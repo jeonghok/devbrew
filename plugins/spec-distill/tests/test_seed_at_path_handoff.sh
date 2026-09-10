@@ -60,4 +60,48 @@ assert_contains "$s3" 'Skill conducting-interview <풀린 입력>' "§3: Step 3 
 assert_not_contains "$s3" 'Skill conducting-interview $ARGUMENTS' "§3: Step 3 가 치환된 원 인자를 넘기지 않는다"
 assert_contains "$sa" '「풀린 입력」 — Step 1.5 의 결과' "§3: Arguments 절이 풀린 입력을 가리킨다"
 
+# ── framing 게이트: 옵션 표 · 호출 모양 · 두 가드 ──────────────────────────
+call="$(block '^### 호출 모양' '^##' "$SK")"
+rows="$(printf '%s\n' "$call" | grep -E '^\| [①②③④] \|')"
+nrows="$(printf '%s\n' "$rows" | grep -c .)"
+assert_eq "$nrows" "4" "AC1(양성): 호출 모양 절 옵션 표에서 행 4개를 읽었다"
+r1="$(printf '%s\n' "$rows" | grep -E '^\| ① \|')"
+r2="$(printf '%s\n' "$rows" | grep -E '^\| ② \|')"
+for n in '`/new` 후' '`/interview @<seed 경로>`' '권장' '턴 종료'; do assert_contains "$r1" "$n" "AC1: ① 행에 $n"; done
+for n in '`/compact` 후' '`/interview @<seed 경로>`' '턴 종료'; do assert_contains "$r2" "$n" "AC1: ② 행에 $n"; done
+assert_not_contains "$r2" '권장' "AC1: 권장은 ① 하나"
+assert_not_contains "$rows" '바로' "AC1: 옵션 표에 「바로」 진행 행이 없다"
+cf="$(printf '%s\n' "$call" | flat)"
+assert_contains "$cf" '`<seed 경로>` 는 `$SEED` 의 실제 값' "AC2: 자리표를 실제 값으로 치환하라는 지시"
+assert_contains "$cf" '`/new` 뒤 같은 줄에' "AC2: /new 뒤 같은 줄에 붙이지 말라는 안내"
+assert_contains "$cf" '세션 이름' "AC2: 같은 줄 텍스트가 세션 이름이 된다는 사실"
+assert_contains "$cf" '명령 노출(①/②) 바로 앞' "§4: 핸드오프 직전 커밋 시점 = 명령 노출 바로 앞"
+assert_not_contains "$cf" '<seed 전문>' "§1: 호출 모양 절에 옛 붙여넣기 자리표가 없다"
+
+gb="$(block '^### 두 가드' '^##' "$SK")"
+stop="$(printf '%s\n' "$gb" | awk '/^- \*\*cross-compact 조기 진행 금지\*\*/{f=1; print; next} f && /^- /{f=0} f' | flat)"
+pol="$(printf '%s\n' "$gb" | awk '/^- \*\*polite stop 금지/{f=1; print; next} f && /^- /{f=0} f' | flat)"
+[ -n "$stop" ] && ok "AC3(양성): 정지 가드 불릿을 읽었다" || no "AC3(양성): 정지 가드 불릿이 없다 — 아래 단언이 공허하다"
+for n in '①/② 어느 쪽이든' '턴 종료(STOP)' '같은 턴에서 인터뷰를 시작하지 않습니다' '**다음 턴**' '사용자 트리거로만'; do
+  assert_contains "$stop" "$n" "AC3: 정지 가드 한 불릿 안에 $n"
+done
+[ -n "$pol" ] && ok "§1(양성): polite stop 불릿을 읽었다" || no "§1(양성): polite stop 불릿이 없다 — 아래 단언이 공허하다"
+assert_contains "$pol" '두 줄 명령을 노출하지 않고 설명만 하고 끝내는 것' "§1: 핸드오프 옵션의 polite stop 정의"
+assert_not_contains "$gb" '다음 단계로 가지 않는 것은' "§1: 옛 polite stop 문면이 남지 않았다"
+
+# ── 이름 가드: 공백 거부 — 문구가 아니라 case 패턴을 실제로 돌려 잰다 ──────
+case_pat() { awk -v c="$1" 'index($0, c) {getline; print; exit}' "$SK" | sed -E 's/^[[:space:]]*//; s/\).*$//'; }
+rejects()  { bash -c 'case "$2" in '"$1"') echo R ;; *) echo A ;; esac' _ "$1" "$2"; }
+tp="$(case_pat 'case "$TOPIC" in')"
+ip="$(case_pat 'case "$IV_NAME" in')"
+{ [ -n "$tp" ] && [ -n "$ip" ]; } \
+  && ok "이름 가드(양성): case 패턴 둘을 읽었다" \
+  || no "이름 가드(양성): case 패턴을 못 읽었다 (TOPIC='${tp}' IV_NAME='${ip}') — 아래 단언이 공허하다"
+assert_eq "$(rejects "$tp" 'umbrella-kiosk')" A "이름 가드(양성 짝): 공백 없는 kebab TOPIC 은 통과"
+assert_eq "$(rejects "$tp" 'umbrella kiosk')" R "이름 가드: 공백 든 TOPIC 거부"
+assert_eq "$(rejects "$tp" "$(printf 'umbrella\tkiosk')")" R "이름 가드: 탭 든 TOPIC 거부"
+assert_eq "$(rejects "$tp" '<kebab-topic>')" R "이름 가드: 자리표 TOPIC 거부 (기존 동작 유지)"
+assert_eq "$(rejects "$ip" '2026-09-10-umbrella-kiosk-interview')" A "이름 가드(양성 짝): 공백 없는 IV_NAME 은 통과"
+assert_eq "$(rejects "$ip" '2026-09-10-umbrella kiosk-interview')" R "이름 가드: 공백 든 IV_NAME 거부"
+
 finish
