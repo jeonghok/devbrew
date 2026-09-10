@@ -128,4 +128,38 @@ ver="$(block '^## 검증' '^## ' "$CANON" | flat)"
 assert_contains "$ver" '명령을 노출하는 각 옵션의 서술 *블록 안에서*' "§2: 검증 절 리뷰 레이어 = 명령 노출 옵션마다"
 assert_contains "$ver" '「호출 모양」 절 옵션 표 ①·② 행' "§2: 앵커 절 — framing 앵커에 ② 행"
 
+# ── 옛 호출 모양 부재(코퍼스 전수) + 새 모양 실재 ──────────────────────────
+ncorp="${#CORPUS[@]}"
+for need in "$SK" "$CMD" "$RF" "$README" "$CANON"; do
+  case " ${CORPUS[*]+"${CORPUS[*]}"} " in
+    *" $need "*) ok "AC6(양성): 코퍼스에 ${need#"$ROOT"/} 가 들어 있다" ;;
+    *) no "AC6(양성): 코퍼스에 ${need#"$ROOT"/} 가 없다 — 부재 단언이 그 파일을 안 본다" ;;
+  esac
+done
+old_hits="$(grep -nF -e '<seed 전문>' -e '<seed 파일 전문>' -- "${CORPUS[@]+"${CORPUS[@]}"}" 2>&1)"; grc=$?
+if [ "$ncorp" -eq 0 ]; then
+  no "AC6: 코퍼스 0개 — 부재를 잴 수 없다"
+elif [ "$grc" -ge 2 ]; then
+  no "AC6: grep 실패(rc=$grc) — 부재를 확인하지 못했다: $old_hits"
+elif [ -n "$old_hits" ]; then
+  no "AC6: 옛 호출 모양이 남았다:"; printf '%s\n' "$old_hits"
+else
+  ok "AC6: 옛 호출 모양(<seed 전문> · <seed 파일 전문>) 0건 — 문서 ${ncorp}개"
+fi
+for f in "$SK" "$RF" "$CMD" "$README"; do
+  assert_file_grep "$f" '/interview @<seed 경로>' "AC6: 새 모양이 ${f#"$ROOT"/} 에 있다"
+done
+
+# ── 풀어 쓴 옛 서술의 동기화 (§4 목록) ──────────────────────────────────
+TPL="$SD/templates/interview-seed-audit-template.md"
+SEEDIN="$SD/skills/conducting-interview/references/seed-input.md"
+FIN="$SD/skills/conducting-interview/references/finishing.md"
+assert_file_grep   "$TPL"    '/interview @<seed 경로>` 가 가리키는 것은 payload' "§4: audit 템플릿 인용 블록이 새 모양"
+assert_file_absent "$TPL"    '첫 턴에 붙여넣는' "§4: audit 템플릿에 옛 핸드오프 서술이 없다"
+assert_file_grep   "$SEEDIN" '`/interview @<seed 경로>` 를 치게 하고' "§4: seed-input 도착 경로가 새 모양"
+assert_file_absent "$SEEDIN" '붙여넣게 하고' "§4: seed-input 에 옛 도착 경로가 없다"
+assert_file_grep   "$FIN"    '`@경로` 를 풀어 넘겼든 사용자가 전문을 붙여넣었든' "§4: finishing S1 문장이 두 도착 경로를 다 적는다"
+assert_file_absent "$RF"     '붙여넣' "§4: request-framing 에 붙여넣기 핸드오프 서술이 없다"
+assert_file_absent "$README" '다음 세션 첫 턴에 붙여넣는 메시지' "§4: README 흐름도에 옛 서술이 없다"
+
 finish
