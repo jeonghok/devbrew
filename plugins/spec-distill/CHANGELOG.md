@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.0.0] — 2026-09-11
+
+major인 이유: **설계문서 리뷰의 자동 진입 계약이 깨진다.** Stop 훅(`hooks/review-dispatch.py`)이 턴 경계에서 `reviewing-spec` 을 강제하던 경로를 없애고, 리뷰 진입을 오케스트레이터가 인터뷰 핸드오프 문구와 skill description 을 읽고 스스로 부르는 것으로 바꾼다. 이 자리의 집행(철학 P13 의 hook)이 사라졌다는 사실을 숨기지 않는다 — 리뷰어 분리(Law 2 `tools:` allowlist)는 그대로다. 표준 흐름에서 그 훅은 이미 발동하지 않고 있었다: brainstorming 이 턴 안에서 설계문서를 커밋하고, 훅의 발견은 dirty·untracked 문서만 보았다. 설계: `docs/superpowers/specs/2026-09-10-spec-review-hook-removal-design.md`.
+
+**알려진 결과** — (1) 리뷰 진입에 강제가 없다. `/brainstorming` 직접 경로는 `reviewing-spec` description 하나에 기댄다 — 건너뛰면 `/spec-distill:reviewing-spec <경로>` 로 부른다. (2) CLAUDE.md Law 1 필수 섹션 게이트의 리포 내 구현이 0 이 됐다(사용자 결정 D10 — 유일한 구현이던 spec 모드 검사는 생산자가 없어 발동하지 않았다). (3) `spec-distill:Stop`·`:review-dispatch` 로 자동 리뷰를 꺼 둔 사용자는 리뷰가 되살아나고(advisory 가 알린다), 같은 토큰이 부수효과로 막던 TTL-GC 도 advisory 없이 다시 돈다(D9). (4) 저자 쪽 Handoff Context 계약의 기계 앵커가 사라졌다(아래 Changed). (5) deprecation window 면제의 근거가 약하다(아래 Deprecated).
+
+### Added
+
+- **`scripts/review_entry.py` — `reviewing-spec` 진입 검사.** 끄기 판정(`DEVBREW_SPEC_DISTILL_DISABLE=1` · `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` · `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1`)과 은퇴 스위치 공시를 stdout JSON 한 줄(`disabled` · `reason` · `advisories`)로 낸다. 새 kill switch 이름 `spec-distill:review-entry` 가 여기서 생긴다 — 공용 헬퍼 `kill_switch_active` 가 이름을 요구하고, 이름은 스크립트 이름을 따른다(`spec-distill-gc` 와 같은 관례). skill 이름 `reviewing-spec` 을 쓰지 않은 이유: `check_names.py` 가 README 참조를 skill 이름으로도 해소해 수신처가 사라져도 매달림으로 잡히지 않는다. 락: `tests/test_review_entry.py`.
+
 ## [1.0.0] — 2026-09-09
 
 major인 이유: **design doc 자리(`reviewing-spec`)의 verdict 계약이 깨진다.** `approved`/`needs_revise` 산출물은 더 이상 나오지 않는다 — 승인은 문서 리뷰 엔진(`shared/docreview/`)의 게이트 판정(`approval_gate_open`, 열린 항목이 없으면 즉시 · 상한 도달·stagnation 이면 승인 게이트 1단계 경유)을 **집계**해서 도출된다. `reviewing-spec/SKILL.md` 는 235줄(base 297줄)로 재작성된 엔진 껍데기가 됐다 — 절차 8단계의 정본은 `shared/docreview/references/reviewing-document.md` 하나이고, 이 skill 에는 이 자리의 것(입력 슬롯 · 프로필 선택 · dispatch 둘 · 원장 갱신 · 게이트 진입)만 남는다. `description` 의 "design docs reviewed by a physically-separated Law 2 reviewer" 문구는 여전히 참이다 — `doc-critic`·`doc-recritic` 도 `tools:` 에 쓰기가 없다. 바뀐 것은 리뷰어의 이름뿐이다.
