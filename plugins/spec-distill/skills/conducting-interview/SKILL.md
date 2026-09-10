@@ -53,7 +53,7 @@ confirm_repost_count: 0              # 종료 확정 확인 재제시 횟수 (�
 ---
 ```
 
-State body: 각 라운드의 §1.1 기록(`## R<n>` 형식 그대로 — `depth_pairs.py` 가 읽는 계약) + coverage-mapper 출력 transcript.
+State body: 각 라운드의 `## R<n>` 기록(«라운드 규약» 형식) + coverage-mapper 출력 transcript.
 
 **Secret 기록 금지** (P21): 사용자 답변에 token/key/credential 패턴 감지 시 placeholder로 치환 후
 기록합니다. **치환 토큰은 `<REDACTED>` 또는 `<REDACTED:라벨>` 형태**로 씁니다(다른 허용 형태:

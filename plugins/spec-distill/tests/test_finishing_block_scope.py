@@ -1,16 +1,16 @@
-"""finishing.md 의 bash 펜스는 앞 펜스의 변수를 물려받지 못한다 (v0.57.0).
+"""finishing.md 의 bash 펜스는 앞 펜스의 변수를 물려받지 못한다.
 
-Bash 도구는 호출마다 새 셸이고 유지되는 것은 cwd 뿐이다. Step A.7 은 `Agent` dispatch 와
-`AskUserQuestion` 을 사이에 끼고 여러 셸에 걸쳐 도는데, 두 번째 블록이 첫 블록에서만
-정의된 `$PR`·`$PAIRS`·`$AUD_RAW`·`$ROOT`·`$harness_sid` 를 그대로 썼다. 실측:
+Bash 도구는 호출마다 새 셸이고 유지되는 것은 cwd 뿐이다. 이 문서의 절차는 `Skill` 호출과
+`AskUserQuestion` 을 사이에 끼고 여러 셸에 걸쳐 돈다 — 한 펜스가 앞 펜스에서만 정의된
+`$ROOT`·`$harness_sid` 같은 값을 쓰면 빈 문자열로 전개돼 `'/scripts/…'` 같은 경로가 만들어지고,
+실패는 rc≠0 하나로 조용히 지나간다. 이 락이 생긴 실측(지금은 삭제된 사후 측정 단계):
 
     $ bash <<'B'
     > python3 "$PR/scripts/depth_record.py" ...
     > B
     can't open file '/scripts/depth_record.py': [Errno 2]   rc=2
 
-결과는 조용하다 — 이 기능 전체의 산출물인 `depth/<basename>.json` 이 영영 안 써지고
-Law 3 측정 원장이 빈 채로 남는다. 종료를 막지 않는 단계라 아무도 눈치채지 못한다.
+그 단계는 사라졌지만 불변식은 남는 펜스(Step A 5 게이트 · Step A.5 · B-0)에 그대로 걸린다.
 
 **이 락은 열거가 아니라 도출이다.** 변수 이름 목록을 핀하지 않고, 펜스마다 «쓰인 변수»와
 «그 펜스가 정의한 변수»를 각각 뽑아 차집합을 본다. 새 블록이 생기거나 변수 이름이 바뀌어도
@@ -59,16 +59,16 @@ class FinishingBlockScope(unittest.TestCase):
         self.fences = bash_fences(self.text)
 
     def test_corpus_is_actually_read(self):
-        """양성 대조 — 펜스를 못 찾으면 아래 단언들이 통째로 공허해진다.
+        """양성 대조 — 펜스를 못 찾으면 아래 단언이 통째로 공허해진다.
 
-        부재 검사만으로 된 락은 대상 파일을 지워도 통과한다. 여기서는 '펜스가 여럿 있고
-        그중 깊이 측정 호출을 담은 것이 있다' 를 먼저 못 박는다.
+        부재 검사만으로 된 락은 대상 파일을 지워도 통과한다. 여기서는 '펜스가 셋 이상 있고
+        그중 게이트 호출(check_brief.py)을 담은 것이 있다' 를 먼저 못 박는다.
         """
-        self.assertGreaterEqual(len(self.fences), 4,
-                                "finishing.md 에서 bash 펜스를 못 찾았다 — 추출기가 깨졌다")
+        self.assertGreaterEqual(len(self.fences), 3,
+                                "finishing.md 에서 bash 펜스를 셋 이상 못 찾았다 — 추출기가 깨졌다")
         joined = "\n".join("\n".join(b) for _, _, b in self.fences)
-        self.assertIn("depth_record.py", joined,
-                      "깊이 측정 호출이 어떤 bash 펜스에도 없다 — 락이 겨눌 대상이 사라졌다")
+        self.assertIn("check_brief.py", joined,
+                      "게이트 호출이 어떤 bash 펜스에도 없다 — 락이 겨눌 대상이 사라졌다")
 
     def test_no_variable_carried_across_fences(self):
         """펜스마다: 쓰인 변수 ⊆ 그 펜스가 정의한 변수 ∪ 환경 제공."""

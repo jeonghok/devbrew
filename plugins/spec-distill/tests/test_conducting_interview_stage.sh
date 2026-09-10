@@ -223,7 +223,7 @@ grep -qF '이미 있는 값은 손대지 않는다' <<<"$mig_block" \
   && ok "AC5/C2: 이미 있는 값은 두고 부재 키만 채운다 (진행 중 인터뷰의 닫힘을 안 되돌린다)" \
   || no "AC5/C2: 부분 보충 총칙이 없다 — 있는 값을 덮어쓸 수 있다"
 # 조건을 넓히면 «구세션 전용» 이던 `user_statements` 초기화가 직전 릴리스 세션까지 삼킬 수
-# 있다. 그건 마이그레이션이 아니라 §6 원문·깊이 측정 근거의 손실이다. 범위 한정을 못 박는다.
+# 있다. 그건 마이그레이션이 아니라 §6 원문의 손실이다. 범위 한정을 못 박는다.
 grep -qE '구세션에 한해|구세션에만' <<<"$mig_block" \
   && ok "AC5/C2: user_statements 초기화가 구세션으로 한정된다" \
   || no "AC5/C2: user_statements 초기화 범위가 한정되지 않았다 — 넓힌 조건이 발화 레코드를 지운다"
@@ -967,37 +967,8 @@ grep -qE '발화 전부를 payload §6|전부를 payload §6 에' "$FIN" \
   && no "U2-T6: 「전부를 payload §6 에」 옛 지시 잔존" \
   || ok "U2-T6: 옛 거처 지시 제거됨"
 
-# --- v0.57.0 Step A.7 깊이 측정 (finishing.md, 블록 스코프) --------------------
-a7_block="$(awk '/^### Step A\.7/{f=1;print;next} /^### /{f=0} f' "$FIN")"
-a7_flat="$(tr '\n' ' ' <<<"$a7_block" | tr -s ' ')"
-# 「산문이 파일명을 언급하는 것」과 「실제로 호출하는 것」은 다른 사실이다. 아래 둘을
-# `grep -qF '<파일명>' <<<"$a7_block"` 로 재던 동안 락은 **이빨이 없었다**: A.7 안에서
-# `depth_pairs.py` 는 호출 줄과 산문에, `depth_record.py` 는 호출 줄·산문·처분 줄에 나와서,
-# **호출 두 줄을 통째로 지워도 스위트가 196/196 GREEN 이었다**(실측). 그래서 코퍼스를
-# **bash 펜스 안**으로 좁히고 `python3 … <스크립트>` 라는 호출 «형태» 에 건다 — 산문은
-# 그 형태를 만족시킬 수 없다(줄 머리가 `python3` 인 산문은 없다).
-a7_bash="$(awk '/^```bash/{f=1;next} f&&/^```/{f=0;next} f' <<<"$a7_block")"
-[[ -n "$a7_bash" ]] \
-  && ok "A.7(양성대조): 절 안에서 bash 펜스를 추출했다 (아래 호출 단언이 실재한다)" \
-  || no "A.7(양성대조): bash 펜스를 못 뽑았다 — 아래 호출 단언이 공허하다"
-{ [[ -n "$a7_block" ]] && grep -qE '^[[:space:]]*python3 .*depth_pairs\.py' <<<"$a7_bash"; } \
-  && ok "A.7: 깊이 측정 절이 있고 bash 펜스에서 depth_pairs.py 를 «호출»한다" \
-  || no "A.7: 절 부재 또는 depth_pairs.py 호출 줄 없음 (산문 언급은 호출이 아니다)"
-grep -qF 'spec-distill:depth-auditor' <<<"$a7_block" && ok "A.7: depth-auditor dispatch" || no "A.7: depth-auditor dispatch 없음"
-grep -qF 'consumer=plugins/spec-distill/scripts/depth_record.py' <<<"$a7_block" && ok "A.7: 처분 줄이 depth_record.py 를 소비자로" || no "A.7: 처분 줄 부재"
-grep -qE '^[[:space:]]*python3 .*depth_record\.py' <<<"$a7_bash" \
-  && ok "A.7: bash 펜스에서 depth_record.py 를 «호출»한다" \
-  || no "A.7: depth_record.py 호출 줄 없음 (산문·처분 줄 언급은 호출이 아니다)"
-grep -qE 'pairs_rc[^.]{0,40}3[^.]{0,60}측정 불가' <<<"$a7_flat" && ok "A.7: rc 3 → «측정 불가» 기록" || no "A.7: rc 3 처분 없음"
-grep -qE '기록한다[^.]{0,20}막지 않는다|막지 않는다' <<<"$a7_flat" && ok "A.7: «기록한다, 막지 않는다» (C5)" || no "A.7: 비게이트 선언 없음"
-grep -qE '표본[^.]{0,10}0[^.]{0,30}(띄우지 않는다|호출 안 함|호출하지 않는다)' <<<"$a7_flat" && ok "A.7: 표본 0 이면 라벨 질문 없음" || no "A.7: 표본 0 처분 없음"
-grep -qF '미라벨' <<<"$a7_block" && grep -qF 'unavailable' <<<"$a7_block" && ok "A.7: 미라벨·unavailable 어휘" || no "A.7: 미라벨/unavailable 어휘 부재"
-grep -qE 'heredoc' <<<"$a7_block" && grep -qE '리다이렉트' <<<"$a7_block" && ok "A.7: raw 저장은 파일 리다이렉트(heredoc 금지)" || no "A.7: raw 저장 방식 미명시"
-grep -q '파고들었다' <<<"$a7_block" && grep -q '안 팠다' <<<"$a7_block" && grep -q '판단불가' <<<"$a7_block" && ok "A.7: 사람 라벨 선택지 셋" || no "A.7: 사람 라벨 선택지 부재"
-grep -qF 'min(4' <<<"$a7_block" && ok "A.7: 질문 수 min(4, 적격)" || no "A.7: 표본 상한 규칙 부재"
-# B-2 게이트 텍스트에 깊이 요약과 advisories 슬롯
+# B-2 게이트 텍스트의 advisories 슬롯
 b2_block="$(awk '/^#### B-2/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
-grep -qF '깊이:' <<<"$b2_block" && ok "B-2: question 에 깊이 요약 슬롯" || no "B-2: 깊이 요약 슬롯 부재"
 grep -qF 'coverage-mapper 0' <<<"$b2_block" && ok "B-2: coverage-mapper unavailable advisory 가 게이트 텍스트에" || no "B-2: mapper advisory 슬롯 부재"
 # Step A 4 항: 직렬화 규칙 (S앵커·재개방 접미)
 stepa4="$(awk '/^4\. \*\*Coverage Ledger 직렬화/{f=1} f&&/^5\. /{exit} f' "$FIN")"
@@ -1005,18 +976,6 @@ grep -qE 'S<N>|S\d\+|S 앵커' <<<"$stepa4" && grep -qF '재개방' <<<"$stepa4"
 grep -qF 'coverage-mapper <k>' <<<"$stepa4" && ok "Step A 4: §2 coverage-mapper <k> 직렬화" || no "Step A 4: coverage-mapper <k> 부재"
 # audit 템플릿
 TPL="$REPO_ROOT/plugins/spec-distill/templates/interview-audit-template.md"
-# `depth_record.py` 는 stdout 으로 **네 줄**을 내고 finishing.md Step A.7 이 그 넷을 §2 에
-# 그대로 붙이라고 지시한다. 락이 셋만 세는 동안 `- 판정자 조건:` 줄은 템플릿에서 지워도
-# 스위트가 GREEN 이었다(실측) — 그 줄은 spec §3.4 의 판정자 투입 조건이 사람에게 도달하는
-# 유일한 자리다. 넷 다 데이터 불릿으로 실재하는지 센다.
-depth_rows=0
-for key in '깊이 측정(형식)' '깊이 측정(auditor)' '깊이 측정(사람)' '판정자 조건:'; do
-  grep -qE "^- .*$(printf '%s' "$key" | sed 's/[][\.*^$(){}?+|/]/\\&/g')" "$TPL" \
-    && depth_rows=$((depth_rows + 1))
-done
-[[ "$depth_rows" -eq 4 ]] \
-  && ok "AC10: audit 템플릿 §2 깊이 네 줄 (형식·auditor·사람·판정자 조건) 이 전부 데이터 불릿" \
-  || no "AC10: 템플릿 §2 깊이 줄이 4 가 아니라 $depth_rows — depth_record.py 의 네 줄과 어긋난다"
 grep -qF '(재개방' "$TPL" && ok "AC10: 템플릿 §1 재개방 접미 예시" || no "AC10: 재개방 접미 예시 부재"
 # 템플릿의 mapper 계수는 **데이터 줄**(불릿)에 있어야 하되 **숫자로 미리 채워선 안 된다**.
 # 두 요구는 R18 과 충돌했다: R18 은 「산문이 판정을 지지 않게」 데이터 줄에 실제 숫자를
