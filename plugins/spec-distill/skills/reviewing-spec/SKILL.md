@@ -80,10 +80,11 @@ ok = (isinstance(d, dict)
       and isinstance(d.get("disabled"), bool)
       and "reason" in d
       and (d["reason"] is None or isinstance(d["reason"], str))
+      and not (isinstance(d["reason"], str) and ("\n" in d["reason"] or "\r" in d["reason"]))
       and isinstance(d.get("advisories"), list)
-      and all(isinstance(a, str) for a in d["advisories"]))
+      and all(isinstance(a, str) and "\n" not in a and "\r" not in a for a in d["advisories"]))
 if not ok:
-    print("[spec-distill] 진입 검사 실패(끔으로 친다) — 출력이 계약(JSON 객체 · disabled boolean · reason 문자열|null · advisories 문자열 배열)을 어긴다: " + raw[:120].replace("\n", " "))
+    print("[spec-distill] 진입 검사 실패(끔으로 친다) — 출력이 계약(JSON 객체 · disabled boolean · reason 문자열|null · advisories 문자열 배열 · 개행 없음)을 어긴다: " + raw[:120].replace("\n", " "))
     print("review-entry: DISABLED:entry_check_failed")
     sys.exit(0)
 for a in d["advisories"]:
@@ -192,7 +193,7 @@ skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
 # codex_available: 줄을 낸다(false 여도). 그 줄이 없으면 감지기 자체가 안 돈 것이다 —
 # skip_reason: unknown 으로 뭉개지 않는다.
 if [[ -z "$codex_avail" ]]; then skip_reason="detector_not_runnable"; fi
-# `$spec_path` 는 이 skill 의 호출 인자(`## 입력`)라 디스크에서 도출되지 않는다 — 값이
+# `$spec_path` 는 호출 인자(`## 입력`)라 디스크에서 도출되지 않는다 — 값이
 # 없으면 여기서 **소리를 내고 멈춘다.** 빈 채로 러너에 넘기면 러너가 usage 로 rc 2 에
 # 죽는데, 그 rc 는 아래 잔존물 제거의 옛 조건(rc 3)이 보지 않는 값이라 직전 라운드 YAML 이
 # 그대로 남아 이번 라운드 판정으로 읽힌다. 처방은 「앞에 이어 붙여라」다 — 별개 호출로 다시
@@ -309,7 +310,7 @@ Read ${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/proceed-gate.md
 ```bash
 spec_dir="$(dirname -- "$spec_path")"
 spec_base="$(basename -- "$spec_path")"
-born_out="$(git -C "$spec_dir" status --porcelain -- "$spec_base" 2>/dev/null)"; born_rc=$?
+born_out="$(git -C "$spec_dir" status --porcelain --ignored -- "$spec_base" 2>/dev/null)"; born_rc=$?
 if [ "$born_rc" -ne 0 ]; then
   echo "[spec-distill] 커밋 여부를 확인하지 못했다(git rc=$born_rc) — '$spec_path' 가 git 작업 트리 밖이거나 git 이 실패했다. writing-plans 전에 문서가 커밋됐는지 직접 확인하라."
 elif [ -n "$born_out" ]; then
