@@ -242,12 +242,16 @@ done
 # 출하된 dogfood payload 만 해도 `evidence: S1` 항목이 4건이라, 그 항목들에 대한
 # distortion·evidence_unsupported 판정이 「대조할 원문이 코퍼스 밖」인 채로 났다.
 # 세 자리는 같은 EXPECTED 튜플(= 산출자 상수)에서 파생된다.
+# 문서 리뷰 엔진 전환(PR 3) 뒤 넷째 자리는 2-a dispatch 프롬프트가 아니라 **brief 프로필의
+# `ground_truth`** 다 — 엔진의 탐지·재비판 agent 는 dispatch 프롬프트가 아니라 `<profile>` 의 그
+# 필드에서 정답의 위치를 읽는다. 번들은 audit §6 의 헤딩을 벗기고 `<<<AUDIT-VERBATIM>>>` 라벨을 붙이므로,
+# 프로필이 audit 쪽을 헤딩으로만 부르면 그 원문은 번들 안에서 찾을 수 없다.
 F3_ERR="$(mktemp -t sdF3err)"
 F3_REPORT="$(python3 - "$SD/scripts/build_brief_bundle.py" "$CR" \
-    "$SD/scripts/brief-codex-fidelity-checklist.md" "$SKILL_BRIEF" 2>"$F3_ERR" <<'PYEOF'
+    "$SD/scripts/brief-codex-fidelity-checklist.md" "$SD/references/docreview-profiles/brief.md" 2>"$F3_ERR" <<'PYEOF'
 import importlib.util, re, sys
 
-bundle_script, critic_path, checklist_path, skill_path = sys.argv[1:5]
+bundle_script, critic_path, checklist_path, profile_path = sys.argv[1:5]
 spec = importlib.util.spec_from_file_location("brief_bundle_mod", bundle_script)
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
@@ -292,28 +296,23 @@ def frontmatter_block(path):
     return [] if end < 0 else [text[4:end]]
 
 
-def dispatch_block(path):
-    """SKILL.md 의 2-a critic dispatch 를 **구조로** 잘라낸다.
+def profile_ground_truth(path):
+    """brief 프로필 frontmatter 의 `ground_truth:` 한 줄을 **구조로** 잘라낸다.
 
-    산문 문단을 앵커로 잡으면 그 파일 다른 곳의 'ground truth' 문단(3-b readback
-    설명)이 대신 검사를 만족시킬 수 있다. subagent_type 리터럴을 감싸는 Agent({ …
-    }) 호출만 본다 — dispatch 가 사라지거나 개명되면 빈 목록이 되어 red 다.
+    frontmatter 밖 본문(층 설명)의 문장이 대신 검사를 만족시키지 못하게, 구분자 안의
+    그 키 줄만 본다. 키가 사라지거나 frontmatter 가 깨지면 빈 목록이 되어 red 다.
     """
-    text = open(path, encoding="utf-8").read()
-    i = text.find('subagent_type: "spec-distill:brief-critic"')
-    if i < 0:
+    fm = frontmatter_block(path)
+    if not fm:
         return []
-    start, end = text.rfind("Agent({", 0, i), text.find("\n})", i)
-    if start < 0 or end < 0:
-        return []
-    return [text[start:end]]
+    return [ln for ln in fm[0].split("\n") if re.match(r"^ground_truth:\s*\S", ln)][:1]
 
 
 GT_SITES = (
     ("critic 정의", [p for p in critic_paras if GT_ANCHOR.search(p)]),
     ("critic description", frontmatter_block(critic_path)),
     ("codex 체크리스트", [p for p in paras(checklist_path) if GT_ANCHOR.search(p)]),
-    ("2-a dispatch", dispatch_block(skill_path)),
+    ("brief 프로필 ground_truth", profile_ground_truth(profile_path)),
 )
 for label, blocks in GT_SITES:
     # 술어는 ∀다: **위치를 하나라도 이름으로 대는** ground-truth 문단은 두 곳을

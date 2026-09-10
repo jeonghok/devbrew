@@ -36,11 +36,13 @@ SKILL="$REPO_ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
 README="$REPO_ROOT/plugins/spec-distill/README.md"
 
 # 이후 PR 이 늘리는 자리 — 「그 자리의 산문이 상한을 CAP 으로 적었는가」를 재는 대상.
-# (`reviewing-brief` · `critiquing-artifacts` · `framing-requests` 의 SKILL.md 가
-#  엔진으로 전환될 때 여기 한 줄씩.)
+# (`critiquing-artifacts` · `framing-requests` 의 SKILL.md 가 엔진으로 전환될 때 여기 한 줄씩.
+#  `reviewing-brief` 는 PR 3 에서 들어왔다 — 옛 브리프 critic 의 별개 상한이 그 전환으로
+#  사라져, 파일 통째로 양의 단언과 ∀ 둘 다의 대상이 된다.)
 TARGETS=(
   "$SKILL"
   "$README"
+  "$REPO_ROOT/plugins/spec-distill/skills/reviewing-brief/SKILL.md"
 )
 
 # ── ∀ 전용 코퍼스 — 「이 자리가 숫자를 **되찾으면** 소리를 낸다」 ────────────
@@ -56,28 +58,17 @@ TARGETS=(
 # 코퍼스를 안 넓히면 다음 값 변경 때 같은 자리가 같은 방식으로 다시 빠져나간다.
 # **넣기 전에 M4 의 위험(같은 어휘를 쓰는 «다른» 상한)을 점검했다**: 이 파일에서 아래
 # `CAP_RE` 가 매치하는 자리는 그 P18 줄 하나뿐이고, 나머지 상한 언급(P18 본문의
-# 「max-iteration cap」, 「qg Review fix-loop」)에는 **숫자가 없다.** 그래서
-# `reviewing-brief/SKILL.md` 와 달리 줄-스코프가 필요 없고 파일 통째로 넣는다.
+# 「max-iteration cap」, 「qg Review fix-loop」)에는 **숫자가 없다.** 그래서 줄-스코프(이
+# 상한을 인용하는 줄만 잘라 ∀ 를 거는 방식)가 필요 없고 파일 통째로 넣는다.
 # **다만 미래 위험 하나를 이름 붙여 둔다** — 그 P18 줄은 이 상한 바로 옆에 「qg Review
 # fix-loop」를 나란히 적는다. 누가 그 qg 상한을 **숫자로** 적으면 이 락이 무관한 값에 대해
-# RED 를 낸다. 그때의 처방은 이 항목을 빼는 것이 아니라 `reviewing-brief` 와 같은 줄-스코프로
-# 좁히는 것이다.
+# RED 를 낸다. 그때의 처방은 이 항목을 빼는 것이 아니라 줄-스코프로 좁히는 것이다.
 NEG_ONLY=(
   "$REPO_ROOT/plugins/spec-distill/references/proceed-gate.md"
   "$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/references/finishing.md"
   "$REPO_ROOT/docs/philosophy/devbrew-harness-philosophy.md"
 )
 
-# ── ∀ 줄-스코프 코퍼스 ──────────────────────────────────────────────────────
-# `reviewing-brief/SKILL.md` 도 같은 전환이 손댄 자리다(`cap 5` → 숫자 없는 서술).
-# 그런데 **파일 통째로는 코퍼스에 넣을 수 없다** — 이 파일에는 *다른* 상한(브리프
-# critic 의 재dispatch 상한)이 `재리뷰 상한 2` 라는 **같은 어휘**로 적혀 있고 오늘
-# 값이 우연히 같다. 통째로 넣으면 문서 리뷰 엔진의 상한이 바뀌는 날 무관한 브리프
-# 상한이 RED 를 내며, 이 락이 독립된 두 값을 묶어 버린다(위 「서로 다른 상한은
-# 코퍼스에 넣지 않는다」). 그래서 **docreview 자리를 인용하는 줄만** 잘라 그 줄에
-# 대해서만 ∀ 를 건다. 자르는 술어가 깨지면 코퍼스가 조용히 비므로 하한 1 을 둔다.
-NEG_SCOPED_FILE="$REPO_ROOT/plugins/spec-distill/skills/reviewing-brief/SKILL.md"
-NEG_SCOPED_RE='reviewing-spec'
 
 # ── 정본 ─────────────────────────────────────────────────────────────────────
 CAP="$(grep -oE '`rereview_cap: [0-9]+`' "$REF" | grep -oE '[0-9]+' | head -1)"
@@ -150,22 +141,8 @@ for f in "$REF" "$ENGINE" "${TARGETS[@]}" "${NEG_ONLY[@]}"; do
   fi
   scan_text "$rel" "$(cat "$f")"
 done
-# 줄-스코프 자리 — 위 헤더의 `NEG_SCOPED_*`.
-scoped_rel="${NEG_SCOPED_FILE#"$REPO_ROOT"/}"
-if [ ! -r "$NEG_SCOPED_FILE" ]; then
-  no "코퍼스 실재: $scoped_rel 를 읽을 수 없다 — 줄-스코프 자리가 통째로 빠졌다"
-else
-  scoped_lines="$(grep -E "$NEG_SCOPED_RE" "$NEG_SCOPED_FILE" || true)"
-  n_scoped="$(printf '%s\n' "$scoped_lines" | grep -c . || true)"
-  if [ "${n_scoped:-0}" -lt 1 ]; then
-    no "코퍼스 비공허: $scoped_rel 에서 '$NEG_SCOPED_RE' 줄을 하나도 못 잘랐다 — 자르는 술어가 깨졌고 이 자리의 ∀ 는 공허하다"
-  else
-    ok "코퍼스 비공허: $scoped_rel 의 docreview 인용 ${n_scoped}줄을 잘라 ∀ 대상으로 삼았다 (하한 1)"
-    scan_text "$scoped_rel(docreview 인용 줄)" "$scoped_lines"
-  fi
-fi
-if [ "$seen" -lt 5 ]; then
-  no "음의 짝: 상한 어휘를 ${seen}건밖에 도출하지 못했다 — 코퍼스 넷에서 최소 5건(정본 1 + 엔진 1 + SKILL 1 + README 2)이 나와야 한다. 이 상태에서 'bad=0' 은 증거가 아니다"
+if [ "$seen" -lt 6 ]; then
+  no "음의 짝: 상한 어휘를 ${seen}건밖에 도출하지 못했다 — 코퍼스에서 최소 6건(정본 1 + 엔진 1 + SKILL 둘 각 1 + README 2)이 나와야 한다. 이 상태에서 'bad=0' 은 증거가 아니다"
 elif [ "$bad" -eq 0 ]; then
   ok "음의 짝: 상한 어휘 ${seen}건 전부가 정본 $CAP 과 같다 (옛 값 잔존 0)"
 fi

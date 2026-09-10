@@ -152,9 +152,9 @@ grep -qF 'reviewing-brief' <<<"$WA5" && ok "A.5가 reviewing-brief를 지목 (�
 # satisfiable하다 — fix round 1 리뷰가 mutation으로 실증(invocation 라인을 지우고 "위 형식
 # 참고용" 데코이로 치환해도, 또는 "이전 형식 참고" 펜스를 따로 추가해도 계속 PASS). load-bearing
 # lock은 (a) 실제 invocation directive가 사는 bare ``` 펜스 내부(주석 제외)를 지목하고,
-# (b) 그 안의 라인이 $PAYLOAD·$AUDIT·$CODEX_DIR_YAML·$CODEX_FID_YAML 네 핸드오프 변수를 실제로
-# 실어 나르는지까지 확인한다 — "Skill spec-distill:reviewing-brief"라는 문자열만 있고 네
-# 변수를 나르지 않는 장식용 데코이 라인(예: "위 형식 참고용" 주석)은 이 조건에서 걸러진다.
+# (b) 그 안의 라인이 $PAYLOAD·$AUDIT 두 핸드오프 변수를 실제로 실어 나르는지까지 확인한다 —
+# "Skill spec-distill:reviewing-brief"라는 문자열만 있고 두 변수를 나르지 않는 장식용 데코이
+# 라인(예: "위 형식 참고용" 주석)은 이 조건에서 걸러진다.
 # anchor는 들여쓰기·"- " 불릿을 허용한다(무해한 리포맷이 col-0 강제로 false-fail하지 않게 —
 # 펜스 경계가 lock을 정직하게 만드는 것이지 column 0이 아니다).
 INVOKE_FENCE="$(fence "$WA5" "")"
@@ -169,10 +169,19 @@ INVOKE_LINE="$(grep -E '^[[:space:]]*-?[[:space:]]*Skill spec-distill:reviewing-
 # fence()가 전체-라인 주석만 거르는 것과 같은 구분을 트레일링 "#"까지 확장한다 —
 # 같은 따옴표-상태 스캐너를 마커만 바꿔 재사용한다(두 번째 스트리퍼를 쓰지 않는다).
 INVOKE_CODE="$(strip_trailing_linecomment "$INVOKE_LINE" '#')"
-for handoff_var in '$PAYLOAD' '$AUDIT' '$CODEX_DIR_YAML' '$CODEX_FID_YAML'; do
+for handoff_var in '$PAYLOAD' '$AUDIT'; do
   grep -qF "$handoff_var" <<<"$INVOKE_CODE" \
     && ok "invocation 라인이 ${handoff_var} 전달 (트레일링 # 코멘트 제외하고 검사)" \
     || no "invocation 라인(코멘트 제외)에 ${handoff_var} 부재 — 주석에만 적혀 있으면 호출은 인자 없이 나간다"
+done
+# 호출자 계약은 두 값뿐이다 — codex 산출물 경로는 callee 가 세션과 payload 에서 스스로 도출한다
+# (문서별 상태 디렉토리). 옛 두 인자가 호출 라인에 남으면 callee 가 받지 않는 값을 나르거나, callee
+# 가 도출하는 경로와 다른 경로를 쥔 두 벌의 진실이 생긴다. 양의 짝은 바로 위 두 변수의 존재다 —
+# 호출 라인이 통째로 사라지면 위 루프가 RED 이므로 이 부재 단언이 공허하게 통과하지 않는다.
+for gone_var in 'CODEX_DIR_YAML' 'CODEX_FID_YAML'; do
+  grep -qF "$gone_var" <<<"$WA5" \
+    && no "A.5 가 옛 인자 ${gone_var} 를 아직 세우거나 나른다 — 호출자 계약은 \$PAYLOAD·\$AUDIT 둘이다" \
+    || ok "A.5 에 옛 인자 ${gone_var} 없음 (callee 가 codex 산출물 경로를 도출한다)"
 done
 grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW' <<<"$WA5" \
   && ok "A.5에 kill switch 경로" || no "A.5에 kill switch 경로 부재"
@@ -183,17 +192,19 @@ for tok in 'brief-critic' 'merge_brief_review' 'check_verbatim_coverage' 'G1'; d
   grep -qF "$tok" <<<"$WA5" && no "A.5가 파이프라인 내부('$tok')를 복제" || ok "A.5에 '$tok' 없음 (복제 아님)"
 done
 
-# --- 핸드오프 변수 4종 (Task 7 cross-task obligation) -----------------------
-# reviewing-brief SKILL.md 상태 섹션은 $PAYLOAD·$AUDIT·$CODEX_DIR_YAML·$CODEX_FID_YAML을
-# "호출자가 진입 시점에 이미 쥐고 넘기는 값"이라 주장한다 — conducting-interview가
-# 실제로 이 네 값을 세우지 않으면 그 주장은 overclaim이 된다(V1 cross-task 요건).
-for var in 'PAYLOAD=' 'AUDIT=' 'CODEX_DIR_YAML=' 'CODEX_FID_YAML='; do
-  grep -qF "$var" <<<"$WA5" && ok "A.5가 ${var%=} 값을 확립" || no "A.5에 ${var%=} 확립 부재"
+# --- 핸드오프 변수 2종 (cross-task obligation) --------------------------------
+# reviewing-brief SKILL.md `## 입력` 은 $PAYLOAD·$AUDIT 를 "호출자가 인자로 넘기는 값"이라
+# 주장한다 — conducting-interview 가 실제로 두 값을 세우지 않으면 그 주장은 overclaim 이다.
+# 실행 라인만 본다(펜스 안 bash, 주석 제외) — 산문에 적힌 대입은 값을 세우지 않는다.
+WA5_BASH="$(fence "$WA5" "bash")"
+for var in 'PAYLOAD=' 'AUDIT='; do
+  grep -qE "^[[:space:]]*${var}" <<<"$WA5_BASH" && ok "A.5가 ${var%=} 값을 실행 라인으로 확립" || no "A.5에 ${var%=} 확립 실행 라인 부재"
 done
-grep -qE 'state_path\.py.*state-root' <<<"$WA5" \
-  && ok "A.5가 파이프라인과 같은 state-root 리졸버 사용" || no "A.5의 ROOT 도출이 리졸버와 불일치"
-grep -qE 'state_path\.py.*session-id' <<<"$WA5" \
-  && ok "A.5가 파이프라인과 같은 harness_sid 리졸버 사용" || no "A.5의 harness_sid 도출이 리졸버와 불일치"
+# 엔진은 상대 --doc 을 doc_not_absolute 로 거부한다. callee 도 상대를 절대로 고치지만,
+# 호출자가 절대로 넘기면 두 셸의 cwd 가 달라도 같은 문서를 가리킨다.
+grep -qE '^[[:space:]]*PAYLOAD="\$\(pwd\)/' <<<"$WA5_BASH" \
+  && ok "A.5가 PAYLOAD 를 절대경로(\$(pwd)/…)로 세운다" \
+  || no "A.5의 PAYLOAD 가 상대경로다 — 엔진은 상대 문서 경로를 거부한다"
 
 # --- Step A 게이트·종료 조건 불변 (회귀 락) ---------------------------------
 grep -qF 'check_brief.py' "${CI_FILES[@]}" && ok "Step A 게이트 보존" || no "check_brief.py 게이트가 사라졌다"

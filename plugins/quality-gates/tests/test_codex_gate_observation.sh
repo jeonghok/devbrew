@@ -169,7 +169,7 @@ run_gate() {   # $1=SKILL, $2=runner basename, $3=capture, $4=gate_path(전제 �
     env "$@" PATH="$gate_path" CODEX_CAPTURE_DIR="$cap" \
         CLAUDE_PLUGIN_ROOT="$plugin_root" PR="$plugin_root" PA="$plugin_root" SD="$plugin_root" \
         AXIS_FILE="$w/input.md" PAYLOAD="$w/input.md" spec_path="$w/input.md" \
-        CODEX_JSON="$w/out.json" CODEX_YAML="$w/out.yaml" CODEX_DIR_YAML="$w/out.yaml" \
+        CODEX_JSON="$w/out.json" CODEX_YAML="$w/out.yaml" BUNDLE="$w/input.md" \
         HOME="$SCRATCH/home" CODEX_API_KEY=t \
         bash "$w/gate.sh" ) >/dev/null 2>"$cap.stderr" || true
   obs_call_count "$cap"
@@ -255,10 +255,9 @@ for i in "${!GATED_RUNNER[@]}"; do
   # codex 를 부르면 안 된다. PATH 는 "가용" 시나리오와 동일하게 codex 가 정상
   # 해석되도록 둔다 — PATH 문제가 아니라 감지기 부재 자체가 codex 호출을 막는지를
   # 격리해서 잰다. 세 fence 전부 dangling 링크로 실측 완료 — 셋 다
-  # `skip_reason=detector_not_runnable` 을 올바르게 만든다(구현자가 추론만 했던
-  # `reviewing-brief` 포함). 다만 `reviewing-brief` 는 else 분기가 `:`(no-op) 라
-  # **변수는 올바르게 설정되지만 아무것도 출력하지 않는다** — 그 사용자 가시 구분은
-  # 하류 프로즈 advisory 에 실려 있지 이 fence 자체에는 없다(아래 case 참조).
+  # `skip_reason=detector_not_runnable` 을 올바르게 만든다. `reviewing-brief` 는 문서 리뷰
+  # 엔진 껍데기가 되면서 else 분기가 no-op 에서 SKIPPED 공시로 바뀌어, 이제 stderr 로
+  # 관측된다(아래 case 의 stderr 계열).
   #
   # round 2 수정(N3): 호출 **횟수만** 세면 이 축이 무엇도 재지 못한다 — 감지기가
   # 없으면 codex_avail 이 빈 문자열이라 세 fence 모두 `if [[ "$codex_avail" == "true"
@@ -317,18 +316,15 @@ for i in "${!GATED_RUNNER[@]}"; do
       # (`quality-pipeline/SKILL.md:386-388`이 나머지 두 산문 게이트의 리터럴화가
       # "이 사이클 범위 밖"이라고 적어 뒀다 — 즉 이 목록은 언젠가 반드시 자란다.)
       case "$label" in
-        auditing-plugins|reviewing-spec|framing-requests)
+        auditing-plugins|reviewing-spec|reviewing-brief|framing-requests)
           if grep -q 'detector_not_runnable' "$NODETECT_CAP.stderr" 2>/dev/null; then
             ok "$label: 감지기 부재 → codex 0회 + stderr에 detector_not_runnable (loud-failure 확인)"
           else
             no "$label: 감지기 부재 → codex 0회지만 stderr에 detector_not_runnable 없음 — loud-failure 미확인"
           fi
           ;;
-        reviewing-brief)
-          ok "$label: 감지기 부재 → codex 0회 (안전 확인) — 이 fence 는 else 가 no-op 이라 detector_not_runnable 표시 자체는 관측 불가(사용자 가시성은 하류 프로즈 advisory 에 의존, N3)"
-          ;;
         *)
-          no "$label: 감지기 부재 시나리오의 stderr 관측성이 분류돼 있지 않다 — 이 fence 가 skip_reason 을 stderr 로 내는지 확인하고 위 두 갈래(stderr 에 값을 내는 auditing-plugins|reviewing-spec 계열, 또는 else 가 no-op 인 reviewing-brief 계열) 중 하나에 등재할 것"
+          no "$label: 감지기 부재 시나리오의 stderr 관측성이 분류돼 있지 않다 — 이 fence 가 skip_reason 을 stderr 로 내는지 확인하고 위 stderr 계열에 등재하거나, else 가 no-op 인 fence 면 그 사실을 이름 붙인 갈래를 따로 둘 것"
           ;;
       esac
       ;;

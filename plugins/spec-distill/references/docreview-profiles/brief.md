@@ -1,6 +1,6 @@
 ---
 detectors: 1
-ground_truth: "payload `## 6. 사용자 원문`(S1) + audit `## 6. 사용자 원문`(S2 이상) — 둘 다 정답이다"
+ground_truth: "번들 안의 두 원문 — payload 의 `## 6. 사용자 원문`(S1)과 `<<<AUDIT-VERBATIM>>>` 뒤 블록(audit §6 의 S2 이상) — 둘 다 정답이다"
 allowed_dispositions: [decide, ask, fix, drop]
 fix_anchors: ["^0\\.", "^2\\."]
 immutable: ["^6\\."]
