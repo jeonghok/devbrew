@@ -24,7 +24,13 @@
 5. **익명화** — `docreview_route.py prepare-recritic --state-dir D --critic critic.txt --codex codex.yaml > prep.json`. `codex.yaml` 이 1단계 `begin-round` 가 기록한 이번 라운드 시작보다 먼저(또는 같은 시각에) 쓰였으면 내용과 무관하게 부재로 읽는다(`codex_predates_round`; 기록이 없으면 `round_start_unrecorded`, 정수가 아니면 `round_start_unreadable`) — 4단계의 중화가 불가능한 권한 조합(상태 디렉토리와 그 파일이 둘 다 쓰기 불가, 상태 파일은 쓰기 가능 — 이때 1단계는 통과한다)의 집행 지점이 여기다. rc 4 면 critic 사망 — 라운드를 세지 않고 재dispatch 1회, 또 실패면 승인 게이트를 「미검증」으로 연다. `prep.json` 의 `items` 가 재비판 입력이다.
 6. **재비판** — recritic kill switch 가 아니면 `doc-recritic` 을 한 번 dispatch. 입력 슬롯 셋: 문서 · `prep.json` 의 items(출처 라벨 없음) · 프로필. 그 외 아무것도 넣지 않는다(프레이밍 차단). 출력을 verbatim 파일로.
 7. **얼림 검사 + 라우팅** — 라운드 ≥ 2 면 `docreview_state.py exempt-anchors > ex.json` → `docreview_anchor.py diff prev.json snap.json --exempt ex.json > diff.json` → `docreview_state.py observe-diff --diff diff.json`(permit·fix 적용 관측). 그다음 `docreview_route.py finalize --state-dir D [--recritic recritic.txt | --recritic-skipped] [--diff diff.json] --doc <doc> > fin.json`.
-8. **게이트** — `docreview_state.py gate --state-dir D --render`. `round_gate_needed` 면 라운드 게이트(`decide` 묶음 + 차단 `ask`)를 `AskUserQuestion` 하나로. 사용자 응답을 `decide`·`fix`·`ask` 서브커맨드로 반영. `approval_gate_open` 이면 승인 게이트. 열린 것이 남아 있으면 두 단계이고, **상한 도달이면 열린 것이
+8. **게이트** — `docreview_state.py gate --state-dir D --render`. `round_gate_needed` 면 라운드
+게이트(`decide` 묶음 + 차단 `ask`, 렌더 순서)를 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠
+띄운다 — 도구가 호출당 질문을 4개로 제한하고, 한 결정을 다른 결정의 질문에 묶으면 그 결정의
+선택지가 사라지기 때문이다. 매 호출 첫 질문의 첫 줄은 렌더 첫 줄(degrade 공시)과 같다. 사용자
+응답을 `decide`·`fix`·`ask` 서브커맨드로 반영. `approval_gate_open` 이면 승인 게이트. 열린 것이
+남아 있으면 두 단계다(**1단계는 라운드 게이트와 같은 형태라 같은 분할이 적용된다**, §6.4).
+**상한 도달이면 열린 것이
 0 이어도 항상 두 단계다** — 그때 1단계 선택지는 「추가 라운드 1회 열기」와 「진행 옵션으로」
 둘이다. 「추가 라운드 1회 열기」를 고르면 다음 라운드 1단계가 `begin-round --extra-approval "<사용자
 자신의 문구>"` 로 돈다(그 문구가 `extra_rounds` 에 개별 기록된다). 2단계(네 옵션)의 정본은

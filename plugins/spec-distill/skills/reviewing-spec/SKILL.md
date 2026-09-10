@@ -263,9 +263,12 @@ Read ${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/proceed-gate.md
 ```
 
 엔진 8단계의 `docreview_state.py gate --state-dir "$STATE_DIR" --render` 가 어느 게이트인지 정한다.
-`round_gate_needed` 면 라운드 게이트(결정 묶음 + 차단 `ask`)를 `AskUserQuestion` **하나**로 띄우고
-응답을 `decide`·`fix`·`ask` 서브커맨드로 반영한다. `approval_gate_open` 이면 승인 게이트다. 열린
-것이 남아 있으면 두 단계이고, **상한 도달이면 열린 것이 0 이어도 항상 두 단계다** — 그때 1단계
+`round_gate_needed` 면 라운드 게이트(결정 묶음 + 차단 `ask`, 렌더 순서)를 **`AskUserQuestion` 최대 4개씩
+연속 호출**로 나눠 띄운다 — 도구가 호출당 질문을 4개로 제한하고, 한 결정을 다른 결정의
+질문에 묶으면 그 결정의 선택지가 사라지기 때문이다. 매 호출 첫 질문의 첫 줄은 렌더 첫 줄(degrade
+공시)과 같다. 응답을 `decide`·`fix`·`ask` 서브커맨드로 반영한다. `approval_gate_open` 이면 승인
+게이트다. 열린 것이 남아 있으면 두 단계다(**1단계는 라운드 게이트와 같은 형태라 같은 분할이
+적용된다**). **상한 도달이면 열린 것이 0 이어도 항상 두 단계다** — 그때 1단계
 선택지는 「추가 라운드 1회 열기」와 「진행 옵션으로」 둘이다. 「추가 라운드 1회 열기」를 고르면
 다음 라운드 1단계가 `begin-round --extra-approval "<사용자 자신의 문구>"` 로 돈다.
 
