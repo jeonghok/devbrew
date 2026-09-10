@@ -11,6 +11,8 @@
 **선결(1단계 앞, 매 라운드)** — `mkdir -p <state-dir>` 그다음 `docreview_state.py init --state-dir D --doc <doc> --profile <profile>`.
 `init` 은 멱등이다(이미 있으면 `{"created": false}` rc 0). 건너뛰면 1단계 `begin-round` 가 `state_missing` rc 1 이고, 디렉토리가 없으면 `init` 이 `state_dir_missing` rc 1 이다.
 
+**왜 배포 경로에서 부르는가.** 스크립트는 배포 경로(`<플러그인 루트>/scripts/…`)에서 부른다. 정본(`shared/docreview/scripts/`)에서 부르면 안 된다 — 스크립트는 형제 파일에 의존하는데(셸 러너는 `runner_common.sh` 를, `docreview_route.py` 는 `adjudication` 모듈을) 그 형제는 배포 디렉토리에만 있다(정본 트리에서는 다른 자리에 산다). 그래서 정본에서 부르면 죽는 방식도 다르다: 셸 러너는 fail-closed 로 `codex_failed: true · reason: runner_common_unloadable` 을 기록하고 rc 0 으로 끝나고, `docreview_route.py` 는 `ModuleNotFoundError` 로 rc 1 에 죽는다.
+
 1. **스냅샷** — `docreview_anchor.py snapshot <doc> > snap.json`. `docreview_state.py begin-round --state-dir D --snapshot snap.json` (라운드 4 이상은 `--extra-approval "<사용자 문구>"`; rc 3 이면 상한 — 승인 없이 진행하지 않는다).
 2. **kill switch** — dispatch 직전에 확인하고 캐시하지 않는다. `DEVBREW_<HOST>_DISABLE`(전체)·`…_DISABLE_CODEX`·`…_DISABLE_WEB`·`…_DISABLE_RECRITIC`.
 3. **탐지** — `doc-critic` 을 한 번 dispatch. 입력 슬롯: 문서(또는 번들) · 프로필 · (있으면) 같은 출처의 이전 라운드 finding id. 출력을 verbatim 파일로 저장한다.
