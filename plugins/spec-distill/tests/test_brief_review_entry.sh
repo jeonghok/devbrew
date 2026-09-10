@@ -212,15 +212,24 @@ grep -qF 'floor 5차원' "${CI_FILES[@]}" && ok "종료 driver(floor 5) 보존" 
 grep -qF '# confirmed 0건 — 사용자가 전부 잠정으로 판단' "${CI_FILES[@]}" \
   && ok "confirmed 0건 sentinel 보존" || no "sentinel 문구 손실"
 
-# --- Step B 실기 (4 산출물 + degrade) ---------------------------------------
+# --- Step B 실기 (reviewing-brief 산출물 셋 + degrade) -----------------------
 WB2="$(window '^#### B-2')"
 [[ -n "$WB2" ]] && ok "B-2 윈도우 존재" || no "B-2 윈도우 부재"
 grep -qF 'AskUserQuestion' <<<"$WB2" && ok "B-2 게이트 보존" || no "B-2 게이트 손실"
 n_opt="$(grep -cE '^\s*\{label:' <<<"$WB2" || true)"
 [[ "$n_opt" == "4" ]] && ok "B-2 4옵션 구조 불변 (${n_opt})" || no "B-2 옵션이 ${n_opt} 개 (구조 변경)"
-for tok in '방향성' 'readback' 'gap' 'degrade'; do
+for tok in 'readback' 'gap' 'degrade'; do
   grep -qF "$tok" <<<"$WB2" && ok "B-2 question에 '$tok' 실림 (느슨한 substring, defense-in-depth)" || no "B-2에 '$tok' 부재"
 done
+# reviewing-brief 가 넘기는 첫 산출물은 「리뷰 게이트 결과」다 — 게이트 앞 프로즈 목록의 **번호 항목**
+# 으로 실재해야 한다(느슨한 substring 은 다른 문장의 우연한 단어로 만족된다). 옛 산출물 「방향성 C4
+# 항목」은 없는 산출물이라 남으면 Step B 가 기다리기만 한다 — 부재 단언의 양의 짝이 바로 이 번호 항목이다.
+grep -qE '^1\. \*\*리뷰 게이트 결과\*\*' <<<"$WB2" \
+  && ok "B-2 프로즈 목록 1 이 「리뷰 게이트 결과」다 (번호 항목, load-bearing)" \
+  || no "B-2 프로즈 목록에 「리뷰 게이트 결과」 번호 항목이 없다 — reviewing-brief 의 첫 산출물을 받는 자리가 사라졌다"
+grep -qF '방향성 C4 항목' "${CI_FILES[@]}" \
+  && no "옛 산출물 「방향성 C4 항목」이 남았다 — reviewing-brief 는 그것을 더는 내지 않는다" \
+  || ok "옛 산출물 「방향성 C4 항목」 없음"
 grep -qE 'question 텍스트|question 본문' "${CI_FILES[@]}" \
   && ok "degrade가 question 텍스트에 렌더 (프로즈 서술, defense-in-depth)" || no "렌더 위치(question 텍스트) 명시 부재"
 # 위 두 체크는 어휘(prose가 "degrade"·"question 텍스트"를 언급하는지)만 본다 — §5.6/AC15가

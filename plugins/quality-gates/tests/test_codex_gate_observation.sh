@@ -264,15 +264,11 @@ for i in "${!GATED_RUNNER[@]}"; do
   # ]]` 로 codex 를 안 부르므로, `skip_reason="detector_not_runnable"` 세 줄을 통째로
   # 지워도 호출 수는 그대로 0 이다(호출-수 axis 는 "codex 미설치"·"kill switch" 등
   # 다른 모든 스킵 경로와 값이 같아 구별 불가). `run_gate` 가 이미 stderr 를
-  # `"$cap.stderr"` 로 캡처하므로, stderr 에 skip_reason 값을 echo 하는
-  # auditing-plugins·reviewing-spec 두 fence 는 그 캡처를 직접 grep 해 진짜 이빨을
-  # 만든다. reviewing-brief 는 else 가 no-op 이라 stderr 에 아무것도 안 남는다 — 그
-  # 축은 이 러너로는 **관측 불가**다(가짜 락을 남기지 않는다, 아래 case 의 정직한
-  # 문구 참조). mutation 증명: 세 fence 의 `skip_reason="detector_not_runnable"` 줄을
-  # 지우면 auditing-plugins·reviewing-spec 두 시나리오는 RED 가 되고(stderr 가
-  # `${skip_reason:-unknown}` 의 fallback 인 "unknown" 을 내 grep 이 실패한다),
-  # reviewing-brief 시나리오는 GREEN 그대로다(원래도 이 fence 로는 관측 불가라는
-  # 주장과 일치 — 아래 report 의 "N3 mutation 증명" 절 참조).
+  # `"$cap.stderr"` 로 캡처하므로, stderr 에 skip_reason 값을 echo 하는 fence 는 그
+  # 캡처를 직접 grep 해 진짜 이빨을 만든다 — 아래 case 의 stderr 계열(reviewing-brief 도
+  # 문서 리뷰 엔진 전환 뒤 SKIPPED 공시로 사유를 내므로 이 계열이다). mutation 증명: 그
+  # fence 들의 `skip_reason="detector_not_runnable"` 줄을 지우면 stderr 가
+  # `${skip_reason:-unknown}` 의 fallback 인 "unknown" 을 내 grep 이 실패해 RED 다.
   _ACTIVE_DETECTOR_ORIG="$plugin_root_dir/scripts/detect_codex.sh"
   # N5(round 2): 파괴(`rm -f`) 앞에 링크 여부를 확인한다. `readlink` 는 대상이
   # 심볼릭 링크가 아니면 빈 출력 + rc=1을 내는데, 이 스크립트는 `-e` 없이

@@ -19,6 +19,10 @@
 #   · P×자리 — 같은 세션에서 design doc 자리(`reviewing-spec`)와 brief 자리가 다른 자리를 받는가.
 #   · S×자리 — brief 쪽 sweep 이 design doc 자리의 codex 산출물까지 중화하되 번들·원장은 남기는가.
 #   · B 번들 조립이 실패한 라운드가 직전 번들을 남기지 않는가, 그 뒤 fence 가 codex 를 건너뛰는가.
+#   · H 따로 도는 블록(Bash 호출마다 새 셸) — `## 입력` 만 돌아도 payload 가 절대경로가 되는가(I1),
+#     `## 번들` 이 머리 없이 들어온 상대경로로도 조립되는가, 진입 게이트 실패가 직전 번들을 세 층으로
+#     치우는가(M2), 상태 디렉토리 부재의 사유를 가르는가, 따로 돈 degrade-append 의 record 가 원장 또는
+#     두 번째 채널에 닿는가(M3).
 # 감지기와 kill switch 설정은 리포 정본을 복사해 쓰고 러너만 스텁이다. PATH 는 진짜 `$PATH` 를
 # 이어붙이지 않는다 — 실제 codex 로 새는 경로를 막는다. 리포의 배포 지점은 건드리지 않는다.
 set -u
@@ -139,7 +143,8 @@ stale_into() {   # stale_into <path> — 직전 라운드가 정상으로 끝낸
 # ── 계측기 전제 — 쓰는 sid 전부가 세션 이름 검사와 문서별 도출을 통과하는가 ────
 SIDS="rb01kill rb02noin rb03nopl rb04nobd rb05rc3x rb06nodt rb07keep rb08trap rb09lock
       rb10down rb11ctlx rb12trnc rb13pred rb21kill rb22noin rb23nopl rb24nobd rb25rc3x
-      rb26nodt rb27lock rb30plce rb31swep rb32swpe rb33swlk rb34swle rb40bndl rb41bndf rb42bnde rb43bndk"
+      rb26nodt rb27lock rb30plce rb31swep rb32swpe rb33swlk rb34swle rb40bndl rb41bndf rb42bnde rb43bndk
+      rb50relx rb51relb rb52gtrm rb53gttr rb54gtst rb55gtre rb56bdst rb57nopl rb58apnd"
 bad=""
 for s in $SIDS; do
   DEVBREW_SPEC_DISTILL_SESSION_ID="$s" python3 "$PR/scripts/state_path.py" session-id >/dev/null 2>&1 || bad="$bad $s"
@@ -520,4 +525,105 @@ fire_at="$(where rb41bndf "$DOC_B")"
 { [ ! -e "$SCRATCH/rb41bndf.argv" ] && grep -q 'reason: gate_inputs_missing' "$SCRATCH/rb41bndf.fence.err"; } \
   && ok "B→fence: 번들 실패 라운드 뒤의 fence 는 러너를 부르지 않고 gate_inputs_missing 으로 공시한다" \
   || no "B→fence: 번들 실패 라운드 뒤에 러너가 불렸거나 공시가 없다 ($(state_of "$fire_at/brief-bundle.md") 번들)"
+
+# ── H) 따로 도는 블록 — Bash 도구는 호출마다 새 셸이다 ─────────────────────────────
+# 진입 게이트·degrade 원장은 check_brief.py · brief_review_state.py 의 형제 모듈이 필요해 리포의 배포
+# 루트를 쓴다(상태 루트는 cwd 가 git 밖인 스크래치라 그 안에 생긴다). 러너가 없는 블록이라 스텁이 필요 없다.
+RPR="$ROOT/plugins/spec-distill"
+APPEND_BLK="$SCRATCH/append.sh"; cut_block "$SKILL" '^## kill switch' > "$APPEND_BLK"
+GATE_BLK="$SCRATCH/gate.sh";     cut_block "$SKILL" '^## 진입 게이트' > "$GATE_BLK"
+GATE_BLK_E="$SCRATCH/gate-e.sh"; { echo 'set -euo pipefail'; cat "$GATE_BLK"; } > "$GATE_BLK_E"
+{ grep -q 'degrade-append' "$APPEND_BLK" && grep -q 'check_brief.py" gate' "$GATE_BLK" && bash -n "$GATE_BLK" 2>/dev/null; } \
+  && ok "H 추출: degrade-append 블록과 진입 게이트 블록을 잘랐다 (bash -n 통과)" \
+  || no "H 추출: degrade-append 또는 진입 게이트 블록이 비었거나 문법이 깨졌다 — 아래 H 셀은 무의미하다"
+alone() {   # alone <sid> <script> <플러그인 루트> [env…] — 앞 블록 없이 새 셸에서 그 블록 하나만
+  local sid="$1" script="$2" pr="$3"; shift 3
+  mkdir -p "$SCRATCH/$sid"
+  ( cd "$SCRATCH/$sid" && env -i PATH="$BASE" HOME="$SCRATCH/$sid" PYTHONDONTWRITEBYTECODE=1 \
+      CLAUDE_PLUGIN_ROOT="$pr" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" "$@" bash "$script" ) >/dev/null 2>"$SCRATCH/$sid.alone.err"
+}
+
+# I1 — `## 입력` 하나만 돌아도 payload·audit 가 절대경로가 된다. 엔진의 --doc 슬롯이 그 값을 받는다.
+home="$SCRATCH/rb50relx"; mkdir -p "$home/docs"; cp "$DOC_B" "$AUD_B" "$home/docs/"
+{ cat "$INPUT"; printf '%s\n' 'printf "PAYLOAD=%s\nAUDIT=%s\n" "$PAYLOAD" "$AUDIT" > "$OBS"'; } > "$SCRATCH/i1-input.sh"
+alone rb50relx "$SCRATCH/i1-input.sh" "$PR" PAYLOAD="docs/brief-sample.md" AUDIT="docs/brief-sample.audit.md" OBS="$SCRATCH/i1.obs"
+ip="$(seen "$SCRATCH/i1.obs" PAYLOAD)"; ia="$(seen "$SCRATCH/i1.obs" AUDIT)"
+if [ "${ip#/}" != "$ip" ] && [ "${ia#/}" != "$ia" ] && [ "$(real "$ip")" = "$(real "$home/docs/brief-sample.md")" ] \
+   && [ "$(real "$ia")" = "$(real "$home/docs/brief-sample.audit.md")" ]; then
+  ok "I1: \`## 입력\` 만 돌아도 상대 payload·audit 가 같은 파일의 절대경로가 된다"
+else
+  no "I1: \`## 입력\` 뒤 PAYLOAD='$ip' AUDIT='$ia' — 상대경로가 남으면 엔진은 --doc 을 doc_not_absolute 로 거부한다"
+fi
+# I1 — `## 번들` 이 앞 블록 없이 상대 payload·audit 로 들어와도 제 머리로 절대화해 그 문서 자리에 조립한다.
+home="$SCRATCH/rb51relb"; mkdir -p "$home/docs"; cp "$DOC_B" "$AUD_B" "$home/docs/"
+rc=0; alone rb51relb "$BUNDLE_BLK" "$PR" PAYLOAD="docs/brief-sample.md" AUDIT="docs/brief-sample.audit.md" || rc=$?
+bnd="$(where rb51relb "$home/docs/brief-sample.md")/brief-bundle.md"
+{ [ "$rc" = "0" ] && grep -qF '<<<AUDIT-VERBATIM>>>' "$bnd" 2>/dev/null; } \
+  && ok "I1: \`## 번들\` 이 따로 상대경로로 돌아도 그 문서의 자리에 번들을 조립한다" \
+  || no "I1: \`## 번들\` 을 따로 상대경로로 돌리면 rc=$rc · 번들 $(state_of "$bnd") — $(head -c 200 "$SCRATCH/rb51relb.alone.err" 2>/dev/null)"
+
+# M2 — 진입 게이트가 막히면 직전 라운드 번들을 세 층으로 치운다(지움 → 절단 → 공시).
+gate_case() {   # gate_case <라벨> <sid> <디렉토리 권한> <파일 권한> <기대: absent|0byte|stuck> <블록>
+  local label="$1" sid="$2" dm="$3" fm="$4" want="$5" script="$6" at b rc=0 got tail
+  at="$(where "$sid" "$DOC_B")"; mkdir -p "$at"; b="$at/brief-bundle.md"
+  printf 'bundle from the previous round — %s\n' "$OLD" > "$b"; chmod "$fm" "$b"; chmod "$dm" "$at"
+  alone "$sid" "$script" "$RPR" PAYLOAD="$DOC_B" AUDIT="$AUD_B" || rc=$?
+  got="$(state_of "$b")"; chmod 755 "$at"; [ -e "$b" ] && chmod 644 "$b"
+  tail="${b#"$SCRATCH"/}"
+  if ! grep -q '구조 게이트 미통과' "$SCRATCH/$sid.alone.err"; then
+    no "M2($label) 전제 붕괴: 진입 게이트가 실패 경로로 돌지 않았다 (rc=$rc) — 이 셀은 정리를 재지 않는다"; return
+  fi
+  if [ "$want" = "stuck" ]; then
+    { [ "$rc" != "0" ] && [ "$got" != "absent" ] && [ "$got" != "0byte" ] \
+      && grep -q '지우지도 비우지도 못했다' "$SCRATCH/$sid.alone.err" && grep -qF "$tail" "$SCRATCH/$sid.alone.err"; } \
+      && ok "M2($label): 치울 수 없는 직전 번들은 그 경로와 함께 공시되고 라운드가 멈춘다 (rc $rc · $got 잔존)" \
+      || no "M2($label): 치우지 못한 직전 번들이 공시되지 않았다 (rc=$rc · $got)"
+  else
+    { [ "$rc" != "0" ] && [ "$got" = "$want" ]; } \
+      && ok "M2($label): 진입 게이트 실패가 직전 번들을 치운다 ($got)" \
+      || no "M2($label): 진입 게이트가 막혔는데 직전 번들이 $got 로 남았다 (기대 $want) — codex 게이트의 -s 검사가 그것을 넘긴다"
+  fi
+}
+gate_case "지움"          rb52gtrm 755 644 absent "$GATE_BLK"
+gate_case "절단"          rb53gttr 555 644 0byte  "$GATE_BLK"
+gate_case "중화 불가"     rb54gtst 555 444 stuck  "$GATE_BLK"
+gate_case "지움 · errexit" rb55gtre 755 644 absent "$GATE_BLK_E"
+# 번들 조립 쪽의 셋째 층 — 리다이렉트도 지움도 절단도 막히면 공시하고 멈춘다.
+at="$(where rb56bdst "$DOC_B")"; mkdir -p "$at"; b="$at/brief-bundle.md"
+printf 'bundle from the previous round — %s\n' "$OLD" > "$b"; chmod 444 "$b"; chmod 555 "$at"
+rc=0; alone rb56bdst "$BUNDLE_BLK" "$PR" PAYLOAD="$DOC_B" AUDIT="$AUD_B" || rc=$?
+got="$(state_of "$b")"; chmod 755 "$at"; chmod 644 "$b"
+{ [ "$rc" != "0" ] && [ "$got" != "absent" ] && [ "$got" != "0byte" ] \
+  && grep -q '지우지도 비우지도 못했다' "$SCRATCH/rb56bdst.alone.err" && grep -q '번들 조립 실패' "$SCRATCH/rb56bdst.alone.err"; } \
+  && ok "M2(번들 · 중화 불가): 조립·지움·절단이 다 막히면 직전 번들을 공시하고 멈춘다 (rc $rc · $got 잔존)" \
+  || no "M2(번들 · 중화 불가): 치우지 못한 직전 번들이 공시되지 않았다 (rc=$rc · $got)"
+
+# M5 — 상태 디렉토리가 없는 사유를 가른다: 빈 payload 에 세션 id 처방을 내지 않는다.
+rc=0; alone rb57nopl "$BUNDLE_BLK" "$PR" AUDIT="$AUD_B" || rc=$?
+{ [ "$rc" != "0" ] && grep -q 'PAYLOAD 가 비었다' "$SCRATCH/rb57nopl.alone.err" && ! grep -q '세션 id 미해석' "$SCRATCH/rb57nopl.alone.err"; } \
+  && ok "M5: 빈 payload 로 들어온 번들 블록이 그 사유(Skill 인자 1)를 대고 멈춘다" \
+  || no "M5: 빈 payload 의 공시가 사유를 잘못 대거나 멈추지 않는다 (rc=$rc · $(head -c 200 "$SCRATCH/rb57nopl.alone.err" 2>/dev/null))"
+
+# M3 — 따로 돈 degrade-append 블록의 record 가 닿는다. 원장이 쓰기 불가면 두 번째 채널 파일에 닿는다.
+# 슬롯(<a>·<b>·<c>·<r>)은 모델이 채우는 자리라 여기서도 채워 돌린다.
+home="$SCRATCH/rb58apnd"; S="$home/.claude/spec-distill/rb58apnd"; mkdir -p "$S"
+printf -- '---\nsession_id: rb58apnd\n---\n\nbody\n' > "$S/state.local.md"
+alone rb58apnd "$INPUT" "$RPR" PAYLOAD="$DOC_B" AUDIT="$AUD_B"
+fill() { sed -e 's/<a>/pipeline/g' -e 's/<b>/all/g' -e 's/<c>/skipped/g' -e "s/<r>/$1/g" "$APPEND_BLK" > "$2"; }
+fill probe-land-q1 "$SCRATCH/append-1.sh"; fill probe-fallback-q2 "$SCRATCH/append-2.sh"
+if grep -q '^brief_review_degradations:' "$S/state.local.md"; then
+  ok "M3 전제: \`## 입력\` 머리의 init 이 degrade 원장 키를 심었다"
+else
+  no "M3 전제 붕괴: degrade 원장 키가 없다 — 아래 셀은 append 를 재지 않는다 ($(head -c 200 "$SCRATCH/rb58apnd.alone.err" 2>/dev/null))"
+fi
+alone rb58apnd "$SCRATCH/append-1.sh" "$RPR" PAYLOAD="$DOC_B" AUDIT="$AUD_B"
+grep -q 'probe-land-q1' "$S/state.local.md" \
+  && ok "M3: 앞 블록 없이 따로 돈 degrade-append 의 record 가 원장에 닿는다" \
+  || no "M3: 따로 돈 degrade-append 의 record 가 원장에 없다 — 그 record 는 「degrade 없음」으로 사라진다 ($(head -c 200 "$SCRATCH/rb58apnd.alone.err" 2>/dev/null))"
+chmod 444 "$S/state.local.md"
+alone rb58apnd "$SCRATCH/append-2.sh" "$RPR" PAYLOAD="$DOC_B" AUDIT="$AUD_B"
+chmod 644 "$S/state.local.md"
+{ grep -q 'probe-fallback-q2' "$S/brief-degrade-fallback.txt" 2>/dev/null && ! grep -q 'probe-fallback-q2' "$S/state.local.md"; } \
+  && ok "M3: 원장이 쓰기 불가면 따로 돈 블록의 record 가 머리가 다시 도출한 두 번째 채널 파일에 닿는다" \
+  || no "M3: 원장 쓰기 실패의 record 가 두 번째 채널 파일($S/brief-degrade-fallback.txt)에 없다 — \`>> \"\"\` 로 사라졌다"
 finish

@@ -18,25 +18,33 @@ user-invocable: false
 
 ## 입력
 
-호출자 `conducting-interview` 종료 Step A.5 가 두 값을 인자로 넘긴다. 훅은 이 자리에 없으므로 이
-둘이 계약의 전부다.
+호출자 `conducting-interview` 종료 Step A.5 가 두 값을 Skill 인자로 넘긴다. 훅은 이 자리에 없으므로
+이 둘이 계약의 전부다.
 
 - `$PAYLOAD` — 구조 게이트를 막 통과한 payload. 엔진의 `--doc`(init · snapshot · 얼림 검사 ·
   finalize)이 이것이다 — 저자가 고치는 파일이고 프로필의 앵커가 이 파일의 절을 가리킨다.
 - `$AUDIT` — 그 payload 의 audit sidecar(`<payload>.audit.md`). §6 원문 `S2` 이상이 여기 산다.
 
-인자 없이 들어왔으면(직접 호출) loud advisory 를 내고 두 경로를 사용자에게 확인한다. 상대경로는
-`$(pwd)` 를 붙여 절대로 만든다 — 엔진은 상대 `--doc` 을 `doc_not_absolute` 로 거부한다.
+**두 인자를 어느 블록보다 먼저 대입한다** — 매 Bash 호출의 첫 줄에 `PAYLOAD="<Skill 인자 1>"; AUDIT="<Skill
+인자 2>"` 를 둔다. Bash 도구는 호출마다 새 셸이라 앞 호출의 대입이 남지 않는다. 인자 없이 들어왔으면(직접
+호출) loud advisory 를 내고 두 경로를 사용자에게 확인한다.
+
+아래 블록이 이 skill 의 **머리**다. 이 파일의 bash 블록은 전부 이 머리의 줄들로 시작하고, `## 절차` 의
+엔진 호출도 이 머리를 앞에 붙인 같은 Bash 호출에서 돈다. 머리가 상대경로를 `$(pwd)/` 로 절대화한다 —
+엔진은 상대 `--doc` 을 `doc_not_absolute` 로 거부하고, 번들 자리도 그 절대경로의 함수다. 마지막 줄은
+degrade 원장을 연다(부재 키만 추가하므로 몇 번 돌아도 같다):
 
 ```bash
 PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
-harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"
-ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
+harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
 STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 — 세션의 한 파일
+DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
+touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
+init_rc=0; python3 "$PR/scripts/brief_review_state.py" init "$STATE" || init_rc=$?
 ```
 
 엔진 상태(`$STATE_DIR`, 원장은 그 안의 `docreview-state.md`)는 **문서별**이다 — 세션과 payload 경로의
@@ -44,19 +52,12 @@ BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 세션의 다른 문서(design doc 자리의 것 포함)는 다른 자리로 간다. 세션 id 를 못 풀었거나 `$PAYLOAD` 가
 비면 `$STATE_DIR` 이 비고 선결 `init` 이 `state_dir_missing` 으로 멈춘다. **선결의 `init` 이 rc 0 이
 아니면 값과 무관하게 이 라운드를 진행하지 않는다** — `begin-round` 는 문서를 보지 않으므로,
-`state_doc_mismatch` 같은 거부를 넘어 진행하면 다른 문서의 원장 위에서 라운드가 돈다. degrade 원장
-`$STATE` 는 엔진 원장과 다른 파일이다. 진입 게이트보다 먼저 연다(`init` 은 부재 키만 추가한다):
+`state_doc_mismatch` 같은 거부를 넘어 진행하면 다른 문서의 원장 위에서 라운드가 돈다. 그때는
+record(`pipeline` / `all` / `unavailable`, reason = `init` 이 낸 사유)를 남기고 Step B 로 돌아간다.
 
-```bash
-DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"
-touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null \
-  || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
-init_rc=0; python3 "$PR/scripts/brief_review_state.py" init "$STATE" || init_rc=$?
-```
-
-`init_rc != 0` 이면 그 자리에서 loud advisory(`[spec-distill] brief 리뷰 degrade 원장 기록 불가
-(<reason>) — 이 세션의 record 는 두 번째 채널로만 Step B 에 간다`)를 내고 계속한다 — 기록이 없는 것과
-degrade 가 없는 것은 다른 사실이다.
+degrade 원장 `$STATE` 는 엔진 원장과 다른 파일이다. `init_rc != 0` 이면 그 자리에서 loud
+advisory(`[spec-distill] brief 리뷰 degrade 원장 기록 불가 (<reason>) — 이 세션의 record 는 두 번째
+채널로만 Step B 에 간다`)를 내고 계속한다 — 기록이 없는 것과 degrade 가 없는 것은 다른 사실이다.
 
 ## kill switch
 
@@ -77,6 +78,15 @@ record 의 필드는 `component` · `affected_axis` · `verification_status` · 
 호출마다 새 셸이라 누산기는 파일이어야 Step B 까지 산다 — 에 이어 붙인다:
 
 ```bash
+PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
+case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
+harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
+STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 — 세션의 한 파일
+DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
+touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component <a> --axis <b> --status <c> --reason "<r>" \
   || echo "- (state 기록 실패) component=<a> axis=<b> status=<c> reason=<r>" >> "$DEGRADE_FALLBACK_FILE"
 ```
@@ -85,16 +95,37 @@ python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component 
 
 엔진은 게이트를 통과한 문서만 받는다. 저자 수정이 게이트를 깨뜨릴 수 있으므로 **라운드마다** 1단계
 앞에서 돈다(첫 라운드 포함 — 이 skill 은 호출자를 거치지 않고도 들어올 수 있다). 파이프를 걸지
-않는다 — `$?` 가 파이프 마지막 명령의 코드가 된다.
+않는다 — `$?` 가 파이프 마지막 명령의 코드가 된다. 막히면 직전 라운드의 번들을 치운다 — 남으면 codex
+게이트가 그것을 이번 번들로 넘긴다. 치우는 순서는 codex 산출물과 같다: 지운다 → 못 지우면 0바이트로
+절단한다 → 둘 다 못 하면 공시하고 멈춘다.
 
 ```bash
+PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
+case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
+harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
+STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 — 세션의 한 파일
+DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
+touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
+drop_bundle() {   # 직전 라운드 번들 — 지운다, 못 지우면 0바이트로 절단, 둘 다 못 하면 공시하고 rc 1
+  [ -n "${BUNDLE:-}" ] && [ -e "$BUNDLE" ] || return 0
+  rm -f "$BUNDLE" 2>/dev/null || true
+  if [ -e "$BUNDLE" ]; then : > "$BUNDLE" 2>/dev/null || true; fi
+  [ -s "$BUNDLE" ] || return 0
+  echo "[spec-distill] 직전 라운드 번들을 지우지도 비우지도 못했다: $BUNDLE — 남아 있는 한 codex 게이트가 그것을 이번 번들로 넘긴다. 이 라운드는 멈춘다. 해소: 그 파일을 직접 지우거나 상태 디렉토리의 쓰기 권한을 복구하라." >&2
+  return 1
+}
 gate_rc=0; python3 "$PR/scripts/check_brief.py" gate "$PAYLOAD" || gate_rc=$?
 if [ "$gate_rc" -ne 0 ]; then
+  drop_bundle || true
   echo "[spec-distill] 구조 게이트 미통과 — 이 라운드를 시작하지 않는다 (Law 1). failures 를 고치고 이 절부터 다시 탄다." >&2
   exit 1
 fi
 vc_rc=0; python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE" "$AUDIT" || vc_rc=$?
 if [ "$vc_rc" -eq 1 ]; then
+  drop_bundle || true
   echo "[spec-distill] §6 원문 완전성 위반 — 이 라운드를 시작하지 않는다. 아래 표대로 고치고 이 절부터 다시 탄다." >&2
   exit 1
 fi
@@ -125,23 +156,44 @@ PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-prof
 소비자 셋이 같은 바이트를 보고, 저자 수정 뒤 다음 라운드는 새 번들을 본다.
 
 ```bash
+PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
+case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
+harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
+STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 — 세션의 한 파일
+DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
+touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
+drop_bundle() {   # 직전 라운드 번들 — 지운다, 못 지우면 0바이트로 절단, 둘 다 못 하면 공시하고 rc 1
+  [ -n "${BUNDLE:-}" ] && [ -e "$BUNDLE" ] || return 0
+  rm -f "$BUNDLE" 2>/dev/null || true
+  if [ -e "$BUNDLE" ]; then : > "$BUNDLE" 2>/dev/null || true; fi
+  [ -s "$BUNDLE" ] || return 0
+  echo "[spec-distill] 직전 라운드 번들을 지우지도 비우지도 못했다: $BUNDLE — 남아 있는 한 codex 게이트가 그것을 이번 번들로 넘긴다. 이 라운드는 멈춘다. 해소: 그 파일을 직접 지우거나 상태 디렉토리의 쓰기 권한을 복구하라." >&2
+  return 1
+}
 if [ -z "${STATE_DIR:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
-  echo "[spec-distill] 엔진 상태 디렉토리를 만들 수 없다('${STATE_DIR:-}') — 이 라운드를 시작하지 않는다. 해소: DEVBREW_SPEC_DISTILL_SESSION_ID 로 sid 를 명시하라." >&2
+  if [ -z "${PAYLOAD:-}" ]; then why="PAYLOAD 가 비었다 — Skill 인자 1(payload 경로)을 이 블록 앞에서 대입하라"
+  elif [ -z "${harness_sid:-}" ]; then why="세션 id 미해석 — DEVBREW_SPEC_DISTILL_SESSION_ID 로 명시하라"
+  else why="state-dir-for 가 거부했거나('${STATE_DIR:-}') 디렉토리를 만들 수 없다 — 위 stderr 의 사유를 보라"; fi
+  echo "[spec-distill] 엔진 상태 디렉토리 없음 — ${why}. 이 라운드를 시작하지 않는다(record 후 Step B)." >&2
   exit 1
 fi
 blob_rc=0; python3 "$PR/scripts/build_brief_bundle.py" "$PAYLOAD" "$AUDIT" > "$BUNDLE" || blob_rc=$?
 if [ "$blob_rc" -ne 0 ] && [ "$blob_rc" -ne 3 ]; then
-  rm -f "$BUNDLE" 2>/dev/null || : > "$BUNDLE" 2>/dev/null || true
-  echo "[spec-distill] 번들 조립 실패(rc $blob_rc) — 이 라운드를 시작하지 않는다." >&2
+  drop_bundle || true
+  echo "[spec-distill] 번들 조립 실패(rc $blob_rc) — 이 라운드를 시작하지 않는다(record 후 Step B)." >&2
   exit 1
 fi
 ```
 
-`blob_rc == 2`(payload·audit 부재 · 읽기 실패 · audit 에 `## 6. 사용자 원문` 없음)와 표에 없는 코드는
-같은 처리다: 번들을 지워(못 지우면 비워) 다음 셸이 직전 라운드 번들을 이번 것으로 집지 못하게 하고,
-record(`pipeline` / `all` / `unavailable`) 후 Step B 로 돌아간다 — 원문 없이 충실도를 물으면 「왜곡
-없음」이 공허하게 나온다. `blob_rc == 3` 은 번들의 payload 부분에 audit 파일명이 남았다는 뜻이다 —
-원문 보존이 우선이라 지우지 않고 record(`critic` / `fidelity` / `degraded`) 후 계속한다.
+엔진 상태 디렉토리가 없으면(빈 payload · 세션 id 미해석 · `state-dir-for` 거부) 라운드를 시작하지 않고
+record(`pipeline` / `all` / `unavailable`, reason = 위 공시의 사유) 후 Step B 로 돌아간다. `blob_rc == 2`
+(payload·audit 부재 · 읽기 실패 · audit 에 `## 6. 사용자 원문` 없음)와 표에 없는 코드도 같다 — 직전 번들을
+치운 뒤(치우지 못하면 그 사실이 공시된다) record(`pipeline` / `all` / `unavailable`) 후 Step B. 원문 없이
+충실도를 물으면 「왜곡 없음」이 공허하게 나온다. `blob_rc == 3` 은 번들의 payload 부분에 audit 파일명이
+남았다는 뜻이다 — 원문 보존이 우선이라 지우지 않고 record(`critic` / `fidelity` / `degraded`) 후 계속한다.
 
 ## 절차
 
@@ -154,6 +206,7 @@ Read ${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/reviewing-document
 - `--state-dir` = `$STATE_DIR` · `--profile` = `$PROFILE` · `--doc` = `$PAYLOAD`
 - 탐지·재비판의 `<document>` = `$BUNDLE` 의 내용 · codex 러너의 `<doc>` = `$BUNDLE`
 - 결정 기록의 `--log-file` = `$AUDIT` — 프로필 `decision_log` 이 audit 의 `## 8. 리뷰 결정` 을 가리킨다
+- 엔진 호출마다 `## 입력` 의 머리를 앞에 붙인다 — `$PAYLOAD` 는 머리가 절대화한 값이고 `$STATE_DIR` 은 그 문서의 자리다
 
 상한은 그 문서가 정하는 **재리뷰 상한 2** 다. 이 자리의 지출 통제가 그것이다 — 라운드 4 이상은
 사용자가 승인 게이트에서 자기 문구로 열어야만 돈다.
@@ -213,7 +266,7 @@ if [[ -z "$codex_avail" ]]; then skip_reason="detector_not_runnable"; fi
 # `$PAYLOAD` 는 호출자 인자라 디스크에서 도출되지 않고, 번들은 진입 게이트를 통과한 라운드에만 있다 —
 # 셋 중 하나라도 없으면 소리를 내고 codex 없이 간다(빈 채로 러너에 넘기면 사유가 남지 않는다).
 if [[ -z "${PAYLOAD:-}" || -z "${CODEX_YAML:-}" || ! -s "${BUNDLE:-}" ]]; then
-  echo "[spec-distill] codex 게이트 입력 부재 — PAYLOAD='${PAYLOAD:-}' CODEX_YAML='${CODEX_YAML:-}' BUNDLE='${BUNDLE:-}'. 「## 입력」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 돌리고, 「## 번들」 이 이번 라운드 번들을 조립했는지 확인하라. 이 라운드의 codex 축은 없이 간다." >&2
+  echo "[spec-distill] codex 게이트 입력 부재 — PAYLOAD='${PAYLOAD:-}' CODEX_YAML='${CODEX_YAML:-}' BUNDLE='${BUNDLE:-}'. PAYLOAD 에 Skill 인자 1(payload 경로)을 대입하고 「## 입력」 머리를 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 돌려라. 「## 번들」 이 이번 라운드 번들을 조립했는지 확인하라. 이 라운드의 codex 축은 없이 간다." >&2
   codex_avail=""; skip_reason="gate_inputs_missing"
 fi
 # 진입 중화가 실패했으면 그 사실이 다른 어떤 사유보다 앞선다.
@@ -235,10 +288,11 @@ fi
 
 **웹 — Claude 쪽 근거가 없다.** 탐지·재비판 agent 둘은 `tools: Read, Grep, Glob` 뿐이다. 프로필의
 `web: true` 를 소비하는 것은 codex 러너 하나다 — 러너가 프로필 frontmatter 의 `web:` 을 읽어 codex 웹
-검색을 켜고, `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 이면 끈다. 그래서 이 스위치가 이 자리의 리뷰에서 끄는
-것은 codex 의 웹 검색 하나이고(진입 게이트의 `check_brief.py` 도 같은 스위치로 §4 sentinel 하나를
-완화하며 자기 advisory 로 공시한다), codex 가 없는 라운드에는 외부 근거가 0 이다. 그 사실은
-`## degrade 채널` 의 웹 줄로 매번 공시한다.
+검색을 켜고, 두 호스트 스위치 `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` · `DEVBREW_QUALITY_GATES_DISABLE_WEB=1`
+중 하나라도 켜져 있으면 끈다(공유 러너가 두 호스트의 스위치를 함께 본다). 그래서 이 자리의 리뷰에서 웹
+스위치가 끄는 것은 codex 의 웹 검색 하나이고(진입 게이트의 `check_brief.py` 도
+`DEVBREW_SPEC_DISTILL_DISABLE_WEB` 로 §4 sentinel 하나를 완화하며 자기 advisory 로 공시한다), codex 가
+없는 라운드에는 외부 근거가 0 이다. 그 사실은 `## degrade 채널` 의 웹 줄로 매번 공시한다.
 
 ## dispatch 블록 둘
 
@@ -316,8 +370,8 @@ Agent({
   수동 재호출)이 그 라운드부터 잇는다. 이 자리에는 arm 원장이 없어 치울 in-flight 표시가 없다.
 - **critic 사망이 두 번**이면 승인 게이트를 「미검증」으로 열고 그 라벨을 그대로 Step B 로 넘긴다.
 - **polite stop 금지 (AP2)** — 이 skill 을 끝내는 모든 경로는 게이트 결과를 싣고 Step B 로 돌아가거나,
-  게이트를 거치지 않는 예외 경로(kill switch · 진입 게이트 차단 · 번들 실패)면 명시적 advisory 단락을
-  동반한다. 조용한 종료는 금지다.
+  게이트를 거치지 않는 예외 경로(kill switch · 진입 게이트 차단 · 엔진 상태 디렉토리 없음 · 엔진 init 거부 ·
+  번들 실패)면 record 와 명시적 advisory 단락을 동반하고 Step B 로 돌아간다. 조용한 종료는 금지다.
 
 ## 냉독 — 엔진 밖, advisory
 
@@ -326,6 +380,15 @@ Step B 텍스트에 advisory 로 붙는다. 문서가 더 이상 바뀌지 않�
 1단계가 닫힌 뒤 한 번 돈다. 하류가 읽는 것이 payload 이므로 번들이 아니라 payload 만 싣는다.
 
 ```bash
+PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
+case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
+harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
+STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 — 세션의 한 파일
+DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
+touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 blob_rc=0; BLOB="$(python3 "$PR/scripts/build_brief_inline_blob.py" "$PAYLOAD")" || blob_rc=$?
 ```
 
@@ -364,7 +427,7 @@ ${BLOB}
 
 G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **세 조각**으로 넘긴다 — *어느 클래스 /
 요약의 어느 문장 / payload 의 어느 절*. 판정은 advisory 다: 프레시 에이전트는 잘못 재구성된 payload 도
-정확히 요약할 수 있어 hard verdict 로 쓰면 false block 이 난다. 일곱 번째 클래스가 관측되면 이 표에 더한다.
+정확히 요약할 수 있어 hard verdict 로 쓰면 false block 이 난다.
 
 ## Step B 로 돌아간다
 
@@ -376,6 +439,9 @@ G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **�
 2. **냉독 요약 전문 + gap 목록**(세 조각), 또는 냉독이 돌지 못한 사유.
 3. **degrade** — 아래 채널 전부를 한 줄씩.
 
+돌아가기 전에 같은 셋을 audit(`$AUDIT`) §5 의 `### brief 리뷰 (reviewing-brief — 문서 리뷰 엔진)` 에 템플릿
+줄 모양대로 한 줄씩 채운다 — 기록이지 게이트가 아니다. 결정 자체는 엔진이 `## 8. 리뷰 결정` 에 이미 썼다.
+
 ## degrade 채널
 
 이 skill 의 degrade 채널은 이름이 다섯이다:
@@ -385,7 +451,7 @@ G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **�
   `docreview_state.py gate --render` 의 **첫 줄**(그 라운드의 degrade 한 줄).
 - 이 자리의 둘 — `brief_review_state.py get "$STATE"` 의 `brief_review_degradations`(진입 게이트 강등 ·
   번들 위생 미달 · 냉독 실패 · BRIEF_REVIEW skip · 원장 기록 불가처럼 엔진 밖의 사건) · 그 기록이
-  실패했을 때의 `$DEGRADE_FALLBACK_FILE` 줄들.
+  실패했을 때의 `$DEGRADE_FALLBACK_FILE` 줄들(머리가 매 호출 같은 파일로 다시 도출한다).
 
 그리고 매번 싣는 한 줄 — `웹: Claude 쪽 없음 · codex <켜짐 | 꺼짐(DISABLE_WEB) | codex 부재>`.
 

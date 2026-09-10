@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/agents/doc-critic.md plugins/spec-distill/agents/doc-recritic.md shared/docreview/scripts/docreview_state.py
+# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/agents/doc-critic.md plugins/spec-distill/agents/doc-recritic.md shared/docreview/scripts/docreview_state.py shared/docreview/scripts/run_docreview_codex_reviewer.sh plugins/spec-distill/templates/interview-audit-template.md plugins/spec-distill/README.md
 #
 # `reviewing-brief` 껍데기의 **계약** 락 — 문서 리뷰 엔진의 brief 자리.
 #
@@ -24,6 +24,9 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/agents/doc-critic.md"
   echo "plugins/spec-distill/agents/doc-recritic.md"
   echo "shared/docreview/scripts/docreview_state.py"
+  echo "shared/docreview/scripts/run_docreview_codex_reviewer.sh"
+  echo "plugins/spec-distill/templates/interview-audit-template.md"
+  echo "plugins/spec-distill/README.md"
   exit 0
 fi
 
@@ -277,4 +280,105 @@ W_SB="$(section 'Step B 로 돌아간다')"
 { has "$W_SB" '엔진 게이트 결과' && has "$W_SB" '냉독 요약' && has "$W_SB" 'degrade'; } \
   && ok "Step B: 산출물 셋(엔진 게이트 결과 · 냉독 요약 · degrade)을 싣는다" \
   || no "Step B: 호출자에게 넘길 산출물 목록이 무너졌다"
+TPL="$SD/templates/interview-audit-template.md"
+TPL_HEAD='### brief 리뷰 (reviewing-brief — 문서 리뷰 엔진)'
+{ has "$W_SB" "$TPL_HEAD" && grep -qxF "$TPL_HEAD" "$TPL"; } \
+  && ok "Step B: audit §5 기록 자리를 이름 대고, 템플릿에 그 절이 실재한다 (쓰는 쪽 ↔ 템플릿이 같은 절)" \
+  || no "Step B: audit 기록 자리가 SKILL 과 템플릿에서 갈렸다 — 템플릿의 절을 채우는 손이 없거나 SKILL 이 없는 절을 채운다"
+
+# ── 14. 머리 — 매 bash 블록이 같은 도출로 시작한다 (Bash 호출마다 새 셸) ────────────
+# 따로 도는 블록이 `$PR`·`$STATE`·`$DEGRADE_FALLBACK_FILE` 을 물려받지 못하면 record 가 `>> ""` 로
+# 사라지고 그것이 「degrade 없음」으로 렌더된다. 실행 증거는 residue 락의 M3·I1 셀이고, 여기서는
+# 네 블록이 `## 입력` 머리와 **같은 줄들**로 시작하는지를 잰다 — 한 블록만 고치면 갈린다.
+first_block() {   # first_block <절 이름 정규식> → 그 절의 첫 ```bash 블록
+  section "$1" | awk '/^```bash$/ { if (!d) { b = 1; next } } b && /^```$/ { b = 0; d = 1; next } b'
+}
+HEAD_TXT="$(first_block '입력' | sed '/^BUNDLE=/q')"
+n_head="$(printf '%s\n' "$HEAD_TXT" | grep -c . || true)"
+if [ "${n_head:-0}" -ge 8 ] && grep -q '^case "${PAYLOAD:-}"' <<<"$HEAD_TXT" \
+   && grep -q '^STATE_DIR=' <<<"$HEAD_TXT" && grep -q '^BUNDLE=' <<<"$HEAD_TXT" \
+   && grep -q '^DEGRADE_FALLBACK_FILE=' <<<"$HEAD_TXT"; then
+  ok "머리: \`## 입력\` 머리 ${n_head}줄 — 경로 절대화 · 세션 · 두 원장 · 문서별 자리를 담는다"
+else
+  no "머리: \`## 입력\` 머리를 못 잘랐거나 핵심 줄이 빠졌다 (${n_head:-0}줄) — 아래 동일성 단언이 공허하다"
+fi
+for s in 'kill switch' '진입 게이트' '번들' '냉독'; do
+  blk_head="$(first_block "$s" | head -n "${n_head:-0}")"
+  { [ -n "$HEAD_TXT" ] && [ "$blk_head" = "$HEAD_TXT" ]; } \
+    && ok "머리: \`## $s\` 블록이 같은 머리로 시작한다 (따로 돌아도 같은 변수를 다시 도출한다)" \
+    || no "머리: \`## $s\` 블록이 \`## 입력\` 머리로 시작하지 않는다 — 새 셸에서 따로 돌면 변수가 비고 record 가 사라진다"
+done
+has "$W_IN" '두 인자를 어느 블록보다 먼저 대입한다' \
+  && ok "입력: Skill 인자 두 개를 어느 블록보다 먼저 대입하라고 적는다" \
+  || no "입력: 인자 대입 시점이 적혀 있지 않다 — 첫 블록이 빈 \$PAYLOAD 로 돈다"
+FENCE_TXT="$(awk '/codex-gate:begin/{g=1} g; /codex-gate:end/{g=0}' "$SKILL")"
+grep -q 'codex 게이트 입력 부재.*Skill 인자 1' <<<"$FENCE_TXT" \
+  && ok "codex 게이트: 입력 부재 공시가 채울 슬롯(Skill 인자 1)을 말한다" \
+  || no "codex 게이트: 입력 부재 공시가 어느 슬롯을 채울지 말하지 않는다"
+
+# ── 15. 번들 정리 — 진입 게이트 실패도, 세 층으로 ───────────────────────────────
+drop_def="$(awk '/^drop_bundle\(\) \{/{f=1} f; f && /^\}$/{exit}' <<<"$GATE_RUN")"
+{ grep -qF 'rm -f "$BUNDLE"' <<<"$drop_def" && grep -qF ': > "$BUNDLE"' <<<"$drop_def" \
+  && grep -qF '지우지도 비우지도 못했다' <<<"$drop_def" && grep -q 'return 1' <<<"$drop_def"; } \
+  && ok "진입 게이트: 번들 정리가 세 층이다 (지움 → 절단 → 공시·rc 1)" \
+  || no "진입 게이트: 번들 정리의 층이 빠졌다 — 지우지 못한 직전 번들이 조용히 남는다"
+for pat in '^if \[ "\$gate_rc" -ne 0 \]' '^if \[ "\$vc_rc" -eq 1 \]'; do
+  P="$pat" awk '!inb && $0 ~ ENVIRON["P"] {inb=1; next} inb && /^fi$/ {exit} inb' <<<"$GATE_RUN" | grep -q '^[[:space:]]*drop_bundle' \
+    && ok "진입 게이트: 실패 분기($pat)가 직전 번들을 치운다" \
+    || no "진입 게이트: 실패 분기($pat)가 직전 번들을 남긴다 — codex 게이트의 -s 검사가 그것을 이번 번들로 넘긴다"
+done
+BD_RUN="$(run_lines "$(section '번들')")"
+P='^if \[ "\$blob_rc" -ne 0 \]' awk '!inb && $0 ~ ENVIRON["P"] {inb=1; next} inb && /^fi$/ {exit} inb' <<<"$BD_RUN" | grep -q '^[[:space:]]*drop_bundle' \
+  && ok "번들: 조립 실패 분기가 같은 세 층 정리를 부른다" \
+  || no "번들: 조립 실패 분기가 세 층 정리를 부르지 않는다"
+
+# ── 16. 예외 경로의 목적지 ─────────────────────────────────────────────────────
+{ has "$W_IN" '이 라운드를 진행하지 않는다' && has "$W_IN" 'reason = `init` 이 낸 사유' && has "$W_IN" 'Step B 로 돌아간다'; } \
+  && ok "입력: 엔진 init 거부의 목적지 — record 후 Step B" \
+  || no "입력: 엔진 init 거부 뒤 어디로 가는지 적혀 있지 않다"
+{ grep -qF 'PAYLOAD 가 비었다' <<<"$BD_RUN" && grep -qF '세션 id 미해석' <<<"$BD_RUN" && grep -qF 'record 후 Step B' <<<"$BD_RUN"; } \
+  && ok "번들: 상태 디렉토리 부재의 사유를 가르고(빈 payload · sid) 목적지를 댄다" \
+  || no "번들: 상태 디렉토리 부재 공시가 사유를 가르지 않거나 목적지가 없다"
+{ has "$G_BODY" '엔진 상태 디렉토리 없음' && has "$G_BODY" '엔진 init 거부'; } \
+  && ok "게이트: polite stop 금지 목록에 두 예외 경로(상태 디렉토리 없음 · init 거부)" \
+  || no "게이트: polite stop 금지 목록에서 예외 경로가 빠졌다"
+
+# ── 17. 웹 공시 — 러너가 보는 스위치 둘 ────────────────────────────────────────
+{ has "$W_PROC" 'DEVBREW_SPEC_DISTILL_DISABLE_WEB=1' && has "$W_PROC" 'DEVBREW_QUALITY_GATES_DISABLE_WEB=1'; } \
+  && ok "웹: 러너가 웹을 끄는 두 호스트 스위치를 둘 다 공시한다" \
+  || no "웹: 공시가 러너의 웹 스위치 중 하나만 댄다"
+RUNNER="$ROOT/shared/docreview/scripts/run_docreview_codex_reviewer.sh"
+{ grep -qF '"${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" != "1"' "$RUNNER" && grep -qF '"${DEVBREW_QUALITY_GATES_DISABLE_WEB:-0}" != "1"' "$RUNNER"; } \
+  && ok "웹(사실): 러너의 웹 조건이 실제로 두 스위치를 본다 — 공시가 참이다" \
+  || no "웹(사실): 러너의 웹 조건이 바뀌었다 — 두 스위치 공시가 거짓이 됐다"
+
+# ── 18. 모델이 읽는 파일에 관리자 메모를 두지 않는다 · gap 클래스 범위의 교차 일치 ───────
+grep -qF '일곱 번째' "$SKILL" \
+  && no "냉독: 관리자 메모(「일곱 번째 클래스가 관측되면…」)가 모델이 읽는 파일에 남았다" \
+  || ok "냉독: 관리자 메모 없음 (표 자체는 위 G1–G6 행 단언이 잰다)"
+# 표의 상한을 SKILL 에서 **읽고**, 기록 템플릿과 README 의 범위 표기(`G1..G<N>` · `G1–G<N>`)가 그 값과
+# 같은지 잰다 — 새 클래스를 표에만 더하면 그것을 적을 칸이 출하 표면에 없다. 셋이 함께 사라지는
+# 변형에 공허해지지 않게 상한 하한 6 과 파일당 범위 표기 ≥1 을 함께 건다.
+README_F="$SD/README.md"
+gap_report="$(python3 -c 'import re, sys
+rows = re.compile(r"(?m)^\|\s*G(\d+)\s*\|")
+rng = re.compile(r"G1\s*(?:\.\.|[–-])\s*G(\d+)")
+top = max([int(n) for n in rows.findall(open(sys.argv[1], encoding="utf-8").read())] or [0])
+print("TOP\t%d" % top)
+for label, path in zip(("SKILL", "audit-template", "README"), sys.argv[1:4]):
+    ns = [int(n) for n in rng.findall(open(path, encoding="utf-8").read())]
+    print("RANGE\t%s\t%d\t%s" % (label, len(ns), "OK" if ns and all(n == top for n in ns) else "BAD"))' \
+  "$SKILL" "$TPL" "$README_F" 2>/dev/null)"
+gap_top="$(grep '^TOP' <<<"$gap_report" | cut -f2)"
+{ [[ "$gap_top" =~ ^[0-9]+$ ]] && [ "$gap_top" -ge 6 ]; } \
+  && ok "gap 범위(양성대조): SKILL 표의 상한이 $gap_top (≥6)" \
+  || no "gap 범위(양성대조): SKILL 표에서 상한을 못 읽었다 ('$gap_top') — 아래 관계 단언이 공허하다"
+[ "$(grep -c '^RANGE' <<<"$gap_report" || true)" = "3" ] \
+  && ok "gap 범위(양성대조): 세 파일을 모두 쟀다" || no "gap 범위(양성대조): 리포트가 비었거나 잘렸다"
+while IFS="$(printf '\t')" read -r tag label cnt state; do
+  [ "$tag" = "RANGE" ] || continue
+  [ "$state" = "OK" ] \
+    && ok "gap 범위: $label 의 범위 표기 ${cnt}건이 전부 G1–G${gap_top}" \
+    || no "gap 범위: $label 의 범위 표기(${cnt}건)가 G1–G${gap_top} 과 어긋난다 — 새 클래스를 적을 칸이 없다"
+done <<< "$gap_report"
 finish

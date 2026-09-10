@@ -82,13 +82,15 @@ source: spec-distill conducting-interview v0.57.0
 
 - round <n>: <path (a|b|d)> — <한 줄 요약>
 
-### brief 리뷰 라운드 (reviewing-brief, v0.24.0)
+### brief 리뷰 (reviewing-brief — 문서 리뷰 엔진)
 
-(순수 텔레메트리 — **기록이며 게이트 통과 조건이 아니다.** 검사 대상이 통과 조건을 직접 쓰는
-검사는 이빨이 없으므로, 리뷰 생략 방지는 Step B 게이트의 degrade 전파가 담당한다.)
+(순수 텔레메트리 — **기록이며 게이트 통과 조건이 아니다.** `reviewing-brief` 가 Step B 로 돌아가기 전에
+한 줄씩 채운다. 라운드의 결정 자체는 엔진이 이 파일 끝의 `## 8. 리뷰 결정` 에 append-only 로 쓴다 — 그
+절은 손으로 만들지 않는다(없으면 엔진이 만든다). 리뷰 생략 방지는 Step B 게이트의 degrade 전파가 담당한다.)
 
-- 방향성: Claude <n>건 / codex <n>건 — 사용자 재결정 <n>건
-- 충실도 기록(게이트 아님, 마지막 관측 verdict만 기재): <approved|needs_revise|advisory> — critic <n>건 / codex <n>건 — 재라운드 <n>/2
+- 라운드: <n> · 재리뷰 카운트 <k> · 추가 라운드 <m> — 승인 게이트 도달 사유: <열린 것 없음|상한|stagnation|미검증>
+- 결정: `## 8. 리뷰 결정` <n>건 · 열린 채 남은 항목 <n>건(<ask·decide 의 id>)
+- codex: <있음 | 없음 — <skip_reason>> · 웹: <켜짐 | 꺼짐 | codex 부재>
 - 냉독: gap <n>건 (<G1..G6 중 어느 클래스>)
 - degrade: <component:reason 한 줄씩 | 없음>
 
