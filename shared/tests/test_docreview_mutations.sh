@@ -680,4 +680,13 @@ mut 1/1 init_profile_compare_off case_init_other_profile_refused sed_state \
 #    케이스는 이름이 같은 두 문서로 잰다.
 mut 1/1 state_dir_for_doc_dropped case_state_dir_for_per_doc sed_state \
   's/digest = hashlib\.sha256(os\.fsencode(ident))\.hexdigest()\[:16\]/digest = hashlib.sha256(os.fsencode(str(root))).hexdigest()[:16]/'
+# (58) 세션 검사를 구분자·점만 막던 넓은 형태로 되돌린다 — 개행이 든 세션이 두 줄 경로를 낸다.
+mut 1/1 session_charset_widened case_state_dir_for_per_doc sed_state \
+  's|if not a\.session or not _SESSION_OK\.fullmatch(a\.session):|if not a.session or a.session in (".", "..") or "/" in a.session:|'
+# (59) `state-dir-for` 가 상대 문서를 받는다 — 같은 문서의 키가 cwd 마다 갈린다.
+mut 1/1 state_dir_for_relative_doc_accepted case_state_dir_for_per_doc sed_state \
+  's/    if not os\.path\.isabs(a\.doc):/    if False:/'
+# (60) `init` 이 상대 문서를 받는다 — 원장의 문서 정체가 cwd 의 함수가 된다.
+mut 1/1 init_relative_doc_accepted case_init_relative_doc_refused sed_state \
+  's/if not a\.doc or not os\.path\.isabs(a\.doc):/if not a.doc:/'
 finish

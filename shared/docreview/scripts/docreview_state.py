@@ -222,6 +222,7 @@ def _emit(obj) -> None:
 # 문서를 다른 표기로 불렀을 때 같은 디렉토리에 앉고도 `init` 이 거부하거나, 그 반대가 된다.
 STATE_SUBDIR = "docreview"
 _KEY_UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
+_SESSION_OK = re.compile(r"[A-Za-z0-9_-]+")
 
 
 def doc_identity(doc) -> str:
@@ -246,14 +247,17 @@ def state_dir_for(root, session, doc) -> Path:
 
 # ── 서브커맨드 ───────────────────────────────────────────────────────────
 def cmd_state_dir_for(a) -> int:
-    # 상대 루트는 cwd 의 함수고, 빈 세션은 루트 바로 아래 자리다 — 둘 다 여러 세션이 같은
-    # 디렉토리를 나눠 쓰게 만든다. 거부한다.
+    # 상대 루트·상대 문서는 cwd 의 함수고(같은 문서가 cwd 마다 다른 자리로 간다), 빈 세션은
+    # 루트 바로 아래 자리다. 세션은 경로의 한 성분이라 `[A-Za-z0-9_-]+` 밖(구분자·점·제어
+    # 문자)은 받지 않는다 — 개행이 든 세션은 두 줄 경로를 낸다. 전부 거부한다.
     if not a.root or not os.path.isabs(a.root):
         return fail("root_not_absolute", root=a.root)
-    if not a.session or a.session in (".", "..") or "/" in a.session:
+    if not a.session or not _SESSION_OK.fullmatch(a.session):
         return fail("session_invalid", session=a.session)
     if not a.doc:
         return fail("doc_empty")
+    if not os.path.isabs(a.doc):
+        return fail("doc_not_absolute", doc=a.doc)
     print(state_dir_for(a.root, a.session, a.doc))
     return 0
 
@@ -268,6 +272,9 @@ def cmd_init(a) -> int:
     # 빈 값은 `Path("")` = cwd 가 되어 cwd 에 원장을 만든다 — 없는 디렉토리로 친다.
     if not a.state_dir:
         return fail("state_dir_missing", state_dir=a.state_dir)
+    # 문서의 정체(realpath)가 cwd 의 함수가 되면 같은 문서가 cwd 마다 다른 문서로 읽힌다.
+    if not a.doc or not os.path.isabs(a.doc):
+        return fail("doc_not_absolute", doc=a.doc)
     d = Path(a.state_dir)
     if not d.is_dir():
         return fail("state_dir_missing", state_dir=str(d))

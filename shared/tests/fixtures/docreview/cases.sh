@@ -1780,5 +1780,27 @@ case_state_dir_for_per_doc() {
   py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "" >"$w/o3" 2>"$w/e3"; rc=$?
   assert_eq "$rc:$(cat "$w/o3")" "1:" "문서별 자리: 빈 문서는 rc 1 · 출력 없음"
   assert_file_grep "$w/e3" '"reason": "doc_empty"' "문서별 자리: 빈 문서의 사유는 doc_empty"
+  ( cd "$FX" && py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc design-sample.md ) >"$w/o4" 2>"$w/e4"; rc=$?
+  assert_eq "$rc:$(cat "$w/o4")" "1:" "문서별 자리: 상대 문서 경로는 rc 1 · 출력 없음 (키가 cwd 의 함수가 되지 않는다)"
+  assert_file_grep "$w/e4" '"reason": "doc_not_absolute"' "문서별 자리: 상대 문서의 사유는 doc_not_absolute"
+  py docreview_state.py state-dir-for --root "$w/root" --session "$(printf 'ab\ncd')" --doc "$FX/design-sample.md" >"$w/o5" 2>"$w/e5"; rc=$?
+  assert_eq "$rc:$(cat "$w/o5")" "1:" "문서별 자리: 개행이 든 세션은 rc 1 · 출력 없음 (두 줄 경로를 내지 않는다)"
+  assert_file_grep "$w/e5" '"reason": "session_invalid"' "문서별 자리: 제어 문자 세션의 사유는 session_invalid"
+  py docreview_state.py state-dir-for --root "$w/root" --session ".." --doc "$FX/design-sample.md" >"$w/o6" 2>"$w/e6"; rc=$?
+  assert_eq "$rc:$(cat "$w/o6")" "1:" "문서별 자리: '..' 세션은 rc 1 · 출력 없음"
+  a1="$(py docreview_state.py state-dir-for --root "$w/root" --session "a_B-9" --doc "$FX/design-sample.md")"
+  assert_eq "${a1%/docreview/*}" "$w/root/a_B-9" "문서별 자리: [A-Za-z0-9_-] 세션은 받는다 (세션 검사 좁힘의 양의 짝)"
   rm -rf "$w"
+}
+case_init_relative_doc_refused() {
+  local d rc; d="$(mktemp -d -t docreview-XXXXXX)"
+  ( cd "$FX" && py docreview_state.py init --state-dir "$d" --doc design-sample.md --profile "$PROF_SD/design-doc.md" ) >"$d/out" 2>"$d/err"; rc=$?
+  assert_eq "$rc" "1" "상대 문서: init 이 상대 --doc 을 rc 1 로 거부한다 (문서 정체가 cwd 의 함수가 되지 않는다)"
+  assert_file_grep "$d/err" '"reason": "doc_not_absolute"' "상대 문서: 사유는 doc_not_absolute"
+  if [ -e "$d/docreview-state.md" ]; then
+    no "상대 문서: 거부했는데 원장이 생겼다"
+  else
+    ok "상대 문서: 원장이 생기지 않는다"
+  fi
+  rm -rf "$d"
 }

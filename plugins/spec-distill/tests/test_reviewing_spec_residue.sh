@@ -141,7 +141,8 @@ BASE="/usr/bin:/bin"
 # 같다. 이 락을 처음 돌렸을 때 실제로 셀 하나가 그렇게 무의미했다(7자 sid). 쓰는 이름을
 # 전부 미리 통과시켜, 계측기가 죽은 채로 판정이 나오는 것을 막는다.
 SIDS="rs01kill rs02noin rs03noip rs05rc3x rs04nodt rs06keep rs07trap rs08lock rs09down rs10ctlx
-      rs11trnc rs12pred rs21kill rs22noin rs23noip rs24nodt rs25rc3x rs26lock rs30plce"
+      rs11trnc rs12pred rs21kill rs22noin rs23noip rs24nodt rs25rc3x rs26lock rs30plce
+      rs31swep rs32swpe rs33swlk rs34swle"
 bad_sid=""
 for s in $SIDS; do
   DEVBREW_SPEC_DISTILL_SESSION_ID="$s" python3 "$PR/scripts/state_path.py" session-id >/dev/null 2>&1 \
@@ -492,4 +493,74 @@ if [ -n "$st1" ] && [ "$st1" = "$st2" ] && [ "$sess" != "$st1" ] && [ "${sa%/*}"
 else
   no "P5: arm 원장 또는 문서별 디렉토리의 자리가 어긋났다 (STATE $st1 / $st2 · STATE_DIR $sa / $sb)"
 fi
+
+# ── S) 문서 미상 sweep — 범위와 중화 불가 공시 ────────────────────────────────────
+# `$spec_path` 가 비면 펜스는 세션의 문서별 codex 산출물 전부를 훑는다. 위 A(게이트 입력
+# 부재)는 codex 파일 하나만 심으므로 sweep 이 세션 디렉토리째 지우거나 문서 디렉토리의 모든
+# 파일을 지워도 GREEN 이다. 그래서 같은 세션에 **살아야 할 것**(arm 원장 · 두 문서의 엔진
+# 원장 · 다른 이름의 파일)을 함께 심고 바이트 동일을 잰다. 다른 문서의 codex 산출물이
+# 중화되는 것은 「문서를 모르면 전부가 후보」의 양의 쪽이다.
+sweep_scope_case() {   # sweep_scope_case <라벨> <sid> <펜스>
+  local label="$1" sid="$2" fence="$3" home S DA DB g f i lost=""
+  home="$SCRATCH/$sid"; S="$home/.claude/spec-distill/$sid"
+  DA="$(dir_of "$sid" "$DOC_D")"; DB="$(dir_of "$sid" "$DOC_B")"; mkdir -p "$DA" "$DB"
+  printf 'armed_paths: [x]\n' > "$S/state.local.md"
+  printf 'unrelated\n' > "$S/notes-unrelated.txt"
+  mk_state "$DA"
+  printf 'critic verbatim\n' > "$DA/critic.txt"
+  printf -- '---\ndocreview: {doc: other}\n---\n' > "$DB/docreview-state.md"
+  plant_stale "$DA/docreview-codex.yaml"; plant_stale "$DB/docreview-codex.yaml"
+  g="$SCRATCH/$sid.golden"; mkdir -p "$g"; i=0
+  for f in "$S/state.local.md" "$S/notes-unrelated.txt" "$DA/docreview-state.md" "$DA/critic.txt" "$DB/docreview-state.md"; do
+    i=$((i+1)); cp "$f" "$g/$i"
+  done
+  ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
+      PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
+      STUB_WRITE=none STUB_RC=0 bash "$fence" ) >/dev/null 2>"$SCRATCH/$sid.err"
+  if [ "$DA" != "$DB" ] && grep -q 'codex co-review SKIPPED (reason: gate_inputs_missing)' "$SCRATCH/$sid.err"; then
+    ok "S($label) 전제: 두 문서가 다른 자리이고 펜스가 문서 미상 경로(gate_inputs_missing)로 돌았다"
+  else
+    no "S($label) 전제 붕괴: 두 문서 자리가 같거나 펜스가 sweep 경로로 돌지 않았다 — 아래 판정은 sweep 을 재지 않는다"
+  fi
+  i=0
+  for f in "$S/state.local.md" "$S/notes-unrelated.txt" "$DA/docreview-state.md" "$DA/critic.txt" "$DB/docreview-state.md"; do
+    i=$((i+1)); cmp -s "$g/$i" "$f" 2>/dev/null || lost="$lost ${f#"$S"/}"
+  done
+  if [ -z "$lost" ]; then
+    ok "S($label): arm 원장 · 두 문서의 엔진 원장 · 다른 이름의 파일이 바이트 동일로 남는다 (sweep 은 codex 산출물만 지운다)"
+  else
+    no "S($label): sweep 이 살아야 할 파일을 지우거나 바꿨다:$lost"
+  fi
+  if neutralised "$DA/docreview-codex.yaml" && neutralised "$DB/docreview-codex.yaml"; then
+    ok "S($label): 두 문서의 codex 산출물이 모두 중화된다 (문서를 모르면 전부가 후보 — 양의 쪽)"
+  else
+    no "S($label): 문서별 codex 산출물 중 중화되지 않은 것이 있다 ($(post_state "$DA/docreview-codex.yaml") / $(post_state "$DB/docreview-codex.yaml"))"
+  fi
+}
+sweep_scope_case "평상시" rs31swep "$FENCE"
+sweep_scope_case "errexit" rs32swpe "$FENCE_E"
+# sweep 분기의 중화 불가 — 명시 경로의 A!/E(중화 불가)와 짝이다. 문서를 모르는 라운드에서
+# 지우지도 절단하지도 못한 파일이 남으면, 그 사실과 그 경로가 공시되지 않는 한 사람이 읽는
+# 채널은 gate_inputs_missing 만 보고 남은 파일은 5단계의 시점 판별 하나에 맡겨진다.
+sweep_lock_case() {   # sweep_lock_case <라벨> <sid> <펜스>
+  local label="$1" sid="$2" fence="$3" home D yml tail left
+  home="$SCRATCH/$sid"; D="$(dir_of "$sid" "$DOC_D")"; mkdir -p "$D"
+  yml="$D/docreview-codex.yaml"; plant_stale "$yml"; chmod 444 "$yml"; chmod 555 "$D"
+  ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
+      PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
+      STUB_WRITE=none STUB_RC=0 bash "$fence" ) >/dev/null 2>"$SCRATCH/$sid.err"
+  left="$(post_state "$yml")"
+  chmod 755 "$D"; chmod 644 "$yml"
+  tail="${yml#"$SCRATCH"/}"   # 펜스는 cwd 의 물리 경로(/private/var/…)로 적는다 — 스크래치 뒤 꼬리로 대조한다
+  if [ "$left" = "absent" ] || [ "$left" = "0byte" ]; then
+    no "S!($label) 전제 붕괴: 잠금이 중화를 막지 못했다 ($left) — 이 셀은 중화 불가를 재지 않는다"
+  elif grep -q 'codex co-review SKIPPED (reason: residue_unclearable)' "$SCRATCH/$sid.err" \
+       && grep -qF "$tail" "$SCRATCH/$sid.err"; then
+    ok "S!($label): 문서 미상 라운드에서 치우지 못한 문서별 산출물이 residue_unclearable 와 그 경로로 공시된다 ($left 잔존)"
+  else
+    no "S!($label): 문서 미상 라운드의 중화 불가가 공시되지 않는다 — residue_unclearable 또는 경로($tail)가 stderr 에 없다"
+  fi
+}
+sweep_lock_case "평상시" rs33swlk "$FENCE"
+sweep_lock_case "errexit" rs34swle "$FENCE_E"
 finish

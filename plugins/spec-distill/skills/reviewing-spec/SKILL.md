@@ -48,7 +48,9 @@ STATE_DIR="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/docr
 여러 문서가 쓰면 둘째 문서가 첫 문서의 라운드·상한·finding 위에서 시작한다(`init` 은 그런 원장을
 `state_doc_mismatch` 로 거부한다). 그러므로 `$spec_path` 를 이 블록보다 **먼저** 대입한다. 세션 id
 를 못 풀었거나 `$spec_path` 가 비면 도출이 사유를 stderr 로 내고 `$STATE_DIR` 은 빈 값이다 — 선결의
-`init` 이 `state_dir_missing` 으로 멈춘다.
+`init` 이 `state_dir_missing` 으로 멈춘다. **선결의 `init` 이 rc 0 이 아니면 값과 무관하게 이 라운드를
+진행하지 않는다** — `begin-round` 는 문서를 보지 않으므로, `state_doc_mismatch` 같은 거부를 넘어
+진행하면 다른 문서의 원장 위에서 라운드가 돈다.
 
 ## 프로필
 
@@ -125,6 +127,11 @@ fi
 # 중화한다. codex 산출물은 한 라운드의 4단계가 쓰고 5단계가 읽고 끝나는 파일이라 지워서
 # 잃는 것이 없다. 게이트 입력 부재도 codex 를 건너뛴 라운드다 — 그 라운드만 잔존물을 남기면
 # 위의 결함이 그 경로로 그대로 돌아온다.
+# **전제: 한 세션은 리뷰 라운드를 동시에 둘 돌리지 않는다.** sweep 은 다른 문서의 codex
+# 산출물까지 중화한다 — 동시에 도는 라운드가 있으면 그 라운드가 방금 쓴 판정을 지운다.
+# 「잃는 것이 없다」와 이 sweep 의 fail-closed 는 이 전제 아래에서만 참이다. 지우는 것은 문서별
+# 디렉토리의 `docreview-codex.yaml` 뿐이고 원장(`docreview-state.md`)·arm 원장(`state.local.md`)·
+# 그 밖의 파일은 건드리지 않는다.
 residue_unclear=0; residue_left=""
 neutralise() {   # 지운다 — 못 지우면 0바이트로 절단한다. 둘 다 못 하면 rc 1
   rm -f "$1" 2>/dev/null || true

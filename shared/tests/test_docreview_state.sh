@@ -78,5 +78,6 @@ case_init_other_doc_refused
 case_init_other_profile_refused
 case_init_same_doc_idempotent
 case_init_empty_state_dir_refused
+case_init_relative_doc_refused
 case_state_dir_for_per_doc
 finish
