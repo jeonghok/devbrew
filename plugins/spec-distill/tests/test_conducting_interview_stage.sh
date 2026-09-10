@@ -320,38 +320,48 @@ grep -q 'interview_round' <<<"$term_block" \
 
 # --- v0.22.0: teach-beat + blind-spot/coverage-mapper dispatch (AC6/AC7/AC8/AC9/C11/C12) ---
 
-# --- v0.57.0 §1 라운드 규약 (블록 스코프 — 4-block·teach-beat 대체) ---------------------
-# 스코프 안의 예시 fenced block 이 `## R<n>`(depth_pairs 계약이 요구하는 실제 헤딩 리터럴)을
-# 담고 있어 — 단순 "다음 `## ` 헤딩에서 닫는다" idiom 이 예시 자체를 다음 섹션 시작으로
-# 오판한다(fence 미인식). 그래서 이 스코프만 ``` 토글로 fence 안쪽을 닫힘-판정에서 뺀다.
+# --- 라운드 규약 (블록 스코프) — 지금 이해 · 다음 결정 · 질문 하나 -----------------------
+# 스코프 안의 예시 fenced block 이 `## R<n>` 헤딩 리터럴을 담고 있어 — 단순 "다음 `## `
+# 헤딩에서 닫는다" idiom 이 예시 자체를 다음 섹션 시작으로 오판한다(fence 미인식). 그래서 이
+# 스코프만 ``` 토글로 fence 안쪽을 닫힘-판정에서 뺀다. 절 제목은 `## 라운드 규약` 으로 시작해야
+# 이 앵커가 절을 뜬다.
 round_block="$(awk '/^```/{c=!c} /^## 라운드 규약/{f=1;print;next} !c && /^## /{f=0} f' "$SKILL")"
 round_flat="$(tr '\n' ' ' <<<"$round_block" | tr -s ' ')"
-{ [[ -n "$round_block" ]] && grep -qF '### 직전 답에서 — S<k>' <<<"$round_block"; } \
-  && ok "AC1: 라운드 규약 절 + «### 직전 답에서 — S<k>» 블록 형식" || no "AC1: 라운드 규약 절/블록 형식 부재"
-for key in '- 함의:' '- 상충:' '- 확인한 사실:' '- 위험:'; do
-  grep -qF -- "$key" <<<"$round_block" && ok "AC1: 네 줄 키 $key" || no "AC1: 네 줄 키 $key 부재"
+[[ -n "$round_block" ]] \
+  && ok "AC3(양성대조): 라운드 규약 절을 떴다 (아래 단언이 실재한다)" \
+  || no "AC3(양성대조): 라운드 규약 절 부재 — 아래 단언이 공허하다"
+for h in '### 지금 이해' '### 다음 결정' '### 질문' '### 답'; do
+  grep -qxF -- "$h" <<<"$round_block" && ok "AC3: 소제목 $h" || no "AC3: 소제목 $h 부재"
 done
-grep -qF '## R<n>' <<<"$round_block" && ok "AC1: state 본문 헤딩 ## R<n> (depth_pairs 계약)" || no "AC1: ## R<n> 헤딩 부재"
-grep -qF 'Q1 은 생략할 수 없다' <<<"$round_flat" && ok "AC1: «Q1 은 생략할 수 없다»" || no "AC1: Q1 불가생략 문장 부재"
-grep -qF 'R1 은 S1 을 되비춘다' <<<"$round_flat" && ok "AC1: «R1 은 S1 을 되비춘다»" || no "AC1: R1/S1 문장 부재"
-grep -qE '넷 다 «없음»[^.]{0,60}되묻기|전부 «없음»[^.]{0,60}되묻기' <<<"$round_flat" && ok "AC1: 전부 «없음» → Q1 되묻기 (G1 이행 규칙)" || no "AC1: 전부-없음 규칙 부재"
-# 실측(round 산문): «/interview» 와 «R2 부터» 사이 간격이 101자 — 원안 {0,80} 은 이 정확한
-# 산문(브리프가 지정한 리터럴 그대로, 임의로 줄이지 않음)에 대해 너무 좁아 자기모순이었다.
-# 120으로 넓혀 현재 문장 + 사소한 리라이트 여유를 함께 잡는다(부재 판정용이 아니라 「한
-# 문장 안의 관계」결속이 목적이므로 상한 자체를 없애지 않는다 — 무관한 문장까지 걸리는
-# vacuous 매치를 막는 것이 이 축의 역할이다).
-grep -qE '인자 없이[^.]{0,40}/interview[^.]{0,120}R2 부터' <<<"$round_flat" && ok "AC1: 비-seed 경로의 R1 예외" || no "AC1: 비-seed R1 규약 부재"
-q_js="$(awk '/^## 라운드 규약/{f=1} f&&/^```javascript/{j=1;next} j&&/^```/{exit} j' "$SKILL")"
-[[ "$(grep -c 'header:' <<<"$q_js")" -eq 2 ]] && grep -q 'AskUserQuestion(' <<<"$q_js" \
-  && ok "AC2: AskUserQuestion 한 번에 질문 둘(header 2개)" || no "AC2: AskUserQuestion 질문 수가 2가 아니다"
-grep -qF '(권장)' <<<"$q_js" && ok "AC2: 첫 선택지가 추천 (권장)" || no "AC2: 추천 선택지 부재"
-grep -qF '고르면 무엇이 달라지는가' <<<"$round_flat" && ok "AC2: description = 고르면 무엇이 달라지는가" || no "AC2: description 규칙 부재"
-grep -qE 'Q1 의 선택지는 둘|«맞다» / «모르겠다»' <<<"$round_flat" && ok "AC2: Q1 선택지 둘(맞다/모르겠다), 수정은 기타" || no "AC2: Q1 선택지 규칙 부재"
-grep -qF 'provisional_on' <<<"$round_flat" && ok "AC2: Q2 의 provisional_on 규칙" || no "AC2: provisional_on 부재"
-reask_block="$(awk '/^## 되묻기로 바뀌는 조건/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
-{ [[ -n "$reask_block" ]] && grep -q '이유' <<<"$reask_block" && grep -q '사례' <<<"$reask_block" && grep -q '실패 조건' <<<"$reask_block"; } \
-  && ok "C1: 되묻기 세 축(이유·사례·실패 조건)" || no "C1: 되묻기 절/세 축 부재"
-grep -qE '추측[^.]{0,20}첫 선택지' <<<"$(tr '\n' ' ' <<<"$reask_block")" && ok "C1: 인터뷰어 추측이 첫 선택지" || no "C1: 추측-첫-선택지 규칙 부재"
+grep -qF '## R<n>' <<<"$round_block" && ok "AC3: state 본문 헤딩 ## R<n>" || no "AC3: ## R<n> 헤딩 부재"
+grep -qF 'AskUserQuestion 1회, **질문 1개**' <<<"$round_flat" \
+  && ok "AC3: 라운드마다 AskUserQuestion 1회 · 질문 1개" || no "AC3: 질문 1개 규칙 부재"
+grep -qE '첫 선택지가 추천이고[^.]{0,30}\(권장\)' <<<"$round_flat" \
+  && ok "AC3: 첫 선택지가 추천 (권장)" || no "AC3: 추천 첫 선택지 규칙 부재"
+grep -qF '고르면 무엇이 달라지는가' <<<"$round_flat" \
+  && ok "AC3: description = 고르면 무엇이 달라지는가" || no "AC3: description 규칙 부재"
+grep -qF '이유·사례·실패 조건 중 하나를 되묻고 인터뷰어의 추측을 첫 선택지로' <<<"$round_flat" \
+  && ok "C1: 되묻기 세 축(이유·사례·실패 조건) + 추측이 첫 선택지" || no "C1: 되묻기 규칙 부재"
+grep -qF '같은 주제의 연속 되묻기는 최대 2회' <<<"$round_flat" \
+  && ok "AC3: 되묻기 상한 — 같은 주제 최대 2회" || no "AC3: 되묻기 상한 부재 또는 값이 2회가 아니다"
+grep -qF '그 차원을 자동으로 닫지 않는다' <<<"$round_flat" \
+  && ok "AC3: 상한 뒤에도 차원을 자동으로 닫지 않는다" || no "AC3: 상한 뒤 자동 닫힘 금지 문장 부재"
+grep -qE '되묻기 → 외부 근거 처분[^→]{0,60}→ 새 결정' <<<"$round_flat" \
+  && ok "AC3: 겹침 순서 — 되묻기 → 외부 근거 처분 → 새 결정" || no "AC3: 겹침 순서 부재 또는 뒤바뀜"
+grep -qF '`references/steelman.md` 가 사용자에게 묻는 질문은 전부 그 파일의 규약' <<<"$round_flat" \
+  && ok "AC3: steelman 절차 질문의 예외 (그 파일이 묻는 질문 — 도출 규칙)" || no "AC3: steelman 예외 도출 규칙 부재"
+grep -qE '인자 없이 `/interview` 를 부른 경로의 R1\*\* 은[^.]{0,60}«아직 없음»' <<<"$round_flat" \
+  && ok "AC3: 인자 없는 R1 — «지금 이해» 는 «아직 없음»" || no "AC3: 인자 없는 R1 모양 부재"
+# 부재 — 이 절로 스코프한다. coverage-mapper 절의 «인자 없이 부른 경로에서는 R1 답을 받은 뒤 R2
+# 전에» 는 정본으로 남아야 하므로(아래 coverage-mapper 락) 전-파일 부재로 재지 않는다.
+for tok in 'Q1' 'Q2' 'provisional_on' '블록 없이' '직전 답에서'; do
+  grep -qF -- "$tok" <<<"$round_block" \
+    && no "AC3: 라운드 규약 절에 «${tok}» 잔존" || ok "AC3: 라운드 규약 절에 «${tok}» 없음"
+done
+[[ "$(wc -l < "$SKILL")" -lt 388 ]] \
+  && ok "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") < 388 (순감)" \
+  || no "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 388"
+
 # 제거 (G7·AC1·AC14) — 존재 검사가 아니라 부재 검사이므로 CI_ALL 전체
 for tok in 'teach-lite' 'teach-heavy' 'teach-beat' 'general-purpose'; do
   grep -qF -- "$tok" "${CI_ALL[@]}" && no "G7: «${tok}» 잔존" || ok "G7: «${tok}» 제거됨"
@@ -390,6 +400,10 @@ grep -qE 'R1[^.]{0,30}첫 질문 전[^.]{0,20}필수 1회' <<<"$covmap_flat" \
   && ok "C4: R1 첫 질문 전 필수 1회" || no "C4: R1 필수 dispatch 규칙 부재"
 grep -qE '재개방[^.]{0,20}최대 1회' <<<"$covmap_flat" \
   && ok "C4: 재개방 시 최대 1회" || no "C4: 재개방 dispatch 규칙 부재"
+# 인자 없는 경로의 첫 dispatch 시점은 이 절이 정본이다(라운드 규약 절은 여기를 가리키기만 한다).
+grep -qF '인자 없이 부른 경로에서는 R1 답을 받은 뒤 R2 전에' <<<"$covmap_flat" \
+  && ok "AC3: 인자 없는 경로의 coverage-mapper 첫 dispatch — R1 답 뒤 R2 전 (정본 자리)" \
+  || no "AC3: coverage-mapper 절에서 인자 없는 경로의 첫 dispatch 시점이 사라졌다"
 { grep -qE '상한[^.]{0,6}2' <<<"$covmap_flat" && grep -qF 'coverage_mapper_dispatches' <<<"$covmap_block"; } \
   && ok "C4: 상한 2 + 카운터" || no "C4: 상한 2/카운터 부재"
 grep -qE 'coverage-mapper 0 \(unavailable' <<<"$covmap_block" \
