@@ -80,6 +80,16 @@ if bash -n "$FENCE" 2>/dev/null; then
 else
   no "추출: 펜스가 bash -n 을 통과하지 못한다 — 읽기로는 옳아 보여도 돌지 않는다"
 fi
+# 펜스의 계약은 「앞에 이어 붙여라」라서 앞 블록의 셸 옵션을 물려받을 수 있다. 가장 엄한
+# 조합을 앞에 붙인 사본 — 아래 E 셀이 같은 경로를 그 아래서 다시 돌린다.
+FENCE_E="$SCRATCH/fence-errexit.sh"
+{ echo 'set -euo pipefail'; cat "$FENCE"; } > "$FENCE_E"
+post_state() {   # post_state <path> → absent | 0byte | <N>B
+  if [ ! -e "$1" ]; then echo absent
+  elif [ ! -s "$1" ]; then echo 0byte
+  else echo "$(wc -c < "$1" | tr -d ' ')B"; fi
+}
+yml_of() { printf '%s' "$SCRATCH/$1/.claude/spec-distill/$1/docreview-codex.yaml"; }
 
 # ── 가짜 플러그인 루트 ───────────────────────────────────────────────────────
 PR="$SCRATCH/plugin"
@@ -119,7 +129,8 @@ BASE="/usr/bin:/bin"
 # 아래 케이스는 「중화가 안 됐다」가 아니라 「아무것도 재지 않았다」가 되는데 둘의 겉모습이
 # 같다. 이 락을 처음 돌렸을 때 실제로 셀 하나가 그렇게 무의미했다(7자 sid). 쓰는 이름을
 # 전부 미리 통과시켜, 계측기가 죽은 채로 판정이 나오는 것을 막는다.
-SIDS="rs01kill rs02noin rs03noip rs05rc3x rs04nodt rs06keep rs07trap rs08lock rs09down rs10ctlx"
+SIDS="rs01kill rs02noin rs03noip rs05rc3x rs04nodt rs06keep rs07trap rs08lock rs09down rs10ctlx
+      rs11trnc rs12pred rs21kill rs22noin rs23noip rs24nodt rs25rc3x rs26lock"
 bad_sid=""
 for s in $SIDS; do
   DEVBREW_SPEC_DISTILL_SESSION_ID="$s" python3 "$PR/scripts/state_path.py" session-id >/dev/null 2>&1 \
@@ -149,7 +160,7 @@ run_fence() {
       PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" \
       DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
       STUB_WRITE="$sw" STUB_RC="$rc" STUB_ARGV_OUT="$SCRATCH/$sid.argv" \
-      "$@" bash "$FENCE" ) >/dev/null 2>"$CASE_ERR"
+      "$@" bash "${RUN_FENCE:-$FENCE}" ) >/dev/null 2>"$CASE_ERR"
   printf '%s' "$yml"
 }
 
@@ -255,5 +266,132 @@ if [ "$got" = "$ctl" ]; then
   ok "D 대조군: 잔존물이 있던 라운드의 하류 판정이 «애초에 파일이 없던» 라운드와 완전히 같다 ($ctl)"
 else
   no "D 대조군: 잔존물 라운드($got)와 파일 없는 라운드($ctl)의 하류 판정이 다르다 — 잔존물이 어떤 형태로든 판정에 남아 있다"
+fi
+
+# ── A2) 지우지 못하면 절단한다 — 디렉토리 쓰기 불가 · 파일 쓰기 가능 ───────────
+# unlink 는 디렉토리 권한을, 절단은 파일 권한을 요구한다 — 이 조합에서 중화의 수단은 절단
+# 하나다. 잔존물은 라운드 시작 «뒤» 에 심는다: 하류의 시점 판별이 아니라 절단만으로
+# 중화되는지를 재기 위해서다.
+sid=rs11trnc; home="$SCRATCH/$sid"; D="$home/.claude/spec-distill/$sid"; mkdir -p "$D"
+mk_state "$D"
+yml="$D/docreview-codex.yaml"; plant_stale "$yml"; chmod 555 "$D"
+( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
+    PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
+    STUB_WRITE=none STUB_RC=0 spec_path="$SKILL" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1 \
+    bash "$FENCE" ) >/dev/null 2>"$SCRATCH/$sid.err"
+chmod 755 "$D"
+got="$(post_state "$yml")"
+if [ "$got" = "0byte" ]; then
+  ok "A2(절단): 지우지 못한 잔존물이 0바이트로 절단됐다"
+else
+  no "A2(절단): 사후상태 $got — 지우지 못한 잔존물이 절단되지 않았다"
+fi
+got="$(downstream "$D" "$yml")"
+if [ "${got%%|*}" = "True" ] && [ "${got##*|}" = "0" ]; then
+  ok "A2(절단): 하류가 절단된 파일을 codex 부재로 읽고 직전 라운드 마커를 섭취하지 않는다 ($got)"
+else
+  no "A2(절단): 하류가 그 파일을 codex 판정으로 읽는다 (absent|items|직전마커 = $got)"
+fi
+
+# ── A3) 중화가 불가능한 조합 — 집행은 하류의 시점 판별이다 ──────────────────
+# 디렉토리·파일 둘 다 쓰기 불가여도 상태 파일이 쓰기 가능하면 1단계 `begin-round` 는
+# 통과한다(상태 파일은 제자리 덮어쓰기다). 그 라운드에 펜스는 잔존물을 치우지 못하고, 5단계는
+# 새 셸에서 같은 경로를 다시 도출해 넘긴다 — 판정을 지키는 것은 `prepare-recritic` 이
+# 라운드 시작보다 먼저 쓰인 파일을 부재로 읽는 것 하나다.
+prep_view() {   # prep_view <prep.json> → "absent|reason|직전마커"
+  python3 - "$1" "$STALE_MARK" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+g = d.get("degrade", {})
+print("%s|%s|%d" % (g.get("codex_absent"), g.get("codex_reason"),
+                    json.dumps(d.get("items") or [], ensure_ascii=False).count(sys.argv[2])))
+PY
+}
+sid=rs12pred; home="$SCRATCH/$sid"; D="$home/.claude/spec-distill/$sid"; mkdir -p "$D"
+mk_state "$D"                                    # 라운드 1
+yml="$D/docreview-codex.yaml"; plant_stale "$yml"  # 라운드 1 의 codex 산출물 — 라운드 2 시작보다 앞선다
+python3 -c 'import os, sys, time; t = time.time() - 60; os.utime(sys.argv[1], (t, t))' "$yml"
+chmod 444 "$yml"; chmod 555 "$D"
+python3 "$SD_SCRIPTS/docreview_anchor.py" snapshot "$FXD/design-sample.md" > "$SCRATCH/$sid.s2.json"
+python3 "$SD_SCRIPTS/docreview_state.py" begin-round --state-dir "$D" --snapshot "$SCRATCH/$sid.s2.json" >/dev/null 2>&1; brc=$?
+rnd="$(python3 "$FXD/st_get.py" "$D/docreview-state.md" 'st["round"]' 2>/dev/null)"
+( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
+    PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
+    STUB_WRITE=none STUB_RC=0 spec_path="$SKILL" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1 \
+    bash "$FENCE" ) >/dev/null 2>"$SCRATCH/$sid.err"
+left="$(post_state "$yml")"
+python3 "$SD_SCRIPTS/docreview_route.py" prepare-recritic --state-dir "$D" --critic "$FXD/critic-r1.txt" \
+    --codex "$yml" > "$SCRATCH/$sid.prep.json" 2>/dev/null
+chmod 755 "$D"; chmod 644 "$yml"
+if [ "$brc" = "0" ] && [ "$rnd" = "2" ] && [ "$left" != "absent" ] && [ "$left" != "0byte" ]; then
+  ok "A3 전제: 이 조합에서 1단계는 통과하고(rc 0, 라운드 2) 펜스는 잔존물을 치우지 못한다 ($left)"
+else
+  no "A3 전제 붕괴: begin-round rc=$brc 라운드=$rnd 잔존=$left — 이 셀은 하류 판별을 재지 못한다"
+fi
+got="$(prep_view "$SCRATCH/$sid.prep.json")"
+if [ "$got" = "True|codex_predates_round|0" ]; then
+  ok "A3(시점): 치우지 못한 직전 라운드 산출물을 하류가 부재로 읽는다 — 섭취 0 ($got)"
+else
+  no "A3(시점): 하류가 직전 라운드 산출물을 이번 라운드 판정으로 읽는다 (absent|reason|직전마커 = $got)"
+fi
+
+# ── E) 셸 옵션 상속 — `set -euo pipefail` 을 앞에 붙여도 같은 사후상태인가 ──────
+# 앞 블록의 errexit 는 실패한 명령 하나로 펜스를 죽인다. 중화 명령이 실패하는 권한 조합이나
+# 러너의 non-zero 에서 펜스가 죽으면 잔존물이 살고 SKIPPED 공시조차 안 난다. 판정은 평상시
+# 실행(A 의 쌍둥이 셀)과 **같은 디스크 사후상태** + skip 경로의 공시 줄이다.
+errexit_case() {   # errexit_case <라벨> <sid> <쌍둥이 sid> <bin> <stub_write> <stub_rc> <기대 사유|-> [env…]
+  local label="$1" sid="$2" twin="$3" bin="$4" sw="$5" rc="$6" why="$7"; shift 7
+  local yml got want
+  yml="$(RUN_FENCE="$FENCE_E" run_fence "$sid" "$bin" plant "$sw" "$rc" "$@")"
+  got="$(post_state "$yml")"; want="$(post_state "$(yml_of "$twin")")"
+  if [ "$got" = "$want" ] && neutralised "$yml"; then
+    ok "E($label): errexit 아래서도 디스크 사후상태가 평상시와 같다 ($got)"
+  else
+    no "E($label): errexit 아래 사후상태 $got ≠ 평상시 $want — 펜스가 중간에 죽었다"
+  fi
+  [ "$why" = "-" ] && return 0
+  if grep -q "codex co-review SKIPPED (reason: $why)" "$SCRATCH/$sid.err"; then
+    ok "E($label): errexit 아래서도 SKIPPED 공시가 난다 (reason: $why)"
+  else
+    no "E($label): errexit 아래서 SKIPPED (reason: $why) 공시가 없다 — 펜스가 조용히 죽었다"
+  fi
+}
+errexit_case "kill switch"      rs21kill rs01kill "$BIN_OK"   none 0 kill_switch         spec_path="$SKILL" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1
+errexit_case "codex 미설치"      rs22noin rs02noin "$BIN_NONE" none 0 not_installed       spec_path="$SKILL"
+errexit_case "게이트 입력 부재"   rs23noip rs03noip "$BIN_OK"   none 0 gate_inputs_missing
+errexit_case "러너 rc=3 (껍데기)" rs25rc3x rs05rc3x "$BIN_OK"   husk 3 -                   spec_path="$SKILL"
+mv "$DETECTOR" "$SCRATCH/detector.bak"
+errexit_case "감지기 부재"       rs24nodt rs04nodt "$BIN_OK"   none 0 detector_not_runnable spec_path="$SKILL"
+mv "$SCRATCH/detector.bak" "$DETECTOR"
+# 중화 불가 조합(A 의 셋째 층과 같은 잠금) — 지우기·절단의 실패가 errexit 로 펜스를 죽이면
+# residue_unclearable 공시가 사라진다.
+sid=rs26lock; home="$SCRATCH/$sid"; D="$home/.claude/spec-distill/$sid"; mkdir -p "$D"
+yml="$D/docreview-codex.yaml"; plant_stale "$yml"; chmod 444 "$yml"; chmod 555 "$D"
+( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
+    PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
+    STUB_WRITE=none STUB_RC=0 spec_path="$SKILL" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1 \
+    bash "$FENCE_E" ) >/dev/null 2>"$SCRATCH/$sid.err"
+chmod 755 "$D"; chmod 644 "$yml"
+got="$(post_state "$yml")"; want="$(post_state "$(yml_of rs08lock)")"
+if [ "$got" = "$want" ]; then
+  ok "E(중화 불가): errexit 아래서도 디스크 사후상태가 평상시와 같다 ($got)"
+else
+  no "E(중화 불가): errexit 아래 사후상태 $got ≠ 평상시 $want"
+fi
+if grep -q 'codex co-review SKIPPED (reason: residue_unclearable)' "$SCRATCH/$sid.err"; then
+  ok "E(중화 불가): 지우기·절단의 실패가 펜스를 죽이지 않고 residue_unclearable 로 공시된다"
+else
+  no "E(중화 불가): errexit 아래서 residue_unclearable 공시가 없다 — 지우기 또는 절단의 실패가 펜스를 죽였다"
+fi
+# sid 미해석 — 경로를 도출할 수 없는 채로 들어온 라운드. 도출 실패의 rc 가 errexit 로 펜스를
+# 죽이면 gate_inputs_missing 공시가 사라진다.
+home="$SCRATCH/nosid-e"; mkdir -p "$home"
+( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
+    PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" STUB_WRITE=none STUB_RC=0 spec_path="$SKILL" \
+    bash "$FENCE_E" ) >/dev/null 2>"$SCRATCH/nosid-e.err"
+if grep -q 'codex co-review SKIPPED (reason: gate_inputs_missing)' "$SCRATCH/nosid-e.err"; then
+  ok "E(sid 미해석): 세션 id 도출 실패가 펜스를 죽이지 않고 gate_inputs_missing 으로 공시된다"
+else
+  no "E(sid 미해석): errexit 아래서 gate_inputs_missing 공시가 없다 — 도출 실패가 펜스를 죽였다"
 fi
 finish
