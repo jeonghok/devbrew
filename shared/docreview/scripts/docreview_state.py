@@ -266,6 +266,12 @@ def cmd_begin_round(a) -> int:
     st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
     save_state(a.state_dir, st, "begin-round (rereview_count=%d%s)"
                % (rr, ", extra" if n > 1 + REREVIEW_CAP else ""))
+    # 라운드 시작 표식 — codex 산출물이 이보다 먼저 쓰였으면 직전 라운드 것이다
+    # (`docreview_route._codex_staleness`). 프로세스 시계가 아니라 방금 쓴 상태 파일의
+    # mtime 을 쓴다: 같은 디렉토리의 codex 파일도 같은 파일시스템 시계로 찍히므로 해상도가
+    # 같은 눈금이다.
+    st["rounds"][str(n)]["started_mtime_ns"] = state_path(a.state_dir).stat().st_mtime_ns
+    save_state(a.state_dir, st)
     _emit({"ok": True, "round": n, "rereview_count": rr})
     return 0
 

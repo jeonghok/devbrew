@@ -99,6 +99,23 @@ def _permit_covers(st, n, anchor) -> bool:
 
 
 # ── prepare-recritic ─────────────────────────────────────────────────────
+def _codex_staleness(st, path):
+    """이 codex 파일이 이번 라운드의 산출물이 아닐 사유 — 이번 라운드 것이면 None.
+
+    산출물 경로는 세션의 순수 함수라 라운드마다 같은 파일이고, 직전 라운드의 산출물과 이번
+    라운드의 것은 내용(스키마·마커)으로 못 가른다. 판별자는 시점이다: `begin-round` 가 남긴
+    라운드 시작 표식보다 먼저 쓰인 파일은 직전 라운드 것이다. 진입 중화가 불가능한 권한
+    조합(상태 디렉토리와 그 파일이 둘 다 쓰기 불가, 상태 파일은 쓰기 가능)에서도 1단계는
+    통과하므로 그 조합의 집행은 여기 하나다. 표식이 없으면 판별할 수 없으므로 부재로 닫는다.
+    """
+    started = ((st.get("rounds") or {}).get(str(st.get("round"))) or {}).get("started_mtime_ns")
+    if started is None:
+        return "round_start_unrecorded"
+    if path.stat().st_mtime_ns < int(started):
+        return "codex_predates_round"
+    return None
+
+
 def cmd_prepare(a) -> int:
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
@@ -131,16 +148,18 @@ def cmd_prepare(a) -> int:
                 n2 = normalize(it, 2, "c", 100 + i, L)
                 if n2:
                     items.append(("critic", n2))
-    cx = None
+    cx, stale = None, None
     if a.codex and Path(a.codex).is_file():
-        try:
-            cx = yaml.safe_load(Path(a.codex).read_text(encoding="utf-8"))
-        except Exception:
-            cx = None
+        stale = _codex_staleness(st, Path(a.codex))
+        if stale is None:
+            try:
+                cx = yaml.safe_load(Path(a.codex).read_text(encoding="utf-8"))
+            except Exception:
+                cx = None
     meta = cx.get("meta") if isinstance(cx, dict) and isinstance(cx.get("meta"), dict) else {}
-    if not isinstance(cx, dict) or meta.get("codex_failed", True):
+    if stale or not isinstance(cx, dict) or meta.get("codex_failed", True):
         degrade["codex_absent"] = True
-        degrade["codex_reason"] = str(meta.get("reason") or "yaml_missing_or_broken")
+        degrade["codex_reason"] = stale or str(meta.get("reason") or "yaml_missing_or_broken")
         ev("source_failed", "codex", degrade["codex_reason"], False)
     else:
         for i, it in enumerate(cx.get("findings") or [], 1):
