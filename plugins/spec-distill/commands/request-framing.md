@@ -30,7 +30,8 @@ Skill framing-requests $ARGUMENTS
 ## Arguments
 
 `$ARGUMENTS` — 거친 프롬프트·생각·대화 로그·자료 무엇이든. 비어 있으면 skill 이
-「무엇을 맡기려 하시나요」로 시작합니다.
+「무엇을 맡기려 하시나요」로 주제부터 정합니다 — 그 뒤의 순서는 skill 의
+`## 워크트리 — 진입 직후` 절이 정합니다.
 
 ## 다음 단계
 

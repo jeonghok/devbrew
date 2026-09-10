@@ -102,6 +102,15 @@ grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE' <<<"$wt_block" && ok "AC12: kil
 # (AC11 에서 실측된 것과 같은 결함 — 삭제-방향 뮤테이션으로 직접 확인 후 좁혔다).
 pre_q="${wt_block%%AskUserQuestion(*}"
 grep -qF 'git rev-list --count' <<<"$pre_q" && ok "AC12: 로컬 전용 커밋 확인이 질문 앞에 있다" || no "AC12: 로컬 전용 커밋 확인이 질문 앞에 없다"
+# v1.0.1: 빈 요청에는 워크트리 이름을 댈 주제가 없다. 주제 질문이 워크트리 질문 «앞»에 있는지
+# (위치 축 — 절 안 어딘가가 아니라 pre_q), 그 답이 audit 원문으로 가는지, command 가 순서를
+# 다시 정하지 않고 이 절을 가리키는지.
+grep -qF '무엇을 맡기려' <<<"$pre_q" && ok "AC12: 빈 요청의 주제 질문이 워크트리 질문 앞에 있다" || no "AC12: 빈 요청의 주제 질문이 워크트리 질문 앞에 없다"
+grep -qF '건너뛰는 경우도 같다' <<<"$(tr '\n' ' ' <<<"$pre_q" | tr -s ' ')" && ok "AC12: 워크트리를 건너뛰어도 주제 질문이 먼저다" || no "AC12: 워크트리를 건너뛰는 경로에서 주제 질문 순서가 빠졌다"
+grep -qF '첫 행동**이다(빈 요청일 때만' <<<"$wt_flat" && ok "AC12: «첫 행동» 문장이 빈 요청 예외를 스스로 밝힌다" || no "AC12: «첫 행동» 문장이 빈 요청 예외 없이 단정한다 — 절 안에서 모순"
+grep -qE '1\. 원문[^.]{0,20}첫 항목' <<<"$wt_flat" && ok "AC12: 주제 질문의 답이 audit 원문 첫 항목으로 간다" || no "AC12: 주제 질문의 답이 audit 원문으로 가는 규칙 부재"
+args_block="$(awk '/^## Arguments/{f=1;next} /^## /{f=0} f' "$CMD")"
+{ grep -qF '무엇을 맡기려' <<<"$args_block" && grep -qF '워크트리 — 진입 직후' <<<"$args_block"; } && ok "AC12: command 가 빈 요청 순서의 정본으로 skill 절을 가리킨다" || no "AC12: command 의 빈 요청 안내가 skill 절을 안 가리킨다"
 askq_block="$(awk '/^```javascript$/{f=1;next} f&&/^```$/{exit} f' <<<"$wt_block")"
 grep -qF 'LOCAL_ONLY_NOTE' <<<"$askq_block" && ok "AC12: 질문 본문에 로컬 전용 커밋 안내가 실린다" || no "AC12: 질문 본문에 로컬 전용 커밋 안내 부재"
 grep -qF 'LOCAL_ONLY_NOTE="확인 못함' <<<"$wt_block" && ok "AC12: base 부재/확인 실패가 «확인 못함» 으로 드러난다" || no "AC12: 확인 불가 상태가 침묵(또는 0건 오독)으로 떨어진다"
