@@ -3,8 +3,11 @@
 
 변형(V)은 머리 20줄 안의 `# variant-of: <기준 경로>` 마커로 기준(B)을 가리킨다. 관계는 두 조건이
 함께 설 때만 성립한다:
-  ① frontmatter — 최상위 키 집합이 같고, `name`·`description`·`tools` 밖의 키는 값 블록이 줄 단위로
-     같다. 컬럼-0 주석 줄(`# copy-of:`·`# variant-of:`)은 비교에서 뺀다. `tools` 는 자유 키다 —
+  ① frontmatter — 최상위 키 집합이 같고, `name`·`description`·`tools` 밖의 키는 값 블록(키 줄 +
+     이어지는 들여쓴·빈 줄 **전부**)이 줄 단위로 같다. 키 인식은 YAML 과 같다 — 컬럼-0 의 비지 않은
+     줄(주석 제외)은 전부 키 줄이고, 따옴표 키(`"k":` · `'k':`)와 콜론 앞 공백 키(`k :`)도 이름으로
+     정규화해 센다. 키로 못 읽는 컬럼-0 줄은 판정 불가다(앞 키의 값으로 흡수하면 frontmatter 에 숨은
+     키가 관계를 통과한다). 컬럼-0 주석 줄(`# copy-of:`·`# variant-of:`)은 비교에서 뺀다. `tools` 는 자유 키다 —
      관계는 도구 표면을 판정하지 않는다(웹 사본의 도구 집합은 test_docreview_agents.sh 와
      test_brief_agents.sh 가 doc-critic 에서 도출한 집합 등식으로 잰다).
   ② 본문(frontmatter 닫힘 뒤) — V 는 B 에 연속한 한 덩어리를 끼워 넣은 것뿐이다. B 의 어느 줄도
@@ -33,7 +36,12 @@ from typing import Dict, List, Optional, Tuple
 MARKER = re.compile(r'^\s*(?:#|//|<!--)\s*variant-of:\s*(\S+)')
 HEAD_WINDOW = 20
 FREE_KEYS = ("name", "description", "tools")
-_KEY = re.compile(r'^([A-Za-z_][A-Za-z0-9_.-]*):')
+# 키 뒤의 콜론 — YAML 은 `:` 다음에 공백이나 줄 끝이 와야 키로 읽는다(`a:b: c` 의 키는 `a:b`).
+_COLON_AFTER_QUOTED = re.compile(r'[ \t]*:(?:[ \t]|$)')
+_PLAIN_COLON = re.compile(r':(?:[ \t]|$)')
+# 평문 키로 시작할 수 없는 YAML 지시 문자(흐름 · 앵커 · 태그 · 블록 스칼라 · 예약) — 그런 컬럼-0 줄은
+# 키로 못 읽는다.
+_NOT_PLAIN_START = tuple("[]{},&*!|>%@`")
 _AGENT_DEF = re.compile(r'^(?:shared|plugins)/[^/]+/agents/[^/]+\.md$')
 _CANONICAL_AGENT = re.compile(r'^shared/[^/]+/agents/[^/]+\.md$')
 
@@ -73,24 +81,60 @@ def _split(text: str) -> Optional[Tuple[List[str], List[str]]]:
     return text[4:end].split("\n"), text[end + 5:].split("\n")
 
 
+def _top_key(ln: str) -> Optional[str]:
+    """컬럼-0 줄이 여는 최상위 키의 이름 — 따옴표 둘과 콜론 앞 공백을 벗겨 정규화한다.
+    키로 못 읽으면 None."""
+    if ln[:1] in ('"', "'"):
+        q, i, buf = ln[0], 1, []
+        while i < len(ln):
+            c = ln[i]
+            if c == q:
+                if q == "'" and ln[i + 1:i + 2] == "'":
+                    buf.append("'")
+                    i += 2
+                    continue
+                break
+            if q == '"' and c == "\\" and i + 1 < len(ln):
+                buf.append(ln[i:i + 2])
+                i += 2
+                continue
+            buf.append(c)
+            i += 1
+        else:
+            return None
+        return "".join(buf) if _COLON_AFTER_QUOTED.match(ln, i + 1) else None
+    if ln[:1] in _NOT_PLAIN_START or ln[:2] in ("- ", "? ", ": "):
+        return None
+    m = _PLAIN_COLON.search(ln)
+    if not m:
+        return None
+    k = ln[:m.start()].rstrip(" \t")
+    if not k or " #" in k or "\t#" in k:
+        return None
+    return k
+
+
 def _fm_blocks(lines: List[str]) -> Optional[Dict[str, List[str]]]:
-    """최상위 키 → 그 키의 줄 블록(키 줄 + 이어지는 들여쓴·빈 줄). 중복 키·키 없는 내용은 None."""
+    """최상위 키 → 그 키의 줄 블록(키 줄 + 이어지는 들여쓴·빈 줄). 컬럼-0 의 비지 않은 줄(주석
+    제외)은 전부 키 줄이어야 한다. 키로 못 읽는 컬럼-0 줄 · 중복 키(정규화한 이름으로) · 첫 키
+    앞의 내용은 None."""
     blocks: Dict[str, List[str]] = {}
     key = None
     for ln in lines:
         if ln.startswith("#"):
             continue
-        m = _KEY.match(ln)
-        if m:
-            key = m.group(1)
-            if key in blocks:
-                return None
-            blocks[key] = [ln]
-        elif key is None:
-            if ln.strip():
-                return None
-        else:
+        if not ln.strip() or ln[:1] in (" ", "\t"):
+            if key is None:
+                if ln.strip():
+                    return None
+                continue
             blocks[key].append(ln)
+            continue
+        k = _top_key(ln)
+        if k is None or k in blocks:
+            return None
+        key = k
+        blocks[key] = [ln]
     return blocks
 
 

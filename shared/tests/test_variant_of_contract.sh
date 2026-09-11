@@ -13,7 +13,9 @@
 #      줄로 드러나야 한다(새 variant 는 이 목록을 같은 커밋에서 고친다).
 #   V2 판정기 음성 — fixtures/variant_of/ 의 쌍. 양성(ok.md — 자유 키 description·tools 도 다르다)은 OK,
 #      음성은 저마다의 사유로 FAIL. 감사 함수의 FAIL 갈래도 스크래치 코퍼스에서 하나씩 태운다.
-#      판정기가 관대하게 퇴행하면 여기가 RED 다.
+#      판정기가 관대하게 퇴행하면 여기가 RED 다. 키 인식 축: YAML 이 최상위 키로 읽는 모양(큰따옴표 ·
+#      작은따옴표 · 콜론 앞 공백)이 앞 키의 값으로 흡수되면 숨은 키가 관계를 통과한다. 값 블록 축:
+#      비-자유 키의 여러 줄 값은 둘째 줄 이후만 달라도 FAIL 이고, 줄마다 같으면 OK(양의 짝).
 #   V3 범위 음성 셀 — agent 정의 밖(skill) 복제본에 마커를 달고 한 줄을 끼우면 관계는 서지만(전제로 잰다)
 #      중복 락이 면제하지 않는다. 스크래치 git 루트에서 중복 락을 실제로 돌려 그 쌍의 위반 줄을 본다.
 #      양의 짝: 같은 루트의 agent 정본 쌍(doc-critic ↔ doc-critic-web)은 면제된다.
@@ -85,7 +87,16 @@ neg fm_key_added.md base.md frontmatter_keys_differ:model
 neg blank_insertion.md base.md no_insertion
 neg identical.md base.md no_insertion
 neg ok.md absent-target.md unreadable:
-[ "$n_neg" -ge 8 ] && ok "V2: 판정기 음성 ${n_neg}건을 태웠다" || no "V2: 음성이 ${n_neg}건뿐 — 셀이 사라졌다"
+# 키 인식 — YAML 은 셋 다 최상위 키로 읽는다(Task 3b 재리뷰 P4: `"maxTurns": 1` 이 tools 블록에 흡수돼
+# 관계가 OK 였다).
+neg fm_dq_key.md base.md frontmatter_keys_differ:maxTurns
+neg fm_sq_key.md base.md frontmatter_keys_differ:hooks
+neg fm_spacecolon_key.md base.md frontmatter_keys_differ:permissionMode
+# 값 블록 — 여러 줄 값의 둘째 줄 이후만 다른 쌍(키 줄만 비교하는 퇴행이 GREEN 이던 축).
+neg ml_value.md base_ml.md frontmatter_value_differs:input_slots
+[ "$n_neg" -ge 12 ] && ok "V2: 판정기 음성 ${n_neg}건을 태웠다" || no "V2: 음성이 ${n_neg}건뿐 — 셀이 사라졌다"
+res_ml="$(python3 "$VO" check "$FX/ml_ok.md" "$FX/base_ml.md")"
+assert_eq "$res_ml" "OK${TAB}4" "V2(양성 대조 — 여러 줄 값): 비-자유 키 input_slots 블록이 줄마다 같으면 관계가 선다"
 
 # 감사 함수의 FAIL 갈래 — 스크래치 코퍼스(경로 모양이 판정 근거라 상대경로 트리를 만든다).
 A="$TMPD/audit-root"
