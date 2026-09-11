@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.2.0] — 2026-09-11
+
+minor 인 이유: `/interview` 가 새 입력 모양 `@<seed 경로>` 를 받는다 — 새 surface 다. 옛 입력(rough request · seed 전문 붙여넣기)은 그대로 동작한다.
+
+### Added
+
+- **`/interview` Step 1.5 — `@경로` 인자 풀기.** 앞뒤 공백을 걷은 인자가 `@` 로 시작하는 공백 없는 한 토큰이면 그 파일을 Read 로 읽어 frontmatter 포함 전문을 「풀린 입력」으로 삼고, Step 2(trivia) · Step 2.5(seed 판별) · Step 3(`Skill conducting-interview`)이 그 값을 쓴다. 읽기 실패면 사유를 담은 문구를 내고 인터뷰를 시작하지 않는다. 입구에서 직접 푸는 이유: 2026-09-10 헤드리스 실측(`claude -p`)에서 커맨드 인자의 `@경로` 는 `$ARGUMENTS` 에 리터럴로 남고 파일이 첨부되지 않았다(평문 프롬프트의 `@경로` 는 첨부됐다). 대화형 입력은 재지 않았다 — 거기서 첨부되더라도 command 본문이 읽는 것은 치환된 인자라 이 단계가 필요하다.
+- `tests/test_seed_at_path_handoff.sh` — framing 옵션 표 · 호출 모양 · 두 가드 · 공유 계약(정본 자체) · Step 1.5 · 옛 호출 모양 부재(코퍼스 멤버십 양성 짝 포함) · 이름 가드 공백 거부(case 패턴을 실제로 돌린다). 단언 종류마다 삭제 · 치환 · 순서 뒤집기 · 재삽입 변이로 RED 를 확인했다.
+- 실동작 확인(2026-09-11, 헤드리스 `claude -p` + `--plugin-dir`, sonnet, 1회): `/spec-distill:interview @<seed>` 가 픽스처를 절대경로로 읽고 frontmatter 포함 전문을 바꾸지 않고 `conducting-interview` 에 넘겼다(넘긴 인자 = 픽스처 전문). 「`/request-framing` 을 먼저」 조언은 나오지 않았다. 없는 경로는 부재 문구를 내고 인터뷰를 시작하지 않았다. 재지 못한 것: 첫 라운드 — 헤드리스 세션에 작업 디렉토리 밖 읽기 권한이 없어 `conducting-interview` 의 참조 파일을 읽지 못했고, 인터뷰 질문 대신 그 제약을 알리고 진행 방식을 물으며 끝났다(그 글은 seed 주제를 언급했다). Step 2(trivia 대조)도 같은 이유(`references/trivia-escape.md` Read 가 작업 디렉토리 밖이라 거부)로 관측되지 못했다. 대화형 입력도 재지 않았다.
+
+### Changed
+
+- **framing 게이트의 핸드오프가 `/interview @<seed 경로>` 로 바뀌었다.** 옵션은 ① `/new` 후 `/interview @<seed 경로>`(권장) · ② `/compact` 후 같은 명령 · ③ 수정 · ④ 멈춤이다. ①/② 는 두 줄 명령을 노출하고 턴을 끝낸다. 「바로 `/interview`」 옵션은 없어졌다 — `AskUserQuestion` 한 질문의 옵션 상한이 4 다. `/new` 는 `/clear [name]` 의 별칭이라 같은 줄 뒤 텍스트가 세션 이름이 되므로 두 줄을 따로 입력하게 안내한다. 권장이 `/new` 인 이유: seed 는 framing 대화를 대신하려고 존재하고, `/compact` 는 그 대화의 요약을 남긴다.
+- **공유 게이트 계약(`references/proceed-gate.md`)의 ①/② 를 「권장/차선 핸드오프」로 일반화했다.** 핸드오프 종류(`/compact` · `/new` · 바로 진행)와 노출할 명령은 각 skill 이 채운다. 가드 2 는 명령을 노출하는 모든 옵션에 걸리고 바로 진행 옵션이 예외다. 가드 1 의 완료 동작은 핸드오프 종류가 정한다. Step A 는 「핸드오프 명령도 노출하지 않는다」. `reviewing-spec` · `conducting-interview` 는 새 표에 그대로 맞아 바뀌지 않았다. **이 릴리스가 닫지 않는 것**: 두 skill 의 가드 1 문면(「①/② 선택 후 … 다음 단계 진입을 skip 하면 polite stop」)이 자기 ① 의 정지 요건과 어긋나는 것은 이번 변경 전부터 있던 불일치다.
+- framing 의 이름 가드(`TOPIC` · `IV_NAME`)가 공백을 거부한다 — seed 경로가 한 토큰이어야 `/interview` 가 `@경로` 로 푼다. 공백 든 경로를 사람이 손으로 넘기면 Step 1.5 는 발동하지 않고 거친 요청으로 받는다.
+- 옛 핸드오프(「다음 세션 첫 턴에 붙여넣는 메시지」)를 풀어 쓴 문장을 `commands/request-framing.md` · `conducting-interview/references/seed-input.md` · `finishing.md` 의 S1 문장 · `templates/interview-seed-audit-template.md` · README 흐름도에서 새 모양으로 바꿨다. README 의 v0.41.0 이력 단락은 그 버전이 한 일의 기록이라 그대로 뒀다.
+
 ## [1.1.0] — 2026-09-10
 
 ### Changed

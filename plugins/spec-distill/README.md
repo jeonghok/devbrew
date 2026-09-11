@@ -29,9 +29,9 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
                                        · 압축 — check_seed.py 게이트 다섯 (Law 1)
                                        · 검증 — 억제 축(seed-critic 격리 + codex, model diversity)
                                                 · 냉독 축(seed-readback)
-                                       ▼ [확정 — proceed 게이트] ①/compact 후 /interview · ②바로 /interview · ③수정 필요 · ④멈춤
-                                   interview-seed → docs/superpowers/interview/   ← 문서가 아니라 다음 세션 첫 턴에 붙여넣는 메시지
-                                       ▼ 새 세션 첫 턴 = `/interview <seed 파일 전문>` (frontmatter 포함, 한 턴)
+                                       ▼ [확정 — proceed 게이트] ①/new 후 /interview @경로 · ②/compact 후 /interview @경로 · ③수정 필요 · ④멈춤
+                                   interview-seed → docs/superpowers/interview/   ← 문서가 아니라 다음 세션 첫 턴이 가리키는 파일
+                                       ▼ 새 세션 첫 턴 = `/interview @<seed 경로>` (/interview 가 frontmatter 포함 전문으로 풀어 인터뷰에 넘김)
 /interview ─→ [0] Trivia escape ─→ [1] Interview (문제공간 stage)
                                        · «직전 답에서» 블록 + 질문 둘 + 3-path (web=path(a))
                                        · R1 Problem Reframe / R2 Landscape / R3 Steelman / R4 Tried&Discarded / R5 OQ
