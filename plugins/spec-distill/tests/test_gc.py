@@ -120,6 +120,43 @@ class GcTest(unittest.TestCase):
         run_gc(cwd=self.tmp)
         self.assertTrue(recent.exists())
 
+    def test_13_symlinked_child_untouched(self):
+        # 루트 안의 링크 자식은 세션 폴더가 아니다 — 이름이 패턴에 맞고 링크 너머가 늙었어도
+        # 건드리지 않는다(`.gc-pending-*` 로 개명하지도 않는다). 링크 너머도 이 임시 리포 안이다.
+        outside = Path(self.tmp) / "outside-victim"
+        outside.mkdir()
+        f = outside / "notes.txt"
+        f.write_text("x")
+        past = time.time() - 25 * 3600
+        os.utime(f, (past, past))
+        link = self.root / "link-session-01"
+        os.symlink(str(outside), link)
+        self.assertEqual(os.path.realpath(link), os.path.realpath(outside))
+        run_gc(cwd=self.tmp)
+        self.assertTrue(link.is_symlink(), "링크 자식을 개명하거나 지웠다")
+        self.assertTrue(f.exists())
+        self.assertEqual([p.name for p in self.root.iterdir()
+                          if p.name.startswith(".gc-pending-")], [])
+
+    def test_14_symlinked_root_refused(self):
+        # `.claude/spec-distill` 자신이 링크면 GC 는 락 파일도 만들지 않고 거부한다.
+        import shutil
+        shutil.rmtree(self.root)
+        elsewhere = Path(self.tmp) / "elsewhere"
+        stale = elsewhere / "abc12345"
+        stale.mkdir(parents=True)
+        f = stale / "state.local.md"
+        f.write_text("x")
+        past = time.time() - 25 * 3600
+        os.utime(f, (past, past))
+        os.symlink("../elsewhere", self.root)
+        self.assertEqual(os.path.realpath(self.root), os.path.realpath(elsewhere))
+        rc, _, stderr = run_gc(cwd=self.tmp)
+        self.assertEqual(rc, 0)
+        self.assertTrue(stale.exists())
+        self.assertFalse((elsewhere / ".gc.lock").exists())
+        self.assertIn("GC 거부", stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

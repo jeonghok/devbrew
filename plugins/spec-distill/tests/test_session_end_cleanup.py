@@ -179,5 +179,82 @@ class SessionEndCleanupTest(unittest.TestCase):
             run_hook({"session_id": self.sid, "cwd": self.tmp})
 
 
+class SymlinkedStateRootTest(unittest.TestCase):
+    """AC17 — 저장소가 커밋한 링크로 state root 가 저장소 밖으로 풀리면 GC·정리가 지우지 않는다.
+
+    양성 짝은 위 `test_9_gc_collects_stale_other_session`(진짜 루트에서는 같은 훅이 지운다)이다.
+    심는 링크와 피해 디렉토리는 전부 이 테스트가 만든 임시 디렉토리 `P` 안이고, 훅을 띄우기 전에
+    링크가 `P` 안으로 풀리는지 확인한다 — 저장소나 $HOME 을 가리키는 것은 없다.
+    """
+
+    def setUp(self):
+        tmp_root = os.path.realpath(tempfile.gettempdir())
+        base = os.path.realpath(tempfile.mkdtemp(prefix="sd-gc-symlink-"))
+        # mktemp 가 빈 값·엉뚱한 곳을 내면 아래 링크가 그 기준으로 풀린다 — 여기서 멈춘다.
+        if not (base and os.path.isabs(base) and os.path.isdir(base)
+                and base.startswith(tmp_root + os.sep)):
+            raise RuntimeError(f"임시 디렉토리가 이상하다: {base!r} (tmp={tmp_root!r})")
+        self.P = Path(base)
+        self.clone = self.P / "clone"
+        self.clone.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=self.clone, check=True)
+
+    def tearDown(self):
+        shutil.rmtree(self.P, ignore_errors=True)
+
+    def _victim(self, d: Path, age_s: float = 2 * 86400) -> Path:
+        d.mkdir(parents=True)
+        f = d / "notes.txt"
+        f.write_text("precious\n")
+        t = time.time() - age_s
+        os.utime(f, (t, t))
+        os.utime(d, (t, t))
+        return f
+
+    def _commit_link(self, link: Path, target: str, resolves_to: Path):
+        os.symlink(target, link)
+        real = os.path.realpath(self.clone / ".claude" / "spec-distill")
+        # 계측기 바닥 — 링크가 기대한 곳(이 테스트의 P 안)으로 풀리지 않으면 훅을 띄우지 않는다.
+        if real != os.path.realpath(resolves_to) or not (
+                real == str(self.P) or real.startswith(str(self.P) + os.sep)):
+            raise RuntimeError(f"링크가 {real!r} 로 풀린다 — P={self.P} 밖이다")
+        git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+        subprocess.run(git + ["add", "-A"], cwd=self.clone, check=True)
+        subprocess.run(git + ["commit", "-qm", "plant link"], cwd=self.clone, check=True)
+
+    def test_symlinked_root_gc_refused(self):
+        """`.claude/spec-distill -> ../..` — GC 의 루트가 P 로 풀린다."""
+        victim = self._victim(self.P / "victim-dir-01")
+        (self.clone / ".claude").mkdir()
+        self._commit_link(self.clone / ".claude" / "spec-distill", "../..", self.P)
+        rc, _, stderr = run_hook(None, cwd=str(self.clone), raw_stdin=b"")
+        self.assertEqual(rc, 0)
+        self.assertTrue(victim.exists(), "저장소 밖 디렉토리를 GC 가 지웠다")
+        self.assertFalse((self.P / ".gc.lock").exists(), "저장소 밖에 GC 락 파일을 만들었다")
+        self.assertIn("GC 거부", stderr)
+
+    def test_symlinked_claude_dir_gc_refused(self):
+        """`.claude -> ../outside` — 루트 자신이 아니라 그 부모가 링크다."""
+        victim = self._victim(self.P / "outside" / "spec-distill" / "victim-dir-02")
+        self._commit_link(self.clone / ".claude", "../outside",
+                          self.P / "outside" / "spec-distill")
+        rc, _, stderr = run_hook(None, cwd=str(self.clone), raw_stdin=b"")
+        self.assertEqual(rc, 0)
+        self.assertTrue(victim.exists(), "링크된 .claude 너머의 디렉토리를 GC 가 지웠다")
+        self.assertFalse((self.P / "outside" / "spec-distill" / ".gc.lock").exists())
+        self.assertIn("GC 거부", stderr)
+
+    def test_symlinked_root_session_cleanup_refused(self):
+        """payload sid 가 링크 너머의 디렉토리 이름과 같으면 ② 정리가 그것을 지우던 자리 — 나이와 무관하다."""
+        victim = self._victim(self.P / "victim-dir-03", age_s=0)
+        (self.clone / ".claude").mkdir()
+        self._commit_link(self.clone / ".claude" / "spec-distill", "../..", self.P)
+        rc, _, stderr = run_hook({"session_id": "victim-dir-03", "cwd": str(self.clone)},
+                                 cwd=str(self.clone))
+        self.assertEqual(rc, 0)
+        self.assertTrue(victim.exists(), "세션 정리가 링크 너머의 디렉토리를 지웠다")
+        self.assertIn("세션 정리 거부", stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

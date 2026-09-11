@@ -142,7 +142,7 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
 
 | # | 끊기는 것 | 처리 |
 |---|---|---|
-| 1 | TTL-GC(`scripts/spec-distill-gc.py`)의 **유일한 기동자**가 훅이다(`review-dispatch.py:481` → `hook_common.fire_and_forget_gc`) | `hooks/session-end-cleanup.py` 가 이 순서로 한다: ① 자기 kill switch(`spec-distill:SessionEnd` · `:session-end-cleanup` · 전역 `DISABLE`) 검사 ② 끝나는 세션의 폴더 삭제 ③ `try/finally` 의 `finally` 에서 `fire_and_forget_gc()`. ① 이 참이면 훅은 아무것도 하지 않는다 — GC 도 돌지 않는다(CLAUDE.md: 어떤 훅도 자기 kill switch 존중을 거부할 수 없다). 그래서 **`spec-distill:SessionEnd` 는 이번 세션 정리와 TTL-GC 를 함께 끈다** — README 의 이 스위치 설명(「SessionEnd cleanup hook만 skip」)을 같은 변경에서 고친다. ③ 이 `finally` 라서 ② 의 payload 조기 return(`:33-44`)이나 stdin 디코딩 예외가 GC 를 건너뛰게 하지 않는다. GC 자신은 `spec-distill:spec-distill-gc` 와 전역 `DISABLE` 을 스스로 검사한다(`spec-distill-gc.py:81`). 루트는 옛 훅과 같이 **프로세스 cwd** 의 `state_root()` 다(`spec-distill-gc.py:83`) — per-session 삭제는 payload `cwd` 를 쓰고, 두 층은 원래 서로 다른 훅에서 각자 루트를 풀었다. 이 함수는 이름과 달리 동기다(`subprocess.run`, `timeout=5`). 훅 `timeout: 10` 을 넘기면 끊기는 것은 **맨 뒤의 GC** 다 — 끝나는 세션의 자기 폴더 삭제는 그 앞에서 이미 끝났고, GC 는 다음 SessionEnd 가 다시 돈다. 옛 훅에서는 `spec-distill:Stop` 이 GC 까지 부수효과로 막았다(`review-dispatch.py:479` 가 `:481` 앞) — 이 변경 뒤 그 사용자의 GC 는 다시 돈다(C3 예외 · 알려진 한계) |
+| 1 | TTL-GC(`scripts/spec-distill-gc.py`)의 **유일한 기동자**가 훅이다(`review-dispatch.py:481` → `hook_common.fire_and_forget_gc`) | `hooks/session-end-cleanup.py` 가 이 순서로 한다: ① 자기 kill switch(`spec-distill:SessionEnd` · `:session-end-cleanup` · 전역 `DISABLE`) 검사 ② 끝나는 세션의 폴더 삭제 ③ `try/finally` 의 `finally` 에서 `fire_and_forget_gc()`. ① 이 참이면 훅은 아무것도 하지 않는다 — GC 도 돌지 않는다(CLAUDE.md: 어떤 훅도 자기 kill switch 존중을 거부할 수 없다). 그래서 **`spec-distill:SessionEnd` 는 이번 세션 정리와 TTL-GC 를 함께 끈다** — README 의 이 스위치 설명(「SessionEnd cleanup hook만 skip」)을 같은 변경에서 고친다. ③ 이 `finally` 라서 ② 의 payload 조기 return(`:33-44`)이나 stdin 디코딩 예외가 GC 를 건너뛰게 하지 않는다. GC 자신은 `spec-distill:spec-distill-gc` 와 전역 `DISABLE` 을 스스로 검사한다(`spec-distill-gc.py:81`). 루트는 옛 훅과 같이 **프로세스 cwd** 의 `state_root()` 다(`spec-distill-gc.py:83`) — per-session 삭제는 payload `cwd` 를 쓰고, 두 층은 원래 서로 다른 훅에서 각자 루트를 풀었다. 이 함수는 이름과 달리 동기다(`subprocess.run`, `timeout=5`). 훅 `timeout: 10` 을 넘기면 끊기는 것은 **맨 뒤의 GC** 다 — 끝나는 세션의 자기 폴더 삭제는 그 앞에서 이미 끝났고, GC 는 다음 SessionEnd 가 다시 돈다. 옛 훅에서는 `spec-distill:Stop` 이 GC 까지 부수효과로 막았다(`review-dispatch.py:479` 가 `:481` 앞) — 이 변경 뒤 그 사용자의 GC 는 다시 돈다(C3 예외 · 알려진 한계). 루트가 심볼릭 링크를 거쳐 제자리 밖으로 풀리면 ② 와 GC 둘 다 거부한다(D14 · AC17) |
 | 2 | `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE` 의 유일한 독자가 `resolve_mode.py:50` 이다 | `reviewing-spec` 진입(§4.2)이 이 스위치를 존중한다. 의미는 **끄는 쪽으로 넓어진다** — 예전에는 자동 dispatch·구조 검사만 껐고 수동 호출은 살아 있었지만, 이제는 수동 호출을 포함해 skill 전체를 끈다. content-aware 판별(접미사 없는 `.md` 를 frontmatter 로 design 분류)도 함께 사라진다. 둘 다 README·CHANGELOG 에 적는다. 은퇴시키면 이 스위치로 리뷰를 꺼 둔 사용자에게 리뷰가 조용히 되살아난다(C3) |
 | 3 | `tools/adjudication/check_wiring.py` 의 `review-dispatch.py` 줄번호 키 `EXEMPT` 10개 · `TERMINAL_CONSUMERS` 1개 · `_T5_SELECT_LOOP*` 가 stale 이 되어 `test_adjudication_wiring.sh` 가 RED | 항목을 제거하고 `EXEMPT_BASELINE`·`COMP_BASELINE` 과 그 주석은 **재계수**한 값으로 쓴다(손으로 뺄셈하지 않는다) |
 | 4 | README `:227` 의 `spec-distill:review-dispatch` 키가 도출 키 집합에서 사라져 `shared/tests/test_dispatch_name_defined.sh` 가 RED(`spec-distill:Stop` 은 그 락의 참조 정규식이 소문자로 시작하는 이름만 잡아 걸리지 않는다 — 그래도 거짓이 되는 문장이라 함께 옮긴다) | 활성 kill switch 목록에서 빼고 「은퇴한 스위치」 절로 옮긴다. 표기는 그 락을 이미 통과하는 v0.36.0 은퇴 절의 방식을 따른다(확인은 plan) |
@@ -359,6 +359,10 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 - **AC15** — README·CHANGELOG 가 §6 대로 갱신되고, spec-distill 은 major, quality-gates 는 patch 로 bump 된다.
 - **AC16** — `reviewing-spec` 의 게이트 없는 종료 경로 둘(kill switch — 진입 검사 실패 포함 · 대상 경로 부재 — 인자 없음 미선택 포함)의 advisory 가
   각각 §3.2 의 복귀 지시로 끝나고, §3.1 ② 의 호출 프롬프트가 같은 분기를 싣는다.
+- **AC17** — state root 가 심볼릭 링크를 거쳐 제자리 밖으로 풀리면 TTL-GC 와 SessionEnd 정리는 아무것도 지우지
+  않고, 저장소 밖에 락 파일을 만들지 않으며, stderr 로 거부를 알린다(D14). 회귀 테스트는
+  `tests/test_session_end_cleanup.py` 의 둘 — `.claude/spec-distill -> ../..` 와 `.claude -> ../outside` — 이고 둘 다 훅을
+  실행해 저장소 밖 피해 디렉토리의 생존을 잰다. 양성 짝은 AC3 의 GC 수집 케이스(진짜 루트에서는 같은 훅이 지운다)다.
 
 ## Files to Modify
 
@@ -381,7 +385,7 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 를 옮겨 온다), 부재·연결 지점 문구 락(이름은 plan).
 
 **수정** — `plugins/spec-distill/`:
-- `hooks/hooks.json` · `hooks/session-end-cleanup.py` · `scripts/hook_common.py` · `scripts/state_path.py` ·
+- `hooks/hooks.json` · `hooks/session-end-cleanup.py` · `scripts/hook_common.py` · `scripts/state_path.py` · `scripts/spec-distill-gc.py`(D14) ·
   `scripts/check_brief.py` · `scripts/codex_prompt_common.py`
 - `skills/reviewing-spec/SKILL.md` · `skills/reviewing-brief/SKILL.md` ·
   `skills/conducting-interview/references/finishing.md` · `templates/interview-brief-template.md`
@@ -500,6 +504,7 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 | D11 | AC14 통과 기준 (리뷰 라운드 1 이후) | ② 경로 호출 관찰 필수. 실패하면 핸드오프 문구 보강·재관찰 최대 2회, 그래도 실패면 머지 전 사용자 결정. ① 경로는 관찰·기록 |
 | D12 | 리뷰 라운드 3 반복 지적 게이트 | ③ 수정 필요 — 리뷰대로 저자가 수정(틀린 문장 수정 + 검증 절차 세부는 plan 요구로), 수정 뒤 재리뷰 1회 |
 | D13 | 리뷰 라운드 4 게이트 | ③ 수정 필요 — 저자가 남은 3건(진입 판정 리터럴 펜스 · 검증 계획의 AC6/AC9 · `git status` rc 처리)을 고치고, 재리뷰 없이 게이트로 돌아온다 |
+| D14 | 구현 뒤 qg 리뷰 게이트 1회차 — 저장소가 커밋한 `.claude/spec-distill`(또는 `.claude`) 심볼릭 링크를 TTL-GC 가 따라가 저장소 밖을 지운다 | 고친다, spec-distill 안에서만 — `state_path.state_root_escapes` 한 곳이 판정하고 GC 와 SessionEnd 정리가 거부한다. 공용 `gc_common.safe_rmtree` 는 두지 않는다 — 그 검증만 realpath 로 굳혀서는 루트 자신이 링크일 때 루트와 대상이 함께 풀려 경로가 닫히지 않는다. AC17 |
 
 오케스트레이터가 정하고 사용자에게 알린 것(되돌리려면 괄호 안의 한마디):
 

@@ -7,6 +7,8 @@ qg-gc.py pattern adaptation:
   - self-session protection via CLAUDE_CODE_SESSION_ID or --session-id
   - grace window (60s) for newly-created empty folders
   - ROOT resolved dynamically via state_path.state_root() (worktree compat)
+  - 루트가 심볼릭 링크를 거쳐 제자리 밖으로 풀리면(`state_root_escapes`) 락 파일을 만들기
+    전에 거부한다. 루트 안의 링크 자식은 세션 폴더로 보지 않는다.
   - .gc-pending-* orphan sweep (>60s) at iteration start
 
 Kill switches:
@@ -28,7 +30,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from state_path import state_root, SESSION_PATTERN  # noqa: E402 # pyright: ignore[reportMissingImports]
+from state_path import state_root, state_root_escapes, SESSION_PATTERN  # noqa: E402 # pyright: ignore[reportMissingImports]
 from gc_common import (  # noqa: E402 # pyright: ignore[reportMissingImports]
     GC_PENDING_PREFIX, gc_one, safe_rmtree, ttl_ns,
 )
@@ -62,7 +64,7 @@ def _sweep_gc_pending(root: Path) -> int:
     removed = 0
     now = time.time()
     for child in root.iterdir():
-        if not child.is_dir():
+        if child.is_symlink() or not child.is_dir():
             continue
         if not child.name.startswith(GC_PENDING_PREFIX):
             continue
@@ -82,6 +84,13 @@ def gc(self_session_id: str | None = None) -> int:
         return 0
     root = state_root()
     if not root.exists():
+        return 0
+    if state_root_escapes(root):
+        print(
+            f"[spec-distill] GC 거부 — state root '{root}' 가 심볼릭 링크를 거쳐 "
+            f"'{os.path.realpath(root)}' 로 풀린다. 저장소 밖을 지울 수 있어 건너뛴다.",
+            file=sys.stderr,
+        )
         return 0
     lock_path = root / LOCK_NAME
     try:
@@ -110,7 +119,7 @@ def gc(self_session_id: str | None = None) -> int:
         try:
             removed += _sweep_gc_pending(root)
             for child in root.iterdir():
-                if not child.is_dir():
+                if child.is_symlink() or not child.is_dir():
                     continue
                 if not SESSION_PATTERN.match(child.name):
                     continue

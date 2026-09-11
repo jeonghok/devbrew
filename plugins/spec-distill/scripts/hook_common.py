@@ -32,7 +32,8 @@ def fire_and_forget_gc() -> None:
 
     훅의 본업이 아니므로 결과를 기다려 판단하지 않는다 — 다만 GC 가 멈춘 사실이
     보이지 않으면 상태 폴더가 조용히 쌓이므로, 두 실패 모드(비정상 rc · 실행 자체
-    실패) 모두 stderr 로 낸다.
+    실패) 모두 stderr 로 낸다. rc 0 이어도 GC 가 stderr 로 낸 것(루트 거부 등)은 그대로
+    옮긴다. stdout(verbose 요약)은 옮기지 않는다.
     """
     try:
         result = subprocess.run(
@@ -44,6 +45,8 @@ def fire_and_forget_gc() -> None:
                 f"[spec-distill] GC exited rc={result.returncode}: {result.stderr.strip()}",
                 file=sys.stderr,
             )
+        elif result.stderr.strip():
+            print(result.stderr.strip(), file=sys.stderr)
     except (subprocess.TimeoutExpired, OSError) as exc:
         print(
             f"[spec-distill] gc fire-and-forget failed (non-fatal): {exc}",

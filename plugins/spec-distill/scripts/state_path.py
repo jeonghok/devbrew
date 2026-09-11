@@ -74,6 +74,17 @@ def state_root(cwd: str | None = None) -> Path:
     return fallback
 
 
+def state_root_escapes(root: Path) -> bool:
+    """`root`(`<repo>/.claude/spec-distill`)가 심볼릭 링크를 거쳐 제자리 밖으로 풀리면 True.
+
+    `spec-distill` 자신이나 `.claude` 가 링크면 참이다. 조상의 링크(macOS `/tmp` →
+    `/private/tmp`)는 양쪽이 똑같이 풀려 거짓이다. 지우는 쪽(TTL-GC · SessionEnd 정리)은
+    참이면 아무것도 지우지 않는다 — 저장소가 커밋한 링크는 저장소 밖을 가리킬 수 있다.
+    """
+    return os.path.realpath(root) != os.path.join(
+        os.path.realpath(root.parent.parent), ".claude", "spec-distill")
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print("usage: state_path.py {state-root|session-id} [<cwd>]", file=sys.stderr)
