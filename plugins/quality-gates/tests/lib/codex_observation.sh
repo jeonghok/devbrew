@@ -146,7 +146,9 @@ obs_invoke() {
       # 정확히 F-5 가 없앤 결함이다 — 이 관측은 "codex 가 실제로 불리는가"만
       # 재고 프롬프트 «내용»은 안 재므로, 최소한 게이트를 통과할 만큼의
       # frontmatter 를 준다(정본 `load_profile()` 의 열 필드 전부는 필요 없다 —
-      # 이 러너는 그 검증을 다시 하지 않고 이 셋만 읽는다).
+      # 이 러너는 그 검증을 다시 하지 않고 이 넷만 읽는다). `ground_truth` 가 넷째다
+      # — 러너가 그것을 codex 프롬프트에 싣고, 없거나 비면 `ground_truth_empty` 로
+      # fail-closed 해 codex 를 부르지 않는다(Task 3c).
       # 정본이 `shared/`에 있고 두 플러그인 모두에 파일 단위 링크로 배포되므로
       # (`plugins/{quality-gates,spec-distill}/scripts/`) CLAUDE_PLUGIN_ROOT는 둘 중
       # 아무 쪽이어도 무방하다 — prompt-preamble.md·codex_findings_to_yaml.py가
@@ -154,6 +156,7 @@ obs_invoke() {
       local profile; profile="$work/docreview-profile.md"
       {
         printf -- '---\n'
+        printf 'ground_truth: "devbrew observation fixture"\n'
         printf 'layer_rubric:\n  layer1: [observation]\n  layer2: []\n'
         printf 'allowed_dispositions: [decide, ask]\n'
         printf 'web: false\n'

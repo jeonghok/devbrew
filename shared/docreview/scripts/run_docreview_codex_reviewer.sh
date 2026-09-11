@@ -87,13 +87,15 @@ WEB_META_FILE="$SCRATCH/web.meta"
 STDOUT_FILE="$SCRATCH/codex.jsonl"
 STDERR_FILE="$SCRATCH/codex.stderr"
 
-# 프롬프트 조립(러너 안 인라인 빌더) — 프로필의 frontmatter(`layer_rubric` ·
+# 프롬프트 조립(러너 안 인라인 빌더) — 프로필의 frontmatter(`ground_truth` · `layer_rubric` ·
 # `allowed_dispositions` · `web`) 와 shared/codex/prompt-preamble.md(P21) 로 프롬프트
 # 하나를 낸다. `web` 판정을 **같은 호출에서** WEB_META_FILE 에 함께 써서, frontmatter
 # 파싱을 두 번(프롬프트용 · 웹 스위치용) 하지 않는다 — 파싱이 한 곳이면 그 결과를 두
 # 갈래로 읽는 자리가 하나이므로 웹 인자를 만드는 지점도 하나로 유지하기 쉽다(P11).
-if ! python3 - "$PROFILE" "$DOC" "$PLUGIN_ROOT/scripts/prompt-preamble.md" "$WEB_META_FILE" \
-       > "$PROMPT_FILE" <<'PY'
+# 빌더의 rc 는 셋으로 갈린다 — 0 성공 · 3 `ground_truth` 가 없거나 빔 · 그 밖 도출 실패.
+BUILD_RC=0
+python3 - "$PROFILE" "$DOC" "$PLUGIN_ROOT/scripts/prompt-preamble.md" "$WEB_META_FILE" \
+       > "$PROMPT_FILE" <<'PY' || BUILD_RC=$?
 import pathlib, re, sys
 
 prof_path, doc_path, preamble_path, meta_path = sys.argv[1:5]
@@ -107,7 +109,7 @@ fm_text = m.group(1) if m else ""
 # 안 쓰는 것과 같은 이유다: 이 러너는 `HOME` 이 격리되는 하니스(예: codex 인증
 # 격리)에서 site-packages 의 PyYAML 에 닿지 못해 죽는다(실측 — 이 파일이 그
 # 하니스에서 유일하게 third-party import 를 했다). 필요한 것은 프로필
-# frontmatter 의 셋뿐이고 넷 다 한 줄짜리 flow-list/불리언이므로(design-doc·
+# frontmatter 의 넷(`ground_truth` 문자열은 아래 `_ground_truth`)이고 나머지 셋은 한 줄짜리 flow-list/불리언이므로(design-doc·
 # brief·seed·generic 프로필 실측 — 참고: `docreview_state.py:load_profile()` 은
 # 이 넷을 훨씬 엄격하게 검증하지만 그건 정본 스키마 게이트이지 이 러너가
 # 다시 구현할 대상이 아니다) 새 YAML 파서를 발명하지 않고 그 모양만 좁게 뽑는다.
@@ -220,6 +222,51 @@ def _flow_list(key, text, indented=True):
             items.append(_unquote(val))
     return items
 
+
+def _ground_truth(text):
+    # `ground_truth`(설계 §5.3 「정답의 출처」) — codex 가 문서를 **무엇에 대조해** 보는가.
+    # 탐지·재비판 agent 는 프로필 전문을 받아 이것을 보지만 codex 는 이 프롬프트만 본다.
+    # 게이트(`load_profile()`)는 비지 않은 문자열만 받는다 — 이 러너는 그 게이트를 다시
+    # 구현하지 않고 모양을 넓게 읽는다: 스칼라(따옴표 · 평문 · 여러 줄 평문 · block scalar
+    # `|`/`>`)와 목록(flow · block — 항목을 `; ` 로 잇는다). 어느 occurrence 를 읽는지는
+    # 헤더 줄과 `_block_span` 이 **같은 컬럼-0 마지막 줄**로 한 번에 정한다(PyYAML
+    # last-wins). `_flow_list` 를 부르지 않는 이유: 그 함수는 flow 형과 block 형을 각자
+    # 따로 last-match 해서, 모양이 다른 중복 키(`k: [a]` 뒤 `k:` + `- b`)에서 PyYAML 의
+    # 답(b)이 아니라 flow 형(a)을 고른다.
+    # 반환: 문자열(`""` = 없음·빔) 또는 `None`(헤더는 있는데 이 함수가 못 읽는 모양).
+    hm = _last_match(r"(?m)^ground_truth:([^\n]*)$", text)
+    if hm is None:
+        return ""
+    head = hm.group(1).strip()
+    body = [ln for ln in _block_span("ground_truth", text).splitlines() if ln.strip()]
+    if re.match(r"^[|>][+-]?[0-9]?(?:[ \t]+#.*)?$", head):
+        # block scalar — 내용 줄의 `#` 은 주석이 아니라 내용이다. 공통 들여쓰기만 걷는다.
+        ind = min(len(ln) - len(ln.lstrip(" ")) for ln in body) if body else 0
+        return ("\n" if head[0] == "|" else " ").join(ln[ind:].rstrip() for ln in body).strip()
+    rest = [ln.strip() for ln in body if not ln.lstrip().startswith("#")]
+    # `head[:1] in "..."` 로 쓰지 않는다 — 빈 헤더면 `"" in "..."` 가 참이라 block 목록·
+    # 여러 줄 평문·빈 값이 전부 이 분기로 새어 `None`(못 읽음)이 된다(실측).
+    if head and head[0] in "\"'[":
+        # 따옴표 스칼라와 flow 목록은 여러 줄로 이어질 수 있다 — 이은 뒤 한 번에 읽는다.
+        whole = " ".join([head] + rest)
+        qm = re.match(r"^([\"'])(.*)\1(?:[ \t]+#.*)?$", whole, re.DOTALL)
+        if qm:
+            return qm.group(2).strip()
+        fm = re.match(r"^\[(.*)\](?:[ \t]+#.*)?$", whole, re.DOTALL)
+        if fm:
+            return "; ".join(_unquote(x) for x in fm.group(1).split(",") if x.strip())
+        return None
+    head = re.sub(r"^#.*$|[ \t]+#.*$", "", head)
+    if not head:
+        items = [re.match(r"^-(?:[ \t]+(.*?))?(?:[ \t]+#.*)?$", ln) for ln in rest]
+        if rest and all(items):
+            return "; ".join(_unquote(m.group(1)) for m in items if m.group(1))
+    val = " ".join(x for x in [head] + [re.sub(r"[ \t]+#.*$", "", ln) for ln in rest] if x).strip()
+    # YAML 의 null 평문(`~` · `null`)은 글자가 아니라 «값 없음»이다(PyYAML → None, 게이트는
+    # 거절) — 문자열 "null" 을 정답의 출처로 싣지 않는다.
+    return "" if re.match(r"^(?:~|null|Null|NULL)$", val) else val
+
+
 LAYER_RUBRIC_BLOCK = _block_span("layer_rubric", fm_text)
 lr_layer1 = _flow_list("layer1", LAYER_RUBRIC_BLOCK)
 lr_layer2 = _flow_list("layer2", LAYER_RUBRIC_BLOCK)
@@ -240,6 +287,15 @@ ad = _flow_list("allowed_dispositions", fm_text, indented=False)
 if lr_layer1 is None or lr_layer2 is None or ad is None or not lr_layer1 or not ad:
     sys.exit(1)
 lr_layer2 = lr_layer2 or []
+# `ground_truth` 도 게이트가 비지 않음을 강제한다(`ground_truth_empty`) — 여기서 못 읽은
+# 모양(`None`)은 위와 같은 loud 경로(rc 1)로, 없거나 빈 값은 게이트와 같은 이름의 사유
+# (rc 3 → `ground_truth_empty`)로 공시한다. 게이트 없이 러너만 불린 경우에도 "정답의
+# 출처: " 뒤가 빈 프롬프트가 조용히 나가지 않는다.
+gt = _ground_truth(fm_text)
+if gt is None:
+    sys.exit(1)
+if not gt:
+    sys.exit(3)
 # YAML 1.1 진리값 어휘 — PyYAML 의 SafeLoader 가 `true`·`yes`·`on` 을 대소문자
 # 불문하고 파이썬 `True` 로 접는다(실측: `yaml.safe_load("web: yes")` ==
 # {"web": True}). `y`/`n` 한 글자는 PyYAML 에서도 문자열로 남아 `load_profile()`
@@ -269,6 +325,7 @@ if pre_p.is_file():
 doc = pathlib.Path(doc_path).read_text(encoding="utf-8")
 
 print("You are an independent document reviewer in a read-only sandbox. Do NOT modify files.")
+print("\nGround truth (the source the document is judged against): " + gt)
 print("\nReview the document in two layers.")
 print("Layer 1 (big-picture coherence) — categories: "
       + ", ".join(str(x) for x in lr_layer1))
@@ -284,7 +341,8 @@ print('```json\n{"findings":[{"ref":"x1","layer":1,"category":"...","anchor":"#s
       '"disposition":"...","summary":"...","edit_scope":"#slug","blocks":[],"evidence":"..."}]}\n```')
 print("\n<document>\n" + doc + "\n</document>")
 PY
-then emit_fallback prompt_build_failed; fi
+if [[ $BUILD_RC -eq 3 ]]; then emit_fallback ground_truth_empty; fi
+if [[ $BUILD_RC -ne 0 ]]; then emit_fallback prompt_build_failed; fi
 
 # 웹 스위치 — 이 if/else 가 WEB_ARGS 를 만드는 **유일한 자리**다(P11). 기본값은 꺼짐:
 # 프로필 web:false 면 두 kill switch 와 무관하게 꺼져 있고(WEB_META_FILE 이 "web: false"),

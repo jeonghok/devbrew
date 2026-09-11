@@ -260,12 +260,15 @@ grep -q 'reason: *aborted_before_completion' "$b_stale" 2>/dev/null \
 # 인자 형태가 형제들과 다르다: `<profile> <doc> <project_dir> <out_yaml>` 넷이고
 # 프로필이 앞에 하나 더 붙는다(러너 자신의 파싱 그대로). 그리고 그 프로필은 최소
 # 파일로 충분하지 않다 — 러너의 인라인 빌더가 `layer_rubric`·`allowed_dispositions`
-# 를 못 읽으면 파싱 실패로 loud 하게 죽는다. 그래서 게이트를 통과할 만큼의
-# frontmatter 를 준다(codex_observation.sh 의 docreview arm 과 같은 모양).
+# 를 못 읽으면 파싱 실패로 loud 하게 죽고, `ground_truth` 가 없거나 비면
+# `ground_truth_empty` 로 fail-closed 해 codex 를 부르지 않는다(그러면 이 절의 중단
+# 트리거가 codex 에 닿지 못한다). 그래서 게이트를 통과할 만큼의 frontmatter 를
+# 준다(codex_observation.sh 의 docreview arm 과 같은 모양).
 printf '# design doc fixture\n' > "$tmp/doc-fix.md"
 c_prof="$tmp/degrade3-c-profile.md"
 {
   printf -- '---\n'
+  printf 'ground_truth: "degrade contract fixture"\n'
   printf 'layer_rubric:\n  layer1: [observation]\n  layer2: []\n'
   printf 'allowed_dispositions: [decide, ask]\n'
   printf 'web: false\n'

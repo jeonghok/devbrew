@@ -3,7 +3,7 @@
 #
 # codex 러너(run_docreview_codex_reviewer.sh)의 배선을 잰다 — 실제 codex 는 절대 부르지
 # 않는다(fixtures/docreview/codex-stub.sh 가 그 자리를 대신한다). 재는 것 셋: ① 프로필의
-# layer_rubric·allowed_dispositions·prompt-preamble.md(P21) 가 실제로 프롬프트에 실리는가
+# ground_truth·layer_rubric·allowed_dispositions·prompt-preamble.md(P21) 가 실제로 프롬프트에 실리는가
 # ② 웹 스위치가 프로필 web 필드 + 두 호스트 kill switch 의 OR 로 정확히 닫히는가(P11 —
 # 양성 대조 포함, 켠 적 없는 스위치의 "꺼짐"은 공허하다) ③ codex_findings_to_yaml.py
 # --emit-keys docreview 변환과 rc==3 fail-closed(호출자가 stale 을 지워야 하는 계약).
@@ -129,6 +129,23 @@ assert_file_absent "$CAP" '<!--' \
 #    덮이지 않는다"). seed(web:false, layer2 빔)·generic(quality-gates 호스트)
 #    을 이 락에서 처음 태운다 — truncated 없이 정상 변환되는지만 본다(형태별
 #    회귀는 아래 절이 딴다) ────────────────────────────────────────────────
+GT_PREFIX='Ground truth (the source the document is judged against): '
+L1_PREFIX='Layer 1 (big-picture coherence) — categories: '
+AD_PREFIX='For each finding assign a disposition from: '
+pc_get() {  # pc_get <profile-check.json> <key> [<subkey>] → 목록이면 ", " 로 이은 값
+  python3 -c 'import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+for k in sys.argv[2:]:
+    d = d[k]
+print(", ".join(d) if isinstance(d, list) else d)' "$@" 2>/dev/null
+}
+cmp_line() {  # cmp_line <capture> <줄 머리> <기대값> <msg> — 머리 뒤 값이 기대값과 같아야 한다
+  local got
+  got="$(awk -v p="$2" 'index($0, p) == 1 { print substr($0, length(p) + 1); exit }' "$1" 2>/dev/null)"
+  if [ -n "$3" ] && [ "$got" = "$3" ]; then ok "$4 ($got)"
+  else no "$4 (프롬프트='$got' · 기대='$3')"; fi
+}
+
 n_corpus=0
 while IFS= read -r p; do
   [ -n "$p" ] || continue
@@ -151,6 +168,18 @@ while IFS= read -r p; do
   else
     no "러너: 프로필 코퍼스 — $cbase 의 층 2 목록이 어긋난다 (프롬프트='$got_l2' · 프로필='$want_l2')"
   fi
+  # 정답의 출처(ground_truth)도 같은 방식 — 기대값은 profile-check(실 PyYAML)가 읽은 값이다.
+  # 탐지·재비판 agent 는 프로필 전문을 받지만 codex 는 이 프롬프트만 본다: 여기 없으면 codex 는
+  # 문서를 무엇에 대조하는지 모른다(brief 자리 — 번들 속 S1·S2+ 의 자리). 양의 짝으로 층 1 과
+  # 처분 목록도 같은 기대값 대조로 잰다(다른 필드는 그대로 실린다).
+  pj="$TMPD/corpus-$cbase.json"
+  python3 "$SCRIPTS/docreview_state.py" profile-check "$p" > "$pj" 2>/dev/null
+  cmp_line "$CCAP" "$GT_PREFIX" "$(pc_get "$pj" ground_truth)" \
+    "러너: 프로필 코퍼스 — $cbase 의 ground_truth 가 프롬프트에 그대로 실린다"
+  cmp_line "$CCAP" "$L1_PREFIX" "$(pc_get "$pj" layer_rubric layer1)" \
+    "러너: 프로필 코퍼스 — $cbase 의 층 1 목록이 프롬프트에 그대로 실린다"
+  cmp_line "$CCAP" "$AD_PREFIX" "$(pc_get "$pj" allowed_dispositions)" \
+    "러너: 프로필 코퍼스 — $cbase 의 처분 목록이 프롬프트에 그대로 실린다"
 done < <(find "$REPO_ROOT"/plugins/*/references/docreview-profiles -name '*.md' | sort)
 if [ "$n_corpus" -ge 4 ]; then
   ok "프로필 코퍼스 $n_corpus 개 전수(design-doc·brief·seed·generic) — 둘만 보던 것에서 확장"
@@ -223,14 +252,71 @@ assert_file_absent "$TMPD/shape-dup-layer1-cap.txt" 'goal_fit' \
 # dispositions 처럼 보이는 decoy 줄이 있어도(frontmatter 상 진짜 필드
 # «뒤»에 와서 스코프 안 된 last-match 라면 진짜를 이겼을 것) 진짜 값만
 # 읽는다 — `layer_rubric:` 블록 밖의 내용은 애초에 검색 범위에 안 들어온다.
+#
+# decoy 의 부재는 **범주 줄에서** 잰다 — ground_truth 가 프롬프트에 실리므로 decoy 문구는
+# 이제 정답의 출처 블록 안에 정당하게 나타난다(Task 3c). 전체 캡처에서 부재를 재면 그
+# 정당한 등장이 RED 가 되고, 범주 줄을 잘못 읽는 회귀는 여전히 이 줄 단위 부재가 잡는다.
 mutate_case ground-truth-decoy
-assert_file_grep "$TMPD/shape-ground-truth-decoy-cap.txt" 'goal_fit' \
-  "러너: ground_truth: block scalar 안 decoy → 진짜 layer1(goal_fit)을 읽는다(리뷰 F-6)"
-assert_file_absent "$TMPD/shape-ground-truth-decoy-cap.txt" 'decoy_layer1' \
-  "러너: ground_truth: 안 decoy_layer1 은 안 실린다(F-6 회귀 방지)"
-assert_file_absent "$TMPD/shape-ground-truth-decoy-cap.txt" 'decoy_layer2' \
-  "러너: ground_truth: 안 decoy_layer2 는 안 실린다(F-6 회귀 방지)"
-assert_file_grep "$TMPD/shape-ground-truth-decoy-cap.txt" 'assign a disposition from: decide, ask, fix, defer, drop' \
+DECOY_CAP="$TMPD/shape-ground-truth-decoy-cap.txt"
+assert_file_grep "$DECOY_CAP" '^Layer 1 \(big-picture coherence\) — categories: goal_fit,' \
+  "러너: ground_truth: block scalar 안 decoy → 층 1 줄은 진짜 layer1(goal_fit…)을 읽는다(리뷰 F-6)"
+assert_file_absent "$DECOY_CAP" '^Layer 1 \(big-picture coherence\) — categories: .*decoy_layer1' \
+  "러너: ground_truth: 안 decoy_layer1 은 층 1 줄에 안 실린다(F-6 회귀 방지)"
+assert_file_grep "$DECOY_CAP" '^Layer 2 \(detail completeness\) — categories: placeholder,' \
+  "러너: ground_truth: block scalar 안 decoy → 층 2 줄은 진짜 layer2(placeholder…)를 읽는다(F-6)"
+assert_file_absent "$DECOY_CAP" '^Layer 2 \(detail completeness\) — categories: .*decoy_layer2' \
+  "러너: ground_truth: 안 decoy_layer2 는 층 2 줄에 안 실린다(F-6 회귀 방지)"
+assert_file_grep "$DECOY_CAP" 'assign a disposition from: decide, ask, fix, defer, drop' \
   "러너: ground_truth: 안 decoy(allowed_dispositions: [decide]) 대신 진짜 다섯 처분을 읽는다(F-6)"
+assert_file_grep "$DECOY_CAP" '^Ground truth \(the source the document is judged against\): decoy block scalar deliberately mimicking field headers$' \
+  "러너: block scalar(|) ground_truth → 첫 내용 줄이 정답의 출처 머리에 실린다"
+assert_file_grep "$DECOY_CAP" '^end of decoy$' \
+  "러너: block scalar(|) ground_truth → 마지막 내용 줄까지 실린다(안 잘림)"
+
+# ── ground_truth 모양 — Task 3c. 러너가 ground_truth 를 PyYAML 과 같은 값(last-wins ·
+#    스칼라·목록 두 모양)으로 읽는지, 없거나 비면 조용히 빈 머리를 싣지 않고 이름 붙은
+#    사유로 공시하는지. 스칼라의 기대값은 profile-check(실 PyYAML)에서 읽고, 게이트가
+#    거절하는 목록 모양은 항목을 `; ` 로 이은 값을 기대한다(러너는 게이트를 다시 구현하지
+#    않는다 — 단독 호출에서도 정보를 버리지 않는다) ─────────────────────────────
+gt_expect_pc() {  # gt_expect_pc <shape> → 그 모양 프로필을 profile-check 가 읽은 ground_truth
+  python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/shape-$1.md" > "$TMPD/shape-$1.json" 2>/dev/null
+  pc_get "$TMPD/shape-$1.json" ground_truth
+}
+
+mutate_case gt-dup
+cmp_line "$TMPD/shape-gt-dup-cap.txt" "$GT_PREFIX" "$(gt_expect_pc gt-dup)" \
+  "러너: 중복 ground_truth: → PyYAML 처럼 마지막 선언이 이긴다"
+assert_file_absent "$TMPD/shape-gt-dup-cap.txt" '^Ground truth \(the source the document is judged against\): 인터뷰 브리프' \
+  "러너: 중복 ground_truth: → 첫 선언은 정답의 출처 줄에 안 실린다(first-match 회귀 방지)"
+
+mutate_case gt-plain
+cmp_line "$TMPD/shape-gt-plain-cap.txt" "$GT_PREFIX" "$(gt_expect_pc gt-plain)" \
+  "러너: 따옴표 없는 평문 ground_truth(+ 꼬리 주석) → PyYAML 과 같은 값"
+
+for shape in gt-flow-list gt-block-list; do
+  mutate_case "$shape"
+  cmp_line "$TMPD/shape-$shape-cap.txt" "$GT_PREFIX" "marker_gt_first; marker_gt_second" \
+    "러너: 목록 모양 ground_truth($shape) → 항목 둘을 순서대로 잇는다(게이트 밖 단독 호출)"
+done
+
+mutate_case gt-dup-mixed
+cmp_line "$TMPD/shape-gt-dup-mixed-cap.txt" "$GT_PREFIX" "marker_gt_second" \
+  "러너: 모양이 다른 중복 ground_truth:(flow 먼저 · block 나중) → 나중 선언이 이긴다"
+
+for shape in gt-empty gt-bare gt-null gt-absent; do
+  mutate_case "$shape"
+  assert_file_grep "$TMPD/shape-$shape.yaml" 'reason: ground_truth_empty' \
+    "러너: ground_truth 가 비었거나 없음($shape) → 이름 붙은 fail-closed 사유"
+  if [ ! -e "$TMPD/shape-$shape-cap.txt" ]; then
+    ok "러너: $shape → codex 를 부르지 않는다(빈 정답의 출처로 프롬프트가 나가지 않는다)"
+  else
+    no "러너: $shape → codex 가 불렸다(캡처 파일이 있다)"
+  fi
+  if python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/shape-$shape.md" >/dev/null 2>&1; then
+    no "게이트 전제: profile-check 가 $shape 를 받았다 — 러너가 이 모양을 다시 막지 않는 근거가 무너졌다"
+  else
+    ok "게이트 전제: profile-check 가 $shape 를 거절한다(엔진 경로에서는 러너까지 오지 않는다)"
+  fi
+done
 
 finish

@@ -2,10 +2,13 @@
 """mutate_profile_shape.py — 리뷰 F-5 회귀 락(test_docreview_codex.sh)이 쓰는 픽스처.
 
 실재 프로필 파일(`references/docreview-profiles/*.md`) 하나를 받아 `layer1`·`layer2`·
-`web` 줄만 정규식으로 다시 써서, `load_profile()`(docreview_state.py, 실 PyYAML)은
-여전히 통과시키지만 `run_docreview_codex_reviewer.sh`의 stdlib 빌더가 예전엔 조용히
-잘못 읽던 형태로 바꾼다. 새 프로필을 손으로 짓지 않는다 — 실재 프로필의 나머지
-필드(detectors·ground_truth·fix_anchors·...)는 그대로 둔다.
+`web`·`ground_truth` 줄만 정규식으로 다시 써서, `run_docreview_codex_reviewer.sh`의
+stdlib 빌더가 그 모양을 어떻게 읽는지 재게 한다. 새 프로필을 손으로 짓지 않는다 —
+실재 프로필의 나머지 필드(detectors·fix_anchors·...)는 그대로 둔다.
+
+`gt-*` 모양 중 목록·빔·null·부재(`gt-flow-list`·`gt-block-list`·`gt-dup-mixed`·
+`gt-empty`·`gt-bare`·`gt-null`·`gt-absent`)는 `load_profile()` 이 **거절한다** — 러너가 게이트 없이 단독으로
+불렸을 때의 행동을 재기 위한 것이다(러너는 게이트를 다시 구현하지 않는다).
 
 Usage: mutate_profile_shape.py <shape> <src_profile> <dst_profile>
 """
@@ -15,7 +18,10 @@ import sys
 SHAPES = (
     "wrapped-layer1", "wrapped-layer2", "block-blank", "block-comment",
     "web-yes", "dup-web", "dup-layer1", "ground-truth-decoy",
+    "gt-dup", "gt-plain", "gt-flow-list", "gt-block-list", "gt-dup-mixed",
+    "gt-empty", "gt-bare", "gt-null", "gt-absent",
 )
+GT_LINE = r"^ground_truth:.*$"
 
 
 def _wrap_flow(text, key):
@@ -86,6 +92,34 @@ def main():
             "  end of decoy\n"
         )
         text = re.sub(r"\n---\n", "\n" + decoy + "---\n", text, count=1)
+    elif shape == "gt-dup":
+        # 원래 줄 바로 뒤에 두 번째 선언 — PyYAML 처럼 마지막(표지)이 이겨야 한다.
+        text = re.sub(GT_LINE, lambda m: m.group(0) + '\nground_truth: "marker_gt_last_wins"',
+                      text, count=1, flags=re.MULTILINE)
+    elif shape == "gt-plain":
+        text = re.sub(GT_LINE, "ground_truth: marker_gt_plain value # trailing comment",
+                      text, count=1, flags=re.MULTILINE)
+    elif shape == "gt-flow-list":
+        text = re.sub(GT_LINE, 'ground_truth: [marker_gt_first, "marker_gt_second"]',
+                      text, count=1, flags=re.MULTILINE)
+    elif shape == "gt-block-list":
+        text = re.sub(GT_LINE,
+                      "ground_truth:\n  - marker_gt_first\n  # a comment between items\n"
+                      "  - marker_gt_second  # trailing",
+                      text, count=1, flags=re.MULTILINE)
+    elif shape == "gt-dup-mixed":
+        # 모양이 다른 중복 — flow 목록이 먼저, block 목록이 frontmatter 끝(나중)에.
+        # flow 형과 block 형을 따로 last-match 하는 파서는 앞의 flow 를 고른다.
+        text = re.sub(GT_LINE, "ground_truth: [marker_gt_first]", text, count=1, flags=re.MULTILINE)
+        text = re.sub(r"\n---\n", "\nground_truth:\n  - marker_gt_second\n---\n", text, count=1)
+    elif shape == "gt-empty":
+        text = re.sub(GT_LINE, 'ground_truth: ""', text, count=1, flags=re.MULTILINE)
+    elif shape == "gt-bare":
+        text = re.sub(GT_LINE, "ground_truth:", text, count=1, flags=re.MULTILINE)
+    elif shape == "gt-null":
+        text = re.sub(GT_LINE, "ground_truth: null", text, count=1, flags=re.MULTILINE)
+    elif shape == "gt-absent":
+        text = re.sub(GT_LINE + r"\n?", "", text, count=1, flags=re.MULTILINE)
 
     open(dst, "w", encoding="utf-8").write(text)
     return 0
