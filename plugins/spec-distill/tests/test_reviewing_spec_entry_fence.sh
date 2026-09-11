@@ -139,6 +139,36 @@ out="$(run_entry_fence DEVBREW_SKIP_HOOKS=spec-distill:Stop)"
 expect_verdict "정본: 은퇴 Stop 토큰" 'review-entry: PROCEED' "$out"
 assert_contains "$out" "spec-distill:Stop" "정본: 은퇴 Stop 토큰 — 사용자의 토큰을 되읽는 advisory"
 
+# ── F1: 플러그인 루트 해석 — 로드시 치환 시뮬레이션 vs 무치환 ──────────────────
+# `SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"` 의 안쪽 bare 형태
+# `${CLAUDE_PLUGIN_ROOT}` 는 skill 로드 시 하니스가 치환하고(2026-09-11 실측 —
+# 이 대화에서 로드된 skill 본문의 bare 참조가 절대경로로 치환된 채 보였다),
+# `:-` 를 낀 바깥 형태는 치환되지 않는다. 치환된 경우 SD 는 절대 플러그인
+# 루트가 되고, 치환이 없으면 `[ -n "$SD" ] || SD="./plugins/spec-distill"` 가
+# 오늘과 같은 fallback 을 낸다.
+SUBST_FENCE="$SCRATCH/entry_subst.sh"
+subst_out="$(python3 -c '
+import sys
+src, dst, pr = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(src, "r", encoding="utf-8") as f:
+    text = f.read()
+new_text = text.replace("${CLAUDE_PLUGIN_ROOT}", pr)
+with open(dst, "w", encoding="utf-8") as f:
+    f.write(new_text)
+print("CHANGED" if new_text != text else "UNCHANGED")
+' "$ENTRY_FENCE" "$SUBST_FENCE" "$PR")"
+assert_eq "$subst_out" "CHANGED" \
+  "F1: 치환 사본이 원본과 다르다(bare \${CLAUDE_PLUGIN_ROOT} 가 실제로 치환됐다 — 사라지면 이 케이스는 무의미해진다)"
+run_fence_no_root() {   # run_fence_no_root <fence-file> <cwd>
+  ( cd "$2" && env -i PATH="/usr/bin:/bin:$PY_DIR" HOME="$SCRATCH" \
+      PYTHONDONTWRITEBYTECODE=1 bash "$1" ) 2>/dev/null
+}
+expect_verdict "F1: 치환 시뮬레이션(변수 없음)" 'review-entry: PROCEED' \
+  "$(run_fence_no_root "$SUBST_FENCE" "$SCRATCH")"
+out="$(run_fence_no_root "$ENTRY_FENCE" "$SCRATCH")"
+expect_verdict "F1: 무치환·변수 없음·플러그인 루트 밖 cwd" 'review-entry: DISABLED:entry_check_failed' "$out"
+assert_contains "$out" "모듈 부재" "F1: 무치환·변수 없음 — 오늘과 같은 fail-closed fallback(모듈 부재)"
+
 # ── AC9: 미커밋 펜스 ─────────────────────────────────────────────────────────
 UNC_FENCE="$SCRATCH/uncommitted.sh"
 extract '<!-- uncommitted-check:begin -->' '<!-- uncommitted-check:end -->' "$UNC_FENCE"

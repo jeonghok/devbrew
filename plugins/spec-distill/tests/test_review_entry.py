@@ -152,15 +152,17 @@ class TestRetiredSwitchAdvisory(unittest.TestCase):
     def test_advisories_point_only_at_live_switches(self):
         """advisory 가 «권하는» 스위치는 전부 살아 있는 끄기 스위치다.
 
-        사용자 자신의 `SKIP_AUTOREVIEW=1` 은 되읽기라 권유가 아니지만 같은 모양이라 허용 집합에
-        함께 둔다. 토큰 되읽기(`DEVBREW_SKIP_HOOKS 의 spec-distill:Stop`)는 `=` 가 없어 추출되지
-        않는다.
+        사용자 자신의 `SKIP_AUTOREVIEW=1` 읽기(`{AUTOREVIEW_VAR}=1 은 읽는 곳이 없어…`)는
+        권유가 아니라 되읽기라, 셈에 넣기 전에 그 문장을 지워 걸러낸다 — 지우지 않으면 그
+        문장 자신이 「권하는 스위치」로 오추출된다. 은퇴한 `{AUTOREVIEW_VAR}=1` 은 이제
+        허용 집합에 없다 — 권해도 안 되는 죽은 스위치다. 토큰 되읽기(`DEVBREW_SKIP_HOOKS 의
+        spec-distill:Stop`)는 `=` 가 없어 추출되지 않는다.
         """
-        live = {f"DEVBREW_SKIP_HOOKS={ENTRY_TOKEN}", f"{DESIGN_VAR}=1", f"{GLOBAL_VAR}=1",
-                f"{AUTOREVIEW_VAR}=1"}
+        live = {f"DEVBREW_SKIP_HOOKS={ENTRY_TOKEN}", f"{DESIGN_VAR}=1", f"{GLOBAL_VAR}=1"}
         every = ",".join(REVIEW_RETIRED + GONE_RETIRED)
         out = run_entry(DEVBREW_SKIP_HOOKS=every, **{AUTOREVIEW_VAR: "1"})
         text = " ".join(out["advisories"])
+        text = text.replace(f"{AUTOREVIEW_VAR}=1 은 읽는 곳이 없어", "")
         suggested = set(re.findall(
             r"DEVBREW_SKIP_HOOKS=spec-distill:[A-Za-z-]+|DEVBREW_[A-Z_]+=1", text))
         self.assertTrue(suggested, "권하는 스위치를 하나도 못 뽑았다 — 추출이 깨졌다")

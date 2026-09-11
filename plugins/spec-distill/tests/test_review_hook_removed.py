@@ -29,6 +29,9 @@ S2·S4·S5 에서는 **살아 있는 어휘**를 뺀다: base 에서 삭제도 �
 그 파일이 인용한 S2·S4·S5 이름은 살아 있는 어휘로 오인된다 — `test_report_live_vocabulary` 가
 제외 목록과 그 사유 파일을 출력한다. 사람이 그 목록을 볼 것.
 
+base 커밋 `c7b4f580` 이 reachable 해야 한다 — 얕은 클론·이력 재작성에서는 `test_base_commit_reachable`
+이 이유를 대고 RED 다(도출 불가 = fail-closed).
+
 Run:
     cd plugins/spec-distill/tests && python3 -m unittest -v test_review_hook_removed
 """

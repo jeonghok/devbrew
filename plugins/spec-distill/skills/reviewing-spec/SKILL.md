@@ -56,7 +56,7 @@ STATE_DIR="$ROOT/$harness_sid"
 
 <!-- review-entry:begin -->
 ```bash
-SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"; [ -n "$SD" ] || SD="./plugins/spec-distill"
 ENTRY="$SD/scripts/review_entry.py"
 RETURN_MSG="[spec-distill] 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
 if [ ! -f "$ENTRY" ]; then
@@ -64,7 +64,7 @@ if [ ! -f "$ENTRY" ]; then
 else
   entry_err="$(mktemp 2>/dev/null || printf '/dev/null')"
   entry_out="$(python3 "$ENTRY" 2>"$entry_err")"; entry_rc=$?
-  entry_err_1="$(head -n 1 "$entry_err" 2>/dev/null)"
+  entry_err_1="$(tail -n 1 "$entry_err" 2>/dev/null)"
   [ "$entry_err" != /dev/null ] && rm -f "$entry_err"
   if [ "$entry_rc" -ne 0 ]; then
     block="$(printf '%s\n' "[spec-distill] 진입 검사 실패(끔으로 친다) — $ENTRY rc=$entry_rc: $entry_err_1" "review-entry: DISABLED:entry_check_failed")"
@@ -127,7 +127,7 @@ PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-prof
 ## 절차
 
 ```
-Read ${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/reviewing-document.md
+Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 ```
 
 그 파일의 여덟 단계를 **한 턴 안에서** 돈다. 절차를 여기 복사하지 않는다 — 네 자리가 같은 절차를
@@ -268,7 +268,7 @@ Agent({
 골격 · 두 가드 · 예외 경로의 정본은 아래 파일이다. 게이트 진입 시 읽고 따른다.
 
 ```
-Read ${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/proceed-gate.md
+Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 ```
 
 엔진 8단계의 `docreview_state.py gate --state-dir "$STATE_DIR" --render` 가 어느 게이트인지 정한다.
