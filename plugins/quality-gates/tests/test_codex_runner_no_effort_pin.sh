@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# codex 러너 능력 상한 부재 락 — 두 러너(`run_codex_reviewer.sh` ·
-# `run_artifact_codex_reviewer.sh`)가 `model_reasoning_effort`를 실행 인자로 핀하지
-# 않으면서, load-bearing 플래그(`-s read-only` 샌드박스 · `-C` 작업디렉토리 핀 ·
-# `--json` 파싱 계약)는 그대로 유지하는지 확인한다.
+# codex 러너 능력 상한 부재 락 — codex 러너가 `model_reasoning_effort`를 실행 인자로
+# 핀하지 않으면서, load-bearing 플래그(`-s read-only` 샌드박스 · `-C` 작업디렉토리 핀 ·
+# `--json` 파싱 계약)는 그대로 유지하는지 확인한다. 상한 부재·샌드박스는 플러그인 전체를
+# 스캔하고, `-C`·`--json` 은 이름 붙인 러너 셋(`run_codex_reviewer.sh` ·
+# `run_artifact_codex_reviewer.sh` · 문서 리뷰 엔진의 `run_docreview_codex_reviewer.sh`)에서 잰다.
 #
 # 왜 양방향인가: 상한만 지우고 샌드박스까지 함께 지우면 이 sweep이 보안 컨트롤을
 # 걷어낸 것이 된다(C1 유지선). 두 방향을 같이 재야 "상한만" 사라졌음이 증명된다.
@@ -47,6 +48,13 @@ INVOKE='(^|[[:space:]])codex[[:space:]]+exec[[:space:]]'
 # `plugin-audit/scripts/run_audit_codex_reviewer.sh`가 했다 — 이 주석이 참이 된
 # 근거가 그 파일이다. 스캔이 여전히 못 보는 형태(마크다운 인라인 · 바이너리 간접)는
 # 열린 갭이며 판정은 `test_codex_invocation_contract.sh`의 실행 관측이 한다.
+#
+# **심볼릭 링크를 따라간다(`grep -S`, macOS BSD grep).** 문서 리뷰 엔진 러너
+# `run_docreview_codex_reviewer.sh` 는 정본이 `shared/docreview/scripts/` 에 있고 두
+# 플러그인에 파일 단위 링크로 배포된다. BSD grep 의 `-r` 은 링크를 안 따라가므로 이 락은
+# 그 러너를 한 번도 보지 못했다 — brief·design-doc 두 자리를 맡은 러너가 상한 부재 락
+# 밖이었다(Task 5 리뷰 M1). 설치본에 실리는 것은 링크가 가리키는 내용이므로 링크를 따라가는
+# 쪽이 코퍼스의 정의에 맞는다(`codex_observation.sh` 의 `codex_candidates()` 와 같은 선택).
 scan_roots=()
 for d in "$REPO"/plugins/*/; do
   [[ -d "$d" ]] && scan_roots+=("$d")
@@ -56,17 +64,30 @@ done
 # 이것이 없으면 "핀이 하나도 없다"와 "아무것도 스캔하지 않았다"가 구별되지 않는다.
 callsites=0
 if [[ "${#scan_roots[@]}" -gt 0 ]]; then
-  callsites="$(grep -rlE "$INVOKE" "${scan_roots[@]}" 2>/dev/null | wc -l | tr -d ' ')"
+  callsites="$(grep -rlSE "$INVOKE" "${scan_roots[@]}" 2>/dev/null | wc -l | tr -d ' ')"
 fi
 if [[ "${#scan_roots[@]}" -ge 4 && "$callsites" -ge 3 ]]; then
   ok "스캔 코퍼스 실재: 디렉토리 ${#scan_roots[@]}개 · codex 호출부 ${callsites}개 파일"
 else
   no "스캔 코퍼스가 비었거나 너무 작다 (dirs=${#scan_roots[@]} callsites=$callsites) — 아래 결과는 무의미하다"
 fi
+# positive: 링크로 배포된 호출부가 코퍼스에 실제로 들었는가 — `-S` 가 빠지면 이 칸이 RED 다.
+# 개수는 이름을 적지 않고 코퍼스에서 센다(링크인 호출부 파일).
+linked=0
+if [[ "${#scan_roots[@]}" -gt 0 ]]; then
+  while IFS= read -r f; do
+    [[ -L "$f" ]] && linked=$((linked+1))
+  done < <(grep -rlSE "$INVOKE" "${scan_roots[@]}" 2>/dev/null)
+fi
+if [[ "$linked" -ge 1 ]]; then
+  ok "링크로 배포된 codex 호출부 ${linked}개 파일이 코퍼스에 들었다"
+else
+  no "링크로 배포된 codex 호출부가 코퍼스에 0개 — 링크를 안 따라가 그 러너가 상한·샌드박스 스캔 밖이다"
+fi
 
 stray=""
 if [[ "${#scan_roots[@]}" -gt 0 ]]; then
-  stray="$(grep -rlE "$KEY" "${scan_roots[@]}" 2>/dev/null \
+  stray="$(grep -rlSE "$KEY" "${scan_roots[@]}" 2>/dev/null \
            | while IFS= read -r f; do
                grep -vE '^[[:space:]]*#' "$f" | grep -E "$KEY" | grep -qE "$FLAG" && echo "$f"
              done)"
@@ -110,7 +131,7 @@ if [[ "${#scan_roots[@]}" -gt 0 ]]; then
     sandbox_seen=$((sandbox_seen+1))
     _invocation_block "$f" | grep -qE '(^|[[:space:]])-s[[:space:]]+read-only' \
       || missing_sandbox="$missing_sandbox $f"
-  done < <(grep -rlE "$INVOKE" "${scan_roots[@]}" 2>/dev/null)
+  done < <(grep -rlSE "$INVOKE" "${scan_roots[@]}" 2>/dev/null)
 fi
 # 스캔이 실제로 호출부를 봤는가 — 없으면 "위반 0"과 "아무것도 안 봄"이 구별되지 않는다.
 if [[ "$sandbox_seen" -ge 3 ]]; then
@@ -125,8 +146,9 @@ else
 fi
 
 # `-C`/`--json`도 같은 이유로 invocation 블록에서 잰다 — 주석에 이름만 있어도 통과하면
-# 파싱 계약과 작업디렉토리 핀 역시 조용히 사라질 수 있다.
-for r in run_codex_reviewer run_artifact_codex_reviewer; do
+# 파싱 계약과 작업디렉토리 핀 역시 조용히 사라질 수 있다. 엔진 러너는 이 플러그인의 배포
+# 링크 경로(`scripts/run_docreview_codex_reviewer.sh`)로 연다.
+for r in run_codex_reviewer run_artifact_codex_reviewer run_docreview_codex_reviewer; do
   RUN="$ROOT/scripts/$r.sh"
   if [[ ! -f "$RUN" ]]; then no "$r.sh 부재"; continue; fi
   _invocation_block "$RUN" | grep -qE '(^|[[:space:]])-C[[:space:]]' \
