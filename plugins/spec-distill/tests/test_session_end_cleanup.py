@@ -255,6 +255,33 @@ class SymlinkedStateRootTest(unittest.TestCase):
         self.assertTrue(victim.exists(), "세션 정리가 링크 너머의 디렉토리를 지웠다")
         self.assertIn("세션 정리 거부", stderr)
 
+    def test_planted_gc_lock_link_not_followed(self):
+        """진짜 루트에 커밋된 `.gc.lock -> ../../../sentinel.txt` — 훅의 GC 가 그 링크를 열지 않는다."""
+        root = self.clone / ".claude" / "spec-distill"
+        root.mkdir(parents=True)
+        sentinel = self.P / "sentinel.txt"
+        sentinel.write_bytes(b"precious line 1\nprecious line 2\n")
+        before = sentinel.read_bytes()
+        lock = root / ".gc.lock"
+        os.symlink("../../../sentinel.txt", lock)
+        # 계측기 바닥 — 링크가 이 테스트의 센티널로 풀리지 않으면 훅을 띄우지 않는다.
+        if os.path.realpath(lock) != str(sentinel) or not str(sentinel).startswith(str(self.P) + os.sep):
+            raise RuntimeError(f"링크가 {os.path.realpath(lock)!r} 로 풀린다 — P={self.P} 의 센티널이 아니다")
+        stale = root / "stale-lockleaf-02"
+        stale.mkdir()
+        f = stale / "state.local.md"
+        f.write_text("x")
+        t = time.time() - STALE_AGE_S
+        os.utime(f, (t, t))
+        git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+        subprocess.run(git + ["add", "-A"], cwd=self.clone, check=True)
+        subprocess.run(git + ["commit", "-qm", "plant lock link"], cwd=self.clone, check=True)
+        rc, _, _ = run_hook(None, cwd=str(self.clone), raw_stdin=b"")
+        self.assertEqual(rc, 0)
+        self.assertEqual(sentinel.read_bytes(), before, "훅의 GC 가 심은 .gc.lock 링크를 따라 저장소 밖 파일을 잘랐다")
+        self.assertTrue(lock.is_symlink())
+        self.assertFalse(stale.exists(), "훅의 GC 가 돌지 않았다 — 위 단언이 공허하다")
+
 
 if __name__ == "__main__":
     unittest.main()

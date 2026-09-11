@@ -360,9 +360,15 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 - **AC16** — `reviewing-spec` 의 게이트 없는 종료 경로 둘(kill switch — 진입 검사 실패 포함 · 대상 경로 부재 — 인자 없음 미선택 포함)의 advisory 가
   각각 §3.2 의 복귀 지시로 끝나고, §3.1 ② 의 호출 프롬프트가 같은 분기를 싣는다.
 - **AC17** — state root 가 심볼릭 링크를 거쳐 제자리 밖으로 풀리면 TTL-GC 와 SessionEnd 정리는 아무것도 지우지
-  않고, 저장소 밖에 락 파일을 만들지 않으며, stderr 로 거부를 알린다(D14). 회귀 테스트는
-  `tests/test_session_end_cleanup.py` 의 둘 — `.claude/spec-distill -> ../..` 와 `.claude -> ../outside` — 이고 둘 다 훅을
-  실행해 저장소 밖 피해 디렉토리의 생존을 잰다. 양성 짝은 AC3 의 GC 수집 케이스(진짜 루트에서는 같은 훅이 지운다)다.
+  않고, 저장소 밖에 락 파일을 만들지 않으며, stderr 로 거부를 알린다(D14). GC 는 루트 아래 고정 이름 파일을 만들거나
+  열지 않는다 — 저장소가 `.gc.lock` 을 링크(매달린 링크 포함)나 디렉토리로 심어도 저장소 밖 파일은 바이트 그대로이고
+  새로 생기지 않으며, GC 는 계속 돈다(D14 2회차). 회귀 테스트: `tests/test_session_end_cleanup.py` 의
+  `SymlinkedStateRootTest` 넷 — `.claude/spec-distill -> ../..`(GC) · `.claude -> ../outside`(GC) · payload sid 가 링크
+  너머 디렉토리 이름과 같은 경우(세션 정리) · 진짜 루트에 심은 `.gc.lock` 링크(`test_planted_gc_lock_link_not_followed`)
+  — 는 훅을 실행해 저장소 밖 피해의 부재를 잰다. `tests/test_gc.py` 의 `test_13_symlinked_child_untouched` ·
+  `test_14_symlinked_root_refused` 와 `GcLockLeafTest` 다섯(심은 링크 · 매달린 링크 · 디렉토리 · 락 파일 부재와 수집 ·
+  루트 디렉토리 락 경합)은 GC 를 직접 돌린다. 양성 짝은 AC3 의 GC 수집 케이스(진짜 루트에서는 같은 훅이 지운다)와
+  `GcLockLeafTest` 의 수집 단언이다.
 
 ## Files to Modify
 
@@ -504,7 +510,7 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 | D11 | AC14 통과 기준 (리뷰 라운드 1 이후) | ② 경로 호출 관찰 필수. 실패하면 핸드오프 문구 보강·재관찰 최대 2회, 그래도 실패면 머지 전 사용자 결정. ① 경로는 관찰·기록 |
 | D12 | 리뷰 라운드 3 반복 지적 게이트 | ③ 수정 필요 — 리뷰대로 저자가 수정(틀린 문장 수정 + 검증 절차 세부는 plan 요구로), 수정 뒤 재리뷰 1회 |
 | D13 | 리뷰 라운드 4 게이트 | ③ 수정 필요 — 저자가 남은 3건(진입 판정 리터럴 펜스 · 검증 계획의 AC6/AC9 · `git status` rc 처리)을 고치고, 재리뷰 없이 게이트로 돌아온다 |
-| D14 | 구현 뒤 qg 리뷰 게이트 1회차 — 저장소가 커밋한 `.claude/spec-distill`(또는 `.claude`) 심볼릭 링크를 TTL-GC 가 따라가 저장소 밖을 지운다 | 고친다, spec-distill 안에서만 — `state_path.state_root_escapes` 한 곳이 판정하고 GC 와 SessionEnd 정리가 거부한다. 공용 `gc_common.safe_rmtree` 는 두지 않는다 — 그 검증만 realpath 로 굳혀서는 루트 자신이 링크일 때 루트와 대상이 함께 풀려 경로가 닫히지 않는다. AC17 |
+| D14 | 구현 뒤 qg 리뷰 게이트 1회차 — 저장소가 커밋한 `.claude/spec-distill`(또는 `.claude`) 심볼릭 링크를 TTL-GC 가 따라가 저장소 밖을 지운다 | 고친다, spec-distill 안에서만 — `state_path.state_root_escapes` 한 곳이 판정하고 GC 와 SessionEnd 정리가 거부한다. 판정을 공용 `gc_common.safe_rmtree` 에 두지 않는다(그 함수는 바꾸지 않는다) — 그 검증만 realpath 로 굳혀서는 루트 자신이 링크일 때 루트와 대상이 함께 풀려 경로가 닫히지 않는다. 2회차: 루트 아래 고정 이름 락 파일(`.gc.lock`)도 저장소가 링크로 심을 수 있어 GC 가 그것을 만들고 열면 링크를 따라 저장소 밖 파일을 만들거나 자른다 — 락 파일을 없애고 루트 디렉토리 자신의 fd(`O_DIRECTORY \| O_NOFOLLOW`)를 잠근다. 저장소가 통제하는 루트 아래에 고정 이름 파일을 만들거나 열지 않는다. AC17 |
 
 오케스트레이터가 정하고 사용자에게 알린 것(되돌리려면 괄호 안의 한마디):
 

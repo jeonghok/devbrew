@@ -1,5 +1,7 @@
 """AC5 — TTL-GC contract (qg-gc.py pattern adaptation + .gc-pending-* orphan sweep)."""
+import fcntl
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -156,6 +158,108 @@ class GcTest(unittest.TestCase):
         self.assertTrue(stale.exists())
         self.assertFalse((elsewhere / ".gc.lock").exists())
         self.assertIn("GC 거부", stderr)
+
+
+class GcLockLeafTest(unittest.TestCase):
+    """저장소가 `.claude/spec-distill/.gc.lock` 을 링크나 디렉토리로 커밋해도 GC 는 그 이름을 열지 않는다.
+
+    락은 루트 디렉토리 자신이다. 심는 링크 · 센티널 · 유령 경로는 전부 이 테스트가 만든 임시
+    디렉토리 `P` 안이고(클론은 `P/clone`, 센티널은 클론 밖 `P/`), GC 를 띄우기 전에 링크가
+    `P` 안으로 풀리는지 확인한다 — 저장소나 $HOME 을 가리키는 것은 없다.
+    """
+
+    def setUp(self):
+        tmp_root = os.path.realpath(tempfile.gettempdir())
+        base = os.path.realpath(tempfile.mkdtemp(prefix="sd-gc-lockleaf-"))
+        if not (base and os.path.isabs(base) and os.path.isdir(base)
+                and base.startswith(tmp_root + os.sep)):
+            raise RuntimeError(f"임시 디렉토리가 이상하다: {base!r} (tmp={tmp_root!r})")
+        self.P = Path(base)
+        self.clone = self.P / "clone"
+        self.clone.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=self.clone, check=True)
+        self.root = self.clone / ".claude" / "spec-distill"
+        self.root.mkdir(parents=True)
+        self.lock = self.root / ".gc.lock"
+
+    def tearDown(self):
+        shutil.rmtree(self.P, ignore_errors=True)
+
+    def _stale(self, sid="stale-lockleaf-01"):
+        d = self.root / sid
+        d.mkdir()
+        f = d / "state.local.md"
+        f.write_text("x")
+        past = time.time() - 25 * 3600
+        os.utime(f, (past, past))
+        return d
+
+    def _plant_link(self, name):
+        """`.gc.lock -> ../../../<name>` — 계측기 바닥: `P/<name>` 으로 풀리지 않으면 GC 를 띄우지 않는다."""
+        os.symlink(os.path.join("..", "..", "..", name), self.lock)
+        real = os.path.realpath(self.lock)
+        want = str(self.P / name)
+        if real != want or not real.startswith(str(self.P) + os.sep):
+            raise RuntimeError(f"링크가 {real!r} 로 풀린다 — 기대 {want!r} (P={self.P})")
+        return Path(want)
+
+    def test_a_lock_link_to_outside_file_untouched(self):
+        sentinel = self.P / "sentinel.txt"
+        sentinel.write_bytes(b"precious line 1\nprecious line 2\n")
+        past = time.time() - 3600
+        os.utime(sentinel, (past, past))
+        before = (sentinel.read_bytes(), os.stat(sentinel).st_mtime_ns)
+        self.assertEqual(self._plant_link("sentinel.txt"), sentinel)
+        stale = self._stale()
+        rc, _, _ = run_gc(cwd=str(self.clone))
+        self.assertEqual(rc, 0)
+        self.assertEqual(sentinel.read_bytes(), before[0],
+                         "심은 .gc.lock 링크를 따라 저장소 밖 파일을 잘랐다")
+        self.assertEqual(os.stat(sentinel).st_mtime_ns, before[1],
+                         "심은 .gc.lock 링크를 따라 저장소 밖 파일을 건드렸다(touch)")
+        self.assertTrue(self.lock.is_symlink(), "심은 링크를 바꿨다")
+        self.assertFalse(stale.exists(), "GC 가 돌지 않았다 — 위 단언들이 공허하다")
+
+    def test_b_dangling_lock_link_target_not_created(self):
+        ghost = self._plant_link("ghost.txt")
+        self.assertFalse(os.path.lexists(ghost))
+        stale = self._stale()
+        rc, _, _ = run_gc(cwd=str(self.clone))
+        self.assertEqual(rc, 0)
+        self.assertFalse(os.path.lexists(ghost),
+                         "매달린 .gc.lock 링크를 따라 저장소 밖에 파일을 만들었다")
+        self.assertFalse(stale.exists(), "GC 가 돌지 않았다 — 위 단언이 공허하다")
+
+    def test_c_lock_name_as_directory_gc_still_runs(self):
+        self.lock.mkdir()
+        stale = self._stale()
+        rc, _, stderr = run_gc(cwd=str(self.clone))
+        self.assertEqual(rc, 0)
+        self.assertFalse(stale.exists(),
+                         f"디렉토리로 심은 .gc.lock 이 GC 를 멈췄다 — stderr: {stderr.strip()}")
+        self.assertTrue(self.lock.is_dir())
+
+    def test_d_real_root_no_lock_file_and_collects(self):
+        stale = self._stale()
+        rc, _, _ = run_gc(cwd=str(self.clone))
+        self.assertEqual(rc, 0)
+        self.assertFalse(stale.exists())
+        self.assertFalse(os.path.lexists(self.lock),
+                         "GC 가 루트에 락 파일을 만들었다 — 고정 이름 파일을 여는 경로가 살아 있다")
+
+    def test_e_root_dir_lock_held_elsewhere_gc_yields(self):
+        # 락이 실제로 루트 디렉토리에 걸리는가 — 다른 프로세스가 쥐고 있으면 GC 는 비켜선다.
+        stale = self._stale()
+        dfd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            fcntl.flock(dfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            rc, _, _ = run_gc(cwd=str(self.clone))
+            self.assertEqual(rc, 0)
+            self.assertTrue(stale.exists(), "루트 디렉토리 락을 쥔 동안 GC 가 지웠다 — 락이 걸리지 않는다")
+        finally:
+            os.close(dfd)
+        run_gc(cwd=str(self.clone))
+        self.assertFalse(stale.exists(), "락을 놓은 뒤에도 GC 가 돌지 않았다")
 
 
 if __name__ == "__main__":

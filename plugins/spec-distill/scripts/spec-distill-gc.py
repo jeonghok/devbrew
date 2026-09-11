@@ -3,12 +3,14 @@
 
 qg-gc.py pattern adaptation:
   - race guard: fcntl lock + double-stat ns + rename-then-rmtree (3-layer)
+    락은 state root 디렉토리 자신의 fd(`O_DIRECTORY | O_NOFOLLOW`)에 건다 — 락 파일은 없다.
+    루트 아래 고정 이름 파일은 저장소가 링크로 커밋할 수 있어서 열지 않는다.
   - 24h TTL (DEVBREW_SPEC_DISTILL_TTL_HOURS override)
   - self-session protection via CLAUDE_CODE_SESSION_ID or --session-id
   - grace window (60s) for newly-created empty folders
   - ROOT resolved dynamically via state_path.state_root() (worktree compat)
-  - 루트가 심볼릭 링크를 거쳐 제자리 밖으로 풀리면(`state_root_escapes`) 락 파일을 만들기
-    전에 거부한다. 루트 안의 링크 자식은 세션 폴더로 보지 않는다.
+  - 루트가 심볼릭 링크를 거쳐 제자리 밖으로 풀리면(`state_root_escapes`) 락을 잡기 전에
+    거부한다. 루트 안의 링크 자식은 세션 폴더로 보지 않는다.
   - .gc-pending-* orphan sweep (>60s) at iteration start
 
 Kill switches:
@@ -36,7 +38,6 @@ from gc_common import (  # noqa: E402 # pyright: ignore[reportMissingImports]
 )
 from kill_switch_active import kill_switch_active  # noqa: E402
 
-LOCK_NAME = ".gc.lock"
 GC_PENDING_SWEEP_AGE_S = 60
 
 # TTL 계산 · 나이 판정 · 안전 삭제 · 폴더 수집은 `shared/gc/gc_common.py` 정본(형제
@@ -92,28 +93,18 @@ def gc(self_session_id: str | None = None) -> int:
             file=sys.stderr,
         )
         return 0
-    lock_path = root / LOCK_NAME
-    try:
-        lock_path.touch(exist_ok=True)
-    except OSError as exc:
-        print(
-            f"[spec-distill] GC skipped — cannot create lock file {lock_path}: {exc}",
-            file=sys.stderr,
-        )
-        return 0
     ttl = ttl_ns("DEVBREW_SPEC_DISTILL_TTL_HOURS")
     removed = 0
+    # 락은 루트 디렉토리 자신이다. 루트 아래의 고정 이름 파일은 저장소가 링크로 커밋할 수
+    # 있어, 그것을 만들거나 열면 링크를 따라 저장소 밖 파일을 만들거나 자른다.
     try:
-        lockfile = open(lock_path, "w")
+        dfd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     except OSError as exc:
-        print(
-            f"[spec-distill] GC lock open failed: {exc}",
-            file=sys.stderr,
-        )
+        print(f"[spec-distill] GC 거부 — state root 를 링크 없이 열 수 없다: {exc}", file=sys.stderr)
         return 0
-    with lockfile:
+    try:
         try:
-            fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(dfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except (BlockingIOError, OSError):
             return 0
         try:
@@ -135,9 +126,11 @@ def gc(self_session_id: str | None = None) -> int:
                     )
         finally:
             try:
-                fcntl.flock(lockfile.fileno(), fcntl.LOCK_UN)
+                fcntl.flock(dfd, fcntl.LOCK_UN)
             except OSError:
                 pass
+    finally:
+        os.close(dfd)
     if _verbose() and removed > 0:
         print(f"[spec-distill] GC: removed {removed} stale folder(s)")
     return removed
