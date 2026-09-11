@@ -22,7 +22,7 @@ from adjudication import Ledger  # noqa: E402
 from docreview_anchor import classify_anchor, refs_of  # noqa: E402
 from docreview_state import (  # noqa: E402
     RANK, _CHOICE_LABEL, _decide_choices_for, _is_reraise_successor,
-    fail, load_profile, load_state, record_findings, save_state, yaml,
+    fail, load_profile, load_state, pending_mismatch, record_findings, save_state, yaml,
 )
 
 BLOCK_RE = r"```%s[ \t]*\n(.*?)\n```"
@@ -180,7 +180,7 @@ def cmd_prepare(a) -> int:
         pub["blocks"] = [ref2f.get((src, r), r) for r in it["blocks"]]
         pub.pop("ref", None)
         pending.append({"f": pub["f"], "source": src, "finding": pub})
-    st["pending_recritic"] = {"items": pending, "degrade": degrade, "events": events}
+    st["pending_recritic"] = {"round": int(st["round"]), "items": pending, "degrade": degrade, "events": events}  # round — docreview_state.pending_mismatch
     save_state(a.state_dir, st, "prepare-recritic (%d items%s)" % (len(pending), ", critic dead" if degrade["critic_dead"] else ""))
     print(json.dumps({"ok": not degrade["critic_dead"], "items": [p["finding"] for p in pending],
                       "degrade": degrade}, ensure_ascii=False, indent=1))
@@ -677,11 +677,19 @@ def cmd_finalize(a) -> int:
     (`nonlocal` 은 `_resolve_ids_and_lineage` 안의 계보 해소 하나뿐 — 분해 전과 같다).
     """
     st = load_state(a.state_dir)
-    prof = load_profile(st["profile"])
     n = int(st["round"])
-    pend = st.get("pending_recritic")
-    if not pend:
-        return fail("no_pending_recritic")
+    why = pending_mismatch(st, n)
+    if why:
+        # 이번 라운드의 준비가 없거나 · 다른 라운드 것이거나 · 어느 라운드 것인지 모른다 — 소비하지
+        # 않는다. rc 만 내고 끝나면 준비가 없는 라운드의 게이트가 정상으로 열리므로, 실패를 이 라운드
+        # 자리에 남겨 게이트가 「미검증」(`finalize_incomplete`)으로 알게 한다. 같은 라운드의 finalize
+        # 가 나중에 성공하면 아래에서 치운다.
+        r = st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
+        r["finalize_failed"] = why
+        save_state(a.state_dir, st, "finalize 거부 (%s)" % why)
+        return fail(why, round=n)
+    prof = load_profile(st["profile"])
+    pend = st["pending_recritic"]
     L = Ledger(items="open")
     for e in pend.get("events", []):
         getattr(L, e[0])(*e[1:])
@@ -707,6 +715,7 @@ def cmd_finalize(a) -> int:
                          "revived": revived, "reraise_unconsumed": reraise_unconsumed,
                          "escalated_unconsumed": escalated_unconsumed})
     st["pending_recritic"] = None
+    st["rounds"][str(n)].pop("finalize_failed", None)   # 같은 라운드의 앞선 거부 표지 — 이 성공이 대신한다
     save_state(a.state_dir, st, "finalize (%d findings, %d rejected)" % (len(final), len(rejected_items)))
     print(json.dumps(out, ensure_ascii=False, indent=1))
     return 0

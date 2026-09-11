@@ -1213,6 +1213,118 @@ case_route_adjudication_keys() {
   rm -rf "$d"
 }
 
+# ── T46 — 「미검증」 라운드를 엔진이 스스로 안다 (Task 7b, R51) ───────────────────
+# 이번 라운드의 판정이 원장에 없는 세 모양 — critic 사망 두 번(5단계가 6~7단계를 건너뛴다) ·
+# critic 이 죽은 채 finalize · finalize 실패. 게이트 요약이 사유(`unverified`) · 승인 게이트 라벨
+# (`approval_label`) · 완료 기록 신호(`round_reviewed`)를 내고, 렌더 첫 줄이 공시로 시작한다. 진입
+# skill 은 이 셋을 읽는다(reviewing-spec 의 mark-reviewed 배제 · reviewing-brief 의 Step B 라벨).
+gsum()   { py docreview_state.py gate --state-dir "$1" | jgets "$2"; }            # gsum <dir> <expr over d>
+gfirst() { py docreview_state.py gate --state-dir "$1" --render | head -1; }      # 렌더 첫 줄(degrade 공시)
+UNV='d["unverified"], d["approval_label"], d["round_reviewed"], d["approval_gate_open"]'
+UNV3='d["unverified"], d["approval_label"], d["round_reviewed"]'
+critic_dead_twice() {   # critic_dead_twice <state-dir> — 5단계 rc 4 두 번(재dispatch 도 죽었다)
+  py docreview_route.py prepare-recritic --state-dir "$1" --critic "$FX/critic-nolayer1.txt" --codex "$(codex_now "$1" "$FX/codex-r1.yaml")" > "$1/prep.json" 2>/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$1" --critic "$FX/critic-broken.txt" --codex "$(codex_now "$1" "$FX/codex-r1.yaml")" > "$1/prep.json" 2>/dev/null
+}
+case_T46_critic_dead_twice_unverified() {
+  local d f; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  critic_dead_twice "$d"
+  assert_eq "$(gsum "$d" "$UNV")" "('critic_dead', '미검증', False, True)" \
+    "T46: critic 사망 두 번(finalize 없음) → unverified critic_dead · 라벨 「미검증」 · 완료 기록 불가 · 승인 게이트 열림"
+  f="$(gfirst "$d")"
+  assert_not_contains "$f" "degrade 없음" "T46: critic 사망 두 번 라운드의 렌더 첫 줄에 「degrade 없음」이 없다"
+  assert_contains "$f" "「미검증」 주 판정자(doc-critic) 사망" "T46: 렌더 첫 줄이 주 판정자 사망 · 「미검증」을 공시한다 (부재 단언의 양의 짝)"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "다음: 승인 게이트(「미검증」)" \
+    "T46: 렌더의 다음 줄이 승인 게이트를 「미검증」 라벨로 연다"
+  rm -rf "$d"
+}
+case_T46_critic_dead_finalized_unverified() {   # mark-reviewed 배제 둘째 갈래 — 죽은 채 finalize 한 라운드
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer1.txt" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json" 2>/dev/null
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null
+  assert_eq "$(jget "$d/fin.json" 'd["blocks"]')" "True" "T46 전제: critic 이 죽은 채 finalize 한 라운드 — fin.json blocks 참"
+  assert_eq "$(gsum "$d" "$UNV")" "('critic_dead', '미검증', False, True)" \
+    "T46: critic 이 죽은 채 finalize 한 라운드도 엔진이 「미검증」으로 안다 (unverified critic_dead · 완료 기록 불가)"
+  assert_contains "$(gfirst "$d")" "「미검증」 주 판정자(doc-critic) 사망" "T46: 그 라운드의 렌더 첫 줄도 주 판정자 사망을 맨 앞에 싣는다"
+  rm -rf "$d"
+}
+case_T46_finalize_failed_unverified() {   # critic 생존 · finalize rc≠0 — 준비는 남고 fin.json 은 비었다
+  local d rc f; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-r1.txt" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json"
+  printf '{' > "$d/broken-diff.json"   # 파손 diff — finalize 가 원장을 쓰기 전에 죽는다
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/broken-diff.json" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null; rc=$?
+  assert_eq "$rc $(wc -c < "$d/fin.json" | tr -d ' ')" "1 0" "T46 전제: finalize 가 rc 1 로 죽고 fin.json 은 비었다"
+  assert_eq "$(gsum "$d" "$UNV")" "('finalize_incomplete', '미검증', False, True)" \
+    "T46: finalize 실패 → 정상 게이트가 아니다 (unverified finalize_incomplete · 라벨 「미검증」 · 완료 기록 불가)"
+  f="$(gfirst "$d")"
+  assert_not_contains "$f" "degrade 없음" "T46: finalize 실패 라운드의 렌더 첫 줄에 「degrade 없음」이 없다"
+  assert_contains "$f" "「미검증」 라우팅(finalize) 미완" "T46: 렌더 첫 줄이 라우팅 미완 · 「미검증」을 공시한다 (부재 단언의 양의 짝)"
+  rm -rf "$d"
+}
+case_T46_finalize_without_prepare_marks_round() {   # 준비 없는 finalize — 거부를 원장에 남기고, 성공이 치운다
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>"$d/fin.err"; rc=$?
+  assert_eq "$rc $(jget "$d/fin.err" 'd["reason"]')" "1 no_pending_recritic" "T46 전제: 준비 없는 finalize 는 rc 1 no_pending_recritic"
+  assert_eq "$(st_yaml "$d" 'st["rounds"]["1"].get("finalize_failed")')" "no_pending_recritic" "T46: 그 거부가 이 라운드 자리에 실패 표지로 남는다"
+  assert_eq "$(gsum "$d" "$UNV")" "('finalize_incomplete', '미검증', False, True)" "T46: 준비 없이 finalize 가 거부된 라운드의 게이트는 「미검증」이다"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-r1.txt" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json"; rc=$?
+  assert_eq "$rc $(st_yaml "$d" 'st["rounds"]["1"].get("finalize_failed")')" "0 None" "T46: 같은 라운드의 finalize 성공이 실패 표지를 치운다"
+  assert_eq "$(gsum "$d" "$UNV3")" "(None, None, True)" "T46: 그 뒤 게이트는 정상이다 (라벨 없음 · 완료 기록 가능)"
+  rm -rf "$d"
+}
+case_T46_stale_pending_refused() {   # 다른 라운드의 준비는 소비하지 않는다 · 번호 없는 준비도
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  critic_dead_twice "$d"                                   # 라운드 1 의 준비(critic 사망)가 남는다
+  next_round "$d" "$FX/design-sample.md" >/dev/null        # 라운드 2 — 아직 준비 없음
+  assert_eq "$(gsum "$d" 'd["unverified"], d["round_reviewed"]')" "(None, False)" \
+    "T46 라운드 스코프: 직전 라운드의 critic 사망 준비는 이번 라운드를 「미검증」으로 만들지 않는다 — 다만 라우팅 전이라 완료 기록 신호도 서지 않는다"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>"$d/fin.err"; rc=$?
+  assert_eq "$rc $(jget "$d/fin.err" 'd["reason"]') $(wc -c < "$d/fin.json" | tr -d ' ')" "1 pending_recritic_stale 0" \
+    "T46: 라운드 2 의 finalize 는 라운드 1 의 준비를 소비하지 않는다 (rc 1 pending_recritic_stale · fin.json 없음)"
+  assert_eq "$(st_yaml "$d" 'st["pending_recritic"]["round"], st["rounds"]["2"].get("route_report"), st["rounds"]["2"].get("finalize_failed")')" \
+    "(1, None, 'pending_recritic_stale')" "T46: 거부는 준비를 건드리지 않고 이번 라운드 자리에 표지만 남긴다"
+  assert_eq "$(gsum "$d" "$UNV3")" "('finalize_incomplete', '미검증', False)" "T46: 그 라운드의 게이트는 「미검증」이다"
+  rm -rf "$d"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-r1.txt" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json"
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2]); st["pending_recritic"].pop("round"); s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
+  assert_eq "$(gsum "$d" "$UNV3")" "('finalize_incomplete', '미검증', False)" "T46: 라운드 번호가 없는 준비는 이번 라운드의 미완 준비로 친다 (닫힌 쪽)"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>"$d/fin.err"; rc=$?
+  assert_eq "$rc $(jget "$d/fin.err" 'd["reason"]')" "1 pending_round_unrecorded" "T46: finalize 는 어느 라운드 것인지 모르는 준비를 소비하지 않는다"
+  rm -rf "$d"
+}
+case_T46_unverified_released_next_round() {   # 라운드 스코프 — 다음 라운드가 정상으로 끝나면 표지가 풀린다
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  critic_dead_twice "$d"
+  assert_eq "$(gsum "$d" 'd["unverified"]')" "critic_dead" "T46 전제: 라운드 1 은 「미검증」(critic 사망)"
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-r1.txt" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin2.json"
+  assert_eq "$(gsum "$d" "$UNV3")" "(None, None, True)" "T46: 라운드 2 가 정상으로 끝나면 「미검증」이 풀린다 (라벨 없음 · 완료 기록 가능)"
+  assert_not_contains "$(gfirst "$d")" "미검증" "T46: 풀린 라운드의 렌더 첫 줄에 「미검증」이 없다"
+  # finalize 실패 표지도 같은 스코프다 — 라운드 3 에서 준비 없이 거부된 뒤 라운드 4(추가 승인) 가 정상이면 풀린다.
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > /dev/null 2>&1
+  assert_eq "$(gsum "$d" 'd["unverified"]')" "finalize_incomplete" "T46 전제: 라운드 3 은 「미검증」(finalize 거부)"
+  next_round "$d" "$FX/design-sample.md" '사용자: 한 라운드 더' >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-r1.txt" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep4.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff4.json" --doc "$FX/design-sample.md" > "$d/fin4.json"
+  assert_eq "$(gsum "$d" "$UNV3")" "(None, None, True)" "T46: 라운드 4 가 정상으로 끝나면 finalize 실패 표지도 풀린다"
+  rm -rf "$d"
+}
+case_T46_normal_and_unrouted_rounds() {   # 양의 짝 둘 — 정상 라운드는 참, 라우팅 없는 라운드는 사유 없이 거짓
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_eq "$(gsum "$d" "$UNV3")" "(None, None, True)" "T46 양의 짝: 정상 라운드(critic 생존 · finalize 성공) → 사유 없음 · 라벨 없음 · 완료 기록 가능"
+  assert_not_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "미검증" "T46 양의 짝: 정상 라운드의 렌더에 「미검증」이 없다"
+  rm -rf "$d"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_eq "$(gsum "$d" "$UNV3")" "(None, None, False)" \
+    "T46: finalize 를 거치지 않은 라운드 — 「미검증」 사유는 없지만 완료 기록 신호는 서지 않는다 (참은 이번 라운드의 finalize 보고서를 요구한다)"
+  rm -rf "$d"
+}
+
 # ── check-intent (Task 7) ─────────────────────────────────────────────────
 _ci() { py docreview_anchor.py check-intent "$@" 2>/dev/null; }   # rc 는 $?
 case_AC6_fix_contract() {

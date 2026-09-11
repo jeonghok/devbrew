@@ -808,6 +808,61 @@ def cmd_observe_diff(a) -> int:
     return 0
 
 
+# ── 「미검증」 라운드 — 이번 라운드의 판정이 원장에 없다는 사실 (설계 §9 degrade 표 critic 사망 행) ──
+# 엔진이 이 사실을 스스로 안다. 같은 턴 모델의 기억에 맡기면 다음 턴·compact 뒤에는 그 라운드가
+# 리뷰된 것처럼 보인다. 사유 키는 둘이다 — `critic_dead`(주 판정자 doc-critic 사망) ·
+# `finalize_incomplete`(7단계 라우팅이 끝나지 않았다). 읽는 자리는 셋이고 전부 라운드 번호에 묶인다:
+#   · `pending_recritic` — 5단계 `prepare-recritic` 이 `round` 와 함께 쓰고 7단계 `finalize` 의 성공만
+#     지운다. 이번 라운드의 것이 남아 있으면 라우팅이 끝나지 않았고, 그 `degrade.critic_dead` 가
+#     사유를 가른다(critic 이 두 번 죽으면 5단계가 6~7단계를 건너뛰어 이 상태로 게이트에 온다).
+#   · `rounds[n].finalize_failed` — 준비가 없거나 다른 라운드 것이라 `finalize` 가 거부할 때 남긴다.
+#   · `rounds[n].route_report.degrade.critic_dead` — critic 이 죽은 채 finalize 한 라운드(`fin.json` 의
+#     `blocks` 참)다.
+# 다음 라운드는 제 자리(`rounds[n+1]`, 새 준비)를 쓰므로 그 라운드가 정상으로 끝나면 표지가 풀린다.
+UNVERIFIED_LABEL = "미검증"
+UNVERIFIED_TEXT = {
+    "critic_dead": "「미검증」 주 판정자(doc-critic) 사망 — 이 라운드는 리뷰되지 않았다",
+    "finalize_incomplete": "「미검증」 라우팅(finalize) 미완 — 이 라운드의 finding 이 원장에 없다",
+}
+
+
+def pending_mismatch(st, n):
+    """`pending_recritic` 이 라운드 n 의 준비가 아닐 사유 — 라운드 n 의 것이면 None.
+
+    라운드 번호가 없거나 정수가 아니면 어느 라운드 것인지 가를 수 없다(`pending_round_unrecorded`).
+    `finalize` 는 이 사유가 있으면 소비하지 않고, `round_unverified` 는 번호 없는 준비를 이번
+    라운드의 미완 준비로 친다 — 양쪽 다 닫힌 쪽이다."""
+    p = st.get("pending_recritic")
+    if not isinstance(p, dict):
+        return "no_pending_recritic"
+    r = p.get("round")
+    if isinstance(r, bool) or not isinstance(r, int):
+        return "pending_round_unrecorded"
+    if r != n:
+        return "pending_recritic_stale"
+    return None
+
+
+def _pending_here(st, n):
+    return st["pending_recritic"] if pending_mismatch(st, n) in (None, "pending_round_unrecorded") else None
+
+
+def round_unverified(st):
+    """이번 라운드를 엔진이 「미검증」으로 아는 사유 키(`critic_dead` · `finalize_incomplete`), 아니면 None."""
+    n = int(st["round"])
+    p = _pending_here(st, n)
+    if p is not None:
+        deg = p.get("degrade") if isinstance(p.get("degrade"), dict) else {}
+        return "critic_dead" if deg.get("critic_dead") else "finalize_incomplete"
+    cur = (st.get("rounds") or {}).get(str(n)) or {}
+    if cur.get("finalize_failed"):
+        return "finalize_incomplete"
+    rdeg = (cur.get("route_report") or {}).get("degrade")
+    if isinstance(rdeg, dict) and rdeg.get("critic_dead"):
+        return "critic_dead"
+    return None
+
+
 def gate_summary(st) -> dict:
     n = int(st["round"])
     rr = int(st["rereview_count"])
@@ -829,9 +884,12 @@ def gate_summary(st) -> dict:
     prev = st["rounds"].get(str(n - 1), {})
     g["stagnation"] = bool(n >= 2 and cur.get("open_lineages") and
                            cur.get("open_lineages") == prev.get("open_lineages") and int(cur.get("progress", 0)) == 0)
+    unv = round_unverified(st)
     g["approval_ready"] = not any(g[row.name] for row in GATE_ROWS if row.blocks)
     g["round_gate_needed"] = bool(g["open_decide"] or g["blocking_ask_open"])
-    g["approval_gate_open"] = g["approval_ready"] or g["cap_reached"] or g["stagnation"]
+    # 「미검증」 라운드는 승인 게이트를 그 라벨로 연다(설계 §9 — critic 사망 두 번). 열린 것이 남아
+    # 있으면 stagnation 과 같이 두 단계다(아래 `two_stage`).
+    g["approval_gate_open"] = g["approval_ready"] or g["cap_reached"] or g["stagnation"] or bool(unv)
     # 상한 도달이면 열린 것이 0 이어도 두 단계다(Park P3·D-U3) — 1단계가 「추가 라운드
     # 1회 열기」(§8.2)를 실어야 하고, 그 문구가 성립하려면 `next_round_mode` 가
     # `extra_approval` 이어야 한다(`approval_ready` 와 무관). 상한 전(`cap_reached`
@@ -841,8 +899,17 @@ def gate_summary(st) -> dict:
     g["next_round_mode"] = ("extra_approval" if g["cap_reached"]
                              else (None if g["approval_ready"] else "budget"))
     rep = cur.get("route_report") or {}
-    g["degrade"] = rep.get("degrade") or {}
+    # finalize 가 끝나지 않은 라운드는 보고서가 없다 — 그 라운드 준비의 degrade(codex 부재 등)를 싣는다.
+    pend = _pending_here(st, n)
+    pdeg = pend.get("degrade") if pend is not None and isinstance(pend.get("degrade"), dict) else None
+    g["degrade"] = rep.get("degrade") or pdeg or {}
     g["advisory"] = rep.get("advisory") or []
+    # 「미검증」 — 사유 키 · 승인 게이트 라벨(정본은 이 출력, 진입 skill 이 읽는다) · 완료 기록 신호.
+    # `round_reviewed` 는 양의 증거를 요구한다: 이번 라운드의 finalize 보고서가 있고 「미검증」이 아닐
+    # 때만 참이다 — finalize 를 거치지 않은 라운드는 사유가 없어도 완료로 기록되지 않는다.
+    g["unverified"] = unv
+    g["approval_label"] = UNVERIFIED_LABEL if unv else None
+    g["round_reviewed"] = bool(cur.get("route_report")) and unv is None
     g["counts"] = {k: rep.get(k, 0) for k in ("rejected", "bucket_conflicts", "lineage_mismatch",
                                               "revived", "reraise_unconsumed", "escalated_unconsumed")}
     g["counts"]["user_rejected"] = sum(1 for v in st["rejected_lineages"].values() if v.get("by") == "user")
@@ -965,12 +1032,17 @@ GATE_RENDERERS = {"decide": _rg_decide, "adopted": _rg_adopted, "expired": _rg_e
 def render_gate(st, g) -> str:
     deg = g["degrade"]
     out = []
+    # 첫 줄 = 그 라운드의 degrade 공시. 「미검증」이면 주 판정자 사망 · 라우팅 미완을 맨 앞에 싣는다 —
+    # 그 라운드에 「degrade 없음」이 나올 수 없다.
+    first = []
+    if g.get("unverified"):
+        first.append(UNVERIFIED_TEXT.get(g["unverified"], "「미검증」 (%s)" % g["unverified"]))
     if deg.get("codex_absent"):
-        out.append("codex 없음 — 모델 다양성 0 (%s)" % (deg.get("codex_reason") or "?"))
+        first.append("codex 없음 — 모델 다양성 0 (%s)" % (deg.get("codex_reason") or "?"))
     elif g["advisory"]:
-        out.append("degrade: " + " · ".join(g["advisory"]))
-    else:
-        out.append("degrade 없음")
+        first.append("degrade: " + " · ".join(g["advisory"]))
+    out.append(" ; ".join(first) if first else "degrade 없음")
+    ag = "승인 게이트" + ("(「%s」)" % g["approval_label"] if g.get("approval_label") else "")
     out.append("라운드 %d · 재리뷰 %d/%d%s%s" % (g["round"], g["rereview_count"], REREVIEW_CAP,
                                               " · 상한 도달" if g["cap_reached"] else "",
                                               " · stagnation" if g["stagnation"] else ""))
@@ -990,17 +1062,17 @@ def render_gate(st, g) -> str:
         # 고르면 다음 라운드 1단계가 `begin-round --extra-approval "<문구>"` 로 돌고, 그
         # 문구는 사용자 자신이 쓰는 것이라 여기 산문에 미리 채우지 않는다.
         if g["approval_ready"]:
-            out.append("다음: 승인 게이트 1단계 — 「추가 라운드 1회 열기」(다음 라운드 1단계가 "
+            out.append("다음: " + ag + " 1단계 — 「추가 라운드 1회 열기」(다음 라운드 1단계가 "
                        "begin-round --extra-approval \"<사용자 자신의 문구>\" 로 도는 개별 승인) "
                        "또는 진행 옵션으로")
         else:
-            out.append("다음: 승인 게이트 1단계 — 열린 항목을 처리한 뒤 진행 옵션, 또는 "
+            out.append("다음: " + ag + " 1단계 — 열린 항목을 처리한 뒤 진행 옵션, 또는 "
                        "「추가 라운드 1회 열기」(다음 라운드 1단계가 "
                        "begin-round --extra-approval \"<사용자 자신의 문구>\" 로 도는 개별 승인)")
     elif g["approval_ready"]:
-        out.append("다음: 승인 게이트 — 진행 옵션 활성")
+        out.append("다음: " + ag + " — 진행 옵션 활성")
     elif g["two_stage"]:
-        out.append("다음: 승인 게이트 1단계 — 열린 항목을 처리한 뒤 진행 옵션 (다음 라운드 = %s)" % g["next_round_mode"])
+        out.append("다음: " + ag + " 1단계 — 열린 항목을 처리한 뒤 진행 옵션 (다음 라운드 = %s)" % g["next_round_mode"])
     else:
         out.append("다음: 라운드 %d (%s)" % (g["round"] + 1, g["next_round_mode"]))
     return "\n".join(out)

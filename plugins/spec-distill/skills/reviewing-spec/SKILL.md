@@ -241,11 +241,16 @@ python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" ma
 
 이 한 호출이 **in-flight 표시도 함께 지운다** — 그래서 정상 경로에서는 아래 두 종료 자리의
 `clear-inflight` 를 부를 일이 없다. **예외** — 아무도 리뷰하지 않은 라운드에서는 **호출하지 않는다.**
-그런 라운드는 둘이다. 첫째, 승인 게이트를 「미검증」으로 연 라운드 — critic 사망이 두 번이면 5단계가
-6~7단계를 건너뛰므로 이번 라운드의 `fin.json` 이 없다. 둘째, 이번 라운드 `fin.json` 의
-`blocks` 가 참이고 `advisory[]` 에 critic 사망(`입력 실패(주): doc-critic`)이 실린 라운드 — `blocks` 는
-참/거짓 하나이고, 무엇이 막는지는 `advisory[]` 가 말한다.
-직전 라운드의 `fin.json` 이 남아 있어도 그것을 이번 라운드의 판정으로 읽지 않는다.
+판정 근거는 같은 턴의 기억이 아니라 엔진 신호다: 이번 라운드 8단계 요약(`docreview_state.py gate --state-dir "$STATE_DIR"`,
+`--render` 없이)의 `round_reviewed` 가 참일 때만 부른다. 그 요약을 얻지 못했으면(gate 의 rc 가 0 이 아니다) 부르지 않는다.
+엔진이 거짓으로 내는 라운드는 둘이고, 요약의 `unverified` 가 사유를 말한다.
+첫째, 승인 게이트를 「미검증」으로 연 라운드 — critic 사망이 두 번이면 5단계가 6~7단계를 건너뛰어 이번
+라운드의 `fin.json` 이 없고(`unverified: critic_dead`), `finalize` 가 실패한 라운드도 같다(`unverified: finalize_incomplete`).
+둘째, critic 이 죽은 채 finalize 된 라운드 — 이번 라운드 `fin.json` 의
+`blocks` 가 참이고 `advisory[]` 에 critic 사망(`입력 실패(주): doc-critic`)이 실린 라운드이고, 엔진은 같은 사실을
+`unverified: critic_dead` 로 낸다. `blocks` 는 참/거짓 하나이고, 무엇이 막는지는 `advisory[]` 가 말한다.
+직전 라운드의 `fin.json` 이 남아 있어도 그것을 이번 라운드의 판정으로 읽지 않는다 — 엔진 신호는 라운드마다
+새로 서므로(다음 라운드가 정상으로 끝나면 풀린다) 이번 라운드의 finalize 보고서가 없으면 참이 되지 않는다.
 
 `$harness_sid` 가 빈 값이면 상태 파일을 특정할 수 없으므로 호출하지 않고, 조용히 넘어가는 대신
 advisory 를 낸다:
@@ -311,6 +316,12 @@ Read ${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/proceed-gate.md
 얹지 않는다). 「추가 라운드 1회 열기」를 고르면
 다음 라운드 1단계가 `begin-round --extra-approval "<사용자 자신의 문구>"` 로 돈다.
 
+**「미검증」 라운드** — 라벨의 정본은 엔진 출력이다. 요약(`gate --state-dir "$STATE_DIR"`, `--render` 없이)의
+`approval_label` 이 「미검증」이면 승인 게이트를 그 라벨로 연다(엔진이 `approval_gate_open` 을 참으로 내고, 사유는
+`unverified` 가 말하며, 렌더 첫 줄이 그 공시를 맨 앞에 싣는다). **`finalize` 의 rc 가 0 이 아니면 값과 무관하게 이 라운드를 정상 게이트로 넘기지 않는다** —
+그 라운드의 `fin.json` 은 비었거나 직전 라운드 것이라 판정에 쓰지 않고, 엔진이 「미검증」(`unverified: finalize_incomplete`)으로
+낸 게이트를 띄운다. 어느 쪽이든 요약의 `round_reviewed` 가 거짓이라 아래 `mark-reviewed` 의 예외가 걸린다.
+
 승인 게이트 **2단계**의 옵션 넷 — 정본 Step B 표를 이 skill 어휘로 채운 것이다:
 
 | # | 이 skill 에서 |
@@ -342,7 +353,9 @@ Read ${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/proceed-gate.md
 - `fin.json` 의 `blocks` — 막는지를 참/거짓 하나로 말한다. critic 사망(주 판정자) · 항목 소실 · 셀 수 없음일
   때만 참이고, 무엇이 막는지는 위 `advisory[]` 에 함께 실린다.
 - `docreview_state.py gate --render` 의 **첫 줄** — 그 라운드의 degrade 한 줄이다. codex 가 없었으면
-  그 사실과 사유가, 아니면 `advisory[]` 요약이, 둘 다 비면 `degrade 없음` 이 온다. 라운드 번호와
+  그 사실과 사유가, 아니면 `advisory[]` 요약이, 둘 다 비면 `degrade 없음` 이 온다. 이번 라운드가 「미검증」이면
+  (요약의 `unverified` — critic 사망 · `finalize` 실패, `fin.json` 이 없는 라운드 포함) 그 공시가 맨 앞에 오고
+  `degrade 없음` 은 나올 수 없다. 라운드 번호와
   재리뷰 카운트는 **둘째 줄**이다(상한 도달·stagnation 도 그 줄에 붙는다).
 
 게이트를 띄우기 **직전에** 이 셋을 읽어 하나도 빠뜨리지 않고 프로즈로 내고, 승인 게이트 질문
