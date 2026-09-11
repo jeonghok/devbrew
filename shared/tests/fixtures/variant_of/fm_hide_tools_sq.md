@@ -1,9 +1,8 @@
 ---
 name: fx-variant
-description: >
-  variant_of.py 판정기 fixture — 음성: 자유 키 tools 가 한 번 더 나온다(PyYAML 은 나중 값으로 조용히 덮는다).
+description: 'variant_of.py 판정기 fixture — 음성: 안 닫힌 작은따옴표가 뒤따르는 tools 줄을 삼킨다
 tools: Read, WebSearch
-tools: Read
+  '
 color: blue
 cost_class: low
 ---

@@ -1,9 +1,9 @@
 ---
 name: fx-variant
 description: >
-  variant_of.py 판정기 fixture — 음성: 자유 키 tools 가 한 번 더 나온다(PyYAML 은 나중 값으로 조용히 덮는다).
+  variant_of.py 판정기 fixture — 음성: 줄 문법 안의 키 `on` 을 PyYAML 은 문자열이 아니라 True 로 읽는다(교차 대조만 잡는다).
 tools: Read, WebSearch
-tools: Read
+on: x
 color: blue
 cost_class: low
 ---

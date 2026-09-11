@@ -4,23 +4,41 @@
 변형(V)은 머리 20줄 안의 `# variant-of: <기준 경로>` 마커로 기준(B)을 가리킨다. 관계는 두 조건이
 함께 설 때만 성립한다:
   ① frontmatter — 최상위 키 집합이 같고, `name`·`description`·`tools` 밖의 키는 값 블록(키 줄 +
-     이어지는 들여쓴·빈 줄 **전부**)이 줄 단위로 같다. 키 인식은 이 판정기가 받는 줄 모양 안에서만
-     YAML 과 같다 — frontmatter 에 LF 밖 줄바꿈(CR · NEL · U+2028 · U+2029 — YAML 1.1 은 전부 줄바꿈으로
-     읽는다)이나 탭으로 시작하는 줄이 있으면 판정 불가다(형제 러너의 줄 문법과 같은 거절). 그 안에서
-     컬럼-0 의 비지 않은 줄(주석 제외)은 전부 키 줄이고, 따옴표 키(`"k":` · `'k':`)와 콜론 앞 공백 키(`k :`)도 이름으로
-     정규화해 센다. 키로 못 읽는 컬럼-0 줄은 판정 불가다(앞 키의 값으로 흡수하면 frontmatter 에 숨은
-     키가 관계를 통과한다). 컬럼-0 주석 줄(`# copy-of:`·`# variant-of:`)은 비교에서 뺀다. `tools` 는 자유 키다 —
-     관계는 도구 표면을 판정하지 않는다(웹 사본의 도구 집합은 test_docreview_agents.sh 와
-     test_brief_agents.sh 가 doc-critic 에서 도출한 집합 등식으로 잰다).
+     이어지는 들여쓴·빈 줄 **전부**)이 줄 단위로 같다. 컬럼-0 주석 줄(`# copy-of:`·`# variant-of:`)은
+     비교에서 뺀다. `tools` 는 자유 키다 — 관계는 도구 표면을 판정하지 않는다(웹 사본의 도구 집합은
+     test_docreview_agents.sh 와 test_brief_agents.sh 가 doc-critic 에서 도출한 집합 등식으로 잰다).
   ② 본문(frontmatter 닫힘 뒤) — V 는 B 에 연속한 한 덩어리를 끼워 넣은 것뿐이다. B 의 어느 줄도
      바뀌거나 빠지지 않고, 끼운 덩어리에는 빈 줄이 아닌 줄이 있다.
+
+frontmatter 를 어떻게 읽는가 — 보장하는 것 셋과 보장하지 않는 것:
+  (가) 한 경계 — frontmatter 는 첫 `---\\n` 과 그 뒤 처음 나오는 `\\n---\\n` 사이다. 위험 문자 검사 ·
+      줄 문법 · 교차 대조 · 비교가 모두 이 경계 하나를 쓴다(`_fm_region`).
+  (나) 줄 문법(허용 목록) — 두 파일의 frontmatter 모든 줄이 실제 agent 파일이 쓰는 모양 안에 있다:
+      빈 줄 · 컬럼-0 주석 · 컬럼-0 `키: <그 줄에서 끝나는 평문>` · `키: >`(접힘 블록 — 본문은 2칸 이상
+      들여쓴 줄) · `키: []` · 값 없는 `키:`(블록 시퀀스를 연다 — 자식은 `  - 키: 평문` · 그 뒤
+      `    키: 평문` · 들여쓴 주석). 키는 `[A-Za-z_][A-Za-z0-9_]*`. 그 밖의 줄 — 따옴표 · flow 로 여는
+      값, 다음 줄로 이어지는 값, 공백뿐인 줄, LF 밖 줄바꿈(CR · NEL · U+2028 · U+2029), 탭으로 시작하는
+      줄 — 은 판정 불가다(`frontmatter_unparsable:<규칙>` · `frontmatter_nonlf_break:<문자>` ·
+      `frontmatter_tab_line`). 값이 한 줄을 넘지 않으므로 「여는 따옴표 · flow 가 뒤따르는 컬럼-0 줄을
+      삼키는」 부류가 모양째 없다.
+  (다) 교차 대조 — 이 판정기가 읽은 최상위 키 집합이, 같은 frontmatter 를 PyYAML `safe_load` 가 읽은
+      최상위 키 집합(문자열 키)과 같다. 두 파일 모두. 다르거나 PyYAML 이 못 읽으면 판정 불가
+      (`frontmatter_yaml_mismatch:<무엇>`). PyYAML 을 import 할 수 없으면 판정 불가(`pyyaml_unavailable`
+      + stderr) — 조용히 통과하지 않는다.
+  보장하지 않는 것 — 런타임(Claude Code)이 frontmatter 를 읽는 파서 · YAML 판본을 모형화하지 않는다(대조
+  기준은 PyYAML = YAML 1.1 하나다). 값의 의미(도구 이름이 실재하는가 등)와 본문의 의미는 판정하지 않는다.
+
+규칙의 뜻은 형제 러너(`shared/docreview/scripts/run_docreview_codex_reviewer.sh` 의 `_parse_frontmatter`
+— 「값은 한 줄에서 끝난다」 · LF 밖 줄바꿈 거절)와 같다. 코드는 나눠 쓰지 않는다: 그쪽은 셸 스크립트 안의
+인라인 빌더라 import 할 모듈이 없고, 받는 모양도 다르다(프로필의 flow 목록 · 큰따옴표 값 ↔ agent 의
+블록 시퀀스 · 접힘 블록).
 
 범위 — 마커는 agent 정의에만 쓴다. 변형은 `shared/<x>/agents/*.md`(정본) 또는
 `plugins/<x>/agents/*.md`(그 배포 사본)이고, 대상은 `shared/<x>/agents/*.md` 정본이다.
 
 소비자 셋: shared/tests/test_no_new_duplication.sh(범위 안에서 관계가 서는 쌍만 중복 면제) ·
 shared/tests/test_docreview_agents.sh(웹 사본 drift 락) · shared/tests/test_variant_of_contract.sh
-(마커 전수 감사 · 판정기 음성 fixture · 범위 음성 셀).
+(마커 전수 감사 · 판정기 음성 셀 · 범위 음성 셀 · agent 파일 전체 문자 금지).
 
 CLI:
   variant_of.py marker <file>              → 마커가 가리키는 경로(없으면 빈 출력) · rc 0
@@ -28,7 +46,7 @@ CLI:
   variant_of.py inserted <variant> <base>  → 끼운 덩어리 원문 rc 0 | "FAIL\\t<사유>" rc 1
   variant_of.py audit <코퍼스 목록 파일>     → 마커 파일마다 "<경로>\\t<대상>\\tOK" 또는
                                               "<경로>\\t<대상>\\tFAIL:<사유>" · rc 0
-python 3.9 · stdlib 만 쓴다.
+python 3.9 · stdlib + PyYAML(교차 대조에만).
 """
 import re
 import sys
@@ -38,19 +56,25 @@ from typing import Dict, List, Optional, Tuple
 MARKER = re.compile(r'^\s*(?:#|//|<!--)\s*variant-of:\s*(\S+)')
 HEAD_WINDOW = 20
 FREE_KEYS = ("name", "description", "tools")
-# 키 뒤의 콜론 — YAML 은 `:` 다음에 공백이나 줄 끝이 와야 키로 읽는다(`a:b: c` 의 키는 `a:b`).
-_COLON_AFTER_QUOTED = re.compile(r'[ \t]*:(?:[ \t]|$)')
-_PLAIN_COLON = re.compile(r':(?:[ \t]|$)')
-# 평문 키로 시작할 수 없는 YAML 지시 문자(흐름 · 앵커 · 태그 · 블록 스칼라 · 예약) — 그런 컬럼-0 줄은
-# 키로 못 읽는다.
-_NOT_PLAIN_START = tuple("[]{},&*!|>%@`")
-# frontmatter 에 있으면 판정 불가인 LF 밖 줄바꿈. PyYAML(YAML 1.1)은 넷 다 줄바꿈으로 읽는데 이 판정기는
-# LF 로만 줄을 나눈다 — 그 문자 뒤에 쓴 최상위 키를 앞 키의 한 줄로 보고, 자유 키면 비교조차 하지 않는다.
-# 형제 러너(`run_docreview_codex_reviewer.sh` 의 `_parse_frontmatter`)와 같은 거절이다. 문자마다 따로
-# 둔다 — 하나를 풀면 그 문자의 셀만 RED 가 된다.
-_NON_LF_BREAKS = (("\r", "U+000D"), ("\x85", "U+0085"), (chr(0x2028), "U+2028"), (chr(0x2029), "U+2029"))
 _AGENT_DEF = re.compile(r'^(?:shared|plugins)/[^/]+/agents/[^/]+\.md$')
 _CANONICAL_AGENT = re.compile(r'^shared/[^/]+/agents/[^/]+\.md$')
+
+# LF 밖 줄바꿈 — PyYAML(YAML 1.1)은 넷 다 줄바꿈으로 읽는데 이 판정기는 LF 로만 줄을 나눈다. 판정기
+# (frontmatter)와 V4(agent 파일 전체)가 이 한 정의를 쓴다(`nonlf_breaks`).
+_NON_LF_BREAKS = ((chr(0x0D), "U+000D"), (chr(0x85), "U+0085"), (chr(0x2028), "U+2028"), (chr(0x2029), "U+2029"))
+
+# 줄 문법(허용 목록) — 실제 agent 파일 24개(정본 3 · 배포 21)의 frontmatter 가 쓰는 모양에서 도출했다.
+_KEY_LINE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*):(?: (.*))?$')
+_SEQ_ITEM = re.compile(r'  - [A-Za-z_][A-Za-z0-9_]*: (.+)$')
+_SEQ_CONT = re.compile(r'    [A-Za-z_][A-Za-z0-9_]*: (.+)$')
+_INDENTED_COMMENT = re.compile(r' +#')
+_BLOCK_INDICATOR = ">"      # 실제 파일이 쓰는 블록 스칼라 표지는 접힘 `>` 하나다
+_EMPTY_FLOW_LIST = "[]"     # 실제 파일이 쓰는 flow 값은 빈 목록 하나다
+# 값을 여는 문자마다 따로 이름을 준다 — 하나를 풀면 그 규칙의 셀이 RED 가 된다.
+_OPENERS = (('"', "value_double_quote"), ("'", "value_single_quote"),
+            ("{", "value_flow_mapping"), ("[", "value_flow_sequence"))
+# 평문이 시작할 수 없는 그 밖의 지시 문자(앵커 · 별칭 · 태그 · 블록 스칼라 · 예약 · 주석).
+_INDICATOR_START = tuple("&*!|>%@`#")
 
 
 def in_agent_scope(path: str) -> bool:
@@ -78,114 +102,168 @@ def marker(path) -> Optional[str]:
     return None
 
 
-def _split(text: str) -> Optional[Tuple[List[str], List[str]]]:
-    """(frontmatter 줄, 본문 줄). frontmatter 가 없으면 None."""
+def nonlf_breaks(text: str) -> List[str]:
+    """text 에 든 LF 밖 줄바꿈의 이름들(`_NON_LF_BREAKS` 순서)."""
+    return [name for ch, name in _NON_LF_BREAKS if ch in text]
+
+
+def _fm_region(text: str) -> Optional[Tuple[str, str]]:
+    """(frontmatter 원문, 본문 원문). 시작은 `---\\n`, 끝은 그 뒤 처음 나오는 `\\n---\\n`. 없으면 None."""
     if not text.startswith("---\n"):
         return None
     end = text.find("\n---\n", 4)
     if end < 0:
         return None
-    return text[4:end].split("\n"), text[end + 5:].split("\n")
+    return text[4:end], text[end + 5:]
 
 
-def _fm_hazard(text: str) -> Optional[str]:
-    """frontmatter 후보(첫 `---` 부터 닫는 `\\n---` 앞까지, 닫힘이 없으면 끝까지)에 판정 불가 모양이
-    있으면 그 사유. 탭으로 시작하는 줄도 거절한다 — YAML 은 탭 들여쓰기를 받지 않고, 이 판정기는 그
-    줄을 앞 키 블록에 흡수한다."""
-    if not text.startswith("---"):
-        return None
-    end = text.find("\n---", 3)
-    head = text if end < 0 else text[:end]
-    for ch, name in _NON_LF_BREAKS:
-        if ch in head:
-            return "frontmatter_nonlf_break:%s" % name
-    if any(ln.startswith("\t") for ln in head.split("\n")):
+def _fm_hazard(fm: str) -> Optional[str]:
+    """frontmatter 원문의 LF 밖 줄바꿈 · 탭으로 시작하는 줄 — 줄을 나누기 전에 본다."""
+    hits = nonlf_breaks(fm)
+    if hits:
+        return "frontmatter_nonlf_break:%s" % hits[0]
+    if any(ln.startswith("\t") for ln in fm.split("\n")):
         return "frontmatter_tab_line"
     return None
 
 
-def _top_key(ln: str) -> Optional[str]:
-    """컬럼-0 줄이 여는 최상위 키의 이름 — 따옴표 둘과 콜론 앞 공백을 벗겨 정규화한다.
-    키로 못 읽으면 None."""
-    if ln[:1] in ('"', "'"):
-        q, i, buf = ln[0], 1, []
-        while i < len(ln):
-            c = ln[i]
-            if c == q:
-                if q == "'" and ln[i + 1:i + 2] == "'":
-                    buf.append("'")
-                    i += 2
-                    continue
-                break
-            if q == '"' and c == "\\" and i + 1 < len(ln):
-                buf.append(ln[i:i + 2])
-                i += 2
-                continue
-            buf.append(c)
-            i += 1
-        else:
-            return None
-        return "".join(buf) if _COLON_AFTER_QUOTED.match(ln, i + 1) else None
-    if ln[:1] in _NOT_PLAIN_START or ln[:2] in ("- ", "? ", ": "):
-        return None
-    m = _PLAIN_COLON.search(ln)
-    if not m:
-        return None
-    k = ln[:m.start()].rstrip(" \t")
-    if not k or " #" in k or "\t#" in k:
-        return None
-    return k
+def _plain_ok(v: str) -> bool:
+    """그 줄에서 끝나는 평문 — 비지 않고, 여는 문자 · 지시 문자로 시작하지 않고, 매핑 표지(`: ` · 끝
+    `:`)나 주석 표지(` #`)를 담지 않는다."""
+    return (bool(v.strip()) and v[:1] not in _INDICATOR_START
+            and not any(v.startswith(ch) for ch, _ in _OPENERS)
+            and v[:2] not in ("- ", "? ", ": ")
+            and ": " not in v and not v.endswith(":") and " #" not in v)
 
 
-def _fm_blocks(lines: List[str]) -> Optional[Dict[str, List[str]]]:
-    """최상위 키 → 그 키의 줄 블록(키 줄 + 이어지는 들여쓴·빈 줄). 컬럼-0 의 비지 않은 줄(주석
-    제외)은 전부 키 줄이어야 한다. 키로 못 읽는 컬럼-0 줄 · 중복 키(정규화한 이름으로) · 첫 키
-    앞의 내용은 None."""
+def _value_mode(v: str) -> Tuple[Optional[str], Optional[str]]:
+    """컬럼-0 키 줄의 값 → (뒤따르는 줄의 모드, None) 또는 (None, 규칙 이름)."""
+    if v == _BLOCK_INDICATOR:
+        return "block", None
+    if v == _EMPTY_FLOW_LIST:
+        return "scalar", None
+    for ch, why in _OPENERS:
+        if v.startswith(ch):
+            return None, why
+    if not _plain_ok(v):
+        return None, "value_plain_shape"
+    return "scalar", None
+
+
+def _fm_blocks(lines: List[str]) -> Tuple[Optional[Dict[str, List[str]]], Optional[str]]:
+    """줄 문법으로 읽는다 → ({최상위 키: 줄 블록}, None) 또는 (None, 규칙 이름). 블록은 키 줄 +
+    이어지는 들여쓴·빈 줄이다. 컬럼-0 주석은 블록에 넣지 않는다."""
     blocks: Dict[str, List[str]] = {}
-    key = None
+    key: Optional[str] = None
+    mode: Optional[str] = None
+    in_item = False
     for ln in lines:
+        if not ln.strip():
+            if ln:
+                return None, "whitespace_line"
+            if key is not None:
+                blocks[key].append(ln)
+            continue
         if ln.startswith("#"):
             continue
-        if not ln.strip() or ln[:1] in (" ", "\t"):
+        if ln.startswith(" "):
             if key is None:
-                if ln.strip():
-                    return None
-                continue
+                return None, "content_before_key"
+            if mode == "block":
+                if not ln.startswith("  "):
+                    return None, "block_indent"
+            elif mode == "open":
+                if _INDENTED_COMMENT.match(ln):
+                    pass
+                else:
+                    item, cont = _SEQ_ITEM.match(ln), _SEQ_CONT.match(ln)
+                    m = item or (cont if in_item else None)
+                    if not m:
+                        return None, "child_shape"
+                    if not _plain_ok(m.group(1)):
+                        return None, "child_value"
+                    in_item = in_item or bool(item)
+            else:
+                return None, "value_continuation"
             blocks[key].append(ln)
             continue
-        k = _top_key(ln)
-        if k is None or k in blocks:
-            return None
-        key = k
+        m = _KEY_LINE.match(ln)
+        if not m:
+            return None, "key_shape"
+        k, v = m.group(1), m.group(2)
+        if k in blocks:
+            return None, "duplicate_key"
+        if not v:
+            mode = "open"
+        else:
+            mode, why = _value_mode(v)
+            if why:
+                return None, why
+        key, in_item = k, False
         blocks[key] = [ln]
-    return blocks
+    return blocks, None
+
+
+def _yaml_keys(fm: str) -> Tuple[Optional[set], Optional[str]]:
+    """PyYAML `safe_load` 가 읽은 최상위 키 집합 → (집합, None) 또는 (None, 사유)."""
+    try:
+        import yaml  # noqa: PLC0415 — 교차 대조에만 쓴다
+    except ImportError:
+        sys.stderr.write("variant_of: PyYAML 을 import 할 수 없다 — 교차 대조 없이 판정하지 않는다\n")
+        return None, "pyyaml_unavailable"
+    try:
+        data = yaml.safe_load(fm)
+    except yaml.YAMLError as exc:
+        return None, "frontmatter_yaml_mismatch:load_error:%s" % type(exc).__name__
+    if not isinstance(data, dict):
+        return None, "frontmatter_yaml_mismatch:not_mapping"
+    odd = sorted(repr(k) for k in data if not isinstance(k, str))
+    if odd:
+        return None, "frontmatter_yaml_mismatch:non_string_key:%s" % ",".join(odd)
+    return set(data), None
+
+
+def _read_fm(fm: str) -> Tuple[Optional[Dict[str, List[str]]], str]:
+    """한 파일의 frontmatter → (블록, "") 또는 (None, 사유) — 위험 문자 · 줄 문법 · 교차 대조 순서."""
+    why = _fm_hazard(fm)
+    if why:
+        return None, why
+    blocks, rule = _fm_blocks(fm.split("\n"))
+    if rule:
+        return None, "frontmatter_unparsable:%s" % rule
+    ykeys, why = _yaml_keys(fm)
+    if why:
+        return None, why
+    if ykeys != set(blocks):
+        return None, "frontmatter_yaml_mismatch:keys:%s" % ",".join(sorted(ykeys ^ set(blocks)))
+    return blocks, ""
 
 
 def relation(variant, base) -> Tuple[bool, str, List[str]]:
     """(성립 여부, 사유, 끼운 줄 목록)."""
     try:
-        # 바이트로 읽는다 — `read_text()` 의 universal newline 이 CR 을 LF 로 바꿔 `_fm_hazard` 의 CR
-        # 규칙을 우연에 맡기지 않게.
+        # 바이트로 읽는다 — `read_text()` 의 universal newline 이 CR 을 LF 로 바꿔 CR 규칙을 우연에
+        # 맡기지 않게.
         vt = Path(variant).read_bytes().decode("utf-8")
         bt = Path(base).read_bytes().decode("utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         return False, "unreadable:%s" % type(exc).__name__, []
-    for t in (vt, bt):
-        why = _fm_hazard(t)
-        if why:
-            return False, why, []
-    vs, bs = _split(vt), _split(bt)
+    vs, bs = _fm_region(vt), _fm_region(bt)
     if vs is None or bs is None:
         return False, "frontmatter_missing", []
-    (vf, vb), (bf, bb) = vs, bs
-    vk, bk = _fm_blocks(vf), _fm_blocks(bf)
-    if vk is None or bk is None:
-        return False, "frontmatter_unparsable", []
+    (vfm, vbody), (bfm, bbody) = vs, bs
+    vk, why = _read_fm(vfm)
+    if vk is None:
+        return False, why, []
+    bk, why = _read_fm(bfm)
+    if bk is None:
+        return False, why, []
     if set(vk) != set(bk):
         return False, "frontmatter_keys_differ:%s" % ",".join(sorted(set(vk) ^ set(bk))), []
     for k in sorted(vk):
         if k not in FREE_KEYS and vk[k] != bk[k]:
             return False, "frontmatter_value_differs:%s" % k, []
+    vb, bb = vbody.split("\n"), bbody.split("\n")
     n, m = len(bb), len(vb)
     p = 0
     while p < n and p < m and bb[p] == vb[p]:

@@ -15,17 +15,24 @@
 #      음성은 저마다의 사유로 FAIL. 감사 함수의 FAIL 갈래도 스크래치 코퍼스에서 하나씩 태운다.
 #      판정기가 관대하게 퇴행하면 여기가 RED 다. 키 인식 축: YAML 이 최상위 키로 읽는 모양(큰따옴표 ·
 #      작은따옴표 · 콜론 앞 공백)이 앞 키의 값으로 흡수되면 숨은 키가 관계를 통과한다. 값 블록 축:
-#      비-자유 키의 여러 줄 값은 둘째 줄 이후만 달라도 FAIL 이고, 줄마다 같으면 OK(양의 짝). fail-closed
-#      갈래 축: 키로 못 읽는 컬럼-0 줄(명시 키 `?` · flow · 안 닫힌 따옴표) · 정규화 이름 중복 · 한 줄 명시 키가
-#      저마다의 셀을 갖는다.
+#      비-자유 키의 여러 줄 값은 둘째 줄 이후만 달라도 FAIL 이고, 줄마다 같으면 OK(양의 짝). 줄 문법 축:
+#      판정기는 실제 agent 파일이 쓰는 줄 모양(허용 목록)만 받는다 — 식별자 밖 키(따옴표 · 콜론 앞 공백 ·
+#      명시 키 `?` · 컬럼-0 flow · 안 닫힌 따옴표) · 중복 키 · 자유 키 값을 여는 따옴표 · flow(뒤따르는
+#      컬럼-0 줄을 YAML 이 값 안으로 삼켜 `tools` 가 사라진다 — Task 7 재리뷰 N1)가 저마다의 사유로 떨어진다.
+#      교차 대조 축: 판정기가 읽은 최상위 키 집합이 PyYAML 의 것과 다르면 판정 불가(줄 문법 안의 `on:` 키).
 #   V2b 줄바꿈 축 — frontmatter 에 LF 밖 줄바꿈(CR · NEL · U+2028 · U+2029)이나 탭으로 시작하는 줄이 있으면
 #      판정 불가. PyYAML 은 그 문자 뒤를 새 최상위 키로 읽는데 판정기는 LF 로만 나누므로, 문자마다 한 셀과
 #      리뷰의 실측 재현(실제 doc-critic-web 두 사본의 description 끝에 NEL + 권한 모드 키)을 둔다.
+#   V2c 줄 문법 — 규칙 하나만 어기는 입력을 ok.md · ml_ok.md 에서 규칙마다 짓는다(규칙 하나를 풀면 그 셀의
+#      사유가 바뀌어 RED). 경계 셀(`---a:` 키 뒤의 NEL — 위험 문자 검사도 비교와 같은 `\n---\n` 경계를
+#      쓴다)과 N1 실측 재현(실제 doc-critic-web 두 사본의 description 을 안 닫힌 큰따옴표로 열어 tools 줄을
+#      삼킨다)을 둔다.
 #   V4 파일 전체 문자 금지 — agent 정의 파일(정본 · 배포 사본 · copy-of 사본 전부, 코퍼스에서 도출)은
 #      어디에도 CR · NEL · U+2028 · U+2029 를 담지 않는다. 판정기가 보는 쌍 밖의 agent 파일, frontmatter 밖의
 #      자리까지 바이트로 잰다 — 다른 락의 줄 기반 검사가 우연히 잡는 것에 기대지 않는다. 여기 두는 이유:
 #      이 락이 이미 중복 락과 같은 코퍼스를 도출하고, agent 정의 자리의 정의(`variant_of.in_agent_scope`)가
-#      이 판정기 한 곳에 있다.
+#      이 판정기 한 곳에 있다. 검출기는 판정기와 한 정의(`variant_of.nonlf_breaks`)이고, 문자마다 검출 셀이
+#      있다(검출 집합에서 문자 하나를 빼면 그 셀이 RED).
 #   V3 범위 음성 셀 — agent 정의 밖(skill) 복제본에 마커를 달고 한 줄을 끼우면 관계는 서지만(전제로 잰다)
 #      중복 락이 면제하지 않는다. 스크래치 git 루트에서 중복 락을 실제로 돌려 그 쌍의 위반 줄을 본다.
 #      양의 짝: 같은 루트의 agent 정본 쌍(doc-critic ↔ doc-critic-web)은 면제된다.
@@ -97,22 +104,29 @@ neg fm_key_added.md base.md frontmatter_keys_differ:model
 neg blank_insertion.md base.md no_insertion
 neg identical.md base.md no_insertion
 neg ok.md absent-target.md unreadable:
-# 키 인식 — YAML 은 셋 다 최상위 키로 읽는다(Task 3b 재리뷰 P4: `"maxTurns": 1` 이 tools 블록에 흡수돼
-# 관계가 OK 였다).
-neg fm_dq_key.md base.md frontmatter_keys_differ:maxTurns
-neg fm_sq_key.md base.md frontmatter_keys_differ:hooks
-neg fm_spacecolon_key.md base.md frontmatter_keys_differ:permissionMode
+# 식별자 밖 키 — YAML 은 따옴표 · 콜론 앞 공백 키를 최상위 키로 읽는다(Task 3b 재리뷰 P4: `"maxTurns": 1` 이
+# tools 블록에 흡수돼 관계가 OK 였다). 줄 문법이 그 모양을 받지 않는다.
+neg fm_dq_key.md base.md frontmatter_unparsable:key_shape
+neg fm_sq_key.md base.md frontmatter_unparsable:key_shape
+neg fm_spacecolon_key.md base.md frontmatter_unparsable:key_shape
 # 값 블록 — 여러 줄 값의 둘째 줄 이후만 다른 쌍(키 줄만 비교하는 퇴행이 GREEN 이던 축).
 neg ml_value.md base_ml.md frontmatter_value_differs:input_slots
-# fail-closed 갈래 — 키로 못 읽는 컬럼-0 줄은 앞 블록에 흡수하지 않고 판정 불가다(흡수하면 명시 키 `? hooks`
-# 가 tools 자유 블록에 숨어 통과한다 — PyYAML 은 최상위 hooks 로 읽는다). 정규화 이름의 중복도 같다.
-neg fm_qmark_explicit.md base.md frontmatter_unparsable
-neg fm_flow_key.md base.md frontmatter_unparsable
-neg fm_unclosed_quote_key.md base.md frontmatter_unparsable
-neg fm_dup_key.md base.md frontmatter_unparsable
-# 한 줄 명시 키 — `? ` 거절을 풀면 키 이름이 `? hooks` 가 되어 사유가 keys_differ 로 바뀐다(사유까지 잰다).
-neg fm_qmark_inline.md base.md frontmatter_unparsable
-[ "$n_neg" -ge 17 ] && ok "V2: 판정기 음성 ${n_neg}건을 태웠다" || no "V2: 음성이 ${n_neg}건뿐 — 셀이 사라졌다"
+# 키로 못 읽는 컬럼-0 줄은 앞 블록에 흡수하지 않고 판정 불가다(흡수하면 명시 키 `? hooks` 가 tools 자유 블록에
+# 숨어 통과한다 — PyYAML 은 최상위 hooks 로 읽는다). 중복 키도 같다(PyYAML 은 나중 값으로 조용히 덮는다).
+neg fm_qmark_explicit.md base.md frontmatter_unparsable:key_shape
+neg fm_flow_key.md base.md frontmatter_unparsable:key_shape
+neg fm_unclosed_quote_key.md base.md frontmatter_unparsable:key_shape
+neg fm_qmark_inline.md base.md frontmatter_unparsable:key_shape
+neg fm_dup_key.md base.md frontmatter_unparsable:duplicate_key
+# 자유 키 값을 여는 따옴표 · flow — 뒤따르는 컬럼-0 줄을 YAML 은 값 안으로 삼키는데 옛 판정기는 그 줄을 키로
+# 읽었다(Task 7 재리뷰 N1 — `tools` 가 사라지면 agent 는 도구 전체를 상속한다). PyYAML 전제 셀은 아래 V2c.
+neg fm_hide_tools_dq.md base.md frontmatter_unparsable:value_double_quote
+neg fm_hide_tools_sq.md base.md frontmatter_unparsable:value_single_quote
+neg fm_hide_tools_flow.md base.md frontmatter_unparsable:value_flow_mapping
+neg fm_hide_color_dq.md base.md frontmatter_unparsable:value_double_quote
+# 교차 대조만 잡는 셀 — `on:` 은 줄 문법 안의 키인데 PyYAML 은 문자열이 아니라 True 로 읽는다.
+neg fm_yaml_boolkey.md base.md frontmatter_yaml_mismatch:non_string_key
+[ "$n_neg" -ge 22 ] && ok "V2: 판정기 음성 ${n_neg}건을 태웠다" || no "V2: 음성이 ${n_neg}건뿐 — 셀이 사라졌다"
 res_ml="$(python3 "$VO" check "$FX/ml_ok.md" "$FX/base_ml.md")"
 assert_eq "$res_ml" "OK${TAB}4" "V2(양성 대조 — 여러 줄 값): 비-자유 키 input_slots 블록이 줄마다 같으면 관계가 선다"
 
@@ -180,6 +194,97 @@ for f in "$RP"/*.md; do
   assert_eq "$res" "FAIL${TAB}frontmatter_nonlf_break:U+0085" "V2b 재현: $(basename "$f") ↔ doc-critic 정본 → 판정 불가"
 done
 assert_eq "$n_rp" "2" "V2b 재현: 실제 doc-critic-web 사본 둘을 모두 태웠다"
+
+# ── V2c 줄 문법 — 규칙마다 한 셀 · 경계 셀 · N1 실측 재현 ─────────────────────────
+# 전제 — V2 의 N1 fixture 넷을 PyYAML 은 숨긴 키 없이 읽는다(셀이 가리키는 구멍이 실재한다).
+assert_eq "$(yaml_top "$FX/fm_hide_tools_dq.md" tools)" "None" "V2c 전제: fm_hide_tools_dq — PyYAML 최상위에 tools 가 없다"
+assert_eq "$(yaml_top "$FX/fm_hide_tools_sq.md" tools)" "None" "V2c 전제: fm_hide_tools_sq — PyYAML 최상위에 tools 가 없다"
+assert_eq "$(yaml_top "$FX/fm_hide_tools_flow.md" tools)" "None" "V2c 전제: fm_hide_tools_flow — PyYAML 최상위에 tools 가 없다"
+assert_eq "$(yaml_top "$FX/fm_hide_color_dq.md" color)" "None" "V2c 전제: fm_hide_color_dq — PyYAML 최상위에 color 가 없다"
+# 규칙마다 한 셀 — 그 규칙 하나만 어기는 입력. 기대 사유를 끝까지 잰다(규칙을 풀면 다른 규칙 · 교차 대조가
+# 잡더라도 사유가 바뀌어 RED).
+GR="$TMPD/gr"
+python3 - "$FX/ok.md" "$FX/ml_ok.md" "$GR" > "$TMPD/gr.txt" <<'PY'
+import os, sys
+ok, ml, d = sys.argv[1:4]
+os.makedirs(d, exist_ok=True)
+t = open(ok, "rb").read().decode("utf-8")
+m = open(ml, "rb").read().decode("utf-8")
+def sub(src, old, new):
+    assert src.count(old) == 1, old
+    return src.replace(old, new)
+COLOR = "color: blue\n"
+DESC = "  variant_of.py 판정기 fixture — 변형(양성).\n"
+cells = [
+    ("key_shape", "base.md", sub(t, COLOR, '"color": blue\n')),
+    ("duplicate_key", "base.md", sub(t, COLOR, COLOR + COLOR)),
+    ("content_before_key", "base.md", sub(t, "---\nname:", "---\n  stray\nname:")),
+    ("whitespace_line", "base.md", sub(t, COLOR, COLOR + "   \n")),
+    ("block_indent", "base.md", sub(t, DESC, DESC[1:])),
+    ("child_shape", "base_ml.md", sub(m, "    kind: repo_context\n", "    kind: repo_context\n  tag: extra\n")),
+    ("child_value", "base_ml.md", sub(m, "    kind: artifact\n", '    kind: "artifact"\n')),
+    ("value_continuation", "base.md", sub(t, COLOR, COLOR + "  more\n")),
+    ("value_double_quote", "base.md", sub(t, COLOR, 'color: "blue"\n')),
+    ("value_single_quote", "base.md", sub(t, COLOR, "color: 'blue'\n")),
+    ("value_flow_mapping", "base.md", sub(t, COLOR, "color: {a: blue}\n")),
+    ("value_flow_sequence", "base.md", sub(t, COLOR, "color: [blue]\n")),
+    ("value_plain_shape", "base.md", sub(t, COLOR, "color: blue: sky\n")),
+]
+for rule, base, body in cells:
+    open(os.path.join(d, rule + ".md"), "wb").write(body.encode("utf-8"))
+    print("%s\t%s" % (rule, base))
+PY
+n_gr=0
+while IFS="$TAB" read -r rule base; do
+  [ -n "$rule" ] || continue
+  n_gr=$((n_gr+1))
+  res="$(python3 "$VO" check "$GR/$rule.md" "$FX/$base")"
+  assert_eq "$res" "FAIL${TAB}frontmatter_unparsable:$rule" "V2c 규칙: $rule 하나만 어긴 입력 → 그 규칙의 사유"
+done < "$TMPD/gr.txt"
+assert_eq "$n_gr" "13" "V2c: 줄 문법 규칙 13개를 하나씩 태웠다"
+# 경계 — 위험 문자 검사가 비교와 같은 `\n---\n` 경계를 쓴다. `---a:` 키 줄에서 멈추면 그 뒤의 NEL 을 못 보고
+# 사유가 줄 문법(key_shape)으로 바뀐다(Task 7 재리뷰 n2).
+python3 - "$FX/ok.md" "$TMPD/dash.md" <<'PY'
+import sys
+src, dst = sys.argv[1:3]
+t = open(src, "rb").read().decode("utf-8")
+for old, new in (("tools: Read, WebSearch\n", "tools: Read, WebSearch\n---a: 1\n"),
+                 ("cost_class: low\n", "cost_class: low" + chr(0x85) + "hooks: x\n")):
+    assert t.count(old) == 1, old
+    t = t.replace(old, new)
+open(dst, "wb").write(t.encode("utf-8"))
+PY
+assert_eq "$(yaml_top "$TMPD/dash.md" hooks)" "x" "V2c 경계 전제: PyYAML 은 `---a` 뒤의 NEL 다음을 최상위 키 hooks 로 읽는다"
+assert_eq "$(python3 "$VO" check "$TMPD/dash.md" "$FX/base.md")" "FAIL${TAB}frontmatter_nonlf_break:U+0085" \
+  "V2c 경계: \`---a:\` 키 줄 뒤의 NEL 도 위험 문자 검사가 본다"
+# N1 실측 재현 — 실제 doc-critic-web 두 사본의 description 블록을 안 닫힌 큰따옴표 한 줄로 바꾸고 tools 줄 뒤에
+# 들여쓴 닫는 따옴표를 둔다. YAML 은 tools 줄을 description 안으로 삼킨다. 옛 판정기는 `OK 4` 였다.
+N1="$TMPD/n1"
+python3 - "$ROOT" "$N1" <<'PY'
+import os, sys
+root, d = sys.argv[1:3]
+os.makedirs(d, exist_ok=True)
+for rel in ("shared/docreview/agents/doc-critic-web.md", "plugins/spec-distill/agents/doc-critic-web.md"):
+    lines = open(os.path.join(root, rel), "rb").read().decode("utf-8").split("\n")
+    end = lines.index("---", 1)
+    i = next(j for j in range(1, end) if lines[j].startswith("description:"))
+    j = i + 1
+    while j < end and (lines[j] == "" or lines[j].startswith(" ")):
+        j += 1
+    lines[i:j] = ['description: "hidden web variant']
+    k = next(x for x in range(1, len(lines)) if lines[x].startswith("tools:"))
+    lines.insert(k + 1, '  "')
+    open(os.path.join(d, rel.replace("/", "__")), "wb").write("\n".join(lines).encode("utf-8"))
+PY
+n_n1=0
+for f in "$N1"/*.md; do
+  [ -f "$f" ] || continue
+  n_n1=$((n_n1+1))
+  assert_eq "$(yaml_top "$f" tools)" "None" "V2c N1 재현 전제: $(basename "$f") — PyYAML 최상위에 tools 가 없다"
+  assert_eq "$(python3 "$VO" check "$f" "$ROOT/shared/docreview/agents/doc-critic.md")" \
+    "FAIL${TAB}frontmatter_unparsable:value_double_quote" "V2c N1 재현: $(basename "$f") ↔ doc-critic 정본 → 판정 불가"
+done
+assert_eq "$n_n1" "2" "V2c N1 재현: 실제 doc-critic-web 사본 둘을 모두 태웠다"
 
 # 감사 함수의 FAIL 갈래 — 스크래치 코퍼스(경로 모양이 판정 근거라 상대경로 트리를 만든다).
 A="$TMPD/audit-root"
@@ -254,7 +359,6 @@ import sys
 root, corpus = sys.argv[1:3]
 sys.path.insert(0, root + "/shared/tests")
 import variant_of
-BAD = (("\r", "U+000D"), ("\x85", "U+0085"), (chr(0x2028), "U+2028"), (chr(0x2029), "U+2029"))
 n = 0
 for p in open(corpus, encoding="utf-8").read().splitlines():
     if not variant_of.in_agent_scope(p):
@@ -265,8 +369,7 @@ for p in open(corpus, encoding="utf-8").read().splitlines():
     except (OSError, UnicodeDecodeError) as exc:
         print("%s\tunreadable:%s" % (p, type(exc).__name__))
         continue
-    hits = [name for ch, name in BAD if ch in t]
-    print("%s\t%s" % (p, ",".join(hits) or "clean"))
+    print("%s\t%s" % (p, ",".join(variant_of.nonlf_breaks(t)) or "clean"))
 print("COUNT\t%d" % n)
 PY
 n_agents="$(awk -F "$TAB" '$1=="COUNT"{print $2}' "$TMPD/v4.txt")"
@@ -279,4 +382,25 @@ if [ -z "$dirty" ]; then
 else
   no "V4: agent 정의 파일에 LF 밖 줄바꿈 문자가 있다 — $(printf '%s' "$dirty" | tr '\n' ' ')"
 fi
+# 검출 셀 — 문자마다 본문(frontmatter 밖)에만 그 문자를 둔 스크래치 파일을 같은 검출기에 태운다. 기대 목록은
+# 이 락의 진술이다(검출기의 집합에서 문자 하나를 빼면 그 셀이 RED).
+python3 - "$ROOT" "$TMPD/v4cells" > "$TMPD/v4cells.txt" <<'PY'
+import os, sys
+root, d = sys.argv[1:3]
+sys.path.insert(0, root + "/shared/tests")
+import variant_of
+os.makedirs(d, exist_ok=True)
+for want, cp in (("U+000D", 0x0D), ("U+0085", 0x85), ("U+2028", 0x2028), ("U+2029", 0x2029)):
+    p = os.path.join(d, want + ".md")
+    open(p, "wb").write(("---\nname: x\n---\n\n본문" + chr(cp) + "숨김\n").encode("utf-8"))
+    got = variant_of.nonlf_breaks(open(p, "rb").read().decode("utf-8"))
+    print("%s\t%s" % (want, ",".join(got) or "none"))
+PY
+n_v4c=0
+while IFS="$TAB" read -r want got; do
+  [ -n "$want" ] || continue
+  n_v4c=$((n_v4c+1))
+  assert_eq "$got" "$want" "V4 검출 셀: 본문의 $want 하나를 검출기(variant_of.nonlf_breaks)가 잡는다"
+done < "$TMPD/v4cells.txt"
+assert_eq "$n_v4c" "4" "V4 검출 셀: 문자 넷을 모두 태웠다"
 finish
