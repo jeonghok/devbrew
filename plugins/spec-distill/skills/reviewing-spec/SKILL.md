@@ -32,10 +32,10 @@ if [ ! -f "$ENTRY" ]; then
 else
   entry_err="$(mktemp 2>/dev/null || printf '/dev/null')"
   entry_out="$(python3 "$ENTRY" 2>"$entry_err")"; entry_rc=$?
-  entry_err_1="$(tail -n 1 "$entry_err" 2>/dev/null)"
+  entry_err_last="$(tail -n 1 "$entry_err" 2>/dev/null)"
   [ "$entry_err" != /dev/null ] && rm -f "$entry_err"
   if [ "$entry_rc" -ne 0 ]; then
-    block="$(printf '%s\n' "[spec-distill] 진입 검사 실패(끔으로 친다) — $ENTRY rc=$entry_rc: $entry_err_1" "review-entry: DISABLED:entry_check_failed")"
+    block="$(printf '%s\n' "[spec-distill] 진입 검사 실패(끔으로 친다) — $ENTRY rc=$entry_rc: $entry_err_last" "review-entry: DISABLED:entry_check_failed")"
   else
     block="$(printf '%s' "$entry_out" | python3 -c '
 import json, sys
@@ -98,8 +98,8 @@ advisory · 복귀 지시)을 **그대로** 한 단락으로 보이고 게이트
 <!-- review-candidates:begin -->
 ```bash
 top="$(git rev-parse --show-toplevel)"
-git -C "$top" -c core.quotePath=false log -n 50 --diff-filter=A --name-only --pretty=format: -- 'docs/superpowers/specs/*-design.md' | awk 'NF && !seen[$0]++' | head -n 5 | sed "s|^|$top/|"
-git -C "$top" -c core.quotePath=false ls-files --others --exclude-standard -- 'docs/superpowers/specs/*-design.md' | sed "s|^|$top/|"
+git -C "$top" -c core.quotePath=false log -n 50 --diff-filter=A --name-only --pretty=format: -- 'docs/superpowers/specs/*-design.md' | awk 'NF && !seen[$0]++' | while IFS= read -r p; do [ -e "$top/$p" ] && printf '%s/%s\n' "$top" "$p"; done | head -n 5
+git -C "$top" -c core.quotePath=false ls-files --others --exclude-standard -- 'docs/superpowers/specs/*-design.md' | while IFS= read -r p; do [ -e "$top/$p" ] && printf '%s/%s\n' "$top" "$p"; done
 ```
 <!-- review-candidates:end -->
 
@@ -109,16 +109,21 @@ git -C "$top" -c core.quotePath=false ls-files --others --exclude-standard -- 'd
 산출물이 여기 산다:
 
 ```bash
-harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" session-id)"
-ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" state-root)"
+SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"; [ -n "$SD" ] || SD="./plugins/spec-distill"
+harness_sid="$(python3 "$SD/scripts/state_path.py" session-id)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
 STATE_DIR="$ROOT/$harness_sid"
-if [ -z "$harness_sid" ] || [ -z "$ROOT" ]; then
+if [ ! -f "$SD/scripts/state_path.py" ]; then
+  STATE_DIR=""
+  echo "[spec-distill] 상태 리졸버 부재: $SD/scripts/state_path.py (플러그인 루트 미해석) — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
+elif [ -z "$harness_sid" ] || [ -z "$ROOT" ]; then
   STATE_DIR=""
   echo "[spec-distill] 세션 상태 디렉토리를 특정할 수 없다(session id 또는 state root 미해석) — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
 fi
 ```
 
-그 줄이 나오면 게이트 없이 끝낸다 — 아래 `### 대상 부재` 와 같은 출구다.
+두 `[spec-distill]` 줄(상태 리졸버 부재 · 세션 상태 디렉토리 미특정) 중 하나가 나오면 게이트 없이 끝낸다 —
+아래 `### 대상 부재` 의 하위 경우다.
 
 ### 대상 부재 — 게이트 없이 끝나는 경로 (정본 Step A)
 
@@ -131,7 +136,8 @@ fi
 ## 프로필
 
 ```bash
-PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/design-doc.md"
+SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"; [ -n "$SD" ] || SD="./plugins/spec-distill"
+PROFILE="$SD/references/docreview-profiles/design-doc.md"
 ```
 
 프로필은 `design-doc.md` 로 **고정**이다 — 이 skill 은 design 자리 전용이고 다른 프로필을 고르지 않는다.
@@ -151,10 +157,10 @@ kill switch 는 P21 보안 컨트롤이라 그 공백은 "껐다고 믿게만" �
 
 <!-- codex-gate:begin runner=run_docreview_codex_reviewer.sh -->
 ```bash
-SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
-# `## 프로필` 과 **같은 한 줄**이다. Bash 도구는 호출마다 새 셸이라 앞 펜스의 대입이 여기로
-# 오지 않는다 — `SD=` 를 펜스마다 다시 세우는 것과 같은 이유다.
-PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/design-doc.md"
+SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"; [ -n "$SD" ] || SD="./plugins/spec-distill"
+# `## 프로필` 과 **같은 두 줄**(`SD=` · `PROFILE=`)이다. Bash 도구는 호출마다 새 셸이라 앞 펜스의
+# 대입이 여기로 오지 않는다 — `SD=` 를 펜스마다 다시 세우는 것과 같은 이유다.
+PROFILE="$SD/references/docreview-profiles/design-doc.md"
 # 러너의 네 인자 중 둘은 이 펜스가 대입하지 않았었다. 같은 이유(새 셸)로 여기서 함께
 # 세운다 — `$CODEX_YAML` 은 세션의 **순수 함수**라 어느 셸에서 다시 도출해도 같은 파일을
 # 가리킨다(`## 입력` 의 `$STATE_DIR` 과 같은 자리다. `mktemp` 은 `$$` 와 같은 결함이다 —
@@ -304,7 +310,8 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
   미진입한다(P17).
 - **polite stop 금지 (AP2)** — ①/② 를 골랐는데 narrate 만 하고 `### 미커밋 확인` 과 다음 단계
   진입을 skip 하면 polite stop 이다. 이 skill 을 종료하는 모든 경로는 이 게이트를 거치거나, 게이트를
-  거치지 않는 예외 경로(`### 대상 부재` · `## 진입 검사` 의 끔)면 명시적 advisory 단락을 동반한다 —
+  거치지 않는 예외 경로(`### 대상 부재` — `## 입력` 의 상태 리졸버·session id 출구는 그 하위 경우다 ·
+  `## 진입 검사` 의 끔)면 명시적 advisory 단락을 동반한다 —
   게이트-less silent 종료는 금지다.
 - **재결정 규약 (P23)** — `decide` 처분이 인터뷰가 이미 확정한 항목을 겨냥하면 조용히 덮어쓰지
   않는다. design.md 의 재결정 기록에 *원래 / 재결정 후보 / 근거* 를 적어 다음 라운드로 들고 가고,
@@ -314,12 +321,15 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 ### 미커밋 확인 — ①/② 직전
 
 사용자가 진행을 고르면 다음 단계로 가기 전에 이 펜스를 돌리고, 나온 `[spec-distill]` 줄을 그대로
-보인다. 진행은 막지 않는다. `$spec_path` 는 이 펜스 안에서 호출 인자로 다시 대입한다(새 셸).
+보인다. 진행은 막지 않는다. 펜스 앞에 `spec_path='<「## 입력」에서 절대 경로로 바꾼 설계문서 경로>'` 한 줄을 붙여
+같은 Bash 호출로 돌린다 — 호출마다 새 셸이라 앞 대입이 오지 않는다.
 
 <!-- uncommitted-check:begin -->
 ```bash
 if [ -z "${spec_path:-}" ]; then
   echo "[spec-distill] 미커밋 확인 입력 부재 — spec_path 가 비었다(Bash 호출마다 새 셸이다 — 호출 인자를 이 펜스 안에서 다시 대입하라)."
+elif [ ! -e "$spec_path" ]; then
+  echo "[spec-distill] 미커밋 확인 대상 부재 — '$spec_path' 가 없다(cwd=$(pwd)). 커밋 여부를 확인하지 못했다."
 else
   spec_dir="$(dirname -- "$spec_path")"
   spec_base="$(basename -- "$spec_path")"

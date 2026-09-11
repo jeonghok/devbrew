@@ -30,10 +30,10 @@ GC_SCRIPT = SCRIPTS_DIR / "spec-distill-gc.py"
 def fire_and_forget_gc() -> None:
     """TTL-GC 를 best-effort 로 한 번 돌린다. 실패는 non-fatal 이되 조용하지 않다.
 
-    훅의 본업이 아니므로 결과를 기다려 판단하지 않는다 — 다만 GC 가 멈춘 사실이
-    보이지 않으면 상태 폴더가 조용히 쌓이므로, 두 실패 모드(비정상 rc · 실행 자체
-    실패) 모두 stderr 로 낸다. rc 0 이어도 GC 가 stderr 로 낸 것(루트 거부 등)은 그대로
-    옮긴다. stdout(verbose 요약)은 옮기지 않는다.
+    동기로(timeout 5초) 기다리지만 결과로 훅의 동작을 바꾸지 않는다 — rc≠0 이면 rc 와
+    stderr 를, rc 0 이면 stderr 만 옮긴다. 실행 자체가 실패해도(timeout · OSError)
+    stderr 로 낸다 — GC 가 멈춘 사실이 보이지 않으면 상태 폴더가 조용히 쌓인다.
+    stdout(verbose 요약)은 옮기지 않는다.
     """
     try:
         result = subprocess.run(

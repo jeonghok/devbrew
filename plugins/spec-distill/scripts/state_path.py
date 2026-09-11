@@ -96,12 +96,12 @@ def main(argv: list[str]) -> int:
         return 0
     if sub == "session-id":
         # env-only resolve (no hook payload on the CLI path). Skills key their
-        # per-session state directory with this sid. Unresolved → exit 1 with NO
-        # stdout; each named caller handles the empty value itself:
-        #   - reviewing-spec `## 입력`: empty sid/root → loud line, STATE_DIR left
-        #     empty, the skill ends without the gate (same exit as 대상 부재).
-        #   - reviewing-brief `## 상태` (state.local.md): proceeds without state
-        #     writes, loud advisory, degrades carried in the Step B gate text.
+        # per-session state directory with this sid.
+        # 계약: 풀리지 않으면 exit 1, stdout 은 비어 있다.
+        # 규칙: 호출자는 빈 sid 로 `$ROOT/$sid/<leaf>` 를 만들지 않는다 — 빈 값이면 소리를
+        # 내고 거부한다. 본보기는 `skills/framing-requests/SKILL.md` 의 sid 가드다(sid 가
+        # 실값이고 mkdir 이 성공할 때만 경로가 생긴다). 호출자는 여기 적지 않고
+        # `git grep -n 'state_path.py" session-id'` 로 센다.
         sid = resolve_session_id(None)
         if sid is None:
             return 1
