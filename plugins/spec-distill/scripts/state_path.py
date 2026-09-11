@@ -102,6 +102,7 @@ def main(argv: list[str]) -> int:
         # 내고 거부한다. 본보기는 `skills/framing-requests/SKILL.md` 의 sid 가드다(sid 가
         # 실값이고 mkdir 이 성공할 때만 경로가 생긴다). 호출자는 여기 적지 않고
         # `git grep -n 'state_path.py" session-id'` 로 센다.
+        # 알려진 위반(연기): reviewing-brief ## 상태 · conducting-interview/references/finishing.md — 빈 sid 가드 없음.
         sid = resolve_session_id(None)
         if sid is None:
             return 1

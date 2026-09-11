@@ -11,7 +11,7 @@ from pathlib import Path
 GC = (Path(__file__).resolve().parent.parent / "scripts" / "spec-distill-gc.py").resolve()
 
 
-def run_gc(env_extra=None, cwd=None):
+def run_gc(env_extra=None, cwd=None, cmd=None):
     env = {**os.environ}
     for k in ("DEVBREW_SPEC_DISTILL_DISABLE", "DEVBREW_SKIP_HOOKS",
               "DEVBREW_SPEC_DISTILL_TTL_HOURS", "DEVBREW_SPEC_DISTILL_GC_VERBOSE",
@@ -20,7 +20,7 @@ def run_gc(env_extra=None, cwd=None):
     if env_extra:
         env.update(env_extra)
     cp = subprocess.run(
-        ["python3", str(GC)],
+        cmd or ["python3", str(GC)],
         env=env, cwd=cwd, capture_output=True, text=True, timeout=10,
     )
     return cp.returncode, cp.stdout, cp.stderr
@@ -211,6 +211,7 @@ class GcLockLeafTest(unittest.TestCase):
         before = (sentinel.read_bytes(), os.stat(sentinel).st_mtime_ns)
         self.assertEqual(self._plant_link("sentinel.txt"), sentinel)
         stale = self._stale()
+        p_before = sorted(os.listdir(self.P))
         rc, _, _ = run_gc(cwd=str(self.clone))
         self.assertEqual(rc, 0)
         self.assertEqual(sentinel.read_bytes(), before[0],
@@ -219,16 +220,22 @@ class GcLockLeafTest(unittest.TestCase):
                          "심은 .gc.lock 링크를 따라 저장소 밖 파일을 건드렸다(touch)")
         self.assertTrue(self.lock.is_symlink(), "심은 링크를 바꿨다")
         self.assertFalse(stale.exists(), "GC 가 돌지 않았다 — 위 단언들이 공허하다")
+        self.assertEqual(sorted(os.listdir(self.root)), [".gc.lock"],
+                         "GC 가 루트에 심은 링크 말고 다른 이름을 남겼다")
+        self.assertEqual(sorted(os.listdir(self.P)), p_before, "GC 가 저장소 밖 목록을 바꿨다")
 
     def test_b_dangling_lock_link_target_not_created(self):
         ghost = self._plant_link("ghost.txt")
         self.assertFalse(os.path.lexists(ghost))
         stale = self._stale()
+        p_before = sorted(os.listdir(self.P))
         rc, _, _ = run_gc(cwd=str(self.clone))
         self.assertEqual(rc, 0)
-        self.assertFalse(os.path.lexists(ghost),
+        self.assertEqual(sorted(os.listdir(self.P)), p_before,
                          "매달린 .gc.lock 링크를 따라 저장소 밖에 파일을 만들었다")
         self.assertFalse(stale.exists(), "GC 가 돌지 않았다 — 위 단언이 공허하다")
+        self.assertEqual(sorted(os.listdir(self.root)), [".gc.lock"],
+                         "GC 가 루트에 심은 링크 말고 다른 이름을 남겼다")
 
     def test_c_lock_name_as_directory_gc_still_runs(self):
         self.lock.mkdir()
@@ -238,14 +245,16 @@ class GcLockLeafTest(unittest.TestCase):
         self.assertFalse(stale.exists(),
                          f"디렉토리로 심은 .gc.lock 이 GC 를 멈췄다 — stderr: {stderr.strip()}")
         self.assertTrue(self.lock.is_dir())
+        self.assertEqual(sorted(os.listdir(self.root)), [".gc.lock"],
+                         "GC 가 루트에 심은 디렉토리 말고 다른 이름을 남겼다")
 
     def test_d_real_root_no_lock_file_and_collects(self):
         stale = self._stale()
         rc, _, _ = run_gc(cwd=str(self.clone))
         self.assertEqual(rc, 0)
         self.assertFalse(stale.exists())
-        self.assertFalse(os.path.lexists(self.lock),
-                         "GC 가 루트에 락 파일을 만들었다 — 고정 이름 파일을 여는 경로가 살아 있다")
+        self.assertEqual(sorted(os.listdir(self.root)), [],
+                         "GC 가 루트에 파일을 남겼다 — 고정 이름 파일을 만드는 경로가 살아 있다")
 
     def test_e_root_dir_lock_held_elsewhere_gc_yields(self):
         # 락이 실제로 루트 디렉토리에 걸리는가 — 다른 프로세스가 쥐고 있으면 GC 는 비켜선다.
@@ -253,13 +262,43 @@ class GcLockLeafTest(unittest.TestCase):
         dfd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             fcntl.flock(dfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            rc, _, _ = run_gc(cwd=str(self.clone))
+            rc, _, stderr = run_gc(cwd=str(self.clone))
             self.assertEqual(rc, 0)
             self.assertTrue(stale.exists(), "루트 디렉토리 락을 쥔 동안 GC 가 지웠다 — 락이 걸리지 않는다")
+            self.assertEqual(stderr, "", "경합으로 비켜서는 GC 가 줄을 냈다 — 경합은 조용해야 한다")
         finally:
             os.close(dfd)
         run_gc(cwd=str(self.clone))
         self.assertFalse(stale.exists(), "락을 놓은 뒤에도 GC 가 돌지 않았다")
+
+    def test_f_flock_failure_announced(self):
+        # 경합이 아닌 flock 실패(OSError)는 조용히 넘기지 않는다 — GC 를 건너뛴 사실을 stderr 에 낸다.
+        stale = self._stale()
+        code = (
+            "import errno, fcntl, runpy, sys\n"
+            "def _boom(*a, **k):\n"
+            "    raise OSError(errno.EBADF, 'Bad file descriptor')\n"
+            "fcntl.flock = _boom\n"
+            "sys.argv = sys.argv[1:]\n"
+            "runpy.run_path(sys.argv[0], run_name='__main__')\n"
+        )
+        rc, _, stderr = run_gc(cwd=str(self.clone), cmd=["python3", "-c", code, str(GC)])
+        self.assertEqual(rc, 0, stderr)
+        self.assertIn("GC 건너뜀 — state root 락 실패", stderr)
+        self.assertTrue(stale.exists(), "락을 못 잡았는데 GC 가 돌았다")
+
+    def test_g_root_regular_file_refused(self):
+        # 저장소가 `.claude/spec-distill` 을 일반 파일로 커밋하면 GC 는 추적 없이 거부 줄로 끝난다.
+        self.root.rmdir()
+        self.root.write_text("not a directory\n")
+        git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+        subprocess.run(git + ["add", "-A"], cwd=self.clone, check=True)
+        subprocess.run(git + ["commit", "-qm", "root as file"], cwd=self.clone, check=True)
+        rc, _, stderr = run_gc(cwd=str(self.clone))
+        self.assertEqual(rc, 0, stderr)
+        self.assertIn("GC 거부", stderr)
+        self.assertNotIn("Traceback", stderr)
+        self.assertEqual(self.root.read_text(), "not a directory\n")
 
 
 if __name__ == "__main__":

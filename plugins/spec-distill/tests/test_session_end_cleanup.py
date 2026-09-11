@@ -281,6 +281,8 @@ class SymlinkedStateRootTest(unittest.TestCase):
         self.assertEqual(sentinel.read_bytes(), before, "훅의 GC 가 심은 .gc.lock 링크를 따라 저장소 밖 파일을 잘랐다")
         self.assertTrue(lock.is_symlink())
         self.assertFalse(stale.exists(), "훅의 GC 가 돌지 않았다 — 위 단언이 공허하다")
+        self.assertEqual(sorted(os.listdir(root)), [".gc.lock"],
+                         "훅이 루트에 심은 링크 말고 다른 이름을 남겼다")
 
 
 if __name__ == "__main__":

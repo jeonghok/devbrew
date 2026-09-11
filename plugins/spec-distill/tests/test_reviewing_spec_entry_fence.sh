@@ -41,6 +41,17 @@ SCRATCH="$(mktemp -d -t sd-entry-fence-XXXXXX)" || { echo "scratch 생성 실패
 trap 'rm -rf "$SCRATCH"' EXIT
 
 RETURN_MSG='[spec-distill] 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).'
+RETURN_TAIL='리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).'
+ends_with_return() {   # ends_with_return <라벨> <출력> — `[spec-distill]` 줄이 정확히 하나이고 복귀 지시로 끝난다
+  local line n
+  line="$(printf '%s\n' "$2" | grep -E '^\[spec-distill\]' || true)"
+  n="$(printf '%s' "$line" | grep -c . || true)"
+  if [ "$n" != "1" ]; then no "$1: [spec-distill] 줄이 ${n}개 — 정확히 하나여야 한다"; return; fi
+  case "$line" in
+    *"$RETURN_TAIL") ok "$1" ;;
+    *) no "$1: [spec-distill] 줄이 복귀 지시로 끝나지 않는다: $line" ;;
+  esac
+}
 F='review-entry: DISABLED:entry_check_failed'
 FAIL_TAG='진입 검사 실패(끔으로 친다)'
 PY_DIR="$(dirname "$(command -v python3)")"
@@ -240,7 +251,7 @@ run_sdir() {   # run_sdir [VAR=값 …] → 펜스 stdout, 마지막 줄은 STAT
 }
 out="$(run_sdir)"
 assert_contains "$out" "[spec-distill] 세션 상태 디렉토리를 특정할 수 없다" "상태 디렉토리: session id 미해석 — 소리를 낸다"
-assert_contains "$out" "리뷰 없이 끝났다" "상태 디렉토리: 그 줄이 복귀 지시를 싣는다"
+ends_with_return "상태 디렉토리: 그 줄이 복귀 지시로 끝난다" "$out"
 assert_eq "$(printf '%s\n' "$out" | tail -n 1)" "STATE_DIR=[]" "상태 디렉토리: session id 미해석 — STATE_DIR 을 비운다"
 out="$(run_sdir DEVBREW_SPEC_DISTILL_SESSION_ID=sdirtest01)"
 assert_not_contains "$out" "특정할 수 없다" "상태 디렉토리(양성 대조): sid 가 풀리면 소리 없음"
@@ -324,7 +335,7 @@ assert_contains "$out" "PROFILE_FILE_OK" "설치본: codex 게이트 — PROFILE
 out="$(run_inst "$SDIR_FENCE" 'printf "STATE_DIR=[%s]\n" "$STATE_DIR"')"
 assert_contains "$out" "[spec-distill] 상태 리졸버 부재: ./plugins/spec-distill/scripts/state_path.py (플러그인 루트 미해석)" \
   "무치환: 「## 입력」 — 상태 리졸버 부재를 원인으로 댄다"
-assert_contains "$out" "리뷰 없이 끝났다 — writing-plans 로 가기 전에" "무치환: 그 줄이 복귀 지시를 싣는다"
+ends_with_return "무치환: 그 줄이 복귀 지시로 끝난다" "$out"
 assert_not_contains "$out" "특정할 수 없다" "무치환: session id 줄로 원인을 가리지 않는다"
 assert_eq "$(printf '%s\n' "$out" | tail -n 1)" "STATE_DIR=[]" "무치환: STATE_DIR 을 비운다"
 

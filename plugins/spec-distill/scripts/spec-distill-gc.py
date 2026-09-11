@@ -100,12 +100,18 @@ def gc(self_session_id: str | None = None) -> int:
     try:
         dfd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     except OSError as exc:
-        print(f"[spec-distill] GC 거부 — state root 를 링크 없이 열 수 없다: {exc}", file=sys.stderr)
+        print(
+            f"[spec-distill] GC 거부 — state root '{root}' 를 디렉토리로 열 수 없다(링크 · 디렉토리 아님 · 권한): {exc}",
+            file=sys.stderr,
+        )
         return 0
     try:
         try:
             fcntl.flock(dfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except (BlockingIOError, OSError):
+        except BlockingIOError:
+            return 0
+        except OSError as exc:
+            print(f"[spec-distill] GC 건너뜀 — state root 락 실패: {exc}", file=sys.stderr)
             return 0
         try:
             removed += _sweep_gc_pending(root)

@@ -498,10 +498,12 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
   프로필의 `handoff_incomplete`)에만 남는다.
 - **deprecation window 면제의 근거가 약하다.** 리포가 PUBLIC 이라 누구든 마켓플레이스로 추가할 수 있고, fork 0 ·
   star 0 은 「설치가 없다」의 증명이 아니다.
-- **아무것도 치환하지 않는 하니스에서는 설치본 리뷰가 돌지 않는다(D15).** `reviewing-spec` 펜스의 플러그인 루트는
-  bare `${CLAUDE_PLUGIN_ROOT}` 가 skill 로드 시 치환되는 경우와 Bash 환경에 `CLAUDE_PLUGIN_ROOT` 가 있는 경우만
-  푼다. 둘 다 없으면 cwd 상대 `./plugins/spec-distill` 로 떨어져, devbrew 체크아웃 밖에서는 진입 검사가 「모듈
-  부재」로 fail-closed 끝나고 복귀 지시가 brainstorming 의 사용자 리뷰 게이트로 돌려보낸다.
+- **하니스가 skill 본문을 치환하지 않고 Bash 환경에 `CLAUDE_PLUGIN_ROOT` 도 없으면 설치본의 펜스가 제 플러그인을
+  찾지 못한다(D15).** `reviewing-spec` 펜스의 플러그인 루트는 bare `${CLAUDE_PLUGIN_ROOT}` 가 skill 로드 시
+  치환되는 경우와 Bash 환경에 `CLAUDE_PLUGIN_ROOT` 가 있는 경우만 푼다. 둘 다 없으면 cwd 상대
+  `./plugins/spec-distill` 로 떨어진다 — cwd 에 그 디렉토리가 없을 때만 진입 검사가 「모듈 부재」로 fail-closed
+  끝나 복귀 지시가 brainstorming 의 사용자 리뷰 게이트로 돌려보내고, 사용자 저장소에 `plugins/spec-distill/` 이
+  있으면 그 저장소의 스크립트가 돈다(후속 과제).
 
 ## Concrete Next Action
 
@@ -529,7 +531,7 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 | D12 | 리뷰 라운드 3 반복 지적 게이트 | ③ 수정 필요 — 리뷰대로 저자가 수정(틀린 문장 수정 + 검증 절차 세부는 plan 요구로), 수정 뒤 재리뷰 1회 |
 | D13 | 리뷰 라운드 4 게이트 | ③ 수정 필요 — 저자가 남은 3건(진입 판정 리터럴 펜스 · 검증 계획의 AC6/AC9 · `git status` rc 처리)을 고치고, 재리뷰 없이 게이트로 돌아온다 |
 | D14 | 구현 뒤 qg 리뷰 게이트 1회차 — 저장소가 커밋한 `.claude/spec-distill`(또는 `.claude`) 심볼릭 링크를 TTL-GC 가 따라가 저장소 밖을 지운다 | 고친다, spec-distill 안에서만 — `state_path.state_root_escapes` 한 곳이 판정하고 GC 와 SessionEnd 정리가 거부한다. 판정을 공용 `gc_common.safe_rmtree` 에 두지 않는다(그 함수는 바꾸지 않는다) — 그 검증만 realpath 로 굳혀서는 루트 자신이 링크일 때 루트와 대상이 함께 풀려 경로가 닫히지 않는다. 2회차: 루트 아래 고정 이름 락 파일(`.gc.lock`)도 저장소가 링크로 심을 수 있어 GC 가 그것을 만들고 열면 링크를 따라 저장소 밖 파일을 만들거나 자른다 — 락 파일을 없애고 루트 디렉토리 자신의 fd(`O_DIRECTORY \| O_NOFOLLOW`)를 잠근다. 저장소가 통제하는 루트 아래에 고정 이름 파일을 만들거나 열지 않는다. AC17 |
-| D15 | 구현 뒤 qg 리뷰 게이트 2회차 — 설치본 배치(플러그인이 cwd 밖 · `CLAUDE_PLUGIN_ROOT` 없음 · bare `${CLAUDE_PLUGIN_ROOT}` 만 로드 시 치환)에서 진입 검사는 `PROCEED` 인데 `## 입력` 이 상태 리졸버를 못 찾아 리뷰가 거기서 끝난다 | `reviewing-spec` 의 나머지 펜스(`## 입력` 상태 · `## 프로필` · codex 게이트 — 다섯 줄)가 진입 펜스의 루트 관용구를 그대로 쓴다. 앞 라운드에서 미뤘던 것을 다시 연다 — 빈 session id 가드(§4.1)가 복구 가능한 오류를 필수 정지로 바꿨고, 이 변경이 이미 그 관용구를 광고하며, 다섯 줄이면 된다. `## 입력` 은 리졸버가 없으면 그 원인(상태 리졸버 부재)을 대고 대상 부재의 하위 경우로 끝난다. 아무것도 치환하지 않는 하니스는 알려진 결과로 남는다(알려진 한계). §4.1 |
+| D15 | 구현 뒤 qg 리뷰 게이트 2회차 — 설치본 배치(플러그인이 cwd 밖 · `CLAUDE_PLUGIN_ROOT` 없음 · bare `${CLAUDE_PLUGIN_ROOT}` 만 로드 시 치환)에서 진입 검사는 `PROCEED` 인데 `## 입력` 이 상태 리졸버를 못 찾아 리뷰가 거기서 끝난다 | `reviewing-spec` 의 나머지 펜스(`## 입력` 상태 · `## 프로필` · codex 게이트 — 다섯 줄)가 진입 펜스의 루트 관용구를 그대로 쓴다. 앞 라운드에서 미뤘던 것을 다시 연다 — 빈 session id 가드(§4.1)가 복구 가능한 오류를 필수 정지로 바꿨고, 이 변경이 이미 그 관용구를 광고하며, 다섯 줄이면 된다. `## 입력` 은 리졸버가 없으면 그 원인(상태 리졸버 부재)을 대고 대상 부재의 하위 경우로 끝난다. 아무것도 치환하지 않고 Bash 환경에 `CLAUDE_PLUGIN_ROOT` 도 없는 하니스는 알려진 결과로 남는다(알려진 한계). §4.1 |
 
 오케스트레이터가 정하고 사용자에게 알린 것(되돌리려면 괄호 안의 한마디):
 
