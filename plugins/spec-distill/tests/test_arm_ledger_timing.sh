@@ -151,16 +151,19 @@ fi
 # --- T12: 아무도 리뷰하지 않은 라운드는 원장에 기록하지 않는다 ---
 # 두 층이 한 쌍으로 잠근다.
 #   (a) 엔진이 critic 사망을 신호로 낸다 — `docreview_route.py prepare-recritic` 이
-#       rc 4 와 `degrade.critic_dead` 를 내고, 그 주(主) 판정자 사망이 `fin.json` 의
-#       `blocks` 로 간다. **이 층은 엔진 테스트가 잰다**: `shared/tests/fixtures/
-#       docreview/cases.sh` 의 `case_T41_critic_dead_blocks`(`shared/tests/
-#       test_docreview_route.sh` 가 돌린다). 예전에는 옛 병합 스크립트를 직접 돌려 이
-#       층을 쟀는데(T12a), 그 스크립트가 지워지면서 그 칸도 함께 빠졌다.
-#   (b) 껍데기(SKILL.md)의 mark-reviewed 지시가 **엔진 어휘로 쓰인 배제 조건**과
-#       같은 섹션 윈도우 안에 있다. 엔진의 신호는 `fin.json` 의 `blocks` 이고, 그중
-#       이 배제를 부르는 값이 «critic 사망»이다. 이 파일은 이 층을 잰다(T12b).
+#       rc 4 와 `degrade.critic_dead` 를 내고, 그 라운드를 finalize 하면 `fin.json` 의
+#       `blocks` 가 참이며 advisory 에 주 판정자 사유(`입력 실패(주): doc-critic`)가 실린다.
+#       **이 층은 엔진 테스트가 잰다**: `shared/tests/fixtures/docreview/cases.sh` 의
+#       `case_T41_critic_dead_blocks`(`shared/tests/test_docreview_route.sh` 가 돌린다) —
+#       rc 4 · `critic_dead` · finalize 뒤 `blocks` 셋 다. 예전에는 옛 병합 스크립트를
+#       직접 돌려 이 층을 쟀는데(T12a), 그 스크립트가 지워지면서 그 칸도 함께 빠졌다.
+#   (b) 껍데기(SKILL.md)의 mark-reviewed 지시가 **배제 조건**과 같은 섹션 윈도우 안에
+#       있다. 배제는 두 갈래다: 「미검증」으로 연 승인 게이트(critic 사망 두 번 — 절차
+#       5단계가 6~7단계를 건너뛰어 이번 라운드 `fin.json` 이 없다)와 이번 라운드
+#       `fin.json` 의 `blocks` 에 실린 «critic 사망». 이 파일은 이 층을 잰다(T12b · T12c).
 # (a)만으로는 지시가 사라져도 통과하고, (b)만으로는 신호가 사라져 지시가 따를 수 없게
-# 돼도 통과한다 — 두 층은 다른 파일에 살지만 하나를 지우면 쌍이 깨진다.
+# 돼도 통과한다. 두 층은 다른 파일에 살고 이 주석이 이름으로 묶는다 — T41 을 지워도 이
+# 파일은 GREEN 이다(쌍은 스위트 전체가 집행한다).
 
 # 섹션 윈도우 — 헤더-satisfiable 회피를 위해 blockquote/헤더가 아닌 **본문 고유** 토큰을
 # 윈도우 안에서 찾는다. 빈 윈도우는 앵커가 깨진 것이므로 FAIL(조용한 통과 금지).
@@ -190,15 +193,34 @@ fi
 # 이었다(실측 확인). 그리고 규칙을 무르게 하는 현실적 변경은 정확히 그 모양이다 —
 # 설명은 남기고 명령만 지운다. 이 문장이 없으면 아무도 리뷰하지 않은 라운드가
 # "리뷰됨"으로 원장에 박혀 그 문서는 영영 다시 arm 되지 않는다.
+# 다섯 번째 conjunct — `blocks` 갈래의 문구 자체(아래 T12c 의 양의 짝). 맨 `critic 사망` 은
+# 「미검증」 갈래의 「critic 사망이 두 번」도 만족시키므로, 그것만으로는 `blocks` 갈래가
+# 사라져도 GREEN 이다.
 win="$(awk '/^### mark-reviewed/{f=1; print; next} f && /^#/{f=0} f' "$SKILL")"
 if [[ -n "$win" ]] \
   && grep -qF 'arm_ledger.py" mark-reviewed' <<<"$win" \
   && grep -qF 'blocks' <<<"$win" \
   && grep -qF 'critic 사망' <<<"$win" \
-  && grep -qF '호출하지 않는다' <<<"$win"; then
+  && grep -qF '호출하지 않는다' <<<"$win" \
+  && grep -qF '`blocks` 에 critic 사망이 실린' <<<"$win"; then
   note PASS "T12b: SKILL 원장 절의 mark-reviewed 지시가 엔진 어휘의 배제 조건·금지 명령과 같은 블록"
 else
   note FAIL "T12b 실패: window=$(wc -l <<<"$win")줄"
+fi
+
+# --- T12c: 배제의 첫 갈래 — 「미검증」으로 연 승인 게이트 ---
+# 절차 5단계(`shared/docreview/references/reviewing-document.md`)는 critic 이 두 번 죽으면
+# 6~7단계를 건너뛰고 승인 게이트를 「미검증」으로 연다. 그 라운드에는 `fin.json` 이 없거나
+# 직전 라운드의 것이 남아 있다 — `blocks` 갈래만 있으면 배제가 발동할 수 없고, 「미검증」
+# 게이트에서 진행을 고르면 아무도 리뷰하지 않은 문서가 원장에 박힌다. 두 문구 모두 이 절의
+# 본문에만 있다(body-unique). 양의 짝은 T12b 의 `` `blocks` 에 critic 사망이 실린 `` 이다 —
+# 새 갈래가 옛 갈래를 **대체**하면 거기서 RED 가 난다.
+if [[ -n "$win" ]] \
+  && grep -qF '「미검증」으로 연 라운드' <<<"$win" \
+  && grep -qF '이번 라운드의 판정으로 읽지 않는다' <<<"$win"; then
+  note PASS "T12c: mark-reviewed 배제에 「미검증」 게이트 갈래 + 직전 라운드 fin.json 불사용"
+else
+  note FAIL "T12c 실패: 「미검증」 갈래 또는 직전 fin.json 불사용 문장이 mark-reviewed 절에 없다"
 fi
 
 arm_summary

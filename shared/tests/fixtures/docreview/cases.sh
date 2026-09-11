@@ -1179,6 +1179,12 @@ case_T41_critic_dead_blocks() {
   assert_eq "$rc $(jget "$d/prep.json" 'd["degrade"]["critic_dead"]')" "4 True" "T41: 층 1 블록 없음 → rc 4 + critic_dead"
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-broken.txt" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json" 2>/dev/null; rc=$?
   assert_eq "$rc" "4" "T41: 층 1 블록 YAML 파손 → rc 4"
+  # critic 사망 라운드를 finalize 까지 태운다 — `reviewing-spec/SKILL.md` 의 mark-reviewed 배제가
+  # 읽는 신호는 `fin.json` 의 `blocks` 다. rc 4 · `critic_dead` 만 재면 그 다리(주 판정자로 기록 →
+  # `blocks`)가 끊겨도 통과한다(doc-critic 을 보조로 기록하는 변이가 락 15개 전부에서 GREEN 이었다).
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null
+  assert_eq "$(jget "$d/fin.json" 'd["blocks"], any(a.startswith("입력 실패(주): doc-critic") for a in d["advisory"])')" "(True, True)" \
+    "T41: critic 사망 라운드의 finalize → fin.json blocks 참 + 주 판정자 사유(doc-critic)"
   rm -rf "$d"
 }
 case_T42_layer2_missing() {

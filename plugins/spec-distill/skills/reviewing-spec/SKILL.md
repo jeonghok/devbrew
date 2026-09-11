@@ -240,8 +240,10 @@ python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" ma
 ```
 
 이 한 호출이 **in-flight 표시도 함께 지운다** — 그래서 정상 경로에서는 아래 두 종료 자리의
-`clear-inflight` 를 부를 일이 없다. **예외** — `fin.json` 의 `blocks` 에 critic 사망이 실린 라운드,
-즉 아무도 리뷰하지 않은 라운드에서는 **호출하지 않는다.**
+`clear-inflight` 를 부를 일이 없다. **예외** — 아무도 리뷰하지 않은 라운드에서는 **호출하지 않는다.**
+그런 라운드는 둘이다. ① 승인 게이트를 「미검증」으로 연 라운드 — critic 사망이 두 번이면 5단계가
+6~7단계를 건너뛰므로 이번 라운드의 `fin.json` 이 없다. ② 이번 라운드 `fin.json` 의 `blocks` 에 critic 사망이 실린 라운드.
+직전 라운드의 `fin.json` 이 남아 있어도 그것을 이번 라운드의 판정으로 읽지 않는다.
 
 `$harness_sid` 가 빈 값이면 상태 파일을 특정할 수 없으므로 호출하지 않고, 조용히 넘어가는 대신
 advisory 를 낸다:

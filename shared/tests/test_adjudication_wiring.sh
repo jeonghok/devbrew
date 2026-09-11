@@ -28,7 +28,6 @@
 # `quality-gates/tests/test_synthesize_disposition.sh`(synthesize_findings.py) ·
 # `quality-gates/tests/test_synthesize_artifact_adjudication.py` ·
 # `spec-distill/tests/test_review_dispatch_disposition.sh`(review-dispatch.py) ·
-# `spec-distill/tests/test_depth_record.py`(depth_record.py) ·
 # `shared/tests/test_docreview_route.sh`(docreview_route.py).
 # 단일 락을 지목하면 그 하나가 덮지 않는 나머지 소비자가 조용해진다(최종 리뷰 A/m3).
 #
@@ -177,8 +176,8 @@ done
 # 검사가 없어 파일이 지워지거나(PR 3) 앵커가 새로 생겨도(호스트 wiring) 등재가
 # 영원히 남을 수 있었다. `stale_terminal()` 로 EXEMPT 와 같은 축을 잰다(크기
 # baseline 은 25줄 예산 안에서 뺐다 — TERMINAL_CONSUMERS 는 몇 건뿐이라(크기는 위
-# `TERMINAL_CONSUMERS 크기` note 가 매 실행 낸다) EXEMPT 급 성장 위험이 없고, 이 신선도 검사가 "영원히 남는다"는 실제 우려를
-# 이미 잡는다).
+# `TERMINAL_CONSUMERS 크기` note 가 매 실행 낸다) EXEMPT 급 성장 위험이 없고, 이
+# 신선도 검사가 "영원히 남는다"는 실제 우려를 이미 잡는다).
 terminal_stale="$(printf '%s\n' "$SCAN" | sed -n 's/^terminal_stale=//p')"
 assert_eq "$terminal_stale" "0" "TERMINAL_CONSUMERS 항목이 전부 여전히 유효하다 (파일이 아직 IMPORT + 아직 ANCHOR 없음)"
 printf '%s\n' "$SCAN" | sed -n 's/^  STALE_TERMINAL //p' | while IFS= read -r l; do

@@ -204,7 +204,7 @@ print("AXIS_A4_FAIL %s" % "|".join(a4_fail))
 #    `.py` 를 가리켜도 A④(실재)와 축 B(그 파일이 adjudication 을 import)를 그대로
 #    통과하고, `.py` 라는 이유로 A④ 의 `disclosure=` 의무까지 면제된다 — 소비자가
 #    거짓인데 세 축이 전부 GREEN 이다 〔실측(PR 3 Task 6): plugin-audit 의
-#    smoke-workflow.js:11 의 consumer 를 `plugins/spec-distill/scripts/depth_record.py ·
+#    smoke-workflow.js:11 의 consumer 를 `plugins/quality-gates/scripts/synthesize_findings.py ·
 #    fail-closed` 로 바꾸면 19 칸 중 A⑤ 하나만 RED — A④·B 는 GREEN〕.
 #    설치본에서 다른 플러그인의 스크립트는 도달조차 불가능하다 — 플러그인 경계가
 #    소비자 주장의 하한이다.
