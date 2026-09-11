@@ -51,8 +51,8 @@ def redact_frontmatter(text: str) -> str:
     보지 않으므로, 빈 `name:`은 구조 게이트를 통과한 뒤 여기서 조용히 한 줄을 지운
     사본이 격리 critic에게 간다.
 
-    `brief_review_state.py`의 `parse()`/`_set_scalar()`, `_parse_degradations()`가
-    같은 클래스의 버그를 이미 같은 방식으로 닫았다 — 이 파일이 남은 하나였다.
+    `brief_review_state.py`의 `_parse_degradations()`가 같은 클래스의 버그를 이미 같은
+    방식으로 닫았다(콜론 뒤 공백을 줄 안으로 한정) — 이 파일이 남은 하나였다.
     """
     if not text.startswith("---"):
         return text

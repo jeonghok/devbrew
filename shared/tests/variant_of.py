@@ -4,8 +4,10 @@
 변형(V)은 머리 20줄 안의 `# variant-of: <기준 경로>` 마커로 기준(B)을 가리킨다. 관계는 두 조건이
 함께 설 때만 성립한다:
   ① frontmatter — 최상위 키 집합이 같고, `name`·`description`·`tools` 밖의 키는 값 블록(키 줄 +
-     이어지는 들여쓴·빈 줄 **전부**)이 줄 단위로 같다. 키 인식은 YAML 과 같다 — 컬럼-0 의 비지 않은
-     줄(주석 제외)은 전부 키 줄이고, 따옴표 키(`"k":` · `'k':`)와 콜론 앞 공백 키(`k :`)도 이름으로
+     이어지는 들여쓴·빈 줄 **전부**)이 줄 단위로 같다. 키 인식은 이 판정기가 받는 줄 모양 안에서만
+     YAML 과 같다 — frontmatter 에 LF 밖 줄바꿈(CR · NEL · U+2028 · U+2029 — YAML 1.1 은 전부 줄바꿈으로
+     읽는다)이나 탭으로 시작하는 줄이 있으면 판정 불가다(형제 러너의 줄 문법과 같은 거절). 그 안에서
+     컬럼-0 의 비지 않은 줄(주석 제외)은 전부 키 줄이고, 따옴표 키(`"k":` · `'k':`)와 콜론 앞 공백 키(`k :`)도 이름으로
      정규화해 센다. 키로 못 읽는 컬럼-0 줄은 판정 불가다(앞 키의 값으로 흡수하면 frontmatter 에 숨은
      키가 관계를 통과한다). 컬럼-0 주석 줄(`# copy-of:`·`# variant-of:`)은 비교에서 뺀다. `tools` 는 자유 키다 —
      관계는 도구 표면을 판정하지 않는다(웹 사본의 도구 집합은 test_docreview_agents.sh 와
@@ -42,6 +44,11 @@ _PLAIN_COLON = re.compile(r':(?:[ \t]|$)')
 # 평문 키로 시작할 수 없는 YAML 지시 문자(흐름 · 앵커 · 태그 · 블록 스칼라 · 예약) — 그런 컬럼-0 줄은
 # 키로 못 읽는다.
 _NOT_PLAIN_START = tuple("[]{},&*!|>%@`")
+# frontmatter 에 있으면 판정 불가인 LF 밖 줄바꿈. PyYAML(YAML 1.1)은 넷 다 줄바꿈으로 읽는데 이 판정기는
+# LF 로만 줄을 나눈다 — 그 문자 뒤에 쓴 최상위 키를 앞 키의 한 줄로 보고, 자유 키면 비교조차 하지 않는다.
+# 형제 러너(`run_docreview_codex_reviewer.sh` 의 `_parse_frontmatter`)와 같은 거절이다. 문자마다 따로
+# 둔다 — 하나를 풀면 그 문자의 셀만 RED 가 된다.
+_NON_LF_BREAKS = (("\r", "U+000D"), ("\x85", "U+0085"), (chr(0x2028), "U+2028"), (chr(0x2029), "U+2029"))
 _AGENT_DEF = re.compile(r'^(?:shared|plugins)/[^/]+/agents/[^/]+\.md$')
 _CANONICAL_AGENT = re.compile(r'^shared/[^/]+/agents/[^/]+\.md$')
 
@@ -79,6 +86,22 @@ def _split(text: str) -> Optional[Tuple[List[str], List[str]]]:
     if end < 0:
         return None
     return text[4:end].split("\n"), text[end + 5:].split("\n")
+
+
+def _fm_hazard(text: str) -> Optional[str]:
+    """frontmatter 후보(첫 `---` 부터 닫는 `\\n---` 앞까지, 닫힘이 없으면 끝까지)에 판정 불가 모양이
+    있으면 그 사유. 탭으로 시작하는 줄도 거절한다 — YAML 은 탭 들여쓰기를 받지 않고, 이 판정기는 그
+    줄을 앞 키 블록에 흡수한다."""
+    if not text.startswith("---"):
+        return None
+    end = text.find("\n---", 3)
+    head = text if end < 0 else text[:end]
+    for ch, name in _NON_LF_BREAKS:
+        if ch in head:
+            return "frontmatter_nonlf_break:%s" % name
+    if any(ln.startswith("\t") for ln in head.split("\n")):
+        return "frontmatter_tab_line"
+    return None
 
 
 def _top_key(ln: str) -> Optional[str]:
@@ -141,10 +164,16 @@ def _fm_blocks(lines: List[str]) -> Optional[Dict[str, List[str]]]:
 def relation(variant, base) -> Tuple[bool, str, List[str]]:
     """(성립 여부, 사유, 끼운 줄 목록)."""
     try:
-        vt = Path(variant).read_text(encoding="utf-8")
-        bt = Path(base).read_text(encoding="utf-8")
+        # 바이트로 읽는다 — `read_text()` 의 universal newline 이 CR 을 LF 로 바꿔 `_fm_hazard` 의 CR
+        # 규칙을 우연에 맡기지 않게.
+        vt = Path(variant).read_bytes().decode("utf-8")
+        bt = Path(base).read_bytes().decode("utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         return False, "unreadable:%s" % type(exc).__name__, []
+    for t in (vt, bt):
+        why = _fm_hazard(t)
+        if why:
+            return False, why, []
     vs, bs = _split(vt), _split(bt)
     if vs is None or bs is None:
         return False, "frontmatter_missing", []

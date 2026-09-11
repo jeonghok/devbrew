@@ -68,15 +68,14 @@ assert_contains "$REF_FLAT" "$INIT_RULE_REF" \
 # 양의 짝 — 규칙이 가리키는 호출이 절차서에 실재한다.
 assert_contains "$REF_FLAT" 'docreview_state.py init --state-dir' \
   "절차서 선결: 규칙이 가리키는 init 호출이 실재한다 (양의 짝)"
-# 음성 셀 — init 규칙 문장만 지운 절차서에는 begin-round 의 비슷한 규칙이 남지만 init 판정은 서지
-# 않는다. 남는 쪽의 실재를 먼저 잰다 — 없으면 이 셀이 공허하다.
+# 구분의 이빨 둘 — 판정 문구가 begin-round 규칙과 공유하는 꼬리(「값과 무관하게 이 라운드를 진행하지
+# 않는다」)로 약화되면 둘 다 RED 다. ① 문구가 본문에 정확히 한 번 나온다(공유 꼬리면 두 번). ② 그 한 번을
+# 지운 사본에 begin-round 문장이 온전히 남는다(공유 꼬리를 지우면 begin-round 문장까지 잘린다).
+n_rule="$(printf '%s' "$REF_FLAT" | python3 -c 'import sys; print(sys.stdin.read().count(sys.argv[1]))' "$INIT_RULE_REF")"
+assert_eq "$n_rule" "1" "절차서 init 규칙 문구가 본문에 정확히 한 번 나온다 (begin-round 규칙과 공유하지 않는다)"
 NEG_FLAT="$(printf '%s' "$REF_FLAT" | python3 -c 'import sys; print(sys.stdin.read().replace(sys.argv[1], ""))' "$INIT_RULE_REF")"
 assert_contains "$NEG_FLAT" '**rc 가 0 이 아니면 값과 무관하게 이 라운드를 진행하지 않는다**' \
-  "음성 셀 전제: init 규칙을 지운 절차서에 begin-round 의 비슷한 규칙이 남는다"
-case "$NEG_FLAT" in
-  *"$INIT_RULE_REF"*) no "음성 셀: init 규칙을 지운 절차서에서도 init 판정이 선다 — 판정 문구가 begin-round 규칙과 갈리지 않는다" ;;
-  *) ok "음성 셀: init 규칙을 지우면 init 판정이 서지 않는다 (begin-round 규칙과 갈린다)" ;;
-esac
+  "음성 셀: init 규칙을 지워도 begin-round 규칙은 온전히 남는다 (판정 문구가 init 쪽만 가리킨다)"
 for s in reviewing-spec reviewing-brief; do
   SK_FLAT="$(flat "$REPO_ROOT/plugins/spec-distill/skills/$s/SKILL.md")"
   assert_contains "$SK_FLAT" "$INIT_RULE_SKILL" \
