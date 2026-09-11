@@ -336,10 +336,13 @@ done
 grep -qF '## R<n>' <<<"$round_block" && ok "AC3: state 본문 헤딩 ## R<n>" || no "AC3: ## R<n> 헤딩 부재"
 grep -qF 'AskUserQuestion 1회, **질문 1개**' <<<"$round_flat" \
   && ok "AC3: 라운드마다 AskUserQuestion 1회 · 질문 1개" || no "AC3: 질문 1개 규칙 부재"
-grep -qE '첫 선택지가 추천이고[^.]{0,30}\(권장\)' <<<"$round_flat" \
+grep -qF '첫 선택지가 추천이고 그 라벨 끝에 `(권장)` 을 단다' <<<"$round_flat" \
   && ok "AC3: 첫 선택지가 추천 (권장)" || no "AC3: 추천 첫 선택지 규칙 부재"
 grep -qF '고르면 무엇이 달라지는가' <<<"$round_flat" \
   && ok "AC3: description = 고르면 무엇이 달라지는가" || no "AC3: description 규칙 부재"
+grep -qF '직전 답이 보류(«모르겠다/둘 다/아무거나»)·한 단어·이유 없는 추천 수락·근거 없는 단정이면' <<<"$round_flat" \
+  && ok "C1: 되묻기 발동 조건 넷(보류 · 한 단어 · 이유 없는 추천 수락 · 근거 없는 단정)" \
+  || no "C1: 되묻기 발동 조건 부재 또는 조건이 빠졌다"
 grep -qF '이유·사례·실패 조건 중 하나를 되묻고 인터뷰어의 추측을 첫 선택지로' <<<"$round_flat" \
   && ok "C1: 되묻기 세 축(이유·사례·실패 조건) + 추측이 첫 선택지" || no "C1: 되묻기 규칙 부재"
 grep -qF '같은 주제의 연속 되묻기는 최대 2회' <<<"$round_flat" \
@@ -348,12 +351,14 @@ grep -qF '그 차원을 자동으로 닫지 않는다' <<<"$round_flat" \
   && ok "AC3: 상한 뒤에도 차원을 자동으로 닫지 않는다" || no "AC3: 상한 뒤 자동 닫힘 금지 문장 부재"
 grep -qE '되묻기 → 외부 근거 처분[^→]{0,60}→ 새 결정' <<<"$round_flat" \
   && ok "AC3: 겹침 순서 — 되묻기 → 외부 근거 처분 → 새 결정" || no "AC3: 겹침 순서 부재 또는 뒤바뀜"
+grep -qF '나머지는 다음 라운드의 «다음 결정»으로 넘어간다' <<<"$round_flat" \
+  && ok "AC3: 겹침에서 밀린 것은 다음 라운드의 «다음 결정»으로 이월" || no "AC3: 겹침 이월 조항 부재"
 grep -qF '`references/steelman.md` 가 사용자에게 묻는 질문은 전부 그 파일의 규약' <<<"$round_flat" \
   && ok "AC3: steelman 절차 질문의 예외 (그 파일이 묻는 질문 — 도출 규칙)" || no "AC3: steelman 예외 도출 규칙 부재"
 grep -qE '인자 없이 `/interview` 를 부른 경로의 R1\*\* 은[^.]{0,60}«아직 없음»' <<<"$round_flat" \
   && ok "AC3: 인자 없는 R1 — «지금 이해» 는 «아직 없음»" || no "AC3: 인자 없는 R1 모양 부재"
-# 부재 — 이 절로 스코프한다. coverage-mapper 절의 «인자 없이 부른 경로에서는 R1 답을 받은 뒤 R2
-# 전에» 는 정본으로 남아야 하므로(아래 coverage-mapper 락) 전-파일 부재로 재지 않는다.
+# 부재 — 새 규약 절 안에 옛 형식이 남았는지를 잰다. `Q1`·`Q2` 는 `OQ1`·`OQ2` 표기와 겹칠 수 있어
+# 전-파일로 재지 않고 이 절로 좁힌다. production 전체의 제거 어휘 부재는 test_stale_terms.sh V13 이 잰다.
 for tok in 'Q1' 'Q2' 'provisional_on' '블록 없이' '직전 답에서'; do
   grep -qF -- "$tok" <<<"$round_block" \
     && no "AC3: 라운드 규약 절에 «${tok}» 잔존" || ok "AC3: 라운드 규약 절에 «${tok}» 없음"
@@ -416,7 +421,8 @@ grep -q 'advisory' <<<"$covmap_block" \
 # rewrap 관용은 flatten 이 담당한다.
 close_block="$(awk '/^## 닫힘 · 재개방/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
 close_flat="$(tr '\n' ' ' <<<"$close_block" | tr -s ' ')"
-# 한정어 «그 차원에 관한» 을 문구째 잡는다 — 어느 S 로 닫혔는지 보는 게이트가 없어(OQ2) 이 산문이
+# 한정어 «그 차원에 관한» 을 문구째 잡는다 — 어느 S 로 닫혔는지 보는 게이트가 없어(설계
+# 2026-09-10-remove-depth-audit OQ2 = SKILL.md 가 «spec OQ6» 이라 부르는 한계) 이 산문이
 # 유일한 방어선이고, 한정어가 빠지면 아무 S 나 인용해 닫는 것이 규칙상 허용된다.
 { [[ -n "$close_block" ]] && grep -qF '차원은 그 차원에 관한 질문에 사용자가 답한 S 를 근거로만 닫는다' <<<"$close_flat"; } \
   && ok "AC4/G2: «차원은 그 차원에 관한 질문에 사용자가 답한 S 를 근거로만 닫는다»" \
@@ -438,6 +444,10 @@ done
 # 문구여야 한다 — 아래 Step A 4 락이 그쪽을 잰다. 한쪽만 고치면 종료 직렬화가 다른 S 를 인용한다.
 grep -qF 'landscape = 외부 근거 처분 S' <<<"$close_flat" \
   && ok "AC4: 닫힘 절의 landscape 닫힘 발화 = 외부 근거 처분 S" || no "AC4: 닫힘 절의 landscape 닫힘 발화 문구 부재"
+# 외부 근거의 표시 자리 — 빠지면 사용자는 본 적 없는 근거를 처분하게 된다.
+grep -qF 'landscape·premortem 출력은 «지금 이해»에 실려' <<<"$close_flat" \
+  && ok "AC4: 닫힘 절 — landscape·premortem 출력은 «지금 이해»에 실린다" \
+  || no "AC4: 닫힘 절에서 외부 근거의 표시 자리(«지금 이해»)가 사라졌다"
 
 # blind-spot-prober dispatch (AC6/C8, scoped)
 blindspot_block="$(awk '/^## blind-spot-prober dispatch/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
@@ -457,7 +467,7 @@ grep -qE 'web 비활성|inline premortem' <<<"$blindspot_block" \
   && ok "C5: web-absent loud degrade to inline premortem" \
   || no "C5: web-absent loud degrade to inline premortem"
 blindspot_flat="$(tr '\n' ' ' <<<"$blindspot_block" | tr -s ' ')"
-grep -qE '사용자 처분 S 를 받은 뒤[^.]{0,30}closed 로 전이' <<<"$blindspot_flat" \
+grep -qE '다음 라운드의 «지금 이해»에 실어 사용자 처분 S 를 받은 뒤[^.]{0,30}closed 로 전이' <<<"$blindspot_flat" \
   && ok "AC4: blind_spot 은 prober 출력의 처분 S 뒤에 closed (닫힘 절과 같은 규칙)" \
   || no "AC4: blind-spot-prober 절이 처분 S 없이 closed 로 전이한다 — 닫힘 절과 어긋난다"
 

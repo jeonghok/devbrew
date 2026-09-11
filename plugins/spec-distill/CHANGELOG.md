@@ -26,9 +26,9 @@ major인 이유: **dispatch 가능한 agent 하나(`spec-distill:depth-auditor`)
 
 ### Verification
 
-- **회귀 0** — spec-distill 셸 스위트 · `python3 -m unittest discover -s plugins/spec-distill/tests` · `shared/tests` 를 (파일, 실패 식별자) 멀티셋으로 기록해 «완료 − 기준선 = ∅» 를 확인했다. 기준선은 `origin/main` merge 뒤 그 끝 커밋 `f4e5de79` 이고, 기준선에 이미 있던 실패(`plugins/spec-distill/tests/test_no_write_matcher_hooks_repo.sh` rc 1 · unittest `test_hook_output_schema.TestCrossResolverAdvisory.test_python_and_bash_resolvers_agree`)는 그대로다. task 커밋마다 같은 판정을 거쳤다(착수 전 기준선 대비).
+- **회귀 0** — spec-distill 셸 스위트 · `python3 -m unittest discover -s plugins/spec-distill/tests` · `shared/tests` 를 (파일, 실패 식별자) 멀티셋으로 기록해 «완료 − 기준선 = ∅» 를 확인했다. 최종 기준선은 머지 직전에 합친 `origin/main` 끝 커밋 `bf626555`(1.2.0)이고, 기준선에 이미 있던 실패(`plugins/spec-distill/tests/test_no_write_matcher_hooks_repo.sh` 1건 · unittest `test_hook_output_schema.TestCrossResolverAdvisory.test_python_and_bash_resolvers_agree`)는 그대로다. task 커밋은 각각 그때의 착수 전 기준선(`efb8aa16` 을 합친 `f4e5de79`) 대비로 같은 판정을 거쳤다.
 - **완료 증거** — 셸 파일마다 요약 줄(`Total: …`) 또는 기준선과 같은 마지막 출력 줄을 요구했다. 단언 없이 죽은 파일이 `(파일, rc=<N>)` 로 잡히는 것과, 기존 실패 하나를 찍고 중단된 실행이 멀티셋 비교를 통과하지 못하는 것을 합성 양성 대조로 확인했다.
-- **변이** — 새로 쓰거나 고친 락마다 통째 삭제 · 문구 반전 · 값 변경 · 위치 변경으로 해당 단언의 RED 를 확인했다(25건).
+- **변이** — 새로 쓰거나 고친 락을 통째 삭제 · 문구 반전 · 값 변경 · 위치 변경 · 문장 추가로 흔들어 30건을 돌렸다. 29건은 해당 단언 하나만 RED 였고, 1건(README 별칭 면제)은 의도대로 GREEN 이었다. 변이하지 않은 새 락: 라운드 규약 절의 소제목 넷 · `## R<n>` 헤딩 · description 문구 · 되묻기 세 축 · SKILL 줄 수 상한, coverage-mapper 절의 인자 없는 경로 첫 dispatch 시점, V13 의 두 번째 양성 짝, 절 추출 양성 대조.
 - **사람 e2e** — 결과 미보고: 체크리스트 5항목을 안내했으나 사용자가 결과 보고 없이 릴리스 진행을 지시했다(2026-09-11). 항목별 통과/실패 기록 없음.
 
 ## [1.2.0] — 2026-09-11
