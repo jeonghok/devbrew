@@ -1318,10 +1318,44 @@ case_T46_normal_and_unrouted_rounds() {   # 양의 짝 둘 — 정상 라운드�
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   assert_eq "$(gsum "$d" "$UNV3")" "(None, None, True)" "T46 양의 짝: 정상 라운드(critic 생존 · finalize 성공) → 사유 없음 · 라벨 없음 · 완료 기록 가능"
   assert_not_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "미검증" "T46 양의 짝: 정상 라운드의 렌더에 「미검증」이 없다"
+  local gr; gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_eq "$(gsum "$d" 'd["unreviewed_reason"]')|$(printf '%s' "$gr" | grep -c '리뷰 완료')" "None|0" \
+    "T46 양의 짝: 정상 라운드는 공시 사유가 없고 렌더에 리뷰 완료 아님 공시 · 꼬리가 없다"
   rm -rf "$d"
   d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   assert_eq "$(gsum "$d" "$UNV3")" "(None, None, False)" \
     "T46: finalize 를 거치지 않은 라운드 — 「미검증」 사유는 없지만 완료 기록 신호는 서지 않는다 (참은 이번 라운드의 finalize 보고서를 요구한다)"
+  rm -rf "$d"
+}
+case_T46_prepare_crash_unrouted_disclosed() {   # 리뷰 P1 재현 — 5단계가 rc 0·4 밖(비-UTF-8 critic)이고 7단계를 건너뛴 라운드
+  local d rc f l; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  printf '\xff\xfe\x00bad' > "$d/critic-bad.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-bad.txt" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json" 2>"$d/prep.err"; rc=$?
+  assert_eq "$rc $(jget "$d/prep.err" 'd["reason"]')" "1 unreadable" "T46 전제(리뷰 P1): 비-UTF-8 critic → prepare-recritic rc 1 unreadable (rc 0·4 밖)"
+  assert_eq "$(gsum "$d" 'd["unreviewed_reason"], d["unverified"], d["approval_label"], d["round_reviewed"]')" "('unrouted', None, None, False)" \
+    "T46: 7단계를 건너뛴 라운드 — 공시 사유 unrouted · 「미검증」 사유와 라벨은 아니다 · 완료 기록 불가"
+  f="$(gfirst "$d")"
+  assert_not_contains "$f" "degrade 없음" "T46: 라우팅 보고서 없는 라운드의 렌더 첫 줄에 「degrade 없음」이 없다"
+  assert_contains "$f" "리뷰 완료 아님 — 이번 라운드의 라우팅 보고서가 없다" "T46: 렌더 첫 줄이 라우팅 보고서 부재를 공시한다 (부재 단언의 양의 짝)"
+  assert_not_contains "$f" "미검증" "T46: 그 공시는 「미검증」 라벨 문구가 아니다 (다른 사유)"
+  l="$(py docreview_state.py gate --state-dir "$d" --render | tail -1)"
+  assert_contains "$l" "리뷰 완료가 아니다(round_reviewed=false · unrouted)" \
+    "T46: 「다음:」 줄이 진행 옵션을 무조건 말하지 않는다 — 리뷰 완료 아님 꼬리 (리뷰 P1 의 「진행 옵션 활성」)"
+  # 리뷰 P1b — 7단계를 건너뛰지 않으면 거부 표지가 서서 「미검증」(finalize_incomplete)이 된다.
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null
+  assert_eq "$(gsum "$d" 'd["unreviewed_reason"], d["approval_label"]')" "('finalize_incomplete', '미검증')" \
+    "T46(리뷰 P1b): 그 뒤 finalize 를 부르면 거부 표지가 서서 「미검증」 이 된다"
+  rm -rf "$d"
+}
+case_T46_unverified_two_stage_with_open_items() {   # 「미검증」 + 이전 라운드의 열린 항목 → 두 단계 승인 게이트(설계 §8.2)
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_eq "$(gsum "$d" 'd["approval_ready"], d["approval_gate_open"]')" "(False, False)" "T46 전제: 라운드 1 이 열린 항목을 남긴다 (승인 준비 아님 · 승인 게이트 닫힘)"
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  critic_dead_twice "$d"
+  assert_eq "$(gsum "$d" 'd["unverified"], d["approval_gate_open"], d["approval_ready"], d["two_stage"], d["next_round_mode"]')" \
+    "('critic_dead', True, False, True, 'budget')" "T46: 「미검증」 + 열린 항목 → 승인 게이트를 열되 두 단계 · 다음 라운드는 예산"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "다음: 승인 게이트(「미검증」) 1단계 — 열린 항목을 처리한 뒤 진행 옵션 (다음 라운드 = budget)" \
+    "T46: 렌더의 다음 줄이 「미검증」 라벨의 두 단계 승인 게이트다"
   rm -rf "$d"
 }
 

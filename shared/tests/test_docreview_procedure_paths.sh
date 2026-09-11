@@ -134,6 +134,23 @@ assert_contains "$BR_FLAT" '그 값을 그대로 Step B 로 넘긴다' \
   "reviewing-brief: 엔진이 낸 그 값을 Step B 로 넘긴다"
 assert_not_contains "$BR_FLAT" '**critic 사망이 두 번**이면 승인 게이트를 「미검증」으로 열고' \
   "reviewing-brief: 모델이 사망 횟수를 세어 라벨을 붙이던 옛 문면이 없다 (양의 짝은 위 두 단언)"
+# R54(Task 7b fix) — `round_reviewed` 가 거짓인 **모든** 라운드(「미검증」이 아닌 `unrouted` 포함)의 공시 사유도
+# 엔진 요약에서 온다. reviewing-brief 는 라벨만 넘기면 `unrouted` 라운드가 라벨 없이 Step B 로 가므로
+# `round_reviewed` 를 읽어 그 사실과 사유를 넘긴다.
+assert_contains "$REF_FLAT" '거짓인 라운드는 요약의 `unreviewed_reason` 이 사유를 말하고' \
+  "절차서 8단계: round_reviewed 가 거짓인 모든 라운드의 공시 사유가 엔진 요약에서 온다"
+assert_contains "$BR_FLAT" '`round_reviewed` 가 거짓이면(사유 `unreviewed_reason`' \
+  "reviewing-brief: 리뷰 완료 여부를 엔진 요약의 round_reviewed 에서 읽는다 (body-unique)"
+assert_contains "$BR_FLAT" '라벨이 없어도 그 사실과 사유를 그대로 Step B 로 넘긴다' \
+  "reviewing-brief: 라벨이 없는 라운드도 그 사실과 사유를 Step B 로 넘긴다"
+# M3 — Step B 넘김 절의 출처 문구. 절 창(다음 `## ` 에서 닫힘)으로 재서 다른 절로 옮기면 RED 다.
+BR_STEPB="$(awk '/^## Step B 로 돌아간다/{f=1; next} f && /^## /{f=0} f' "$REPO_ROOT/plugins/spec-distill/skills/reviewing-brief/SKILL.md" | tr '\n' ' ' | tr -s ' ')"
+assert_grep "$(cat "$REPO_ROOT/plugins/spec-distill/skills/reviewing-brief/SKILL.md")" '^## Step B 로 돌아간다$' \
+  "양의 짝 — reviewing-brief 에 Step B 넘김 절이 실재한다 (아래 두 창 단언이 절 삭제로 헛통과하지 않는다)"
+assert_contains "$BR_STEPB" '「미검증」은 마지막 요약의 `approval_label` 과 사유 `unverified` 그대로' \
+  "reviewing-brief Step B 절: 「미검증」 사유의 출처가 마지막 요약이다 (body-unique)"
+assert_contains "$BR_STEPB" '리뷰 완료 여부(마지막 요약의 `round_reviewed`' \
+  "reviewing-brief Step B 절: 리뷰 완료 여부의 출처가 마지막 요약이다"
 SP_FLAT="$(flat "$REPO_ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md")"
 assert_contains "$SP_FLAT" "\`approval_label\` 이 「${LABEL}」이면 승인 게이트를 그 라벨로 연다" \
   "reviewing-spec ## 게이트: 「미검증」 라벨을 엔진 요약의 approval_label 에서 읽는다"

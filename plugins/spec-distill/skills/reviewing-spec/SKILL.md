@@ -243,7 +243,8 @@ python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" ma
 `clear-inflight` 를 부를 일이 없다. **예외** — 아무도 리뷰하지 않은 라운드에서는 **호출하지 않는다.**
 판정 근거는 같은 턴의 기억이 아니라 엔진 신호다: 이번 라운드 8단계 요약(`docreview_state.py gate --state-dir "$STATE_DIR"`,
 `--render` 없이)의 `round_reviewed` 가 참일 때만 부른다. 그 요약을 얻지 못했으면(gate 의 rc 가 0 이 아니다) 부르지 않는다.
-엔진이 거짓으로 내는 라운드는 둘이고, 요약의 `unverified` 가 사유를 말한다.
+엔진이 거짓으로 낼 때 사유는 요약의 `unreviewed_reason` 이 말한다 — 「미검증」이면 `unverified` 와 같은 값이고,
+finalize 보고서가 아예 없는 라운드는 `unrouted` 다(5단계가 rc 0·4 밖으로 끝나고 7단계를 건너뛴 경우 등). 「미검증」 갈래는 둘이다.
 첫째, 승인 게이트를 「미검증」으로 연 라운드 — critic 사망이 두 번이면 5단계가 6~7단계를 건너뛰어 이번
 라운드의 `fin.json` 이 없고(`unverified: critic_dead`), `finalize` 가 실패한 라운드도 같다(`unverified: finalize_incomplete`).
 둘째, critic 이 죽은 채 finalize 된 라운드 — 이번 라운드 `fin.json` 의
@@ -251,6 +252,9 @@ python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" ma
 `unverified: critic_dead` 로 낸다. `blocks` 는 참/거짓 하나이고, 무엇이 막는지는 `advisory[]` 가 말한다.
 직전 라운드의 `fin.json` 이 남아 있어도 그것을 이번 라운드의 판정으로 읽지 않는다 — 엔진 신호는 라운드마다
 새로 서므로(다음 라운드가 정상으로 끝나면 풀린다) 이번 라운드의 finalize 보고서가 없으면 참이 되지 않는다.
+이 예외가 걸린 라운드에서 사용자가 진행(①/②)을 고르면 `mark-reviewed` 대신 `clear-inflight` 를 부른다 — 호출은 아래
+clear-inflight B 절의 그 한 줄 그대로다. 부르지 않으면 in-flight 표시가 TTL(15분)까지 남아 다음 편집이 그 문서를
+다시 찾지 못한다.
 
 `$harness_sid` 가 빈 값이면 상태 파일을 특정할 수 없으므로 호출하지 않고, 조용히 넘어가는 대신
 advisory 를 낸다:
@@ -321,6 +325,8 @@ Read ${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/proceed-gate.md
 `unverified` 가 말하며, 렌더 첫 줄이 그 공시를 맨 앞에 싣는다). **`finalize` 의 rc 가 0 이 아니면 값과 무관하게 이 라운드를 정상 게이트로 넘기지 않는다** —
 그 라운드의 `fin.json` 은 비었거나 직전 라운드 것이라 판정에 쓰지 않고, 엔진이 「미검증」(`unverified: finalize_incomplete`)으로
 낸 게이트를 띄운다. 어느 쪽이든 요약의 `round_reviewed` 가 거짓이라 아래 `mark-reviewed` 의 예외가 걸린다.
+「미검증」이 아니어도 `round_reviewed` 가 거짓이면(`unreviewed_reason: unrouted` — 이번 라운드의 finalize 보고서가 없다)
+라벨은 붙지 않지만 렌더 첫 줄이 그 사실을 공시하고 「다음:」 줄에 리뷰 완료가 아니라는 꼬리가 붙는다 — 그 라운드도 같은 예외다.
 
 승인 게이트 **2단계**의 옵션 넷 — 정본 Step B 표를 이 skill 어휘로 채운 것이다:
 
@@ -354,7 +360,8 @@ Read ${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/proceed-gate.md
   때만 참이고, 무엇이 막는지는 위 `advisory[]` 에 함께 실린다.
 - `docreview_state.py gate --render` 의 **첫 줄** — 그 라운드의 degrade 한 줄이다. codex 가 없었으면
   그 사실과 사유가, 아니면 `advisory[]` 요약이, 둘 다 비면 `degrade 없음` 이 온다. 이번 라운드가 「미검증」이면
-  (요약의 `unverified` — critic 사망 · `finalize` 실패, `fin.json` 이 없는 라운드 포함) 그 공시가 맨 앞에 오고
+  (요약의 `unverified` — critic 사망 · `finalize` 실패, `fin.json` 이 없는 라운드 포함) 그 공시가, 「미검증」은 아니지만
+  리뷰 완료가 아닌 라운드(요약의 `round_reviewed` 거짓 · `unreviewed_reason: unrouted`)면 라우팅 보고서 부재 공시가 맨 앞에 오고
   `degrade 없음` 은 나올 수 없다. 라운드 번호와
   재리뷰 카운트는 **둘째 줄**이다(상한 도달·stagnation 도 그 줄에 붙는다).
 

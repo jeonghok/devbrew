@@ -228,11 +228,14 @@ fi
 # `unverified: finalize_incomplete`)로 읽는다 — 두 사유 이름도 이 절에 있어야 한다(Task 7b).
 # 문구 모두 이 절의 본문에만 있다(body-unique). 양의 짝은 T12b 의 다섯째 conjunct(`blocks` 갈래
 # 문구)다 — 새 갈래가 옛 갈래를 **대체**하면 거기서 RED 가 난다.
+# 사유 이름은 **갈래마다 따로** 잰다(Task 7b fix M2) — `unverified: critic_dead` 는 둘째 갈래에도 나오므로 맨
+# 토큰으로 재면 첫째 갈래의 사유가 사라져도 GREEN 이었다. 각 갈래의 문장 조각에 붙은 문구로 앵커한다.
 if [[ -n "$win" ]] \
   && grep -qF '「미검증」으로 연 라운드' <<<"$win" \
   && grep -qF '이번 라운드의 판정으로 읽지 않는다' <<<"$win" \
-  && grep -qF 'unverified: critic_dead' <<<"$win" \
-  && grep -qF 'unverified: finalize_incomplete' <<<"$win"; then
+  && grep -qF '없고(`unverified: critic_dead`)' <<<"$win" \
+  && grep -qF '같다(`unverified: finalize_incomplete`)' <<<"$win" \
+  && grep -qF '`unverified: critic_dead` 로 낸다' <<<"$win"; then
   note PASS "T12c: mark-reviewed 배제에 「미검증」 게이트 갈래(엔진 사유 둘) + 직전 라운드 fin.json 불사용"
 else
   note FAIL "T12c 실패: 「미검증」 갈래 · 엔진 사유(critic_dead · finalize_incomplete) · 직전 fin.json 불사용 문장 중 하나가 mark-reviewed 절에 없다"
@@ -257,6 +260,19 @@ if [[ -n "$win" ]] && grep -qF '그 요약을 얻지 못했으면(gate 의 rc �
   note PASS "T12e: 게이트 요약을 얻지 못한 라운드에서도 mark-reviewed 를 부르지 않는다"
 else
   note FAIL "T12e 실패: mark-reviewed 절에 요약 부재(gate rc≠0) 시 부르지 않는다는 문장이 없다"
+fi
+
+# --- T12f: 배제가 걸린 라운드에서 진행하면 in-flight 표시를 걷어낸다 (Task 7b fix, R54) ---
+# 예외가 걸린 라운드에서 사용자가 진행(①/②)을 고르면 `mark-reviewed` 도 `clear-inflight` 도 불리지 않아
+# 표시가 TTL(900초)까지 남고, 그동안 다음 편집이 그 문서를 다시 찾지 못한다. 그 자리의 지시는 이 절에만
+# 있다(body-unique). 양의 짝 — 지시가 가리키는 호출(`### clear-inflight B` 절의 harness_sid 키잉 한 줄)이
+# 실재한다. 없으면 지시가 가리킬 것이 사라진 채 이 칸만 GREEN 이 된다.
+cib="$(awk '/^### clear-inflight B/{f=1; next} f && /^#/{f=0} f' "$SKILL")"
+if [[ -n "$win" ]] && grep -qF '`mark-reviewed` 대신 `clear-inflight` 를 부른다' <<<"$win" \
+  && grep -qF 'arm_ledger.py" clear-inflight "$harness_sid"' <<<"$cib"; then
+  note PASS "T12f: 배제가 걸린 라운드의 진행은 mark-reviewed 대신 clear-inflight(B 절의 그 호출)를 부른다"
+else
+  note FAIL "T12f 실패: mark-reviewed 절에 배제 라운드의 clear-inflight 지시가 없거나, 가리키는 B 절 호출이 없다"
 fi
 
 arm_summary

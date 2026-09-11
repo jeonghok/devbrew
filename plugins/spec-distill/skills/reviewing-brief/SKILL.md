@@ -439,6 +439,9 @@ Agent({
   `approval_label` 이 「미검증」이면(critic 사망이 두 번이거나 `finalize` 가 실패한 라운드 — 사유는 `unverified`)
   승인 게이트를 그 라벨로 열고 그 값을 그대로 Step B 로 넘긴다. **`finalize` 의 rc 가 0 이 아니면 값과 무관하게 이 라운드를 정상 게이트로 넘기지 않는다** —
   그 라운드의 `fin.json` 은 비었거나 직전 라운드 것이라 판정에 쓰지 않는다.
+- **리뷰 완료 여부도 엔진 출력에서 읽는다** — 같은 요약의 `round_reviewed` 가 거짓이면(사유 `unreviewed_reason` — 「미검증」
+  둘, 또는 finalize 보고서가 없는 `unrouted`) 라벨이 없어도 그 사실과 사유를 그대로 Step B 로 넘긴다 — 그 라운드는 리뷰
+  완료가 아니고, 렌더 첫 줄도 `degrade 없음` 이 아니다.
 - **polite stop 금지 (AP2)** — 이 skill 을 끝내는 모든 경로는 게이트 결과를 싣고 Step B 로 돌아가거나,
   게이트를 거치지 않는 예외 경로(kill switch · 진입 게이트 차단 · 엔진 상태 디렉토리 없음 · 엔진 init 거부 ·
   번들 실패)면 record 와 명시적 advisory 단락을 동반하고 Step B 로 돌아간다. 조용한 종료는 금지다.
@@ -504,7 +507,8 @@ G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **�
 `conducting-interview` 종료 Step B 의 proceed 게이트에 셋을 싣는다:
 
 1. **엔진 게이트 결과** — 마지막 `gate --render` 전문 · 승인 게이트에 도달한 사유(열린 것 없음 · 상한 ·
-   stagnation · 「미검증」 — 「미검증」은 마지막 요약의 `approval_label` 과 사유 `unverified` 그대로) · 1단계에서의 사용자 선택 · 열린 채 남은 항목(`ask`·`decide`)과 미반영
+   stagnation · 「미검증」 — 「미검증」은 마지막 요약의 `approval_label` 과 사유 `unverified` 그대로) · 리뷰 완료 여부(마지막 요약의 `round_reviewed` —
+   거짓이면 `unreviewed_reason` 과 함께) · 1단계에서의 사용자 선택 · 열린 채 남은 항목(`ask`·`decide`)과 미반영
    findings 목록(각각 이유와 함께).
 2. **냉독 요약 전문 + gap 목록**(세 조각), 또는 냉독이 돌지 못한 사유.
 3. **degrade** — 아래 채널 전부를 한 줄씩.

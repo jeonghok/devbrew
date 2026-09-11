@@ -824,6 +824,10 @@ UNVERIFIED_TEXT = {
     "critic_dead": "「미검증」 주 판정자(doc-critic) 사망 — 이 라운드는 리뷰되지 않았다",
     "finalize_incomplete": "「미검증」 라우팅(finalize) 미완 — 이 라운드의 finding 이 원장에 없다",
 }
+# 「미검증」 사유가 없어도 이번 라운드의 finalize 보고서가 없으면 `round_reviewed` 는 거짓이다(양의 증거).
+# 그 라운드는 라벨 없이 공시만 한다 — 「미검증」(라벨 · 승인 게이트 강제)과 다른 공시 사유 `unrouted`.
+# 5단계가 rc 0·4 밖으로 끝나고 7단계를 건너뛴 라운드가 여기 온다(Task 7b fix, R54).
+UNROUTED_TEXT = "리뷰 완료 아님 — 이번 라운드의 라우팅 보고서가 없다(finalize 를 거치지 않았다)"
 
 
 def pending_mismatch(st, n):
@@ -910,6 +914,8 @@ def gate_summary(st) -> dict:
     g["unverified"] = unv
     g["approval_label"] = UNVERIFIED_LABEL if unv else None
     g["round_reviewed"] = bool(cur.get("route_report")) and unv is None
+    # 공시 사유 — `round_reviewed` 가 거짓인 모든 라운드에 선다. 「미검증」이면 그 사유 키, 아니면 `unrouted`.
+    g["unreviewed_reason"] = None if g["round_reviewed"] else (unv or "unrouted")
     g["counts"] = {k: rep.get(k, 0) for k in ("rejected", "bucket_conflicts", "lineage_mismatch",
                                               "revived", "reraise_unconsumed", "escalated_unconsumed")}
     g["counts"]["user_rejected"] = sum(1 for v in st["rejected_lineages"].values() if v.get("by") == "user")
@@ -1037,6 +1043,8 @@ def render_gate(st, g) -> str:
     first = []
     if g.get("unverified"):
         first.append(UNVERIFIED_TEXT.get(g["unverified"], "「미검증」 (%s)" % g["unverified"]))
+    elif g.get("unreviewed_reason"):
+        first.append(UNROUTED_TEXT)
     if deg.get("codex_absent"):
         first.append("codex 없음 — 모델 다양성 0 (%s)" % (deg.get("codex_reason") or "?"))
     elif g["advisory"]:
@@ -1075,6 +1083,9 @@ def render_gate(st, g) -> str:
         out.append("다음: " + ag + " 1단계 — 열린 항목을 처리한 뒤 진행 옵션 (다음 라운드 = %s)" % g["next_round_mode"])
     else:
         out.append("다음: 라운드 %d (%s)" % (g["round"] + 1, g["next_round_mode"]))
+    # 리뷰 완료가 아닌 라운드에서는 「다음:」 줄이 진행 옵션을 무조건 말하지 않는다 — 그 사실과 사유를 꼬리로 단다.
+    if g.get("unreviewed_reason"):
+        out[-1] += " — 단 이번 라운드는 리뷰 완료가 아니다(round_reviewed=false · %s)" % g["unreviewed_reason"]
     return "\n".join(out)
 
 
