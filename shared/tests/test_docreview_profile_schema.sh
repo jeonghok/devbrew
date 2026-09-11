@@ -88,4 +88,56 @@ else
   ok "라운드 진입(init): 거부되어 상태 파일이 생기지 않았다"
 fi
 
+# ⑤ (Task 3c R37) 중복 키. PyYAML 기본은 같은 키가 두 번 나오면 나중 값으로 조용히 덮고,
+# codex 러너의 stdlib 파서는 모양이 다른 중복(`[a]` 뒤 `- b`)에서 앞의 flow 값을 읽었다
+# (실측: 게이트 rc 0 · layer1 = ['marker_block_last'] — 러너 층 1 = 원래 여덟). 판정 지점을
+# 게이트 하나로 둔다: 중복 키가 있으면 진입에서 멈춘다. 모양이 다른 중복 둘(중첩·최상위) +
+# 같은 모양 중복 둘(web · ground_truth).
+python3 - "$DD" "$TMPD" <<'PY'
+import re, sys
+src, d = sys.argv[1:3]
+t = open(src, encoding="utf-8").read()
+cases = {
+    "layer1": (r"^(  layer1: \[[^\]]*\])$", r"\1\n  layer1:\n    - marker_block_last"),
+    "allowed_dispositions": (r"^(allowed_dispositions: \[[^\]]*\])$",
+                             r"\1\nallowed_dispositions:\n  - decide\n  - ask"),
+    "web": (r"^(web: false)$", r"\1\nweb: true"),
+    "ground_truth": (r"^(ground_truth: .*)$", r'\1\nground_truth: "marker_gt_second"'),
+}
+for key, (pat, rep) in cases.items():
+    n, c = re.subn(pat, rep, t, count=1, flags=re.M)
+    assert c == 1, key
+    open("%s/dup-%s.md" % (d, key), "w", encoding="utf-8").write(n)
+PY
+for key in layer1 allowed_dispositions web ground_truth; do
+  python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/dup-$key.md" >/dev/null 2>"$TMPD/dup-$key.err"
+  rc=$?
+  assert_eq "$rc" "2" "중복 키($key) → profile-check rc 2"
+  assert_file_grep "$TMPD/dup-$key.err" "duplicate_key:$key" "중복 키($key) → 사유가 duplicate_key:$key 다"
+done
+# 양의 짝 — 서로 다른 매핑의 같은 이름은 중복이 아니다. design-doc 은 `heading:` 을
+# decision_log 와 defer_target 두 매핑에 갖는다(전제를 먼저 잰다 — 없으면 이 짝은 공허하다).
+n_heading="$(sed -n '2,/^---$/p' "$DD" | grep -c 'heading:')"
+[ "$n_heading" -ge 2 ] && ok "전제: design-doc frontmatter 에 heading: 이 두 매핑에 있다(${n_heading})" \
+  || no "전제: design-doc frontmatter 의 heading: 이 ${n_heading} 개뿐 — 양의 짝이 공허하다"
+if python3 "$SCRIPTS/docreview_state.py" profile-check "$DD" >/dev/null 2>"$TMPD/err5"; then
+  ok "양성 짝: 다른 매핑의 같은 키 이름(heading)은 중복으로 거절되지 않는다"
+else
+  no "양성 짝: design-doc 이 거절됐다 — $(cat "$TMPD/err5")"
+fi
+
+# ⑥ (Task 3c R34) 본문 — 탐지·재비판 agent 와 codex 러너가 함께 읽는 루브릭. 공백뿐이면
+# 러너가 `profile_body_empty` 로 fail-closed 하고 게이트도 같은 판정을 낸다. 양의 짝은 ③
+# (본문이 있는 배포 프로필 넷 통과).
+python3 - "$DD" "$TMPD/body-empty.md" <<'PY'
+import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+end = t.find("\n---\n", 4)
+open(sys.argv[2], "w", encoding="utf-8").write(t[:end + 5] + "\n  \n")
+PY
+python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/body-empty.md" >/dev/null 2>"$TMPD/err6"
+rc=$?
+assert_eq "$rc" "2" "빈 본문(공백뿐) → profile-check rc 2"
+assert_file_grep "$TMPD/err6" 'profile_body_empty' "빈 본문 → 사유가 profile_body_empty 다"
+
 finish

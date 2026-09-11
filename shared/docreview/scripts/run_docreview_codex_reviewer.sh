@@ -88,11 +88,12 @@ STDOUT_FILE="$SCRATCH/codex.jsonl"
 STDERR_FILE="$SCRATCH/codex.stderr"
 
 # 프롬프트 조립(러너 안 인라인 빌더) — 프로필의 frontmatter(`ground_truth` · `layer_rubric` ·
-# `allowed_dispositions` · `web`) 와 shared/codex/prompt-preamble.md(P21) 로 프롬프트
-# 하나를 낸다. `web` 판정을 **같은 호출에서** WEB_META_FILE 에 함께 써서, frontmatter
+# `allowed_dispositions` · `web`) · 프로필 본문(검토 항목 — 탐지·재비판 agent 가 읽는 것과
+# 같은 루브릭) · shared/codex/prompt-preamble.md(P21) 로 프롬프트 하나를 낸다. `web` 판정을 **같은 호출에서** WEB_META_FILE 에 함께 써서, frontmatter
 # 파싱을 두 번(프롬프트용 · 웹 스위치용) 하지 않는다 — 파싱이 한 곳이면 그 결과를 두
 # 갈래로 읽는 자리가 하나이므로 웹 인자를 만드는 지점도 하나로 유지하기 쉽다(P11).
-# 빌더의 rc 는 셋으로 갈린다 — 0 성공 · 3 `ground_truth` 가 없거나 빔 · 그 밖 도출 실패.
+# 빌더의 rc 는 넷으로 갈린다 — 0 성공 · 3 `ground_truth` 가 없거나 빔(목록 포함) · 4 프로필
+# 본문이 빔 · 그 밖 도출 실패.
 BUILD_RC=0
 python3 - "$PROFILE" "$DOC" "$PLUGIN_ROOT/scripts/prompt-preamble.md" "$WEB_META_FILE" \
        > "$PROMPT_FILE" <<'PY' || BUILD_RC=$?
@@ -103,6 +104,8 @@ prof_path, doc_path, preamble_path, meta_path = sys.argv[1:5]
 t = pathlib.Path(prof_path).read_text(encoding="utf-8")
 m = re.match(r"^---\n(.*?)\n---\n", t, re.DOTALL)
 fm_text = m.group(1) if m else ""
+# 본문 = frontmatter 를 닫는 `---` 뒤 전부 — `load_profile()` 이 `body` 로 돌려주는 것과 같은 자리.
+body = t[m.end():] if m else ""
 
 # PyYAML 없이 stdlib 만으로 — 형제 프롬프트 빌더들(build_brief_codex_prompt.py ·
 # build_seed_codex_prompt.py 등)이 third-party 모듈을
@@ -226,14 +229,15 @@ def _flow_list(key, text, indented=True):
 def _ground_truth(text):
     # `ground_truth`(설계 §5.3 「정답의 출처」) — codex 가 문서를 **무엇에 대조해** 보는가.
     # 탐지·재비판 agent 는 프로필 전문을 받아 이것을 보지만 codex 는 이 프롬프트만 본다.
-    # 게이트(`load_profile()`)는 비지 않은 문자열만 받는다 — 이 러너는 그 게이트를 다시
-    # 구현하지 않고 모양을 넓게 읽는다: 스칼라(따옴표 · 평문 · 여러 줄 평문 · block scalar
-    # `|`/`>`)와 목록(flow · block — 항목을 `; ` 로 잇는다). 어느 occurrence 를 읽는지는
+    # 게이트(`load_profile()`)는 비지 않은 문자열만 받는다. 이 러너가 읽는 값도 스칼라뿐이다
+    # (따옴표 · 평문 · 여러 줄 평문 · block scalar `|`/`>`). 목록(flow · block)은 게이트가
+    # 문자열이 아니라고 거절하므로(`ground_truth_empty`) 러너도 같은 판정으로 빈 값을 낸다 —
+    # 두 파서가 같은 프로필에 서로 다른 판정을 내지 않는다(R36). 어느 occurrence 를 읽는지는
     # 헤더 줄과 `_block_span` 이 **같은 컬럼-0 마지막 줄**로 한 번에 정한다(PyYAML
     # last-wins). `_flow_list` 를 부르지 않는 이유: 그 함수는 flow 형과 block 형을 각자
     # 따로 last-match 해서, 모양이 다른 중복 키(`k: [a]` 뒤 `k:` + `- b`)에서 PyYAML 의
     # 답(b)이 아니라 flow 형(a)을 고른다.
-    # 반환: 문자열(`""` = 없음·빔) 또는 `None`(헤더는 있는데 이 함수가 못 읽는 모양).
+    # 반환: 문자열(`""` = 없음·빔·목록) 또는 `None`(헤더는 있는데 이 함수가 못 읽는 모양).
     hm = _last_match(r"(?m)^ground_truth:([^\n]*)$", text)
     if hm is None:
         return ""
@@ -254,13 +258,12 @@ def _ground_truth(text):
             return qm.group(2).strip()
         fm = re.match(r"^\[(.*)\](?:[ \t]+#.*)?$", whole, re.DOTALL)
         if fm:
-            return "; ".join(_unquote(x) for x in fm.group(1).split(",") if x.strip())
+            return ""  # flow 목록 — 게이트와 같은 판정(ground_truth_empty)
         return None
     head = re.sub(r"^#.*$|[ \t]+#.*$", "", head)
     if not head:
-        items = [re.match(r"^-(?:[ \t]+(.*?))?(?:[ \t]+#.*)?$", ln) for ln in rest]
-        if rest and all(items):
-            return "; ".join(_unquote(m.group(1)) for m in items if m.group(1))
+        if rest and all(re.match(r"^-(?:[ \t]|$)", ln) for ln in rest):
+            return ""  # block 목록 — 게이트와 같은 판정(ground_truth_empty)
     val = " ".join(x for x in [head] + [re.sub(r"[ \t]+#.*$", "", ln) for ln in rest] if x).strip()
     # YAML 의 null 평문(`~` · `null`)은 글자가 아니라 «값 없음»이다(PyYAML → None, 게이트는
     # 거절) — 문자열 "null" 을 정답의 출처로 싣지 않는다.
@@ -296,6 +299,11 @@ if gt is None:
     sys.exit(1)
 if not gt:
     sys.exit(3)
+# 본문(검토 항목)은 탐지·재비판 agent 가 읽는 루브릭이다 — codex 도 같은 루브릭으로 본다(R34).
+# 비었으면 빈 절을 조용히 싣지 않고 게이트와 같은 이름의 사유(rc 4 → `profile_body_empty`)로
+# 공시한다.
+if not body.strip():
+    sys.exit(4)
 # YAML 1.1 진리값 어휘 — PyYAML 의 SafeLoader 가 `true`·`yes`·`on` 을 대소문자
 # 불문하고 파이썬 `True` 로 접는다(실측: `yaml.safe_load("web: yes")` ==
 # {"web": True}). `y`/`n` 한 글자는 PyYAML 에서도 문자열로 남아 `load_profile()`
@@ -334,6 +342,10 @@ print("Layer 2 (detail completeness) — categories: " + ", ".join(str(x) for x 
 print("For each finding assign a disposition from: " + ", ".join(str(x) for x in ad))
 print("  decide = user must decide · ask = ask the user · fix = author edits · drop = not worth raising"
       + (" · defer = hand to the implementation plan" if "defer" in ad else ""))
+# 프로필 본문은 `<document>` 슬롯 밖, 자기 태그 안에 둔다 — 검토 대상 문서와 섞이지 않게.
+print("\nReview profile — the rubric for this review (category definitions and disposition rules). "
+      "It is part of your instructions, not part of the document under review:")
+print("<review_profile>\n" + body.strip("\n") + "\n</review_profile>")
 print("Zero findings is a valid honest answer.")
 print("\n" + pre)
 print('\nEmit ONE fenced JSON block. `disposition` is required unless you cannot judge it.')
@@ -342,6 +354,7 @@ print('```json\n{"findings":[{"ref":"x1","layer":1,"category":"...","anchor":"#s
 print("\n<document>\n" + doc + "\n</document>")
 PY
 if [[ $BUILD_RC -eq 3 ]]; then emit_fallback ground_truth_empty; fi
+if [[ $BUILD_RC -eq 4 ]]; then emit_fallback profile_body_empty; fi
 if [[ $BUILD_RC -ne 0 ]]; then emit_fallback prompt_build_failed; fi
 
 # 웹 스위치 — 이 if/else 가 WEB_ARGS 를 만드는 **유일한 자리**다(P11). 기본값은 꺼짐:

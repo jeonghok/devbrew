@@ -54,6 +54,17 @@ for c in $BR_CATS; do
 done
 [ "$n_def" -ge 6 ] && ok "brief 층 2: 본문 정의 대조 ${n_def}건 (vacuous 아님)" \
   || no "brief 층 2: 본문 정의 대조가 ${n_def}건뿐 — 목록 도출이 깨졌다"
+# brief 층 2 규칙 둘(Task 3c R35) — 범주 정의 밖의 규칙이라 불릿이 아니다. frontmatter 의
+# ground_truth 도 두 원문 자리를 이름으로 대므로, 헤더가 만족시키지 못하게 `## 층 2` 절 본문
+# 안에서만 찾는다(절 추출이 공허하지 않은지는 범주 불릿 하나로 먼저 잰다).
+BR_L2="$(awk '/^## 층 2/{f=1; next} /^## /{f=0} f' "$BR")"
+assert_contains "$BR_L2" '- `distortion` — ' "brief 층 2 절 추출: 범주 불릿이 절 안에 있다(추출 전제)"
+assert_contains "$BR_L2" '층 2 finding 은 근거가 되는 원문의 `S<N>` 을 `evidence` 에 인용한다' \
+  "brief 층 2: finding 마다 근거 원문의 S<N> 을 evidence 에 인용한다(R35 a)"
+assert_contains "$BR_L2" '`omission` 은 따라갈 앵커가 없다 — 두 원문 자리' \
+  "brief 층 2: omission 은 앵커가 없어 두 원문 자리를 본다(R35 b)"
+assert_contains "$BR_L2" '둘 다 끝까지 훑는다' \
+  "brief 층 2: omission 은 두 자리를 둘 다 끝까지 훑는다(R35 b — 반만 읽는 스캔 금지)"
 # 양의 짝 — 다른 프로필의 층 2 는 이 편집과 무관하게 그대로다.
 assert_eq "$(chk "$DD" 'd["layer_rubric"]["layer2"]')" \
   "['placeholder', 'ambiguity', 'scope_creep', 'approaches_comparison', 'isolation', 'testing', 'handoff_incomplete']" \

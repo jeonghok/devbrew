@@ -45,6 +45,33 @@ class ProfileError(Exception):
     pass
 
 
+if yaml is not None:
+    class _UniqueKeyLoader(yaml.SafeLoader):
+        """중복 키를 거절하는 SafeLoader. PyYAML 기본은 같은 키가 두 번 나오면 나중 값으로
+        조용히 덮는다. codex 러너의 stdlib 파서는 모양이 다른 중복(`k: [a]` 뒤 `k:` + `- b`)
+        에서 앞의 flow 값을 읽어, 같은 프로필을 두 파서가 다른 값으로 읽었다(실측, Task 3c
+        R37). 두 파서를 맞추는 대신 판정 지점을 하나로 둔다 — 중복 키가 있는 프로필은 진입에서
+        멈춘다. 서로 다른 매핑의 같은 이름(`decision_log.heading` · `defer_target.heading`)은
+        중복이 아니다 — 매핑마다 따로 센다."""
+
+        def construct_mapping(self, node, deep=False):
+            keys = [self.construct_object(k, deep=deep) for k, _v in node.value
+                    if k.tag != "tag:yaml.org,2002:merge"]
+            counts = collections.Counter(k for k in keys if isinstance(k, (str, int, float, bool)))
+            dups = sorted(str(k) for k, c in counts.items() if c > 1)
+            if dups:
+                raise ProfileError("duplicate_key:%s" % ",".join(dups))
+            return super().construct_mapping(node, deep=deep)
+
+
+def _safe_load_unique(text):
+    loader = _UniqueKeyLoader(text)
+    try:
+        return loader.get_single_data()
+    finally:
+        loader.dispose()
+
+
 def fail(reason, **extra):
     out = {"ok": False, "reason": reason}
     out.update(extra)
@@ -92,7 +119,7 @@ def load_profile(path) -> dict:
     if not p.is_file():
         raise ProfileError("profile_not_found:%s" % p)
     fm, body = _split_frontmatter(p.read_text(encoding="utf-8"))
-    data = yaml.safe_load(fm) or {}
+    data = _safe_load_unique(fm) or {}
     if not isinstance(data, dict):
         raise ProfileError("frontmatter_not_mapping")
     missing = [f for f in PROFILE_FIELDS if f not in data]
@@ -132,6 +159,10 @@ def load_profile(path) -> dict:
         raise ProfileError("web_not_bool")
     if not isinstance(data["ground_truth"], str) or not data["ground_truth"].strip():
         raise ProfileError("ground_truth_empty")
+    # 본문(검토 항목)은 탐지·재비판 agent 와 codex 러너가 함께 읽는 루브릭이다. 러너는 빈
+    # 본문이면 `profile_body_empty` 로 fail-closed 한다 — 게이트도 같은 판정을 낸다(한 판정).
+    if not body.strip():
+        raise ProfileError("profile_body_empty")
     out = dict(data)
     out["name"] = p.stem
     out["path"] = str(p)

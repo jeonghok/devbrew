@@ -6,8 +6,9 @@
 stdlib 빌더가 그 모양을 어떻게 읽는지 재게 한다. 새 프로필을 손으로 짓지 않는다 —
 실재 프로필의 나머지 필드(detectors·fix_anchors·...)는 그대로 둔다.
 
-`gt-*` 모양 중 목록·빔·null·부재(`gt-flow-list`·`gt-block-list`·`gt-dup-mixed`·
-`gt-empty`·`gt-bare`·`gt-null`·`gt-absent`)는 `load_profile()` 이 **거절한다** — 러너가 게이트 없이 단독으로
+게이트(`load_profile()`)가 **거절하는** 모양도 있다 — 중복 키(`dup-web`·`dup-layer1`·
+`gt-dup`·`gt-dup-mixed`, Task 3c R37 이후), 목록·빔·null·부재(`gt-flow-list`·`gt-block-list`·
+`gt-empty`·`gt-bare`·`gt-null`·`gt-absent`), 빈 본문(`body-empty`) — 러너가 게이트 없이 단독으로
 불렸을 때의 행동을 재기 위한 것이다(러너는 게이트를 다시 구현하지 않는다).
 
 Usage: mutate_profile_shape.py <shape> <src_profile> <dst_profile>
@@ -19,7 +20,7 @@ SHAPES = (
     "wrapped-layer1", "wrapped-layer2", "block-blank", "block-comment",
     "web-yes", "dup-web", "dup-layer1", "ground-truth-decoy",
     "gt-dup", "gt-plain", "gt-flow-list", "gt-block-list", "gt-dup-mixed",
-    "gt-empty", "gt-bare", "gt-null", "gt-absent",
+    "gt-empty", "gt-bare", "gt-null", "gt-absent", "body-empty",
 )
 GT_LINE = r"^ground_truth:.*$"
 
@@ -108,10 +109,10 @@ def main():
                       "  - marker_gt_second  # trailing",
                       text, count=1, flags=re.MULTILINE)
     elif shape == "gt-dup-mixed":
-        # 모양이 다른 중복 — flow 목록이 먼저, block 목록이 frontmatter 끝(나중)에.
-        # flow 형과 block 형을 따로 last-match 하는 파서는 앞의 flow 를 고른다.
+        # 모양이 다른 중복 — flow 목록이 먼저, 따옴표 스칼라가 frontmatter 끝(나중)에.
+        # 나중 선언(스칼라)이 이겨야 한다 — 앞 선언(목록)을 고르는 파서는 fail-closed 로 샌다.
         text = re.sub(GT_LINE, "ground_truth: [marker_gt_first]", text, count=1, flags=re.MULTILINE)
-        text = re.sub(r"\n---\n", "\nground_truth:\n  - marker_gt_second\n---\n", text, count=1)
+        text = re.sub(r"\n---\n", '\nground_truth: "marker_gt_second"\n---\n', text, count=1)
     elif shape == "gt-empty":
         text = re.sub(GT_LINE, 'ground_truth: ""', text, count=1, flags=re.MULTILINE)
     elif shape == "gt-bare":
@@ -120,6 +121,11 @@ def main():
         text = re.sub(GT_LINE, "ground_truth: null", text, count=1, flags=re.MULTILINE)
     elif shape == "gt-absent":
         text = re.sub(GT_LINE + r"\n?", "", text, count=1, flags=re.MULTILINE)
+    elif shape == "body-empty":
+        # frontmatter 는 그대로, 닫는 `---` 뒤 본문은 공백 줄만 남긴다(빈 문자열이 아니라
+        # 공백 — `if not body` 로 좁혀 쓴 검사도 걸리게).
+        end = text.find("\n---\n", 4)
+        text = text[:end + 5] + "\n  \n"
 
     open(dst, "w", encoding="utf-8").write(text)
     return 0
