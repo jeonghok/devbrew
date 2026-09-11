@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- **`scripts/run_audit_codex_reviewer.sh` 의 주석 두 곳이 지워진 spec-distill 러너를 현재형으로 가리켰다.** spec-distill 이 interview brief 리뷰를 공유 문서 리뷰 엔진으로 옮기며 `run_brief_codex_reviewer.sh` 를 지웠다(`plugins/spec-distill/CHANGELOG.md` `[1.3.0]`). 「형제 러너」 주석은 살아 있는 `run_docreview_codex_reviewer.sh` 하나로 줄였고, 선례를 대던 문장은 「지금은 지워진 옛 brief 러너」로 고쳤다. 동작 무변경, 새 surface 없음 — patch.
+- **`scripts/run_audit_codex_reviewer.sh` 의 주석 두 곳이 지워진 spec-distill 러너를 현재형으로 가리켰다.** spec-distill 이 interview brief 리뷰를 공유 문서 리뷰 엔진으로 옮기며 `run_brief_codex_reviewer.sh` 를 지웠다(`plugins/spec-distill/CHANGELOG.md` `[2.1.0]`). 「형제 러너」 주석은 살아 있는 `run_docreview_codex_reviewer.sh` 하나로 줄였고, 선례를 대던 문장은 「지금은 지워진 옛 brief 러너」로 고쳤다. 동작 무변경, 새 surface 없음 — patch.
 
 ## [0.9.1] — 2026-09-09
 

@@ -14,8 +14,7 @@ user-invocable: false
 
 당신은 spec-distill의 인터뷰 stage를 진행 중입니다. 이 stage는 *받아적는* 인터뷰가
 아니라 **강한 문제공간 stage**입니다(Double Diamond 1st diamond — brainstorming 해답공간
-앞단, 상보적·비중복). 매 라운드를 «직전 답에서» 블록으로 시작하고 AskUserQuestion 질문
-둘로 묻되, 종료는
+앞단, 상보적·비중복). 매 라운드를 «지금 이해 · 다음 결정 · 질문 하나»로 묻되, 종료는
 **커버리지 원장의 floor 5차원**(root-problem/landscape/skepticism/blind-spot/open-questions)이
 **모두 `closed`**일 때만 허용됩니다 — landscape·skepticism 등 통과 의례 메커니즘이 각 차원을
 채우는 수단이며, `check_brief.py`가 이를 기계적으로 검증합니다(Law 1 구조 게이트).
@@ -53,7 +52,7 @@ confirm_repost_count: 0              # 종료 확정 확인 재제시 횟수 (�
 ---
 ```
 
-State body: 각 라운드의 §1.1 기록(`## R<n>` 형식 그대로 — `depth_pairs.py` 가 읽는 계약) + coverage-mapper 출력 transcript.
+State body: 각 라운드의 `## R<n>` 기록(«라운드 규약» 형식) + coverage-mapper 출력 transcript.
 
 **Secret 기록 금지** (P21): 사용자 답변에 token/key/credential 패턴 감지 시 placeholder로 치환 후
 기록합니다. **치환 토큰은 `<REDACTED>` 또는 `<REDACTED:라벨>` 형태**로 씁니다(다른 허용 형태:
@@ -75,98 +74,47 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 **brief는 예외**: `docs/superpowers/interview/`는 워크트리 *안*이라 `Write` tool로 정상 작성.
 
-## 라운드 규약 — «직전 답에서» 블록 + 질문 둘
+## 라운드 규약 — 지금 이해 · 다음 결정 · 질문 하나
 
-인터뷰어의 다음 행동은 사용자의 직전 답에서 나온다. 사용자에게 보이는 출력과 state 본문 기록이
-**같은 형식**이다 — 측정 스크립트(`depth_pairs.py`)가 state 본문을 읽기 때문이다.
+사용자에게 보이는 출력과 state 본문 기록이 같은 형식이다.
 
 ```markdown
 ## R<n>
 
-### 직전 답에서 — S<k>
-- 함의: <이 답이 사실이면 따라오는 것>
-- 상충: <이전 답 S<j> / 외부 근거 / 코드 사실과 부딪히는 점 — 재개방이면 «→ <차원> 재개방: <사유>»> (없으면 «없음»)
-- 확인한 사실: <답을 받고 코드·문서에서 찾아본 것> (없으면 «없음»)
-- 위험: <이 답대로 가면 무너질 수 있는 것> (없으면 «없음»)
-
 ### 지금 이해
-<문제의 현재 재구성 — 바뀐 부분만 한두 문장>
+<문제의 현재 재구성 — 바뀐 부분만 한두 문장. 코드·문서에서 확인한 사실(경로 a)과
+ 외부 근거(landscape·premortem)가 있으면 여기 싣는다. 재개방이면 «→ <차원> 재개방: <사유>»>
 
 ### 다음 결정
 <무엇을 정하는지 한 줄> · 추천: <첫 선택지> · 트레이드오프: <선택지별 한 줄>
 
 ### 질문
-Q1 (되비추기 확인 | 되묻기): <본문>
-Q2: <본문>
+<본문>
 
 ### 답
-→ S<m>[, S<m+1>]
+→ S<m>
 ```
 
-- `## R<n>` 은 1부터 순증. 직전 라운드가 발화를 둘 만들었으면(Q1·Q2) **`### 직전 답에서 — S<k>`
-  블록을 발화마다 하나씩** 둔다 — 한 블록에 두 S 를 섞으면 어느 답에서 무엇이 나왔는지가 사라진다.
-  각 블록의 네 줄은 **그 S 에서** 따라 나오는 것만 적는다(다른 답·무관한 정보는 «없음»).
-- **R1 은 S1 을 되비춘다** — S1 이 seed(`round: 0`)이면 seed 의 «다시 검증할 것» 문단 항목이 R1 의
-  함의·상충·위험 줄을 채운다. **인자 없이 `/interview` 를 부른 경로**(S1 이 없고 첫 사용자 답이 S1 이
-  되는 호환 경로)에서는 R1 이 «직전 답에서» 블록 없이 «지금 이해 + 다음 결정 + Q2» 만으로 성립하고
-  규약은 R2 부터 적용된다; coverage-mapper 첫 dispatch 도 R1 답을 받은 뒤 R2 전에 일어난다.
-  (아래 «Q1 은 생략할 수 없다»는 이 R2 부터의 규약이다 — R1 은 그 밖의 예외라 상충이 아니다.)
-- 네 줄 중 하나라도 «없음»이 아니어야 «형식 층에서 성립»이다. **넷 다 «없음»이면** 그 라운드는
-  «S<k> 에서 아무것도 못 끌어냈다»는 기록이 되고 **그 라운드의 Q1 은 되묻기여야 한다**(아래 절).
-  블록을 아예 쓰지 않는 것만이 라운드 불성립이다.
-- «상충» 줄이 외부 근거(landscape·steelman·premortem 출력)를 싣는다 — 열린 질문으로 흘려보내지 않고
-  «맞나?»로 사용자 처분을 받는다. 경로 (a)(코드·문서에서 찾을 수 있는 것)는 «확인한 사실» 줄로
-  들어간다 — 묻기 전에 찾을 수 있는 것을 먼저 찾는다.
-
-### 질문 — AskUserQuestion 한 번, 질문 둘
-
-```javascript
-AskUserQuestion({
-  questions: [
-    { header: "직전 답",  question: "<S<k> 에서 끌어낸 것을 한 절로 — 용어와 기술 사실을 풀어서>. 맞나요?",
-      options: [
-        {label: "맞다",     description: "이대로 <차원> 을 진행/닫는다 — <고르면 달라지는 것>"},
-        {label: "모르겠다", description: "판단불가로 기록하고 Open Question 후보로 둔다"}],
-      multiSelect: false },
-    { header: "<결정 이름>", question: "<무엇을 정하는지 한 줄> · <용어 풀이> · <관련 기술 사실> · 추천은 첫 선택지",
-      options: [
-        {label: "<추천> (권장)", description: "고르면 <결과>"},
-        {label: "<대안 1>",      description: "고르면 <결과>"},
-        {label: "<대안 2>",      description: "고르면 <결과>"}],
-      multiSelect: false }
-  ]
-})
-```
-
-- **Q1 은 생략할 수 없다**(단 인자 없이 부른 경로의 R1 은 예외 — 위 «R1 은 S1 을 되비춘다» 참조). Q1 이 항상 먼저고 Q2 는 새 결정 하나다.
-- **Q1 의 선택지는 둘뿐이다**(«맞다» / «모르겠다»). 틀린 부분은 사용자가 «기타» 자유 입력에 적는다 —
-  선택지를 고르면서 동시에 자유 입력을 남기는 동작은 도구에 없다. «기타» 텍스트는 `verbatim` S 로
-  기록되고 다음 라운드 Q1 이 그것을 다시 되비춘다(같은 주제 최대 2회 — 3회째는 §3 Open Questions 로
-  박제하고 넘어간다).
-- **Q2 는 Q1 의 확인과 독립이어야 한다.** Q2 가 Q1 이 되비춘 해석에 기대면 그 라운드는 Q1 만 낸다.
-  독립인데도 Q1 이 «모르겠다»·«기타(수정)» 이면 Q2 의 답은 state 에 `provisional_on: S<k>` 를 달고,
-  그 표시가 해소(다음 라운드 되비추기 «맞다»)되기 전에는 어느 차원의 닫힘 근거로도 쓰지 않는다.
-  `provisional_on`은 «사용자 발화 기록»의 `user_statements` 스키마 필드다 — 이 금지는 기계 검사가
-  아니라 orchestrator 판단이다(`check_brief.py`는 아래 «닫힘 · 재개방» 절의 S 앵커 실재만 본다).
-- 각 선택지의 `description` 은 «고르면 무엇이 달라지는가»를 담고, question 본문은 무엇을 정하는지·
-  용어·기술 사실을 푼다. 기계 검사는 없다 — 사람 e2e 가 본다.
-- 두 답은 `user_statements` 에 `S<m>`·`S<m+1>` 로 append 된다(`source: chosen`, «기타» 입력은
-  `verbatim`). 번호 공식은 «사용자 발화 기록» 절 그대로.
-
-## 되묻기로 바뀌는 조건
-
-되비추기가 **성립하지 않는 답**에서 Q1 은 되묻기가 된다 — 보류(«모르겠다/둘 다/아무거나»), 한 단어 답,
-추천안 즉시 동의(이유 없이 «추천»), 근거 없는 단정(휴리스틱, 기계화 안 함). Q1 본문은 **이유·사례·
-실패 조건** 중 하나를 묻고 인터뷰어의 추측을 첫 선택지로 둔다:
-
-```
-Q1 (되묻기): «<S<k>>»라고 답하셨는데, 왜 그렇게 봤는지가 <차원> 을 닫는 데 필요합니다.
-  - «내 추측: <이유 A>» (권장)  — 고르면 <결과>
-  - «<이유 B>»                 — 고르면 <결과>
-  - «잘 모르겠다»              — 판단불가로 기록, OQ 후보
-```
-
-세 축이 도구상자의 전부다. 목록을 더 두지 않는다.
+- `## R<n>` 은 1부터 순증한다.
+- 라운드마다 AskUserQuestion 1회, **질문 1개**다. 첫 선택지가 추천이고 그 라벨 끝에 `(권장)` 을 단다 —
+  steelman 절차의 질문만 예외다(아래).
+- question 본문은 무엇을 정하는지·용어·기술 사실을 풀고, 각 선택지의 `description` 은 «고르면 무엇이
+  달라지는가»를 담는다. 기계 검사는 없다.
+- **되묻기** — 직전 답이 보류(«모르겠다/둘 다/아무거나»)·한 단어·이유 없는 추천 수락·근거 없는 단정이면,
+  그 라운드의 질문은 이유·사례·실패 조건 중 하나를 되묻고 인터뷰어의 추측을 첫 선택지로 둔다.
+  같은 주제의 연속 되묻기는 최대 2회다 — 그 뒤에도 약한 답이면 답을 그대로 기록하고(보류는 «사용자 발화
+  기록» 표대로 §3 Open Questions 로도 이월) 다음 질문으로 넘어간다. 그 차원을 자동으로 닫지 않는다.
+- **한 라운드에 겹치면** 되묻기 → 외부 근거 처분(landscape·premortem 출력을 받아들일지) → 새 결정 순서로
+  앞선 하나가 그 라운드의 질문이 되고, 나머지는 다음 라운드의 «다음 결정»으로 넘어간다. landscape·
+  blind_spot 은 그 처분 S 로만 닫힌다.
+- **steelman 절차의 질문** — `references/steelman.md` 가 사용자에게 묻는 질문은 전부 그 파일의 규약(선택지
+  순서·라벨·추천 표기·시점)을 따르고 각각 `## R<n>` 한 라운드로 기록한다. 이 절의 질문 수·`(권장)` 표기·
+  «추천: <첫 선택지>»·겹침 순서는 그 질문들에 적용하지 않으며, steelman 절차가 진행 중이면 그 질문이 겹침
+  순서보다 앞선다.
+- **인자 없이 `/interview` 를 부른 경로의 R1** 은 seed 도 직전 답도 없으므로 «지금 이해»를 «아직 없음»으로
+  두고 질문으로 무엇을 다룰지 묻는다. coverage-mapper 첫 dispatch 시점은 아래 coverage-mapper 절이 정한다.
+- 답은 `user_statements` 에 `S<m>` 하나로 append 한다(선택지 = `chosen`, «기타» 자유 입력 = `verbatim`).
+  번호 공식은 «사용자 발화 기록» 절 그대로.
 
 ## C43 3-path routing
 
@@ -178,7 +126,8 @@ Q1 (되묻기): «<S<k>>»라고 답하셨는데, 왜 그렇게 봤는지가 <�
 | (b) **judgment** | 사용자 선호/우선순위/제약 | 사용자에게 묻기 (default path). |
 | (d) **ontological** | "이게 무엇인가" 종류 (essence/root cause 등) | essence/root cause 류 — 라벨 강제 없음. 사용자에게 묻기. |
 
-매 라운드의 «확인한 사실»·«질문» 에 어떤 path 인지 transcript에 명시하십시오.
+매 라운드의 «지금 이해»·«질문» 에 어떤 path 인지 명시하십시오 — 경로 (a) 로 찾을 수 있는 것은 묻기 전에
+먼저 찾아 «지금 이해»에 싣습니다.
 
 ## 사용자 발화 기록 (G1, AC1)
 
@@ -198,7 +147,6 @@ Q1 (되묻기): «<S<k>>»라고 답하셨는데, 왜 그렇게 봤는지가 <�
   source: verbatim         # verbatim(발화 그대로) | chosen(고른 선택지 라벨 + 요지)
   round: <int>
   text: "<사용자가 실제로 한 말>"    # P21 secret placeholder 치환 적용
-  provisional_on: S<k>       # optional — Q1 이 «모르겠다»/«기타»일 때만. 해소(Q1 «맞다») 전엔 닫힘 근거 불가. 기계 검사 없음 — orchestrator 판단.
 ```
 
 `status` 필드는 없습니다. `section:` 해답공간 앵커도 없습니다 — 문제공간의 답변을 답이
@@ -265,17 +213,18 @@ name 기준 union·dedup.
 
 ## 닫힘 · 재개방
 
-**차원은 «그 차원의 되비추기에 사용자가 답한 S» 뒤에만 닫는다.** sweep·steelman·prober 의 **횟수**는
-닫힘 근거가 아니다 — 그 출력은 «상충/위험» 줄로 돌아와 사용자 처분 S 를 받은 뒤 닫힌다. 원장 행의
-evidence 는 그 S 를 인용하고, `check_brief.py`가 앵커 실재를 검사한다(«어느 S 가 닫힘을
+**차원은 그 차원에 관한 질문에 사용자가 답한 S 를 근거로만 닫는다**(floor · derived 모두).
+sweep·steelman·prober 의 **횟수**는 닫힘 근거가 아니다 — landscape·premortem 출력은 «지금 이해»에 실려,
+steelman 출력은 자기 게이트 제시 형식(`references/steelman.md` Step 3)으로 사용자 처분 S 를 받은 뒤 닫힌다.
+원장 행의 evidence 는 그 S 를 인용하고, `check_brief.py`가 앵커 실재를 검사한다(«어느 S 가 닫힘을
 정당화하는가»는 보지 않는다 — 그 한계는 spec OQ6).
-다섯 floor 의 닫힘 발화: root_problem = 재구성 동의 S · landscape = 외부 근거 되비추기 처분 S ·
+다섯 floor 의 닫힘 발화: root_problem = 재구성 동의 S · landscape = 외부 근거 처분 S ·
 skepticism = steelman 판정 S · blind_spot = 숨은 가정·실패 양식 처분 S · open_questions = OQ 목록
-확인 S. `provisional_on` 이 해소되지 않은 S 는 닫힘 근거가 아니다.
+확인 S.
 
 **재개방 — `closed → open` 을 허용한다.** 조건: 새 답·외부 근거·코드 사실이 그 차원의 닫힘 근거 S 와
 충돌할 때(판단은 orchestrator). 기록: 그 차원의 `reopened` +1, `reopen_log` 에
-`{round, reason, conflicts_with: S<N>}` append, 그 라운드의 «상충» 줄에 «→ <차원> 재개방: <사유>».
+`{round, reason, conflicts_with: S<N>}` append, 그 라운드의 «지금 이해»에 «→ <차원> 재개방: <사유>».
 상한 없음 — 라운드는 사용자 답으로만 돌아 사용자가 시계다. 재개방된 차원이 다시 닫힐 때는 **새 S** 를
 인용한다(게이트는 최신 닫힘의 evidence 를 본다).
 
@@ -294,8 +243,8 @@ Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind
 ```
 
 출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 payload §5 `## 5. 기각 · Blind Spots`의
-**`위험` 항목**(`- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>`)으로 기록하고, `blind_spot` floor
-차원을 in-progress→closed로 전이한다. web 비활성 시 advisory:
+**`위험` 항목**(`- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>`)으로 기록하고, 다음 라운드의
+«지금 이해»에 실어 사용자 처분 S 를 받은 뒤 `blind_spot` floor 차원을 closed 로 전이한다. web 비활성 시 advisory:
 `[spec-distill] web 비활성 — blind-spot-prober 자동 생략, inline premortem으로 전환`.
 
 ## 5 통과 의례 (Law 1 구조 게이트, R1–R5)

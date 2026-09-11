@@ -81,11 +81,6 @@ fi
 
 conducting-interview 는 builder 출력을 **약화·편집하지 않는다** — verbatim 계약이다.
 
-같은 출력(`case_for_alternative` · `evidence[].url`)은 다음 라운드 «직전 답에서» 블록의 **«상충» 줄**에도
-반대 케이스로 실린다(SKILL.md 라운드 규약: 그 줄이 landscape·steelman·premortem 출력을 싣는다). 그 줄은
-`depth_pairs.py` 가 **개행에서 끊어** 읽으므로, 대안이 길어도 **줄바꿈 없이 한 줄로** 적는다 — 길다고
-압축하지 않는다(압축은 verbatim 계약 위반이고, 개행은 그 줄을 반토막 낸다).
-
 #### Step 4 — 기록
 
 payload §5 항목은 **사용자가 고른 verdict 별로** 형식이 정해지고 builder 추천과 무관하다:

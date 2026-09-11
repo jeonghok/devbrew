@@ -190,7 +190,10 @@ comp="$(printf '%s\n' "$SCAN" | sed -n 's/^comprehensions=//p')"
 # 컴프리헨션 둘(`ast` 실측)이 모집단에서 빠졌다. 줄어든 만큼 내린다(EXEMPT_BASELINE 과 같은 규율).
 # PR 3 Task 6 — 56 → 50. merge_review.py 가 지워져 그 파일의 컴프리헨션 여섯(`ast` 실측 —
 # 아래 Task 10 이 더한 `{k: 0 for k in _MERGED_COUNT_KEYS}` 포함)이 모집단에서 빠졌다.
-COMP_BASELINE=50   # Task 1 F5 census 28 + Task 10 이 1 늘림(29) — merge_review.py
+# PR 3 Task 8b(origin/main 병합) — 50 → 44. 두 브랜치가 58 에서 따로 내렸다(이 브랜치 50 · main 52 —
+# 아래 끝 줄의 depth audit 제거). 지운 파일이 서로 달라(merge_brief_review.py · merge_review.py 대
+# main 이 지운 사후 측정 스크립트) 겹쳐 센 것이 없다: 병합 트리 run_wiring_scan.py 실측 44 = 58 − 2 − 6 − 6.
+COMP_BASELINE=44   # Task 1 F5 census 28 + Task 10 이 1 늘림(29) — merge_review.py
                    # `merged["report"]["counts"]`를 만드는 `{k: 0 for k in
                    # _MERGED_COUNT_KEYS}`. 항목을 버리는 자리가 아니라 값 0
                    # 으로 카운터를 초기화하는 자리라 처분 호출이 필요 없다.
@@ -257,6 +260,9 @@ COMP_BASELINE=50   # Task 1 F5 census 28 + Task 10 이 1 늘림(29) — merge_re
                    # =="decide" 인 항목에서만 불리고 그 상태는 항상 "open" 이라
                    # `_decide_choices_for` 가 최소 두 항목을 낸다)의 모든 원소가
                    # 라벨로 그대로 대응된다 — 버려지는 원소가 없다.
+                   # depth audit 제거가 6 줄였다(58→52) — depth_record.py 가 삭제되며 그 파일의
+                   # 컴프리헨션 여섯(v0.57.0 Task 8 의 다섯 + 최종 fix wave 의 하나)이 ㉮ 에서
+                   # 함께 빠졌다. run_wiring_scan.py 의 `ast` 실측값이다.
 if [ "${comp:-0}" -le "$COMP_BASELINE" ] 2>/dev/null; then
   ok "컴프리헨션 내포 $comp <= baseline $COMP_BASELINE"
 else

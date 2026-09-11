@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Spec B T7 (+ T21의 Bash 부재 절) — 브리핑 자리 agent 도구·모델 표면 락.
 # AC4(쓰기·실행·위임 도구 0) · AC5(model 키 부재) · N5(격리 집합 등식 L —
-# tools: [] 스캔 집합 == 리터럴 이름 넷)
+# tools: [] 스캔 집합 == 리터럴 이름 셋)
 #
 # PR3 Task 4 재조준(2026-09-10): 옛 brief-critic·brief-direction-reviewer 는
 # 삭제됐다 — 그 둘이 지던 fidelity·direction 축은 공유 문서 리뷰 엔진의
@@ -108,21 +108,20 @@ done
 # 벗어나 락이 공허참으로 통과한다(∀x∈{x:P(x)}. P(x)).
 #
 # 우변이 리터럴이므로 세 방향이 전부 잡힌다:
-#   하나를 넓힘   → 좌변이 셋으로 줄어 ≠  → RED
-#   다섯째 추가   → 좌변이 다섯으로 늘어 ≠ → RED
-#   넷을 동시에   → 좌변이 공집합 ≠        → RED
+#   하나를 넓힘   → 좌변이 둘로 줄어 ≠    → RED
+#   넷째 추가     → 좌변이 넷으로 늘어 ≠   → RED
+#   셋을 동시에   → 좌변이 공집합 ≠        → RED
 # 세 번째가 잡히므로 "각 원소가 tools: [] 이다" 는 별도 락이 **논리적으로
 # 잉여**다 — 등식이 그것을 함의한다. 잉여를 필요하다고 적으면 다음 저자가
 # 등식 쪽을 지운다.
 #
 # 표기 변형은 형제 락 test_seed_agents.sh:131 을 물려받아 `[]` 와 `[ ]` 를
 # 둘 다 빈 리스트로 읽는다.
-# v0.57.0 depth-auditor 편입 — 짝 목록만 인라인으로 받고 파일을 열지 않는 다섯째
-# 격리 에이전트다(도구 표면 0). 리터럴이라 넣지 않으면 좌변이 다섯으로 늘어 RED 다.
-# T4: brief-critic 삭제 — 리터럴에서 뺀다(넷 → 지금은 이 넷으로 준다). 그 파일의
-# 부재 자체는 아래 N 블록이 별도로, 양의 짝(M)과 함께 잰다.
+# 사후 깊이 측정 agent 는 그 층의 제거(2.0.0)로, brief-critic 은 brief 자리 엔진 전환(T4)으로 빠졌다
+# — 격리 에이전트는 셋이다. 리터럴이라 둘 중 하나가 `tools: []` 로 되살아나면 좌변이 넷으로 늘어
+# RED 다. brief-critic 파일의 부재 자체는 아래 N 블록이 별도로, 양의 짝(M)과 함께 잰다(측정 agent
+# 파일의 부재는 test_stale_terms.sh V10 이 잰다).
 EXPECTED_ISOLATED="brief-readback
-depth-auditor
 seed-critic
 seed-readback"
 

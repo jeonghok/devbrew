@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.3.0] — 2026-09-11
+## [2.1.0] — 2026-09-11
 
 minor 인 이유 — interview brief 리뷰 자리(`reviewing-brief`)가 공유 문서 리뷰 엔진(`shared/docreview/`)의 두 번째 껍데기가 됐다. 새 surface(웹 있는 탐지 사본 `agents/doc-critic-web.md` · 엔진 게이트 요약의 필드 넷 · 엔진 서브커맨드 `state-dir-for`)가 들고, 바뀌는 호출 계약(`reviewing-brief` 의 인자 넷 → 둘)은 `user-invocable: false` skill 의 유일한 호출자 `conducting-interview` 를 같은 릴리스에서 함께 고쳤다. 이 플러그인은 엔진을 `scripts/{docreview_state,docreview_route,adjudication}.py` · `scripts/run_docreview_codex_reviewer.sh` · `references/reviewing-document.md` 심볼릭 링크로 배포하므로 엔진 변경도 이 블록에 적는다(cache key).
 
@@ -30,6 +30,7 @@ minor 인 이유 — interview brief 리뷰 자리(`reviewing-brief`)가 공유 
 - **지워진 옛 파이프라인을 다른 이름으로 부르던 참조를 정리했다** — 식별자 축과 개념 별칭 축 둘로 훑었고, 모델이 읽는 산문이 없는 파일을 가리키던 자리도 포함한다. 다른 플러그인 쪽(quality-gates 러너 둘 주석 · SKILL 둘 산문 · plugin-audit 러너 주석 둘)은 각 플러그인 CHANGELOG 에 적었다.
 - **README 를 엔진 전환 뒤 사실로 맞추고, 죽은 술어를 잡는 락을 더했다.** 흐름도의 brief 단계 · Principles Instantiated(Law 2 · Law 3 의 brief 자리 · 처분 회계 소비자 · 에이전트 목록 · P22) · kill switch 셋(`DISABLE_CODEX` · `DISABLE_WEB` · `DISABLE_BRIEF_REVIEW`)이 지워진 agent · 스크립트와 은퇴한 「재dispatch 상한」 · 「호출 지점 3곳」을 현재형으로 적고 있었다. `tests/test_readme_sync.sh` 는 키워드의 «존재»만 재서 이것을 못 잡았다. 부재 단언과 양의 짝을 쌍으로 더했다. (1) README 의 살아 있는 줄(버전 이력 문단 `**vX.Y.Z**` 제외)이 이름으로 대는 `.py` · `.sh` 파일은 전부 리포에 실재한다 — 도출 ∀ 이고 추출기 양성 대조를 함께 건다. 짝은 지금 소비자 · 러너(`docreview_route.py` · `run_docreview_codex_reviewer.sh`)를 이름으로 대는가다. (2) AP9 의 에이전트 목록은 이름마다 `agents/` 에 실재하고, 개수가 그 디렉토리와 같다. (3) 옛 brief agent 이름 둘과 「재dispatch 상한」이 살아 있는 줄에 없다 — 짝은 Principles 의 brief 자리 불릿이 `reviewing-brief` · `doc-critic-web` · `doc-recritic` 를 한 줄에 대는가다 — 줄머리 `- **Law 2` 로 묶었다. 머리 없이 재면 세 이름을 우연히 함께 대는 AP9 목록 줄이 짝을 대신 만족시켜, 불릿을 통째로 지워도 GREEN 이었다(변이로 확인). `tests/test_brief_review_meta.sh` 의 C4 는 `3곳|세 곳` 을 요구하던 단언을 두 엔진 자리 · 공유 러너 · 펜스 표지로 재조준했고, 「펜스 하나」 주장을 두 SKILL 에서 도출해 잰다. (1) 은 첫 실행에서 이 전환과 무관한 선재 거짓 인용 하나도 잡았다 — `## Hooks Installed` 의 Output schema 문단이 quality-gates 에서 이미 지워진 Stop 훅(`dd8d1911`)을 레퍼런스 패턴의 현재 위치로 대고 있었다. 같은 패턴을 지금 구현하는 이 플러그인의 `hooks/review-dispatch.py` 로 고치고 옛 원형은 이력으로 남겼다.
 - **동작 변화 (주의).** 「미검증」 라운드에 이전 라운드의 열린 항목이 있으면 라운드 게이트 대신 두 단계 승인 게이트가 뜬다(1단계는 라운드 게이트와 같은 형태). 같은 라운드에서 `finalize` 를 두 번 부르면(첫 번 성공 뒤) 그 라운드는 「미검증」이 된다 — 닫힌 쪽 오판이고 다음 정상 라운드에서 풀린다.
+- **락 수치 둘이 아래 [2.0.0] 의 값에서 한 번 더 내려갔다.** `shared/tests/test_adjudication_wiring.sh` 의 `COMP_BASELINE` 52 → 44 — 이 릴리스가 지운 병합 스크립트 둘(`merge_brief_review.py` 2 · `merge_review.py` 6)의 컴프리헨션이 파일과 함께 빠졌다(병합 트리 `ast` 실측 — [2.0.0] 이 뺀 6 과 다른 파일이라 겹치지 않는다). `tests/test_brief_agents.sh` 의 격리 목록 4 → 3 — 옛 `brief-critic` 삭제. 두 락의 비교 방향(이하 · 등식)은 그대로다.
 
 ### Removed
 
@@ -61,6 +62,37 @@ minor 인 이유 — interview brief 리뷰 자리(`reviewing-brief`)가 공유 
 - **P21 preamble 파일이 없거나 비었으면 러너가 `preamble_missing` 으로 멈춘다.** 전에는 주입 경계 절 없이 codex 를 부르고 실패 없음으로 기록했다. codex 프롬프트 순서를 형제 빌더와 같게 맞추고 흉내 가능한 권위 문구를 뺐으며, P21 지배 락(quality-gates `test_codex_prompt_untrusted_clause.sh`)의 모집단에 엔진 러너를 넣었다.
 - **variant 판정기(`shared/tests/variant_of.py`)가 frontmatter 를 허용 목록 줄 문법으로 읽고 PyYAML 과 키 집합을 대조한다.** 전에는 LF 밖 줄바꿈(CR · NEL · U+2028 · U+2029) 뒤나 안 닫힌 따옴표 값 뒤에 숨긴 최상위 키를 YAML 은 읽는데 판정기와 락 다섯이 통과시켰다. 숨긴 키에는 `tools` 도 들 수 있다 — `tools` 가 없으면 agent 는 도구 전체를 상속한다(Law 2). 이제 문법 밖 줄 · 그 네 문자 · 탭 시작 줄은 판정 불가이고, PyYAML 을 import 할 수 없어도 판정 불가(`pyyaml_unavailable`)다. 추적되는 모든 agent 정의 파일에 그 네 문자를 금지하는 파일 전체 락도 섰다(`shared/tests/test_variant_of_contract.sh`).
 - **공유 중복 락(`shared/tests/test_no_new_duplication.sh`)에 면제 ③ — 락 약화라 보안 리뷰를 거쳤다.** `variant-of:` 표지 쌍이고 agent 정의 파일로 한정된다. `variant_of.py` 가 두 파일이 이름 · 설명 · 도구와 삽입 블록 하나만 다른지를 이 락 안에서 판정한다. 표지 계약 락 `shared/tests/test_variant_of_contract.sh` 가 모든 표지를 범위 · 대상 실재 · 관계로 잰다.
+
+## [2.0.0] — 2026-09-11
+
+major인 이유: **dispatch 가능한 agent 하나(`spec-distill:depth-auditor`)가 사라지고, 인터뷰의 라운드 형식과 audit §2 형식이 바뀐다.** 인터뷰 종료 직전의 사후 깊이 측정(Step A.7) 전체와, 그 측정이 읽던 라운드 형식(«직전 답에서» 블록 + 질문 둘)을 제거했다. 라운드는 «지금 이해 / 다음 결정 / 질문 하나»로 돈다. 사용자 결정(2026-09-10)의 이유는 셋이다 — 쓰이지 않는 무게(0.57.0 도입 뒤 측정 기록 0건 · 사람 e2e 미실행), 인터뷰가 번거로움, 방향이 틀렸다. 설계: `docs/superpowers/specs/2026-09-10-remove-depth-audit-design.md`.
+
+### Removed
+
+- **사후 깊이 측정 층 전체** — `agents/depth-auditor.md` · `scripts/depth_pairs.py` · `scripts/depth_record.py`, 그 테스트 셋(`test_depth_pairs.py` · `test_depth_record.py` · `test_depth_auditor_frontmatter.sh`)과 fixture 11개(`tests/fixtures/depth-state-*.md`), 측정 원장 디렉토리 `docs/superpowers/interview/depth/`. 함께 사라진 것: `finishing.md` Step A.7 절, 종료 시 사람 라벨 질문(≤4개), proceed 게이트 질문의 «깊이:» 슬롯, audit §2 의 깊이 네 줄.
+- **판정자 투입 조건**(누적 5건 · not_dug 30% · 일치 70%) — 닫힘 거부권 에이전트를 언제 들일지 알려 주던 유일한 신호였다(설계 OQ3 로 이월).
+- **라운드의 «직전 답에서» 블록과 질문 둘** — 네 줄(함의 · 상충 · 확인한 사실 · 위험) 블록, Q1 되비추기 확인 · Q2 새 결정, Q1 수정 시 재되비추기, Q2 독립성 규칙, 인자 없는 경로의 R1 블록 면제, «되묻기로 바뀌는 조건» 절, `steelman.md` 의 «상충 줄에도 한 줄로 싣는다» 문단.
+- **`provisional_on`** — `user_statements` 스키마 필드와 그 규칙. 진행 중 세션에 남은 필드는 읽는 자가 없어 무해하므로 마이그레이션을 두지 않는다.
+
+### Changed
+
+- **라운드 규약** — `## R<n>` 한 라운드 = 지금 이해 / 다음 결정 / 질문 / 답. AskUserQuestion 1회에 질문 1개, 첫 선택지가 추천(`(권장)`). 약한 답(보류 · 한 단어 · 이유 없는 추천 수락 · 근거 없는 단정)에는 이유 · 사례 · 실패 조건 중 하나를 되묻고, 같은 주제의 연속 되묻기는 최대 2회다(그 뒤엔 기록하고 넘어간다 · 차원을 자동으로 닫지 않는다). 한 라운드에 겹치면 되묻기 → 외부 근거 처분 → 새 결정 순. `references/steelman.md` 가 묻는 질문은 그 파일의 규약을 따른다.
+- **옮겨 간 규칙 다섯** — 닫힘 근거(«그 차원에 관한 질문에 사용자가 답한 S» — blind-spot-prober 절의 전이 문장도 처분 S 뒤로 맞췄다) · landscape 닫힘 발화(«외부 근거 처분 S», SKILL · `finishing.md` 양쪽) · 재개방 표시 자리(«상충» 줄 → 그 라운드의 «지금 이해». `reopen_log` · audit §1 접미는 그대로) · seed «다시 검증할 것» 문단의 소비 자리(R1 «지금 이해»·질문의 재료 + coverage-mapper 첫 dispatch 입력 — `seed-input.md` · `framing-requests` · seed 템플릿) · C43 경로 표시 자리(«지금 이해»·«질문»).
+- **audit 템플릿 §2** — 데이터 줄 하나(질문 라운드 · agent dispatch · coverage-mapper `<k>` · codex 실호출). 게이트가 보는 `coverage-mapper <k>` 는 그대로다.
+- **proceed 게이트 질문 텍스트** — «깊이:» 슬롯 제거. `check_brief` advisories 슬롯은 유지.
+- **`shared/tests/test_adjudication_wiring.sh` 의 `COMP_BASELINE` 58 → 52** — `depth_record.py` 가 더했던 컴프리헨션이 파일과 함께 사라졌다(`ast` 실측).
+- **락** — `tests/test_stale_terms.sh` V13(식별자 축은 README 포함 · 개념 별칭 축은 README 제외 · 새 라운드 규약의 양성 짝 둘) · V10 부재 목록 20 → 37 · `test_conducting_interview_stage.sh` 의 라운드 규약 · 닫힘 · 재개방 · landscape 발화 · blind-spot 전이 · seed 문단 · C43 경로 표시 락을 재조준 · 신설 · `test_request_framing_command.sh` 의 seed 문단 소비 락 · `test_finishing_block_scope.py` 의 양성 대조를 남는 펜스의 게이트 호출로 · `test_brief_agents.sh` 격리 목록 5 → 4.
+
+### Deprecated
+
+- `spec-distill:depth-auditor` agent · 두 측정 스크립트 · 옛 라운드 형식 · audit §2 깊이 네 줄은 **fallback 없이 즉시 제거**됐다 — CLAUDE.md 메타데이터의 one-minor deprecation window 규정과 충돌한다. 이 충돌을 다음 조건 아래 수용한다: 이 플러그인의 제3자 설치가 현재 없다(사용자 확인, 2026-09-10). **제3자 설치가 생기면 이 근거가 사라지므로, 그 뒤의 제거에는 창을 둔다.**
+
+### Verification
+
+- **회귀 0** — spec-distill 셸 스위트 · `python3 -m unittest discover -s plugins/spec-distill/tests` · `shared/tests` 를 (파일, 실패 식별자) 멀티셋으로 기록해 «완료 − 기준선 = ∅» 를 확인했다. 최종 기준선은 머지 직전에 합친 `origin/main` 끝 커밋 `bf626555`(1.2.0)이고, 기준선에 이미 있던 실패(`plugins/spec-distill/tests/test_no_write_matcher_hooks_repo.sh` 1건 · unittest `test_hook_output_schema.TestCrossResolverAdvisory.test_python_and_bash_resolvers_agree`)는 그대로다. task 커밋은 각각 그때의 착수 전 기준선(`efb8aa16` 을 합친 `f4e5de79`) 대비로 같은 판정을 거쳤다.
+- **완료 증거** — 셸 파일마다 요약 줄(`Total: …`) 또는 기준선과 같은 마지막 출력 줄을 요구했다. 단언 없이 죽은 파일이 `(파일, rc=<N>)` 로 잡히는 것과, 기존 실패 하나를 찍고 중단된 실행이 멀티셋 비교를 통과하지 못하는 것을 합성 양성 대조로 확인했다.
+- **변이** — 새로 쓰거나 고친 락을 통째 삭제 · 문구 반전 · 값 변경 · 위치 변경 · 문장 추가로 흔들어 30건을 돌렸다. 29건은 해당 단언 하나만 RED 였고, 1건(README 별칭 면제)은 의도대로 GREEN 이었다. 변이하지 않은 새 락: 라운드 규약 절의 소제목 넷 · `## R<n>` 헤딩 · description 문구 · 되묻기 세 축 · SKILL 줄 수 상한, coverage-mapper 절의 인자 없는 경로 첫 dispatch 시점, V13 의 두 번째 양성 짝, 절 추출 양성 대조.
+- **사람 e2e** — 결과 미보고: 체크리스트 5항목을 안내했으나 사용자가 결과 보고 없이 릴리스 진행을 지시했다(2026-09-11). 항목별 통과/실패 기록 없음.
 
 ## [1.2.0] — 2026-09-11
 

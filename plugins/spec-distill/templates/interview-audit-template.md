@@ -30,22 +30,16 @@ source: spec-distill conducting-interview v0.57.0
 
 ## 2. Budget
 
-(다섯 줄. 첫 줄의 두 계수는 **다른 것을 센다**: `agent dispatch: <n>` 은 이 인터뷰의 subagent
+(한 줄. 이 줄의 두 계수는 **다른 것을 센다**: `agent dispatch: <n>` 은 이 인터뷰의 subagent
  dispatch **총계**이고, `coverage-mapper <k>` 는 그중 coverage-mapper **하나만**의 횟수라
  언제나 `<k> ≤ <n>` 이다. 게이트가 보는 것은 후자뿐이며 k≥1이면 통과한다 — dispatch 를 못
  했으면 `coverage-mapper 0 (unavailable: <사유>)`처럼 사유를 붙인다(advisory). 사유 없는 0은
  게이트 red(AC4). 게이트가 읽는 것은 아래 **불릿 줄**뿐이고 이 설명 산문은 판정에 참여하지
  않는다. `<k>` 는 **반드시 실제 횟수로 치환한다** — 템플릿이 통과값을 미리 채워 두면
  dispatch 를 한 번도 안 한 턴이 그대로 옮겨 적어 게이트가 조용히 통과한다. 채우지 않은
- `<k>` 는 게이트 red 다(«coverage-mapper <k> line missing»): 침묵보다 red 가 낫다.
- 나머지 네 줄은 `depth_record.py` stdout 을 그대로 옮긴 깊이 측정이다 —
- 순수 기록이며 게이트가 아니다. 스크립트가 «기록 불가»를 내면 그 한 줄을 대신 붙인다.)
+ `<k>` 는 게이트 red 다(«coverage-mapper <k> line missing»): 침묵보다 red 가 낫다.)
 
 - 질문 라운드: <n> · agent dispatch: <n> · coverage-mapper <k> · codex 실호출: <n> (성공 <n>)
-- 깊이 측정(형식): 짝 <n> 중 되비추기 블록 있음 <m> · 내용 있는 줄 ≥1 <p> · terminal <t> · round 불명 <k2>
-- 깊이 측정(auditor): dug <a> · not_dug <b> · undecidable <c> · held <h> · unavailable <0|1>
-- 깊이 측정(사람): 표본 <s> — dug <x> · not_dug <y> · undecidable <z> · 미라벨 <w> · auditor 일치 <k>/<v> (auditor 판정 없는 표본 <u> 별도)
-- 판정자 조건: <depth_record.py 출력 한 줄>
 
 ## 3. Steelman 원문
 
