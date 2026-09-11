@@ -70,7 +70,8 @@ advisory(`[spec-distill] brief 리뷰 degrade 원장 기록 불가 (<reason>) �
   > `[spec-distill] brief 리뷰 SKIPPED (DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1) — 엔진 라운드·냉독 전부 미검증. Step B 게이트에서 확인하세요.`
 
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` → codex 만 끈다(아래 codex 게이트가 집행한다). 탐지·재비판은 그대로.
-- `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` → 이 자리에서 끄는 것은 codex 의 웹 검색이다(`## 절차` 의 「웹」).
+- `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` → 이 자리의 웹 둘을 끈다 — 탐지 dispatch 대상을 웹 도구가 없는
+  `spec-distill:doc-critic` 으로 바꾸고(`## dispatch 블록 둘` 의 선택 펜스가 집행한다) codex 의 웹 검색도 끈다(`## 절차` 의 「웹」).
 - `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` → 재비판만 끈다.
 
 record 의 필드는 `component` · `affected_axis` · `verification_status` · `reason` 넷이고(이 문서의
@@ -286,19 +287,82 @@ fi
 ```
 <!-- codex-gate:end -->
 
-**웹 — Claude 쪽 근거가 없다.** 탐지·재비판 agent 둘은 `tools: Read, Grep, Glob` 뿐이다. 프로필의
-`web: true` 를 소비하는 것은 codex 러너 하나다 — 러너가 프로필 frontmatter 의 `web:` 을 읽어 codex 웹
-검색을 켜고, 두 호스트 스위치 `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` · `DEVBREW_QUALITY_GATES_DISABLE_WEB=1`
-중 하나라도 켜져 있으면 끈다(공유 러너가 두 호스트의 스위치를 함께 본다). 그래서 이 자리의 리뷰에서 웹
-스위치가 끄는 것은 codex 의 웹 검색 하나이고(진입 게이트의 `check_brief.py` 도
-`DEVBREW_SPEC_DISTILL_DISABLE_WEB` 로 §4 sentinel 하나를 완화하며 자기 advisory 로 공시한다), codex 가
-없는 라운드에는 외부 근거가 0 이다. 그 사실은 `## degrade 채널` 의 웹 줄로 매번 공시한다.
+**웹 — Claude 쪽과 codex 쪽 둘 다 프로필의 `web` 을 따른다.** Claude 쪽은 탐지 리뷰어다. 프로필이 웹을
+허용하면 `## dispatch 블록 둘` 의 선택 펜스가 웹 도구(`WebSearch`·`WebFetch`)를 가진 `spec-distill:doc-critic-web`
+을 고르고, 그 리뷰어가 층 1(방향)의 외부 근거를 URL 로 인용한다. 재비판자 `doc-recritic` 은 웹이 없다
+(`tools: Read, Grep, Glob`). codex 쪽은 러너가 프로필 frontmatter 의 `web:` 을 읽어 codex 웹 검색을 켜고,
+두 호스트 스위치 `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` · `DEVBREW_QUALITY_GATES_DISABLE_WEB=1` 중 하나라도
+켜져 있으면 끈다(공유 러너가 두 호스트의 스위치를 함께 본다). `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 은 그에 더해
+선택 펜스가 웹 도구 없는 `spec-distill:doc-critic` 을 고르게 해 Claude 쪽 웹을 **물리적으로** 끈다 — 그 사본의
+`tools:` 에 웹 도구가 없다(진입 게이트의 `check_brief.py` 도 같은 스위치로 §4 sentinel 하나를 완화하며 자기
+advisory 로 공시한다). 둘 다 꺼진 라운드에는 외부 근거가 0 이다. 그 사실은 `## degrade 채널` 의 웹 줄로 매번
+공시한다.
 
 ## dispatch 블록 둘
 
-3단계 탐지 — `${DOCUMENT}` 에는 이번 라운드 `$BUNDLE` 의 **내용**을 싣는다(경로가 아니다 — 정답이
-원문이라 외부 정보가 오염원이다). 한 번 dispatch 하고 출력을 요약·전사 없이 verbatim 파일
-(`critic.txt`)로 저장한다. 파싱은 `docreview_route.py` 가 그 파일에서 한다.
+3단계 탐지 — dispatch 대상은 아래 선택 펜스가 정한다: 프로필이 웹을 허용하고 `DEVBREW_SPEC_DISTILL_DISABLE_WEB`
+이 켜져 있지 않을 때만 웹 도구를 가진 `spec-distill:doc-critic-web`, 그 밖에는 웹 도구가 없는
+`spec-distill:doc-critic` 이다. 프로필의 `web` 은 엔진의 `profile-check` 가 낸 값으로만 읽는다. 매 라운드 탐지
+dispatch **직전에** 이 펜스를 돌리고(캐시하지 않는다), 펜스가 낸 `CRITIC_AGENT=` 값과 `subagent_type` 이 같은
+블록 **하나만** dispatch 한다 — 조건을 산문으로 다시 판단하지 않는다. 스위치가 웹 없는 사본으로 내리거나
+프로필의 `web` 을 읽지 못하면 펜스가 loud advisory 를 내고 degrade 원장에 record(`critic` / `direction` /
+`degraded`)를 남긴다.
+
+<!-- critic-select:begin -->
+```bash
+PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
+case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
+harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
+STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 — 세션의 한 파일
+DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
+touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
+PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/brief.md"
+pc_rc=0; PJ="$(python3 "$PR/scripts/docreview_state.py" profile-check "$PROFILE")" || pc_rc=$?
+PROFILE_WEB=""
+if [ "$pc_rc" -eq 0 ]; then
+  PROFILE_WEB="$(python3 -c 'import json, sys; w = json.loads(sys.argv[1]).get("web"); print({True: "on", False: "off"}.get(w, ""))' "$PJ" 2>/dev/null || true)"
+fi
+record_web() {   # 웹 없는 사본으로 내려간 라운드 — degrade 원장, 못 쓰면 두 번째 채널
+  python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component critic --axis direction --status degraded --reason "$1" \
+    || echo "- (state 기록 실패) component=critic axis=direction status=degraded reason=$1" >> "$DEGRADE_FALLBACK_FILE"
+}
+CRITIC_AGENT="spec-distill:doc-critic"
+if [ -z "$PROFILE_WEB" ]; then
+  echo "[spec-distill] 프로필의 web 값을 읽지 못했다(profile-check rc $pc_rc) — 탐지는 웹 없는 doc-critic 으로 간다. 이 라운드의 층 1(방향)에는 Claude 쪽 외부 근거가 없다 (degraded)." >&2
+  record_web "프로필 web 판독 불가(profile-check rc $pc_rc) — 웹 없는 doc-critic 으로 dispatch"
+elif [ "$PROFILE_WEB" = "on" ]; then
+  if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
+    echo "[spec-distill] 웹 비활성(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1) — 탐지는 웹 없는 doc-critic 으로 간다. 이 라운드의 층 1(방향)에는 Claude 쪽 외부 근거가 없다 (degraded)." >&2
+    record_web "DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 — 웹 없는 doc-critic 으로 dispatch"
+  else
+    CRITIC_AGENT="spec-distill:doc-critic-web"
+  fi
+fi
+echo "CRITIC_AGENT=$CRITIC_AGENT"
+```
+<!-- critic-select:end -->
+
+`${DOCUMENT}` 에는 이번 라운드 `$BUNDLE` 의 **내용**을 싣는다(경로가 아니다 — 정답이 원문이라 외부 정보가
+오염원이다). 한 번 dispatch 하고 출력을 요약·전사 없이 verbatim 파일(`critic.txt`)로 저장한다. 파싱은
+`docreview_route.py` 가 그 파일에서 한다. 두 블록은 `description`·`subagent_type` 만 다르다.
+
+`CRITIC_AGENT=spec-distill:doc-critic-web` 이면:
+
+```
+Agent({
+  description: "Document review detection with web evidence (layer 1 then layer 2)",
+  subagent_type: "spec-distill:doc-critic-web",
+  // **처분** — consumer=plugins/spec-distill/scripts/docreview_route.py · fail-closed
+  prompt: "<document>${DOCUMENT}</document>
+    <profile>${PROFILE}</profile>
+    <prior_finding_ids>${PRIOR_FINDING_IDS}</prior_finding_ids>"
+})
+```
+
+`CRITIC_AGENT=spec-distill:doc-critic` 이면:
 
 ```
 Agent({
@@ -453,7 +517,9 @@ G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **�
   번들 위생 미달 · 냉독 실패 · BRIEF_REVIEW skip · 원장 기록 불가처럼 엔진 밖의 사건) · 그 기록이
   실패했을 때의 `$DEGRADE_FALLBACK_FILE` 줄들(머리가 매 호출 같은 파일로 다시 도출한다).
 
-그리고 매번 싣는 한 줄 — `웹: Claude 쪽 없음 · codex <켜짐 | 꺼짐(DISABLE_WEB) | codex 부재>`.
+그리고 매번 싣는 한 줄 — `웹: Claude <doc-critic-web | doc-critic(DISABLE_WEB) | doc-critic(프로필 판독 불가)> ·
+codex <켜짐 | 꺼짐(DISABLE_WEB) | codex 부재>`. Claude 쪽 값은 그 라운드 선택 펜스가 낸 `CRITIC_AGENT=` 와
+advisory 에서 온다.
 
 Step B 게이트를 띄우기 **직전에** 이 채널들을 읽어 하나도 빠뜨리지 않고 게이트 `question` 텍스트에
 싣는다. 전부 비었을 때만 `degrade 없음` 이다 — 그 문구는 **채널을 실제로 읽었다는 주장**이므로 읽지

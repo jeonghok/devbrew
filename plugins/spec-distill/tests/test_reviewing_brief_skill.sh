@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/agents/doc-critic.md plugins/spec-distill/agents/doc-recritic.md shared/docreview/scripts/docreview_state.py shared/docreview/scripts/run_docreview_codex_reviewer.sh plugins/spec-distill/templates/interview-audit-template.md plugins/spec-distill/README.md
+# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/agents/doc-critic.md plugins/spec-distill/agents/doc-critic-web.md plugins/spec-distill/agents/doc-recritic.md shared/docreview/scripts/docreview_state.py shared/docreview/scripts/run_docreview_codex_reviewer.sh plugins/spec-distill/templates/interview-audit-template.md plugins/spec-distill/README.md
 #
 # `reviewing-brief` 껍데기의 **계약** 락 — 문서 리뷰 엔진의 brief 자리.
 #
@@ -22,6 +22,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/skills/reviewing-brief/SKILL.md"
   echo "plugins/spec-distill/references/docreview-profiles/brief.md"
   echo "plugins/spec-distill/agents/doc-critic.md"
+  echo "plugins/spec-distill/agents/doc-critic-web.md"
   echo "plugins/spec-distill/agents/doc-recritic.md"
   echo "shared/docreview/scripts/docreview_state.py"
   echo "shared/docreview/scripts/run_docreview_codex_reviewer.sh"
@@ -176,7 +177,7 @@ for gone in 'brief-critic' 'brief-direction-reviewer' 'merge_brief_review' 'run_
   grep -qF -- "$gone" "$SKILL" && no "옛 파이프라인: '$gone' 이 남았다 — 치환이지 추가가 아니다(없는 산출물을 기다린다)" \
                               || ok "옛 파이프라인: '$gone' 없음"
 done
-for d in doc-critic doc-recritic brief-readback; do
+for d in doc-critic doc-critic-web doc-recritic brief-readback; do
   n="$(grep -cE "^[[:space:]]*subagent_type: \"spec-distill:${d}\"" "$SKILL" || true)"
   [ "$n" = "1" ] && ok "배선: $d dispatch 가 정확히 하나" || no "배선: $d dispatch 가 ${n}개 (기대 1)"
 done
@@ -245,14 +246,22 @@ W_ED="$(section '수정 권한')"
   || no "수정 권한: 임의 기각 금지 또는 미반영 이월이 빠졌다"
 
 # ── 11. 웹 공시 — 문면이 사실과 맞는가 ─────────────────────────────────────────
-{ has "$ALL" 'Claude 쪽 근거가 없다' && has "$ALL" '`tools: Read, Grep, Glob`' && has "$ALL" 'codex 의 웹 검색'; } \
-  && ok "웹: Claude 쪽 웹 근거 부재와 스위치가 끄는 대상(codex 웹)을 공시한다" \
-  || no "웹: 웹 축소 공시가 빠졌다 — 옛 방향성 리뷰어의 웹 근거가 사라진 사실이 안 보인다"
+{ has "$W_PROC" '`spec-distill:doc-critic-web`' && has "$W_PROC" '**물리적으로**' && has "$W_PROC" 'codex 웹 검색'; } \
+  && ok "웹: Claude 쪽 웹(doc-critic-web)과 DISABLE_WEB 이 끄는 둘(웹 없는 사본 전환 · codex 웹)을 공시한다" \
+  || no "웹: 웹 공시가 빠졌다 — Claude 쪽 웹 근거를 누가 지고 스위치가 무엇을 끄는지 안 보인다"
+has "$ALL" 'Claude 쪽 근거가 없다' \
+  && no "웹: 옛 공시(「Claude 쪽 근거가 없다」)가 남았다 — 웹 사본이 dispatch 되는 뒤로는 거짓이다" \
+  || ok "웹: 옛 「Claude 쪽 근거가 없다」 공시 없음 (양의 짝은 바로 위 새 공시)"
+fm_tools() { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$1" | grep -E '^tools:' | head -1; }
 for a in doc-critic doc-recritic; do
-  awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$SD/agents/$a.md" | grep -qxE 'tools: Read, Grep, Glob' \
-    && ok "웹(사실): $a 의 tools 가 정확히 Read, Grep, Glob 이다 — 공시가 참이다" \
-    || no "웹(사실): $a 의 tools 가 바뀌었다 — 「Claude 쪽 웹 근거 없음」 공시가 거짓이 됐다"
+  fm_tools "$SD/agents/$a.md" | grep -qxE 'tools: Read, Grep, Glob' \
+    && ok "웹(사실): $a 의 tools 가 정확히 Read, Grep, Glob 이다 — 웹 없는 사본이라는 공시가 참이다" \
+    || no "웹(사실): $a 의 tools 가 바뀌었다 — 「DISABLE_WEB 이 Claude 쪽 웹을 물리적으로 끈다」 공시가 거짓이 됐다"
 done
+web_tools="$(fm_tools "$SD/agents/doc-critic-web.md")"
+{ printf '%s\n' "$web_tools" | grep -qE '(^|[ ,])WebSearch(,|$)' && printf '%s\n' "$web_tools" | grep -qE '(^|[ ,])WebFetch(,|$)'; } \
+  && ok "웹(사실): doc-critic-web 의 tools 에 WebSearch·WebFetch 가 있다 — Claude 쪽 웹 공시가 참이다" \
+  || no "웹(사실): doc-critic-web 의 tools 에 웹 도구가 없다 — 「Claude 쪽 웹」 공시가 거짓이 됐다"
 awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$PROF" | grep -qxE 'web: true' \
   && ok "웹(사실): 프로필 brief.md 가 web: true — codex 러너가 이 자리에서 웹을 켠다" \
   || no "웹(사실): 프로필이 web: true 가 아니다 — 「스위치가 codex 웹을 끈다」 공시가 거짓이 됐다"
@@ -302,7 +311,7 @@ if [ "${n_head:-0}" -ge 8 ] && grep -q '^case "${PAYLOAD:-}"' <<<"$HEAD_TXT" \
 else
   no "머리: \`## 입력\` 머리를 못 잘랐거나 핵심 줄이 빠졌다 (${n_head:-0}줄) — 아래 동일성 단언이 공허하다"
 fi
-for s in 'kill switch' '진입 게이트' '번들' '냉독'; do
+for s in 'kill switch' '진입 게이트' '번들' '냉독' 'dispatch 블록'; do
   blk_head="$(first_block "$s" | head -n "${n_head:-0}")"
   { [ -n "$HEAD_TXT" ] && [ "$blk_head" = "$HEAD_TXT" ]; } \
     && ok "머리: \`## $s\` 블록이 같은 머리로 시작한다 (따로 돌아도 같은 변수를 다시 도출한다)" \

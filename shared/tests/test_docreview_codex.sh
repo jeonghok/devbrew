@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/docreview/scripts/run_docreview_codex_reviewer.sh shared/tests/fixtures/docreview/**
+# guards: shared/docreview/scripts/run_docreview_codex_reviewer.sh shared/tests/fixtures/docreview/** plugins/*/references/docreview-profiles/*.md shared/docreview/scripts/docreview_state.py
 #
 # codex 러너(run_docreview_codex_reviewer.sh)의 배선을 잰다 — 실제 codex 는 절대 부르지
 # 않는다(fixtures/docreview/codex-stub.sh 가 그 자리를 대신한다). 재는 것 셋: ① 프로필의
@@ -16,6 +16,8 @@ set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "shared/docreview/scripts/run_docreview_codex_reviewer.sh"
   bash "$(dirname "$0")/docreview_fixture_corpus.sh"
+  git ls-files -- 'plugins/*/references/docreview-profiles/*.md'
+  echo "shared/docreview/scripts/docreview_state.py"
   exit 0
 fi
 
@@ -139,6 +141,16 @@ while IFS= read -r p; do
     "러너: 프로필 코퍼스 — $cbase 가 truncated 없이 정상 변환된다"
   assert_file_absent "$CCAP" 'disposition from:[ ]*$' \
     "러너: 프로필 코퍼스 — $cbase 의 allowed_dispositions 안내가 비지 않는다"
+  # 층 2 목록이 러너 프롬프트에 **그대로** 실린다 — 기대값은 엔진 스키마 게이트(profile-check, 실
+  # PyYAML)가 읽은 목록이다. 러너의 stdlib 파서가 목록을 자르거나 늘리거나 바꾸면 RED 다.
+  want_l2="$(python3 "$SCRIPTS/docreview_state.py" profile-check "$p" 2>/dev/null \
+    | python3 -c 'import json, sys; l = json.load(sys.stdin)["layer_rubric"]["layer2"]; print(", ".join(l) if l else "(none — skip layer 2)")' 2>/dev/null)"
+  got_l2="$(sed -n 's/^Layer 2 (detail completeness) — categories: //p' "$CCAP" | head -1)"
+  if [ -n "$want_l2" ] && [ "$got_l2" = "$want_l2" ]; then
+    ok "러너: 프로필 코퍼스 — $cbase 의 층 2 목록이 프롬프트에 그대로 실린다 ($got_l2)"
+  else
+    no "러너: 프로필 코퍼스 — $cbase 의 층 2 목록이 어긋난다 (프롬프트='$got_l2' · 프로필='$want_l2')"
+  fi
 done < <(find "$REPO_ROOT"/plugins/*/references/docreview-profiles -name '*.md' | sort)
 if [ "$n_corpus" -ge 4 ]; then
   ok "프로필 코퍼스 $n_corpus 개 전수(design-doc·brief·seed·generic) — 둘만 보던 것에서 확장"

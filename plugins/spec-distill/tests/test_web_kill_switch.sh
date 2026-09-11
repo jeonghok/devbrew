@@ -390,10 +390,11 @@ for sk in "${surfaces[@]+"${surfaces[@]}"}"; do
     || no "$name: 스위치 확인이 실행 가능한 형태가 아니다(산문만으로는 집행되지 않는다)"
 done
 
-# ── reviewing-brief: 이 자리에서 스위치를 소비하는 것은 codex 러너 하나다 ──────────
-# 문서 리뷰 엔진 전환 뒤 이 skill 은 웹 도구를 가진 agent 를 dispatch 하지 않는다(위 (b)
-# 루프가 도출로 잰다 — web agent dispatch 가 생기면 그 루프가 스위치 확인을 요구한다). 남는
-# 소비자는 codex 러너이고 그 집행은 shared/tests/test_docreview_codex.sh 가 실행 관측으로 잰다.
+# ── reviewing-brief: 이 자리에서 스위치를 소비하는 것은 둘이다 ─────────────────────
+# ① 탐지 dispatch 의 선택 펜스 — 웹 도구를 가진 doc-critic-web 을 dispatch 하므로 위 (b) 루프가
+# 스위치 확인 블록을 요구하고, 스위치가 켜지면 웹 없는 doc-critic 으로 내려가는 것은
+# test_reviewing_brief_critic_select.sh 가 차가운 셸 실행으로 잰다. ② codex 러너 — 그 집행은
+# shared/tests/test_docreview_codex.sh 가 실행 관측으로 잰다.
 # 러너는 **프로필이** `web: true` 일 때만 웹을 켠다 — 이 자리에서 스위치가 무엇이라도 끄려면
 # 그 전제가 서 있어야 하고, skill 표면은 스위치를 공시해야 한다. 둘 중 하나라도 무너지면 사용자가
 # 끈 것과 실제로 꺼진 것이 갈린다(P21).
@@ -403,9 +404,14 @@ if [[ -f "$RB" ]]; then
   awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$BP" 2>/dev/null | grep -qxE 'web:[[:space:]]*true' \
     && ok "reviewing-brief: 프로필 brief.md 가 web: true — codex 러너가 이 자리에서 웹을 켤 수 있다(스위치가 끌 대상이 있다)" \
     || no "reviewing-brief: 프로필 brief.md 에 web: true 가 없다 — 이 자리에서 DISABLE_WEB 은 아무것도 끄지 않는데 공시만 남는다"
-  awk '/codex-gate:end/{f=1; next} f' "$RB" | grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_WEB=1' \
-    && ok "reviewing-brief: codex 게이트 fence 밖 표면이 DISABLE_WEB 을 공시한다" \
-    || no "reviewing-brief: DISABLE_WEB 공시가 fence 밖 표면에 없다 — 사용자가 끌 수 있다는 사실을 알 경로가 없다"
+  # 파이프로 `grep -q` 에 넘기지 않는다 — `pipefail` 아래서 grep 이 첫 매치에 먼저 끝나면, 그 뒤를 아직
+  # 쓰는 awk 가 SIGPIPE(141)로 죽어 매치가 있어도 RED 가 된다. 표식 뒤 본문이 파이프 버퍼(16KB)를
+  # 넘자 실제로 그렇게 됐다(13KB 에서는 3/3 통과, 17.7KB 에서 3/3 실패 — 같은 매치). 변수로 받아 잰다.
+  after_codex_gate="$(awk '/codex-gate:end/{f=1; next} f' "$RB")"
+  case "$after_codex_gate" in
+    *'DEVBREW_SPEC_DISTILL_DISABLE_WEB=1'*) ok "reviewing-brief: codex 게이트 fence 밖 표면이 DISABLE_WEB 을 공시한다" ;;
+    *) no "reviewing-brief: DISABLE_WEB 공시가 fence 밖 표면에 없다 — 사용자가 끌 수 있다는 사실을 알 경로가 없다" ;;
+  esac
 fi
 
 # production 전역 — 스크립트와 카운터가 실제로 사라졌다(AC7a).

@@ -7,7 +7,7 @@ immutable: ["^6\\."]
 protected_headings: ["^1\\."]
 layer_rubric:
   layer1: [direction]
-  layer2: [distortion, omission, invention]
+  layer2: [distortion, omission, invention, provenance_mislabel, authority_syntax, evidence_unsupported]
 decision_log: {kind: audit_section, heading: "## 8. 리뷰 결정"}
 defer_target: {kind: none}
 web: true
@@ -28,6 +28,9 @@ web: true
 - `distortion` — 원문의 뜻이 바뀐 요약.
 - `omission` — 원문에 있는 결정·제약이 요약에서 빠짐.
 - `invention` — 원문에 없는 것이 요약에 확정으로 들어감.
+- `provenance_mislabel` — 항목의 출처 표기(🗣 발화 · ☑ 선택 · ✎ 모델 추론, frontmatter 의 `source: verbatim|chosen`)가 그 항목에 대해 틀림 — 모델의 추론이 사용자의 발화·선택으로 표기된 것.
+- `authority_syntax` — 원문이 열어 둔 것을 최종 확정으로 못박아 재검토 여지를 없애는 표현, 또는 그런 뜻을 암시하는 스키마 필드명. brief 는 방향을 기록할 뿐 되짚어 보는 것을 막지 않는다.
+- `evidence_unsupported` — `evidence: S<N>` 가 실재하는 원문을 가리키지만 그 원문이 요약을 뒷받침하지 않음. 구조 게이트는 앵커의 존재만 본다 — 이 항목은 기계가 닫지 못한다.
 
 ## 처분 안내
 
