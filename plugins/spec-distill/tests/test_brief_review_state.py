@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Spec B T6·T22(행위) — brief_review_state.py.
 
-AC13(§6.2 전이 표: 카운터 증가 시점 · escalate 경계값 == 2 · 손상값 clamp)
-AC15(degradation record 4필드 + 닫힌 enum + append-only)
+AC15(degradation record 4필드 + 닫힌 enum + append-only). 단계·재리뷰 상한은 문서 리뷰 엔진
+원장의 몫이라 이 모듈은 옛 두 키(`brief_review_stage` · `brief_critic_rounds`)를 심지도 읽지도
+않는다 — 아래 TestRetiredStageAndRounds 가 그 부재와 옛 state 호환을 잰다.
 
 Run: cd plugins/spec-distill/tests && python3 -m unittest test_brief_review_state -v
 """
@@ -23,6 +24,8 @@ phase: 1
 
 body
 """
+
+RETIRED_KEYS = ("brief_review_stage", "brief_critic_rounds")
 
 
 def run(*args):
@@ -55,23 +58,25 @@ class TestInitAndGet(Base):
         rc, out, _ = run("get", str(self.state))
         self.assertEqual(rc, 0)
         d = json.loads(out)
-        self.assertEqual(d["brief_critic_rounds"], 0)
-        self.assertEqual(d["brief_review_stage"], "direction")
         self.assertEqual(d["brief_review_degradations"], [])
-        self.assertIn("brief_critic_rounds", d["migrated"])
+        self.assertIn("brief_review_degradations", d["migrated"])
+        for k in RETIRED_KEYS:
+            self.assertNotIn(k, d, f"get 이 은퇴한 키 {k} 를 아직 낸다")
         self.assertEqual(before, self.state_text(), "get은 state를 쓰지 않는다")
 
-    def test_init_adds_three_keys_idempotently(self):
-        rc, _, _ = run("init", str(self.state))
+    def test_init_seeds_only_the_ledger_idempotently(self):
+        rc, out, _ = run("init", str(self.state))
         self.assertEqual(rc, 0)
         t = self.state_text()
-        self.assertIn("brief_review_stage: direction", t)
-        self.assertIn("brief_critic_rounds: 0", t)
+        # 양의 짝 — init 이 실제로 원장 줄을 심었다(아래 부재 단언이 공허하지 않다).
         self.assertIn("brief_review_degradations: []", t)
+        self.assertEqual(json.loads(out)["added"], ["brief_review_degradations"])
+        for k in RETIRED_KEYS:
+            self.assertNotIn(k, t, f"init 이 아무도 읽지 않는 옛 키 {k} 를 심었다")
         rc, _, _ = run("init", str(self.state))
         self.assertEqual(rc, 0)
-        self.assertEqual(t.count("brief_critic_rounds"),
-                         self.state_text().count("brief_critic_rounds"),
+        self.assertEqual(t.count("brief_review_degradations"),
+                         self.state_text().count("brief_review_degradations"),
                          "init 재호출이 키를 중복 추가했다")
 
     def test_missing_state_fails_closed(self):
@@ -79,64 +84,41 @@ class TestInitAndGet(Base):
         self.assertNotEqual(rc, 0, "state 부재가 exit 0을 냈다 (fail-open)")
 
 
-class TestTransitionTable(Base):
-    """spec §6.2 전이 표 — 행 1~6 전부."""
+class TestRetiredStageAndRounds(Base):
+    """옛 단계·critic 라운드 카운터 — 읽는 자리가 0 이 되어 시딩과 그것만 쓰던 서브커맨드 셋
+    (`can-redispatch` · `bump-critic-round` · `set-stage`)을 지웠다. 되살아나면 누구도 읽지 않는
+    게이트가 있는 척하게 된다."""
 
-    def setUp(self):
-        super().setUp()
-        run("init", str(self.state))
-
-    def rounds(self):
-        return json.loads(run("get", str(self.state))[1])["brief_critic_rounds"]
-
-    def test_row1_first_review_keeps_counter_zero(self):
-        # 최초 리뷰는 *재*라운드가 아니다 — dispatch만으로 카운터가 오르지 않는다.
-        self.assertEqual(self.rounds(), 0)
-
-    def test_row3_bump_after_fix_increments_to_one(self):
-        rc, out, _ = run("bump-critic-round", str(self.state))
+    def test_retired_subcommands_are_gone(self):
+        # 양의 짝 — 같은 state 에서 CLI 자체는 돈다(아래 rc 2 가 CLI 붕괴의 부수효과가 아니다).
+        rc, _, _ = run("get", str(self.state))
         self.assertEqual(rc, 0)
-        self.assertEqual(json.loads(out)["brief_critic_rounds"], 1)
-        self.assertEqual(self.rounds(), 1, "카운터가 state에 persist되지 않았다")
+        for sub in ("can-redispatch", "bump-critic-round", "set-stage"):
+            args = [sub, str(self.state)] + (["fidelity"] if sub == "set-stage" else [])
+            rc, _, err = run(*args)
+            self.assertEqual(rc, 2, f"은퇴한 서브커맨드 {sub} 가 아직 받아진다: {err[-200:]}")
+            self.assertIn("invalid choice", err)
 
-    def test_row5_counter_one_still_allows_redispatch(self):
-        run("bump-critic-round", str(self.state))
-        rc, _, _ = run("can-redispatch", str(self.state))
-        self.assertEqual(rc, 0, "== 1 에서 escalate가 발화했다 (경계값 오류)")
-
-    def test_row6_counter_two_escalates(self):
-        run("bump-critic-round", str(self.state))
-        run("bump-critic-round", str(self.state))
-        self.assertEqual(self.rounds(), 2)
-        rc, _, _ = run("can-redispatch", str(self.state))
-        self.assertEqual(rc, 1, "== 2 에서 escalate가 발화하지 않았다 (`> 2`를 기다리는 버그)")
-
-    def test_bump_clamps_at_two(self):
-        for _ in range(4):
-            run("bump-critic-round", str(self.state))
-        self.assertEqual(self.rounds(), 2, "카운터가 상한 2를 넘었다")
-
-    def test_corrupt_three_is_clamped_with_advisory_not_silent(self):
-        t = self.state_text().replace("brief_critic_rounds: 0", "brief_critic_rounds: 3")
-        self.state.write_text(t, encoding="utf-8")
+    def test_legacy_state_lines_are_left_untouched(self):
+        """옛 세션 state 는 두 줄을 갖고 있다 — 지우지도 고치지도 않고, 원장만 다룬다."""
+        legacy = ("---\nsession_id: 33333333-3333-3333-3333-333333333333\n"
+                  "brief_review_stage: fidelity\nbrief_critic_rounds: 2\n---\n\nbody\n")
+        self.state.write_text(legacy, encoding="utf-8")
+        rc, out, _ = run("init", str(self.state))
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out)["added"], ["brief_review_degradations"])
+        t = self.state_text()
+        self.assertIn("brief_review_stage: fidelity\nbrief_critic_rounds: 2\n", t,
+                      "init 이 옛 두 줄을 건드렸다")
+        rc, _, _ = run("degrade-append", str(self.state), "--component", "codex",
+                       "--reason", "kill switch", "--axis", "all", "--status", "skipped")
+        self.assertEqual(rc, 0)
         rc, out, _ = run("get", str(self.state))
-        d = json.loads(out)
         self.assertEqual(rc, 0)
-        self.assertEqual(d["brief_critic_rounds"], 2, "손상된 3이 clamp되지 않았다")
-        self.assertTrue(d["clamped"], "clamp가 조용히 일어났다 (advisory 없음)")
-        rc, _, _ = run("can-redispatch", str(self.state))
-        self.assertEqual(rc, 1, "손상된 3이 재dispatch를 허용했다")
-
-    def test_stage_transitions(self):
-        for stage in ("direction", "fidelity", "readback", "done"):
-            rc, _, _ = run("set-stage", str(self.state), stage)
-            self.assertEqual(rc, 0)
-            self.assertEqual(json.loads(run("get", str(self.state))[1])["brief_review_stage"],
-                             stage)
-
-    def test_bad_stage_rejected(self):
-        rc, _, _ = run("set-stage", str(self.state), "whatever")
-        self.assertNotEqual(rc, 0, "닫힌 열거 밖 stage가 통과했다")
+        d = json.loads(out)
+        self.assertEqual([r["component"] for r in d["brief_review_degradations"]], ["codex"])
+        for k in RETIRED_KEYS:
+            self.assertNotIn(k, d, f"get 이 옛 줄 {k} 를 읽어 냈다")
 
 
 class TestDegradationRecord(Base):
@@ -205,8 +187,8 @@ class TestLedgerKeyOverride(Base):
     def setUp(self):
         super().setUp()
         run("init", str(self.state))
-        # init은 표준 3키만 만든다 — framing_degradations는 PR3 SKILL이 자기 state에
-        # 직접 심는 자리라, 여기서는 그 계약을 픽스처로 흉내낸다. typo_degradations도
+        # 인자 없는 init은 기본 원장 한 줄만 만든다 — 여기서는 framing_degradations 줄을
+        # 픽스처로 직접 심는다. typo_degradations도
         # 일부러 실재하는 라인으로 심는다 — 그래야 "오타 거부"가 검증이 실제로 막는 것이지
         # "그 줄이 우연히 없어서" 통과하는 별개 fail-closed 경로의 부수효과가 아님을 확인한다.
         t = self.state_text().replace(
@@ -257,87 +239,9 @@ class TestLedgerKeyOverride(Base):
         self.assertEqual(rc, 1)
 
 
-class TestBlankValueNewlineHazard(Base):
-    """`\\s*`가 콜론 뒤에서 `\\n`을 삼켜 다음 줄의 내용을 이 라인의 값으로 오인하는 클래스의
-    회귀 — KEY_STAGE/KEY_ROUNDS 읽기 경로 및 _set_scalar 쓰기 경로 양쪽 모두.
-    fix round 1: 리뷰어가 재현한 3개 repro(§task-3-report.md 참고)의 회귀 락."""
-
-    def setUp(self):
-        super().setUp()
-        run("init", str(self.state))
-
-    def test_blank_stage_with_bare_word_next_line_fails_closed(self):
-        # brief_review_stage:  (값 없음) 다음 줄에 `done`이 있어도 그 값을 조용히 흡수하면 안 된다.
-        # rc != 0만으로는 "어떤 실패든" 통과하므로(엉뚱한 crash도 lock을 만족시킨다), reason이
-        # 구체적으로 이 키·이 blank-value 가드를 지목하는지까지 확인한다.
-        t = self.state_text().replace("brief_review_stage: direction",
-                                       "brief_review_stage:\ndone")
-        self.state.write_text(t, encoding="utf-8")
-        rc, out, _ = run("get", str(self.state))
-        self.assertNotEqual(rc, 0,
-                             "빈 stage 값이 다음 줄의 `done`을 조용히 흡수했다 (newline hazard)")
-        d = json.loads(out)
-        self.assertIn("brief_review_stage", d["reason"],
-                      "실패 사유가 brief_review_stage를 지목하지 않는다 (엉뚱한 실패일 수 있다)")
-        self.assertIn("비어 있다", d["reason"],
-                      "실패 사유가 blank-value 가드를 지목하지 않는다 (엉뚱한 실패일 수 있다)")
-
-    def test_blank_rounds_with_bare_number_next_line_fails_closed(self):
-        # brief_critic_rounds:  (값 없음) 다음 줄에 `42`가 있어도 조용히 읽고 clamp하면 안 된다
-        # — 카운터를 알 수 없는 상태에서 0으로 읽는 것은 escalate 가드 방향으로 fail-open이다.
-        # rc != 0만으로는 "어떤 실패든" 통과하므로, reason이 구체적으로 이 키·이 blank-value
-        # 가드를 지목하는지까지 확인한다.
-        t = self.state_text().replace("brief_critic_rounds: 0",
-                                       "brief_critic_rounds:\n42")
-        self.state.write_text(t, encoding="utf-8")
-        rc, out, _ = run("get", str(self.state))
-        self.assertNotEqual(rc, 0,
-                             "빈 rounds 값이 다음 줄의 42를 조용히 흡수했다 (newline hazard)")
-        d = json.loads(out)
-        self.assertIn("brief_critic_rounds", d["reason"],
-                      "실패 사유가 brief_critic_rounds를 지목하지 않는다 (엉뚱한 실패일 수 있다)")
-        self.assertIn("비어 있다", d["reason"],
-                      "실패 사유가 blank-value 가드를 지목하지 않는다 (엉뚱한 실패일 수 있다)")
-
-    def test_set_stage_on_blank_stage_does_not_delete_adjacent_line(self):
-        # 실제로 재현됐던 사고: brief_review_stage가 비어 있고 바로 다음 줄에
-        # brief_critic_rounds: 0이 있으면, set-stage가 그 줄 전체를 삼켜 삭제했다.
-        t = self.state_text().replace("brief_review_stage: direction",
-                                       "brief_review_stage:")
-        self.state.write_text(t, encoding="utf-8")
-        self.assertIn("brief_critic_rounds: 0", self.state_text(),
-                      "픽스처 전제 오류: 인접 라인이 없다")
-        before = self.state_text()
-        rc, _, _ = run("set-stage", str(self.state), "fidelity")
-        self.assertNotEqual(rc, 0, "빈 stage 값 위에 set-stage가 조용히 성공했다")
-        self.assertEqual(before, self.state_text(),
-                         "실패한 set-stage가 인접 라인(brief_critic_rounds)을 삭제/변경했다")
-        self.assertIn("brief_critic_rounds: 0", self.state_text(),
-                      "인접 라인이 삭제됐다")
-
-    def test_bump_on_blank_rounds_does_not_delete_adjacent_line(self):
-        # 동일 클래스의 쓰기 경로 회귀 — ROUNDS 쪽. cmd_bump는 parse()를 먼저 호출하므로
-        # _set_scalar에 도달하기 전에 fail-closed 되어야 하며, 인접 라인도 살아남아야 한다.
-        t = self.state_text().replace("brief_critic_rounds: 0",
-                                       "brief_critic_rounds:\n99")
-        self.state.write_text(t, encoding="utf-8")
-        self.assertIn("brief_review_degradations: []", self.state_text(),
-                      "픽스처 전제 오류: 인접 라인이 없다")
-        before = self.state_text()
-        rc, _, _ = run("bump-critic-round", str(self.state))
-        self.assertNotEqual(rc, 0, "빈 rounds 값 위에 bump가 조용히 성공했다")
-        self.assertEqual(before, self.state_text(),
-                         "실패한 bump가 인접 라인(brief_review_degradations)을 삭제/변경했다")
-        self.assertIn("brief_review_degradations: []", self.state_text(),
-                      "인접 라인이 삭제됐다")
-
-
-
 class TestDegradationLedgerValueValidation(unittest.TestCase):
     """/qg iter-1 IMPORTANT — degradation 원장만 값 검증이 없던 결함.
 
-    형제 두 키는 엄격하다: `brief_review_stage`는 빈 값에 ValueError·닫힌 열거 밖에
-    ValueError, `brief_critic_rounds`는 빈 값·비-digit에 ValueError를 낸다. 그런데
     `brief_review_degradations`는 `[]`/`[ ]`만 특수 처리하고 **그 외 스칼라는 전부
     record 스캔으로 흘러가** 빈 리스트를 반환했다.
 
@@ -345,7 +249,8 @@ class TestDegradationLedgerValueValidation(unittest.TestCase):
     Step B 텍스트가 **깨끗한 run과 바이트 동일**해진다. SKILL.md가 명시로 금지한
     "기록이 없는 것과 degrade가 없는 것이 구분되지 않는다"(indeterminate ≠ clean).
 
-    원장은 이 설계 전체가 얹힌 산출물이므로 셋 중 **가장 엄격**해야 한다.
+    픽스처는 옛 세션 state 의 모양 그대로다(은퇴한 두 줄이 원장 앞에 있다) — 그 줄들이
+    원장 판독을 흔들지 않는다는 것도 함께 잰다.
     """
 
     def _state(self, degrade_line: str) -> Path:
@@ -396,9 +301,6 @@ class TestDegradationLedgerValueValidation(unittest.TestCase):
                 self.assertEqual(rc, 0, f"정상 원장 {good!r}이 거부됐다")
                 self.assertIn('"brief_review_degradations": []', out)
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class TestInitLedgerKey(Base):
     """`init --ledger-key` — 두 번째 파이프라인(framing-requests)이 자기 원장 줄을
@@ -410,14 +312,14 @@ class TestInitLedgerKey(Base):
     실행하라"`로 죽었다. 닫힌 열거에 이름이 있다는 것과 그 원장에 쓸 수 있다는 것은
     다른 사실이다.
 
-    **기본값 경로는 바뀌면 안 된다.** brief 파이프라인의 SKILL 이 「키 3개」라고
-    적고 있으므로, 인자 없는 `init`이 네 번째 줄을 심으면 그 문장이 거짓이 된다."""
+    **기본값 경로는 바뀌면 안 된다.** 인자 없는 `init`이 두 번째 원장을 심으면 brief 쪽
+    state 에 아무도 읽지 않는 원장 줄이 생긴다."""
 
     def test_default_init_does_not_plant_the_second_ledger(self):
         rc, _, _ = run("init", str(self.state))
         self.assertEqual(rc, 0)
         self.assertNotIn("framing_degradations", self.state_text(),
-                         "인자 없는 init이 두 번째 원장을 심었다 — brief SKILL의 「키 3개」가 거짓이 된다")
+                         "인자 없는 init이 두 번째 원장을 심었다")
 
     def test_ledger_key_plants_that_ledger_line(self):
         rc, out, _ = run("init", str(self.state), "--ledger-key", "framing_degradations")
@@ -425,13 +327,13 @@ class TestInitLedgerKey(Base):
         self.assertIn("framing_degradations: []", self.state_text())
         self.assertIn("framing_degradations", json.loads(out)["added"])
 
-    def test_ledger_key_keeps_the_standard_three(self):
+    def test_ledger_key_keeps_the_default_ledger(self):
         """**추가**이지 치환이 아니다 — 기본 원장이 사라지면 brief 쪽 degrade가 통째로 죽는다."""
         run("init", str(self.state), "--ledger-key", "framing_degradations")
         t = self.state_text()
-        self.assertIn("brief_review_stage: direction", t)
-        self.assertIn("brief_critic_rounds: 0", t)
         self.assertIn("brief_review_degradations: []", t)
+        for k in RETIRED_KEYS:
+            self.assertNotIn(k, t, f"--ledger-key init 이 옛 키 {k} 를 심었다")
 
     def test_ledger_key_init_is_idempotent(self):
         run("init", str(self.state), "--ledger-key", "framing_degradations")
@@ -466,3 +368,7 @@ class TestInitLedgerKey(Base):
         self.assertEqual([r["component"] for r in recs], ["codex"])
         default = json.loads(run("get", str(self.state))[1])["brief_review_degradations"]
         self.assertEqual(default, [], "기본 원장이 framing record를 흡수했다(오염)")
+
+
+if __name__ == "__main__":
+    unittest.main()

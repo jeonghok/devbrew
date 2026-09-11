@@ -137,9 +137,8 @@ DET_CHECKS="check_brief.py check_verbatim_coverage T-lock build_brief_inline_blo
 # 아래 둘은 shipping에 실재하지만 §6.3 표에 **행이 없다**. design doc 수정은 사람 몫이라
 # (이 사이클에서 문서는 read-only) 여기에 이름을 박아 gap을 greppable·강제 가능하게 만든다:
 #   - build_brief_inline_blob.py : 본문 audit 파일명 잔존 → exit 3 (호출자가 degrade 기록)
-#   - brief_review_state.py      : 닫힌 열거 검증 + rounds clamp + can-redispatch 게이트.
-#     특히 can-redispatch의 통과 조건은 `brief_critic_rounds`이고 그 값을 **orchestrator
-#     자신이 쓴다** — 표가 존재하는 이유인 "검사 대상이 통과 조건을 직접 쓴다" 범주다.
+#   - brief_review_state.py      : degrade 원장의 닫힌 열거 검증(component · axis · status ·
+#     ledger-key)과 손상 원장 거부 — 게이트가 아니라 degrade 강등을 기록하는 결정론 체크다.
 #     사람이 표에 행을 추가할 때 이빨 등급도 함께 판정해야 한다(기계가 못 하는 부분).
 DESIGN_GAP="build_brief_inline_blob brief_review_state"
 missing=""

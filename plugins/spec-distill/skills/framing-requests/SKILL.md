@@ -291,7 +291,7 @@ fi
 돌려라」가 아니라 「앞에 이어 붙여라」라고 쓰는 이유가 그것입니다 — 별개 호출로 다시 돌리면
 같은 빈 상태가 그대로 재생산됩니다.
 
-`--ledger-key framing_degradations` 는 표준 3키에 **더해** 이 원장 줄을 심습니다(치환이
+`--ledger-key framing_degradations` 는 기본 원장 줄(`brief_review_degradations`)에 **더해** 이 원장 줄을 심습니다(치환이
 아닙니다 — brief 파이프라인의 원장은 그대로 남습니다). 이 호출이 없으면 뒤의
 `degrade-append` 가 「라인 부재」로 죽습니다 — 닫힌 열거에 이름이 있다는 것과 그 원장에
 쓸 수 있다는 것은 다른 사실입니다.
