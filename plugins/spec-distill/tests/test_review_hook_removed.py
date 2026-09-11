@@ -12,13 +12,17 @@ AC2 의 검사 목록은 손으로 적지 않고 아래 `DELETED` 에서 **도�
 S2·S4·S5 에서는 **살아 있는 어휘**를 뺀다: base 에서 삭제도 수정도 하지 않은 파일
 (`DELETED` ∪ `EDITED` ∪ 역사 밖)에 이미 나오는 이름은 이 변경의 인용이 아니다. S4 는 추가로
 살아 있는 스위치를 뺀다 — 추적되는 비-테스트 .py 중 `EDITED` 밖 파일이 문자열로 쥔 이름이다.
-은퇴 토큰(`RETIRED_LITERALS`)은 빼지 않는다: 그 리터럴은 (b) 자리에서만 가려진다.
+은퇴 토큰 중 전체 형태(`RETIRED_LITERALS` 에서 `spec-distill:` · `DEVBREW_` 로 시작하는 것)는
+도출과 무관하게 스캔 집합에 **더하고** 살아 있는 스위치로도 빼지 않는다 — 그 리터럴은 (b)
+자리에서만 가려진다.
 
 「현재형」은 기계로 가르지 않고 면제 코퍼스로 정한다(설계 AC2):
   (a) 역사 — `*/CHANGELOG.md` · `docs/archive/**` · `docs/audits/README.md` ·
       `docs/superpowers/{specs,plans,interview}/**` · 날짜 붙은 `docs/audits/*.md`
   (b) 은퇴 토큰 리터럴 **만** — `scripts/review_entry.py` · `tests/test_review_entry.py` ·
-      README 「은퇴한 스위치」 절(절 헤딩부터 다음 `## ` 까지). 그 안의 다른 삭제 식별자는 RED.
+      `tests/test_reviewing_spec_entry_fence.sh`(진입 펜스를 실행해 은퇴 토큰 advisory 를 재므로
+      토큰을 환경변수 값으로 쥔다) · README 「은퇴한 스위치」 절(절 헤딩부터 다음 `## ` 까지).
+      그 안의 다른 삭제 식별자는 RED.
   (c) 이 파일 자신.
 면제를 넓힐 때는 이 docstring 에 이유를 함께 적는다.
 
@@ -112,7 +116,13 @@ RETIRED_LITERALS = (
     "spec-distill:review-dispatch", "spec-distill:PostToolUse", "spec-distill:validator",
     "spec-distill:reminder", "spec-distill:Stop", ":review-dispatch", ":validator", ":reminder",
 )
-LITERAL_EXEMPT_FILES = (f"{SD}/scripts/review_entry.py", f"{SD}/tests/test_review_entry.py")
+#: 은퇴 토큰 전체 형태 — 도출(S4 는 삭제 코어 .py 의 문자열만 본다)과 무관하게 스캔한다.
+RETIRED_FULL = frozenset(t for t in RETIRED_LITERALS if t.startswith(("spec-distill:", "DEVBREW_")))
+LITERAL_EXEMPT_FILES = (
+    f"{SD}/scripts/review_entry.py", f"{SD}/tests/test_review_entry.py",
+    # 진입 펜스를 실행해 은퇴 토큰의 advisory 를 잰다 — 토큰을 환경변수 값으로 쥐어야 한다.
+    f"{SD}/tests/test_reviewing_spec_entry_fence.sh",
+)
 README = f"{SD}/README.md"
 README_RETIRED_HEADING = re.compile(r"^### 은퇴한 스위치")
 
@@ -251,7 +261,7 @@ def derivation():
     for lit in RETIRED_LITERALS:
         live_env.pop(lit, None)
 
-    tokens = (s1 | s3 | ((s2 | s4 | s5) - set(stop))) - set(live_env)
+    tokens = ((s1 | s3 | ((s2 | s4 | s5) - set(stop))) - set(live_env)) | RETIRED_FULL
     return {"S1": s1, "S2": s2, "S3": s3, "S4": s4, "S5": s5}, stop, live_env, frozenset(tokens)
 
 
@@ -338,6 +348,17 @@ class TestDerivationInstrument(unittest.TestCase):
         hits = scan_text(README, base_text(README), derivation()[3])
         self.assertGreaterEqual(len(hits), 10, hits)
 
+    def test_retired_full_literal_scanned_outside_readme_section(self):
+        """양성 대조 — 은퇴 토큰 전체 형태는 README 은퇴 절 밖에서 잡히고 안에서는 가려진다."""
+        tokens = derivation()[3]
+        self.assertTrue(RETIRED_FULL <= tokens, sorted(RETIRED_FULL - tokens))
+        line = "- `DEVBREW_SKIP_HOOKS=spec-distill:Stop` - x"
+        text = "\n".join(["# t", "## Kill switches", line, "### 은퇴한 스위치", line,
+                          "## Prerequisites", ""])
+        hits = scan_text(README, text, tokens)
+        self.assertIn(f"{README}:3: spec-distill:Stop", hits)
+        self.assertEqual([h for h in hits if h.startswith(f"{README}:5:")], [], hits)
+
     def test_report_live_vocabulary(self):
         _, stop, live_env, _ = derivation()
         sys.stderr.write("\n[살아 있는 어휘로 제외] " + ", ".join(
@@ -419,6 +440,35 @@ class TestReviewingSpecContract(unittest.TestCase):
         m = re.search(r"^## 입력\n(.*?)^## ", t, re.S | re.M)
         self.assertIsNotNone(m, "## 입력 절을 못 찾았다")
         self.assertIn("호출 인자", m.group(1))
+
+    def test_fence_placement(self):
+        """정적 배치만 잰다 — 모델이 이 순서를 따르는지는 재지 못한다(AC14 수동 e2e 몫).
+
+        진입 펜스가 후보 펜스와 `## 절차` 보다 앞이고, 미커밋 펜스가 `## 게이트` 절 안
+        (`## degrade 채널` 앞)이며, 승인 게이트 표 ①·② 행이 `미커밋 확인` 을 부른다.
+        진입 펜스와 `## 입력` 의 선후는 재지 않는다.
+        """
+        t = self.SKILL.read_text(encoding="utf-8")
+
+        def at(s: str) -> int:
+            i = t.find(s)
+            self.assertNotEqual(i, -1, f"없다: {s}")
+            return i
+
+        entry = at("<!-- review-entry:begin -->")
+        self.assertLess(entry, at("<!-- review-candidates:begin -->"))
+        self.assertLess(entry, at("\n## 절차\n"))
+        gate, degrade = at("\n## 게이트\n"), at("\n## degrade 채널\n")
+        for mk in ("<!-- uncommitted-check:begin -->", "<!-- uncommitted-check:end -->"):
+            with self.subTest(marker=mk):
+                self.assertTrue(gate < at(mk) < degrade, mk)
+        for row in ("①", "②"):
+            with self.subTest(row=row):
+                lines = [ln for ln in t.splitlines() if ln.startswith(f"| {row} |")]
+                self.assertEqual(len(lines), 1, lines)
+                self.assertIn("미커밋 확인", lines[0])
+        self.assertIn("마지막 줄이 정확히 `review-entry: PROCEED` 일 때만 `## 입력` 을 거쳐 "
+                      "`## 절차` 로 간다", t)
 
 
 if __name__ == "__main__":

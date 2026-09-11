@@ -179,7 +179,7 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
 
 - `$spec_path` 는 **호출 인자**다(Skill 호출의 args / `/spec-distill:reviewing-spec <path>`). 이 skill 에는
   `user-invocable: false` 가 없어 사용자도 직접 부를 수 있다.
-- 인자가 없으면 `docs/superpowers/specs/` 아래 `-design.md` 후보(현재 브랜치의 최근 커밋 50개 안에서 추가된 것
+- 인자가 없으면 `docs/superpowers/specs/` 아래 `-design.md` 후보(설계문서를 추가한 최근 커밋 50개에서 나온 것
   중 최신 5개 + untracked 전부)를 보이고
   `AskUserQuestion` 으로 확인한다. 후보 산출은 git 명령 한두 줄이다 — 삭제되는 `discover_candidates.py` 를
   되살리지 않는다.
@@ -210,7 +210,7 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
 - **진입 검사 실패는 끔으로 친다(fail-closed).** `review_entry.py` 가 없거나 rc≠0 이거나 stdout 이 JSON 한 줄로
   파싱되지 않거나, 파싱돼도 스키마(최상위 객체 · `disabled` 는 boolean 필수 · `reason` 은 문자열 또는 null ·
   `advisories` 는 문자열 배열)를 어기면 펜스는 `DISABLED:entry_check_failed` 판결을 내고, 실패 사실(경로 · rc · stderr
-  첫 줄)을 advisory 로 낸 뒤 §3.2 의 복귀 지시로 끝난다. 끔 여부를 모르는 채 리뷰를 돌리면 사용자가 끈 스위치를
+  마지막 줄)을 advisory 로 낸 뒤 §3.2 의 복귀 지시로 끝난다. 끔 여부를 모르는 채 리뷰를 돌리면 사용자가 끈 스위치를
   무시할 수 있고, 끔으로 치면 잃는 것은 이번 자동 리뷰 한 번뿐이다 — 사용자는 brainstorming 의 사용자 리뷰 게이트를
   그대로 받는다. 엔진은 판결이 `PROCEED` 일 때만 돈다 — 펜스는 스키마가 유효하고 `disabled` 가 정확히 `false` 일 때만 `PROCEED` 를 낸다.
 - **공유 엔진 2단계와의 관계 — 병존.** 엔진 절차서 2단계(`references/reviewing-document.md:15`)의

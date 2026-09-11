@@ -22,7 +22,7 @@ bounded_window() {  # $1=시작 정규식  $2=종료 정규식
   printf '%s\n' "$out"
 }
 
-w_out="$(bounded_window '^## 입력$' '^## 진입 검사$')"
+w_out="$(bounded_window '^## 입력$' '^## 프로필$')"
 [[ -n "$w_out" ]] \
   && ok "W: 입력 윈도우가 비어 있지 않다 (앵커 생존)" \
   || no "W: 입력 윈도우가 비었다 — 구조 앵커 파손"

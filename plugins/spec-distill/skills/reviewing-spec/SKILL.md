@@ -13,44 +13,12 @@ cost_class: medium
 # reviewing-spec — 문서 리뷰 엔진의 design doc 자리
 
 이 skill 은 진입 껍데기다. 한 라운드의 절차는 공유 엔진이 갖고 있고, 여기 남는 것은 이 자리의
-것 — 입력 · 진입 검사 · 프로필 · dispatch 둘 · 게이트 · degrade 채널 — 뿐이다.
-
-## 입력
-
-`$spec_path` 는 **호출 인자**다 — `Skill spec-distill:reviewing-spec <설계문서 경로>` 또는
-`/spec-distill:reviewing-spec <경로>`. 상대 경로면 리포 루트 기준 절대 경로로 바꿔 쓴다.
-
-인자가 없으면 후보를 뽑아 `AskUserQuestion` 으로 고르게 한다 — 현재 브랜치의 최근 커밋 50개
-안에서 추가된 `-design.md` 중 최신 5개와 untracked 전부:
-
-```bash
-top="$(git rev-parse --show-toplevel)"
-git -C "$top" log -n 50 --diff-filter=A --name-only --pretty=format: -- 'docs/superpowers/specs/*-design.md' | awk 'NF && !seen[$0]++' | head -n 5 | sed "s|^|$top/|"
-git -C "$top" ls-files --others --exclude-standard -- 'docs/superpowers/specs/*-design.md' | sed "s|^|$top/|"
-```
-
-후보가 없거나 사용자가 고르지 않으면 아래 「대상 부재」로 끝낸다.
-
-세션 상태 디렉토리는 `state_path.py` 리졸버로 연다 — 엔진 상태(`docreview-state.md`)와 codex
-산출물이 여기 산다:
-
-```bash
-harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" session-id)"
-ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" state-root)"
-STATE_DIR="$ROOT/$harness_sid"
-```
-
-### 대상 부재 — 게이트 없이 끝나는 경로 (정본 Step A)
-
-`$spec_path` 가 working-tree 에 없거나(삭제된 워크트리 경로 등) 인자 없이 불려 후보를 고르지
-않았으면 게이트를 띄우지 않고 이 문면 그대로 끝낸다. 승인 게이트 직전에도 같은 확인을 한 번 더
-한다.
-
-> `[spec-distill] current_spec '<path>' 부재 (working-tree 에 없거나 후보를 고르지 않았다) — handoff 진행 안 함. 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).`
+것 — 진입 검사 · 입력 · 프로필 · dispatch 둘 · 게이트 · degrade 채널 — 뿐이다.
 
 ## 진입 검사
 
-엔진 라운드 전에 한 번 돈다. 끄기 판정은 이 펜스가 하고, 산문은 펜스 출력의 **마지막 줄**(판결)만
+이 skill 에서 **맨 먼저** 한 번 돈다 — 인자 해석·후보 제시보다, 엔진 라운드보다 앞이다. 끄기 판정은
+이 펜스가 하고, 산문은 펜스 출력의 **마지막 줄**(판결)만
 읽는다 — 조건을 산문으로 적지 않는다. 산문 조건은 집행되지 않고, kill switch 는 P21 보안 컨트롤이라
 그 공백은 "껐다고 믿게만" 만든다.
 
@@ -71,7 +39,8 @@ else
   else
     block="$(printf '%s' "$entry_out" | python3 -c '
 import json, sys
-raw = sys.stdin.read()
+sys.stdout.reconfigure(encoding="utf-8")
+raw = sys.stdin.buffer.read().decode("utf-8", "replace")
 try:
     d = json.loads(raw)
 except ValueError:
@@ -90,10 +59,11 @@ if not ok:
 for a in d["advisories"]:
     print(a)
 if d["disabled"]:
+    print("[spec-distill] 설계문서 리뷰가 꺼져 있다 — " + (d["reason"] or "disabled"))
     print("review-entry: DISABLED:" + (d["reason"] or "disabled"))
 else:
     print("review-entry: PROCEED")
-')" || block="review-entry: DISABLED:entry_check_failed"
+')" || block="$(printf '%s\n' "[spec-distill] 진입 검사 실패(끔으로 친다) — 출력 계약 검사기 자체가 실패했다" "review-entry: DISABLED:entry_check_failed")"
   fi
 fi
 verdict="$(printf '%s\n' "$block" | tail -n 1)"
@@ -107,14 +77,56 @@ printf '%s\n' "$verdict"
 ```
 <!-- review-entry:end -->
 
-마지막 줄이 정확히 `review-entry: PROCEED` 일 때만 `## 절차` 로 간다. 그 밖이면 — `review-entry:
-DISABLED:<사유>` — 펜스가 낸 `[spec-distill]` 줄을 **그대로** 한 단락으로 보이고 게이트 없이 끝난다
-(그 단락의 마지막 문장이 복귀 지시다). 정본 `proceed-gate.md` 의 kill switch 예외 경로다. `PROCEED`
-여도 `[spec-distill]` 줄(은퇴 스위치 공시)이 있으면 그대로 보인다.
+마지막 줄이 정확히 `review-entry: PROCEED` 일 때만 `## 입력` 을 거쳐 `## 절차` 로 간다.
+그 밖이면 — `review-entry: DISABLED:<사유>` — 펜스가 낸 `[spec-distill]` 줄(끈 스위치 또는 실패 사유 ·
+advisory · 복귀 지시)을 **그대로** 한 단락으로 보이고 게이트 없이 끝난다(그 단락의 마지막 문장이 복귀
+지시다). 정본 `proceed-gate.md` 의 kill switch 예외 경로다. `PROCEED` 여도 `[spec-distill]` 줄(은퇴
+스위치 공시)이 있으면 그대로 보인다.
 
 끄는 스위치는 셋이고 셋 다 이 skill 을 직접 불러도 끈다: `DEVBREW_SKIP_HOOKS=spec-distill:review-entry`
 · `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` · 플러그인 전체 `DEVBREW_SPEC_DISTILL_DISABLE=1`. 진입
-검사 자신이 실패하면(모듈 부재 · rc≠0 · 출력 계약 위반) 끔으로 친다.
+검사 자신이 실패하면(모듈 부재 · rc≠0 · 출력 계약 위반 · 검사기 자체 실패) 끔으로 친다.
+
+## 입력
+
+`$spec_path` 는 **호출 인자**다 — `Skill spec-distill:reviewing-spec <설계문서 경로>` 또는
+`/spec-distill:reviewing-spec <경로>`. 상대 경로면 리포 루트 기준 절대 경로로 바꿔 쓴다.
+
+인자가 없으면 후보를 뽑아 `AskUserQuestion` 으로 고르게 한다 — 설계문서(`-design.md`)를 추가한 최근
+커밋 50개에서 나온 것 중 최신 5개와 untracked 전부:
+
+<!-- review-candidates:begin -->
+```bash
+top="$(git rev-parse --show-toplevel)"
+git -C "$top" -c core.quotePath=false log -n 50 --diff-filter=A --name-only --pretty=format: -- 'docs/superpowers/specs/*-design.md' | awk 'NF && !seen[$0]++' | head -n 5 | sed "s|^|$top/|"
+git -C "$top" -c core.quotePath=false ls-files --others --exclude-standard -- 'docs/superpowers/specs/*-design.md' | sed "s|^|$top/|"
+```
+<!-- review-candidates:end -->
+
+후보가 없거나 사용자가 고르지 않으면 아래 「대상 부재」로 끝낸다.
+
+세션 상태 디렉토리는 `state_path.py` 리졸버로 연다 — 엔진 상태(`docreview-state.md`)와 codex
+산출물이 여기 산다:
+
+```bash
+harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" session-id)"
+ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" state-root)"
+STATE_DIR="$ROOT/$harness_sid"
+if [ -z "$harness_sid" ] || [ -z "$ROOT" ]; then
+  STATE_DIR=""
+  echo "[spec-distill] 세션 상태 디렉토리를 특정할 수 없다(session id 또는 state root 미해석) — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
+fi
+```
+
+그 줄이 나오면 게이트 없이 끝낸다 — 아래 `### 대상 부재` 와 같은 출구다.
+
+### 대상 부재 — 게이트 없이 끝나는 경로 (정본 Step A)
+
+`$spec_path` 가 working-tree 에 없거나(삭제된 워크트리 경로 등) 인자 없이 불려 후보를 고르지
+않았으면 게이트를 띄우지 않고 이 문면 그대로 끝낸다. 승인 게이트 직전에도 같은 확인을 한 번 더
+한다.
+
+> `[spec-distill] current_spec '<path>' 부재 (working-tree 에 없거나 후보를 고르지 않았다) — handoff 진행 안 함. 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).`
 
 ## 프로필
 
@@ -193,11 +205,9 @@ skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
 # codex_available: 줄을 낸다(false 여도). 그 줄이 없으면 감지기 자체가 안 돈 것이다 —
 # skip_reason: unknown 으로 뭉개지 않는다.
 if [[ -z "$codex_avail" ]]; then skip_reason="detector_not_runnable"; fi
-# `$spec_path` 는 호출 인자(`## 입력`)라 디스크에서 도출되지 않는다 — 값이
-# 없으면 여기서 **소리를 내고 멈춘다.** 빈 채로 러너에 넘기면 러너가 usage 로 rc 2 에
-# 죽는데, 그 rc 는 아래 잔존물 제거의 옛 조건(rc 3)이 보지 않는 값이라 직전 라운드 YAML 이
-# 그대로 남아 이번 라운드 판정으로 읽힌다. 처방은 「앞에 이어 붙여라」다 — 별개 호출로 다시
-# 돌려도 같은 빈 상태가 재생산된다.
+# `$spec_path` 는 호출 인자(`## 입력`)라 디스크에서 도출되지 않는다 — 값이 없으면 소리를
+# 내고 이 라운드의 codex 축을 건너뛴다(러너에 빈 인자를 넘기면 usage rc 2 로 죽는다). 잔존물은
+# 위 진입 중화가 이미 지웠다.
 if [[ -z "${spec_path:-}" || -z "${CODEX_YAML:-}" ]]; then
   echo "[spec-distill] codex 게이트 입력 부재 — spec_path='${spec_path:-}' CODEX_YAML='${CODEX_YAML:-}'. 「## 입력」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 함께 돌리고, spec_path 에는 이 skill 의 호출 인자(설계문서 경로)를 대입해라. 이 라운드의 codex 축은 없이 간다." >&2
   codex_avail=""; skip_reason="gate_inputs_missing"
@@ -304,17 +314,21 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 ### 미커밋 확인 — ①/② 직전
 
 사용자가 진행을 고르면 다음 단계로 가기 전에 이 펜스를 돌리고, 나온 `[spec-distill]` 줄을 그대로
-보인다. 진행은 막지 않는다.
+보인다. 진행은 막지 않는다. `$spec_path` 는 이 펜스 안에서 호출 인자로 다시 대입한다(새 셸).
 
 <!-- uncommitted-check:begin -->
 ```bash
-spec_dir="$(dirname -- "$spec_path")"
-spec_base="$(basename -- "$spec_path")"
-born_out="$(git -C "$spec_dir" status --porcelain --ignored -- "$spec_base" 2>/dev/null)"; born_rc=$?
-if [ "$born_rc" -ne 0 ]; then
-  echo "[spec-distill] 커밋 여부를 확인하지 못했다(git rc=$born_rc) — '$spec_path' 가 git 작업 트리 밖이거나 git 이 실패했다. writing-plans 전에 문서가 커밋됐는지 직접 확인하라."
-elif [ -n "$born_out" ]; then
-  echo "[spec-distill] 리뷰 수정분이 커밋되지 않았다: $spec_path — writing-plans 전에 커밋하라."
+if [ -z "${spec_path:-}" ]; then
+  echo "[spec-distill] 미커밋 확인 입력 부재 — spec_path 가 비었다(Bash 호출마다 새 셸이다 — 호출 인자를 이 펜스 안에서 다시 대입하라)."
+else
+  spec_dir="$(dirname -- "$spec_path")"
+  spec_base="$(basename -- "$spec_path")"
+  born_out="$(git -C "$spec_dir" status --porcelain --ignored --untracked-files=all -- "$spec_base" 2>/dev/null)"; born_rc=$?
+  if [ "$born_rc" -ne 0 ]; then
+    echo "[spec-distill] 커밋 여부를 확인하지 못했다(git rc=$born_rc) — '$spec_path' 가 git 작업 트리 밖이거나 git 이 실패했다. writing-plans 전에 문서가 커밋됐는지 직접 확인하라."
+  elif [ -n "$born_out" ]; then
+    echo "[spec-distill] 커밋되지 않은 변경(또는 미추적·ignore 된 문서)이 있다: $spec_path — writing-plans 전에 커밋하라."
+  fi
 fi
 ```
 <!-- uncommitted-check:end -->

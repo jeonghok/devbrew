@@ -96,9 +96,12 @@ def main(argv: list[str]) -> int:
         return 0
     if sub == "session-id":
         # env-only resolve (no hook payload on the CLI path). Skills key their
-        # per-session state directory with this sid (reviewing-spec's STATE_DIR,
-        # the brief pipeline's state.local.md). Unresolved → exit 1 with NO
-        # stdout (caller treats empty as "state directory unresolved").
+        # per-session state directory with this sid. Unresolved → exit 1 with NO
+        # stdout; each named caller handles the empty value itself:
+        #   - reviewing-spec `## 입력`: empty sid/root → loud line, STATE_DIR left
+        #     empty, the skill ends without the gate (same exit as 대상 부재).
+        #   - reviewing-brief `## 상태` (state.local.md): proceeds without state
+        #     writes, loud advisory, degrades carried in the Step B gate text.
         sid = resolve_session_id(None)
         if sid is None:
             return 1
