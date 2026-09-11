@@ -388,7 +388,7 @@ stopped gt-plain "러너: 공백·꼬리 주석 든 평문 ground_truth(R42 — 
 mutate_case gt-dup-mixed
 stopped gt-dup-mixed "러너: 모양이 다른 중복 ground_truth:(R42)"
 
-for shape in web-absent gt-absent; do
+for shape in web-absent gt-absent lr-absent; do
   mutate_case "$shape"
   assert_file_grep "$TMPD/shape-$shape.yaml" 'reason: profile_field_missing' \
     "러너: 읽는 필드가 없음($shape) → profile_field_missing 으로 멈춘다(R42 — 웹도 추측하지 않는다)"
@@ -481,7 +481,8 @@ variant flow-web "$SD_PROF/seed.md" accept ambiguous "I1 리뷰 재현: seed 의
 variant flow-web "$QG_PROF/generic.md" accept ambiguous "I1 리뷰 재현: generic 의 defer_target flow 연속줄 컬럼-0 web: true"
 # M3 — 게이트는 받는데 러너가 틀린 사유(ground_truth_empty)를 내던 모양.
 variant gt-spacecolon "$SD_PROF/design-doc.md" accept ambiguous "M3: ground_truth : (콜론 앞 공백)"
-variant gt-u2028 "$SD_PROF/design-doc.md" accept ambiguous "M3: U+2028 뒤의 ground_truth"
+variant gt-u2028 "$SD_PROF/design-doc.md" accept ambiguous "M3: ground_truth 값 안의 U+2028 — U+2028 규칙 하나만 어긴다"
+variant gt-u2028-hidden "$SD_PROF/design-doc.md" accept ambiguous "M3 원 재현: U+2028 뒤에 숨긴 ground_truth(꼬리 주석 규칙도 함께 어긴다)"
 # M1 — 게이트가 거절하는 문자열 아닌 ground_truth.
 variant 'gt-value= 123' "$SD_PROF/design-doc.md" reject ambiguous "M1: ground_truth: 123"
 variant 'gt-value= true' "$SD_PROF/design-doc.md" reject ambiguous "M1: ground_truth: true"
@@ -527,7 +528,18 @@ variant g-blockscalar "$SD_PROF/seed.md" accept ambiguous "R42 규칙: block sca
 variant g-anchor "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 앵커"
 variant g-unclosed "$SD_PROF/seed.md" reject ambiguous "R42 규칙: 줄에서 안 닫힌 큰따옴표"
 variant g-tab "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 탭 문자"
-[ "$VN" -ge 42 ] && ok "한 판정 모양 ${VN}개 (vacuous 아님)" || no "한 판정 모양이 ${VN}개뿐이다"
+# 풀어도 이 절이 GREEN 이던 규칙 넷(Task 3c 재리뷰 2 Minor 3 — mutcov)의 단일 위반 셀.
+variant g-nel "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 큰따옴표 안 NEL(U+0085) — PyYAML 은 공백으로 접는다"
+variant g-seqtail "$SD_PROF/seed.md" reject ambiguous "R42 규칙: 시퀀스 항목 뒤 텍스트"
+variant g-boolkey "$SD_PROF/seed.md" accept ambiguous "R42 규칙: bool 낱말 키(on)"
+variant g-topqkey "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 최상위 따옴표 키"
+# 경로 중간의 키가 있지만 매핑이 아니면 부재(rc 6)가 아니라 모양(rc 5)이다(재리뷰 2 Minor 4). 양의 짝은
+# 위 「읽는 필드가 없음」 루프의 lr-absent(키 자체가 없으면 profile_field_missing).
+variant lr-list "$SD_PROF/design-doc.md" reject ambiguous "rc 5: layer_rubric 이 목록(매핑 아님)"
+variant lr-bare "$SD_PROF/design-doc.md" reject ambiguous "rc 5: 맨 layer_rubric:(null — 매핑 아님)"
+# 층 범주명은 정규식이 아니다(재리뷰 2 Minor 1) — 게이트가 컴파일하지 않고 받고, 러너는 같은 값을 싣는다.
+variant l1-regexy "$SD_PROF/design-doc.md" accept faithful "층 범주명에 정규식 메타(c++) — 게이트·러너가 같은 값"
+[ "$VN" -ge 50 ] && ok "한 판정 모양 ${VN}개 (vacuous 아님)" || no "한 판정 모양이 ${VN}개뿐이다"
 
 # ── P21 preamble 부재 — R43 (i). 호스트에 prompt-preamble.md 가 없거나 주석뿐이면 주입 경계 없이
 #    codex 를 부르지 않는다(재리뷰 실측: 옛 러너는 P21 절 없는 프롬프트로 codex 를 불렀다 —

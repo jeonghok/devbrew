@@ -8,8 +8,9 @@ stdlib 빌더가 그 모양을 어떻게 읽는지 재게 한다. 새 프로필�
 
 게이트(`load_profile()`)가 **거절하는** 모양도 있다 — 중복 키(`dup-web`·`dup-layer1`·
 `gt-dup`·`gt-dup-mixed`, Task 3c R37 이후), 목록·빔·null·부재(`gt-flow-list`·`gt-block-list`·
-`gt-empty`·`gt-bare`·`gt-null`·`gt-absent`), 빈 본문(`body-empty`), 문자열 아닌 `gt-value=` 값.
-리뷰 I1·M3 재현 모양(`qcont-gt`·`qcont-all`·`flow-web`·`gt-spacecolon`·`gt-u2028`)은 게이트가
+`gt-empty`·`gt-bare`·`gt-null`·`gt-absent`), 빈 본문(`body-empty`), 문자열 아닌 `gt-value=` 값,
+시퀀스 항목 뒤 텍스트(`g-seqtail`), 매핑이 아니거나 없는 `layer_rubric`(`lr-list`·`lr-bare`·`lr-absent`).
+리뷰 I1·M3 재현 모양(`qcont-gt`·`qcont-all`·`flow-web`·`gt-spacecolon`·`gt-u2028`·`gt-u2028-hidden`)은 게이트가
 **받는다** — 러너가 그것을 다른 값으로 읽지 않는지(이름 붙은 fail-closed 인지) 재는 용도다 — 러너가 게이트 없이 단독으로
 불렸을 때의 행동을 재기 위한 것이다(러너는 게이트를 다시 구현하지 않는다).
 
@@ -28,6 +29,8 @@ SHAPES = (
     "rr-qkey-gt", "rr-control",
     "g-qkey", "g-hashkey", "g-qmark", "g-comment", "g-tailcomment", "g-sq", "g-esc", "g-nestflow",
     "g-plainquote", "g-indent4", "g-blockscalar", "g-anchor", "g-unclosed", "g-tab",
+    "g-nel", "g-seqtail", "g-boolkey", "g-topqkey", "gt-u2028-hidden",
+    "lr-list", "lr-bare", "lr-absent", "l1-regexy",
 )
 # Task 3c 재리뷰 1 의 I1(b) 재현(`t3c-rr1/mkv.py` 그대로) — `defer_target: {kind: none}` 을 frontmatter
 # 끝의 block 매핑으로 옮기고, 옛 스캐너가 추적하지 못한 자리에 컬럼-0 디코이 줄을 숨긴다. 게이트는
@@ -47,6 +50,7 @@ RR_BLOCKS = {
 # 모양은 규칙 여럿을 한꺼번에 어겨서 규칙 하나를 풀어도 여전히 멈추므로, 규칙별 이빨은 이 모양들이
 # 잰다(`g-comment` · `g-tailcomment` 는 아래 분기).
 G_BLOCKS = {
+    "g-boolkey": '\ndefer_target:\n  kind: none\n  on: v',
     "g-qkey": '\ndefer_target:\n  kind: none\n  "k": abc',
     "g-hashkey": '\ndefer_target:\n  kind: none\n  a#b: abc',
     "g-qmark": '\ndefer_target:\n  kind: none\n  ? k\n  : v',
@@ -202,6 +206,11 @@ def main():
     elif shape == "gt-spacecolon":
         text = _sub1(r"^ground_truth:", "ground_truth :", text)
     elif shape == "gt-u2028":
+        # U+2028 규칙 **하나만** 어긴다 — 큰따옴표 안의 U+2028(PyYAML 은 보존한다). 이 규칙을 풀면
+        # 러너가 같은 값을 읽고 진행하므로 셀이 RED 가 된다. 옛 입력(아래 gt-u2028-hidden)은 꼬리 주석
+        # 규칙에서 먼저 멈춰 이 규칙의 이빨이 아니었다.
+        text = _sub1(GT_LINE, 'ground_truth: "before\u2028REAL_BEHIND_U2028"', text)
+    elif shape == "gt-u2028-hidden":
         # 리뷰 M3 재현 — PyYAML 은 U+2028 을 줄바꿈으로 본다. 진짜 ground_truth 를 그 뒤에 둔다.
         text = _sub1(GT_LINE + r"\n", "", text)
         text = _sub1(r"^detectors: 1$", 'detectors: 1 # c ground_truth: "REAL_BEHIND_U2028"', text)
@@ -218,6 +227,21 @@ def main():
         text = _sub1(r"^detectors: 1$", "detectors: 1\n# a comment line", text)
     elif shape == "g-tailcomment":
         text = _sub1(r"^web: false$", "web: false # note", text)
+    elif shape == "g-nel":
+        # 큰따옴표 안의 NEL(U+0085) — PyYAML 은 공백으로 접고, 러너는 LF 밖 줄바꿈 규칙에서 멈춘다.
+        text = _sub1(GT_LINE, 'ground_truth: "NEL\u0085INSIDE"', text)
+    elif shape == "g-seqtail":
+        text = _sub1(r"^protected_headings: \[\]$", 'protected_headings:\n  - "x" y', text)
+    elif shape == "g-topqkey":
+        text = _sub1(r"^web: false$", '"web": false', text)
+    elif shape in ("lr-list", "lr-bare", "lr-absent"):
+        # 경로 중간의 키가 있지만 매핑이 아님(목록 · null) ↔ 키 자체가 없음 — 러너가 rc 5 와 rc 6 을 가른다.
+        text = _sub1(r"^layer_rubric:\n  layer1: .*\n  layer2: .*\n",
+                     {"lr-list": "layer_rubric: [a]\n", "lr-bare": "layer_rubric:\n",
+                      "lr-absent": ""}[shape], text)
+    elif shape == "l1-regexy":
+        # 층 범주명에 정규식 메타 — 게이트와 러너가 같은 문자열로 받아야 한다.
+        text = _sub1(r"^  layer1: \[", '  layer1: ["c++", ', text)
     elif shape.startswith("gt-value="):
         text = _sub1(GT_LINE, "ground_truth:" + shape[len("gt-value="):].replace("\\n", "\n"), text)
 

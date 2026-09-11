@@ -103,15 +103,16 @@ def _split_frontmatter(text: str):
     return text[4:end], text[end + 5:]
 
 
-def _str_list(v, field):
+def _str_list(v, field, regex=True):
     if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
         raise ProfileError("field_not_str_list:%s" % field)
-    for pat in v:
-        if pat != "*":
-            try:
-                re.compile(pat)
-            except re.error as e:
-                raise ProfileError("bad_regex:%s:%s" % (field, e))
+    if regex:
+        for pat in v:
+            if pat != "*":
+                try:
+                    re.compile(pat)
+                except re.error as e:
+                    raise ProfileError("bad_regex:%s:%s" % (field, e))
     return v
 
 
@@ -146,9 +147,11 @@ def load_profile(path) -> dict:
     lr_extra = [k for k in lr if k not in ("layer1", "layer2")]
     if lr_extra:
         raise ProfileError("layer_rubric_fields_unknown:%s" % ",".join(lr_extra))
-    # 층 항목은 문자열이다 — 러너도 문자열 목록이 아니면 멈춘다(한 판정, Task 3c R43).
-    _str_list(lr["layer1"], "layer_rubric.layer1")
-    _str_list(lr["layer2"], "layer_rubric.layer2")
+    # 층 항목은 문자열이다 — 러너도 문자열 목록이 아니면 멈춘다(한 판정, Task 3c R43). 층 범주명은
+    # 정규식이 아니므로 컴파일하지 않는다 — 러너는 문자열이면 그대로 싣는다(`"c++"` 를 게이트만
+    # `bad_regex` 로 거절하던 반대 방향 발산).
+    _str_list(lr["layer1"], "layer_rubric.layer1", regex=False)
+    _str_list(lr["layer2"], "layer_rubric.layer2", regex=False)
     dl = data["decision_log"]
     if not isinstance(dl, dict) or dl.get("kind") not in LOG_KINDS:
         raise ProfileError("decision_log_invalid")

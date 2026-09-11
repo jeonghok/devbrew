@@ -97,11 +97,14 @@ STDERR_FILE="$SCRATCH/codex.stderr"
 #   0 성공 · 1 `prompt_build_failed`(층 1·처분 목록이 빔) · 3 `ground_truth_empty`(빈 문자열·
 #   null·목록 — 게이트와 같은 이름) · 4 `profile_body_empty`(본문이 공백뿐 — 게이트와 같은 이름) ·
 #   5 `profile_parse_ambiguous`(frontmatter 가 허용 목록 줄 문법 밖 — 문법 전부는 빌더의
-#   `_parse_frontmatter` 주석이다 — 이거나, 같은 매핑의 중복 키, 또는 읽는 필드의 타입이 다름:
-#   ground_truth 가 문자열이 아님 · web 이 bool 이 아님 · 층·처분이 문자열 목록이 아님) ·
+#   `_parse_frontmatter` 주석이다 — 이거나, 같은 매핑의 중복 키, 또는 읽는 필드의 모양·타입이 다름:
+#   ground_truth 가 문자열이 아님 · web 이 bool 이 아님 · 층·처분이 문자열 목록이 아님 · 경로 중간의
+#   키(`layer_rubric`)가 있지만 매핑이 아님) ·
 #   6 `profile_field_missing`(읽는 필드 — layer_rubric.layer1·layer2 · allowed_dispositions ·
 #   ground_truth · web — 가 없음, frontmatter 부재 포함) · 7 `preamble_missing`(P21 preamble 파일이
-#   없거나 비어 있음 — 주입 경계 없이 codex 를 부르지 않는다).
+#   없거나, 비었거나, 한 줄 HTML 주석뿐 — 그러면 codex 를 부르지 않는다. 내용에 P21 절이 있는지는
+#   보지 않는다: 그것은 P21 지배 락 plugins/quality-gates/tests/test_codex_prompt_untrusted_clause.sh
+#   가 배포 preamble 로 잰다).
 # `DOCREVIEW_CODEX_PARSED_OUT=<경로>` 가 있으면 빌더가 읽은 frontmatter 값(`_read` 경로 → 값)을
 # 그 경로에 JSON 으로 남긴다 — 게이트와의 등식 대조(test_docreview_codex.sh)가 쓰는 관측 채널.
 BUILD_RC=0
@@ -272,8 +275,11 @@ def _parse_frontmatter(fm):
     # 멈춘다(게이트의 `duplicate_key` 와 같은 판정).
     #
     # 보장하는 것: 값이 한 줄을 넘지 않으므로 「따옴표·flow 연속줄 속 컬럼-0 키」 부류가 모양째 없다.
-    # 이 문법을 통과한 frontmatter 는 PyYAML 이 같은 구조와 같은 값(문자열의 `\\` 해제 · 토큰의
-    # bool·int·null 해석 포함)으로 읽는다. 보장하지 않는 것: 게이트의 **스키마** 검사(필드 집합 ·
+    # 이 문법을 통과한 frontmatter 를 PyYAML 도 받는다면 같은 구조와 같은 값(문자열의 `\\` 해제 ·
+    # 토큰의 bool·int·null 해석 포함)으로 읽는다 — 두 파서가 **모두 받을 때**의 성질이다. 이 문법은
+    # 받지만 PyYAML 은 거절하는 입력(큰따옴표 안 비인쇄 문자 · `0x_` 류 토큰)이 있다: 엔진 경로에서는
+    # 게이트가 먼저 거절하므로 도달하지 않고, 러너만 단독으로 부르면 그 값으로 codex 를 부른다.
+    # 보장하지 않는 것: 게이트의 **스키마** 검사(필드 집합 ·
     # 처분 어휘 · detectors · 정규식 컴파일 · decision_log/defer_target 모양) — 그것은
     # `load_profile()` 몫이고, 엔진 경로는 언제나 게이트를 먼저 지난다.
     for ch in ("\r", "\x85", "\u2028", "\u2029", "\t"):
@@ -317,9 +323,14 @@ def _parse_frontmatter(fm):
 
 
 def _field(data, *path):
+    # 키가 없으면 부재(rc 6)다. 경로 중간의 키가 있지만 매핑이 아니면(`layer_rubric: [a]` · 맨
+    # `layer_rubric:`) 부재가 아니라 모양이 다른 것이다(rc 5) — 게이트도 둘을 다른 사유
+    # (`fields_missing` · `layer_rubric_invalid`)로 가른다.
     d = data
-    for k in path:
-        if not isinstance(d, dict) or k not in d:
+    for i, k in enumerate(path):
+        if not isinstance(d, dict):
+            _ambiguous("not a mapping: " + ".".join(path[:i]))
+        if k not in d:
             raise _Missing(".".join(path))
         d = d[k]
     return d

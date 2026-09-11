@@ -158,4 +158,31 @@ PY
     "층 항목이 문자열이 아님($lk) → 사유가 field_not_str_list:layer_rubric.$lk 다"
 done
 
+# ⑧ (Task 3c 재리뷰 2 Minor 1) 층 범주명은 정규식이 아니다 — 게이트가 컴파일하지 않는다. `"c++"` 를
+# 게이트만 `bad_regex` 로 거절하고 러너는 받던 반대 방향 발산이었다(러너 쪽 셀은
+# test_docreview_codex.sh 의 l1-regexy). 양의 짝: 정규식 필드(fix_anchors)는 여전히 컴파일한다 —
+# 층에서 푼 검사가 정규식 필드까지 번지면 거기서 RED.
+python3 - "$DD" "$TMPD/l1-regexy.md" "$TMPD/fa-badre.md" <<'PY'
+import re, sys
+src, d1, d2 = sys.argv[1:4]
+t = open(src, encoding="utf-8").read()
+n, c = re.subn(r"^(  layer1: \[)", lambda m: m.group(1) + '"c++", "(", ', t, count=1, flags=re.M)
+assert c == 1, "layer1"
+open(d1, "w", encoding="utf-8").write(n)
+n, c = re.subn(r'^fix_anchors: \["\*"\]$', 'fix_anchors: ["("]', t, count=1, flags=re.M)
+assert c == 1, "fix_anchors"
+open(d2, "w", encoding="utf-8").write(n)
+PY
+if python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/l1-regexy.md" >"$TMPD/out8.json" 2>"$TMPD/err8"; then
+  ok "층 범주명에 정규식 메타(c++ · 여는 괄호) → profile-check 가 받는다(컴파일하지 않는다)"
+else
+  no "층 범주명에 정규식 메타 → profile-check 가 거절했다 — $(cat "$TMPD/err8")"
+fi
+assert_eq "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["layer_rubric"]["layer1"][:2])' "$TMPD/out8.json" 2>/dev/null)" \
+  "['c++', '(']" "층 범주명: 받은 값이 문자열 그대로다"
+python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/fa-badre.md" >/dev/null 2>"$TMPD/err8b"
+rc=$?
+assert_eq "$rc" "2" "양의 짝: 정규식 필드 fix_anchors 에 못 여는 괄호 → profile-check rc 2"
+assert_file_grep "$TMPD/err8b" 'bad_regex:fix_anchors' "양의 짝: 사유가 bad_regex:fix_anchors 다"
+
 finish
