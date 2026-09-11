@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# AC20 — codex 프롬프트 빌더 4종이 untrusted-data(P21) 절 + 무조건 blanket 문장 +
-# 무조건 action 금지 문장을 **방출**하는가, 적대적 stdout 인코딩에서도 여전히
-# 방출하는가, 그 판정이(brief 빌더 한정) **템플릿에서 왔다**고 말할 수 있는가, 그리고
-# 세 앵커가 입력 태그보다 **먼저** 오고, **마지막 앵커의 끝과 입력 태그의 시작 사이**에
-# 공백 아닌 것이 안 끼어드는가(정확한 범위는 아래 dominance 문단 참조).
+# AC20 — codex 프롬프트 빌더(와 인라인 빌더를 가진 셸 러너)가 untrusted-data(P21) 절 +
+# 무조건 blanket 문장 + 무조건 action 금지 문장을 **방출**하는가, 적대적 stdout 인코딩에서도
+# 여전히 방출하는가, 그 판정이(프롬프트에 프로필 본문을 싣는 러너 한정) 프로필이 아니라
+# **preamble 에서 왔다**고 말할 수 있는가, 그리고 세 앵커가 입력 태그보다 **먼저** 오고,
+# **마지막 앵커의 끝과 입력 태그의 시작 사이**에 공백 아닌 것이 안 끼어드는가(정확한 범위는
+# 아래 dominance 문단 참조).
 #
 # 이 지배(dominance) 축이 **재지 않는** 것 — 넓은 커버리지로 오독하지 말 것: 세 앵커
 # *사이*의 gap(예: ONLY와 BLANKET 사이에 뭔가 끼어드는 것), 첫 앵커보다 **앞**에 오는
@@ -40,8 +41,8 @@
 # brief 안 URL은 조사해도 된다"). 그래서 각 (빌더, axis)마다: 세 앵커의 위치가
 # 전부 입력 태그보다 앞서는가, 그리고 **마지막 앵커의 끝과 입력 태그의 시작 사이엔
 # 공백만 있는가**를 함께 잰다 — 한 assertion으로 A(순서 위반)와 D(공백 자리에
-# 삽입)를 동시에 잡는다. 입력 태그 이름(`<diff>`/`<artifact>`/`<design_doc>`/
-# `<interview_brief>`)은 빌더→태그 매핑을 여기 하드코딩하지 않고, 빌더 소스에서
+# 삽입)를 동시에 잡는다. 입력 태그 이름(`<diff>`·`<artifact>` 등, 빌더마다 다르다)은
+# 빌더→태그 매핑을 여기 하드코딩하지 않고, 빌더 소스에서
 # `<tag>\n{{PLACEHOLDER}}` 패턴으로 **도출**한다.
 #
 # 인코딩 축은 PYTHONIOENCODING=ascii로만 잰다 — 로케일 축(LC_ALL=...)이 아니다.
@@ -50,18 +51,14 @@
 # 그러면 로케일 락은 아무것도 재지 못한다 — PYTHONIOENCODING은 python3 프로세스에만
 # 영향을 주므로 bash 파싱과 분리된다.
 #
-# brief 빌더(build_brief_codex_prompt.py)는 나머지 셋과 구조가 다르다 — 다른 빌더는
-# 하니스가 입력을 직접 쓰지만, 이 빌더는 `--axis`가 고른 체크리스트 **파일**
-# (brief-codex-<axis>-checklist.md)을 `{{AXIS_CHECKLIST}}`에 그대로 inline한다.
-# 그래서 두 가지가 이 빌더에만 필요하다:
-#   1) 두 axis 전부를 잰다 — `direction`만 재면 `fidelity` 프롬프트는 아무도 보지
-#      않는다. 하드코딩("direction fidelity")이 아니라 빌더 자신의 `AXES` 튜플에서
-#      axis 목록을 **도출**한다 — 나중에 세 번째 축이 추가돼도 이 락이 계속 잡는다.
-#   2) 양성(clause/blanket/action이 방출됐다)과 **짝을 이루는 음성**(체크리스트
-#      파일 자체는 그 리터럴을 담지 않는다)을 함께 잰다. 양성 하나만으로는 판정이
-#      템플릿에서 왔는지 체크리스트에서 왔는지 구분 못 한다 — P21 문단을 템플릿에서
-#      빼서 체크리스트 파일에 옮겨도 양성만으로는 계속 GREEN이 나온다(실측: 이 락이
-#      리뷰에서 이 실패를 겪었다). 음성이 없으면 판정은 vacuous.
+# 프롬프트에 **데이터 파일을 통째로 싣는** 자리는 양성만으로 출처를 못 가린다. 옛 brief
+# 빌더(문서 리뷰 엔진 전환으로 삭제)는 축별 체크리스트 파일을 inline 했고, 지금은 엔진의
+# codex 러너가 프로필 본문(`references/docreview-profiles/*.md`)을 `<review_profile>` 에
+# 싣는다. 그래서 러너 판정의 양성(clause/blanket/action 이 방출됐다)과 **짝을 이루는
+# 음성**(프로필 파일 자체는 그 리터럴을 담지 않는다)을 함께 잰다. 양성 하나로는 판정이
+# preamble 에서 왔는지 프로필에서 왔는지 구분 못 한다 — P21 문단을 preamble 에서 빼 프로필
+# 본문에 옮겨도 양성만으로는 계속 GREEN 이다(옛 체크리스트에서 실측된 실패). 음성이 없으면
+# 판정은 vacuous.
 set -u -o pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
@@ -82,7 +79,7 @@ builder_source_path() {
   case "$1" in
     build_codex_prompt.py|build_artifact_codex_prompt.py)
       echo "$ROOT/plugins/quality-gates/scripts/$1" ;;
-    build_brief_codex_prompt.py|build_seed_codex_prompt.py)
+    build_seed_codex_prompt.py)
       echo "$ROOT/plugins/spec-distill/scripts/$1" ;;
     *)
       return 1 ;;
@@ -108,40 +105,13 @@ emit() {
       $py "$ROOT/plugins/quality-gates/scripts/$builder" "$TMP/in.diff" "$TMP/empty.txt" ;;
     build_artifact_codex_prompt.py)
       $py "$ROOT/plugins/quality-gates/scripts/$builder" "$TMP/in.md" ;;
-    build_brief_codex_prompt.py)
-      $py "$ROOT/plugins/spec-distill/scripts/$builder" --axis "$axis" "$TMP/in.md" ;;
     build_seed_codex_prompt.py)
-      # brief 와 달리 AXES 는 "suppression" 하나뿐이라(Task 14) 브리프처럼 소스에서
-      # 축 목록을 도출하지 않는다 — 축이 하나인 빌더에는 단일-인자 하드코딩이면
-      # 충분하다(형제 중 브리프만 축이 둘이라 예외였다).
+      # AXES 는 "suppression" 하나뿐이라(Task 14) 소스에서 축 목록을 도출하지 않는다 —
+      # 축이 하나인 빌더에는 단일-인자 하드코딩이면 충분하다.
       $py "$ROOT/plugins/spec-distill/scripts/$builder" --axis suppression "$TMP/in.md" ;;
     *)
       return 1 ;;
   esac
-}
-
-# brief 빌더 자신의 AXES 튜플을 **소스에서 파싱**해 axis 목록을 도출한다(import로
-# 실행하지 않는다 — 그냥 ast로 리터럴을 읽는다). "direction fidelity"를 여기 다시
-# 타이핑하면 이 락 자체가 하드코딩이 되어, 빌더가 세 번째 축을 추가해도 못 잡는다.
-# ast.Assign(`AXES = (...)`)뿐 아니라 ast.AnnAssign(`AXES: tuple[str, ...] = (...)`)도
-# 잡는다 — 타입 힌트를 붙이는 평범한 편집 한 번에 이 락이 "AXES 튜플을 도출하지
-# 못했다"는, 원인을 잘못 짚는 진단으로 넘어가는 것을 막는다.
-brief_axes() {
-  python3 - "$ROOT/plugins/spec-distill/scripts/build_brief_codex_prompt.py" <<'PY'
-import ast, sys
-src = open(sys.argv[1], encoding="utf-8").read()
-tree = ast.parse(src)
-for node in ast.walk(tree):
-    target = value = None
-    if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-        target, value = node.targets[0], node.value
-    elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-        target, value = node.target, node.value
-    if target is not None and target.id == "AXES" and value is not None:
-        for v in ast.literal_eval(value):
-            print(v)
-        break
-PY
 }
 
 # 지배(dominance) 판정: 세 앵커(CLAUSE/BLANKET/ACTION)가 전부 입력 태그보다 앞에
@@ -179,7 +149,7 @@ PY
 
 # 방출된 프롬프트 하나에 대한 6개 assertion: 본문 마커, CLAUSE, BLANKET, ACTION,
 # 적대적 인코딩에서도 CLAUSE가 살아남는가, 세 앵커의 지배 관계. $1=사람이 읽을
-# 라벨, $2=빌더 파일명, $3=axis(brief 전용, 그 외 무시).
+# 라벨, $2=빌더 파일명, $3=axis(emit() 에 넘길 축 — 없으면 빈 값).
 check_one() {
   local label="$1" builder="$2" axis="${3:-}"
   local out out_ascii src_path dom
@@ -232,7 +202,9 @@ check_one() {
 builders="$(grep -lE '^PROMPT_TEMPLATE' "$ROOT"/plugins/*/scripts/build_*codex*prompt.py 2>/dev/null \
             | while IFS= read -r f; do basename "$f"; done | sort)"
 n=0; [ -n "$builders" ] && n="$(printf '%s\n' "$builders" | wc -l | tr -d ' ')"
-if [ "$n" -ge 4 ]; then
+# 하한은 오늘의 실측이다(옛 brief 빌더가 문서 리뷰 엔진 전환으로 지워져 4 → 3). 일부만
+# 사라져도(3 → 2) 조용히 좁아지지 않게 실측을 하한으로 둔다.
+if [ "$n" -ge 3 ]; then
   ok "빌더 도출 ${n}개 (vacuous 아님)"
 else
   no "빌더가 ${n}개뿐 — 도출 기준이 깨졌다, 아래 판정 무의미"
@@ -240,51 +212,34 @@ fi
 
 while IFS= read -r b; do
   [ -n "$b" ] || continue
-  if [ "$b" = "build_brief_codex_prompt.py" ]; then
-    axes="$(brief_axes)"
-    if [ -z "$axes" ]; then
-      no "$b: AXES 튜플을 소스에서 도출하지 못했다 — axis별 판정을 스킵한다"
-    else
-      while IFS= read -r ax; do
-        [ -n "$ax" ] || continue
-        check_one "$b --axis $ax" "$b" "$ax"
-      done <<AXEOF
-$axes
-AXEOF
-    fi
-  else
-    check_one "$b" "$b" ""
-  fi
+  check_one "$b" "$b" ""
 done <<EOF
 $builders
 EOF
 
-# 음성 짝(brief 전용 구멍): 체크리스트 파일 자체는 앵커 리터럴을 담지 않아야 한다.
-# 위 axis별 양성 판정은 출처가 템플릿인지 체크리스트인지 구분하지 못한다 — 파일
-# 목록도 하드코딩하지 않고 glob으로 도출한다. 빌더 목록과 같은 이유로 도출
-# 기준에도 floor(-ge 2)를 둔다 — glob이 0개를 매칭하면 아래 음성 판정 전부가
-# 조용히 스킵되어 vacuous GREEN이 된다(빌더 floor가 `-ge 4`인 것과 같은 원칙).
-# 참고: 이 파일명이 통째로 사라지는 사고는 이 락이 아니라
-# test_brief_codex_axes.sh:11-12,67이 이미 하드핀으로 잡는다 — 여기 floor는 그
-# 락의 대체가 아니라, glob 도출 자체가 자기 안에서 vacuous하지 않다는 보장이다.
-checklist_glob="$ROOT"/plugins/spec-distill/scripts/brief-codex-*-checklist.md
-cn=0
-for cl in $checklist_glob; do [ -f "$cl" ] && cn=$((cn+1)); done
-if [ "$cn" -ge 2 ]; then
-  ok "brief 체크리스트 파일 도출 ${cn}개 (vacuous 아님)"
+# 음성 짝: 러너가 프롬프트에 싣는 프로필 본문 자체는 앵커 리터럴을 담지 않아야 한다.
+# 아래 러너 판정의 양성은 출처가 preamble 인지 프로필 본문인지 구분하지 못한다(헤더의
+# 데이터 파일 문단). 대상은 아래 러너 판정이 도는 것과 같은 글롭으로 도출하고, 하한은
+# 오늘의 실측(4)이다 — 글롭이 일부만 맞춰도(4 → 3) 음성 판정이 조용히 좁아지지 않게.
+profile_glob="$ROOT"/plugins/*/references/docreview-profiles/*.md
+pn=0
+for pf in $profile_glob; do [ -f "$pf" ] && pn=$((pn+1)); done
+if [ "$pn" -ge 4 ]; then
+  ok "프로필 파일 도출 ${pn}개 (vacuous 아님)"
 else
-  no "brief 체크리스트 파일이 ${cn}개뿐 — 도출 기준이 깨졌다, 아래 음성 판정 무의미"
+  no "프로필 파일이 ${pn}개뿐 — 도출 기준이 깨졌다, 아래 음성 판정 무의미"
 fi
-for cl in $checklist_glob; do
-  [ -f "$cl" ] || continue
+for pf in $profile_glob; do
+  [ -f "$pf" ] || continue
   leaked=""
-  grep -qF "$CLAUSE" "$cl" && leaked="CLAUSE"
-  grep -qF "$BLANKET" "$cl" && leaked="${leaked:+$leaked+}BLANKET"
-  grep -qF "$ACTION" "$cl" && leaked="${leaked:+$leaked+}ACTION"
+  grep -qF "$CLAUSE" "$pf" && leaked="CLAUSE"
+  grep -qF "$BLANKET" "$pf" && leaked="${leaked:+$leaked+}BLANKET"
+  grep -qF "$ACTION" "$pf" && leaked="${leaked:+$leaked+}ACTION"
+  plabel="$(basename "$(dirname "$(dirname "$(dirname "$pf")")")")/$(basename "$pf")"
   if [ -z "$leaked" ]; then
-    ok "$(basename "$cl"): 앵커 리터럴이 체크리스트 자체엔 없다 (위 양성 판정이 템플릿 귀속임을 보장)"
+    ok "$plabel: 앵커 리터럴이 프로필 자체엔 없다 (러너 판정의 양성이 preamble 귀속임을 보장)"
   else
-    no "$(basename "$cl"): 체크리스트가 앵커 리터럴($leaked)을 이미 담고 있다 — 위 양성 판정이 템플릿이 아니라 이 파일에서 왔을 수 있다. 고치려면: 이 표준 문장을 체크리스트에 그대로 인용하지 말고 같은 규칙을 자기 말로 바꿔 적어라(원문을 그대로 복사하면 이 짝-검사가 다시 무의미해진다)"
+    no "$plabel: 프로필이 앵커 리터럴($leaked)을 이미 담고 있다 — 러너 판정의 양성이 preamble 이 아니라 이 파일에서 왔을 수 있다. 고치려면: 이 표준 문장을 프로필에 그대로 인용하지 말고 같은 규칙을 자기 말로 바꿔 적어라(원문을 그대로 복사하면 이 짝-검사가 다시 무의미해진다)"
   fi
 done
 

@@ -186,7 +186,9 @@ done
 
 note "── 컴프리헨션 회귀 축 — 요구가 아니라 baseline"
 comp="$(printf '%s\n' "$SCAN" | sed -n 's/^comprehensions=//p')"
-COMP_BASELINE=58   # Task 1 F5 census 28 + Task 10 이 1 늘림(29) — merge_review.py
+# PR 3 Task 5 — 58 → 56. merge_brief_review.py 가 문서 리뷰 엔진 전환으로 지워져 그 파일의
+# 컴프리헨션 둘(`ast` 실측)이 모집단에서 빠졌다. 줄어든 만큼 내린다(EXEMPT_BASELINE 과 같은 규율).
+COMP_BASELINE=56   # Task 1 F5 census 28 + Task 10 이 1 늘림(29) — merge_review.py
                    # `merged["report"]["counts"]`를 만드는 `{k: 0 for k in
                    # _MERGED_COUNT_KEYS}`. 항목을 버리는 자리가 아니라 값 0
                    # 으로 카운터를 초기화하는 자리라 처분 호출이 필요 없다.

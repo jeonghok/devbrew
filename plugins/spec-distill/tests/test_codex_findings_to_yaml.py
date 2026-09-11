@@ -26,8 +26,8 @@ VALID = (
 class TestCodexFindingsToYaml(unittest.TestCase):
     def test_new_keys_emitted(self):
         # 2026-08-17 무게 감축 이후 emit keyset은 호출자 인자다(`--emit-keys`) —
-        # spec-distill 배포는 실제 호출자(run_brief_codex_reviewer.sh ·
-        # run_docreview_codex_reviewer.sh)와 마찬가지로 design을 명시한다.
+        # spec-distill 배포는 실제 호출자(run_seed_codex_reviewer.sh — runner_common 의
+        # codex_extract_or_fallback 에 design 을 넘긴다)와 마찬가지로 design을 명시한다.
         out = run(VALID, argv_extra=("--emit-keys", "design"))
         self.assertIn("category: ambiguity", out)      # AC7: new key
         self.assertIn('target_section: "#2-goals"', out)  # AC7: new key

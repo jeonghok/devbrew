@@ -117,13 +117,9 @@ obs_invoke() {
       PATH="$OBS_MOCKBIN:$PATH" CODEX_CAPTURE_DIR="$capture" CLAUDE_PLUGIN_ROOT="$qg" \
         bash "$cand" "$input" "$OBS_REPO" "$out" >/dev/null 2>&1 || rc=$?
       ;;
-    run_brief_codex_reviewer.sh)
-      PATH="$OBS_MOCKBIN:$PATH" CODEX_CAPTURE_DIR="$capture" CLAUDE_PLUGIN_ROOT="$sd" \
-        bash "$cand" direction "$input" "$OBS_REPO" "$out" >/dev/null 2>&1 || rc=$?
-      ;;
     run_seed_codex_reviewer.sh)
-      # Task 14 — 형제 run_brief_codex_reviewer.sh 와 같은 인자 형태(<axis> <payload>
-      # <project_dir> <out>)이지만 axis 는 "suppression" 하나뿐이다.
+      # Task 14 — 인자 형태는 <axis> <payload> <project_dir> <out> 이고 axis 는
+      # "suppression" 하나뿐이다.
       PATH="$OBS_MOCKBIN:$PATH" CODEX_CAPTURE_DIR="$capture" CLAUDE_PLUGIN_ROOT="$sd" \
         bash "$cand" suppression "$input" "$OBS_REPO" "$out" >/dev/null 2>&1 || rc=$?
       ;;

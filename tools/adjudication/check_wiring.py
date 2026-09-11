@@ -242,18 +242,6 @@ EXEMPT = {
         "\"reasons\" 는 이 loop 이전에 이미 advisory 채널로, \"held_by_class\" "
         "는 loop 직후 세 줄(held_unadjudicated/held_malformed/held_other)로 "
         "각각 실린다 — 버려지는 항목이 없다.",
-    # Task 10 수정 라운드 1 — merge_brief_review.py 가 형제 merge_review.py 와
-    # 같은 편평화 루프를 쓴다. 원장이 하나뿐이라 합산이 없다는 점만 다르고
-    # 제외 사유는 동일하다: "reasons" 는 이 loop 이전에 이미
-    # `advisory.extend(L.reasons())` 로, "held_by_class" 는 loop 직후
-    # 세 줄로 각각 실린다 — 버려지는 항목이 없다.
-    ("plugins/spec-distill/scripts/merge_brief_review.py", 363,
-     "continue in main @ if _k in ('reasons', 'held_by_class')"):
-        "C6(1) — disposition_report().items() 를 도는 이 continue 는 "
-        "\"reasons\"·\"held_by_class\" 두 키를 이 loop 에서만 제외한다. "
-        "\"reasons\" 는 이 loop 이전에 이미 `advisory.extend(L.reasons())` "
-        "로, \"held_by_class\" 는 loop 직후 세 줄(held_unadjudicated/"
-        "held_malformed/held_other)로 각각 실린다 — 버려지는 항목이 없다.",
 
     # Task 11 (T5) — select_dispatch_target() 의 선택 루프 7 자리.
     # Task 11b Step 4c/수정 — 07c9991·6d87b2c 가 이 함수보다 «앞선» 코드
@@ -839,7 +827,11 @@ def uncited_exemptions():
 # `docreview_route.py` 몫은 여전히 아홉 자리지만 구성원이 하나 바뀌었다(dedup
 # 나가고 fix-liveness 들어옴). 무엇이 지금 등재돼 있는지는 위 `_DR_*` 상수를
 # 직접 읽어라.
-EXEMPT_BASELINE = 27
+#
+# PR 3 Task 5 — 27 → 26. `merge_brief_review.py` 가 문서 리뷰 엔진 전환으로 지워져 그
+# 파일의 편평화 루프 면제(`:363`) 하나가 키째 사라졌다. 줄어든 만큼 상한을 내린다 —
+# 빈자리가 사유 없는 면제 추가로 조용히 채워지지 않게.
+EXEMPT_BASELINE = 26
 
 
 def derive_consumers(repo_root):

@@ -40,7 +40,7 @@ BRIEFPROF="$REPO_ROOT/plugins/spec-distill/references/docreview-profiles/brief.m
 # CLAUDE_PLUGIN_ROOT 는 그래도 `$SCRIPTS` 와 무관하게 명시로 고정한다 — 호출자가
 # `$SCRIPTS` 를 다른 호스트(quality-gates)나 정본 자리(shared/docreview/scripts)로
 # 바꿔도 codex_findings_to_yaml.py·prompt-preamble.md 는 이 러너가 `$PLUGIN_ROOT/scripts/`
-# sibling 으로 찾으므로(형제 run_brief_codex_reviewer.sh 와 같은 규약) 항상 그 sibling을
+# sibling 으로 찾으므로 항상 그 sibling을
 # 가진 실재 호스트를 가리켜야 한다. `runner_common.sh` sourcing 만은 `$PLUGIN_ROOT` 가
 # 아니라 BASH_SOURCE 기준(sibling)이라 이 값의 영향을 받지 않는다 — 이 러너가
 # 참조하는 파일 넷 중 셋(codex_findings_to_yaml.py·codex_jsonl.py·prompt-preamble.md)은

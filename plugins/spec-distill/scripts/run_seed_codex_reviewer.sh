@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # run_seed_codex_reviewer.sh — independent codex SUPPRESSION review of an
 # interview-seed DRAFT (Phase 0, request-framing). Not code, not a brief, not a
-# design doc — the third of this shape (형제: run_brief_codex_reviewer.sh ·
-# run_docreview_codex_reviewer.sh). codex 호출은 이 파일 1곳이고 축은 인자다.
+# design doc (형제: run_docreview_codex_reviewer.sh). codex 호출은 이 파일 1곳이고
+# 축은 인자다.
 #
 # **처분** — consumer=orchestrator · fail-open · disclosure=framing_degradations
 #

@@ -22,8 +22,8 @@
 #   소비자 스키마(YAML 중첩 vs 최상위 vs JSON)·의존 스크립트를 억지로 맞추게 돼
 #   유지비만 크고, 태스크 20b가 실제로 필요로 한 것은 그게 아니었다.
 #
-#   대신 아래 "계약 핵심 3개 — 5 러너 전부" 섹션이 다음 핵심 성질 3개만 **도출된
-#   5개 러너 전부**에 반복한다(나머지 4개 검사는 이 러너 전용으로 계속 남는다):
+#   대신 아래 "계약 핵심 3개 — 러너 넷" 섹션이 다음 핵심 성질 3개만 **러너
+#   넷**에 반복한다(나머지 4개 검사는 이 러너 전용으로 계속 남는다):
 #     - 산출물이 0바이트가 아니다 (실패해도 무언가 쓴다)
 #     - 실패 시 codex_failed: true 양성 표식이 있다
 #     - stale 미재사용 — 실행 전에 있던 내용이 실패 후 살아남지 않는다
@@ -173,14 +173,14 @@ else
   printf '%s\n' "$runners" | sed 's/^/      /'
 fi
 
-# ══ 계약 핵심 3개 — 러너 다섯 (태스크 20b) ═════════════════════════════════
+# ══ 계약 핵심 3개 — 러너 넷 (태스크 20b) ═════════════════════════════════
 # 위 1~7번은 run_codex_reviewer.sh 하나만 깊게 잰다. 여기서는 같은 3개 핵심
-# 성질(0바이트 아님 · codex_failed:true · stale 미재사용)을 러너 **다섯**에
+# 성질(0바이트 아님 · codex_failed:true · stale 미재사용)을 러너 **넷**에
 # 반복한다.
 #
 # **「전부」가 아니다** — 위 「0 — 러너 도출」이 세는 도출 목록은 오늘 이보다 크다
 # (형제 러너가 늘었고 docreview 러너는 두 플러그인에 배포돼 두 경로로 잡힌다).
-# 이 다섯이 스키마 계열을 전부 덮는다는 것이 이 절의 주장이고, 개수가 도출
+# 이 넷이 스키마 계열을 전부 덮는다는 것이 이 절의 주장이고, 개수가 도출
 # 목록과 같다는 주장은 아니다 — 그 주장을 라벨에 박아 두면 러너가 늘 때마다
 # 조용히 거짓이 된다(실측: 「5 러너 전부」가 도출 8 앞에서 이미 거짓이었다).
 # 러너마다 두 시나리오로 잰다:
@@ -192,7 +192,7 @@ fi
 # 참고): run_codex_reviewer.sh/run_artifact_codex_reviewer.sh는
 # `${CLAUDE_PLUGIN_ROOT}`를 가드 없이 참조하므로
 # 환경에서 지우면 `set -u`가 스크립트를 완료 전에 죽인다(실제로 컨트롤러가 밟은
-# 조건). run_brief_codex_reviewer.sh/run_audit_codex_reviewer.sh/
+# 조건). run_audit_codex_reviewer.sh/
 # run_docreview_codex_reviewer.sh는 fallback
 # (`${CLAUDE_PLUGIN_ROOT:-...}`)이 있어 env-unset이 통하지 않는다 — 대신 그
 # 러너의 **종단 추출기**를 exit 0 + 빈 stdout 스텁으로 바꿔치기한 fake
@@ -292,30 +292,9 @@ grep -q 'reason: *aborted_before_completion' "$c_stale" 2>/dev/null \
   && ok "핵심3 C(stale-시작): 중단이 abort 로 표시된다" \
   || no "핵심3 C(stale-시작): abort 표시 없음 — 트리거가 중단을 못 일으켰다 ($(tr '\n' ' ' < "$c_stale" 2>/dev/null))"
 
-# --- D) run_brief_codex_reviewer.sh — CLAUDE_PLUGIN_ROOT에 fallback이 있어
-#     env-unset 트리거가 안 통한다. 종단 추출기를 exit0+빈출력 스텁으로 바꾼
-#     fake root로 재현한다(실제 결함 형태 그대로: seed_failclosed가 stale은
-#     지우지만 이 마지막 단계가 그 seed를 다시 비운다). ---
-mkdir -p "$tmp/rootD/scripts"
-cp "$SD/scripts/build_brief_codex_prompt.py" "$tmp/rootD/scripts/"
-cp "$SD/scripts/codex_prompt_common.py" "$tmp/rootD/scripts/"   # 빌더의 형제 import
-cp "$SD/scripts/brief-codex-direction-checklist.md" "$tmp/rootD/scripts/"
-cp "$SD/scripts/brief-codex-fidelity-checklist.md" "$tmp/rootD/scripts/"
-cp "$SD/scripts/prompt-preamble.md" "$tmp/rootD/scripts/"
-printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$tmp/rootD/scripts/codex_findings_to_yaml.py"
-chmod +x "$tmp/rootD/scripts/codex_findings_to_yaml.py"
-printf '브리프 fixture\n사용자 원문 예시\n' > "$tmp/payload-fix.md"
-
-d_empty="$tmp/degrade3-d-empty.yaml"; : > "$d_empty"
-PATH="$tmp/bin5:$PATH" CLAUDE_PLUGIN_ROOT="$tmp/rootD" \
-  bash "$SD/scripts/run_brief_codex_reviewer.sh" fidelity "$tmp/payload-fix.md" "$ROOT" "$d_empty" >/dev/null 2>&1
-assert_degrade3 "핵심3 D(run_brief_codex_reviewer.sh, 빈-시작)" "$d_empty" ""
-
-d_stale="$tmp/degrade3-d-stale.yaml"
-printf '%s\n' 'findings:' '  - {summary: "STALE_MARKER_D"}' 'meta:' '  codex_failed: false' > "$d_stale"
-PATH="$tmp/bin5:$PATH" CLAUDE_PLUGIN_ROOT="$tmp/rootD" \
-  bash "$SD/scripts/run_brief_codex_reviewer.sh" fidelity "$tmp/payload-fix.md" "$ROOT" "$d_stale" >/dev/null 2>&1
-assert_degrade3 "핵심3 D(run_brief_codex_reviewer.sh, stale-시작)" "$d_stale" "STALE_MARKER_D"
+# --- D) (없음) spec-distill 의 brief 전용 러너였다 — 문서 리뷰 엔진 전환으로 지워졌고,
+#     brief 자리는 이제 위 C 의 러너를 부른다(C 와 같은 runner_common.sh 계열이라 이 절의
+#     계열 커버리지는 줄지 않는다). ---
 
 # --- E) run_audit_codex_reviewer.sh (이미 준수 — 회귀 방지, JSON 소비자) ---
 mkdir -p "$tmp/rootE/scripts"

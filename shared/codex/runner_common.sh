@@ -4,9 +4,8 @@
 # shared/tests/test_no_new_duplication.sh 의 20줄 검사가 지킨다.
 #
 # ── 이 파일을 source 하는 러너 (실측 도출: `grep -l runner_common.sh plugins/*/scripts/`) ──
-# 중첩 YAML(`findings: []` + `meta:`)을 소비 계약으로 갖는 **넷**이다:
+# 중첩 YAML(`findings: []` + `meta:`)을 소비 계약으로 갖는 **셋**이다:
 #   · plugins/quality-gates/scripts/run_codex_reviewer.sh
-#   · plugins/spec-distill/scripts/run_brief_codex_reviewer.sh
 #   · plugins/spec-distill/scripts/run_seed_codex_reviewer.sh
 #   · run_docreview_codex_reviewer.sh — 정본은 shared/docreview/scripts/ 이고
 #     plugins/{quality-gates,spec-distill}/scripts/ 에 파일 단위 심볼릭 링크로

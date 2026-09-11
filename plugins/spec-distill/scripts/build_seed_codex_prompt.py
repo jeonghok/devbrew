@@ -2,9 +2,9 @@
 """build_seed_codex_prompt.py — axis-scoped codex prompt for an interview-seed
 DRAFT (Phase 0, request-framing). Not code, not a brief, not a design doc.
 
-축은 지금 "suppression" 하나뿐이지만 --axis 인자로 받는다 — 형제
-build_brief_codex_prompt.py 와 같은 관용구를 유지해, 축이 늘어도 이 파일의 인자
-처리·checklist lookup 은 그대로 두고 checklist 파일 하나만 추가하면 되게 한다.
+축은 지금 "suppression" 하나뿐이지만 --axis 인자로 받는다 — 축이 늘어도 이 파일의
+인자 처리·checklist lookup 은 그대로 두고 checklist 파일 하나만 추가하면 되게
+한다.
 
 **AXES 이름 경고(§7.2)를 그대로 따른다.** 이 파일의 AXES 는 「codex 프롬프트 축,
 각 축마다 checklist 파일이 실재해야 한다」는 뜻뿐이다 — 러너의 `case` fail-point 나
@@ -18,11 +18,10 @@ payload 는 **파일 경로로만** 받는다(argv/stdin 인라인 금지 — in
 
 design-doc/brief 리뷰 프롬프트 빌더를 재사용하지 **않는다**: checklist 문면과 JSON
 스키마가 이 축(뺄셈 검사) 전용이고, 최신 spec/brief 의 AC 를 주입하는 성질은 여기서
-모델 다양성을 죽이는 오염원이다(형제 build_brief_codex_prompt.py 와 같은 이유).
+모델 다양성을 죽이는 오염원이다.
 
 **checklist 파일은 축 정의만 담고 JSON 출력 형식은 담지 않는다**(brief Step 3
-verbatim — brief-codex-*.md 형제와 다른 점). 그래서 출력 형식 지시는 형제
-형제 build_brief_codex_prompt.py 와 같은 자리(이 PROMPT_TEMPLATE 안)에 둔다.
+verbatim). 그래서 출력 형식 지시는 이 PROMPT_TEMPLATE 안에 둔다.
 
 Usage: build_seed_codex_prompt.py --axis suppression <payload_file>
 """

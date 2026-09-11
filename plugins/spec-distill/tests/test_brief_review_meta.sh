@@ -116,8 +116,10 @@ grep -qF '누가' <<<"$T63" && ok "T29: '누가 쓰는가' 열 존재" || no "T2
 # 삭제된 어휘-검출 체크를 요구하지 않는다 (round-4가 잡은 dangling)
 grep -qE '어휘 검출|오염 검출|contamination' <<<"$T63" \
   && no "T29: 삭제된 검출 메커니즘을 열거표가 요구" || ok "T29: 삭제된 검출 요구 부재"
-# 신규 결정론 체크가 표에 빠지지 않았는가 — 구현된 스크립트 목록과 대조
-for s in check_verbatim_coverage merge_brief_review; do
+# 신규 결정론 체크가 표에 빠지지 않았는가 — 구현된 스크립트 목록과 대조.
+# merge_brief_review.py 는 문서 리뷰 엔진 전환으로 지워졌다(병합은 docreview_route.py) —
+# §6.3 표의 그 행은 옛 설계의 기록이고, 파일 부재는 test_brief_codex_axes.sh 가 잰다.
+for s in check_verbatim_coverage; do
   test -f "$SD/scripts/$s.py" \
     && ok "T29: ${s}.py 실재" \
     || no "T29: ${s}.py 부재 (Task 순서 이상)"
@@ -129,7 +131,7 @@ done
 # 잡을 수단이 0이었다. 아래가 실제 열거 대조다.
 #
 # 판정 대상 = 파이프라인이 **게이트 결정이나 degrade 강등에 쓰는** 결정론 체크.
-DET_CHECKS="check_brief.py check_verbatim_coverage merge_brief_review T-lock build_brief_inline_blob brief_review_state"
+DET_CHECKS="check_brief.py check_verbatim_coverage T-lock build_brief_inline_blob brief_review_state"
 # 아래 둘은 shipping에 실재하지만 §6.3 표에 **행이 없다**. design doc 수정은 사람 몫이라
 # (이 사이클에서 문서는 read-only) 여기에 이름을 박아 gap을 greppable·강제 가능하게 만든다:
 #   - build_brief_inline_blob.py : 본문 audit 파일명 잔존 → exit 3 (호출자가 degrade 기록)
