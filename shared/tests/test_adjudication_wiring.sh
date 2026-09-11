@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/*/scripts/*.py plugins/*/hooks/*.py tools/adjudication/check_wiring.py tools/adjudication/cite.py shared/tests/fixtures/adjudication/run_wiring_scan.py shared/tests/fixtures/adjudication/run_wiring_probe.py
+# guards: plugins/*/scripts/*.py tools/adjudication/check_wiring.py tools/adjudication/cite.py shared/tests/fixtures/adjudication/run_wiring_scan.py shared/tests/fixtures/adjudication/run_wiring_probe.py
 #
 # 수정 라운드 1 (F6) — 판정기 자신(`tools/adjudication/check_wiring.py`)이
 # 이 락의 `# guards:` 에 없었다. 27개 선언 전수 확인 결과 `tools/adjudication/`

@@ -93,6 +93,7 @@ EDITED = (
     "plugins/quality-gates/.claude-plugin/plugin.json",
     "plugins/quality-gates/scripts/codex_prompt_common.py",
     "shared/codex/codex_prompt_common.py", "shared/docreview/scripts/docreview_state.py",
+    "shared/tests/test_adjudication_consumed.sh",
     "shared/tests/test_adjudication_wiring.sh",
     "tools/adjudication/check_wiring.py", "tools/adjudication/check_names.py",
 )
