@@ -133,6 +133,14 @@ state_seen() {   # 그 셀이 원장 경로를 냈고 원장이 실재하는가 
   st="$(sed -n 's/^__STATE=//p' "$SCRATCH/$1.out" | tail -1)"
   [ -n "$st" ] && [ -f "$st" ]
 }
+any_record() {   # any_record <셀> — 사유와 무관하게 critic/direction/degraded record 가 두 채널 어디에든 있는가.
+  # 부재 단언은 사유 문자열로 거르지 않는다 — 걸러 두면 다른 사유로 쌓인 record 가 부재 판정을 조용히 통과한다.
+  local st fb
+  st="$(sed -n 's/^__STATE=//p' "$SCRATCH/$1.out" | tail -1)"
+  fb="$(sed -n 's/^__FB=//p' "$SCRATCH/$1.out" | tail -1)"
+  { [ -n "$st" ] && [ -f "$st" ] && grep -q 'component: critic' "$st" && grep -q 'affected_axis: direction' "$st"; } \
+    || { [ -n "$fb" ] && [ -f "$fb" ] && grep -q 'component=critic axis=direction' "$fb"; }
+}
 
 WEB="spec-distill:doc-critic-web"; NOWEB="spec-distill:doc-critic"
 
@@ -140,7 +148,7 @@ check_web() {   # check_web <셀> <라벨> — S1 형태(웹 사본 · 공시 �
   assert_eq "$(agent_of "$1")" "$WEB" "$2: 웹 사본을 고른다"
   advised "$1" && no "$2: 웹을 켠 라운드에 degrade advisory 가 나왔다" || ok "$2: advisory 없음"
   if state_seen "$1"; then
-    recorded "$1" 'doc-critic' && no "$2: 웹을 켠 라운드에 critic/direction degrade record 가 남았다" \
+    any_record "$1" && no "$2: 웹을 켠 라운드에 critic/direction degrade record 가 남았다" \
                                || ok "$2: degrade record 없음 (원장은 실재한다 — 양의 짝)"
   else
     no "$2: 원장 경로가 없거나 원장이 없다 — record 부재 판정이 공허하다"
@@ -163,7 +171,7 @@ check_noweb_quiet() {   # check_noweb_quiet <셀> <라벨> — S3 형태(웹 없
   advised "$1" && no "$2: web false 프로필에 degrade advisory 가 나왔다 (끌 웹이 없다)" || ok "$2: advisory 없음"
   # S2 의 record 존재 단언과 짝 — web false 는 degrade 가 아니다. 원장이 실재해야 부재가 공허하지 않다.
   if state_seen "$1"; then
-    recorded "$1" 'doc-critic' && no "$2: web false 프로필에 critic/direction degrade record 가 남았다" \
+    any_record "$1" && no "$2: web false 프로필에 critic/direction degrade record 가 남았다" \
                                || ok "$2: degrade record 없음 (원장은 실재한다 — 양의 짝)"
   else
     no "$2: 원장 경로가 없거나 원장이 없다 — record 부재 판정이 공허하다"
