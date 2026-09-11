@@ -121,4 +121,122 @@ else
   fi
   rm -f "$ABSORB_TMP"
 fi
+
+# ── brief 자리 엔진 전환(v1.2.0) — 죽은 술어의 부재 + 양의 짝 ─────────────────
+# 위 P18 쌍과 같은 병이 한 번 더 났다. 엔진 전환이 옛 brief 파이프라인의 agent 둘 · 병합
+# 스크립트 · codex 러너와 그 「재dispatch 상한」을 지웠는데, README 가 흐름도 · Principles ·
+# kill switch 목록에서 그것들을 현재형으로 계속 댔고(처분 회계 소비자 줄은 지워진 파일 둘을
+# 소비자로 댔다) 이 스위트는 «존재»만 물어서 조용했다.
+#
+# 「살아 있는 줄」 = README 에서 버전 이력 문단(줄머리가 `**vX.Y.Z**`)을 뺀 나머지. 이력 문단은
+# 그 버전에 무엇이 있었는지를 적는 기록이라 지워진 이름이 정당하게 남는다. 면제를 줄머리 표지
+# 하나로 좁힌다 — 문장 중간에 버전을 적어도 면제되지 않는다. 면제가 비거나 README 를 통째로
+# 삼키면 아래 단언이 공허해지므로 그 크기를 먼저 잰다.
+LIVE_TMP="$(mktemp -t readme-live-XXXXXX)"
+grep -vE '^\*\*v[0-9]+\.[0-9]+\.[0-9]+\*\*' "$README" > "$LIVE_TMP" || true
+n_all="$(wc -l < "$README" | tr -d ' ')"
+n_live="$(wc -l < "$LIVE_TMP" | tr -d ' ')"
+n_hist=$((n_all - n_live))
+{ [ "$n_hist" -ge 1 ] && [ "$n_hist" -le 20 ] && [ "$n_live" -ge 100 ]; } \
+  && ok "live: 이력 문단 ${n_hist}줄을 뺀 살아 있는 줄 ${n_live}줄 (면제가 비지도 넘치지도 않는다)" \
+  || no "live: 이력 면제가 비었거나 넘친다 (전체 $n_all · 살아 있는 $n_live · 이력 $n_hist) — 면제 표지나 README 구조가 바뀌었다"
+
+# (1) 도출 ∀ — 살아 있는 줄이 이름으로 대는 `.py` · `.sh` 파일은 전부 리포에 실재한다.
+# 지워진 파일 이름을 목록으로 금지하지 않는다 — 그러면 다음에 지워질 파일에서 이 락이 다시
+# 침묵한다. 경로꼴(`a/b.py`)은 그 꼬리로 끝나는 파일이, 이름꼴(`b.py`)은 그 이름의 파일이 리포
+# 어딘가에 있어야 한다. 여러 파일을 뜻하는 표기(중괄호 · 별표 · 꺾쇠 · 쉼표)는 건너뛴다.
+# 출력: 없는 이름마다 `MISSING<TAB>이름`, 끝에 `COUNT<TAB>n`.
+file_check() {
+  python3 -c 'import os, re, sys
+root, src = sys.argv[1], sys.argv[2]
+text = open(src, encoding="utf-8").read()
+toks = set()
+for t in re.findall(r"[A-Za-z0-9_./{},*<>-]+\.(?:py|sh)(?![A-Za-z0-9_])", text):
+    if any(c in t for c in "{}*<>,"):
+        continue
+    toks.add(t.lstrip("./"))
+paths = []
+for d, dirs, files in os.walk(root):
+    dirs[:] = [x for x in dirs if x not in (".git", ".claude", "node_modules")]
+    for f in files:
+        paths.append(os.path.relpath(os.path.join(d, f), root))
+for t in sorted(toks):
+    if not any(p == t or p.endswith("/" + t) for p in paths):
+        print("MISSING\t" + t)
+print("COUNT\t%d" % len(toks))' "$REPO_ROOT" "$1" 2>&1
+}
+# 양성 대조 — 추출기가 지워진 이름을 실제로 «없다»고 말하고 실재하는 이름은 통과시키는가.
+# 이것이 없으면 아래 「MISSING 0」은 추출기가 아무것도 못 뽑아도 나온다.
+PROBE_TMP="$(mktemp -t readme-probe-XXXXXX)"
+printf '%s\n' '소비자는 `scripts/merge_review.py` 와 `plugins/spec-distill/scripts/check_brief.py`로 간다.' > "$PROBE_TMP"
+probe_out="$(file_check "$PROBE_TMP")"
+{ grep -qx "$(printf 'MISSING\tscripts/merge_review.py')" <<<"$probe_out" \
+    && ! grep -qF 'check_brief.py' <<<"$(grep '^MISSING' <<<"$probe_out")" \
+    && grep -qx "$(printf 'COUNT\t2')" <<<"$probe_out"; } \
+  && ok "파일 실재(양성 대조): 추출기가 지워진 이름을 없다고 하고, 한국어 조사가 붙은 실재 이름은 통과시킨다" \
+  || no "파일 실재(양성 대조): 추출기가 고장났다 — 아래 판정은 증거가 아니다 (출력: $(tr '\n' ' ' <<<"$probe_out"))"
+rm -f "$PROBE_TMP"
+live_out="$(file_check "$LIVE_TMP")"
+live_count="$(grep '^COUNT' <<<"$live_out" | cut -f2)"
+live_missing="$(grep '^MISSING' <<<"$live_out" | cut -f2 | tr '\n' ' ')"
+{ [[ "$live_count" =~ ^[0-9]+$ ]] && [ "$live_count" -ge 10 ]; } \
+  && ok "파일 실재(비공허): 살아 있는 줄에서 .py · .sh 이름 ${live_count}개를 뽑았다" \
+  || no "파일 실재(비공허): 뽑은 이름이 '${live_count}'개 — 10개 미만이면 추출이 무너진 것이다"
+[ -z "$live_missing" ] \
+  && ok "파일 실재(부재): README 의 살아 있는 줄이 대는 .py · .sh 파일이 전부 리포에 있다" \
+  || no "파일 실재(부재): README 가 없는 파일을 현재형으로 댄다: ${live_missing}— 지워졌거나 옮겨졌다(거짓 인용)"
+# 양의 짝 — 지금 소비자를 이름으로 댄다. 처분 회계 줄을 통째로 지우면 위 부재 단언은 만족된다.
+adj_line="$(grep -F '처분 회계(adjudication' "$LIVE_TMP" | head -1)"
+grep -qF 'scripts/docreview_route.py' <<<"$adj_line" \
+  && ok "파일 실재(양의 짝): 처분 회계 불릿이 지금 소비자 docreview_route.py 를 댄다" \
+  || no "파일 실재(양의 짝): 처분 회계 불릿이 지금 소비자(scripts/docreview_route.py)를 대지 않는다 — 부재 단언이 줄 삭제만으로 만족된다"
+
+# (2) AP9 의 에이전트 목록 — 이름마다 agents/ 에 실재하고, 목록의 수 · 적힌 N종 · 디렉토리의
+# 파일 수가 셋 다 같다. 목록에서 지운 agent 이름이 남으면(실재 단언) · 새 agent 가 목록에 없으면
+# (개수 단언) RED 다. 디렉토리가 기준이라 agent 를 더하거나 지우는 PR 이 이 줄을 함께 고친다.
+ap9_line="$(grep -F '**AP9 (Subagent spray)**' "$LIVE_TMP" | head -1)"
+ap9_report="$(python3 -c 'import os, re, sys
+d, line = sys.argv[1], sys.argv[2]
+m = re.search(r"(\d+)종\(([^)]*)\)", line)
+if not m:
+    print("PARSE\tfail"); sys.exit(0)
+names = [x.strip() for x in m.group(2).split("·") if x.strip()]
+on_disk = sorted(f[:-3] for f in os.listdir(d) if f.endswith(".md"))
+print("CLAIM\t%s" % m.group(1))
+print("LISTED\t%d" % len(names))
+print("DISK\t%d" % len(on_disk))
+for n in names:
+    if n not in on_disk:
+        print("GONE\t" + n)
+for n in on_disk:
+    if n not in names:
+        print("UNLISTED\t" + n)' "$REPO_ROOT/plugins/spec-distill/agents" "$ap9_line" 2>&1)"
+ap9_claim="$(grep '^CLAIM' <<<"$ap9_report" | cut -f2)"
+ap9_listed="$(grep '^LISTED' <<<"$ap9_report" | cut -f2)"
+ap9_disk="$(grep '^DISK' <<<"$ap9_report" | cut -f2)"
+{ [[ "$ap9_disk" =~ ^[0-9]+$ ]] && [ "$ap9_disk" -ge 5 ] && [[ "$ap9_listed" =~ ^[0-9]+$ ]]; } \
+  && ok "AP9(양성 대조): 목록 ${ap9_listed}개 · 디렉토리 ${ap9_disk}개를 읽었다" \
+  || no "AP9(양성 대조): AP9 목록이나 agents/ 를 못 읽었다 — $(tr '\n' ' ' <<<"$ap9_report")"
+if grep -qE '^(GONE|UNLISTED)' <<<"$ap9_report"; then
+  no "AP9: 목록과 agents/ 가 어긋난다 — $(grep -E '^(GONE|UNLISTED)' <<<"$ap9_report" | tr '\n' ' ')"
+else
+  ok "AP9: 목록의 이름이 전부 agents/ 에 있고, agents/ 의 파일이 전부 목록에 있다"
+fi
+{ [ "$ap9_claim" = "$ap9_listed" ] && [ "$ap9_listed" = "$ap9_disk" ]; } \
+  && ok "AP9: 적힌 ${ap9_claim}종 = 목록 수 = 디렉토리 수" \
+  || no "AP9: 적힌 수 '${ap9_claim}' · 목록 수 '${ap9_listed}' · 디렉토리 수 '${ap9_disk}' 가 다르다"
+
+# (3) 옛 brief 파이프라인의 이름 — 살아 있는 줄에 없다. 이 둘과 그 상한은 파일이 아니라 (1) 의
+# 도출에 안 걸리는 이름이다. 양의 짝: Principles 의 brief 자리 불릿이 지금 리뷰어를 한 줄에 댄다
+# (file-wide 면 흐름도 · 다른 절의 우연한 언급이 만족시킨다).
+if grep -qE 'brief-critic|brief-direction-reviewer|재dispatch 상한' "$LIVE_TMP"; then
+  no "brief 자리/부재: 지워진 brief agent 이름이나 은퇴한 「재dispatch 상한」이 README 의 살아 있는 줄에 있다: $(grep -nE 'brief-critic|brief-direction-reviewer|재dispatch 상한' "$LIVE_TMP" | cut -c1-80 | tr '\n' ' ')"
+else
+  ok "brief 자리/부재: 지워진 brief agent 이름 · 은퇴한 「재dispatch 상한」이 살아 있는 줄에 없다"
+fi
+brief_row="$(grep -F 'reviewing-brief' <<<"$pi_block" | grep -F 'doc-critic-web' | grep -F 'doc-recritic' || true)"
+[ -n "$brief_row" ] \
+  && ok "brief 자리/양의 짝: Principles 의 한 줄이 reviewing-brief · doc-critic-web · doc-recritic 를 함께 댄다" \
+  || no "brief 자리/양의 짝: Principles 에 brief 자리의 지금 리뷰어(doc-critic-web → doc-recritic)를 대는 줄이 없다 — 부재 단언이 불릿 삭제만으로 만족된다"
+rm -f "$LIVE_TMP"
 finish

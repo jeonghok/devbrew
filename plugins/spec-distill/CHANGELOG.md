@@ -1,5 +1,67 @@
 # Changelog
 
+## [1.2.0] — 2026-09-11
+
+minor 인 이유 — interview brief 리뷰 자리(`reviewing-brief`)가 공유 문서 리뷰 엔진(`shared/docreview/`)의 두 번째 껍데기가 됐다. 새 surface(웹 있는 탐지 사본 `agents/doc-critic-web.md` · 엔진 게이트 요약의 필드 넷 · 엔진 서브커맨드 `state-dir-for`)가 들고, 바뀌는 호출 계약(`reviewing-brief` 의 인자 넷 → 둘)은 `user-invocable: false` skill 의 유일한 호출자 `conducting-interview` 를 같은 릴리스에서 함께 고쳤다. 이 플러그인은 엔진을 `scripts/{docreview_state,docreview_route,adjudication}.py` · `scripts/run_docreview_codex_reviewer.sh` · `references/reviewing-document.md` 심볼릭 링크로 배포하므로 엔진 변경도 이 블록에 적는다(cache key).
+
+**업그레이드 주의 셋**
+
+- **진행 중인 리뷰는 라운드가 한 번 리셋된다.** 엔진 상태가 문서별 디렉토리(`state-dir-for`)로 옮겨, 이 버전 이전에 시작된 리뷰는 새 자리에서 라운드 1 로 다시 시작하고 재리뷰 상한도 한 번 리셋된다.
+- **중복 키가 있는 사용자 프로필은 진입에서 멈춘다.** 게이트 `profile-check` 와 `init` 이 같은 로더로 `duplicate_key:` 를 거절하고, `init` 의 rc 가 0 이 아니면 라운드를 진행하지 않는다.
+- **허용 문법 밖의 프로필은 codex 축이 공시와 함께 멈춘다.** 러너가 프로필 frontmatter 를 YAML 보다 좁은 한 줄 완결 문법으로만 읽는다 — 주석 · 홑따옴표 · 여러 줄 값을 쓰는 프로필은 게이트를 통과해도 `profile_parse_ambiguous` 로 codex 를 부르지 않는다. 배포 프로필 넷은 무편집으로 맞는다.
+
+### Added
+
+- **웹 있는 탐지 리뷰어 사본 `agents/doc-critic-web.md`.** 정본 `shared/docreview/agents/doc-critic-web.md` 의 `# copy-of:` 바이트 동일 사본이고, 그 정본은 `doc-critic` 의 `variant-of:` 다. 도구는 `doc-critic` 의 `Read, Grep, Glob` 에 `WebSearch` · `WebFetch` 를 더한 것이다. 프로필이 `web: true` 인 자리만 지명한다 — 오늘은 brief 자리 하나다(사용자 결정). brief 자리의 Claude 쪽 웹 근거(층 1 방향성의 외부 선례)가 이것으로 돌아왔다. 나머지 자리의 탐지는 웹 없는 `doc-critic` 그대로다.
+- **엔진 서브커맨드 `docreview_state.py state-dir-for --root --session --doc`.** 세션과 문서 경로의 순수 함수로 문서별 상태 디렉토리를 낸다.
+- **엔진 게이트 요약의 필드 넷.** `unverified`(`critic_dead` · `finalize_incomplete` · null) · `approval_label`(「미검증」 또는 null) · `round_reviewed`(이번 라운드의 finalize 보고서가 있고 「미검증」이 아닐 때만 참) · `unreviewed_reason`(`round_reviewed` 가 거짓인 모든 라운드의 사유 — 「미검증」 둘 또는 `unrouted`). 동작은 아래 Fixed 에 있다.
+
+### Changed
+
+- **brief 자리를 공유 엔진으로 전환 (`reviewing-brief`).** 3단계 파이프라인(방향성 → 충실도 → 냉독)이 엔진 여덟 단계(스냅샷 → kill switch → 탐지 → codex → 익명화 → 재비판 → 얼림 검사·라우팅 → 게이트)와 라운드마다 앞서는 진입 게이트 둘(`check_brief.py gate` · `check_verbatim_coverage.py`), 엔진 밖 냉독(`brief-readback`, advisory)으로 바뀌었다. 방향성과 충실도는 brief 프로필(`references/docreview-profiles/brief.md`)의 층 1 · 층 2 로 한 라운드에서 본다. 탐지 · 재비판 · codex 는 payload 와 audit 원문을 조립한 **번들**을 라운드마다 받는다. 결정 기록은 audit 의 `## 8. 리뷰 결정`(프로필 `decision_log`)으로 간다. 승인 게이트 2단계(진행 옵션 넷)는 이 skill 이 띄우지 않고 호출자 Step B 가 묻는다.
+- **`cost_class: high` → `medium`, 진입 지출 승인 게이트 제거 (사용자 결정).** 지출 상한은 엔진의 재리뷰 상한이 맡는다 — 라운드 3 까지 돌고, 라운드 4 이상은 사용자가 승인 게이트에서 자기 문구로 열어야만 돈다.
+- **`conducting-interview` 가 `reviewing-brief` 를 인자 둘(`$PAYLOAD $AUDIT`, 절대경로)로 부른다.** 옛 codex 산출물 경로 두 인자는 skill 이 스스로 도출한다. Step B 가 받는 산출물이 넷(확정 후보 / 방향성 C4 / readback + gap / degrade)에서 셋(엔진 게이트 결과 / 냉독 요약 + gap / degrade 채널)으로 바뀌었고, audit 템플릿의 brief 리뷰 절이 그 모양이다.
+- **절차서가 엔진 스크립트를 배포 경로에서 부르라고 명시한다 (Park P10).** 정본 경로(`shared/docreview/scripts/`)에서 부르면 형제 파일에 기대는 스크립트 둘이 죽는다 — 셸 러너는 fail-closed 로 `runner_common_unloadable` 을 기록하고 rc 0 으로 끝나고, `docreview_route.py` 는 `ModuleNotFoundError` 로 rc 1 에 죽는다. `reviewing-spec` codex 펜스의 rc 3 서술은 종료점 열거 대신 메커니즘으로 적었다(Park P5 ④).
+- **상한 도달 시 승인 게이트는 열린 것이 0 이어도 항상 두 단계다 (Park P3, 사용자 결정).** 1단계에 「추가 라운드 1회 열기」가 선다. 열린 것이 0 이면 「추가 라운드 1회 열기 / 진행 옵션으로」 둘뿐인 질문 하나이고, 열린 것이 있으면 열린 항목들 뒤에 별개 항목으로 서서 같은 4개씩 분할에 세어진다. 고르면 다음 라운드 1단계가 `begin-round --extra-approval "<사용자 문구>"` 로 돈다.
+- **라운드 게이트가 한 `AskUserQuestion` 에 안 들어가면 질문 최대 4개씩 연속 호출로 나눈다 (Park P4, 사용자 결정 · 설계 §8.1 · AC8 수정).** 결정 하나에 질문 하나를 유지하고, 매 호출 첫 질문의 첫 줄은 렌더 첫 줄(degrade 공시)이다.
+- **`DEVBREW_SPEC_DISTILL_DISABLE_WEB` 이 brief 자리에서 하는 일.** 탐지 dispatch 직전의 선택 펜스가 웹 사본 대신 웹 도구 없는 `doc-critic` 을 **지명**하고 loud advisory 와 degrade record(`critic` / `direction` / `degraded`)를 남긴다. 펜스는 dispatch 대상을 결정론적으로 이름 짓고 dispatch 는 지명된 블록을 따른다 — 그 선택을 강제하는 훅은 없다. 물리적인 것은 웹 없는 사본의 `tools:` 에 웹 도구가 없다는 것뿐이다. 커밋 `1eec5870` 메시지의 「물리적으로 끈다」는 과장이고 이 서술이 정정본이다. codex 쪽 웹 검색은 공유 러너가 끈다.
+- **codex 프롬프트가 프로필의 `ground_truth` 와 본문을 싣는다 — 네 자리 공통 (Park P11 · 사용자 결정).** 전에는 `layer_rubric` · `allowed_dispositions` · `web` 만 실었다. 본문은 `<review_profile>` 절로 가고, 탐지 · 재비판 agent 가 읽는 것과 같은 루브릭이다. **design doc 자리의 codex 프롬프트도 바뀐다.** 지워진 옛 brief codex 체크리스트 둘의 실질 항목이 이 경로로 codex 에 간다. 순서는 형제 codex 빌더 셋과 같은 「지시 → P21 preamble → 입력 → 출력 형식」이다.
+- **공유 절차서 3단계가 「진입 skill 이 고른 탐지 리뷰어(기본 `doc-critic`)」를 dispatch 한다.** 이 절차서의 배포 링크는 이 플러그인뿐이다(`references/reviewing-document.md`).
+- **지워진 옛 파이프라인을 다른 이름으로 부르던 참조를 정리했다** — 식별자 축과 개념 별칭 축 둘로 훑었고, 모델이 읽는 산문이 없는 파일을 가리키던 자리도 포함한다. 다른 플러그인 쪽(quality-gates 러너 둘 주석 · SKILL 둘 산문 · plugin-audit 러너 주석 둘)은 각 플러그인 CHANGELOG 에 적었다.
+- **README 를 엔진 전환 뒤 사실로 맞추고, 죽은 술어를 잡는 락을 더했다.** 흐름도의 brief 단계 · Principles Instantiated(Law 2 · Law 3 의 brief 자리 · 처분 회계 소비자 · 에이전트 목록 · P22) · kill switch 셋(`DISABLE_CODEX` · `DISABLE_WEB` · `DISABLE_BRIEF_REVIEW`)이 지워진 agent · 스크립트와 은퇴한 「재dispatch 상한」 · 「호출 지점 3곳」을 현재형으로 적고 있었다. `tests/test_readme_sync.sh` 는 키워드의 «존재»만 재서 이것을 못 잡았다. 부재 단언과 양의 짝을 쌍으로 더했다. (1) README 의 살아 있는 줄(버전 이력 문단 `**vX.Y.Z**` 제외)이 이름으로 대는 `.py` · `.sh` 파일은 전부 리포에 실재한다 — 도출 ∀ 이고 추출기 양성 대조를 함께 건다. 짝은 지금 소비자 · 러너(`docreview_route.py` · `run_docreview_codex_reviewer.sh`)를 이름으로 대는가다. (2) AP9 의 에이전트 목록은 이름마다 `agents/` 에 실재하고, 개수가 그 디렉토리와 같다. (3) 옛 brief agent 이름 둘과 「재dispatch 상한」이 살아 있는 줄에 없다 — 짝은 Principles 의 brief 자리 불릿이 `reviewing-brief` · `doc-critic-web` · `doc-recritic` 를 한 줄에 대는가다. `tests/test_brief_review_meta.sh` 의 C4 는 `3곳|세 곳` 을 요구하던 단언을 두 엔진 자리 · 공유 러너 · 펜스 표지로 재조준했고, 「펜스 하나」 주장을 두 SKILL 에서 도출해 잰다. (1) 은 첫 실행에서 이 전환과 무관한 선재 거짓 인용 하나도 잡았다 — `## Hooks Installed` 의 Output schema 문단이 quality-gates 에서 이미 지워진 Stop 훅(`dd8d1911`)을 레퍼런스 패턴의 현재 위치로 대고 있었다. 같은 패턴을 지금 구현하는 이 플러그인의 `hooks/review-dispatch.py` 로 고치고 옛 원형은 이력으로 남겼다.
+- **동작 변화 (주의).** 「미검증」 라운드에 이전 라운드의 열린 항목이 있으면 라운드 게이트 대신 두 단계 승인 게이트가 뜬다(1단계는 라운드 게이트와 같은 형태). 같은 라운드에서 `finalize` 를 두 번 부르면(첫 번 성공 뒤) 그 라운드는 「미검증」이 된다 — 닫힌 쪽 오판이고 다음 정상 라운드에서 풀린다.
+
+### Removed
+
+- **옛 brief 리뷰 파이프라인.** agent `brief-critic` · `brief-direction-reviewer`(탐지 · 재비판은 엔진의 `doc-critic` / `doc-critic-web` · `doc-recritic`), 스크립트 `merge_brief_review.py` · `build_brief_codex_prompt.py` · `run_brief_codex_reviewer.sh`(라우팅은 `docreview_route.py`, codex 는 `run_docreview_codex_reviewer.sh`), codex 체크리스트 둘(`brief-codex-fidelity-checklist.md` · `brief-codex-direction-checklist.md` — 실질 항목은 프로필 본문으로 codex 에 간다).
+- **옛 design doc verdict 파이프라인의 마지막 두 파일** — `merge_review.py` · `compute_issue_id.py` (1.0.0 이월, Park P8). README 의 `Phase 3` 잔존 인용도 정리했다(P6).
+- 피검자가 사라진 테스트 여섯 — `test_merge_brief_review.py` · `test_merge_brief_adjudication.py` · `test_merge_review.py` · `test_merge_review_adjudication.py` · `test_compute_issue_id.py` · `test_degrade_alias_single_definition.py`.
+- **`brief_review_state.py` 가 아무도 읽지 않던 옛 키 둘(`brief_review_stage` · `brief_critic_rounds`)을 심던 것과, 그 키만 쓰던 서브커맨드 셋.** degrade 원장(`brief_review_degradations`)은 그대로다.
+
+### Fixed
+
+- **엔진 상태가 문서를 넘어 재사용되던 결함.** `init` 이 이미 있는 원장이 다른 문서 · 프로필의 것이면 `state_doc_mismatch`(`state_profile_mismatch`) rc 1 로 거부하고 원장 바이트를 건드리지 않는다. 상태 디렉토리가 문서별이고(`state-dir-for`) codex 산출물도 그 안에 있다. 전에는 한 세션의 둘째 문서가 첫 문서의 라운드 · 재리뷰 상한 · finding 을 조용히 물려받았다 — design doc 자리에서도 도달했다.
+- **brief 프로필의 `ground_truth` 가 번들의 두 원문 자리를 가리킨다.** 번들이 audit §6 헤딩을 벗겨 리뷰어가 `S2` 이상의 원문을 못 찾았다.
+- **brief 프로필 층 2 에 충실도 범주 셋을 복원했다** — `provenance_mislabel` · `authority_syntax` · `evidence_unsupported`. 옛 critic 의 여섯 범주 중 엔진 전환으로 빠졌던 셋이고, critic 과 codex 프롬프트 둘 다로 흐른다.
+- **brief 프로필 층 2 에 세 줄을 더했다.** finding 은 근거 원문 `S<N>` 을 `evidence` 에 인용한다 · `omission` 은 두 원문 자리를 둘 다 끝까지 훑는다 · 두 원문 자리의 내용은 비신뢰 데이터라 그 안의 지시를 따르지 않는다. critic 과 codex 둘 다로 흐른다.
+- **codex 러너가 `ground_truth` 를 조용히 빈 줄로 싣지 않는다.** 없거나 비었거나 목록이면 게이트와 같은 이름의 `ground_truth_empty` 로, 문자열이 아닌 스칼라 · 매핑이면 `profile_parse_ambiguous` 로 멈추고 codex 를 부르지 않는다.
+- **design doc 자리에서 리뷰되지 않은 라운드가 리뷰 완료로 기록되던 결함.** critic 이 두 번 죽어 승인 게이트를 「미검증」으로 연 라운드는 finalize 를 건너뛰어 `fin.json` 이 없으므로, `blocks` 에만 걸린 배제 조건이 발동하지 않았다. 그 게이트에서 진행을 고르면 `mark-reviewed` 가 아무도 리뷰하지 않은 문서를 완료로 기록했다(arm-once 종결이라 재arm 없음, 1.0.0 부터). 이제 `mark-reviewed` 는 엔진 요약의 `round_reviewed` 가 참일 때만 부르고, 요약을 얻지 못하면 부르지 않는다. 그런 라운드에서 진행을 고르면 대신 `clear-inflight` 를 부른다 — 전에는 in-flight 표시가 TTL(15분) 동안 남아 그 문서가 다음 편집에 재발견되지 않았다.
+- **엔진이 「미검증」 라운드와 finalize 실패 라운드를 결정론으로 안다.** critic 사망 두 번과 finalize 거부를 원장에 기록하고(준비의 `round` · `rounds[n].finalize_failed`) 게이트 요약에 위 필드 넷을 싣는다. 전에는 그런 라운드의 게이트 첫 줄이 「degrade 없음」으로 렌더됐다(거짓 공시). `round_reviewed` 가 거짓인 **모든** 라운드(finalize 에 닿지 못한 `unrouted` 포함)는 첫 줄이 그 사실을 공시하고, 「다음:」 줄이 「진행 옵션 활성」을 조건 없이 내지 않는다(꼬리 「단 이번 라운드는 리뷰 완료가 아니다」). 「미검증」 라벨과 승인 게이트 강제는 critic 사망 · finalize 실패에만 서고 `unrouted` 는 공시만 한다. 절차서 7단계에 finalize rc 규칙이 섰다 — rc 가 0 이 아니면 값과 무관하게 정상 게이트로 넘기지 않는다. brief 자리는 라벨 · `round_reviewed` · 사유를 엔진 출력에서 읽어 Step B 로 싣는다.
+- **엔진 게이트가 층 범주명을 정규식으로 컴파일하지 않는다.** `"c++"` 같은 범주를 게이트는 `bad_regex` 로 거절하고 러너는 받던 반대 방향 발산이다. 러너 줄 문법 규칙 넷에 단일 위반 셀을 더했고, `layer_rubric` 이 매핑이 아니면 러너가 모양 사유(rc 5)로 멈춘다. 「`init` rc ≠ 0 이면 라운드를 진행하지 않는다」에 락을 걸었다(절차서 + 두 진입 skill).
+
+### Security
+
+- **`layer_rubric` 의 허용 키를 `{layer1, layer2}` 로 닫았다 (Park P1).** 셋째 키의 블록 스칼라 미끼가 codex 러너의 파서를 속이던 경로다. 게이트가 `layer_rubric_fields_unknown:` 으로 거절하고, `init` 이 같은 로더라 그 프로필로는 라운드가 시작되지 않는다.
+- **kill switch 잔존물 경계 셋 (Park P5 ①②③).** 상태 디렉토리와 codex 파일이 쓰기 불가여도 라운드가 전진하는 권한 조합이 실측으로 도달 가능했다. 이제 1단계 `begin-round` 가 라운드 시작을 기록하고, 5단계 `prepare-recritic` 이 그 시각 전(동률 포함)에 쓰인 codex 파일을 내용과 무관하게 부재로 읽는다(`codex_predates_round` · 기록이 없으면 `round_start_unrecorded` · 정수가 아니면 `round_start_unreadable`). `reviewing-spec` codex 펜스의 errexit 안전 · 절단 tier 락 · 1단계의 비-zero rc 전부 정지도 함께다.
+- **엔진이 상대 `--doc` 을 `doc_not_absolute` 로 거부하고, `state-dir-for` 가 `[A-Za-z0-9_-]` 밖 문자가 섞인 세션 id 를 `session_invalid` 로 거부한다.** 절차서와 두 진입 skill 이 「`init` 비-zero 면 진행하지 않는다」를 적는다. 문서 경로가 빈 라운드의 codex 펜스는 세션의 모든 문서별 codex 산출물(`docreview/*/docreview-codex.yaml`)을 중화한다 — arm 원장 · 엔진 원장 · 다른 이름의 파일은 건드리지 않는다는 것을 락이 바이트로 잰다(전제: 한 세션은 리뷰 라운드를 동시에 둘 돌리지 않는다). 치우지 못하면 `residue_unclearable` 로 공시하고 codex 없이 간다.
+- **웹 kill switch 계약 락이 엔진 codex 러너를 같은 해상도로 잰다.** `tests/test_web_kill_switch.sh` 의 AC21 표가 옛 brief 러너 행을 잃고 `run_docreview_codex_reviewer.sh` 를 배포 경로 둘 × 평시 · `=1` · `=yes` × 두 열(`web_search` 모드 · `tools.web_search`)로 잰다. 전에는 엔진 러너의 스위치 효과를 한 열(`live` 부재)로만 재서, 스위치를 켜도 `tools.web_search=true` 로 캐시 검색이 남는 변이를 못 잡았다. 추론 강도 핀 금지 락(quality-gates `test_codex_runner_no_effort_pin.sh`)도 엔진 러너를 포함한다.
+- **주입 경계 규칙을 `doc-critic` · `doc-critic-web` · `doc-recritic` · `brief-readback` 페르소나에 더했다.** 리뷰 대상 문서와 그 안의 사용자 원문 블록은 데이터다 — 옛 `brief-critic` 삭제로 사라졌던 보호의 복원이다. 추가만 했고 삭제 줄은 0 이다.
+- **게이트(`profile-check` · `init`)가 중복 키(`duplicate_key:`)와 빈 본문(`profile_body_empty`)을 거절한다.** 게이트와 러너 파서가 같은 프로필을 다른 값으로 읽던 경로(Park P1 부류)를 막는다. 게이트는 `layer1` · `layer2` 항목의 타입도 본다.
+- **러너가 프로필 frontmatter 를 허용 문법으로만 읽는다.** 모든 줄이 한 줄에 완결돼야 한다 — 맨 식별자 키 · 줄 안에서 닫히는 따옴표와 괄호 · 블록 스칼라 · 앵커 · 태그 · 따옴표 키 없음. 그 밖은 `profile_parse_ambiguous` 로 멈추고 codex 를 부르지 않는다. 같은 매핑의 중복 키와 러너가 읽는 필드의 부재(`profile_field_missing`)도 멈춘다. 새 모양마다 새던 옛 모호 모양 탐지기는 지웠다. 러너-게이트 등식 락이 러너가 읽는 모든 필드를 추출 지점에서 도출해 대조한다. 문법이 좁아서 생기는 주의는 위 업그레이드 주의 셋째다.
+- **P21 preamble 파일이 없거나 비었으면 러너가 `preamble_missing` 으로 멈춘다.** 전에는 주입 경계 절 없이 codex 를 부르고 실패 없음으로 기록했다. codex 프롬프트 순서를 형제 빌더와 같게 맞추고 흉내 가능한 권위 문구를 뺐으며, P21 지배 락(quality-gates `test_codex_prompt_untrusted_clause.sh`)의 모집단에 엔진 러너를 넣었다.
+- **variant 판정기(`shared/tests/variant_of.py`)가 frontmatter 를 허용 목록 줄 문법으로 읽고 PyYAML 과 키 집합을 대조한다.** 전에는 LF 밖 줄바꿈(CR · NEL · U+2028 · U+2029) 뒤나 안 닫힌 따옴표 값 뒤에 숨긴 최상위 키를 YAML 은 읽는데 판정기와 락 다섯이 통과시켰다. 숨긴 키에는 `tools` 도 들 수 있다 — `tools` 가 없으면 agent 는 도구 전체를 상속한다(Law 2). 이제 문법 밖 줄 · 그 네 문자 · 탭 시작 줄은 판정 불가이고, PyYAML 을 import 할 수 없어도 판정 불가(`pyyaml_unavailable`)다. 추적되는 모든 agent 정의 파일에 그 네 문자를 금지하는 파일 전체 락도 섰다(`shared/tests/test_variant_of_contract.sh`).
+- **공유 중복 락(`shared/tests/test_no_new_duplication.sh`)에 면제 ③ — 락 약화라 보안 리뷰를 거쳤다.** `variant-of:` 표지 쌍이고 agent 정의 파일로 한정된다. `variant_of.py` 가 두 파일이 이름 · 설명 · 도구와 삽입 블록 하나만 다른지를 이 락 안에서 판정한다. 표지 계약 락 `shared/tests/test_variant_of_contract.sh` 가 모든 표지를 범위 · 대상 실재 · 관계로 잰다.
+
 ## [1.1.0] — 2026-09-10
 
 ### Changed

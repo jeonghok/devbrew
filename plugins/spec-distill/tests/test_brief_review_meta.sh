@@ -82,11 +82,28 @@ ORPHAN="$(grep -nE '^[0-9]+\.[0-9]*\.? ' <<<"$FLOW" || true)"
 [[ -z "$ORPHAN" ]] \
   && ok "C4: Flow 섹션에 고아 리스트 번호 없음" \
   || no "C4: Flow 섹션에 붙을 리스트가 없는 번호 항목: ${ORPHAN}"
-# codex kill switch가 brief 파이프라인까지 문서화됐는가 (design-doc 경로만 적혀 있었다)
+# codex kill switch가 두 엔진 자리까지 문서화됐는가 (design-doc 경로만 적혀 있었다).
+# v1.2.0 에서 brief 자리의 codex 호출이 옛 파이프라인의 세 지점에서 엔진 라운드마다 도는
+# 리터럴 게이트 펜스 하나로 바뀌었다. 옛 단언(`3곳|세 곳`)은 그 전환 뒤 거짓 문장을 요구하므로,
+# README 가 **지금** 대는 것 — 두 자리 · 공유 러너 · 펜스 표지 — 을 재고, 그 주장이 참인지(두
+# SKILL 에 그 러너의 게이트 펜스가 정확히 하나씩 있는가)를 SKILL 에서 도출해 함께 잰다.
+# 부재 짝: 옛 세 지점 서술과 지워진 러너 이름이 이 줄에 돌아오면 RED 다.
 KS_CODEX="$(grep -F 'DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1' <<<"$KS" | head -1)"
-{ grep -qF 'reviewing-brief' <<<"$KS_CODEX" && grep -qE '3곳|세 곳' <<<"$KS_CODEX"; } \
-  && ok "C4: codex kill switch가 brief 파이프라인 호출 지점까지 문서화" \
-  || no "C4: codex kill switch가 design-doc 경로만 말한다 — brief 3개 호출 지점이 미문서화"
+{ grep -qF 'reviewing-spec' <<<"$KS_CODEX" && grep -qF 'reviewing-brief' <<<"$KS_CODEX" \
+    && grep -qF 'run_docreview_codex_reviewer.sh' <<<"$KS_CODEX" && grep -qF 'codex-gate' <<<"$KS_CODEX"; } \
+  && ok "C4: codex kill switch 가 두 엔진 자리 · 공유 러너 · 게이트 펜스 표지를 댄다" \
+  || no "C4: codex kill switch 서술이 두 엔진 자리(reviewing-spec · reviewing-brief) · 공유 러너(run_docreview_codex_reviewer.sh) · codex-gate 펜스 중 하나를 대지 않는다"
+if grep -qE '3곳|세 곳|세 지점|run_brief_codex_reviewer' <<<"$KS_CODEX"; then
+  no "C4/부재: codex kill switch 서술이 은퇴한 brief 파이프라인의 세 호출 지점이나 지워진 러너를 현재형으로 댄다"
+else
+  ok "C4/부재: 은퇴한 세 호출 지점 · 지워진 러너 서술 없음"
+fi
+for sk in reviewing-spec reviewing-brief; do
+  n_fence="$(grep -c 'codex-gate:begin runner=run_docreview_codex_reviewer.sh' "$SD/skills/$sk/SKILL.md" 2>/dev/null || true)"
+  [[ "$n_fence" == "1" ]] \
+    && ok "C4(사실): $sk 에 공유 러너의 codex 게이트 펜스가 정확히 하나 — README 의 「펜스 하나」가 참이다" \
+    || no "C4(사실): $sk 의 공유 러너 codex 게이트 펜스가 '${n_fence:-없음}'개 — README 의 「펜스 하나」 주장과 어긋난다"
+done
 
 # --- T18 / AC22a : 훅 집합 고정 열거 + 'brief' 문자열 0건 --------------------
 EXPECTED="hooks.json review-dispatch.py session-end-cleanup.py"
