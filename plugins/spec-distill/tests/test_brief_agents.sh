@@ -26,7 +26,6 @@ REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
 ALL=("doc-critic" "doc-critic-web" "doc-recritic" "brief-readback")
 
-SKILL_BRIEF="$SD/skills/reviewing-brief/SKILL.md"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 fm_of() { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$1"; }
 

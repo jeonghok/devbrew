@@ -41,9 +41,11 @@ PRIN="$(section '^## Principles Instantiated' "$RM")"
 # 첫 줄을 한 줄로 붙여, 경계에 걸친 유령 매치를 만들 수 있다(오늘 안전한 이유는 Flow
 # 섹션의 첫 줄이 마침 빈 줄이라서일 뿐 — 그 우연이 사라지면 조용히 성립이 바뀐다).
 RM_SCAN="$(printf '%s\n%s\n' "$PRIN" "$(section '^## Flow' "$RM")")"
-for kw in 'brief-critic' 'brief-direction-reviewer' 'brief-readback' 'reviewing-brief'; do
+# 이름 목록은 오늘 brief 자리의 리뷰어다. 옛 brief-critic·brief-direction-reviewer 는 문서 리뷰
+# 엔진 전환으로 지워졌다 — 그 이름을 요구하면 README 가 지워진 agent 를 계속 적어야 GREEN 이다.
+for kw in 'doc-critic' 'doc-recritic' 'brief-readback' 'reviewing-brief'; do
   grep -qF "$kw" <<<"$RM_SCAN" \
-    && ok "T15: README에 신규 컴포넌트 '$kw'" || no "T15: README에 '$kw' 부재"
+    && ok "T15: README에 brief 자리 컴포넌트 '$kw'" || no "T15: README에 '$kw' 부재"
 done
 KS="$(section '^## Kill switches' "$RM")"
 grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW' <<<"$KS" \

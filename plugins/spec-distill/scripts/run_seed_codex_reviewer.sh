@@ -139,9 +139,9 @@ codex exec - \
     2>"$STDERR_FILE" || EXIT_CODE=$?
 
 # override_reason 유도 + codex_findings_to_yaml.py 호출은 정본화됐다
-# (`codex_extract_or_fallback`, runner_common.sh) — 형제 run_brief_codex_reviewer.sh 와
-# 이 tail 을 바이트-동일하게 썼을 때 test_no_new_duplication.sh 의 20줄 창에 걸려서
-# 여기로 올라갔다(Task 14). set -e 하에서 이 호출이 실패하면 fallback YAML 없이
-# 죽으므로 가드한다.
+# (`codex_extract_or_fallback`, runner_common.sh) — 당시 형제였던 옛 brief 러너(지금은
+# 지워졌다)와 이 tail 을 바이트-동일하게 썼을 때 test_no_new_duplication.sh 의 20줄 창에
+# 걸려서 여기로 올라갔다(Task 14). 지금 이 함수를 부르는 러너는 이 파일 하나다. set -e
+# 하에서 이 호출이 실패하면 fallback YAML 없이 죽으므로 가드한다.
 codex_extract_or_fallback "$STDOUT_FILE" "$STDERR_FILE" "$EXIT_CODE" "$OUTPUT_PATH" \
     design "$PLUGIN_ROOT" || emit_fallback yaml_conversion_failed

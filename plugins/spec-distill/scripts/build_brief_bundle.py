@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""build_brief_bundle.py — 충실도 축의 두 리뷰어가 공유하는 번들 (payload + audit §6).
+"""build_brief_bundle.py — 문서 리뷰 엔진 한 라운드의 소비자 셋(탐지 · 재비판 · codex)이 공유하는
+번들 (payload + audit §6).
 
 형제 `build_seed_inline_blob.py`의 **구조**를 이식한다(명시 경로 → 라벨 붙은 조립 →
-stdout). 조립 로직이 두 소비자에 각각 따로 있으면 한쪽만 고쳐질 때 두 리뷰어가 다른
+stdout). 조립 로직이 소비자마다 따로 있으면 한쪽만 고쳐질 때 리뷰어끼리 다른
 재료를 보는 drift가 생긴다.
 
 **이식하는 것은 구조이지 그 파일의 실패 정책이 아니다.** 형제는 원문 절을 못 찾으면
@@ -43,9 +44,10 @@ REDACT_KEYS = ("audit_file", "name", "created_at")
 AUDIT_NAME_RE = re.compile(r"\S*\.audit\.md\b")
 
 # 번들 안에서 비신뢰 verbatim이 "여기서부터 시작한다"고 알리는 두 리터럴 표지 — 이 번들을
-# 프롬프트에 그대로 inline하는 소비자(agents/brief-critic.md의 dispatch 지시문)는 반드시
-# **둘 다** 이름으로 가리켜야 한다. 하나만 가리키면 다른 쪽 원문에는 injection 경계가
-# 없어진다(task-10 fix round 2 실측 — 라벨 토큰만 가리키고 payload 쪽 §6은 빠뜨린 결함).
+# 받는 리뷰어에게 두 원문 자리를 알려 주는 문면(지금은 brief 프로필
+# `references/docreview-profiles/brief.md` 의 층 2 절 — 탐지·재비판 agent 와 codex 러너가 함께
+# 싣는다)은 반드시 **둘 다** 이름으로 가리켜야 한다. 하나만 가리키면 다른 쪽 원문에는 injection
+# 경계가 없어진다(task-10 fix round 2 실측 — 라벨 토큰만 가리키고 payload 쪽 §6은 빠뜨린 결함).
 #
 # 왜 이 둘인가: `<<<PAYLOAD>>>` 다음에 실리는 payload 본문은 자신의 `## 6. 사용자 원문`
 # 절(S1)을 **바이트 그대로** 담고 있다 — redact_frontmatter()는 frontmatter 세 키만
@@ -53,8 +55,8 @@ AUDIT_NAME_RE = re.compile(r"\S*\.audit\.md\b")
 # 안 벗기면 payload의 같은 헤딩과 바이트 동일해진다"는 대칭으로, payload 쪽 헤딩은 애초에
 # 벗길 대상이 아니라 그대로 남는다). audit_verbatim()이 만드는 두 번째 블록(S2 이상)은
 # `<<<AUDIT-VERBATIM>>>` 라벨이 표지한다. 이 튜플이 정본이다 — 번들 포맷이 바뀌어 세
-# 번째 위치가 생기면 여기만 늘리면 되고, 소비자 쪽 문면이 그 표지를 놓치면
-# test_brief_agents.sh의 cross-check 락이 잡는다.
+# 번째 위치가 생기면 여기만 늘리면 되고, 프로필 문면이 그 표지를 놓치면
+# shared/tests/test_docreview_profiles.sh 의 교차 대조(이 튜플에서 도출)가 잡는다.
 UNTRUSTED_VERBATIM_MARKERS = ("## 6. 사용자 원문", "<<<AUDIT-VERBATIM>>>")
 
 

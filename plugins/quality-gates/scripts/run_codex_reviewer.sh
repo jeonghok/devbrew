@@ -45,10 +45,10 @@
 # instead. On rc == 3 the CALLER MUST delete <output_yaml_path> before reading
 # it — a prior round's stale YAML (which may carry a false-positive
 # `codex_failed: false`) would otherwise sit untouched and be read as this
-# round's codex verdict. Same contract as `run_brief_codex_reviewer.sh`, whose
-# caller (spec-distill's reviewing-brief SKILL) already implements the
-# rc==3 → rm -f pattern; quality-pipeline/SKILL.md now documents the same for
-# this runner.
+# round's codex verdict. Same contract as the shared document-review runner
+# (`run_docreview_codex_reviewer.sh`), whose callers (spec-distill's reviewing-spec
+# and reviewing-brief SKILLs) implement the rc==3 → rm -f pattern;
+# quality-pipeline/SKILL.md documents the same for this runner.
 #
 # Sandbox guarantees: codex exec -s read-only (Layer 3) — codex subprocess
 # cannot write to the working tree even though the script invokes it.
@@ -62,7 +62,7 @@ OUTPUT_PATH="${3:-}"
 # CLAUDE_PLUGIN_ROOT는 훅 실행에만 주입된다 — 스킬의 bash 블록에는 오지 않는다.
 # fallback 없이 참조하면 `set -u` 아래에서 codex에 **도달하기 전에** 즉사하고,
 # 산출물은 `aborted_before_completion` 이 되어 모델 다양성이 매번 0이 된다.
-# 형제 `run_brief_codex_reviewer.sh`와 같은 철자를 쓴다(세 번째 철자 발명 금지).
+# 형제 `run_docreview_codex_reviewer.sh`와 같은 철자를 쓴다(세 번째 철자 발명 금지).
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 if [[ -z "$OUTPUT_PATH" ]]; then
@@ -77,7 +77,7 @@ fi
 # 상대경로를 cd *이후* cwd로 다시 해석해 **서로 다른 파일**을 본다 — 가드가
 # 호출자가 읽는 파일이 아닌 엉뚱한 곳을 지켜 사실상 아무것도 지키지 못한다
 # (형제 `run_artifact_codex_reviewer.sh`에서 리뷰 R1으로 적발된 것과 같은 결함이
-# 여기도 있었다 — sweep). 형제 러너 3곳(run_brief_/run_spec_/run_audit_codex_reviewer.sh)
+# 여기도 있었다 — sweep). 형제 러너 3곳(run_audit_/run_docreview_/run_seed_codex_reviewer.sh)
 # 전부 cd 전에 이 절대화를 한다.
 [[ "$OUTPUT_PATH" = /* ]] || OUTPUT_PATH="$PWD/$OUTPUT_PATH"
 [[ "$DIFF_PATH" = /* ]] || DIFF_PATH="$PWD/$DIFF_PATH"
@@ -210,7 +210,8 @@ fi
 # 하니스가 "medium"을 박으면 high/xhigh로 설정한 사용자가 조용히 하향되고, 그 하향은
 # 이 co-reviewer의 유일한 존재 이유(별-모델 적발력)를 정확히 깎는다. 바닥값이
 # 필요하다는 판단이 서면 그때 명시적으로 문서화해서 넣는다.
-# (`run_brief_codex_reviewer.sh`가 이미 쓰던 계약을 전파한 것이다.)
+# (지금은 지워진 옛 brief 러너가 먼저 쓰던 계약을 전파한 것이다 — 오늘 같은 계약을 지는
+# 형제는 `run_docreview_codex_reviewer.sh` 다.)
 #
 # Direct codex invocation — no per-call timeout (hang risk accepted; backstops:
 # Bash tool timeout, DEVBREW_QUALITY_GATES_DISABLE_CODEX=1, /cancel-qg). Layer 3 sandbox
@@ -242,7 +243,7 @@ fi
 # (python3 부재, plugin-root 문제)는 `> "$OUTPUT_PATH"` 리다이렉트가 이미 파일을
 # 비운 뒤에 일어난다 → 0바이트 산출물. 소비자에게 그것은 "codex가 성공했고 발견이
 # 없다"로 읽힌다 — 리뷰어 하나가 조용히 사라지는 것이다. 형제 두 러너
-# (run_artifact_codex_reviewer.sh, run_brief_codex_reviewer.sh)는 이 가드를 이미
+# (run_artifact_codex_reviewer.sh, 그리고 지금은 지워진 옛 brief 러너)는 이 가드를 이미
 # 갖고 있었고 주석으로 같은 실패를 지목하고 있었다; 여기에만 백포트되지 않았다.
 # `-s` 검사가 별도로 필요한 이유: exit 0 + 빈 출력이 가능하다(파이프 실패, 부분 쓰기).
 if ! python3 "${PLUGIN_ROOT}/scripts/codex_findings_to_yaml.py" \

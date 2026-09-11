@@ -141,7 +141,7 @@ for a in seed-critic seed-readback; do
   printf '%s\n' "$fm" | grep -qE '^allowedTools:' \
     && no "$a: allowedTools(camelCase) — 존재하지 않는 필드다. 조용히 무시된다" \
     || ok "$a: allowedTools(camelCase) 잔존 없음"
-  # model 키 부재 — 형제 zero-tool 둘(brief-critic·brief-readback)의 정본과 같다.
+  # model 키 부재 — 형제 zero-tool agent(brief-readback)의 정본과 같다.
   MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
   printf '%s\n' "$fm" | grep -qE "$MODEL_KEY" \
     && no "$a: frontmatter 에 model 키가 있다 — 형제 정본은 키 부재다" \

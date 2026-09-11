@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """build_brief_inline_blob.py — **brief-readback 전용** payload blob.
 
-v0.45.0에서 충실도 축이 `build_brief_bundle.py`로 갈라졌다(payload + audit §6을 조립해
-`brief-critic`과 codex #2가 받는다). 이 파일은 계약이 바뀌지 않았고 소비자가 하나로
+v0.45.0에서 충실도 축이 `build_brief_bundle.py`로 갈라졌다(payload + audit §6을 조립한 번들 —
+지금은 문서 리뷰 엔진의 탐지·재비판·codex가 받는다). 이 파일은 계약이 바뀌지 않았고 소비자가 하나로
 줄었다 — 냉독이 재는 것은 *하류가 실제로 받는 문서*의 읽힘이므로 payload-only가 맞다.
 번들을 주면 냉독이 하류가 절대 보지 않을 것을 읽는다.
 

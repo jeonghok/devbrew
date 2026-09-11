@@ -31,12 +31,12 @@ OUT="$(cd "$T" && bash "$T/plugins/spec-distill/tests/test_brief_agents.sh" 2>&1
 grep -qF 'tools' <<<"$OUT" && ok "그 실행이 tools 표면을 실제로 검사했다" \
   || no "출력에 tools 검사 흔적이 없다 — 락이 조기 종료했을 수 있다"
 
-# (3) 양성 증인 — 그 절이 사라졌어도 충실도 hard gate 서술은 남아 있다. 부재
+# (3) 양성 증인 — 그 절이 사라졌어도 brief finding 의 hard gate 서술은 남아 있다. 부재
 # 단언보다 먼저 둔다 — 설정이 통째로 무너져도(예: SKILL 파일이 비어버려도) 부재
 # 단언은 공허하게 통과하지만, 이 증인은 그때 함께 RED가 되어 조용한 통과를 막는다.
 SKILL="$REPO_ROOT/plugins/spec-distill/skills/reviewing-brief/SKILL.md"
-grep -qF 'hard gate' "$SKILL" \
-  && ok "충실도 verdict 가 여전히 hard gate 로 서술된다 (차단력 유지)" \
+grep -qF 'finding 은 hard gate 다' "$SKILL" \
+  && ok "brief finding 이 여전히 hard gate 로 서술된다 (층 1·2 둘 다 — 차단력 유지)" \
   || no "hard gate 서술이 사라졌다 — 완화가 아니라 유지여야 한다"
 
 # (4) 부재 — SKILL 본문이 실행 시점에 배포 단위 밖 경로를 읽지 않는다.
