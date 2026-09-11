@@ -199,7 +199,10 @@ brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안�
 
 게이트를 띄우기 *전에* Step A.5 리뷰 산출물을 프로즈로 출력합니다(B-0 확정 후보 목록 다음):
 
-1. **리뷰 게이트 결과** — 엔진의 마지막 게이트 렌더 · 승인 게이트 도달 사유(열린 것 없음 · 상한 · stagnation · 「미검증」) · 1단계에서의 사용자 선택. 층 1(방향성) 결정은 라운드 게이트에서 이미 사용자가 판정했습니다.
+1. **리뷰 게이트 결과** — 엔진의 마지막 게이트 렌더 · 승인 게이트 도달 사유(열린 것 없음 · 상한 · stagnation · 「미검증」) · 리뷰 완료 여부 · 1단계에서의 사용자 선택. 층 1(방향성) 결정은 라운드 게이트에서 이미 사용자가 판정했습니다.
+   「미검증」 라벨과 리뷰 완료 여부의 출처는 **엔진 게이트 요약**입니다 — `reviewing-brief` 가 넘기는 마지막 요약의 `approval_label` · `round_reviewed` · `unreviewed_reason` 을 그대로 싣고, critic 사망 횟수나 `finalize` 결과를 기억해 라벨을 붙이지 않습니다. `round_reviewed` 가 거짓이면 그 라운드는 리뷰 완료가 아니고, 사유(`unreviewed_reason`)는 다음 중 하나입니다:
+   - 「미검증」 — critic 사망(`critic_dead`) · `finalize` 실패(`finalize_incomplete`). `approval_label` 이 「미검증」이고 승인 게이트를 그 라벨로 연 라운드입니다.
+   - 라운드 미완(`unrouted`) — 이번 라운드의 라우팅 보고서가 없다(`finalize` 를 거치지 않았다). 라벨도 승인 게이트 강제도 없지만 리뷰 완료가 아니므로, 이 사유를 도달 사유와 함께 싣습니다.
 2. **readback 요약 전문** + gap 목록(*어느 클래스 / 요약의 어느 문장 / payload의 어느 절*).
 3. **열린 채 남은 항목과 미반영 findings** — 있으면 각각 이유와 함께. 저자가 임의로 기각한 것이 아니라 사용자 판정
    대상입니다.
@@ -220,7 +223,7 @@ state 의 `brief_review_degradations` 원장(BRIEF_REVIEW skip record 포함)·�
 ```javascript
 AskUserQuestion({
   questions: [{
-    question: "interview brief 완결: <brief-path> (구조 게이트 통과, 리뷰 <게이트 결과 한 줄 — 도달 사유 · 열린 항목 수>). 확정 후보·리뷰 게이트 결과·readback gap은 위 목록대로. 게이트 advisory: <check_brief 의 advisories 한 줄씩 (예: coverage-mapper 0 (unavailable: …)) | 없음>. degrade: <record 한 줄씩 | degrade 없음>. 다음 단계?",
+    question: "interview brief 완결: <brief-path> (구조 게이트 통과, 리뷰 <게이트 결과 한 줄 — 도달 사유 · 열린 항목 수 · 리뷰 완료가 아니면 그 사유(unreviewed_reason)>). 확정 후보·리뷰 게이트 결과·readback gap은 위 목록대로. 게이트 advisory: <check_brief 의 advisories 한 줄씩 (예: coverage-mapper 0 (unavailable: …)) | 없음>. degrade: <record 한 줄씩 | degrade 없음>. 다음 단계?",
     header: "Proceed",
     options: [
       {label: "확정하고 /compact 후 brainstorming (권장)", description: "확정 후보를 status: confirmed로 반영 → 재저장 → 게이트 재실행 → verbatim /compact 노출. 긴 인터뷰 context 정리 이점."},
