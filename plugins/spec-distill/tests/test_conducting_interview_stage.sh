@@ -366,7 +366,7 @@ done
 for tok in 'teach-lite' 'teach-heavy' 'teach-beat' 'general-purpose'; do
   grep -qF -- "$tok" "${CI_ALL[@]}" && no "G7: «${tok}» 잔존" || ok "G7: «${tok}» 제거됨"
 done
-# `4-block`·`막힌 결정` 은 **라운드 규약**의 어휘로서 제거됐다(AC1: «직전 답에서» 블록 + 질문 둘).
+# `4-block`·`막힌 결정` 은 **라운드 규약**의 어휘로서 제거됐다(지금 라운드 규약은 «지금 이해 · 다음 결정 · 질문 하나»).
 # 그런데 **R3 steelman 게이트**가 자기 제시 형식으로 같은 두 낱말을 쓴다(`references/steelman.md`
 # Step 3) — 다른 물건이 같은 어휘를 쓴다. 어휘가 같다고 한쪽을 지우면 다른 쪽 설계를 지우는
 # 것이므로, 부재는 «전 코퍼스»가 아니라 «steelman.md 를 뺀 전 코퍼스»에서 요구한다.
