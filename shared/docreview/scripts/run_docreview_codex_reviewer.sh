@@ -389,8 +389,8 @@ if os.environ.get("DOCREVIEW_CODEX_PARSED_OUT"):
 # 경로(`emit_fallback prompt_build_failed`)로 넘긴다. `layer2` 는 게이트가 비어도 허용한다(seed).
 if not lr_layer1 or not ad:
     sys.exit(1)
-# `ground_truth` 가 없음·빔·null·목록이면 게이트와 같은 이름의 사유(rc 3 → `ground_truth_empty`)로
-# 공시한다 — 게이트 없이 러너만 불린 경우에도 "정답의 출처: " 뒤가 빈 프롬프트가 나가지 않는다.
+# `ground_truth` 값이 빔·null·목록이면 게이트와 같은 이름의 사유(rc 3 → `ground_truth_empty`)로 공시한다(키 부재는 위 rc 6) —
+# 게이트 없이 러너만 불린 경우에도 "정답의 출처: " 뒤가 빈 프롬프트가 나가지 않는다.
 if not gt:
     sys.exit(3)
 # 본문(검토 항목)은 탐지·재비판 agent 가 읽는 루브릭이다 — codex 도 같은 루브릭으로 본다(R34).

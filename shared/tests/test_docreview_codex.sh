@@ -407,7 +407,7 @@ done
 for shape in gt-flow-list gt-block-list gt-empty gt-bare gt-null; do
   mutate_case "$shape"
   assert_file_grep "$TMPD/shape-$shape.yaml" 'reason: ground_truth_empty' \
-    "러너: ground_truth 가 문자열이 아니거나 비었거나 없음($shape) → 게이트와 같은 이름의 fail-closed 사유"
+    "러너: ground_truth 값이 목록이거나 비었음(빈 문자열·맨 키·null, $shape) → 게이트와 같은 이름의 fail-closed 사유 (키 부재는 위 profile_field_missing)"
   if [ ! -e "$TMPD/shape-$shape-cap.txt" ]; then
     ok "러너: $shape → codex 를 부르지 않는다(빈 정답의 출처로 프롬프트가 나가지 않는다)"
   else
