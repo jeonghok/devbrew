@@ -105,9 +105,8 @@ else
   ok "P18: 'Principles 흡수' 절 추출 ($(printf '%s\n' "$absorb_block" | wc -l | tr -d ' ')줄)"
   ABSORB_TMP="$(mktemp -t readme-absorb-XXXXXX)"
   printf '%s\n' "$absorb_block" > "$ABSORB_TMP"
-  # 부재 — 엔진이 대체한 옛 술어의 두 카운터. 이 브랜치 이후 design doc 자리에는
-  # 생산자도 소비자도 없다(구현은 brief 자리가 아직 쓰는 merge_review.py 하나뿐이고,
-  # 이 플러그인 README 가 서술하는 자리에는 도달하지 않는다).
+  # 부재 — 엔진이 대체한 옛 술어의 두 카운터. 이 플러그인에는 생산자도 소비자도
+  # 없다(마지막 구현이던 옛 병합 스크립트는 brief 자리 전환과 함께 지워졌다).
   if grep -qE 'raised_count|dismissed_by_user' "$README"; then
     no "P18/부재: 옛 stagnation 술어의 카운터 이름이 README 에 남아 있다 — 생산자도 소비자도 없는 술어를 현재형으로 서술한다(거짓 인용)"
   else

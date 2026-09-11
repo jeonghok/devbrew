@@ -183,7 +183,7 @@ while IFS= read -r skill_dir; do
   # Step B 의무: 자기 **degrade 채널**을 이름으로 댔는가.
   #
   # 재는 것은 **라벨 있는 절의 존재**이지 채널의 *형태*가 아니다. 형태는 채택자마다 다르고
-  # (`brief_review_degradations` 원장 vs `merge_review` 플래그 + `advisory:`) 둘로 일반화하면
+  # (`brief_review_degradations` 원장 vs 엔진 `fin.json` 의 `advisory[]`·`blocks`) 둘로 일반화하면
   # 둘에 과적합한 정규식이 된다 — 그 검증은 세 번째 채택자가 나와야 형태가 생긴다(감사문서
   # 「이월된 미해결 항목」의 degrade 채널 항목). 여기서 잡는 것은 정확히 하나, 계약이 두려워한
   # 실패다: 새 채택자가 이 의무를 **해당 없음으로 넘기는 것**. 그때 이 줄이 RED 다.

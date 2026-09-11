@@ -66,7 +66,7 @@ class Ledger:
         """강제 — 항목이 아니라 값을 대체했다.
 
         gate=True 는 그 대체가 **게이트 판정을 바꾼다**는 뜻이다
-        (예: raised_count 5→0 이 `>=3` 정체 게이트를 무력화). 그때만 degraded.
+        (예: 카운터 5→0 대체가 `>=3` 같은 임계 게이트를 무력화). 그때만 degraded.
         """
         self._coerced.append((field, frm, to, bool(gate)))
 
@@ -125,8 +125,9 @@ class Ledger:
         """차단 — 항목이 소실됐거나 셀 수 없거나 그 축의 주(主) 판정자가 죽었을 때만 참.
 
         보조(모델 다양성) 손실은 공시하되 막지 않는다. 무조건 True 로 만들면
-        test_merge_review.py:130-135(AC10)·:144-148·:154-158 이 깨진다 —
-        화석이 아니라 계약이다.
+        `shared/tests/test_adjudication_behavior.sh` 의 양성 대조 (b) 와 엔진의
+        `case_T40_codex_absent_first_line` · `case_T43_recritic_dead`
+        (`shared/tests/fixtures/docreview/cases.sh`)가 깨진다 — 화석이 아니라 계약이다.
         """
         return (bool(self._held)
                 or bool(self._unknown)

@@ -18,7 +18,6 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
 DISPATCH="$SD/hooks/review-dispatch.py"
 LEDGER="$SD/scripts/arm_ledger.py"
-MERGE="$SD/scripts/merge_review.py"
 SKILL="$SD/skills/reviewing-spec/SKILL.md"
 FIX="$SD/tests/fixtures"
 

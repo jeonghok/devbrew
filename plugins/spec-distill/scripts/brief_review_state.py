@@ -32,8 +32,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-# `_yaml_scalar` 는 이 플러그인 안의 두 소비자가 공유한다(merge_review · 여기).
-# 같은 플러그인 안이라 import 하나로 중복이 소멸한다(설계 §6.1③).
+# `_yaml_scalar` 의 정의는 `hook_common` 한 곳이다 — 같은 플러그인 안이라 import 하나로
+# 중복이 소멸한다(설계 §6.1③).
 from hook_common import _yaml_scalar  # noqa: E402
 
 STAGES = ("direction", "fidelity", "readback", "done")

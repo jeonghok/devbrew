@@ -12,8 +12,7 @@
     상태 파일의 경로 해석이고, 두 번째 정의가 있다는 사실 자체가 arm_ledger 쪽
     docstring("저장소 위치 변경 시 이 한 곳만 갱신")을 거짓으로 만들고 있었다
     (census #122). 정의가 여기로 오면서 그 문장이 다시 참이 됐다.
-  - `merge_review.py` · `brief_review_state.py` 가
-    `_yaml_scalar` 을 쓴다(census #45의 spec-distill 부분).
+  - `brief_review_state.py` 가 `_yaml_scalar` 을 쓴다(census #45의 spec-distill 부분).
 
 **담지 않는 것** — `kill_switch_active`(Task 19의 `shared/killswitch/` 정본에서
 온다. 여기로 다시 가져오면 정본이 둘이 된다) · `resolve_session_id` / `state_root`
@@ -101,10 +100,9 @@ def parse_iso(s) -> Optional[datetime]:
 def state_file_for(session_id: str) -> Path:
     """sid → state.local.md 경로 단일 해석(저장소 위치 변경 시 이 한 곳만 갱신).
 
-    `state_path` import 를 함수 안에 둔다. 이 모듈의 `_yaml_scalar` 만 쓰는 소비자가
-    둘 있고(merge_review · brief_review_state) 그 둘은 상태 경로를
-    전혀 해석하지 않는다 — 모듈 최상단에서 import 하면 그 둘이 같은 디렉토리의
-    `state_path.py` 에 import 시점으로 묶인다.
+    `state_path` import 를 함수 안에 둔다. 이 모듈의 `_yaml_scalar` 만 쓰는 소비자
+    (`brief_review_state`)는 상태 경로를 전혀 해석하지 않는다 — 모듈 최상단에서
+    import 하면 그 소비자가 같은 디렉토리의 `state_path.py` 에 import 시점으로 묶인다.
     """
     if str(SCRIPTS_DIR) not in sys.path:
         sys.path.insert(0, str(SCRIPTS_DIR))

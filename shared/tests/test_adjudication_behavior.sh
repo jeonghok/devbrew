@@ -75,9 +75,11 @@ assert_eq "$out" "False" "양성대조(a): 소실도 미상도 주-실패도 없
 
 #    양성 대조 (b) — 보조 source 실패는 degraded 이되 blocks 아님.
 #    이 단언이 없으면 이 테스트는 «철회된 보편 규칙»(degraded 면 언제나 blocks)과
-#    구별되지 않는다. 실측 근거: merge_review.py:461-465 는 codex(보조) 실패에도
-#    combined = claude_verdict = approved 를 내고, test_merge_review.py:130-135(AC10)·
-#    :144-148 · :154-158 이 그것을 계약으로 못 박았다.
+#    구별되지 않는다. 실측 근거: 문서 리뷰 엔진(`docreview_route.py`)은 codex·doc-recritic
+#    실패를 `primary=False` 로 기록하고 그 라운드를 막지 않는다 — `shared/tests/fixtures/
+#    docreview/cases.sh` 의 `case_T40_codex_absent_first_line`(codex 없음 → blocks
+#    False) · `case_T43_recritic_dead`(recritic 부재 → blocks False)가 그것을 계약으로
+#    못 박는다.
 out="$(run 'from adjudication import Ledger
 L = Ledger(); L.source_failed("codex", "한도 소진", primary=False)
 print(L.report()["degraded"], L.blocks())')"

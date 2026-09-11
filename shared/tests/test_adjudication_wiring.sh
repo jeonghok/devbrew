@@ -27,9 +27,10 @@
 # 바꾸면 통과한다 — 종류의 정합은 소비자마다 자기 처분 행렬 테스트가 잰다:
 # `quality-gates/tests/test_synthesize_disposition.sh`(synthesize_findings.py) ·
 # `quality-gates/tests/test_synthesize_artifact_adjudication.py` ·
-# `spec-distill/tests/test_merge_review_adjudication.py` ·
-# `spec-distill/tests/test_merge_brief_adjudication.py`.
-# 단일 락을 지목하면 그 하나가 덮지 않는 소비자 넷이 조용해진다(최종 리뷰 A/m3).
+# `spec-distill/tests/test_review_dispatch_disposition.sh`(review-dispatch.py) ·
+# `spec-distill/tests/test_depth_record.py`(depth_record.py) ·
+# `shared/tests/test_docreview_route.sh`(docreview_route.py).
+# 단일 락을 지목하면 그 하나가 덮지 않는 나머지 소비자가 조용해진다(최종 리뷰 A/m3).
 #
 # **모집단의 범위 — 「모든 자리」가 아니다.** 이 락(과 L2)이 겨누는 것은
 # `Ledger` 를 import 하는 `.py` 소비자와 `consumer=<.py 경로>` 앵커뿐이다.
@@ -175,8 +176,8 @@ done
 # T6b 재리뷰(F-2 판정 항목) — TERMINAL_CONSUMERS 는 EXEMPT 와 달리 신선도
 # 검사가 없어 파일이 지워지거나(PR 3) 앵커가 새로 생겨도(호스트 wiring) 등재가
 # 영원히 남을 수 있었다. `stale_terminal()` 로 EXEMPT 와 같은 축을 잰다(크기
-# baseline 은 25줄 예산 안에서 뺐다 — TERMINAL_CONSUMERS 는 아직 3건뿐이라
-# EXEMPT 급 성장 위험이 없고, 이 신선도 검사가 "영원히 남는다"는 실제 우려를
+# baseline 은 25줄 예산 안에서 뺐다 — TERMINAL_CONSUMERS 는 몇 건뿐이라(크기는 위
+# `TERMINAL_CONSUMERS 크기` note 가 매 실행 낸다) EXEMPT 급 성장 위험이 없고, 이 신선도 검사가 "영원히 남는다"는 실제 우려를
 # 이미 잡는다).
 terminal_stale="$(printf '%s\n' "$SCAN" | sed -n 's/^terminal_stale=//p')"
 assert_eq "$terminal_stale" "0" "TERMINAL_CONSUMERS 항목이 전부 여전히 유효하다 (파일이 아직 IMPORT + 아직 ANCHOR 없음)"
@@ -188,7 +189,9 @@ note "── 컴프리헨션 회귀 축 — 요구가 아니라 baseline"
 comp="$(printf '%s\n' "$SCAN" | sed -n 's/^comprehensions=//p')"
 # PR 3 Task 5 — 58 → 56. merge_brief_review.py 가 문서 리뷰 엔진 전환으로 지워져 그 파일의
 # 컴프리헨션 둘(`ast` 실측)이 모집단에서 빠졌다. 줄어든 만큼 내린다(EXEMPT_BASELINE 과 같은 규율).
-COMP_BASELINE=56   # Task 1 F5 census 28 + Task 10 이 1 늘림(29) — merge_review.py
+# PR 3 Task 6 — 56 → 50. merge_review.py 가 지워져 그 파일의 컴프리헨션 여섯(`ast` 실측 —
+# 아래 Task 10 이 더한 `{k: 0 for k in _MERGED_COUNT_KEYS}` 포함)이 모집단에서 빠졌다.
+COMP_BASELINE=50   # Task 1 F5 census 28 + Task 10 이 1 늘림(29) — merge_review.py
                    # `merged["report"]["counts"]`를 만드는 `{k: 0 for k in
                    # _MERGED_COUNT_KEYS}`. 항목을 버리는 자리가 아니라 값 0
                    # 으로 카운터를 초기화하는 자리라 처분 호출이 필요 없다.

@@ -149,28 +149,18 @@ else
 fi
 
 # --- T12: 아무도 리뷰하지 않은 라운드는 원장에 기록하지 않는다 ---
-# 두 층으로 잠근다.
-#   (a) `merge_review.py` 가 both-dead 라운드에서 두 degrade flag 를 함께 낸다.
-#       **이 층은 이제 brief 자리 소유다.** 문서 리뷰 엔진 전환(T7) 이후 design doc
-#       자리는 `merge_review.py` 를 부르지 않는다 — 이 스크립트는 `merge_brief_review.py`
-#       가 세 함수를 import 하는 동안만 살아 있고, 그 자리를 전환하는 PR 이 지운다.
-#       그때까지 이 층은 그 스크립트의 계약을 그대로 지킨다.
+# 두 층이 한 쌍으로 잠근다.
+#   (a) 엔진이 critic 사망을 신호로 낸다 — `docreview_route.py prepare-recritic` 이
+#       rc 4 와 `degrade.critic_dead` 를 내고, 그 주(主) 판정자 사망이 `fin.json` 의
+#       `blocks` 로 간다. **이 층은 엔진 테스트가 잰다**: `shared/tests/fixtures/
+#       docreview/cases.sh` 의 `case_T41_critic_dead_blocks`(`shared/tests/
+#       test_docreview_route.sh` 가 돌린다). 예전에는 옛 병합 스크립트를 직접 돌려 이
+#       층을 쟀는데(T12a), 그 스크립트가 지워지면서 그 칸도 함께 빠졌다.
 #   (b) 껍데기(SKILL.md)의 mark-reviewed 지시가 **엔진 어휘로 쓰인 배제 조건**과
 #       같은 섹션 윈도우 안에 있다. 엔진의 신호는 `fin.json` 의 `blocks` 이고, 그중
-#       이 배제를 부르는 값이 «critic 사망»이다.
+#       이 배제를 부르는 값이 «critic 사망»이다. 이 파일은 이 층을 잰다(T12b).
 # (a)만으로는 지시가 사라져도 통과하고, (b)만으로는 신호가 사라져 지시가 따를 수 없게
-# 돼도 통과한다.
-printf 'no status line here\n' > "$WORK/claude.txt"
-printf '{"issue_history": []}\n' > "$WORK/hist.json"
-mout=$(python3 "$MERGE" --claude-output "$WORK/claude.txt" \
-         --codex-yaml /nonexistent --history "$WORK/hist.json" 2>/dev/null)
-if grep -q '^claude_verdict_unrecoverable: true$' <<<"$mout" \
-  && grep -q '^codex_degraded: true$' <<<"$mout" \
-  && grep -q '^combined_verdict: needs_revise$' <<<"$mout"; then
-  note PASS "T12a: both-dead가 combined_verdict를 내면서 두 degrade flag를 함께 emit"
-else
-  note FAIL "T12a 실패: merge_review out='$mout'"
-fi
+# 돼도 통과한다 — 두 층은 다른 파일에 살지만 하나를 지우면 쌍이 깨진다.
 
 # 섹션 윈도우 — 헤더-satisfiable 회피를 위해 blockquote/헤더가 아닌 **본문 고유** 토큰을
 # 윈도우 안에서 찾는다. 빈 윈도우는 앵커가 깨진 것이므로 FAIL(조용한 통과 금지).
@@ -192,8 +182,8 @@ fi
 # **공존(co-location)** 을 전혀 재지 못한다. 명령형(`arm_ledger.py" mark-reviewed`)은
 # 그 줄에만 있으므로 body-unique 하다.
 # 배제 조건의 어휘는 **엔진의 것**이다. 옛 두 토큰(`claude_verdict_unrecoverable` ·
-# `codex_degraded`)은 `merge_review.py` 산출물의 키였고 껍데기는 그 스크립트를 부르지
-# 않는다. 오늘 이 배제를 부르는 신호는 `fin.json` 의 `blocks` 에 실린 «critic 사망»이다
+# `codex_degraded`)은 지워진 옛 병합 스크립트의 산출물 키였다. 오늘 이 배제를 부르는
+# 신호는 `fin.json` 의 `blocks` 에 실린 «critic 사망»이다
 # — 불변식은 그대로이고 신호의 이름만 바뀌었으므로 락을 지우지 않고 토큰을 바꾼다.
 # 네 번째 conjunct — **규칙 문장 자체**를 고정한다. 앞의 세 개는 두 *토큰* 의 공존만
 # 재므로, 근거 산문을 남긴 채 명령형 리드인("예외 — …호출하지 않는다")만 지우면 GREEN
