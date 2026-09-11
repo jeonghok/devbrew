@@ -48,12 +48,11 @@ def configure_stdout() -> None:
     stdout 인코딩은 프로세스 locale/PYTHONIOENCODING을 따른다(파일 읽기 쪽의 명시적
     encoding="utf-8"과 달리) — 고정하지 않으면 템플릿의 em dash·한국어가 ascii 계열
     인코딩에서 UnicodeEncodeError로 프로세스를 죽인다. reconfigure는 TextIOWrapper에만
-    있고 sys.stdout을 채울 수 있는 모든 객체에 있지는 않으므로 형제 관용구(둘 다
-    plugins/spec-distill/ 하위 — review-dispatch.py 모듈 최상단의 stdin/stdout/stderr
-    reconfigure 루프, check_verbatim_coverage.py의 main()이 쓰는 stdout/stderr guard)와
-    같이 guard한다. 단 그 둘이 잡는 예외 클래스가 서로 다르다(전자 AttributeError·OSError,
-    후자 AttributeError·ValueError) — 닫힌 TextIOWrapper는 ValueError를 낸다(실측)로
-    여기서는 합집합을 잡는다.
+    있고 sys.stdout을 채울 수 있는 모든 객체에 있지는 않으므로 형제 관용구
+    (plugins/spec-distill/scripts/check_verbatim_coverage.py 의 main() 이 쓰는
+    stdout/stderr guard)와 같이 guard한다. 그 형제는 AttributeError·ValueError 를
+    잡는다 — 닫힌 TextIOWrapper는 ValueError를 낸다(실측). 여기서는 쓰기 불가 스트림의
+    OSError 까지 더한 합집합을 잡는다.
     """
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]

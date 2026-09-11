@@ -3,6 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.5.2] — 2026-09-11
+
+### Fixed
+
+- **사본·링크 둘의 주석이 삭제된 spec-distill 파일을 가리켰다.** spec-distill 2.0.0 이 설계문서 리뷰 Stop 훅을 삭제했다(`plugins/spec-distill/CHANGELOG.md` `[2.0.0]`). 이 플러그인의 `scripts/codex_prompt_common.py`(정본 `shared/codex/codex_prompt_common.py` 의 `# copy-of:` 사본) docstring 이 그 훅의 stdin/stdout reconfigure 루프를 형제 관용구로 인용했고, 심볼릭 링크로 싣는 `scripts/docreview_state.py`(정본 `shared/docreview/scripts/`) docstring 이 `state.local.md` 의 소유자로 그 훅을 들었다. 두 인용을 살아 있는 대상으로 고쳤다. 동작 무변경 — 주석만 바뀌지만 배포 파일 바이트가 바뀌므로 bump 한다(cache key).
+
 ## [7.5.1] — 2026-09-09
 
 ### Changed
