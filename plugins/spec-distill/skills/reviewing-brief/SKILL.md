@@ -240,16 +240,16 @@ BUNDLE="${BUNDLE:-${STATE_DIR:+$STATE_DIR/brief-bundle.md}}"
 # 미설치 · 감지기 부재 · 게이트 입력 부재)가 직전 라운드의 판정을 이번 것으로 남긴다. 앞 블록의
 # `set -e` 가 따라와도 죽지 않도록 실패할 수 있는 명령은 rc 를 삼키거나 잡는다.
 residue_unclear=0; residue_left=""
-neutralise() {   # 지운다 — 못 지우면 0바이트로 절단한다. 둘 다 못 하면 rc 1
-  rm -f "$1" 2>/dev/null || true
-  if [ -e "$1" ]; then
-    : > "$1" 2>/dev/null || true
-    if [ -s "$1" ]; then return 1; fi
+neutralise() {   # `$NEUTRALISE_TARGET` 을 지운다 — 못 지우면 0바이트로 절단한다. 둘 다 못 하면 rc 1
+  rm -f "$NEUTRALISE_TARGET" 2>/dev/null || true
+  if [ -e "$NEUTRALISE_TARGET" ]; then
+    : > "$NEUTRALISE_TARGET" 2>/dev/null || true
+    if [ -s "$NEUTRALISE_TARGET" ]; then return 1; fi
   fi
   return 0
 }
 if [ -n "${CODEX_YAML:-}" ]; then
-  neutralise "$CODEX_YAML" || { residue_unclear=1; residue_left="$CODEX_YAML"; }
+  NEUTRALISE_TARGET="$CODEX_YAML"; neutralise || { residue_unclear=1; residue_left="$CODEX_YAML"; }
 elif [ -n "${harness_sid:-}" ] && [ -n "${ROOT:-}" ]; then
   # 문서를 모르면 이 세션의 문서별 codex 산출물 전부가 후보다 — design doc 자리의 것도 같은
   # `docreview/` 아래라 함께 중화되고, 그 자리의 같은 분기도 이 자리의 것을 중화한다. **전제: 한
@@ -257,7 +257,7 @@ elif [ -n "${harness_sid:-}" ] && [ -n "${ROOT:-}" ]; then
   # 때문이다. 지우는 것은 `docreview-codex.yaml` 뿐이고 엔진 원장·번들·degrade 원장은 건드리지 않는다.
   for y in "$ROOT/$harness_sid"/docreview/*/docreview-codex.yaml; do
     [ -e "$y" ] || continue
-    neutralise "$y" || { residue_unclear=1; residue_left="${residue_left:+$residue_left }$y"; }
+    NEUTRALISE_TARGET="$y"; neutralise || { residue_unclear=1; residue_left="${residue_left:+$residue_left }$y"; }
   done
 fi
 DETECT_OUT="$(bash "$SD/scripts/detect_codex.sh")" || true
@@ -328,18 +328,18 @@ PROFILE_WEB=""
 if [ "$pc_rc" -eq 0 ]; then
   PROFILE_WEB="$(python3 -c 'import json, sys; w = json.loads(sys.argv[1]).get("web"); print({True: "on", False: "off"}.get(w, ""))' "$PJ" 2>/dev/null || true)"
 fi
-record_web() {   # 웹 없는 사본으로 내려간 라운드 — degrade 원장, 못 쓰면 두 번째 채널
-  python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component critic --axis direction --status degraded --reason "$1" \
-    || echo "- (state 기록 실패) component=critic axis=direction status=degraded reason=$1" >> "$DEGRADE_FALLBACK_FILE"
+record_web() {   # 웹 없는 사본으로 내려간 라운드(사유 `$WEB_REASON`) — degrade 원장, 못 쓰면 두 번째 채널
+  python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component critic --axis direction --status degraded --reason "$WEB_REASON" \
+    || echo "- (state 기록 실패) component=critic axis=direction status=degraded reason=$WEB_REASON" >> "$DEGRADE_FALLBACK_FILE"
 }
 CRITIC_AGENT="spec-distill:doc-critic"
 if [ -z "$PROFILE_WEB" ]; then
   echo "[spec-distill] 프로필의 web 값을 읽지 못했다(profile-check rc $pc_rc) — 탐지는 웹 없는 doc-critic 으로 간다. 이 라운드의 층 1(방향)에는 Claude 쪽 외부 근거가 없다 (degraded)." >&2
-  record_web "프로필 web 판독 불가(profile-check rc $pc_rc) — 웹 없는 doc-critic 으로 dispatch"
+  WEB_REASON="프로필 web 판독 불가(profile-check rc $pc_rc) — 웹 없는 doc-critic 으로 dispatch"; record_web
 elif [ "$PROFILE_WEB" = "on" ]; then
   if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
     echo "[spec-distill] 웹 비활성(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1) — 탐지는 웹 없는 doc-critic 으로 간다. 이 라운드의 층 1(방향)에는 Claude 쪽 외부 근거가 없다 (degraded)." >&2
-    record_web "DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 — 웹 없는 doc-critic 으로 dispatch"
+    WEB_REASON="DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 — 웹 없는 doc-critic 으로 dispatch"; record_web
   else
     CRITIC_AGENT="spec-distill:doc-critic-web"
   fi

@@ -272,7 +272,7 @@ For each iteration N (1..5):
 
    ```bash
    QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"   # plugin root per Step P0b
-   MERGE_BASE=$("$QG/scripts/resolve-baseline.sh" | awk '$1=="merge_base:"{print $2}')
+   MERGE_BASE=$("$QG/scripts/resolve-baseline.sh" | sed -n 's/^merge_base: //p')
    git diff --name-only "$MERGE_BASE"..HEAD    # (a) committed on this branch
    git diff HEAD --name-only                   # (b) tracked, not yet committed
    git ls-files --others --exclude-standard    # (c) untracked and not ignored

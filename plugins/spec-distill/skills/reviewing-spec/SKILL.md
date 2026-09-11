@@ -133,20 +133,20 @@ fi
 # 디렉토리의 `docreview-codex.yaml` 뿐이고 원장(`docreview-state.md`)·arm 원장(`state.local.md`)·
 # 그 밖의 파일은 건드리지 않는다.
 residue_unclear=0; residue_left=""
-neutralise() {   # 지운다 — 못 지우면 0바이트로 절단한다. 둘 다 못 하면 rc 1
-  rm -f "$1" 2>/dev/null || true
-  if [ -e "$1" ]; then
-    : > "$1" 2>/dev/null || true
-    if [ -s "$1" ]; then return 1; fi
+neutralise() {   # `$NEUTRALISE_TARGET` 을 지운다 — 못 지우면 0바이트로 절단한다. 둘 다 못 하면 rc 1
+  rm -f "$NEUTRALISE_TARGET" 2>/dev/null || true
+  if [ -e "$NEUTRALISE_TARGET" ]; then
+    : > "$NEUTRALISE_TARGET" 2>/dev/null || true
+    if [ -s "$NEUTRALISE_TARGET" ]; then return 1; fi
   fi
   return 0
 }
 if [ -n "${CODEX_YAML:-}" ]; then
-  neutralise "$CODEX_YAML" || { residue_unclear=1; residue_left="$CODEX_YAML"; }
+  NEUTRALISE_TARGET="$CODEX_YAML"; neutralise || { residue_unclear=1; residue_left="$CODEX_YAML"; }
 elif [ -n "${harness_sid:-}" ] && [ -n "${ROOT:-}" ]; then
   for y in "$ROOT/$harness_sid"/docreview/*/docreview-codex.yaml; do
     [ -e "$y" ] || continue
-    neutralise "$y" || { residue_unclear=1; residue_left="${residue_left:+$residue_left }$y"; }
+    NEUTRALISE_TARGET="$y"; neutralise || { residue_unclear=1; residue_left="${residue_left:+$residue_left }$y"; }
   done
 fi
 DETECT_OUT="$(bash "$SD/scripts/detect_codex.sh")" || true
