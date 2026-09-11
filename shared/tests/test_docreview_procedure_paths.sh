@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/docreview/references/reviewing-document.md
+# guards: shared/docreview/references/reviewing-document.md plugins/spec-distill/skills/reviewing-spec/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md
 #
 # 절차서(`shared/docreview/references/reviewing-document.md`)의 「## 한 라운드」 절이
 # 스크립트를 **배포 경로**(`<플러그인 루트>/scripts/…`)에서 부르라고 명시하는지 잰다
@@ -18,9 +18,13 @@
 #    보므로) — 2번이 그 사각을 잡는다. 1번이 더하는 문단은 스크립트 이름을
 #    인자 없는 backtick 나열로만 쓰므로 2번의 정규식(이름 뒤 공백+토큰)에 걸리지
 #    않는다 — 1번 문단만 지워도 2번은 격리돼 그대로 GREEN 이어야 한다(Step 7).
+# 3. init rc 규칙 — 절차서 선결과 두 진입 skill 의 「`init` 이 rc 0 이 아니면 라운드를 진행하지
+#    않는다」(아래 절 주석).
 set -u -o pipefail
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "shared/docreview/references/reviewing-document.md"
+  echo "plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+  echo "plugins/spec-distill/skills/reviewing-brief/SKILL.md"
   exit 0
 fi
 
@@ -48,5 +52,38 @@ if [ "${n_calls:-0}" -ge 1 ]; then
 else
   no "절차서에 스크립트 호출 줄이 하나도 없다 — 배포 경로 지시가 가리킬 실행이 사라졌다"
 fi
+
+# ── 3. init rc 규칙(Task 2e M3) — 선결 `init` 이 rc 0 이 아니면 라운드를 진행하지 않는다 ──
+# 절차서와 두 진입 skill 이 같은 규칙을 산문으로만 적고 락이 없었다. `begin-round` 는 문서를
+# 보지 않으므로 거부를 넘어 진행하면 다른 문서의 원장 위에서 라운드가 돈다. 문장이 줄바꿈을
+# 넘으므로 헤더 줄을 뺀 본문을 한 줄로 접어 본다(body-unique). 1단계 `begin-round` 의 비슷한
+# 규칙(「rc 가 0 이 아니면 값과 무관하게 이 라운드를 진행하지 않는다」)과 갈리도록 주어 `init`
+# 을 문구에 넣고, 그 구분이 실제로 서는지를 아래 음성 셀이 잰다.
+flat() { grep -vE '^#' "$1" | tr '\n' ' ' | tr -s ' '; }
+INIT_RULE_REF='`init` 의 rc 가 0 이 아니면 값과 무관하게 이 라운드를 진행하지 않는다'
+INIT_RULE_SKILL='선결의 `init` 이 rc 0 이 아니면 값과 무관하게 이 라운드를 진행하지 않는다'
+REF_FLAT="$(flat "$REF")"
+assert_contains "$REF_FLAT" "$INIT_RULE_REF" \
+  "절차서 선결: init rc≠0 이면 값과 무관하게 라운드를 진행하지 않는다 (body-unique)"
+# 양의 짝 — 규칙이 가리키는 호출이 절차서에 실재한다.
+assert_contains "$REF_FLAT" 'docreview_state.py init --state-dir' \
+  "절차서 선결: 규칙이 가리키는 init 호출이 실재한다 (양의 짝)"
+# 음성 셀 — init 규칙 문장만 지운 절차서에는 begin-round 의 비슷한 규칙이 남지만 init 판정은 서지
+# 않는다. 남는 쪽의 실재를 먼저 잰다 — 없으면 이 셀이 공허하다.
+NEG_FLAT="$(printf '%s' "$REF_FLAT" | python3 -c 'import sys; print(sys.stdin.read().replace(sys.argv[1], ""))' "$INIT_RULE_REF")"
+assert_contains "$NEG_FLAT" '**rc 가 0 이 아니면 값과 무관하게 이 라운드를 진행하지 않는다**' \
+  "음성 셀 전제: init 규칙을 지운 절차서에 begin-round 의 비슷한 규칙이 남는다"
+case "$NEG_FLAT" in
+  *"$INIT_RULE_REF"*) no "음성 셀: init 규칙을 지운 절차서에서도 init 판정이 선다 — 판정 문구가 begin-round 규칙과 갈리지 않는다" ;;
+  *) ok "음성 셀: init 규칙을 지우면 init 판정이 서지 않는다 (begin-round 규칙과 갈린다)" ;;
+esac
+for s in reviewing-spec reviewing-brief; do
+  SK_FLAT="$(flat "$REPO_ROOT/plugins/spec-distill/skills/$s/SKILL.md")"
+  assert_contains "$SK_FLAT" "$INIT_RULE_SKILL" \
+    "$s: 선결 init rc≠0 이면 값과 무관하게 라운드를 진행하지 않는다 (body-unique)"
+  # 양의 짝 — 규칙이 가리키는 선결의 정본(절차서)을 그 skill 이 실제로 읽는다.
+  assert_contains "$SK_FLAT" 'references/reviewing-document.md' \
+    "$s: 선결의 정본(절차서)을 읽는다 (양의 짝)"
+done
 
 finish
