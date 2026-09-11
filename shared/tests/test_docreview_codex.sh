@@ -177,6 +177,84 @@ body_cells() {  # body_cells <profile> <capture> <label>
   assert_contains "$r" "h1_slot=no" "러너: 프로필 코퍼스 — $3 본문이 <document> 슬롯 안에는 없다"
   assert_contains "$r" "order=before" "러너: 프로필 코퍼스 — $3 의 프로필 절이 <document> 슬롯보다 앞에서 닫힌다"
 }
+# R38 (a) — 러너가 읽는 필드 목록을 손으로 적지 않는다. 러너 인라인 빌더를 AST 로 읽어
+# `_read("<경로>", …)` 호출에서 도출하고(EXTRACTS), 게이트(profile-check)가 같은 경로에서 읽은
+# 값과 대조한다. 따로 「읽기 지점」은 게이트의 필드 이름(docreview_state.PROFILE_FIELDS 아래
+# 잎)이 빌더의 문자열 상수에 나오는 자리로 도출한다(POINTS) — `_read` 를 거치지 않는 새 읽기가
+# 생기면 POINTS ⊄ EXTRACTS 로 RED 다.
+cat > "$TMPD/parsed_check.py" <<'PY'
+import ast, json, re, sys
+mode, runner, scripts = sys.argv[1:4]
+src = open(runner, encoding="utf-8").read()
+m = re.search(r"<<'PY'[^\n]*\n(.*?)\nPY\n", src, re.DOTALL)
+tree = ast.parse(m.group(1)) if m else ast.parse("")
+extracts = sorted({n.args[0].value for n in ast.walk(tree)
+                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "_read"
+                   and n.args and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str)})
+
+
+def get(d, path):
+    for k in path.split("."):
+        if not isinstance(d, dict) or k not in d:
+            raise KeyError(path)
+        d = d[k]
+    return d
+
+
+if mode == "points":
+    sys.path.insert(0, scripts)
+    import docreview_state
+    leaves = set()
+
+    def walk(d, pre):
+        for k, v in d.items():
+            if isinstance(v, dict):
+                walk(v, pre + k + ".")
+            else:
+                leaves.add(pre + k)
+    for f in sys.argv[4:]:
+        d = json.load(open(f, encoding="utf-8"))
+        walk({k: v for k, v in d.items() if k in docreview_state.PROFILE_FIELDS}, "")
+    consts = [n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+    points = sorted(p for p in leaves if any(
+        re.search(r"(?<![A-Za-z0-9_])" + re.escape(p.split(".")[-1]) + r"(?![A-Za-z0-9_])", c) for c in consts))
+    print("EXTRACTS=" + ",".join(extracts))
+    print("POINTS=" + ",".join(points))
+    print("UNCOVERED=" + (",".join(p for p in points if p not in extracts) or "none"))
+    print("UNKNOWN=" + (",".join(e for e in extracts if e not in leaves) or "none"))
+    print("FLOOR=" + ("ok" if extracts and points else "empty"))
+else:
+    try:
+        parsed = json.load(open(sys.argv[4], encoding="utf-8"))
+        gate = json.load(open(sys.argv[5], encoding="utf-8"))
+    except Exception as e:
+        print("UNREADABLE %s" % e)
+        sys.exit(0)
+    bad = []
+    for e in extracts:
+        if e not in parsed:
+            bad.append("%s: runner=<absent>" % e)
+            continue
+        try:
+            g = get(gate, e)
+        except KeyError:
+            bad.append("%s: gate=<absent>" % e)
+            continue
+        r = parsed[e]
+        same = (r.strip() == g.strip()) if isinstance(r, str) and isinstance(g, str) else (type(r) is type(g) and r == g)
+        if not same:
+            bad.append("%s: runner=%r gate=%r" % (e, r, g))
+    print(("ALL_EQUAL n=%d" % len(extracts)) if extracts and not bad else "DIVERGE " + "; ".join(bad or ["no extracts"]))
+PY
+parsed_eq() {  # parsed_eq <parsed.json> <gate.json>
+  PYTHONDONTWRITEBYTECODE=1 python3 "$TMPD/parsed_check.py" equal "$RUNNER" "$SCRIPTS" "$1" "$2" 2>&1
+}
+web_effect() {  # web_effect <argv-file> <gate.json> <msg> — 러너가 실제로 만든 codex 인자의 웹 == 게이트 web
+  local g live
+  g="$(pc_get "$2" web)"
+  if [ -f "$1" ] && grep -q 'web_search="live"' "$1"; then live=True; else live=False; fi
+  assert_eq "$live" "$g" "$3"
+}
 
 n_corpus=0
 while IFS= read -r p; do
@@ -184,7 +262,9 @@ while IFS= read -r p; do
   n_corpus=$((n_corpus + 1))
   cbase="$(basename "$(dirname "$(dirname "$(dirname "$p")")")")-$(basename "$p" .md)"
   CCAP="$TMPD/corpus-$cbase.txt"
-  DOCREVIEW_CODEX_CAPTURE="$CCAP" CLAUDE_PLUGIN_ROOT="$HOST_PLUGIN_ROOT" \
+  env -u DEVBREW_SPEC_DISTILL_DISABLE_WEB -u DEVBREW_QUALITY_GATES_DISABLE_WEB \
+    DOCREVIEW_CODEX_CAPTURE="$CCAP" DOCREVIEW_CODEX_ARGV_FILE="$TMPD/corpus-$cbase.argv" \
+    DOCREVIEW_CODEX_PARSED_OUT="$TMPD/parsed-$cbase.json" CLAUDE_PLUGIN_ROOT="$HOST_PLUGIN_ROOT" \
     bash "$RUNNER" "$p" "$FX/design-sample.md" "$REPO_ROOT" "$TMPD/corpus-$cbase.yaml" 2>/dev/null
   assert_file_grep "$TMPD/corpus-$cbase.yaml" 'codex_failed: false' \
     "러너: 프로필 코퍼스 — $cbase 가 truncated 없이 정상 변환된다"
@@ -213,12 +293,20 @@ while IFS= read -r p; do
   cmp_line "$CCAP" "$AD_PREFIX" "$(pc_get "$pj" allowed_dispositions)" \
     "러너: 프로필 코퍼스 — $cbase 의 처분 목록이 프롬프트에 그대로 실린다"
   body_cells "$p" "$CCAP" "$cbase"
+  assert_contains "$(parsed_eq "$TMPD/parsed-$cbase.json" "$pj")" "ALL_EQUAL" \
+    "러너: 프로필 코퍼스 — $cbase 에서 러너가 읽은 필드 전부(_read 도출)가 게이트 값과 같다(R38 a)"
+  web_effect "$TMPD/corpus-$cbase.argv" "$pj" \
+    "러너: 프로필 코퍼스 — $cbase 의 codex 웹 인자가 게이트의 web 과 같다(두 kill switch 꺼짐, R38 a)"
 done < <(find "$REPO_ROOT"/plugins/*/references/docreview-profiles -name '*.md' | sort)
 if [ "$n_corpus" -ge 4 ]; then
   ok "프로필 코퍼스 $n_corpus 개 전수(design-doc·brief·seed·generic) — 둘만 보던 것에서 확장"
 else
   no "프로필 코퍼스가 $n_corpus 개뿐이다 — references/docreview-profiles/*.md 도출이 깨졌다(하한 4)"
 fi
+COV="$(PYTHONDONTWRITEBYTECODE=1 python3 "$TMPD/parsed_check.py" points "$RUNNER" "$SCRIPTS" "$TMPD"/corpus-*.json 2>&1)"
+assert_contains "$COV" "FLOOR=ok" "R38 a 도출 전제: _read 지점과 읽기 지점이 둘 다 비지 않다 ($(printf '%s' "$COV" | tr '\n' ' '))"
+assert_contains "$COV" "UNCOVERED=none" "R38 a: 러너가 읽는 frontmatter 필드 전부가 게이트 등식에 들어 있다(_read 를 거치지 않는 읽기는 RED)"
+assert_contains "$COV" "UNKNOWN=none" "R38 a: 러너의 _read 경로가 전부 게이트 필드다(대조할 수 없는 경로 없음)"
 
 # ── 형태 회귀 — 리뷰 F-5. (중복 키 모양 dup-web·dup-layer1 은 Task 3c R37 이후 게이트가
 #    거절한다 — 이 셀들은 게이트 없이 불린 러너의 행동을 잰다.) `load_profile()`(실 PyYAML)은 받는데 stdlib 빌더가
@@ -243,13 +331,13 @@ mutate_case() {  # $1=shape $2=assert 함수 이름(내부용)
 
 # 항목 1 — 줄바꿈된 flow list(layer1) → loud 실패(조용한 빈 프롬프트가 아니라)
 mutate_case wrapped-layer1
-assert_file_grep "$TMPD/shape-wrapped-layer1.yaml" 'reason: prompt_build_failed' \
-  "러너: 줄바꿈된 flow list(layer1) → loud 실패(조용히 빈 채로 새지 않는다, 리뷰 F-5 항목 1)"
+assert_file_grep "$TMPD/shape-wrapped-layer1.yaml" 'reason: profile_parse_ambiguous' \
+  "러너: 줄바꿈된 flow list(layer1) → loud 실패(조용히 빈 채로 새지 않는다, 리뷰 F-5 항목 1 — Task 3c R38 b 이후 사유 이름은 profile_parse_ambiguous)"
 
 # 항목 1 변형 — layer2 는 게이트가 비어도 허용하므로 "비면 실패"만으로는 안
 # 잡힌다(리뷰 재재현) — 헤더는 있는데 못 읽는 모양 자체를 잡아야 한다.
 mutate_case wrapped-layer2
-assert_file_grep "$TMPD/shape-wrapped-layer2.yaml" 'reason: prompt_build_failed' \
+assert_file_grep "$TMPD/shape-wrapped-layer2.yaml" 'reason: profile_parse_ambiguous' \
   "러너: 줄바꿈된 flow list(layer2, 정당하게 빌 수 있는 키) → 그래도 loud 실패"
 
 # 항목 2 — block 목록 중간의 빈 줄 → 끝까지 읽는다(마지막 항목 feasibility 로 확인)
@@ -360,5 +448,68 @@ fi
 python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/shape-body-empty.md" >/dev/null 2>"$TMPD/body-empty.err"
 assert_file_grep "$TMPD/body-empty.err" 'profile_body_empty' \
   "게이트: 같은 프로필을 같은 이름(profile_body_empty)으로 거절한다(한 판정)"
+
+# ── 한 판정 — Task 3c 리뷰 I1·M1·M2·M3 (R38 b). 게이트가 받는 프로필이면 러너는 **같은 값을
+#    읽거나 이름 붙은 사유(profile_parse_ambiguous)로 멈춘다** — 다른 값으로 codex 를 부르는 셋째
+#    결과는 없다. 모양마다 게이트 전제 · 러너 결과를 적고, 게이트가 받았는데 러너가 진행했으면
+#    러너가 읽은 필드 전부와 웹 인자를 게이트 값과 대조한다 ─────────────────────────────
+VN=0
+variant() {  # variant <shape> <src-profile> <gate accept|reject> <runner ambiguous|faithful> <label>
+  local tag mp pj out cap argv pout grc
+  VN=$((VN + 1)); tag="variant-$VN"
+  mp="$TMPD/$tag.md"; pj="$TMPD/$tag.json"; out="$TMPD/$tag.yaml"
+  cap="$TMPD/$tag-cap.txt"; argv="$TMPD/$tag-argv.txt"; pout="$TMPD/$tag-parsed.json"
+  if ! PYTHONDONTWRITEBYTECODE=1 python3 "$MUTATE" "$1" "$2" "$mp" 2>/dev/null; then
+    no "$5 — 픽스처가 적용되지 않았다(전제 실패)"; return
+  fi
+  python3 "$SCRIPTS/docreview_state.py" profile-check "$mp" > "$pj" 2>/dev/null; grc=$?
+  if [ "$3" = accept ]; then
+    assert_eq "$grc" "0" "$5 — 게이트 전제: profile-check 가 받는다"
+  elif [ "$grc" != 0 ]; then
+    ok "$5 — 게이트 전제: profile-check 가 거절한다"
+  else
+    no "$5 — 게이트 전제: profile-check 가 받았다(거절을 기대)"
+  fi
+  env -u DEVBREW_SPEC_DISTILL_DISABLE_WEB -u DEVBREW_QUALITY_GATES_DISABLE_WEB \
+    DOCREVIEW_CODEX_CAPTURE="$cap" DOCREVIEW_CODEX_ARGV_FILE="$argv" DOCREVIEW_CODEX_PARSED_OUT="$pout" \
+    CLAUDE_PLUGIN_ROOT="$HOST_PLUGIN_ROOT" \
+    bash "$RUNNER" "$mp" "$FX/design-sample.md" "$REPO_ROOT" "$out" 2>/dev/null
+  if [ "$4" = ambiguous ]; then
+    assert_file_grep "$out" 'reason: profile_parse_ambiguous' "$5 — 러너: 이름 붙은 사유(profile_parse_ambiguous)로 fail-closed"
+    if [ ! -e "$cap" ]; then ok "$5 — 러너: codex 를 부르지 않는다"; else no "$5 — 러너: codex 가 불렸다"; fi
+  else
+    assert_file_grep "$out" 'codex_failed: false' "$5 — 러너: 멈추지 않고 읽는다(과잉 fail-closed 아님)"
+  fi
+  if [ "$grc" = 0 ] && ! grep -q 'reason: profile_parse_ambiguous' "$out" 2>/dev/null; then
+    assert_contains "$(parsed_eq "$pout" "$pj")" "ALL_EQUAL" "$5 — 한 판정: 러너가 읽은 필드 전부가 게이트 값과 같다"
+    web_effect "$argv" "$pj" "$5 — 한 판정: codex 웹 인자가 게이트의 web 과 같다"
+  fi
+}
+SD_PROF="$REPO_ROOT/plugins/spec-distill/references/docreview-profiles"
+QG_PROF="$REPO_ROOT/plugins/quality-gates/references/docreview-profiles"
+# I1 — 따옴표·flow 연속줄의 컬럼-0 키. 셋째·넷째가 리뷰의 배포 seed·generic 편집(게이트 web=False
+# 인데 러너가 codex 웹을 켰다 — 락 전부 GREEN 이던 자리).
+variant qcont-gt "$SD_PROF/design-doc.md" accept ambiguous "I1: immutable 항목 큰따옴표 연속줄에 숨긴 ground_truth(design-doc)"
+variant qcont-all "$SD_PROF/design-doc.md" accept ambiguous "I1: decision_log.heading 연속줄에 숨긴 네 필드(design-doc)"
+variant qcont-all "$SD_PROF/seed.md" accept ambiguous "I1: decision_log.heading 연속줄에 숨긴 네 필드(seed)"
+variant flow-web "$SD_PROF/seed.md" accept ambiguous "I1 리뷰 재현: seed 의 defer_target flow 연속줄 컬럼-0 web: true"
+variant flow-web "$QG_PROF/generic.md" accept ambiguous "I1 리뷰 재현: generic 의 defer_target flow 연속줄 컬럼-0 web: true"
+# M3 — 게이트는 받는데 러너가 틀린 사유(ground_truth_empty)를 내던 모양.
+variant gt-spacecolon "$SD_PROF/design-doc.md" accept ambiguous "M3: ground_truth : (콜론 앞 공백)"
+variant gt-u2028 "$SD_PROF/design-doc.md" accept ambiguous "M3: U+2028 뒤의 ground_truth"
+# M1 — 게이트가 거절하는 문자열 아닌 ground_truth.
+variant 'gt-value= 123' "$SD_PROF/design-doc.md" reject ambiguous "M1: ground_truth: 123"
+variant 'gt-value= true' "$SD_PROF/design-doc.md" reject ambiguous "M1: ground_truth: true"
+variant 'gt-value= 2026-09-11' "$SD_PROF/design-doc.md" reject ambiguous "M1: ground_truth: 2026-09-11"
+variant 'gt-value= {a: b}' "$SD_PROF/design-doc.md" reject ambiguous "M1: ground_truth: {a: b}"
+variant 'gt-value=\n  sub: val' "$SD_PROF/design-doc.md" reject ambiguous "M1: ground_truth: block 매핑"
+# M2 — 게이트가 받는 스칼라. 같은 값을 읽을 수 있으면 읽고(faithful), 아니면 멈춘다.
+variant 'gt-value= &x "anch"' "$SD_PROF/design-doc.md" accept ambiguous "M2: 앵커 &x"
+variant 'gt-value= !!str tagged' "$SD_PROF/design-doc.md" accept ambiguous "M2: 태그 !!str"
+variant 'gt-value= "esc \"q\" x"' "$SD_PROF/design-doc.md" accept ambiguous "M2: 큰따옴표 escape"
+variant 'gt-value= >-\n  para one\n\n  para two' "$SD_PROF/design-doc.md" accept ambiguous "M2: folded 의 빈 줄 문단"
+variant "gt-value= 'it''s'" "$SD_PROF/design-doc.md" accept faithful "M2: 작은따옴표의 '' → '"
+variant 'gt-value= |\n  para one\n\n  para two' "$SD_PROF/design-doc.md" accept faithful "M2: literal 의 빈 줄 문단"
+[ "$VN" -ge 18 ] && ok "한 판정 모양 ${VN}개 (vacuous 아님)" || no "한 판정 모양이 ${VN}개뿐이다"
 
 finish

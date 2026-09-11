@@ -8,7 +8,9 @@ stdlib 빌더가 그 모양을 어떻게 읽는지 재게 한다. 새 프로필�
 
 게이트(`load_profile()`)가 **거절하는** 모양도 있다 — 중복 키(`dup-web`·`dup-layer1`·
 `gt-dup`·`gt-dup-mixed`, Task 3c R37 이후), 목록·빔·null·부재(`gt-flow-list`·`gt-block-list`·
-`gt-empty`·`gt-bare`·`gt-null`·`gt-absent`), 빈 본문(`body-empty`) — 러너가 게이트 없이 단독으로
+`gt-empty`·`gt-bare`·`gt-null`·`gt-absent`), 빈 본문(`body-empty`), 문자열 아닌 `gt-value=` 값.
+리뷰 I1·M3 재현 모양(`qcont-gt`·`qcont-all`·`flow-web`·`gt-spacecolon`·`gt-u2028`)은 게이트가
+**받는다** — 러너가 그것을 다른 값으로 읽지 않는지(이름 붙은 fail-closed 인지) 재는 용도다 — 러너가 게이트 없이 단독으로
 불렸을 때의 행동을 재기 위한 것이다(러너는 게이트를 다시 구현하지 않는다).
 
 Usage: mutate_profile_shape.py <shape> <src_profile> <dst_profile>
@@ -21,7 +23,9 @@ SHAPES = (
     "web-yes", "dup-web", "dup-layer1", "ground-truth-decoy",
     "gt-dup", "gt-plain", "gt-flow-list", "gt-block-list", "gt-dup-mixed",
     "gt-empty", "gt-bare", "gt-null", "gt-absent", "body-empty",
+    "qcont-gt", "qcont-all", "flow-web", "gt-spacecolon", "gt-u2028",
 )
+# `gt-value=<값>` — ground_truth 줄을 `ground_truth:<값>` 으로 바꾼다(`\n` 은 줄바꿈).
 GT_LINE = r"^ground_truth:.*$"
 
 
@@ -41,12 +45,25 @@ def _to_block_with_gap(text, gap_line):
     return re.sub(r"^  layer1: \[([^\]]*)\]$", repl, text, count=1, flags=re.MULTILINE)
 
 
+def _sub1(pattern, repl, text):
+    # 정확히 한 번 바꾼다. 못 바꾸면 조용히 원본을 쓰지 않고 죽는다(픽스처 전제 실패).
+    out, n = re.subn(pattern, lambda m: repl, text, count=1, flags=re.MULTILINE)
+    if n != 1:
+        sys.exit("fixture pattern not found: %r" % pattern)
+    return out
+
+
+def _move_to_end(text, block):
+    end = text.find("\n---\n", 4)
+    return text[:end] + block + text[end:]
+
+
 def main():
     if len(sys.argv) != 4:
         print("usage: mutate_profile_shape.py <shape> <src> <dst>", file=sys.stderr)
         return 2
     shape, src, dst = sys.argv[1], sys.argv[2], sys.argv[3]
-    if shape not in SHAPES:
+    if shape not in SHAPES and not shape.startswith("gt-value="):
         print("unknown shape: %s (want one of %s)" % (shape, ", ".join(SHAPES)), file=sys.stderr)
         return 2
     text = open(src, encoding="utf-8").read()
@@ -126,6 +143,34 @@ def main():
         # 공백 — `if not body` 로 좁혀 쓴 검사도 걸리게).
         end = text.find("\n---\n", 4)
         text = text[:end + 5] + "\n  \n"
+    elif shape == "qcont-gt":
+        # 리뷰 I1 재현 — immutable 목록 항목의 큰따옴표 연속줄 안 컬럼 0 에 ground_truth 를 숨긴다.
+        text = _sub1(r"^immutable: .*$",
+                     'immutable:\n  - "^6\\\\.\nground_truth: DECOY_GT_FROM_CONTINUATION\n    #"', text)
+    elif shape == "qcont-all":
+        # 리뷰 I1 재현 — decision_log 를 block 매핑으로 frontmatter 끝에 옮기고, heading 의 큰따옴표
+        # 연속줄 안 컬럼 0 에 네 필드를 숨긴다(게이트는 이것을 heading 의 값으로 읽는다).
+        m = re.search(r'^decision_log: \{kind: (\w+), heading: "([^"]*)"\}\n', text, flags=re.MULTILINE)
+        if not m:
+            sys.exit("fixture pattern not found: decision_log flow mapping")
+        text = text[:m.start()] + text[m.end():]
+        hidden = ("ground_truth: DECOY_GT\nweb: true\nlayer_rubric:\n  layer1: [DECOY_L1]\n  layer2: []\n"
+                  "allowed_dispositions: [decide, ask]\n")
+        text = _move_to_end(text, '\ndecision_log:\n  kind: %s\n  heading: "%s\n%s    #"'
+                            % (m.group(1), m.group(2), hidden))
+    elif shape == "flow-web":
+        # 리뷰 I1 재현(배포 seed·generic) — defer_target 의 flow 매핑을 여러 줄로 펴고 그 연속줄
+        # 컬럼 0 에 `web: true` 를 둔다. 게이트는 defer_target 의 여분 키로 읽고 최상위 web 은 false.
+        text = _sub1(r"^defer_target: \{kind: none\}\n", "", text)
+        text = _move_to_end(text, "\ndefer_target: {kind: none,\nweb: true\n  }")
+    elif shape == "gt-spacecolon":
+        text = _sub1(r"^ground_truth:", "ground_truth :", text)
+    elif shape == "gt-u2028":
+        # 리뷰 M3 재현 — PyYAML 은 U+2028 을 줄바꿈으로 본다. 진짜 ground_truth 를 그 뒤에 둔다.
+        text = _sub1(GT_LINE + r"\n", "", text)
+        text = _sub1(r"^detectors: 1$", 'detectors: 1 # c ground_truth: "REAL_BEHIND_U2028"', text)
+    elif shape.startswith("gt-value="):
+        text = _sub1(GT_LINE, "ground_truth:" + shape[len("gt-value="):].replace("\\n", "\n"), text)
 
     open(dst, "w", encoding="utf-8").write(text)
     return 0

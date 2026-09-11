@@ -148,12 +148,14 @@ PY
 # 있고, 마지막 앵커의 끝과 태그의 시작 사이엔 공백만 있는가. 태그는 빌더 소스에서
 # `<tag>\n{{PLACEHOLDER}}` 패턴으로 도출한다 — 빌더→태그 이름표를 따로 안 둔다.
 check_dominance() {
-  local src_path="$1" out_path="$2"
-  python3 - "$src_path" "$out_path" "$CLAUSE" "$BLANKET" "$ACTION" <<'PY'
+  # $3(선택) — 입력 태그를 소스에서 도출하는 정규식. 빌더는 `<tag>\n{{PLACEHOLDER}}`(기본값),
+  # 인라인 빌더를 가진 셸 러너는 `<tag>\n" + doc` 모양이라 호출부가 넘긴다.
+  local src_path="$1" out_path="$2" tag_pat="${3:-}"
+  python3 - "$src_path" "$out_path" "$CLAUSE" "$BLANKET" "$ACTION" "$tag_pat" <<'PY'
 import re, sys, pathlib
-src_path, out_path, clause, blanket, action = sys.argv[1:6]
+src_path, out_path, clause, blanket, action, tag_pat = sys.argv[1:7]
 src = pathlib.Path(src_path).read_text(encoding="utf-8")
-m = re.search(r'<([a-zA-Z_]+)>\n\{\{', src)
+m = re.search(tag_pat or r'<([a-zA-Z_]+)>\n\{\{', src)
 if not m:
     print("NO_TAG_DERIVED")
     sys.exit(0)
@@ -285,4 +287,75 @@ for cl in $checklist_glob; do
     no "$(basename "$cl"): 체크리스트가 앵커 리터럴($leaked)을 이미 담고 있다 — 위 양성 판정이 템플릿이 아니라 이 파일에서 왔을 수 있다. 고치려면: 이 표준 문장을 체크리스트에 그대로 인용하지 말고 같은 규칙을 자기 말로 바꿔 적어라(원문을 그대로 복사하면 이 짝-검사가 다시 무의미해진다)"
   fi
 done
+
+# ── 인라인 빌더를 가진 셸 러너(Task 3c R40) ─────────────────────────────────────
+# 위 빌더 도출(`build_*codex*prompt.py` 의 PROMPT_TEMPLATE)은 셸 러너 안의 인라인 python 빌더를
+# 못 본다 — 문서 리뷰 엔진의 codex 러너가 그 모양이라 이 락에 한 번도 잡히지 않았다. 그래서 러너를
+# 따로 **도출한다**: git 이 추적하는 `plugins/*/scripts/*.sh` 가운데 `prompt-preamble.md` 를
+# 직접 읽고 인라인 빌더(`<<'PY'`)를 가진 것. 같은 정본의 배포본(심볼릭 링크)은 실경로로 하나로
+# 접고 배포 경로로 부른다(정본 자리에서 부르면 형제 파일이 없어 죽는다). 입력 태그는 러너 소스의
+# `<tag>\n" + doc` 모양에서 도출하고, 프로필은 references/docreview-profiles/*.md 전부로 돈다.
+# codex 는 부르지 않는다 — 가짜 스텁(shared/tests/fixtures/docreview/codex-stub.sh)이 프롬프트를
+# 파일로 받는다. 판정은 파일에서 grep 한다(pipefail 아래 `printf | grep -q` 는 큰 출력에서
+# SIGPIPE 로 거짓 RED 가 난다).
+RUNNER_TAG_PAT='<([a-zA-Z_]+)>\\n" \+ doc\b'
+mkdir -p "$TMP/bin"
+ln -sf "$ROOT/shared/tests/fixtures/docreview/codex-stub.sh" "$TMP/bin/codex"
+runners="$(cd "$ROOT" && git ls-files -- 'plugins/*/scripts/*.sh' | while IFS= read -r f; do
+  if grep -q 'prompt-preamble.md' "$f" && grep -q "<<'PY'" "$f"; then
+    printf '%s\t%s\n' "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$f")" "$f"
+  fi
+done | sort -t "$(printf '\t')" -k1,1 -u | cut -f2)"
+nr=0; [ -n "$runners" ] && nr="$(printf '%s\n' "$runners" | wc -l | tr -d ' ')"
+if [ "$nr" -ge 1 ]; then
+  ok "인라인 빌더 셸 러너 도출 ${nr}개 (vacuous 아님)"
+else
+  no "인라인 빌더 셸 러너가 0개 — 도출 기준이 깨졌다, 아래 판정 무의미"
+fi
+
+check_runner() {  # check_runner <runner 상대경로> <프로필 절대경로>
+  local rn="$1" prof="$2" host label cap capa dom
+  host="$ROOT/$(dirname "$(dirname "$rn")")"
+  label="$(basename "$rn") [$(basename "$(dirname "$(dirname "$(dirname "$prof")")")")/$(basename "$prof" .md)]"
+  cap="$TMP/runner-cap.txt"; capa="$TMP/runner-cap-ascii.txt"
+  rm -f "$cap" "$capa" "$TMP/runner-out.yaml"
+  PATH="$TMP/bin:$PATH" DOCREVIEW_CODEX_CAPTURE="$cap" CLAUDE_PLUGIN_ROOT="$host" \
+    bash "$ROOT/$rn" "$prof" "$TMP/in.md" "$ROOT" "$TMP/runner-out.yaml" >/dev/null 2>&1
+  if [ ! -s "$cap" ]; then
+    no "$label: 프롬프트를 캡처하지 못했다 — 러너가 codex 에 닿지 않았다 ($(tr '\n' ' ' < "$TMP/runner-out.yaml" 2>/dev/null))"
+    return
+  fi
+  grep -qF 'UNTRUSTED_BODY_MARKER' "$cap" \
+    && ok "$label: 입력 본문이 프롬프트에 실렸다" \
+    || no "$label: 입력 본문이 프롬프트에 없다 — 이 판정은 무의미하다"
+  grep -qF "$CLAUSE" "$cap" \
+    && ok "$label: untrusted-data 절 방출" \
+    || no "$label: untrusted-data 절이 방출된 프롬프트에 없다"
+  grep -qF "$BLANKET" "$cap" \
+    && ok "$label: 무조건 blanket 문장(보고 무결성) 방출" \
+    || no "$label: 무조건 blanket 문장이 방출된 프롬프트에 없다"
+  grep -qF "$ACTION" "$cap" \
+    && ok "$label: 무조건 action 금지 문장(행동 금지) 방출" \
+    || no "$label: 무조건 action 금지 문장이 방출된 프롬프트에 없다"
+  PYTHONIOENCODING=ascii PATH="$TMP/bin:$PATH" DOCREVIEW_CODEX_CAPTURE="$capa" CLAUDE_PLUGIN_ROOT="$host" \
+    bash "$ROOT/$rn" "$prof" "$TMP/in.md" "$ROOT" "$TMP/runner-out.yaml" >/dev/null 2>&1
+  grep -qF "$CLAUSE" "$capa" 2>/dev/null \
+    && ok "$label: PYTHONIOENCODING=ascii 에서도 untrusted-data 절 방출" \
+    || no "$label: PYTHONIOENCODING=ascii 에서 절이 소실됐다 (stdout 인코딩 고정 없음)"
+  dom="$(check_dominance "$ROOT/$rn" "$cap" "$RUNNER_TAG_PAT")"
+  case "$dom" in
+    OK*) ok "$label: 세 앵커가 입력 태그보다 앞서고 그 사이엔 공백만 있다 ($dom)" ;;
+    *)   no "$label: 앵커-입력 지배 관계가 깨졌다 — 규칙이 데이터보다 뒤에 오거나 사이에 다른 문장이 끼어들었다 ($dom)" ;;
+  esac
+}
+
+while IFS= read -r rn; do
+  [ -n "$rn" ] || continue
+  for prof in "$ROOT"/plugins/*/references/docreview-profiles/*.md; do
+    [ -f "$prof" ] || continue
+    check_runner "$rn" "$prof"
+  done
+done <<REOF
+$runners
+REOF
 finish

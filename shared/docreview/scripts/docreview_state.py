@@ -50,8 +50,10 @@ if yaml is not None:
         """중복 키를 거절하는 SafeLoader. PyYAML 기본은 같은 키가 두 번 나오면 나중 값으로
         조용히 덮는다. codex 러너의 stdlib 파서는 모양이 다른 중복(`k: [a]` 뒤 `k:` + `- b`)
         에서 앞의 flow 값을 읽어, 같은 프로필을 두 파서가 다른 값으로 읽었다(실측, Task 3c
-        R37). 두 파서를 맞추는 대신 판정 지점을 하나로 둔다 — 중복 키가 있는 프로필은 진입에서
-        멈춘다. 서로 다른 매핑의 같은 이름(`decision_log.heading` · `defer_target.heading`)은
+        R37). 중복 키에 대해서는 두 파서를 맞추는 대신 판정 지점을 게이트 하나로 둔다 — 중복 키가
+        있는 프로필은 진입에서 멈춘다. 두 파서의 발산 전부를 이 로더가 닫지는 않는다: 따옴표·flow
+        연속줄 같은 모양은 러너가 `profile_parse_ambiguous` 로 멈추고, 배포 프로필은 러너·게이트
+        등식 대조(test_docreview_codex.sh)가 잰다. 서로 다른 매핑의 같은 이름(`decision_log.heading` · `defer_target.heading`)은
         중복이 아니다 — 매핑마다 따로 센다."""
 
         def construct_mapping(self, node, deep=False):
