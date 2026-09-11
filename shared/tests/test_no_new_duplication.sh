@@ -13,6 +13,10 @@
 # 정본)을 가리키며, **두 파일이 `shared/tests/variant_of.py` 의 관계를 이 락 안에서 실제로
 # 만족한다** — frontmatter 는 name·description·tools 만 다르고 본문은 한 덩어리를 끼워 넣은
 # 것뿐이다. ③은 마커만으로 면제하지 않는다: 관계가 깨지면 그 쌍은 VIOLATION 으로 남는다.
+# ③의 범위는 agent 정의뿐이다 — 두 파일 다 `shared/<x>/agents/*.md` · `plugins/<x>/agents/*.md` 이고
+# 마커의 대상은 `shared/<x>/agents/*.md` 정본이다(판정은 variant_of.in_agent_scope · canonical_agent).
+# skill·command 를 통째 복제하고 마커 한 줄을 다는 것으로는 빠져나가지 못한다. 마커 전수와 그
+# 목록은 shared/tests/test_variant_of_contract.sh 가 잰다.
 #
 # **①② 는 마커의 *존재*만 본다.** 실제 동일성은 test_copy_of_contract.sh 의
 # GREEN 에 기댄다 — 즉 이 락의 이빨은 그 락이 살아 있을 때만 유효하다. 두 락을 같은
@@ -163,9 +167,11 @@ variant_target = {}
 if variant_of is not None:
     for p in body:
         # 링크는 대상의 마커를 빌려 쓰지 못한다 — canonical_of 의 링크 분기와 같은 이유.
-        if not pathlib.Path(p).is_symlink():
+        # 범위: 마커를 단 쪽은 agent 정의(정본 또는 배포 사본)여야 하고 대상은 shared/ 의 agent 정본이어야
+        # 한다 — 그 밖의 마커는 면제 근거가 되지 않는다(그런 마커는 test_variant_of_contract.sh 가 RED 로 낸다).
+        if not pathlib.Path(p).is_symlink() and variant_of.in_agent_scope(p):
             t = variant_of.marker(p)
-            if t:
+            if t and variant_of.canonical_agent(t):
                 variant_target[p] = t
 _rel_cache = {}
 broken_variant = {}
@@ -181,10 +187,10 @@ def exempt(a, b):
     # ② 양쪽이 같은 정본을 가리킨다
     ca, cb = canon.get(a), canon.get(b)
     if ca is not None and ca == cb: return True
-    # ③ variant-of 로 이어졌고, 관계가 이 자리에서 실제로 선다
+    # ③ variant-of 로 이어졌고(양쪽 다 agent 정의), 관계가 이 자리에서 실제로 선다
     for v, o in ((a, b), (b, a)):
         t = variant_target.get(v)
-        if t is not None and t in (o, canon.get(o)):
+        if t is not None and t in (o, canon.get(o)) and variant_of.in_agent_scope(o):
             holds, why, _ins = variant_holds(v, o)
             if holds: return True
             broken_variant[(a, b)] = why

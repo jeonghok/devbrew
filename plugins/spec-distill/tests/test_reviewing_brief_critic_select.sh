@@ -158,12 +158,21 @@ recorded sel02off 'DEVBREW_SPEC_DISTILL_DISABLE_WEB=1' \
   && ok "S2: degrade 원장(또는 두 번째 채널)에 critic/direction/degraded record 가 남았다" \
   || no "S2: 스위치로 내려간 사실이 degrade 채널에 없다 — Step B 에서 「degrade 없음」으로 보인다"
 
+check_noweb_quiet() {   # check_noweb_quiet <셀> <라벨> — S3 형태(웹 없는 사본 · 공시 없음 · record 없음)
+  assert_eq "$(agent_of "$1")" "$NOWEB" "$2: 웹 없는 doc-critic"
+  advised "$1" && no "$2: web false 프로필에 degrade advisory 가 나왔다 (끌 웹이 없다)" || ok "$2: advisory 없음"
+  # S2 의 record 존재 단언과 짝 — web false 는 degrade 가 아니다. 원장이 실재해야 부재가 공허하지 않다.
+  if state_seen "$1"; then
+    recorded "$1" 'doc-critic' && no "$2: web false 프로필에 critic/direction degrade record 가 남았다" \
+                               || ok "$2: degrade record 없음 (원장은 실재한다 — 양의 짝)"
+  else
+    no "$2: 원장 경로가 없거나 원장이 없다 — record 부재 판정이 공허하다"
+  fi
+}
 run_select sel03nof "$PR_OFF"
-assert_eq "$(agent_of sel03nof)" "$NOWEB" "S3(web false): 웹 없는 doc-critic"
-advised sel03nof && no "S3: web false 프로필에 degrade advisory 가 나왔다 (끌 웹이 없다)" || ok "S3: advisory 없음"
+check_noweb_quiet sel03nof "S3(web false)"
 run_select sel03nsw "$PR_OFF" DEVBREW_SPEC_DISTILL_DISABLE_WEB=1
-assert_eq "$(agent_of sel03nsw)" "$NOWEB" "S3(web false · 스위치 켜짐): 웹 없는 doc-critic"
-advised sel03nsw && no "S3(스위치 켜짐): web false 프로필에 advisory 가 나왔다" || ok "S3(스위치 켜짐): advisory 없음"
+check_noweb_quiet sel03nsw "S3(web false · 스위치 켜짐)"
 
 run_select sel04bad "$PR_BAD"
 assert_eq "$(agent_of sel04bad)" "$NOWEB" "S4(프로필 판독 불가): 웹 없는 doc-critic — 웹 쪽으로 새지 않는다"

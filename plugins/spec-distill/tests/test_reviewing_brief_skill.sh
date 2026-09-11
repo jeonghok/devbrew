@@ -246,9 +246,15 @@ W_ED="$(section '수정 권한')"
   || no "수정 권한: 임의 기각 금지 또는 미반영 이월이 빠졌다"
 
 # ── 11. 웹 공시 — 문면이 사실과 맞는가 ─────────────────────────────────────────
-{ has "$W_PROC" '`spec-distill:doc-critic-web`' && has "$W_PROC" '**물리적으로**' && has "$W_PROC" 'codex 웹 검색'; } \
-  && ok "웹: Claude 쪽 웹(doc-critic-web)과 DISABLE_WEB 이 끄는 둘(웹 없는 사본 전환 · codex 웹)을 공시한다" \
-  || no "웹: 웹 공시가 빠졌다 — Claude 쪽 웹 근거를 누가 지고 스위치가 무엇을 끄는지 안 보인다"
+{ has "$W_PROC" '`spec-distill:doc-critic-web`' && has "$W_PROC" '**지명**' && has "$W_PROC" '강제하는 훅은 없다' \
+  && has "$W_PROC" 'codex 웹 검색'; } \
+  && ok "웹: Claude 쪽 웹(doc-critic-web) · DISABLE_WEB 의 두 효과(펜스가 웹 없는 사본을 지명 · codex 웹 끔) · 지명을 강제하는 훅이 없음을 공시한다" \
+  || no "웹: 웹 공시가 빠졌다 — Claude 쪽 웹 근거를 누가 지고, 스위치가 무엇을 하고, 무엇이 강제되지 않는지 안 보인다"
+# 막지 않는 것을 막는다고 믿게 만드는 선언은 없는 것보다 나쁘다(CLAUDE.md) — 블록 선택은 모델이 펜스 출력을
+# 읽고 하고 그것을 집행하는 훅은 없다. 양의 짝은 바로 위 「강제하는 훅은 없다」.
+has "$ALL" '**물리적으로** 끈다' \
+  && no "웹: 옛 과장(「Claude 쪽 웹을 **물리적으로** 끈다」)이 남았다 — 지명을 강제하는 훅이 없어 거짓이다" \
+  || ok "웹: 「물리적으로 끈다」 과장 없음 (양의 짝은 위 지명·무훅 공시)"
 has "$ALL" 'Claude 쪽 근거가 없다' \
   && no "웹: 옛 공시(「Claude 쪽 근거가 없다」)가 남았다 — 웹 사본이 dispatch 되는 뒤로는 거짓이다" \
   || ok "웹: 옛 「Claude 쪽 근거가 없다」 공시 없음 (양의 짝은 바로 위 새 공시)"
@@ -256,7 +262,7 @@ fm_tools() { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$1" | grep -
 for a in doc-critic doc-recritic; do
   fm_tools "$SD/agents/$a.md" | grep -qxE 'tools: Read, Grep, Glob' \
     && ok "웹(사실): $a 의 tools 가 정확히 Read, Grep, Glob 이다 — 웹 없는 사본이라는 공시가 참이다" \
-    || no "웹(사실): $a 의 tools 가 바뀌었다 — 「DISABLE_WEB 이 Claude 쪽 웹을 물리적으로 끈다」 공시가 거짓이 됐다"
+    || no "웹(사실): $a 의 tools 가 바뀌었다 — 「웹 없는 사본의 tools: 에 웹 도구가 없다」 공시가 거짓이 됐다"
 done
 web_tools="$(fm_tools "$SD/agents/doc-critic-web.md")"
 { printf '%s\n' "$web_tools" | grep -qE '(^|[ ,])WebSearch(,|$)' && printf '%s\n' "$web_tools" | grep -qE '(^|[ ,])WebFetch(,|$)'; } \

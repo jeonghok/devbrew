@@ -70,8 +70,9 @@ advisory(`[spec-distill] brief 리뷰 degrade 원장 기록 불가 (<reason>) �
   > `[spec-distill] brief 리뷰 SKIPPED (DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1) — 엔진 라운드·냉독 전부 미검증. Step B 게이트에서 확인하세요.`
 
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` → codex 만 끈다(아래 codex 게이트가 집행한다). 탐지·재비판은 그대로.
-- `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` → 이 자리의 웹 둘을 끈다 — 탐지 dispatch 대상을 웹 도구가 없는
-  `spec-distill:doc-critic` 으로 바꾸고(`## dispatch 블록 둘` 의 선택 펜스가 집행한다) codex 의 웹 검색도 끈다(`## 절차` 의 「웹」).
+- `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` → 이 자리의 웹 둘에 걸린다 — `## dispatch 블록 둘` 의 선택 펜스가 탐지
+  dispatch 대상으로 웹 도구가 없는 `spec-distill:doc-critic` 을 지명하고(dispatch 는 지명된 블록을 따른다 — 그
+  선택을 강제하는 훅은 없다), 러너가 codex 의 웹 검색을 끈다(`## 절차` 의 「웹」).
 - `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` → 재비판만 끈다.
 
 record 의 필드는 `component` · `affected_axis` · `verification_status` · `reason` 넷이고(이 문서의
@@ -293,18 +294,20 @@ fi
 (`tools: Read, Grep, Glob`). codex 쪽은 러너가 프로필 frontmatter 의 `web:` 을 읽어 codex 웹 검색을 켜고,
 두 호스트 스위치 `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` · `DEVBREW_QUALITY_GATES_DISABLE_WEB=1` 중 하나라도
 켜져 있으면 끈다(공유 러너가 두 호스트의 스위치를 함께 본다). `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 은 그에 더해
-선택 펜스가 웹 도구 없는 `spec-distill:doc-critic` 을 고르게 해 Claude 쪽 웹을 **물리적으로** 끈다 — 그 사본의
-`tools:` 에 웹 도구가 없다(진입 게이트의 `check_brief.py` 도 같은 스위치로 §4 sentinel 하나를 완화하며 자기
-advisory 로 공시한다). 둘 다 꺼진 라운드에는 외부 근거가 0 이다. 그 사실은 `## degrade 채널` 의 웹 줄로 매번
+선택 펜스가 탐지 dispatch 대상으로 웹 도구 없는 `spec-distill:doc-critic` 을 **지명**하게 한다 — 스위치가 켜져
+있거나 프로필이 웹을 허용하지 않으면 펜스는 웹 사본을 지명하지 않고, dispatch 는 지명된 블록을 따른다. 그 선택을
+강제하는 훅은 없다 — 물리적인 것은 웹 없는 사본의 `tools:` 에 웹 도구가 없다는 것뿐이다(진입 게이트의
+`check_brief.py` 도 같은 스위치로 §4 sentinel 하나를 완화하며 자기 advisory 로 공시한다). 둘 다 꺼진 라운드에는 외부 근거가 0 이다. 그 사실은 `## degrade 채널` 의 웹 줄로 매번
 공시한다.
 
 ## dispatch 블록 둘
 
-3단계 탐지 — dispatch 대상은 아래 선택 펜스가 정한다: 프로필이 웹을 허용하고 `DEVBREW_SPEC_DISTILL_DISABLE_WEB`
+3단계 탐지 — dispatch 대상은 아래 선택 펜스가 지명한다: 프로필이 웹을 허용하고 `DEVBREW_SPEC_DISTILL_DISABLE_WEB`
 이 켜져 있지 않을 때만 웹 도구를 가진 `spec-distill:doc-critic-web`, 그 밖에는 웹 도구가 없는
 `spec-distill:doc-critic` 이다. 프로필의 `web` 은 엔진의 `profile-check` 가 낸 값으로만 읽는다. 매 라운드 탐지
 dispatch **직전에** 이 펜스를 돌리고(캐시하지 않는다), 펜스가 낸 `CRITIC_AGENT=` 값과 `subagent_type` 이 같은
-블록 **하나만** dispatch 한다 — 조건을 산문으로 다시 판단하지 않는다. 스위치가 웹 없는 사본으로 내리거나
+블록 **하나만** dispatch 한다 — 조건을 산문으로 다시 판단하지 않는다. 이 선택을 강제하는 훅은 없다 — 펜스와 다른
+블록을 dispatch 하면 그 라운드의 웹 공시가 거짓이 된다. 스위치가 웹 없는 사본으로 내리거나
 프로필의 `web` 을 읽지 못하면 펜스가 loud advisory 를 내고 degrade 원장에 record(`critic` / `direction` /
 `degraded`)를 남긴다.
 
