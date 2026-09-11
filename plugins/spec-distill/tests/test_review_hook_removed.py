@@ -11,7 +11,8 @@ AC2 의 검사 목록은 손으로 적지 않고 아래 `DELETED` 에서 **도�
   S5 삭제 코어 .py 의 하이픈 소문자 문자열(CLI 하위 명령 등).
 S2·S4·S5 에서는 **살아 있는 어휘**를 뺀다: base 에서 삭제도 수정도 하지 않은 파일
 (`DELETED` ∪ `EDITED` ∪ 역사 밖)에 이미 나오는 이름은 이 변경의 인용이 아니다. S4 는 추가로
-지금 트리의 비-테스트 .py 가 문자열로 쥔 변수(살아 있는 스위치)를 뺀다.
+살아 있는 스위치를 뺀다 — 추적되는 비-테스트 .py 중 `EDITED` 밖 파일이 문자열로 쥔 이름이다.
+은퇴 토큰(`RETIRED_LITERALS`)은 빼지 않는다: 그 리터럴은 (b) 자리에서만 가려진다.
 
 「현재형」은 기계로 가르지 않고 면제 코퍼스로 정한다(설계 AC2):
   (a) 역사 — `*/CHANGELOG.md` · `docs/archive/**` · `docs/audits/README.md` ·
@@ -227,19 +228,27 @@ def derivation():
                 stop[tok] = path
                 break
 
-    live_env = set()
-    for f in head_files():
-        if not f.endswith(".py") or "/tests/" in f or f in DELETED:
+    # `EDITED` 파일은 뺀다 — 이 변경이 남긴 인용이 자기 토큰을 스스로 살려낼 수 있기
+    # 때문이다. 추적 파일만 본다(`--others` 없이) — untracked 스크래치가 살려내면
+    # 로컬 뿐인 흔적이 리포 공통 판정을 바꾼다. 은퇴 토큰은 여기서 다시 뺀다 —
+    # 그 리터럴은 (b) 세 자리에서만 가려지는 것이지 「살아 있는 스위치」가 아니다.
+    live_env = {}
+    for f in git("ls-files").splitlines():
+        if not f.endswith(".py") or "/tests/" in f or f in DELETED or f in EDITED:
             continue
         p = REPO / f
         if p.is_symlink() or not p.is_file():
             continue
         try:
-            live_env |= set(strings(parse_py(p.read_text(encoding="utf-8")))) & s4
+            names = set(strings(parse_py(p.read_text(encoding="utf-8")))) & s4
         except (SyntaxError, UnicodeDecodeError):
             continue
+        for name in names:
+            live_env.setdefault(name, f)
+    for lit in RETIRED_LITERALS:
+        live_env.pop(lit, None)
 
-    tokens = (s1 | s3 | ((s2 | s4 | s5) - set(stop))) - live_env
+    tokens = (s1 | s3 | ((s2 | s4 | s5) - set(stop))) - set(live_env)
     return {"S1": s1, "S2": s2, "S3": s3, "S4": s4, "S5": s5}, stop, live_env, frozenset(tokens)
 
 
@@ -330,7 +339,8 @@ class TestDerivationInstrument(unittest.TestCase):
         _, stop, live_env, _ = derivation()
         sys.stderr.write("\n[살아 있는 어휘로 제외] " + ", ".join(
             f"{k} ← {v}" for k, v in sorted(stop.items())) + "\n")
-        sys.stderr.write("[살아 있는 스위치로 제외] " + ", ".join(sorted(live_env)) + "\n")
+        sys.stderr.write("[살아 있는 스위치로 제외] " + ", ".join(
+            f"{k} ← {v}" for k, v in sorted(live_env.items())) + "\n")
 
     def test_alias_canaries(self):
         for pat, sample in ALIASES:
@@ -343,13 +353,19 @@ class TestResidue(unittest.TestCase):
 
     def test_no_identifier_residue(self):
         tokens = derivation()[3]
+        scanned = []
         hits = []
         for f in head_files():
             if f == SELF or HISTORY.search(f):
                 continue
             text = read_head(f)
             if text is not None:
+                scanned.append(f)
                 hits += scan_text(f, text, tokens)
+        for must in (f"{SD}/README.md", f"{SD}/skills/reviewing-spec/SKILL.md",
+                     f"{SD}/scripts/review_entry.py"):
+            with self.subTest(must=must):
+                self.assertIn(must, scanned, "스캔 대상에서 빠졌다 — HISTORY/면제가 넓어졌다")
         self.assertEqual(hits, [], "\n".join(hits[:60]))
 
     def _alias_scope(self) -> list[str]:
