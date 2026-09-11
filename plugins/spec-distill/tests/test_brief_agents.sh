@@ -101,11 +101,10 @@ done
 #
 # 표기 변형은 형제 락 test_seed_agents.sh:131 을 물려받아 `[]` 와 `[ ]` 를
 # 둘 다 빈 리스트로 읽는다.
-# v0.57.0 depth-auditor 편입 — 짝 목록만 인라인으로 받고 파일을 열지 않는 다섯째
-# 격리 에이전트다(도구 표면 0). 리터럴이라 넣지 않으면 좌변이 다섯으로 늘어 RED 다.
+# depth-auditor 는 depth audit 제거로 빠졌다 — 격리 에이전트는 넷이다. 리터럴이라 그 파일이
+# 되살아나면 좌변이 다섯으로 늘어 RED 다.
 EXPECTED_ISOLATED="brief-critic
 brief-readback
-depth-auditor
 seed-critic
 seed-readback"
 

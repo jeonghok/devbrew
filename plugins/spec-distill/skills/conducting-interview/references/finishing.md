@@ -73,7 +73,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 
    **닫힌 행의 evidence 는 그 차원을 닫은 사용자 발화 `S<N>` 을 인용합니다**(게이트가 검사합니다 —
    `floor:<dim> evidence cites no S<N> anchor`). 어느 S 인지의 규약: root_problem = 재구성 동의 S ·
-   landscape = 외부 근거 되비추기 처분 S · skepticism = steelman 판정 S · blind_spot = 숨은 가정·
+   landscape = 외부 근거 처분 S · skepticism = steelman 판정 S · blind_spot = 숨은 가정·
    실패 양식 처분 S · open_questions = OQ 목록 확인 S. 사용자-승인 박제 행은 앵커가 접두 **뒤**에
    옵니다: `사용자-승인 박제(@S12) — §Open Questions 참조`. 재개방된 차원은 행 끝에
    `(재개방 <n>회 — <마지막 사유>)` 접미를 붙입니다(state `reopen_log` 의 마지막 항목).
@@ -123,98 +123,6 @@ Skill spec-distill:reviewing-brief $PAYLOAD $AUDIT $CODEX_DIR_YAML $CODEX_FID_YA
   최종 문서**를 봅니다.
 - 산출물 4종(확정 후보 / 방향성 C4 항목 / readback 요약 + gap / 모든 degrade record)이
   Step B 게이트로 넘어옵니다.
-
-### Step A.7 — 깊이 측정 (세 층, 게이트 아님 · v0.57.0)
-
-«답 직후 파고들었는가»를 스크립트(형식)·`depth-auditor`(내용)·사람(≤4개 라벨)이 각각 세고,
-결과는 audit §2 네 줄과 `docs/superpowers/interview/depth/<brief-basename>.json` 하나로 남는다.
-**어느 층의 결과도 종료를 막지 않는다 — 기록한다, 막지 않는다.** 측정 불가·unavailable·미라벨은
-전부 그렇게 **기록**된다(C5).
-
-이 단계는 `Agent` dispatch 와 `AskUserQuestion` 을 사이에 끼고 **여러 셸에 걸쳐** 돈다. Bash 도구는
-호출마다 새 셸이고 유지되는 것은 cwd 뿐이므로, **아래 어떤 명령도 앞 블록의 변수를 물려받지
-못한다** — `$PR`·`$ROOT`·`$harness_sid`·`$PAIRS`·`$AUD_RAW` 는 쓰는 자리마다 그 블록 머리에서
-다시 도출한다(Step B-0 과 같은 관례). 나르려 하면 빈 문자열로 전개돼 `'/scripts/depth_record.py'`
-같은 경로가 만들어지고, 실패는 rc≠0 하나로 지나가 **측정 원장이 영영 안 써진다**.
-
-```bash
-PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
-ROOT="$(python3 "$PR/scripts/state_path.py" state-root)"
-harness_sid="$(python3 "$PR/scripts/state_path.py" session-id)"
-STATE="$ROOT/$harness_sid/state.local.md"
-PAIRS="$ROOT/$harness_sid/depth-pairs.json"
-AUD_RAW="$ROOT/$harness_sid/depth-auditor-raw.txt"
-python3 "$PR/scripts/depth_pairs.py" "$STATE" --sample 4 > "$PAIRS"; pairs_rc=$?
-```
-
-- `pairs_rc` 가 3 이면 «측정 불가» 한 줄만 audit §2 에 쓰고 Step B 로 간다 — auditor 도 사람
-  라벨도 돌리지 않는다. 줄은 `- 깊이 측정: 측정 불가 — <stdout 의 unmeasurable 값>` 이다.
-- `pairs_rc` 가 0 이면 `$PAIRS` 의 `pairs` 배열을 **그대로 inline** 해 dispatch 한다:
-
-```javascript
-Agent({
-  description: "Depth audit of answer→next-action pairs",
-  subagent_type: "spec-distill:depth-auditor",
-  // **처분** — consumer=plugins/spec-distill/scripts/depth_record.py · fail-open
-  prompt: `아래 짝마다 «직전 답에서» 블록이 S 에 없던 함의·상충·사실·위험을 하나라도 적었는지 판정하라.
-라벨은 dug | not_dug | undecidable, 각각 한 줄 이유(S 의 어느 부분에서인지). 짝 목록 밖의 것은 보지 마라.
-<pairs>${PAIRS_INLINE}</pairs>` })
-```
-
-- auditor 의 raw 출력은 **요약·전사 없이** `$AUD_RAW` 에 저장한다 — heredoc 이 아니라 **파일
-  리다이렉트**로(`printf '%s' "$RAW" > "$AUD_RAW"`). raw 에 작은따옴표·닫는 괄호가 섞이면
-  heredoc-in-`$()` 파싱이 깨진 전례가 있다. dispatch 자체가 불가능하면(도구 부재·kill switch)
-  빈 파일을 두고 `depth_record.py` 가 «unavailable» 로 기록하게 한다 — 0건으로 적지 않는다.
-- 사람 라벨: `$PAIRS` 의 `human_sample` 이 표본이다(`min(4, 적격 짝)` 개). **표본이 0 이면
-  질문을 띄우지 않는다**(«표본 없음»). 표본이 있으면 `AskUserQuestion` **한 번**, 질문 수 = 표본 수:
-
-```javascript
-AskUserQuestion({ questions: [ /* 표본마다 하나, ≤4 */ {
-  header: "깊이 S<k>",
-  question: "답 S<k>: «<s_excerpt ≤200자>» → 다음 라운드의 «직전 답에서» 블록: «<block_excerpt ≤300자>». 이 블록이 답에서 새로 끌어낸 것이 있나요?",
-  options: [
-    {label: "파고들었다", description: "블록에 답에서 따라 나온, 답에 없던 함의·상충·사실·위험이 있다"},
-    {label: "안 팠다",   description: "네 줄이 «없음»이거나 답의 되풀이·무관한 정보뿐이다"},
-    {label: "판단불가",  description: "발췌만으로는 알 수 없다"}],
-  multiSelect: false } ] })
-```
-
-  «기타»에 «나중에» 류가 오거나 질문을 건너뛰면 그 표본은 **미라벨**이다. 답을
-  `{"skipped": false, "labels": {"S3": "dug", …}}` (파고들었다→`dug`, 안 팠다→`not_dug`,
-  판단불가→`undecidable`) 로 만들어 파일 `$ROOT/$harness_sid/depth-human.json` 에 쓴다.
-  **표본이 0 이었거나 라벨을 하나도 못 받았어도 이 파일은 반드시 쓴다** —
-  `{"skipped": true, "labels": {}}` 를 같은 경로에 둔다. 아래 호출이 `--human` 을 **무조건**
-  넘기므로 파일이 없으면 스크립트가 `기록 불가` 로 떨어지고 측정 파일이 아예 안 생긴다:
-  rc 는 0 이라 종료는 막히지 않지만 그 인터뷰가 누적 코퍼스에서 통째로 빠진다 —
-  **막지 않는 것과 재는 것은 다르다.** 적격 짝 0 은 코너가 아니라 `depth_pairs.py` 가
-  rc 0 으로 내는 정상 결과이므로, 그때 스크립트의 `표본 없음` 분기가 실제로 도달한다.
-
-```bash
-# 이 단계의 **모든** bash 블록은 머리에서 경로를 다시 도출한다 — 위 블록의 변수는 여기 없다.
-PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
-ROOT="$(python3 "$PR/scripts/state_path.py" state-root)"
-harness_sid="$(python3 "$PR/scripts/state_path.py" session-id)"
-PAIRS="$ROOT/$harness_sid/depth-pairs.json"
-AUD_RAW="$ROOT/$harness_sid/depth-auditor-raw.txt"
-AUDIT="docs/superpowers/interview/<file>.audit.md"        # Step A 가 쓴 경로
-BASENAME="$(basename "$AUDIT" .audit.md)"
-python3 "$PR/scripts/depth_record.py" "$PAIRS" --auditor "$AUD_RAW" \
-  --human "@$ROOT/$harness_sid/depth-human.json" --audit "$AUDIT" \
-  --out "docs/superpowers/interview/depth/$BASENAME.json"
-```
-
-  stdout 의 처음 네 줄(`- 깊이 측정(형식)…` · `(auditor)…` · `(사람)…` · `- 판정자 조건: …`)을
-  **audit §2 Budget 에 그대로 붙인다**. 처분 두 줄과 `advisory:` 줄은 사용자에게 그대로 보인다.
-  **그 배관 줄의 `(차단: 예)` 는 이 단계에서 «공시»일 뿐 종료를 막지 않는다 — 보이고 그대로
-  Step B 로 간다.** 바로 위의 정상 퇴화 경로(dispatch 불가 → 빈 raw)가 곧 그 표시를 내는
-  자리다: 주 판정자 사망은 `source_failed(primary=True)` 라 렌더러가 `(차단: 예)` 를 찍는다.
-  여기서 멈추면 「기록한다, 막지 않는다」가 깨진다.
-  스크립트는 항상 exit 0 이고 실패는 `- 깊이 측정: 기록 불가 — <이유>` 로 온다 — 그 줄도 §2 에
-  붙인다. 측정 파일은 `Write` 가 아니라 스크립트가 쓴다(라벨 병합을 orchestrator 가 손으로
-  하지 않기 위해서다).
-- 이 단계는 Step A 5 의 게이트 **뒤**에 돈다 — §2 에 줄이 늘어도 게이트는 §2 의
-  `coverage-mapper <k>` 만 본다. 붙인 뒤 `check_brief.py gate` 를 한 번 더 돌려 §2 삽입이
-  다른 검사를 건드리지 않았음을 확인한다.
 
 ### Step B — proceed 게이트 (handoff 방식 제안)
 
@@ -310,12 +218,12 @@ state 의 `brief_review_degradations` 원장 + `DEVBREW_SPEC_DISTILL_DISABLE_BRI
 
 `check_brief.py gate` 의 `advisories` 도 이 텍스트에 싣습니다 — `coverage-mapper 0
 (unavailable: …)` 은 게이트가 관측할 수 없는 사실(실제 dispatch 여부)을 사람에게 넘기는
-유일한 자리입니다. 같은 이유로 Step A.7 의 깊이 측정 세 줄 요약도 여기 싣습니다.
+유일한 자리입니다.
 
 ```javascript
 AskUserQuestion({
   questions: [{
-    question: "interview brief 완결: <brief-path> (구조 게이트 통과, 리뷰 <verdict 요약>). 확정 후보·방향성 항목·readback gap은 위 목록대로. 깊이: <audit §2 의 깊이 측정 세 줄 요약 | 측정 불가 — <이유>>. 게이트 advisory: <check_brief 의 advisories 한 줄씩 (예: coverage-mapper 0 (unavailable: …)) | 없음>. degrade: <record 한 줄씩 | degrade 없음>. 다음 단계?",
+    question: "interview brief 완결: <brief-path> (구조 게이트 통과, 리뷰 <verdict 요약>). 확정 후보·방향성 항목·readback gap은 위 목록대로. 게이트 advisory: <check_brief 의 advisories 한 줄씩 (예: coverage-mapper 0 (unavailable: …)) | 없음>. degrade: <record 한 줄씩 | degrade 없음>. 다음 단계?",
     header: "Proceed",
     options: [
       {label: "확정하고 /compact 후 brainstorming (권장)", description: "확정 후보를 status: confirmed로 반영 → 재저장 → 게이트 재실행 → verbatim /compact 노출. 긴 인터뷰 context 정리 이점."},

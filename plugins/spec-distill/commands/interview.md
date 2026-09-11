@@ -59,7 +59,7 @@ Trivia 아닌 경우, `conducting-interview` skill을 invoke하십시오. 인자
 Skill conducting-interview <풀린 입력>
 ```
 
-`conducting-interview` skill이 «직전 답에서» 블록 + 질문 둘 형식으로 첫 round를 진행합니다.
+`conducting-interview` skill이 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 첫 round를 진행합니다.
 
 ## Arguments
 

@@ -4,7 +4,7 @@
 
 ## What it does
 
-`/interview <rough request>` 호출 시 «직전 답에서» 블록 + 질문 둘 형식의 Korean Socratic
+`/interview <rough request>` 호출 시 «지금 이해 · 다음 결정 · 질문 하나» 형식의 Korean Socratic
 인터뷰가 **강한 문제공간 stage**로 동작합니다: 요청을 재구성(메타프롬프팅)하고, 외부 사례를 웹으로 조사하고(bounded), 약한 방향을
 steelman으로 깨뜨려, **interview brief**(brainstorming용 meta-prompt)를 **2파일 쌍**으로
 산출합니다 — payload `docs/superpowers/interview/YYYY-MM-DD-<topic>-interview.md`(8섹션 역피라미드,
@@ -19,7 +19,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 /interview todo 앱 만들어줘
 ```
 
-`conducting-interview` skill이 «직전 답에서» 블록 + 질문 둘 형식으로 첫 round를 시작합니다.
+`conducting-interview` skill이 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 첫 round를 시작합니다.
 
 ## Flow (v0.41.0)
 
@@ -33,7 +33,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
                                    interview-seed → docs/superpowers/interview/   ← 문서가 아니라 다음 세션 첫 턴이 가리키는 파일
                                        ▼ 새 세션 첫 턴 = `/interview @<seed 경로>` (/interview 가 frontmatter 포함 전문으로 풀어 인터뷰에 넘김)
 /interview ─→ [0] Trivia escape ─→ [1] Interview (문제공간 stage)
-                                       · «직전 답에서» 블록 + 질문 둘 + 3-path (web=path(a))
+                                       · 지금 이해 · 다음 결정 · 질문 하나 + 3-path (web=path(a))
                                        · R1 Problem Reframe / R2 Landscape / R3 Steelman / R4 Tried&Discarded / R5 OQ
                                        ▼ 5 의례 통과 (check_brief.py gate, Law 1)
                                    interview brief (payload + audit) → docs/superpowers/interview/   ← terminal 산출물
@@ -105,8 +105,6 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - **Law 3 (Compounding) — 문서 리뷰 엔진 기반 (v0.56.0)** — 네 문서 리뷰 자리를 통일하는 `shared/docreview/` 를 호출자 0 으로 심었다. 처분(decide·ask·fix·defer·drop)이 finding 의 수신자를 정하고, 회귀는 편집 범위·얼림·보호 부류로 막는다. 자리별 전환은 후속 PR(design doc·brief·seed). 집행은 `shared/tests/test_docreview_*.sh` + 변이 매트릭스.
 - **「판정기가 항목을 버리면 센다」 + fail-closed — 엔진 결함 일곱 (v0.58.0)** — 호출자가 붙기 «전에» 이 일곱을 닫았다. 당시엔 **전부는 아니었다** — 재상승 후속 사슬 한 hop 뒤에서 다시 열리는 셋의 알려진 한계가 남아 있었다(설계 §6.4 「알려진 한계 셋」, PR 2 대상). 승인 차단은 역방향 스캔이 아니라 **전방 포인터**(`superseded_by`)로 판정하고(AC20), 소비되지 못한 재상승 예약·어휘 밖 재비판 verdict·`same_as` 허상 타겟은 버리지 않고 `reraise_unconsumed`/`coerced` 로 **센다**(AC21·AC27). 영구 차단에는 사용자 탈출구를 주되 「보류」는 거부한다(AC22 — 덜 잠그는 쪽이 아니라 «막힌 채로 두지 않는» 쪽이 안전한 방향). **v1.0.0 에서 셋 다 닫혔다** — (a) 재상승 후속의 「보류」 거부를 제안하는 선택지와 받아주는 선택지가 한 함수에서 나오게(전방 포인터가 원본의 차단을 후속에 넘겨도 같은 가드가 걸린다), (b) 재상승 후속이 원본의 `kind`·`prev_hash` 를 물려받아 원복 의무가 강등되지 않게, (c) `escalated` 예약도 재상승 예약과 같은 누적·dedup·계수 규칙을 따르고 상태 축의 정본 표(`is_open`·`gate_summary`·`render_gate` 를 한 표에서 도출)로 «막는 집합 ⊆ 그리는 집합»을 구조로 보장. **Law 2 계열의 자기검증**: 「동작 무변경」주장을 케이스 스위트 하나로 재지 않는다 — 실제 `fin.json`+state 골든 동치 · 단언 수까지 대조하는 전수 스위트 · 변이 매트릭스 판정의 셀별 대조, 셋을 함께 요구한다(AC26). 각각이 못 보는 것이 다르다: 스위트는 어떤 단언도 안 읽는 출력 필드를 못 보고, 골든은 세 케이스 밖을 못 보며, 매트릭스는 `sed` 가 매치 0 건이어도 성공을 내 조용히 무장해제된다. **그리고 검증 장치 자신이 락이어야 한다** — 골든은 `test_docreview_golden.sh` 로 스위트에 배선했고(사람이 기억해서 돌리는 스크립트는 락이 아니다), 매트릭스는 셀마다 diff 규모를 선언시켜 앵커 소실을 계측기 고장으로 잡는다.
 - **Law 2 (Writer/Reviewer 분리) — design doc 자리 첫 호출자 배선 (v1.0.0)** — `reviewing-spec` 이 옛 verdict 파이프라인(`spec-reviewer` agent, `tools:` 에 `WebSearch`/`WebFetch` 포함)을 버리고 `shared/docreview/` 엔진의 껍데기가 됐다. 리뷰어는 `doc-critic`→`doc-recritic`(둘 다 `agents/*.md` 에 `# copy-of:` 마커로 바이트 동일 배포, `tools: Read, Grep, Glob` 뿐 — 심볼릭 링크 agent 는 dispatch 되지 않는다는 실측 때문에 사본이다) 이고, verdict(`approved`/`needs_revise`)는 사라져 승인은 게이트 판정(`approval_gate_open`)의 집계로 도출된다. **능력이 줄었다는 사실을 공시한다** — design-doc 리뷰의 외부 prior-art 대조가 Claude·codex 양쪽에서 동시에 0 이 됐다(`design-doc.md` 프로필 `web: false`). 이것은 설계가 의도한 결정(§5.3·OQ-C)이고 이 전환이 뒤집지 않는다. **집행 없는 kill switch 는 이름조차 남기지 않는다(P21)** — 옛 handoff 우회 스위치(이름은 `CHANGELOG.md` `[1.0.0]` Removed 참고)의 유일한 집행 지점이 삭제된 `spec-reviewer.md` 뿐이었다는 것을 리포 전체(`shared/`·엔진·모든 프로필·모든 skill) 대상 `git grep` 으로 확인한 뒤 이 README 의 문서화를 지웠고, **같은 커밋에서** `test_handoff_kill_switch.sh` 의 부재-판정 코퍼스를 이 README 까지 넓혀 그 이름이 design 자리 표면에 재등장하면 RED 가 나게 했다(그 락 자신은 `SWITCH=` 변수에 그 이름을 여전히 리터럴로 쥔다 — 부재를 재려면 무엇의 부재인지 알아야 하기 때문이다. 반대로 **이 README 는**, 자신이 그 락의 코퍼스에 들어간 이상 이 문단에서도 그 이름을 리터럴로 쓰지 않는다) — 집행이 없다는 관찰과 그것을 지키는 회귀 락이 갈라지면 다음 사람이 손으로 다시 넓혀야 하고, 그 창에서는 「이름은 있는데 아무도 안 지킨다」가 다시 조용해진다.
-- **Law 3 (Compounding) — 깊이 측정 원장 (v0.57.0)** — 인터뷰마다 «답→다음 행동» 짝을 세 층(스크립트·`depth-auditor`·사람 ≤4 라벨)으로 재어 `docs/superpowers/interview/depth/<basename>.json` 에 남긴다. `depth_record.py` 가 `depth/*.json` 을 읽어 판정자 투입 조건(적격 5건·not_dug 30%·일치 70%)을 audit 에 한 줄로 낸다 — 게이트 아님(spec C5).
-
 ### Principles 흡수
 
 - **P2 (Ambiguity Gate)** — 구조적 (필수 11 섹션) default, numerical 거부 (philosophy P2).
@@ -133,7 +131,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - **AP3 (Self-approval)** — writer/reviewer 물리적 분리 (frontmatter scoping).
 - **AP2 (Polite stop)** — **정본은 `references/proceed-gate.md`** (v0.31.0). 두 proceed 게이트(reviewing-spec 의 `## 게이트` 절 · conducting-interview 종료 Step B)가 그 파일의 골격·두 가드·예외 경로를 공유하며, 각 skill 은 자기 어휘(옵션 라벨 · verbatim `/compact` 템플릿 · 고유 스텝)만 인라인으로 갖는다. 아래는 그 계약의 **요약**이지 별개 저술이 아니다 — 계약이 바뀌면 정본을 고치고 여기를 따라 고친다. approve tail = proceed 게이트(AskUserQuestion) → 원장 기록(`mark-reviewed`) + 미커밋 advisory(`check-born`). 게이트를 skip한 narrate-only 종료 금지. cross-compact 조기 진행(옵션 ① 노출 후 같은 턴 writing-plans 직진)도 게이트 P17 우회의 대칭 실패로 금지 (v0.11.0 AC19). interview→brainstorming Step B의 **4옵션**: ①/compact 후 brainstorming / ②바로 brainstorming / ③확정 목록 수정 / ④brief만 종료 (③ 추가는 v0.23.0) — 전용 handoff 스크립트를 호출하지 않음(brief는 막 검증됨, 하류/SessionEnd가 cleanup) (v0.13.0).
 - **AP5 (Trivia ceremony)** — `/interview` first-step trivia escape (5 패턴).
-- **AP9 (Subagent spray)** — `plugins/spec-distill/agents/` 11종(doc-critic·doc-recritic·steelman-builder·coverage-mapper·blind-spot-prober·brief-critic·brief-direction-reviewer·brief-readback·seed-critic·seed-readback·depth-auditor). 상한이 선언된 것: coverage-mapper dispatch 상한 2 + blind-spot-prober fan-out 1(interview) · brief-critic 재dispatch 상한 2(reviewing-brief).
+- **AP9 (Subagent spray)** — `plugins/spec-distill/agents/` 10종(doc-critic·doc-recritic·steelman-builder·coverage-mapper·blind-spot-prober·brief-critic·brief-direction-reviewer·brief-readback·seed-critic·seed-readback). 상한이 선언된 것: coverage-mapper dispatch 상한 2 + blind-spot-prober fan-out 1(interview) · brief-critic 재dispatch 상한 2(reviewing-brief).
 - **P11 (Cross-Model Adversarial)** — sub-agent reviewer adversarial review + **`steelman-builder` 의심 게이트(v0.12.0, v0.54.0 재설계)**: 의심 방향에 대해 builder 가 원안·대안 **양쪽**의 최강 케이스를 사용자 goal 기준으로 쓰고 근거가 핵심 전제에 닿는지 판정한다. 재검토를 여는 열쇠는 전제 충돌 하나 — 그 외 근거는 원안 강화·경계 다듬기에 쓴다. 판정 어휘 유지/보완/전환/보류(kept/refined/switched/deferred), 선택은 사용자.
 - **AP16 (Unbounded autonomy)** — 재리뷰 상한 2 (정본은 `shared/docreview/references/reviewing-document.md` 한 줄이고, 라운드 4 이상은 승인 게이트에서 사용자가 연다), rhythm guard 3, **자동 dispatch 재시도 상한 3 (v0.25.0, 세션당·문서당)**, kill switch.
 - **P14 (State Survives Compaction)** — state.local.md frontmatter 보존.
@@ -142,7 +140,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 ## External source absorption
 
-- **devbrother2024 deep-interview** — 초기 영향은 4-block Korean format (현재 이해 / 막힌 결정 / 추천 답안 / 질문). v0.57.0에서 **라운드 규약의** 4-block 이 «직전 답에서» 블록 + 질문 둘로 대체됐다. 형식 자체가 리포에서 사라진 것은 아니다 — **R3 steelman 게이트**는 제시 형식으로 4-block 을 그대로 쓴다(`skills/conducting-interview/references/steelman.md` Step 3). 같은 어휘를 쓰는 다른 물건이라 한쪽의 제거가 다른 쪽의 제거가 아니고, `tests/test_conducting_interview_stage.sh` 의 G7 부재 락이 그 파일 하나만 예외로 두되 그 예외가 vacuous 하지 않은지를 양성 대조로 함께 잰다.
+- **devbrother2024 deep-interview** — 초기 영향은 4-block Korean format (현재 이해 / 막힌 결정 / 추천 답안 / 질문). 라운드 규약은 v0.57.0 에서 4-block 을 다른 블록 구성으로 바꿨다가, 지금은 그 후손인 «지금 이해 / 다음 결정 / 질문 하나»로 돌아왔다. 4-block 형식 자체도 리포에 남아 있다 — **R3 steelman 게이트**는 제시 형식으로 4-block 을 그대로 쓴다(`skills/conducting-interview/references/steelman.md` Step 3). 같은 어휘를 쓰는 다른 물건이라 한쪽의 제거가 다른 쪽의 제거가 아니고, `tests/test_conducting_interview_stage.sh` 의 G7 부재 락이 그 파일 하나만 예외로 두되 그 예외가 vacuous 하지 않은지를 양성 대조로 함께 잰다.
 - **gstack** — Structural baseline (11 필수 섹션) + concrete-next-action refusal pattern + ETHOS ("AI recommends, users decide").
 - **OMC** — env-var configurable threshold (steelman antithesis는 plan-reviewer PR로 defer, v0.2.0+ 회귀 도입).
 - **superpowers** — 산출물 위치(`docs/superpowers/specs/`) + plan-document-reviewer 출력 형식 (Status / Issues / Recommendations) + brainstorming drop-in 대체.

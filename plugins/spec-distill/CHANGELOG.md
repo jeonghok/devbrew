@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.0.0] — 2026-09-11
+
+major인 이유: **dispatch 가능한 agent 하나(`spec-distill:depth-auditor`)가 사라지고, 인터뷰의 라운드 형식과 audit §2 형식이 바뀐다.** 인터뷰 종료 직전의 사후 깊이 측정(Step A.7) 전체와, 그 측정이 읽던 라운드 형식(«직전 답에서» 블록 + 질문 둘)을 제거했다. 라운드는 «지금 이해 / 다음 결정 / 질문 하나»로 돈다. 사용자 결정(2026-09-10)의 이유는 셋이다 — 쓰이지 않는 무게(0.57.0 도입 뒤 측정 기록 0건 · 사람 e2e 미실행), 인터뷰가 번거로움, 방향이 틀렸다. 설계: `docs/superpowers/specs/2026-09-10-remove-depth-audit-design.md`.
+
+### Removed
+
+- **사후 깊이 측정 층 전체** — `agents/depth-auditor.md` · `scripts/depth_pairs.py` · `scripts/depth_record.py`, 그 테스트 셋(`test_depth_pairs.py` · `test_depth_record.py` · `test_depth_auditor_frontmatter.sh`)과 fixture 11개(`tests/fixtures/depth-state-*.md`), 측정 원장 디렉토리 `docs/superpowers/interview/depth/`. 함께 사라진 것: `finishing.md` Step A.7 절, 종료 시 사람 라벨 질문(≤4개), proceed 게이트 질문의 «깊이:» 슬롯, audit §2 의 깊이 네 줄.
+- **판정자 투입 조건**(누적 5건 · not_dug 30% · 일치 70%) — 닫힘 거부권 에이전트를 언제 들일지 알려 주던 유일한 신호였다(설계 OQ3 로 이월).
+- **라운드의 «직전 답에서» 블록과 질문 둘** — 네 줄(함의 · 상충 · 확인한 사실 · 위험) 블록, Q1 되비추기 확인 · Q2 새 결정, Q1 수정 시 재되비추기, Q2 독립성 규칙, 인자 없는 경로의 R1 블록 면제, «되묻기로 바뀌는 조건» 절, `steelman.md` 의 «상충 줄에도 한 줄로 싣는다» 문단.
+- **`provisional_on`** — `user_statements` 스키마 필드와 그 규칙. 진행 중 세션에 남은 필드는 읽는 자가 없어 무해하므로 마이그레이션을 두지 않는다.
+
+### Changed
+
+- **라운드 규약** — `## R<n>` 한 라운드 = 지금 이해 / 다음 결정 / 질문 / 답. AskUserQuestion 1회에 질문 1개, 첫 선택지가 추천(`(권장)`). 약한 답(보류 · 한 단어 · 이유 없는 추천 수락 · 근거 없는 단정)에는 이유 · 사례 · 실패 조건 중 하나를 되묻고, 같은 주제의 연속 되묻기는 최대 2회다(그 뒤엔 기록하고 넘어간다 · 차원을 자동으로 닫지 않는다). 한 라운드에 겹치면 되묻기 → 외부 근거 처분 → 새 결정 순. `references/steelman.md` 가 묻는 질문은 그 파일의 규약을 따른다.
+- **옮겨 간 규칙 다섯** — 닫힘 근거(«그 차원에 관한 질문에 사용자가 답한 S» — blind-spot-prober 절의 전이 문장도 처분 S 뒤로 맞췄다) · landscape 닫힘 발화(«외부 근거 처분 S», SKILL · `finishing.md` 양쪽) · 재개방 표시 자리(«상충» 줄 → 그 라운드의 «지금 이해». `reopen_log` · audit §1 접미는 그대로) · seed «다시 검증할 것» 문단의 소비 자리(R1 «지금 이해»·질문의 재료 + coverage-mapper 첫 dispatch 입력 — `seed-input.md` · `framing-requests` · seed 템플릿) · C43 경로 표시 자리(«지금 이해»·«질문»).
+- **audit 템플릿 §2** — 데이터 줄 하나(질문 라운드 · agent dispatch · coverage-mapper `<k>` · codex 실호출). 게이트가 보는 `coverage-mapper <k>` 는 그대로다.
+- **proceed 게이트 질문 텍스트** — «깊이:» 슬롯 제거. `check_brief` advisories 슬롯은 유지.
+- **`shared/tests/test_adjudication_wiring.sh` 의 `COMP_BASELINE` 58 → 52** — `depth_record.py` 가 더했던 컴프리헨션이 파일과 함께 사라졌다(`ast` 실측).
+- **락** — `tests/test_stale_terms.sh` V13(식별자 축은 README 포함 · 개념 별칭 축은 README 제외 · 새 라운드 규약의 양성 짝 둘) · V10 부재 목록 20 → 37 · `test_conducting_interview_stage.sh` 의 라운드 규약 · 닫힘 · 재개방 · landscape 발화 · blind-spot 전이 · seed 문단 · C43 경로 표시 락을 재조준 · 신설 · `test_request_framing_command.sh` 의 seed 문단 소비 락 · `test_finishing_block_scope.py` 의 양성 대조를 남는 펜스의 게이트 호출로 · `test_brief_agents.sh` 격리 목록 5 → 4.
+
+### Deprecated
+
+- `spec-distill:depth-auditor` agent · 두 측정 스크립트 · 옛 라운드 형식 · audit §2 깊이 네 줄은 **fallback 없이 즉시 제거**됐다 — CLAUDE.md 메타데이터의 one-minor deprecation window 규정과 충돌한다. 이 충돌을 다음 조건 아래 수용한다: 이 플러그인의 제3자 설치가 현재 없다(사용자 확인, 2026-09-10). **제3자 설치가 생기면 이 근거가 사라지므로, 그 뒤의 제거에는 창을 둔다.**
+
+### Verification
+
+- **회귀 0** — spec-distill 셸 스위트 · `python3 -m unittest discover -s plugins/spec-distill/tests` · `shared/tests` 를 (파일, 실패 식별자) 멀티셋으로 기록해 «완료 − 기준선 = ∅» 를 확인했다. 최종 기준선은 머지 직전에 합친 `origin/main` 끝 커밋 `bf626555`(1.2.0)이고, 기준선에 이미 있던 실패(`plugins/spec-distill/tests/test_no_write_matcher_hooks_repo.sh` 1건 · unittest `test_hook_output_schema.TestCrossResolverAdvisory.test_python_and_bash_resolvers_agree`)는 그대로다. task 커밋은 각각 그때의 착수 전 기준선(`efb8aa16` 을 합친 `f4e5de79`) 대비로 같은 판정을 거쳤다.
+- **완료 증거** — 셸 파일마다 요약 줄(`Total: …`) 또는 기준선과 같은 마지막 출력 줄을 요구했다. 단언 없이 죽은 파일이 `(파일, rc=<N>)` 로 잡히는 것과, 기존 실패 하나를 찍고 중단된 실행이 멀티셋 비교를 통과하지 못하는 것을 합성 양성 대조로 확인했다.
+- **변이** — 새로 쓰거나 고친 락을 통째 삭제 · 문구 반전 · 값 변경 · 위치 변경 · 문장 추가로 흔들어 30건을 돌렸다. 29건은 해당 단언 하나만 RED 였고, 1건(README 별칭 면제)은 의도대로 GREEN 이었다. 변이하지 않은 새 락: 라운드 규약 절의 소제목 넷 · `## R<n>` 헤딩 · description 문구 · 되묻기 세 축 · SKILL 줄 수 상한, coverage-mapper 절의 인자 없는 경로 첫 dispatch 시점, V13 의 두 번째 양성 짝, 절 추출 양성 대조.
+- **사람 e2e** — 결과 미보고: 체크리스트 5항목을 안내했으나 사용자가 결과 보고 없이 릴리스 진행을 지시했다(2026-09-11). 항목별 통과/실패 기록 없음.
+
 ## [1.2.0] — 2026-09-11
 
 minor 인 이유: `/interview` 가 새 입력 모양 `@<seed 경로>` 를 받는다 — 새 surface 다. 옛 입력(rough request · seed 전문 붙여넣기)은 그대로 동작한다.
