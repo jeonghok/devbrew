@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.2.0] — 2026-09-10
+## [1.2.0] — 2026-09-11
 
 minor 인 이유: `/interview` 가 새 입력 모양 `@<seed 경로>` 를 받는다 — 새 surface 다. 옛 입력(rough request · seed 전문 붙여넣기)은 그대로 동작한다.
 
