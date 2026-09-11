@@ -514,7 +514,7 @@ G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **�
 이 skill 의 degrade 채널은 이름이 다섯이다:
 
 - 엔진의 셋 — `fin.json` 의 `advisory[]`(codex 부재 · critic 층 2 부재 · recritic 부재 · 처분 회계의
-  degrade 사유) · `fin.json` 의 `blocks`(막는 것만: critic 사망 · 항목 소실 · 셀 수 없음) ·
+  degrade 사유) · `fin.json` 의 `blocks`(참/거짓 하나 — critic 사망 · 항목 소실 · 셀 수 없음일 때만 참, 사유는 `advisory[]`) ·
   `docreview_state.py gate --render` 의 **첫 줄**(그 라운드의 degrade 한 줄).
 - 이 자리의 둘 — `brief_review_state.py get "$STATE"` 의 `brief_review_degradations`(진입 게이트 강등 ·
   번들 위생 미달 · 냉독 실패 · BRIEF_REVIEW skip · 원장 기록 불가처럼 엔진 밖의 사건) · 그 기록이

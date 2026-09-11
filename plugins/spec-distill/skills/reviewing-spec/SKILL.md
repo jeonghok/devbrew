@@ -241,8 +241,10 @@ python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" ma
 
 이 한 호출이 **in-flight 표시도 함께 지운다** — 그래서 정상 경로에서는 아래 두 종료 자리의
 `clear-inflight` 를 부를 일이 없다. **예외** — 아무도 리뷰하지 않은 라운드에서는 **호출하지 않는다.**
-그런 라운드는 둘이다. ① 승인 게이트를 「미검증」으로 연 라운드 — critic 사망이 두 번이면 5단계가
-6~7단계를 건너뛰므로 이번 라운드의 `fin.json` 이 없다. ② 이번 라운드 `fin.json` 의 `blocks` 에 critic 사망이 실린 라운드.
+그런 라운드는 둘이다. 첫째, 승인 게이트를 「미검증」으로 연 라운드 — critic 사망이 두 번이면 5단계가
+6~7단계를 건너뛰므로 이번 라운드의 `fin.json` 이 없다. 둘째, 이번 라운드 `fin.json` 의
+`blocks` 가 참이고 `advisory[]` 에 critic 사망(`입력 실패(주): doc-critic`)이 실린 라운드 — `blocks` 는
+참/거짓 하나이고, 무엇이 막는지는 `advisory[]` 가 말한다.
 직전 라운드의 `fin.json` 이 남아 있어도 그것을 이번 라운드의 판정으로 읽지 않는다.
 
 `$harness_sid` 가 빈 값이면 상태 파일을 특정할 수 없으므로 호출하지 않고, 조용히 넘어가는 대신
@@ -337,7 +339,8 @@ Read ${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/proceed-gate.md
 
 - `fin.json` 의 `advisory[]` — codex 부재 · critic 층 2 부재 · recritic 부재 · 처분 회계의 degrade
   사유가 전부 이 한 채널로 온다.
-- `fin.json` 의 `blocks` — **막는 것**만 여기 온다: critic 사망(주 판정자) · 항목 소실 · 셀 수 없음.
+- `fin.json` 의 `blocks` — 막는지를 참/거짓 하나로 말한다. critic 사망(주 판정자) · 항목 소실 · 셀 수 없음일
+  때만 참이고, 무엇이 막는지는 위 `advisory[]` 에 함께 실린다.
 - `docreview_state.py gate --render` 의 **첫 줄** — 그 라운드의 degrade 한 줄이다. codex 가 없었으면
   그 사실과 사유가, 아니면 `advisory[]` 요약이, 둘 다 비면 `degrade 없음` 이 온다. 라운드 번호와
   재리뷰 카운트는 **둘째 줄**이다(상한 도달·stagnation 도 그 줄에 붙는다).
