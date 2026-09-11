@@ -234,9 +234,12 @@ if grep -qE 'brief-critic|brief-direction-reviewer|재dispatch 상한' "$LIVE_TM
 else
   ok "brief 자리/부재: 지워진 brief agent 이름 · 은퇴한 「재dispatch 상한」이 살아 있는 줄에 없다"
 fi
-brief_row="$(grep -F 'reviewing-brief' <<<"$pi_block" | grep -F 'doc-critic-web' | grep -F 'doc-recritic' || true)"
+# 줄머리를 `- **Law 2` 로 묶는다 — 세 이름을 함께 대는 줄이 AP9 목록 줄(`doc-critic-web·doc-recritic` 과
+# `reviewing-brief`)에도 있어서, 머리 없이 재면 brief 자리 불릿을 통째로 지워도 AP9 줄이 짝을 만족시킨다
+# (변이 M3 실측 — 헤더 만족과 같은 병).
+brief_row="$(grep -E '^- \*\*Law 2' <<<"$pi_block" | grep -F 'reviewing-brief' | grep -F 'doc-critic-web' | grep -F 'doc-recritic' || true)"
 [ -n "$brief_row" ] \
-  && ok "brief 자리/양의 짝: Principles 의 한 줄이 reviewing-brief · doc-critic-web · doc-recritic 를 함께 댄다" \
-  || no "brief 자리/양의 짝: Principles 에 brief 자리의 지금 리뷰어(doc-critic-web → doc-recritic)를 대는 줄이 없다 — 부재 단언이 불릿 삭제만으로 만족된다"
+  && ok "brief 자리/양의 짝: Principles 의 Law 2 불릿 한 줄이 reviewing-brief · doc-critic-web · doc-recritic 를 함께 댄다" \
+  || no "brief 자리/양의 짝: Principles 에 brief 자리의 지금 리뷰어(doc-critic-web → doc-recritic)를 대는 Law 2 불릿이 없다 — 부재 단언이 불릿 삭제만으로 만족된다"
 rm -f "$LIVE_TMP"
 finish
