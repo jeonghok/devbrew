@@ -23,8 +23,43 @@ SHAPES = (
     "web-yes", "dup-web", "dup-layer1", "ground-truth-decoy",
     "gt-dup", "gt-plain", "gt-flow-list", "gt-block-list", "gt-dup-mixed",
     "gt-empty", "gt-bare", "gt-null", "gt-absent", "body-empty",
-    "qcont-gt", "qcont-all", "flow-web", "gt-spacecolon", "gt-u2028",
+    "qcont-gt", "qcont-all", "flow-web", "gt-spacecolon", "gt-u2028", "dup-web-live", "web-absent",
+    "rr-qkey", "rr-hashkey", "rr-qmark", "rr-nestseq", "rr-blockseq", "rr-phantom", "rr-phantom1",
+    "rr-qkey-gt", "rr-control",
+    "g-qkey", "g-hashkey", "g-qmark", "g-comment", "g-tailcomment", "g-sq", "g-esc", "g-nestflow",
+    "g-plainquote", "g-indent4", "g-blockscalar", "g-anchor", "g-unclosed", "g-tab",
 )
+# Task 3c 재리뷰 1 의 I1(b) 재현(`t3c-rr1/mkv.py` 그대로) — `defer_target: {kind: none}` 을 frontmatter
+# 끝의 block 매핑으로 옮기고, 옛 스캐너가 추적하지 못한 자리에 컬럼-0 디코이 줄을 숨긴다. 게이트는
+# 전부 받는다(defer_target 은 여분 키를 검사하지 않는다).
+RR_BLOCKS = {
+    "rr-qkey": '\ndefer_target:\n  kind: none\n  "k": "abc\nweb: true #"',
+    "rr-hashkey": '\ndefer_target:\n  kind: none\n  a#b: "abc\nweb: true #"',
+    "rr-qmark": '\ndefer_target:\n  kind: none\n  ? "abc\nweb: true #"\n  : v',
+    "rr-nestseq": '\ndefer_target:\n  kind: none\n  x:\n  - - "abc\nweb: true #"',
+    "rr-blockseq": '\ndefer_target:\n  kind: none\n  x:\n  - k: |\n        content\n    z: "abc\nweb: true #"',
+    "rr-phantom": '\ndefer_target:\n  kind: none\n  x: [a"b]\n  y: "a]\nweb: true #"',
+    "rr-phantom1": "\ndefer_target:\n  kind: none\n  x: [it's]\n  y: 'a]\nweb: true #'",
+    "rr-qkey-gt": '\ndefer_target:\n  kind: none\n  "k": "abc\nground_truth: DECOY_GT #"',
+    "rr-control": '\ndefer_target:\n  kind: none\n  k: "abc\nweb: true #"',
+}
+# 러너 줄 문법(R42)의 규칙을 **하나만** 어기는 모양 — 나머지 줄은 전부 문법 안이다. 재리뷰의 일곱
+# 모양은 규칙 여럿을 한꺼번에 어겨서 규칙 하나를 풀어도 여전히 멈추므로, 규칙별 이빨은 이 모양들이
+# 잰다(`g-comment` · `g-tailcomment` 는 아래 분기).
+G_BLOCKS = {
+    "g-qkey": '\ndefer_target:\n  kind: none\n  "k": abc',
+    "g-hashkey": '\ndefer_target:\n  kind: none\n  a#b: abc',
+    "g-qmark": '\ndefer_target:\n  kind: none\n  ? k\n  : v',
+    "g-sq": "\ndefer_target:\n  kind: none\n  k: 'abc'",
+    "g-esc": '\ndefer_target:\n  kind: none\n  k: "a\\"b"',
+    "g-nestflow": '\ndefer_target:\n  kind: none\n  k: [a, [b]]',
+    "g-plainquote": '\ndefer_target:\n  kind: none\n  k: [a"b]',
+    "g-indent4": '\ndefer_target:\n  kind: none\n  k: abc\n    def',
+    "g-blockscalar": '\ndefer_target:\n  kind: none\n  k: |',
+    "g-anchor": '\ndefer_target:\n  kind: none\n  k: &a abc',
+    "g-unclosed": '\ndefer_target:\n  kind: none\n  k: "abc',
+    "g-tab": '\ndefer_target:\n  kind: none\n  k: "a\tb"',
+}
 # `gt-value=<값>` — ground_truth 줄을 `ground_truth:<값>` 으로 바꾼다(`\n` 은 줄바꿈).
 GT_LINE = r"^ground_truth:.*$"
 
@@ -121,9 +156,10 @@ def main():
         text = re.sub(GT_LINE, 'ground_truth: [marker_gt_first, "marker_gt_second"]',
                       text, count=1, flags=re.MULTILINE)
     elif shape == "gt-block-list":
+        # 주석 없이 — 러너의 줄 문법은 주석 줄·꼬리 주석을 받지 않는다(R42). 이 모양이 재는 것은
+        # 「목록이면 게이트와 같은 판정(ground_truth_empty)」이다.
         text = re.sub(GT_LINE,
-                      "ground_truth:\n  - marker_gt_first\n  # a comment between items\n"
-                      "  - marker_gt_second  # trailing",
+                      "ground_truth:\n  - marker_gt_first\n  - marker_gt_second",
                       text, count=1, flags=re.MULTILINE)
     elif shape == "gt-dup-mixed":
         # 모양이 다른 중복 — flow 목록이 먼저, 따옴표 스칼라가 frontmatter 끝(나중)에.
@@ -169,6 +205,19 @@ def main():
         # 리뷰 M3 재현 — PyYAML 은 U+2028 을 줄바꿈으로 본다. 진짜 ground_truth 를 그 뒤에 둔다.
         text = _sub1(GT_LINE + r"\n", "", text)
         text = _sub1(r"^detectors: 1$", 'detectors: 1 # c ground_truth: "REAL_BEHIND_U2028"', text)
+    elif shape == "web-absent":
+        text = _sub1(r"^web: \w+\n", "", text)
+    elif shape == "dup-web-live":
+        # 재리뷰 1 의 러너 단독 중복 키(`t3c-rr1/safe.sh`) — false 먼저, true 나중. 게이트는
+        # duplicate_key 로 거절하고, 옛 러너는 last-wins 로 codex 웹을 켰다.
+        text = _sub1(r"^web: false$", "web: false\nweb: true", text)
+    elif shape in RR_BLOCKS or shape in G_BLOCKS:
+        text = _sub1(r"^defer_target: \{kind: none\}\n", "", text)
+        text = _move_to_end(text, RR_BLOCKS.get(shape) or G_BLOCKS[shape])
+    elif shape == "g-comment":
+        text = _sub1(r"^detectors: 1$", "detectors: 1\n# a comment line", text)
+    elif shape == "g-tailcomment":
+        text = _sub1(r"^web: false$", "web: false # note", text)
     elif shape.startswith("gt-value="):
         text = _sub1(GT_LINE, "ground_truth:" + shape[len("gt-value="):].replace("\\n", "\n"), text)
 

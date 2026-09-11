@@ -94,12 +94,14 @@ STDERR_FILE="$SCRATCH/codex.stderr"
 # 갈래로 읽는 자리가 하나이므로 웹 인자를 만드는 지점도 하나로 유지하기 쉽다(P11).
 # 빌더의 rc 와 그것이 남기는 fail-closed 사유(이 러너의 사유 목록은 이 주석과 앞쪽의
 # `emit_fallback` 호출들이 전부다):
-#   0 성공 · 1 `prompt_build_failed`(층 1·처분 도출 실패) · 3 `ground_truth_empty`(없음·빔·
+#   0 성공 · 1 `prompt_build_failed`(층 1·처분 목록이 빔) · 3 `ground_truth_empty`(빈 문자열·
 #   null·목록 — 게이트와 같은 이름) · 4 `profile_body_empty`(본문이 공백뿐 — 게이트와 같은 이름) ·
-#   5 `profile_parse_ambiguous`(이 stdlib 파서가 게이트(PyYAML)와 같은 값을 읽는다고 보장할 수
-#   없는 모양 — 추측해서 읽지 않고 멈춘다: 따옴표·flow 스칼라가 열린 채 컬럼 0 에 온 줄 · `\n`
-#   밖의 줄바꿈 · 콜론 앞 공백 · 앵커·태그·별칭 · escape 있는 큰따옴표 · 문자열이 아닌 평문 ·
-#   매핑 모양 · 문단 있는 접힘 스칼라 · 못 읽는 목록 모양 · bool 이 아닌 web).
+#   5 `profile_parse_ambiguous`(frontmatter 가 허용 목록 줄 문법 밖 — 문법 전부는 빌더의
+#   `_parse_frontmatter` 주석이다 — 이거나, 같은 매핑의 중복 키, 또는 읽는 필드의 타입이 다름:
+#   ground_truth 가 문자열이 아님 · web 이 bool 이 아님 · 층·처분이 문자열 목록이 아님) ·
+#   6 `profile_field_missing`(읽는 필드 — layer_rubric.layer1·layer2 · allowed_dispositions ·
+#   ground_truth · web — 가 없음, frontmatter 부재 포함) · 7 `preamble_missing`(P21 preamble 파일이
+#   없거나 비어 있음 — 주입 경계 없이 codex 를 부르지 않는다).
 # `DOCREVIEW_CODEX_PARSED_OUT=<경로>` 가 있으면 빌더가 읽은 frontmatter 값(`_read` 경로 → 값)을
 # 그 경로에 JSON 으로 남긴다 — 게이트와의 등식 대조(test_docreview_codex.sh)가 쓰는 관측 채널.
 BUILD_RC=0
@@ -125,8 +127,12 @@ body = t[m.end():] if m else ""
 
 
 class _Ambiguous(Exception):
-    """이 파서가 게이트(`load_profile()`, PyYAML)와 같은 값을 읽는다고 보장할 수 없는 모양.
-    추측해서 읽지 않는다 — rc 5 → `profile_parse_ambiguous`."""
+    """frontmatter 가 이 러너의 허용 목록 줄 문법(`_parse_frontmatter`) 밖이거나, 읽는 필드의 타입이
+    다르다 — rc 5 → `profile_parse_ambiguous`. 값을 추측하지 않고 멈춘다."""
+
+
+class _Missing(Exception):
+    """이 러너가 읽는 필드가 없다 — rc 6 → `profile_field_missing`(게이트도 거절한다)."""
 
 
 def _ambiguous(why):
@@ -143,367 +149,237 @@ def _read(path, value):
     return value
 
 
-# PyYAML(YAML 1.1) 암묵 해석기 중 문자열이 아닌 것 — PyYAML resolver.py 의 정규식 그대로다(re.X).
-# 평문 스칼라가 여기 맞으면 PyYAML 은 문자열이 아닌 값(bool·float·int·merge·null·timestamp·value)
-# 으로 읽는다.
-_NONSTR_PLAIN = [re.compile(p, re.X) for p in (
-    r"""^(?:yes|Yes|YES|no|No|NO|true|True|TRUE|false|False|FALSE|on|On|ON|off|Off|OFF)$""",
-    r"""^(?:[-+]?(?:[0-9][0-9_]*)\.[0-9_]*(?:[eE][-+][0-9]+)?
-         |\.[0-9][0-9_]*(?:[eE][-+][0-9]+)?
-         |[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\.[0-9_]*
-         |[-+]?\.(?:inf|Inf|INF)
-         |\.(?:nan|NaN|NAN))$""",
-    r"""^(?:[-+]?0b[0-1_]+
-         |[-+]?0[0-7_]+
-         |[-+]?(?:0|[1-9][0-9_]*)
-         |[-+]?0x[0-9a-fA-F_]+
-         |[-+]?[1-9][0-9_]*(?::[0-5]?[0-9])+)$""",
-    r"""^(?:<<)$""",
-    r"""^(?:~|null|Null|NULL|)$""",
-    r"""^(?:[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]
-         |[0-9][0-9][0-9][0-9]-[0-9][0-9]?-[0-9][0-9]?
-          (?:[Tt]|[ \t]+)[0-9][0-9]?
-          :[0-9][0-9]:[0-9][0-9](?:\.[0-9]*)?
-          (?:[ \t]*(?:Z|[-+][0-9][0-9]?(?::[0-9][0-9])?))?)$""",
-    r"""^(?:=)$""",
-)]
-_NULL_PLAIN = re.compile(r"^(?:~|null|Null|NULL)$")
-_YAML_TRUE = ("yes", "Yes", "YES", "true", "True", "TRUE", "on", "On", "ON")
-_YAML_FALSE = ("no", "No", "NO", "false", "False", "FALSE", "off", "Off", "OFF")
+# PyYAML 없이 stdlib 만으로 — 이 러너는 `HOME` 이 격리되는 하니스(예: codex 인증 격리)에서
+# site-packages 의 PyYAML 에 닿지 못해 죽었다(실측 — T6b 가 PyYAML 을 걷어낸 이유). 그래서 게이트
+# (`docreview_state.py:load_profile()`, PyYAML)의 파서를 다시 쓰지 않는다. 대신 아래 **허용 목록
+# 줄 문법**만 받는다(Task 3c R42 — 「모호한 모양 탐지」는 열거라 라운드마다 새 모양이 샜다).
+#
+# 평문 토큰(`[A-Za-z0-9_]+`)의 타입은 PyYAML resolver(YAML 1.1)의 규칙 그대로다 — 이 문자 집합에서
+# 문자열이 아닌 것은 bool · int · null 뿐이다(float 는 `.`, 날짜는 `-` 가 있어야 한다).
+_BOOL_TRUE = ("yes", "Yes", "YES", "true", "True", "TRUE", "on", "On", "ON")
+_BOOL_FALSE = ("no", "No", "NO", "false", "False", "FALSE", "off", "Off", "OFF")
+_NULL = ("null", "Null", "NULL")
+_INT = re.compile(r"""^(?:[-+]?0b[0-1_]+
+                     |[-+]?0[0-7_]+
+                     |[-+]?(?:0|[1-9][0-9_]*)
+                     |[-+]?0x[0-9a-fA-F_]+
+                     |[-+]?[1-9][0-9_]*(?::[0-5]?[0-9])+)$""", re.X)
+_TOKEN = re.compile(r"[A-Za-z0-9_]+")
+_DQ = re.compile(r'"((?:[^"\\]|\\\\)*)"')
 
 
-def _indent(ln):
-    return len(ln) - len(ln.lstrip(" "))
+class _Other:
+    """문자열·bool·null 이 아닌 평문 토큰(PyYAML 은 int 로 읽는다). 읽는 필드에 오면 멈춘다."""
+
+    def __init__(self, raw):
+        self.raw = raw
+
+    def __repr__(self):
+        return "<non-string %s>" % self.raw
 
 
-def _scan_frontmatter(fm):
-    # 헤더 정규식·`_block_span`·`_flow_list` 는 「컬럼 0 의 `key:` 줄은 최상위 키다」에 기댄다. 그
-    # 전제는 block scalar 에서만 참이다 — PyYAML 은 **따옴표 스칼라의 연속줄과 flow 컬렉션**을
-    # 컬럼 0 에서도 받고, `\n` 밖의 줄바꿈(`\r` `\x85` U+2028 U+2029)도 줄 경계로 본다(리뷰 I1·M3
-    # 실측: flow 매핑 연속줄에 둔 컬럼-0 `web: true` 를 게이트는 defer_target 의 값으로, 러너는
-    # 최상위 web 으로 읽었다). 그 모양을 만나면 값을 추측하지 않고 멈춘다. 게이트가 받는 평범한
-    # 모양(한 줄 따옴표 · 한 줄 flow · 들여쓴 연속줄 · block scalar)은 통과한다.
-    for ch in ("\r", "\x85", "\u2028", "\u2029"):
-        if ch in fm:
-            _ambiguous("line break other than LF")
-    stack = []
-    block_indent = None
-    for line in fm.split("\n"):
-        if block_indent is not None:
-            if not line.strip() or _indent(line) > block_indent:
-                continue
-            block_indent = None
-        if stack:
-            if line.strip() and line[:1] != " ":
-                _ambiguous("column-0 line inside an open quoted or flow scalar")
-            pos = 0
-        else:
-            s = line.strip()
-            if not s or s.startswith("#"):
-                continue
-            if re.match(r"^[ \t]*[A-Za-z_][\w.-]*[ \t]+:(?:[ \t]|$)", line):
-                _ambiguous("whitespace before ':' in a key")
-            km = re.match(r"^[ \t]*(?:-[ \t]+)?(?:[^\s#'\"\[{][^:#]*:(?:[ \t]+|$))?", line)
-            pos = km.end()
-            pos += re.match(r"(?:[&!]\S*[ \t]+)*", line[pos:]).end()
-            if re.match(r"[|>][+-]?[0-9]?[ \t]*(?:#.*)?$", line[pos:]):
-                block_indent = _indent(line)
-                continue
-            if line[pos:pos + 1] not in ("\"", "'", "[", "{"):
-                continue
-        i, started = pos, bool(stack)
-        while i < len(line):
-            c = line[i]
-            if not stack:
-                if started:
-                    break
-                stack.append(c)
-                started = True
-            elif stack[-1] == "\"":
-                if c == "\\":
-                    i += 1
-                elif c == "\"":
-                    stack.pop()
-            elif stack[-1] == "'":
-                if c == "'":
-                    if line[i + 1:i + 2] == "'":
-                        i += 1
-                    else:
-                        stack.pop()
-            elif c in "\"'[{":
-                stack.append(c)
-            elif c in "]}":
-                stack.pop()
-            elif c == "#" and line[i - 1:i] in (" ", "\t"):
-                break
-            i += 1
-    if stack:
-        _ambiguous("unclosed quoted or flow scalar")
+def _key(k):
+    if k in _BOOL_TRUE or k in _BOOL_FALSE or k in _NULL:
+        _ambiguous("key that PyYAML does not read as a string: " + k)
+    return k
 
 
-def _quoted(s, where):
-    # 한 덩어리 따옴표 스칼라(+ 꼬리 주석). 큰따옴표의 escape(`\`)는 해석하지 않고 멈춘다(게이트는
-    # escape 를 푼다 — 같은 값을 보장할 수 없다). 작은따옴표의 `''` 는 YAML 규칙대로 `'` 다.
-    qm = re.match(r"^\"([^\"\\]*)\"(?:[ \t]+#.*)?$", s)
-    if qm:
-        return qm.group(1)
-    qm = re.match(r"^'((?:[^']|'')*)'(?:[ \t]+#.*)?$", s)
-    if qm:
-        return qm.group(1).replace("''", "'")
-    _ambiguous("unreadable quoted scalar: " + where)
-
-
-def _plain(val, where):
-    # 평문 스칼라 — PyYAML 이 **같은 문자열**로 읽는 모양만 받는다.
-    if (re.match(r"^(?:[-?:](?:[ \t]|$)|[,\[\]{}#&*!|>'\"%@`])", val)
-            or re.search(r":(?:[ \t]|$)", val)):
-        _ambiguous("unreadable plain scalar: " + where)
-    if any(p.match(val) for p in _NONSTR_PLAIN):
-        _ambiguous("non-string plain scalar: " + where)
-    return val
-
-
-def _item(raw, where):
-    raw = raw.strip()
-    if raw[:1] in ("\"", "'"):
-        return _quoted(raw, where)
-    return _plain(raw, where)
-
-
-def _web(text):
-    # YAML 1.1 진리값 — PyYAML SafeLoader 는 yes·true·on(과 반대말)을 소문자·첫 글자 대문자·
-    # 전부 대문자 세 표기로만 bool 로 읽는다(resolver.py). 키는 대소문자를 가린다(`Web:` 은 다른
-    # 키다). **`web:` 줄 자체의 마지막 occurrence 를 먼저 고르고 그 값을 해석한다** — 값 패턴으로
-    # last-match 하면 `web: true` 뒤 `web: false` 에서 앞의 true 를 고른다(리뷰 F-5 항목 5).
-    # 어휘 밖의 값(따옴표 · 태그 · 빈 값 · 다음 줄의 값)은 같은 값을 보장할 수 없어 멈춘다. 키가
-    # 없으면 꺼짐이다(웹이 켜지는 쪽으로 추측하지 않는다).
-    wm = _last_match(r"(?m)^web:([^\n]*)$", text)
-    if wm is None:
-        return False
-    val = re.sub(r"(?:^|[ \t]+)#.*$", "", wm.group(1)).strip()
-    if val in _YAML_TRUE:
+def _plain_token(tok):
+    if tok in _BOOL_TRUE:
         return True
-    if val in _YAML_FALSE:
+    if tok in _BOOL_FALSE:
         return False
-    _ambiguous("web is not a YAML boolean")
-
-# PyYAML 없이 stdlib 만으로 — 형제 프롬프트 빌더들(build_brief_codex_prompt.py ·
-# build_seed_codex_prompt.py 등)이 third-party 모듈을
-# 안 쓰는 것과 같은 이유다: 이 러너는 `HOME` 이 격리되는 하니스(예: codex 인증
-# 격리)에서 site-packages 의 PyYAML 에 닿지 못해 죽는다(실측 — 이 파일이 그
-# 하니스에서 유일하게 third-party import 를 했다). 필요한 것은 프로필
-# frontmatter 의 넷(`ground_truth` 문자열은 아래 `_ground_truth`)이고 나머지 셋은 한 줄짜리 flow-list/불리언이므로(design-doc·
-# brief·seed·generic 프로필 실측 — 참고: `docreview_state.py:load_profile()` 은
-# 이 넷을 훨씬 엄격하게 검증하지만 그건 정본 스키마 게이트이지 이 러너가
-# 다시 구현할 대상이 아니다) 새 YAML 파서를 발명하지 않고 그 모양만 좁게 뽑는다.
-def _last_match(pattern, text):
-    # PyYAML 은 매핑에 같은 키가 두 번 나오면 **나중 값이 이긴다**(실측:
-    # `yaml.safe_load("a: 1\na: 2")` == {"a": 2}). `re.search` 는 반대로 첫
-    # 매치를 낸다 — 중복 키가 있으면 이 러너와 `load_profile()` 이 서로 다른
-    # 값을 "정답"으로 읽는, fail-open 방향의 불일치가 된다(리뷰 F-5 항목
-    # 5·6 — `web:` 중복은 킬 스위치에 인접한 통제라 특히 위험하다). 마지막
-    # 매치를 취해 PyYAML 의 last-wins 규칙에 맞춘다.
-    last = None
-    for last in re.finditer(pattern, text):
-        pass
-    return last
+    if tok in _NULL:
+        return None
+    if _INT.match(tok):
+        return _Other(tok)
+    return tok
 
 
-def _block_span(top_key, text):
-    # **컬럼-0 키의 마지막 occurrence 뒤부터, 다음 컬럼-0 키(또는 frontmatter
-    # 끝) 앞까지**가 그 최상위 키의 몸통이다. 이 함수가 존재하는 이유(리뷰
-    # F-6): `ground_truth:` 같은 다른 최상위 키가 block scalar(`ground_truth:
-    # |`)일 수 있고, 그 스칼라 «본문»에 우연히 "layer1: [decoy]" 같은 줄이
-    # 있으면 `_last_match(r"^\s*layer1:...", 전체 frontmatter)` 가 그 decoy 를
-    # 진짜 헤더로 잘못 집는다 — YAML 구조 경계를 안 지키는 정규식의 대가다.
-    # 이걸 막는 성질은 이미 `web:` 에 있다(컬럼 0 고정, `\s*` 없음) — block
-    # scalar 의 내용은 **부모보다 반드시 더 들여써야** 하므로(YAML 문법)
-    # 컬럼 0에 올 수 없다. `layer_rubric:` 자신도 최상위 키라 같은 성질을
-    # 쓸 수 있다: 그 블록의 시작·끝을 컬럼-0 경계로 먼저 자르면, `layer1`/
-    # `layer2` 검색을 그 안으로만 좁혀 다른 키의 block scalar 내용이 애초에
-    # 검색 범위에 들어오지 않는다. 중복 `layer_rubric:` 도 last-wins 로 고른다
-    # (다른 키들과 같은 계약). 단 따옴표·flow 스칼라의 연속줄은 컬럼 0 에 올 수 있다 — 그 모양은
-    # `_scan_frontmatter` 가 이 함수보다 먼저 멈춘다(리뷰 I1).
-    matches = list(re.finditer(r"(?m)^" + re.escape(top_key) + r":[^\n]*\n?", text))
-    if not matches:
-        return ""
-    start = matches[-1].end()
-    nm = re.search(r"(?m)^\S", text[start:])
-    return text[start:start + nm.start()] if nm else text[start:]
+def _scalar_at(s, i):
+    # 한 줄 값 안의 스칼라 하나 — 큰따옴표 문자열(escape 는 `\\` 하나만: 배포 프로필의 정규식
+    # 문자열이 쓰는 것 — 그 밖의 `\` 는 문법 밖) 또는 평문 토큰. 돌려주는 것: (값, 다음 위치).
+    if s.startswith('"', i):
+        dm = _DQ.match(s, i)
+        if not dm:
+            _ambiguous("double-quoted scalar not closed on its line or with an unsupported escape")
+        return dm.group(1).replace("\\\\", "\\"), dm.end()
+    tm = _TOKEN.match(s, i)
+    if not tm:
+        _ambiguous("value outside the line grammar")
+    return _plain_token(tm.group(0)), tm.end()
 
 
-def _flow_list(key, text, indented=True):
-    # `layer1`·`layer2` 는 `layer_rubric:` 아래 2칸 들여쓰기다(`indented=True`,
-    # 기본값) — 호출부가 `_block_span("layer_rubric", ...)` 로 이미 좁혀진
-    # 텍스트를 넘기므로 `^\s*` 가 다른 최상위 키의 block scalar 내용을 잘못
-    # 물 위험이 없다(리뷰 F-6, 위 `_block_span` 설명 참조). `allowed_
-    # dispositions` 는 최상위 키라 `indented=False` 로 불러 컬럼 0에
-    # 고정한다 — `web:` 과 같은 성질(block scalar 내용은 부모보다 반드시
-    # 더 들여써야 하므로 컬럼 0에 못 온다, YAML 문법).
-    prefix = r"^\s*" if indented else r"^"
-    #
-    # 형식은 **둘 다** 받는다 — flow(`key: [a, b, c]`)와 block(`key:\n  - a\n
-    # - b`). `load_profile()`(docreview_state.py, 실 PyYAML)은 이 상위 스키마
-    # 게이트라 둘 다 통과시키는데, 이 러너가 flow만 읽으면 그 게이트가 아무것도
-    # 보호하지 못한다 — design-doc.md 의 `protected_headings` 가 이미 block
-    # 이고(리뷰 F-1), layer1/layer2/allowed_dispositions 가 나중에 길어져 block
-    # 으로 옮겨가면 flow 전용 파서는 **조용히 빈 리스트**를 내고(그 프로필 자체는
-    # 여전히 유효하므로 게이트가 안 잡는다) 프롬프트는 "assign a disposition
-    # from: " 뒤가 빈 채로 나간다. 트레일링 `# comment` 도 두 형식 모두에서
-    # 허용한다(비교 지점: `web:` 아래에도 같은 요구가 있다).
-    #
-    # 반환은 리스트다(정말 없거나 비었으면 `[]`). 헤더는 있는데 이 함수가 못 읽는 모양은
-    # 리스트를 내지 않고 `_ambiguous` 로 멈춘다(rc 5 → `profile_parse_ambiguous`). 이 구분이
-    # 필요한 이유(리뷰 F-5): `layer2` 는 정당하게 비어 있을 수 있어(seed.md — `layer2: []`)
-    # 「비었다」만으로는 진짜 빈 것과 못 읽은 것(줄바꿈된 flow 리스트
-    # `layer2: [placeholder,\n  ambiguity]` 등)을 가르지 못한다. 항목도 게이트(PyYAML)가 같은
-    # 문자열로 읽는 모양만 받는다(`_item`) — 앵커·태그·escape·문자열 아닌 평문은 멈춘다.
-    mm = _last_match(r"(?m)" + prefix + re.escape(key) + r":[ \t]*\[(.*?)\][ \t]*(?:#.*)?$", text)
-    if mm:
-        inner = mm.group(1).strip()
-        if not inner:
-            return []
-        return [_item(x, key) for x in inner.split(",") if x.strip()]
-    # 헤더 뒤 개행을 **정규식 안에서** 소비한다(`$` 대신 리터럴 `\n`) — `$` 로
-    # 끊으면 `mm.end()` 가 개행 문자 바로 앞에 멈춰, 그 뒤 `splitlines()` 의 첫
-    # 원소가 빈 문자열이 된다("\n  - a".splitlines() == ['', '  - a']) — 그
-    # 빈 줄이 `- ` 패턴에 안 맞아 첫 항목을 보기도 전에 루프가 끊긴다(실측
-    # 회귀 — 고치기 전엔 block 세 프로필 모두 빈 리스트를 냈다).
-    mm = _last_match(r"(?m)" + prefix + re.escape(key) + r":[ \t]*(?:#.*)?\n", text)
-    if not mm:
-        # 헤더 줄 자체가 이 두 형태(flow·block) 중 어디에도 안 맞는다. 콜론
-        # 뒤에 공백·코멘트가 아닌 내용이 있으면(줄바꿈된 flow list 등) 그
-        # 키는 «존재하지만 이 파서가 못 읽는 모양»이다 — 키가 아예 없는 것과
-        # 다르다(리뷰 F-5, layer2 잔여). 콜론 뒤에 아무 내용도 없으면(키
-        # 자체가 없거나, `key:` 뿐이고 뒤에 목록이 없거나) 정말 빈 것으로
-        # 본다.
-        if re.search(r"(?m)" + prefix + re.escape(key) + r":[ \t]*\S", text):
-            _ambiguous("unreadable list shape: " + key)
-        return []
-    h = _indent(mm.group(0).rstrip("\n").split("\n")[-1])
-    items = []
-    for line in text[mm.end():].splitlines():
-        # 빈 줄·줄 전체 주석은 목록 «안»에서도 유효하다(YAML 블록 시퀀스
-        # 문법) — 항목이 아니라고 끊으면 리뷰 F-5 항목 2·3(빈 줄/주석으로
-        # 잘리는 목록)이 재발한다. 항목도 아니고 빈 줄·주석도 아닌 줄은 헤더
-        # 들여쓰기 이하면 다음 키(목록 끝)이고, 더 깊으면 이 파서가 못 읽는 모양이다.
-        if not line.strip() or re.match(r"^[ \t]*#", line):
-            continue
-        im = re.match(r"^[ \t]*-(?:[ \t]+(.*?))?(?:[ \t]+#.*)?[ \t]*$", line)
-        if im:
-            if not im.group(1):
-                _ambiguous("empty list item: " + key)
-            items.append(_item(im.group(1), key))
-            continue
-        if _indent(line) <= h:
+def _flow(s, i):
+    # 한 줄에서 닫히는 flow 목록 `[a, "b"]` · 매핑 `{k: a, k2: "b"}` — 항목은 스칼라뿐(중첩 없음).
+    close = "]" if s[i] == "[" else "}"
+    keys, vals = [], []
+    i += 1
+    while True:
+        while s.startswith(" ", i):
+            i += 1
+        if not vals and s.startswith(close, i):
+            i += 1
             break
-        _ambiguous("unreadable list shape: " + key)
-    return items
+        if close == "}":
+            km = re.compile(r"[a-z_][a-z0-9_]*").match(s, i)
+            if not km or not s.startswith(": ", km.end()):
+                _ambiguous("flow mapping entry outside the line grammar")
+            keys.append(_key(km.group(0)))
+            i = km.end() + 2
+        val, i = _scalar_at(s, i)
+        vals.append(val)
+        while s.startswith(" ", i):
+            i += 1
+        if s.startswith(",", i):
+            i += 1
+            continue
+        if s.startswith(close, i):
+            i += 1
+            break
+        _ambiguous("flow collection not closed on its line, nested, or malformed")
+    if close == "]":
+        return vals, i
+    if len(set(keys)) != len(keys):
+        _ambiguous("duplicate key in a flow mapping")
+    return dict(zip(keys, vals)), i
 
 
-def _ground_truth(text):
-    # `ground_truth`(설계 §5.3 「정답의 출처」) — codex 가 문서를 **무엇에 대조해** 보는가.
-    # 게이트(`load_profile()`)는 비지 않은 문자열만 받는다. 이 함수는 게이트와 **같은 문자열을
-    # 읽을 수 있는 모양만** 읽는다: 따옴표 한 덩어리(들여쓴 연속줄 포함 · 작은따옴표의 `''` 는 `'`)
-    # · 문자열로 해석되는 평문 · literal `|` · 문단 없는 folded `>`. 목록(flow · block)·null·빔은
-    # 게이트의 거절과 같은 판정으로 `""`(→ rc 3 `ground_truth_empty`, R36 — 목록에 한한 일치다).
-    # 그 밖(문자열 아닌 평문 · 매핑 · 앵커·태그·별칭 · escape 있는 큰따옴표 · 문단 있는 folded ·
-    # 들여쓰기 지시자)은 같은 값을 보장할 수 없어 `_ambiguous` 로 멈춘다(rc 5). 어느 occurrence 를
-    # 읽는지는 헤더 줄과 `_block_span` 이 **같은 컬럼-0 마지막 줄**로 한 번에 정한다(PyYAML
-    # last-wins — 중복 키 자체는 게이트가 거절한다, R37). `_flow_list` 를 부르지 않는 이유: 그
-    # 함수는 flow 형과 block 형을 각자 따로 last-match 한다.
-    hm = _last_match(r"(?m)^ground_truth:([^\n]*)$", text)
-    if hm is None:
+def _value(s):
+    # 한 줄 값 전체 — 스칼라 또는 flow 컬렉션. 그 뒤에는 아무것도 없다(꼬리 주석도 없다).
+    if s[:1] in ("[", "{"):
+        v, i = _flow(s, 0)
+    else:
+        v, i = _scalar_at(s, 0)
+    if i != len(s):
+        _ambiguous("text after a value")
+    return v
+
+
+def _parse_frontmatter(fm):
+    # **허용 목록 줄 문법**(Task 3c R42) — 배포 프로필 넷과 러너에 프로필을 먹이는 fixture 가 실제로
+    # 쓰는 모양만 받고, 그 밖의 줄은 전부 `profile_parse_ambiguous` 로 멈춘다. 모든 줄은 다음 중 하나다:
+    #   · 빈 줄
+    #   · 컬럼-0 `key: <한 줄 값>`
+    #   · 컬럼-0 `key:` — 블록을 연다. 자식은 아래 두 모양 중 한 가지(섞지 않는다). 자식이 없으면 null
+    #   · 2칸 `subkey: <한 줄 값>`  (블록의 매핑 자식)
+    #   · 2칸 `- <한 줄 스칼라>`    (블록의 시퀀스 자식)
+    # 키는 `[a-z_][a-z0-9_]*`(PyYAML 이 문자열로 읽지 않는 bool·null 낱말은 뺀다). 한 줄 값은 그
+    # 줄에서 끝난다: 큰따옴표 문자열(escape 는 `\\` 하나) · 평문 토큰 `[A-Za-z0-9_]+` · 스칼라만 담은
+    # flow 목록/매핑. 주석 줄(배포 프로필·fixture 가 쓰지 않는다 — 받으면 「주석이냐 내용이냐」를
+    # 따지는 규칙이 다시 생긴다) · 꼬리 주석 · 작은따옴표 · block scalar(`|` `>`) · 앵커·별칭·태그 ·
+    # 따옴표가 든 평문 · 여러 줄에 걸친 값 · 탭 · LF 밖의 줄바꿈은 받지 않는다. 같은 매핑의 중복 키도
+    # 멈춘다(게이트의 `duplicate_key` 와 같은 판정).
+    #
+    # 보장하는 것: 값이 한 줄을 넘지 않으므로 「따옴표·flow 연속줄 속 컬럼-0 키」 부류가 모양째 없다.
+    # 이 문법을 통과한 frontmatter 는 PyYAML 이 같은 구조와 같은 값(문자열의 `\\` 해제 · 토큰의
+    # bool·int·null 해석 포함)으로 읽는다. 보장하지 않는 것: 게이트의 **스키마** 검사(필드 집합 ·
+    # 처분 어휘 · detectors · 정규식 컴파일 · decision_log/defer_target 모양) — 그것은
+    # `load_profile()` 몫이고, 엔진 경로는 언제나 게이트를 먼저 지난다.
+    for ch in ("\r", "\x85", "\u2028", "\u2029", "\t"):
+        if ch in fm:
+            _ambiguous("character outside the line grammar (%r)" % ch)
+    top, block, kind = {}, None, None
+    for line in fm.split("\n"):
+        if not line:
+            continue
+        lm = re.fullmatch(r"([a-z_][a-z0-9_]*):(?: (.+))?", line)
+        if lm:
+            key = _key(lm.group(1))
+            if key in top:
+                _ambiguous("duplicate key: " + key)
+            if lm.group(2) is None:
+                top[key], block, kind = None, key, None
+            else:
+                top[key], block = _value(lm.group(2)), None
+            continue
+        lm = re.fullmatch(r"  ([a-z_][a-z0-9_]*): (.+)", line)
+        if lm and block is not None and kind in (None, "map"):
+            if top[block] is None:
+                top[block] = {}
+            key = _key(lm.group(1))
+            if key in top[block]:
+                _ambiguous("duplicate key: %s.%s" % (block, key))
+            top[block][key], kind = _value(lm.group(2)), "map"
+            continue
+        lm = re.fullmatch(r"  - (.+)", line)
+        if lm and block is not None and kind in (None, "seq"):
+            if top[block] is None:
+                top[block] = []
+            val, i = _scalar_at(lm.group(1), 0)
+            if i != len(lm.group(1)):
+                _ambiguous("text after a list item")
+            top[block].append(val)
+            kind = "seq"
+            continue
+        _ambiguous("line outside the line grammar")
+    return top
+
+
+def _field(data, *path):
+    d = data
+    for k in path:
+        if not isinstance(d, dict) or k not in d:
+            raise _Missing(".".join(path))
+        d = d[k]
+    return d
+
+
+def _str_list_field(data, *path):
+    v = _field(data, *path)
+    if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+        _ambiguous("not a list of strings: " + ".".join(path))
+    return v
+
+
+def _ground_truth(data):
+    # `ground_truth`(설계 §5.3 「정답의 출처」) — codex 가 문서를 **무엇에 대조해** 보는가. 게이트는
+    # 비지 않은 문자열만 받는다. 빈 문자열·null·목록은 게이트의 거절과 같은 판정으로 `""`(→ rc 3
+    # `ground_truth_empty`), 그 밖의 문자열이 아닌 값(bool · int · 매핑)은 rc 5 로 멈춘다.
+    v = _field(data, "ground_truth")
+    if v is None or isinstance(v, list) or (isinstance(v, str) and not v.strip()):
         return ""
-    head = hm.group(1).strip()
-    lines = _block_span("ground_truth", text).split("\n")
-    while lines and not lines[-1].strip():
-        lines.pop()
-    filled = [i for i, ln in enumerate(lines) if ln.strip()]
-    gaps = bool(filled) and any(not lines[i].strip() for i in range(filled[0], filled[-1] + 1))
-    if re.match(r"^[&!*]", head):
-        _ambiguous("anchor, tag or alias: ground_truth")
-    bm = re.match(r"^([|>])([+-]?)([0-9]?)(?:[ \t]+#.*)?$", head)
-    if bm:
-        # block scalar — 내용 줄의 `#` 은 주석이 아니라 내용이다. 기준 들여쓰기는 첫 내용 줄의 것.
-        if bm.group(3):
-            _ambiguous("indentation indicator: ground_truth")
-        if not filled:
-            return ""
-        base = _indent(lines[filled[0]])
-        if any(_indent(lines[i]) < base for i in filled):
-            _ambiguous("block scalar indentation: ground_truth")
-        if bm.group(1) == "|":
-            return "\n".join(ln[base:] if ln.strip() else "" for ln in lines[filled[0]:]).strip()
-        if gaps or any(_indent(lines[i]) > base for i in filled):
-            _ambiguous("folded scalar with paragraphs or more-indented lines: ground_truth")
-        return " ".join(lines[i][base:] for i in filled).strip()
-    # `head[:1] in "..."` 로 쓰지 않는다 — 빈 헤더면 `"" in "..."` 가 참이다(실측). 튜플로 가른다.
-    if head[:1] in ("\"", "'"):
-        if gaps:
-            _ambiguous("blank line inside quoted scalar: ground_truth")
-        return _quoted(" ".join([head] + [lines[i].strip() for i in filled]), "ground_truth")
-    if head[:1] == "[":
-        whole = " ".join([head] + [lines[i].strip() for i in filled])
-        if re.match(r"^\[.*\](?:[ \t]+#.*)?$", whole, re.DOTALL):
-            return ""  # flow 목록 — 게이트와 같은 판정(ground_truth_empty)
-        _ambiguous("unreadable flow sequence: ground_truth")
-    if head[:1] == "{":
-        _ambiguous("mapping: ground_truth")
-    head = re.sub(r"^#.*$|[ \t]+#.*$", "", head).strip()
-    comments = [lines[i] for i in filled if lines[i].strip().startswith("#")]
-    rest = [lines[i].strip() for i in filled if not lines[i].strip().startswith("#")]
-    if not head:
-        if not rest:
-            return ""  # 맨 헤더 — null
-        if all(re.match(r"^-(?:[ \t]|$)", ln) for ln in rest):
-            return ""  # block 목록 — 게이트와 같은 판정(ground_truth_empty)
-        if any(re.match(r"^[^\s#'\"\[{\-][^:]*:(?:[ \t]|$)", ln) for ln in rest):
-            _ambiguous("mapping: ground_truth")
-    if gaps or comments:
-        _ambiguous("multi-line plain scalar with blank or comment lines: ground_truth")
-    val = " ".join(x for x in [head] + [re.sub(r"[ \t]+#.*$", "", ln) for ln in rest] if x).strip()
-    # YAML 의 null 평문(`~` · `null`)은 글자가 아니라 «값 없음»이다(PyYAML → None, 게이트는
-    # 거절) — 문자열 "null" 을 정답의 출처로 싣지 않는다.
-    if _NULL_PLAIN.match(val):
-        return ""
-    return _plain(val, "ground_truth")
+    if not isinstance(v, str):
+        _ambiguous("ground_truth is not a string")
+    return v
 
 
-# 읽기 — 전부 `_read` 를 거치고, 못 믿을 모양은 `_Ambiguous` 로 이 한 자리에서 멈춘다(rc 5).
+def _web(data):
+    # YAML 1.1 bool 만 받는다(평문 토큰의 타입은 PyYAML resolver 그대로). 없으면 멈춘다 — 게이트도
+    # `fields_missing` 으로 거절한다(웹이 켜지는 쪽으로도, 꺼지는 쪽으로도 추측하지 않는다).
+    v = _field(data, "web")
+    if not isinstance(v, bool):
+        _ambiguous("web is not a YAML boolean")
+    return v
+
+
+# 읽기 — 전부 `_read` 를 거친다. 문법 밖·타입 불일치는 rc 5, 읽는 필드의 부재는 rc 6.
 try:
-    _scan_frontmatter(fm_text)
-    LAYER_RUBRIC_BLOCK = _block_span("layer_rubric", fm_text)
-    lr_layer1 = _read("layer_rubric.layer1", _flow_list("layer1", LAYER_RUBRIC_BLOCK))
-    lr_layer2 = _read("layer_rubric.layer2", _flow_list("layer2", LAYER_RUBRIC_BLOCK))
-    ad = _read("allowed_dispositions", _flow_list("allowed_dispositions", fm_text, indented=False))
-    gt = _read("ground_truth", _ground_truth(fm_text))
-    web = _read("web", _web(fm_text))
+    if not m:
+        raise _Missing("frontmatter")
+    data = _parse_frontmatter(fm_text)
+    lr_layer1 = _read("layer_rubric.layer1", _str_list_field(data, "layer_rubric", "layer1"))
+    lr_layer2 = _read("layer_rubric.layer2", _str_list_field(data, "layer_rubric", "layer2"))
+    ad = _read("allowed_dispositions", _str_list_field(data, "allowed_dispositions"))
+    gt = _read("ground_truth", _ground_truth(data))
+    web = _read("web", _web(data))
 except _Ambiguous as e:
     sys.stderr.write("[docreview] profile_parse_ambiguous — %s\n" % e)
     sys.exit(5)
+except _Missing as e:
+    sys.stderr.write("[docreview] profile_field_missing — %s\n" % e)
+    sys.exit(6)
 if os.environ.get("DOCREVIEW_CODEX_PARSED_OUT"):
     pathlib.Path(os.environ["DOCREVIEW_CODEX_PARSED_OUT"]).write_text(
         json.dumps(PARSED, ensure_ascii=False), encoding="utf-8")
-# **게이트-유도 불변식(리뷰 F-5)** — `docreview_state.py:load_profile()` 이
-# `layer_rubric.layer1` 이 비지 않고 `allowed_dispositions` 가 비지 않고
-# decide·ask 를 포함함을 이미 강제한다(그 파일 :97-100·:104-106) — 그 검증을
-# 통과한 프로필이라면 이 러너가 이 둘을 비어 있게 읽을 방법이 원리적으로
-# 없다. 그러므로 여기서 비어 있다는 것은 "그 프로필이 실제로 비었다"가 아니라
-# "이 stdlib 파서가 그 모양을 못 읽었다"는 뜻이다 — 개별 모양을 하나씩
-# 나열해 고치는 대신(리뷰가 잡은 여섯 개 중 다섯이 이런 식으로 새로 생겼을
-# 것이다), **그 도출 자체를 실패로 선언한다.** `layer2` 는 게이트가 비어도
-# 허용하므로 같은 논리가 안 통한다 — 헤더는 있는데 못 읽는 모양은 `_flow_list` 가
-# `_ambiguous` 로 이미 멈췄다(위 try, rc 5). 값을 채우지 못한 채 진행해
-# "assign a disposition from: " 뒤가 빈 프롬프트를 조용히 내보내는 대신,
-# 러너의 기존 loud 경로(`emit_fallback prompt_build_failed`)로 넘긴다 — 새
-# 실패 모드가 아니라 이미 있던 계약을 이 지점까지 넓히는 것이다.
+# **게이트-유도 불변식(리뷰 F-5)** — `load_profile()` 이 `layer_rubric.layer1` 과
+# `allowed_dispositions` 가 비지 않음을 강제한다. 그러므로 여기서 비어 있으면 그 프로필은 게이트를
+# 지나지 못했다 — "assign a disposition from: " 뒤가 빈 프롬프트를 조용히 내보내지 않고 기존 loud
+# 경로(`emit_fallback prompt_build_failed`)로 넘긴다. `layer2` 는 게이트가 비어도 허용한다(seed).
 if not lr_layer1 or not ad:
     sys.exit(1)
-# `ground_truth` 도 게이트가 비지 않은 문자열을 강제한다(`ground_truth_empty`) — 못 읽는 모양은
-# 위 try 에서 rc 5 로 멈췄고, 없음·빔·null·목록은 게이트와 같은 이름의 사유(rc 3 →
-# `ground_truth_empty`)로 공시한다. 게이트 없이 러너만 불린 경우에도 "정답의 출처: " 뒤가 빈
-# 프롬프트가 조용히 나가지 않는다.
+# `ground_truth` 가 없음·빔·null·목록이면 게이트와 같은 이름의 사유(rc 3 → `ground_truth_empty`)로
+# 공시한다 — 게이트 없이 러너만 불린 경우에도 "정답의 출처: " 뒤가 빈 프롬프트가 나가지 않는다.
 if not gt:
     sys.exit(3)
 # 본문(검토 항목)은 탐지·재비판 agent 가 읽는 루브릭이다 — codex 도 같은 루브릭으로 본다(R34).
@@ -513,13 +389,18 @@ if not body.strip():
     sys.exit(4)
 pathlib.Path(meta_path).write_text("web: %s\n" % ("true" if web else "false"), encoding="utf-8")
 
-pre = ""
+# P21 preamble 이 없으면 주입 경계 없이 codex 를 부르지 않는다(rc 7 → `preamble_missing`) — 예전에는
+# 파일이 없으면 빈 문자열로 진행해 `codex_failed: false` 인 채 P21 절 없는 프롬프트가 나갔다(재리뷰
+# 실측). HTML 주석 줄은 제거한 뒤 싣는다 — 그 마커가 본문으로 새면 모델이 그것을 지시로 읽는다.
 pre_p = pathlib.Path(preamble_path)
-if pre_p.is_file():
-    # P21 preamble 은 HTML 주석 줄을 제거한 뒤 프롬프트에 넣는다 — 그 마커가 본문으로
-    # 새면 모델이 그것을 지시로 읽는다(shared/codex/prompt-preamble.md 자체 주석).
-    pre = "\n".join(line for line in pre_p.read_text(encoding="utf-8").splitlines()
-                    if not re.match(r"^\s*<!--.*-->\s*$", line))
+if not pre_p.is_file():
+    sys.stderr.write("[docreview] preamble_missing — %s\n" % preamble_path)
+    sys.exit(7)
+pre = "\n".join(line for line in pre_p.read_text(encoding="utf-8").splitlines()
+                if not re.match(r"^\s*<!--.*-->\s*$", line))
+if not pre.strip():
+    sys.stderr.write("[docreview] preamble_missing — %s is empty\n" % preamble_path)
+    sys.exit(7)
 
 doc = pathlib.Path(doc_path).read_text(encoding="utf-8")
 
@@ -550,6 +431,8 @@ PY
 if [[ $BUILD_RC -eq 3 ]]; then emit_fallback ground_truth_empty; fi
 if [[ $BUILD_RC -eq 4 ]]; then emit_fallback profile_body_empty; fi
 if [[ $BUILD_RC -eq 5 ]]; then emit_fallback profile_parse_ambiguous; fi
+if [[ $BUILD_RC -eq 6 ]]; then emit_fallback profile_field_missing; fi
+if [[ $BUILD_RC -eq 7 ]]; then emit_fallback preamble_missing; fi
 if [[ $BUILD_RC -ne 0 ]]; then emit_fallback prompt_build_failed; fi
 
 # 웹 스위치 — 이 if/else 가 WEB_ARGS 를 만드는 **유일한 자리**다(P11). 기본값은 꺼짐:

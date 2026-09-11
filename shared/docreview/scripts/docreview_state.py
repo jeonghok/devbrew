@@ -50,11 +50,12 @@ if yaml is not None:
         """중복 키를 거절하는 SafeLoader. PyYAML 기본은 같은 키가 두 번 나오면 나중 값으로
         조용히 덮는다. codex 러너의 stdlib 파서는 모양이 다른 중복(`k: [a]` 뒤 `k:` + `- b`)
         에서 앞의 flow 값을 읽어, 같은 프로필을 두 파서가 다른 값으로 읽었다(실측, Task 3c
-        R37). 중복 키에 대해서는 두 파서를 맞추는 대신 판정 지점을 게이트 하나로 둔다 — 중복 키가
-        있는 프로필은 진입에서 멈춘다. 두 파서의 발산 전부를 이 로더가 닫지는 않는다: 따옴표·flow
-        연속줄 같은 모양은 러너가 `profile_parse_ambiguous` 로 멈추고, 배포 프로필은 러너·게이트
-        등식 대조(test_docreview_codex.sh)가 잰다. 서로 다른 매핑의 같은 이름(`decision_log.heading` · `defer_target.heading`)은
-        중복이 아니다 — 매핑마다 따로 센다."""
+        R37). 중복 키가 있는 프로필은 이 로더가 진입에서 멈춘다. 러너는 이 로더를 쓰지 않는다
+        (PyYAML 을 쓸 수 없다 — T6b) — 대신 허용 목록 줄 문법(러너의 `_parse_frontmatter`)만 받고
+        그 밖의 모양과 중복 키에서 `profile_parse_ambiguous` 로 멈춘다. 두 쪽이 같은 값을 읽는다는
+        보장은 그 문법의 범위(그 주석이 적는 것)까지이고, 배포 프로필은 러너·게이트 등식 대조
+        (test_docreview_codex.sh)가 따로 잰다. 서로 다른 매핑의 같은 이름(`decision_log.heading` ·
+        `defer_target.heading`)은 중복이 아니다 — 매핑마다 따로 센다."""
 
         def construct_mapping(self, node, deep=False):
             keys = [self.construct_object(k, deep=deep) for k, _v in node.value
@@ -145,6 +146,9 @@ def load_profile(path) -> dict:
     lr_extra = [k for k in lr if k not in ("layer1", "layer2")]
     if lr_extra:
         raise ProfileError("layer_rubric_fields_unknown:%s" % ",".join(lr_extra))
+    # 층 항목은 문자열이다 — 러너도 문자열 목록이 아니면 멈춘다(한 판정, Task 3c R43).
+    _str_list(lr["layer1"], "layer_rubric.layer1")
+    _str_list(lr["layer2"], "layer_rubric.layer2")
     dl = data["decision_log"]
     if not isinstance(dl, dict) or dl.get("kind") not in LOG_KINDS:
         raise ProfileError("decision_log_invalid")

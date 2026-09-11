@@ -308,8 +308,11 @@ assert_contains "$COV" "FLOOR=ok" "R38 a 도출 전제: _read 지점과 읽기 �
 assert_contains "$COV" "UNCOVERED=none" "R38 a: 러너가 읽는 frontmatter 필드 전부가 게이트 등식에 들어 있다(_read 를 거치지 않는 읽기는 RED)"
 assert_contains "$COV" "UNKNOWN=none" "R38 a: 러너의 _read 경로가 전부 게이트 필드다(대조할 수 없는 경로 없음)"
 
-# ── 형태 회귀 — 리뷰 F-5. (중복 키 모양 dup-web·dup-layer1 은 Task 3c R37 이후 게이트가
-#    거절한다 — 이 셀들은 게이트 없이 불린 러너의 행동을 잰다.) `load_profile()`(실 PyYAML)은 받는데 stdlib 빌더가
+# ── 형태 회귀 — 리뷰 F-5. (Task 3c R42 이후 러너는 허용 목록 줄 문법만 받는다 — 빌더의
+#    `_parse_frontmatter` 주석. 이 절의 모양 가운데 문법 밖인 것 — 4칸 block 목록 · 빈 줄·주석 줄이 낀
+#    목록 · 중복 키 · block scalar — 은 「끝까지 읽는다」 대신 `profile_parse_ambiguous` 로 멈추고
+#    codex 를 부르지 않는 것을 잰다. 옛 셀이 막으려던 것 — 조용히 비거나 잘리거나 다른 값을 읽는 것 —
+#    은 멈춤으로도 막힌다.) `load_profile()`(실 PyYAML)은 받는데 stdlib 빌더가
 #    조용히 오독하던 여섯 모양을, 손으로 지은 프로필이 아니라 실재
 #    design-doc.md 를 `mutate_profile_shape.py` 로 변형해 재현한다(계획
 #    §"프로필은 지어내지 않는다" — 형제 fixture 와 같은 태도). 게이트가 여전히
@@ -328,6 +331,10 @@ mutate_case() {  # $1=shape $2=assert 함수 이름(내부용)
     CLAUDE_PLUGIN_ROOT="$HOST_PLUGIN_ROOT" \
     bash "$RUNNER" "$mp" "$FX/design-sample.md" "$REPO_ROOT" "$mout" 2>/dev/null
 }
+stopped() {  # stopped <shape> <label> — 러너가 줄 문법 밖 모양에서 멈추고 codex 를 부르지 않는다(R42)
+  assert_file_grep "$TMPD/shape-$1.yaml" 'reason: profile_parse_ambiguous' "$2 → profile_parse_ambiguous 로 멈춘다"
+  if [ ! -e "$TMPD/shape-$1-cap.txt" ]; then ok "$2 → codex 를 부르지 않는다"; else no "$2 → codex 가 불렸다"; fi
+}
 
 # 항목 1 — 줄바꿈된 flow list(layer1) → loud 실패(조용한 빈 프롬프트가 아니라)
 mutate_case wrapped-layer1
@@ -340,86 +347,64 @@ mutate_case wrapped-layer2
 assert_file_grep "$TMPD/shape-wrapped-layer2.yaml" 'reason: profile_parse_ambiguous' \
   "러너: 줄바꿈된 flow list(layer2, 정당하게 빌 수 있는 키) → 그래도 loud 실패"
 
-# 항목 2 — block 목록 중간의 빈 줄 → 끝까지 읽는다(마지막 항목 feasibility 로 확인)
+# 항목 2 — layer1 을 4칸 block 목록(중간에 빈 줄)으로 → 줄 문법 밖(블록 자식은 2칸 한 층뿐) — 멈춘다
 mutate_case block-blank
-assert_file_grep "$TMPD/shape-block-blank-cap.txt" '^Layer 1 \(big-picture coherence\) — categories: .*feasibility$' \
-  "러너: block 목록 중간 빈 줄 → 끝 항목(feasibility)까지 읽는다(안 잘림, 리뷰 F-5 항목 2)"
+stopped block-blank "러너: 4칸 block 목록 + 빈 줄(리뷰 F-5 항목 2 — R42 이후 잘리는 대신 멈춘다)"
 
-# 항목 3 — block 목록 중간의 주석 줄 → 끝까지 읽는다
+# 항목 3 — 같은 목록 중간의 주석 줄 → 줄 문법 밖(주석 줄) — 멈춘다
 mutate_case block-comment
-assert_file_grep "$TMPD/shape-block-comment-cap.txt" '^Layer 1 \(big-picture coherence\) — categories: .*feasibility$' \
-  "러너: block 목록 중간 주석 줄 → 끝 항목(feasibility)까지 읽는다(안 잘림, 리뷰 F-5 항목 3)"
+stopped block-comment "러너: 4칸 block 목록 + 주석 줄(리뷰 F-5 항목 3 — R42 이후 잘리는 대신 멈춘다)"
 
 # 항목 4 — `web: yes` 도 `web: true` 와 같은 진리값(YAML 1.1)이다
 mutate_case web-yes
 assert_file_grep "$TMPD/shape-web-yes-argv.txt" 'web_search="live"' \
   "러너: web: yes → true 와 동치로 웹 live(리뷰 F-5 항목 4)"
 
-# 항목 5 — 중복 `web:` 키(true 먼저, false 나중) → PyYAML 처럼 **마지막** 값이
-# 이긴다(false) — 순서가 이래야 "진리값 패턴만 검색"하는 파서의 우연한
-# 정답(그 패턴엔 true 줄 하나만 걸리므로 값과 무관하게 last-match 서치가
-# 우연히 맞는다)과 실제 "web: 줄 자체의 마지막" 판정이 갈린다.
+# 항목 5 — 중복 `web:` 키(true 먼저, false 나중) → 게이트처럼 멈춘다(R42 — 옛 셀은 last-wins 를
+# 쟀다. 재리뷰 1 이 반대 순서(false 먼저, true 나중)에서 러너 단독 호출이 codex 웹을 켜는 것을 실측했다
+# — 그 순서는 아래 한 판정 절의 `dup-web-live`).
 mutate_case dup-web
-assert_file_absent "$TMPD/shape-dup-web-argv.txt" 'web_search="live"' \
-  "러너: 중복 web: 키(true, false 순) → 마지막(false)이 이긴다, 첫 값(true) 아님(리뷰 F-5 항목 5)"
+stopped dup-web "러너: 중복 web: 키(true, false 순 — 리뷰 F-5 항목 5)"
 
-# 항목 6 — 중복 `layer1:` 키 → 마지막 선언의 카테고리가 이긴다
+# 항목 6 — 중복 `layer1:` 키 → 멈춘다(R42)
 mutate_case dup-layer1
-assert_file_grep "$TMPD/shape-dup-layer1-cap.txt" '^Layer 1 \(big-picture coherence\) — categories: marker_last_wins_category$' \
-  "러너: 중복 layer1: 키 → 층 1 줄은 마지막 선언(marker_last_wins_category)이다(리뷰 F-5 항목 6)"
-assert_file_absent "$TMPD/shape-dup-layer1-cap.txt" '^Layer 1 \(big-picture coherence\) — categories: .*goal_fit' \
-  "러너: 중복 layer1: 키 → 첫 선언(goal_fit 등)은 층 1 줄에 안 실린다(first-match 회귀 방지)"
+stopped dup-layer1 "러너: 중복 layer1: 키(리뷰 F-5 항목 6)"
 
-# 리뷰 F-6 — `ground_truth:` 의 block scalar 안에 layer1/layer2/allowed_
-# dispositions 처럼 보이는 decoy 줄이 있어도(frontmatter 상 진짜 필드
-# «뒤»에 와서 스코프 안 된 last-match 라면 진짜를 이겼을 것) 진짜 값만
-# 읽는다 — `layer_rubric:` 블록 밖의 내용은 애초에 검색 범위에 안 들어온다.
-#
-# decoy 의 부재는 **범주 줄에서** 잰다 — ground_truth 가 프롬프트에 실리므로 decoy 문구는
-# 이제 정답의 출처 블록 안에 정당하게 나타난다(Task 3c). 전체 캡처에서 부재를 재면 그
-# 정당한 등장이 RED 가 되고, 범주 줄을 잘못 읽는 회귀는 여전히 이 줄 단위 부재가 잡는다.
+# 리뷰 F-6 — `ground_truth:` 의 block scalar 안에 layer1/layer2/allowed_dispositions 처럼 보이는 decoy
+# 줄. R42 이후 block scalar 자체가 줄 문법 밖이라 decoy 가 읽힐 자리가 없다 — 멈추고 codex 를 부르지
+# 않는다(decoy 문구가 프롬프트에 실리지도 않는다).
 mutate_case ground-truth-decoy
-DECOY_CAP="$TMPD/shape-ground-truth-decoy-cap.txt"
-assert_file_grep "$DECOY_CAP" '^Layer 1 \(big-picture coherence\) — categories: goal_fit,' \
-  "러너: ground_truth: block scalar 안 decoy → 층 1 줄은 진짜 layer1(goal_fit…)을 읽는다(리뷰 F-6)"
-assert_file_absent "$DECOY_CAP" '^Layer 1 \(big-picture coherence\) — categories: .*decoy_layer1' \
-  "러너: ground_truth: 안 decoy_layer1 은 층 1 줄에 안 실린다(F-6 회귀 방지)"
-assert_file_grep "$DECOY_CAP" '^Layer 2 \(detail completeness\) — categories: placeholder,' \
-  "러너: ground_truth: block scalar 안 decoy → 층 2 줄은 진짜 layer2(placeholder…)를 읽는다(F-6)"
-assert_file_absent "$DECOY_CAP" '^Layer 2 \(detail completeness\) — categories: .*decoy_layer2' \
-  "러너: ground_truth: 안 decoy_layer2 는 층 2 줄에 안 실린다(F-6 회귀 방지)"
-assert_file_grep "$DECOY_CAP" 'assign a disposition from: decide, ask, fix, defer, drop' \
-  "러너: ground_truth: 안 decoy(allowed_dispositions: [decide]) 대신 진짜 다섯 처분을 읽는다(F-6)"
-assert_file_grep "$DECOY_CAP" '^Ground truth \(the source the document is judged against\): decoy block scalar deliberately mimicking field headers$' \
-  "러너: block scalar(|) ground_truth → 첫 내용 줄이 정답의 출처 머리에 실린다"
-assert_file_grep "$DECOY_CAP" '^end of decoy$' \
-  "러너: block scalar(|) ground_truth → 마지막 내용 줄까지 실린다(안 잘림)"
+stopped ground-truth-decoy "러너: ground_truth: | block scalar 안 decoy(리뷰 F-6)"
 
-# ── ground_truth 모양 — Task 3c. 러너가 스칼라 ground_truth 를 PyYAML 과 같은 값으로
-#    읽는지(평문의 기대값은 profile-check), 목록·빔·null·부재면 게이트와 **같은 판정**
-#    (`ground_truth_empty`)으로 fail-closed 하는지(R36 — 두 파서가 한 프로필에 다른 판정을
-#    내지 않는다). 중복 키는 게이트가 거절한다(R37, test_docreview_profile_schema.sh) —
-#    여기서는 러너 단독 호출의 last-wins 만 잰다 ─────────────────────────────────
-gt_expect_pc() {  # gt_expect_pc <shape> → 그 모양 프로필을 profile-check 가 읽은 ground_truth
-  python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/shape-$1.md" > "$TMPD/shape-$1.json" 2>/dev/null
-  pc_get "$TMPD/shape-$1.json" ground_truth
-}
-
+# ── ground_truth 모양 — Task 3c. 빈 문자열·null·목록이면 게이트와 **같은 판정**
+#    (`ground_truth_empty`)으로 fail-closed(R36). 중복 키 · 공백·주석 든 평문은 줄 문법 밖이라
+#    멈춘다(R42). 읽는 필드가 없으면 `profile_field_missing`(R42 — 게이트도 fields_missing) ─────
 mutate_case gt-dup
-cmp_line "$TMPD/shape-gt-dup-cap.txt" "$GT_PREFIX" "marker_gt_last_wins" \
-  "러너 단독 호출: 중복 ground_truth: → 마지막 선언이 이긴다(게이트는 R37 로 중복 키 자체를 거절)"
-assert_file_absent "$TMPD/shape-gt-dup-cap.txt" '^Ground truth \(the source the document is judged against\): 인터뷰 브리프' \
-  "러너: 중복 ground_truth: → 첫 선언은 정답의 출처 줄에 안 실린다(first-match 회귀 방지)"
+stopped gt-dup "러너: 중복 ground_truth: 키(R42 — 옛 셀은 러너 단독 last-wins 를 쟀다)"
 
 mutate_case gt-plain
-cmp_line "$TMPD/shape-gt-plain-cap.txt" "$GT_PREFIX" "$(gt_expect_pc gt-plain)" \
-  "러너: 따옴표 없는 평문 ground_truth(+ 꼬리 주석) → PyYAML 과 같은 값"
+stopped gt-plain "러너: 공백·꼬리 주석 든 평문 ground_truth(R42 — 평문은 토큰 [A-Za-z0-9_]+ 만)"
 
 mutate_case gt-dup-mixed
-cmp_line "$TMPD/shape-gt-dup-mixed-cap.txt" "$GT_PREFIX" "marker_gt_second" \
-  "러너 단독 호출: 모양이 다른 중복 ground_truth:(flow 목록 먼저 · 스칼라 나중) → 나중 선언이 이긴다"
+stopped gt-dup-mixed "러너: 모양이 다른 중복 ground_truth:(R42)"
 
-for shape in gt-flow-list gt-block-list gt-empty gt-bare gt-null gt-absent; do
+for shape in web-absent gt-absent; do
+  mutate_case "$shape"
+  assert_file_grep "$TMPD/shape-$shape.yaml" 'reason: profile_field_missing' \
+    "러너: 읽는 필드가 없음($shape) → profile_field_missing 으로 멈춘다(R42 — 웹도 추측하지 않는다)"
+  if [ ! -e "$TMPD/shape-$shape-cap.txt" ]; then
+    ok "러너: $shape → codex 를 부르지 않는다"
+  else
+    no "러너: $shape → codex 가 불렸다(캡처 파일이 있다)"
+  fi
+  if python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/shape-$shape.md" >/dev/null 2>"$TMPD/shape-$shape.err"; then
+    no "게이트 전제: profile-check 가 $shape 를 받았다"
+  else
+    assert_file_grep "$TMPD/shape-$shape.err" 'fields_missing' "게이트 전제: profile-check 가 $shape 를 fields_missing 으로 거절한다(한 판정)"
+  fi
+done
+
+for shape in gt-flow-list gt-block-list gt-empty gt-bare gt-null; do
   mutate_case "$shape"
   assert_file_grep "$TMPD/shape-$shape.yaml" 'reason: ground_truth_empty' \
     "러너: ground_truth 가 문자열이 아니거나 비었거나 없음($shape) → 게이트와 같은 이름의 fail-closed 사유"
@@ -508,8 +493,58 @@ variant 'gt-value= &x "anch"' "$SD_PROF/design-doc.md" accept ambiguous "M2: 앵
 variant 'gt-value= !!str tagged' "$SD_PROF/design-doc.md" accept ambiguous "M2: 태그 !!str"
 variant 'gt-value= "esc \"q\" x"' "$SD_PROF/design-doc.md" accept ambiguous "M2: 큰따옴표 escape"
 variant 'gt-value= >-\n  para one\n\n  para two' "$SD_PROF/design-doc.md" accept ambiguous "M2: folded 의 빈 줄 문단"
-variant "gt-value= 'it''s'" "$SD_PROF/design-doc.md" accept faithful "M2: 작은따옴표의 '' → '"
-variant 'gt-value= |\n  para one\n\n  para two' "$SD_PROF/design-doc.md" accept faithful "M2: literal 의 빈 줄 문단"
-[ "$VN" -ge 18 ] && ok "한 판정 모양 ${VN}개 (vacuous 아님)" || no "한 판정 모양이 ${VN}개뿐이다"
+# 작은따옴표·literal block scalar 는 R42 이후 줄 문법 밖이다(배포 프로필·fixture 가 쓰지 않는다) —
+# fix round 1 에서 충실히 읽던 두 모양도 이제 멈춘다.
+variant "gt-value= 'it''s'" "$SD_PROF/design-doc.md" accept ambiguous "M2: 작은따옴표(R42 — 줄 문법 밖)"
+variant 'gt-value= |\n  para one\n\n  para two' "$SD_PROF/design-doc.md" accept ambiguous "M2: literal block scalar(R42 — 줄 문법 밖)"
+# R42 — 재리뷰 1 의 I1(b) 일곱 모양과 대조군(`t3c-rr1/mkv.py`). 배포 seed 에 게이트가 받는 편집
+# (defer_target 은 여분 키를 검사하지 않는다)으로 옛 스캐너를 지나 codex 웹이 켜지던 자리다(게이트
+# web=False). 줄 문법은 이 모양들을 모양째 받지 않는다 — 탐지가 아니라 허용 목록이다.
+variant rr-qkey "$SD_PROF/seed.md" accept ambiguous "R42 재리뷰 I1b: 따옴표 키 + 디코이 web"
+variant rr-hashkey "$SD_PROF/seed.md" accept ambiguous "R42 재리뷰 I1b: # 든 평문 키 + 디코이 web"
+variant rr-qmark "$SD_PROF/seed.md" accept ambiguous "R42 재리뷰 I1b: 명시 키(?) + 디코이 web"
+variant rr-nestseq "$SD_PROF/seed.md" accept ambiguous "R42 재리뷰 I1b: 중첩 시퀀스(- -) + 디코이 web"
+variant rr-blockseq "$SD_PROF/seed.md" accept ambiguous "R42 재리뷰 I1b: - k: | 아래 형제 키 + 디코이 web"
+variant rr-phantom "$SD_PROF/seed.md" accept ambiguous "R42 재리뷰 I1b: flow 평문 속 유령 큰따옴표 + 디코이 web"
+variant rr-phantom1 "$SD_PROF/seed.md" accept ambiguous "R42 재리뷰 I1b: flow 평문 속 유령 작은따옴표 + 디코이 web"
+variant rr-qkey-gt "$SD_PROF/seed.md" accept ambiguous "R42 재리뷰 I1b: 따옴표 키 + 디코이 ground_truth(DECOY_GT)"
+variant rr-control "$SD_PROF/seed.md" accept ambiguous "R42 재리뷰 대조군: 열린 큰따옴표 값 + 디코이 web"
+variant dup-web-live "$SD_PROF/seed.md" reject ambiguous "R42 재리뷰: 러너 단독 중복 web(false 먼저, true 나중)"
+# R42 — 규칙 하나씩. 문법의 각 규칙을 **하나만** 어기는 모양(나머지 줄은 전부 문법 안)이라, 변이로 한
+# 규칙을 풀면 그 규칙의 셀이 RED 가 된다. 위 일곱 모양은 규칙 여럿을 한꺼번에 어겨 규칙 하나를 풀어도
+# 여전히 멈추므로 규칙별 이빨은 이 셀들이 잰다.
+variant g-qkey "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 따옴표 키"
+variant g-hashkey "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 식별자 밖 키(#)"
+variant g-qmark "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 명시 키(?)"
+variant g-comment "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 주석 줄"
+variant g-tailcomment "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 꼬리 주석"
+variant g-sq "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 작은따옴표"
+variant g-esc "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 백슬래시 둘 밖의 escape"
+variant g-nestflow "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 중첩 flow"
+variant g-plainquote "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 따옴표 든 평문 토큰"
+variant g-indent4 "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 2칸 밖 들여쓰기(평문 연속줄)"
+variant g-blockscalar "$SD_PROF/seed.md" accept ambiguous "R42 규칙: block scalar"
+variant g-anchor "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 앵커"
+variant g-unclosed "$SD_PROF/seed.md" reject ambiguous "R42 규칙: 줄에서 안 닫힌 큰따옴표"
+variant g-tab "$SD_PROF/seed.md" accept ambiguous "R42 규칙: 탭 문자"
+[ "$VN" -ge 42 ] && ok "한 판정 모양 ${VN}개 (vacuous 아님)" || no "한 판정 모양이 ${VN}개뿐이다"
+
+# ── P21 preamble 부재 — R43 (i). 호스트에 prompt-preamble.md 가 없거나 주석뿐이면 주입 경계 없이
+#    codex 를 부르지 않는다(재리뷰 실측: 옛 러너는 P21 절 없는 프롬프트로 codex 를 불렀다 —
+#    codex_failed: false). 양의 짝은 위 「프롬프트에 P21 preamble 이 실린다」(preamble 있는 호스트) ──
+mkdir -p "$TMPD/nopre-host/scripts" "$TMPD/commentpre-host/scripts"
+printf '<!-- only an HTML comment line -->\n' > "$TMPD/commentpre-host/scripts/prompt-preamble.md"
+for host in nopre commentpre; do
+  rm -f "$TMPD/$host-cap.txt"
+  DOCREVIEW_CODEX_CAPTURE="$TMPD/$host-cap.txt" CLAUDE_PLUGIN_ROOT="$TMPD/$host-host" \
+    bash "$RUNNER" "$PROF" "$FX/design-sample.md" "$REPO_ROOT" "$TMPD/$host.yaml" 2>/dev/null
+  assert_file_grep "$TMPD/$host.yaml" 'reason: preamble_missing' \
+    "러너: P21 preamble 이 없거나 비었음($host) → preamble_missing 으로 fail-closed"
+  if [ ! -e "$TMPD/$host-cap.txt" ]; then
+    ok "러너: $host → codex 를 부르지 않는다(주입 경계 없는 프롬프트가 나가지 않는다)"
+  else
+    no "러너: $host → codex 가 불렸다"
+  fi
+done
 
 finish

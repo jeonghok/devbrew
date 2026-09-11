@@ -140,4 +140,22 @@ rc=$?
 assert_eq "$rc" "2" "빈 본문(공백뿐) → profile-check rc 2"
 assert_file_grep "$TMPD/err6" 'profile_body_empty' "빈 본문 → 사유가 profile_body_empty 다"
 
+# ⑦ (Task 3c R43) 층 항목의 타입 — 러너는 문자열 목록이 아니면 멈춘다. 게이트도 같은 판정을 낸다
+# (`_str_list`). 양의 짝은 ③(배포 프로필 넷의 문자열 층 목록 통과).
+for lk in layer1 layer2; do
+  python3 - "$DD" "$TMPD/l-$lk.md" "$lk" <<'PY'
+import re, sys
+src, dst, lk = sys.argv[1:4]
+t = open(src, encoding="utf-8").read()
+n, c = re.subn(r"^(  %s: )\[[^\]]*\]$" % lk, r"\g<1>[1]", t, count=1, flags=re.M)
+assert c == 1, lk
+open(dst, "w", encoding="utf-8").write(n)
+PY
+  python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/l-$lk.md" >/dev/null 2>"$TMPD/err7-$lk"
+  rc=$?
+  assert_eq "$rc" "2" "층 항목이 문자열이 아님($lk: [1]) → profile-check rc 2"
+  assert_file_grep "$TMPD/err7-$lk" "field_not_str_list:layer_rubric.$lk" \
+    "층 항목이 문자열이 아님($lk) → 사유가 field_not_str_list:layer_rubric.$lk 다"
+done
+
 finish
