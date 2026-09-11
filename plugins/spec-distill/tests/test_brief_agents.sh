@@ -207,13 +207,17 @@ else
 fi
 
 # --- IB : 주입 경계 — 엔진 사본 전부 + brief-readback 의 **본문**에 규칙이 있다 ------------
-# 대상은 정본 디렉토리(shared/docreview/agents/)에서 도출한다 — 새 엔진 agent 가 생기면 그 사본도
-# 자동으로 대상이 된다. 문구는 frontmatter 를 뺀 본문에서만 찾는다: description 이 같은 문구를
-# 담아도 본문 규칙을 지우면 RED 다. 본문 추출이 살아 있다는 양의 짝은 H1 헤딩의 존재다.
+# 대상은 이 플러그인의 agents/ 에서 도출한다 — 머리에 `# copy-of: shared/docreview/agents/` 마커를 단
+# 엔진 사본 전부(새 엔진 사본도 자동으로 대상) + brief-readback. shared/ 는 읽지 않는다: 이 락은 배포
+# 단위(plugins/spec-distill)만으로 돌아야 한다(test_brief_review_no_external_precondition.sh). 정본 쪽 ∀ 는
+# shared/tests/test_docreview_agents.sh 가, 사본이 정본과 같은지는 test_copy_of_contract.sh 가 잰다.
+# 문구는 frontmatter 를 뺀 본문에서만 찾는다: description 이 같은 문구를 담아도 본문 규칙을 지우면
+# RED 다. 본문 추출이 살아 있다는 양의 짝은 H1 헤딩의 존재다. 하한 4 = 엔진 사본 셋 + readback.
 body_of() { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{f=0;b=1;next} b' "$1"; }
 IB_TARGETS=""
-for c in "$REPO_ROOT"/shared/docreview/agents/*.md; do
-  [ -f "$c" ] && IB_TARGETS="$IB_TARGETS $SD/agents/$(basename "$c")"
+for c in "$SD"/agents/*.md; do
+  [ -f "$c" ] || continue
+  head -20 "$c" | grep -cE '^# copy-of: shared/docreview/agents/' >/dev/null && IB_TARGETS="$IB_TARGETS $c"
 done
 IB_TARGETS="$IB_TARGETS $SD/agents/brief-readback.md"
 n_ib=0
@@ -232,8 +236,8 @@ for f in $IB_TARGETS; do
     no "IB: $a 본문에 주입 경계 규칙이 없다 — 문서 안 사용자 원문의 지시를 따를 수 있다"
   fi
 done
-[ "$n_ib" -ge 4 ] && ok "IB: 대상 ${n_ib}건 (정본 도출 + readback, vacuous 아님)" \
-  || no "IB: 대상이 ${n_ib}건뿐 — 정본 도출이 깨졌다"
+[ "$n_ib" -ge 4 ] && ok "IB: 대상 ${n_ib}건 (copy-of 마커로 도출한 엔진 사본 + readback, vacuous 아님)" \
+  || no "IB: 대상이 ${n_ib}건뿐 — 엔진 사본의 copy-of 마커 도출이 깨졌다"
 
 # --- N : 옛 agent 둘의 부재 (양의 짝은 위 M) -----------------------------------
 for gone in brief-critic brief-direction-reviewer; do
