@@ -197,6 +197,23 @@ fi
 
 ## dispatch 블록 둘
 
+`${PROFILE}` 에는 경로가 아니라 **프로필 파일의 내용**을 싣는다 — 플러그인 캐시는 사용자 프로젝트 밖이라 리뷰어의
+Read 가 거부된다. 탐지 dispatch 직전에(재dispatch 포함) 아래 펜스를 돌려 그 stdout 전문을 탐지와 재비판의
+`<profile>` 슬롯에 싣는다. 펜스의 rc 가 0 이 아니면 dispatch 하지 않고 critic 출력 파일(`critic.txt`)을 빈 채로
+둔다 — 5단계가 그것을 critic 사망(rc 4)으로 읽어 재dispatch 1회(이 펜스부터 다시), 또 실패면 「미검증」이다.
+
+<!-- profile-content:begin -->
+```bash
+PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/design-doc.md"
+prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
+if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
+  echo "[spec-distill] 프로필 내용을 읽지 못했다(cat rc $prof_rc): $PROFILE — 탐지 · 재비판을 dispatch 하지 않는다. critic 출력 파일을 빈 채로 두고 5단계로 간다(critic 사망 → 재dispatch 1회 → 「미검증」)." >&2
+  exit 1
+fi
+printf '%s\n' "$PROFILE_TEXT"
+```
+<!-- profile-content:end -->
+
 3단계 탐지 — 한 번 dispatch 하고 출력을 요약·전사 없이 verbatim 파일(`critic.txt`)로 저장한다.
 파싱은 `docreview_route.py` 가 그 파일에서 한다.
 

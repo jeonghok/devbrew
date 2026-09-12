@@ -302,6 +302,34 @@ fi
 
 ## dispatch 블록 둘
 
+`${PROFILE}` 에는 경로가 아니라 **프로필 파일의 내용**을 싣는다 — 플러그인 캐시는 사용자 프로젝트 밖이라 리뷰어의
+Read 가 거부된다. 탐지 dispatch 직전에(재dispatch 포함) 아래 펜스를 돌려 그 stdout 전문을 탐지와 재비판의
+`<profile>` 슬롯에 싣는다. 펜스의 rc 가 0 이 아니면 dispatch 하지 않고 critic 출력 파일(`critic.txt`)을 빈 채로
+둔다 — 5단계가 그것을 critic 사망(rc 4)으로 읽어 재dispatch 1회(이 펜스부터 다시), 또 실패면 「미검증」이다.
+
+<!-- profile-content:begin -->
+```bash
+PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
+case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
+harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
+STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 — 세션의 한 파일
+DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
+touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
+PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/brief.md"
+prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
+if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
+  echo "[spec-distill] 프로필 내용을 읽지 못했다(cat rc $prof_rc): $PROFILE — 탐지 · 재비판을 dispatch 하지 않는다. critic 출력 파일을 빈 채로 두고 5단계로 간다(critic 사망 → 재dispatch 1회 → 「미검증」)." >&2
+  python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component critic --axis all --status unavailable --reason "프로필 내용 판독 불가(cat rc $prof_rc) — 탐지 dispatch 안 함" >&2 \
+    || echo "- (state 기록 실패) component=critic axis=all status=unavailable reason=프로필 내용 판독 불가(cat rc $prof_rc)" >> "$DEGRADE_FALLBACK_FILE"
+  exit 1
+fi
+printf '%s\n' "$PROFILE_TEXT"
+```
+<!-- profile-content:end -->
+
 3단계 탐지 — dispatch 대상은 아래 선택 펜스가 지명한다: 프로필이 웹을 허용하고 `DEVBREW_SPEC_DISTILL_DISABLE_WEB`
 이 켜져 있지 않을 때만 웹 도구를 가진 `spec-distill:doc-critic-web`, 그 밖에는 웹 도구가 없는
 `spec-distill:doc-critic` 이다. 프로필의 `web` 은 엔진의 `profile-check` 가 낸 값으로만 읽는다. 매 라운드 탐지
