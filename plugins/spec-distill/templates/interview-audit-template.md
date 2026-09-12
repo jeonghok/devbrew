@@ -82,9 +82,9 @@ source: spec-distill conducting-interview v0.57.0
 한 줄씩 채운다. 라운드의 결정 자체는 엔진이 이 파일 끝의 `## 8. 리뷰 결정` 에 append-only 로 쓴다 — 그
 절은 손으로 만들지 않는다(없으면 엔진이 만든다). 리뷰 생략 방지는 Step B 게이트의 degrade 전파가 담당한다.)
 
-- 라운드: <n> · 재리뷰 카운트 <k> · 추가 라운드 <m> — 승인 게이트 도달 사유: <열린 것 없음|상한|stagnation|미검증>
+- 라운드: <n> · 재리뷰 카운트 <k> · 추가 라운드 <m> — 승인 게이트 도달 사유: <열린 것 없음|상한|stagnation|미검증> · 리뷰 완료: <예 | 아니오 — <unreviewed_reason>>
 - 결정: `## 8. 리뷰 결정` <n>건 · 열린 채 남은 항목 <n>건(<ask·decide 의 id>)
-- codex: <있음 | 없음 — <skip_reason>> · 웹: <켜짐 | 꺼짐 | codex 부재>
+- codex: <있음 | 없음 — <skip_reason>> · 웹: Claude <doc-critic-web | doc-critic(DISABLE_WEB) | doc-critic(프로필 판독 불가)> · codex <켜짐 | 꺼짐(DISABLE_WEB) | codex 부재>
 - 냉독: gap <n>건 (<G1..G6 중 어느 클래스>)
 - degrade: <component:reason 한 줄씩 | 없음>
 

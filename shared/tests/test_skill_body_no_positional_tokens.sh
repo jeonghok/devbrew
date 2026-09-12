@@ -10,8 +10,9 @@
 # `rm -f` 가 됐다. 인자 하나로 불린 `reviewing-spec` 에서는 같은 토큰이 그대로 남았다.
 #
 # 코퍼스 — Skill · 커맨드 로드 때 본문으로 들어가는 파일: `plugins/*/skills/*/SKILL.md` ·
-#   `plugins/*/commands/*.md`. skill 디렉토리의 다른 파일(references 등)은 모델이 Read 로 읽어
-#   치환되지 않는다. 파일 전체를 본다 — frontmatter · 펜스 안팎 · 주석 · 인라인 코드.
+#   `plugins/*/commands/*.md`. skill 디렉토리의 다른 파일(references 등)은 모델이 Read 로 읽으므로
+#   코퍼스에 넣지 않았다 — 그 파일들이 치환되지 않는다는 것은 로드 경로에서 도출한 것이고 문서가
+#   명시하지 않는다. 파일 전체를 본다 — frontmatter · 펜스 안팎 · 주석 · 인라인 코드.
 # 금지 — `$0`…`$9`(뒤 숫자 이어짐 · 역슬래시 이스케이프 형 포함) · `${0`…`${9` · `$@` · `$*` · `$#`
 #   (앞 셋은 문서에 치환 여부가 없어 보수적으로) · frontmatter 의 `arguments:` 선언(선언된 이름의
 #   `$name` 이 치환된다).

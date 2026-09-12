@@ -227,6 +227,25 @@ done
 grep -qE '^1\. \*\*리뷰 게이트 결과\*\*' <<<"$WB2" \
   && ok "B-2 프로즈 목록 1 이 「리뷰 게이트 결과」다 (번호 항목, load-bearing)" \
   || no "B-2 프로즈 목록에 「리뷰 게이트 결과」 번호 항목이 없다 — reviewing-brief 의 첫 산출물을 받는 자리가 사라졌다"
+# 그 결과가 audit 에 닿는 칸 — reviewing-brief 는 audit §5 의 brief 리뷰 절을 「템플릿 줄 모양대로」 채운다. 템플릿에
+# 리뷰 완료 여부 칸이 없거나 웹 칸이 SKILL `## degrade 채널` 의 웹 줄과 다른 모양이면 엔진이 낸 `round_reviewed` ·
+# `unreviewed_reason`(`unrouted` 포함)과 두 쪽 웹 공시가 기록에 닿지 않는다(PR 3 최종 리뷰 F9(b)). 웹 칸의 기대 모양은
+# SKILL 에서 도출한다 — 여기 리터럴로 적으면 SKILL 이 바뀌어도 이 칸은 옛 모양을 지킨다.
+AUD_TPL="$REPO_ROOT/plugins/spec-distill/templates/interview-audit-template.md"
+RB_SKILL="$REPO_ROOT/plugins/spec-distill/skills/reviewing-brief/SKILL.md"
+TPL_BR="$(awk '/^### brief 리뷰 \(reviewing-brief/{f=1; next} f && /^#{2,3} /{f=0} f' "$AUD_TPL")"
+[[ -n "$TPL_BR" ]] && ok "audit 템플릿: brief 리뷰 절 창을 잘랐다 (아래 칸 단언이 공허하지 않다)" \
+  || no "audit 템플릿: \`### brief 리뷰 (reviewing-brief …)\` 절이 없다 — 아래 칸 단언이 공허하다"
+printf '%s\n' "$TPL_BR" | grep -E '^- 라운드:' | grep -qF '리뷰 완료: <예 | 아니오 — <unreviewed_reason>>' \
+  && ok "audit 템플릿: 라운드 줄에 리뷰 완료 여부 칸(<예 | 아니오 — unreviewed_reason>)이 있다" \
+  || no "audit 템플릿: 라운드 줄에 리뷰 완료 여부 칸이 없다 — round_reviewed · unreviewed_reason(unrouted 포함)이 audit 기록에 닿지 않는다"
+WEB_SHAPE="$(awk '/^## degrade 채널/{f=1; next} f && /^## /{f=0} f' "$RB_SKILL" | tr '\n' ' ' | grep -oE '`웹: Claude <[^`]*>`' | head -1 | tr -d '`')"
+printf '%s' "$WEB_SHAPE" | grep -q '^웹: Claude <.*> · codex <.*>$' \
+  && ok "도출: reviewing-brief degrade 채널에서 웹 줄 모양을 뽑았다 (Claude · codex 두 쪽)" \
+  || no "도출: reviewing-brief degrade 채널의 웹 줄을 못 뽑았다('$WEB_SHAPE') — 아래 등식이 공허하다"
+printf '%s\n' "$TPL_BR" | grep -qF "$WEB_SHAPE" \
+  && ok "audit 템플릿: 웹 칸이 reviewing-brief degrade 채널의 웹 줄과 같은 모양이다 (SKILL 에서 도출)" \
+  || no "audit 템플릿: 웹 칸이 reviewing-brief 의 웹 줄('$WEB_SHAPE')과 다르다 — 두 쪽 웹 공시가 기록에 닿지 않는다"
 grep -qF '방향성 C4 항목' "${CI_FILES[@]}" \
   && no "옛 산출물 「방향성 C4 항목」이 남았다 — reviewing-brief 는 그것을 더는 내지 않는다" \
   || ok "옛 산출물 「방향성 C4 항목」 없음"

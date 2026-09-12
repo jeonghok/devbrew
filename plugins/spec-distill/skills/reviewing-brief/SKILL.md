@@ -283,7 +283,7 @@ if [[ "$codex_avail" == "true" ]]; then
   # 원래 실패의 rc 를 단 채 남긴 이번 라운드의 정직한 기록을 지운다.
   if [[ "$runner_rc" -eq 3 ]]; then rm -f "$CODEX_YAML" || true; fi
 else
-  echo "[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — Claude-only, 이 리뷰에는 모델 다양성도 외부 웹 근거도 없었다 (degraded)." >&2
+  echo "[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — Claude-only, 이 리뷰에는 codex 쪽의 모델 다양성과 웹 근거가 없었다 (degraded)." >&2
 fi
 ```
 <!-- codex-gate:end -->
