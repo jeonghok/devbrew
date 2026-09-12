@@ -1359,6 +1359,64 @@ case_T46_unverified_two_stage_with_open_items() {   # 「미검증」 + 이전 �
   rm -rf "$d"
 }
 
+# ── 7단계 얼림 입력 — 직전 라운드 스냅숏은 원장에서 나온다 (PR 3 최종 리뷰 F2) ─────────────────
+# 절차서 7단계의 `diff prev.json snap.json` 은 직전 라운드 스냅숏을 요구하는데 그것을 만드는 자리가 없었다.
+# `prev-snapshot` 이 `begin-round` 가 원장에 저장한 직전 라운드 스냅숏을 낸다. 라운드 ≥ 2 에서 diff 없이
+# `finalize` 하면 얼림 검사가 꺼진 라운드이므로 보고서 `advisory[]` 가 그것을 공시한다 — 차단은 아니다.
+case_F2_prev_snapshot_from_ledger() {
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_state.py prev-snapshot --state-dir "$d" > "$d/prev1.json" 2>"$d/prev1.err"; rc=$?
+  assert_eq "$rc $(jget "$d/prev1.err" 'd["reason"]' 2>/dev/null) $(wc -c < "$d/prev1.json" | tr -d ' ')" "1 no_prev_snapshot 0" \
+    "F2: 라운드 1 에는 직전 스냅숏이 없다 — prev-snapshot rc 1 no_prev_snapshot · stdout 비움"
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  py docreview_state.py prev-snapshot --state-dir "$d" > "$d/prev2.json" 2>/dev/null; rc=$?
+  assert_eq "$rc" "0" "F2: 라운드 2 의 prev-snapshot rc 0"
+  assert_eq "$(python3 -c 'import json, sys
+a, b = (json.load(open(p)) for p in sys.argv[1:3])
+K = ("anchor", "title", "level", "hash", "parents")
+pick = lambda s: [{k: x.get(k) for k in K} for x in s["sections"]]
+print(bool(b["sections"]) and pick(a) == pick(b) and a["headingless"] == b["headingless"])' "$d/prev2.json" "$d/s1.json" 2>/dev/null)" "True" \
+    "F2: 라운드 2 의 prev-snapshot sections 가 라운드 1 스냅숏(snap.json)의 sections 와 같다 (비어 있지 않다)"
+  py docreview_anchor.py diff "$d/prev2.json" "$d/s2.json" --exempt "$d/ex2.json" > "$d/diffp.json" 2>/dev/null
+  assert_eq "$(cat "$d/diffp.json")" "$(cat "$d/diff2.json")" \
+    "F2: prev-snapshot 으로 지은 diff 가 라운드 1 스냅숏 파일로 지은 diff 와 바이트로 같다 (얼림 입력으로 등가)"
+  assert_contains "$(cat "$d/diff2.json")" '"changed": [{' "F2 전제: 그 diff 가 비어 있지 않다 (위 등가가 공허하지 않다)"
+  rm -rf "$d"
+}
+F2_FREEZE='얼림 검사 없음 — diff 미제공(라운드 2)'
+f2_round2() {   # f2_round2 <finalize 에 덧붙일 인자…> → 라운드 2 까지 돌고 finalize 한 상태 디렉토리
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-r1.txt" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" "$@" > "$d/fin2.json" 2>"$d/fin2.err"
+  echo "$?" > "$d/fin2.rc"; echo "$d"
+}
+case_F2_finalize_round2_without_diff_discloses() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_eq "$(jget "$d/fin.json" 'any("얼림 검사 없음" in a for a in d["advisory"])')" "False" \
+    "F2 양의 짝: 라운드 1 finalize 는 diff 가 없어도 얼림 공시를 내지 않는다 (직전 라운드가 없다)"
+  rm -rf "$d"
+  d="$(f2_round2)"
+  assert_eq "$(cat "$d/fin2.rc")" "0" "F2: 라운드 2 무-diff finalize 는 rc 0 (거부가 아니다)"
+  assert_eq "$(jget "$d/fin2.json" '[a for a in d["advisory"] if "얼림 검사 없음" in a]')" "['$F2_FREEZE']" \
+    "F2: 라운드 2 무-diff finalize 의 advisory[] 에 얼림 검사 부재 공시"
+  assert_contains "$(gfirst "$d")" "$F2_FREEZE" "F2: 렌더 첫 줄이 그 공시를 싣는다"
+  assert_eq "$(gsum "$d" 'd["round_reviewed"], d["approval_label"]')" "(True, None)" \
+    "F2: 공시일 뿐 차단(「미검증」)이 아니다 — 리뷰 완료 기록 가능"
+  rm -rf "$d"
+  d="$(f2_round2 --diff /nonexistent/f2-diff.json)"
+  assert_eq "$(jget "$d/fin2.json" '[a for a in d["advisory"] if "얼림 검사 없음" in a]')" "['$F2_FREEZE']" \
+    "F2: --diff 가 읽을 수 없는 경로여도 같은 공시"
+  rm -rf "$d"
+  d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-r1.txt" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin2.json"
+  assert_eq "$(jget "$d/fin2.json" 'len(d["advisory"]) > 0, any("얼림 검사 없음" in a for a in d["advisory"])')" "(True, False)" \
+    "F2 양의 짝: 같은 라운드를 diff 와 함께 finalize 하면 얼림 공시가 없다 (다른 advisory 는 있다 — 채널이 비어서 통과한 것이 아니다)"
+  rm -rf "$d"
+}
+
 # ── check-intent (Task 7) ─────────────────────────────────────────────────
 _ci() { py docreview_anchor.py check-intent "$@" 2>/dev/null; }   # rc 는 $?
 case_AC6_fix_contract() {

@@ -626,7 +626,8 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats):
     """출력 JSON 을 조립하고 같은 요약을 `st["rounds"][n]["route_report"]` 에 남긴다.
 
     `stats` 는 앞 단계가 낸 계수 다섯(bucket_conflicts · lineage_mismatch · revived ·
-    reraise_unconsumed · escalated_unconsumed). 키 순서는 골든(`shared/tests/fixtures/
+    reraise_unconsumed · escalated_unconsumed)과 얼림 검사 부재 표지(`freeze_unchecked` — 참이면
+    advisory 한 줄, 출력 키는 늘지 않는다). 키 순서는 골든(`shared/tests/fixtures/
     docreview/golden/`)이 바이트로 고정하므로 재배열하지 않는다.
     """
     report = L.report()
@@ -639,6 +640,8 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats):
         adv.append("상세 미검증 — 층 2 블록 없음")
     if st["snapshots"][str(n)].get("headingless"):
         adv.append("앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위")
+    if stats.get("freeze_unchecked"):
+        adv.append("얼림 검사 없음 — diff 미제공(라운드 %d)" % n)
     out = {
         "ok": True, "round": n, "findings": [_pub(it) for it in final],
         "by_disposition": {d: [it["id"] for it in final if it["disposition"] == d] for d in DISPOSITIONS},
@@ -710,10 +713,13 @@ def cmd_finalize(a) -> int:
     for it in final:
         L.accept(it["id"])
     record_findings(st, final + rejected_items, n)
+    # 라운드 ≥ 2 에서 얼림 diff 가 없거나 읽을 수 없으면 이 라운드의 얼림 검사가 꺼진 것이다 — 공시한다.
+    freeze_unchecked = n >= 2 and not (a.diff and Path(a.diff).is_file())
     out = _build_report(L, st, n, final, rejected_items, degrade,
                         {"bucket_conflicts": bucket_conflicts, "lineage_mismatch": lineage_mismatch,
                          "revived": revived, "reraise_unconsumed": reraise_unconsumed,
-                         "escalated_unconsumed": escalated_unconsumed})
+                         "escalated_unconsumed": escalated_unconsumed,
+                         "freeze_unchecked": freeze_unchecked})
     st["pending_recritic"] = None
     st["rounds"][str(n)].pop("finalize_failed", None)   # 같은 라운드의 앞선 거부 표지 — 이 성공이 대신한다
     save_state(a.state_dir, st, "finalize (%d findings, %d rejected)" % (len(final), len(rejected_items)))

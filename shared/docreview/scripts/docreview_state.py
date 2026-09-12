@@ -578,6 +578,22 @@ def cmd_exempt_anchors(a) -> int:
     return 0
 
 
+def cmd_prev_snapshot(a) -> int:
+    """7단계 얼림 검사의 직전 라운드 스냅숏 — `begin-round` 가 원장에 저장한 모양 그대로.
+
+    `docreview_anchor.diff_snapshots` 가 읽는 `anchor` · `title` · `hash` 가 거기 있다. 라운드 1 에는
+    직전이 없고(`no_prev_snapshot`), 원장에 직전 라운드 스냅숏이 없으면 `prev_snapshot_missing` 이다."""
+    st = load_state(a.state_dir)
+    n = int(st["round"])
+    if n < 2:
+        return fail("no_prev_snapshot", round=n)
+    snap = st["snapshots"].get(str(n - 1))
+    if not isinstance(snap, dict) or not isinstance(snap.get("sections"), list):
+        return fail("prev_snapshot_missing", round=n)
+    _emit({"headingless": bool(snap.get("headingless")), "sections": snap["sections"]})
+    return 0
+
+
 def cmd_decide(a) -> int:
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
@@ -1126,6 +1142,7 @@ def build_parser() -> argparse.ArgumentParser:
         return x
     x = sd(sp.add_parser("record-findings")); x.add_argument("--json", required=True); x.set_defaults(fn=cmd_record_findings)
     x = sd(sp.add_parser("exempt-anchors")); x.set_defaults(fn=cmd_exempt_anchors)
+    x = sd(sp.add_parser("prev-snapshot")); x.set_defaults(fn=cmd_prev_snapshot)
     x = sd(sp.add_parser("decide")); x.add_argument("--id", required=True)
     x.add_argument("--choice", required=True, choices=("adopt", "reject", "hold"))
     x.add_argument("--quote", required=True); x.add_argument("--log-file", default=None); x.set_defaults(fn=cmd_decide)

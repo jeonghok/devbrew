@@ -241,4 +241,19 @@ for r in $(printf '%s\n' "$DERIVED" | sed -n 's/^REASON //p'); do
     "finishing Step B: 엔진의 리뷰 미완 사유 \`$r\` 를 싣는다 (사유 집합은 코드에서 도출)"
 done
 
+# ── 7. 산출자 없는 입력 — 절차서가 대는 `*.json` 마다 그것을 쓰는 `> <이름>` 이 같은 문서에 있다 (PR 3 최종 리뷰 F2) ──
+# 7단계가 `diff prev.json snap.json` 으로 직전 라운드 스냅숏을 읽는데 그것을 만드는 줄이 절차서 · 두 skill · 엔진 어디에도
+# 없었다 — 모델이 diff 를 건너뛰면 얼림 검사가 조용히 꺼진다. 이름을 열거하지 않고 문서에서 도출한다(∀). 산출은 셸
+# 리다이렉트 `> <이름>` 하나로만 센다 — 산문의 언급은 파일을 만들지 않는다.
+JSON_NAMES="$(grep -oE '[A-Za-z0-9_-]+\.json' "$REF" | LC_ALL=C sort -u)"
+n_json="$(printf '%s\n' "$JSON_NAMES" | grep -c . || true)"
+{ [ "${n_json:-0}" -ge 5 ] && printf '%s\n' "$JSON_NAMES" | grep -qx 'snap.json'; } \
+  && ok "산출자: 절차서에서 \`*.json\` 이름 ${n_json}개를 도출했다 (하한 5 · 카나리아 snap.json — 아래 ∀ 가 공허하지 않다)" \
+  || no "산출자: \`*.json\` 이름 도출이 깨졌다 (${n_json:-0}개) — 아래 ∀ 가 공허하다"
+for j in $JSON_NAMES; do
+  grep -qF "> $j" "$REF" \
+    && ok "산출자: 절차서가 대는 \`$j\` 를 쓰는 \`> $j\` 가 같은 문서에 있다" \
+    || no "산출자: 절차서가 \`$j\` 를 대지만 그것을 만드는 \`> $j\` 가 절차서 어디에도 없다 — 그 단계의 입력을 아무도 만들지 않는다"
+done
+
 finish
