@@ -283,7 +283,7 @@ for rf in "${removed_files[@]}"; do
 done
 
 # --- V13: depth audit 제거 — 사후 측정 층과 옛 라운드 형식의 어휘가 production 에 0건 ---
-# 번호는 다음 빈 번호다(V10 · V11 · V12 가 이미 쓰인다).
+# 번호는 다음 빈 번호다(V10 · V12 가 쓰인다. V11 은 3.0.0 에서 대상과 함께 지웠고 번호는 재사용하지 않는다).
 # 식별자 축 — 스코프 = prod_files 그대로(README.md 포함). README 는 이 제거를 개념으로 서술하고
 # 식별자를 인용하지 않는다. `depth-audit`(센티널 이름)은 넣지 않는다: 이 제거의 설계문서
 # 파일명(…-remove-depth-audit-design.md)과 겹치고, production 은 설계문서 경로를 출처로 인용하는
