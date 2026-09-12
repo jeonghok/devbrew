@@ -267,8 +267,10 @@ fi
 # 표시가 TTL(900초)까지 남고, 그동안 다음 편집이 그 문서를 다시 찾지 못한다. 그 자리의 지시는 이 절에만
 # 있다(body-unique). 양의 짝 — 지시가 가리키는 호출(`### clear-inflight B` 절의 harness_sid 키잉 한 줄)이
 # 실재한다. 없으면 지시가 가리킬 것이 사라진 채 이 칸만 GREEN 이 된다.
+# 찾는 리터럴은 발동 조건(①/②)과 극성까지 붙인 한 줄이다 — 부분 문자열 `mark-reviewed 대신 clear-inflight`
+# 만 찾으면 조건을 `(④)` 로 바꾼 문장도 통과했다(PR 3 최종 리뷰 F8 — 변이로 확인).
 cib="$(awk '/^### clear-inflight B/{f=1; next} f && /^#/{f=0} f' "$SKILL")"
-if [[ -n "$win" ]] && grep -qF '`mark-reviewed` 대신 `clear-inflight` 를 부른다' <<<"$win" \
+if [[ -n "$win" ]] && grep -qF '이 예외가 걸린 라운드에서 사용자가 진행(①/②)을 고르면 `mark-reviewed` 대신 `clear-inflight` 를 부른다' <<<"$win" \
   && grep -qF 'arm_ledger.py" clear-inflight "$harness_sid"' <<<"$cib"; then
   note PASS "T12f: 배제가 걸린 라운드의 진행은 mark-reviewed 대신 clear-inflight(B 절의 그 호출)를 부른다"
 else
