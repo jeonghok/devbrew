@@ -24,79 +24,6 @@ DISCARD_NODES = (ast.Continue, ast.Break, ast.Return)
 # Task 1 Step 6 이 이 목록의 초기 내용을 정한다. 착수 시점에는 비어 있다 —
 # 비어 있는 것이 이 락이 오늘 RED 인 이유의 일부다.
 
-# Task 11 (T5) — 훅에 `from adjudication import Ledger` 를 더하면서
-# review-dispatch.py 가 처음으로 ㉮(회계 소비자)에 들어왔다. 이 파일의 다른
-# for 문 열 자리가 그 순간 새로 이 락의 대상이 된다 — 이번 Task 가 배선한 두
-# `decision:"block"` 자리(T5-1·T5-2)는 루프 «안»이 아니라서 이 열에 포함되지
-# 않는다. 남은 열 자리는 전부 `select_dispatch_target()`(다음 턴에 dispatch할
-# 문서 하나를 고르는 선택 루프)와 `main()` 의 검증 대상 선별 루프에 있다 —
-# 신고된 발견물을 판정하는 자리가 아니라 "이번 턴에 무엇을 처리할지" 고르는
-# 스케줄링 루프다.
-#
-# 근거(코드를 직접 읽고 확인 — 선재 판정을 그대로 받아 적지 않았다): 이 파일의
-# 모듈 docstring 과 `discover_candidates.py` 의 모듈 docstring 이 함께 명시하듯
-# "발견은 무상태"다 — 매 Stop 마다 `git status` 로 후보 전체를 다시 낸다.
-# 그러므로 이번 턴에 선택되지 않은 후보는 «사라지는» 것이 아니라 다음 Stop 의
-# 후보 목록에 그대로 다시 나타난다. 소실이라는 개념 자체가 성립하지 않는다
-# (C6(1)) — "판정자가 처리하지 못해 항목이 사라졌다"는 전제가 스케줄링 루프에는
-# 적용되지 않는다.
-_T5_SELECT_LOOP = (
-    "C6(1) — select_dispatch_target() 의 선택 루프(cands 를 훑어 dispatch 대상 "
-    "하나를 고른다). discover()가 매 Stop마다 git status 로 후보 전체를 무상태 "
-    "재스캔하므로, 이번 턴에 고르지 못한 후보는 사라지지 않고 다음 Stop 의 "
-    "후보 목록에 그대로 다시 나타난다. 이 루프는 신고된 발견물을 판정하는 "
-    "자리가 아니라 '이번 턴에 dispatch할 문서 하나'를 고르는 스케줄링이다 — "
-    "회계가 대응할 처분 대상(accountable finding) 자체가 없다."
-)
-# Task 11b Step 4c — 오케스트레이터 지적: 위 `_T5_SELECT_LOOP` 의 "다음 Stop 의
-# 후보 목록에 그대로 다시 나타난다"는 두 영속-상태 상한 검사(DISPATCH_ATTEMPT_CAP·
-# VALIDATION_ATTEMPT_CAP)에는 **거짓**이다 — 상한 카운터는 arm_ledger.py 의
-# record_attempt()/validation 기록이 세션에 걸쳐 영속시키므로, 한 번 상한에
-# 닿으면 그 후보는 이 특정 검사를 다음 Stop 에도 계속 다시 통과 못 한다(코드
-# 확인: record_attempt() 는 attempts 가 DISPATCH_ATTEMPT_CAP 에 닿는 바로 그
-# write 에서 armed_paths 에도 같이 추가한다 — arm_ledger.py 의
-# record_attempt()). 결론(배선
-# 불필요)은 그대로다: 소실이 없다는 근거가 "다시 보인다"가 아니라 "이미
-# 한 번 공시됐다"로 바뀔 뿐이다.
-_T5_SELECT_LOOP_DISPATCH_CAP = (
-    "C6(1) — select_dispatch_target() 의 DISPATCH_ATTEMPT_CAP 스킵. 위 "
-    "_T5_SELECT_LOOP 의 '다음 Stop 에 다시 나타난다'는 이 필터에는 거짓이다 "
-    "— record_attempt()(arm_ledger.py)가 attempts 를 상한에 올리는 그 "
-    "write 에서 armed_paths 에도 같이 추가하므로, 이후 Stop 에서 그 후보는 "
-    "(이 검사가 아니라) 위 armed 검사에서 먼저 걸린다. 진짜 근거: 상한 도달 "
-    "사실은 상한에 닿던 바로 그 dispatch 시도에서 이미 한 번 공시됐다 — "
-    "review-dispatch.py 의 dispatch 상한 mandate 메시지(「…자동 dispatch를 "
-    "중단한다」 — `if cap and attempt_n >= cap:` 분기가 조립한다). 이후의 "
-    "조용한 스킵은 새 소실이 아니라 이미 공시된 상태를 "
-    "다시 지나가는 것이다."
-)
-_T5_SELECT_LOOP_VALIDATION_CAP = (
-    "C6(1) — select_dispatch_target() 의 VALIDATION_ATTEMPT_CAP 스킵. 같은 "
-    "이유로 _T5_SELECT_LOOP 의 '다시 나타난다' 근거는 이 필터에도 거짓이다. "
-    "진짜 근거: 같은 상한·같은 카운터를 main() 의 검증 대상 선별 루프"
-    "(`val_att.get(c.key, 0) >= val_cap` 분기)가 이 함수 호출보다 **앞서** "
-    "같은 Stop 안에서 이미 검사해 `capped_advisory` 를 만들어 두고, 그 값은 "
-    "select_dispatch_target() 이 무엇을 고르든 상관없이 with_advisory 로 이 "
-    "턴의 출력에 실린다(flush 지점 일곱 — `flush_advisory(capped_advisory)` "
-    "넷 · `_block_with_ledger(…, capped_advisory)` 둘 · "
-    "`with_advisory({\"systemMessage\": …}, capped_advisory)` 하나). 이 "
-    "자리의 스킵은 같은 Stop "
-    "안에서 이미 공시된 사실을 다시 지나가는 것이지 새 소실이 아니다."
-)
-_T5_MAIN_VALIDATION_LOOP_INFLIGHT = (
-    "C6(1) — main() 의 검증 대상 선별 루프(cands 를 훑어 validation_pool 을 "
-    "만든다). is_inflight 는 arm_ledger.is_inflight(body, c.path, now) 로 매 "
-    "Stop 마다 새로 계산되는 상태다 — 지금 다른 리뷰가 도는 문서를 이번 턴의 "
-    "구조 검증에서만 뺀다. 리뷰가 끝나면 다음 Stop 에서 다시 후보가 되므로 "
-    "영구 소실이 아니다."
-)
-_T5_MAIN_VALIDATION_LOOP_SUCCESS = (
-    "C6(1) — main() 의 구조 검증 루프(`for key in picked`). `reasons` 가 "
-    "빈 목록이면 그 문서는 구조 검증을 통과했다는 뜻이라 애초에 판정할 "
-    "실패가 없다 — hold/reject 할 대상이 없는 성공 케이스에는 대응하는 "
-    "처분 개념이 없다."
-)
-
 # T6b — `docreview_route.py`의 아홉 자리. **인과관계 정정(재리뷰 F-3)**: 이
 # 파일이 이 락의 모집단에 처음 들어온 것은 이 태스크의 symlink 수정이 아니라
 # Task 6이다 — `reviewing-spec/SKILL.md`에 `consumer=plugins/spec-distill/
@@ -112,9 +39,8 @@ _DR_PERMIT_SEARCH = (
     "C6(1) — `_permit_covers()` 는 `st[\"permits\"]` 를 도는 존재검사 헬퍼다 "
     "(리뷰 대상 finding 이 아니라 permit 레코드를 순회한다). 일치하는 permit 을 "
     "찾으면 `return True` 로 끊고, 못 찾으면 루프가 끝까지 돌아 `return False` "
-    "로 떨어진다 — 어느 쪽도 판정 대상 항목을 버리지 않는다. review-dispatch.py "
-    "의 `select_dispatch_target()` 선택 루프(같은 파일 위 `_T5_SELECT_LOOP`)와 "
-    "같은 범주: 처분을 낼 대상 자체가 없는 탐색 루프다."
+    "로 떨어진다 — 어느 쪽도 판정 대상 항목을 버리지 않는다. 처분을 낼 "
+    "대상 자체가 없는 탐색 루프다."
 )
 _DR_ABSORB_GROUP_DEAD = (
     "C6(1) — `_absorb_same_as()` 의 그룹 순회. `live`(그룹 안에서 아직 "
@@ -135,16 +61,14 @@ _DR_REJECTED_ALREADY = (
     "`_rejected` 는 `_apply_recritic()` 에서 `L.reject(f, ...)` 와 같은 자리에서 "
     "대입된다(:229-230) — 이미 회계된 항목이고, 이 continue **직전** 세 줄이 "
     "그 항목을 `rejected_items` 에 담아 반환값에 실어(:332-334) 파이프라인에서도 "
-    "사라지지 않는다(review-dispatch.py 의 `capped.append` 선행 대입과 같은 "
-    "모양 — continue 이전에 보존이 먼저 실행된다)."
+    "사라지지 않는다(continue 이전에 보존이 먼저 실행된다)."
 )
 _DR_ESCALATED_NOT_DUE = (
     "C6(1) — `_auto_decides()` 의 escalated 예약 순회. 아직 자기 라운드가 아닌 "
     "예약(Task 2 갱신 — `int(e['round']) >= n`, 이번 라운드 이후에 생긴 예약)은 "
     "`continue` **직전** `keep_esc.append(e)` 로 이미 보존돼 "
     "`st['escalated'] = keep_esc` 로 다음 라운드까지 살아남는다 — "
-    "review-dispatch.py 의 `_T5_SELECT_LOOP`(discover() 가 매 Stop 재스캔) 와 "
-    "같은 범주: 이번 라운드에 못 골랐다고 사라지는 게 아니라 다음 라운드의 "
+    "이번 라운드에 못 골랐다고 사라지는 게 아니라 다음 라운드의 "
     "같은 순회에 다시 나타난다. Task 2 이전엔 조건이 `!= n - 1`(정확히 직전 "
     "라운드의 예약만 소비)이라 `finalize` 가 이 루프 전에 조기 반환한 라운드가 "
     "하나라도 끼면 그 예약의 라운드 번호가 영원히 어긋나 소비도 계수도 안 되는 "
@@ -255,98 +179,8 @@ EXEMPT = {
         "로, \"held_by_class\" 는 loop 직후 세 줄(held_unadjudicated/"
         "held_malformed/held_other)로 각각 실린다 — 버려지는 항목이 없다.",
 
-    # Task 11 (T5) — select_dispatch_target() 의 선택 루프 7 자리.
-    # Task 11b Step 4c/수정 — 07c9991·6d87b2c 가 이 함수보다 «앞선» 코드
-    # (`_block_with_ledger` 재작성 + import 한 줄)를 늘려 select_dispatch_target
-    # 전체가 +13 줄 밀렸다. 원래 327~338 이던 키가 조용히 stale 해져 배선 락이
-    # 이미 인용한 자리를 "미배선"으로 잘못 재보고했다 — 배선 락은 (파일, 줄번호)
-    # 로만 面제를 찾으므로 줄 이동은 그 자체로 락을 무력화한다(발견: Task 11b
-    # 스캔 실측, unwired=14 인데 브리프 전제는 4). 아래 7 줄을 현재 위치로
-    # 갱신한다 — 코드·판정은 무변경, 줄번호만 교정.
-    #
-    # 최종 수정 라운드 2 — 같은 drift 가 «한 번 더» 일어났다(+17): R-A 가
-    # `_block_with_ledger()` 의 docstring 을 늘려 그 아래 전부가 밀렸다. 이번엔
-    # 다른 점이 하나 있다 — 키가 «정체»(kind·func·guard)를 함께 쥐게 된 뒤라
-    # 락이 열 자리를 **이름과 함께** 냈고, 갱신을 «정체가 같은 행 찾기»로
-    # 기계적으로 할 수 있었다(줄번호를 손으로 세지 않았다). 판정·사유는 무변경.
-    # 일곱 중 다섯(`c.born` · `c.key in armed` · `is_inflight(...)` ·
-    # `resolve_mode(...) is None` · 루프 끝의 `return c`)은 `_T5_SELECT_LOOP` 를
-    # 그대로 공유한다(앞 넷은 실제로 매 Stop 재계산되는 상태다). 두 상한 분기
-    # (`DISPATCH_ATTEMPT_CAP`·`VALIDATION_ATTEMPT_CAP`)는 그 공유 근거가 거짓
-    # 이라 위 두 전용 상수로 분리했다(Step 4c). `return c` — 첫 적격 후보를
-    # 찾고 순회를 멈추는 것도 `_T5_SELECT_LOOP` 와 같은 이유로 소실이 아니다
-    # (discover()가 다음 Stop 에 나머지 후보를 다시 낸다).
-    ("plugins/spec-distill/hooks/review-dispatch.py", 357,
-     'continue in select_dispatch_target @ if c.born'): _T5_SELECT_LOOP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 359,
-     'continue in select_dispatch_target @ if c.key in armed'): _T5_SELECT_LOOP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 361,
-     'continue in select_dispatch_target @ if att.get(c.key, 0) >= arm_ledger.DISPATCH_ATTEMPT_CAP'):
-        _T5_SELECT_LOOP_DISPATCH_CAP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 363,
-     'continue in select_dispatch_target @ if val.get(c.key, 0) >= arm_ledger.VALIDATION_ATTEMPT_CAP'):
-        _T5_SELECT_LOOP_VALIDATION_CAP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 365,
-     'continue in select_dispatch_target @ if arm_ledger.is_inflight(body, c.path, now)'): _T5_SELECT_LOOP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 367,
-     'continue in select_dispatch_target @ if resolve_mode(c.path) is None'): _T5_SELECT_LOOP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 368,
-     'return in select_dispatch_target @ <bare>'): _T5_SELECT_LOOP,
-
-    # Task 11 (T5) — main() 의 검증 대상 선별 루프. `is_inflight(...)` 분기는
-    # in-flight 스킵(다른 리뷰가 도는 중 — 끝나면 다음 Stop 에 다시 후보가
-    # 된다). Task 11b 가 위와 같은 drift 로 자리를 교정했다(사유·판정 무변경).
-    ("plugins/spec-distill/hooks/review-dispatch.py", 560,
-     'continue in main @ if arm_ledger.is_inflight(body, c.path, now)'):
-        _T5_MAIN_VALIDATION_LOOP_INFLIGHT,
-
-    # Task 11 수정 라운드 1 — 최초 사유가 범주 착오였다(오케스트레이터 지적).
-    # Task 11b — 그 자리를 교정했다(위와 같은 drift, 판정·본문 논거는 무변경).
-    # 이 자리는 검증 상한(VALIDATION_ATTEMPT_CAP) 도달 스킵이다. `capped.append(
-    # c.key)` 가 바로 위 같은 분기에서 continue 이전에 실행되므로 항목 자체는
-    # 사라지지 않고 `capped` → `capped_advisory` 를 타고 이번 턴의 JSON 출력
-    # `systemMessage` 필드에 실제로 실린다(추적: `capped_advisory` 의 선언·조립과
-    # 그 값을 태우는 flush 지점 일곱 — 위 `_T5_SELECT_LOOP_VALIDATION_CAP` 이
-    # 그 일곱을 형태로 열거한다).
-    #
-    # 최초 판정은 여기서 "systemMessage 가 모델 도달 카나리 0/14 라 채널
-    # 효과가 의심된다"고 적었으나 **그건 범주 착오다.** CLAUDE.md 의 계약:
-    # "미판정 항목의 방향은 다음 소비자가 정한다: 기계면 제외, 사람이면
-    # 라벨을 붙여 보여준다." `systemMessage` 는 **사람의 터미널**에 뜨는
-    # 채널이지 모델 컨텍스트에 주입되는 채널이 아니다 — T5-1·T5-2 가 채널을
-    # `reason` 으로 정한 이유는 그 두 자리의 소비자가 **모델**(다음 턴
-    # dispatch 판단)이기 때문이었다. 이 자리의 소비자는 사람이다 —
-    # "자동 검증·dispatch 를 하지 않는 문서가 있다"는 사실은 세션을 보는
-    # 사람에게 알리는 것이지 모델에게 강제할 대상이 아니다. 그러므로 모델
-    # 미도달은 결함이 아니라 이 채널의 **설계대로**다 — 소실도 아니고 채널
-    # 결함도 아니다(C6(1)).
-    #
-    # 그래도 면제 표시는 "최종 리뷰 재검토" 를 남긴다 — 규칙 억제
-    # (`suppressed()`)로 재분류할지는 여전히 열린 질문이다: 이 스킵은 규칙
-    # (상한값)이 정한 배제이지 판정자의 판단이 아니라는 점에서 `suppressed()`
-    # 의 정의("규칙 억제 — 판정자의 판단이 아니라 규칙(임계값)이 정한 배제")
-    # 와 정확히 들어맞아 보이기 때문이다.
-    ("plugins/spec-distill/hooks/review-dispatch.py", 563,
-     'continue in main @ if val_att.get(c.key, 0) >= val_cap'):
-        "C6(1) — 검증 상한 도달 스킵. `capped.append(c.key)` 가 같은 분기에서 "
-        "continue 이전에 실행돼 항목이 `capped`→`capped_advisory`로 이 턴의 "
-        "systemMessage 에 실린다(코드 추적 완료). systemMessage 는 사람의 "
-        "터미널에 뜨는 채널이다(CLAUDE.md: 미판정 항목은 사람이면 라벨을 "
-        "붙여 보여준다) — 이 자리의 소비자는 사람이고, 모델 컨텍스트 카나리 "
-        "0/14 는 이 채널의 설계이지 소실이 아니다. 최종 리뷰가 재검토할 것 "
-        "(규칙 억제 `suppressed()` 재분류 후보 — 판단이 아니라 상한값이 "
-        "정한 배제라는 점에서).",
-
-    # Task 11 (T5) — main() 의 구조 검증 루프. `if not reasons` 분기는 `reasons`
-    # 가 빈 성공 케이스 — 판정할 실패 자체가 없다. Task 11b 가 자리를 교정했다
-    # (사유·판정 무변경 — 이 지점은 위 검증 상한 스킵보다 아래라 6d87b2c 의
-    # `failed_keys` 삽입 한 줄이 더 얹혔다).
-    ("plugins/spec-distill/hooks/review-dispatch.py", 620,
-     'continue in main @ if not reasons'):
-        _T5_MAIN_VALIDATION_LOOP_SUCCESS,
-
     # Task 11b Step 1~3 — 계획이 배정하지 않았던 네 자리(merge_review.py).
-    # PR1 배선 baseline=14, T1-A/T1-B 가 review-dispatch.py 열을 닫아 남긴 게
+    # PR1 배선 baseline=14, T1-A/T1-B 가 (삭제된) 설계문서 리뷰 훅 열을 닫아 남긴 게
     # 이 넷이었다(원 계획 전제). 넷 다 판단 결과는 «배선 불필요» — 근거는
     # 자리마다 다르다(보고서 `.superpowers/sdd/2026-09-03-adjudication-topology/
     # task-11b-report.md` 에 각 자리의 세 질문 답변).
@@ -458,12 +292,12 @@ EXEMPT = {
 
 # Task 11 수정 라운드 1 — `derive_consumers()` 의 import·앵커 대칭 가정이
 # 깨지는 자리를 명시적으로 등재한다. 그 가정("원장을 import 하는 파일은
-# 전부 어딘가 dispatch 자리에서 `consumer=` 로 불린다")은 PR1 이 넣은 것이고
-# review-dispatch.py 가 그 반례다: 앵커(`consumer=`)는 skill/command/agent
-# 문서가 "이 subagent 의 발견물을 이 스크립트가 판정한다"고 선언하는 자리인데,
-# 훅은 subagent dispatch 결과를 받는 소비자가 아니라 **그 자신이** 직접
-# `decision:"block"` 으로 차단/통과를 정하는 **종단(terminal) 결정자**다 —
-# 이름 붙일 dispatch 자리 자체가 없다. 없는 자리를 만들어 붙이면 그건 허구다.
+# 전부 어딘가 dispatch 자리에서 `consumer=` 로 불린다")은 PR1 이 넣은 것이다.
+# 앵커(`consumer=`)는 skill/command/agent 문서가 "이 subagent 의 발견물을 이
+# 스크립트가 판정한다"고 선언하는 자리인데, 원장을 import 하면서도 그렇게 불릴
+# dispatch 자리가 없는 파일이 있다(아래 항목마다 사유). 없는 자리를 만들어
+# 붙이면 그건 허구다. 첫 반례였던 설계문서 리뷰 훅(스스로 차단/통과를 정하던
+# 종단 결정자)은 spec-distill 3.0.0 에서 삭제됐다.
 #
 # `EXEMPT` 와 같은 규율: 사유 없는 항목(빈 문자열)은 그 자체로 RED —
 # `test_adjudication_wiring.sh` 의 `terminal_uncited` 축이 잡는다.
@@ -476,14 +310,6 @@ EXEMPT = {
 # 맞추고, 아래 값에 그 인용을 명시한다(실질은 이미 C6(1) — 대응할 dispatch
 # 자리 자체가 없음).
 TERMINAL_CONSUMERS = {
-    "plugins/spec-distill/hooks/review-dispatch.py":
-        "C6(1) — 종단 결정자. subagent findings 를 판정해 넘기는 소비자가 "
-        "아니라 이 파일 스스로 두 `decision:\"block\"` 자리(T5-1 구조 검증 "
-        "실패 · T5-2 dispatch 강제)에서 차단/통과를 정한다. 이 훅을 부르는 "
-        "어떤 skill/command/agent 문서에도 「이 스크립트가 판정한다」고 "
-        "선언할 dispatch 자리가 없다 — Stop 이벤트가 훅을 직접 실행하지, "
-        "markdown 이 subagent 로 dispatch 하는 형태가 아니다. 대응물이 "
-        "원리적으로 없다.",
     # T6b — reviewing-spec 껍데기화(Task 6)가 옛 spec-reviewer 참조를 끊으면서
     # 이 파일이 ANCHOR 를 잃었다(Ruling 9). `merge_brief_review.py:37` 이 여전히
     # `codex_degraded_from`·`derive_codex_verdict`·`parse_codex_yaml` 셋을 이
@@ -500,7 +326,7 @@ TERMINAL_CONSUMERS = {
     # 없는 자리를 만들어 붙이면 그건 허구). ② TERMINAL_CONSUMERS 등재 — 채택.
     # C6(2, 측정된 이유): 이 파일은 이제 어떤 skill/command/agent 도 subagent
     # dispatch 결과를 이 파일에 판정시키지 않는다(옛 dispatch 자리가 사라졌다) —
-    # 순수 재사용 라이브러리로 변했다. review-dispatch.py 처럼 «원리적으로»
+    # 순수 재사용 라이브러리로 변했다. 종단 결정자처럼 «원리적으로»
     # 앵커가 불가능한 것은 아니지만(재도입되면 앵커가 다시 생길 수 있다), «지금»
     # 은 대응하는 dispatch 자리가 없고 만들 근거도 없다는 점에서 결론(앵커 없음)
     # 은 같다.
@@ -727,8 +553,9 @@ def stale_exempt(repo_root):
     **두 방향의 위험이 있고 둘 다 이 검사가 잡는다.**
 
     ⑴ 자리가 어긋남 — 그 자리 «위»에 코드가 늘면 키가 밀린다. Task 11b 가
-    실증했다: 앞선 두 커밋이 `select_dispatch_target()` 위에 코드를 늘려 그
-    함수가 +13/+14 줄 밀렸고 열 개의 키가 통째로 낡았다. 밀린 줄이 아무것도
+    실증했다: 앞선 두 커밋이 설계문서 리뷰 훅(spec-distill 3.0.0 에서 삭제)의
+    선택 함수 위에 코드를 늘려 그 함수가 +13/+14 줄 밀렸고 열 개의 키가 통째로
+    낡았다. 밀린 줄이 아무것도
     안 가리키면 배선 락이 미배선으로 다시 잡아 시끄럽게 실패하지만, 다른
     버리는 분기의 줄번호와 겹치면 그 엉뚱한 자리가 조용히 면제된다.
 
@@ -839,7 +666,11 @@ def uncited_exemptions():
 # `docreview_route.py` 몫은 여전히 아홉 자리지만 구성원이 하나 바뀌었다(dedup
 # 나가고 fix-liveness 들어옴). 무엇이 지금 등재돼 있는지는 위 `_DR_*` 상수를
 # 직접 읽어라.
-EXEMPT_BASELINE = 27
+#
+# spec-distill 3.0.0 — 27 → 17. 설계문서 리뷰 훅이 삭제되며 그 파일의 면제 열 자리가
+# 대상과 함께 사라졌다. 줄인 것이지 면제로 옮긴 것이 아니다 — 값은 손으로 빼지 않고
+# 삭제 뒤 스캔의 `exempt_total` 로 재계수했다.
+EXEMPT_BASELINE = 17
 
 
 def derive_consumers(repo_root):

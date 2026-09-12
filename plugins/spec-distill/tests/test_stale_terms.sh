@@ -10,7 +10,7 @@
 #     grep -cF로 **0건** 인용한다. CHANGELOG.md는 실제로 4건 인용하므로(released 기록) 그
 #     제외만 유효하다.
 # 스코프: $SD 아래 전체 production 파일 — 확장자 whitelist 없이 sweep(SKILL.md/README.md/agents/
-#         templates/scripts/plugin.json 뿐 아니라 scripts/ambiguity-blacklist.txt 같은 .txt/.yaml/
+#         templates/scripts/plugin.json 뿐 아니라 scripts/codex-killswitch.conf 같은 .conf/.yaml/
 #         확장자없는 production 파일도 포함). 확장자 whitelist는 header 주장(scripts/ 커버)보다
 #         좁아지는 grep-lock header-satisfiable 함정이라 폐기했다.
 #         리포 루트의 docs/는 $SD 밖이라 자동으로 스코프 밖 — 중복 필터를 두지 않는다.
@@ -40,7 +40,7 @@ scan() { SCAN_OUT="$(grep "$@" 2>&1)"; SCAN_RC=$?; }
 
 # production artifact 파일 집합 — tests/·CHANGELOG.md·.claude/·cache/binary 제외,
 # **확장자 whitelist 없이 전체**.
-# (whitelist는 scripts/ambiguity-blacklist.txt 같은 .txt production 파일을 놓쳐 lock이 자기 헤더 주장보다
+# (whitelist는 scripts/codex-killswitch.conf 같은 비-.md/.py production 파일을 놓쳐 lock이 자기 헤더 주장보다
 #  좁아진다 — grep-lock header-satisfiable 함정. grep -I로 binary는 스킵.)
 # .claude/ 제외는 V7a·V7b·V8이 **함께** 쓰는 이 find 한 곳에 둔다 — 한 검사에만 걸면
 # 검사별 스코프가 갈려 헤더 주장이 다시 거짓이 된다.
@@ -282,29 +282,8 @@ for rf in "${removed_files[@]}"; do
     || no "V10/T5: '$rf' 가 되살아났다"
 done
 
-# --- V11 (v0.25.0): 대체 surface 가 실재한다 (음의 락만 두면 전부 지워도 통과) ---
-# 두 conjunct는 "대체 machinery가 진짜로 있다"는 하나의 주장을 나눠 진다 — 어느 한쪽만으로는
-# 부족하다. (1) 파일 존재만 보면 빈 파일도 통과하므로 arm_ledger.py가 원장 reader를 **정의**
-# 하는지(`^def armed_keys(`)까지 확인한다. (2) 'armed_keys'라는 bare 토큰 존재만 grep하면
-# 세 가지 거짓양성을 놓친다 — 주석, neutered 호출(반환값을 버리는 단독 문장), 스텁화된 정의
-# (항상 빈 목록을 반환). 앞의 둘은 Stop 훅의 dispatch 대상 선택이 그 결과를 **소비 위치**
-# (`if c.key in armed:`)에서 쓰는지로 잡는다 — 반환값이 실제로 control flow를 가른다는 증거.
-# 스텁화는 이 락의 범위 밖이다(함수 본문 의미는 grep으로 못 잡는다 — T-lock류의 한계와 같은 이유).
-#
-# 소비 지점이 v0.36.0에서 옮겨왔다: 예전에는 PostToolUse validator가 `arm_ledger.should_arm(...)`
-# 을 `if` 에서 불렀고, 지금은 Stop 훅의 `select_dispatch_target` 이 per-candidate skip 으로
-# 같은 판정을 한다. 이 락이 재는 성질(게이트가 control flow를 실제로 가른다)은 그대로다.
-scan -InE -- '^def armed_keys\(' "$SD/scripts/arm_ledger.py"
-[[ $SCAN_RC -eq 0 ]] \
-  && ok "V11: arm_ledger.py 가 armed_keys 를 정의한다" \
-  || no "V11: arm_ledger.py 에 armed_keys 정의가 없다 (파일 부재 포함 — 대체 machinery 없음)"
-scan -InE -- 'if c\.key in armed:' "$SD/hooks/review-dispatch.py"
-[[ $SCAN_RC -eq 0 ]] \
-  && ok "V11: Stop 훅이 armed 판정을 소비 위치(if)에서 쓴다" \
-  || no "V11: Stop 훅의 armed 판정이 소비 위치에 없다 (주석/neutered 호출 의심 — 게이트 증발)"
-
 # --- V13: depth audit 제거 — 사후 측정 층과 옛 라운드 형식의 어휘가 production 에 0건 ---
-# 번호는 다음 빈 번호다(V10 · V11 · V12 가 이미 쓰인다).
+# 번호는 다음 빈 번호다(V10 · V12 가 쓰인다. V11 은 3.0.0 에서 대상과 함께 지웠고 번호는 재사용하지 않는다).
 # 식별자 축 — 스코프 = prod_files 그대로(README.md 포함). README 는 이 제거를 개념으로 서술하고
 # 식별자를 인용하지 않는다. `depth-audit`(센티널 이름)은 넣지 않는다: 이 제거의 설계문서
 # 파일명(…-remove-depth-audit-design.md)과 겹치고, production 은 설계문서 경로를 출처로 인용하는

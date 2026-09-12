@@ -59,7 +59,7 @@ AskUserQuestion({
 
 ## 상태
 
-state는 새 파일을 만들지 않고 기존 `.claude/spec-distill/<session-id>/state.local.md`에 키 3개를 씁니다. 훅이 읽는 파일과 **같은 리졸버**로 경로를 구합니다. `$STATE`를 이 절에서 먼저 정의하는 이유는 아래 degrade 기록 경로(`brief_review_state.py`)가 그 값을 쓰기 때문입니다(이 문서 전체가 위에서 아래로 그대로 실행 가능하다는 주장은 아닙니다: `$PAYLOAD`·`$AUDIT`·`$CODEX_DIR_YAML`·`$CODEX_FID_YAML`은 이 skill이 정의하지 않는 입력이고, 호출자 `conducting-interview`가 진입 시점에 이미 쥐고 넘기는 값입니다. `$AUDIT`은 payload의 audit sidecar 경로 — v0.43.0부터 §6 원문이 payload(`S1`)와 audit(`S2` 이상)에 나뉘어 살아서, 완전성 검사가 두 파일을 모두 읽어야 합니다):
+state는 새 파일을 만들지 않고 기존 `.claude/spec-distill/<session-id>/state.local.md`에 키 3개를 씁니다. 경로는 `state_path.py` 리졸버로 구합니다. `$STATE`를 이 절에서 먼저 정의하는 이유는 아래 degrade 기록 경로(`brief_review_state.py`)가 그 값을 쓰기 때문입니다(이 문서 전체가 위에서 아래로 그대로 실행 가능하다는 주장은 아닙니다: `$PAYLOAD`·`$AUDIT`·`$CODEX_DIR_YAML`·`$CODEX_FID_YAML`은 이 skill이 정의하지 않는 입력이고, 호출자 `conducting-interview`가 진입 시점에 이미 쥐고 넘기는 값입니다. `$AUDIT`은 payload의 audit sidecar 경로 — v0.43.0부터 §6 원문이 payload(`S1`)와 audit(`S2` 이상)에 나뉘어 살아서, 완전성 검사가 두 파일을 모두 읽어야 합니다):
 
 ```bash
 PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"

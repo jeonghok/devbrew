@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/*/scripts/*.py plugins/*/hooks/*.py shared/adjudication/*.py tools/adjudication/check_consumed.py tools/adjudication/check_wiring.py shared/tests/fixtures/adjudication/run_consumed.py
+# guards: plugins/*/scripts/*.py shared/adjudication/*.py tools/adjudication/check_consumed.py tools/adjudication/check_wiring.py shared/tests/fixtures/adjudication/run_consumed.py
 #
 # 수정 라운드 1 (F6) — 판정기 자신을 declare 한다. `fixtures/adjudication/
 # run_consumed.py` 가 `from check_consumed import ...` 와 `from check_wiring

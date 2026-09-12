@@ -74,6 +74,17 @@ def state_root(cwd: str | None = None) -> Path:
     return fallback
 
 
+def state_root_escapes(root: Path) -> bool:
+    """`root`(`<repo>/.claude/spec-distill`)가 심볼릭 링크를 거쳐 제자리 밖으로 풀리면 True.
+
+    `spec-distill` 자신이나 `.claude` 가 링크면 참이다. 조상의 링크(macOS `/tmp` →
+    `/private/tmp`)는 양쪽이 똑같이 풀려 거짓이다. 지우는 쪽(TTL-GC · SessionEnd 정리)은
+    참이면 아무것도 지우지 않는다 — 저장소가 커밋한 링크는 저장소 밖을 가리킬 수 있다.
+    """
+    return os.path.realpath(root) != os.path.join(
+        os.path.realpath(root.parent.parent), ".claude", "spec-distill")
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print("usage: state_path.py {state-root|session-id} [<cwd>]", file=sys.stderr)
@@ -84,11 +95,14 @@ def main(argv: list[str]) -> int:
         print(str(state_root(cwd)))
         return 0
     if sub == "session-id":
-        # env-only resolve (no hook payload on the CLI path); mirrors what the
-        # Stop hook resolves so the skill keys `mark-reviewed` to the SAME state
-        # file the hook reads (v0.25.0 arm ledger). Unresolved → exit 1 with NO
-        # stdout (caller treats empty as "skip the ledger write, keep
-        # enforcement").
+        # env-only resolve (no hook payload on the CLI path). Skills key their
+        # per-session state directory with this sid.
+        # 계약: 풀리지 않으면 exit 1, stdout 은 비어 있다.
+        # 규칙: 호출자는 빈 sid 로 `$ROOT/$sid/<leaf>` 를 만들지 않는다 — 빈 값이면 소리를
+        # 내고 거부한다. 본보기는 `skills/framing-requests/SKILL.md` 의 sid 가드다(sid 가
+        # 실값이고 mkdir 이 성공할 때만 경로가 생긴다). 호출자는 여기 적지 않고
+        # `git grep -n 'state_path.py" session-id'` 로 센다.
+        # 알려진 위반(연기): reviewing-brief ## 상태 · conducting-interview/references/finishing.md — 빈 sid 가드 없음.
         sid = resolve_session_id(None)
         if sid is None:
             return 1
