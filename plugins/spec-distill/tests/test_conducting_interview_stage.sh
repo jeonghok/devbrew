@@ -223,7 +223,7 @@ grep -qF '이미 있는 값은 손대지 않는다' <<<"$mig_block" \
   && ok "AC5/C2: 이미 있는 값은 두고 부재 키만 채운다 (진행 중 인터뷰의 닫힘을 안 되돌린다)" \
   || no "AC5/C2: 부분 보충 총칙이 없다 — 있는 값을 덮어쓸 수 있다"
 # 조건을 넓히면 «구세션 전용» 이던 `user_statements` 초기화가 직전 릴리스 세션까지 삼킬 수
-# 있다. 그건 마이그레이션이 아니라 §6 원문·깊이 측정 근거의 손실이다. 범위 한정을 못 박는다.
+# 있다. 그건 마이그레이션이 아니라 §6 원문의 손실이다. 범위 한정을 못 박는다.
 grep -qE '구세션에 한해|구세션에만' <<<"$mig_block" \
   && ok "AC5/C2: user_statements 초기화가 구세션으로 한정된다" \
   || no "AC5/C2: user_statements 초기화 범위가 한정되지 않았다 — 넓힌 조건이 발화 레코드를 지운다"
@@ -320,43 +320,58 @@ grep -q 'interview_round' <<<"$term_block" \
 
 # --- v0.22.0: teach-beat + blind-spot/coverage-mapper dispatch (AC6/AC7/AC8/AC9/C11/C12) ---
 
-# --- v0.57.0 §1 라운드 규약 (블록 스코프 — 4-block·teach-beat 대체) ---------------------
-# 스코프 안의 예시 fenced block 이 `## R<n>`(depth_pairs 계약이 요구하는 실제 헤딩 리터럴)을
-# 담고 있어 — 단순 "다음 `## ` 헤딩에서 닫는다" idiom 이 예시 자체를 다음 섹션 시작으로
-# 오판한다(fence 미인식). 그래서 이 스코프만 ``` 토글로 fence 안쪽을 닫힘-판정에서 뺀다.
+# --- 라운드 규약 (블록 스코프) — 지금 이해 · 다음 결정 · 질문 하나 -----------------------
+# 스코프 안의 예시 fenced block 이 `## R<n>` 헤딩 리터럴을 담고 있어 — 단순 "다음 `## `
+# 헤딩에서 닫는다" idiom 이 예시 자체를 다음 섹션 시작으로 오판한다(fence 미인식). 그래서 이
+# 스코프만 ``` 토글로 fence 안쪽을 닫힘-판정에서 뺀다. 절 제목은 `## 라운드 규약` 으로 시작해야
+# 이 앵커가 절을 뜬다.
 round_block="$(awk '/^```/{c=!c} /^## 라운드 규약/{f=1;print;next} !c && /^## /{f=0} f' "$SKILL")"
 round_flat="$(tr '\n' ' ' <<<"$round_block" | tr -s ' ')"
-{ [[ -n "$round_block" ]] && grep -qF '### 직전 답에서 — S<k>' <<<"$round_block"; } \
-  && ok "AC1: 라운드 규약 절 + «### 직전 답에서 — S<k>» 블록 형식" || no "AC1: 라운드 규약 절/블록 형식 부재"
-for key in '- 함의:' '- 상충:' '- 확인한 사실:' '- 위험:'; do
-  grep -qF -- "$key" <<<"$round_block" && ok "AC1: 네 줄 키 $key" || no "AC1: 네 줄 키 $key 부재"
+[[ -n "$round_block" ]] \
+  && ok "AC3(양성대조): 라운드 규약 절을 떴다 (아래 단언이 실재한다)" \
+  || no "AC3(양성대조): 라운드 규약 절 부재 — 아래 단언이 공허하다"
+for h in '### 지금 이해' '### 다음 결정' '### 질문' '### 답'; do
+  grep -qxF -- "$h" <<<"$round_block" && ok "AC3: 소제목 $h" || no "AC3: 소제목 $h 부재"
 done
-grep -qF '## R<n>' <<<"$round_block" && ok "AC1: state 본문 헤딩 ## R<n> (depth_pairs 계약)" || no "AC1: ## R<n> 헤딩 부재"
-grep -qF 'Q1 은 생략할 수 없다' <<<"$round_flat" && ok "AC1: «Q1 은 생략할 수 없다»" || no "AC1: Q1 불가생략 문장 부재"
-grep -qF 'R1 은 S1 을 되비춘다' <<<"$round_flat" && ok "AC1: «R1 은 S1 을 되비춘다»" || no "AC1: R1/S1 문장 부재"
-grep -qE '넷 다 «없음»[^.]{0,60}되묻기|전부 «없음»[^.]{0,60}되묻기' <<<"$round_flat" && ok "AC1: 전부 «없음» → Q1 되묻기 (G1 이행 규칙)" || no "AC1: 전부-없음 규칙 부재"
-# 실측(round 산문): «/interview» 와 «R2 부터» 사이 간격이 101자 — 원안 {0,80} 은 이 정확한
-# 산문(브리프가 지정한 리터럴 그대로, 임의로 줄이지 않음)에 대해 너무 좁아 자기모순이었다.
-# 120으로 넓혀 현재 문장 + 사소한 리라이트 여유를 함께 잡는다(부재 판정용이 아니라 「한
-# 문장 안의 관계」결속이 목적이므로 상한 자체를 없애지 않는다 — 무관한 문장까지 걸리는
-# vacuous 매치를 막는 것이 이 축의 역할이다).
-grep -qE '인자 없이[^.]{0,40}/interview[^.]{0,120}R2 부터' <<<"$round_flat" && ok "AC1: 비-seed 경로의 R1 예외" || no "AC1: 비-seed R1 규약 부재"
-q_js="$(awk '/^## 라운드 규약/{f=1} f&&/^```javascript/{j=1;next} j&&/^```/{exit} j' "$SKILL")"
-[[ "$(grep -c 'header:' <<<"$q_js")" -eq 2 ]] && grep -q 'AskUserQuestion(' <<<"$q_js" \
-  && ok "AC2: AskUserQuestion 한 번에 질문 둘(header 2개)" || no "AC2: AskUserQuestion 질문 수가 2가 아니다"
-grep -qF '(권장)' <<<"$q_js" && ok "AC2: 첫 선택지가 추천 (권장)" || no "AC2: 추천 선택지 부재"
-grep -qF '고르면 무엇이 달라지는가' <<<"$round_flat" && ok "AC2: description = 고르면 무엇이 달라지는가" || no "AC2: description 규칙 부재"
-grep -qE 'Q1 의 선택지는 둘|«맞다» / «모르겠다»' <<<"$round_flat" && ok "AC2: Q1 선택지 둘(맞다/모르겠다), 수정은 기타" || no "AC2: Q1 선택지 규칙 부재"
-grep -qF 'provisional_on' <<<"$round_flat" && ok "AC2: Q2 의 provisional_on 규칙" || no "AC2: provisional_on 부재"
-reask_block="$(awk '/^## 되묻기로 바뀌는 조건/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
-{ [[ -n "$reask_block" ]] && grep -q '이유' <<<"$reask_block" && grep -q '사례' <<<"$reask_block" && grep -q '실패 조건' <<<"$reask_block"; } \
-  && ok "C1: 되묻기 세 축(이유·사례·실패 조건)" || no "C1: 되묻기 절/세 축 부재"
-grep -qE '추측[^.]{0,20}첫 선택지' <<<"$(tr '\n' ' ' <<<"$reask_block")" && ok "C1: 인터뷰어 추측이 첫 선택지" || no "C1: 추측-첫-선택지 규칙 부재"
+grep -qF '## R<n>' <<<"$round_block" && ok "AC3: state 본문 헤딩 ## R<n>" || no "AC3: ## R<n> 헤딩 부재"
+grep -qF 'AskUserQuestion 1회, **질문 1개**' <<<"$round_flat" \
+  && ok "AC3: 라운드마다 AskUserQuestion 1회 · 질문 1개" || no "AC3: 질문 1개 규칙 부재"
+grep -qF '첫 선택지가 추천이고 그 라벨 끝에 `(권장)` 을 단다' <<<"$round_flat" \
+  && ok "AC3: 첫 선택지가 추천 (권장)" || no "AC3: 추천 첫 선택지 규칙 부재"
+grep -qF '고르면 무엇이 달라지는가' <<<"$round_flat" \
+  && ok "AC3: description = 고르면 무엇이 달라지는가" || no "AC3: description 규칙 부재"
+grep -qF '직전 답이 보류(«모르겠다/둘 다/아무거나»)·한 단어·이유 없는 추천 수락·근거 없는 단정이면' <<<"$round_flat" \
+  && ok "C1: 되묻기 발동 조건 넷(보류 · 한 단어 · 이유 없는 추천 수락 · 근거 없는 단정)" \
+  || no "C1: 되묻기 발동 조건 부재 또는 조건이 빠졌다"
+grep -qF '이유·사례·실패 조건 중 하나를 되묻고 인터뷰어의 추측을 첫 선택지로' <<<"$round_flat" \
+  && ok "C1: 되묻기 세 축(이유·사례·실패 조건) + 추측이 첫 선택지" || no "C1: 되묻기 규칙 부재"
+grep -qF '같은 주제의 연속 되묻기는 최대 2회' <<<"$round_flat" \
+  && ok "AC3: 되묻기 상한 — 같은 주제 최대 2회" || no "AC3: 되묻기 상한 부재 또는 값이 2회가 아니다"
+grep -qF '그 차원을 자동으로 닫지 않는다' <<<"$round_flat" \
+  && ok "AC3: 상한 뒤에도 차원을 자동으로 닫지 않는다" || no "AC3: 상한 뒤 자동 닫힘 금지 문장 부재"
+grep -qE '되묻기 → 외부 근거 처분[^→]{0,60}→ 새 결정' <<<"$round_flat" \
+  && ok "AC3: 겹침 순서 — 되묻기 → 외부 근거 처분 → 새 결정" || no "AC3: 겹침 순서 부재 또는 뒤바뀜"
+grep -qF '나머지는 다음 라운드의 «다음 결정»으로 넘어간다' <<<"$round_flat" \
+  && ok "AC3: 겹침에서 밀린 것은 다음 라운드의 «다음 결정»으로 이월" || no "AC3: 겹침 이월 조항 부재"
+grep -qF '`references/steelman.md` 가 사용자에게 묻는 질문은 전부 그 파일의 규약' <<<"$round_flat" \
+  && ok "AC3: steelman 절차 질문의 예외 (그 파일이 묻는 질문 — 도출 규칙)" || no "AC3: steelman 예외 도출 규칙 부재"
+grep -qE '인자 없이 `/interview` 를 부른 경로의 R1\*\* 은[^.]{0,60}«아직 없음»' <<<"$round_flat" \
+  && ok "AC3: 인자 없는 R1 — «지금 이해» 는 «아직 없음»" || no "AC3: 인자 없는 R1 모양 부재"
+# 부재 — 새 규약 절 안에 옛 형식이 남았는지를 잰다. `Q1`·`Q2` 는 `OQ1`·`OQ2` 표기와 겹칠 수 있어
+# 전-파일로 재지 않고 이 절로 좁힌다. production 전체의 제거 어휘 부재는 test_stale_terms.sh V13 이 잰다.
+for tok in 'Q1' 'Q2' 'provisional_on' '블록 없이' '직전 답에서'; do
+  grep -qF -- "$tok" <<<"$round_block" \
+    && no "AC3: 라운드 규약 절에 «${tok}» 잔존" || ok "AC3: 라운드 규약 절에 «${tok}» 없음"
+done
+[[ "$(wc -l < "$SKILL")" -lt 388 ]] \
+  && ok "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") < 388 (순감)" \
+  || no "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 388"
+
 # 제거 (G7·AC1·AC14) — 존재 검사가 아니라 부재 검사이므로 CI_ALL 전체
 for tok in 'teach-lite' 'teach-heavy' 'teach-beat' 'general-purpose'; do
   grep -qF -- "$tok" "${CI_ALL[@]}" && no "G7: «${tok}» 잔존" || ok "G7: «${tok}» 제거됨"
 done
-# `4-block`·`막힌 결정` 은 **라운드 규약**의 어휘로서 제거됐다(AC1: «직전 답에서» 블록 + 질문 둘).
+# `4-block`·`막힌 결정` 은 **라운드 규약**의 어휘로서 제거됐다(지금 라운드 규약은 «지금 이해 · 다음 결정 · 질문 하나»).
 # 그런데 **R3 steelman 게이트**가 자기 제시 형식으로 같은 두 낱말을 쓴다(`references/steelman.md`
 # Step 3) — 다른 물건이 같은 어휘를 쓴다. 어휘가 같다고 한쪽을 지우면 다른 쪽 설계를 지우는
 # 것이므로, 부재는 «전 코퍼스»가 아니라 «steelman.md 를 뺀 전 코퍼스»에서 요구한다.
@@ -390,6 +405,10 @@ grep -qE 'R1[^.]{0,30}첫 질문 전[^.]{0,20}필수 1회' <<<"$covmap_flat" \
   && ok "C4: R1 첫 질문 전 필수 1회" || no "C4: R1 필수 dispatch 규칙 부재"
 grep -qE '재개방[^.]{0,20}최대 1회' <<<"$covmap_flat" \
   && ok "C4: 재개방 시 최대 1회" || no "C4: 재개방 dispatch 규칙 부재"
+# 인자 없는 경로의 첫 dispatch 시점은 이 절이 정본이다(라운드 규약 절은 여기를 가리키기만 한다).
+grep -qF '인자 없이 부른 경로에서는 R1 답을 받은 뒤 R2 전에' <<<"$covmap_flat" \
+  && ok "AC3: 인자 없는 경로의 coverage-mapper 첫 dispatch — R1 답 뒤 R2 전 (정본 자리)" \
+  || no "AC3: coverage-mapper 절에서 인자 없는 경로의 첫 dispatch 시점이 사라졌다"
 { grep -qE '상한[^.]{0,6}2' <<<"$covmap_flat" && grep -qF 'coverage_mapper_dispatches' <<<"$covmap_block"; } \
   && ok "C4: 상한 2 + 카운터" || no "C4: 상한 2/카운터 부재"
 grep -qE 'coverage-mapper 0 \(unavailable' <<<"$covmap_block" \
@@ -402,14 +421,18 @@ grep -q 'advisory' <<<"$covmap_block" \
 # rewrap 관용은 flatten 이 담당한다.
 close_block="$(awk '/^## 닫힘 · 재개방/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
 close_flat="$(tr '\n' ' ' <<<"$close_block" | tr -s ' ')"
-{ [[ -n "$close_block" ]] && grep -qE '사용자가 답한 S[^.]{0,10}뒤에만 닫' <<<"$close_flat"; } \
-  && ok "AC1/G2: «차원은 사용자가 답한 S 뒤에만 닫는다»" || no "AC1/G2: 닫힘 규칙 부재"
+# 한정어 «그 차원에 관한» 을 문구째 잡는다 — 어느 S 로 닫혔는지 보는 게이트가 없어(설계
+# 2026-09-10-remove-depth-audit OQ2 = SKILL.md 가 «spec OQ6» 이라 부르는 한계) 이 산문이
+# 유일한 방어선이고, 한정어가 빠지면 아무 S 나 인용해 닫는 것이 규칙상 허용된다.
+{ [[ -n "$close_block" ]] && grep -qF '차원은 그 차원에 관한 질문에 사용자가 답한 S 를 근거로만 닫는다' <<<"$close_flat"; } \
+  && ok "AC4/G2: «차원은 그 차원에 관한 질문에 사용자가 답한 S 를 근거로만 닫는다»" \
+  || no "AC4/G2: 닫힘 규칙(한정어 «그 차원에 관한» 포함) 부재"
 grep -qE '횟수[^.]{0,30}닫힘 근거가 아니' <<<"$close_flat" \
   && ok "G2: 이벤트 횟수는 닫힘 근거 아님" || no "G2: 횟수-비근거 문장 부재"
 grep -qF 'closed → open' <<<"$close_block" \
   && ok "AC5: closed → open 전이" || no "AC5: closed → open 부재"
-grep -qF '→ <차원> 재개방' <<<"$close_block" \
-  && ok "AC5: 상충 줄에 → 재개방" || no "AC5: 상충-재개방 표기 부재"
+grep -qF '«지금 이해»에 «→ <차원> 재개방' <<<"$close_flat" \
+  && ok "AC4/AC5: 재개방 표시 자리가 그 라운드의 «지금 이해»" || no "AC4/AC5: 재개방 표시 자리(«지금 이해») 부재"
 grep -qE '다시 닫힐 때[^.]{0,20}새 S|새 S[^.]{0,20}인용' <<<"$close_flat" \
   && ok "AC5: 재개방 후 닫힘은 새 S" || no "AC5: 새-S 규칙 부재"
 grep -qE '상한[^.]{0,10}없|무상한' <<<"$close_flat" \
@@ -417,6 +440,14 @@ grep -qE '상한[^.]{0,10}없|무상한' <<<"$close_flat" \
 for dim in root_problem landscape skepticism blind_spot open_questions; do
   grep -q "$dim" <<<"$close_block" && ok "§2.1: $dim 의 닫힘 발화 규약" || no "§2.1: $dim 닫힘 발화 규약 부재"
 done
+# landscape 닫힘 발화는 문구까지 잰다(위 루프는 차원 이름만 본다). finishing.md Step A 4 항도 같은
+# 문구여야 한다 — 아래 Step A 4 락이 그쪽을 잰다. 한쪽만 고치면 종료 직렬화가 다른 S 를 인용한다.
+grep -qF 'landscape = 외부 근거 처분 S' <<<"$close_flat" \
+  && ok "AC4: 닫힘 절의 landscape 닫힘 발화 = 외부 근거 처분 S" || no "AC4: 닫힘 절의 landscape 닫힘 발화 문구 부재"
+# 외부 근거의 표시 자리 — 빠지면 사용자는 본 적 없는 근거를 처분하게 된다.
+grep -qF 'landscape·premortem 출력은 «지금 이해»에 실려' <<<"$close_flat" \
+  && ok "AC4: 닫힘 절 — landscape·premortem 출력은 «지금 이해»에 실린다" \
+  || no "AC4: 닫힘 절에서 외부 근거의 표시 자리(«지금 이해»)가 사라졌다"
 
 # blind-spot-prober dispatch (AC6/C8, scoped)
 blindspot_block="$(awk '/^## blind-spot-prober dispatch/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
@@ -435,6 +466,10 @@ grep -q 'blind_spot_dispatched' <<<"$blindspot_block" \
 grep -qE 'web 비활성|inline premortem' <<<"$blindspot_block" \
   && ok "C5: web-absent loud degrade to inline premortem" \
   || no "C5: web-absent loud degrade to inline premortem"
+blindspot_flat="$(tr '\n' ' ' <<<"$blindspot_block" | tr -s ' ')"
+grep -qE '다음 라운드의 «지금 이해»에 실어 사용자 처분 S 를 받은 뒤[^.]{0,30}closed 로 전이' <<<"$blindspot_flat" \
+  && ok "AC4: blind_spot 은 prober 출력의 처분 S 뒤에 closed (닫힘 절과 같은 규칙)" \
+  || no "AC4: blind-spot-prober 절이 처분 S 없이 closed 로 전이한다 — 닫힘 절과 어긋난다"
 
 # rhythm-guard 재프레임 (AC9, scoped)
 rhythm_block="$(awk '/^## C44 Dialectic Rhythm Guard/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
@@ -481,6 +516,47 @@ done
 grep -qF '유지 / 보완 / 전환 / 보류' <<<"$r3_block" \
   && ok "AC6: 게이트 선택지 고정 순서 (유지 / 보완 / 전환 / 보류)" \
   || no "AC6: 게이트 선택지 고정 순서 부재"
+# 추천 표시 (steelman-goal-fit C11 재결정) — 코퍼스는 질문 줄 하나다. 표시 규칙의 조건·라벨·금지가 그 한
+# 줄에 함께 있어야 하고, 추천 답안이나 Step 2.5 로 흩어지면 RED. 출처 라벨이 걸린 리터럴은 조건과 라벨을
+# 한 문자열로 묶어 잰다 — 라벨만 재면 두 출처의 라벨을 맞바꾸거나 조건을 지워도 통과한다. 질문 규칙은 steelman.md 에서
+# **한 물리 줄**이어야 한다 — 줄바꿈하면 뒷부분이 코퍼스에서 빠져 RED.
+# 한계 — 존재 락(아래 리터럴들)은 그 문자열이 정해진 자리에 있는지만 본다: 리터럴이 끝난 뒤에 덧붙인 부정
+# (예: 「… 이 아니라 …」), 리터럴 밖의 변경, 동의어로 바꿔 쓴 규칙은 못 잡는다. 부재 락은 R3 블록 안의 괄호형
+# `(Recommended)`·`(권장)` 두 리터럴만 본다. 어느 락도 모델이 실제로 라벨을 그렇게 붙이는지는 재지 않는다.
+steelman_q="$(grep -m1 '^- \*\*질문\*\*' <<<"$r3_block")"
+for lit in \
+  '**고정 순서** 유지 / 보완 / 전환 / 보류 — 추천을 첫 자리로 옮기지 않는다' \
+  'builder 가 추천한 선택지 라벨 뒤에 `(builder 추천)`' \
+  'orchestrator 판정 선택지 라벨 뒤에 `(orchestrator 추천)`' \
+  '두 추천이 다른 선택지면 각각 붙고, 같은 선택지면 `(builder·orchestrator 추천)` 하나만 붙인다' \
+  'builder 추천이 switched 이고 Step 2.5 가 `재검토 사유 없음` 이면 전환 라벨은 `(builder 추천 · 전제 충돌 없음)`' \
+  '`(Recommended)`·`(권장)` 접미사는 붙이지 않는다' \
+  'builder 의 kept / refined / switched 는 유지 / 보완 / 전환이다'; do
+  grep -qF "$lit" <<<"$steelman_q" && ok "R3 추천 표시 질문 줄: $lit" \
+    || no "R3 추천 표시 질문 줄에 없음 (질문 줄이 한 물리 줄인지도 보라): $lit"
+done
+# 금지 문장을 양성 리터럴로만 재면 R3 블록의 다른 자리에 허용 문장이 새로 들어와도 통과한다. 금지 문장을
+# 도려낸 나머지에서 부재를 잰다 — 도려내지 않으면 금지 문장 자신이 두 접미사를 담고 있어 늘 RED 다.
+ban='`(Recommended)`·`(권장)` 접미사는 붙이지 않는다'
+r3_minus_ban="${r3_block//"$ban"/}"
+grep -qE '\(Recommended\)|\(권장\)' <<<"$r3_minus_ban" \
+  && no "R3 추천 표시: 금지 문장 밖에 기본 추천 접미사가 있다" || ok "R3 추천 표시: 기본 추천 접미사는 금지 문장에만 있다"
+# 표시가 가리킬 선택지가 정해지려면 orchestrator 줄이 판정 하나로 시작해야 하고, 보류는 그 판정에
+# 들지 않는다(C15).
+grep -qF '「orchestrator: <판정> — <이유>」(판정은 유지 / 보완 / 전환 중 하나 — 보류는 사람만 고른다)' <<<"$r3_block" \
+  && ok "R3 추천 표시: orchestrator 줄 형식 (보류 제외)" || no "R3 추천 표시: orchestrator 줄 형식 「판정 — 이유」(보류 제외) 부재"
+# Step 2.5 충돌 0 항목의 두 규칙 — orchestrator 판정의 유지·보완 제한, builder 전환 옆 라벨 — 은 게이트 전환
+# 라벨의 봉쇄가 기대는 전제다. 코퍼스는 그 항목 하나를 한 줄로 이어 붙인 것이다. 항목으로 좁히면 문장을 충돌
+# ≥1 항목으로 옮기거나 항목의 조건(충돌 0 ↔ ≥1)을 뒤집을 때 RED 가 나고, 이어 붙이면 줄바꿈 너머의 조건
+# (「builder 추천이」 / 「switched 면」)까지 한 리터럴에 담긴다.
+c0_block="$(awk '/^- 충돌 0/{f=1;print;next} f&&/^- /{f=0} f' <<<"$r3_block")"
+c0_flat="$(tr '\n' ' ' <<<"$c0_block" | tr -s ' ')"
+[[ -n "$c0_block" ]] && ok "R3 추천 표시: Step 2.5 충돌 0 항목 실재" || no "R3 추천 표시: Step 2.5 의 '- 충돌 0' 항목을 못 찾았다"
+for lit in \
+  '단 「추천 답안」의 orchestrator 줄은 유지 또는 보완 중 하나이고' \
+  'builder 추천이 switched 면 그 옆에 `[전제 충돌 없음]` 라벨을 붙인다'; do
+  grep -qF "$lit" <<<"$c0_flat" && ok "R3 추천 표시 충돌 0 항목: $lit" || no "R3 추천 표시 충돌 0 항목에 없음: $lit"
+done
 grep -qE 'defended|방어' <<<"$r3_block" && no "AC6: 옛 어휘 defended/방어 잔존" || ok "AC6: 옛 어휘 부재"
 # 5의례 표(`| R3 |` 행)는 r3_block 밖이다 — 그 블록은 이제 steelman.md 에서 뜨고, 표는 SKILL.md
 # 의 다른 절에 산다. 그래서 위 어휘 락이 닿지 않고, 그 자리가 조용히 옛 2값(`방어 또는 전환`)으로
@@ -826,6 +902,11 @@ seed_flat="$(tr '\n' ' ' <<<"$seed_block" | tr -s ' ')"
 grep -qF '다시 검증할 것' <<<"$seed_flat" \
   && ok "AC11: seed 의 «다시 검증할 것» 문단을 R1/coverage-mapper 입력으로" \
   || no "AC11: seed 재검증 문단 소비 부재"
+# 위 단언은 낱말 하나만 봐서 그 문단을 «어디에» 쓰는지는 못 잰다. 한 문장 안에서 R1 의
+# «지금 이해» · coverage-mapper 첫 dispatch 둘 다와 결속됐는지 본다.
+grep -qF '«다시 검증할 것 —»** 은 R1 의 «지금 이해»·질문의 재료이자 coverage-mapper 첫 dispatch 의 입력' <<<"$seed_flat" \
+  && ok "AC4: seed 재검증 문단 = R1 «지금 이해»·질문의 재료 + coverage-mapper 첫 dispatch 입력" \
+  || no "AC4: seed 재검증 문단의 소비 자리가 R1 «지금 이해»·coverage-mapper 로 결속되지 않았다"
 # 위 단언의 코퍼스는 seed 참조 «산문» 뿐이라 dispatch 를 못 본다 — 실제 호출이 seed 를
 # 하나도 안 싣고 `<ledger_state>` 와 `<web_disabled>` 만 넘겨도 계속 green 이었다
 # (spec §4.1·AC11 위반). 첫 dispatch 는 R1 «전에» 돌고 그때 원장은 floor 다섯 줄뿐이라,
@@ -926,56 +1007,18 @@ grep -qE '발화 전부를 payload §6|전부를 payload §6 에' "$FIN" \
   && no "U2-T6: 「전부를 payload §6 에」 옛 지시 잔존" \
   || ok "U2-T6: 옛 거처 지시 제거됨"
 
-# --- v0.57.0 Step A.7 깊이 측정 (finishing.md, 블록 스코프) --------------------
-a7_block="$(awk '/^### Step A\.7/{f=1;print;next} /^### /{f=0} f' "$FIN")"
-a7_flat="$(tr '\n' ' ' <<<"$a7_block" | tr -s ' ')"
-# 「산문이 파일명을 언급하는 것」과 「실제로 호출하는 것」은 다른 사실이다. 아래 둘을
-# `grep -qF '<파일명>' <<<"$a7_block"` 로 재던 동안 락은 **이빨이 없었다**: A.7 안에서
-# `depth_pairs.py` 는 호출 줄과 산문에, `depth_record.py` 는 호출 줄·산문·처분 줄에 나와서,
-# **호출 두 줄을 통째로 지워도 스위트가 196/196 GREEN 이었다**(실측). 그래서 코퍼스를
-# **bash 펜스 안**으로 좁히고 `python3 … <스크립트>` 라는 호출 «형태» 에 건다 — 산문은
-# 그 형태를 만족시킬 수 없다(줄 머리가 `python3` 인 산문은 없다).
-a7_bash="$(awk '/^```bash/{f=1;next} f&&/^```/{f=0;next} f' <<<"$a7_block")"
-[[ -n "$a7_bash" ]] \
-  && ok "A.7(양성대조): 절 안에서 bash 펜스를 추출했다 (아래 호출 단언이 실재한다)" \
-  || no "A.7(양성대조): bash 펜스를 못 뽑았다 — 아래 호출 단언이 공허하다"
-{ [[ -n "$a7_block" ]] && grep -qE '^[[:space:]]*python3 .*depth_pairs\.py' <<<"$a7_bash"; } \
-  && ok "A.7: 깊이 측정 절이 있고 bash 펜스에서 depth_pairs.py 를 «호출»한다" \
-  || no "A.7: 절 부재 또는 depth_pairs.py 호출 줄 없음 (산문 언급은 호출이 아니다)"
-grep -qF 'spec-distill:depth-auditor' <<<"$a7_block" && ok "A.7: depth-auditor dispatch" || no "A.7: depth-auditor dispatch 없음"
-grep -qF 'consumer=plugins/spec-distill/scripts/depth_record.py' <<<"$a7_block" && ok "A.7: 처분 줄이 depth_record.py 를 소비자로" || no "A.7: 처분 줄 부재"
-grep -qE '^[[:space:]]*python3 .*depth_record\.py' <<<"$a7_bash" \
-  && ok "A.7: bash 펜스에서 depth_record.py 를 «호출»한다" \
-  || no "A.7: depth_record.py 호출 줄 없음 (산문·처분 줄 언급은 호출이 아니다)"
-grep -qE 'pairs_rc[^.]{0,40}3[^.]{0,60}측정 불가' <<<"$a7_flat" && ok "A.7: rc 3 → «측정 불가» 기록" || no "A.7: rc 3 처분 없음"
-grep -qE '기록한다[^.]{0,20}막지 않는다|막지 않는다' <<<"$a7_flat" && ok "A.7: «기록한다, 막지 않는다» (C5)" || no "A.7: 비게이트 선언 없음"
-grep -qE '표본[^.]{0,10}0[^.]{0,30}(띄우지 않는다|호출 안 함|호출하지 않는다)' <<<"$a7_flat" && ok "A.7: 표본 0 이면 라벨 질문 없음" || no "A.7: 표본 0 처분 없음"
-grep -qF '미라벨' <<<"$a7_block" && grep -qF 'unavailable' <<<"$a7_block" && ok "A.7: 미라벨·unavailable 어휘" || no "A.7: 미라벨/unavailable 어휘 부재"
-grep -qE 'heredoc' <<<"$a7_block" && grep -qE '리다이렉트' <<<"$a7_block" && ok "A.7: raw 저장은 파일 리다이렉트(heredoc 금지)" || no "A.7: raw 저장 방식 미명시"
-grep -q '파고들었다' <<<"$a7_block" && grep -q '안 팠다' <<<"$a7_block" && grep -q '판단불가' <<<"$a7_block" && ok "A.7: 사람 라벨 선택지 셋" || no "A.7: 사람 라벨 선택지 부재"
-grep -qF 'min(4' <<<"$a7_block" && ok "A.7: 질문 수 min(4, 적격)" || no "A.7: 표본 상한 규칙 부재"
-# B-2 게이트 텍스트에 깊이 요약과 advisories 슬롯
+# B-2 게이트 텍스트의 advisories 슬롯
 b2_block="$(awk '/^#### B-2/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
-grep -qF '깊이:' <<<"$b2_block" && ok "B-2: question 에 깊이 요약 슬롯" || no "B-2: 깊이 요약 슬롯 부재"
 grep -qF 'coverage-mapper 0' <<<"$b2_block" && ok "B-2: coverage-mapper unavailable advisory 가 게이트 텍스트에" || no "B-2: mapper advisory 슬롯 부재"
 # Step A 4 항: 직렬화 규칙 (S앵커·재개방 접미)
 stepa4="$(awk '/^4\. \*\*Coverage Ledger 직렬화/{f=1} f&&/^5\. /{exit} f' "$FIN")"
 grep -qE 'S<N>|S\d\+|S 앵커' <<<"$stepa4" && grep -qF '재개방' <<<"$stepa4" && ok "Step A 4: 직렬화가 S앵커·재개방 접미를 요구" || no "Step A 4: 직렬화 규칙에 S앵커/재개방 부재"
 grep -qF 'coverage-mapper <k>' <<<"$stepa4" && ok "Step A 4: §2 coverage-mapper <k> 직렬화" || no "Step A 4: coverage-mapper <k> 부재"
+grep -qF 'landscape = 외부 근거 처분 S' <<<"$(tr '\n' ' ' <<<"$stepa4" | tr -s ' ')" \
+  && ok "AC4: finishing.md Step A 4 항의 landscape 닫힘 발화 = 외부 근거 처분 S" \
+  || no "AC4: Step A 4 항의 landscape 닫힘 발화 문구 부재 (닫힘 절과 갈렸다)"
 # audit 템플릿
 TPL="$REPO_ROOT/plugins/spec-distill/templates/interview-audit-template.md"
-# `depth_record.py` 는 stdout 으로 **네 줄**을 내고 finishing.md Step A.7 이 그 넷을 §2 에
-# 그대로 붙이라고 지시한다. 락이 셋만 세는 동안 `- 판정자 조건:` 줄은 템플릿에서 지워도
-# 스위트가 GREEN 이었다(실측) — 그 줄은 spec §3.4 의 판정자 투입 조건이 사람에게 도달하는
-# 유일한 자리다. 넷 다 데이터 불릿으로 실재하는지 센다.
-depth_rows=0
-for key in '깊이 측정(형식)' '깊이 측정(auditor)' '깊이 측정(사람)' '판정자 조건:'; do
-  grep -qE "^- .*$(printf '%s' "$key" | sed 's/[][\.*^$(){}?+|/]/\\&/g')" "$TPL" \
-    && depth_rows=$((depth_rows + 1))
-done
-[[ "$depth_rows" -eq 4 ]] \
-  && ok "AC10: audit 템플릿 §2 깊이 네 줄 (형식·auditor·사람·판정자 조건) 이 전부 데이터 불릿" \
-  || no "AC10: 템플릿 §2 깊이 줄이 4 가 아니라 $depth_rows — depth_record.py 의 네 줄과 어긋난다"
 grep -qF '(재개방' "$TPL" && ok "AC10: 템플릿 §1 재개방 접미 예시" || no "AC10: 재개방 접미 예시 부재"
 # 템플릿의 mapper 계수는 **데이터 줄**(불릿)에 있어야 하되 **숫자로 미리 채워선 안 된다**.
 # 두 요구는 R18 과 충돌했다: R18 은 「산문이 판정을 지지 않게」 데이터 줄에 실제 숫자를
@@ -1016,6 +1059,10 @@ c43_prose_n="$(sed -n 's/.*다음 \([0-9][0-9]*\) 경로 중.*/\1/p' <<<"$c43_bl
 [[ "$c43_prose_n" == "$c43_rows" ]] \
   && ok "C43: 산문이 선언한 경로 수 $c43_prose_n == 표 행 수 $c43_rows" \
   || no "C43: 산문 «다음 ${c43_prose_n:-∅} 경로 중» 이 표 행 수 ${c43_rows:-∅} 와 다르다"
+c43_flat="$(tr '\n' ' ' <<<"$c43_block" | tr -s ' ')"
+grep -qF '매 라운드의 «지금 이해»·«질문» 에 어떤 path 인지' <<<"$c43_flat" \
+  && ok "AC4: C43 경로 표시 자리 = 매 라운드의 «지금 이해»·«질문»" \
+  || no "AC4: C43 경로 표시 자리가 «지금 이해»·«질문» 이 아니다"
 
 # 위 락의 코퍼스는 `SKILL.md` 뿐이라 **README 를 못 본다**. 그래서 README 안에서 87줄 떨어진
 # 두 줄이 «4-path» 와 «3-path» 로 서로 모순한 채 릴리스까지 갔다 — 사용자가 가장 먼저 읽는

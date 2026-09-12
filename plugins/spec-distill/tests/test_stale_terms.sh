@@ -246,6 +246,25 @@ removed_files=(
   'tests/test_design_mode_validator.sh'
   'tests/test_reminder_hook.sh'
   'tests/test_stale_state_truncate.sh'
+  # depth audit 제거 — 사후 측정 층. 되살아나면 무참조로 조용히 눌러앉는다.
+  # docs/superpowers/interview/depth/.gitkeep 은 $SD 밖이라 여기 넣지 않는다.
+  'agents/depth-auditor.md'
+  'scripts/depth_pairs.py'
+  'scripts/depth_record.py'
+  'tests/test_depth_pairs.py'
+  'tests/test_depth_record.py'
+  'tests/test_depth_auditor_frontmatter.sh'
+  'tests/fixtures/depth-state-allnone.md'
+  'tests/fixtures/depth-state-badstatements.md'
+  'tests/fixtures/depth-state-elig0.md'
+  'tests/fixtures/depth-state-elig1.md'
+  'tests/fixtures/depth-state-elig3.md'
+  'tests/fixtures/depth-state-emptystatements.md'
+  'tests/fixtures/depth-state-nofrontmatter.md'
+  'tests/fixtures/depth-state-normal.md'
+  'tests/fixtures/depth-state-noround.md'
+  'tests/fixtures/depth-state-nostatementskey.md'
+  'tests/fixtures/depth-state-templatecomment.md'
 )
 # **개수를 먼저 잠근다.** 아래 루프는 배열을 도는 것이라, 항목을 지우면 검사가 하나
 # 사라질 뿐 스위트는 GREEN 이다 — `ok` 줄이 하나 줄지만 아무도 세지 않는다. 즉 이
@@ -254,13 +273,72 @@ removed_files=(
 #
 # 리터럴을 핀하는 것이 요점이다: 이 숫자를 고치는 것은 **의도된 편집**이어야 하고,
 # 그 편집이 리뷰에서 보여야 한다.
-[[ ${#removed_files[@]} -eq 20 ]] \
-  && ok "V10/T5: 부재 락 목록이 20개다 (항목이 조용히 빠지지 않았다)" \
-  || no "V10/T5: 부재 락 목록이 ${#removed_files[@]}개 — 20개여야 한다. 항목을 의도적으로 더하거나 뺐다면 이 숫자도 같은 커밋에서 고쳐라"
+[[ ${#removed_files[@]} -eq 37 ]] \
+  && ok "V10/T5: 부재 락 목록이 37개다 (항목이 조용히 빠지지 않았다)" \
+  || no "V10/T5: 부재 락 목록이 ${#removed_files[@]}개 — 37개여야 한다. 항목을 의도적으로 더하거나 뺐다면 이 숫자도 같은 커밋에서 고쳐라"
 for rf in "${removed_files[@]}"; do
   [[ ! -e "$SD/$rf" ]] \
     && ok "V10/T5: '$rf' 부재" \
     || no "V10/T5: '$rf' 가 되살아났다"
 done
 
+# --- V13: depth audit 제거 — 사후 측정 층과 옛 라운드 형식의 어휘가 production 에 0건 ---
+# 번호는 다음 빈 번호다(V10 · V11 · V12 가 이미 쓰인다).
+# 식별자 축 — 스코프 = prod_files 그대로(README.md 포함). README 는 이 제거를 개념으로 서술하고
+# 식별자를 인용하지 않는다. `depth-audit`(센티널 이름)은 넣지 않는다: 이 제거의 설계문서
+# 파일명(…-remove-depth-audit-design.md)과 겹치고, production 은 설계문서 경로를 출처로 인용하는
+# 관례가 있어 정직한 인용까지 RED 가 된다. 그 이름이 살던 두 파일은 V10 이 부재를 잰다.
+depth_terms=(
+  'depth_pairs'
+  'depth_record'
+  'depth-auditor'
+  '직전 답에서'
+  'provisional_on'
+  '깊이 측정'
+)
+for term in "${depth_terms[@]}"; do
+  scan -inIF -- "$term" "${prod_files[@]}"
+  if [[ $SCAN_RC -ge 2 ]]; then
+    no "V13: '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
+    printf '%s\n' "$SCAN_OUT"
+  elif [[ $SCAN_RC -eq 0 ]]; then
+    no "V13: '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
+  else
+    ok "V13: '$term' 잔존 0건 (production)"
+  fi
+done
+# 개념 별칭 축 — 식별자만 재면 활용 · 어순이 다른 서술(«되비춘다» · «판정자 투입 조건»)이
+# 살아남는다. V9 별칭과 같은 이유로 README 는 뺀다(alias_files): README 는 삭제 연혁을 정직하게
+# 적는 자리라 별칭까지 재면 정직한 서술이 RED 가 되고, 그러면 락이 무시된다.
+# `Q1` 은 넣지 않는다 — `OQ1` 과 겹친다.
+depth_alias_terms=(
+  '되비추'
+  '되비춘'
+  '판정자 조건'
+  '판정자 투입'
+)
+for term in "${depth_alias_terms[@]}"; do
+  scan -inIF -- "$term" "${alias_files[@]}"
+  if [[ $SCAN_RC -ge 2 ]]; then
+    no "V13: 별칭 '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
+    printf '%s\n' "$SCAN_OUT"
+  elif [[ $SCAN_RC -eq 0 ]]; then
+    no "V13: 별칭 '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
+  else
+    ok "V13: 별칭 '$term' 잔존 0건 (README 제외 production)"
+  fi
+done
+# 양성 짝 — 부재 락은 대상 절을 통째로 지워도 통과한다. 새 라운드 규약에만 있는 문구 둘이
+# 그 절에 실재하는가(`### 지금 이해` 는 옛 형식에도 있던 소제목이라 새 형식의 증거가 못 된다).
+v13_round="$(awk '/^```/{c=!c} /^## 라운드 규약/{f=1;print;next} !c && /^## /{f=0} f' "$SKILL")"
+v13_flat="$(tr '\n' ' ' <<<"$v13_round" | tr -s ' ')"
+[[ -n "$v13_round" ]] \
+  && ok "V13(양성대조): 라운드 규약 절을 떴다" \
+  || no "V13(양성대조): 라운드 규약 절 부재 — 아래 양성 짝이 공허하다"
+grep -qF '**질문 1개**' <<<"$v13_flat" \
+  && ok "V13 양성 짝: 라운드 규약에 «질문 1개»" \
+  || no "V13 양성 짝: 라운드 규약에 «질문 1개» 가 없다 — 새 형식이 사라졌다"
+grep -qF '같은 주제의 연속 되묻기는 최대 2회' <<<"$v13_flat" \
+  && ok "V13 양성 짝: 라운드 규약에 되묻기 상한 문구" \
+  || no "V13 양성 짝: 라운드 규약에 되묻기 상한 문구가 없다 — 새 형식이 사라졌다"
 finish

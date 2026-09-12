@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.0.0] — 2026-09-11
+## [3.0.0] — 2026-09-12
 
 major인 이유: **설계문서 리뷰의 자동 진입 계약이 깨진다.** Stop 훅(`hooks/review-dispatch.py`)이 턴 경계에서 `reviewing-spec` 을 강제하던 경로를 없애고, 리뷰 진입을 오케스트레이터가 인터뷰 핸드오프 문구와 skill description 을 읽고 스스로 부르는 것으로 바꾼다. 이 자리의 집행(철학 P13 의 hook)이 사라졌다는 사실을 숨기지 않는다 — 리뷰어 분리(Law 2 `tools:` allowlist)는 그대로다. 표준 흐름에서 그 훅은 이미 발동하지 않고 있었다: brainstorming 이 턴 안에서 설계문서를 커밋하고, 훅의 발견은 dirty·untracked 문서만 보았다. 설계: `docs/superpowers/specs/2026-09-10-spec-review-hook-removal-design.md`.
 
@@ -20,7 +20,7 @@ major인 이유: **설계문서 리뷰의 자동 진입 계약이 깨진다.** S
 - **`reviewing-spec` 의 두 `Read ${CLAUDE_PLUGIN_ROOT}/references/…` 줄**(`## 절차` 의 `reviewing-document.md` · `## 게이트` 의 `proceed-gate.md`)이 `${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}` fallback 을 잃고 bare 형태가 됐다 — bare 형태는 skill 로드 시 하니스가 치환하고, `:-` 를 낀 형태는 치환되지 않는다. 같은 이유로 나머지 bash 펜스의 다섯 줄(`## 입력` 상태 펜스의 둘 · `## 프로필` · codex 게이트의 `SD=` · `PROFILE=`)은 진입 펜스의 관용구 `SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"; [ -n "$SD" ] || SD="./plugins/spec-distill"` 를 그대로 쓴다 — 플러그인이 cwd 밖에 있고 변수가 없는 설치본에서 진입 검사는 통과하는데 `## 입력` 이 상태 리졸버를 못 찾아 리뷰가 거기서 끝났다. 리졸버가 없으면 `## 입력` 은 이제 그 원인을 댄다(「상태 리졸버 부재: <경로> (플러그인 루트 미해석)」 + 같은 복귀 지시). 락: `tests/test_reviewing_spec_entry_fence.sh` 의 설치본 흉내(cwd 밖 플러그인 · 변수 없음 · bare 만 치환)와 무치환 변형.
 - **핸드오프가 리뷰 순서를 싣는다.** 인터뷰 종료 게이트의 ① `/compact` 템플릿 「다음 단계:」, ② brainstorming 호출 프롬프트, brief 템플릿 §7 이 brainstorming → 설계문서 작성·커밋 → 그 경로로 `spec-distill:reviewing-spec` → 승인 게이트 뒤 writing-plans 순서를 적는다. ② 는 「brainstorming 의 『다음은 writing-plans 뿐』 지시보다 이 순서가 우선한다」와 「reviewing-spec 이 게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다」를 함께 싣는다 — brainstorming 은 spec-distill 을 모르므로 규약의 거처는 호출 프롬프트다(`finishing.md` 「규약의 거처 (C5)」). ① 은 compact 요약이 운반자라 손실이 있을 수 있다. `reviewing-spec` 의 description 은 「brainstorming 이 설계문서를 쓰고 커밋한 직후, writing-plans 전에 쓴다 · 사용자 리뷰 게이트를 대신한다 · 경로를 인자로 받는다」로 바뀌었다 — `/brainstorming` 직접 경로는 이 한 줄에 기댄다. 락: `tests/test_review_handoff_order.sh`(정적 — 문구의 존재와 순서만 잰다).
 - **삭제된 대상을 현재형으로 가리키던 인용 여섯을 고쳤다** — `scripts/state_path.py`(session-id CLI 주석) · `scripts/check_brief.py`(docstring 의 「같은 층」 비교) · `skills/reviewing-brief/SKILL.md`(「훅이 읽는 파일과 같은 리졸버」) · `shared/docreview/scripts/docreview_state.py`(`state.local.md` 소유자) · `shared/codex/codex_prompt_common.py` 와 사본 둘(형제 관용구 인용) · `tools/adjudication/check_names.py`(`dispatch` 가 든 키 이름의 예). `scripts/hook_common.py` 의 모듈 docstring 은 소비자 목록을 현재 둘로 다시 썼다. 동작 무변경. quality-gates 는 사본·링크 때문에 7.5.2 로 함께 bump.
-- **README.** 흐름도의 Stop 상자를 「오케스트레이터가 그 경로로 reviewing-spec 호출 — 훅 강제 없음」으로, Principles Instantiated 에서 훅·원장·구조 검증 서술을 걷고 「리뷰 진입은 집행이 아니다」(P13 기준 이 자리의 집행 소실)와 「Law 1 필수 섹션 게이트 구현 0」을 명시했다. Hooks Installed 는 SessionEnd 한 행(TTL-GC 기동 포함, 스위치가 두 층을 함께 끈다), kill switch 절은 「먼저 — 설계문서 리뷰를 끄는 법」 + `DESIGN_MODE_DISABLE` 재정의 + `spec-distill:review-entry` 추가, 은퇴 절은 2.0.0 토큰 둘을 더하고 v0.36.0 항목의 「끄려면 `spec-distill:Stop`」 권고를 걷었다(훅 삭제 뒤 거짓이 되는 문장). 「발견의 한계」 · 「행동 케이스 테스트」 · 「무엇이 리뷰의 범위를 정하는가」 절은 대상과 함께 지웠다. `tests/test_readme_sync.sh` 의 키워드는 `armed_paths` · `arm-once` → `spec-distill:review-entry` · `review_entry.py`. Prerequisites 의 `jq` 줄도 뺐다(쓰는 파일이 없다).
+- **README.** 흐름도의 Stop 상자를 「오케스트레이터가 그 경로로 reviewing-spec 호출 — 훅 강제 없음」으로, Principles Instantiated 에서 훅·원장·구조 검증 서술을 걷고 「리뷰 진입은 집행이 아니다」(P13 기준 이 자리의 집행 소실)와 「Law 1 필수 섹션 게이트 구현 0」을 명시했다. Hooks Installed 는 SessionEnd 한 행(TTL-GC 기동 포함, 스위치가 두 층을 함께 끈다), kill switch 절은 「먼저 — 설계문서 리뷰를 끄는 법」 + `DESIGN_MODE_DISABLE` 재정의 + `spec-distill:review-entry` 추가, 은퇴 절은 3.0.0 토큰 둘을 더하고 v0.36.0 항목의 「끄려면 `spec-distill:Stop`」 권고를 걷었다(훅 삭제 뒤 거짓이 되는 문장). 「발견의 한계」 · 「행동 케이스 테스트」 · 「무엇이 리뷰의 범위를 정하는가」 절은 대상과 함께 지웠다. `tests/test_readme_sync.sh` 의 키워드는 `armed_paths` · `arm-once` → `spec-distill:review-entry` · `review_entry.py`. Prerequisites 의 `jq` 줄도 뺐다(쓰는 파일이 없다).
 
 ### Deprecated
 
@@ -39,8 +39,71 @@ major인 이유: **설계문서 리뷰의 자동 진입 계약이 깨진다.** S
 
 ### Security
 
-- **TTL-GC 와 SessionEnd 정리가 심볼릭 링크를 거쳐 풀리는 state root 를 거부한다.** 저장소가 `.claude/spec-distill`(또는 `.claude`)을 링크로 커밋하면 — 예: `.claude/spec-distill -> ../..` — state root 가 저장소 밖으로 풀린다. GC 는 그 너머에서 세션 이름 패턴(`^[A-Za-z0-9_-]{8,}$`)에 맞고 직속 파일이 TTL(24시간)보다 늙은 디렉토리를 개명·삭제했고 `.gc.lock` 을 저장소 밖에 만들었다(실측: 클론 옆 형제 디렉토리 삭제). SessionEnd 정리도 payload sid 와 이름이 같은 링크 너머 디렉토리를 나이와 무관하게 지울 수 있었다. 판정은 `scripts/state_path.py` 의 `state_root_escapes` 한 곳이다 — 루트의 realpath 가 `realpath(루트의 조부모)/.claude/spec-distill` 과 다르면 거부한다(조상 경로의 링크, 예: macOS `/tmp` → `/private/tmp` 는 양쪽이 같이 풀려 통과한다). `scripts/spec-distill-gc.py` 는 락을 잡기 전에, `hooks/session-end-cleanup.py` 는 삭제 전에 거부하고 stderr 한 줄로 알린다. 훅은 rc 0 으로 끝난 GC 의 stderr 도 옮긴다 — 그전에는 rc≠0 일 때만 옮겨서, rc 0 인 GC 의 거부 줄은 버려졌다. GC 는 루트 안의 링크 자식도 세션 폴더로 보지 않는다. 공용 `gc_common.safe_rmtree` 는 바꾸지 않았다 — 그 경로 검증만 realpath 로 굳혀서는 루트 자신이 링크인 경우가 닫히지 않는다(루트와 대상이 같은 링크를 거쳐 함께 풀린다). **2.0.0 이전에도 있던 결함이다** — 삭제된 리뷰 훅이 턴마다 같은 GC 를 돌렸다. 락: `tests/test_session_end_cleanup.py` 의 `SymlinkedStateRootTest`(양성 짝은 같은 파일의 `test_9_gc_collects_stale_other_session`) · `tests/test_gc.py` 의 `test_13`·`test_14`.
-- **TTL-GC 가 락 파일을 쓰지 않고 state root 디렉토리 자신을 잠근다.** GC 는 루트 아래 고정 이름 `.gc.lock` 을 만들고(`touch`) 쓰기 모드로 열었다(`open(…, "w")` — `O_CREAT | O_TRUNC`). 둘 다 링크를 따라가므로, 저장소가 진짜 `.claude/spec-distill/` 디렉토리 안에 `.gc.lock -> ../../../<파일>` 링크를 커밋하면 SessionEnd 한 번에 저장소 밖 파일이 잘렸고(실측: 32바이트 센티널 → 0바이트) 매달린 링크면 저장소 밖에 파일이 생겼다. `.gc.lock` 을 디렉토리로 심으면 `open` 이 실패해 GC 가 영구히 멈췄다. 이제 GC 는 루트를 `os.open(root, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)` 로 열어 그 fd 에 `flock` 을 건다 — 루트 아래 이름을 만들지도 열지도 않으므로 심은 `.gc.lock`(링크든 디렉토리든)은 무시된다. 이 열기가 실패하면(루트가 디렉토리가 아니거나 열 수 없을 때 — 검사 뒤 링크로 바뀐 경우 포함) stderr 한 줄로 거부한다. 앞 항목의 판정과 함께, 링크가 저장소 **안**을 가리켜도(`.claude` 나 `.claude/spec-distill` 이 링크) 정리와 GC 가 멈춰 상태 폴더가 쌓인다 — 신호는 SessionEnd stderr 뿐이다. 사용자 루트에 이미 남은 `.gc.lock` 파일은 해가 없다(세션 이름 패턴에 맞는 디렉토리가 아니다). **2.0.0 이전에도 있던 결함이다.** 락: `tests/test_gc.py` 의 `GcLockLeafTest`(심은 링크 · 매달린 링크 · 디렉토리 · 락 파일 부재와 수집 · 루트 디렉토리 락 경합) · `tests/test_session_end_cleanup.py` 의 `test_planted_gc_lock_link_not_followed`(훅 경유).
+- **TTL-GC 와 SessionEnd 정리가 심볼릭 링크를 거쳐 풀리는 state root 를 거부한다.** 저장소가 `.claude/spec-distill`(또는 `.claude`)을 링크로 커밋하면 — 예: `.claude/spec-distill -> ../..` — state root 가 저장소 밖으로 풀린다. GC 는 그 너머에서 세션 이름 패턴(`^[A-Za-z0-9_-]{8,}$`)에 맞고 직속 파일이 TTL(24시간)보다 늙은 디렉토리를 개명·삭제했고 `.gc.lock` 을 저장소 밖에 만들었다(실측: 클론 옆 형제 디렉토리 삭제). SessionEnd 정리도 payload sid 와 이름이 같은 링크 너머 디렉토리를 나이와 무관하게 지울 수 있었다. 판정은 `scripts/state_path.py` 의 `state_root_escapes` 한 곳이다 — 루트의 realpath 가 `realpath(루트의 조부모)/.claude/spec-distill` 과 다르면 거부한다(조상 경로의 링크, 예: macOS `/tmp` → `/private/tmp` 는 양쪽이 같이 풀려 통과한다). `scripts/spec-distill-gc.py` 는 락을 잡기 전에, `hooks/session-end-cleanup.py` 는 삭제 전에 거부하고 stderr 한 줄로 알린다. 훅은 rc 0 으로 끝난 GC 의 stderr 도 옮긴다 — 그전에는 rc≠0 일 때만 옮겨서, rc 0 인 GC 의 거부 줄은 버려졌다. GC 는 루트 안의 링크 자식도 세션 폴더로 보지 않는다. 공용 `gc_common.safe_rmtree` 는 바꾸지 않았다 — 그 경로 검증만 realpath 로 굳혀서는 루트 자신이 링크인 경우가 닫히지 않는다(루트와 대상이 같은 링크를 거쳐 함께 풀린다). **3.0.0 이전에도 있던 결함이다** — 삭제된 리뷰 훅이 턴마다 같은 GC 를 돌렸다. 락: `tests/test_session_end_cleanup.py` 의 `SymlinkedStateRootTest`(양성 짝은 같은 파일의 `test_9_gc_collects_stale_other_session`) · `tests/test_gc.py` 의 `test_13`·`test_14`.
+- **TTL-GC 가 락 파일을 쓰지 않고 state root 디렉토리 자신을 잠근다.** GC 는 루트 아래 고정 이름 `.gc.lock` 을 만들고(`touch`) 쓰기 모드로 열었다(`open(…, "w")` — `O_CREAT | O_TRUNC`). 둘 다 링크를 따라가므로, 저장소가 진짜 `.claude/spec-distill/` 디렉토리 안에 `.gc.lock -> ../../../<파일>` 링크를 커밋하면 SessionEnd 한 번에 저장소 밖 파일이 잘렸고(실측: 32바이트 센티널 → 0바이트) 매달린 링크면 저장소 밖에 파일이 생겼다. `.gc.lock` 을 디렉토리로 심으면 `open` 이 실패해 GC 가 영구히 멈췄다. 이제 GC 는 루트를 `os.open(root, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)` 로 열어 그 fd 에 `flock` 을 건다 — 루트 아래 이름을 만들지도 열지도 않으므로 심은 `.gc.lock`(링크든 디렉토리든)은 무시된다. 이 열기가 실패하면(루트가 디렉토리가 아니거나 열 수 없을 때 — 검사 뒤 링크로 바뀐 경우 포함) stderr 한 줄로 거부한다. 앞 항목의 판정과 함께, 링크가 저장소 **안**을 가리켜도(`.claude` 나 `.claude/spec-distill` 이 링크) 정리와 GC 가 멈춰 상태 폴더가 쌓인다 — 신호는 SessionEnd stderr 뿐이다. 사용자 루트에 이미 남은 `.gc.lock` 파일은 해가 없다(세션 이름 패턴에 맞는 디렉토리가 아니다). **3.0.0 이전에도 있던 결함이다.** 락: `tests/test_gc.py` 의 `GcLockLeafTest`(심은 링크 · 매달린 링크 · 디렉토리 · 락 파일 부재와 수집 · 루트 디렉토리 락 경합) · `tests/test_session_end_cleanup.py` 의 `test_planted_gc_lock_link_not_followed`(훅 경유).
+
+## [2.0.0] — 2026-09-11
+
+major인 이유: **dispatch 가능한 agent 하나(`spec-distill:depth-auditor`)가 사라지고, 인터뷰의 라운드 형식과 audit §2 형식이 바뀐다.** 인터뷰 종료 직전의 사후 깊이 측정(Step A.7) 전체와, 그 측정이 읽던 라운드 형식(«직전 답에서» 블록 + 질문 둘)을 제거했다. 라운드는 «지금 이해 / 다음 결정 / 질문 하나»로 돈다. 사용자 결정(2026-09-10)의 이유는 셋이다 — 쓰이지 않는 무게(0.57.0 도입 뒤 측정 기록 0건 · 사람 e2e 미실행), 인터뷰가 번거로움, 방향이 틀렸다. 설계: `docs/superpowers/specs/2026-09-10-remove-depth-audit-design.md`.
+
+### Removed
+
+- **사후 깊이 측정 층 전체** — `agents/depth-auditor.md` · `scripts/depth_pairs.py` · `scripts/depth_record.py`, 그 테스트 셋(`test_depth_pairs.py` · `test_depth_record.py` · `test_depth_auditor_frontmatter.sh`)과 fixture 11개(`tests/fixtures/depth-state-*.md`), 측정 원장 디렉토리 `docs/superpowers/interview/depth/`. 함께 사라진 것: `finishing.md` Step A.7 절, 종료 시 사람 라벨 질문(≤4개), proceed 게이트 질문의 «깊이:» 슬롯, audit §2 의 깊이 네 줄.
+- **판정자 투입 조건**(누적 5건 · not_dug 30% · 일치 70%) — 닫힘 거부권 에이전트를 언제 들일지 알려 주던 유일한 신호였다(설계 OQ3 로 이월).
+- **라운드의 «직전 답에서» 블록과 질문 둘** — 네 줄(함의 · 상충 · 확인한 사실 · 위험) 블록, Q1 되비추기 확인 · Q2 새 결정, Q1 수정 시 재되비추기, Q2 독립성 규칙, 인자 없는 경로의 R1 블록 면제, «되묻기로 바뀌는 조건» 절, `steelman.md` 의 «상충 줄에도 한 줄로 싣는다» 문단.
+- **`provisional_on`** — `user_statements` 스키마 필드와 그 규칙. 진행 중 세션에 남은 필드는 읽는 자가 없어 무해하므로 마이그레이션을 두지 않는다.
+
+### Changed
+
+- **라운드 규약** — `## R<n>` 한 라운드 = 지금 이해 / 다음 결정 / 질문 / 답. AskUserQuestion 1회에 질문 1개, 첫 선택지가 추천(`(권장)`). 약한 답(보류 · 한 단어 · 이유 없는 추천 수락 · 근거 없는 단정)에는 이유 · 사례 · 실패 조건 중 하나를 되묻고, 같은 주제의 연속 되묻기는 최대 2회다(그 뒤엔 기록하고 넘어간다 · 차원을 자동으로 닫지 않는다). 한 라운드에 겹치면 되묻기 → 외부 근거 처분 → 새 결정 순. `references/steelman.md` 가 묻는 질문은 그 파일의 규약을 따른다.
+- **옮겨 간 규칙 다섯** — 닫힘 근거(«그 차원에 관한 질문에 사용자가 답한 S» — blind-spot-prober 절의 전이 문장도 처분 S 뒤로 맞췄다) · landscape 닫힘 발화(«외부 근거 처분 S», SKILL · `finishing.md` 양쪽) · 재개방 표시 자리(«상충» 줄 → 그 라운드의 «지금 이해». `reopen_log` · audit §1 접미는 그대로) · seed «다시 검증할 것» 문단의 소비 자리(R1 «지금 이해»·질문의 재료 + coverage-mapper 첫 dispatch 입력 — `seed-input.md` · `framing-requests` · seed 템플릿) · C43 경로 표시 자리(«지금 이해»·«질문»).
+- **audit 템플릿 §2** — 데이터 줄 하나(질문 라운드 · agent dispatch · coverage-mapper `<k>` · codex 실호출). 게이트가 보는 `coverage-mapper <k>` 는 그대로다.
+- **proceed 게이트 질문 텍스트** — «깊이:» 슬롯 제거. `check_brief` advisories 슬롯은 유지.
+- **`shared/tests/test_adjudication_wiring.sh` 의 `COMP_BASELINE` 58 → 52** — `depth_record.py` 가 더했던 컴프리헨션이 파일과 함께 사라졌다(`ast` 실측).
+- **락** — `tests/test_stale_terms.sh` V13(식별자 축은 README 포함 · 개념 별칭 축은 README 제외 · 새 라운드 규약의 양성 짝 둘) · V10 부재 목록 20 → 37 · `test_conducting_interview_stage.sh` 의 라운드 규약 · 닫힘 · 재개방 · landscape 발화 · blind-spot 전이 · seed 문단 · C43 경로 표시 락을 재조준 · 신설 · `test_request_framing_command.sh` 의 seed 문단 소비 락 · `test_finishing_block_scope.py` 의 양성 대조를 남는 펜스의 게이트 호출로 · `test_brief_agents.sh` 격리 목록 5 → 4.
+
+### Deprecated
+
+- `spec-distill:depth-auditor` agent · 두 측정 스크립트 · 옛 라운드 형식 · audit §2 깊이 네 줄은 **fallback 없이 즉시 제거**됐다 — CLAUDE.md 메타데이터의 one-minor deprecation window 규정과 충돌한다. 이 충돌을 다음 조건 아래 수용한다: 이 플러그인의 제3자 설치가 현재 없다(사용자 확인, 2026-09-10). **제3자 설치가 생기면 이 근거가 사라지므로, 그 뒤의 제거에는 창을 둔다.**
+
+### Verification
+
+- **회귀 0** — spec-distill 셸 스위트 · `python3 -m unittest discover -s plugins/spec-distill/tests` · `shared/tests` 를 (파일, 실패 식별자) 멀티셋으로 기록해 «완료 − 기준선 = ∅» 를 확인했다. 최종 기준선은 머지 직전에 합친 `origin/main` 끝 커밋 `bf626555`(1.2.0)이고, 기준선에 이미 있던 실패(`plugins/spec-distill/tests/test_no_write_matcher_hooks_repo.sh` 1건 · unittest `test_hook_output_schema.TestCrossResolverAdvisory.test_python_and_bash_resolvers_agree`)는 그대로다. task 커밋은 각각 그때의 착수 전 기준선(`efb8aa16` 을 합친 `f4e5de79`) 대비로 같은 판정을 거쳤다.
+- **완료 증거** — 셸 파일마다 요약 줄(`Total: …`) 또는 기준선과 같은 마지막 출력 줄을 요구했다. 단언 없이 죽은 파일이 `(파일, rc=<N>)` 로 잡히는 것과, 기존 실패 하나를 찍고 중단된 실행이 멀티셋 비교를 통과하지 못하는 것을 합성 양성 대조로 확인했다.
+- **변이** — 새로 쓰거나 고친 락을 통째 삭제 · 문구 반전 · 값 변경 · 위치 변경 · 문장 추가로 흔들어 30건을 돌렸다. 29건은 해당 단언 하나만 RED 였고, 1건(README 별칭 면제)은 의도대로 GREEN 이었다. 변이하지 않은 새 락: 라운드 규약 절의 소제목 넷 · `## R<n>` 헤딩 · description 문구 · 되묻기 세 축 · SKILL 줄 수 상한, coverage-mapper 절의 인자 없는 경로 첫 dispatch 시점, V13 의 두 번째 양성 짝, 절 추출 양성 대조.
+- **사람 e2e** — 결과 미보고: 체크리스트 5항목을 안내했으나 사용자가 결과 보고 없이 릴리스 진행을 지시했다(2026-09-11). 항목별 통과/실패 기록 없음.
+
+## [1.2.0] — 2026-09-11
+
+minor 인 이유: `/interview` 가 새 입력 모양 `@<seed 경로>` 를 받는다 — 새 surface 다. 옛 입력(rough request · seed 전문 붙여넣기)은 그대로 동작한다.
+
+### Added
+
+- **`/interview` Step 1.5 — `@경로` 인자 풀기.** 앞뒤 공백을 걷은 인자가 `@` 로 시작하는 공백 없는 한 토큰이면 그 파일을 Read 로 읽어 frontmatter 포함 전문을 「풀린 입력」으로 삼고, Step 2(trivia) · Step 2.5(seed 판별) · Step 3(`Skill conducting-interview`)이 그 값을 쓴다. 읽기 실패면 사유를 담은 문구를 내고 인터뷰를 시작하지 않는다. 입구에서 직접 푸는 이유: 2026-09-10 헤드리스 실측(`claude -p`)에서 커맨드 인자의 `@경로` 는 `$ARGUMENTS` 에 리터럴로 남고 파일이 첨부되지 않았다(평문 프롬프트의 `@경로` 는 첨부됐다). 대화형 입력은 재지 않았다 — 거기서 첨부되더라도 command 본문이 읽는 것은 치환된 인자라 이 단계가 필요하다.
+- `tests/test_seed_at_path_handoff.sh` — framing 옵션 표 · 호출 모양 · 두 가드 · 공유 계약(정본 자체) · Step 1.5 · 옛 호출 모양 부재(코퍼스 멤버십 양성 짝 포함) · 이름 가드 공백 거부(case 패턴을 실제로 돌린다). 단언 종류마다 삭제 · 치환 · 순서 뒤집기 · 재삽입 변이로 RED 를 확인했다.
+- 실동작 확인(2026-09-11, 헤드리스 `claude -p` + `--plugin-dir`, sonnet, 1회): `/spec-distill:interview @<seed>` 가 픽스처를 절대경로로 읽고 frontmatter 포함 전문을 바꾸지 않고 `conducting-interview` 에 넘겼다(넘긴 인자 = 픽스처 전문). 「`/request-framing` 을 먼저」 조언은 나오지 않았다. 없는 경로는 부재 문구를 내고 인터뷰를 시작하지 않았다. 재지 못한 것: 첫 라운드 — 헤드리스 세션에 작업 디렉토리 밖 읽기 권한이 없어 `conducting-interview` 의 참조 파일을 읽지 못했고, 인터뷰 질문 대신 그 제약을 알리고 진행 방식을 물으며 끝났다(그 글은 seed 주제를 언급했다). Step 2(trivia 대조)도 같은 이유(`references/trivia-escape.md` Read 가 작업 디렉토리 밖이라 거부)로 관측되지 못했다. 대화형 입력도 재지 않았다.
+
+### Changed
+
+- **framing 게이트의 핸드오프가 `/interview @<seed 경로>` 로 바뀌었다.** 옵션은 ① `/new` 후 `/interview @<seed 경로>`(권장) · ② `/compact` 후 같은 명령 · ③ 수정 · ④ 멈춤이다. ①/② 는 두 줄 명령을 노출하고 턴을 끝낸다. 「바로 `/interview`」 옵션은 없어졌다 — `AskUserQuestion` 한 질문의 옵션 상한이 4 다. `/new` 는 `/clear [name]` 의 별칭이라 같은 줄 뒤 텍스트가 세션 이름이 되므로 두 줄을 따로 입력하게 안내한다. 권장이 `/new` 인 이유: seed 는 framing 대화를 대신하려고 존재하고, `/compact` 는 그 대화의 요약을 남긴다.
+- **공유 게이트 계약(`references/proceed-gate.md`)의 ①/② 를 「권장/차선 핸드오프」로 일반화했다.** 핸드오프 종류(`/compact` · `/new` · 바로 진행)와 노출할 명령은 각 skill 이 채운다. 가드 2 는 명령을 노출하는 모든 옵션에 걸리고 바로 진행 옵션이 예외다. 가드 1 의 완료 동작은 핸드오프 종류가 정한다. Step A 는 「핸드오프 명령도 노출하지 않는다」. `reviewing-spec` · `conducting-interview` 는 새 표에 그대로 맞아 바뀌지 않았다. **이 릴리스가 닫지 않는 것**: 두 skill 의 가드 1 문면(「①/② 선택 후 … 다음 단계 진입을 skip 하면 polite stop」)이 자기 ① 의 정지 요건과 어긋나는 것은 이번 변경 전부터 있던 불일치다.
+- framing 의 이름 가드(`TOPIC` · `IV_NAME`)가 공백을 거부한다 — seed 경로가 한 토큰이어야 `/interview` 가 `@경로` 로 푼다. 공백 든 경로를 사람이 손으로 넘기면 Step 1.5 는 발동하지 않고 거친 요청으로 받는다.
+- 옛 핸드오프(「다음 세션 첫 턴에 붙여넣는 메시지」)를 풀어 쓴 문장을 `commands/request-framing.md` · `conducting-interview/references/seed-input.md` · `finishing.md` 의 S1 문장 · `templates/interview-seed-audit-template.md` · README 흐름도에서 새 모양으로 바꿨다. README 의 v0.41.0 이력 단락은 그 버전이 한 일의 기록이라 그대로 뒀다.
+
+## [1.1.0] — 2026-09-10
+
+### Changed
+
+- **steelman 게이트가 추천을 출처별로 표시한다 — 재결정.** `skills/conducting-interview/references/steelman.md` Step 3 의 질문 규칙. 선택지 순서(유지 / 보완 / 전환 / 보류)는 고정 그대로이고 추천을 첫 자리로 옮기지 않는다. 표시는 선택지마다 붙는다 — builder 가 추천한 선택지, orchestrator 판정 선택지, 두 추천이 같은 선택지면 공동 라벨 하나. 확인된 전제 충돌이 0건인데 builder 가 전환을 추천하면 그 전환 라벨에 「전제 충돌 없음」이 함께 붙는다 — Step 2.5 의 전환 봉쇄는 추천·라벨 층에 있으므로, 게이트 선택지에 표시가 생기면 봉쇄도 거기까지 따라가야 표시가 봉쇄를 무력화하지 않는다. 출처 라벨이 유일한 추천 표시다 — 도구(`AskUserQuestion`)와 이 skill 라운드 규약의 기본 추천 접미사는 붙이지 않는다. 1.0.1 까지는 도구 쪽 접미사만 금지했고, 라운드 규약의 접미사 금지는 이번에 새로 들어갔다. web 부재 시의 수동 의심 게이트는 builder 추천이 없어 바뀌지 않는다.
+  - **재결정 기록 (P23).** 원래 — C11(`docs/superpowers/interview/2026-09-05-steelman-goal-fit-interview.md:185`, 사용자 발화 S12) 원문: 「builder 추천은 4-block 추천 답안 블록에 orchestrator 의견과 나란히 표시하고, 선택지는 항상 유지/보완/전환/보류 순으로 고정하며 Recommended 라벨로 첫 자리에 올리지 않는다」. S12 는 「builder 추천의 게이트 노출」 질문의 답이었다(`2026-09-05-steelman-goal-fit-interview.audit.md:252`). 0.55.0 이 그 답을 선택지에 도구 쪽 추천 접미사를 붙이지 않는 것으로 구현했다(steelman.md 도입). 기각 이유는 같은 인터뷰 §5 의 `:242`(compromise effect 와 앵커링 재현을 피한다)이고, 원천은 추천을 추천 답안 블록에「만」 두라고 명시하지는 않는다. 재결정 — 게이트 선택지에 도구 쪽 접미사만 금지하고 추천 표시는 규정하지 않던 규칙을 바꿔, 출처별 표시를 규정한다. C11 의 글자(나란히 표시 · 순서 고정 · 첫 자리 승격 금지)는 그대로 지켜진다. 근거 — 사용자 재결정(2026-09-10). 새 외부 근거는 없다. 받아들인 비용은 둘이다 — 앵커링(보이는 추천이 판단을 자기 쪽으로 끌어당긴다)에 대한 방어가 약해진다. 그리고 순서 고정은 추천이 선택지를 첫 자리로 옮기는 경로만 막는다(인터뷰 `:255` 의 확정 대응) — 보완은 순서상 여전히 가운데다. 확인된 전제 충돌이 0건이면 orchestrator 판정이 유지·보완뿐이라 그 가운데 선택지에 추천 표시가 붙을 수 있다 — 위치 효과 위에 얹히는 새 압력이다.
+- **4-block 의 orchestrator 줄이 「판정 — 이유」 형식이 됐다.** 표시가 가리킬 선택지가 정해지게 하려는 것이다. 판정은 유지 / 보완 / 전환 중 하나이고 보류는 들지 않는다 — C15(보류는 게이트에서 사람만 고른다)를 그대로 지킨다. 확인된 전제 충돌이 0건이면 Step 2.5 가 이것을 다시 유지·보완으로 좁힌다.
+- **`tests/test_conducting_interview_stage.sh` — 표시 규칙 락.** 질문 줄 하나를 코퍼스로, 리터럴 일곱(순서 고정·첫 자리 금지 · builder 라벨 · orchestrator 라벨 · 두 추천이 다를 때와 같을 때 · 충돌 0건 전환 라벨과 그 조건 · 기본 추천 접미사 금지 · kept/refined/switched 대응)이 그 한 줄에 함께 있는지 잰다 — 그중 출처 라벨이 걸린 넷은 조건과 라벨을 한 문자열로 묶었다. 라벨만 재면 두 출처의 라벨을 맞바꾸거나 조건을 지워도 통과하므로 묶어 잰다. 질문 규칙은 steelman.md 에서 한 물리 줄이어야 한다. 금지 문장을 도려낸 R3 블록에서 기본 추천 접미사의 부재를 잰다 — 다른 자리에 허용 문장이 새로 들어오는 것을 잡는다. R3 블록 전체에서는 orchestrator 줄 형식(보류 제외 포함)을 재고, Step 2.5 의 충돌 0건 항목 하나를 한 줄로 이어 붙여 그 항목의 두 규칙(orchestrator 판정의 유지·보완 제한 · 줄바꿈 너머의 조건까지 포함한 builder 전환 옆 라벨)을 잰다 — Step 2.5 의 두 규칙은 이번 변경 전부터 있었지만 잠겨 있지 않던 전제다. 한계 — 존재 락은 그 문자열이 정해진 자리에 있는지만 본다: 리터럴이 끝난 뒤에 덧붙인 부정, 리터럴 밖의 변경, 동의어로 바꿔 쓴 규칙은 못 잡는다. 부재 락은 R3 블록 안의 괄호형 두 접미사 리터럴만 본다. 어느 락도 모델이 실제로 라벨을 그렇게 붙이는지는 재지 않는다.
+
+## [1.0.1] — 2026-09-10
+
+### Fixed
+
+- **`framing-requests` — 빈 요청일 때 첫 행동이 둘로 갈리던 것.** `/request-framing` 은 인자가 비면 「무엇을 맡기려 하시나요」로 시작한다고 적었고, skill 의 `## 워크트리 — 진입 직후` 는 워크트리 질문이 첫 행동이라고 적었다. 빈 요청에는 `feature/<kebab-topic>` 도 audit 이름도 댈 주제가 없다. 이제 순서는 skill 절 한 곳이 정한다 — 빈 요청이면 주제 질문이 워크트리 질문보다 앞서고(답으로도 주제를 못 대면 좁혀 다시 묻는다 · 워크트리를 건너뛰는 경우도 같다), 그 답들은 audit `## 1. 원문` 의 첫 항목부터 옮겨진다. «첫 행동» 문장은 그 예외를 스스로 밝힌다. command 는 주제가 먼저라는 것만 적고 나머지 순서는 그 절을 가리킨다. `tests/test_request_framing_command.sh` 에 단언 다섯(질문 앞 위치 · 건너뛰는 경로 · «첫 행동» 예외 · 원문 이관 · command 포인터).
 
 ## [1.0.0] — 2026-09-09
 

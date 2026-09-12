@@ -2,7 +2,7 @@
 # PN2/V8/AC10 — reviewing-spec is design-mode only; spec-mode/re-consensus/Mode B removed;
 # drafting-spec absent from skills/hooks/commands.
 #
-# ── 앵커 (2.0.0) ─────────────────────────────────────────────────────────────
+# ── 앵커 (3.0.0) ─────────────────────────────────────────────────────────────
 # 이 파일의 주제 — *"이 skill 은 design 자리 전용인가"* — 를 오늘 지탱하는 것은 **프로필
 # 고정**이다: 이 skill 은 `design-doc.md` 하나만 고르고, 호출 인자에는 모드가 없다. 그래서
 # 양의 단언은 `## 프로필` 절의 고정 문장을, 음의 단언은 옛 모드 슬롯의 부재를 잰다.

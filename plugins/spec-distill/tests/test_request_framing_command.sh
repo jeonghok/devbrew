@@ -72,6 +72,13 @@ grep -qF '확정 표시는 «(사용자 확인)» 하나' <<<"$conv_block" && ok
 # 오지 않으므로 이 리터럴을 만족시키지 못한다.
 grep -qF '다시 검증할 것 —»로 시작' <<<"$conv_block" && ok "AC11: 마지막 문단 «다시 검증할 것 —»로 시작 규칙" || no "AC11: 재검증 문단 규약 부재"
 grep -qE '그 밖[^.]{0,30}미확인|나머지[^.]{0,30}미확인' <<<"$conv_flat" && ok "AC11: 무표시 = 미확인" || no "AC11: 무표시=미확인 문장 부재"
+# Phase 1 이 이 문단을 어디에 쓰는가 — conducting-interview references/seed-input.md 와 같은 자리여야
+# 한다(두 문서가 갈라지면 Phase 0 은 없는 블록을 겨냥해 문단을 쓴다).
+grep -qF 'Phase 1 은 이 문단을 R1 의 «지금 이해»·질문의 재료와 coverage-mapper 첫 dispatch 의 입력으로 씁니다' <<<"$conv_flat" \
+  && ok "AC4: 재검증 문단의 소비 자리 = R1 «지금 이해»·질문 + coverage-mapper 첫 dispatch" \
+  || no "AC4: 재검증 문단의 소비 자리가 seed-input.md 와 갈렸다"
+grep -qF '필요하면 Phase 1 이 질문으로 검증합니다' <<<"$conv_flat" \
+  && ok "AC4: 무표시 문장은 Phase 1 이 질문으로 검증한다" || no "AC4: 무표시 문장의 검증 방식 문장 부재"
 # 수정 라운드 1: 「태그[^.]{0,30}(쓰지 않|없)」는 안전망 문장(「태그 없는 산문으로 떨어질 뿐」)도
 # 만족시켜, 규칙 문장(「seed 는 태그를 쓰지 않습니다」)을 지워도 GREEN 이 유지됐다(리뷰 지적,
 # 삭제-방향 뮤테이션으로 실측). 규칙 문장 고유의 리터럴로 좁힌다.
@@ -102,6 +109,15 @@ grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE' <<<"$wt_block" && ok "AC12: kil
 # (AC11 에서 실측된 것과 같은 결함 — 삭제-방향 뮤테이션으로 직접 확인 후 좁혔다).
 pre_q="${wt_block%%AskUserQuestion(*}"
 grep -qF 'git rev-list --count' <<<"$pre_q" && ok "AC12: 로컬 전용 커밋 확인이 질문 앞에 있다" || no "AC12: 로컬 전용 커밋 확인이 질문 앞에 없다"
+# v1.0.1: 빈 요청에는 워크트리 이름을 댈 주제가 없다. 주제 질문이 워크트리 질문 «앞»에 있는지
+# (위치 축 — 절 안 어딘가가 아니라 pre_q), 그 답이 audit 원문으로 가는지, command 가 순서를
+# 다시 정하지 않고 이 절을 가리키는지.
+grep -qF '무엇을 맡기려' <<<"$pre_q" && ok "AC12: 빈 요청의 주제 질문이 워크트리 질문 앞에 있다" || no "AC12: 빈 요청의 주제 질문이 워크트리 질문 앞에 없다"
+grep -qF '건너뛰는 경우도 같다' <<<"$(tr '\n' ' ' <<<"$pre_q" | tr -s ' ')" && ok "AC12: 워크트리를 건너뛰어도 주제 질문이 먼저다" || no "AC12: 워크트리를 건너뛰는 경로에서 주제 질문 순서가 빠졌다"
+grep -qF '첫 행동**이다(빈 요청일 때만' <<<"$wt_flat" && ok "AC12: «첫 행동» 문장이 빈 요청 예외를 스스로 밝힌다" || no "AC12: «첫 행동» 문장이 빈 요청 예외 없이 단정한다 — 절 안에서 모순"
+grep -qE '1\. 원문[^.]{0,20}첫 항목' <<<"$wt_flat" && ok "AC12: 주제 질문의 답이 audit 원문 첫 항목으로 간다" || no "AC12: 주제 질문의 답이 audit 원문으로 가는 규칙 부재"
+args_block="$(awk '/^## Arguments/{f=1;next} /^## /{f=0} f' "$CMD")"
+{ grep -qF '무엇을 맡기려' <<<"$args_block" && grep -qF '워크트리 — 진입 직후' <<<"$args_block"; } && ok "AC12: command 가 빈 요청 순서의 정본으로 skill 절을 가리킨다" || no "AC12: command 의 빈 요청 안내가 skill 절을 안 가리킨다"
 askq_block="$(awk '/^```javascript$/{f=1;next} f&&/^```$/{exit} f' <<<"$wt_block")"
 grep -qF 'LOCAL_ONLY_NOTE' <<<"$askq_block" && ok "AC12: 질문 본문에 로컬 전용 커밋 안내가 실린다" || no "AC12: 질문 본문에 로컬 전용 커밋 안내 부재"
 grep -qF 'LOCAL_ONLY_NOTE="확인 못함' <<<"$wt_block" && ok "AC12: base 부재/확인 실패가 «확인 못함» 으로 드러난다" || no "AC12: 확인 불가 상태가 침묵(또는 0건 오독)으로 떨어진다"

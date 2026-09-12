@@ -7,7 +7,7 @@
 #   · 층 2 의 `handoff_incomplete` rubric 줄이 Handoff Context 를 이름으로 댄다.
 #
 # 재지 못하는 것 — 저자 쪽 지시. Handoff Context 를 `TL;DR` · `Implicit context` · `Deferred to plan`
-# 세 하위 항목으로 쓰라는 기계 앵커는 spec-distill 2.0.0 에서 템플릿과 함께 사라졌다
+# 세 하위 항목으로 쓰라는 기계 앵커는 spec-distill 3.0.0 에서 템플릿과 함께 사라졌다
 # (brainstorming 은 그 템플릿을 읽지 않았다). 앞의 두 라벨은 이제 어디서도 기계로 재지 않는다.
 set -u -o pipefail
 
