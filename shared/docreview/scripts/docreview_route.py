@@ -131,11 +131,16 @@ def cmd_prepare(a) -> int:
 
     degrade = {"critic_dead": False, "layer2_missing": False, "codex_absent": False, "codex_reason": None}
     items = []
-    text = Path(a.critic).read_text(encoding="utf-8") if Path(a.critic).is_file() else ""
+    undecodable = None
+    try:
+        text = Path(a.critic).read_text(encoding="utf-8") if Path(a.critic).is_file() else ""
+    except UnicodeDecodeError:
+        # 깨진 critic 출력 — 설계 §9 의 sentinel 깨짐과 같은 판정(critic 사망 → 재dispatch 1회 → 「미검증」)
+        text, undecodable = "", "undecodable"
     l1, e1 = extract_block(text, "docreview-layer1")
-    if e1 or not isinstance(l1, list):
+    if undecodable or e1 or not isinstance(l1, list):
         degrade["critic_dead"] = True
-        ev("source_failed", "doc-critic", "layer1 block %s" % (e1 or "not a list"), True)
+        ev("source_failed", "doc-critic", "layer1 block %s" % (undecodable or e1 or "not a list"), True)
     else:
         for i, it in enumerate(l1, 1):
             n1 = normalize(it, 1, "c", i, L)

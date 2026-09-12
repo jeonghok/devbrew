@@ -1327,11 +1327,13 @@ case_T46_normal_and_unrouted_rounds() {   # 양의 짝 둘 — 정상 라운드�
     "T46: finalize 를 거치지 않은 라운드 — 「미검증」 사유는 없지만 완료 기록 신호는 서지 않는다 (참은 이번 라운드의 finalize 보고서를 요구한다)"
   rm -rf "$d"
 }
-case_T46_prepare_crash_unrouted_disclosed() {   # 리뷰 P1 재현 — 5단계가 rc 0·4 밖(비-UTF-8 critic)이고 7단계를 건너뛴 라운드
-  local d rc f l; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
-  printf '\xff\xfe\x00bad' > "$d/critic-bad.txt"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-bad.txt" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json" 2>"$d/prep.err"; rc=$?
-  assert_eq "$rc $(jget "$d/prep.err" 'd["reason"]')" "1 unreadable" "T46 전제(리뷰 P1): 비-UTF-8 critic → prepare-recritic rc 1 unreadable (rc 0·4 밖)"
+case_T46_skipped_routing_unrouted_disclosed() {   # 리뷰 P1 — 5~7단계를 건너뛴 라운드(준비도 라우팅 보고서도 없다)
+  # 탈것: 옛 판본은 비-UTF-8 critic 으로 5단계를 rc 1 로 죽였다. 그 입력은 이제 critic 사망(rc 4)이라
+  # (최종 리뷰 F6 — 아래 case_T46_undecodable_critic_is_dead) 「미검증」 쪽으로 가므로, `unrouted` 는
+  # 5~7단계를 건너뛴 라운드로 잰다 — 1단계 뒤 곧장 게이트다.
+  local d f l; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_eq "$(st_yaml "$d" 'st["pending_recritic"], st["rounds"]["1"].get("route_report"), st["rounds"]["1"].get("finalize_failed")')" "(None, None, None)" \
+    "T46 전제(리뷰 P1): 5~7단계를 건너뛴 라운드 — 준비 · 라우팅 보고서 · finalize 거부 표지가 모두 없다"
   assert_eq "$(gsum "$d" 'd["unreviewed_reason"], d["unverified"], d["approval_label"], d["round_reviewed"]')" "('unrouted', None, None, False)" \
     "T46: 7단계를 건너뛴 라운드 — 공시 사유 unrouted · 「미검증」 사유와 라벨은 아니다 · 완료 기록 불가"
   f="$(gfirst "$d")"
@@ -1345,6 +1347,34 @@ case_T46_prepare_crash_unrouted_disclosed() {   # 리뷰 P1 재현 — 5단계�
   py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null
   assert_eq "$(gsum "$d" 'd["unreviewed_reason"], d["approval_label"]')" "('finalize_incomplete', '미검증')" \
     "T46(리뷰 P1b): 그 뒤 finalize 를 부르면 거부 표지가 서서 「미검증」 이 된다"
+  rm -rf "$d"
+}
+case_T46_undecodable_critic_is_dead() {   # 비-UTF-8 critic 출력 = sentinel 깨짐 — 설계 §9 주 판정자 실패 (최종 리뷰 F6)
+  # 옛 판본은 디코드 예외가 `unreadable` rc 1 로 새어 재dispatch 없이 `unrouted` 로 갔다. 설계 §9 는 sentinel 이
+  # 없거나 깨지면 critic 사망(재dispatch 1회, 또 실패면 「미검증」)이다.
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  printf '\xff\xfe\x00bad' > "$d/critic-bad.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-bad.txt" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json" 2>"$d/prep.err"; rc=$?
+  assert_eq "$rc $(jget "$d/prep.json" 'd["ok"], d["degrade"]["critic_dead"]' 2>/dev/null)" "4 (False, True)" \
+    "T46(F6): 비-UTF-8 critic → prepare-recritic rc 4 · critic_dead (rc 1 unreadable 이 아니다)"
+  assert_eq "$(st_yaml "$d" '[e[2] for e in st["pending_recritic"]["events"] if e[0] == "source_failed" and e[1] == "doc-critic"]' 2>/dev/null)" "['layer1 block undecodable']" \
+    "T46(F6): source_failed 사유가 디코드 실패를 말한다"
+  assert_eq "$(gsum "$d" "$UNV3")" "('critic_dead', '미검증', False)" \
+    "T46(F6): 그 라운드의 게이트는 「미검증」(critic 사망) 쪽이다 — unrouted 가 아니다"
+  rm -rf "$d"
+}
+case_T46_unrouted_round2_with_open_items() {   # 가장 흔한 재리뷰 모양 — 라운드 2 · 이전 라운드의 열린 항목 · 5~7단계 건너뜀 (최종 리뷰 F7)
+  # 위 `unrouted` 셀들은 전부 라운드 1 · 열린 것 없음이라 공시가 `approval_ready` 갈래에서만 재졌다.
+  local d f l; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  assert_eq "$(gsum "$d" 'd["round"], d["approval_ready"], d["unreviewed_reason"], d["approval_label"]')" "(2, False, 'unrouted', None)" \
+    "T46(F7) 전제: 라운드 2 · 이전 라운드의 열린 항목으로 승인 준비 아님 · 공시 사유 unrouted · 라벨 없음"
+  f="$(gfirst "$d")"
+  assert_not_contains "$f" "degrade 없음" "T46(F7): 승인 준비가 아닌 라우팅 없는 라운드의 렌더 첫 줄에도 「degrade 없음」이 없다"
+  assert_contains "$f" "리뷰 완료 아님 — 이번 라운드의 라우팅 보고서가 없다" "T46(F7): 렌더 첫 줄이 라우팅 보고서 부재를 공시한다 (부재 단언의 양의 짝)"
+  l="$(py docreview_state.py gate --state-dir "$d" --render | tail -1)"
+  assert_contains "$l" "리뷰 완료가 아니다(round_reviewed=false · unrouted)" \
+    "T46(F7): 승인 준비가 아닐 때의 「다음:」 줄에도 리뷰 완료 아님 꼬리가 붙는다"
   rm -rf "$d"
 }
 case_T46_unverified_two_stage_with_open_items() {   # 「미검증」 + 이전 라운드의 열린 항목 → 두 단계 승인 게이트(설계 §8.2)
