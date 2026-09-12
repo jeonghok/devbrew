@@ -213,7 +213,8 @@ def _yaml_keys(fm: str) -> Tuple[Optional[set], Optional[str]]:
         return None, "pyyaml_unavailable"
     try:
         data = yaml.safe_load(fm)
-    except yaml.YAMLError as exc:
+    except (yaml.YAMLError, ValueError, TypeError, OverflowError) as exc:
+        # 무효 timestamp(`2001-13-45`) 같은 값은 YAMLError 가 아니라 생성자의 ValueError 로 죽는다.
         return None, "frontmatter_yaml_mismatch:load_error:%s" % type(exc).__name__
     if not isinstance(data, dict):
         return None, "frontmatter_yaml_mismatch:not_mapping"

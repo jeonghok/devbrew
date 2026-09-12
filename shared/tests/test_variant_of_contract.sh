@@ -126,6 +126,9 @@ neg fm_hide_tools_flow.md base.md frontmatter_unparsable:value_flow_mapping
 neg fm_hide_color_dq.md base.md frontmatter_unparsable:value_double_quote
 # 교차 대조만 잡는 셀 — `on:` 은 줄 문법 안의 키인데 PyYAML 은 문자열이 아니라 True 로 읽는다.
 neg fm_yaml_boolkey.md base.md frontmatter_yaml_mismatch:non_string_key
+# 교차 대조의 적재가 YAMLError 밖으로 죽는 셀 — 무효 timestamp(`color: 2001-13-45`)에서 PyYAML 이 ValueError 를 낸다.
+# 판정기는 트레이스백이 아니라 명명 사유로 떨어져야 한다(PR 3 최종 리뷰 F5 — 빈 출력은 중복 락이 「코퍼스 축소」로 오지목한다).
+neg fm_bad_timestamp.md base.md frontmatter_yaml_mismatch:load_error:ValueError
 [ "$n_neg" -ge 22 ] && ok "V2: 판정기 음성 ${n_neg}건을 태웠다" || no "V2: 음성이 ${n_neg}건뿐 — 셀이 사라졌다"
 res_ml="$(python3 "$VO" check "$FX/ml_ok.md" "$FX/base_ml.md")"
 assert_eq "$res_ml" "OK${TAB}4" "V2(양성 대조 — 여러 줄 값): 비-자유 키 input_slots 블록이 줄마다 같으면 관계가 선다"
