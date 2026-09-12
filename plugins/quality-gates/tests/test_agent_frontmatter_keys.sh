@@ -10,6 +10,9 @@
 #   버그를 놓친 검증 파일을 편집하는 것이 compounding 이벤트다.
 #
 # 규칙 (plugins/*/agents/*.md 전부):
+#   L0  frontmatter 가 YAML 로 파싱되지 않거나 · 매핑이 아니거나 · `tools` 키가 없음 -> FAIL
+#       (PyYAML 부재도 FAIL. 아래 형태 화이트리스트가 닫는 것은 «키 스펠링»이지 파싱 가능성이 아니다 —
+#        파서가 못 읽는 frontmatter 를 런타임은 전 도구로 싣는다. 근거 · 한계는 루프 앞 L0 주석.)
 #   L1  `allowedTools` / kebab 변종 존재            -> FAIL
 #   L2  `tools:` 부재                                -> FAIL  (카브아웃 없음)
 #       + `tools:` 키 중복(YAML 은 마지막 값으로 resolve, grep -m1 은 첫 값을 봄) -> FAIL
@@ -106,8 +109,68 @@ if [ "$scanned_agents" -lt 1 ]; then
   echo "FAIL: 스캔된 agent 파일 0개 (cwd=$(pwd)) — 락이 빈 집합 위에서 통과할 뻔했다" >&2
   exit 1
 fi
+# --- L0 — YAML 파서가 frontmatter 를 읽는가 (PR 3 최종 리뷰 F3) ---
+# 런타임 로더는 frontmatter 를 못 읽으면 오류 없이 **파일명 이름 + 전 도구**로 agent 를 싣는다(PR 3 관측
+# 태스크 T9 p9 — 안 닫힌 따옴표 · U+2028 · U+2029). 아래 L2 의 형태 화이트리스트는 column-0 줄의 모양만
+# 보므로 `description: "unclosed` 같은 줄을 통과시킨다. `tools:` allowlist 의 fail-closed 는 frontmatter 가
+# 파싱될 때만 성립하므로, 스캔한 agent 마다 첫 두 `---` 사이를 PyYAML `safe_load` 해 **예외 없음 · 매핑 ·
+# `tools` 키 있음**을 요구한다. PyYAML(또는 python3)이 없으면 FAIL 이다 — 조용히 건너뛰지 않는다.
+# 한계: PyYAML 은 YAML 1.1 이라 U+2028 · U+2029 를 줄바꿈으로 읽어 파싱에 성공한다. 그 둘은
+# shared/tests/test_variant_of_contract.sh 의 V4(agent 정의 파일 전체 문자 금지)가 막는다. 락이 검증한
+# `tools` 값과 파서가 resolve 한 값의 등식은 test_agent_tools_lock_differential.sh 가 잰다.
+# 파이썬은 한 번만 돈다(모든 파일을 인자로). 출력은 위반 파일마다 `<경로>\t<사유>` 한 줄.
+L0_PY='
+import sys
+try:
+    import yaml
+except ImportError:
+    print("PYYAML_MISSING")
+    sys.exit(0)
+for p in sys.argv[1:]:
+    try:
+        lines = open(p, encoding="utf-8").read().split("\n")
+    except (OSError, UnicodeDecodeError) as exc:
+        print("%s\tunreadable:%s" % (p, type(exc).__name__))
+        continue
+    fm = None
+    if lines and lines[0] == "---":
+        for i in range(1, len(lines)):
+            if lines[i] == "---":
+                fm = "\n".join(lines[1:i])
+                break
+    if fm is None:
+        print("%s\tno_frontmatter" % p)
+        continue
+    try:
+        data = yaml.safe_load(fm)
+    except Exception as exc:
+        print("%s\tload_error:%s" % (p, type(exc).__name__))
+        continue
+    if not isinstance(data, dict):
+        print("%s\tnot_mapping" % p)
+        continue
+    if "tools" not in data:
+        print("%s\ttools_key_absent" % p)
+'
+L0_OUT="$(python3 -c "$L0_PY" "$@" 2>&1)"; l0_rc=$?
+if [ "$l0_rc" -ne 0 ] || [ "$L0_OUT" = "PYYAML_MISSING" ]; then
+  echo "FAIL [L0] frontmatter 파서(python3 + PyYAML)를 돌리지 못했다 (rc=${l0_rc}${L0_OUT:+ · $L0_OUT}) — 파싱 가능성을 재지 못한 채 통과시키지 않는다." >&2
+  echo "  복구: python3 -m pip install pyyaml" >&2
+  violations=$((violations+1))
+  L0_OUT=""
+fi
+
 for f in plugins/*/agents/*.md; do
   FM="$(fm_of "$f")"
+
+  # --- L0 ---
+  l0_why="$(printf '%s\n' "$L0_OUT" | F="$f" awk -F '\t' '$1 == ENVIRON["F"] {print $2; exit}')"
+  if [ -n "$l0_why" ]; then
+    echo "FAIL [L0] $f: frontmatter 를 YAML 파서가 읽지 못한다 (${l0_why}) — 런타임은 이런 agent 를 파일명" >&2
+    echo "  이름 + 전 도구로 싣는다. tools: allowlist 는 frontmatter 가 파싱될 때만 닫힌다 — 따옴표 · 괄호를 닫을 것." >&2
+    violations=$((violations+1))
+    continue
+  fi
 
   # --- L1 ---
   if grep -qE '^(allowedTools|allowed-tools|disallowed-tools):' <<<"$FM"; then

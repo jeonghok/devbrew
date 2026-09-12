@@ -210,6 +210,26 @@ write_agent 'tools: []
   Write'
 expect RED "tools: [] 뒤 indented continuation — 카브아웃이 multiline 가드를 건너뛰면 안 된다"
 
+# ── L0: 파서가 못 읽는 frontmatter (PR 3 최종 리뷰 F3) ─────────────────────────
+# 런타임 로더는 frontmatter 를 못 읽으면 오류 없이 **파일명 이름 + 전 도구**로 agent 를 싣는다
+# (PR 3 관측 태스크 T9 p9). 형태 화이트리스트(L2)는 column-0 줄의 모양만 봐서 아래 셋을 전부
+# 통과시켰다 — `tools: Read, Grep, Glob` 이 멀쩡히 보여도 런타임에는 그 allowlist 가 없다.
+write_raw() {   # write_raw <name 과 tools 사이에 끼울 줄들>
+  printf -- '---\nname: probe\n%s\nmodel: inherit\ntools: Read, Grep, Glob\n---\n\nbody\n' "$1" > "$FIX/probe.md"
+}
+echo "== L0: 파서가 못 읽는 frontmatter =="
+write_raw 'description: "unclosed'
+expect RED "description 의 안 닫힌 큰따옴표 — 파서가 못 읽는다 (런타임은 전 도구로 싣는다)"
+write_raw "description: 'unclosed"
+expect RED "description 의 안 닫힌 작은따옴표 — 파서가 못 읽는다"
+write_raw 'description: fixture
+color: [red'
+expect RED "안 닫힌 flow 값(color: [red) — 파서가 못 읽는다"
+echo "== L0 보강: 같은 모양이 닫혀 있으면 통과 (L0 이 over-reject 하지 않는다) =="
+write_raw 'description: "closed"
+color: [red]'
+expect GREEN "닫힌 따옴표 · 닫힌 flow 값은 파싱되므로 통과"
+
 # ── A-1 (v2.14.2): 진단 스위치가 verdict 를 뒤집던 fail-open ──────────────────
 # 199d682 은 DECL 진단을 **agent 루프 안에서 fd 1** 로 printf 했다. stdout 이 쓰기 불가면
 # (`>&-`) 그 printf 는 실패하지만 bash 의 stdio 버퍼에 내용이 **남고**, 바로 뒤 L3 토큰 루프의
