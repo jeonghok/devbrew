@@ -80,5 +80,7 @@ case_init_same_doc_idempotent
 case_init_empty_state_dir_refused
 case_init_relative_doc_refused
 case_state_dir_for_per_doc
-case_F2_prev_snapshot_from_ledger
+# PR 3 qg iter 3 — 관측은 원장의 함수: 건너뛴 라운드의 permit(적용 · 원복)을 뒤 라운드가 그 라운드의 스냅숏으로 따라잡는다.
+case_E1_skipped_round_permit_caught_up
+case_E5_revert_caught_up_by_its_round_snapshot
 finish

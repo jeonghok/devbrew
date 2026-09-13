@@ -19,14 +19,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점의 형제를 읽는다
 from docreview_state import (  # noqa: E402
-    ProfileError, anchors_matching, fail, load_profile, load_state, save_state,
+    DOC_ANCHOR, ProfileError, anchors_matching, diff_snapshots, fail, load_profile, load_state, save_state,
     slugify,
 )
 
 HEADING_RE = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
 FENCE_RE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})")
 PREAMBLE = "#__preamble__"
-DOC_ANCHOR = "#__doc__"
 
 
 # ── 파싱 ────────────────────────────────────────────────────────────────
@@ -98,52 +97,9 @@ def snapshot_of(doc_path) -> dict:
 
 
 # ── diff ────────────────────────────────────────────────────────────────
-def resolve_scope(scope: str, old_secs, new_secs) -> set:
-    """scope → 앵커 집합. `insert-after:#x` 는 new 에서 #x 바로 다음이고 old 에 없던 앵커 하나."""
-    if not scope.startswith("insert-after:"):
-        return {scope}
-    after = scope.split(":", 1)[1]
-    old = {s["anchor"] for s in old_secs}
-    for i, s in enumerate(new_secs):
-        if s["anchor"] == after and i + 1 < len(new_secs):
-            nxt = new_secs[i + 1]
-            if nxt["anchor"] not in old:
-                return {nxt["anchor"]}
-    return set()
-
-
-def diff_snapshots(old: dict, new: dict, exempt_scopes) -> dict:
-    os_, ns = old.get("sections", []), new.get("sections", [])
-    om = {s["anchor"]: s for s in os_}
-    nm = {s["anchor"]: s for s in ns}
-    headingless = bool(old.get("headingless") or new.get("headingless"))
-    ex = {}
-    for sc in exempt_scopes or []:
-        for a in resolve_scope(sc, os_, ns):
-            ex[a] = sc
-    changed, exempt_applied = [], []
-
-    def rec(anchor, kind, title, oh, nh):
-        item = {"anchor": anchor, "kind": kind, "title": title, "old_hash": oh, "new_hash": nh,
-                "evidence": "섹션 '%s' (%s) %s — hash %s→%s" % (title, anchor, kind, oh or "∅", nh or "∅")}
-        if headingless:
-            item["scope"] = DOC_ANCHOR
-            exempt_applied.append(item)
-        elif anchor in ex:
-            item["scope"] = ex[anchor]
-            exempt_applied.append(item)
-        else:
-            changed.append(item)
-
-    for a, s in nm.items():
-        if a not in om:
-            rec(a, "added", s["title"], None, s["hash"])
-        elif om[a]["hash"] != s["hash"]:
-            rec(a, "modified", s["title"], om[a]["hash"], s["hash"])
-    for a, s in om.items():
-        if a not in nm:
-            rec(a, "removed", s["title"], s["hash"], None)
-    return {"headingless": headingless, "changed": changed, "exempt_applied": exempt_applied}
+# 두 스냅샷의 헤딩 단위 변경(`diff_snapshots` · `resolve_scope`)은 `docreview_state` 에 산다 — 엔진이 원장의 라운드별
+# 스냅숏으로 얼림 diff 를 계산할 때 같은 함수를 부르고, state 는 이 파일을 import 하지 않는 leaf 다. 아래 `diff` CLI 는
+# 그 함수를 그대로 부른다.
 
 
 # ── 보호 부류 ────────────────────────────────────────────────────────────

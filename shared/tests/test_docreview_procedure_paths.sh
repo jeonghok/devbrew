@@ -245,10 +245,13 @@ done
 # 7단계가 `diff prev.json snap.json` 으로 직전 라운드 스냅숏을 읽는데 그것을 만드는 줄이 절차서 · 두 skill · 엔진 어디에도
 # 없었다 — 모델이 diff 를 건너뛰면 얼림 검사가 조용히 꺼진다. 이름을 열거하지 않고 문서에서 도출한다(∀). 산출은 셸
 # 리다이렉트 `> <이름>` 하나로만 센다 — 산문의 언급은 파일을 만들지 않는다.
+# PR 3 qg iter 3 — 7단계의 diff 사슬(`prev.json` · `ex.json` · `diff.json`)이 지워졌다(얼림 diff 는 엔진이 원장의 스냅숏으로
+# 계산한다). 옛 하한 5 는 그 셋을 센 값이었다 — 남은 이름은 `snap.json` · `prep.json` · `fin.json` 셋이고 하한은 그 셋
+# 전부다(여유 0). 카나리아는 1단계 산출(`snap.json`)과 7단계 산출(`fin.json` — 4 절 rc 규칙이 가리키는 호출) 둘이다.
 JSON_NAMES="$(grep -oE '[A-Za-z0-9_-]+\.json' "$REF" | LC_ALL=C sort -u)"
 n_json="$(printf '%s\n' "$JSON_NAMES" | grep -c . || true)"
-{ [ "${n_json:-0}" -ge 5 ] && printf '%s\n' "$JSON_NAMES" | grep -qx 'snap.json'; } \
-  && ok "산출자: 절차서에서 \`*.json\` 이름 ${n_json}개를 도출했다 (하한 5 · 카나리아 snap.json — 아래 ∀ 가 공허하지 않다)" \
+{ [ "${n_json:-0}" -ge 3 ] && printf '%s\n' "$JSON_NAMES" | grep -qx 'snap.json' && printf '%s\n' "$JSON_NAMES" | grep -qx 'fin.json'; } \
+  && ok "산출자: 절차서에서 \`*.json\` 이름 ${n_json}개를 도출했다 (하한 3 · 카나리아 snap.json · fin.json — 아래 ∀ 가 공허하지 않다)" \
   || no "산출자: \`*.json\` 이름 도출이 깨졌다 (${n_json:-0}개) — 아래 ∀ 가 공허하다"
 for j in $JSON_NAMES; do
   grep -qF "> $j" "$REF" \

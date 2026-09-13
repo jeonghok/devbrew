@@ -256,29 +256,133 @@ def _emit(obj) -> None:
     print(json.dumps(obj, ensure_ascii=False))
 
 
-def load_diff(path):
-    """얼림 diff(7단계 `docreview_anchor.py diff` 의 산출물)를 한 번 읽는다 — (diff, why).
+# ── 라운드 diff — 원장의 라운드별 스냅숏으로 엔진이 계산한다 ──────────────────────────────
+# 얼림 검사와 permit · fix 적용 관측이 읽는 diff 는 오케스트레이터가 쓰는 파일이 아니다. 두 입력 — 직전 · 이번
+# 라운드 스냅숏(`begin-round` 가 원장에 저장한다) — 과 면제 집합의 재료(`applied_scopes` · `permits` · 프로필)가
+# 전부 원장에 있으므로 엔진이 계산한다. `docreview_anchor.py diff` CLI 도 같은 `diff_snapshots` 를 부른다.
+DOC_ANCHOR = "#__doc__"
 
-    읽혔으면 why 는 None 이고, 아니면 diff 가 None 이다. `observe-diff` 와 `finalize` 가 같은 판정을 쓴다.
-    why 는 공시 문구에 그대로 들어간다: `미제공`(인자 없음 · 파일 없음) · `읽기 실패:<사유>` · `0바이트` ·
-    `JSON 아님` · `매핑 아님`. 그런 diff 로는 관측도 얼림 검사도 할 수 없다 — 원장 탓으로 죽지 않고
-    (원장은 멀쩡하다) 호출자가 그 사실을 공시한다.
-    """
+
+def resolve_scope(scope: str, old_secs, new_secs) -> set:
+    """scope → 앵커 집합. `insert-after:#x` 는 new 에서 #x 바로 다음이고 old 에 없던 앵커 하나."""
+    if not scope.startswith("insert-after:"):
+        return {scope}
+    after = scope.split(":", 1)[1]
+    old = {s["anchor"] for s in old_secs}
+    for i, s in enumerate(new_secs):
+        if s["anchor"] == after and i + 1 < len(new_secs):
+            nxt = new_secs[i + 1]
+            if nxt["anchor"] not in old:
+                return {nxt["anchor"]}
+    return set()
+
+
+def diff_snapshots(old: dict, new: dict, exempt_scopes) -> dict:
+    os_, ns = old.get("sections", []), new.get("sections", [])
+    om = {s["anchor"]: s for s in os_}
+    nm = {s["anchor"]: s for s in ns}
+    headingless = bool(old.get("headingless") or new.get("headingless"))
+    ex = {}
+    for sc in exempt_scopes or []:
+        for a in resolve_scope(sc, os_, ns):
+            ex[a] = sc
+    changed, exempt_applied = [], []
+
+    def rec(anchor, kind, title, oh, nh):
+        item = {"anchor": anchor, "kind": kind, "title": title, "old_hash": oh, "new_hash": nh,
+                "evidence": "섹션 '%s' (%s) %s — hash %s→%s" % (title, anchor, kind, oh or "∅", nh or "∅")}
+        if headingless:
+            item["scope"] = DOC_ANCHOR
+            exempt_applied.append(item)
+        elif anchor in ex:
+            item["scope"] = ex[anchor]
+            exempt_applied.append(item)
+        else:
+            changed.append(item)
+
+    for a, s in nm.items():
+        if a not in om:
+            rec(a, "added", s["title"], None, s["hash"])
+        elif om[a]["hash"] != s["hash"]:
+            rec(a, "modified", s["title"], om[a]["hash"], s["hash"])
+    for a, s in om.items():
+        if a not in nm:
+            rec(a, "removed", s["title"], s["hash"], None)
+    return {"headingless": headingless, "changed": changed, "exempt_applied": exempt_applied}
+
+
+class LedgerCorrupt(Exception):
+    """원장이 관측 · 얼림 검사에 필요한 것을 갖지 않는다(상태 파손) — 이름 있는 실패. 빈 diff 로 넘어가지 않는다."""
+
+    def __init__(self, reason, **extra):
+        super().__init__(reason)
+        self.reason = reason
+        self.extra = extra
+
+
+def _snapshot_ok(snap) -> bool:
+    if not isinstance(snap, dict) or not isinstance(snap.get("sections"), list):
+        return False
+    return all(isinstance(s, dict) and isinstance(s.get("anchor"), str) and isinstance(s.get("hash"), str)
+               and "title" in s for s in snap["sections"])
+
+
+def snapshot_at(st, k) -> dict:
+    """원장의 라운드 k 스냅숏 — 없거나 모양이 틀리면 `snapshot_missing`."""
+    snap = (st.get("snapshots") or {}).get(str(k))
+    if not _snapshot_ok(snap):
+        raise LedgerCorrupt("snapshot_missing", round=k)
+    return snap
+
+
+PERMIT_KINDS = ("apply", "revert")
+
+
+def _permit_fields(did, p):
+    """permit 의 (라운드, 종류, 앵커 목록, finding id) — 모양이 틀리면 `permit_corrupt`. 관측과 면제가 같은 판정을 쓴다."""
     try:
-        if not path or not Path(path).is_file():
-            return None, "미제공"
-        raw = Path(path).read_bytes()
-    except OSError as exc:
-        return None, "읽기 실패:%s" % (exc.strerror or type(exc).__name__)
-    if not raw:
-        return None, "0바이트"
-    try:
-        diff = json.loads(raw.decode("utf-8"))
-    except ValueError:   # JSONDecodeError · UnicodeDecodeError 둘 다 ValueError 다
-        return None, "JSON 아님"
-    if not isinstance(diff, dict):
-        return None, "매핑 아님"
-    return diff, None
+        k, kind, anchors, fid = int(p["round"]), p["kind"], p["apply_anchors"], p["finding_id"]
+    except (TypeError, KeyError, ValueError):
+        raise LedgerCorrupt("permit_corrupt", decision_id=did)
+    if (kind not in PERMIT_KINDS or not isinstance(anchors, list) or not anchors
+            or not all(isinstance(x, str) for x in anchors)):
+        raise LedgerCorrupt("permit_corrupt", decision_id=did)
+    return k, kind, anchors, fid
+
+
+def exempt_scopes(st, prof, r) -> list:
+    """라운드 r 의 얼림 면제 집합(설계 §7 예외 ①②③) — 라운드 r−1 에 통과한 fix 의 범위 ∪ 라운드 r 의 **모든**
+    permit 앵커 ∪ 프로필 `decision_log` · `defer_target` 절의 헤딩 앵커. permit 은 소비 여부와 무관하다: 라운드 r 의
+    diff 가 정의되는 시점(라운드 r 시작)에는 전부 미소비였고, `finalize` 는 관측으로 소비한 **뒤** 얼림 diff 를
+    계산하므로 소비된 permit 을 빼면 허가된 편집이 `frozen_change` 로 둔갑한다."""
+    out = []
+    for i, s in enumerate(st.get("applied_scopes") or []):
+        try:
+            sr, scope = int(s["round"]), s["scope"]
+        except (TypeError, KeyError, ValueError):
+            raise LedgerCorrupt("applied_scope_corrupt", index=i)
+        if not isinstance(scope, str):
+            raise LedgerCorrupt("applied_scope_corrupt", index=i)
+        if sr == r - 1:
+            out.append(scope)
+    for did, p in (st.get("permits") or {}).items():
+        k, _kind, anchors, _fid = _permit_fields(did, p)
+        if k == r:
+            out.extend(anchors)
+    for key in ("decision_log", "defer_target"):
+        t = prof[key]
+        if t.get("kind") == "doc_section":
+            out.append(heading_anchor(t["heading"]))
+    return sorted(set(out))
+
+
+def round_diff(st, prof, r) -> dict:
+    """라운드 r 의 얼림 diff — 원장의 스냅숏 r−1 → r 와 그 라운드의 면제 집합. 스냅숏이 없으면 `snapshot_missing`."""
+    snaps = st.get("snapshots") or {}
+    for k in (r - 1, r):
+        if not _snapshot_ok(snaps.get(str(k))):
+            raise LedgerCorrupt("snapshot_missing", round=k, diff_round=r)
+    return diff_snapshots(snaps[str(r - 1)], snaps[str(r)], exempt_scopes(st, prof, r))
 
 
 # ── 문서의 정체 · 문서별 상태 디렉토리 ────────────────────────────────────────
@@ -585,37 +689,14 @@ def cmd_record_findings(a) -> int:
 
 
 def cmd_exempt_anchors(a) -> int:
+    """이번 라운드의 얼림 면제 집합(`exempt_scopes` 의 현재 라운드 값)."""
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
-    n = int(st["round"])
-    out = []
-    for s in st["applied_scopes"]:
-        if int(s["round"]) == n - 1:
-            out.append(s["scope"])
-    for _did, p in st["permits"].items():
-        if int(p["round"]) == n and not p.get("consumed"):
-            out.extend(p["apply_anchors"])
-    for key in ("decision_log", "defer_target"):
-        t = prof[key]
-        if t.get("kind") == "doc_section":
-            out.append(heading_anchor(t["heading"]))
-    print(json.dumps(sorted(set(out)), ensure_ascii=False))
-    return 0
-
-
-def cmd_prev_snapshot(a) -> int:
-    """7단계 얼림 검사의 직전 라운드 스냅숏 — `begin-round` 가 원장에 저장한 모양 그대로.
-
-    `docreview_anchor.diff_snapshots` 가 읽는 `anchor` · `title` · `hash` 가 거기 있다. 라운드 1 에는
-    직전이 없고(`no_prev_snapshot`), 원장에 직전 라운드 스냅숏이 없으면 `prev_snapshot_missing` 이다."""
-    st = load_state(a.state_dir)
-    n = int(st["round"])
-    if n < 2:
-        return fail("no_prev_snapshot", round=n)
-    snap = st["snapshots"].get(str(n - 1))
-    if not isinstance(snap, dict) or not isinstance(snap.get("sections"), list):
-        return fail("prev_snapshot_missing", round=n)
-    _emit({"headingless": bool(snap.get("headingless")), "sections": snap["sections"]})
+    try:
+        out = exempt_scopes(st, prof, int(st["round"]))
+    except LedgerCorrupt as e:
+        return fail(e.reason, **e.extra)
+    print(json.dumps(out, ensure_ascii=False))
     return 0
 
 
@@ -779,41 +860,46 @@ def cmd_defer(a) -> int:
     return 0
 
 
-def cmd_observe_diff(a) -> int:
-    st = load_state(a.state_dir)
-    n = int(st["round"])
+def observe_ledger(st, prof, n) -> dict:
+    """라운드 n 에서 permit · fix 의 적용을 관측한다 — `observe-diff` CLI 와 `finalize` 가 함께 쓰는 한 함수.
+
+    `round ≤ n` 인 미소비 permit 전부를 각자 **자기 라운드**의 diff(`round_diff(st, prof, p.round)`)로 본다 — 관측을
+    건너뛴 라운드(critic 사망으로 6~7단계를 건너뛴 라운드 · finalize 가 거부된 라운드)의 permit 을 뒤 라운드가 그
+    라운드의 스냅숏 쌍으로 따라잡는다. `apply` 는 앵커가 그 diff 에 닿았는가, `revert` 는 그 permit 라운드 스냅숏의
+    앵커 해시가 `expect_hash` 와 같은가. `intent_passed` fix 도 같다 — 라운드 r(< n)에 통과한 것을 `round_diff(r+1)`
+    로 본다. 관측 없이는 만료하지 않는다(R70): 필요한 스냅숏이 없거나 permit 이 파손이면 `LedgerCorrupt` 로 멈추고,
+    호출자는 저장하지 않으므로 아무것도 소비되지 않는다.
+
+    따라잡은 `applied` 는 관측한 라운드(n)의 `progress` 로 센다(선택) — stagnation 입력(설계 §8.4)은 「이번 라운드에
+    진행이 관측됐는가」이고, 지난 라운드 자리에 적으면 이번 라운드가 진행 0 으로 읽혀 거짓 stagnation 이 선다.
+
+    관측할 것이 없으면 원장을 바꾸지 않는다(`observed` 거짓) — 같은 라운드에 두 번 불려도 둘째는 무동작이다.
+    """
     r = st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
-    diff, why = load_diff(a.diff)
-    if diff is None:
-        # 읽히지 않는 diff(부재 · 읽기 실패 · 0바이트 · JSON 아님 · 매핑 아님)로는 관측할 수 없다. permit 을 소비하지
-        # 않고(만료 · 재상승도 하지 않는다 — 사용자 결정 R70), 이번 라운드 permit 중 관측하지 못한 것을 사유와 함께
-        # 원장에 센다(`rounds[n].permit_unobserved`) — `finalize` 가 그 수를 advisory 로 공시한다. 원장은 멀쩡하므로
-        # rc 0 이다(`state_unreadable` 은 원장 탓이다).
-        unobserved = sorted(did for did, p in st["permits"].items()
-                            if not p.get("consumed") and int(p["round"]) == n and st["decides"].get(p["finding_id"]))
-        r["permit_unobserved"] = {"why": why, "count": len(unobserved), "permits": unobserved}
-        _refresh_open_lineages(st, n)
-        save_state(a.state_dir, st, "observe-diff 관측 불가 (diff %s · permit %d건 미관측)" % (why, len(unobserved)))
-        _emit({"ok": True, "observed": False, "why": why, "permit_unobserved": len(unobserved),
-               "applied": [], "expired": [], "reraise": list(st.get("reraise") or []), "progress": r["progress"]})
-        return 0
-    r.pop("permit_unobserved", None)   # 같은 라운드의 앞선 관측 불가 기록 — 이 관측이 대신한다
-    touched = {c["anchor"] for c in diff.get("changed", [])}
-    touched |= {e["anchor"] for e in diff.get("exempt_applied", [])}
-    touched |= {e["scope"] for e in diff.get("exempt_applied", []) if e.get("scope")}
-    cur = {s["anchor"]: s["hash"] for s in st["snapshots"].get(str(n), {}).get("sections", [])}
+    touched_at = {}
+
+    def touched(k):   # 라운드 k 의 diff 가 닿은 앵커 — 라운드마다 한 번 계산한다
+        if k not in touched_at:
+            diff = round_diff(st, prof, k)
+            t = {c["anchor"] for c in diff.get("changed", [])}
+            t |= {e["anchor"] for e in diff.get("exempt_applied", [])}
+            t |= {e["scope"] for e in diff.get("exempt_applied", []) if e.get("scope")}
+            touched_at[k] = t
+        return touched_at[k]
+
     applied, expired, reraise = [], [], []
     for did, p in st["permits"].items():
-        if p.get("consumed") or int(p["round"]) != n:
+        k, kind, anchors, fid = _permit_fields(did, p)
+        if p.get("consumed") or k > n:
             continue
-        fid = p["finding_id"]
         d = st["decides"].get(fid)
         if not d:
             continue
-        if p["kind"] == "apply":
-            hit = any(x in touched for x in p["apply_anchors"])
+        if kind == "apply":
+            hit = any(x in touched(k) for x in anchors)
         else:
-            hit = cur.get(p["apply_anchors"][0]) == p.get("expect_hash")
+            cur = {s["anchor"]: s["hash"] for s in snapshot_at(st, k)["sections"]}
+            hit = cur.get(anchors[0]) == p.get("expect_hash")
         p["consumed"] = True
         d.pop("superseded_by", None)   # 이 만료 인스턴스는 끝났다 — 낡은 포인터가 다음 만료를 풀면 안 된다
         if hit:
@@ -823,11 +909,19 @@ def cmd_observe_diff(a) -> int:
         else:
             d["state"] = "expired"
             expired.append(fid)
-            reraise.append({"finding_id": fid, "kind": p["kind"],
+            reraise.append({"finding_id": fid, "kind": kind,
                             "reason": "라운드 %d 에 %s 변경 관측 없음 (%s)" % (
-                                n, "원복" if p["kind"] == "revert" else "채택", did)})
+                                k, "원복" if kind == "revert" else "채택", did)})
     for fid, fx in st["fixes"].items():
-        if fx["state"] == "intent_passed" and int(fx.get("round") or 0) == n - 1 and fx.get("scope") in touched:
+        if fx.get("state") != "intent_passed":
+            continue
+        try:
+            fr = int(fx["round"])
+        except (TypeError, KeyError, ValueError):
+            raise LedgerCorrupt("fix_corrupt", id=fid)
+        if fr < 1:
+            raise LedgerCorrupt("fix_corrupt", id=fid)
+        if fr < n and fx.get("scope") in touched(fr + 1):
             fx["state"] = "applied"
             r["progress"] += 1
             applied.append(fid)
@@ -857,9 +951,26 @@ def cmd_observe_diff(a) -> int:
         pending.append(r0)
         seen.add(r0["finding_id"])
     st["reraise"] = pending
-    _refresh_open_lineages(st, n)
-    save_state(a.state_dir, st, "observe-diff applied=%d expired=%d" % (len(applied), len(expired)))
-    _emit({"ok": True, "applied": applied, "expired": expired, "reraise": pending, "progress": r["progress"]})
+    return {"applied": applied, "expired": expired, "reraise": pending, "observed": bool(applied or expired)}
+
+
+def cmd_observe_diff(a) -> int:
+    """이번 라운드의 permit · fix 적용 관측(`observe_ledger`). diff 는 원장의 스냅숏으로 엔진이 계산한다 — 인자가 없다.
+
+    관측한 것이 있을 때만 원장을 쓴다. 필요한 스냅숏이 없거나 permit 이 파손이면 그 이름으로 rc 1 이고 원장은
+    그대로다(아무것도 소비되지 않는다)."""
+    st = load_state(a.state_dir)
+    prof = load_profile(st["profile"])
+    n = int(st["round"])
+    try:
+        obs = observe_ledger(st, prof, n)
+    except LedgerCorrupt as e:
+        return fail(e.reason, **e.extra)
+    if obs["observed"]:
+        _refresh_open_lineages(st, n)
+        save_state(a.state_dir, st, "observe-diff applied=%d expired=%d" % (len(obs["applied"]), len(obs["expired"])))
+    _emit({"ok": True, "applied": obs["applied"], "expired": obs["expired"], "reraise": obs["reraise"],
+           "progress": st["rounds"][str(n)]["progress"]})
     return 0
 
 
@@ -1181,7 +1292,6 @@ def build_parser() -> argparse.ArgumentParser:
         return x
     x = sd(sp.add_parser("record-findings")); x.add_argument("--json", required=True); x.set_defaults(fn=cmd_record_findings)
     x = sd(sp.add_parser("exempt-anchors")); x.set_defaults(fn=cmd_exempt_anchors)
-    x = sd(sp.add_parser("prev-snapshot")); x.set_defaults(fn=cmd_prev_snapshot)
     x = sd(sp.add_parser("decide")); x.add_argument("--id", required=True)
     x.add_argument("--choice", required=True, choices=("adopt", "reject", "hold"))
     x.add_argument("--quote", required=True); x.add_argument("--log-file", default=None); x.set_defaults(fn=cmd_decide)
@@ -1193,7 +1303,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--answered", action="store_true"); x.set_defaults(fn=cmd_ask)
     x = sd(sp.add_parser("defer")); x.add_argument("--id", required=True)
     x.add_argument("--log-file", required=True); x.set_defaults(fn=cmd_defer)
-    x = sd(sp.add_parser("observe-diff")); x.add_argument("--diff", required=True); x.set_defaults(fn=cmd_observe_diff)
+    x = sd(sp.add_parser("observe-diff")); x.set_defaults(fn=cmd_observe_diff)
     x = sd(sp.add_parser("gate")); x.add_argument("--render", action="store_true"); x.set_defaults(fn=cmd_gate)
     x = sp.add_parser("gate-rows"); x.set_defaults(fn=cmd_gate_rows)
     return p

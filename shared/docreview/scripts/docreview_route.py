@@ -21,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점
 from adjudication import Ledger  # noqa: E402
 from docreview_anchor import classify_anchor, refs_of  # noqa: E402
 from docreview_state import (  # noqa: E402
-    RANK, _CHOICE_LABEL, _decide_choices_for, _is_reraise_successor,
-    fail, load_diff, load_profile, load_state, pending_mismatch, record_findings, save_state, yaml,
+    RANK, _CHOICE_LABEL, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, fail, load_profile,
+    load_state, observe_ledger, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
 
 BLOCK_RE = r"```%s[ \t]*\n(.*?)\n```"
@@ -85,8 +85,8 @@ def _bucket(it) -> str:
 def _permit_covers(st, n, anchor) -> bool:
     """이 라운드에 그 앵커를 겨눈 permit 이 있었는가.
 
-    실행 노트(R1) — `consumed` 로 걸러지지 않는다. cases.sh 의 `next_round` 헬퍼는
-    begin-round 직후 observe-diff 까지 마치므로, route.finalize 가 도는 시점엔 이번
+    실행 노트(R1) — `consumed` 로 걸러지지 않는다. `finalize` 는 분류 전에 이번 라운드
+    관측(`docreview_state.observe_ledger`)을 마치므로, 분류가 도는 시점엔 이번
     라운드에 실제로 적용된 permit 은 이미 `consumed: True` 다(T21). `not consumed` 로
     거르면 그 라운드에 열린 «유효한 편집 창» 안에서 나온 새 finding(T11)이 매번
     엄격 존재검사를 실패해 보호 승격에 삼켜진다 — permit 이 있었다는 사실 자체가
@@ -425,8 +425,8 @@ def _classify_items(items, st, prof, sections, n, L):
 def _auto_decides(a, diff, st, prof, sections, n, L):
     """사후·이월 auto decide — 얼림 diff(post) · check-intent 거부(pre) · expired 재상승(pre).
 
-    `diff` 는 `cmd_finalize` 가 `docreview_state.load_diff` 로 한 번 읽은 얼림 diff 다 — 읽히지 않았으면 None 이고 사후
-    항목은 없다(그 사실은 보고서가 공시한다). `a` 는 인자 묶음 그대로다.
+    `diff` 는 `cmd_finalize` 가 원장의 라운드별 스냅숏으로 계산한 얼림 diff(`docreview_state.round_diff`)다 — 라운드
+    1 에는 직전 스냅숏이 없어 None 이고 사후 항목이 없다. `a` 는 인자 묶음 그대로다.
     `st["escalated"]` 은 아직 자기 차례가 아닌 예약만 남기고, `st["reraise"]` 는 비운다.
     낸 값은 (새 항목들, 미소비 재상승 예약 수, 미소비 escalated 예약 수).
 
@@ -649,8 +649,7 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats):
     """출력 JSON 을 조립하고 같은 요약을 `st["rounds"][n]["route_report"]` 에 남긴다.
 
     `stats` 는 앞 단계가 낸 계수 다섯(bucket_conflicts · lineage_mismatch · revived ·
-    reraise_unconsumed · escalated_unconsumed)과 얼림 검사 부재 사유(`freeze_unchecked` — `_load_diff` 의 why
-    문자열이면 advisory 한 줄, 출력 키는 늘지 않는다). 키 순서는 골든(`shared/tests/fixtures/
+    reraise_unconsumed · escalated_unconsumed)이다. 키 순서는 골든(`shared/tests/fixtures/
     docreview/golden/`)이 바이트로 고정하므로 재배열하지 않는다.
     """
     report = L.report()
@@ -663,13 +662,6 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats):
         adv.append("상세 미검증 — 층 2 블록 없음")
     if st["snapshots"][str(n)].get("headingless"):
         adv.append("앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위")
-    if stats.get("freeze_unchecked"):
-        adv.append("얼림 검사 없음 — diff %s(라운드 %d)" % (stats["freeze_unchecked"], n))
-    # 7단계 `observe-diff` 가 읽히지 않는 diff 로 이번 라운드 permit 을 관측하지 못했다(원장 `rounds[n].permit_unobserved`,
-    # 사용자 결정 R70 — 공시만, 만료 · 재상승 없음).
-    unobserved = st["rounds"][str(n)].get("permit_unobserved")
-    if isinstance(unobserved, dict):
-        adv.append("permit 관측 불가 — diff %s(라운드 %d): %d건" % (unobserved.get("why"), n, int(unobserved.get("count") or 0)))
     if degrade.get("critic_freshness_unknown"):
         adv.append("critic 시점 판별 불가 (%s)" % degrade["critic_freshness_unknown"])
     out = {
@@ -722,6 +714,18 @@ def cmd_finalize(a) -> int:
         save_state(a.state_dir, st, "finalize 거부 (%s)" % why)
         return fail(why, round=n)
     prof = load_profile(st["profile"])
+    # 라운드 ≥ 2 — permit · fix 적용 관측과 얼림 diff 는 원장의 라운드별 스냅숏으로 엔진이 계산한다(오케스트레이터가
+    # 쓰는 diff 파일이 없다). 관측이 먼저다: 관측이 연 재상승 예약을 아래 `_auto_decides` 가 같은 호출에서 소비하고,
+    # 얼림 diff 의 면제 집합은 소비된 permit 도 센다(`exempt_scopes`). 관측을 건너뛴 지난 라운드의 permit 도 여기서
+    # 따라잡는다. 스냅숏 부재 · 파손 permit 은 준비(`pending_recritic`)를 치우기 **전에** rc ≠ 0 이다 — 원장을 쓰지
+    # 않으므로 준비가 남고, 게이트가 「미검증」(`finalize_incomplete`)으로 연다. 라운드 1 에는 직전이 없다.
+    diff, obs = None, None
+    if n >= 2:
+        try:
+            obs = observe_ledger(st, prof, n)
+            diff = round_diff(st, prof, n)
+        except LedgerCorrupt as e:
+            return fail(e.reason, **e.extra)
     pend = st["pending_recritic"]
     L = Ledger(items="open")
     for e in pend.get("events", []):
@@ -735,7 +739,6 @@ def cmd_finalize(a) -> int:
     same_as = _apply_recritic(items, verdicts, added, L)
     keep_of = _absorb_same_as(items, same_as, L)
     final, rejected_items = _classify_items(items, st, prof, sections, n, L)
-    diff, diff_why = load_diff(a.diff)
     extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, diff, st, prof, sections, n, L)
     final.extend(extra)
     bucket_conflicts, lineage_mismatch, revived = _resolve_ids_and_lineage(st, final, rejected_items, n)
@@ -744,16 +747,16 @@ def cmd_finalize(a) -> int:
     for it in final:
         L.accept(it["id"])
     record_findings(st, final + rejected_items, n)
-    # 라운드 ≥ 2 에서 얼림 diff 가 읽히지 않았으면 이 라운드의 얼림 검사가 꺼진 것이다 — 그 사유로 공시한다.
-    freeze_unchecked = diff_why if n >= 2 and diff is None else None
     out = _build_report(L, st, n, final, rejected_items, degrade,
                         {"bucket_conflicts": bucket_conflicts, "lineage_mismatch": lineage_mismatch,
                          "revived": revived, "reraise_unconsumed": reraise_unconsumed,
-                         "escalated_unconsumed": escalated_unconsumed,
-                         "freeze_unchecked": freeze_unchecked})
+                         "escalated_unconsumed": escalated_unconsumed})
     st["pending_recritic"] = None
     st["rounds"][str(n)].pop("finalize_failed", None)   # 같은 라운드의 앞선 거부 표지 — 이 성공이 대신한다
-    save_state(a.state_dir, st, "finalize (%d findings, %d rejected)" % (len(final), len(rejected_items)))
+    log = "finalize (%d findings, %d rejected)" % (len(final), len(rejected_items))
+    if obs and obs["observed"]:   # 이 finalize 가 관측을 새로 했다(observe-diff 를 먼저 돌지 않은 라운드 · 따라잡기)
+        log += " · observe applied=%d expired=%d" % (len(obs["applied"]), len(obs["expired"]))
+    save_state(a.state_dir, st, log)
     print(json.dumps(out, ensure_ascii=False, indent=1))
     return 0
 
@@ -766,7 +769,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.set_defaults(fn=cmd_prepare)
     x = sp.add_parser("finalize"); x.add_argument("--state-dir", required=True)
     x.add_argument("--recritic", default=None); x.add_argument("--recritic-skipped", action="store_true")
-    x.add_argument("--diff", default=None); x.add_argument("--doc", default=None)
+    x.add_argument("--doc", default=None)
     x.set_defaults(fn=cmd_finalize)
     return p
 
