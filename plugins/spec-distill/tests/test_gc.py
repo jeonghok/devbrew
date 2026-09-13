@@ -159,6 +159,32 @@ class GcTest(unittest.TestCase):
         self.assertFalse((elsewhere / ".gc.lock").exists())
         self.assertIn("GC 거부", stderr)
 
+    def test_15_dangling_root_link_announced(self):
+        # 매달린 루트 링크 — 지울 것은 없지만 조용히 끝나면 안 된다. 존재 검사보다 탈출 판정이 먼저다.
+        # 링크 너머도 이 임시 리포 안이다.
+        shutil.rmtree(self.root)
+        os.symlink("../ghost-root", self.root)
+        self.assertEqual(os.path.realpath(self.root),
+                         os.path.join(os.path.realpath(self.tmp), "ghost-root"))
+        self.assertFalse(os.path.exists(self.root))
+        before = sorted(os.listdir(self.tmp))
+        rc, _, stderr = run_gc(cwd=self.tmp)
+        self.assertEqual(rc, 0)
+        self.assertIn("GC 거부", stderr)
+        self.assertEqual(sorted(os.listdir(self.tmp)), before, "매달린 루트 링크 너머에 무언가를 만들었다")
+
+    def test_16_refusal_line_does_not_echo_link_target(self):
+        # 거부 줄은 링크가 가리키는 곳을 옮겨 적지 않는다 — 그 이름은 저장소가 정한 문자열이다.
+        shutil.rmtree(self.root)
+        target = Path(self.tmp) / "INJECTMARK-target"
+        target.mkdir()
+        os.symlink("../INJECTMARK-target", self.root)
+        self.assertEqual(os.path.realpath(self.root), os.path.realpath(target))
+        rc, _, stderr = run_gc(cwd=self.tmp)
+        self.assertEqual(rc, 0)
+        self.assertIn("GC 거부", stderr)
+        self.assertNotIn("INJECTMARK", stderr, "거부 줄이 링크 대상 이름을 옮겨 적었다")
+
 
 class GcLockLeafTest(unittest.TestCase):
     """저장소가 `.claude/spec-distill/.gc.lock` 을 링크나 디렉토리로 커밋해도 GC 는 그 이름을 열지 않는다.

@@ -85,17 +85,20 @@ class TestQgGc(unittest.TestCase):
         self.assertTrue(old.exists(), msg="kill switch must skip GC")
 
     def test_lock_contention_silent_exit(self):
+        # 락은 state root 디렉토리 자신이다 — 다른 프로세스가 그것을 쥐면 GC 는 조용히 비켜선다.
         import fcntl
         root = self.tmp / ".claude" / "quality-gates"
         root.mkdir(parents=True)
-        lockpath = root / ".gc.lock"
-        lockpath.touch()
         old = make_session_dir(self.tmp, "lockedsess12", mtime_offset_seconds=-25 * 3600)
-        with open(lockpath, "w") as lf:
-            fcntl.flock(lf.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        dfd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            fcntl.flock(dfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             proc = run_gc(self.tmp)
             self.assertEqual(proc.returncode, 0)
             self.assertTrue(old.exists(), msg="contended lock must skip GC")
+            self.assertEqual(proc.stderr, "", msg="contention must be silent")
+        finally:
+            os.close(dfd)
 
     def test_session_id_arg_overrides_env(self):
         sid = "argsession12"
@@ -210,6 +213,247 @@ class TestQgGc(unittest.TestCase):
         os.utime(sib, (old, old))
         run_gc(self.tmp)
         self.assertTrue(f.exists(), "마커 없는 형제 디렉토리가 GC됐다")
+
+
+# ── 루트 안전 (7.5.3) ─────────────────────────────────────────────────────────
+# 저장소가 `.claude/quality-gates` 나 그 아래 `.gc.lock` 을 링크 · 디렉토리 · 파일로 커밋해도
+# GC 는 저장소 밖을 만들거나 자르거나 지우지 않는다. 락은 루트 디렉토리 자신이다.
+# 심는 링크 · 센티널 · 유령 경로는 전부 이 테스트가 만든 임시 디렉토리 `P` 안이고(작업 트리는
+# `P/clone`, 센티널은 그 밖 `P/`), GC 를 띄우기 전에 링크가 `P` 안으로 풀리는지 확인한다.
+
+
+def run_gc_code(cwd, code):
+    """GC 를 `python3 -c <code> <GC>` 로 띄운다 — 프로세스 안에서 모듈을 바꿔 치우고 싶을 때."""
+    env = os.environ.copy()
+    for k in ("DEVBREW_QUALITY_GATES_GC_VERBOSE", "DEVBREW_QUALITY_GATES_TTL_HOURS",
+              "DEVBREW_QUALITY_GATES_DISABLE"):
+        env.pop(k, None)
+    return subprocess.run([sys.executable, "-c", code, str(GC)],
+                          capture_output=True, text=True, cwd=cwd, env=env)
+
+
+class QgGcRootSafetyTest(unittest.TestCase):
+    def setUp(self):
+        tmp_root = os.path.realpath(tempfile.gettempdir())
+        base = os.path.realpath(tempfile.mkdtemp(prefix="qg-gc-rootsafety-"))
+        if not (base and os.path.isabs(base) and os.path.isdir(base)
+                and base.startswith(tmp_root + os.sep)):
+            raise RuntimeError(f"임시 디렉토리가 이상하다: {base!r} (tmp={tmp_root!r})")
+        self.P = Path(base)
+        self.addCleanup(shutil.rmtree, self.P, ignore_errors=True)
+        self.clone = self.P / "clone"
+        self.root = self.clone / ".claude" / "quality-gates"
+        self.root.mkdir(parents=True)
+        self.lock = self.root / ".gc.lock"
+
+    def _stale(self, sid="stalerootsafe01", where=None):
+        d = (where or self.root) / sid
+        d.mkdir(parents=True)
+        f = d / "pipeline.md"
+        f.write_text("x\n", encoding="utf-8")
+        past = time.time() - 48 * 3600
+        os.utime(f, (past, past))
+        os.utime(d, (past, past))
+        return d
+
+    def _inside_p(self, path):
+        real = os.path.realpath(path)
+        if not real.startswith(str(self.P) + os.sep):
+            raise RuntimeError(f"링크가 P 밖으로 풀린다: {path} → {real} (P={self.P})")
+        return real
+
+    def _plant_lock_link(self, name):
+        """`.gc.lock -> ../../../<name>` — `P/<name>` 으로 풀리지 않으면 GC 를 띄우지 않는다."""
+        os.symlink(os.path.join("..", "..", "..", name), self.lock)
+        want = str(self.P / name)
+        if self._inside_p(self.lock) != want:
+            raise RuntimeError(f"링크가 {os.path.realpath(self.lock)!r} 로 풀린다 — 기대 {want!r}")
+        return Path(want)
+
+    def test_a_lock_link_to_outside_file_untouched(self):
+        sentinel = self.P / "sentinel.txt"
+        sentinel.write_bytes(b"0123456789abcdef0123456789abcdef")
+        past = time.time() - 3600
+        os.utime(sentinel, (past, past))
+        before = (sentinel.read_bytes(), os.stat(sentinel).st_mtime_ns)
+        self.assertEqual(self._plant_lock_link("sentinel.txt"), sentinel)
+        stale = self._stale()
+        p_before = sorted(os.listdir(self.P))
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(sentinel.read_bytes(), before[0],
+                         "심은 .gc.lock 링크를 따라 저장소 밖 파일을 잘랐다")
+        self.assertEqual(os.stat(sentinel).st_mtime_ns, before[1],
+                         "심은 .gc.lock 링크를 따라 저장소 밖 파일을 건드렸다(touch)")
+        self.assertTrue(self.lock.is_symlink(), "심은 링크를 바꿨다")
+        self.assertFalse(stale.exists(), "GC 가 돌지 않았다 — 위 단언들이 공허하다")
+        self.assertEqual(sorted(os.listdir(self.root)), [".gc.lock"],
+                         "GC 가 루트에 심은 링크 말고 다른 이름을 남겼다")
+        self.assertEqual(sorted(os.listdir(self.P)), p_before, "GC 가 저장소 밖 목록을 바꿨다")
+
+    def test_b_dangling_lock_link_target_not_created(self):
+        ghost = self._plant_lock_link("ghost.txt")
+        self.assertFalse(os.path.lexists(ghost))
+        stale = self._stale()
+        p_before = sorted(os.listdir(self.P))
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(sorted(os.listdir(self.P)), p_before,
+                         "매달린 .gc.lock 링크를 따라 저장소 밖에 파일을 만들었다")
+        self.assertFalse(stale.exists(), "GC 가 돌지 않았다 — 위 단언이 공허하다")
+        self.assertEqual(sorted(os.listdir(self.root)), [".gc.lock"])
+
+    def test_c_lock_name_as_directory_gc_still_runs(self):
+        self.lock.mkdir()
+        stale = self._stale()
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0)
+        self.assertFalse(stale.exists(),
+                         f"디렉토리로 심은 .gc.lock 이 GC 를 멈췄다 — stderr: {proc.stderr.strip()}")
+        self.assertEqual(sorted(os.listdir(self.root)), [".gc.lock"])
+
+    def test_d_real_root_no_lock_file_and_collects(self):
+        stale = self._stale()
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertFalse(stale.exists())
+        self.assertEqual(sorted(os.listdir(self.root)), [],
+                         "GC 가 루트에 파일을 남겼다 — 고정 이름 파일을 만드는 경로가 살아 있다")
+
+    def test_e_root_dir_lock_held_elsewhere_gc_yields_silently(self):
+        import fcntl
+        stale = self._stale()
+        dfd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            fcntl.flock(dfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            proc = run_gc(self.clone)
+            self.assertEqual(proc.returncode, 0)
+            self.assertTrue(stale.exists(), "루트 디렉토리 락을 쥔 동안 GC 가 지웠다 — 락이 걸리지 않는다")
+            self.assertEqual(proc.stderr, "", "경합으로 비켜서는 GC 가 줄을 냈다 — 경합은 조용해야 한다")
+        finally:
+            os.close(dfd)
+        run_gc(self.clone)
+        self.assertFalse(stale.exists(), "락을 놓은 뒤에도 GC 가 돌지 않았다")
+
+    def test_f_flock_failure_announced(self):
+        stale = self._stale()
+        code = (
+            "import errno, fcntl, runpy, sys\n"
+            "def _boom(*a, **k):\n"
+            "    raise OSError(errno.EBADF, 'Bad file descriptor')\n"
+            "fcntl.flock = _boom\n"
+            "sys.argv = sys.argv[1:]\n"
+            "runpy.run_path(sys.argv[0], run_name='__main__')\n"
+        )
+        proc = run_gc_code(self.clone, code)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("[quality-gates] GC 건너뜀 — state root 락 실패", proc.stderr)
+        self.assertTrue(stale.exists(), "락을 못 잡았는데 GC 가 돌았다")
+
+    def test_g_root_regular_file_refused(self):
+        self.root.rmdir()
+        self.root.write_text("not a directory\n", encoding="utf-8")
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("[quality-gates] GC 거부", proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertEqual(self.root.read_text(encoding="utf-8"), "not a directory\n")
+
+    def test_h_symlinked_root_refused(self):
+        self.root.rmdir()
+        elsewhere = self.P / "elsewhere"
+        stale = self._stale(where=elsewhere)
+        os.symlink(os.path.join("..", "..", "elsewhere"), self.root)
+        self.assertEqual(self._inside_p(self.root), str(elsewhere))
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0)
+        self.assertTrue(stale.exists(), "링크 루트 너머의 세션 모양 디렉토리를 지웠다")
+        self.assertEqual(sorted(os.listdir(elsewhere)), [stale.name],
+                         "링크 루트 너머에 무언가를 만들었다")
+        self.assertIn("[quality-gates] GC 거부", proc.stderr)
+
+    def test_i_symlinked_child_untouched(self):
+        outside = self._stale(sid="outsidevictim01", where=self.P)
+        link = self.root / "linksession0001"
+        os.symlink(str(outside), link)
+        self.assertEqual(self._inside_p(link), str(outside))
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertTrue(link.is_symlink(), "링크 자식을 개명하거나 지웠다")
+        self.assertTrue((outside / "pipeline.md").exists())
+        self.assertEqual(sorted(os.listdir(self.root)), ["linksession0001"])
+
+    def test_j_symlinked_claude_dir_refused(self):
+        # `.claude` 자신이 링크면 루트의 마지막 성분은 진짜 디렉토리라 `O_NOFOLLOW` 가 못 막는다 —
+        # 이 경우는 탈출 판정(`root_escapes`)만이 막는다.
+        shutil.rmtree(self.clone / ".claude")
+        elsewhere = self.P / "elsewhere-claude"
+        stale = self._stale(where=elsewhere / "quality-gates")
+        os.symlink(os.path.join("..", "elsewhere-claude"), self.clone / ".claude")
+        self.assertEqual(self._inside_p(self.root), str(elsewhere / "quality-gates"))
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0)
+        self.assertTrue(stale.exists(), "링크된 .claude 너머의 세션 모양 디렉토리를 지웠다")
+        self.assertEqual(sorted(os.listdir(elsewhere / "quality-gates")), [stale.name],
+                         "링크된 .claude 너머에 무언가를 만들었다")
+        self.assertIn("[quality-gates] GC 거부", proc.stderr)
+
+    def test_k_dangling_root_link_announced(self):
+        # 매달린 루트 링크 — 지울 것은 없지만 조용히 끝나면 뒤이은 `setup-qg.sh` 의 `mkdir -p` 가
+        # 링크 너머(저장소 밖)에 폴더를 만드는 동안 아무도 모른다. 존재 검사보다 탈출 판정이 먼저다.
+        self.root.rmdir()
+        os.symlink(os.path.join("..", "..", "ghost-root"), self.root)
+        self.assertEqual(self._inside_p(self.root), str(self.P / "ghost-root"))
+        self.assertFalse(os.path.exists(self.root))
+        p_before = sorted(os.listdir(self.P))
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("[quality-gates] GC 거부", proc.stderr)
+        self.assertEqual(sorted(os.listdir(self.P)), p_before, "매달린 루트 링크 너머에 무언가를 만들었다")
+
+    def test_l_symlinked_claude_without_root_announced(self):
+        # `.claude -> <밖>` 인데 밖에 quality-gates 가 아직 없다 — 같은 이유로 알린다.
+        shutil.rmtree(self.clone / ".claude")
+        elsewhere = self.P / "elsewhere-claude-empty"
+        elsewhere.mkdir()
+        os.symlink(os.path.join("..", "elsewhere-claude-empty"), self.clone / ".claude")
+        self.assertEqual(self._inside_p(self.clone / ".claude"), str(elsewhere))
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("[quality-gates] GC 거부", proc.stderr)
+        self.assertEqual(sorted(os.listdir(elsewhere)), [], "링크된 .claude 너머에 무언가를 만들었다")
+
+    def test_m_no_claude_dir_stays_silent(self):
+        # 음의 짝 — `.claude` 가 아예 없는 평범한 저장소에서는 여전히 아무 줄도 내지 않는다.
+        shutil.rmtree(self.clone / ".claude")
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(proc.stderr, "", "루트가 없는 평범한 저장소에서 GC 가 줄을 냈다")
+
+    def test_n_refusal_line_does_not_echo_link_target(self):
+        # 거부 줄은 링크가 가리키는 곳을 옮겨 적지 않는다 — 그 이름은 저장소가 정한 문자열이고,
+        # 이 stderr 는 `/qg` 시작 경로에서 모델에게 보인다.
+        self.root.rmdir()
+        target = self.P / "INJECTMARK-target"
+        target.mkdir()
+        os.symlink(os.path.join("..", "..", "INJECTMARK-target"), self.root)
+        self.assertEqual(self._inside_p(self.root), str(target))
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("[quality-gates] GC 거부", proc.stderr)
+        self.assertNotIn("INJECTMARK", proc.stderr, "거부 줄이 링크 대상 이름을 옮겨 적었다")
+
+
+class SetupForwardsGcStderr(unittest.TestCase):
+    def test_setup_gc_call_does_not_discard_stderr(self):
+        # GC 의 거부 · 락 실패 줄은 `/qg` 시작마다 도는 이 자동 경로에서 보여야 한다.
+        setup = GC.parent / "setup-qg.sh"
+        calls = [ln for ln in setup.read_text(encoding="utf-8").splitlines()
+                 if "qg-gc.py" in ln and not ln.lstrip().startswith("#")]
+        self.assertEqual(len(calls), 1, f"setup-qg.sh 의 GC 호출 줄이 하나가 아니다: {calls}")
+        self.assertNotIn("2>", calls[0], f"GC 호출이 stderr 를 돌린다: {calls[0]}")
+        # `&>/dev/null` · `>/dev/null 2>&1` 처럼 `2>` 없이 버리는 모양도 막는다.
+        self.assertNotIn("/dev/null", calls[0], f"GC 호출이 출력을 버린다: {calls[0]}")
 
 
 if __name__ == "__main__":

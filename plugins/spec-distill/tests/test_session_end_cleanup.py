@@ -255,6 +255,19 @@ class SymlinkedStateRootTest(unittest.TestCase):
         self.assertTrue(victim.exists(), "세션 정리가 링크 너머의 디렉토리를 지웠다")
         self.assertIn("세션 정리 거부", stderr)
 
+    def test_refusal_lines_do_not_echo_link_target(self):
+        """거부 줄(② 정리 · ③ GC)은 링크가 가리키는 곳을 옮겨 적지 않는다 — 그 이름은 저장소가 정한 문자열이다."""
+        target = self.clone / "INJECTMARK-target"
+        target.mkdir()
+        (self.clone / ".claude").mkdir()
+        self._commit_link(self.clone / ".claude" / "spec-distill", "../INJECTMARK-target", target)
+        rc, _, stderr = run_hook({"session_id": "victim-dir-04", "cwd": str(self.clone)},
+                                 cwd=str(self.clone))
+        self.assertEqual(rc, 0)
+        self.assertIn("세션 정리 거부", stderr)
+        self.assertIn("GC 거부", stderr)
+        self.assertNotIn("INJECTMARK", stderr, "거부 줄이 링크 대상 이름을 옮겨 적었다")
+
     def test_planted_gc_lock_link_not_followed(self):
         """진짜 루트에 커밋된 `.gc.lock -> ../../../sentinel.txt` — 훅의 GC 가 그 링크를 열지 않는다."""
         root = self.clone / ".claude" / "spec-distill"

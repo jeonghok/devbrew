@@ -137,7 +137,7 @@ fi
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"; [ -n "$SD" ] || SD="./plugins/spec-distill"
-PROFILE="$SD/references/docreview-profiles/design-doc.md"
+PROFILE="${CLAUDE_PLUGIN_ROOT:-$SD}/references/docreview-profiles/design-doc.md"
 ```
 
 프로필은 `design-doc.md` 로 **고정**이다 — 이 skill 은 design 자리 전용이고 다른 프로필을 고르지 않는다.
@@ -160,7 +160,7 @@ kill switch 는 P21 보안 컨트롤이라 그 공백은 "껐다고 믿게만" �
 SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"; [ -n "$SD" ] || SD="./plugins/spec-distill"
 # `## 프로필` 과 **같은 두 줄**(`SD=` · `PROFILE=`)이다. Bash 도구는 호출마다 새 셸이라 앞 펜스의
 # 대입이 여기로 오지 않는다 — `SD=` 를 펜스마다 다시 세우는 것과 같은 이유다.
-PROFILE="$SD/references/docreview-profiles/design-doc.md"
+PROFILE="${CLAUDE_PLUGIN_ROOT:-$SD}/references/docreview-profiles/design-doc.md"
 # 러너의 네 인자 중 둘은 이 펜스가 대입하지 않았었다. 같은 이유(새 셸)로 여기서 함께
 # 세운다 — `$CODEX_YAML` 은 세션의 **순수 함수**라 어느 셸에서 다시 도출해도 같은 파일을
 # 가리킨다(`## 입력` 의 `$STATE_DIR` 과 같은 자리다. `mktemp` 은 `$$` 와 같은 결함이다 —
