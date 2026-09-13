@@ -1,17 +1,6 @@
 {
-  "description": "spec-distill — Stop hook (discovery + Layer 1 structural validation + reviewer dispatch), SessionEnd cleanup.",
+  "description": "spec-distill — SessionEnd cleanup (ending session's state folder + TTL-GC).",
   "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/review-dispatch.py",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
     "SessionEnd": [
       {
         "hooks": [

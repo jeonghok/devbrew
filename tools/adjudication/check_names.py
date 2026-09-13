@@ -108,9 +108,9 @@ def defined(repo_root, allow_killswitch=False):
     해소된다. 실측: 도출된 키 14개 중 **8개가 agent·skill·command 가 전혀 아닌**
     실재 문자열이다.
 
-    문맥을 «동사»(`Dispatch` 등)로 가르지 않는다 — 키 이름 자체에 `dispatch` 가
-    든 것이 있어(`spec-distill:review-dispatch`) 그 매칭이 자기 자신을 문맥으로
-    오인한다. 파일 종류는 그 함정이 없다.
+    문맥을 «동사»(`Dispatch` 등)로 가르지 않는다 — 키 이름 자체에 `dispatch` 같은
+    동사가 들 수 있어 그 매칭이 자기 자신을 문맥으로 오인한다. 파일 종류는 그 함정이
+    없다.
     """
     repo = Path(repo_root)
     out = set(killswitch_keys(repo_root)) if allow_killswitch else set()

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/*/scripts/*.py plugins/*/hooks/*.py tools/adjudication/check_wiring.py tools/adjudication/cite.py shared/tests/fixtures/adjudication/run_wiring_scan.py shared/tests/fixtures/adjudication/run_wiring_probe.py
+# guards: plugins/*/scripts/*.py tools/adjudication/check_wiring.py tools/adjudication/cite.py shared/tests/fixtures/adjudication/run_wiring_scan.py shared/tests/fixtures/adjudication/run_wiring_probe.py
 #
 # 수정 라운드 1 (F6) — 판정기 자신(`tools/adjudication/check_wiring.py`)이
 # 이 락의 `# guards:` 에 없었다. 27개 선언 전수 확인 결과 `tools/adjudication/`
@@ -186,16 +186,14 @@ done
 
 note "── 컴프리헨션 회귀 축 — 요구가 아니라 baseline"
 comp="$(printf '%s\n' "$SCAN" | sed -n 's/^comprehensions=//p')"
-COMP_BASELINE=52   # Task 1 F5 census 28 + Task 10 이 1 늘림(29) — merge_review.py
+COMP_BASELINE=48   # Task 1 F5 census 28 + Task 10 이 1 늘림(29) — merge_review.py
                    # `merged["report"]["counts"]`를 만드는 `{k: 0 for k in
                    # _MERGED_COUNT_KEYS}`. 항목을 버리는 자리가 아니라 값 0
                    # 으로 카운터를 초기화하는 자리라 처분 호출이 필요 없다.
                    # Task 11 이 4 늘림(29→33) — `Ledger` import 로 ㉮ 에 처음
-                   # 들어온 review-dispatch.py 자신의 컴프리헨션 넷: `raw.split`
-                   # 토큰 집합·필터(:145-146, DEVBREW_SKIP_HOOKS 파싱)와 회전
-                   # 커서 계산·선택(:270-271, select_keys 의 라운드로빈). 넷 다
-                   # 설정 파싱·목록 회전이지 처분 대상을 버리는 자리가 아니다
-                   # (코드 확인 완료).
+                   # 들어온 설계문서 리뷰 훅 자신의 컴프리헨션 넷(토큰 파싱 둘 ·
+                   # 목록 회전 둘). 넷 다 처분 대상을 버리는 자리가 아니었다.
+                   # 그 훅은 spec-distill 3.0.0 에서 삭제됐다(아래 재계수).
                    # v0.57.0 Task 8 이 5 늘림(33→38) — `Ledger` import 로 ㉮ 에
                    # 새로 들어온 depth_record.py 의 컴프리헨션 다섯. 하나씩 «항목을
                    # 버리는 자리»가 아니라 «세거나 목록을 만드는 자리»임을 코드를
@@ -256,6 +254,9 @@ COMP_BASELINE=52   # Task 1 F5 census 28 + Task 10 이 1 늘림(29) — merge_re
                    # depth audit 제거가 6 줄였다(58→52) — depth_record.py 가 삭제되며 그 파일의
                    # 컴프리헨션 여섯(v0.57.0 Task 8 의 다섯 + 최종 fix wave 의 하나)이 ㉮ 에서
                    # 함께 빠졌다. run_wiring_scan.py 의 `ast` 실측값이다.
+                   # spec-distill 3.0.0 이 4 줄인다(52→48) — 설계문서
+                   # 리뷰 훅이 삭제되며 그 파일의 컴프리헨션이 모집단에서 빠졌다.
+                   # 값은 main 병합 뒤 스캔의 `comprehensions=` 로 재계수했다.
 if [ "${comp:-0}" -le "$COMP_BASELINE" ] 2>/dev/null; then
   ok "컴프리헨션 내포 $comp <= baseline $COMP_BASELINE"
 else
