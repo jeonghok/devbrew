@@ -1278,8 +1278,11 @@ case_T46_critic_dead_finalized_unverified() {   # mark-reviewed 배제 둘째 �
 case_T46_finalize_failed_unverified() {   # critic 생존 · finalize rc≠0 — 준비는 남고 fin.json 은 비었다
   local d rc f; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json"
-  printf '{' > "$d/broken-diff.json"   # 파손 diff — finalize 가 원장을 쓰기 전에 죽는다
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/broken-diff.json" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null; rc=$?
+  # 탈것: 옛 판본은 파손 diff(`{`)로 finalize 를 죽였다. 파손 diff 는 이제 얼림 검사 부재 공시(rc 0)라
+  # (PR 3 qg iter 1 — 아래 case_F2_finalize_round2_unreadable_diff_discloses), 비-UTF-8 재비판 출력으로 죽인다 —
+  # finalize 가 원장을 쓰기 전에 `unreadable` rc 1 로 끝난다.
+  printf '\xff\xfe\x00bad' > "$d/broken-recritic.txt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$d/broken-recritic.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null; rc=$?
   assert_eq "$rc $(wc -c < "$d/fin.json" | tr -d ' ')" "1 0" "T46 전제: finalize 가 rc 1 로 죽고 fin.json 은 비었다"
   assert_eq "$(gsum "$d" "$UNV")" "('finalize_incomplete', '미검증', False, True)" \
     "T46: finalize 실패 → 정상 게이트가 아니다 (unverified finalize_incomplete · 라벨 「미검증」 · 완료 기록 불가)"
@@ -1472,6 +1475,28 @@ case_F2_finalize_round2_without_diff_discloses() {
   assert_eq "$(jget "$d/fin2.json" 'len(d["advisory"]) > 0, any("얼림 검사 없음" in a for a in d["advisory"])')" "(True, False)" \
     "F2 양의 짝: 같은 라운드를 diff 와 함께 finalize 하면 얼림 공시가 없다 (다른 advisory 는 있다 — 채널이 비어서 통과한 것이 아니다)"
   rm -rf "$d"
+}
+# `--diff` 파일이 있는데 읽히지 않는 모양(0바이트 · JSON 아님 · 매핑 아님)도 얼림 검사 부재다. 옛 판본은
+# finalize 가 그 파일에서 죽어 라운드가 「미검증」(finalize_incomplete)이 됐다 — 차단이고 사유도 틀린다
+# (PR 3 qg iter 1). 공시는 그 모양을 이름으로 댄다. 파일 부재의 「diff 미제공」은 위 케이스가 잰다.
+case_F2_finalize_round2_unreadable_diff_discloses() {
+  local f d shape why
+  f="$(mktemp -t f2diff-XXXXXX)" || { no "F2: mktemp 실패"; return; }
+  for shape in empty broken list; do
+    case "$shape" in
+      empty)  : > "$f";           why='0바이트' ;;
+      broken) printf '{' > "$f";  why='JSON 아님' ;;
+      list)   printf '[]' > "$f"; why='매핑 아님' ;;
+    esac
+    d="$(f2_round2 --diff "$f")"
+    assert_eq "$(cat "$d/fin2.rc")" "0" "F2($why): 라운드 2 finalize 는 rc 0 — 읽히지 않는 diff 로 라운드를 죽이지 않는다"
+    assert_eq "$(jget "$d/fin2.json" '[a for a in d["advisory"] if "얼림 검사 없음" in a]' 2>/dev/null)" "['얼림 검사 없음 — diff $why(라운드 2)']" \
+      "F2($why): advisory[] 가 얼림 검사 부재를 그 모양의 이름으로 공시한다"
+    assert_eq "$(gsum "$d" 'd["round_reviewed"], d["approval_label"]')" "(True, None)" \
+      "F2($why): 공시일 뿐 차단(「미검증」)이 아니다 — round_reviewed True · 라벨 없음"
+    rm -rf "$d"
+  done
+  rm -f "$f"
 }
 
 # ── check-intent (Task 7) ─────────────────────────────────────────────────
