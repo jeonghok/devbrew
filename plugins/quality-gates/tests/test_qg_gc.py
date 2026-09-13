@@ -383,6 +383,21 @@ class QgGcRootSafetyTest(unittest.TestCase):
         self.assertTrue((outside / "pipeline.md").exists())
         self.assertEqual(sorted(os.listdir(self.root)), ["linksession0001"])
 
+    def test_j_symlinked_claude_dir_refused(self):
+        # `.claude` 자신이 링크면 루트의 마지막 성분은 진짜 디렉토리라 `O_NOFOLLOW` 가 못 막는다 —
+        # 이 경우는 탈출 판정(`root_escapes`)만이 막는다.
+        shutil.rmtree(self.clone / ".claude")
+        elsewhere = self.P / "elsewhere-claude"
+        stale = self._stale(where=elsewhere / "quality-gates")
+        os.symlink(os.path.join("..", "elsewhere-claude"), self.clone / ".claude")
+        self.assertEqual(self._inside_p(self.root), str(elsewhere / "quality-gates"))
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0)
+        self.assertTrue(stale.exists(), "링크된 .claude 너머의 세션 모양 디렉토리를 지웠다")
+        self.assertEqual(sorted(os.listdir(elsewhere / "quality-gates")), [stale.name],
+                         "링크된 .claude 너머에 무언가를 만들었다")
+        self.assertIn("[quality-gates] GC 거부", proc.stderr)
+
 
 class SetupForwardsGcStderr(unittest.TestCase):
     def test_setup_gc_call_does_not_discard_stderr(self):

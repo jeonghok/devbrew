@@ -16,7 +16,7 @@
 - 두 검사는 공용 정본 `shared/gc/gc_common.py` 의 `root_escapes` · `locked_root` 다. spec-distill 3.0.0 이 같은 결함을 자기 GC 에서만 고쳐 이쪽에 남았던 것을 한 구현으로 모았다(spec-distill 3.0.1 이 같은 함수를 쓴다).
 - `scripts/setup-qg.sh` 가 GC 의 stderr 를 버리지 않는다(`2>/dev/null` 제거) — 거부 · 락 실패 줄이 `/qg` 시작 경로에서 보인다. 정상 실행은 출력이 없다.
 - **알려진 한계(후속):** 링크 루트를 거친 비파괴 쓰기(`setup-qg.sh` 의 상태 폴더 생성과 상태 파일)와, SessionEnd 정리 · `/cancel-qg` 가 자기 세션 폴더를 지우는 경로에는 루트 탈출 검사가 없다. 지우는 대상은 qg 가 스스로 만든 그 세션의 폴더 하나다.
-- 락: `tests/test_qg_gc.py` 의 `QgGcRootSafetyTest`(아홉) · `SetupForwardsGcStderr`. `test_lock_contention_silent_exit` 는 루트 디렉토리 락을 쥐도록 바꿨다. `tests/e2e-scenarios.md` V5 도 루트 디렉토리 락으로 바꿨다.
+- 락: `tests/test_qg_gc.py` 의 `QgGcRootSafetyTest`(열 — 그중 `.claude` 자신이 링크인 경우는 루트의 마지막 성분이 진짜 디렉토리라 `O_NOFOLLOW` 가 못 막고 탈출 판정만 막는다) · `SetupForwardsGcStderr`. `test_lock_contention_silent_exit` 는 루트 디렉토리 락을 쥐도록 바꿨다. `tests/e2e-scenarios.md` V5 도 루트 디렉토리 락으로 바꿨다.
 
 ## [7.5.2] — 2026-09-13
 
