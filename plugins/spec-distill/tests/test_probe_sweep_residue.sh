@@ -48,7 +48,7 @@
 #
 # `CONCEPT_RE` — "probe" 와 "백스톱"/"self-tracking" 이 **같은 줄에서 10~15자 이내**로
 # 근접할 때만 잡는다(파일 전체 co-occurrence 가 아니라 근접). 이유: `백스톱` 단독은 이
-# 플러그인 안에서만도 7개 파일에 다른 백스톱(재리뷰 cap, arm-once 등)을 가리키며 legitimately
+# 플러그인 안에서만도 여러 파일에 다른 백스톱(재리뷰 cap 등)을 가리키며 legitimately
 # 등장하고, `self-tracking` 단독도 finishing.md·이 스위트 자신에서 **다른** 카운터(재제시
 # cap)를 가리키며 등장한다 — 단독 토큰으로 넣으면 그 문서들이 전부 거짓 잔존이 된다(실측).
 # `probe` 단독도 이 스킬 전체에서 "매 probe"처럼 흔히 쓰이고, reviewing-brief/SKILL.md 는

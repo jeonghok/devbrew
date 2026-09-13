@@ -47,13 +47,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[3]
 PLUGIN_ROOT = pathlib.Path(__file__).resolve().parents[1]
 ADVISOR_HOOK = PLUGIN_ROOT / "hooks" / "session-start-advisor.py"
 
-# 이미 확인한 예외 셋 — 셋 다 실제 텍스트를 읽거나 쓰지 않아 encoding 이 의미가 없다.
+# 이미 확인한 예외 — 실제 텍스트를 읽거나 쓰지 않아 encoding 이 의미가 없다.
 _KNOWN_EXCEPTIONS = {
     # docstring 안의 산문 언급이지 호출이 아니다 (Task 30 axis 2 조사로 확정).
     "plugins/quality-gates/scripts/build_codex_prompt.py": {17},
-    # fcntl.flock 전용 락 파일 핸들 — write()/read() 로 텍스트가 한 번도 오가지 않는다.
-    "plugins/quality-gates/scripts/qg-gc.py": {95},
-    "plugins/spec-distill/scripts/spec-distill-gc.py": {98},
 }
 
 
@@ -116,11 +113,11 @@ class ProductionEncodingSweep(unittest.TestCase):
         )
 
     def test_the_known_exceptions_are_still_exceptions(self):
-        """계측기 확인 — 예외 목록이 실제로 그 세 줄을 가리키는지.
+        """계측기 확인 — 예외 목록이 실제로 그 줄을 가리키는지.
 
         `_KNOWN_EXCEPTIONS` 를 조용히 넓혀서 위 테스트를 헐겁게 만드는 편집을
-        여기서 잡는다: 셋 다 여전히 offender **모양**(encoding 없음)이어야 하고,
-        그 개수가 정확히 3이어야 한다 — 늘어나면 새 예외가 몰래 추가된 것이다.
+        여기서 잡는다: 목록의 줄이 여전히 offender **모양**(encoding 없음)이어야 하고,
+        그 개수가 정확히 1이어야 한다 — 늘어나면 새 예외가 몰래 추가된 것이다.
         """
         paths = sorted(ROOT.glob("plugins/*/hooks/*.py")) + \
             sorted(ROOT.glob("plugins/*/scripts/*.py"))
@@ -129,7 +126,7 @@ class ProductionEncodingSweep(unittest.TestCase):
         self.assertEqual(set(with_exceptions_disabled) & flagged, flagged,
                          "알려진 예외 중 일부가 더 이상 offender 모양이 아니다 — "
                          "목록이 stale 하다")
-        self.assertEqual(sum(len(v) for v in _KNOWN_EXCEPTIONS.values()), 3)
+        self.assertEqual(sum(len(v) for v in _KNOWN_EXCEPTIONS.values()), 1)
 
 
 def _find_offenders_without_allowlist(paths):

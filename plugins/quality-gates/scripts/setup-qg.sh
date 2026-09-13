@@ -200,7 +200,7 @@ fi
 
 # --- TTL GC (best-effort; never aborts setup) ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-python3 "$SCRIPT_DIR/qg-gc.py" --session-id "$SESSION_ID" 2>/dev/null || true
+python3 "$SCRIPT_DIR/qg-gc.py" --session-id "$SESSION_ID" || true
 
 mkdir -p "$STATE_DIR"
 

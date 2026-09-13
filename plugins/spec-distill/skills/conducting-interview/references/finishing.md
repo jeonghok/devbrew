@@ -254,7 +254,7 @@ AskUserQuestion({
   *그대로 보이게* 노출 + "다음 턴에 직접 `Skill superpowers:brainstorming <실제 경로>` 를
   부르세요" 안내 (사람이 유일한 운반자다 — 자동으로 이어지지 않는다):
 
-  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 §0 한눈에, §2 제약, §3 Open Questions, §6 사용자 원문 중 `S1`), audit 파일 경로 참조, **그리고 아래 '재결정 규약' 문장**을 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. 재결정 규약: confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 다음 단계: Skill superpowers:brainstorming <brief-path>.`
+  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 §0 한눈에, §2 제약, §3 Open Questions, §6 사용자 원문 중 `S1`), audit 파일 경로 참조, **그리고 아래 '재결정 규약' 문장**을 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. 재결정 규약: confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 다음 단계: Skill superpowers:brainstorming <brief-path> → 설계문서를 쓰고 커밋한 뒤, brainstorming 의 사용자 리뷰 게이트 자리에서 그 설계문서 경로로 Skill spec-distill:reviewing-spec → 그 승인 게이트에서 진행을 고른 뒤 superpowers:writing-plans.`
 
   **`<brief-path>` 두 자리를 Step A 가 방금 쓴 실제 경로로 치환한 뒤 노출한다.** 이 명령은
   사용자가 그대로 붙여넣는 것이므로, 치환하지 않고 내보내면 사용자가 깨진 명령을 실행한다 —
@@ -267,10 +267,12 @@ AskUserQuestion({
   진입하지 *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17).
 
 - **② 확정하고 바로 brainstorming**: 확정 반영 → 재저장 → 게이트 재실행 → 즉시
-  `Skill superpowers:brainstorming <brief-path>` 호출하되, **호출 프롬프트에 C4 문장을 함께
-  싣는다**:
+  `Skill superpowers:brainstorming <brief-path>` 호출하되, **호출 프롬프트에 C4 문장과 순서
+  문장을 함께 싣는다**:
 
   > `confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.`
+  >
+  > `설계문서를 쓰고 커밋한 뒤, brainstorming 의 사용자 리뷰 게이트 자리에서 그 설계문서 경로로 Skill spec-distill:reviewing-spec 을 부른다 — brainstorming 의 「다음은 writing-plans 뿐」 지시보다 이 순서가 우선한다. superpowers:writing-plans 는 reviewing-spec 의 승인 게이트에서 진행이 선택된 뒤에만 부른다. reviewing-spec 이 게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다.`
 
   이것은 아래 cross-compact 정지 요건의 *명시적 예외*다.
 

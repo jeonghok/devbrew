@@ -22,6 +22,31 @@
 - **L0 가 파이썬이 끝까지 돌았다는 양성 신호를 요구하고, 같은 매핑의 중복 키를 거절한다 (PR 3 qg iter 1).** 위 L0 는 출력이 없는 것을 「위반 없음」으로 읽어 네 경로로 조용히 아무것도 안 쟀다 — (1) 위반 레코드를 경로로 키잉해 파일명에 탭 · 개행이 든 agent 의 레코드가 대조에 실패했고, (2) PyYAML 부재를 stderr 가 섞인 출력 전체의 완전 일치로 알아봐 시작 시 경고 한 줄이 끼면 비교가 빗나갔으며(부재 분기는 rc 0), (3) 파이썬의 stdout 이 사라지거나 (4) 일부 파일만 받아도 통과했다. 이제 레코드는 argv 인덱스로 키잉하고, 파이썬은 마지막 줄 `L0_DONE <파일 수> <위반 수>` 를 내며, 셸은 그 줄이 있고 파일 수 == `$#` 이고 소비한 위반 수가 같을 때만 통과로 친다. PyYAML 부재는 stderr 알림 + rc 3 이고 rc ≠ 0 이면 무엇이 찍혔든 FAIL 이다. stderr 는 따로 받아 FAIL 메시지에만 싣는다. 또 PyYAML `safe_load` 는 같은 매핑의 반복 키를 마지막 값으로 조용히 읽고 L2 의 중복 검사는 `tools:` 만 세서 `description:` 두 줄이 L0~L3 을 통과했다 — `SafeLoader` 하위 클래스가 반복 키에서 예외를 내 `duplicate_key:<키>` 로 FAIL 한다. 런타임 로더가 반복 키를 어떻게 다루는지는 측정하지 않았다(모르는 것을 통과시키지 않는다). `tests/test_agent_tools_lock_mutation.sh` 에 셀 열하나 — 중복 키 · 탭 파일명 · 개행 파일명 · PyYAML 부재 + stderr 경고 · stdout 소실 · 일부 파일만 받음은 RED(이 여섯은 수정 전 락에서 GREEN 이었다), 위반 인덱스 어긋남 · 완주 신호 뒤 비-0 종료도 RED(새 대조 둘의 이빨), 탭 파일명의 정상 frontmatter · stderr 경고만 있는 환경 · 기준선은 GREEN.
 - **L0 의 PyYAML 은 스캔 루트 밖에서만 온다 (PR 3 qg iter 2 F-f · iter 3).** 락은 스캔 루트로 cd 한 뒤 `python3 -c` 로 돌아 sys.path 첫 자리가 cwd 이고, PYTHONPATH(절대 · 상대) 등도 스캔 루트 아래 경로를 싣는다 — 거기 심은 `yaml.py` · `yaml/` 는 PyYAML 보다 먼저 import 돼 위 완주 신호(`L0_DONE <파일 수> 0`)를 위조하고 끝낼 수 있었고, PyYAML 이 import 하는 `datetime.py` 의 가짜는 `yaml.__file__` 이 정상이라 import 뒤 검사로도 못 잡았다. 이제 import 전에 스캔 루트 자신 또는 그 아래인 sys.path 항목을 전부 뺀다 — 판정은 문자열 접두어가 아니라 `(st_dev, st_ino)` 조상 걷기다(APFS 대소문자 변형 경로), 아직 없는 항목은 realpath 의 실재 조상으로 판정한다(루트 안 venv 의 PyYAML 도 쓰지 않는다). import 뒤 `yaml.__file__` 이 같은 판정으로 루트 안이면 stderr `PYYAML_SHADOWED` + rc 3 이다(두 번째 벽 — 시작 과정이 루트 안의 yaml 을 미리 import 해 둔 경우). `python3 -I` 는 쓰지 않는다(PYTHONPATH 까지 버려 변이 테스트의 주입 셀이 공허해진다). 막지 못하는 것: `sitecustomize` · `usercustomize` · `.pth` 는 인터프리터 시작 시 L0_PY 보다 먼저 돈다 — 실행 환경이 소유하는 표면이다. `tests/test_agent_tools_lock_mutation.sh` — 스캔 루트 `yaml.py` 위조 · `yaml/__init__.py` 위조(iter 2 이전 락에서 GREEN), 루트 아래 `vendor/yaml.py` 위조(PYTHONPATH 절대 · 상대) · 대소문자 변형 경로의 같은 위조 · `vendor/datetime.py` 위조(절대 · 상대)(다섯 모양 모두 iter 2 락에서 GREEN), 시작 시 미리 import 된 루트 안 가짜 yaml(두 번째 벽)은 RED, 심은 모듈이 없으면 GREEN. 주입 디렉토리는 스캔 루트 밖 형제 디렉토리로 옮겼다(루트 안이면 첫 벽이 그 셀들을 공허하게 만든다).
 - **`agents/security-reviewer.md` 의 `## Hunt categories` 에 한 줄 — skill · command 본문의 위치 인자 치환 (PR 3 최종 리뷰 F4, Law 3).** spec-distill `reviewing-brief` 의 `rm -f "$1"` 이 로드된 본문에서 사용자 audit 경로로 치환된 결함(`plugins/spec-distill/CHANGELOG.md` `[2.1.0]` Fixed)은 세 도입 커밋과 그 태스크 리뷰들을 통과했다 — 이 리뷰어가 그 토큰을 셸 의미로만 읽었다. 불릿 하나를 **추가만** 했다(기존 줄 삭제 · 수정 0, 강화 편집). `tests/test_security_reviewer_persona.sh` 가 그 불릿의 body-unique 문구를 `## Hunt categories` 창 안에서 잰다.
+## [7.5.3] — 2026-09-13
+
+### Fixed
+
+- **`tests/test_utf8_explicit.py` 의 예외 목록이 낡아 있었다.** spec-distill 3.0.0 이 `spec-distill-gc.py` 의 락 파일 `open` 을 지워, 그 줄을 가리키던 예외가 offender 모양이 아니게 됐고 `test_the_known_exceptions_are_still_exceptions` 가 RED 였다(그 여파로 `tests/test_codex_backward_compat.sh` 도 「예상 밖 실패」로 RED). 이번 변경이 `qg-gc.py` 의 같은 `open` 도 지우므로 두 예외를 함께 걷고 개수 단언을 3 → 1 로 고쳤다.
+
+### Security
+
+- **TTL-GC 가 state root 아래 `.gc.lock` 을 만들고(`touch`) 쓰기 모드로 열었다(`O_CREAT | O_TRUNC`).** 둘 다 링크를 따라가므로, 저장소가 `.claude/quality-gates/.gc.lock -> <밖의 파일>` 을 커밋하면 `/qg` 시작 한 번에 그 파일이 잘렸다(격리 재현: 32바이트 → 0바이트). 매달린 링크면 저장소 밖에 파일이 생겼고, 디렉토리로 심으면 GC 가 영구히 멈췄다. 이제 락은 루트 디렉토리 자신의 fd(`O_RDONLY | O_DIRECTORY | O_NOFOLLOW`)에 거는 `flock` 이고 락 파일은 없다. 경합은 조용히 건너뛰고, 그 밖의 락 실패와 루트를 열 수 없는 경우는 stderr 한 줄로 알린다.
+- **`.claude/quality-gates`(또는 `.claude`) 자신이 저장소 밖을 가리키는 링크면 GC 가 그 너머를 수집했다.** 이름 패턴과 세션 마커가 맞고 TTL 이 지난 디렉토리를 개명 · 삭제했고 밖에 `.gc.lock` 을 만들었다(격리 재현). 이제 루트의 realpath 가 `realpath(cwd)/.claude/quality-gates` 와 다르면 락을 잡기 전에 거부하고 stderr 한 줄로 알린다. 이 판정은 루트의 존재 검사보다 먼저라, 매달린 루트 링크나 밖에 루트가 아직 없는 `.claude` 링크에서도 조용히 끝나지 않는다(그 경우 뒤이은 `setup-qg.sh` 의 `mkdir -p` 가 링크 너머에 폴더를 만든다 — 아래 알려진 한계). 거부 줄은 링크 대상을 옮겨 적지 않는다 — 저장소가 정한 문자열이고, 이 줄은 `/qg` 시작 경로에서 모델에게 보인다. 루트 안의 링크 자식도 세션 폴더로 보지 않는다.
+- **`/cancel-qg --all` 의 삭제 펜스가 `.claude` 링크를 따라갔다.** `rm -rf -- .claude/quality-gates` 는 `.claude` 가 링크면 그 너머의 진짜 `quality-gates` 디렉토리를 지운다(격리 재현). 이제 `.claude` 나 `.claude/quality-gates` 가 링크면 `REFUSED_SYMLINKED_ROOT` 를 내고 지우지 않는다. 명시적 `--all` 과 확인 클릭이 있어야 닿는 선재 경로다.
+- 두 검사는 공용 정본 `shared/gc/gc_common.py` 의 `root_escapes` · `locked_root` 다. spec-distill 3.0.0 이 같은 결함을 자기 GC 에서만 고쳐 이쪽에 남았던 것을 한 구현으로 모았다(spec-distill 3.0.1 이 같은 함수를 쓴다).
+- `scripts/setup-qg.sh` 가 GC 의 stderr 를 버리지 않는다(`2>/dev/null` 제거) — 거부 · 락 실패 줄이 `/qg` 시작 경로에서 보인다. 정상 실행은 출력이 없다.
+- **알려진 한계(후속):** 다음 경로에는 아직 루트 탈출 검사가 없다.
+  - 링크 루트를 거친 비파괴 쓰기 — `setup-qg.sh` 의 상태 폴더 생성과 상태 파일.
+  - 자기 세션 폴더를 지우는 경로 — `/cancel-qg`(기본 · `--gc`) 와 `/qg --reset` 의 `rm -rf .claude/quality-gates/<sid>`, SessionEnd 정리. 지우는 대상은 qg 가 스스로 만든 그 세션의 폴더 하나다.
+  - 레거시 평면 상태 파일 정리(`setup-qg.sh` · `/qg --reset` 의 `rm -f .claude/quality-gates.local.md` 등 다섯 이름) — `.claude` 가 링크면 너머의 같은 이름 파일을 지운다. v1.5.0 이 쓰던 이름뿐이다.
+- **`.claude` 를 링크로 쓰는 사용자(dotfiles 등)는 이제 `/qg` 를 시작할 때마다 거부 줄을 보고, GC 는 돌지 않는다.** 링크가 의도한 것이면 `DEVBREW_SKIP_HOOKS=quality-gates:qg-gc` 로 이 GC 만 끈다. 그때 오래된 세션 폴더는 직접 지운다 — `/cancel-qg --all` 도 링크 루트를 거부한다.
+- 락: `tests/test_qg_gc.py` 의 `QgGcRootSafetyTest`(열넷 — 그중 `.claude` 자신이 링크인 경우는 루트의 마지막 성분이 진짜 디렉토리라 `O_NOFOLLOW` 가 못 막고 탈출 판정만 막는다. 매달린 루트 링크 · 루트 없는 `.claude` 링크 · 거부 줄 무에코와, 그 음의 짝인 「`.claude` 가 없는 저장소는 조용하다」를 포함한다) · `SetupForwardsGcStderr`(GC 호출 줄에 `2>` 도 `/dev/null` 도 없다) · 새 `tests/test_cancel_all_fence.sh`(`--all` 펜스를 문서에서 떠 임시 저장소에서 돌린다). `test_lock_contention_silent_exit` 는 루트 디렉토리 락을 쥐도록 바꿨다. `tests/e2e-scenarios.md` V5 도 루트 디렉토리 락으로 바꿨다.
+
+## [7.5.2] — 2026-09-13
+
+### Fixed
+
+- **사본·링크 둘의 주석이 삭제된 spec-distill 파일을 가리켰다.** spec-distill 3.0.0 이 설계문서 리뷰 Stop 훅을 삭제했다(`plugins/spec-distill/CHANGELOG.md` `[3.0.0]`). 이 플러그인의 `scripts/codex_prompt_common.py`(정본 `shared/codex/codex_prompt_common.py` 의 `# copy-of:` 사본) docstring 이 그 훅의 stdin/stdout reconfigure 루프를 형제 관용구로 인용했고, 심볼릭 링크로 싣는 `scripts/docreview_state.py`(정본 `shared/docreview/scripts/`) docstring 이 `state.local.md` 의 소유자로 그 훅을 들었다. 두 인용을 살아 있는 대상으로 고쳤다. 동작 무변경 — 주석만 바뀌지만 배포 파일 바이트가 바뀌므로 bump 한다(cache key).
 
 ## [7.5.1] — 2026-09-09
 

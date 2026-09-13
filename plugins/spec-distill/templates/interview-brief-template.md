@@ -89,5 +89,6 @@ user_sourced_items:
 
 ## 7. Next Action
 
-(superpowers 있으면: 이 brief를 context로 `superpowers:brainstorming` 호출 → `-design.md`
- → reviewer 검증 → writing-plans. 없으면: 이 brief가 완결 산출물 — 직접 사용.)
+(superpowers 있으면: 이 brief를 context로 `superpowers:brainstorming` 호출 → `-design.md` 작성·커밋
+ → 그 설계문서 경로로 `spec-distill:reviewing-spec`(brainstorming 의 사용자 리뷰 게이트 대신) → 승인
+ 게이트에서 진행을 고른 뒤 `superpowers:writing-plans`. 없으면: 이 brief가 완결 산출물 — 직접 사용.)
