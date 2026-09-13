@@ -1498,6 +1498,113 @@ case_F2_finalize_round2_unreadable_diff_discloses() {
   done
   rm -f "$f"
 }
+# ── 7단계 observe-diff 가 읽히지 않는 diff 를 만날 때 (PR 3 qg iter 2 F-a · F-d) ─────────────────────────
+# 실제 7단계 순서 — anchor diff → observe-diff → finalize. 옛 판본의 observe-diff 는 0바이트 · `{` 에서 rc 1
+# `state_unreadable`(원장 탓)로, `[]` 에서 잡히지 않은 AttributeError 로 죽었다. 멈추면 라운드가 막히고, 넘어가면
+# 이번 라운드 permit 이 공시 없이 영영 소비되지 않았다. 이제 observe-diff 는 rc 0 으로 permit 을 소비하지 않은 채
+# 관측하지 못한 수를 원장에 세고, finalize 가 그 수를 advisory 로 공시한다(만료 · 재상승 없음 — 사용자 결정 R70).
+f2a_round2() {   # f2a_round2 → 라운드 1 의 decide 하나를 채택하고(라운드 2 apply permit) 라운드 2 를 시작한 상태 디렉토리
+  local d gid; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || return 1
+  gid="$(fsum "$d" 'Non-goals' '["id"]')"
+  py docreview_state.py decide --state-dir "$d" --id "$gid" --choice adopt --quote '채택' >/dev/null
+  snap "$FX/design-sample.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  py docreview_state.py exempt-anchors --state-dir "$d" > "$d/ex2.json"
+  echo "$d"
+}
+f2a_finalize() {   # f2a_finalize <dir> <diff> — 5단계 익명화 → 7단계 finalize --diff. fin2.json · fin2.rc
+  py docreview_route.py prepare-recritic --state-dir "$1" --critic "$(critic_now "$1" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$1" "$FX/codex-failed.yaml")" > "$1/prep2.json" 2>/dev/null
+  py docreview_route.py finalize --state-dir "$1" --recritic "$FX/recritic-missing.txt" --diff "$2" --doc "$FX/design-sample.md" > "$1/fin2.json" 2>"$1/fin2.err"
+  echo "$?" > "$1/fin2.rc"
+}
+PERMIT_SEL='[(p["round"], bool(p.get("consumed"))) for p in st["permits"].values()]'
+case_F2_observe_diff_unreadable_permit_disclosed() {
+  local d gid shape why rc
+  for shape in empty broken list; do
+    d="$(f2a_round2)"; gid="$(fsum "$d" 'Non-goals' '["id"]')"
+    case "$shape" in
+      empty)  # anchor diff 가 실패하면(직전 스냅숏 부재) `>` 가 0바이트 파일을 남긴다
+              py docreview_anchor.py diff "$d/prev-missing.json" "$d/s2.json" --exempt "$d/ex2.json" > "$d/diff2.json" 2>/dev/null
+              why='0바이트' ;;
+      broken) printf '{' > "$d/diff2.json";  why='JSON 아님' ;;
+      list)   printf '[]' > "$d/diff2.json"; why='매핑 아님' ;;
+    esac
+    [ "$shape" = empty ] && assert_eq "$(wc -c < "$d/diff2.json" | tr -d ' ')" "0" "F-a 전제: 실패한 anchor diff 가 0바이트 diff.json 을 남겼다"
+    py docreview_state.py observe-diff --state-dir "$d" --diff "$d/diff2.json" > "$d/obs2.json" 2>"$d/obs2.err"; rc=$?
+    assert_eq "$rc $(jget "$d/obs2.json" 'd["observed"], d["why"], d["permit_unobserved"]' 2>/dev/null)" "0 (False, '$why', 1)" \
+      "F-a($why): observe-diff 는 rc 0 으로 관측 불가를 사유와 함께 낸다 (원장 탓 state_unreadable 이 아니다)"
+    assert_eq "$(st_yaml "$d" "$PERMIT_SEL"', st["rounds"]["2"]["permit_unobserved"]["count"], st["decides"]["'"$gid"'"]["state"], st["reraise"]')" \
+      "([(2, False)], 1, 'adopted', [])" "F-a($why): 라운드 2 permit 은 소비되지 않고 원장이 관측 못 한 수를 센다 (만료 · 재상승 없음 — R70)"
+    f2a_finalize "$d" "$d/diff2.json"
+    assert_eq "$(cat "$d/fin2.rc")" "0" "F-a($why): 그 라운드의 finalize 는 rc 0"
+    assert_eq "$(jget "$d/fin2.json" '[a for a in d["advisory"] if a.startswith("permit 관측 불가")]' 2>/dev/null)" "['permit 관측 불가 — diff $why(라운드 2): 1건']" \
+      "F-a($why): finalize 가 관측하지 못한 permit 수를 advisory 로 공시한다"
+    assert_eq "$(gsum "$d" 'd["round_reviewed"], d["approval_label"]')" "(True, None)" \
+      "F-a($why): 공시일 뿐 차단(「미검증」)이 아니다 — round_reviewed True · 라벨 없음"
+    rm -rf "$d"
+  done
+  # 양의 짝 — 같은 라운드에서 읽히지 않는 diff 로 관측이 실패한 뒤 읽히는 diff 로 다시 관측하면 permit 이 소비되고
+  # 관측 불가 기록이 지워져, finalize 에 그 공시가 없다(다른 advisory 는 있다 — 채널이 비어서 통과한 것이 아니다).
+  d="$(f2a_round2)"
+  : > "$d/diff-bad.json"
+  py docreview_state.py observe-diff --state-dir "$d" --diff "$d/diff-bad.json" >/dev/null 2>&1
+  py docreview_anchor.py diff "$d/s1.json" "$d/s2.json" --exempt "$d/ex2.json" > "$d/diff2.json"
+  py docreview_state.py observe-diff --state-dir "$d" --diff "$d/diff2.json" > "$d/obs2.json" 2>/dev/null; rc=$?
+  assert_eq "$rc $(jget "$d/obs2.json" '"permit_unobserved" in d' 2>/dev/null)" "0 False" "F-a 양의 짝: 읽히는 diff 의 observe-diff 는 관측 불가를 내지 않는다"
+  assert_eq "$(st_yaml "$d" "$PERMIT_SEL"', "permit_unobserved" in st["rounds"]["2"]')" "([(2, True)], False)" \
+    "F-a 양의 짝: permit 이 소비되고 앞선 관측 불가 기록이 지워진다"
+  f2a_finalize "$d" "$d/diff2.json"
+  assert_eq "$(cat "$d/fin2.rc") $(jget "$d/fin2.json" 'len(d["advisory"]) > 0, any(a.startswith("permit 관측 불가") for a in d["advisory"])' 2>/dev/null)" "0 (True, False)" \
+    "F-a 양의 짝: 그 라운드의 finalize 에 permit 관측 불가 공시가 없다"
+  rm -rf "$d"
+}
+case_F2_diff_read_failure_discloses() {   # 읽기 권한이 없는 --diff — 원장 탓 · traceback 이 아니라 사유 있는 공시 (PR 3 qg iter 2 F-d)
+  local d f rc; d="$(f2a_round2)"; f="$d/diff-000.json"
+  py docreview_anchor.py diff "$d/s1.json" "$d/s2.json" --exempt "$d/ex2.json" > "$f"; chmod 000 "$f"
+  if [ -r "$f" ]; then
+    echo "  (F-d 건너뜀 — 이 사용자는 mode 000 파일도 읽는다(root 로 도는가). 읽기 실패를 만들 수 없어 이 셀은 재지 않는다)"
+    chmod 600 "$f"; rm -rf "$d"; return
+  fi
+  py docreview_state.py observe-diff --state-dir "$d" --diff "$f" > "$d/obs2.json" 2>"$d/obs2.err"; rc=$?
+  assert_eq "$rc $(jget "$d/obs2.json" 'd["observed"], d["why"].startswith("읽기 실패:"), d["permit_unobserved"]' 2>/dev/null)" "0 (False, True, 1)" \
+    "F-d: 읽을 수 없는 diff 의 observe-diff 는 rc 0 · 사유 「읽기 실패:…」 · 관측 못 한 permit 1"
+  f2a_finalize "$d" "$f"
+  assert_eq "$(cat "$d/fin2.rc")" "0" "F-d: 읽을 수 없는 --diff 의 finalize 는 rc 0 (traceback · 「미검증」이 아니다)"
+  assert_eq "$(jget "$d/fin2.json" '[a.startswith("얼림 검사 없음 — diff 읽기 실패:") and a.endswith("(라운드 2)") for a in d["advisory"] if a.startswith("얼림 검사 없음")], [a.startswith("permit 관측 불가 — diff 읽기 실패:") and a.endswith(": 1건") for a in d["advisory"] if a.startswith("permit 관측 불가")]' 2>/dev/null)" \
+    "([True], [True])" "F-d: advisory 가 얼림 검사 부재와 permit 관측 불가를 「읽기 실패」 사유로 공시한다"
+  assert_eq "$(gsum "$d" 'd["round_reviewed"], d["approval_label"]')" "(True, None)" "F-d: 공시일 뿐 차단이 아니다"
+  chmod 600 "$f"; rm -rf "$d"
+}
+# ── critic 시점 판별 불가의 이름 (PR 3 qg iter 2 F-e) ─────────────────────────────────────────────
+# 표식이 없거나 정수가 아니면 critic 을 죽이지 않지만(R69), 시점을 판별하지 못했다는 사실에 codex 경로와 독립으로
+# 이름을 남긴다 — codex 파일을 넘기지 않는 라운드(kill switch · residue_unclearable)에서도. 공시이지 차단이 아니다.
+case_critic_freshness_unknown_disclosed() {
+  local d rc mode want
+  for mode in unrecorded garble; do
+    d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+    if [ "$mode" = unrecorded ]; then
+      python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2]); st["rounds"][str(st["round"])].pop("started_mtime_ns", None); s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
+      want=round_start_unrecorded
+    else
+      st_mark "$d" garble; want=round_start_unreadable
+    fi
+    cp "$FX/critic-r1.txt" "$d/critic.txt"
+    py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic.txt" --codex "$d/never-written.yaml" > "$d/prep.json" 2>/dev/null; rc=$?
+    assert_eq "$rc $(jget "$d/prep.json" 'd["degrade"]["critic_dead"], d["degrade"].get("critic_freshness_unknown"), len(d["items"]) > 0' 2>/dev/null)" "0 (False, '$want', True)" \
+      "F-e($want): critic 은 죽지 않고(R69 · rc 0 · 항목 그대로) 시점 판별 불가가 이름으로 남는다 (codex 파일 없이도)"
+    py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null
+    assert_eq "$(jget "$d/fin.json" '"critic 시점 판별 불가 ('"$want"')" in d["advisory"], d["blocks"]' 2>/dev/null)" "(True, False)" \
+      "F-e($want): finalize 가 그것을 advisory 로 공시한다 — 차단은 아니다"
+    rm -rf "$d"
+  done
+  # 양의 짝 — 표식이 멀쩡한 라운드에는 그 이름도 공시도 없다.
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$d/never-written.yaml" > "$d/prep.json" 2>/dev/null
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null
+  assert_eq "$(jget "$d/prep.json" '"critic_freshness_unknown" in d["degrade"]' 2>/dev/null) $(jget "$d/fin.json" 'len(d["advisory"]) > 0, any(a.startswith("critic 시점 판별 불가") for a in d["advisory"])' 2>/dev/null)" \
+    "False (True, False)" "F-e 양의 짝: 표식이 멀쩡하면 시점 판별 불가의 이름 · 공시가 없다 (다른 advisory 는 있다)"
+  rm -rf "$d"
+}
 
 # ── check-intent (Task 7) ─────────────────────────────────────────────────
 _ci() { py docreview_anchor.py check-intent "$@" 2>/dev/null; }   # rc 는 $?

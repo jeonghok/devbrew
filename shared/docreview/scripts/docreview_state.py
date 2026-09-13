@@ -256,6 +256,31 @@ def _emit(obj) -> None:
     print(json.dumps(obj, ensure_ascii=False))
 
 
+def load_diff(path):
+    """얼림 diff(7단계 `docreview_anchor.py diff` 의 산출물)를 한 번 읽는다 — (diff, why).
+
+    읽혔으면 why 는 None 이고, 아니면 diff 가 None 이다. `observe-diff` 와 `finalize` 가 같은 판정을 쓴다.
+    why 는 공시 문구에 그대로 들어간다: `미제공`(인자 없음 · 파일 없음) · `읽기 실패:<사유>` · `0바이트` ·
+    `JSON 아님` · `매핑 아님`. 그런 diff 로는 관측도 얼림 검사도 할 수 없다 — 원장 탓으로 죽지 않고
+    (원장은 멀쩡하다) 호출자가 그 사실을 공시한다.
+    """
+    try:
+        if not path or not Path(path).is_file():
+            return None, "미제공"
+        raw = Path(path).read_bytes()
+    except OSError as exc:
+        return None, "읽기 실패:%s" % (exc.strerror or type(exc).__name__)
+    if not raw:
+        return None, "0바이트"
+    try:
+        diff = json.loads(raw.decode("utf-8"))
+    except ValueError:   # JSONDecodeError · UnicodeDecodeError 둘 다 ValueError 다
+        return None, "JSON 아님"
+    if not isinstance(diff, dict):
+        return None, "매핑 아님"
+    return diff, None
+
+
 # ── 문서의 정체 · 문서별 상태 디렉토리 ────────────────────────────────────────
 # 문서의 정체는 경로다(훅이 경로로 arm 한다). 비교와 디렉토리 도출은 **같은 정규화**
 # 하나를 쓴다 — 절대경로 + 심볼릭 링크 해석(`realpath`). 둘이 다른 정규화를 쓰면 같은
@@ -757,13 +782,27 @@ def cmd_defer(a) -> int:
 def cmd_observe_diff(a) -> int:
     st = load_state(a.state_dir)
     n = int(st["round"])
-    diff = json.loads(Path(a.diff).read_text(encoding="utf-8"))
+    r = st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
+    diff, why = load_diff(a.diff)
+    if diff is None:
+        # 읽히지 않는 diff(부재 · 읽기 실패 · 0바이트 · JSON 아님 · 매핑 아님)로는 관측할 수 없다. permit 을 소비하지
+        # 않고(만료 · 재상승도 하지 않는다 — 사용자 결정 R70), 이번 라운드 permit 중 관측하지 못한 것을 사유와 함께
+        # 원장에 센다(`rounds[n].permit_unobserved`) — `finalize` 가 그 수를 advisory 로 공시한다. 원장은 멀쩡하므로
+        # rc 0 이다(`state_unreadable` 은 원장 탓이다).
+        unobserved = sorted(did for did, p in st["permits"].items()
+                            if not p.get("consumed") and int(p["round"]) == n and st["decides"].get(p["finding_id"]))
+        r["permit_unobserved"] = {"why": why, "count": len(unobserved), "permits": unobserved}
+        _refresh_open_lineages(st, n)
+        save_state(a.state_dir, st, "observe-diff 관측 불가 (diff %s · permit %d건 미관측)" % (why, len(unobserved)))
+        _emit({"ok": True, "observed": False, "why": why, "permit_unobserved": len(unobserved),
+               "applied": [], "expired": [], "reraise": list(st.get("reraise") or []), "progress": r["progress"]})
+        return 0
+    r.pop("permit_unobserved", None)   # 같은 라운드의 앞선 관측 불가 기록 — 이 관측이 대신한다
     touched = {c["anchor"] for c in diff.get("changed", [])}
     touched |= {e["anchor"] for e in diff.get("exempt_applied", [])}
     touched |= {e["scope"] for e in diff.get("exempt_applied", []) if e.get("scope")}
     cur = {s["anchor"]: s["hash"] for s in st["snapshots"].get(str(n), {}).get("sections", [])}
     applied, expired, reraise = [], [], []
-    r = st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
     for did, p in st["permits"].items():
         if p.get("consumed") or int(p["round"]) != n:
             continue

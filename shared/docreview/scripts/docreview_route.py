@@ -22,7 +22,7 @@ from adjudication import Ledger  # noqa: E402
 from docreview_anchor import classify_anchor, refs_of  # noqa: E402
 from docreview_state import (  # noqa: E402
     RANK, _CHOICE_LABEL, _decide_choices_for, _is_reraise_successor,
-    fail, load_profile, load_state, pending_mismatch, record_findings, save_state, yaml,
+    fail, load_diff, load_profile, load_state, pending_mismatch, record_findings, save_state, yaml,
 )
 
 BLOCK_RE = r"```%s[ \t]*\n(.*?)\n```"
@@ -139,21 +139,25 @@ def cmd_prepare(a) -> int:
     if critic.is_file():
         # 라운드 시작 표식보다 먼저(또는 같은 시각에) 쓰인 critic 출력은 직전 라운드 것이다 — 탐지를 dispatch
         # 하지 못한 라운드에 같은 자리에 남은 출력을 이번 라운드의 탐지로 섭취하지 않는다(codex 와 같은 판별).
-        # 표식 부재 · 비정수(`round_start_unrecorded` · `round_start_unreadable`)는 critic 을 닫지 않는다 —
-        # 그 두 사유로 부재가 되는 것은 아래 codex 축이다.
-        if _round_staleness(st, critic, "critic_predates_round") == "critic_predates_round":
+        # 표식 부재 · 비정수(`round_start_unrecorded` · `round_start_unreadable`)는 critic 을 닫지 않는다(R69) —
+        # 다만 시점을 판별하지 못했다는 사실은 codex 경로와 독립으로 `degrade.critic_freshness_unknown` 에 이름을
+        # 남기고 `finalize` 가 advisory 로 공시한다(차단 아님). 그 키는 이 경우에만 생긴다.
+        critic_stale = _round_staleness(st, critic, "critic_predates_round")
+        if critic_stale == "critic_predates_round":
             critic_why = "critic_predates_round"
         else:
+            if critic_stale:
+                degrade["critic_freshness_unknown"] = critic_stale
             try:
                 text = critic.read_text(encoding="utf-8")
             except UnicodeDecodeError:
                 # 깨진 critic 출력 — 설계 §9 의 sentinel 깨짐과 같은 판정(critic 사망 → 재dispatch 1회 → 「미검증」)
                 critic_why = "undecodable"
     l1, e1 = extract_block(text, "docreview-layer1")
-    critic_why = critic_why or e1 or (None if isinstance(l1, list) else "not a list")
-    if critic_why:
+    critic_why = critic_why or e1
+    if critic_why or not isinstance(l1, list):
         degrade["critic_dead"] = True
-        ev("source_failed", "doc-critic", "layer1 block %s" % critic_why, True)
+        ev("source_failed", "doc-critic", "layer1 block %s" % (critic_why or "not a list"), True)
     else:
         for i, it in enumerate(l1, 1):
             n1 = normalize(it, 1, "c", i, L)
@@ -418,31 +422,10 @@ def _classify_items(items, st, prof, sections, n, L):
     return final, rejected_items
 
 
-def _load_diff(path):
-    """얼림 diff 를 한 번 읽는다 — (diff, why). 읽혔으면 why 는 None 이고, 아니면 diff 가 None 이다.
-
-    why 는 공시 문구에 그대로 들어간다: `미제공`(인자 없음 · 파일 없음) · `0바이트` · `JSON 아님` · `매핑
-    아님`. 그런 diff 로는 얼림 검사를 할 수 없다 — 라운드를 죽이지 않고(`finalize` 실패는 「미검증」이라
-    차단이고 사유도 틀린다) 얼림 검사 부재로 공시한다.
-    """
-    if not path or not Path(path).is_file():
-        return None, "미제공"
-    raw = Path(path).read_bytes()
-    if not raw:
-        return None, "0바이트"
-    try:
-        diff = json.loads(raw.decode("utf-8"))
-    except ValueError:   # JSONDecodeError · UnicodeDecodeError 둘 다 ValueError 다
-        return None, "JSON 아님"
-    if not isinstance(diff, dict):
-        return None, "매핑 아님"
-    return diff, None
-
-
 def _auto_decides(a, diff, st, prof, sections, n, L):
     """사후·이월 auto decide — 얼림 diff(post) · check-intent 거부(pre) · expired 재상승(pre).
 
-    `diff` 는 `cmd_finalize` 가 `_load_diff` 로 한 번 읽은 얼림 diff 다 — 읽히지 않았으면 None 이고 사후
+    `diff` 는 `cmd_finalize` 가 `docreview_state.load_diff` 로 한 번 읽은 얼림 diff 다 — 읽히지 않았으면 None 이고 사후
     항목은 없다(그 사실은 보고서가 공시한다). `a` 는 인자 묶음 그대로다.
     `st["escalated"]` 은 아직 자기 차례가 아닌 예약만 남기고, `st["reraise"]` 는 비운다.
     낸 값은 (새 항목들, 미소비 재상승 예약 수, 미소비 escalated 예약 수).
@@ -682,6 +665,13 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats):
         adv.append("앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위")
     if stats.get("freeze_unchecked"):
         adv.append("얼림 검사 없음 — diff %s(라운드 %d)" % (stats["freeze_unchecked"], n))
+    # 7단계 `observe-diff` 가 읽히지 않는 diff 로 이번 라운드 permit 을 관측하지 못했다(원장 `rounds[n].permit_unobserved`,
+    # 사용자 결정 R70 — 공시만, 만료 · 재상승 없음).
+    unobserved = st["rounds"][str(n)].get("permit_unobserved")
+    if isinstance(unobserved, dict):
+        adv.append("permit 관측 불가 — diff %s(라운드 %d): %d건" % (unobserved.get("why"), n, int(unobserved.get("count") or 0)))
+    if degrade.get("critic_freshness_unknown"):
+        adv.append("critic 시점 판별 불가 (%s)" % degrade["critic_freshness_unknown"])
     out = {
         "ok": True, "round": n, "findings": [_pub(it) for it in final],
         "by_disposition": {d: [it["id"] for it in final if it["disposition"] == d] for d in DISPOSITIONS},
@@ -745,7 +735,7 @@ def cmd_finalize(a) -> int:
     same_as = _apply_recritic(items, verdicts, added, L)
     keep_of = _absorb_same_as(items, same_as, L)
     final, rejected_items = _classify_items(items, st, prof, sections, n, L)
-    diff, diff_why = _load_diff(a.diff)
+    diff, diff_why = load_diff(a.diff)
     extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, diff, st, prof, sections, n, L)
     final.extend(extra)
     bucket_conflicts, lineage_mismatch, revived = _resolve_ids_and_lineage(st, final, rejected_items, n)
