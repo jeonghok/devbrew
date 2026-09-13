@@ -230,6 +230,82 @@ write_raw 'description: "closed"
 color: [red]'
 expect GREEN "닫힌 따옴표 · 닫힌 flow 값은 파싱되므로 통과"
 
+# ── L0 완주 신호 · 인덱스 키잉 · 중복 키 (PR 3 qg iter 1) ─────────────────────────
+# L0 는 파이썬이 끝까지 돌았다는 양성 신호(`L0_DONE <파일 수> <위반 수>`)가 있고 셸의 대조가 그와 맞을
+# 때만 통과다. (a)(b)(b2)(c)(e1)(e2) 는 수정 전 락에서 전부 GREEN 이었다(결함 재현 — 리포트에 출력).
+# (e3) 은 위반 수 대조의 이빨이다(수정 전 락은 경로 키라 이 변형에 흔들리지 않았다).
+expect_env() {  # expect_env <RED|GREEN> <설명> <VAR=값…> — 할당은 락 실행에만 얹힌다
+  local want="$1" msg="$2"; shift 2
+  if env "$@" bash "$LOCK" "$TMP" >/dev/null 2>&1; then local got=GREEN; else local got=RED; fi
+  assert_eq "$got" "$want" "$msg (want $want, got $got)"
+}
+echo "== L0 (a): 같은 매핑의 중복 키 =="
+write_raw 'description: fixture
+description: 두 번째'
+expect RED "description: 두 줄 — 파서는 조용히 마지막 값을 쓰고 L2 의 중복 검사는 tools: 만 센다"
+
+echo "== L0 (b): 파일명에 탭 + 안 닫힌 따옴표 =="
+write_agent 'tools: Read, Grep, Glob'
+ODDF="$FIX/tab$(printf '\t')name.md"
+printf -- '---\nname: oddname\ndescription: "unclosed\nmodel: inherit\ntools: Read, Grep, Glob\n---\n\nbody\n' > "$ODDF"
+expect RED "탭이 든 파일명의 안 닫힌 따옴표 — 경로 키 레코드는 대조에 실패해 그 파일의 L0 가 빠졌다"
+printf -- '---\nname: oddname\ndescription: closed\nmodel: inherit\ntools: Read, Grep, Glob\n---\n\nbody\n' > "$ODDF"
+expect GREEN "탭이 든 파일명이어도 파싱되는 frontmatter 는 통과 (인덱스 대조가 이상한 이름에 over-reject 하지 않는다)"
+rm -f "$ODDF"
+echo "== L0 (b2): 파일명에 개행 + 안 닫힌 따옴표 =="
+ODDF="$FIX/nl"$'\n'"name.md"
+printf -- '---\nname: oddname\ndescription: "unclosed\nmodel: inherit\ntools: Read, Grep, Glob\n---\n\nbody\n' > "$ODDF"
+expect RED "개행이 든 파일명의 안 닫힌 따옴표 — 경로 키 레코드가 두 줄로 쪼개졌다"
+rm -f "$ODDF"
+
+# 파이썬 시작 환경을 흔드는 셀 — PYTHONPATH 앞자리에 둔 모듈이 락의 파이썬에만 얹힌다.
+SH_NOYAML="$TMP/py-noyaml"; SH_NOISE="$TMP/py-noise"; SH_MUTE="$TMP/py-mute"; SH_ARGV="$TMP/py-argv"; SH_SHIFT="$TMP/py-shift"; SH_EXIT="$TMP/py-exit"
+mkdir -p "$SH_NOYAML" "$SH_NOISE" "$SH_MUTE" "$SH_ARGV" "$SH_SHIFT" "$SH_EXIT" || exit 1
+printf 'raise ImportError("PyYAML shadowed by the L0 mutation cell")\n' > "$SH_NOYAML/yaml.py"
+printf 'import sys\nsys.stderr.write("sitecustomize: startup warning\\n")\n' > "$SH_NOYAML/sitecustomize.py"
+cp "$SH_NOYAML/sitecustomize.py" "$SH_NOISE/sitecustomize.py"
+printf 'import os, sys\nsys.stdout = open(os.devnull, "w")\n' > "$SH_MUTE/sitecustomize.py"
+printf 'import sys\ndel sys.argv[2:]\n' > "$SH_ARGV/sitecustomize.py"
+# 위반 레코드(`<i>\t<사유>`)의 인덱스만 100 밀어 찍는다 — 파이썬의 print 를 감싼다. builtins.enumerate 를
+# 바꾸면 PyYAML 까지 깨져 셀이 rc 검사로 RED 가 됐다(위반 수 대조를 지운 변이가 안 잡혔다 — 변이 표 M3).
+cat > "$SH_SHIFT/sitecustomize.py" <<'PY'
+import builtins, re
+_print = builtins.print
+def _shifted(*args, **kw):
+    if args and isinstance(args[0], str):
+        m = re.match(r"(\d+)\t", args[0])
+        if m:
+            args = ("%d\t%s" % (int(m.group(1)) + 100, args[0][m.end():]),) + args[1:]
+    return _print(*args, **kw)
+builtins.print = _shifted
+PY
+printf 'import atexit, os, sys\natexit.register(lambda: (sys.stdout.flush(), os._exit(1)))\n' > "$SH_EXIT/sitecustomize.py"
+
+echo "== L0 (c): PyYAML 부재 + 시작 시 stderr 한 줄 =="
+write_raw 'description: "unclosed'
+expect_env RED "PyYAML 을 못 읽는데 stderr 에 경고 한 줄이 섞였다 — 완전 일치 비교가 빗나가 L0 가 아무것도 안 쟀다" PYTHONPATH="$SH_NOYAML"
+echo "== L0 (c) 보강: stderr 경고만 있고 PyYAML 은 있다 =="
+write_agent 'tools: Read, Grep, Glob'
+expect_env GREEN "시작 시 stderr 경고 한 줄은 판정을 바꾸지 않는다 (stderr 는 파싱 출력에 섞이지 않는다)" PYTHONPATH="$SH_NOISE"
+
+echo "== L0 (e1): 파이썬의 stdout 이 사라졌다 — 완주 신호 없음 =="
+write_raw 'description: "unclosed'
+expect_env RED "rc 0 인데 아무 출력이 없으면 L0 는 아무것도 안 잰 것이다 — 침묵은 통과가 아니다" PYTHONPATH="$SH_MUTE"
+echo "== L0 (e2): 파이썬이 파일 일부만 받았다 — 파일 수 불일치 =="
+write_agent 'tools: Read, Grep, Glob'
+printf -- '---\nname: zlate\ndescription: "unclosed\nmodel: inherit\ntools: Read, Grep, Glob\n---\n\nbody\n' > "$FIX/zlate.md"
+expect_env RED "파이썬이 첫 파일만 보고 끝냈다 — 완주 신호의 파일 수가 셸의 \$# 와 다르다" PYTHONPATH="$SH_ARGV"
+echo "== L0 (e3): 위반 레코드의 인덱스가 어긋났다 — 위반 수 불일치 =="
+expect_env RED "위반 레코드가 셸이 모르는 인덱스를 달았다 — 셸이 소비한 위반 수가 완주 신호의 위반 수보다 적다" PYTHONPATH="$SH_SHIFT"
+rm -f "$FIX/zlate.md"
+echo "== L0 (e4): 완주 신호 뒤에 비-0 으로 끝났다 — 종료 코드 =="
+write_agent 'tools: Read, Grep, Glob'
+expect_env RED "완주 신호가 찍혔어도 rc ≠ 0 이면 FAIL 이다 (무엇이 찍혔든)" PYTHONPATH="$SH_EXIT"
+
+echo "== L0 (d): 기준선은 여전히 GREEN =="
+write_agent 'tools: Read, Grep, Glob'
+expect GREEN "정상 allowlist 는 L0 강화 뒤에도 통과"
+
 # ── A-1 (v2.14.2): 진단 스위치가 verdict 를 뒤집던 fail-open ──────────────────
 # 199d682 은 DECL 진단을 **agent 루프 안에서 fd 1** 로 printf 했다. stdout 이 쓰기 불가면
 # (`>&-`) 그 printf 는 실패하지만 bash 의 stdio 버퍼에 내용이 **남고**, 바로 뒤 L3 토큰 루프의
