@@ -65,10 +65,19 @@ cut_block() {   # cut_block <SKILL> <절 헤딩 정규식> → 그 절의 첫 ba
        s && b && /^```$/ {b=0; done=1; next}
        s && b' "$1"
 }
+cut_block_with() {   # cut_block_with <SKILL> <절 헤딩 정규식> <줄 정규식> → 그 절에서 그 줄을 담은 첫 bash 블록
+  H="$2" P="$3" awk '$0 ~ ENVIRON["H"] {s=1; next}
+       s && /^## / {exit}
+       s && /^```bash$/ {b=1; buf=""; has=0; next}
+       s && b && /^```$/ {b=0; if (has && !done) {printf "%s", buf; done=1}; next}
+       s && b {buf = buf $0 "\n"; if ($0 ~ ENVIRON["P"]) has=1}' "$1"
+}
 FENCE="$SCRATCH/fence.sh";  cut_fence "$SKILL" > "$FENCE"
 INPUT="$SCRATCH/input.sh";  cut_block "$SKILL" '^## 입력$' > "$INPUT"
 BUNDLE_BLK="$SCRATCH/bundle.sh"; cut_block "$SKILL" '^## 번들' > "$BUNDLE_BLK"
-S_INPUT="$SCRATCH/spec-input.sh"; cut_block "$SPEC_SKILL" '^## 입력$' > "$S_INPUT"
+# reviewing-spec 의 `## 입력` 절에는 후보 펜스(spec-distill 3.0.0)가 먼저 온다 — 첫 블록이 아니라 `STATE_DIR=` 대입을
+# 담은 블록을 고른다. 없으면 아래 추출 검사가 RED 다.
+S_INPUT="$SCRATCH/spec-input.sh"; cut_block_with "$SPEC_SKILL" '^## 입력$' '^STATE_DIR=' > "$S_INPUT"
 S_FENCE="$SCRATCH/spec-fence.sh"; cut_fence "$SPEC_SKILL" > "$S_FENCE"
 n_fence="$(grep -c . "$FENCE" || true)"
 if [ "${n_fence:-0}" -lt 10 ]; then

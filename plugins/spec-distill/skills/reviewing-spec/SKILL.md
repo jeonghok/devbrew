@@ -98,15 +98,15 @@ advisory · 복귀 지시)을 **그대로** 한 단락으로 보이고 게이트
 <!-- review-candidates:begin -->
 ```bash
 top="$(git rev-parse --show-toplevel)"
-git -C "$top" -c core.quotePath=false log -n 50 --diff-filter=A --name-only --pretty=format: -- 'docs/superpowers/specs/*-design.md' | awk 'NF && !seen[$0]++' | while IFS= read -r p; do [ -e "$top/$p" ] && printf '%s/%s\n' "$top" "$p"; done | head -n 5
+git -C "$top" -c core.quotePath=false log -n 50 --diff-filter=A --name-only --pretty=format: -- 'docs/superpowers/specs/*-design.md' | awk 'BEGIN{FS="\037"} NF && !seen[$NF]++' | while IFS= read -r p; do [ -e "$top/$p" ] && printf '%s/%s\n' "$top" "$p"; done | head -n 5
 git -C "$top" -c core.quotePath=false ls-files --others --exclude-standard -- 'docs/superpowers/specs/*-design.md' | while IFS= read -r p; do [ -e "$top/$p" ] && printf '%s/%s\n' "$top" "$p"; done
 ```
 <!-- review-candidates:end -->
 
 후보가 없거나 사용자가 고르지 않으면 아래 「대상 부재」로 끝낸다.
 
-세션 상태 디렉토리는 `state_path.py` 리졸버로 연다 — 엔진 상태(`docreview-state.md`)와 codex
-산출물이 여기 산다:
+상태 디렉토리는 `state_path.py` 리졸버(세션)와 엔진의 `state-dir-for`(문서)로 연다 — 이 문서의 엔진 상태
+(`docreview-state.md`)와 codex 산출물이 여기 산다:
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"; [ -n "$SD" ] || SD="./plugins/spec-distill"
@@ -219,7 +219,7 @@ fi
 # **전제: 한 세션은 리뷰 라운드를 동시에 둘 돌리지 않는다.** sweep 은 다른 문서의 codex
 # 산출물까지 중화한다 — 동시에 도는 라운드가 있으면 그 라운드가 방금 쓴 판정을 지운다.
 # 「잃는 것이 없다」와 이 sweep 의 fail-closed 는 이 전제 아래에서만 참이다. 지우는 것은 문서별
-# 디렉토리의 `docreview-codex.yaml` 뿐이고 원장(`docreview-state.md`)·arm 원장(`state.local.md`)·
+# 디렉토리의 `docreview-codex.yaml` 뿐이고 원장(`docreview-state.md`)·세션 원장(`state.local.md`)·
 # 그 밖의 파일은 건드리지 않는다.
 residue_unclear=0; residue_left=""
 neutralise() {   # `$NEUTRALISE_TARGET` 을 지운다 — 못 지우면 0바이트로 절단한다. 둘 다 못 하면 rc 1
@@ -296,11 +296,11 @@ Read 가 거부된다. 탐지 dispatch 직전에(재dispatch 포함) 아래 펜�
 
 <!-- profile-content:begin -->
 ```bash
-harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" session-id)"
-ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" state-root)"
-STATE="$ROOT/$harness_sid/state.local.md"   # 훅이 읽는 바로 그 파일
-STATE_DIR="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
-PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/design-doc.md"
+SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"; [ -n "$SD" ] || SD="./plugins/spec-distill"
+harness_sid="$(python3 "$SD/scripts/state_path.py" session-id)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
+PROFILE="${CLAUDE_PLUGIN_ROOT:-$SD}/references/docreview-profiles/design-doc.md"
 prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
   echo "[spec-distill] 프로필 내용을 읽지 못했다(cat rc $prof_rc): $PROFILE — 탐지 · 재비판을 dispatch 하지 않는다. 5단계가 critic 사망으로 읽는다(재dispatch 1회 → 「미검증」)." >&2

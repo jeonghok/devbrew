@@ -128,8 +128,10 @@ LABEL="$(PYTHONDONTWRITEBYTECODE=1 python3 -c 'import sys; sys.path.insert(0, sy
 assert_eq "$LABEL" "미검증" "엔진: 「미검증」 라벨의 정본 상수가 실재한다 (산문 라벨 단언의 양의 짝)"
 assert_contains "$REF_FLAT" "\`approval_label\` 이 있으면(「${LABEL}」)" \
   "절차서 8단계: 승인 게이트 라벨을 엔진 요약의 approval_label 에서 읽는다"
-assert_contains "$REF_FLAT" '`round_reviewed` 가 참일 때만 남긴다' \
-  "절차서 8단계: 리뷰 완료 기록은 엔진 요약의 round_reviewed 가 참일 때만 남긴다"
+# 옛 단언은 「리뷰 완료 기록은 `round_reviewed` 가 참일 때만 남긴다」였다 — 그 기록자(설계문서 자리의 arm 원장)를
+# spec-distill 3.0.0 이 지웠고 기록하는 호스트가 남지 않았다(R75). 대상이 남은 부분 — `round_reviewed` 의 정의 — 으로 옮긴다.
+assert_contains "$REF_FLAT" '`round_reviewed` 는 이번 라운드가 리뷰 완료인가다' \
+  "절차서 8단계: round_reviewed 는 이번 라운드가 리뷰 완료인가다 (엔진 요약의 정의)"
 BR_FLAT="$(flat "$REPO_ROOT/plugins/spec-distill/skills/reviewing-brief/SKILL.md")"
 assert_contains "$BR_FLAT" "\`approval_label\` 이 「${LABEL}」이면" \
   "reviewing-brief: 「미검증」 라벨을 엔진 요약의 approval_label 에서 읽는다 (body-unique)"

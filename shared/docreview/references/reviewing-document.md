@@ -39,7 +39,7 @@
 자신의 문구>"` 로 돈다(그 문구가 `extra_rounds` 에 개별 기록된다). 2단계(네 옵션)의 정본은
 `proceed-gate.md`. 요약(`gate --state-dir D`, `--render` 없이)의 `approval_label` 이 있으면(「미검증」) 승인
 게이트를 그 라벨로 연다 — 라벨의 정본은 엔진 출력이고, 사유는 `unverified`(`critic_dead` · `finalize_incomplete`)다.
-리뷰 완료 기록(호스트의 mark-reviewed 류)은 그 요약의 `round_reviewed` 가 참일 때만 남긴다 — 이번 라운드가
+요약의 `round_reviewed` 는 이번 라운드가 리뷰 완료인가다 — 이번 라운드가
 `finalize` 로 끝나지 않았거나 「미검증」이면 거짓이고, 다음 라운드가 정상으로 끝나면 다시 참이 된다. 거짓인 라운드는
 요약의 `unreviewed_reason` 이 사유를 말하고(「미검증」 둘, 또는 finalize 보고서가 없는 `unrouted` — `unrouted` 에는 라벨이
 붙지 않는다) 렌더 첫 줄이 그것을 공시하며 「다음:」 줄에 리뷰 완료가 아니라는 꼬리가 붙는다.

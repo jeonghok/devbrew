@@ -1206,8 +1206,8 @@ case_T41_critic_dead_blocks() {
   assert_eq "$rc $(jget "$d/prep.json" 'd["degrade"]["critic_dead"]')" "4 True" "T41: 층 1 블록 없음 → rc 4 + critic_dead"
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-broken.txt")" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json" 2>/dev/null; rc=$?
   assert_eq "$rc" "4" "T41: 층 1 블록 YAML 파손 → rc 4"
-  # critic 사망 라운드를 finalize 까지 태운다 — `reviewing-spec/SKILL.md` 의 mark-reviewed 배제가
-  # 읽는 신호는 `fin.json` 의 `blocks` 다. rc 4 · `critic_dead` 만 재면 그 다리(주 판정자로 기록 →
+  # critic 사망 라운드를 finalize 까지 태운다 — 게이트가 그 라운드를 「미검증」으로 여는 근거의 하나가
+  # `fin.json` 의 `blocks` 다. rc 4 · `critic_dead` 만 재면 그 다리(주 판정자로 기록 →
   # `blocks`)가 끊겨도 통과한다(doc-critic 을 보조로 기록하는 변이가 락 15개 전부에서 GREEN 이었다).
   py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null
   assert_eq "$(jget "$d/fin.json" 'd["blocks"], any(a.startswith("입력 실패(주): doc-critic") for a in d["advisory"])')" "(True, True)" \
@@ -1244,7 +1244,7 @@ case_route_adjudication_keys() {
 # 이번 라운드의 판정이 원장에 없는 세 모양 — critic 사망 두 번(5단계가 6~7단계를 건너뛴다) ·
 # critic 이 죽은 채 finalize · finalize 실패. 게이트 요약이 사유(`unverified`) · 승인 게이트 라벨
 # (`approval_label`) · 완료 기록 신호(`round_reviewed`)를 내고, 렌더 첫 줄이 공시로 시작한다. 진입
-# skill 은 이 셋을 읽는다(reviewing-spec 의 mark-reviewed 배제 · reviewing-brief 의 Step B 라벨).
+# skill 은 이 셋을 읽는다(reviewing-spec 의 승인 게이트 라벨 · reviewing-brief 의 Step B 라벨).
 gsum()   { py docreview_state.py gate --state-dir "$1" | jgets "$2"; }            # gsum <dir> <expr over d>
 gfirst() { py docreview_state.py gate --state-dir "$1" --render | head -1; }      # 렌더 첫 줄(degrade 공시)
 UNV='d["unverified"], d["approval_label"], d["round_reviewed"], d["approval_gate_open"]'
@@ -1265,7 +1265,7 @@ case_T46_critic_dead_twice_unverified() {
     "T46: 렌더의 다음 줄이 승인 게이트를 「미검증」 라벨로 연다"
   rm -rf "$d"
 }
-case_T46_critic_dead_finalized_unverified() {   # mark-reviewed 배제 둘째 갈래 — 죽은 채 finalize 한 라운드
+case_T46_critic_dead_finalized_unverified() {   # 「미검증」 둘째 갈래 — 죽은 채 finalize 한 라운드
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer1.txt")" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json" 2>/dev/null
   py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null

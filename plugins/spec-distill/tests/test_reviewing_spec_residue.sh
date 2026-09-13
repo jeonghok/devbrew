@@ -429,19 +429,21 @@ fi
 # **파일 이름이 같다** — 이름표(stem)만으로 갈리면 도출에서 문서 경로가 빠져도 통과한다.
 # 텍스트가 아니라 실행 결과로 판정한다: 블록을 잘라 이어 붙이고 끝에 관측 줄 하나를 단다.
 INPUT="$SCRATCH/input.sh"
+# `## 입력` 절에는 후보 펜스(spec-distill 3.0.0)가 먼저 온다 — 첫 블록이 아니라 줄머리 `STATE_DIR=` 대입을 담은
+# 첫 블록을 고른다. 그런 블록이 없으면 아래 추출 검사가 RED 다.
 awk '
   /^## 입력$/ {ins=1; next}
   /^## 프로필$/ {ins=0}
-  ins && !seen && /^```bash$/ {inb=1; next}
-  ins && inb && /^```$/ {inb=0; seen=1; next}
-  ins && inb {print}
+  ins && /^```bash$/ {inb=1; buf=""; has=0; next}
+  ins && inb && /^```$/ {inb=0; if (has && !seen) {printf "%s", buf; seen=1}; next}
+  ins && inb {buf = buf $0 "\n"; if ($0 ~ /^STATE_DIR=/) has=1}
 ' "$SKILL" > "$INPUT"
 if grep -q '^STATE_DIR=' "$INPUT" && bash -n "$INPUT" 2>/dev/null; then
   ok "P 추출: \`## 입력\` 블록 $(grep -c . "$INPUT")줄 — STATE_DIR 대입을 담고 bash -n 을 통과한다"
 else
   no "P 추출: \`## 입력\` 블록이 비었거나 STATE_DIR 대입이 없거나 문법이 깨졌다 — 아래 판정은 무의미하다"
 fi
-OBS_LINE='printf "STATE=%s\nSTATE_DIR=%s\nCODEX_YAML=%s\n" "${STATE:-}" "${STATE_DIR:-}" "${CODEX_YAML:-}" > "$OBS"'
+OBS_LINE='printf "ROOT=%s\nSID=%s\nSTATE_DIR=%s\nCODEX_YAML=%s\n" "${ROOT:-}" "${harness_sid:-}" "${STATE_DIR:-}" "${CODEX_YAML:-}" > "$OBS"'
 { cat "$INPUT"; cat "$FENCE"; printf '%s\n' "$OBS_LINE"; } > "$SCRATCH/input-fence.sh"
 { cat "$FENCE"; printf '%s\n' "$OBS_LINE"; } > "$SCRATCH/fence-only.sh"
 mkdir -p "$SCRATCH/other"; cp "$DOC_D" "$SCRATCH/other/design-sample.md"
@@ -461,7 +463,8 @@ sa="$(obs "$SCRATCH/p1.obs" STATE_DIR)"; ca="$(obs "$SCRATCH/p1.obs" CODEX_YAML)
 sb="$(obs "$SCRATCH/p2.obs" STATE_DIR)"; cb="$(obs "$SCRATCH/p2.obs" CODEX_YAML)"
 sa2="$(obs "$SCRATCH/p3.obs" STATE_DIR)"; ca2="$(obs "$SCRATCH/p3.obs" CODEX_YAML)"
 ca4="$(obs "$SCRATCH/p4.obs" CODEX_YAML)"
-st1="$(obs "$SCRATCH/p1.obs" STATE)"; st2="$(obs "$SCRATCH/p2.obs" STATE)"
+r1="$(obs "$SCRATCH/p1.obs" ROOT)"; r2="$(obs "$SCRATCH/p2.obs" ROOT)"
+id1="$(obs "$SCRATCH/p1.obs" SID)"; id2="$(obs "$SCRATCH/p2.obs" SID)"
 if [ -n "$sa" ] && [ -n "$ca" ] && [ -n "$sb" ] && [ -n "$cb" ]; then
   ok "P 전제: 두 문서 모두 STATE_DIR · CODEX_YAML 이 도출된다 (빈 값끼리의 비교가 아니다)"
 else
@@ -487,24 +490,27 @@ if [ -n "$sa" ] && [ "$ca" = "$sa/docreview-codex.yaml" ]; then
 else
   no "P4: codex 산출물($ca)이 그 문서의 상태 디렉토리($sa) 밖이다"
 fi
-sess="${st1%/state.local.md}"
-if [ -n "$st1" ] && [ "$st1" = "$st2" ] && [ "$sess" != "$st1" ] && [ "${sa%/*}" = "$sess/docreview" ] && [ "${sb%/*}" = "$sess/docreview" ]; then
-  ok "P5: arm 원장(\$STATE)은 문서와 무관하게 세션의 한 파일이고, 문서별 디렉토리는 그 세션 아래 docreview/ 에 앉는다"
+# P5 — 문서별 디렉토리는 문서와 무관한 한 세션(`$ROOT/$harness_sid`) 아래 docreview/ 에 앉는다. 옛 P5 는 세션 쪽
+# 앵커로 arm 원장(`$STATE`)을 썼다 — 그 원장은 spec-distill 3.0.0 이 지웠다(R75). 앵커를 그 원장 경로를 만들던 두
+# 값(`$ROOT` · `$harness_sid`)으로 옮긴다. 두 문서가 같은 세션을 보는가(루트 · sid 동일)는 그대로 잰다.
+sess="$r1/$id1"
+if [ -n "$r1" ] && [ -n "$id1" ] && [ "$r1" = "$r2" ] && [ "$id1" = "$id2" ] && [ "${sa%/*}" = "$sess/docreview" ] && [ "${sb%/*}" = "$sess/docreview" ]; then
+  ok "P5: 두 문서는 같은 세션(\$ROOT/\$harness_sid)을 보고, 문서별 디렉토리는 그 세션 아래 docreview/ 에 앉는다"
 else
-  no "P5: arm 원장 또는 문서별 디렉토리의 자리가 어긋났다 (STATE $st1 / $st2 · STATE_DIR $sa / $sb)"
+  no "P5: 세션 또는 문서별 디렉토리의 자리가 어긋났다 (ROOT $r1 / $r2 · SID $id1 / $id2 · STATE_DIR $sa / $sb)"
 fi
 
 # ── S) 문서 미상 sweep — 범위와 중화 불가 공시 ────────────────────────────────────
 # `$spec_path` 가 비면 펜스는 세션의 문서별 codex 산출물 전부를 훑는다. 위 A(게이트 입력
 # 부재)는 codex 파일 하나만 심으므로 sweep 이 세션 디렉토리째 지우거나 문서 디렉토리의 모든
-# 파일을 지워도 GREEN 이다. 그래서 같은 세션에 **살아야 할 것**(arm 원장 · 두 문서의 엔진
+# 파일을 지워도 GREEN 이다. 그래서 같은 세션에 **살아야 할 것**(세션 원장 `state.local.md` · 두 문서의 엔진
 # 원장 · 다른 이름의 파일)을 함께 심고 바이트 동일을 잰다. 다른 문서의 codex 산출물이
 # 중화되는 것은 「문서를 모르면 전부가 후보」의 양의 쪽이다.
 sweep_scope_case() {   # sweep_scope_case <라벨> <sid> <펜스>
   local label="$1" sid="$2" fence="$3" home S DA DB g f i lost=""
   home="$SCRATCH/$sid"; S="$home/.claude/spec-distill/$sid"
   DA="$(dir_of "$sid" "$DOC_D")"; DB="$(dir_of "$sid" "$DOC_B")"; mkdir -p "$DA" "$DB"
-  printf 'armed_paths: [x]\n' > "$S/state.local.md"
+  printf -- '---\nsession_id: %s\n---\n' "$sid" > "$S/state.local.md"
   printf 'unrelated\n' > "$S/notes-unrelated.txt"
   mk_state "$DA"
   printf 'critic verbatim\n' > "$DA/critic.txt"
@@ -527,7 +533,7 @@ sweep_scope_case() {   # sweep_scope_case <라벨> <sid> <펜스>
     i=$((i+1)); cmp -s "$g/$i" "$f" 2>/dev/null || lost="$lost ${f#"$S"/}"
   done
   if [ -z "$lost" ]; then
-    ok "S($label): arm 원장 · 두 문서의 엔진 원장 · 다른 이름의 파일이 바이트 동일로 남는다 (sweep 은 codex 산출물만 지운다)"
+    ok "S($label): 세션 원장 · 두 문서의 엔진 원장 · 다른 이름의 파일이 바이트 동일로 남는다 (sweep 은 codex 산출물만 지운다)"
   else
     no "S($label): sweep 이 살아야 할 파일을 지우거나 바꿨다:$lost"
   fi

@@ -434,7 +434,9 @@ class TestReviewingSpecContract(unittest.TestCase):
 
     def test_new_input_contract_present(self):
         t = self.SKILL.read_text(encoding="utf-8")
-        self.assertIn('STATE_DIR="$ROOT/$harness_sid"', t)
+        # 엔진 상태는 세션 아래 문서별 디렉토리다(spec-distill 3.1.0 · R78) — 세션 리터럴 대신 그 도출 줄을 잰다.
+        self.assertIn('STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for '
+                      '--root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}"', t)
         self.assertIn("<!-- review-entry:begin -->", t)
         self.assertIn("<!-- uncommitted-check:begin -->", t)
         m = re.search(r"^## 입력\n(.*?)^## ", t, re.S | re.M)

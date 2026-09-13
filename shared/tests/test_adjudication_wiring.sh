@@ -27,7 +27,6 @@
 # 바꾸면 통과한다 — 종류의 정합은 소비자마다 자기 처분 행렬 테스트가 잰다:
 # `quality-gates/tests/test_synthesize_disposition.sh`(synthesize_findings.py) ·
 # `quality-gates/tests/test_synthesize_artifact_adjudication.py` ·
-# `spec-distill/tests/test_review_dispatch_disposition.sh`(review-dispatch.py) ·
 # `shared/tests/test_docreview_route.sh`(docreview_route.py).
 # 단일 락을 지목하면 그 하나가 덮지 않는 나머지 소비자가 조용해진다(최종 리뷰 A/m3).
 #
@@ -193,7 +192,10 @@ comp="$(printf '%s\n' "$SCAN" | sed -n 's/^comprehensions=//p')"
 # PR 3 Task 8b(origin/main 병합) — 50 → 44. 두 브랜치가 58 에서 따로 내렸다(이 브랜치 50 · main 52 —
 # 아래 끝 줄의 depth audit 제거). 지운 파일이 서로 달라(merge_brief_review.py · merge_review.py 대
 # main 이 지운 사후 측정 스크립트) 겹쳐 센 것이 없다: 병합 트리 run_wiring_scan.py 실측 44 = 58 − 2 − 6 − 6.
-COMP_BASELINE=44   # Task 1 F5 census 28 + Task 10 이 1 늘림(29) — merge_review.py
+# PR 3 T8c(origin/main 1238cae1 병합) — 44 → 40. main 의 spec-distill 3.0.0 이 설계문서 리뷰 훅의 컴프리헨션 넷을
+# 걷었다(main 52 → 48 — 아래 끝 줄). 이 브랜치가 지운 병합 스크립트 둘과 파일이 달라 겹쳐 센 것이 없다: 병합 트리
+# run_wiring_scan.py 실측 40 = 44 − 4 = 48 − 2 − 6.
+COMP_BASELINE=40   # Task 1 F5 census 28 + Task 10 이 1 늘림(29) — merge_review.py
                    # `merged["report"]["counts"]`를 만드는 `{k: 0 for k in
                    # _MERGED_COUNT_KEYS}`. 항목을 버리는 자리가 아니라 값 0
                    # 으로 카운터를 초기화하는 자리라 처분 호출이 필요 없다.

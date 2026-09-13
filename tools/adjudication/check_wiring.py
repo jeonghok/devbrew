@@ -562,7 +562,10 @@ def uncited_exemptions():
 # spec-distill 3.0.0 — 27 → 17. 설계문서 리뷰 훅이 삭제되며 그 파일의 면제 열 자리가
 # 대상과 함께 사라졌다. 줄인 것이지 면제로 옮긴 것이 아니다 — 값은 손으로 빼지 않고
 # 삭제 뒤 스캔의 `exempt_total` 로 재계수했다.
-EXEMPT_BASELINE = 21
+#
+# PR 3 T8c(origin/main 1238cae1 병합) — 두 삭제가 겹치지 않는다. 이 브랜치 21(27 − 6: 병합 스크립트 둘) ·
+# main 17(27 − 10: 설계문서 리뷰 훅) → 병합 트리 스캔 `exempt_total` 실측 11 = 27 − 6 − 10.
+EXEMPT_BASELINE = 11
 
 
 def derive_consumers(repo_root):
