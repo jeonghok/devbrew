@@ -317,11 +317,31 @@ if [ "${n_head:-0}" -ge 8 ] && grep -q '^case "${PAYLOAD:-}"' <<<"$HEAD_TXT" \
 else
   no "머리: \`## 입력\` 머리를 못 잘랐거나 핵심 줄이 빠졌다 (${n_head:-0}줄) — 아래 동일성 단언이 공허하다"
 fi
-for s in 'kill switch' '진입 게이트' '번들' '냉독' 'dispatch 블록'; do
+for s in 'kill switch' '진입 게이트' '번들' '냉독'; do
   blk_head="$(first_block "$s" | head -n "${n_head:-0}")"
   { [ -n "$HEAD_TXT" ] && [ "$blk_head" = "$HEAD_TXT" ]; } \
     && ok "머리: \`## $s\` 블록이 같은 머리로 시작한다 (따로 돌아도 같은 변수를 다시 도출한다)" \
     || no "머리: \`## $s\` 블록이 \`## 입력\` 머리로 시작하지 않는다 — 새 셸에서 따로 돌면 변수가 비고 record 가 사라진다"
+done
+# `## dispatch 블록 둘` 절은 bash 블록이 둘 이상이다(프로필 내용 펜스 · 탐지 선택 펜스). 첫 블록만 재면 뒤
+# 블록의 머리가 흘러가도 아무 락도 못 잰다 — 선택 펜스 락은 `## 입력` 블록을 앞에 붙여 돌려 그 drift 를
+# 가린다(PR 3 qg iter 1 NB-1). 그 절의 bash 블록을 전부 잰다.
+nth_block() {   # nth_block <절 이름 정규식> <k> → 그 절의 k 번째 ```bash 블록
+  section "$1" | K="$2" awk '/^```bash$/ { n++; if (n == ENVIRON["K"] + 0) { b = 1; next } } b && /^```$/ { exit } b'
+}
+n_disp="$(section 'dispatch 블록' | grep -c '^```bash$' || true)"
+if [ "${n_disp:-0}" -ge 2 ]; then
+  ok "머리: \`## dispatch 블록\` 절의 bash 블록 ${n_disp}개 — 아래 전수 대조가 두 펜스를 다 본다"
+else
+  no "머리: \`## dispatch 블록\` 절의 bash 블록이 ${n_disp:-0}개다 — 프로필 내용 펜스 · 탐지 선택 펜스 둘이 있어야 한다"
+fi
+k=1
+while [ "$k" -le "${n_disp:-0}" ]; do
+  blk_head="$(nth_block 'dispatch 블록' "$k" | head -n "${n_head:-0}")"
+  { [ -n "$HEAD_TXT" ] && [ "$blk_head" = "$HEAD_TXT" ]; } \
+    && ok "머리: \`## dispatch 블록\` 의 bash 블록 $k/$n_disp 가 같은 머리로 시작한다 (따로 돌아도 같은 변수를 다시 도출한다)" \
+    || no "머리: \`## dispatch 블록\` 의 bash 블록 $k/$n_disp 가 \`## 입력\` 머리로 시작하지 않는다 — 새 셸에서 따로 돌면 변수가 비고 record 가 사라진다"
+  k=$((k+1))
 done
 has "$W_IN" '두 인자를 어느 블록보다 먼저 대입한다' \
   && ok "입력: Skill 인자 두 개를 어느 블록보다 먼저 대입하라고 적는다" \
