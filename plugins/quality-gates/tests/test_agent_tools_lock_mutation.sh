@@ -302,6 +302,43 @@ echo "== L0 (e4): 완주 신호 뒤에 비-0 으로 끝났다 — 종료 코드 
 write_agent 'tools: Read, Grep, Glob'
 expect_env RED "완주 신호가 찍혔어도 rc ≠ 0 이면 FAIL 이다 (무엇이 찍혔든)" PYTHONPATH="$SH_EXIT"
 
+# ── L0 완주 신호 위조 — 스캔 루트의 모듈이 PyYAML 을 가린다 (PR 3 qg iter 2) ───────────────
+# 락은 스캔 루트로 cd 한 뒤 `python3 -c` 로 돈다 — sys.path 첫 자리가 cwd 라, 스캔 루트에 심은 yaml.py ·
+# yaml/ 가 PyYAML 보다 먼저 import 돼 `L0_DONE <파일 수> 0` 을 찍고 끝낼 수 있었다. (f1)(f2) 는 수정 전 락에서
+# GREEN 이었다(우회 재현 — 리포트에 출력). (f3) 은 위조 없이 모든 frontmatter 를 통과시키는 가짜 yaml 을 스캔
+# 루트 아래 디렉토리에서 PYTHONPATH 로 싣는다 — cwd 제거로는 안 막히고 import 뒤 위치 검사가 막는다.
+FORGE='import sys\nprint("L0_DONE %%d 0" %% (len(sys.argv) - 1))\nraise SystemExit(0)\n'
+echo "== L0 (f1): 스캔 루트에 심은 yaml.py 가 완주 신호를 위조한다 =="
+write_raw 'description: "unclosed'
+printf "$FORGE" > "$TMP/yaml.py"
+expect RED "스캔 루트의 yaml.py 가 L0_DONE 을 위조해도 통과시키지 않는다 (cwd 는 import 경로에서 빠진다)"
+rm -f "$TMP/yaml.py"
+echo "== L0 (f2): 스캔 루트에 심은 yaml/__init__.py 가 완주 신호를 위조한다 =="
+mkdir -p "$TMP/yaml" || exit 1
+printf "$FORGE" > "$TMP/yaml/__init__.py"
+expect RED "스캔 루트의 yaml 패키지가 L0_DONE 을 위조해도 통과시키지 않는다"
+rm -rf "$TMP/yaml"
+echo "== L0 (f3): 스캔 루트 아래의 가짜 yaml 이 모든 frontmatter 를 통과시킨다 =="
+mkdir -p "$TMP/vendor" || exit 1
+cat > "$TMP/vendor/yaml.py" <<'PY'
+class MappingNode(object):
+    pass
+
+
+class SafeLoader(object):
+    def __init__(self, *args, **kwargs):
+        pass
+
+
+def load(text, Loader=None):
+    return {"tools": "Read"}
+PY
+expect_env RED "import 된 yaml 이 스캔 루트 안에 있으면 FAIL 이다 (PYYAML_SHADOWED)" PYTHONPATH="$TMP/vendor"
+rm -rf "$TMP/vendor"
+echo "== L0 (f) 보강: 심은 모듈이 없으면 정상 agent 는 통과 =="
+write_agent 'tools: Read, Grep, Glob'
+expect GREEN "스캔 루트에 yaml 모듈이 없으면 PyYAML 로 읽고 통과한다 (위치 검사가 over-reject 하지 않는다)"
+
 echo "== L0 (d): 기준선은 여전히 GREEN =="
 write_agent 'tools: Read, Grep, Glob'
 expect GREEN "정상 allowlist 는 L0 강화 뒤에도 통과"

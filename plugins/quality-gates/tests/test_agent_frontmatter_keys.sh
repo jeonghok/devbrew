@@ -137,12 +137,25 @@ fi
 #   - PyYAML 이 없으면 stderr 로 알리고 rc 3. rc ≠ 0 이면 무엇이 찍혔든 FAIL 이다. stderr 는 파싱 출력과
 #     따로 받아 FAIL 메시지에만 싣는다 — 둘을 섞으면 시작 시 경고 한 줄이 판정을 바꾼다(섞던 옛 판본은
 #     PyYAML 부재를 출력 전체의 완전 일치로 알아봤고, 경고 한 줄이 끼면 L0 가 아무것도 안 잰 채 통과했다).
+#   - PyYAML 은 스캔 루트 밖에서만 온다. 이 락은 스캔 루트로 cd 한 뒤 `python3 -c` 로 돌아 sys.path 첫 자리가
+#     cwd 다 — 스캔 루트에 심은 `yaml.py` · `yaml/` 가 PyYAML 보다 먼저 import 돼 완주 신호를 위조할 수 있었다.
+#     그래서 import 전에 `""` · `"."` · cwd 의 realpath 를 sys.path 에서 빼고, import 뒤 `yaml.__file__` 의
+#     realpath 가 스캔 루트 안이면 stderr `PYYAML_SHADOWED` + rc 3 이다. `python3 -I` 는 쓰지 않는다 —
+#     PYTHONPATH 까지 버려 변이 테스트의 주입 셀이 공허해진다.
 L0_PY='
+import os
 import sys
+
+_scan_root = os.path.realpath(os.getcwd())
+sys.path[:] = [p for p in sys.path if p not in ("", ".") and os.path.realpath(p) != _scan_root]
 try:
     import yaml
 except ImportError:
     sys.stderr.write("PYYAML_MISSING\n")
+    sys.exit(3)
+_yaml_file = os.path.realpath(getattr(yaml, "__file__", None) or "")
+if _yaml_file == _scan_root or _yaml_file.startswith(_scan_root + os.sep):
+    sys.stderr.write("PYYAML_SHADOWED %s\n" % _yaml_file)
     sys.exit(3)
 
 
