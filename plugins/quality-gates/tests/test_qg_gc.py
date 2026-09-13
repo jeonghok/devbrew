@@ -398,6 +398,51 @@ class QgGcRootSafetyTest(unittest.TestCase):
                          "링크된 .claude 너머에 무언가를 만들었다")
         self.assertIn("[quality-gates] GC 거부", proc.stderr)
 
+    def test_k_dangling_root_link_announced(self):
+        # 매달린 루트 링크 — 지울 것은 없지만 조용히 끝나면 뒤이은 `setup-qg.sh` 의 `mkdir -p` 가
+        # 링크 너머(저장소 밖)에 폴더를 만드는 동안 아무도 모른다. 존재 검사보다 탈출 판정이 먼저다.
+        self.root.rmdir()
+        os.symlink(os.path.join("..", "..", "ghost-root"), self.root)
+        self.assertEqual(self._inside_p(self.root), str(self.P / "ghost-root"))
+        self.assertFalse(os.path.exists(self.root))
+        p_before = sorted(os.listdir(self.P))
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("[quality-gates] GC 거부", proc.stderr)
+        self.assertEqual(sorted(os.listdir(self.P)), p_before, "매달린 루트 링크 너머에 무언가를 만들었다")
+
+    def test_l_symlinked_claude_without_root_announced(self):
+        # `.claude -> <밖>` 인데 밖에 quality-gates 가 아직 없다 — 같은 이유로 알린다.
+        shutil.rmtree(self.clone / ".claude")
+        elsewhere = self.P / "elsewhere-claude-empty"
+        elsewhere.mkdir()
+        os.symlink(os.path.join("..", "elsewhere-claude-empty"), self.clone / ".claude")
+        self.assertEqual(self._inside_p(self.clone / ".claude"), str(elsewhere))
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("[quality-gates] GC 거부", proc.stderr)
+        self.assertEqual(sorted(os.listdir(elsewhere)), [], "링크된 .claude 너머에 무언가를 만들었다")
+
+    def test_m_no_claude_dir_stays_silent(self):
+        # 음의 짝 — `.claude` 가 아예 없는 평범한 저장소에서는 여전히 아무 줄도 내지 않는다.
+        shutil.rmtree(self.clone / ".claude")
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(proc.stderr, "", "루트가 없는 평범한 저장소에서 GC 가 줄을 냈다")
+
+    def test_n_refusal_line_does_not_echo_link_target(self):
+        # 거부 줄은 링크가 가리키는 곳을 옮겨 적지 않는다 — 그 이름은 저장소가 정한 문자열이고,
+        # 이 stderr 는 `/qg` 시작 경로에서 모델에게 보인다.
+        self.root.rmdir()
+        target = self.P / "INJECTMARK-target"
+        target.mkdir()
+        os.symlink(os.path.join("..", "..", "INJECTMARK-target"), self.root)
+        self.assertEqual(self._inside_p(self.root), str(target))
+        proc = run_gc(self.clone)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("[quality-gates] GC 거부", proc.stderr)
+        self.assertNotIn("INJECTMARK", proc.stderr, "거부 줄이 링크 대상 이름을 옮겨 적었다")
+
 
 class SetupForwardsGcStderr(unittest.TestCase):
     def test_setup_gc_call_does_not_discard_stderr(self):
@@ -407,6 +452,8 @@ class SetupForwardsGcStderr(unittest.TestCase):
                  if "qg-gc.py" in ln and not ln.lstrip().startswith("#")]
         self.assertEqual(len(calls), 1, f"setup-qg.sh 의 GC 호출 줄이 하나가 아니다: {calls}")
         self.assertNotIn("2>", calls[0], f"GC 호출이 stderr 를 돌린다: {calls[0]}")
+        # `&>/dev/null` · `>/dev/null 2>&1` 처럼 `2>` 없이 버리는 모양도 막는다.
+        self.assertNotIn("/dev/null", calls[0], f"GC 호출이 출력을 버린다: {calls[0]}")
 
 
 if __name__ == "__main__":

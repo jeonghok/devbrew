@@ -59,9 +59,10 @@ def cleanup_ending_session() -> None:
         cwd = os.getcwd()
     root = state_root(cwd)
     if root_escapes(root, "spec-distill"):
+        # 링크 대상은 옮겨 적지 않는다 — 저장소가 정한 문자열이다.
         print(
-            f"[spec-distill] 세션 정리 거부 — state root '{root}' 가 심볼릭 링크를 거쳐 "
-            f"'{os.path.realpath(root)}' 로 풀린다. 저장소 밖을 지울 수 있어 건너뛴다.",
+            f"[spec-distill] 세션 정리 거부 — state root '{root}' 가 심볼릭 링크를 거쳐 제자리 "
+            "밖으로 풀린다. 링크 너머를 지울 수 있어 건너뛴다.",
             file=sys.stderr,
         )
         return

@@ -12,11 +12,16 @@
 ### Security
 
 - **TTL-GC 가 state root 아래 `.gc.lock` 을 만들고(`touch`) 쓰기 모드로 열었다(`O_CREAT | O_TRUNC`).** 둘 다 링크를 따라가므로, 저장소가 `.claude/quality-gates/.gc.lock -> <밖의 파일>` 을 커밋하면 `/qg` 시작 한 번에 그 파일이 잘렸다(격리 재현: 32바이트 → 0바이트). 매달린 링크면 저장소 밖에 파일이 생겼고, 디렉토리로 심으면 GC 가 영구히 멈췄다. 이제 락은 루트 디렉토리 자신의 fd(`O_RDONLY | O_DIRECTORY | O_NOFOLLOW`)에 거는 `flock` 이고 락 파일은 없다. 경합은 조용히 건너뛰고, 그 밖의 락 실패와 루트를 열 수 없는 경우는 stderr 한 줄로 알린다.
-- **`.claude/quality-gates`(또는 `.claude`) 자신이 저장소 밖을 가리키는 링크면 GC 가 그 너머를 수집했다.** 이름 패턴과 세션 마커가 맞고 TTL 이 지난 디렉토리를 개명 · 삭제했고 밖에 `.gc.lock` 을 만들었다(격리 재현). 이제 루트의 realpath 가 `realpath(cwd)/.claude/quality-gates` 와 다르면 락을 잡기 전에 거부하고 stderr 한 줄로 알린다. 루트 안의 링크 자식도 세션 폴더로 보지 않는다.
+- **`.claude/quality-gates`(또는 `.claude`) 자신이 저장소 밖을 가리키는 링크면 GC 가 그 너머를 수집했다.** 이름 패턴과 세션 마커가 맞고 TTL 이 지난 디렉토리를 개명 · 삭제했고 밖에 `.gc.lock` 을 만들었다(격리 재현). 이제 루트의 realpath 가 `realpath(cwd)/.claude/quality-gates` 와 다르면 락을 잡기 전에 거부하고 stderr 한 줄로 알린다. 이 판정은 루트의 존재 검사보다 먼저라, 매달린 루트 링크나 밖에 루트가 아직 없는 `.claude` 링크에서도 조용히 끝나지 않는다(그 경우 뒤이은 `setup-qg.sh` 의 `mkdir -p` 가 링크 너머에 폴더를 만든다 — 아래 알려진 한계). 거부 줄은 링크 대상을 옮겨 적지 않는다 — 저장소가 정한 문자열이고, 이 줄은 `/qg` 시작 경로에서 모델에게 보인다. 루트 안의 링크 자식도 세션 폴더로 보지 않는다.
+- **`/cancel-qg --all` 의 삭제 펜스가 `.claude` 링크를 따라갔다.** `rm -rf -- .claude/quality-gates` 는 `.claude` 가 링크면 그 너머의 진짜 `quality-gates` 디렉토리를 지운다(격리 재현). 이제 `.claude` 나 `.claude/quality-gates` 가 링크면 `REFUSED_SYMLINKED_ROOT` 를 내고 지우지 않는다. 명시적 `--all` 과 확인 클릭이 있어야 닿는 선재 경로다.
 - 두 검사는 공용 정본 `shared/gc/gc_common.py` 의 `root_escapes` · `locked_root` 다. spec-distill 3.0.0 이 같은 결함을 자기 GC 에서만 고쳐 이쪽에 남았던 것을 한 구현으로 모았다(spec-distill 3.0.1 이 같은 함수를 쓴다).
 - `scripts/setup-qg.sh` 가 GC 의 stderr 를 버리지 않는다(`2>/dev/null` 제거) — 거부 · 락 실패 줄이 `/qg` 시작 경로에서 보인다. 정상 실행은 출력이 없다.
-- **알려진 한계(후속):** 링크 루트를 거친 비파괴 쓰기(`setup-qg.sh` 의 상태 폴더 생성과 상태 파일)와, SessionEnd 정리 · `/cancel-qg` 가 자기 세션 폴더를 지우는 경로에는 루트 탈출 검사가 없다. 지우는 대상은 qg 가 스스로 만든 그 세션의 폴더 하나다.
-- 락: `tests/test_qg_gc.py` 의 `QgGcRootSafetyTest`(열 — 그중 `.claude` 자신이 링크인 경우는 루트의 마지막 성분이 진짜 디렉토리라 `O_NOFOLLOW` 가 못 막고 탈출 판정만 막는다) · `SetupForwardsGcStderr`. `test_lock_contention_silent_exit` 는 루트 디렉토리 락을 쥐도록 바꿨다. `tests/e2e-scenarios.md` V5 도 루트 디렉토리 락으로 바꿨다.
+- **알려진 한계(후속):** 다음 경로에는 아직 루트 탈출 검사가 없다.
+  - 링크 루트를 거친 비파괴 쓰기 — `setup-qg.sh` 의 상태 폴더 생성과 상태 파일.
+  - 자기 세션 폴더를 지우는 경로 — `/cancel-qg`(기본 · `--gc`) 와 `/qg --reset` 의 `rm -rf .claude/quality-gates/<sid>`, SessionEnd 정리. 지우는 대상은 qg 가 스스로 만든 그 세션의 폴더 하나다.
+  - 레거시 평면 상태 파일 정리(`setup-qg.sh` · `/qg --reset` 의 `rm -f .claude/quality-gates.local.md` 등 다섯 이름) — `.claude` 가 링크면 너머의 같은 이름 파일을 지운다. v1.5.0 이 쓰던 이름뿐이다.
+- **`.claude` 를 링크로 쓰는 사용자(dotfiles 등)는 이제 `/qg` 를 시작할 때마다 거부 줄을 보고, GC 는 돌지 않는다.** 링크가 의도한 것이면 `DEVBREW_SKIP_HOOKS=quality-gates:qg-gc` 로 이 GC 만 끈다. 그때 오래된 세션 폴더는 직접 지운다 — `/cancel-qg --all` 도 링크 루트를 거부한다.
+- 락: `tests/test_qg_gc.py` 의 `QgGcRootSafetyTest`(열넷 — 그중 `.claude` 자신이 링크인 경우는 루트의 마지막 성분이 진짜 디렉토리라 `O_NOFOLLOW` 가 못 막고 탈출 판정만 막는다. 매달린 루트 링크 · 루트 없는 `.claude` 링크 · 거부 줄 무에코와, 그 음의 짝인 「`.claude` 가 없는 저장소는 조용하다」를 포함한다) · `SetupForwardsGcStderr`(GC 호출 줄에 `2>` 도 `/dev/null` 도 없다) · 새 `tests/test_cancel_all_fence.sh`(`--all` 펜스를 문서에서 떠 임시 저장소에서 돌린다). `test_lock_contention_silent_exit` 는 루트 디렉토리 락을 쥐도록 바꿨다. `tests/e2e-scenarios.md` V5 도 루트 디렉토리 락으로 바꿨다.
 
 ## [7.5.2] — 2026-09-13
 

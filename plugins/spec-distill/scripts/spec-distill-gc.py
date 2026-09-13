@@ -83,14 +83,16 @@ def gc(self_session_id: str | None = None) -> int:
     if kill_switch_active("spec-distill", "spec-distill-gc"):
         return 0
     root = state_root()
-    if not root.exists():
-        return 0
+    # 탈출 판정이 존재 검사보다 먼저다 — 매달린 루트 링크에서 조용히 끝나지 않는다. realpath 는
+    # 없는 경로도 풀므로 `.claude` 가 없는 저장소는 거부되지 않는다. 링크 대상은 옮겨 적지 않는다.
     if root_escapes(root, "spec-distill"):
         print(
-            f"[spec-distill] GC 거부 — state root '{root}' 가 심볼릭 링크를 거쳐 "
-            f"'{os.path.realpath(root)}' 로 풀린다. 저장소 밖을 지울 수 있어 건너뛴다.",
+            f"[spec-distill] GC 거부 — state root '{root}' 가 심볼릭 링크를 거쳐 제자리 밖으로 "
+            "풀린다. 링크 너머를 지울 수 있어 건너뛴다.",
             file=sys.stderr,
         )
+        return 0
+    if not root.exists():
         return 0
     ttl = ttl_ns("DEVBREW_SPEC_DISTILL_TTL_HOURS")
     removed = 0

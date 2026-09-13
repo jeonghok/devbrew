@@ -57,10 +57,11 @@ before completion.
 2. `AskUserQuestion`을 사용해 사용자에게 확인:
    - 질문: "Delete ALL quality-gates session folders? N appear active (mtime < 1h)."
    - 옵션: "Yes, delete all" / "No, abort"
-3. **Yes**: 정확한 경로만 지우도록 가드된 Bash 블록 사용:
+3. **Yes**: 정확한 경로만 지우도록 가드된 Bash 블록 사용(`-d` 는 링크를 따라가므로 링크 검사가 먼저다):
    ```!
+   [[ -L ".claude" || -L ".claude/quality-gates" ]] && { echo "REFUSED_SYMLINKED_ROOT"; exit 0; }
    [[ -d ".claude/quality-gates" ]] || { echo "NOTHING_TO_DELETE"; exit 0; }
    rm -rf -- ".claude/quality-gates" && echo "REMOVED_ALL" || echo "FAILED_ALL"
    ```
-   보고: "Removed all session folders."
+   보고 — `REMOVED_ALL`: "Removed all session folders." · `REFUSED_SYMLINKED_ROOT`: "state root 가 심볼릭 링크라 지우지 않았다 — 링크 너머는 저장소 밖일 수 있다. 직접 확인하고 지워라." · `NOTHING_TO_DELETE`: "No session folders to delete." · `FAILED_ALL`: "Failed to remove session folders."
 4. **No**: 보고 "Aborted." 종료.

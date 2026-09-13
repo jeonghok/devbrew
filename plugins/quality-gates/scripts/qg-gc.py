@@ -84,14 +84,20 @@ def _verbose() -> bool:
 
 
 def gc(self_session_id: str | None = None) -> int:
-    if kill_switch_active("quality-gates", "qg-gc") or not ROOT.exists():
+    if kill_switch_active("quality-gates", "qg-gc"):
         return 0
+    # 탈출 판정이 존재 검사보다 먼저다 — 매달린 루트 링크나 밖에 루트가 아직 없는 `.claude`
+    # 링크에서 조용히 끝나면, 뒤이은 `setup-qg.sh` 의 `mkdir -p` 가 링크 너머에 폴더를 만드는
+    # 동안 아무도 모른다. realpath 는 없는 경로도 풀므로 `.claude` 가 없는 저장소는 거부되지 않는다.
+    # 링크 대상은 옮겨 적지 않는다 — 저장소가 정한 문자열이고, 이 줄은 `/qg` 시작 경로에서 보인다.
     if root_escapes(ROOT, "quality-gates"):
         print(
-            f"[quality-gates] GC 거부 — state root '{ROOT}' 가 심볼릭 링크를 거쳐 "
-            f"'{os.path.realpath(ROOT)}' 로 풀린다. 저장소 밖을 지울 수 있어 건너뛴다.",
+            f"[quality-gates] GC 거부 — state root '{ROOT}' 가 심볼릭 링크를 거쳐 제자리 밖으로 "
+            "풀린다. 링크 너머를 지울 수 있어 건너뛴다.",
             file=sys.stderr,
         )
+        return 0
+    if not ROOT.exists():
         return 0
     ttl = ttl_ns("DEVBREW_QUALITY_GATES_TTL_HOURS")
     removed = 0

@@ -77,9 +77,13 @@ def locked_root(root, tag: str):
     """state root 디렉토리 자신의 fd 에 배타 락을 건다. 잡았으면 True, 못 잡았으면 False 를 낸다.
 
     락 파일을 쓰지 않는다 — 루트 아래 고정 이름은 저장소가 링크로 커밋할 수 있어서, 그것을
-    만들거나 열면 링크를 따라 저장소 밖 파일을 만들거나 자른다. `O_NOFOLLOW` 라 검사 뒤
-    루트가 링크로 바뀌어도 따라가지 않는다. 경합(`BlockingIOError`)은 조용히 False, 그 밖의
-    실패는 `[<tag>]` 로 시작하는 줄 하나를 stderr 에 내고 False.
+    만들거나 열면 링크를 따라 저장소 밖 파일을 만들거나 자른다. 경합(`BlockingIOError`)은
+    조용히 False, 그 밖의 실패는 `[<tag>]` 로 시작하는 줄 하나를 stderr 에 내고 False.
+
+    `O_NOFOLLOW` 는 루트의 **마지막 성분**이 링크일 때 락을 거부할 뿐이다. 조상(`.claude`)의
+    링크는 막지 못하고, 호출자의 순회는 이 fd 가 아니라 경로 문자열을 다시 풀므로 락을 잡은
+    뒤 경로가 링크로 바뀌는 동시 교체도 막지 못한다. 막는 대상은 저장소에 커밋된 정적 링크이고,
+    그 판정은 호출자가 이 락보다 먼저 `root_escapes` 로 한다.
     """
     try:
         dfd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)

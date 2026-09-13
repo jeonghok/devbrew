@@ -4,11 +4,14 @@
 
 ### Changed
 
-- **GC 의 루트 락과 루트 탈출 판정이 공용 정본으로 옮겨갔다.** `scripts/spec-distill-gc.py` 가 직접 쓰던 루트 디렉토리 fd 락은 `gc_common.locked_root` 가, 루트 탈출 판정은 `gc_common.root_escapes` 가 한다. `state_path.state_root_escapes` 는 없어졌고 두 호출자(GC · SessionEnd 정리 훅)가 그 함수를 직접 부른다 — `state_path.py` 는 설치본 펜스가 홀로 부르는 CLI 라 `gc_common` 에 기대지 않게 뒀다. 동작과 stderr 문구는 바뀌지 않는다. quality-gates 7.5.3 이 같은 함수로 자기 GC 의 같은 결함을 고친다. `scripts/gc_common.py` 사본을 정본에 맞췄다.
+- **GC 의 루트 락과 루트 탈출 판정이 공용 정본으로 옮겨갔다.** `scripts/spec-distill-gc.py` 가 직접 쓰던 루트 디렉토리 fd 락은 `gc_common.locked_root` 가, 루트 탈출 판정은 `gc_common.root_escapes` 가 한다. `state_path.state_root_escapes` 는 없어졌고 두 호출자(GC · SessionEnd 정리 훅)가 그 함수를 직접 부른다 — `state_path.py` 는 설치본 펜스가 홀로 부르는 CLI 라 `gc_common` 에 기대지 않게 뒀다. 이관 자체는 동작을 바꾸지 않는다(바뀐 두 가지는 아래 Fixed). quality-gates 7.5.3 이 같은 함수로 자기 GC 의 같은 결함을 고친다. `scripts/gc_common.py` 사본을 정본에 맞췄다.
 
 ### Fixed
 
 - **3.0.0 이 공용 락 `shared/tests/test_skill_reference_pointers.sh` 를 RED 로 남겼다.** `reviewing-spec` 의 두 `PROFILE=` 줄(`## 프로필` · codex 게이트 펜스)이 `$SD/references/…` 모양이 되어, 그 락이 알아보는 포인터 접두사(`${CLAUDE_PLUGIN_ROOT…}/…` · `plugins/<p>/…` · `(../)*references/…`) 밖으로 나갔다 — 락은 모르는 접두사를 재해석하지 않고 거부한다. 두 줄을 `${CLAUDE_PLUGIN_ROOT:-$SD}/references/…` 로 바꿨다. 실행 시 값은 같다 — 이 형태는 로드 시 치환되지 않고 Bash 환경에 `CLAUDE_PLUGIN_ROOT` 가 없으면 `$SD` 로 풀린다. 3.0.0 의 검증이 spec-distill 스위트와 공용 락 둘만 돌려 이 락을 보지 못했다.
+- **GC 가 매달린 루트 링크에서 조용히 끝났다.** 존재 검사가 탈출 판정보다 앞이라, `.claude/spec-distill` 이 없는 곳을 가리키는 링크면 거부 줄 없이 끝났다. 이제 탈출 판정이 먼저다 — realpath 는 없는 경로도 풀므로 `.claude` 가 없는 저장소는 거부되지 않는다.
+- **거부 줄 두 곳(GC · SessionEnd 정리)이 링크 대상 경로를 옮겨 적었다.** 저장소가 정한 문자열이다. 이제 「state root '<루트>' 가 심볼릭 링크를 거쳐 제자리 밖으로 풀린다」로 끝나고 대상은 적지 않는다. 앞머리(`[spec-distill] GC 거부` · `세션 정리 거부`)는 그대로다.
+- 락: `tests/test_gc.py` 의 `test_15_dangling_root_link_announced` · `test_16_refusal_line_does_not_echo_link_target`, `tests/test_session_end_cleanup.py` 의 `test_refusal_lines_do_not_echo_link_target`.
 
 ## [3.0.0] — 2026-09-13
 
