@@ -434,14 +434,16 @@ class TestReviewingSpecContract(unittest.TestCase):
 
     def test_new_input_contract_present(self):
         t = self.SKILL.read_text(encoding="utf-8")
-        # 엔진 상태는 세션 아래 문서별 디렉토리다(spec-distill 3.1.0 · R78) — 세션 리터럴 대신 그 도출 줄을 잰다.
-        self.assertIn('STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for '
-                      '--root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}"', t)
         self.assertIn("<!-- review-entry:begin -->", t)
         self.assertIn("<!-- uncommitted-check:begin -->", t)
         m = re.search(r"^## 입력\n(.*?)^## ", t, re.S | re.M)
         self.assertIsNotNone(m, "## 입력 절을 못 찾았다")
         self.assertIn("호출 인자", m.group(1))
+        # 엔진 상태는 세션 아래 문서별 디렉토리다(spec-distill 3.1.0 · R78) — 세션 리터럴 대신 그 도출 줄을 잰다.
+        # `## 입력` 절 안에서 잰다 — 같은 줄을 싣는 profile-content 펜스가 파일 전체 검색을 대신 만족시키지 못하게
+        # (옛 세션 리터럴은 `## 입력` 에만 있었다).
+        self.assertIn('STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for '
+                      '--root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}"', m.group(1))
 
     def test_fence_placement(self):
         """정적 배치만 잰다 — 모델이 이 순서를 따르는지는 재지 못한다(AC14 수동 e2e 몫).
