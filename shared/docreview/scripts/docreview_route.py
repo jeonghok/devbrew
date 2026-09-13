@@ -99,15 +99,17 @@ def _permit_covers(st, n, anchor) -> bool:
 
 
 # ── prepare-recritic ─────────────────────────────────────────────────────
-def _codex_staleness(st, path):
-    """이 codex 파일이 이번 라운드의 산출물이 아닐 사유 — 이번 라운드 것이면 None.
+def _round_staleness(st, path, predates):
+    """이 리뷰어 산출물 파일이 이번 라운드의 것이 아닐 사유 — 이번 라운드 것이면 None.
 
-    산출물 경로는 세션과 문서의 순수 함수라 같은 문서의 라운드마다 같은 파일이고, 직전 라운드의 산출물과 이번
-    라운드의 것은 내용(스키마·마커)으로 못 가른다. 판별자는 시점이다: `begin-round` 가 남긴
-    라운드 시작 표식보다 먼저 쓰인 파일은 직전 라운드 것이다. 진입 중화가 불가능한 권한
-    조합(상태 디렉토리와 그 파일이 둘 다 쓰기 불가, 상태 파일은 쓰기 가능)에서도 1단계는
-    통과하므로 그 조합의 집행은 여기 하나다. 표식이 없거나 정수가 아니면 판별할 수 없으므로
-    부재로 닫고, 표식과 같은 시각도 앞뒤를 가를 수 없으므로 부재 쪽으로 닫는다.
+    codex · critic 두 산출물이 같은 규칙을 쓴다(사유 이름 `predates` 만 다르다). 산출물 경로는 세션과
+    문서의 순수 함수라 같은 문서의 라운드마다 같은 파일이고, 직전 라운드의 산출물과 이번 라운드의 것은
+    내용(스키마·마커)으로 못 가른다. 판별자는 시점이다: `begin-round` 가 남긴 라운드 시작 표식보다 먼저
+    쓰인 파일은 직전 라운드 것이다. codex 쪽은 진입 중화가 불가능한 권한 조합(상태 디렉토리와 그 파일이
+    둘 다 쓰기 불가, 상태 파일은 쓰기 가능)에서도 1단계가 통과하므로 그 조합의 집행이 여기 하나고,
+    critic 쪽은 탐지를 dispatch 하지 못한 라운드(프로필 판독 실패 등)에 직전 라운드의 탐지 출력이 같은
+    자리에 남을 수 있다. 표식이 없거나 정수가 아니면 판별할 수 없어 그 사유를 내고, 표식과 같은 시각도
+    앞뒤를 가를 수 없으므로 `predates` 쪽으로 닫는다.
     """
     started = ((st.get("rounds") or {}).get(str(st.get("round"))) or {}).get("started_mtime_ns")
     if started is None:
@@ -115,7 +117,7 @@ def _codex_staleness(st, path):
     if isinstance(started, bool) or not isinstance(started, int):
         return "round_start_unreadable"
     if path.stat().st_mtime_ns <= started:
-        return "codex_predates_round"
+        return predates
     return None
 
 
@@ -131,16 +133,27 @@ def cmd_prepare(a) -> int:
 
     degrade = {"critic_dead": False, "layer2_missing": False, "codex_absent": False, "codex_reason": None}
     items = []
-    undecodable = None
-    try:
-        text = Path(a.critic).read_text(encoding="utf-8") if Path(a.critic).is_file() else ""
-    except UnicodeDecodeError:
-        # 깨진 critic 출력 — 설계 §9 의 sentinel 깨짐과 같은 판정(critic 사망 → 재dispatch 1회 → 「미검증」)
-        text, undecodable = "", "undecodable"
+    critic = Path(a.critic)
+    critic_why = None    # critic 사망 사유 — None 이면 층 1 블록의 판정에 맡긴다
+    text = ""
+    if critic.is_file():
+        # 라운드 시작 표식보다 먼저(또는 같은 시각에) 쓰인 critic 출력은 직전 라운드 것이다 — 탐지를 dispatch
+        # 하지 못한 라운드에 같은 자리에 남은 출력을 이번 라운드의 탐지로 섭취하지 않는다(codex 와 같은 판별).
+        # 표식 부재 · 비정수(`round_start_unrecorded` · `round_start_unreadable`)는 critic 을 닫지 않는다 —
+        # 그 두 사유로 부재가 되는 것은 아래 codex 축이다.
+        if _round_staleness(st, critic, "critic_predates_round") == "critic_predates_round":
+            critic_why = "critic_predates_round"
+        else:
+            try:
+                text = critic.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                # 깨진 critic 출력 — 설계 §9 의 sentinel 깨짐과 같은 판정(critic 사망 → 재dispatch 1회 → 「미검증」)
+                critic_why = "undecodable"
     l1, e1 = extract_block(text, "docreview-layer1")
-    if undecodable or e1 or not isinstance(l1, list):
+    critic_why = critic_why or e1 or (None if isinstance(l1, list) else "not a list")
+    if critic_why:
         degrade["critic_dead"] = True
-        ev("source_failed", "doc-critic", "layer1 block %s" % (undecodable or e1 or "not a list"), True)
+        ev("source_failed", "doc-critic", "layer1 block %s" % critic_why, True)
     else:
         for i, it in enumerate(l1, 1):
             n1 = normalize(it, 1, "c", i, L)
@@ -158,7 +171,7 @@ def cmd_prepare(a) -> int:
                     items.append(("critic", n2))
     cx, stale = None, None
     if a.codex and Path(a.codex).is_file():
-        stale = _codex_staleness(st, Path(a.codex))
+        stale = _round_staleness(st, Path(a.codex), "codex_predates_round")
         if stale is None:
             try:
                 cx = yaml.safe_load(Path(a.codex).read_text(encoding="utf-8"))
