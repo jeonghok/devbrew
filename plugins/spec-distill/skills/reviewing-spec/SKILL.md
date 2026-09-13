@@ -202,7 +202,8 @@ Read 가 거부된다. 탐지 dispatch 직전에(재dispatch 포함) 아래 펜�
 `<profile>` 슬롯에 싣는다. 펜스의 rc 가 0 이 아니면 dispatch 하지 않는다 — 펜스가 critic 출력 파일
 (`$STATE_DIR/critic.txt`)을 비우고(`$STATE_DIR` 이 비면 건너뛴다) 5단계가 그것을 critic 사망(rc 4)으로 읽어
 재dispatch 1회(이 펜스부터 다시), 또 실패면 「미검증」이다. 엔진도 라운드 시작보다 오래된 critic 파일을 부재로
-읽는다(`critic_predates_round`).
+읽는다(`critic_predates_round`). `$spec_path` 는 이 펜스와 **같은 Bash 호출**에서 대입한다(codex 게이트 펜스와
+같다) — 새 셸에는 앞 호출의 대입이 남지 않아 `$STATE_DIR` 이 비고, 그러면 펜스는 비움을 건너뛰고 그 사실을 알린다.
 
 <!-- profile-content:begin -->
 ```bash
@@ -213,10 +214,15 @@ STATE_DIR="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/docr
 PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/design-doc.md"
 prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
-  echo "[spec-distill] 프로필 내용을 읽지 못했다(cat rc $prof_rc): $PROFILE — 탐지 · 재비판을 dispatch 하지 않는다. critic 출력 파일을 비우고 5단계로 간다(critic 사망 → 재dispatch 1회 → 「미검증」)." >&2
+  echo "[spec-distill] 프로필 내용을 읽지 못했다(cat rc $prof_rc): $PROFILE — 탐지 · 재비판을 dispatch 하지 않는다. 5단계가 critic 사망으로 읽는다(재dispatch 1회 → 「미검증」)." >&2
   if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then
-    { : > "$STATE_DIR/critic.txt"; } 2>/dev/null \
-      || echo "[spec-distill] critic 출력 파일($STATE_DIR/critic.txt)을 비우지 못했다 — 5단계가 라운드 시작보다 오래된 그 파일을 부재로 읽는다(critic_predates_round)." >&2
+    if { : > "$STATE_DIR/critic.txt"; } 2>/dev/null; then
+      echo "[spec-distill] critic 출력 파일($STATE_DIR/critic.txt)을 비웠다." >&2
+    else
+      echo "[spec-distill] critic 출력 파일($STATE_DIR/critic.txt)을 비우지 못했다 — 5단계가 라운드 시작보다 오래된 그 파일을 부재로 읽는다(critic_predates_round)." >&2
+    fi
+  else
+    echo "[spec-distill] critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패(spec_path='${spec_path:-}' · harness_sid='${harness_sid:-}' · STATE_DIR='${STATE_DIR:-}'). spec_path 는 이 펜스와 같은 Bash 호출에서 대입한다. 5단계는 라운드 시작보다 오래된 critic 파일을 부재로 읽는다(critic_predates_round)." >&2
   fi
   exit 1
 fi

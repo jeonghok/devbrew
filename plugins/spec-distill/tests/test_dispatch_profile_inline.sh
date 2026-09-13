@@ -72,13 +72,16 @@ cp "$ROOT/shared/tests/fixtures/docreview/brief-sample.md" "$DOCS/brief-sample.m
 cp "$ROOT/shared/tests/fixtures/docreview/design-sample.md" "$DOCS/design-sample.md"
 printf -- '---\nx: 1\n---\n\n## 6. 사용자 원문\n\n- id: S2\n  source: verbatim\n  round: 1\n  text: "둘째 발화"\n' > "$DOCS/brief-sample.audit.md"
 
-run_fence() {   # run_fence <셀> <펜스 파일> <플러그인 루트> — stdout·stderr·rc 를 scratch 에 남긴다
+run_fence() {   # run_fence <셀> <펜스 파일> <플러그인 루트> [nodoc] — stdout·stderr·rc 를 scratch 에 남긴다
+  # nodoc: 문서 슬롯(PAYLOAD · AUDIT · spec_path)을 넘기지 않는다 — 같은 Bash 호출에서 대입하지 않은 호출이다.
   local cell="$1" fence="$2" pr="$3" home="$SCRATCH/$1"
+  local docvars=(PAYLOAD="$DOCS/brief-sample.md" AUDIT="$DOCS/brief-sample.audit.md" spec_path="$DOCS/design-sample.md")
+  [ "${4:-}" = nodoc ] && docvars=()
   mkdir -p "$home/.claude/spec-distill/$cell"
   printf -- '---\nsession_id: %s\n---\n\nbody\n' "$cell" > "$home/.claude/spec-distill/$cell/state.local.md"
   ( cd "$home" && env -i PATH="$BASE" HOME="$home" PYTHONPATH="$YAML_SITE" PYTHONDONTWRITEBYTECODE=1 \
       CLAUDE_PLUGIN_ROOT="$pr" DEVBREW_SPEC_DISTILL_SESSION_ID="$cell" \
-      PAYLOAD="$DOCS/brief-sample.md" AUDIT="$DOCS/brief-sample.audit.md" spec_path="$DOCS/design-sample.md" bash "$fence" ) \
+      ${docvars[@]+"${docvars[@]}"} bash "$fence" ) \
       >"$SCRATCH/$cell.out" 2>"$SCRATCH/$cell.err"
   echo $? > "$SCRATCH/$cell.rc"
 }
@@ -157,6 +160,17 @@ for spec in "reviewing-brief:brief.md:3" "reviewing-spec:design-doc.md:2"; do
       assert_eq "$(grep -c . "$SCRATCH/no-$sk-$mode.out" || true)" "0" "$sk X($mode): 그때 stdout 은 비었다 (빈 슬롯으로 dispatch 할 거리가 없다)"
       assert_contains "$(cat "$SCRATCH/no-$sk-$mode.err")" "dispatch 하지 않는다" "$sk X($mode): 그때 loud advisory 가 dispatch 금지를 말한다"
       assert_eq "$(wc -c < "$seed_no" 2>/dev/null | tr -d ' ')" "0" "$sk X($mode): 그때 실패 분기가 \$STATE_DIR/critic.txt(직전 라운드 critic 출력)를 비운다"
+      assert_contains "$(cat "$SCRATCH/no-$sk-$mode.err")" "critic.txt)을 비웠다." "$sk X($mode): 그때 비운 «뒤에» 「비웠다」고 보고한다"
+      # 문서 슬롯(brief 는 PAYLOAD · spec 은 spec_path)을 같은 Bash 호출에서 대입하지 않은 실패 분기 — STATE_DIR 이 비어
+      # 비움을 건너뛰고, 그 사실을 말하며, 비웠다고 말하지 않는다(PR 3 qg iter 2 F-c).
+      seed_nd="$(seed_critic "nd-$sk-$mode" "$SDOC")"
+      run_fence "nd-$sk-$mode" "$f" "$PR_NOPROF" nodoc
+      assert_eq "$(cat "$SCRATCH/nd-$sk-$mode.rc")" "1" "$sk X($mode) 문서 슬롯 없음: 그래도 rc 1 (dispatch 하지 않는다)"
+      assert_contains "$(cat "$SCRATCH/nd-$sk-$mode.err")" "critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패" \
+        "$sk X($mode) 문서 슬롯 없음: 비움을 건너뛰었다고 말한다"
+      assert_not_contains "$(cat "$SCRATCH/nd-$sk-$mode.err")" "을 비웠다" "$sk X($mode) 문서 슬롯 없음: 비우지 않은 파일을 비웠다고 말하지 않는다"
+      assert_eq "$(cat "$seed_nd" 2>/dev/null)" "$CRITIC_SEED" \
+        "$sk X($mode) 문서 슬롯 없음: 건너뛴 분기는 그 문서의 critic.txt 를 건드리지 않는다 (채워 둔 값 그대로)"
     done
   fi
 done

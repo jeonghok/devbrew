@@ -323,10 +323,15 @@ BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/brief.md"
 prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
-  echo "[spec-distill] 프로필 내용을 읽지 못했다(cat rc $prof_rc): $PROFILE — 탐지 · 재비판을 dispatch 하지 않는다. critic 출력 파일을 비우고 5단계로 간다(critic 사망 → 재dispatch 1회 → 「미검증」)." >&2
+  echo "[spec-distill] 프로필 내용을 읽지 못했다(cat rc $prof_rc): $PROFILE — 탐지 · 재비판을 dispatch 하지 않는다. 5단계가 critic 사망으로 읽는다(재dispatch 1회 → 「미검증」)." >&2
   if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then
-    { : > "$STATE_DIR/critic.txt"; } 2>/dev/null \
-      || echo "[spec-distill] critic 출력 파일($STATE_DIR/critic.txt)을 비우지 못했다 — 5단계가 라운드 시작보다 오래된 그 파일을 부재로 읽는다(critic_predates_round)." >&2
+    if { : > "$STATE_DIR/critic.txt"; } 2>/dev/null; then
+      echo "[spec-distill] critic 출력 파일($STATE_DIR/critic.txt)을 비웠다." >&2
+    else
+      echo "[spec-distill] critic 출력 파일($STATE_DIR/critic.txt)을 비우지 못했다 — 5단계가 라운드 시작보다 오래된 그 파일을 부재로 읽는다(critic_predates_round)." >&2
+    fi
+  else
+    echo "[spec-distill] critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패(PAYLOAD='${PAYLOAD:-}' · harness_sid='${harness_sid:-}' · STATE_DIR='${STATE_DIR:-}'). PAYLOAD 는 이 펜스와 같은 Bash 호출에서 대입한다. 5단계는 라운드 시작보다 오래된 critic 파일을 부재로 읽는다(critic_predates_round)." >&2
   fi
   python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component critic --axis all --status unavailable --reason "프로필 내용 판독 불가(cat rc $prof_rc) — 탐지 dispatch 안 함" >&2 \
     || echo "- (state 기록 실패) component=critic axis=all status=unavailable reason=프로필 내용 판독 불가(cat rc $prof_rc)" >> "$DEGRADE_FALLBACK_FILE"
