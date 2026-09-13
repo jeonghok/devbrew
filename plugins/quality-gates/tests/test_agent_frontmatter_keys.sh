@@ -138,23 +138,50 @@ fi
 #     따로 받아 FAIL 메시지에만 싣는다 — 둘을 섞으면 시작 시 경고 한 줄이 판정을 바꾼다(섞던 옛 판본은
 #     PyYAML 부재를 출력 전체의 완전 일치로 알아봤고, 경고 한 줄이 끼면 L0 가 아무것도 안 잰 채 통과했다).
 #   - PyYAML 은 스캔 루트 밖에서만 온다. 이 락은 스캔 루트로 cd 한 뒤 `python3 -c` 로 돌아 sys.path 첫 자리가
-#     cwd 다 — 스캔 루트에 심은 `yaml.py` · `yaml/` 가 PyYAML 보다 먼저 import 돼 완주 신호를 위조할 수 있었다.
-#     그래서 import 전에 `""` · `"."` · cwd 의 realpath 를 sys.path 에서 빼고, import 뒤 `yaml.__file__` 의
-#     realpath 가 스캔 루트 안이면 stderr `PYYAML_SHADOWED` + rc 3 이다. `python3 -I` 는 쓰지 않는다 —
+#     cwd 이고, PYTHONPATH(절대 · 상대) · 루트 안 venv · editable 설치도 루트 아래 경로를 sys.path 에 싣는다. 거기
+#     심은 `yaml.py` 나 PyYAML 이 import 하는 모듈의 가짜(`datetime.py` — 이때 `yaml.__file__` 은 정상이다)는 import
+#     도중에 완주 신호를 찍고 끝낼 수 있다 — import 뒤의 검사로는 늦다. 그래서 import **전에** 스캔 루트 자신 또는
+#     그 아래인 sys.path 항목을 전부 뺀다(루트 안 venv 의 PyYAML 도 쓰지 않는다 — 루트 밖 인터프리터의 PyYAML 을
+#     요구한다). 판정은 문자열 접두어가 아니라 `(st_dev, st_ino)` 조상 걷기다 — APFS 에서 대소문자만 다른 경로는
+#     문자열로는 루트 밖으로 보인다. 아직 없는 항목은 realpath 의 실재하는 조상으로 판정한다(루트 아래의 없는
+#     경로도 뺀다 — 거기 무엇이 생길지 이 락은 모른다).
+#     import 뒤 `yaml.__file__` 이 같은 판정으로 루트 안이면 stderr `PYYAML_SHADOWED` + rc 3 이다 — 두 번째 벽으로,
+#     시작 과정이 루트 안의 yaml 을 이미 import 해 둔 경우(sys.modules)를 막는다. `python3 -I` 는 쓰지 않는다 —
 #     PYTHONPATH 까지 버려 변이 테스트의 주입 셀이 공허해진다.
+#     남는 것(이 락이 막을 수 없다): `sitecustomize` · `usercustomize` · `.pth` 는 인터프리터 시작 시 L0_PY 보다
+#     먼저 돈다 — 실행 환경이 소유하는 표면이다. 그것이 yaml 이 아닌 가짜 모듈(`datetime` 등)을 미리 import 해
+#     두거나 시작 중에 완주 신호를 찍고 끝내면 두 벽 다 보지 못한다.
 L0_PY='
 import os
 import sys
 
-_scan_root = os.path.realpath(os.getcwd())
-sys.path[:] = [p for p in sys.path if p not in ("", ".") and os.path.realpath(p) != _scan_root]
+_root_st = os.stat(os.getcwd())
+_root_id = (_root_st.st_dev, _root_st.st_ino)
+
+
+def _at_or_under_root(p):
+    q = os.path.realpath(p or os.curdir)
+    while True:
+        try:
+            st = os.stat(q)
+        except OSError:
+            st = None
+        if st is not None and (st.st_dev, st.st_ino) == _root_id:
+            return True
+        up = os.path.dirname(q)
+        if up == q:
+            return False
+        q = up
+
+
+sys.path[:] = [p for p in sys.path if not _at_or_under_root(p)]
 try:
     import yaml
 except ImportError:
     sys.stderr.write("PYYAML_MISSING\n")
     sys.exit(3)
-_yaml_file = os.path.realpath(getattr(yaml, "__file__", None) or "")
-if _yaml_file == _scan_root or _yaml_file.startswith(_scan_root + os.sep):
+_yaml_file = getattr(yaml, "__file__", None) or ""
+if not _yaml_file or _at_or_under_root(_yaml_file):
     sys.stderr.write("PYYAML_SHADOWED %s\n" % _yaml_file)
     sys.exit(3)
 

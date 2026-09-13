@@ -259,7 +259,13 @@ expect RED "개행이 든 파일명의 안 닫힌 따옴표 — 경로 키 레�
 rm -f "$ODDF"
 
 # 파이썬 시작 환경을 흔드는 셀 — PYTHONPATH 앞자리에 둔 모듈이 락의 파이썬에만 얹힌다.
-SH_NOYAML="$TMP/py-noyaml"; SH_NOISE="$TMP/py-noise"; SH_MUTE="$TMP/py-mute"; SH_ARGV="$TMP/py-argv"; SH_SHIFT="$TMP/py-shift"; SH_EXIT="$TMP/py-exit"
+# 주입 디렉토리는 스캔 루트(`$TMP`) **밖**의 형제 mktemp 디렉토리다(PR 3 qg iter 3) — 락은 import 전에 스캔 루트
+# 아래의 sys.path 항목을 뺀다. 루트 안에 두면 `yaml.py` 를 싣는 셀(c)이 그 제거로 공허해진다(PyYAML 부재가 아니라
+# 진짜 PyYAML 로 읽혀 다른 이유로 RED 가 된다). sitecustomize 는 시작 시 돌아 그 제거와 무관하다.
+SHROOT="$(mktemp -d)" || { echo "FAIL: mktemp 실패 (주입 디렉토리)"; exit 1; }
+[ -n "$SHROOT" ] && [ -d "$SHROOT" ] || { echo "FAIL: SHROOT 가 유효한 디렉토리가 아님"; exit 1; }
+trap 'rm -rf "$TMP" "$SHROOT"' EXIT
+SH_NOYAML="$SHROOT/py-noyaml"; SH_NOISE="$SHROOT/py-noise"; SH_MUTE="$SHROOT/py-mute"; SH_ARGV="$SHROOT/py-argv"; SH_SHIFT="$SHROOT/py-shift"; SH_EXIT="$SHROOT/py-exit"
 mkdir -p "$SH_NOYAML" "$SH_NOISE" "$SH_MUTE" "$SH_ARGV" "$SH_SHIFT" "$SH_EXIT" || exit 1
 printf 'raise ImportError("PyYAML shadowed by the L0 mutation cell")\n' > "$SH_NOYAML/yaml.py"
 printf 'import sys\nsys.stderr.write("sitecustomize: startup warning\\n")\n' > "$SH_NOYAML/sitecustomize.py"
@@ -305,8 +311,12 @@ expect_env RED "완주 신호가 찍혔어도 rc ≠ 0 이면 FAIL 이다 (무�
 # ── L0 완주 신호 위조 — 스캔 루트의 모듈이 PyYAML 을 가린다 (PR 3 qg iter 2) ───────────────
 # 락은 스캔 루트로 cd 한 뒤 `python3 -c` 로 돈다 — sys.path 첫 자리가 cwd 라, 스캔 루트에 심은 yaml.py ·
 # yaml/ 가 PyYAML 보다 먼저 import 돼 `L0_DONE <파일 수> 0` 을 찍고 끝낼 수 있었다. (f1)(f2) 는 수정 전 락에서
-# GREEN 이었다(우회 재현 — 리포트에 출력). (f3) 은 위조 없이 모든 frontmatter 를 통과시키는 가짜 yaml 을 스캔
-# 루트 아래 디렉토리에서 PYTHONPATH 로 싣는다 — cwd 제거로는 안 막히고 import 뒤 위치 검사가 막는다.
+# GREEN 이었다(우회 재현 — 리포트에 출력).
+# (f3)(f3c)(f4) — PR 3 qg iter 3. 스캔 루트 **아래** 디렉토리를 PYTHONPATH(절대 · 상대 · 대소문자 변형)로 싣는 위조.
+# (f3) 은 FORGE yaml.py, (f4) 는 PyYAML 이 import 하는 datetime 의 가짜다 — `yaml.__file__` 은 정상이라 import 뒤
+# 검사로는 못 잡는다. (f3)(f4) 는 수정 전 락(dbae116b)에서 GREEN 이었다(우회 재현 — 리포트에 출력). import 전에 루트
+# 아래 sys.path 항목을 빼는 첫 벽이 막는다. (f5) 는 두 번째 벽(import 뒤 `yaml.__file__` 위치 검사)을 잰다 — 루트 밖
+# sitecustomize 가 시작 시 루트 안의 가짜 yaml 을 미리 import 해 두면(sys.modules) 첫 벽은 늦고 두 번째 벽만 막는다.
 FORGE='import sys\nprint("L0_DONE %%d 0" %% (len(sys.argv) - 1))\nraise SystemExit(0)\n'
 echo "== L0 (f1): 스캔 루트에 심은 yaml.py 가 완주 신호를 위조한다 =="
 write_raw 'description: "unclosed'
@@ -318,8 +328,26 @@ mkdir -p "$TMP/yaml" || exit 1
 printf "$FORGE" > "$TMP/yaml/__init__.py"
 expect RED "스캔 루트의 yaml 패키지가 L0_DONE 을 위조해도 통과시키지 않는다"
 rm -rf "$TMP/yaml"
-echo "== L0 (f3): 스캔 루트 아래의 가짜 yaml 이 모든 frontmatter 를 통과시킨다 =="
+echo "== L0 (f3): 스캔 루트 아래 vendor/yaml.py 가 PYTHONPATH 로 완주 신호를 위조한다 =="
+write_raw 'description: "unclosed'
 mkdir -p "$TMP/vendor" || exit 1
+printf "$FORGE" > "$TMP/vendor/yaml.py"
+expect_env RED "PYTHONPATH(절대)=<루트>/vendor 의 yaml.py 위조 — import 전에 루트 아래 항목이 빠진다" PYTHONPATH="$TMP/vendor"
+expect_env RED "PYTHONPATH(상대)=vendor 의 yaml.py 위조 — 락은 루트로 cd 하므로 상대 항목도 루트 아래다" PYTHONPATH=vendor
+echo "== L0 (f3c): 대소문자만 다른 루트 경로의 vendor/yaml.py (APFS) =="
+VARIANT="$(dirname "$TMP")/$(basename "$TMP" | tr 'a-zA-Z' 'A-Za-z')"
+if [ "$VARIANT" != "$TMP" ] && [ -d "$VARIANT/vendor" ]; then
+  expect_env RED "대소문자 변형 PYTHONPATH — 문자열로는 루트 밖이지만 (st_dev, st_ino) 조상 걷기로 루트 아래다" PYTHONPATH="$VARIANT/vendor"
+else
+  echo "  (f3c 건너뜀 — 대소문자를 구별하는 파일시스템이라 변형 경로가 없다. 이 셀은 재지 않는다)"
+fi
+rm -f "$TMP/vendor/yaml.py"
+echo "== L0 (f4): 스캔 루트 아래 vendor/datetime.py — PyYAML 이 import 하는 모듈의 위조 =="
+printf "$FORGE" > "$TMP/vendor/datetime.py"
+expect_env RED "PYTHONPATH(절대) 의 datetime.py 위조 — yaml.__file__ 은 정상이라 import 뒤 검사로는 못 잡는다" PYTHONPATH="$TMP/vendor"
+expect_env RED "PYTHONPATH(상대) 의 datetime.py 위조" PYTHONPATH=vendor
+rm -f "$TMP/vendor/datetime.py"
+echo "== L0 (f5): 시작 시 미리 import 된 루트 안의 가짜 yaml — 두 번째 벽 =="
 cat > "$TMP/vendor/yaml.py" <<'PY'
 class MappingNode(object):
     pass
@@ -333,7 +361,9 @@ class SafeLoader(object):
 def load(text, Loader=None):
     return {"tools": "Read"}
 PY
-expect_env RED "import 된 yaml 이 스캔 루트 안에 있으면 FAIL 이다 (PYYAML_SHADOWED)" PYTHONPATH="$TMP/vendor"
+SH_PRE="$SHROOT/py-preimport"; mkdir -p "$SH_PRE" || exit 1
+printf 'import sys\nsys.path.insert(0, "%s")\nimport yaml\ndel sys.path[0]\n' "$TMP/vendor" > "$SH_PRE/sitecustomize.py"
+expect_env RED "시작 과정이 루트 안의 yaml 을 이미 import 해 뒀으면 import 뒤 위치 검사가 FAIL 로 막는다 (PYYAML_SHADOWED)" PYTHONPATH="$SH_PRE"
 rm -rf "$TMP/vendor"
 echo "== L0 (f) 보강: 심은 모듈이 없으면 정상 agent 는 통과 =="
 write_agent 'tools: Read, Grep, Glob'
