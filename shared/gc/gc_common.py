@@ -7,13 +7,15 @@
 # 파이썬에서도 같은 부류의 사고를 막기 위해 root 밖 경로를 거부한다.
 """devbrew TTL-GC 공통 조각 정본.
 
-**담는 것** — TTL 계산 · 세션 디렉토리 나이 판정 · 안전 삭제(경로 검증 포함).
+**담는 것** — TTL 계산 · 세션 디렉토리 나이 판정 · 안전 삭제(경로 검증 포함) ·
+받은 state root 에 대한 두 안전 검사(`root_escapes` · `locked_root`).
 
 **담지 않는 것** — state root 해석. 그것이 quality-gates ↔ spec-distill 에서 다른
 부분이고(전자는 payload cwd 상대, 후자는 git-aware `--git-common-dir`), 부분 사본의
 "각자 고유 본문"이다. 플러그인 **안**의 중복은 그 플러그인의 파일 하나로 접는다
 (quality-gates 는 `plugins/quality-gates/scripts/state_path.py`, spec-distill 은
-이미 `state_path.py` 를 갖고 있다).
+이미 `state_path.py` 를 갖고 있다). 두 안전 검사는 해석이 아니라 **이미 해석된 루트**에
+대한 검사라 여기 산다 — 같은 보안 컨트롤을 두 GC 가 따로 가지면 한쪽만 고쳐진다.
 
 **배포 방식** — 실행 지점(`if __name__`)이 없는 import-only 정본이다. 각 플러그인의
 `scripts/` 에 머리 한 줄짜리 마커를 단 물리 사본으로 실린다(설치본에는 `shared/` 가
@@ -22,11 +24,13 @@
 """
 from __future__ import annotations
 
+import fcntl
 import os
 import shutil
 import sys
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 # 갓 만들어진 **빈** 세션 폴더가 첫 write 전에 수집되는 것을 막는 창.
@@ -54,6 +58,58 @@ def ttl_ns(env_name: str, default_hours: int = 24) -> int:
     except ValueError:
         n = default_hours
     return n * 3600 * 1_000_000_000
+
+
+def root_escapes(root, namespace: str) -> bool:
+    """`root`(`<repo>/.claude/<namespace>`)가 심볼릭 링크를 거쳐 제자리 밖으로 풀리면 True.
+
+    `<namespace>` 자신이나 `.claude` 가 링크면 참이다. 조상의 링크(macOS `/tmp` →
+    `/private/tmp`)는 양쪽이 똑같이 풀려 거짓이다. 지우는 쪽은 참이면 아무것도 지우지
+    않는다 — 저장소가 커밋한 링크는 저장소 밖을 가리킬 수 있다.
+    """
+    return os.path.realpath(root) != os.path.join(
+        os.path.realpath(Path(root).parent.parent), ".claude", namespace)
+
+
+@contextmanager
+def locked_root(root, tag: str):
+    """state root 디렉토리 자신의 fd 에 배타 락을 건다. 잡았으면 True, 못 잡았으면 False 를 낸다.
+
+    락 파일을 쓰지 않는다 — 루트 아래 고정 이름은 저장소가 링크로 커밋할 수 있어서, 그것을
+    만들거나 열면 링크를 따라 저장소 밖 파일을 만들거나 자른다. `O_NOFOLLOW` 라 검사 뒤
+    루트가 링크로 바뀌어도 따라가지 않는다. 경합(`BlockingIOError`)은 조용히 False, 그 밖의
+    실패는 `[<tag>]` 로 시작하는 줄 하나를 stderr 에 내고 False.
+    """
+    try:
+        dfd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError as exc:
+        print(
+            "[{0}] GC 거부 — state root '{1}' 를 디렉토리로 열 수 없다"
+            "(링크 · 디렉토리 아님 · 권한): {2}".format(tag, root, exc),
+            file=sys.stderr,
+        )
+        yield False
+        return
+    try:
+        try:
+            fcntl.flock(dfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            yield False
+            return
+        except OSError as exc:
+            print("[{0}] GC 건너뜀 — state root 락 실패: {1}".format(tag, exc),
+                  file=sys.stderr)
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            try:
+                fcntl.flock(dfd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+    finally:
+        os.close(dfd)
 
 
 def folder_mtime_ns(folder: Path) -> int:
@@ -93,6 +149,7 @@ def safe_rmtree(target, root) -> bool:
     root 안의 심볼릭 링크가 밖을 가리키는 경우는 이 검사를 통과하지만, 그때는
     `shutil.rmtree` 자신이 심볼릭 링크를 거부하므로(디렉토리가 아니다) 밖이 지워지지
     않는다. 여기서 판정하는 것은 **경로 문자열이 root 밖을 가리키는가** 하나다.
+    root 자신이 링크인 경우는 이 검사로 닫히지 않는다 — 그것은 `root_escapes` 가 맡는다.
 
     True 는 "검증을 통과해 `rmtree` 를 호출했다"는 뜻이지 삭제 성공 보장이 아니다
     (`ignore_errors=True` 라 권한 오류 등은 조용히 넘어간다) — 호출자가 존재
@@ -121,7 +178,7 @@ def safe_rmtree(target, root) -> bool:
 def gc_one(folder: Path, ttl: int, root) -> bool:
     """폴더 하나를 TTL 기준으로 수집. 실제로 걷어냈으면 True.
 
-    레이스 가드 2층(호출자의 fcntl 락까지 합쳐 3층): ① `DOUBLE_STAT_DELAY_S`
+    레이스 가드 2층(호출자의 `locked_root` 락까지 합쳐 3층): ① `DOUBLE_STAT_DELAY_S`
     간격의 double-stat 로 "지금 쓰이는 중"을 걸러내고, ② rename 을 먼저 해
     사라짐을 원자적으로 만든 뒤 지운다. rename 이 성공한 시점에 그 폴더는 이미
     root 에서 사라졌으므로, 뒤이은 삭제가 실패해도 True 다.

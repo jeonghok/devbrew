@@ -3,6 +3,21 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.5.3] — 2026-09-13
+
+### Fixed
+
+- **`tests/test_utf8_explicit.py` 의 예외 목록이 낡아 있었다.** spec-distill 3.0.0 이 `spec-distill-gc.py` 의 락 파일 `open` 을 지워, 그 줄을 가리키던 예외가 offender 모양이 아니게 됐고 `test_the_known_exceptions_are_still_exceptions` 가 RED 였다(그 여파로 `tests/test_codex_backward_compat.sh` 도 「예상 밖 실패」로 RED). 이번 변경이 `qg-gc.py` 의 같은 `open` 도 지우므로 두 예외를 함께 걷고 개수 단언을 3 → 1 로 고쳤다.
+
+### Security
+
+- **TTL-GC 가 state root 아래 `.gc.lock` 을 만들고(`touch`) 쓰기 모드로 열었다(`O_CREAT | O_TRUNC`).** 둘 다 링크를 따라가므로, 저장소가 `.claude/quality-gates/.gc.lock -> <밖의 파일>` 을 커밋하면 `/qg` 시작 한 번에 그 파일이 잘렸다(격리 재현: 32바이트 → 0바이트). 매달린 링크면 저장소 밖에 파일이 생겼고, 디렉토리로 심으면 GC 가 영구히 멈췄다. 이제 락은 루트 디렉토리 자신의 fd(`O_RDONLY | O_DIRECTORY | O_NOFOLLOW`)에 거는 `flock` 이고 락 파일은 없다. 경합은 조용히 건너뛰고, 그 밖의 락 실패와 루트를 열 수 없는 경우는 stderr 한 줄로 알린다.
+- **`.claude/quality-gates`(또는 `.claude`) 자신이 저장소 밖을 가리키는 링크면 GC 가 그 너머를 수집했다.** 이름 패턴과 세션 마커가 맞고 TTL 이 지난 디렉토리를 개명 · 삭제했고 밖에 `.gc.lock` 을 만들었다(격리 재현). 이제 루트의 realpath 가 `realpath(cwd)/.claude/quality-gates` 와 다르면 락을 잡기 전에 거부하고 stderr 한 줄로 알린다. 루트 안의 링크 자식도 세션 폴더로 보지 않는다.
+- 두 검사는 공용 정본 `shared/gc/gc_common.py` 의 `root_escapes` · `locked_root` 다. spec-distill 3.0.0 이 같은 결함을 자기 GC 에서만 고쳐 이쪽에 남았던 것을 한 구현으로 모았다(spec-distill 3.0.1 이 같은 함수를 쓴다).
+- `scripts/setup-qg.sh` 가 GC 의 stderr 를 버리지 않는다(`2>/dev/null` 제거) — 거부 · 락 실패 줄이 `/qg` 시작 경로에서 보인다. 정상 실행은 출력이 없다.
+- **알려진 한계(후속):** 링크 루트를 거친 비파괴 쓰기(`setup-qg.sh` 의 상태 폴더 생성과 상태 파일)와, SessionEnd 정리 · `/cancel-qg` 가 자기 세션 폴더를 지우는 경로에는 루트 탈출 검사가 없다. 지우는 대상은 qg 가 스스로 만든 그 세션의 폴더 하나다.
+- 락: `tests/test_qg_gc.py` 의 `QgGcRootSafetyTest`(아홉) · `SetupForwardsGcStderr`. `test_lock_contention_silent_exit` 는 루트 디렉토리 락을 쥐도록 바꿨다. `tests/e2e-scenarios.md` V5 도 루트 디렉토리 락으로 바꿨다.
+
 ## [7.5.2] — 2026-09-13
 
 ### Fixed

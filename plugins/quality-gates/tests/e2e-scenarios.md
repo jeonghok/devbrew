@@ -193,10 +193,11 @@ touch .claude/quality-gates.local.md \
 
 ### V5 — GC lock contention silent
 
-1. Hold the lock from a shell:
+1. Hold the lock from a shell — 락은 state root 디렉토리 자신이다(락 파일 없음):
 ```bash
-exec 9>".claude/quality-gates/.gc.lock"
-flock -n 9 || echo "fail"
+python3 -c 'import fcntl, os, time
+fd = os.open(".claude/quality-gates", os.O_RDONLY | os.O_DIRECTORY)
+fcntl.flock(fd, fcntl.LOCK_EX); print("holding"); time.sleep(600)'
 # (keep shell open with lock held)
 ```
 2. In another terminal, run `/qg --gc`. Should silently exit (GC skipped, no error).
