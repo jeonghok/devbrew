@@ -3,7 +3,7 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [7.5.2] — 2026-09-12
+## [7.5.2] — 2026-09-13
 
 ### Fixed
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.0.0] — 2026-09-12
+## [3.0.0] — 2026-09-13
 
 major인 이유: **설계문서 리뷰의 자동 진입 계약이 깨진다.** Stop 훅(`hooks/review-dispatch.py`)이 턴 경계에서 `reviewing-spec` 을 강제하던 경로를 없애고, 리뷰 진입을 오케스트레이터가 인터뷰 핸드오프 문구와 skill description 을 읽고 스스로 부르는 것으로 바꾼다. 이 자리의 집행(철학 P13 의 hook)이 사라졌다는 사실을 숨기지 않는다 — 리뷰어 분리(Law 2 `tools:` allowlist)는 그대로다. 표준 흐름에서 그 훅은 이미 발동하지 않고 있었다: brainstorming 이 턴 안에서 설계문서를 커밋하고, 훅의 발견은 dirty·untracked 문서만 보았다. 설계: `docs/superpowers/specs/2026-09-10-spec-review-hook-removal-design.md`.
 
