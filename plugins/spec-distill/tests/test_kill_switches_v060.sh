@@ -24,6 +24,9 @@ echo "x" > .claude/spec-distill/old-12345678/state.local.md
 past=$(($(date +%s) - 90000))
 touch -d "@$past" .claude/spec-distill/old-12345678/state.local.md 2>/dev/null \
     || python3 -c "import os; os.utime('.claude/spec-distill/old-12345678/state.local.md', ($past, $past))"
+# 폴더 자신의 mtime 도 늙힌다 — GC 나이는 폴더 자신과 그 아래 모든 항목의 최신 mtime 이다(3.1.0). 늙히지
+# 않으면 방금 만든 폴더의 mtime 이 kill switch 와 무관하게 폴더를 살려 이 칸이 공허해진다.
+python3 -c "import os; os.utime('.claude/spec-distill/old-12345678', ($past, $past))"
 env DEVBREW_SPEC_DISTILL_DISABLE=1 python3 "$PLUGIN_DIR/scripts/spec-distill-gc.py" >/dev/null
 [[ -d .claude/spec-distill/old-12345678 ]] \
     && ok "case 2: global kill switch blocks GC" \
@@ -61,6 +64,7 @@ mkdir -p .claude/spec-distill/ttl-12345678
 echo "x" > .claude/spec-distill/ttl-12345678/state.local.md
 past=$(($(date +%s) - 7200))  # 2h old
 python3 -c "import os; os.utime('.claude/spec-distill/ttl-12345678/state.local.md', ($past, $past))"
+python3 -c "import os; os.utime('.claude/spec-distill/ttl-12345678', ($past, $past))"   # 폴더 자신도(3.1.0)
 env DEVBREW_SPEC_DISTILL_TTL_HOURS=1 python3 "$PLUGIN_DIR/scripts/spec-distill-gc.py" >/dev/null
 [[ ! -d .claude/spec-distill/ttl-12345678 ]] \
     && ok "case 6: TTL override removes 2h-old folder" \

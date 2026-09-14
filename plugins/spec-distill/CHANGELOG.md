@@ -46,7 +46,7 @@ minor 인 이유 — interview brief 리뷰 자리(`reviewing-brief`)가 공유 
   - `NestedAgeTest` — 두 층 아래 신선한 원장이면 보존한다(수정 전 RED). 모든 깊이가 늙었으면 수집한다. 깊은 링크든 직속 링크든 밖의 신선한 파일을 가리켜도 수집한다(직속 링크 셀은 수정 전 RED).
   - `FolderMtimeVanishTest` — 순회 중 사라진 항목을 건너뛴다.
 
-  늙은 세션을 흉내 내던 픽스처(`tests/test_gc.py` 둘 · `tests/test_session_end_cleanup.py` 하나)는 폴더 자신의 mtime 도 늙힌다 — 실제로 늙은 세션은 폴더 mtime 도 늙었다. `skills/framing-requests/SKILL.md` 의 폴더 나이 서술도 고쳤다.
+  늙은 세션을 흉내 내던 픽스처(`tests/test_gc.py` 둘 · `tests/test_session_end_cleanup.py` 둘 · `tests/test_kill_switches_v060.sh` 둘)는 폴더 자신의 mtime 도 늙힌다 — 실제로 늙은 세션은 폴더 mtime 도 늙었다. 늙히지 않으면 방금 만든 폴더의 mtime 이 폴더를 살린다. 수집을 기대하는 칸은 RED 가 되고, kill switch 로 보존을 기대하는 칸(`test_kill_switches_v060.sh` case 2)은 스위치와 무관하게 GREEN 인 공허한 칸이 된다. `skills/framing-requests/SKILL.md` 의 폴더 나이 서술도 고쳤다.
 - **`reviewing-spec` 후보 펜스의 awk 가 `$0` 을 썼다([3.0.0]) — 잠복 결함.** 로드된 skill 본문의 `$0` 은 첫 Skill 인자로 치환된다. 인자가 있는 호출에서는 `awk 'NF && !seen[<경로>]++'` 가 되어 문법 오류(rc 2)로 죽지만, 문서화된 경로는 인자가 있으면 이 펜스를 돌리지 않는다 — 살아 있는 결함은 아니었다. 바뀐 것은 펜스의 텍스트다: 저장소 전체 락 `shared/tests/test_skill_body_no_positional_tokens.sh` 가 그 토큰을 금지해서, 필드 구분자를 git 이 인용 없이 내지 않는 제어 문자 `\037` 로 두고 `$NF`(= 줄 전체)를 키로 쓴다. 순서 보존 · 중복 제거 · 빈 줄 제거는 그대로다. `tests/test_reviewing_spec_entry_fence.sh` 의 후보 셀에 공백이 든 이름 셋(마지막 공백 필드가 같은 둘 + 한글 하나)을 더했다 — `BEGIN{FS="\037"}` 를 지우면 기본 FS 의 `$NF` 가 마지막 공백 필드라 뒤의 둘이 중복으로 지워져 RED 다.
 - **brief 프로필의 `ground_truth` 가 번들의 두 원문 자리를 가리킨다.** 번들이 audit §6 헤딩을 벗겨 리뷰어가 `S2` 이상의 원문을 못 찾았다.
 - **brief 프로필 층 2 에 충실도 범주 셋을 복원했다** — `provenance_mislabel` · `authority_syntax` · `evidence_unsupported`. 옛 critic 의 여섯 범주 중 엔진 전환으로 빠졌던 셋이고, critic 과 codex 프롬프트 둘 다로 흐른다.

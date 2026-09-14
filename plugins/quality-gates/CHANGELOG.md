@@ -20,6 +20,7 @@
   - **어떻게 재나.** 링크는 따라가지 않는다(`os.walk(followlinks=False)` · `os.lstat` — 링크 자신의 mtime 만 센다).
   - **이 플러그인에서 달라지는 것.** 하위 디렉토리에 새 파일이 있는 세션 폴더는 더 이상 수집되지 않는다(덜 지우는 쪽). 세션 폴더의 직속 링크는 더 이상 따라가지 않는다 — 링크 너머의 신선한 파일이 폴더를 살려 두지 못한다.
   - **그대로인 것.** 루트 탈출 · 링크 루트 거부 · 마커 식별.
+  - **픽스처.** `tests/test_cancel_qg.sh` 의 `--gc` 픽스처는 폴더 자신의 mtime 도 늙힌다 — 파일만 늙히면 방금 만든 폴더의 mtime 이 폴더를 살린다.
   - **락.** `tests/test_qg_gc.py` 의 셋이다. 두 층 아래 신선한 파일이면 보존한다(수정 전 RED). 모든 깊이가 늙었으면 수집한다. 직속 · 깊은 링크가 밖의 신선한 파일을 가리켜도 수집한다(수정 전 RED).
   - 전문은 `plugins/spec-distill/CHANGELOG.md` `[3.1.0]`.
 - **지워진 spec-distill brief 러너 · 빌더를 현재형으로 부르던 주석과 산문.** spec-distill 이 `run_brief_codex_reviewer.sh` · `build_brief_codex_prompt.py` 를 지웠다(`plugins/spec-distill/CHANGELOG.md` `[3.1.0]`). 그 이름을 대던 자리 — `scripts/run_codex_reviewer.sh` · `scripts/run_artifact_codex_reviewer.sh` 의 형제 · 계약 주석, `scripts/runner_common.sh` 의 소비자 목록(넷 → 셋), `scripts/codex_prompt_common.py` 의 빌더 목록, 그리고 **모델이 읽는 산문**인 `skills/quality-pipeline/SKILL.md` · `skills/critiquing-artifacts/SKILL.md` 의 exit-3 계약 참조 — 가 없는 파일을 가리키고 있었다. 전부 `run_docreview_codex_reviewer.sh` 와 그 호출자(`reviewing-spec` · `reviewing-brief`)로 재조준했다. 이 플러그인 자신의 동작은 무변경이다.

@@ -68,6 +68,8 @@ echo "PASS /qg --reset (command-file documents behavior)"
 echo "--- /qg --gc TTL fixture ---"
 mkdir -p ".claude/quality-gates/old-sid-deadbeef"
 touch -t 200001010000 ".claude/quality-gates/old-sid-deadbeef/pipeline.md"
+# 폴더 자신의 mtime 도 늙힌다 — GC 나이는 폴더 자신과 그 아래 모든 항목의 최신 mtime 이다(7.6.0).
+touch -t 200001010000 ".claude/quality-gates/old-sid-deadbeef"
 
 # Run real production script (per spec: qg-gc.py is the production tool, no mock).
 # Note: HOME-relative CLAUDE_CODE_SESSION_ID may not be set; pass --session-id to
