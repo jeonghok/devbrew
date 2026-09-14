@@ -58,8 +58,8 @@ fi
 # 주석·heredoc·죽은 분기로 만족될 수 없다: 실행되지 않으면 애초에 mock에 도달하지
 # 않는다.
 #
-# 여섯 호출부 전부를 평시(kill switch 미설정) 1회 실행해 AC21 표의 두 열
-# (`tools.web_search`·`web_search` 모드)을 양방향 대조하고, 웹 ON 세 곳은
+# 도출된 호출부 전부를 평시(kill switch 미설정) 1회 실행해 AC21 표의 두 열
+# (`tools.web_search`·`web_search` 모드)을 양방향 대조하고, 웹 ON 인 곳은
 # **kill switch를 세팅한 채 두 번째로 실행**해 분기가 실제로 두 값을 OFF로
 # 뒤집는지 관측한다 — 헤더가 아니라 effect를 잰다(Critical 1을 직접 겨냥).
 #
@@ -85,7 +85,6 @@ else
     case "$1" in
       run_codex_reviewer.sh) echo off ;;
       run_artifact_codex_reviewer.sh) echo off ;;
-      run_brief_codex_reviewer.sh) echo on ;;
       run_audit_codex_reviewer.sh) echo on ;;
       # Task 14 — 억제 축 네 항목은 초안을 원문·레포 CLAUDE.md 하나와만 대조한다
       # (direction/spec 리뷰와 달리 외부 prior-art 대조가 필요 없다). 그래서
@@ -98,22 +97,31 @@ else
       # 넷 중 brief.md만 `web: true`고 나머지 셋은 `web: false`
       # (plugins/{quality-gates,spec-distill}/references/docreview-profiles/*.md).
       # 이 표는 "러너 자체의 posture"가 아니라 "이 관측 호출(obs_invoke)이 실제로
-      # 넘기는 profile의 posture"를 잰다 — obs_invoke의 docreview arm은 frontmatter
-      # 없는 최소 profile 파일을 만들어 넘기므로(codex_observation.sh) 러너 쪽
-      # 파싱이 `fm={}` → `web=false`로 떨어져 off가 맞다. ON 경로와 kill switch를
-      # **실제로 재는 곳**은 여기가 아니라 `shared/tests/test_docreview_codex.sh`다 —
-      # 그 락이 profile web 필드 × 두 호스트 kill switch의 조합 넷을 실행 관측으로 덮는다.
-      run_docreview_codex_reviewer.sh) echo off ;;
+      # 넘기는 profile의 posture"를 잰다 — 아래 루프 앞에서 `OBS_DOCREVIEW_WEB=true` 로
+      # obs_invoke 가 `web: true` 프로필을 넘기게 하므로 on 이다. 그래서 brief 자리의 웹 ON
+      # 경로가 다른 호출부와 **같은 계약**(두 열 양방향 · kill switch effect · `=yes` 엄격성)
+      # 으로 재진다. 두 배포 경로가 두 호스트 스위치를 하나씩 맡는다(kill_switch_for).
+      # `shared/tests/test_docreview_codex.sh` 는 프로필 web 필드 × 스위치 조합의 `live`
+      # 여부를 따로 잰다.
+      run_docreview_codex_reviewer.sh) echo on ;;
       *) echo '' ;;
     esac
   }
   # ON 사이트에만 의미가 있다. qg 두 곳은 현재 OFF라 이 표에 미도달이지만, ON
   # 전환 시 쓸 이름을 미리 등록해둔다(지금 죽은 스위치를 만들지는 않는다).
-  kill_switch_for() {  # <basename> -> switch var name
-    case "$1" in
-      run_brief_codex_reviewer.sh) echo 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' ;;
+  # docreview 러너는 두 플러그인에 같은 파일로 배포되고 두 호스트 스위치를 모두 본다(P11 OR).
+  # 배포 경로마다 그 호스트의 스위치를 하나씩 맡겨, 두 스위치가 각각 effect·엄격성으로 재진다.
+  # 경로 패턴은 `plugins/` 뒤 구분자 수에 기대지 않는다(수집기 출력이 `plugins//x` 일 수 있다).
+  kill_switch_for() {  # <candidate path> -> switch var name
+    case "$(basename "$1")" in
       run_audit_codex_reviewer.sh) echo 'DEVBREW_PLUGIN_AUDIT_DISABLE_WEB' ;;
       run_codex_reviewer.sh|run_artifact_codex_reviewer.sh) echo 'DEVBREW_QUALITY_GATES_DISABLE_WEB' ;;
+      run_docreview_codex_reviewer.sh)
+        case "$1" in
+          */spec-distill/scripts/*) echo 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' ;;
+          */quality-gates/scripts/*) echo 'DEVBREW_QUALITY_GATES_DISABLE_WEB' ;;
+          *) echo '' ;;
+        esac ;;
       *) echo '' ;;
     esac
   }
@@ -178,6 +186,9 @@ $label_lines
 EOF_LBL
   }
 
+  # docreview 러너를 `web: true` 프로필로 부른다(위 expected_posture 주석) — obs_invoke 가
+  # 이 값으로 관측용 프로필을 만든다(codex_observation.sh).
+  OBS_DOCREVIEW_WEB=true; export OBS_DOCREVIEW_WEB
   candidates="$(codex_candidates)"
   n_cand=0
   [ -n "$candidates" ] && n_cand="$(printf '%s\n' "$candidates" | wc -l | tr -d ' ')"
@@ -244,7 +255,7 @@ EOF_KNOWN
       done
 
       if [[ "$exp" == on ]]; then
-        sw="$(kill_switch_for "$bn")"
+        sw="$(kill_switch_for "$f")"
         if [[ -z "$sw" ]]; then
           no "$bn: ON인데 kill switch 변수를 특정할 수 없다(kill_switch_for에 등록하라)"
           continue
@@ -390,21 +401,28 @@ for sk in "${surfaces[@]+"${surfaces[@]}"}"; do
     || no "$name: 스위치 확인이 실행 가능한 형태가 아니다(산문만으로는 집행되지 않는다)"
 done
 
-# ── 스위치가 **소비되는가** (선언만으로는 부족하다) ──────────────────────────
-# reviewing-brief의 확인 블록은 `web_disabled` 변수를 세팅만 한다. 그 변수를 읽는
-# 두 bullet과 dispatch 프롬프트 문구를 전부 지워도 두 락이 GREEN이었다 — 죽은
-# 스위치가 산 것으로 읽혔다(mutation M12). 선언이 아니라 소비를 앵커한다.
+# ── reviewing-brief: 이 자리에서 스위치를 소비하는 것은 둘이다 ─────────────────────
+# ① 탐지 dispatch 의 선택 펜스 — 웹 도구를 가진 doc-critic-web 을 dispatch 하므로 위 (b) 루프가
+# 스위치 확인 블록을 요구하고, 스위치가 켜지면 웹 없는 doc-critic 으로 내려가는 것은
+# test_reviewing_brief_critic_select.sh 가 차가운 셸 실행으로 잰다. ② codex 러너 — 그 집행은
+# 위 (a) AC21 표가 두 열 · `=yes` 엄격성으로 잰다(두 배포 경로가 두 호스트 스위치를 하나씩).
+# 러너는 **프로필이** `web: true` 일 때만 웹을 켠다 — 이 자리에서 스위치가 무엇이라도 끄려면
+# 그 전제가 서 있어야 하고, skill 표면은 스위치를 공시해야 한다. 둘 중 하나라도 무너지면 사용자가
+# 끈 것과 실제로 꺼진 것이 갈린다(P21).
 RB="$SD/skills/reviewing-brief/SKILL.md"
+BP="$SD/references/docreview-profiles/brief.md"
 if [[ -f "$RB" ]]; then
-  reads="$(grep -cE 'web_disabled[[:space:]]*==[[:space:]]*1|web_disabled[[:space:]]*==[[:space:]]*0' "$RB" 2>/dev/null || echo 0)"
-  if [[ "$reads" -ge 1 ]]; then
-    ok "reviewing-brief: web_disabled가 실제로 **읽히는** 분기가 있다"
-  else
-    no "reviewing-brief: web_disabled를 세팅만 하고 아무도 읽지 않는다 (죽은 스위치)"
-  fi
-  grep -qE 'kill switch 활성' "$RB" \
-    && ok "reviewing-brief: dispatch 프롬프트에 web-disabled 조건이 실린다" \
-    || no "reviewing-brief: dispatch 프롬프트에서 web-disabled 조건이 사라졌다"
+  awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$BP" 2>/dev/null | grep -qxE 'web:[[:space:]]*true' \
+    && ok "reviewing-brief: 프로필 brief.md 가 web: true — codex 러너가 이 자리에서 웹을 켤 수 있다(스위치가 끌 대상이 있다)" \
+    || no "reviewing-brief: 프로필 brief.md 에 web: true 가 없다 — 이 자리에서 DISABLE_WEB 은 아무것도 끄지 않는데 공시만 남는다"
+  # 파이프로 `grep -q` 에 넘기지 않는다 — `pipefail` 아래서 grep 이 첫 매치에 먼저 끝나면, 그 뒤를 아직
+  # 쓰는 awk 가 SIGPIPE(141)로 죽어 매치가 있어도 RED 가 된다. 표식 뒤 본문이 파이프 버퍼(16KB)를
+  # 넘자 실제로 그렇게 됐다(13KB 에서는 3/3 통과, 17.7KB 에서 3/3 실패 — 같은 매치). 변수로 받아 잰다.
+  after_codex_gate="$(awk '/codex-gate:end/{f=1; next} f' "$RB")"
+  case "$after_codex_gate" in
+    *'DEVBREW_SPEC_DISTILL_DISABLE_WEB=1'*) ok "reviewing-brief: codex 게이트 fence 밖 표면이 DISABLE_WEB 을 공시한다" ;;
+    *) no "reviewing-brief: DISABLE_WEB 공시가 fence 밖 표면에 없다 — 사용자가 끌 수 있다는 사실을 알 경로가 없다" ;;
+  esac
 fi
 
 # production 전역 — 스크립트와 카운터가 실제로 사라졌다(AC7a).

@@ -96,33 +96,30 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 ### Step A.5 — brief 리뷰 파이프라인 진입 (Law 2 분리 리뷰, v0.24.0)
 
 게이트(Step A 5)를 통과한 payload는 **Law 1 구조 자기검사**를 마친 것이고, 아직 **분리 리뷰**를
-받지 않았습니다. 여기서 `reviewing-brief` skill로 넘깁니다 — 축은 둘(충실도·방향성), 담당은
-셋 + codex이며, 절차는 그 skill이 소유합니다(여기에 복제하지 않습니다).
+받지 않았습니다. 여기서 `reviewing-brief` skill로 넘깁니다 — 문서 리뷰 엔진이 층 1(방향성)·층 2(충실도)를
+보며, 절차는 그 skill이 소유합니다(여기에 복제하지 않습니다).
 
-핸드오프 변수 4개를 그 skill과 같은 리졸버로 세팅합니다(state 배치 규약 정합, PN1):
+핸드오프 변수 2개를 **절대경로**로 세팅합니다(엔진은 상대 문서 경로를 거부하고, codex 산출물 경로는 그 skill 이 도출합니다):
 
 ```bash
-ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/state_path.py" state-root)"
-harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/state_path.py" session-id)"
-PAYLOAD="docs/superpowers/interview/<file>"          # Step A가 방금 쓰고 검증한 경로
+PAYLOAD="$(pwd)/docs/superpowers/interview/<file>"   # Step A가 방금 쓰고 검증한 경로
 AUDIT="${PAYLOAD%.md}.audit.md"                      # payload 의 audit sidecar (§6 S2+ 원문)
-CODEX_DIR_YAML="$ROOT/$harness_sid/codex-direction.yaml"
-CODEX_FID_YAML="$ROOT/$harness_sid/codex-fidelity.yaml"
 ```
 
 ```
-Skill spec-distill:reviewing-brief $PAYLOAD $AUDIT $CODEX_DIR_YAML $CODEX_FID_YAML
+Skill spec-distill:reviewing-brief $PAYLOAD $AUDIT
 ```
 
-네 인자는 **주석이 아니라 호출 라인 위에** 있어야 합니다 — `reviewing-brief`는 이 값들을 스스로 정의하지 않는다고 명시하므로, `#` 뒤에만 적혀 있으면 호출은 인자 없이 나가고 callee는 정의되지 않은 변수를 쥡니다.
+두 인자는 **주석이 아니라 호출 라인 위에** 있어야 합니다 — `reviewing-brief`는 이 값들을 스스로 정의하지 않는다고 명시하므로, `#` 뒤에만 적혀 있으면 호출은 인자 없이 나가고 callee는 정의되지 않은 변수를 쥡니다.
 
-- 그 skill이 `cost_class: high` 진입 승인 게이트를 띄웁니다(모델 호출 하한 5 · 상한 9).
+- 지출 승인 게이트는 없습니다(`cost_class: medium`) — 지출 통제는 엔진의 재리뷰 상한이 합니다: 상한 뒤의
+  추가 라운드는 사용자가 그 skill 의 승인 게이트에서 자기 문구로 열어야만 돕니다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1`이면 파이프라인이 전체 skip되고 skip record가
   Step B 게이트 질문에 표시됩니다 — 조용한 생략이 아닙니다.
-- 리뷰가 payload를 수정할 수 있습니다(§2 제약·§3 OQ 등). 수정이 일어나면 Step B는 **리뷰 후
+- 리뷰가 payload를 수정할 수 있습니다(§0·§2 — 프로필의 수정 자리). 수정이 일어나면 Step B는 **리뷰 후
   최종 문서**를 봅니다.
-- 산출물 4종(확정 후보 / 방향성 C4 항목 / readback 요약 + gap / 모든 degrade record)이
-  Step B 게이트로 넘어옵니다.
+- 산출물 셋(엔진 게이트 결과 / 냉독 요약 + gap / degrade 채널)이 Step B 게이트로 넘어옵니다. 엔진
+  승인 게이트의 2단계(진행 옵션)는 그 skill 이 띄우지 않고 아래 Step B 가 묻습니다.
 
 ### Step B — proceed 게이트 (handoff 방식 제안)
 
@@ -202,15 +199,18 @@ brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안�
 
 게이트를 띄우기 *전에* Step A.5 리뷰 산출물을 프로즈로 출력합니다(B-0 확정 후보 목록 다음):
 
-1. **방향성 C4 항목** — `<출처(Claude|codex)> — <무엇을 뒤집자는 것인가> — <근거> — <결정할 질문>`.
+1. **리뷰 게이트 결과** — 엔진의 마지막 게이트 렌더 · 승인 게이트 도달 사유(열린 것 없음 · 상한 · stagnation · 「미검증」) · 리뷰 완료 여부 · 1단계에서의 사용자 선택. 층 1(방향성) 결정은 라운드 게이트에서 이미 사용자가 판정했습니다.
+   「미검증」 라벨과 리뷰 완료 여부의 출처는 **엔진 게이트 요약**입니다 — `reviewing-brief` 가 넘기는 마지막 요약의 `approval_label` · `round_reviewed` · `unreviewed_reason` 을 그대로 싣고, critic 사망 횟수나 `finalize` 결과를 기억해 라벨을 붙이지 않습니다. `round_reviewed` 가 거짓이면 그 라운드는 리뷰 완료가 아니고, 사유(`unreviewed_reason`)는 다음 중 하나입니다:
+   - 「미검증」 — critic 사망(`critic_dead`) · `finalize` 실패(`finalize_incomplete`). `approval_label` 이 「미검증」이고 승인 게이트를 그 라벨로 연 라운드입니다.
+   - 라운드 미완(`unrouted`) — 이번 라운드의 라우팅 보고서가 없다(`finalize` 를 거치지 않았다). 라벨도 승인 게이트 강제도 없지만 리뷰 완료가 아니므로, 이 사유를 도달 사유와 함께 싣습니다.
 2. **readback 요약 전문** + gap 목록(*어느 클래스 / 요약의 어느 문장 / payload의 어느 절*).
-3. **미반영 findings** — 있으면 각각 이유와 함께. 저자가 임의로 기각한 것이 아니라 사용자 판정
+3. **열린 채 남은 항목과 미반영 findings** — 있으면 각각 이유와 함께. 저자가 임의로 기각한 것이 아니라 사용자 판정
    대상입니다.
 
 **이 skill 의 degrade 채널** (정본 Step B 가 각 skill 에 이름을 대라고 요구하는 그것):
-state 의 `brief_review_degradations` 원장 + `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1`
-로 파이프라인이 통째로 skip된 경우의 skip record(A.5). `degrade 없음`은 **그 원장을 실제로
-읽었다는 주장**이므로, 원장을 조회하지 않은 채 쓰지 않습니다.
+`reviewing-brief` 의 `## degrade 채널` 다섯 — 엔진의 `fin.json` `advisory[]`·`blocks`·`gate --render` 첫 줄 +
+state 의 `brief_review_degradations` 원장(BRIEF_REVIEW skip record 포함)·두 번째 채널 파일 — 과 웹 한 줄.
+`degrade 없음`은 **그 채널들을 실제로 읽었다는 주장**이므로, 조회하지 않은 채 쓰지 않습니다.
 
 그리고 `question` 텍스트에 **모든 degrade record를 한 줄씩** 싣습니다 — 옵션 description이
 아니라 question 본문이어야 사용자가 옵션을 고르기 *전에* 봅니다. record가 없으면
@@ -223,7 +223,7 @@ state 의 `brief_review_degradations` 원장 + `DEVBREW_SPEC_DISTILL_DISABLE_BRI
 ```javascript
 AskUserQuestion({
   questions: [{
-    question: "interview brief 완결: <brief-path> (구조 게이트 통과, 리뷰 <verdict 요약>). 확정 후보·방향성 항목·readback gap은 위 목록대로. 게이트 advisory: <check_brief 의 advisories 한 줄씩 (예: coverage-mapper 0 (unavailable: …)) | 없음>. degrade: <record 한 줄씩 | degrade 없음>. 다음 단계?",
+    question: "interview brief 완결: <brief-path> (구조 게이트 통과, 리뷰 <게이트 결과 한 줄 — 도달 사유 · 열린 항목 수 · 리뷰 완료가 아니면 그 사유(unreviewed_reason)>). 확정 후보·리뷰 게이트 결과·readback gap은 위 목록대로. 게이트 advisory: <check_brief 의 advisories 한 줄씩 (예: coverage-mapper 0 (unavailable: …)) | 없음>. degrade: <record 한 줄씩 | degrade 없음>. 다음 단계?",
     header: "Proceed",
     options: [
       {label: "확정하고 /compact 후 brainstorming (권장)", description: "확정 후보를 status: confirmed로 반영 → 재저장 → 게이트 재실행 → verbatim /compact 노출. 긴 인터뷰 context 정리 이점."},

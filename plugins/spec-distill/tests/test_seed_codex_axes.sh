@@ -4,11 +4,10 @@
 # seed 억제 축의 **세 지점이 서로를 지탱하는가** — 러너의 fail-point · 빌더가 아는 축 ·
 # 그 축의 체크리스트 파일 실재.
 #
-# **`build_brief_codex_prompt.py` 의 `AXES` 와 parity 를 재지 않는다.** 같은 이름이지만
-# 뜻이 다르다: 그쪽은 brief 의 codex 프롬프트 축이고, `brief_review_state.py` 의 `AXES` 는
-# degrade 원장의 `affected_axis` 이며, 러너의 `case` 는 실제 fail-point 다. 셋을 등식으로
-# 묶으면 **술어 자체가 거짓**이 된다 — parity 락을 세우기 전에 두 열거가 같은 것을 뜻하는지
-# 먼저 확인해야 한다는 규칙의 실사례다.
+# **`brief_review_state.py` 의 `AXES` 와 parity 를 재지 않는다.** 같은 이름이지만 뜻이
+# 다르다: 그쪽은 degrade 원장의 `affected_axis` 이고, 러너의 `case` 는 실제 fail-point 다.
+# 둘을 등식으로 묶으면 **술어 자체가 거짓**이 된다 — parity 락을 세우기 전에 두 열거가 같은
+# 것을 뜻하는지 먼저 확인해야 한다는 규칙의 실사례다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
@@ -57,23 +56,14 @@ n="$(wc -l < "$cl" | tr -d ' ')"
 # 러너가 실제로 codex를 부르는지·빌더가 실제로 checklist 내용을 프롬프트에
 # 옮기는지는 아무것도 재지 않는다. 리뷰가 실측으로 보였다: 세 파일을 전부 속이
 # 빈 decoy(4줄 case문 하나 · 주석 한 줄 · 리터럴만 나열한 11줄)로 바꿔도 위
-# 여덟 assertion이 8/8 GREEN이었다. 형제 test_brief_codex_axes.sh는 처음부터
-# 이 함정을 피한다 — body-unique 마커를 체크리스트에 심고, 빌더를 **실행**해
-# 그 마커가 출력에 실제로 실리는지 보고, 러너도 mock codex로 **실행**해 계약을
-# 확인한다. 아래는 같은 원리를 이 축(하나뿐인 suppression)에 맞춰 좁힌 것이다.
+# 여덟 assertion이 8/8 GREEN이었다. 옛 형제 락(brief codex 축 — 문서 리뷰 엔진
+# 전환으로 대상이 지워졌다)이 처음부터 이 함정을 피한 방식을 따른다 — body-unique 마커를
+# 체크리스트에 심고, 빌더를 **실행**해 그 마커가 출력에 실제로 실리는지 보고, 러너도 mock
+# codex로 **실행**해 계약을 확인한다. 아래는 그 원리를 이 축(하나뿐인 suppression)에 맞춘 것이다.
 MK='AXIS-MARKER: seed-suppression-axis-only'
 
 [ "$(grep -cF "$MK" "$cl")" = "1" ] && ok "체크리스트에 body-unique 마커 1회 실재" \
                                      || no "체크리스트 마커가 없거나 중복"
-
-# 형제 brief 체크리스트로 마커가 새면 축 귀속이 흐려진다(교차 오염 부재 확인).
-leaked=0
-for other in "$S"/brief-codex-*-checklist.md; do
-  [ -f "$other" ] || continue
-  grep -qF "$MK" "$other" && leaked=$((leaked + 1))
-done
-[ "$leaked" -eq 0 ] && ok "형제 brief 체크리스트에 seed 마커 오염 없음" \
-                     || no "형제 brief 체크리스트 ${leaked}곳에 seed 마커가 새어 있다"
 
 # 빌더를 실제로 실행해 마커 + payload 본문이 출력에 실리는가 — 정적 grep이
 # 아니라 실행 관측. 빌더가 checklist를 무시하고 다른 텍스트를 내도(또는 빌더

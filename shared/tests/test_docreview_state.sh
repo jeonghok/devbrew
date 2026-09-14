@@ -32,6 +32,8 @@ case_T33_user_drops_fix
 case_T36_freeze_exceptions_log_targets
 case_T38_stagnation
 case_T39_gate_derivation
+case_cap_zero_open_two_stage
+case_precap_zero_open_not_two_stage
 case_T45_decision_log_append_only
 case_T12_immutable_permit_targets_summary
 case_AC21_reraise_accumulates
@@ -71,4 +73,14 @@ case_GR_held_decide_cross_ledger
 case_GR_escalated_fix_blocks_approval
 case_GR_escalated_fix_drop_clears_block
 case_GR_escalated_fix_reason_persists
+# 상태 디렉토리의 문서 정체 — init 거부 둘 · 그 양의 짝 · 빈 state-dir · 문서별 자리 도출.
+case_init_other_doc_refused
+case_init_other_profile_refused
+case_init_same_doc_idempotent
+case_init_empty_state_dir_refused
+case_init_relative_doc_refused
+case_state_dir_for_per_doc
+# PR 3 qg iter 3 — 관측은 원장의 함수: 건너뛴 라운드의 permit(적용 · 원복)을 뒤 라운드가 그 라운드의 스냅숏으로 따라잡는다.
+case_E1_skipped_round_permit_caught_up
+case_E5_revert_caught_up_by_its_round_snapshot
 finish

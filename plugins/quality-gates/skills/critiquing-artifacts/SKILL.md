@@ -150,9 +150,9 @@ Agent({
     으로 죽는다. `rc == 3`이면 codex.yaml을 읽기 **전에** 지운다(`rm -f codex.yaml`)
     — 지우지 않으면 직전 라운드의 YAML(양성 `codex_failed: false`를 담고 있을 수
     있다)이 그대로 남아 이번 라운드의 codex 판정으로 읽힌다. 형제
-    `run_brief_codex_reviewer.sh`와 동일한 exit-3 계약이고, 그 호출자
-    (`spec-distill`의 `reviewing-brief` SKILL)가 이미 같은 `rc==3 → rm -f` 패턴을
-    구현하고 있다.
+    `run_docreview_codex_reviewer.sh`(spec-distill 의 문서 리뷰 러너)와 동일한 exit-3
+    계약이고, 그 호출자(`spec-distill`의 `reviewing-spec`·`reviewing-brief` SKILL)가 같은
+    `rc==3 → rm -f` 패턴을 구현하고 있다.
   - 출력이 `codex_failed: true`면 **가용 판정 후 런타임 실패**: `> [quality-gates] codex 가용 판정 후 런타임 실패(<reason>) — degraded, tier-unpinned 단독.` (crash 아님, C7) codex.yaml은 병합에서 제외.
 - `codex_available: false` → **미가용**: `> [quality-gates] codex 미가용(<skip_reason>) — tier-unpinned 단독 비평.` (위 런타임-실패 문구와 **구분**된 별도 라인.) `<skip_reason>` 자리에는
   `not_installed`·`auth_missing`·`timeout_binary_missing`·`known_bad_version`·

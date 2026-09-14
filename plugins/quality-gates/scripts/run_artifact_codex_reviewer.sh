@@ -20,8 +20,8 @@
 # a loud stderr diagnostic and exits **3** instead. On rc == 3 the CALLER MUST
 # delete OUT before reading it — a prior round's stale YAML (possibly carrying
 # a false-positive `codex_failed: false`) would otherwise sit untouched and be
-# read as this round's codex verdict. Same contract as
-# `run_brief_codex_reviewer.sh`; critiquing-artifacts/SKILL.md now documents
+# read as this round's codex verdict. Same contract as the shared document-review
+# runner (`run_docreview_codex_reviewer.sh`); critiquing-artifacts/SKILL.md documents
 # the caller-side rc==3 → rm -f obligation for this runner.
 #
 # Usage: run_artifact_codex_reviewer.sh <artifact_path> <project_dir> <output_yaml_path>
@@ -34,7 +34,7 @@ OUT="${3:-}"
 # CLAUDE_PLUGIN_ROOT는 훅 실행에만 주입된다 — 스킬의 bash 블록에는 오지 않는다.
 # fallback 없이 참조하면 `set -u` 아래에서 codex에 **도달하기 전에** 즉사하고,
 # 산출물은 `aborted_before_completion` 이 되어 모델 다양성이 매번 0이 된다.
-# 형제 `run_brief_codex_reviewer.sh`와 같은 철자를 쓴다(세 번째 철자 발명 금지).
+# 형제 `run_docreview_codex_reviewer.sh`와 같은 철자를 쓴다(세 번째 철자 발명 금지).
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 # ── B2 (/qg 2026-08-13 whole-branch 리뷰): 인자 검사를 두 축으로 가른다 ─────────
@@ -64,7 +64,7 @@ emit_fail() { # <reason> — 리다이렉트 실패를 삼키지 않는다 (형�
 # OUT을 열고, EXIT 트랩의 `-s` 검사는 (트랩이 cd 이후에 발동하면) 같은 상대경로를
 # cd *이후* cwd로 다시 해석해 **서로 다른 파일**을 본다 — 가드가 호출자가 보는
 # 파일이 아닌 엉뚱한 곳을 지키는 셈이라 사실상 아무것도 지키지 못했다(리뷰 R1).
-# 형제 러너 3곳(run_brief_/run_spec_/run_audit_codex_reviewer.sh) 전부 cd 전에
+# 형제 러너 3곳(run_audit_/run_docreview_/run_seed_codex_reviewer.sh) 전부 cd 전에
 # 이 절대화를 한다 — 이 러너에만 없었다.
 case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
 case "$ARTIFACT" in /*) ;; *) ARTIFACT="$PWD/$ARTIFACT" ;; esac

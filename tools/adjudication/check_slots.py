@@ -73,8 +73,8 @@ EXEMPT_SLOTS = {
         "framing 을 새로 세우고 그것을 치게 되어, 이 agent 가 존재하는 이유"
         "(인터뷰 턴이 «자기» 전제에 눈먼 자리를 찾는다)를 잃는다. 잔여 "
         "위험은 남는다 — 재구성이 이미 잃은 것은 프로버도 못 본다. 그 "
-        "축은 이 락이 아니라 reviewing-brief 의 충실도 단계가 §6 원문 대비로 "
-        "따로 잰다(brief-critic).",
+        "축은 이 락이 아니라 reviewing-brief 의 문서 리뷰 엔진 층 2(충실도)가 "
+        "§6 원문 대비로 따로 잰다(doc-critic · codex).",
     ("spec-distill:steelman-builder", "premises"):
         "C6(1) 이 agent 의 과업은 «그 전제 목록에 대한» 반증 판정과 목록 자체의 반박이다 — "
         "대상이 정의상 orchestrator 가 R1 에서 도출한 그 목록이라 대응물이 없다. 다른 값(사용자 "

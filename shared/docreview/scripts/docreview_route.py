@@ -21,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점
 from adjudication import Ledger  # noqa: E402
 from docreview_anchor import classify_anchor, refs_of  # noqa: E402
 from docreview_state import (  # noqa: E402
-    RANK, _CHOICE_LABEL, _decide_choices_for, _is_reraise_successor,
-    fail, load_profile, load_state, record_findings, save_state, yaml,
+    RANK, _CHOICE_LABEL, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, fail, load_profile,
+    load_state, observe_ledger, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
 
 BLOCK_RE = r"```%s[ \t]*\n(.*?)\n```"
@@ -85,8 +85,8 @@ def _bucket(it) -> str:
 def _permit_covers(st, n, anchor) -> bool:
     """이 라운드에 그 앵커를 겨눈 permit 이 있었는가.
 
-    실행 노트(R1) — `consumed` 로 걸러지지 않는다. cases.sh 의 `next_round` 헬퍼는
-    begin-round 직후 observe-diff 까지 마치므로, route.finalize 가 도는 시점엔 이번
+    실행 노트(R1) — `consumed` 로 걸러지지 않는다. `finalize` 는 분류 전에 이번 라운드
+    관측(`docreview_state.observe_ledger`)을 마치므로, 분류가 도는 시점엔 이번
     라운드에 실제로 적용된 permit 은 이미 `consumed: True` 다(T21). `not consumed` 로
     거르면 그 라운드에 열린 «유효한 편집 창» 안에서 나온 새 finding(T11)이 매번
     엄격 존재검사를 실패해 보호 승격에 삼켜진다 — permit 이 있었다는 사실 자체가
@@ -99,6 +99,28 @@ def _permit_covers(st, n, anchor) -> bool:
 
 
 # ── prepare-recritic ─────────────────────────────────────────────────────
+def _round_staleness(st, path, predates):
+    """이 리뷰어 산출물 파일이 이번 라운드의 것이 아닐 사유 — 이번 라운드 것이면 None.
+
+    codex · critic 두 산출물이 같은 규칙을 쓴다(사유 이름 `predates` 만 다르다). 산출물 경로는 세션과
+    문서의 순수 함수라 같은 문서의 라운드마다 같은 파일이고, 직전 라운드의 산출물과 이번 라운드의 것은
+    내용(스키마·마커)으로 못 가른다. 판별자는 시점이다: `begin-round` 가 남긴 라운드 시작 표식보다 먼저
+    쓰인 파일은 직전 라운드 것이다. codex 쪽은 진입 중화가 불가능한 권한 조합(상태 디렉토리와 그 파일이
+    둘 다 쓰기 불가, 상태 파일은 쓰기 가능)에서도 1단계가 통과하므로 그 조합의 집행이 여기 하나고,
+    critic 쪽은 탐지를 dispatch 하지 못한 라운드(프로필 판독 실패 등)에 직전 라운드의 탐지 출력이 같은
+    자리에 남을 수 있다. 표식이 없거나 정수가 아니면 판별할 수 없어 그 사유를 내고, 표식과 같은 시각도
+    앞뒤를 가를 수 없으므로 `predates` 쪽으로 닫는다.
+    """
+    started = ((st.get("rounds") or {}).get(str(st.get("round"))) or {}).get("started_mtime_ns")
+    if started is None:
+        return "round_start_unrecorded"
+    if isinstance(started, bool) or not isinstance(started, int):
+        return "round_start_unreadable"
+    if path.stat().st_mtime_ns <= started:
+        return predates
+    return None
+
+
 def cmd_prepare(a) -> int:
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
@@ -111,11 +133,31 @@ def cmd_prepare(a) -> int:
 
     degrade = {"critic_dead": False, "layer2_missing": False, "codex_absent": False, "codex_reason": None}
     items = []
-    text = Path(a.critic).read_text(encoding="utf-8") if Path(a.critic).is_file() else ""
+    critic = Path(a.critic)
+    critic_why = None    # critic 사망 사유 — None 이면 층 1 블록의 판정에 맡긴다
+    text = ""
+    if critic.is_file():
+        # 라운드 시작 표식보다 먼저(또는 같은 시각에) 쓰인 critic 출력은 직전 라운드 것이다 — 탐지를 dispatch
+        # 하지 못한 라운드에 같은 자리에 남은 출력을 이번 라운드의 탐지로 섭취하지 않는다(codex 와 같은 판별).
+        # 표식 부재 · 비정수(`round_start_unrecorded` · `round_start_unreadable`)는 critic 을 닫지 않는다(R69) —
+        # 다만 시점을 판별하지 못했다는 사실은 codex 경로와 독립으로 `degrade.critic_freshness_unknown` 에 이름을
+        # 남기고 `finalize` 가 advisory 로 공시한다(차단 아님). 그 키는 이 경우에만 생긴다.
+        critic_stale = _round_staleness(st, critic, "critic_predates_round")
+        if critic_stale == "critic_predates_round":
+            critic_why = "critic_predates_round"
+        else:
+            if critic_stale:
+                degrade["critic_freshness_unknown"] = critic_stale
+            try:
+                text = critic.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                # 깨진 critic 출력 — 설계 §9 의 sentinel 깨짐과 같은 판정(critic 사망 → 재dispatch 1회 → 「미검증」)
+                critic_why = "undecodable"
     l1, e1 = extract_block(text, "docreview-layer1")
-    if e1 or not isinstance(l1, list):
+    critic_why = critic_why or e1
+    if critic_why or not isinstance(l1, list):
         degrade["critic_dead"] = True
-        ev("source_failed", "doc-critic", "layer1 block %s" % (e1 or "not a list"), True)
+        ev("source_failed", "doc-critic", "layer1 block %s" % (critic_why or "not a list"), True)
     else:
         for i, it in enumerate(l1, 1):
             n1 = normalize(it, 1, "c", i, L)
@@ -131,16 +173,18 @@ def cmd_prepare(a) -> int:
                 n2 = normalize(it, 2, "c", 100 + i, L)
                 if n2:
                     items.append(("critic", n2))
-    cx = None
+    cx, stale = None, None
     if a.codex and Path(a.codex).is_file():
-        try:
-            cx = yaml.safe_load(Path(a.codex).read_text(encoding="utf-8"))
-        except Exception:
-            cx = None
+        stale = _round_staleness(st, Path(a.codex), "codex_predates_round")
+        if stale is None:
+            try:
+                cx = yaml.safe_load(Path(a.codex).read_text(encoding="utf-8"))
+            except Exception:
+                cx = None
     meta = cx.get("meta") if isinstance(cx, dict) and isinstance(cx.get("meta"), dict) else {}
-    if not isinstance(cx, dict) or meta.get("codex_failed", True):
+    if stale or not isinstance(cx, dict) or meta.get("codex_failed", True):
         degrade["codex_absent"] = True
-        degrade["codex_reason"] = str(meta.get("reason") or "yaml_missing_or_broken")
+        degrade["codex_reason"] = stale or str(meta.get("reason") or "yaml_missing_or_broken")
         ev("source_failed", "codex", degrade["codex_reason"], False)
     else:
         for i, it in enumerate(cx.get("findings") or [], 1):
@@ -158,7 +202,7 @@ def cmd_prepare(a) -> int:
         pub["blocks"] = [ref2f.get((src, r), r) for r in it["blocks"]]
         pub.pop("ref", None)
         pending.append({"f": pub["f"], "source": src, "finding": pub})
-    st["pending_recritic"] = {"items": pending, "degrade": degrade, "events": events}
+    st["pending_recritic"] = {"round": int(st["round"]), "items": pending, "degrade": degrade, "events": events}  # round — docreview_state.pending_mismatch
     save_state(a.state_dir, st, "prepare-recritic (%d items%s)" % (len(pending), ", critic dead" if degrade["critic_dead"] else ""))
     print(json.dumps({"ok": not degrade["critic_dead"], "items": [p["finding"] for p in pending],
                       "degrade": degrade}, ensure_ascii=False, indent=1))
@@ -378,9 +422,11 @@ def _classify_items(items, st, prof, sections, n, L):
     return final, rejected_items
 
 
-def _auto_decides(a, st, prof, sections, n, L):
+def _auto_decides(a, diff, st, prof, sections, n, L):
     """사후·이월 auto decide — 얼림 diff(post) · check-intent 거부(pre) · expired 재상승(pre).
 
+    `diff` 는 `cmd_finalize` 가 원장의 라운드별 스냅숏으로 계산한 얼림 diff(`docreview_state.round_diff`)다 — 라운드
+    1 에는 직전 스냅숏이 없어 None 이고 사후 항목이 없다. `a` 는 인자 묶음 그대로다.
     `st["escalated"]` 은 아직 자기 차례가 아닌 예약만 남기고, `st["reraise"]` 는 비운다.
     낸 값은 (새 항목들, 미소비 재상승 예약 수, 미소비 escalated 예약 수).
 
@@ -391,8 +437,7 @@ def _auto_decides(a, st, prof, sections, n, L):
     않으므로 위 불변식은 그대로다.
     """
     extra = []
-    if a.diff and Path(a.diff).is_file():
-        diff = json.loads(Path(a.diff).read_text(encoding="utf-8"))
+    if diff is not None:
         for c in diff.get("changed", []):
             cls = classify_anchor(c["anchor"], sections, prof)
             extra.append({"f": None, "layer": 1 if cls["protected"] else 2, "category": "frozen_change",
@@ -604,7 +649,7 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats):
     """출력 JSON 을 조립하고 같은 요약을 `st["rounds"][n]["route_report"]` 에 남긴다.
 
     `stats` 는 앞 단계가 낸 계수 다섯(bucket_conflicts · lineage_mismatch · revived ·
-    reraise_unconsumed · escalated_unconsumed). 키 순서는 골든(`shared/tests/fixtures/
+    reraise_unconsumed · escalated_unconsumed)이다. 키 순서는 골든(`shared/tests/fixtures/
     docreview/golden/`)이 바이트로 고정하므로 재배열하지 않는다.
     """
     report = L.report()
@@ -617,6 +662,8 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats):
         adv.append("상세 미검증 — 층 2 블록 없음")
     if st["snapshots"][str(n)].get("headingless"):
         adv.append("앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위")
+    if degrade.get("critic_freshness_unknown"):
+        adv.append("critic 시점 판별 불가 (%s)" % degrade["critic_freshness_unknown"])
     out = {
         "ok": True, "round": n, "findings": [_pub(it) for it in final],
         "by_disposition": {d: [it["id"] for it in final if it["disposition"] == d] for d in DISPOSITIONS},
@@ -655,11 +702,31 @@ def cmd_finalize(a) -> int:
     (`nonlocal` 은 `_resolve_ids_and_lineage` 안의 계보 해소 하나뿐 — 분해 전과 같다).
     """
     st = load_state(a.state_dir)
-    prof = load_profile(st["profile"])
     n = int(st["round"])
-    pend = st.get("pending_recritic")
-    if not pend:
-        return fail("no_pending_recritic")
+    why = pending_mismatch(st, n)
+    if why:
+        # 이번 라운드의 준비가 없거나 · 다른 라운드 것이거나 · 어느 라운드 것인지 모른다 — 소비하지
+        # 않는다. rc 만 내고 끝나면 준비가 없는 라운드의 게이트가 정상으로 열리므로, 실패를 이 라운드
+        # 자리에 남겨 게이트가 「미검증」(`finalize_incomplete`)으로 알게 한다. 같은 라운드의 finalize
+        # 가 나중에 성공하면 아래에서 치운다.
+        r = st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
+        r["finalize_failed"] = why
+        save_state(a.state_dir, st, "finalize 거부 (%s)" % why)
+        return fail(why, round=n)
+    prof = load_profile(st["profile"])
+    # 라운드 ≥ 2 — permit · fix 적용 관측과 얼림 diff 는 원장의 라운드별 스냅숏으로 엔진이 계산한다(오케스트레이터가
+    # 쓰는 diff 파일이 없다). 관측이 먼저다: 관측이 연 재상승 예약을 아래 `_auto_decides` 가 같은 호출에서 소비하고,
+    # 얼림 diff 의 면제 집합은 소비된 permit 도 센다(`exempt_scopes`). 관측을 건너뛴 지난 라운드의 permit 도 여기서
+    # 따라잡는다. 스냅숏 부재 · 파손 permit 은 준비(`pending_recritic`)를 치우기 **전에** rc ≠ 0 이다 — 원장을 쓰지
+    # 않으므로 준비가 남고, 게이트가 「미검증」(`finalize_incomplete`)으로 연다. 라운드 1 에는 직전이 없다.
+    diff, obs = None, None
+    if n >= 2:
+        try:
+            obs = observe_ledger(st, prof, n)
+            diff = round_diff(st, prof, n)
+        except LedgerCorrupt as e:
+            return fail(e.reason, **e.extra)
+    pend = st["pending_recritic"]
     L = Ledger(items="open")
     for e in pend.get("events", []):
         getattr(L, e[0])(*e[1:])
@@ -672,7 +739,7 @@ def cmd_finalize(a) -> int:
     same_as = _apply_recritic(items, verdicts, added, L)
     keep_of = _absorb_same_as(items, same_as, L)
     final, rejected_items = _classify_items(items, st, prof, sections, n, L)
-    extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, st, prof, sections, n, L)
+    extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, diff, st, prof, sections, n, L)
     final.extend(extra)
     bucket_conflicts, lineage_mismatch, revived = _resolve_ids_and_lineage(st, final, rejected_items, n)
     _remap_blocks(final, keep_of, a.doc, st)
@@ -685,7 +752,11 @@ def cmd_finalize(a) -> int:
                          "revived": revived, "reraise_unconsumed": reraise_unconsumed,
                          "escalated_unconsumed": escalated_unconsumed})
     st["pending_recritic"] = None
-    save_state(a.state_dir, st, "finalize (%d findings, %d rejected)" % (len(final), len(rejected_items)))
+    st["rounds"][str(n)].pop("finalize_failed", None)   # 같은 라운드의 앞선 거부 표지 — 이 성공이 대신한다
+    log = "finalize (%d findings, %d rejected)" % (len(final), len(rejected_items))
+    if obs and obs["observed"]:   # 이 finalize 가 관측을 새로 했다(observe-diff 를 먼저 돌지 않은 라운드 · 따라잡기)
+        log += " · observe applied=%d expired=%d" % (len(obs["applied"]), len(obs["expired"]))
+    save_state(a.state_dir, st, log)
     print(json.dumps(out, ensure_ascii=False, indent=1))
     return 0
 
@@ -698,7 +769,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.set_defaults(fn=cmd_prepare)
     x = sp.add_parser("finalize"); x.add_argument("--state-dir", required=True)
     x.add_argument("--recritic", default=None); x.add_argument("--recritic-skipped", action="store_true")
-    x.add_argument("--diff", default=None); x.add_argument("--doc", default=None)
+    x.add_argument("--doc", default=None)
     x.set_defaults(fn=cmd_finalize)
     return p
 

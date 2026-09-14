@@ -10,6 +10,11 @@
 #   버그를 놓친 검증 파일을 편집하는 것이 compounding 이벤트다.
 #
 # 규칙 (plugins/*/agents/*.md 전부):
+#   L0  frontmatter 가 YAML 로 파싱되지 않거나 · 같은 매핑에 중복 키가 있거나 · 매핑이 아니거나 ·
+#       `tools` 키가 없음 -> FAIL
+#       (PyYAML 부재도 FAIL, 파이썬이 끝까지 돌았다는 완주 신호가 없거나 셸의 대조와 안 맞아도 FAIL.
+#        아래 형태 화이트리스트가 닫는 것은 «키 스펠링»이지 파싱 가능성이 아니다 — 파서가 못 읽는
+#        frontmatter 를 런타임은 전 도구로 싣는다. 근거 · 한계는 루프 앞 L0 주석.)
 #   L1  `allowedTools` / kebab 변종 존재            -> FAIL
 #   L2  `tools:` 부재                                -> FAIL  (카브아웃 없음)
 #       + `tools:` 키 중복(YAML 은 마지막 값으로 resolve, grep -m1 은 첫 값을 봄) -> FAIL
@@ -106,8 +111,180 @@ if [ "$scanned_agents" -lt 1 ]; then
   echo "FAIL: 스캔된 agent 파일 0개 (cwd=$(pwd)) — 락이 빈 집합 위에서 통과할 뻔했다" >&2
   exit 1
 fi
-for f in plugins/*/agents/*.md; do
+# --- L0 — YAML 파서가 frontmatter 를 읽는가 (PR 3 최종 리뷰 F3) ---
+# 런타임 로더는 frontmatter 를 못 읽으면 오류 없이 **파일명 이름 + 전 도구**로 agent 를 싣는다(PR 3 관측
+# 태스크 T9 p9 — 안 닫힌 따옴표 · U+2028 · U+2029). 아래 L2 의 형태 화이트리스트는 column-0 줄의 모양만
+# 보므로 `description: "unclosed` 같은 줄을 통과시킨다. `tools:` allowlist 의 fail-closed 는 frontmatter 가
+# 파싱될 때만 성립하므로, 스캔한 agent 마다 첫 두 `---` 사이를 PyYAML `SafeLoader` 로 읽어 **예외 없음 · 같은
+# 매핑의 중복 키 없음 · 매핑 · `tools` 키 있음**을 요구한다. PyYAML(또는 python3)이 없으면 FAIL 이다 — 조용히
+# 건너뛰지 않는다.
+# 중복 키: PyYAML `safe_load` 는 같은 매핑의 반복 키를 오류 없이 마지막 값으로 읽고, 아래 L2 의 중복 검사는
+# `tools:` 만 센다 — `description:` 두 줄은 L0~L3 을 전부 통과했다. 런타임 로더가 반복 키를 어떻게 다루는지
+# (거절해 파일명 이름 + 전 도구로 싣는지, 한 값을 고르는지)는 **측정하지 않았다**. 모르는 것을 통과시키지
+# 않는다 — `SafeLoader` 하위 클래스의 `construct_mapping` 이 같은 매핑의 반복 키에서 예외를 내고, 그 파일은
+# `duplicate_key:<키>` 로 FAIL 이다.
+# 한계: PyYAML 은 YAML 1.1 이라 U+2028 · U+2029 를 줄바꿈으로 읽어 파싱에 성공한다. 그 둘은
+# shared/tests/test_variant_of_contract.sh 의 V4(agent 정의 파일 전체 문자 금지)가 막는다. 락이 검증한
+# `tools` 값과 파서가 resolve 한 값의 등식은 test_agent_tools_lock_differential.sh 가 잰다.
+#
+# 파이썬은 한 번만 돈다(모든 파일을 인자로). L0 는 **파이썬이 끝까지 돌았다는 양성 신호**가 있을 때만 통과로
+# 친다 — 출력이 없는 것은 「위반 없음」이 아니다:
+#   - 위반 레코드는 경로가 아니라 argv 인덱스로 키잉한다(`<i>\t<사유>`). 경로로 키잉하면 파일명에 탭 · 개행이
+#     든 agent 의 레코드가 대조에 실패해 그 파일의 L0 가 조용히 빠졌다. 사유 안의 제어 · 비-ASCII 문자는
+#     이스케이프한다.
+#   - 마지막 줄은 `L0_DONE <파일 수> <위반 수>` 다. 셸은 그 줄이 있고 · 파일 수 == $# 이고 · 셸이 인덱스로
+#     소비한 위반 수 == 위반 수일 때만 L0 를 통과로 친다.
+#   - PyYAML 이 없으면 stderr 로 알리고 rc 3. rc ≠ 0 이면 무엇이 찍혔든 FAIL 이다. stderr 는 파싱 출력과
+#     따로 받아 FAIL 메시지에만 싣는다 — 둘을 섞으면 시작 시 경고 한 줄이 판정을 바꾼다(섞던 옛 판본은
+#     PyYAML 부재를 출력 전체의 완전 일치로 알아봤고, 경고 한 줄이 끼면 L0 가 아무것도 안 잰 채 통과했다).
+#   - PyYAML 은 스캔 루트 밖에서만 온다. 이 락은 스캔 루트로 cd 한 뒤 `python3 -c` 로 돌아 sys.path 첫 자리가
+#     cwd 이고, PYTHONPATH(절대 · 상대) · 루트 안 venv · editable 설치도 루트 아래 경로를 sys.path 에 싣는다. 거기
+#     심은 `yaml.py` 나 PyYAML 이 import 하는 모듈의 가짜(`datetime.py` — 이때 `yaml.__file__` 은 정상이다)는 import
+#     도중에 완주 신호를 찍고 끝낼 수 있다 — import 뒤의 검사로는 늦다. 그래서 import **전에** 스캔 루트 자신 또는
+#     그 아래인 sys.path 항목을 전부 뺀다(루트 안 venv 의 PyYAML 도 쓰지 않는다 — 루트 밖 인터프리터의 PyYAML 을
+#     요구한다). 판정은 문자열 접두어가 아니라 `(st_dev, st_ino)` 조상 걷기다 — APFS 에서 대소문자만 다른 경로는
+#     문자열로는 루트 밖으로 보인다. 아직 없는 항목은 realpath 의 실재하는 조상으로 판정한다(루트 아래의 없는
+#     경로도 뺀다 — 거기 무엇이 생길지 이 락은 모른다).
+#     import 뒤 `yaml.__file__` 이 같은 판정으로 루트 안이면 stderr `PYYAML_SHADOWED` + rc 3 이다 — 두 번째 벽으로,
+#     시작 과정이 루트 안의 yaml 을 이미 import 해 둔 경우(sys.modules)를 막는다. `python3 -I` 는 쓰지 않는다 —
+#     PYTHONPATH 까지 버려 변이 테스트의 주입 셀이 공허해진다.
+#     남는 것(이 락이 막을 수 없다): `sitecustomize` · `usercustomize` · `.pth` 는 인터프리터 시작 시 L0_PY 보다
+#     먼저 돈다 — 실행 환경이 소유하는 표면이다. 그것이 yaml 이 아닌 가짜 모듈(`datetime` 등)을 미리 import 해
+#     두거나 시작 중에 완주 신호를 찍고 끝내면 두 벽 다 보지 못한다.
+L0_PY='
+import os
+import sys
+
+_root_st = os.stat(os.getcwd())
+_root_id = (_root_st.st_dev, _root_st.st_ino)
+
+
+def _at_or_under_root(p):
+    q = os.path.realpath(p or os.curdir)
+    while True:
+        try:
+            st = os.stat(q)
+        except OSError:
+            st = None
+        if st is not None and (st.st_dev, st.st_ino) == _root_id:
+            return True
+        up = os.path.dirname(q)
+        if up == q:
+            return False
+        q = up
+
+
+sys.path[:] = [p for p in sys.path if not _at_or_under_root(p)]
+try:
+    import yaml
+except ImportError:
+    sys.stderr.write("PYYAML_MISSING\n")
+    sys.exit(3)
+_yaml_file = getattr(yaml, "__file__", None) or ""
+if not _yaml_file or _at_or_under_root(_yaml_file):
+    sys.stderr.write("PYYAML_SHADOWED %s\n" % _yaml_file)
+    sys.exit(3)
+
+
+class DuplicateKey(Exception):
+    pass
+
+
+class NoDuplicateKeyLoader(yaml.SafeLoader):
+    def construct_mapping(self, node, deep=False):
+        if isinstance(node, yaml.MappingNode):
+            self.flatten_mapping(node)
+            seen = set()
+            for key_node, _value_node in node.value:
+                key = self.construct_object(key_node, deep=deep)
+                try:
+                    repeated = key in seen
+                except TypeError:
+                    continue
+                if repeated:
+                    raise DuplicateKey(key)
+                seen.add(key)
+        return yaml.SafeLoader.construct_mapping(self, node, deep=deep)
+
+
+def clean(text):
+    return "".join(c if c.isprintable() and ord(c) < 128 else ascii(c)[1:-1] for c in str(text))
+
+
+bad = 0
+for i, p in enumerate(sys.argv[1:], 1):
+    why = None
+    try:
+        lines = open(p, encoding="utf-8").read().split("\n")
+    except (OSError, UnicodeDecodeError) as exc:
+        why = "unreadable:%s" % type(exc).__name__
+    else:
+        fm = None
+        if lines and lines[0] == "---":
+            for j in range(1, len(lines)):
+                if lines[j] == "---":
+                    fm = "\n".join(lines[1:j])
+                    break
+        if fm is None:
+            why = "no_frontmatter"
+        else:
+            try:
+                data = yaml.load(fm, Loader=NoDuplicateKeyLoader)
+            except DuplicateKey as exc:
+                why = "duplicate_key:%s" % clean(exc.args[0])
+            except Exception as exc:
+                why = "load_error:%s" % type(exc).__name__
+            else:
+                if not isinstance(data, dict):
+                    why = "not_mapping"
+                elif "tools" not in data:
+                    why = "tools_key_absent"
+    if why is not None:
+        bad += 1
+        print("%d\t%s" % (i, why))
+print("L0_DONE %d %d" % (len(sys.argv) - 1, bad))
+'
+# stderr 는 임시 파일로 따로 받는다(scan root 밖 — 이 락은 cd "$ROOT" 뒤에 돈다).
+l0_errf="$(mktemp "${TMPDIR:-/tmp}/agent-fm-l0.XXXXXX" 2>/dev/null)" || l0_errf=""
+if [ -n "$l0_errf" ]; then
+  L0_OUT="$(python3 -c "$L0_PY" "$@" 2>"$l0_errf")"; l0_rc=$?
+  L0_ERR="$(cat "$l0_errf" 2>/dev/null)"; rm -f "$l0_errf"
+else
+  L0_OUT="$(python3 -c "$L0_PY" "$@" 2>/dev/null)"; l0_rc=$?
+  L0_ERR="(stderr 를 받을 임시 파일을 만들지 못했다)"
+fi
+L0_DONE_LINE="$(printf '%s\n' "$L0_OUT" | grep '^L0_DONE ' | tail -n 1)"
+l0_rest="${L0_DONE_LINE#L0_DONE }"; l0_nfiles="${l0_rest%% *}"; l0_nviol="${l0_rest#* }"
+l0_broken=no
+case "$l0_rest" in [0-9]*' '[0-9]*) ;; *) l0_broken=yes ;; esac
+case "$l0_nfiles" in ''|*[!0-9]*) l0_broken=yes ;; esac
+case "$l0_nviol" in ''|*[!0-9]*) l0_broken=yes ;; esac
+if [ "$l0_rc" -ne 0 ] || [ "$l0_broken" = yes ]; then
+  echo "FAIL [L0] frontmatter 파서(python3 + PyYAML)가 끝까지 돌았다는 신호가 없다 (rc=${l0_rc} · 완주 신호 '${L0_DONE_LINE}') — 파싱 가능성을 재지 못한 채 통과시키지 않는다." >&2
+  [ -n "$L0_ERR" ] && printf '  stderr: %s\n' "$L0_ERR" >&2
+  echo "  복구: python3 -m pip install pyyaml" >&2
+  violations=$((violations+1))
+  l0_broken=yes
+fi
+
+l0_i=0; l0_consumed=0
+for f in "$@"; do
+  l0_i=$((l0_i+1))
   FM="$(fm_of "$f")"
+
+  # --- L0 --- 위반 레코드를 이 파일의 argv 인덱스로 찾는다(경로로 찾지 않는다).
+  l0_why=""
+  if [ "$l0_broken" = no ]; then
+    l0_why="$(printf '%s\n' "$L0_OUT" | I="$l0_i" awk -F '\t' '$1 == ENVIRON["I"] {print $2; exit}')"
+  fi
+  if [ -n "$l0_why" ]; then
+    l0_consumed=$((l0_consumed+1))
+    echo "FAIL [L0] $f: frontmatter 를 YAML 파서가 읽지 못한다 (${l0_why}) — 런타임은 이런 agent 를 파일명" >&2
+    echo "  이름 + 전 도구로 싣는다. tools: allowlist 는 frontmatter 가 파싱될 때만 닫힌다 — 따옴표 · 괄호를 닫고" >&2
+    echo "  같은 키를 두 번 쓰지 말 것." >&2
+    violations=$((violations+1))
+    continue
+  fi
 
   # --- L1 ---
   if grep -qE '^(allowedTools|allowed-tools|disallowed-tools):' <<<"$FM"; then
@@ -403,6 +580,14 @@ for f in plugins/*/agents/*.md; do
     violations=$((violations+1))
   done < <(printf '%s\n' "$tools_val" | tr ',' '\n')
 done
+
+# L0 대조 — 완주 신호의 두 수가 셸이 실제로 대조한 것과 같아야 한다. 파일 수가 다르면 파이썬이 일부
+# 파일만 봤고, 위반 수가 다르면 셸이 어느 파일의 것인지 모르는 위반 레코드가 있다 — 둘 다 어떤 파일의 L0
+# 판정이 대조되지 않았다는 뜻이다.
+if [ "$l0_broken" = no ] && { [ "$l0_nfiles" -ne "$#" ] || [ "$l0_consumed" -ne "$l0_nviol" ]; }; then
+  echo "FAIL [L0] 완주 신호가 셸의 대조와 맞지 않는다 (파이썬: 파일 ${l0_nfiles} · 위반 ${l0_nviol} / 셸: 파일 $# · 소비한 위반 ${l0_consumed}) — 어떤 파일의 L0 판정이 대조되지 않았다." >&2
+  violations=$((violations+1))
+fi
 
 if [ "$violations" -gt 0 ]; then
   echo "FAIL: agent 도구 표면 위반 $violations 건" >&2

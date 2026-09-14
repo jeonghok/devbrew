@@ -17,9 +17,9 @@ v0.23.0부터 brief는 payload + audit 2파일 쌍이다. `gate <payload>`는 pa
 해석한다(AC9, fail-closed) — audit_file 부재·traversal·파일 부재는 전부 red다.
 
 이 게이트는 **Law 1 구조 자기검사**다.
-Law 2 분리 리뷰는 v0.24.0부터 그 위에 얹혔다 — `skills/reviewing-brief/`가 격리된
-brief-critic(충실도) · brief-direction-reviewer(방향성) · brief-readback(냉독) + codex
-축별 2회를 돌린다. 즉 "brief는 분리 리뷰를 받지 않는다"는 더 이상 사실이 아니다(NG3 교정,
+Law 2 분리 리뷰는 v0.24.0부터 그 위에 얹혔다 — 지금 `skills/reviewing-brief/`는 공유 문서
+리뷰 엔진(doc-critic 층 1 방향성 · 층 2 충실도 → doc-recritic, + codex)과 brief-readback(냉독)을
+돌린다. 즉 "brief는 분리 리뷰를 받지 않는다"는 더 이상 사실이 아니다(NG3 교정,
 Spec B AC17).
 
 **불변식: 이 스크립트는 brief 파일만 읽는다** (payload + 그것이 가리키는 audit). conducting-interview의

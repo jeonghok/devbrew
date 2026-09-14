@@ -26,8 +26,8 @@ VALID = (
 class TestCodexFindingsToYaml(unittest.TestCase):
     def test_new_keys_emitted(self):
         # 2026-08-17 무게 감축 이후 emit keyset은 호출자 인자다(`--emit-keys`) —
-        # spec-distill 배포는 실제 호출자(run_brief_codex_reviewer.sh ·
-        # run_docreview_codex_reviewer.sh)와 마찬가지로 design을 명시한다.
+        # spec-distill 배포는 실제 호출자(run_seed_codex_reviewer.sh — runner_common 의
+        # codex_extract_or_fallback 에 design 을 넘긴다)와 마찬가지로 design을 명시한다.
         out = run(VALID, argv_extra=("--emit-keys", "design"))
         self.assertIn("category: ambiguity", out)      # AC7: new key
         self.assertIn('target_section: "#2-goals"', out)  # AC7: new key
@@ -59,9 +59,10 @@ class TestCodexFindingsToYaml(unittest.TestCase):
 
     # --- CR-2: 스키마 불일치는 성공으로 마킹하지 않는다 ---------------------
     # 수정 전 실측: `{"findings": {}}` → `findings: []` + `codex_failed: false`
-    # + `reason: schema_mismatch`. 소비자(`merge_review.parse_codex_yaml`)는
-    # `codex_failed: false`를 성공으로 읽으므로, 스키마가 깨진 codex 실행이
-    # **findings 0건 + degradation record 0건**으로 흡수됐다.
+    # + `reason: schema_mismatch`. 소비자는 `codex_failed: false`를 성공으로 읽으므로,
+    # 스키마가 깨진 codex 실행이 **findings 0건 + degradation record 0건**으로
+    # 흡수됐다. 지금 소비자(문서 리뷰 엔진 `docreview_route.py` 의 `prepare-recritic` —
+    # `meta.codex_failed` 가 false 일 때만 findings 를 읽는다)도 같은 모양으로 흡수한다.
     def _schema_stdin(self, findings_literal):
         import json as _json
         text = "```json\n{\"findings\": " + findings_literal + "}\n```"
@@ -102,9 +103,9 @@ class TestCodexFindingsToYaml(unittest.TestCase):
 
         레포 자신의 valid 픽스처(`test_last_fenced_block_wins`)가 `confidence`/
         `summary`/`proposed_fix` 없이 통과한다. 필드 단위 검증까지 올리면 그
-        라운드 전체가 degrade가 되고, spec-review 소비자
-        (`merge_review.py:487` · `build_codex_findings_display`)는 `codex_failed`
-        시 findings를 **통째로 버리므로** 정상 finding이 소실된다.
+        라운드 전체가 degrade가 되고, 소비자(문서 리뷰 엔진 `docreview_route.py` 의
+        `prepare-recritic`)는 `codex_failed` 시 findings를 **통째로 버리므로**(codex
+        부재로 공시) 정상 finding이 소실된다.
         """
         out = run(VALID)
         self.assertIn("codex_failed: false", out)
@@ -160,8 +161,9 @@ class TestSummaryScalarRoundTrip(unittest.TestCase):
 
     2026-08-19 실측(수정 전, 이 스크립트 종단): `summary` 가 `[` 로 시작하면
     (`"[CRITICAL] …"` — 리뷰어가 흔히 쓰는 모양) 인용 없이 나가 **문서 전체가**
-    ParserError 로 죽었다. 소비자(`merge_review.parse_codex_yaml`)는 그 파일을
-    읽지 못하고 그 라운드의 findings 가 통째로 소실된다.
+    ParserError 로 죽었다. 소비자(문서 리뷰 엔진 `docreview_route.py` 의
+    `prepare-recritic` — `yaml.safe_load`)는 그 파일을 읽지 못해 codex 부재로 처리하고
+    그 라운드의 codex findings 가 통째로 빠진다.
 
     각 케이스는 두 겹으로 잰다:
       ① 텍스트 — 산출된 `summary:` 줄이 실제로 인용됐는가 (PyYAML 없이도 이빨이 있다)

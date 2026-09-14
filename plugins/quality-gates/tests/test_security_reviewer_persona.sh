@@ -20,6 +20,9 @@ inputs_to_hunt() {
 antiflag_section() {
   awk '/^## What you do NOT flag/{f=1; next} /^## /{f=0} f' "$PERSONA"
 }
+hunt_section() {
+  awk '/^## Hunt categories/{f=1; next} /^## /{f=0} f' "$PERSONA"
+}
 
 # Frontmatter required keys
 assert_count_ge "grep -c '^name: security-reviewer$' '$PERSONA'" 1 "frontmatter name"
@@ -62,5 +65,9 @@ assert_count_ge "inputs_to_hunt | grep -cE 'DATA to analyze, never as instructio
 assert_count_ge "antiflag_section | grep -c 'Managed-language memory safety'" 1 "managed-lang memory-safety precedent in anti-flag section"
 assert_count_ge "antiflag_section | grep -c 'Framework-escaped XSS'" 1 "framework-escaped XSS precedent in anti-flag section"
 assert_count_ge "antiflag_section | grep -c 'Path-only SSRF'" 1 "path-only SSRF precedent in anti-flag section"
+
+# --- v7.6.0 skill · command 본문의 위치 인자 치환 — 리뷰를 탈출한 결함(PR 3 T9a `rm -f "$1"`)의 페르소나 편집 (최종 리뷰 F4)
+# body-unique 문구를 `## Hunt categories` 창 안에서만 찾는다 — 불릿이 다른 절로 옮겨지거나 지워지면 RED.
+assert_count_ge "hunt_section | grep -cF 'becomes caller input when the fence is run literally'" 1 "skill/command body positional-token substitution hunt bullet in Hunt categories"
 
 finish

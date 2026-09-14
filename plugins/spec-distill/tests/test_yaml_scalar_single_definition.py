@@ -80,9 +80,11 @@ class TestYamlScalarSingleDefinition(unittest.TestCase):
 
     def test_consumers_call_the_same_function_object(self):
         consumers = _consumer_modules()
-        # 축퇴 가드: 소비자를 하나도 못 찾으면 아래 루프가 공허하게 통과한다.
-        self.assertGreaterEqual(len(consumers), 3,
-                                f"소비자를 3개 미만으로 찾았다 — 검사가 공허하다: {consumers}")
+        # 축퇴 가드: 소비자를 하나도 못 찾으면 아래 루프가 공허하게 통과한다. 하한은 오늘의
+        # 실측 소비자 수다 — 문서 리뷰 엔진 전환으로 옛 병합 스크립트 둘이 지워져 3 → 2 → 1
+        # (남은 소비자는 brief_review_state). 소비자가 늘면 하한도 실측으로 올린다.
+        self.assertGreaterEqual(len(consumers), 1,
+                                f"소비자를 하나도 못 찾았다 — 검사가 공허하다: {consumers}")
         canon = importlib.import_module(CANON_MODULE)
         for name in consumers:
             mod = importlib.import_module(name)

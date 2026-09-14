@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """build_brief_inline_blob.py — **brief-readback 전용** payload blob.
 
-v0.45.0에서 충실도 축이 `build_brief_bundle.py`로 갈라졌다(payload + audit §6을 조립해
-`brief-critic`과 codex #2가 받는다). 이 파일은 계약이 바뀌지 않았고 소비자가 하나로
+v0.45.0에서 충실도 축이 `build_brief_bundle.py`로 갈라졌다(payload + audit §6을 조립한 번들 —
+지금은 문서 리뷰 엔진의 탐지·재비판·codex가 받는다). 이 파일은 계약이 바뀌지 않았고 소비자가 하나로
 줄었다 — 냉독이 재는 것은 *하류가 실제로 받는 문서*의 읽힘이므로 payload-only가 맞다.
 번들을 주면 냉독이 하류가 절대 보지 않을 것을 읽는다.
 
@@ -51,8 +51,8 @@ def redact_frontmatter(text: str) -> str:
     보지 않으므로, 빈 `name:`은 구조 게이트를 통과한 뒤 여기서 조용히 한 줄을 지운
     사본이 격리 critic에게 간다.
 
-    `brief_review_state.py`의 `parse()`/`_set_scalar()`, `_parse_degradations()`가
-    같은 클래스의 버그를 이미 같은 방식으로 닫았다 — 이 파일이 남은 하나였다.
+    `brief_review_state.py`의 `_parse_degradations()`가 같은 클래스의 버그를 이미 같은
+    방식으로 닫았다(콜론 뒤 공백을 줄 안으로 한정) — 이 파일이 남은 하나였다.
     """
     if not text.startswith("---"):
         return text

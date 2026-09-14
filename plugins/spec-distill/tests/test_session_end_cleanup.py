@@ -55,13 +55,14 @@ class SessionEndCleanupTest(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _plant(self, name, age_s):
-        """다른 세션의 폴더. 폴더 나이 = 직속 파일의 최신 mtime(gc_common)."""
+        """다른 세션의 폴더. 폴더 나이 = 폴더 자신과 그 아래 모든 항목의 최신 mtime(gc_common, 3.1.0)."""
         d = self.root / name
         d.mkdir(parents=True)
         f = d / "state.local.md"
         f.write_text("x")
         t = time.time() - age_s
         os.utime(f, (t, t))
+        os.utime(d, (t, t))
         return d
 
     def test_1_happy_path(self):
@@ -286,6 +287,7 @@ class SymlinkedStateRootTest(unittest.TestCase):
         f.write_text("x")
         t = time.time() - STALE_AGE_S
         os.utime(f, (t, t))
+        os.utime(stale, (t, t))   # 폴더 자신의 mtime 도 나이에 든다(gc_common, 3.1.0)
         git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
         subprocess.run(git + ["add", "-A"], cwd=self.clone, check=True)
         subprocess.run(git + ["commit", "-qm", "plant lock link"], cwd=self.clone, check=True)

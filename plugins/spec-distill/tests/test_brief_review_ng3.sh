@@ -91,7 +91,7 @@ else
   no "T13: 두 자리가 같은 ground_truth 를 쓴다 — 자리 경계가 무너졌다"
 fi
 
-# 층 2 항목의 분리: 충실도 축(distortion·omission·invention)은 brief 자리 소유이고
+# 층 2 항목의 분리: 충실도 축(brief 프로필의 층 2 전부)은 brief 자리 소유이고
 # design 자리 rubric 에 나타나면 안 된다. 반대 방향도 함께 잰다.
 L2_D="$(lay_of "$PROF_DESIGN" layer2)"; L2_B="$(lay_of "$PROF_BRIEF" layer2)"
 L1_D="$(lay_of "$PROF_DESIGN" layer1)"; L1_B="$(lay_of "$PROF_BRIEF" layer1)"
@@ -101,11 +101,16 @@ else
   no "T13: layer_rubric 추출 실패 — 아래 경계 판정이 공허하다"
 fi
 leak=""
-for _fid in distortion omission invention; do
+n_fid=0
+for _fid in $(printf '%s' "$L2_B" | tr -d '[]' | tr ',' ' '); do
+  n_fid=$((n_fid+1))
   printf '%s' "$L2_D" | grep -qF "$_fid" && leak="$leak $_fid"
 done
+[[ "$n_fid" -ge 3 ]] \
+  && ok "T13: brief 층 2 에서 충실도 축 ${n_fid}개를 읽었다 (아래 부재 판정의 양의 짝)" \
+  || no "T13: brief 층 2 에서 충실도 축을 ${n_fid}개만 읽었다 — 아래 부재 판정이 공허하다"
 [[ -z "$leak" ]] \
-  && ok "T13: 충실도 축(distortion·omission·invention)이 design 자리 rubric 에 없다" \
+  && ok "T13: 충실도 축(brief 층 2 전부)이 design 자리 rubric 에 없다" \
   || no "T13: design 자리 rubric 이 brief 자리의 충실도 축을 흡수했다:$leak"
 leak2=""
 for _did in goal_fit architecture tradeoffs; do

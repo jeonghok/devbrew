@@ -272,7 +272,7 @@ For each iteration N (1..5):
 
    ```bash
    QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"   # plugin root per Step P0b
-   MERGE_BASE=$("$QG/scripts/resolve-baseline.sh" | awk '$1=="merge_base:"{print $2}')
+   MERGE_BASE=$("$QG/scripts/resolve-baseline.sh" | sed -n 's/^merge_base: //p')
    git diff --name-only "$MERGE_BASE"..HEAD    # (a) committed on this branch
    git diff HEAD --name-only                   # (b) tracked, not yet committed
    git ls-files --others --exclude-standard    # (c) untracked and not ignored
@@ -409,9 +409,10 @@ Agent({
    `rc == 3`, delete the output file before reading anything from it
    (`rm -f <output_path>`) — otherwise a prior iteration's YAML (which may carry a
    false-positive `codex_failed: false`) sits untouched and is read as this
-   iteration's codex verdict. This mirrors `run_brief_codex_reviewer.sh`'s identical
-   exit-3 contract, whose caller (`spec-distill`'s `reviewing-brief` SKILL) already
-   implements the same `if rc == 3: rm -f` pattern.
+   iteration's codex verdict. This mirrors the identical exit-3 contract of
+   `run_docreview_codex_reviewer.sh` (spec-distill's document-review runner), whose
+   callers (`spec-distill`'s `reviewing-spec` and `reviewing-brief` SKILLs) implement
+   the same `if rc == 3: rm -f` pattern.
 
 #### Codex skip 안내
 

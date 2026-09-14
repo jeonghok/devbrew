@@ -2,7 +2,7 @@
 
 이 모듈을 import 하는 빌더 (실측 도출: `grep -l 'from codex_prompt_common' plugins/*/scripts/`):
 quality-gates 의 `build_codex_prompt.py`·`build_artifact_codex_prompt.py`, spec-distill 의
-`build_brief_codex_prompt.py`·`build_seed_codex_prompt.py`.
+`build_seed_codex_prompt.py`.
 
 정본화 이전 이력: 같은 stdout 인코딩 가드와 같은 P21(신뢰불가 입력 프리앰블) 로더가 빌더
 마다 따로 있었고 주석까지 바이트 단위로 같았다. P21 은 **보안 컨트롤**이라 여러 벌로 두면

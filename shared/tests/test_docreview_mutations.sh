@@ -661,4 +661,32 @@ mut 1/1 reraise_kind_hardcoded_post case_AC22c_reraise_preserves_pre_kind sed_ro
 #    즉시-applied 단언은 렌더 텍스트와 무관해 생존한다(실측 RED(1) 생존(2)).
 mut 1/1 rg_decide_post_tail_unwired case_AC22c_reraise_inherits_post_kind sed_state \
   's/"\[decide%s\] %s — %s%s" % (" auto" if dv\.get("auto") else "", fid, f\.get("summary"), _post_kind_notice(d)),/"[decide%s] %s — %s" % (" auto" if dv.get("auto") else "", fid, f.get("summary")),/'
+# (54) 상태 디렉토리의 문서 정체 — `init` 의 문서 비교를 끈다. 다른 문서의 원장을 조용히
+#    이어받던 그 동작이다. 거부 셀만 RED 가 된다.
+mut 1/1 init_doc_compare_off case_init_other_doc_refused sed_state \
+  's/if not isinstance(have, str) or doc_identity(have) != doc_identity(a\.doc):/if False:/'
+# (55) 반대 방향 — 정규화를 빼고 원문 문자열로 비교한다. 같은 문서를 심볼릭 링크나 '/./'
+#    표기로 부르면 거부되는 거짓 양성이다. 도출(`state-dir-for`)은 여전히 정규화하므로 같은
+#    디렉토리에 앉은 같은 문서를 `init` 이 거부하게 된다 — 비교와 도출이 같은 정규화를 써야
+#    하는 이유를 양의 짝(`case_init_same_doc_idempotent`)이 잰다.
+mut 1/1 init_doc_compare_raw case_init_same_doc_idempotent sed_state \
+  's/doc_identity(have) != doc_identity(a\.doc)/have != a.doc/'
+# (56) 프로필 비교를 끈다 — 같은 문서의 원장을 다른 프로필(허용 처분·앵커 규칙이 다르다)로
+#    이어간다.
+mut 1/1 init_profile_compare_off case_init_other_profile_refused sed_state \
+  's/if not isinstance(have, str) or profile_identity(have) != profile_identity(a\.profile):/if False:/'
+# (57) 도출에서 문서 경로를 뺀다 — 해시가 루트만의 함수가 되면 이름이 같은 다른 문서가 한
+#    디렉토리를 나눠 쓴다. 이름표(stem)는 남아 파일 이름이 다른 문서끼리는 여전히 갈리므로
+#    케이스는 이름이 같은 두 문서로 잰다.
+mut 1/1 state_dir_for_doc_dropped case_state_dir_for_per_doc sed_state \
+  's/digest = hashlib\.sha256(os\.fsencode(ident))\.hexdigest()\[:16\]/digest = hashlib.sha256(os.fsencode(str(root))).hexdigest()[:16]/'
+# (58) 세션 검사를 구분자·점만 막던 넓은 형태로 되돌린다 — 개행이 든 세션이 두 줄 경로를 낸다.
+mut 1/1 session_charset_widened case_state_dir_for_per_doc sed_state \
+  's|if not a\.session or not _SESSION_OK\.fullmatch(a\.session):|if not a.session or a.session in (".", "..") or "/" in a.session:|'
+# (59) `state-dir-for` 가 상대 문서를 받는다 — 같은 문서의 키가 cwd 마다 갈린다.
+mut 1/1 state_dir_for_relative_doc_accepted case_state_dir_for_per_doc sed_state \
+  's/    if not os\.path\.isabs(a\.doc):/    if False:/'
+# (60) `init` 이 상대 문서를 받는다 — 원장의 문서 정체가 cwd 의 함수가 된다.
+mut 1/1 init_relative_doc_accepted case_init_relative_doc_refused sed_state \
+  's/if not a\.doc or not os\.path\.isabs(a\.doc):/if not a.doc:/'
 finish

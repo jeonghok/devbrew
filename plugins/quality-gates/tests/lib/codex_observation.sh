@@ -117,13 +117,9 @@ obs_invoke() {
       PATH="$OBS_MOCKBIN:$PATH" CODEX_CAPTURE_DIR="$capture" CLAUDE_PLUGIN_ROOT="$qg" \
         bash "$cand" "$input" "$OBS_REPO" "$out" >/dev/null 2>&1 || rc=$?
       ;;
-    run_brief_codex_reviewer.sh)
-      PATH="$OBS_MOCKBIN:$PATH" CODEX_CAPTURE_DIR="$capture" CLAUDE_PLUGIN_ROOT="$sd" \
-        bash "$cand" direction "$input" "$OBS_REPO" "$out" >/dev/null 2>&1 || rc=$?
-      ;;
     run_seed_codex_reviewer.sh)
-      # Task 14 — 형제 run_brief_codex_reviewer.sh 와 같은 인자 형태(<axis> <payload>
-      # <project_dir> <out>)이지만 axis 는 "suppression" 하나뿐이다.
+      # Task 14 — 인자 형태는 <axis> <payload> <project_dir> <out> 이고 axis 는
+      # "suppression" 하나뿐이다.
       PATH="$OBS_MOCKBIN:$PATH" CODEX_CAPTURE_DIR="$capture" CLAUDE_PLUGIN_ROOT="$sd" \
         bash "$cand" suppression "$input" "$OBS_REPO" "$out" >/dev/null 2>&1 || rc=$?
       ;;
@@ -146,17 +142,30 @@ obs_invoke() {
       # 정확히 F-5 가 없앤 결함이다 — 이 관측은 "codex 가 실제로 불리는가"만
       # 재고 프롬프트 «내용»은 안 재므로, 최소한 게이트를 통과할 만큼의
       # frontmatter 를 준다(정본 `load_profile()` 의 열 필드 전부는 필요 없다 —
-      # 이 러너는 그 검증을 다시 하지 않고 이 셋만 읽는다).
+      # 이 러너는 그 검증을 다시 하지 않고 이 넷만 읽는다). `ground_truth` 가 넷째다
+      # — 러너가 그것을 codex 프롬프트에 싣고, 없거나 비면 `ground_truth_empty` 로
+      # fail-closed 해 codex 를 부르지 않는다(Task 3c).
       # 정본이 `shared/`에 있고 두 플러그인 모두에 파일 단위 링크로 배포되므로
       # (`plugins/{quality-gates,spec-distill}/scripts/`) CLAUDE_PLUGIN_ROOT는 둘 중
       # 아무 쪽이어도 무방하다 — prompt-preamble.md·codex_findings_to_yaml.py가
       # 두 플러그인 모두에서 shared/codex/의 같은 대상으로 링크돼 있다.
+      # `web` 은 호출자가 고른다(`OBS_DOCREVIEW_WEB`, 기본 false). 대부분의 관측은 codex 가
+      # 불리는지만 재므로 false 로 충분하다. test_web_kill_switch.sh 의 AC21 표는 true 로
+      # 불러 이 러너의 웹 ON 과 두 호스트 kill switch 를 두 열 · 엄격성으로 잰다.
+      # true|false 밖의 값은 false 로 떨어뜨리지 않고 거부한다 — 떨어뜨리면 ON 을 재려던
+      # 호출이 조용히 OFF 를 잰다.
+      local web_val="${OBS_DOCREVIEW_WEB:-false}"
+      if [ "$web_val" != true ] && [ "$web_val" != false ]; then
+        echo "obs_invoke: OBS_DOCREVIEW_WEB 는 true|false 만 받는다 — '$web_val'" >&2
+        return 95
+      fi
       local profile; profile="$work/docreview-profile.md"
       {
         printf -- '---\n'
+        printf 'ground_truth: "devbrew observation fixture"\n'
         printf 'layer_rubric:\n  layer1: [observation]\n  layer2: []\n'
         printf 'allowed_dispositions: [decide, ask]\n'
-        printf 'web: false\n'
+        printf 'web: %s\n' "$web_val"
         printf -- '---\n'
         printf 'devbrew observation profile\n'
       } > "$profile"

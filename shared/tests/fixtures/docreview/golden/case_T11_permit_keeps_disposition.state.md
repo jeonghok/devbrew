@@ -496,6 +496,7 @@ docreview:
         lineage_mismatch: 1
         reraise_unconsumed: 0
         escalated_unconsumed: 0
+      started_mtime_ns: <MTIME_NS>
     '2':
       open_lineages:
       - 011167c4#r1.2
@@ -526,6 +527,7 @@ docreview:
         lineage_mismatch: 0
         reraise_unconsumed: 0
         escalated_unconsumed: 0
+      started_mtime_ns: <MTIME_NS>
   pending_recritic: null
   rejected_lineages:
     011167c4#r1.1:

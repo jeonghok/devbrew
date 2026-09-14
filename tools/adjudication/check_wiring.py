@@ -152,94 +152,6 @@ EXEMPT = {
         "제외한다. 항목 자체는 이 loop 이전에 계산된 `passthrough` 리스트에 "
         "이미 담겨 있고 함수 반환값(`deduped + passthrough`)에 그대로 "
         "살아남는다 — 버려지는 항목이 없다.",
-    # Task 10 — merge_review.py 의 `disposition_report()` 결과를 이름별로 펴는
-    # 루프. `continue` 는 "reasons"·"held_by_class" 두 키를 이 loop 에서만
-    # 제외한다 — 둘 다 다른 자리에서 이미/따로 실린다: "reasons" 는 이 loop
-    # «이전»에 이미 `advisory.extend(merged["reasons"])`로 advisory 채널에
-    # 실렸고, "held_by_class" 는 loop 직후 세 줄(`adjudication_held_unadjudicated`/
-    # `_malformed`/`_other`)로 분해돼 실린다.
-    # 버려지는 항목이 없다(C6(1)).
-    ("plugins/spec-distill/scripts/merge_review.py", 618,
-     "continue in main @ if _k in ('reasons', 'held_by_class')"):
-        "C6(1) — disposition_report().items() 를 도는 이 continue 는 "
-        "\"reasons\"·\"held_by_class\" 두 키를 이 loop 에서만 제외한다. "
-        "\"reasons\" 는 이 loop 이전에 이미 advisory 채널로, \"held_by_class\" "
-        "는 loop 직후 세 줄(held_unadjudicated/held_malformed/held_other)로 "
-        "각각 실린다 — 버려지는 항목이 없다.",
-    # Task 10 수정 라운드 1 — merge_brief_review.py 가 형제 merge_review.py 와
-    # 같은 편평화 루프를 쓴다. 원장이 하나뿐이라 합산이 없다는 점만 다르고
-    # 제외 사유는 동일하다: "reasons" 는 이 loop 이전에 이미
-    # `advisory.extend(L.reasons())` 로, "held_by_class" 는 loop 직후
-    # 세 줄로 각각 실린다 — 버려지는 항목이 없다.
-    ("plugins/spec-distill/scripts/merge_brief_review.py", 363,
-     "continue in main @ if _k in ('reasons', 'held_by_class')"):
-        "C6(1) — disposition_report().items() 를 도는 이 continue 는 "
-        "\"reasons\"·\"held_by_class\" 두 키를 이 loop 에서만 제외한다. "
-        "\"reasons\" 는 이 loop 이전에 이미 `advisory.extend(L.reasons())` "
-        "로, \"held_by_class\" 는 loop 직후 세 줄(held_unadjudicated/"
-        "held_malformed/held_other)로 각각 실린다 — 버려지는 항목이 없다.",
-
-    # Task 11b Step 1~3 — 계획이 배정하지 않았던 네 자리(merge_review.py).
-    # PR1 배선 baseline=14, T1-A/T1-B 가 (삭제된) 설계문서 리뷰 훅 열을 닫아 남긴 게
-    # 이 넷이었다(원 계획 전제). 넷 다 판단 결과는 «배선 불필요» — 근거는
-    # 자리마다 다르다(보고서 `.superpowers/sdd/2026-09-03-adjudication-topology/
-    # task-11b-report.md` 에 각 자리의 세 질문 답변).
-    #
-    # 헤더 두 자리 — parse_codex_yaml() 의 `for raw in lines:` 는 codex YAML
-    # 파일의 «텍스트 줄» 을 도는 라인 파서 루프다. 원소는 판정 항목(finding)
-    # 이 아니라 원문 줄이고, 두 continue 는 YAML 섹션 헤더(`findings:`·
-    # `meta:`) 를 만났을 때 상태 전이만 하고 다음 줄로 넘어간다 — 그 줄
-    # 자체가 finding 이 아니므로 버릴 항목이 없다. `meta:` 쪽은 오히려 반대
-    # 증거를 담고 있다: `meta:` 전환 **이전에** `if cur: findings.append(cur)`
-    # 로 그때까지 누적된 finding 을 먼저 보존한 뒤에 continue 한다 — 소실
-    # 방지가 코드에 명시적으로 있다.
-    ("plugins/spec-distill/scripts/merge_review.py", 155,
-     "continue in parse_codex_yaml @ if line.startswith('findings:')"):
-        "C6(1) — parse_codex_yaml() 의 `for raw in lines:` 는 codex YAML 의 "
-        "«텍스트 줄»을 도는 라인 파서다(findings 리스트가 아니다). 이 "
-        "continue 는 `findings:` 섹션 헤더 줄을 만났을 때 상태 전이만 하고 "
-        "다음 줄로 넘어간다 — 헤더 줄 자체는 finding 이 아니라 버릴 항목이 "
-        "없다.",
-    ("plugins/spec-distill/scripts/merge_review.py", 160,
-     "continue in parse_codex_yaml @ if line.startswith('meta:')"):
-        "C6(1) — 같은 라인 파서, `meta:` 섹션 헤더. `if cur: findings.append("
-        "cur)` 가 continue **이전**에 실행돼 그때까지 누적된 finding 을 먼저 "
-        "보존한다 — 헤더 줄 자체는 finding 이 아니고, 진행 중이던 finding 도 "
-        "소실되지 않는다.",
-    # fold 조기 종료 — derive_codex_verdict() 는 `codex_findings` 전체에 대한 단일
-    # 집계값(verdict 문자열)을 접는(fold) 함수다. 첫 escalating finding 에서
-    # `return "needs_revise"` 로 끊지만, 순회를 멈춘다고 나머지 finding 이
-    # 파이프라인에서 사라지지 않는다 — 호출자가 들고 있는 같은 `codex_findings`
-    # 리스트가 이 함수와 무관하게 build_ledger() 의 `for f in codex_findings:`
-    # (이미 배선됨 — codex_ledger.hold() 뒤 continue) 로 전수
-    # 다시 돌며, category·target_section 둘 다 없는 원소는 거기서 hold() 된다.
-    # 표시 채널(build_codex_findings_display)도 이 함수와 별개로 같은 전체
-    # 리스트를 돈다. 즉 이 fold 가 일찍 멈춰도 "판정에 영향을 주는 값"은
-    # 동일하고(max 류 단조 집계라 나머지를 봐도 결론이 안 바뀐다), 개별
-    # finding 의 회계는 이미 build_ledger() 의 그 루프가 맡는다.
-    ("plugins/spec-distill/scripts/merge_review.py", 229,
-     'return in derive_codex_verdict @ if sev in CODEX_SEVERITY_REVISE or sev not in CODEX_SEVERITY_KNOWN'):
-        "C6(1) — derive_codex_verdict() 의 fold 조기 종료. `codex_findings` "
-        "전체는 이 함수와 무관하게 build_ledger() 의 `for f in codex_findings:` "
-        "(이미 배선 — codex_ledger.hold() 뒤 continue) 가 "
-        "전수 다시 돌아 개별 회계하고, build_codex_findings_display() 도 같은 "
-        "전체 리스트를 별도로 순회해 표시한다 — 이 fold 가 멈춰도 미방문 "
-        "finding 이 파이프라인에서 사라지지 않는다. 결론(needs_revise)도 "
-        "단조 집계라 나머지를 마저 봐도 바뀌지 않는다.",
-    # 도달 불가능한 방어 — build_codex_findings_display() 의
-    # `if not isinstance(f, dict): continue`. 이 함수의 유일한 호출자 main() 은
-    # 항상 parse_codex_yaml() 의 반환값을 그대로 넘기고(그 둘 사이에
-    # 변형 없음), parse_codex_yaml() 의 `findings` 리스트는 `cur = {}` 로만
-    # 생성되고 dict 항목 대입(`cur[k] = v`)만 받는다 — 코드 어디에도 `cur` 를
-    # dict 아닌 값으로 덮어쓰는 경로가 없다(코드 확인 완료). 배선하면 Task 10
-    # 의 `phase_key` 와 같은 죽은 코드가 된다.
-    ("plugins/spec-distill/scripts/merge_review.py", 270,
-     'continue in build_codex_findings_display @ if not isinstance(f, dict)'):
-        "C6(1) — 도달 불가능한 방어. 유일한 호출자 main() 은 parse_codex_"
-        "yaml() 의 반환값을 변형 없이 그대로 넘기고, 그 함수의 `findings` "
-        "는 `cur = {}` 로만 생성돼 dict 항목 대입만 받는다 — 비-dict 원소를 "
-        "만드는 경로가 코드에 없다(확인 완료). 배선하면 죽은 코드다(Task 10 "
-        "의 `phase_key` 와 같은 함정).",
 
     # T6b — docreview_route.py 아홉 자리. spec-distill·quality-gates 두 호스트에
     # 같은 물리 파일이 심볼릭 링크로 배포되지만(설계 §12) `scan()`/`comprehension_
@@ -258,11 +170,14 @@ EXEMPT = {
      "return in _permit_covers @ if int(p['round']) == n and anchor in p['apply_anchors']"):
         _DR_PERMIT_SEARCH,
     # T6b — docreview_route.py 아홉 자리 나머지. 사유는 위 `_DR_*` 상수 참조.
-    ("plugins/quality-gates/scripts/docreview_route.py", 328,
+    # PR 3 최종 리뷰 F6 — `cmd_prepare` 의 critic 디코드 실패 분기(sentinel 깨짐 = critic 사망)가 위에서 줄을 늘렸다.
+    # PR 3 qg iter 1 · 2 — 공유 시점 판별(`_round_staleness`)과 `cmd_prepare` 의 critic 시점 판별이 위에서 줄을
+    # 늘렸다(가드 텍스트 · 사유 무변경).
+    ("plugins/quality-gates/scripts/docreview_route.py", 372,
      "continue in _absorb_same_as @ if not live"): _DR_ABSORB_GROUP_DEAD,
-    ("plugins/quality-gates/scripts/docreview_route.py", 347,
+    ("plugins/quality-gates/scripts/docreview_route.py", 391,
      "continue in _classify_items @ if it.get('_absorbed_into')"): _DR_ABSORBED_ALREADY,
-    ("plugins/quality-gates/scripts/docreview_route.py", 352,
+    ("plugins/quality-gates/scripts/docreview_route.py", 396,
      "continue in _classify_items @ if it.get('_rejected')"): _DR_REJECTED_ALREADY,
     # Task 2 — escalated 예약을 재상승(AC21)과 대칭으로 맞추면서 줄번호가 밀렸다.
     # F-2/F-3 재리뷰(Ruling 20·21) 가 한 번 더 바꿨다: dedup continue(옛 404)는
@@ -270,22 +185,22 @@ EXEMPT = {
     # (`scan()` 이 그 호출을 disposition 으로 자동 인식해 guarded=True) — 그래서
     # 아래 목록에서 통째로 빠졌다(EXEMPT_BASELINE 주석 참조). 대신 F-3 이 새
     # discard 자리(fix 가 지금도 escalated 상태인지 검사)를 하나 늘렸다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 417,
+    ("plugins/quality-gates/scripts/docreview_route.py", 462,
      "continue in _auto_decides @ if int(e['round']) >= n"): _DR_ESCALATED_NOT_DUE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 422,
+    ("plugins/quality-gates/scripts/docreview_route.py", 467,
      "continue in _auto_decides @ if not f0"): _DR_ESCALATED_TARGET_GONE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 433,
+    ("plugins/quality-gates/scripts/docreview_route.py", 478,
      "continue in _auto_decides @ if not fx0 or fx0.get('state') != 'escalated'"):
         _DR_ESCALATED_FIX_NOT_LIVE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 458,
+    ("plugins/quality-gates/scripts/docreview_route.py", 503,
      "continue in _auto_decides @ if not f0"): _DR_RERAISE_TARGET_GONE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 469,
+    ("plugins/quality-gates/scripts/docreview_route.py", 514,
      "continue in _auto_decides @ if not d0 or d0.get('state') != 'expired'"):
         _DR_RERAISE_ALREADY_DECIDED,
     # Task 5 — 재상승 후속의 kind·prev_hash 승계 주석이 `_auto_decides` 재상승 갈래
     # 위에 끼어들며 아래로 밀렸다(옛 509 → fix round 1 M3 의 확장 주석까지 더해
     # 521). 가드 텍스트 자체는 그대로다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 521,
+    ("plugins/quality-gates/scripts/docreview_route.py", 566,
      "continue in _resolve_ids_and_lineage @ if it.get('_source') != 'reraise'"):
         _DR_LINEAGE_NOT_RERAISE,
 }
@@ -310,38 +225,6 @@ EXEMPT = {
 # 맞추고, 아래 값에 그 인용을 명시한다(실질은 이미 C6(1) — 대응할 dispatch
 # 자리 자체가 없음).
 TERMINAL_CONSUMERS = {
-    # T6b — reviewing-spec 껍데기화(Task 6)가 옛 spec-reviewer 참조를 끊으면서
-    # 이 파일이 ANCHOR 를 잃었다(Ruling 9). `merge_brief_review.py:37` 이 여전히
-    # `codex_degraded_from`·`derive_codex_verdict`·`parse_codex_yaml` 셋을 이
-    # 파일에서 재사용 import 한다(try 로 감싼 degrade 경로라 지우면 그 사용처가
-    # 조용히 축소된다) — 그래서 이 파일은 PR 3(브리프 리뷰 자리로의 전환)까지
-    # 산다. 최소 조치로 두 후보를 견줬다: ① `reviewing-brief/SKILL.md` 의 기존
-    # `consumer=merge_brief_review.py` 처분 줄에 이 파일도 얹기 — 기각한다.
-    # `_ANCHOR_RE` 는 처분 줄 하나당 `consumer=` 하나만 잡고(정규식이 `\S+` 까지만
-    # 먹는다), `test_dispatch_disposition.sh` 축 A①(앵커 수==dispatch 수, 실측
-    # 22==22)·축 A②(각 dispatch 아래 창에 자기 앵커가 정확히 하나)가 앵커:dispatch
-    # 1:1 을 이미 강제한다 — 기존 dispatch 옆에 두 번째 앵커를 얹으면 그 dispatch
-    # 가 앵커 2개를 갖게 돼 축 A② 가 깨지고, 앵커만 늘리면 축 A① 이 깨진다. 이
-    # 파일을 위해 «새 Agent() dispatch 자리»를 만드는 것은 허구다(CLAUDE.md —
-    # 없는 자리를 만들어 붙이면 그건 허구). ② TERMINAL_CONSUMERS 등재 — 채택.
-    # C6(2, 측정된 이유): 이 파일은 이제 어떤 skill/command/agent 도 subagent
-    # dispatch 결과를 이 파일에 판정시키지 않는다(옛 dispatch 자리가 사라졌다) —
-    # 순수 재사용 라이브러리로 변했다. 종단 결정자처럼 «원리적으로»
-    # 앵커가 불가능한 것은 아니지만(재도입되면 앵커가 다시 생길 수 있다), «지금»
-    # 은 대응하는 dispatch 자리가 없고 만들 근거도 없다는 점에서 결론(앵커 없음)
-    # 은 같다.
-    "plugins/spec-distill/scripts/merge_review.py":
-        "C6(2) — Ruling 9(T6b). reviewing-spec 껍데기화가 옛 spec-reviewer "
-        "dispatch 참조를 끊어 이 파일이 ANCHOR 를 잃었다. `merge_brief_review.py:37` "
-        "이 여전히 이 파일에서 세 함수를 재사용 import 하므로(try-wrapped degrade "
-        "경로) 파일은 PR 3 까지 산다(계획 File Structure 표). 기존 "
-        "`reviewing-brief/SKILL.md` 의 `consumer=merge_brief_review.py` 처분 "
-        "줄에 이 파일을 얹는 대안을 검토했으나 기각했다 — `test_dispatch_"
-        "disposition.sh` 축 A①/A② 가 앵커:dispatch 1:1 을 이미 강제해서(실측 "
-        "22==22) 기존 dispatch 옆에 두 번째 앵커를 얹으면 그 비율이 깨지고, 이 "
-        "파일만을 위한 새 Agent() dispatch 자리를 만드는 것은 허구다. 지금은 "
-        "어떤 skill 도 이 파일에 subagent 판정을 맡기지 않는다 — 대응하는 "
-        "dispatch 자리가 없다.",
     # T6b — check_wiring.py 의 IMPORT 도출에서 심볼릭 링크 skip 을 뺐다(Ruling 8).
     # 그 전에는 이 파일이 by_import·by_anchor 어느 쪽에도 없어(둘 다 링크를 걸러
     # 냈거나 애초에 앵커가 없어) union 자체에 없었다 — 이번 확장이 처음으로
@@ -581,7 +464,7 @@ def stale_terminal(repo_root):
     """`TERMINAL_CONSUMERS`의 신선도 — `stale_exempt()`와 같은 목적(F-2 재리뷰).
 
     항목은 자기 파일이 지금도 IMPORT이고 아직 ANCHOR가 없을 때만 유효하다.
-    두 방향의 낡음: 파일이 지워지면(PR 3의 merge_review.py 등) IMPORT에서
+    두 방향의 낡음: 파일이 지워지면(PR 3 이 지운 옛 병합 스크립트처럼) IMPORT에서
     빠지고, 호스트가 wiring되면(quality-gates docreview_route.py 등) ANCHOR가
     새로 생긴다 — 둘 다 원래의 등재 사유를 무효화한다. `derive_consumers()`를
     재사용한다(재도출 아님).
@@ -667,10 +550,22 @@ def uncited_exemptions():
 # 나가고 fix-liveness 들어옴). 무엇이 지금 등재돼 있는지는 위 `_DR_*` 상수를
 # 직접 읽어라.
 #
+# PR 3 Task 5 — 27 → 26. `merge_brief_review.py` 가 문서 리뷰 엔진 전환으로 지워져 그
+# 파일의 편평화 루프 면제(`:363`) 하나가 키째 사라졌다. 줄어든 만큼 상한을 내린다 —
+# 빈자리가 사유 없는 면제 추가로 조용히 채워지지 않게.
+#
+# PR 3 Task 6 — 26 → 21. `merge_review.py` 가 지워져 그 파일의 면제 다섯(Task 10 의
+# `:618` · Task 11b 의 `:155`·`:160`·`:229`·`:270`)이 키째 사라졌다. 같은 규율로
+# 내린다. 같은 커밋이 그 파일의 `TERMINAL_CONSUMERS` 항목도 지웠다 — 남겨 두면
+# `stale_terminal()` 이 `import_gone` 으로 RED 를 낸다.
+#
 # spec-distill 3.0.0 — 27 → 17. 설계문서 리뷰 훅이 삭제되며 그 파일의 면제 열 자리가
 # 대상과 함께 사라졌다. 줄인 것이지 면제로 옮긴 것이 아니다 — 값은 손으로 빼지 않고
 # 삭제 뒤 스캔의 `exempt_total` 로 재계수했다.
-EXEMPT_BASELINE = 17
+#
+# PR 3 T8c(origin/main 1238cae1 병합) — 두 삭제가 겹치지 않는다. 이 브랜치 21(27 − 6: 병합 스크립트 둘) ·
+# main 17(27 − 10: 설계문서 리뷰 훅) → 병합 트리 스캔 `exempt_total` 실측 11 = 27 − 6 − 10.
+EXEMPT_BASELINE = 11
 
 
 def derive_consumers(repo_root):

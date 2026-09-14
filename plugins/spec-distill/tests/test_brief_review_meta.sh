@@ -41,9 +41,11 @@ PRIN="$(section '^## Principles Instantiated' "$RM")"
 # 첫 줄을 한 줄로 붙여, 경계에 걸친 유령 매치를 만들 수 있다(오늘 안전한 이유는 Flow
 # 섹션의 첫 줄이 마침 빈 줄이라서일 뿐 — 그 우연이 사라지면 조용히 성립이 바뀐다).
 RM_SCAN="$(printf '%s\n%s\n' "$PRIN" "$(section '^## Flow' "$RM")")"
-for kw in 'brief-critic' 'brief-direction-reviewer' 'brief-readback' 'reviewing-brief'; do
+# 이름 목록은 오늘 brief 자리의 리뷰어다. 옛 brief-critic·brief-direction-reviewer 는 문서 리뷰
+# 엔진 전환으로 지워졌다 — 그 이름을 요구하면 README 가 지워진 agent 를 계속 적어야 GREEN 이다.
+for kw in 'doc-critic' 'doc-recritic' 'brief-readback' 'reviewing-brief'; do
   grep -qF "$kw" <<<"$RM_SCAN" \
-    && ok "T15: README에 신규 컴포넌트 '$kw'" || no "T15: README에 '$kw' 부재"
+    && ok "T15: README에 brief 자리 컴포넌트 '$kw'" || no "T15: README에 '$kw' 부재"
 done
 KS="$(section '^## Kill switches' "$RM")"
 grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW' <<<"$KS" \
@@ -80,11 +82,28 @@ ORPHAN="$(grep -nE '^[0-9]+\.[0-9]*\.? ' <<<"$FLOW" || true)"
 [[ -z "$ORPHAN" ]] \
   && ok "C4: Flow 섹션에 고아 리스트 번호 없음" \
   || no "C4: Flow 섹션에 붙을 리스트가 없는 번호 항목: ${ORPHAN}"
-# codex kill switch가 brief 파이프라인까지 문서화됐는가 (design-doc 경로만 적혀 있었다)
+# codex kill switch가 두 엔진 자리까지 문서화됐는가 (design-doc 경로만 적혀 있었다).
+# 3.1.0 에서 brief 자리의 codex 호출이 옛 파이프라인의 세 지점에서 엔진 라운드마다 도는
+# 리터럴 게이트 펜스 하나로 바뀌었다. 옛 단언(`3곳|세 곳`)은 그 전환 뒤 거짓 문장을 요구하므로,
+# README 가 **지금** 대는 것 — 두 자리 · 공유 러너 · 펜스 표지 — 을 재고, 그 주장이 참인지(두
+# SKILL 에 그 러너의 게이트 펜스가 정확히 하나씩 있는가)를 SKILL 에서 도출해 함께 잰다.
+# 부재 짝: 옛 세 지점 서술과 지워진 러너 이름이 이 줄에 돌아오면 RED 다.
 KS_CODEX="$(grep -F 'DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1' <<<"$KS" | head -1)"
-{ grep -qF 'reviewing-brief' <<<"$KS_CODEX" && grep -qE '3곳|세 곳' <<<"$KS_CODEX"; } \
-  && ok "C4: codex kill switch가 brief 파이프라인 호출 지점까지 문서화" \
-  || no "C4: codex kill switch가 design-doc 경로만 말한다 — brief 3개 호출 지점이 미문서화"
+{ grep -qF 'reviewing-spec' <<<"$KS_CODEX" && grep -qF 'reviewing-brief' <<<"$KS_CODEX" \
+    && grep -qF 'run_docreview_codex_reviewer.sh' <<<"$KS_CODEX" && grep -qF 'codex-gate' <<<"$KS_CODEX"; } \
+  && ok "C4: codex kill switch 가 두 엔진 자리 · 공유 러너 · 게이트 펜스 표지를 댄다" \
+  || no "C4: codex kill switch 서술이 두 엔진 자리(reviewing-spec · reviewing-brief) · 공유 러너(run_docreview_codex_reviewer.sh) · codex-gate 펜스 중 하나를 대지 않는다"
+if grep -qE '3곳|세 곳|세 지점|run_brief_codex_reviewer' <<<"$KS_CODEX"; then
+  no "C4/부재: codex kill switch 서술이 은퇴한 brief 파이프라인의 세 호출 지점이나 지워진 러너를 현재형으로 댄다"
+else
+  ok "C4/부재: 은퇴한 세 호출 지점 · 지워진 러너 서술 없음"
+fi
+for sk in reviewing-spec reviewing-brief; do
+  n_fence="$(grep -c 'codex-gate:begin runner=run_docreview_codex_reviewer.sh' "$SD/skills/$sk/SKILL.md" 2>/dev/null || true)"
+  [[ "$n_fence" == "1" ]] \
+    && ok "C4(사실): $sk 에 공유 러너의 codex 게이트 펜스가 정확히 하나 — README 의 「펜스 하나」가 참이다" \
+    || no "C4(사실): $sk 의 공유 러너 codex 게이트 펜스가 '${n_fence:-없음}'개 — README 의 「펜스 하나」 주장과 어긋난다"
+done
 
 # --- T18 / AC22a : 훅 집합 고정 열거 + 'brief' 문자열 0건 --------------------
 EXPECTED="hooks.json session-end-cleanup.py"
@@ -116,8 +135,10 @@ grep -qF '누가' <<<"$T63" && ok "T29: '누가 쓰는가' 열 존재" || no "T2
 # 삭제된 어휘-검출 체크를 요구하지 않는다 (round-4가 잡은 dangling)
 grep -qE '어휘 검출|오염 검출|contamination' <<<"$T63" \
   && no "T29: 삭제된 검출 메커니즘을 열거표가 요구" || ok "T29: 삭제된 검출 요구 부재"
-# 신규 결정론 체크가 표에 빠지지 않았는가 — 구현된 스크립트 목록과 대조
-for s in check_verbatim_coverage merge_brief_review; do
+# 신규 결정론 체크가 표에 빠지지 않았는가 — 구현된 스크립트 목록과 대조.
+# merge_brief_review.py 는 문서 리뷰 엔진 전환으로 지워졌다(병합은 docreview_route.py) —
+# §6.3 표의 그 행은 옛 설계의 기록이고, 파일 부재는 test_brief_codex_axes.sh 가 잰다.
+for s in check_verbatim_coverage; do
   test -f "$SD/scripts/$s.py" \
     && ok "T29: ${s}.py 실재" \
     || no "T29: ${s}.py 부재 (Task 순서 이상)"
@@ -129,13 +150,12 @@ done
 # 잡을 수단이 0이었다. 아래가 실제 열거 대조다.
 #
 # 판정 대상 = 파이프라인이 **게이트 결정이나 degrade 강등에 쓰는** 결정론 체크.
-DET_CHECKS="check_brief.py check_verbatim_coverage merge_brief_review T-lock build_brief_inline_blob brief_review_state"
+DET_CHECKS="check_brief.py check_verbatim_coverage T-lock build_brief_inline_blob brief_review_state"
 # 아래 둘은 shipping에 실재하지만 §6.3 표에 **행이 없다**. design doc 수정은 사람 몫이라
 # (이 사이클에서 문서는 read-only) 여기에 이름을 박아 gap을 greppable·강제 가능하게 만든다:
 #   - build_brief_inline_blob.py : 본문 audit 파일명 잔존 → exit 3 (호출자가 degrade 기록)
-#   - brief_review_state.py      : 닫힌 열거 검증 + rounds clamp + can-redispatch 게이트.
-#     특히 can-redispatch의 통과 조건은 `brief_critic_rounds`이고 그 값을 **orchestrator
-#     자신이 쓴다** — 표가 존재하는 이유인 "검사 대상이 통과 조건을 직접 쓴다" 범주다.
+#   - brief_review_state.py      : degrade 원장의 닫힌 열거 검증(component · axis · status ·
+#     ledger-key)과 손상 원장 거부 — 게이트가 아니라 degrade 강등을 기록하는 결정론 체크다.
 #     사람이 표에 행을 추가할 때 이빨 등급도 함께 판정해야 한다(기계가 못 하는 부분).
 DESIGN_GAP="build_brief_inline_blob brief_review_state"
 missing=""

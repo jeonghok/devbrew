@@ -210,6 +210,169 @@ write_agent 'tools: []
   Write'
 expect RED "tools: [] 뒤 indented continuation — 카브아웃이 multiline 가드를 건너뛰면 안 된다"
 
+# ── L0: 파서가 못 읽는 frontmatter (PR 3 최종 리뷰 F3) ─────────────────────────
+# 런타임 로더는 frontmatter 를 못 읽으면 오류 없이 **파일명 이름 + 전 도구**로 agent 를 싣는다
+# (PR 3 관측 태스크 T9 p9). 형태 화이트리스트(L2)는 column-0 줄의 모양만 봐서 아래 셋을 전부
+# 통과시켰다 — `tools: Read, Grep, Glob` 이 멀쩡히 보여도 런타임에는 그 allowlist 가 없다.
+write_raw() {   # write_raw <name 과 tools 사이에 끼울 줄들>
+  printf -- '---\nname: probe\n%s\nmodel: inherit\ntools: Read, Grep, Glob\n---\n\nbody\n' "$1" > "$FIX/probe.md"
+}
+echo "== L0: 파서가 못 읽는 frontmatter =="
+write_raw 'description: "unclosed'
+expect RED "description 의 안 닫힌 큰따옴표 — 파서가 못 읽는다 (런타임은 전 도구로 싣는다)"
+write_raw "description: 'unclosed"
+expect RED "description 의 안 닫힌 작은따옴표 — 파서가 못 읽는다"
+write_raw 'description: fixture
+color: [red'
+expect RED "안 닫힌 flow 값(color: [red) — 파서가 못 읽는다"
+echo "== L0 보강: 같은 모양이 닫혀 있으면 통과 (L0 이 over-reject 하지 않는다) =="
+write_raw 'description: "closed"
+color: [red]'
+expect GREEN "닫힌 따옴표 · 닫힌 flow 값은 파싱되므로 통과"
+
+# ── L0 완주 신호 · 인덱스 키잉 · 중복 키 (PR 3 qg iter 1) ─────────────────────────
+# L0 는 파이썬이 끝까지 돌았다는 양성 신호(`L0_DONE <파일 수> <위반 수>`)가 있고 셸의 대조가 그와 맞을
+# 때만 통과다. (a)(b)(b2)(c)(e1)(e2) 는 수정 전 락에서 전부 GREEN 이었다(결함 재현 — 리포트에 출력).
+# (e3) 은 위반 수 대조의 이빨이다(수정 전 락은 경로 키라 이 변형에 흔들리지 않았다).
+expect_env() {  # expect_env <RED|GREEN> <설명> <VAR=값…> — 할당은 락 실행에만 얹힌다
+  local want="$1" msg="$2"; shift 2
+  if env "$@" bash "$LOCK" "$TMP" >/dev/null 2>&1; then local got=GREEN; else local got=RED; fi
+  assert_eq "$got" "$want" "$msg (want $want, got $got)"
+}
+echo "== L0 (a): 같은 매핑의 중복 키 =="
+write_raw 'description: fixture
+description: 두 번째'
+expect RED "description: 두 줄 — 파서는 조용히 마지막 값을 쓰고 L2 의 중복 검사는 tools: 만 센다"
+
+echo "== L0 (b): 파일명에 탭 + 안 닫힌 따옴표 =="
+write_agent 'tools: Read, Grep, Glob'
+ODDF="$FIX/tab$(printf '\t')name.md"
+printf -- '---\nname: oddname\ndescription: "unclosed\nmodel: inherit\ntools: Read, Grep, Glob\n---\n\nbody\n' > "$ODDF"
+expect RED "탭이 든 파일명의 안 닫힌 따옴표 — 경로 키 레코드는 대조에 실패해 그 파일의 L0 가 빠졌다"
+printf -- '---\nname: oddname\ndescription: closed\nmodel: inherit\ntools: Read, Grep, Glob\n---\n\nbody\n' > "$ODDF"
+expect GREEN "탭이 든 파일명이어도 파싱되는 frontmatter 는 통과 (인덱스 대조가 이상한 이름에 over-reject 하지 않는다)"
+rm -f "$ODDF"
+echo "== L0 (b2): 파일명에 개행 + 안 닫힌 따옴표 =="
+ODDF="$FIX/nl"$'\n'"name.md"
+printf -- '---\nname: oddname\ndescription: "unclosed\nmodel: inherit\ntools: Read, Grep, Glob\n---\n\nbody\n' > "$ODDF"
+expect RED "개행이 든 파일명의 안 닫힌 따옴표 — 경로 키 레코드가 두 줄로 쪼개졌다"
+rm -f "$ODDF"
+
+# 파이썬 시작 환경을 흔드는 셀 — PYTHONPATH 앞자리에 둔 모듈이 락의 파이썬에만 얹힌다.
+# 주입 디렉토리는 스캔 루트(`$TMP`) **밖**의 형제 mktemp 디렉토리다(PR 3 qg iter 3) — 락은 import 전에 스캔 루트
+# 아래의 sys.path 항목을 뺀다. 루트 안에 두면 `yaml.py` 를 싣는 셀(c)이 그 제거로 공허해진다(PyYAML 부재가 아니라
+# 진짜 PyYAML 로 읽혀 다른 이유로 RED 가 된다). sitecustomize 는 시작 시 돌아 그 제거와 무관하다.
+SHROOT="$(mktemp -d)" || { echo "FAIL: mktemp 실패 (주입 디렉토리)"; exit 1; }
+[ -n "$SHROOT" ] && [ -d "$SHROOT" ] || { echo "FAIL: SHROOT 가 유효한 디렉토리가 아님"; exit 1; }
+trap 'rm -rf "$TMP" "$SHROOT"' EXIT
+SH_NOYAML="$SHROOT/py-noyaml"; SH_NOISE="$SHROOT/py-noise"; SH_MUTE="$SHROOT/py-mute"; SH_ARGV="$SHROOT/py-argv"; SH_SHIFT="$SHROOT/py-shift"; SH_EXIT="$SHROOT/py-exit"
+mkdir -p "$SH_NOYAML" "$SH_NOISE" "$SH_MUTE" "$SH_ARGV" "$SH_SHIFT" "$SH_EXIT" || exit 1
+printf 'raise ImportError("PyYAML shadowed by the L0 mutation cell")\n' > "$SH_NOYAML/yaml.py"
+printf 'import sys\nsys.stderr.write("sitecustomize: startup warning\\n")\n' > "$SH_NOYAML/sitecustomize.py"
+cp "$SH_NOYAML/sitecustomize.py" "$SH_NOISE/sitecustomize.py"
+printf 'import os, sys\nsys.stdout = open(os.devnull, "w")\n' > "$SH_MUTE/sitecustomize.py"
+printf 'import sys\ndel sys.argv[2:]\n' > "$SH_ARGV/sitecustomize.py"
+# 위반 레코드(`<i>\t<사유>`)의 인덱스만 100 밀어 찍는다 — 파이썬의 print 를 감싼다. builtins.enumerate 를
+# 바꾸면 PyYAML 까지 깨져 셀이 rc 검사로 RED 가 됐다(위반 수 대조를 지운 변이가 안 잡혔다 — 변이 표 M3).
+cat > "$SH_SHIFT/sitecustomize.py" <<'PY'
+import builtins, re
+_print = builtins.print
+def _shifted(*args, **kw):
+    if args and isinstance(args[0], str):
+        m = re.match(r"(\d+)\t", args[0])
+        if m:
+            args = ("%d\t%s" % (int(m.group(1)) + 100, args[0][m.end():]),) + args[1:]
+    return _print(*args, **kw)
+builtins.print = _shifted
+PY
+printf 'import atexit, os, sys\natexit.register(lambda: (sys.stdout.flush(), os._exit(1)))\n' > "$SH_EXIT/sitecustomize.py"
+
+echo "== L0 (c): PyYAML 부재 + 시작 시 stderr 한 줄 =="
+write_raw 'description: "unclosed'
+expect_env RED "PyYAML 을 못 읽는데 stderr 에 경고 한 줄이 섞였다 — 완전 일치 비교가 빗나가 L0 가 아무것도 안 쟀다" PYTHONPATH="$SH_NOYAML"
+echo "== L0 (c) 보강: stderr 경고만 있고 PyYAML 은 있다 =="
+write_agent 'tools: Read, Grep, Glob'
+expect_env GREEN "시작 시 stderr 경고 한 줄은 판정을 바꾸지 않는다 (stderr 는 파싱 출력에 섞이지 않는다)" PYTHONPATH="$SH_NOISE"
+
+echo "== L0 (e1): 파이썬의 stdout 이 사라졌다 — 완주 신호 없음 =="
+write_raw 'description: "unclosed'
+expect_env RED "rc 0 인데 아무 출력이 없으면 L0 는 아무것도 안 잰 것이다 — 침묵은 통과가 아니다" PYTHONPATH="$SH_MUTE"
+echo "== L0 (e2): 파이썬이 파일 일부만 받았다 — 파일 수 불일치 =="
+write_agent 'tools: Read, Grep, Glob'
+printf -- '---\nname: zlate\ndescription: "unclosed\nmodel: inherit\ntools: Read, Grep, Glob\n---\n\nbody\n' > "$FIX/zlate.md"
+expect_env RED "파이썬이 첫 파일만 보고 끝냈다 — 완주 신호의 파일 수가 셸의 \$# 와 다르다" PYTHONPATH="$SH_ARGV"
+echo "== L0 (e3): 위반 레코드의 인덱스가 어긋났다 — 위반 수 불일치 =="
+expect_env RED "위반 레코드가 셸이 모르는 인덱스를 달았다 — 셸이 소비한 위반 수가 완주 신호의 위반 수보다 적다" PYTHONPATH="$SH_SHIFT"
+rm -f "$FIX/zlate.md"
+echo "== L0 (e4): 완주 신호 뒤에 비-0 으로 끝났다 — 종료 코드 =="
+write_agent 'tools: Read, Grep, Glob'
+expect_env RED "완주 신호가 찍혔어도 rc ≠ 0 이면 FAIL 이다 (무엇이 찍혔든)" PYTHONPATH="$SH_EXIT"
+
+# ── L0 완주 신호 위조 — 스캔 루트의 모듈이 PyYAML 을 가린다 (PR 3 qg iter 2) ───────────────
+# 락은 스캔 루트로 cd 한 뒤 `python3 -c` 로 돈다 — sys.path 첫 자리가 cwd 라, 스캔 루트에 심은 yaml.py ·
+# yaml/ 가 PyYAML 보다 먼저 import 돼 `L0_DONE <파일 수> 0` 을 찍고 끝낼 수 있었다. (f1)(f2) 는 수정 전 락에서
+# GREEN 이었다(우회 재현 — 리포트에 출력).
+# (f3)(f3c)(f4) — PR 3 qg iter 3. 스캔 루트 **아래** 디렉토리를 PYTHONPATH(절대 · 상대 · 대소문자 변형)로 싣는 위조.
+# (f3) 은 FORGE yaml.py, (f4) 는 PyYAML 이 import 하는 datetime 의 가짜다 — `yaml.__file__` 은 정상이라 import 뒤
+# 검사로는 못 잡는다. (f3)(f4) 는 수정 전 락(dbae116b)에서 GREEN 이었다(우회 재현 — 리포트에 출력). import 전에 루트
+# 아래 sys.path 항목을 빼는 첫 벽이 막는다. (f5) 는 두 번째 벽(import 뒤 `yaml.__file__` 위치 검사)을 잰다 — 루트 밖
+# sitecustomize 가 시작 시 루트 안의 가짜 yaml 을 미리 import 해 두면(sys.modules) 첫 벽은 늦고 두 번째 벽만 막는다.
+FORGE='import sys\nprint("L0_DONE %%d 0" %% (len(sys.argv) - 1))\nraise SystemExit(0)\n'
+echo "== L0 (f1): 스캔 루트에 심은 yaml.py 가 완주 신호를 위조한다 =="
+write_raw 'description: "unclosed'
+printf "$FORGE" > "$TMP/yaml.py"
+expect RED "스캔 루트의 yaml.py 가 L0_DONE 을 위조해도 통과시키지 않는다 (cwd 는 import 경로에서 빠진다)"
+rm -f "$TMP/yaml.py"
+echo "== L0 (f2): 스캔 루트에 심은 yaml/__init__.py 가 완주 신호를 위조한다 =="
+mkdir -p "$TMP/yaml" || exit 1
+printf "$FORGE" > "$TMP/yaml/__init__.py"
+expect RED "스캔 루트의 yaml 패키지가 L0_DONE 을 위조해도 통과시키지 않는다"
+rm -rf "$TMP/yaml"
+echo "== L0 (f3): 스캔 루트 아래 vendor/yaml.py 가 PYTHONPATH 로 완주 신호를 위조한다 =="
+write_raw 'description: "unclosed'
+mkdir -p "$TMP/vendor" || exit 1
+printf "$FORGE" > "$TMP/vendor/yaml.py"
+expect_env RED "PYTHONPATH(절대)=<루트>/vendor 의 yaml.py 위조 — import 전에 루트 아래 항목이 빠진다" PYTHONPATH="$TMP/vendor"
+expect_env RED "PYTHONPATH(상대)=vendor 의 yaml.py 위조 — 락은 루트로 cd 하므로 상대 항목도 루트 아래다" PYTHONPATH=vendor
+echo "== L0 (f3c): 대소문자만 다른 루트 경로의 vendor/yaml.py (APFS) =="
+VARIANT="$(dirname "$TMP")/$(basename "$TMP" | tr 'a-zA-Z' 'A-Za-z')"
+if [ "$VARIANT" != "$TMP" ] && [ -d "$VARIANT/vendor" ]; then
+  expect_env RED "대소문자 변형 PYTHONPATH — 문자열로는 루트 밖이지만 (st_dev, st_ino) 조상 걷기로 루트 아래다" PYTHONPATH="$VARIANT/vendor"
+else
+  echo "  (f3c 건너뜀 — 대소문자를 구별하는 파일시스템이라 변형 경로가 없다. 이 셀은 재지 않는다)"
+fi
+rm -f "$TMP/vendor/yaml.py"
+echo "== L0 (f4): 스캔 루트 아래 vendor/datetime.py — PyYAML 이 import 하는 모듈의 위조 =="
+printf "$FORGE" > "$TMP/vendor/datetime.py"
+expect_env RED "PYTHONPATH(절대) 의 datetime.py 위조 — yaml.__file__ 은 정상이라 import 뒤 검사로는 못 잡는다" PYTHONPATH="$TMP/vendor"
+expect_env RED "PYTHONPATH(상대) 의 datetime.py 위조" PYTHONPATH=vendor
+rm -f "$TMP/vendor/datetime.py"
+echo "== L0 (f5): 시작 시 미리 import 된 루트 안의 가짜 yaml — 두 번째 벽 =="
+cat > "$TMP/vendor/yaml.py" <<'PY'
+class MappingNode(object):
+    pass
+
+
+class SafeLoader(object):
+    def __init__(self, *args, **kwargs):
+        pass
+
+
+def load(text, Loader=None):
+    return {"tools": "Read"}
+PY
+SH_PRE="$SHROOT/py-preimport"; mkdir -p "$SH_PRE" || exit 1
+printf 'import sys\nsys.path.insert(0, "%s")\nimport yaml\ndel sys.path[0]\n' "$TMP/vendor" > "$SH_PRE/sitecustomize.py"
+expect_env RED "시작 과정이 루트 안의 yaml 을 이미 import 해 뒀으면 import 뒤 위치 검사가 FAIL 로 막는다 (PYYAML_SHADOWED)" PYTHONPATH="$SH_PRE"
+rm -rf "$TMP/vendor"
+echo "== L0 (f) 보강: 심은 모듈이 없으면 정상 agent 는 통과 =="
+write_agent 'tools: Read, Grep, Glob'
+expect GREEN "스캔 루트에 yaml 모듈이 없으면 PyYAML 로 읽고 통과한다 (위치 검사가 over-reject 하지 않는다)"
+
+echo "== L0 (d): 기준선은 여전히 GREEN =="
+write_agent 'tools: Read, Grep, Glob'
+expect GREEN "정상 allowlist 는 L0 강화 뒤에도 통과"
+
 # ── A-1 (v2.14.2): 진단 스위치가 verdict 를 뒤집던 fail-open ──────────────────
 # 199d682 은 DECL 진단을 **agent 루프 안에서 fd 1** 로 printf 했다. stdout 이 쓰기 불가면
 # (`>&-`) 그 printf 는 실패하지만 bash 의 stdio 버퍼에 내용이 **남고**, 바로 뒤 L3 토큰 루프의

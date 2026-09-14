@@ -43,11 +43,14 @@ mkdir -p "$OUT"
 # 구분자/치환 메타문자로 조용히 오작동한다. 인코딩도 명시한다(non-UTF-8 locale 에서
 # fail-open 하지 않게).
 GOLDEN_PLACEHOLDER='<REPO_ROOT>'
-norm_copy() {   # norm_copy <src> <dst> — REPO_ROOT 절대경로를 안정 placeholder 로
-  python3 -c 'import io, sys
+# 라운드 시작 표식(`started_mtime_ns`)은 실행마다 다른 파일시스템 시각이다 — 같은 이유로
+# 자리표로 바꾼다. 줄 자체는 남기므로 표식이 사라지면 골든이 여전히 RED 다.
+norm_copy() {   # norm_copy <src> <dst> — REPO_ROOT 절대경로·라운드 시작 표식을 안정 placeholder 로
+  python3 -c 'import io, re, sys
 src, dst, root, ph = sys.argv[1:5]
-io.open(dst, "w", encoding="utf-8").write(
-    io.open(src, encoding="utf-8").read().replace(root + "/", ph + "/"))' \
+t = io.open(src, encoding="utf-8").read().replace(root + "/", ph + "/")
+t = re.sub(r"(?m)^(\s*started_mtime_ns: )[0-9]+$", r"\g<1><MTIME_NS>", t)
+io.open(dst, "w", encoding="utf-8").write(t)' \
     "$1" "$2" "$REPO_ROOT" "$GOLDEN_PLACEHOLDER"
 }
 

@@ -74,9 +74,9 @@ printf 'not json\n'                                  > "$samples_dir/07-garbage.
 # 판정 필드만 뽑는다. 〔2026-08-17 fix round 1〕 이 락은 아래에서 qg·sd 호출
 # **둘 다 --emit-keys 인자 없이** 부른다(정본화 이후 기본값은 DEFAULT_KEYS) —
 # category/target_section이 나타나는 design 어휘는 여기서 아예 안 켜지므로
-# findings 본문에 지금 갈릴 만한 차이가 없다. 그 배선(호출자가 --emit-keys design을
-# 실제로 넘기는가)은 이 락이 아니라 run_brief_codex_reviewer.sh·
-# run_docreview_codex_reviewer.sh 쪽 락이 잰다(F1). verdict()가 findings 본문이
+# findings 본문에 지금 갈릴 만한 차이가 없다. 그 배선(호출자가 자기 keyset 을 --emit-keys 로
+# 실제로 넘기는가)은 이 락이 아니라 호출자 쪽 락이 잰다 — run_docreview_codex_reviewer.sh 는
+# shared/tests/test_docreview_codex.sh 가 잰다. verdict()가 findings 본문이
 # 아니라 meta만 보는 것은 그와 무관하게 유지한다 — 이 락의 목적은 codex_failed·
 # reason 같은 판정 필드의 동일성이지 렌더 형태 동일성이 아니다.
 verdict() { grep -E '^  (codex_failed|reason|raw_findings_type|bad_element_types):' || true; }

@@ -11,7 +11,7 @@
 # 오케스트레이터가 파싱해 만든 codexFindings 인자를 받을 뿐 이 파일을 열지 않는다
 # (auditing-plugins/SKILL.md:137 표: "post-1에서 --codex-side <codex.json>으로
 # 넘긴다"). 나머지 한 채널(findings → audit-workflow.js)은 여기 산문으로만 남긴다
-# — 형제 run_brief_codex_reviewer.sh가 direction/fidelity 두 축을 같은 방식으로
+# — 지금은 지워진 옛 brief 러너가 direction/fidelity 두 축을 같은 방식으로
 # 처리한 선례를 따른다.
 #
 # fail-open 인 이유: emit_degrade()(아래)가 codex 실패 시에도 빈 컬렉션의 유효한
@@ -33,7 +33,7 @@
 # **"codex를 이 감사에서 아예 부를지" 게이트는 호출자(SKILL)·`detect_codex.sh` 책임이다**
 # — 이 러너는 그 kill switch를 읽지 않는다(test_run_audit_codex_reviewer.py가 그
 # 변수명 리터럴 부재를 고정한다). 다만 "웹 검색을 켤지"는 이 러너 **자신**의 결정이다
-# (형제 러너 run_brief_codex_reviewer.sh · run_docreview_codex_reviewer.sh와 동형) —
+# (형제 러너 run_docreview_codex_reviewer.sh와 동형) —
 # `DEVBREW_PLUGIN_AUDIT_DISABLE_WEB`은 아래에서 읽는다(AC21, Task 18).
 #
 # Usage: run_audit_codex_reviewer.sh <axis_question_file> <project_dir> <output_json_path>

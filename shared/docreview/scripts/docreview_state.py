@@ -7,14 +7,21 @@ state_root(hook_input, hook_name)). 파일은 `<state-dir>/docreview-state.md` �
 frontmatter 의 `docreview:` 트리가 원장, 본문은 사람이 읽는 사건 로그다. `state.local.md` 는
 건드리지 않는다 — 그 파일은 brief 파이프라인의 줄 파서가 소유한다.
 
-서브커맨드: init · begin-round · exempt-anchors · decide · fix · ask · defer · observe-diff · gate
+서브커맨드: state-dir-for · init · begin-round · exempt-anchors · decide · fix · ask · defer ·
+observe-diff · gate
 전이 규칙의 정본은 plan(2026-09-06-document-review-engine.md)의 D13 표다.
+
+상태 디렉토리는 **문서별**이다 — 한 디렉토리의 원장(라운드 · 재리뷰 상한 · finding · permit ·
+스냅샷)은 한 문서의 것이다. `state-dir-for` 가 세션 디렉토리와 문서 경로에서 그 자리를
+도출하고, `init` 은 이미 있는 원장이 다른 문서(또는 다른 프로필)의 것이면 거부한다.
 """
 from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -36,6 +43,36 @@ DEFER_KINDS = ("doc_section", "none")
 
 class ProfileError(Exception):
     pass
+
+
+if yaml is not None:
+    class _UniqueKeyLoader(yaml.SafeLoader):
+        """중복 키를 거절하는 SafeLoader. PyYAML 기본은 같은 키가 두 번 나오면 나중 값으로
+        조용히 덮는다. codex 러너의 stdlib 파서는 모양이 다른 중복(`k: [a]` 뒤 `k:` + `- b`)
+        에서 앞의 flow 값을 읽어, 같은 프로필을 두 파서가 다른 값으로 읽었다(실측, Task 3c
+        R37). 중복 키가 있는 프로필은 이 로더가 진입에서 멈춘다. 러너는 이 로더를 쓰지 않는다
+        (PyYAML 을 쓸 수 없다 — T6b) — 대신 허용 목록 줄 문법(러너의 `_parse_frontmatter`)만 받고
+        그 밖의 모양과 중복 키에서 `profile_parse_ambiguous` 로 멈춘다. 두 쪽이 같은 값을 읽는다는
+        보장은 그 문법의 범위(그 주석이 적는 것)까지이고, 배포 프로필은 러너·게이트 등식 대조
+        (test_docreview_codex.sh)가 따로 잰다. 서로 다른 매핑의 같은 이름(`decision_log.heading` ·
+        `defer_target.heading`)은 중복이 아니다 — 매핑마다 따로 센다."""
+
+        def construct_mapping(self, node, deep=False):
+            keys = [self.construct_object(k, deep=deep) for k, _v in node.value
+                    if k.tag != "tag:yaml.org,2002:merge"]
+            counts = collections.Counter(k for k in keys if isinstance(k, (str, int, float, bool)))
+            dups = sorted(str(k) for k, c in counts.items() if c > 1)
+            if dups:
+                raise ProfileError("duplicate_key:%s" % ",".join(dups))
+            return super().construct_mapping(node, deep=deep)
+
+
+def _safe_load_unique(text):
+    loader = _UniqueKeyLoader(text)
+    try:
+        return loader.get_single_data()
+    finally:
+        loader.dispose()
 
 
 def fail(reason, **extra):
@@ -66,15 +103,16 @@ def _split_frontmatter(text: str):
     return text[4:end], text[end + 5:]
 
 
-def _str_list(v, field):
+def _str_list(v, field, regex=True):
     if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
         raise ProfileError("field_not_str_list:%s" % field)
-    for pat in v:
-        if pat != "*":
-            try:
-                re.compile(pat)
-            except re.error as e:
-                raise ProfileError("bad_regex:%s:%s" % (field, e))
+    if regex:
+        for pat in v:
+            if pat != "*":
+                try:
+                    re.compile(pat)
+                except re.error as e:
+                    raise ProfileError("bad_regex:%s:%s" % (field, e))
     return v
 
 
@@ -85,7 +123,7 @@ def load_profile(path) -> dict:
     if not p.is_file():
         raise ProfileError("profile_not_found:%s" % p)
     fm, body = _split_frontmatter(p.read_text(encoding="utf-8"))
-    data = yaml.safe_load(fm) or {}
+    data = _safe_load_unique(fm) or {}
     if not isinstance(data, dict):
         raise ProfileError("frontmatter_not_mapping")
     missing = [f for f in PROFILE_FIELDS if f not in data]
@@ -106,6 +144,14 @@ def load_profile(path) -> dict:
     if (not isinstance(lr, dict) or not isinstance(lr.get("layer1"), list) or not lr["layer1"]
             or not isinstance(lr.get("layer2"), list)):
         raise ProfileError("layer_rubric_invalid")
+    lr_extra = [k for k in lr if k not in ("layer1", "layer2")]
+    if lr_extra:
+        raise ProfileError("layer_rubric_fields_unknown:%s" % ",".join(lr_extra))
+    # 층 항목은 문자열이다 — 러너도 문자열 목록이 아니면 멈춘다(한 판정, Task 3c R43). 층 범주명은
+    # 정규식이 아니므로 컴파일하지 않는다 — 러너는 문자열이면 그대로 싣는다(`"c++"` 를 게이트만
+    # `bad_regex` 로 거절하던 반대 방향 발산).
+    _str_list(lr["layer1"], "layer_rubric.layer1", regex=False)
+    _str_list(lr["layer2"], "layer_rubric.layer2", regex=False)
     dl = data["decision_log"]
     if not isinstance(dl, dict) or dl.get("kind") not in LOG_KINDS:
         raise ProfileError("decision_log_invalid")
@@ -122,6 +168,10 @@ def load_profile(path) -> dict:
         raise ProfileError("web_not_bool")
     if not isinstance(data["ground_truth"], str) or not data["ground_truth"].strip():
         raise ProfileError("ground_truth_empty")
+    # 본문(검토 항목)은 탐지·재비판 agent 와 codex 러너가 함께 읽는 루브릭이다. 러너는 빈
+    # 본문이면 `profile_body_empty` 로 fail-closed 한다 — 게이트도 같은 판정을 낸다(한 판정).
+    if not body.strip():
+        raise ProfileError("profile_body_empty")
     out = dict(data)
     out["name"] = p.stem
     out["path"] = str(p)
@@ -206,7 +256,181 @@ def _emit(obj) -> None:
     print(json.dumps(obj, ensure_ascii=False))
 
 
+# ── 라운드 diff — 원장의 라운드별 스냅숏으로 엔진이 계산한다 ──────────────────────────────
+# 얼림 검사와 permit · fix 적용 관측이 읽는 diff 는 오케스트레이터가 쓰는 파일이 아니다. 두 입력 — 직전 · 이번
+# 라운드 스냅숏(`begin-round` 가 원장에 저장한다) — 과 면제 집합의 재료(`applied_scopes` · `permits` · 프로필)가
+# 전부 원장에 있으므로 엔진이 계산한다. `docreview_anchor.py diff` CLI 도 같은 `diff_snapshots` 를 부른다.
+DOC_ANCHOR = "#__doc__"
+
+
+def resolve_scope(scope: str, old_secs, new_secs) -> set:
+    """scope → 앵커 집합. `insert-after:#x` 는 new 에서 #x 바로 다음이고 old 에 없던 앵커 하나."""
+    if not scope.startswith("insert-after:"):
+        return {scope}
+    after = scope.split(":", 1)[1]
+    old = {s["anchor"] for s in old_secs}
+    for i, s in enumerate(new_secs):
+        if s["anchor"] == after and i + 1 < len(new_secs):
+            nxt = new_secs[i + 1]
+            if nxt["anchor"] not in old:
+                return {nxt["anchor"]}
+    return set()
+
+
+def diff_snapshots(old: dict, new: dict, exempt_scopes) -> dict:
+    os_, ns = old.get("sections", []), new.get("sections", [])
+    om = {s["anchor"]: s for s in os_}
+    nm = {s["anchor"]: s for s in ns}
+    headingless = bool(old.get("headingless") or new.get("headingless"))
+    ex = {}
+    for sc in exempt_scopes or []:
+        for a in resolve_scope(sc, os_, ns):
+            ex[a] = sc
+    changed, exempt_applied = [], []
+
+    def rec(anchor, kind, title, oh, nh):
+        item = {"anchor": anchor, "kind": kind, "title": title, "old_hash": oh, "new_hash": nh,
+                "evidence": "섹션 '%s' (%s) %s — hash %s→%s" % (title, anchor, kind, oh or "∅", nh or "∅")}
+        if headingless:
+            item["scope"] = DOC_ANCHOR
+            exempt_applied.append(item)
+        elif anchor in ex:
+            item["scope"] = ex[anchor]
+            exempt_applied.append(item)
+        else:
+            changed.append(item)
+
+    for a, s in nm.items():
+        if a not in om:
+            rec(a, "added", s["title"], None, s["hash"])
+        elif om[a]["hash"] != s["hash"]:
+            rec(a, "modified", s["title"], om[a]["hash"], s["hash"])
+    for a, s in om.items():
+        if a not in nm:
+            rec(a, "removed", s["title"], s["hash"], None)
+    return {"headingless": headingless, "changed": changed, "exempt_applied": exempt_applied}
+
+
+class LedgerCorrupt(Exception):
+    """원장이 관측 · 얼림 검사에 필요한 것을 갖지 않는다(상태 파손) — 이름 있는 실패. 빈 diff 로 넘어가지 않는다."""
+
+    def __init__(self, reason, **extra):
+        super().__init__(reason)
+        self.reason = reason
+        self.extra = extra
+
+
+def _snapshot_ok(snap) -> bool:
+    if not isinstance(snap, dict) or not isinstance(snap.get("sections"), list):
+        return False
+    return all(isinstance(s, dict) and isinstance(s.get("anchor"), str) and isinstance(s.get("hash"), str)
+               and "title" in s for s in snap["sections"])
+
+
+def snapshot_at(st, k) -> dict:
+    """원장의 라운드 k 스냅숏 — 없거나 모양이 틀리면 `snapshot_missing`."""
+    snap = (st.get("snapshots") or {}).get(str(k))
+    if not _snapshot_ok(snap):
+        raise LedgerCorrupt("snapshot_missing", round=k)
+    return snap
+
+
+PERMIT_KINDS = ("apply", "revert")
+
+
+def _permit_fields(did, p):
+    """permit 의 (라운드, 종류, 앵커 목록, finding id) — 모양이 틀리면 `permit_corrupt`. 관측과 면제가 같은 판정을 쓴다."""
+    try:
+        k, kind, anchors, fid = int(p["round"]), p["kind"], p["apply_anchors"], p["finding_id"]
+    except (TypeError, KeyError, ValueError):
+        raise LedgerCorrupt("permit_corrupt", decision_id=did)
+    if (kind not in PERMIT_KINDS or not isinstance(anchors, list) or not anchors
+            or not all(isinstance(x, str) for x in anchors)):
+        raise LedgerCorrupt("permit_corrupt", decision_id=did)
+    return k, kind, anchors, fid
+
+
+def exempt_scopes(st, prof, r) -> list:
+    """라운드 r 의 얼림 면제 집합(설계 §7 예외 ①②③) — 라운드 r−1 에 통과한 fix 의 범위 ∪ 라운드 r 의 **모든**
+    permit 앵커 ∪ 프로필 `decision_log` · `defer_target` 절의 헤딩 앵커. permit 은 소비 여부와 무관하다: 라운드 r 의
+    diff 가 정의되는 시점(라운드 r 시작)에는 전부 미소비였고, `finalize` 는 관측으로 소비한 **뒤** 얼림 diff 를
+    계산하므로 소비된 permit 을 빼면 허가된 편집이 `frozen_change` 로 둔갑한다."""
+    out = []
+    for i, s in enumerate(st.get("applied_scopes") or []):
+        try:
+            sr, scope = int(s["round"]), s["scope"]
+        except (TypeError, KeyError, ValueError):
+            raise LedgerCorrupt("applied_scope_corrupt", index=i)
+        if not isinstance(scope, str):
+            raise LedgerCorrupt("applied_scope_corrupt", index=i)
+        if sr == r - 1:
+            out.append(scope)
+    for did, p in (st.get("permits") or {}).items():
+        k, _kind, anchors, _fid = _permit_fields(did, p)
+        if k == r:
+            out.extend(anchors)
+    for key in ("decision_log", "defer_target"):
+        t = prof[key]
+        if t.get("kind") == "doc_section":
+            out.append(heading_anchor(t["heading"]))
+    return sorted(set(out))
+
+
+def round_diff(st, prof, r) -> dict:
+    """라운드 r 의 얼림 diff — 원장의 스냅숏 r−1 → r 와 그 라운드의 면제 집합. 스냅숏이 없으면 `snapshot_missing`."""
+    snaps = st.get("snapshots") or {}
+    for k in (r - 1, r):
+        if not _snapshot_ok(snaps.get(str(k))):
+            raise LedgerCorrupt("snapshot_missing", round=k, diff_round=r)
+    return diff_snapshots(snaps[str(r - 1)], snaps[str(r)], exempt_scopes(st, prof, r))
+
+
+# ── 문서의 정체 · 문서별 상태 디렉토리 ────────────────────────────────────────
+# 문서의 정체는 경로다(훅이 경로로 arm 한다). 비교와 디렉토리 도출은 **같은 정규화**
+# 하나를 쓴다 — 절대경로 + 심볼릭 링크 해석(`realpath`). 둘이 다른 정규화를 쓰면 같은
+# 문서를 다른 표기로 불렀을 때 같은 디렉토리에 앉고도 `init` 이 거부하거나, 그 반대가 된다.
+STATE_SUBDIR = "docreview"
+_KEY_UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
+_SESSION_OK = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def doc_identity(doc) -> str:
+    return os.path.realpath(doc)
+
+
+def profile_identity(profile) -> str:
+    """프로필의 정체는 이름(파일 stem)이다 — 경로가 아니다. 플러그인 루트가 옮겨져도(버전
+    캐시) 같은 프로필은 같은 프로필이다. 호스트마다 상태 루트가 따로라 다른 호스트의 같은
+    이름 프로필이 한 디렉토리에서 만나지 않는다."""
+    return Path(profile).stem
+
+
+def state_dir_for(root, session, doc) -> Path:
+    """`<root>/<session>/docreview/<이름표>-<정체 해시 16자>` — 세션과 문서 경로의 순수 함수.
+    이름표는 사람이 읽으라고 붙인 파일 stem 이고 유일성은 해시가 진다."""
+    ident = doc_identity(doc)
+    label = _KEY_UNSAFE.sub("-", Path(ident).stem).strip("-.")[:40] or "doc"
+    digest = hashlib.sha256(os.fsencode(ident)).hexdigest()[:16]
+    return Path(root) / session / STATE_SUBDIR / ("%s-%s" % (label, digest))
+
+
 # ── 서브커맨드 ───────────────────────────────────────────────────────────
+def cmd_state_dir_for(a) -> int:
+    # 상대 루트·상대 문서는 cwd 의 함수고(같은 문서가 cwd 마다 다른 자리로 간다), 빈 세션은
+    # 루트 바로 아래 자리다. 세션은 경로의 한 성분이라 `[A-Za-z0-9_-]+` 밖(구분자·점·제어
+    # 문자)은 받지 않는다 — 개행이 든 세션은 두 줄 경로를 낸다. 전부 거부한다.
+    if not a.root or not os.path.isabs(a.root):
+        return fail("root_not_absolute", root=a.root)
+    if not a.session or not _SESSION_OK.fullmatch(a.session):
+        return fail("session_invalid", session=a.session)
+    if not a.doc:
+        return fail("doc_empty")
+    if not os.path.isabs(a.doc):
+        return fail("doc_not_absolute", doc=a.doc)
+    print(state_dir_for(a.root, a.session, a.doc))
+    return 0
+
+
 def cmd_init(a) -> int:
     if yaml is None:
         return fail("pyyaml_missing")
@@ -214,12 +438,27 @@ def cmd_init(a) -> int:
         load_profile(a.profile)
     except ProfileError as e:
         return fail("profile_invalid", detail=str(e))
+    # 빈 값은 `Path("")` = cwd 가 되어 cwd 에 원장을 만든다 — 없는 디렉토리로 친다.
+    if not a.state_dir:
+        return fail("state_dir_missing", state_dir=a.state_dir)
+    # 문서의 정체(realpath)가 cwd 의 함수가 되면 같은 문서가 cwd 마다 다른 문서로 읽힌다.
+    if not a.doc or not os.path.isabs(a.doc):
+        return fail("doc_not_absolute", doc=a.doc)
     d = Path(a.state_dir)
     if not d.is_dir():
         return fail("state_dir_missing", state_dir=str(d))
     p = state_path(d)
     if p.is_file():
         st = load_state(d)
+        # 다른 문서의 원장을 이어받으면 그 문서의 라운드·재리뷰 상한·finding·permit·
+        # 스냅샷이 이 문서에 섞인다. 거부는 원장을 건드리지 않는다.
+        have = st.get("doc")
+        if not isinstance(have, str) or doc_identity(have) != doc_identity(a.doc):
+            return fail("state_doc_mismatch", state_dir=str(d), state_doc=have, requested_doc=a.doc)
+        have = st.get("profile")
+        if not isinstance(have, str) or profile_identity(have) != profile_identity(a.profile):
+            return fail("state_profile_mismatch", state_dir=str(d), state_profile=have,
+                        requested_profile=a.profile)
         _emit({"ok": True, "created": False, "round": st["round"]})
         return 0
     st = _empty(a.doc, a.profile)
@@ -263,6 +502,12 @@ def cmd_begin_round(a) -> int:
     st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
     save_state(a.state_dir, st, "begin-round (rereview_count=%d%s)"
                % (rr, ", extra" if n > 1 + REREVIEW_CAP else ""))
+    # 라운드 시작 표식 — codex · critic 산출물이 이보다 먼저 쓰였으면 직전 라운드 것이다
+    # (`docreview_route._round_staleness`). 프로세스 시계가 아니라 방금 쓴 상태 파일의
+    # mtime 을 쓴다: 같은 디렉토리의 codex 파일도 같은 파일시스템 시계로 찍히므로 해상도가
+    # 같은 눈금이다.
+    st["rounds"][str(n)]["started_mtime_ns"] = state_path(a.state_dir).stat().st_mtime_ns
+    save_state(a.state_dir, st)
     _emit({"ok": True, "round": n, "rereview_count": rr})
     return 0
 
@@ -444,21 +689,14 @@ def cmd_record_findings(a) -> int:
 
 
 def cmd_exempt_anchors(a) -> int:
+    """이번 라운드의 얼림 면제 집합(`exempt_scopes` 의 현재 라운드 값)."""
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
-    n = int(st["round"])
-    out = []
-    for s in st["applied_scopes"]:
-        if int(s["round"]) == n - 1:
-            out.append(s["scope"])
-    for _did, p in st["permits"].items():
-        if int(p["round"]) == n and not p.get("consumed"):
-            out.extend(p["apply_anchors"])
-    for key in ("decision_log", "defer_target"):
-        t = prof[key]
-        if t.get("kind") == "doc_section":
-            out.append(heading_anchor(t["heading"]))
-    print(json.dumps(sorted(set(out)), ensure_ascii=False))
+    try:
+        out = exempt_scopes(st, prof, int(st["round"]))
+    except LedgerCorrupt as e:
+        return fail(e.reason, **e.extra)
+    print(json.dumps(out, ensure_ascii=False))
     return 0
 
 
@@ -622,27 +860,46 @@ def cmd_defer(a) -> int:
     return 0
 
 
-def cmd_observe_diff(a) -> int:
-    st = load_state(a.state_dir)
-    n = int(st["round"])
-    diff = json.loads(Path(a.diff).read_text(encoding="utf-8"))
-    touched = {c["anchor"] for c in diff.get("changed", [])}
-    touched |= {e["anchor"] for e in diff.get("exempt_applied", [])}
-    touched |= {e["scope"] for e in diff.get("exempt_applied", []) if e.get("scope")}
-    cur = {s["anchor"]: s["hash"] for s in st["snapshots"].get(str(n), {}).get("sections", [])}
-    applied, expired, reraise = [], [], []
+def observe_ledger(st, prof, n) -> dict:
+    """라운드 n 에서 permit · fix 의 적용을 관측한다 — `observe-diff` CLI 와 `finalize` 가 함께 쓰는 한 함수.
+
+    `round ≤ n` 인 미소비 permit 전부를 각자 **자기 라운드**의 diff(`round_diff(st, prof, p.round)`)로 본다 — 관측을
+    건너뛴 라운드(critic 사망으로 6~7단계를 건너뛴 라운드 · finalize 가 거부된 라운드)의 permit 을 뒤 라운드가 그
+    라운드의 스냅숏 쌍으로 따라잡는다. `apply` 는 앵커가 그 diff 에 닿았는가, `revert` 는 그 permit 라운드 스냅숏의
+    앵커 해시가 `expect_hash` 와 같은가. `intent_passed` fix 도 같다 — 라운드 r(< n)에 통과한 것을 `round_diff(r+1)`
+    로 본다. 관측 없이는 만료하지 않는다(R70): 필요한 스냅숏이 없거나 permit 이 파손이면 `LedgerCorrupt` 로 멈추고,
+    호출자는 저장하지 않으므로 아무것도 소비되지 않는다.
+
+    따라잡은 `applied` 는 관측한 라운드(n)의 `progress` 로 센다(선택) — stagnation 입력(설계 §8.4)은 「이번 라운드에
+    진행이 관측됐는가」이고, 지난 라운드 자리에 적으면 이번 라운드가 진행 0 으로 읽혀 거짓 stagnation 이 선다.
+
+    관측할 것이 없으면 원장을 바꾸지 않는다(`observed` 거짓) — 같은 라운드에 두 번 불려도 둘째는 무동작이다.
+    """
     r = st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
+    touched_at = {}
+
+    def touched(k):   # 라운드 k 의 diff 가 닿은 앵커 — 라운드마다 한 번 계산한다
+        if k not in touched_at:
+            diff = round_diff(st, prof, k)
+            t = {c["anchor"] for c in diff.get("changed", [])}
+            t |= {e["anchor"] for e in diff.get("exempt_applied", [])}
+            t |= {e["scope"] for e in diff.get("exempt_applied", []) if e.get("scope")}
+            touched_at[k] = t
+        return touched_at[k]
+
+    applied, expired, reraise = [], [], []
     for did, p in st["permits"].items():
-        if p.get("consumed") or int(p["round"]) != n:
+        k, kind, anchors, fid = _permit_fields(did, p)
+        if p.get("consumed") or k > n:
             continue
-        fid = p["finding_id"]
         d = st["decides"].get(fid)
         if not d:
             continue
-        if p["kind"] == "apply":
-            hit = any(x in touched for x in p["apply_anchors"])
+        if kind == "apply":
+            hit = any(x in touched(k) for x in anchors)
         else:
-            hit = cur.get(p["apply_anchors"][0]) == p.get("expect_hash")
+            cur = {s["anchor"]: s["hash"] for s in snapshot_at(st, k)["sections"]}
+            hit = cur.get(anchors[0]) == p.get("expect_hash")
         p["consumed"] = True
         d.pop("superseded_by", None)   # 이 만료 인스턴스는 끝났다 — 낡은 포인터가 다음 만료를 풀면 안 된다
         if hit:
@@ -652,11 +909,19 @@ def cmd_observe_diff(a) -> int:
         else:
             d["state"] = "expired"
             expired.append(fid)
-            reraise.append({"finding_id": fid, "kind": p["kind"],
+            reraise.append({"finding_id": fid, "kind": kind,
                             "reason": "라운드 %d 에 %s 변경 관측 없음 (%s)" % (
-                                n, "원복" if p["kind"] == "revert" else "채택", did)})
+                                k, "원복" if kind == "revert" else "채택", did)})
     for fid, fx in st["fixes"].items():
-        if fx["state"] == "intent_passed" and int(fx.get("round") or 0) == n - 1 and fx.get("scope") in touched:
+        if fx.get("state") != "intent_passed":
+            continue
+        try:
+            fr = int(fx["round"])
+        except (TypeError, KeyError, ValueError):
+            raise LedgerCorrupt("fix_corrupt", id=fid)
+        if fr < 1:
+            raise LedgerCorrupt("fix_corrupt", id=fid)
+        if fr < n and fx.get("scope") in touched(fr + 1):
             fx["state"] = "applied"
             r["progress"] += 1
             applied.append(fid)
@@ -686,10 +951,86 @@ def cmd_observe_diff(a) -> int:
         pending.append(r0)
         seen.add(r0["finding_id"])
     st["reraise"] = pending
-    _refresh_open_lineages(st, n)
-    save_state(a.state_dir, st, "observe-diff applied=%d expired=%d" % (len(applied), len(expired)))
-    _emit({"ok": True, "applied": applied, "expired": expired, "reraise": pending, "progress": r["progress"]})
+    return {"applied": applied, "expired": expired, "reraise": pending, "observed": bool(applied or expired)}
+
+
+def cmd_observe_diff(a) -> int:
+    """이번 라운드의 permit · fix 적용 관측(`observe_ledger`). diff 는 원장의 스냅숏으로 엔진이 계산한다 — 인자가 없다.
+
+    관측한 것이 있을 때만 원장을 쓴다. 필요한 스냅숏이 없거나 permit 이 파손이면 그 이름으로 rc 1 이고 원장은
+    그대로다(아무것도 소비되지 않는다)."""
+    st = load_state(a.state_dir)
+    prof = load_profile(st["profile"])
+    n = int(st["round"])
+    try:
+        obs = observe_ledger(st, prof, n)
+    except LedgerCorrupt as e:
+        return fail(e.reason, **e.extra)
+    if obs["observed"]:
+        _refresh_open_lineages(st, n)
+        save_state(a.state_dir, st, "observe-diff applied=%d expired=%d" % (len(obs["applied"]), len(obs["expired"])))
+    _emit({"ok": True, "applied": obs["applied"], "expired": obs["expired"], "reraise": obs["reraise"],
+           "progress": st["rounds"][str(n)]["progress"]})
     return 0
+
+
+# ── 「미검증」 라운드 — 이번 라운드의 판정이 원장에 없다는 사실 (설계 §9 degrade 표 critic 사망 행) ──
+# 엔진이 이 사실을 스스로 안다. 같은 턴 모델의 기억에 맡기면 다음 턴·compact 뒤에는 그 라운드가
+# 리뷰된 것처럼 보인다. 사유 키는 둘이다 — `critic_dead`(주 판정자 doc-critic 사망) ·
+# `finalize_incomplete`(7단계 라우팅이 끝나지 않았다). 읽는 자리는 셋이고 전부 라운드 번호에 묶인다:
+#   · `pending_recritic` — 5단계 `prepare-recritic` 이 `round` 와 함께 쓰고 7단계 `finalize` 의 성공만
+#     지운다. 이번 라운드의 것이 남아 있으면 라우팅이 끝나지 않았고, 그 `degrade.critic_dead` 가
+#     사유를 가른다(critic 이 두 번 죽으면 5단계가 6~7단계를 건너뛰어 이 상태로 게이트에 온다).
+#   · `rounds[n].finalize_failed` — 준비가 없거나 다른 라운드 것이라 `finalize` 가 거부할 때 남긴다.
+#   · `rounds[n].route_report.degrade.critic_dead` — critic 이 죽은 채 finalize 한 라운드(`fin.json` 의
+#     `blocks` 참)다.
+# 다음 라운드는 제 자리(`rounds[n+1]`, 새 준비)를 쓰므로 그 라운드가 정상으로 끝나면 표지가 풀린다.
+UNVERIFIED_LABEL = "미검증"
+UNVERIFIED_TEXT = {
+    "critic_dead": "「미검증」 주 판정자(doc-critic) 사망 — 이 라운드는 리뷰되지 않았다",
+    "finalize_incomplete": "「미검증」 라우팅(finalize) 미완 — 이 라운드의 finding 이 원장에 없다",
+}
+# 「미검증」 사유가 없어도 이번 라운드의 finalize 보고서가 없으면 `round_reviewed` 는 거짓이다(양의 증거).
+# 그 라운드는 라벨 없이 공시만 한다 — 「미검증」(라벨 · 승인 게이트 강제)과 다른 공시 사유 `unrouted`.
+# 5단계가 rc 0·4 밖으로 끝나고 7단계를 건너뛴 라운드가 여기 온다(Task 7b fix, R54).
+UNROUTED_TEXT = "리뷰 완료 아님 — 이번 라운드의 라우팅 보고서가 없다(finalize 를 거치지 않았다)"
+
+
+def pending_mismatch(st, n):
+    """`pending_recritic` 이 라운드 n 의 준비가 아닐 사유 — 라운드 n 의 것이면 None.
+
+    라운드 번호가 없거나 정수가 아니면 어느 라운드 것인지 가를 수 없다(`pending_round_unrecorded`).
+    `finalize` 는 이 사유가 있으면 소비하지 않고, `round_unverified` 는 번호 없는 준비를 이번
+    라운드의 미완 준비로 친다 — 양쪽 다 닫힌 쪽이다."""
+    p = st.get("pending_recritic")
+    if not isinstance(p, dict):
+        return "no_pending_recritic"
+    r = p.get("round")
+    if isinstance(r, bool) or not isinstance(r, int):
+        return "pending_round_unrecorded"
+    if r != n:
+        return "pending_recritic_stale"
+    return None
+
+
+def _pending_here(st, n):
+    return st["pending_recritic"] if pending_mismatch(st, n) in (None, "pending_round_unrecorded") else None
+
+
+def round_unverified(st):
+    """이번 라운드를 엔진이 「미검증」으로 아는 사유 키(`critic_dead` · `finalize_incomplete`), 아니면 None."""
+    n = int(st["round"])
+    p = _pending_here(st, n)
+    if p is not None:
+        deg = p.get("degrade") if isinstance(p.get("degrade"), dict) else {}
+        return "critic_dead" if deg.get("critic_dead") else "finalize_incomplete"
+    cur = (st.get("rounds") or {}).get(str(n)) or {}
+    if cur.get("finalize_failed"):
+        return "finalize_incomplete"
+    rdeg = (cur.get("route_report") or {}).get("degrade")
+    if isinstance(rdeg, dict) and rdeg.get("critic_dead"):
+        return "critic_dead"
+    return None
 
 
 def gate_summary(st) -> dict:
@@ -713,14 +1054,34 @@ def gate_summary(st) -> dict:
     prev = st["rounds"].get(str(n - 1), {})
     g["stagnation"] = bool(n >= 2 and cur.get("open_lineages") and
                            cur.get("open_lineages") == prev.get("open_lineages") and int(cur.get("progress", 0)) == 0)
+    unv = round_unverified(st)
     g["approval_ready"] = not any(g[row.name] for row in GATE_ROWS if row.blocks)
     g["round_gate_needed"] = bool(g["open_decide"] or g["blocking_ask_open"])
-    g["approval_gate_open"] = g["approval_ready"] or g["cap_reached"] or g["stagnation"]
-    g["two_stage"] = g["approval_gate_open"] and not g["approval_ready"]
-    g["next_round_mode"] = None if g["approval_ready"] else ("budget" if rr < REREVIEW_CAP else "extra_approval")
+    # 「미검증」 라운드는 승인 게이트를 그 라벨로 연다(설계 §9 — critic 사망 두 번). 열린 것이 남아
+    # 있으면 stagnation 과 같이 두 단계다(아래 `two_stage`).
+    g["approval_gate_open"] = g["approval_ready"] or g["cap_reached"] or g["stagnation"] or bool(unv)
+    # 상한 도달이면 열린 것이 0 이어도 두 단계다(Park P3·D-U3) — 1단계가 「추가 라운드
+    # 1회 열기」(§8.2)를 실어야 하고, 그 문구가 성립하려면 `next_round_mode` 가
+    # `extra_approval` 이어야 한다(`approval_ready` 와 무관). 상한 전(`cap_reached`
+    # False)은 이 조건이 원래 식으로 접혀 동작이 그대로다 — `budget`/`None` 분기는
+    # 손대지 않는다.
+    g["two_stage"] = g["cap_reached"] or (g["approval_gate_open"] and not g["approval_ready"])
+    g["next_round_mode"] = ("extra_approval" if g["cap_reached"]
+                             else (None if g["approval_ready"] else "budget"))
     rep = cur.get("route_report") or {}
-    g["degrade"] = rep.get("degrade") or {}
+    # finalize 가 끝나지 않은 라운드는 보고서가 없다 — 그 라운드 준비의 degrade(codex 부재 등)를 싣는다.
+    pend = _pending_here(st, n)
+    pdeg = pend.get("degrade") if pend is not None and isinstance(pend.get("degrade"), dict) else None
+    g["degrade"] = rep.get("degrade") or pdeg or {}
     g["advisory"] = rep.get("advisory") or []
+    # 「미검증」 — 사유 키 · 승인 게이트 라벨(정본은 이 출력, 진입 skill 이 읽는다) · 완료 기록 신호.
+    # `round_reviewed` 는 양의 증거를 요구한다: 이번 라운드의 finalize 보고서가 있고 「미검증」이 아닐
+    # 때만 참이다 — finalize 를 거치지 않은 라운드는 사유가 없어도 완료로 기록되지 않는다.
+    g["unverified"] = unv
+    g["approval_label"] = UNVERIFIED_LABEL if unv else None
+    g["round_reviewed"] = bool(cur.get("route_report")) and unv is None
+    # 공시 사유 — `round_reviewed` 가 거짓인 모든 라운드에 선다. 「미검증」이면 그 사유 키, 아니면 `unrouted`.
+    g["unreviewed_reason"] = None if g["round_reviewed"] else (unv or "unrouted")
     g["counts"] = {k: rep.get(k, 0) for k in ("rejected", "bucket_conflicts", "lineage_mismatch",
                                               "revived", "reraise_unconsumed", "escalated_unconsumed")}
     g["counts"]["user_rejected"] = sum(1 for v in st["rejected_lineages"].values() if v.get("by") == "user")
@@ -843,12 +1204,19 @@ GATE_RENDERERS = {"decide": _rg_decide, "adopted": _rg_adopted, "expired": _rg_e
 def render_gate(st, g) -> str:
     deg = g["degrade"]
     out = []
+    # 첫 줄 = 그 라운드의 degrade 공시. 「미검증」이면 주 판정자 사망 · 라우팅 미완을 맨 앞에 싣는다 —
+    # 그 라운드에 「degrade 없음」이 나올 수 없다.
+    first = []
+    if g.get("unverified"):
+        first.append(UNVERIFIED_TEXT.get(g["unverified"], "「미검증」 (%s)" % g["unverified"]))
+    elif g.get("unreviewed_reason"):
+        first.append(UNROUTED_TEXT)
     if deg.get("codex_absent"):
-        out.append("codex 없음 — 모델 다양성 0 (%s)" % (deg.get("codex_reason") or "?"))
+        first.append("codex 없음 — 모델 다양성 0 (%s)" % (deg.get("codex_reason") or "?"))
     elif g["advisory"]:
-        out.append("degrade: " + " · ".join(g["advisory"]))
-    else:
-        out.append("degrade 없음")
+        first.append("degrade: " + " · ".join(g["advisory"]))
+    out.append(" ; ".join(first) if first else "degrade 없음")
+    ag = "승인 게이트" + ("(「%s」)" % g["approval_label"] if g.get("approval_label") else "")
     out.append("라운드 %d · 재리뷰 %d/%d%s%s" % (g["round"], g["rereview_count"], REREVIEW_CAP,
                                               " · 상한 도달" if g["cap_reached"] else "",
                                               " · stagnation" if g["stagnation"] else ""))
@@ -862,12 +1230,28 @@ def render_gate(st, g) -> str:
     out.append("기각 %d건(재비판) · 사용자 기각 %d · drop %d · bucket 충돌 %d · 계보 지목 불일치 %d · 기각 계보 재상승 %d · 미소비 재상승 예약 %d · 미소비 상향 예약 %d"
                % (c["rejected"], c["user_rejected"], len(g["dropped"]), c["bucket_conflicts"],
                   c["lineage_mismatch"], c["revived"], c["reraise_unconsumed"], c["escalated_unconsumed"]))
-    if g["approval_ready"]:
-        out.append("다음: 승인 게이트 — 진행 옵션 활성")
+    if g["two_stage"] and g["next_round_mode"] == "extra_approval":
+        # 상한 도달 — approval_ready 와 무관하게 두 단계이고(Park P3·D-U3), 1단계는
+        # 날 모드 토큰(`extra_approval`)이 아니라 사용자 말로 이름을 낸다. 이 선택지를
+        # 고르면 다음 라운드 1단계가 `begin-round --extra-approval "<문구>"` 로 돌고, 그
+        # 문구는 사용자 자신이 쓰는 것이라 여기 산문에 미리 채우지 않는다.
+        if g["approval_ready"]:
+            out.append("다음: " + ag + " 1단계 — 「추가 라운드 1회 열기」(다음 라운드 1단계가 "
+                       "begin-round --extra-approval \"<사용자 자신의 문구>\" 로 도는 개별 승인) "
+                       "또는 진행 옵션으로")
+        else:
+            out.append("다음: " + ag + " 1단계 — 열린 항목을 처리한 뒤 진행 옵션, 또는 "
+                       "「추가 라운드 1회 열기」(다음 라운드 1단계가 "
+                       "begin-round --extra-approval \"<사용자 자신의 문구>\" 로 도는 개별 승인)")
+    elif g["approval_ready"]:
+        out.append("다음: " + ag + " — 진행 옵션 활성")
     elif g["two_stage"]:
-        out.append("다음: 승인 게이트 1단계 — 열린 항목을 처리한 뒤 진행 옵션 (다음 라운드 = %s)" % g["next_round_mode"])
+        out.append("다음: " + ag + " 1단계 — 열린 항목을 처리한 뒤 진행 옵션 (다음 라운드 = %s)" % g["next_round_mode"])
     else:
         out.append("다음: 라운드 %d (%s)" % (g["round"] + 1, g["next_round_mode"]))
+    # 리뷰 완료가 아닌 라운드에서는 「다음:」 줄이 진행 옵션을 무조건 말하지 않는다 — 그 사실과 사유를 꼬리로 단다.
+    if g.get("unreviewed_reason"):
+        out[-1] += " — 단 이번 라운드는 리뷰 완료가 아니다(round_reviewed=false · %s)" % g["unreviewed_reason"]
     return "\n".join(out)
 
 
@@ -891,6 +1275,9 @@ def cmd_gate_rows(a) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="docreview_state.py")
     sp = p.add_subparsers(dest="cmd", required=True)
+    x = sp.add_parser("state-dir-for"); x.add_argument("--root", required=True)
+    x.add_argument("--session", required=True); x.add_argument("--doc", required=True)
+    x.set_defaults(fn=cmd_state_dir_for)
     x = sp.add_parser("init"); x.add_argument("--state-dir", required=True)
     x.add_argument("--doc", required=True); x.add_argument("--profile", required=True)
     x.set_defaults(fn=cmd_init)
@@ -916,7 +1303,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--answered", action="store_true"); x.set_defaults(fn=cmd_ask)
     x = sd(sp.add_parser("defer")); x.add_argument("--id", required=True)
     x.add_argument("--log-file", required=True); x.set_defaults(fn=cmd_defer)
-    x = sd(sp.add_parser("observe-diff")); x.add_argument("--diff", required=True); x.set_defaults(fn=cmd_observe_diff)
+    x = sd(sp.add_parser("observe-diff")); x.set_defaults(fn=cmd_observe_diff)
     x = sd(sp.add_parser("gate")); x.add_argument("--render", action="store_true"); x.set_defaults(fn=cmd_gate)
     x = sp.add_parser("gate-rows"); x.set_defaults(fn=cmd_gate_rows)
     return p

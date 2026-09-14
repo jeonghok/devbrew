@@ -137,7 +137,7 @@ next_round() {   # next_round <state-dir> <doc-for-this-round> [extra-quote]  �
   else py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s$n.json" >/dev/null; fi
   py docreview_state.py exempt-anchors --state-dir "$d" > "$d/ex$n.json"
   py docreview_anchor.py diff "$d/s$((n-1)).json" "$d/s$n.json" --exempt "$d/ex$n.json" > "$d/diff$n.json"
-  py docreview_state.py observe-diff --state-dir "$d" --diff "$d/diff$n.json" > "$d/obs$n.json"
+  py docreview_state.py observe-diff --state-dir "$d" > "$d/obs$n.json"
   echo "$d/diff$n.json"
 }
 case_T18_adopt_issues_permit() {
@@ -225,8 +225,8 @@ case_AC20_reexpiry_blocks_again() {
   local gid; gid="$(fsum "$d" 'Non-goals' '["id"]')"
   py docreview_state.py decide --state-dir "$d" --id "$gid" --choice adopt --quote '채택' >/dev/null
   next_round "$d" "$FX/design-sample.md" >/dev/null        # 라운드 2 — 변경 없음 → expired
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin2.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin2.json"
   local succ; succ="$(jget "$d/fin2.json" '[x["id"] for x in d["findings"] if "expired" in x["summary"]][0]')"
   assert_eq "$(st_yaml "$d" 'st["decides"]["'"$gid"'"].get("superseded_by")')" "$succ" "AC20②: 재상승 루프가 후속 id 를 전방 포인터로 남긴다"
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["blocked_expired"]')" "[]" "AC20②: 포인터가 찍힌 만료는 더 막지 않는다"
@@ -328,8 +328,8 @@ case_AC22_stale_pointer_cleared_via_redecide() {
   local gid; gid="$(fsum "$d" 'Non-goals' '["id"]')"
   py docreview_state.py decide --state-dir "$d" --id "$gid" --choice adopt --quote '채택' >/dev/null
   next_round "$d" "$FX/design-sample.md" >/dev/null        # 라운드 2 — 변경 없음 → expired
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin2.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin2.json"
   local succ; succ="$(jget "$d/fin2.json" '[x["id"] for x in d["findings"] if "expired" in x["summary"]][0]')"
   assert_eq "$(st_yaml "$d" 'st["decides"]["'"$gid"'"].get("superseded_by")')" "$succ" "AC22: finalize 가 gid 에 전방 포인터를 남긴다(재상승, Task 3)"
   py docreview_state.py decide --state-dir "$d" --id "$gid" --choice adopt --quote '재결정: 다시 채택' >/dev/null
@@ -362,8 +362,8 @@ case_AC22b_reraise_successor_hold_refused() {
   # `rm -rf "$d"` 가 함께 지운다.
   local empty_critic="$d/critic-empty.txt"
   printf '리뷰 없음.\n\n```docreview-layer1\n[]\n```\n\n```docreview-layer2\n[]\n```\n' > "$empty_critic"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$empty_critic" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin2.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$empty_critic" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin2.json"
   local succ; succ="$(jget "$d/fin2.json" '[x["id"] for x in d["findings"] if x["disposition"]=="decide" and "expired" in x["summary"]][0]')"
   assert_eq "$(st_yaml "$d" 'st["decides"]["aaaa0001#r1.1"].get("superseded_by")')" "$succ" "AC22b: finalize 가 원본에 전방 포인터를 남긴다(선결조건, 재상승)"
   assert_eq "$(st_yaml "$d" 'st["decides"]["'"$succ"'"]["state"]')" "open" "AC22b: 후속은 평범한 open decide 다(선결조건 — 열려 있지 않으면 「보류」시도 자체가 무의미)"
@@ -408,8 +408,8 @@ case_AC22b_reraise_successor_hold_refused() {
 # 꼬리를 잰다 — 예전 선결조건 중복은 필요 없어졌으므로 지웠다.
 case_AC22c_reraise_inherits_post_kind() {
   local d; d="$(_post_with_real_hash)"; next_round "$d" "$FX/design-sample-r2.md" >/dev/null   # 원복 관측 안 됨 → expired + 재상승 예약
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep3.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff3.json" --doc "$FX/design-sample-r2.md" > "$d/fin3.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep3.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample-r2.md" > "$d/fin3.json"
   # M4(fix round 1) — 부분문자열("expired" in summary) 대신 계보 포인터로 구조적으로
   # 고른다. 원본 id 는 `_post_with_real_hash`/F_POST 가 고정한 "dddd0001#r2.1" 이고,
   # 재상승 후속만 `supersedes` 에 이 값을 싣는다(escalated 후속도 `supersedes` 를
@@ -438,8 +438,8 @@ case_AC22c_reraise_inherits_prev_hash() {
   # GREEN 이 된다(리뷰의 V1 프로브가 실측으로 확인). 원본이 실제 12자리 hex 해시임을
   # 먼저 박아, 등식이 None==None 으로 새지 않게 한다.
   assert_grep "$orig_hash" '^[0-9a-f]{12}$' "AC22c: 선결조건(공허성 바닥) — 원본 prev_hash 가 실제 해시 모양이다(None==None 등식이 아니다)"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep3.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff3.json" --doc "$FX/design-sample-r2.md" > "$d/fin3.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep3.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample-r2.md" > "$d/fin3.json"
   local succ; succ="$(jget "$d/fin3.json" '[x["id"] for x in d["findings"] if x["supersedes"]=="dddd0001#r2.1"][0]')"
   assert_eq "$(st_yaml "$d" 'st["decides"]["'"$succ"'"]["prev_hash"]')" "$orig_hash" "AC22c: 후속의 prev_hash 가 원본의 prev_hash 와 같다"
   rm -rf "$d"
@@ -465,8 +465,8 @@ case_AC22c_reraise_preserves_pre_kind() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
   py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' >/dev/null
   next_round "$d" "$FX/design-sample.md" >/dev/null        # 라운드 2 — 변경 없음 → expired + 예약
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin2.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin2.json"
   # M4(fix round 1) — 위와 같은 구조적 선택자. 원본 id 는 F_DEC 의 고정 id
   # "aaaa0001#r1.1".
   local succ; succ="$(jget "$d/fin2.json" '[x["id"] for x in d["findings"] if x["supersedes"]=="aaaa0001#r1.1"][0]')"
@@ -535,8 +535,8 @@ case_choices_offered_equal_accepted() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
   py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' >/dev/null
   next_round "$d" "$FX/design-sample.md" >/dev/null        # 라운드 2 — 변경 없음 → expired + 예약
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin2.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin2.json"
   local succ normal
   succ="$(jget "$d/fin2.json" '[x["id"] for x in d["findings"] if x["disposition"]=="decide" and "expired" in x["summary"]][0]')"
   # critic-nolayer2 가 같은 라운드에 만드는 무관 lineage(Non-goals, aaaa 와 다른 bucket)
@@ -691,6 +691,39 @@ case_T39_gate_derivation() {
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["approval_ready"], d["round_gate_needed"], d["approval_gate_open"]')" "(False, True, False)" "T39: 열린 decide → 라운드 게이트, 승인 게이트 아님"
   next_round "$d" "$FX/design-sample.md" >/dev/null; next_round "$d" "$FX/design-sample.md" >/dev/null
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["cap_reached"], d["approval_gate_open"], d["two_stage"], d["next_round_mode"]')" "(True, True, True, 'extra_approval')" "T39: 상한 도달 + 열린 것 → 두 단계, 다음 라운드는 개별 승인"
+  local gr; gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$gr" "추가 라운드 1회 열기" "T39: 열린 것이 있어도 렌더 1단계가 사용자 말로 「추가 라운드 1회 열기」를 싣는다(Park P3)"
+  assert_not_contains "$gr" "= extra_approval" "T39: 렌더에 날 모드 토큰 'extra_approval' 이 없다"
+  rm -rf "$d"
+}
+# ── 상한 도달 + 열린 것 0 — 승인 게이트는 항상 두 단계다 (Park P3·D-U3) ────
+# 기존(2026-09-06 설계 §8.2 원문)엔 「열린 것이 남아 있으면」만 두 단계였다 — 상한
+# 도달 + 열린 것 0 은 approval_ready 하나로 즉시 진행 옵션이 열렸다(추가 라운드를
+# 고를 자리가 없었다). 사용자가 이 동작을 뒤집었다: 상한 도달이면 항상 두 단계이고
+# 1단계에 「추가 라운드 1회 열기」가 선다. 아래가 그 음 셀이고, 바로 다음이 그 양의
+# 짝(상한 전 + 열린 것 0 은 예전대로 즉시 진행)이다.
+case_cap_zero_open_two_stage() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  next_round "$d" "$FX/design-sample.md" >/dev/null; next_round "$d" "$FX/design-sample.md" >/dev/null
+  local g; g="$(py docreview_state.py gate --state-dir "$d")"
+  assert_eq "$(printf '%s' "$g" | jgets 'd["cap_reached"], d["approval_ready"], d["two_stage"], d["next_round_mode"]')" \
+    "(True, True, True, 'extra_approval')" \
+    "상한 도달 + 열린 것 0: approval_ready 와 무관하게 two_stage 참, next_round_mode 는 개별 승인(Park P3·D-U3)"
+  local gr; gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$gr" "추가 라운드 1회 열기" "상한 도달 + 열린 것 0: 렌더 1단계가 사용자 말로 「추가 라운드 1회 열기」를 싣는다"
+  assert_contains "$gr" "진행 옵션으로" "상한 도달 + 열린 것 0: 1단계 둘째 선택지 「진행 옵션으로」도 함께 실린다"
+  assert_not_contains "$gr" "= extra_approval" "상한 도달 + 열린 것 0: 렌더에 날 모드 토큰 'extra_approval' 이 없다"
+  rm -rf "$d"
+}
+case_precap_zero_open_not_two_stage() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  local g; g="$(py docreview_state.py gate --state-dir "$d")"
+  assert_eq "$(printf '%s' "$g" | jgets 'd["cap_reached"], d["approval_ready"], d["two_stage"], d["next_round_mode"]')" \
+    "(False, True, False, None)" \
+    "양의 짝 — 상한 전 + 열린 것 0: two_stage 거짓, next_round_mode 없음(동작 불변)"
+  local gr; gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_not_contains "$gr" "추가 라운드 1회 열기" "양의 짝: 상한 전 렌더엔 「추가 라운드 1회 열기」문구가 없다"
+  assert_contains "$gr" "다음: 승인 게이트 — 진행 옵션 활성" "양의 짝: 상한 전 + 열린 것 0 은 예전처럼 즉시 진행 옵션이다"
   rm -rf "$d"
 }
 case_T45_decision_log_append_only() {
@@ -742,10 +775,131 @@ t = open(sys.argv[2], encoding="utf-8").read()
 open(sys.argv[3], "w", encoding="utf-8").write(re.sub(r"\{\{F:([^}]+)\}\}", lambda m: f_of(m.group(1)), t))
 PY
 }
+# ── codex 산출물의 시점 판별 (prepare-recritic) ────────────────────────────
+# 산출물 경로는 세션과 문서의 순수 함수라 같은 문서의 라운드마다 같은 파일이고, 직전 라운드의 산출물과 이번
+# 라운드의 것은 내용으로 못 가른다. `prepare-recritic` 은 `begin-round` 가 기록한 라운드
+# 시작보다 먼저 쓰인 codex 파일을 부재로 읽는다. 그래서 픽스처는 러너가 4단계에서 쓰듯
+# 라운드 시작 «뒤» 에 상태 디렉토리로 복사해 넘긴다 — 커밋된 픽스처의 mtime 은 체크아웃
+# 시각이라 언제나 라운드보다 앞선다.
+codex_now() {   # codex_now <state-dir> <fixture> → 방금 쓴 사본 경로 (없는 경로는 그대로)
+  if [ -f "$2" ]; then cp "$2" "$1/codex.yaml" && echo "$1/codex.yaml"; else echo "$2"; fi
+}
+# critic 출력도 같은 판별을 받는다(`critic_predates_round`) — 라운드 시작보다 먼저 쓰인 critic 파일은 직전
+# 라운드의 탐지 출력이라 critic 사망이다. 커밋된 critic 픽스처를 라운드 시작 뒤에 그대로 넘기는 자리는
+# 탐지 리뷰어가 3단계에서 쓰듯 라운드 시작 «뒤» 에 상태 디렉토리로 복사해 넘긴다.
+critic_now() {   # critic_now <state-dir> <critic 파일> → 방금 쓴 사본 경로 (없는 경로는 그대로)
+  if [ -f "$2" ]; then cp "$2" "$1/critic.txt" && echo "$1/critic.txt"; else echo "$2"; fi
+}
+backdate() { python3 -c 'import os, sys, time; t = time.time() - 60; os.utime(sys.argv[1], (t, t))' "$1"; }
+case_codex_predates_round_absent() {
+  local d; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "시점 판별: init 실패"; return; }
+  # 직전 라운드가 남긴 산출물 — 이번 라운드 시작보다 앞선다(거친 타임스탬프 FS 에서도 그 순서가 보이게 뒤로 민다)
+  cp "$FX/codex-r1.yaml" "$d/codex.yaml"; backdate "$d/codex.yaml"
+  snap "$FX/design-sample.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$d/codex.yaml" > "$d/prep.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$d/never-written.yaml" > "$d/ctl.json"
+  assert_eq "$(jget "$d/prep.json" 'd["degrade"]["codex_absent"], d["degrade"]["codex_reason"]')" "(True, 'codex_predates_round')" \
+    "시점 판별: 라운드 시작보다 먼저 쓰인 codex 파일은 codex_failed: false 여도 부재다 (사유 codex_predates_round)"
+  assert_eq "$(jget "$d/prep.json" 'd["items"]')" "$(jget "$d/ctl.json" 'd["items"]')" \
+    "시점 판별: 그 라운드의 항목이 codex 파일이 없던 라운드와 같다 (직전 라운드 finding 섭취 0)"
+  rm -rf "$d"
+}
+case_codex_after_round_start_read() {   # 위 부재 단언의 양의 짝
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  # 라운드 시작 «뒤» 에 쓰인 산출물 — 뒤로 밀지 않는다. 판별의 경계(시작 직후)를 그대로 잰다
+  cp "$FX/codex-r1.yaml" "$d/codex.yaml"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$d/codex.yaml" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'd["degrade"]["codex_absent"], d["degrade"]["codex_reason"], len(d["items"])')" "(False, None, 10)" \
+    "시점 판별(양의 짝): 라운드 시작 뒤에 쓰인 codex 파일은 이번 라운드의 판정으로 읽힌다 (critic+codex 10건)"
+  rm -rf "$d"
+}
+case_codex_round_start_unrecorded_absent() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2]); st["rounds"][str(st["round"])].pop("started_mtime_ns", None); s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
+  cp "$FX/codex-r1.yaml" "$d/codex.yaml"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$d/codex.yaml" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'd["degrade"]["codex_absent"], d["degrade"]["codex_reason"]')" "(True, 'round_start_unrecorded')" \
+    "시점 판별: 라운드 시작 기록이 없으면 판별할 수 없으므로 부재로 닫는다 (사유 round_start_unrecorded)"
+  rm -rf "$d"
+}
+st_mark() {   # st_mark <state-dir> <op> [<file>] — 라운드 시작 표식을 다루는 픽스처 조작(엔진 사본을 쓴다)
+  python3 -c 'import os, sys
+sys.path.insert(0, sys.argv[1]); import docreview_state as s
+d, op = sys.argv[2], sys.argv[3]; st = s.load_state(d); cur = st["rounds"][str(st["round"])]
+if op == "shift-r1-back":   # 라운드 1 시작을 120초 앞으로 되돌리고 파일을 그 +60초(ns 명시)에 둔다
+    r = st["rounds"]["1"]; r["started_mtime_ns"] = int(r["started_mtime_ns"]) - 120 * 10**9; s.save_state(d, st)
+    t = r["started_mtime_ns"] + 60 * 10**9; os.utime(sys.argv[4], ns=(t, t))
+elif op == "tie":           # 파일 mtime 을 이번 라운드 표식과 정확히 같게
+    t = int(cur["started_mtime_ns"]); os.utime(sys.argv[4], ns=(t, t))
+elif op == "garble":        # 표식을 정수가 아닌 값으로
+    cur["started_mtime_ns"] = "not-a-number"; s.save_state(d, st)
+elif op == "window":        # 파일이 라운드 1 시작과 이번 라운드 시작 «사이» 에 있는가
+    m = os.stat(sys.argv[4]).st_mtime_ns; c = cur.get("started_mtime_ns")
+    print(st["round"], c is not None and int(st["rounds"]["1"]["started_mtime_ns"]) < m < int(c))
+else:
+    sys.exit("st_mark: unknown op %s" % op)' "$SCRIPTS" "$@"
+}
+# 직전 라운드의 산출물은 «직전 라운드 시작 뒤 · 이번 라운드 시작 앞» 에 쓰인다 — 위협의 실제 자리다.
+# 위의 부재 단언은 파일을 모든 라운드 시작보다 앞에 두므로 «어느 라운드의 표식과 비교하는가»를
+# 가르지 못한다. 라운드 1 시작을 120초 되돌리고 파일을 그 +60초에 두면, 어떤 타임스탬프
+# 해상도에서도 파일은 두 시작 사이에 있다.
+case_codex_prev_round_output_absent() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  cp "$FX/codex-r1.yaml" "$d/codex.yaml"; st_mark "$d" shift-r1-back "$d/codex.yaml"
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  assert_eq "$(st_mark "$d" window "$d/codex.yaml")" "2 True" \
+    "시점 판별 전제: 직전 라운드 산출물이 라운드 1 시작과 라운드 2 시작 «사이» 에 있다"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$d/codex.yaml" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'd["degrade"]["codex_absent"], d["degrade"]["codex_reason"]')" "(True, 'codex_predates_round')" \
+    "시점 판별: 라운드 2 에서 직전 라운드 산출물(라운드 1 시작 뒤·라운드 2 시작 앞)은 부재다 — 비교 대상은 이번 라운드의 표식이다"
+  rm -rf "$d"
+}
+case_codex_tie_absent() {   # 표식과 같은 시각 — 앞뒤를 가를 수 없으면 부재 쪽으로 닫는다
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  cp "$FX/codex-r1.yaml" "$d/codex.yaml"; st_mark "$d" tie "$d/codex.yaml"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$d/codex.yaml" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'd["degrade"]["codex_absent"], d["degrade"]["codex_reason"]')" "(True, 'codex_predates_round')" \
+    "시점 판별: mtime 이 라운드 시작 표식과 같으면 부재다 (동률은 부재 쪽)"
+  rm -rf "$d"
+}
+case_codex_round_start_unreadable_absent() {
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  st_mark "$d" garble
+  cp "$FX/codex-r1.yaml" "$d/codex.yaml"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$d/codex.yaml" > "$d/prep.json" 2>/dev/null; rc=$?
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$d/never-written.yaml" > "$d/ctl.json" 2>/dev/null
+  assert_eq "$rc|$(jget "$d/prep.json" 'd["degrade"]["codex_absent"], d["degrade"]["codex_reason"]' 2>/dev/null)" "0|(True, 'round_start_unreadable')" \
+    "시점 판별: 정수가 아닌 라운드 시작 표식은 죽지 않고 codex 부재로 닫는다 (rc 0, 사유 round_start_unreadable)"
+  assert_eq "$(jget "$d/prep.json" 'd["items"]' 2>/dev/null)" "$(jget "$d/ctl.json" 'd["items"]' 2>/dev/null)" \
+    "시점 판별: 표식이 깨져도 critic 항목은 그대로다 (codex 파일이 없던 라운드와 같다)"
+  rm -rf "$d"
+}
+# critic 출력도 같은 판별을 받는다. 탐지를 dispatch 하지 못한 라운드(프로필 판독 실패 등)에는 직전 라운드의
+# critic 출력이 같은 자리에 남는다 — 내용이 유효해도 이번 라운드 시작보다 먼저 쓰였으면 이번 라운드의 탐지가
+# 아니다(critic 사망, 사유 critic_predates_round). 파일은 라운드 1 시작 «뒤» · 라운드 2 시작 «앞» 에 쓰인다.
+case_critic_predates_round_dead() {
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  cp "$FX/critic-r1.txt" "$d/critic.txt"                    # 라운드 1 의 탐지 출력
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic.txt" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep1.json" 2>/dev/null; rc=$?
+  assert_eq "$rc $(jget "$d/prep1.json" 'd["degrade"]["critic_dead"], len(d["items"]) > 0' 2>/dev/null)" "0 (False, True)" \
+    "critic 시점 판별 전제: 라운드 1 에서는 같은 파일이 유효한 탐지다 (rc 0 · 항목 있음)"
+  next_round "$d" "$FX/design-sample.md" >/dev/null        # 라운드 2 시작 — critic.txt 는 그 자리에 남는다
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic.txt" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json" 2>/dev/null; rc=$?
+  assert_eq "$rc $(jget "$d/prep2.json" 'd["ok"], d["degrade"]["critic_dead"], len(d["items"])' 2>/dev/null)" "4 (False, True, 0)" \
+    "critic 시점 판별: 라운드 2 에 라운드 1 의 critic 출력을 그대로 넘기면 critic 사망이다 (rc 4 · 항목 섭취 0)"
+  assert_eq "$(st_yaml "$d" '[(e[2], e[3]) for e in st["pending_recritic"]["events"] if e[0] == "source_failed" and e[1] == "doc-critic"]' 2>/dev/null)" \
+    "[('layer1 block critic_predates_round', True)]" "critic 시점 판별: 주 판정자 실패로 기록되고 사유가 critic_predates_round 다"
+  cp "$FX/critic-r1.txt" "$d/critic.txt"                    # 양의 짝 — 라운드 2 시작 뒤에 새로 쓴 탐지 출력
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic.txt" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep3.json" 2>/dev/null; rc=$?
+  assert_eq "$rc $(jget "$d/prep3.json" 'd["degrade"]["critic_dead"], len(d["items"]) > 0' 2>/dev/null)" "0 (False, True)" \
+    "critic 시점 판별(양의 짝): 라운드 2 시작 뒤에 새로 쓴 critic 출력은 이번 라운드의 탐지로 읽힌다 (rc 0 · 항목 있음)"
+  rm -rf "$d"
+}
 route_r1() {   # route_r1 <profile> <doc> [critic] [codex] [recritic-tmpl|--skip] → state dir; $R1 = finalize json path
   local prof="$1" doc="$2" critic="${3:-$FX/critic-r1.txt}" codex="${4:-$FX/codex-r1.yaml}" rtmpl="${5:-$FX/recritic-r1.txt.tmpl}"
   local d; d="$(r1 "$prof" "$doc")" || return 1
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$critic" --codex "$codex" > "$d/prep.json"; echo "$?" > "$d/prep.rc"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$critic")" --codex "$(codex_now "$d" "$codex")" > "$d/prep.json"; echo "$?" > "$d/prep.rc"
   if [ "$rtmpl" = "--skip" ]; then
     py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$doc" > "$d/fin.json"
   elif [ -f "$rtmpl" ] && [ "${rtmpl%.tmpl}" != "$rtmpl" ]; then
@@ -760,7 +914,7 @@ fsum() { jget "$1/fin.json" "[x for x in d[\"findings\"] if \"$2\" in x[\"summar
 
 case_T01_prepare_anonymizes() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-r1.txt" --codex "$FX/codex-r1.yaml" > "$d/prep.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json"
   assert_eq "$(jget "$d/prep.json" 'len(d["items"]), all(i["f"].startswith("f") for i in d["items"]), any("ref" in i for i in d["items"]), any("source" in i for i in d["items"])')" "(10, True, False, False)" "T01: 10건이 f-번호만 갖고 ref·source 라벨이 없다"
   assert_eq "$(jget "$d/prep.json" '[i["f"] for i in d["items"]] == ["f%d" % k for k in range(1, 11)]')" "True" "T01: 번호는 f1…fN 연속"
   assert_eq "$(jget "$d/prep.json" '[i["layer"] for i in d["items"]] == sorted(i["layer"] for i in d["items"])')" "True" "T01: 정렬 첫 키가 layer (P9) — 출처 순이 아니다"
@@ -794,7 +948,7 @@ case_T05_T06_reject() {
 # 남긴다. 대칭이 깨진 자리(Task 7, AC27).
 case_AC27_unknown_verdict_coerced() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-r1.txt" "$FX/codex-failed.yaml" "--skip")"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-r1.txt" --codex "$FX/codex-failed.yaml" > "$d/prep.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep.json"
   local rt; rt="$(mktemp -t rt-XXXXXX.txt)"
   printf '```docreview-recritic\nverdicts:\n  - f: "f1"\n    verdict: maybe\nadded: []\n```\n' > "$rt"
   py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
@@ -809,7 +963,7 @@ case_AC27_unknown_verdict_coerced() {
 # 사실을 먼저 단언(hold==0)한 뒤에 coerced 를 본다.
 case_AC7b_unknown_same_as_target_coerced() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-r1.txt" "$FX/codex-failed.yaml" "--skip")"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-r1.txt" --codex "$FX/codex-failed.yaml" > "$d/prep.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep.json"
   local rt; rt="$(mktemp -t rt-XXXXXX.txt)"
   printf '```docreview-recritic\nverdicts:\n  - f: "f1"\n    verdict: confirm\n    same_as: ["zzzz9999#r1.1"]\nadded: []\n```\n' > "$rt"
   py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
@@ -864,7 +1018,7 @@ case_T10_invalidated_reject_still_promotes() {   # A×1: 무효 reject × protec
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   local t; t="$(mktemp -t cr-XXXXXX.txt)"
   printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#11-acceptance-criteria"\n  disposition: fix\n  summary: "회귀 방지 A1: 무효 reject 뒤에도 보호 승격"\n```\n' > "$t"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep.json"
   local rt; rt="$(mktemp -t rt-XXXXXX.txt)"
   printf '```docreview-recritic\nverdicts:\n  - f: "f1"\n    verdict: reject\nadded: []\n```\n' > "$rt"
   py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
@@ -876,7 +1030,7 @@ case_T10_invalidated_raise_still_promotes() {   # B×1: 하향 raise × protecte
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   local t; t="$(mktemp -t cr-XXXXXX.txt)"
   printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#11-acceptance-criteria"\n  disposition: fix\n  summary: "회귀 방지 B1: 하향 raise 뒤에도 보호 승격"\n```\n' > "$t"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep.json"
   local rt; rt="$(mktemp -t rt-XXXXXX.txt)"
   printf '```docreview-recritic\nverdicts:\n  - f: "f1"\n    verdict: raise\n    to: drop\nadded: []\n```\n' > "$rt"
   py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
@@ -888,7 +1042,7 @@ case_T12_invalidated_reject_still_promotes() {   # A×2: 무효 reject × immuta
   local d; d="$(r1 "$PROF_SD/brief.md" "$FX/brief-sample.md")"
   local t; t="$(mktemp -t cr-XXXXXX.txt)"
   printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: omission\n  anchor: "#6-사용자-원문"\n  disposition: fix\n  summary: "회귀 방지 A2: 무효 reject 뒤에도 불변 승격"\n```\n' > "$t"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep.json"
   local rt; rt="$(mktemp -t rt-XXXXXX.txt)"
   printf '```docreview-recritic\nverdicts:\n  - f: "f1"\n    verdict: reject\nadded: []\n```\n' > "$rt"
   py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/brief-sample.md" > "$d/fin.json"
@@ -900,7 +1054,7 @@ case_T12_invalidated_raise_still_promotes() {   # B×2: 하향 raise × immutabl
   local d; d="$(r1 "$PROF_SD/brief.md" "$FX/brief-sample.md")"
   local t; t="$(mktemp -t cr-XXXXXX.txt)"
   printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: omission\n  anchor: "#6-사용자-원문"\n  disposition: fix\n  summary: "회귀 방지 B2: 하향 raise 뒤에도 불변 승격"\n```\n' > "$t"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep.json"
   local rt; rt="$(mktemp -t rt-XXXXXX.txt)"
   printf '```docreview-recritic\nverdicts:\n  - f: "f1"\n    verdict: raise\n    to: drop\nadded: []\n```\n' > "$rt"
   py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/brief-sample.md" > "$d/fin.json"
@@ -915,8 +1069,8 @@ case_T11_permit_keeps_disposition() {
   next_round "$d" "$FX/design-sample-r2.md" >/dev/null
   local t; t="$(mktemp -t cr-XXXXXX.txt)"
   printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#2-goals"\n  disposition: fix\n  summary: "목표 B 문구 후속 손질"\n```\n' > "$t"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
   assert_eq "$(fsum "$d" '후속 손질' '["disposition"]')" "fix" "T11: 유효 permit 이 있는 보호 앵커는 리뷰어 처분 그대로"
   assert_eq "$(jget "$d/fin.json" 'all(x["id"].split("#")[1].startswith("r2.") for x in d["findings"])')" "True" "T11: 라운드 2 에서 생성된 id 는 전부 r2. 로 시작 — 라운드 «번호» 가 실제로 박힌다(r 존재가 아니라 값)"
   rm -rf "$d" "$t"
@@ -936,11 +1090,11 @@ case_AC24_stale_permit_does_not_cover() {
   assert_eq "$(st_yaml "$d" 'st["round"], [p["round"] for p in st["permits"].values()]')" "(3, [2])" "AC24: 라운드 3 인데 permit 은 라운드 2 의 것(permits 는 삭제되지 않는다)"
   local t; t="$(mktemp -t cr-XXXXXX.txt)"
   printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "%s"\n  disposition: fix\n  summary: "낡은 permit 앵커의 새 fix"\n```\n' "$anc" > "$t"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep3.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep3.json"
   # fsum 은 "$1/fin.json" 을 고정으로 읽는다(다른 접미사를 안 받는다) — round1 산출물을
   # 그대로 덮어써야 이 assert 가 실제 round3 결과를 본다(브리프 원안의 fin3.json 은 fsum
   # 이 절대 안 읽는 죽은 파일이라 아래 두 assert 가 IndexError 로 죽는다, 실측 확인).
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff3.json" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
   assert_eq "$(fsum "$d" '낡은 permit' '["disposition"]')" "decide" "AC24: 라운드가 지난 permit 은 보호 승격을 막지 못한다"
   # .get(...) — 라운드 경계가 없으면 승격 자체가 안 먹어 "promotion" 키가 통째로 없다.
   # ["promotion"] 이면 그 변이 사본에서 KeyError → traceback → run_case 가 caught 대신
@@ -972,8 +1126,8 @@ case_T14_T15_lineage() {
   next_round "$d" "$FX/design-sample.md" >/dev/null
   local t; t="$(mktemp -t cr-XXXXXX.txt)"
   printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#1-context"\n  disposition: fix\n  summary: "AC 가 여전히 하나뿐이다"\n- ref: c2\n  category: ambiguity\n  anchor: "#1-context"\n  disposition: fix\n  supersedes: "%s"\n  summary: "명시 지목"\n```\n' "$fid" > "$t"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json"
   assert_eq "$(fsum "$d" '명시 지목' '["lineage"]')" "$lin" "T14: supersedes 실재 → 그 계보"
   assert_eq "$(fsum "$d" '여전히 하나뿐' '["lineage"] != "'"$lin"'"')" "True" "T15: 지목된 조상은 자동 연결에서 빠지고 남는 것은 새 계보"
   rm -rf "$d" "$t"
@@ -984,8 +1138,8 @@ case_T15_auto_lineage() {
   next_round "$d" "$FX/design-sample.md" >/dev/null
   local t; t="$(mktemp -t cr-XXXXXX.txt)"
   printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#1-context"\n  disposition: fix\n  summary: "지목 없이 같은 자리"\n```\n' > "$t"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json"
   assert_eq "$(fsum "$d" '지목 없이' '["lineage"]')" "$lin" "T15: 지목이 없으면 같은 bucket 의 열린 이전 finding 에 자동 연결(순번 낮은 것부터)"
   rm -rf "$d" "$t"
 }
@@ -1002,8 +1156,8 @@ case_T17_revival_notice() {
   next_round "$d" "$FX/design-sample.md" >/dev/null
   local t; t="$(mktemp -t cr-XXXXXX.txt)"
   printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#2-goals"\n  disposition: fix\n  summary: "목표 B 가 또 두 가지로 읽힌다"\n```\n' > "$t"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json"
   assert_eq "$(jget "$d/fin.json" 'len(d["revived"]), d["revived"][0]["by"], "그대로" in d["revived"][0]["why"]')" "(1, 'user', True)" "T17: 기각 계보의 부활을 라우터가 원장으로 대조해 사유와 함께 공시"
   assert_eq "$(fsum "$d" '또 두 가지' '["disposition"]')" "decide" "T17: 새 finding 은 지우지 않는다(보호라 decide)"
   rm -rf "$d" "$t"
@@ -1011,8 +1165,8 @@ case_T17_revival_notice() {
 case_T35_frozen_change_auto_decide() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   next_round "$d" "$FX/design-sample-r2.md" >/dev/null
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
   local fr; fr="$(jget "$d/fin.json" 'sorted((x["anchor"], x["disposition"], x["origin"], x["kind"]) for x in d["findings"] if x["category"]=="frozen_change")')"
   assert_eq "$fr" "[('#12-files-to-modify', 'decide', 'auto', 'post'), ('#2-goals', 'decide', 'auto', 'post')]" "T35·AC4: 얼린 두 섹션의 변경 → 사후 auto decide 둘"
   assert_grep "$(jget "$d/fin.json" '[x["evidence"] for x in d["findings"] if x["anchor"]=="#12-files-to-modify" and x["category"]=="frozen_change"][0]')" 'hash [0-9a-f]{12}→[0-9a-f]{12}' "T35·AC4: evidence 에 헤딩 diff(해시 전후)"
@@ -1025,8 +1179,8 @@ case_T28_escalated_fix_becomes_decide() {
   local fid; fid="$(fsum "$d" 'AC 가 하나뿐' '["id"]')"
   py docreview_state.py fix --state-dir "$d" --id "$fid" --event escalate --reason 'check-intent 거부: edit_scope 밖' >/dev/null
   next_round "$d" "$FX/design-sample.md" >/dev/null
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json"
   assert_eq "$(jget "$d/fin.json" '[(x["disposition"], x["kind"], x["supersedes"]==sys.argv[0] if False else x["supersedes"]) for x in d["findings"] if "AC 가 하나뿐" in x["summary"]]')" "[('decide', 'pre', '$fid')]" "T28: check-intent 거부된 fix 는 다음 라운드에 같은 계보의 decide(pre)"
   rm -rf "$d"
 }
@@ -1035,8 +1189,8 @@ case_T22_reraise_appears_in_next_round() {
   local gid; gid="$(fsum "$d" 'Non-goals' '["id"]')"
   py docreview_state.py decide --state-dir "$d" --id "$gid" --choice adopt --quote '채택' >/dev/null
   next_round "$d" "$FX/design-sample.md" >/dev/null        # 변경 없음 → expired
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json"
   assert_eq "$(jget "$d/fin.json" '[(x["disposition"], x["supersedes"], x["lineage"]) for x in d["findings"] if "expired" in x["summary"]]')" "[('decide', '$gid', '$gid')]" "T22: expired 는 같은 계보의 decide 로 다음 라운드 목록에 재상승"
   rm -rf "$d"
 }
@@ -1048,10 +1202,16 @@ case_T40_codex_absent_first_line() {
 }
 case_T41_critic_dead_blocks() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer1.txt" --codex "$FX/codex-r1.yaml" > "$d/prep.json" 2>/dev/null; local rc=$?
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer1.txt")" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json" 2>/dev/null; local rc=$?
   assert_eq "$rc $(jget "$d/prep.json" 'd["degrade"]["critic_dead"]')" "4 True" "T41: 층 1 블록 없음 → rc 4 + critic_dead"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-broken.txt" --codex "$FX/codex-r1.yaml" > "$d/prep.json" 2>/dev/null; rc=$?
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-broken.txt")" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json" 2>/dev/null; rc=$?
   assert_eq "$rc" "4" "T41: 층 1 블록 YAML 파손 → rc 4"
+  # critic 사망 라운드를 finalize 까지 태운다 — 게이트가 그 라운드를 「미검증」으로 여는 근거의 하나가
+  # `fin.json` 의 `blocks` 다. rc 4 · `critic_dead` 만 재면 그 다리(주 판정자로 기록 →
+  # `blocks`)가 끊겨도 통과한다(doc-critic 을 보조로 기록하는 변이가 락 15개 전부에서 GREEN 이었다).
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null
+  assert_eq "$(jget "$d/fin.json" 'd["blocks"], any(a.startswith("입력 실패(주): doc-critic") for a in d["advisory"])')" "(True, True)" \
+    "T41: critic 사망 라운드의 finalize → fin.json blocks 참 + 주 판정자 사유(doc-critic)"
   rm -rf "$d"
 }
 case_T42_layer2_missing() {
@@ -1077,6 +1237,327 @@ case_route_adjudication_keys() {
     "['adjudication_absorbed', 'adjudication_accepted', 'adjudication_coerced', 'adjudication_degraded', 'adjudication_held', 'adjudication_held_by_class', 'adjudication_rejected', 'adjudication_sources_failed', 'adjudication_suppressed', 'adjudication_unknown_counts']" \
     "route: adjudication_* 키 전부(P7)"
   assert_eq "$(jget "$d/fin.json" 'd["adjudication_accepted"] == len(d["findings"])')" "True" "route: 최종 목록 전부 accept 계수"
+  rm -rf "$d"
+}
+
+# ── T46 — 「미검증」 라운드를 엔진이 스스로 안다 (Task 7b, R51) ───────────────────
+# 이번 라운드의 판정이 원장에 없는 세 모양 — critic 사망 두 번(5단계가 6~7단계를 건너뛴다) ·
+# critic 이 죽은 채 finalize · finalize 실패. 게이트 요약이 사유(`unverified`) · 승인 게이트 라벨
+# (`approval_label`) · 완료 기록 신호(`round_reviewed`)를 내고, 렌더 첫 줄이 공시로 시작한다. 진입
+# skill 은 이 셋을 읽는다(reviewing-spec 의 승인 게이트 라벨 · reviewing-brief 의 Step B 라벨).
+gsum()   { py docreview_state.py gate --state-dir "$1" | jgets "$2"; }            # gsum <dir> <expr over d>
+gfirst() { py docreview_state.py gate --state-dir "$1" --render | head -1; }      # 렌더 첫 줄(degrade 공시)
+UNV='d["unverified"], d["approval_label"], d["round_reviewed"], d["approval_gate_open"]'
+UNV3='d["unverified"], d["approval_label"], d["round_reviewed"]'
+critic_dead_twice() {   # critic_dead_twice <state-dir> — 5단계 rc 4 두 번(재dispatch 도 죽었다)
+  py docreview_route.py prepare-recritic --state-dir "$1" --critic "$(critic_now "$1" "$FX/critic-nolayer1.txt")" --codex "$(codex_now "$1" "$FX/codex-r1.yaml")" > "$1/prep.json" 2>/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$1" --critic "$(critic_now "$1" "$FX/critic-broken.txt")" --codex "$(codex_now "$1" "$FX/codex-r1.yaml")" > "$1/prep.json" 2>/dev/null
+}
+case_T46_critic_dead_twice_unverified() {
+  local d f; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  critic_dead_twice "$d"
+  assert_eq "$(gsum "$d" "$UNV")" "('critic_dead', '미검증', False, True)" \
+    "T46: critic 사망 두 번(finalize 없음) → unverified critic_dead · 라벨 「미검증」 · 완료 기록 불가 · 승인 게이트 열림"
+  f="$(gfirst "$d")"
+  assert_not_contains "$f" "degrade 없음" "T46: critic 사망 두 번 라운드의 렌더 첫 줄에 「degrade 없음」이 없다"
+  assert_contains "$f" "「미검증」 주 판정자(doc-critic) 사망" "T46: 렌더 첫 줄이 주 판정자 사망 · 「미검증」을 공시한다 (부재 단언의 양의 짝)"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "다음: 승인 게이트(「미검증」)" \
+    "T46: 렌더의 다음 줄이 승인 게이트를 「미검증」 라벨로 연다"
+  rm -rf "$d"
+}
+case_T46_critic_dead_finalized_unverified() {   # 「미검증」 둘째 갈래 — 죽은 채 finalize 한 라운드
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer1.txt")" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json" 2>/dev/null
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null
+  assert_eq "$(jget "$d/fin.json" 'd["blocks"]')" "True" "T46 전제: critic 이 죽은 채 finalize 한 라운드 — fin.json blocks 참"
+  assert_eq "$(gsum "$d" "$UNV")" "('critic_dead', '미검증', False, True)" \
+    "T46: critic 이 죽은 채 finalize 한 라운드도 엔진이 「미검증」으로 안다 (unverified critic_dead · 완료 기록 불가)"
+  assert_contains "$(gfirst "$d")" "「미검증」 주 판정자(doc-critic) 사망" "T46: 그 라운드의 렌더 첫 줄도 주 판정자 사망을 맨 앞에 싣는다"
+  rm -rf "$d"
+}
+case_T46_finalize_failed_unverified() {   # critic 생존 · finalize rc≠0 — 준비는 남고 fin.json 은 비었다
+  local d rc f; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json"
+  # 탈것: 옛 판본은 파손 diff(`{`)로 finalize 를 죽였다. finalize 는 이제 diff 파일을 받지 않으므로(얼림 diff 는
+  # 엔진이 원장의 스냅숏으로 계산한다 — PR 3 qg iter 3), 비-UTF-8 재비판 출력으로 죽인다 —
+  # finalize 가 원장을 쓰기 전에 `unreadable` rc 1 로 끝난다.
+  printf '\xff\xfe\x00bad' > "$d/broken-recritic.txt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$d/broken-recritic.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null; rc=$?
+  assert_eq "$rc $(wc -c < "$d/fin.json" | tr -d ' ')" "1 0" "T46 전제: finalize 가 rc 1 로 죽고 fin.json 은 비었다"
+  assert_eq "$(gsum "$d" "$UNV")" "('finalize_incomplete', '미검증', False, True)" \
+    "T46: finalize 실패 → 정상 게이트가 아니다 (unverified finalize_incomplete · 라벨 「미검증」 · 완료 기록 불가)"
+  f="$(gfirst "$d")"
+  assert_not_contains "$f" "degrade 없음" "T46: finalize 실패 라운드의 렌더 첫 줄에 「degrade 없음」이 없다"
+  assert_contains "$f" "「미검증」 라우팅(finalize) 미완" "T46: 렌더 첫 줄이 라우팅 미완 · 「미검증」을 공시한다 (부재 단언의 양의 짝)"
+  rm -rf "$d"
+}
+case_T46_finalize_without_prepare_marks_round() {   # 준비 없는 finalize — 거부를 원장에 남기고, 성공이 치운다
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>"$d/fin.err"; rc=$?
+  assert_eq "$rc $(jget "$d/fin.err" 'd["reason"]')" "1 no_pending_recritic" "T46 전제: 준비 없는 finalize 는 rc 1 no_pending_recritic"
+  assert_eq "$(st_yaml "$d" 'st["rounds"]["1"].get("finalize_failed")')" "no_pending_recritic" "T46: 그 거부가 이 라운드 자리에 실패 표지로 남는다"
+  assert_eq "$(gsum "$d" "$UNV")" "('finalize_incomplete', '미검증', False, True)" "T46: 준비 없이 finalize 가 거부된 라운드의 게이트는 「미검증」이다"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json"; rc=$?
+  assert_eq "$rc $(st_yaml "$d" 'st["rounds"]["1"].get("finalize_failed")')" "0 None" "T46: 같은 라운드의 finalize 성공이 실패 표지를 치운다"
+  assert_eq "$(gsum "$d" "$UNV3")" "(None, None, True)" "T46: 그 뒤 게이트는 정상이다 (라벨 없음 · 완료 기록 가능)"
+  rm -rf "$d"
+}
+case_T46_stale_pending_refused() {   # 다른 라운드의 준비는 소비하지 않는다 · 번호 없는 준비도
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  critic_dead_twice "$d"                                   # 라운드 1 의 준비(critic 사망)가 남는다
+  next_round "$d" "$FX/design-sample.md" >/dev/null        # 라운드 2 — 아직 준비 없음
+  assert_eq "$(gsum "$d" 'd["unverified"], d["round_reviewed"]')" "(None, False)" \
+    "T46 라운드 스코프: 직전 라운드의 critic 사망 준비는 이번 라운드를 「미검증」으로 만들지 않는다 — 다만 라우팅 전이라 완료 기록 신호도 서지 않는다"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>"$d/fin.err"; rc=$?
+  assert_eq "$rc $(jget "$d/fin.err" 'd["reason"]') $(wc -c < "$d/fin.json" | tr -d ' ')" "1 pending_recritic_stale 0" \
+    "T46: 라운드 2 의 finalize 는 라운드 1 의 준비를 소비하지 않는다 (rc 1 pending_recritic_stale · fin.json 없음)"
+  assert_eq "$(st_yaml "$d" 'st["pending_recritic"]["round"], st["rounds"]["2"].get("route_report"), st["rounds"]["2"].get("finalize_failed")')" \
+    "(1, None, 'pending_recritic_stale')" "T46: 거부는 준비를 건드리지 않고 이번 라운드 자리에 표지만 남긴다"
+  assert_eq "$(gsum "$d" "$UNV3")" "('finalize_incomplete', '미검증', False)" "T46: 그 라운드의 게이트는 「미검증」이다"
+  rm -rf "$d"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json"
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2]); st["pending_recritic"].pop("round"); s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
+  assert_eq "$(gsum "$d" "$UNV3")" "('finalize_incomplete', '미검증', False)" "T46: 라운드 번호가 없는 준비는 이번 라운드의 미완 준비로 친다 (닫힌 쪽)"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>"$d/fin.err"; rc=$?
+  assert_eq "$rc $(jget "$d/fin.err" 'd["reason"]')" "1 pending_round_unrecorded" "T46: finalize 는 어느 라운드 것인지 모르는 준비를 소비하지 않는다"
+  rm -rf "$d"
+}
+case_T46_unverified_released_next_round() {   # 라운드 스코프 — 다음 라운드가 정상으로 끝나면 표지가 풀린다
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  critic_dead_twice "$d"
+  assert_eq "$(gsum "$d" 'd["unverified"]')" "critic_dead" "T46 전제: 라운드 1 은 「미검증」(critic 사망)"
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin2.json"
+  assert_eq "$(gsum "$d" "$UNV3")" "(None, None, True)" "T46: 라운드 2 가 정상으로 끝나면 「미검증」이 풀린다 (라벨 없음 · 완료 기록 가능)"
+  assert_not_contains "$(gfirst "$d")" "미검증" "T46: 풀린 라운드의 렌더 첫 줄에 「미검증」이 없다"
+  # finalize 실패 표지도 같은 스코프다 — 라운드 3 에서 준비 없이 거부된 뒤 라운드 4(추가 승인) 가 정상이면 풀린다.
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > /dev/null 2>&1
+  assert_eq "$(gsum "$d" 'd["unverified"]')" "finalize_incomplete" "T46 전제: 라운드 3 은 「미검증」(finalize 거부)"
+  next_round "$d" "$FX/design-sample.md" '사용자: 한 라운드 더' >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep4.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin4.json"
+  assert_eq "$(gsum "$d" "$UNV3")" "(None, None, True)" "T46: 라운드 4 가 정상으로 끝나면 finalize 실패 표지도 풀린다"
+  rm -rf "$d"
+}
+case_T46_normal_and_unrouted_rounds() {   # 양의 짝 둘 — 정상 라운드는 참, 라우팅 없는 라운드는 사유 없이 거짓
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_eq "$(gsum "$d" "$UNV3")" "(None, None, True)" "T46 양의 짝: 정상 라운드(critic 생존 · finalize 성공) → 사유 없음 · 라벨 없음 · 완료 기록 가능"
+  assert_not_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "미검증" "T46 양의 짝: 정상 라운드의 렌더에 「미검증」이 없다"
+  local gr; gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_eq "$(gsum "$d" 'd["unreviewed_reason"]')|$(printf '%s' "$gr" | grep -c '리뷰 완료')" "None|0" \
+    "T46 양의 짝: 정상 라운드는 공시 사유가 없고 렌더에 리뷰 완료 아님 공시 · 꼬리가 없다"
+  rm -rf "$d"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_eq "$(gsum "$d" "$UNV3")" "(None, None, False)" \
+    "T46: finalize 를 거치지 않은 라운드 — 「미검증」 사유는 없지만 완료 기록 신호는 서지 않는다 (참은 이번 라운드의 finalize 보고서를 요구한다)"
+  rm -rf "$d"
+}
+case_T46_skipped_routing_unrouted_disclosed() {   # 리뷰 P1 — 5~7단계를 건너뛴 라운드(준비도 라우팅 보고서도 없다)
+  # 탈것: 옛 판본은 비-UTF-8 critic 으로 5단계를 rc 1 로 죽였다. 그 입력은 이제 critic 사망(rc 4)이라
+  # (최종 리뷰 F6 — 아래 case_T46_undecodable_critic_is_dead) 「미검증」 쪽으로 가므로, `unrouted` 는
+  # 5~7단계를 건너뛴 라운드로 잰다 — 1단계 뒤 곧장 게이트다.
+  local d f l; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_eq "$(st_yaml "$d" 'st["pending_recritic"], st["rounds"]["1"].get("route_report"), st["rounds"]["1"].get("finalize_failed")')" "(None, None, None)" \
+    "T46 전제(리뷰 P1): 5~7단계를 건너뛴 라운드 — 준비 · 라우팅 보고서 · finalize 거부 표지가 모두 없다"
+  assert_eq "$(gsum "$d" 'd["unreviewed_reason"], d["unverified"], d["approval_label"], d["round_reviewed"]')" "('unrouted', None, None, False)" \
+    "T46: 7단계를 건너뛴 라운드 — 공시 사유 unrouted · 「미검증」 사유와 라벨은 아니다 · 완료 기록 불가"
+  f="$(gfirst "$d")"
+  assert_not_contains "$f" "degrade 없음" "T46: 라우팅 보고서 없는 라운드의 렌더 첫 줄에 「degrade 없음」이 없다"
+  assert_contains "$f" "리뷰 완료 아님 — 이번 라운드의 라우팅 보고서가 없다" "T46: 렌더 첫 줄이 라우팅 보고서 부재를 공시한다 (부재 단언의 양의 짝)"
+  assert_not_contains "$f" "미검증" "T46: 그 공시는 「미검증」 라벨 문구가 아니다 (다른 사유)"
+  l="$(py docreview_state.py gate --state-dir "$d" --render | tail -1)"
+  assert_contains "$l" "리뷰 완료가 아니다(round_reviewed=false · unrouted)" \
+    "T46: 「다음:」 줄이 진행 옵션을 무조건 말하지 않는다 — 리뷰 완료 아님 꼬리 (리뷰 P1 의 「진행 옵션 활성」)"
+  # 리뷰 P1b — 7단계를 건너뛰지 않으면 거부 표지가 서서 「미검증」(finalize_incomplete)이 된다.
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null
+  assert_eq "$(gsum "$d" 'd["unreviewed_reason"], d["approval_label"]')" "('finalize_incomplete', '미검증')" \
+    "T46(리뷰 P1b): 그 뒤 finalize 를 부르면 거부 표지가 서서 「미검증」 이 된다"
+  rm -rf "$d"
+}
+case_T46_undecodable_critic_is_dead() {   # 비-UTF-8 critic 출력 = sentinel 깨짐 — 설계 §9 주 판정자 실패 (최종 리뷰 F6)
+  # 옛 판본은 디코드 예외가 `unreadable` rc 1 로 새어 재dispatch 없이 `unrouted` 로 갔다. 설계 §9 는 sentinel 이
+  # 없거나 깨지면 critic 사망(재dispatch 1회, 또 실패면 「미검증」)이다.
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  printf '\xff\xfe\x00bad' > "$d/critic-bad.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-bad.txt" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json" 2>"$d/prep.err"; rc=$?
+  assert_eq "$rc $(jget "$d/prep.json" 'd["ok"], d["degrade"]["critic_dead"]' 2>/dev/null)" "4 (False, True)" \
+    "T46(F6): 비-UTF-8 critic → prepare-recritic rc 4 · critic_dead (rc 1 unreadable 이 아니다)"
+  assert_eq "$(st_yaml "$d" '[e[2] for e in st["pending_recritic"]["events"] if e[0] == "source_failed" and e[1] == "doc-critic"]' 2>/dev/null)" "['layer1 block undecodable']" \
+    "T46(F6): source_failed 사유가 디코드 실패를 말한다"
+  assert_eq "$(gsum "$d" "$UNV3")" "('critic_dead', '미검증', False)" \
+    "T46(F6): 그 라운드의 게이트는 「미검증」(critic 사망) 쪽이다 — unrouted 가 아니다"
+  rm -rf "$d"
+}
+case_T46_unrouted_round2_with_open_items() {   # 가장 흔한 재리뷰 모양 — 라운드 2 · 이전 라운드의 열린 항목 · 5~7단계 건너뜀 (최종 리뷰 F7)
+  # 위 `unrouted` 셀들은 전부 라운드 1 · 열린 것 없음이라 공시가 `approval_ready` 갈래에서만 재졌다.
+  local d f l; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  assert_eq "$(gsum "$d" 'd["round"], d["approval_ready"], d["unreviewed_reason"], d["approval_label"]')" "(2, False, 'unrouted', None)" \
+    "T46(F7) 전제: 라운드 2 · 이전 라운드의 열린 항목으로 승인 준비 아님 · 공시 사유 unrouted · 라벨 없음"
+  f="$(gfirst "$d")"
+  assert_not_contains "$f" "degrade 없음" "T46(F7): 승인 준비가 아닌 라우팅 없는 라운드의 렌더 첫 줄에도 「degrade 없음」이 없다"
+  assert_contains "$f" "리뷰 완료 아님 — 이번 라운드의 라우팅 보고서가 없다" "T46(F7): 렌더 첫 줄이 라우팅 보고서 부재를 공시한다 (부재 단언의 양의 짝)"
+  l="$(py docreview_state.py gate --state-dir "$d" --render | tail -1)"
+  assert_contains "$l" "리뷰 완료가 아니다(round_reviewed=false · unrouted)" \
+    "T46(F7): 승인 준비가 아닐 때의 「다음:」 줄에도 리뷰 완료 아님 꼬리가 붙는다"
+  rm -rf "$d"
+}
+case_T46_unverified_two_stage_with_open_items() {   # 「미검증」 + 이전 라운드의 열린 항목 → 두 단계 승인 게이트(설계 §8.2)
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_eq "$(gsum "$d" 'd["approval_ready"], d["approval_gate_open"]')" "(False, False)" "T46 전제: 라운드 1 이 열린 항목을 남긴다 (승인 준비 아님 · 승인 게이트 닫힘)"
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  critic_dead_twice "$d"
+  assert_eq "$(gsum "$d" 'd["unverified"], d["approval_gate_open"], d["approval_ready"], d["two_stage"], d["next_round_mode"]')" \
+    "('critic_dead', True, False, True, 'budget')" "T46: 「미검증」 + 열린 항목 → 승인 게이트를 열되 두 단계 · 다음 라운드는 예산"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "다음: 승인 게이트(「미검증」) 1단계 — 열린 항목을 처리한 뒤 진행 옵션 (다음 라운드 = budget)" \
+    "T46: 렌더의 다음 줄이 「미검증」 라벨의 두 단계 승인 게이트다"
+  rm -rf "$d"
+}
+
+# ── 관측과 얼림 diff 는 원장의 함수다 — 건너뛴 라운드를 따라잡는다 (PR 3 qg iter 3 층위 수정) ─────────────
+# 엔진이 permit · fix 적용 관측과 얼림 diff 를 원장의 라운드별 스냅숏(`begin-round` 가 저장한다)으로 스스로 계산한다
+# — 오케스트레이터가 쓰는 diff 파일이 없다. 관측 없이 끝난 라운드(critic 이 두 번 죽어 6~7단계를 건너뛴 라운드의
+# 모양)의 permit 은 뒤 라운드의 관측이 그 permit 라운드의 스냅숏 쌍으로 따라잡는다. 옛 엔진은 `round == n` 인 permit
+# 만 봐서 그런 permit 을 영영 다시 보지 않았고, 그 결정은 adopted 로 남아 재결정도 거부됐다(봉인).
+PERMIT_SEL='[(p["round"], bool(p.get("consumed"))) for p in st["permits"].values()]'
+begin_only() {   # begin_only <state-dir> <doc> — 1단계만(스냅숏 + begin-round). 관측도 finalize 도 없다
+  local d="$1" n; n="$(st_yaml "$d" 'st["round"]+1')"; snap "$2" "$d/s$n.json"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s$n.json" >/dev/null
+}
+empty_critic() {   # empty_critic <state-dir> → 형식은 맞고 finding 이 없는 critic 출력(라운드 시작 뒤에 쓴다)
+  printf '리뷰 없음.\n\n```docreview-layer1\n[]\n```\n\n```docreview-layer2\n[]\n```\n' > "$1/critic.txt"; echo "$1/critic.txt"
+}
+case_E1_skipped_round_permit_caught_up() {
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' >/dev/null
+  begin_only "$d" "$FX/design-sample-r2.md"      # 라운드 2 — permit 앵커(#12)를 고친 문서 · 관측 · finalize 없음
+  assert_eq "$(st_yaml "$d" "$PERMIT_SEL")" "[(2, False)]" "E1 전제: 라운드 2 의 permit 이 관측 없이 남았다"
+  begin_only "$d" "$FX/design-sample-r2.md"      # 라운드 3 — 문서 그대로
+  py docreview_state.py observe-diff --state-dir "$d" > "$d/obs3.json" 2>"$d/obs3.err"; rc=$?
+  assert_eq "$rc $(jget "$d/obs3.json" 'd["applied"], d["expired"]' 2>/dev/null)" "0 (['aaaa0001#r1.1'], [])" \
+    "E1: 라운드 3 관측이 라운드 2 의 permit 을 그 라운드의 스냅숏 쌍(1→2)으로 따라잡아 applied 로 닫는다"
+  assert_eq "$(st_yaml "$d" 'st["decides"]["aaaa0001#r1.1"]["state"]')" "applied" "E1: decide 상태가 applied 다"
+  assert_eq "$(gsum "$d" 'd["adopted"]')" "[]" "E1: 라운드 3 게이트에 채택 대기 항목이 없다 (봉인이 없다)"
+  rm -rf "$d"
+}
+case_E1b_skipped_round_unedited_permit_expires() {
+  local d rc succ; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' >/dev/null
+  begin_only "$d" "$FX/design-sample.md"          # 라운드 2 — 편집 없음 · 관측 · finalize 없음
+  begin_only "$d" "$FX/design-sample.md"          # 라운드 3
+  py docreview_state.py observe-diff --state-dir "$d" > "$d/obs3.json" 2>/dev/null
+  assert_eq "$(jget "$d/obs3.json" 'd["expired"], [(r["finding_id"], r["reason"]) for r in d["reraise"]]' 2>/dev/null)" \
+    "(['aaaa0001#r1.1'], [('aaaa0001#r1.1', '라운드 2 에 채택 변경 관측 없음 (D1.1)')])" \
+    "E1′: 편집 없이 지나간 라운드의 permit 은 따라잡혀 만료되고 재상승 예약을 남긴다 (사유의 라운드는 permit 의 라운드)"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(empty_critic "$d")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep3.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin3.json" 2>/dev/null; rc=$?
+  succ="$(jget "$d/fin3.json" '[x["id"] for x in d["findings"] if x.get("supersedes") == "aaaa0001#r1.1" and x["disposition"] == "decide"]' 2>/dev/null)"
+  assert_eq "$rc $(jget "$d/fin3.json" 'len([x for x in d["findings"] if x.get("supersedes") == "aaaa0001#r1.1" and x["disposition"] == "decide"])' 2>/dev/null)" "0 1" \
+    "E1′: 라운드 3 finalize 가 그 계보의 후속 decide 를 하나 만든다"
+  assert_eq "$(st_yaml "$d" '[st["decides"]["aaaa0001#r1.1"].get("superseded_by")]')" "$succ" "E1′: 원본에 전방 포인터(superseded_by)가 그 후속을 가리킨다"
+  rm -rf "$d"
+}
+e2_round2() {   # e2_round2 <yes|no> → 라운드 1 의 Non-goals decide 를 채택하고 라운드 2(편집된 문서)를 finalize 한 상태 디렉토리
+  local d gid; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || return 1
+  gid="$(fsum "$d" 'Non-goals' '["id"]')"
+  py docreview_state.py decide --state-dir "$d" --id "$gid" --choice adopt --quote '채택' >/dev/null
+  begin_only "$d" "$FX/design-sample-r2.md"
+  [ "$1" = yes ] && py docreview_state.py observe-diff --state-dir "$d" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample-r2.md" > "$d/fin2.json" 2>/dev/null
+  echo "$d"
+}
+case_E2_finalize_observes_idempotent() {
+  local a b gid dec; a="$(e2_round2 no)"; b="$(e2_round2 yes)"; gid="$(fsum "$a" 'Non-goals' '["id"]')"
+  dec='sorted((k, v["state"], v.get("superseded_by")) for k, v in st["decides"].items())'
+  assert_eq "$(jget "$a/fin2.json" 'len([x for x in d["findings"] if x.get("supersedes") == "'"$gid"'"]), len([x for x in d["findings"] if x["category"] == "frozen_change"])' 2>/dev/null)" "(1, 2)" \
+    "E2 전제: observe-diff 없이 finalize 한 라운드 2 — 채택 permit 이 관측돼 만료 후속 하나 · 얼림 검사가 편집 둘을 잡았다"
+  assert_eq "$(st_yaml "$a" "$dec")" "$(st_yaml "$b" "$dec")" "E2: observe-diff 없이 finalize 한 decide 상태 == observe-diff 뒤 finalize 한 decide 상태"
+  assert_eq "$(jget "$a/fin2.json" 'd["findings"]' 2>/dev/null)" "$(jget "$b/fin2.json" 'd["findings"]' 2>/dev/null)" "E2: 두 순서의 fin.json findings 가 같다"
+  rm -rf "$a" "$b"
+}
+case_E3_consumed_permit_exempt_from_freeze() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' >/dev/null
+  begin_only "$d" "$FX/design-sample-r2.md"      # 라운드 2 — permit 앵커(#12)와 permit 없는 #2-goals 를 고친 문서
+  py docreview_state.py observe-diff --state-dir "$d" > "$d/obs2.json"
+  assert_eq "$(jget "$d/obs2.json" 'd["applied"]') $(st_yaml "$d" "$PERMIT_SEL")" "['aaaa0001#r1.1'] [(2, True)]" \
+    "E3 전제: 라운드 2 permit 이 관측돼 소비됐다"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(empty_critic "$d")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample-r2.md" > "$d/fin2.json"
+  assert_eq "$(jget "$d/fin2.json" 'sorted(x["anchor"] for x in d["findings"] if x["category"] == "frozen_change")')" "['#2-goals']" \
+    "E3: 소비된 permit 의 앵커(#12)는 그 라운드 얼림 검사에서 면제되고 permit 없는 편집(#2-goals)만 frozen_change 다"
+  rm -rf "$d"
+}
+case_E4_snapshot_missing_unverified() {
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' >/dev/null
+  begin_only "$d" "$FX/design-sample-r2.md"
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2]); del st["snapshots"]["1"]; s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
+  py docreview_state.py observe-diff --state-dir "$d" > "$d/obs2.json" 2>"$d/obs2.err"; rc=$?
+  assert_eq "$rc $(jget "$d/obs2.err" 'd["reason"], d["round"]' 2>/dev/null) $(wc -c < "$d/obs2.json" | tr -d ' ')" "1 ('snapshot_missing', 1) 0" \
+    "E4: 원장에 라운드 1 스냅숏이 없으면 observe-diff 는 rc 1 snapshot_missing 이다 — 빈 diff 로 넘어가지 않는다"
+  assert_eq "$(st_yaml "$d" "$PERMIT_SEL"', st["decides"]["aaaa0001#r1.1"]["state"], st["reraise"]')" "([(2, False)], 'adopted', [])" \
+    "E4: 관측하지 못한 permit 은 소비 · 만료 · 재상승되지 않는다"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(empty_critic "$d")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample-r2.md" > "$d/fin2.json" 2>"$d/fin2.err"; rc=$?
+  assert_eq "$rc $(jget "$d/fin2.err" 'd["reason"]' 2>/dev/null) $(wc -c < "$d/fin2.json" | tr -d ' ')" "1 snapshot_missing 0" \
+    "E4: finalize 도 rc 1 snapshot_missing — 준비를 치우기 전에 멈춘다"
+  assert_eq "$(gsum "$d" 'd["approval_label"], d["unverified"], d["round_reviewed"]')" "('미검증', 'finalize_incomplete', False)" \
+    "E4: 그 라운드의 게이트는 「미검증」(finalize_incomplete) · 완료 기록 불가"
+  rm -rf "$d"
+}
+case_E5_revert_caught_up_by_its_round_snapshot() {
+  local d h; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample-r2.md")"   # 라운드 1 — #12 가 바뀐 채인 문서
+  snap "$FX/design-sample.md" "$d/orig.json"
+  h="$(jget "$d/orig.json" '[s["hash"] for s in d["sections"] if s["anchor"] == "#12-files-to-modify"][0]')"
+  seed_findings "$d" '[{"id":"dddd0005#r1.1","lineage":"dddd0005#r1.1","bucket":"dddd0005","origin":"auto","layer":2,"category":"frozen_change","anchor":"#12-files-to-modify","edit_scope":"#12-files-to-modify","disposition":"decide","summary":"finding 없이 바뀜","evidence":"hash a→b","blocks":[],"kind":"post","prev_hash":"'"$h"'"}]'
+  py docreview_state.py decide --state-dir "$d" --id 'dddd0005#r1.1' --choice reject --quote '원복하라' >/dev/null   # 원복 permit(라운드 2)
+  begin_only "$d" "$FX/design-sample.md"          # 라운드 2 — #12 를 원복했다 · 관측 없이 지나간다
+  begin_only "$d" "$FX/design-sample-r2.md"       # 라운드 3 — #12 를 다시 바꿨다
+  assert_eq "$(jget "$d/s2.json" '[s["hash"] for s in d["sections"] if s["anchor"] == "#12-files-to-modify"][0] == "'"$h"'"') $(jget "$d/s3.json" '[s["hash"] for s in d["sections"] if s["anchor"] == "#12-files-to-modify"][0] == "'"$h"'"')" "True False" \
+    "E5 전제: 라운드 2 의 #12 는 원복 해시와 같고 라운드 3 의 #12 는 다르다 (현재 라운드 스냅숏으로 판정하면 만료다)"
+  py docreview_state.py observe-diff --state-dir "$d" > "$d/obs3.json" 2>/dev/null
+  assert_eq "$(jget "$d/obs3.json" 'd["applied"], d["expired"]' 2>/dev/null)" "(['dddd0005#r1.1'], [])" \
+    "E5: 원복 permit 은 그 permit 라운드(2)의 스냅숏으로 판정돼 applied 다"
+  assert_eq "$(st_yaml "$d" 'st["decides"]["dddd0005#r1.1"]["state"]')" "applied" "E5: decide 상태가 applied 다 (원복 완료)"
+  rm -rf "$d"
+}
+# ── critic 시점 판별 불가의 이름 (PR 3 qg iter 2 F-e) ─────────────────────────────────────────────
+# 표식이 없거나 정수가 아니면 critic 을 죽이지 않지만(R69), 시점을 판별하지 못했다는 사실에 codex 경로와 독립으로
+# 이름을 남긴다 — codex 파일을 넘기지 않는 라운드(kill switch · residue_unclearable)에서도. 공시이지 차단이 아니다.
+case_critic_freshness_unknown_disclosed() {
+  local d rc mode want
+  for mode in unrecorded garble; do
+    d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+    if [ "$mode" = unrecorded ]; then
+      python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2]); st["rounds"][str(st["round"])].pop("started_mtime_ns", None); s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
+      want=round_start_unrecorded
+    else
+      st_mark "$d" garble; want=round_start_unreadable
+    fi
+    cp "$FX/critic-r1.txt" "$d/critic.txt"
+    py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic.txt" --codex "$d/never-written.yaml" > "$d/prep.json" 2>/dev/null; rc=$?
+    assert_eq "$rc $(jget "$d/prep.json" 'd["degrade"]["critic_dead"], d["degrade"].get("critic_freshness_unknown"), len(d["items"]) > 0' 2>/dev/null)" "0 (False, '$want', True)" \
+      "F-e($want): critic 은 죽지 않고(R69 · rc 0 · 항목 그대로) 시점 판별 불가가 이름으로 남는다 (codex 파일 없이도)"
+    py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null
+    assert_eq "$(jget "$d/fin.json" '"critic 시점 판별 불가 ('"$want"')" in d["advisory"], d["blocks"]' 2>/dev/null)" "(True, False)" \
+      "F-e($want): finalize 가 그것을 advisory 로 공시한다 — 차단은 아니다"
+    rm -rf "$d"
+  done
+  # 양의 짝 — 표식이 멀쩡한 라운드에는 그 이름도 공시도 없다.
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$d/never-written.yaml" > "$d/prep.json" 2>/dev/null
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null
+  assert_eq "$(jget "$d/prep.json" '"critic_freshness_unknown" in d["degrade"]' 2>/dev/null) $(jget "$d/fin.json" 'len(d["advisory"]) > 0, any(a.startswith("critic 시점 판별 불가") for a in d["advisory"])' 2>/dev/null)" \
+    "False (True, False)" "F-e 양의 짝: 표식이 멀쩡하면 시점 판별 불가의 이름 · 공시가 없다 (다른 advisory 는 있다)"
   rm -rf "$d"
 }
 
@@ -1244,7 +1725,14 @@ case_AC21_reraise_accumulates() {
   # finalize 가 재상승 루프 «전에» 빠져나간다 — prepare-recritic 이 없으므로 no_pending_recritic.
   py docreview_route.py finalize --state-dir "$d" --doc "$FX/design-sample.md" --recritic-skipped >/dev/null 2>&1
   assert_eq "$(st_yaml "$d" '[r["finding_id"] for r in st["reraise"]]')" "['aaaa0001#r1.1']" "AC21: 조기 반환한 finalize 는 예약을 소비하지 않는다"
-  next_round "$d" "$FX/design-sample.md" >/dev/null        # 라운드 3 — observe-diff 가 다시 돈다
+  # [PR 3 qg iter 3 탈것] 관측할 것이 없는 observe-diff 는 원장을 쓰지 않는다 — 라운드 3 이 무언가를 관측해 원장을 써야
+  # 아래 단언이 누적(대입이 아니다)을 잰다. 라운드 2 에 #2-goals 의 decide 를 하나 더 채택해 라운드 3 permit 을 열고,
+  # 라운드 3 문서가 그 앵커를 고친다(적용 관측 — 새 예약은 생기지 않으므로 기대값은 그대로다).
+  local g="${F_DEC//aaaa0001/gggg0001}"; g="${g//#12-files-to-modify/#2-goals}"
+  seed_findings "$d" "[$g]"
+  py docreview_state.py decide --state-dir "$d" --id 'gggg0001#r1.1' --choice adopt --quote '채택' >/dev/null
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null     # 라운드 3 — observe-diff 가 다시 돌고 그 permit 의 적용을 관측한다
+  assert_eq "$(jget "$d/obs3.json" 'd["applied"]')" "['gggg0001#r1.1']" "AC21 전제: 라운드 3 관측이 원장을 썼다 (다른 permit 의 적용)"
   assert_eq "$(st_yaml "$d" '[r["finding_id"] for r in st["reraise"]]')" "['aaaa0001#r1.1']" "AC21: 다음 라운드 observe-diff 가 그 예약을 지우지 않는다(누적)"
   rm -rf "$d"
 }
@@ -1276,7 +1764,7 @@ case_AC21_reraise_dedup() {
 case_AC21_unconsumed_counted() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   python3 "$FX/st_set_reraise.py" "$d/docreview-state.md" 'zzzz9999#r1.1'
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
   py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json"
   assert_eq "$(jget "$d/fin.json" 'd["reraise_unconsumed"]')" "1" "AC21: 대상 finding 이 없는 예약은 버려지지 않고 계수된다"
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["counts"]["reraise_unconsumed"]')" "1" "AC21: 그 계수가 게이트에 실린다"
@@ -1331,8 +1819,8 @@ case_escalated_accumulates() {
   py docreview_state.py fix --state-dir "$d" --id "$fid2" --event escalate --reason 'check-intent 거부(라운드 2)' >/dev/null
   next_round "$d" "$FX/design-sample.md" >/dev/null   # 라운드 3
   py docreview_state.py fix --state-dir "$d" --id "$fid1" --event escalate --reason 'check-intent 거부(라운드 3, 아직 자기 차례가 아님)' >/dev/null
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep3.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff3.json" --doc "$FX/design-sample.md" > "$d/fin.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep3.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json"
   # n=3. 새 계약: 「직전 라운드」가 아니라 「이번 라운드보다 앞선」 예약을 전부 소비한다
   # — fid1(round=1)·fid2(round=2) 둘 다 이번 finalize 에서 decide 로 올라온다.
   # `supersedes in (fid1,fid2)` 로 걸러 다른 자동 항목(같은 라운드 critic 이 우연히
@@ -1372,7 +1860,7 @@ case_escalated_dedup() {
   py docreview_state.py fix --state-dir "$d" --id "$fid" --event escalate --reason 'check-intent 거부(2차, 같은 finding_id 재예약)' >/dev/null
   py docreview_state.py fix --state-dir "$d" --id "$fid_other" --event escalate --reason 'check-intent 거부(같은 라운드, 다른 finding)' >/dev/null
   next_round "$d" "$FX/design-sample.md" >/dev/null   # 라운드 2 — 세 예약(round=1) 모두 이번 finalize 대상
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
   py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json"
   # F-1 — dedup 은 finding_id 로 키잉한다. round 로 키잉하면(리뷰의 M8 변이:
   # `esc_seen.add(e["finding_id"])` → `esc_seen.add(e["round"])`) 세 예약이 모두
@@ -1401,7 +1889,7 @@ case_escalated_unconsumed_counted() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   python3 "$FX/st_set_escalated.py" "$d/docreview-state.md" 'zzzz9999#r1.1'
   next_round "$d" "$FX/design-sample.md" >/dev/null   # 라운드 2 — round=1 예약이 이번 finalize 대상
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
   py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json"
   # F-7 재리뷰 — 매트릭스 헤더의 요구대로 `.get()` 을 쓴다(값이 사라질 수 있는 변이를
   # 겨눌 때 엄격 `d["key"]` 인덱싱은 unmeasurable 로 떨어진다). 기대값이 리터럴 "1"
@@ -1435,7 +1923,7 @@ case_escalated_dropped_fix_not_resurrected() {
   next_round "$d" "$FX/design-sample.md" >/dev/null   # 라운드 2
   py docreview_state.py fix --state-dir "$d" --id "$fid" --event drop --reason '사용자가 라운드 2 에 drop' >/dev/null
   next_round "$d" "$FX/design-sample.md" >/dev/null   # 라운드 3 — 옛 예약(round=1)이 이번 finalize 대상
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep3.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep3.json"
   py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json"
   assert_eq "$(jget "$d/fin.json" 'len([x for x in d["findings"] if x.get("supersedes")=="'"$fid"'"])')" "0" \
     "escalated: drop 된 fix 의 잔존 예약은 decide 로 부활하지 않는다(F-3)"
@@ -1465,10 +1953,10 @@ case_reraise_successor_immune_to_recritic() {
   next_round "$d" "$FX/design-sample.md" >/dev/null        # 변경 없음 → expired + 재상승 예약
   local t; t="$(mktemp -t cr-XXXXXX.txt)"
   printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#2-goals"\n  disposition: fix\n  summary: "재상승과 무관한 동행 finding"\n```\n' > "$t"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
   local rt; rt="$(mktemp -t rt-XXXXXX.txt)"
   printf '```docreview-recritic\nverdicts:\n  - f: "%s"\n    verdict: reject\n    evidence: "적대적: 재상승 계보(원본 id)를 직접 기각 시도"\n    same_as: ["%s"]\n  - f: "f1"\n    verdict: confirm\n    same_as: ["%s"]\nadded: []\n```\n' "$gid" "$gid" "$gid" > "$rt"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
   assert_eq "$(jget "$d/fin.json" 'sorted(x["disposition"] for x in d["findings"] if x.get("supersedes")=="'"$gid"'")')" \
     "['decide']" "재상승 불변식: 원본 계보를 직접 겨눈 reject/same_as 뒤에도 후속은 decide 로 남는다(items 를 안 지나 안 닿는다)"
   local succid; succid="$(jget "$d/fin.json" 'next((x["id"] for x in d["findings"] if x.get("supersedes")=="'"$gid"'"), "")')"
@@ -1547,10 +2035,133 @@ case_GR_escalated_fix_reason_persists() {
   assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep -c '사유: anchor_protected')" "1" \
     "GR: 라운드 1 렌더에 진짜 사유가 실린다(선결조건)"
   next_round "$d" "$FX/design-sample.md" >/dev/null
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-nolayer2.txt" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin2.json"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin2.json"
   assert_eq "$(st_yaml "$d" 'st["escalated"]')" "[]" "GR: finalize 뒤 예약은 소비돼 빈다(원장 쪽 선결조건, M7 이 겨눈 자리)"
   assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep -c '사유: anchor_protected')" "1" \
     "GR: 라운드 2 렌더에도 같은 진짜 사유가 남는다(M7 — fx 레코드의 escalate_reason 이 원장 소비와 무관)"
+  rm -rf "$d"
+}
+
+# ── 상태 디렉토리의 문서 정체 — init 거부 · state-dir-for ──────────────────────
+# 한 디렉토리의 원장은 한 문서의 것이다. 다른 문서로 init 하면 그 문서가 첫 문서의
+# 라운드·재리뷰 상한·finding·permit·스냅샷을 물려받는다. 판정은 stdout·stderr 파일을
+# grep 으로 읽는다 — 거부가 사라지는 변이에서 빈 stderr 를 json 으로 읽으면 traceback 이
+# 나고, 그러면 매트릭스가 규칙 위반을 「측정 불가」로 판정한다.
+case_init_other_doc_refused() {
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  cp "$d/docreview-state.md" "$d/before.md"
+  py docreview_state.py init --state-dir "$d" --doc "$FX/brief-sample.md" --profile "$PROF_SD/design-doc.md" >"$d/out" 2>"$d/err"; rc=$?
+  assert_eq "$rc" "1" "문서 정체: 다른 문서의 원장이 있는 디렉토리에 init 하면 rc 1"
+  assert_file_grep "$d/err" '"reason": "state_doc_mismatch"' "문서 정체: 사유는 state_doc_mismatch"
+  assert_file_grep "$d/err" '"state_doc": "[^"]*/design-sample\.md"' "문서 정체: 상세에 기존 원장의 문서가 실린다"
+  assert_file_grep "$d/err" '"requested_doc": "[^"]*/brief-sample\.md"' "문서 정체: 상세에 요청한 문서가 실린다"
+  assert_eq "$(cat "$d/out")" "" "문서 정체: 거부는 성공 JSON 을 내지 않는다"
+  if cmp -s "$d/before.md" "$d/docreview-state.md"; then
+    ok "문서 정체: 거부가 원장을 건드리지 않는다 (바이트 동일, 라운드 1 그대로)"
+  else
+    no "문서 정체: 거부했는데 원장이 바뀌었다"
+  fi
+  rm -rf "$d"
+}
+case_init_other_profile_refused() {
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  cp "$d/docreview-state.md" "$d/before.md"
+  py docreview_state.py init --state-dir "$d" --doc "$FX/design-sample.md" --profile "$PROF_SD/brief.md" >"$d/out" 2>"$d/err"; rc=$?
+  assert_eq "$rc" "1" "프로필 정체: 다른 프로필로 같은 문서를 init 하면 rc 1"
+  assert_file_grep "$d/err" '"reason": "state_profile_mismatch"' "프로필 정체: 사유는 state_profile_mismatch"
+  assert_file_grep "$d/err" '"state_profile": "[^"]*/design-doc\.md"' "프로필 정체: 상세에 기존 프로필이 실린다"
+  assert_file_grep "$d/err" '"requested_profile": "[^"]*/brief\.md"' "프로필 정체: 상세에 요청한 프로필이 실린다"
+  if cmp -s "$d/before.md" "$d/docreview-state.md"; then
+    ok "프로필 정체: 거부가 원장을 건드리지 않는다"
+  else
+    no "프로필 정체: 거부했는데 원장이 바뀌었다"
+  fi
+  rm -rf "$d"
+}
+# 위 두 거부의 양의 짝 — 같은 문서·같은 프로필은 표기가 달라도 멱등이다.
+case_init_same_doc_idempotent() {
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  cp "$d/docreview-state.md" "$d/before.md"
+  ln -s "$FX/design-sample.md" "$d/link.md"
+  py docreview_state.py init --state-dir "$d" --doc "$FX/design-sample.md" --profile "$PROF_SD/design-doc.md" >"$d/o1" 2>&1; rc=$?
+  assert_eq "$rc" "0" "멱등: 같은 문서로 다시 init 하면 rc 0"
+  assert_file_grep "$d/o1" '"created": false, "round": 1' "멱등: created false · 원장의 라운드 1 이 그대로 보인다"
+  py docreview_state.py init --state-dir "$d" --doc "$d/link.md" --profile "$PROF_SD/design-doc.md" >"$d/o2" 2>&1; rc=$?
+  assert_eq "$rc" "0" "멱등(정규화): 같은 문서를 가리키는 심볼릭 링크로 init 해도 rc 0"
+  assert_file_grep "$d/o2" '"created": false' "멱등(정규화): 심볼릭 링크 표기도 같은 문서로 읽는다"
+  py docreview_state.py init --state-dir "$d" --doc "$FX/./design-sample.md" --profile "$PROF_SD/../docreview-profiles/design-doc.md" >"$d/o3" 2>&1; rc=$?
+  assert_eq "$rc" "0" "멱등(정규화): '/./' 문서 표기와 '..' 프로필 표기로 init 해도 rc 0"
+  if cmp -s "$d/before.md" "$d/docreview-state.md"; then
+    ok "멱등: 재 init 셋이 원장을 건드리지 않는다"
+  else
+    no "멱등: 재 init 이 원장을 바꿨다"
+  fi
+  rm -rf "$d"
+}
+# 빈 --state-dir 는 `Path("")` = cwd 다 — cwd 에 원장이 생기면 안 된다.
+case_init_empty_state_dir_refused() {
+  local w o rc; w="$(mktemp -d -t docreview-XXXXXX)"; o="$(mktemp -d -t docreview-XXXXXX)"
+  ( cd "$w" && py docreview_state.py init --state-dir "" --doc "$FX/design-sample.md" --profile "$PROF_SD/design-doc.md" ) >"$o/out" 2>"$o/err"; rc=$?
+  assert_eq "$rc" "1" "빈 state-dir: init 이 rc 1 로 거부한다"
+  assert_file_grep "$o/err" '"reason": "state_dir_missing"' "빈 state-dir: 사유는 state_dir_missing"
+  if [ -e "$w/docreview-state.md" ]; then
+    no "빈 state-dir: cwd 에 원장이 생겼다"
+  else
+    ok "빈 state-dir: cwd 에 원장이 생기지 않는다"
+  fi
+  rm -rf "$w" "$o"
+}
+# 문서별 디렉토리 — 같은 문서는 같은 자리, 다른 문서는 다른 자리. 두 번째 문서는 첫 문서와
+# **파일 이름이 같게** 둔다: 이름표(stem)만으로 갈리면 도출에서 문서 경로가 빠져도 이 셀이
+# 통과한다. 유일성은 경로의 정체가 져야 한다.
+case_state_dir_for_per_doc() {
+  local w a1 a2 a3 b rc; w="$(mktemp -d -t docreview-XXXXXX)"
+  mkdir -p "$w/other"; cp "$FX/design-sample.md" "$w/other/design-sample.md"
+  ln -s "$FX/design-sample.md" "$w/link.md"
+  a1="$(py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "$FX/design-sample.md")"
+  a2="$(py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "$FX/design-sample.md")"
+  a3="$(py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "$w/link.md")"
+  b="$(py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "$w/other/design-sample.md")"
+  assert_eq "${a1%/*}" "$w/root/sess0001/docreview" "문서별 자리: <root>/<session>/docreview/ 아래다"
+  assert_grep "${a1##*/}" '^design-sample-[0-9a-f]{16}$' "문서별 자리: 키는 <stem>-<해시 16자>"
+  assert_eq "$a2" "$a1" "문서별 자리: 같은 문서를 두 번 도출하면 같은 자리"
+  assert_eq "$a3" "$a1" "문서별 자리: 같은 문서를 가리키는 심볼릭 링크도 같은 자리 (init 의 정규화와 같다)"
+  if [ -n "$b" ] && [ "$b" != "$a1" ] && [ "${b%/*}" = "$w/root/sess0001/docreview" ]; then
+    ok "문서별 자리: 이름이 같은 다른 문서는 다른 자리"
+  else
+    no "문서별 자리: 다른 문서가 같은 자리로 간다 ($b = $a1)"
+  fi
+  py docreview_state.py state-dir-for --root "root" --session sess0001 --doc "$FX/design-sample.md" >"$w/o1" 2>"$w/e1"; rc=$?
+  assert_eq "$rc:$(cat "$w/o1")" "1:" "문서별 자리: 상대 루트는 rc 1 · 출력 없음"
+  assert_file_grep "$w/e1" '"reason": "root_not_absolute"' "문서별 자리: 상대 루트의 사유는 root_not_absolute"
+  py docreview_state.py state-dir-for --root "$w/root" --session "" --doc "$FX/design-sample.md" >"$w/o2" 2>"$w/e2"; rc=$?
+  assert_eq "$rc:$(cat "$w/o2")" "1:" "문서별 자리: 빈 세션은 rc 1 · 출력 없음 (루트 바로 아래를 여러 세션이 나눠 쓰지 않는다)"
+  assert_file_grep "$w/e2" '"reason": "session_invalid"' "문서별 자리: 빈 세션의 사유는 session_invalid"
+  py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "" >"$w/o3" 2>"$w/e3"; rc=$?
+  assert_eq "$rc:$(cat "$w/o3")" "1:" "문서별 자리: 빈 문서는 rc 1 · 출력 없음"
+  assert_file_grep "$w/e3" '"reason": "doc_empty"' "문서별 자리: 빈 문서의 사유는 doc_empty"
+  ( cd "$FX" && py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc design-sample.md ) >"$w/o4" 2>"$w/e4"; rc=$?
+  assert_eq "$rc:$(cat "$w/o4")" "1:" "문서별 자리: 상대 문서 경로는 rc 1 · 출력 없음 (키가 cwd 의 함수가 되지 않는다)"
+  assert_file_grep "$w/e4" '"reason": "doc_not_absolute"' "문서별 자리: 상대 문서의 사유는 doc_not_absolute"
+  py docreview_state.py state-dir-for --root "$w/root" --session "$(printf 'ab\ncd')" --doc "$FX/design-sample.md" >"$w/o5" 2>"$w/e5"; rc=$?
+  assert_eq "$rc:$(cat "$w/o5")" "1:" "문서별 자리: 개행이 든 세션은 rc 1 · 출력 없음 (두 줄 경로를 내지 않는다)"
+  assert_file_grep "$w/e5" '"reason": "session_invalid"' "문서별 자리: 제어 문자 세션의 사유는 session_invalid"
+  py docreview_state.py state-dir-for --root "$w/root" --session ".." --doc "$FX/design-sample.md" >"$w/o6" 2>"$w/e6"; rc=$?
+  assert_eq "$rc:$(cat "$w/o6")" "1:" "문서별 자리: '..' 세션은 rc 1 · 출력 없음"
+  a1="$(py docreview_state.py state-dir-for --root "$w/root" --session "a_B-9" --doc "$FX/design-sample.md")"
+  assert_eq "${a1%/docreview/*}" "$w/root/a_B-9" "문서별 자리: [A-Za-z0-9_-] 세션은 받는다 (세션 검사 좁힘의 양의 짝)"
+  rm -rf "$w"
+}
+case_init_relative_doc_refused() {
+  local d rc; d="$(mktemp -d -t docreview-XXXXXX)"
+  ( cd "$FX" && py docreview_state.py init --state-dir "$d" --doc design-sample.md --profile "$PROF_SD/design-doc.md" ) >"$d/out" 2>"$d/err"; rc=$?
+  assert_eq "$rc" "1" "상대 문서: init 이 상대 --doc 을 rc 1 로 거부한다 (문서 정체가 cwd 의 함수가 되지 않는다)"
+  assert_file_grep "$d/err" '"reason": "doc_not_absolute"' "상대 문서: 사유는 doc_not_absolute"
+  if [ -e "$d/docreview-state.md" ]; then
+    no "상대 문서: 거부했는데 원장이 생겼다"
+  else
+    ok "상대 문서: 원장이 생기지 않는다"
+  fi
   rm -rf "$d"
 }
