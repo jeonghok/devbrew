@@ -68,17 +68,21 @@ cwd 로 가지 않고 멈춘다.
 | `plugins/spec-distill/skills/reviewing-spec/SKILL.md` | 5 (SD 관용구) | 끝자락 `\|\| SD="./plugins/spec-distill"` |
 | `plugins/quality-gates/skills/quality-pipeline/SKILL.md` | 6 | 펜스 5 · 산문 1 (Step P0b 설명 포함) |
 | `plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md` | 20 | **reference** — 치환이 오지 않는다 |
-| `plugins/plugin-audit/skills/auditing-plugins/SKILL.md` | 1 + 자기 하니스 인자 2 | codex 감지 펜스(112) · 43–44 의 Law 2 정적 게이트가 자기 워크플로·agents 를 cwd 상대 `plugins/plugin-audit/…` 로 받는다 — 150 의 Workflow 는 설치본을 실행하므로 게이트와 실행 대상이 갈라진다 |
+| `plugins/plugin-audit/skills/auditing-plugins/SKILL.md` | 1 + 자기 하니스 인자 2 + 루트 진술 1 | codex 감지 펜스(112) · 43–44 의 Law 2 정적 게이트가 자기 워크플로·agents 를 cwd 상대 `plugins/plugin-audit/…` 로 받는다 — 150 의 Workflow 는 설치본을 실행하므로 게이트와 실행 대상이 갈라진다 · 17 「모든 스크립트 호출은 리포 root에서」 — 이름만 적힌 자기 스크립트 호출 약 11개가 이 진술로 cwd 사본에 묶인다 |
 | `plugins/plugin-audit/scripts/check-law2.py` | 기본값 1 | 201 `--agents-dir` 기본값 `Path("plugins/plugin-audit/agents")` — cwd 상대 |
 | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md` | 산문 1 | 38–40 「devbrew 안에서는 `./plugins/quality-gates`」 — 본문에 치환 토큰이 없어 모델이 받는 유일한 구체 경로 |
 | `plugins/spec-distill/skills/conducting-interview/references/finishing.md` | 0 (bare 7) | **reference** — bare 가 빈 값으로 풀려 `/scripts/…` 로 깨진다(기능 결함) |
 
-표는 표기(`:-`)가 아니라 개념 — cwd 상대 플러그인 루트(`./plugins/<p>` 리터럴, 자기 하니스를 실행·검사
-인자로 넘기는 cwd 상대 `plugins/<p>/…`) — 으로 센다. 감사 대상 `plugins/<target>` 을 cwd 에서 받는 plugin-audit
-동작과 처분 앵커(`consumer=plugins/…`) · 문서 포인터 같은 식별자 용례는 실행 루트가 아니라 범위 밖이다.
+표는 표기(`:-`)가 아니라 개념 — skill 이 모델에게 주는 루트가 cwd 인 자리(`./plugins/<p>` 리터럴, 자기 하니스를
+실행·검사 인자로 넘기는 cwd 상대 `plugins/<p>/…`, 「리포 root에서」 같은 루트 진술) — 으로 센다. 감사 대상
+`plugins/<target>` 을 cwd 에서 받는 plugin-audit 동작과 처분 앵커(`consumer=plugins/…`) · 문서 포인터 같은
+식별자 용례는 실행 루트가 아니라 범위 밖이다. **이 표는 예시다** — 리뷰 두 라운드가 매번 새 자리를 찾았으므로
+전수 목록은 plan 이 구조에서 도출한다(D10).
 
 스크립트(.sh/.py) 다섯의 `${CLAUDE_PLUGIN_ROOT:-…}` 는 모두 `$(dirname "${BASH_SOURCE[0]}")/..` 등
-스크립트 자기 위치 기준이라 cwd 와 무관하다 — 범위 밖. 스크립트 쪽 예외는 위 `check-law2.py` 기본값 하나다.
+스크립트 자기 위치 기준이라 cwd 와 무관하다. 스크립트 안의 cwd 상대 자기 경로 리터럴은 전수 도출로 셋이다:
+`check-law2.py:201`(범위, D1.3) · `check-integrity.sh:135` · `run-own-tests.sh:18`(뒤의 둘은 이 PR 이전부터의
+불일치라 범위 밖, D2.7).
 
 **실측** (2026-09-14, Claude Code 2.1.270, 헤드리스 `claude -p --model haiku` 4회, 판정은 하니스가 기록한
 항목 기준):
@@ -92,8 +96,10 @@ cwd 로 가지 않고 멈춘다.
 
 `${CLAUDE_SKILL_DIR}` 도 본문에서만 치환된다. 치환은 글자 그대로의 토큰을 맞추므로
 `${CLAUDE_PLUGIN_ROOT-}` 같은 변형은 치환되지 않는다. quality-gates 락
-`tests/test_skill_plugin_root_fallback.sh` 의 머리말 「skill 의 지시에는 치환이 없다(2.1.239 실측)」는 현 버전
-기준으로 틀렸고, 그 락은 이 틀린 전제로 `:-` 형태를 **강제**한다.
+`tests/test_skill_plugin_root_fallback.sh` 의 머리말(4–6)은 「`CLAUDE_PLUGIN_ROOT` 는 Bash 도구 환경에 없다(2.1.239
+실측). command 계층의 `!` 펜스는 하니스가 치환하지만 skill 의 지시는 모델이 Bash 도구로 실행하므로 치환이
+없다」다. 실측 표지는 앞 문장(Bash 환경)에만 붙고, skill 치환 부재는 그 뒤의 추론이다 — 그 추론이 현 버전
+기준으로 틀렸고, 그 락은 이 추론으로 `:-` 형태를 **강제**한다.
 
 ## Goals
 
@@ -105,7 +111,9 @@ cwd 로 가지 않고 멈춘다.
 ## Non-goals
 
 - 스크립트(.sh/.py)의 루트 해석 — 이미 스크립트 기준이다. 예외인 `check-law2.py` 의 `--agents-dir` 기본값은
-  범위에 든다(D1.3).
+  범위에 든다(D1.3). `check-integrity.sh` 의 harness 변조 감시 범위와 `run-own-tests.sh` 의 quality-gates
+  fallback 은 범위 밖이다(D2.7) — agent 정의는 원래 설치 캐시에서 오고 plugin-audit 은 devbrew 루트에서만
+  쓰이므로 이 PR 이전부터 있던 불일치이며, 고치려면 git 밖 해시 수집과 플러그인 간 도달성 설계가 따로 필요하다.
 - 설치본 reference 를 메인 에이전트가 `Read` 할 때의 권한 질문(cwd 밖 캐시) — 선재 문제, 따로 다룬다.
 - 이미 bare 형태만 쓰는 SKILL.md(publishing-pr-understanding · briefing-current-state · conducting-interview
   본문 한 줄 · framing-requests 산문 넷)에 가드를 덧대는 일 — 치환되지 않아도 `/scripts/…` 로 풀려 cwd 로
@@ -167,9 +175,9 @@ reference 파일(`runtime-gate.md` · `finishing.md`)은 `Read` 로 열리므로
 - 축 2 — reference 파일(경로에 `/references/` 가 있는 파일)의 bash 펜스 중 변수를 쓰는 것은, 같은 펜스
   안에서 그 사용보다 앞에 가드(빈 값 검사 → 비0 종료)가 있다. **bash 펜스**는 여는 줄이 앞 공백 들여쓰기를
   허용한 `` ```bash `` 이고 닫는 줄이 같은 들여쓰기의 `` ``` `` 인 블록이다 — 행 머리에 고정한 정규식(은퇴하는
-  락의 `^```bash`)은 목록 안 펜스 `finishing.md:87–89` 를 놓친다. **사용**은 가드 대입문
-  (`X="${CLAUDE_PLUGIN_ROOT}"`) 밖의 토큰 등장과 대입된 변수(`$X`)의 모든 등장이며, 둘 다 빈 값 검사 → 비0
-  종료 줄보다 뒤에 있어야 한다.
+  락의 `^```bash`)은 목록 안 펜스 `finishing.md:87–89` 를 놓친다. **사용**은 루트 대입문
+  (`X="${CLAUDE_PLUGIN_ROOT}"`)과 가드 자신의 빈 값 검사(`[ -n "$X" ]`)를 뺀 나머지 — 토큰의 다른 등장과
+  `$X` 로 경로를 짓거나 명령을 실행하는 등장 — 이며, 전부 가드의 비0 종료보다 뒤에 있어야 한다.
 - 축 3 — 변수를 담은 reference 마다, 그 파일 이름으로 그것을 `Read` 하는 SKILL.md 줄이
   `${CLAUDE_PLUGIN_ROOT}/…` 절대 형태이고 같은 절에 치환 안내 문장이 있다.
 - 공허 통과 방지 — 축 2 대상 펜스 수와 축 3 대상 reference 수에 하한을 둔다(값은 plan 이 base 에서 센다).
@@ -229,8 +237,9 @@ reference 파일(`runtime-gate.md` · `finishing.md`)은 `Read` 로 열리므로
 | `plugins/quality-gates/skills/quality-pipeline/SKILL.md` | Step P0b(116–127) · 펜스 135 · 274 · 293 · 915 · 산문 509 · `Read` 줄 845 · 848–850 의 「상대경로」 문단 재작성 |
 | `plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md` | `QG=` 20줄 → bare + 가드 |
 | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md` | 38–40 → 치환되는 bare 토큰으로 스크립트 루트를 알려 주는 문장 (D1.1) |
-| `plugins/plugin-audit/skills/auditing-plugins/SKILL.md` | 112 · 43–44 의 자기 워크플로 · agents 경로를 `$PA/…` 로 (D1.3) |
+| `plugins/plugin-audit/skills/auditing-plugins/SKILL.md` | 112 · 17–21 의 루트 진술 재작성 — 「스크립트는 `${CLAUDE_PLUGIN_ROOT}/scripts/`(로드 시 치환), 감사 대상 인자는 리포 root」, 「`--agents-dir` 기본값이 cwd-relative」 서술도 함께 고친다(D2.4) · 43–44 의 `check-law2.py` 호출과 자기 워크플로 · agents 인자를 bare `${CLAUDE_PLUGIN_ROOT}/…` 로 — 산문이라 `$PA` 는 빈 값이다(D1.3) |
 | `plugins/plugin-audit/scripts/check-law2.py` | 201 `--agents-dir` 기본값을 스크립트 위치 기준으로 (D1.3) |
+| plan 의 도출 스윕이 찾은 나머지 자리 | 같은 규칙 — skill 이 주는 루트를 치환 루트로 (D10) |
 | `plugins/quality-gates/tests/test_skill_plugin_root_fallback.sh` | 삭제 |
 | `shared/tests/test_plugin_root_no_cwd_fallback.sh` | 신규 |
 | 펜스를 잘라 실행하는 기존 테스트 | 치환 흉내로 루트 받기 (목록은 plan) |
@@ -266,8 +275,14 @@ reference 파일(`runtime-gate.md` · `finishing.md`)은 `Read` 로 열리므로
 
 - **devbrew 안 dogfooding 이 바뀐다.** 지금은 설치본 skill 이 cwd 의 워킹트리 스크립트를 돈다. 이제는 설치본
   skill 이 설치본 스크립트를 돈다. 워킹트리 코드를 돌리려면 `claude --plugin-dir ./plugins/<p>` 로 로드한다.
-- **치환이 없는 하니스에서는 멈춘다.** 옛 버전이 그럴 수 있다(quality-gates 락이 인용한 2.1.239 가 후보지만
-  확인하지 않았다).
+- **치환이 없는 하니스에서는 멈춘다.** 어느 버전이 그런지는 모른다 — quality-gates 락의 2.1.239 실측은 Bash
+  환경 변수 부재에 대한 것이지 skill 본문 치환에 대한 것이 아니다.
+- **락은 이름만 적힌 스크립트 호출과 「리포 root에서」 같은 산문 루트 진술을 잡지 못한다.** 산문이 실행 지시인지
+  설명인지를 가려야 해서다. 그 부류는 skill 의 루트 진술을 치환 루트로 바꿔 닫고(D2.4), 전수 목록은 plan 의
+  도출 스윕이 만든다(D10). 축 1b 는 `./plugins/<p>` 리터럴 회귀만 잡는다.
+- **plugin-audit 스크립트 둘은 여전히 체크아웃을 본다(D2.7).** `check-integrity.sh` 의 harness 변조 감시는
+  체크아웃 사본을 해시하는데 실행되는 agent 는 설치 캐시에서 오고, `run-own-tests.sh` 는 quality-gates
+  스크립트를 cwd 에서 찾는다. 이 PR 이전부터의 불일치이며 후속으로 넘긴다.
 - **대화형 세션은 재지 않았다.** 치환은 하니스 쪽 동작이라 같을 공산이 크다.
 - **reference 에서의 루트는 모델이 바꿔 넣는다.** 빠뜨리면 멈추고 복구 지시를 따라 다시 시도한다 —
   보안이 아니라 매끄러움의 비용이다.
@@ -290,6 +305,7 @@ reference 파일(`runtime-gate.md` · `finishing.md`)은 `Read` 로 열리므로
 | D2 | 범위 | 전 플러그인(spec-distill · quality-gates · plugin-audit, reference 둘 포함) |
 | D3 | 치환이 없는 reference 에 루트를 건네는 방식 | A — 단일 관용구 + 가드, SKILL.md 가 절대 경로를 건넨다 |
 | D4 | 설계 5절(관용구 · reference · 락 · 한계 · 검증) | 승인 |
+| D10 | 리뷰 라운드 3 에서 같은 부류(암묵적 cwd 루트)의 새 자리가 나오면 | 설계는 규칙과 도출 방법만 둔다. 전수 목록은 plan 의 도출 스윕이 만들고, 새 자리는 설계를 넓히지 않고 Deferred 로 넘긴다 |
 
 오케스트레이터가 정하고 사용자에게 알린 것(되돌리려면 괄호 안의 한마디):
 
@@ -299,7 +315,19 @@ reference 파일(`runtime-gate.md` · `finishing.md`)은 `Read` 로 열리므로
 | D6 | 가드 강제는 reference 펜스만. 이미 bare 인 SKILL.md 는 건드리지 않고, 이번에 고치는 SKILL.md 자리만 가드형을 쓴다 (「SKILL.md 도 전부 가드」) | SKILL.md 의 bare 는 치환되며, 치환이 없어도 `/scripts/…` 로 풀려 cwd 로 가지 않는다. 설계 제시 때의 「SKILL.md 도 가드형」을 줄 전수 뒤 좁혔다 |
 | D7 | quality-gates 락 은퇴 · 공용 락으로 대체 (「qg 락은 고쳐서 유지」) | 전제 반증 · 새 락이 전 축을 덮는다 |
 | D8 | dogfooding 변화 수용 (「devbrew 안에서는 워킹트리 스크립트 유지」) | 되살리려면 조건부 cwd fallback 이 필요해 보안 수정과 충돌 |
-| D9 | 스크립트(.sh/.py) 범위 밖 | 다섯 모두 스크립트 기준 fallback (전수 grep) |
+| D9 | 스크립트(.sh/.py) 범위 밖 | 다섯 모두 스크립트 기준 fallback (전수 grep). 스크립트 안의 cwd 상대 리터럴 셋은 D1.3 · D2.7 이 따로 다룬다 |
+
+리뷰 라운드의 결정(번호는 리뷰 엔진이 매긴 `D<라운드>.<순번>` — 위 D1–D10 과 다른 계열이다):
+
+| # | 라운드 | 항목 | 결과 |
+|---|---|---|---|
+| D1.1 | 1 | critiquing-artifacts 의 산문 cwd 지시 | 채택 — 범위에 넣고 38–40 을 치환 루트 문장으로 |
+| D1.2 | 1 | 새 락이 `:-` 표기만 잰다 | 채택 — 락 강화(축 1b · AC1 · AC7 변이) |
+| D1.3 | 1 | plugin-audit 정적 게이트의 자기 하니스 경로 | 채택 (a) — 범위에 넣음(43–44 · `check-law2.py` 기본값 · AC11) |
+| D2.4 | 2 | auditing-plugins 의 이름 호출 + 17 행 「리포 root에서」 | 채택 — 루트 진술 재작성 |
+| D2.5 | 2 | (자동) Acceptance Criteria 절 변경 | 채택 — D1.2 · D1.3 반영분 |
+| D2.6 | 2 | (자동) 목차 추가 | 채택 — CLAUDE.md 300줄 규칙 |
+| D2.7 | 2 | `check-integrity.sh` · `run-own-tests.sh` 의 cwd 경로 | 채택 (b) — 범위 밖 · 알려진 한계 · 후속 |
 
 ### Deferred to plan
 
@@ -311,6 +339,7 @@ reference 파일(`runtime-gate.md` · `finishing.md`)은 `Read` 로 열리므로
 - 새 락의 하한 값과 `# guards:` 선언 형식.
 - 은퇴하는 락을 가리키는 활성 참조 목록(기대 실패 목록 · 러너 목록 등).
 - baseline 실행 명령(spec-distill 의 python 테스트는 `-m unittest` 로만 돈다).
-- D1.1 · r1 · adopt · c43e2738#r1.1 · "채택 (Recommended)" — critiquing-artifacts SKILL.md 는 bare 토큰을 쓰는 것이 아니라 산문으로 cwd 경로(`./plugins/quality-gates`)를 지시하는 자리입니다. 그런데 Non-goals 가 이 파일을 「이미 bare 형태만 쓰는 SKILL.md」로 분류해 범위 밖에 둡니다. 그래서 D2(전 플러그인)와 G1 이 이 자리에서 달성되지 않습니다. 범위에 넣을지, 넣는다면 어떤 형태로 루트를 건넬지 정해야 합니다.
-- D1.2 · r1 · adopt · f99659d3#r1.1 · "채택 (Recommended)" — 새 락은 cwd fallback 금지보다 좁은 문자열 규칙을 검사한다. 기존 SD 관용구의 명시적 상대 경로 대입까지 검출하도록 락과 AC7을 강화하거나, G4의 집행 보장을 좁힐 결정이 필요하다.
-- D1.3 · r1 · adopt · 013c9288#r1.1 · "채택 (Recommended)" — 「현재 분포」 표와 D9 의 전수 grep 은 `${CLAUDE_PLUGIN_ROOT:-…}` 표기만 셌다. 그래서 plugin-audit 이 자기 하니스 파일을 cwd 상대 경로로 넘기는 자리가 빠졌다. auditing-plugins SKILL.md:43–44 는 Law 2 정적 게이트를 `check-law2.py plugins/plugin-audit/scripts/audit-workflow.js --agents-dir plugins/plugin-audit/agents`(와 smoke-workflow.js)로 부른다. 같은 파일 150행의 Workflow 는 `${CLAUDE_PLUGIN_ROOT}/scripts/audit-workflow.js`(설치본)를 실행한다. 설계대로 112행 `PA=` 를 설치본으로 바꾸면, 정적 게이트는 cwd 사본을 검사하고 실제 dispatch 는 설치본 워크플로·agents 로 돈다. devbrew 밖에서는 경로가 없어 hard error 로 끝나고, devbrew 옛 체크아웃·포크에서는 다른 버전을 검사하고 통과시킨다(Context 의 「버전 섞임」). 이 설계는 PROFILE= 같은 데이터 경로도 범위에 넣었으므로 같은 기준이 적용된다. 감사 대상 `plugins/&lt;target&gt;` 을 cwd 에서 받는 것은 의도된 동작(17–21행 「모든 스크립트 호출은 리포 root에서」)이라 결함은 자기 하니스 경로뿐이다. 선택지: (a) 범위에 넣는다 — 43–44행의 자기 경로를 `$PA/…` 로 바꾸고, check-law2.py:201 의 기본값 `Path("plugins/plugin-audit/agents")` 를 스크립트 기준 경로로 바꿀지 정한다. (b) 범위 밖에 두고 「현재 분포」와 알려진 한계에 공시한다. f1 과 원인이 같다(전수를 표기로 셌다). 새 락 축 1 도 이 모양을 못 잡는다.
+- 축 3 이 「같은 절에 치환 안내 문장이 있다」를 무엇으로 인식하는지 — 고정 리터럴 · 마커 · 「같은 절」의 경계.
+  부분 문자열로 인식하면 뒤집은 문장도 통과한다(AC7 의 「`Read` 옆 안내 문장 삭제」 변이가 이 규칙에 기댄다).
+- 전수 목록 도출 스윕(D10) — 각 플러그인 `scripts/` 의 실제 파일 이름 × 자기 skill · reference · command 본문의
+  루트 진술과 실행 지시. 설계의 「현재 분포」 표는 예시다. 이름만 적힌 언급은 실행 지시와 설명을 가려 센다.
