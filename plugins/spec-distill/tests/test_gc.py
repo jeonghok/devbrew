@@ -137,6 +137,9 @@ class GcTest(unittest.TestCase):
         os.utime(f, (past, past))
         link = self.root / "link-session-01"
         os.symlink(str(outside), link)
+        # 링크 자신의 mtime 도 늙힌다(3.1.0 · 재리뷰 N-1) — 나이는 폴더 자신의 lstat 을 세므로, 방금 만든 링크의
+        # 신선한 mtime 이 skip 없이도 링크를 살려 이 셀이 공허해진다.
+        os.utime(link, (past, past), follow_symlinks=False)
         self.assertEqual(os.path.realpath(link), os.path.realpath(outside))
         run_gc(cwd=self.tmp)
         self.assertTrue(link.is_symlink(), "링크 자식을 개명하거나 지웠다")
@@ -412,36 +415,102 @@ class NestedAgeTest(unittest.TestCase):
         self.assertTrue(target.exists(), "링크 너머 파일을 지웠다")
 
 
-class FolderMtimeVanishTest(unittest.TestCase):
-    """순회 중 사라진 항목 — 죽지 않고 건너뛴다. 그 항목 때문에 폴더를 영구히 신선하게 치지 않는다."""
+def _load_gc_common():
+    """이 플러그인이 싣는 사본 `scripts/gc_common.py` 를 프로세스 안에서 읽는다 — 패치로 레이스를 재현하려고."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("gc_common_sd_under_test", str(GC.parent / "gc_common.py"))
+    gcm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gcm)
+    return gcm
 
-    def test_e_entry_vanishing_mid_walk_is_skipped(self):
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("gc_common_sd_under_test", str(GC.parent / "gc_common.py"))
-        gcm = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(gcm)
-        tmp = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, tmp, True)
-        d = tmp / "sess-vanish-01"
-        sub = d / "sub"
+
+class SnapshotUnstableTest(unittest.TestCase):
+    """순회 중 사라진 항목이 있으면 나이 스냅숏은 불안정하다 — 이번 실행은 그 폴더를 수집하지 않는다(3.1.0 · R80).
+
+    원자적 교체(tmp 쓰기 → rename)가 `gc_one` 의 두 번째 스캔 중에 끝나면, 한 번의 걷기 안에서 부모 디렉토리와
+    원래 파일은 이미 늙은 값으로 쟀고 tmp 는 lstat 전에 사라진다. 그 항목을 건너뛰면 두 스냅숏이 같은 늙은 값이라
+    진행 중인 세션이 걷힌다. 셀은 그 모양을 `os.lstat` · `os.scandir` 패치로 재현한다(`gc_one` 을 직접 부른다).
+    """
+
+    DOC = "doc-0123456789abcdef"
+
+    def setUp(self):
+        self.gcm = _load_gc_common()
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.root = self.tmp / "root"
+        self.old = time.time() - 48 * 3600
+        self.ttl = 3600 * 1_000_000_000
+
+    def _old_session(self, sid):
+        """늙은 직속 파일(grace 를 비켜 간다) + 늙은 하위 원장 + 늙은 tmp. 모든 디렉토리도 늙었다."""
+        d = self.root / sid
+        sub = d / "docreview" / self.DOC
         sub.mkdir(parents=True)
-        a = sub / "a.txt"
-        a.write_text("a")
-        (sub / "gone.txt").write_text("fresh — 순회 중 사라진다")
-        old = time.time() - 48 * 3600
-        for p in (a, sub, d):
-            os.utime(p, (old, old))
+        for p in (d / "state.local.md", sub / "docreview-state.md", sub / "state.tmp"):
+            p.write_text("x")
+            os.utime(p, (self.old, self.old))
+        for p in (sub, sub.parent, d):
+            os.utime(p, (self.old, self.old))
+        return d
+
+    def _pending_left(self):
+        return [p.name for p in self.root.iterdir() if p.name.startswith(self.gcm.GC_PENDING_PREFIX)]
+
+    def test_a_file_vanishing_during_second_scan_keeps_folder(self):
+        d = self._old_session("unstable-file-01")
+        real_lstat = os.lstat
+        seen = {"n": 0}
+
+        def lstat(path, *args, **kw):
+            if os.fspath(path).endswith("state.tmp"):
+                seen["n"] += 1
+                if seen["n"] >= 2:   # 두 번째 스캔 — rename 으로 원래 이름을 덮고 사라졌다
+                    raise FileNotFoundError(2, "replaced mid-walk", os.fspath(path))
+            return real_lstat(path, *args, **kw)
+
+        with mock.patch.object(self.gcm.os, "lstat", side_effect=lstat):
+            got = self.gcm.gc_one(d, self.ttl, self.root)
+        self.assertGreaterEqual(seen["n"], 2, "두 번째 스캔이 그 항목에 닿지 않았다 — 셀이 공허하다")
+        self.assertFalse(got, "두 번째 스캔 중 사라진 항목이 있는데 수집했다 — 불안정한 스냅숏을 늙은 값으로 읽었다")
+        self.assertTrue(d.exists())
+        self.assertEqual(self._pending_left(), [])
+
+    def test_b_directory_vanishing_mid_walk_keeps_folder(self):
+        d = self._old_session("unstable-dir-01")
+        real_scandir = os.scandir
+        target = str(d / "docreview" / self.DOC)
+
+        def scandir(path=".", *args, **kw):
+            if not isinstance(path, int) and os.fspath(path) == target:   # rmtree 는 fd(int)로도 부른다
+                raise FileNotFoundError(2, "directory vanished mid-walk", target)
+            return real_scandir(path, *args, **kw)
+
+        with mock.patch.object(self.gcm.os, "scandir", side_effect=scandir):
+            got = self.gcm.gc_one(d, self.ttl, self.root)
+        self.assertFalse(got, "순회 중 사라진 하위 디렉토리가 있는데 수집했다(walk onerror 경로)")
+        self.assertTrue(d.exists())
+
+    def test_c_stable_old_folder_still_collected(self):
+        d = self._old_session("stable-old-01")
+        got = self.gcm.gc_one(d, self.ttl, self.root)
+        self.assertTrue(got, "안정적으로 늙은 폴더를 수집하지 않았다 — 「아무것도 안 지운다」가 여기서 RED")
+        self.assertFalse(d.exists())
+
+    def test_d_folder_mtime_raises_snapshot_unstable(self):
+        # 함수 수준 — 사라진 항목은 `SnapshotUnstable`(`OSError` 의 하위)을 올린다. 호출자의 `except OSError` 가 받는다.
+        d = self._old_session("unstable-fn-01")
         real_lstat = os.lstat
 
         def lstat(path, *args, **kw):
-            if os.fspath(path).endswith("gone.txt"):
-                raise FileNotFoundError(2, "vanished mid-walk", os.fspath(path))
+            if os.fspath(path).endswith("state.tmp"):
+                raise FileNotFoundError(2, "vanished", os.fspath(path))
             return real_lstat(path, *args, **kw)
 
-        with mock.patch.object(gcm.os, "lstat", side_effect=lstat):
-            got = gcm.folder_mtime_ns(d)
-        want = max(real_lstat(p).st_mtime_ns for p in (a, sub, d))
-        self.assertEqual(got, want, "사라진 항목을 건너뛰지 않았거나 다른 값을 냈다")
+        with mock.patch.object(self.gcm.os, "lstat", side_effect=lstat):
+            with self.assertRaises(self.gcm.SnapshotUnstable) as cm:
+                self.gcm.folder_mtime_ns(d)
+        self.assertIsInstance(cm.exception, OSError)
 
 
 if __name__ == "__main__":

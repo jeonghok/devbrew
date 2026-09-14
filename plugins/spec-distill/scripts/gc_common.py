@@ -117,6 +117,10 @@ def locked_root(root, tag: str):
         os.close(dfd)
 
 
+class SnapshotUnstable(OSError):
+    """나이 스냅숏을 재는 동안 폴더 아래의 항목이나 하위 디렉토리가 사라졌다 — 이번 실행은 그 나이를 모른다."""
+
+
 def folder_mtime_ns(folder: Path) -> int:
     """폴더 나이 = 폴더 자신과 그 아래 **모든 항목**(깊이 무관)의 최신 mtime.
 
@@ -128,26 +132,29 @@ def folder_mtime_ns(folder: Path) -> int:
     **링크는 따라가지 않는다.** `os.walk(followlinks=False)` 로 걷고 항목마다 `os.lstat` 만 쓴다 — 폴더
     안의 링크가 밖의 신선한 파일을 가리켜도 폴더를 살려 두지 못한다(링크 자신의 mtime 은 센다).
 
-    **순회 중 사라진 항목**(`FileNotFoundError` — 동시 쓰기의 원자적 교체 · 정리)은 건너뛴다. 그 항목의
-    mtime 을 모른다는 이유로 폴더를 신선하게 치면 판정이 레이스에 묶여 끝나지 않는다. 항목이 사라지면
-    그 부모 디렉토리의 mtime 이 바뀌고(여기서 함께 잰다), `gc_one` 의 두 번 stat 이 그 사이의 변화를
-    보고 수집을 건너뛴다. 하위 디렉토리를 **읽지 못하면**(권한 등 그 밖의 `OSError`) 잴 수 없는 폴더라
-    예외를 그대로 올린다 — 호출자가 수집하지 않는다. 폴더 자신이 사라졌거나 권한이 없을 때도 `OSError`
-    를 올린다 — 호출자가 "폴더가 사라졌다"와 "권한이 없다"를 구분해 처리한다.
+    **순회 중 사라진 항목이나 하위 디렉토리**(`FileNotFoundError` — 동시 쓰기의 원자적 교체 · 정리)가 있으면
+    이 스냅숏은 불안정하다 — `SnapshotUnstable`(`OSError` 의 하위)을 올린다. 한 번의 걷기 안에서는 부모
+    디렉토리와 원래 파일을 이미 늙은 값으로 쟀을 수 있다: tmp 쓰기 → rename 교체가 걷기 도중에 끝나면
+    tmp 는 목록에는 있는데 lstat 전에 사라지고, 그것을 건너뛰면 교체 중인 세션이 늙은 값으로 두 번 재져
+    걷힌다. `gc_one` 은 `OSError` 에서 수집하지 않고, 다음 GC 실행이 다시 잰다. 하위 디렉토리를
+    **읽지 못하면**(권한 등 그 밖의 `OSError`) 잴 수 없는 폴더라 예외를 그대로 올린다 — 호출자가 수집하지
+    않는다. 폴더 자신이 사라졌거나 권한이 없을 때도 `OSError` 를 올린다 — 호출자가 "폴더가 사라졌다"와
+    "권한이 없다"를 구분해 처리한다.
     """
     newest = os.lstat(folder).st_mtime_ns
 
     def _walk_error(exc: OSError) -> None:
         if isinstance(exc, FileNotFoundError):
-            return
+            raise SnapshotUnstable(exc.errno, "순회 중 하위 디렉토리가 사라졌다", exc.filename) from exc
         raise exc
 
     for dirpath, dirnames, filenames in os.walk(folder, onerror=_walk_error, followlinks=False):
         for name in dirnames + filenames:
+            path = os.path.join(dirpath, name)
             try:
-                m = os.lstat(os.path.join(dirpath, name)).st_mtime_ns
-            except FileNotFoundError:
-                continue
+                m = os.lstat(path).st_mtime_ns
+            except FileNotFoundError as exc:
+                raise SnapshotUnstable(exc.errno, "순회 중 항목이 사라졌다", path) from exc
             if m > newest:
                 newest = m
     return newest

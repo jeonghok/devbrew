@@ -7,6 +7,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 GC = Path(__file__).resolve().parent.parent / "scripts" / "qg-gc.py"
 
@@ -136,6 +137,10 @@ class TestQgGc(unittest.TestCase):
         marker = wt_parent / ".worktrees-index"
         marker.write_text("rt-abc12345\n", encoding="utf-8")
         old = time.time() - 48 * 3600
+        # 워크트리 쪽도 늙힌다(7.6.0 · 재리뷰 N-3) — 나이가 하위 전체를 보므로 신선한 `wt` 가 남아 있으면 마커
+        # 식별과 무관하게 폴더가 살아, 이 셀이 식별(`_is_session_folder`)을 재지 못한다.
+        os.utime(wt / "live.txt", (old, old))
+        os.utime(wt, (old, old))
         os.utime(marker, (old, old))
         os.utime(wt_parent, (old, old))
         run_gc(self.tmp)
@@ -256,6 +261,95 @@ class TestQgGc(unittest.TestCase):
         run_gc(self.tmp)
         self.assertFalse(folder.exists(), "폴더 안 링크가 가리키는 밖의 신선한 파일이 폴더를 살렸다 — 링크를 따라갔다")
         self.assertTrue(target.exists(), "링크 너머 파일을 지웠다")
+
+
+def _load_gc_common():
+    """이 플러그인이 싣는 사본 `scripts/gc_common.py` 를 프로세스 안에서 읽는다 — 패치로 레이스를 재현하려고."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("gc_common_qg_under_test", str(GC.parent / "gc_common.py"))
+    gcm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gcm)
+    return gcm
+
+
+class SnapshotUnstableTest(unittest.TestCase):
+    """순회 중 사라진 항목이 있으면 나이 스냅숏은 불안정하다 — 이번 실행은 그 폴더를 수집하지 않는다(7.6.0 · R80).
+
+    원자적 교체(tmp 쓰기 → rename)가 `gc_one` 의 두 번째 스캔 중에 끝나면 tmp 가 lstat 전에 사라진다. 그 항목을
+    건너뛰면 두 스냅숏이 같은 늙은 값이라 진행 중인 세션이 걷힌다. `gc_one` 을 직접 부르고 패치로 재현한다.
+    """
+
+    def setUp(self):
+        self.gcm = _load_gc_common()
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.root = self.tmp / "root"
+        self.old = time.time() - 48 * 3600
+        self.ttl = 3600 * 1_000_000_000
+
+    def _old_session(self, sid):
+        d = self.root / sid
+        sub = d / "nested" / "deeper"
+        sub.mkdir(parents=True)
+        for p in (d / "pipeline.md", sub / "state.md", sub / "state.tmp"):
+            p.write_text("x")
+            os.utime(p, (self.old, self.old))
+        for p in (sub, sub.parent, d):
+            os.utime(p, (self.old, self.old))
+        return d
+
+    def test_a_file_vanishing_during_second_scan_keeps_folder(self):
+        d = self._old_session("unstablefile01")
+        real_lstat = os.lstat
+        seen = {"n": 0}
+
+        def lstat(path, *args, **kw):
+            if os.fspath(path).endswith("state.tmp"):
+                seen["n"] += 1
+                if seen["n"] >= 2:
+                    raise FileNotFoundError(2, "replaced mid-walk", os.fspath(path))
+            return real_lstat(path, *args, **kw)
+
+        with mock.patch.object(self.gcm.os, "lstat", side_effect=lstat):
+            got = self.gcm.gc_one(d, self.ttl, self.root)
+        self.assertGreaterEqual(seen["n"], 2, "두 번째 스캔이 그 항목에 닿지 않았다 — 셀이 공허하다")
+        self.assertFalse(got, "두 번째 스캔 중 사라진 항목이 있는데 수집했다")
+        self.assertTrue(d.exists())
+
+    def test_b_directory_vanishing_mid_walk_keeps_folder(self):
+        d = self._old_session("unstabledir01")
+        real_scandir = os.scandir
+        target = str(d / "nested" / "deeper")
+
+        def scandir(path=".", *args, **kw):
+            if not isinstance(path, int) and os.fspath(path) == target:   # rmtree 는 fd(int)로도 부른다
+                raise FileNotFoundError(2, "directory vanished mid-walk", target)
+            return real_scandir(path, *args, **kw)
+
+        with mock.patch.object(self.gcm.os, "scandir", side_effect=scandir):
+            got = self.gcm.gc_one(d, self.ttl, self.root)
+        self.assertFalse(got, "순회 중 사라진 하위 디렉토리가 있는데 수집했다(walk onerror 경로)")
+        self.assertTrue(d.exists())
+
+    def test_c_stable_old_folder_still_collected(self):
+        d = self._old_session("stableold01")
+        got = self.gcm.gc_one(d, self.ttl, self.root)
+        self.assertTrue(got, "안정적으로 늙은 폴더를 수집하지 않았다")
+        self.assertFalse(d.exists())
+
+    def test_d_folder_mtime_raises_snapshot_unstable(self):
+        d = self._old_session("unstablefn01")
+        real_lstat = os.lstat
+
+        def lstat(path, *args, **kw):
+            if os.fspath(path).endswith("state.tmp"):
+                raise FileNotFoundError(2, "vanished", os.fspath(path))
+            return real_lstat(path, *args, **kw)
+
+        with mock.patch.object(self.gcm.os, "lstat", side_effect=lstat):
+            with self.assertRaises(self.gcm.SnapshotUnstable) as cm:
+                self.gcm.folder_mtime_ns(d)
+        self.assertIsInstance(cm.exception, OSError)
 
 
 # ── 루트 안전 (7.5.3) ─────────────────────────────────────────────────────────
@@ -419,6 +513,10 @@ class QgGcRootSafetyTest(unittest.TestCase):
         outside = self._stale(sid="outsidevictim01", where=self.P)
         link = self.root / "linksession0001"
         os.symlink(str(outside), link)
+        # 링크 자신의 mtime 도 늙힌다(7.6.0 · 재리뷰 N-1) — 나이는 폴더 자신의 lstat 을 세므로, 방금 만든 링크의
+        # 신선한 mtime 이 링크 자식 skip 없이도 링크를 살려 이 셀이 공허해진다.
+        past = time.time() - 48 * 3600
+        os.utime(link, (past, past), follow_symlinks=False)
         self.assertEqual(self._inside_p(link), str(outside))
         proc = run_gc(self.clone)
         self.assertEqual(proc.returncode, 0, proc.stderr)
