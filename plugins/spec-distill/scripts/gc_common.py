@@ -118,16 +118,39 @@ def locked_root(root, tag: str):
 
 
 def folder_mtime_ns(folder: Path) -> int:
-    """폴더 나이 = 직속 파일들의 최신 mtime. 직속 파일이 없으면 폴더 자신의 mtime.
+    """폴더 나이 = 폴더 자신과 그 아래 **모든 항목**(깊이 무관)의 최신 mtime.
 
-    디렉토리 mtime 은 하위 **디렉토리** 변경에 반응하지 않는 플랫폼이 있어서
-    파일 쪽을 먼저 본다. `OSError` 는 잡지 않는다 — 호출자가 "폴더가 사라졌다"와
-    "권한이 없다"를 구분해 처리한다.
+    엔진 상태는 세션 폴더의 하위 디렉토리(`<sid>/docreview/<문서별>/`)에 산다 — 직속 파일만 재면
+    방금 쓴 하위 원장이 있는 세션이 늙어 보여 수집된다. 재는 집합은 예전(직속 파일, 없으면 폴더
+    자신)의 상위집합이라 나이는 같거나 젊어진다 — GC 는 덜 지우는 쪽으로만 바뀐다. 예외 하나: 예전에는
+    직속 **링크**를 `stat()` 으로 따라가 링크 너머 파일의 mtime 을 썼다.
+
+    **링크는 따라가지 않는다.** `os.walk(followlinks=False)` 로 걷고 항목마다 `os.lstat` 만 쓴다 — 폴더
+    안의 링크가 밖의 신선한 파일을 가리켜도 폴더를 살려 두지 못한다(링크 자신의 mtime 은 센다).
+
+    **순회 중 사라진 항목**(`FileNotFoundError` — 동시 쓰기의 원자적 교체 · 정리)은 건너뛴다. 그 항목의
+    mtime 을 모른다는 이유로 폴더를 신선하게 치면 판정이 레이스에 묶여 끝나지 않는다. 항목이 사라지면
+    그 부모 디렉토리의 mtime 이 바뀌고(여기서 함께 잰다), `gc_one` 의 두 번 stat 이 그 사이의 변화를
+    보고 수집을 건너뛴다. 하위 디렉토리를 **읽지 못하면**(권한 등 그 밖의 `OSError`) 잴 수 없는 폴더라
+    예외를 그대로 올린다 — 호출자가 수집하지 않는다. 폴더 자신이 사라졌거나 권한이 없을 때도 `OSError`
+    를 올린다 — 호출자가 "폴더가 사라졌다"와 "권한이 없다"를 구분해 처리한다.
     """
-    files = [p for p in folder.iterdir() if p.is_file()]
-    if not files:
-        return folder.stat().st_mtime_ns
-    return max(p.stat().st_mtime_ns for p in files)
+    newest = os.lstat(folder).st_mtime_ns
+
+    def _walk_error(exc: OSError) -> None:
+        if isinstance(exc, FileNotFoundError):
+            return
+        raise exc
+
+    for dirpath, dirnames, filenames in os.walk(folder, onerror=_walk_error, followlinks=False):
+        for name in dirnames + filenames:
+            try:
+                m = os.lstat(os.path.join(dirpath, name)).st_mtime_ns
+            except FileNotFoundError:
+                continue
+            if m > newest:
+                newest = m
+    return newest
 
 
 def within_grace(folder: Path) -> bool:

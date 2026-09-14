@@ -539,5 +539,25 @@ if check_fence "후보" "$CAND_FENCE" 3; then
   assert_not_contains "$out" "2026-04-06-e6-design.md" "후보: git rm 으로 지워진 설계문서는 나오지 않는다"
   assert_eq "$(printf '%s\n' "$out" | grep -c . || true)" "5" "후보: 지워진 문서가 5개 자리를 차지하지 않는다(남은 다섯이 전부 나온다)"
   assert_contains "$out" "2026-04-01-e1-design.md" "후보: 가장 오래된 남은 문서도 5번째 자리에 들어온다"
+
+  # 공백이 든 이름 — 마지막 공백 필드가 같은 둘과 한글이 섞인 하나. awk 의 `BEGIN{FS="\037"}` 가 없으면 기본 FS
+  # 에서 `$NF` 가 마지막 공백 필드(`x-design.md`)가 되어 둘째 · 셋째가 첫째의 중복으로 지워진다(리뷰 m1 · X8).
+  CSP="$SCRATCH/cand-space"
+  mkdir -p "$CSP/docs/superpowers/specs"
+  ( cd "$CSP" && git init -q && git config user.email t@t && git config user.name t )
+  for n in "2026-05-01-a x-design.md" "2026-05-02-b x-design.md" "2026-05-03-한글 설계 x-design.md"; do
+    echo "$n" > "$CSP/docs/superpowers/specs/$n"
+    ( cd "$CSP" && git add -A && git commit -qm "s" )
+  done
+  SPTOP="$(git -C "$CSP" rev-parse --show-toplevel)"
+  out="$(run_cand "$CSP")"
+  for n in "2026-05-01-a x-design.md" "2026-05-02-b x-design.md" "2026-05-03-한글 설계 x-design.md"; do
+    if has_line "$out" "$SPTOP/docs/superpowers/specs/$n"; then
+      ok "후보: 공백 이름 '$n' 가 나온다 (마지막 공백 필드가 같은 이름끼리 중복으로 지워지지 않는다)"
+    else
+      no "후보: 공백 이름 '$n' 가 목록에 없다 — 출력: $(printf '%s' "$out" | head -c 400)"
+    fi
+  done
+  assert_eq "$(printf '%s\n' "$out" | grep -c . || true)" "3" "후보: 공백 이름 셋이 전부 한 번씩 나온다"
 fi
 finish

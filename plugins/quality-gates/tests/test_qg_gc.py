@@ -214,6 +214,49 @@ class TestQgGc(unittest.TestCase):
         run_gc(self.tmp)
         self.assertTrue(f.exists(), "마커 없는 형제 디렉토리가 GC됐다")
 
+    # 7.6.0 · R79 — 폴더 나이는 폴더 자신과 그 아래 **모든 항목**(깊이 무관)의 최신 mtime 이다. 링크는 따라가지
+    # 않는다(링크 자신의 mtime 만 센다). 정본 `shared/gc/gc_common.py` 는 spec-distill 과 같이 쓴다.
+    def _nested(self, sid, deep_fresh):
+        folder = make_session_dir(self.tmp, sid, mtime_offset_seconds=-48 * 3600)  # 마커 pipeline.md · 폴더 늙음
+        sub = folder / "nested" / "deeper"
+        sub.mkdir(parents=True)
+        f = sub / "state.md"
+        f.write_text("x")
+        old = time.time() - 48 * 3600
+        if not deep_fresh:
+            os.utime(f, (old, old))
+        for p in (sub, sub.parent, folder):   # 깊은 쪽부터
+            os.utime(p, (old, old))
+        return folder, f
+
+    def test_nested_fresh_file_keeps_folder(self):
+        folder, f = self._nested("nestfresh0qg", deep_fresh=True)
+        run_gc(self.tmp)
+        self.assertTrue(folder.exists(), "두 층 아래 방금 쓴 파일이 있는 세션 폴더를 수집했다 — 나이가 직속 파일만 본다")
+        self.assertTrue(f.exists())
+
+    def test_nested_all_old_collected(self):
+        folder, _ = self._nested("nestold00qg", deep_fresh=False)
+        run_gc(self.tmp)
+        self.assertFalse(folder.exists(), "모든 깊이가 늙은 세션 폴더가 수집되지 않았다")
+
+    def test_symlink_to_fresh_outside_file_does_not_keep_folder(self):
+        if os.utime not in os.supports_follow_symlinks:
+            self.skipTest("이 플랫폼은 링크 자신의 mtime 을 바꿀 수 없다")
+        folder, _ = self._nested("nestlink0qg", deep_fresh=False)
+        outside = self.tmp / "outside-fresh"
+        outside.mkdir()
+        target = outside / "fresh.txt"
+        target.write_text("fresh")
+        old = time.time() - 48 * 3600
+        for link in (folder / "evil-link", folder / "nested" / "deeper" / "evil-link"):
+            os.symlink(str(target), link)
+            os.utime(link, (old, old), follow_symlinks=False)
+            os.utime(link.parent, (old, old))
+        run_gc(self.tmp)
+        self.assertFalse(folder.exists(), "폴더 안 링크가 가리키는 밖의 신선한 파일이 폴더를 살렸다 — 링크를 따라갔다")
+        self.assertTrue(target.exists(), "링크 너머 파일을 지웠다")
+
 
 # ── 루트 안전 (7.5.3) ─────────────────────────────────────────────────────────
 # 저장소가 `.claude/quality-gates` 나 그 아래 `.gc.lock` 을 링크 · 디렉토리 · 파일로 커밋해도

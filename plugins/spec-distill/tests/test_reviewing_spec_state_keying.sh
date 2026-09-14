@@ -37,7 +37,9 @@ grep -qF 'state_path.py" state-root' <<<"$w_out" \
   || no "S1b: 입력 절에 state-root 해석이 없다"
 # S2 — 옛 단언은 `^STATE_DIR="$ROOT/$harness_sid"$`(세션 디렉토리)였다. 엔진 상태는 이제 그 아래 문서별
 # 디렉토리다(R78). 같은 창 · 같은 두 성분(`$ROOT` · `$harness_sid`)에 문서(`$spec_path`)를 더한 도출 줄을 잰다.
-grep -qE '^STATE_DIR="\$\(python3 "\$SD/scripts/docreview_state\.py" state-dir-for --root "\$ROOT" --session "\$harness_sid" --doc "\$\{spec_path:-\}"' <<<"$w_out" \
+# 줄 끝까지 고정한다(main 의 `$` 앵커 — 리뷰 m5): `|| true)"` 뒤에는 주석만 올 수 있다. 값 뒤에 경로를 덧붙이는
+# 변이(`|| true)/.."`)가 여기서 RED 다.
+grep -qE '^STATE_DIR="\$\(python3 "\$SD/scripts/docreview_state\.py" state-dir-for --root "\$ROOT" --session "\$harness_sid" --doc "\$\{spec_path:-\}" \|\| true\)"([[:space:]]+#.*)?$' <<<"$w_out" \
   && ok "S2: 입력 절이 STATE_DIR 을 \$ROOT · \$harness_sid · \$spec_path 에서 state-dir-for 로 만든다" \
   || no "S2: 입력 절의 STATE_DIR 이 \$ROOT · \$harness_sid · \$spec_path 의 state-dir-for 도출이 아니다"
 

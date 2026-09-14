@@ -3,7 +3,7 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [7.6.0] — 2026-09-11
+## [7.6.0] — 2026-09-14
 
 ### Changed
 
@@ -15,6 +15,13 @@
 
 ### Fixed
 
+- **TTL-GC 의 폴더 나이가 폴더 자신과 그 아래 모든 항목의 최신 mtime 이다 (공용 정본 `shared/gc/gc_common.py` · 사본 `scripts/gc_common.py`).**
+  - **왜 바꿨나.** 전에는 직속 파일만 봤다. spec-distill 3.1.0 이 엔진 상태를 세션 폴더의 하위 디렉토리로 내리면서, 진행 중인 리뷰의 폴더가 늙어 보여 수집될 수 있었다. 같은 정본을 싣는 이 플러그인의 GC 도 함께 바뀐다.
+  - **어떻게 재나.** 링크는 따라가지 않는다(`os.walk(followlinks=False)` · `os.lstat` — 링크 자신의 mtime 만 센다).
+  - **이 플러그인에서 달라지는 것.** 하위 디렉토리에 새 파일이 있는 세션 폴더는 더 이상 수집되지 않는다(덜 지우는 쪽). 세션 폴더의 직속 링크는 더 이상 따라가지 않는다 — 링크 너머의 신선한 파일이 폴더를 살려 두지 못한다.
+  - **그대로인 것.** 루트 탈출 · 링크 루트 거부 · 마커 식별.
+  - **락.** `tests/test_qg_gc.py` 의 셋이다. 두 층 아래 신선한 파일이면 보존한다(수정 전 RED). 모든 깊이가 늙었으면 수집한다. 직속 · 깊은 링크가 밖의 신선한 파일을 가리켜도 수집한다(수정 전 RED).
+  - 전문은 `plugins/spec-distill/CHANGELOG.md` `[3.1.0]`.
 - **지워진 spec-distill brief 러너 · 빌더를 현재형으로 부르던 주석과 산문.** spec-distill 이 `run_brief_codex_reviewer.sh` · `build_brief_codex_prompt.py` 를 지웠다(`plugins/spec-distill/CHANGELOG.md` `[3.1.0]`). 그 이름을 대던 자리 — `scripts/run_codex_reviewer.sh` · `scripts/run_artifact_codex_reviewer.sh` 의 형제 · 계약 주석, `scripts/runner_common.sh` 의 소비자 목록(넷 → 셋), `scripts/codex_prompt_common.py` 의 빌더 목록, 그리고 **모델이 읽는 산문**인 `skills/quality-pipeline/SKILL.md` · `skills/critiquing-artifacts/SKILL.md` 의 exit-3 계약 참조 — 가 없는 파일을 가리키고 있었다. 전부 `run_docreview_codex_reviewer.sh` 와 그 호출자(`reviewing-spec` · `reviewing-brief`)로 재조준했다. 이 플러그인 자신의 동작은 무변경이다.
 - **테스트 일곱을 같은 전환에 맞춰 재조준 · 강화했다.** `tests/lib/codex_observation.sh` 와 `tests/test_codex_runner_degrade_contract.sh` 의 손으로 만든 최소 프로필에 `ground_truth` 한 줄을 더했다 — 엔진 러너의 새 fail-closed 계약 때문이다. `codex_observation.sh` 에 입력 `OBS_DOCREVIEW_WEB` 이 생겼다(기본 false 가 옛 동작이고, 무효값은 rc 95). `tests/test_codex_prompt_untrusted_clause.sh` 가 엔진 러너를 P21 지배 모집단에 넣어 배포 프로필 전부를 가짜 codex 스텁으로 잰다. `tests/test_codex_runner_no_effort_pin.sh` 가 엔진 러너를 링크 추적으로 포함한다. `tests/test_agent_model_mutation.sh` 의 변이 대상이 지워진 `brief-critic.md` 에서 `doc-critic.md` · `doc-critic-web.md` 로 바뀌었다. `tests/test_codex_gate_observation.sh` 는 `reviewing-brief` 펜스를 stderr 관측 계열로 옮겼고(엔진 껍데기의 SKIPPED 공시가 사유를 낸다), `tests/test_codex_copies_agree.sh` 는 지워진 러너를 가리키던 주석을 고쳤다.
 - **`skills/quality-pipeline/SKILL.md` Review gate 스코프 도출의 awk 필드 토큰.** `awk '$1=="merge_base:"{print $2}'` 의 `$1` · `$2` 는 로드된 SKILL 본문에서 Skill 인자로 치환되는 토큰이다 — Claude Code 는 `$N` 을 0부터 센 호출 인자로 바꾸고 인자가 없는 자리는 그대로 둔다. 인자가 둘 이상인 호출이면 awk 프로그램이 인자 값으로 바뀌어 `MERGE_BASE` 가 비고, `git diff "$MERGE_BASE"..HEAD` 가 빈 범위가 되어 branch 스코프 (a) 가 조용히 0 이 될 수 있었다. 이 경로는 치환 규칙에서 도출한 것이고 이 자리의 런타임 관측은 없다 — 관측된 자리는 spec-distill `reviewing-brief` 다(`plugins/spec-distill/CHANGELOG.md` `[3.1.0]` Fixed). 위치 필드를 쓰지 않는 `sed -n 's/^merge_base: //p'` 로 바꿨고, `resolve-baseline.sh` 의 두 출력 모양(정상 · degraded)에서 옛 awk 와 같은 값을 낸다. 저장소 전체 락 `shared/tests/test_skill_body_no_positional_tokens.sh` 가 이 플러그인의 skill · command 본문도 잰다.

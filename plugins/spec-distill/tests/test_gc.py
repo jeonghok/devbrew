@@ -7,6 +7,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 GC = (Path(__file__).resolve().parent.parent / "scripts" / "spec-distill-gc.py").resolve()
 
@@ -44,6 +45,9 @@ class GcTest(unittest.TestCase):
         f.write_text(f"---\nsession_id: {sid}\n---\n")
         past = time.time() - age_seconds
         os.utime(f, (past, past))
+        # 폴더 자신의 mtime 도 늙힌다 — 나이는 폴더 자신과 그 아래 모든 항목의 최신 mtime 이다(3.1.0).
+        # 실제로 늙은 세션은 폴더 mtime 도 늙었다. 이 줄이 없으면 방금 만든 폴더의 mtime 이 판정을 막는다.
+        os.utime(d, (past, past))
         return d
 
     def test_1_ttl_not_reached(self):
@@ -218,6 +222,7 @@ class GcLockLeafTest(unittest.TestCase):
         f.write_text("x")
         past = time.time() - 25 * 3600
         os.utime(f, (past, past))
+        os.utime(d, (past, past))   # 폴더 자신의 mtime 도 나이에 든다(3.1.0)
         return d
 
     def _plant_link(self, name):
@@ -325,6 +330,118 @@ class GcLockLeafTest(unittest.TestCase):
         self.assertIn("GC 거부", stderr)
         self.assertNotIn("Traceback", stderr)
         self.assertEqual(self.root.read_text(), "not a directory\n")
+
+
+class NestedAgeTest(unittest.TestCase):
+    """폴더 나이는 폴더 자신과 그 아래 **모든 항목**(깊이 무관)의 최신 mtime 이다(3.1.0 · R79).
+
+    엔진 상태는 `<sid>/docreview/<문서별>/` 아래에 산다. 설계문서만 리뷰한 세션은 `<sid>/` 에 직속 파일이
+    없거나 오래된 것뿐이라, 직속 파일만 재던 판정은 방금 쓴 엔진 원장이 있는 세션을 수집했다. 여기서는
+    grace 창(ctime 은 되돌릴 수 없다)을 비켜 가려고 늙은 직속 파일 `state.local.md`(brief degrade 원장) 하나를 둔다.
+    링크는 따라가지 않는다 — 링크 자신의 mtime 만 센다.
+    """
+
+    DOC = "design-sample-0123456789abcdef"
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        subprocess.run(["git", "init", "-q"], cwd=self.tmp, check=True)
+        self.root = Path(self.tmp) / ".claude" / "spec-distill"
+        self.root.mkdir(parents=True)
+        self.old = time.time() - 48 * 3600
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _session(self, sid, deep_fresh):
+        """`<sid>/state.local.md`(늙음) + `<sid>/docreview/<doc>/docreview-state.md`(deep_fresh 면 방금 씀)."""
+        d = self.root / sid
+        doc = d / "docreview" / self.DOC
+        doc.mkdir(parents=True)
+        top = d / "state.local.md"
+        top.write_text("x")
+        deep = doc / "docreview-state.md"
+        deep.write_text("---\ndocreview: {}\n---\n")
+        os.utime(top, (self.old, self.old))
+        if not deep_fresh:
+            os.utime(deep, (self.old, self.old))
+        for p in (doc, doc.parent, d):   # 깊은 쪽부터 — 자식을 만들면 부모 mtime 이 갱신된다
+            os.utime(p, (self.old, self.old))
+        return d, deep
+
+    def _outside_fresh(self):
+        outside = Path(self.tmp) / "outside-fresh"
+        outside.mkdir(exist_ok=True)
+        f = outside / "fresh.txt"
+        f.write_text("fresh")
+        return f
+
+    def _old_link(self, link, target):
+        if os.utime not in os.supports_follow_symlinks:
+            self.skipTest("이 플랫폼은 링크 자신의 mtime 을 바꿀 수 없다")
+        os.symlink(str(target), link)
+        os.utime(link, (self.old, self.old), follow_symlinks=False)
+        os.utime(link.parent, (self.old, self.old))   # 링크를 만들며 갱신된 부모 mtime 을 되돌린다
+
+    def test_a_fresh_file_two_levels_down_keeps_folder(self):
+        d, deep = self._session("nestfresh01", deep_fresh=True)
+        run_gc(cwd=self.tmp)
+        self.assertTrue(d.exists(), "두 층 아래 방금 쓴 엔진 원장이 있는 세션을 수집했다 — 나이가 직속 파일만 본다")
+        self.assertTrue(deep.exists())
+
+    def test_b_everything_old_is_collected(self):
+        d, _ = self._session("nestold0001", deep_fresh=False)
+        run_gc(cwd=self.tmp)
+        self.assertFalse(d.exists(), "모든 깊이가 늙은 세션이 수집되지 않았다 — 「아무것도 안 지운다」가 여기서 RED")
+
+    def test_c_deep_symlink_to_fresh_outside_file_does_not_keep_folder(self):
+        d, _ = self._session("nestlink001", deep_fresh=False)
+        target = self._outside_fresh()
+        self._old_link(d / "docreview" / self.DOC / "evil-link", target)
+        run_gc(cwd=self.tmp)
+        self.assertFalse(d.exists(), "폴더 안 링크가 가리키는 밖의 신선한 파일이 폴더를 살렸다 — 링크를 따라갔다")
+        self.assertTrue(target.exists(), "링크 너머 파일을 지웠다")
+
+    def test_c2_direct_symlink_to_fresh_outside_file_does_not_keep_folder(self):
+        # 직속 링크 — 3.1.0 이전 판정은 `is_file()` · `stat()` 로 이 링크를 따라가 밖의 파일 mtime 을 썼다.
+        d, _ = self._session("nestlink002", deep_fresh=False)
+        target = self._outside_fresh()
+        self._old_link(d / "evil-link", target)
+        run_gc(cwd=self.tmp)
+        self.assertFalse(d.exists(), "직속 링크가 가리키는 밖의 신선한 파일이 폴더를 살렸다 — 링크를 따라갔다")
+        self.assertTrue(target.exists(), "링크 너머 파일을 지웠다")
+
+
+class FolderMtimeVanishTest(unittest.TestCase):
+    """순회 중 사라진 항목 — 죽지 않고 건너뛴다. 그 항목 때문에 폴더를 영구히 신선하게 치지 않는다."""
+
+    def test_e_entry_vanishing_mid_walk_is_skipped(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("gc_common_sd_under_test", str(GC.parent / "gc_common.py"))
+        gcm = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gcm)
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        d = tmp / "sess-vanish-01"
+        sub = d / "sub"
+        sub.mkdir(parents=True)
+        a = sub / "a.txt"
+        a.write_text("a")
+        (sub / "gone.txt").write_text("fresh — 순회 중 사라진다")
+        old = time.time() - 48 * 3600
+        for p in (a, sub, d):
+            os.utime(p, (old, old))
+        real_lstat = os.lstat
+
+        def lstat(path, *args, **kw):
+            if os.fspath(path).endswith("gone.txt"):
+                raise FileNotFoundError(2, "vanished mid-walk", os.fspath(path))
+            return real_lstat(path, *args, **kw)
+
+        with mock.patch.object(gcm.os, "lstat", side_effect=lstat):
+            got = gcm.folder_mtime_ns(d)
+        want = max(real_lstat(p).st_mtime_ns for p in (a, sub, d))
+        self.assertEqual(got, want, "사라진 항목을 건너뛰지 않았거나 다른 값을 냈다")
 
 
 if __name__ == "__main__":
