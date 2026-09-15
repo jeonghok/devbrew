@@ -7,7 +7,7 @@
 # 환경에는 그 변수가 없고, `Read` 로 연 reference 파일은 글자 그대로 온다(2.1.270 실측 — 설계
 # docs/superpowers/specs/2026-09-14-plugin-root-cwd-fallback-design.md 「실측」). 그래서 잰다:
 #
-#  축 1  — 본문 어디에도 `CLAUDE_PLUGIN_ROOT:-` 가 없다. 그 형태는 치환되지 않아 늘 끝자락으로 떨어진다.
+#  축 1  — 본문 어디에도 bare 가 아닌 루트 전개(`${CLAUDE_PLUGIN_ROOT` 뒤에 `}` 가 아닌 무엇이든 — `:-` · `-` · `:=` · `:?` 등)가 없다. SKILL.md 에서도 치환되지 않아 끝자락으로 떨어진다(C1).
 #  축 1b — 본문 어디에도 cwd 상대 플러그인 루트가 없다: `./plugins/` 리터럴(대입 끝자락 · 산문 모두),
 #          그리고 자기 플러그인 스크립트를 실행하는 코드 스팬 · bash 줄이 넘기는 cwd 상대
 #          `plugins/<자기 플러그인>/…` 인자. 처분 앵커 · 문서 포인터처럼 명령이 아닌 자리와 감사 대상
@@ -25,7 +25,10 @@
 #          복구 지시가 나오는지, 토큰을 픽스처 루트로 바꾼 조건에서 픽스처 스크립트가 도는지 실행한다.
 #
 # 재지 못하는 것: 이름만 적힌 스크립트 호출과 「리포 root에서」 같은 산문 루트 진술(실행 지시인지
-# 설명인지 가려야 한다), 치환이 없는 하니스에서 모델이 `Read` 경로를 어떻게 푸는지.
+# 설명인지 가려야 한다), 치환이 없는 하니스에서 모델이 `Read` 경로를 어떻게 푸는지, bare 토큰에서 받은
+# 루트 변수를 가드 뒤에 `./` 없는 cwd 상대 값이나 현재 디렉토리에서 만든 값으로 다시 대입하는 것, 그리고
+# 태그가 `bash` 가 아닌 펜스(태그 없음 · `sh`) — 축 1b 의 자기 하니스 인자 · 축 2 · C3 · C4 는 bash 태그
+# 펜스만 본다.
 #
 # 파싱은 python 으로 한다 — 셸 본문 추출기는 조용히 깨진다.
 set -u
@@ -159,7 +162,7 @@ for path in files:
             buf, first = "", None
     # 축 1 · 축 1b(리터럴)
     for k in range(start, len(lines)):
-        if "CLAUDE_PLUGIN_ROOT:-" in lines[k]:
+        if re.search(r"\$\{CLAUDE_PLUGIN_ROOT(?!\})", lines[k]):
             emit("A1", path, k + 1, lines[k])
         if "./plugins/" in lines[k]:
             emit("A1B", path, k + 1, lines[k])
@@ -280,7 +283,7 @@ n_corpus="$(val N_CORPUS)"; n_a2="$(val N_A2)"; n_a3="$(val N_A3)"
 for ax in A1 A1B A2 A3 C3 C4; do
   n="$(count "$ax")"
   case "$ax" in
-    A1)  what="축 1: 본문의 CLAUDE_PLUGIN_ROOT:- 형태" ;;
+    A1)  what="축 1: 본문의 bare 가 아닌 CLAUDE_PLUGIN_ROOT 전개" ;;
     A1B) what="축 1b: 본문의 cwd 상대 플러그인 루트(./plugins/ · 자기 하니스 cwd 인자)" ;;
     A2)  what="축 2: reference 펜스가 가드보다 먼저 루트를 쓴다 / 가드가 없다" ;;
     A3)  what="축 3: reference 를 여는 Read 줄이 절대 형태가 아니거나 안내 문장이 없다" ;;
