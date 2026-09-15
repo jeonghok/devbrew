@@ -136,10 +136,12 @@ cwd 로 가지 않고 멈춘다.
 cwd fallback 을 쓰는 SKILL.md 펜스는 루트를 bare 토큰에서 받고, 같은 펜스에서 가드를 통과한다.
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — 이 펜스의 루트 변수를 SKILL.md 가 보여 준 플러그인 절대 경로로 바꿔 다시 실행하라" >&2; exit 1; }
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 ```
 
-(메시지는 초안이다 — 확정 문안은 plan, C4 를 지킨다.) 로드 시 치환되면 `QG="/…/quality-gates/<ver>"` 가 되어 가드는 늘 통과한다. 치환이 없는 하니스에서는 빈
+(메시지는 초안이다 — 확정 문안은 plan, C4 를 지킨다. 문안이 지킬 의미 조건은 하나다: 이 가드가 SKILL.md 펜스에서
+걸렸다면 치환이 없는 하니스라 절대 경로는 어디에도 보인 적이 없으므로 모델은 추측하지 않고 멈춰 보고하고, 절대
+경로로 바꿔 넣으라는 지시는 SKILL.md 가 그 경로를 보여 준 reference 펜스에서만 뜻이 있다.) 로드 시 치환되면 `QG="/…/quality-gates/<ver>"` 가 되어 가드는 늘 통과한다. 치환이 없는 하니스에서는 빈
 값이 되어 멈춘다. reviewing-spec 의 SD 관용구도 끝자락 `|| SD="./plugins/spec-distill"` 를 이 가드로 바꾼다.
 quality-gates Step P0b 의 설명(「devbrew 안에서는 `./plugins/quality-gates`」)과 산문 한 줄도 새 모델로 다시
 쓴다.
@@ -149,18 +151,22 @@ quality-gates Step P0b 의 설명(「devbrew 안에서는 `./plugins/quality-gat
 reference 파일(`runtime-gate.md` · `finishing.md`)은 `Read` 로 열리므로 어떤 토큰도 치환되지 않는다.
 
 - reference 의 펜스는 1절과 같은 형태로 루트를 대입하고 가드를 통과한다. 모델이 그대로 실행하면 값이
-  비어 가드가 멈추고, 메시지가 복구 지시(「SKILL.md 가 보여 준 플러그인 루트 절대 경로로 바꿔 넣고 다시
-  실행」)가 된다.
+  비어 가드가 멈추고, 메시지가 복구 지시(「SKILL.md 가 보여 준 절대 경로가 있으면 그것으로 바꿔 다시 실행,
+  없으면 추측하지 말고 멈춰 보고」)가 된다.
 - 그 reference 를 여는 SKILL.md 의 `Read` 줄은 `Read ${CLAUDE_PLUGIN_ROOT}/skills/<skill>/references/<file>.md`
   로 바꾼다 — 치환되어 절대 경로가 된다. 같은 자리에 한 문장을 둔다: 「그 파일에서 플러그인 루트 변수는
-  치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다.」 뒤 토큰만 치환되어
+  치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 이 줄의 경로가 절대 경로로
+  보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.」 뒤 토큰만 치환되어
   모델에게 절대 경로가 보인다. 해당 자리는 quality-gates `SKILL.md:845` 와 conducting-interview `SKILL.md:315`
   둘이다.
 - reference 산문 속 포인터(`finishing.md` 의 `${CLAUDE_PLUGIN_ROOT}/references/compression.md` 등)는 형태를
   바꾸지 않는다 — 위 한 문장이 읽기에도 적용된다.
 
-모델이 바꿔 넣기를 빠뜨려도 결과는 멈춤이지 cwd 실행이 아니다. 이것이 이 설계에서 모델에 기대는 유일한
-고리이며, 검증 계획의 프로브가 잰다.
+모델이 바꿔 넣기를 빠뜨려도 결과는 멈춤이지 cwd 실행이 아니다. 이 설계에서 모델에 기대는 고리는 둘이다.
+(1) 치환이 있는 하니스에서 reference 펜스의 루트를 바꿔 넣는 것 — 빠뜨리면 가드가 멈추고, 검증 계획의
+프로브(AC9)가 잰다. (2) 치환이 없는 하니스에서 `Read` 줄의 경로가 글자 그대로 와 풀리지 않을 때 — 모델은 cwd 의
+`plugins/<p>/…` 사본을 찾아 읽지 않고 멈춰 보고한다. 이 조건은 `Read` 줄 옆 안내 문장에 함께 싣는다. (2) 에는
+기계 가드가 없고 AC9 도 치환이 있는 조건만 재므로 알려진 한계에 공시한다.
 
 ### 3. 락
 
@@ -214,8 +220,9 @@ reference 파일(`runtime-gate.md` · `finishing.md`)은 `Read` 로 열리므로
   `Read` 줄을 상대 형태로 되돌림 · bare 대입 뒤에 `|| X="./plugins/x"` 끝자락 추가 · SKILL.md 산문에
   「devbrew 안에서는 `./plugins/x`」 추가 · 자기 하니스 실행 인자를 cwd 상대 `plugins/<p>/…` 로 되돌림 ·
   들여쓴 reference 펜스에서 가드 삭제. 양성 대조는 GREEN 이다.
-- **AC8** — 전체 스위트(세 플러그인 + shared)에서 base 대비 새 실패가 0이다. 파일별 실패 **줄 수**로
-  비교한다.
+- **AC8** — 전체 스위트(세 플러그인 + shared)에서 base 대비 새 실패가 0이다. 실패 항목의 **식별자 집합**을
+  비교하고(새로 나타난 식별자 0), 파일별 실패 줄 수를 함께 적는다 — 줄 수만으로는 한 파일 안에서 기존 실패가
+  풀리고 새 실패가 생긴 교체를 못 본다(D3.9). 식별자 수집 · 정규화 절차는 plan 이 정한다.
 - **AC9** — 헤드리스 프로브(관찰 · 기록): 브랜치의 플러그인을 `--plugin-dir` 로 로드하고 cwd 에 미끼를 둔
   세션에서 (a) 수정된 SKILL.md 펜스가 절대 경로로 도착한다(하니스 기록) (b) reference 펜스 실행에서 미끼가
   한 번도 실행되지 않는다. 모델이 바꿔 넣었는지 · 가드에서 멈췄는지는 결과로 적는다 — 통과 조건은
@@ -248,11 +255,12 @@ reference 파일(`runtime-gate.md` · `finishing.md`)은 `Read` 로 열리므로
 
 ## Verification Plan
 
-1. 착수 전 base(`add4c9cd`)에서 전체 스위트를 돌려 파일별 실패 줄 수를 기록한다(main 의 선재 RED 둘 포함).
+1. 착수 전 base(`add4c9cd`)에서 전체 스위트를 돌려 실패 식별자 집합과 파일별 실패 줄 수를 기록한다(main 의 선재
+   RED 둘 포함).
 2. 새 락 GREEN · AC7 변이 행렬 전부 RED · 양성 대조 GREEN. 변이는 커밋 뒤에 걸고 `git checkout HEAD --`
    로 되돌린다.
 3. AC4 · AC5 행동 테스트.
-4. 구현 뒤 전체 스위트 → 1과 파일별 실패 줄 수 비교(AC8).
+4. 구현 뒤 전체 스위트 → 1과 실패 식별자 집합 · 파일별 실패 줄 수 비교(AC8).
 5. AC9 헤드리스 프로브(haiku, 몇 회) — 결과를 PR 에 적는다.
 6. `/qg` Review gate.
 
@@ -279,7 +287,10 @@ reference 파일(`runtime-gate.md` · `finishing.md`)은 `Read` 로 열리므로
   환경 변수 부재에 대한 것이지 skill 본문 치환에 대한 것이 아니다.
 - **락은 이름만 적힌 스크립트 호출과 「리포 root에서」 같은 산문 루트 진술을 잡지 못한다.** 산문이 실행 지시인지
   설명인지를 가려야 해서다. 그 부류는 skill 의 루트 진술을 치환 루트로 바꿔 닫고(D2.4), 전수 목록은 plan 의
-  도출 스윕이 만든다(D10). 축 1b 는 `./plugins/<p>` 리터럴 회귀만 잡는다.
+  도출 스윕이 만든다(D10). 축 1b 가 잡는 회귀는 `./plugins/<p>` 리터럴과 자기 하니스의 cwd 상대 `plugins/<p>/…`
+  인자까지다.
+- **치환이 없는 하니스에서 reference 를 여는 `Read` 줄은 모델의 판단에 맡겨진다.** 경로가 글자 그대로 오면 모델이
+  cwd 사본을 찾지 않고 멈춰야 하는데, 이를 막는 기계 가드는 없고 AC9 도 치환이 있는 조건만 잰다(§2 의 고리 (2)).
 - **plugin-audit 스크립트 둘은 여전히 체크아웃을 본다(D2.7).** `check-integrity.sh` 의 harness 변조 감시는
   체크아웃 사본을 해시하는데 실행되는 agent 는 설치 캐시에서 오고, `run-own-tests.sh` 는 quality-gates
   스크립트를 cwd 에서 찾는다. 이 PR 이전부터의 불일치이며 후속으로 넘긴다.
@@ -306,6 +317,8 @@ reference 파일(`runtime-gate.md` · `finishing.md`)은 `Read` 로 열리므로
 | D3 | 치환이 없는 reference 에 루트를 건네는 방식 | A — 단일 관용구 + 가드, SKILL.md 가 절대 경로를 건넨다 |
 | D4 | 설계 5절(관용구 · reference · 락 · 한계 · 검증) | 승인 |
 | D10 | 리뷰 라운드 3 에서 같은 부류(암묵적 cwd 루트)의 새 자리가 나오면 | 설계는 규칙과 도출 방법만 둔다. 전수 목록은 plan 의 도출 스윕이 만들고, 새 자리는 설계를 넓히지 않고 Deferred 로 넘긴다 |
+| D11 | 이 문서를 대조할 정답 출처(리뷰 라운드 3 의 질문) | 인터뷰 브리프 없음 — 이 절(「결정 기록」)이 정본이다 |
+| D12 | 재리뷰 상한 뒤 추가 라운드 | 열지 않음 — 라운드 3 의 fix 셋(§1 · §2 의 의미 조건 · 알려진 한계 정정)과 D3.9 반영분은 재리뷰 없이 들어갔다 |
 
 오케스트레이터가 정하고 사용자에게 알린 것(되돌리려면 괄호 안의 한마디):
 
@@ -328,6 +341,8 @@ reference 파일(`runtime-gate.md` · `finishing.md`)은 `Read` 로 열리므로
 | D2.5 | 2 | (자동) Acceptance Criteria 절 변경 | 채택 — D1.2 · D1.3 반영분 |
 | D2.6 | 2 | (자동) 목차 추가 | 채택 — CLAUDE.md 300줄 규칙 |
 | D2.7 | 2 | `check-integrity.sh` · `run-own-tests.sh` 의 cwd 경로 | 채택 (b) — 범위 밖 · 알려진 한계 · 후속 |
+| D3.8 | 3 | (자동) 알려진 한계 절 변경 | 채택 — D2.4 · D2.7 공시분 |
+| D3.9 | 3 | AC8 을 실패 식별자 비교로 | 채택 — AC8 · 검증 계획 1 · 4 |
 
 ### Deferred to plan
 
@@ -343,3 +358,6 @@ reference 파일(`runtime-gate.md` · `finishing.md`)은 `Read` 로 열리므로
   부분 문자열로 인식하면 뒤집은 문장도 통과한다(AC7 의 「`Read` 옆 안내 문장 삭제」 변이가 이 규칙에 기댄다).
 - 전수 목록 도출 스윕(D10) — 각 플러그인 `scripts/` 의 실제 파일 이름 × 자기 skill · reference · command 본문의
   루트 진술과 실행 지시. 설계의 「현재 분포」 표는 예시다. 이름만 적힌 언급은 실행 지시와 설명을 가려 센다.
+- 락의 대상 도출(C5)과 도출 스윕(D10)은 심볼릭 링크로 배포된 파일을 포함한다 — git 추적 목록(mode 120000
+  포함)을 쓰고 링크를 풀어 읽는다. 링크된 reference 의 산문 루트 표기(`<플러그인 루트>/scripts/…`, 예:
+  `plugins/spec-distill/references/reviewing-document.md`)도 스윕 대상이다.
