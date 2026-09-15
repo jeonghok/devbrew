@@ -16,7 +16,7 @@
 - **devbrew 안 dogfooding 이 바뀐다.** 설치본 skill 이 이제 워킹트리가 아니라 설치본 스크립트를 돈다. 워킹트리 코드를 돌리려면 `claude --plugin-dir ./plugins/plugin-audit` 로 로드한다.
 - **skill 본문 치환이 없는 하니스에서는 멈춘다.** 경로를 추측하지 않고 가드에서 복구 지시와 함께 멈춘다. 어느 하니스가 그런지는 모른다 — 2.1.270 에서는 치환된다.
 
-**범위 밖으로 남긴 것** — `scripts/check-integrity.sh` 의 harness 변조 감시는 체크아웃 사본을 해시하고, `scripts/run-own-tests.sh` 는 quality-gates 스크립트를 cwd 에서 찾는다. 이 릴리스 이전부터의 불일치이며 후속으로 넘긴다.
+**범위 밖으로 남긴 것** — `scripts/check-integrity.sh` 의 harness 변조 감시는 체크아웃 사본을 해시하고, `scripts/run-own-tests.sh` 는 `--qg-worktree` 를 주지 않으면 cwd 상대 `plugins/quality-gates/scripts/qg-worktree.sh` 를 **실행**한다 — 사용자 저장소의 그 경로에 파일이 있으면 그것이 돈다. 이 릴리스 이전부터의 불일치이며 후속으로 넘긴다.
 
 ## [0.9.2] — 2026-09-11
 
