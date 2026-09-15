@@ -181,7 +181,7 @@ git 이다"* 는 *"피검자가 통제하는 코드가 안 돈다"* 와 **같은
 "실패 시 보존"), 위 `echo` 가 그 경로를 사용자에게 알린다. 정리는 `TMPDIR` 수명에 위임.
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/resolve-baseline.sh"
 ```
 
@@ -224,7 +224,7 @@ no 이고 기준선 트리도 만들어진다; 그 창을 닫는 결정론 수�
 **Step R1a — 러너 어댑터 감지 (HEAD 트리).**
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/run-test-selection.sh" detect "$project_dir"
 ```
 
@@ -280,7 +280,7 @@ Agent({
 여기서 손으로 하지 않는다:
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 set -o pipefail
 printf '%s\n' "${candidate_files[@]}" \
   | "$QG/scripts/run-test-selection.sh" assign "$project_dir" \
@@ -427,7 +427,7 @@ R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 �
 없으면 여기서 직접 부른다 (이미 allowed-tools 에 있다):
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/check-review-scope.sh"
 ```
 
@@ -453,7 +453,7 @@ QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
 ① 캐시 조회 — 어댑터마다:
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/baseline-cache.sh" get \
   ".claude/quality-gates/baseline-cache" "$merge_base" "$runner" "${units[@]}"
 ```
@@ -479,7 +479,7 @@ QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
 ② **기준선 워크트리는 캐시 적중 여부와 무관하게 항상 만든다** (전량 적중이어도):
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 baseline_wt=$("$QG/scripts/qg-worktree.sh" create-baseline \
   "$merge_base" "<session-id>") || baseline_wt=""
 ```
@@ -537,7 +537,7 @@ diff 가 테스트 인프라 자체를 바꾸는 경우(unittest→pytest 마이
 (/qg iter-5 CRITICAL SR1):
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/run-test-selection.sh" probe "$baseline_wt" "$runner"
 ```
 
@@ -587,7 +587,7 @@ SR1 의 조상이다). `run` 이 관문을 다시 도는 중복은 `setup_cmd` �
 `probe` 도 이미 돌았다):
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/run-test-selection.sh" run \
   "$baseline_wt" "$runner" bulk "${miss_units[@]}"
 ```
@@ -601,7 +601,7 @@ bulk 가 red 면 실패한 unit 에 대해서만 `per-unit` 으로 재실행한�
 ③ 결과를 **R6 이 읽을 파일에 쓰고**, 캐시에 기록하고, 기준선 워크트리를 폐기한다:
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 printf '%s\n' "${rows[@]}" > "$qg_run_tmp/baseline-$runner.tsv"
 printf '%s\n' "${rows[@]}" | "$QG/scripts/baseline-cache.sh" put \
   ".claude/quality-gates/baseline-cache" "$merge_base" "$runner"
@@ -671,7 +671,7 @@ already ran (gate scope = both), this step is a no-op.
 a disposable git-worktree:
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/qg-worktree.sh" create-sandbox "<session-id>"
 ```
 
@@ -760,7 +760,7 @@ verifier 의 dispatch 가 **끝난 뒤**, 먼저 **HEAD 축 전용 트리**를 �
 봉인한 커밋 `B` 다:
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 head_tree_dir=$("$QG/scripts/qg-worktree.sh" create-head \
   "$baseline_sha" "<session-id>")
 ```
@@ -787,7 +787,7 @@ head_tree_dir=$("$QG/scripts/qg-worktree.sh" create-head \
 그다음 어댑터마다 (샌드박스가 있을 때만):
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/run-test-selection.sh" run \
   "$head_tree_dir" "$runner" bulk "${units[@]}"
 ```
@@ -853,7 +853,7 @@ authoritative 라 verifier 가 만든 상태에서 난 green 이 회귀를 강�
 **Step R6 — 대조 (결정론).** 어댑터마다 한 번씩:
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/diff-test-results.py" \
   --expected "$qg_run_tmp/expected-$runner.txt" \
   --baseline "$qg_run_tmp/baseline-$runner.tsv" \
@@ -877,7 +877,7 @@ QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
 확인이 필요하면 소유자에게 직접 물으면 된다 (순수 함수, 트리 불필요):
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/run-test-selection.sh" granularity "$runner"
 ```
 
@@ -929,7 +929,7 @@ QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
 후보만 **`$head_tree_dir` 에서** 1회 재실행한다:
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/run-test-selection.sh" run \
   "$head_tree_dir" "$runner" per-unit "${flaky_candidates[@]}"
 ```
@@ -966,7 +966,7 @@ codex).** 그러지 않으면 *"마지막 호출의 결과가 authoritative"* �
 그다음 어댑터 YAML 들을 집계한다:
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/diff-test-results.py" --aggregate \
   --expected-adapters "$adapter_count" "$qg_run_tmp"/per-adapter-*.yaml > "$aggregate_yaml"
 ```
@@ -984,7 +984,7 @@ stale 파일을 주울 수 없으므로, glob 은 **실제 생산물**을 세게
 까지다):
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 if [[ -n "${head_tree_dir:-}" && -d "$head_tree_dir" ]]; then
   "$QG/scripts/qg-worktree.sh" remove "$head_tree_dir"
 fi
@@ -1041,7 +1041,7 @@ R7 은 `sandbox_dir` 만 검사하므로 이 트리가 R6 까지 살아 있어�
 fallback, compute the product-mutation oracle:
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/qg-worktree.sh" mutation-guard "<sandbox_dir>" "<baseline_sha>" "<snapshot_digest>"
 ```
 
@@ -1117,7 +1117,7 @@ R6 이 낸 `attribution_status` 를 그대로 `floor:attribution` 의 status 로
 구조 게이트를 돌린다:
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/check_qa_ledger.py" \
   --aggregate "$aggregate_yaml" \
   --assign-rows "$assign_rows_file" \
@@ -1201,6 +1201,6 @@ verdict 결정:
 **Step R9 — Discard the sandbox** (verdict-independent), unless in read-only fallback:
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/qg-worktree.sh" remove "<sandbox_dir>"
 ```
