@@ -24,7 +24,7 @@ cost_class: medium
 
 <!-- review-entry:begin -->
 ```bash
-SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"; [ -n "$SD" ] || SD="./plugins/spec-distill"
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
 ENTRY="$SD/scripts/review_entry.py"
 RETURN_MSG="[spec-distill] 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
 if [ ! -f "$ENTRY" ]; then
@@ -109,7 +109,7 @@ git -C "$top" -c core.quotePath=false ls-files --others --exclude-standard -- 'd
 (`docreview-state.md`)와 codex 산출물이 여기 산다:
 
 ```bash
-SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"; [ -n "$SD" ] || SD="./plugins/spec-distill"
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
@@ -146,8 +146,8 @@ fi
 ## 프로필
 
 ```bash
-SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"; [ -n "$SD" ] || SD="./plugins/spec-distill"
-PROFILE="${CLAUDE_PLUGIN_ROOT:-$SD}/references/docreview-profiles/design-doc.md"
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
+PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/design-doc.md"
 ```
 
 프로필은 `design-doc.md` 로 **고정**이다 — 이 skill 은 design 자리 전용이고 다른 프로필을 고르지 않는다.
@@ -167,10 +167,10 @@ kill switch 는 P21 보안 컨트롤이라 그 공백은 "껐다고 믿게만" �
 
 <!-- codex-gate:begin runner=run_docreview_codex_reviewer.sh -->
 ```bash
-SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"; [ -n "$SD" ] || SD="./plugins/spec-distill"
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
 # `## 프로필` 과 **같은 두 줄**(`SD=` · `PROFILE=`)이다. Bash 도구는 호출마다 새 셸이라 앞 펜스의
 # 대입이 여기로 오지 않는다 — `SD=` 를 펜스마다 다시 세우는 것과 같은 이유다.
-PROFILE="${CLAUDE_PLUGIN_ROOT:-$SD}/references/docreview-profiles/design-doc.md"
+PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/design-doc.md"
 # 러너의 네 인자는 전부 이 호출 안에서 서야 한다. 같은 이유(새 셸)로 여기서 함께 세운다 —
 # `$CODEX_YAML` 은 `## 입력` 의 `$STATE_DIR`(세션과 문서의 **순수 함수**) 안의 한 파일이라
 # 어느 셸에서 다시 도출해도 같은 파일을 가리킨다. 도출은 `## 입력` 과 같은 `state-dir-for`
@@ -296,11 +296,11 @@ Read 가 거부된다. 탐지 dispatch 직전에(재dispatch 포함) 아래 펜�
 
 <!-- profile-content:begin -->
 ```bash
-SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"; [ -n "$SD" ] || SD="./plugins/spec-distill"
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
-PROFILE="${CLAUDE_PLUGIN_ROOT:-$SD}/references/docreview-profiles/design-doc.md"
+PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/design-doc.md"
 prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
   echo "[spec-distill] 프로필 내용을 읽지 못했다(cat rc $prof_rc): $PROFILE — 탐지 · 재비판을 dispatch 하지 않는다. 5단계가 critic 사망으로 읽는다(재dispatch 1회 → 「미검증」)." >&2

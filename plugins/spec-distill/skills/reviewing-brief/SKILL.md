@@ -35,7 +35,7 @@ user-invocable: false
 degrade 원장을 연다(부재 키만 추가하므로 몇 번 돌아도 같다):
 
 ```bash
-PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
@@ -80,7 +80,7 @@ record 의 필드는 `component` · `affected_axis` · `verification_status` · 
 호출마다 새 셸이라 누산기는 파일이어야 Step B 까지 산다 — 에 이어 붙인다:
 
 ```bash
-PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
@@ -102,7 +102,7 @@ python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component 
 절단한다 → 둘 다 못 하면 공시하고 멈춘다.
 
 ```bash
-PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
@@ -145,7 +145,8 @@ fi
 ## 프로필
 
 ```bash
-PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/brief.md"
+PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
 ```
 
 호출자가 모드를 싣지 않으므로 이 자리의 프로필은 이것 하나다.
@@ -158,7 +159,7 @@ PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-prof
 소비자 셋이 같은 바이트를 보고, 저자 수정 뒤 다음 라운드는 새 번들을 본다.
 
 ```bash
-PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
@@ -200,7 +201,7 @@ record(`pipeline` / `all` / `unavailable`, reason = 위 공시의 사유) 후 St
 ## 절차
 
 ```
-Read ${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/reviewing-document.md
+Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 ```
 
 그 파일의 여덟 단계를 **한 턴 안에서** 돈다. 절차를 여기 복사하지 않는다. 이 자리의 슬롯:
@@ -218,9 +219,9 @@ kill switch 는 P21 보안 컨트롤이라 그 공백은 "껐다고 믿게만" �
 
 <!-- codex-gate:begin runner=run_docreview_codex_reviewer.sh -->
 ```bash
-SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 # `## 프로필` 과 같은 한 줄 — Bash 도구는 호출마다 새 셸이라 앞 펜스의 대입이 여기로 오지 않는다.
-PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/brief.md"
+PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
 # 러너 인자 넷(프로필 · 번들 · 프로젝트 · 산출물)이 이 호출 안에서 선다. `$CODEX_YAML`·`$BUNDLE` 은
 # `$STATE_DIR`(세션과 payload 의 순수 함수) 안의 파일이라 `## 입력` 과 같은 도출로 어느 셸에서나
 # 같은 파일이다. `## 입력` 을 앞에 이어 붙여 한 호출로 도는 것이 정상 경로다.
@@ -311,7 +312,7 @@ Read 가 거부된다. 탐지 dispatch 직전에(재dispatch 포함) 아래 펜�
 
 <!-- profile-content:begin -->
 ```bash
-PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
@@ -320,7 +321,7 @@ DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
-PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/brief.md"
+PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
 prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
   echo "[spec-distill] 프로필 내용을 읽지 못했다(cat rc $prof_rc): $PROFILE — 탐지 · 재비판을 dispatch 하지 않는다. 5단계가 critic 사망으로 읽는다(재dispatch 1회 → 「미검증」)." >&2
@@ -352,7 +353,7 @@ dispatch **직전에** 이 펜스를 돌리고(캐시하지 않는다), 펜스�
 
 <!-- critic-select:begin -->
 ```bash
-PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
@@ -361,7 +362,7 @@ DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
-PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/brief.md"
+PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
 pc_rc=0; PJ="$(python3 "$PR/scripts/docreview_state.py" profile-check "$PROFILE")" || pc_rc=$?
 PROFILE_WEB=""
 if [ "$pc_rc" -eq 0 ]; then
@@ -492,7 +493,7 @@ Step B 텍스트에 advisory 로 붙는다. 문서가 더 이상 바뀌지 않�
 1단계가 닫힌 뒤 한 번 돈다. 하류가 읽는 것이 payload 이므로 번들이 아니라 payload 만 싣는다.
 
 ```bash
-PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
