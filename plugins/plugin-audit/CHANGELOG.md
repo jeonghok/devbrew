@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.3] — 2026-09-15
+
+### Security
+
+- **codex 감지 펜스가 cwd 의 `./plugins/plugin-audit` 로 떨어지던 fallback 을 없앴다.** `skills/auditing-plugins/SKILL.md` 의 `PA="${CLAUDE_PLUGIN_ROOT:-./plugins/plugin-audit}"` 는 Bash 도구 환경에 그 변수가 없어 언제나 cwd 상대로 풀렸다. 이제 로드 시 치환되는 bare `${CLAUDE_PLUGIN_ROOT}` 에서 받고, 빈 값이면 `[plugin-audit] 플러그인 루트 미해석 — …` 로 멈춘다.
+- **Law 2 정적 게이트가 실행 대상과 같은 플러그인 루트를 본다.** pre-0 의 `check-law2.py` 호출이 자기 워크플로 · agents 를 cwd 상대 `plugins/plugin-audit/…` 로 받아, Workflow 가 실행하는 설치본과 게이트가 검사하는 사본이 갈라질 수 있었다. 호출과 인자를 `${CLAUDE_PLUGIN_ROOT}/…` 로 바꾸고, 「모든 스크립트 호출은 리포 root에서」 진술을 「스크립트는 `${CLAUDE_PLUGIN_ROOT}/scripts/`, 감사 대상 인자는 리포 root 기준」으로 다시 썼다.
+
+### Fixed
+
+- **`scripts/check-law2.py` 의 `--agents-dir` 기본값이 cwd 상대(`plugins/plugin-audit/agents`)였다.** 스크립트 위치 기준(`<플러그인 루트>/agents`)으로 바꿨다 — cwd 에 `plugins/plugin-audit/` 이 없거나 다른 사본이 있어도 설치본 agents 를 검사한다. `tests/test_check_law2.py` 에 두 케이스를 더했다.
+
+**알려진 결과 둘**
+
+- **devbrew 안 dogfooding 이 바뀐다.** 설치본 skill 이 이제 워킹트리가 아니라 설치본 스크립트를 돈다. 워킹트리 코드를 돌리려면 `claude --plugin-dir ./plugins/plugin-audit` 로 로드한다.
+- **skill 본문 치환이 없는 하니스에서는 멈춘다.** 경로를 추측하지 않고 가드에서 복구 지시와 함께 멈춘다. 어느 하니스가 그런지는 모른다 — 2.1.270 에서는 치환된다.
+
+**범위 밖으로 남긴 것** — `scripts/check-integrity.sh` 의 harness 변조 감시는 체크아웃 사본을 해시하고, `scripts/run-own-tests.sh` 는 quality-gates 스크립트를 cwd 에서 찾는다. 이 릴리스 이전부터의 불일치이며 후속으로 넘긴다.
+
 ## [0.9.2] — 2026-09-11
 
 ### Fixed

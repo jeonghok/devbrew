@@ -14,11 +14,13 @@ read-only reviewer다 — 셋 다 `tools:` allowlist가 `Read, Grep, Glob, WebSe
 scoping되어 있어 물리적으로 쓸 수 없다. 모든 파일 write(consent artifact·evidence pack·audit-data·
 리포트)는 **orchestrator만** 한다 (Law 2).
 
-**모든 스크립트 호출은 리포 root에서** 실행한다. `check-law2.py`의 `--agents-dir` 기본값
-(`plugins/plugin-audit/agents`)이 cwd-relative고, pre-check 스크립트들(`check-shape-completeness.py
-<plugin_dir>`, `check-integrity.sh --target`)도 cwd-relative positional/path 인자를 받는다 — 다른
+**스크립트는 `${CLAUDE_PLUGIN_ROOT}/scripts/` 에 있다** — 아래에 이름만 적힌 스크립트는 모두 이 경로의 것을
+실행하고, 이 경로가 절대 경로로 보이지 않으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고한다. **감사 대상 인자는
+리포 root 기준이다** — 호출은 리포 root 에서 한다. pre-check 스크립트들(`check-shape-completeness.py
+<plugin_dir>`, `check-integrity.sh --target`)이 cwd-relative positional/path 인자를 받기 때문이다 — 다른
 cwd에서 부르면 조용히 엉뚱한(또는 부재하는) 경로를 본다. (`check-shape-completeness.py --repo-root`는
-parse만 되고 `check()`엔 전달되지 않는 dead flag — cwd 민감성의 원인이 아니다.)
+parse만 되고 `check()`엔 전달되지 않는 dead flag — cwd 민감성의 원인이 아니다.) `check-law2.py` 의
+`--agents-dir` 기본값은 스크립트 위치 기준(`<플러그인 루트>/agents`)이다.
 
 ## phase 0 — consent (dispatch 전 필수)
 
@@ -40,9 +42,9 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
 싣는다 (bonus-degradable). 반대로 F(`check-shape-completeness.py`)는 core 구조 검사를 self-contained로
 커버하는 load-bearing 게이트라 그 자체의 크래시(非0)는 abort다:
 
-- `check-law2.py plugins/plugin-audit/scripts/audit-workflow.js --agents-dir plugins/plugin-audit/agents`
-  + 별도 호출로 `check-law2.py plugins/plugin-audit/scripts/smoke-workflow.js --mode smoke
-  --agents-dir plugins/plugin-audit/agents` (`audit-workflow.js`에 `--mode smoke`만 붙이면 실패한다 —
+- `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-law2.py ${CLAUDE_PLUGIN_ROOT}/scripts/audit-workflow.js --agents-dir ${CLAUDE_PLUGIN_ROOT}/agents`
+  + 별도 호출로 `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-law2.py ${CLAUDE_PLUGIN_ROOT}/scripts/smoke-workflow.js --mode smoke
+  --agents-dir ${CLAUDE_PLUGIN_ROOT}/agents` (`audit-workflow.js`에 `--mode smoke`만 붙이면 실패한다 —
   CANONICAL_SMOKE는 정확히 agent 식별자 1개를 기대하는데 `audit-workflow.js`는 2개(`plugin-auditor`,
   `audit-refuter`)를 쓴다).
 - `check-no-verdict-injection.py <seedPath>` — seed **하나만** argv-extra로 넘긴다(B). 다른 파일을
@@ -109,7 +111,7 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
 # 시나리오들(가용·kill switch·미설치·버전 바닥 미달·감지기 부재)로 실행하고 codex
 # 호출 횟수를 센다 — 목록은 test_codex_gate_observation.sh 의 루프 본문이 정의한다
 # (개수를 여기서 세지 않는다: 시나리오가 늘 때마다 이 자리가 stale 해지는 것을 피한다).
-PA="${CLAUDE_PLUGIN_ROOT:-./plugins/plugin-audit}"
+PA="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PA" ] || { echo "[plugin-audit] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 DETECT_OUT="$(bash "$PA/scripts/detect_codex.sh")"
 codex_avail="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^codex_available: //p')"
 skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
