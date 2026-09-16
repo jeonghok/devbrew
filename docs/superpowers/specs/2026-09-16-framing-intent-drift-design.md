@@ -164,6 +164,7 @@ seed 가 제목 헤딩을 갖는 것 자체는 어느 쪽에도 안 걸린다. �
         8 라운드 게이트 — 항목별 처분 + **저자 편집 diff 공시·차단**(변경 D)
            └─ **처분 전에는 저자가 seed 를 열지 않는다** — 호스트의 단계 순서(변경 B)
   └─ 냉독(seed-readback) — 엔진 밖 advisory
+  └─ **확정 게이트 직전 diff 공시·차단**(변경 D) — 마지막 라운드 뒤의 편집이 보이는 유일한 자리
   └─ proceed 게이트(현행 4옵션, 변경 없음)
         └─ ①/② → /interview @<seed 경로> → Phase 1(**출처 규약 변경 E**)
 ```
@@ -242,6 +243,17 @@ seed 가 제목 헤딩을 갖는 것 자체는 어느 쪽에도 안 걸린다. �
 고친 것이 아무 데도 드러나지 않았다. 여기서는 순서가 규율이되 **그 규율의 위반이 다음 공시에서
 반드시 보이고, 보이면 진행이 멈춘다.** 규율만이 아니라 규율 + 관측 + 차단이다. 그럼에도 이것은
 엔진의 기계적 거부보다 약하다 — 그 사실을 §7 R7 에 이름 붙여 둔다.
+
+**사용자가 `fix` 를 거부하면**(D18) — 앞 판본은 「적용 전에 묻는다」만 두고 **거부 분기를 비워
+뒀다.** 엔진에서 미적용 `fix` 는 승인을 계속 막고(`unapplied_fix` 가 차단 행이다) 그것을 푸는
+사건은 `drop` 뿐이라, 비워 두면 결국 저자가 혼자 `drop` 을 누른다 — C10 이 닫으려던 저자 단독
+처분이 **정상 라운드로** 되돌아온다.
+
+그래서 거부는 **`drop` 이 아니라 기록으로 닫는다**: 호스트가 사용자의 거부 문구를 받아
+audit `## 6. 리뷰 결정` 에 *항목 / 거부 / 사용자 문구* 로 적고, **그 문구를 인용해** `fix --event
+drop` 을 부른다. 저자가 판단해서 누르는 것이 아니라 **사용자의 답을 집행하는 것**이고, 둘의 차이는
+원장에 문구가 있느냐다. 문구 없이 눌린 `drop` 은 규약 위반이며, `## 6` 에 짝이 없는 `drop` 은
+다음 라운드 리뷰가 볼 수 있다.
 
 **`ask` 구멍은 그대로 닫는다**(D1.13) — 엔진의 `ask` 는 전제 `fix` 가 없으면 승인도 라운드 게이트도
 막지 않고 사용자 답을 기록하지도 않는다(§1.2). **seed 프로필 본문의 처분 안내에서 `ask` 를 지운다**:
@@ -389,8 +401,10 @@ red 가 된다. 출처(provenance)와 원문 보존(verbatim)은 다른 축이�
 | seed | 압축 직후 | 엔진 `--doc` · 번들의 초안 부분 · 냉독 · 다음 세션 |
 | 번들 | `build_seed_inline_blob.py` | 탐지 리뷰어 · 재비판자 · codex 러너 |
 | finding + 처분 | 엔진 7단계 | 라운드 게이트 → **사용자** |
-| 사용자 결정 + 문구 | 라운드 게이트 | audit `## 6. 리뷰 결정` · 다음 라운드 permit |
+| 질문·선택지·응답 | 확산 라운드(변경 A) | audit `## 2. 질문 전체` → **번들 → 탐지·재비판·codex**(D14) |
+| 사용자 결정 + 문구 | 라운드 게이트 | audit `## 6. 리뷰 결정` → **번들 → 탐지·재비판·codex**(D14) · 다음 라운드 permit |
 | 저자 편집 diff | 변경 D | 라운드 게이트 · 확정 게이트 직전 → 사용자 |
+| **저자 편집에 대한 사용자 처분**(「그대로 둔다 / 되돌린다」) | 변경 D 의 게이트 | audit `## 6. 리뷰 결정` 에 **호스트가 직접 적는다** — 엔진의 `decide` CLI 는 finding id 를 요구하므로 finding 없는 diff 처분은 그 경로로 갈 수 없다 |
 | 냉독 산문 | `seed-readback` | proceed 게이트 텍스트 → 사용자 |
 | degrade record | 엔진 + 호스트 | **채널 둘 — ① state 의 `framing_degradations` 원장(보관소는 audit `## 5. degrade`) · ② proceed 게이트 텍스트** → 사용자 |
 | 탐지·재비판·codex 의 verbatim 산출물 | 엔진 3·4·6단계 | 엔진 상태 디렉토리(라우팅 입력) · **audit `## 4. 비평과 냉독`**(사람이 되짚을 자리) |
@@ -458,11 +472,12 @@ red 가 된다. 출처(provenance)와 원문 보존(verbatim)은 다른 축이�
 | `plugins/spec-distill/skills/conducting-interview/references/seed-input.md` | 출처 규약(변경 E) |
 | `plugins/spec-distill/tests/test_rereview_cap_consistency.sh` | `NEG_ONLY` 에 한 줄 + **숫자 부재 검사 추가** |
 | `plugins/spec-distill/tests/test_seed_gate_wiring.sh` | **재작성** — 지워지는 러너의 게이트 블록을 재던 락이다 |
-| `plugins/spec-distill/tests/test_seed_inline_blob.sh` | 소비자가 바뀐다(critic → 엔진 문서 슬롯) + 번들 재료가 셋에서 다섯으로(§5.4) |
+| `plugins/spec-distill/scripts/build_seed_inline_blob.py` | **번들 재료를 셋에서 다섯으로**(D14) — 오늘 위치 인자 셋(`seed_file`·`audit_file`·`claude_md_file`)과 3절 조립이 하드코딩돼 있다. 계약을 넓히는 **유일한 산출자**라 락보다 이쪽이 먼저다 |
+| `plugins/spec-distill/tests/test_seed_inline_blob.sh` | 소비자가 바뀐다(critic → 엔진 문서 슬롯) + 위 조립기의 새 계약을 잰다 |
 | `plugins/spec-distill/tests/test_seed_agents.sh` | `seed-critic` 의 실재를 단언한다(`for a in seed-critic seed-readback`) — 삭제와 함께 고친다 |
 | `plugins/spec-distill/tests/test_seed_codex_axes.sh` | 삭제되는 codex 축 파일들을 잰다 |
 | `plugins/spec-distill/tests/test_web_kill_switch.sh` | `run_seed_codex_reviewer.sh` 를 이름으로 잰다 |
-| `shared/tests/test_docreview_profiles.sh` | seed 의 앵커 부류가 **둘 다 비어 있음**을 단언 추가 — 그 락은 오늘 brief 의 `immutable` 만 재고 seed 에는 아무 단언이 없다 |
+| `shared/tests/test_docreview_profiles.sh` | seed 의 앵커 부류가 **둘 다 비어 있음**을 단언 추가. 그 락에 seed 단언이 이미 둘 있으나(`:36` 「seed 는 defer 불허」 · `:102` 「seed 는 층 2 를 비운다」) **앵커 부류에 대한 단언만 없다** |
 | `plugins/spec-distill/.claude-plugin/plugin.json` | minor bump — **번호는 머지 직전에 정한다**(Handoff 7 · AC9) |
 | `plugins/spec-distill/CHANGELOG.md` · `README.md` | minor 항목 · Principles |
 | 삭제 | `agents/seed-critic.md` · `scripts/run_seed_codex_reviewer.sh` · `scripts/build_seed_codex_prompt.py` · `scripts/seed-codex-suppression-checklist.md` |
@@ -557,6 +572,8 @@ red 가 된다. 출처(provenance)와 원문 보존(verbatim)은 다른 축이�
 | D15 | 변경 D 는 그 구간의 **실제 diff 전부**를 덩어리마다 처분 대상으로 한다 — 승인된 수정을 가려내지 않는다(가릴 기계가 없다) | 사용자, 라운드 2 게이트 D2.7 |
 | D16 | Phase 1 이 `audit_file` 포인터로 audit `## 1. 원문` 을 읽어 출처를 **대조**한다. seed 에 표시를 더하지 않는다 | 사용자, 라운드 2 게이트 D2.8 |
 | D17 | 숫자 부재 검사의 어휘는 락이 이미 가진 `CAP_RE` **네 형태 그대로**다 — 새 표기를 발명하지 않는다 | 설계 — §5.4, 라운드 2 D2.10 |
+| D18 | 사용자가 `fix` 를 **거부**하면 저자가 판단해 `drop` 하지 않는다 — 호스트가 사용자의 거부 문구를 audit `## 6. 리뷰 결정` 에 적고 **그 문구를 인용해** `drop` 을 집행한다. 문구 없는 `drop` 은 규약 위반이고, `## 6` 에 짝이 없는 `drop` 은 다음 라운드 리뷰가 본다 | 설계 — §5.3, 라운드 3 게이트 D3.30 채택 위에서 |
+| D19 | §5.1 흐름도에 **확정 게이트 직전 diff 공시·차단**을 그린다 — 그림이 계획 단계가 먼저 보는 정본이라 빠지면 그 창이 다시 열린다 | 사용자, 라운드 3 게이트 D3.29 |
 
 **D7 의 첫 뒤집힘** (라운드 1 — `immutable` → `protected`)
 
@@ -619,6 +636,13 @@ red 가 된다. 출처(provenance)와 원문 보존(verbatim)은 다른 축이�
 - D2.26 · r2 · adopt · 7d6b6ce9#r2.1 · "채택 — 그대로 둔다 (권장) [게이트 선택지 라벨] — 데이터 흐름표의 무허가 편집을 사후 승인" — finding 없이 바뀜: 6. 데이터 흐름 — 무엇이 어디서 나와 어디로 가나 (modified)
 - D2.27 · r2 · adopt · 94a2dbed#r2.1 · "채택 — 그대로 둔다 (권장) [게이트 선택지 라벨] — 위험표의 무허가 편집을 사후 승인. 단 R1b 완화 문구는 라운드 3 에서 고친다" — finding 없이 바뀜: 7. 위험 (modified)
 - D2.28 · r2 · adopt · a275cc65#r2.1 · "채택 — 그대로 둔다 (권장) [게이트 선택지 라벨] — 기각 목록의 무허가 편집을 사후 승인" — finding 없이 바뀜: 11. Rejected Alternatives (modified)
+- D3.29 · r3 · adopt · 0bb37f83#r3.1 · "채택 (권장) [게이트 선택지 라벨] — 흐름도에 확정 게이트 직전 공시를 넣는다" — §5.1 흐름도가 변경 D 의 공시·차단을 8단계 라운드 게이트에만 그리고 「확정(proceed) 게이트 직전」 자리를 빼, 정본 그림만 읽고 배선하면 D1.5 가 닫은 「마지막 라운드 뒤 편집」 창이 다시 열린다.
+- D3.30 · r3 · adopt · 1f1c8aca#r3.1 · "채택 (권장) [게이트 선택지 라벨] — fix 거부 분기를 설계가 정한다" — 「`fix` 처분도 적용 전에 사용자에게 묻는다」를 두면서 사용자가 **거부**했을 때 그 항목을 닫는 경로를 정하지 않아, 엔진에서 미적용 `fix` 가 승인을 계속 막고 그것을 푸는 유일한 수단인 `fix --event drop` 을 결국 저자가 혼자 누르게 된다 — C10 이 닫으려던 저자 단독 처분이 정상 라운드로 되돌아온다. 거부를 ① 사용자 문구와 함께 호스트가 `fix --event drop` 으로 닫을지 ② `decide` 로 올려 원장에 남길지가 결정할 일이다.
+- D3.31 · r3 · adopt · 093d9017#r3.1 · "채택 — 그대로 둔다 (권장) [게이트 선택지 라벨] — 흐름도의 무허가 편집을 사후 승인" — finding 없이 바뀜: 5.1 한 사이클의 흐름 (modified)
+- D3.32 · r3 · adopt · 7c0ccdb0#r3.1 · "채택 — 그대로 둔다 (권장) [게이트 선택지 라벨] — AC 의 무허가 편집을 사후 승인" — finding 없이 바뀜: 8. Acceptance Criteria (modified)
+- D3.33 · r3 · adopt · 94a2dbed#r3.1 · "채택 — 그대로 둔다 (권장) [게이트 선택지 라벨] — 위험표의 무허가 편집을 사후 승인" — finding 없이 바뀜: 7. 위험 (modified)
+- D3.34 · r3 · adopt · a275cc65#r3.1 · "채택 — 그대로 둔다 (권장) [게이트 선택지 라벨] — 기각 목록의 무허가 편집을 사후 승인" — finding 없이 바뀜: 11. Rejected Alternatives (modified)
+- D3.35 · r3 · adopt · e3ff3375#r3.1 · "채택 — 그대로 둔다 (권장) [게이트 선택지 라벨] — Handoff Context 의 무허가 편집을 사후 승인" — finding 없이 바뀜: Handoff Context (modified)
 
 ## Handoff Context
 
