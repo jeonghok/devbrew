@@ -42,9 +42,9 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
 싣는다 (bonus-degradable). 반대로 F(`check-shape-completeness.py`)는 core 구조 검사를 self-contained로
 커버하는 load-bearing 게이트라 그 자체의 크래시(非0)는 abort다:
 
-- `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-law2.py ${CLAUDE_PLUGIN_ROOT}/scripts/audit-workflow.js --agents-dir ${CLAUDE_PLUGIN_ROOT}/agents`
-  + 별도 호출로 `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-law2.py ${CLAUDE_PLUGIN_ROOT}/scripts/smoke-workflow.js --mode smoke
-  --agents-dir ${CLAUDE_PLUGIN_ROOT}/agents` (`audit-workflow.js`에 `--mode smoke`만 붙이면 실패한다 —
+- `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check-law2.py" "${CLAUDE_PLUGIN_ROOT}/scripts/audit-workflow.js" --agents-dir "${CLAUDE_PLUGIN_ROOT}/agents"`
+  + 별도 호출로 `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check-law2.py" "${CLAUDE_PLUGIN_ROOT}/scripts/smoke-workflow.js" --mode smoke
+  --agents-dir "${CLAUDE_PLUGIN_ROOT}/agents"` (설치 경로에 공백이 있으면 따옴표 없이는 인자가 쪼개진다) (`audit-workflow.js`에 `--mode smoke`만 붙이면 실패한다 —
   CANONICAL_SMOKE는 정확히 agent 식별자 1개를 기대하는데 `audit-workflow.js`는 2개(`plugin-auditor`,
   `audit-refuter`)를 쓴다).
 - `check-no-verdict-injection.py <seedPath>` — seed **하나만** argv-extra로 넘긴다(B). 다른 파일을

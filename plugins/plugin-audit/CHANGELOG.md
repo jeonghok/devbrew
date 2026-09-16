@@ -5,7 +5,7 @@
 ### Security
 
 - **codex 감지 펜스가 cwd 의 `./plugins/plugin-audit` 로 떨어지던 fallback 을 없앴다.** `skills/auditing-plugins/SKILL.md` 의 `PA="${CLAUDE_PLUGIN_ROOT:-./plugins/plugin-audit}"` 는 Bash 도구 환경에 그 변수가 없어 언제나 cwd 상대로 풀렸다. 이제 로드 시 치환되는 bare `${CLAUDE_PLUGIN_ROOT}` 에서 받고, 빈 값이면 `[plugin-audit] 플러그인 루트 미해석 — …` 로 멈춘다.
-- **Law 2 정적 게이트가 실행 대상과 같은 플러그인 루트를 본다.** pre-0 의 `check-law2.py` 호출이 자기 워크플로 · agents 를 cwd 상대 `plugins/plugin-audit/…` 로 받아, Workflow 가 실행하는 설치본과 게이트가 검사하는 사본이 갈라질 수 있었다. 호출과 인자를 `${CLAUDE_PLUGIN_ROOT}/…` 로 바꾸고, 「모든 스크립트 호출은 리포 root에서」 진술을 「스크립트는 `${CLAUDE_PLUGIN_ROOT}/scripts/`, 감사 대상 인자는 리포 root 기준」으로 다시 썼다.
+- **Law 2 정적 게이트가 실행 대상과 같은 플러그인 루트를 본다.** pre-0 의 `check-law2.py` 호출이 자기 워크플로 · agents 를 cwd 상대 `plugins/plugin-audit/…` 로 받아, Workflow 가 실행하는 설치본과 게이트가 검사하는 사본이 갈라질 수 있었다. 호출과 인자를 `${CLAUDE_PLUGIN_ROOT}/…` 로 바꾸고, 「모든 스크립트 호출은 리포 root에서」 진술을 「스크립트는 `${CLAUDE_PLUGIN_ROOT}/scripts/`, 감사 대상 인자는 리포 root 기준」으로 다시 썼다. 치환된 경로는 전부 따옴표로 감쌌다 — 설치 경로에 공백이 있으면 따옴표 없이는 인자가 쪼개져 감사가 dispatch 전에 멈춘다.
 
 ### Fixed
 

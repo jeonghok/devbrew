@@ -15,20 +15,26 @@
 #          걸리지 않는다.
 #  축 2  — reference 파일의 bash 펜스(들여쓴 펜스 포함) 중 루트를 쓰는 것은, 같은 펜스에서 그 사용보다
 #          앞에 `X="${CLAUDE_PLUGIN_ROOT}"; [ -n "$X" ] || { echo "…" >&2; exit N; }` 한 줄이 있다.
+#          「루트를 쓴다」는 코퍼스 전체에서 모은 가드 변수 이름으로 판정한다 — reference 펜스는 SKILL.md
+#          펜스 뒤에 이어 붙여 한 호출로 도는 것이 호출 관습이라, 그 파일 안에 대입이 없어도 루트를 쓴다.
+#  축 2b — 가드가 잡은 루트 변수를 같은 펜스에서 다시 대입하지 않는다(모든 마크다운의 bash 펜스). 가드는
+#          빈 값에서 멈출 뿐이고, 그 뒤에서 `pwd` 나 상대 경로로 루트를 되살리면 결함이 그대로 돌아온다.
 #  축 3  — 루트 토큰을 담은 reference 마다 그것을 `Read` 하는 SKILL.md 줄이 있고, 그 줄은 전부
 #          `${CLAUDE_PLUGIN_ROOT}/…` 절대 형태이며, 같은 절에 치환 안내 문장이 **줄 전체 그대로** 있다.
 #          부분 문자열로 재면 문장 뒤에 부정을 붙여도 통과한다.
 #  C3/C4 — 가드 줄의 메시지에 `${CLAUDE_PLUGIN_ROOT}` 가 없고(SKILL.md 에서는 그것까지 치환된다), 가드를
 #          담은 펜스에서 가드 앞에 `set -u` 가 없다(unbound 오류가 복구 메시지를 가린다).
+#  C5    — 가드 메시지가 원인과 복구 지시를 함께 싣는다. 치환이 없는 하니스에서 cwd 실행을 실제로 막는
+#          것은 비0 종료가 아니라 이 문장이고, 대표 펜스의 stderr 만 재면 나머지 자리는 무방비다.
 #  행동  — 대표 펜스 둘(SKILL.md 하나 · reference 하나)을 잘라, 무치환 · 변수 없음 · cwd 에
 #          `./plugins/quality-gates/scripts/` 미끼가 있는 조건에서 미끼가 돌지 않고 비0 으로 끝나며
 #          복구 지시가 나오는지, 토큰을 픽스처 루트로 바꾼 조건에서 픽스처 스크립트가 도는지 실행한다.
+#          축 1b 의 자기 하니스 인자 탐지에는 합성 단위를 태우는 양성 대조가 따로 있다(N_PROBE).
 #
 # 재지 못하는 것: 이름만 적힌 스크립트 호출과 「리포 root에서」 같은 산문 루트 진술(실행 지시인지
-# 설명인지 가려야 한다), 치환이 없는 하니스에서 모델이 `Read` 경로를 어떻게 푸는지, bare 토큰에서 받은
-# 루트 변수를 가드 뒤에 `./` 없는 cwd 상대 값이나 현재 디렉토리에서 만든 값으로 다시 대입하는 것, 그리고
-# 태그가 `bash` 가 아닌 펜스(태그 없음 · `sh`) — 축 1b 의 자기 하니스 인자 · 축 2 · C3 · C4 는 bash 태그
-# 펜스만 본다.
+# 설명인지 가려야 한다), 치환이 없는 하니스에서 모델이 `Read` 경로를 어떻게 푸는지, `Read` 로 연 파일이
+# 다시 가리키는 2차 포인터, 그리고 태그가 `bash` 가 아닌 펜스(태그 없음 · `sh`) — 축 1b 의 자기 하니스
+# 인자 · 축 2 · 축 2b · C3 · C4 · C5 는 bash 태그 펜스만 본다.
 #
 # 파싱은 python 으로 한다 — 셸 본문 추출기는 조용히 깨진다.
 set -u
@@ -138,6 +144,20 @@ def command_violations(unit, p, is_bash):
     return bad
 
 
+# 가드가 잡는 루트 변수 이름은 코퍼스 전체에서 모은다. reference 펜스를 SKILL.md 펜스 뒤에 이어 붙여
+# 한 호출로 도는 것이 이 리포의 호출 관습이라, 그 파일 안에 대입이 없어도 루트를 쓰는 펜스일 수 있다 —
+# 파일 안 대입만 보면 그런 펜스는 축 2 대상에서 통째로 빠지고 하한도 그것을 세지 않는다.
+GLOBAL_ROOTVARS = set()
+for _p in files:
+    _lines, _s = load(_p)
+    for _l in _lines[_s:]:
+        _g = GUARD.match(_l)
+        if _g:
+            GLOBAL_ROOTVARS.add(_g.group(1))
+        _m = re.match(r'^\s*([A-Za-z_]\w*)="\$\{CLAUDE_PLUGIN_ROOT\}"', _l)
+        if _m:
+            GLOBAL_ROOTVARS.add(_m.group(1))
+
 n_a2 = 0
 ref_with_var = []
 skills = [f for f in files if f.endswith("/SKILL.md")]
@@ -187,12 +207,36 @@ for path in files:
                     emit("C4", path, k + 1, lines[k])
                 if seen_set_u is not None:
                     emit("C3", path, seen_set_u + 1, lines[seen_set_u])
+                # C5 — 메시지가 원인과 복구 지시를 함께 싣는다. 치환이 없는 하니스에서 cwd 실행을
+                # 실제로 막는 것은 비0 종료가 아니라 이 문장이다(설계 §2 의 고리 (2)). 대표 펜스 둘의
+                # stderr 만 재면 나머지 자리에서 문구를 뒤집어도 통과한다.
+                if not all(s in g.group(2) for s in
+                           ("플러그인 루트 미해석", "추측하지 말고(cwd 포함) 멈춰 보고하라")):
+                    emit("C5", path, k + 1, lines[k])
+    # 축 2b — 가드가 잡은 루트 변수를 같은 펜스에서 cwd 쪽 값으로 다시 대입하지 않는다.
+    # 가드는 빈 값에서 멈출 뿐 그 뒤를 보지 않는다. 이 릴리스가 「설치본 skill 은 워킹트리 스크립트를
+    # 더는 돌리지 않는다」를 공시했으므로, `pwd` 로 루트를 되살리려는 유인이 새로 생겼다.
+    # reference 뿐 아니라 SKILL.md 펜스도 본다 — 가드를 둔 자리라면 그 가드가 지켜져야 한다.
+    for (o, c, lang, ind) in fz:
+        if lang != "bash":
+            continue
+        guarded_here = set()
+        for k in range(o + 1, c):
+            g = GUARD.match(lines[k])
+            if g:
+                guarded_here.add(g.group(1))
+                continue
+            for v in guarded_here:
+                m = re.match(r"^\s*(?:export\s+)?" + v + r"=(.*)$", lines[k])
+                if (m and TOKEN not in m.group(1)) or re.search(r"\$\{" + v + r":?=", lines[k]):
+                    emit("A2B", path, k + 1, lines[k])
+                    break
     # 축 2 — reference 의 루트 사용 펜스
     if "/references/" in path:
         body = "\n".join(lines[start:])
         if "CLAUDE_PLUGIN_ROOT" in body:
             ref_with_var.append(path)
-        rootvars = set(re.findall(r'([A-Za-z_]\w*)="\$\{CLAUDE_PLUGIN_ROOT\}"', body))
+        rootvars = set(re.findall(r'([A-Za-z_]\w*)="\$\{CLAUDE_PLUGIN_ROOT\}"', body)) | GLOBAL_ROOTVARS
         for (o, c, lang, ind) in fz:
             if lang != "bash":
                 continue
@@ -266,6 +310,17 @@ for r in ref_with_var:
             emit("A3", s, k + 1, "상대 형태 Read — 설치본에서 모델이 cwd 로 풀 수 있다")
         if not has_sent:
             emit("A3", s, k + 1, "같은 절에 치환 안내 문장(줄 전체)이 없다")
+# 축 1b 자기 하니스 인자 탐지의 양성 대조. `own_scripts()` 가 빈 집합이 되면(디렉토리 이름 변경 ·
+# 확장자 변경) 그 축은 위반 0 을 조용히 낸다 — 합성 단위 하나를 같은 코드 경로로 태워 잡히는지 본다.
+probe = 0
+for _p in sorted({f.split("/")[1] for f in files}):
+    _sc = sorted(own_scripts(_p))
+    if not _sc:
+        continue
+    if command_violations(f"{_sc[0]} --in plugins/{_p}/x", _p, True):
+        probe = 1
+    break
+print(f"N_PROBE\t{probe}")
 print(f"N_CORPUS\t{len(files)}")
 print(f"N_A2\t{n_a2}")
 print(f"N_A3\t{len(ref_with_var)}")
@@ -280,15 +335,17 @@ assert_eq "$py_rc" "0" "파서가 끝까지 돌았다 (rc $py_rc)"
 n_corpus="$(val N_CORPUS)"; n_a2="$(val N_A2)"; n_a3="$(val N_A3)"
 [ "${n_corpus:-0}" -ge 30 ] && ok "대상 마크다운 ${n_corpus}개 — vacuous 아님" \
   || no "대상 마크다운이 ${n_corpus:-0}개뿐 — 도출이 무너졌다(글롭 · 경로 변경?)"
-for ax in A1 A1B A2 A3 C3 C4; do
+for ax in A1 A1B A2 A2B A3 C3 C4 C5; do
   n="$(count "$ax")"
   case "$ax" in
     A1)  what="축 1: 본문의 bare 가 아닌 CLAUDE_PLUGIN_ROOT 전개" ;;
     A1B) what="축 1b: 본문의 cwd 상대 플러그인 루트(./plugins/ · 자기 하니스 cwd 인자)" ;;
     A2)  what="축 2: reference 펜스가 가드보다 먼저 루트를 쓴다 / 가드가 없다" ;;
+    A2B) what="축 2b: 가드 뒤에 루트 변수를 다시 대입한다" ;;
     A3)  what="축 3: reference 를 여는 Read 줄이 절대 형태가 아니거나 안내 문장이 없다" ;;
     C3)  what="C3: 가드 앞의 set -u" ;;
     C4)  what="C4: 가드 메시지 안의 루트 토큰" ;;
+    C5)  what="C5: 가드 메시지에 원인 · 복구 지시가 없다" ;;
   esac
   assert_eq "$n" "0" "$what — ${n}곳"
   [ "$n" -eq 0 ] || show "$ax"
@@ -298,6 +355,9 @@ done
   || no "축 2 대상 reference 펜스가 ${n_a2:-0}곳 — 하한 22 미달(들여쓴 펜스 인식이 무너졌나?)"
 [ "${n_a3:-0}" -ge 2 ] && ok "축 3 대상 reference ${n_a3}개 (하한 2)" \
   || no "축 3 대상 reference 가 ${n_a3:-0}개 — 하한 2 미달"
+# 양성 대조 — 자기 하니스 인자 탐지는 대상 스크립트 목록이 비면 조용히 0 을 낸다(부재 락에는 양의 짝).
+[ "$(val N_PROBE)" = "1" ] && ok "축 1b 자기 하니스 탐지 양성 대조 — 합성 단위를 잡는다" \
+  || no "축 1b 자기 하니스 탐지가 합성 단위를 잡지 못했다 — 이 축은 이 실행에서 아무것도 재지 않았다"
 
 # ── 행동 — 대표 펜스 둘 ──────────────────────────────────────────────────────
 USER_REPO="$TMP/user"; FX="$TMP/fx/quality-gates"
