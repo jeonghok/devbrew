@@ -17,15 +17,23 @@
 #          앞에 `X="${CLAUDE_PLUGIN_ROOT}"; [ -n "$X" ] || { echo "…" >&2; exit N; }` 한 줄이 있다.
 #          「루트를 쓴다」는 코퍼스 전체에서 모은 가드 변수 이름으로 판정한다 — reference 펜스는 SKILL.md
 #          펜스 뒤에 이어 붙여 한 호출로 도는 것이 호출 관습이라, 그 파일 안에 대입이 없어도 루트를 쓴다.
-#  축 2b — 가드가 잡은 루트 변수를 같은 펜스에서 다시 대입하지 않는다(모든 마크다운의 bash 펜스). 가드는
-#          빈 값에서 멈출 뿐이고, 그 뒤에서 `pwd` 나 상대 경로로 루트를 되살리면 결함이 그대로 돌아온다.
+#  축 2b — 루트 변수는 cwd 에서 만들어지지 않는다(모든 마크다운의 bash 펜스). 대입이 줄 어디에 있든
+#          (복합문 · local/declare/readonly/export · `+=`), 기본값 전개가 어떤 연산자든(`:-` · `:=` ·
+#          `-` · `=`), 값이 현재 디렉토리나 상대 `plugins/…` 에서 오면 위반이다. 가드를 지난 펜스에서는
+#          한 걸음 더 엄격하다 — 우변은 치환 토큰이어야 한다. 주석은 떼고 본다(주석에 토큰을 적어
+#          무력화하는 우회를 막는다). 대입 문법 밖의 형태(`printf -v` · `eval` · 배열)는 못 잰다.
 #  축 3  — 루트 토큰을 담은 reference 마다 그것을 `Read` 하는 SKILL.md 줄이 있고, 그 줄은 전부
 #          `${CLAUDE_PLUGIN_ROOT}/…` 절대 형태이며, 같은 절에 치환 안내 문장이 **줄 전체 그대로** 있다.
 #          부분 문자열로 재면 문장 뒤에 부정을 붙여도 통과한다.
 #  C3/C4 — 가드 줄의 메시지에 `${CLAUDE_PLUGIN_ROOT}` 가 없고(SKILL.md 에서는 그것까지 치환된다), 가드를
 #          담은 펜스에서 가드 앞에 `set -u` 가 없다(unbound 오류가 복구 메시지를 가린다).
-#  C5    — 가드 메시지가 원인과 복구 지시를 함께 싣는다. 치환이 없는 하니스에서 cwd 실행을 실제로 막는
-#          것은 비0 종료가 아니라 이 문장이고, 대표 펜스의 stderr 만 재면 나머지 자리는 무방비다.
+#  C5    — 가드 메시지가 정본 문안과 **통째로** 같다(허용되는 꼬리는 reviewing-spec 의 복귀 지시 하나).
+#          치환이 없는 하니스에서 cwd 실행을 실제로 막는 것은 비0 종료가 아니라 이 문장이다. 부분
+#          문자열로 재면 두 문구를 품은 채 뒤에 부정을 붙여 뜻을 뒤집을 수 있다(실측) — 축 3 이 안내
+#          문장에 줄 전체 일치를 쓰는 이유와 같다.
+#  C6    — 루트를 대입하며 가드 모양을 취한 줄은 정본 가드 형태다. 그 줄이 정규식 밖 형태로 다시 쓰이면
+#          그 자리는 C3 · C4 · C5 · 축 2b 에서 통째로 빠지는데, 개수만 세면 「지켜졌다」와 「보이지
+#          않는다」가 구별되지 않는다. 가드 줄 수와 가드를 지나는 펜스 수도 함께 낸다(회계).
 #  행동  — 대표 펜스 둘(SKILL.md 하나 · reference 하나)을 잘라, 무치환 · 변수 없음 · cwd 에
 #          `./plugins/quality-gates/scripts/` 미끼가 있는 조건에서 미끼가 돌지 않고 비0 으로 끝나며
 #          복구 지시가 나오는지, 토큰을 픽스처 루트로 바꾼 조건에서 픽스처 스크립트가 도는지 실행한다.
@@ -33,8 +41,13 @@
 #
 # 재지 못하는 것: 이름만 적힌 스크립트 호출과 「리포 root에서」 같은 산문 루트 진술(실행 지시인지
 # 설명인지 가려야 한다), 치환이 없는 하니스에서 모델이 `Read` 경로를 어떻게 푸는지, `Read` 로 연 파일이
-# 다시 가리키는 2차 포인터, 그리고 태그가 `bash` 가 아닌 펜스(태그 없음 · `sh`) — 축 1b 의 자기 하니스
-# 인자 · 축 2 · 축 2b · C3 · C4 · C5 는 bash 태그 펜스만 본다.
+# 다시 가리키는 2차 포인터, 대입 문법을 벗어난 루트 설정(`printf -v` · `eval` · 배열), 그리고 태그가
+# `bash` 가 아닌 펜스(태그 없음 · `sh`) — 축 1b 의 자기 하니스 인자 · 축 2 · 축 2b · C3 · C4 · C5 · C6 은
+# bash 태그 펜스만 본다. 축 1b 의 자기 하니스 인자는 `X="$(interp … )"` 로 감싼 호출을 놓친다.
+#
+# 재지 «않는» 것: SKILL.md 펜스의 가드 **존재**. 설계 D6 의 결정이다 — 가드 없는 bare 토큰은 치환이
+# 없어도 `/scripts/…` 로 풀려 cwd 로 가지 않는다. 가드가 있는데 cwd fallback 으로 변질되는 경우는
+# 축 2b 가 파일 종류와 무관하게 잡는다.
 #
 # 파싱은 python 으로 한다 — 셸 본문 추출기는 조용히 깨진다.
 set -u
@@ -68,6 +81,15 @@ TOKEN = "${CLAUDE_PLUGIN_ROOT}"
 SENT = ("그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 "
         "`${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 "
         "cwd 에서 찾지 말고 멈춰 보고한다.")
+# 가드 메시지의 정본. 이 문안이 치환 없는 하니스에서 cwd 실행을 막는 실제 컨트롤이라, C5 는 부분
+# 문자열이 아니라 이 문자열과 통째로 맞춘다(축 3 이 SENT 에 쓰는 방식과 같다).
+MSG = ("플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 "
+       "값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라")
+# 유일하게 허용되는 꼬리. reviewing-spec 은 리뷰 없이 끝나는 모든 출구가 이 복귀 지시로 끝난다는 계약을
+# 갖는다(그 skill 의 `ends_with_return`). 「아무 꼬리나 허용」으로 두면 두 문구를 품은 채 뒤에 부정을
+# 붙이는 우회가 통과한다 — 실측(변이 M22).
+RS_TAIL = (" — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 "
+           "요청하라(brainstorming 의 사용자 리뷰 게이트).")
 FM = re.compile(r"\A---\n.*?\n---\n", re.S)
 FOPEN = re.compile(r"^(\s*)```(\S*)\s*$")
 GUARD = re.compile(r'^\s*([A-Za-z_]\w*)="\$\{CLAUDE_PLUGIN_ROOT\}"; \[ -n "\$\1" \] \|\| '
@@ -159,6 +181,8 @@ for _p in files:
             GLOBAL_ROOTVARS.add(_m.group(1))
 
 n_a2 = 0
+n_guard = 0          # GUARD 정규식이 인식한 가드 줄
+n_guard_fence = 0    # 그 가드를 지나는 bash 펜스(펜스당 1)
 ref_with_var = []
 skills = [f for f in files if f.endswith("/SKILL.md")]
 for path in files:
@@ -198,20 +222,32 @@ for path in files:
         if lang != "bash":
             continue
         seen_set_u = None
+        fence_has_guard = False
         for k in range(o + 1, c):
             if SET_U.match(lines[k]):
                 seen_set_u = k
+            # C6 — 루트를 대입하고 가드 모양(뒤에 `;`)을 취한 줄은 정본 가드여야 한다. 이 줄이 정규식
+            # 밖 형태로 다시 쓰이면 그 자리는 C3 · C4 · C5 · 축 2b 에서 통째로 빠지는데, 개수만 세면
+            # 「지켜졌다」와 「보이지 않는다」가 구별되지 않는다.
+            if re.match(r'^\s*[A-Za-z_]\w*="\$\{CLAUDE_PLUGIN_ROOT\}"\s*;', lines[k]) \
+                    and not GUARD.match(lines[k]):
+                emit("C6", path, k + 1, lines[k])
             g = GUARD.match(lines[k])
             if g:
+                n_guard += 1
+                if not fence_has_guard:
+                    fence_has_guard = True
+                    n_guard_fence += 1
                 if "CLAUDE_PLUGIN_ROOT" in g.group(2):
                     emit("C4", path, k + 1, lines[k])
                 if seen_set_u is not None:
                     emit("C3", path, seen_set_u + 1, lines[seen_set_u])
-                # C5 — 메시지가 원인과 복구 지시를 함께 싣는다. 치환이 없는 하니스에서 cwd 실행을
-                # 실제로 막는 것은 비0 종료가 아니라 이 문장이다(설계 §2 의 고리 (2)). 대표 펜스 둘의
-                # stderr 만 재면 나머지 자리에서 문구를 뒤집어도 통과한다.
-                if not all(s in g.group(2) for s in
-                           ("플러그인 루트 미해석", "추측하지 말고(cwd 포함) 멈춰 보고하라")):
+                # C5 — 메시지는 정본 문안과 **통째로** 같다. 치환이 없는 하니스에서 cwd 실행을 실제로
+                # 막는 것은 비0 종료가 아니라 이 문장이고(설계 §2 의 고리 (2)), 부분 문자열로 재면 두
+                # 문구를 품은 채 뒤에 부정을 붙여 뜻을 뒤집을 수 있다 — 축 3 이 안내 문장에 줄 전체
+                # 일치를 쓰는 이유와 같다. 정본은 `[<플러그인>] ` + MSG, reviewing-spec 은 그 뒤에
+                # 복귀 꼬리를 붙인다(그 skill 의 계약).
+                if g.group(2) not in (f"[{p}] {MSG}", f"[{p}] {MSG}{RS_TAIL}"):
                     emit("C5", path, k + 1, lines[k])
     # 축 2b — 가드가 잡은 루트 변수를 같은 펜스에서 cwd 쪽 값으로 다시 대입하지 않는다.
     # 가드는 빈 값에서 멈출 뿐 그 뒤를 보지 않는다. 이 릴리스가 「설치본 skill 은 워킹트리 스크립트를
@@ -226,12 +262,32 @@ for path in files:
             if g:
                 guarded_here.add(g.group(1))
                 continue
-            for v in guarded_here:
-                m = re.match(r"^\s*(?:export\s+)?" + v + r"=(.*)$", lines[k])
-                if (m and TOKEN not in m.group(1)) or re.search(r"\$\{" + v + r":?=", lines[k]):
+            # 규칙은 표기 열거가 아니라 제약이다: **루트 변수는 cwd 에서 만들어지지 않는다.** 대입이
+            # 줄 어디에 있든(복합문 · local/declare/readonly/export · `+=`), 기본값 전개가 어떤
+            # 연산자든(`:-` · `:=` · `-` · `=`), 값이 현재 디렉토리나 상대 `plugins/…` 에서 오면
+            # 위반이다. 가드를 지난 펜스에서는 한 걸음 더 엄격하다 — 우변은 치환 토큰이어야 한다.
+            # 주석은 먼저 떼어 낸다(주석에 토큰을 적어 무력화하는 우회를 막는다).
+            bare = re.sub(r"(^|\s)#.*$", "", lines[k])
+            cwdish = lambda s: bool(re.search(r"\$\(\s*pwd\b|\$\{?PWD\b", s)
+                                    or re.match(r"\.?/?plugins/", s.strip("\"'")))
+            for v in sorted(guarded_here | GLOBAL_ROOTVARS):
+                a = re.search(r"(?:^|[;&|(){}]|\b(?:export|local|declare|typeset|readonly)\s+)\s*"
+                              + v + r"\+?=\s*(\S*)", bare)
+                if a:
+                    rhs = a.group(1).strip("\"'")
+                    if rhs != TOKEN and (cwdish(rhs) or v in guarded_here):
+                        emit("A2B", path, k + 1, lines[k])
+                        break
+                d = re.search(r"\$\{" + v + r"[:+]?[-=?+]([^}]*)\}", bare)
+                if d and (cwdish(d.group(1)) or v in guarded_here):
                     emit("A2B", path, k + 1, lines[k])
                     break
-    # 축 2 — reference 의 루트 사용 펜스
+            # 재료(`$(pwd)`) 자체는 금지하지 않는다 — 코퍼스는 그것을 러너에 넘기는 **프로젝트 경로**
+            # 인자와 사용자 인자 절대화에 정직하게 쓴다(19곳 실측). 제약은 값의 출처가 아니라 **무엇에
+            # 대입되는가**다: 루트 변수가 cwd 에서 만들어지면 위반이고, 그 밖의 변수는 이 축이 아니다.
+    # 축 2 — reference 의 루트 사용 펜스. reference 한정은 설계 D6 이다: SKILL.md 의 가드 없는 bare
+    # 토큰은 치환이 없어도 `/scripts/…` 로 풀려 cwd 로 가지 않는다. 가드가 cwd fallback 으로 변질되는
+    # 경우는 축 2 가 아니라 축 2b 가 파일 종류와 무관하게 잡는다.
     if "/references/" in path:
         body = "\n".join(lines[start:])
         if "CLAUDE_PLUGIN_ROOT" in body:
@@ -321,6 +377,10 @@ for _p in sorted({f.split("/")[1] for f in files}):
         probe = 1
     break
 print(f"N_PROBE\t{probe}")
+# 가드 회계 — 「가드를 지나는 펜스」와 「가드가 있는 펜스」는 같은 수여야 한다. 고정 하한이 아니라
+# 관계다: 가드가 정규식 밖 형태(`printf` 등)로 다시 쓰이면 그 자리는 C3 · C4 · C5 · 축 2b 에서
+# 조용히 빠지는데, 개수를 고정으로 재면 정직한 삭제에 거짓 RED 가 난다.
+print(f"N_GUARD\t{n_guard}\t{n_guard_fence}")
 print(f"N_CORPUS\t{len(files)}")
 print(f"N_A2\t{n_a2}")
 print(f"N_A3\t{len(ref_with_var)}")
@@ -335,7 +395,7 @@ assert_eq "$py_rc" "0" "파서가 끝까지 돌았다 (rc $py_rc)"
 n_corpus="$(val N_CORPUS)"; n_a2="$(val N_A2)"; n_a3="$(val N_A3)"
 [ "${n_corpus:-0}" -ge 30 ] && ok "대상 마크다운 ${n_corpus}개 — vacuous 아님" \
   || no "대상 마크다운이 ${n_corpus:-0}개뿐 — 도출이 무너졌다(글롭 · 경로 변경?)"
-for ax in A1 A1B A2 A2B A3 C3 C4 C5; do
+for ax in A1 A1B A2 A2B A3 C3 C4 C5 C6; do
   n="$(count "$ax")"
   case "$ax" in
     A1)  what="축 1: 본문의 bare 가 아닌 CLAUDE_PLUGIN_ROOT 전개" ;;
@@ -345,7 +405,8 @@ for ax in A1 A1B A2 A2B A3 C3 C4 C5; do
     A3)  what="축 3: reference 를 여는 Read 줄이 절대 형태가 아니거나 안내 문장이 없다" ;;
     C3)  what="C3: 가드 앞의 set -u" ;;
     C4)  what="C4: 가드 메시지 안의 루트 토큰" ;;
-    C5)  what="C5: 가드 메시지에 원인 · 복구 지시가 없다" ;;
+    C5)  what="C5: 가드 메시지가 정본 문안이 아니다" ;;
+    C6)  what="C6: 루트를 대입하는 가드 모양 줄이 정본 가드 형태가 아니다" ;;
   esac
   assert_eq "$n" "0" "$what — ${n}곳"
   [ "$n" -eq 0 ] || show "$ax"
@@ -355,6 +416,15 @@ done
   || no "축 2 대상 reference 펜스가 ${n_a2:-0}곳 — 하한 22 미달(들여쓴 펜스 인식이 무너졌나?)"
 [ "${n_a3:-0}" -ge 2 ] && ok "축 3 대상 reference ${n_a3}개 (하한 2)" \
   || no "축 3 대상 reference 가 ${n_a3:-0}개 — 하한 2 미달"
+# 가드 회계 — 가드 줄 수와 그 가드를 지나는 펜스 수를 함께 낸다. 고정 하한이 아니라 **관계**다:
+# 가드가 정규식 밖 형태로 다시 쓰이면 그 자리는 C3 · C4 · C5 · 축 2b 에서 조용히 빠지는데, 개수를
+# 고정으로 재면 정직한 삭제가 거짓 RED 가 된다. 두 값이 함께 줄면 그 사실이 출력에 남는다.
+n_guard="$(awk -F'\t' '$1=="N_GUARD" {print $2}' "$TMP/report.tsv")"
+n_guard_fence="$(awk -F'\t' '$1=="N_GUARD" {print $3}' "$TMP/report.tsv")"
+[ "${n_guard:-0}" -ge "${n_guard_fence:-0}" ] && [ "${n_guard_fence:-0}" -ge 20 ] \
+  && ok "가드 ${n_guard}줄 / 가드를 지나는 펜스 ${n_guard_fence}곳 — 회계가 선다" \
+  || no "가드 회계가 무너졌다: 가드 ${n_guard:-0}줄 · 펜스 ${n_guard_fence:-0}곳 — 가드가 정규식 밖 형태로 다시 쓰였나(그 자리는 C3 · C4 · C5 · 축 2b 에서 빠진다)"
+
 # 양성 대조 — 자기 하니스 인자 탐지는 대상 스크립트 목록이 비면 조용히 0 을 낸다(부재 락에는 양의 짝).
 [ "$(val N_PROBE)" = "1" ] && ok "축 1b 자기 하니스 탐지 양성 대조 — 합성 단위를 잡는다" \
   || no "축 1b 자기 하니스 탐지가 합성 단위를 잡지 못했다 — 이 축은 이 실행에서 아무것도 재지 않았다"
