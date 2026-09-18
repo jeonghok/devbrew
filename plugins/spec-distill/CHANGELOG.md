@@ -1,5 +1,31 @@
 # Changelog
 
+## [3.2.0] — 2026-09-19
+
+minor 인 이유 — 새 surface 가 셋이다: seed 자리의 문서 리뷰 엔진 배선(재설계 PR 5), 스크립트 셋(`scripts/seed_review_log.py` · `scripts/seed_edit_diff.py` · `scripts/seed_provenance.py`), 번들 조립기의 `--for detect|recritic`. 지운 넷(격리 critic · seed 전용 codex 러너 · 빌더 · 체크리스트)은 `framing-requests` 안에서만 쓰이던 내부 파일이라 이 플러그인 밖의 호출 계약은 바뀌지 않는다. 설계 `docs/superpowers/specs/2026-09-16-framing-intent-drift-design.md`.
+
+### Added
+
+- **seed 리뷰의 처분 주체가 사용자다.** `framing-requests` 가 저자 편집을 처분 뒤로 미루고(단계 순서), 엔진이 라운드 게이트를 열지 않는 `fix` · `ask` 까지 사용자 앞에 올리며, 문구 없는 `drop` 을 라운드 게이트 뒤와 확정 게이트 직전에 막는다(`scripts/seed_review_log.py check-drops` — 엔진 공개 요약의 `dropped` 대 audit `## 6. 리뷰 결정`).
+- **저자 편집 공시.** 헤딩 없는 seed 는 엔진 얼림이 꺼진다 — 기준 사본 diff(`scripts/seed_edit_diff.py`)를 라운드 게이트와 확정 게이트 앞에서 덩어리마다 「그대로 둔다 / 되돌린다」로 처분받는다. 기준 사본은 공시 뒤에만 교체된다.
+- **형성 라운드의 확인 질문.** «원문과 다른 점» 자기보고 블록 대신 풀이를 질문 문구 · 원문과 나란히 놓고 양의 선택으로 묻는다. 압축이 고친 문장의 «(사용자 확인)» 은 `scripts/seed_provenance.py marks` 가 뗀다.
+- **Phase 1 출처 대조.** `/interview` 가 seed 경로에서 audit 경로를 도출해 한 줄로 넘기고, `conducting-interview` 가 `seed_provenance.py classify` 로 출처와 확인을 두 축으로 가른다. `S1` 은 그대로다.
+- **저자 편집 공시는 보인 판본에 묶인다.** `seed_edit_diff.py hunks` 가 비교한 seed 를 기준 사본 옆 `.shown` 에 기록하고, 그 뒤 seed 가 바뀌면 `revert` · `accept` 가 rc 4 로 거부한다 — 공시되지 않은 편집이 기준 사본으로 흡수되지 않는다.
+- **확인과 출처는 문장 단위 일치로 가른다.** `seed_provenance.py` 는 부분 문자열이 아니라 문장 전체가 같아야 확인 · 사용자 출처로 친다 — 압축이 앞을 깎은 문장은 미확인 · 저자로 떨어진다. audit 의 `## 1` · `## 2` 가 없거나 템플릿 절 제목이 중복되면 `unavailable` 로 낸다.
+- **seed audit 의 절 경계는 한 곳에서 계산한다.** `seed_review_log.section_body` 가 템플릿 절 제목에서만 끊는다. 템플릿 절 제목이 중복되면 번들을 만들지 않고(rc 2), 세 원문 자리 안의 제목 모양 줄은 게이트 공시로 올린다(판정 정규식은 `section6.py` 에 둔다).
+- 락: `tests/test_seed_review_profile.sh` · `test_seed_review_log.sh` · `test_seed_edit_diff.sh` · `test_seed_provenance.sh` · `test_framing_review_contract.sh` · `test_seed_input_provenance.sh`.
+
+### Changed
+
+- **seed 프로필** — `ground_truth` 를 줄 단위로(audit `## 1` 전부 · `## 2` 의 «당신이 답한 것» 줄 · `## 6` 의 사용자 문구), 처분 안내에서 `ask` 를 빼고 앵커 리터럴 `#__doc__` 과 세 원문 자리의 비신뢰 경계를 적었다. `decision_log` 이 `## 8.` 에서 `## 6. 리뷰 결정` 으로. 앵커 부류는 비운 채 그대로다.
+- **audit 템플릿** — `## 2` 의 줄 모양(«당신이 답한 것» · 확인 질문), `## 4` 가 엔진 산출물 자리, `## 6. 리뷰 결정` 절 추가.
+- **번들** — 재료 다섯(초안 · `## 1` · `## 2` · `## 6` · CLAUDE.md). 재비판자는 판정 이력 대신 사용자 문구만 받는다.
+- 락: `test_seed_gate_wiring.sh`(차가운 셸 실행) · `test_seed_codex_axes.sh`(옛 파일 부재 + 엔진 양의 짝) 재작성. 상한 락에 framing-requests 숫자 부재 검사(`ABSENT`). 에이전트 하한 20 → 19(`shared/tests/test_variant_of_contract.sh`).
+
+### Removed
+
+- `agents/seed-critic.md` · `scripts/run_seed_codex_reviewer.sh` · `scripts/build_seed_codex_prompt.py` · `scripts/seed-codex-suppression-checklist.md` — seed 자리의 탐지 · codex 는 엔진이 진다.
+
 ## [3.1.1] — 2026-09-15
 
 patch 인 이유 — 새 surface 가 없다. 바뀌는 것은 skill · reference 펜스가 플러그인 루트를 얻는 방식뿐이다.

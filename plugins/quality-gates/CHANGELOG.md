@@ -3,6 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.6.2] — 2026-09-19
+
+### Changed
+
+- **spec-distill 의 seed 전용 codex 러너 · 빌더 삭제에 맞춰 락 셋과 주석을 고쳤다.** `tests/lib/codex_observation.sh` 의 러너 표 · `tests/test_codex_prompt_untrusted_clause.sh` 의 빌더 표와 하한(3 → 2) · `tests/test_agent_model_mutation.sh` 의 에이전트 짝, 그리고 `scripts/runner_common.sh` · `scripts/codex_prompt_common.py`(공용 사본) · `scripts/run_codex_reviewer.sh` · `scripts/run_artifact_codex_reviewer.sh` 의 형제 목록 주석. 동작 변경 없음.
+
 ## [7.6.1] — 2026-09-15
 
 ### Security
