@@ -103,6 +103,7 @@ fi
 assert_contains "$DISC" "위 공시 펜스를 다시 돌려 다시 처분받습니다" "T10-b: rc 4 는 기준 사본을 바꾸지 않고 공시를 다시 돈다"
 assert_contains "$DISC" "처분 하나에 한 번만" "T10-b: revert 는 처분마다 한 번만 — --ids 를 쉼표로 모아 한 번에"
 assert_contains "$DISC" "부르면 매번 «공시됨»으로 기록" "T10-b: hunks 는 사용자에게 보일 자리에서만 부른다"
+assert_contains "$DISC" "rc 4" "fix1 고정: 리터럴 rc 4 가 문구에 있다(rc 3 으로 바뀌면 RED)"
 FIN="$(section "$SK" '^## 확정 — proceed 게이트$')"
 [ -n "$FIN" ] && ok "절 추출: ## 확정" || no "절 추출: ## 확정 이 비었다"
 FB="$(bash_lines "$FIN")"
@@ -172,5 +173,79 @@ cold3() { env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 SD="$ROOT/plugins/
 fd_out="$(cold3 "$T/final_disc.sh")"
 assert_not_contains "$fd_out" "저자 편집 없음" "T10-d: 확정 직전 공시가 기준 사본 부재를 «저자 편집 없음»으로 내지 않는다"
 assert_contains "$(cat "$T/final_disc.sh.err")" "기준 사본이 없다" "T10-d: 확정 직전 공시가 기준 사본 부재를 알린다"
+
+# ── fix round 1, #1 — 확정 직전 표시 검사가 rc1 목록을 삼키지 않는다 ─────────
+nth_bash_with "$FIN" 'seed_provenance.py' > "$T/marks_final.sh"
+mkdir -p "$T/marksA/state"
+cat > "$T/marksA/a.audit.md" <<'EOF'
+---
+type: interview-seed-audit
+---
+
+## 1. 원문
+
+나는 클라이언트 쪽 경합을 의심하는데 확신은 없다.
+
+## 2. 질문 전체
+
+### 라운드 1
+
+- 확인 질문: 라운드 1
+  - 내가 읽은 것: 「세션 스토어 개편은 이번에 하지 않는다 — 다음 분기에 따로 한다.」 — 고름
+  - 내가 읽은 것: 「경합이 원인이다.」 — 고르지 않음
+EOF
+printf -- '---\ntype: interview-seed\n---\n\n경합이 원인이다. (사용자 확인)\n' > "$T/marksA/seed.md"
+coldm() { env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 SD="$ROOT/plugins/spec-distill" STATE_DIR="$T/marksA/state" SEED_ABS="$T/marksA/seed.md" AUDIT_ABS="$T/marksA/a.audit.md" bash "$1" 2>"$1.err"; }
+outA="$(coldm "$T/marks_final.sh")"
+assert_contains "$outA" "경합이 원인이다." "fix1(a): rc1 의 근거 없는 표시 목록이 stdout 에 그대로 남는다(더 이상 /dev/null 로 안 간다)"
+assert_contains "$outA" "marks_rc=1" "fix1(a): marks_rc 도 같은 출력에 함께 보인다"
+
+mkdir -p "$T/marksB/state"
+cat > "$T/marksB/a.audit.md" <<'EOF'
+---
+type: interview-seed-audit
+---
+
+## 1. 원문
+
+사용자가 이렇게 말했다:
+## 2. 질문 전체
+을 확인해 달라고 했다.
+
+## 2. 질문 전체
+
+### 라운드 1
+
+- 확인 질문: 라운드 1
+  - 내가 읽은 것: 「무엇이든」 — 고름
+EOF
+printf -- '---\ntype: interview-seed\n---\n\n문장 하나. (사용자 확인)\n' > "$T/marksB/seed.md"
+cp "$T/marksB/seed.md" "$T/marksB/seed.before"
+coldm2() { env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 SD="$ROOT/plugins/spec-distill" STATE_DIR="$T/marksB/state" SEED_ABS="$T/marksB/seed.md" AUDIT_ABS="$T/marksB/a.audit.md" bash "$1" 2>"$1.err"; }
+coldm2 "$T/marks_final.sh" >/dev/null
+assert_contains "$(cat "$T/marks_final.sh.err")" "표시 검사 불가" "fix1(b): 제목이 중복된(못 믿는) audit 은 «표시 검사 불가» 로 막는다(rc2 ≠ 위반)"
+assert_eq "$(cmp -s "$T/marksB/seed.md" "$T/marksB/seed.before" && echo same)" "same" "fix1(b): 검사 1 은 검사만 — seed 의 sha 가 그대로다"
+
+# ── fix round 1, #2 — revert 실패면 log · accept 를 돌리지 않는다(기준 사본 보존) ─
+mkdir -p "$T/revert1"
+printf 'line one\n' > "$T/revert1/base.md"
+printf 'line one changed\n' > "$T/revert1/seed.md"
+python3 "$S/seed_edit_diff.py" hunks "$T/revert1/base.md" "$T/revert1/seed.md" >/dev/null
+cp "$T/revert1/base.md" "$T/revert1/base.before"
+cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$T/revert1/a.audit.md"
+n6_before="$(grep -c '^- 편집' "$T/revert1/a.audit.md" || true)"
+nth_bash_with "$DISC" 'seed_edit_diff.py" revert' | sed \
+  -e 's/<되돌릴 덩어리 번호, 쉼표로>/99/' \
+  -e 's/<n>/1/' \
+  -e 's/<k>/1/' \
+  -e 's/<그대로 둔다|되돌린다>/되돌린다/' \
+  -e 's/<사용자 문구>/QUOTE/' \
+  -e 's/<덩어리 머리줄>/HEAD/' > "$T/revert_fence.sh"
+coldr() { env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 SD="$ROOT/plugins/spec-distill" SEED_BASE="$T/revert1/base.md" SEED_ABS="$T/revert1/seed.md" AUDIT_ABS="$T/revert1/a.audit.md" bash "$1" 2>"$1.err"; }
+outR="$(coldr "$T/revert_fence.sh")"
+n6_after="$(grep -c '^- 편집' "$T/revert1/a.audit.md" || true)"
+assert_contains "$outR" "rev_rc=2" "fix2: 없는 덩어리 번호(--ids 99) 는 revert rc 2 로 막힌다"
+assert_eq "$(cmp -s "$T/revert1/base.md" "$T/revert1/base.before" && echo same)" "same" "fix2: revert 실패면 기준 사본(accept)이 바뀌지 않는다"
+assert_eq "$n6_after" "$n6_before" "fix2: revert 실패면 log 도 돌지 않는다 — audit ## 6 에 편집 줄이 늘지 않는다"
 
 finish

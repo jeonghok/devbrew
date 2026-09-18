@@ -372,6 +372,7 @@ fi
 mkdir -p "$STATE_DIR"
 python3 "$SD/scripts/seed_provenance.py" marks "$SEED_ABS" "$AUDIT_ABS" --fix; marks_rc=$?
 python3 "$SD/scripts/seed_edit_diff.py" init "$SEED_BASE" "$SEED_ABS"; base_rc=$?
+echo "marks_rc=$marks_rc base_rc=$base_rc"
 ```
 
 `marks` 의 출력이 뗀 표시를 문장째 댑니다 — 그 목록을 사용자에게 한 줄로 보입니다(「확인 뒤 압축이 고쳐
@@ -617,9 +618,11 @@ if ! python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$
 elif ! python3 "$SD/scripts/seed_review_log.py" check-drops "$AUDIT_ABS" "$STATE_DIR/gate-drops.json"; then
   drops_rc=1
 fi
-if [ "$drops_rc" -ne 0 ]; then
-  echo "[spec-distill] 문구 없는 drop 검사 실패(drops_rc=$drops_rc) — 진행하지 않는다. 위 violations 의 항목을 사용자에게 다시 묻고 그 문구로 거부 줄을 적은 뒤 이 펜스를 다시 돌려라." >&2
-fi
+case "$drops_rc" in
+  0) : ;;
+  1) echo "[spec-distill] 문구 없는 drop 검사 실패(drops_rc=1) — 진행하지 않는다. 위 violations 의 항목을 사용자에게 다시 묻고 그 문구로 거부 줄을 적은 뒤 이 펜스를 다시 돌려라." >&2 ;;
+  *) echo "[spec-distill] drop 검사 불가(drops_rc=$drops_rc) — 엔진 요약을 못 읽었다(gate 호출 실패). 진행하지 않는다 — 거부 줄로 풀 수 있는 상태가 아니다." >&2 ;;
+esac
 echo "drops_rc=$drops_rc"
 ```
 
@@ -658,10 +661,19 @@ esac
 전에 교체하면 그 사이의 편집이 영영 안 보입니다.
 
 ```bash
-# <…> 는 게이트의 답으로 채운다. 되돌릴 덩어리가 없으면 첫 줄을 건너뛴다. 기록은 덩어리마다 한 줄.
-python3 "$SD/scripts/seed_edit_diff.py" revert "$SEED_BASE" "$SEED_ABS" --ids "<되돌릴 덩어리 번호, 쉼표로>"
-python3 "$SD/scripts/seed_review_log.py" log "$AUDIT_ABS" --kind 편집 --round "<n>" --target "덩어리 <k> · <그대로 둔다|되돌린다>" --quote "<사용자 문구>" --note "<덩어리 머리줄>"
-python3 "$SD/scripts/seed_edit_diff.py" accept "$SEED_BASE" "$SEED_ABS"
+# <…> 는 게이트의 답으로 채운다. 되돌릴 덩어리가 없으면 첫 줄을 건너뛰고 rev_rc=0 으로 둔다(그러면
+# 아래 log · accept 는 그대로 돈다). 기록은 덩어리마다 한 줄.
+rev_rc=0
+python3 "$SD/scripts/seed_edit_diff.py" revert "$SEED_BASE" "$SEED_ABS" --ids "<되돌릴 덩어리 번호, 쉼표로>" || rev_rc=$?
+if [ "$rev_rc" -eq 0 ]; then
+  python3 "$SD/scripts/seed_review_log.py" log "$AUDIT_ABS" --kind 편집 --round "<n>" --target "덩어리 <k> · <그대로 둔다|되돌린다>" --quote "<사용자 문구>" --note "<덩어리 머리줄>"
+  accept_rc=0
+  python3 "$SD/scripts/seed_edit_diff.py" accept "$SEED_BASE" "$SEED_ABS" || accept_rc=$?
+  echo "accept_rc=$accept_rc"
+else
+  echo "[spec-distill] revert 실패(rev_rc=$rev_rc) — 기준 사본을 교체하지 않는다. 위 공시 펜스를 다시 돌려 이 처분을 다시 받아라." >&2
+fi
+echo "rev_rc=$rev_rc"
 ```
 
 `revert` · `accept` 가 rc 4 를 내면 공시(`hunks`) 뒤에 seed 가 또 바뀐 것입니다 — 기준 사본을 그대로 두고
@@ -825,18 +837,20 @@ git commit -q -F "$SEED_DIR/commit-msg.txt"
 돕니다. 하나라도 막히면 게이트를 띄우지 않습니다 — 막힌 것을 풀고 1번부터 다시 돕니다.
 
 **검사 1 — 표시** — 떼지 않고 검사만 합니다. 근거 없는 «(사용자 확인)» 이 있으면(`marks_rc` 1) 막힙니다 —
-떼는 것도 편집이라 검사 2 에서 사용자 앞에 옵니다. audit 을 판단할 수 없어 표시 자체를 매길 수 없으면
+펜스의 stdout(`invalid` 목록)이 그 문장을 그대로 대므로 그 목록을 게이트 텍스트에 옮겨 싣습니다. 떼는
+것도 편집이라 검사 2 에서 사용자 앞에 옵니다. audit 을 판단할 수 없어 표시 자체를 매길 수 없으면
 (`marks_rc` 2, 위반이 아니다) **떼지 않고** 표시 검사 불가로 막히고, stderr 사유를 게이트 텍스트에
 싣습니다.
 
 ```bash
 marks_rc=0
-marks_err="$(python3 "$SD/scripts/seed_provenance.py" marks "$SEED_ABS" "$AUDIT_ABS" 2>&1 >/dev/null)" || marks_rc=$?
+python3 "$SD/scripts/seed_provenance.py" marks "$SEED_ABS" "$AUDIT_ABS" 2>"$STATE_DIR/marks-final.err" || marks_rc=$?
 case "$marks_rc" in
   0) : ;;
-  1) echo "[spec-distill] 근거 없는 «(사용자 확인)» 표시(marks_rc=1) — 위 목록의 표시를 떼고 이 절을 처음부터 다시 탄다. 게이트를 띄우지 않는다." >&2 ;;
-  *) echo "[spec-distill] 표시 검사 불가(marks_rc=$marks_rc) — ${marks_err}. 게이트를 띄우지 않는다." >&2 ;;
+  1) echo "[spec-distill] 근거 없는 «(사용자 확인)» 표시(marks_rc=1) — 위 목록(stdout 의 invalid)의 표시를 떼고 이 절을 처음부터 다시 탄다. 게이트를 띄우지 않는다." >&2 ;;
+  *) cat "$STATE_DIR/marks-final.err" >&2; echo "[spec-distill] 표시 검사 불가(marks_rc=$marks_rc) — 게이트를 띄우지 않는다." >&2 ;;
 esac
+echo "marks_rc=$marks_rc"
 ```
 
 **검사 2 — 저자 편집 공시** — `### 저자 편집 공시` 의 처분 절차 그대로입니다. 마지막 라운드 뒤의 편집(채택 결정의
@@ -866,7 +880,11 @@ esac
 final_drops_rc=0
 python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$STATE_DIR/gate-final.json" || final_drops_rc=2
 [ "$final_drops_rc" -ne 0 ] || python3 "$SD/scripts/seed_review_log.py" check-drops "$AUDIT_ABS" "$STATE_DIR/gate-final.json" || final_drops_rc=1
-[ "$final_drops_rc" -eq 0 ] || echo "[spec-distill] 문구 없는 drop(final_drops_rc=$final_drops_rc) — 사용자에게 다시 묻고 거부 줄을 적은 뒤 이 절을 다시 탄다." >&2
+case "$final_drops_rc" in
+  0) : ;;
+  1) echo "[spec-distill] 문구 없는 drop(final_drops_rc=1) — 사용자에게 다시 묻고 거부 줄을 적은 뒤 이 절을 다시 탄다." >&2 ;;
+  *) echo "[spec-distill] drop 검사 불가(final_drops_rc=$final_drops_rc) — 엔진 요약을 못 읽었다(gate 호출 실패). 게이트를 띄우지 않는다 — 거부 줄로 풀 수 있는 상태가 아니다." >&2 ;;
+esac
 ```
 
 **검사 4 — 구조** — 아래 `check_seed.py`.
