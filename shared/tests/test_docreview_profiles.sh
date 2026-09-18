@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# guards: plugins/*/references/docreview-profiles/*.md shared/docreview/scripts/docreview_state.py plugins/spec-distill/scripts/build_brief_bundle.py
+# guards: plugins/*/references/docreview-profiles/*.md shared/docreview/scripts/docreview_state.py plugins/spec-distill/scripts/build_brief_bundle.py plugins/spec-distill/scripts/build_seed_inline_blob.py
 #
 # 프로필 넷의 frontmatter 가 열 필드 스키마를 지키고, 스키마를 깨는 변이가 진입 실패(rc 2)인지 잰다.
 set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
   git ls-files -- 'plugins/*/references/docreview-profiles/*.md'
   echo "shared/docreview/scripts/docreview_state.py"
-  echo "plugins/spec-distill/scripts/build_brief_bundle.py"; exit 0
+  echo "plugins/spec-distill/scripts/build_brief_bundle.py"
+  echo "plugins/spec-distill/scripts/build_seed_inline_blob.py"; exit 0
 fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
@@ -152,6 +153,28 @@ mut_expect ask "ask_named" '- 0건은 정직한 답이다.' '- 사용자만 답�
 mut_expect anchor "anchor_literal_missing" '리터럴은 `#__doc__`' '리터럴은 `#doc`'
 mut_expect untrusted 'untrusted_missing:`## 2. 질문 전체`' '`## 2. 질문 전체` · `## 6.' '`## 6.'
 mut_expect ground_truth "gt_answer_line_missing" '«당신이 답한 것» 줄' '질문 전체'
+
+# 번들의 비신뢰 자리 튜플(정본 — build_seed_inline_blob.py 의 UNTRUSTED_VERBATIM_SECTIONS)을 seed
+# 처분 안내가 전부 이름으로 가리키는가. 튜플에서 도출하므로 번들에 넷째 자리가 생기면 프로필이
+# 따라오기 전까지 RED 다(brief 자리의 UNTRUSTED_VERBATIM_MARKERS 대조와 같은 모양).
+SB="$REPO_ROOT/plugins/spec-distill/scripts/build_seed_inline_blob.py"
+SE_SEC="$(awk '/^## 처분 안내/{f=1; next} /^## /{f=0} f' "$SE")"
+SMK="$(python3 -c '
+import ast, sys
+tree = ast.parse(open(sys.argv[1], encoding="utf-8").read())
+for node in tree.body:
+    if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "UNTRUSTED_VERBATIM_SECTIONS" for t in node.targets):
+        for elt in node.value.elts:
+            print(elt.value)
+' "$SB")"
+n_smk=0
+while IFS= read -r mk; do
+  [ -n "$mk" ] || continue
+  n_smk=$((n_smk+1))
+  assert_contains "$SE_SEC" "\`$mk\`" "seed 처분 안내: 번들의 비신뢰 자리 '$mk' 를 이름으로 가리킨다(정본 튜플 대조)"
+done <<<"$SMK"
+[ "$n_smk" -ge 3 ] && ok "seed 처분 안내: 비신뢰 자리 튜플 ${n_smk}개를 도출해 대조했다 (vacuous 아님)" \
+  || no "seed 처분 안내: 튜플을 ${n_smk}개만 도출했다 — UNTRUSTED_VERBATIM_SECTIONS 추출이 깨졌다"
 
 # 변이 — 스키마를 깨면 rc 2 (양성 대조: 위에서 같은 파일이 통과했다)
 sed '/^web:/d' "$DD" > "$TMPD/m1.md"

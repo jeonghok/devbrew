@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""build_seed_inline_blob.py — assembles the seed-suppression review bundle.
+"""build_seed_inline_blob.py — seed 리뷰 번들을 조립한다.
 
-`agents/seed-critic.md` (Claude 쪽 억제 비평자)는 "the draft, the user's raw
-statements, and the repo CLAUDE.md inline, bundled as a single
-`<draft>${BLOB}</draft>` block"을 받는다고 스스로 문서화한다. 이 파일이 그
-`${BLOB}`(바깥 `<draft>` 태그는 제외 — 그건 호출자가 감싼다)을 조립하는 유일한
-코드다. `run_seed_codex_reviewer.sh`의 codex 쪽 리뷰도 같은 세 재료를 봐야
-공정하므로, 이 파일이 만드는 번들을 `run_seed_codex_reviewer.sh <axis> <payload>
-...`의 `<payload>`로 그대로 쓸 수 있다 — 조립 로직이 두 소비자(Claude 격리
-critic · codex)에 각각 따로 있으면 한쪽만 고쳐질 때 두 리뷰어가 다른 재료를 보는
-drift 가 생긴다.
+문서 리뷰 엔진의 seed 자리(`framing-requests` 의 `## 검증`)가 탐지 리뷰어 · codex 러너 · 재비판자에게
+넘기는 문서가 이 파일의 출력이다. 엔진의 `--doc`(스냅숏 · 얼림 검사 대상)은 seed 파일 자신이고,
+리뷰어가 **읽는** 것은 이 번들이다.
 
-세 재료는 **명시적 파일 경로**로만 받는다(argv 인라인 금지 — 형제 프롬프트
-빌더들과 같은 injection-안전 관용구). 자동 유추(예: seed frontmatter 의
-`audit_file:` 필드를 따라가기)는 하지 않는다 — 유추가 실패했을 때의 침묵이
-호출자가 잘못된 재료로 리뷰를 태우는 것보다 나쁘다.
+재료 다섯 — seed 본문 · audit `## 1. 원문` · audit `## 2. 질문 전체` · audit `## 6. 리뷰 결정` ·
+레포 CLAUDE.md. `## 2` 가 없으면 「1번」 같은 짧은 답이 무엇을 확인한 것인지 복원할 수 없다.
 
-Usage: build_seed_inline_blob.py <seed_file> <audit_file> <claude_md_file>
-Stdout: 조립된 번들(초안 + 사용자 원문 + CLAUDE.md).
+소비자별로 갈린다(`--for`):
+  detect   (기본) 탐지 리뷰어 · codex — 다섯 재료 전부.
+  recritic 재비판자 — `## 6` 대신 그 절의 사용자 문구만 뽑은 목록. 판정 이력(결정 id · 라운드 ·
+           채택/기각 · finding id · 요약)이 가면 엔진이 5단계 익명화로 지운 프레이밍이 재비판자에게
+           되돌아간다(엔진 절차서 6단계 — 입력은 문서 · items · 프로필, 그 밖에는 아무것도).
+
+재료는 **명시적 파일 경로**로만 받는다 — seed frontmatter 의 `audit_file:` 을 따라가는 자동 유추는
+하지 않는다. 유추가 실패했을 때의 침묵이 잘못된 재료로 리뷰를 태우는 것보다 나쁘다.
+
+Usage: build_seed_inline_blob.py <seed_file> <audit_file> <claude_md_file> [--for detect|recritic]
 """
 from __future__ import annotations
 
@@ -26,40 +26,49 @@ import pathlib
 import re
 import sys
 
-# check_seed.py 의 frontmatter/원문-절 정규식과 같은 앵커를 쓴다(같은 파일에 대해
-# 다른 정규식을 쓰면 그 파일을 seed 게이트는 통과시키는데 이 조립기는 다르게
-# 읽는 drift 가 생긴다). 이 파일이 그 정규식들을 재사용(import)하지 않고 다시
-# 적는 이유: check_seed.py 의 그것들은 `gate()` 함수 안에 인라인돼 있어 이름 붙은
-# import 대상이 아니고, 이 스크립트가 재는 것(존재 검사)과 여기서 하는 것(내용
-# 추출)은 다른 연산이다 — 강제로 공유 함수를 만들면 그 함수 하나가 두 다른 계약
-# (게이트 통과/거부 · 내용 있는 그대로 추출)을 동시에 지게 된다.
+from seed_review_log import section_body, user_quotes
+
+# 리뷰어에게 비신뢰 verbatim 으로 알릴 audit 자리 — seed 프로필 `## 처분 안내` 가 이 셋을 이름으로
+# 가리킨다(shared/tests/test_docreview_profiles.sh 가 이 튜플에서 도출해 대조한다).
+UNTRUSTED_VERBATIM_SECTIONS = ("## 1. 원문", "## 2. 질문 전체", "## 6. 리뷰 결정")
+
+# check_seed.py 의 frontmatter/원문-절 정규식과 같은 앵커를 쓴다 — 같은 파일을 seed 게이트는
+# 통과시키는데 이 조립기는 다르게 읽는 drift 를 막는다. `## 2` · `## 6` 은 게이트가 보지 않는
+# 절이라 헤딩 줄 일치(`section_body`)로 자른다.
 FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.S)
 RAW_TEXT_SECTION_RE = re.compile(r'^##\s*1\.\s*원문\s*$(.*?)(?=^##\s|\Z)', re.M | re.S)
 
 
 def seed_body(text: str) -> str:
-    """frontmatter 를 뺀 seed 본문. frontmatter 세 줄은 하니스용 메타데이터이고
-    비평자가 읽고 판정할 것은 사람이 읽는 메시지이므로, 리뷰 대상도 본문이어야
-    한다(check_seed.py 의 body_of() 와 같은 이유)."""
+    """frontmatter 를 뺀 seed 본문 — 리뷰 대상은 사람이 읽는 메시지다(check_seed.py 의 body_of 와 같은 이유)."""
     return FRONTMATTER_RE.sub("", text, count=1)
 
 
 def raw_statements(audit_text: str) -> str:
-    """audit 파일의 `## 1. 원문` 절 본문. 없으면 빈 문자열을 낸다 — 호출자가
-    아래 main() 에서 그 빈 문자열을 loud 하게 알린다(조용한 결측 금지)."""
     m = RAW_TEXT_SECTION_RE.search(audit_text)
     return m.group(1).strip() if m else ""
 
 
-def assemble(seed_text: str, audit_text: str, claude_md_text: str) -> str:
-    return (
-        "## 초안 (interview-seed 본문)\n\n"
-        f"{seed_body(seed_text).strip()}\n\n"
-        "## 사용자 원문 (audit `## 1. 원문`)\n\n"
-        f"{raw_statements(audit_text)}\n\n"
-        "## 레포 CLAUDE.md\n\n"
-        f"{claude_md_text.strip()}\n"
-    )
+def _or_none(s: str | None) -> str:
+    s = (s or "").strip()
+    return s if s else "(없음)"
+
+
+def assemble(seed_text: str, audit_text: str, claude_md_text: str, consumer: str = "detect") -> str:
+    parts = [
+        "## 초안 (interview-seed 본문)\n\n" + seed_body(seed_text).strip(),
+        "## 사용자 원문 (audit `## 1. 원문`)\n\n" + raw_statements(audit_text),
+        "## 질문 전체 (audit `## 2. 질문 전체`)\n\n" + _or_none(section_body(audit_text, "## 2. 질문 전체")),
+    ]
+    if consumer == "recritic":
+        qs = user_quotes(audit_text)
+        parts.append("## 사용자 결정 문구 (audit `## 6. 리뷰 결정` 에서 사용자 문구만)\n\n"
+                     + ("\n".join('- "%s"' % q for q in qs) if qs else "(없음)"))
+    else:
+        parts.append("## 리뷰 결정 (audit `## 6. 리뷰 결정`)\n\n"
+                     + _or_none(section_body(audit_text, "## 6. 리뷰 결정")))
+    parts.append("## 레포 CLAUDE.md\n\n" + claude_md_text.strip())
+    return "\n\n".join(parts) + "\n"
 
 
 def main() -> int:
@@ -67,6 +76,7 @@ def main() -> int:
     p.add_argument("seed_file")
     p.add_argument("audit_file")
     p.add_argument("claude_md_file")
+    p.add_argument("--for", dest="consumer", choices=("detect", "recritic"), default="detect")
     args = p.parse_args()
 
     paths = {
@@ -86,8 +96,12 @@ def main() -> int:
     if not raw_statements(audit_text):
         print(f"경고: {paths['audit_file']} 에서 `## 1. 원문` 절을 찾지 못했다 "
               "(비었거나 헤딩이 다르다) — 사용자 원문 없이 조립한다", file=sys.stderr)
+    for heading in ("## 2. 질문 전체", "## 6. 리뷰 결정"):
+        if section_body(audit_text, heading) is None:
+            print(f"경고: {paths['audit_file']} 에 `{heading}` 절이 없다 — 「(없음)」으로 조립한다",
+                  file=sys.stderr)
 
-    sys.stdout.write(assemble(seed_text, audit_text, claude_md_text))
+    sys.stdout.write(assemble(seed_text, audit_text, claude_md_text, args.consumer))
     return 0
 
 
