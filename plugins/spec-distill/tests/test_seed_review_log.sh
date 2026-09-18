@@ -26,7 +26,7 @@ trap 'rm -rf "$TMP"' EXIT
 test -f "$L" || { no "부재: $L"; finish; exit; }
 
 # ── AUDIT_HEADINGS — 여섯 제목이 템플릿의 '## N.' 줄에서 도출된다, 순서까지(fix round 1) ──
-tpl_headings="$(grep -o '^## [0-9][0-9]*\. .*' "$TPL")"
+tpl_headings="$(grep '^## ' "$TPL")"
 py_headings="$(PYTHONPATH="$S" python3 -c '
 import seed_review_log as m
 for h in m.AUDIT_HEADINGS:
