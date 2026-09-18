@@ -12,7 +12,8 @@ minor 인 이유 — 새 surface 가 셋이다: seed 자리의 문서 리뷰 엔
 - **Phase 1 출처 대조.** `/interview` 가 seed 경로에서 audit 경로를 도출해 한 줄로 넘기고, `conducting-interview` 가 `seed_provenance.py classify` 로 출처와 확인을 두 축으로 가른다. `S1` 은 그대로다.
 - **저자 편집 공시는 보인 판본에 묶인다.** `seed_edit_diff.py hunks` 가 비교한 seed 를 기준 사본 옆 `.shown` 에 기록하고, 그 뒤 seed 가 바뀌면 `revert` · `accept` 가 rc 4 로 거부한다 — 공시되지 않은 편집이 기준 사본으로 흡수되지 않는다.
 - **확인과 출처는 문장 단위 일치로 가른다.** `seed_provenance.py` 는 부분 문자열이 아니라 문장 전체가 같아야 확인 · 사용자 출처로 친다 — 압축이 앞을 깎은 문장은 미확인 · 저자로 떨어진다. audit 의 `## 1` · `## 2` 가 없거나 템플릿 절 제목이 중복되면 `unavailable` 로 낸다.
-- **seed audit 의 절 경계는 한 곳에서 계산한다.** `seed_review_log.section_body` 가 템플릿 절 제목에서만 끊는다. 템플릿 절 제목이 중복되면 번들을 만들지 않고(rc 2), 세 원문 자리 안의 제목 모양 줄은 게이트 공시로 올린다(판정 정규식은 `section6.py` 에 둔다).
+- **seed audit 의 절 경계는 한 곳에서 계산한다.** `seed_review_log.section_body` 가 템플릿 절 제목에서만 끊는다. 템플릿 절 제목이 중복되면 번들을 만들지 않고(rc 2), 세 원문 자리 안의 제목 모양 줄은 게이트 공시로 올린다(판정 정규식은 `section6.py` 에 둔다). 붙여 넣은 원문 때문에 막히면 사용자가 「멈춘다 / 그 줄만 인용 표시로 감싼다」를 고른다.
+- **확정 직전 검사는 엔진 자리가 없어도 오진하지 않는다.** 세션 정리로 엔진 자리가 걷혔으면 표시 · 공시 검사가 자리를 다시 만들고(공시는 기준 사본 부재 경로로), 엔진 원장이 없으면 문구 없는 drop 검사가 audit `## 6` 의 엔진 drop 줄로 대조하며 그 사실을 게이트 텍스트에 싣는다. audit 을 읽지 못하면 위반이 아니라 «검사 불가»다(`check-drops` rc 2 를 그대로 넘긴다).
 - 락: `tests/test_seed_review_profile.sh` · `test_seed_review_log.sh` · `test_seed_edit_diff.sh` · `test_seed_provenance.sh` · `test_framing_review_contract.sh` · `test_seed_input_provenance.sh`.
 
 ### Changed

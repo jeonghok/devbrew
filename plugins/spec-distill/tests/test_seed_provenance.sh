@@ -7,10 +7,9 @@
 #              audit 을 못 읽거나 못 믿으면(중복 제목 · 절 누락) 판단을 거부한다(rc 2, 위반이 아니다).
 #   classify — 사용자 원문 그대로의 문장은 확인 표시 없이도 사용자 출처(미확인), 저자 문장은 저자 출처,
 #              audit 을 못 읽으면 전부 저자 · 미확인으로 떨어지고 그 사실을 밝힌다(설계 §10-4).
-#
-# fix round 1: Important #1(부분 문자열이 아니라 문장 단위 일치) · #2(audit 중복 제목 · 절 누락은
-# «읽었다»가 아니다) · 폴드된 사소한 것 셋(비ok audit 에서 --fix 거부 · UnicodeError 도 입력
-# 오류 · --fix 결과 바이트 단위 대조).
+#   경계 — 부분 문자열이 아니라 문장 단위 일치 · audit 중복 제목 · 절 누락은 «읽었다»가 아니다 ·
+#          비ok audit 에서 --fix 거부 · UnicodeError 도 입력 오류 · --fix 결과 바이트 단위 대조 ·
+#          줄바꿈으로 감싼 원문 문장의 뒷토막은 원문 단위가 아니다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 if [ "${1:-}" = "--emit-scanned" ]; then
@@ -137,7 +136,7 @@ assert_eq "$rc" "2" "marks --fix(audit 못 믿음): rc 2"
 assert_eq "$(cmp -s "$TMP/s5.md" "$TMP/s.orig.md" && echo same)" "same" "marks --fix(audit 못 믿음): seed 를 건드리지 않는다"
 assert_contains "$(cat "$TMP/m5.err")" "[spec-distill]" "marks --fix(audit 못 믿음): stderr 에 표준 접두사"
 
-# ── 문장 단위 일치 — 부분 문자열이 아니다(fix round 1 Important #1) ─────────
+# ── 문장 단위 일치 — 부분 문자열이 아니다 ───────────────────────────────────
 cat > "$TMP/b.audit.md" <<'EOF'
 ---
 type: interview-seed-audit
@@ -191,7 +190,40 @@ cls2() { j "$TMP/b2.json" "[(s['provenance'], s['basis']) for s in d['sentences'
 assert_eq "$(cls2 '2FA 를 끈다.')" "('author', 'none')" "classify: ## 1 문장의 일부만 같은 문장은 저자 출처(부분 문자열이던 시절엔 사용자로 잘못 판정)"
 assert_eq "$(cls2 '로그인이 가끔 실패한다')" "('user', 'verbatim')" "classify: 종결부호 없는 ## 1 줄도 그 줄 하나가 seed 문장과 같으면 사용자 원문"
 
-# Task 11 이 의존하는 정확한 경계 — 문단 안에서 두 문장으로 갈린다.
+# ── 줄바꿈으로 감싼 원문 문장의 뒷토막은 원문 단위가 아니다 ────────────────────
+cat > "$TMP/w.audit.md" <<'EOF'
+---
+type: interview-seed-audit
+---
+
+## 1. 원문
+
+나는 클라이언트 쪽 경합을
+의심하는데 확신은 없다.
+
+## 2. 질문 전체
+
+### 라운드 1
+EOF
+cat > "$TMP/w.md" <<'EOF'
+---
+type: interview-seed
+next_phase: spec-distill:interview
+audit_file: w.audit.md
+---
+
+의심하는데 확신은 없다.
+
+나는 클라이언트 쪽 경합을 의심하는데 확신은 없다.
+EOF
+python3 "$P" classify "$TMP/w.md" --audit "$TMP/w.audit.md" > "$TMP/w.json"; rc=$?
+assert_eq "$rc" "0" "classify(감싼 원문) rc 0"
+assert_eq "$(j "$TMP/w.json" 'd["audit"]')" "ok" "전제: 감싼 원문 audit 을 읽었다"
+clsw() { j "$TMP/w.json" "[(s['provenance'], s['basis']) for s in d['sentences'] if s['text'] == '$1'][0]"; }
+assert_eq "$(clsw '의심하는데 확신은 없다.')" "('author', 'none')" "classify: 감싼 원문 문장의 뒷토막만 남은 seed 문장은 저자 출처"
+assert_eq "$(clsw '나는 클라이언트 쪽 경합을 의심하는데 확신은 없다.')" "('user', 'verbatim')" "classify 양성 짝: 감싼 원문 문장 전체는 사용자 원문"
+
+# Phase 1 출처 대조(`/interview`)가 의존하는 정확한 경계 — 문단 안에서 두 문장으로 갈린다.
 cat > "$TMP/e.audit.md" <<'EOF'
 ---
 type: interview-seed-audit
@@ -219,10 +251,10 @@ audit_file: e.audit.md
 EOF
 python3 "$P" classify "$TMP/e.md" --audit "$TMP/e.audit.md" > "$TMP/e.json"
 cls3() { j "$TMP/e.json" "[(s['provenance'], s['confirmed']) for s in d['sentences'] if s['text'].startswith('$1')][0]"; }
-assert_eq "$(cls3 '나는 경합을')" "('user', False)" "Task 11 경계: ## 1 과 같은 첫 문장은 사용자 출처"
-assert_eq "$(cls3 '로그인 화면으로')" "('author', False)" "Task 11 경계: 이어 붙인 둘째 문장은 저자 출처 — 문장 경계가 갈랐다"
+assert_eq "$(cls3 '나는 경합을')" "('user', False)" "Phase 1 경계: ## 1 과 같은 첫 문장은 사용자 출처"
+assert_eq "$(cls3 '로그인 화면으로')" "('author', False)" "Phase 1 경계: 이어 붙인 둘째 문장은 저자 출처 — 문장 경계가 갈랐다"
 
-# ── audit 이 «읽혔다» 가 «믿을 수 있다» 는 아니다(fix round 1 Important #2) ──
+# ── audit 이 «읽혔다» 가 «믿을 수 있다» 는 아니다 ─────────────────────────────
 cat > "$TMP/f.audit.md" <<'EOF'
 ---
 type: interview-seed-audit

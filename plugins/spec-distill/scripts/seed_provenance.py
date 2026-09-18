@@ -11,8 +11,9 @@
 비교 단위 — 공백(줄바꿈 포함)을 한 칸으로 접고 종결부호 앞 공백을 지운 뒤 **문장 단위로 정확히
 같아야**(부분 문자열이 아니다) 확인 · 원문으로 친다. 마크업(백틱 · 별표)은 지우지 않는다. audit
 `## 2` 의 풀이 문장 하나가 통째로 seed 에 남으면 확인이고, `## 1` 의 원문 문장(문단 전체를 이어
-붙인 것과 줄 단위 각각을 모두 단위로 본다) 하나가 통째로 남으면 사용자 원문이다. 압축이 그 문장을
-한 글자라도 고치면 확인 · 원문 어느 쪽도 아니다 — 확인은 저자가 다시 쓸 수 없는 고정점이다.
+붙인 것과, 감싼 문장의 뒷토막이 아닌 줄 단위 각각을 단위로 본다) 하나가 통째로 남으면 사용자
+원문이다. 압축이 그 문장을 한 글자라도 고치면 확인 · 원문 어느 쪽도 아니다 — 확인은 저자가 다시
+쓸 수 없는 고정점이다.
 audit 을 못 읽으면 확인된 풀이와 원문 문장은 0 이다: marks 는 판단을 거부하고(rc 2), classify 는
 전부 저자 · 미확인으로 떨어지며 그 사실을 밝힌다. audit 에 템플릿 제목이 중복되거나(예: `## 2`
 줄이 `## 1` 본문 안에도 심겨 있음) `## 1`/`## 2` 절이 없으면 같은 «못 믿는» 상태로 다룬다.
@@ -77,7 +78,7 @@ def _sentence_units(flat: str) -> list[str]:
 def confirmed_reading_sentences(audit_text: str | None) -> set[str]:
     """`## 2` 의 「…」 — 고름 풀이마다 문장 단위로 쪼갠 집합. seed 문장은 이 집합의 원소와
     **정확히 같아야**(부분 문자열이 아니다) 확인이다 — 풀이 문장 하나가 통째로 살아남으면
-    확인, 압축이 그 문장 경계를 넘나들며 고치면 확인이 아니다(fix round 1 Important #1)."""
+    확인, 압축이 그 문장 경계를 넘나들며 고치면 확인이 아니다."""
     body = section_body(audit_text, "## 2. 질문 전체") if audit_text else None
     readings = [norm(m["t"]) for m in map(READING_RE.match, (body or "").splitlines()) if m]
     out: set[str] = set()
@@ -89,15 +90,21 @@ def confirmed_reading_sentences(audit_text: str | None) -> set[str]:
 def verbatim_units(audit_text: str | None) -> set[str]:
     """`## 1` 원문의 문장 단위 집합 — 문단 전체를 이어 붙여 쪼갠 것과, 줄 하나하나를 각각
     쪼갠 것의 합집합이다. 후자가 있어야 종결부호 없는 대화체 줄(예: 「로그인이 가끔 실패한다」)
-    도 그 줄 하나만으로 사용자 원문 단위가 된다 — 전체를 이어 붙이면 다음 줄과 합쳐져 버린다."""
+    도 그 줄 하나만으로 사용자 원문 단위가 된다 — 전체를 이어 붙이면 다음 줄과 합쳐져 버린다.
+    단, 줄 단위가 전체 단위의 진부분 꼬리이면 뺀다 — 한 문장을 줄바꿈으로 감싼 뒷토막이라
+    그것만 남은 seed 문장은 원문 문장이 아니다."""
     body = section_body(audit_text, "## 1. 원문") if audit_text else None
     if not body:
         return set()
-    out: set[str] = set(_sentence_units(norm(body)))
+    whole: set[str] = set(_sentence_units(norm(body)))
+    out: set[str] = set(whole)
     for line in body.splitlines():
         line_n = norm(line)
-        if line_n:
-            out.update(_sentence_units(line_n))
+        if not line_n:
+            continue
+        for u in _sentence_units(line_n):
+            if not any(len(w) > len(u) and w.endswith(u) for w in whole):
+                out.add(u)
     return out
 
 
@@ -123,11 +130,11 @@ def strip_invalid(text: str, segs: list[dict]) -> str:
 
 
 def _read_audit(path: str | None) -> tuple[str | None, str]:
-    """audit 을 읽고 신뢰할 수 있는지 확인한다. 셋 중 하나라도 걸리면 못 믿는 것으로 친다
-    (fix round 1 Important #2) — `audit_text` 를 None 으로 돌려 하류가 «없음»과 똑같이 다루게
-    한다: (1) 못 읽음, (2) `AUDIT_HEADINGS` 제목이 본문 어딘가에 심겨 중복됨(`section_body` 가
-    첫 occurrence 를 고르므로 `## 1` 본문 안에 `## 2` 로 보이는 줄이 있으면 진짜 `## 2` 를
-    가릴 수 있다), (3) `## 1`/`## 2` 절 자체가 없음."""
+    """audit 을 읽고 신뢰할 수 있는지 확인한다. 셋 중 하나라도 걸리면 못 믿는 것으로 친다 —
+    `audit_text` 를 None 으로 돌려 하류가 «없음»과 똑같이 다루게 한다: (1) 못 읽음,
+    (2) `AUDIT_HEADINGS` 제목이 본문 어딘가에 심겨 중복됨(`section_body` 가 첫 occurrence 를
+    고르므로 `## 1` 본문 안에 `## 2` 로 보이는 줄이 있으면 진짜 `## 2` 를 가릴 수 있다),
+    (3) `## 1`/`## 2` 절 자체가 없음."""
     if not path:
         return None, "unavailable: --audit 없음"
     try:

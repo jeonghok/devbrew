@@ -174,7 +174,7 @@ fd_out="$(cold3 "$T/final_disc.sh")"
 assert_not_contains "$fd_out" "저자 편집 없음" "T10-d: 확정 직전 공시가 기준 사본 부재를 «저자 편집 없음»으로 내지 않는다"
 assert_contains "$(cat "$T/final_disc.sh.err")" "기준 사본이 없다" "T10-d: 확정 직전 공시가 기준 사본 부재를 알린다"
 
-# ── fix round 1, #1 — 확정 직전 표시 검사가 rc1 목록을 삼키지 않는다 ─────────
+# ── 확정 직전 표시 검사가 rc1 목록을 삼키지 않는다 ───────────────────────────
 nth_bash_with "$FIN" 'seed_provenance.py' > "$T/marks_final.sh"
 mkdir -p "$T/marksA/state"
 cat > "$T/marksA/a.audit.md" <<'EOF'
@@ -226,7 +226,7 @@ coldm2 "$T/marks_final.sh" >/dev/null
 assert_contains "$(cat "$T/marks_final.sh.err")" "표시 검사 불가" "fix1(b): 제목이 중복된(못 믿는) audit 은 «표시 검사 불가» 로 막는다(rc2 ≠ 위반)"
 assert_eq "$(cmp -s "$T/marksB/seed.md" "$T/marksB/seed.before" && echo same)" "same" "fix1(b): 검사 1 은 검사만 — seed 의 sha 가 그대로다"
 
-# ── fix round 1, #2 — revert 실패면 log · accept 를 돌리지 않는다(기준 사본 보존) ─
+# ── revert 실패면 log · accept 를 돌리지 않는다(기준 사본 보존) ────────────────
 mkdir -p "$T/revert1"
 printf 'line one\n' > "$T/revert1/base.md"
 printf 'line one changed\n' > "$T/revert1/seed.md"
@@ -247,5 +247,62 @@ n6_after="$(grep -c '^- 편집' "$T/revert1/a.audit.md" || true)"
 assert_contains "$outR" "rev_rc=2" "fix2: 없는 덩어리 번호(--ids 99) 는 revert rc 2 로 막힌다"
 assert_eq "$(cmp -s "$T/revert1/base.md" "$T/revert1/base.before" && echo same)" "same" "fix2: revert 실패면 기준 사본(accept)이 바뀌지 않는다"
 assert_eq "$n6_after" "$n6_before" "fix2: revert 실패면 log 도 돌지 않는다 — audit ## 6 에 편집 줄이 늘지 않는다"
+
+# ── 확정 직전 검사 셋 — 엔진 자리가 사라졌거나(세션 정리) 라운드가 시작되지 않았을 때 ──
+coldx() {   # coldx <펜스 파일> <VAR=값 …> — 차가운 셸에서 펜스를 돌리고 stderr 는 <펜스 파일>.err 로
+  f="$1"; shift
+  env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 SD="$ROOT/plugins/spec-distill" "$@" bash "$f" 2>"$f.err"
+}
+nth_bash_with "$FIN" 'gate-final.json' > "$T/final_drops.sh"
+[ -s "$T/final_drops.sh" ] && ok "추출: 확정 직전 drop 검사 펜스" || no "추출: 확정 직전 drop 검사 펜스가 비었다 — 아래 판정은 무의미하다"
+mkdir -p "$T/gc"
+cp "$T/marksA/a.audit.md" "$T/gc/a.audit.md"
+printf -- '---\ntype: interview-seed\n---\n\n세션 스토어 개편은 이번에 하지 않는다 — 다음 분기에 따로 한다. (사용자 확인)\n' > "$T/gc/seed.md"
+# (i) 검사 1 · 2 — 없는 엔진 자리 디렉토리를 리다이렉트 실패로 오진하지 않는다
+out_i1="$(coldx "$T/marks_final.sh" STATE_DIR="$T/gc/gone1" SEED_ABS="$T/gc/seed.md" AUDIT_ABS="$T/gc/a.audit.md")"
+assert_contains "$out_i1" "marks_rc=0" "I2 검사 1: 엔진 자리가 사라져도 표시 검사는 실제 결과(근거 있는 표시 → 0)를 낸다"
+assert_not_contains "$(cat "$T/marks_final.sh.err")" "근거 없는" "I2 검사 1: 빈 목록으로 «근거 없는 표시» 를 내지 않는다"
+[ -d "$T/gc/gone1" ] && ok "I2 검사 1: 사라진 엔진 자리를 다시 만든다" || no "I2 검사 1: 사라진 엔진 자리를 다시 만들지 않았다"
+coldx "$T/final_disc.sh" STATE_DIR="$T/gc/gone2" SEED_BASE="$T/gc/gone2/seed-baseline.md" SEED_ABS="$T/gc/seed.md" >/dev/null
+assert_contains "$(cat "$T/final_disc.sh.err")" "기준 사본이 없다" "I2 검사 2: 엔진 자리가 사라지면 기준 사본 부재(rc 3) 경로로 간다"
+assert_not_contains "$(cat "$T/final_disc.sh.err")" "(rc 1)" "I2 검사 2: 리다이렉트 실패(rc 1)로 오진하지 않는다"
+# (ii) 엔진 원장 없음 + audit ## 6 에 drop 줄 없음 — 라운드가 시작되지 않은 세션
+mkdir -p "$T/nl/state"
+cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$T/nl/a.audit.md"
+out_ii="$(coldx "$T/final_drops.sh" STATE_DIR="$T/nl/state" AUDIT_ABS="$T/nl/a.audit.md")"
+assert_contains "$out_ii" "final_drops_rc=0" "I1 검사 3: 라운드가 시작되지 않은 세션도 확정 게이트에 닿는다"
+assert_contains "$(cat "$T/final_drops.sh.err")" "엔진 원장 없음" "I1 검사 3: 엔진 원장 없이 audit ## 6 으로 대조했다고 밝힌다"
+# (iii) 엔진 원장 없음(세션 정리로 자리째 걷힘) + 문구가 빈 엔진 drop 줄
+mkdir -p "$T/gcd"
+cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$T/gcd/a.audit.md"
+printf -- '- D1.1 · r1 · drop · ffff0001#r1.1 · "" — GC_DROP 요약\n' >> "$T/gcd/a.audit.md"
+out_iii="$(coldx "$T/final_drops.sh" STATE_DIR="$T/gcd/gone" AUDIT_ABS="$T/gcd/a.audit.md")"
+assert_contains "$out_iii" "final_drops_rc=1" "I1 검사 3: 엔진 원장이 걷혀도 audit 에 기록된 문구 없는 drop 은 막는다"
+python3 "$S/seed_review_log.py" log "$T/gcd/a.audit.md" --kind 거부 --round 1 --target "ffff0001#r1.1" --quote "GC_USER_REFUSE" --note "다시 물어 받은 문구" >/dev/null
+assert_contains "$(coldx "$T/final_drops.sh" STATE_DIR="$T/gcd/gone" AUDIT_ABS="$T/gcd/a.audit.md")" "final_drops_rc=0" "I1 검사 3 양성 대조: 같은 항목에 거부 줄을 채우면 통과한다"
+# (iv) UTF-8 이 아닌 audit — 엔진 원장은 있다. drop 검사는 «검사 불가»(rc 2)지 «거부 줄을 적어라» 가 아니다
+printf '## 6. 리뷰 결정\n\n- \377\376 깨진 줄\n' > "$T/bad.audit.md"
+out_iv="$(coldx "$T/final_drops.sh" STATE_DIR="$D" AUDIT_ABS="$T/bad.audit.md")"
+assert_contains "$out_iv" "final_drops_rc=2" "I3 검사 3: audit 을 못 읽으면 rc 2 가 그대로 온다(1 로 눌리지 않는다)"
+assert_contains "$(cat "$T/final_drops.sh.err")" "drop 검사 불가" "I3 검사 3: «검사 불가» 로 알린다"
+assert_not_contains "$(cat "$T/final_drops.sh.err")" "거부 줄을 적은" "I3 검사 3: 거부 줄로 풀라는 지시를 내지 않는다"
+assert_not_contains "$(cat "$T/final_drops.sh.err")" "Traceback" "check-drops 가 UTF-8 이 아닌 audit 에 트레이스백을 내지 않는다"
+assert_contains "$(coldx "$T/drops.sh" STATE_DIR="$D" AUDIT_ABS="$T/bad.audit.md")" "drops_rc=2" "I3 라운드 게이트: audit 을 못 읽으면 drops_rc 2(1 로 눌리지 않는다)"
+assert_not_contains "$(cat "$T/drops.sh.err")" "거부 줄을 적은" "I3 라운드 게이트: 거부 줄로 풀라는 지시를 내지 않는다"
+# 엔진 자리 변수가 비었다 — 검사 1 은 한 줄로 알리고 실제 결과를, 검사 2 · 3 은 «검사 불가»
+out_e1="$(coldx "$T/marks_final.sh" STATE_DIR= SEED_ABS="$T/gc/seed.md" AUDIT_ABS="$T/gc/a.audit.md")"
+assert_contains "$out_e1" "marks_rc=0" "빈 STATE_DIR: 검사 1 은 실제 표시 결과를 낸다"
+assert_contains "$(cat "$T/marks_final.sh.err")" "리뷰 엔진 자리 없음" "빈 STATE_DIR: 검사 1 이 한 줄로 알린다"
+coldx "$T/final_disc.sh" STATE_DIR= SEED_BASE= SEED_ABS="$T/gc/seed.md" >/dev/null
+assert_contains "$(cat "$T/final_disc.sh.err")" "검사 불가" "빈 STATE_DIR: 검사 2 는 «검사 불가»"
+assert_contains "$(coldx "$T/final_drops.sh" STATE_DIR= AUDIT_ABS="$T/nl/a.audit.md")" "final_drops_rc=2" "빈 STATE_DIR: 검사 3 은 «검사 불가»(rc 2)"
+
+# ── 템플릿 절 제목 중복의 출구 · 검사 2 뒤 되돌림 · 풀이 한 문장 ────────────────
+BUN="$(subsection "$SK" '^### 번들')"
+assert_contains "$BUN" "그 줄만 인용 표시로 감싼다" "I4: 중복 제목으로 막힌 번들의 출구 — 「멈춘다 / 감싼다」 를 묻는다"
+assert_contains "$BUN" "append-only 의 유일한 예외" "I4: 감싸기는 ## 1 append-only 의 유일한 예외다"
+assert_contains "$FIN" "템플릿 절 제목 중복 절차" "I4: 확정 검사 1 의 rc 2 가 그 출구를 가리킨다"
+assert_contains "$FIN" "「되돌린다」를 받으면 검사 1 부터" "검사 2 에서 되돌리면 검사 1 부터 다시 돈다"
+assert_contains "$CQ" "풀이는 한 문장으로 쓴다" "여러 문장 풀이는 문장마다 표시한다(대조는 문장 단위)"
 
 finish

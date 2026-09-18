@@ -18,11 +18,10 @@
 하지 않는다. 유추가 실패했을 때의 침묵이 잘못된 재료로 리뷰를 태우는 것보다 나쁘다.
 
 세 verbatim 절(`UNTRUSTED_VERBATIM_SECTIONS`)의 경계와 중복은 `seed_review_log.section_body` ·
-`duplicate_headings` 한 곳이 정한다(fix round 1) — 이 파일이 자기 정규식으로 절을 다시 자르면
-audit 템플릿 제목이 아닌 임의의 `## ` 줄에서 잘리거나(truncation), 비신뢰 본문 안에 심긴 가짜
-제목 줄이 진짜 절을 가릴 수 있다(hijacking, Important #1b/#1c). `duplicate_headings` 가 하나라도
-잡으면 조립하지 않는다 — 어느 occurrence 가 진짜인지 이 코드가 골라 버리면 그 선택 자체가
-공격 표면이 된다.
+`duplicate_headings` 한 곳이 정한다 — 이 파일이 자기 정규식으로 절을 다시 자르면 audit 템플릿
+제목이 아닌 임의의 `## ` 줄에서 잘리거나(truncation), 비신뢰 본문 안에 심긴 가짜 제목 줄이 진짜
+절을 가릴 수 있다(hijacking). `duplicate_headings` 가 하나라도 잡으면 조립하지 않는다 — 어느
+occurrence 가 진짜인지 이 코드가 골라 버리면 그 선택 자체가 공격 표면이 된다.
 
 Usage: build_seed_inline_blob.py <seed_file> <audit_file> <claude_md_file> [--for detect|recritic]
 """
@@ -45,22 +44,21 @@ from seed_review_log import duplicate_headings, section_body, user_quotes  # noq
 # 리뷰어에게 비신뢰 verbatim 으로 알릴 audit 자리 — seed 프로필 `## 처분 안내` 가 이 셋을 이름으로
 # 가리킨다(shared/tests/test_docreview_profiles.sh 가 이 튜플에서 도출해 대조한다). assemble() 은
 # 이 튜플을 **읽어서** 헤딩 문구와 `section_body` 조회 키를 만든다 — 같은 문자열을 따로 다시
-# 타이핑하지 않는다(fix round 1 Important #2 — 넷째 자리가 생기거나 헤딩이 바뀌어도 락이 조용히
-# 통과하던 결함).
+# 타이핑하면 넷째 자리가 생기거나 헤딩이 바뀌어도 락이 조용히 통과한다.
 UNTRUSTED_VERBATIM_SECTIONS = ("## 1. 원문", "## 2. 질문 전체", "## 6. 리뷰 결정")
 
 FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.S)
 
 # 비신뢰 절 본문 안에서 CommonMark 가 실제 헤딩으로 렌더할 줄(들여쓰기 0–3칸 + ATX `#`) — 리뷰어가
-# 읽는 번들에서 위조 절 제목처럼 보일 수 있다(fix round 1 Important #1a). 절 경계 자체는 이 정규식이
-# 끊지 않는다(그건 seed_review_log.section_body 가 audit 템플릿 제목으로만 막는다) — 여기서는
-# stderr 경고만 내고 본문 바이트는 그대로 둔다(비신뢰 원문 보존이 우선). 판정 자체는
-# `section6.HEADING_SHAPED_RE` — 같은 패턴을 여기서 다시 정의하지 않는다(§6-단일화 락).
+# 읽는 번들에서 위조 절 제목처럼 보일 수 있다. 절 경계 자체는 이 정규식이 끊지 않는다(그건
+# seed_review_log.section_body 가 audit 템플릿 제목으로만 막는다) — 여기서는 stderr 경고만 내고
+# 본문 바이트는 그대로 둔다(비신뢰 원문 보존이 우선). 판정 자체는 `section6.HEADING_SHAPED_RE` —
+# 같은 패턴을 여기서 다시 정의하지 않는다(§6-단일화 락).
 
 # audit 템플릿이 `## 2. 질문 전체` 안에서 라운드마다 쓰는 고정 제목(`interview-seed-audit-template.md`
 # 의 `### 라운드 <n>`) — 사용자 문구가 아니라 호스트가 매 라운드 똑같이 쓰는 스캐폴드라 위 경고에서
-# 뺀다(fix round 1 controller ruling — 이 줄까지 매번 경고하면 정상 seed 마다 늘 시끄러워 신호를
-# 잃는다). 그 밖의 heading-모양 줄(예: 사용자 답 뒤에 붙은 `# 다른 제목`)은 여전히 걸린다.
+# 뺀다 — 이 줄까지 매번 경고하면 정상 seed 마다 늘 시끄러워 신호를 잃는다. 그 밖의 heading-모양
+# 줄(예: 사용자 답 뒤에 붙은 `# 다른 제목`)은 여전히 걸린다.
 ROUND_SCAFFOLD_RE = re.compile(r'^### 라운드 \d+$')
 
 

@@ -193,6 +193,8 @@ AskUserQuestion({ questions: [
 
 - **고른 풀이만 확인이다.** 고르지 않은 것 · «기타» 로 다른 말을 적은 것 · 답하지 않은 질문의 풀이는
   전부 미확인이다. «(사용자 확인)» 표시는 이 선택에서만 나온다.
+- **풀이는 한 문장으로 쓴다.** 여러 문장이면 seed 에 남긴 문장마다 «(사용자 확인)» 을 따로 붙인다 —
+  확인 대조는 문장 단위다.
 - **한 질문의 선택지는 2~4개다**(도구 스키마). 풀이를 넷씩 나눠 확인 질문을 여럿 싣되(한 호출에 질문
   넷까지 — 넘치면 다음 호출), **선택지가 하나만 남는 질문은 만들지 않는다** — 넷씩 나누다 하나가
   남으면 마지막 두 질문을 둘 이상씩으로 나눈다(예: 5 → 3+2). **나뉜 질문 전부에 답해야** 그 라운드의
@@ -424,6 +426,13 @@ fi
 
 이 펜스가 stderr 로 낸 `[spec-distill]` 줄은 그 라운드 게이트 공시(첫 질문의 텍스트)에 글자 그대로 싣습니다 — `bundle_rc` 가 0 이 아니면 위 degrade 경로를 따릅니다.
 
+**audit 템플릿 절 제목이 중복되면** — stderr 가 템플릿 제목이 여러 번 나온다고 대면(조립기의 「… 가 N번(줄 …)
+나온다」 · `marks` 의 `duplicate_heading`) 사용자가 붙여 넣은 원문에 그 제목과 같은 줄이 있는 것이고, 손대지
+않으면 매 라운드 같은 자리에서 막힙니다. 단독 `AskUserQuestion` 으로 「멈춘다 / 그 줄만 인용 표시로 감싼다」를
+묻습니다. 「감싼다」면 audit `## 1. 원문` 안의 그 줄(들) 맨 앞에 `> ` 만 붙이고 나머지 글자는 그대로 둡니다 —
+`## 1` append-only 의 유일한 예외입니다. 그 선택과 사용자 문구를 audit `## 5. degrade` 에 한 줄로 남기고
+`### 번들` 부터 다시 돕니다.
+
 ### 프로필 내용 — 탐지 dispatch 직전마다
 
 ```bash
@@ -615,13 +624,13 @@ fi
 drops_rc=0
 if ! python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$STATE_DIR/gate-drops.json"; then
   drops_rc=2
-elif ! python3 "$SD/scripts/seed_review_log.py" check-drops "$AUDIT_ABS" "$STATE_DIR/gate-drops.json"; then
-  drops_rc=1
+else
+  python3 "$SD/scripts/seed_review_log.py" check-drops "$AUDIT_ABS" "$STATE_DIR/gate-drops.json" || drops_rc=$?
 fi
 case "$drops_rc" in
   0) : ;;
   1) echo "[spec-distill] 문구 없는 drop 검사 실패(drops_rc=1) — 진행하지 않는다. 위 violations 의 항목을 사용자에게 다시 묻고 그 문구로 거부 줄을 적은 뒤 이 펜스를 다시 돌려라." >&2 ;;
-  *) echo "[spec-distill] drop 검사 불가(drops_rc=$drops_rc) — 엔진 요약을 못 읽었다(gate 호출 실패). 진행하지 않는다 — 거부 줄로 풀 수 있는 상태가 아니다." >&2 ;;
+  *) echo "[spec-distill] drop 검사 불가(drops_rc=$drops_rc) — 엔진 요약이나 audit 을 읽지 못했다(위 stderr). 진행하지 않는다 — 거부 줄로 풀 수 있는 상태가 아니다." >&2 ;;
 esac
 echo "drops_rc=$drops_rc"
 ```
@@ -661,7 +670,7 @@ esac
 전에 교체하면 그 사이의 편집이 영영 안 보입니다.
 
 ```bash
-# <…> 는 게이트의 답으로 채운다. 되돌릴 덩어리가 없으면 첫 줄을 건너뛰고 rev_rc=0 으로 둔다(그러면
+# <…> 는 게이트의 답으로 채운다. 되돌릴 덩어리가 없으면 `revert` 줄을 건너뛰고 rev_rc=0 으로 둔다(그러면
 # 아래 log · accept 는 그대로 돈다). 기록은 덩어리마다 한 줄.
 rev_rc=0
 python3 "$SD/scripts/seed_edit_diff.py" revert "$SEED_BASE" "$SEED_ABS" --ids "<되돌릴 덩어리 번호, 쉼표로>" || rev_rc=$?
@@ -759,7 +768,7 @@ codex 부재 · 재비판 부재는 이 표에 없습니다 — 엔진이 `advis
 항목의 최신 mtime**(링크는 따라가지 않는다)이고, TTL(기본 24시간, env override)을 넘기면 폴더가 통째로
 걷힙니다 — 리뷰 원장도 함께입니다. 리뷰 도중 그렇게 걷히면 엔진 호출이 `state_missing` 으로 죽고, 저자 편집
 공시는 기준 사본 부재(`### 저자 편집 공시` 의 rc 3 경로)로 떨어집니다. 사용자 결정은 audit `## 6. 리뷰 결정`
-에 남아 있어 잃지 않습니다.
+에 남아 있어 잃지 않고, 확정 직전 drop 검사는 엔진 원장 없이 그 기록으로 대조합니다(`### 게이트 직전` 검사 3).
 
 **냉독 축도 죽을 수 있고, 죽으면 여기 보입니다.** 그 축의 입력은 `${SEED_TEXT}` 이고 그 출처는 `### 냉독` 의
 `cat "$SEED"` 입니다 — `$SEED` 가 비면 냉독은 아무 내용도 없이 돌게 되므로 **돌리지 않습니다**. 리뷰 축은
@@ -840,25 +849,32 @@ git commit -q -F "$SEED_DIR/commit-msg.txt"
 펜스의 stdout(`invalid` 목록)이 그 문장을 그대로 대므로 그 목록을 게이트 텍스트에 옮겨 싣습니다. 떼는
 것도 편집이라 검사 2 에서 사용자 앞에 옵니다. audit 을 판단할 수 없어 표시 자체를 매길 수 없으면
 (`marks_rc` 2, 위반이 아니다) **떼지 않고** 표시 검사 불가로 막히고, stderr 사유를 게이트 텍스트에
-싣습니다.
+싣습니다. 그 사유가 `duplicate_heading` 이면 `### 번들` 뒤의 템플릿 절 제목 중복 절차로 풉니다.
 
 ```bash
+# 검사 2 · 3 이 엔진 자리에 파일을 쓴다 — 세션 정리로 디렉토리가 사라졌으면 다시 만든다.
+if [ -n "${STATE_DIR:-}" ]; then mkdir -p "$STATE_DIR"; else echo "[spec-distill] 리뷰 엔진 자리 없음(STATE_DIR 빈 값) — 「## 상태」 블록을 이 펜스 앞에 이어 붙여라. 검사 2 · 3 은 «검사 불가»로 막힌다." >&2; fi
 marks_rc=0
-python3 "$SD/scripts/seed_provenance.py" marks "$SEED_ABS" "$AUDIT_ABS" 2>"$STATE_DIR/marks-final.err" || marks_rc=$?
+python3 "$SD/scripts/seed_provenance.py" marks "$SEED_ABS" "$AUDIT_ABS" || marks_rc=$?
 case "$marks_rc" in
   0) : ;;
   1) echo "[spec-distill] 근거 없는 «(사용자 확인)» 표시(marks_rc=1) — 위 목록(stdout 의 invalid)의 표시를 떼고 이 절을 처음부터 다시 탄다. 게이트를 띄우지 않는다." >&2 ;;
-  *) cat "$STATE_DIR/marks-final.err" >&2; echo "[spec-distill] 표시 검사 불가(marks_rc=$marks_rc) — 게이트를 띄우지 않는다." >&2 ;;
+  *) echo "[spec-distill] 표시 검사 불가(marks_rc=$marks_rc) — 사유는 위 stderr. 게이트를 띄우지 않는다." >&2 ;;
 esac
 echo "marks_rc=$marks_rc"
 ```
 
 **검사 2 — 저자 편집 공시** — `### 저자 편집 공시` 의 처분 절차 그대로입니다. 마지막 라운드 뒤의 편집(채택 결정의
-반영 · ③ 뒤에 다시 깎은 것)이 사용자 앞에 오는 유일한 자리입니다.
+반영 · ③ 뒤에 다시 깎은 것)이 사용자 앞에 오는 유일한 자리입니다. 덩어리 하나라도 「되돌린다」를 받으면 검사 1 부터
+다시 돕니다 — 되돌리기가 검사 1 뒤에 뗀 표시를 되살릴 수 있습니다.
 
 ```bash
 final_hunks_rc=0
-python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" > "$STATE_DIR/hunks-final.json" || final_hunks_rc=$?
+if [ -z "${STATE_DIR:-}" ] || [ -z "${SEED_BASE:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
+  final_hunks_rc=2
+else
+  python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" > "$STATE_DIR/hunks-final.json" || final_hunks_rc=$?
+fi
 case "$final_hunks_rc" in
   0) python3 -c '
 import json, sys
@@ -870,21 +886,39 @@ for h in d["hunks"]:
     print()
 ' "$STATE_DIR/hunks-final.json" ;;
   3) echo "[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자 편집을 비교할 수 없다. seed 전문을 보이고 「이대로 둔다 / 멈춘다」를 물어라. 게이트를 띄우지 않는다." >&2 ;;
-  *) echo "[spec-distill] 확정 직전 공시 실패(rc $final_hunks_rc) — 게이트를 띄우지 않는다." >&2 ;;
+  *) echo "[spec-distill] 확정 직전 공시 검사 불가(rc $final_hunks_rc) — 엔진 자리가 없거나(STATE_DIR='${STATE_DIR:-}') 입력을 읽지 못했다. 게이트를 띄우지 않는다." >&2 ;;
 esac
 ```
 
-**검사 3 — 문구 없는 drop** — `### 게이트` 의 검사와 같습니다.
+**검사 3 — 문구 없는 drop** — `### 게이트` 의 검사와 같습니다. 엔진 원장(`$STATE_DIR/docreview-state.md`)이
+없으면 — 라운드가 시작되지 않았거나 세션 정리로 걷혔다 — `gate` 를 부르지 않고 audit `## 6. 리뷰 결정` 의 엔진
+drop 줄로 대조하며, 펜스가 내는 «엔진 원장 없음» 줄을 게이트 텍스트에 싣습니다.
 
 ```bash
 final_drops_rc=0
-python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$STATE_DIR/gate-final.json" || final_drops_rc=2
-[ "$final_drops_rc" -ne 0 ] || python3 "$SD/scripts/seed_review_log.py" check-drops "$AUDIT_ABS" "$STATE_DIR/gate-final.json" || final_drops_rc=1
+if [ -z "${STATE_DIR:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
+  final_drops_rc=2
+elif [ -f "$STATE_DIR/docreview-state.md" ]; then
+  python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$STATE_DIR/gate-final.json" || final_drops_rc=2
+else
+  # 엔진 원장이 없다 — dropped 를 audit ## 6 의 엔진 drop 줄에서 만든다. 기록된 drop 마다 문구가 있는지는 그대로 잰다.
+  python3 -c '
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from seed_review_log import parse_lines
+text = open(sys.argv[2], encoding="utf-8").read()
+ids = [i for e in parse_lines(text) if e["source"] == "engine" and e["choice"] == "drop" for i in e["ids"]]
+json.dump({"dropped": ids}, open(sys.argv[3], "w", encoding="utf-8"), ensure_ascii=False)
+' "$SD/scripts" "$AUDIT_ABS" "$STATE_DIR/gate-final.json" || final_drops_rc=2
+  [ "$final_drops_rc" -ne 0 ] || echo '[spec-distill] 엔진 원장 없음 — audit `## 6` 기록으로 대조했다. 엔진이 audit 에 적지 않은 drop 은 이 대조에 보이지 않는다.' >&2
+fi
+[ "$final_drops_rc" -ne 0 ] || python3 "$SD/scripts/seed_review_log.py" check-drops "$AUDIT_ABS" "$STATE_DIR/gate-final.json" || final_drops_rc=$?
 case "$final_drops_rc" in
   0) : ;;
   1) echo "[spec-distill] 문구 없는 drop(final_drops_rc=1) — 사용자에게 다시 묻고 거부 줄을 적은 뒤 이 절을 다시 탄다." >&2 ;;
-  *) echo "[spec-distill] drop 검사 불가(final_drops_rc=$final_drops_rc) — 엔진 요약을 못 읽었다(gate 호출 실패). 게이트를 띄우지 않는다 — 거부 줄로 풀 수 있는 상태가 아니다." >&2 ;;
+  *) echo "[spec-distill] drop 검사 불가(final_drops_rc=$final_drops_rc) — 엔진 자리 · 엔진 요약 · audit 중 하나를 읽지 못했다(위 stderr). 게이트를 띄우지 않는다 — 거부 줄로 풀 수 있는 상태가 아니다." >&2 ;;
 esac
+echo "final_drops_rc=$final_drops_rc"
 ```
 
 **검사 4 — 구조** — 아래 `check_seed.py`.

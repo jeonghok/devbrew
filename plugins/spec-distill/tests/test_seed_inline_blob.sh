@@ -7,7 +7,7 @@
 #
 # 재는 것: 재료 다섯의 실림과 순서 · seed frontmatter 제거 · 재료별 부재 exit 2 · 절 부재의
 # 소리 · **재비판 번들에 `## 6` 의 판정 이력 줄이 0건**(AC11) · 두 변이(갈래를 지우면 AC11 이 RED,
-# frontmatter 제거를 지우면 누출 단언이 RED). fix round 1: 비신뢰 `## 1` 안의 임의 `## ` 줄이
+# frontmatter 제거를 지우면 누출 단언이 RED) · 비신뢰 `## 1` 안의 임의 `## ` 줄이
 # 절을 자르지 않는가(truncation) · 같은 audit 제목이 두 번 나오면 조립을 거절하는가(hijacking,
 # exit 2 · stdout 없음) · heading-모양 줄 경고가 뜨면서도 진짜 문구는 여전히 실리는가(forging) ·
 # 정상 fixture 는 경고가 0건인가(음성 짝, `### 라운드 <n>` 스캐폴드 예외) · 번들의

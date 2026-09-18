@@ -37,10 +37,10 @@ ENGINE_LINE_RE = re.compile(
 HOST_LINE_RE = re.compile(
     r'^- (?P<kind>편집|답|거부) · r(?P<round>\d+) · (?P<target>[^"]*?) · "(?P<quote>.*?)" —')
 
-# `interview-seed-audit-template.md` 의 여섯 절 제목 — 절 경계의 유일한 근거(fix round 1
-# Important #1c). 이 밖의 `## ` 로 시작하는 줄(사용자가 붙여 넣은 마크다운 안의 `## 배경` 같은
-# 줄)은 절을 끊지 않는다 — `section_body` 가 임의의 `## ` 줄에서 멈추면 비신뢰 본문 안의
-# heading-모양 줄 하나가 진짜 절 뒤 내용을 조용히 잘라낸다.
+# `interview-seed-audit-template.md` 의 여섯 절 제목 — 절 경계의 유일한 근거다. 이 밖의 `## ` 로
+# 시작하는 줄(사용자가 붙여 넣은 마크다운 안의 `## 배경` 같은 줄)은 절을 끊지 않는다 —
+# `section_body` 가 임의의 `## ` 줄에서 멈추면 비신뢰 본문 안의 heading-모양 줄 하나가 진짜 절 뒤
+# 내용을 조용히 잘라낸다.
 AUDIT_HEADINGS = (
     "## 1. 원문",
     "## 2. 질문 전체",
@@ -70,8 +70,8 @@ def section_body(text: str, heading: str) -> str | None:
 def duplicate_headings(text: str) -> list[tuple[str, list[int]]]:
     """`AUDIT_HEADINGS` 중 텍스트에 줄 전체 일치로 두 번 이상(펜스 안팎 가리지 않고) 나오는 것과
     그 1-based 줄 번호들. `section_body` 는 첫 occurrence 를 고르므로, 비신뢰 본문 안에 같은
-    제목 줄이 심겨 있으면 그 occurrence 가 진짜 절 시작을 가릴 수 있다(fix round 1 Important
-    #1b). 비어 있으면 모호함이 없다는 뜻이다."""
+    제목 줄이 심겨 있으면 그 occurrence 가 진짜 절 시작을 가릴 수 있다. 비어 있으면 모호함이
+    없다는 뜻이다."""
     lines = text.splitlines()
     out: list[tuple[str, list[int]]] = []
     for heading in AUDIT_HEADINGS:
@@ -202,8 +202,8 @@ def main(argv=None) -> int:
             quoted = "\n".join(("> " + l) if l.strip() else ">" for l in content)
             append_under(pathlib.Path(a.audit), a.section, "### %s\n\n%s" % (a.title, quoted))
             return 0
-    except OSError as e:
-        print("입력 오류: %s" % e, file=sys.stderr)
+    except (OSError, UnicodeError) as e:
+        print("[spec-distill] 입력 오류: %s" % e, file=sys.stderr)
         return 2
     return 2
 

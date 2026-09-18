@@ -25,7 +25,7 @@ TMP="$(mktemp -d -t sd-seed-log-XXXXXX)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
 test -f "$L" || { no "부재: $L"; finish; exit; }
 
-# ── AUDIT_HEADINGS — 여섯 제목이 템플릿의 '## N.' 줄에서 도출된다, 순서까지(fix round 1) ──
+# ── AUDIT_HEADINGS — 여섯 제목이 템플릿의 '## N.' 줄에서 도출된다, 순서까지 ──
 tpl_headings="$(grep '^## ' "$TPL")"
 py_headings="$(PYTHONPATH="$S" python3 -c '
 import seed_review_log as m
@@ -94,6 +94,11 @@ assert_eq "$(chk '{"dropped": ["bbbb0001#r1.1"]}' "$TMP/no6.md")" "1" "check-dro
 cp "$AUD" "$TMP/fix.audit.md"
 python3 "$L" log "$TMP/fix.audit.md" --kind 거부 --round 2 --target "cccc0001#r1.1" --quote "QUOTE_REFUSE 그 지적은 반영하지 않는다" --note "다시 물어 받은 문구" >/dev/null
 assert_eq "$(chk '{"dropped": ["cccc0001#r1.1"]}' "$TMP/fix.audit.md")" "0" "check-drops: 문구가 빈 drop 도 사용자 문구로 쓴 거부 줄이 있으면 통과한다"
+# UTF-8 이 아닌 audit — 못 읽는 것은 위반(rc 1)이 아니라 입력 오류(rc 2)다.
+printf '## 6. 리뷰 결정\n\n- \377\376 깨진 줄\n' > "$TMP/bad.audit.md"
+assert_eq "$(chk '{"dropped": []}' "$TMP/bad.audit.md")" "2" "check-drops: UTF-8 이 아닌 audit 은 rc 2(위반 rc 1 이 아니다)"
+assert_not_contains "$(cat "$TMP/cd.out")" "Traceback" "check-drops: UTF-8 이 아닌 audit 에 트레이스백을 내지 않는다"
+assert_contains "$(cat "$TMP/cd.out")" "[spec-distill]" "check-drops: 입력 오류를 표준 접두사로 알린다"
 
 # ── log — finding 없는 처분 한 줄 ─────────────────────────────────────────────
 cp "$TPL" "$TMP/t.audit.md"
