@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/framing-requests/SKILL.md
+# guards: plugins/spec-distill/skills/framing-requests/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/seed_review_log.py shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_anchor.py
 #
 # framing-requests SKILL 의 **계약** 락 — 설계 2026-09-16-framing-intent-drift 의 AC 중 SKILL 문면과
 # 배선으로 재는 것(AC1 · AC3b · AC3d · AC4 · AC6 · AC12 · AC13 배선).
@@ -11,7 +11,12 @@ set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SK="$ROOT/plugins/spec-distill/skills/framing-requests/SKILL.md"
 if [ "${1:-}" = "--emit-scanned" ]; then
-  echo "plugins/spec-distill/skills/framing-requests/SKILL.md"; exit 0
+  for f in plugins/spec-distill/skills/framing-requests/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md \
+           plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/seed_review_log.py \
+           shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_anchor.py; do
+    echo "$f"
+  done
+  exit 0
 fi
 . "$ROOT/shared/tests/assert.sh"
 test -f "$SK" || { no "부재: $SK"; finish; exit; }
@@ -65,4 +70,107 @@ assert_contains "$VER" 'subagent_type: "spec-distill:seed-readback"' "냉독은 
 assert_contains "$VER" '재비판의 `<document>` = `$BUNDLE_RC` 의 **내용**' "재비판자는 판정 이력 없는 번들을 받는다(D4.44)"
 assert_contains "$(bash_lines "$VER")" 'build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md --for recritic' "번들 펜스가 재비판용 갈래를 조립한다(실행 줄)"
 assert_contains "$(bash_lines "$VER")" 'seed_review_log.py" append-verbatim' "엔진 산출물을 audit ## 4 에 옮긴다(실행 줄)"
+
+# ── AC3b · AC3d · AC12 — 게이트 규칙 ──────────────────────────────────────────
+GATE="$(subsection "$SK" '^### 게이트')"
+[ -n "$GATE" ] && ok "절 추출: ### 게이트 (vacuous 아님)" || no "절 추출: ### 게이트 가 비었다 — 아래 판정은 무의미하다"
+assert_contains "$GATE" "사용자가 처분하기 전에는 seed 파일을 편집하지 않는다" "AC3b: 처분 전 편집 금지가 단계로 있다"
+assert_contains "$GATE" "읽기는 막지 않는다" "AC3b: 술어는 편집이지 읽기가 아니다(D4.40)"
+assert_contains "$GATE" '`fix` 도 적용 전에 묻는다' "AC3b: fix 도 적용 전 사용자 확인"
+assert_contains "$GATE" '--event drop --reason "<사용자 문구>" --log-file "$AUDIT_ABS"' "D18: fix 거부는 사용자 문구로 엔진이 기록한다"
+assert_contains "$GATE" '`ask_open` 개수를 처분과 무관하게 싣는다' "AC3d: ask_open 개수 공시"
+GB="$(bash_lines "$GATE")"
+assert_contains "$GB" '"ask_open"' "AC3d: 요약 펜스가 ask_open 을 센다(실행 줄)"
+assert_contains "$GB" '"unapplied_fix"' "AC3b: 요약 펜스가 unapplied_fix 를 센다(엔진이 fix 로 라운드 게이트를 열지 않는다)"
+assert_contains "$GB" 'seed_review_log.py" check-drops' "AC12: 라운드 게이트 뒤 문구 없는 drop 검사(실행 줄)"
+
+# ── AC6 · AC6b — 저자 편집 공시 ──────────────────────────────────────────────
+DISC="$(subsection "$SK" '^### 저자 편집 공시')"
+[ -n "$DISC" ] && ok "절 추출: ### 저자 편집 공시" || no "절 추출: ### 저자 편집 공시 가 비었다"
+DB="$(bash_lines "$DISC")"
+assert_contains "$DB" 'seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS"' "AC6: 공시 펜스가 기준 사본 diff 를 낸다(실행 줄)"
+assert_contains "$DISC" "저자 편집 없음" "AC6: 빈 diff 를 침묵과 구분한다"
+assert_contains "$DISC" "권장 표시를 달지 않는다" "D15: 덩어리 처분에 저자 권장이 없다"
+ln_rev="$(printf '%s\n' "$DB" | grep -n 'seed_edit_diff.py" revert' | head -1 | cut -d: -f1)"
+ln_log="$(printf '%s\n' "$DB" | grep -n 'seed_review_log.py" log' | head -1 | cut -d: -f1)"
+ln_acc="$(printf '%s\n' "$DB" | grep -n 'seed_edit_diff.py" accept' | head -1 | cut -d: -f1)"
+if [ -n "$ln_rev" ] && [ -n "$ln_log" ] && [ -n "$ln_acc" ] && [ "$ln_rev" -lt "$ln_log" ] && [ "$ln_log" -lt "$ln_acc" ]; then
+  ok "AC6b: 되돌리기 → 기록 → 기준 사본 교체 순서(교체는 맨 끝)"
+else
+  no "AC6b: revert($ln_rev) · log($ln_log) · accept($ln_acc) 순서가 아니다 — 공시 전 교체는 그 사이 편집을 지운다"
+fi
+# ── T10-b — revert · accept 의 rc 4(공시 뒤 seed 재변경) 처리 규약 ────────────
+assert_contains "$DISC" "위 공시 펜스를 다시 돌려 다시 처분받습니다" "T10-b: rc 4 는 기준 사본을 바꾸지 않고 공시를 다시 돈다"
+assert_contains "$DISC" "처분 하나에 한 번만" "T10-b: revert 는 처분마다 한 번만 — --ids 를 쉼표로 모아 한 번에"
+assert_contains "$DISC" "부르면 매번 «공시됨»으로 기록" "T10-b: hunks 는 사용자에게 보일 자리에서만 부른다"
+FIN="$(section "$SK" '^## 확정 — proceed 게이트$')"
+[ -n "$FIN" ] && ok "절 추출: ## 확정" || no "절 추출: ## 확정 이 비었다"
+FB="$(bash_lines "$FIN")"
+assert_contains "$FB" 'seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS"' "AC6: 확정 게이트 직전에도 공시 펜스(실행 줄)"
+assert_contains "$FB" 'seed_review_log.py" check-drops' "AC12: 확정 게이트 직전 문구 없는 drop 검사(실행 줄)"
+
+# ── AC13 — 표시 검사 배선 ─────────────────────────────────────────────────────
+AFTER="$(subsection "$SK" '^### seed 를 쓴 직후')"
+assert_contains "$(bash_lines "$AFTER")" 'seed_provenance.py" marks "$SEED_ABS" "$AUDIT_ABS" --fix' "AC13: seed 를 쓴 직후 근거 없는 표시를 뗀다(실행 줄)"
+assert_contains "$(bash_lines "$AFTER")" 'seed_edit_diff.py" init "$SEED_BASE" "$SEED_ABS"' "AC6b: 기준 사본은 seed 를 쓴 직후 처음 뜬다(실행 줄)"
+assert_contains "$FB" 'seed_provenance.py" marks "$SEED_ABS" "$AUDIT_ABS"' "AC13: 확정 게이트 직전 표시 검사(실행 줄)"
+assert_not_contains "$(printf '%s\n' "$FB" | grep 'seed_provenance.py" marks')" '--fix' "확정 직전 검사는 떼지 않는다 — 떼는 것도 편집이라 공시를 거친다"
+
+# ── 차가운 실행 — 게이트 요약 펜스와 drop 검사 펜스 ──────────────────────────
+export PYTHONDONTWRITEBYTECODE=1
+T="$(mktemp -d -t sd-framing-contract-XXXXXX)" || exit 1
+trap 'rm -rf "$T"' EXIT
+S="$ROOT/plugins/spec-distill/scripts"
+nth_bash_with() {   # nth_bash_with <텍스트> <고정 문자열> → 그 문자열을 담은 첫 bash 펜스
+  printf '%s\n' "$1" | awk -v pat="$2" '/^```bash[[:space:]]*$/ {b=1; buf=""; next}
+    b && /^```/ {b=0; if (!done && index(buf, pat)) {printf "%s", buf; done=1}; next}
+    b {buf = buf $0 "\n"}'
+}
+nth_bash_with "$GATE" '"unapplied_fix"' > "$T/summary.sh"
+nth_bash_with "$GATE" 'check-drops' > "$T/drops.sh"
+printf -- '---\ntype: interview-seed\n---\n\n로그인이 가끔 실패한다.\n' > "$T/s.md"
+cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$T/s.audit.md"
+D="$T/state"; mkdir -p "$D"
+python3 "$S/docreview_state.py" init --state-dir "$D" --doc "$T/s.md" --profile "$ROOT/plugins/spec-distill/references/docreview-profiles/seed.md" >/dev/null
+python3 "$S/docreview_anchor.py" snapshot "$T/s.md" > "$D/snap.json"
+python3 "$S/docreview_state.py" begin-round --state-dir "$D" --snapshot "$D/snap.json" >/dev/null
+cat > "$D/critic.txt" <<'EOF'
+```docreview-layer1
+- ref: c1
+  category: premature_closure
+  anchor: "#__doc__"
+  disposition: fix
+  summary: "CT_FIX"
+- ref: c2
+  category: unfounded_addition
+  anchor: "#__doc__"
+  disposition: ask
+  summary: "CT_ASK"
+```
+```docreview-layer2
+[]
+```
+EOF
+python3 "$S/docreview_route.py" prepare-recritic --state-dir "$D" --critic "$D/critic.txt" > "$D/prep.json"
+python3 "$S/docreview_route.py" finalize --state-dir "$D" --recritic-skipped --doc "$T/s.md" > "$D/fin.json"
+cold() { env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 SD="$ROOT/plugins/spec-distill" STATE_DIR="$D" AUDIT_ABS="$T/s.audit.md" bash "$1" 2>"$1.err"; }
+sum_out="$(cold "$T/summary.sh")"
+assert_contains "$sum_out" "unapplied_fix=1" "AC3b 실행: 엔진이 라운드 게이트를 열지 않는 fix 를 호스트 요약이 센다"
+assert_contains "$sum_out" "ask_open=1" "AC3d 실행: 아무것도 막지 않는 ask 를 호스트 요약이 센다"
+assert_contains "$sum_out" "round_gate_needed=False" "전제: 이 라운드에 엔진은 라운드 게이트를 열지 않는다(호스트 게이트가 필요한 이유)"
+FIX_ID="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); print([f["id"] for f in d["findings"] if f.get("summary")=="CT_FIX"][0])' "$D/fin.json")"
+python3 "$S/docreview_state.py" fix --state-dir "$D" --id "$FIX_ID" --event drop --log-file "$T/s.audit.md" >/dev/null
+assert_contains "$(cold "$T/drops.sh")" "drops_rc=1" "AC12 실행: 문구 없이 누른 drop 이면 검사 펜스가 막는다"
+python3 "$S/seed_review_log.py" log "$T/s.audit.md" --kind 거부 --round 1 --target "$FIX_ID" --quote "CT_USER_REFUSE" --note "다시 물어 받은 문구" >/dev/null
+assert_contains "$(cold "$T/drops.sh")" "drops_rc=0" "AC12 양성 대조: 사용자 문구를 채우면 통과한다"
+
+# ── T10-d — 확정 직전 공시가 기준 사본 부재를 «저자 편집 없음»으로 내지 않는다 ─
+mkdir -p "$T/final2"
+printf -- '---\ntype: interview-seed\n---\n\nFINAL_SEED_LINE.\n' > "$T/final2/seed.md"
+nth_bash_with "$FIN" 'hunks-final.json' > "$T/final_disc.sh"
+cold3() { env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 SD="$ROOT/plugins/spec-distill" STATE_DIR="$T/final2" SEED_BASE="$T/final2/missing-baseline.md" SEED_ABS="$T/final2/seed.md" bash "$1" 2>"$1.err"; }
+fd_out="$(cold3 "$T/final_disc.sh")"
+assert_not_contains "$fd_out" "저자 편집 없음" "T10-d: 확정 직전 공시가 기준 사본 부재를 «저자 편집 없음»으로 내지 않는다"
+assert_contains "$(cat "$T/final_disc.sh.err")" "기준 사본이 없다" "T10-d: 확정 직전 공시가 기준 사본 부재를 알린다"
+
 finish

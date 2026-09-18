@@ -359,6 +359,25 @@ seed 는 공유 문서 리뷰 엔진으로 리뷰합니다. 한 라운드의 절
 없어 앵커가 `#__doc__` 하나뿐이고 엔진의 보호는 앵커 단위라, 「이 자리는 막고 저 자리는 연다」가 성립하지
 않습니다. 차단은 이 skill 이 집니다 — `### 게이트`.
 
+### seed 를 쓴 직후 — 한 번, 첫 라운드 앞
+
+압축이 seed 를 쓴 직후 두 가지를 합니다. 확인 질문에서 고른 풀이가 **글자 그대로** 남은 문장에만
+«(사용자 확인)» 이 남도록 근거 없는 표시를 떼고, 저자 편집 공시의 기준 사본을 뜹니다.
+
+```bash
+if [ -z "${SEED_ABS:-}" ] || [ -z "${SEED_BASE:-}" ]; then
+  echo "[spec-distill] seed 직후 검사 입력 부재 — SEED_ABS='${SEED_ABS:-}' SEED_BASE='${SEED_BASE:-}'. 「## 상태」 블록을 이 펜스 앞에 이어 붙여라. 리뷰 라운드를 시작하지 않는다." >&2
+  exit 1
+fi
+mkdir -p "$STATE_DIR"
+python3 "$SD/scripts/seed_provenance.py" marks "$SEED_ABS" "$AUDIT_ABS" --fix; marks_rc=$?
+python3 "$SD/scripts/seed_edit_diff.py" init "$SEED_BASE" "$SEED_ABS"; base_rc=$?
+```
+
+`marks` 의 출력이 뗀 표시를 문장째 댑니다 — 그 목록을 사용자에게 한 줄로 보입니다(「확인 뒤 압축이 고쳐
+미확인으로 돌아간 문장」). `marks_rc` 가 0 이 아니거나 `base_rc` 가 0 이 아니면 `## degrade 채널` 의 해당 행을
+남기고, 기준 사본이 없으면 저자 편집 공시가 rc 3 경로로 떨어진다는 사실을 게이트 텍스트에 싣습니다.
+
 ### 절차
 
 ```
@@ -529,14 +548,126 @@ for pair in "탐지 (doc-critic)|critic.txt" "codex|docreview-codex.yaml" "재�
 done
 ```
 
-### 게이트
+### 게이트 — 처분은 사용자가, 편집은 처분 뒤에
 
-엔진 8단계의 `docreview_state.py gate --state-dir "$STATE_DIR" --render` 가 어느 게이트인지 정합니다.
-`round_gate_needed` 면 라운드 게이트(결정 묶음 + 차단 `ask`, 렌더 순서)를 **`AskUserQuestion` 최대 4개씩
-연속 호출**로 나눠 띄웁니다 — 매 호출 첫 질문의 첫 줄은 렌더 첫 줄(degrade 공시)과 같습니다. 응답을
-`decide`(`--log-file "$AUDIT_ABS"` 와 함께) · `fix` · `ask` 서브커맨드로 반영합니다. `approval_gate_open` 이면
-승인 게이트입니다 — 1단계(열린 항목 · 「추가 라운드 1회 열기」)는 절차서 8단계 그대로이고, 2단계(진행
-옵션)는 이 skill 의 `## 확정 — proceed 게이트` 입니다.
+엔진 8단계의 `docreview_state.py gate --state-dir "$STATE_DIR" --render` 가 결정 묶음과 게이트 종류를
+냅니다. 그 묶음은 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠 띄우고, 매 호출 첫 질문의 첫 줄은 렌더
+첫 줄(degrade 공시)과 같습니다. `approval_gate_open` 이면 승인 게이트입니다 — 1단계(열린 항목 · 「추가
+라운드 1회 열기」)는 절차서 8단계 그대로이고, 2단계(진행 옵션)는 이 skill 의 `## 확정 — proceed 게이트`
+입니다. 이 자리는 그 위에 규칙 넷을 더합니다 — seed 는 헤딩이 없어 엔진의 얼림 · 보호가 꺼지고(엔진
+계획서 T44 — 「차단은 호스트 구조 게이트의 일」), 엔진에서 승인을 막고 사용자 문구를 남기는 처분은
+`decide` 하나뿐입니다.
+
+1. **사용자가 처분하기 전에는 seed 파일을 편집하지 않는다.** 읽기는 막지 않는다 — 관측 수단(`### 저자 편집
+   공시`)이 편집만 재므로 규칙도 편집이다. 라운드 1단계(스냅숏)부터 그 라운드 게이트의 처분이 끝날
+   때까지 seed 를 고치지 않는다. 처분이 끝난 뒤에만 채택된 결정과 사용자가 적용을 고른 `fix` 를
+   반영하고, 그 편집은 다음 공시에서 덩어리째 사용자 앞에 다시 온다.
+2. **라운드 게이트는 엔진보다 넓다.** 아래 요약 펜스가 내는 넷(`open_decide` · `blocking_ask_open` ·
+   `unapplied_fix` · `ask_open`)과 저자 편집 덩어리 중 하나라도 0 이 아니면 라운드 게이트를 띄운다 —
+   엔진의 `round_gate_needed` 가 거짓이어도. **`fix` 도 적용 전에 묻는다** — 엔진은 `fix` 로 라운드
+   게이트를 열지 않는다. `ask_open` 도 올린다 — 엔진이 처분 없이 온 항목과 재비판이 더한 항목을 스스로
+   `ask` 로 만들고, 그 `ask` 는 아무것도 막지 않고 답도 기록하지 않는다.
+   게이트 텍스트에 `ask_open` 개수를 처분과 무관하게 싣는다.
+3. **`fix` 는 사용자가 고른 대로만 닫는다.** 질문은 「적용 / 적용하지 않음」 둘이다.
+   - 적용 — `docreview_anchor.py check-intent <id> --intent '#__doc__' --state-dir "$STATE_DIR"` 가 통과하면
+     `docreview_state.py fix --state-dir "$STATE_DIR" --id <id> --event intent-pass --scope '#__doc__'` 를
+     적고, 처분이 전부 끝난 뒤 편집한다. 거부되면 `fix … --event escalate --reason "<거부 사유>"` — 다음
+     라운드 `decide` 로 온다.
+   - 적용하지 않음 — 저자가 판단해 `drop` 하지 않는다. 사용자의 문구를 넘겨 엔진이 적게 한다:
+     `docreview_state.py fix --state-dir "$STATE_DIR" --id <id> --event drop --reason "<사용자 문구>" --log-file "$AUDIT_ABS"`.
+4. **`ask_open` 의 답은 이 skill 이 적는다.** 엔진의 `ask --answered` 는 답을 기록하지 않는다. 답을 받으면
+   `docreview_state.py ask --state-dir "$STATE_DIR" --id <id> --answered` 와 함께
+   `seed_review_log.py log "$AUDIT_ABS" --kind 답 --round <n> --target <id> --quote "<사용자 문구>" --note "<항목 요약>"`
+   을 부른다. 그 답이 seed 를 바꿔야 하면 그것도 처분 뒤의 편집이다.
+
+사용자 문구는 게이트에서 사용자가 고른 선택지 라벨(«기타» 면 적은 말) 그대로다. 엔진은 그 문구가 사용자의
+말인지 검증하지 못한다(설계 §7 R2) — 저자가 지어 넣지 않는다.
+
+게이트를 띄우기 **전에** 요약 펜스를 돕니다:
+
+```bash
+# 라운드 게이트에 올릴 것 — 엔진 요약에서 넷. 저자 편집 덩어리는 `### 저자 편집 공시` 가 센다.
+gate_json="$STATE_DIR/gate-summary.json"
+if ! python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$gate_json"; then
+  echo "[spec-distill] 엔진 게이트 요약을 읽지 못했다(STATE_DIR='${STATE_DIR:-}') — 게이트를 띄우지 않는다. 「## 상태」 블록을 앞에 이어 붙였는지 확인하라." >&2
+else
+  python3 -c '
+import json, sys
+g = json.load(open(sys.argv[1], encoding="utf-8"))
+for k in ("open_decide", "blocking_ask_open", "unapplied_fix", "ask_open"):
+    ids = g.get(k) or []
+    print("%s=%d %s" % (k, len(ids), " ".join(ids)))
+print("round_gate_needed=%s approval_gate_open=%s" % (g.get("round_gate_needed"), g.get("approval_gate_open")))
+' "$gate_json"
+fi
+```
+
+처분을 반영한 **뒤에** 문구 없는 `drop` 검사를 돕니다 — 엔진이 dropped 로 센 `fix` 마다 audit `## 6. 리뷰
+결정` 에 문구 있는 drop 줄(또는 `거부` 줄)이 있어야 합니다. 승인 게이트가 열린 채 막힌 항목이 남는
+라운드(상한 · 정체 · 「미검증」)에서 엔진 렌더가 「drop 하면 이 차단이 풀린다」를 안내해도, 그 drop 은
+사용자의 문구로만 누릅니다. 막히면 그 항목을 사용자에게 다시 묻고 받은 문구로
+`seed_review_log.py log "$AUDIT_ABS" --kind 거부 --round <n> --target <id> --quote "<사용자 문구>"` 를 적은 뒤
+이 펜스를 다시 돕니다 — 되돌리는 기록은 `거부` 줄로 남기고 엔진에 drop 을 다시 누르지 않습니다.
+
+```bash
+# 문구 없는 drop 검사 — 엔진 공개 요약의 dropped 대 audit ## 6 의 기록.
+drops_rc=0
+if ! python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$STATE_DIR/gate-drops.json"; then
+  drops_rc=2
+elif ! python3 "$SD/scripts/seed_review_log.py" check-drops "$AUDIT_ABS" "$STATE_DIR/gate-drops.json"; then
+  drops_rc=1
+fi
+if [ "$drops_rc" -ne 0 ]; then
+  echo "[spec-distill] 문구 없는 drop 검사 실패(drops_rc=$drops_rc) — 진행하지 않는다. 위 violations 의 항목을 사용자에게 다시 묻고 그 문구로 거부 줄을 적은 뒤 이 펜스를 다시 돌려라." >&2
+fi
+echo "drops_rc=$drops_rc"
+```
+
+### 저자 편집 공시 — 라운드 게이트 앞 · 확정 게이트 앞
+
+seed 는 헤딩이 없어 엔진의 얼림 검사가 모든 변경을 면제합니다. 저자 편집은 기준 사본과의 diff 로 **전부**
+사용자 앞에 놓습니다 — 승인된 수정과 그 틈에 끼어든 수정을 가를 기계가 없으므로 가르지 않습니다.
+
+```bash
+hunks_rc=0
+python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" > "$STATE_DIR/hunks.json" || hunks_rc=$?
+case "$hunks_rc" in
+  0) python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+if not d["hunks"]:
+    print("저자 편집 없음")
+for h in d["hunks"]:
+    print(h["render"])
+    print()
+' "$STATE_DIR/hunks.json" ;;
+  3) echo "[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자 편집을 비교할 수 없다. seed 전문을 보이고 「이대로 둔다 / 멈춘다」를 물어라." >&2 ;;
+  *) echo "[spec-distill] 저자 편집 공시 실패(rc $hunks_rc) — 게이트를 띄우지 않는다." >&2 ;;
+esac
+```
+
+- 덩어리가 0 이면 게이트 텍스트에 **«저자 편집 없음»** 한 줄을 싣는다 — 침묵과 구분한다.
+- 덩어리가 있으면 **덩어리마다 질문 하나** — 「그대로 둔다 / 되돌린다」. **권장 표시를 달지 않는다** —
+  어느 덩어리가 승인된 수정인지 가를 기계가 없고, 저자의 권장은 바로 그 가름을 저자가 하는 것이다.
+  덩어리 본문(`render`)은 질문 텍스트에 줄임 없이 싣는다 — 분량 상한을 두지 않는다(줄이면 공시가 아니다).
+- 처분 없이는 다음 단계로 가지 않는다.
+- 기준 사본이 없으면(rc 3 — 세션 디렉토리가 정리됐다) 그 사실을 게이트 텍스트에 싣고 seed 전문을 한 질문으로
+  보여 「이대로 둔다 / 멈춘다」를 묻는다. 「이대로 둔다」면 `seed_edit_diff.py init` 으로 새 기준 사본을 뜬다.
+
+처분을 받은 뒤 순서가 계약입니다 — **되돌리기 → 기록 → 기준 사본 교체.** 교체는 맨 끝에서만 합니다. 공시
+전에 교체하면 그 사이의 편집이 영영 안 보입니다.
+
+```bash
+# <…> 는 게이트의 답으로 채운다. 되돌릴 덩어리가 없으면 첫 줄을 건너뛴다. 기록은 덩어리마다 한 줄.
+python3 "$SD/scripts/seed_edit_diff.py" revert "$SEED_BASE" "$SEED_ABS" --ids "<되돌릴 덩어리 번호, 쉼표로>"
+python3 "$SD/scripts/seed_review_log.py" log "$AUDIT_ABS" --kind 편집 --round "<n>" --target "덩어리 <k> · <그대로 둔다|되돌린다>" --quote "<사용자 문구>" --note "<덩어리 머리줄>"
+python3 "$SD/scripts/seed_edit_diff.py" accept "$SEED_BASE" "$SEED_ABS"
+```
+
+`revert` · `accept` 가 rc 4 를 내면 공시(`hunks`) 뒤에 seed 가 또 바뀐 것입니다 — 기준 사본을 그대로 두고
+위 공시 펜스를 다시 돌려 다시 처분받습니다. `revert` 는 처분 하나에 한 번만 부릅니다 — 되돌릴 덩어리
+번호를 전부 쉼표로 모아 `--ids` 에 한 번에 넘깁니다. `hunks` 는 그 출력을 사용자에게 보이는 자리에서만
+부릅니다 — 부르면 매번 «공시됨»으로 기록되기 때문입니다.
 
 ### 냉독
 
@@ -593,6 +724,8 @@ degrade 는 **채널 다섯**으로 나갑니다 — 엔진의 셋과 이 skill 
 | `$STATE_DIR` 이 비었다 · 엔진 `init` 이 rc ≠ 0 | `pipeline` · `all` | `unavailable` | 비어 있던 변수, 또는 `init` 이 낸 사유 |
 | `bundle_rc` 가 0 이 아니다 | `pipeline` · `suppression` | `unavailable` | 번들 조립 실패 — 조립기 stderr 마지막 줄 |
 | `prof_rc` 가 0 이 아니다 | `critic` · `suppression` | `unavailable` | seed 프로필 판독 불가(cat rc) |
+| `marks_rc` 가 2 다(표시 검사 불가) | `pipeline` · `suppression` | `degraded` | `seed_provenance.py marks` 의 stderr — 표시가 떼어지지 않았을 수 있다 |
+| `base_rc` 가 0 이 아니다 · 공시 펜스가 rc 3 | `pipeline` · `all` | `degraded` | 기준 사본 부재 — 저자 편집을 비교할 수 없는 구간이 있다 |
 | `seed_text_rc` 가 0 이 아니다 | `readback` · `readback` | `unavailable` | 냉독 입력 부재 — 관측한 `$SEED` 값과 `seed_text_rc` |
 
 codex 부재 · 재비판 부재는 이 표에 없습니다 — 엔진이 `advisory[]` 와 게이트 첫 줄로 이미 공시합니다. 같은
@@ -612,7 +745,9 @@ codex 부재 · 재비판 부재는 이 표에 없습니다 — 엔진이 `advis
 성공을 함께 요구하고, `state_path.py` 가 GC 의 세션 이름 필터와 같은 정규식을 통과한 값만 내주므로, **이
 파일들이 존재한다는 것 자체가 GC 가 걷는 자리에 있다는 뜻**입니다. 폴더 나이는 **폴더 자신과 그 아래 모든
 항목의 최신 mtime**(링크는 따라가지 않는다)이고, TTL(기본 24시간, env override)을 넘기면 폴더가 통째로
-걷힙니다 — 리뷰 원장도 함께입니다. 사용자 결정은 audit `## 6. 리뷰 결정` 에 남아 있어 잃지 않습니다.
+걷힙니다 — 리뷰 원장도 함께입니다. 리뷰 도중 그렇게 걷히면 엔진 호출이 `state_missing` 으로 죽고, 저자 편집
+공시는 기준 사본 부재(`### 저자 편집 공시` 의 rc 3 경로)로 떨어집니다. 사용자 결정은 audit `## 6. 리뷰 결정`
+에 남아 있어 잃지 않습니다.
 
 **냉독 축도 죽을 수 있고, 죽으면 여기 보입니다.** 그 축의 입력은 `${SEED_TEXT}` 이고 그 출처는 `### 냉독` 의
 `cat "$SEED"` 입니다 — `$SEED` 가 비면 냉독은 아무 내용도 없이 돌게 되므로 **돌리지 않습니다**. 리뷰 축은
@@ -684,7 +819,57 @@ git commit -q -F "$SEED_DIR/commit-msg.txt"
 적습니다. ①/② 의 «다음 세션 첫 턴» 안내에는 **워크트리 절대경로**(`pwd`)를 함께 냅니다 —
 다른 터미널에서 새 세션을 열 때 그 디렉토리에서 열어야 `@<seed 경로>` 가 풀리기 때문입니다.
 
-게이트를 띄우기 **직전에** 구조 검사를 돌립니다:
+### 게이트 직전 — 넷, 이 순서로
+
+마지막 라운드의 게이트가 닫힌 뒤, 그리고 ③ 「수정 필요」 로 돌아올 때마다 게이트를 띄우기 **직전에** 넷을
+돕니다. 하나라도 막히면 게이트를 띄우지 않습니다 — 막힌 것을 풀고 1번부터 다시 돕니다.
+
+**검사 1 — 표시** — 떼지 않고 검사만 합니다. 근거 없는 «(사용자 확인)» 이 있으면(`marks_rc` 1) 막힙니다 —
+떼는 것도 편집이라 검사 2 에서 사용자 앞에 옵니다. audit 을 판단할 수 없어 표시 자체를 매길 수 없으면
+(`marks_rc` 2, 위반이 아니다) **떼지 않고** 표시 검사 불가로 막히고, stderr 사유를 게이트 텍스트에
+싣습니다.
+
+```bash
+marks_rc=0
+marks_err="$(python3 "$SD/scripts/seed_provenance.py" marks "$SEED_ABS" "$AUDIT_ABS" 2>&1 >/dev/null)" || marks_rc=$?
+case "$marks_rc" in
+  0) : ;;
+  1) echo "[spec-distill] 근거 없는 «(사용자 확인)» 표시(marks_rc=1) — 위 목록의 표시를 떼고 이 절을 처음부터 다시 탄다. 게이트를 띄우지 않는다." >&2 ;;
+  *) echo "[spec-distill] 표시 검사 불가(marks_rc=$marks_rc) — ${marks_err}. 게이트를 띄우지 않는다." >&2 ;;
+esac
+```
+
+**검사 2 — 저자 편집 공시** — `### 저자 편집 공시` 의 처분 절차 그대로입니다. 마지막 라운드 뒤의 편집(채택 결정의
+반영 · ③ 뒤에 다시 깎은 것)이 사용자 앞에 오는 유일한 자리입니다.
+
+```bash
+final_hunks_rc=0
+python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" > "$STATE_DIR/hunks-final.json" || final_hunks_rc=$?
+case "$final_hunks_rc" in
+  0) python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+if not d["hunks"]:
+    print("저자 편집 없음")
+for h in d["hunks"]:
+    print(h["render"])
+    print()
+' "$STATE_DIR/hunks-final.json" ;;
+  3) echo "[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자 편집을 비교할 수 없다. seed 전문을 보이고 「이대로 둔다 / 멈춘다」를 물어라. 게이트를 띄우지 않는다." >&2 ;;
+  *) echo "[spec-distill] 확정 직전 공시 실패(rc $final_hunks_rc) — 게이트를 띄우지 않는다." >&2 ;;
+esac
+```
+
+**검사 3 — 문구 없는 drop** — `### 게이트` 의 검사와 같습니다.
+
+```bash
+final_drops_rc=0
+python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$STATE_DIR/gate-final.json" || final_drops_rc=2
+[ "$final_drops_rc" -ne 0 ] || python3 "$SD/scripts/seed_review_log.py" check-drops "$AUDIT_ABS" "$STATE_DIR/gate-final.json" || final_drops_rc=1
+[ "$final_drops_rc" -eq 0 ] || echo "[spec-distill] 문구 없는 drop(final_drops_rc=$final_drops_rc) — 사용자에게 다시 묻고 거부 줄을 적은 뒤 이 절을 다시 탄다." >&2
+```
+
+**검사 4 — 구조** — 아래 `check_seed.py`.
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }

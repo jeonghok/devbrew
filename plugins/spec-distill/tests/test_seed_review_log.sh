@@ -89,8 +89,8 @@ assert_eq "$(chk '{"dropped": []}' "$AUD")" "0" "check-drops: drop 이 없으면
 assert_eq "$(chk '{not json' "$AUD")" "2" "check-drops: 요약을 못 읽으면 rc 2(통과가 아니다)"
 printf -- '---\nx: 1\n---\n\n## 5. degrade\n\n없음\n' > "$TMP/no6.md"
 assert_eq "$(chk '{"dropped": ["bbbb0001#r1.1"]}' "$TMP/no6.md")" "1" "check-drops: ## 6 절이 없으면 drop 은 전부 no_log_line"
-# 되돌리는 길 — 문구 없이 눌린 drop 은 엔진에서 다시 drop 할 수 없다. 사용자에게 다시 물어 받은 문구를
-# `거부` 줄로 적으면 통과한다(설계 D18 의 「항목 / 거부 / 사용자 문구」 기록).
+# 되돌리는 길 — 사용자에게 다시 물어 받은 문구를 `거부` 줄로 적으면 통과한다(설계 D18 의
+# 「항목 / 거부 / 사용자 문구」 기록).
 cp "$AUD" "$TMP/fix.audit.md"
 python3 "$L" log "$TMP/fix.audit.md" --kind 거부 --round 2 --target "cccc0001#r1.1" --quote "QUOTE_REFUSE 그 지적은 반영하지 않는다" --note "다시 물어 받은 문구" >/dev/null
 assert_eq "$(chk '{"dropped": ["cccc0001#r1.1"]}' "$TMP/fix.audit.md")" "0" "check-drops: 문구가 빈 drop 도 사용자 문구로 쓴 거부 줄이 있으면 통과한다"
