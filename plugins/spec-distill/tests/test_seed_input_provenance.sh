@@ -32,6 +32,7 @@ assert_contains "$SIB" '§6 `S1` 은 `$ARGUMENTS` 원문 그대로다' "S1 규�
 assert_contains "$(bash_lines "$SIB")" 'seed_provenance.py" classify' "가름은 기계가 한다(실행 줄)"
 assert_contains "$SIB" '`audit_file:` 은 따라가지 않는다' "seed frontmatter 포인터를 따라가지 않는다"
 assert_contains "$SIB" "audit: unavailable" "audit 이 없으면 보수적으로 떨어지고 그 사실을 밝힌다"
+assert_contains "$SIB" '`--audit` 을 넘겼어도' "T11-a: --audit 을 넘겼어도 unavailable 이면 전부 저자 · 미확인"
 IVT="$(cat "$IV")"
 assert_contains "$IVT" "[spec-distill] seed 원문 대조: seed=" "/interview 가 seed · audit 경로를 한 줄로 낸다"
 assert_contains "$IVT" '`.audit.md`' "audit 경로는 seed 경로에서 도출한다"

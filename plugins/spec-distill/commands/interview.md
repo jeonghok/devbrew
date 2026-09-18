@@ -33,7 +33,7 @@ Read 가 실패하면(파일 부재 · 경로가 디렉토리 · 권한 등) 관
 
 **seed 면 원문 기록의 경로를 한 줄로 낸다.** 「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면,
 읽은 파일의 절대경로에서 audit 경로를 도출한다 — 같은 디렉토리에서 파일명 끝의 `.md` 를 `.audit.md` 로 바꾼
-파일이다. seed frontmatter 의 `audit_file:` 은 따라가지 않는다(파일 이름뿐이라 디렉토리가 없다). 그 파일을
+파일이다. seed frontmatter 의 `audit_file:` 은 따라가지 않는다. 그 파일을
 Read 로 확인하고, 인터뷰에 들어가기 전에 아래 한 줄을 그대로 낸다:
 
 > `[spec-distill] seed 원문 대조: seed=<seed 절대경로> · audit=<audit 절대경로>`
