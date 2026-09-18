@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""seed_edit_diff.py — 저자 편집을 기준 사본과 대조해 덩어리로 낸다.
+
+seed 는 헤딩이 없어 엔진의 얼림 검사가 모든 변경을 면제한다 — 엔진 계획서 T44 가 그 자리의
+차단을 호스트로 넘겼다. `framing-requests` 가 이 모듈로 저자 편집을 전부 사용자 앞에 놓는다.
+
+  init   <base> <seed>             기준 사본이 없을 때만 seed 를 복사한다. 있으면 손대지 않는다.
+  hunks  <base> <seed>             기준 사본 → seed 의 변경 덩어리(JSON).
+  revert <base> <seed> --ids 1,3   그 덩어리만 기준 사본 쪽으로 되돌려 seed 를 다시 쓴다.
+  accept <base> <seed>             seed 를 새 기준 사본으로 — 공시와 처분이 끝난 뒤에만 부른다.
+
+기준 사본은 «공시될 때까지» 산다: 교체는 accept 하나뿐이고 init 은 덮어쓰지 않는다. 라운드마다
+무조건 교체하면 그 사이의 편집이 diff 에서 사라진다.
+rc: 0 정상 · 2 입력 오류(seed 부재 · 잘못된 id) · 3 기준 사본 부재.
+"""
+from __future__ import annotations
+
+import argparse
+import difflib
+import json
+import pathlib
+import shutil
+import sys
+
+
+def _read(p: pathlib.Path) -> list[str]:
+    return p.read_text(encoding="utf-8").splitlines(keepends=True)
+
+
+def _span(a: int, b: int) -> str:
+    if a == b:
+        return "%d행 앞(없음)" % (a + 1)
+    return "%d행" % (a + 1) if b - a == 1 else "%d–%d행" % (a + 1, b)
+
+
+def compute_hunks(base: list[str], seed: list[str]) -> list[dict]:
+    sm = difflib.SequenceMatcher(a=base, b=seed, autojunk=False)
+    out = []
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            continue
+        k = len(out) + 1
+        removed = [l.rstrip("\n") for l in base[i1:i2]]
+        added = [l.rstrip("\n") for l in seed[j1:j2]]
+        head = "덩어리 %d — 기준 %s → 현재 %s" % (k, _span(i1, i2), _span(j1, j2))
+        render = "\n".join([head] + ["- " + l for l in removed] + ["+ " + l for l in added])
+        out.append({"id": k, "tag": tag, "base": [i1, i2], "seed": [j1, j2],
+                    "removed": removed, "added": added, "render": render})
+    return out
+
+
+def revert(base: list[str], seed: list[str], hunks: list[dict], ids: set[int]) -> list[str]:
+    out = list(seed)
+    for h in sorted((h for h in hunks if h["id"] in ids), key=lambda h: h["seed"][0], reverse=True):
+        i1, i2 = h["base"]
+        j1, j2 = h["seed"]
+        out[j1:j2] = base[i1:i2]
+    return out
+
+
+def main(argv=None) -> int:
+    p = argparse.ArgumentParser(prog="seed_edit_diff.py")
+    sp = p.add_subparsers(dest="cmd", required=True)
+    for name in ("init", "hunks", "revert", "accept"):
+        x = sp.add_parser(name)
+        x.add_argument("base")
+        x.add_argument("seed")
+        if name == "revert":
+            x.add_argument("--ids", required=True)
+    try:
+        a = p.parse_args(argv)
+    except SystemExit:
+        return 2
+    base, seed = pathlib.Path(a.base), pathlib.Path(a.seed)
+    if not seed.is_file():
+        print("seed not found: %s" % seed, file=sys.stderr)
+        return 2
+    if a.cmd == "init":
+        if base.exists():
+            print(json.dumps({"initialized": False, "reason": "base_exists"}, ensure_ascii=False))
+            return 0
+        base.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(seed, base)
+        print(json.dumps({"initialized": True}, ensure_ascii=False))
+        return 0
+    if a.cmd == "accept":
+        base.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(seed, base)
+        print(json.dumps({"accepted": True}, ensure_ascii=False))
+        return 0
+    if not base.is_file():
+        print(json.dumps({"base_present": False, "empty": None, "hunks": []}, ensure_ascii=False))
+        return 3
+    b, s = _read(base), _read(seed)
+    hunks = compute_hunks(b, s)
+    if a.cmd == "hunks":
+        print(json.dumps({"base_present": True, "empty": not hunks, "hunks": hunks}, ensure_ascii=False))
+        return 0
+    try:
+        ids = {int(x) for x in a.ids.split(",") if x.strip()}
+    except ValueError:
+        print("--ids 는 쉼표로 이은 정수다: %r" % a.ids, file=sys.stderr)
+        return 2
+    known = {h["id"] for h in hunks}
+    if not ids or not ids <= known:
+        print("없는 덩어리 번호: %s (있는 것: %s)" % (sorted(ids - known), sorted(known)), file=sys.stderr)
+        return 2
+    seed.write_text("".join(revert(b, s, hunks, ids)), encoding="utf-8")
+    print(json.dumps({"reverted": sorted(ids), "remaining": len(compute_hunks(b, _read(seed)))},
+                     ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
