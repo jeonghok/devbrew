@@ -162,17 +162,26 @@ elif [ "$bad" -eq 0 ]; then
 fi
 
 # ── 5. 부재 — `ABSENT` 의 파일에는 상한 어휘가 0건 ───────────────────────────
-for f in "${ABSENT[@]}"; do
-  rel="${f#"$REPO_ROOT"/}"
-  if [ ! -r "$f" ]; then
-    no "부재 코퍼스 실재: $rel 를 읽을 수 없다 — 이 자리는 이번 판정에서 빠졌다(조용한 축소 금지)"
-    continue
-  fi
-  hits="$(grep -oE "$CAP_RE" "$f" || true)"
-  if [ -z "$hits" ]; then
-    ok "부재: $rel 에 상한 어휘 0건 (정본 밖 두 번째 출처 없음)"
-  else
-    no "부재: $rel 가 상한을 다시 적었다 — $(printf '%s' "$hits" | tr '\n' ' ')(정본은 shared/docreview/references/reviewing-document.md 한 줄이다. 같은 숫자여도 두 번째 출처다)"
-  fi
-done
+# 배열이 비면(`ABSENT=()`) 아래 for 는 0회 돌아 검사 없이 조용히 통과한다 — 그래서
+# 도는 개수를 floor 로 먼저 잰다. 이 가드는 이 파일 **안**에 산다 — 「## 5. 부재」
+# 블록 전체(이 가드 포함)가 통째로 삭제되면 파일 안 어떤 가드도 그것을 못 잡는다
+# (알려진 한계, Section 4 의 `seen` floor 와 같은 처지). 이 floor 는 Section 4 의
+# `seen` 에 합치지 않는다 — 합치면 한쪽 코퍼스의 증가가 다른 쪽의 소실을 가린다.
+if [ "${#ABSENT[@]}" -lt 1 ]; then
+  no "부재: ABSENT 코퍼스가 비었다(0건) — 최소 1건(framing-requests/SKILL.md)이 있어야 한다. 배열을 비우면 부재 검사 전체가 검사 없이 조용히 통과한다"
+else
+  for f in "${ABSENT[@]}"; do
+    rel="${f#"$REPO_ROOT"/}"
+    if [ ! -r "$f" ]; then
+      no "부재 코퍼스 실재: $rel 를 읽을 수 없다 — 이 자리는 이번 판정에서 빠졌다(조용한 축소 금지)"
+      continue
+    fi
+    hits="$(grep -oE "$CAP_RE" "$f" || true)"
+    if [ -z "$hits" ]; then
+      ok "부재: $rel 에 상한 어휘 0건 (정본 밖 두 번째 출처 없음)"
+    else
+      no "부재: $rel 가 상한을 다시 적었다 — $(printf '%s' "$hits" | tr '\n' ' ')(정본은 shared/docreview/references/reviewing-document.md 한 줄이다. 같은 숫자여도 두 번째 출처다)"
+    fi
+  done
+fi
 finish
