@@ -289,8 +289,10 @@ builder 출력은 verbatim 으로 다룬다(약화·편집 금지). 보류는 §
 를 가진 문서일 때만 읽는다(조건부 로드 — seed 없는 호출이 더 흔해 finishing.md 보다 조건성이 강하다).
 
 ```
-Read references/seed-input.md
+Read ${CLAUDE_PLUGIN_ROOT}/skills/conducting-interview/references/seed-input.md
 ```
+
+그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
 ## 종료 — brief 작성 + optional handoff
 
@@ -317,7 +319,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/conducting-interview/references/finishing.md
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
-위 seed 포인터와 아래 migration 포인터는 이 SKILL.md 파일 기준 상대경로다 — 레포·설치본 두 레이아웃 모두 이 SKILL.md와 같은 위치에 `references/`가 있어 그대로 resolve 된다(두 포인터 공통 규칙 — 각자 따로 반복하지 않는다).
+아래 migration 포인터는 이 SKILL.md 파일 기준 상대경로다 — 레포·설치본 두 레이아웃 모두 이 SKILL.md와 같은 위치에 `references/`가 있어 그대로 resolve 된다.
 
 ## In-flight state migration
 

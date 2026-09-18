@@ -31,6 +31,17 @@ Read 가 실패하면(파일 부재 · 경로가 디렉토리 · 권한 등) 관
 
 > `[spec-distill] '@<경로>' 를 읽지 못했다(<관측한 사유>) — seed 를 만든 워크트리 디렉토리에서 세션을 열었는지 확인하라. 인터뷰를 시작하지 않는다.`
 
+**seed 면 원문 기록의 경로를 한 줄로 낸다.** 「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면,
+읽은 파일의 절대경로에서 audit 경로를 도출한다 — 같은 디렉토리에서 파일명 끝의 `.md` 를 `.audit.md` 로 바꾼
+파일이다. seed frontmatter 의 `audit_file:` 은 따라가지 않는다(파일 이름뿐이라 디렉토리가 없다). 그 파일을
+Read 로 확인하고, 인터뷰에 들어가기 전에 아래 한 줄을 그대로 낸다:
+
+> `[spec-distill] seed 원문 대조: seed=<seed 절대경로> · audit=<audit 절대경로>`
+
+읽지 못하면 `audit=없음(<관측한 사유>)` 로 낸다. 이 줄은 「풀린 입력」에 넣지 않는다 — 「풀린 입력」은 seed 전문
+그대로여야 brief §6 의 `S1` 이 바뀌지 않는다. `conducting-interview` 의 seed 입력 규약이 이 줄의 두 경로로
+문장마다 출처와 확인을 가른다.
+
 발동하지 않았으면 「풀린 입력」은 이 command 가 받은 입력 그대로다.
 
 ## Step 2: Trivia Escape Check (AP4 회피, AC10)
