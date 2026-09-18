@@ -198,7 +198,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("script", type=Path)
     ap.add_argument("--mode", choices=["audit", "smoke"], default="audit")
-    ap.add_argument("--agents-dir", type=Path, default=Path("plugins/plugin-audit/agents"))
+    ap.add_argument("--agents-dir", type=Path, default=Path(__file__).resolve().parent.parent / "agents")
     args = ap.parse_args()
 
     if not args.script.is_file():

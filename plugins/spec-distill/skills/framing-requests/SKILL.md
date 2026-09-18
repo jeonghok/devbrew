@@ -215,7 +215,7 @@ premortem · coverage-mapper 넷이 거기 있는 장치이고, 이 skill 에는
 없는 채로 갑니다(§`degrade 채널` 의 `no-state-in-phase-0`).
 
 ```bash
-SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
 STATE="$ROOT/$sid/state.local.md"
@@ -405,7 +405,7 @@ Agent({ description: "Seed suppression critique", subagent_type: "spec-distill:s
 # 쌍이고, 그 사이에 무엇을 몇 개 넣든 읽기가 보는 파일은 이 실행이 만든 것이다.
 # 한쪽을 옮기면 그 쌍이 깨진다.
 [[ -n "${CODEX_YAML:-}" ]] && rm -f "$CODEX_YAML"
-SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 DETECT_OUT="$(bash "$SD/scripts/detect_codex.sh")"
 codex_avail="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^codex_available: //p')"
 skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
@@ -630,7 +630,8 @@ git commit -q -F "$SEED_DIR/commit-msg.txt"
 게이트를 띄우기 **직전에** 구조 검사를 돌립니다:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/check_seed.py" \
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+python3 "$SD/scripts/check_seed.py" \
   gate "$SEED" "$AUDIT"; seed_rc=$?
 if [ "$seed_rc" -ne 0 ]; then
   echo "[spec-distill] seed 게이트 위반 — 위 항목을 고치고 다시 이 블록부터 탑니다. 게이트를 띄우지 않습니다." >&2

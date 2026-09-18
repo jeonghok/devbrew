@@ -26,8 +26,8 @@ from pathlib import Path
 FIN = (Path(__file__).resolve().parent.parent / "skills" / "conducting-interview"
        / "references" / "finishing.md")
 
-# 하니스가 넣어 주는 값. `CLAUDE_PLUGIN_ROOT` 는 플러그인 실행 시 Claude Code 가 export 한다
-# (그래서 문서의 블록들도 `${CLAUDE_PLUGIN_ROOT:-...}` 로 fallback 을 단다).
+# 펜스 밖에서 오는 값. `CLAUDE_PLUGIN_ROOT` 는 Bash 도구 환경에 없다 — 모델이 SKILL.md 가 보여 준 절대 경로로
+# 바꿔 넣고, 빠뜨리면 펜스의 가드가 빈 값에서 멈춘다(`shared/tests/test_plugin_root_no_cwd_fallback.sh` 축 2).
 ENV_PROVIDED = {"CLAUDE_PLUGIN_ROOT"}
 
 FENCE_OPEN = re.compile(r"^\s*```bash\s*$")

@@ -312,10 +312,12 @@ floor 다섯이 전부 `closed` 여야 종료가 열리지만, **사용자는 �
 읽어야 하는 조건: `coverage.floor` 의 다섯 차원이 모두 `status: closed`.
 
 ```
-Read references/finishing.md
+Read ${CLAUDE_PLUGIN_ROOT}/skills/conducting-interview/references/finishing.md
 ```
 
-경로는 이 SKILL.md 파일 기준 상대경로다 — 레포·설치본 두 레이아웃 모두 이 SKILL.md와 같은 위치에 `references/`가 있어, 위 seed 포인터·아래 migration 포인터를 포함한 이 세 참조 파일 전부 그대로 resolve 된다(세 포인터 공통 규칙 — 각자 따로 반복하지 않는다).
+그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
+
+위 seed 포인터와 아래 migration 포인터는 이 SKILL.md 파일 기준 상대경로다 — 레포·설치본 두 레이아웃 모두 이 SKILL.md와 같은 위치에 `references/`가 있어 그대로 resolve 된다(두 포인터 공통 규칙 — 각자 따로 반복하지 않는다).
 
 ## In-flight state migration
 

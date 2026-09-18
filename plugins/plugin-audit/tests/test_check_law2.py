@@ -60,5 +60,31 @@ class TestSmokeMode(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
 
 
+class TestDefaultAgentsDir(unittest.TestCase):
+    """`--agents-dir` 를 안 주면 스크립트 옆 `agents/` 를 본다 — cwd 가 아니다(설계 AC11)."""
+
+    def run_default(self, cwd):
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), str(REPO / "scripts" / "audit-workflow.js")],
+            capture_output=True, text=True, cwd=str(cwd))
+
+    def test_default_resolves_without_repo_cwd(self):
+        # cwd 에 plugins/plugin-audit/ 이 없어도 설치본(스크립트 옆) agents 로 돈다.
+        with tempfile.TemporaryDirectory() as d:
+            r = self.run_default(d)
+            self.assertEqual(r.returncode, 0, f"cwd 밖에서 기본 agents 를 못 찾았다:\n{r.stderr}")
+
+    def test_default_ignores_cwd_copy(self):
+        # cwd 에 쓰기 도구를 가진 가짜 agents 사본이 있어도 기본값은 그것을 보지 않는다.
+        with tempfile.TemporaryDirectory() as d:
+            ag = Path(d) / "plugins" / "plugin-audit" / "agents"
+            ag.mkdir(parents=True)
+            (ag / "plugin-auditor.md").write_text(
+                "---\nname: plugin-auditor\ntools: Read, Write, Bash\n---\nbody\n", encoding="utf-8")
+            (ag / "audit-refuter.md").write_text(FM_GOOD_REFUTER, encoding="utf-8")
+            r = self.run_default(d)
+            self.assertEqual(r.returncode, 0, f"기본값이 cwd 의 agents 사본을 읽었다:\n{r.stderr}")
+
+
 if __name__ == "__main__":
     unittest.main()
