@@ -113,13 +113,13 @@ in any per-dispatch block — the reviewer agents declare `project_dir` as a
 required dispatch parameter and forbid `pwd`/`git rev-parse` recomputation
 in their personas.
 
-**Step P0b — Resolve the plugin root.** `CLAUDE_PLUGIN_ROOT` is **not set in the
-Bash tool environment**. Run every script path below with the installed
-plugin-root substituted; when dogfooding inside the devbrew repo that is
-`./plugins/quality-gates`. Self-contained fences derive it in-line:
+**Step P0b — Resolve the plugin root.** Every script named below lives under
+`${CLAUDE_PLUGIN_ROOT}/scripts/`. If that path does not read as absolute, do not guess one
+(the cwd included) — stop and report. Self-contained fences take the root from the token
+and stop when it is empty:
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 ```
 
 Shell state does not carry between Bash calls — every fence that needs `$QG`
@@ -132,7 +132,7 @@ return immediately. Do NOT call setup-qg.sh or any agent.
 **Step P2 — Setup state.** Run:
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/setup-qg.sh" --ensure $ARGUMENTS
 ```
 
@@ -271,7 +271,7 @@ For each iteration N (1..5):
 1. **Resolve the review scope** — `paths` / `branch` / `session` (`session` = the default: no `branch` arg, no `--paths`). **There is no preflight scope**; nothing upstream hands you a file set, so you derive it here, from git, every turn:
 
    ```bash
-   QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"   # plugin root per Step P0b
+   QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }   # plugin root per Step P0b
    MERGE_BASE=$("$QG/scripts/resolve-baseline.sh" | sed -n 's/^merge_base: //p')
    git diff --name-only "$MERGE_BASE"..HEAD    # (a) committed on this branch
    git diff HEAD --name-only                   # (b) tracked, not yet committed
@@ -290,7 +290,7 @@ of this turn (C3 — single call; the cached values are consumed by the
 honest-verdict floor at Step 4.5):
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/check-review-scope.sh"
 ```
 
@@ -506,7 +506,7 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
    gate** (lightness) — fan-out is bounded by the rubric's natural signal-binding, the
    transparency line above, and the recomputed max fan-out declared in the README.
    (A repo-wide `fan-out ≥5` hard-review gate was **removed** from CLAUDE.md and the philosophy doc by the harness-capability-suppression sweep — it is no longer a backstop and must not be cited as one.)
-4. Run `synthesize_findings.py` (`${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}/scripts/`)
+4. Run `synthesize_findings.py` (`${CLAUDE_PLUGIN_ROOT}/scripts/`)
    to consolidate findings. **Capture the script's complete stdout** — the
    synthesized Markdown block (counts line + findings table + suggested-fixes
    list, or the empty-state line). You surface this verbatim in step 4.5; do
@@ -842,12 +842,10 @@ this user-consent termination.)
 Runtime 으로 진행하기로 판정된 경우.
 
 ```
-Read references/runtime-gate.md
+Read ${CLAUDE_PLUGIN_ROOT}/skills/quality-pipeline/references/runtime-gate.md
 ```
 
-경로는 이 SKILL.md 파일 기준 상대경로다 — 레포·설치본 두 레이아웃 모두 이
-SKILL.md와 같은 위치에 `references/runtime-gate.md`가 있으므로 그대로 resolve
-된다([state-file-format](references/state-file-format.md#history)와 같은 관례).
+그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
 ## Blocked-path routing
 
@@ -912,7 +910,7 @@ Build the status rows and render them (deterministic, scannable) — one
 `aborted iter N`, `skipped`, `clean`, `failed`, `SKIP_WITH_EVIDENCE`):
 
 ```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 printf 'Review gate\t<clean iter N | no scope reviewed (branch <M> ahead) | proceeded-with-findings iter N | aborted iter N | skipped>\nRuntime gate\t<clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>\n' \
   | $QG/scripts/render-terminal.py table --title "Quality Gates — Complete"
 ```

@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.1.1] — 2026-09-15
+
+patch 인 이유 — 새 surface 가 없다. 바뀌는 것은 skill · reference 펜스가 플러그인 루트를 얻는 방식뿐이다.
+
+### Security
+
+- **skill 이 사용자 저장소의 스크립트를 실행하던 cwd fallback 을 없앴다.** `reviewing-brief`(13줄) · `framing-requests`(3줄) · `reviewing-spec`(펜스 다섯 · `PROFILE=` 셋)의 `${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}` 과 끝자락 `|| SD="./plugins/spec-distill"` 는 Bash 도구 환경에 그 변수가 없어 언제나 cwd 상대로 풀렸다 — devbrew 밖에서는 사용자 저장소의 `plugins/spec-distill/scripts/*` 를, devbrew 의 옛 체크아웃 · 포크 안에서는 다른 버전의 스크립트를 조용히 실행했다. 이제 펜스는 SKILL.md 를 로드할 때 절대 경로로 치환되는 bare `${CLAUDE_PLUGIN_ROOT}` 에서 루트를 받고, 빈 값이면 `[spec-distill] 플러그인 루트 미해석 — …` 를 stderr 로 내고 비0 으로 멈춘다. `reviewing-spec` 의 가드 메시지는 그 skill 의 다른 비-리뷰 출구와 같은 복귀 지시로 끝난다.
+- **reference `skills/conducting-interview/references/finishing.md` 의 펜스 둘이 같은 가드를 지난다.** `Read` 로 연 reference 에는 치환이 오지 않아 bare 토큰이 Bash 에서 빈 값이 되어 `/scripts/…` 로 깨졌다. 여는 쪽 `conducting-interview/SKILL.md` 의 `Read` 줄은 로드 시 치환되는 `${CLAUDE_PLUGIN_ROOT}/skills/conducting-interview/references/finishing.md` 가 되고, 바로 아래 한 줄이 그 파일의 루트 변수를 무엇으로 바꿔 넣을지와, 경로가 절대 경로로 보이지 않으면 cwd 에서 찾지 말고 멈춘다는 것을 알린다.
+- 집행은 새 공용 락 `shared/tests/test_plugin_root_no_cwd_fallback.sh` 가 한다.
+
+**알려진 결과 둘**
+
+- **devbrew 안 dogfooding 이 바뀐다.** 설치본 skill 이 이제 워킹트리가 아니라 설치본 스크립트를 돈다. 워킹트리 코드를 돌리려면 `claude --plugin-dir ./plugins/spec-distill` 로 로드한다.
+- **skill 본문 치환이 없는 하니스에서는 멈춘다.** 경로를 추측하지 않고 가드에서 복구 지시와 함께 멈춘다. 어느 하니스가 그런지는 모른다 — 2.1.270 에서는 치환된다.
+
+### Fixed
+
+- **`tests/test_finishing_block_scope.py` 머리말.** 「`CLAUDE_PLUGIN_ROOT` 는 Claude Code 가 export 한다」는 틀렸다 — Bash 도구 환경에는 그 변수가 없다. 모델이 SKILL.md 가 보여 준 경로로 바꿔 넣고, 빠뜨리면 가드가 멈춘다고 고쳤다.
+- **`tests/test_reviewing_spec_entry_fence.sh` 의 무치환 기대.** 진입 · `## 입력` 펜스가 판결 없이 비0 으로 멈추고, cwd 의 미끼 스크립트(`./plugins/spec-distill/scripts/`)를 돌리지 않으며, 원인과 복귀 지시를 한 줄로 낸다.
+
 ## [3.1.0] — 2026-09-14
 
 minor 인 이유 — interview brief 리뷰 자리(`reviewing-brief`)가 공유 문서 리뷰 엔진(`shared/docreview/`)의 두 번째 껍데기가 됐다. 새 surface(웹 있는 탐지 사본 `agents/doc-critic-web.md` · 엔진 게이트 요약의 필드 넷 · 엔진 서브커맨드 `state-dir-for`)가 들고, 바뀌는 호출 계약(`reviewing-brief` 의 인자 넷 → 둘)은 `user-invocable: false` skill 의 유일한 호출자 `conducting-interview` 를 같은 릴리스에서 함께 고쳤다. 이 플러그인은 엔진을 `scripts/{docreview_state,docreview_route,adjudication}.py` · `scripts/run_docreview_codex_reviewer.sh` · `references/reviewing-document.md` 심볼릭 링크로 배포하므로 엔진 변경도 이 블록에 적는다(cache key). **3.0.1 위의 minor 다** — 3.0.0 · 3.0.1 과 병합한 뒤에도 위 새 surface 가 그대로 들고, 3.0.0 이 정한 `reviewing-spec` 진입 계약(진입 펜스 · 호출 인자 · 미커밋 펜스)과 후보 펜스의 **동작**은 바꾸지 않는다(후보 펜스의 텍스트는 아래 Fixed 항목대로 바뀌었다). 그 골격 위에서 엔진 상태만 세션 디렉토리에서 문서별 디렉토리로 옮겼다(아래 Fixed 첫 항목 · 업그레이드 주의 첫째).

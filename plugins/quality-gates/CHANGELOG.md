@@ -3,6 +3,23 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.6.1] — 2026-09-15
+
+### Security
+
+- **`/qg` 가 사용자 저장소의 스크립트를 실행하던 cwd fallback 을 없앴다.** `skills/quality-pipeline/SKILL.md` 의 펜스 다섯 · 산문 한 줄과 `skills/quality-pipeline/references/runtime-gate.md` 의 펜스 스물이 쓰던 `${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}` 는 Bash 도구 환경에 그 변수가 없어 언제나 cwd 의 `./plugins/quality-gates` 로 풀렸다 — devbrew 밖에서는 사용자 저장소의 `plugins/quality-gates/scripts/*` 를 실행했다. SKILL.md 펜스는 로드 시 치환되는 bare `${CLAUDE_PLUGIN_ROOT}` 에서, reference 펜스는 SKILL.md 가 건네는 절대 경로를 모델이 바꿔 넣어 루트를 받고, 둘 다 빈 값이면 `[quality-gates] 플러그인 루트 미해석 — …` 로 멈춘다.
+- **reference 를 여는 줄이 절대 경로를 건넨다.** `Read references/runtime-gate.md` 는 `Read ${CLAUDE_PLUGIN_ROOT}/skills/quality-pipeline/references/runtime-gate.md` 가 되고, 「SKILL.md 기준 상대경로」 문단 자리에 그 파일의 루트 변수를 바꿔 넣으라는 한 줄이 선다.
+- **루트 진술 둘.** Step P0b 와 `skills/critiquing-artifacts/SKILL.md` 의 「devbrew 안에서는 `./plugins/quality-gates`」를, 스크립트가 `${CLAUDE_PLUGIN_ROOT}/scripts/`(로드 시 치환)에 있고 절대 경로로 보이지 않으면 추측하지 말고 멈추라는 진술로 바꿨다 — 그 아래 이름만 적힌 스크립트 호출이 이 진술로 루트를 받는다.
+
+**알려진 결과 둘**
+
+- **devbrew 안 dogfooding 이 바뀐다.** 설치본 skill 이 이제 워킹트리가 아니라 설치본 스크립트를 돈다. 워킹트리 코드를 돌리려면 `claude --plugin-dir ./plugins/quality-gates` 로 로드한다.
+- **skill 본문 치환이 없는 하니스에서는 멈춘다.** 경로를 추측하지 않고 가드에서 복구 지시와 함께 멈춘다. 어느 하니스가 그런지는 모른다 — 2.1.270 에서는 치환된다.
+
+### Removed
+
+- **`tests/test_skill_plugin_root_fallback.sh`.** 머리말의 「skill 의 지시에는 치환이 없다」는 2.1.239 의 Bash 환경 실측에서 이어진 추론이었고 2.1.270 에서 틀렸다 — skill 본문의 bare 토큰은 로드 시 치환된다. 그 락의 두 축(펜스 안 `:-` 강제 · 본문 bare 금지)은 새 규칙과 반대 방향이다. 전 플러그인을 재는 공용 락 `shared/tests/test_plugin_root_no_cwd_fallback.sh` 가 대체한다.
+
 ## [7.6.0] — 2026-09-14
 
 ### Changed

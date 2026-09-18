@@ -12,7 +12,7 @@
 #     없으면 빈 값과 사유(`doc_empty`), 있으면 `state-dir-for` 의 문서별 값이고 한 세션의 두 문서가 다른 값을 받는다.
 #   · 설치본 흉내 — 플러그인이 cwd 밖 · `CLAUDE_PLUGIN_ROOT` 없음 · bare `${CLAUDE_PLUGIN_ROOT}` 만
 #     치환: 진입 · `## 입력` 상태 · `## 프로필` · codex 게이트 앞머리의 루트가 그 플러그인으로 풀린다.
-#     무치환이면 `## 입력` 이 상태 리졸버 부재를 원인으로 댄다.
+#     무치환이면 진입 · `## 입력` 이 가드에서 멈추고 cwd 의 미끼(`./plugins/spec-distill/scripts/`)를 돌리지 않는다.
 #   · 미커밋 펜스(`uncommitted-check:begin` ~ `:end`) — 깨끗함 · 미커밋 · untracked(사용자 설정
 #     `status.showUntrackedFiles=no` 포함) · 작업 트리 밖 · 상대 경로 · 빈 `spec_path` · 없는 경로를
 #     가른다. 출력이 비었다는 이유로 깨끗함으로 읽지 않는다(AC9).
@@ -205,12 +205,9 @@ expect_verdict "정본: 은퇴 Stop 토큰 + PYTHONIOENCODING=ascii" 'review-ent
 assert_contains "$out" "spec-distill:Stop" "정본: ascii I/O 에서도 은퇴 advisory 가 그대로 나온다"
 
 # ── F1: 플러그인 루트 해석 — 로드시 치환 시뮬레이션 vs 무치환 ──────────────────
-# `SD="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"` 의 안쪽 bare 형태
-# `${CLAUDE_PLUGIN_ROOT}` 는 skill 로드 시 하니스가 치환하고(2026-09-11 실측 —
-# 이 대화에서 로드된 skill 본문의 bare 참조가 절대경로로 치환된 채 보였다),
-# `:-` 를 낀 바깥 형태는 치환되지 않는다. 치환된 경우 SD 는 절대 플러그인
-# 루트가 되고, 치환이 없으면 `[ -n "$SD" ] || SD="./plugins/spec-distill"` 가
-# 오늘과 같은 fallback 을 낸다.
+# `SD="${CLAUDE_PLUGIN_ROOT}"` 는 skill 로드 시 하니스가 절대 경로로 치환한다(2.1.270 실측 — 설계
+# docs/superpowers/specs/2026-09-14-plugin-root-cwd-fallback-design.md 「실측」). 치환이 없으면 빈 값이고,
+# 같은 줄의 가드가 cwd 로 가지 않고 멈춘다 — cwd 에 `./plugins/spec-distill/` 미끼가 있어도 돌리지 않는다.
 SUBST_FENCE="$SCRATCH/entry_subst.sh"
 subst_out="$(python3 -c '
 import sys
@@ -230,9 +227,20 @@ run_fence_no_root() {   # run_fence_no_root <fence-file> <cwd>
 }
 expect_verdict "F1: 치환 시뮬레이션(변수 없음)" 'review-entry: PROCEED' \
   "$(run_fence_no_root "$SUBST_FENCE" "$SCRATCH")"
-out="$(run_fence_no_root "$ENTRY_FENCE" "$SCRATCH")"
-expect_verdict "F1: 무치환·변수 없음·플러그인 루트 밖 cwd" "$F" "$out"
-assert_contains "$out" "모듈 부재" "F1: 무치환·변수 없음 — 오늘과 같은 fail-closed fallback(모듈 부재)"
+# 무치환 — 변수도 치환도 없고, cwd 에 미끼 `./plugins/spec-distill/scripts/review_entry.py` 가 있다. 가드가
+# 미끼에 닿기 전에 멈춘다: 판결 줄 없이 비0 이고, [spec-distill] 한 줄이 원인과 복귀 지시를 싣는다.
+mkdir -p "$SCRATCH/plugins/spec-distill/scripts"
+printf 'open("%s", "w").close()\n' "$SCRATCH/BAIT.review_entry" > "$SCRATCH/plugins/spec-distill/scripts/review_entry.py"
+F1_ERR="$SCRATCH/f1_nosubst.err"
+out="$( cd "$SCRATCH" && env -i PATH="/usr/bin:/bin:$PY_DIR" HOME="$SCRATCH" PYTHONDONTWRITEBYTECODE=1 \
+    bash "$ENTRY_FENCE" 2>"$F1_ERR" )"; f1_rc=$?
+[ "$f1_rc" -ne 0 ] && ok "F1: 무치환 — 비0 으로 멈춘다 (rc $f1_rc)" || no "F1: 무치환 — rc 0 으로 끝났다"
+assert_not_grep "$out" '^review-entry: ' "F1: 무치환 — 판결 줄을 내지 않는다(PROCEED 로 읽힐 줄이 없다)"
+[ ! -e "$SCRATCH/BAIT.review_entry" ] && ok "F1: 무치환 — cwd 의 미끼 review_entry.py 가 돌지 않았다" \
+  || no "F1: 무치환 — cwd 의 미끼 review_entry.py 가 돌았다(사용자 저장소의 스크립트를 실행한다)"
+assert_contains "$(cat "$F1_ERR")" "[spec-distill] 플러그인 루트 미해석" "F1: 무치환 — 원인을 댄다"
+ends_with_return "F1: 무치환 — 그 줄이 복귀 지시로 끝난다" "$(cat "$F1_ERR")"
+rm -rf "$SCRATCH/plugins" "$SCRATCH/BAIT.review_entry"
 
 # ── `## 입력` 상태 디렉토리 펜스 — session id 를 못 풀면 소리를 내고 STATE_DIR 을 비운다 ──
 # 엔진 상태는 세션 디렉토리가 아니라 그 아래 문서별 디렉토리다(spec-distill 3.1.0 · Ruling R78). 블록은
@@ -303,7 +311,7 @@ fi
 
 # ── 설치본 흉내 — 플러그인이 cwd 밖에 있고, CLAUDE_PLUGIN_ROOT 가 없고, bare `${CLAUDE_PLUGIN_ROOT}`
 #    만 로드 시 치환된다. 진입 · `## 입력` 상태 · `## 프로필` · codex 게이트 네 펜스의 루트가 모두 그
-#    플러그인으로 풀려야 리뷰가 돈다. 무치환이면 `## 입력` 은 진짜 원인(상태 리졸버 부재)을 댄다.
+#    플러그인으로 풀려야 리뷰가 돈다. 무치환이면 `## 입력` 은 가드에서 멈추고 cwd 의 미끼를 돌리지 않는다.
 INST="$SCRATCH/installed/spec-distill"
 mkdir -p "$INST/scripts" "$INST/references/docreview-profiles"
 cp -L "$SD_SCRIPTS/review_entry.py" "$SD_SCRIPTS/kill_switch_active.py" "$SD_SCRIPTS/state_path.py" "$SD_SCRIPTS/docreview_state.py" "$INST/scripts/"
@@ -384,13 +392,19 @@ out="$(run_inst "$INST_CG" 'printf "SD=[%s]\n" "$SD"; [ -f "$PROFILE" ] && echo 
 assert_contains "$out" "SD=[$INST]" "설치본: codex 게이트 — SD 가 설치된 플러그인으로 풀린다"
 assert_contains "$out" "PROFILE_FILE_OK" "설치본: codex 게이트 — PROFILE 이 실재하는 파일이다"
 
-# 무치환 — 같은 설치본에서 하니스가 아무것도 치환하지 않으면 `## 입력` 은 원인을 대고 끝낸다.
+# 무치환 — 같은 설치본에서 하니스가 아무것도 치환하지 않고, cwd(사용자 저장소)에 미끼
+# `./plugins/spec-distill/scripts/state_path.py` 가 있다. `## 입력` 은 가드에서 멈춘다 — 미끼를 돌리지 않고,
+# 원인과 복귀 지시를 한 줄로 댄다. 뒤의 프로브 줄(STATE_DIR 출력)까지 가지 않는다.
+mkdir -p "$UREPO/plugins/spec-distill/scripts"
+printf 'open("%s", "w").close()\nprint("baitsid01")\n' "$SCRATCH/BAIT.state_path" > "$UREPO/plugins/spec-distill/scripts/state_path.py"
 out="$(run_inst "$SDIR_FENCE" 'printf "STATE_DIR=[%s]\n" "$STATE_DIR"')"
-assert_contains "$out" "[spec-distill] 상태 리졸버 부재: ./plugins/spec-distill/scripts/state_path.py (플러그인 루트 미해석)" \
-  "무치환: 「## 입력」 — 상태 리졸버 부재를 원인으로 댄다"
+assert_contains "$out" "[spec-distill] 플러그인 루트 미해석" "무치환: 「## 입력」 — 가드가 원인을 댄다"
 ends_with_return "무치환: 그 줄이 복귀 지시로 끝난다" "$out"
 assert_not_contains "$out" "특정할 수 없다" "무치환: session id 줄로 원인을 가리지 않는다"
-assert_eq "$(printf '%s\n' "$out" | tail -n 1)" "STATE_DIR=[]" "무치환: STATE_DIR 을 비운다"
+assert_not_contains "$out" "STATE_DIR=[" "무치환: 가드에서 멈춰 뒤의 프로브 줄까지 가지 않는다"
+[ ! -e "$SCRATCH/BAIT.state_path" ] && ok "무치환: cwd 의 미끼 state_path.py 가 돌지 않았다" \
+  || no "무치환: cwd 의 미끼 state_path.py 가 돌았다(사용자 저장소의 스크립트를 실행한다)"
+rm -rf "$UREPO/plugins" "$SCRATCH/BAIT.state_path"
 
 # ── AC9: 미커밋 펜스 ─────────────────────────────────────────────────────────
 UNC_FENCE="$SCRATCH/uncommitted.sh"
