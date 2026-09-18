@@ -25,6 +25,22 @@ TMP="$(mktemp -d -t sd-seed-log-XXXXXX)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
 test -f "$L" || { no "부재: $L"; finish; exit; }
 
+# ── AUDIT_HEADINGS — 여섯 제목이 템플릿의 '## N.' 줄에서 도출된다, 순서까지(fix round 1) ──
+tpl_headings="$(grep -o '^## [0-9][0-9]*\. .*' "$TPL")"
+py_headings="$(PYTHONPATH="$S" python3 -c '
+import seed_review_log as m
+for h in m.AUDIT_HEADINGS:
+    print(h)
+')"
+assert_eq "$py_headings" "$tpl_headings" "AUDIT_HEADINGS: seed_review_log 의 여섯 제목이 템플릿의 '## N.' 줄과 순서까지 같다"
+
+# ── ## 2 스캐폴드 — 템플릿이 실제로 '### 라운드 <n>' 줄을 쓰는가. build_seed_inline_blob.py 의
+# ROUND_SCAFFOLD_RE 예외(heading-모양 경고에서 이 줄만 뺀다)가 근거로 삼는 사실이다 — 템플릿이
+# 이 줄을 바꾸면 예외의 근거가 조용히 사라지지 않게 여기서 묶는다.
+grep -qxF '### 라운드 <n>' "$TPL" \
+  && ok "템플릿 ## 2 안에 '### 라운드 <n>' 스캐폴드 줄이 있다(heading-모양 경고 예외의 근거)" \
+  || no "템플릿에 '### 라운드 <n>' 줄이 없다 — ROUND_SCAFFOLD_RE 예외의 근거가 사라졌다"
+
 AUD="$TMP/a.audit.md"
 cat > "$AUD" <<'EOF'
 ---
