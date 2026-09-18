@@ -21,10 +21,11 @@
 # 않는다 — 그러면 다음 값이 `7` 일 때 이 락이 다시 침묵한다.
 #
 # ── 이후 PR 이 코퍼스를 넓히는 자리 ─────────────────────────────────────────
-# 문서 리뷰 엔진은 자리 넷을 흡수한다. design doc 자리(이 파일이 오늘 재는 것) 다음은
-# `reviewing-brief` · `critiquing-artifacts` · `framing-requests` 이고, 그 자리들이
-# 엔진으로 전환될 때 **아래 `TARGETS` 배열에 그 SKILL.md 를 한 줄씩 더한다**. 배열
-# 하나만 늘리면 양의 단언과 음의 짝이 동시에 그 파일을 덮는다.
+# 문서 리뷰 엔진은 자리 넷을 흡수한다. 자리가 엔진으로 전환될 때 그 SKILL.md 가 들어갈
+# 배열은 **그 자리가 상한 숫자를 적는가**로 갈린다 — 적으면 `TARGETS`(양의 하한 + ∀),
+# 적지 않기로 한 자리면 `NEG_ONLY` + `ABSENT`(∀ + 부재). `framing-requests` 는 뒤엣것이다
+# (설계 2026-09-16-framing-intent-drift C-E — 숫자를 다시 적지 않는다). 숫자를 적지 않는
+# 자리를 `TARGETS` 에 넣으면 「없으니 RED」가 되어 옳은 상태를 벌한다.
 set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -35,10 +36,10 @@ ENGINE="$REPO_ROOT/shared/docreview/scripts/docreview_state.py"
 SKILL="$REPO_ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
 README="$REPO_ROOT/plugins/spec-distill/README.md"
 
-# 이후 PR 이 늘리는 자리 — 「그 자리의 산문이 상한을 CAP 으로 적었는가」를 재는 대상.
-# (`critiquing-artifacts` · `framing-requests` 의 SKILL.md 가 엔진으로 전환될 때 여기 한 줄씩.
-#  `reviewing-brief` 는 PR 3 에서 들어왔다 — 옛 브리프 critic 의 별개 상한이 그 전환으로
-#  사라져, 파일 통째로 양의 단언과 ∀ 둘 다의 대상이 된다.)
+# 「그 자리의 산문이 상한을 CAP 으로 적었는가」를 재는 대상 — 상한 숫자를 적는 자리만.
+# (`reviewing-brief` 는 PR 3 에서 들어왔다 — 옛 브리프 critic 의 별개 상한이 그 전환으로
+#  사라져, 파일 통째로 양의 단언과 ∀ 둘 다의 대상이 된다. `framing-requests` 는 숫자를
+#  적지 않는 자리라 여기가 아니라 아래 `NEG_ONLY` · `ABSENT` 다.)
 TARGETS=(
   "$SKILL"
   "$README"
@@ -67,6 +68,18 @@ NEG_ONLY=(
   "$REPO_ROOT/plugins/spec-distill/references/proceed-gate.md"
   "$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/references/finishing.md"
   "$REPO_ROOT/docs/philosophy/devbrew-harness-philosophy.md"
+  "$REPO_ROOT/plugins/spec-distill/skills/framing-requests/SKILL.md"
+)
+
+# ── 부재 코퍼스 — 「이 자리에는 상한 숫자가 하나도 없다」 ─────────────────────
+# `NEG_ONLY` 의 ∀ 는 정본과 **다른** 숫자만 거부한다. 정본과 **같은** 숫자를 다시 적으면
+# 침묵한다 — 그런데 막으려는 것은 값의 불일치가 아니라 **두 번째 출처의 존재**다(설계
+# 2026-09-16-framing-intent-drift C-E). 그래서 이 배열의 파일에는 상한 어휘(`CAP_RE`)가
+# 0건이어야 한다. 어휘는 `CAP_RE` 그대로다 — 넓히면 상한과 무관한 문장(「질문에도 라운드에도
+# 분량에도 상한이 없습니다」)을 잡아 옳은 상태를 벌한다. 네 형태 밖 표기로 다시 적으면 이
+# 검사도 침묵한다(알려진 구멍 — 그 표기가 실제로 나타났을 때 어휘를 넓힌다).
+ABSENT=(
+  "$REPO_ROOT/plugins/spec-distill/skills/framing-requests/SKILL.md"
 )
 
 
@@ -147,4 +160,19 @@ if [ "$seen" -lt 6 ]; then
 elif [ "$bad" -eq 0 ]; then
   ok "음의 짝: 상한 어휘 ${seen}건 전부가 정본 $CAP 과 같다 (옛 값 잔존 0)"
 fi
+
+# ── 5. 부재 — `ABSENT` 의 파일에는 상한 어휘가 0건 ───────────────────────────
+for f in "${ABSENT[@]}"; do
+  rel="${f#"$REPO_ROOT"/}"
+  if [ ! -r "$f" ]; then
+    no "부재 코퍼스 실재: $rel 를 읽을 수 없다 — 이 자리는 이번 판정에서 빠졌다(조용한 축소 금지)"
+    continue
+  fi
+  hits="$(grep -oE "$CAP_RE" "$f" || true)"
+  if [ -z "$hits" ]; then
+    ok "부재: $rel 에 상한 어휘 0건 (정본 밖 두 번째 출처 없음)"
+  else
+    no "부재: $rel 가 상한을 다시 적었다 — $(printf '%s' "$hits" | tr '\n' ' ')(정본은 shared/docreview/references/reviewing-document.md 한 줄이다. 같은 숫자여도 두 번째 출처다)"
+  fi
+done
 finish
