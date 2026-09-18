@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.1.2] — 2026-09-19
+
+patch 인 이유 — 새 surface 가 없다. §6-단일화 락 회귀를 고친 것뿐이다.
+
+### Fixed
+
+- **§6-단일화 락 회귀.** `build_seed_inline_blob.py` 의 `HEADING_SHAPED_RE`(제목-모양 줄 경고용
+  — 어떤 §6 경계도 계산하지 않는다)가 `section6.py` 밖에서 `##` 헤딩 마커를 소비하는 정규식으로
+  탐지돼 `test_check_brief.sh` 의 §6-단일화 락(section6 이 §6 헤딩 소비 정규식의 유일한 자리라는
+  전수 파생 검사)을 RED 로 만들었다. 판정을 `section6.HEADING_SHAPED_RE` 로 옮기고
+  `build_seed_inline_blob.py` 는 그것을 import 한다(행동 불변). `test_seed_inline_blob.sh` 의
+  변이 두 건이 이제 mutated 스크립트를 격리 디렉터리에서 돌릴 때 sibling `section6.py` 도
+  함께 복사한다 — 안 그러면 `ModuleNotFoundError` 로 죽어 "이빨이 없다"로 오독된다
+  (`test_check_verbatim_coverage.sh` 가 이미 겪은 같은 교훈).
+
 ## [3.1.1] — 2026-09-15
 
 patch 인 이유 — 새 surface 가 없다. 바뀌는 것은 skill · reference 펜스가 플러그인 루트를 얻는 방식뿐이다.

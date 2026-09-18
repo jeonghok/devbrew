@@ -122,6 +122,10 @@ open(sys.argv[2], "w", encoding="utf-8").write(t.replace(needle, "if False:", 1)
 print("MUTATED" if needle in t else "UNCHANGED")
 PY
 cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$TMP/"
+# sibling `section6.py` 도 함께 옮긴다 — build_seed_inline_blob.py 가 heading-모양 판정을
+# section6 에서 import 한다(§6-단일화 락). 없으면 ModuleNotFoundError 로 죽어 mout 가 비고,
+# 그 빈 결과가 「이력이 안 샌다」로 오독된다(test_check_verbatim_coverage.sh 의 같은 교훈).
+cp "$ROOT/plugins/spec-distill/scripts/section6.py" "$TMP/"
 mout="$(python3 "$TMP/mut1.py" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/CLAUDE.md" --for recritic 2>/dev/null)"
 grep -qF 'HISTORY_SUMMARY_MARKER' <<<"$mout" \
   && ok "변이: 소비자 갈래를 지우면 재비판 번들에 판정 이력이 샌다 — AC11 단언에 이빨이 있다" \

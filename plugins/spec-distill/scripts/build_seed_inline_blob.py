@@ -33,7 +33,14 @@ import pathlib
 import re
 import sys
 
-from seed_review_log import duplicate_headings, section_body, user_quotes
+# 제목-모양 판정(heading-shaped line)은 이 파일이 계산하지 않는다 — `scripts/section6.py`
+# 한 곳이다(§6-단일화 락, test_check_brief.sh). 헤딩 마커를 소비하는 정규식이 section6.py
+# 밖에 있으면 그 락이 재발(소비자마다 다른 §6 계산)로 읽어 red 를 낸다.
+_SCRIPTS_DIR = str(pathlib.Path(__file__).resolve().parent)
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+import section6  # noqa: E402
+from seed_review_log import duplicate_headings, section_body, user_quotes  # noqa: E402
 
 # 리뷰어에게 비신뢰 verbatim 으로 알릴 audit 자리 — seed 프로필 `## 처분 안내` 가 이 셋을 이름으로
 # 가리킨다(shared/tests/test_docreview_profiles.sh 가 이 튜플에서 도출해 대조한다). assemble() 은
@@ -47,8 +54,8 @@ FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.S)
 # 비신뢰 절 본문 안에서 CommonMark 가 실제 헤딩으로 렌더할 줄(들여쓰기 0–3칸 + ATX `#`) — 리뷰어가
 # 읽는 번들에서 위조 절 제목처럼 보일 수 있다(fix round 1 Important #1a). 절 경계 자체는 이 정규식이
 # 끊지 않는다(그건 seed_review_log.section_body 가 audit 템플릿 제목으로만 막는다) — 여기서는
-# stderr 경고만 내고 본문 바이트는 그대로 둔다(비신뢰 원문 보존이 우선).
-HEADING_SHAPED_RE = re.compile(r'^\s{0,3}#{1,6}\s')
+# stderr 경고만 내고 본문 바이트는 그대로 둔다(비신뢰 원문 보존이 우선). 판정 자체는
+# `section6.HEADING_SHAPED_RE` — 같은 패턴을 여기서 다시 정의하지 않는다(§6-단일화 락).
 
 # audit 템플릿이 `## 2. 질문 전체` 안에서 라운드마다 쓰는 고정 제목(`interview-seed-audit-template.md`
 # 의 `### 라운드 <n>`) — 사용자 문구가 아니라 호스트가 매 라운드 똑같이 쓰는 스캐폴드라 위 경고에서
@@ -76,7 +83,7 @@ def _heading_line_no(text: str, heading: str) -> int | None:
 
 
 def heading_shaped_warnings(audit_text: str, heading: str, body: str) -> list[int]:
-    """`heading` 절 본문 안에서 heading-모양(`HEADING_SHAPED_RE`)으로 보이는 줄의 audit 파일
+    """`heading` 절 본문 안에서 heading-모양(`section6.HEADING_SHAPED_RE`)으로 보이는 줄의 audit 파일
     절대 줄 번호. `## 2. 질문 전체` 의 `### 라운드 <n>` 스캐폴드는 뺀다. 절이 없으면 빈 목록."""
     start = _heading_line_no(audit_text, heading)
     if start is None:
@@ -84,7 +91,7 @@ def heading_shaped_warnings(audit_text: str, heading: str, body: str) -> list[in
     exempt_round_scaffold = heading == "## 2. 질문 전체"
     out = []
     for i, line in enumerate(body.splitlines()):
-        if not HEADING_SHAPED_RE.match(line):
+        if not section6.HEADING_SHAPED_RE.match(line):
             continue
         if exempt_round_scaffold and ROUND_SCAFFOLD_RE.match(line.strip()):
             continue

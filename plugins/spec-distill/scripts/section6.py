@@ -53,6 +53,11 @@ START_RE = re.compile(r"(?m)^##\s*6\.")
 END_LOOSE_RE = re.compile(r"(?m)^##\s")
 END_STRICT_RE = re.compile(r"(?m)^##\s+\d+\.")
 
+# 제목-모양 줄 판정 — markdown ATX 헤딩처럼 보이는 줄(들여쓰기 0–3칸 + `#`×1–6 + 공백)을
+# 분류할 뿐, 어떤 절 경계도 계산하지 않는다. 헤딩 마커를 소비하는 정규식이라 §6-단일화 락의
+# 수집 대상이 되므로(§6 경계 계산과 무관해도), 이 파일이 그 유일한 자리다.
+HEADING_SHAPED_RE = re.compile(r"^\s{0,3}#{1,6}\s")
+
 
 def fence_spans(text: str) -> list:
     return [(m.start(), m.end()) for m in FENCE_RE.finditer(text)]
