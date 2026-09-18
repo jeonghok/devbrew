@@ -5,9 +5,8 @@
 # shared/tests/test_no_new_duplication.sh 의 20줄 검사가 지킨다.
 #
 # ── 이 파일을 source 하는 러너 (실측 도출: `grep -l runner_common.sh plugins/*/scripts/`) ──
-# 중첩 YAML(`findings: []` + `meta:`)을 소비 계약으로 갖는 **셋**이다:
+# 중첩 YAML(`findings: []` + `meta:`)을 소비 계약으로 갖는 **둘**이다:
 #   · plugins/quality-gates/scripts/run_codex_reviewer.sh
-#   · plugins/spec-distill/scripts/run_seed_codex_reviewer.sh
 #   · run_docreview_codex_reviewer.sh — 정본은 shared/docreview/scripts/ 이고
 #     plugins/{quality-gates,spec-distill}/scripts/ 에 파일 단위 심볼릭 링크로
 #     배포된다. 위 도출 grep 은 그 링크를 따라가 두 경로로 잡는다(같은 파일 하나).
@@ -112,12 +111,12 @@ write_failclosed() {
 # 포함)로 부른다. 실패하면(추출기 자체가 비-0 으로 죽으면) **아무것도 쓰지 않고
 # 실패로 반환한다** — output_path 를 그다음 어떻게 채울지(즉시 exit 0 인
 # emit_fallback 호출인지, 인라인 echo 넷인지)는 호출자마다 다르므로 호출자 몫으로
-# 남긴다. 이 함수가 그 exit 까지 가지면 형제 러너 셋의 서로 다른 실패 처리 모양을
+# 남긴다. 이 함수가 그 exit 까지 가지면 형제 러너들의 서로 다른 실패 처리 모양을
 # 강제로 통일하게 된다.
 #
-# 세 번째 러너(run_seed_codex_reviewer.sh, Task 14)가 형제 둘과 이 tail 을
-# 바이트-동일하게 써서 `shared/tests/test_no_new_duplication.sh` 의 20줄 창에
-# 걸린 것을 해소하며 정본화됐다.
+# 세 번째 러너(run_seed_codex_reviewer.sh, Task 14 — seed 자리가 문서 리뷰 엔진으로 옮겨 가며
+# 지워졌다)가 형제 둘과 이 tail 을 바이트-동일하게 써서 `shared/tests/test_no_new_duplication.sh`
+# 의 20줄 창에 걸린 것을 해소하며 정본화됐다.
 #
 # **`codex exec ...` 호출 자체는 여기 넣지 않는다.** 넣으면 이 정본의 배포
 # 사본(`plugins/*/scripts/runner_common.sh`)이 `codex_candidates()`

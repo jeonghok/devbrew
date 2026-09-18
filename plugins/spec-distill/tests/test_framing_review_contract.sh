@@ -51,4 +51,18 @@ assert_not_contains "$(cat "$SK")" "굳던" "AP2: self-narrating history 문구�
 CONV="$(win "$SK" '^### 확정 표시와' '^##')"
 assert_contains "$CONV" "글자 그대로" "D4.43: 압축이 문장을 고치면 표시는 따라가지 않는다"
 assert_not_contains "$CONV" "seed-critic" "확정 표시 절이 지워질 격리 critic 을 가리키지 않는다"
+
+# ── AC4 — 검증 절이 엔진으로 ─────────────────────────────────────────────────
+assert_not_grep "$(cat "$SK")" 'seed-critic|run_seed_codex_reviewer|build_seed_codex_prompt|seed-codex-suppression' \
+  "AC4: 옛 억제 파이프라인 이름이 SKILL 에 0건"
+VER="$(section "$SK" '^## 검증$')"
+[ -n "$VER" ] && ok "절 추출: ## 검증 (vacuous 아님)" || no "절 추출: ## 검증 이 비었다 — 아래 판정은 무의미하다"
+anchors="$(printf '%s\n' "$VER" | grep -E '^[[:space:]]*// \*\*처분\*\* —' || true)"
+assert_contains "$anchors" "consumer=plugins/spec-distill/scripts/docreview_route.py · fail-closed" "AC4: 탐지 dispatch 의 처분 소비자는 엔진 라우터 · fail-closed"
+assert_contains "$anchors" "consumer=plugins/spec-distill/scripts/docreview_route.py · fail-open" "AC4: 재비판 dispatch 의 처분 소비자는 엔진 라우터 · fail-open(재비판 부재는 공시하고 막지 않는다)"
+assert_eq "$(printf '%s\n' "$anchors" | grep -c 'consumer=plugins/spec-distill/scripts/docreview_route.py' || true)" "2" "AC4: 엔진 라우터를 소비자로 대는 dispatch 가 정확히 둘(탐지 · 재비판)"
+assert_contains "$VER" 'subagent_type: "spec-distill:seed-readback"' "냉독은 엔진 밖 그대로(양의 짝)"
+assert_contains "$VER" '재비판의 `<document>` = `$BUNDLE_RC` 의 **내용**' "재비판자는 판정 이력 없는 번들을 받는다(D4.44)"
+assert_contains "$(bash_lines "$VER")" 'build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md --for recritic' "번들 펜스가 재비판용 갈래를 조립한다(실행 줄)"
+assert_contains "$(bash_lines "$VER")" 'seed_review_log.py" append-verbatim' "엔진 산출물을 audit ## 4 에 옮긴다(실행 줄)"
 finish

@@ -30,7 +30,6 @@ pairs=(
   "plugins/spec-distill/agents/steelman-builder.md|plugins/spec-distill/tests/test_steelman_builder_scope.sh"
   "plugins/spec-distill/agents/doc-critic.md|plugins/spec-distill/tests/test_brief_agents.sh"
   "plugins/spec-distill/agents/doc-critic-web.md|plugins/spec-distill/tests/test_brief_agents.sh"
-  "plugins/spec-distill/agents/seed-critic.md|plugins/spec-distill/tests/test_seed_agents.sh"
 )
 variants=("model: inherit" "model: opus" "model:inherit" "\"model\": inherit" "model : inherit")
 

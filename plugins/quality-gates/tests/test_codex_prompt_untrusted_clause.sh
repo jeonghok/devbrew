@@ -79,8 +79,6 @@ builder_source_path() {
   case "$1" in
     build_codex_prompt.py|build_artifact_codex_prompt.py)
       echo "$ROOT/plugins/quality-gates/scripts/$1" ;;
-    build_seed_codex_prompt.py)
-      echo "$ROOT/plugins/spec-distill/scripts/$1" ;;
     *)
       return 1 ;;
   esac
@@ -105,10 +103,6 @@ emit() {
       $py "$ROOT/plugins/quality-gates/scripts/$builder" "$TMP/in.diff" "$TMP/empty.txt" ;;
     build_artifact_codex_prompt.py)
       $py "$ROOT/plugins/quality-gates/scripts/$builder" "$TMP/in.md" ;;
-    build_seed_codex_prompt.py)
-      # AXES 는 "suppression" 하나뿐이라(Task 14) 소스에서 축 목록을 도출하지 않는다 —
-      # 축이 하나인 빌더에는 단일-인자 하드코딩이면 충분하다.
-      $py "$ROOT/plugins/spec-distill/scripts/$builder" --axis suppression "$TMP/in.md" ;;
     *)
       return 1 ;;
   esac
@@ -202,9 +196,9 @@ check_one() {
 builders="$(grep -lE '^PROMPT_TEMPLATE' "$ROOT"/plugins/*/scripts/build_*codex*prompt.py 2>/dev/null \
             | while IFS= read -r f; do basename "$f"; done | sort)"
 n=0; [ -n "$builders" ] && n="$(printf '%s\n' "$builders" | wc -l | tr -d ' ')"
-# 하한은 오늘의 실측이다(옛 brief 빌더가 문서 리뷰 엔진 전환으로 지워져 4 → 3). 일부만
-# 사라져도(3 → 2) 조용히 좁아지지 않게 실측을 하한으로 둔다.
-if [ "$n" -ge 3 ]; then
+# 하한은 오늘의 실측이다(옛 brief 빌더가 문서 리뷰 엔진 전환으로 지워져 4 → 3, seed 빌더가 같은
+# 전환으로 지워져 3 → 2). 일부만 사라져도(2 → 1) 조용히 좁아지지 않게 실측을 하한으로 둔다.
+if [ "$n" -ge 2 ]; then
   ok "빌더 도출 ${n}개 (vacuous 아님)"
 else
   no "빌더가 ${n}개뿐 — 도출 기준이 깨졌다, 아래 판정 무의미"

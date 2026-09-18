@@ -246,9 +246,9 @@ premortem · coverage-mapper 넷이 거기 있는 장치이고, 이 skill 에는
 | audit (`$AUDIT`) | `docs/superpowers/interview/` | `## 확산` 1번부터 — append-only |
 | 긴 초안 | `$AUDIT` 의 `## 3. 긴 초안` 절 | 압축 **직전** — 깎기 전에 여기 먼저 쓴다 |
 | interview-seed (`$SEED`) | 〃 | 압축 직후 — **게이트 직전 구조 검사보다 먼저** |
-| 억제 축 작업 파일 둘 (`$PAYLOAD` · `$CODEX_YAML`) | 아래 `$SEED_DIR` | 검증 라운드마다 |
-| 두 문서의 이름을 붙드는 `interview-basename` | 〃 | 아래 블록에서 `TOPIC` 자리표가 실값으로 치환된 실행 — 자리표가 그대로면 만들지 않는다 |
-| 세션 디렉토리 `$SEED_DIR` 자체 | `.claude/spec-distill/<session-id>/` | `sid` 가 실값이고 `mkdir` 이 성공했을 때만 — 실패하면 위 두 줄의 세 파일을 아예 만들지 않는다 |
+| 두 문서의 이름을 붙드는 `interview-basename` | 아래 `$SEED_DIR` | 아래 블록에서 `TOPIC` 자리표가 실값으로 치환된 실행 — 자리표가 그대로면 만들지 않는다 |
+| 세션 디렉토리 `$SEED_DIR` 자체 | `.claude/spec-distill/<session-id>/` | `sid` 가 실값이고 `mkdir` 이 성공했을 때만 — 실패하면 이름 파일을 아예 만들지 않는다 |
+| 리뷰 엔진 자리 `$STATE_DIR` — 엔진 원장 · 번들 둘(`$BUNDLE` · `$BUNDLE_RC`) · 리뷰어 산출물(`critic.txt` · `recritic.txt` · `$CODEX_YAML`) · 저자 편집 기준 사본(`$SEED_BASE`) | `$SEED_DIR/docreview/<seed 이름>-<해시>/` | 리뷰 라운드마다 — 경로는 seed 의 절대경로와 세션의 순수 함수다 |
 
 **audit 과 seed 는 시점이 다르지만, 둘 다 승인 «전»에 디스크에 있어야 합니다.** audit 은
 확산 첫 항목부터, seed 는 압축 직후입니다 — 게이트 직전의 `check_seed.py` 가 둘 다
@@ -265,28 +265,23 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
 STATE="$ROOT/$sid/state.local.md"
-# 억제 축의 두 작업 파일. 경로는 **세션의 순수 함수**여야 한다 — 어느 블록이 언제
-# 재도출해도 같은 파일을 가리켜야 하기 때문이다. `mktemp` 은 `$$`(PID) 와 **같은 결함**
-# 이다: Bash 도구는 호출마다 새 셸이라 그 값이 소멸하고 **재발견이 불가능**하다.
+# 세션 디렉토리 — 이름 파일과 리뷰 엔진 자리가 그 아래 산다. 경로는 **세션의 순수 함수**여야 한다 —
+# 어느 블록이 언제 재도출해도 같은 파일을 가리켜야 하기 때문이다. `mktemp` 은 `$$`(PID) 와 **같은
+# 결함**이다: Bash 도구는 호출마다 새 셸이라 그 값이 소멸하고 **재발견이 불가능**하다.
 # 세션 «디렉토리»는 만들어도 된다 — state.local.md 를 만드는 것과 다른 일이다.
 #
-# **가드가 하나인 것이 요점이다.** `sid` 가 실값이고 `mkdir` 이 성공한 경우에만 아래
-# 세 경로가 생긴다. `state_path.py` 는 GC 의 세션 이름 필터와 **같은 정규식**을 통과한
-# 값만 stdout 으로 내주므로(안 통과하면 exit 1 + 빈 stdout), 이 한 조건이 «플러그인
-# 네임스페이스 안»과 «TTL-GC 사정거리 안»을 동시에 보장한다. 네임스페이스 밖으로 나가는
-# fallback 을 두지 않는 이유가 그것이다: `/tmp` 로 새면 두 보장이 함께 깨지고, 그
-# 파일들은 사용자의 원문과 레포 `CLAUDE.md` 를 담은 채 아무도 걷지 않는 자리에 남는다.
+# **가드가 하나인 것이 요점이다.** `sid` 가 실값이고 `mkdir` 이 성공한 경우에만 이름 파일 경로가
+# 생긴다. `state_path.py` 는 GC 의 세션 이름 필터와 **같은 정규식**을 통과한 값만 stdout 으로
+# 내주므로(안 통과하면 exit 1 + 빈 stdout), 이 한 조건이 «플러그인 네임스페이스 안»과 «TTL-GC
+# 사정거리 안»을 동시에 보장한다. 네임스페이스 밖으로 나가는 fallback 을 두지 않는 이유가 그것이다:
+# `/tmp` 로 새면 두 보장이 함께 깨지고, 그 파일들은 사용자의 원문을 담은 채 아무도 걷지 않는 자리에 남는다.
 SEED_DIR=""
 [ -n "$sid" ] && mkdir -p "$ROOT/$sid" 2>/dev/null && SEED_DIR="$ROOT/$sid"
-PAYLOAD=""
-CODEX_YAML=""
 NAME_FILE=""
 if [ -n "$SEED_DIR" ]; then
-  PAYLOAD="$SEED_DIR/seed-suppression-bundle.md"
-  CODEX_YAML="$SEED_DIR/seed-suppression-codex.yaml"
   NAME_FILE="$SEED_DIR/interview-basename"
 else
-  echo "[spec-distill] 세션 디렉토리를 못 만들었다 (sid='${sid:-}' ROOT='$ROOT') — 억제 축 작업 파일 둘과 이름 파일을 만들지 않는다. 플러그인 네임스페이스 밖에는 쓰지 않기 때문이다. 아래 가드들이 이름을 대고 멈춘다." >&2
+  echo "[spec-distill] 세션 디렉토리를 못 만들었다 (sid='${sid:-}' ROOT='$ROOT') — 이름 파일을 만들지 않는다. 플러그인 네임스페이스 밖에는 쓰지 않기 때문이다. 아래 가드들이 이름을 대고 멈춘다." >&2
 fi
 # 두 산출 문서. 이름은 **첫 라운드에 한 번** 정하고 이후 라운드는 되찾는다 — 그래서
 # 이 블록을 다시 돌리면 같은 두 경로가 나온다. 이름을 기억에서 다시 대는 판본은
@@ -315,6 +310,19 @@ case "$IV_NAME" in
     AUDIT="docs/superpowers/interview/$IV_NAME.audit.md"
     SEED="docs/superpowers/interview/$IV_NAME.md" ;;
 esac
+# 리뷰 엔진 자리 — 전부 seed 의 **절대경로**와 세션의 순수 함수다(`state-dir-for`). 엔진은 상대
+# `--doc` 을 거부한다(`doc_not_absolute`). seed 이름이 서기 전이면 전부 빈 값이고, 아래 펜스들이
+# 그 사실을 이름으로 대고 멈춘다.
+SEED_ABS=""; AUDIT_ABS=""; STATE_DIR=""
+if [ -n "$SEED" ]; then
+  SEED_ABS="$(pwd)/$SEED"; AUDIT_ABS="$(pwd)/$AUDIT"
+  [ -z "$sid" ] || STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$sid" --doc "$SEED_ABS" || true)"
+fi
+PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/seed.md"
+BUNDLE="${STATE_DIR:+$STATE_DIR/seed-bundle.md}"                 # 탐지 · codex 가 읽는 번들
+BUNDLE_RC="${STATE_DIR:+$STATE_DIR/seed-bundle-recritic.md}"     # 재비판자가 읽는 번들 — 판정 이력 없음
+CODEX_YAML="${STATE_DIR:+$STATE_DIR/docreview-codex.yaml}"       # 4단계 산출물
+SEED_BASE="${STATE_DIR:+$STATE_DIR/seed-baseline.md}"            # 저자 편집 공시의 기준 사본
 if [ -n "$sid" ] && [ -f "$STATE" ]; then
   python3 "$SD/scripts/brief_review_state.py" init "$STATE" --ledger-key framing_degradations; ledger_rc=$?
 else
@@ -322,21 +330,17 @@ else
 fi
 ```
 
-**이 블록이 경로의 유일한 도출 지점입니다.** `$SD`·`$sid`·`$ROOT`·`$STATE`·`$SEED_DIR`·
-`$PAYLOAD`·`$CODEX_YAML`·`$AUDIT`·`$SEED` 은 전부 환경과 `$SEED_DIR` 의 순수 함수이므로,
-셸이 바뀌었으면 **이 블록을 다시 돌려** 같은 값을 얻습니다. 아래 어느 블록도 이 값들을
-새로 만들지 않습니다 —
-`mktemp` 으로 만들면 다음 `Bash` 호출이 그 파일을 다시 찾지 못하고, `$CODEX_YAML` 을
-읽어야 하는 하류 단계가 통째로 수행 불가능해집니다.
+**이 블록이 경로의 유일한 도출 지점입니다.** `$SD`·`$sid`·`$ROOT`·`$STATE`·`$SEED_DIR`·`$AUDIT`·`$SEED`·
+`$SEED_ABS`·`$AUDIT_ABS`·`$STATE_DIR`·`$PROFILE`·`$BUNDLE`·`$BUNDLE_RC`·`$CODEX_YAML`·`$SEED_BASE` 는 전부
+환경과 `$SEED_DIR` 의 순수 함수이므로, 셸이 바뀌었으면 **이 블록을 다시 돌려** 같은 값을 얻습니다. 아래 어느
+블록도 이 값들을 새로 만들지 않습니다 — `mktemp` 으로 만들면 다음 `Bash` 호출이 그 파일을 다시 찾지 못합니다.
 
-**실행 모양 — 아래 펜스들은 이 블록과 «같은 `Bash` 호출» 안에서 돕니다.** 이 블록을 그
-펜스 **앞에 그대로 이어 붙여** 한 번에 넘깁니다. 펜스마다 따로 호출하는 것이 `Bash` 도구의
-기본 동작이고, 그렇게 하면 이 블록이 대입한 값이 다음 호출에 **하나도 넘어가지 않습니다** —
-넘어가는 것은 디스크의 파일뿐입니다(이 skill 이 그 사실을 위에서 `mktemp` 의 결함으로 이미
-적었습니다). 값이 비면 `$PAYLOAD`·`$CODEX_YAML`·`$SEED` 가 전부 빈 문자열이 되어 억제
-리뷰어 둘과 codex 와 냉독이 **한꺼번에 skip** 됩니다. 아래 가드들의 advisory 가 「먼저
-돌려라」가 아니라 「앞에 이어 붙여라」라고 쓰는 이유가 그것입니다 — 별개 호출로 다시 돌리면
-같은 빈 상태가 그대로 재생산됩니다.
+**실행 모양 — 아래 펜스들은 이 블록과 «같은 `Bash` 호출» 안에서 돕니다.** 이 블록을 그 펜스 **앞에 그대로
+이어 붙여** 한 번에 넘깁니다. 펜스마다 따로 호출하는 것이 `Bash` 도구의 기본 동작이고, 그렇게 하면 이 블록이
+대입한 값이 다음 호출에 **하나도 넘어가지 않습니다** — 넘어가는 것은 디스크의 파일뿐입니다. 값이 비면
+`$STATE_DIR` · `$SEED` 가 빈 문자열이 되어 리뷰 라운드 전체와 냉독이 돌지 않습니다. 아래 가드들의 advisory 가
+「먼저 돌려라」가 아니라 「앞에 이어 붙여라」라고 쓰는 이유가 그것입니다 — 별개 호출로 다시 돌리면 같은 빈
+상태가 그대로 재생산됩니다.
 
 `--ledger-key framing_degradations` 는 기본 원장 줄(`brief_review_degradations`)에 **더해** 이 원장 줄을 심습니다(치환이
 아닙니다 — brief 파이프라인의 원장은 그대로 남습니다). 이 호출이 없으면 뒤의
@@ -347,163 +351,198 @@ fi
 
 ## 검증
 
-억제 축의 담당은 **둘**입니다 — 격리 critic 과 codex. 냉독은 별개 축입니다.
+seed 는 공유 문서 리뷰 엔진으로 리뷰합니다. 한 라운드의 절차는 엔진 절차서가 갖고 있고, 여기 남는 것은
+이 자리의 것 — 번들 · 프로필 · codex 게이트 · dispatch 둘 · 산출물 기록 · 게이트 · 냉독 — 뿐입니다. 경로는
+전부 `## 상태` 블록이 도출하고, 아래 펜스는 전부 그 블록을 **앞에 이어 붙여 같은 `Bash` 호출 안에서** 돕니다.
 
-### 재료 조립
+엔진의 앵커 부류(`protected_headings` · `immutable`)는 seed 프로필에서 둘 다 비어 있습니다. seed 는 헤딩이
+없어 앵커가 `#__doc__` 하나뿐이고 엔진의 보호는 앵커 단위라, 「이 자리는 막고 저 자리는 연다」가 성립하지
+않습니다. 차단은 이 skill 이 집니다 — `### 게이트`.
 
-번들(초안 · 사용자 원문 · 레포 `CLAUDE.md`)은 **한 번만** 조립하고 두 담당이 나눠
-씁니다. 조립이 두 곳에 있으면 한쪽만 고쳐질 때 두 리뷰어가 서로 다른 재료를 보게 되고,
-그 어긋남은 findings 가 갈릴 때까지 드러나지 않습니다.
+### 절차
 
-경로는 `## 상태` 에서 이미 도출했습니다. 여기서 새로 만들지 않습니다 — 대신 그 블록을
-**이 펜스 앞에 이어 붙여 같은 `Bash` 호출 안에서** 함께 돌립니다.
+```
+Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
+```
+
+그 파일의 여덟 단계를 **한 턴 안에서** 돕니다. 절차를 여기 복사하지 않습니다. 이 자리의 슬롯:
+
+- `--state-dir` = `$STATE_DIR` · `--profile` = `$PROFILE` · `--doc` = `$SEED_ABS`
+- 탐지의 `<document>` = `$BUNDLE` 의 **내용** · codex 러너의 `<doc>` = `$BUNDLE` · 재비판의 `<document>` = `$BUNDLE_RC` 의 **내용**
+- 탐지 출력은 `$STATE_DIR/critic.txt`, 재비판 출력은 `$STATE_DIR/recritic.txt` 로 요약 · 전사 없이 저장한다
+- 결정 기록의 `--log-file` = `$AUDIT_ABS` — seed 프로필의 `decision_log` 이 audit 의 `## 6. 리뷰 결정` 을 가리킨다
+- 선결 `init` 앞에 `mkdir -p "$STATE_DIR"`. `$STATE_DIR` 이 비었거나 `init` 이 rc ≠ 0 이면 이 라운드를 시작하지 않고 `## degrade 채널` 의 record 를 남긴다
+
+라운드 수의 상한은 절차서의 `## 상한` 한 줄이 정본입니다 — 이 skill 은 그 숫자를 다시 적지 않습니다. 상한
+뒤의 라운드는 사용자가 승인 게이트에서 자기 문구로 열어야만 돕니다.
+
+### 번들 — 라운드마다, 1단계 앞에서
 
 ```bash
-# 게이트 쪽과 같은 가드다. 이 펜스를 `## 상태` 없이 **별개 `Bash` 호출로** 돌리면 네
-# 변수가 다 빈다 — 그것이 도구의 기본 동작이다. 가드가 없으면 `: No such file or
-# directory` 로 죽어 **어느 변수가 비었는지도, 무엇을 고쳐야 하는지도** 말하지 않는다.
-# 관측값을 실어 이름을 대고, 처방은 「다시 돌려라」가 아니라 「앞에 이어 붙여라」다 —
-# 별개 호출로 다시 돌리면 같은 빈 상태가 재생산된다.
-if [[ -z "${SD:-}" || -z "${SEED:-}" || -z "${AUDIT:-}" || -z "${PAYLOAD:-}" ]]; then
-  echo "[spec-distill] 재료 조립 입력 부재 — SD='${SD:-}' SEED='${SEED:-}' AUDIT='${AUDIT:-}' PAYLOAD='${PAYLOAD:-}'. 「## 상태」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 함께 돌려라(따로 돌리면 같은 빈 상태가 그대로 나온다). 번들이 없으면 두 담당 모두 돌리지 않는다." >&2
-  blob_rc=2
+# 이번 라운드 번들 둘 — 탐지 · codex 가 읽는 것(`$BUNDLE`)과 재비판자가 읽는 것(`$BUNDLE_RC`). 한 라운드의
+# 소비자 셋이 한 번의 조립에서 나온 바이트를 보고, 저자 수정 뒤 다음 라운드는 새 번들을 본다. 직전 라운드의
+# 리뷰어 산출물도 여기서 치운다 — 이번 라운드에 안 쓰였으면 없는 것으로 보여야 audit 에 이번 것으로 옮겨지지
+# 않는다. 조립이 실패하면 번들도 남기지 않는다 — 남으면 codex 게이트가 그것을 이번 번들로 넘긴다.
+if [ -z "${STATE_DIR:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
+  echo "[spec-distill] 리뷰 엔진 자리 없음 — STATE_DIR='${STATE_DIR:-}' sid='${sid:-}' SEED='${SEED:-}'. 「## 상태」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 함께 돌려라. 이 라운드를 시작하지 않는다." >&2
+  bundle_rc=2
 else
-  python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED" "$AUDIT" CLAUDE.md > "$PAYLOAD"; blob_rc=$?
-  [ "$blob_rc" -eq 0 ] && cat "$PAYLOAD"
+  rm -f "$STATE_DIR/critic.txt" "$STATE_DIR/recritic.txt" 2>/dev/null || true
+  bundle_rc=0
+  python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md --for detect > "$BUNDLE" || bundle_rc=1
+  python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md --for recritic > "$BUNDLE_RC" || bundle_rc=1
+  if [ "$bundle_rc" -ne 0 ]; then
+    rm -f "$BUNDLE" "$BUNDLE_RC" 2>/dev/null || true
+    for f in "$BUNDLE" "$BUNDLE_RC"; do [ ! -e "$f" ] || : > "$f" 2>/dev/null || true; done
+    echo "[spec-distill] 번들 조립 실패 — 두 번들을 치웠다(못 지우면 비웠다). 이 라운드를 시작하지 않는다." >&2
+  fi
 fi
 ```
 
-**마지막 `cat` 이 `${BLOB}` 의 출처입니다.** 이 블록의 출력에 번들 전문이 그대로 나오고,
-아래 critic dispatch 는 그 출력을 인라인합니다. 경로를 넘기는 선택지는 없습니다 —
-`seed-critic` 은 `tools: []` 이라 파일을 읽을 도구가 물리적으로 없습니다. codex 는 같은
-파일을 `$PAYLOAD` 인자로 받습니다: **한 파일, 두 전달 방식.** `cat` 이 없으면 두 담당이
-같은 번들을 본다는 이 절의 주장에 수행 경로가 없어집니다(조립기 stdout 은 파일로
-리다이렉트되므로 그것만으로는 아무 데도 안 보입니다).
+`bundle_rc` 가 0 이 아니면 이 라운드를 시작하지 않습니다(record 는 `## degrade 채널`). 원문 없이 억제를
+물으면 「억제 없음」이 공허하게 나옵니다.
 
-`blob_rc` 가 0 이 아니면 번들이 없는 것이므로 **두 담당 모두** 돌리지 않고, 그 사실을
-`component: pipeline` · `affected_axis: suppression` · `verification_status: unavailable`
-로 남깁니다.
+이 펜스가 stderr 로 낸 `[spec-distill]` 줄은 그 라운드 게이트 공시(첫 질문의 텍스트)에 글자 그대로 싣습니다 — `bundle_rc` 가 0 이 아니면 위 degrade 경로를 따릅니다.
 
-### 억제 리뷰 — 격리 critic
+### 프로필 내용 — 탐지 dispatch 직전마다
 
-```javascript
-Agent({ description: "Seed suppression critique", subagent_type: "spec-distill:seed-critic",
-        prompt: `초안 · 원문 · 레포 CLAUDE.md 를 전문 inline 으로 받는다. 네 축만 본다.
-<draft>${BLOB}</draft>` })
-// **처분** — consumer=human · fail-open · disclosure=proceed 게이트 질문 텍스트
+```bash
+# 리뷰어의 `<profile>` 슬롯에는 경로가 아니라 **내용**을 싣는다 — 플러그인 캐시는 사용자 프로젝트 밖이라
+# 리뷰어의 Read 가 거부된다. rc 가 0 이 아니면 dispatch 하지 않는다 — critic 출력 파일을 비워 5단계가
+# critic 사망(재dispatch 1회 → 「미검증」)으로 읽게 한다.
+prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
+if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
+  echo "[spec-distill] seed 프로필을 읽지 못했다(cat rc $prof_rc): ${PROFILE:-} — 탐지 · 재비판을 dispatch 하지 않는다." >&2
+  if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then : > "$STATE_DIR/critic.txt" 2>/dev/null || true; fi
+  exit 1
+fi
+printf '%s\n' "$PROFILE_TEXT"
 ```
 
-`${BLOB}` 은 위 조립 블록이 `cat` 으로 낸 출력 그대로입니다 — 요약하거나 다시 조립하지
-않습니다. 그것이 codex 가 `$PAYLOAD` 로 받는 파일과 같은 내용이라는 것이 「두 담당이 같은
-재료를 본다」의 전부입니다.
+### codex — 4단계
 
-**뺄셈 검사입니다.** 「좋은 프롬프트냐」는 묻지 않습니다 — 그건 취향이고 비평자에게는
-사용자의 도메인 지식이 없습니다.
+러너는 `DEVBREW_SPEC_DISTILL_DISABLE_CODEX` 를 스스로 보지 않습니다 — 게이트는 호출자 책임이고, 그 조건을
+산문이 아니라 아래 펜스로 적습니다(kill switch 는 P21 보안 컨트롤이라 산문 조건은 「껐다고 믿게만」
+만듭니다). seed 프로필은 `web: false` 라 러너가 codex 웹 검색을 켜지 않습니다.
 
-### 억제 리뷰 — codex
-
-억제 축의 **세 번째 담당**입니다. 러너는 `DEVBREW_SPEC_DISTILL_DISABLE_CODEX` 를 스스로
-보지 않습니다 — 게이트는 **호출자 책임**이고 그 호출자가 여기입니다.
-
-조건을 **산문으로 적지 않습니다.** 문장으로 「가용할 때만」이라 적고 bash 펜스는 무조건
-실행되게 둔 판본이 형제 skill 에 실제로 있었고, 그 파일에는 `codex_avail` 을 검사하는
-`if` 가 아예 없었습니다. kill switch 는 P21 보안 컨트롤이라 그 상태는 「껐다고 믿게만」
-만듭니다.
-
-**이 축의 전부가 한 실행입니다** — 감지 · 게이트 · 호출 · 판정 · 노출이 한 블록에
-있습니다. 쪼개면 안 됩니다. 판정과 노출이 다른 `Bash` 호출로 가면 그 호출은
-`$CODEX_YAML` 을 **다시 도출해서** 읽는데, 그 자리에 있는 파일이 이번 라운드 것이라는
-근거가 그 호출에는 없습니다 — 지난 라운드 파일도 `codex_failed: false` 를 달고 있으므로
-낡은 성공과 신선한 성공이 같은 모양입니다.
-
-**한 블록 안에서는 그 상태가 만들어질 수 없고, 그것이 규율이 아니라 형태에서 도출됩니다.**
-블록의 **첫 줄**이 그 경로를 지우고 **마지막 줄**이 같은 실행의 같은 바인딩으로 읽습니다.
-그 둘 사이에 무엇을 새로 넣든 — 오늘 없는 분기를 포함해 — 그 사이에서 그 파일을 만들 수
-있는 것은 이 실행뿐입니다. 클리어가 첫 줄이므로 그 **앞**에도 자리가 없습니다. 경로가
-비어 있으면 클리어도 읽기도 **같은 빈 값**에 대한 no-op 이라 `degraded` 로 떨어집니다:
-한쪽만 건너뛰는 상태가 없습니다.
-
-**그러므로 `$CODEX_YAML` 을 읽는 곳은 이 블록 하나뿐입니다.** 다른 절에 그 파일을 읽는
-펜스를 추가하지 마십시오. 그리고 **이 블록을 두 펜스로 쪼개지 마십시오** — 마커 사이가
-한 펜스일 때만 하니스의 이어붙임 모델이 `Bash` 도구의 실행 모델(펜스마다 새 셸)과
-일치합니다. 쪼개고 판정·노출을 뒤 펜스로 옮기면 하니스에는 아무 변화가 없는데 실제로는
-지난 라운드 산출물이 다시 새어 나옵니다.
-
-`tests/test_seed_gate_wiring.sh` 의 판정은 **대부분 동작**입니다 — 잘라낸 블록을 stub 러너
-위에서 실제로 돌리고, stub 이 받은 argv · 산출물 파일의 생사 · 블록의 stdout 을 봅니다.
-그 락에서 **순수하게 정적인 텍스트 검사는 둘뿐**입니다: 마커 사이의 펜스가 하나인가,
-그리고 게이트 블록 밖 펜스에 `$CODEX_YAML` 독자가 있는가. 그 둘은 동작으로는 잴 수 없는
-것(내일 생길 분기의 자리)을 재기 때문에 정적인 것이 맞습니다.
-
-**잡지 못하는 것**도 적어 둡니다(전부 실측): 경로를 조각으로 재조립해 읽기 · 글롭으로
-읽기 · bash 가 아니라 산문으로 「그 파일을 읽어라」라고 시키기. 이 **셋**은 어휘로 닫히지
-않으므로 **락이 아니라 규율로** 지킵니다. ` ```sh ` 처럼 다른 언어표기를 단 펜스와 들여쓴
-펜스는 이 목록에서 **빠졌습니다** — 그 락의 추출기들이 펜스 여는 줄을 언어표기·들여쓰기와
-무관하게 보므로 둘 다 RED 가 됩니다.
-
-<!-- codex-gate:begin runner=run_seed_codex_reviewer.sh -->
+<!-- codex-gate:begin runner=run_docreview_codex_reviewer.sh -->
 ```bash
-# ── 진입 클리어 — 블록의 «첫 줄» ────────────────────────────────────────────
-# 첫 줄인 것이 요점이다: 이 앞에는 어떤 분기도 들어갈 자리가 없다. 경로가 세션의 순수
-# 함수라 라운드마다 같은 파일이고, 지우지 않으면 직전 라운드 YAML 이 그대로 남는다 —
-# 그 파일은 양성 마커를 달고 있을 수 있어 skip 분기(kill switch 포함)와 3 이 아닌 실패
-# rc 에서 「이번 라운드 codex 가 정상이었다」로 읽힌다. 이 줄과 블록 «끝»의 읽기가 한
-# 쌍이고, 그 사이에 무엇을 몇 개 넣든 읽기가 보는 파일은 이 실행이 만든 것이다.
-# 한쪽을 옮기면 그 쌍이 깨진다.
-[[ -n "${CODEX_YAML:-}" ]] && rm -f "$CODEX_YAML"
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-DETECT_OUT="$(bash "$SD/scripts/detect_codex.sh")"
+PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/seed.md"
+# 러너 인자는 프로필 · 탐지 번들 · 프로젝트 · 산출물이다. 번들과 산출물 경로는 `## 상태` 블록이 엔진
+# 자리 안에 도출한다 — 이 펜스는 그것을 새로 만들지 않는다.
+#
+# (1) 직전 라운드 산출물을 먼저 치운다 — 가용성 판정보다 앞이다. 이 경로는 seed 마다 라운드마다 같은
+#     파일이라, 남은 것은 `codex_failed: false` 를 달고 이번 라운드 판정처럼 읽힌다. codex 를 건너뛰는
+#     라운드(kill switch · 미설치 · 감지기 부재 · 입력 부재)가 전부 그 잔존물을 남기지 않게 여기서 한다.
+#     지우지 못하면 0바이트로 절단한다(하류가 fail-closed 로 읽는다). 둘 다 못 하면 codex 축을 끈다.
+seed_codex_residue=""
+wipe_target=""   # 스킬 본문의 위치 인자는 호출 인자로 치환된다 — 대상은 이름 있는 변수로 넘긴다
+wipe_or_truncate() {   # wipe_target 을 지운다 — 못 지우면 절단 — 둘 다 못 하면 rc 1
+  rm -f "$wipe_target" 2>/dev/null || true
+  [ -e "$wipe_target" ] || return 0
+  : > "$wipe_target" 2>/dev/null || true
+  if [ -s "$wipe_target" ]; then return 1; fi
+  return 0
+}
+if [ -n "${CODEX_YAML:-}" ]; then
+  wipe_target="$CODEX_YAML"; wipe_or_truncate || seed_codex_residue="$CODEX_YAML"
+elif [ -n "${sid:-}" ] && [ -n "${ROOT:-}" ]; then
+  # seed 이름을 모르면 이 세션의 문서별 codex 산출물이 전부 후보다. 전제: 한 세션은 리뷰 라운드를
+  # 동시에 둘 돌리지 않는다. 지우는 것은 codex 산출물 하나뿐 — 원장 · 번들은 그대로다.
+  for y in "$ROOT/$sid"/docreview/*/docreview-codex.yaml; do
+    [ -e "$y" ] || continue
+    wipe_target="$y"; wipe_or_truncate || seed_codex_residue="${seed_codex_residue:+$seed_codex_residue }$y"
+  done
+fi
+# (2) 가용성 — 감지기가 안 돈 것과 codex 가 없는 것을 가른다.
+DETECT_OUT="$(bash "$SD/scripts/detect_codex.sh")" || true
 codex_avail="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^codex_available: //p')"
 skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
-# 정상 실행된 감지기는 false 일 때도 `codex_available:` 줄을 내고 exit 0 한다. 그 줄이
-# 없으면 감지기 자체가 안 돈 것이다(끊긴 심볼릭 링크·빈 stdout) — 「codex 가 없다」와
-# 구별해서 적는다. 뭉개면 사용자가 이유 없는 SKIPPED 만 본다.
-if [[ -z "$codex_avail" ]]; then skip_reason="detector_not_runnable"; fi
-# 두 경로는 `## 상태` 가 도출한다. 이 블록을 그 도출 없이 **별개 `Bash` 호출로** 돌리면
-# 값이 비고(도구의 기본 동작이다), 그대로 두면 러너가 빈 경로를 받아 payload_missing 으로
-# **조용히** degrade 한다 — 침묵이 결함이다. 여기서 잡아 소리를 내고 가용 판정을 덮어쓴다.
-# 처방은 「앞에 이어 붙여라」다: 별개 호출로 다시 돌려도 같은 빈 상태가 재생산된다.
-if [[ -z "${PAYLOAD:-}" || -z "${CODEX_YAML:-}" ]]; then
-  echo "[spec-distill] codex 억제 게이트 입력 부재 — PAYLOAD='${PAYLOAD:-}' CODEX_YAML='${CODEX_YAML:-}'. 「## 상태」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 함께 돌려 두 경로를 도출해라(따로 돌리면 같은 빈 상태가 그대로 나온다). 이 라운드의 억제 축은 codex 없이 간다." >&2
+[ -n "$codex_avail" ] || skip_reason="detector_not_runnable"
+# (3) 입력 — 산출물 경로가 비었거나 이번 라운드 탐지 번들이 없으면 러너를 부르지 않는다.
+if [ -z "${CODEX_YAML:-}" ] || [ ! -s "${BUNDLE:-}" ]; then
+  echo "[spec-distill] seed codex 게이트 입력 부재 — CODEX_YAML='${CODEX_YAML:-}' BUNDLE='${BUNDLE:-}'. 「## 상태」 블록을 이 펜스 앞에 이어 붙이고, 「### 번들」 이 이번 라운드 번들을 조립했는지 확인하라. 이 라운드의 codex 축은 없이 간다." >&2
   codex_avail=""; skip_reason="gate_inputs_missing"
 fi
-if [[ "$codex_avail" == "true" ]]; then
-  bash "$SD/scripts/run_seed_codex_reviewer.sh" suppression "$PAYLOAD" "$(pwd)" "$CODEX_YAML"; runner_rc=$?
-  # exit 3 은 「산출물 자체를 못 썼다」이다. 이 경로는 세션의 순수 함수라 **라운드마다
-  # 같은 파일**이므로, 그때 직전 라운드 YAML 이 디스크에 그대로 남아 이번 라운드 판정으로
-  # 읽힌다 — 그 파일은 양성 마커(codex_failed: false)를 달고 있을 수 있어 「이번에 codex 가
-  # 정상이었다」로 읽힌다. 지운다.
-  if [[ "$runner_rc" -eq 3 ]]; then rm -f "$CODEX_YAML"; fi
-else
-  echo "[spec-distill] codex 억제 co-review SKIPPED (reason: ${skip_reason:-unknown}) — 격리 critic 단독, 이 축에 모델 다양성이 없었다 (degraded)." >&2
+if [ -n "$seed_codex_residue" ]; then
+  echo "[spec-distill] 직전 라운드 codex 산출물을 지우지도 비우지도 못했다: ${seed_codex_residue}. 이 라운드의 codex 축은 없이 간다 — 5단계의 --codex 에 이 경로를 넘기지 마라(이번 라운드 begin-round 가 rc 0 이었다면 prepare-recritic 이 그 파일을 codex_predates_round 로 읽지만, 그 전제가 없으면 직전 판정이 섭취된다)." >&2
+  codex_avail=""; skip_reason="residue_unclearable"; CODEX_YAML=""
 fi
-# ── 판정과 노출 — 진입 클리어의 짝. 같은 실행, 같은 바인딩 ──────────────────
-# 러너는 파일에만 쓴다. 그 파일을 여기서 읽어야 degrade 판정과 findings 노출이 일어난다.
-# **성공 마커 양성 요구**로 읽는다 — 파일 부재·0바이트·잘림·`codex_failed: true` 가 전부
-# 같은 degraded 로 떨어진다. 경로가 비면 `[ -s "" ]` 도 `cat ""` 도 실패하므로 위 클리어와
-# 같은 no-op 이 되고, 어느 경우에도 판정 한 줄은 나온다.
-if [ -s "${CODEX_YAML:-}" ] && grep -q 'codex_failed: false' "${CODEX_YAML:-}"; then
-  codex_status=ok
+# (4) 호출 — rc 3(러너가 산출물을 못 썼다)만 치운다. 다른 비0 rc 는 러너의 EXIT 트랩이 남긴 이번
+#     라운드의 정직한 기록이라 남긴다.
+if [ "$codex_avail" = "true" ]; then
+  runner_rc=0
+  bash "$SD/scripts/run_docreview_codex_reviewer.sh" "$PROFILE" "$BUNDLE" "$(pwd)" "$CODEX_YAML" || runner_rc=$?
+  if [ "$runner_rc" -eq 3 ]; then rm -f "$CODEX_YAML" || true; fi
 else
-  codex_status=degraded
+  echo "[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — seed 리뷰에 codex 쪽 모델 다양성이 없었다 (degraded)." >&2
 fi
-echo "codex_status: $codex_status"
-cat "${CODEX_YAML:-}" 2>/dev/null || echo "(codex 산출물 없음)"
 ```
 <!-- codex-gate:end -->
 
-**축은 죽지 않습니다** — 격리 critic 이 남습니다. 위 stderr advisory 는 사용자에게 그대로
-노출하고, 원장이 살아 있으면(`ledger_rc == 0`) 같은 사실을 `framing_degradations` 에도
-남깁니다. 원장이 없으면 그 사실은 proceed 게이트 질문 텍스트로만 갑니다(§`degrade 채널`).
+### dispatch 둘 — 3단계 탐지 · 6단계 재비판
 
-블록의 stdout 이 사용자가 보는 전부입니다. `codex_status` 가 degrade 표 셋째 행의
-입력이고, `cat` 출력의 `findings:` 항목이 codex 의 raw findings 이며 격리 critic 의 것과
-**나란히** 갑니다 — 병합기가 없고 판정도 없습니다(§`degrade 채널`).
+`${PROFILE}` 에는 경로가 아니라 `### 프로필 내용` 펜스가 낸 **내용**을 싣습니다. 탐지의 `${DOCUMENT}` 는
+이번 라운드 `$BUNDLE` 의 내용입니다. seed 프로필이 웹을 허용하지 않으므로 웹 사본을 고르는 펜스가 없습니다.
+
+```
+Agent({
+  description: "Seed review detection (layer 1)",
+  subagent_type: "spec-distill:doc-critic",
+  // **처분** — consumer=plugins/spec-distill/scripts/docreview_route.py · fail-closed
+  prompt: "<document>${DOCUMENT}</document>
+    <profile>${PROFILE}</profile>
+    <prior_finding_ids>${PRIOR_FINDING_IDS}</prior_finding_ids>"
+})
+```
+
+재비판의 `${DOCUMENT}` 는 **`$BUNDLE_RC` 의 내용**입니다 — 탐지와 다른 번들입니다. 입력 슬롯은 정확히 셋(그
+번들 · `prep.json` 의 `items` · 프로필)이고, dispatch 사유도 이전 대화도 어느 리뷰어가 냈는지도 넣지 않습니다.
+`DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` 이면 dispatch 하지 않고 7단계를 `--recritic-skipped` 로 돕니다.
+
+```
+Agent({
+  description: "Framing-blind re-critique of the seed finding list",
+  subagent_type: "spec-distill:doc-recritic",
+  // **처분** — consumer=plugins/spec-distill/scripts/docreview_route.py · fail-open
+  prompt: "<document>${DOCUMENT}</document>
+    <findings>${FINDINGS}</findings>
+    <profile>${PROFILE}</profile>"
+})
+```
+
+### 산출물 기록 — 7단계 뒤, 게이트 앞
+
+```bash
+# 엔진 산출물 셋을 판정 없이 audit `## 4. 비평과 냉독` 에 옮긴다 — 엔진 자리는 세션 정리로 사라지고,
+# 사람이 나중에 되짚을 자리는 audit 이다. 없는 산출물은 그 사실을 적는다(침묵과 0 은 다르다).
+rnd="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" | python3 -c 'import json,sys; print(json.load(sys.stdin)["round"])')" || rnd="?"
+for pair in "탐지 (doc-critic)|critic.txt" "codex|docreview-codex.yaml" "재비판 (doc-recritic)|recritic.txt"; do
+  title="${pair%%|*}"; src="$STATE_DIR/${pair#*|}"
+  if [ ! -s "$src" ]; then
+    src="$STATE_DIR/absent-note.txt"
+    printf '(이 라운드에 산출물 없음 — %s)\n' "${pair#*|}" > "$src"
+  fi
+  python3 "$SD/scripts/seed_review_log.py" append-verbatim "$AUDIT_ABS" --section "## 4. 비평과 냉독" --title "라운드 $rnd — $title" "$src" \
+    || echo "[spec-distill] audit ## 4 에 옮기지 못했다: $title" >&2
+done
+```
+
+### 게이트
+
+엔진 8단계의 `docreview_state.py gate --state-dir "$STATE_DIR" --render` 가 어느 게이트인지 정합니다.
+`round_gate_needed` 면 라운드 게이트(결정 묶음 + 차단 `ask`, 렌더 순서)를 **`AskUserQuestion` 최대 4개씩
+연속 호출**로 나눠 띄웁니다 — 매 호출 첫 질문의 첫 줄은 렌더 첫 줄(degrade 공시)과 같습니다. 응답을
+`decide`(`--log-file "$AUDIT_ABS"` 와 함께) · `fix` · `ask` 서브커맨드로 반영합니다. `approval_gate_open` 이면
+승인 게이트입니다 — 1단계(열린 항목 · 「추가 라운드 1회 열기」)는 절차서 8단계 그대로이고, 2단계(진행
+옵션)는 이 skill 의 `## 확정 — proceed 게이트` 입니다.
 
 ### 냉독
 
-경로는 `## 상태` 가 이미 도출했습니다. 아래 펜스는 그 블록이 대입한 `$SEED` 를 소비하므로
-`## 상태` 블록을 **이 펜스 앞에 이어 붙여 같은 `Bash` 호출 안에서** 함께 돌립니다.
+마지막 라운드의 게이트가 닫힌 뒤 한 번 돕니다 — 문서가 더 바뀌지 않는 시점이어야 측정이 뜻을 가집니다.
+경로는 `## 상태` 가 이미 도출했습니다. 아래 펜스는 그 블록이 대입한 `$SEED` 를 소비하므로 `## 상태` 블록을
+**이 펜스 앞에 이어 붙여 같은 `Bash` 호출 안에서** 함께 돌립니다.
 
 ```bash
 if [[ -z "${SEED:-}" ]]; then
@@ -514,15 +553,13 @@ else
 fi
 ```
 
-**이 `cat` 이 `${SEED_TEXT}` 의 출처입니다.** 블록의 출력에 seed 전문이 그대로 나오고, 아래
-dispatch 는 그 출력을 인라인합니다. 경로를 넘기는 선택지는 없습니다 — `seed-readback` 은
-`tools: []` 이라 파일을 열 도구가 물리적으로 없고, 파일명을 받으면 **아무 내용도 못 읽은
-채로** 냉독이 도는 무의미한 실행이 됩니다. `$SEED` 는 이 skill 에서 **경로**이고
-`${SEED_TEXT}` 가 **내용**입니다 — 억제 축의 `$PAYLOAD`(경로) / `${BLOB}`(내용) 과 같은
-쌍이며, 두 이름을 섞지 않습니다.
+**이 `cat` 이 `${SEED_TEXT}` 의 출처입니다.** 블록의 출력에 seed 전문이 그대로 나오고, 아래 dispatch 는 그
+출력을 인라인합니다. 경로를 넘기는 선택지는 없습니다 — `seed-readback` 은 `tools: []` 이라 파일을 열 도구가
+물리적으로 없고, 파일명을 받으면 **아무 내용도 못 읽은 채로** 냉독이 도는 무의미한 실행이 됩니다. `$SEED` 는
+이 skill 에서 **경로**이고 `${SEED_TEXT}` 가 **내용**입니다 — 번들의 `$BUNDLE`(경로) / `${DOCUMENT}`(내용) 과
+같은 쌍이며, 두 이름을 섞지 않습니다.
 
-`seed_text_rc` 가 0 이 아니면 냉독을 **돌리지 않고**, 그 사실을 `## degrade 채널` 의 냉독
-행으로 남깁니다.
+`seed_text_rc` 가 0 이 아니면 냉독을 **돌리지 않고**, 그 사실을 `## degrade 채널` 의 냉독 행으로 남깁니다.
 
 ```javascript
 Agent({ description: "Seed cold readback", subagent_type: "spec-distill:seed-readback",
@@ -531,83 +568,57 @@ Agent({ description: "Seed cold readback", subagent_type: "spec-distill:seed-rea
 // **처분** — consumer=human · fail-open · disclosure=proceed 게이트 질문 텍스트
 ```
 
-**싱크됐는지는 사용자가 읽고 판정합니다.** 에이전트가 통과·미달을 내면 어긋남의 감각이
-사용자에게 오지 않습니다. 세 리뷰(격리 critic · codex · 냉독)의 raw 출력은 **사용자에게
-직접** 갑니다 — orchestrator 는 판정하지도 병합하지도 않습니다. degrade 가 있으면 그것은
-`## degrade 채널` 의 채널 둘로 나갑니다(원장은 있을 때만, 게이트 텍스트는 항상).
+**싱크됐는지는 사용자가 읽고 판정합니다.** 에이전트가 통과·미달을 내면 어긋남의 감각이 사용자에게 오지
+않습니다. 냉독 출력은 판정 경로 밖이라 엔진 게이트를 거치지 않고 proceed 게이트 텍스트에 그대로 실리며,
+audit `## 4. 비평과 냉독` 의 `### 냉독 (seed-readback)` 아래에 verbatim 으로 옮깁니다(Edit 로 — audit 은
+워크트리 안이다). degrade 가 있으면 그것은 `## degrade 채널` 로 나갑니다.
 
 ## degrade 채널
 
-degrade 는 **채널 둘**로 나갑니다. 하나는 없을 수 있고 하나는 항상 있습니다.
+degrade 는 **채널 다섯**으로 나갑니다 — 엔진의 셋과 이 skill 의 둘.
 
-1. **원장** — state 의 `framing_degradations`. **`ledger_rc` 가 0 일 때만 존재합니다.**
-   기록은 `brief_review_state.py degrade-append "$STATE" --ledger-key framing_degradations …`
-   이고, 매 호출의 종료 코드를 그 자리에서 잡습니다.
-2. **proceed 게이트 질문 텍스트** — 항상 있습니다. 원장이 없거나(`ledger_rc != 0`) 개별
-   `degrade-append` 가 실패하면 **이쪽이 유일한 채널**이고, 그때는 「원장에 기록하지
-   못했다」는 사실 자체를 한 줄로 함께 싣습니다.
+- 엔진의 셋 — `fin.json` 의 `advisory[]`(codex 부재 · 재비판 부재 · 처분 회계의 degrade 사유) ·
+  `fin.json` 의 `blocks`(critic 사망 · 항목 소실 · 셀 수 없음일 때만 참) · `gate --render` 의 **첫 줄**
+  (그 라운드의 degrade 한 줄 — 「미검증」 라운드면 그 공시가 맨 앞이다).
+- 이 skill 의 둘 — state 의 `framing_degradations` 원장(**`ledger_rc` 가 0 일 때만 존재**) ·
+  proceed 게이트 질문 텍스트(**항상**). 원장이 없거나 개별 기록이 실패하면 게이트 텍스트가 유일한 채널이고,
+  그때는 「원장에 기록하지 못했다」는 사실 자체를 한 줄로 함께 싣습니다.
 
-**기록이 없는 것과 degrade 가 없는 것은 다른 사실입니다.** 게이트 텍스트에서 둘을
-구별해 씁니다 — 원장이 없는 세션에 「degrade 없음」이라고 쓰지 않습니다.
-
-**남은 갭 — `no-state-in-phase-0`.** `request-framing` 은 인터뷰 이전이라 state 파일이
-아예 없는 세션이 **정상**입니다. 그 세션에서 원장은 구조적으로 부재하고 채널 2 만
-남습니다. state 파일을 새로 만드는 설계(어디에 · 어떤 frontmatter 로 · 누가 지우나)는 이
-skill 의 범위 밖이므로, 그 갭을 이 이름으로 부르고 게이트 텍스트가 그 사실을 말합니다.
-
-**딸린 상호작용 하나** — `## 상태` 가 `$SEED_DIR` 을 만들므로, 원래 세션 디렉토리가 없었을
-세션에도 디렉토리와 파일 둘이 생깁니다. 그 둘은 `gc_common.py` 의 TTL-GC 관할에 들어갑니다 —
-**관할 밖에 놓이는 분기가 없기 때문**입니다: 그 블록의 단일 가드가 `sid` 실값과 `mkdir`
-성공을 함께 요구하고, `state_path.py` 가 GC 의 세션 이름 필터와 같은 정규식을 통과한 값만
-내주므로, **이 파일들이 존재한다는 것 자체가 GC 가 걷는 자리에 있다는 뜻**입니다(그 조건이
-깨지면 파일이 만들어지지 않고 advisory 만 납니다). 폴더 나이가 **폴더 자신과 그 아래 모든 항목의
-최신 mtime**(링크는 따라가지 않는다)으로 계산되므로 이 두 파일도 그 나이에 들고, TTL(기본 24시간,
-env override) 을 넘기면 폴더가 통째로 걷힙니다. 결함으로 실증된 것은 아니지만 배선 이전에는 없던 상호작용이라 여기
-적어 둡니다.
-
-codex 가 죽으면 record 하나가 남고 격리 critic 이 단독으로 돕니다. **억제 축은 판정에
-합류하지 않습니다** — findings 는 어떤 병합기도 거치지 않고 사용자에게 직접 갑니다.
-
-codex 축의 record 는 게이트 블록이 낸 값으로 정합니다. `--component codex --axis
-suppression` 은 세 경우 모두 같고 갈리는 것은 `--status` 와 `--reason` 입니다.
-**위에서부터 먼저 맞는 행**을 씁니다:
-
-| 관측 | `--status` | `--reason` |
-|---|---|---|
-| `skip_reason` 이 `gate_inputs_missing` | `unavailable` | 게이트 입력 부재 — 「`## 상태`」가 돌지 않아 `$PAYLOAD`·`$CODEX_YAML` 이 비었다 |
-| `codex_avail` 이 `true` 가 아니다 | `skipped` | `$skip_reason` 값 그대로 |
-| `codex_avail` 이 `true` 였는데 `$CODEX_YAML` 에 `codex_failed: false` 가 없다 | `degraded` | `$runner_rc` + 관측한 사실(파일 부재·0바이트·잘림·`true`) |
-
-첫 행이 둘째 행보다 먼저인 이유: 게이트 입력 부재는 `codex_avail` 을 덮어써서 둘째 행에도
-맞지만, 그것은 환경 사실이 아니라 **배선 결함**입니다. `skipped` 로 적으면 사용자가
-「codex 가 없는 환경이었구나」로 읽습니다.
-
-`$CODEX_YAML` 은 **성공 마커 양성 요구**로 읽습니다 — `codex_failed: false` 가 **있어야**
-정상입니다. 「`codex_failed: true` 가 없는지」만 보면 그 술어에 fail-closed 보수가 없어
-파일 부재·0바이트·잘림이 전부 「정상」으로 읽힙니다.
-
-**직전 라운드 잔존은 이 술어가 못 가릅니다.** 지난 라운드의 파일도 `codex_failed: false`
-를 달고 있을 수 있고, 그러면 양성 요구는 만족됩니다 — 신선한 성공과 낡은 성공이 이
-술어에게는 같은 모양입니다. 그것을 막는 것은 술어가 아니라 **블록의 형태**입니다:
-진입 클리어와 마지막 읽기가 한 실행 안에 있으므로 술어가 보는 파일은 그 실행이 만든
-것뿐입니다. 두 장치가 각각 다른 것을 막습니다 — 술어는 *이 실행의 실패*를, 클리어-읽기
-쌍은 *다른 실행의 성공*을. 이 축의 판정과 노출을 게이트 블록 밖으로 옮기면 그 쌍이
-깨지고, 술어 혼자서는 낡은 성공을 가릴 수 없습니다.
-
-`codex_avail` 은 pre-flight **부재**만 잡고, 표 아래 칸은 러너 자체의 **런타임 실패**라
-서로 다른 사실입니다.
-
-**냉독 축도 죽을 수 있고, 죽으면 여기 보입니다.** 그 축의 입력은 `${SEED_TEXT}` 이고 그
-출처는 `### 냉독` 의 `cat "$SEED"` 입니다 — `$SEED` 가 비면 냉독은 아무 내용도 없이 돌게
-되므로 **돌리지 않습니다**. 그 record 는 아래 한 행입니다:
+엔진 밖의 사건은 이 skill 이 원장에 적습니다. 기록은 `brief_review_state.py degrade-append "$STATE"
+--ledger-key framing_degradations --component <a> --axis <b> --status <c> --reason "<r>"` 이고 매 호출의
+종료 코드를 그 자리에서 잡습니다. **위에서부터 먼저 맞는 행**을 씁니다:
 
 | 관측 | `--component` · `--axis` | `--status` | `--reason` |
 |---|---|---|---|
+| `$STATE_DIR` 이 비었다 · 엔진 `init` 이 rc ≠ 0 | `pipeline` · `all` | `unavailable` | 비어 있던 변수, 또는 `init` 이 낸 사유 |
+| `bundle_rc` 가 0 이 아니다 | `pipeline` · `suppression` | `unavailable` | 번들 조립 실패 — 조립기 stderr 마지막 줄 |
+| `prof_rc` 가 0 이 아니다 | `critic` · `suppression` | `unavailable` | seed 프로필 판독 불가(cat rc) |
 | `seed_text_rc` 가 0 이 아니다 | `readback` · `readback` | `unavailable` | 냉독 입력 부재 — 관측한 `$SEED` 값과 `seed_text_rc` |
 
-억제 축이 죽어도 격리 critic 이 남지만 **냉독 축에는 남는 담당이 없습니다** — 담당이 하나
-뿐인 축이라 통째로 없어집니다. 그래서 이 행은 「모델 다양성 손실」이 아니라 **축 소실**이고,
-게이트 질문 텍스트에도 그렇게 씁니다.
+codex 부재 · 재비판 부재는 이 표에 없습니다 — 엔진이 `advisory[]` 와 게이트 첫 줄로 이미 공시합니다. 같은
+사실을 두 채널에 다른 말로 적지 않습니다.
+
+**기록이 없는 것과 degrade 가 없는 것은 다른 사실입니다.** 게이트 텍스트에서 둘을 구별해 씁니다 — 원장이
+없는 세션에 「degrade 없음」이라고 쓰지 않습니다.
+
+**남은 갭 — `no-state-in-phase-0`.** `request-framing` 은 인터뷰 이전이라 state 파일이 아예 없는 세션이
+**정상**입니다. 그 세션에서 원장은 구조적으로 부재하고 채널 2 만 남습니다. state 파일을 새로 만드는
+설계(어디에 · 어떤 frontmatter 로 · 누가 지우나)는 이 skill 의 범위 밖이므로, 그 갭을 이 이름으로 부르고
+게이트 텍스트가 그 사실을 말합니다.
+
+**딸린 상호작용 하나** — `## 상태` 가 `$SEED_DIR` 과 그 아래 리뷰 엔진 자리 `$STATE_DIR` 을 만들므로, 원래
+세션 디렉토리가 없었을 세션에도 디렉토리와 파일이 생깁니다. 그 파일들은 `gc_common.py` 의 TTL-GC 관할에
+들어갑니다 — **관할 밖에 놓이는 분기가 없기 때문**입니다: 그 블록의 단일 가드가 `sid` 실값과 `mkdir`
+성공을 함께 요구하고, `state_path.py` 가 GC 의 세션 이름 필터와 같은 정규식을 통과한 값만 내주므로, **이
+파일들이 존재한다는 것 자체가 GC 가 걷는 자리에 있다는 뜻**입니다. 폴더 나이는 **폴더 자신과 그 아래 모든
+항목의 최신 mtime**(링크는 따라가지 않는다)이고, TTL(기본 24시간, env override)을 넘기면 폴더가 통째로
+걷힙니다 — 리뷰 원장도 함께입니다. 사용자 결정은 audit `## 6. 리뷰 결정` 에 남아 있어 잃지 않습니다.
+
+**냉독 축도 죽을 수 있고, 죽으면 여기 보입니다.** 그 축의 입력은 `${SEED_TEXT}` 이고 그 출처는 `### 냉독` 의
+`cat "$SEED"` 입니다 — `$SEED` 가 비면 냉독은 아무 내용도 없이 돌게 되므로 **돌리지 않습니다**. 리뷰 축은
+codex 를 잃어도 탐지 리뷰어가 남지만 **냉독 축에는 남는 담당이 없습니다** — 담당이 하나뿐인 축이라 통째로
+없어집니다. 그래서 그 행은 「모델 다양성 손실」이 아니라 **축 소실**이고, 게이트 질문 텍스트에도 그렇게
+씁니다.
 
 ## 확정 — proceed 게이트
 
@@ -636,7 +647,7 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 
 **frontmatter 를 떼지 않는 이유**: `type: interview-seed` 줄이 소비자가 seed 를 알아보는
 유일한 표지입니다. 본문은 라벨 없는 산문이라 그것만으로는 seed 인지 아닌지 구별되지
-않습니다. `check_seed.py` 와 억제 번들 조립기가 **본문만** 보는 것은 별개 사실입니다 —
+않습니다. `check_seed.py` 와 리뷰 번들 조립기가 **본문만** 보는 것은 별개 사실입니다 —
 그 둘은 사람이 읽는 메시지를 재고, frontmatter 는 하니스용 메타데이터입니다.
 
 게이트의 네 옵션은 이 모양을 그대로 씁니다 — ①/② 는 두 줄 명령을 노출하는 핸드오프입니다:
@@ -711,5 +722,6 @@ payload 를 양식으로 만드는 유일한 경로이고, `tests/test_seed_one_
 ## kill switch
 
 - `DEVBREW_SPEC_DISTILL_DISABLE=1` — 즉시 abort, state 보존.
-- `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` — codex 억제 축만 skip, 격리 critic 은 정상.
+- `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` — 리뷰 엔진의 codex 축만 skip(탐지 · 재비판은 그대로). `### codex` 펜스가 집행하고 엔진이 게이트 첫 줄로 공시한다.
+- `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` — 재비판만 skip(`doc-recritic` dispatch 없음 · 7단계 `--recritic-skipped`). 엔진이 `advisory[]` 로 공시한다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE=1` — 워크트리 질문·생성을 건너뛰고 현재 디렉토리에서 진행(audit §5 에 사유).
