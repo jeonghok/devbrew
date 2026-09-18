@@ -2,15 +2,21 @@
 """seed_provenance.py — seed 문장의 출처와 확인을 audit 기록과 대조한다.
 
   marks    <seed> <audit> [--fix]    «(사용자 확인)» 이 붙은 문장이 audit `## 2. 질문 전체` 의
-                                     「…」 — 고름 풀이 안에 있는가. 없으면 보고하고 rc 1 —
-                                     --fix 면 그 표시만 떼고 seed 를 다시 쓴다(rc 0).
+                                     「…」 — 고름 풀이를 문장 단위로 쪼갠 것과 정확히 같은가
+                                     (부분 문자열이 아니다). 다르면 보고하고 rc 1 — --fix 면 그
+                                     표시만 떼고 seed 를 다시 쓴다(rc 0). audit 을 못 읽거나
+                                     못 믿으면(중복 제목 · 절 누락) 판단을 거부하고 rc 2.
   classify <seed> [--audit <audit>]  seed 본문 문장마다 출처(user|author)와 확인(true|false).
 
-비교 단위 — 공백(줄바꿈 포함)을 한 칸으로 접고 종결부호 앞 공백을 지운 뒤 **글자 그대로** 본다.
-마크업(백틱 · 별표)은 지우지 않는다. seed 문장이 확인된 풀이의 부분 문자열이면 확인이다. 압축이
-그 문장을 한 글자라도 고치면 확인이 아니다 — 확인은 저자가 다시 쓸 수 없는 고정점이다.
-audit 을 못 읽으면 확인된 풀이는 0 이다: 표시는 전부 근거 없음, 문장은 전부 저자 · 미확인.
-rc: 0 정상 · 1 marks 위반 · 2 입력 오류.
+비교 단위 — 공백(줄바꿈 포함)을 한 칸으로 접고 종결부호 앞 공백을 지운 뒤 **문장 단위로 정확히
+같아야**(부분 문자열이 아니다) 확인 · 원문으로 친다. 마크업(백틱 · 별표)은 지우지 않는다. audit
+`## 2` 의 풀이 문장 하나가 통째로 seed 에 남으면 확인이고, `## 1` 의 원문 문장(문단 전체를 이어
+붙인 것과 줄 단위 각각을 모두 단위로 본다) 하나가 통째로 남으면 사용자 원문이다. 압축이 그 문장을
+한 글자라도 고치면 확인 · 원문 어느 쪽도 아니다 — 확인은 저자가 다시 쓸 수 없는 고정점이다.
+audit 을 못 읽으면 확인된 풀이와 원문 문장은 0 이다: marks 는 판단을 거부하고(rc 2), classify 는
+전부 저자 · 미확인으로 떨어지며 그 사실을 밝힌다. audit 에 템플릿 제목이 중복되거나(예: `## 2`
+줄이 `## 1` 본문 안에도 심겨 있음) `## 1`/`## 2` 절이 없으면 같은 «못 믿는» 상태로 다룬다.
+rc: 0 정상 · 1 marks 위반 · 2 입력 오류(seed 못 읽음 · audit 을 못 믿음).
 """
 from __future__ import annotations
 
@@ -20,7 +26,7 @@ import pathlib
 import re
 import sys
 
-from seed_review_log import section_body
+from seed_review_log import duplicate_headings, section_body
 
 MARK = "(사용자 확인)"
 REVERIFY_PREFIX = "다시 검증할 것 —"
@@ -63,15 +69,42 @@ def segments(body: str) -> list[dict]:
     return out
 
 
-def confirmed_readings(audit_text: str | None) -> list[str]:
+def _sentence_units(flat: str) -> list[str]:
+    """정규화된 한 문자열을 `SENT_SPLIT_RE` 로 쪼갠 뒤 다시 정규화한 비어 있지 않은 조각들."""
+    return [p for p in (norm(piece) for piece in SENT_SPLIT_RE.split(flat)) if p]
+
+
+def confirmed_reading_sentences(audit_text: str | None) -> set[str]:
+    """`## 2` 의 「…」 — 고름 풀이마다 문장 단위로 쪼갠 집합. seed 문장은 이 집합의 원소와
+    **정확히 같아야**(부분 문자열이 아니다) 확인이다 — 풀이 문장 하나가 통째로 살아남으면
+    확인, 압축이 그 문장 경계를 넘나들며 고치면 확인이 아니다(fix round 1 Important #1)."""
     body = section_body(audit_text, "## 2. 질문 전체") if audit_text else None
-    return [norm(m["t"]) for m in map(READING_RE.match, (body or "").splitlines()) if m]
+    readings = [norm(m["t"]) for m in map(READING_RE.match, (body or "").splitlines()) if m]
+    out: set[str] = set()
+    for r in readings:
+        out.update(_sentence_units(r))
+    return out
 
 
-def with_mark_status(segs: list[dict], readings: list[str]) -> list[dict]:
+def verbatim_units(audit_text: str | None) -> set[str]:
+    """`## 1` 원문의 문장 단위 집합 — 문단 전체를 이어 붙여 쪼갠 것과, 줄 하나하나를 각각
+    쪼갠 것의 합집합이다. 후자가 있어야 종결부호 없는 대화체 줄(예: 「로그인이 가끔 실패한다」)
+    도 그 줄 하나만으로 사용자 원문 단위가 된다 — 전체를 이어 붙이면 다음 줄과 합쳐져 버린다."""
+    body = section_body(audit_text, "## 1. 원문") if audit_text else None
+    if not body:
+        return set()
+    out: set[str] = set(_sentence_units(norm(body)))
+    for line in body.splitlines():
+        line_n = norm(line)
+        if line_n:
+            out.update(_sentence_units(line_n))
+    return out
+
+
+def with_mark_status(segs: list[dict], reading_sentences: set[str]) -> list[dict]:
     for s in segs:
         if s["marked"]:
-            s["mark_valid"] = bool(s["text"]) and any(s["text"] in r for r in readings)
+            s["mark_valid"] = bool(s["text"]) and s["text"] in reading_sentences
     return segs
 
 
@@ -90,23 +123,35 @@ def strip_invalid(text: str, segs: list[dict]) -> str:
 
 
 def _read_audit(path: str | None) -> tuple[str | None, str]:
+    """audit 을 읽고 신뢰할 수 있는지 확인한다. 셋 중 하나라도 걸리면 못 믿는 것으로 친다
+    (fix round 1 Important #2) — `audit_text` 를 None 으로 돌려 하류가 «없음»과 똑같이 다루게
+    한다: (1) 못 읽음, (2) `AUDIT_HEADINGS` 제목이 본문 어딘가에 심겨 중복됨(`section_body` 가
+    첫 occurrence 를 고르므로 `## 1` 본문 안에 `## 2` 로 보이는 줄이 있으면 진짜 `## 2` 를
+    가릴 수 있다), (3) `## 1`/`## 2` 절 자체가 없음."""
     if not path:
         return None, "unavailable: --audit 없음"
     try:
-        return pathlib.Path(path).read_text(encoding="utf-8"), "ok"
-    except OSError as e:
+        text = pathlib.Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as e:
         return None, "unavailable: %s" % e
+    dups = duplicate_headings(text)
+    if dups:
+        return None, "unavailable: duplicate_heading %s" % ", ".join(h for h, _ in dups)
+    missing = [h for h in ("## 1. 원문", "## 2. 질문 전체") if section_body(text, h) is None]
+    if missing:
+        return None, "unavailable: section_missing %s" % ", ".join(missing)
+    return text, "ok"
 
 
 def classify(segs: list[dict], audit_text: str | None) -> list[dict]:
-    raw = norm(section_body(audit_text, "## 1. 원문") or "") if audit_text else ""
+    verb_units = verbatim_units(audit_text)
     out = []
     for s in segs:
         if s["reverify"]:
             r = ("author", False, "reverify_paragraph")
         elif s["marked"] and s.get("mark_valid"):
             r = ("user", True, "confirmed_reading")
-        elif s["text"] and raw and s["text"] in raw:
+        elif s["text"] and s["text"] in verb_units:
             r = ("user", False, "verbatim")
         elif s["marked"]:
             r = ("author", False, "mark_invalid")
@@ -117,6 +162,8 @@ def classify(segs: list[dict], audit_text: str | None) -> list[dict]:
 
 
 def main(argv=None) -> int:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     p = argparse.ArgumentParser(prog="seed_provenance.py")
     sp = p.add_subparsers(dest="cmd", required=True)
     x = sp.add_parser("marks"); x.add_argument("seed"); x.add_argument("audit")
@@ -129,12 +176,16 @@ def main(argv=None) -> int:
     seed = pathlib.Path(a.seed)
     try:
         text = seed.read_text(encoding="utf-8")
-    except OSError as e:
+    except (OSError, UnicodeError) as e:
         print("seed 를 읽지 못했다: %s" % e, file=sys.stderr)
         return 2
     audit_text, audit_state = _read_audit(a.audit)
-    segs = with_mark_status(segments(split_front(text)[1]), confirmed_readings(audit_text))
+    segs = with_mark_status(segments(split_front(text)[1]), confirmed_reading_sentences(audit_text))
     if a.cmd == "marks":
+        if audit_state != "ok":
+            print("[spec-distill] audit 을 판단할 수 없어 marks 를 매길 수 없다(위반이 아니다): %s"
+                  % audit_state, file=sys.stderr)
+            return 2
         invalid = [s["text"] for s in segs if s["marked"] and not s["mark_valid"]]
         res = {"marked": sum(1 for s in segs if s["marked"]), "invalid": invalid,
                "audit": audit_state, "fixed": False}
