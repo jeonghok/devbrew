@@ -132,15 +132,17 @@ place() {   # place <sid> [이름] → 그 seed 의 엔진 자리(엔진 state-d
 real() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
 
 # ── P — 엔진 자리 ─────────────────────────────────────────────────────────────
-{ cat "$W/state.sh"; echo 'printf "STATE_DIR=%s\n" "$STATE_DIR"'; } > "$W/state-print.sh"
-home fg01same; run_in fg01same "$W/state-print.sh"; s1="$(sed -n 's/^STATE_DIR=//p' "$W/fg01same.out")"
-run_in fg01same "$W/state-print.sh"; s1b="$(sed -n 's/^STATE_DIR=//p' "$W/fg01same.out")"
+# `set -u` 로 돌린다 — 그래야 아래 「미할당 변수로 죽지 않는다」가 실패할 수 있다. 세 실행의 stderr 를 모아 잰다.
+{ echo 'set -u'; cat "$W/state.sh"; echo 'printf "STATE_DIR=%s\n" "$STATE_DIR"'; } > "$W/state-print.sh"
+: > "$W/p-all.err"
+home fg01same; run_in fg01same "$W/state-print.sh"; cat "$W/fg01same.err" >> "$W/p-all.err"; s1="$(sed -n 's/^STATE_DIR=//p' "$W/fg01same.out")"
+run_in fg01same "$W/state-print.sh"; cat "$W/fg01same.err" >> "$W/p-all.err"; s1b="$(sed -n 's/^STATE_DIR=//p' "$W/fg01same.out")"
 [ -n "$s1" ] && [ "$s1" = "$s1b" ] && ok "P: 같은 seed 는 셸이 바뀌어도 같은 엔진 자리" || no "P: 같은 seed 의 자리가 비었거나 갈렸다 ('$s1' · '$s1b')"
 [ -n "$s1" ] && [ "$(real "$s1")" = "$(real "$(place fg01same)")" ] && ok "P: 그 자리는 엔진 state-dir-for 가 낸 것과 같다" \
   || no "P: 블록이 엔진과 다른 자리를 냈다"
-home fg01same probe-other-interview; run_in fg01same "$W/state-print.sh"; s2="$(sed -n 's/^STATE_DIR=//p' "$W/fg01same.out")"
+home fg01same probe-other-interview; run_in fg01same "$W/state-print.sh"; cat "$W/fg01same.err" >> "$W/p-all.err"; s2="$(sed -n 's/^STATE_DIR=//p' "$W/fg01same.out")"
 [ -n "$s2" ] && [ "$s2" != "$s1" ] && ok "P: 같은 세션의 다른 seed 는 다른 자리" || no "P: 다른 seed 가 같은 자리를 받았다 — 원장이 섞인다"
-grep -q 'unbound variable' "$W/fg01same.err" && no "P: 상태 블록이 미할당 변수로 죽었다" || ok "P: 상태 블록이 차가운 셸에서 죽지 않는다"
+grep -q 'unbound variable' "$W/p-all.err" && no "P: 상태 블록이 set -u 에서 미할당 변수로 죽었다" || ok "P: 상태 블록이 차가운 셸 · set -u 에서 죽지 않는다"
 
 # ── B — 번들 ─────────────────────────────────────────────────────────────────
 { cat "$W/state.sh"; cat "$W/bundle.sh"; echo 'echo "bundle_rc=$bundle_rc"'; } > "$W/bundle-run.sh"
@@ -181,9 +183,18 @@ y="$(fire fg21nobd "$W/nobundle.sh" WRITE=fresh)"
 case "$(state_of "$y")" in absent|0byte) ok "A(번들 부재): 직전 라운드 산출물이 중화됐다" ;; *) no "A(번들 부재): 직전 라운드 산출물이 남았다" ;; esac
 [ ! -e "$W/fg21nobd.argv" ] && grep -q 'SKIPPED (reason: gate_inputs_missing)' "$W/fg21nobd.err" \
   && ok "A(번들 부재): 러너를 부르지 않고 gate_inputs_missing 으로 공시한다" || no "A(번들 부재): 번들 없이 러너가 불렸거나 공시가 없다"
+# 사유 코드는 일반 SKIPPED 줄도 내므로, 전용 메시지(관측한 두 입력값 · 「앞에 이어 붙여라」)는 따로 잰다.
+grep -qF "CODEX_YAML='" "$W/fg21nobd.err" && grep -qF "BUNDLE='" "$W/fg21nobd.err" \
+  && ok "A(번들 부재): 입력 부재 전용 메시지가 관측한 CODEX_YAML · BUNDLE 값을 댄다" \
+  || no "A(번들 부재): 입력 부재 전용 메시지가 없다 — 사유 코드만으로는 무엇이 비었는지 모른다"
 y="$(fire fg22keep "$W/full.sh" WRITE=fresh RC=0)"
 grep -q 'FRESH_SEED_RUN' "$y" 2>/dev/null && ! grep -q 'STALE_PREV_ROUND' "$y" \
   && ok "A+: 이번 실행이 쓴 산출물이 살아남는다" || no "A+: 이번 산출물이 사라졌거나 직전 것이 남았다($(state_of "$y"))"
+if grep -qF "CODEX_YAML='" "$W/fg22keep.err" || grep -qF "BUNDLE='" "$W/fg22keep.err"; then
+  no "A+: 입력이 있는데 입력 부재 메시지가 나왔다"
+else
+  ok "A+: 입력이 있으면 입력 부재 메시지가 없다(위 전용 메시지 단언의 음의 짝)"
+fi
 pl="$(place fg22keep)"
 if [ -f "$W/fg22keep.argv" ]; then
   a1="$(sed -n 1p "$W/fg22keep.argv")"; a2="$(sed -n 2p "$W/fg22keep.argv")"; a4="$(sed -n 4p "$W/fg22keep.argv")"
