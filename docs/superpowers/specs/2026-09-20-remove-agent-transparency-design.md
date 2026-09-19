@@ -14,14 +14,16 @@ next_phase: superpowers:writing-plans
 ## Handoff Context
 
 **TL;DR** — `plugins/agent-transparency/` 와 마켓플레이스 항목을 지운다. 그리고 이 플러그인 **때문에** 리포의
-다른 곳에 생긴 줄 일곱 자리(T1–T7)를 이 플러그인이 없던 상태로 되돌린다. 이력 문서는 건드리지 않는다.
+다른 곳에 생긴 줄 여덟 자리(T1–T8)를 이 플러그인이 없던 상태로 되돌린다. 이력 문서와 과거 시점의 개수 서술은
+건드리지 않는다.
 남는 플러그인의 파일은 하나도 편집하지 않으므로 버전 bump·CHANGELOG 는 없다.
 
 **Implicit context** —
 (1) 사용자 요청 원문: 「agent-transparency 플러그인을 제거하자」. 이유는 D1(안 쓴다 · 무게 감축).
 (2) 판정 기준은 D3 의 사용자 원문 「어떤게 가장 없던 상태 디폴트로 원복하는거야?」다. 흔적은 "이 플러그인을
 **이름으로 부르는** 줄"이 아니라 "이 플러그인 **때문에 생긴** 줄"이다. 이름이 박히지 않은 흔적(T3 정규식 갈래,
-T7 하한 값)은 개념 별칭 grep 에 걸리지 않고 출생 커밋 추적(`git log -S`)으로만 드러났다.
+T7 하한 값, T8 `context: fork` 주석)은 개념 별칭 grep 에 걸리지 않고 출생 추적(`git log -S` · CHANGELOG)으로만
+드러났다. 반대로 과거 시점의 개수·순번(「20 개 agent」, 「18 중 16」 등)은 이 플러그인을 셌더라도 이력으로 둔다(D6).
 (3) 작업 위치: 브랜치 `feature/remove-agent-transparency`, 워크트리
 `/Users/jeonghokim/Downloads/devbrew/.claude/worktrees/remove-agent-transparency`, base `84222ee1`(#157 머지).
 메인 체크아웃(`feature/framing-intent-drift`, PR #158)은 동시 세션이 편집 중이라 **건드리지 않는다**. #158 은 이
@@ -56,18 +58,20 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 | 종류 | 자리 |
 |---|---|
 | 새로 RED | `shared/tests/test_plugin_root_no_cwd_fallback.sh:472` 코퍼스 하한 `≥30` — 31 → 29 |
-| GREEN 인 채 거짓이 됨 | `docs/plugin-authoring.md:24` · `:49–55`, `shared/tests/test_dispatch_disposition.sh:143–145`, `tools/adjudication/check_slots.py:26` · `:46` |
+| GREEN 인 채 거짓이 됨 | `docs/plugin-authoring.md:24` · `:49–55`, `shared/tests/test_dispatch_disposition.sh:143–145`, `tools/adjudication/check_slots.py:46` (같은 파일 `:26` 「20 개 agent」는 과거 시점의 개수 — D6) |
 | GREEN 인 채 아무것도 안 잼 | `shared/tests/test_dispatch_disposition.sh:85` 의 `agent:` 갈래 — 코퍼스 유일 실례가 `briefing-current-state/SKILL.md:6` |
 | 측정 뒤 발견 | `tools/adjudication/check_names.py:19` docstring 이 위 정규식을 글자 그대로 인용 |
+| 설계 리뷰가 발견 | `shared/tests/test_agent_input_slots.sh:86` · `shared/tests/fixtures/adjudication/run_slots.py:34` 주석의 `context: fork` 갈래 — 리포 유일 실례가 `briefing-current-state/SKILL.md:5` |
 | 선재 RED (전후 동일) | 7 파일 — 실패 케이스 집합과 파일별 실패 줄 수가 같다. 목록은 「Verification Plan」 1 |
 | 모델 호출 | claude/codex stub 호출 0 |
 
 ## Goals
 
 - **G1.** 플러그인 디렉토리와 마켓플레이스 항목을 지운다.
-- **G2.** 이 플러그인 때문에 생긴 줄 일곱 자리(T1–T7)를 없던 상태로 되돌린다.
+- **G2.** 이 플러그인 때문에 생긴 줄 여덟 자리(T1–T8)를 없던 상태로 되돌린다.
 - **G3.** 스위트에 새 실패가 0이다.
-- **G4.** 제거 뒤 살아 있는 표면(LIVE)에 이 플러그인의 개념 별칭이 0건이다.
+- **G4.** 제거 뒤 살아 있는 표면(LIVE)에 이 플러그인의 개념 별칭이 0건이다. 단, 보존하는 이력 spec 을 가리키는
+  경로 리터럴은 실재하는 파일의 인용이라 흔적이 아니다(D7, AC4).
 
 ## Non-goals
 
@@ -76,8 +80,11 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
   `docs/superpowers/specs/2026-08-05-agent-transparency-design.md` 는 **제자리에 그대로** 둔다 —
   `shared/tests/fixtures/seamprobe/MEASUREMENT.md:22` · `:178–184` 가 이 문서를 경로와 줄 번호로 인용한다.
   옮기면 경로가 깨지고, 상단에 "제거됨" 배너를 달면 줄 번호가 밀려 인용이 조용히 어긋난다.
-- **락의 개발 이력 서술.** `test_dispatch_disposition.sh:6–8`(「5표기 중 1개만」, 「표기 ②④를 놓쳐 18 중 16」)과
-  `:101`(「A①(17 != 18)」)은 그 락을 만들 때의 사실이다. 고쳐 쓰면 이력의 날조다.
+- **과거 시점의 개수·순번**(D6). 이 플러그인을 셈에 넣었더라도 과거 사건의 개수는 이력으로 둔다 —
+  `shared/tests/test_dispatch_disposition.sh:6–8`(「5표기 중 1개만」, 「표기 ②④를 놓쳐 18 중 16」) · `:84`
+  (「19번째 dispatch」) · `:101`(「A①(17 != 18)」) · `:292`(「오늘 18/18」), `tools/adjudication/check_slots.py:26`
+  (「20 개 agent」), `shared/tests/variant_of.py:66`(「실제 agent 파일 24개 … 에서 도출했다」). 그때의 사실이라
+  고쳐 쓰면 이력의 날조다. 지우는 것은 **없어진 실체를 이름으로 가리키는 줄**뿐이다(T6 의 bullet).
 - **리포 전역 스윕이 남긴 변경.** 이 플러그인을 함께 건드린 스윕 커밋(모델 키 제거 `eef761e0`, UTF-8 명시
   `8443b59b`, `tools:` 어순 통일 `e359c841` 등)이 다른 파일에 남긴 변경은 이 플러그인과 무관하다. 원복은 커밋
   revert 가 아니라 "이 플러그인 때문에 생긴 줄"의 삭제다.
@@ -99,7 +106,7 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 - **C4.** 이력은 고쳐 쓰지 않는다.
 - **C5.** 흔적의 판정 근거는 **출생 원인**이다 — 출생 커밋(`git log -S`)이나 설계 문서의 전수 조사로 이 플러그인이
   원인임을 댈 수 있어야 한다. 이름이 박혀 있다는 것만으로는 흔적이 아니고(이력일 수 있다), 이름이 없다는 것만으로
-  흔적이 아닌 것도 아니다(T3 · T7).
+  흔적이 아닌 것도 아니다(T3 · T7 · T8).
 
 ## 설계 (Architecture)
 
@@ -108,7 +115,7 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 - `plugins/agent-transparency/` 전체(34 파일).
 - `.claude-plugin/marketplace.json` 의 `agent-transparency` 객체와, 앞 객체(`plugin-audit`) 뒤의 쉼표.
 
-### 2. 흔적 일곱 자리 — 없던 상태로
+### 2. 흔적 여덟 자리 — 없던 상태로
 
 | # | 자리 | 출생 | 지금 | 없던 상태 |
 |---|---|---|---|---|
@@ -117,8 +124,9 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 | T3 | `shared/tests/test_dispatch_disposition.sh:85` `NOTATION` 의 `\|^\s*agent:\s` 갈래 | `8b07f9f3` — 설계 `2026-08-22-subagent-adjudication-contract-design.md:84` 의 표기 전수 조사 ④. 그 유일 실례가 이 플러그인 | 실례 0 — 아무것도 재지 않는다 | `re.compile(r'subagent_type:\|agentType:\|Agent\(')` |
 | T4 | 같은 파일 `:142–145` 「아래」 방향의 근거 문단(앞의 빈 `#` 줄 포함) | `f835f31f` | 삭제된 파일을 근거로 인용 | 네 줄 삭제. 규칙 자체는 `:137–138` 에 그대로 남는다 |
 | T5 | `tools/adjudication/check_names.py:19` docstring 의 표기 필터 인용 | T3 의 글자 그대로 사본 | `^\\s*agent:` 포함 | T3 와 같은 세 표기만 인용 |
-| T6 | `tools/adjudication/check_slots.py:26` 「20 개 agent」, `:46` `transcript-reader.inventory` bullet | 전수 스윕이 이 플러그인의 agent 를 셈 | 없는 agent·스크립트를 분류 | 「19 개 agent」, bullet 삭제 |
+| T6 | `tools/adjudication/check_slots.py:46` `transcript-reader.inventory` bullet | 전수 스윕이 이 플러그인의 agent 슬롯을 분류 | 없어진 agent·스크립트를 이름으로 가리킴 | bullet 삭제. 같은 스윕의 「20 개 agent」(`:26`)는 과거 시점의 개수라 둔다(D6) |
 | T7 | `shared/tests/test_plugin_root_no_cwd_fallback.sh:472` 코퍼스 하한 `-ge 30` | `aff6a8ee` — 코퍼스 31(이 플러그인의 `briefing-current-state/SKILL.md` · `commands/standup.md` 포함)에 여유 1 | 29 → RED | `-ge 28` — 29 에 원저자와 같은 여유 1 |
+| T8 | `shared/tests/test_agent_input_slots.sh:86` · `shared/tests/fixtures/adjudication/run_slots.py:33–34` 주석의 「Workflow JS 나 (skill frontmatter 의) `context: fork` 에 있는 agent」 | 최종 리뷰 K4(`plugins/quality-gates/CHANGELOG.md:235–237`) — 「못 잼」 넷 중 `context: fork` 쪽이 이 플러그인의 `transcript-reader` 하나 | 리포에 실례 없는 갈래를 서술 | 「`context: fork`」 갈래를 걷고 「Workflow JS」만 남긴다 |
 
 ### 3. 불변인 것
 
@@ -132,25 +140,33 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 - **AC1.** `git ls-files plugins/agent-transparency` 가 0줄이다.
 - **AC2.** `.claude-plugin/marketplace.json` 이 JSON 으로 파싱되고, `plugins[].name` 이 정확히
   `quality-gates, project-init, spec-distill, plugin-audit`(이 순서)다.
-- **AC3.** T1–T7 이 §2 표의 「없던 상태」 열과 일치한다.
+- **AC3.** T1–T8 이 §2 표의 「없던 상태」 열과 일치한다.
   - T1: `docs/plugin-authoring.md` 에 `output style` · `output-styles` · `keep-coding-instructions` ·
     `force-for-plugin` 이 0건이고, `**Merge 전:**` 단락이 남아 있다.
   - T2: 24행 문단에 `transcript-reader` 가 없고 `smoke-probe` · `pr-understanding-builder` 는 있다.
   - T3: `NOTATION` 정규식 리터럴이 정확히 `subagent_type:|agentType:|Agent\(` 다.
   - T4: 파일에 `briefing-current-state` 가 0건이고, 축 A② 의 「바로 아래」 규칙 문장은 남아 있다.
   - T5: `check_names.py` 에 `agent:` 표기 인용이 0건이고, 나머지 세 표기 인용은 남아 있다.
-  - T6: `check_slots.py` 에 `transcript-reader` · `prepare_standup` 이 0건이고 「19 개 agent」가 있다.
+  - T6: `check_slots.py` 에 `transcript-reader` · `prepare_standup` 이 0건이고, 「20 개 agent」는 그대로 있다.
   - T7: 하한 리터럴이 `-ge 28` 이다.
+  - T8: 두 파일에 `context: fork` 가 0건이고, 「Workflow JS」 서술은 남아 있다.
 - **AC4.** 개념 별칭 `git grep -n -I -i` 가 LIVE 에서 0건이다. LIVE 는 이력 분류(`**/CHANGELOG.md`,
   `docs/archive/**`, `docs/audits/**`, `docs/superpowers/{specs,plans,interview}/**`) 밖의 모든 추적 파일이다.
   별칭: `agent-transparency` · `agent_transparency` · `transcript-reader` · `briefing-current-state` ·
   `prepare_standup` · `standup` · `ab_gate` · `ab_judge` · `ab_seal` · `ab_driver` · `AT_ORACLE` ·
   `comprehension debt` · `comprehension-debt` · `이해부채` · `output-styles` · `output style` ·
-  `force-for-plugin` · `keep-coding-instructions`.
+  `force-for-plugin` · `keep-coding-instructions` · `context: fork`.
+  **예외는 하나다(D7)** — 경로 리터럴 `docs/superpowers/specs/2026-08-05-agent-transparency-design.md` **안의**
+  일치. 보존하는 이력 spec 을 가리키는 인용이다(오늘 `shared/tests/fixtures/seamprobe/MEASUREMENT.md:22` · `:178`).
+  판정은 줄 단위로 그 리터럴을 지운 뒤 남은 부분에 별칭이 없는지로 한다 — 파일을 통째로 빼지 않으므로 같은
+  파일에 새로 생기는 다른 언급은 여전히 걸린다.
 - **AC5.** 전체 스위트 전후 대조에서 base 대비 **새 실패 케이스 집합이 공집합**이고, 파일별 실패 줄 수가
   같다(선재 RED 7 파일 포함). claude/codex stub 호출은 0이다.
-- **AC6.** T7 하한의 양성 대조: 커밋 뒤, 락의 코퍼스 글롭 안 마크다운 2개를 임시로 지워 27개로 만들면 그
-  단언이 ✗ 이고, 복원하면 ✓ 다. 복원은 `git checkout HEAD --` 로 하고 `git diff HEAD` 가 비었음을 확인한다.
+- **AC6.** T7 하한의 양성 대조(D9): 커밋 뒤, 락의 코퍼스 글롭 안 마크다운 2개를 **index 에서**(`git rm`) 지워
+  27개로 만든다 — 락의 코퍼스는 `git ls-files --cached` 에서 나오므로 작업 트리에서만 지우면 파서가 없는 파일을
+  열다 죽고, 그때의 ✗ 는 하한을 재지 않은 「0개뿐」이다. 통과 관측은 둘이 함께다: 하한 단언의 ✗ 메시지가
+  「27개뿐」이고, 같은 실행에서 「파서가 끝까지 돌았다 (rc 0)」가 ✓ 다. 복원(`git checkout HEAD --` 로 index 와
+  작업 트리 둘 다) 뒤 같은 단언이 ✓ 이고 `git diff HEAD` 와 `git diff --cached` 가 비었음을 확인한다.
 - **AC7.** 제거 뒤 dispatch 락의 인쇄값이 `PRINT_2_dispatch 21` · `PRINT_3_anchors 21` 이고 `ZERO_AGENTS` 가
   빈 값이다 — T3 이 이 플러그인 밖의 dispatch 를 하나도 잃지 않았다는 증거다.
 
@@ -165,6 +181,7 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 | 편집 | `shared/tests/test_plugin_root_no_cwd_fallback.sh` (T7) |
 | 편집 | `tools/adjudication/check_names.py` (T5) |
 | 편집 | `tools/adjudication/check_slots.py` (T6) |
+| 편집 | `shared/tests/test_agent_input_slots.sh` · `shared/tests/fixtures/adjudication/run_slots.py` (T8) |
 | 추가 | 이 문서, 그리고 writing-plans 의 plan |
 
 ## Verification Plan
@@ -194,8 +211,10 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 
 - **마켓플레이스 항목만 삭제(비공개).** 코드가 `plugins/*` 에 남아 공용 락이 계속 세고 유지해야 한다 — D1 의
   무게 감축을 이루지 못한다.
-- **deprecation 창 먼저.** CLAUDE.md 의 one-minor 창은 v1.0.0 이상의 CHANGELOG 규칙 아래 있다. 이 플러그인은
-  0.4.0 이고 활성 사용자가 없다.
+- **deprecation 창 먼저.** CLAUDE.md 의 one-minor 창은 v1.0.0 이상의 CHANGELOG 규칙 아래 있고, 이 플러그인은
+  0.4.0 이다. 로컬 설치는 없다. 제3자 설치는 확인할 수 없다 — 리포가 공개라 누구든 마켓플레이스로 추가할 수 있어,
+  로컬 부재는 설치 부재의 증명이 아니다(선례 `plugins/spec-distill/CHANGELOG.md:137`). 그 설치자에게 미치는 영향은
+  PR 본문에 적는다(「Deferred to plan」).
 - **`agent:` 갈래 유지 + 「실례 0」 공시**(처음 추천). 이 플러그인이 없던 세계의 락에는 이 갈래가 없다(D3 · D4).
 - **`agent:` 갈래에 합성 fixture.** 락에 fixture 모드를 새로 들여야 해 범위가 커지고, 없던 상태 기준과도 어긋난다.
 - **output style 절 보존**(플랫폼 지식이라서). 이 플러그인 PR 이 추가한 절이다(D4). 그 지식은 이력 spec 과 git
@@ -203,6 +222,10 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 - **이력 spec 을 `docs/archive/specs/` 로 이동, 또는 상단에 "제거됨" 배너.** 이동은 `MEASUREMENT.md` 의 경로
   인용을, 배너는 줄 번호 인용을 깬다. 얻는 것이 없다.
 - **하한 `≥25`**(처음 안). 원저자의 규칙(현재 수 − 1)과 다르다. 없던 상태 기준이면 29 − 1 이다.
+- **과거 개수를 반사실로 전부 고침**(D6 에서 기각). 「18 중 16」을 「17 중 16」으로 바꾸는 식이라, 실제로 있었던
+  프로토타입 실패 기록이 사실과 달라진다.
+- **AC4 에서 `MEASUREMENT.md` 를 통째로 제외 · 이력 분류를 `shared/tests/fixtures/**` 로 넓힘**(D7 에서 기각). 앞은
+  그 파일에 생길 새 언급을 못 보고, 뒤는 다른 픽스처의 진짜 흔적까지 가린다.
 
 ## 알려진 한계
 
@@ -231,15 +254,18 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 | D1 | 제거 이유 | 안 쓴다 · 무게 감축 — 교훈 회수는 최소로 |
 | D2 | 경로 분류 | architectural(선례 #153 · #154) — 사용자 이의 없음 |
 | D3 | `agent:` 갈래를 어떻게 둘지 | 사용자 원문 「어떤게 가장 없던 상태 디폴트로 원복하는거야?」 — 판정 기준을 "이 플러그인 때문에 생긴 줄"로 확정 |
-| D4 | 설계 §1 (D3 기준 개정판) | 없던 상태로 — output style 절 · `agent:` 갈래 · 「아래」 근거 문단 삭제, 하한 `≥28`, 이력 문서 무수정 |
+| D4 | 설계 §1 (D3 기준 개정판) | 「좋다 — 없던 상태로」 — 채팅 표의 일곱 줄 전부: output style 절 삭제(T1) · 예시 목록의 `transcript-reader` 삭제(T2) · `agent:` 갈래 삭제(T3) · 「아래」 근거 문단 삭제(T4) · `check_slots.py` 정정(T6, 범위는 D6 이 좁힘) · 하한 `≥28`(T7) · 디렉토리와 마켓플레이스 항목 삭제. 이력 문서 무수정 |
 | D5 | 설계 §2 | 승인 — 별도 워크트리, 삭제와 흔적 정리를 한 커밋으로, AC, `/qg review` 1회, bump 없음 |
+| D6 | 이 플러그인을 셈에 넣은 과거 시점의 개수 서술 (설계 리뷰 라운드 1) | 「(a) 개수는 이력」 — 개수·순번은 전부 두고 없어진 실체를 이름으로 가리키는 줄만 지운다. T6 은 bullet 삭제만 |
+| D7 | AC4 와 이력 spec 경로 인용의 충돌 (라운드 1) | 「경로 리터럴만 예외」 — 파일 통째가 아니라 그 경로 문자열 안의 일치만 뺀다. G4 문구도 함께 |
+| D8 | `context: fork` 주석 두 자리 (라운드 1) | 「T8 로 추가」 — 「Workflow JS」만 남기고 AC4 별칭에 `context: fork` 추가 |
+| D9 | AC6 양성 대조가 파서 사망으로도 통과하는 구멍 (라운드 1) | 「고친다」 — index 에서 지우고, 「27개뿐」 ✗ 와 파서 rc 0 ✓ 를 함께 관측 |
 
 오케스트레이터가 정하고 사용자에게 알린 것(되돌리려면 괄호 안의 한마디):
 
 | 정한 것 | 근거 |
 |---|---|
 | T5 추가 — D4 승인 뒤 발견 (「check_names 인용은 두라」) | T3 정규식의 글자 그대로 사본이다. 두면 T3 이 반쪽이 된다 |
-| 락 머리말의 개발 이력(`:6–8`, `:101`) 무수정 (「이력도 없던 상태로」) | 그때의 사실이다(C4) |
 | 이력 spec 제자리 · 배너 없음 (「archive 로 옮겨라」) | 경로·줄 번호 인용(`MEASUREMENT.md`) |
 | 「알려진 한계」의 `agent:` 서술을 채팅 때보다 좁힘 | 채팅에서는 "미래의 `agent:` dispatch 가 빠져나간다"고 했으나, ∀ 도출(`ZERO_AGENTS`) 때문에 그 표기로**만** 불리는 agent 는 드러난다. 빠져나가는 것은 다른 표기로도 불리는 agent 의 추가 호출뿐이다 |
 
@@ -251,3 +277,10 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 - AC6 에서 임시로 지울 마크다운 2개의 선택(T7 락의 코퍼스 글롭 안).
 - PR 본문에 적을 사용자 측 영향 — 마켓플레이스를 갱신한 설치자에게서 플러그인이 사라지고, `force-for-plugin`
   output style 도 함께 사라진다.
+- AC4 예외 판정(경로 리터럴을 지운 뒤 별칭 재검사)의 구현 형태.
+
+설계 리뷰 라운드 1 이 미룬 것:
+
+| 엔진 원장 id | 요지 |
+|---|---|
+| 2e6610eb#r1.1 | 두 가지가 비어 있다. (1) Verification Plan 1 의 「측정 때의 baseline 을 쓴다」는 곧 지워질 job 임시 디렉토리에 기대고 있어, 디렉토리가 없을 때의 경로가 없다. (2) Verification Plan 2 에는 .py·.mjs 대상 파일 선택 규칙이 없어 252개 모집단을 재현할 수 없다. plan 이 선택 규칙을 못 박고, job 디렉토리가 없으면 base 에서 baseline 을 다시 재도록 정한다. |
