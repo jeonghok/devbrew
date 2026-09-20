@@ -89,14 +89,33 @@
 | T6 | `tools/adjudication/check_slots.py` : 46 | 전수 스윕이 이 플러그인의 agent 슬롯을 분류 | `transcript-reader.inventory` bullet 이 없어진 agent·스크립트를 이름으로 가리킴 | bullet 한 줄 삭제. 같은 스윕의 `:26` 「20 개 agent」는 과거 시점의 개수라 둔다(R2) |
 | T7 | `shared/tests/test_plugin_root_no_cwd_fallback.sh` : 472 | `aff6a8ee` — 코퍼스 31(이 플러그인의 `briefing-current-state/SKILL.md` · `commands/standup.md` 포함)에 여유 1 | 제거 후 29 → RED (실측 확인) | `-ge 28` — 29 에 원저자와 같은 여유 1 |
 | T8 | `shared/tests/test_agent_input_slots.sh` : 86–87 · `shared/tests/fixtures/adjudication/run_slots.py` : 33–35 | 최종 리뷰 K4(`plugins/quality-gates/CHANGELOG.md:235–237`) — 「못 잼」 넷 중 `context: fork` 쪽이 이 플러그인의 `transcript-reader` 하나 | 리포에 실례 없는 갈래를 서술 | 「`context: fork`」 갈래를 걷고 「Workflow JS」만 남긴다 |
-| T9 | `shared/tests/test_dispatch_disposition.sh` : 87–89 · 92 | 설계 `2026-08-22-…:350–352` — 「표기 ④는 따옴표가 없으므로 따옴표를 경계로 쓸 수 없다」 | `PRE` 가 줄머리·공백을 경계로 허용, 그 허용의 실례 0 | `PRE = r'(?:["\':])'` 로 좁히고 주석의 「줄머리·공백」 서술을 걷는다 |
+| ~~T9~~ | `shared/tests/test_dispatch_disposition.sh` : 87–89 · 92 | 설계 `2026-08-22-…:350–352` | — | **철회**. 구현 리뷰가 C5(출생 원인)를 반증했다 — 아래 참고 |
 
-**T9 의 경계 문자 집합은 실측으로 정했다**(설계가 plan 에 미룬 항목). 제거 후 남는 dispatch 22줄을 전부 읽어
-보니 **이름 앞이 예외 없이 따옴표(`"` 또는 `'`) 또는 접두사 콜론(`:`)** 이다 — 공백 경계에만 기대는 줄이 없다.
-좁힌 뒤 도출을 재현해 `DISPATCH 22 · ANCHORS 22 · ZERO_AGENTS 없음 · A③ 위반 없음` 으로 **잃은 줄이 0** 임을
-확인했다. 축 A③ 의 이빨도 살아 있다: 경계에 `-` 를 더하는 변이를 넣으면
+**T9 는 철회됐다 — 구현 리뷰가 그 전제를 반증했다.** 이 계획은 원래 `PRE` 를 `r'(?:["\':])'` 로 좁히려 했고,
+근거는 그 넓힘이 이 플러그인의 표기 ④ 때문이라는 것이었다. 실측 두 개가 그것을 무너뜨렸다:
+
+| 경우 | 넓은 `PRE` | 좁은 `PRE` |
+|---|---|---|
+| `agent: agent-transparency:transcript-reader` — **삭제된 바로 그 실례** | 매치 | **매치** |
+| `subagent_type: adversarial` — 따옴표 없는 평범한 YAML (표기 ①) | 매치 | **놓침** |
+| `subagent_type: "quality-gates:adversarial"` — 오늘의 22줄 형태 | 매치 | 매치 |
+
+첫 줄이 C5 를 무너뜨린다 — 좁은 경계도 삭제된 실례를 **이미 매치한다**(접두사의 콜론이 경계다). 넓힘은 그 줄
+때문이 아니었으므로 「출생 원인」이 성립하지 않는다. 둘째 줄이 대가를 보인다 — 손실은 표기 ①에 떨어지고, 그
+표기는 이 플러그인이 건드린 적이 없다. **없던 상태로 되돌리는 것이 이 플러그인과 무관한 집행을 약화시켜서는
+안 된다.**
+
+되돌려도 잃는 것은 없다: 네 (`NOTATION` × `PRE`) 조합이 모두 같은 22줄 집합을 낸다. 되돌린 뒤 양성 대조로
+이빨도 확인했다 — 따옴표 없는 dispatch 자리에서 처분 앵커를 빼면 축 A① 가 23 ≠ 22 로 RED 가 된다.
+
+축 A③ 는 어느 쪽에서도 살아 있다: 경계에 `-` 를 더하는 변이를 넣으면
 `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:197` 이 `adversarial` 과 `artifact-adversarial` 둘에
-귀속되어 A③ 가 발화하고 A① 도 23 ≠ 22 로 깨진다.
+귀속되어 A③ 가 발화한다.
+
+**T3 은 남는다.** 그쪽은 출생 근거(설계 `2026-08-22-…:84` 의 표기 전수 조사 ④, 유일 실례가 이 플러그인)가
+반증되지 않았고, 리뷰의 실측은 설계가 「알려진 한계」에 이미 적은 것 — 다른 표기로도 불리는 agent 의 추가
+frontmatter 호출만 조용히 빠지고, 신규 agent 는 `ZERO_AGENTS` 가 잡는다 — 을 **확인**했을 뿐이다. 같은 규칙에
+다른 증거가 걸려 다른 결론이 나온 것이고, 목록이 아니라 규칙을 정본으로 둔 이유가 이것이다.
 
 ### S3 이 훑은 수치 하한 전수 (R3 판정)
 
@@ -147,7 +166,7 @@
 |---|---|
 | AC1 `git ls-files plugins/agent-transparency` 가 0줄 | Task 3 Step 1 · Step 12 |
 | AC2 marketplace 가 파싱되고 남는 이름이 네 개 그 순서 | Task 3 Step 2 · Step 12 |
-| AC3 확정 표의 모든 행이 「없던 상태」 열과 일치 | Task 3 Step 3–11 (행마다 기대 출력) |
+| AC3 확정 표의 모든 행이 「없던 상태」 열과 일치 | Task 3 Step 3–11 (행마다 기대 출력). **Step 6(T9)은 철회** — 그 행은 「없던 상태」 열이 비어 있고 base 형태가 유지돼야 한다 |
 | AC4 LIVE 에 개념 별칭 0건 (경로 리터럴 예외) | Task 3 Step 12 + **Step 12b(양성 짝)** |
 | AC5 새 실패 케이스 집합 공집합 · 파일별 실패 줄 수 동일 · stub 호출 0 | Task 1 Step 4 (baseline) → Task 3 Step 14 (대조) |
 | AC6 T7 하한의 양성 대조 — 「27개뿐」 ✗ 와 파서 rc 0 ✓ 를 함께 | Task 4 Step 1–3 |
@@ -186,7 +205,7 @@
 | 삭제 | `plugins/agent-transparency/**` (추적 34 파일) | 플러그인 실체 |
 | 편집 | `.claude-plugin/marketplace.json` | 카탈로그 항목 제거 (남는 순서: `quality-gates, project-init, spec-distill, plugin-audit`) |
 | 편집 | `docs/plugin-authoring.md` | T1 · T2 |
-| 편집 | `shared/tests/test_dispatch_disposition.sh` | T3 · T4 · T9 |
+| 편집 | `shared/tests/test_dispatch_disposition.sh` | T3 · T4 (T9 는 철회 — 「확정 표」 참고) |
 | 편집 | `shared/tests/test_plugin_root_no_cwd_fallback.sh` | T7 |
 | 편집 | `shared/tests/test_agent_input_slots.sh` | T8 (셸 쪽) |
 | 편집 | `shared/tests/fixtures/adjudication/run_slots.py` | T8 (픽스처 쪽) |
@@ -403,7 +422,7 @@ WORK="${CLAUDE_JOB_DIR:-$HOME/at-removal-work}/tmp"
 | 이력 근거 | 떠받치는 live 줄 | 판정 |
 |---|---|---|
 | `docs/superpowers/specs/2026-08-22-subagent-adjudication-contract-design.md:84` (표기 전수 조사 ④) | `test_dispatch_disposition.sh:85` | **T3** |
-| 같은 문서 `:350–352` (「표기 ④는 따옴표가 없다」) | `test_dispatch_disposition.sh:87–92` | **T9** |
+| 같은 문서 `:350–352` (「표기 ④는 따옴표가 없다」) | `test_dispatch_disposition.sh:87–92` | ~~T9~~ **철회** — 좁은 경계도 그 실례를 매치한다(접두사 콜론). 손실은 표기 ①에 떨어진다 |
 | `plugins/quality-gates/CHANGELOG.md:235–237` (최종 리뷰 K4) | `test_agent_input_slots.sh:86` · `run_slots.py:33` | **T8** |
 | `docs/superpowers/specs/2026-08-05-agent-transparency-design.md` | `shared/tests/fixtures/seamprobe/MEASUREMENT.md:22` · `:178` | 흔적 아님 — 보존하는 이력 spec 을 가리키는 경로 인용(D7) |
 
@@ -550,7 +569,9 @@ grep -n 'NOTATION = re.compile' shared/tests/test_dispatch_disposition.sh
 
 기대: `NOTATION = re.compile(r'subagent_type:|agentType:|Agent\(')` (AC3 T3)
 
-- [ ] **Step 6: T9 — 이름 경계를 따옴표·콜론으로 좁힌다**
+- [ ] ~~**Step 6: T9 — 이름 경계를 따옴표·콜론으로 좁힌다**~~ — **철회됨. 이 Step 을 실행하지 말 것.**
+
+구현 리뷰가 그 전제를 반증했다(「확정 표」의 T9 절 참고). 아래 블록은 무엇이 철회됐는지 보이기 위해 남겨 둔다.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/remove-agent-transparency
@@ -578,7 +599,7 @@ PY
 sed -n '/^# 경계 규칙/,/^PRE, POST/p' shared/tests/test_dispatch_disposition.sh
 ```
 
-기대: 주석에 「줄머리·공백」이 없고 `PRE, POST = r'(?:["\':])', r'(?=["\'\s,)]|$)'` (AC3 T9)
+~~기대: 주석에 「줄머리·공백」이 없고 …~~ — 철회. `PRE, POST` 는 base 형태 `r'(?:^|[\s"\':])'` 그대로여야 한다.
 
 - [ ] **Step 7: T4 — 축 A② 의 「아래」 근거 문단 삭제**
 
@@ -747,8 +768,8 @@ bash shared/tests/test_dispatch_disposition.sh 2>&1 | tail -25
 
 기대: `에이전트 18개 도출` · `dispatch 줄 22건 도출` · `축 A① 앵커 수(22) == dispatch 수(22)` ·
 `dispatch 0건인 에이전트가 없다` ✓ · `Fail: 0`.
-`22` 는 Task 1 Step 2 가 기록한 제거 전 값 `23` 에서 정확히 1 을 뺀 수다 — **T3 · T9 가 이 플러그인 밖의
-dispatch 를 하나도 잃지 않았다는 증거**다(AC7). 22 보다 작으면 T9 의 경계가 너무 좁다.
+`22` 는 Task 1 Step 2 가 기록한 제거 전 값 `23` 에서 정확히 1 을 뺀 수다 — **T3 이 이 플러그인 밖의
+dispatch 를 하나도 잃지 않았다는 증거**다(AC7). 22 보다 작으면 표기 필터가 너무 좁아진 것이다.
 
 - [ ] **Step 14: 스위트 전후 대조 — AC5**
 
