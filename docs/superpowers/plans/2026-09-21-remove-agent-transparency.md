@@ -419,10 +419,12 @@ WORK="${CLAUDE_JOB_DIR:-$HOME/at-removal-work}/tmp"
 각 파일에 대해 **그 인용이 살아 있는 줄을 떠받치는지** 판단한다. 이미 판정된 셋은 아래와 같고, 새 파일이
 나오면 같은 방식으로 따라간다.
 
-| 이력 근거 | 떠받치는 live 줄 | 판정 |
+자리는 **심볼로** 가리킨다 — 줄 번호는 이 작업이 같은 파일을 편집하면 밀린다(실제로 밀렸다).
+
+| 이력 근거 | 떠받치는 live 자리 | 판정 |
 |---|---|---|
-| `docs/superpowers/specs/2026-08-22-subagent-adjudication-contract-design.md:84` (표기 전수 조사 ④) | `test_dispatch_disposition.sh:85` | **T3** |
-| 같은 문서 `:350–352` (「표기 ④는 따옴표가 없다」) | `test_dispatch_disposition.sh:87–92` | ~~T9~~ **철회** — 좁은 경계도 그 실례를 매치한다(접두사 콜론). 손실은 표기 ①에 떨어진다 |
+| `docs/superpowers/specs/2026-08-22-subagent-adjudication-contract-design.md:84` (표기 전수 조사 ④) | `test_dispatch_disposition.sh` 의 `NOTATION` 정의 | **T3** |
+| 같은 문서 `:350–352` (「표기 ④는 따옴표가 없다」) | `test_dispatch_disposition.sh` 의 `PRE`/`POST` 정의와 그 위 경계 규칙 주석 | ~~T9~~ **철회** — 좁은 경계도 그 실례를 매치한다(접두사 콜론). 손실은 표기 ①에 떨어진다 |
 | `plugins/quality-gates/CHANGELOG.md:235–237` (최종 리뷰 K4) | `test_agent_input_slots.sh:86` · `run_slots.py:33` | **T8** |
 | `docs/superpowers/specs/2026-08-05-agent-transparency-design.md` | `shared/tests/fixtures/seamprobe/MEASUREMENT.md:22` · `:178` | 흔적 아님 — 보존하는 이력 spec 을 가리키는 경로 인용(D7) |
 
