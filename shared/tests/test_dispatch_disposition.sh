@@ -84,12 +84,12 @@ corpus = sorted(set(corpus))
 #       smoke-workflow.js:8 의 주석이 19번째 dispatch 로 잡힌다.
 NOTATION = re.compile(r'subagent_type:|agentType:|Agent\(')
 
-# 경계 규칙: 이름 앞은 따옴표·`:` 중 하나, 뒤는 따옴표·공백·쉼표·
-# 닫는괄호·줄끝 중 하나. `-` 는 경계가 아니다 — 그래야
+# 경계 규칙: 이름 앞은 줄머리·공백·따옴표·`:` 중 하나, 뒤는 따옴표·공백·
+# 쉼표·닫는괄호·줄끝 중 하나. `-` 는 경계가 아니다 — 그래야
 # `adversarial` 이 `artifact-adversarial` 을 먹지 않는다.
 # 접두사는 **선택적**이다: 저자가 접두사를 빼서 자기를 감사 대상에서
 # 제외하는 경로를 봉쇄한다 (spec-distill/CHANGELOG.md:1197-1198 의 실패).
-PRE, POST = r'(?:["\':])', r'(?=["\'\s,)]|$)'
+PRE, POST = r'(?:^|[\s"\':])', r'(?=["\'\s,)]|$)'
 
 
 def name_re(n):
