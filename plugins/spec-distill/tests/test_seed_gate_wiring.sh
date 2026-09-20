@@ -178,10 +178,10 @@ fire() {   # fire <sid> <스크립트> [env…] → 그 seed 의 codex 산출물
 y="$(fire fg20kill "$W/full.sh" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1)"
 case "$(state_of "$y")" in absent|0byte) ok "A(kill switch): 직전 라운드 산출물이 중화됐다" ;; *) no "A(kill switch): 직전 라운드 산출물이 남았다" ;; esac
 [ ! -e "$W/fg20kill.argv" ] && ok "A(kill switch): 러너를 부르지 않았다" || no "A(kill switch): 끈 codex 러너가 불렸다"
-grep -q 'SKIPPED (reason: kill_switch)' "$W/fg20kill.err" && ok "A(kill switch): 사유를 공시한다" || no "A(kill switch): SKIPPED 공시가 없다"
+grep -q '^\[spec-distill\] codex co-review SKIPPED (reason: kill_switch)' "$W/fg20kill.err" && ok "A(kill switch): 사유를 [spec-distill] 줄로 공시한다(게이트 텍스트로 옮겨 싣는 줄)" || no "A(kill switch): [spec-distill] 접두의 SKIPPED 공시가 없다 — 옮겨 싣기 규칙이 그 줄을 못 잡는다"
 y="$(fire fg21nobd "$W/nobundle.sh" WRITE=fresh)"
 case "$(state_of "$y")" in absent|0byte) ok "A(번들 부재): 직전 라운드 산출물이 중화됐다" ;; *) no "A(번들 부재): 직전 라운드 산출물이 남았다" ;; esac
-[ ! -e "$W/fg21nobd.argv" ] && grep -q 'SKIPPED (reason: gate_inputs_missing)' "$W/fg21nobd.err" \
+[ ! -e "$W/fg21nobd.argv" ] && grep -q '^\[spec-distill\] codex co-review SKIPPED (reason: gate_inputs_missing)' "$W/fg21nobd.err" \
   && ok "A(번들 부재): 러너를 부르지 않고 gate_inputs_missing 으로 공시한다" || no "A(번들 부재): 번들 없이 러너가 불렸거나 공시가 없다"
 # 사유 코드는 일반 SKIPPED 줄도 내므로, 전용 메시지(관측한 두 입력값 · 「앞에 이어 붙여라」)는 따로 잰다.
 grep -qF "CODEX_YAML='" "$W/fg21nobd.err" && grep -qF "BUNDLE='" "$W/fg21nobd.err" \

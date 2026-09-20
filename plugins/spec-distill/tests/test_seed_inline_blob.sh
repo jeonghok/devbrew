@@ -104,14 +104,31 @@ done
 python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/CLAUDE.md" --for bogus >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "--for 에 모르는 소비자 → exit 2"
 
-# ── 절 부재 — 소리를 내고 나머지는 조립한다 ───────────────────────────────────
+# ── 원문 절 부재 · 빈 원문 — 대조할 정답이 없으면 조립하지 않는다 ──────────────
 printf -- '---\ntype: interview-seed-audit\n---\n\n# T\n\n## 3. 긴 초안\n\n없음\n' > "$TMP/bare.audit.md"
 out2="$(python3 "$SCRIPT" "$TMP/seed.md" "$TMP/bare.audit.md" "$TMP/CLAUDE.md" 2>"$TMP/err2.txt")"; rc=$?
-assert_eq "$rc" "0" "절 없는 audit 도 exit 0(나머지 재료는 유효)"
-for w in '## 1. 원문' '## 2. 질문 전체' '## 6. 리뷰 결정'; do
-  assert_contains "$(cat "$TMP/err2.txt")" "$w" "절 부재가 stderr 에 이름으로 남는다: $w"
+assert_eq "$rc" "2" "## 1 절이 없는 audit 은 exit 2 — 원문 없이 억제를 물으면 「억제 없음」이 공허하다"
+assert_eq "$out2" "" "## 1 절이 없으면 stdout 에 번들을 내지 않는다"
+assert_contains "$(cat "$TMP/err2.txt")" '[spec-distill]' "## 1 부재를 표준 접두사로 알린다"
+assert_contains "$(cat "$TMP/err2.txt")" '## 1. 원문' "## 1 부재가 stderr 에 이름으로 남는다"
+printf -- '---\ntype: interview-seed-audit\n---\n\n## 1. 원문\n\n\n## 2. 질문 전체\n\nQ\n\n## 6. 리뷰 결정\n\n' > "$TMP/empty1.audit.md"
+out3="$(python3 "$SCRIPT" "$TMP/seed.md" "$TMP/empty1.audit.md" "$TMP/CLAUDE.md" 2>"$TMP/err3.txt")"; rc=$?
+assert_eq "$rc" "2" "## 1 절이 비었으면 exit 2"
+assert_contains "$(cat "$TMP/err3.txt")" '비었다' "## 1 이 비었다고 알린다"
+# 나머지 두 절 — 없거나(## 2 · ## 6) 비었으면(## 2) 표준 접두사로 경고하고 조립한다
+printf -- '---\ntype: interview-seed-audit\n---\n\n## 1. 원문\n\nRAW_ONLY 원문.\n\n## 3. 긴 초안\n\n없음\n' > "$TMP/raw-only.audit.md"
+out4="$(python3 "$SCRIPT" "$TMP/seed.md" "$TMP/raw-only.audit.md" "$TMP/CLAUDE.md" 2>"$TMP/err4.txt")"; rc=$?
+assert_eq "$rc" "0" "## 1 만 있으면 exit 0(나머지 재료는 유효)"
+for w in '## 2. 질문 전체' '## 6. 리뷰 결정'; do
+  assert_contains "$(grep -F '[spec-distill] 경고' "$TMP/err4.txt")" "$w" "절 부재가 [spec-distill] 경고로 이름을 댄다: $w"
 done
-assert_contains "$out2" "SEED_BODY_MARKER" "절이 없어도 초안은 조립된다"
+assert_contains "$out4" "SEED_BODY_MARKER" "절이 없어도 초안은 조립된다"
+assert_contains "$out4" "RAW_ONLY" "원문이 번들에 실린다"
+printf -- '---\ntype: interview-seed-audit\n---\n\n## 1. 원문\n\nRAW 원문.\n\n## 2. 질문 전체\n\n\n## 6. 리뷰 결정\n\n' > "$TMP/empty2.audit.md"
+python3 "$SCRIPT" "$TMP/seed.md" "$TMP/empty2.audit.md" "$TMP/CLAUDE.md" >/dev/null 2>"$TMP/err5.txt"; rc=$?
+assert_eq "$rc" "0" "빈 ## 2 는 exit 0(경고만)"
+assert_contains "$(grep -F '[spec-distill] 경고' "$TMP/err5.txt")" '## 2. 질문 전체' "빈 ## 2 를 [spec-distill] 경고로 알린다"
+assert_not_contains "$(cat "$TMP/err5.txt")" '## 6. 리뷰 결정' "빈 ## 6 은 경고하지 않는다(첫 라운드에는 비어 있는 것이 정상)"
 
 # ── 변이 — 갈래를 지우면 AC11 이 RED 여야 한다 ────────────────────────────────
 python3 - "$SCRIPT" "$TMP/mut1.py" <<'PY'

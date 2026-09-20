@@ -38,13 +38,13 @@ source: spec-distill framing-requests
 ## 4. 비평과 냉독
 
 (리뷰 엔진 라운드마다 탐지 · codex · 재비판 산출물을, 마지막에 냉독 산문을 **판정 없이** 그대로
- 옮긴다 — 엔진 자리는 세션 정리로 사라지고 사람이 나중에 되짚을 자리는 여기다. 엔진 산출물은
- `seed_review_log.py append-verbatim` 이 인용 블록으로 붙인다.)
+ 옮긴다 — 엔진 자리는 세션 정리로 사라지고 사람이 나중에 되짚을 자리는 여기다. 엔진 산출물과
+ 냉독은 `seed_review_log.py append-verbatim` 이 인용 블록으로 붙인다.)
 
 ## 5. degrade
 
 (`framing_degradations` 원장 — `brief_review_state.py degrade-append … --ledger-key
-framing_degradations --axis suppression` 으로 기록한 것을 그대로 직렬화한다. 원장에
+framing_degradations` 로 기록한 것을 축 구분 없이 전부 그대로 직렬화한다. 원장에
 못 쓰면 그 사실 자체를 게이트 질문 텍스트에 실었다는 것과 함께 여기에도 남긴다. 워크트리를
 만들지 않았으면(거절·`EnterWorktree` 부재·`DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE`) «워크트리
 없음 — <이유>» 한 줄도 여기 남긴다 — degrade 원장과 같은 절이지만 별개 사실이다.)

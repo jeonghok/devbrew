@@ -8,6 +8,7 @@
 #   · revert · accept 는 «공시된 판본」에 묶인다 — hunks 뒤 seed 가 또 바뀌면 rc 4(설계 §5.5-2)
 #   · seed·기준 사본이 UTF-8 이 아니면 traceback 없이 rc 2
 #   · 기준 사본 부재는 rc 3
+#   · revert 표지 — 같은 공시에서 같은 되돌리기는 다시 하지 않고(already), 다른 되돌리기는 rc 4
 #   · 변이: init 의 AC6b 보호를 지우면 재-init 뒤 편집이 실제로 사라진다(hunks 0) — 단언에 이빨이
 #     있다. 니들이 없으면(소스가 바뀌면) fail-closed 로 RED
 set -u
@@ -97,6 +98,18 @@ assert_eq "$rc" "3" "기준 사본 부재 → rc 3"
 assert_eq "$(j "$TMP/h6.json" 'd["base_present"]')" "False" "기준 사본 부재를 JSON 으로도 밝힌다"
 python3 "$X" hunks "$B" "$TMP/none.md" >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "seed 부재 → rc 2"
+cp "$S" "$TMP/rv.md"; RV_SHA="$(sha "$TMP/rv.md")"
+python3 "$X" revert "$TMP/none-base.md" "$TMP/rv.md" --ids 1 >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "3" "revert: 기준 사본 부재 → rc 3"
+assert_eq "$(sha "$TMP/rv.md")" "$RV_SHA" "revert rc3: seed 바이트가 그대로다"
+# 빈 경로 인자 — 「## 상태」 가 값을 못 세운 셸에서 부르면 이 모양이다. 문서화된 rc 밖(트레이스백 rc 1)으로 새지 않는다.
+for cmd in init hunks accept; do
+  EMPTY_OUT="$(python3 "$X" "$cmd" "" "$S" 2>&1)"; rc=$?
+  assert_eq "$rc" "2" "$cmd: 빈 기준 사본 경로 → rc 2"
+  assert_not_contains "$EMPTY_OUT" "Traceback" "$cmd: 빈 경로에 트레이스백을 내지 않는다"
+done
+python3 "$X" revert "" "$S" --ids 1 >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "revert: 빈 기준 사본 경로 → rc 2"
 
 # ── UTF-8 아닌 seed → rc 2(traceback 없이) ───────────────────────────────────
 printf '\xff\xfe bad bytes' > "$TMP/bad.md"
@@ -132,6 +145,10 @@ EXPECT_SEED_SHA="$(sha "$VS")"
 python3 "$X" revert "$VB" "$VS" --ids 1 >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "4" "revert: 공시(hunks) 뒤 seed 가 또 바뀌면 rc 4"
 assert_eq "$(sha "$VS")" "$EXPECT_SEED_SHA" "revert rc4: seed 바이트가 그대로다"
+python3 "$X" hunks "$VB" "$VS" > /dev/null
+python3 "$X" revert "$VB" "$VS" --ids abc >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "revert: 정수가 아닌 --ids → rc 2(공시된 판본이어도)"
+assert_eq "$(sha "$VS")" "$EXPECT_SEED_SHA" "revert rc2(--ids abc): seed 바이트가 그대로다"
 
 VB3="$TMP/vbase3.md"; VS3="$TMP/vseed3.md"
 printf 'M 첫 줄\nN 둘째 줄\n' > "$VS3"
@@ -144,6 +161,30 @@ python3 "$X" accept "$VB3" "$VS3" > /dev/null; rc=$?
 assert_eq "$rc" "0" "행복경로: revert 뒤(재공시 없이) accept rc 0 — revert 가 스스로 다시 공시한다"
 python3 "$X" hunks "$VB3" "$VS3" > "$TMP/hv3.json"
 assert_eq "$(j "$TMP/hv3.json" 'd["empty"]')" "True" "행복경로: accept 뒤 hunks 는 비었다"
+
+# ── revert 표지 — 되돌린 뒤 덩어리 번호가 다시 매겨지므로 같은 --ids 를 다시 적용하지 않는다 ──
+RB="$TMP/rbase.md"; RS="$TMP/rseed.md"
+printf 'a\nB0\nc\nd\ne\nf\nG0\nh\n' > "$RS"; python3 "$X" init "$RB" "$RS" > /dev/null
+printf 'a\nB1\nc\nd\ne\nf\nG1\nh\n' > "$RS"
+python3 "$X" hunks "$RB" "$RS" > /dev/null
+python3 "$X" revert "$RB" "$RS" --ids 1 > /dev/null; rc=$?
+assert_eq "$rc" "0" "표지: 첫 revert rc 0"
+[ -s "$RB.reverted" ] && ok "표지: revert 가 <base>.reverted 를 남긴다" || no "표지: revert 뒤 표지가 없다"
+AFTER1="$(sha "$RS")"
+python3 "$X" revert "$RB" "$RS" --ids 1 > "$TMP/r2.json"; rc=$?
+assert_eq "$rc" "0" "표지: 같은 번호 · 같은 판본의 revert 는 rc 0"
+assert_eq "$(j "$TMP/r2.json" 'd.get("already")')" "True" "표지: 이미 되돌렸다고 밝힌다"
+assert_eq "$(sha "$RS")" "$AFTER1" "표지: 다시 불러도 seed 가 그대로다 — 번호가 다시 매겨진 덩어리(G1)를 되돌리지 않는다"
+assert_contains "$(cat "$RS")" "G1" "표지: 남기기로 한 덩어리가 산다"
+python3 "$X" revert "$RB" "$RS" --ids 2 >/dev/null 2>"$TMP/r3.err"; rc=$?
+assert_eq "$rc" "4" "표지: 이 공시에서 다른 번호를 또 되돌리려 하면 rc 4"
+assert_contains "$(cat "$TMP/r3.err")" "[spec-distill]" "표지: rc 4 를 표준 접두사로 알린다"
+python3 "$X" hunks "$RB" "$RS" > /dev/null
+[ ! -e "$RB.reverted" ] && ok "표지: 새 공시(hunks)가 표지를 지운다" || no "표지: 새 공시 뒤에도 표지가 남았다"
+python3 "$X" revert "$RB" "$RS" --ids 1 > /dev/null; rc=$?
+assert_eq "$rc" "0" "표지 양의 짝: 새 공시 뒤에는 그 공시의 번호로 되돌릴 수 있다"
+python3 "$X" accept "$RB" "$RS" > /dev/null
+[ ! -e "$RB.reverted" ] && ok "표지: accept 가 표지를 지운다" || no "표지: accept 뒤에도 표지가 남았다"
 
 # ── 변이 — init 의 AC6b 보호(base.exists 검사)를 지우면 재-init 뒤 편집이
 #    실제로 사라진다 ─────────────────────────────────────────────────────────

@@ -33,7 +33,7 @@
 #     평면 형태를 내므로, 러너만 중첩으로 바꾸면 한 파이프라인 안에서 스키마가
 #     오히려 **둘로 갈라진다**.
 #
-# 그래서 이 정본이 통일하는 범위는 **중첩 YAML 계열 셋**이고, 나머지 둘은 위 근거로
+# 그래서 이 정본이 통일하는 범위는 **중첩 YAML 계열 둘**이고, 나머지 둘은 위 근거로
 # 남긴다. §6.2 의 "4종 → 1종"은 소비자 계약을 세지 않은 서술이다.
 #
 # ── 출력 스키마 (설계 §6.2) ──────────────────────────────────────────────
@@ -107,16 +107,15 @@ write_failclosed() {
 }
 
 # codex_extract_or_fallback <stdout_file> <stderr_file> <exit_code> <output_path> <emit_keys> <plugin_root>
+# **지금 이 함수를 부르는 러너는 없다.** 위 두 러너는 codex_findings_to_yaml.py 를 인라인으로
+# 부르고, 이 함수를 부르던 유일한 러너(run_seed_codex_reviewer.sh)는 지워졌다. 지우는 것은
+# 별도 PR 이다 — 사본 둘 · 관측 락 주석을 함께 건드린다. 아래는 되살려 쓸 때의 계약이다:
 # codex_findings_to_yaml.py 를 표준 인자(override-exit-code·override-reason 유도
 # 포함)로 부른다. 실패하면(추출기 자체가 비-0 으로 죽으면) **아무것도 쓰지 않고
 # 실패로 반환한다** — output_path 를 그다음 어떻게 채울지(즉시 exit 0 인
 # emit_fallback 호출인지, 인라인 echo 넷인지)는 호출자마다 다르므로 호출자 몫으로
-# 남긴다. 이 함수가 그 exit 까지 가지면 형제 러너들의 서로 다른 실패 처리 모양을
+# 남긴다. 이 함수가 그 exit 까지 가지면 호출자들의 서로 다른 실패 처리 모양을
 # 강제로 통일하게 된다.
-#
-# 세 번째 러너(run_seed_codex_reviewer.sh, Task 14 — seed 자리가 문서 리뷰 엔진으로 옮겨 가며
-# 지워졌다)가 형제 둘과 이 tail 을 바이트-동일하게 써서 `shared/tests/test_no_new_duplication.sh`
-# 의 20줄 창에 걸린 것을 해소하며 정본화됐다.
 #
 # **`codex exec ...` 호출 자체는 여기 넣지 않는다.** 넣으면 이 정본의 배포
 # 사본(`plugins/*/scripts/runner_common.sh`)이 `codex_candidates()`

@@ -14,6 +14,10 @@
            채택/기각 · finding id · 요약)이 가면 엔진이 5단계 익명화로 지운 프레이밍이 재비판자에게
            되돌아간다(엔진 절차서 6단계 — 입력은 문서 · items · 프로필, 그 밖에는 아무것도).
 
+`## 1. 원문` 이 없거나 비었으면 조립하지 않는다(rc 2) — 대조할 원문 없이 억제를 물으면 「억제 없음」이
+공허하게 나온다. `## 2` · `## 6` 이 없거나 `## 2` 가 비었으면 `[spec-distill]` 경고를 내고 「(없음)」으로
+조립한다(첫 라운드의 `## 6` 은 비어 있는 것이 정상이다).
+
 재료는 **명시적 파일 경로**로만 받는다 — seed frontmatter 의 `audit_file:` 을 따라가는 자동 유추는
 하지 않는다. 유추가 실패했을 때의 침묵이 잘못된 재료로 리뷰를 태우는 것보다 나쁘다.
 
@@ -145,12 +149,22 @@ def main() -> int:
                   "정해지지 않는다. 번들을 조립하지 않는다.", file=sys.stderr)
         return 2
 
+    sec_raw, sec_questions, _ = UNTRUSTED_VERBATIM_SECTIONS
+    raw = section_body(audit_text, sec_raw)
+    if not (raw or "").strip():
+        print(f"[spec-distill] {paths['audit_file']} 의 `{sec_raw}` 절이 "
+              f"{'없다' if raw is None else '비었다'} — 대조할 원문 없이 억제를 물으면 「억제 없음」이 공허하게 "
+              "나온다. 번들을 조립하지 않는다.", file=sys.stderr)
+        return 2
     for heading in UNTRUSTED_VERBATIM_SECTIONS:
         body = section_body(audit_text, heading)
         if body is None:
-            print(f"경고: {paths['audit_file']} 에 `{heading}` 절이 없다 — 「(없음)」으로 조립한다",
+            print(f"[spec-distill] 경고: {paths['audit_file']} 에 `{heading}` 절이 없다 — 「(없음)」으로 조립한다",
                   file=sys.stderr)
             continue
+        if heading == sec_questions and not body.strip():
+            print(f"[spec-distill] 경고: {paths['audit_file']} 의 `{heading}` 절이 비었다 — 확인 질문 기록 없이 "
+                  "조립한다", file=sys.stderr)
         lns = heading_shaped_warnings(audit_text, heading, body)
         if lns:
             print(f"[spec-distill] 경고: {paths['audit_file']} 의 `{heading}` 절 안에 heading-모양 "

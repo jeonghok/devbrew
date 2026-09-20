@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/scripts/seed_provenance.py plugins/spec-distill/scripts/seed_review_log.py
+# guards: plugins/spec-distill/scripts/seed_provenance.py plugins/spec-distill/scripts/seed_review_log.py plugins/spec-distill/templates/interview-seed-audit-template.md
 #
 # seed_provenance.py 를 실행으로 잰다.
 #   marks    — 압축이 손댄 문장에서 «(사용자 확인)» 이 떨어지고, 글자 그대로 남은 문장에서는 유지된다(AC13).
@@ -9,12 +9,15 @@
 #              audit 을 못 읽으면 전부 저자 · 미확인으로 떨어지고 그 사실을 밝힌다(설계 §10-4).
 #   경계 — 부분 문자열이 아니라 문장 단위 일치 · audit 중복 제목 · 절 누락은 «읽었다»가 아니다 ·
 #          비ok audit 에서 --fix 거부 · UnicodeError 도 입력 오류 · --fix 결과 바이트 단위 대조 ·
-#          줄바꿈으로 감싼 원문 문장의 뒷토막은 원문 단위가 아니다.
+#          줄바꿈으로 감싼 원문 문장의 뒷토막은 원문 단위가 아니다 · 그 판정은 문단을 넘지 않는다 ·
+#          «(사용자 확인)» 은 문장 경계다 · 풀이 줄 0 이면 판단 거부 · 풀이 줄 모양은 템플릿에서 도출 ·
+#          seed 를 못 쓰면 rc 2(위반 rc 1 이 아니다).
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/scripts/seed_provenance.py"
   echo "plugins/spec-distill/scripts/seed_review_log.py"
+  echo "plugins/spec-distill/templates/interview-seed-audit-template.md"
   exit 0
 fi
 . "$ROOT/shared/tests/assert.sh"
@@ -302,6 +305,203 @@ type: interview-seed-audit
 EOF
 python3 "$P" classify "$TMP/f.md" --audit "$TMP/g.audit.md" > "$TMP/g1.json"
 assert_contains "$(j "$TMP/g1.json" 'd["audit"]')" "section_missing" "## 2 절이 없는 audit 은 unavailable — 전부 못 읽은 것과 같다"
+
+# ── 문단 경계 — 문장부호 없는 앞 문단이 다음 문단의 온전한 문장을 뒷토막으로 만들지 않는다 ──
+cat > "$TMP/p.audit.md" <<'EOF'
+---
+type: interview-seed-audit
+---
+
+## 1. 원문
+
+요청: 로그인 고쳐줘
+
+로그인이 가끔 실패한다.
+
+## 2. 질문 전체
+
+### 라운드 1
+EOF
+printf -- '---\ntype: interview-seed\n---\n\n로그인이 가끔 실패한다.\n' > "$TMP/p.md"
+python3 "$P" classify "$TMP/p.md" --audit "$TMP/p.audit.md" > "$TMP/p.json"
+assert_eq "$(j "$TMP/p.json" '[(s["provenance"], s["basis"]) for s in d["sentences"]]')" "[('user', 'verbatim')]" "문단 경계: 앞 문단이 문장부호 없이 끝나도 다음 문단의 문장은 사용자 원문(AC7)"
+
+# ── «(사용자 확인)» 은 문장 경계다 — 종결부호 없는 풀이 뒤에 다른 문장이 이어져도 ─────
+cat > "$TMP/k.audit.md" <<'EOF'
+---
+type: interview-seed-audit
+---
+
+## 1. 원문
+
+인증은 표준으로.
+
+## 2. 질문 전체
+
+### 라운드 1
+
+- 확인 질문: 라운드 1
+  - 내가 읽은 것: 「OAuth 를 쓴다」 — 고름
+EOF
+printf -- '---\ntype: interview-seed\n---\n\nOAuth 를 쓴다 (사용자 확인)\n다음 할 일은 재현이다.\n' > "$TMP/k.md"
+python3 "$P" marks "$TMP/k.md" "$TMP/k.audit.md" > "$TMP/k.json"; rc=$?
+assert_eq "$rc" "0" "표시 경계: 종결부호 없는 풀이에 붙은 표시는 뒤 문장과 합쳐지지 않는다(rc 0)"
+assert_eq "$(j "$TMP/k.json" 'd["marked"], d["invalid"]')" "(1, [])" "표시 경계: 표시 하나 · 무효 0"
+
+# ── 풀이 줄이 하나도 없으면 판단하지 않는다(모양 어긋남과 확인 없음을 가를 수 없다) ──
+cat > "$TMP/z.audit.md" <<'EOF'
+---
+type: interview-seed-audit
+---
+
+## 1. 원문
+
+아무 원문.
+
+## 2. 질문 전체
+
+### 라운드 1
+
+- 확인 질문: 라운드 1
+  - 풀이: 「OAuth 를 쓴다」 — 골랐음
+EOF
+cp "$TMP/k.md" "$TMP/z.md"; cp "$TMP/z.md" "$TMP/z.before"
+python3 "$P" marks "$TMP/z.md" "$TMP/z.audit.md" --fix > "$TMP/z.json" 2> "$TMP/z.err"; rc=$?
+assert_eq "$rc" "2" "풀이 줄 0: 표시가 있는데 풀이 줄이 없으면 rc 2(위반 rc 1 이 아니다)"
+assert_contains "$(cat "$TMP/z.err")" "no_reading_lines" "풀이 줄 0: 사유를 이름으로 댄다"
+assert_eq "$(cmp -s "$TMP/z.md" "$TMP/z.before" && echo same)" "same" "풀이 줄 0: --fix 여도 표시를 떼지 않는다"
+# 양의 짝 — 풀이 줄은 있는데 고른 것이 없으면 그것은 판단 가능하다(표시 무효, rc 1)
+sed 's/  - 풀이: 「OAuth 를 쓴다」 — 골랐음/  - 내가 읽은 것: 「OAuth 를 쓴다」 — 고르지 않음/' "$TMP/z.audit.md" > "$TMP/z2.audit.md"
+python3 "$P" marks "$TMP/z.md" "$TMP/z2.audit.md" > /dev/null 2>&1; rc=$?
+assert_eq "$rc" "1" "풀이 줄 0 의 양의 짝: 풀이 줄이 있고 고르지 않았으면 위반(rc 1)"
+
+# 한 줄만 모양이 어긋나도 판단하지 않는다 — 그 줄의 고름이 읽히지 않아 진짜 확인이 떨어진다.
+cat > "$TMP/m.audit.md" <<'EOF'
+---
+type: interview-seed-audit
+---
+
+## 1. 원문
+
+원문.
+
+## 2. 질문 전체
+
+### 라운드 1
+
+- 확인 질문: 라운드 1
+  - 내가 읽은 것: 「OAuth 를 쓴다.」 — 고름
+  - 내가 읽은 것: 「LEAKHEAD 세션은 30분이다.」 — 고름 (풀이 2 · $(touch PWNED_FROM_STDERR)) LEAKTAIL
+EOF
+printf -- '---\ntype: interview-seed\n---\n\nOAuth 를 쓴다. (사용자 확인)\n\n세션은 30분이다. (사용자 확인)\n' > "$TMP/m.md"; cp "$TMP/m.md" "$TMP/m.before"
+python3 "$P" marks "$TMP/m.md" "$TMP/m.audit.md" --fix > /dev/null 2> "$TMP/m.err"; rc=$?
+assert_eq "$rc" "2" "모양 어긋난 풀이 줄: 하나라도 있으면 rc 2(판단 거부)"
+assert_contains "$(cat "$TMP/m.err")" "malformed_reading_lines" "모양 어긋난 풀이 줄: 사유를 이름으로 댄다"
+assert_contains "$(cat "$TMP/m.err")" "풀이 줄 1개" "모양 어긋난 풀이 줄: 몇 줄인지 댄다"
+# 자리는 절 안 번호로 댄다 — 번호는 fixture 에서 도출한다(줄을 옮기면 여기가 따라 움직인다).
+m_no="$(awk '/^## 2\./{s=NR} /PWNED_FROM_STDERR/{print NR - s; exit}' "$TMP/m.audit.md")"
+assert_contains "$(cat "$TMP/m.err")" "${m_no} 번째" "모양 어긋난 풀이 줄: 그 줄의 자리를 절 안 번호로 댄다"
+# 그 줄의 «글자» 는 비신뢰 요청문에서 온다. stderr 는 엔진 --reason "<…>" 큰따옴표 안으로 옮겨 적히므로,
+# 거기 실린 $( ) 는 셸이 실행한다 — 내용을 싣지 않는 것이 이 단언의 대상이다.
+assert_not_contains "$(cat "$TMP/m.err")" "풀이 2" "모양 어긋난 풀이 줄: 줄 내용을 싣지 않는다"
+assert_not_contains "$(cat "$TMP/m.err")" 'touch' "모양 어긋난 풀이 줄: 요청문의 \$( ) 를 stderr 로 옮기지 않는다"
+assert_not_contains "$(cat "$TMP/m.err")" "LEAKHEAD" "모양 어긋난 풀이 줄: 줄 «앞머리» 도 싣지 않는다(잘라서 싣는 것도 유출이다)"
+assert_not_contains "$(cat "$TMP/m.err")" "LEAKTAIL" "모양 어긋난 풀이 줄: 줄 «끝» 도 싣지 않는다"
+# 부재 단언은 «내가 고른 낱말» 만 막는다 — 줄의 어느 토막이든 메시지 어디에 실려도 걸리게 하려면
+# 가변부가 번호 하나뿐임을 전문 동등으로 못 박아야 한다. 이 메시지를 고치면 여기가 RED 가 된다(그것이 의도다).
+exp_head='[spec-distill] audit `## 2. 질문 전체` 의 풀이 줄 1개가 모양(`- 내가 읽은 것: 「…」 — 고름|고르지 않음`)과 다르다 — 그 줄의 확인을 읽을 수 없어 판단하지 않는다(malformed_reading_lines, 위반이 아니다). 그 절 안에서 '
+exp_tail=' 번째 줄이다(줄 내용은 싣지 않는다 — 요청문에서 온 글자다).'
+assert_eq "$(cat "$TMP/m.err")" "${exp_head}${m_no}${exp_tail}" "모양 어긋난 풀이 줄: stderr 전문에서 가변인 것은 번호 하나뿐이다"
+assert_eq "$(cmp -s "$TMP/m.md" "$TMP/m.before" && echo same)" "same" "모양 어긋난 풀이 줄: --fix 여도 진짜 확인을 떼지 않는다"
+# 음의 짝 — 반쯤 채운 줄(따옴표는 채우고 처분 자리표를 남긴, 흔한 저자 실수)은 자리표가 «아니다».
+# 그것을 건너뛰면 --fix 가 진짜 «(사용자 확인)» 을 뗀다 — 이 가드가 막으려던 바로 그 손실이다.
+cat > "$TMP/h.audit.md" <<'EOF'
+---
+type: interview-seed-audit
+---
+
+## 1. 원문
+
+원문.
+
+## 2. 질문 전체
+
+### 라운드 1
+
+- 확인 질문: 라운드 1
+  - 내가 읽은 것: 「OAuth 를 쓴다.」 — 고름
+  - 내가 읽은 것: 「세션은 30분이다.」 — <고름 | 고르지 않음>
+EOF
+cp "$TMP/m.md" "$TMP/h.md"; cp "$TMP/h.md" "$TMP/h.before"
+python3 "$P" marks "$TMP/h.md" "$TMP/h.audit.md" --fix > /dev/null 2> "$TMP/h.err"; rc=$?
+assert_eq "$rc" "2" "반쯤 채운 풀이 줄: 자리표가 아니다 — 여전히 막는다(rc 2)"
+assert_contains "$(cat "$TMP/h.err")" "malformed_reading_lines" "반쯤 채운 풀이 줄: 사유를 이름으로 댄다"
+assert_eq "$(cmp -s "$TMP/h.md" "$TMP/h.before" && echo same)" "same" "반쯤 채운 풀이 줄: --fix 여도 진짜 확인을 떼지 않는다"
+# 템플릿 자리표 줄은 «어긋난 풀이» 가 아니다 — 템플릿을 그대로 복사하고 한 줄만 채운 audit 도 판단한다.
+python3 - "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$TMP/t.audit.md" <<'PYTPL'
+import pathlib, sys
+lines = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+out = []
+for line in lines:
+    out.append(line)
+    if "내가 읽은 것:" in line:
+        out.append("  - 내가 읽은 것: 「OAuth 를 쓴다.」 — 고름")
+pathlib.Path(sys.argv[2]).write_text("\n".join(out) + "\n", encoding="utf-8")
+PYTPL
+assert_contains "$(cat "$TMP/t.audit.md")" "「<풀이 문장>」" "템플릿 자리표 줄 전제: 복사본에 자리표 줄이 그대로 있다"
+printf -- '---\ntype: interview-seed\n---\n\nOAuth 를 쓴다. (사용자 확인)\n' > "$TMP/t.md"
+python3 "$P" marks "$TMP/t.md" "$TMP/t.audit.md" > /dev/null 2> "$TMP/t.err"; rc=$?
+assert_eq "$rc" "0" "템플릿 자리표 줄: 자리표를 남긴 audit 도 표시를 판단한다(rc 0)"
+assert_not_contains "$(cat "$TMP/t.err")" "malformed_reading_lines" "템플릿 자리표 줄: 어긋난 풀이로 세지 않는다"
+
+# ── 풀이 줄 모양은 템플릿에서 도출한다 — 템플릿이 줄 모양을 바꾸면 여기가 RED 다 ──────
+TPL="$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md"
+tline="$(grep -F '내가 읽은 것:' "$TPL" | head -1)"
+[ -n "$tline" ] && ok "템플릿에 풀이 줄이 있다" || no "템플릿에 '내가 읽은 것:' 줄이 없다 — 아래 판정은 무의미하다"
+pick="$(printf '%s\n' "$tline" | sed -e 's/<풀이 문장>/확인된 풀이다./' -e 's/<고름 | 고르지 않음>/고름/')"
+skip="$(printf '%s\n' "$tline" | sed -e 's/<풀이 문장>/안 고른 풀이다./' -e 's/<고름 | 고르지 않음>/고르지 않음/')"
+[ "$pick" != "$tline" ] && [ "$skip" != "$tline" ] && ok "템플릿 풀이 줄의 자리표 둘을 채웠다" \
+  || no "템플릿 풀이 줄의 자리표 모양이 바뀌었다('$tline') — 이 테스트의 치환과 seed_provenance 의 정규식을 함께 고쳐라"
+printf -- '---\ntype: interview-seed-audit\n---\n\n## 1. 원문\n\n원문.\n\n## 2. 질문 전체\n\n### 라운드 1\n\n- 확인 질문: 라운드 1\n%s\n%s\n' "$pick" "$skip" > "$TMP/t.audit.md"
+printf -- '---\ntype: interview-seed\n---\n\n확인된 풀이다. (사용자 확인)\n\n안 고른 풀이다. (사용자 확인)\n' > "$TMP/t.md"
+python3 "$P" marks "$TMP/t.md" "$TMP/t.audit.md" > "$TMP/t.json" 2>/dev/null; rc=$?
+assert_eq "$rc" "1" "템플릿 줄 모양: 고르지 않은 풀이의 표시는 위반"
+assert_eq "$(j "$TMP/t.json" 'd["invalid"], d["reading_lines"]')" "(['안 고른 풀이다.'], 2)" "템플릿 줄 모양: 고른 풀이의 표시는 유지 · 풀이 줄 둘을 읽었다"
+
+# ── seed 를 못 쓰면 rc 2 — rc 1(위반)과 섞이지 않는다 ─────────────────────────
+cp "$TMP/s.orig.md" "$TMP/ro.md"; chmod 444 "$TMP/ro.md"
+python3 "$P" marks "$TMP/ro.md" "$TMP/a.audit.md" --fix > /dev/null 2> "$TMP/ro.err"; rc=$?
+chmod 644 "$TMP/ro.md"
+if [ "$(id -u)" = "0" ]; then
+  ok "seed 쓰기 실패: root 로 돌아 권한 거부를 재현할 수 없다 — 건너뛴다"
+else
+  assert_eq "$rc" "2" "seed 쓰기 실패: --fix 가 seed 를 못 쓰면 rc 2(위반 rc 1 이 아니다)"
+  assert_contains "$(cat "$TMP/ro.err")" "[spec-distill]" "seed 쓰기 실패: 표준 접두사로 알린다"
+  assert_not_contains "$(cat "$TMP/ro.err")" "Traceback" "seed 쓰기 실패: 트레이스백을 내지 않는다"
+fi
+
+# ── 변이 — 문단 경계를 지우면 위 «문단 경계» 단언이 RED 여야 한다 ────────────────
+python3 - "$P" "$TMP/mutp.py" <<'PY'
+import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+needle = 'for para in re.split(r"\\n\\s*\\n", body.strip()):\n        whole'
+open(sys.argv[2], "w", encoding="utf-8").write(t.replace(needle, 'for para in [body]:\n        whole', 1))
+print("MUTATED" if needle in t else "UNCHANGED")
+PY
+cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$TMP/"
+python3 "$TMP/mutp.py" classify "$TMP/p.md" --audit "$TMP/p.audit.md" > "$TMP/pm.json" 2>/dev/null
+[ "$(j "$TMP/pm.json" '[s["basis"] for s in d["sentences"]]' 2>/dev/null)" = "['none']" ] \
+  && ok "변이: 문단 경계를 지우면 다음 문단의 원문이 저자로 떨어진다 — 문단 경계 단언에 이빨이 있다" \
+  || no "변이: 문단 경계를 지워도 결과가 같다 — 그 단언은 다른 이유로 통과한다"
+python3 - "$P" "$TMP/mutk.py" <<'PY'
+import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+needle = '|(?<=" + re.escape(MARK) + r")\\s+'
+open(sys.argv[2], "w", encoding="utf-8").write(t.replace(needle, "", 1))
+print("MUTATED" if needle in t else "UNCHANGED")
+PY
+python3 "$TMP/mutk.py" marks "$TMP/k.md" "$TMP/k.audit.md" > /dev/null 2>&1; rc=$?
+assert_eq "$rc" "1" "변이: 표시 뒤 문장 경계를 지우면 뒤 문장과 합쳐져 무효가 된다 — 표시 경계 단언에 이빨이 있다"
 
 # ── 변이 — 공백 정규화를 지우면 줄바꿈 문장이 떨어져야 한다 ─────────────────
 python3 - "$P" "$TMP/mut.py" <<'PY'

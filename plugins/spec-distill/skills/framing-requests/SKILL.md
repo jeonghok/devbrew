@@ -245,7 +245,7 @@ premortem · coverage-mapper 넷이 거기 있는 장치이고, 이 skill 에는
 
 | 만드는 것 | 어디에 | 언제 |
 |---|---|---|
-| audit (`$AUDIT`) | `docs/superpowers/interview/` | `## 확산` 1번부터 — append-only |
+| audit (`$AUDIT`) | `docs/superpowers/interview/` | `## 확산` 1번부터 — 덧붙이기(예외 둘: `## 1` 의 인용 감싸기 · `## 2` 의 어긋난 풀이 줄 제자리 수정) |
 | 긴 초안 | `$AUDIT` 의 `## 3. 긴 초안` 절 | 압축 **직전** — 깎기 전에 여기 먼저 쓴다 |
 | interview-seed (`$SEED`) | 〃 | 압축 직후 — **게이트 직전 구조 검사보다 먼저** |
 | 두 문서의 이름을 붙드는 `interview-basename` | 아래 `$SEED_DIR` | 아래 블록에서 `TOPIC` 자리표가 실값으로 치환된 실행 — 자리표가 그대로면 만들지 않는다 |
@@ -393,6 +393,10 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 - 탐지의 `<document>` = `$BUNDLE` 의 **내용** · codex 러너의 `<doc>` = `$BUNDLE` · 재비판의 `<document>` = `$BUNDLE_RC` 의 **내용**
 - 탐지 출력은 `$STATE_DIR/critic.txt`, 재비판 출력은 `$STATE_DIR/recritic.txt` 로 요약 · 전사 없이 저장한다
 - 결정 기록의 `--log-file` = `$AUDIT_ABS` — seed 프로필의 `decision_log` 이 audit 의 `## 6. 리뷰 결정` 을 가리킨다
+- 추가 라운드를 여는 1단계는 사용자 문구를 `$STATE_DIR/said-extra-r<n>.txt` 에 쓰고
+  `q="$(python3 "$SD/scripts/seed_review_log.py" one-line "$STATE_DIR/said-extra-r<n>.txt")"` 로 받아
+  `begin-round … --extra-approval="$q"` 로 넘긴다 — 파일이 없으면 `q` 가 비고, 엔진은 빈 승인을 승인으로 치지
+  않아 상한(rc 3)에서 멈춘다. 성공하면 그 파일을 지운다
 - 선결 `init` 앞에 `mkdir -p "$STATE_DIR"`. `$STATE_DIR` 이 비었거나 `init` 이 rc ≠ 0 이면 이 라운드를 시작하지 않고 `## degrade 채널` 의 record 를 남긴다
 
 라운드 수의 상한은 절차서의 `## 상한` 한 줄이 정본입니다 — 이 skill 은 그 숫자를 다시 적지 않습니다. 상한
@@ -425,6 +429,7 @@ fi
 물으면 「억제 없음」이 공허하게 나옵니다.
 
 이 펜스가 stderr 로 낸 `[spec-distill]` 줄은 그 라운드 게이트 공시(첫 질문의 텍스트)에 글자 그대로 싣습니다 — `bundle_rc` 가 0 이 아니면 위 degrade 경로를 따릅니다.
+`### codex` 펜스가 낸 `[spec-distill]` 줄도 같습니다 — 엔진은 codex 산출물이 없었다는 것만 알고(`yaml_missing_or_broken`), 왜 없었는지(스위치 · 미설치 · 감지기 · 입력 부재 · 잔존물 · 러너 산출물 기록 실패)는 그 줄만 압니다.
 
 **audit 템플릿 절 제목이 중복되면** — stderr 가 템플릿 제목이 여러 번 나온다고 대면(조립기의 「… 가 N번(줄 …)
 나온다」 · `marks` 의 `duplicate_heading`) 사용자가 붙여 넣은 원문에 그 제목과 같은 줄이 있는 것이고, 손대지
@@ -503,7 +508,10 @@ fi
 if [ "$codex_avail" = "true" ]; then
   runner_rc=0
   bash "$SD/scripts/run_docreview_codex_reviewer.sh" "$PROFILE" "$BUNDLE" "$(pwd)" "$CODEX_YAML" || runner_rc=$?
-  if [ "$runner_rc" -eq 3 ]; then rm -f "$CODEX_YAML" || true; fi
+  if [ "$runner_rc" -eq 3 ]; then
+    rm -f "$CODEX_YAML" || true
+    echo "[spec-distill] codex 러너가 산출물을 쓰지 못했다(runner_rc=3, 사유는 위 [docreview] 줄) — 이 라운드의 codex 축은 없이 간다." >&2
+  fi
 else
   echo "[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — seed 리뷰에 codex 쪽 모델 다양성이 없었다 (degraded)." >&2
 fi
@@ -564,9 +572,8 @@ done
 냅니다. 그 묶음은 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠 띄우고, 매 호출 첫 질문의 첫 줄은 렌더
 첫 줄(degrade 공시)과 같습니다. `approval_gate_open` 이면 승인 게이트입니다 — 1단계(열린 항목 · 「추가
 라운드 1회 열기」)는 절차서 8단계 그대로이고, 2단계(진행 옵션)는 이 skill 의 `## 확정 — proceed 게이트`
-입니다. 이 자리는 그 위에 규칙 넷을 더합니다 — seed 는 헤딩이 없어 엔진의 얼림 · 보호가 꺼지고(엔진
-계획서 T44 — 「차단은 호스트 구조 게이트의 일」), 엔진에서 승인을 막고 사용자 문구를 남기는 처분은
-`decide` 하나뿐입니다.
+입니다. 이 자리는 그 위에 규칙 넷을 더합니다 — seed 는 헤딩이 없어 엔진의 얼림 · 보호가 꺼지고, 엔진에서
+승인을 막고 사용자 문구를 남기는 처분은 `decide` 하나뿐입니다.
 
 1. **사용자가 처분하기 전에는 seed 파일을 편집하지 않는다.** 읽기는 막지 않는다 — 관측 수단(`### 저자 편집
    공시`)이 편집만 재므로 규칙도 편집이다. 라운드 1단계(스냅숏)부터 그 라운드 게이트의 처분이 끝날
@@ -579,19 +586,65 @@ done
    `ask` 로 만들고, 그 `ask` 는 아무것도 막지 않고 답도 기록하지 않는다.
    게이트 텍스트에 `ask_open` 개수를 처분과 무관하게 싣는다.
 3. **`fix` 는 사용자가 고른 대로만 닫는다.** 질문은 「적용 / 적용하지 않음」 둘이다.
-   - 적용 — `docreview_anchor.py check-intent <id> --intent '#__doc__' --state-dir "$STATE_DIR"` 가 통과하면
-     `docreview_state.py fix --state-dir "$STATE_DIR" --id <id> --event intent-pass --scope '#__doc__'` 를
-     적고, 처분이 전부 끝난 뒤 편집한다. 거부되면 `fix … --event escalate --reason "<거부 사유>"` — 다음
-     라운드 `decide` 로 온다.
-   - 적용하지 않음 — 저자가 판단해 `drop` 하지 않는다. 사용자의 문구를 넘겨 엔진이 적게 한다:
-     `docreview_state.py fix --state-dir "$STATE_DIR" --id <id> --event drop --reason "<사용자 문구>" --log-file "$AUDIT_ABS"`.
+   - 적용 — `docreview_anchor.py check-intent <id> --intent '#__doc__' --state-dir "$STATE_DIR"` 를 부른다. 그 호출이
+     결과를 스스로 원장에 적는다 — 통과면 `intent_passed` 이고 처분이 전부 끝난 뒤 편집한다. 범위 문제로 거부되면
+     escalate 까지 적어 다음 라운드 `decide` 로 오고, 그 밖의 거부(`fix_not_pending` 등)는 사유를 게이트
+     텍스트에 싣는다. 거부면 편집하지 않는다. 통과 · 거부 어느 쪽이든 엔진 `fix` 로 같은 결과를 다시 적지 않는다.
+   - 적용하지 않음 — 저자가 판단해 `drop` 하지 않는다. 사용자의 문구로 엔진이 적게 한다 — 아래 처분 펜스를
+     `EVENT=drop` 으로 돈다.
 4. **`ask_open` 의 답은 이 skill 이 적는다.** 엔진의 `ask --answered` 는 답을 기록하지 않는다. 답을 받으면
-   `docreview_state.py ask --state-dir "$STATE_DIR" --id <id> --answered` 와 함께
-   `seed_review_log.py log "$AUDIT_ABS" --kind 답 --round <n> --target <id> --quote "<사용자 문구>" --note "<항목 요약>"`
-   을 부른다. 그 답이 seed 를 바꿔야 하면 그것도 처분 뒤의 편집이다.
+   아래 답 기록 펜스를 돈다 — **기록이 먼저**이고, 기록이 성공했을 때만 ask 를 닫는다. 그 답이 seed 를
+   바꿔야 하면 그것도 처분 뒤의 편집이다.
 
 사용자 문구는 게이트에서 사용자가 고른 선택지 라벨(«기타» 면 적은 말) 그대로다. 엔진은 그 문구가 사용자의
-말인지 검증하지 못한다(설계 §7 R2) — 저자가 지어 넣지 않는다.
+말인지 검증하지 못한다 — 저자가 지어 넣지 않는다.
+
+**사용자 문구 · 리뷰어 요약은 셸 인자에 직접 쓰지 않는다.** 큰따옴표 안의 백틱 · `$( )` 는 셸이 실행한다 —
+사용자가 적은 말도, 비신뢰 원문을 읽은 리뷰어가 쓴 요약도 그런 글자를 담을 수 있다. 받은 문구는 **Write
+도구로** 항목마다 따로 쓴다(셸의 `echo` · `printf` 로 쓰지 않는다) — 사용자 문구는 `$STATE_DIR/said-<id>.txt`,
+항목 요약은 `$STATE_DIR/note-<id>.txt`, 저자 편집 덩어리의 문구는 `$STATE_DIR/said-hunk-<k>.txt`, 추가 라운드
+승인은 `$STATE_DIR/said-extra-r<n>.txt` 다. 파일 이름이 항목을 담으므로 한 항목의 Write 를 빠뜨리면 다른
+항목의 문구를 읽는 대신 «파일 없음»으로 멈춘다. 파일은 기록이 성공하면 펜스가 지우고, 덩어리 문구는 공시할
+때마다 공시 펜스가 지운다. `seed_review_log.py log` 에는 `--quote-file` · `--note-file` 로, 엔진의 인자에는
+아래 처분 펜스처럼 `q="$(python3 "$SD/scripts/seed_review_log.py" one-line <파일>)"` 로 먼저 받아 그 rc 를 본
+뒤 `--quote="$q"` · `--reason="$q"` 로 넘긴다 — 명령 치환의 출력은 다시 전개되지 않고, `=` 꼴은 `-` 로 시작하는
+문구를 옵션으로 읽지 않게 한다. 엔진 절차서와 게이트 렌더가 보이는 추가 라운드 승인 꼴(큰따옴표 안의
+자리표)도 이 자리에서는 `### 절차` 의 꼴로 바꿔 쓴다. 여러 줄 문구는 한 줄로 이어진다(audit `## 6` 은 한 줄에 한 기록이다).
+
+```bash
+# 처분 — 엔진에 사용자 문구를 싣는 결정 하나. <id> 의 문구는 먼저 Write 도구로 "$STATE_DIR/said-<id>.txt" 에 쓴다.
+# EVENT 는 이 처분 하나: drop(fix 적용하지 않음) · adopt · reject · hold(decide). 문구 파일이 없거나 비면 누르지 않는다.
+EVENT="<drop | adopt | reject | hold>"
+q_rc=0; q="$(python3 "$SD/scripts/seed_review_log.py" one-line "$STATE_DIR/said-<id>.txt")" || q_rc=$?
+if [ "$q_rc" -ne 0 ]; then
+  echo "[spec-distill] <id> 의 사용자 문구 파일을 읽지 못했다 — 처분을 누르지 않는다. 문구를 Write 도구로 쓴 뒤 이 펜스를 다시 돌려라." >&2
+elif [ "$EVENT" = drop ]; then
+  python3 "$SD/scripts/docreview_state.py" fix --state-dir "$STATE_DIR" --id "<id>" --event drop --reason="$q" --log-file "$AUDIT_ABS" || q_rc=$?
+else
+  python3 "$SD/scripts/docreview_state.py" decide --state-dir "$STATE_DIR" --id "<id>" --choice "$EVENT" --quote="$q" --log-file "$AUDIT_ABS" || q_rc=$?
+fi
+[ "$q_rc" -ne 0 ] || rm -f "$STATE_DIR/said-<id>.txt"
+echo "q_rc=$q_rc"
+```
+
+```bash
+# 답 기록 — ask_open 항목 하나. <n> · <id> 는 게이트의 값이다. 문구 · 요약은 먼저 Write 도구로
+# "$STATE_DIR/said-<id>.txt" · "$STATE_DIR/note-<id>.txt" 에 쓴다. 통째로 다시 돌려도 같은 기록 줄은 다시 적지 않는다.
+log_rc=0; ask_rc=0
+python3 "$SD/scripts/seed_review_log.py" log "$AUDIT_ABS" --kind 답 --round "<n>" --target "<id>" --quote-file "$STATE_DIR/said-<id>.txt" --note-file "$STATE_DIR/note-<id>.txt" || log_rc=$?
+if [ "$log_rc" -ne 0 ]; then
+  echo "[spec-distill] 답 기록 실패(log_rc=$log_rc) — ask 를 닫지 않는다. 위 stderr 를 보고 파일을 고쳐 이 펜스를 다시 돌려라." >&2
+else
+  python3 "$SD/scripts/docreview_state.py" ask --state-dir "$STATE_DIR" --id "<id>" --answered || ask_rc=$?
+  if [ "$ask_rc" -eq 0 ]; then
+    rm -f "$STATE_DIR/said-<id>.txt" "$STATE_DIR/note-<id>.txt"
+  else
+    echo "[spec-distill] 답은 audit ## 6 에 적혔으나 ask 를 닫지 못했다(ask_rc=$ask_rc) — id 를 확인하고 이 펜스를 다시 돌려라(같은 기록 줄은 다시 적지 않는다)." >&2
+  fi
+fi
+ans_rc=$log_rc; [ "$ans_rc" -ne 0 ] || ans_rc=$ask_rc
+echo "ans_rc=$ans_rc"
+```
 
 게이트를 띄우기 **전에** 요약 펜스를 돕니다:
 
@@ -615,9 +668,9 @@ fi
 처분을 반영한 **뒤에** 문구 없는 `drop` 검사를 돕니다 — 엔진이 dropped 로 센 `fix` 마다 audit `## 6. 리뷰
 결정` 에 문구 있는 drop 줄(또는 `거부` 줄)이 있어야 합니다. 승인 게이트가 열린 채 막힌 항목이 남는
 라운드(상한 · 정체 · 「미검증」)에서 엔진 렌더가 「drop 하면 이 차단이 풀린다」를 안내해도, 그 drop 은
-사용자의 문구로만 누릅니다. 막히면 그 항목을 사용자에게 다시 묻고 받은 문구로
-`seed_review_log.py log "$AUDIT_ABS" --kind 거부 --round <n> --target <id> --quote "<사용자 문구>"` 를 적은 뒤
-이 펜스를 다시 돕니다 — 되돌리는 기록은 `거부` 줄로 남기고 엔진에 drop 을 다시 누르지 않습니다.
+사용자의 문구로만 누릅니다. 막히면 그 항목을 사용자에게 다시 묻고 받은 문구를 `said-<id>.txt` 에 쓴 뒤
+`seed_review_log.py log "$AUDIT_ABS" --kind 거부 --round <n> --target <id> --quote-file "$STATE_DIR/said-<id>.txt" && rm -f "$STATE_DIR/said-<id>.txt"`
+를 적고 이 펜스를 다시 돕니다 — 되돌리는 기록은 `거부` 줄로 남기고 엔진에 drop 을 다시 누르지 않습니다.
 
 ```bash
 # 문구 없는 drop 검사 — 엔진 공개 요약의 dropped 대 audit ## 6 의 기록.
@@ -641,6 +694,8 @@ seed 는 헤딩이 없어 엔진의 얼림 검사가 모든 변경을 면제합�
 사용자 앞에 놓습니다 — 승인된 수정과 그 틈에 끼어든 수정을 가를 기계가 없으므로 가르지 않습니다.
 
 ```bash
+# 공시할 때마다 덩어리 번호가 새로 매겨진다 — 지난 공시의 덩어리 문구 파일을 먼저 지운다.
+find "$STATE_DIR" -maxdepth 1 -name 'said-hunk-*.txt' -exec rm -f {} + 2>/dev/null || true
 hunks_rc=0
 python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" > "$STATE_DIR/hunks.json" || hunks_rc=$?
 case "$hunks_rc" in
@@ -670,24 +725,53 @@ esac
 전에 교체하면 그 사이의 편집이 영영 안 보입니다.
 
 ```bash
-# <…> 는 게이트의 답으로 채운다. 되돌릴 덩어리가 없으면 `revert` 줄을 건너뛰고 rev_rc=0 으로 둔다(그러면
-# 아래 log · accept 는 그대로 돈다). 기록은 덩어리마다 한 줄.
-rev_rc=0
-python3 "$SD/scripts/seed_edit_diff.py" revert "$SEED_BASE" "$SEED_ABS" --ids "<되돌릴 덩어리 번호, 쉼표로>" || rev_rc=$?
-if [ "$rev_rc" -eq 0 ]; then
-  python3 "$SD/scripts/seed_review_log.py" log "$AUDIT_ABS" --kind 편집 --round "<n>" --target "덩어리 <k> · <그대로 둔다|되돌린다>" --quote "<사용자 문구>" --note "<덩어리 머리줄>"
+# PAIRS 는 게이트의 답이다 — 덩어리마다 한 줄 「번호:처분」(처분은 「그대로 둔다」 또는 「되돌린다」). 덩어리 k 의
+# 사용자 문구는 먼저 Write 도구로 "$STATE_DIR/said-hunk-<k>.txt" 에 쓴다(공시 펜스가 공시마다 지난 파일을 지운다).
+# 문구 파일이 하나라도 없으면 아무것도 바꾸지 않는다. 기록이 전부 성공했을 때만 기준 사본을 교체한다.
+# 부분 실패 뒤에는 원인을 고치고 이 펜스를 통째로 다시 돈다 — 되돌리기는 표지(`<기준 사본>.reverted`)가 막아 같은 판본에서 한 번만
+# 일어난다. 편집 기록 줄은 그렇지 않다: 다시 돈 만큼 겹친다(덩어리 번호가 공시마다 1 부터 다시 시작해 다른 처분이 같은 줄이 되므로,
+# 같은 줄을 건너뛰면 기록이 사라진다 — 겹치는 쪽을 고른다). **겹친 줄을 지우지 마라**: 어느 것이 재실행으로 겹친 줄이고 어느 것이
+# 다른 공시의 다른 처분인지 글자로는 가를 수 없고, 겹침은 아무것도 상하게 하지 않는다 — `user-quotes` 는 문구로 묶고 `check-drops` 는
+# `거부` 와 엔진 drop 줄만 읽는다.
+PAIRS='<덩어리마다 한 줄 — 번호:처분>'
+pre_rc=0; rev_rc=0; log_rc=0; n_pairs=0; REVERT_IDS=""
+while IFS=: read -r k choice; do
+  [ -n "$k" ] || continue
+  n_pairs=$((n_pairs + 1))
+  [ -s "$STATE_DIR/said-hunk-${k}.txt" ] || { echo "[spec-distill] 덩어리 ${k} 의 사용자 문구 파일이 없다(${STATE_DIR}/said-hunk-${k}.txt) — 아무것도 바꾸지 않는다." >&2; pre_rc=2; }
+  case "$choice" in
+    되돌린다) REVERT_IDS="${REVERT_IDS:+${REVERT_IDS},}${k}" ;;
+    "그대로 둔다") : ;;
+    *) echo "[spec-distill] 덩어리 ${k} 의 처분을 모르겠다: '${choice}' — 아무것도 바꾸지 않는다." >&2; pre_rc=2 ;;
+  esac
+done <<< "$PAIRS"
+[ "$n_pairs" -gt 0 ] || { echo "[spec-distill] 처분 목록(PAIRS)이 비었다 — 아무것도 바꾸지 않는다." >&2; pre_rc=2; }
+if [ "$pre_rc" -eq 0 ] && [ -n "$REVERT_IDS" ]; then
+  python3 "$SD/scripts/seed_edit_diff.py" revert "$SEED_BASE" "$SEED_ABS" --ids "$REVERT_IDS" || rev_rc=$?
+fi
+if [ "$pre_rc" -eq 0 ] && [ "$rev_rc" -eq 0 ]; then
+  while IFS=: read -r k choice; do
+    [ -n "$k" ] || continue
+    python3 "$SD/scripts/seed_review_log.py" log "$AUDIT_ABS" --kind 편집 --round "<n>" --target "덩어리 ${k} · ${choice}" --quote-file "$STATE_DIR/said-hunk-${k}.txt" || log_rc=$?
+  done <<< "$PAIRS"
+fi
+if [ "$pre_rc" -eq 0 ] && [ "$rev_rc" -eq 0 ] && [ "$log_rc" -eq 0 ]; then
   accept_rc=0
   python3 "$SD/scripts/seed_edit_diff.py" accept "$SEED_BASE" "$SEED_ABS" || accept_rc=$?
   echo "accept_rc=$accept_rc"
-else
+  [ "$accept_rc" -ne 0 ] || find "$STATE_DIR" -maxdepth 1 -name 'said-hunk-*.txt' -exec rm -f {} + 2>/dev/null || true
+elif [ "$rev_rc" -ne 0 ]; then
   echo "[spec-distill] revert 실패(rev_rc=$rev_rc) — 기준 사본을 교체하지 않는다. 위 공시 펜스를 다시 돌려 이 처분을 다시 받아라." >&2
+elif [ "$log_rc" -ne 0 ]; then
+  echo "[spec-distill] 편집 처분 기록 실패(log_rc=$log_rc) — 기준 사본을 교체하지 않는다. 위 stderr 가 댄 문구 파일을 고친 뒤 이 펜스를 그대로 다시 돌려라(되돌리기는 표지가 막아 한 번만 일어난다 · 먼저 성공한 편집 기록 줄은 겹쳐 적히지만 그대로 둔다)." >&2
 fi
-echo "rev_rc=$rev_rc"
+echo "pre_rc=$pre_rc rev_rc=$rev_rc log_rc=$log_rc"
 ```
 
-`revert` · `accept` 가 rc 4 를 내면 공시(`hunks`) 뒤에 seed 가 또 바뀐 것입니다 — 기준 사본을 그대로 두고
-위 공시 펜스를 다시 돌려 다시 처분받습니다. `revert` 는 처분 하나에 한 번만 부릅니다 — 되돌릴 덩어리
-번호를 전부 쉼표로 모아 `--ids` 에 한 번에 넘깁니다. `hunks` 는 그 출력을 사용자에게 보이는 자리에서만
+`revert` · `accept` 가 rc 4 를 내면 공시(`hunks`) 뒤에 seed 가 또 바뀌었거나, 이 공시에서 이미 다른 번호를
+되돌린 것입니다(되돌린 뒤에는 덩어리 번호가 다시 매겨진다) — 기준 사본을 그대로 두고
+위 공시 펜스를 다시 돌려 다시 처분받습니다. `revert` 는 처분 하나에 한 번만 부릅니다 — 펜스가 `PAIRS` 의
+「되돌린다」 번호를 전부 쉼표로 모아 `--ids` 에 한 번에 넘깁니다. `hunks` 는 그 출력을 사용자에게 보이는 자리에서만
 부릅니다 — 부르면 매번 «공시됨»으로 기록되기 때문입니다.
 
 ### 냉독
@@ -722,8 +806,14 @@ Agent({ description: "Seed cold readback", subagent_type: "spec-distill:seed-rea
 
 **싱크됐는지는 사용자가 읽고 판정합니다.** 에이전트가 통과·미달을 내면 어긋남의 감각이 사용자에게 오지
 않습니다. 냉독 출력은 판정 경로 밖이라 엔진 게이트를 거치지 않고 proceed 게이트 텍스트에 그대로 실리며,
-audit `## 4. 비평과 냉독` 의 `### 냉독 (seed-readback)` 아래에 verbatim 으로 옮깁니다(Edit 로 — audit 은
-워크트리 안이다). degrade 가 있으면 그것은 `## degrade 채널` 로 나갑니다.
+audit `## 4. 비평과 냉독` 에도 옮깁니다 — 출력을 요약 없이 **Write 도구로** `$STATE_DIR/readback.txt` 에 쓰고 아래
+펜스로 인용 블록째 붙입니다(인용 표시가 없으면 출력 안의 제목 모양 줄이 audit 절 경계로 읽힌다). degrade 가
+있으면 그것은 `## degrade 채널` 로 나갑니다.
+
+```bash
+python3 "$SD/scripts/seed_review_log.py" append-verbatim "$AUDIT_ABS" --section "## 4. 비평과 냉독" --title "냉독 (seed-readback)" "$STATE_DIR/readback.txt" \
+  || echo "[spec-distill] audit ## 4 에 냉독을 옮기지 못했다 — 게이트 텍스트에 그 사실을 싣는다" >&2
+```
 
 ## degrade 채널
 
@@ -750,7 +840,8 @@ degrade 는 **채널 다섯**으로 나갑니다 — 엔진의 셋과 이 skill 
 | `seed_text_rc` 가 0 이 아니다 | `readback` · `readback` | `unavailable` | 냉독 입력 부재 — 관측한 `$SEED` 값과 `seed_text_rc` |
 
 codex 부재 · 재비판 부재는 이 표에 없습니다 — 엔진이 `advisory[]` 와 게이트 첫 줄로 이미 공시합니다. 같은
-사실을 두 채널에 다른 말로 적지 않습니다.
+사실을 두 채널에 다른 말로 적지 않습니다. codex 가 **왜** 없었는지는 엔진이 모릅니다 — 그 사유는 `### 번들` 의
+옮겨 싣기 규칙대로 `### codex` 펜스의 `[spec-distill]` 줄이 게이트 텍스트로 가져갑니다.
 
 **기록이 없는 것과 degrade 가 없는 것은 다른 사실입니다.** 게이트 텍스트에서 둘을 구별해 씁니다 — 원장이
 없는 세션에 「degrade 없음」이라고 쓰지 않습니다.
@@ -849,7 +940,17 @@ git commit -q -F "$SEED_DIR/commit-msg.txt"
 펜스의 stdout(`invalid` 목록)이 그 문장을 그대로 대므로 그 목록을 게이트 텍스트에 옮겨 싣습니다. 떼는
 것도 편집이라 검사 2 에서 사용자 앞에 옵니다. audit 을 판단할 수 없어 표시 자체를 매길 수 없으면
 (`marks_rc` 2, 위반이 아니다) **떼지 않고** 표시 검사 불가로 막히고, stderr 사유를 게이트 텍스트에
-싣습니다. 그 사유가 `duplicate_heading` 이면 `### 번들` 뒤의 템플릿 절 제목 중복 절차로 풉니다.
+싣습니다. 그 사유가 `duplicate_heading` 이면 `### 번들` 뒤의 템플릿 절 제목 중복 절차로 풉니다. `no_reading_lines`
+면 audit `## 2` 에 풀이 줄이 하나도 없다는 뜻입니다 — `### 확인 질문` 이 정한 줄 모양으로 적혔는지 보고, 확인
+질문이 한 번도 없었다면 표시를 뗍니다(떼는 것도 편집이라 검사 2 로 옵니다). `malformed_reading_lines` 면
+`- 내가 읽은 것:` 으로 시작하는데 줄 모양이 어긋난 줄이 있다는 뜻입니다 — stderr 가 `## 2` 안 몇 번째
+줄인지를 번호로 댑니다(줄 내용은 싣지 않습니다. 그 글자는 요청문에서 온 것이고, 게이트 텍스트를 거쳐
+셸 인자에 실리면 그 안의 `$( )` 가 실행됩니다). 번호는 **`## 2. 질문 전체` 제목 다음 줄부터 빈 줄을 포함해**
+셉니다 — 고치기 전에 그 줄이 `- 내가 읽은 것:` 으로 시작하는지 확인하십시오. 그 줄을 `### 확인 질문` 의
+모양(`- 내가 읽은 것: 「<문장>」 — 고름` 또는 `— 고르지 않음`)으로 **그 자리에서 고쳐 적고** 1번부터 다시 돕니다. 이것이 audit 에 덧붙이지
+않고 고치는 자리입니다 — 그 줄은 내가 쓴 확인 질문의 기록이고, 모양이 어긋난 채로는 검사 1 이 계속
+막습니다. 새 줄을 덧붙이는 것으로는 풀리지 않습니다. 템플릿이 예시로 남긴 자리표 줄(`「<풀이 문장>」 —
+<고름 | 고르지 않음>`)은 이 사유로 막지 않습니다.
 
 ```bash
 # 검사 2 · 3 이 엔진 자리에 파일을 쓴다 — 세션 정리로 디렉토리가 사라졌으면 다시 만든다.
@@ -873,6 +974,7 @@ final_hunks_rc=0
 if [ -z "${STATE_DIR:-}" ] || [ -z "${SEED_BASE:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
   final_hunks_rc=2
 else
+  find "$STATE_DIR" -maxdepth 1 -name 'said-hunk-*.txt' -exec rm -f {} + 2>/dev/null || true
   python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" > "$STATE_DIR/hunks-final.json" || final_hunks_rc=$?
 fi
 case "$final_hunks_rc" in

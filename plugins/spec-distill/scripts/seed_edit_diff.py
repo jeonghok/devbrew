@@ -11,7 +11,12 @@ seed 는 헤딩이 없어 엔진의 얼림 검사가 모든 변경을 면제한�
   revert <base> <seed> --ids 1,3   그 덩어리만 기준 사본 쪽으로 되돌려 seed 를 다시 쓴다. 공시
                                     (hunks) 이후 seed 가 또 바뀌었으면 rc 4 — 아무것도 안 쓴다.
                                     성공하면 결과(보인 것에서 고른 덩어리만 뺀 것)로 스스로 다시
-                                    공시한다.
+                                    공시하고 <base>.reverted 에 되돌린 번호와 결과 판본을 적는다.
+                                    그 표지가 있는 동안 같은 번호 · 같은 판본의 revert 는 아무것도
+                                    하지 않고(rc 0, already) 다른 것은 rc 4 다 — 되돌린 뒤 덩어리
+                                    번호가 다시 매겨지므로, 같은 --ids 를 다시 적용하면 사용자가
+                                    남기기로 한 다른 덩어리가 되돌려진다. hunks · accept · init 이
+                                    표지를 지운다.
   accept <base> <seed>             seed 를 새 기준 사본으로 — 공시(hunks) 이후 seed 가 그대로일
                                     때만. 바뀌었으면 rc 4, 기준 사본은 그대로다. 성공하면 그 공시
                                     는 소진돼 <base>.shown 을 지운다.
@@ -19,8 +24,8 @@ seed 는 헤딩이 없어 엔진의 얼림 검사가 모든 변경을 면제한�
 기준 사본은 «공시될 때까지» 산다: 교체는 accept 하나뿐이고 init 은 덮어쓰지 않는다. 라운드마다
 무조건 교체하면 그 사이의 편집이 diff 에서 사라진다. revert · accept 는 그 직전 hunks 가 보여준
 판본에 묶인다(설계 §5.5-2) — 사용자가 보지 않은 편집을 조용히 기준으로 접거나 지우지 않는다.
-rc: 0 정상 · 2 입력 오류(seed 부재 · 잘못된 id · UTF-8 아님) · 3 기준 사본 부재(hunks · revert)
-  · 4 seed 가 공시된 판본과 다름(revert · accept).
+rc: 0 정상 · 2 입력 오류(빈 경로 인자 · seed 부재 · 잘못된 id · UTF-8 아님 · 그 밖의 예외) · 3 기준
+  사본 부재(hunks · revert) · 4 seed 가 공시된 판본과 다름(revert · accept).
 """
 from __future__ import annotations
 
@@ -54,6 +59,10 @@ def _shown_matches(base: pathlib.Path, seed: pathlib.Path) -> bool:
     except UnicodeDecodeError:
         return False
     return recorded == _sha256(seed)
+
+
+def _reverted_path(base: pathlib.Path) -> pathlib.Path:
+    return base.with_name(base.name + ".reverted")
 
 
 def _version_stale_msg() -> str:
@@ -106,6 +115,10 @@ def main(argv=None) -> int:
         a = p.parse_args(argv)
     except SystemExit:
         return 2
+    if not a.base or not a.seed:
+        print("[spec-distill] 기준 사본 · seed 경로가 비었다(base=%r seed=%r) — 「## 상태」 블록이 도출한 값을 "
+              "넘겨라" % (a.base, a.seed), file=sys.stderr)
+        return 2
     base, seed = pathlib.Path(a.base), pathlib.Path(a.seed)
     if not seed.is_file():
         print("seed not found: %s" % seed, file=sys.stderr)
@@ -119,6 +132,7 @@ def main(argv=None) -> int:
         shutil.copyfile(seed, base)
         if shown.exists():
             shown.unlink()
+        _reverted_path(base).unlink(missing_ok=True)
         print(json.dumps({"initialized": True}, ensure_ascii=False))
         return 0
     if a.cmd == "accept":
@@ -128,6 +142,7 @@ def main(argv=None) -> int:
         base.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(seed, base)
         shown.unlink(missing_ok=True)
+        _reverted_path(base).unlink(missing_ok=True)
         print(json.dumps({"accepted": True}, ensure_ascii=False))
         return 0
     if not base.is_file():
@@ -147,6 +162,7 @@ def main(argv=None) -> int:
     if a.cmd == "hunks":
         seed_sha = _sha256(seed)
         shown.write_text(seed_sha, encoding="utf-8")
+        _reverted_path(base).unlink(missing_ok=True)
         print(json.dumps({"base_present": True, "empty": not hunks, "hunks": hunks,
                           "seed_sha256": seed_sha}, ensure_ascii=False))
         return 0
@@ -159,16 +175,34 @@ def main(argv=None) -> int:
     except ValueError:
         print("--ids 는 쉼표로 이은 정수다: %r" % a.ids, file=sys.stderr)
         return 2
+    marker = _reverted_path(base)
+    if marker.exists():
+        try:
+            done = json.loads(marker.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, ValueError):
+            done = {}
+        if done.get("ids") == sorted(ids) and done.get("seed_sha256") == _sha256(seed):
+            print(json.dumps({"reverted": sorted(ids), "already": True, "remaining": len(hunks)},
+                             ensure_ascii=False))
+            return 0
+        print("[spec-distill] 이 공시에서 이미 되돌렸다(%s) — 다시 되돌리지 않는다. 공시(hunks)를 다시 돌려 "
+              "남은 덩어리를 다시 처분받아라" % marker, file=sys.stderr)
+        return 4
     known = {h["id"] for h in hunks}
     if not ids or not ids <= known:
         print("없는 덩어리 번호: %s (있는 것: %s)" % (sorted(ids - known), sorted(known)), file=sys.stderr)
         return 2
     seed.write_text("".join(revert(b, s, hunks, ids)), encoding="utf-8")
     shown.write_text(_sha256(seed), encoding="utf-8")
+    marker.write_text(json.dumps({"ids": sorted(ids), "seed_sha256": _sha256(seed)}), encoding="utf-8")
     print(json.dumps({"reverted": sorted(ids), "remaining": len(compute_hunks(b, _read(seed)))},
                      ensure_ascii=False))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as e:  # 문서화된 rc(0 · 2 · 3 · 4) 밖으로 새지 않게 — 예상 못 한 실패는 입력 오류로
+        print("[spec-distill] seed_edit_diff.py 내부 오류: %s: %s" % (type(e).__name__, e), file=sys.stderr)
+        sys.exit(2)

@@ -15,6 +15,7 @@ minor 인 이유 — 새 surface 가 셋이다: seed 자리의 문서 리뷰 엔
 - **seed audit 의 절 경계는 한 곳에서 계산한다.** `seed_review_log.section_body` 가 템플릿 절 제목에서만 끊는다. 템플릿 절 제목이 중복되면 번들을 만들지 않고(rc 2), 세 원문 자리 안의 제목 모양 줄은 게이트 공시로 올린다(판정 정규식은 `section6.py` 에 둔다). 붙여 넣은 원문 때문에 막히면 사용자가 「멈춘다 / 그 줄만 인용 표시로 감싼다」를 고른다.
 - **확정 직전 검사는 엔진 자리가 없어도 오진하지 않는다.** 세션 정리로 엔진 자리가 걷혔으면 표시 · 공시 검사가 자리를 다시 만들고(공시는 기준 사본 부재 경로로), 엔진 원장이 없으면 문구 없는 drop 검사가 audit `## 6` 의 엔진 drop 줄로 대조하며 그 사실을 게이트 텍스트에 싣는다. audit 을 읽지 못하면 위반이 아니라 «검사 불가»다(`check-drops` rc 2 를 그대로 넘긴다).
 - 락: `tests/test_seed_review_profile.sh` · `test_seed_review_log.sh` · `test_seed_edit_diff.sh` · `test_seed_provenance.sh` · `test_framing_review_contract.sh` · `test_seed_input_provenance.sh`.
+- **사용자 문구 · 리뷰어 요약은 셸 인자로 넘기지 않는다.** `framing-requests` 가 받은 문구와 항목 요약을 Write 도구로 엔진 자리의 **항목별** 파일(`said-<id>.txt` · `note-<id>.txt` · `said-hunk-<k>.txt` · `said-extra-r<n>.txt`)에 쓰고, `seed_review_log.py log` 에는 `--quote-file` · `--note-file` 로, 엔진의 `decide --quote` · `fix --event drop --reason` · `begin-round --extra-approval` 에는 새 `seed_review_log.py one-line <파일>` 로 먼저 받아 rc 를 본 값을 `=` 꼴로 넘긴다 — 큰따옴표 안의 백틱 · `$( )` 가 셸에서 실행되지 않고, 문구 파일이 없으면 처분을 누르지 않는다. 파일은 기록이 성공하면 지우고 덩어리 문구는 공시마다 지운다 — 한 항목의 Write 를 빠뜨려도 다른 항목의 문구가 쓰이지 않는다. 여러 줄 문구는 한 줄로 이어 적고(둘째 줄이 엔진 기록 줄 모양이어도 기록이 되지 않는다), 빈 문구는 적지 않으며(rc 2), `답` · `거부` 는 같은 기록 줄을 다시 적지 않는다(대상이 finding id 라 줄이 처분을 유일하게 가리킨다).
 
 ### Changed
 
@@ -22,6 +23,14 @@ minor 인 이유 — 새 surface 가 셋이다: seed 자리의 문서 리뷰 엔
 - **audit 템플릿** — `## 2` 의 줄 모양(«당신이 답한 것» · 확인 질문), `## 4` 가 엔진 산출물 자리, `## 6. 리뷰 결정` 절 추가.
 - **번들** — 재료 다섯(초안 · `## 1` · `## 2` · `## 6` · CLAUDE.md). 재비판자는 판정 이력 대신 사용자 문구만 받는다.
 - 락: `test_seed_gate_wiring.sh`(차가운 셸 실행) · `test_seed_codex_axes.sh`(옛 파일 부재 + 엔진 양의 짝) 재작성. 상한 락에 framing-requests 숫자 부재 검사(`ABSENT`). 에이전트 하한 20 → 19(`shared/tests/test_variant_of_contract.sh`).
+- **`/qg` Review gate 뒤 고친 것**(같은 3.2.0 안):
+  - `seed_provenance.py` 가 `## 1` 원문 단위를 **문단마다** 만든다 — 문장부호 없는 앞 문단(인사말 · 라벨)이 다음 문단의 온전한 사용자 문장을 «감싼 줄의 뒷토막» 으로 만들어 저자로 떨어뜨리던 것을 고쳤다. «(사용자 확인)» 도 문장 경계로 친다. 표시가 있는데 `## 2` 에 풀이 줄이 하나도 없거나(`no_reading_lines`) 모양이 어긋난 풀이 줄이 하나라도 있으면(`malformed_reading_lines`) 떼지 않고 판단을 거부한다(rc 2). 어긋난 줄은 `## 2` 안 **번호로만** 가리킨다 — 그 글자는 요청문에서 온 것이고 stderr 는 게이트 텍스트를 거쳐 셸 인자에 실린다. 템플릿이 예시로 남긴 자리표 줄(`「<풀이 문장>」 — <고름 | 고르지 않음>`)은 어긋난 풀이로 세지 않는다(템플릿을 그대로 복사한 audit 이 막히지 않는다).
+  - 저자 편집 처분 펜스는 한 목록(`PAIRS` — 덩어리마다 「번호:처분」)이 되돌리기와 기록을 함께 몰고, 문구 파일이 하나라도 없으면 아무것도 바꾸지 않으며, 기록이 전부 성공했을 때만 기준 사본을 교체한다 — 기록이 실패해도 교체되어 그 편집이 다시 공시되지 않던 것을 고쳤다. 부분 실패 뒤에는 펜스를 통째로 다시 돌린다: `seed_edit_diff.py revert` 가 `<base>.reverted` 표지로 같은 공시의 같은 되돌리기를 다시 하지 않고(다른 되돌리기는 rc 4 — 번호가 다시 매겨진 덩어리를 되돌리지 않는다), `편집` 기록 줄은 다시 돈 만큼 겹친다 — `log` 의 같은 줄 건너뛰기는 `답` · `거부` 에만 쓴다. 덩어리 번호는 공시마다 1 부터 다시 시작하고 문구는 고른 라벨이라 다른 공시의 다른 처분이 글자까지 같은 줄이 되고, 그 줄을 「이미 있다」로 읽으면 그 처분 기록이 조용히 사라진다(AC6). 겹친 줄은 지우지 않는다 — 재실행으로 겹친 줄과 다른 공시의 다른 처분을 글자로 가를 수 없고, 겹침은 소비자를 상하게 하지 않는다. `ask_open` 의 답도 기록이 성공했을 때만 ask 를 닫는다.
+  - `fix` 적용은 `check-intent` 한 번이다 — 그 호출이 통과 · escalate 를 스스로 적으므로 뒤따르던 `fix --event intent-pass` · `--event escalate` 지시를 뺐다.
+  - 번들 조립기는 `## 1. 원문` 이 없거나 비면 조립하지 않는다(rc 2). 나머지 절의 부재 · 빈 `## 2` 는 `[spec-distill]` 경고로 내고, 그 줄과 codex 펜스가 낸 건너뛴 사유가 라운드 게이트 텍스트로 간다.
+  - `check-drops` 는 템플릿 절 제목이 중복된 audit 을 판단하지 않는다(rc 2). 세 스크립트의 예상 못 한 예외는 rc 2 로 낸다 — rc 1 은 위반에만 쓴다. `seed_edit_diff.py` 는 빈 경로 인자를 rc 2 로 거부한다.
+  - 냉독 출력은 `append-verbatim` 으로 audit `## 4` 에 인용 블록째 옮기고, `append-verbatim` 은 읽는 쪽과 같은 `str.splitlines` 로 줄을 나눈다(다른 줄 구분자 뒤의 제목 모양 글자가 인용 밖으로 새지 않는다). codex 러너가 산출물을 못 쓴 라운드(rc 3)도 `[spec-distill]` 줄로 게이트 텍스트에 간다. seed 프로필 처분 안내 · audit 템플릿 `## 5` 설명 · SKILL 의 문서 밖 인용 둘을 바로잡았다. `scripts/runner_common.sh` 사본의 러너 수(셋 → 둘)와 호출자 없는 `codex_extract_or_fallback` 을 주석으로 밝혔다(삭제는 별도 PR).
+  - 락: 계약 락에 차단 문장 다섯(변이 포함) · 답 기록 · 공시 펜스 둘의 기준 사본 있는 실행 · 처분 펜스의 성공 경로와 기록 실패 경로. `check-drops` rc 2 네 모양 · 여러 줄 문구 · `one-line`. 문단 경계 · 표시 경계(변이 포함) · 템플릿에서 도출한 풀이 줄. `seed_edit_diff` 의 rc 모서리. seed 프로필 `ground_truth` 의 배제 절과 정답 목록 고정(`shared/tests/test_docreview_profiles.sh`, 넓힘 변이 넷). 처분 펜스의 두 덩어리 부분 실패 · 재실행 · 문구 파일 재사용 없음, drop · decide 처분 펜스, revert 표지, 다른 줄 구분자(U+2028 · U+0085 · U+000B), codex 건너뜀 줄의 `[spec-distill]` 접두(`test_seed_gate_wiring.sh`).
 
 ### Removed
 
