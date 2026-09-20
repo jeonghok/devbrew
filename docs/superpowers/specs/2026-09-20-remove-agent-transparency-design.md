@@ -23,7 +23,7 @@ next_phase: superpowers:writing-plans
 (1) 사용자 요청 원문: 「agent-transparency 플러그인을 제거하자」. 이유는 D1(안 쓴다 · 무게 감축).
 (2) 판정 기준은 D3 의 사용자 원문 「어떤게 가장 없던 상태 디폴트로 원복하는거야?」다. 흔적은 "이 플러그인을
 **이름으로 부르는** 줄"이 아니라 "이 플러그인 **때문에 생긴** 줄"이다. 이름이 박히지 않은 흔적(T3 정규식 갈래,
-T7 하한 값, T8 `context: fork` 주석, T9 이름 경계)은 개념 별칭 grep 에 걸리지 않고 출생 추적(`git log -S` ·
+T7 하한 값, T8 `context: fork` 주석)은 개념 별칭 grep 에 걸리지 않고 출생 추적(`git log -S` ·
 이력 문서 역추적)으로만 드러났다. 반대로 과거 시점의 개수·순번(「20 개 agent」, 「18 중 16」 등)은 이 플러그인을
 셌더라도 이력으로 둔다(D6).
 (3) 작업 위치: 브랜치 `feature/remove-agent-transparency`, 워크트리
@@ -86,7 +86,7 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 | GREEN 인 채 아무것도 안 잼 | `shared/tests/test_dispatch_disposition.sh:85` 의 `agent:` 갈래 — 코퍼스 유일 실례가 `briefing-current-state/SKILL.md:6` |
 | 측정 뒤 발견 | `tools/adjudication/check_names.py:19` docstring 이 위 정규식을 글자 그대로 인용 |
 | 설계 리뷰가 발견 | `shared/tests/test_agent_input_slots.sh:86` · `shared/tests/fixtures/adjudication/run_slots.py:34` 주석의 `context: fork` 갈래 — 리포 유일 실례가 `briefing-current-state/SKILL.md:5` |
-| 선재 RED (전후 동일) | 7 파일 — 실패 케이스 집합과 파일별 실패 줄 수가 같다. 목록은 「Verification Plan」 1 |
+| 선재 RED (전후 동일) | 6 파일 — 실패 케이스 집합과 파일별 실패 줄 수가 같다. 목록은 「Verification Plan」 1 |
 | 모델 호출 | claude/codex stub 호출 0 |
 
 ## Goals
@@ -107,8 +107,8 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
   `shared/tests/fixtures/seamprobe/MEASUREMENT.md:22` · `:178–184` 가 이 문서를 경로와 줄 번호로 인용한다.
   옮기면 경로가 깨지고, 상단에 "제거됨" 배너를 달면 줄 번호가 밀려 인용이 조용히 어긋난다.
 - **과거 시점의 개수·순번**(D6). 이 플러그인을 셈에 넣었더라도 과거 사건의 개수는 이력으로 둔다 —
-  `shared/tests/test_dispatch_disposition.sh:6–8`(「5표기 중 1개만」, 「표기 ②④를 놓쳐 18 중 16」) · `:84`
-  (「19번째 dispatch」) · `:101`(「A①(17 != 18)」) · `:292`(「오늘 18/18」), `tools/adjudication/check_slots.py:26`
+  `shared/tests/test_dispatch_disposition.sh:6–8`(「5표기 중 1개만」, 「표기 ②④를 놓쳐 18 중 16」) · `:88`
+  (「19번째 dispatch」) · `:105`(「A①(17 != 18)」) · `:292`(「오늘 18/18」), `tools/adjudication/check_slots.py:26`
   (「20 개 agent」), `shared/tests/variant_of.py:66`(「실제 agent 파일 24개 … 에서 도출했다」). 그때의 사실이라
   고쳐 쓰면 이력의 날조다. 지우는 것은 **없어진 실체를 이름으로 가리키는 줄**뿐이다(T6 의 bullet).
 - **리포 전역 스윕이 남긴 변경.** 이 플러그인을 함께 건드린 스윕 커밋(모델 키 제거 `eef761e0`, UTF-8 명시
@@ -234,7 +234,7 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
   판정은 줄 단위로 그 리터럴을 지운 뒤 남은 부분에 별칭이 없는지로 한다 — 파일을 통째로 빼지 않으므로 같은
   파일에 새로 생기는 다른 언급은 여전히 걸린다.
 - **AC5.** 전체 스위트 전후 대조에서 base 대비 **새 실패 케이스 집합이 공집합**이고, 파일별 실패 줄 수가
-  같다(선재 RED 7 파일 포함). claude/codex stub 호출은 0이다.
+  같다(선재 RED 6 파일 포함). claude/codex stub 호출은 0이다.
 - **AC6.** T7 하한의 양성 대조(D9 · D14): 커밋 뒤, 락의 코퍼스 글롭 안 마크다운 2개를 `git rm`(index 와 작업
   트리 **둘 다**) 으로 지워 27개로 만든다. 락의 코퍼스는 `git ls-files --cached --others --exclude-standard`
   (`test_plugin_root_no_cwd_fallback.sh:130–131`)라 **반쪽 삭제는 둘 다 아무것도 재지 않는다** — 작업 트리에서만
@@ -272,11 +272,13 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
    파일별 실패 줄 수) ② T7 코퍼스 수(29 가 아니면 하한 = 새 수 − 1) ③ **AC7 의 인쇄 기대값**(제거 전
    `PRINT_2_dispatch`·`PRINT_3_anchors` 를 재고 각각 − 1) ④ **AC6 의 기대 ✗ 메시지**(= 제거 후 코퍼스 수 − 2,
    base `84222ee1` 에서는 「27개뿐」). ③ 은 #158 이 `framing-requests/SKILL.md` 의 dispatch 를 둘에서 셋으로
-   늘리기 때문에 실제로 움직이고, ②④ 는 코퍼스 수에 매여 함께 움직인다. base `84222ee1` 의 선재 RED 7 파일:
+   늘리기 때문에 실제로 움직이고, ②④ 는 코퍼스 수에 매여 함께 움직인다. base `84222ee1` 의 선재 RED 6 파일:
    `plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh` ·
    `plugins/quality-gates/tests/test_codex_backward_compat.sh` · `plugins/quality-gates/tests/test_runner_adapters.sh` ·
    `plugins/quality-gates/tests/test_findings_parser.sh` · `plugins/spec-distill/tests/test_no_write_matcher_hooks_repo.sh` ·
-   `plugins/spec-distill/tests/test_hook_output_schema.py`(NG9) · `shared/tests/test_assert_behavior.sh`(rc 0, 의도된 ✗).
+   `plugins/spec-distill/tests/test_hook_output_schema.py`(NG9). `shared/tests/test_assert_behavior.sh` 는 선재 RED 가
+   아니다 — 32/32 GREEN 이고, 그 `✗` 는 실패 줄 접두 계약을 **설명하는 통과 줄** 안에 있다. 앵커 없이 세던 옛
+   패턴이 그것을 실패로 셌을 뿐이다.
 2. **러너(측정과 동일).** 모두 워크트리 루트에서 돈다.
    - `.sh` — `bash <file>`. 대상은 추적 파일 중 `^(shared/tests|plugins/[^/]+/tests)/(harness/)?test_[^/]*\.sh$`.
      실패 줄 패턴 `✗|^\s*FAIL\b|^\s*not ok\b`.
@@ -375,8 +377,9 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 - PR 본문에 적을 사용자 측 영향 — 마켓플레이스를 갱신한 설치자에게서 플러그인이 사라지고, `force-for-plugin`
   output style 도 함께 사라진다.
 - AC4 예외 판정(경로 리터럴을 지운 뒤 별칭 재검사)의 구현 형태.
-- T9 의 정확한 경계 문자 집합 — 남는 dispatch 21줄(base 이동 시 그 수) 실측으로 정하고, 좁힌 뒤에도 축 A③
-  (`adversarial` ⊂ `artifact-adversarial`)이 사는지 변이로 확인한다.
+- ~~T9 의 정확한 경계 문자 집합 — 남는 dispatch 21줄(base 이동 시 그 수) 실측으로 정하고, 좁힌 뒤에도 축 A③
+  (`adversarial` ⊂ `artifact-adversarial`)이 사는지 변이로 확인한다.~~ **철회** — 「오케스트레이터가 정하고
+  사용자에게 알린 것」표의 T9 철회 행(마지막 행)을 본다.
 - 도출 절차 S1–S3 의 실행 형태와 증거 보관 자리(AC8).
 - plan 안에서 확정 표가 사는 자리와 형식(D15) — §2 표의 다섯 열을 그대로 쓸지, T# 를 이어 붙일지.
 

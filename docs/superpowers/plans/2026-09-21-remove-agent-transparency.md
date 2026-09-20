@@ -928,6 +928,9 @@ bash shared/tests/test_plugin_root_no_cwd_fallback.sh 2>&1 | grep -E '대상 마
 - **도출 절차 증거**(AC8) — `$WORK/sweep-evidence.txt` 의 S1 히트 수 · S2 판정 표 · S3 하한 표 · 「새 행 0」.
 - **양성 대조 결과**(AC6) — Task 4 Step 2 의 두 줄.
 - **스위트 대조**(AC5) — 사라진 대상 5 · 전후 차이 0 · stub 호출 0.
+- **T9 철회** — 사용자가 승인한 결정(D10)이 구현 리뷰의 실측으로 반증돼 철회된 경위와, 사용자가 한마디로
+  되돌릴 수 있다는 것.
+- **남은 사각지대 (T3)** — frontmatter `agent:` 추가 호출이 처분 앵커 검사를 빠져나가는 경로.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/remove-agent-transparency
@@ -946,17 +949,41 @@ cat > "$WORK/pr-body.md" <<'BODY'
 
 ## 도출 절차 증거 (AC8)
 
-- S1(이름) — LIVE 별칭 grep: (히트 수)건. 그중 경로 리터럴 예외 2건.
-- S2(역추적) — 이력 문서에서 근거를 댄 자리 → live 줄 판정: (표)
-- S3(숫자) — 하한·baseline 리터럴 전수 판정: (표). 흔적 1(T7), 나머지는 붕괴 바닥이라 둔다.
-- 확정 표 밖 새 행: (수)
+- S1(이름) — LIVE 별칭 grep: 14건. 그중 경로 리터럴 예외 2건 — 둘 다 `shared/tests/fixtures/seamprobe/MEASUREMENT.md`,
+  보존하는 이력 spec(`docs/superpowers/specs/2026-08-05-agent-transparency-design.md`)을 인용한다.
+- S2(역추적) — 이력 문서에서 근거를 댄 자리 → live 줄 판정: T3 · T8 · T9 셋(별칭 grep 으로는 나오지 않는
+  자리, 계획 「확정 표」 참고). T9 는 아래 「T9 철회」에서 보듯 철회됐다.
+- S3(숫자) — 하한·baseline 리터럴 전수 판정: 계획 「확정 표」 참고. 흔적 1(T7), 나머지는 붕괴 바닥이라 둔다.
+- 확정 표 밖 새 행: 0
 
 ## 검증
 
-- AC5 스위트 대조 — 사라진 대상 5(이 플러그인의 테스트) · 전후 차이 0 · stub 호출 0
-- AC7 dispatch 인쇄값 — (제거 전) → (제거 후), 앵커 수 일치, `ZERO_AGENTS` 빈 값
+- AC5 스위트 대조 — 대상 261 → 256, 사라진 5는 정확히 이 플러그인의 테스트 파일과 일치 · 전후 차이(행) 0 ·
+  stub 호출 0. 선재 RED 6 파일(전후 동일).
+- AC7 dispatch 인쇄값 — 23 → 22, 앵커 수 일치, `ZERO_AGENTS` 빈 값
 - AC6 양성 대조 — `✓ 파서가 끝까지 돌았다 (rc 0)` 와 `✗ 대상 마크다운이 27개뿐` 을 함께 관측
 - AC4 양성 짝 — 경로 리터럴 예외가 같은 파일의 새 언급은 여전히 잡는다
+
+## T9 철회
+
+사용자가 승인한 결정 D10(「이름 경계를 좁혀라」)을 구현 리뷰 중 되돌렸다 — 측정이 그 전제를 반증했다. 좁힌
+경계도 삭제된 실례 `agent: agent-transparency:transcript-reader` 를 접두사의 콜론 때문에 **이미 매치했고**,
+좁히면 `subagent_type: adversarial`(따옴표 없는 평범한 YAML, 이 플러그인이 건드린 적 없는 표기)을 놓쳤다.
+되돌려도 오늘 잡히는 dispatch 는 22줄 그대로다(동일 집합) — **되돌리는 데 비용이 없다.**
+
+사용자는 한 단어로 이 되돌림을 다시 뒤집을 수 있다 — 「다시 좁혀라」.
+
+## 남은 사각지대 (T3)
+
+이미 다른 표기로 dispatch 되는 agent 가 skill frontmatter `agent:` 로 **추가** 호출되면, 그 자리는 dispatch 로
+세어지지 않아 처분 앵커 검사를 조용히 빠져나간다. **그 표기로만** 불리는 agent 는 ∀ 도출(`ZERO_AGENTS`)이
+여전히 잡는다 — 빠져나가는 것은 «추가» 호출뿐이다. 이 경고의 일반형은 이제 `test_dispatch_disposition.sh` 의
+락 머리말에도 있다.
+
+## 참고
+
+삭제된 `keep-coding-instructions: true` 함정 지식은 `docs/superpowers/specs/2026-08-05-agent-transparency-design.md:544`
+와 `docs/archive/plans/2026-08-08-agent-transparency.md:4263` 에 남아 있다.
 
 ## 버전 bump 없음
 
