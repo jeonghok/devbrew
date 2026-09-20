@@ -100,7 +100,8 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 
 ## Non-goals
 
-- **이력 문서.** 각 플러그인 `CHANGELOG.md`, `docs/archive/**`, `docs/audits/**`,
+- **이력 문서** — **이 제거 작업 이전부터 리포에 있던 것**을 말한다(이 설계문서와 plan 은 이 작업의 산출물이라
+  해당하지 않는다). 각 플러그인 `CHANGELOG.md`, `docs/archive/**`, `docs/audits/**`,
   `docs/superpowers/{specs,plans,interview}/**` 는 과거에 참이었던 서술이다. 특히
   `docs/superpowers/specs/2026-08-05-agent-transparency-design.md` 는 **제자리에 그대로** 둔다 —
   `shared/tests/fixtures/seamprobe/MEASUREMENT.md:22` · `:178–184` 가 이 문서를 경로와 줄 번호로 인용한다.
@@ -147,6 +148,9 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 **목록이 아니라 규칙이 정본이다(D13).** 라운드 1·2 의 리뷰가 손으로 적은 목록에서 빠진 흔적을 연달아 찾았다 —
 열거는 사각지대를 남긴다. 그래서 설계는 규칙과 절차를 고정하고, 목록의 확정은 plan 의 첫 Task 가 절차를 끝까지
 돌려서 한다. 아래 표는 **지금까지 도출된 것**이지 닫힌 목록이 아니다.
+
+**확정 표의 정본은 plan 이다(D15).** 이 문서는 규칙·절차와 출발점 표를 갖고, 절차가 확정한 표는 plan 문서에
+산다 — 그래서 구현 중에 이 설계문서를 다시 열 필요가 없다. AC3·AC8 의 대상은 그 확정 표다.
 
 **판정 규칙**
 
@@ -206,7 +210,8 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 - **AC1.** `git ls-files plugins/agent-transparency` 가 0줄이다.
 - **AC2.** `.claude-plugin/marketplace.json` 이 JSON 으로 파싱되고, `plugins[].name` 이 정확히
   `quality-gates, project-init, spec-distill, plugin-audit`(이 순서)다.
-- **AC3.** §2 표의 모든 행(지금까지 T1–T9)이 그 표의 「없던 상태」 열과 일치한다.
+- **AC3.** **plan 의 확정 표**(D15 — 정본)의 모든 행이 그 표의 「없던 상태」 열과 일치한다. 그 표는 §2 표의
+  T1–T9 를 전부 포함하고, 도출 절차가 더 낸 행이 있으면 함께 담는다. 아래 세부는 T1–T9 의 관측 형태다.
   - T1: `docs/plugin-authoring.md` 에 `output style` · `output-styles` · `keep-coding-instructions` ·
     `force-for-plugin` 이 0건이고, `**Merge 전:**` 단락이 남아 있다.
   - T2: 24행 문단에 `transcript-reader` 가 없고 `smoke-probe` · `pr-understanding-builder` 는 있다.
@@ -230,17 +235,21 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
   파일에 새로 생기는 다른 언급은 여전히 걸린다.
 - **AC5.** 전체 스위트 전후 대조에서 base 대비 **새 실패 케이스 집합이 공집합**이고, 파일별 실패 줄 수가
   같다(선재 RED 7 파일 포함). claude/codex stub 호출은 0이다.
-- **AC6.** T7 하한의 양성 대조(D9): 커밋 뒤, 락의 코퍼스 글롭 안 마크다운 2개를 **index 에서**(`git rm`) 지워
-  27개로 만든다 — 락의 코퍼스는 `git ls-files --cached` 에서 나오므로 작업 트리에서만 지우면 파서가 없는 파일을
-  열다 죽고, 그때의 ✗ 는 하한을 재지 않은 「0개뿐」이다. 통과 관측은 둘이 함께다: 하한 단언의 ✗ 메시지가
-  「27개뿐」이고, 같은 실행에서 「파서가 끝까지 돌았다 (rc 0)」가 ✓ 다. 복원(`git checkout HEAD --` 로 index 와
-  작업 트리 둘 다) 뒤 같은 단언이 ✓ 이고 `git diff HEAD` 와 `git diff --cached` 가 비었음을 확인한다.
+- **AC6.** T7 하한의 양성 대조(D9 · D14): 커밋 뒤, 락의 코퍼스 글롭 안 마크다운 2개를 `git rm`(index 와 작업
+  트리 **둘 다**) 으로 지워 27개로 만든다. 락의 코퍼스는 `git ls-files --cached --others --exclude-standard`
+  (`test_plugin_root_no_cwd_fallback.sh:130–131`)라 **반쪽 삭제는 둘 다 아무것도 재지 않는다** — 작업 트리에서만
+  지우면 경로가 `--cached` 로 계속 나와 파서가 없는 파일을 열다 죽고(그 ✗ 는 하한을 재지 않은 「0개뿐」이다),
+  index 에서만 지우면(`git rm --cached`) 파일이 untracked 가 되어 `--others` 로 되돌아오므로 수가 29 로 남고
+  ✗ 자체가 발화하지 않는다. 통과 관측은 둘이 함께다: 하한 단언의 ✗ 메시지가 「27개뿐」이고, 같은 실행에서
+  「파서가 끝까지 돌았다 (rc 0)」가 ✓ 다. 복원(`git checkout HEAD --`) 뒤 같은 단언이 ✓ 이고 `git diff HEAD` 와
+  `git diff --cached` 가 비었음을 확인한다.
 - **AC7.** 제거 뒤 dispatch 락의 인쇄값이 `PRINT_2_dispatch` = `PRINT_3_anchors` = (제거 전 값 − 1)이고
   `ZERO_AGENTS` 가 빈 값이다 — base `84222ee1` 에서는 21/21 이다. T3 · T9 가 이 플러그인 밖의 dispatch 를 하나도
   잃지 않았다는 증거다.
-- **AC8.** 도출 절차 S1–S3 을 끝까지 돌린 결과가 §2 표와 일치한다. 절차가 새로 낸 항목은 R1–R4 로 분류돼 표에
-  들어가고, 규칙이 가르지 못한 항목은 0이거나 사용자 결정으로 올라가 있다. 「돌렸다」의 증거는 S1 의 grep 출력,
-  S2 가 훑은 이력 문서 히트 목록과 각 히트의 판정, S3 의 하한 표다.
+- **AC8.** 도출 절차 S1–S3 을 끝까지 돌린 결과가 **plan 의 확정 표**에 담겨 있고, 그 표가 §2 표의 행을 하나도
+  빠뜨리지 않는다. 절차가 새로 낸 항목은 R1–R4 로 분류돼 그 표에 들어가고, 규칙이 가르지 못한 항목은 0이거나
+  사용자 결정으로 올라가 있다. 「돌렸다」의 증거는 S1 의 grep 출력, S2 가 훑은 이력 문서 히트 목록과 각 히트의
+  판정, S3 의 하한 표다.
 
 ## Files to Modify
 
@@ -261,8 +270,9 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 1. **base 확인과 baseline.** 착수 시 `git rev-parse origin/main` 이 `84222ee1` 이면 측정 때의 baseline 을 쓴다.
    움직였으면 `git merge-tree` 로 충돌을 보고, 새 base 에서 **셋을 다시 잰다** — ① baseline(선재 RED 집합과
    파일별 실패 줄 수) ② T7 코퍼스 수(29 가 아니면 하한 = 새 수 − 1) ③ **AC7 의 인쇄 기대값**(제거 전
-   `PRINT_2_dispatch`·`PRINT_3_anchors` 를 재고 각각 − 1). ③ 은 #158 이 `framing-requests/SKILL.md` 의 dispatch 를
-   둘에서 셋으로 늘리기 때문에 실제로 움직인다. base `84222ee1` 의 선재 RED 7 파일:
+   `PRINT_2_dispatch`·`PRINT_3_anchors` 를 재고 각각 − 1) ④ **AC6 의 기대 ✗ 메시지**(= 제거 후 코퍼스 수 − 2,
+   base `84222ee1` 에서는 「27개뿐」). ③ 은 #158 이 `framing-requests/SKILL.md` 의 dispatch 를 둘에서 셋으로
+   늘리기 때문에 실제로 움직이고, ②④ 는 코퍼스 수에 매여 함께 움직인다. base `84222ee1` 의 선재 RED 7 파일:
    `plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh` ·
    `plugins/quality-gates/tests/test_codex_backward_compat.sh` · `plugins/quality-gates/tests/test_runner_adapters.sh` ·
    `plugins/quality-gates/tests/test_findings_parser.sh` · `plugins/spec-distill/tests/test_no_write_matcher_hooks_repo.sh` ·
@@ -341,6 +351,10 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 | D11 | 코드에 박힌 하한을 가르는 규칙 (라운드 2) | 「(a) 규칙 + 훑은 목록」 — 핀 당시 수 − 1 만 흔적(R3), 훑은 목록은 §2 의 S3 표 |
 | D12 | 라운드 2 자동 decide 7건(D6–D9 를 반영한 내 편집: Handoff · Context · Goals · Non-goals · Constraints · §2 · Files) | 전부 채택 |
 | D13 | 흔적 목록의 층위 (라운드 2) | 「도출 절차로 전환」 — 설계는 규칙 R1–R4 와 절차 S1–S3 을 고정하고, 목록 확정은 plan 의 첫 Task 가 한다. 표는 「지금까지 도출된 것」이다 |
+| D14 | AC6 이 근거로 든 도구 사실이 틀렸다 (라운드 3) | 「고친다」 — 코퍼스는 `--cached --others --exclude-standard`. 제거는 `git rm`(index+작업 트리)으로 못 박고, 반쪽 삭제 두 경로가 각각 어떻게 무력해지는지 적는다 |
+| D15 | 확정 표의 정본이 살 자리 (라운드 3) | 「정본은 plan」 — 설계는 규칙·절차와 출발점 표를, 확정 표는 plan 이 갖는다. AC3·AC8 은 그 표를 가리키고, 이력 분류는 「이 작업 이전부터 있던 문서」로 좁힌다 |
+| D16 | 라운드 3 자동 decide 7건(D10·D11·D13 을 반영한 내 편집: Files · §2 · AC · 목차 · 알려진 한계 · Goals · Handoff) | 전부 채택 |
+| D17 | 재리뷰 상한 도달 뒤 추가 라운드 (라운드 3) | 「열지 않음」 — 라운드 3 은 새 흔적을 못 찾았고 낸 것은 문서 정확성 둘과 기재 하나였다. 전수성은 plan 의 도출 스윕(AC8)과 구현 리뷰가 맡는다 |
 
 오케스트레이터가 정하고 사용자에게 알린 것(되돌리려면 괄호 안의 한마디):
 
@@ -362,6 +376,7 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 - T9 의 정확한 경계 문자 집합 — 남는 dispatch 21줄(base 이동 시 그 수) 실측으로 정하고, 좁힌 뒤에도 축 A③
   (`adversarial` ⊂ `artifact-adversarial`)이 사는지 변이로 확인한다.
 - 도출 절차 S1–S3 의 실행 형태와 증거 보관 자리(AC8).
+- plan 안에서 확정 표가 사는 자리와 형식(D15) — §2 표의 다섯 열을 그대로 쓸지, T# 를 이어 붙일지.
 
 설계 리뷰 라운드 1 이 미룬 것:
 
