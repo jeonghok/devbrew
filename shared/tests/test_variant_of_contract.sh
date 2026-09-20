@@ -376,8 +376,9 @@ for p in open(corpus, encoding="utf-8").read().splitlines():
 print("COUNT\t%d" % n)
 PY
 n_agents="$(awk -F "$TAB" '$1=="COUNT"{print $2}' "$TMPD/v4.txt")"
-[ "${n_agents:-0}" -ge 20 ] \
-  && ok "V4: agent 정의 파일 ${n_agents}개를 바이트로 읽었다 (코퍼스에서 도출 · 하한 20)" \
+# 하한은 오늘의 실측이다 — seed-critic 삭제(seed 자리 엔진 전환)로 20 → 19.
+[ "${n_agents:-0}" -ge 19 ] \
+  && ok "V4: agent 정의 파일 ${n_agents}개를 바이트로 읽었다 (코퍼스에서 도출 · 하한 19)" \
   || no "V4: agent 정의 파일을 ${n_agents:-0}개만 읽었다 — 도출이 깨졌다. 아래 부재 판정이 공허하다"
 dirty="$(awk -F "$TAB" '$1!="COUNT" && $2!="clean"' "$TMPD/v4.txt")"
 if [ -z "$dirty" ]; then

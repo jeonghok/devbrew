@@ -64,7 +64,7 @@ emit_fail() { # <reason> — 리다이렉트 실패를 삼키지 않는다 (형�
 # OUT을 열고, EXIT 트랩의 `-s` 검사는 (트랩이 cd 이후에 발동하면) 같은 상대경로를
 # cd *이후* cwd로 다시 해석해 **서로 다른 파일**을 본다 — 가드가 호출자가 보는
 # 파일이 아닌 엉뚱한 곳을 지키는 셈이라 사실상 아무것도 지키지 못했다(리뷰 R1).
-# 형제 러너 3곳(run_audit_/run_docreview_/run_seed_codex_reviewer.sh) 전부 cd 전에
+# 형제 러너 2곳(run_audit_/run_docreview_codex_reviewer.sh) 전부 cd 전에
 # 이 절대화를 한다 — 이 러너에만 없었다.
 case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
 case "$ARTIFACT" in /*) ;; *) ARTIFACT="$PWD/$ARTIFACT" ;; esac

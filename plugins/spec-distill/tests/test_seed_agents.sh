@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # guards: plugins/spec-distill/agents/seed-*.md plugins/spec-distill/skills/framing-requests/SKILL.md
 #
-# 두 seed 리뷰어의 **도구 표면**을 잰다. `tools: []` 는 Law 2 의 집행 지점이고, 여기서는
-# 그보다 더 강하다 — 이 둘은 `Read` 도 없다.
+# seed 냉독 리뷰어(`seed-readback`)의 **도구 표면**을 잰다. `tools: []` 는 Law 2 의 집행
+# 지점이고, 여기서는 그보다 더 강하다 — `Read` 도 없다. (옛 격리 critic `seed-critic` 은 seed
+# 자리가 문서 리뷰 엔진으로 옮겨 가며 지워졌다 — 그 부재는 test_seed_codex_axes.sh 가 잰다.)
 #
 # **왜 `Read` 조차 없나**: `seed-readback` 의 측정이 성립하려면 그것이 **seed 만** 알아야
 # 한다. `Read` 가 있으면 원문 파일을 열어 「seed 만 읽고 알 수 있나」가 더 이상 재지지
-# 않는다. `seed-critic` 은 원문이 필요하지만 **inline 으로** 받는다 — 도구가 아니라
-# 프롬프트로 준다. 도구 표면이 격리의 유일한 물리적 근거다(프롬프트 지시는 근거가 아니다).
+# 않는다. 도구 표면이 격리의 유일한 물리적 근거다(프롬프트 지시는 근거가 아니다).
 #
 # `disallowedTools` 단독은 금지다 — 공간에 대해서도 시간에 대해서도 fail-open 이다
 # (내일 추가될 도구는 오늘 열거할 수 없다).
@@ -85,7 +85,6 @@ AGENTS="$ROOT/plugins/spec-distill/agents"
 SKILL="$ROOT/plugins/spec-distill/skills/framing-requests/SKILL.md"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
-  echo "plugins/spec-distill/agents/seed-critic.md"
   echo "plugins/spec-distill/agents/seed-readback.md"
   echo "plugins/spec-distill/skills/framing-requests/SKILL.md"
   exit 0
@@ -120,7 +119,7 @@ PAIR_RE='<[a-zA-Z_][a-zA-Z0-9_]*>[[:space:]]*\$\{[A-Za-z_][A-Za-z0-9_]*\}'
 PAIR_SED='s/^<([a-zA-Z_][a-zA-Z0-9_]*)>[[:space:]]*\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/\1=\2/'
 
 n=0
-for a in seed-critic seed-readback; do
+for a in seed-readback; do
   f="$AGENTS/$a.md"
   if [ ! -f "$f" ]; then no "$a: agent 정의 부재"; continue; fi
   n=$((n + 1))
@@ -194,5 +193,5 @@ for a in seed-critic seed-readback; do
     fi
   fi
 done
-[ "$n" -eq 2 ] && ok "agent 2개 전부 실재" || no "agent 도출 ${n}개 — 2 여야 한다"
+[ "$n" -eq 1 ] && ok "agent 1개 실재" || no "agent 도출 ${n}개 — 1 이어야 한다"
 finish
