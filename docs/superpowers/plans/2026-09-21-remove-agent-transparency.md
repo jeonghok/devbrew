@@ -114,15 +114,17 @@
 | `test_no_new_duplication.sh:313` `-ge 50` · `test_docreview_codex.sh:542` `-ge 50` | 값 불변(실측 GREEN) | 둔다 |
 | `test_skill_body_no_positional_tokens.sh:166` `-ge 16` | 값 불변(실측 GREEN) | 둔다 |
 | `test_adjudication_wiring.sh:198` `COMP_BASELINE=40` · `check_wiring.py:568` `EXEMPT_BASELINE=11` · `check_slots.py:93` `EXEMPT_SLOTS_BASELINE=5` | 값 불변(실측 GREEN) | 둔다 |
+| `test_runner_adapters.sh:316` `-lt 10` | 모집단이 `git -C "$PLUGIN_ROOT" ls-files -s -- 'tests/'` 이고 `PLUGIN_ROOT` 는 `plugins/quality-gates` — **자기 플러그인의 테스트만** 센다 | 둔다 — 이 플러그인 기여가 구조적으로 0 |
 | `test_governance_no_capability_caps.sh:43` `-ge 20` · `test_skill_drop_notice_consumed.sh:51,73` · spec-distill 의 줄수 하한들 | 값 불변(실측 GREEN) | 둔다 — 모집단에 이 플러그인 기여 0 |
 
 ### 도출 절차가 남긴 증거
 
-- **S1(이름).** LIVE 전수 별칭 `git grep` 이 **13 히트**(`.claude-plugin/marketplace.json` 3 + `docs/plugin-authoring.md` 4
-  + `shared/tests/fixtures/adjudication/run_slots.py` 1 + `shared/tests/fixtures/seamprobe/MEASUREMENT.md` 2 +
+- **S1(이름).** LIVE 전수 별칭 `git grep` 이 **14 히트**(`.claude-plugin/marketplace.json` 3 +
+  `docs/plugin-authoring.md` **5**(`:24` = T2, `:49` · `:52` · `:53` · `:55` = 전부 T1 의 삭제 범위 49–56 안) +
+  `shared/tests/fixtures/adjudication/run_slots.py` 1 + `shared/tests/fixtures/seamprobe/MEASUREMENT.md` 2 +
   `shared/tests/test_agent_input_slots.sh` 1 + `shared/tests/test_dispatch_disposition.sh` 1 +
   `tools/adjudication/check_slots.py` 1). `MEASUREMENT.md` 둘은 보존하는 이력 spec 을 가리키는 **경로 리터럴**이라
-  AC4 의 유일한 예외다(D7). 나머지 11 은 전부 확정 표가 덮는다.
+  AC4 의 유일한 예외다(D7). 나머지 12 는 전부 확정 표가 덮는다.
 - **S2(역추적).** 이력 문서에서 이 플러그인의 식별자·경로를 근거로 든 자리를 따라가 T3 · T8 · T9 셋을 얻었다.
   이 셋은 별칭 grep 으로는 나오지 않는다 — 살아 있는 줄에 이름이 없기 때문이다.
 - **S3(숫자).** 위 표. 그리고 **삭제를 원리적으로 볼 수 있는 락 38개**(`plugins/*` 를 열거하거나
@@ -364,9 +366,11 @@ ALIAS='agent-transparency|agent_transparency|transcript-reader|briefing-current-
 } | tee "$WORK/sweep-evidence.txt"
 ```
 
-기대: 정확히 **13 줄**. 파일별로 `marketplace.json` 3 · `plugin-authoring.md` 4 · `run_slots.py` 1 ·
+기대: 정확히 **14 줄**. 파일별로 `marketplace.json` 3 · `plugin-authoring.md` **5** · `run_slots.py` 1 ·
 `MEASUREMENT.md` 2 · `test_agent_input_slots.sh` 1 · `test_dispatch_disposition.sh` 1 · `check_slots.py` 1.
-`MEASUREMENT.md` 둘을 뺀 11 이 확정 표에 대응한다. **13 이 아니면** 표에 없는 자리가 생긴 것이니 멈추고 분류한다.
+`MEASUREMENT.md` 둘을 뺀 12 가 확정 표에 대응한다. **14 가 아니면** 표에 없는 자리가 생긴 것이니 멈추고
+분류한다 — 수가 아니라 **파일별 분포**로 판단한다. `plugin-authoring.md` 의 다섯 중 넷(`:49` · `:52` · `:53` ·
+`:55`)은 T1 이 절째로 지우는 범위 안이고 하나(`:24`)가 T2 다.
 
 - [ ] **Step 2: S2 — 이력 역추적**
 
