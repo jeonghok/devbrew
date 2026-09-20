@@ -82,14 +82,14 @@ corpus = sorted(set(corpus))
 #       맨 `adversarial` 이 5줄에 등장하고 전부 산문이다).
 #       **콜론까지 포함**해야 한다. `agentType`(콜론 없음)으로 쓰면
 #       smoke-workflow.js:8 의 주석이 19번째 dispatch 로 잡힌다.
-NOTATION = re.compile(r'subagent_type:|agentType:|Agent\(|^\s*agent:\s')
+NOTATION = re.compile(r'subagent_type:|agentType:|Agent\(')
 
-# 경계 규칙: 이름 앞은 줄머리·공백·따옴표·`:` 중 하나, 뒤는 따옴표·공백·
-# 쉼표·닫는괄호·줄끝 중 하나. `-` 는 경계가 아니다 — 그래야
+# 경계 규칙: 이름 앞은 따옴표·`:` 중 하나, 뒤는 따옴표·공백·쉼표·
+# 닫는괄호·줄끝 중 하나. `-` 는 경계가 아니다 — 그래야
 # `adversarial` 이 `artifact-adversarial` 을 먹지 않는다.
 # 접두사는 **선택적**이다: 저자가 접두사를 빼서 자기를 감사 대상에서
 # 제외하는 경로를 봉쇄한다 (spec-distill/CHANGELOG.md:1197-1198 의 실패).
-PRE, POST = r'(?:^|[\s"\':])', r'(?=["\'\s,)]|$)'
+PRE, POST = r'(?:["\':])', r'(?=["\'\s,)]|$)'
 
 
 def name_re(n):
@@ -139,10 +139,6 @@ print("AXIS_A1 %d %d" % (len(dispatch), len(anchors)))
 #
 #    「∃ 완전매칭」이 아니라 결정론 배정이다 — 배정 규칙이 없으면 구현할 수
 #    없고, greedy-최근접과 완전매칭은 창이 겹치는 배치에서 정확히 갈린다.
-#
-#    방향이 「아래」인 이유: briefing-current-state/SKILL.md 의 dispatch 는
-#    frontmatter 안 6행이고 `---` 닫힘이 9행이라 «위»에는 아무것도 놓을 수 없다.
-#    「위」로 쓰면 그 파일이 배달 즉시 RED 다.
 a2_fail = []
 for (rel, dl, ag) in dispatch:
     later_disp = sorted(x for x in per_file_disp.get(rel, []) if x > dl)

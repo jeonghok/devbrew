@@ -43,7 +43,6 @@ FORBIDDEN_KINDS = ("prior_verdict", "score", "orchestrator_framing")
 #     센 두 번째 항목**(면제 등재는 EXEMPT_SLOTS 참고, 이 bullet 은 새로 세지 않는다).
 #   · `coverage-mapper.ledger_state` — 원장 «상태»의 요약이지 판단이 아니다 → ⓐ.
 #   · `pr-understanding-builder.context` — `build-pr-context` 가 만든 blob → ⓑ.
-#   · `transcript-reader.inventory` — `prepare_standup.py` 출력 → ⓐ.
 #   · `plugin-auditor.axis_task`/`candidate_clues` — `audit-workflow.js` 의
 #     CONTRACT 가 *"나는 이 단서들이 참인지 거짓인지 말하지 않는다"* 로
 #     판단 배제를 명시한다 → ⓐ/ⓒ.
