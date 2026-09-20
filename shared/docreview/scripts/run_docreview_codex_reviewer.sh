@@ -15,7 +15,7 @@
 # 성공·실패 모두 <out_yaml> 에 codex_findings_to_yaml.py --emit-keys docreview 스키마의
 # 중첩 YAML 을 쓴다. <out_yaml> 자체를 못 쓰면(디렉토리 부재·권한·RO 마운트) YAML 이
 # 애초에 불가능하므로 rc 3 으로 죽는다 — 호출자는 rc==3 을 보면 <out_yaml> 을 지워야
-# 한다(형제 run_seed_codex_reviewer.sh 와 같은 계약. 이 fail-
+# 한다(형제 run_codex_reviewer.sh 와 같은 계약. 이 fail-
 # closed 가 핵심이다 — 조용히 죽으면 직전 라운드의 stale YAML 이 이번 라운드 판정으로
 # 읽힌다).
 #
@@ -415,8 +415,8 @@ if not pre.strip():
 
 doc = pathlib.Path(doc_path).read_text(encoding="utf-8")
 
-# 순서는 형제 codex 프롬프트 빌더 셋(build_codex_prompt.py · build_artifact_codex_prompt.py ·
-# build_seed_codex_prompt.py 의 PROMPT_TEMPLATE, 실측)과 같다 —
+# 순서는 형제 codex 프롬프트 빌더 둘(build_codex_prompt.py · build_artifact_codex_prompt.py 의
+# PROMPT_TEMPLATE, 실측)과 같다 —
 # 지시(역할 · 정답의 출처 · 층 · 처분 · 프로필 본문) → P21 preamble → 입력 태그 → 출력 형식.
 # preamble 의 마지막 앵커와 `<document>` 사이에는 공백만 둔다 — test_codex_prompt_untrusted_clause.sh
 # 의 지배 축이 이 러너도 잰다. 프로필 본문은 `<document>` 슬롯 밖, 자기 태그 안에 둔다.

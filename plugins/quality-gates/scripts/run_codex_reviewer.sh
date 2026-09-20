@@ -77,7 +77,7 @@ fi
 # 상대경로를 cd *이후* cwd로 다시 해석해 **서로 다른 파일**을 본다 — 가드가
 # 호출자가 읽는 파일이 아닌 엉뚱한 곳을 지켜 사실상 아무것도 지키지 못한다
 # (형제 `run_artifact_codex_reviewer.sh`에서 리뷰 R1으로 적발된 것과 같은 결함이
-# 여기도 있었다 — sweep). 형제 러너 3곳(run_audit_/run_docreview_/run_seed_codex_reviewer.sh)
+# 여기도 있었다 — sweep). 형제 러너 2곳(run_audit_/run_docreview_codex_reviewer.sh)
 # 전부 cd 전에 이 절대화를 한다.
 [[ "$OUTPUT_PATH" = /* ]] || OUTPUT_PATH="$PWD/$OUTPUT_PATH"
 [[ "$DIFF_PATH" = /* ]] || DIFF_PATH="$PWD/$DIFF_PATH"
