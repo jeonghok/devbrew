@@ -221,8 +221,8 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
   - T6: `check_slots.py` 에 `transcript-reader` · `prepare_standup` 이 0건이고, 「20 개 agent」는 그대로 있다.
   - T7: 하한 리터럴이 `-ge 28` 이다.
   - T8: 두 파일에 `context: fork` 가 0건이고, 「Workflow JS」 서술은 남아 있다.
-  - T9: `PRE`/`POST` 리터럴에 줄머리(`^`)와 공백(`\s`) 갈래가 없고, 주석에 표기 ④ 근거가 0건이며, 그러고도
-    AC7 의 dispatch 수가 유지된다(경계를 좁혀 잃은 줄이 없다는 증거).
+  - ~~T9~~ **철회** — 이 세부는 더 이상 적용되지 않는다. `PRE`/`POST` 는 base 형태 그대로여야 하고, 좁혀진
+    형태가 보이면 그것이 위반이다. 근거는 「오케스트레이터가 정하고 사용자에게 알린 것」의 마지막 행.
 - **AC4.** 개념 별칭 `git grep -n -I -i` 가 LIVE 에서 0건이다. LIVE 는 이력 분류(`**/CHANGELOG.md`,
   `docs/archive/**`, `docs/audits/**`, `docs/superpowers/{specs,plans,interview}/**`) 밖의 모든 추적 파일이다.
   별칭: `agent-transparency` · `agent_transparency` · `transcript-reader` · `briefing-current-state` ·
@@ -244,8 +244,8 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
   「파서가 끝까지 돌았다 (rc 0)」가 ✓ 다. 복원(`git checkout HEAD --`) 뒤 같은 단언이 ✓ 이고 `git diff HEAD` 와
   `git diff --cached` 가 비었음을 확인한다.
 - **AC7.** 제거 뒤 dispatch 락의 인쇄값이 `PRINT_2_dispatch` = `PRINT_3_anchors` = (제거 전 값 − 1)이고
-  `ZERO_AGENTS` 가 빈 값이다 — base `84222ee1` 에서는 21/21 이다. T3 · T9 가 이 플러그인 밖의 dispatch 를 하나도
-  잃지 않았다는 증거다.
+  `ZERO_AGENTS` 가 빈 값이다 — base `84222ee1` 에서는 21/21 이다. T3 이 이 플러그인 밖의 dispatch 를 하나도
+  잃지 않았다는 증거다(T9 은 철회돼 이 수에 기여하지 않는다).
 - **AC8.** 도출 절차 S1–S3 을 끝까지 돌린 결과가 **plan 의 확정 표**에 담겨 있고, 그 표가 §2 표의 행을 하나도
   빠뜨리지 않는다. 절차가 새로 낸 항목은 R1–R4 로 분류돼 그 표에 들어가고, 규칙이 가르지 못한 항목은 0이거나
   사용자 결정으로 올라가 있다. 「돌렸다」의 증거는 S1 의 grep 출력, S2 가 훑은 이력 문서 히트 목록과 각 히트의
@@ -258,7 +258,7 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 | 삭제 | `plugins/agent-transparency/**` (34) |
 | 편집 | `.claude-plugin/marketplace.json` |
 | 편집 | `docs/plugin-authoring.md` (T1 · T2) |
-| 편집 | `shared/tests/test_dispatch_disposition.sh` (T3 · T4 · T9) |
+| 편집 | `shared/tests/test_dispatch_disposition.sh` (T3 · T4. T9 은 철회) |
 | 편집 | `shared/tests/test_plugin_root_no_cwd_fallback.sh` (T7) |
 | 편집 | `tools/adjudication/check_names.py` (T5) |
 | 편집 | `tools/adjudication/check_slots.py` (T6) |
