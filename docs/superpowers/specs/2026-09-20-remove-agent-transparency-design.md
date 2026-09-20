@@ -14,20 +14,24 @@ next_phase: superpowers:writing-plans
 ## Handoff Context
 
 **TL;DR** — `plugins/agent-transparency/` 와 마켓플레이스 항목을 지운다. 그리고 이 플러그인 **때문에** 리포의
-다른 곳에 생긴 줄 여덟 자리(T1–T8)를 이 플러그인이 없던 상태로 되돌린다. 이력 문서와 과거 시점의 개수 서술은
-건드리지 않는다.
+다른 곳에 생긴 줄을 이 플러그인이 없던 상태로 되돌린다. 무엇이 그런 줄인지는 §2 의 판정 규칙(R1–R4)이 정하고,
+목록의 확정은 plan 의 첫 Task 가 도출 절차(S1–S3)를 돌려서 한다 — 지금까지 도출된 것은 T1–T9 다. 이력 문서와
+과거 시점의 개수 서술은 건드리지 않는다.
 남는 플러그인의 파일은 하나도 편집하지 않으므로 버전 bump·CHANGELOG 는 없다.
 
 **Implicit context** —
 (1) 사용자 요청 원문: 「agent-transparency 플러그인을 제거하자」. 이유는 D1(안 쓴다 · 무게 감축).
 (2) 판정 기준은 D3 의 사용자 원문 「어떤게 가장 없던 상태 디폴트로 원복하는거야?」다. 흔적은 "이 플러그인을
 **이름으로 부르는** 줄"이 아니라 "이 플러그인 **때문에 생긴** 줄"이다. 이름이 박히지 않은 흔적(T3 정규식 갈래,
-T7 하한 값, T8 `context: fork` 주석)은 개념 별칭 grep 에 걸리지 않고 출생 추적(`git log -S` · CHANGELOG)으로만
-드러났다. 반대로 과거 시점의 개수·순번(「20 개 agent」, 「18 중 16」 등)은 이 플러그인을 셌더라도 이력으로 둔다(D6).
+T7 하한 값, T8 `context: fork` 주석, T9 이름 경계)은 개념 별칭 grep 에 걸리지 않고 출생 추적(`git log -S` ·
+이력 문서 역추적)으로만 드러났다. 반대로 과거 시점의 개수·순번(「20 개 agent」, 「18 중 16」 등)은 이 플러그인을
+셌더라도 이력으로 둔다(D6).
 (3) 작업 위치: 브랜치 `feature/remove-agent-transparency`, 워크트리
 `/Users/jeonghokim/Downloads/devbrew/.claude/worktrees/remove-agent-transparency`, base `84222ee1`(#157 머지).
 메인 체크아웃(`feature/framing-intent-drift`, PR #158)은 동시 세션이 편집 중이라 **건드리지 않는다**. #158 은 이
-설계가 고치는 파일과 겹치지 않고 T7 의 코퍼스 수도 바꾸지 않는다(실측).
+설계가 고치는 파일과 겹치지 않고 T7 의 코퍼스 수도 바꾸지 않는다(실측). 다만 #158 은 `framing-requests/SKILL.md`
+의 dispatch 를 둘에서 셋으로 늘리므로, 그쪽이 먼저 머지되면 **AC7 의 인쇄 기대값이 21/21 이 아니라 22/22 가
+된다** — 「Verification Plan」 1 이 base 이동 시 그 값을 다시 잰다.
 (4) 영향 측정은 끝났다 — 버리는 워크트리에서 base 에 삭제만 적용하고 스위트 252개를 전후로 비교했다.
 원자료는 job 임시 디렉토리 `/Users/jeonghokim/.claude/jobs/f7a2563a/tmp/`(`run_all.sh` · `analyze.py` ·
 `baseline/` · `after/` · `diff-summary.txt` · `sweep-after.txt`)에 있고 job 이 지워지면 사라진다. 러너는
@@ -35,6 +39,26 @@ T7 하한 값, T8 `context: fork` 주석)은 개념 별칭 grep 에 걸리지 �
 (5) 이 문서는 인터뷰 없이 쓰였다. design-doc 프로필의 층 1 정답 출처(브리프 §2)가 없으므로 「결정 기록」이
 그 자리를 대신한다.
 (6) plan 이 정할 것은 문서 끝 `### Deferred to plan` 에 모여 있다.
+
+## 목차
+
+- [Goal](#goal)
+- [Context / Why](#context--why)
+- [Goals](#goals)
+- [Non-goals](#non-goals)
+- [Constraints](#constraints)
+- [설계 (Architecture)](#설계-architecture)
+  - [1. 삭제](#1-삭제)
+  - [2. 흔적 — 판정 규칙과 도출 절차](#2-흔적--판정-규칙과-도출-절차)
+  - [3. 불변인 것](#3-불변인-것)
+- [Acceptance Criteria](#acceptance-criteria)
+- [Files to Modify](#files-to-modify)
+- [Verification Plan](#verification-plan)
+- [Rejected Alternatives](#rejected-alternatives)
+- [알려진 한계](#알려진-한계)
+- [Concrete Next Action](#concrete-next-action)
+- [결정 기록](#결정-기록)
+  - [Deferred to plan](#deferred-to-plan)
 
 ## Goal
 
@@ -68,7 +92,8 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 ## Goals
 
 - **G1.** 플러그인 디렉토리와 마켓플레이스 항목을 지운다.
-- **G2.** 이 플러그인 때문에 생긴 줄 여덟 자리(T1–T8)를 없던 상태로 되돌린다.
+- **G2.** 이 플러그인 때문에 생긴 줄을 §2 의 규칙 R1–R4 로 가려 없던 상태로 되돌린다. 목록은 도출 절차 S1–S3
+  이 확정한다(지금까지 T1–T9).
 - **G3.** 스위트에 새 실패가 0이다.
 - **G4.** 제거 뒤 살아 있는 표면(LIVE)에 이 플러그인의 개념 별칭이 0건이다. 단, 보존하는 이력 spec 을 가리키는
   경로 리터럴은 실재하는 파일의 인용이라 흔적이 아니다(D7, AC4).
@@ -90,9 +115,11 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
   revert 가 아니라 "이 플러그인 때문에 생긴 줄"의 삭제다.
 - **도출값만 줄어드는 락.** agent 수 20→19, dispatch 22→21, 코퍼스·단언 수 등은 하드코딩이 아니라 도출이라
   고칠 것이 없다.
-- **`plugins/quality-gates/tests/test_codex_runner_no_effort_pin.sh:69` 의 `≥4`.** 제거 뒤 플러그인 디렉토리가
-  5 → 4 가 되어 여유가 0이지만 그대로 둔다. 하한이 현재 수와 같다는 것은 하나라도 더 사라지면 즉시 알린다는
-  뜻이다. 이 값은 이 플러그인 때문에 생긴 것도 아니다.
+- **여유를 둔 붕괴 바닥**(R3 · D11). 모집단에 이 플러그인이 들어갔더라도 여유를 두고 박은 하한은 둔다 —
+  `test_variant_of_contract.sh:379` 의 `≥20`(핀 당시 24, 여유 4) 등. 훑은 목록과 판정은 §2 의 S3 표에 있다.
+  `plugins/quality-gates/tests/test_codex_runner_no_effort_pin.sh:69` 의 `≥4` 는 R1 밖이다 — 2026-08-04
+  (`ecb5bf26`), 이 플러그인이 생기기 전에 플러그인 4개로 박았다(확인함). 제거 뒤 여유가 0이 되지만 그대로 둔다.
+  하한이 현재 수와 같다는 것은 하나라도 더 사라지면 즉시 알린다는 뜻이다.
 - **루트 `README.md` 의 선재 stale 플러그인 표**(원래 quality-gates · project-init 만 있음).
 - **리포 밖 정리.** 고아 캐시 삭제와 메모리 갱신은 머지 후 사용자에게 제안만 한다.
 
@@ -115,7 +142,35 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 - `plugins/agent-transparency/` 전체(34 파일).
 - `.claude-plugin/marketplace.json` 의 `agent-transparency` 객체와, 앞 객체(`plugin-audit`) 뒤의 쉼표.
 
-### 2. 흔적 여덟 자리 — 없던 상태로
+### 2. 흔적 — 판정 규칙과 도출 절차
+
+**목록이 아니라 규칙이 정본이다(D13).** 라운드 1·2 의 리뷰가 손으로 적은 목록에서 빠진 흔적을 연달아 찾았다 —
+열거는 사각지대를 남긴다. 그래서 설계는 규칙과 절차를 고정하고, 목록의 확정은 plan 의 첫 Task 가 절차를 끝까지
+돌려서 한다. 아래 표는 **지금까지 도출된 것**이지 닫힌 목록이 아니다.
+
+**판정 규칙**
+
+- **R1 출생 원인**(C5). 이름이 박혔는지가 아니라 이 플러그인 **때문에 생겼는지**다. 근거는 출생 커밋
+  (`git log -S`)이나 이력 설계 문서의 전수 조사여야 한다.
+- **R2 개수는 이력**(D6). 과거 시점의 개수·순번은 이 플러그인을 셌더라도 둔다. 지우는 것은 없어진 실체를
+  이름으로 가리키는 줄뿐이다.
+- **R3 하한**(D11). 모집단에 이 플러그인 파일이 들어간 하한 중 **핀 당시의 수 − 1**(여유 1)로 박은 것만
+  흔적이다. 여유를 둔 붕괴 바닥은 둔다 — 그 값이 재는 것은 「도출이 통째로 무너졌는가」이지 모집단의 크기가 아니다.
+- **R4 매칭 폭**(D10). 락의 표기·경계가 이 플러그인의 줄 때문에 넓어졌고, 제거 뒤 그 넓힘의 실례가 0이면
+  흔적이다. 대가(미래의 표기 변형에 대한 fail-open)는 ∀ 도출(`ZERO_AGENTS`)이 일부만 받는다 — 「알려진 한계」.
+
+**도출 절차** — plan 의 첫 Task 가 셋을 모두 돌리고, 나온 항목을 R1–R4 로 분류해 표를 확정한다. 규칙이 가르지
+못하는 항목은 사용자 결정으로 올린다.
+
+- **S1 이름.** LIVE 전수에 개념 별칭 `git grep`(목록은 AC4).
+- **S2 역추적.** 이력 문서(`docs/superpowers/{specs,plans}` · `docs/archive` · 각 `CHANGELOG.md`)에서 이
+  플러그인의 식별자·경로를 **근거로 든** 자리를 찾고, 그 근거가 떠받치는 live 파일의 줄로 따라가 R1·R4 로
+  분류한다. T3(설계 `2026-08-22-…:84`) · T8(`quality-gates/CHANGELOG.md:235`) · T9(설계 `2026-08-22-…:350`)
+  셋이 이 경로로 나왔다 — 별칭 grep 으로는 셋 다 안 나온다.
+- **S3 숫자.** 모집단에 이 플러그인 파일이 들어가는 락의 핀 숫자를 전수로 모아 R3 으로 분류한다. 지금까지 훑은
+  것은 표 아래에 있다.
+
+**지금까지 도출된 것**
 
 | # | 자리 | 출생 | 지금 | 없던 상태 |
 |---|---|---|---|---|
@@ -127,6 +182,17 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 | T6 | `tools/adjudication/check_slots.py:46` `transcript-reader.inventory` bullet | 전수 스윕이 이 플러그인의 agent 슬롯을 분류 | 없어진 agent·스크립트를 이름으로 가리킴 | bullet 삭제. 같은 스윕의 「20 개 agent」(`:26`)는 과거 시점의 개수라 둔다(D6) |
 | T7 | `shared/tests/test_plugin_root_no_cwd_fallback.sh:472` 코퍼스 하한 `-ge 30` | `aff6a8ee` — 코퍼스 31(이 플러그인의 `briefing-current-state/SKILL.md` · `commands/standup.md` 포함)에 여유 1 | 29 → RED | `-ge 28` — 29 에 원저자와 같은 여유 1 |
 | T8 | `shared/tests/test_agent_input_slots.sh:86` · `shared/tests/fixtures/adjudication/run_slots.py:33–34` 주석의 「Workflow JS 나 (skill frontmatter 의) `context: fork` 에 있는 agent」 | 최종 리뷰 K4(`plugins/quality-gates/CHANGELOG.md:235–237`) — 「못 잼」 넷 중 `context: fork` 쪽이 이 플러그인의 `transcript-reader` 하나 | 리포에 실례 없는 갈래를 서술 | 「`context: fork`」 갈래를 걷고 「Workflow JS」만 남긴다 |
+| T9 | `shared/tests/test_dispatch_disposition.sh:87–92` 이름 경계 `PRE`/`POST` 의 줄머리·공백 허용과 그 주석 | 설계 `2026-08-22-subagent-adjudication-contract-design.md:350–352` — 「표기 ④는 따옴표가 없으므로 (`agent: agent-transparency:transcript-reader`) 따옴표를 경계로 쓸 수 없다」 | 그 허용의 실례가 0 — 남는 dispatch 21줄은 이름이 전부 따옴표 안이다(실측) | 경계를 따옴표(와 접두사 콜론)로 좁히고 주석에서 ④ 근거를 걷는다. 정확한 문자 집합은 plan 이 21줄 실측으로 확정한다 |
+
+**S3 이 지금까지 훑은 하한**(R3 판정):
+
+| 하한 | 핀 당시 | 판정 |
+|---|---|---|
+| `shared/tests/test_plugin_root_no_cwd_fallback.sh:472` `-ge 30` | 코퍼스 31 (`aff6a8ee`) — 여유 1 | **흔적 = T7** |
+| `shared/tests/test_variant_of_contract.sh:379` `-ge 20` | agent 파일 24 (`fdb3ac3d`, 2026-09-11) — 여유 4 | 둔다 (붕괴 바닥) |
+| `plugins/quality-gates/tests/test_codex_runner_no_effort_pin.sh:69` `-ge 4` | 플러그인 4, 이 플러그인 **이전** (`ecb5bf26`, 2026-08-04) | 둔다 (R1 밖. 제거 뒤 여유 0 은 가장 촘촘한 상태다) |
+| `test_plugin_root_no_cwd_fallback.sh` 의 `n_a2 -ge 22` · `n_a3` · `N_GUARD_FENCE_MIN=45` | — | 둔다 — 이 플러그인은 reference 펜스·가드 펜스가 없어 모집단에 기여 0(측정에서 값 불변) |
+| `check_wiring.EXEMPT_BASELINE=11` · `check_slots.EXEMPT_SLOTS_BASELINE=5` · `COMP_BASELINE=40` · no_new_duplication 붕괴 바닥 50 | — | 둔다 — 측정에서 값 불변(기여 0) |
 
 ### 3. 불변인 것
 
@@ -140,7 +206,7 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 - **AC1.** `git ls-files plugins/agent-transparency` 가 0줄이다.
 - **AC2.** `.claude-plugin/marketplace.json` 이 JSON 으로 파싱되고, `plugins[].name` 이 정확히
   `quality-gates, project-init, spec-distill, plugin-audit`(이 순서)다.
-- **AC3.** T1–T8 이 §2 표의 「없던 상태」 열과 일치한다.
+- **AC3.** §2 표의 모든 행(지금까지 T1–T9)이 그 표의 「없던 상태」 열과 일치한다.
   - T1: `docs/plugin-authoring.md` 에 `output style` · `output-styles` · `keep-coding-instructions` ·
     `force-for-plugin` 이 0건이고, `**Merge 전:**` 단락이 남아 있다.
   - T2: 24행 문단에 `transcript-reader` 가 없고 `smoke-probe` · `pr-understanding-builder` 는 있다.
@@ -150,6 +216,8 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
   - T6: `check_slots.py` 에 `transcript-reader` · `prepare_standup` 이 0건이고, 「20 개 agent」는 그대로 있다.
   - T7: 하한 리터럴이 `-ge 28` 이다.
   - T8: 두 파일에 `context: fork` 가 0건이고, 「Workflow JS」 서술은 남아 있다.
+  - T9: `PRE`/`POST` 리터럴에 줄머리(`^`)와 공백(`\s`) 갈래가 없고, 주석에 표기 ④ 근거가 0건이며, 그러고도
+    AC7 의 dispatch 수가 유지된다(경계를 좁혀 잃은 줄이 없다는 증거).
 - **AC4.** 개념 별칭 `git grep -n -I -i` 가 LIVE 에서 0건이다. LIVE 는 이력 분류(`**/CHANGELOG.md`,
   `docs/archive/**`, `docs/audits/**`, `docs/superpowers/{specs,plans,interview}/**`) 밖의 모든 추적 파일이다.
   별칭: `agent-transparency` · `agent_transparency` · `transcript-reader` · `briefing-current-state` ·
@@ -167,8 +235,12 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
   열다 죽고, 그때의 ✗ 는 하한을 재지 않은 「0개뿐」이다. 통과 관측은 둘이 함께다: 하한 단언의 ✗ 메시지가
   「27개뿐」이고, 같은 실행에서 「파서가 끝까지 돌았다 (rc 0)」가 ✓ 다. 복원(`git checkout HEAD --` 로 index 와
   작업 트리 둘 다) 뒤 같은 단언이 ✓ 이고 `git diff HEAD` 와 `git diff --cached` 가 비었음을 확인한다.
-- **AC7.** 제거 뒤 dispatch 락의 인쇄값이 `PRINT_2_dispatch 21` · `PRINT_3_anchors 21` 이고 `ZERO_AGENTS` 가
-  빈 값이다 — T3 이 이 플러그인 밖의 dispatch 를 하나도 잃지 않았다는 증거다.
+- **AC7.** 제거 뒤 dispatch 락의 인쇄값이 `PRINT_2_dispatch` = `PRINT_3_anchors` = (제거 전 값 − 1)이고
+  `ZERO_AGENTS` 가 빈 값이다 — base `84222ee1` 에서는 21/21 이다. T3 · T9 가 이 플러그인 밖의 dispatch 를 하나도
+  잃지 않았다는 증거다.
+- **AC8.** 도출 절차 S1–S3 을 끝까지 돌린 결과가 §2 표와 일치한다. 절차가 새로 낸 항목은 R1–R4 로 분류돼 표에
+  들어가고, 규칙이 가르지 못한 항목은 0이거나 사용자 결정으로 올라가 있다. 「돌렸다」의 증거는 S1 의 grep 출력,
+  S2 가 훑은 이력 문서 히트 목록과 각 히트의 판정, S3 의 하한 표다.
 
 ## Files to Modify
 
@@ -177,7 +249,7 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 | 삭제 | `plugins/agent-transparency/**` (34) |
 | 편집 | `.claude-plugin/marketplace.json` |
 | 편집 | `docs/plugin-authoring.md` (T1 · T2) |
-| 편집 | `shared/tests/test_dispatch_disposition.sh` (T3 · T4) |
+| 편집 | `shared/tests/test_dispatch_disposition.sh` (T3 · T4 · T9) |
 | 편집 | `shared/tests/test_plugin_root_no_cwd_fallback.sh` (T7) |
 | 편집 | `tools/adjudication/check_names.py` (T5) |
 | 편집 | `tools/adjudication/check_slots.py` (T6) |
@@ -187,8 +259,10 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 ## Verification Plan
 
 1. **base 확인과 baseline.** 착수 시 `git rev-parse origin/main` 이 `84222ee1` 이면 측정 때의 baseline 을 쓴다.
-   움직였으면 `git merge-tree` 로 충돌을 보고, 새 base 에서 baseline 과 T7 코퍼스 수를 다시 잰다(29 가 아니면
-   하한 = 새 수 − 1). base `84222ee1` 의 선재 RED 7 파일:
+   움직였으면 `git merge-tree` 로 충돌을 보고, 새 base 에서 **셋을 다시 잰다** — ① baseline(선재 RED 집합과
+   파일별 실패 줄 수) ② T7 코퍼스 수(29 가 아니면 하한 = 새 수 − 1) ③ **AC7 의 인쇄 기대값**(제거 전
+   `PRINT_2_dispatch`·`PRINT_3_anchors` 를 재고 각각 − 1). ③ 은 #158 이 `framing-requests/SKILL.md` 의 dispatch 를
+   둘에서 셋으로 늘리기 때문에 실제로 움직인다. base `84222ee1` 의 선재 RED 7 파일:
    `plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh` ·
    `plugins/quality-gates/tests/test_codex_backward_compat.sh` · `plugins/quality-gates/tests/test_runner_adapters.sh` ·
    `plugins/quality-gates/tests/test_findings_parser.sh` · `plugins/spec-distill/tests/test_no_write_matcher_hooks_repo.sh` ·
@@ -202,7 +276,7 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
    - 환경 — `PATH` 맨 앞에 `claude` · `codex` stub(인자를 로그에 적고 `exit 97`), `PYTHONDONTWRITEBYTECODE=1`,
      UTF-8 locale, 스위트마다 별도 `TMPDIR`, stdin `/dev/null`.
    - 제외 — `plugins/quality-gates/tests/spike/test_codex_json_extraction.sh`(추적 픽스처를 바꾸는 수동 spike).
-3. **정적·도출 확인** — AC1 · AC2 · AC3 · AC4 · AC7.
+3. **정적·도출 확인** — AC1 · AC2 · AC3 · AC4 · AC7 · AC8(도출 절차 S1–S3 의 실행과 증거).
 4. **양성 대조** — AC6.
 5. **구현 리뷰** — `/qg review` 1회(D5, Law 2).
 6. **이 문서** — `spec-distill:reviewing-spec` 으로 리뷰한다.
@@ -234,6 +308,9 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
   추가 호출하면, 그 자리는 dispatch 로 세어지지 않아 처분 앵커 검사를 조용히 빠져나간다. 이 플러그인이 없던
   세계와 같은 상태다. 그 표기를 다시 들이는 PR 이 `NOTATION` 에 갈래를 더해야 한다 — 락 머리말 6–9행의
   「열거는 fail-open」 경고가 그 위험을 이미 말한다.
+- **T9 이후 따옴표 없는 dispatch 표기.** 경계를 따옴표로 좁히면, 이름을 따옴표 없이 쓴 미래의 dispatch 줄은
+  이름 매칭에 걸리지 않는다. T3 과 같은 부류의 대가이고 완화도 같다 — 그렇게만 불리는 agent 는 dispatch 0건이
+  되어 `ZERO_AGENTS` 로 드러나고, 다른 표기로도 불리는 agent 의 추가 호출만 조용히 빠진다.
 - **output style 지식이 저술 가이드에서 사라진다.** 필요해지면 이력 spec 과 `8303cc24` 에서 찾는다.
 - **측정 원자료는 job 임시 디렉토리에 있다.** job 이 지워지면 사라지며, 러너는 「Verification Plan」 2 로
   재구성한다.
@@ -260,6 +337,10 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 | D7 | AC4 와 이력 spec 경로 인용의 충돌 (라운드 1) | 「경로 리터럴만 예외」 — 파일 통째가 아니라 그 경로 문자열 안의 일치만 뺀다. G4 문구도 함께 |
 | D8 | `context: fork` 주석 두 자리 (라운드 1) | 「T8 로 추가」 — 「Workflow JS」만 남기고 AC4 별칭에 `context: fork` 추가 |
 | D9 | AC6 양성 대조가 파서 사망으로도 통과하는 구멍 (라운드 1) | 「고친다」 — index 에서 지우고, 「27개뿐」 ✗ 와 파서 rc 0 ✓ 를 함께 관측 |
+| D10 | dispatch 락 이름 경계의 줄머리·공백 허용 (라운드 2) | 「(a) T9: 따옴표로 좁힘」 — 대가는 T3 과 같은 부류이고 「알려진 한계」에 적는다 |
+| D11 | 코드에 박힌 하한을 가르는 규칙 (라운드 2) | 「(a) 규칙 + 훑은 목록」 — 핀 당시 수 − 1 만 흔적(R3), 훑은 목록은 §2 의 S3 표 |
+| D12 | 라운드 2 자동 decide 7건(D6–D9 를 반영한 내 편집: Handoff · Context · Goals · Non-goals · Constraints · §2 · Files) | 전부 채택 |
+| D13 | 흔적 목록의 층위 (라운드 2) | 「도출 절차로 전환」 — 설계는 규칙 R1–R4 와 절차 S1–S3 을 고정하고, 목록 확정은 plan 의 첫 Task 가 한다. 표는 「지금까지 도출된 것」이다 |
 
 오케스트레이터가 정하고 사용자에게 알린 것(되돌리려면 괄호 안의 한마디):
 
@@ -278,6 +359,9 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 - PR 본문에 적을 사용자 측 영향 — 마켓플레이스를 갱신한 설치자에게서 플러그인이 사라지고, `force-for-plugin`
   output style 도 함께 사라진다.
 - AC4 예외 판정(경로 리터럴을 지운 뒤 별칭 재검사)의 구현 형태.
+- T9 의 정확한 경계 문자 집합 — 남는 dispatch 21줄(base 이동 시 그 수) 실측으로 정하고, 좁힌 뒤에도 축 A③
+  (`adversarial` ⊂ `artifact-adversarial`)이 사는지 변이로 확인한다.
+- 도출 절차 S1–S3 의 실행 형태와 증거 보관 자리(AC8).
 
 설계 리뷰 라운드 1 이 미룬 것:
 
