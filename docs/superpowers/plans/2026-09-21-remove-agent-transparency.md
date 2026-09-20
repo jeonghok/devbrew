@@ -299,8 +299,11 @@ for t in $LIST; do
       log="$(TMPDIR="$TD" node --test --test-reporter=tap "$t" 2>&1 < /dev/null)"
       rc=$?; n="$(printf '%s\n' "$log" | grep -cE '^not ok [0-9]+ -')" ;;
     *)
+      # `✗` 는 **줄머리에 앵커한다.** 리포의 assert 라이브러리 계약은 실패 줄의 접두가 `  ✗ ` 라는
+      # 것이고(shared/tests/test_assert_behavior.sh 가 그 계약을 단언한다), 앵커 없이 세면 그 계약을
+      # «설명하는 통과 줄»까지 실패로 센다 — 실측: test_assert_behavior.sh 는 32/32 GREEN 인데 1로 세진다.
       log="$(TMPDIR="$TD" bash "$t" 2>&1 < /dev/null)"
-      rc=$?; n="$(printf '%s\n' "$log" | grep -cE '✗|^[[:space:]]*FAIL\b|^[[:space:]]*not ok\b')" ;;
+      rc=$?; n="$(printf '%s\n' "$log" | grep -cE '^[[:space:]]*✗ |^[[:space:]]*FAIL\b|^[[:space:]]*not ok\b')" ;;
   esac
   printf '%s\t%s\t%s\n' "$t" "$rc" "$n" >> "$OUT"
   printf '%s\n' "$log" > "${OUT}.d/$(printf '%s' "$t" | tr '/' '_').log"
@@ -323,9 +326,14 @@ awk -F'\t' '$2!=0 || $3!=0 {printf "%-72s rc=%s fail=%s\n",$1,$2,$3}' "$WORK/bas
 ```
 
 기대: 대상 **261 개**, stub 호출 **0 회**. 선재 RED 목록이 나오면 그대로 받아들인다 — 이것이 AC5 의 비교
-기준이다. (참고: 설계가 base `84222ee1` 에서 잰 선재 RED 은 7 파일이었다. 지금 base 는 다르므로 이 수를
-기대값으로 쓰지 않는다. **실패 「줄 수」까지 기록하는 이유**는 이미 RED 인 파일 안의 새 실패가 rc 만으로는
-보이지 않기 때문이다.)
+기준이다. **실패 「줄 수」까지 기록하는 이유**는 이미 RED 인 파일 안의 새 실패가 rc 만으로는 보이지 않기
+때문이다.
+
+> **설계의 「선재 RED 7 파일」은 여섯이다.** 설계 VP1 이 일곱 번째로 적은
+> `shared/tests/test_assert_behavior.sh(rc 0, 의도된 ✗)` 는 애초에 실패가 아니다 — 32/32 GREEN 이고, 그
+> `✗` 는 실패 줄 접두 계약을 **설명하는 통과 줄** 안에 있다. 앵커 없이 세던 옛 패턴이 그것을 실패로
+> 셌을 뿐이다. 위 러너의 앵커된 패턴에서는 `rc=0 fail=0` 으로 나온다. 이 파일이 목록에 보이면 러너가
+> 옛 패턴을 쓰고 있는 것이다.
 
 - [ ] **Step 5: 커밋 없음 — 산출물 확인만**
 
