@@ -87,7 +87,12 @@ fi
 # ── 버전 판정 — 이름이나 실행 권한이 아니라 «물어본 답» 이 근거다 ──────────────
 PROBE_MAJOR=0; PROBE_MINOR=0
 probe() {   # $1 = 인터프리터. rc 0 이면 PROBE_MAJOR/PROBE_MINOR 가 채워진다
-  _out="$("$1" -c 'import sys;print("%d %d"%(sys.version_info[0],sys.version_info[1]))' 2>/dev/null)" || return 1
+  # `</dev/null` 은 장식이 아니다 (C6). 해석기 **자신** 은 stdin 을 읽지 않지만 명령 치환의
+  # 자식은 훅의 stdin 을 그대로 물려받는다 — 후보가 `-c` 동안 한 줄이라도 읽으면 payload 가
+  # 그만큼 사라지고, 실패 경로에서는 PATH 의 `python3.*` 후보가 차례로 probe 되므로 손실이
+  # 누적된다. 진짜 CPython 은 `-c` 에서 stdin 을 읽지 않지만 C6 은 **절대 제약** 이라,
+  # 「오늘의 인터프리터는 안 그런다」에 기대는 것은 C4 가 금지한 것과 같은 모양의 fail-open 이다.
+  _out="$("$1" -c 'import sys;print("%d %d"%(sys.version_info[0],sys.version_info[1]))' </dev/null 2>/dev/null)" || return 1
   # **정확히 «숫자열 공백 숫자열»** 이어야 한다. 느슨하게 두면 `3x 1y` 같은 답이 통과해
   # 뒤의 `[ … -gt … ]` 가 `integer expression expected` 를 **stderr 로** 뱉는다 — 판정
   # 자체는 fail-open 으로 안전하지만 훅의 stderr 는 사용자가 보는 자리다.
