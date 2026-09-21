@@ -1,0 +1,726 @@
+---
+type: design
+date: 2026-09-21
+plugin: quality-gates
+version_target: major   # 정확한 번호는 머지 직전에 — 먼저 머지되는 쪽이 이긴다
+interview_brief: docs/superpowers/interview/2026-09-21-qg-target-derived-judgment-interview.md
+interview_audit: docs/superpowers/interview/2026-09-21-qg-target-derived-judgment-interview.audit.md
+---
+
+# qg — 판정 구조를 대상에서 도출
+
+> `clean` 은 「버그가 없다」가 아니라 「정확히 이만큼을 검증했다」여야 한다.
+
+`quality-gates` 플러그인을 네 축(게이트 구조 · 리뷰어 구성 · 리뷰 스코프 · 차등 정밀도)에서
+동시에 재편해, 판정 구조를 **대상에서 도출**한다.
+
+## 목차
+
+- [1. Context · Why](#1-context--why)
+- [2. Goals](#2-goals)
+- [3. Non-goals](#3-non-goals)
+- [4. 결정 D1–D6](#4-결정-d1d6)
+- [5. 제약의 반영](#5-제약의-반영)
+- [6. 설계](#6-설계)
+  - [6.1 파이프라인 골격](#61-파이프라인-골격)
+  - [6.2 스코프 — 커밋 집합 모델](#62-스코프--커밋-집합-모델)
+  - [6.3 각도 바닥 · 리뷰어 도출 · 재비판](#63-각도-바닥--리뷰어-도출--재비판)
+  - [6.4 차등 테스트 · 해상도 공시 · 판정 어휘](#64-차등-테스트--해상도-공시--판정-어휘)
+  - [6.5 공개 표면 · 이주 · 헌장](#65-공개-표면--이주--헌장)
+- [7. 실측 근거](#7-실측-근거)
+- [8. 재결정 기록 P23](#8-재결정-기록-p23)
+- [9. brief 정정 셋](#9-brief-정정-셋)
+- [10. Open Questions 처분표](#10-open-questions-처분표)
+- [11. Acceptance Criteria](#11-acceptance-criteria)
+- [12. Files to Modify](#12-files-to-modify)
+- [13. Verification Plan](#13-verification-plan)
+- [14. Rejected Alternatives](#14-rejected-alternatives)
+- [15. 알려진 한계](#15-알려진-한계)
+- [16. 구현 분할](#16-구현-분할)
+- [17. Metadata](#17-metadata)
+
+## 1. Context · Why
+
+qg 의 구조가 **「부팅되는 웹앱 · 고정 리뷰 관점 · 한 브랜치 PR」** 을 전제로 굳어 있는데 실제
+대상은 그 전제 밖에 있다. 그래서 셋이 동시에 일어난다 — 가장 비싼 게이트가 아무것도 검증하지
+못하고, 무관한 리뷰어가 매번 불리고, 한 작업이 판정 단위로 안 잡힌다.
+
+진짜 문제는 성능이 아니라 **대상 모델의 어긋남**이다. 따라서 해법도 게이트를 빠르게 만드는 것이
+아니라 **판정 구조를 대상에서 도출**하는 것이다.
+
+## 2. Goals
+
+- **G1** — 무엇을 검증할지 · 누가 검증할지 · 무엇을 대상으로 할지 · 무엇을 회귀로 셀지를 전부
+  대상에서 도출해, `clean` 이 그 실행에서 실제로 검증된 것과 일치하게 만든다.
+- **G2** — 그 일치를 네 축에서 동시에 만든다. 어느 한 축의 성과가 다른 축의 결손을 갚지 않는다.
+- **G3** — 「검증하지 못했다」를 `clean` 과도 실패와도 다른 **일급 판정값**으로 만든다.
+
+## 3. Non-goals
+
+- 리뷰어를 더 많이 부르는 것. 외부 실측이 역할 자리를 늘리는 것 자체가 신뢰도를 사주지 않음을
+  보인다(brief §4 «cr-benchmark» · «submodularity»).
+- 「도출」을 이유로 결정론적 보장을 0으로 만드는 것. 명단은 버리되 각도 의무와 그 집행 장치는
+  남는다.
+- 차등 테스트 실행 자체를 없애거나 선택적으로 만드는 것.
+- spec↔브랜치 묶음을 문서 사슬 추론으로 세우는 것.
+- **차등 테스트 기계 자체를 다른 것으로 바꾸는 것**(brief OQ5). 지금 기계는 여러 라운드의
+  하드닝을 거쳤고, 교체는 신뢰도 하한을 올리지 않으면서 단순함을 크게 깎는다 — D1 상 범위 밖.
+- **부팅되는 앱의 런타임 행위 검증**. 대체하지 않고 **주장을 거둔다**(§6.5).
+
+## 4. 결정 D1–D6
+
+인터뷰 brief 의 열린 질문 중 사용자 소유였던 여섯. 이 결정들이 나머지를 계산으로 바꿨다.
+
+| id | 질문 | 결정 |
+|---|---|---|
+| **D1** | 성공 척도 넷이 부딪히면 무엇이 이기는가 (OQ4) | **신뢰도는 저울 위가 아니라 후보 자격**이다. `clean` 이 실제 검증된 것과 어긋나게 만드는 안은 애초에 후보가 아니다. 그 필터를 통과한 안들 사이에서 비용·시간 / 단순함 / SDD 맞물림 셋을 대등하게 저울질하고, 셋이 부딪히면 **단순함**이 이긴다. |
+| **D2** | C14(차등 정밀도)를 어떻게 하는가 (OQ18) | **「해상도 공시」로 재결정.** 파서 층을 만들지 않고, `(F,F)` 구멍을 닫는 대신 **드러낸다**. |
+| **D3** | 선언을 무엇이 담는가 (C12 하위) | **커밋 트레일러 `Spec: <리포-상대 경로>`.** |
+| **D4** | 묶음이 미완일 때 무엇을 하는가 (OQ10) | **지금 실재하는 것을 묶고**, 판정 산출물에 본 커밋 집합과 각 SHA 를 싣는다. |
+| **D5** | codex 를 어느 층에 두는가 (OQ2) | **C13 의 각도 목록에 세 번째 각도 「다른 전제」로 편입.** 3단계 Tier 개념이 사라진다. |
+| **D6** | 재편된 qg 의 큰 모양 (C19 하위) | **한 파이프라인.** 게이트 두 이름을 없앤다. |
+
+**D1 의 적용 방식** — 갈림마다 두 줄을 적는다: ⑴ 이 안이 신뢰도 하한을 깨는가(깨면 탈락) ⑵ 남은
+셋 중 무엇이 이겼는가. 설계문서의 모든 선택에 이 두 줄이 대응한다.
+
+## 5. 제약의 반영
+
+인터뷰가 확정한 19항목(brief §2)과 이 설계의 대응. **어느 것도 침묵으로 처리하지 않는다.**
+
+| 제약 | 반영 |
+|---|---|
+| C1 척도 넷 대등 | D1 이 「대등」을 깨지 않는 방식으로 충돌 규칙을 세움 |
+| C2 verifier 와 딸린 것만 제거 | §6.1 · §6.4.1 — 제거 목록 일곱 전부에 처분 부여 |
+| C3 실행 주체는 오케스트레이터 | §6.1 단계 ② — verifier 가 없으므로 self-report 경로 자체가 소멸 |
+| C4 차등 테스트는 항상 | §6.1 표 · §6.4.3 — kill switch 경로는 `not-certified` |
+| C5 리뷰어는 스코프 도출 | §6.3.1 — 각도는 고정, **수행자**가 도출됨 |
+| C6 Tier A 바닥 제거 | §6.3.1 — 명단 2인 전용 디스패치 형태 소멸 |
+| C7 adversarial → 출처-제거 재비판 | §6.3.3 |
+| C8 브랜치 전부가 한 리뷰 대상 | §6.2 — 브랜치가 아니라 **커밋 집합**으로 일반화 |
+| C9 경계는 spec/design 문서 | §6.2 — 트레일러 값이 그 문서 경로 |
+| C10 기준선은 작업 시작점 | §6.2 경계 규칙 — merge-base 를 쓰지 않음 |
+| C11 goal = 판정 구조를 대상에서 도출 | G1 |
+| C12 묶음은 선언이 담는다 | D3 |
+| C13 바닥의 축을 명단 → 각도 | §6.3.1 |
+| C14 정밀도는 자리별 원장 | **D2 로 재결정** — §8 |
+| C15 공개 계약 + 헌장 동시 이동 | §6.5.3 |
+| C18 재비판 계약에 diff 슬롯 + 도입-게이트 | §6.3.4 |
+| C19 게이트 범위 공개 인자 제거 | §6.5.1 — **셋이 아니라 12 자리**(OQ15 가 맞았다) |
+| C20 커밋 봉인·두 축 트리 배관 존치 | §6.4.1 — 봉인자는 워크트리 없이 산다 |
+| C21 HEAD 축은 합친 한 트리 | §6.2 — `merge-tree --write-tree` |
+
+## 6. 설계
+
+### 6.1 파이프라인 골격
+
+`/qg` 는 게이트가 없는 **한 파이프라인**이고 판정도 하나다.
+
+| # | 단계 | 소유 | 빠질 수 있나 |
+|---|---|---|---|
+| ① | **스코프 해소** — 선언 → 커밋 집합 → 경계·끝점 → 두 축 트리 | 결정론 스크립트 | 아니오 |
+| ② | **차등 테스트** — 기준선 축·HEAD 축 양쪽에서 오케스트레이터가 직접 | 결정론 | trivia escape · kill switch 만 |
+| ③ | **각도 도출 + 리뷰어 디스패치** | 수행자는 모델, 각도 의무는 결정론 | 아니오 |
+| ④ | **출처-제거 재비판** | 공유 문서-리뷰 엔진 | 아니오 |
+| ⑤ | **합성 · 판정 · 공시** | 결정론 | 아니오 |
+
+**②가 ③보다 앞인 것이 load-bearing 이다.** 테스트 결과가 ③의 각도 도출 입력이 되고, 그만큼
+「도출의 입력을 피검자가 쓴다」(OQ14)가 완화된다 — diff 는 피검자가 쓰지만 **테스트 결과는 실행이
+낸다.**
+
+**「게이트」라는 이름을 지우는 이유** — C19 가 게이트 범위를 고르는 인자를 없애면 고를 것이 없다.
+헌장이 「막지 않는 것을 막는다고 믿게 만드는 선언은 없는 것보다 나쁘다」고 적고 있고, 고를 수
+없는 두 게이트가 정확히 그것이다.
+
+*D1: 하한 무관(판정 내용이 안 바뀜) → 단순함이 이김.*
+
+### 6.2 스코프 — 커밋 집합 모델
+
+#### 6.2.1 선언
+
+커밋 트레일러 **`Spec: <리포-상대 경로>`**. 작성자가 쓰고, qg 는 그것만 읽으며 문서에서 추론하지
+않는다(C12).
+
+이 리포는 이미 커밋 트레일러를 쓴다 — 최근 200 커밋 중 `Claude-Session` 172개 ·
+`Co-Authored-By` 189개(실측 §7-B). 새 배관이 아니다.
+
+#### 6.2.2 토픽은 브랜치가 아니라 커밋 집합이다
+
+```
+T = git log --all --grep='^Spec: <경로>$' --format='%H'
+```
+
+**브랜치 모델을 쓰지 않는 이유는 실측 둘이다**(§7-C · §7-D):
+
+1. `git branch --contains` 는 머지된 커밋에 대해 `main` 과 그 후손 브랜치 전부를 돌려준다 —
+   실측에서 커밋 35개가 매번 브랜치 5개를 내놨다. 토픽의 끝점을 이걸로 못 찾는다.
+2. 이미 머지된 앞 브랜치는 `base..branch` 범위 스캔에서 **통째로 안 보인다.** seed 가 이름 붙인
+   결함(「스택에서 앞 브랜치가 이미 머지됐으면 그 변경은 지금 안 보인다」)이 선언 기반 스코프에서
+   그대로 재발하는 자리다.
+
+커밋 집합 모델은 둘 다 피한다. 비용도 문제가 아니다 — 2409 커밋 리포에서 값 하나로 좁히는 데
+40ms(실측 §7-A).
+
+#### 6.2.3 기준선 = 작업 시작점 (C10 · OQ16)
+
+```
+B = parents(T) \ T          # 경계 — T 의 부모 중 T 가 아닌 것
+기준선 = |B| == 1 ? B : merge-base(B)
+```
+
+**이 규칙은 선언과 별개의 값이 아니라 히스토리에서 도출된다.** 그래서 「피검자가 무엇이 선재
+결함인가까지 정한다」(OQ16)가 성립하지 않는다.
+
+*실측 검증(§7-E)* — devbrew 자신의 한 토픽(|T|=35)에 이 규칙을 걸었더니 경계 2개가 나왔고 그
+merge-base 가 `add4c9cd` 였다. 그 커밋은 그 작업이 실제로 시작된 직전 지점(PR #155 머지)이다.
+**규칙이 사람이 아는 답과 일치했다.**
+
+경계가 여럿인 정상 원인은 **토픽 중간의 main 병합**이다(그 두 번째 부모가 경계에 든다). 그때
+merge-base 를 쓰면 그 병합이 가져온 남의 변경까지 diff 에 든다 — §15 의 알려진 한계.
+
+#### 6.2.4 HEAD 축 = 합친 한 트리 (C21)
+
+- **끝점** = `T` 중 다른 `T` 원소의 조상이 아닌 것들. 그중 **현재 브랜치의 끝점은 봉인 커밋
+  `B`**(§6.4.1)로 치환한다 — 커밋 안 된 워킹트리 변경이 리뷰에 들어가야 하기 때문이다.
+- **합치기** = `git merge-tree --write-tree` 를 끝점들에 **순차** 적용. 워크트리가 필요 없다.
+- **순서** = 선언 커밋의 topo-order. 결정론으로 고정한다.
+- **충돌** = `rc 1`(실측 §7-F). 그 실행은 `not-certified (merge-conflict)` 이고 충돌 파일 목록을
+  싣는다.
+- 순차 합치기는 `commit-tree` 중간 커밋을 만들고 그것은 unreachable 로 남는다(실측 §7-G) →
+  기존 `qg-gc.py` 경로에 편입한다.
+
+**OQ17 의 성숙형(한 구성원 실패 시 그것 없이 재테스트)은 취하지 않는다.** 충돌이 「판정 불가」로
+렌더되는 한 신뢰도 하한이 지켜지고, 그다음은 단순함이 이긴다. 순서만 결정론으로 고정한다.
+
+*D1: 하한 지켜짐(충돌 → not-certified) → 단순함이 이김.*
+
+#### 6.2.5 세 스코프 모드의 처분 (OQ1)
+
+새 스코프가 **기본**이고 `paths` · `branch` · `session` 은 **override 로 존치**한다. seed 원문이
+「기본으로」라 했고, 선언 없는 브랜치에는 fallback 이 필요하다. 선언이 없으면
+어느 `not-certified` 사유로도 막히지 않고 **기존 세 모드로 내려간다** — 선언은 새 능력이지
+새 의무가 아니다.
+
+#### 6.2.6 산출물이 싣는 것 (D4 · OQ6)
+
+판정 산출물은 다음을 함께 싣는다: **본 커밋 SHA 전부 · 끝점 · 경계 · 합친 트리 OID.**
+
+`clean` 은 그 튜플에 대한 clean 이다. 나중에 트레일러를 고쳐도 이미 난 `clean` 이 다른 대상의
+판정으로 재사용되지 않는다 — OQ6 의 「재선언」 절반이 이 한 장치로 닫힌다. 「충돌」 절반은 spec
+경로가 리포 안에서 유일하므로 원천적으로 없다.
+
+#### 6.2.7 늦게 붙인 선언의 창 (OQ14 잔여)
+
+경계보다 앞선 커밋이 그 브랜치에 있으면(= 선언을 늦게 붙였으면) **그 수를 공시한다.**
+`resolve-baseline.sh` 의 `ahead:` 키와 같은 모양이고, 같은 이유로 막지는 않는다 — 신뢰 채널이
+없다. 막으면 「작업 도중에 spec 으로 묶기로 마음먹는」 흔한 경로가 rebase 강제가 되고, 이미 머지된
+앞 브랜치는 rebase 가 불가능해 영원히 묶을 수 없게 된다.
+
+### 6.3 각도 바닥 · 리뷰어 도출 · 재비판
+
+#### 6.3.1 각도 셋 (C13 + D5)
+
+| 각도 | 묻는 것 | 다른 리뷰어에 접어 넣기 | 부재 시 |
+|---|---|---|---|
+| **보안** | 이 변경이 악용 가능 경로를 여는가 | 가능 | 공시 + `clean` 아님 |
+| **판정** | 나온 finding 이 진짜인가 · 놓친 게 있는가 | **다른** 리뷰어에게만 가능 | 공시 + `clean` 아님 |
+| **다른 전제** | 전제를 공유하지 않는 모델이 같은 것을 보는가 | 불가(같은 모델이 다른 전제를 연기할 수 없다) | 공시, **막지 않음** |
+
+셋째 행의 비대칭이 헌장 그대로다 — 「모델 다양성 손실은 공시하고 막지 않는다」. 앞 둘은
+**소실·부재**라 막는다.
+
+**판정 각도의 「다른 리뷰어에게만」이 C13 과 Law 2 를 동시에 만족시키는 방식이다.** C13 은 작은
+스코프에서 각도를 다른 리뷰어 프롬프트에 접어 넣는 것을 허용한다. Law 2 는 finding 을 «낸» 패스가
+그 finding 을 판정하는 것을 금한다. 둘을 겹치면 답이 하나로 떨어진다 — **접어 넣되 자기 자신에게는
+안 된다.** 즉 판정 각도는 전용 재비판 패스로 채우거나, finding 을 내지 않은 다른 리뷰어에게 접어
+넣거나, `absent` 로 공시된다. 「자기 finding 을 자기가 판정」은 `folded_into` 값으로 쓸 수 없고,
+합성기가 그 조합을 거부한다(AC10a).
+
+**각도 ≠ 에이전트.** 각도는 「채워졌는가」의 술어이고 수행자는 스코프가 정한다. 그래서 C6(명단
+제거)과 C13(각도 의무)이 충돌하지 않는다 — C6 이 닫은 것은 「명단 2인을 매 iteration 전용
+에이전트로 무조건 디스패치」라는 **형태**이고, C13 이 세운 것은 그 형태가 지키고 있던 **coverage**
+다.
+
+**D5 의 효과** — codex 가 별도 Tier B 가 아니라 세 번째 각도가 되면서 **3단계 Tier 개념이 통째로
+사라진다.** 남는 것은 「각도 의무 + 도출된 수행자」 한 기계뿐이다.
+
+*D1: 하한 지켜짐(부재가 clean 을 막음) → 단순함이 크게 이김(Tier 소멸).*
+
+#### 6.3.2 교체 락의 앵커 (OQ12)
+
+명단-리터럴 락(`plugins/quality-gates/tests/test_review_floor_lock.sh`)을 지우고 **각도 coverage
+락으로 교체한다.** 교체 없는 삭제는 별개 결정이 아니라 C13 위반이다.
+
+앵커는 **피검자가 쥘 수 없는 것**이어야 한다:
+
+- ✗ SKILL.md 산문 — 피검자가 쓴다
+- ✗ 각도 이름 리터럴 — 명단 락의 반복
+- ✓ **합성기 출력 스키마의 ∀ 관계** — `synthesize_findings.py` 가 각 각도의 상태를
+  `filled` / `folded_into:<수행자>` / `absent` 의 **총 함수**로 내고, 각도 하나라도 상태가 없으면
+  스키마 검증 RED
+
+오늘 `diff-test-results.py` 의 16칸 총 함수와 같은 모양이다 — **열거가 아니라 총 함수.**
+
+**음의 짝** — 부재 락만 두면 통째로 삭제해도 통과한다. 그래서 양의 락을 함께 둔다:
+**각도가 `absent` 인데 판정이 `clean` 으로 렌더되면 RED.**
+
+#### 6.3.3 재비판 — 빈 입력 처분 (OQ13)
+
+`quality-gates:adversarial` 자리를 공유 문서-리뷰 엔진의 **출처-제거 재비판**으로 바꾼다(C7).
+
+- 탐지가 0건이어도 **재비판을 디스패치한다.** 슬롯이 비었다는 사실을 프롬프트에 명시한다.
+- 탐지 0 · 재비판 0 이면 `clean` 이되, 판정 표면에 **「탐지 0 · 재비판 0」을 싣는다** — 침묵과 0
+  은 다른 사실이다.
+
+#### 6.3.4 diff 슬롯과 도입-게이트 (C18 · OQ9)
+
+**사본 비용은 파일당 한 줄이다.** `shared/tests/test_copy_of_contract.sh` 가 `plugins/** shared/**`
+를 guards 로 잡고 `# copy-of:` 마커를 가진 파일은 「그 줄만 빼고 바이트가 같아야」 한다. ∃-스윕이
+아니라 **∀ 도미넌스** 체크다(실측 §7-H).
+
+남는 것은 **슬롯 락의 동반 이동**이다. `shared/tests/test_docreview_agents.sh` 가 재비판자 입력
+슬롯을 정확히 셋(`document` · `findings` · `profile`)으로 락하고 있고, **그 락은 spec-distill 의
+브리프 경로도 지배한다.**
+
+→ diff 를 **선택 슬롯**으로 더한다(`kind: repo_context`, 부재 허용). 브리프 경로는 싣지 않고 코드
+경로만 싣는다. 락 기대값이 한 번 움직이고, **`diff` 만 optional** 임을 락이 명시한다.
+
+**「이 변경이 도입했는가」 게이트** — 재비판자의 판정 축으로 더한다. diff 가 있으면 「선재 결함」을
+기각 사유로 쓸 수 있고, 없으면 그 축을 쓰지 않는다.
+
+**프레이밍 맹목성과 충돌하지 않는다.** 재비판자가 맹목이어야 하는 것은 「왜 이 리뷰가 열렸나 ·
+앞 리뷰어가 무엇이라 했나」다. diff 는 출처가 아니라 **대상**이고 문서 자신과 같은 층의 1차
+자료다. 슬롯 `kind` 어휘가 이미 그 선을 긋고 있다 — `artifact` · `repo_context` 는 허용,
+`prior_verdict` · `orchestrator_framing` 은 **락으로 금지**. diff 는 `repo_context` 다.
+
+#### 6.3.5 도출 입력의 신뢰 (OQ14)
+
+제거는 불가하다(신뢰 채널이 없다). 완화 셋:
+
+1. ②가 ③보다 앞 — 테스트 결과는 실행이 낸다
+2. **각도 셋은 도출에 걸리지 않는다** — 스코프가 정하는 것은 수행자이지 각도의 유무가 아니다
+3. 「라우팅과 무관하게 서는 층」 = §6.3.2 의 각도 coverage 락
+
+### 6.4 차등 테스트 · 해상도 공시 · 판정 어휘
+
+#### 6.4.1 봉인자를 샌드박스에서 분리 (C2 · C20 · OQ19)
+
+brief 는 C2(「샌드박스 생성·폐기」 제거)와 C20(봉인자 존치)이 리포에서 같은 한 서브커맨드라
+충돌한다고 적었다. **분리 가능하고, 오히려 워크트리가 아예 필요 없어진다.**
+
+**기준선 축** — 경계 커밋에서 `git worktree add --detach`. 기존 `create-baseline` 그대로, 인자만
+`merge_base` → 경계.
+
+**HEAD 축** — 네 걸음:
+
+```bash
+# 1. 봉인 — 워크트리 생성 없음
+GIT_INDEX_FILE="<세션 상태 디렉토리>/seal.index"    # ★ 반드시 리포 «밖»
+git read-tree HEAD && git add -A && git write-tree   # → TREE
+git commit-tree "$TREE" -p HEAD -m "qg: sealed"      # → B
+# 2. 끝점 치환: 토픽 끝점 중 현재 브랜치의 것을 B 로
+# 3. 합치기: git merge-tree --write-tree 순차
+# 4. 체크아웃: 합친 트리로 commit-tree → git worktree add --detach
+```
+
+*실측(§7-I)* — 수정 반영 ✓ · 삭제 반영 ✓ · untracked 포함 ✓ · `.gitignore` 존중 ✓ · 실제
+인덱스 불변 ✓ · HEAD 불변 ✓ · 워킹트리 불변 ✓ · 추가 워크트리 0 ✓ · 봉인 커밋에서 워크트리 추출
+가능 ✓.
+
+> **임시 인덱스를 리포 안에 두면 그 파일 자신이 봉인된 트리에 들어간다.** 실측에서
+> `.qg-seal-index` 와 `.qg-seal-index.lock` 이 봉인 트리에 나타났다. 이 설계는 인덱스 경로를 세션
+> 상태 디렉토리(리포 밖)로 못 박고, 그 사실에 회귀 락을 단다(AC14).
+
+`create-sandbox` 는 **사라진다.** `create-head` 의 「샌드박스 디렉토리 실재」 assert 는 「봉인
+커밋의 트리가 기대 OID 와 일치」로 바뀐다 — verifier 가 없으니 「피검자가 샌드박스 HEAD 를
+움직인다」 위협 자체가 사라져 대조가 단순해진다.
+
+#### 6.4.2 해상도 공시 (D2 — C14 재결정)
+
+**산출자가 이미 있다.** `diff-test-results.py` 가 `counts: {still_green: N, …, pre_existing: N, …}`
+로 8칸 전부를 emit 한다(실측 §7-J). D2 가 더하는 것은 **렌더링과 규칙**뿐이고 새 계산은 없다.
+
+- `counts.pre_existing > 0` → 판정 옆 한 줄:
+  **「양측 빨강 unit N개 — 그 안의 새 실패는 이 해상도(unit 당 종료 코드 하나)에서 보이지 않는다」**
+- 이 줄은 **`clean` 을 막지 않는다.** `(F,F)` 보호의 이유(devbrew 자신의 stale red 가 첫 실행부터
+  게이트를 막으면 설계를 쓸 수 없다)가 그대로 유효하다.
+- 락: `pre_existing > 0` 인데 공시 줄이 없으면 RED.
+
+*D1: 하한 지켜짐(구멍을 드러내면 clean 이 「정확히 이만큼」을 뜻한다) → 단순함이 이김(파서 층 0).*
+
+#### 6.4.3 판정 어휘 (OQ11 · OQ8)
+
+C2 가 `PASS` / `FAIL` / `SKIP_WITH_EVIDENCE` / `NEEDS_RESOLUTION` 의 산출자(verifier)를 지운다.
+대체 어휘는 **세 값 + 사유**다:
+
+| 값 | 뜻 |
+|---|---|
+| `clean` | 검증했고 확증 결함 없음 |
+| `defect` | 확증 결함 (`NEW_REGRESSION` · `NEW_TEST_RED` · 채택된 finding) |
+| `not-certified` | **판정하지 못함** — `reason:` 필수 |
+
+`reason` 닫힌 열거: `kill-switch` · `merge-conflict` · `baseline-unrunnable` · `angle-absent` ·
+`scope-empty` · `declaration-invalid`.
+
+> `declaration-invalid` 는 **선언이 없는 경우가 아니다** — 없으면 §6.2.5 대로 기존 세 모드로
+> 내려간다. 이 사유는 트레일러가 «있는데» 그것이 가리키는 경로가 리포에 실재하지 않거나, 같은
+> 토픽의 커밋들이 서로 다른 경로를 가리키는 경우다. 선언이 깨진 것과 없는 것은 다른 사실이다.
+
+**이것이 OQ11 을 푼다** — kill-switched 실행은 `not-certified (kill-switch)` 다. `clean` 이
+아니므로 C4 후반(「테스트 없는 clean 은 나오지 않는다」)이 참이고, 실패도 아니므로 kill switch 가
+「무조건 실패 버튼」이 되지 않는다. §6.2.4 의 합치기 충돌과 §6.3.1 의 각도 부재가 **같은 어휘**를
+쓴다.
+
+**하류 처분** — 기계 소비자(PR 코멘트 · SDD 원장 등 이분법을 기대하는 자리)는 `not-certified` 를
+**`clean` 아님**으로 읽는다. 사람은 사유를 보고 넘어갈지 정한다. 헌장의 「미판정 항목의 방향은
+다음 소비자가 정한다 — 기계면 제외, 사람이면 라벨을 붙여 보여준다」 그대로다.
+
+**이주 목록은 열거가 아니라 도출** — 구현 시
+`SKIP_WITH_EVIDENCE|NEEDS_RESOLUTION|forced_downgrade|block_policy` 4토큰 전수 grep 으로 뽑는다.
+
+#### 6.4.4 C2 제거 목록 일곱의 전수 처분
+
+brief ✎ 가 「일곱 중 둘의 처분이 없다」고 지적했다. 전수:
+
+| 항목 | 처분 |
+|---|---|
+| spec AC 런타임 검증 | 제거 |
+| 브라우저 플로우 | 제거 |
+| mutation guard (R7) | 제거 |
+| 샌드박스 워크트리 배관 | 제거 — 봉인자는 워크트리 없이 산다(§6.4.1) |
+| block policy | 제거 |
+| **런타임 스코프 결정** | **제거** — 부팅할 표면이 없으니 대상이 사라짐 |
+| **해소 루프** | **제거** — 그 어휘의 산출자가 사라짐 |
+
+### 6.5 공개 표면 · 이주 · 헌장
+
+#### 6.5.1 breaking 전수 (C19 · OQ15)
+
+**OQ15 가 맞았다 — C19 가 센 「셋」은 과소 계수다.** 도출한 전수는 **12 자리**다.
+
+**CLI 인자 4 제거** — `both` · `review` · `runtime` · `--skip-runtime`. Decision 1 질문도 사라진다.
+**존치** — `branch [<name>]` · `--paths` · `--reset` · `--gc` · `--plan` · `--pr-url` ·
+`critique <path>`.
+
+**환경 스위치 — 전 17개 중 5개가 움직인다**(실측 §7-K):
+
+| 스위치 | 처분 | 근거 |
+|---|---|---|
+| `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` | 제거 | 대상(샌드박스 executor)이 사라짐 |
+| `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS` | 제거 | 해소 루프가 사라짐 |
+| `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE` | 축소 | `ac_coverage` 만 사라지고 나머지 유지 |
+| `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_TEST_VALIDATION` | 개명 | 이름에서 `RUNTIME` 이 빠짐(대상은 존치) |
+| `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER` | 의미 변경 | loud advisory → 보안 각도 `absent` → `not-certified (angle-absent)` |
+
+> **「통제 제거」와 「대상 소멸」은 다르다.** 헌장이 kill switch 를 보안 컨트롤로 규정하므로 통제를
+> 없애는 것은 그 자체로 결정 사안이다. 위 둘은 통제를 없애는 게 아니라 **통제할 대상이 사라져
+> 스위치가 공허해지는** 경우다. 이 구분을 CHANGELOG 에도 그대로 적는다.
+
+#### 6.5.2 deprecation — 친절한 오류로 바로 major
+
+별도 deprecation 릴리스 없이 **v8.0.0 에서 제거**하되, 제거된 인자를 받으면 조용히 무시하지 않고
+한 줄을 내고 **정상 진행**한다:
+
+```
+> [quality-gates] `review` 는 v8 에서 제거됐다 — 이제 한 파이프라인이라 게이트 범위를 고르지 않는다. 그대로 진행한다.
+```
+
+하드 오류로 멈추지 않는 이유: 스크립트·별칭·메모에 묻힌 호출이 어느 날 아무것도 안 하게 되는
+것을 피한다. 조용히 무시하지 않는 이유: 「내가 고른 범위가 무시됐는데 모르고 지나감」 경로를
+막는다.
+
+#### 6.5.3 공개 계약과 헌장 (C15)
+
+- `.claude-plugin/marketplace.json` — `"2-gate quality verification pipeline (review + runtime)…"`
+  → 「리뷰 파이프라인 + 강제 차등 테스트」로
+- `plugins/quality-gates/.claude-plugin/plugin.json` — 같은 문장
+- `CLAUDE.md` Law 2 *Scoped exception (qg v2.2.0)* — `runtime-verifier` 를 **이름으로** 박고 있다.
+  그 executor 가 사라지므로 조항 전체를 제거한다. Law 2 는 예외 없는 원칙으로 돌아간다.
+
+**이것이 OQ7 의 답이기도 하다** — 부팅되는 앱을 가진 설치본의 런타임 결함 클래스를 **대체하지
+않고 주장을 거둔다.** 신뢰도 하한은 「검증 못 하는 것을 검증했다고 말하지 않음」으로 지켜진다 —
+C11 의 goal 그 자체다. CHANGELOG 에 그 설치본이 잃는 것(브라우저 플로우 · spec AC 런타임 검증 ·
+mutation guard)을 **이름으로** 적는다.
+
+#### 6.5.4 헌장 조항의 고아화 방지
+
+brief 의 blind-spot 이 짚은 대로 **그 조항에는 아무 락도 없다** — 제거가 GREEN 으로 통과해도
+조항이 대상 없이 살아남는다. 락 부재는 자유가 아니라 무보호다.
+
+새 락: **`CLAUDE.md` 가 이름으로 박는 agent · 스크립트 · 플러그인이 실재해야 한다.** 코퍼스를 헌장
+본문에서 **도출**해 하나씩 확인(∀). 이번 제거뿐 아니라 앞으로의 모든 제거를 덮는다.
+
+## 7. 실측 근거
+
+이 설계가 기대는 도구 동작 사실. **전부 이 리포 또는 격리된 scratch 리포에서 직접 실행해 관측한
+것이고, 산문 추론이 아니다.** 환경: git 2.54.0 (Apple Git-157), macOS.
+
+| id | 관측 | 값 |
+|---|---|---|
+| **A** | `git log --all --grep='^Claude-Session: <값>$'` 로 토픽 좁히기 | 커밋 35개 / **40ms** (전체 2409 커밋) |
+| **B** | 이 리포의 트레일러 관행 | 최근 200 중 `Claude-Session` 172 · `Co-Authored-By` 189 · `Spec` 0 |
+| **C** | `git branch --contains <머지된 커밋>` | 커밋마다 **브랜치 5개**(main + 후손 전부) — 끝점 식별 불가 |
+| **D** | `origin/main..<머지된 브랜치>` 범위 스캔 | 범위가 비어 **히트 0** — 머지된 앞 브랜치가 안 보임 |
+| **E** | 경계 규칙 `parents(T) \ T` | |T|=35 → |B|=2 → merge-base = `add4c9cd` = **PR #155 머지(작업 시작 직전)** |
+| **F** | `git merge-tree --write-tree` 충돌 (scratch 합성) | **rc 1** + stdout 에 트리 OID · stage 1/2/3 · `CONFLICT (content):` |
+| **G** | 순차 합치기의 `commit-tree` 중간 커밋 | ref 0개 · `fsck --unreachable` 에 잡힘 |
+| **H** | `test_copy_of_contract.sh` | guards `plugins/** shared/**` · 마커 정규식이 `#`·`//`·`<!--` 수용 · **∀ 도미넌스** |
+| **I** | 임시 인덱스 봉인 (scratch) | 수정·삭제·untracked 반영 ✓ · `.gitignore` 존중 ✓ · 인덱스/HEAD/워킹트리 불변 ✓ · 워크트리 0 ✓ · **인덱스를 리포 안에 두면 봉인 트리에 들어감** |
+| **J** | `diff-test-results.py` 집계 출력 | `counts: {…}` 가 8칸 전부 emit (`pre_existing` 포함) |
+| **K** | qg 의 `DEVBREW_QUALITY_GATES_*` 전수 | **17개** |
+| **L** | `run-test-selection.sh run` 출력 계약 | `<unit>\t<status>\t<exit-code>` — 테스트 신원 없음 |
+| **M** | `diff-test-results.py:read_results` | 3열 TSV → `{unit: (status, exit)}` · 상태값 `pass\|fail\|error\|unrun\|absent` 5개 |
+
+**E 와 I 는 구현 전에 재검증한다** — E 는 브랜치 형태에 따라 경계가 달라질 수 있고, I 는 scratch
+리포와 실제 리포의 `.gitignore` 깊이가 다르다.
+
+## 8. 재결정 기록 P23
+
+devbrew 는 「재발견 금지 ≠ 반증 금지」를 원칙으로 둔다. 근거 있는 재결정은 기록한다.
+
+**C14 — 차등 정밀도**
+
+- **원래** (seed 확정): unit 축에 상태와 **실패 개수**를 함께 실어 양측 빨강 unit 에서도 수가
+  늘었으면 회귀로 잡는다.
+- **1차 재결정** (인터뷰 S5): 개수는 신원 없는 스칼라라 교환 가능하다 — 하나 고쳐지고 하나
+  깨지면 총합이 같아 구멍이 그대로 남고, 반대로 불안정한 테스트 하나가 없는 회귀를 발명한다.
+  → 실패 **집합의 차집합**(자리별 원장).
+- **2차 재결정** (이 설계 D2): 집합을 얻을 **해상도가 실행 층에 없다.** `run` 계약이 unit 당
+  `(status, exit)` 둘만 내고(실측 L) `read_results` 의 상태값이 5개뿐이다(실측 M). unit 해상도의
+  「집합 차집합」은 이미 16칸 표가 하는 일이므로, 파서 층을 새로 만들지 않는 한 C14 는 정밀도를
+  0 만큼 올린다. → **구멍을 닫는 대신 드러낸다**(§6.4.2).
+- **근거** — 실측 L · M. 그리고 D1: 구멍을 공시하면 신뢰도 하한(「clean 이 검증된 것과 일치」)이
+  지켜지므로 그다음은 단순함이 정한다.
+- **남는 것** — `(F,F)` 안의 새 실패는 여전히 안 보인다. 구멍은 **「이미 빨간 파일 안에 새 실패가
+  생기는 경우」 하나**다(새 파일은 `(A,F)=NEW_TEST_RED` 로 이미 잡힌다). §15 에 적는다.
+
+## 9. brief 정정 셋
+
+인터뷰 brief 가 사실로 적은 것 중 셋이 실측과 어긋났다. **설계는 정정된 사실 위에 선다.**
+
+1. **OQ9 「기존 두 사본이 이미 서로 어긋나 있다」 — 아니다.**
+   `shared/docreview/agents/doc-recritic.md` 와 `plugins/spec-distill/agents/doc-recritic.md` 의
+   차이는 **한 줄**이다: `# copy-of: shared/docreview/agents/doc-recritic.md`. drift 가 아니라
+   선언된 사본 표식이고, `shared/tests/test_copy_of_contract.sh` 가 ∀ 로 집행한다(실측 H).
+   → 「세 번째 사본」의 비용이 실제로는 **파일당 한 줄**이다.
+
+2. **OQ13 「재판정기는 생성기가 아니다」 — 아니다.**
+   `shared/docreview/agents/doc-recritic.md` 가 「놓친 결함이 있으면 `added` 에 새 finding 을
+   낸다」고 적고 `added:` 필드를 갖는다. 재비판자는 재판정기 **이면서** 생성기다.
+   → 남는 진짜 문제는 **빈 입력**이고, §6.3.3 이 그것을 다룬다.
+
+3. **OQ8 의 소비자 목록 중 둘이 틀렸다.**
+   `render-terminal.py` 와 `comment-upsert.py` 는 판정 어휘를 **아예 읽지 않는다**(두 파일 모두
+   `PASS|FAIL|clean|SKIP_WITH_EVIDENCE|NEEDS_RESOLUTION|verdict` 히트 0).
+   → 이주 목록을 이름으로 열거하지 않고 **4토큰 전수 grep 으로 도출**한다(§6.4.3).
+
+## 10. Open Questions 처분표
+
+brief §3 의 19개 전부. **미처분 0.**
+
+| OQ | 처분 | 절 |
+|---|---|---|
+| OQ1 세 스코프 모드 | 새 스코프가 기본, 셋은 override 로 존치 | §6.2.5 |
+| OQ2 codex 층 | D5 — 각도 목록에 편입, Tier 개념 소멸 | §6.3.1 |
+| OQ3 부모-브랜치 후보 부재 | **부수 효과로 해소** — 선언 경로의 기준선이 경계 규칙이라 merge-base 를 안 씀. 선언 없는 fallback 경로에는 남음(§15) | §6.2.3 |
+| OQ4 척도 충돌 순서 | **D1** | §4 |
+| OQ5 차등 기계 교체 | **범위 밖** — 하한을 올리지 않고 단순함을 크게 깎음 | §3 |
+| OQ6 선언의 가변성·충돌 | 충돌: spec 경로가 유일해 원천 없음 / 재선언: 산출물이 집합+SHA 를 실음 | §6.2.6 |
+| OQ7 N=1 일반화 · 부팅 앱 설치본 | 대체하지 않고 **주장을 거둠** | §6.5.3 |
+| OQ8 판정 어휘 소비자 이주 | 세 값 어휘 + **4토큰 전수 grep 도출**. brief 목록 정정 | §6.4.3 · §9 |
+| OQ9 스키마 임피던스 · 세 번째 사본 | 사본은 한 줄(∀ 락이 덮음). 임피던스는 diff 를 **선택 슬롯**으로 | §6.3.4 · §9 |
+| OQ10 리뷰 발동 시점·중복 | **D4** — 있는 것을 묶고 집합을 실음. SDD 최종 리뷰와는 **대상이 다름** | §6.2.6 |
+| OQ11 kill-switched 실행의 어휘 | `not-certified (kill-switch)` | §6.4.3 |
+| OQ12 교체 락의 앵커 | 합성기 출력 스키마의 ∀ + 양의 짝 | §6.3.2 |
+| OQ13 재판정기 ≠ 생성기 | **전제 정정.** 남는 문제는 빈 입력 | §6.3.3 · §9 |
+| OQ14 도출 입력을 피검자가 씀 | 완화 셋(제거 불가) | §6.3.5 · §6.2.7 |
+| OQ15 공개 표면의 실제 크기 | **12 자리** — C19 의 셋은 과소 계수 | §6.5.1 |
+| OQ16 「작업 시작점」의 산출자 | **경계 규칙** — 선언과 별개 값이 아니라 히스토리에서 도출 | §6.2.3 |
+| OQ17 합친 트리의 성숙형 | **취하지 않음** — 순서만 결정론 고정, 충돌은 판정 불가 | §6.2.4 |
+| OQ18 자리별 원장의 실효 | **D2** — 파서 층 없음, 해상도 공시로 | §6.4.2 · §8 |
+| OQ19 봉인자 분리 가능성 | **가능** — 워크트리가 아예 필요 없음 | §6.4.1 |
+
+## 11. Acceptance Criteria
+
+- **AC1** — `/qg` 가 게이트 범위를 묻지 않는다. `both` · `review` · `runtime` · `--skip-runtime`
+  를 주면 §6.5.2 의 한 줄을 내고 정상 진행한다.
+- **AC2** — 차등 테스트는 trivia escape 와 kill switch 외의 어느 경로로도 생략되지 않는다.
+- **AC3** — `Spec:` 트레일러를 가진 커밋이 둘 이상의 브랜치에 걸쳐 있을 때, 한 번의 `/qg` 가 그
+  전부를 한 판정 단위로 본다.
+- **AC4** — 그중 하나가 이미 `main` 에 머지돼 있어도 토픽에 포함된다.
+- **AC5** — **선언 경로에서** 기준선이 `parents(T) \ T` 로 계산되고, `|B|>1` 이면 `merge-base(B)` 다.
+  그 경로는 `merge-base(base_ref, HEAD)` 를 쓰지 않는다. (선언 없는 fallback 경로는 기존대로 —
+  AC16 · §15-5.)
+- **AC6** — HEAD 축이 끝점들의 `merge-tree --write-tree` 결과이고, 현재 브랜치 끝점은 봉인 커밋으로
+  치환된다.
+- **AC7** — 합치기 충돌 시 판정이 `not-certified` 이고 `reason: merge-conflict` 이며 충돌 파일이
+  나열된다. `clean` 이 아니다.
+- **AC8** — 판정값이 `clean` · `defect` · `not-certified` 셋 뿐이고, `not-certified` 는 항상
+  닫힌 열거의 `reason` 을 동반한다.
+- **AC9** — kill switch 로 차등 테스트가 생략된 실행의 판정이 `not-certified (kill-switch)` 다.
+- **AC10** — 각 각도(보안 · 판정 · 다른 전제)의 상태가 `filled` / `folded_into:<수행자>` /
+  `absent` 중 하나로 **항상** 산출물에 있다. 셋 중 하나라도 상태가 없으면 스키마 검증이 실패한다.
+- **AC10a** — `folded_into:<수행자>` 의 수행자가 그 실행에서 finding 을 낸 리뷰어면 실패한다
+  (자기 finding 자기 판정 = Law 2 위반).
+- **AC11** — 보안 또는 판정 각도가 `absent` 인데 판정이 `clean` 이면 실패한다.
+- **AC12** — 「다른 전제」 각도가 `absent` 여도 판정은 막히지 않고 공시만 된다.
+- **AC13** — `counts.pre_existing > 0` 인 실행의 산출물에 해상도 공시 줄이 있다. 그 줄이 없으면
+  실패한다.
+- **AC14** — 봉인이 실제 인덱스 · HEAD · 워킹트리를 바꾸지 않고, 추가 워크트리를 만들지 않으며,
+  **봉인된 트리에 임시 인덱스 파일이 들어 있지 않다.**
+- **AC15** — 판정 산출물이 본 커밋 SHA 전부 · 끝점 · 경계 · 합친 트리 OID 를 싣는다.
+- **AC16** — 선언이 없는 브랜치에서 `/qg` 가 기존 세 모드로 내려가고 어느 `not-certified` 사유로도
+  막히지 않는다. 트레일러가 «있는데» 그 경로가 실재하지 않거나 한 토픽이 서로 다른 경로를
+  가리키면 `not-certified (declaration-invalid)` 다.
+- **AC17** — 탐지 0건이어도 재비판이 디스패치되고, 탐지 0 · 재비판 0 이 산출물에 명시된다.
+- **AC18** — 재비판자의 `diff` 슬롯이 optional 이고, 부재 시 「이 변경이 도입했는가」 축을 쓰지
+  않는다. spec-distill 의 브리프 경로는 diff 를 싣지 않는다.
+- **AC19** — `CLAUDE.md` 가 이름으로 박는 agent · 스크립트 · 플러그인이 전부 실재한다.
+- **AC20** — `marketplace.json` · `plugin.json` · `CLAUDE.md` 셋 어디에도 `runtime-verifier` 나
+  「2-gate」가 남지 않는다.
+- **AC21** — 제거된 테스트가 어떤 `# guards:` 글롭의 유일 대상이 아니다(선언이 공허해지지 않는다).
+
+## 12. Files to Modify
+
+**제거**
+- `plugins/quality-gates/agents/runtime-verifier.md`
+- `plugins/quality-gates/scripts/detect-runtime.sh`
+- `plugins/quality-gates/scripts/qg-worktree.sh` 의 `create-sandbox` · `mutation-guard` 분기
+- `plugins/quality-gates/tests/` 중 4토큰 grep + `sandbox|mutation.guard` 로 도출되는 것
+  (`test_qg_runtime_sandbox.sh` · `test_qg_mutation_guard.sh` · `test_sandbox_enforced.sh` ·
+  `test_runtime_verifier_*` · `test_runtime_verdict_precedence.sh` · `test_detect_runtime.sh` 등 —
+  **열거가 아니라 도출로 확정한다**)
+- `plugins/quality-gates/tests/test_review_floor_lock.sh` (교체)
+
+**대폭 수정**
+- `plugins/quality-gates/skills/quality-pipeline/SKILL.md` — 962줄. 게이트 개념 제거, 5단계 골격,
+  각도 절, Decision 1·2 제거
+- `plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md` — 1206줄. R5a·R7·R9
+  제거 후 「차등 테스트」 레퍼런스로 개명·재작성
+- `plugins/quality-gates/commands/qg.md` — 인자 표 · Quick Reference · Gates 절
+- `plugins/quality-gates/scripts/resolve-baseline.sh` — 경계 규칙 추가(기존 키는 fallback 경로용
+  으로 유지)
+- `plugins/quality-gates/scripts/qg-worktree.sh` — 봉인 서브커맨드 신설, `create-head` assert 변경
+- `plugins/quality-gates/scripts/synthesize_findings.py` — 각도 상태 총 함수, 세 값 어휘
+- `plugins/quality-gates/scripts/diff-test-results.py` — 해상도 공시 줄
+- `plugins/quality-gates/scripts/qg-gc.py` — unreachable 중간 커밋 정리
+- `plugins/quality-gates/README.md` · `plugins/quality-gates/CHANGELOG.md` ·
+  `plugins/quality-gates/.claude-plugin/plugin.json`
+
+**신설**
+- `plugins/quality-gates/scripts/resolve-topic.sh` — 선언 → 커밋 집합 → 경계 · 끝점
+- `plugins/quality-gates/scripts/seal-worktree.sh` — 임시 인덱스 봉인
+- `plugins/quality-gates/scripts/combine-tips.sh` — 순차 `merge-tree`
+- `plugins/quality-gates/agents/doc-critic.md` · `doc-recritic.md` — `# copy-of:` 사본
+- 새 락 5종(§13)
+
+**리포 루트**
+- `.claude-plugin/marketplace.json` — 공개 계약 문자열
+- `CLAUDE.md` — Law 2 scoped exception 제거
+
+**qg 밖 (이번 사이클의 유일한 자리)**
+- `shared/docreview/agents/doc-recritic.md` — `diff` 선택 슬롯
+- `shared/tests/test_docreview_agents.sh` — 슬롯 기대값 이동
+
+## 13. Verification Plan
+
+**교체 1**
+- `test_angle_coverage.sh` — §6.3.2 의 ∀ 총 함수 + 양의 짝(`absent` + `clean` = RED)
+
+**신규 5**
+- `test_verdict_vocabulary.sh` — 세 값 × 사유 닫힌 열거의 총 함수
+- `test_topic_boundary.sh` — 경계 규칙. **합성 토픽 픽스처 + 양성 대조 필수**
+- `test_seal_no_side_effects.sh` — AC14. 특히 **봉인 트리에 인덱스 파일 없음**(실측 결함의 회귀 락)
+- `test_resolution_disclosure.sh` — AC13
+- `shared/tests/test_charter_citations.sh` — AC19. 코퍼스를 `CLAUDE.md` 본문에서 도출(∀)
+
+**mutation** — 새 락 전부를 네 축으로 흔든다: **삭제 · 변형 · 추가 · 불일치**. 각 축에
+**양성 대조**를 둔다(green-expected 단언은 모양으로 이빨을 판별할 수 없다). `PYTHONDONTWRITEBYTECODE=1`
+로 돌린다(같은 길이 변이가 stale `.pyc` 를 못 넘는다).
+
+**삭제 후 필수** — `plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh` 를 돌려
+AC21 을 확인한다.
+
+**회귀 스위트** — `shared/tests/` 전부 + `plugins/quality-gates/tests/` 전부 + `plugins/spec-distill/tests/`
+전부(§12 의 마지막 항목이 그 경로를 건드린다). 리포 루트에서 돌린다.
+
+**선재 RED 기준선** — 이 리포에 stale red 가 있다. 착수 전에 baseline 을 캡처하고 **실패 파일
+이름과 실패 줄 수를 함께** 기록한다(rc 만으로는 이미 RED 인 파일 안의 새 실패가 원리적으로 안
+보인다).
+
+**수동 e2e** — 실제로 `Spec:` 트레일러를 단 브랜치 둘을 만들어 `/qg` 를 돌린다. 자동 락이 잴 수
+없는 것: 실제 디스패치가 일어나는지, 산출물이 사람에게 읽히는지.
+
+## 14. Rejected Alternatives
+
+| 기각한 것 | 이유 |
+|---|---|
+| **엄격 우선순위 하나**(신뢰도 > 맞물림 > 단순함 > 비용) | C1 의 「넷은 대등」이 문자 그대로 깨진다. 순서는 곧 대체다 |
+| **비용·시간을 1순위로** | §2 확정 둘(C14 · C21)의 근거를 되돌려야 한다 |
+| **파서 층 전면 신설** | shell·make·npm-script 는 구조화 출력이 없어 휴리스틱 파싱이 된다. 이번 사이클이 「차등 기계 재작성」으로 불어난다 |
+| **신원을 낼 수 있는 어댑터만 per-test 원장** | 구멍이 주 스위트에서 닫히지만 「어댑터 전부에 같은 코드」 전제가 깨지고 기준선 캐시가 열 수 검증(`NF != 4`)으로 전량 무효화된다 |
+| **추적되는 선언 파일**(`.qg/topics/*.yml`) | 트리 쪽이라 C12 의 「브랜치 쪽」과 어긋나고, 브랜치마다 갈라져 충돌하며, 작업 시작점이 여전히 사람이 쓰는 별도 필드라 OQ16 이 안 풀린다 |
+| **SDD 원장 한 줄 정형화** | `.superpowers/sdd/.gitignore` 가 `*` 라 기계가 의지할 수 없고, 추적되게 바꾸려면 외부 플러그인의 파일을 고쳐야 한다 |
+| **`git notes` · `branch.<name>.description`** | notes 는 push 가 기본이 아니고 이 리포에 흔적 0. description 은 로컬 전용이라 클론에 없다 |
+| **묶음이 완결될 때까지 리뷰 거부** | 「완결」의 판정자가 새 열림이 되고, 긴 작업에서 마지막까지 피드백이 없으며, 사용자가 선언을 늦게 붙이는 우회를 배우게 된다 |
+| **브랜치별 + 묶음 둘 다 리뷰** | 비용·시간이 명시적으로 오르는데 이번 재편의 발단이 그 축이다 |
+| **두 게이트 유지, Runtime 을 개명만** | 고를 수 없는 「게이트」라는 허구가 남고 단순함 축이 거의 안 움직인다 |
+| **차등 테스트를 「리뷰어 한 명」으로 모델링** | 결정론 기계를 모델-소유 자리처럼 보이게 만든다. C3 및 「락의 PASS 는 이빨의 증거가 아니다」와 어긋날 위험 |
+| **`folded_into` 금지**(각도는 항상 전용 패스) | C6 이 없앤 「매 iteration 전용 디스패치」 형태가 이름만 바꿔 되살아나고 비용·단순함이 둘 다 내려간다 |
+| **`not-certified` 를 `defect` 로 접기** | kill switch 가 「무조건 실패 버튼」이 되어 사용자가 스위치 대신 플러그인을 끈다(OQ11 이 경고한 경로) |
+| **`not-certified` 를 `clean` 으로 접기** | C11 의 goal 을 정면으로 깬다 |
+| **diff 슬롯을 qg 전용으로 분기** | `# copy-of:` 계약을 일부러 깨야 하고, 「통합한 것의 재분열」을 막는 바로 그 락에 예외를 파야 한다 |
+| **one-minor deprecation window** | 릴리스 둘을 나눠 돌려야 하고 중간 상태 자체의 테스트가 필요해진다. 친절한 오류가 같은 일을 한 릴리스로 한다 |
+| **제거 인자를 하드 오류로** | 스크립트·별칭에 묻힌 호출이 어느 날 아무것도 안 하게 된다 |
+
+## 15. 알려진 한계
+
+설계가 **못 하는 것**을 적는다. 이 절이 비어 보이면 그것이 위험 신호다.
+
+1. **`(F,F)` 구멍은 열려 있다.** 이미 빨간 파일 **안**에 새 실패가 생기면 이 해상도에서 안
+   보인다(새 파일은 `(A,F)` 로 잡힌다). 공시로 드러낼 뿐 닫지 않는다 — D2.
+2. **토픽 중간의 main 병합이 diff 를 부풀린다.** 경계가 여럿일 때 merge-base 를 쓰므로 그 병합이
+   가져온 남의 변경이 diff 에 든다. 공시하되 막지 않는다.
+3. **선언을 늦게 붙인 앞 커밋은 범위 밖이다.** 수만 공시한다. 신뢰 채널이 없어 막을 결정론 수단이
+   없다 — `resolve-baseline.sh` 의 `ahead:` 가 같은 이유로 같은 선택을 했다.
+4. **각도 coverage 락은 형식적 완전성만 잰다.** 「각도가 상태를 가졌는가」는 재지만 「그 상태가
+   참인가」는 못 잰다 — 모델이 모든 각도를 `folded_into:` 로 주장하면 락은 GREEN 이다. 이 한계를
+   락 자신의 주석에 공시한다.
+5. **선언 없는 fallback 경로에는 OQ3 의 결함이 남는다.** 그 경로는 여전히
+   `merge-base(base_ref, HEAD)` 를 쓰므로 스택 앞 브랜치가 머지됐으면 그 변경이 안 보인다.
+6. **증거가 N=1 이다.** 「대상 모델이 어긋났다」의 근거가 전부 devbrew 한 리포에서 왔고, 그 리포는
+   부팅되는 앱이 없다는 점에서 모집단 중 가장 비전형적이다. 이 설계는 그 비대표성을 **해결하지
+   않고**, 대신 qg 가 하지 않는 일을 공개 계약에서 주장하지 않게 만든다.
+7. **실측 E · I 는 구현 전 재검증이 필요하다**(§7).
+
+## 16. 구현 분할
+
+이 설계는 **한 구현 계획으로는 크다** — 962줄 SKILL · 1206줄 레퍼런스 · 스크립트 10 · 새 락 5 ·
+삭제 ~15 파일 · 리포 루트 2 · `shared/` 1. 한 PR 에 담으면 리뷰가 실질을 못 본다.
+
+**다섯 PR 로 나눈다. 전부 같은 사이클이다**(C7·C15 의 「같은 사이클」 요구를 만족한다 — 그 요구는
+같은 PR 이 아니라 같은 사이클이다).
+
+| PR | 내용 | 기존 동작 영향 |
+|---|---|---|
+| **1** | 스코프 기계 — `resolve-topic.sh` · `seal-worktree.sh` · `combine-tips.sh` + `test_topic_boundary.sh` · `test_seal_no_side_effects.sh` | **없음** (새 스크립트만, 호출자 0) |
+| **2** | 판정 어휘 세 값 + 해상도 공시 — `synthesize_findings.py` · `diff-test-results.py` + 락 둘 | 어휘가 바뀐다 (소비자 동반 이주) |
+| **3** | 각도 바닥 — 각도 총 함수 · `test_angle_coverage.sh` · 명단 락 교체 · `doc-critic`/`doc-recritic` 사본 · `shared` diff 슬롯 | 리뷰어 구성이 바뀐다 |
+| **4** | verifier 제거 + 파이프라인 합치기 — SKILL · runtime-gate.md · qg.md · 공개 인자 · 스코프 배선 | **breaking** |
+| **5** | 공개 계약 · 헌장 · 인용 락 — `marketplace.json` · `plugin.json` · `CLAUDE.md` · `test_charter_citations.sh` | 문자열·조항 |
+
+**순서 제약** — 1 → 2 → 3 → 4 → 5. PR 4 가 PR 1 의 스크립트를 배선하고 PR 2·3 의 어휘를 쓴다.
+PR 5 는 PR 4 가 대상을 지운 뒤라야 인용 락이 GREEN 이 된다.
+
+**각 PR 마다** `plugin.json` bump · CHANGELOG 항목 · 그 PR 이 닿은 소비자 전부의 스위트를 돌린다.
+
+## 17. Metadata
+
+- **상류** — `docs/superpowers/interview/2026-09-21-qg-target-derived-judgment-interview.md`
+  (Phase 1 brief, 확정 19 · 열린 19) 및 그 audit
+- **Phase 0 seed** — `docs/superpowers/interview/2026-09-21-qg-review-only-sdd-scope-interview.md`
+- **대상 플러그인** — `quality-gates` (현재 7.6.2 → **major**, breaking)
+- **동반 bump** — `spec-distill` (**minor 이상** — `shared/docreview` 슬롯 변경은 surface 변경이다)
+- **버전 번호는 브랜치에서 정하지 않는다** — 머지 직전에 정한다. 같은 버전 문자열은 충돌 없이
+  병합되므로 먼저 머지되는 쪽이 이긴다.
+- **다음 단계** — `spec-distill:reviewing-spec` 으로 이 문서를 리뷰한 뒤, 승인 게이트에서 진행을
+  고르면 `superpowers:writing-plans`
