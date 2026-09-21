@@ -30,6 +30,15 @@ case "$SUB" in
 esac
 [ -n "$TOPIC" ] || die "empty topic key"
 
+SEAL=""
+if [ "${3:-}" = "--seal" ]; then
+  SEAL="${4:-}"
+  [ -n "$SEAL" ] || die "--seal needs a commit"
+  git rev-parse --verify --quiet "$SEAL^{commit}" >/dev/null 2>&1 || die "not a commit: $SEAL"
+elif [ -n "${3:-}" ]; then
+  die "unknown option: $3"
+fi
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 
 DECLARED="-"; BRANCHES="-"; BOUNDARY="-"; TIPS="-"; NCOMMITS="-"; BASE_REF="-"
@@ -44,6 +53,10 @@ emit() {   # <status> <reason>
   echo "tips: $TIPS"
   echo "commits: $NCOMMITS"
   echo "base_ref: $BASE_REF"
+  if [ "$SUB" = "commits" ] && [ "$1" != "ok" ]; then
+    echo "resolve-topic: status=$1 (${2:--}) — no commit set" >&2
+    exit 3
+  fi
   exit 0
 }
 
@@ -127,5 +140,71 @@ fi
 BRANCHES=$(printf '%s\n' $BR_NAMES | sort -u | paste -sd, -)
 [ -n "$BRANCHES" ] || BRANCHES="-"
 
-# Task 3 이 boundary · tips · commits 를 채운다.
+# ── 경계 = fork 들의 merge-base (§6.2.3 · AC5) ─────────────────────────────
+# 머지된 구성원에는 merge-base(base_ref, tip) 을 쓸 수 없다 — 그것은 tip 자신을
+# 돌려주고, 그러면 그 브랜치 전체가 경계 뒤로 숨는다〔실측 2〕. 대신 그 브랜치를
+# 받아들인 머지 커밋의 mainline 부모와의 merge-base 가 진짜 분기점이다〔실측 3〕.
+FORKS=""
+for tip in $BR_TIPS; do
+  ml=""
+  for pair in ${MERGED_MAINLINE:-}; do
+    case "$pair" in "$tip:"*) ml="${pair#*:}"; break ;; esac
+  done
+  if [ -n "$ml" ]; then
+    f=$(git merge-base "$tip" "$ml" 2>/dev/null)
+  else
+    f=$(git merge-base "$BASE_REF" "$tip" 2>/dev/null)
+  fi
+  [ -n "$f" ] || emit base-unresolved "cannot compute fork for ${tip}"
+  FORKS="$FORKS $f"
+done
+FORKS=$(printf '%s\n' $FORKS | sort -u | tr '\n' ' ')
+set -- $FORKS
+BOUNDARY="$1"; shift
+for f in "$@"; do
+  BOUNDARY=$(git merge-base "$BOUNDARY" "$f" 2>/dev/null) \
+    || emit base-unresolved "merge-base of forks failed"
+done
+[ -n "$BOUNDARY" ] || emit base-unresolved "empty boundary"
+
+# ── 끝점 = (tips ∪ {봉인}) 의 극대원소 (§6.2.4 · AC6) ──────────────────────
+# 「치환」이 아니라 «먼저 넣고 계산»이다. 스택에서 현재 브랜치가 다른 구성원의
+# 조상이면 치환할 자리가 없어 미커밋 변경이 조용히 사라진다〔실측 10〕.
+CANDS=$(printf '%s\n' $BR_TIPS $SEAL | grep -v '^$' | sort -u)
+MAXIMAL=""
+for a in $CANDS; do
+  is_anc=no
+  for b in $CANDS; do
+    [ "$a" = "$b" ] && continue
+    git merge-base --is-ancestor "$a" "$b" 2>/dev/null && { is_anc=yes; break; }
+  done
+  [ "$is_anc" = no ] && MAXIMAL="$MAXIMAL $a"
+done
+[ -n "$MAXIMAL" ] || emit base-unresolved "no maximal endpoint"
+
+# 순서 결정론 — **두 단계다.** `rev-list --topo-order --no-walk` 의 출력은 인자
+# 순서에 의존하므로〔실측 8〕, 먼저 집합을 사전순으로 정규화한 뒤 topo-order 를
+# 건다. 한 단계로 줄이면 발견 순서가 결과에 새어 들어가 결정론이 조용히 사라진다.
+MAXIMAL=$(printf '%s\n' $MAXIMAL | sort -u | tr '\n' ' ')
+TIPS=$(git rev-list --topo-order --no-walk $MAXIMAL 2>/dev/null | paste -sd, -)
+[ -n "$TIPS" ] || TIPS="-"
+
+# ── T = 끝점들에서 경계를 뺀 합집합 ────────────────────────────────────────
+TSET=$(git rev-list --topo-order $MAXIMAL "^$BOUNDARY" 2>/dev/null)
+NCOMMITS=$(printf '%s\n' "$TSET" | grep -c .)
+
+# ── AC16 나머지 절반: T 가 서로 다른 토픽 키를 함께 담는가 ──────────────────
+# 조상 전체가 아니라 **T 위에서** 센다 — 조상을 훑으면 main 에 이미 머지된 앞
+# 토픽의 키까지 세어 거짓 양성이 난다.
+nkeys=$(git log --format='%(trailers:key=Spec,valueonly)' $MAXIMAL "^$BOUNDARY" 2>/dev/null \
+        | grep -v '^$' | sort -u | grep -c .)
+if [ "$nkeys" -gt 1 ]; then
+  emit declaration-invalid "topic commit set carries $nkeys distinct Spec keys"
+fi
+
+# ── commits 서브커맨드 ─────────────────────────────────────────────────────
+if [ "$SUB" = "commits" ]; then
+  printf '%s\n' "$TSET"
+  exit 0
+fi
 emit ok "-"

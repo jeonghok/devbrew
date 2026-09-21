@@ -129,7 +129,109 @@ case_path_check_is_repo_root_relative() {
   cleanup
 }
 
-# (F4 · F7 · F8 은 Task 3 이 더한다 — 셋 다 경계 또는 T 가 있어야 잴 수 있다.)
+# ── F1 의 경계 (AC5) — 형제 둘의 fork 가 같으므로 경계 = 분기점 ─────────────
+case_f1_boundary() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
+  git checkout -q topicA
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field boundary "$out")" "$R" "F1 경계 = 두 fork 의 merge-base = 분기점"
+  assert_eq "$(field commits "$out")" "2" "F1 |T| = 2"
+  cleanup
+}
+
+# ── F2 의 경계 (AC4+AC5) — 머지된 구성원이 경계 뒤로 숨으면 안 된다 ──────────
+#    구성원이 «하나»뿐이고 그것이 이미 머지된 지형이어야 두 규칙이 갈린다.
+#    다른 구성원이 그 머지의 후손이면 1단계가 선언 커밋을 흡수해 2단계가
+#    발화하지 않고, 형제 구성원이 있으면 merge-base 가 같은 답으로 되돌아간다.
+case_f2_boundary_merged_not_hidden() {
+  new_repo
+  echo r1 >> f.txt; git commit -qam r1
+  local FORKPT; FORKPT=$(git rev-parse HEAD)
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  local TIPA; TIPA=$(git rev-parse HEAD)
+  git checkout -q main
+  echo r2 >> f.txt; git commit -qam r2          # main 이 토픽과 무관하게 앞으로 나간다
+  git merge -q --no-ff -m "merge topicA" topicA
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_grep "$(field branches "$out")" 'merged:' "F2 경계: 2단계가 발화했다(전제 확인)"
+  assert_eq "$(field boundary "$out")" "$FORKPT" "F2 경계 = 머지된 구성원의 진짜 분기점"
+  assert_not_contains "$(field boundary "$out")" "$TIPA" "F2 경계가 머지된 tip 이 아니다"
+  cleanup
+}
+
+# ── F4: 선언 없는 조상 커밋도 브랜치 소속으로 들어온다 (§6.2.2) ─────────────
+#    R→A→B 에서 B 에만 트레일러를 붙여도 A 가 T 에 들어야 한다. 안 그러면
+#    A 의 회귀가 선재 결함으로 숨는다.
+case_f4_undeclared_ancestor_included() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA
+  echo a1 > a.txt; git add a.txt; git commit -qm "a1 (선언 없음)"
+  decl_commit b.txt b1 "b1"
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field boundary "$out")" "$R" "F4 경계 = 브랜치 분기점(선언 커밋이 아니다)"
+  assert_eq "$(field commits "$out")" "2" "F4 선언 없는 조상 a1 도 T 에 든다"
+  local cs; cs=$(bash "$RT" commits "$KEY")
+  assert_eq "$(printf '%s\n' "$cs" | grep -c .)" "2" "F4 commits 서브커맨드도 2줄"
+  cleanup
+}
+
+# ── F7: 토픽 커밋 집합이 서로 다른 토픽 키를 함께 담음 (AC16) ───────────────
+case_f7_mixed_keys_in_T() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  echo b1 > b.txt; git add b.txt
+  git commit -qm "b1
+
+Spec: docs/x-design.md#pr2"
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "declaration-invalid" "F7 한 집합에 두 토픽 키 → declaration-invalid"
+  local rc; bash "$RT" commits "$KEY" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "3" "F7 status != ok 이면 commits 는 exit 3 (fail-closed)"
+  cleanup
+}
+
+# ── F8: 끝점 = 봉인을 «먼저 넣고» 극대원소 (AC6) ────────────────────────────
+#    스택 A→B 에서 현재 체크아웃이 A 면 tip(A) 는 tip(B) 의 조상이라 극대원소가
+#    아니다 — 「끝점 중 현재 브랜치 것을 치환」할 자리가 없다. 봉인을 먼저 넣으면
+#    그 자신이 극대원소로 선다.
+case_f8_seal_first_then_maximal() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  local TIPA; TIPA=$(git rev-parse HEAD)
+  git checkout -q -b topicB; decl_commit b.txt b1 "b1"
+  local TIPB; TIPB=$(git rev-parse HEAD)
+  git checkout -q topicA
+  # 봉인 커밋을 손으로 만든다 — seal-worktree.sh 는 Task 4 다(이 Task 는 그것에 기대지 않는다).
+  local SEAL; SEAL=$(git commit-tree "$TIPA^{tree}" -p "$TIPA" -m seal)
+
+  local out0; out0=$(bash "$RT" resolve "$KEY")
+  assert_not_contains "$(field tips "$out0")" "$TIPA" "F8 --seal 없으면 tip(A) 는 극대원소가 아니라 빠진다"
+  assert_contains "$(field tips "$out0")" "$TIPB" "F8 tip(B) 는 끝점이다"
+
+  local out1; out1=$(bash "$RT" resolve "$KEY" --seal "$SEAL")
+  assert_contains "$(field tips "$out1")" "$SEAL" "F8 봉인을 먼저 넣으면 끝점에 든다"
+  assert_not_contains "$(field tips "$out1")" "$TIPA" "F8 tip(A) 는 여전히 빠진다(조상이므로)"
+  cleanup
+}
+
+# ── 끝점 순서 결정론: 발견 순서와 무관해야 한다 ─────────────────────────────
+case_tips_order_deterministic() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b zzz "$R"; decl_commit z.txt z "z"
+  git checkout -q -b aaa "$R"; decl_commit a.txt a "a"
+  git checkout -q -b mmm "$R"; decl_commit m.txt m "m"
+  local o1 o2
+  o1=$(field tips "$(bash "$RT" resolve "$KEY")")
+  o2=$(field tips "$(bash "$RT" resolve "$KEY")")
+  assert_eq "$o1" "$o2" "tips 두 번 호출 동일"
+  assert_eq "$(printf '%s' "$o1" | tr ',' '\n' | grep -c .)" "3" "끝점 3개"
+  cleanup
+}
 
 # ── 선언이 아예 없는 리포 ───────────────────────────────────────────────────
 case_no_declaration() {
@@ -153,9 +255,11 @@ case_nine_keys_always() {
   cleanup
 }
 
-for c in case_f1_two_siblings case_f2_merged_ref_alive case_f3_merged_ref_deleted \
-         case_f5_fragment_discriminates case_f6_path_absent \
-         case_path_check_is_repo_root_relative \
+for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
+         case_f2_boundary_merged_not_hidden case_f3_merged_ref_deleted \
+         case_f4_undeclared_ancestor_included case_f5_fragment_discriminates \
+         case_f6_path_absent case_f7_mixed_keys_in_T case_f8_seal_first_then_maximal \
+         case_tips_order_deterministic case_path_check_is_repo_root_relative \
          case_no_declaration case_nine_keys_always; do
   echo "== $c"; $c
 done
