@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json plugins/**/*.py plugins/quality-gates/hooks/session-start-advisor.py
+# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json plugins/**/*.py plugins/quality-gates/hooks/session-start-advisor.py pyproject.toml .python-version uv.lock
 #
 # 출하 Python 바닥의 «집행» 이 살아 있는가. 선언은 여기서 재지 않는다 — 선언만 한 바닥은
 # 훅이 읽지 않는다는 것이 이 설계의 출발점이다(설계 Context/Why 3).
@@ -33,7 +33,10 @@ plugins/project-init/hooks/hooks.json
 plugins/quality-gates/hooks/hooks.json
 plugins/spec-distill/hooks/hooks.json
 plugins/spec-distill/scripts/hook_common.py
-plugins/quality-gates/hooks/session-start-advisor.py"
+plugins/quality-gates/hooks/session-start-advisor.py
+pyproject.toml
+.python-version
+uv.lock"
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$SCANNED"
   exit 0
@@ -540,5 +543,36 @@ assert_eq "$adv_quiet" "" "A15/AC8: IGNORED 가 없으면 advisor 의 stdout 은
 adv_ks="$(printf '{"session_id":"","cwd":"%s"}' "$TMP" \
   | env DEVBREW_PYTHON_IGNORED=x DEVBREW_SKIP_HOOKS=quality-gates:SessionStart python3 "$ADVISOR" 2>/dev/null)"
 assert_eq "$adv_ks" "" "A15/AC8: kill switch 가 켜지면 이 공시도 나가지 않는다"
+
+note "── 축 D: 두 바닥의 분리 (AC9) ────────────────────────────────────────"
+# **두 자리를 각각 읽는다.** 한 자리에서 읽어 다른 자리에 쓰면, 갈라지는 날 조용히
+# 거짓이 된다(설계 §4). 그리고 도출값이 비어 있으면 아래 비교가 전부 헛돈다 —
+# 보간 실패를 먼저 증인으로 잡는다.
+DEV_MINOR="$(sed -n 's/^requires-python = ">=3\.\([0-9][0-9]*\)"$/\1/p' pyproject.toml 2>/dev/null | head -1)"
+PV_MINOR="$(sed -n 's/^3\.\([0-9][0-9]*\)$/\1/p' .python-version 2>/dev/null | head -1)"
+case "${DEV_MINOR:-x}" in *[!0-9]*|'') no "D/AC9: pyproject.toml 에서 개발 바닥을 못 읽었다" ;;
+  *) ok "D/AC9: 개발 바닥 3.${DEV_MINOR} 를 pyproject.toml 에서 도출했다 (증인)" ;; esac
+case "${PV_MINOR:-x}" in *[!0-9]*|'') no "D/AC9: .python-version 을 못 읽었다" ;;
+  *) ok "D/AC9: .python-version = 3.${PV_MINOR} (증인)" ;; esac
+assert_eq "$FLOOR_MAJOR_VAL" "3" "D/AC9: 출하 바닥의 major 가 3 이다 (아래 minor-only 비교의 전제)"
+assert_eq "${PV_MINOR:-}" "${DEV_MINOR:-}" "D/AC9: .python-version 이 개발 바닥과 같은 minor 를 가리킨다"
+if [ -n "${DEV_MINOR:-}" ] && [ -n "${FLOOR_MINOR_VAL:-}" ] && [ "$DEV_MINOR" -ge "$FLOOR_MINOR_VAL" ]; then
+  ok "D/AC9: 개발 바닥 3.$DEV_MINOR >= 출하 바닥 ${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL}"
+else
+  no "D/AC9: 개발 바닥이 출하 바닥보다 낮다 — uv 가 출하 바닥을 못 재게 된다"
+fi
+
+note "── 축 H: uv.lock 핀 (AC16) ───────────────────────────────────────────"
+if [ -f uv.lock ]; then
+  ok "H/AC16: uv.lock 이 추적된다"
+  pin="$(awk '/^name = "pyyaml"$/{f=1;next} f&&/^version = /{print;exit}' uv.lock)"
+  assert_grep "${pin:-}" '^version = "[0-9]+\.[0-9]+' "H/AC16: uv.lock 이 PyYAML 을 정확한 버전으로 고정한다 ($pin)"
+  assert_file_grep uv.lock "^requires-python = \">=3\.${DEV_MINOR:-x}\"" \
+    "H/AC16: uv.lock 의 requires-python 이 pyproject.toml 과 같다"
+else
+  no "H/AC16: uv.lock 이 없다"
+fi
+assert_file_grep pyproject.toml '^package = false$' \
+  "H: [tool.uv] package = false — devbrew 는 빌드되는 패키지가 아니다"
 
 finish
