@@ -27,6 +27,18 @@ cd "$ROOT" || exit 1
 
 MARKER='**층 1 판정 관계** —'
 
+# A2 가 세는 리터럴 여덟 축 이름 — 이 목록 자체가 「금지할 대상」이므로 여기서 이름을
+# 나열하는 것은 맞다. `컴포넌트 관계` 는 반드시 두 단어 붙은 토큰으로 맞혀야 한다 — 새
+# 불릿 산문에 「판정 관계」·「그 자리의 관계」처럼 맨 `관계` 가 정당하게 섞여 있어서,
+# `관계` 단독을 목록에 넣으면 오탐이다.
+AXIS_NAMES=("목표" "문제정의" "범위" "아키텍처" "컴포넌트 관계" "데이터 흐름" "trade-off" "구현 가능성")
+n_axis_names="${#AXIS_NAMES[@]}"
+if [ "$n_axis_names" -eq 8 ]; then
+  ok "A2 양의 짝: 리터럴 축 이름 목록이 8개다 (아래 카운트 판정이 잴 대상을 갖는다)"
+else
+  no "A2 양의 짝: 리터럴 축 이름 목록이 ${n_axis_names}개다 — 8개여야 한다. 아래 카운트 판정이 공허하다"
+fi
+
 # ── 축 A : agent 사본 넷이 층 1 을 프로필에 위임한다 ─────────────────────────
 AGENTS="$(git ls-files -- 'shared/docreview/agents/doc-critic*.md' 'plugins/*/agents/doc-critic*.md')"
 n_agents="$(printf '%s\n' "$AGENTS" | grep -c . || true)"
@@ -45,12 +57,22 @@ for f in $AGENTS; do
     continue
   fi
   body="${line#*:}"
-  # A2 — 리터럴 여덟 축 열거 부재. 연쇄의 한 조각만 겨누면 나머지를 남긴 채 통과하므로
-  #      가운뎃점 연쇄 자체를 겨눈다.
-  case "$body" in
-    *"목표·문제정의·범위"*) no "A2: $f 층 1 불릿이 리터럴 축 열거를 아직 쥐고 있다" ;;
-    *) ok "A2: $f 층 1 불릿에 리터럴 여덟 축 열거가 없다" ;;
-  esac
+  # A2 — 리터럴 축 열거의 «개수» 판정. 이름 하나가 산문에 예로 섞이는 것은 정상이다 —
+  #      둘 이상이 한 불릿에 함께 있으면 그것이 열거다. 여덟 이름 중 앞쪽 세 개
+  #      (「목표·문제정의·범위」)만 겨누면 뒤쪽 다섯(아키텍처·컴포넌트 관계·데이터
+  #      흐름·trade-off·구현 가능성)이 리터럴로 남아도 통과한다 — 리뷰가 잡은 구멍이다.
+  #      그래서 목록(AXIS_NAMES) 전체를 순회해 세고, 2개 이상이면 RED 로 판정한다.
+  n_axis_hits=0
+  for axis in "${AXIS_NAMES[@]}"; do
+    case "$body" in
+      *"$axis"*) n_axis_hits=$((n_axis_hits+1)) ;;
+    esac
+  done
+  if [ "$n_axis_hits" -le 1 ]; then
+    ok "A2: $f 층 1 불릿에 리터럴 축 열거가 없다 (관찰된 축 이름 수: ${n_axis_hits}/8)"
+  else
+    no "A2: $f 층 1 불릿이 리터럴 축 열거를 아직 쥐고 있다 (관찰된 축 이름 수: ${n_axis_hits}/8)"
+  fi
   # A3 — 프로필 참조 존재(양의 짝: A2 의 부재가 «줄 삭제»로 달성되지 않았다)
   case "$body" in
     *'layer_rubric.layer1'*) ok "A3: $f 층 1 불릿이 layer_rubric.layer1 을 참조한다" ;;
