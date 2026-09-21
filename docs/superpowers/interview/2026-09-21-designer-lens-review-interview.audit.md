@@ -1,505 +1,321 @@
 ---
-type: interview-seed-audit
+type: interview-audit
 payload: 2026-09-21-designer-lens-review-interview.md
 created_at: 2026-09-21
-session_id: 0d872e3d-b48a-48fb-ab1e-900796f80842
-source: spec-distill framing-requests
+session_id: 593645ef-8ca6-472b-8c21-861adec7a34d
+source: spec-distill conducting-interview v3.2.0
 ---
 
-# Designer-lens review — Interview Seed Audit
+# Designer-lens review — Interview Audit
 
-> 순수 텔레메트리 — 다음 세션의 첫 턴 `/interview @<seed 경로>` 가 가리키는 것은 payload(seed)
-> 파일이고, 여기에는 확산·압축이 어떻게 진행됐는지의 과정 기록만 남는다. payload 의 `audit_file`
-> 이 이 파일을 가리킨다.
+> 순수 텔레메트리 — 다음 stage가 읽는 핸드오프 산출물은 payload이고, 여기에는 이 인터뷰가 어떻게 진행됐는지의 프로세스 기록만 남는다(D1).
+> payload frontmatter의 `audit_file`이 이 파일을 가리키며, 게이트는 두 파일을 함께 검사한다.
 
-## 1. 원문
+## 1. Coverage Ledger
 
-### `/request-framing` 요청 원문 (2026-09-21)
+- floor:root_problem — closed — 「seed 그대로 — 두 독립 결함」으로 재구성 세 후보를 모두 물림 (@S2)
+- floor:landscape — closed — ponytail 외부 근거 처분: 절차·오탐 가드·0건 출구만 취함 (@S3)
+- floor:skepticism — closed — ST1 확정 ① 의 판정 「보완」 (@S4)
+- floor:blind_spot — closed — premortem 처분: ⓐⓑ 원인 재지정만 이번 범위, 나머지는 §5 위험·§3 OQ 박제 (@S5)
+- floor:open_questions — closed — OQ 목록 확인 후 범위 경계 둘을 닫고 나머지 박제 (@S12)
+- derived:axis_injection — closed — 축의 정본이 판정자마다 다름(doc-critic 본문 리터럴 vs codex 프로필); 버림 ⓐ 가 층 1 불릿을 layer_rubric.layer1 참조로 바꾸는 것을 같은 변경에 포함 (@S4)
+- derived:axis_placement — closed — 새 축이 층 1 이냐 층 2 냐와 그 처분 귀결; brief 층 1 강제 + finding 상한·묶음으로 decide 폭증 차단 (@S6)
+- derived:verdict_wording — closed — 판정 문구·오탐 관리·Lazy Ladder 의 review-time 변환; 축 하나 안에 술어 셋 (@S9) (재개방 1회 — 사용자가 겪은 실패 패턴 셋 중 둘을 4단 질문이 못 잡음)
+- derived:explanation_site — closed — 사용자-승인 박제(@S9) — §Open Questions 참조
 
-> 리뷰 공통 모듈에서, 리뷰를 하는 경우에 과설계 등 하지 않았는지랑 아키텍처관점에서 등 설계하는 사람으로서 리뷰를 해주는게 좋을거 같아(좋은 레퍼런스를 찾고, 예시 중 하나로 pr 리뷰어들을 봐줘 앞단에서도 아키텍처 리뷰와 같은걸 설계자로서 보면 좋겠지), 그리고 리뷰어들이 찾은걸 오케스트레이터가 변경하는 경우 사용자에게 쉽게 설명해줘야 할거 같아 ask question에서 답변하는건 좋은데 선택에 어렵네
+## 2. Budget
 
-### 리뷰 라운드 2 중 추가 원문 (2026-09-21)
+- 질문 라운드: 12 · agent dispatch: 13 · coverage-mapper 1 · codex 실호출: 3 (성공 3)
 
-> 좀더 이거보다 잘설명해주면 좋을거 같아 글을 늘리라는건 아니야 정보가 많아야 한다는거지 글은 오히려 아주 살짝 길어
+(인터뷰 12 라운드 + 리뷰 게이트 3 라운드. dispatch 13 = coverage-mapper 1 · steelman-builder 1 · blind-spot-prober 1 · doc-critic-web 3 · doc-recritic 3 · brief-readback 1 + 재비판 블록 재요청 1 · seed 분류기는 스크립트라 미포함. codex 는 리뷰 라운드마다 러너 실호출.)
 
-## 2. 질문 전체
+## 3. Steelman 원문
 
-(라운드마다 블록 하나 — 답하지 않은 질문도 남긴다. **«당신이 답한 것» 줄만 사용자의 말이다** —
- 질문 문구 · 선택지 · 내가 읽은 것은 저자가 쓴 것이다. 리뷰는 이 구분으로 정답을 가른다.)
+#### ST1 — 확정 ①(새 agent 없이 프로필 축 추가 · doc-critic 하나 유지)을 외부 선례의 「분리」 관행과 리포의 리터럴 축 사실로 흔든다
 
-### 라운드 0 (절차 — 워크트리)
+**dispatch 입력** — goal: S1(「구현 전에 과설계를 잡는 것과 리뷰 처분을 멈칫 없이 고르는 것은 같은 무게의 목표이고, 어느 하나가 다른 하나의 수단이거나 부차적이지 않다」) · 전제: P1 두 목표 동등 무게(S1) · P2 두 갈래 독립 결함(S2) · P3 범위는 문서 두 자리, seed·/qg 제외(S1) · P4 차용은 절차+가드+0건 출구(S3) · P5 설계자 시선은 기존 탐지 리뷰어 하나가 프로필을 따라 수행 가능하며 별도 판정자를 요구하지 않는다(orchestrator 도출, 근거 S1 「새 리뷰어 agent 를 만드는 대신」) · 제약: S1–S3 원문 전량 · trigger: landscape 모순(ponytail 별도 커맨드 · pr-review-toolkit 관심사별 agent · Mozilla/TU-e 팀 밖 리뷰어) + 리포 사실(doc-critic 층 1 축이 본문 리터럴이고 층 2 만 프로필 참조, codex 러너는 layer_rubric.layer1 을 읽음)
 
-- 물은 것: `feature/<kebab-topic>` 워크트리를 만들고 거기서 시작할까요? 이 브랜치 하나에서 인터뷰·설계·계획·구현까지 갑니다. (origin/main 에 없는 커밋 0개) 거절하면 현재 디렉토리에서 진행합니다.
-  - 선택지: 만들고 시작 (권장) « / » 현재 디렉토리에서
-  - 당신이 답한 것: 만들고 시작 (권장)
-
-### 라운드 1
-
-- 물은 것: 「설계자로서 보는 시선」을 어느 층에 넣을까요? (현재는 `doc-critic` 하나가 프로필의 rubric 대로 층 1·2 를 다 봅니다. pr-review-toolkit 은 반대로 type-design · silent-failure · test 등 관심사마다 agent 를 따로 둡니다.)
-  - 선택지: 프로필 rubric 에 축만 추가 « / » 전용 리뷰어 신설 (pr-review-toolkit 식) « / » 둘 다 — 축은 공통, 리뷰어는 설계문서만 « / » 먼저 조사해 보고 결정
-  - 당신이 답한 것: 프로필 rubric 에 축만 추가
-- 물은 것: 설계자 시선을 어느 문서 자리까지 넣을까요? (여러 개 고를 수 있습니다)
-  - 선택지: seed (Phase 0 최앞단) « / » brief (인터뷰 산출물) « / » design-doc (설계문서) « / » 코드 리뷰(`/qg`)까지
-  - 당신이 답한 것: brief (인터뷰 산출물), design-doc (설계문서), 코드 리뷰(`/qg`)까지
-- 물은 것: «과설계» 를 무엇에 대비해 재야 할까요? 기준이 없으면 리뷰어가 자기 취향을 결함으로 내놓습니다.
-  - 선택지: 사용자 goal 대비 « / » 더 단순한 대안의 존재 « / » 리포 철학 대비 (하니스 가볍게) « / » 셋 다 — 세 개를 함께
-  - 당신이 답한 것: 1, 2에 가까워보여 포니테일 스킬을 자세하게 전부다 봐볼래? 거기서 차용할게 많을거야
-- 물은 것: AskUserQuestion 으로 리뷰 처분을 고를 때 실제로 무엇이 어려웠나요? (여러 개 고를 수 있습니다 — 여기 답이 결정적입니다)
-  - 선택지: 고르면 무엇이 바뀌는지 안 보임 « / » 왜 문제인지 안 와닿음 « / » 용어가 내부 회계어 « / » 항목이 많아 지침 · 우선순위 없음
-  - 당신이 답한 것: 고르면 무엇이 바뀜는지 안 보임, 왜 문제인지 안 와닿음, 용어가 내부 회계어, 항목이 많아 지침 · 우선순위 없음
-
-### 라운드 2
-
-- 물은 것: «포니테일 스킬» 을 찾지 못했습니다 — 이 머신의 플러그인·스킬 설치본에 `ponytail`·`pony` 로 검색되는 것이 0건입니다. 어떤 자료인가요?
-  - 선택지: 경로를 적겠다 « / » 설치 안 된 외부 자료다 « / » 이름을 잘못 썼다 « / » 넘어가고 1+2 로 간다
-  - 당신이 답한 것: 설치 안 된 외부 자료다
-- 물은 것: 코드 리뷰(`/qg`) 에는 프로필도 `layer_rubric` 도 없습니다 — 리뷰어가 보는 것은 `filtered_diff` 이고, `security-reviewer` 는 「design or architecture critique 는 내 책임이 아니다」를 명시적으로 선언합니다. 거기는 어떻게 할까요?
-  - 선택지: qg 에도 리뷰어를 하나 더한다 « / » qg 는 다음 PR 로 미룬다 « / » 기존 qg 리뷰어를 넓힌다 « / » 설계문서 대비로 대신한다
-  - 당신이 답한 것: (답 없음 — 아래 확인 질문의 「qg는 빼자」로 대신 답했다)
-- 물은 것: 네 난점을 어떻게 풀까요? (여러 개 고를 수 있습니다 — 고른 것만 설계 범위에 들어갑니다)
-  - 선택지: before/after 를 질문에 싣는다 « / » 「그대로 두면」 한 줄 « / » 회계어를 사람 말로 « / » 우선순위 · 묶음 표시
-  - 당신이 답한 것: before/after 를 질문에 싣는다, 「그대로 두면」 한 줄, 회계어를 사람 말로, 우선순위 · 묶음 표시
-- 확인 질문: 라운드 1 의 풀이
-  - 내가 읽은 것: 「설계자 시선은 새 리뷰어 agent 를 만드는 대신 프로필의 `layer_rubric` 에 축을 더하는 방식으로 넣고, 탐지 리뷰어는 `doc-critic` 하나로 유지한다」 — 고름
-  - 내가 읽은 것: 「seed(Phase 0) 는 설계자 시선의 적용 범위에서 제외하고, brief · design-doc · 코드 리뷰(/qg) 세 자리에만 넣는다」 — 고르지 않음
-  - 내가 읽은 것: 「네 난점이 모두 실재하므로 해법은 네 가지를 모두 다뤄야 하고, 하나만 고치는 것은 부분 해결이다」 — 고름
-  - 당신이 답한 것: 풀이 1 — 리뷰어 유지, 풀이 3 — 난점 넷 다, qg는 빼자
-
-### 라운드 3
-
-- 물은 것: 다음 단계가 그 자료를 찾으려면 검색 단서가 필요합니다. «포니테일» 은 어느 쪽인가요?
-  - 선택지: 영어 ponytail 이다 « / » 정확한 이름을 적겠다 « / » 이름만 싣고 맡긴다
-  - 당신이 답한 것: https://github.com/dietrichgebert/ponytail
-- 물은 것: 이 작업이 끝났을 때 **무엇이 좋아지면** 성공입니까? (이 답이 seed 의 goal 이 되고, 다음 단계의 설계가 이것에 맞춰 판단됩니다)
-  - 선택지: 구현 전에 과설계를 잡는다 « / » 처분을 멈칫 없이 고른다 « / » 둘 다 — 같은 무게로 « / » 둘 다 — 설명이 먼저
-  - 당신이 답한 것: 둘 다 — 같은 무게로
-- 확인 질문: 라운드 2 의 풀이
-  - 내가 읽은 것: 「설계자 시선의 적용 범위는 brief 와 design-doc 두 문서 자리이고, seed 와 코드 리뷰(/qg) 는 둘 다 범위 밖이다」 — 고름
-  - 내가 읽은 것: 「과설계 판정 기준은 지금 확정하지 않고, 다음 단계가 그 외부 자료를 전문 조사해 거기서 끌어오는 것을 사용자가 원한다」 — 고름
-  - 내가 읽은 것: 「before/after 미리보기 · 『그대로 두면』 한 줄 · 회계어의 사람말 번역 · 우선순위·묶음 표시 넷을 모두 설계 범위에 넣는다」 — 고름
-  - 당신이 답한 것: 풀이 A — 문서 둘만, 풀이 B — 자료는 다음 단계가, 풀이 C — 설명 넷 다
-
-### 라운드 4 (압축 직전 — 확인 질문만)
-
-- 확인 질문: 라운드 3 의 풀이
-  - 내가 읽은 것: 「과설계를 재는 기준은 GitHub 의 dietrichgebert/ponytail 스킬을 다음 단계가 전문 읽고 거기서 끌어오며, 그것이 사용자 goal 대비·더 단순한 대안이라는 두 후보보다 우선한다」 — 고르지 않음
-  - 내가 읽은 것: 「구현 전에 과설계를 잡는 것과 리뷰 처분을 멈칫 없이 고르는 것은 같은 무게의 목표이고, 어느 하나가 다른 하나의 수단이거나 부차적이지 않다」 — 고름
-  - 당신이 답한 것: 풀이 E — 두 목표 동등, goal대비 더단순한 대안쪽이 우선한다
-
-## 3. 긴 초안
-
-(압축 전 긴 초안 — 크게 그린 다음 깎아낸 원본. **seed 로는** 나가지 않고 이 절에만 남는다.)
-
-### 요청의 두 갈래
-
-**갈래 1 — 설계자 시선의 리뷰.** 리뷰가 돌 때 「과설계를 하지 않았는가」와 「아키텍처 관점에서 맞는가」를 **설계하는 사람의 눈으로** 봐 달라는 것. 사용자는 좋은 레퍼런스를 찾아 오라고 했고, 예시 중 하나로 PR 리뷰어들을 보라고 했다. 뒷단(PR 리뷰)에 있는 아키텍처 리뷰 같은 것이 앞단(문서 단계)에도 있으면 좋겠다는 뜻.
-
-**갈래 2 — 오케스트레이터의 변경 설명.** 리뷰어가 찾은 것을 오케스트레이터가 문서에 반영할 때, 무엇을 왜 바꾸는지가 사용자에게 쉽게 설명돼야 한다. AskUserQuestion 으로 답하는 방식 자체는 좋지만 **선택이 어렵다.**
-
-### Phase 0 이 리포에서 읽어 확인한 것
-
-- 리뷰 공통 모듈의 정본은 `shared/docreview/`. `plugins/spec-distill/` 쪽 스크립트는 심볼릭 링크(`git ls-files -s` mode 120000), agent 는 `# copy-of:` 한 줄만 더한 복사본.
-- 「무엇을 보는가」는 리뷰어 agent 가 아니라 **프로필의 `layer_rubric`** 이 정한다. `doc-critic` 은 프로필을 받아 그대로 따르는 실행자다.
-- 프로필 셋의 층 1 현황: `seed.md` 는 뺄셈 검사 넷(`unfounded_addition`·`example_as_requirement`·`premature_closure`·`inference_as_decision`), `brief.md` 는 `direction` 하나, `design-doc.md` 는 `goal_fit`·`problem_definition`·`scope`·`architecture`·`component_relations`·`data_flow`·`tradeoffs`·`feasibility`.
-- **과설계를 재는 축은 세 프로필 어디에도 없다.** 층 2 의 `scope_creep` 은 「한 구현 계획으로 분해되지 않는 독립 하위 시스템 묶음」 — 범위 팽창이지 「이 문제에 이 구조가 과한가」가 아니다.
-- 아키텍처 축은 design-doc 자리에만 있고 앞단(seed·brief)에는 없다.
-- `/qg` 의 `security-reviewer` 는 "NOT responsible for: … design or architecture critique" 를 명시적으로 선언한다 — 코드 리뷰에 설계자 시선이 없는 것은 누락이 아니라 의도적 경계다. 또한 qg 리뷰어가 보는 것은 `filtered_diff` 이고 프로필도 `layer_rubric` 도 없다.
-- 게이트 렌더(`docreview_state.py` 의 `_rg_decide`)가 사용자에게 내는 전부: finding 한 문장 요약 + `변경`/`근거`/`대안`/`영향` 네 줄 + 선택지 라벨(채택/기각/보류). before/after 없음. 그 아래 회계 줄에 `기각 N건(재비판) · 사용자 기각 · drop · bucket 충돌 · 계보 지목 불일치 · 기각 계보 재상승 · 미소비 재상승 예약 · 미소비 상향 예약` 이 그대로 노출된다.
-- `shared/adjudication/render_disposition.py` 가 처분 두 줄의 공통 렌더를 이미 갖고 있다(`수용 · 기각 · 억제 · 흡수 · 미판정`).
-- pr-review-toolkit(설치본 `claude-plugins-official/pr-review-toolkit/c447c3207a42`)은 관심사마다 agent 를 따로 둔다: `code-reviewer`·`code-simplifier`·`comment-analyzer`·`pr-test-analyzer`·`silent-failure-hunter`·`type-design-analyzer`. `type-design-analyzer` 가 설계 시선에 가장 가깝지만 1–10 수치 스코어링을 쓴다 — devbrew 철학 P2 는 수치 스코어링을 허용하되 권장하지 않는다.
-
-### 사용자가 확정한 것 (라운드 1~4)
-
-1. 방식은 **새 리뷰어 agent 신설이 아니라 프로필 `layer_rubric` 에 축 추가.** 탐지 리뷰어는 `doc-critic` 하나로 유지. (라운드 2 확인 질문에서 고름)
-2. 적용 범위는 **brief 와 design-doc 두 문서 자리.** seed 와 코드 리뷰(`/qg`) 는 둘 다 범위 밖. 라운드 1 답에는 `/qg` 가 들어 있었으나 라운드 2 확인 질문에서 「qg는 빼자」로 사용자가 직접 뒤집었다. (라운드 3 확인 질문에서 고름)
-3. 과설계 판정 기준은 **사용자 goal 대비**와 **더 단순한 대안의 존재** 쪽이 우선하고, GitHub 의 `dietrichgebert/ponytail` 스킬(전체 URL: https://github.com/dietrichgebert/ponytail — 설치본에 없는 외부 자료)은 다음 단계가 전문 읽고 **차용**할 자료다. 라운드 4 에서 사용자가 「goal대비 더단순한 대안쪽이 우선한다」로 우선순위를 명시적으로 뒤집었다 — 내가 풀이 D 에서 ponytail 을 기준의 정본으로 읽은 것은 틀렸다.
-4. 설명 개선은 **넷 모두** 설계 범위: before/after 미리보기 · 「그대로 두면」 한 줄 · 회계어의 사람말 번역 · 우선순위·묶음 표시. (라운드 3 확인 질문에서 고름)
-5. goal 은 **둘 다 같은 무게**: 구현 전에 과설계를 잡는 것과 리뷰 처분을 멈칫 없이 고르는 것. 어느 하나가 다른 하나의 수단이거나 부차적이지 않다. (라운드 4 확인 질문에서 고름)
-
-### Phase 0 이 제기했으나 풀지 않은 긴장
-
-- **before/after 를 누가 만드는가.** 리뷰어는 문제를 지적할 뿐 수정안을 쓰지 않는다. 미리보기 문안을 오케스트레이터가 만들면 그것은 오케스트레이터가 변경안의 저자가 되는 것이고, 그 문안을 사용자가 승인한다 — Law 2(writer/reviewer 분리)와 얽히는 자리다.
-- **우선순위 표시와 Law 2.** 오케스트레이터가 「이것부터」를 매기면 그 순위 자체가 판단이다. 이 경고를 선택지 설명에 달았고 사용자가 그대로 골랐으므로 안고 간다 — 설계 단계가 풀 문제.
-- **회계어 번역의 경계.** 회계 숫자는 공시 의무가 있는 값이다(degrade 는 언제나 드러낸다). 「사람 말로」가 «숨기기»가 되면 공시 계약이 깨진다 — 번역이어야 하고 은폐여선 안 된다.
-- **brief 프로필의 층 1 은 `direction` 하나**이고 「사용자가 정한 방향이 틀렸을 근거를 찾되 방향을 바꾸지 않는다」가 그 자리의 계약이다. 과설계 축이 거기 들어갈 때 이 계약과 어떻게 공존하는지는 미검토.
-- **seed 프로필과의 방향 충돌**(뺄셈 검사 대 설계자 제안)은 사용자가 seed 를 범위에서 빼면서 해소됐다.
-
-### 다음 단계가 할 일
-
-- `dietrichgebert/ponytail` 을 전문 조사해 차용할 것을 고른다 — Phase 0 은 웹을 보지 않으므로 이 자료의 내용을 아무것도 모른다.
-- 아키텍처 리뷰 레퍼런스를 더 찾는다(사용자 원문: 「좋은 레퍼런스를 찾고」).
-- 과설계 축의 이름·개수·판정 문구를 정하고, brief 와 design-doc 두 프로필에 어떻게 앉힐지 정한다.
-- 설명 개선 넷이 사는 층을 정한다 — 공통 렌더(`docreview_state.py`·`render_disposition.py`)인가, 각 진입 skill 의 질문 구성 규약인가, 둘 다인가.
-
-## 4. 비평과 냉독
-
-(리뷰 엔진 라운드마다 탐지 · codex · 재비판 산출물을, 마지막에 냉독 산문을 **판정 없이** 그대로
- 옮긴다.)
-
-### 라운드 1 — 탐지 (doc-critic)
-
-> ## doc-critic (seed 프로필) — 라운드 리뷰 결과
+> **case_for_alternative** — statement: 「설계자 시선을 `doc-critic` 의 축으로 흡수하지 말고, 과설계·아키텍처만 보는 별도 판정자(새 agent 또는 별도 리뷰 자리)로 세운다.」
 >
-> 층 1 에서 4건, 층 2 는 프로필이 요구하지 않아 `[]`.
+> goal 의 앞 절반(구현 전 과설계 포착)에서 별도 판정자가 이긴다 — 이 리포 자신의 설계가 그 증거를 적어 뒀다: 「이 리포에서 두 번째 판정자가 단독으로 잡은 사례는 전부 다른 계열(codex)이거나 **다른 역할(adversarial)**이었다」(설계 §14). 기각된 것은 같은 모델 «복제»이지 다른 «역할»이 아니다 — 설계자 시선은 정확히 후자다. 외부도 같은 방향이다: PBR 원 실험에서 세 관점의 결함 집합은 거의 겹치지 않았고, 복제 실험에서 두 관점이 겹친 «바로 그 문서»가 PBR 이 체크리스트를 못 이긴 유일한 사례였다 — 관점이 실제로 구별되면 별도 판독자가 체크리스트를 이긴다는 조건부가 그대로 성립한다. 그리고 goal 의 뒤 절반(처분을 멈칫 없이)에도 이긴다고 주장할 수 있다: 별도 판정자는 자기 블록으로 findings 를 «이미 묶어서» 내므로, S1 이 위험하다고 적은 「오케스트레이터가 순위를 매기면 그 순위 자체가 판단이다」를 거치지 않고 그룹핑을 얻는다. 지금 `doc-critic` 은 design-doc 자리에서 층1 여덟 + 층2 일곱 = 열다섯 축을 한 패스에 들고 있고, 거기에 두 축을 더 얹는 것은 주의 희석의 전형이다.
 >
-> ```docreview-layer1
-> - ref: c1
->   layer: 1
->   category: premature_closure
->   anchor: "#__doc__"
->   disposition: fix
->   summary: "둘째 갈래(설명 넷)의 적용 자리를 「오케스트레이터가 문서에 반영할 때」로 좁혀 놓았는데, 사용자는 그 범위를 묻지도 답하지도 않았고 「다시 검증할 것」에도 없다 — 범위 답(brief·design-doc, seed·/qg 제외)은 갈래 1(설계자 시선)에만 물어 받은 것이다."
->   edit_scope: "#__doc__"
->   evidence: "원문 = 「리뷰어들이 찾은걸 오케스트레이터가 변경하는 경우 사용자에게 쉽게 설명해줘야 할거 같아」(변경 대상을 지정하지 않음). 범위를 물은 질문은 「설계자 시선을 어느 문서 자리까지 넣을까요?」 하나뿐이고 R3 확인의 「풀이 A — 문서 둘만」도 「설계자 시선의 적용 범위는…」으로 갈래 1 에만 걸려 있다. 초안은 갈래 2 의 자리를 「문서」로 단정하면서 그 미확정을 열린 항목으로도 남기지 않았다."
-> - ref: c2
->   layer: 1
->   category: inference_as_decision
->   anchor: "#__doc__"
->   disposition: fix
->   summary: "「이 경고를 선택지에 달았는데도 사용자가 그 항목을 골랐으니 안고 간다」가 사용자의 위험 수용 결정처럼 적혀 있으나, 기록에 남은 선택지는 경고 없는 「우선순위 · 묶음 표시」 한 줄이고 위험을 감수하겠다는 사용자 답은 어디에도 없다."
->   edit_scope: "#__doc__"
->   evidence: "audit `## 2` 라운드 2 — 선택지: 「before/after 를 질문에 싣는다 « / » 「그대로 두면」 한 줄 « / » 회계어를 사람 말로 « / » 우선순위 · 묶음 표시」, 당신이 답한 것: 「… 우선순위 · 묶음 표시」. 「순위 자체가 판단이다」라는 경고 문구도, 그것을 알고 고른다는 사용자 발화도 「당신이 답한 것」 줄에 없다 — 항목 선택 사실만 남기고 수용 여부는 열린 긴장으로 두어야 한다."
-> - ref: c3
->   layer: 1
->   category: unfounded_addition
->   anchor: "#__doc__"
->   disposition: fix
->   summary: "「미리보기 문안을 오케스트레이터가 쓰면 그것이 변경안의 저자가 되는 자리라 쓰는 쪽과 보는 쪽을 나누는 규칙과 얽힌다」는 원문에 근거가 없고 엔진 실체와도 어긋난다 — 오케스트레이터는 이미 모든 편집의 저자이고 승인자는 사용자 게이트라, 미리보기가 새로 만드는 분리 문제가 없다."
->   edit_scope: "#__doc__"
->   evidence: "`shared/docreview/references/reviewing-document.md` 배달 절 — 「`fix` → 저자가 `check-intent <id> --intent <scope> --state-dir D` 통과 후 적용」·「채택된 `decide` 의 적용은 … permit 계약」, 8단계 — 결정은 `AskUserQuestion` 라운드 게이트에서 사용자가 한다. 원문(`## 1. 원문`)에도 「당신이 답한 것」 줄에도 저자/리뷰어 분리에 관한 사용자 말은 없다."
-> - ref: c4
->   layer: 1
->   category: unfounded_addition
->   anchor: "#__doc__"
->   disposition: fix
->   summary: "「뒷단에 아키텍처 리뷰 같은 것이 있듯」을 리포 사실처럼 단정했는데, 이 리포의 뒷단(`/qg`)에는 그런 리뷰어가 없고 `security-reviewer` 는 아키텍처 비평을 명시적으로 자기 책임에서 뺀다 — 출처가 외부 PR 리뷰 관행인지 리포 안인지도 밝히지 않아 다음 단계의 「좋은 레퍼런스」 탐색이 없는 자리를 향한다."
->   edit_scope: "#__doc__"
->   evidence: "원문은 「앞단에서도 아키텍처 리뷰와 같은걸 설계자로서 보면 좋겠지」로 전제만 깔았을 뿐 뒷단에 그것이 있다고 말하지 않았다. `plugins/quality-gates/agents/security-reviewer.md:29` — 「You are NOT responsible for: code style, design or architecture critique …」이고, qg agents 일곱(adversarial · artifact-adversarial · artifact-critic · pr-understanding-builder · runtime-verifier · security-reviewer · test-scope-validator) 중 설계·아키텍처 축을 맡는 자리는 없다."
-> ```
+> **case_for_current** —
 >
-> ```docreview-layer2
-> []
-> ```
+> 같은 두 기준에서 원안이 이긴다. 앞 절반 — PBR 의 활성 성분은 «읽는 사람»이 아니라 «읽는 절차»다(체크리스트 기반 읽기가 ad-hoc 대비 유의하게 우월하다는 통제 실험). S3 가 고른 Lazy Ladder+가드+0건 출구는 바로 그 scenario 이고, 그것은 프로필 rubric 문구로 전달된다 — 판정자를 늘려야 얻어지는 것이 아니다. 게다가 design-doc 자리에는 `architecture`·`component_relations`·`data_flow`·`tradeoffs`·`feasibility`(층1)와 `scope_creep`·`approaches_comparison`(층2)이 **이미** 있으므로, 별도 판정자가 사는 자리는 대부분 «겹침»이고 — PBR 복제가 말하는 「겹치면 체크리스트와 무승부」 구간이다. 뒤 절반 — 두 번째 탐지자는 항목 수를 늘린다. 정적 분석에서 비실행가능 경고 비율 35~91% 가 alert fatigue 로 이어져 개발자가 전체를 무시하게 만든다는 것이 반복 관측된 실패 양식이고, 이 리포 설계는 같은 이유(「finding 수를 N배로 늘려 `decide` 인플레이션을 키운다」)로 병렬 탐지자를 이미 기각했다. 그리고 트리거가 인용한 외부 선례 셋은 읽으면 분리 근거가 약하다: Mozilla 는 design review 에 「문제 도메인에 밝은 팀 밖 엔지니어» **한 명**을 배정하지 판정자를 쪼개지 않고, 그 원칙의 내용은 «저자≠리뷰어»인데 `doc-critic` 은 `tools: Read, Grep, Glob` 로 이미 그것을 물리적으로 만족한다(Law 2). ponytail 의 `/ponytail-review` 가 분리된 상대는 다른 «리뷰어»가 아니라 **쓰기 전 생성 규율**인 base skill 이다(Lazy Ladder 는 "Before writing code" 사다리다) — ponytail 은 일반 리뷰어를 아예 안 만든다. pr-review-toolkit 의 명시 분리 사유는 「Use them individually for targeted reviews」 — **주문형 지목 호출**인데, docreview 에는 그 호출 모드가 없다(자리마다 강제된 단일 패스). 마지막으로 비용이 무르지 않다: `detectors != 1` 은 `load_profile()` 에서 fail-closed 로 죽고, 같은 함수가 프로필의 미지 필드도 거절하며, 락이 그 rc 를 단언한다.
 >
-> ### 참고 (finding 아님)
+> **premise_refutation.hits** — `[]`
 >
-> - 세 개의 «(사용자 확인)» 문장은 모두 audit `## 2` 의 「고름」 풀이와 글자 그대로 일치한다 — 풀이 1(리뷰어 유지) · 풀이 A(문서 둘만) · 풀이 B(자료는 다음 단계가) · 풀이 C(설명 넷 다) · 풀이 3 · 풀이 E. `inference_as_decision` 로 낼 것이 이 넷 밖에 더 없었다.
-> - 초안의 리포 사실 주장 중 「brief 자리의 층 1 이 지금 방향 반증 하나로만 되어 있어서」는 **참**이다 — `plugins/spec-distill/references/docreview-profiles/brief.md` frontmatter 가 `layer1: [direction]` 이고, 그 자리 층 1 처분은 `decide` 로 고정돼 있다(같은 파일 20행). 그래서 이 문장은 finding 으로 내지 않았다.
-> - 「과설계 기준은 확정하지 않는다(풀이 B)」와 「goal 대비·더 단순한 대안 쪽이 우선한다(R4)」의 긴장은 초안의 「기준 둘을 정했을 뿐 판정 문구는 아직 없다」가 이미 해소하고 있어 층 1 네 범주 어디에도 걸지 않았다.
+> **premise_list_challenge** —
 >
-> 읽은 파일(절대경로): `/Users/jeonghokim/Downloads/devbrew/.claude/worktrees/designer-lens-review/plugins/spec-distill/references/docreview-profiles/brief.md` · `.../docreview-profiles/design-doc.md` · `.../shared/docreview/references/reviewing-document.md` · `.../plugins/quality-gates/agents/*.md`
+> 세 가지. (1) **빠진 전제 — 전달 경로**. P5 는 「한 리뷰어가 «할 수 있다»」는 능력 주장이고, 「프로필의 축이 그 리뷰어의 층 1 지시를 «지배한다»」는 배선 주장이 아니다. 둘은 다른 문장인데 목록에 후자가 없어서 반박 대상이 되지 못한다. 실제 리포는 후자에 흠이 있다: `doc-critic` 의 층 1 불릿은 여덟 축을 리터럴로 열거하고 바로 다음 층 2 불릿만 `layer_rubric.layer2` 를 참조한다. 다만 트리거의 강한 읽기(「codex 쪽에만 닿고 Claude 탐지기에는 안 닿는다」)는 **과장**이다 — 같은 agent 본문이 「프로필은 이 자리의 공개 계약이지 프레이밍이 아니다 — 그대로 따른다」고 하고 `category` 를 「프로필 rubric 의 값」으로 못 박으므로, 새 축은 프로필 본문과 category 어휘를 통해 닿는다. 닿되 **리터럴 여덟 축과 충돌**하는 것이 실상이고, 이것은 방향의 반증이 아니라 이행 범위의 누락이다(그래서 hits 가 아니라 refined 다).
+> (2) **빠진 전제 — 두 자리의 비대칭**. P3 는 범위만 말하고 「brief 와 design-doc 에 같은 축을 같은 방식으로 더한다」는 대칭을 암묵 가정한다. 사실은 다르다: design-doc 층1 은 여덟 축(그중 다섯이 이미 설계자 시선), brief 층1 은 `direction` 하나다. 더 중요한 것은 brief 프로필의 층 1 은 정의상 **모든 finding 이 `decide`** 라는 점이다 — 거기 과설계 축을 더하면 늘어나는 것은 축 수가 아니라 «사용자가 결정해야 할 항목 수»이고, 그것이 goal 뒤 절반을 직접 때린다. 이 비대칭이 전제에 없다.
+> (3) **P4 의 결함**. ponytail 의 Lazy Ladder 는 «쓰기 전»(generation-time) 사다리이지 «이미 쓰인 문서»에 대한 리뷰 절차가 아니다("Does this need to exist?" → "Only then: minimum necessary code"). P4 는 「절차를 차용한다」고만 적고 이 변환(코드 작성 전 질문 → 설계 문서 판정 질문)을 전제로 세우지 않았다 — 변환 없이 옮기면 문서에 대고 「이 코드를 쓰지 마라」를 묻는 범주 오류가 난다. 또한 P2 는 「두 독립 «결함»」으로는 맞지만 「두 독립 «해법»」으로 읽으면 틀린다: 갈래 1 의 해법이 finding 수를 늘리면 갈래 2 의 「항목이 많다」가 악화되고, S3 의 사용자 선택 설명이 바로 그 결합을 근거로 썼다("finding 수가 안 늘어 … 악화하지 않는다"). 전제에 「해법은 독립이 아니다」를 명시해야 다음 단계가 이 결합을 잊지 않는다.
+> 덧: 여기서 세운 대안(별도 판정자)은 S1 ① 이 이미 닫은 경로다. 위 케이스는 게이트가 요구한 최강 형태이지 제안이 아니며, 아래 추천은 그 경로를 열지 않는다.
+>
+> **recommendation** — refined
+>
+> **refined_takes** — 새 탐지 리뷰어 0개 · `doc-critic` 하나 유지 · `detectors: 1` 유지 — 설계 §14 의 기각 사유(finding N배 · `decide` 인플레이션)와 §5.3 의 재개 조건(「측정 근거가 생겼을 때」)이 아직 충족되지 않았고, 게이트·락이 fail-closed 로 막고 있다. 변이점을 프로필(호스트 데이터)에 두어 엔진을 안 건드리는 것도 그대로 간다. S3 의 절차(Lazy Ladder)·오탐 가드·정직한 0건 출구를 **rubric 문구**로 싣는 것도 그대로 — PBR·체크리스트 증거가 「활성 성분은 절차」 쪽이다.
+>
+> **refined_drops** — ①「프로필에 축을 더하면 끝」이라는 **충분성 주장**. 같은 변경이 층 1 불릿을 리터럴 여덟 축 열거에서 `layer_rubric.layer1` 참조로 바꿔야 하고, 그 문장은 사본 넷(`shared/docreview/agents/doc-critic.md` · `doc-critic-web.md` · `plugins/spec-distill/agents/` 의 같은 둘)에 있다 — 안 바꾸면 새 축이 리터럴 여덟 축과 경쟁하고 brief 의 선재 불일치(여덟 축 문장 vs `[direction]` 하나)가 그대로 남는다. ② **두 자리 대칭 가정**. design-doc 에서는 「없는 축의 추가」가 아니라 「이미 있는 다섯 축의 절차화」여야 한다(중복 축 신설 자체가 갈래 1 이 잡으려는 과설계다). brief 에서는 진짜 추가지만 그 자리의 비용은 축 수가 아니라 **모든 층 1 finding 이 `decide` 로 나온다는 처분 부담**이므로, 축을 더할지 여부와 별개로 「그 축의 finding 을 몇 건까지 낼 것인가」의 상한·묶음 규칙을 같이 정해야 한다.
 
-### 라운드 1 — codex
+**게이트-전 확인** — repo_claims 8건 전부 확인(반증 0 · 미확인 0): `shared/docreview/agents/doc-critic.md` 층 1 리터럴 여덟 축 + 사본 넷 전부 mode 100644 실체 파일(`git ls-files -s` 로 확인, quality-gates 사본 없음) 확인 · 같은 파일 `<profile>` 「공개 계약」 문장 확인 · `design-doc.md` `layer1` 여덟 / `layer2` 일곱 확인 · `brief.md` `layer1: [direction]` + 「처분은 `decide` 다」 + `fix_anchors` §0·§2 + `defer` 없음 확인 · `docreview_state.py` `load_profile()` 의 `fields_unknown`·`detectors_unsupported` fail-closed 확인 · `test_docreview_profiles.sh` 의 `detectors: 2 → rc 2` assert 확인 · 설계 §14 「탐지 리뷰어 병렬 N명」 행 인용 확인 · 설계 §5.3 `detectors` 행 「측정 근거가 생겼을 때」 인용 확인. 부착 주장: evidence 7건 전부 `touches` 비지 않음 — ponytail → P4·P5 확인 · pr-review-toolkit → P5 확인 · Mozilla → P5 확인 · PBR 복제 → P5 확인 · Regnell 「관점은 정말 다른가」 → P5 확인(builder 자기 고지: 303 리다이렉트로 본문 직접 확인 못 함, 검색 인덱스 요약) · 체크리스트 vs ad-hoc → P5 확인 · alert fatigue → P1 확인. 재검토 자격: 사유 없음(확인된 전제 충돌 0건). 근거 7 중 부착 7 · 리포 주장 8 중 확인 8
 
-> findings:
->   - agent: codex-reviewer
->     ref: x1
->     layer: 1
->     category: inference_as_decision
->     anchor: "#__doc__"
->     disposition: fix
->     summary: 사용자가 고른 ‘우선순위·묶음 표시’를 오케스트레이터의 순위 판단과 그 위험까지 수용한 결정으로 확대했다. 판단 주체와 위험 수용 여부는 미확정으로 다시 열어야 한다.
->     edit_scope: "#__doc__"
->     blocks: []
->     evidence: 초안은 ‘이 경고를 선택지에 달았는데도 사용자가 그 항목을 골랐으니 안고 간다’고 서술한다. 그러나 라운드 2의 해당 선택지에는 경고가 없으며, 사용자 답변은 ‘우선순위 · 묶음 표시’를 선택한 것뿐이다.
->   - agent: codex-reviewer
->     ref: x2
->     layer: 1
->     category: unfounded_addition
->     anchor: "#__doc__"
->     disposition: fix
->     summary: 회계 숫자의 공시 의무를 사용자 요구에 없는 제약으로 추가했다. 확정 제약에서 빼고 필요하면 확인할 사항으로 남겨야 한다.
->     edit_scope: "#__doc__"
->     blocks: []
->     evidence: 초안은 ‘회계 숫자는 공시 의무가 있는 값이라, 사람 말로 바꾸는 것이 숨기기가 되면 안 된다’고 규정한다. 사용자 답변은 ‘용어가 내부 회계어’라는 난점과 ‘회계어를 사람 말로’라는 해법을 선택했으며, 숫자 공시 의무를 요구하거나 확인하지 않았다. 첨부 CLAUDE.md의 공시 규칙은 지정된 사용자 발언 근거에 해당하지 않는다.
-> meta:
->   codex_failed: false
->   exit_code: 0
+**사용자 선택** — 보완 (S4)
 
-### 라운드 1 — 재비판 (doc-recritic)
+## 4. 게이트 실행 기록
 
-> ```docreview-recritic
-> verdicts:
->   - f: f1
->     verdict: confirm
->   - f: f2
->     verdict: confirm
->     same_as: [f1]
->   - f: f3
->     verdict: reject
->     evidence: "원문 첫 구절이 요청 전체를 「리뷰 공통 모듈에서」로 스코프하고(갈래 2 는 같은 문장의 「그리고」로 이어진다), 그 모듈에서 오케스트레이터가 바꾸는 것은 문서뿐이다 — `shared/docreview/references/reviewing-document.md` 배달 절 「`fix` → 저자가 `check-intent <id> --intent <scope> --state-dir D` 통과 후 적용」·「채택된 `decide` 의 적용은 … permit 계약」. 사용자의 ground-truth 줄 「qg는 빼자」(R2 확인, 한정어 없음)가 코드 자리를 이미 뺐고, R1 의 난점 답 「용어가 내부 회계어」도 docreview 회계 어휘를 가리킨다. 초안은 「문서에 반영할 때」라고만 쓰고 **어느 문서 자리인지는 닫지 않았다** — 닫힘이 아니다."
->   - f: f4
->     verdict: reject
->     evidence: "그 문장은 「풀다 만 긴장이 셋 있다」 절 안에 있고 «(사용자 확인)» 태그가 없다 — 확정 제약으로 적힌 것이 아니라 미해결 긴장이다. 그리고 그 의무는 모델이 만든 것이 아니라 선재하는 리포 계약이다: `shared/docreview/references/reviewing-document.md` 배달 절 「`drop`·recritic `reject` → 회계에만 남고 게이트 텍스트에 개수 공시」, degrade 절 「codex 부재·critic 층 2 부재·recritic 부재는 `fin.json` 의 `advisory[]` 와 게이트 첫 줄로 공시한다」, 8단계 「매 호출 첫 질문의 첫 줄은 렌더 첫 줄(degrade 공시)과 같다」 — 사용자가 「사람 말로」 바꾸길 원한 바로 그 텍스트가 공시 의무를 지고 있다. 이 긴장을 빼면 다음 단계가 살아 있는 계약을 모르는 채 설계한다."
->   - f: f5
->     verdict: confirm
->   - f: f6
->     verdict: reject
->     evidence: "원문(`## 1. 원문`) 「예시 중 하나로 pr 리뷰어들을 봐줘 **앞단에서도** 아키텍처 리뷰와 같은걸 설계자로서 보면 좋겠지」 — 「…에서도」가 뒷단 대응물을 전제하고, 그 대응물로 사용자가 직접 지목한 예시가 PR 리뷰어들이다. 초안의 「뒷단에 아키텍처 리뷰 같은 것이 있듯」은 그 전제를 풀어 쓴 것이지 모델이 더한 요구·제약이 아니고, 이 리포의 `/qg` 를 가리킨다고 쓰지도 않았다(같은 초안이 「코드 리뷰(/qg) 는 … 범위 밖」이라고 적는다). 탐색 대상도 「없는 자리」가 아니라 사용자가 준 PR 리뷰어 레퍼런스다."
-> added:
->   - category: unfounded_addition
->     anchor: "#__doc__"
->     layer: 1
->     disposition: fix
->     edit_scope: "#__doc__"
->     summary: "「지금은 그 시선이 없다」는 원문에 없는 모델의 전제이고, 확정된 두 자리 중 design-doc 에서는 사실과 다르다 — 그 프로필의 층 1 에 `architecture` · `component_relations` · `data_flow` · `tradeoffs` · `feasibility` 가, 층 2 에 `scope_creep` · `approaches_comparison` 이 이미 있다. 부재를 단정한 채 넘기면 다음 단계가 기존 축의 확장 대신 중복 축을 새로 만든다(갈래 1 이 잡으려는 과설계 그 자체)."
->     evidence: "원문은 「…설계하는 사람으로서 리뷰를 해주는게 좋을거 같아」라는 요청일 뿐 「없다」는 사실 단정이 아니다. `plugins/spec-distill/references/docreview-profiles/design-doc.md:15` — `layer1: [goal_fit, problem_definition, scope, architecture, component_relations, data_flow, tradeoffs, feasibility]`, `:16` — `layer2: [placeholder, ambiguity, scope_creep, approaches_comparison, …]`. 반면 `…/brief.md:9` 는 `layer1: [direction]` 이라 brief 에서만 참이다 — 자리별로 무엇이 이미 있고 무엇이 없는지를 적어야 한다."
-> ```
+- check_brief.py gate — pass (2026-09-21) — web: enabled
+- check_verbatim_coverage.py — exit 0 (2026-09-21)
 
-### 라운드 2 — 탐지 (doc-critic)
+## 5. 프로세스 로그
 
-> ## doc-critic (seed 프로필) — 라운드 2 리뷰 결과
->
-> 층 1 에서 2건, 층 2 는 프로필이 요구하지 않아 `[]`.
->
-> ```docreview-layer1
-> - ref: c1
->   layer: 1
->   category: unfounded_addition
->   anchor: "#__doc__"
->   disposition: fix
->   summary: "「설계문서 자리에는 … 과설계를 재는 축만 없다」가 design-doc 프로필의 층 1 여덟 축 중 넷만 대조한 결론이라, 사용자가 우선한다고 한 두 기준에 각각 대응하는 기존 축(층 1 `goal_fit` · 층 2 `approaches_comparison`)을 부재로 넘긴다 — 라운드 1 의 수정이 층 1 열거만 자리별로 고치고 「과설계 축은 없다」는 부재 단정은 그대로 남긴 잔여다."
->   edit_scope: "#__doc__"
->   supersedes: "3720b2b7#r1.1"
->   evidence: "초안 = 「설계문서 자리에는 아키텍처·컴포넌트 관계·데이터 흐름·trade-off 축이 이미 있고 과설계를 재는 축만 없다」. `plugins/spec-distill/references/docreview-profiles/design-doc.md:15` 의 층 1 은 여덟(`goal_fit`·`problem_definition`·`scope`·`architecture`·`component_relations`·`data_flow`·`tradeoffs`·`feasibility`)이고, 초안이 뺀 넷 중 `goal_fit` 은 `:28` 에서 「문서의 Goals 가 브리프의 goal 과 같은 것을 겨누는가」 — 초안이 바로 아래 문단에서 우선한다고 적은 기준 ①(사용자 goal 대비)과 같은 축이다. `:44` 의 `approaches_comparison` 은 「대안 비교 없이 단정된 선택」으로 기준 ②(더 단순한 대안의 존재)와 겹친다. 원문(`## 1. 원문`)에는 「…설계하는 사람으로서 리뷰를 해주는게 좋을거 같아」라는 요청만 있을 뿐 「없다」는 사실 단정이 없다 — 부재를 단정한 채 넘기면 다음 단계가 기존 축의 확장 대신 중복 축을 만든다."
-> - ref: c2
->   layer: 1
->   category: premature_closure
->   anchor: "#__doc__"
->   disposition: decide
->   summary: "라운드 2 에 사용자가 새로 말한 「글을 늘리라는 게 아니라 정보가 많아야 한다 · 글은 오히려 아주 살짝 길어」가 초안 어디에도 남지 않았다 — 「이거」가 게이트 질문 텍스트를 가리키면 갈래 2 의 제약(분량이 아니라 정보 밀도)으로 seed 에 들어가야 하고, 초안 산문을 가리키면 들어가면 안 된다. 지시 대상은 사용자만 답할 수 있다."
->   evidence: "audit `## 1. 원문` 의 라운드 2 추가 원문 = 「좀더 이거보다 잘설명해주면 좋을거 같아 글을 늘리라는건 아니야 정보가 많아야 한다는거지 글은 오히려 아주 살짝 길어」. 초안의 갈래 2 는 「…넷을 모두 설계 범위에 넣는다 (사용자 확인)」로 끝나고 분량·밀도에 관한 줄이 없으며 「다시 검증할 것」에도 없다. 네 해법(before/after 미리보기 · 『그대로 두면』 한 줄 · 회계어 번역 · 우선순위·묶음)은 모두 질문 텍스트를 늘리는 쪽이라 이 제약은 갈래 2 설계를 직접 구속한다. audit 머리말 = 「순수 텔레메트리 — 다음 세션의 첫 턴 `/interview @<seed 경로>` 가 가리키는 것은 payload(seed) 파일이고, 여기에는 확산·압축이 어떻게 진행됐는지의 과정 기록만 남는다」 — seed 본문에 없는 제약은 다음 단계에 닿지 않는다. 기각된 7c0f5fba#r1.1(갈래 2 의 «자리»를 문서로 좁혔다)과는 다른 결함이라 그 계보를 잇지 않는다 — 여기서 열려 있는 것은 자리가 아니라 사용자가 새로 준 분량 제약의 귀속이다."
-> ```
->
-> ```docreview-layer2
-> []
-> ```
->
-> ### 참고 (finding 아님)
->
-> - 여섯 «(사용자 확인)» 문장은 전부 audit `## 2` 의 「고름」 풀이(풀이 1 · A · B · C · 3 · E)와 글자 그대로 일치한다 — `inference_as_decision` 0건.
-> - 라운드 1 에서 기각된 세 계보(7c0f5fba#r1.1 「문서에 반영할 때」 · 3720b2b7#r1.2 공시 의무 · 3720b2b7#r1.4 「뒷단에 아키텍처 리뷰 같은 것이 있듯」)는 새 근거가 없어 재상승시키지 않았다.
-> - 채택된 세 fix 는 초안에 반영돼 있음을 확인했다 — 우선순위 위험 수용(2adc8dfb#r1.1)은 「이 위험을 감수하겠다고 말한 적은 없다 … 아직 열려 있다」로, Law 2/before-after 긴장(3720b2b7#r1.3)은 삭제(긴장 셋→둘)로, 자리별 서술(3720b2b7#r1.1)은 문단 1 로. c1 은 그 셋 중 마지막의 잔여다.
-> - 「brief 자리에는 방향 반증 하나뿐」은 **참** — `plugins/spec-distill/references/docreview-profiles/brief.md:9` 가 `layer1: [direction]`, 층 2 여섯은 충실도 축이라 설계자 시선이 아니다. finding 으로 내지 않았다.
-> - 「과설계 기준은 확정하지 않는다(풀이 B)」와 「goal 대비·더 단순한 대안이 우선(R4)」의 긴장은 초안의 「기준 둘을 정했을 뿐 판정 문구는 아직 없다」가 이미 해소한다. 선택지 ③(리포 철학 대비)도 「쪽이 우선한다」로 닫히지 않았다.
+- round 1: path (d) — 진짜 문제 재구성. 통합 후보 셋(부분/합 · 탐지언어→결정언어 · 축 주입 경로) 제시, 사용자가 셋을 물리고 seed 의 두-독립-결함 읽기 유지.
+- round 2: path (a) — landscape sweep. ponytail 전문 조사 + 아키텍처 리뷰 선례. rubric(코드 5카테고리)은 안 옮겨지고 절차·가드·0건 출구만 옮겨진다는 판정을 사용자가 채택.
+- round 3: path (b) — ST1 steelman 게이트. 전제 충돌 0, builder·orchestrator 둘 다 refined 추천, 사용자 「보완」.
+- round 4: path (b) — blind-spot premortem 처분. 네 갈림 중 ⓐⓑ 원인 재지정만 이번 범위.
+- round 5: path (b) — brief 층 1 강제 확인 후 decide 폭증 차단 수단 선택(상한+묶음).
+- round 6: path (b) — 축 수와 술어. 사용자가 「한 축 4단 질문」을 고르며 겪은 실패 패턴 셋을 추가 제시.
+- round 7: path (b) — 4단 질문이 셋 중 하나만 잡음을 지적하고 보강 방식을 물음. 사용자가 「사다리에 두 단」 선택 + 커버리지 동일성 질의.
+- round 8: path (b) — 우선순위 생산 자리. 사용자가 라인 중단 + 직전 결정을 「술어 셋」으로 재결정.
+- round 9: path (d) — 「더 본질」 확인. 갈래 2 의 본질 = 설명의 정보량 + 쉬운 전달.
+- round 10: path (b) — 수용 기준 셋 확정(라벨만 읽고 고른다 · 안 바뀐 것은 안 보인다 · 용어가 처음 보는 말이 아니다).
+- round 11: path (b) — OQ 목록 확인. 범위 경계 둘만 지금 닫기로.
+- round 12: path (b) — 갈래 2 의 적용 자리에 `/qg` 포함. (범위 경계 둘 중 나머지 하나는 orchestrator 실측으로 해소 — 문서 리뷰 게이트는 `shared/adjudication/render_disposition.py` 를 쓰지 않는다.)
 
-### 라운드 2 — codex
+### brief 리뷰 (reviewing-brief — 문서 리뷰 엔진)
 
-> findings:
->   - agent: codex-reviewer
->     ref: x1
->     layer: 1
->     category: unfounded_addition
->     anchor: "#__doc__"
->     disposition: fix
->     summary: 회계 숫자의 공시 의무와 숨기기 금지를 사용자 근거 없이 제약으로 추가했다. 확정 제약에서 빼거나 확인이 필요한 가정으로 바꿔야 한다.
->     edit_scope: "#__doc__"
->     blocks: []
->     evidence: 초안은 “회계 숫자는 공시 의무가 있는 값이라, 사람 말로 바꾸는 것이 숨기기가 되면 안 된다”고 단정한다. 사용자 답변은 라운드 2의 “회계어를 사람 말로”와 라운드 3의 “풀이 C — 설명 넷 다”로 설명 방식의 변경을 선택했을 뿐, 숫자 공시 의무를 확정하지 않았다. 첨부 CLAUDE.md의 공시 규칙은 지정된 사용자 발화 근거에 해당하지 않는다.
-> meta:
->   codex_failed: false
->   exit_code: 0
+- 라운드: 3 · 재리뷰 카운트 2 · 추가 라운드 0 — 승인 게이트 도달 사유: 상한 · 리뷰 완료: 예
+- 결정: `## 8. 리뷰 결정` 19건(라운드 1 → 4 · 라운드 2 → 9 · 라운드 3 → 6) · 열린 채 남은 항목 0건 · **채택 상태로 남은 항목 5건**(`abf668a4#r3.1`·`#r3.2`·`#r3.3`·`#r3.4`·`e99bfa50#r3.4`) — permit 이 라운드 4 용인데 상한에 닿아 그 라운드가 없어 엔진이 적용을 관측하지 못했다. 내용은 §0·§2 에 반영돼 있고 사용자가 `e99bfa50#r3.4` 에 대해 「적용된 것으로 닫는다」(S32)를 골랐다. 미적용 fix 4건도 같은 이유로 원장에 남지만 편집은 끝났다.
+- codex: 있음(3라운드 전부 실호출, `codex-cli 0.154.0`, rc 0) · 웹: Claude `doc-critic-web`(3라운드 전부) · codex 켜짐
+- 냉독: gap **9건** (G1 0 · G2 0(공허 — `status: confirmed` 항목이 0건이라 이 클래스는 발화할 수 없다) · **G3 9** · G4 0 · G5 0 · G6 0). 판정은 advisory 다 — 프레시 에이전트는 잘못 재구성된 payload 도 정확히 요약할 수 있다. 신뢰도 **두 번 하향**: ① 블롭에 audit 파일명 잔존(`build_brief_inline_blob.py` rc 3 — §6 S1 이 seed frontmatter 를 포함해 발생) ② dispatch 에 넘긴 본문이 스크립트 출력 그대로가 아니라 오케스트레이터가 인라인한 재구성본이었다(첫 dispatch 가 경로를 넘겨 실패한 뒤의 재시도). 편차는 두 곳 — §5 위험 불릿의 실측 근거 꼬리, §6 S1 의 seed frontmatter 인용 5줄. gap 클래스가 대조하는 **§0·§1·§2·§3·§7 은 전수 일치**(frontmatter 항목 27 · §2 제약 불릿 27 · ✎ 7 · OQ 15 · §4 19 · §5 19 · §7 4줄).
+- 냉독 gap — **G3 최상위 제약 누락**, 완전 7건(*클래스 / 요약의 어느 문장 / payload 의 어느 절*):
+  - G3 / 요약은 술어 ①②③ 만 서술하고 그 출처를 말하지 않는다 / §2 **C10** — 사용자가 든 세 실패(제약 지키려 억지 아키텍처 · 과하게 짜인 아키텍처 · 구현 유입)와 「원문이 쉼표로 끝나 목록이 닫히지 않았다」
+  - G3 / 요약의 갈래 2 정의는 「멈칫 없이 고를 수 있게」뿐이다 / §1 Goal 둘째 줄 · §2 **C12** — 「쉽게 전달되어 피로도 없이 이해되는 설명」
+  - G3 / 요약은 축이 하나라고만 말한다 / §2 **C15** — 「과설계·아키텍처는 예로 든 둘일 뿐이고 축 목록은 여기서 닫히지 않는다」
+  - G3 / 요약의 술어 ①은 「goal 대비 과한가」로만 나온다 / §2 **C16** — 기준 둘 중 「더 단순한 대안의 존재」와 「우선순위이지 닫힌 목록이 아니다」
+  - G3 / 요약은 분량 기준의 부재(D19)만 싣는다 / §2 **C18** — 밀도(같은 길이에 정보가 더 · 비구속 선호 · 현재 글이 살짝 길다 · OQ15 측정 뒤 재판정). **네 해법 전부를 구속하는 제약이라 누락의 무게가 가장 크다**
+  - G3 / 요약은 D22 를 「사다리 단 수가 7단/5단으로 다르게 읽힌다」는 맥락으로만 인용한다 / §2 **D22** — 「새 의존성을 더하지 마라」는 리뷰 축으로 옮기지 않는다(제약이 과하게 붙는 것 자체가 문제이고 리뷰에 들어가면 더 문제)
+  - G3 / 요약은 「agent 사본이 넷」까지만 말한다 / §2 **D23** — 그 수정이 seed·/qg generic 자리에도 닿고, 그 어긋남 교정이 부수효과인지 수선인지를 설계가 정한다
+- 냉독 gap — **G3 부분 누락 2건**:
+  - G3 / 요약은 「라운드당 N 건 + 묶음 + 필드 없음 + 셀 수 없음」까지 담았다 / §2 **D9** — 빠진 것은 「상한은 판정자별이고 라운드 총량은 2N+α · 총량을 묶는 것은 이 수단의 약속이 아니다」
+  - G3 / 요약은 「공통 모듈 충돌이 실측으로 사라졌다」까지 담았다 / §2 **D21** — 빠진 것은 처방 「낱말은 그대로 두고 사람말 한 줄을 옆에 덧붙인다」
+- 냉독 advisory — 클래스 밖(gap 수에 넣지 않음), 전부 **독자가 스스로 밝힌 미해결**:
+  - ⓐⓑⓒⓓ 기호가 한 자리에서 정의되지 않아 독자가 §2 C3 의 나열 순서로 추측해 읽었다 — §0 은 ⓒ 를, C3 는 넷을 풀어 쓰고, D8 은 ⓐⓑ 를, D25 는 ⓒ 를 쓴다
+  - ponytail 을 읽었는지가 문서만으로 풀리지 않는다 — §6 S1 은 「설치돼 있지 않고 아무도 읽지 않았다 · 차용 가능 여부는 전부 미확인」이고 §4·D6 은 Lazy Ladder 단계와 오탐 가드를 구체적으로 적어 [취함]으로 표시한다. 실제로는 S1 이 Phase 0 시점의 인용이고 §4 는 이 인터뷰 R2 sweep 의 결과지만, **그 시점 차이가 payload 안에 없다**. G6 문언(「요약이 두 서술 중 한쪽만 담고」)에는 해당하지 않는다 — 요약이 둘 다 담고 못 풀었다고 밝혔다
+  - frontmatter id 순서가 `C27` 다음 `C26` 으로 끝난다(추가 순서 잔존) — 독자가 읽다가 한 번 걸렸다고 적었다
+  - `_decision_view` · T13 · NG3 스크립트 · OQ-A · `protected_headings` · 「설계문서 §14」는 바깥 문서를 아는 사람 기준이라 이름만 확인했다 — brief 의 하류 독자가 리포 내부인이므로 설계상 허용 범위
+- degrade: critic:fidelity:degraded — 번들 payload 부분에 audit 파일명 잔존(S1 이 seed frontmatter 를 포함해 발생, 원문 보존 우선) · critic:fidelity:degraded — 라운드 3 중 audit §6 에 S18~S26 을 추가해 탐지·codex 와 재비판이 서로 다른 번들을 봤다(그 결과 재비판이 9건을 기각) · readback:readback:degraded — 냉독 블롭에도 audit 파일명 잔존(gap 판정을 신뢰도 하향으로 읽을 것) · readback:fidelity:degraded — 냉독 dispatch 에 넘긴 본문이 `build_brief_inline_blob.py` 출력 그대로가 아니라 오케스트레이터의 인라인 재구성본이었다(첫 dispatch 가 경로를 넘겼는데 `brief-readback` 은 파일 도구가 없어 실패 → 재시도에서 인라인). §5 근거 꼬리와 §6 seed frontmatter 5줄이 빠졌고 §0·§1·§2·§3·§7 은 전수 일치
 
-### 라운드 2 — 재비판 (doc-recritic)
+### 라운드별 요약
 
-> ```docreview-recritic
-> verdicts:
->   - f: f1
->     verdict: confirm
->   - f: f2
->     verdict: reject
->     evidence: "그 문장은 초안의 「풀다 만 긴장이 둘 있다」 문단 안 둘째 긴장 자리에 있다 — 초안이 확정 항목마다 붙이는 「(사용자 확인)」 표지가 이 문장에는 없고, 같은 문단 첫째 긴장은 「누가 순위를 매길지와 그 위험을 받아들일지는 아직 열려 있다」로 끝난다. 즉 이 줄은 확정 제약으로 제시된 적이 없고, finding 이 요구하는 처방(「확정 제약에서 빼거나 확인이 필요한 가정으로 바꿔야」)이 이미 충족된 자리다. 또 이 문장이 인용하는 공시 의무는 사용자 발화가 아니라 리포 계약(CLAUDE.md 「공시와 차단은 다른 술어다 — 무엇이 degrade 든 언제나 드러내되」·`disclosure=` 필수)에서 오는 사실이며, 초안 첫 문단의 프로필 축 서술과 같은 「저자가 싣는 리포 사실」 부류다. 층 1 은 사용자에게 귀속시킨 조작된 요구·제약을 잡는 뺄셈 검사이지 리포 사실의 동반을 금하지 않는다 — f3 은 같은 부류의 문장을 «존재» 가 아니라 «정확성» 으로 다투며 그 전제를 공유한다. 오탐."
->   - f: f3
->     verdict: confirm
-> added: []
-> ```
+| 라운드 | 탐지 | codex | 익명화 | 재비판 | 라우팅 | 게이트 |
+|---|---|---|---|---|---|---|
+| 1 | 12 (층1 4 · 층2 8) | 4 | 16 | 15 confirm · 1 reject · `same_as` 2 · added 1 | 수용 14 · 기각 1 · 흡수 2 | decide 4 채택 · fix 10(9 적용 · 1 상향) |
+| 2 | 13 (층1 5 · 층2 8) | 7 | 20 | 20 confirm · `same_as` 5 · added 1 | 수용 18 · 기각 0 · 흡수 5 | decide 9 채택 · fix 8 적용 · ask 1 응답 |
+| 3 | 10 (층1 4 · 층2 6) | 6 | 16 | 7 confirm · **9 reject** · added 1 | 수용 10 · 기각 8 · 흡수 1 | decide 6 채택 · fix 4 적용 · 추가 라운드 미개방 |
 
-### 라운드 3 — 탐지 (doc-critic)
+라운드 3 의 기각 9건은 전부 한 원인이다 — 탐지·codex 가 ground_truth 의 audit §6 을 **S17 에서 끊고** 읽었고, 그 뒤 S18~S26(라운드 2 게이트 선택)이 바로 그 문장들의 근거였다. 저자가 라운드 중에 그 누락을 고친 것이 원인이고, 재비판이 현재 문서를 보고 잡았다.
 
-> ## doc-critic (seed 프로필) — 라운드 3 리뷰 결과
->
-> ```docreview-layer1
-> - ref: c1
->   layer: 1
->   category: premature_closure
->   anchor: "#__doc__"
->   disposition: fix
->   summary: "원문이 과설계와 나란히 든 「아키텍처 관점」이 첫 문장 뒤로 사라져, 기준·성공 목표·「다시 검증할 것」이 전부 과설계 한 축만 다루므로 설계자 시선이 조용히 한 축으로 좁혀졌다."
->   edit_scope: "#__doc__"
->   evidence: "원문 — 「과설계 등 하지 않았는지랑 아키텍처관점에서 등 설계하는 사람으로서 리뷰를 해주는게 좋을거 같아」. 초안 하류는 「과설계를 재는 기준은…」·「과설계 판정 기준은 지금 확정하지 않고」·「과설계 축이 그 계약과 어떻게 공존하는지」 뿐이고 아키텍처 축의 기준·검증 항목은 없다. 라운드 3 의 선택지 「구현 전에 과설계를 잡는다」는 저자가 쓴 줄이라 사용자가 아키텍처 축을 뺀 근거가 되지 못한다."
-> - ref: c2
->   layer: 1
->   category: premature_closure
->   anchor: "#__doc__"
->   disposition: fix
->   summary: "원문의 «등» 두 개가 닫혀, 설계자 시선의 축 목록이 과설계·아키텍처 둘로 확정된 것처럼 읽힌다."
->   edit_scope: "#__doc__"
->   evidence: "원문은 「과설계 등 하지 않았는지랑 아키텍처관점에서 등」으로 두 번 열어 두었으나, 초안은 「과설계를 하지 않았는지, 그리고 아키텍처 관점에서 맞는지」 둘로 옮기고 나머지가 열려 있다는 표시를 남기지 않았다. 「당신이 답한 것」 어느 줄도 축 목록을 둘로 한정하지 않는다."
-> - ref: c3
->   layer: 1
->   category: inference_as_decision
->   anchor: "#__doc__"
->   disposition: decide
->   summary: "모델의 「이미 겹친다」는 판정이 사용자가 고른 「프로필 rubric 에 축만 추가」를 「새 축이냐 기존 축 문구 확장이냐」의 미정 상태로 되돌리므로, 그 되돌림을 받아들일지 사용자가 정해야 한다."
->   evidence: "초안 — 「우선한다고 한 두 기준은 그중 goal_fit·approaches_comparison 과 이미 겹치므로, 새 축을 더할지 그 둘의 판정 문구를 넓힐지는 다음 단계가 정한다」. 사용자가 답한 줄은 라운드 1 의 「프로필 rubric 에 축만 추가」다. 겹침 판정 자체도 리포와 어긋난다 — plugins/spec-distill/references/docreview-profiles/design-doc.md:28 의 goal_fit 은 「문서의 Goals 가 브리프의 goal 과 같은 것을 겨누는가」, :44 의 approaches_comparison 은 「대안 비교 없이 단정된 선택」이라, 사용자가 우선하라고 한 「goal 대비 과설계」·「더 단순한 대안의 존재」와 같은 술어가 아니다."
-> - ref: c4
->   layer: 1
->   category: premature_closure
->   anchor: "#__doc__"
->   disposition: fix
->   summary: "두 번째 갈래(처분 설명)의 적용 범위가 「문서에 반영할 때」로 좁혀졌는데, 원문은 자리를 한정하지 않았고 「qg는 빼자」는 설계자 시선의 문서 자리를 묻는 질문에 대한 답이라 이 갈래에는 미치지 않는다."
->   edit_scope: "#__doc__"
->   evidence: "원문 — 「리뷰어들이 찾은걸 오케스트레이터가 변경하는 경우 사용자에게 쉽게 설명해줘야 할거 같아」(자리 한정 없음). 초안 — 「두 번째 갈래는 리뷰어가 찾은 것을 오케스트레이터가 문서에 반영할 때의 설명이다」. 「qg는 빼자」가 답한 질문은 라운드 1 의 「설계자 시선을 어느 문서 자리까지 넣을까요?」이고, 초안도 그 확정을 「설계자 시선의 적용 범위는…」으로만 적는다."
-> - ref: c5
->   layer: 1
->   category: unfounded_addition
->   anchor: "#__doc__"
->   disposition: fix
->   summary: "「회계 숫자는 공시 의무가 있는 값이라 사람 말로 바꾸는 것이 숨기기가 되면 안 된다」는 제약은 사용자 원문·답한 줄 어디에도 근거가 없고 출처 표기도 없어 사용자가 건 제약처럼 읽힌다."
->   edit_scope: "#__doc__"
->   evidence: "회계어에 대한 사용자의 말은 난점 「용어가 내부 회계어」와 해법 「회계어를 사람 말로」 둘뿐이고, 공시 의무를 말한 줄은 없다. 초안의 그 문장은 리포 CLAUDE.md 의 처분 회계 공시 계약에서 온 것인데 그 귀속이 문서에 없다."
-> ```
->
-> ```docreview-layer2
-> []
-> ```
->
-> ### 참고 (finding 아님)
->
-> - 확인한 리포 사실 — `design-doc.md` 의 `layer1` 여덟 축과 `layer2` 의 `scope_creep`·`approaches_comparison`, `brief.md` 의 `layer1: [direction]` — 초안의 리포 사실 서술은 참.
-> - audit `## 6. 리뷰 결정` 의 「채택 — 게이트 질문을 가리쿼다」는 초안에서 대응 문장을 찾지 못했으나, 「결정의 소실」은 이 프로필 층 1 네 범주 밖이라 finding 으로 내지 않았다.
-> - `<prior_finding_ids>` 는 id 만 주어져 내용을 알 수 없어 `supersedes` 를 붙이지 못했다 — 계보 매핑은 재비판·엔진이 한다.
+## 6. 사용자 원문
 
-### 라운드 3 — codex
+> **출처 표기** — 🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론
 
-> findings:
->   - agent: codex-reviewer
->     ref: x1
->     layer: 1
->     category: unfounded_addition
->     anchor: "#__doc__"
->     disposition: fix
->     summary: 회계 숫자의 공시 의무를 확정 제약으로 추가했다. 사용자 요구로 단정한 문구를 삭제하거나, 별도 검증이 필요한 저장소 제약으로 구분해야 한다.
->     edit_scope: "#__doc__"
->     blocks: []
->     evidence: 초안은 “회계 숫자는 공시 의무가 있는 값이라, 사람 말로 바꾸는 것이 숨기기가 되면 안 된다”고 규정한다. 지정된 사용자 근거에는 “용어가 내부 회계어”, “회계어를 사람 말로”, “풀이 C — 설명 넷 다”라는 답변이 있지만, 숫자의 공시 의무를 확정한 발언은 없다. 함께 수록된 CLAUDE.md의 공시 규정은 지정된 사용자 정답 근거에 포함되지 않는다.
-> meta:
->   codex_failed: false
->   exit_code: 0
+- **S2** ☑ 선택 (진짜 문제의 재구성):
+  > "seed 그대로 — 두 독립 결함"
+  >
+  > (고른 선택지 설명: "축 부재와 설명 부족은 별개 문제이고 재구성이 필요 없다. 위 발견들은 구현 세부로 내려가고, 설계는 seed 의 두 갈래를 그대로 따릅니다. 두 갈래가 같은 무게라는 확정과 가장 직접적으로 맞습니다.")
 
-### 라운드 3 — 재비판 (doc-recritic)
+- **S3** ☑ 선택 (외부 근거 차용 폭):
+  > "절차+가드만 (권장)"
+  >
+  > (고른 선택지 설명: "Lazy Ladder 를 문서 판정 절차로, 보호 경계를 오탐 가드로, 「Lean already」를 0건 출구로 가져오고 다섯 카테고리는 버립니다. → 축은 «과설계·아키텍처» 둘 안팎으로 유지되고 finding 수가 안 늘어 갈래 2 의 「항목이 많다」를 악화하지 않습니다. 없던 «판정 문구» 자리에 사다리 단계가 들어갑니다.")
 
-> ```docreview-recritic
-> verdicts:
->   - f: f1
->     verdict: confirm
->   - f: f2
->     verdict: confirm
->   - f: f3
->     verdict: confirm
->   - f: f4
->     verdict: confirm
->   - f: f5
->     verdict: confirm
->   - f: f6
->     verdict: confirm
->     same_as: [f5]
-> added: []
-> ```
->
-> ### 판단 근거 (finding 별)
->
-> - **f1 (decide, inference_as_decision) — confirm.** 「우선한다고 한 두 기준은 그중 goal_fit·approaches_comparison 과 이미 겹치므로」는 모델 판정이고, 그 판정이 사용자가 답한 「프로필 rubric 에 축만 추가」(라운드 1)를 「새 축이냐 기존 문구 확장이냐」 미정으로 되돌린다. 겹침 주장의 진위도 리포에서 직접 확인했고 **성립하지 않는다** — `design-doc.md:28` 의 `goal_fit` 은 「문서의 Goals 가 브리프의 goal 과 같은 것을 겨누는가」(문서↔브리프 정합), `:44` 의 `approaches_comparison` 은 「대안 비교 없이 단정된 선택」(비교의 부재)이라, 사용자가 우선하라고 한 「goal 대비 과잉인가」·「더 단순한 대안이 실재하는가」와 술어가 다르다. 처분 `decide` 적정 — 겹침 전제가 무너진 이상 되돌림을 유지할지는 사용자 몫.
-> - **f2 (fix, premature_closure) — confirm.** 원문의 «등» 두 개가 초안에서 둘로 닫혔고, 이 닫힘을 지지하는 «당신이 답한 것» 줄이 없다. 수정은 열림 표시 한 마디.
-> - **f3 (fix, premature_closure) — confirm.** 초안 7행 뒤로 아키텍처 축이 사라지는 것을 본문에서 확인했다 — 21·22·37·47행이 전부 「과설계」 단일 축이고 「다시 검증할 것」에도 아키텍처 항목이 없다. 보강 사실: design-doc 프로필은 이미 층 1 에 `architecture` 축(`design-doc.md:31`)을 갖고 brief 는 `direction` 하나뿐(`brief.md:9`)이라, 아키텍처 축이 두 자리에서 서로 다른 상태라는 점도 초안이 다루지 않는다. f2 와 수정이 다르다(f2=열림 표시 복원, f3=아키텍처 축의 기준·검증 항목 복원) — `same_as` 로 묶지 않았다.
-> - **f4 (fix, premature_closure) — confirm.** 원문은 자리를 한정하지 않았는데 초안이 「문서에 반영할 때」로 닫았다. 「qg는 빼자」가 달린 질문은 설계자 시선의 문서 자리를 묻는 것이고 초안도 그 확정을 설계자 시선에만 적는다. 둘째 갈래의 qg 적용 여부는 한 번도 묻지 않았으므로 미결로 되돌리는 것이 맞다.
-> - **f5 / f6 (fix, unfounded_addition) — confirm, 한 결함.** 둘 다 같은 한 문장을 가리키고 수정도 같아 `same_as: [f5]` 로 묶었다. 같은 절의 긴장 ①은 「사용자는 … 말한 적은 없다」로 비귀속을 명시하는 반면 이 문장만 무표기 단정이라 비대칭이 실재한다. 근거는 리포 쪽(CLAUDE.md 의 처분 회계 공시 계약)이므로 삭제보다 **출처를 리포 제약으로 표시**하는 쪽이 손실이 적다.
->
-> ### reject·raise·added 가 0 인 이유
->
-> - reject 0 — 여섯 건 모두 문서 본문과 audit 의 «당신이 답한 것» 줄로 재현됐고, 리포 인용을 건 f1 은 원문 파일을 직접 읽어 확인했다.
-> - raise 0 — 프로필의 「다시 열어야 할 닫힘은 `fix`」에 f2·f3·f4 가 해당하고, f5/f6 은 귀속 한 줄이라 `fix` 가 맞다. f1 은 이미 최상위 `decide`.
-> - added 0 — 층 1 네 축으로 훑은 자리들이 전부 사용자 줄에 근거가 있었다. 「네 해법이 전부 질문 텍스트를 늘리는 방향이라 이 밀도 제약이 그 넷을 모두 구속한다」만 모델 추론이나, 밀도 제약 자체가 사용자 추가 원문에 근거가 있어 finding 으로 내지 않았다.
+- **S4** ☑ 선택 (ST1 steelman 판정):
+  > "보완 (builder·orchestrator 추천)"
+  >
+  > (고른 선택지 설명: "방향은 살리고 거짓인 가정 둘을 버립니다. 버리는 것: ⓐ 「프로필 편집만으로 충분」 — 층1 불릿을 리터럴 열거에서 layer_rubric.layer1 참조로 바꾸는 것을 같은 변경에 포함(사본 넷) ⓑ 「두 자리 대칭」 — design-doc 은 기존 축의 절차화, brief 는 축 추가 + finding 상한·묶음 규칙을 함께. → 새 agent·detectors 는 그대로 1 로 잠긴 채로, 이행 범위가 네 파일 + 처분 규칙으로 넓어집니다.")
 
-### 냉독 (seed-readback)
+- **S5** ☑ 선택 (premortem 처분 — 이번 사이클 설계 대상):
+  > "ⓐⓑ 원인 재지정 (권장)"
+  >
+  > (고른 선택지 설명: "「고르면 무엇이 바뀌는지 안 보임」·「왜 문제인지 안 와닿음」을 «리뷰어 새 필드 추가»가 아니라 «_decision_view 의 동어반복 수정»으로 다룹니다(「변경」=summary 그대로, 「영향」=anchor+인용수). → 설명 넷 중 둘의 수정 지점이 바뀝니다. 새 필드를 더해도 같은 fallback 이 재현되는 «조용한 실패»를 피합니다." — 나머지 셋(계측 칸 · T13 락 · OQ-A 구조적 원인)은 고르지 않음)
 
-> ## 무엇을 맡기려는 것으로 읽었는가
->
-> 두 갈래의 일이 한 seed 에 묶여 있고, 둘이 **동등한 무게**라고 명시적으로 못 박혀 있다고 읽었다.
->
-> **첫째 갈래 — 리뷰어에게 「설계하는 사람의 눈」을 붙이는 일.** 리뷰가 돌 때 과설계를 하지 않았는지, 아키텍처 관점에서 맞는지를 보게 하는 것. 다만 그 둘은 *예로 든 것*이고 축 목록이 거기서 닫히지 않는다고 분명히 적혀 있어서, 내가 받은 것은 「이 두 축을 넣어라」가 아니라 「설계자 시선이라는 범주를 열고 그 안에 무엇이 들어갈지를 찾아와라」로 읽었다. 문제 인식의 출발점은 자리별 비대칭이다 — 설계문서 자리에는 층 1 여덟 축과 층 2 의 `scope_creep`·`approaches_comparison` 이 이미 있는데, brief 자리에는 방향 반증 하나뿐이라 설계자 시선이 통째로 없다. 수단은 이미 닫혀 있다: 새 리뷰어 agent 를 만들지 않고 프로필의 `layer_rubric` 에 축을 더하는 방식, 탐지 리뷰어는 `doc-critic` 하나 유지.
->
-> **둘째 갈래 — 오케스트레이터가 리뷰어의 발견을 반영할 때 사용자에게 묻는 방식을 고치는 일.** `AskUserQuestion` 이라는 방식 자체는 유지하되 제시가 고쳐져야 한다. 고를 때 어려웠던 이유 넷을 사용자가 전부 겪었다고 답했고(고르면 뭐가 바뀌는지 안 보임 · 왜 문제인지 안 와닿음 · 용어가 내부 회계어 · 항목 많은데 우선순위 없음), 네 해법(before/after 미리보기 · 『그대로 두면』 한 줄 · 회계어의 사람말 번역 · 우선순위·묶음 표시)을 전부 범위에 넣는다. 여기에 다섯째 제약이 겹쳐 있다 — 같은 길이에 정보가 적다는 것. 글을 늘리는 게 아니라 정보를 늘리라는 것이고, 현재 글은 오히려 아주 살짝 길다. 그리고 네 해법이 전부 텍스트를 늘리는 방향이라서 이 밀도 제약이 **넷을 동시에 구속한다**는 구조까지 seed 가 미리 지적해 두었다.
->
-> **이번 턴에 실제로 하라는 행동**으로 읽은 것은 위 둘의 구현이 아니라, 「좋은 레퍼런스를 찾아 오는 것」과 「예시 중 하나로 PR 리뷰어들을 보는 것」이다. 과설계 판정 기준은 지금 확정하지 않고 다음 단계가 외부 자료를 전문 조사해 거기서 끌어오기로 되어 있으니, 결론을 내는 자리가 아니라 재료를 모으는 자리라고 받았다.
->
-> ## 방향이 무엇으로 읽혔는가
->
-> 관통하는 논리는 **앞단/뒷단 대칭**이다. 뒷단(PR·코드 리뷰)에는 아키텍처 리뷰 같은 것이 이미 있는데 앞단(문서 단계)에는 없다, 그러니 앞단에도 설계자로서 보는 자리를 만들자. PR 리뷰어를 보라는 지시도 「그대로 베껴라」가 아니라 「뒷단에 이미 있는 그 시선의 실물을 예시로 확인하라」는 쪽으로 읽혔다.
->
-> 범위는 좁게 닫혀 있다. 설계자 시선은 **brief 와 design-doc 두 문서 자리**에만, seed 와 코드 리뷰(`/qg`)는 둘 다 밖. 특히 코드 리뷰는 처음 답에 들어 있었다가 사용자가 직접 빼자고 뒤집은 것이라고 이력까지 적혀 있어서, 이건 단순한 미포함이 아니라 「되돌리지 말라」는 표시로 읽었다. 반면 둘째 갈래의 적용 자리는 의도적으로 열려 있다 — 문서 리뷰만인지 코드 리뷰까지인지 묻지 않았다고 명시.
->
-> 기준 쪽 방향은 「지금 지어내지 말고 밖에서 가져와라」다. 과설계를 재는 기준으로 *사용자 goal 대비* 와 *더 단순한 대안의 존재* 가 우선한다는 것까지만 정해졌고, 판정 문구는 없고, 아키텍처 관점은 기준도 문구도 아직 없다. 그 공백을 메울 출처로 지목된 것이 `dietrichgebert/ponytail` 이다.
->
-> ## 보낸 사람이 무엇을 신경 쓰는 것으로 읽혔는가
->
-> **구현 전에 잡는 것.** 과설계는 코드가 나온 뒤에 잡으면 늦다는 감각이 첫째 갈래 전체를 끌고 간다.
->
-> **하니스를 무겁게 만들지 않는 것.** 새 agent 금지, 탐지 리뷰어 하나 유지, 기존 프로필에 축만 추가 — 해결을 새 컴포넌트가 아니라 기존 표면의 확장으로 가져가려는 선택이 세 번 반복된다.
->
-> **자기 상상으로 기준을 급조하지 않는 것.** 판정 기준을 이번에 확정하지 않고 외부 자료 조사로 미룬 것, 「좋은 레퍼런스를 찾아 오라」가 첫 지시인 것.
->
-> **체험된 마찰.** 둘째 갈래의 네 이유는 가설이 아니라 사용자가 전부 실제로 겪은 것이라고 답했다. 그래서 「넷 중 하나만 고치면 부분 해결」이라는 판정도 붙어 있다.
->
-> **정보량과 분량을 구별하는 것.** 길면 안 되는 게 아니라 정보가 적은 게 문제라는 구분을 굳이 따로 적어 둔 대목.
->
-> **오케스트레이터가 판단을 슬쩍 대신하는 것에 대한 경계.** 풀다 만 긴장으로 남긴 것이 정확히 그것이다 — 우선순위를 매기는 행위 자체가 판단이고, 사용자는 그 항목을 골랐을 뿐 위험을 감수하겠다고 말한 적이 없다.
->
-> **닫힌 것과 열린 것의 표기를 유지하는 것.** 「(사용자 확인)」이 붙은 문장과 안 붙은 문장이 섞여 있고, 마지막 문단은 통째로 「다시 검증할 것」이다. 확정을 확정으로, 미확인을 미확인으로 넘기려는 태도가 seed 의 형식 자체에 들어 있다.
->
-> ## 읽으면서 «이건 모르겠다» 싶었던 곳
->
-> - **`dietrichgebert/ponytail` 이 무엇인지 전혀 모른다.** seed 가 스스로 「설치돼 있지 않고, 여기까지 오는 동안 아무도 읽지 않았다」고 밝힌다. 그래서 거기서 과설계 판정 기준을 끌어올 수 있다는 전제 자체가 미확인이라는 것까지는 읽었지만, 그게 스킬인지 문서인지 어떤 성격의 물건인지는 모른다.
-> - **「좋은 레퍼런스를 찾아 오고」 와 ponytail 이 같은 것인지 다른 것인지.** 문장 순서로는 레퍼런스 탐색이 먼저 나오고 ponytail 은 뒤에 「그 외부 자료」로 등장한다. 찾아올 레퍼런스가 곧 ponytail 인지, ponytail 은 이미 정해진 한 건이고 그 외에 더 찾으라는 것인지 갈리지 않았다.
-> - **「예시 중 하나로 PR 리뷰어들을 봐라」 의 PR 리뷰어가 어디 것인지.** 이 리포 안의 코드 리뷰 페르소나를 가리키는지, 바깥 생태계의 PR 리뷰 도구들을 가리키는지. 뒤따르는 「뒷단에 아키텍처 리뷰 같은 것이 있듯」 은 리포 안쪽으로도 바깥쪽으로도 읽힌다.
-> - **층 1 / 층 2 의 구분과 여덟 축의 내용.** seed 는 개수와 두 이름만 준다. 새로 넣을 설계자 시선 축이 층 1 에 붙는지 층 2 에 붙는지도 적혀 있지 않다 — brief 의 층 1 이 방향 반증 하나라는 언급 때문에 층 1 쪽으로 기울어 읽히긴 했지만 확정은 아니다.
-> - **`layer_rubric` 프로필이 어느 파일이고, brief 자리와 design-doc 자리가 같은 프로필을 공유하는지 각각인지.**
-> - **「방향 반증」 계약이 무엇을 요구하거나 금하는지.** 과설계 축이 그 계약과 어떻게 공존하는지를 안 봤다는 게 재검증 항목으로 올라와 있는데, 애초에 그 계약의 내용을 모르니 왜 공존이 문제가 될 수 있는지도 짐작만 된다.
-> - **둘째 갈래의 `AskUserQuestion` 이 정확히 어느 흐름의 어느 지점인지.** 「리뷰어가 찾은 것을 오케스트레이터가 반영할 때」 라는 서술 외에 자리 정보가 없다.
-> - **「회계어」 가 구체적으로 어떤 용어들인지.** 번역 대상이 무엇인지 seed 는 말해주지 않는다.
-> - **밀도 제약이 얼마나 딱딱한지.** 「아주 살짝 길다」 는 체감인데 무엇에 비해 긴지, 지켜야 할 상한이 있는지는 없다.
-> - **우선순위를 매길 후보가 누구누구인지.** 오케스트레이터가 매기면 판단이 된다는 위험만 제시되고, 대안으로 누가 있을 수 있는지는 열려 있다고만 되어 있다.
-> - **아키텍처 축의 기준·판정 문구를 이번에 만드는지.** 「지금 확정하지 않는다」 는 과설계 쪽에만 붙어 있어서 아키텍처 쪽의 타이밍은 읽히지 않았다.
-> - **이 일의 산출물 형태.** 다음 단계가 「전문 조사」라는 것까지만 있고, 그 결과가 brief 인지 설계문서인지 바로 구현인지는 없다. 두 갈래를 한 PR 로 갈지 나눌지도 미정이라고 적혀 있다.
+- **S6** ☑ 선택 (brief 층 1 의 decide 폭증 차단):
+  > "finding 상한 + 묶음 (권장)"
+  >
+  > (고른 선택지 설명: "이 축은 라운드당 N 건까지, 나머지는 한 묶음으로. S4 의 버림 ⓑ 가 이미 예고한 수단입니다. → 가장 가벼운 변경(프로필 데이터 + rubric 문구)이고 엔진을 안 건드립니다. 대가: 상한이 «무엇을 자르나»가 그 자체로 판단이고, 그 판단자는 자기 출력을 자르는 리뷰어 자신입니다(생산자 단계의 침묵 삭제).")
 
-## 5. degrade
+- **S7** 🗣 발화 (축 수와 술어 — 선택지 1 + 자유 입력):
+  > "1, 제약을 지키기 위해서 억지스러운 아키텍처로 가는 경우도 많더라고 혹은 과하게 아키텍처가 짜지거나 구현이 들어가거나,"
 
-- `framing_degradations` 원장 부재 — `pipeline` · `ledger` · `unavailable` · 사유: `no-state-in-phase-0` (`brief_review_state.py init` rc 1 — `.claude/spec-distill/<sid>/state.local.md` 가 없다. `/request-framing` 은 인터뷰 이전이라 state 파일이 없는 세션이 정상이다). degrade 채널은 proceed 게이트 질문 텍스트 하나만 남는다.
-- 저자 편집 기준 사본 재설정 — 첫 `seed_provenance.py marks --fix` 가 여섯 «(사용자 확인)» 을 전부 떼었고(seed 문장이 마침표로 끝나 audit `## 2` 의 풀이 줄과 글자가 달랐다), 그 떼어진 판본으로 `seed_edit_diff.py init` 이 기준을 떠 버렸다. seed 문장을 풀이와 글자 그대로 맞춰 재작성한 뒤 `marks` 가 `marked: 6 · invalid: []` 로 통과했고, 리뷰 라운드 시작 전(`begin-round` 이전)이므로 기준 사본을 현재 판본으로 다시 떴다(`hunks: []`). 라운드 중 편집이 아니므로 「처분 전 편집 금지」 위반이 아니다.
-- 워크트리 있음 — `feature/designer-lens-review` (`.claude/worktrees/designer-lens-review`). 워크트리 격리 가드가 복합 셸 명령(heredoc 포함)과 main repo 경로에 대한 `Write` 를 거부하므로, skill 의 여러 줄 펜스는 워크트리-로컬 `.claude/framing-tmp/*.sh` 에 저장해 `bash <file>` 단순 명령으로 실행한다.
+- **S8** 🗣 발화 (술어 보강 — 선택지 2 + 확인 질의):
+  > "2, 이게 아까 1번도 다 들어가는거지? "
 
-## 6. 리뷰 결정
+- **S9** 🗣 발화 (우선순위 라인 중단 + 직전 결정 재결정):
+  > "이 내용은 진행하지 말자 내가 요청한 더 본질이 있어, 그리고 직전 결정은 1번으로 바꿀게"
 
-(리뷰 라운드의 처분 기록.)
+- **S10** 🗣 발화 (「더 본질」 — 선택지 1 + 자유 입력):
+  > "1, 쉽게 전달해주는거도 포함 피로도 없게 이해쉽게끔 "
 
-- 편집 · r2 · 덩어리 1 · 그대로 둔다 · "그대로 둔다" —
+- **S11** ☑ 선택 (갈래 2 의 수용 기준 — 복수 선택):
+  > "라벨만 읽고 고른다 (권장), 안 바뀜 것은 안 보인다, 용어가 처음 보는 말이 아니다"
+  >
+  > (고르지 않은 것: "한 항목이 한 줄로 준다")
 
-- 편집 · r2 · 덩어리 2 · 그대로 둔다 · "그대로 둔다" —
-- D2.1 · r2 · adopt · 7c0f5fba#r2.1 · "채택 — 게이트 질문을 가리쿼다" — 라운드 2 에 사용자가 새로 말한 「글을 늘리라는 게 아니라 정보가 많아야 한다 · 글은 오히려 아주 살짝 길어」가 초안 어디에도 남지 않았다 — 「이거」가 게이트 질문 텍스트를 가리키면 갈래 2 의 제약(분량이 아니라 정보 밀도)으로 seed 에 들어가야 하고, 초안 산문을 가리키면 들어가면 안 된다. 지시 대상은 사용자만 답할 수 있다.
+- **S12** ☑ 선택 (Open Questions 목록 확인):
+  > "A 둘만 지금 닫자 (권장)"
+  >
+  > (고른 선택지 설명: "범위 경계 둘을 한 라운드 더 써서 지금 정하고, 나머지 14개는 §3 OQ 로 박제합니다. → 설계 단계가 «무엇을 건드려도 되는지»를 알고 시작합니다. 범위는 나중에 발견되면 설계를 되돌려야 하는 종류입니다.")
 
-- 편집 · r3 · 덩어리 1 · 그대로 둔다 · "그대로 둔다" —
+- **S13** ☑ 선택 (갈래 2 의 적용 자리):
+  > "/qg 까지 포함"
+  >
+  > (고른 선택지 설명: "synthesize_findings.py 와 render_disposition.py 도 같이 고쳐 두 곳이 함께 좋아집니다. → 리뷰 처분을 고르는 경험이 리포 전체에서 같아집니다. 대가: 범위가 커지고, 공통 모듈 편집이라 「억제는 기각에 섞이지 않는다」 같은 락을 함께 건드립니다.")
 
-- 편집 · r3 · 덩어리 2 · 그대로 둔다 · "그대로 둔다" —
-- D3.2 · r3 · adopt · 2adc8dfb#r3.1 · "채택 — 되돌림을 취소" — 모델의 「이미 겹친다」는 판정이 사용자가 고른 「프로필 rubric 에 축만 추가」를 「새 축이냐 기존 축 문구 확장이냐」의 미정 상태로 되돌리므로, 그 되돌림을 받아들일지 사용자가 정해야 한다.
+- **S14** ☑ 선택 (리뷰 라운드 1 게이트 — D14 의 /qg 범위, finding `abf668a4#r1.1`):
+  > "채택 — /qg 범위를 ⓒ 로 좁힌다"
+  >
+  > (고른 선택지 설명: "D14 를 「/qg 에는 회계어 번역(ⓒ)만 옮긴다」로 고칩니다. 설계 단계가 ⓐⓑⓓ 를 /qg 에 억지로 붙이려다 항목별 선택 자리를 새로 만드는 일을 막습니다.")
 
-- 편집 · r3 · 덩어리 1 · 그대로 둔다 · "그대로 둔다" —
+- **S15** 🗣 발화 (리뷰 라운드 1 게이트 — Lazy Ladder 판본, finding `abf668a4#r1.2`):
+  > "1, 새 의존성 금지는 너무 과한 제약인거 같은데 제약이 덕지덕지 과하게 붙게 만드는거도 별로라고 했지 근데 그게 리뷰에 들어가면 더 문제일거 같아"
 
-- 편집 · r3 · 덩어리 2 · 그대로 둔다 · "그대로 둔다" —
+- **S16** ☑ 선택 (리뷰 라운드 1 게이트 — D7 의 공유 파급, finding `abf668a4#r1.3`):
+  > "채택 — 파급을 명시하고 열어 둔다"
+  >
+  > (고른 선택지 설명: "D7 에 「이 변경은 seed·/qg generic 자리에도 닿는다」를 싣고, 그 둘을 어떻게 할지를 열린 질문으로 남깁니다. 설계 단계가 «범위 밖 자리를 건드리지 않고» 고치는 방법을 찾게 됩니다.")
 
-- 편집 · r3 · 덩어리 3 · 그대로 둔다 · "그대로 둔다" —
+- **S17** ☑ 선택 (리뷰 라운드 1 게이트 — D9 의 묶음, finding `abf668a4#r1.4`):
+  > "채택 — 묶음을 표시로만 한정"
+  >
+  > (고른 선택지 설명: "D9 을 「묶음은 시각 표시일 뿐 항목별 선택권은 남긴다」로 명시합니다. 질문 수는 안 줄지만 선택권 손실이 없고 기존 계약과 충돌하지 않습니다.")
 
-- 편집 · r3 · 덩어리 4 · 그대로 둔다 · "그대로 둔다" —
+- **S18** ☑ 선택 (리뷰 라운드 2 게이트 — D11 술어 ②③ 의 자리, finding `abf668a4#r2.3`):
+  > "채택 — 자리별로 가른다"
+  >
+  > (고른 선택지 설명: "②(제약→구조 왜곡)은 design-doc 자리에만 세우고, brief 자리엔 ①과 ③ 만 둡니다. 각 자리가 잴 수 있는 것만 재게 되고, 대상 없는 술어가 매 라운드 헛도는 일이 없습니다.")
 
-- 편집 · r3 · 덩어리 5 · 그대로 둔다 · "그대로 둔다" —
+- **S19** ☑ 선택 (리뷰 라운드 2 게이트 — ponytail 넷째 장치, finding `abf668a4#r2.4`):
+  > "채택 — 문서용으로 옮긴다"
+  >
+  > (고른 선택지 설명: "「줄이자는 판정에는 그 줄임이 틀렸을 때 드러날 관측 가능한 것 하나를 함께 낸다」를 D6 에 더합니다. OQ10 의 한 방향 압력에 대응책이 생기고, 과설계 finding 이 「그냥 줄여」가 아니게 됩니다.")
 
-- 편집 · r3 · 덩어리 6 · 그대로 둔다 · "그대로 둔다" —
+- **S20** ☑ 선택 (리뷰 라운드 2 게이트 — 상한의 작동 범위, finding `abf668a4#r2.2`):
+  > "채택 — 2N+α 를 받아든다"
+  >
+  > (고른 선택지 설명: "D9 을 「상한은 판정자별이고 라운드 총량은 그 배수 + 재비판 추가분」으로 명시합니다. 엔진을 안 건드리고 사실대로 적습니다. 대가: 상한이 총량을 묶는다는 기대는 포기합니다.")
+
+- **S21** ☑ 선택 (리뷰 라운드 2 게이트 — 묶음의 효과, finding `abf668a4#r2.6`):
+  > "채택 — 「표시 부담 완화」로 고쳐 쓴다"
+  >
+  > (고른 선택지 설명: "D9 에서 「묶음으로 decide 폭증을 막는다」를 빼고, 묶음의 효과를 「읽는 부담을 줄인다」로만 적습니다. 문장이 실제 동작과 맞아집니다. 폭증을 막는 것은 상한 쪽만 남습니다.")
+
+- **S22** ☑ 선택 (리뷰 라운드 2 게이트 — D7 의 보존 대상, finding `abf668a4#r2.5`):
+  > "채택 — 「깨진 상태」로 고쳐 쓴다"
+  >
+  > (고른 선택지 설명: "D7 에서 「현 프레이밍 보존」을 빼고 「그 둘은 이미 프로필과 어긋난 상태이므로, 참조 전환이 그걸 교정하는 것이 부수효과인지 수선인지를 설계가 정한다」로 바꿉니다. 설계가 없는 것을 보존하려고 애쓰는 일을 막습니다.")
+
+- **S23** ☑ 선택 (리뷰 라운드 2 게이트 — 밀도 제약의 구속력, finding `abf668a4#r2.1`):
+  > "채택 — 비구속 선호로 내린다"
+  >
+  > (고른 선택지 설명: "C18 을 「구속한다」에서 「지향한다」로 바꾸고, 상한이 측정되면(OQ15) 그때 기준으로 올릴지 정합니다. D19 의 선택(분량 기준 미채택)과 앞뒤가 맞아집니다.")
+
+- **S24** ☑ 선택 (리뷰 라운드 2 게이트 — S1 의 남은 한 줄, finding `f0f95e2d#r2.1`):
+  > "채택 — 둘 다 싣고 관계를 명시"
+  >
+  > (고른 선택지 설명: "「기준 둘은 우선순위일 뿐 판정 문구는 다음 단계가 외부 자료에서 끌어온다」로 두 줄의 관계를 적습니다. 원문 여섯 줄이 전부 문서에 살고, 충돌도 해소됩니다.")
+
+- **S25** ☑ 선택 (리뷰 라운드 2 게이트 — permit 밖 §0 편집, finding `5443440e#r2.1`):
+  > "채택 — 그 편집을 승인"
+  >
+  > (고른 선택지 설명: "§0 의 변경을 그대로 둡니다. §0 과 §2 가 같은 말을 합니다. permit 밖 편집이었다는 사실은 엔진 원장과 audit §8 에 남습니다.")
+
+- **S26** ☑ 선택 (리뷰 라운드 2 게이트 — 상향된 항목, finding `e99bfa50#r2.3`):
+  > "채택 — 저자 수정으로 돌린다"
+  >
+  > (고른 선택지 설명: "D11 의 진술을 「사용자가 고른 선택지의 내용이고 원문에는 그 본문이 없다」는 표시와 함께 고칩니다. 같은 결함을 두 번 지적받은 것이 한 번의 수정으로 닫힙니다.")
+
+- **S27** ☑ 선택 (리뷰 라운드 3 게이트 — 상한을 담을 자리 부재, finding `abf668a4#r3.4`):
+  > "채택 — 강제 없는 문구로 둔다"
+  >
+  > (고른 선택지 설명: "D9 을 「상한은 rubric 산문의 비강제 지시이고 어기지 않았는지 셀 수단이 없다」로 명시합니다. 엔진을 안 건드리고 사실대로 적습니다. 대가: 상한이 지켜진다는 보장이 없고, OQ8 의 침묵 삭제 위험이 그대로 남습니다.")
+
+- **S28** ☑ 선택 (리뷰 라운드 3 게이트 — 넷째 장치를 실을 칸 부재, finding `abf668a4#r3.3`):
+  > "채택 — 리뷰어 산문 규약으로만"
+  >
+  > (고른 선택지 설명: "넷째 장치를 rubric 문구에만 두고 전용 칸은 안 만듭니다 — 리뷰어가 evidence 안에 자연스럽게 씁니다. 엔진을 안 건드리고 밀도도 안 깨집니다. 대가: 강제도 관측도 없어 붙였는지 모릅니다.")
+
+- **S29** ☑ 선택 (리뷰 라운드 3 게이트 — /qg 에 선택 자리 부재, finding `abf668a4#r3.1`):
+  > "채택 — /qg 에는 다른 기준을"
+  >
+  > (고른 선택지 설명: "/qg 를 범위에 남기되 그 자리의 수용 기준을 따로 세웁니다(고르기가 아니라 «읽히기» 기준). D13 이 문서 자리 전용임이 명시됩니다.")
+
+- **S30** ☑ 선택 (리뷰 라운드 3 게이트 — 락 지목이 빗나감, finding `abf668a4#r3.2`):
+  > "채택 — 낱말은 두고 옆에 덧붙인다"
+  >
+  > (고른 선택지 설명: "회계어 낱말은 그대로 두고 사람말 한 줄을 옆에 붙입니다. 락 여섯 줄이 GREEN 을 유지하고 공시 계약도 안 깨집니다. D21 의 「대가」 서술을 실제 노출 지점으로 고쳐 씁니다.")
+
+- **S31** ☑ 선택 (리뷰 라운드 3 게이트 — permit 밖 §0 편집, finding `5443440e#r3.1`):
+  > "채택 — 승인하고 남은 한 곳도 고친다"
+  >
+  > (고른 선택지 설명: "§0 의 변경을 승인하고, 그 안의 「상한·묶음으로 decide 폭증을 막는다」도 S21 대로 「상한으로」만 남깁니다. §0 과 §2 가 완전히 같은 말을 합니다.")
+
+- **S32** ☑ 선택 (리뷰 라운드 3 게이트 — 만료된 채택, finding `e99bfa50#r3.4`):
+  > "채택 — 적용된 것으로 닫는다"
+  >
+  > (고른 선택지 설명: "문서의 ✎ 표시를 적용 증거로 보고 닫습니다. 미적용 항목이 사라져 승인 게이트가 깨끗해집니다. 관측은 엔진이 아니라 사용자가 한 것이고, 그 사실은 이 기록에 남습니다.")
+
+- **S33** ☑ 선택 (리뷰 라운드 3 게이트 — 추가 라운드 개방 여부):
+  > "열지 않음 (권장)"
+  >
+  > (고른 선택지 설명: "라운드 3 으로 마감하고 진행 옵션으로 갑니다. 남은 것은 §3 Open Questions 와 audit 기록으로 다음 단계에 갑니다.")
+
+- **S34** 🗣 원문 (종료 확정 게이트 — 확정 전이 + handoff 방식):
+  > "compact 후 진행하자"
+  >
+  > (이어진 한 줄: "brainstormign" — `/compact` 다음 턴에 부를 대상이 `superpowers:brainstorming`
+  > 임을 지목. 두 발화가 같은 경로(확정 → `/compact` 노출 → 다음 턴 brainstorming)를 가리켜
+  > 그대로 진행했다. 이 선택으로 D11 을 뺀 26건이 `confirmed` 로 전이했다.)
+
+## 7. 확산 원자료
+
+- «ponytail» — https://github.com/dietrichgebert/ponytail — Lazy Ladder 7단, 보호 경계(trust-boundary validation · data-loss handling · security · accessibility 는 never on the chopping block), 세 모드, 커맨드 넷
+- «ponytail-review» — https://claudeskills.info/skills/DietrichGebert/ponytail/ponytail-review/ — 다섯 카테고리(delete·stdlib·native·yagni·shrink), finding 형식 `L<line>: <tag> <what>. <replacement>.`, 종결 문구 `net: -<N> lines possible` / `Lean already. Ship.`, 명시적 제외(정확성·보안·성능, 최소 자기검증 테스트), 「수정을 적용하지 않고 목록만 낸다」
+- «ponytail-deepdive» — https://flaviocopes.com/ponytail/ — Lazy Ladder 7단의 독립 서술, 세 모드(lite·full·ultra), 보호 경계 목록
+- «pr-review-toolkit» — https://github.com/anthropics/claude-plugins-official/blob/main/plugins/pr-review-toolkit/README.md — 관심사별 agent 여섯, 분리 사유가 「Use them individually for targeted reviews」(주문형 지목 호출). 설치본 `type-design-analyzer.md` 는 네 축 각각 `Rate 1-10` 수치 스코어링
+- «mozilla-arch-review» — https://mozilla.github.io/firefox-browser-architecture/text/0006-architecture-review-process.html — 「엔지니어는 자기 코드를 리뷰하지 않듯 자기 설계도 리뷰하지 않는다」, design review 에 문제 도메인에 밝은 팀 밖 엔지니어 «한 명» 배정
+- «nodrama-design-review» — https://nodramadevops.com/2019/09/how-to-review-a-design/ — 「무엇을 제거·연기하거나 더 단순한 기술로 구현해도 사용자 필요가 충족되는가」
+- «tue-add-checklist» — https://wstomv.win.tue.nl/edu/2im24+2im25/add.html — 아키텍처 설계 문서 리뷰 체크리스트, 「고수준 컴포넌트 일곱 이하, 느슨한 결합」
+- «togaf-checklist» — https://pubs.opengroup.org/architecture/togaf7-doc/arch/p4/comp/clists/syseng.htm — 시스템 엔지니어링·전체 아키텍처 리뷰 체크리스트
+- «bansal-chi2021» — https://idl.cs.washington.edu/files/2021-AIExplanationsTeamPerformance-CHI.pdf — 설명이 팀 정확도를 올리지 않고 AI 제안 수용률만 올린다는 통제 실험
+- «automation-bias» — https://link.springer.com/content/pdf/10.1007/s00146-025-02422-7.pdf — 설명 가능성만으로 automation bias 가 완화되지 않는다는 리뷰
+- «alert-fatigue» — https://www.nature.com/articles/s41597-025-06154-7 — 정적 분석 경고의 비실행가능 비율 35~91% 와 그로 인한 alert fatigue
+- «code-review-overload» — https://codeant.ai/blogs/prevent-ai-code-review-overload — AI 리뷰 코멘트 과다 시 무시 비율과 「정당한 일부까지 함께 무시된다」
+- «pbr-replication» — https://link.springer.com/article/10.1007/s10664-006-5967-6 — PBR 복제 실험: 관점이 실제로 구별될 때만 별도 판독자가 체크리스트를 이긴다는 조건부
+- «checklist-vs-adhoc» — https://arxiv.org/pdf/0909.4260 — 체크리스트 기반 읽기 vs ad-hoc 읽기 통제 비교, 체크리스트 쪽 유의하게 우월
+- «checklist-length-reliability» — https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4613902/ — 체크리스트 길이가 평가자 간 신뢰도에 미치는 영향
+- «hicks-law» — https://thedecisionlab.com/reference-guide/design/hicks-law — 선택지 수와 결정 시간·선택 포기
+- «yagni» — https://lawsofsoftwareengineering.com/laws/yagni/ — YAGNI 가 판단을 요구하는 원칙이고 오적용 시 확장 불가 설계를 낳는다
+- «goodhart» — https://towardsdatascience.com/goodharts-law-and-the-dangers-of-metric-selection-with-a-b-testing-91b48d1c1bef/ — 지표를 목표로 삼을 때의 실패
+
+## 8. 리뷰 결정
+
+- D1.1 · r1 · adopt · abf668a4#r1.1 · "채택 — /qg 범위를 ⓒ 로 좁힌다" — D14 가 갈래 2 를 /qg 까지 넓힌 근거는 「리뷰 처분을 고르는 경험이 같아진다」인데, /qg 에는 항목별로 고르는 자리가 없고(iteration 단위 3지선다) 처분 렌더는 항목 설명이 아니라 집계 두 줄이며 우선순위는 이미 있다 — 네 개선 중 실제로 옮겨갈 수 있는 것이 몇 개인지 정하고 범위를 다시 판단해야 한다
+- D1.2 · r1 · adopt · abf668a4#r1.2 · "1, 새 의존성 금지는 너무 과한 제약인거 같은데 제약이 덕지덕지 과하게 붙게 만드는거도 별로라고 했지 근데 그게 리뷰에 들어가면 더 문제일거 같아" — D6 이 차용하겠다고 확정한 Lazy Ladder 의 모양이 원본과 다르다 — 원본은 7단인데 §4 는 5단, §5 는 「6단」으로 적었고, 접혀 사라진 단들이 바로 문서로 옮길 때 대응물이 불분명한 단들이다: 어느 판본을 정본으로 삼을지 정해야 한다
+- D1.3 · r1 · adopt · abf668a4#r1.3 · "채택 — 파급을 명시하고 열어 둔다" — D7 이 고치겠다는 doc-critic 본문의 층 1 리터럴 여덟 축은 네 리뷰 자리가 «공유»하는 프레이밍이라, 그것을 layer_rubric.layer1 참조로 바꾸면 C2 가 범위 밖으로 확정한 seed 자리와 /qg generic 자리의 층 1 프레이밍까지 함께 바뀐다 — 두 확정이 충돌한다
+- D1.4 · r1 · adopt · abf668a4#r1.4 · "채택 — 묶음을 표시로만 한정" — D9 의 「묶음 규칙」이 진입 skill 계약이 명시적으로 금지하는 것과 같은 결과를 생산자 단계에서 만든다 — 결정을 묶으면 묶인 결정의 선택지가 사라진다는 이유로 엔진은 질문 병합을 금지하는데, 리뷰어가 finding 을 한 묶음으로 내면 같은 손실이 더 이른 단계에서 관측 불가능하게 일어난다
+- D2.5 · r2 · adopt · abf668a4#r2.3 · "채택 — 자리별로 가른다" — D11 의 술어 ②(제약이 구조를 왜곡했는가)·③(층위를 벗어났는가)은 문서가 구조·구현을 담고 있을 때만 성립하는데 brief 자리에는 그 대상이 없다 — 두 술어를 design-doc 자리에만 세울 것인가, 아니면 brief 자리용으로 「제약 과잉·설계 선점」으로 다시 정의할 것인가.
+- D2.6 · r2 · adopt · abf668a4#r2.4 · "채택 — 문서용으로 옮긴다" — D6 이 ponytail 에서 셋만 차용하기로 닫으면서 상류가 사다리의 한 방향 압력을 막으려고 둔 넷째 장치(잘라낸 자리에 관측 가능한 검사 하나를 남긴다)를 빼 OQ10 의 실패에 대응책이 없다 — 그 넷째를 문서용으로 옮길지.
+- D2.7 · r2 · adopt · abf668a4#r2.2 · "채택 — 2N+α 를 받아든다" — D9 의 「라운드당 N 건」 상한은 탐지원이 둘이고 재비판이 항목을 더할 수 있어 프로필 데이터·rubric 문구만으로는 라운드 총량을 묶지 못한다 — 2N+α 를 받아들일지, D9 이 금지한 엔진 변경(카테고리별 계수·상한)을 열지.
+- D2.8 · r2 · adopt · abf668a4#r2.6 · "채택 — 「표시 부담 완화」로 고쳐 쓴다" — D9는 초과 항목의 선택권을 모두 보존하면서 엔진 변경 없이 decide 폭증을 막겠다고 하지만, 현 게이트는 각 항목을 별도 결정으로 처리합니다. 상한·묶음의 효과를 결정 수 제한이 아닌 표시 부담 완화로 한정할까요?
+- D2.9 · r2 · adopt · abf668a4#r2.5 · "채택 — 「깨진 상태」로 고쳐 쓴다" — D7 이 「바꾸지 않고 고치겠다」고 보존하려는 seed·/qg generic 의 현재 층 1 프레이밍은 이미 각 자리의 프로필과 모순이다 — 어긋난 현 상태를 보존할지, 참조 전환이 그 둘을 부수효과로 교정하는 것을 C2 의 범위 밖 변경으로 승인할지.
+- D2.10 · r2 · adopt · abf668a4#r2.1 · "채택 — 비구속 선호로 내린다" — C18 은 밀도 제약이 해법 넷을 「모두 구속한다」고 선언하는데 D13 의 수용 기준 셋에 그것을 재는 항목이 없고 그 상한값도 미측정이라, 구속력 있는 제약이 달성 판정 없이 남는다 — C18 을 비구속 선호로 내릴지, D19 를 뒤집어 분량·정보밀도 기준 하나를 D13 에 더할지.
+- D2.11 · r2 · adopt · f0f95e2d#r2.1 · "채택 — 둘 다 싣고 관계를 명시" — S1 의 (사용자 확인) 문장 하나 — 「과설계 판정 기준은 지금 확정하지 않고, 다음 단계가 그 외부 자료를 전문 조사해 거기서 끌어오는 것을 사용자가 원한다」 — 만 §2 에 C 항목이 없는데, 그것을 넣으면 C16·C17 의 「기준 둘은 과설계 쪽에 정해졌다」와 충돌한다 — 원문이 두 가지로 읽히므로 §2 를 어느 쪽으로 쓸지는 사용자 결정.
+- D2.12 · r2 · adopt · 5443440e#r2.1 · "채택 — 그 편집을 승인" — finding 없이 바뀜: 0. 한눈에 (modified)
+- D2.13 · r2 · adopt · e99bfa50#r2.3 · "채택 — 저자 수정으로 돌린다" — check-intent 거부 후 상향: D11의 구체적인 세 술어와 Lazy Ladder의 배치를 S9로 확인된 사용자 발화로 제시하지 말고, 번들에서 확인되지 않는 해석으로 구분해야 합니다.
+- D3.15 · r3 · adopt · abf668a4#r3.4 · "채택 — 강제 없는 문구로 둔다" — D9 이 약속한 「프로필 데이터」로는 finding 상한 N 을 담을 자리가 없다 — 프로필 frontmatter 는 열 필드로 닫혀 있고 열한 번째 필드도 layer_rubric 의 셋째 키도 진입에서 rc 2 로 거절되므로, 상한은 rubric 산문(리뷰어에게 주는 비강제 지시)으로만 존재한다: 상한을 강제 없는 문구로 둘 것인가, D9 이 금한 엔진·락 편집을 열 것인가, 상한을 버리고 다른 수단으로 decide 폭증을 막을 것인가.
+- D3.16 · r3 · adopt · abf668a4#r3.3 · "채택 — 리뷰어 산문 규약으로만" — D6 의 넷째 장치(「줄이자」 판정마다 관측 가능한 검사 하나를 함께 낸다)를 실을 칸이 finding 스키마에도 게이트 렌더에도 없어서 `summary` 한 문장이나 `evidence` 안에 끼워 넣는 수밖에 없고, 그것은 C18 의 밀도 제약과 D13 의 「라벨만 읽고 고른다」를 정면으로 누른다: 넷째 장치를 실을 칸을 여는(=엔진 편집) 것을 허용할 것인가, 장치를 리뷰어 산문 규약으로만 둘 것인가, 이 자리에서는 포기할 것인가.
+- D3.17 · r3 · adopt · abf668a4#r3.1 · "채택 — /qg 에는 다른 기준을" — D14·D25 가 갈래 2 를 /qg 로 넓히지만 /qg 에는 D13 의 수용 기준을 적용할 선택 자리가 없다 — 유일한 AskUserQuestion 은 iteration 단위 Retry/Proceed/Stop 이고 그 `<summary>` 는 `**Findings:**` 카운트 줄의 verbatim 복사라서, ⓒ 가 고치려는 회계어 줄은 질문이 아니라 보고서에만 실린다: /qg 를 범위에 남기되 그 자리에는 D13 과 다른 수용 기준을 세울 것인가, 아니면 갈래 2 도 문서 두 자리로 좁힐 것인가.
+- D3.18 · r3 · adopt · abf668a4#r3.2 · "채택 — 낱말은 두고 옆에 덧붙인다" — D21 이 ⓒ 의 대가로 지목한 락(「억제는 기각에 섞이지 않는다」)은 계수 분리만 재고 표시 문구는 재지 않는 반면, 회계 낱말을 리터럴로 고정하는 락은 따로 여섯 줄 있다 — 「번역」이 낱말 교체를 뜻하면 그 여섯이 RED 가 되고 persona/락 편집급 신중함이 필요하다: 낱말을 바꾸고 락을 함께 고칠 것인가, 회계어는 그대로 두고 옆에 사람말 한 줄을 덧붙일 것인가.
+- D3.19 · r3 · adopt · 5443440e#r3.1 · "채택 — 승인하고 남은 한 곳도 고친다" — finding 없이 바뀜: 0. 한눈에 (modified)
+- D3.20 · r3 · adopt · e99bfa50#r3.4 · "채택 — 적용된 것으로 닫는다" · supersedes D2.14 — 채택 후 미적용(expired): check-intent 거부 후 상향: D11의 구체적인 세 술어와 Lazy Ladder의 배치를 S9로 확인된 사용자 발화로 제시하지 말고, 번들에서 확인되지 않는 해석으로 구분해야 합니다.
