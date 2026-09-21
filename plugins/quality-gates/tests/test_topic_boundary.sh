@@ -116,6 +116,19 @@ Spec: docs/nonexistent-design.md#pr1"
   cleanup
 }
 
+# ── path 체크는 repo-root-relative 다 (컨트롤러 Ruling 2 회귀 락) ──────────
+#    브리프 원안의 cwd-relative 검사(`[ -e "$path" ]`)는 하위 디렉터리에서 부르면
+#    거짓 declaration-invalid 를 낸다. 다른 모든 케이스는 cwd == repo root 라서
+#    이 차이를 구분 못 한다 — 이 케이스만 cwd != repo root 를 만들어 구분한다.
+case_path_check_is_repo_root_relative() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  mkdir -p sub/dir; cd sub/dir
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "하위 디렉터리에서 호출해도 declared path 는 repo-root 기준으로 resolve 된다"
+  cleanup
+}
+
 # (F4 · F7 · F8 은 Task 3 이 더한다 — 셋 다 경계 또는 T 가 있어야 잴 수 있다.)
 
 # ── 선언이 아예 없는 리포 ───────────────────────────────────────────────────
@@ -142,6 +155,7 @@ case_nine_keys_always() {
 
 for c in case_f1_two_siblings case_f2_merged_ref_alive case_f3_merged_ref_deleted \
          case_f5_fragment_discriminates case_f6_path_absent \
+         case_path_check_is_repo_root_relative \
          case_no_declaration case_nine_keys_always; do
   echo "== $c"; $c
 done
