@@ -318,13 +318,57 @@ case_combine_edges() {
   cleanup
 }
 
+# ── 합치기 정상: 끝점 셋 → 누적기가 진짜 자란다 (AC6, 순차 2+ 스텝) ─────────
+#    Fix round 1 — 두-끝점 케이스만으로는 sequential accumulation 자체(스텝이
+#    누적되는지, N-1 회 도는지)가 안 잠긴다. 형제 셋을 겹치지 않게 붙여
+#    steps: N-1 과 intermediates 개수·트리에 세 파일 전부를 확인한다.
+case_combine_three_clean() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA "$R"; decl_commit a.txt a1 "a1"; local TA; TA=$(git rev-parse HEAD)
+  git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"; local TB; TB=$(git rev-parse HEAD)
+  git checkout -q -b topicC "$R"; decl_commit c.txt c1 "c1"; local TC; TC=$(git rev-parse HEAD)
+  local out; out=$(bash "$CT" "$TA" "$TB" "$TC")
+  assert_eq "$(field status "$out")" "ok" "끝점 셋 합치기 → status: ok"
+  assert_eq "$(field steps "$out")" "2" "끝점 셋 → merge-tree 2회(N-1) — 누적이 실제로 돈다"
+  local inter; inter=$(field intermediates "$out")
+  assert_eq "$(printf '%s' "$inter" | tr ',' '\n' | grep -c .)" "2" "중간 커밋 2개(스텝마다 하나)"
+  assert_grep "$inter" '^[0-9a-f]{40},[0-9a-f]{40}$' "중간 커밋 둘 다 40-hex SHA"
+  local names; names=$(git ls-tree -r --name-only "$(field tree "$out")")
+  assert_grep "$names" '^a\.txt$' "합친 트리에 a.txt(1차 누적)"
+  assert_grep "$names" '^b\.txt$' "합친 트리에 b.txt(1차 누적)"
+  assert_grep "$names" '^c\.txt$' "합친 트리에 c.txt(2차 누적 — 누적기가 앞 결과를 버리지 않는다)"
+  cleanup
+}
+
+# ── 합치기 충돌 — 셋 중 «둘째»에서 충돌 (귀속이 "마지막 인자" 함정을 피함) ──
+#    Fix round 1 — 끝점 둘짜리 충돌 케이스는 failed_at 이 유일하게 tip2 (=
+#    마지막 인자) 값 하나만 취할 수 있어, 「진짜 실패한 스텝의 tip」과
+#    「그냥 마지막 인자」를 구분 못 한다. 셋째 끝점(TC, 무관)을 더해
+#    첫 스텝(acc=TA, tip=TB)에서 충돌시키면 failed_at 이 TB(끝에서 둘째)여야
+#    하고 TC(마지막 인자)여서는 안 된다 — 이 비대칭이 귀속을 정말 잠근다.
+case_combine_three_conflict_attribution() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA "$R"; decl_commit f.txt AAA "a"; local TA; TA=$(git rev-parse HEAD)
+  git checkout -q -b topicB "$R"; decl_commit f.txt BBB "b"; local TB; TB=$(git rev-parse HEAD)
+  git checkout -q -b topicC "$R"; decl_commit c.txt c1 "c1"; local TC; TC=$(git rev-parse HEAD)
+  local out; out=$(bash "$CT" "$TA" "$TB" "$TC")
+  assert_eq "$(field status "$out")" "merge-conflict" "셋 중 첫 스텝(TA·TB)이 충돌 → status: merge-conflict"
+  assert_eq "$(field steps "$out")" "1" "충돌은 첫 merge-tree 호출(acc=TA, tip=TB)에서 남 — steps: 1"
+  assert_eq "$(field failed_at "$out")" "$TB" "귀속은 실제로 충돌시킨 tip(TB) — 「마지막 인자」가 아니다"
+  assert_not_contains "$(field failed_at "$out")" "$TC" "failed_at 이 마지막 인자(TC)가 아님을 명시적으로 못박는다"
+  cleanup
+}
+
 for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_f2_boundary_merged_not_hidden case_f3_merged_ref_deleted \
          case_f4_undeclared_ancestor_included case_f5_fragment_discriminates \
          case_f6_path_absent case_f7_mixed_keys_in_T case_f8_seal_first_then_maximal \
          case_tips_order_deterministic case_path_check_is_repo_root_relative \
          case_no_declaration case_nine_keys_always \
-         case_combine_clean case_combine_conflict case_combine_edges; do
+         case_combine_clean case_combine_conflict case_combine_edges \
+         case_combine_three_clean case_combine_three_conflict_attribution; do
   echo "== $c"; $c
 done
 finish
