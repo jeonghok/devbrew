@@ -364,8 +364,12 @@ AC9 가 `개발 ≥ 출하` 를 고정하되 **두 자리를 각각 읽어서** 
 - **AC15** 신규 락이 `# guards:` 를 선언하고 **`--emit-scanned` 를 지원한다**. 둘 중 하나만 하면
   `test_guards_coverage_bidirectional.sh:71` 이 락을 통째로 실행해 출력을 「스캔한 경로」로 읽고 RED 를 낸다.
 - **AC16** `uv.lock` 이 커밋되고 PyYAML 이 정확한 버전으로 고정된다.
-- **AC17** 4개 플러그인 모두 version bump + CHANGELOG 항목. 바닥 상향은 **breaking** 이므로 bump 등급은
-  breaking 규칙을 따른다(0.x 는 minor, 1.0 이상은 major). 리터럴 번호는 머지 직전에 정한다.
+- **AC17** 4개 플러그인 모두 version bump + CHANGELOG 항목. **등급은 그 플러그인이 바닥을 집행하는지로
+  갈린다** — 훅이 바닥을 집행하는 플러그인(`project-init`·`quality-gates`·`spec-distill`)에서 바닥 상향은
+  사용자에게 **breaking** 이므로 breaking 규칙을 따른다(0.x 는 minor, 1.0 이상은 major). 집행하는 훅이
+  **없는** 플러그인(`plugin-audit`)에서는 그 바닥을 강제하는 주체가 없어 사용자 쪽 동작이 바뀌지 않으므로
+  breaking 이 아니다 — cache key 를 움직이기 위한 **patch** 를 받는다(AC14 의 음의 짝과 같은 근거:
+  집행 주체가 없는 자리에 집행의 대가를 물리지 않는다). 리터럴 번호는 머지 직전에 정한다.
 
 ## Files to Modify
 
@@ -452,6 +456,12 @@ AC9 가 `개발 ≥ 출하` 를 고정하되 **두 자리를 각각 읽어서** 
   범위를 넓히는 PR 은 거기서부터 재집계해야 한다.
 - **L8** 설치 캐시에서의 배포 동작은 비문서다. 물리 사본은 링크 역참조 의존을 제거하지만 설치본의 배치
   자체를 보장하지는 못한다.
+- **L9** **안내 채널은 「어느 플러그인을 설치했나」에 달려 있다.** 해석기는 `EVENT = SessionStart` 일 때만
+  안내를 내고, `SessionStart` 훅 자리는 `quality-gates` 하나뿐이다. `.claude-plugin/marketplace.json` 은
+  네 플러그인을 각각 설치 가능한 것으로 싣는데, `quality-gates` 없이 `spec-distill` 또는 `project-init` 만
+  설치한 바닥 미만 사용자는 훅이 조용히 건너뛰어지는 것을 **아무 안내 없이** 겪는다 — 그 사용자에게는
+  Goal 2 가 충족되지 않는다. 자리를 늘리는 것은 설계 변경이라 후속으로 미루고, 이 버전에서는 세 README 와
+  루트 README 의 산문이 그 의존을 **명시한다**(안내가 온다고 약속하지 않는다).
 
 ## Concrete Next Action
 

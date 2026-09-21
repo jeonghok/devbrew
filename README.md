@@ -40,7 +40,9 @@ devbrew의 **훅**은 Python 3.12 이상을 요구합니다. 이 숫자는 리�
 올릴 때는 숫자를 손으로 바꾸는 게 아니라 이 규칙을 다시 적용합니다. 정본은
 `shared/python/devbrew-python.sh`의 `FLOOR_MAJOR`/`FLOOR_MINOR`.
 
-바닥 미만 머신에서 훅은 **막지 않고 건너뜁니다**. 대신 세션 시작에 안내가 한 번 나가고,
+바닥 미만 머신에서 훅은 **막지 않고 건너뜁니다**. 그 사실을 알리는 세션 시작 안내는
+`quality-gates`의 `SessionStart` 훅 자리에서 한 번 나갑니다 — devbrew 전체에서 그 자리는
+거기 하나뿐이라, `quality-gates` 없이 다른 플러그인만 설치하면 안내 없이 건너뜁니다.
 `$DEVBREW_PYTHON`으로 인터프리터를 직접 지정할 수 있습니다. 스킬·커맨드가 Bash로 부르는
 자리는 이 해석의 범위 밖이라 여전히 사용자의 `python3`를 집습니다.
 

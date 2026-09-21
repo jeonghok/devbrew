@@ -233,11 +233,6 @@ Phase 1.6  Synthesizer (Phase 1 실행 시 항상) — dedupe/rank (결정론 �
 팔레트는 SKILL `## Reviewer composition (scope-driven)` 섹션. scout(`scripts/scout.py`)는
 `depth` + 추천 subset을 emit하는 **힌트 provider**(권위 아님).
 
-- **Python 3.12+** — 이 플러그인의 훅이 요구하는 바닥입니다. 숫자는 도출된 값입니다 —
-  「2026-10 이후에도 패치를 받는 버전 중 최빈」, 다음 재검토는 3.12 EOL(2028-10).
-  바닥 미만이면 훅은 **막지 않고** 건너뛰며 세션 시작에 안내가 한 번 나갑니다.
-  `$DEVBREW_PYTHON`으로 인터프리터를 직접 지정할 수 있습니다.
-
 **Prerequisites (Tier C optional dependencies):** `pr-review-toolkit`(code-reviewer +
 silent-failure-hunter + type-design-analyzer + pr-test-analyzer + comment-analyzer),
 `feature-dev`(code-architect). 미설치 시 해당 Tier C는 unavailable로 degrade하고 floor(A) +
@@ -406,6 +401,13 @@ plan과 달리 **legacy-global 소스는 없습니다** — spec은 프로젝트
 알고리즘 자체는 `scripts/discover-spec.sh`(적격성 술어 + source 우선순위)와 그것이 source 하는 `scripts/discover_common.sh`(디렉토리 스캔 + mtime 선택)에 분리되어 `tests/test_discover_spec.sh` 9개 fixture로 검증됩니다.
 
 ## 사전 요건
+
+- **Python 3.12+** — 이 플러그인의 훅이 요구하는 바닥입니다. 숫자는 도출된 값입니다 —
+  「2026-10 이후에도 패치를 받는 버전 중 최빈」, 다음 재검토는 3.12 EOL(2028-10).
+  바닥 미만이면 훅은 **막지 않고** 건너뜁니다. 그 사실을 알리는 세션 시작 안내는 이 플러그인의
+  `SessionStart` 훅 자리 하나에서만 나갑니다 — devbrew 전체에서 그 자리는 여기뿐이라,
+  이 플러그인 없이 다른 devbrew 플러그인만 설치하면 안내 없이 조용히 건너뜁니다.
+  `$DEVBREW_PYTHON`으로 인터프리터를 직접 지정할 수 있습니다.
 
 | 플러그인 | 필수 | 사용처 | 목적 |
 |---------|------|-------|------|
