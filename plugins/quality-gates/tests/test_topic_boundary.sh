@@ -287,6 +287,48 @@ case_f8_seal_first_then_maximal() {
   cleanup
 }
 
+# ── 봉인의 부모가 토픽 안 — seal_on_topic: yes (D1 disclosure) ──────────────
+case_seal_on_topic_yes() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA "$R"; decl_commit a.txt a1 "a1"
+  local TIPA; TIPA=$(git rev-parse HEAD)
+  local SEAL; SEAL=$(git commit-tree "$TIPA^{tree}" -p "$TIPA" -m seal)
+  local out; out=$(bash "$RT" resolve "$KEY" --seal "$SEAL")
+  assert_eq "$(field status "$out")" "ok" "봉인-토픽안: status: ok"
+  assert_eq "$(field seal_on_topic "$out")" "yes" "봉인-토픽안: seal_on_topic: yes(봉인의 부모가 B_t 구성원)"
+  assert_contains "$(field tips "$out")" "$SEAL" "봉인-토픽안: tips 에 봉인 SHA 가 있다"
+  cleanup
+}
+
+# ── 봉인의 부모가 토픽 밖 — seal_on_topic: no · status: ok · 오염 없음 ──────
+#    A1/A2 회귀 락: 옛 구현은 `$MAXIMAL`(끝점 = tips ∪ 봉인)에서 T·nkeys 를 뽑아
+#    봉인을 사후에 `grep -v -x -F` 로만 걷어냈다 — 봉인의 부모(outside 브랜치)가
+#    끌고 온 조상 커밋은 그 후처리로 못 잡는다. `$BR_TIPS`(브랜치 집합 자체) 에서
+#    뽑으면 outside 브랜치가 애초에 B_t 밖이라 안 들어온다.
+case_seal_off_topic_excludes_commits() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA "$R"; decl_commit a.txt a1 "a1"
+  local TIPA; TIPA=$(git rev-parse HEAD)
+  git checkout -q -b outside "$R"
+  echo o1 > o.txt; git add o.txt; git commit -qm "o1 (선언 없음, 토픽 밖)"
+  local OUTSIDE_TIP; OUTSIDE_TIP=$(git rev-parse HEAD)
+  git checkout -q topicA
+  local SEAL; SEAL=$(git commit-tree "$OUTSIDE_TIP^{tree}" -p "$OUTSIDE_TIP" -m seal)
+
+  local out; out=$(bash "$RT" resolve "$KEY" --seal "$SEAL")
+  assert_eq "$(field status "$out")" "ok" "봉인-토픽밖: status: ok(진행하되 공시일 뿐 막지 않는다)"
+  assert_eq "$(field seal_on_topic "$out")" "no" "봉인-토픽밖: seal_on_topic: no"
+  assert_contains "$(field tips "$out")" "$SEAL" "봉인-토픽밖: tips 는 여전히 봉인 SHA 를 담는다(끝점 자격은 유지)"
+
+  local cs; cs=$(bash "$RT" commits "$KEY" --seal "$SEAL")
+  assert_eq "$(printf '%s\n' "$cs" | grep -c .)" "1" "봉인-토픽밖: commits 는 정확히 1개 — 토픽 자신의 커밋만"
+  assert_contains "$cs" "$TIPA" "봉인-토픽밖: commits 에 topicA 자신의 커밋(TIPA)이 있다"
+  assert_not_contains "$cs" "$OUTSIDE_TIP" "봉인-토픽밖: commits 에 outside 브랜치의 커밋이 없다(오염 없음)"
+  cleanup
+}
+
 # ── 끝점 순서 결정론: «발견 순서» 와 무관해야 한다 ──────────────────────────
 #    같은 스크립트를 두 번 부르는 것으로는 못 잰다 — 리포가 안 바뀌면 정규화가
 #    없어도 같은 답이 나온다. 브랜치를 개명하면 SHA 는 그대로인 채
@@ -321,12 +363,45 @@ case_no_declaration() {
   cleanup
 }
 
-# ── 출력 계약: 9키가 «항상» 나온다 ──────────────────────────────────────────
-case_nine_keys_always() {
+# ── B1: 원격-전용 미머지 구성원도 1단계가 받는다 (D2 재결정, §8) ────────────
+#    선언 발견(C)은 `--all` 로 원격-추적 ref 까지 보는데 1단계가 `refs/heads` 만 보면
+#    비대칭이 생겨 이 구성원이 고아(declaration-invalid)로 떨어진다. `git clone` 은
+#    로컬에 main 만 만들므로 이것이 신선한 clone·CI 체크아웃의 기본 상태다.
+case_remote_only_unmerged_member() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA "$R"; decl_commit a.txt a1 "a1"
+  local TIPA; TIPA=$(git rev-parse HEAD)
+  git update-ref refs/remotes/origin/topicA "$TIPA"
+  git checkout -q main
+  git branch -q -D topicA
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "원격-전용 미머지 구성원: status: ok(orphan 이 아니다)"
+  assert_grep "$(field branches "$out")" 'origin/topicA' "원격-전용 미머지 구성원: branches 에 원격-추적 이름이 있다"
+  cleanup
+}
+
+# ── B1: 로컬 브랜치와 그 원격-추적 대응이 같은 커밋 → 구성원 한 번만 ────────
+case_local_and_remote_same_commit_dedup() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA "$R"; decl_commit a.txt a1 "a1"
+  local TIPA; TIPA=$(git rev-parse HEAD)
+  git update-ref refs/remotes/origin/topicA "$TIPA"
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "로컬+원격 같은 커밋: status: ok"
+  assert_eq "$(field branches "$out" | tr ',' '\n' | grep -c .)" "1" "로컬+원격 같은 커밋: branches 에 구성원이 한 번만"
+  assert_eq "$(field branches "$out")" "topicA" "로컬+원격 같은 커밋: 로컬 이름이 이긴다(사전순으로 먼저 스캔됨)"
+  cleanup
+}
+
+# ── 출력 계약: 10키가 «항상» 나온다 (seal_on_topic 이 열 번째 키) ───────────
+case_ten_keys_always() {
   new_repo
   local out; out=$(bash "$RT" resolve "$KEY")
   local n; n=$(printf '%s\n' "$out" | grep -cE '^[a-z_]+:')
-  assert_eq "$n" "9" "선언 0 인 리포에서도 9키 전부 emit"
+  assert_eq "$n" "10" "선언 0 인 리포에서도 10키 전부 emit"
+  assert_eq "$(field seal_on_topic "$out")" "-" "--seal 없으면 seal_on_topic: -"
   local rc; bash "$RT" resolve "$KEY" >/dev/null 2>&1; rc=$?
   assert_eq "$rc" "0" "정상 경로 exit 0"
   cleanup
@@ -456,8 +531,11 @@ for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_nkeys_grep_family_catches_genuine_trailer \
          case_nkeys_lowercase_trailer_no_false_positive \
          case_f8_seal_first_then_maximal \
+         case_seal_on_topic_yes case_seal_off_topic_excludes_commits \
          case_tips_order_deterministic case_path_check_is_repo_root_relative \
-         case_no_declaration case_nine_keys_always \
+         case_no_declaration \
+         case_remote_only_unmerged_member case_local_and_remote_same_commit_dedup \
+         case_ten_keys_always \
          case_combine_clean case_combine_conflict case_combine_edges \
          case_combine_three_clean case_combine_three_conflict_attribution \
          case_resolve_tips_feed_combine; do

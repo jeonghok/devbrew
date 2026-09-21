@@ -3,7 +3,7 @@
 #   (설계 2026-09-21 §6.2, AC3·AC4·AC5·AC15·AC16)
 #
 # Subcommands:
-#   resolve <topic-key>   -> key: value 요약 9줄
+#   resolve <topic-key>   -> key: value 요약 10줄
 #   commits <topic-key>   -> T 의 커밋 SHA (topo-order), 한 줄에 하나
 #
 # **사실만 낸다 — 판정하지 않는다.** `resolve-baseline.sh` 와 같은 계약이다:
@@ -46,11 +46,12 @@ fi
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 
 DECLARED="-"; BRANCHES="-"; BOUNDARY="-"; TIPS="-"; NCOMMITS="-"; BASE_REF="-"
+SEAL_ON_TOPIC="-"
 
 emit() {   # <status> <reason>
   # `commits` 는 fail-closed 다 — status != ok 이면 stdout 에 «아무것도» 내지 않는다.
-  # 이 검사는 echo 들보다 «앞» 이어야 한다. 뒤에 두면 9줄이 이미 나간 뒤라
-  # 소비자가 `$(… commits …)` 로 받을 때 SHA 아닌 9줄을 순회한다.
+  # 이 검사는 echo 들보다 «앞» 이어야 한다. 뒤에 두면 10줄이 이미 나간 뒤라
+  # 소비자가 `$(… commits …)` 로 받을 때 SHA 아닌 10줄을 순회한다.
   if [ "$SUB" = "commits" ] && [ "$1" != "ok" ]; then
     echo "resolve-topic: status=$1 (${2:--}) — no commit set" >&2
     exit 3
@@ -64,6 +65,7 @@ emit() {   # <status> <reason>
   echo "tips: $TIPS"
   echo "commits: $NCOMMITS"
   echo "base_ref: $BASE_REF"
+  echo "seal_on_topic: $SEAL_ON_TOPIC"
   exit 0
 }
 
@@ -95,11 +97,24 @@ repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || emit base-unresolved "
 # ── B_t 1단계: 살아 있는 ref ───────────────────────────────────────────────
 # `git branch --contains` 를 쓰지 않는다 — 머지된 커밋에 대해 main 과 후손 전부를
 # 돌려줘 끝점을 식별할 수 없다(설계 §7-C).
+#
+# refs/heads **와** refs/remotes 를 함께 스캔한다(§6.2.2 D2 재결정, §8). 선언 발견(C, :80)은
+# 이미 `git log --all` 로 원격-추적 ref 까지 보므로, `refs/heads` 만 보면 비대칭이 생겨
+# 머지 안 된 원격-전용 구성원이 1단계를 통과하지 못하고 2단계(머지된 구성원)도 못 받아
+# 고아(declaration-invalid)로 떨어진다 — `git clone` 은 로컬에 `main` 만 만드므로 이것이
+# 신선한 clone·CI 체크아웃의 기본 상태다.
+#
+# `git for-each-ref` 의 기본 정렬은 전체 refname 사전순이라 `refs/heads/*` 가 항상
+# `refs/remotes/*` 보다 먼저 나온다(`h` < `r`) — 그래서 로컬 브랜치가 먼저 처리되고,
+# 아래 tip-SHA 중복 제거가 로컬·원격-추적이 같은 커밋을 가리킬 때 로컬 이름을 자연히
+# 남긴다(뒤에 나온 중복은 건너뛴다).
 BR_NAMES=""; BR_TIPS=""
-for ref in $(git for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null); do
+for ref in $(git for-each-ref --format='%(refname:short)' refs/heads refs/remotes 2>/dev/null); do
   tip=$(git rev-parse "$ref" 2>/dev/null) || continue
   # base_ref 의 조상인 ref(= main 자신 · 이미 머지돼 tip 이 안 움직인 브랜치)는 뺀다.
   git merge-base --is-ancestor "$tip" "$BASE_REF" 2>/dev/null && continue
+  # 같은 커밋을 가리키는 중복 ref(로컬+원격-추적) — 이미 담았으면 건너뛴다.
+  case " $BR_TIPS " in *" $tip "*) continue ;; esac
   for c in $C; do
     if git merge-base --is-ancestor "$c" "$tip" 2>/dev/null; then
       BR_NAMES="$BR_NAMES $ref"; BR_TIPS="$BR_TIPS $tip"; break
@@ -142,6 +157,20 @@ fi
 
 BRANCHES=$(printf '%s\n' $BR_NAMES | sort -u | paste -sd, -)
 [ -n "$BRANCHES" ] || BRANCHES="-"
+
+# ── 봉인이 토픽 위에 있는가 (D1 disclosure) ─────────────────────────────────
+# 봉인은 끝점이지만(§6.2.4) `B_t` 의 원소가 아니다 — 그 부모가 `B_t` 어느 구성원에도
+# 안 담기면 봉인은 토픽 밖 브랜치에서 갈라진 것이다. 이것은 판정을 막지 않는다
+# (`status:` 는 여전히 `ok`) — 드러낼 뿐이다. PR4 가 이 disclosure 로 무엇을 할지 정한다.
+if [ -n "$SEAL" ]; then
+  SEAL_PARENT=$(git rev-parse "$SEAL^1" 2>/dev/null)
+  SEAL_ON_TOPIC=no
+  if [ -n "$SEAL_PARENT" ]; then
+    for tip in $BR_TIPS; do
+      git merge-base --is-ancestor "$SEAL_PARENT" "$tip" 2>/dev/null && { SEAL_ON_TOPIC=yes; break; }
+    done
+  fi
+fi
 
 # ── 경계 = fork 들의 merge-base (§6.2.3 · AC5) ─────────────────────────────
 # 머지된 구성원에는 merge-base(base_ref, tip) 을 쓸 수 없다 — 그것은 tip 자신을
@@ -192,16 +221,19 @@ MAXIMAL=$(printf '%s\n' $MAXIMAL | sort -u | tr '\n' ' ')
 TIPS=$(git rev-list --topo-order --no-walk $MAXIMAL 2>/dev/null | paste -sd, -)
 [ -n "$TIPS" ] || TIPS="-"
 
-# ── T = 끝점들에서 경계를 뺀 합집합 ────────────────────────────────────────
-TSET=$(git rev-list --topo-order $MAXIMAL "^$BOUNDARY" 2>/dev/null)
-# 봉인(`--seal`)은 tips 의 끝점 자격은 갖지만(§6.2.4) T 의 원소는 아니다 — ref 없는
-# 합성 커밋이라 GC 에 사라지고, 어떤 파생 해석에서도 「토픽의 커밋」이 아니다. tips 를
-# 통해 HEAD 축에는 그대로 도달한다(트리 내용) — T 에서 빼는 것은 SHA 하나를 목록에서
-# 제거하는 것이지 작업물을 버리는 게 아니다.
-[ -z "$SEAL" ] || TSET=$(printf '%s\n' "$TSET" | grep -v -x -F "$SEAL")
+# ── T = B_t 각 구성원에서 경계를 뺀 합집합 (§6.2.2 정의 그대로) ─────────────
+# `$MAXIMAL` 이 아니라 `$BR_TIPS` 에서 뽑는다 — `$MAXIMAL` 은 «끝점»(tips) 집합이고
+# 봉인이 후보에 들어 있으면(§6.2.4) 봉인의 부모 축(다른 브랜치일 수 있다)까지 그대로
+# 딸려 온다. `$BR_TIPS` 는 브랜치 집합 그 자체라 봉인이 어디서 갈라졌든 흔들리지 않는다.
+# (이전 수정이 `grep -v -x -F "$SEAL"` 로 봉인 SHA 하나만 사후에 걷어냈었다 — 그 봉인의
+# 부모 브랜치가 토픽 밖이면 그 조상들은 여전히 남아 있었다. `$BR_TIPS` 에서 뽑으면 애초에
+# 안 들어오므로 그 후처리가 필요 없다 — 규칙 하나에 메커니즘 하나.)
+TSET=$(git rev-list --topo-order $BR_TIPS "^$BOUNDARY" 2>/dev/null)
 NCOMMITS=$(printf '%s\n' "$TSET" | grep -c .)
 
 # ── AC16 나머지 절반: T 가 서로 다른 토픽 키를 함께 담는가 ──────────────────
+# `T` 와 같은 범위(`$BR_TIPS`)에서 센다 — `$MAXIMAL` 로 세면 위와 같은 이유로 봉인이
+# 토픽 밖에서 끌고 온 커밋의 Spec 키까지 세어 거짓 declaration-invalid 를 낼 수 있다.
 # 조상 전체가 아니라 **T 위에서** 센다 — 조상을 훑으면 main 에 이미 머지된 앞
 # 토픽의 키까지 세어 거짓 양성이 난다.
 #
@@ -211,7 +243,7 @@ NCOMMITS=$(printf '%s\n' "$TSET" | grep -c .)
 # 세어 거짓 declaration-invalid 를 내고, 거꾸로 GitHub squash-merge 가 흔히 만드는
 # 본문(body)의 `Spec: ` 줄(트레일러 블록 밖)은 트레일러가 아니라서 못 세어 C 가 이미 잡은
 # 커밋을 놓친다. `--grep` 과 같은 원시-텍스트 매치는 둘 다 피한다.
-nkeys=$(git log --format='%B' $MAXIMAL "^$BOUNDARY" 2>/dev/null \
+nkeys=$(git log --format='%B' $BR_TIPS "^$BOUNDARY" 2>/dev/null \
         | grep -E '^Spec: ' | sed -E 's/^Spec: //' | sort -u | grep -c .)
 if [ "$nkeys" -gt 1 ]; then
   emit declaration-invalid "topic commit set carries $nkeys distinct Spec keys"
