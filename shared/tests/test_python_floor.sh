@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json plugins/**/*.py
+# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json plugins/**/*.py plugins/quality-gates/hooks/session-start-advisor.py
 #
 # 출하 Python 바닥의 «집행» 이 살아 있는가. 선언은 여기서 재지 않는다 — 선언만 한 바닥은
 # 훅이 읽지 않는다는 것이 이 설계의 출발점이다(설계 Context/Why 3).
@@ -32,7 +32,8 @@ plugins/spec-distill/scripts/devbrew-python.sh
 plugins/project-init/hooks/hooks.json
 plugins/quality-gates/hooks/hooks.json
 plugins/spec-distill/hooks/hooks.json
-plugins/spec-distill/scripts/hook_common.py"
+plugins/spec-distill/scripts/hook_common.py
+plugins/quality-gates/hooks/session-start-advisor.py"
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$SCANNED"
   exit 0
@@ -507,5 +508,37 @@ else
 fi
 assert_file_grep plugins/spec-distill/scripts/hook_common.py 'sys\.executable' \
   "E/AC10: hook_common.py 가 sys.executable 을 쓴다 (양의 짝 — 위는 음의 락)"
+
+note "── 축 A15: 해석 성공 경로의 IGNORED 공시 (AC8 의 나머지 절반) ─────────"
+
+ADVISOR="plugins/quality-gates/hooks/session-start-advisor.py"
+adv_out="$(printf '{"session_id":"","cwd":"%s"}' "$TMP" \
+  | env DEVBREW_PYTHON_IGNORED='/usr/bin/python3 (Python 3.9 < 3.12)' python3 "$ADVISOR" 2>/dev/null)"
+adv_report="$(printf '%s' "$adv_out" | python3 -c '
+import json, sys
+raw = sys.stdin.read().strip()
+if not raw:
+    print("emitted: no"); raise SystemExit(0)
+try:
+    d = json.loads(raw)
+except ValueError as e:
+    print("emitted: broken (%s)" % e); raise SystemExit(0)
+print("emitted: yes")
+print("both_keys: %s" % ("yes" if d.get("systemMessage") and
+      d.get("hookSpecificOutput", {}).get("additionalContext") else "no"))
+print("carries_reason: %s" % ("yes" if "3.9" in json.dumps(d) else "no"))
+')"
+assert_eq "$(field emitted "$adv_report")" "yes" "A15/AC8: IGNORED 가 있으면 advisor 가 JSON 을 낸다"
+assert_eq "$(field both_keys "$adv_report")" "yes" "A15/AC8: 두 키를 함께 담는다"
+assert_eq "$(field carries_reason "$adv_report")" "yes" "A15/AC8: 사유를 그대로 싣는다"
+
+# 음의 짝 — 평소에는 stdout 이 비어야 한다 (이 훅은 원래 stdout 을 쓰지 않는다)
+adv_quiet="$(printf '{"session_id":"","cwd":"%s"}' "$TMP" | env -u DEVBREW_PYTHON_IGNORED python3 "$ADVISOR" 2>/dev/null)"
+assert_eq "$adv_quiet" "" "A15/AC8: IGNORED 가 없으면 advisor 의 stdout 은 비어 있다"
+
+# kill switch 가 이 자리도 지배한다
+adv_ks="$(printf '{"session_id":"","cwd":"%s"}' "$TMP" \
+  | env DEVBREW_PYTHON_IGNORED=x DEVBREW_SKIP_HOOKS=quality-gates:SessionStart python3 "$ADVISOR" 2>/dev/null)"
+assert_eq "$adv_ks" "" "A15/AC8: kill switch 가 켜지면 이 공시도 나가지 않는다"
 
 finish
