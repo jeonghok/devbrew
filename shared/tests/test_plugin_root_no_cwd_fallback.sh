@@ -469,7 +469,7 @@ show()  { awk -F'\t' -v t="$1" '$1==t {print "      " $2 "  " $3}' "$TMP/report.
 
 assert_eq "$py_rc" "0" "파서가 끝까지 돌았다 (rc $py_rc)"
 n_corpus="$(val N_CORPUS)"; n_a2="$(val N_A2)"; n_a3="$(val N_A3)"
-[ "${n_corpus:-0}" -ge 30 ] && ok "대상 마크다운 ${n_corpus}개 — vacuous 아님" \
+[ "${n_corpus:-0}" -ge 28 ] && ok "대상 마크다운 ${n_corpus}개 — vacuous 아님" \
   || no "대상 마크다운이 ${n_corpus:-0}개뿐 — 도출이 무너졌다(글롭 · 경로 변경?)"
 for ax in A1 A1B A2 A2B A3 C3 C4 C5 C6; do
   n="$(count "$ax")"

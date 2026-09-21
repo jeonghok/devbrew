@@ -83,8 +83,8 @@ else
 fi
 
 # 축 (a)가 «잰» 수와 «못 잰» 수를 함께 낸다. `declared=N` 만 내면 그 N 이
-# 대조된 수로 읽힌다 — 실제로는 dispatch 가 Workflow JS 나 `context: fork` 에
-# 있는 agent 가 `.md` 코퍼스에 안 보여 선언·전달 대조가 «없다». 셀 수 없으면
+# 대조된 수로 읽힌다 — 실제로는 dispatch 가 Workflow JS 에 있는 agent 가
+# `.md` 코퍼스에 안 보여 선언·전달 대조가 «없다». 셀 수 없으면
 # 셀 수 없음을 낸다(최종 리뷰 K4b).
 nmeas="$(printf '%s\n' "$OUT" | sed -n 's/^measured=//p')"
 nunmeas="$(printf '%s\n' "$OUT" | sed -n 's/^unmeasured=//p')"

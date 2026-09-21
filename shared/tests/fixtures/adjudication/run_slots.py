@@ -30,9 +30,9 @@ print("no_declaration=%d" % kinds.get("no_declaration", 0))
 print("declared=%d" % len([1 for v in defs.values() if v["slots"] is not None]))
 
 # 최종 리뷰 K4b — `declared=N` 은 «선언한» 수이지 축 (a)가 «잰» 수가 아니다.
-# dispatch 자리가 Workflow JS(`agent(prompt, {agentType})`)나 skill frontmatter
-# 의 `context: fork` 에 있는 agent 는 `.md` dispatch 코퍼스에 «구조적으로»
-# 안 보인다 — 그 agent 에서는 선언과 전달을 대조할 대상이 애초에 없다.
+# dispatch 자리가 Workflow JS(`agent(prompt, {agentType})`)에 있는 agent 는
+# `.md` dispatch 코퍼스에 «구조적으로» 안 보인다 — 그 agent 에서는 선언과
+# 전달을 대조할 대상이 애초에 없다.
 # 셀 수 없으면 셀 수 없음을 낸다(리포 규약: 침묵과 0 은 다른 사실이다).
 pairs, _m = check_slots.dispatch_pairs(str(root))
 unmeasured = sorted(k for k in defs if not pairs.get(k))
