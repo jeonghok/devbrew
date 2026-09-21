@@ -21,7 +21,7 @@ plugins/<your-plugin>/
 ```
 
 - **agent frontmatter 에 `model` 키를 두지 않는다.** 리터럴 티어(`opus`/`sonnet`/`haiku`)는 세션의 모델 선택을 덮어쓰고, `inherit` 는 사용자의 subagent 기본 티어 설정(`CLAUDE_CODE_SUBAGENT_MODEL`)을 덮어쓴다 — CLI 2.1.261 실측(2026-09-06, `docs/superpowers/specs/2026-09-06-agent-model-unpin-design.md` §A). 키가 없으면 하니스는 「사용자 설정 → 세션 모델」 순으로 위임한다. 어느 값이든 하니스가 티어를 정하는 것이라 P8(Determinism Economy) 위반이다. reference: `plugins/plugin-audit/agents/*.md`.
-  - **dispatch 시점의 `model` 인자는 오케스트레이터의 재량이다.** 세션 모델이 어떤 것이든 상황에 맞는 티어를 고를 수 있다 — 단, 그 agent 의 출력이 **게이트 판정(verdict·findings)이나 측정(readback 류)에 들어가면 인자를 넘기지 않는다.** writer 인 오케스트레이터가 자기 리뷰어의 티어를 고르는 구조는 Law 2 의 취지와 충돌한다. 재량은 프로브·생성기처럼 사람이 읽는 출력만 내는 agent(예: `smoke-probe`, `transcript-reader`, `pr-understanding-builder`)에 한한다. adversarial 은 `plugins/quality-gates/tests/test_adversarial_model_consistency.sh` 가 dispatch 자리 근처의 `model=` 부재를 집행한다.
+  - **dispatch 시점의 `model` 인자는 오케스트레이터의 재량이다.** 세션 모델이 어떤 것이든 상황에 맞는 티어를 고를 수 있다 — 단, 그 agent 의 출력이 **게이트 판정(verdict·findings)이나 측정(readback 류)에 들어가면 인자를 넘기지 않는다.** writer 인 오케스트레이터가 자기 리뷰어의 티어를 고르는 구조는 Law 2 의 취지와 충돌한다. 재량은 프로브·생성기처럼 사람이 읽는 출력만 내는 agent(예: `smoke-probe`, `pr-understanding-builder`)에 한한다. adversarial 은 `plugins/quality-gates/tests/test_adversarial_model_consistency.sh` 가 dispatch 자리 근처의 `model=` 부재를 집행한다.
 
 **Reference 구현** — 본인 플러그인의 형태와 맞는 것을 읽으세요:
 
@@ -45,13 +45,5 @@ plugins/<your-plugin>/
 - **검증** — `/plugin-audit` (읽기전용 6축 감사 → 적대적 반박 → codex 병렬 co-audit).
 
 `plugin-dev`가 주는 것은 **문법**이다. devbrew **정책**(위 트리의 주석 + [Plugin Shape](../CLAUDE.md#plugin-shape))은 이 문서가 유일한 소스이며 충돌 시 우선한다. `plugin-dev`의 `/create-plugin`은 자체 Discovery/Design phase를 갖는 end-to-end 워크플로우 — devbrew에서는 설계를 brainstorming과 spec-distill이 담당하므로 skill을 지식으로만 쓴다.
-
-**output style 컴포넌트** — devbrew 첫 사례는 [`plugins/agent-transparency/`](../plugins/agent-transparency/). `output-styles/<name>.md` 한 파일이며 frontmatter 네 필드가 전부다:
-
-- `name` · `description` — `description` 은 `plugin.json` 과 같은 문구로 두는 것이 관행(중복 서술이 갈리는 것을 막는다).
-- **`keep-coding-instructions: true` — 빠뜨리면 안 된다.** 기본값이 `false`라 생략하면 Claude Code 내장 소프트웨어 엔지니어링 지침이 **통째로 사라진다**. 그것이 devbrew 가 금지하는 능력 억제다.
-- `force-for-plugin: true` — 설치하면 자동 적용되고 사용자의 `outputStyle` 설정을 **덮어쓴다**. 대가: 스타일만 따로 끄는 길이 없고(플러그인 `settings.json`은 `agent`·`subagentStatusLine` 키만 지원), 여러 플러그인이 켜면 **먼저 로드된 것이 이긴다**. README 맨 앞에 경고를 둘 것.
-
-**output style 은 subagent 에 닿지 않는다.** 메인 대화의 시스템 프롬프트만 바꾸므로, subagent 나 `context: fork` skill 이 따라야 할 규칙은 그쪽 파일에 **따로** 두고 파리티 테스트로 묶어야 한다(사본이 셋이 되면 파리티가 못 보는 자리가 생긴다).
 
 **Merge 전:** [Plugin Shape](../CLAUDE.md#plugin-shape)의 모든 bullet 만족 + 시작 버전 `0.1.0`.
