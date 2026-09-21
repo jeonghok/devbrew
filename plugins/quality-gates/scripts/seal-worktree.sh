@@ -50,7 +50,8 @@ B=$(
 [ -n "$B" ] || die "seal produced no commit"
 
 # 권위 있는 가드 — **결과**를 잰다. index 자체와 그 .lock 형제 둘 다 대상이다
-# (git 이 add -A 자신의 락 파일을 그 add -A 로 줍는 관측이 있었다 — 설계 §7-I).
+# (git 이 add -A 자신의 락 파일을 그 add -A 로 줍는 관측이 이 작업에서 나왔다 —
+# 설계 §7-I 는 인덱스 자체가 봉인 트리에 들어간다는 것만 기록하고 .lock 은 안 담는다).
 if git -C "$main_root" ls-tree -r --name-only "$B" | grep -qE "seal-${sid_short}\.index(\.lock)?$"; then
   die "sealed tree contains the temp index or its lock ($rel) — AC14 violation"
 fi

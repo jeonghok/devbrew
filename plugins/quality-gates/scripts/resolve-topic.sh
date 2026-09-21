@@ -7,8 +7,9 @@
 #   commits <topic-key>   -> T 의 커밋 SHA (topo-order), 한 줄에 하나
 #
 # **사실만 낸다 — 판정하지 않는다.** `resolve-baseline.sh` 와 같은 계약이다:
-# 고정 키 집합 · 없는 값은 `-` · 정상 경로는 언제나 exit 0. `not-certified` 같은
-# 판정 어휘는 이 층에 없다 — 소비자(PR4)가 `status:` 를 판정으로 옮긴다.
+# 고정 키 집합 · 없는 값은 `-`. `resolve` 는 정상 경로에서 언제나 exit 0(판정은 `status:`
+# 값으로 낸다) — `commits` 는 다르다, status != ok 이면 fail-closed 로 exit 3 이다(:47–53).
+# `not-certified` 같은 판정 어휘는 이 층에 없다 — 소비자(PR4)가 `status:` 를 판정으로 옮긴다.
 #
 #   status: ok                  선언 경로로 진행
 #   status: no-declaration      선언 0 — 기존 세 모드로 fallback (판정 아님)
@@ -17,6 +18,9 @@
 #
 # **토픽 키는 트레일러 값 «전체»다 — 조각(`#pr1`)까지 포함한다.** 조각을 무시하는
 # 질의를 쓰면 여러 PR 이 한 토픽으로 합쳐진다(설계 §6.2.1 · §16).
+#
+# **`tips:` 는 콤마-구분이다.** `combine-tips.sh` 에 그대로 넘기지 않는다 — 그쪽은
+# 공백-구분 인자를 받는다. 호출부가 변환한다(예: `tr ',' ' '`).
 #
 # bash 3.2 호환: 배열 대신 공백 구분 문자열을 쓴다.
 set -u
@@ -87,10 +91,6 @@ DECLARED=$(printf '%s\n' "$C" | grep -c . )
 path="${TOPIC%%#*}"
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || emit base-unresolved "not a git repo"
 [ -e "$repo_root/$path" ] || emit declaration-invalid "declared path does not exist: $path"
-
-# (AC16 의 나머지 절반 — 「한 브랜치가 서로 다른 토픽 키를 함께 담음」 — 은 Task 3 이
-#  더한다. 그 검사는 **T 위에서** 해야 한다: 커밋의 조상 전체를 훑으면 main 에 이미
-#  머지된 앞 토픽의 키까지 세어 거짓 양성이 난다.)
 
 # ── B_t 1단계: 살아 있는 ref ───────────────────────────────────────────────
 # `git branch --contains` 를 쓰지 않는다 — 머지된 커밋에 대해 main 과 후손 전부를
@@ -194,13 +194,25 @@ TIPS=$(git rev-list --topo-order --no-walk $MAXIMAL 2>/dev/null | paste -sd, -)
 
 # ── T = 끝점들에서 경계를 뺀 합집합 ────────────────────────────────────────
 TSET=$(git rev-list --topo-order $MAXIMAL "^$BOUNDARY" 2>/dev/null)
+# 봉인(`--seal`)은 tips 의 끝점 자격은 갖지만(§6.2.4) T 의 원소는 아니다 — ref 없는
+# 합성 커밋이라 GC 에 사라지고, 어떤 파생 해석에서도 「토픽의 커밋」이 아니다. tips 를
+# 통해 HEAD 축에는 그대로 도달한다(트리 내용) — T 에서 빼는 것은 SHA 하나를 목록에서
+# 제거하는 것이지 작업물을 버리는 게 아니다.
+[ -z "$SEAL" ] || TSET=$(printf '%s\n' "$TSET" | grep -v -x -F "$SEAL")
 NCOMMITS=$(printf '%s\n' "$TSET" | grep -c .)
 
 # ── AC16 나머지 절반: T 가 서로 다른 토픽 키를 함께 담는가 ──────────────────
 # 조상 전체가 아니라 **T 위에서** 센다 — 조상을 훑으면 main 에 이미 머지된 앞
 # 토픽의 키까지 세어 거짓 양성이 난다.
-nkeys=$(git log --format='%(trailers:key=Spec,valueonly)' $MAXIMAL "^$BOUNDARY" 2>/dev/null \
-        | grep -v '^$' | sort -u | grep -c .)
+#
+# 트레일러 atom(`%(trailers:key=Spec,valueonly)`) 대신 C(:76)와 같은 --grep 계열
+# 원시-메시지 추출을 쓴다(설계 §6.2.2 는 C 커맨드를 리터럴로 고정 — 반대쪽을 맞춘다).
+# 이 둘은 실제로 갈린다: atom 은 키를 대소문자 무시로 매치해 `spec:` 소문자 트레일러까지
+# 세어 거짓 declaration-invalid 를 내고, 거꾸로 GitHub squash-merge 가 흔히 만드는
+# 본문(body)의 `Spec: ` 줄(트레일러 블록 밖)은 트레일러가 아니라서 못 세어 C 가 이미 잡은
+# 커밋을 놓친다. `--grep` 과 같은 원시-텍스트 매치는 둘 다 피한다.
+nkeys=$(git log --format='%B' $MAXIMAL "^$BOUNDARY" 2>/dev/null \
+        | grep -E '^Spec: ' | sed -E 's/^Spec: //' | sort -u | grep -c .)
 if [ "$nkeys" -gt 1 ]; then
   emit declaration-invalid "topic commit set carries $nkeys distinct Spec keys"
 fi

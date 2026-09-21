@@ -119,7 +119,7 @@ case_fails_closed_when_not_ignored() {
 #   넣는다 — 그 결과를 권위 있는 가드가 잡아야 한다(위치가 아니라 결과).
 #   스크립트는 건드리지 않고 fixture 로만 그 틈을 재현한다.
 case_lock_leak_dies_closed() {
-  local sid_short="deadbeef"    # "${SID:0:8}" 과 반드시 일치해야 같은 rel 을 가리킨다
+  local sid_short="${SID:0:8}"    # 전역 SID 에서 도출 — 수동 리터럴은 SID 가 바뀌면 갈린다
   REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
   git init -q .
   git config user.email t@t.test; git config user.name tester
@@ -132,7 +132,7 @@ case_lock_leak_dies_closed() {
   local out rc
   out=$(bash "$SEAL" seal "$SID" 2>&1); rc=$?
   assert_eq "$rc" "2" ".lock 형제만 새는 자리에서도 exit 2 (fail-closed)"
-  assert_grep "$out" 'AC14' "사유가 AC14 를 인용한다"
+  assert_grep "$out" 'sealed tree contains' "권위 있는(봉인 후) 가드가 잡았다 — 이른 가드(AC14 usage 문구)가 아니다"
   cleanup
 }
 

@@ -2,7 +2,7 @@
 # test_topic_boundary.sh — scripts/resolve-topic.sh (설계 §6.2, AC3·AC4·AC5·AC15·AC16).
 #
 # 각 케이스는 mktemp 아래 **일회용 git 리포**를 세운다 — 실제 리포에서 fixture git 실행 금지.
-# 합성 토픽 픽스처 F1–F8 + Task 6 의 양성 대조가 이 락의 이빨이다.
+# 합성 토픽 픽스처 F1–F8(F5b 포함 9개) + 양성 대조 + 조립·nkeys 정합 케이스가 이 락의 이빨이다.
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -223,6 +223,38 @@ Spec: docs/x-design.md#pr2"
   cleanup
 }
 
+# ── nkeys 추출 정합 1/2: 진짜 트레일러의 다른 키는 여전히 잡는다 (약화 아님) ──
+#    F7 과 같은 모양(빈 줄 + `Spec: <다른 키>`)이지만, 이 케이스는 명시적으로
+#    「--grep 계열로 갈아도 진짜 트레일러 다른-키 검출력이 그대로다」를 잠근다 —
+#    F2 가 nkeys 추출기를 트레일러 atom 에서 원시-메시지 매치로 바꾼 회귀 락이다.
+case_nkeys_grep_family_catches_genuine_trailer() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  echo b1 > b.txt; git add b.txt
+  git commit -qm "b1
+
+Spec: docs/x-design.md#pr2"
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "declaration-invalid" "nkeys: 진짜 트레일러의 다른 키는 여전히 declaration-invalid"
+  cleanup
+}
+
+# ── nkeys 추출 정합 2/2: 소문자 spec: 트레일러는 거짓 declaration-invalid 를 안 낸다 ──
+#    트레일러 atom(`%(trailers:key=Spec,valueonly)`)은 키를 대소문자 무시로 매치하므로
+#    이 케이스에서 nkeys=2 로 부풀려 거짓 declaration-invalid 를 낸다. --grep 계열
+#    (대소문자 구분)은 안 낸다. 구 구현(atom) 대비 RED 로 이빨을 증명한다.
+case_nkeys_lowercase_trailer_no_false_positive() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  echo b1 > b.txt; git add b.txt
+  git commit -qm "b1
+
+spec: docs/other.md#zz"
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "nkeys: 소문자 spec: 트레일러는 declaration-invalid 를 유발하지 않는다"
+  cleanup
+}
+
 # ── F8: 끝점 = 봉인을 «먼저 넣고» 극대원소 (AC6) ────────────────────────────
 #    스택 A→B 에서 현재 체크아웃이 A 면 tip(A) 는 tip(B) 의 조상이라 극대원소가
 #    아니다 — 「끝점 중 현재 브랜치 것을 치환」할 자리가 없다. 봉인을 먼저 넣으면
@@ -234,7 +266,8 @@ case_f8_seal_first_then_maximal() {
   git checkout -q -b topicB; decl_commit b.txt b1 "b1"
   local TIPB; TIPB=$(git rev-parse HEAD)
   git checkout -q topicA
-  # 봉인 커밋을 손으로 만든다 — seal-worktree.sh 는 Task 4 다(이 Task 는 그것에 기대지 않는다).
+  # 봉인 커밋을 손으로 만든다 — 이 케이스는 resolve-topic.sh 만 잰다(seal-worktree.sh 에
+  # 기대지 않는다).
   local SEAL; SEAL=$(git commit-tree "$TIPA^{tree}" -p "$TIPA" -m seal)
 
   local out0; out0=$(bash "$RT" resolve "$KEY")
@@ -244,6 +277,13 @@ case_f8_seal_first_then_maximal() {
   local out1; out1=$(bash "$RT" resolve "$KEY" --seal "$SEAL")
   assert_contains "$(field tips "$out1")" "$SEAL" "F8 봉인을 먼저 넣으면 끝점에 든다"
   assert_not_contains "$(field tips "$out1")" "$TIPA" "F8 tip(A) 는 여전히 빠진다(조상이므로)"
+
+  # ── F1(리뷰): 합성 봉인 커밋은 tips 의 끝점이지만 commits 의 원소가 아니다 ──
+  #    ref 없는 합성 커밋이 「토픽 커밋」으로 세이면 GC 뒤 사라질 SHA 가 clean 튜플에
+  #    낀다. tips 는 그대로 봉인을 담아야 한다(§6.2.4) — commits 만 뺀다.
+  local cout1; cout1=$(bash "$RT" commits "$KEY" --seal "$SEAL")
+  assert_not_contains "$cout1" "$SEAL" "F8 commits 는 봉인 SHA 를 포함하지 않는다(합성 커밋 제외)"
+  assert_contains "$cout1" "$TIPB" "F8 commits 는 여전히 실제 토픽 커밋(tip B)을 포함한다"
   cleanup
 }
 
@@ -387,15 +427,40 @@ case_combine_three_conflict_attribution() {
   cleanup
 }
 
+# ── PR4 조립: resolve 의 tips(콤마) 를 combine 이 실제로 받는다(공백) ────────
+#    변환은 계획 문서에만 있고 두 스크립트 헤더·테스트 어디에도 없었다 — 두 스크립트가
+#    실제로 물리는지는 이 케이스가 처음 잰다(cross-task seam).
+case_resolve_tips_feed_combine() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA "$R"; decl_commit a.txt a1 "a1"
+  git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
+  git checkout -q -b topicC "$R"; decl_commit c.txt c1 "c1"
+  git checkout -q topicA
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "조립: resolve 가 status ok 를 낸다(전제 확인)"
+  local cout; cout=$(bash "$CT" $(field tips "$out" | tr ',' ' '))
+  assert_eq "$(field status "$cout")" "ok" "조립: resolve 의 tips(콤마) 를 combine(공백 인자) 이 받는다"
+  local names; names=$(git ls-tree -r --name-only "$(field tree "$cout")")
+  assert_grep "$names" '^a\.txt$' "조립: 합친 트리에 a.txt(구성원 A)"
+  assert_grep "$names" '^b\.txt$' "조립: 합친 트리에 b.txt(구성원 B)"
+  assert_grep "$names" '^c\.txt$' "조립: 합친 트리에 c.txt(구성원 C)"
+  cleanup
+}
+
 for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_f2_boundary_merged_not_hidden case_f3_merged_ref_deleted \
          case_f4_undeclared_ancestor_included case_f5_fragment_discriminates \
          case_f5b_prefix_fragment_collision \
-         case_f6_path_absent case_f7_mixed_keys_in_T case_f8_seal_first_then_maximal \
+         case_f6_path_absent case_f7_mixed_keys_in_T \
+         case_nkeys_grep_family_catches_genuine_trailer \
+         case_nkeys_lowercase_trailer_no_false_positive \
+         case_f8_seal_first_then_maximal \
          case_tips_order_deterministic case_path_check_is_repo_root_relative \
          case_no_declaration case_nine_keys_always \
          case_combine_clean case_combine_conflict case_combine_edges \
-         case_combine_three_clean case_combine_three_conflict_attribution; do
+         case_combine_three_clean case_combine_three_conflict_attribution \
+         case_resolve_tips_feed_combine; do
   echo "== $c"; $c
 done
 finish
