@@ -142,8 +142,21 @@ qg 의 구조가 **「부팅되는 웹앱 · 고정 리뷰 관점 · 한 브랜�
 
 #### 6.2.1 선언
 
-커밋 트레일러 **`Spec: <리포-상대 경로>`**. 작성자가 쓰고, qg 는 그것만 읽으며 문서에서 추론하지
-않는다(C12).
+커밋 트레일러 **`Spec: <리포-상대 경로>[#<조각>]`**. 작성자가 쓰고, qg 는 그것만 읽으며 문서에서
+추론하지 않는다(C12).
+
+**선언의 입도는 «한 설계문서»가 아니라 «한 번에 머지되는 묶음»이다.** 한 설계문서가 여러 PR 로
+나뉘면(§16) 각 PR 이 자기 조각을 선언한다 — `…-design.md#pr1` · `…#pr2` … . 이유는 §16 의
+분할이 이 모델과 부딪히기 때문이다: 다섯 PR 이 **같은** 값을 선언하면 PR2~5 의 매 `/qg` 가 이미
+머지된 앞 PR 전부를 합집합으로 보고(AC3·AC4 가 그것을 요구한다) 기준선이 PR1 직전에 고정돼,
+**분할이 리뷰 1회의 분량을 줄이지 못하고 같은 커밋이 최대 다섯 번 재리뷰된다.** 이번 재편의
+발단이 바로 그 비용 축이다.
+
+- **C8 은 그 묶음 «안»에서 유지된다** — 「한 작업의 브랜치 전부가 한 대상」의 «한 작업»이 «한 번에
+  머지되는 것» 으로 읽힌다. 한 PR 이 브랜치 셋으로 이뤄지면 그 셋이 한 대상이다.
+- **C9 도 유지된다** — 경계를 정하는 것은 여전히 spec/design 문서이고, 조각은 그 문서 «안»의
+  분할을 가리킬 뿐 다른 문서를 가리키지 않는다.
+- **조각 없는 값도 유효하다** — 분할하지 않는 흔한 경우가 기본형이다.
 
 이 리포는 이미 커밋 트레일러를 쓴다 — 최근 200 커밋 중 `Claude-Session` 172개 ·
 `Co-Authored-By` 189개(실측 §7-B). 새 배관이 아니다.
@@ -238,7 +251,8 @@ merge-base 를 쓰면 그 병합이 가져온 남의 변경까지 diff 에 든�
 그 finding 을 판정하는 것을 금한다. 둘을 겹치면 답이 하나로 떨어진다 — **접어 넣되 자기 자신에게는
 안 된다.** 즉 판정 각도는 전용 재비판 패스로 채우거나, finding 을 내지 않은 다른 리뷰어에게 접어
 넣거나, `absent` 로 공시된다. 「자기 finding 을 자기가 판정」은 `folded_into` 값으로 쓸 수 없고,
-합성기가 그 조합을 거부한다(AC10a).
+합성기가 그 조합을 거부한다(AC10a — **판정 각도에 한정**한다. 보안 각도는 그 리뷰어가 finding 을
+내는 것이 정상이다).
 
 **각도 ≠ 에이전트.** 각도는 「채워졌는가」의 술어이고 수행자는 스코프가 정한다. 그래서 C6(명단
 제거)과 C13(각도 의무)이 충돌하지 않는다 — C6 이 닫은 것은 「명단 2인을 매 iteration 전용
@@ -278,9 +292,15 @@ merge-base 를 쓰면 그 병합이 가져온 남의 변경까지 diff 에 든�
 
 #### 6.3.4 diff 슬롯과 도입-게이트 (C18 · OQ9)
 
-**사본 비용은 파일당 한 줄이다.** `shared/tests/test_copy_of_contract.sh` 가 `plugins/** shared/**`
-를 guards 로 잡고 `# copy-of:` 마커를 가진 파일은 「그 줄만 빼고 바이트가 같아야」 한다. ∃-스윕이
-아니라 **∀ 도미넌스** 체크다(실측 §7-H).
+**사본 비용은 파일당 한 줄이되, 그 락은 ∃ 다.** `shared/tests/test_copy_of_contract.sh` 는
+`plugins/** shared/**` 를 guards 로 잡지만 **세 축의 한정사가 다르다** — 심볼릭 링크 축과 import
+형제 축은 ∀ 도미넌스이고, **`copy-of:` 축은 마커를 가진 파일만 훑는다**(마커가 없으면 `continue`).
+즉 **있는 사본이 어긋나는 것은 잡지만 «빠진 사본»은 못 잡는다**. `shared/README.md` 가 그 차이를
+명시한다(실측 §7-H).
+
+→ qg 의 새 사본 둘은 정확히 「빠질 수 있는 자리」다. 그래서 **∀ 락을 하나 더 단다**: 「docreview
+엔진을 호출하는 플러그인은 `doc-critic` · `doc-critic-web` · `doc-recritic` 사본 셋을 전부 가져야
+한다」 — 호출자 목록을 코퍼스에서 도출해 확인한다(AC22).
 
 남는 것은 **슬롯 락의 동반 이동**이다. `shared/tests/test_docreview_agents.sh` 가 재비판자 입력
 슬롯을 정확히 셋(`document` · `findings` · `profile`)으로 락하고 있고, **그 락은 spec-distill 의
@@ -291,6 +311,22 @@ merge-base 를 쓰면 그 병합이 가져온 남의 변경까지 diff 에 든�
 
 **「이 변경이 도입했는가」 게이트** — 재비판자의 판정 축으로 더한다. diff 가 있으면 「선재 결함」을
 기각 사유로 쓸 수 있고, 없으면 그 축을 쓰지 않는다.
+
+**출력 계약의 차이는 «입력»과 별개 문제이고, 변환 계층을 qg 가 소유한다.** 재비판자는 항목을
+`f` 로 식별하고 신규 발견을 `added` 로 내며 `raise`/`to`/`same_as` 를 쓴다. `synthesize_findings.py`
+는 `finding_id` 로 연결하고 `new_findings` 만 읽으며 신규 발견에 `file`·`severity`·`summary` 를
+요구한다. **그대로 이으면 기각이 원래 finding 에 반영되지 않고 `added` 가 누락된다.**
+
+→ qg 쪽에 **변환 한 자리**를 둔다:
+
+- **`f` ↔ `finding_id` 역매핑** — 익명화할 때 만든 매핑을 보관했다가 역으로 쓴다(그 라운드 안에서만 산다).
+- **`added` → `new_findings`** — `file`·`severity` 는 diff 슬롯에서 도출하고, 도출할 수 없으면
+  **「미지」로 공시한다**(값을 발명하지 않는다).
+- **`raise`/`to`** — 코드 경로의 severity 어휘로 매핑하고, 매핑 못 하는 값은 소실이 아니라
+  **강제(coercion)** 로 계수한다(헌장 — 강제가 게이트 판정을 바꾸면 degrade 다).
+
+**변환을 공유 층에 두지 않는 이유** — 그러면 `shared/docreview` 가 코드 경로의 어휘를 알게 되고
+spec-distill 의 문서 경로까지 그 어휘를 지고 다닌다. 임피던스는 **경계를 넘는 쪽**이 흡수한다.
 
 **프레이밍 맹목성과 충돌하지 않는다.** 재비판자가 맹목이어야 하는 것은 「왜 이 리뷰가 열렸나 ·
 앞 리뷰어가 무엇이라 했나」다. diff 는 출처가 아니라 **대상**이고 문서 자신과 같은 층의 1차
@@ -318,11 +354,15 @@ brief 는 C2(「샌드박스 생성·폐기」 제거)와 C20(봉인자 존치)�
 **HEAD 축** — 네 걸음:
 
 ```bash
-# 1. 봉인 — 워크트리 생성 없음
-GIT_INDEX_FILE="<세션 상태 디렉토리>/seal.index"    # ★ 반드시 리포 «밖»
-git read-tree HEAD && git add -A && git write-tree   # → TREE
-git commit-tree "$TREE" -p HEAD -m "qg: sealed"      # → B
-# 2. 끝점 치환: 토픽 끝점 중 현재 브랜치의 것을 B 로
+# 1. 봉인 — 워크트리 생성 없음. 인덱스 경로는 «git 이 무시하는 자리» 여야 한다.
+#    변수는 반드시 export 하거나 각 명령에 실어 보낸다 — 그냥 대입만 하면 아래 두 git 이
+#    실제 인덱스를 쓴다(그러면 AC14 가 깨진다).
+(
+  export GIT_INDEX_FILE="$SEAL_INDEX"
+  git read-tree HEAD && git add -A && TREE=$(git write-tree)
+  git commit-tree "$TREE" -p HEAD -m "qg: sealed"        # → B
+)
+# 2. 끝점: 봉인 커밋 B 를 후보에 «먼저 넣고» 극대원소를 계산 (§6.2.4)
 # 3. 합치기: git merge-tree --write-tree 순차
 # 4. 체크아웃: 합친 트리로 commit-tree → git worktree add --detach
 ```
@@ -331,9 +371,13 @@ git commit-tree "$TREE" -p HEAD -m "qg: sealed"      # → B
 인덱스 불변 ✓ · HEAD 불변 ✓ · 워킹트리 불변 ✓ · 추가 워크트리 0 ✓ · 봉인 커밋에서 워크트리 추출
 가능 ✓.
 
-> **임시 인덱스를 리포 안에 두면 그 파일 자신이 봉인된 트리에 들어간다.** 실측에서
-> `.qg-seal-index` 와 `.qg-seal-index.lock` 이 봉인 트리에 나타났다. 이 설계는 인덱스 경로를 세션
-> 상태 디렉토리(리포 밖)로 못 박고, 그 사실에 회귀 락을 단다(AC14).
+> **요건은 「리포 밖」이 아니라 「git 이 무시하는 자리」다.** 실측에서 인덱스를 리포 안 추적
+> 대상 자리에 뒀더니 `.qg-seal-index` 와 `.qg-seal-index.lock` 이 봉인 트리에 들어갔다. 그런데
+> **qg 의 세션 상태 디렉토리는 리포 «안»이다** — `state_path.py` 가 `<cwd>/.claude/quality-gates`
+> 를 내고 헌장이 그 자리를 못 박는다. 그 자리가 안전한 이유는 밖이라서가 아니라
+> `.gitignore` 의 `/.claude/*` 가 덮어서 `git add -A` 가 집지 않기 때문이다.
+> 그래서 이 설계가 못 박는 것은 **`$SEAL_INDEX` 가 git 이 무시하는 자리여야 한다**는 것이고,
+> 회귀 락은 「봉인 트리에 인덱스 파일이 없다」를 잰다(AC14) — 위치가 아니라 결과를 잰다.
 
 `create-sandbox` 는 **사라진다.** `create-head` 의 「샌드박스 디렉토리 실재」 assert 는 「봉인
 커밋의 트리가 기대 OID 와 일치」로 바뀐다 — verifier 가 없으니 「피검자가 샌드박스 HEAD 를
@@ -346,8 +390,12 @@ git commit-tree "$TREE" -p HEAD -m "qg: sealed"      # → B
 
 - `counts.pre_existing > 0` → 판정 옆 한 줄:
   **「양측 빨강 unit N개 — 그 안의 새 실패는 이 해상도(unit 당 종료 코드 하나)에서 보이지 않는다」**
-- 이 줄은 **`clean` 을 막지 않는다.** `(F,F)` 보호의 이유(devbrew 자신의 stale red 가 첫 실행부터
-  게이트를 막으면 설계를 쓸 수 없다)가 그대로 유효하다.
+- 이 줄은 **그 자체로는 `clean` 을 막지 않는다.** `(F,F)` 보호의 이유(devbrew 자신의 stale red 가
+  첫 실행부터 게이트를 막으면 설계를 쓸 수 없다)가 그대로 유효하다.
+  > **다만 기존 가드를 대체하지 않는다.** 오늘 `granularity == bulk` 이거나 `smeared` 일 때
+  > `pre_existing > 0` 은 이미 `degraded` 로 인증을 막는다(`diff-test-results.py` 의 `degraded`
+  > 식). 공시 줄은 그 «위에» 얹히는 것이고, 그 조건에서는 여전히
+  > `not-certified (granularity-smear)` 가 난다. 이 단서 없이 구현하면 가드가 조용히 사라진다.
 - 락: `pre_existing > 0` 인데 공시 줄이 없으면 RED.
 
 *D1: 하한 지켜짐(구멍을 드러내면 clean 이 「정확히 이만큼」을 뜻한다) → 단순함이 이김(파서 층 0).*
@@ -363,12 +411,29 @@ C2 가 `PASS` / `FAIL` / `SKIP_WITH_EVIDENCE` / `NEEDS_RESOLUTION` 의 산출자
 | `defect` | 확증 결함 (`NEW_REGRESSION` · `NEW_TEST_RED` · 채택된 finding) |
 | `not-certified` | **판정하지 못함** — `reason:` 필수 |
 
-`reason` 닫힌 열거: `kill-switch` · `merge-conflict` · `baseline-unrunnable` · `angle-absent` ·
-`scope-empty` · `declaration-invalid`.
+`reason` 닫힌 열거 — **존치하는 차등 기계가 실제로 내는 미판정 상태를 전부 받는다.**
+`diff-test-results.py` 의 `degraded` 식은 원인이 여섯인데(`not expected` · `baseline_unrunnable` ·
+`silent_drop` · `error_axis_seen` · `granularity==bulk && pre_existing>0` · `smeared`) 초안의
+열거에는 하나뿐이었다. 그러면 오늘 인증을 막던 실행이 새 어휘에서 갈 곳을 잃는다.
+
+| `reason` | 발동 |
+|---|---|
+| `kill-switch` | 차등 테스트가 kill switch 로 생략됨 |
+| `merge-conflict` | 끝점 합치기가 `rc 1`(§6.2.4) |
+| `baseline-unrunnable` | 기준선 축이 안 돌아 귀속의 한쪽이 없음 |
+| `silent-drop` | 영향분으로 고른 unit 이 HEAD 에서 미확인 |
+| `error-axis` | 어느 축이든 `error` 상태가 닿음(수집 에러·import 실패의 대칭 경우) |
+| `granularity-smear` | bulk 도말 또는 `smeared` — 한 종료 코드가 전 unit 에 발림 |
+| `angle-absent` | 보안 또는 판정 각도가 `absent`(§6.3.1) |
+| `scope-empty` | **resolved scope 가 0 인데 `check-review-scope.sh` 가 `changes_exist: yes` 를 냄** — 오늘의 「정직-verdict floor」가 내던 false-clean 차단이 이 사유로 옮겨온다. 진짜 변경 없음(genuine no-op)은 `scope-empty` 가 아니라 `clean` 이다 |
+| `declaration-invalid` | 트레일러가 있으나 가리키는 경로가 실재하지 않거나 한 토픽이 서로 다른 경로를 가리킴 |
+
+**우선순위** — `defect` > `not-certified` > `clean`. 확증 결함과 미판정이 같은 실행에서 나면
+**`defect`** 다. 기존 `runtime-gate.md` R8 이 이미 그 순서로 돌고 있어, 안 적으면 오늘 결함으로
+잡히던 실행이 내일 「판정 불가」로 내려앉는다.
 
 > `declaration-invalid` 는 **선언이 없는 경우가 아니다** — 없으면 §6.2.5 대로 기존 세 모드로
-> 내려간다. 이 사유는 트레일러가 «있는데» 그것이 가리키는 경로가 리포에 실재하지 않거나, 같은
-> 토픽의 커밋들이 서로 다른 경로를 가리키는 경우다. 선언이 깨진 것과 없는 것은 다른 사실이다.
+> 내려간다. 선언이 깨진 것과 없는 것은 다른 사실이다.
 
 **이것이 OQ11 을 푼다** — kill-switched 실행은 `not-certified (kill-switch)` 다. `clean` 이
 아니므로 C4 후반(「테스트 없는 clean 은 나오지 않는다」)이 참이고, 실패도 아니므로 kill switch 가
@@ -381,6 +446,12 @@ C2 가 `PASS` / `FAIL` / `SKIP_WITH_EVIDENCE` / `NEEDS_RESOLUTION` 의 산출자
 
 **이주 목록은 열거가 아니라 도출** — 구현 시
 `SKIP_WITH_EVIDENCE|NEEDS_RESOLUTION|forced_downgrade|block_policy` 4토큰 전수 grep 으로 뽑는다.
+
+> **그 grep 은 존치 표면까지 쓸어간다.** `/qg critique`(`critiquing-artifacts`)는 §6.5.1 에서
+> **존치**로 선언됐는데 그 루프의 살아 있는 판정값이 `NEEDS_RESOLUTION` 이고, 파이프라인
+> 오케스트레이션 락들도 같은 토큰을 쓴다. 그래서 도출 규칙은 두 단계다 — ① 4토큰으로 후보를 뽑고
+> ② **`critiquing-artifacts` 경로와 그 락들을 제외**한 뒤 ③ 남은 것을 사람이 확인한다. §12 의
+> 삭제 목록 도출도 같은 규칙을 쓴다(그쪽은 `sandbox|mutation.guard` 가 OR 로 더해진다).
 
 #### 6.4.4 C2 제거 목록 일곱의 전수 처분
 
@@ -400,7 +471,26 @@ brief ✎ 가 「일곱 중 둘의 처분이 없다」고 지적했다. 전수:
 
 #### 6.5.1 breaking 전수 (C19 · OQ15)
 
-**OQ15 가 맞았다 — C19 가 센 「셋」은 과소 계수다.** 도출한 전수는 **12 자리**다.
+**OQ15 가 맞았다 — C19 가 센 「셋」은 과소 계수다.** 도출한 전수는 **12 자리**이고, 한자리에서
+센다:
+
+| # | 자리 | 처분 |
+|---|---|---|
+| 1 | `/qg both` | 제거 |
+| 2 | `/qg review` | 제거 |
+| 3 | `/qg runtime` | 제거 |
+| 4 | `--skip-runtime` | 제거 |
+| 5 | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` | 제거(대상 소멸) |
+| 6 | `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS` | 제거(대상 소멸) |
+| 7 | `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE` | 축소 |
+| 8 | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_TEST_VALIDATION` | 개명 |
+| 9 | `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER` | 의미 변경 |
+| 10 | `.claude-plugin/marketplace.json` 의 「2-gate」 문자열 | 이동 |
+| 11 | `plugins/quality-gates/.claude-plugin/plugin.json` 의 같은 문장 | 이동 |
+| 12 | `CLAUDE.md` Law 2 *Scoped exception (qg v2.2.0)* | 제거 |
+
+Decision 1 의 게이트-범위 질문이 사라지는 것은 **13번째 자리가 아니라 1~4 의 결과**다 — 고를 인자가
+없으면 물을 것도 없다.
 
 **CLI 인자 4 제거** — `both` · `review` · `runtime` · `--skip-runtime`. Decision 1 질문도 사라진다.
 **존치** — `branch [<name>]` · `--paths` · `--reset` · `--gc` · `--plan` · `--pr-url` ·
@@ -468,7 +558,7 @@ brief 의 blind-spot 이 짚은 대로 **그 조항에는 아무 락도 없다**
 | **E** | 경계 규칙 `parents(T) \ T` | |T|=35 → |B|=2 → merge-base = `add4c9cd` = **PR #155 머지(작업 시작 직전)** |
 | **F** | `git merge-tree --write-tree` 충돌 (scratch 합성) | **rc 1** + stdout 에 트리 OID · stage 1/2/3 · `CONFLICT (content):` |
 | **G** | 순차 합치기의 `commit-tree` 중간 커밋 | ref 0개 · `fsck --unreachable` 에 잡힘 |
-| **H** | `test_copy_of_contract.sh` | guards `plugins/** shared/**` · 마커 정규식이 `#`·`//`·`<!--` 수용 · **∀ 도미넌스** |
+| **H** | `test_copy_of_contract.sh` | guards `plugins/** shared/**` · 마커 정규식이 `#`·`//`·`<!--` 수용 · **세 축의 한정사가 다르다** — 심볼릭 링크·import 형제 축은 ∀, **`copy-of:` 축은 ∃**(마커 없는 파일은 `continue`, 564–568줄). `shared/README.md` 가 그 차이를 명시 |
 | **I** | 임시 인덱스 봉인 (scratch) | 수정·삭제·untracked 반영 ✓ · `.gitignore` 존중 ✓ · 인덱스/HEAD/워킹트리 불변 ✓ · 워크트리 0 ✓ · **인덱스를 리포 안에 두면 봉인 트리에 들어감** |
 | **J** | `diff-test-results.py` 집계 출력 | `counts: {…}` 가 8칸 전부 emit (`pre_existing` 포함) |
 | **K** | qg 의 `DEVBREW_QUALITY_GATES_*` 전수 | **17개** |
@@ -505,7 +595,8 @@ devbrew 는 「재발견 금지 ≠ 반증 금지」를 원칙으로 둔다. 근
 1. **OQ9 「기존 두 사본이 이미 서로 어긋나 있다」 — 아니다.**
    `shared/docreview/agents/doc-recritic.md` 와 `plugins/spec-distill/agents/doc-recritic.md` 의
    차이는 **한 줄**이다: `# copy-of: shared/docreview/agents/doc-recritic.md`. drift 가 아니라
-   선언된 사본 표식이고, `shared/tests/test_copy_of_contract.sh` 가 ∀ 로 집행한다(실측 H).
+   선언된 사본 표식이고, `shared/tests/test_copy_of_contract.sh` 가 **있는 사본끼리는** 바이트
+   동일성을 집행한다(실측 H). 그 축은 ∃ 라 «빠진 사본»은 못 잡으므로 §6.3.4 가 ∀ 락을 따로 세운다.
    → 「세 번째 사본」의 비용이 실제로는 **파일당 한 줄**이다.
 
 2. **OQ13 「재판정기는 생성기가 아니다」 — 아니다.**
@@ -532,7 +623,7 @@ brief §3 의 19개 전부. **미처분 0.**
 | OQ6 선언의 가변성·충돌 | 충돌: spec 경로가 유일해 원천 없음 / 재선언: 산출물이 집합+SHA 를 실음 | §6.2.6 |
 | OQ7 N=1 일반화 · 부팅 앱 설치본 | 대체하지 않고 **주장을 거둠** | §6.5.3 |
 | OQ8 판정 어휘 소비자 이주 | 세 값 어휘 + **4토큰 전수 grep 도출**. brief 목록 정정 | §6.4.3 · §9 |
-| OQ9 스키마 임피던스 · 세 번째 사본 | 사본은 한 줄(∀ 락이 덮음). 임피던스는 diff 를 **선택 슬롯**으로 | §6.3.4 · §9 |
+| OQ9 스키마 임피던스 · 세 번째 사본 | 사본은 한 줄 + **빠진 사본용 ∀ 락 신설**. 임피던스는 입력=diff 선택 슬롯 · **출력=qg 쪽 변환 계층** | §6.3.4 · §9 |
 | OQ10 리뷰 발동 시점·중복 | **D4** — 있는 것을 묶고 집합을 실음. SDD 최종 리뷰와는 **대상이 다름** | §6.2.6 |
 | OQ11 kill-switched 실행의 어휘 | `not-certified (kill-switch)` | §6.4.3 |
 | OQ12 교체 락의 앵커 | 합성기 출력 스키마의 ∀ + 양의 짝 | §6.3.2 |
@@ -564,8 +655,10 @@ brief §3 의 19개 전부. **미처분 0.**
 - **AC9** — kill switch 로 차등 테스트가 생략된 실행의 판정이 `not-certified (kill-switch)` 다.
 - **AC10** — 각 각도(보안 · 판정 · 다른 전제)의 상태가 `filled` / `folded_into:<수행자>` /
   `absent` 중 하나로 **항상** 산출물에 있다. 셋 중 하나라도 상태가 없으면 스키마 검증이 실패한다.
-- **AC10a** — `folded_into:<수행자>` 의 수행자가 그 실행에서 finding 을 낸 리뷰어면 실패한다
-  (자기 finding 자기 판정 = Law 2 위반).
+- **AC10a** — **판정 각도**의 `folded_into:<수행자>` 가 그 실행에서 finding 을 낸 리뷰어면
+  실패한다(자기 finding 자기 판정 = Law 2 위반). **보안 각도에는 적용하지 않는다** — 보안 각도는
+  «무엇을 찾는가»의 문제라 그 리뷰어가 finding 을 내는 것이 정상이고, 금지하면 C13 이 허용한
+  접어 넣기가 사실상 죽는다.
 - **AC11** — 보안 또는 판정 각도가 `absent` 인데 판정이 `clean` 이면 실패한다.
 - **AC12** — 「다른 전제」 각도가 `absent` 여도 판정은 막히지 않고 공시만 된다.
 - **AC13** — `counts.pre_existing > 0` 인 실행의 산출물에 해상도 공시 줄이 있다. 그 줄이 없으면
@@ -582,6 +675,10 @@ brief §3 의 19개 전부. **미처분 0.**
 - **AC19** — `CLAUDE.md` 가 이름으로 박는 agent · 스크립트 · 플러그인이 전부 실재한다.
 - **AC20** — `marketplace.json` · `plugin.json` · `CLAUDE.md` 셋 어디에도 `runtime-verifier` 나
   「2-gate」가 남지 않는다.
+- **AC23** — PR2 가 넣는 옛↔새 판정 어휘 매핑 표가 PR4 에서 산출자와 함께 제거된다. PR5 시점에
+  그 표가 남아 있으면 실패한다.
+- **AC22** — docreview 엔진을 호출하는 모든 플러그인이 `doc-critic` · `doc-critic-web` ·
+  `doc-recritic` 사본 셋을 전부 갖는다. 호출자 목록은 코퍼스에서 도출한다(∃ 가 아니라 ∀).
 - **AC21** — 제거된 테스트가 어떤 `# guards:` 글롭의 유일 대상이 아니다(선언이 공허해지지 않는다).
 
 ## 12. Files to Modify
@@ -595,6 +692,9 @@ brief §3 의 19개 전부. **미처분 0.**
   `test_runtime_verifier_*` · `test_runtime_verdict_precedence.sh` · `test_detect_runtime.sh` 등 —
   **열거가 아니라 도출로 확정한다**)
 - `plugins/quality-gates/tests/test_review_floor_lock.sh` (교체)
+- **`plugins/quality-gates/agents/adversarial.md`** — **제거.** §6.3.3 이 그 dispatch 자리를
+  재비판으로 바꾸므로 정의만 남으면 `shared/tests/test_dispatch_disposition.sh` 가 「어디서도
+  dispatch 되지 않는 agent」로 잡는다. SKILL.md 의 dispatch 블록과 **같은 커밋**에서 지운다.
 
 **대폭 수정**
 - `plugins/quality-gates/skills/quality-pipeline/SKILL.md` — 962줄. 게이트 개념 제거, 5단계 골격,
@@ -622,8 +722,11 @@ brief §3 의 19개 전부. **미처분 0.**
 - `.claude-plugin/marketplace.json` — 공개 계약 문자열
 - `CLAUDE.md` — Law 2 scoped exception 제거
 
-**qg 밖 (이번 사이클의 유일한 자리)**
+**qg 밖 (이번 사이클이 qg 경계를 넘는 자리)**
 - `shared/docreview/agents/doc-recritic.md` — `diff` 선택 슬롯
+- **`plugins/spec-distill/agents/doc-recritic.md`** — 위 정본의 `# copy-of:` 물리 사본. 정본이
+  움직이면 **같은 커밋에서 함께** 움직여야 한다 — 안 그러면 `test_copy_of_contract.sh` 의 바이트
+  동일성 검사가 RED 다. (이것이 「유일한 자리」가 아니었던 이유다.)
 - `shared/tests/test_docreview_agents.sh` — 슬롯 기대값 이동
 
 ## 13. Verification Plan
@@ -716,6 +819,23 @@ AC21 을 확인한다.
 **순서 제약** — 1 → 2 → 3 → 4 → 5. PR 4 가 PR 1 의 스크립트를 배선하고 PR 2·3 의 어휘를 쓴다.
 PR 5 는 PR 4 가 대상을 지운 뒤라야 인용 락이 GREEN 이 된다.
 
+**각 PR 은 자기 `Spec:` 조각을 선언한다**(§6.2.1) — `…-design.md#pr1` … `#pr5`. 같은 값을 쓰면
+PR2~5 가 앞 PR 전부를 합집합으로 재리뷰해 분할이 비용을 **늘린다**.
+
+**PR2 와 PR4 사이의 중간 상태를 닫는다.** PR2 가 판정 어휘를 세 값으로 바꾸는데 옛 어휘의
+산출자(`runtime-verifier` 와 그 락들)는 PR4 까지 살아 있다 — 그대로 두면 두 릴리스 동안 산출자와
+소비자가 다른 어휘로 말한다. 처리:
+
+- PR2 의 합성기는 **두 어휘를 모두 읽는다**(옛 값 → 새 값 매핑 표를 그 PR 안에 둔다). 새 어휘만
+  «낸다».
+- 옛 어휘를 **내는** 자리(verifier·그 락들)는 PR4 에서 산출자와 함께 사라지고, 그때 PR2 가 넣은
+  매핑 표도 같이 지운다 — 그 삭제를 PR4 의 체크리스트에 명시한다.
+- 매핑 표가 PR5 까지 살아남으면 그 자체가 결함이다(AC23).
+
+**계획 단위는 PR 하나에 계획 하나다.** `superpowers:writing-plans` 를 다섯 번 부른다 — 다섯을 한
+계획으로 받으면 §16 이 분할한 이유가 계획 층에서 다시 붕괴한다. 각 계획은 그 PR 의 AC 부분집합만
+받고, 앞 PR 의 산출물을 전제로 적는다.
+
 **각 PR 마다** `plugin.json` bump · CHANGELOG 항목 · 그 PR 이 닿은 소비자 전부의 스위트를 돌린다.
 
 ## 결정 기록
@@ -732,6 +852,15 @@ D6 한 파이프라인.
 대신 드러낸다.
 
 **brief 정정 셋.** OQ9·OQ13·OQ8 의 전제가 실측과 어긋났다. 전문은 §9.
+- D1.1 · r1 · adopt · 3dc9f893#r1.1 · "채택 — 열거 확장 + 우선순위 명시" — 새 판정 사유가 존치하는 차등 테스트의 모든 미판정 상태를 수용하지 못한다. 기존 degraded 상태의 매핑과 결함 동시 발생 시 우선순위를 정해야 한다.
+- D1.2 · r1 · adopt · 737cd2ec#r1.1 · "채택 — 봉인을 먼저 넣고 끝점을 계산" — 현재 브랜치가 다른 구성원 브랜치의 조상이면 끝점 집합에 없어 봉인 커밋 치환이 불가능하다. 봉인을 반영한 뒤 끝점을 계산하는 등의 규칙이 필요하다.
+- D1.3 · r1 · adopt · 75676a42#r1.1 · "채택 — 변환 계층을 qg 쪽에" — diff 슬롯 추가만으로 공유 재비판자와 코드 합성기의 출력 계약 차이가 해결되지 않는다. 변환 계층 또는 공통 계약 확장을 정해야 한다.
+- D1.4 · r1 · adopt · 85e80b4b#r1.1 · "채택 — PR 마다 선언을 달리 한다" — §16 이 다섯 PR 로 쪼갠 이유(「한 PR 에 담으면 리뷰가 실질을 못 본다」)를 §6.2 의 스코프 모델이 되돌린다 — 다섯 PR 이 같은 `Spec:` 경로를 선언하는 한 PR2~PR5 의 매 `/qg` 는 이미 머지된 앞 PR 전부를 합집합으로 한 판정 단위로 보고(AC3·AC4 가 그것을 요구한다), 기준선은 PR1 직전에 고정된다. 분할이 리뷰 1회의 분량을 줄이지 못하고 같은 커밋이 사이클 안에서 최대 다섯 번 재리뷰돼 이번 재편의 발단인 비용·시간 축(C1)을 거꾸로 민다. 사이클 안의 PR 마다 선언을 달리할지(그러면 C8 의 「브랜치 전부가 한 대상」이 사이클 안에서 깨진다), 판정 단위를 그대로 두고 §16 의 분할 근거를 다시 쓸지 사용자가 정해야 한다.
+- D1.5 · r1 · adopt · 8692acd2#r1.1 · "채택 — 판정 각도에만 적용" — AC10a의 자기 판정 금지가 보안 각도의 정상적인 접어 넣기까지 금지한다. 판정 각도에만 적용하도록 AC 범위를 명확히 해야 한다.
+- D1.6 · r1 · adopt · b3b6ed3b#r1.1 · "채택 — 선언을 브랜치 소속 표식으로" — 끝점을 `T` 안에서만 고르므로 브랜치의 마지막 선언 커밋 «뒤»의 미선언 커밋은 합친 트리에서 통째로 빠지는데 공시가 없다 — §6.2.7 은 경계 «앞»만 세고 현재 브랜치는 봉인이 가려 주지만 이미 머지된·형제 브랜치에서는 그대로 소실되어 「`clean` 은 그 튜플에 대한 clean」이 깨진다.
+- D1.7 · r1 · adopt · bf618af4#r1.1 · "채택 — 각도가 새 기대값 앵커다" — 디스패치를 모델 도출로 내리면서 헌장의 처분 회계 계약과의 관계를 설계가 정하지 않았다 — 매 dispatch 자리의 `**처분** — consumer=… · fail-… · disclosure=…` 줄을 도출된 수행자에 어떻게 붙이는지, 현 `fail-open` 이 각도 fail-closed 로 바뀌는지, 신설 사본 둘의 처분 자리는 어디인지가 없고, 브리프가 이름 붙인 blind spot(「항상-디스패치 바닥은 회계의 기대값 앵커이기도 했다」)이 §5·§10 어디에서도 처분을 받지 않았다.
+- D1.8 · r1 · adopt · db12e61a#r1.1 · "채택 — C1 의 근거 있는 재결정으로 명시" — D1 의 「셋이 부딪히면 단순함이 이긴다」는 §14 가 「순서는 곧 대체다」라며 기각한 바로 그 형태이고 — 실제로 본문의 D1 판정 넷이 전부 「단순함이 이김」이라 비용·시간·SDD 맞물림이 이긴 갈림이 0건이다 — C1 의 「넷 대등」을 유지할지 「신뢰도 필터 + 단순함 우선」을 C1 의 근거 있는 재결정으로 명시할지 사용자가 정해야 한다.
+- D1.9 · r1 · adopt · fe2f8d17#r1.1 · "채택 — b3b6ed3b 와 같은 규칙을 경계에도" — 선언된 커밋만으로 경계와 끝점을 정하면 선언이 묶는 브랜치 전체가 빠질 수 있다. 브랜치 전체를 포함할지 선언 커밋으로 범위를 좁힐지 결정해야 한다.
 
 ## Handoff Context
 
