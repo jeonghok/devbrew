@@ -34,6 +34,9 @@ plugins/quality-gates/hooks/hooks.json
 plugins/spec-distill/hooks/hooks.json
 plugins/spec-distill/scripts/hook_common.py
 plugins/quality-gates/hooks/session-start-advisor.py
+plugins/quality-gates/hooks/session-end-cleanup.py
+plugins/spec-distill/hooks/session-end-cleanup.py
+plugins/project-init/hooks/post-tool-use.py
 pyproject.toml
 .python-version
 uv.lock
@@ -114,6 +117,21 @@ exec "\$@"
 FAKE
 chmod +x "$TMP/atfloor/python3.$FLOOR_MINOR_VAL"
 
+# 점이 **없는** bare `python3` 가 바닥을 만족하는 경우 — 해석기 2단계이자 실사용자 대다수가
+# 타는 경로다. 다른 fixture 의 `python3` 는 전부 바닥 미만이고 3단계 글롭은 `python3.*` 라
+# 점을 요구하므로, 이 자리가 없으면 2단계의 «성공» 가지가 어느 단언에도 닿지 않는다
+# 〔최종 리뷰 실측: 2단계를 통째로 지워도 135조합 중 관측 차이 1건이고, 그나마 아무 단언도
+# 재지 않는 안내 문구 차이였다 — 락이 「가장 흔한 머신에서 동작한다」와 「bare python3 를
+# 통째로 무시한다」를 구별하지 못했다〕. 버전은 리터럴이 아니라 해석기에서 도출한 값이다
+# ($TMP/atfloor 와 같은 규약).
+mkdir -p "$TMP/plainfloor"
+cat > "$TMP/plainfloor/python3" <<FAKE
+#!/bin/sh
+[ "\$1" = "-c" ] && { echo "$FLOOR_MAJOR_VAL $FLOOR_MINOR_VAL"; exit 0; }
+exec "\$@"
+FAKE
+chmod +x "$TMP/plainfloor/python3"
+
 TARGET="$TMP/target.sh"      # 훅 대역 — exec 됐는지와 stdin 이 온전한지를 함께 증명한다
 cat > "$TARGET" <<'T'
 #!/bin/sh
@@ -140,6 +158,9 @@ PATH_FLOOR="$TMP/floor:$TMP/plain:/bin"     # 바닥 만족 후보가 있다
 PATH_SUB="$TMP/sub:$TMP/plain:/bin"         # 바닥 미만만 있다
 PATH_BARE="$TMP/floor"                      # coreutils 가 **하나도 없다** (A4 용)
 PATH_ATFLOOR="$TMP/atfloor:$TMP/plain:/bin" # 바닥과 «정확히» 같은 것만 있다 (A12 용)
+# 점 없는 `python3` «하나»만 바닥을 만족하고, 3단계 글롭이 집을 `python3.*` 는 이 PATH 어디에도
+# 없다 (`/bin` 에 python 이 하나도 없음을 확인했다). 그래서 여기서 대상이 돌면 그것은 2단계다.
+PATH_PLAINFLOOR="$TMP/plainfloor:/bin"      # 2단계의 성공 가지 (A17 용)
 R="$ROOT/$RESOLVER"
 
 note "── 축 A: 해석기 행동 ───────────────────────────────────────────────"
@@ -214,6 +235,16 @@ assert_eq "$out" "" "A6/AC3: 건너뛴 뒤 SessionEnd 는 아무것도 찍지 �
 # A7 (AC4) python3 로 fallback 하지 않는다
 assert_not_contains "$out" "EXECED-PLAIN-PYTHON3" "A7/AC4: 바닥 미만 python3 로 내려가지 않는다"
 
+# A17 (AC4 의 «양의 짝» — 해석기 2단계의 성공 가지) A7 은 음의 락이다: 바닥 «미만» python3 를
+#     안 쓴다는 것만 잰다. 바닥을 «만족하는» bare python3 를 실제로 쓰는지는 이 자리가 처음 잰다 —
+#     그리고 그것이 실사용자 대다수의 경로다. 부재 락만으로는 2단계를 통째로 지워도 관측이
+#     바뀌지 않는다〔최종 리뷰가 135조합 대조로 실측〕. 마커는 파일 부작용이 아니라 stdout 이다
+#     (`touch` 는 /usr/bin 에만 있고 이 PATH 에는 없다).
+out="$(run_resolver "$PATH_PLAINFLOOR" /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET")"
+assert_contains "$out" "TARGET-RAN" \
+  "A17/AC4: 점 없는 bare python3 가 바닥(${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL})을 만족하면 2단계가 그것으로 exec 한다"
+assert_contains "$out" "PAYLOAD-INTACT" "A17/AC6: 2단계로 exec 해도 payload 가 훅에 그대로 간다"
+
 # A8 (AC7) 안내는 SessionStart 에서만. 문서 «하나» 에 두 키.
 out="$(run_resolver "$PATH_SUB" /bin/sh "$R" --event SessionStart --plugin qg --hook h "$TARGET")"
 # 바닥 문자열은 하드코딩하지 않는다 — 해석기에서 이미 도출한 FLOOR_MAJOR_VAL/MINOR_VAL 을
@@ -270,6 +301,29 @@ assert_not_grep "$out" '^\{' "A9/AC8: 그 통지를 stdout JSON 으로 찍지 �
 out="$(run_resolver "$PATH_FLOOR" /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET")"
 assert_contains "$out" "PAYLOAD-INTACT" "A10/AC6: payload 가 훅에 그대로 간다 (해석기는 stdin 을 읽지 않는다)"
 
+# A18 (AC6·C6) 해석기가 stdin 을 «직접» 읽지 않는다는 것과, 그 stdin 이 자식에게 새지 않는다는
+#     것은 다른 술어다. `probe` 는 명령 치환이라 후보 인터프리터가 훅의 stdin 을 물려받고,
+#     그 자식이 `-c` 동안 한 줄만 읽어도 payload 가 사라진다 — A10 은 이것을 못 본다(진짜
+#     CPython 이 안 읽으니 통과한다). C6 은 절대 제약이므로 「오늘의 인터프리터는 안 그런다」에
+#     기대지 않고 **탐욕스러운 후보** 로 직접 잰다. 처방은 해석기의 `probe` 에 붙은 `</dev/null`.
+GREEDY="$TMP/greedy-py"
+cat > "$GREEDY" <<FAKE
+#!/bin/sh
+# \`-c\` 동안 stdin 을 한 줄 삼킨다. 바닥은 만족한다고 답하므로 해석기는 이것으로 exec 하고,
+# 그때 \$TARGET 이 받는 stdin 이 온전한지가 곧 probe 의 stdin 격리 여부다.
+if [ "\$1" = "-c" ]; then
+  read -r _swallow
+  echo "$FLOOR_MAJOR_VAL $FLOOR_MINOR_VAL"
+  exit 0
+fi
+exec "\$@"
+FAKE
+chmod +x "$GREEDY"
+out="$(run_resolver "$PATH_SUB" "DEVBREW_PYTHON=$GREEDY" /bin/sh "$R" \
+        --event SessionEnd --plugin qg --hook h "$TARGET")"
+assert_contains "$out" "TARGET-RAN" "A18/C6: stdin 을 삼키는 \$DEVBREW_PYTHON 도 바닥을 만족하면 exec 된다 (양성 대조)"
+assert_contains "$out" "PAYLOAD-INTACT" "A18/C6: probe 의 자식이 훅의 payload 를 삼키지 못한다 (probe 의 stdin 은 /dev/null)"
+
 # A14 (AC7·AC8·C7) 안내 JSON 은 $DEVBREW_PYTHON 이 «무엇이든» 유효한 문서 하나다.
 #     손으로 조립한 JSON 에 사용자 값을 escape 없이 싣던 자리다 — 경로에 따옴표 하나면
 #     훅의 stdout 이 JSON 이 아니게 된다〔실측: Expecting ',' delimiter〕. 그리고 이 조합
@@ -279,18 +333,31 @@ BADPY="$TMP/ba\"d-py"
 cp "$TMP/sub/python3.9" "$BADPY"; chmod +x "$BADPY"
 out="$(run_resolver "$PATH_SUB" "DEVBREW_PYTHON=$BADPY" /bin/sh "$R" \
         --event SessionStart --plugin qg --hook h "$TARGET")"
-bad_report="$(printf '%s' "$out" | python3 -c '
-import json, sys
-raw = sys.stdin.read()
+# **「DEVBREW_PYTHON 이라는 글자가 있나」로 재지 않는다.** 안내의 «고치는 법» 문장이
+# (해석기 :195 부근, 「이미 있다면 $DEVBREW_PYTHON 에 그 경로를 지정하라」) 그 글자를 **항상**
+# 담으므로, 무시 사실을 싣는 `_extra` 줄을 통째로 지워도 그 검사는 yes 로 남는다〔최종 리뷰
+# 실측〕 — AC8 이 요구하는 「지우면 RED」가 성립하지 않는다. 대신 해석기가 «조립하는» 사유
+# 문장 자체를 재도출해 대조한다: `_extra` 의 형태는 `무시했다: Python <maj>.<min> < <바닥>.`
+# 이고, 이 fixture 는 sub/python3.9 의 사본이라 앞 절반이 3.9, 뒤 절반이 출하 바닥이다.
+# 바닥은 리터럴로 핀하지 않는다(재도출) — 그리고 보간이 비면 대조가 헛도므로 증인을 함께 낸다.
+IGNORE_SENTENCE="무시했다: Python 3.9 < ${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL}."
+bad_report="$(printf '%s' "$out" | IGNORE_SENTENCE="$IGNORE_SENTENCE" python3 -c '
+import json, os, sys
+# 한국어 마커를 대조하므로 locale 에 맡기지 않고 UTF-8 로 명시 디코드한다.
+raw = sys.stdin.buffer.read().decode("utf-8", "replace")
+want = os.environ.get("IGNORE_SENTENCE", "")
+print("want_nonempty: %s" % ("yes" if want else "no"))
 try:
     d = json.loads(raw)
 except ValueError as e:
     print("parsed: no (%s)" % e); raise SystemExit(0)
 print("parsed: yes")
-print("mentions_ignored: %s" % ("yes" if "DEVBREW_PYTHON" in json.dumps(d, ensure_ascii=False) else "no"))
+print("mentions_ignored: %s" % ("yes" if want and want in json.dumps(d, ensure_ascii=False) else "no"))
 ')"
+assert_eq "$(field want_nonempty "$bad_report")" "yes" \
+  "A14/AC8: 증인 — 대조할 사유 문장('$IGNORE_SENTENCE')이 비어 있지 않다"
 assert_eq "$(field parsed "$bad_report")" "yes" "A14/C7: 경로에 따옴표가 있어도 stdout 이 유효한 JSON 문서 하나다"
-assert_eq "$(field mentions_ignored "$bad_report")" "yes" "A14/AC8: 그 안내가 \$DEVBREW_PYTHON 무시 사실을 싣는다"
+assert_eq "$(field mentions_ignored "$bad_report")" "yes" "A14/AC8: 그 안내가 \$DEVBREW_PYTHON 무시 «사유» 를 싣는다 (고치는 법 문장이 아니라)"
 
 # A11 (AC11 의 파일-국소 전제) plugin-audit 의 kill switch 판정기 정규식은
 #     `DEVBREW_[A-Z0-9_]*_DISABLE` 이라 **도출형 이름도 꺾쇠 플레이스홀더도 못 본다**
@@ -340,22 +407,51 @@ done
 
 note "── 축 C: 배선 — hooks.json 4 자리 (AC1) ──────────────────────────────"
 
-cmds_of() {   # hooks.json 하나의 command 문자열을 전부
+cmds_of() {   # hooks.json 하나에서 «(이벤트 키, command)» 쌍을 전부. 한 줄 = `<이벤트> <command>`.
+  # **이벤트 키를 버리지 않는다.** 버리면 `--event` 값이 자기를 담은 이벤트 키와 같은지를
+  # 아무도 안 본다: 갈라지면 (a) kill switch 의 이벤트 별칭이 엉뚱한 이름에 답해
+  # `DEVBREW_SKIP_HOOKS=<plugin>:<event>` 로 끈 사용자가 안 꺼지고(C2), (b) `PostToolUse`
+  # 자리에 `--event SessionStart` 가 박히면 바닥 미만 머신에서 **Bash 호출마다** 안내가 모델
+  # 컨텍스트로 재주입된다 — 설계가 이름 붙여 기각한 실패다(R14·D26).
+  # 이벤트 이름에는 공백이 없으므로 「첫 공백까지가 키, 나머지가 command」로 되쪼갤 수 있다.
   python3 - "$1" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
 out = []
-def walk(o):
+def walk(o, ev):
     if isinstance(o, dict):
         for k, v in o.items():
-            if k == "command" and isinstance(v, str): out.append(v)
-            else: walk(v)
+            if k == "command" and isinstance(v, str):
+                out.append((ev, v))
+            elif k == "hooks" and isinstance(v, dict):
+                # 「이벤트 이름 -> 목록」 매핑은 최상위 `hooks` 뿐이다. 그 아래의 `hooks` 는
+                # 리스트라 이 가지를 타지 않는다 — 이벤트 키가 뒤섞이지 않는다.
+                for evname, sub in v.items():
+                    walk(sub, evname)
+            else:
+                walk(v, ev)
     elif isinstance(o, list):
-        for x in o: walk(x)
-walk(d)
-for c in out:
-    print(c)
+        for x in o:
+            walk(x, ev)
+walk(d, "")
+for ev, c in out:
+    print("%s %s" % (ev, c))
 PY
+}
+
+flag_val() {   # flag_val <플래그> <command 문자열> → 그 플래그 «바로 뒤» 토큰 (없으면 빈 문자열)
+  _fv_flag="$1"; _fv_cmd="$2"; _fv_out=""
+  # `set -f` 없이 unquoted 확장을 하면 IFS 분리 **뒤에** pathname expansion 이 붙어 cwd 내용에
+  # 좌우된다 — 해석기 본문이 같은 함정을 피하는 이유와 같다. `set --` 는 **이 함수의**
+  # 위치인자만 건드리므로 호출자 쪽은 그대로다.
+  _fv_ifs="$IFS"; IFS=' '; set -f
+  set -- $_fv_cmd
+  set +f; IFS="$_fv_ifs"
+  while [ $# -gt 0 ]; do
+    if [ "$1" = "$_fv_flag" ]; then _fv_out="${2-}"; break; fi
+    shift
+  done
+  printf '%s' "$_fv_out"
 }
 
 n_cmd=0; n_bare=0
@@ -365,8 +461,10 @@ for hj in plugins/project-init/hooks/hooks.json \
   # 명령 치환을 heredoc 본문에 **직접** 넣지 않는다 — 그 형태가 본문 내용에 따라 파싱이
   # 깨진 전례가 이 리포에 있다. 변수에 먼저 받는다(형제 락 test_copy_of_contract.sh 와 같은 꼴).
   hj_cmds="$(cmds_of "$hj")"
-  while IFS= read -r cmd; do
-    [ -n "$cmd" ] || continue
+  plugin_dir="${hj%/hooks/hooks.json}"      # plugins/<플러그인> — `${CLAUDE_PLUGIN_ROOT}` 의 리포 대역
+  while IFS= read -r pair; do
+    [ -n "$pair" ] || continue
+    ev_key="${pair%% *}"; cmd="${pair#* }"
     n_cmd=$((n_cmd+1))
     case "$cmd" in
       "python3 "*) n_bare=$((n_bare+1)); no "C/AC1: bare python3 로 시작하는 자리가 남아 있다: $hj — $cmd" ;;
@@ -386,6 +484,25 @@ for hj in plugins/project-init/hooks/hooks.json \
     for flag in --event --plugin --hook; do
       case "$cmd" in *"$flag "*) ;; *) no "C/AC1: $hj 의 자리에 $flag 가 없다" ;; esac
     done
+    # 여기까지는 command 의 «모양» 만 봤다 — 세 값이 무엇인지는 아무것과도 대조되지 않았다.
+    # 아래 둘이 그 값을 바깥 사실 두 가지에 묶는다.
+    ev_arg="$(flag_val --event "$cmd")"
+    pl_arg="$(flag_val --plugin "$cmd")"
+    hk_arg="$(flag_val --hook "$cmd")"
+    # (1) `--event` 값 == 자기를 담은 hooks.json 의 이벤트 키.
+    assert_eq "$ev_arg" "$ev_key" \
+      "C/AC1: $hj — '$ev_key' 아래 자리의 --event 가 그 이벤트 키와 같다"
+    # (2) 세 값이 훅 .py 가 실제로 부르는 `kill_switch_active(...)` 인자와 **글자 그대로** 같다.
+    #     해석기(sh)와 훅(python) 두 층이 서로 다른 토큰에 답하면 kill switch 가 층마다 다르게
+    #     발동한다 — C2 가 금지하는 「정본과 다른 의미」가 조용히 산다. 훅 경로는 command 의
+    #     마지막 토큰에서 기계적으로 도출한다(`${CLAUDE_PLUGIN_ROOT}` → 이 플러그인 디렉토리).
+    #     공백은 느슨하게 둔다 — 포매터가 인자 사이 간격을 바꿔도 이 락이 거짓 RED 를 내지 않게.
+    #     〔못 재는 것〕 호출이 여러 줄로 쪼개지면 이 줄-단위 grep 은 못 본다.
+    PLUGIN_ROOT_PREFIX='${CLAUDE_PLUGIN_ROOT}/'
+    hook_py="$plugin_dir/${last#"$PLUGIN_ROOT_PREFIX"}"
+    assert_file_grep "$hook_py" \
+      "kill_switch_active\(\"$pl_arg\",[[:space:]]*\"$hk_arg\",[[:space:]]*\"$ev_arg\"\)" \
+      "C/AC1·C2: $hook_py 가 kill_switch_active(\"$pl_arg\", \"$hk_arg\", \"$ev_arg\") 로 같은 토큰에 답한다"
   done <<EOF
 $hj_cmds
 EOF
@@ -520,11 +637,17 @@ assert_file_grep plugins/spec-distill/scripts/hook_common.py 'sys\.executable' \
 note "── 축 A15: 해석 성공 경로의 IGNORED 공시 (AC8 의 나머지 절반) ─────────"
 
 ADVISOR="plugins/quality-gates/hooks/session-start-advisor.py"
+# 사유를 **한 자리에서** 정하고 입력과 기대값 양쪽에 쓴다. 부분 문자열 `"3.9"` 로 재면 사유를
+# 잘라먹거나 뭉개도 그 조각만 남으면 통과한다 — 「그대로 싣는다」는 주장과 검사가 어긋난다.
+# 바닥 절반은 여기서도 재도출한다(리터럴 핀 금지).
+ADV_REASON="/usr/bin/python3 (Python 3.9 < ${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL})"
 adv_out="$(printf '{"session_id":"","cwd":"%s"}' "$TMP" \
-  | env DEVBREW_PYTHON_IGNORED='/usr/bin/python3 (Python 3.9 < 3.12)' python3 "$ADVISOR" 2>/dev/null)"
-adv_report="$(printf '%s' "$adv_out" | python3 -c '
-import json, sys
-raw = sys.stdin.read().strip()
+  | env DEVBREW_PYTHON_IGNORED="$ADV_REASON" python3 "$ADVISOR" 2>/dev/null)"
+adv_report="$(printf '%s' "$adv_out" | ADV_REASON="$ADV_REASON" python3 -c '
+import json, os, sys
+raw = sys.stdin.buffer.read().decode("utf-8", "replace").strip()
+want = os.environ.get("ADV_REASON", "")
+print("want_nonempty: %s" % ("yes" if want else "no"))
 if not raw:
     print("emitted: no"); raise SystemExit(0)
 try:
@@ -534,11 +657,13 @@ except ValueError as e:
 print("emitted: yes")
 print("both_keys: %s" % ("yes" if d.get("systemMessage") and
       d.get("hookSpecificOutput", {}).get("additionalContext") else "no"))
-print("carries_reason: %s" % ("yes" if "3.9" in json.dumps(d) else "no"))
+print("carries_reason: %s" % ("yes" if want and want in json.dumps(d, ensure_ascii=False) else "no"))
 ')"
+assert_eq "$(field want_nonempty "$adv_report")" "yes" \
+  "A15/AC8: 증인 — 대조할 사유('$ADV_REASON')가 비어 있지 않다"
 assert_eq "$(field emitted "$adv_report")" "yes" "A15/AC8: IGNORED 가 있으면 advisor 가 JSON 을 낸다"
 assert_eq "$(field both_keys "$adv_report")" "yes" "A15/AC8: 두 키를 함께 담는다"
-assert_eq "$(field carries_reason "$adv_report")" "yes" "A15/AC8: 사유를 그대로 싣는다"
+assert_eq "$(field carries_reason "$adv_report")" "yes" "A15/AC8: 사유를 «통째로» 그대로 싣는다 (조각이 아니라)"
 
 # 음의 짝 — 평소에는 stdout 이 비어야 한다 (이 훅은 원래 stdout 을 쓰지 않는다)
 adv_quiet="$(printf '{"session_id":"","cwd":"%s"}' "$TMP" | env -u DEVBREW_PYTHON_IGNORED python3 "$ADVISOR" 2>/dev/null)"
