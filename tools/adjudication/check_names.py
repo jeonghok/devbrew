@@ -16,7 +16,7 @@
 가려진다. README 는 dispatch 하지 않고 문서화한다는 전제 위에 선 대가이고,
 실측으로 재현된다.
 
-기존 dispatch 락의 표기 필터(subagent_type:|agentType:|Agent\\()를
+기존 dispatch 락의 표기 필터(subagent_type:|agentType:|Agent\\(|^\\s*agent:)를
 «빼지 않는다». 그 필터는 산문 속 맨 영어 단어가 dispatch 로 잡히는 것을 막고
 있고 그 필요는 실측으로 기록돼 있다
 (test_dispatch_disposition.sh 의 `NOTATION` 정규식 바로 위 주석).

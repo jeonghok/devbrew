@@ -83,9 +83,9 @@
 |---|---|---|---|---|
 | T1 | `docs/plugin-authoring.md` : 49–56 | `8303cc24` — 이 플러그인 PR 이 추가한 output style 절 | 삭제될 경로로 가는 링크 + 리포에 사례 없는 컴포넌트 설명 | 절 전체(도입 줄 · bullet 셋 · 「subagent 에 닿지 않는다」 단락 · 뒤 빈 줄) 삭제 |
 | T2 | `docs/plugin-authoring.md` : 24 | `df47c49a` | 예시 목록이 `smoke-probe`, `transcript-reader`, `pr-understanding-builder` | `transcript-reader` 를 빼고 둘 |
-| T3 | `shared/tests/test_dispatch_disposition.sh` : 85 | `8b07f9f3` — 설계 `2026-08-22-subagent-adjudication-contract-design.md:84` 의 표기 전수 조사 ④, 그 유일 실례가 이 플러그인 | `NOTATION` 의 `\|^\s*agent:\s` 갈래가 실례 0 — 아무것도 재지 않는다 | `re.compile(r'subagent_type:\|agentType:\|Agent\(')` |
-| T4 | `shared/tests/test_dispatch_disposition.sh` : 142–145 | `f835f31f` | 축 A② 의 방향 근거가 삭제될 파일을 인용 | 네 줄(앞의 빈 `#` 줄 포함) 삭제. 규칙 문장은 `:137–138` 에 그대로 남는다 |
-| T5 | `tools/adjudication/check_names.py` : 19 | T3 의 글자 그대로 사본 | docstring 이 `^\\s*agent:` 를 포함해 인용 | T3 와 같은 세 표기만 인용 |
+| ~~T3~~ | `shared/tests/test_dispatch_disposition.sh` : 89 | `8b07f9f3` — 설계 `2026-08-22-…:84` 의 표기 전수 조사 ④ | — | **철회**. `/qg review` 가 탐지 표면 축소를 실측으로 보였다 — 아래 참고 |
+| T4 | `shared/tests/test_dispatch_disposition.sh` : 142–145 | `f835f31f` | 축 A② 의 방향 근거가 삭제될 파일을 인용 | 네 줄 삭제 + **추상형 근거 세 줄로 대체**(삭제된 파일을 인용하지 않고 같은 제약을 말한다). 규칙 문장은 그대로 |
+| ~~T5~~ | `tools/adjudication/check_names.py` : 19 | T3 의 글자 그대로 사본 | — | **철회** — T3 과 한 몸이다. 인용도 base 형태 그대로 |
 | T6 | `tools/adjudication/check_slots.py` : 46 | 전수 스윕이 이 플러그인의 agent 슬롯을 분류 | `transcript-reader.inventory` bullet 이 없어진 agent·스크립트를 이름으로 가리킴 | bullet 한 줄 삭제. 같은 스윕의 `:26` 「20 개 agent」는 과거 시점의 개수라 둔다(R2) |
 | T7 | `shared/tests/test_plugin_root_no_cwd_fallback.sh` : 472 | `aff6a8ee` — 코퍼스 31(이 플러그인의 `briefing-current-state/SKILL.md` · `commands/standup.md` 포함)에 여유 1 | 제거 후 29 → RED (실측 확인) | `-ge 28` — 29 에 원저자와 같은 여유 1 |
 | T8 | `shared/tests/test_agent_input_slots.sh` : 86–87 · `shared/tests/fixtures/adjudication/run_slots.py` : 33–35 | 최종 리뷰 K4(`plugins/quality-gates/CHANGELOG.md:235–237`) — 「못 잼」 넷 중 `context: fork` 쪽이 이 플러그인의 `transcript-reader` 하나 | 리포에 실례 없는 갈래를 서술 | 「`context: fork`」 갈래를 걷고 「Workflow JS」만 남긴다 |
@@ -112,10 +112,18 @@
 `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:197` 이 `adversarial` 과 `artifact-adversarial` 둘에
 귀속되어 A③ 가 발화한다.
 
-**T3 은 남는다.** 그쪽은 출생 근거(설계 `2026-08-22-…:84` 의 표기 전수 조사 ④, 유일 실례가 이 플러그인)가
-반증되지 않았고, 리뷰의 실측은 설계가 「알려진 한계」에 이미 적은 것 — 다른 표기로도 불리는 agent 의 추가
-frontmatter 호출만 조용히 빠지고, 신규 agent 는 `ZERO_AGENTS` 가 잡는다 — 을 **확인**했을 뿐이다. 같은 규칙에
-다른 증거가 걸려 다른 결론이 나온 것이고, 목록이 아니라 규칙을 정본으로 둔 이유가 이것이다.
+**T3 도 철회됐다 — `/qg review` 가 대가를 구체로 보였다.** T3 의 출생 근거(설계 `2026-08-22-…:84` 의 표기
+전수 조사 ④, 유일 실례가 이 플러그인)는 반증되지 않았다. 그런데 다섯 좌석 중 둘이 **대가**를 실측했다: 이미
+다른 표기로 불리는 agent 를 그 표기로 «추가» 호출하면 옛 정규식은 RED(dispatch 23 ≠ 앵커 22), 좁힌 정규식은
+GREEN 이다. `ZERO_AGENTS` 는 dispatch 총합 0 일 때만 발화하므로 이 경우를 못 구한다.
+
+결정적 근거는 **락 자신의 머리말**(6–9행)이었다 — ∀ 도출을 들인 이유로 「표기 ②④를 놓쳐 18 중 16 만 센 것」을
+드는데, **표기 ④가 바로 그 표기**다. 즉 T3 은 이 파일이 존재하는 이유인 두 실패 중 하나를 구조적으로 재현한다.
+
+T9 와는 판정 경로가 다르다. T9 은 **출생 근거가 반증**돼 규칙(C5)이 스스로 배제했다. T3 은 근거가 살아 있어
+규칙으로는 흔적이 맞고, 사용자가 `/qg review` 게이트에서 **대가를 보고** 기준을 굽혔다(「Retry — 갈래 복원」).
+되돌릴 한마디는 「다시 지워라」다. 복원 비용은 0 이다 — dispatch 는 22 그대로이고, 복원 뒤 양성 대조에서
+프로브가 23≠22 로 RED 를 냈다. **T5 도 함께 철회**된다(T3 의 글자 그대로 사본이라 한 몸이다).
 
 ### S3 이 훑은 수치 하한 전수 (R3 판정)
 
@@ -205,11 +213,11 @@ frontmatter 호출만 조용히 빠지고, 신규 agent 는 `ZERO_AGENTS` 가 �
 | 삭제 | `plugins/agent-transparency/**` (추적 34 파일) | 플러그인 실체 |
 | 편집 | `.claude-plugin/marketplace.json` | 카탈로그 항목 제거 (남는 순서: `quality-gates, project-init, spec-distill, plugin-audit`) |
 | 편집 | `docs/plugin-authoring.md` | T1 · T2 |
-| 편집 | `shared/tests/test_dispatch_disposition.sh` | T3 · T4 (T9 는 철회 — 「확정 표」 참고) |
+| 편집 | `shared/tests/test_dispatch_disposition.sh` | T4 만 (T3 · T9 는 철회 — 「확정 표」 참고) |
 | 편집 | `shared/tests/test_plugin_root_no_cwd_fallback.sh` | T7 |
 | 편집 | `shared/tests/test_agent_input_slots.sh` | T8 (셸 쪽) |
 | 편집 | `shared/tests/fixtures/adjudication/run_slots.py` | T8 (픽스처 쪽) |
-| 편집 | `tools/adjudication/check_names.py` | T5 |
+| ~~편집~~ | ~~`tools/adjudication/check_names.py`~~ | ~~T5~~ — 철회(T3 과 한 몸) |
 | 편집 | `tools/adjudication/check_slots.py` | T6 |
 | 추가 | `docs/superpowers/plans/2026-09-21-remove-agent-transparency.md` | 이 문서 |
 
@@ -932,7 +940,7 @@ bash shared/tests/test_plugin_root_no_cwd_fallback.sh 2>&1 | grep -E '대상 마
 - **스위트 대조**(AC5) — 사라진 대상 5 · 전후 차이 0 · stub 호출 0.
 - **T9 철회** — 사용자가 승인한 결정(D10)이 구현 리뷰의 실측으로 반증돼 철회된 경위와, 사용자가 한마디로
   되돌릴 수 있다는 것.
-- **남은 사각지대 (T3)** — frontmatter `agent:` 추가 호출이 처분 앵커 검사를 빠져나가는 경로.
+- **T3 철회** — `agent:` 표기 갈래를 되돌렸다. 되돌릴 한마디는 「다시 지워라」.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/remove-agent-transparency
@@ -975,12 +983,18 @@ cat > "$WORK/pr-body.md" <<'BODY'
 
 사용자는 한 단어로 이 되돌림을 다시 뒤집을 수 있다 — 「다시 좁혀라」.
 
-## 남은 사각지대 (T3)
+## T3 철회 — `agent:` 표기 갈래는 그대로 둔다
 
-이미 다른 표기로 dispatch 되는 agent 가 skill frontmatter `agent:` 로 **추가** 호출되면, 그 자리는 dispatch 로
-세어지지 않아 처분 앵커 검사를 조용히 빠져나간다. **그 표기로만** 불리는 agent 는 ∀ 도출(`ZERO_AGENTS`)이
-여전히 잡는다 — 빠져나가는 것은 «추가» 호출뿐이다. 이 경고의 일반형은 이제 `test_dispatch_disposition.sh` 의
-락 머리말에도 있다.
+처음 계획은 그 갈래를 지우는 것이었다(실례가 0이 되므로). `/qg review` 의 다섯 좌석 중 둘이 대가를 실측으로
+보였다 — 이미 다른 표기로 불리는 agent 를 그 표기로 «추가» 호출하면 옛 정규식은 RED(23≠22), 좁힌 정규식은
+GREEN 이다. `ZERO_AGENTS` 는 dispatch 총합 0 일 때만 발화해 못 구한다. 그리고 락 머리말이 ∀ 도출을 들인 이유로
+「표기 ②④를 놓쳐 18 중 16 만 센 것」을 드는데 **표기 ④가 바로 그 표기**다.
+
+사용자가 게이트에서 복원을 선택했다. 되돌릴 한마디는 **「다시 지워라」**. 복원 비용 0(dispatch 22 불변),
+복원 뒤 양성 대조에서 프로브가 23≠22 RED. `check_names.py` 의 인용(T5)도 한 몸이라 함께 되돌렸다.
+
+**남는 대가는 없다** — `NOTATION` 이 base 형태 그대로다. 락 머리말에 ∀ 도출의 일반적 한계를 적은 줄은
+그대로 둔다: 이 플러그인과 무관하게 참인 문장이고, 열거가 fail-open 이라는 기존 경고를 정확하게 만든다.
 
 ## 참고
 

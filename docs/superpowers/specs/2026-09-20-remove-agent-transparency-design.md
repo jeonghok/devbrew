@@ -203,8 +203,8 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 
 - dispatch 락의 **위치 규칙**(앵커는 dispatch 줄 «아래» `WINDOW` 줄 안)은 그대로다. 근거 문단만 사라진다 — 규칙은
   축 A② 본문(`:137–138`)이 이미 선언한다.
-- dispatch 락의 **∀ 도출**(`ZERO_AGENTS`)은 그대로다. T3 이후에도 frontmatter `agent:` 로만 불리는 새 agent 는
-  dispatch 0건으로 RED 가 된다(「알려진 한계」 참고).
+- dispatch 락의 **∀ 도출**(`ZERO_AGENTS`)은 그대로다. T3 철회로 `NOTATION` 도 base 형태 그대로이므로,
+  frontmatter `agent:` dispatch 는 예전처럼 세어지고 1:1 앵커 계약이 그대로 건다.
 
 ## Acceptance Criteria
 
@@ -216,9 +216,10 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
   - T1: `docs/plugin-authoring.md` 에 `output style` · `output-styles` · `keep-coding-instructions` ·
     `force-for-plugin` 이 0건이고, `**Merge 전:**` 단락이 남아 있다.
   - T2: 24행 문단에 `transcript-reader` 가 없고 `smoke-probe` · `pr-understanding-builder` 는 있다.
-  - T3: `NOTATION` 정규식 리터럴이 정확히 `subagent_type:|agentType:|Agent\(` 다.
+  - ~~T3~~ **철회** — `NOTATION` 은 base 형태(`…|^\s*agent:\s` 포함) 그대로여야 하고, 좁혀진 형태가
+    보이면 그것이 위반이다. 근거는 「오케스트레이터가 정하고 사용자에게 알린 것」의 T3 행.
   - T4: 파일에 `briefing-current-state` 가 0건이고, 축 A② 의 「바로 아래」 규칙 문장은 남아 있다.
-  - T5: `check_names.py` 에 `agent:` 표기 인용이 0건이고, 나머지 세 표기 인용은 남아 있다.
+  - ~~T5~~ **철회** — T3 과 한 몸이다. docstring 의 인용도 네 표기 그대로여야 한다.
   - T6: `check_slots.py` 에 `transcript-reader` · `prepare_standup` 이 0건이고, 「20 개 agent」는 그대로 있다.
   - T7: 하한 리터럴이 `-ge 28` 이다.
   - T8: 두 파일에 `context: fork` 가 0건이고, 「Workflow JS」 서술은 남아 있다.
@@ -245,8 +246,8 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
   「파서가 끝까지 돌았다 (rc 0)」가 ✓ 다. 복원(`git checkout HEAD --`) 뒤 같은 단언이 ✓ 이고 `git diff HEAD` 와
   `git diff --cached` 가 비었음을 확인한다.
 - **AC7.** 제거 뒤 dispatch 락의 인쇄값이 `PRINT_2_dispatch` = `PRINT_3_anchors` = (제거 전 값 − 1)이고
-  `ZERO_AGENTS` 가 빈 값이다 — base `84222ee1` 에서는 21/21 이다. T3 이 이 플러그인 밖의 dispatch 를 하나도
-  잃지 않았다는 증거다(T9 은 철회돼 이 수에 기여하지 않는다).
+  `ZERO_AGENTS` 가 빈 값이다 — base `84222ee1` 에서는 21/21 이다. T3 · T9 이 모두 철회돼 dispatch 도출을
+  건드리는 흔적 편집은 남지 않았으므로, 이 −1 은 플러그인 디렉토리 삭제 하나에서만 온다.
 - **AC8.** 도출 절차 S1–S3 을 끝까지 돌린 결과가 **plan 의 확정 표**에 담겨 있고, 그 표가 §2 표의 행을 하나도
   빠뜨리지 않는다. 절차가 새로 낸 항목은 R1–R4 로 분류돼 그 표에 들어가고, 규칙이 가르지 못한 항목은 0이거나
   사용자 결정으로 올라가 있다. 「돌렸다」의 증거는 S1 의 grep 출력, S2 가 훑은 이력 문서 히트 목록과 각 히트의
@@ -259,9 +260,9 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 | 삭제 | `plugins/agent-transparency/**` (34) |
 | 편집 | `.claude-plugin/marketplace.json` |
 | 편집 | `docs/plugin-authoring.md` (T1 · T2) |
-| 편집 | `shared/tests/test_dispatch_disposition.sh` (T3 · T4. T9 은 철회) |
+| 편집 | `shared/tests/test_dispatch_disposition.sh` (T4 만. T3 · T9 은 철회) |
 | 편집 | `shared/tests/test_plugin_root_no_cwd_fallback.sh` (T7) |
-| 편집 | `tools/adjudication/check_names.py` (T5) |
+| ~~편집~~ | ~~`tools/adjudication/check_names.py` (T5)~~ — 철회 |
 | 편집 | `tools/adjudication/check_slots.py` (T6) |
 | 편집 | `shared/tests/test_agent_input_slots.sh` · `shared/tests/fixtures/adjudication/run_slots.py` (T8) |
 | 추가 | 이 문서, 그리고 writing-plans 의 plan |
@@ -316,11 +317,10 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 
 ## 알려진 한계
 
-- **T3 이후 frontmatter `agent:` dispatch 의 가시성.** 이 표기로만 불리는 새 agent 는 dispatch 0건이 되어
-  `ZERO_AGENTS` 로 RED — 드러난다. 그러나 **다른 표기로도 불리는** agent 를 어떤 skill 이 frontmatter `agent:` 로
-  추가 호출하면, 그 자리는 dispatch 로 세어지지 않아 처분 앵커 검사를 조용히 빠져나간다. 이 플러그인이 없던
-  세계와 같은 상태다. 그 표기를 다시 들이는 PR 이 `NOTATION` 에 갈래를 더해야 한다 — 락 머리말 6–9행의
-  「열거는 fail-open」 경고가 그 위험을 이미 말한다.
+- ~~**T3 이후 frontmatter `agent:` dispatch 의 가시성.**~~ **해당 없음 — T3 도 철회됐다.** `/qg review` 의
+  다섯 좌석 중 둘이 이 대가를 실측으로 보였다: 이미 다른 표기로 불리는 agent 를 그 표기로 추가 호출하면
+  옛 정규식은 RED(23≠22), 좁힌 정규식은 GREEN 이다. 그리고 락 머리말 6–9행이 ∀ 도출을 들인 이유로
+  「표기 ②④를 놓쳐 18 중 16 만 센 것」을 든다 — **표기 ④가 바로 그 표기다**. `NOTATION` 은 base 형태 그대로다.
 - ~~**T9 이후 따옴표 없는 dispatch 표기.**~~ **해당 없음 — T9 은 철회됐다**(위 표의 마지막 행). 구현 리뷰가
   이 대가를 추상이 아니라 구체로 보였다: 놓치는 것은 `subagent_type: adversarial`, 즉 이 플러그인과 무관한
   **표기 ①**이다. 그리고 좁힌 경계도 삭제된 실례를 이미 매치하므로 애초에 흔적이 아니었다. 이름 경계는 base
@@ -367,6 +367,7 @@ A/B 산출물 디렉토리 `~/.claude/agent-transparency-ab/` 는 존재하지 �
 | T5 추가 — D4 승인 뒤 발견 (「check_names 인용은 두라」) | T3 정규식의 글자 그대로 사본이다. 두면 T3 이 반쪽이 된다 |
 | 이력 spec 제자리 · 배너 없음 (「archive 로 옮겨라」) | 경로·줄 번호 인용(`MEASUREMENT.md`) |
 | 「알려진 한계」의 `agent:` 서술을 채팅 때보다 좁힘 | 채팅에서는 "미래의 `agent:` dispatch 가 빠져나간다"고 했으나, ∀ 도출(`ZERO_AGENTS`) 때문에 그 표기로**만** 불리는 agent 는 드러난다. 빠져나가는 것은 다른 표기로도 불리는 agent 의 추가 호출뿐이다 |
+| **T3(`agent:` 표기 갈래 삭제) 철회 — D3·D4 의 근거 있는 재결정, 사용자가 `/qg review` 게이트에서 직접 선택** (「다시 지워라」) | `/qg review` 다섯 좌석 중 둘(`security-reviewer` · `pr-test-analyzer`)이 탐지 표면 축소를 실측으로 보였고 `adversarial` 이 손으로 추적해 확증했다. 이미 다른 표기로 불리는 agent 를 그 표기로 «추가» 호출하면 옛 정규식은 RED(dispatch 23 ≠ 앵커 22), 좁힌 정규식은 GREEN 이다 — `ZERO_AGENTS` 는 dispatch 총합 0 일 때만 발화하므로 못 구한다. 결정적 근거는 락 자신의 머리말 6–9행이다: ∀ 도출을 들인 이유로 「표기 ②④를 놓쳐 18 중 16 만 센 것」을 드는데 **표기 ④가 바로 이 표기**다. 복원 비용 0(dispatch 22 불변, 실측) · 복원 뒤 양성 대조로 이빨 확인(프로브 → 23≠22 RED). **T5 도 함께 철회**(T3 의 글자 그대로 사본). **T4 는 유지하되 추상형 근거로 대체** — 삭제된 파일을 인용하지 않으면서 같은 제약을 말한다 |
 | **T9(이름 경계 좁힘) 철회 — D10 의 근거 있는 재결정** (「다시 좁혀라」) | 구현 리뷰가 C5 를 실측으로 반증했다. ① 좁힌 경계도 삭제된 실례 `agent: agent-transparency:transcript-reader` 를 **이미 매치한다** — 접두사의 콜론이 경계이므로 `^\|\s` 갈래는 그 줄 때문에 있던 것이 아니다. ② 좁히면 `subagent_type: adversarial`(따옴표 없는 평범한 YAML, **표기 ①**)을 놓친다 — 손실이 이 플러그인과 무관한 표기에 떨어진다. 되돌려도 오늘 잡히는 dispatch 는 22줄 그대로다(네 조합 동일 집합). 되돌린 뒤 양성 대조로 이빨 확인(처분 앵커를 뺀 따옴표 없는 dispatch → 축 A① 23 ≠ 22 RED). **T3 은 그대로다** — 그쪽은 출생 근거가 반증되지 않았고 리뷰 실측이 「알려진 한계」를 확인했을 뿐이다 |
 
 ### Deferred to plan
