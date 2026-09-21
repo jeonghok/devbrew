@@ -233,6 +233,11 @@ Phase 1.6  Synthesizer (Phase 1 실행 시 항상) — dedupe/rank (결정론 �
 팔레트는 SKILL `## Reviewer composition (scope-driven)` 섹션. scout(`scripts/scout.py`)는
 `depth` + 추천 subset을 emit하는 **힌트 provider**(권위 아님).
 
+- **Python 3.12+** — 이 플러그인의 훅이 요구하는 바닥입니다. 숫자는 도출된 값입니다 —
+  「2026-10 이후에도 패치를 받는 버전 중 최빈」, 다음 재검토는 3.12 EOL(2028-10).
+  바닥 미만이면 훅은 **막지 않고** 건너뛰며 세션 시작에 안내가 한 번 나갑니다.
+  `$DEVBREW_PYTHON`으로 인터프리터를 직접 지정할 수 있습니다.
+
 **Prerequisites (Tier C optional dependencies):** `pr-review-toolkit`(code-reviewer +
 silent-failure-hunter + type-design-analyzer + pr-test-analyzer + comment-analyzer),
 `feature-dev`(code-architect). 미설치 시 해당 Tier C는 unavailable로 degrade하고 floor(A) +

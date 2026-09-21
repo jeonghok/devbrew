@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json plugins/**/*.py plugins/quality-gates/hooks/session-start-advisor.py pyproject.toml .python-version uv.lock
+# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json plugins/**/*.py plugins/quality-gates/hooks/session-start-advisor.py pyproject.toml .python-version uv.lock README.md plugins/*/README.md
 #
 # 출하 Python 바닥의 «집행» 이 살아 있는가. 선언은 여기서 재지 않는다 — 선언만 한 바닥은
 # 훅이 읽지 않는다는 것이 이 설계의 출발점이다(설계 Context/Why 3).
@@ -36,7 +36,12 @@ plugins/spec-distill/scripts/hook_common.py
 plugins/quality-gates/hooks/session-start-advisor.py
 pyproject.toml
 .python-version
-uv.lock"
+uv.lock
+README.md
+plugins/project-init/README.md
+plugins/quality-gates/README.md
+plugins/spec-distill/README.md
+plugins/plugin-audit/README.md"
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$SCANNED"
   exit 0
@@ -578,5 +583,32 @@ else
 fi
 assert_file_grep pyproject.toml '^package = false$' \
   "H: [tool.uv] package = false — devbrew 는 빌드되는 패키지가 아니다"
+
+note "── 축 F: 도출 규칙이 산출물에 적혀 있다 (AC13) ───────────────────────"
+RULE='2026-10 이후에도 패치를 받는 버전 중 최빈'
+for f in "$RESOLVER" README.md \
+         plugins/project-init/README.md plugins/quality-gates/README.md plugins/spec-distill/README.md; do
+  assert_file_grep "$f" "$RULE" "F/AC13: $f 가 도출 규칙을 담는다"
+  # 버전 숫자는 **재도출**해서 본다 — 리터럴로 핀하면 바닥이 움직일 때 stale-red 가 된다.
+  assert_file_grep "$f" "${FLOOR_MAJOR_VAL}\.${FLOOR_MINOR_VAL}" \
+    "F/AC13: $f 가 현재 바닥 ${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL} 를 말한다"
+  assert_file_grep "$f" "EOL" "F/AC13: $f 가 다음 재검토 시점(EOL)을 말한다"
+done
+
+note "── 축 G: prerequisite (AC14) ─────────────────────────────────────────"
+# `assert_file_grep`/`assert_file_absent` 는 grep -qE 를 쓴다 — ERE 에서 `+` 는 quantifier,
+# `.` 는 any-char 다. 리터럴로 읽히려면 이스케이프해야 한다: 이스케이프 없이 두면
+# "Python 3.12"(plus 없음)·"Python 3x122"(문자 바뀜) 까지 매치해 음의 짝이 실제보다
+# 넓게 금지하게 된다(측정: 둘 다 '3.12+' 없이도 매치) — 그러면 이 축의 핵심 주장인
+# 음의 짝이 약해진다. 정규식엔 이스케이프한 것을, 사람이 읽는 메시지엔 원문을 쓴다.
+PREREQ_RE="Python ${FLOOR_MAJOR_VAL}\.${FLOOR_MINOR_VAL}\+"
+PREREQ_TXT="Python ${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL}+"
+for p in project-init quality-gates spec-distill; do
+  assert_file_grep "plugins/$p/README.md" "$PREREQ_RE" "G/AC14: $p README 에 '$PREREQ_TXT' prerequisite 가 있다"
+done
+# 음의 짝 — plugin-audit 에는 **쓰지 않는다**. 훅이 없고 셸 13자리는 범위 밖이라
+# 그 바닥을 집행하는 주체가 없다(D27 — R8 이 기각한 「집행 없는 선언」이 그대로 돌아온다).
+assert_file_absent plugins/plugin-audit/README.md "$PREREQ_RE" \
+  "G/AC14: plugin-audit README 에는 그 prerequisite 를 쓰지 않는다 (집행 주체가 없다)"
 
 finish
