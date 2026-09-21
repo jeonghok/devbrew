@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/python/**
+# guards: shared/python/** plugins/*/scripts/devbrew-python.sh
 #
 # 출하 Python 바닥의 «집행» 이 살아 있는가. 선언은 여기서 재지 않는다 — 선언만 한 바닥은
 # 훅이 읽지 않는다는 것이 이 설계의 출발점이다(설계 Context/Why 3).
@@ -25,7 +25,10 @@ RESOLVER="shared/python/devbrew-python.sh"
 # 대조하므로, 목록에 소망을 적으면 그 글롭들이 **아무것도 안 재면서 GREEN** 이 된다 — 그 락의
 # 머리말이 「선언 ⊃ 실제 → 선택은 되는데 아무것도 안 본다」로 이름 붙인 바로 그 실패다.
 # 축을 더하는 Task 가 자기 줄을 **그때** 더한다(위 `# guards:` 글롭도 함께).
-SCANNED="shared/python/devbrew-python.sh"
+SCANNED="shared/python/devbrew-python.sh
+plugins/project-init/scripts/devbrew-python.sh
+plugins/quality-gates/scripts/devbrew-python.sh
+plugins/spec-distill/scripts/devbrew-python.sh"
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$SCANNED"
   exit 0
@@ -283,5 +286,49 @@ assert_eq "$(field mentions_ignored "$bad_report")" "yes" "A14/AC8: 그 안내�
 #     「어느 파일이 원인인지」를 바로 가리키는 국소 신호다.
 assert_file_grep "$ROOT/$RESOLVER" 'DEVBREW_[A-Z0-9_]+_DISABLE' \
   "A11: 해석기 본문에 plugin-audit 가 읽을 수 있는 구체 kill switch 이름이 있다"
+
+note "── 축 B: 배포 — 물리 사본 (AC11 · C9 · C10) ───────────────────────────"
+
+COPY_PLUGINS="project-init quality-gates spec-distill"
+n_copy=0
+for p in $COPY_PLUGINS; do
+  c="plugins/$p/scripts/devbrew-python.sh"
+  n_copy=$((n_copy+1))
+  if [ -L "$c" ]; then
+    no "B/AC11: $c 가 심볼릭 링크다 — 감사기 containment 가 shared/ 로 풀려 거짓 gap 을 낸다"
+  elif [ -f "$c" ]; then
+    ok "B/AC11: $c 가 물리 파일이다"
+  else
+    no "B/AC11: $c 가 없다"
+    continue
+  fi
+  # 마커는 머리 20줄 안(HEAD_WINDOW). 2번째 줄에 두는 것이 이 리포의 선례다
+  # (shared/codex/runner_common.sh ↔ plugins/*/scripts/runner_common.sh).
+  marker="$(head -20 "$c" | grep -nE '^[[:space:]]*#[[:space:]]*copy-of:[[:space:]]*shared/python/devbrew-python\.sh')"
+  if [ -n "$marker" ]; then
+    ok "B/C10: $c 의 copy-of 마커가 머리 20줄 안에 있다 (${marker%%:*}번째 줄)"
+    lineno="${marker%%:*}"
+    if sed "${lineno}d" "$c" | diff -q - "$ROOT/$RESOLVER" >/dev/null 2>&1; then
+      ok "B/C10: $c ≡ 정본 (마커 줄 제외 바이트 동일)"
+    else
+      no "B/C10: $c 가 정본과 갈라졌다"
+      sed "${lineno}d" "$c" | diff - "$ROOT/$RESOLVER" | head -10
+    fi
+  else
+    no "B/C10: $c 에 copy-of 마커가 없다 — 위 바이트 비교에서 조용히 빠진다"
+  fi
+done
+[ "$n_copy" -eq 3 ] && ok "B: 사본 자리 3건을 훑었다 (vacuous 아님)" || no "B: 사본 자리가 3이 아니다 ($n_copy)"
+
+# plugin-audit 의 kill switch 판정이 **참** 인가 — A11 의 구체 예시 줄이 load-bearing 이다.
+for p in $COPY_PLUGINS; do
+  v="$(python3 plugins/plugin-audit/scripts/check-shape-completeness.py "plugins/$p" 2>/dev/null \
+      | python3 -c 'import json,sys
+try: d = json.load(sys.stdin)["shape_gaps"]
+except Exception: print("unreadable"); raise SystemExit(0)
+m = [g["present"] for g in d if g["requirement"] == "hooks_killswitch"]
+print(m[0] if m else "absent")')"
+  assert_eq "$v" "True" "B/AC11: plugin-audit 가 $p 의 hooks_killswitch 를 참으로 낸다"
+done
 
 finish
