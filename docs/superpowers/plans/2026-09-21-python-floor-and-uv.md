@@ -81,7 +81,7 @@
 | 2 | `pyproject.toml` 의 `[project]` 최소 필드 | `name` · `version = "0"` · `requires-python` 셋 + `[tool.uv] package = false`. **`project-init` 이 devbrew 를 「Python 프로젝트」로 판정하게 되는 부작용은 허용한다** — devbrew 는 실제로 `.py` 181개를 담은 파이썬 리포이고, `/project-init` 의 Phase 0 은 manifest **와 디렉토리 구조**를 함께 본다(`commands/project-init.md:93`). 이 파일이 없어도 같은 판정이 났을 것이므로 새 거짓을 만들지 않는다 | 축 H 가 `package = false` 를 본다 |
 | 3 | 테스트 파일의 배치 | `shared/tests/test_python_floor.sh` **하나**. 재는 대상이 정본 1 + 사본 3 + `hooks.json` 3 + 루트 파일 3 이라 본래 크로스-플러그인이고, `shared/README.md` 가 그 자리를 「크로스-플러그인 락」으로 이미 정의한다. 플러그인별로 쪼개면 사본 3벌의 **바이트 동일**을 세 파일이 각자 주장하게 된다 | Task 1~7 이 한 파일에 축을 쌓는다 |
 | 4 | 플러그인 버전 리터럴 | **머지 직전에 정한다.** 먼저 머지되는 PR 이 이기고, 같은 버전 문자열은 충돌 없이 병합된다 | Task 9 Step 1 이 그때 읽는다 |
-| 5 | `DEVBREW_PYTHON_IGNORED` 키 이름과 advisor 코드 형태 | 키 이름은 설계 그대로 `DEVBREW_PYTHON_IGNORED`. 코드는 Task 5 Step 3 의 `_emit_python_ignored_notice()` — `main()` 끝에서 한 번, **이 훅의 유일한 stdout writer** | 축 A12 가 양·음 짝을 둘 다 본다 |
+| 5 | `DEVBREW_PYTHON_IGNORED` 키 이름과 advisor 코드 형태 | 키 이름은 설계 그대로 `DEVBREW_PYTHON_IGNORED`. 코드는 Task 5 Step 3 의 `_emit_python_ignored_notice()` — `main()` 끝에서 한 번, **이 훅의 유일한 stdout writer** | 축 A15 가 양·음 짝을 둘 다 본다 |
 | 6 | AC1·AC14·AC16·AC17 의 관측 절차 | Task 8 Step 4 의 여섯 명령과 기대값 | 그 Step |
 | 7 | 해석기 머리 20줄 예산의 배분 | **예산 문제가 성립하지 않는다.** 마커를 shebang 바로 뒤 **2번째 줄**에 두면(`runner_common.sh` 선례) `HEAD_WINDOW=20` 은 언제나 만족된다 — 머리 주석의 길이와 무관해진다 | Task 2 Step 3 의 생성 명령이 그 자리를 고정하고, 축 B 가 줄 번호를 출력한다 |
 
@@ -104,6 +104,22 @@
 
 **`plugin-audit` 에는 해석기도 prerequisite 도 두지 않는다** — 훅이 없고 셸 13자리는 범위 밖이라 그 바닥을 집행하는 주체가 없다(D27). version·CHANGELOG 만 건드린다.
 
+### `# guards:` 와 `--emit-scanned` 는 Task 마다 «자란다»
+
+`shared/tests/test_python_floor.sh` 는 한 파일이지만 축이 Task 마다 붙는다. 그 두 선언도 **그때 함께** 늘린다 — 앞으로 읽을 경로를 Task 1 에서 미리 적으면, 소비자(`test_guards_coverage_bidirectional.sh`)가 글롭을 그 목록과 대조하므로 **아무것도 안 재는 글롭이 GREEN** 이 된다. 그 락의 머리말이 「선언 ⊃ 실제 → 선택은 되는데 아무것도 안 본다」로 이름 붙인 실패다. 각 Task 의 축 Step 이 자기 줄을 더한다:
+
+| Task | `# guards:` 에 더하는 글롭 | `SCANNED` 에 더하는 경로 |
+|---|---|---|
+| 1 | `shared/python/**` | `shared/python/devbrew-python.sh` |
+| 2 | `plugins/*/scripts/devbrew-python.sh` | 사본 3건 |
+| 3 | `plugins/*/hooks/hooks.json` | `hooks.json` 3건 |
+| 4 | `plugins/spec-distill/scripts/hook_common.py` | 같은 경로 1건 |
+| 5 | `plugins/quality-gates/hooks/session-start-advisor.py` | 같은 경로 1건 |
+| 6 | `pyproject.toml` · `.python-version` · `uv.lock` | 같은 경로 3건 |
+| 7 | `README.md` · `plugins/*/README.md` | 루트 1건 + 플러그인 4건(`plugin-audit` 포함 — 축 G 의 **음의 짝**이 그 파일을 읽는다) |
+
+Task 8 이 `test_guards_coverage_bidirectional.sh` 로 **양방향**을 확인한다. 최종 상태는 글롭 10개 · 경로 17건이고, 그때 비로소 그 수가 「읽은 것」과 같아진다.
+
 ---
 
 ### Task 1: 해석기 `devbrew-python.sh` 와 그 변이 테스트
@@ -124,7 +140,7 @@
 
 ````bash
 #!/usr/bin/env bash
-# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json plugins/quality-gates/hooks/session-start-advisor.py plugins/spec-distill/scripts/hook_common.py plugins/*/README.md README.md pyproject.toml .python-version uv.lock
+# guards: shared/python/**
 #
 # 출하 Python 바닥의 «집행» 이 살아 있는가. 선언은 여기서 재지 않는다 — 선언만 한 바닥은
 # 훅이 읽지 않는다는 것이 이 설계의 출발점이다(설계 Context/Why 3).
@@ -142,26 +158,15 @@ cd "$ROOT" || exit 1
 
 RESOLVER="shared/python/devbrew-python.sh"
 
-# `--emit-scanned` — 이 락이 **실제로 읽는** 경로. 선언에서 도출하면 선언의 자기 반복이라
-# 커버리지 증거가 안 된다(Task 6 의 양방향 검사가 이것을 읽는다). assert.sh 를 source 하기
-# **전에** 답한다 — 헬퍼가 깨져도 커버리지 대조는 답을 받아야 한다.
-SCANNED="shared/python/devbrew-python.sh
-plugins/project-init/scripts/devbrew-python.sh
-plugins/quality-gates/scripts/devbrew-python.sh
-plugins/spec-distill/scripts/devbrew-python.sh
-plugins/project-init/hooks/hooks.json
-plugins/quality-gates/hooks/hooks.json
-plugins/spec-distill/hooks/hooks.json
-plugins/quality-gates/hooks/session-start-advisor.py
-plugins/spec-distill/scripts/hook_common.py
-plugins/plugin-audit/README.md
-plugins/project-init/README.md
-plugins/quality-gates/README.md
-plugins/spec-distill/README.md
-README.md
-pyproject.toml
-.python-version
-uv.lock"
+# `--emit-scanned` — 이 락이 **실제로 읽는** 경로. assert.sh 를 source 하기 **전에** 답한다 —
+# 헬퍼가 깨져도 커버리지 대조는 답을 받아야 한다.
+#
+# **여기에 «앞으로 읽을» 경로를 미리 적지 않는다.** 소비자
+# (`plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh`)는 글롭을 이 목록과
+# 대조하므로, 목록에 소망을 적으면 그 글롭들이 **아무것도 안 재면서 GREEN** 이 된다 — 그 락의
+# 머리말이 「선언 ⊃ 실제 → 선택은 되는데 아무것도 안 본다」로 이름 붙인 바로 그 실패다.
+# 축을 더하는 Task 가 자기 줄을 **그때** 더한다(위 `# guards:` 글롭도 함께).
+SCANNED="shared/python/devbrew-python.sh"
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$SCANNED"
   exit 0
@@ -208,12 +213,31 @@ echo "EXECED-PLAIN-PYTHON3"
 exit 0
 FAKE
 chmod +x "$TMP/floor/python3.99" "$TMP/sub/python3.9" "$TMP/plain/python3"
-# `python3.12-config` 류가 후보로 새지 않는지 — 실행 가능하고 이름이 맞아도 제외돼야 한다
+# `python3.12-config` 류가 후보로 새지 않는지 — 실행 가능하고 이름이 맞아도 제외돼야 한다.
+# **이 fixture 는 진짜 인터프리터처럼 답해야 한다.** 자기 마커만 찍으면 `probe` 의 `$( )` 가
+# 그 출력을 삼켜 shape 검사에서 떨어뜨리므로, 배제 줄을 지워도 마커가 해석기 stdout 에 도달할
+# 수 없다 — 단언이 **원리적으로 실패할 수 없는** vacuous 락이 된다〔실측: 배제 줄 제거 전후
+# 출력 바이트 동일〕. `-c` 에 만족 버전을 답하게 하면 배제가 없을 때 글롭 순서상 이것이 먼저
+# 뽑혀(`python3.12-config` < `python3.99`) 마커가 실제로 나온다.
 cat > "$TMP/floor/python3.12-config" <<'FAKE'
 #!/bin/sh
-echo "CONFIG-SHOULD-NOT-RUN"; exit 0
+[ "$1" = "-c" ] && { echo "3 99"; exit 0; }
+echo "CONFIG-SHOULD-NOT-RUN"
+exec "$@"
 FAKE
 chmod +x "$TMP/floor/python3.12-config"
+
+# 바닥과 **정확히** 같은 버전. 리터럴 12 를 쓰지 않고 해석기에서 도출한 값으로 만든다 —
+# 이 자리가 없으면 `-ge` → `-gt` 변이가 27/27 GREEN 을 유지하면서 **출하 바닥 자신을**
+# 거부한다〔실측〕. 리포에서 가장 중요한 숫자의 등호 경계다.
+mkdir -p "$TMP/atfloor"
+cat > "$TMP/atfloor/python3.$FLOOR_MINOR_VAL" <<FAKE
+#!/bin/sh
+[ "\$1" = "-c" ] && { echo "$FLOOR_MAJOR_VAL $FLOOR_MINOR_VAL"; exit 0; }
+echo "EXECED-ATFLOOR"
+exec "\$@"
+FAKE
+chmod +x "$TMP/atfloor/python3.$FLOOR_MINOR_VAL"
 
 TARGET="$TMP/target.sh"      # 훅 대역 — exec 됐는지와 stdin 이 온전한지를 함께 증명한다
 cat > "$TARGET" <<'T'
@@ -240,6 +264,7 @@ run_resolver() {   # run_resolver <PATH> [VAR=val …] /bin/sh <해석기> <인�
 PATH_FLOOR="$TMP/floor:$TMP/plain:/bin"     # 바닥 만족 후보가 있다
 PATH_SUB="$TMP/sub:$TMP/plain:/bin"         # 바닥 미만만 있다
 PATH_BARE="$TMP/floor"                      # coreutils 가 **하나도 없다** (A4 용)
+PATH_ATFLOOR="$TMP/atfloor:$TMP/plain:/bin" # 바닥과 «정확히» 같은 것만 있다 (A12 용)
 R="$ROOT/$RESOLVER"
 
 note "── 축 A: 해석기 행동 ───────────────────────────────────────────────"
@@ -284,6 +309,20 @@ assert_contains "$out" "TARGET-RAN" "A4b: coreutils 가 하나도 없는 PATH �
 out="$(run_resolver "$PATH_FLOOR" /bin/sh "$R" --event SessionStart --plugin qg --hook h "$TARGET")"
 assert_contains "$out" "TARGET-RAN" "A5/AC2: PATH 글롭이 python3.99 를 찾아 exec 한다 (양성 대조)"
 assert_not_contains "$out" "CONFIG-SHOULD-NOT-RUN" "A5/AC2: python3.12-config 류는 후보가 아니다"
+
+# A12 (바닥의 등호) 바닥과 «정확히» 같은 버전은 만족이다. 이 단언이 없으면 `-ge` → `-gt`
+#     변이가 27/27 GREEN 을 유지하면서 출하 바닥 자신을 거부한다〔실측〕.
+out="$(run_resolver "$PATH_ATFLOOR" /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET")"
+assert_contains "$out" "TARGET-RAN" \
+  "A12: 바닥과 정확히 같은 Python ${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL} 를 만족으로 친다 (등호 경계)"
+
+# A13 (AC5·C2) 판정이 cwd 내용에 좌우되지 않는다. 정본은 순수 문자열 비교다
+#     (`kill_switch_active.py` 의 `skip.split(",")`). unquoted 확장은 IFS 분리 **뒤에**
+#     pathname expansion 을 타서, cwd 에 우연히 맞는 파일이 있으면 조용히 끈다〔실측〕.
+: > "$TMP/qg:h"
+out="$(cd "$TMP" && printf '%s' "$PAY" | env PATH="$PATH_FLOOR" DEVBREW_SKIP_HOOKS='qg:*' \
+        /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET" 2>/dev/null)"
+assert_contains "$out" "TARGET-RAN" "A13/C2: cwd 에 'qg:h' 가 있어도 'qg:*' 는 끄지 못한다 (글롭 아님)"
 
 # A6 (AC3) 후보도 같은 판정을 받는다 — 바닥 미만 python3.9 는 건너뛴다
 out="$(run_resolver "$PATH_SUB" /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET")"
@@ -345,6 +384,28 @@ assert_not_grep "$out" '^\{' "A9/AC8: 그 통지를 stdout JSON 으로 찍지 �
 out="$(run_resolver "$PATH_FLOOR" /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET")"
 assert_contains "$out" "PAYLOAD-INTACT" "A10/AC6: payload 가 훅에 그대로 간다 (해석기는 stdin 을 읽지 않는다)"
 
+# A14 (AC7·AC8·C7) 안내 JSON 은 $DEVBREW_PYTHON 이 «무엇이든» 유효한 문서 하나다.
+#     손으로 조립한 JSON 에 사용자 값을 escape 없이 싣던 자리다 — 경로에 따옴표 하나면
+#     훅의 stdout 이 JSON 이 아니게 된다〔실측: Expecting ',' delimiter〕. 그리고 이 조합
+#     (DEVBREW_PYTHON 설정 + SessionStart)은 **한 번도 파싱된 적이 없었다** — A8 은
+#     DEVBREW_PYTHON 을 안 쓰고, A9 는 SessionEnd 라 안내 블록에 닿지 않는다.
+BADPY="$TMP/ba\"d-py"
+cp "$TMP/sub/python3.9" "$BADPY"; chmod +x "$BADPY"
+out="$(run_resolver "$PATH_SUB" "DEVBREW_PYTHON=$BADPY" /bin/sh "$R" \
+        --event SessionStart --plugin qg --hook h "$TARGET")"
+bad_report="$(printf '%s' "$out" | python3 -c '
+import json, sys
+raw = sys.stdin.read()
+try:
+    d = json.loads(raw)
+except ValueError as e:
+    print("parsed: no (%s)" % e); raise SystemExit(0)
+print("parsed: yes")
+print("mentions_ignored: %s" % ("yes" if "DEVBREW_PYTHON" in json.dumps(d, ensure_ascii=False) else "no"))
+')"
+assert_eq "$(field parsed "$bad_report")" "yes" "A14/C7: 경로에 따옴표가 있어도 stdout 이 유효한 JSON 문서 하나다"
+assert_eq "$(field mentions_ignored "$bad_report")" "yes" "A14/AC8: 그 안내가 \$DEVBREW_PYTHON 무시 사실을 싣는다"
+
 # A11 (AC11 의 파일-국소 전제) plugin-audit 의 kill switch 판정기 정규식은
 #     `DEVBREW_[A-Z0-9_]*_DISABLE` 이라 **도출형 이름도 꺾쇠 플레이스홀더도 못 본다**
 #     〔실측〕. 그래서 머리에 구체 예시 한 줄이 필요하다. 진짜 소비자를 보는 것은 Task 2 의
@@ -364,7 +425,7 @@ Expected: FAIL — `assert_file_grep` 이 `(파일 없음: …/shared/python/dev
 - [ ] **Step 3: `--emit-scanned` 가 커버리지 계약을 만족하는지 먼저 본다**
 
 Run: `bash shared/tests/test_python_floor.sh --emit-scanned`
-Expected: 17줄. 첫 줄 `shared/python/devbrew-python.sh`, 마지막 줄 `uv.lock`. **rc 0.**
+Expected: **한 줄** — `shared/python/devbrew-python.sh` — 그리고 **rc 0**. 이 시점에 이 락이 실제로 읽는 파일이 그것 하나뿐이다. Task 2~7 이 자기 축을 붙일 때 이 목록과 `# guards:` 글롭을 함께 늘린다.
 
 - [ ] **Step 4: 해석기를 쓴다**
 
@@ -415,13 +476,18 @@ _ks_trim() {   # 앞뒤 공백 제거 — 정본의 `.strip()` 자리
 
 _ks_skip_has() {   # DEVBREW_SKIP_HOOKS 에 «전체 토큰» $1 이 있는가 (부분 일치 금지)
   [ -n "${DEVBREW_SKIP_HOOKS-}" ] || return 1
-  _ifs_save="$IFS"; IFS=","
+  # `set -f` 가 없으면 unquoted 확장이 IFS 분리 **뒤에 pathname expansion** 을 탄다 —
+  # cwd 에 우연히 맞는 파일이 있으면 `DEVBREW_SKIP_HOOKS='qg:*'` 가 훅을 끄고 없으면 안
+  # 끈다〔실측〕. 정본은 `skip.split(",")` 라 cwd 와 무관하다. 보안 컨트롤의 판정이 작업
+  # 디렉토리 «내용» 에 좌우되면 안 된다. 같은 함정과 같은 처방이
+  # plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh:67-70 에 실측으로 적혀 있다.
+  _ifs_save="$IFS"; IFS=","; set -f
   for _tok in ${DEVBREW_SKIP_HOOKS}; do
-    IFS="$_ifs_save"
+    IFS="$_ifs_save"; set +f
     [ "$(_ks_trim "$_tok")" = "$1" ] && return 0
-    IFS=","
+    IFS=","; set -f
   done
-  IFS="$_ifs_save"
+  IFS="$_ifs_save"; set +f
   return 1
 }
 
@@ -456,9 +522,17 @@ fi
 PROBE_MAJOR=0; PROBE_MINOR=0
 probe() {   # $1 = 인터프리터. rc 0 이면 PROBE_MAJOR/PROBE_MINOR 가 채워진다
   _out="$("$1" -c 'import sys;print("%d %d"%(sys.version_info[0],sys.version_info[1]))' 2>/dev/null)" || return 1
+  # **정확히 «숫자열 공백 숫자열»** 이어야 한다. 느슨하게 두면 `3x 1y` 같은 답이 통과해
+  # 뒤의 `[ … -gt … ]` 가 `integer expression expected` 를 **stderr 로** 뱉는다 — 판정
+  # 자체는 fail-open 으로 안전하지만 훅의 stderr 는 사용자가 보는 자리다.
+  # 〔/bin/sh · dash · ksh 3/3 실측〕 통과: `3 12` `3 9` `0 0` `310 14`.
+  # 거부: `3x 1y` `3` `3  12` ` 3 12` `3 12 ` `3 12 4` `` `a b`.
   case "$_out" in
-    [0-9]*' '[0-9]*) ;;
-    *) return 1 ;;
+    ''|*[!0-9\ ]*) return 1 ;;   # 빈 값 · 숫자도 공백도 아닌 글자
+    ' '*|*' ')     return 1 ;;   # 앞뒤 공백
+    *' '*' '*)     return 1 ;;   # 공백이 둘 이상
+    *' '*)         ;;            # 남은 것 = 숫자열 공백 숫자열
+    *)             return 1 ;;   # 공백이 없다
   esac
   PROBE_MAJOR="${_out%% *}"; PROBE_MINOR="${_out##* }"
   return 0
@@ -479,14 +553,21 @@ satisfies() {
 }
 
 # ── 1. $DEVBREW_PYTHON (탈출구) ─────────────────────────────────────────────
-IGNORED=""
+# 사유를 **두 벌** 만든다. 경로는 사용자가 준 값이라 무엇이든 들어 있을 수 있다:
+#   · IGNORED       — 경로 포함. **환경변수로만** 나간다. 소비자(session-start-advisor.py)가
+#                     `json.dumps` 로 직렬화하므로 따옴표·역슬래시·개행이 안전하다.
+#   · IGNORED_BRIEF — 숫자와 리터럴뿐. **손으로 조립하는 JSON** 에는 이쪽만 싣는다.
+# 경로를 손조립 JSON 에 그대로 넣으면 따옴표 하나로 문서가 깨진다〔실측: Expecting ',' delimiter〕.
+IGNORED=""; IGNORED_BRIEF=""
 if [ -n "${DEVBREW_PYTHON-}" ]; then
   if probe "$DEVBREW_PYTHON"; then
     note_best
     if satisfies; then exec "$DEVBREW_PYTHON" "$@"; fi
     IGNORED="$DEVBREW_PYTHON (Python ${PROBE_MAJOR}.${PROBE_MINOR} < ${FLOOR_MAJOR}.${FLOOR_MINOR})"
+    IGNORED_BRIEF="Python ${PROBE_MAJOR}.${PROBE_MINOR} < ${FLOOR_MAJOR}.${FLOOR_MINOR}"
   else
     IGNORED="$DEVBREW_PYTHON (실행할 수 없거나 버전을 물을 수 없다)"
+    IGNORED_BRIEF="실행할 수 없거나 버전을 물을 수 없다"
   fi
   # stdout 에 쓰지 않는다 (C7) — 이 사실은 환경으로 넘기고 SessionStart 안내가 싣는다.
   DEVBREW_PYTHON_IGNORED="$IGNORED"; export DEVBREW_PYTHON_IGNORED
@@ -526,7 +607,9 @@ fi
 
 # ── 4. 아무것도 없다 — fail-open (C3). 안내는 SessionStart 에서만 (D26) ─────
 # 여기서만 stdout 에 쓴다. exec 하는 경로(1·2·3)의 stdout 은 비어 있다.
-# 메시지에 `"` 와 `\` 를 넣지 않는다 — 아래 printf 가 JSON 을 손으로 조립한다.
+# 아래 printf 는 JSON 을 **손으로** 조립하므로, 끼워 넣는 값이 전부 리터럴이거나 숫자여야
+# 한다. 사용자가 준 경로는 `IGNORED_BRIEF` 가 이미 걸러 냈다 — `$DEVBREW_PYTHON` 을 여기
+# 그대로 실으면 따옴표 하나로 훅의 stdout 이 JSON 이 아니게 된다(C7 위반).
 if [ "$EVENT" = "SessionStart" ]; then
   if [ "$BEST_MINOR" -ge 0 ]; then
     _seen="발견된 최고 버전 Python ${BEST_MAJOR}.${BEST_MINOR}"
@@ -534,7 +617,7 @@ if [ "$EVENT" = "SessionStart" ]; then
     _seen="PATH 에서 Python 을 찾지 못했다"
   fi
   _extra=""
-  [ -n "$IGNORED" ] && _extra=" \$DEVBREW_PYTHON 은 무시했다: ${IGNORED}."
+  [ -n "$IGNORED_BRIEF" ] && _extra=" \$DEVBREW_PYTHON 은 무시했다(${IGNORED_BRIEF})."
   _msg="[devbrew] 이 세션에서 devbrew 훅이 비활성이다 — ${_seen}, 요구 바닥은 Python ${FLOOR_MAJOR}.${FLOOR_MINOR}+ 다.${_extra} 고치는 법: Python ${FLOOR_MAJOR}.${FLOOR_MINOR} 이상을 설치해 PATH 에 두거나(uv python install ${FLOOR_MAJOR}.${FLOOR_MINOR}), 이미 있다면 \$DEVBREW_PYTHON 에 그 경로를 지정하라."
   printf '{"systemMessage":"%s","hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' \
     "$_msg" "$_msg"
@@ -556,7 +639,7 @@ Expected: 세 셸 모두 `syntax OK`. 테스트는 축 A 전부 `✓`, `Fail: 0`
 
 - [ ] **Step 6: 변이로 이빨을 확인한다**
 
-아래 일곱을 **하나씩** 넣고 매번 `bash shared/tests/test_python_floor.sh` 를 돌린다. 각각 RED 를 확인한 뒤 `git checkout HEAD -- shared/python/devbrew-python.sh` 로 되돌린다(`git checkout --` 은 index 로 되돌아가므로 `HEAD` 를 명시한다). **먼저 Step 7 의 커밋을 하고 변이를 돌려라** — 커밋 전에는 되돌릴 기준이 없다.
+아래 열 건을 **하나씩** 넣고 매번 `bash shared/tests/test_python_floor.sh` 를 돌린다. 각각 RED 를 확인한 뒤 `git checkout HEAD -- shared/python/devbrew-python.sh` 로 되돌린다(`git checkout --` 은 index 로 되돌아가므로 `HEAD` 를 명시한다). **먼저 Step 7 의 커밋을 하고 변이를 돌려라** — 커밋 전에는 되돌릴 기준이 없다.
 
 표의 「죽는 단언」은 **2026-09-22 에 실제로 변이를 넣어 확인한 값**이다. 어느 단언이 어느 스위치 «분기» 를 타는지가 결과를 정하므로, 그 분기를 함께 적는다 — 이것을 틀리게 적으면 다음 사람이 애초에 움직일 리 없는 단언을 보며 「이빨이 있다」고 결론 내린다.
 
@@ -575,6 +658,9 @@ Expected: 세 셸 모두 `syntax OK`. 테스트는 축 A 전부 `✓`, `Fail: 0`
 | M5 | `scan_path` 의 글롭 `"$_dir"/python3.*` 를 열거 `"$_dir"/python3.12 "$_dir"/python3.13 "$_dir"/python3.14` 로 바꾼다 | **A5**(python3.99 를 못 찾는다) · A4b 도 함께 |
 | M6 | `if [ "$EVENT" = "SessionStart" ]; then` 을 지워 모든 이벤트에서 안내를 찍게 한다 | **A8**(SessionEnd·PostToolUse stdout 이 안 비었다) |
 | M7 | 머리의 `예: spec-distill -> DEVBREW_SPEC_DISTILL_DISABLE=1` 줄을 지운다 | **A11** |
+| M8 | `scan_path` 의 `case "$_cand" in *-config) continue ;; esac` 줄을 지운다 | **A5 의 `CONFIG-SHOULD-NOT-RUN` 단언** — 글롭 순서상 `python3.12-config` 가 `python3.99` 보다 먼저 뽑힌다. fixture 가 진짜 인터프리터처럼 답하지 않으면 이 변이는 **통과해 버린다**(마커가 probe 의 `$( )` 에 삼켜진다) |
+| M9 | `satisfies` 의 `-ge "$FLOOR_MINOR"` 를 `-gt` 로 바꾼다 | **A12** — 이 단언이 없던 판본에서는 27/27 GREEN 을 유지한 채 **출하 바닥 자신을** 거부했다〔실측〕 |
+| M10 | `_ks_skip_has` 의 `set -f` 를 지운다 | **A13** — cwd 에 `qg:h` 가 있을 때 `qg:*` 가 훅을 끈다 |
 
 **M1 은 놓을 자리를 위 표대로 정확히 잡는다.** 「`scan_path` 뒤 어딘가」로 두면 일부 위치에서 `Fail: 0` 이 난다 — 변이가 애매하면 이빨이 없다는 결론과 변이가 빗나갔다는 사실을 구별할 수 없다. 되돌림은 `git diff HEAD --stat` 으로 매번 확인한다(블록 이동은 눈으로 놓치기 쉽다).
 **어떤 변이가 통과해 버리면 그 축이 아무것도 재고 있지 않다는 뜻이다** — 계측기를 먼저 의심하라(fixture 미생성 · `$PATH_BARE` 공백 · 변이가 다른 분기에 떨어짐).
@@ -614,6 +700,9 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 - [ ] **Step 1: 축 B 를 먼저 쓴다 (실패하는 테스트)**
 
 `shared/tests/test_python_floor.sh` 의 `finish` **앞**에 붙인다.
+
+**먼저 선언을 늘린다** — 이 축이 새로 읽는 경로를 `# guards:` 글롭과 `SCANNED` 에 함께 더한다(「`# guards:` 와 `--emit-scanned` 는 Task 마다 «자란다»」 표의 해당 행). 둘 중 하나만 늘리면 커버리지 검사가 방향 A 또는 B 에서 RED 다.
+
 
 ````bash
 note "── 축 B: 배포 — 물리 사본 (AC11 · C9 · C10) ───────────────────────────"
@@ -745,6 +834,9 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 - [ ] **Step 1: 축 C 를 먼저 쓴다 (실패하는 테스트)**
 
 `finish` 앞에 붙인다.
+
+**먼저 선언을 늘린다** — 이 축이 새로 읽는 경로를 `# guards:` 글롭과 `SCANNED` 에 함께 더한다(「`# guards:` 와 `--emit-scanned` 는 Task 마다 «자란다»」 표의 해당 행). 둘 중 하나만 늘리면 커버리지 검사가 방향 A 또는 B 에서 RED 다.
+
 
 ````bash
 note "── 축 C: 배선 — hooks.json 4 자리 (AC1) ──────────────────────────────"
@@ -940,6 +1032,8 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: 축 E 를 먼저 쓴다**
 
+**먼저 선언을 늘린다** — 이 축이 새로 읽는 경로를 `# guards:` 글롭과 `SCANNED` 에 함께 더한다(「`# guards:` 와 `--emit-scanned` 는 Task 마다 «자란다»」 표의 해당 행). 둘 중 하나만 늘리면 커버리지 검사가 방향 A 또는 B 에서 RED 다.
+
 ````bash
 note "── 축 E: 훅 자식 (AC10) ──────────────────────────────────────────────"
 
@@ -1020,18 +1114,21 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `plugins/quality-gates/hooks/session-start-advisor.py`
-- Modify: `shared/tests/test_python_floor.sh` (축 A 에 A12 추가)
+- Modify: `shared/tests/test_python_floor.sh` (축 A 에 A15 추가)
 
 **Interfaces:**
 - Consumes: Task 1 의 `DEVBREW_PYTHON_IGNORED` 환경변수.
 - **왜 여기가 따로 필요한가** — 해석기가 직접 안내를 내는 경로는 「아무 인터프리터도 못 찾았다」일 때뿐이고, 그때 이 훅은 **아예 돌지 않는다**. `$DEVBREW_PYTHON` 을 버리고 **다른 인터프리터로 exec 한** 경우는 그 반대다: 해석기는 침묵하고(C7) 훅이 돈다. 두 출구는 배타적이라 JSON 이 둘이 되지 않는다.
 
-- [ ] **Step 1: 축 A12 를 먼저 쓴다**
+- [ ] **Step 1: 축 A15 를 먼저 쓴다**
 
 `finish` 앞에 붙인다.
 
+**먼저 선언을 늘린다** — 이 축이 새로 읽는 경로를 `# guards:` 글롭과 `SCANNED` 에 함께 더한다(「`# guards:` 와 `--emit-scanned` 는 Task 마다 «자란다»」 표의 해당 행). 둘 중 하나만 늘리면 커버리지 검사가 방향 A 또는 B 에서 RED 다.
+
+
 ````bash
-note "── 축 A12: 해석 성공 경로의 IGNORED 공시 (AC8 의 나머지 절반) ─────────"
+note "── 축 A15: 해석 성공 경로의 IGNORED 공시 (AC8 의 나머지 절반) ─────────"
 
 ADVISOR="plugins/quality-gates/hooks/session-start-advisor.py"
 adv_out="$(printf '{"session_id":"","cwd":"%s"}' "$TMP" \
@@ -1050,18 +1147,18 @@ print("both_keys: %s" % ("yes" if d.get("systemMessage") and
       d.get("hookSpecificOutput", {}).get("additionalContext") else "no"))
 print("carries_reason: %s" % ("yes" if "3.9" in json.dumps(d) else "no"))
 ')"
-assert_eq "$(field emitted "$adv_report")" "yes" "A12/AC8: IGNORED 가 있으면 advisor 가 JSON 을 낸다"
-assert_eq "$(field both_keys "$adv_report")" "yes" "A12/AC8: 두 키를 함께 담는다"
-assert_eq "$(field carries_reason "$adv_report")" "yes" "A12/AC8: 사유를 그대로 싣는다"
+assert_eq "$(field emitted "$adv_report")" "yes" "A15/AC8: IGNORED 가 있으면 advisor 가 JSON 을 낸다"
+assert_eq "$(field both_keys "$adv_report")" "yes" "A15/AC8: 두 키를 함께 담는다"
+assert_eq "$(field carries_reason "$adv_report")" "yes" "A15/AC8: 사유를 그대로 싣는다"
 
 # 음의 짝 — 평소에는 stdout 이 비어야 한다 (이 훅은 원래 stdout 을 쓰지 않는다)
 adv_quiet="$(printf '{"session_id":"","cwd":"%s"}' "$TMP" | env -u DEVBREW_PYTHON_IGNORED python3 "$ADVISOR" 2>/dev/null)"
-assert_eq "$adv_quiet" "" "A12/AC8: IGNORED 가 없으면 advisor 의 stdout 은 비어 있다"
+assert_eq "$adv_quiet" "" "A15/AC8: IGNORED 가 없으면 advisor 의 stdout 은 비어 있다"
 
 # kill switch 가 이 자리도 지배한다
 adv_ks="$(printf '{"session_id":"","cwd":"%s"}' "$TMP" \
   | env DEVBREW_PYTHON_IGNORED=x DEVBREW_SKIP_HOOKS=quality-gates:SessionStart python3 "$ADVISOR" 2>/dev/null)"
-assert_eq "$adv_ks" "" "A12/AC8: kill switch 가 켜지면 이 공시도 나가지 않는다"
+assert_eq "$adv_ks" "" "A15/AC8: kill switch 가 켜지면 이 공시도 나가지 않는다"
 ````
 
 - [ ] **Step 2: 돌려서 실패를 확인한다**
@@ -1166,6 +1263,8 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 - Produces: `[dependency-groups] dev` — 테스트 의존성. 지금은 PyYAML 하나.
 
 - [ ] **Step 1: 축 D·H 를 먼저 쓴다**
+
+**먼저 선언을 늘린다** — 이 축이 새로 읽는 경로를 `# guards:` 글롭과 `SCANNED` 에 함께 더한다(「`# guards:` 와 `--emit-scanned` 는 Task 마다 «자란다»」 표의 해당 행). 둘 중 하나만 늘리면 커버리지 검사가 방향 A 또는 B 에서 RED 다.
 
 ````bash
 note "── 축 D: 두 바닥의 분리 (AC9) ────────────────────────────────────────"
@@ -1317,6 +1416,8 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: 축 F·G 를 먼저 쓴다**
 
+**먼저 선언을 늘린다** — 이 축이 새로 읽는 경로를 `# guards:` 글롭과 `SCANNED` 에 함께 더한다(「`# guards:` 와 `--emit-scanned` 는 Task 마다 «자란다»」 표의 해당 행). 둘 중 하나만 늘리면 커버리지 검사가 방향 A 또는 B 에서 RED 다.
+
 ````bash
 note "── 축 F: 도출 규칙이 산출물에 적혀 있다 (AC13) ───────────────────────"
 RULE='2026-10 이후에도 패치를 받는 버전 중 최빈'
@@ -1444,6 +1545,17 @@ bash plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh
 Expected: `Fail: 0`. 출력에 새 락에 대한 줄이 **양방향 모두** 있어야 한다:
 - `guards: shared/tests/test_python_floor.sh — 읽은 경로가 전부 선언 안`
 - `guards: shared/tests/test_python_floor.sh — 글롭 '<각 글롭>' 가 실제 N건을 덮는다` ×10
+
+**그리고 이 Task 에서만 할 수 있는 확인이 하나 더 있다** — 소비자는 글롭을 `--emit-scanned` **목록**과 대조할 뿐, 그 목록이 정직한지는 묻지 못한다. 17건 각각이 축 A~H 중 **어디서 실제로 읽히는지**를 여기서 전수 대조하라:
+
+```bash
+bash shared/tests/test_python_floor.sh --emit-scanned | while IFS= read -r p; do
+  [ -n "$p" ] || continue
+  n=$(grep -cF -- "$p" shared/tests/test_python_floor.sh)
+  printf '%-52s 본문 등장 %s회\n' "$p" "$n"
+done
+```
+기대: **17줄, 전부 1회 이상.** `0회` 가 있으면 그 줄은 「읽는다」가 아니라 「읽을 예정」이고, 그것을 목록에 두면 해당 글롭이 아무것도 안 재면서 GREEN 이 된다 — 커버리지 락이 막으라고 있는 바로 그 상태다. 그 줄을 빼거나, 그것을 읽는 단언을 더하라.
 
 어느 글롭이 `아무것도 안 덮는다` 로 나오면 그 글롭을 지우거나 `--emit-scanned` 에 그 경로를 더한다. **「미지원」으로 넘어가면 `--emit-scanned` 가 빈 출력을 냈다는 뜻이다** — 그 분기는 조용히 통과하므로 출력 줄을 직접 확인하라.
 
