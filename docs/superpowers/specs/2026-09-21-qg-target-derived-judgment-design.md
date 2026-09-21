@@ -1,10 +1,12 @@
 ---
+name: qg-target-derived-judgment
 type: design
-date: 2026-09-21
+created_at: 2026-09-21
+source_interview: docs/superpowers/interview/2026-09-21-qg-target-derived-judgment-interview.md
+next_phase: superpowers:writing-plans
+interview_audit: docs/superpowers/interview/2026-09-21-qg-target-derived-judgment-interview.audit.md
 plugin: quality-gates
 version_target: major   # 정확한 번호는 머지 직전에 — 먼저 머지되는 쪽이 이긴다
-interview_brief: docs/superpowers/interview/2026-09-21-qg-target-derived-judgment-interview.md
-interview_audit: docs/superpowers/interview/2026-09-21-qg-target-derived-judgment-interview.audit.md
 ---
 
 # qg — 판정 구조를 대상에서 도출
@@ -37,7 +39,10 @@ interview_audit: docs/superpowers/interview/2026-09-21-qg-target-derived-judgmen
 - [14. Rejected Alternatives](#14-rejected-alternatives)
 - [15. 알려진 한계](#15-알려진-한계)
 - [16. 구현 분할](#16-구현-분할)
-- [17. Metadata](#17-metadata)
+- [결정 기록](#결정-기록)
+- [Handoff Context](#handoff-context)
+  - [Deferred to plan](#deferred-to-plan)
+- [Metadata](#metadata)
 
 ## 1. Context · Why
 
@@ -713,7 +718,49 @@ PR 5 는 PR 4 가 대상을 지운 뒤라야 인용 락이 GREEN 이 된다.
 
 **각 PR 마다** `plugin.json` bump · CHANGELOG 항목 · 그 PR 이 닿은 소비자 전부의 스위트를 돌린다.
 
-## 17. Metadata
+## 결정 기록
+
+리뷰 라운드의 `decide` 처분이 여기 쌓인다. 진입 시점의 내용은 아래 둘이다.
+
+**D1–D6 — 인터뷰 열린 질문 중 사용자 소유였던 여섯.** 표는 §4 에 있다. 요지 —
+D1 신뢰도는 저울 위가 아니라 후보 자격(셋 중엔 단순함 우선) · D2 C14 를 해상도 공시로 재결정 ·
+D3 선언은 커밋 트레일러 `Spec:` · D4 있는 것을 묶고 집합+SHA 를 실음 · D5 codex 를 각도로 편입 ·
+D6 한 파이프라인.
+
+**C14 재결정 (P23).** 원래 / 재결정 / 근거의 전문은 §8 에 있다. 요약 — 실행 층이 unit 당
+`(status, exit)` 둘만 내고 테스트 신원이 없어 파서 층 없이는 정밀도가 0만큼 오른다. 구멍을 닫는
+대신 드러낸다.
+
+**brief 정정 셋.** OQ9·OQ13·OQ8 의 전제가 실측과 어긋났다. 전문은 §9.
+
+## Handoff Context
+
+`/compact` 뒤 이 문서만 읽고 이어갈 수 있도록, 이 문서 밖에만 있는 것을 여기 적는다.
+
+- **상류** — 인터뷰 brief(frontmatter `source_interview`)의 §2 가 확정 19항목의 정본이고, 그
+  audit(`interview_audit`)의 §6 이 사용자 원문이다. 이 설계의 §5 가 그 19 전부에 대응을 붙였다.
+- **실측은 §7 이 전부다** — 이 문서가 기대는 도구 동작 사실 13개가 거기 있고, 그중 **E(경계
+  규칙)와 I(임시 인덱스 봉인)는 구현 전에 재검증해야 한다**고 적혀 있다.
+- **이 리포에는 선재 RED 가 있다.** 착수 전 baseline 을 캡처하되 rc 만이 아니라 **실패 파일 이름과
+  실패 줄 수**를 함께 기록한다 — 이미 RED 인 파일 안의 새 실패는 rc 로는 원리적으로 안 보인다.
+- **세션 격리** — 이 작업은 워크트리 `.claude/worktrees/qg-review-only-sdd-scope` 에서 진행됐다.
+  브랜치는 `feature/qg-review-only-sdd-scope`.
+- **머지 규약** — `gh pr merge` 는 auto-mode 판정기가 막는다. 머지는 사용자가 직접 실행한다.
+
+### Deferred to plan
+
+이 문서가 정하지 않고 구현 계획에 넘기는 것. **판정에 영향을 주는 것은 여기 두지 않는다.**
+
+- 새 스크립트 셋(`resolve-topic.sh` · `seal-worktree.sh` · `combine-tips.sh`)의 정확한 CLI 표면과
+  출력 키 이름. 계약은 §6.2·§6.4.1 이 정했고 표기는 구현이 정한다.
+- 제거 대상 테스트의 **최종 목록**. §12 가 도출 규칙(4토큰 + `sandbox|mutation.guard` grep)을
+  정했고, 그 grep 을 실제로 돌려 확정하는 것은 계획의 일이다.
+- 새 락 5종의 픽스처 구성과 mutation 변이의 구체 문면. 축 넷과 양성 대조 요구는 §13 이 정했다.
+- `run-test-selection.sh` 의 러너 어댑터 표를 건드리는지 여부 — §6.4.2 는 새 계산이 없다고
+  적었으므로 기본은 「안 건드린다」이고, 구현이 반증하면 보고한다.
+- 각 PR 의 버전 번호. §16 이 순서를 정했고 번호는 머지 직전에 정한다.
+
+## Metadata
 
 - **상류** — `docs/superpowers/interview/2026-09-21-qg-target-derived-judgment-interview.md`
   (Phase 1 brief, 확정 19 · 열린 19) 및 그 audit
