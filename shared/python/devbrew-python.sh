@@ -42,13 +42,18 @@ _ks_trim() {   # 앞뒤 공백 제거 — 정본의 `.strip()` 자리
 
 _ks_skip_has() {   # DEVBREW_SKIP_HOOKS 에 «전체 토큰» $1 이 있는가 (부분 일치 금지)
   [ -n "${DEVBREW_SKIP_HOOKS-}" ] || return 1
-  _ifs_save="$IFS"; IFS=","
+  # `set -f` 가 없으면 unquoted 확장이 IFS 분리 **뒤에 pathname expansion** 을 탄다 —
+  # cwd 에 우연히 맞는 파일이 있으면 `DEVBREW_SKIP_HOOKS='qg:*'` 가 훅을 끄고 없으면 안
+  # 끈다〔실측〕. 정본은 `skip.split(",")` 라 cwd 와 무관하다. 보안 컨트롤의 판정이 작업
+  # 디렉토리 «내용» 에 좌우되면 안 된다. 같은 함정과 같은 처방이
+  # plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh:67-70 에 실측으로 적혀 있다.
+  _ifs_save="$IFS"; IFS=","; set -f
   for _tok in ${DEVBREW_SKIP_HOOKS}; do
-    IFS="$_ifs_save"
+    IFS="$_ifs_save"; set +f
     [ "$(_ks_trim "$_tok")" = "$1" ] && return 0
-    IFS=","
+    IFS=","; set -f
   done
-  IFS="$_ifs_save"
+  IFS="$_ifs_save"; set +f
   return 1
 }
 
@@ -83,9 +88,17 @@ fi
 PROBE_MAJOR=0; PROBE_MINOR=0
 probe() {   # $1 = 인터프리터. rc 0 이면 PROBE_MAJOR/PROBE_MINOR 가 채워진다
   _out="$("$1" -c 'import sys;print("%d %d"%(sys.version_info[0],sys.version_info[1]))' 2>/dev/null)" || return 1
+  # **정확히 «숫자열 공백 숫자열»** 이어야 한다. 느슨하게 두면 `3x 1y` 같은 답이 통과해
+  # 뒤의 `[ … -gt … ]` 가 `integer expression expected` 를 **stderr 로** 뱉는다 — 판정
+  # 자체는 fail-open 으로 안전하지만 훅의 stderr 는 사용자가 보는 자리다.
+  # 〔/bin/sh · dash · ksh 3/3 실측〕 통과: `3 12` `3 9` `0 0` `310 14`.
+  # 거부: `3x 1y` `3` `3  12` ` 3 12` `3 12 ` `3 12 4` `` `a b`.
   case "$_out" in
-    [0-9]*' '[0-9]*) ;;
-    *) return 1 ;;
+    ''|*[!0-9\ ]*) return 1 ;;   # 빈 값 · 숫자도 공백도 아닌 글자
+    ' '*|*' ')     return 1 ;;   # 앞뒤 공백
+    *' '*' '*)     return 1 ;;   # 공백이 둘 이상
+    *' '*)         ;;            # 남은 것 = 숫자열 공백 숫자열
+    *)             return 1 ;;   # 공백이 없다
   esac
   PROBE_MAJOR="${_out%% *}"; PROBE_MINOR="${_out##* }"
   return 0
@@ -106,13 +119,22 @@ satisfies() {
 }
 
 # ── 1. $DEVBREW_PYTHON (탈출구) ─────────────────────────────────────────────
-IGNORED=""
+# IGNORED 와 IGNORED_REASON 은 채널이 다르다. IGNORED 는 $DEVBREW_PYTHON 의 실제 경로를
+# «그대로» 담는다 — 사용자 경로에 `"`·`\` 가 있을 수 있고, 그 값은 환경변수
+# DEVBREW_PYTHON_IGNORED 로만 나간다(Task 5 의 Python 이 json.dumps 로 안전하게 직렬화한다).
+# IGNORED_REASON 은 숫자와 고정 리터럴만 담는다 — 아래 손으로 조립한 JSON(:169 부근)에
+# 들어가는 것은 이쪽뿐이다. 사용자 경로가 손으로 조립한 문자열에 섞이면 따옴표 하나로
+# stdout 이 JSON 이 아니게 된다〔실측: Expecting ',' delimiter〕 — 그 조합(DEVBREW_PYTHON
+# 설정 + SessionStart)은 한 번도 파싱되지 않았었다.
+IGNORED=""; IGNORED_REASON=""
 if [ -n "${DEVBREW_PYTHON-}" ]; then
   if probe "$DEVBREW_PYTHON"; then
     note_best
     if satisfies; then exec "$DEVBREW_PYTHON" "$@"; fi
-    IGNORED="$DEVBREW_PYTHON (Python ${PROBE_MAJOR}.${PROBE_MINOR} < ${FLOOR_MAJOR}.${FLOOR_MINOR})"
+    IGNORED_REASON="Python ${PROBE_MAJOR}.${PROBE_MINOR} < ${FLOOR_MAJOR}.${FLOOR_MINOR}"
+    IGNORED="$DEVBREW_PYTHON (${IGNORED_REASON})"
   else
+    IGNORED_REASON="실행 불가"
     IGNORED="$DEVBREW_PYTHON (실행할 수 없거나 버전을 물을 수 없다)"
   fi
   # stdout 에 쓰지 않는다 (C7) — 이 사실은 환경으로 넘기고 SessionStart 안내가 싣는다.
@@ -153,7 +175,10 @@ fi
 
 # ── 4. 아무것도 없다 — fail-open (C3). 안내는 SessionStart 에서만 (D26) ─────
 # 여기서만 stdout 에 쓴다. exec 하는 경로(1·2·3)의 stdout 은 비어 있다.
-# 메시지에 `"` 와 `\` 를 넣지 않는다 — 아래 printf 가 JSON 을 손으로 조립한다.
+# 손으로 조립한 이 JSON 에는 리터럴과 숫자(BEST_MAJOR/MINOR·FLOOR_MAJOR/MINOR·
+# IGNORED_REASON)만 들어간다 — $DEVBREW_PYTHON 의 실제 경로(따옴표·백슬래시를 포함할
+# 수 있다)는 IGNORED 쪽(환경변수 DEVBREW_PYTHON_IGNORED)에만 실리고 이 문자열에는
+# 절대 섞이지 않는다. 그것이 이 printf 가 안전한 이유다.
 if [ "$EVENT" = "SessionStart" ]; then
   if [ "$BEST_MINOR" -ge 0 ]; then
     _seen="발견된 최고 버전 Python ${BEST_MAJOR}.${BEST_MINOR}"
@@ -161,7 +186,7 @@ if [ "$EVENT" = "SessionStart" ]; then
     _seen="PATH 에서 Python 을 찾지 못했다"
   fi
   _extra=""
-  [ -n "$IGNORED" ] && _extra=" \$DEVBREW_PYTHON 은 무시했다: ${IGNORED}."
+  [ -n "$IGNORED_REASON" ] && _extra=" \$DEVBREW_PYTHON 은 무시했다: ${IGNORED_REASON}."
   _msg="[devbrew] 이 세션에서 devbrew 훅이 비활성이다 — ${_seen}, 요구 바닥은 Python ${FLOOR_MAJOR}.${FLOOR_MINOR}+ 다.${_extra} 고치는 법: Python ${FLOOR_MAJOR}.${FLOOR_MINOR} 이상을 설치해 PATH 에 두거나(uv python install ${FLOOR_MAJOR}.${FLOOR_MINOR}), 이미 있다면 \$DEVBREW_PYTHON 에 그 경로를 지정하라."
   printf '{"systemMessage":"%s","hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' \
     "$_msg" "$_msg"

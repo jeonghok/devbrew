@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json plugins/quality-gates/hooks/session-start-advisor.py plugins/spec-distill/scripts/hook_common.py plugins/*/README.md README.md pyproject.toml .python-version uv.lock
+# guards: shared/python/**
 #
 # 출하 Python 바닥의 «집행» 이 살아 있는가. 선언은 여기서 재지 않는다 — 선언만 한 바닥은
 # 훅이 읽지 않는다는 것이 이 설계의 출발점이다(설계 Context/Why 3).
@@ -17,26 +17,15 @@ cd "$ROOT" || exit 1
 
 RESOLVER="shared/python/devbrew-python.sh"
 
-# `--emit-scanned` — 이 락이 **실제로 읽는** 경로. 선언에서 도출하면 선언의 자기 반복이라
-# 커버리지 증거가 안 된다(Task 6 의 양방향 검사가 이것을 읽는다). assert.sh 를 source 하기
-# **전에** 답한다 — 헬퍼가 깨져도 커버리지 대조는 답을 받아야 한다.
-SCANNED="shared/python/devbrew-python.sh
-plugins/project-init/scripts/devbrew-python.sh
-plugins/quality-gates/scripts/devbrew-python.sh
-plugins/spec-distill/scripts/devbrew-python.sh
-plugins/project-init/hooks/hooks.json
-plugins/quality-gates/hooks/hooks.json
-plugins/spec-distill/hooks/hooks.json
-plugins/quality-gates/hooks/session-start-advisor.py
-plugins/spec-distill/scripts/hook_common.py
-plugins/plugin-audit/README.md
-plugins/project-init/README.md
-plugins/quality-gates/README.md
-plugins/spec-distill/README.md
-README.md
-pyproject.toml
-.python-version
-uv.lock"
+# `--emit-scanned` — 이 락이 **실제로 읽는** 경로. assert.sh 를 source 하기 **전에** 답한다 —
+# 헬퍼가 깨져도 커버리지 대조는 답을 받아야 한다.
+#
+# **여기에 «앞으로 읽을» 경로를 미리 적지 않는다.** 소비자
+# (`plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh`)는 글롭을 이 목록과
+# 대조하므로, 목록에 소망을 적으면 그 글롭들이 **아무것도 안 재면서 GREEN** 이 된다 — 그 락의
+# 머리말이 「선언 ⊃ 실제 → 선택은 되는데 아무것도 안 본다」로 이름 붙인 바로 그 실패다.
+# 축을 더하는 Task 가 자기 줄을 **그때** 더한다(위 `# guards:` 글롭도 함께).
+SCANNED="shared/python/devbrew-python.sh"
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$SCANNED"
   exit 0
@@ -83,12 +72,31 @@ echo "EXECED-PLAIN-PYTHON3"
 exit 0
 FAKE
 chmod +x "$TMP/floor/python3.99" "$TMP/sub/python3.9" "$TMP/plain/python3"
-# `python3.12-config` 류가 후보로 새지 않는지 — 실행 가능하고 이름이 맞아도 제외돼야 한다
+# `python3.12-config` 류가 후보로 새지 않는지 — 실행 가능하고 이름이 맞아도 제외돼야 한다.
+# **이 fixture 는 진짜 인터프리터처럼 답해야 한다.** 자기 마커만 찍으면 `probe` 의 `$( )` 가
+# 그 출력을 삼켜 shape 검사에서 떨어뜨리므로, 배제 줄을 지워도 마커가 해석기 stdout 에 도달할
+# 수 없다 — 단언이 **원리적으로 실패할 수 없는** vacuous 락이 된다〔실측: 배제 줄 제거 전후
+# 출력 바이트 동일〕. `-c` 에 만족 버전을 답하게 하면 배제가 없을 때 글롭 순서상 이것이 먼저
+# 뽑혀(`python3.12-config` < `python3.99`) 마커가 실제로 나온다.
 cat > "$TMP/floor/python3.12-config" <<'FAKE'
 #!/bin/sh
-echo "CONFIG-SHOULD-NOT-RUN"; exit 0
+[ "$1" = "-c" ] && { echo "3 99"; exit 0; }
+echo "CONFIG-SHOULD-NOT-RUN"
+exec "$@"
 FAKE
 chmod +x "$TMP/floor/python3.12-config"
+
+# 바닥과 **정확히** 같은 버전. 리터럴 12 를 쓰지 않고 해석기에서 도출한 값으로 만든다 —
+# 이 자리가 없으면 `-ge` → `-gt` 변이가 27/27 GREEN 을 유지하면서 **출하 바닥 자신을**
+# 거부한다〔실측〕. 리포에서 가장 중요한 숫자의 등호 경계다.
+mkdir -p "$TMP/atfloor"
+cat > "$TMP/atfloor/python3.$FLOOR_MINOR_VAL" <<FAKE
+#!/bin/sh
+[ "\$1" = "-c" ] && { echo "$FLOOR_MAJOR_VAL $FLOOR_MINOR_VAL"; exit 0; }
+echo "EXECED-ATFLOOR"
+exec "\$@"
+FAKE
+chmod +x "$TMP/atfloor/python3.$FLOOR_MINOR_VAL"
 
 TARGET="$TMP/target.sh"      # 훅 대역 — exec 됐는지와 stdin 이 온전한지를 함께 증명한다
 cat > "$TARGET" <<'T'
@@ -115,6 +123,7 @@ run_resolver() {   # run_resolver <PATH> [VAR=val …] /bin/sh <해석기> <인�
 PATH_FLOOR="$TMP/floor:$TMP/plain:/bin"     # 바닥 만족 후보가 있다
 PATH_SUB="$TMP/sub:$TMP/plain:/bin"         # 바닥 미만만 있다
 PATH_BARE="$TMP/floor"                      # coreutils 가 **하나도 없다** (A4 용)
+PATH_ATFLOOR="$TMP/atfloor:$TMP/plain:/bin" # 바닥과 «정확히» 같은 것만 있다 (A12 용)
 R="$ROOT/$RESOLVER"
 
 note "── 축 A: 해석기 행동 ───────────────────────────────────────────────"
@@ -160,6 +169,27 @@ out="$(run_resolver "$PATH_FLOOR" /bin/sh "$R" --event SessionStart --plugin qg 
 assert_contains "$out" "TARGET-RAN" "A5/AC2: PATH 글롭이 python3.99 를 찾아 exec 한다 (양성 대조)"
 assert_not_contains "$out" "CONFIG-SHOULD-NOT-RUN" "A5/AC2: python3.12-config 류는 후보가 아니다"
 
+# A12 (바닥의 등호) 바닥과 «정확히» 같은 버전은 만족이다. 이 단언이 없으면 `-ge` → `-gt`
+#     변이가 27/27 GREEN 을 유지하면서 출하 바닥 자신을 거부한다〔실측〕.
+out="$(run_resolver "$PATH_ATFLOOR" /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET")"
+assert_contains "$out" "TARGET-RAN" \
+  "A12: 바닥과 정확히 같은 Python ${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL} 를 만족으로 친다 (등호 경계)"
+
+# A13 (AC5·C2) 판정이 cwd 내용에 좌우되지 않는다. 정본은 순수 문자열 비교다
+#     (`kill_switch_active.py` 의 `skip.split(",")`). unquoted 확장은 IFS 분리 **뒤에**
+#     pathname expansion 을 타서, cwd 에 우연히 맞는 파일이 있으면 조용히 끈다〔실측〕.
+: > "$TMP/qg:h"
+out="$(cd "$TMP" && printf '%s' "$PAY" | env PATH="$PATH_FLOOR" DEVBREW_SKIP_HOOKS='qg:*' \
+        /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET" 2>/dev/null)"
+assert_contains "$out" "TARGET-RAN" "A13/C2: cwd 에 'qg:h' 가 있어도 'qg:*' 는 끄지 못한다 (글롭 아님)"
+
+# A16 (:73 의 [ -n "$3" ] 가드 — 빈 이벤트는 별칭을 만들지 않는다) --event 없이 부르면
+#     EVENT 가 비고, DEVBREW_SKIP_HOOKS 의 `<plugin>:` 꼴 접두어와 매치되면 안 된다. 이
+#     규칙을 재는 단언이 지금까지 없었다. (번호는 A15 를 Task 5 가 이미 예약해 A16 으로 띄운다.)
+out="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS=qg: /bin/sh "$R" \
+        --plugin qg --hook h "$TARGET")"
+assert_contains "$out" "TARGET-RAN" "A16: --event 없이 불러도(빈 이벤트) DEVBREW_SKIP_HOOKS=qg: 가 훅을 끄지 않는다"
+
 # A6 (AC3) 후보도 같은 판정을 받는다 — 바닥 미만 python3.9 는 건너뛴다
 out="$(run_resolver "$PATH_SUB" /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET")"
 assert_not_contains "$out" "EXECED-SUBFLOOR" "A6/AC3: 바닥 미만 python3.9 후보를 exec 하지 않는다"
@@ -170,20 +200,24 @@ assert_not_contains "$out" "EXECED-PLAIN-PYTHON3" "A7/AC4: 바닥 미만 python3
 
 # A8 (AC7) 안내는 SessionStart 에서만. 문서 «하나» 에 두 키.
 out="$(run_resolver "$PATH_SUB" /bin/sh "$R" --event SessionStart --plugin qg --hook h "$TARGET")"
-guide_report="$(printf '%s' "$out" | python3 -c '
-import json, sys
+# 바닥 문자열은 하드코딩하지 않는다 — 해석기에서 이미 도출한 FLOOR_MAJOR_VAL/MINOR_VAL 을
+# 환경으로 python3 에 건네 그것과 대조한다. "3.12" 를 여기 리터럴로 심으면 바닥이 움직이는
+# 날 이 단언만 stale-red 가 된다 — 헤더의 증인 절이 막으려는 것과 같은 실패.
+guide_report="$(printf '%s' "$out" | FLOOR_STR="${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL}" python3 -c '
+import json, os, sys
 raw = sys.stdin.read()
 try:
     d = json.loads(raw)          # 문서가 둘이면 여기서 깨진다 (C7)
 except ValueError as e:
     print("parse_error: %s" % e); raise SystemExit(0)
 ctx = d.get("hookSpecificOutput", {}).get("additionalContext", "")
+floor_str = os.environ.get("FLOOR_STR", "")
 print("one_doc: yes")
 print("has_system_message: %s" % ("yes" if d.get("systemMessage") else "no"))
 print("has_additional_context: %s" % ("yes" if ctx else "no"))
 print("event_name: %s" % d.get("hookSpecificOutput", {}).get("hookEventName", ""))
 print("mentions_found: %s" % ("yes" if "3.9" in ctx else "no"))
-print("mentions_floor: %s" % ("yes" if "3.12" in ctx else "no"))
+print("mentions_floor: %s" % ("yes" if floor_str and floor_str in ctx else "no"))
 print("mentions_fix: %s" % ("yes" if "DEVBREW_PYTHON" in ctx or "install" in ctx else "no"))
 ')"
 assert_eq "$(field one_doc "$guide_report")" "yes" "A8/AC7: SessionStart stdout 이 JSON 문서 «하나» 다"
@@ -219,6 +253,28 @@ assert_not_grep "$out" '^\{' "A9/AC8: 그 통지를 stdout JSON 으로 찍지 �
 # A10 (AC6) stdin 불가침
 out="$(run_resolver "$PATH_FLOOR" /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET")"
 assert_contains "$out" "PAYLOAD-INTACT" "A10/AC6: payload 가 훅에 그대로 간다 (해석기는 stdin 을 읽지 않는다)"
+
+# A14 (AC7·AC8·C7) 안내 JSON 은 $DEVBREW_PYTHON 이 «무엇이든» 유효한 문서 하나다.
+#     손으로 조립한 JSON 에 사용자 값을 escape 없이 싣던 자리다 — 경로에 따옴표 하나면
+#     훅의 stdout 이 JSON 이 아니게 된다〔실측: Expecting ',' delimiter〕. 그리고 이 조합
+#     (DEVBREW_PYTHON 설정 + SessionStart)은 **한 번도 파싱된 적이 없었다** — A8 은
+#     DEVBREW_PYTHON 을 안 쓰고, A9 는 SessionEnd 라 안내 블록에 닿지 않는다.
+BADPY="$TMP/ba\"d-py"
+cp "$TMP/sub/python3.9" "$BADPY"; chmod +x "$BADPY"
+out="$(run_resolver "$PATH_SUB" "DEVBREW_PYTHON=$BADPY" /bin/sh "$R" \
+        --event SessionStart --plugin qg --hook h "$TARGET")"
+bad_report="$(printf '%s' "$out" | python3 -c '
+import json, sys
+raw = sys.stdin.read()
+try:
+    d = json.loads(raw)
+except ValueError as e:
+    print("parsed: no (%s)" % e); raise SystemExit(0)
+print("parsed: yes")
+print("mentions_ignored: %s" % ("yes" if "DEVBREW_PYTHON" in json.dumps(d, ensure_ascii=False) else "no"))
+')"
+assert_eq "$(field parsed "$bad_report")" "yes" "A14/C7: 경로에 따옴표가 있어도 stdout 이 유효한 JSON 문서 하나다"
+assert_eq "$(field mentions_ignored "$bad_report")" "yes" "A14/AC8: 그 안내가 \$DEVBREW_PYTHON 무시 사실을 싣는다"
 
 # A11 (AC11 의 파일-국소 전제) plugin-audit 의 kill switch 판정기 정규식은
 #     `DEVBREW_[A-Z0-9_]*_DISABLE` 이라 **도출형 이름도 꺾쇠 플레이스홀더도 못 본다**
