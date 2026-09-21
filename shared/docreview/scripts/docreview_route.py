@@ -75,6 +75,10 @@ def normalize(item, layer_default, prefix, idx, ledger):
         "edit_scope": str(item.get("edit_scope") or anchor), "blocks": _refs(item.get("blocks")),
         "supersedes": (str(item["supersedes"]) if item.get("supersedes") else None),
         "evidence": (str(item["evidence"]) if item.get("evidence") else None),
+        # 갈래 2 의 칸 둘. 여기 없으면 리뷰어가 무엇을 적든 «조용히» 버려진다 —
+        # 이 dict 는 입력을 갱신하는 것이 아니라 처음부터 새로 짓는다.
+        "replacement": (str(item["replacement"]) if item.get("replacement") else None),
+        "if_unfixed": (str(item["if_unfixed"]) if item.get("if_unfixed") else None),
     }
 
 

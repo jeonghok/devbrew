@@ -12,6 +12,8 @@
    "blocks": [],
    "supersedes": null,
    "evidence": "브리프 §2 C3 vs 문서 §3",
+   "replacement": null,
+   "if_unfixed": null,
    "f": "f1",
    "origin": "reviewer",
    "immutable": false,

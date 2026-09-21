@@ -12,6 +12,8 @@
    "blocks": [],
    "supersedes": null,
    "evidence": null,
+   "replacement": null,
+   "if_unfixed": null,
    "f": "f1",
    "origin": "reviewer",
    "immutable": false,

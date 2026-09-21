@@ -76,6 +76,8 @@ docreview:
       edit_scope: '#3-non-goals'
       blocks: []
       evidence: 브리프 §2 C3 vs 문서 §3
+      replacement: null
+      if_unfixed: null
       decision_view:
         change: Non-goals 가 브리프의 범위 항목 하나를 조용히 뺐다
         basis: 브리프 §2 C3 vs 문서 §3
@@ -104,6 +106,8 @@ docreview:
       edit_scope: '#1-context'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view: null
       state: null
       promotion: null
@@ -125,6 +129,8 @@ docreview:
       blocks:
       - 9dea7cf3#r1.1
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view: null
       state: null
       promotion: null
@@ -145,6 +151,8 @@ docreview:
       edit_scope: '#12-files-to-modify'
       blocks: []
       evidence: §5 가 c.py 를 참조한다
+      replacement: null
+      if_unfixed: null
       decision_view:
         change: c.py 누락 — 파일 목록이 실제 변경과 다르다
         basis: §5 가 c.py 를 참조한다
@@ -173,6 +181,8 @@ docreview:
       edit_scope: '#12-files-to-modify'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view: null
       state: null
       promotion: null
@@ -193,6 +203,8 @@ docreview:
       edit_scope: '#2-goals'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view:
         change: 목표 B 가 두 가지로 읽힌다
         basis: (근거 없음)
@@ -221,6 +233,8 @@ docreview:
       edit_scope: '#handoff-context'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view: null
       state: null
       promotion: null
@@ -241,6 +255,8 @@ docreview:
       edit_scope: '#handoff-context'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view: null
       state: null
       promotion: null
@@ -261,6 +277,8 @@ docreview:
       edit_scope: '#5-architecture'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view:
         change: §5 의 데이터 흐름에 소비자 없는 산출물이 있다 — 의도인가?
         basis: (근거 없음)
@@ -289,6 +307,8 @@ docreview:
       edit_scope: '#1-context'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view: null
       state: rejected
       promotion: null

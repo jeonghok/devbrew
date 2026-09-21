@@ -2165,3 +2165,30 @@ case_init_relative_doc_refused() {
   fi
   rm -rf "$d"
 }
+
+# ── 칸 둘(replacement·if_unfixed)의 왕복 — 리뷰어 → normalize → 원장 (Task 5) ──────
+# 닫힌 열거가 셋이라(PROFILE_FIELDS · normalize 반환 · PUBLIC_FIELDS) 앞의 둘만 고치면
+# 렌더까지는 도달하고 «원장에는 안 남는다». 그러면 다음 라운드가 그 값을 못 본다.
+case_fields_roundtrip_decide() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" --skip)" || { no "칸 왕복: route_r1 실패"; return; }
+  assert_eq "$(fsum "$d" '다른 것을 겨눈다' '["replacement"]')" \
+    "§2 를 브리프 §1 의 goal 한 문장으로 되돌린다" "칸 왕복: normalize 가 replacement 를 실어 나른다"
+  assert_eq "$(fsum "$d" '다른 것을 겨눈다' '["if_unfixed"]')" \
+    "설계 전체가 다른 문제를 잘 푸는 쪽으로 굳는다" "칸 왕복: normalize 가 if_unfixed 를 실어 나른다"
+  assert_eq "$(st_yaml "$d" 'bool([f for f in st["findings"].values() if f.get("replacement") == "§2 를 브리프 §1 의 goal 한 문장으로 되돌린다"])')" \
+    "True" "칸 왕복: PUBLIC_FIELDS 를 지나 원장에 top-level 로 남는다"
+  rm -rf "$d"
+}
+# AC21' — decide «가 아닌» 처분에서도 남는가. decision_view 통로는 decide 에만 열리므로
+# 이 케이스가 없으면 fix 로 난 과설계 지적이 대체안 없이 저자에게 간다.
+case_fields_survive_non_decide() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" --skip)" || { no "칸 비-decide: route_r1 실패"; return; }
+  local fid; fid="$(jget "$d/fin.json" '[x["id"] for x in d["findings"] if x["disposition"]=="fix" and "TBD" in x["summary"]][0]')"
+  assert_eq "$(st_yaml "$d" 'st["findings"]["'"$fid"'"].get("decision_view")')" "None" \
+    "칸 비-decide: 선결조건 — 이 항목에는 decision_view 통로가 «없다»(공허하지 않음의 증거)"
+  assert_eq "$(st_yaml "$d" 'st["findings"]["'"$fid"'"].get("replacement")')" \
+    "TBD 를 실제 컴포넌트 이름으로 채운다" "AC21': fix 처분의 replacement 도 원장에 남는다"
+  assert_eq "$(st_yaml "$d" 'st["findings"]["'"$fid"'"].get("if_unfixed")')" \
+    "plan 이 그 자리를 스스로 지어낸다" "AC21': fix 처분의 if_unfixed 도 원장에 남는다"
+  rm -rf "$d"
+}

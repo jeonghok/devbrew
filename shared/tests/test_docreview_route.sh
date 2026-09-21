@@ -68,4 +68,6 @@ case_E2_finalize_observes_idempotent
 case_E3_consumed_permit_exempt_from_freeze
 case_E4_snapshot_missing_unverified
 case_critic_freshness_unknown_disclosed
+case_fields_roundtrip_decide
+case_fields_survive_non_decide
 finish

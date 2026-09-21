@@ -514,8 +514,12 @@ def cmd_begin_round(a) -> int:
 
 # ── 전이 ────────────────────────────────────────────────────────────────
 PUBLIC_FIELDS = ("id", "lineage", "bucket", "supersedes", "origin", "layer", "category", "anchor",
-                 "disposition", "summary", "edit_scope", "blocks", "evidence", "decision_view",
-                 "state", "promotion", "promoted_from", "immutable", "kind")
+                 "disposition", "summary", "edit_scope", "blocks", "evidence",
+                 # 갈래 2 — top-level 이다. `decision_view` 통로는 disposition == "decide"
+                 # 에만 열리므로(docreview_route.py:640-641) 그쪽에만 실으면 fix·defer·ask
+                 # 로 난 항목의 대체안이 원장에 한 글자도 안 남는다.
+                 "replacement", "if_unfixed",
+                 "decision_view", "state", "promotion", "promoted_from", "immutable", "kind")
 
 
 GateRow = collections.namedtuple("GateRow", "name ledger pred open blocks render")
