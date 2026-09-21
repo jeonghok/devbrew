@@ -482,6 +482,17 @@ done
 
 note "── 축 E: 훅 자식 (AC10) ──────────────────────────────────────────────"
 
+# 코퍼스 증인 — grep 의 -r · --include 조합이 plugins/ 를 실제로 거느릴 수 있는지를 **같은
+# 기계로** 재본다. 디렉토리가 없거나 권한이 없으면 아래 negative lock 이 조용히 아무것도
+# 안 찾으면서 거짓 PASS 가 되는데, 그 자리에서 먼저 실패해야 한다 — 아니면 「코퍼스가 깨져도
+# 0 건이라서 통과했다」는 원인 불명의 false negative 를 나중에 쫓아야 한다.
+corpus_files="$(grep -rln '' plugins --include='*.py' 2>/dev/null | wc -l | tr -d ' ')"
+case "$corpus_files" in
+  0) no "증인: plugins 아래 .py 코퍼스를 못 읽었다 — 축 E 의 대조는 무의미하다" ;;
+  *[!0-9]*) no "증인: 파일 수를 셀 수 없었다" ;;
+  *) ok "증인: plugins 아래 .py 파일 ${corpus_files}개를 세었다 (코퍼스가 있다)" ;;
+esac
+
 # 코퍼스는 설계 Context/Why 4 의 도출을 그대로 쓴다 — 「훅·스크립트 .py 전수 grep」.
 # **BRE 의 `\|` 를 쓰지 않는다** — GNU 확장이라 macOS/BSD grep 에서는 alternation 이 아니라
 # 리터럴 `|` 로 읽혀 이 검사가 조용히 아무것도 안 찾는다. 따옴표 두 모양을 각각 훑는다.
