@@ -189,10 +189,11 @@ mkdir -p "$TMP/floor" "$TMP/sub" "$TMP/plain"
 
 cat > "$TMP/floor/python3.99" <<'FAKE'
 #!/bin/sh
+# 바닥을 만족한다고 «답하고», 그 밖에는 **건네받은 스크립트를 실제로 실행한다** — 진짜
+# 인터프리터가 하는 일이 그것이다. 자기 마커만 찍고 끝내면 argv 전달도 stdin 전달도 재지
+# 못하고, A9 의 「사유가 자식 환경으로 간다」는 원리적으로 관측 불가가 된다.
 [ "$1" = "-c" ] && { echo "3 99"; exit 0; }
-echo "EXECED-FLOOR"
-cat
-exit 0
+exec "$@"
 FAKE
 cat > "$TMP/sub/python3.9" <<'FAKE'
 #!/bin/sh
@@ -217,8 +218,9 @@ chmod +x "$TMP/floor/python3.12-config"
 TARGET="$TMP/target.sh"      # 훅 대역 — exec 됐는지와 stdin 이 온전한지를 함께 증명한다
 cat > "$TARGET" <<'T'
 #!/bin/sh
+# **내장 명령만 쓴다** — A4b 는 coreutils 가 하나도 없는 PATH 로 돈다(`cat` 이 없다).
 echo "TARGET-RAN"
-cat
+while IFS= read -r _line; do printf '%s\n' "$_line"; done
 T
 chmod +x "$TARGET"
 
@@ -325,7 +327,7 @@ REPORT_ENV="$TMP/report_env.sh"
 cat > "$REPORT_ENV" <<'R'
 #!/bin/sh
 echo "ignored=${DEVBREW_PYTHON_IGNORED-}"
-cat >/dev/null
+while IFS= read -r _line; do :; done
 R
 chmod +x "$REPORT_ENV"
 out="$(run_resolver "$PATH_FLOOR" "DEVBREW_PYTHON=$TMP/sub/python3.9" /bin/sh "$R" \
