@@ -3,7 +3,7 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [7.7.0] — 2026-09-22
+## [8.1.0] — 2026-09-22
 
 ### Added
 
@@ -11,6 +11,28 @@
 - **`tests/test_topic_boundary.sh` · `tests/test_seal_no_side_effects.sh`.** 합성 토픽 픽스처 위에서 경계·끝점·봉인을 재는 회귀 락 둘. 봉인 락의 핵심 단언은 「봉인 트리에 임시 인덱스 파일이 없다」 — 위치가 아니라 결과를 잰다.
 
 **호출자는 아직 0 이다.** 이 릴리스는 기계만 들여놓고 `/qg` 의 동작은 바꾸지 않는다 — 배선은 뒤 릴리스다. `git branch --contains` 를 쓰지 않는 이유(머지된 커밋에 대해 `main` 과 후손 전부를 돌려줘 끝점을 식별할 수 없다)와 머지된 구성원의 분기점을 `merge-base(주제쪽 부모, 머지의 mainline 부모)` 로 되찾는 이유는 설계문서 §6.2 에 있다.
+
+## [8.0.0] — 2026-09-22
+
+major 인 이유 — **설치 요구사항이 하나 늘어난다.** 이 플러그인의 훅은 이제 Python 3.12
+이상을 요구하고, 바닥 미만 머신에서는 돌지 않는다(막지는 않는다 — 건너뛴다).
+
+### Changed
+
+- **훅이 `python3` 를 직접 부르지 않는다.** `hooks.json` 의 자리가 `sh
+  ${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh --event … --plugin … --hook … <훅.py>` 로
+  바뀌었다. 해석기는 kill switch 를 먼저 보고(정본과 같은 판정), `$DEVBREW_PYTHON` →
+  `python3` → PATH 의 `python3.*` 순으로 바닥을 만족하는 인터프리터를 찾아 `exec` 한다.
+  마이너 버전을 열거하지 않으며 `python3` 로 fallback 하지 않는다.
+
+### Added
+
+- `scripts/devbrew-python.sh` — `shared/python/devbrew-python.sh` 의 물리 사본
+  (`# copy-of:`). 심볼릭 링크면 `plugin-audit` 의 containment 검사가 `shared/` 로 풀려
+  거짓 「kill switch 부재」를 낸다.
+- README 에 `Python 3.12+` prerequisite 와 바닥의 **도출 규칙**.
+- `session-start-advisor` 가 `$DEVBREW_PYTHON` 무시 사실을 `additionalContext` +
+  `systemMessage` 로 공시한다 — stderr 는 모델에 닿지 않는다(실측 0/1).
 
 ## [7.6.2] — 2026-09-19
 

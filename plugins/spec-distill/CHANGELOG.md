@@ -1,5 +1,27 @@
 # Changelog
 
+## [4.0.0] — 2026-09-22
+
+major 인 이유 — **설치 요구사항이 하나 늘어난다.** 이 플러그인의 훅은 이제 Python 3.12
+이상을 요구하고, 바닥 미만 머신에서는 돌지 않는다(막지는 않는다 — 건너뛴다).
+
+### Changed
+
+- **훅이 `python3` 를 직접 부르지 않는다.** `hooks.json` 의 자리가 `sh
+  ${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh --event … --plugin … --hook … <훅.py>` 로
+  바뀌었다. 해석기는 kill switch 를 먼저 보고(정본과 같은 판정), `$DEVBREW_PYTHON` →
+  `python3` → PATH 의 `python3.*` 순으로 바닥을 만족하는 인터프리터를 찾아 `exec` 한다.
+  마이너 버전을 열거하지 않으며 `python3` 로 fallback 하지 않는다.
+- **TTL-GC 자식을 `sys.executable` 로 띄운다** (`scripts/hook_common.py`). `python3` 로
+  띄우면 해석의 효력이 프로세스 경계에서 끊겨 자식만 바닥 미만으로 떨어진다.
+
+### Added
+
+- `scripts/devbrew-python.sh` — `shared/python/devbrew-python.sh` 의 물리 사본
+  (`# copy-of:`). 심볼릭 링크면 `plugin-audit` 의 containment 검사가 `shared/` 로 풀려
+  거짓 「kill switch 부재」를 낸다.
+- README 에 `Python 3.12+` prerequisite 와 바닥의 **도출 규칙**.
+
 ## [3.2.0] — 2026-09-19
 
 minor 인 이유 — 새 surface 가 셋이다: seed 자리의 문서 리뷰 엔진 배선(재설계 PR 5), 스크립트 셋(`scripts/seed_review_log.py` · `scripts/seed_edit_diff.py` · `scripts/seed_provenance.py`), 번들 조립기의 `--for detect|recritic`. 지운 넷(격리 critic · seed 전용 codex 러너 · 빌더 · 체크리스트)은 `framing-requests` 안에서만 쓰이던 내부 파일이라 이 플러그인 밖의 호출 계약은 바뀌지 않는다. 설계 `docs/superpowers/specs/2026-09-16-framing-intent-drift-design.md`.

@@ -36,7 +36,10 @@ def fire_and_forget_gc() -> None:
     """
     try:
         result = subprocess.run(
-            ["python3", str(GC_SCRIPT)],
+            # **`python3` 가 아니라 자기 자신이다.** 훅은 `devbrew-python.sh` 가 고른
+            # 인터프리터로 돌고 있는데, 자식을 PATH 의 `python3` 로 띄우면 그 자식만
+            # 바닥 미만으로 떨어진다 — 해석의 효력이 프로세스 경계에서 끊긴다.
+            [sys.executable, str(GC_SCRIPT)],
             timeout=5, check=False, capture_output=True, text=True,
         )
         if result.returncode != 0:
