@@ -49,6 +49,8 @@ case_f1_two_siblings() {
   assert_eq "$(field declared "$out")" "2" "F1 선언 커밋 2"
   assert_grep "$(field branches "$out")" 'topicA' "F1 branches 에 topicA"
   assert_grep "$(field branches "$out")" 'topicB' "F1 branches 에 topicB"
+  assert_eq "$(field branches "$out" | tr ',' '\n' | grep -c .)" "2" "F1 branches 가 정확히 2개다"
+  assert_not_grep "$(field branches "$out")" 'noise' "F1 선언 없는 noise 브랜치는 branches 에 없다"
   cleanup
 }
 
@@ -102,6 +104,28 @@ Spec: docs/x-design.md#pr2"
   assert_eq "$(field declared "$out")" "1" "F5 #pr1 질의가 #pr2 를 매치하지 않는다"
   local out2; out2=$(bash "$RT" resolve 'docs/x-design.md')
   assert_eq "$(field status "$out2")" "no-declaration" "F5 맨 경로 질의는 조각을 매치하지 않는다"
+  cleanup
+}
+
+# ── F5b: 조각 하나가 다른 조각의 리터럴 접두일 때도 구분돼야 한다 ───────────
+#    #pr1 과 #pr2 는 끝 글자부터 다르므로 접두 관계가 아니다 — 끝 앵커를 빼도
+#    이 둘로는 충돌을 못 만든다(F5 는 이 축을 재지 못한다). #pr1 은 #pr10 의
+#    리터럴 접두다 — 끝 앵커가 실제로 막아야 하는 충돌은 이 모양이다.
+case_f5b_prefix_fragment_collision() {
+  new_repo
+  git checkout -q -b topicA
+  echo a1 > a.txt; git add a.txt
+  git commit -qm "a1
+
+Spec: docs/x-design.md#pr1"
+  echo b1 > b.txt; git add b.txt
+  git commit -qm "b1
+
+Spec: docs/x-design.md#pr10"
+  local out; out=$(bash "$RT" resolve 'docs/x-design.md#pr1')
+  assert_eq "$(field declared "$out")" "1" "F5b #pr1 질의가 #pr10 을 매치하지 않는다"
+  local out2; out2=$(bash "$RT" resolve 'docs/x-design.md#pr10')
+  assert_eq "$(field declared "$out2")" "1" "F5b #pr10 질의는 자기 자신만 매치한다"
   cleanup
 }
 
@@ -366,6 +390,7 @@ case_combine_three_conflict_attribution() {
 for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_f2_boundary_merged_not_hidden case_f3_merged_ref_deleted \
          case_f4_undeclared_ancestor_included case_f5_fragment_discriminates \
+         case_f5b_prefix_fragment_collision \
          case_f6_path_absent case_f7_mixed_keys_in_T case_f8_seal_first_then_maximal \
          case_tips_order_deterministic case_path_check_is_repo_root_relative \
          case_no_declaration case_nine_keys_always \
