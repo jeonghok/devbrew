@@ -7,6 +7,7 @@ set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 RT="$PLUGIN_ROOT/scripts/resolve-topic.sh"
+CT="$PLUGIN_ROOT/scripts/combine-tips.sh"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 KEY='docs/x-design.md#pr1'
@@ -265,12 +266,65 @@ case_nine_keys_always() {
   cleanup
 }
 
+# ── 합치기 정상: 겹치지 않는 두 끝점 → 트리 하나 (AC6) ─────────────────────
+case_combine_clean() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"; local TA; TA=$(git rev-parse HEAD)
+  git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"; local TB; TB=$(git rev-parse HEAD)
+  local out; out=$(bash "$CT" "$TA" "$TB")
+  assert_eq "$(field status "$out")" "ok" "합치기 정상 → status: ok"
+  assert_eq "$(field steps "$out")" "1" "끝점 둘 → merge-tree 1회"
+  assert_grep "$(field tree "$out")" '^[0-9a-f]{40}$' "트리 OID 한 개"
+  # 합친 트리가 양쪽 파일을 다 갖는다
+  local names; names=$(git ls-tree -r --name-only "$(field tree "$out")")
+  assert_grep "$names" '^a\.txt$' "합친 트리에 a.txt"
+  assert_grep "$names" '^b\.txt$' "합친 트리에 b.txt"
+  assert_grep "$(field intermediates "$out")" '^[0-9a-f]{40}$' "중간 커밋 SHA 가 나온다"
+  cleanup
+}
+
+# ── 합치기 충돌: status · 충돌 파일 · 귀속 (AC7) ────────────────────────────
+case_combine_conflict() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA; decl_commit f.txt AAA "a"; local TA; TA=$(git rev-parse HEAD)
+  git checkout -q -b topicB "$R"; decl_commit f.txt BBB "b"; local TB; TB=$(git rev-parse HEAD)
+  local out; out=$(bash "$CT" "$TA" "$TB")
+  assert_eq "$(field status "$out")" "merge-conflict" "충돌 → status: merge-conflict"
+  assert_eq "$(field tree "$out")" "-" "충돌이면 트리를 내지 않는다"
+  assert_eq "$(field conflicts "$out")" "f.txt" "충돌 파일 목록"
+  assert_eq "$(field failed_at "$out")" "$TB" "충돌을 일으킨 구성원이 귀속된다(순차의 이득)"
+  cleanup
+}
+
+# ── 끝점 하나 · 나쁜 입력 ───────────────────────────────────────────────────
+case_combine_edges() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"; local TA; TA=$(git rev-parse HEAD)
+  local out; out=$(bash "$CT" "$TA")
+  assert_eq "$(field status "$out")" "ok" "끝점 하나도 정상"
+  assert_eq "$(field steps "$out")" "0" "끝점 하나 → merge-tree 0회"
+  assert_eq "$(field tree "$out")" "$(git rev-parse "$TA^{tree}")" "끝점 하나면 그 트리 그대로"
+  assert_eq "$(field intermediates "$out")" "-" "중간 커밋 없음"
+
+  local out2; out2=$(bash "$CT" "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+  assert_eq "$(field status "$out2")" "bad-input" "없는 커밋 → bad-input"
+  local out3; out3=$(bash "$CT")
+  assert_eq "$(field status "$out3")" "bad-input" "인자 0 → bad-input"
+
+  local n; n=$(printf '%s\n' "$out3" | grep -cE '^[a-z_]+:')
+  assert_eq "$n" "6" "bad-input 에서도 6키 전부 emit"
+  cleanup
+}
+
 for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_f2_boundary_merged_not_hidden case_f3_merged_ref_deleted \
          case_f4_undeclared_ancestor_included case_f5_fragment_discriminates \
          case_f6_path_absent case_f7_mixed_keys_in_T case_f8_seal_first_then_maximal \
          case_tips_order_deterministic case_path_check_is_repo_root_relative \
-         case_no_declaration case_nine_keys_always; do
+         case_no_declaration case_nine_keys_always \
+         case_combine_clean case_combine_conflict case_combine_edges; do
   echo "== $c"; $c
 done
 finish
