@@ -928,7 +928,10 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 note "── 축 E: 훅 자식 (AC10) ──────────────────────────────────────────────"
 
 # 코퍼스는 설계 Context/Why 4 의 도출을 그대로 쓴다 — 「훅·스크립트 .py 전수 grep」.
-child_spawns="$(grep -rn '\["python3"\|'"'"'python3'"'"',' plugins --include='*.py' 2>/dev/null \
+# **BRE 의 `\|` 를 쓰지 않는다** — GNU 확장이라 macOS/BSD grep 에서는 alternation 이 아니라
+# 리터럴 `|` 로 읽혀 이 검사가 조용히 아무것도 안 찾는다. 따옴표 두 모양을 각각 훑는다.
+child_spawns="$( { grep -rn '"python3"' plugins --include='*.py'
+                   grep -rn "'python3'" plugins --include='*.py'; } 2>/dev/null \
   | grep -v '/tests/' || true)"
 if [ -z "$child_spawns" ]; then
   ok "E/AC10: 훅·스크립트가 spawn 하는 python3 가 0 건이다"
@@ -1385,9 +1388,12 @@ uv가 없으면 기존 `python3 -m unittest`로 degrade합니다 — uv는 출�
 
 ```bash
 bash shared/tests/test_python_floor.sh
+bash plugins/spec-distill/tests/test_readme_sync.sh
+bash plugins/spec-distill/tests/test_stale_terms.sh
 grep -c 'Prerequisites' plugins/project-init/README.md
 ```
-Expected: 축 F·G `✓`. `plugin-audit` 의 음의 짝도 `✓`(그 README 를 건드리지 않았으므로).
+Expected: 넷 다 통과. `plugin-audit` 의 음의 짝도 `✓`(그 README 를 건드리지 않았으므로).
+`test_readme_sync.sh` 는 spec-distill README 의 `## Principles Instantiated` 절과 plugin.json 버전 floor 를 본다 — 새 bullet 은 그 절 밖이고 버전은 아직 안 건드렸으므로 통과해야 한다. `test_stale_terms.sh` 는 `plugins/spec-distill/` 전체를 훑으므로 **Task 2 가 넣은 사본도 그 스윕에 든다** — 금지 토큰(`breadth-keeper`·`interview_round` 등)이 없어야 한다.
 
 - [ ] **Step 6: 커밋**
 
@@ -1532,7 +1538,9 @@ echo "=== AC16: uv.lock 의 PyYAML 핀 ==="
 awk '/^name = "pyyaml"$/{f=1;next} f&&/^version = /{print;exit}' uv.lock
 
 echo "=== AC10: 훅·스크립트의 python3 spawn (0 이어야) ==="
-grep -rn '\["python3"' plugins --include='*.py' | grep -vc '/tests/' || echo 0
+# `grep -vc` 는 빈 입력에 0 을 «찍고» rc 1 로 끝나므로 `|| echo 0` 을 달면 0 이 두 번 나온다.
+{ grep -rn '"python3"' plugins --include='*.py'; grep -rn "'python3'" plugins --include='*.py'; } 2>/dev/null \
+  | grep -v '/tests/' | wc -l | tr -d ' '
 ```
 
 기대값: `0` · `4` · `True True True` · `plugin-audit/README.md:0` · `version = "6.0.3"` 형태 · `0`.
