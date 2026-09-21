@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.2.1] — 2026-09-22
+
+### Fixed
+
+- **`doc-critic` 층 1 이 축 이름과 판정 관계를 리터럴 산문으로 쥐고 있었다 — 네 자리 중 하나에만 맞는 문장이었다.** 본문(`shared/docreview/agents/doc-critic.md:47` + 사본 셋)이 「목표·문제정의·범위·아키텍처·컴포넌트 관계·데이터 흐름·trade-off·구현 가능성」을 열거했는데 그것은 design-doc 프로필의 `layer_rubric.layer1` 뿐이다. brief 는 `[direction]`, seed 는 `[unfounded_addition, …]`, `/qg` generic 은 `[logic, assumption]` 이다. 한편 codex 러너는 이미 프로필의 `layer_rubric.layer1` 을 읽어 프롬프트에 싣는다(`run_docreview_codex_reviewer.sh:372`·`:427`) — **같은 라운드의 두 판정자가 다른 rubric 으로 돌고 있었다.** 그 줄을 붙드는 락은 **하나도 없었다**(테스트 전수 grep 0건).
+- **판정 관계를 프로필로 옮긴다.** agent 본문은 `layer_rubric.layer1` 을 참조하고, 「무엇과 대조하는가」는 각 프로필 본문의 「**층 1 판정 관계** —」 줄이 소유한다. 축 이름만 넘기고 관계를 리터럴로 두면 넷 중 하나에만 맞던 문장이 넷 중 둘에만 맞는 문장이 될 뿐이다.
+- **근거 요구의 조건절은 남기되 축 이름에서 푼다.** 「**구현 가능성** finding 은 …」 → 「**리포 사실을 단정하는** finding 은 …」. 축이 사라져도 요구가 같이 사라지지 않는다. 「예외 없이 모든 층 1 finding」으로 넓히지 않는다 — 문서 내부 모순처럼 리포를 볼 필요가 없는 finding 에까지 인용을 요구하면 그 판정이 갈 곳을 잃는다.
+
+### Added
+
+- `shared/tests/test_docreview_layer1_wiring.sh` — 위임(agent 가 프로필을 참조하는가)과 소유(프로필 넷이 각자 관계를 갖는가)를 **함께** 잰다. 한쪽만 재면 다른 쪽이 조용히 빈다. 프로필 코퍼스는 글롭 도출이라 다섯째 자리가 생겨도 자동으로 계약에 든다. 판정 관계 네 줄이 서로 다름을 별도 축(B2)으로 재 복사-붙여넣기 재발을 막는다.
+
 ## [3.2.0] — 2026-09-19
 
 minor 인 이유 — 새 surface 가 셋이다: seed 자리의 문서 리뷰 엔진 배선(재설계 PR 5), 스크립트 셋(`scripts/seed_review_log.py` · `scripts/seed_edit_diff.py` · `scripts/seed_provenance.py`), 번들 조립기의 `--for detect|recritic`. 지운 넷(격리 critic · seed 전용 codex 러너 · 빌더 · 체크리스트)은 `framing-requests` 안에서만 쓰이던 내부 파일이라 이 플러그인 밖의 호출 계약은 바뀌지 않는다. 설계 `docs/superpowers/specs/2026-09-16-framing-intent-drift-design.md`.

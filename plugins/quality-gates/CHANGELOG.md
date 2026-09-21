@@ -3,6 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.6.3] — 2026-09-22
+
+### Fixed
+
+- **`references/docreview-profiles/generic.md` 가 자기 자리의 층 1 판정 관계를 갖는다.** 공유 `doc-critic` 본문이 「`ground_truth` 와 문서가 하나의 그림으로 정합한가」를 리터럴로 쥐고 있었는데, 이 자리의 `ground_truth` 는 「문서 자체 — 외부 정답이 없다」라 그 문장이 「문서와 문서가 정합한가」로 공허해진다. 프로필 본문이 「**층 1 판정 관계** — 문서가 자기 주장을 스스로 지탱하는가」를 소유한다. 이 플러그인은 `doc-critic*.md` 를 배송하지 않지만 이 프로필은 배포 트리 안이라 bump 대상이다. **`/qg` generic 자리는 아직 호출자가 0 이므로 동작 변경이 아니라 전환을 위한 선반영이다.**
+
 ## [7.6.2] — 2026-09-19
 
 ### Changed
