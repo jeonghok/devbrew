@@ -406,6 +406,14 @@ print("mentions_ignored: %s" % ("yes" if "DEVBREW_PYTHON" in json.dumps(d, ensur
 assert_eq "$(field parsed "$bad_report")" "yes" "A14/C7: 경로에 따옴표가 있어도 stdout 이 유효한 JSON 문서 하나다"
 assert_eq "$(field mentions_ignored "$bad_report")" "yes" "A14/AC8: 그 안내가 \$DEVBREW_PYTHON 무시 사실을 싣는다"
 
+# A16 (빈 이벤트 가드) `--event` 없이 부르면 EVENT 가 비고, 그때 `<plugin>:` 꼴 토큰과
+#     매치되면 안 된다 — 그러면 `DEVBREW_SKIP_HOOKS=qg:` 하나가 그 플러그인의 모든
+#     무이벤트 소비자를 끄는 «문서화되지 않은 와일드카드» 가 된다(정본이 주석으로 특별히
+#     못 박은 규칙). 번호는 A15 를 Task 5 가 예약해 하나 띄운다.
+out="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS=qg: /bin/sh "$R" \
+        --plugin qg --hook h "$TARGET")"
+assert_contains "$out" "TARGET-RAN" "A16: --event 없이 불러도(빈 이벤트) DEVBREW_SKIP_HOOKS=qg: 가 훅을 끄지 않는다"
+
 # A11 (AC11 의 파일-국소 전제) plugin-audit 의 kill switch 판정기 정규식은
 #     `DEVBREW_[A-Z0-9_]*_DISABLE` 이라 **도출형 이름도 꺾쇠 플레이스홀더도 못 본다**
 #     〔실측〕. 그래서 머리에 구체 예시 한 줄이 필요하다. 진짜 소비자를 보는 것은 Task 2 의
@@ -663,7 +671,7 @@ Expected: 세 셸 모두 `syntax OK`. 테스트는 축 A 전부 `✓`, `Fail: 0`
 | M7 | 머리의 `예: spec-distill -> DEVBREW_SPEC_DISTILL_DISABLE=1` 줄을 지운다 | **A11** |
 | M8 | `scan_path` 의 `case "$_cand" in *-config) continue ;; esac` 줄을 지운다 | **A5 의 `CONFIG-SHOULD-NOT-RUN` 단언** — 글롭 순서상 `python3.12-config` 가 `python3.99` 보다 먼저 뽑힌다. fixture 가 진짜 인터프리터처럼 답하지 않으면 이 변이는 **통과해 버린다**(마커가 probe 의 `$( )` 에 삼켜진다) |
 | M9 | `satisfies` 의 `-ge "$FLOOR_MINOR"` 를 `-gt` 로 바꾼다 | **A12** — 이 단언이 없던 판본에서는 27/27 GREEN 을 유지한 채 **출하 바닥 자신을** 거부했다〔실측〕 |
-| M10 | `_ks_skip_has` 의 `set -f` 를 지운다 | **A13** — cwd 에 `qg:h` 가 있을 때 `qg:*` 가 훅을 끈다 |
+| M10 | `_ks_skip_has` 의 **루프 «앞»** `set -f`(`IFS=","; set -f` 줄)를 지운다 | **A13** — cwd 에 `qg:h` 가 있을 때 `qg:*` 가 훅을 끈다. **루프 «안» 의 `set -f` 를 지우면 A13 은 GREEN 으로 남는다**: POSIX `for x in $list` 는 진입 시 한 번만 확장하므로 그쪽은 어떤 확장도 통제하지 않는다(대칭을 위해 둔 것이다). 어느 쪽을 지우는지 반드시 못 박아라 |
 | M11 | `_ks_skip_has` 의 `[ -n "$3" ] &&` 가드를 지워 빈 이벤트도 별칭으로 만든다 | **A16** — `DEVBREW_SKIP_HOOKS=qg:` 하나가 그 플러그인의 «모든 무이벤트 소비자» 를 끄는 문서화되지 않은 와일드카드가 된다(정본이 주석으로 특별히 못 박은 규칙) |
 
 **단언 번호 규약** — 축 A 는 A1~A14·A16 을 쓴다. **A15 는 Task 5 가 쓴다**(advisor 의 IGNORED 공시). 비어 있는 번호를 메우지 말 것.
