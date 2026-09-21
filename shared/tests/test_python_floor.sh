@@ -320,15 +320,9 @@ for p in $COPY_PLUGINS; do
 done
 [ "$n_copy" -eq 3 ] && ok "B: 사본 자리 3건을 훑었다 (vacuous 아님)" || no "B: 사본 자리가 3이 아니다 ($n_copy)"
 
-# plugin-audit 의 kill switch 판정이 **참** 인가 — A11 의 구체 예시 줄이 load-bearing 이다.
-for p in $COPY_PLUGINS; do
-  v="$(python3 plugins/plugin-audit/scripts/check-shape-completeness.py "plugins/$p" 2>/dev/null \
-      | python3 -c 'import json,sys
-try: d = json.load(sys.stdin)["shape_gaps"]
-except Exception: print("unreadable"); raise SystemExit(0)
-m = [g["present"] for g in d if g["requirement"] == "hooks_killswitch"]
-print(m[0] if m else "absent")')"
-  assert_eq "$v" "True" "B/AC11: plugin-audit 가 $p 의 hooks_killswitch 를 참으로 낸다"
-done
+# **감사기 판정은 여기서 재지 않는다.** `hooks.json` 이 아직 해석기를 가리키지 않으므로
+# plugin-audit 는 사본을 읽지조차 않는다 — 사본을 통째로 지워도 `hooks_killswitch` 는
+# True 다〔실측〕. 여기 두면 「감사기가 커버된다」는 착시만 만든다. AC11 의 감사기 절반은
+# 배선이 생기는 **Task 3 축 C** 가 지고, 그 자리에서 심볼릭 링크 변이가 판정을 뒤집는다.
 
 finish
