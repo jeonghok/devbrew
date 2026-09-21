@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/python/** plugins/*/scripts/devbrew-python.sh
+# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json
 #
 # 출하 Python 바닥의 «집행» 이 살아 있는가. 선언은 여기서 재지 않는다 — 선언만 한 바닥은
 # 훅이 읽지 않는다는 것이 이 설계의 출발점이다(설계 Context/Why 3).
@@ -28,7 +28,10 @@ RESOLVER="shared/python/devbrew-python.sh"
 SCANNED="shared/python/devbrew-python.sh
 plugins/project-init/scripts/devbrew-python.sh
 plugins/quality-gates/scripts/devbrew-python.sh
-plugins/spec-distill/scripts/devbrew-python.sh"
+plugins/spec-distill/scripts/devbrew-python.sh
+plugins/project-init/hooks/hooks.json
+plugins/quality-gates/hooks/hooks.json
+plugins/spec-distill/hooks/hooks.json"
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$SCANNED"
   exit 0
@@ -323,6 +326,129 @@ done
 # **감사기 판정은 여기서 재지 않는다.** `hooks.json` 이 아직 해석기를 가리키지 않으므로
 # plugin-audit 는 사본을 읽지조차 않는다 — 사본을 통째로 지워도 `hooks_killswitch` 는
 # True 다〔실측〕. 여기 두면 「감사기가 커버된다」는 착시만 만든다. AC11 의 감사기 절반은
-# 배선이 생기는 **Task 3 축 C** 가 지고, 그 자리에서 심볼릭 링크 변이가 판정을 뒤집는다.
+# 배선이 생기는 아래 **축 C** 가 지고, 그 자리에서 심볼릭 링크 변이가 판정을 뒤집는다.
+
+note "── 축 C: 배선 — hooks.json 4 자리 (AC1) ──────────────────────────────"
+
+cmds_of() {   # hooks.json 하나의 command 문자열을 전부
+  python3 - "$1" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+out = []
+def walk(o):
+    if isinstance(o, dict):
+        for k, v in o.items():
+            if k == "command" and isinstance(v, str): out.append(v)
+            else: walk(v)
+    elif isinstance(o, list):
+        for x in o: walk(x)
+walk(d)
+for c in out:
+    print(c)
+PY
+}
+
+n_cmd=0; n_bare=0
+for hj in plugins/project-init/hooks/hooks.json \
+          plugins/quality-gates/hooks/hooks.json \
+          plugins/spec-distill/hooks/hooks.json; do
+  # 명령 치환을 heredoc 본문에 **직접** 넣지 않는다 — 그 형태가 본문 내용에 따라 파싱이
+  # 깨진 전례가 이 리포에 있다. 변수에 먼저 받는다(형제 락 test_copy_of_contract.sh 와 같은 꼴).
+  hj_cmds="$(cmds_of "$hj")"
+  while IFS= read -r cmd; do
+    [ -n "$cmd" ] || continue
+    n_cmd=$((n_cmd+1))
+    case "$cmd" in
+      "python3 "*) n_bare=$((n_bare+1)); no "C/AC1: bare python3 로 시작하는 자리가 남아 있다: $hj — $cmd" ;;
+      "sh \${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh "*)
+        ok "C/AC1: $hj 의 자리가 sh <해석기> 를 경유한다" ;;
+      *) no "C/AC1: $hj 의 command 가 기대 형태가 아니다: $cmd" ;;
+    esac
+    # 훅 .py 는 «마지막 토큰» 이어야 한다 — project-init 의 test_command_contract.py:125 가
+    # `h["command"].split()[-1]` 로 훅 스크립트를 뽑는다. 순서를 바꾸면 그 락이 조용히
+    # 엉뚱한 파일명을 본다.
+    last="${cmd##* }"
+    case "$last" in
+      *.py) ok "C/AC1: 마지막 토큰이 훅 .py 다 ($last)" ;;
+      *)    no "C/AC1: 마지막 토큰이 훅 .py 가 아니다 ($last) — test_command_contract.py 가 깨진다" ;;
+    esac
+    # --event / --plugin / --hook 셋이 다 있어야 kill switch 가 정본과 같은 판정을 한다
+    for flag in --event --plugin --hook; do
+      case "$cmd" in *"$flag "*) ;; *) no "C/AC1: $hj 의 자리에 $flag 가 없다" ;; esac
+    done
+  done <<EOF
+$hj_cmds
+EOF
+done
+assert_eq "$n_cmd" "4" "C/AC1: hooks.json 3 파일에서 호출 자리 4건을 셌다"
+assert_eq "$n_bare" "0" "C/AC1: bare python3 로 시작하는 자리가 0 이다"
+
+# ── AC11 의 «감사기» 절반 — 이 자리에서 비로소 이빨이 생긴다 ─────────────────
+# Task 2 에서는 이 단언이 아무것도 재지 못했다: `hooks.json` 이 해석기를 가리키지 않아
+# plugin-audit 가 사본을 읽지조차 않았고, 사본을 통째로 지워도 True 였다〔실측〕.
+# 배선이 생긴 지금부터는 command 의 `.sh` 와 `.py` 를 **둘 다** 판독하므로,
+# 해석기가 심볼릭 링크면 `.resolve()` 가 `shared/` 로 풀려 containment 가 거부되고
+# 세 플러그인 모두에 거짓 「kill switch 부재」가 난다(C9·R13).
+for p in project-init quality-gates spec-distill; do
+  v="$(python3 plugins/plugin-audit/scripts/check-shape-completeness.py "plugins/$p" 2>/dev/null \
+      | python3 -c 'import json,sys
+try: d = json.load(sys.stdin)["shape_gaps"]
+except Exception: print("unreadable"); raise SystemExit(0)
+m = [g["present"] for g in d if g["requirement"] == "hooks_killswitch"]
+print(m[0] if m else "absent")')"
+  assert_eq "$v" "True" "C/AC11: plugin-audit 가 $p 의 hooks_killswitch 를 참으로 낸다"
+done
+
+note "── 축 C2: PATH 격리 시뮬레이션 (AC12 · L3) ───────────────────────────"
+# **먼저 이 PATH 의 python3 가 정말 바닥 미만인지 확인한다.** Apple 이 그것을 올리면
+# 이 시뮬레이션은 «조용히 아무것도 재지 않게» 된다 — 그때는 통과가 아니라 RED 로 알린다.
+# FLOOR_*_VAL 은 파일 머리에서 도출됐다(증인 포함).
+iso_ver="$(PATH=/usr/bin:/bin python3 -c 'import sys;print("%d %d"%sys.version_info[:2])' 2>/dev/null || true)"
+iso_ma="${iso_ver%% *}"; iso_mi="${iso_ver##* }"
+iso_ok=0
+if [ -z "$iso_ver" ]; then
+  ok "C2/AC12: PATH=/usr/bin:/bin 에 python3 가 없다 — 해석 실패 경로를 그대로 잰다"; iso_ok=1
+elif [ -z "${FLOOR_MAJOR_VAL:-}" ] || [ -z "${FLOOR_MINOR_VAL:-}" ]; then
+  no "C2/AC12: 출하 바닥을 못 읽어 격리 PATH 의 유효성을 판정할 수 없다"
+elif [ "$iso_ma" -gt "$FLOOR_MAJOR_VAL" ] || { [ "$iso_ma" -eq "$FLOOR_MAJOR_VAL" ] && [ "$iso_mi" -ge "$FLOOR_MINOR_VAL" ]; }; then
+  no "C2/AC12: **이 시뮬레이션이 아무것도 재지 않는다** — PATH=/usr/bin:/bin 의 python3 가 ${iso_ma}.${iso_mi} 로 이미 바닥 이상이다. 격리 PATH 를 다시 골라라 (L3)"
+else
+  ok "C2/AC12: PATH=/usr/bin:/bin 의 python3 = ${iso_ma}.${iso_mi} < 바닥 (시뮬레이션이 유효하다)"; iso_ok=1
+fi
+
+if [ "$iso_ok" -eq 1 ]; then
+  # 실제 훅 «넷» 을 그대로 쓴다 — AC12 가 말하는 것이 그것이다. 해석에 실패하면 해석기가
+  # exec 하지 않으므로 훅 파이썬은 한 줄도 돌지 않는다.
+  for spec in "SessionStart:quality-gates:session-start-advisor:plugins/quality-gates/hooks/session-start-advisor.py" \
+              "SessionEnd:quality-gates:session-end-cleanup:plugins/quality-gates/hooks/session-end-cleanup.py" \
+              "SessionEnd:spec-distill:session-end-cleanup:plugins/spec-distill/hooks/session-end-cleanup.py" \
+              "PostToolUse:project-init:post-tool-use:plugins/project-init/hooks/post-tool-use.py"; do
+    ev="${spec%%:*}"; r1="${spec#*:}"; pl="${r1%%:*}"; r2="${r1#*:}"; hk="${r2%%:*}"; tgt="${r2#*:}"
+    out="$(printf '{"session_id":"00000000-0000-0000-0000-0000000000c2","cwd":"%s","tool_name":"Bash","tool_input":{"command":"true"}}' "$TMP" \
+           | env PATH=/usr/bin:/bin /bin/sh "$R" \
+             --event "$ev" --plugin "$pl" --hook "$hk" "$ROOT/$tgt" 2>/dev/null)"; rc=$?
+    assert_eq "$rc" "0" "C2/AC12: $pl/$hk 가 rc 0 이다 (fail-open, 막지 않는다)"
+    if [ "$ev" = "SessionStart" ]; then
+      assert_grep "$out" 'additionalContext' "C2/AC12: SessionStart 는 안내 JSON 을 낸다"
+    else
+      assert_eq "$out" "" "C2/AC12: $ev($pl) 는 stdout 이 비어 있다"
+    fi
+    out_ks="$(printf '{"session_id":"x"}' \
+           | env PATH=/usr/bin:/bin DEVBREW_SKIP_HOOKS="$pl:$ev" /bin/sh "$R" \
+             --event "$ev" --plugin "$pl" --hook "$hk" "$ROOT/$tgt" 2>/dev/null)"
+    assert_eq "$out_ks" "" "C2/AC12: kill switch 를 켜면 $pl/$ev 는 안내도 내지 않는다"
+  done
+
+  # 「본래 동작은 수행되지 않는다」 — 위 넷은 실패 경로에서 부작용이 없어 관측할 것이
+  # 없으므로, **메커니즘** 을 카나리아로 직접 잰다: exec 이 없으면 대상 코드가 한 줄도 안 돈다.
+  CANARY="$TMP/canary.sh"; CANARY_MARK="$TMP/canary.ran"
+  printf '#!/bin/sh\ntouch "%s"\n' "$CANARY_MARK" > "$CANARY"; chmod +x "$CANARY"
+  rm -f "$CANARY_MARK"
+  printf '{}' | env PATH=/usr/bin:/bin /bin/sh "$R" \
+    --event PostToolUse --plugin project-init --hook post-tool-use "$CANARY" >/dev/null 2>&1
+  [ -f "$CANARY_MARK" ] \
+    && no "C2/AC12: 해석에 실패했는데 대상이 실행됐다 — exec 하지 않는다는 계약이 깨졌다" \
+    || ok "C2/AC12: 해석 실패 시 대상이 한 줄도 돌지 않는다 (본래 동작 미수행)"
+fi
 
 finish
