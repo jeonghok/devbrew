@@ -134,7 +134,8 @@ docreview:
       replacement: null
       if_unfixed: null
       decision_view:
-        change: Non-goals 가 브리프의 범위 항목 하나를 조용히 뺐다
+        if_unfixed: (리뷰어가 안 적음)
+        replacement: (대체안 미작성)
         basis: 브리프 §2 C3 vs 문서 §3
         alternatives:
         - 채택(적용)
@@ -209,7 +210,8 @@ docreview:
       replacement: null
       if_unfixed: null
       decision_view:
-        change: c.py 누락 — 파일 목록이 실제 변경과 다르다
+        if_unfixed: (리뷰어가 안 적음)
+        replacement: (대체안 미작성)
         basis: §5 가 c.py 를 참조한다
         alternatives:
         - 채택(적용)
@@ -261,7 +263,8 @@ docreview:
       replacement: null
       if_unfixed: null
       decision_view:
-        change: 목표 B 가 두 가지로 읽힌다
+        if_unfixed: (리뷰어가 안 적음)
+        replacement: (대체안 미작성)
         basis: (근거 없음)
         alternatives:
         - 채택(적용)
@@ -335,7 +338,8 @@ docreview:
       replacement: null
       if_unfixed: null
       decision_view:
-        change: §5 의 데이터 흐름에 소비자 없는 산출물이 있다 — 의도인가?
+        if_unfixed: (리뷰어가 안 적음)
+        replacement: (대체안 미작성)
         basis: (근거 없음)
         alternatives:
         - 채택(적용)
@@ -409,7 +413,8 @@ docreview:
       replacement: null
       if_unfixed: null
       decision_view:
-        change: 'finding 없이 바뀜: 12. Files to Modify (modified)'
+        if_unfixed: (리뷰어가 안 적음)
+        replacement: (대체안 미작성)
         basis: 섹션 '12. Files to Modify' (#12-files-to-modify) modified — hash 62a715899d27→5d9a206e6f82
         alternatives:
         - 채택(적용)

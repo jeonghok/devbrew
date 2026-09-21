@@ -2192,3 +2192,34 @@ case_fields_survive_non_decide() {
     "plan 이 그 자리를 스스로 지어낸다" "AC21': fix 처분의 if_unfixed 도 원장에 남는다"
   rm -rf "$d"
 }
+# ── 동어반복 제거 + 침묵 공시 (AC15) ────────────────────────────────────────
+# 「변경」이 헤더의 복사였다. 칸을 더해도 fallback 이 summary 를 되풀이하면 그 실패는
+# «필드가 비어 있지 않아» 관측되지 않는다 — 그래서 부재는 리터럴로 말한다.
+case_decision_view_no_tautology() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" --skip)" || { no "동어반복: route_r1 실패"; return; }
+  assert_eq "$(fsum "$d" '다른 것을 겨눈다' '["decision_view"].get("change", "<없음>")')" "<없음>" \
+    "AC15: decision_view 에 change 키가 없다 (헤더 복사 제거)"
+  assert_eq "$(fsum "$d" '다른 것을 겨눈다' '["decision_view"]["replacement"]')" \
+    "§2 를 브리프 §1 의 goal 한 문장으로 되돌린다" "AC15 양의 짝: 채워진 replacement 는 그대로 난다"
+  assert_eq "$(fsum "$d" '다른 것을 겨눈다' '["decision_view"]["if_unfixed"]')" \
+    "설계 전체가 다른 문제를 잘 푸는 쪽으로 굳는다" "AC15 양의 짝: 채워진 if_unfixed 는 그대로 난다"
+  rm -rf "$d"
+}
+# 부재가 summary 로 메워지지 않는다. frozen_change 는 애초에 두 칸이 없는 «실재하는»
+# 경로라 리뷰어 실수를 지어내지 않고도 이 갈래를 태울 수 있다. T35 와 같은 시퀀스
+# (route_r1 → next_round → prepare-recritic(critic-nolayer2, codex-failed) →
+# finalize(recritic-missing)) — 이미 frozen_change 둘을 내는 것으로 검증된 경로다.
+case_decision_view_absence_is_literal() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  local dv; dv="$(jget "$d/fin.json" '[x["decision_view"] for x in d["findings"] if x["category"]=="frozen_change"][0]')"
+  assert_grep "$dv" '리뷰어가 안 적음' "AC15: if_unfixed 부재는 「(리뷰어가 안 적음)」으로 난다"
+  assert_grep "$dv" '대체안 미작성' "AC15: replacement 부재는 「(대체안 미작성)」으로 난다"
+  case "$dv" in
+    *'그냥 뺀다'*) no "AC15: 부재가 「대체안 없음 — 그냥 뺀다」로 났다 — 아무도 제안하지 않은 삭제를 만들어 낸다" ;;
+    *) ok "AC15: 부재가 삭제 제안으로 승격되지 않았다" ;;
+  esac
+  rm -rf "$d"
+}

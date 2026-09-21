@@ -41,7 +41,8 @@
    "id": "42522f07#r2.1",
    "lineage": "42522f07#r2.1",
    "decision_view": {
-    "change": "finding 없이 바뀜: 12. Files to Modify (modified)",
+    "if_unfixed": "(리뷰어가 안 적음)",
+    "replacement": "(대체안 미작성)",
     "basis": "섹션 '12. Files to Modify' (#12-files-to-modify) modified — hash 62a715899d27→5d9a206e6f82",
     "alternatives": [
      "채택(적용)",

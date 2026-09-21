@@ -236,7 +236,15 @@ def _decision_view(it, doc, st):
     basis = it.get("evidence")
     if not basis:
         basis = "finding 없이 바뀜" if it["category"] == "frozen_change" else "(근거 없음)"
-    return {"change": it["summary"], "basis": basis,
+    # [갈래 2] `change` 를 «내지 않는다» — 그 값은 it["summary"] 였고 헤더가 이미 그
+    # 문자열을 낸다(동어반복). 대신 두 칸을 낸다. **부재를 summary 로 메우지 않는다**:
+    # 메우면 「리뷰어가 안 적었다」는 사실이 필드가 비어 있지 않다는 이유로 관측되지
+    # 않는다. 그리고 두 부재 리터럴은 서로 다르다 — 침묵(`(대체안 미작성)`)과 판정
+    # (`대체안 없음 — 그냥 뺀다`, 리뷰어가 그 문자열을 실제로 냈을 때만)은 다른
+    # 사실이다. 같은 글자를 내면 아무도 제안하지 않은 삭제가 제안으로 전달된다.
+    return {"if_unfixed": it.get("if_unfixed") or "(리뷰어가 안 적음)",
+            "replacement": it.get("replacement") or "(대체안 미작성)",
+            "basis": basis,
             "alternatives": [_CHOICE_LABEL[c] for c in choices],
             "impact": "%s · 인용 %s 섹션" % (it["anchor"], nref if nref is not None else "?"),
             "auto": it.get("origin") == "auto"}

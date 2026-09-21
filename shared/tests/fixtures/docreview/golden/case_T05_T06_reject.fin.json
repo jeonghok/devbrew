@@ -22,7 +22,8 @@
    "id": "fee27fc9#r1.1",
    "lineage": "fee27fc9#r1.1",
    "decision_view": {
-    "change": "Non-goals 가 브리프의 범위 항목 하나를 조용히 뺐다",
+    "if_unfixed": "(리뷰어가 안 적음)",
+    "replacement": "(대체안 미작성)",
     "basis": "브리프 §2 C3 vs 문서 §3",
     "alternatives": [
      "채택(적용)",
@@ -95,7 +96,8 @@
    "id": "9dea7cf3#r1.1",
    "lineage": "9dea7cf3#r1.1",
    "decision_view": {
-    "change": "c.py 누락 — 파일 목록이 실제 변경과 다르다",
+    "if_unfixed": "(리뷰어가 안 적음)",
+    "replacement": "(대체안 미작성)",
     "basis": "§5 가 c.py 를 참조한다",
     "alternatives": [
      "채택(적용)",
@@ -148,7 +150,8 @@
    "id": "11adb9c3#r1.1",
    "lineage": "11adb9c3#r1.1",
    "decision_view": {
-    "change": "목표 B 가 두 가지로 읽힌다",
+    "if_unfixed": "(리뷰어가 안 적음)",
+    "replacement": "(대체안 미작성)",
     "basis": "(근거 없음)",
     "alternatives": [
      "채택(적용)",
@@ -221,7 +224,8 @@
    "id": "1615824b#r1.1",
    "lineage": "1615824b#r1.1",
    "decision_view": {
-    "change": "§5 의 데이터 흐름에 소비자 없는 산출물이 있다 — 의도인가?",
+    "if_unfixed": "(리뷰어가 안 적음)",
+    "replacement": "(대체안 미작성)",
     "basis": "(근거 없음)",
     "alternatives": [
      "채택(적용)",

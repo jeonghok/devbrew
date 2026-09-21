@@ -70,4 +70,6 @@ case_E4_snapshot_missing_unverified
 case_critic_freshness_unknown_disclosed
 case_fields_roundtrip_decide
 case_fields_survive_non_decide
+case_decision_view_no_tautology
+case_decision_view_absence_is_literal
 finish
