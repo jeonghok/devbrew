@@ -219,8 +219,12 @@ TARGET="$TMP/target.sh"      # 훅 대역 — exec 됐는지와 stdin 이 온전
 cat > "$TARGET" <<'T'
 #!/bin/sh
 # **내장 명령만 쓴다** — A4b 는 coreutils 가 하나도 없는 PATH 로 돈다(`cat` 이 없다).
+# `|| [ -n "$_line" ]` 는 장식이 아니다: payload 는 `printf '%s'` 로 와서 **끝에 개행이
+# 없고**, 그 가드가 없으면 마지막(=유일한) 줄이 통째로 버려져 A10 이 조용히 RED 다
+# 〔/bin/sh · dash · ksh 셋 다 실측〕. 리포의 같은 관용구:
+# plugins/spec-distill/tests/test_seed_agents.sh:173
 echo "TARGET-RAN"
-while IFS= read -r _line; do printf '%s\n' "$_line"; done
+while IFS= read -r _line || [ -n "$_line" ]; do printf '%s\n' "$_line"; done
 T
 chmod +x "$TARGET"
 
@@ -326,8 +330,10 @@ assert_contains "$out" "TARGET-RAN" "A9/AC8: 바닥을 만족하는 \$DEVBREW_PY
 REPORT_ENV="$TMP/report_env.sh"
 cat > "$REPORT_ENV" <<'R'
 #!/bin/sh
+# stdin 을 읽지 않는다 — 여기서 재는 것은 «환경» 이고, payload 는 파이프 버퍼에 이미
+# 다 쓰여 있다(수십 바이트). 읽지 않는 쪽이 움직이는 부품이 하나 적고, 위 $TARGET 의
+# 가드 없는 사본이 이 파일에 남아 복사되는 일도 없다.
 echo "ignored=${DEVBREW_PYTHON_IGNORED-}"
-while IFS= read -r _line; do :; done
 R
 chmod +x "$REPORT_ENV"
 out="$(run_resolver "$PATH_FLOOR" "DEVBREW_PYTHON=$TMP/sub/python3.9" /bin/sh "$R" \
