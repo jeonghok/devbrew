@@ -1092,7 +1092,22 @@ def gate_summary(st) -> dict:
     return g
 
 
-_CHOICE_LABEL = {"adopt": "채택(적용)", "reject": "기각(원복)", "hold": "보류"}
+# 선택지 라벨은 **상태의 함수**다. `cmd_decide` 가 kind=post 에서 reject 에 revert
+# permit 을 만드므로(위 `cmd_decide` 의 post 분기 — `kind: "revert"` permit 을 여는
+# 자리) 고정 라벨을 사람말로 바꾸면 그 자리에서 «동작을 반대로 설명»하게 된다.
+# 회계어(채택·기각·보류)는 괄호 안에 그대로 보존한다 — 낱말을 바꾸는 것이 아니라
+# 사람말을 앞에 두는 것이다.
+_CHOICE_LABEL = {
+    "pre":  {"adopt": "고친다(채택)",        "reject": "그대로 둔다(기각)",      "hold": "나중에 정한다(보류)"},
+    "post": {"adopt": "현재 변경 유지(채택)", "reject": "이전 상태로 원복(기각)", "hold": "나중에 정한다(보류)"},
+}
+
+
+def choice_label(choice, kind) -> str:
+    """선택지 라벨 — 리터럴이 사는 유일한 자리. `kind` 가 없으면 `pre` 로 읽는다
+    (`record_findings` 가 기록 시점에 `it.get("kind") or "pre"` 로 강제하므로
+    원장에서 온 값은 항상 둘 중 하나다 — None 은 원장 밖 호출부에서만 온다)."""
+    return _CHOICE_LABEL.get(kind or "pre", _CHOICE_LABEL["pre"])[choice]
 
 
 def _post_kind_notice(d) -> str:
@@ -1115,8 +1130,8 @@ def _rg_decide(st, g, fid):
     # 영향 세 필드에는 여전히 쓴다 — 그 셋은 항목별 서술이라 선택지 축과 무관하다.
     f = st["findings"][fid]
     dv = f.get("decision_view") or {}
-    alternatives = [_CHOICE_LABEL[c] for c in decide_choices(st, fid)]
     d = st["decides"].get(fid) or {}
+    alternatives = [choice_label(c, d.get("kind")) for c in decide_choices(st, fid)]
     return ["[decide%s] %s — %s%s" % (" auto" if dv.get("auto") else "", fid, f.get("summary"), _post_kind_notice(d)),
             "  변경: %s" % dv.get("change", f.get("summary")),
             "  근거: %s" % dv.get("basis", f.get("evidence") or "—"),
@@ -1138,7 +1153,7 @@ def _rg_expired(st, g, fid):
     # 닫으려던 「제안 ≠ 수용」이 형제 렌더러에 그대로 있었다. `decide_choices` 로
     # 통일한다(M3 부산물 — `_rg_decide` 와 라벨 어휘도 이제 같다).
     d = st["decides"].get(fid) or {}
-    alt = " / ".join(_CHOICE_LABEL[c] for c in decide_choices(st, fid))
+    alt = " / ".join(choice_label(c, d.get("kind")) for c in decide_choices(st, fid))
     return ["[만료·차단] %s — %s (%s%s)" % (fid, st["findings"][fid].get("summary"), alt, _post_kind_notice(d))]
 
 

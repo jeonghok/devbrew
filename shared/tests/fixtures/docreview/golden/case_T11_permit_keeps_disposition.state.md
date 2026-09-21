@@ -138,9 +138,9 @@ docreview:
         replacement: (대체안 미작성)
         basis: 브리프 §2 C3 vs 문서 §3
         alternatives:
-        - 채택(적용)
-        - 기각(원복)
-        - 보류
+        - 고친다(채택)
+        - 그대로 둔다(기각)
+        - 나중에 정한다(보류)
         impact: '#3-non-goals · 인용 0 섹션'
         auto: false
       state: null
@@ -214,9 +214,9 @@ docreview:
         replacement: (대체안 미작성)
         basis: §5 가 c.py 를 참조한다
         alternatives:
-        - 채택(적용)
-        - 기각(원복)
-        - 보류
+        - 고친다(채택)
+        - 그대로 둔다(기각)
+        - 나중에 정한다(보류)
         impact: '#12-files-to-modify · 인용 1 섹션'
         auto: false
       state: null
@@ -267,9 +267,9 @@ docreview:
         replacement: (대체안 미작성)
         basis: (근거 없음)
         alternatives:
-        - 채택(적용)
-        - 기각(원복)
-        - 보류
+        - 고친다(채택)
+        - 그대로 둔다(기각)
+        - 나중에 정한다(보류)
         impact: '#2-goals · 인용 0 섹션'
         auto: true
       state: null
@@ -342,9 +342,9 @@ docreview:
         replacement: (대체안 미작성)
         basis: (근거 없음)
         alternatives:
-        - 채택(적용)
-        - 기각(원복)
-        - 보류
+        - 고친다(채택)
+        - 그대로 둔다(기각)
+        - 나중에 정한다(보류)
         impact: '#5-architecture · 인용 0 섹션'
         auto: true
       state: null
@@ -417,9 +417,9 @@ docreview:
         replacement: (대체안 미작성)
         basis: 섹션 '12. Files to Modify' (#12-files-to-modify) modified — hash 62a715899d27→5d9a206e6f82
         alternatives:
-        - 채택(적용)
-        - 기각(원복)
-        - 보류
+        - 현재 변경 유지(채택)
+        - 이전 상태로 원복(기각)
+        - 나중에 정한다(보류)
         impact: '#12-files-to-modify · 인용 1 섹션'
         auto: true
       state: null

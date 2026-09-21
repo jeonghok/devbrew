@@ -72,4 +72,6 @@ case_fields_roundtrip_decide
 case_fields_survive_non_decide
 case_decision_view_no_tautology
 case_decision_view_absence_is_literal
+case_labels_are_kind_dependent
+case_labels_pre_site
 finish

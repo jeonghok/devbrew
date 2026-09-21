@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점
 from adjudication import Ledger  # noqa: E402
 from docreview_anchor import classify_anchor, refs_of  # noqa: E402
 from docreview_state import (  # noqa: E402
-    RANK, _CHOICE_LABEL, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, fail, load_profile,
+    RANK, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, choice_label, fail, load_profile,
     load_state, observe_ledger, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
 
@@ -245,7 +245,7 @@ def _decision_view(it, doc, st):
     return {"if_unfixed": it.get("if_unfixed") or "(리뷰어가 안 적음)",
             "replacement": it.get("replacement") or "(대체안 미작성)",
             "basis": basis,
-            "alternatives": [_CHOICE_LABEL[c] for c in choices],
+            "alternatives": [choice_label(c, it.get("kind")) for c in choices],
             "impact": "%s · 인용 %s 섹션" % (it["anchor"], nref if nref is not None else "?"),
             "auto": it.get("origin") == "auto"}
 

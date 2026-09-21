@@ -372,7 +372,7 @@ case_AC22b_reraise_successor_hold_refused() {
   # render 만 맞고 fin.json 의 decision_view.alternatives 는 여전히 셋을 내던 것이
   # 리뷰가 실측으로 잡은 결함(fin.json·state.md·골든 셋 다 새는 채널).
   assert_eq "$(jget "$d/fin2.json" '[x["decision_view"]["alternatives"] for x in d["findings"] if x["id"]=="'"$succ"'"][0]')" \
-    "['채택(적용)', '기각(원복)']" "AC22b: fin.json 의 decision_view.alternatives 에도 「보류」가 없다(I1 — JSON 채널)"
+    "['고친다(채택)', '그대로 둔다(기각)']" "AC22b: fin.json 의 decision_view.alternatives 에도 「보류」가 없다(I1 — JSON 채널)"
   # I5(리뷰) — 선결조건: 이 항목이 유일한 열린 항목이다(클러터 없음). 이게 없으면
   # 아래 마지막 단언은 이 성공/실패와 무관하게 항상 False 라 아무것도 못 잰다.
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["open_decide"], d["unapplied_fix"], d["blocking_ask_open"]')" \
@@ -486,11 +486,11 @@ choices_match() {   # choices_match <render-text> <fid> <state-dir> → True/Fal
   python3 -c '
 import sys
 sys.path.insert(0, sys.argv[1])
-from docreview_state import load_state, decide_choices
-LABEL = {"adopt": "채택(적용)", "reject": "기각(원복)", "hold": "보류"}
+from docreview_state import load_state, decide_choices, choice_label
 st = load_state(sys.argv[2])
 choices = decide_choices(st, sys.argv[3])
-expected = {LABEL[c] for c in choices}
+kind = (st["decides"].get(sys.argv[3]) or {}).get("kind")
+expected = {choice_label(c, kind) for c in choices}
 alt_line = sys.argv[4]
 offered = set()
 if "대안: " in alt_line:
@@ -501,19 +501,19 @@ print(bool(choices) and expected == offered)
 # [Task 4 fix round 1 — 리뷰 I4] `_rg_expired` 도 괄호 안에 선택지를 나열한다 —
 # `_rg_decide` 의 「대안:」 줄과는 다른 형식(별도 줄이 아니라 한 줄에 인라인)이라
 # `choices_match` 를 그대로 못 쓴다. 정규식으로 다시 파싱하지 않는다 — 라벨
-# 자체가 괄호를 품는다(`채택(적용)`). 대신 실제로 찍히는 접두사·형식을 그대로
+# 자체가 괄호를 품는다(`고친다(채택)`). 대신 실제로 찍히는 접두사·형식을 그대로
 # 재구성해 벗겨낸다(프로그램의 포맷 문자열과 같은 모양).
 choices_match_expired() {   # choices_match_expired <render-text> <fid> <state-dir> → True/False
   local line; line="$(printf '%s\n' "$1" | grep -F -- "[만료·차단] $2 —" | head -1)"
   python3 -c '
 import sys
 sys.path.insert(0, sys.argv[1])
-from docreview_state import load_state, decide_choices
-LABEL = {"adopt": "채택(적용)", "reject": "기각(원복)", "hold": "보류"}
+from docreview_state import load_state, decide_choices, choice_label
 st = load_state(sys.argv[2])
 fid = sys.argv[3]
 choices = decide_choices(st, fid)
-expected = {LABEL[c] for c in choices}
+kind = (st["decides"].get(fid) or {}).get("kind")
+expected = {choice_label(c, kind) for c in choices}
 line = sys.argv[4]
 summary = st["findings"][fid].get("summary") or ""
 prefix = "[만료·차단] %s — %s (" % (fid, summary)
@@ -1171,7 +1171,9 @@ case_T35_frozen_change_auto_decide() {
   assert_eq "$fr" "[('#12-files-to-modify', 'decide', 'auto', 'post'), ('#2-goals', 'decide', 'auto', 'post')]" "T35·AC4: 얼린 두 섹션의 변경 → 사후 auto decide 둘"
   assert_grep "$(jget "$d/fin.json" '[x["evidence"] for x in d["findings"] if x["anchor"]=="#12-files-to-modify" and x["category"]=="frozen_change"][0]')" 'hash [0-9a-f]{12}→[0-9a-f]{12}' "T35·AC4: evidence 에 헤딩 diff(해시 전후)"
   assert_grep "$(jget "$d/fin.json" '[x["decision_view"]["impact"] for x in d["findings"] if x["anchor"]=="#12-files-to-modify" and x["category"]=="frozen_change"][0]')" '인용 1 섹션' "T35: 영향 = refs (Architecture 가 #12 를 인용)"
-  assert_eq "$(jget "$d/fin.json" '[x["decision_view"]["alternatives"] for x in d["findings"] if x["category"]=="frozen_change"][0]')" "['채택(적용)', '기각(원복)', '보류']" "T35: 대안은 고정 셋"
+  # `frozen_change` 는 `kind=post` 다 — 이 자리의 기댓값은 **post 라벨 셋**이어야 한다
+  # (pre 셋을 적으면 통과하는 스위트가 엉뚱한 것을 단언한다).
+  assert_eq "$(jget "$d/fin.json" '[x["decision_view"]["alternatives"] for x in d["findings"] if x["category"]=="frozen_change"][0]')" "['현재 변경 유지(채택)', '이전 상태로 원복(기각)', '나중에 정한다(보류)']" "T35: 대안은 kind=post 의 셋"
   rm -rf "$d"
 }
 case_T28_escalated_fix_becomes_decide() {
@@ -2221,5 +2223,37 @@ case_decision_view_absence_is_literal() {
     *'그냥 뺀다'*) no "AC15: 부재가 「대체안 없음 — 그냥 뺀다」로 났다 — 아무도 제안하지 않은 삭제를 만들어 낸다" ;;
     *) ok "AC15: 부재가 삭제 제안으로 승격되지 않았다" ;;
   esac
+  rm -rf "$d"
+}
+
+# ── 라벨은 kind 의 함수다 (AC17 · AC17') ───────────────────────────────────
+# cmd_decide 는 kind=post 에서 reject 에 revert permit 을 만든다 — 그 자리에서
+# 「그대로 둔다」는 실제로 원복이다. 고정 라벨을 사람말로 바꾸면 동작을 반대로
+# 설명하게 된다. 이 케이스는 얼림 diff 가 만드는 «실재하는» post 항목 위에서 돈다.
+case_labels_are_kind_dependent() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "라벨 kind: r1 실패"; return; }
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  local render; render="$(py docreview_state.py gate --state-dir "$d" --render)"
+  local fid; fid="$(jget "$d/fin.json" '[x["id"] for x in d["findings"] if x["category"]=="frozen_change"][0]')"
+  assert_eq "$(st_yaml "$d" 'st["decides"]["'"$fid"'"]["kind"]')" "post" \
+    "라벨 kind: 선결조건 — 이 항목은 kind=post 다(공허하지 않음의 증거)"
+  local blk; blk="$(printf '%s\n' "$render" | grep -F -A6 -- "] $fid —")"
+  assert_grep "$blk" '현재 변경 유지\(채택\)' "AC17: post 의 adopt 라벨은 「현재 변경 유지(채택)」"
+  assert_grep "$blk" '이전 상태로 원복\(기각\)' "AC17: post 의 reject 라벨은 「이전 상태로 원복(기각)」"
+  case "$blk" in
+    *'그대로 둔다'*) no "AC17': post 자리에 「그대로 둔다」로 읽히는 라벨이 있다 — reject 가 revert permit 을 만드는데 동작을 반대로 설명한다" ;;
+    *) ok "AC17': post 자리에 「그대로 둔다」로 읽히는 라벨이 하나도 없다" ;;
+  esac
+  rm -rf "$d"
+}
+# pre 자리의 양의 짝 — 위 부재 단언이 「라벨이 통째로 사라져서」 통과하는 것을 막는다.
+case_labels_pre_site() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" --skip)" || { no "라벨 pre: route_r1 실패"; return; }
+  local render; render="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_grep "$render" '고친다\(채택\)'       "AC17: pre 의 adopt 라벨은 「고친다(채택)」"
+  assert_grep "$render" '그대로 둔다\(기각\)'  "AC17: pre 의 reject 라벨은 「그대로 둔다(기각)」"
+  assert_grep "$render" '나중에 정한다\(보류\)' "AC17: hold 라벨은 양쪽에서 「나중에 정한다(보류)」"
   rm -rf "$d"
 }
