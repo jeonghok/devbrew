@@ -752,16 +752,10 @@ for p in $COPY_PLUGINS; do
 done
 [ "$n_copy" -eq 3 ] && ok "B: 사본 자리 3건을 훑었다 (vacuous 아님)" || no "B: 사본 자리가 3이 아니다 ($n_copy)"
 
-# plugin-audit 의 kill switch 판정이 **참** 인가 — A11 의 구체 예시 줄이 load-bearing 이다.
-for p in $COPY_PLUGINS; do
-  v="$(python3 plugins/plugin-audit/scripts/check-shape-completeness.py "plugins/$p" 2>/dev/null \
-      | python3 -c 'import json,sys
-try: d = json.load(sys.stdin)["shape_gaps"]
-except Exception: print("unreadable"); raise SystemExit(0)
-m = [g["present"] for g in d if g["requirement"] == "hooks_killswitch"]
-print(m[0] if m else "absent")')"
-  assert_eq "$v" "True" "B/AC11: plugin-audit 가 $p 의 hooks_killswitch 를 참으로 낸다"
-done
+# **감사기 판정은 여기서 재지 않는다.** `hooks.json` 이 아직 해석기를 가리키지 않으므로
+# plugin-audit 는 사본을 읽지조차 않는다 — 사본을 통째로 지워도 `hooks_killswitch` 는
+# True 다〔실측〕. 여기 두면 「감사기가 커버된다」는 착시만 만든다. AC11 의 감사기 절반은
+# 배선이 생기는 **Task 3 축 C** 가 지고, 그 자리에서 심볼릭 링크 변이가 판정을 뒤집는다.
 ````
 
 - [ ] **Step 2: 돌려서 실패를 확인한다**
@@ -806,15 +800,15 @@ Expected: 셋 다 `Fail: 0`.
 - [ ] **Step 6: 변이로 이빨을 확인한다**
 
 ```bash
-# 링크로 바꾸면 축 B 와 plugin-audit 둘 다 RED 여야 한다
+# 링크로 바꾸면 축 B 의 두 단언(심볼릭 링크다 · 마커 없다)이 RED 여야 한다.
 rm plugins/spec-distill/scripts/devbrew-python.sh
 ln -s ../../../shared/python/devbrew-python.sh plugins/spec-distill/scripts/devbrew-python.sh
-bash shared/tests/test_python_floor.sh   # Expected: FAIL (심볼릭 링크다 + hooks_killswitch)
-git checkout HEAD -- plugins/spec-distill/scripts/devbrew-python.sh 2>/dev/null || true
-rm -f plugins/spec-distill/scripts/devbrew-python.sh
-# 다시 만든다
-{ head -1 shared/python/devbrew-python.sh; echo "# copy-of: shared/python/devbrew-python.sh"; tail -n +2 shared/python/devbrew-python.sh; } > plugins/spec-distill/scripts/devbrew-python.sh
+bash shared/tests/test_python_floor.sh   # Expected: FAIL — 축 B 의 spec-distill 단언 둘
+git checkout HEAD -- plugins/spec-distill/scripts/devbrew-python.sh
+git diff HEAD --stat                     # 비어야 복원 완료
 ```
+
+**`hooks_killswitch` 는 여기서 안 움직인다** — 그것을 기대하지 마라. `hooks.json` 이 아직 해석기를 가리키지 않아 plugin-audit 가 사본을 **읽지조차 않는다**. 사본을 통째로 지워도 그 판정은 `True` 다〔실측〕. AC11 의 감사기 절반은 배선이 생기는 Task 3 의 몫이다.
 
 **주의** — 이 시점에 사본은 아직 커밋되지 않았으므로 `git checkout HEAD --` 가 복원하지 못한다. 위 마지막 줄이 재생성이다. 변이 실험은 **커밋 뒤에** 하는 편이 안전하다(Step 7 뒤로 미뤄도 된다).
 
@@ -907,6 +901,22 @@ EOF
 done
 assert_eq "$n_cmd" "4" "C/AC1: hooks.json 3 파일에서 호출 자리 4건을 셌다"
 assert_eq "$n_bare" "0" "C/AC1: bare python3 로 시작하는 자리가 0 이다"
+
+# ── AC11 의 «감사기» 절반 — 이 자리에서 비로소 이빨이 생긴다 ─────────────────
+# Task 2 에서는 이 단언이 아무것도 재지 못했다: `hooks.json` 이 해석기를 가리키지 않아
+# plugin-audit 가 사본을 읽지조차 않았고, 사본을 통째로 지워도 True 였다〔실측〕.
+# 배선이 생긴 지금부터는 command 의 `.sh` 와 `.py` 를 **둘 다** 판독하므로,
+# 해석기가 심볼릭 링크면 `.resolve()` 가 `shared/` 로 풀려 containment 가 거부되고
+# 세 플러그인 모두에 거짓 「kill switch 부재」가 난다(C9·R13).
+for p in project-init quality-gates spec-distill; do
+  v="$(python3 plugins/plugin-audit/scripts/check-shape-completeness.py "plugins/$p" 2>/dev/null \
+      | python3 -c 'import json,sys
+try: d = json.load(sys.stdin)["shape_gaps"]
+except Exception: print("unreadable"); raise SystemExit(0)
+m = [g["present"] for g in d if g["requirement"] == "hooks_killswitch"]
+print(m[0] if m else "absent")')"
+  assert_eq "$v" "True" "C/AC11: plugin-audit 가 $p 의 hooks_killswitch 를 참으로 낸다"
+done
 
 note "── 축 C2: PATH 격리 시뮬레이션 (AC12 · L3) ───────────────────────────"
 # **먼저 이 PATH 의 python3 가 정말 바닥 미만인지 확인한다.** Apple 이 그것을 올리면
@@ -1005,6 +1015,20 @@ bash plugins/quality-gates/tests/test_runtime_contract_invariance.sh
 python3 -m unittest discover -s plugins/plugin-audit/tests -t plugins/plugin-audit/tests -p 'test_check_*.py'
 ```
 Expected: 전부 통과. **`test_no_write_matcher_hooks_repo.sh` 는 선재 RED 다**(baseline §2 — 양성 대조가 Bash matcher ≥2 를 기대하는데 리포엔 1개) — 새로 깨진 것이 아닌지 확인만 하고 고치지 않는다.
+
+- [ ] **Step 4b: AC11 의 감사기 절반이 이제 «움직이는지» 확인한다 (변이)**
+
+Task 2 에서 이 판정은 사본을 지워도 `True` 였다. 배선이 생긴 지금은 달라야 한다 — 그 차이가 이 축을 옮긴 이유다.
+
+```bash
+rm plugins/spec-distill/scripts/devbrew-python.sh
+ln -s ../../../shared/python/devbrew-python.sh plugins/spec-distill/scripts/devbrew-python.sh
+bash shared/tests/test_python_floor.sh 2>&1 | grep -E 'C/AC11|B/AC11|B/C10'
+git checkout HEAD -- plugins/spec-distill/scripts/devbrew-python.sh
+git diff HEAD --stat     # 비어야 복원 완료
+```
+Expected: `C/AC11 … spec-distill …` 이 **✗**. 축 B 의 「물리 파일이다」·「마커」 단언도 함께 ✗ 다(같은 링크가 원인).
+**`C/AC11` 이 ✓ 로 남으면 이 축은 여전히 아무것도 재지 않는 것이다** — 그때는 `hooks.json` 의 command 가 정말 `scripts/devbrew-python.sh` 를 담고 있는지부터 확인하라.
 
 - [ ] **Step 5: 설치본 모양으로 한 번 실행해 본다 (모의)**
 
