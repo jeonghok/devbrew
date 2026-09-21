@@ -558,18 +558,26 @@ Expected: 세 셸 모두 `syntax OK`. 테스트는 축 A 전부 `✓`, `Fail: 0`
 
 아래 일곱을 **하나씩** 넣고 매번 `bash shared/tests/test_python_floor.sh` 를 돌린다. 각각 RED 를 확인한 뒤 `git checkout HEAD -- shared/python/devbrew-python.sh` 로 되돌린다(`git checkout --` 은 index 로 되돌아가므로 `HEAD` 를 명시한다). **먼저 Step 7 의 커밋을 하고 변이를 돌려라** — 커밋 전에는 되돌릴 기준이 없다.
 
-| # | 변이 | 죽어야 하는 단언 |
-|---|---|---|
-| M1 | `if kill_switch_active …` 블록을 `scan_path` **뒤로** 옮긴다 | A4a (해석보다 먼저가 아니다) |
-| M2 | `_ks_skip_has` 의 `[ "$(_ks_trim "$_tok")" = "$1" ]` 를 `case "$_tok" in *"$1"*)` 부분 일치로 바꾼다 | A2 (부분 일치가 끈다) |
-| M3 | `[ -n "$3" ] && _ks_skip_has "$1:$3"` 줄을 지운다 | A3 (이벤트 별칭이 안 듣는다) |
-| M4 | 변수명 도출의 `case` 블록을 `_up="$(printf '%s' "$1" \| tr 'a-z-' 'A-Z_')"` 로 되돌린다 | A4a **그리고 A1** — 이 머신의 `tr` 은 `/usr/bin/tr` 이고 fixture PATH 에는 `/bin` 만 있다. 전역 스위치가 통째로 fail-open 한다 |
-| M5 | `scan_path` 의 글롭 `"$_dir"/python3.*` 를 열거 `"$_dir"/python3.12 "$_dir"/python3.13 "$_dir"/python3.14` 로 바꾼다 | A5 (python3.99 를 못 찾는다) |
-| M6 | `if [ "$EVENT" = "SessionStart" ]; then` 을 지워 모든 이벤트에서 안내를 찍게 한다 | A8 (SessionEnd·PostToolUse stdout 이 안 비었다) |
-| M7 | 머리의 `예: spec-distill -> DEVBREW_SPEC_DISTILL_DISABLE=1` 줄을 지운다 | A11 |
+표의 「죽는 단언」은 **2026-09-22 에 실제로 변이를 넣어 확인한 값**이다. 어느 단언이 어느 스위치 «분기» 를 타는지가 결과를 정하므로, 그 분기를 함께 적는다 — 이것을 틀리게 적으면 다음 사람이 애초에 움직일 리 없는 단언을 보며 「이빨이 있다」고 결론 내린다.
 
-**M1 은 반드시 `git diff` 로 되돌림을 확인한다** — 블록 이동은 눈으로 놓치기 쉽다.
-**M4·M5 가 통과해 버리면 그 축이 아무것도 재고 있지 않다는 뜻이다** — 계측기 자체를 먼저 의심하라(fixture 가 안 만들어졌거나 `$PATH_BARE` 가 비었을 수 있다).
+| 스위치 | 그 단언이 타는 분기 |
+|---|---|
+| A1 | `DEVBREW_QUALITY_GATES_DISABLE=1` → **`_up` 도출 + `eval`** · PATH 에 만족 인터프리터 **있음** |
+| A2 · A3 · A4a | `DEVBREW_SKIP_HOOKS` → **`_ks_skip_has`** (`_up` 을 타지 않는다) |
+| A4a | 그중 PATH 가 **완전히 비어** 해석이 반드시 실패하는 자리 |
+
+| # | 변이 | 죽는 단언 (실측) |
+|---|---|---|
+| M1 | `if kill_switch_active …` 블록을 **`scan_path` 호출 바로 뒤**(`if [ -n "$FOUND" ]` 앞)로 옮긴다 | **A1** — PATH_FLOOR 는 해석에 «성공» 하므로 검사가 그 뒤면 아예 도달하지 못하고 훅이 돈다. **A4a 는 죽지 않는다**: 빈 PATH 라 해석이 실패해 끝까지 내려오고 거기서 검사가 걸린다 |
+| M2 | `_ks_skip_has` 의 `[ "$(_ks_trim "$_tok")" = "$1" ]` 를 `case "$_tok" in *"$1"*)` 부분 일치로 바꾼다 | **A3 둘째 케이스** — 부분 일치 버그는 「설정 토큰이 검사값을 **포함**」 방향에서 문다(`…advisor:frontmatter-scan` ⊃ `…advisor`). **A2 는 GREEN 으로 남는다**: 그 비활성 케이스의 설정 토큰이 더 «짧아» 그 방향에 걸리지 않는다 |
+| M3 | `[ -n "$3" ] && _ks_skip_has "$1:$3"` 줄을 지운다 | **A3 첫째 케이스**(이벤트 별칭으로 못 끈다) **그리고 A4a**(끄지 못해 SessionStart 안내가 찍힌다) |
+| M4 | 변수명 도출의 `case` 블록을 `_up="$(printf '%s' "$1" \| tr 'a-z-' 'A-Z_')"` 로 되돌린다 | **A1 만** — 이 머신의 `tr` 은 `/usr/bin/tr` 이고 fixture PATH 에는 `/bin` 만 있어 `_up` 이 비고 변수명이 어긋난다. **A4a 는 무관**하다: `DEVBREW_SKIP_HOOKS` 경로라 `_up` 을 아예 타지 않는다 |
+| M5 | `scan_path` 의 글롭 `"$_dir"/python3.*` 를 열거 `"$_dir"/python3.12 "$_dir"/python3.13 "$_dir"/python3.14` 로 바꾼다 | **A5**(python3.99 를 못 찾는다) · A4b 도 함께 |
+| M6 | `if [ "$EVENT" = "SessionStart" ]; then` 을 지워 모든 이벤트에서 안내를 찍게 한다 | **A8**(SessionEnd·PostToolUse stdout 이 안 비었다) |
+| M7 | 머리의 `예: spec-distill -> DEVBREW_SPEC_DISTILL_DISABLE=1` 줄을 지운다 | **A11** |
+
+**M1 은 놓을 자리를 위 표대로 정확히 잡는다.** 「`scan_path` 뒤 어딘가」로 두면 일부 위치에서 `Fail: 0` 이 난다 — 변이가 애매하면 이빨이 없다는 결론과 변이가 빗나갔다는 사실을 구별할 수 없다. 되돌림은 `git diff HEAD --stat` 으로 매번 확인한다(블록 이동은 눈으로 놓치기 쉽다).
+**어떤 변이가 통과해 버리면 그 축이 아무것도 재고 있지 않다는 뜻이다** — 계측기를 먼저 의심하라(fixture 미생성 · `$PATH_BARE` 공백 · 변이가 다른 분기에 떨어짐).
 
 - [ ] **Step 7: 커밋**
 
