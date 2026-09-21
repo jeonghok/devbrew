@@ -555,7 +555,11 @@ case "${DEV_MINOR:-x}" in *[!0-9]*|'') no "D/AC9: pyproject.toml 에서 개발 �
 case "${PV_MINOR:-x}" in *[!0-9]*|'') no "D/AC9: .python-version 을 못 읽었다" ;;
   *) ok "D/AC9: .python-version = 3.${PV_MINOR} (증인)" ;; esac
 assert_eq "$FLOOR_MAJOR_VAL" "3" "D/AC9: 출하 바닥의 major 가 3 이다 (아래 minor-only 비교의 전제)"
-assert_eq "${PV_MINOR:-}" "${DEV_MINOR:-}" "D/AC9: .python-version 이 개발 바닥과 같은 minor 를 가리킨다"
+if [ -n "${PV_MINOR:-}" ] && [ -n "${DEV_MINOR:-}" ]; then
+  assert_eq "$PV_MINOR" "$DEV_MINOR" "D/AC9: .python-version 이 개발 바닥과 같은 minor 를 가리킨다"
+else
+  no "D/AC9: .python-version 또는 pyproject.toml 의 도출이 비어 있어 두 바닥을 비교할 수 없다"
+fi
 if [ -n "${DEV_MINOR:-}" ] && [ -n "${FLOOR_MINOR_VAL:-}" ] && [ "$DEV_MINOR" -ge "$FLOOR_MINOR_VAL" ]; then
   ok "D/AC9: 개발 바닥 3.$DEV_MINOR >= 출하 바닥 ${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL}"
 else
