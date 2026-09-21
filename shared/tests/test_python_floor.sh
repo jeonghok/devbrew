@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json
+# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json plugins/**/*.py
 #
 # 출하 Python 바닥의 «집행» 이 살아 있는가. 선언은 여기서 재지 않는다 — 선언만 한 바닥은
 # 훅이 읽지 않는다는 것이 이 설계의 출발점이다(설계 Context/Why 3).
@@ -31,7 +31,8 @@ plugins/quality-gates/scripts/devbrew-python.sh
 plugins/spec-distill/scripts/devbrew-python.sh
 plugins/project-init/hooks/hooks.json
 plugins/quality-gates/hooks/hooks.json
-plugins/spec-distill/hooks/hooks.json"
+plugins/spec-distill/hooks/hooks.json
+plugins/spec-distill/scripts/hook_common.py"
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$SCANNED"
   exit 0
@@ -478,5 +479,22 @@ for spec in "SessionStart:quality-gates:session-start-advisor" \
   assert_not_contains "$out_evoff" "TARGET-RAN" \
     "C2/AC12: 이벤트명 별칭(DEVBREW_SKIP_HOOKS=$pl:$ev) 이 $pl/$hk 대상 실행을 막는다"
 done
+
+note "── 축 E: 훅 자식 (AC10) ──────────────────────────────────────────────"
+
+# 코퍼스는 설계 Context/Why 4 의 도출을 그대로 쓴다 — 「훅·스크립트 .py 전수 grep」.
+# **BRE 의 `\|` 를 쓰지 않는다** — GNU 확장이라 macOS/BSD grep 에서는 alternation 이 아니라
+# 리터럴 `|` 로 읽혀 이 검사가 조용히 아무것도 안 찾는다. 따옴표 두 모양을 각각 훑는다.
+child_spawns="$( { grep -rn '"python3"' plugins --include='*.py'
+                   grep -rn "'python3'" plugins --include='*.py'; } 2>/dev/null \
+  | grep -v '/tests/' || true)"
+if [ -z "$child_spawns" ]; then
+  ok "E/AC10: 훅·스크립트가 spawn 하는 python3 가 0 건이다"
+else
+  no "E/AC10: 훅·스크립트가 여전히 python3 를 spawn 한다"
+  printf '%s\n' "$child_spawns" | head -5
+fi
+assert_file_grep plugins/spec-distill/scripts/hook_common.py 'sys\.executable' \
+  "E/AC10: hook_common.py 가 sys.executable 을 쓴다 (양의 짝 — 위는 음의 락)"
 
 finish
