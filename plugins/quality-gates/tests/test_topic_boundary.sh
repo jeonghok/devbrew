@@ -189,8 +189,10 @@ case_f7_mixed_keys_in_T() {
 Spec: docs/x-design.md#pr2"
   local out; out=$(bash "$RT" resolve "$KEY")
   assert_eq "$(field status "$out")" "declaration-invalid" "F7 한 집합에 두 토픽 키 → declaration-invalid"
-  local rc; bash "$RT" commits "$KEY" >/dev/null 2>&1; rc=$?
-  assert_eq "$rc" "3" "F7 status != ok 이면 commits 는 exit 3 (fail-closed)"
+  local cout crc
+  cout=$(bash "$RT" commits "$KEY" 2>/dev/null); crc=$?
+  assert_eq "$crc" "3" "F7 status != ok 이면 commits 는 exit 3 (fail-closed)"
+  assert_eq "$cout" "" "F7 commits 가 stdout 에 아무것도 내지 않는다"
   cleanup
 }
 
@@ -218,17 +220,21 @@ case_f8_seal_first_then_maximal() {
   cleanup
 }
 
-# ── 끝점 순서 결정론: 발견 순서와 무관해야 한다 ─────────────────────────────
+# ── 끝점 순서 결정론: «발견 순서» 와 무관해야 한다 ──────────────────────────
+#    같은 스크립트를 두 번 부르는 것으로는 못 잰다 — 리포가 안 바뀌면 정규화가
+#    없어도 같은 답이 나온다. 브랜치를 개명하면 SHA 는 그대로인 채
+#    `git for-each-ref` 열거 순서가 바뀌므로, 그때도 같은 순서여야 한다.
 case_tips_order_deterministic() {
   new_repo
   local R; R=$(git rev-parse HEAD)
   git checkout -q -b zzz "$R"; decl_commit z.txt z "z"
   git checkout -q -b aaa "$R"; decl_commit a.txt a "a"
   git checkout -q -b mmm "$R"; decl_commit m.txt m "m"
-  local o1 o2
-  o1=$(field tips "$(bash "$RT" resolve "$KEY")")
-  o2=$(field tips "$(bash "$RT" resolve "$KEY")")
-  assert_eq "$o1" "$o2" "tips 두 번 호출 동일"
+  git checkout -q main
+  local o1; o1=$(field tips "$(bash "$RT" resolve "$KEY")")
+  git branch -m zzz b_zzz; git branch -m aaa y_aaa; git branch -m mmm a_mmm
+  local o2; o2=$(field tips "$(bash "$RT" resolve "$KEY")")
+  assert_eq "$o2" "$o1" "브랜치 개명으로 발견 순서가 바뀌어도 tips 순서가 같다"
   assert_eq "$(printf '%s' "$o1" | tr ',' '\n' | grep -c .)" "3" "끝점 3개"
   cleanup
 }
@@ -241,6 +247,10 @@ case_no_declaration() {
   local out; out=$(bash "$RT" resolve "$KEY")
   assert_eq "$(field status "$out")" "no-declaration" "선언 0 → no-declaration"
   assert_eq "$(field declared "$out")" "0" "declared: 0"
+  local cout crc
+  cout=$(bash "$RT" commits "$KEY" 2>/dev/null); crc=$?
+  assert_eq "$crc" "3" "no-declaration 이면 commits 는 exit 3 (fail-closed)"
+  assert_eq "$cout" "" "no-declaration 이면 commits 가 stdout 에 아무것도 내지 않는다"
   cleanup
 }
 

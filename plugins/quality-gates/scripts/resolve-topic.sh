@@ -44,6 +44,13 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 DECLARED="-"; BRANCHES="-"; BOUNDARY="-"; TIPS="-"; NCOMMITS="-"; BASE_REF="-"
 
 emit() {   # <status> <reason>
+  # `commits` 는 fail-closed 다 — status != ok 이면 stdout 에 «아무것도» 내지 않는다.
+  # 이 검사는 echo 들보다 «앞» 이어야 한다. 뒤에 두면 9줄이 이미 나간 뒤라
+  # 소비자가 `$(… commits …)` 로 받을 때 SHA 아닌 9줄을 순회한다.
+  if [ "$SUB" = "commits" ] && [ "$1" != "ok" ]; then
+    echo "resolve-topic: status=$1 (${2:--}) — no commit set" >&2
+    exit 3
+  fi
   echo "topic_key: $TOPIC"
   echo "status: $1"
   echo "reason: ${2:--}"
@@ -53,10 +60,6 @@ emit() {   # <status> <reason>
   echo "tips: $TIPS"
   echo "commits: $NCOMMITS"
   echo "base_ref: $BASE_REF"
-  if [ "$SUB" = "commits" ] && [ "$1" != "ok" ]; then
-    echo "resolve-topic: status=$1 (${2:--}) — no commit set" >&2
-    exit 3
-  fi
   exit 0
 }
 
