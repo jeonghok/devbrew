@@ -553,21 +553,23 @@ satisfies() {
 }
 
 # ── 1. $DEVBREW_PYTHON (탈출구) ─────────────────────────────────────────────
-# 사유를 **두 벌** 만든다. 경로는 사용자가 준 값이라 무엇이든 들어 있을 수 있다:
-#   · IGNORED       — 경로 포함. **환경변수로만** 나간다. 소비자(session-start-advisor.py)가
-#                     `json.dumps` 로 직렬화하므로 따옴표·역슬래시·개행이 안전하다.
-#   · IGNORED_BRIEF — 숫자와 리터럴뿐. **손으로 조립하는 JSON** 에는 이쪽만 싣는다.
-# 경로를 손조립 JSON 에 그대로 넣으면 따옴표 하나로 문서가 깨진다〔실측: Expecting ',' delimiter〕.
-IGNORED=""; IGNORED_BRIEF=""
+# IGNORED 와 IGNORED_REASON 은 채널이 다르다. IGNORED 는 $DEVBREW_PYTHON 의 실제 경로를
+# «그대로» 담는다 — 사용자 경로에 `"`·`\` 가 있을 수 있고, 그 값은 환경변수
+# DEVBREW_PYTHON_IGNORED 로만 나간다(Task 5 의 Python 이 json.dumps 로 안전하게 직렬화한다).
+# IGNORED_REASON 은 숫자와 고정 리터럴만 담는다 — 아래 손으로 조립한 JSON 에 들어가는 것은
+# 이쪽뿐이다. 사용자 경로가 손으로 조립한 문자열에 섞이면 따옴표 하나로 stdout 이 JSON 이
+# 아니게 된다〔실측: Expecting ',' delimiter〕 — 그 조합(DEVBREW_PYTHON 설정 + SessionStart)은
+# 한 번도 파싱되지 않았었다.
+IGNORED=""; IGNORED_REASON=""
 if [ -n "${DEVBREW_PYTHON-}" ]; then
   if probe "$DEVBREW_PYTHON"; then
     note_best
     if satisfies; then exec "$DEVBREW_PYTHON" "$@"; fi
-    IGNORED="$DEVBREW_PYTHON (Python ${PROBE_MAJOR}.${PROBE_MINOR} < ${FLOOR_MAJOR}.${FLOOR_MINOR})"
-    IGNORED_BRIEF="Python ${PROBE_MAJOR}.${PROBE_MINOR} < ${FLOOR_MAJOR}.${FLOOR_MINOR}"
+    IGNORED_REASON="Python ${PROBE_MAJOR}.${PROBE_MINOR} < ${FLOOR_MAJOR}.${FLOOR_MINOR}"
+    IGNORED="$DEVBREW_PYTHON (${IGNORED_REASON})"
   else
+    IGNORED_REASON="실행 불가"
     IGNORED="$DEVBREW_PYTHON (실행할 수 없거나 버전을 물을 수 없다)"
-    IGNORED_BRIEF="실행할 수 없거나 버전을 물을 수 없다"
   fi
   # stdout 에 쓰지 않는다 (C7) — 이 사실은 환경으로 넘기고 SessionStart 안내가 싣는다.
   DEVBREW_PYTHON_IGNORED="$IGNORED"; export DEVBREW_PYTHON_IGNORED
@@ -607,9 +609,10 @@ fi
 
 # ── 4. 아무것도 없다 — fail-open (C3). 안내는 SessionStart 에서만 (D26) ─────
 # 여기서만 stdout 에 쓴다. exec 하는 경로(1·2·3)의 stdout 은 비어 있다.
-# 아래 printf 는 JSON 을 **손으로** 조립하므로, 끼워 넣는 값이 전부 리터럴이거나 숫자여야
-# 한다. 사용자가 준 경로는 `IGNORED_BRIEF` 가 이미 걸러 냈다 — `$DEVBREW_PYTHON` 을 여기
-# 그대로 실으면 따옴표 하나로 훅의 stdout 이 JSON 이 아니게 된다(C7 위반).
+# 손으로 조립한 이 JSON 에는 리터럴과 숫자(BEST_MAJOR/MINOR·FLOOR_MAJOR/MINOR·
+# IGNORED_REASON)만 들어간다 — $DEVBREW_PYTHON 의 실제 경로(따옴표·백슬래시를 포함할
+# 수 있다)는 IGNORED 쪽(환경변수 DEVBREW_PYTHON_IGNORED)에만 실리고 이 문자열에는
+# 절대 섞이지 않는다. 그것이 이 printf 가 안전한 이유다.
 if [ "$EVENT" = "SessionStart" ]; then
   if [ "$BEST_MINOR" -ge 0 ]; then
     _seen="발견된 최고 버전 Python ${BEST_MAJOR}.${BEST_MINOR}"
@@ -617,7 +620,7 @@ if [ "$EVENT" = "SessionStart" ]; then
     _seen="PATH 에서 Python 을 찾지 못했다"
   fi
   _extra=""
-  [ -n "$IGNORED_BRIEF" ] && _extra=" \$DEVBREW_PYTHON 은 무시했다(${IGNORED_BRIEF})."
+  [ -n "$IGNORED_REASON" ] && _extra=" \$DEVBREW_PYTHON 은 무시했다: ${IGNORED_REASON}."
   _msg="[devbrew] 이 세션에서 devbrew 훅이 비활성이다 — ${_seen}, 요구 바닥은 Python ${FLOOR_MAJOR}.${FLOOR_MINOR}+ 다.${_extra} 고치는 법: Python ${FLOOR_MAJOR}.${FLOOR_MINOR} 이상을 설치해 PATH 에 두거나(uv python install ${FLOOR_MAJOR}.${FLOOR_MINOR}), 이미 있다면 \$DEVBREW_PYTHON 에 그 경로를 지정하라."
   printf '{"systemMessage":"%s","hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' \
     "$_msg" "$_msg"
@@ -661,6 +664,9 @@ Expected: 세 셸 모두 `syntax OK`. 테스트는 축 A 전부 `✓`, `Fail: 0`
 | M8 | `scan_path` 의 `case "$_cand" in *-config) continue ;; esac` 줄을 지운다 | **A5 의 `CONFIG-SHOULD-NOT-RUN` 단언** — 글롭 순서상 `python3.12-config` 가 `python3.99` 보다 먼저 뽑힌다. fixture 가 진짜 인터프리터처럼 답하지 않으면 이 변이는 **통과해 버린다**(마커가 probe 의 `$( )` 에 삼켜진다) |
 | M9 | `satisfies` 의 `-ge "$FLOOR_MINOR"` 를 `-gt` 로 바꾼다 | **A12** — 이 단언이 없던 판본에서는 27/27 GREEN 을 유지한 채 **출하 바닥 자신을** 거부했다〔실측〕 |
 | M10 | `_ks_skip_has` 의 `set -f` 를 지운다 | **A13** — cwd 에 `qg:h` 가 있을 때 `qg:*` 가 훅을 끈다 |
+| M11 | `_ks_skip_has` 의 `[ -n "$3" ] &&` 가드를 지워 빈 이벤트도 별칭으로 만든다 | **A16** — `DEVBREW_SKIP_HOOKS=qg:` 하나가 그 플러그인의 «모든 무이벤트 소비자» 를 끄는 문서화되지 않은 와일드카드가 된다(정본이 주석으로 특별히 못 박은 규칙) |
+
+**단언 번호 규약** — 축 A 는 A1~A14·A16 을 쓴다. **A15 는 Task 5 가 쓴다**(advisor 의 IGNORED 공시). 비어 있는 번호를 메우지 말 것.
 
 **M1 은 놓을 자리를 위 표대로 정확히 잡는다.** 「`scan_path` 뒤 어딘가」로 두면 일부 위치에서 `Fail: 0` 이 난다 — 변이가 애매하면 이빨이 없다는 결론과 변이가 빗나갔다는 사실을 구별할 수 없다. 되돌림은 `git diff HEAD --stat` 으로 매번 확인한다(블록 이동은 눈으로 놓치기 쉽다).
 **어떤 변이가 통과해 버리면 그 축이 아무것도 재고 있지 않다는 뜻이다** — 계측기를 먼저 의심하라(fixture 미생성 · `$PATH_BARE` 공백 · 변이가 다른 분기에 떨어짐).
