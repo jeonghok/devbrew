@@ -42,6 +42,8 @@ case_f1_two_siblings() {
   git checkout -q -b topicA; decl_commit a.txt a1 "a1"
   git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
   git checkout -q topicA
+  git checkout -q -b noise "$R"; echo n > n.txt; git add n.txt; git commit -qm "noise (선언 없음)"
+  git checkout -q topicA
   local out; out=$(bash "$RT" resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "F1 status: ok"
   assert_eq "$(field declared "$out")" "2" "F1 선언 커밋 2"
