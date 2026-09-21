@@ -451,4 +451,32 @@ if [ "$iso_ok" -eq 1 ]; then
     || ok "C2/AC12: 해석 실패 시 대상이 한 줄도 돌지 않는다 (본래 동작 미수행)"
 fi
 
+# 위 격리 PATH 블록의 $out_ks 단언은 SessionStart 를 뺀 세 자리에서 vacuous 하다 — 바닥
+# 미만 PATH 에서는 해석기가 fail-open 으로 이미 stdout 을 비우므로, 스위치 검사를 통째로
+# 지워도 그 세 자리는 그대로 GREEN 이다(스크래치 사본으로 실측). kill switch 자신의 효과는
+# 거기서 관측할 수 없다 — 만족 PATH($PATH_FLOOR)에서 exec 여부로 직접 재야 한다: 스위치가
+# 꺼지면 $TARGET 이 돌아 TARGET-RAN 이 나오고, 켜지면 exec 자체가 없어 사라진다. 이 satisfying
+# PATH 는 호스트의 실제 python3 와 무관하므로 `iso_ok` 게이트 밖에 둔다.
+for spec in "SessionStart:quality-gates:session-start-advisor" \
+            "SessionEnd:quality-gates:session-end-cleanup" \
+            "SessionEnd:spec-distill:session-end-cleanup" \
+            "PostToolUse:project-init:post-tool-use"; do
+  ev="${spec%%:*}"; r1="${spec#*:}"; pl="${r1%%:*}"; hk="${r1#*:}"
+
+  out_run="$(run_resolver "$PATH_FLOOR" /bin/sh "$R" \
+          --event "$ev" --plugin "$pl" --hook "$hk" "$TARGET")"
+  assert_contains "$out_run" "TARGET-RAN" \
+    "C2/AC12: 만족 PATH·스위치 꺼짐 — $pl/$hk 대상이 실행된다 (양성 대조)"
+
+  out_hookoff="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS="$pl:$hk" /bin/sh "$R" \
+          --event "$ev" --plugin "$pl" --hook "$hk" "$TARGET")"
+  assert_not_contains "$out_hookoff" "TARGET-RAN" \
+    "C2/AC12: 훅명 별칭(DEVBREW_SKIP_HOOKS=$pl:$hk) 이 $pl/$hk 대상 실행을 막는다"
+
+  out_evoff="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS="$pl:$ev" /bin/sh "$R" \
+          --event "$ev" --plugin "$pl" --hook "$hk" "$TARGET")"
+  assert_not_contains "$out_evoff" "TARGET-RAN" \
+    "C2/AC12: 이벤트명 별칭(DEVBREW_SKIP_HOOKS=$pl:$ev) 이 $pl/$hk 대상 실행을 막는다"
+done
+
 finish
