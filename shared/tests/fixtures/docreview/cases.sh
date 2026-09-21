@@ -2210,7 +2210,7 @@ case_decision_view_no_tautology() {
 # (route_r1 → next_round → prepare-recritic(critic-nolayer2, codex-failed) →
 # finalize(recritic-missing)) — 이미 frozen_change 둘을 내는 것으로 검증된 경로다.
 case_decision_view_absence_is_literal() {
-  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "침묵 공시: route_r1 실패"; return; }
   next_round "$d" "$FX/design-sample-r2.md" >/dev/null
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
   py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
