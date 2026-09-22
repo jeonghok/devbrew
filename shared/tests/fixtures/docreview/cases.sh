@@ -2302,7 +2302,15 @@ case_gate_render_six_lines() {
 case_gate_head_and_grouping() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "게이트 머리: route_r1 실패"; return; }
   local render; render="$(py docreview_state.py gate --state-dir "$d" --render)"
-  assert_grep "$render" '열린 결정 먼저' "AC18: 머리에 GATE_ROWS 순서의 뜻이 난다"
+  # [리뷰 fix round 2] 원래는 첫 세 어절만(`열린 결정 먼저`) 단언했다 — 다섯
+  # 구절 중 하나만 살아 있으면 통과하고, 순서가 뒤섞여도 통과한다. AC18 이
+  # 재는 것은 「GATE_ROWS 순서의 뜻」이므로 다섯 구절 «전부» + 그 «순서» 를
+  # 한 번에 잰다: 머리 줄 전체를 뽑아 기대 리터럴과 정확히 같은지 본다(한
+  # 등식이 내용과 순서를 동시에 고정한다 — 독립된 다섯 substring 단언은
+  # 뒤섞인 줄에서도 전부 통과하므로 쓰지 않는다).
+  local head_line; head_line="$(printf '%s\n' "$render" | grep '^순서: ')"
+  assert_eq "$head_line" "순서: 열린 결정 먼저 · 그다음 관측 대기 · 막힌 것 · 미적용 수정 · 질문" \
+    "AC18: 머리 줄이 GATE_ROWS 순서를 다섯 구절 전부 + 그 순서 그대로 편다"
   # AC18' — 묶음은 «표시»다. 묶기 전후로 게이트가 세는 항목 수(= AskUserQuestion
   # 질문 수)가 같다. gate_summary 의 버킷을 세면 그 수가 나온다 — 렌더와 독립인
   # 채널이라 순환이 아니다.
@@ -2373,11 +2381,18 @@ print(json.dumps({"n_same_anchor_open_pairs": len(same_pairs), "group_size": gro
   anchor_val="$(printf '%s' "$calc" | jgets 'd["same_pair"][2]')"
   fid_diff1="$(printf '%s' "$calc" | jgets 'd["diff_pair"][0] if d["diff_pair"] else ""')"
   fid_diff2="$(printf '%s' "$calc" | jgets 'd["diff_pair"][1] if d["diff_pair"] else ""')"
-  # 인접 쌍의 둘째 항목이 렌더에서 처음 나오는 줄 바로 앞줄을 뽑는다 — 헤더
-  # 리터럴 형식(대안 구분자 「—」/「→」)이 렌더러마다 달라 fid 자체를 찾는다.
+  # 인접 쌍의 둘째 항목이 렌더에서 «자기 헤더로» 처음 나오는 줄 바로 앞줄을
+  # 뽑는다 — [리뷰 fix round 2] bare fid 매치(예전 코드)는 그 fid 가 «다른»
+  # 항목의 헤더보다 먼저, 참조로 나오면(예: `_rg_blocking_ask` 의 「→ 전제인
+  # fix: <fid>」) 그 참조 줄을 헤더로 오인한다 — 오늘 쓰는 두 쌍(decide ·
+  # unapplied_fix)엔 안 걸리지만 일반적으로 안전하지 않다. `choices_match`
+  # (cases.sh:490)와 같은 헤더 앵커 방식으로 좁힌다: 모든 렌더러가 헤더를
+  # 「] <fid>」로 시작한다(그 뒤 구분자만 「—」/「→」로 갈린다 — `_rg_superseded`
+  # 가 유일하게 「→」다) — 참조 문구엔 그 앞의 「]」가 없으므로 이 접두로
+  # 헤더와 참조가 갈린다.
   local before_same before_diff
-  before_same="$(printf '%s\n' "$render" | awk -v f="$fid_same2" '{l[NR]=$0} index($0,f) && !hit {hit=NR} END{if (hit>1) print l[hit-1]}')"
-  before_diff="$(printf '%s\n' "$render" | awk -v f="$fid_diff2" '{l[NR]=$0} index($0,f) && !hit {hit=NR} END{if (hit>1) print l[hit-1]}')"
+  before_same="$(printf '%s\n' "$render" | awk -v f="] ${fid_same2}" '{l[NR]=$0} index($0,f) && !hit {hit=NR} END{if (hit>1) print l[hit-1]}')"
+  before_diff="$(printf '%s\n' "$render" | awk -v f="] ${fid_diff2}" '{l[NR]=$0} index($0,f) && !hit {hit=NR} END{if (hit>1) print l[hit-1]}')"
   assert_grep "$before_same" '^  ┆ 같은 자리\(' \
     "AC18': 같은 anchor(${anchor_val}) 인접 쌍(${fid_same1} → ${fid_same2}) 앞에 묶음 마커가 실제로 붙는다"
   case "$before_diff" in

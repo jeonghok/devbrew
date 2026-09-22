@@ -1294,7 +1294,23 @@ def render_gate(st, g) -> str:
     # [Task 9 ⓓ] GATE_ROWS 10행의 순서는 이미 결정론이지만 «상태 범주» 순이라 그
     # 뜻이 안 보였다. 순위를 새로 매기지 않는다 — 오케스트레이터가 순위를 매기면
     # 그 순위 자체가 판단이고 사용자가 그 위험을 받아들인다고 말한 적이 없다.
-    # 있는 순서의 뜻만 낸다. 이 한 줄의 내용은 GATE_ROWS 의 순서에서 읽는다.
+    # 있는 순서의 뜻만 낸다. 이 한 줄의 내용은 GATE_ROWS 의 순서에서 읽는다 —
+    # 구절 ↔ 행(`.name`) 대응은 다음과 같다:
+    #   열린 결정        → open_decide
+    #   그다음 관측 대기  → adopted (그 렌더러 자신이 "다음 라운드 diff 가 적용을
+    #                       관측해야 닫힌다" 고 말한다 — _rg_adopted)
+    #   막힌 것          → blocked_expired · superseded_expired
+    #   미적용 수정       → unapplied_fix · escalated_fix · held_fix
+    #   질문             → blocking_ask_open · ask_open
+    # held_decide 는 다섯 구절 어디에도 없다 — decides 원장 안에 있지만 "보류"는
+    # 다른 어떤 구절의 뜻도 아니다. 표의 침묵이지 누락 버그가 아니다(§8.2 가
+    # held_decide 를 승인 게이트의 남은 ask 목록에서 따로 보여준다는 전제).
+    # [정직 고지] 이 대응은 사람이 적었다 — `cases.sh` 의 `case_gate_head_and_
+    # grouping` 은 이 줄의 «내용과 순서»가 아래 리터럴과 정확히 같은지만 기계로
+    # 잰다. 그 등식은 이 대응표가 뜻으로 맞다는 증명이 아니다. GATE_ROWS 를
+    # 재정렬하거나 새 행을 끼워 넣으면, 이 줄과 위 대응표와 `case_gate_head_
+    # and_grouping` 의 기대 리터럴을 함께 옮겨라 — 셋 중 하나만 고치면 이
+    # 줄이 조용히 낡은 설명이 된다.
     out.append("순서: 열린 결정 먼저 · 그다음 관측 대기 · 막힌 것 · 미적용 수정 · 질문")
     prev_anchor = None
     for row in GATE_ROWS:
