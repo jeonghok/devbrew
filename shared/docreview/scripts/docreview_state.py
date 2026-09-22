@@ -1291,11 +1291,24 @@ def render_gate(st, g) -> str:
     out.append("라운드 %d · 재리뷰 %d/%d%s%s" % (g["round"], g["rereview_count"], REREVIEW_CAP,
                                               " · 상한 도달" if g["cap_reached"] else "",
                                               " · stagnation" if g["stagnation"] else ""))
+    # [Task 9 ⓓ] GATE_ROWS 10행의 순서는 이미 결정론이지만 «상태 범주» 순이라 그
+    # 뜻이 안 보였다. 순위를 새로 매기지 않는다 — 오케스트레이터가 순위를 매기면
+    # 그 순위 자체가 판단이고 사용자가 그 위험을 받아들인다고 말한 적이 없다.
+    # 있는 순서의 뜻만 낸다. 이 한 줄의 내용은 GATE_ROWS 의 순서에서 읽는다.
+    out.append("순서: 열린 결정 먼저 · 그다음 관측 대기 · 막힌 것 · 미적용 수정 · 질문")
+    prev_anchor = None
     for row in GATE_ROWS:
         fn = GATE_RENDERERS.get(row.render) if row.render else None
         if fn is None:
             continue
         for fid in g[row.name]:
+            # [Task 9 ⓓ] 묶음은 «표시»다 — 질문 수도 항목별 선택권도 안 바꾼다
+            # (D24). 같은 자리를 건드리는 항목이 연달아 오면 그 사실만 한 줄로
+            # 보인다.
+            anchor = (st["findings"].get(fid) or {}).get("anchor")
+            if anchor and anchor == prev_anchor:
+                out.append("  ┆ 같은 자리(%s)" % anchor)
+            prev_anchor = anchor
             out.extend(fn(st, g, fid))
     c = g["counts"]
     out.append("기각 %d건(재비판) · 사용자 기각 %d · drop %d · bucket 충돌 %d · 계보 지목 불일치 %d · 기각 계보 재상승 %d · 미소비 재상승 예약 %d · 미소비 상향 예약 %d"

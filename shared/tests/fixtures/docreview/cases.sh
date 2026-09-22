@@ -2290,3 +2290,27 @@ case_gate_render_six_lines() {
   esac
   rm -rf "$d"
 }
+
+# ── 게이트 머리의 순서 뜻 한 줄 + 같은 anchor 묶음 (AC18 · AC18') ────────────
+# 순위를 새로 매기지 않는다(ⓓ · 설계 §5.7). GATE_ROWS 10행의 순서는 이미
+# 결정론이지만 «상태 범주» 순이다 — 문제는 「순위가 없다」가 아니라 「있는
+# 순서의 뜻이 안 보인다」였다. 오케스트레이터가 순위를 매기면 그 순위 자체가
+# 판단이고 사용자가 그 위험을 받아들인다고 말한 적이 없다.
+# 묶음은 표시일 뿐이다(D24) — AskUserQuestion 질문 수도 항목별 선택권도
+# 그대로다. AC18' 은 「묶기 전후로 질문 수가 같다」를 함께 잰다 — gate 요약의
+# 버킷 수(렌더와 독립인 채널)와 렌더가 낸 헤더 줄 수를 비교한다.
+case_gate_head_and_grouping() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "게이트 머리: route_r1 실패"; return; }
+  local render; render="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_grep "$render" '열린 결정 먼저' "AC18: 머리에 GATE_ROWS 순서의 뜻이 난다"
+  # AC18' — 묶음은 «표시»다. 묶기 전후로 게이트가 세는 항목 수(= AskUserQuestion
+  # 질문 수)가 같다. gate_summary 의 버킷을 세면 그 수가 나온다 — 렌더와 독립인
+  # 채널이라 순환이 아니다.
+  local n_items; n_items="$(py docreview_state.py gate --state-dir "$d" | jgets 'len(d["open_decide"]) + len(d["unapplied_fix"]) + len(d["blocking_ask_open"])')"
+  local n_headers; n_headers="$(printf '%s\n' "$render" | grep -cE '^\[(decide|미적용 fix|ask 비차단)' || true)"
+  [ "${n_items:-0}" -gt 0 ] \
+    && ok "AC18' 양의 짝: 이 케이스에 열린 항목이 ${n_items}개 있다 (아래 등식이 0 == 0 으로 통과하지 않는다)" \
+    || no "AC18': 열린 항목이 0개다 — 아래 등식이 공허하다. 항목을 만드는 픽스처로 바꿔라"
+  assert_eq "$n_headers" "$n_items" "AC18': 묶음이 항목 수를 바꾸지 않는다(질문 수 불변)"
+  rm -rf "$d"
+}
