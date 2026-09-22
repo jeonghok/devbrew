@@ -106,6 +106,6 @@ web: false
 
 ## 처분 안내
 
-- 목표·범위·제약·Non-goal·아키텍처·trade-off·AC 를 바꾸는 수정은 `decide` — 변경 내용 · 근거 · 대안 · 영향을 `summary`/`evidence` 에 채운다.
+- 목표·범위·제약·Non-goal·아키텍처·trade-off·AC 를 바꾸는 수정은 `decide` — 무엇이 문제인지는 `summary`, 근거는 `evidence`, 대안은 `replacement`, 그대로 두면 남는 결과는 `if_unfixed` 에 채운다.
 - 답이 있어야 고칠 수 있는 fix 에는 `ask` 를 하나 내고 `blocks` 에 그 fix 의 `ref` 를 적는다.
 - plan 이 도출·관측할 일은 `defer`. 근거 없는 의심은 내지 않는다 — 0건은 정직한 답이다.
