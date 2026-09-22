@@ -62,7 +62,11 @@ LEGACY_VERDICTS = {
 
 
 def fail4(msg):
-    print(f"verdict: {msg}", file=sys.stderr)
+    # `verdict:` 를 쓰지 않는다 — 그것은 성공 출력의 판정 키다. `field verdict
+    # "$text"`(shared/tests/assert.sh:95) 같은 순진한 파서가 이 오류 문장을 넷째
+    # 판정값으로 읽는다. 형제 `diff-test-results.py` 의 `print(f"diff-test-results:
+    # {msg}", ...)` 와 같은 모양으로 스크립트 이름을 접두사로 쓴다.
+    print(f"verdict.py: {msg}", file=sys.stderr)
     raise SystemExit(4)
 
 
@@ -78,6 +82,13 @@ def read_or_none(path):
             return f.read()
     except OSError as exc:
         fail4(f"차등 산출물을 읽지 못했다: {path} ({exc})")
+    except UnicodeDecodeError as exc:
+        # UnicodeDecodeError 는 ValueError 의 하위이지 OSError 가 아니다 — 위 절만
+        # 두면 비-UTF-8 입력이 raw traceback + exit 1 로 이 docstring 이 금지한
+        # 0/2/4 계약을 그대로 탈출한다. 형제 `diff-test-results.py` 의
+        # `read_text_or_fail4`(75-82행)는 이미 이 절을 갖고 있다(/qg iter-7 M2) —
+        # 여기만 없었던 것이 이번 라운드에서 잡힌 결함이다.
+        fail4(f"차등 산출물이 UTF-8 이 아님: {path} ({exc})")
 
 
 def causes_of(differential_text):
@@ -141,6 +152,11 @@ def decide(*, defect=False, review_blocked=False, differential_text=None,
 
 
 def render(decision):
+    # `VALUES` 를 `decide()` · `render()` 어느 쪽도 참조하지 않으면, "판정 어휘가
+    # 이 파일 한 곳에만 산다" 는 이 모듈의 존재 이유가 강제되지 않는 문서가 된다.
+    # 여기서 막아 값 자체를 그 상수 밖으로 못 나가게 한다.
+    if decision["verdict"] not in VALUES:
+        fail4(f"열거 밖 판정값 '{decision['verdict']}' — 어휘는 닫혀 있다")
     out = [f"verdict: {decision['verdict']}"]
     if decision["verdict"] == "not-certified":
         if not decision["reason"]:
@@ -153,18 +169,33 @@ def render(decision):
 
 def main():
     ap = argparse.ArgumentParser(add_help=True)
-    ap.add_argument("--differential", default="")
+    ap.add_argument("--differential", default=None)
     ap.add_argument("--defect", action="store_true")
     ap.add_argument("--review-blocked", action="store_true")
     ap.add_argument("--reason", action="append", default=[])
-    ap.add_argument("--legacy-verdict", default="")
+    ap.add_argument("--legacy-verdict", default=None)
     args = ap.parse_args()
+    # 기본값을 `""` 로 두면 "플래그를 안 줬다" 와 "빈 경로를 줬다" 가 같은 값이
+    # 된다 — 값을 못 구한 호출자가 `--differential "$DIFF_YAML"` 을 빈 변수로
+    # 호출하면 차등 축이 조용히 사라지고 `clean` 으로 인증된다(read_or_none 의
+    # docstring 이 금지한 바로 그 새는 경로). 기본값을 `None` 으로 바꿔 두 경우를
+    # 구별하고, **명시적으로 빈 문자열**을 주면 usage 오류(exit 2)로 막는다 —
+    # exit 4(fail-closed 판정 실패)가 아니라 exit 2(잘못된 호출)다: 이것은 판정
+    # 축의 문제가 아니라 호출 자체가 말이 안 되는 것이다.
+    if args.differential is not None and args.differential == "":
+        print("verdict.py: --differential 은 빈 문자열을 받지 않는다 "
+              "(플래그를 생략하거나 실제 경로를 줘라)", file=sys.stderr)
+        return 2
+    if args.legacy_verdict is not None and args.legacy_verdict == "":
+        print("verdict.py: --legacy-verdict 는 빈 문자열을 받지 않는다",
+              file=sys.stderr)
+        return 2
     sys.stdout.write(render(decide(
         defect=args.defect,
         review_blocked=args.review_blocked,
         differential_text=read_or_none(args.differential),
         extra_reasons=args.reason,
-        legacy_verdict=args.legacy_verdict or None,
+        legacy_verdict=args.legacy_verdict,
     )))
     return 0
 
