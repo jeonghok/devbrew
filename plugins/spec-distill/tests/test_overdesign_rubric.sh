@@ -81,10 +81,13 @@ done
 
 # ── AC5 불릿 커버리지 : layer1 의 축 «전부»가 body 에 자기 불릿을 갖는다 (파생 ∀) ──
 # 파일 머리말의 계약 — 「이름은 rubric 목록이, 내용은 본문 절이 진다」 — 을 overdesign
-# 하나가 아니라 축 «전부»에 닫는다. 목록은 layer1 에서 파생한다(열거하지 않는다) — 열째
-# 축이 나중에 추가돼도 이 락이 자동으로 그 축을 검사 대상에 넣는다. 여덟 축의 불릿 «문구»
+# 하나가 아니라 축 «전부»에 닫는다. ∀ 루프(check_axis_bullets)는 layer1 에서 파생한다
+# (열거하지 않는다) — 열째 축이 추가되면 루프는 자동으로 그 축을 검사 대상에 넣는다.
+# 아래 양의 짝(B_N==2 · D_N==9)은 의도적으로 하드코딩이다 — 축 개수가 바뀌면 사람이
+# 이 락을 한 번 읽고 숫자를 올리게 만드는 것이 목적이다(자동 스케일이 아니라 fail-safe:
+# layer1 이 줄바꿈돼 파생이 0개가 되는 사고도 이 숫자가 잡는다). 여덟 축의 불릿 «문구»
 # 는 byte-pin 하지 않는다 — 그것은 이 PR 한 번의 사실이지 영구 불변식이 아니다(정본은
-# git diff). 이 락이 고정하는 것은 «불릿의 존재»와 «축마다 서로 다른 불릿»뿐이다.
+# git diff). 이 락이 고정하는 것은 «불릿의 존재»와 «이름 뒤 문구가 축마다 다름»뿐이다.
 axes_of() {  # axes_of <파일> — layer1 이 한 줄일 때 그 원소들(한 줄이 아니면 공백)
   sed -n 's/^  layer1: \[\(.*\)\]$/\1/p' "$1" | tr ',' '\n' | sed -e 's/^ *//' -e 's/ *$//'
 }
@@ -101,18 +104,24 @@ D_N="$(printf '%s\n' "$D_AXES" | grep -c '.' || true)"
 check_axis_bullets() {  # check_axis_bullets <본문> <라벨> <axes 개행 목록>
   # 불릿 텍스트는 흔히 "- `...`" 로 «-» 로 시작한다 — grep 의 패턴 인자로 그대로 넘기면
   # 옵션으로 오독된다. 그래서 중복 비교는 grep 을 거치지 않고 배열 원소 비교로 한다.
-  local body="$1" label="$2" axes="$3" a pat line dup=0 prev
-  local -a lines=()
+  #
+  # 비교 대상은 «전체 줄»이 아니라 «이름 토큰(- `<axis>`) 뒤에 남는 본문»이다. 전체
+  # 줄로 비교하면 서로 다른 두 축은 이름 자체가 달라 절대 같을 수 없다 — 그러면 이
+  # 판정은 "복사-붙여넣기된 불릿"을 구조적으로 못 잡고 "같은 축 이름이 layer1 에
+  # 중복됐다"만 우연히 잡는다(그 경우도 이름 뒤 본문이 같으므로 이 비교로 여전히 걸린다).
+  local body="$1" label="$2" axes="$3" a pat line rest dup=0 prev
+  local -a rests=()
   while IFS= read -r a; do
     [ -z "$a" ] && continue
     pat='^- `'"$a"'`'
     line="$(printf '%s\n' "$body" | grep -- "$pat" | head -1)"
     if [ -n "$line" ]; then
       ok "AC5: $label 의 축 \`$a\` 가 body 에 불릿을 갖는다"
-      for prev in "${lines[@]:-}"; do
-        [ -n "$prev" ] && [ "$prev" = "$line" ] && dup=1
+      rest="$(printf '%s' "$line" | sed 's/^- `[^`]*`//')"
+      for prev in "${rests[@]:-}"; do
+        [ -n "$prev" ] && [ "$prev" = "$rest" ] && dup=1
       done
-      lines+=("$line")
+      rests+=("$rest")
     else
       no "AC5: $label 의 축 \`$a\` 가 body 에 불릿이 없다"
     fi
@@ -120,8 +129,8 @@ check_axis_bullets() {  # check_axis_bullets <본문> <라벨> <axes 개행 목�
 $axes
 EOF_AXES
   [ "$dup" -eq 0 ] \
-    && ok "AC5: $label 의 layer1 불릿들이 축마다 서로 다르다 (겹치는 문구 없음)" \
-    || no "AC5: $label 의 layer1 불릿 중 최소 두 축이 같은 문구를 공유한다"
+    && ok "AC5: $label 의 layer1 불릿들이 이름 뒤 본문까지 서로 다르다 (복사-붙여넣기 없음)" \
+    || no "AC5: $label 의 layer1 불릿 중 최소 두 축이 이름 뒤 본문을 그대로 공유한다 (복사-붙여넣기 의심)"
 }
 check_axis_bullets "$BB" "brief" "$B_AXES"
 check_axis_bullets "$DB" "design" "$D_AXES"
