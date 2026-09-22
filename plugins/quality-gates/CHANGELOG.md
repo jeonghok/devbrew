@@ -3,6 +3,17 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [8.3.0] — 2026-09-22
+
+### Added
+
+- **판정 어휘 세 값과 닫힌 사유 열거.** `scripts/verdict.py` 가 `clean` · `defect` · `not-certified` 와 11값 사유 열거, 우선순위(`defect > not-certified > clean`), 옛 네 값 매핑표를 한 자리에 갖는다. 사유 없는 `not-certified` 와 열거 밖 사유는 exit 4 로 막는다.
+- **차등 산출물이 degrade 의 원인을 낸다.** `degrade_causes:` 가 `attribution_status: degraded` 한 값에 접혀 있던 여섯 원인을 편다. per-adapter 와 집계 양쪽에서 `degraded == (causes != [])` 를 fail-closed 로 검사한다.
+- **해상도 공시(AC13).** `pre_existing > 0` 인 실행이 「양측 빨강 unit N개 — 그 안의 새 실패는 이 해상도에서 보이지 않는다」를 **per-adapter 와 집계 양쪽에** 낸다. 공시는 판정을 막지 않고 기존 bulk 가드를 대체하지도 않는다.
+- `tests/test_verdict_vocabulary.sh` · `tests/test_resolution_disclosure.sh`.
+
+**`/qg` 의 동작은 바뀌지 않는다.** 합성기의 판정 산출은 `--emit-verdict` 뒤에 있고 기본 off 이며, 켜지 않으면 stdout 이 이전과 바이트 동일하다 — 소비자 이주는 뒤 릴리스다.
+
 ## [8.1.0] — 2026-09-22
 
 ### Added
