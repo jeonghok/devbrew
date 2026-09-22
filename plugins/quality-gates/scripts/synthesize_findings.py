@@ -615,6 +615,26 @@ def main():
     kept, suppressed = suppress(findings, ledger=ledger)
     kept = sort_findings(kept)
 
+    # Ruling T5-b — 판정 «계산» 은 본 보고서를 쓰기 «전» 에 한다. `_verdict.
+    # read_or_none()` 의 fail4 가 여기서 터지면 stdout 이 아직 비어 있다(이
+    # 리포의 fail4 계약: 원자적·무출력 — Task 2 리뷰가 diff-test-results.py 의
+    # `_aggregate` 에서 이미 확인한 바로 그 계약). 뒤에 두면 완전해 보이는
+    # 보고서가 이미 나간 뒤 rc=4 가 되어, rc 를 보지 않는 줄-지향 소비자에게는
+    # 성공한 실행으로 읽힌다 — 실측(이전 라운드): 549바이트 완전한 보고서 +
+    # rc=4 조합.
+    decision = None
+    if args.emit_verdict:
+        # `report["degraded"]`(공시)가 아니라 `blocks()`(차단)다 — 헌장은 모델 다양성
+        # 손실 같은 degrade 를 공시만 하고 막지 않는다. 여기서 둘을 섞으면 이 PR 이
+        # 조용히 게이트를 넓힌다.
+        decision = _verdict.decide(
+            defect=bool(kept),                    # 계획 R-B — severity 를 묻지 않는다
+            review_blocked=ledger.blocks(),
+            differential_text=_verdict.read_or_none(args.differential),
+            extra_reasons=args.reason,
+            legacy_verdict=args.legacy_verdict,
+        )
+
     # 원장은 «회계»만 한다 — 읽어서 stdout 에 싣는 것은 이 소비자의 책임이다.
     # 라운드 4 이전에는 `held` 만 꺼내 갔고 `degraded`/`reasons` 는 어디로도 가지
     # 않았다: 주 입력이 통째로 죽어도 출력이 clean 과 **바이트 동일**이었다.
@@ -623,16 +643,7 @@ def main():
                             report, ledger.held_by_class()))
 
     if args.emit_verdict:
-        # `report["degraded"]`(공시)가 아니라 `blocks()`(차단)다 — 헌장은 모델 다양성
-        # 손실 같은 degrade 를 공시만 하고 막지 않는다. 여기서 둘을 섞으면 이 PR 이
-        # 조용히 게이트를 넓힌다.
-        sys.stdout.write(_verdict.render(_verdict.decide(
-            defect=bool(kept),                    # 계획 R-B — severity 를 묻지 않는다
-            review_blocked=ledger.blocks(),
-            differential_text=_verdict.read_or_none(args.differential),
-            extra_reasons=args.reason,
-            legacy_verdict=args.legacy_verdict,
-        )))
+        sys.stdout.write(_verdict.render(decision))
 
 
 if __name__ == "__main__":

@@ -516,6 +516,29 @@ case_synth_empty_differential_is_usage_error() {
   rm -rf "$T"
 }
 
+case_synth_verdict_failure_is_atomic() {
+  # Ruling T5-b — 판정 «계산» 은 본 보고서를 쓰기 «전» 에 한다. 디코드 불가한
+  # `--differential` 이 `read_or_none()` 의 fail4 를 태우면, 그 시점에 stdout 은
+  # 아직 비어 있어야 한다 — 이 리포의 fail4 계약(원자적·무출력, Task 2 리뷰가
+  # diff-test-results.py 의 `_aggregate` 에서 이미 확인)을 이 소비자도 지킨다.
+  #
+  # 단언은 **둘**이다 — exit 코드 하나만 재면 이빨이 없다. 판정 계산을 본
+  # 보고서 뒤로 옮겨도(원래 브리프가 지시했던 순서) exit 4 단언은 여전히
+  # 통과한다: 실패가 나긴 나기 때문이다. stdout-빈값 단언만이 그 순서를
+  # 구별한다 — 실측(이전 라운드): 뒤로 옮긴 순서에서 549바이트 완전한 보고서 +
+  # rc=4 조합이 나왔다.
+  local T; T=$(mktemp -d)
+  printf 'verdicts: []\n' > "$T/adv.yaml"
+  printf -- '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/f.yaml"
+  printf 'x\n\xff\xfe' > "$T/bad.yaml"
+  local out rc=0
+  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+    --emit-verdict --differential "$T/bad.yaml" 2>/dev/null) || rc=$?
+  assert_eq "$rc" "4"  "디코드 불가 차등 산출물은 exit 4"
+  assert_eq "$out" ""  "그 실행의 stdout 은 비어 있다 — 판정 실패는 원자적이다(이 단언이 이빨이다)"
+  rm -rf "$T"
+}
+
 case_three_values_only
 case_reason_flag_certifies_known_members
 case_reason_enum_is_closed_and_accounted
@@ -549,4 +572,5 @@ case_synth_lost_findings_is_not_certified
 case_synth_secondary_degrade_does_not_block
 case_synth_clean_is_clean
 case_synth_empty_differential_is_usage_error
+case_synth_verdict_failure_is_atomic
 finish "test_verdict_vocabulary"
