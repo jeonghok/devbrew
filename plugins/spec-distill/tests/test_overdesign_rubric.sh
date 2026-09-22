@@ -146,4 +146,44 @@ has "$DL" '브리프 §1 Goal' "AC6: design 불릿이 자기 상류(브리프 §
 hasnt "$BL" '왜곡'        "AC6: brief 불릿에 술어 ②(왜곡)가 없다 (그 대상이 구조·구현이라 brief 에 없다)"
 has "$DL" '왜곡'          "AC6: design 불릿에 술어 ②(왜곡)가 있다"
 
+# ── AC7 : 판정 한 줄의 형식 · 태그 · 대체안 · 천장 · 금지 어법 ────────────
+# 태그는 표 «행»으로 서야 한다 — 바닥 occurrence(has "$BB" "\`delete:\`")는
+# 본문 «어디에나» 그 문자열이 있으면 통과해서, 표가 비었거나 깨져도 다른
+# 자리의 우연한 언급이 개별 태그 검사를 통과시킬 수 있다. 행 형태
+# (`| \`<tag>\` |`)로 좁히고, 표 자체의 행 수에 양의 대조를 건다(design 5행 ·
+# brief 4행 — bent: 행 하나만 brief 에서 빠진다). 대조가 없으면 빈 표나
+# 행이 다 날아간 표도 개별 태그 검사를 우연히 통과시킬 수 있다.
+for tag in 'delete:' 'yagni:' 'shrink:' 'altitude:'; do
+  row="| \`$tag\` |"
+  has "$BB" "$row" "AC7: brief 본문에 태그 $tag 가 표 «행»으로 있다"
+  has "$DB" "$row" "AC7: design 본문에 태그 $tag 가 표 «행»으로 있다"
+done
+row="| \`bent:\` |"
+has   "$DB" "$row" "AC7: design 본문에 태그 bent: 가 표 «행»으로 있다 (술어 ②)"
+hasnt "$BB" '`bent:`' "AC7: brief 본문에 태그 bent: 가 «없다» (술어 ② 는 design 자리의 것)"
+
+tag_table_row_count() { # tag_table_row_count <본문> — 판정 표에서 "| `<태그>:` |" 형태의 행 수
+  printf '%s\n' "$1" | grep -c '^| `[a-z]*:` |'
+}
+DB_ROWS="$(tag_table_row_count "$DB")"
+BB_ROWS="$(tag_table_row_count "$BB")"
+[ "${DB_ROWS:-0}" -eq 5 ] \
+  && ok "양의 짝: design 판정 표가 행 5개다 (위 표-행 검사가 공허하지 않다)" \
+  || no "양의 짝: design 판정 표 행 수가 5 가 아니다(실제 ${DB_ROWS:-0}) — 표가 비었거나 깨졌을 수 있다"
+[ "${BB_ROWS:-0}" -eq 4 ] \
+  && ok "양의 짝: brief 판정 표가 행 4개다 (위 표-행 검사가 공허하지 않다)" \
+  || no "양의 짝: brief 판정 표 행 수가 4 가 아니다(실제 ${BB_ROWS:-0}) — 표가 비었거나 깨졌을 수 있다"
+
+has "$BB" '대체안 없음 — 그냥 뺀다' "AC7: brief 본문에 삭제 제안의 명시 문구가 있다"
+has "$DB" '대체안 없음 — 그냥 뺀다' "AC7: design 본문에 삭제 제안의 명시 문구가 있다"
+has "$BB" '└ 천장' "AC7: brief 본문에 천장 규약이 있다"
+has "$DB" '└ 천장' "AC7: design 본문에 천장 규약이 있다"
+has "$BB" 'no-trigger' "AC7: brief 본문에 되돌릴 길 없음의 공시가 있다"
+has "$DB" 'no-trigger' "AC7: design 본문에 되돌릴 길 없음의 공시가 있다"
+has "$BB" '헤지형' "AC7: brief 본문에 금지 어법이 있다"
+has "$DB" '헤지형' "AC7: design 본문에 금지 어법이 있다"
+# AC7' — brief 자리에만 있는 어법 공존 규약
+has   "$BB" '사용자가 고를 두 상태를 사실로 제시해서 세워라' \
+  "AC7': brief 본문에 두 어법 계약의 공존 규약이 있다"
+
 finish
