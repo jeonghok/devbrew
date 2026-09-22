@@ -592,6 +592,34 @@ def main():
               file=sys.stderr)
         sys.exit(2)
 
+    # I1 (리뷰 라운드 2) — 위 두 검사는 세 판정 입력 플래그 중 딱 한 모양
+    # (`--differential ""`)만 `--emit-verdict` 앞에서 막았다. `--differential
+    # /some/path`·`--reason x`·`--legacy-verdict x` 는 `--emit-verdict` 없이
+    # 줘도 여기까지 통과해 아래 `if args.emit_verdict:` 블록에서 조용히
+    # 버려지고 rc=0 으로 빠졌다(측정: 셋 다 verdict_lines=0, stderr 없음) —
+    # Ruling T5-a 가 닫은 것과 같은 fail-open 계열이다: 값을 구했지만
+    # `--emit-verdict` 를 빼먹은 호출자가 완전해 보이는 보고서 + rc=0 을 받고,
+    # 판정축 전체가 그 실행에서 빠졌다는 사실이 어느 채널에도 안 남는다. 세
+    # 플래그 모두 `--emit-verdict` 없이는 의미가 없으므로 여기서 대칭으로
+    # 막는다 — exit 2(usage 오류)다, exit 4(판정축 실패)가 아니다: 이것은
+    # 잘못된 *호출*이지 실패한 *판정*이 아니다.
+    if not args.emit_verdict:
+        if args.differential is not None:
+            print("synthesize_findings.py: --differential 은 --emit-verdict "
+                  "없이는 의미가 없다 (함께 주거나 --differential 을 빼라)",
+                  file=sys.stderr)
+            sys.exit(2)
+        if args.reason:
+            print("synthesize_findings.py: --reason 은 --emit-verdict 없이는 "
+                  "의미가 없다 (함께 주거나 --reason 을 빼라)",
+                  file=sys.stderr)
+            sys.exit(2)
+        if args.legacy_verdict is not None:
+            print("synthesize_findings.py: --legacy-verdict 는 --emit-verdict "
+                  "없이는 의미가 없다 (함께 주거나 --legacy-verdict 을 빼라)",
+                  file=sys.stderr)
+            sys.exit(2)
+
     ledger = Ledger(items="open")
 
     doc = load_yaml_doc(args.adversarial) if args.adversarial else None

@@ -1271,7 +1271,7 @@ Expected: `MERGEABLE`. `CONFLICTING` 이면 **merge** 로(rebase 아님) `origin
 **3. Type consistency.** `parse_adapter_yaml` 의 반환이 4-튜플 → **5-튜플**로 바뀐다(Task 2 Step 4). 호출자는 이 파일 안의 `_aggregate` 하나뿐이고 Task 2 Step 5 가 같은 커밋에서 함께 바꾼다. `DEGRADE_CAUSES`(Task 2) 의 7값과 `CAUSE_TO_REASON`(Task 4) 의 키 7개가 **1:1** 이다 — 한쪽만 늘면 Task 4 의 `미지의 degrade_cause` 가 exit 4 로 잡는다. `verdict.decide` 의 키워드 인자 다섯이 Task 5 의 호출과 이름까지 일치한다.
 
 **4. 이 계획이 스스로 아는 약점.**
-- `verdict.py` 의 사유 중 `angle-absent` 는 **PR3 가 배선한다** — 이 PR 에서는 열거에만 있고 산출자가 없다. Task 4 의 `case_every_reason_is_reachable` 이 「CLI 로 주면 선다」까지만 재고 「실제로 그 상태에서 발화한다」는 못 잰다. 같은 말이 `merge-conflict`(PR4) · `declaration-invalid`(PR4) · `trivia`(PR4) · `scope-empty`(PR4) 에도 해당한다. **다섯 사유의 발화 지점은 PR4 의 빚이다.**
+- `verdict.py` 의 사유 중 `angle-absent` 는 **PR3 가 배선한다** — 이 PR 에서는 열거에만 있고 산출자가 없다. Task 4 의 `case_every_reason_is_reachable` 이 「CLI 로 주면 선다」까지만 재고 「실제로 그 상태에서 발화한다」는 못 잰다. 같은 말이 `merge-conflict`(PR4) · `declaration-invalid`(PR4) · `trivia`(PR4) 에도 해당한다. **네 사유의 발화 지점은 PR4 의 빚이다.** (정정, 리뷰 라운드 2 · Ruling F-3 — `scope-empty` 는 이 목록에서 뺐다: 이 PR 자신의 `CAUSE_TO_REASON`이 `expected-empty`/`no-adapters` → `scope-empty` 로 이미 산출자를 준다(계획 R-A), `test_verdict_vocabulary.sh` 의 부채 목록도 그렇게 서 있다 — PR4 를 기다릴 이유가 없다.)
 - `test_verdict_vocabulary.sh` 가 열거를 스크립트에서 도출하므로 **스크립트와 락이 함께 틀리면** 둘 다 GREEN 이다. 그 자리의 backstop 은 리뷰와 Task 6 Step 4 의 GREEN-기대 변이뿐이다.
 - 합성기 stdout 의 「바이트 접두」 단언은 **on 이 off 뒤에 붙는다**는 것만 잰다. off 자체가 PR2 이전과 같은지는 기존 락 다섯이 문면을 핀하는 것에 기댄다 — 그 락들이 안 보는 부분이 바뀌면 이 PR 은 그것을 못 잡는다.
 

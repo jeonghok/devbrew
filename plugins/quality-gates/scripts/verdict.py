@@ -130,6 +130,24 @@ def decide(*, defect=False, review_blocked=False, differential_text=None,
     # 헌장 — 막는 것은 「항목이 소실됐거나 셀 수 없거나 주 판정자가 죽었을 때」다.
     # 모델 다양성 손실 같은 나머지 degrade 는 공시만 한다. 그래서 원장의
     # `degraded`(공시)가 아니라 `blocks()`(차단)를 받는다.
+    #
+    # I2 (리뷰 라운드 2 · Ruling F-2) — 알려진 편차, 기록만 하고 여기서 고치지
+    # 않는다. `blocks()`(shared/adjudication/adjudication.py) 는 헌장의 세
+    # 차단 조건을 **각각 독립적으로** 나른다 — `held`(항목 소실) ·
+    # `unknown`(셀 수 없음) · `_has_primary_source_failure()`(그 축의 주
+    # 판정자 죽음). 설계 §6.4.3 은 처음 둘을 `findings-lost`, 셋째를
+    # `angle-absent`(PR3 배선)로 나눠 배정한다. 그런데 이 아래 한 줄은
+    # `review_blocked`(= `blocks()`) 참이면 무조건 `findings-lost`
+    # 하나로만 접는다 — 주 판정자가 죽은 실행도 "항목이 소실됐다"로 보고된다.
+    #
+    # 정밀하게 가르려면 `Ledger` 가 `_has_primary_source_failure()` 를 공개
+    # accessor 로 내야 하는데, `Ledger` 는 `shared/adjudication/` 에 살고 이
+    # PR 의 Global Constraints 는 그 디렉토리를 건드리지 못하게 막는다 —
+    # 건드리면 spec-distill 소비자와 `shared/tests/test_adjudication_wiring.sh`
+    # 까지 이 PR 범위로 끌려 들어온다. 판정 **값** 은 어느 쪽이든
+    # `not-certified` 로 같으므로 이 편차로 게이트가 넓어지지는 않는다 —
+    # 넓어지는 것은 `reason:` 라벨의 정밀도뿐이다. `angle-absent` 를 실제로
+    # 배선하는 PR 이 이 분리의 소유자다.
     if review_blocked:
         add("findings-lost")
 

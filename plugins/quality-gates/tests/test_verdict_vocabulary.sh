@@ -553,6 +553,39 @@ case_synth_empty_differential_is_usage_error() {
   rm -rf "$T"
 }
 
+case_synth_verdict_flags_without_emit_are_usage_error() {
+  # I1 (리뷰 라운드 2) — off + 판정 입력 플래그 조합 4종을 실측했더니 셋은
+  # rc=0·verdict_lines=0·stderr 없음(조용한 소실)이었고, 오직
+  # `--differential ""`(위 케이스) 만 usage 오류로 닫혀 있었다. 이것은
+  # Ruling T5-a 가 이미 닫은 것과 같은 fail-open 계열이다: 나중 호출자가
+  # `--differential "$agg_yaml"` 을 주고 `--emit-verdict` 를 빼먹으면 완전해
+  # 보이는 보고서 + rc=0 이 나가고 차등 축 전체가 그 실행에서 조용히
+  # 사라진다. 세 플래그(`--differential`·`--reason`·`--legacy-verdict`) 모두
+  # `--emit-verdict` 없이는 의미가 없으므로 대칭으로 막는다 — exit 2(usage
+  # 오류)지 exit 4(판정축 실패)가 아니다: 잘못된 *호출*이지 실패한 *판정*이
+  # 아니다.
+  local T; T=$(mktemp -d)
+  printf 'verdicts: []\n' > "$T/adv.yaml"; printf '[]\n' > "$T/f.yaml"
+  local valid_reason; valid_reason=$(printf '%s\n' "$REASONS" | head -1)
+
+  local rc=0
+  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+    --differential /nonexistent/does-not-matter >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "2" "--emit-verdict 없는 --differential <경로> 는 usage 오류다"
+
+  rc=0
+  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+    --reason "$valid_reason" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "2" "--emit-verdict 없는 --reason <열거값> 은 usage 오류다 — 값이 유효해도 마찬가지다"
+
+  rc=0
+  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+    --legacy-verdict MADE_UP >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "2" "--emit-verdict 없는 --legacy-verdict 는 usage 오류다"
+
+  rm -rf "$T"
+}
+
 case_synth_verdict_failure_is_atomic() {
   # Ruling T5-b — 판정 «계산» 은 본 보고서를 쓰기 «전» 에 한다. 디코드 불가한
   # `--differential` 이 `read_or_none()` 의 fail4 를 태우면, 그 시점에 stdout 은
@@ -564,10 +597,23 @@ case_synth_verdict_failure_is_atomic() {
   # 통과한다: 실패가 나긴 나기 때문이다. stdout-빈값 단언만이 그 순서를
   # 구별한다 — 실측(이전 라운드): 뒤로 옮긴 순서에서 549바이트 완전한 보고서 +
   # rc=4 조합이 나왔다.
+  #
+  # Minor 3 (리뷰 라운드 2 · Ruling F-3) — 픽스처가 `printf 'x\n\xff\xfe'` 였다.
+  # 이 `\x` 이스케이프는 **셸이 확장**해야 진짜 잘못된 바이트가 된다(bash 는
+  # 확장한다). 확장 안 하는 셸에서 돌면 파일은 리터럴 ASCII 문자열 `x`(유효한
+  # UTF-8) 한 줄뿐인데, 그래도 이 케이스는 `causes_of()`의 zero-hit 경로라는
+  # **다른** 이유로 우연히 같은 exit 4 를 냈다 — 형제
+  # `case_non_utf8_differential_is_fail_closed` 가 이미 진단한
+  # green-for-the-wrong-reason 모양과 같다. 그 케이스가 고친 것과 같은 치료를
+  # 여기도 적용한다: 픽스처를 **유효한 차등 산출물 본문 + 그 뒤에 곧바로 붙는
+  # 나쁜 바이트**로 바꿨다(`read_or_none()` 의 `f.read()` 는 파일 전체를 한
+  # 번에 디코드하므로 앞부분이 유효해도 뒤의 나쁜 바이트가 여전히
+  # `UnicodeDecodeError` 를 낸다). 단언 대상(stdout 빈값)은 안 바뀐다 — 이
+  # 케이스가 도는 *이유*만 진짜 디코드 실패로 고정한다.
   local T; T=$(mktemp -d)
   printf 'verdicts: []\n' > "$T/adv.yaml"
   printf -- '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/f.yaml"
-  printf 'x\n\xff\xfe' > "$T/bad.yaml"
+  printf 'attribution_status: degraded\ndegrade_causes: [silent-drop]\nverdict_input:\n  confirmed_product_defect: false\n  silent_drop: true\n  baseline_unrunnable: false\n\xff\xfe' > "$T/bad.yaml"
   local out rc=0
   out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
     --emit-verdict --differential "$T/bad.yaml" 2>/dev/null) || rc=$?
@@ -609,5 +655,6 @@ case_synth_lost_findings_is_not_certified
 case_synth_secondary_degrade_does_not_block
 case_synth_clean_is_clean
 case_synth_empty_differential_is_usage_error
+case_synth_verdict_flags_without_emit_are_usage_error
 case_synth_verdict_failure_is_atomic
 finish "test_verdict_vocabulary"
