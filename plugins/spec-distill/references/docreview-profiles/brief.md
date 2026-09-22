@@ -6,7 +6,7 @@ fix_anchors: ["^0\\.", "^2\\."]
 immutable: ["^6\\."]
 protected_headings: ["^1\\."]
 layer_rubric:
-  layer1: [direction]
+  layer1: [direction, overdesign]
   layer2: [distortion, omission, invention, provenance_mislabel, authority_syntax, evidence_unsupported]
 decision_log: {kind: audit_section, heading: "## 8. 리뷰 결정"}
 defer_target: {kind: none}
@@ -19,9 +19,10 @@ web: true
 
 사용자가 정한 방향이 **틀렸을 근거**를 찾는다 — 리포 실체와 웹의 선례로. 방향을 바꾸지 않는다: finding 하나마다 사용자가 결정할 질문 하나를 `summary` 에 담고 처분은 `decide` 다.
 
-**층 1 판정 관계** — 이 층의 각 축이 무엇과 대조하는지는 **축마다 다르다**. `direction` 은 리포 실체와 웹 선례로 사용자가 정한 방향을 **반증**한다 — 이 축은 `ground_truth` 를 쓰지 않는다.
+**층 1 판정 관계** — 이 층의 각 축이 무엇과 대조하는지는 **축마다 다르다**. `direction` 은 리포 실체와 웹 선례로 사용자가 정한 방향을 **반증**한다 — 이 축은 `ground_truth` 를 쓰지 않는다. `overdesign` 은 그 `ground_truth` 의 **두 원문**(payload `## 6. 사용자 원문` 의 S1 · `<<<AUDIT-VERBATIM>>>` 뒤 블록의 S2 이상)이 말한 goal 을 기준으로 **과함**을 잰다 — 한 층 안에 정답 출처가 둘이다.
 
 - `direction` — 확정 항목이 리포 사실과 모순되거나, 더 성숙한 외부 대안이 있거나, 확정 사이가 서로 충돌한다. 근거(파일:심볼 · URL)를 `evidence` 에 인용한다.
+- `overdesign` — **사용자 원문**의 goal 에 비해 과한가. 술어 둘(① 과함 · ③ 층위 이탈)이고 처분은 둘 다 `decide` 다. 상세는 아래 「층 1 `overdesign` — 설계자 시선」 절.
 
 ## 층 2 — 충실도 (`docreview-layer2`)
 

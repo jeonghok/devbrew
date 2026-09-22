@@ -12,7 +12,7 @@ protected_headings:
   - "trade-?offs?|트레이드오프"
   - "Acceptance Criteria|수용 기준|\\bAC\\b"
 layer_rubric:
-  layer1: [goal_fit, problem_definition, scope, architecture, component_relations, data_flow, tradeoffs, feasibility]
+  layer1: [goal_fit, problem_definition, scope, architecture, component_relations, data_flow, tradeoffs, feasibility, overdesign]
   layer2: [placeholder, ambiguity, scope_creep, approaches_comparison, isolation, testing, handoff_incomplete]
 decision_log: {kind: doc_section, heading: "## 결정 기록"}
 defer_target: {kind: doc_section, heading: "### Deferred to plan"}
@@ -25,7 +25,7 @@ web: false
 
 정답의 출처는 인터뷰 브리프 §2 의 확정 항목이다. 문서가 그 확정과 **하나의 그림**으로 정합한지 본다.
 
-**층 1 판정 관계** — 문서가 `ground_truth`(브리프 §2 확정 항목)와 **하나의 그림으로 정합한가**. 어긋남은 문서 쪽의 결함이다.
+**층 1 판정 관계** — 문서가 `ground_truth`(브리프 §2 확정 항목)와 **하나의 그림으로 정합한가**. 어긋남은 문서 쪽의 결함이다. 단 `overdesign` 은 정합이 아니라 **과함**을 잰다 — 기준이 `ground_truth`(§2 확정 항목)가 아니라 **같은 브리프의 §1 Goal** 이라, 이 축만 §2 자체를 의심할 수 있다.
 
 - `goal_fit` — 문서의 Goals 가 브리프의 goal 과 같은 것을 겨누는가. 다른 문제를 잘 풀고 있지 않은가.
 - `problem_definition` — Context 의 근본 원인 서술이 브리프의 문제 정의와 맞는가.
@@ -35,6 +35,7 @@ web: false
 - `data_flow` — 한 사이클의 데이터가 끊김 없이 흐르는가(생산자 없는 소비자, 소비자 없는 산출물).
 - `tradeoffs` — 기각된 대안이 왜 기각됐는지가 확정 항목과 모순되지 않는가.
 - `feasibility` — 설계가 단정한 도구·리포 사실이 실재하는가(파일·락·시그니처를 읽어 확인한다).
+- `overdesign` — **브리프 §1 Goal** 에 비해 과한가, 제약을 지키려다 구조가 **왜곡**됐나, 이 문서의 층이 아닌 것이 **들어왔나**. 술어 셋(① 과함 · ② 왜곡 · ③ 층위 이탈)이고 처분은 전부 `decide` 다. 기존 `architecture`(§2 확정 제약 준수)와 다르다 — 그래야 「§2 가 확정한 것 **자체가** §1 의 goal 에 비해 과하다」를 말할 수 있다. 상세는 아래 「층 1 `overdesign` — 설계자 시선」 절.
 
 층 1 finding 의 처분은 대개 `decide` 다 — 방향의 결함은 저자가 아니라 사용자가 정한다.
 
