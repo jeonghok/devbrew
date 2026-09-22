@@ -3,6 +3,15 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.7.0] — 2026-09-22
+
+minor 인 이유 — 새 surface 가 둘이다: 이 플러그인이 직접 부르는 `disposition_lines()`(`shared/adjudication/render_disposition.py`, 심볼릭 링크)의 4-튜플 반환과, 엔진 링크(`docreview_state.py`·`docreview_route.py`)가 나르는 리뷰어 출력 스키마 칸 둘(`replacement`·`if_unfixed`). 앞의 것은 **호출 계약이 깨진다** — 위치 언패킹이 `ValueError` 로 소리 낸다. 다만 소비자가 이 리포 안의 셋(호출 자리 기준, 전수 grep: `scripts/synthesize_findings.py` 둘 · `scripts/synthesize_artifact_findings.py` 하나)뿐이고 전부 같은 PR 안에서 4-튜플 언패킹으로 고쳤으며, `shared/adjudication/` 은 배포 심볼릭 링크로만 나가 외부 플러그인이 이 함수를 부를 표면이 없으므로 외부 계약은 안 깨진다. 설계 `docs/superpowers/specs/2026-09-21-designer-lens-review-design.md` §5.7·§5.8·§5.9·§6.
+
+### Changed
+
+- **`disposition_lines()` 가 4-튜플을 낸다** (`처분줄, 배관줄, 풀이줄, advisory목록`). 새 풀이 줄(`line3`)이 앞 두 줄 «둘 다» 의 회계 낱말을 사람말로 푼다 — 「억제=규칙이 자른 것 · 흡수=같은 것끼리 합친 것 · 미판정=볼 사람이 없던 것 · 배관 손실=입력이 죽었거나 항목이 깨졌거나 값을 보정한 것」. 회계 낱말 자체는 **바꾸지 않는다** — 사람말을 옆에 붙일 뿐이다. **기존 3-튜플 위치 언패킹(`line1, line2, advisories = disposition_lines(...)`)은 `ValueError` 로 깨진다** — 조용히 틀린 값을 받는 대신 소리 내며 죽는 쪽을 선택했다. `scripts/synthesize_findings.py`(두 호출)·`scripts/synthesize_artifact_findings.py`(한 호출) 가 이 PR 안에서 4-튜플 언패킹으로 갱신됐다.
+- 엔진 링크 `scripts/{docreview_state,docreview_route}.py`(심볼릭 링크)가 리뷰어 출력 스키마 칸 둘(`replacement`·`if_unfixed`) · `decision_view` 동어반복 제거 · 상태의 함수가 된 선택지 라벨 · category 사람말 사상(`CATEGORY_GLOSS`, 네 프로필 + 엔진 category) · 게이트 순서 공시 · `AskUserQuestion` 라벨 항목별 내용 규약으로 바뀌었다. 전문은 `plugins/spec-distill/CHANGELOG.md` `[3.3.0]`. 이 플러그인의 호출자는 여전히 0 이다(quality-gates 쪽 docreview 진입 skill 은 이 PR 의 범위 밖).
+
 ## [7.6.2] — 2026-09-19
 
 ### Changed

@@ -485,7 +485,7 @@ def _auto_decides(a, diff, st, prof, sections, n, L):
         if not f0:
             esc_unconsumed += 1   # 대상 finding 부재 — 버리지 않고 센다(공시는 게이트가, 재상승과 같은 규칙)
             continue
-        # F-3 재리뷰(Ruling 20) — 형제 재상승(:428, `if not d0 or d0.get("state") != "expired"`)
+        # F-3 재리뷰(Ruling 20) — 형제 재상승(:533, `if not d0 or d0.get("state") != "expired"`)
         # 과 같은 모양. `f0` 존재만으로는 이 fix 가 «지금도» escalated 상태인지 모른다 —
         # 예약이 만들어진 뒤 사용자가 drop 하거나(cmd_fix event=drop, 상태 검사 없이
         # 무조건 대입) intent-pass 로 재시도했을 수 있다(둘 다 `st["fixes"][fid]["state"]`
@@ -695,7 +695,7 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats):
         "escalated_unconsumed": stats["escalated_unconsumed"],
     }
     # 키를 «이름으로» 편다 — `render_disposition.disposition_report()` 의 같은
-    # 결정과 같은 이유다(그 파일 :54-56): `report["counts"]` 를 `.items()` 로
+    # 결정과 같은 이유다(그 파일 :66-68): `report["counts"]` 를 `.items()` 로
     # 통째로 넘기면 카운트 이름이 이 파일에 문자열로 한 번도 안 나타나서,
     # 어휘가 늘어도 이 소비자는 조용하다 — `tools/adjudication/check_consumed.py`
     # 가 막으려는 바로 그 침묵이다(L2, 리터럴 첨자·튜플 원소만 소비로 센다).

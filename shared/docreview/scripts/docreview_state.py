@@ -516,8 +516,9 @@ def cmd_begin_round(a) -> int:
 PUBLIC_FIELDS = ("id", "lineage", "bucket", "supersedes", "origin", "layer", "category", "anchor",
                  "disposition", "summary", "edit_scope", "blocks", "evidence",
                  # 갈래 2 — top-level 이다. `decision_view` 통로는 disposition == "decide"
-                 # 에만 열리므로(docreview_route.py:640-641) 그쪽에만 실으면 fix·defer·ask
-                 # 로 난 항목의 대체안이 원장에 한 글자도 안 남는다.
+                 # 에만 열리므로(docreview_route.py:660-661, `_remap_blocks` 안의 게이트 —
+                 # 이 앵커는 PR 3 안에서 두 번 밀렸다. 재측정 없이 베끼지 말 것) 그쪽에만
+                 # 실으면 fix·defer·ask 로 난 항목의 대체안이 원장에 한 글자도 안 남는다.
                  "replacement", "if_unfixed",
                  "decision_view", "state", "promotion", "promoted_from", "immutable", "kind")
 
@@ -1307,7 +1308,7 @@ def render_gate(st, g) -> str:
     # 「아직 적용되지 않은 fix」라는 사실은 같다(적용됐으면 애초에 이 원장에
     # 안 남는다). held_fix 가 여기 들어가는 것은 held_fix 만의 특별 취급이
     # 아니라 이 구절이 «상태 무관·원장 전체»를 가리키기 때문이다.
-    # [리뷰 fix round 3 정정] held_decide 가 다섯 구절 밖인 이유는 그래서 "보류
+    # [Task 9 정정] held_decide 가 다섯 구절 밖인 이유는 그래서 "보류
     # 라는 개념은 어느 구절도 못 담는다"가 아니다 — held_fix 가 바로 그 반례다.
     # 진짜 이유는 더 좁다: decides 원장 segment(열린 결정·관측 대기·막힌 것)는
     # fixes 와 달리 «상태 무관·원장 전체»를 가리키는 구절이 없다 — 세 구절이
