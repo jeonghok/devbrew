@@ -141,7 +141,8 @@ docreview:
         - 고친다(채택)
         - 그대로 둔다(기각)
         - 나중에 정한다(보류)
-        impact: '#3-non-goals · 인용 0 섹션'
+        impact: '#3-non-goals (범위가 넓어지거나 좁아짐) · 인용 0 섹션'
+        category_unglossed: null
         auto: false
       state: null
       promotion: null
@@ -217,7 +218,8 @@ docreview:
         - 고친다(채택)
         - 그대로 둔다(기각)
         - 나중에 정한다(보류)
-        impact: '#12-files-to-modify · 인용 1 섹션'
+        impact: '#12-files-to-modify (TBD·빈 절) · 인용 1 섹션'
+        category_unglossed: null
         auto: false
       state: null
       promotion: null
@@ -270,7 +272,8 @@ docreview:
         - 고친다(채택)
         - 그대로 둔다(기각)
         - 나중에 정한다(보류)
-        impact: '#2-goals · 인용 0 섹션'
+        impact: '#2-goals (두 가지로 읽힘) · 인용 0 섹션'
+        category_unglossed: null
         auto: true
       state: null
       promotion: protected
@@ -345,7 +348,8 @@ docreview:
         - 고친다(채택)
         - 그대로 둔다(기각)
         - 나중에 정한다(보류)
-        impact: '#5-architecture · 인용 0 섹션'
+        impact: '#5-architecture (데이터가 끊김) · 인용 0 섹션'
+        category_unglossed: null
         auto: true
       state: null
       promotion: protected
@@ -398,7 +402,8 @@ docreview:
         - 고친다(채택)
         - 그대로 둔다(기각)
         - 나중에 정한다(보류)
-        impact: '#3-non-goals · 인용 0 섹션'
+        impact: '#3-non-goals (범위가 넓어지거나 좁아짐) · 인용 0 섹션'
+        category_unglossed: null
         auto: false
       state: null
       promotion: null
@@ -428,7 +433,8 @@ docreview:
         alternatives:
         - 고친다(채택)
         - 그대로 둔다(기각)
-        impact: '#3-non-goals · 인용 0 섹션'
+        impact: '#3-non-goals (범위가 넓어지거나 좁아짐) · 인용 0 섹션'
+        category_unglossed: null
         auto: true
       state: null
       promotion: null

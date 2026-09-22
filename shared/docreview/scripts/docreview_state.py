@@ -1092,6 +1092,48 @@ def gate_summary(st) -> dict:
     return g
 
 
+# category 의 사람말 — 렌더가 쓰는 유일한 자리. 코퍼스는 네 프로필(brief · design-doc ·
+# seed · generic)의 층 1·2 축 전부 + 엔진이 직접 만드는 category 다. 렌더는 프로필별이
+# 아니라 엔진 하나이므로 두 프로필로 좁히면 가장 흔한 항목(frozen_change)이 상시
+# advisory 경로가 된다. `shared/tests/test_docreview_profile_schema.sh` 가 «프로필에서
+# 도출한 이름 전부에 사상이 있는가»를 ∀ 로 재므로, 새 축이 사상 없이 들어오면 RED 다.
+# 여분 항목은 무해하다 — `overdesign` 은 프로필보다 먼저 들어와 있다(그 축을 더하는 PR 이
+# 이 파일을 0줄 건드려야 단독 머지가 가능하기 때문이다).
+CATEGORY_GLOSS = {
+    # brief 층 1·2
+    "direction": "방향의 반증", "distortion": "원문의 뜻이 바뀜",
+    "omission": "원문에 있는 것이 빠짐", "invention": "원문에 없는 것이 들어옴",
+    "provenance_mislabel": "출처 표기가 틀림", "authority_syntax": "열린 것을 확정으로 못박음",
+    "evidence_unsupported": "근거가 요약을 안 받침",
+    # design-doc 층 1·2
+    "goal_fit": "목표가 다른 것을 겨눔", "problem_definition": "문제 정의가 어긋남",
+    "scope": "범위가 넓어지거나 좁아짐", "architecture": "확정 제약 위반",
+    "component_relations": "의존 방향이 안 닫힘", "data_flow": "데이터가 끊김",
+    "tradeoffs": "기각 사유가 확정과 모순", "feasibility": "단정한 리포 사실이 없음",
+    "placeholder": "TBD·빈 절", "ambiguity": "두 가지로 읽힘",
+    "scope_creep": "분해 안 되는 묶음", "approaches_comparison": "대안 비교 없는 단정",
+    "isolation": "컴포넌트 경계가 흐림", "testing": "검증 전략 부재",
+    "handoff_incomplete": "이어갈 컨텍스트 부족",
+    # seed 층 1
+    "unfounded_addition": "원문에 없는 요구가 더해짐", "example_as_requirement": "예시가 요구로 승격됨",
+    "premature_closure": "열어 둔 선택이 닫힘", "inference_as_decision": "추론이 결정처럼 쓰임",
+    # generic 층 1·2
+    "logic": "결론이 전제에서 안 따라 나옴", "assumption": "말해지지 않은 전제",
+    "completeness": "약속하고 안 채운 자리", "evidence": "근거 없는 단정",
+    "actionability": "무엇을 할지 알 수 없음", "structure": "목차와 본문의 불일치",
+    # 엔진이 직접 만드는 것
+    "frozen_change": "얼림 검사가 잡은 변경", "other": "분류 없음",
+    # 갈래 1 이 더할 축 — 프로필보다 먼저 여기 선다(위 문단)
+    "overdesign": "goal 대비 과함",
+}
+
+
+def category_gloss(cat):
+    """사람말 또는 None. **없으면 조용히 빈칸으로 두지 않는다** — 부르는 쪽이
+    원래 이름을 그대로 내고 그 사실을 렌더에 한 줄로 공시한다."""
+    return CATEGORY_GLOSS.get(cat)
+
+
 # 선택지 라벨은 **상태의 함수**다. `cmd_decide` 가 kind=post 에서 reject 에 revert
 # permit 을 만드므로(위 `cmd_decide` 의 post 분기 — `kind: "revert"` permit 을 여는
 # 자리) 고정 라벨을 사람말로 바꾸면 그 자리에서 «동작을 반대로 설명»하게 된다.
@@ -1123,20 +1165,30 @@ def _post_kind_notice(d) -> str:
 
 
 def _rg_decide(st, g, fid):
-    # [Task 4 — §6.4 한계 (a)] 「대안:」 줄은 `dv.get("alternatives")`(docreview_route.py
-    # `_decision_view` 의 상수 목록)가 아니라 `decide_choices` 로 낸다 — 그쪽은 라우팅
-    # 시점(record_findings 이전)에 불려 이 id 를 못 보므로 여기가 «제안 = 수용» 이
-    # 실제로 성립하는 유일한 자리다(위 `decide_choices` 헤더 코멘트). `dv` 는 변경·근거·
-    # 영향 세 필드에는 여전히 쓴다 — 그 셋은 항목별 서술이라 선택지 축과 무관하다.
+    # [Task 4 — §6.4 한계 (a)] 「대안:」 줄은 `dv.get("alternatives")` 가 아니라
+    # `decide_choices` 로 낸다 — 그쪽은 라우팅 시점에 이 id 를 못 보므로 여기가
+    # «제안 = 수용» 이 실제로 성립하는 유일한 자리다. `dv` 는 항목별 서술 네 필드에
+    # 여전히 쓴다.
+    # [갈래 2] 「변경」이 사라지고 「그대로 두면 / 고치면」 둘로 갈린다 — 헤더가 이미
+    # 「무엇이 문제인가」를 내므로 동어반복이 원리적으로 불가능해진다. 「영향」은
+    # 「자리」다(anchor + 인용수는 영향이 아니라 위치다). **「대안」 줄은 조건부로
+    # 내지 않는다** — 그 줄이 `cases.sh` 의 「제안 = 수용」 락의 발동 조건이고,
+    # 형제 `_rg_expired` 가 똑같은 실패를 이미 한 번 고쳤다.
     f = st["findings"][fid]
     dv = f.get("decision_view") or {}
     d = st["decides"].get(fid) or {}
     alternatives = [choice_label(c, d.get("kind")) for c in decide_choices(st, fid)]
-    return ["[decide%s] %s — %s%s" % (" auto" if dv.get("auto") else "", fid, f.get("summary"), _post_kind_notice(d)),
-            "  변경: %s" % dv.get("change", f.get("summary")),
-            "  근거: %s" % dv.get("basis", f.get("evidence") or "—"),
-            "  대안: %s" % " / ".join(alternatives),
-            "  영향: %s" % dv.get("impact", f.get("anchor"))]
+    lines = ["[decide%s] %s — %s%s" % (" auto" if dv.get("auto") else "", fid, f.get("summary"), _post_kind_notice(d)),
+             "  그대로 두면: %s" % dv.get("if_unfixed", "(리뷰어가 안 적음)"),
+             "  고치면: %s" % dv.get("replacement", "(대체안 미작성)"),
+             "  근거: %s" % dv.get("basis", f.get("evidence") or "—"),
+             "  자리: %s" % dv.get("impact", f.get("anchor")),
+             "  대안: %s" % " / ".join(alternatives)]
+    # 사람말이 없는 category 는 원래 이름으로 나가되 그 사실을 «말한다». 조용히
+    # 빈칸으로 두면 사상이 낡았다는 것이 아무 데도 안 남는다(D13-③ 이 안 닫힌다).
+    if dv.get("category_unglossed"):
+        lines.append("  ↳ 사람말 사상 없음: %s — 원래 이름 그대로 낸다" % dv["category_unglossed"])
+    return lines
 
 
 def _rg_adopted(st, g, fid):

@@ -481,8 +481,13 @@ dc_choices() {   # dc_choices <state-dir> <fid> → decide_choices(st, fid) 의 
 # render 의 그 id 블록에서 「대안:」 줄을 뽑아 decide_choices 가 내는 집합과 «라벨로
 # 바꾼 뒤» 비교한다(라벨 문자열이 아니라 집합 — 순서 무관). fid 는 hash 파생이라
 # "] <fid> —" 조합이 그 id 의 [decide…] 헤더 줄에서만 나온다.
+# [Task 8 재측정] `_rg_decide` 가 여섯 줄이 되며 「대안:」 이 헤더 뒤 3번째(옛 형식:
+# 변경·근거·대안)가 아니라 5번째(그대로 두면·고치면·근거·자리·대안) 줄로 밀렸다.
+# `-A4` 는 그 줄에 안 닿아 「대안: 」 이 빈 채로 돌아 이 함수가 늘 False 를 냈다
+# (실측 — RED 로 걸렸다) — `-A5` 로 넓힌다. 대안 줄은 항상 이 오프셋에 있으므로
+# (사람말 미사상 7번째 줄은 대안 «뒤») category 사상 여부와 무관하게 정확하다.
 choices_match() {   # choices_match <render-text> <fid> <state-dir> → True/False
-  local alt; alt="$(printf '%s\n' "$1" | grep -F -A4 -- "] $2 —" | grep '대안: ' | head -1)"
+  local alt; alt="$(printf '%s\n' "$1" | grep -F -A5 -- "] $2 —" | grep '대안: ' | head -1)"
   python3 -c '
 import sys
 sys.path.insert(0, sys.argv[1])
@@ -2239,7 +2244,11 @@ case_labels_are_kind_dependent() {
   local fid; fid="$(jget "$d/fin.json" '[x["id"] for x in d["findings"] if x["category"]=="frozen_change"][0]')"
   assert_eq "$(st_yaml "$d" 'st["decides"]["'"$fid"'"]["kind"]')" "post" \
     "라벨 kind: 선결조건 — 이 항목은 kind=post 다(공허하지 않음의 증거)"
-  local blk; blk="$(printf '%s\n' "$render" | grep -F -A6 -- "] $fid —")"
+  # [Task 8 재측정] 여섯 줄 렌더 이후 이 항목(frozen_change, 항상 사상됨)의 블록은
+  # 헤더+5 = 6줄이다. -A6 은 다음 블록의 헤더 한 줄까지 삼켰다(실측) — 대안 줄까지는
+  # 안 닿아 오늘은 안전하지만, «자기 블록만» 잡도록 -A5 로 좁힌다(그 판이 swallow
+  # 여지를 아예 없앤다).
+  local blk; blk="$(printf '%s\n' "$render" | grep -F -A5 -- "] $fid —")"
   assert_grep "$blk" '현재 변경 유지\(채택\)' "AC17: post 의 adopt 라벨은 「현재 변경 유지(채택)」"
   assert_grep "$blk" '이전 상태로 원복\(기각\)' "AC17: post 의 reject 라벨은 「이전 상태로 원복(기각)」"
   case "$blk" in
@@ -2255,5 +2264,29 @@ case_labels_pre_site() {
   assert_grep "$render" '고친다\(채택\)'       "AC17: pre 의 adopt 라벨은 「고친다(채택)」"
   assert_grep "$render" '그대로 둔다\(기각\)'  "AC17: pre 의 reject 라벨은 「그대로 둔다(기각)」"
   assert_grep "$render" '나중에 정한다\(보류\)' "AC17: hold 라벨은 양쪽에서 「나중에 정한다(보류)」"
+  rm -rf "$d"
+}
+
+# ── 게이트 렌더 여섯 줄 (AC16 · AC19') ─────────────────────────────────────
+case_gate_render_six_lines() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" --skip)" || { no "렌더: route_r1 실패"; return; }
+  local fid; fid="$(jget "$d/fin.json" '[x["id"] for x in d["findings"] if x["disposition"]=="decide" and "다른 것을 겨눈다" in x["summary"]][0]')"
+  local render blk
+  render="$(py docreview_state.py gate --state-dir "$d" --render)"
+  blk="$(printf '%s\n' "$render" | grep -F -A5 -- "] $fid —")"
+  assert_grep "$blk" '^  그대로 두면: 설계 전체가' "AC16: 「그대로 두면」 줄이 if_unfixed 를 낸다"
+  assert_grep "$blk" '^  고치면: §2 를 브리프'      "AC16: 「고치면」 줄이 replacement 를 낸다"
+  assert_grep "$blk" '^  근거: '                     "AC16: 「근거」 줄이 있다"
+  assert_grep "$blk" '^  자리: #2-goals \(목표가 다른 것을 겨눔\) · 인용 ' \
+    "AC16·AC19': 「자리」 줄이 anchor · category 사람말 · 인용 수를 함께 낸다"
+  assert_grep "$blk" '^  대안: '                     "AC16: 「대안」 줄은 항상 난다"
+  case "$blk" in
+    *'  변경: '*) no "AC16: 「변경」 줄이 아직 난다 — 헤더 복사(동어반복)" ;;
+    *) ok "AC16: 「변경」 줄이 사라졌다" ;;
+  esac
+  case "$blk" in
+    *'  영향: '*) no "AC16: 「영향」 줄이 아직 난다 — 위치를 영향이라 부른다" ;;
+    *) ok "AC16: 「영향」이 「자리」로 바뀌었다" ;;
+  esac
   rm -rf "$d"
 }

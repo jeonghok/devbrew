@@ -30,7 +30,8 @@
      "그대로 둔다(기각)",
      "나중에 정한다(보류)"
     ],
-    "impact": "#3-non-goals · 인용 0 섹션",
+    "impact": "#3-non-goals (범위가 넓어지거나 좁아짐) · 인용 0 섹션",
+    "category_unglossed": null,
     "auto": false
    }
   },
@@ -60,7 +61,8 @@
      "고친다(채택)",
      "그대로 둔다(기각)"
     ],
-    "impact": "#3-non-goals · 인용 0 섹션",
+    "impact": "#3-non-goals (범위가 넓어지거나 좁아짐) · 인용 0 섹션",
+    "category_unglossed": null,
     "auto": true
    }
   }

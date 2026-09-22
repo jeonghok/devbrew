@@ -21,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점
 from adjudication import Ledger  # noqa: E402
 from docreview_anchor import classify_anchor, refs_of  # noqa: E402
 from docreview_state import (  # noqa: E402
-    RANK, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, choice_label, fail, load_profile,
-    load_state, observe_ledger, pending_mismatch, record_findings, round_diff, save_state, yaml,
+    RANK, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, category_gloss, choice_label, fail,
+    load_profile, load_state, observe_ledger, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
 
 BLOCK_RE = r"```%s[ \t]*\n(.*?)\n```"
@@ -242,11 +242,19 @@ def _decision_view(it, doc, st):
     # 않는다. 그리고 두 부재 리터럴은 서로 다르다 — 침묵(`(대체안 미작성)`)과 판정
     # (`대체안 없음 — 그냥 뺀다`, 리뷰어가 그 문자열을 실제로 냈을 때만)은 다른
     # 사실이다. 같은 글자를 내면 아무도 제안하지 않은 삭제가 제안으로 전달된다.
+    # 「영향」 → 「자리」: anchor + 인용수는 영향이 아니라 위치다. category 의 사람말을
+    # `인용` **앞**에 넣는다 — `cases.sh` 가 `인용 1 섹션` 을 부분 문자열로 잰다
+    # (T35), 사람말을 뒤로 옮기면 그 단언이 깨진다. 사상 없는 category 는 원래
+    # 이름을 그대로 싣고 `category_unglossed` 로 그 사실을 공시한다(조용히 빈칸으로
+    # 두지 않는다 — `category_gloss` 의 계약).
+    gloss = category_gloss(it["category"])
     return {"if_unfixed": it.get("if_unfixed") or "(리뷰어가 안 적음)",
             "replacement": it.get("replacement") or "(대체안 미작성)",
             "basis": basis,
             "alternatives": [choice_label(c, it.get("kind")) for c in choices],
-            "impact": "%s · 인용 %s 섹션" % (it["anchor"], nref if nref is not None else "?"),
+            "impact": "%s (%s) · 인용 %s 섹션" % (it["anchor"], gloss or it["category"],
+                                                nref if nref is not None else "?"),
+            "category_unglossed": None if gloss else it["category"],
             "auto": it.get("origin") == "auto"}
 
 

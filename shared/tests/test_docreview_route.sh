@@ -74,4 +74,5 @@ case_decision_view_no_tautology
 case_decision_view_absence_is_literal
 case_labels_are_kind_dependent
 case_labels_pre_site
+case_gate_render_six_lines
 finish
