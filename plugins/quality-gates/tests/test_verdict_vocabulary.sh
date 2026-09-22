@@ -436,6 +436,86 @@ case_real_producer_aggregate_feeds_verdict() {
   rm -rf "$T"
 }
 
+SYNTH="$PLUGIN_ROOT/scripts/synthesize_findings.py"
+
+case_synth_off_is_byte_prefix_of_on() {
+  # 차등 — 같은 입력으로 두 번 돌려 **off 출력이 on 출력의 접두** 인지 본다.
+  # 「off 에 verdict 줄이 없다」만 재면 on 이 앞부분을 바꿔도 안 보인다.
+  local T; T=$(mktemp -d)
+  printf 'verdicts: []\n' > "$T/adv.yaml"
+  printf -- '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/f.yaml"
+  local off on
+  off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml")
+  on=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  assert_not_grep "$off" '^verdict: '  "기본값에서는 판정 줄이 없다"
+  assert_grep     "$on"  '^verdict: '  "--emit-verdict 가 판정 줄을 켠다"
+  assert_eq "${on:0:${#off}}" "$off"   "off 출력은 on 출력의 바이트 접두다"
+  rm -rf "$T"
+}
+
+case_synth_kept_finding_is_defect() {
+  local T; T=$(mktemp -d)
+  printf 'verdicts: []\n' > "$T/adv.yaml"
+  printf -- '- {agent: r, file: a.py, line: 1, severity: SUGGESTION, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/f.yaml"
+  local out; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  # 계획 R-B — severity 를 묻지 않는다. SUGGESTION 하나도 채택된 finding 이다.
+  assert_grep "$out" '^verdict: defect$' "채택된 finding 이 있으면 defect"
+  rm -rf "$T"
+}
+
+case_synth_lost_findings_is_not_certified() {
+  # 원장의 blocks() — 항목이 소실되면 막는다. 공시(degraded)가 아니라 차단이다.
+  local T; T=$(mktemp -d)
+  printf 'verdicts: []\n' > "$T/adv.yaml"
+  printf -- '- not-a-mapping\n' > "$T/f.yaml"
+  local out; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  assert_grep "$out" '^verdict: not-certified$' "소실된 항목이 있으면 미판정"
+  assert_grep "$out" '^reason: findings-lost$'  "사유가 findings-lost 다"
+  rm -rf "$T"
+}
+
+case_synth_secondary_degrade_does_not_block() {
+  # 실측(이번 라운드) — 브리프가 제시한 `- not-a-mapping` 픽스처는 `blocks()`
+  # 와 `report["degraded"]` 를 가르지 못한다: 그 픽스처는 `ledger.hold()`(주
+  # 판정자 소실)를 태워서 **둘 다** 참이 되기 때문이다(`_degraded()` 가
+  # `blocks()` 의 상위집합이라 `blocks()` 참이면 `degraded` 도 항상 참). 두
+  # 값이 실제로 갈라지는 자리는 **보조** source_failed 뿐이다(모델 다양성
+  # 손실 — adjudication.py 의 `primary=False` 경로). `verdicts: {a: 1}` 은
+  # 리스트가 아닌 매핑이라 `_as_list()` 가 `ledger.source_failed(..., primary=
+  # False)` 만 태우고 `hold()`/`uncountable()` 은 전혀 안 건드린다 — 그래서
+  # `blocks()` 는 거짓인데 `degraded` 는 참인 유일한 조합을 만든다. 헌장(모델
+  # 다양성 손실은 공시하고 막지 않는다)이 진짜로 지켜지는지는 이 조합에서만
+  # 보인다 — `report["degraded"]` 를 쓰면(변이 C) 이 실행이 부당하게
+  # not-certified 로 떨어진다(실측, 아래에서 직접 확인).
+  local T; T=$(mktemp -d)
+  printf 'verdicts: {a: 1}\n' > "$T/adv.yaml"; printf '[]\n' > "$T/f.yaml"
+  local out; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  assert_grep "$out" '^verdict: clean$' "보조 축(모델 다양성) 손실만으로는 차단되지 않는다"
+  assert_not_grep "$out" '^reason: '   "clean 에는 사유가 없다"
+  rm -rf "$T"
+}
+
+case_synth_clean_is_clean() {
+  local T; T=$(mktemp -d)
+  printf 'verdicts: []\n' > "$T/adv.yaml"; printf '[]\n' > "$T/f.yaml"
+  local out; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  assert_grep "$out" '^verdict: clean$' "발견 0 · 소실 0 이면 clean"
+  rm -rf "$T"
+}
+
+case_synth_empty_differential_is_usage_error() {
+  # Ruling T5-a — 합성기도 `verdict.py` 의 post-fix 계약을 그대로 거울처럼
+  # 따른다: present-but-empty `--differential` 은 usage 오류(exit 2)지 판정축
+  # 실패(exit 4)도, 조용한 clean(exit 0)도 아니다.
+  local T; T=$(mktemp -d)
+  printf 'verdicts: []\n' > "$T/adv.yaml"; printf '[]\n' > "$T/f.yaml"
+  local rc=0
+  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+    --emit-verdict --differential "" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "2" "--differential 에 빈 문자열은 usage 오류다"
+  rm -rf "$T"
+}
+
 case_three_values_only
 case_reason_flag_certifies_known_members
 case_reason_enum_is_closed_and_accounted
@@ -463,4 +543,10 @@ case_render_enforces_values_and_reasonless_guard
 case_degrade_causes_and_cause_to_reason_are_bijective
 case_real_producer_per_adapter_feeds_verdict
 case_real_producer_aggregate_feeds_verdict
+case_synth_off_is_byte_prefix_of_on
+case_synth_kept_finding_is_defect
+case_synth_lost_findings_is_not_certified
+case_synth_secondary_degrade_does_not_block
+case_synth_clean_is_clean
+case_synth_empty_differential_is_usage_error
 finish "test_verdict_vocabulary"

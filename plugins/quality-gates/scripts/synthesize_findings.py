@@ -20,6 +20,7 @@ from collections import defaultdict
 
 from adjudication import Ledger
 from render_disposition import disposition_lines
+import verdict as _verdict          # 새 책임은 새 모듈 — 여기는 진입점일 뿐이다
 
 
 SEV_ORDER = {"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 2}
@@ -568,7 +569,28 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--adversarial", default="")
     ap.add_argument("--findings", default="")
+    # 판정 어휘는 `verdict.py` 가 갖는다. 여기서는 입력을 모아 넘기기만 한다.
+    # 기본 off — 켜지 않으면 stdout 이 이 PR 이전과 바이트 동일하다(소비자 이주는 PR4).
+    ap.add_argument("--emit-verdict", action="store_true")
+    # 기본값을 `""` 로 두면 "플래그를 안 줬다" 와 "빈 경로를 줬다" 가 같은 값이
+    # 된다 — 값을 못 구한 호출자가 `--differential "$DIFF_YAML"` 을 빈 변수로
+    # 호출하면 차등 축이 조용히 사라지고 `clean` 으로 인증된다(`verdict.py` 의
+    # `read_or_none()` docstring 이 금지한 바로 그 새는 경로 — Ruling T5-a, Task 4
+    # 리뷰가 한 층 아래서 잡은 결함을 이 층에서 되살리지 않는다). 기본값을 `None`
+    # 으로 둬 두 경우를 구별하고, 명시적으로 빈 문자열을 주면 usage 오류(exit 2)다.
+    ap.add_argument("--differential", default=None)
+    ap.add_argument("--reason", action="append", default=[])
+    ap.add_argument("--legacy-verdict", default=None)
     args = ap.parse_args()
+
+    if args.differential is not None and args.differential == "":
+        print("synthesize_findings.py: --differential 은 빈 문자열을 받지 않는다 "
+              "(플래그를 생략하거나 실제 경로를 줘라)", file=sys.stderr)
+        sys.exit(2)
+    if args.legacy_verdict is not None and args.legacy_verdict == "":
+        print("synthesize_findings.py: --legacy-verdict 는 빈 문자열을 받지 않는다",
+              file=sys.stderr)
+        sys.exit(2)
 
     ledger = Ledger(items="open")
 
@@ -599,6 +621,18 @@ def main():
     report = ledger.report()
     sys.stdout.write(render(kept, len(suppressed), dropped_malformed,
                             report, ledger.held_by_class()))
+
+    if args.emit_verdict:
+        # `report["degraded"]`(공시)가 아니라 `blocks()`(차단)다 — 헌장은 모델 다양성
+        # 손실 같은 degrade 를 공시만 하고 막지 않는다. 여기서 둘을 섞으면 이 PR 이
+        # 조용히 게이트를 넓힌다.
+        sys.stdout.write(_verdict.render(_verdict.decide(
+            defect=bool(kept),                    # 계획 R-B — severity 를 묻지 않는다
+            review_blocked=ledger.blocks(),
+            differential_text=_verdict.read_or_none(args.differential),
+            extra_reasons=args.reason,
+            legacy_verdict=args.legacy_verdict,
+        )))
 
 
 if __name__ == "__main__":
