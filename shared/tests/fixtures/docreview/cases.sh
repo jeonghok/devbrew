@@ -2401,3 +2401,22 @@ print(json.dumps({"n_same_anchor_open_pairs": len(same_pairs), "group_size": gro
   esac
   rm -rf "$d"
 }
+
+# ── added finding 의 두 칸 왕복 (AC19″) ────────────────────────────────────
+# added 는 critic 항목과 «같은» normalize() 를 지난다(docreview_route.py, _apply_recritic 의
+# `normalize(ad, 2, "a", i, L)`) — 그래서 칸을 실을 수 «있다». 그것을 내라고 적는 자리는
+# agent 본문뿐이고, 본문에 적는 것만으로는 배관이 실제로 사는지가 안 잡힌다. 이 케이스가
+# 그 왕복을 잰다.
+case_recritic_added_carries_fields() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" "$FX/recritic-added-fields.txt.tmpl")" \
+    || { no "added 왕복: route_r1 실패"; return; }
+  local n_added; n_added="$(jget "$d/fin.json" 'len([x for x in d["findings"] if "재비판이 찾은" in (x["summary"] or "")])')"
+  [ "${n_added:-0}" -ge 1 ] \
+    && ok "AC19″ 양의 짝: added 항목이 ${n_added}개 살아남았다 (아래 판정이 공허하지 않다)" \
+    || { no "AC19″: added 항목이 0개다 — 재비판 픽스처가 안 먹었다"; rm -rf "$d"; return; }
+  assert_eq "$(fsum "$d" '재비판이 찾은' '["replacement"]')" \
+    "그 절을 빼고 §5.1 한 줄로 대신한다" "AC19″: added 의 replacement 가 같은 normalize() 를 지나 산다"
+  assert_eq "$(fsum "$d" '재비판이 찾은' '["if_unfixed"]')" \
+    "plan 이 그 구조를 실재로 믿고 Task 를 짠다" "AC19″: added 의 if_unfixed 도 산다"
+  rm -rf "$d"
+}

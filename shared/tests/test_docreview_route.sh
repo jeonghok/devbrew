@@ -77,4 +77,5 @@ case_labels_pre_site
 case_gate_render_six_lines
 case_gate_head_and_grouping
 case_gate_grouping_marker
+case_recritic_added_carries_fields
 finish
