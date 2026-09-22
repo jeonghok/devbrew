@@ -47,29 +47,51 @@ case_reason_flag_certifies_known_members() {
 }
 
 case_reason_enum_is_closed_and_accounted() {
-  # Important 1 — 11 값 각각이 셋 중 하나에 «속한다», 그리고 그 셋의 합집합이
-  # REASONS 와 «같다»(양방향). 산출자가 아직 없는 다섯은 부채로 이름을 적어 둔다.
-  # PR3 가 angle-absent 를 배선하면 같은 커밋에서 이 debt 목록이 줄어야 한다 —
-  # 부채가 원장이 되고, 열거에 값을 몰래 더하는 경로(위 case 가 못 잡는 경로)가
-  # 여기서 닫힌다. `len(REASONS)` 를 직접 고정해 "닫힌 11값 열거" 를 처음으로
-  # 측정한다 — VALUES 는 case_three_values_only 가 개수를 재지만 REASONS 는
-  # 이 라운드 전까지 아무 케이스도 크기를 재지 않았다(실측 결함).
+  # Important 1 — 11 값 각각이 셋 중 하나에 «속한다», 그리고 그 셋이 서로
+  # «겹치지 않는다»(진짜 partition — 라운드 2 수정). 라운드 1 판은 `covered` 를
+  # 합집합으로만 만들었다: "산출 가능" 과 "부채" 가 같은 이름을 동시에 만족해도
+  # (겹쳐도) MISSING·STALE 둘 다 비어 GREEN 이 났다 — 이것은 *cover* 검사이지
+  # 주석이 주장한 *partition* 이 아니었다. 리뷰가 실측: 나중 PR 이 `decide()`
+  # 안에 `add("angle-absent")` 를 실제로 배선해도, 64행의 `debt` 문자열에서 그
+  # 이름을 안 지우면 라운드 1 케이스는 여전히 전부 GREEN 이었다 — "부채로 적혀
+  # 있다" 가 반증 불가능했다(산출자가 생겨도 부채 목록에 남아 있으면 안 걸림).
+  #
+  # 이번 판은 `produced`(CAUSE_TO_REASON.values() ∪ decide() 소스에서 정규식
+  #으로 **도출한** 리터럴 `add("...")` 호출들) 와 `debt` 가 서로소인지
+  # (OVERLAP 비어 있음)까지 함께 잰다 — 부채로 적어 둔 이름에 실제 산출자가
+  # 생기면 이제 그 자리가 RED 로 알린다("배선했으면 부채 목록에서 지워라").
+  # `findings-lost` 도 이제 하드코딩이 아니라 `decide()` 소스에서 같은 방식으로
+  # 도출된다.
+  #
+  # **이 케이스가 여전히 증명하지 않는 것** — `produced` 는 `decide()` 소스에서
+  # `add("<literal>")` 형태의 호출만 정규식으로 찾는다. `add(CAUSE_TO_REASON[c])`
+  # 처럼 변수를 거쳐 사유를 넣는 경로는 이 정규식에 안 잡힌다 — 그 경로는
+  # `CAUSE_TO_REASON.values()` 로 이미 따로 세고 있어 의도적으로 제외했다.
+  # 하지만 **미래에 어떤 사유가 리터럴이 아닌 다른 방식(딕셔너리 조회·f-string
+  # 조합 등)으로 새로 배선되면 이 케이스는 그것을 "아직 산출자 없음(부채)" 으로
+  # 오판할 수 있다** — 이것은 정적 분석의 근본 한계이고, 여기서는 "오늘 이
+  # 소스가 실제로 갖고 있는 리터럴 add() 호출" 이상을 주장하지 않는다.
   #
   # 실측 3분할(코디네이터 정정 — 최초 지시의 5값 목록은 방향이 둘 다 틀렸었다):
   #   차등 축 산출 가능(5): scope-empty · baseline-unrunnable · silent-drop ·
   #                        error-axis · granularity-smear (CAUSE_TO_REASON.values())
-  #   모듈 자신의 플래그로 산출 가능(1): findings-lost (decide(review_blocked=True))
+  #   모듈 자신의 플래그로 산출 가능(1): findings-lost (decide() 소스에서 도출)
   #   호출자-전용 부채, 이 PR 에 산출자 없음(5): trivia · kill-switch ·
   #                        declaration-invalid · merge-conflict · angle-absent
   local debt="angle-absent declaration-invalid kill-switch merge-conflict trivia"
   local got; got=$(python3 -c "
-import sys; sys.path.insert(0,'$PLUGIN_ROOT/scripts'); import verdict
-covered = set(verdict.CAUSE_TO_REASON.values()) | {'findings-lost'} | set('''$debt'''.split())
-print('MISSING:' + ','.join(sorted(set(verdict.REASONS) - covered)))
-print('STALE:'   + ','.join(sorted(covered - set(verdict.REASONS))))
+import re, inspect, sys
+sys.path.insert(0,'$PLUGIN_ROOT/scripts'); import verdict
+debt = set('''$debt'''.split())
+flag_produced = set(re.findall(r'add\(\"([a-z-]+)\"\)', inspect.getsource(verdict.decide)))
+produced = set(verdict.CAUSE_TO_REASON.values()) | flag_produced
+print('MISSING:' + ','.join(sorted(set(verdict.REASONS) - (produced | debt))))
+print('STALE:'   + ','.join(sorted((produced | debt) - set(verdict.REASONS))))
+print('OVERLAP:' + ','.join(sorted(debt & produced)))
 print('N:%d' % len(verdict.REASONS))")
   assert_grep "$got" '^MISSING:$' "열거의 모든 사유가 산출자 또는 부채 목록에 귀속된다"
   assert_grep "$got" '^STALE:$'   "부채 목록·매핑에 열거 밖 이름이 없다"
+  assert_grep "$got" '^OVERLAP:$' "부채 목록에 이미 산출자가 생긴 이름이 남아 있지 않다"
   assert_grep "$got" '^N:11$'     "사유 열거는 정확히 열한 값이다"
 }
 
@@ -223,10 +245,22 @@ case_non_utf8_differential_is_fail_closed() {
   # read_text_or_fail4(75-82행)가 이미 같은 결함을 잡아 뒀던 자리인데
   # (/qg iter-7 M2) 이 모듈만 없었다. 이 케이스가 그 문을 못박는다 — 바로 위
   # case_unreadable_differential_is_fail_closed 옆에 둔다.
+  #
+  # Minor (라운드 2) — 라운드 1 픽스처는 `printf '\xff\xfe\x00bad'` 한 줄뿐이었다.
+  # 이 `\x` 이스케이프는 **셸이 확장**해야 진짜 잘못된 바이트가 된다(bash 는
+  # 확장한다). 확장 안 하는 셸에서 돌면 파일은 리터럴 ASCII 문자열
+  # `\xff\xfe\x00bad`(유효한 UTF-8)가 되는데, 그래도 이 케이스는 여전히 rc=4
+  # 였다 — `degrade_causes` 줄이 0회라는 **다른** 이유로(causes_of() 의 zero-hit
+  # 경로). 즉 "진짜 디코드 실패" 세계와 "이스케이프 미확장" 세계가 같은 exit
+  # 코드로 뭉개져, 이 케이스가 실제로 디코드 오류 경로를 태웠는지 구별하지
+  # 못했다(실측 — green-for-the-wrong-reason). 픽스처를 **유효한 차등 산출물
+  # 본문 + 그 뒤에 곧바로 붙는 나쁜 바이트**로 바꿨다: 확장이 안 되는 세계에서는
+  # 본문이 그대로 정상 파싱되어 `rc=0`(다른 이유로 우연히 4가 되지 않는다 —
+  # RED 로 드러난다)이 나오도록 갈랐다.
   local T; T=$(mktemp -d)
-  printf '\xff\xfe\x00bad' > "$T/bad.yaml"
+  printf 'attribution_status: degraded\ndegrade_causes: [silent-drop]\nverdict_input:\n  confirmed_product_defect: false\n  silent_drop: true\n  baseline_unrunnable: false\n\xff\xfe' > "$T/bad.yaml"
   local rc=0; python3 "$V" --differential "$T/bad.yaml" >/dev/null 2>&1 || rc=$?
-  assert_eq "$rc" "4" "비-UTF-8 차등 산출물은 exit 4 — exit 1 raw traceback 이 아니다"
+  assert_eq "$rc" "4" "비-UTF-8 차등 산출물은 exit 4 — exit 1 raw traceback 도, 다른 이유의 exit 4 도 아니다"
   rm -rf "$T"
 }
 
@@ -245,6 +279,40 @@ case_empty_differential_flag_is_usage_error() {
 case_empty_legacy_verdict_flag_is_usage_error() {
   local rc=0; python3 "$V" --legacy-verdict "" >/dev/null 2>&1 || rc=$?
   assert_eq "$rc" "2" "--legacy-verdict 에 빈 문자열은 usage 오류다"
+}
+
+case_fail4_uses_scriptname_prefix_not_verdict_key() {
+  # Minor 1 (라운드 1) 회귀 방지 — fail4() 가 `verdict:` 키로 에러를 내면
+  # `field verdict "$text"`(shared/tests/assert.sh:95) 같은 순진한 파서가 에러
+  # 문장을 넷째 판정값으로 읽을 수 있다. 라운드 1 은 접두사를 `verdict.py:` 로
+  # 고쳤지만 그 수정을 지키는 락이 없었다 — `print(f"verdict: {msg}")` 로
+  # 되돌려도(라운드 2 리뷰 실측) 이전까지는 어떤 단언도 RED 가 안 됐다. 이제
+  # 이 케이스가 그 자리를 지킨다.
+  local err; err=$(python3 "$V" --reason bogus 2>&1 >/dev/null)
+  assert_grep "$err"     '^verdict\.py: ' "fail4 의 stderr 는 verdict.py: 로 시작한다"
+  assert_not_grep "$err" '^verdict: '     "fail4 의 stderr 가 성공 출력의 verdict: 키를 재사용하지 않는다"
+}
+
+case_render_enforces_values_and_reasonless_guard() {
+  # Minor 2 (라운드 1) 회귀 방지 — render() 의 `decision["verdict"] not in
+  # VALUES` 가드를 지워도, decide() 가 오늘 세 리터럴("defect"/"not-certified"/
+  # "clean")만 반환해 그 가드를 발화시킬 정상 경로가 없으므로 어떤 단언도 RED
+  # 가 안 됐다(라운드 2 리뷰 실측). render() 를 직접 불러 강제로 두 시나리오를
+  # 통과시킨다: ①어휘 밖 판정값, ②사유 없는 not-certified(AC8) — 후자는
+  # render() 의 가드가 decide() 로부터는 도달 불가라 라운드 1 이후 한 번도
+  # 실행된 적이 없었다.
+  local rc
+  rc=0; python3 -c "
+import sys; sys.path.insert(0,'$PLUGIN_ROOT/scripts'); import verdict
+verdict.render({'verdict': 'passed', 'reason': None, 'reasons': []})
+" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "4" "어휘 밖 판정값은 render() 가 exit 4 로 막는다"
+
+  rc=0; python3 -c "
+import sys; sys.path.insert(0,'$PLUGIN_ROOT/scripts'); import verdict
+verdict.render({'verdict': 'not-certified', 'reason': None, 'reasons': []})
+" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "4" "사유 없는 not-certified 는 render() 가 exit 4 로 막는다(AC8, decide() 에서는 도달 불가)"
 }
 
 case_degrade_causes_and_cause_to_reason_are_bijective() {
@@ -390,6 +458,8 @@ case_unreadable_differential_is_fail_closed
 case_non_utf8_differential_is_fail_closed
 case_empty_differential_flag_is_usage_error
 case_empty_legacy_verdict_flag_is_usage_error
+case_fail4_uses_scriptname_prefix_not_verdict_key
+case_render_enforces_values_and_reasonless_guard
 case_degrade_causes_and_cause_to_reason_are_bijective
 case_real_producer_per_adapter_feeds_verdict
 case_real_producer_aggregate_feeds_verdict
