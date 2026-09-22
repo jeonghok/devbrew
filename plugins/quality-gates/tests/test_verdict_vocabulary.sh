@@ -466,12 +466,24 @@ SYNTH="$PLUGIN_ROOT/scripts/synthesize_findings.py"
 case_synth_off_is_byte_prefix_of_on() {
   # 차등 — 같은 입력으로 두 번 돌려 **off 출력이 on 출력의 접두** 인지 본다.
   # 「off 에 verdict 줄이 없다」만 재면 on 이 앞부분을 바꿔도 안 보인다.
+  #
+  # Ruling T6-a — rc 를 안 재면 이 케이스는 사각지대다. `off=$(...)` 는 stdout 만
+  # 잡고 종료 코드를 안 본다: off 경로가 죽으면(트레이스백이 stdout 에 안 실리는
+  # 크래시, 또는 부분 출력 후 죽는 크래시) `off` 가 비거나 짧아지고, `assert_not_grep
+  # "$off" '^verdict: '` 는 그 빈/짧은 문자열에 대해 그대로 통과하며,
+  # `"${on:0:${#off}}" == "$off"` 도 **빈 문자열의 0-길이 접두는 항상 빈 문자열과
+  # 같으므로 트리비얼하게 통과**한다 — 죽은 off 경로가 "정상적으로 판정 줄을 안 냈다"
+  # 와 구별되지 않는다(Task 6 mutation 실측: T5-1 1차 시도 로그
+  # `synth/T5row1_partial.log`가 바로 이 모양 — 트레이스백이 찍힌 뒤 곧바로 ✓).
+  # rc 를 먼저 확인해 이 사각지대를 막는다.
   local T; T=$(mktemp -d)
   printf 'verdicts: []\n' > "$T/adv.yaml"
   printf -- '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/f.yaml"
-  local off on
-  off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml")
-  on=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  local off on off_rc on_rc
+  off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml"); off_rc=$?
+  on=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict); on_rc=$?
+  assert_eq "$off_rc" "0" "off 경로가 정상 종료한다(비정상 종료를 뒤 단언이 놓치지 않게 먼저 잡는다)"
+  assert_eq "$on_rc"  "0" "on 경로가 정상 종료한다"
   assert_not_grep "$off" '^verdict: '  "기본값에서는 판정 줄이 없다"
   assert_grep     "$on"  '^verdict: '  "--emit-verdict 가 판정 줄을 켠다"
   assert_eq "${on:0:${#off}}" "$off"   "off 출력은 on 출력의 바이트 접두다"
