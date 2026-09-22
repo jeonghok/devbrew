@@ -14,6 +14,21 @@
 
 **`/qg` 의 동작은 바뀌지 않는다.** 합성기의 판정 산출은 `--emit-verdict` 뒤에 있고 기본 off 이며, 켜지 않으면 stdout 이 이전과 바이트 동일하다 — 소비자 이주는 뒤 릴리스다.
 
+## [8.2.0] — 2026-09-22
+
+minor 인 이유 — 새 surface 가 둘이다: 이 플러그인이 직접 부르는 `disposition_lines()`(`shared/adjudication/render_disposition.py`, 심볼릭 링크)의 4-튜플 반환과, 엔진 링크(`docreview_state.py`·`docreview_route.py`)가 나르는 리뷰어 출력 스키마 칸 둘(`replacement`·`if_unfixed`). 앞의 것은 **호출 계약이 깨진다** — 위치 언패킹이 `ValueError` 로 소리 낸다. 다만 소비자가 이 리포 안의 셋(호출 자리 기준, 전수 grep: `scripts/synthesize_findings.py` 둘 · `scripts/synthesize_artifact_findings.py` 하나)뿐이고 전부 같은 PR 안에서 4-튜플 언패킹으로 고쳤으며, `shared/adjudication/` 은 배포 심볼릭 링크로만 나가 외부 플러그인이 이 함수를 부를 표면이 없으므로 외부 계약은 안 깨진다. 설계 `docs/superpowers/specs/2026-09-21-designer-lens-review-design.md` §5.7·§5.8·§5.9·§6.
+
+### Changed
+
+- **`disposition_lines()` 가 4-튜플을 낸다** (`처분줄, 배관줄, 풀이줄, advisory목록`). 새 풀이 줄(`line3`)이 앞 두 줄 «둘 다» 의 회계 낱말을 사람말로 푼다 — 「억제=규칙이 자른 것 · 흡수=같은 것끼리 합친 것 · 미판정=볼 사람이 없던 것 · 배관 손실=입력이 죽었거나 항목이 깨졌거나 값을 보정한 것」. 회계 낱말 자체는 **바꾸지 않는다** — 사람말을 옆에 붙일 뿐이다. **기존 3-튜플 위치 언패킹(`line1, line2, advisories = disposition_lines(...)`)은 `ValueError` 로 깨진다** — 조용히 틀린 값을 받는 대신 소리 내며 죽는 쪽을 선택했다. `scripts/synthesize_findings.py`(두 호출)·`scripts/synthesize_artifact_findings.py`(한 호출) 가 이 PR 안에서 4-튜플 언패킹으로 갱신됐다.
+- 엔진 링크 `scripts/{docreview_state,docreview_route}.py`(심볼릭 링크)가 리뷰어 출력 스키마 칸 둘(`replacement`·`if_unfixed`) · `decision_view` 동어반복 제거 · 상태의 함수가 된 선택지 라벨 · category 사람말 사상(`CATEGORY_GLOSS`, 네 프로필 + 엔진 category) · 게이트 순서 공시 · `AskUserQuestion` 라벨 항목별 내용 규약으로 바뀌었다. 전문은 `plugins/spec-distill/CHANGELOG.md` `[3.3.0]`. 이 플러그인의 호출자는 여전히 0 이다(quality-gates 쪽 docreview 진입 skill 은 이 PR 의 범위 밖).
+
+## [8.1.1] — 2026-09-22
+
+### Fixed
+
+- **`references/docreview-profiles/generic.md` 가 자기 자리의 층 1 판정 관계를 갖는다.** 공유 `doc-critic` 본문이 「`ground_truth` 와 문서가 하나의 그림으로 정합한가」를 리터럴로 쥐고 있었는데, 이 자리의 `ground_truth` 는 「문서 자체 — 외부 정답이 없다」라 그 문장이 「문서와 문서가 정합한가」로 공허해진다. 프로필 본문이 「**층 1 판정 관계** — 문서가 자기 주장을 스스로 지탱하는가」를 소유한다. 이 플러그인은 `doc-critic*.md` 를 배송하지 않지만 이 프로필은 배포 트리 안이라 bump 대상이다. **`/qg` generic 자리는 아직 호출자가 0 이므로 동작 변경이 아니라 전환을 위한 선반영이다.**
+
 ## [8.1.0] — 2026-09-22
 
 ### Added

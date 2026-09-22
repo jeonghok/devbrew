@@ -260,6 +260,10 @@ COMP_BASELINE=40   # Task 1 F5 census 28 + Task 10 이 1 늘림(29) — merge_re
                    # =="decide" 인 항목에서만 불리고 그 상태는 항상 "open" 이라
                    # `_decide_choices_for` 가 최소 두 항목을 낸다)의 모든 원소가
                    # 라벨로 그대로 대응된다 — 버려지는 원소가 없다.
+                   # (Task 7 이 그 표현식의 «모양»만 바꿨다 — 라벨이 상수 dict 조회가
+                   # 아니라 `choice_label(c, it.get("kind"))` 호출이 된다. 지금 트리에서
+                   # 이 자리를 찾으려면 그 문자열로 grep 하라. 무필터 매핑이라는 분류도
+                   # 원소 수도 그대로라 계수는 안 움직인다.)
                    # depth audit 제거가 6 줄였다(58→52) — depth_record.py 가 삭제되며 그 파일의
                    # 컴프리헨션 여섯(v0.57.0 Task 8 의 다섯 + 최종 fix wave 의 하나)이 ㉮ 에서
                    # 함께 빠졌다. run_wiring_scan.py 의 `ast` 실측값이다.

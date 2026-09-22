@@ -21,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점
 from adjudication import Ledger  # noqa: E402
 from docreview_anchor import classify_anchor, refs_of  # noqa: E402
 from docreview_state import (  # noqa: E402
-    RANK, _CHOICE_LABEL, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, fail, load_profile,
-    load_state, observe_ledger, pending_mismatch, record_findings, round_diff, save_state, yaml,
+    RANK, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, category_gloss, choice_label, fail,
+    load_profile, load_state, observe_ledger, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
 
 BLOCK_RE = r"```%s[ \t]*\n(.*?)\n```"
@@ -75,6 +75,10 @@ def normalize(item, layer_default, prefix, idx, ledger):
         "edit_scope": str(item.get("edit_scope") or anchor), "blocks": _refs(item.get("blocks")),
         "supersedes": (str(item["supersedes"]) if item.get("supersedes") else None),
         "evidence": (str(item["evidence"]) if item.get("evidence") else None),
+        # 갈래 2 의 칸 둘. 여기 없으면 리뷰어가 무엇을 적든 «조용히» 버려진다 —
+        # 이 dict 는 입력을 갱신하는 것이 아니라 처음부터 새로 짓는다.
+        "replacement": (str(item["replacement"]) if item.get("replacement") else None),
+        "if_unfixed": (str(item["if_unfixed"]) if item.get("if_unfixed") else None),
     }
 
 
@@ -232,9 +236,25 @@ def _decision_view(it, doc, st):
     basis = it.get("evidence")
     if not basis:
         basis = "finding 없이 바뀜" if it["category"] == "frozen_change" else "(근거 없음)"
-    return {"change": it["summary"], "basis": basis,
-            "alternatives": [_CHOICE_LABEL[c] for c in choices],
-            "impact": "%s · 인용 %s 섹션" % (it["anchor"], nref if nref is not None else "?"),
+    # [갈래 2] `change` 를 «내지 않는다» — 그 값은 it["summary"] 였고 헤더가 이미 그
+    # 문자열을 낸다(동어반복). 대신 두 칸을 낸다. **부재를 summary 로 메우지 않는다**:
+    # 메우면 「리뷰어가 안 적었다」는 사실이 필드가 비어 있지 않다는 이유로 관측되지
+    # 않는다. 그리고 두 부재 리터럴은 서로 다르다 — 침묵(`(대체안 미작성)`)과 판정
+    # (`대체안 없음 — 그냥 뺀다`, 리뷰어가 그 문자열을 실제로 냈을 때만)은 다른
+    # 사실이다. 같은 글자를 내면 아무도 제안하지 않은 삭제가 제안으로 전달된다.
+    # 「영향」 → 「자리」: anchor + 인용수는 영향이 아니라 위치다. category 의 사람말을
+    # `인용` **앞**에 넣는다 — `cases.sh` 가 `인용 1 섹션` 을 부분 문자열로 잰다
+    # (T35), 사람말을 뒤로 옮기면 그 단언이 깨진다. 사상 없는 category 는 원래
+    # 이름을 그대로 싣고 `category_unglossed` 로 그 사실을 공시한다(조용히 빈칸으로
+    # 두지 않는다 — `category_gloss` 의 계약).
+    gloss = category_gloss(it["category"])
+    return {"if_unfixed": it.get("if_unfixed") or "(리뷰어가 안 적음)",
+            "replacement": it.get("replacement") or "(대체안 미작성)",
+            "basis": basis,
+            "alternatives": [choice_label(c, it.get("kind")) for c in choices],
+            "impact": "%s (%s) · 인용 %s 섹션" % (it["anchor"], gloss or it["category"],
+                                                nref if nref is not None else "?"),
+            "category_unglossed": None if gloss else it["category"],
             "auto": it.get("origin") == "auto"}
 
 
@@ -465,7 +485,7 @@ def _auto_decides(a, diff, st, prof, sections, n, L):
         if not f0:
             esc_unconsumed += 1   # 대상 finding 부재 — 버리지 않고 센다(공시는 게이트가, 재상승과 같은 규칙)
             continue
-        # F-3 재리뷰(Ruling 20) — 형제 재상승(:428, `if not d0 or d0.get("state") != "expired"`)
+        # F-3 재리뷰(Ruling 20) — 형제 재상승(:533, `if not d0 or d0.get("state") != "expired"`)
         # 과 같은 모양. `f0` 존재만으로는 이 fix 가 «지금도» escalated 상태인지 모른다 —
         # 예약이 만들어진 뒤 사용자가 drop 하거나(cmd_fix event=drop, 상태 검사 없이
         # 무조건 대입) intent-pass 로 재시도했을 수 있다(둘 다 `st["fixes"][fid]["state"]`
@@ -675,7 +695,7 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats):
         "escalated_unconsumed": stats["escalated_unconsumed"],
     }
     # 키를 «이름으로» 편다 — `render_disposition.disposition_report()` 의 같은
-    # 결정과 같은 이유다(그 파일 :54-56): `report["counts"]` 를 `.items()` 로
+    # 결정과 같은 이유다(그 파일 :66-68): `report["counts"]` 를 `.items()` 로
     # 통째로 넘기면 카운트 이름이 이 파일에 문자열로 한 번도 안 나타나서,
     # 어휘가 늘어도 이 소비자는 조용하다 — `tools/adjudication/check_consumed.py`
     # 가 막으려는 바로 그 침묵이다(L2, 리터럴 첨자·튜플 원소만 소비로 센다).

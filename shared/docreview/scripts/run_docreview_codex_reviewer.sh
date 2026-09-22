@@ -436,8 +436,13 @@ print("Zero findings is a valid honest answer.")
 print("\n" + pre)
 print("\n<document>\n" + doc + "\n</document>")
 print('\nEmit ONE fenced JSON block. `disposition` is required unless you cannot judge it.')
+print('`replacement` is required for `decide` — what the document becomes if fixed. '
+      'To propose deletion, write the literal `대체안 없음 — 그냥 뺀다`, leaving the field '
+      'empty is NOT a deletion proposal. `if_unfixed` states what remains if nothing changes '
+      '(the consequence, not a restatement of the problem).')
 print('```json\n{"findings":[{"ref":"x1","layer":1,"category":"...","anchor":"#slug",'
-      '"disposition":"...","summary":"...","edit_scope":"#slug","blocks":[],"evidence":"..."}]}\n```')
+      '"disposition":"...","summary":"...","edit_scope":"#slug","blocks":[],"evidence":"...",'
+      '"replacement":"...","if_unfixed":"..."}]}\n```')
 PY
 if [[ $BUILD_RC -eq 3 ]]; then emit_fallback ground_truth_empty; fi
 if [[ $BUILD_RC -eq 4 ]]; then emit_fallback profile_body_empty; fi

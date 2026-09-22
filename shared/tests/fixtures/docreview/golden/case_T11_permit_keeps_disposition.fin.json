@@ -12,6 +12,8 @@
    "blocks": [],
    "supersedes": null,
    "evidence": null,
+   "replacement": null,
+   "if_unfixed": null,
    "f": "f1",
    "origin": "reviewer",
    "immutable": false,
@@ -39,14 +41,16 @@
    "id": "42522f07#r2.1",
    "lineage": "42522f07#r2.1",
    "decision_view": {
-    "change": "finding 없이 바뀜: 12. Files to Modify (modified)",
+    "if_unfixed": "(리뷰어가 안 적음)",
+    "replacement": "(대체안 미작성)",
     "basis": "섹션 '12. Files to Modify' (#12-files-to-modify) modified — hash 62a715899d27→5d9a206e6f82",
     "alternatives": [
-     "채택(적용)",
-     "기각(원복)",
-     "보류"
+     "현재 변경 유지(채택)",
+     "이전 상태로 원복(기각)",
+     "나중에 정한다(보류)"
     ],
-    "impact": "#12-files-to-modify · 인용 1 섹션",
+    "impact": "#12-files-to-modify (얼림 검사가 잡은 변경) · 인용 1 섹션",
+    "category_unglossed": null,
     "auto": true
    }
   }

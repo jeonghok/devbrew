@@ -568,8 +568,12 @@ mut 0/1 reraise_successor_hold_allowed case_AC22b_reraise_successor_hold_refused
 #    하나만 겨눈다 — `_rg_decide` 의 `decide_choices` 호출을 걷어내고
 #    `_decision_view` 와 같은 모양의 상수 목록으로 되돌린다. `_decision_view` 자신의
 #    결선은 아래 ㊺ 이 별도로 겨눈다(둘은 이제 다른 두 자리다).
+#    [Task 7 갱신] 겨누는 것이 하나 더 늘었다 — 이제 이 줄은 `choice_label(c,
+#    d.get("kind"))` 다. 변이는 그 **두 결선을 함께** 끊는다: `decide_choices` 도,
+#    `kind` 도 안 보는 고정 셋으로 되돌린다. 「`_CHOICE_LABEL` 상수 목록으로
+#    되돌린다」가 아니다 — 그 상수는 이제 kind 중첩 dict 이고 라벨은 함수가 낸다.
 mut 1/1 rg_decide_alternatives_hardcoded case_choices_offered_equal_accepted sed_state \
-  's/alternatives = \[_CHOICE_LABEL\[c\] for c in decide_choices(st, fid)\]/alternatives = ["채택(적용)", "기각(원복)", "보류"]/'
+  's/alternatives = \[choice_label(c, d\.get("kind")) for c in decide_choices(st, fid)\]/alternatives = ["채택(적용)", "기각(원복)", "보류"]/'
 
 # ── Task 4 fix round 1 (리뷰 I1·I2·I3·I4 — §6.4 한계 (a) 재검토) ───────────────
 # ㊺ I1 — `_decision_view` 를 `_decide_choices_for` 에서 다시 끊는다(그 함수는 계산
@@ -577,8 +581,11 @@ mut 1/1 rg_decide_alternatives_hardcoded case_choices_offered_equal_accepted sed
 #    재상승 후속에도 다시 상수 셋을 낸다 — 리뷰가 실측으로 잡은 바로 그 채널
 #    (fin.json·state.md·골든)이 다시 샌다. `docreview_route.py` 를 겨눈다(그
 #    파일에만 있는 자리 — `sed_route`).
+#    [Task 7 갱신] 이 줄도 이제 `choice_label(c, it.get("kind"))` 다 — 변이는
+#    `_decide_choices_for` 결선과 `kind` 결선을 함께 끊고 kind 를 모르는 고정
+#    셋으로 되돌린다(상수 목록의 복원이 아니라 함수 호출의 제거다).
 mut 1/1 decision_view_unwired case_AC22b_reraise_successor_hold_refused sed_route \
-  's/"alternatives": \[_CHOICE_LABEL\[c\] for c in choices\],/"alternatives": ["채택(적용)", "기각(원복)", "보류"],/'
+  's/"alternatives": \[choice_label(c, it\.get("kind")) for c in choices\],/"alternatives": ["채택(적용)", "기각(원복)", "보류"],/'
 # ㊻ I2 — `_is_reraise_successor` 의 대상 특정(`== fid`)을 존재 검사(`is not None`)
 #    로 넓힌다. state 안 «어딘가»에 승계 포인터가 하나라도 있으면 «그 id 와 무관한»
 #    모든 open decide 가 재상승 후속 취급을 받아 「보류」를 잃는다 — 이 태스크가
@@ -608,8 +615,11 @@ s/fail("decide_hold_not_allowed_for_expired", id=a\.id)/fail("MUT_expired_reason
 #    (이 fix round 가 새로 더했다)만이 이 축을 잰다 — `dc_choices "$blocked"` 는
 #    `decide_choices` 자체를 부르므로 렌더가 갈려도 못 본다(같은 순환 지적, I2 와
 #    같은 종류).
+#    [Task 7 갱신] 이 줄도 이제 `choice_label(c, d.get("kind"))` 다 — 변이는
+#    `decide_choices` 결선과 `kind` 결선을 함께 끊고 kind 를 모르는 옛 하드코딩으로
+#    되돌린다(`_CHOICE_LABEL` 목록의 복원이 아니다 — 라벨은 이제 함수가 낸다).
 mut 1/1 rg_expired_unwired_and_offers_hold case_choices_offered_equal_accepted sed_state \
-  's/alt = " \/ "\.join(_CHOICE_LABEL\[c\] for c in decide_choices(st, fid))/alt = "채택 \/ 기각 \/ 보류"/'
+  's/alt = " \/ "\.join(choice_label(c, d\.get("kind")) for c in decide_choices(st, fid))/alt = "채택 \/ 기각 \/ 보류"/'
 
 # ── 재상승 후속의 kind·prev_hash 승계 (Task 5, 2026-09-08-docreview-design-doc-site,
 #    설계 §6.4 알려진 한계 (b)) ── 표준 원 숫자(①…㊾)는 지난 태스크들에서 이미

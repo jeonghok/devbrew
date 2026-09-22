@@ -372,7 +372,7 @@ case_AC22b_reraise_successor_hold_refused() {
   # render 만 맞고 fin.json 의 decision_view.alternatives 는 여전히 셋을 내던 것이
   # 리뷰가 실측으로 잡은 결함(fin.json·state.md·골든 셋 다 새는 채널).
   assert_eq "$(jget "$d/fin2.json" '[x["decision_view"]["alternatives"] for x in d["findings"] if x["id"]=="'"$succ"'"][0]')" \
-    "['채택(적용)', '기각(원복)']" "AC22b: fin.json 의 decision_view.alternatives 에도 「보류」가 없다(I1 — JSON 채널)"
+    "['고친다(채택)', '그대로 둔다(기각)']" "AC22b: fin.json 의 decision_view.alternatives 에도 「보류」가 없다(I1 — JSON 채널)"
   # I5(리뷰) — 선결조건: 이 항목이 유일한 열린 항목이다(클러터 없음). 이게 없으면
   # 아래 마지막 단언은 이 성공/실패와 무관하게 항상 False 라 아무것도 못 잰다.
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["open_decide"], d["unapplied_fix"], d["blocking_ask_open"]')" \
@@ -481,16 +481,21 @@ dc_choices() {   # dc_choices <state-dir> <fid> → decide_choices(st, fid) 의 
 # render 의 그 id 블록에서 「대안:」 줄을 뽑아 decide_choices 가 내는 집합과 «라벨로
 # 바꾼 뒤» 비교한다(라벨 문자열이 아니라 집합 — 순서 무관). fid 는 hash 파생이라
 # "] <fid> —" 조합이 그 id 의 [decide…] 헤더 줄에서만 나온다.
+# [Task 8 재측정] `_rg_decide` 가 여섯 줄이 되며 「대안:」 이 헤더 뒤 3번째(옛 형식:
+# 변경·근거·대안)가 아니라 5번째(그대로 두면·고치면·근거·자리·대안) 줄로 밀렸다.
+# `-A4` 는 그 줄에 안 닿아 「대안: 」 이 빈 채로 돌아 이 함수가 늘 False 를 냈다
+# (실측 — RED 로 걸렸다) — `-A5` 로 넓힌다. 대안 줄은 항상 이 오프셋에 있으므로
+# (사람말 미사상 7번째 줄은 대안 «뒤») category 사상 여부와 무관하게 정확하다.
 choices_match() {   # choices_match <render-text> <fid> <state-dir> → True/False
-  local alt; alt="$(printf '%s\n' "$1" | grep -F -A4 -- "] $2 —" | grep '대안: ' | head -1)"
+  local alt; alt="$(printf '%s\n' "$1" | grep -F -A5 -- "] $2 —" | grep '대안: ' | head -1)"
   python3 -c '
 import sys
 sys.path.insert(0, sys.argv[1])
-from docreview_state import load_state, decide_choices
-LABEL = {"adopt": "채택(적용)", "reject": "기각(원복)", "hold": "보류"}
+from docreview_state import load_state, decide_choices, choice_label
 st = load_state(sys.argv[2])
 choices = decide_choices(st, sys.argv[3])
-expected = {LABEL[c] for c in choices}
+kind = (st["decides"].get(sys.argv[3]) or {}).get("kind")
+expected = {choice_label(c, kind) for c in choices}
 alt_line = sys.argv[4]
 offered = set()
 if "대안: " in alt_line:
@@ -501,19 +506,19 @@ print(bool(choices) and expected == offered)
 # [Task 4 fix round 1 — 리뷰 I4] `_rg_expired` 도 괄호 안에 선택지를 나열한다 —
 # `_rg_decide` 의 「대안:」 줄과는 다른 형식(별도 줄이 아니라 한 줄에 인라인)이라
 # `choices_match` 를 그대로 못 쓴다. 정규식으로 다시 파싱하지 않는다 — 라벨
-# 자체가 괄호를 품는다(`채택(적용)`). 대신 실제로 찍히는 접두사·형식을 그대로
+# 자체가 괄호를 품는다(`고친다(채택)`). 대신 실제로 찍히는 접두사·형식을 그대로
 # 재구성해 벗겨낸다(프로그램의 포맷 문자열과 같은 모양).
 choices_match_expired() {   # choices_match_expired <render-text> <fid> <state-dir> → True/False
   local line; line="$(printf '%s\n' "$1" | grep -F -- "[만료·차단] $2 —" | head -1)"
   python3 -c '
 import sys
 sys.path.insert(0, sys.argv[1])
-from docreview_state import load_state, decide_choices
-LABEL = {"adopt": "채택(적용)", "reject": "기각(원복)", "hold": "보류"}
+from docreview_state import load_state, decide_choices, choice_label
 st = load_state(sys.argv[2])
 fid = sys.argv[3]
 choices = decide_choices(st, fid)
-expected = {LABEL[c] for c in choices}
+kind = (st["decides"].get(fid) or {}).get("kind")
+expected = {choice_label(c, kind) for c in choices}
 line = sys.argv[4]
 summary = st["findings"][fid].get("summary") or ""
 prefix = "[만료·차단] %s — %s (" % (fid, summary)
@@ -1171,7 +1176,9 @@ case_T35_frozen_change_auto_decide() {
   assert_eq "$fr" "[('#12-files-to-modify', 'decide', 'auto', 'post'), ('#2-goals', 'decide', 'auto', 'post')]" "T35·AC4: 얼린 두 섹션의 변경 → 사후 auto decide 둘"
   assert_grep "$(jget "$d/fin.json" '[x["evidence"] for x in d["findings"] if x["anchor"]=="#12-files-to-modify" and x["category"]=="frozen_change"][0]')" 'hash [0-9a-f]{12}→[0-9a-f]{12}' "T35·AC4: evidence 에 헤딩 diff(해시 전후)"
   assert_grep "$(jget "$d/fin.json" '[x["decision_view"]["impact"] for x in d["findings"] if x["anchor"]=="#12-files-to-modify" and x["category"]=="frozen_change"][0]')" '인용 1 섹션' "T35: 영향 = refs (Architecture 가 #12 를 인용)"
-  assert_eq "$(jget "$d/fin.json" '[x["decision_view"]["alternatives"] for x in d["findings"] if x["category"]=="frozen_change"][0]')" "['채택(적용)', '기각(원복)', '보류']" "T35: 대안은 고정 셋"
+  # `frozen_change` 는 `kind=post` 다 — 이 자리의 기댓값은 **post 라벨 셋**이어야 한다
+  # (pre 셋을 적으면 통과하는 스위트가 엉뚱한 것을 단언한다).
+  assert_eq "$(jget "$d/fin.json" '[x["decision_view"]["alternatives"] for x in d["findings"] if x["category"]=="frozen_change"][0]')" "['현재 변경 유지(채택)', '이전 상태로 원복(기각)', '나중에 정한다(보류)']" "T35: 대안은 kind=post 의 셋"
   rm -rf "$d"
 }
 case_T28_escalated_fix_becomes_decide() {
@@ -2163,5 +2170,253 @@ case_init_relative_doc_refused() {
   else
     ok "상대 문서: 원장이 생기지 않는다"
   fi
+  rm -rf "$d"
+}
+
+# ── 칸 둘(replacement·if_unfixed)의 왕복 — 리뷰어 → normalize → 원장 (Task 5) ──────
+# 닫힌 열거가 셋이라(PROFILE_FIELDS · normalize 반환 · PUBLIC_FIELDS) 앞의 둘만 고치면
+# 렌더까지는 도달하고 «원장에는 안 남는다». 그러면 다음 라운드가 그 값을 못 본다.
+case_fields_roundtrip_decide() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" --skip)" || { no "칸 왕복: route_r1 실패"; return; }
+  assert_eq "$(fsum "$d" '다른 것을 겨눈다' '["replacement"]')" \
+    "§2 를 브리프 §1 의 goal 한 문장으로 되돌린다" "칸 왕복: normalize 가 replacement 를 실어 나른다"
+  assert_eq "$(fsum "$d" '다른 것을 겨눈다' '["if_unfixed"]')" \
+    "설계 전체가 다른 문제를 잘 푸는 쪽으로 굳는다" "칸 왕복: normalize 가 if_unfixed 를 실어 나른다"
+  assert_eq "$(st_yaml "$d" 'bool([f for f in st["findings"].values() if f.get("replacement") == "§2 를 브리프 §1 의 goal 한 문장으로 되돌린다"])')" \
+    "True" "칸 왕복: PUBLIC_FIELDS 를 지나 원장에 top-level 로 남는다"
+  rm -rf "$d"
+}
+# AC21' — decide «가 아닌» 처분에서도 남는가. decision_view 통로는 decide 에만 열리므로
+# 이 케이스가 없으면 fix 로 난 과설계 지적이 대체안 없이 저자에게 간다.
+case_fields_survive_non_decide() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" --skip)" || { no "칸 비-decide: route_r1 실패"; return; }
+  local fid; fid="$(jget "$d/fin.json" '[x["id"] for x in d["findings"] if x["disposition"]=="fix" and "TBD" in x["summary"]][0]')"
+  assert_eq "$(st_yaml "$d" 'st["findings"]["'"$fid"'"].get("decision_view")')" "None" \
+    "칸 비-decide: 선결조건 — 이 항목에는 decision_view 통로가 «없다»(공허하지 않음의 증거)"
+  assert_eq "$(st_yaml "$d" 'st["findings"]["'"$fid"'"].get("replacement")')" \
+    "TBD 를 실제 컴포넌트 이름으로 채운다" "AC21': fix 처분의 replacement 도 원장에 남는다"
+  assert_eq "$(st_yaml "$d" 'st["findings"]["'"$fid"'"].get("if_unfixed")')" \
+    "plan 이 그 자리를 스스로 지어낸다" "AC21': fix 처분의 if_unfixed 도 원장에 남는다"
+  rm -rf "$d"
+}
+# ── 동어반복 제거 + 침묵 공시 (AC15) ────────────────────────────────────────
+# 「변경」이 헤더의 복사였다. 칸을 더해도 fallback 이 summary 를 되풀이하면 그 실패는
+# «필드가 비어 있지 않아» 관측되지 않는다 — 그래서 부재는 리터럴로 말한다.
+case_decision_view_no_tautology() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" --skip)" || { no "동어반복: route_r1 실패"; return; }
+  assert_eq "$(fsum "$d" '다른 것을 겨눈다' '["decision_view"].get("change", "<없음>")')" "<없음>" \
+    "AC15: decision_view 에 change 키가 없다 (헤더 복사 제거)"
+  assert_eq "$(fsum "$d" '다른 것을 겨눈다' '["decision_view"]["replacement"]')" \
+    "§2 를 브리프 §1 의 goal 한 문장으로 되돌린다" "AC15 양의 짝: 채워진 replacement 는 그대로 난다"
+  assert_eq "$(fsum "$d" '다른 것을 겨눈다' '["decision_view"]["if_unfixed"]')" \
+    "설계 전체가 다른 문제를 잘 푸는 쪽으로 굳는다" "AC15 양의 짝: 채워진 if_unfixed 는 그대로 난다"
+  rm -rf "$d"
+}
+# 부재가 summary 로 메워지지 않는다. frozen_change 는 애초에 두 칸이 없는 «실재하는»
+# 경로라 리뷰어 실수를 지어내지 않고도 이 갈래를 태울 수 있다. T35 와 같은 시퀀스
+# (route_r1 → next_round → prepare-recritic(critic-nolayer2, codex-failed) →
+# finalize(recritic-missing)) — 이미 frozen_change 둘을 내는 것으로 검증된 경로다.
+case_decision_view_absence_is_literal() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "침묵 공시: route_r1 실패"; return; }
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  local dv; dv="$(jget "$d/fin.json" '[x["decision_view"] for x in d["findings"] if x["category"]=="frozen_change"][0]')"
+  assert_grep "$dv" '리뷰어가 안 적음' "AC15: if_unfixed 부재는 「(리뷰어가 안 적음)」으로 난다"
+  assert_grep "$dv" '대체안 미작성' "AC15: replacement 부재는 「(대체안 미작성)」으로 난다"
+  case "$dv" in
+    *'그냥 뺀다'*) no "AC15: 부재가 「대체안 없음 — 그냥 뺀다」로 났다 — 아무도 제안하지 않은 삭제를 만들어 낸다" ;;
+    *) ok "AC15: 부재가 삭제 제안으로 승격되지 않았다" ;;
+  esac
+  rm -rf "$d"
+}
+
+# ── 라벨은 kind 의 함수다 (AC17 · AC17') ───────────────────────────────────
+# cmd_decide 는 kind=post 에서 reject 에 revert permit 을 만든다 — 그 자리에서
+# 「그대로 둔다」는 실제로 원복이다. 고정 라벨을 사람말로 바꾸면 동작을 반대로
+# 설명하게 된다. 이 케이스는 얼림 diff 가 만드는 «실재하는» post 항목 위에서 돈다.
+case_labels_are_kind_dependent() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "라벨 kind: r1 실패"; return; }
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  local render; render="$(py docreview_state.py gate --state-dir "$d" --render)"
+  local fid; fid="$(jget "$d/fin.json" '[x["id"] for x in d["findings"] if x["category"]=="frozen_change"][0]')"
+  assert_eq "$(st_yaml "$d" 'st["decides"]["'"$fid"'"]["kind"]')" "post" \
+    "라벨 kind: 선결조건 — 이 항목은 kind=post 다(공허하지 않음의 증거)"
+  # [Task 8 재측정] 여섯 줄 렌더 이후 이 항목(frozen_change, 항상 사상됨)의 블록은
+  # 헤더+5 = 6줄이다. -A6 은 다음 블록의 헤더 한 줄까지 삼켰다(실측) — 대안 줄까지는
+  # 안 닿아 오늘은 안전하지만, «자기 블록만» 잡도록 -A5 로 좁힌다(그 판이 swallow
+  # 여지를 아예 없앤다).
+  local blk; blk="$(printf '%s\n' "$render" | grep -F -A5 -- "] $fid —")"
+  assert_grep "$blk" '현재 변경 유지\(채택\)' "AC17: post 의 adopt 라벨은 「현재 변경 유지(채택)」"
+  assert_grep "$blk" '이전 상태로 원복\(기각\)' "AC17: post 의 reject 라벨은 「이전 상태로 원복(기각)」"
+  case "$blk" in
+    *'그대로 둔다'*) no "AC17': post 자리에 「그대로 둔다」로 읽히는 라벨이 있다 — reject 가 revert permit 을 만드는데 동작을 반대로 설명한다" ;;
+    *) ok "AC17': post 자리에 「그대로 둔다」로 읽히는 라벨이 하나도 없다" ;;
+  esac
+  rm -rf "$d"
+}
+# pre 자리의 양의 짝 — 위 부재 단언이 「라벨이 통째로 사라져서」 통과하는 것을 막는다.
+case_labels_pre_site() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" --skip)" || { no "라벨 pre: route_r1 실패"; return; }
+  local render; render="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_grep "$render" '고친다\(채택\)'       "AC17: pre 의 adopt 라벨은 「고친다(채택)」"
+  assert_grep "$render" '그대로 둔다\(기각\)'  "AC17: pre 의 reject 라벨은 「그대로 둔다(기각)」"
+  assert_grep "$render" '나중에 정한다\(보류\)' "AC17: hold 라벨은 양쪽에서 「나중에 정한다(보류)」"
+  rm -rf "$d"
+}
+
+# ── 게이트 렌더 여섯 줄 (AC16 · AC19') ─────────────────────────────────────
+case_gate_render_six_lines() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" --skip)" || { no "렌더: route_r1 실패"; return; }
+  local fid; fid="$(jget "$d/fin.json" '[x["id"] for x in d["findings"] if x["disposition"]=="decide" and "다른 것을 겨눈다" in x["summary"]][0]')"
+  local render blk
+  render="$(py docreview_state.py gate --state-dir "$d" --render)"
+  blk="$(printf '%s\n' "$render" | grep -F -A5 -- "] $fid —")"
+  assert_grep "$blk" '^  그대로 두면: 설계 전체가' "AC16: 「그대로 두면」 줄이 if_unfixed 를 낸다"
+  assert_grep "$blk" '^  고치면: §2 를 브리프'      "AC16: 「고치면」 줄이 replacement 를 낸다"
+  assert_grep "$blk" '^  근거: '                     "AC16: 「근거」 줄이 있다"
+  assert_grep "$blk" '^  자리: #2-goals \(목표가 다른 것을 겨눔\) · 인용 ' \
+    "AC16·AC19': 「자리」 줄이 anchor · category 사람말 · 인용 수를 함께 낸다"
+  assert_grep "$blk" '^  대안: '                     "AC16: 「대안」 줄은 항상 난다"
+  case "$blk" in
+    *'  변경: '*) no "AC16: 「변경」 줄이 아직 난다 — 헤더 복사(동어반복)" ;;
+    *) ok "AC16: 「변경」 줄이 사라졌다" ;;
+  esac
+  case "$blk" in
+    *'  영향: '*) no "AC16: 「영향」 줄이 아직 난다 — 위치를 영향이라 부른다" ;;
+    *) ok "AC16: 「영향」이 「자리」로 바뀌었다" ;;
+  esac
+  rm -rf "$d"
+}
+
+# ── 게이트 머리의 순서 뜻 한 줄 + 같은 anchor 묶음 (AC18 · AC18') ────────────
+# 순위를 새로 매기지 않는다(ⓓ · 설계 §5.7). GATE_ROWS 10행의 순서는 이미
+# 결정론이지만 «상태 범주» 순이다 — 문제는 「순위가 없다」가 아니라 「있는
+# 순서의 뜻이 안 보인다」였다. 오케스트레이터가 순위를 매기면 그 순위 자체가
+# 판단이고 사용자가 그 위험을 받아들인다고 말한 적이 없다.
+# 묶음은 표시일 뿐이다(D24) — AskUserQuestion 질문 수도 항목별 선택권도
+# 그대로다. AC18' 은 「묶기 전후로 질문 수가 같다」를 함께 잰다 — gate 요약의
+# 버킷 수(렌더와 독립인 채널)와 렌더가 낸 헤더 줄 수를 비교한다.
+case_gate_head_and_grouping() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "게이트 머리: route_r1 실패"; return; }
+  local render; render="$(py docreview_state.py gate --state-dir "$d" --render)"
+  # [리뷰 fix round 2] 원래는 첫 세 어절만(`열린 결정 먼저`) 단언했다 — 다섯
+  # 구절 중 하나만 살아 있으면 통과하고, 순서가 뒤섞여도 통과한다. AC18 이
+  # 재는 것은 「GATE_ROWS 순서의 뜻」이므로 다섯 구절 «전부» + 그 «순서» 를
+  # 한 번에 잰다: 머리 줄 전체를 뽑아 기대 리터럴과 정확히 같은지 본다(한
+  # 등식이 내용과 순서를 동시에 고정한다 — 독립된 다섯 substring 단언은
+  # 뒤섞인 줄에서도 전부 통과하므로 쓰지 않는다).
+  local head_line; head_line="$(printf '%s\n' "$render" | grep '^순서: ')"
+  assert_eq "$head_line" "순서: 열린 결정 먼저 · 그다음 관측 대기 · 막힌 것 · 미적용 수정 · 질문" \
+    "AC18: 머리 줄이 GATE_ROWS 순서를 다섯 구절 전부 + 그 순서 그대로 편다"
+  # AC18' — 묶음은 «표시»다. 묶기 전후로 게이트가 세는 항목 수(= AskUserQuestion
+  # 질문 수)가 같다. gate_summary 의 버킷을 세면 그 수가 나온다 — 렌더와 독립인
+  # 채널이라 순환이 아니다.
+  local n_items; n_items="$(py docreview_state.py gate --state-dir "$d" | jgets 'len(d["open_decide"]) + len(d["unapplied_fix"]) + len(d["blocking_ask_open"])')"
+  # [리뷰] 접두사만 보면 `_rg_held_decide` 의 「[decide 보류]」도 "^\[decide" 에 걸린다 —
+  # held_decide 는 n_items(세 버킷)에 안 들어가므로 그 오탐이 등식을 조용히 깬다.
+  # 닫는 대괄호까지 앵커해 정확히 세 렌더러의 리터럴 형태만 잡는다.
+  local n_headers; n_headers="$(printf '%s\n' "$render" | grep -cE '^\[decide( auto)?\]|^\[미적용 fix\]|^\[ask 비차단\]' || true)"
+  [ "${n_items:-0}" -gt 0 ] \
+    && ok "AC18' 양의 짝: 이 케이스에 열린 항목이 ${n_items}개 있다 (아래 등식이 0 == 0 으로 통과하지 않는다)" \
+    || no "AC18': 열린 항목이 0개다 — 아래 등식이 공허하다. 항목을 만드는 픽스처로 바꿔라"
+  assert_eq "$n_headers" "$n_items" "AC18': 묶음이 항목 수를 바꾸지 않는다(질문 수 불변)"
+  rm -rf "$d"
+}
+
+# ── 같은 anchor 항목이 실제로 붙어서 보인다 (AC18' 의 나머지 절반) ──────────
+# AC18' 는 두 절이다 — 「같은 anchor 의 열린 항목이 한 덩어리로 묶여 렌더된다」
+# (묶음 자체) 와 「질문 수·선택권은 그대로다」(제약, 위 case_gate_head_and_
+# grouping 이 이미 잰다). 위 케이스는 제약만 잰다 — 묶음 표시(`out.append("  ┆
+# 같은 자리…")`) 를 통째로 지워도 안 흔들린다(리뷰 실측 — 178개 단언 전부
+# 그린으로 남았다). 그 절반을 여기서 잰다. 세 단언:
+#  ① 전제 — 이 상태에 같은 anchor 를 가진 «열린»(row.open) 항목이 N≥2 있다.
+#     render_gate() 를 부르지 않는 채널로만 계산한다: `gate-rows` 의 행 순서
+#     (GATE_ROWS 자체가 아니라 그 순서를 낸 CLI 출력) + `gate`(--render 없이)
+#     의 버킷 + `load_state` 의 anchor. 렌더 문자열을 파싱하지 않으므로 이
+#     전제는 렌더와 독립이다.
+#  ② 그 인접 쌍의 둘째 항목 바로 앞줄이 마커다(묶음이 실제로 난다).
+#  ③ anchor 가 다른 인접 쌍 앞에는 마커가 «없다»(무조건 출력이면 여기서 걸림).
+case_gate_grouping_marker() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "묶음 마커: route_r1 실패"; return; }
+  local render; render="$(py docreview_state.py gate --state-dir "$d" --render)"
+  local rows bucket calc
+  rows="$(py docreview_state.py gate-rows)"
+  bucket="$(py docreview_state.py gate --state-dir "$d")"
+  calc="$(python3 -c '
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from docreview_state import load_state
+rows = json.loads(sys.argv[3])
+g = json.loads(sys.argv[4])
+st = load_state(sys.argv[2])
+order = []
+for r in rows:
+    order.extend(g[r["name"]])
+anchors = [(fid, (st["findings"].get(fid) or {}).get("anchor")) for fid in order]
+same_pairs = [(anchors[i - 1][0], anchors[i][0], anchors[i][1])
+              for i in range(1, len(anchors))
+              if anchors[i][1] and anchors[i][1] == anchors[i - 1][1]]
+diff_pairs = [(anchors[i - 1][0], anchors[i][0])
+              for i in range(1, len(anchors))
+              if anchors[i][1] and anchors[i - 1][1] and anchors[i][1] != anchors[i - 1][1]]
+group_size = 0
+if same_pairs:
+    target_anchor = same_pairs[0][2]
+    group_size = sum(1 for _, a in anchors if a == target_anchor)
+print(json.dumps({"n_same_anchor_open_pairs": len(same_pairs), "group_size": group_size,
+                   "same_pair": same_pairs[0] if same_pairs else None,
+                   "diff_pair": diff_pairs[0] if diff_pairs else None}, ensure_ascii=False))
+' "$SCRIPTS" "$d" "$rows" "$bucket")"
+  local n_pairs group_size anchor_val fid_same1 fid_same2 fid_diff1 fid_diff2
+  n_pairs="$(printf '%s' "$calc" | jgets 'd["n_same_anchor_open_pairs"]')"
+  group_size="$(printf '%s' "$calc" | jgets 'd["group_size"]')"
+  [ "${n_pairs:-0}" -gt 0 ] && [ "${group_size:-0}" -ge 2 ] \
+    && ok "AC18' 전제: 이 상태에 같은 anchor 를 가진 열린 항목이 ${group_size}개(인접 쌍 ${n_pairs}) 있다 — 아래 마커 단언이 도달 불가능한 상태를 재지 않는다" \
+    || { no "AC18' 전제: 같은 anchor 인접 쌍이 없다 — 마커 단언이 공허하다. 항목을 만드는 픽스처로 바꿔라"; rm -rf "$d"; return; }
+  fid_same1="$(printf '%s' "$calc" | jgets 'd["same_pair"][0]')"
+  fid_same2="$(printf '%s' "$calc" | jgets 'd["same_pair"][1]')"
+  anchor_val="$(printf '%s' "$calc" | jgets 'd["same_pair"][2]')"
+  fid_diff1="$(printf '%s' "$calc" | jgets 'd["diff_pair"][0] if d["diff_pair"] else ""')"
+  fid_diff2="$(printf '%s' "$calc" | jgets 'd["diff_pair"][1] if d["diff_pair"] else ""')"
+  # 인접 쌍의 둘째 항목이 렌더에서 «자기 헤더로» 처음 나오는 줄 바로 앞줄을
+  # 뽑는다 — [리뷰 fix round 2] bare fid 매치(예전 코드)는 그 fid 가 «다른»
+  # 항목의 헤더보다 먼저, 참조로 나오면(예: `_rg_blocking_ask` 의 「→ 전제인
+  # fix: <fid>」) 그 참조 줄을 헤더로 오인한다 — 오늘 쓰는 두 쌍(decide ·
+  # unapplied_fix)엔 안 걸리지만 일반적으로 안전하지 않다. `choices_match`
+  # (cases.sh:490)와 같은 헤더 앵커 방식으로 좁힌다: 모든 렌더러가 헤더를
+  # 「] <fid>」로 시작한다(그 뒤 구분자만 「—」/「→」로 갈린다 — `_rg_superseded`
+  # 가 유일하게 「→」다) — 참조 문구엔 그 앞의 「]」가 없으므로 이 접두로
+  # 헤더와 참조가 갈린다.
+  local before_same before_diff
+  before_same="$(printf '%s\n' "$render" | awk -v f="] ${fid_same2}" '{l[NR]=$0} index($0,f) && !hit {hit=NR} END{if (hit>1) print l[hit-1]}')"
+  before_diff="$(printf '%s\n' "$render" | awk -v f="] ${fid_diff2}" '{l[NR]=$0} index($0,f) && !hit {hit=NR} END{if (hit>1) print l[hit-1]}')"
+  assert_grep "$before_same" '^  ┆ 같은 자리\(' \
+    "AC18': 같은 anchor(${anchor_val}) 인접 쌍(${fid_same1} → ${fid_same2}) 앞에 묶음 마커가 실제로 붙는다"
+  case "$before_diff" in
+    '  ┆ 같은 자리'*) no "AC18': anchor 가 다른 인접 쌍(${fid_diff1} → ${fid_diff2}) 앞에도 마커가 붙었다 — 무조건 출력이다" ;;
+    *) ok "AC18': anchor 가 다른 인접 쌍(${fid_diff1} → ${fid_diff2}) 앞에는 마커가 없다" ;;
+  esac
+  rm -rf "$d"
+}
+
+# ── added finding 의 두 칸 왕복 (AC19″) ────────────────────────────────────
+# added 는 critic 항목과 «같은» normalize() 를 지난다(docreview_route.py, _apply_recritic 의
+# `normalize(ad, 2, "a", i, L)`) — 그래서 칸을 실을 수 «있다». 그것을 내라고 적는 자리는
+# agent 본문뿐이고, 본문에 적는 것만으로는 배관이 실제로 사는지가 안 잡힌다. 이 케이스가
+# 그 왕복을 잰다.
+case_recritic_added_carries_fields() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" "$FX/recritic-added-fields.txt.tmpl")" \
+    || { no "added 왕복: route_r1 실패"; return; }
+  local n_added; n_added="$(jget "$d/fin.json" 'len([x for x in d["findings"] if "재비판이 찾은" in (x["summary"] or "")])')"
+  [ "${n_added:-0}" -ge 1 ] \
+    && ok "AC19″ 양의 짝: added 항목이 ${n_added}개 살아남았다 (아래 판정이 공허하지 않다)" \
+    || { no "AC19″: added 항목이 0개다 — 재비판 픽스처가 안 먹었다"; rm -rf "$d"; return; }
+  assert_eq "$(fsum "$d" '재비판이 찾은' '["replacement"]')" \
+    "그 절을 빼고 §5.1 한 줄로 대신한다" "AC19″: added 의 replacement 가 같은 normalize() 를 지나 산다"
+  assert_eq "$(fsum "$d" '재비판이 찾은' '["if_unfixed"]')" \
+    "plan 이 그 구조를 실재로 믿고 Task 를 짠다" "AC19″: added 의 if_unfixed 도 산다"
   rm -rf "$d"
 }

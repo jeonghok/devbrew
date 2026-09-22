@@ -185,4 +185,46 @@ rc=$?
 assert_eq "$rc" "2" "양의 짝: 정규식 필드 fix_anchors 에 못 여는 괄호 → profile-check rc 2"
 assert_file_grep "$TMPD/err8b" 'bad_regex:fix_anchors' "양의 짝: 사유가 bad_regex:fix_anchors 다"
 
+# ── category 사람말 사상 커버리지 (AC19') ──────────────────────────────────
+# 렌더는 프로필별이 아니라 «엔진 하나»다. 그래서 사상 코퍼스는 네 프로필의 층 1·2 축
+# 전부 + 엔진이 직접 만드는 category(frozen_change 등)다. 두 프로필로 좁히면 가장 흔한
+# 항목(얼림 검사가 잡은 변경)이 상시 advisory 경로가 된다.
+#
+# 방향은 ∀ 다: 도출한 이름 «전부»가 사상에 있어야 한다. 여분 사상은 무해하다(PR 2 가
+# 더할 축 이름을 이 표가 미리 담는다 — PR 2 는 이 파일을 0줄 건드려야 하므로).
+note "── category 사람말 사상 — 코퍼스는 열거가 아니라 프로필에서 도출한다"
+MISSING="$(python3 - "$REPO_ROOT" <<'PY'
+import pathlib, sys, yaml
+root = pathlib.Path(sys.argv[1])
+sys.path.insert(0, str(root / "plugins" / "spec-distill" / "scripts"))
+from docreview_state import category_gloss
+names = set()
+profs = sorted(root.glob("plugins/*/references/docreview-profiles/*.md"))
+for p in profs:
+    fm = p.read_text(encoding="utf-8").split("---")[1]
+    lr = yaml.safe_load(fm)["layer_rubric"]
+    names |= set(lr.get("layer1") or []) | set(lr.get("layer2") or [])
+# 엔진이 직접 만드는 category — docreview_route.py 가 손으로 짓는 자리에서 온다.
+names |= {"frozen_change", "other"}
+print(len(profs), len(names))
+for n in sorted(names):
+    if category_gloss(n) is None:
+        print("MISSING", n)
+PY
+)"
+head_line="$(printf '%s\n' "$MISSING" | head -1)"
+n_prof_seen="$(printf '%s' "$head_line" | cut -d' ' -f1)"
+n_names="$(printf '%s' "$head_line" | cut -d' ' -f2)"
+if [ "${n_prof_seen:-0}" -ge 4 ] && [ "${n_names:-0}" -ge 25 ]; then
+  ok "사상: 프로필 ${n_prof_seen}개에서 category ${n_names}개를 도출했다 (양의 짝 — 아래 판정이 공허하지 않다)"
+else
+  no "사상: 프로필 ${n_prof_seen}개 · category ${n_names}개 — 도출이 무너졌다. 아래 판정이 공허하다"
+fi
+miss="$(printf '%s\n' "$MISSING" | grep -c '^MISSING ' || true)"
+if [ "${miss:-0}" -eq 0 ]; then
+  ok "사상: 도출한 category 전부에 사람말이 있다"
+else
+  no "사상: 사람말 없는 category ${miss}개 — $(printf '%s\n' "$MISSING" | sed -n 's/^MISSING //p' | tr '\n' ' ')"
+fi
+
 finish
