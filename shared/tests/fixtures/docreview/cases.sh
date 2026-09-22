@@ -1201,6 +1201,38 @@ case_T22_reraise_appears_in_next_round() {
   assert_eq "$(jget "$d/fin.json" '[(x["disposition"], x["supersedes"], x["lineage"]) for x in d["findings"] if "expired" in x["summary"]]')" "[('decide', '$gid', '$gid')]" "T22: expired 는 같은 계보의 decide 로 다음 라운드 목록에 재상승"
   rm -rf "$d"
 }
+# ── I1 — 사후 후속(escalated·reraise)도 갈래 2 두 칸을 물려받는다 ──────────────
+# `_auto_decides` 의 escalated·reraise 두 갈래는 `f0`(원본 finding)에서 layer·category·
+# anchor·edit_scope 등을 물려받지만, PR 3 출시 시점엔 replacement·if_unfixed 를 빼먹었다
+# — 리뷰어가 실제로 쓴 대체안이 한 줄 옆(`st["findings"]`)에 있는데도 렌더가
+# 「(대체안 미작성)」(침묵 리터럴)을 낸다. T28·T22 와 같은 시퀀스지만 critic-fields.txt
+# (갈래 2 두 칸이 채워진 픽스처)로 갈아 끼워, 후속 항목의 값이 원본과 일치하는지 잰다.
+case_I1_escalated_carries_replacement_fields() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" --skip)" \
+    || { no "I1 escalated: route_r1 실패"; return; }
+  local fid; fid="$(fsum "$d" 'TBD' '["id"]')"
+  py docreview_state.py fix --state-dir "$d" --id "$fid" --event escalate --reason 'check-intent 거부: edit_scope 밖' >/dev/null
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" '[(x["replacement"], x["if_unfixed"]) for x in d["findings"] if "check-intent 거부 후 상향" in x["summary"]]')" \
+    "[('TBD 를 실제 컴포넌트 이름으로 채운다', 'plan 이 그 자리를 스스로 지어낸다')]" \
+    "I1: check-intent 거부 후속(escalated)도 원본의 replacement·if_unfixed 를 물려받는다 — 부재가 아니라 원본 값이어야 한다"
+  rm -rf "$d"
+}
+case_I1_reraise_carries_replacement_fields() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" --skip)" \
+    || { no "I1 reraise: route_r1 실패"; return; }
+  local gid; gid="$(fsum "$d" '다른 것을 겨눈다' '["id"]')"
+  py docreview_state.py decide --state-dir "$d" --id "$gid" --choice adopt --quote '채택' >/dev/null
+  next_round "$d" "$FX/design-sample.md" >/dev/null        # 변경 없음 → expired
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" '[(x["replacement"], x["if_unfixed"]) for x in d["findings"] if "채택 후 미적용(expired)" in x["summary"]]')" \
+    "[('§2 를 브리프 §1 의 goal 한 문장으로 되돌린다', '설계 전체가 다른 문제를 잘 푸는 쪽으로 굳는다')]" \
+    "I1: 채택 후 미적용(expired) 후속(reraise)도 원본의 replacement·if_unfixed 를 물려받는다 — 부재가 아니라 원본 값이어야 한다"
+  rm -rf "$d"
+}
 case_T40_codex_absent_first_line() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-r1.txt" "$FX/codex-failed.yaml" "$FX/recritic-missing.txt")"
   assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | head -1)" "codex 없음 — 모델 다양성 0 (exit_nonzero)" "T40·AC8: 게이트 텍스트 첫 줄이 codex 부재 공시"

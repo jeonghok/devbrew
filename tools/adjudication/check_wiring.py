@@ -192,15 +192,19 @@ EXEMPT = {
     ("plugins/quality-gates/scripts/docreview_route.py", 498,
      "continue in _auto_decides @ if not fx0 or fx0.get('state') != 'escalated'"):
         _DR_ESCALATED_FIX_NOT_LIVE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 523,
+    # I1 재앵커 — escalated·reraise 두 후속 dict 가 `replacement`·`if_unfixed` 를
+    # 물려받도록 고치며 각 dict 리터럴에 주석 4줄+1줄, 2줄+1줄이 끼어들어 아래
+    # 세 자리(reraise 의 두 continue · `_resolve_ids_and_lineage` 의 한 자리)가
+    # 523→528 · 534→539 · 586→593 으로 밀렸다. 가드 텍스트·사유 무변경.
+    ("plugins/quality-gates/scripts/docreview_route.py", 528,
      "continue in _auto_decides @ if not f0"): _DR_RERAISE_TARGET_GONE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 534,
+    ("plugins/quality-gates/scripts/docreview_route.py", 539,
      "continue in _auto_decides @ if not d0 or d0.get('state') != 'expired'"):
         _DR_RERAISE_ALREADY_DECIDED,
     # Task 5 — 재상승 후속의 kind·prev_hash 승계 주석이 `_auto_decides` 재상승 갈래
     # 위에 끼어들며 아래로 밀렸다(옛 509 → fix round 1 M3 의 확장 주석까지 더해
     # 521). 가드 텍스트 자체는 그대로다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 586,
+    ("plugins/quality-gates/scripts/docreview_route.py", 593,
      "continue in _resolve_ids_and_lineage @ if it.get('_source') != 'reraise'"):
         _DR_LINEAGE_NOT_RERAISE,
 }

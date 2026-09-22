@@ -513,6 +513,11 @@ def _auto_decides(a, diff, st, prof, sections, n, L):
                       "disposition": "decide", "summary": "check-intent 거부 후 상향: " + (f0.get("summary") or ""),
                       "edit_scope": f0.get("edit_scope") or f0["anchor"], "blocks": [],
                       "supersedes": fid, "evidence": e.get("reason"), "origin": "auto",
+                      # [fix I1] 원본(f0)이 갈래 2 두 칸을 갖고 있으면 후속도 물려받는다 — 안 그러면
+                      # 렌더가 「(대체안 미작성)」(침묵 리터럴)을 내는데, 실제로는 리뷰어가 적은 값이
+                      # `st["findings"]`(f0) 에 한 줄 옆에 있다. 「값이 있는데 못 읽었다」를 「리뷰어가
+                      # 안 적었다」로 보고하는 것은 이 기능 전체가 없애려던 그 혼동이다.
+                      "replacement": f0.get("replacement"), "if_unfixed": f0.get("if_unfixed"),
                       "kind": "pre", "immutable": bool(f0.get("immutable")), "_source": "escalated"})
     st["escalated"] = keep_esc
     reraise_unconsumed = 0
@@ -547,6 +552,8 @@ def _auto_decides(a, diff, st, prof, sections, n, L):
                       "disposition": "decide", "summary": "채택 후 미적용(expired): " + (f0.get("summary") or ""),
                       "edit_scope": f0.get("edit_scope") or f0["anchor"], "blocks": [],
                       "supersedes": r["finding_id"], "evidence": r.get("reason"), "origin": "auto",
+                      # [fix I1] 위 escalated 갈래와 같은 이유 — f0 의 갈래 2 두 칸을 후속이 물려받는다.
+                      "replacement": f0.get("replacement"), "if_unfixed": f0.get("if_unfixed"),
                       "kind": d0.get("kind"), "prev_hash": d0.get("prev_hash"),
                       "immutable": bool(f0.get("immutable")), "_source": "reraise"})
     st["reraise"] = []
