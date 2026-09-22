@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.3.0] — 2026-09-22
+## [4.1.0] — 2026-09-22
 
 minor 인 이유 — 새 surface 가 둘이다: 리뷰어 출력 스키마의 칸 둘(`replacement`·`if_unfixed`, `doc-critic`·`doc-critic-web`·`doc-recritic` 세 에이전트 + codex 러너 프롬프트)과 `disposition_lines()`(공유 `shared/adjudication/render_disposition.py`, 심볼릭 링크로 배송)의 4-튜플 반환. 후자는 호출 계약이 바뀐다 — 위치 언패킹이 깨진다(기존 3-튜플 언패킹은 `ValueError`). 다만 이 플러그인 자신은 그 함수의 호출자가 0 이고(소비자 셋은 전부 `plugins/quality-gates/scripts/`, 전문은 `plugins/quality-gates/CHANGELOG.md` `[7.7.0]`), `shared/adjudication/` 은 배포 심볼릭 링크로만 나가 외부 플러그인이 부를 표면이 아니므로 이 플러그인 쪽에서 깨지는 외부 계약은 없다. 설계 `docs/superpowers/specs/2026-09-21-designer-lens-review-design.md` §5.7·§5.8·§5.9·§6.
 
@@ -21,6 +21,40 @@ minor 인 이유 — 새 surface 가 둘이다: 리뷰어 출력 스키마의 �
 
 - **`case_decision_view_absence_is_literal` 가 실제로 T35 시퀀스를 타지 않던 결함.** 케이스 주석은 "route_r1 → next_round → ..." 라고 적었지만 코드는 bare `r1` 을 불러 round 1 을 전혀 finalize 하지 않고 건너뛰었다 — 엔진이 실제 운용에서 도달할 수 없는 상태(round 1 미완결)를 테스트하고 있었다. `route_r1` 로 교체해 주석을 사실로 만들었다.
 - **`held_fix`·`held_decide` 대응의 자기모순을 없앴다.** 「미적용 수정」 대응에 `held_fix` 를 넣어 놓고 바로 아래 `held_decide` 문단은 "보류는 어느 구절도 못 담는다"고 적어 `held_fix` 자신이 그 문장의 반례였다. 실제 이유는 더 좁다 — 「미적용 수정」은 `fixes` 원장 세 행을 하위 상태와 무관하게 «원장 전체» 로 묶지만(pending·escalated·held 셋 다 「아직 적용 안 됨」은 같은 사실), `decides` segment 의 세 구절은 각각 특정 하위 상태만 가리켜 「상태 무관」 자리가 애초에 없다. 코드 동작은 안 바뀐다 — 주석뿐이다.
+
+## [4.0.1] — 2026-09-22
+
+### Fixed
+
+- **`doc-critic` 층 1 이 축 이름과 판정 관계를 리터럴 산문으로 쥐고 있었다 — 네 자리 중 하나에만 맞는 문장이었다.** 본문(`shared/docreview/agents/doc-critic.md:47` + 사본 셋)이 「목표·문제정의·범위·아키텍처·컴포넌트 관계·데이터 흐름·trade-off·구현 가능성」을 열거했는데 그것은 design-doc 프로필의 `layer_rubric.layer1` 뿐이다. brief 는 `[direction]`, seed 는 `[unfounded_addition, …]`, `/qg` generic 은 `[logic, assumption]` 이다. 한편 codex 러너는 이미 프로필의 `layer_rubric.layer1` 을 읽어 프롬프트에 싣는다(`run_docreview_codex_reviewer.sh:372`·`:427`) — **같은 라운드의 두 판정자가 다른 rubric 으로 돌고 있었다.** 그 줄을 붙드는 락은 **하나도 없었다**(테스트 전수 grep 0건).
+- **판정 관계를 프로필로 옮긴다.** agent 본문은 `layer_rubric.layer1` 을 참조하고, 「무엇과 대조하는가」는 각 프로필 본문의 「**층 1 판정 관계** —」 줄이 소유한다. 축 이름만 넘기고 관계를 리터럴로 두면 넷 중 하나에만 맞던 문장이 넷 중 둘에만 맞는 문장이 될 뿐이다.
+- **근거 요구의 조건절은 남기되 축 이름에서 푼다.** 「**구현 가능성** finding 은 …」 → 「**리포 사실을 단정하는** finding 은 …」. 축이 사라져도 요구가 같이 사라지지 않는다. 「예외 없이 모든 층 1 finding」으로 넓히지 않는다 — 문서 내부 모순처럼 리포를 볼 필요가 없는 finding 에까지 인용을 요구하면 그 판정이 갈 곳을 잃는다.
+
+### Added
+
+- `shared/tests/test_docreview_layer1_wiring.sh` — 위임(agent 가 프로필을 참조하는가)과 소유(프로필 넷이 각자 관계를 갖는가)를 **함께** 잰다. 한쪽만 재면 다른 쪽이 조용히 빈다. 프로필 코퍼스는 글롭 도출이라 다섯째 자리가 생겨도 자동으로 계약에 든다. 판정 관계 네 줄이 서로 다름을 별도 축(B2)으로 재 복사-붙여넣기 재발을 막는다.
+
+## [4.0.0] — 2026-09-22
+
+major 인 이유 — **설치 요구사항이 하나 늘어난다.** 이 플러그인의 훅은 이제 Python 3.12
+이상을 요구하고, 바닥 미만 머신에서는 돌지 않는다(막지는 않는다 — 건너뛴다).
+
+### Changed
+
+- **훅이 `python3` 를 직접 부르지 않는다.** `hooks.json` 의 자리가 `sh
+  ${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh --event … --plugin … --hook … <훅.py>` 로
+  바뀌었다. 해석기는 kill switch 를 먼저 보고(정본과 같은 판정), `$DEVBREW_PYTHON` →
+  `python3` → PATH 의 `python3.*` 순으로 바닥을 만족하는 인터프리터를 찾아 `exec` 한다.
+  마이너 버전을 열거하지 않으며 `python3` 로 fallback 하지 않는다.
+- **TTL-GC 자식을 `sys.executable` 로 띄운다** (`scripts/hook_common.py`). `python3` 로
+  띄우면 해석의 효력이 프로세스 경계에서 끊겨 자식만 바닥 미만으로 떨어진다.
+
+### Added
+
+- `scripts/devbrew-python.sh` — `shared/python/devbrew-python.sh` 의 물리 사본
+  (`# copy-of:`). 심볼릭 링크면 `plugin-audit` 의 containment 검사가 `shared/` 로 풀려
+  거짓 「kill switch 부재」를 낸다.
+- README 에 `Python 3.12+` prerequisite 와 바닥의 **도출 규칙**.
 
 ## [3.2.0] — 2026-09-19
 
