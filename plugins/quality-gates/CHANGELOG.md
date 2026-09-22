@@ -3,6 +3,15 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [8.1.0] — 2026-09-22
+
+### Added
+
+- **선언(`Spec:` 커밋 트레일러)에서 리뷰 스코프를 도출하는 스크립트 셋.** `scripts/resolve-topic.sh` 가 트레일러 값(조각 포함)으로 선언 커밋을 찾아 그것을 담은 브랜치 집합을 도출하고, 경계(= 각 브랜치 분기점들의 merge-base)와 끝점(= 극대원소)과 토픽 커밋 집합을 낸다. `scripts/seal-worktree.sh` 가 임시 인덱스로 워킹트리를 커밋 하나에 봉인하고, `scripts/combine-tips.sh` 가 끝점들을 순차 `git merge-tree --write-tree` 로 합쳐 트리 하나를 낸다. **셋 다 워크트리를 만들지 않고 리포 상태를 바꾸지 않는다.**
+- **`tests/test_topic_boundary.sh` · `tests/test_seal_no_side_effects.sh`.** 합성 토픽 픽스처 위에서 경계·끝점·봉인을 재는 회귀 락 둘. 봉인 락의 핵심 단언은 「봉인 트리에 임시 인덱스 파일이 없다」 — 위치가 아니라 결과를 잰다.
+
+**호출자는 아직 0 이다.** 이 릴리스는 기계만 들여놓고 `/qg` 의 동작은 바꾸지 않는다 — 배선은 뒤 릴리스다. `git branch --contains` 를 쓰지 않는 이유(머지된 커밋에 대해 `main` 과 후손 전부를 돌려줘 끝점을 식별할 수 없다)와 머지된 구성원의 분기점을 `merge-base(주제쪽 부모, 머지의 mainline 부모)` 로 되찾는 이유는 설계문서 §6.2 에 있다.
+
 ## [8.0.0] — 2026-09-22
 
 major 인 이유 — **설치 요구사항이 하나 늘어난다.** 이 플러그인의 훅은 이제 Python 3.12
