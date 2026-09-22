@@ -2452,3 +2452,40 @@ case_recritic_added_carries_fields() {
     "plan 이 그 구조를 실재로 믿고 Task 를 짠다" "AC19″: added 의 if_unfixed 도 산다"
   rm -rf "$d"
 }
+
+# ── I4 — 개행 낀 replacement 는 _classify_items 가 한 줄로 강제하고 그 강제를 센다 ──
+# 프로필 펜스(`### 판정 한 줄`)를 리뷰어가 «펜스가 예전에 두 줄이던 모양 그대로»
+# 베끼면 `replacement` 에 개행이 낀 채 들어올 수 있다 — 렌더는 이 칸을 한 줄로
+# 낸다(「고치면: %s」)이므로 개행이 섞이면 여섯 줄 블록이 여덟 줄이 되고 `└ 천장`
+# 조각이 다음 줄 첫 칸에 떨어져 최상위 게이트 줄과 구별이 안 된다. critic-
+# replacement-newline.txt 는 그 실패 모양(펜스의 옛 두 줄 그대로)을 그대로 낸다.
+# 강제는 normalize() 가 아니라 `_classify_items` 에서 한다 — critic/codex 출처는
+# `cmd_prepare`(별도 프로세스)에서 normalize() 를 지나는데, 그 라운드의 Ledger 는
+# `events` 로 기록된 호출만 `cmd_finalize` 로 넘어간다(직접 `ledger.coerced()` 호출은
+# 프로세스 경계를 못 넘는다 — 실측: normalize() 에 강제를 두면 값은 한 줄로 바뀌어도
+# `adjudication_coerced` 는 0으로 남는다). `_classify_items` 는 두 출처(critic/codex ·
+# recritic added)가 합류한 뒤 `cmd_finalize` 자신의 L 로 한 번만 돌므로 그 경계가 없다.
+case_I4_replacement_newline_collapsed() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-replacement-newline.txt" "$FX/codex-failed.yaml" --skip)" \
+    || { no "I4 개행 강제: route_r1 실패"; return; }
+  local repl; repl="$(fsum "$d" '안 쓰는 옵션이 있다' '["replacement"]')"
+  assert_eq "$repl" "옵션을 뺀다. └ 천장: 다시 요청되면" \
+    "I4: 개행 낀 replacement 가 공백 하나로 뭉쳐 한 줄로 난다"
+  case "$repl" in
+    *$'\n'*) no "I4: 강제 후에도 replacement 에 실제 개행 문자가 남아 있다" ;;
+    *) ok "I4: 강제 후 replacement 에 개행 문자가 없다" ;;
+  esac
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"]')" "1" \
+    "I4: 개행 강제가 adjudication_coerced 로 계수된다(소실이 아니라 강제)"
+  # gate=False 확인은 집계 adjudication_degraded 로는 못 잰다 — 이 픽스처는 codex-failed.yaml
+  # 로 codex 를 죽여 source_failed(모델 다양성, primary=False)만으로 이미 degraded=True 다
+  # (adjudication.py:_degraded — `bool(sources_failed)` 가 gate 와 무관하게 참여한다). 대신
+  # `reasons()` 가 `gate=True` 인 coerced 만 advisory 줄로 낸다는 사실(adjudication.py:141-149)
+  # 로 gate=False 를 정확히 겨눈다 — 이 강제가 advisory 에 "강제(게이트 변경): replacement" 줄을
+  # «내지 않아야» gate=False 다.
+  case "$(jget "$d/fin.json" '"\n".join(d["advisory"])')" in
+    *'강제(게이트 변경): replacement'*) no "I4 양의 짝: replacement 강제가 게이트 변경으로 advisory 에 났다 — gate=True 여야 할 이유가 없다" ;;
+    *) ok "I4 양의 짝: replacement 강제는 gate=False 라 advisory 의 게이트-변경 줄로 나지 않는다(카운트는 늘지만 차단은 아니다)" ;;
+  esac
+  rm -rf "$d"
+}

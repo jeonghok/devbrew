@@ -76,7 +76,13 @@ def normalize(item, layer_default, prefix, idx, ledger):
         "supersedes": (str(item["supersedes"]) if item.get("supersedes") else None),
         "evidence": (str(item["evidence"]) if item.get("evidence") else None),
         # 갈래 2 의 칸 둘. 여기 없으면 리뷰어가 무엇을 적든 «조용히» 버려진다 —
-        # 이 dict 는 입력을 갱신하는 것이 아니라 처음부터 새로 짓는다.
+        # 이 dict 는 입력을 갱신하는 것이 아니라 처음부터 새로 짓는다. 개행 강제는
+        # 여기가 아니라 `_classify_items`(I4) — 이 함수는 `cmd_prepare`(critic/codex)
+        # 에서도 불리는데, 그 라운드의 Ledger 는 `events` 로 기록된 호출만 `cmd_finalize`
+        # 로 넘어간다(`ev()` 래퍼를 거치지 않는 직접 `ledger.coerced()` 호출은 프로세스
+        # 경계를 못 넘어 fin.json 의 adjudication_coerced 에 조용히 안 잡힌다 — 실측).
+        # `_classify_items` 는 두 출처(critic/codex 와 recritic added) 를 합친 뒤
+        # `cmd_finalize` 자신의 L 로 한 번만 돌므로 그 경계가 없다.
         "replacement": (str(item["replacement"]) if item.get("replacement") else None),
         "if_unfixed": (str(item["if_unfixed"]) if item.get("if_unfixed") else None),
     }
@@ -407,6 +413,20 @@ def _classify_items(items, st, prof, sections, n, L):
     allowed = prof["allowed_dispositions"]
     final, rejected_items = [], []
     for f, it in items.items():
+        repl = it.get("replacement")
+        if repl:
+            collapsed = re.sub(r"\s+", " ", repl).strip()
+            if collapsed != repl:
+                # I4 — 리뷰어가 프로필 펜스(`### 판정 한 줄`)를 옛 두 줄 모양대로 베끼면
+                # `replacement` 에 개행이 낀다. 렌더는 이 칸을 한 줄로 낸다(docreview_state.py
+                # 「고치면: %s」) — 개행이 섞이면 여섯 줄 블록이 여덟 줄이 되고 `└ 천장` 조각이
+                # 다음 줄 첫 칸에 떨어져 최상위 게이트 줄과 구별이 안 된다. 항목이 아니라 값을
+                # 바꾸는 것이므로 hold 가 아니라 coerced 다(CLAUDE.md 「강제는 계수하되 소실이
+                # 아니다」) — 이 대체가 게이트 판정 자체를 바꾸지는 않으므로 gate=False(기본값).
+                # 여기(모든 출처가 합류한 뒤, cmd_finalize 자신의 L)서 하는 이유는 normalize()
+                # 헤더 주석 참조 — cmd_prepare 의 L 은 프로세스 경계를 못 넘는다.
+                L.coerced("replacement", repl, collapsed)
+            it["replacement"] = collapsed or None
         if it.get("_absorbed_into"):
             continue
         if it.get("_rejected"):

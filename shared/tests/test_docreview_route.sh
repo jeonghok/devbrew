@@ -80,4 +80,5 @@ case_gate_render_six_lines
 case_gate_head_and_grouping
 case_gate_grouping_marker
 case_recritic_added_carries_fields
+case_I4_replacement_newline_collapsed
 finish

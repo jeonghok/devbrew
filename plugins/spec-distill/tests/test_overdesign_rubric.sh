@@ -217,6 +217,20 @@ DFENCE="$(judgment_fence_of "$DB")"
 has "$BFENCE" '└ 천장' "AC7: brief 판정 한 줄 «펜스 안»에 천장 규약이 있다 (프로즈 헤딩이 아니라 템플릿 그 자체)"
 has "$DFENCE" '└ 천장' "AC7: design 판정 한 줄 «펜스 안»에 천장 규약이 있다 (프로즈 헤딩이 아니라 템플릿 그 자체)"
 
+# ── I4 : 펜스가 실제로 «한 줄»이다 (「필드 사상」의 「한 줄, 개행 없이」와 일치) ──
+# 펜스가 옛 두 줄 모양(대안 줄 + 들여쓴 천장 줄)으로 되돌아가면 리뷰어가 그대로 베껴
+# `replacement` 에 개행이 낀다 — 엔진이 그 개행을 강제로 지우긴 하지만(I4 엔진단,
+# `_classify_items`), 펜스 자체가 프로즈와 다시 어긋나는 것은 이 락으로 막는다.
+# 펜스 «전체»(judgment_fence_of 가 낸 내용)의 실제 줄 수를 잰다 — 공백이 아닌 줄만 센다.
+BFENCE_LINES="$(printf '%s\n' "$BFENCE" | grep -c '.')"
+DFENCE_LINES="$(printf '%s\n' "$DFENCE" | grep -c '.')"
+[ "${BFENCE_LINES:-0}" -eq 1 ] \
+  && ok "I4: brief 판정 한 줄 펜스가 실제로 «한 줄»이다 (개행 없음 — 프로즈와 일치)" \
+  || no "I4: brief 판정 한 줄 펜스가 여러 줄이다(실제 ${BFENCE_LINES:-0}줄) — 베끼면 replacement 에 개행이 낀다"
+[ "${DFENCE_LINES:-0}" -eq 1 ] \
+  && ok "I4: design 판정 한 줄 펜스가 실제로 «한 줄»이다 (개행 없음 — 프로즈와 일치)" \
+  || no "I4: design 판정 한 줄 펜스가 여러 줄이다(실제 ${DFENCE_LINES:-0}줄) — 베끼면 replacement 에 개행이 낀다"
+
 # 필드 사상 — 「└ 천장」은 스키마 필드가 없다(shared/docreview/scripts, plugins/spec-distill/scripts,
 # plugins/spec-distill/agents 전체에서 git grep 천장 로 확인 — 프로필·이 락 밖엔 0건). summary 는
 # 렌더될 때 파이프-표 행 한 칸이 된다(docreview_state.py:861) — 천장 줄의 개행이 그리로 섞이면
