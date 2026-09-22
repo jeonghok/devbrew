@@ -1302,15 +1302,28 @@ def render_gate(st, g) -> str:
     #   막힌 것          → blocked_expired · superseded_expired
     #   미적용 수정       → unapplied_fix · escalated_fix · held_fix
     #   질문             → blocking_ask_open · ask_open
-    # held_decide 는 다섯 구절 어디에도 없다 — decides 원장 안에 있지만 "보류"는
-    # 다른 어떤 구절의 뜻도 아니다. 표의 침묵이지 누락 버그가 아니다(§8.2 가
-    # held_decide 를 승인 게이트의 남은 ask 목록에서 따로 보여준다는 전제).
+    # 「미적용 수정」은 fixes 원장 세 행(6·7·8) 전체를 하위 상태와 무관하게
+    # 뜻으로 묶는다 — pending/intent_passed 든 escalated 든 held 든, 셋 다
+    # 「아직 적용되지 않은 fix」라는 사실은 같다(적용됐으면 애초에 이 원장에
+    # 안 남는다). held_fix 가 여기 들어가는 것은 held_fix 만의 특별 취급이
+    # 아니라 이 구절이 «상태 무관·원장 전체»를 가리키기 때문이다.
+    # [리뷰 fix round 3 정정] held_decide 가 다섯 구절 밖인 이유는 그래서 "보류
+    # 라는 개념은 어느 구절도 못 담는다"가 아니다 — held_fix 가 바로 그 반례다.
+    # 진짜 이유는 더 좁다: decides 원장 segment(열린 결정·관측 대기·막힌 것)는
+    # fixes 와 달리 «상태 무관·원장 전체»를 가리키는 구절이 없다 — 세 구절이
+    # 각각 open_decide·adopted·(blocked_expired·superseded_expired) 라는 특정
+    # 하위 상태만 가리키므로 held_decide 를 담을 자리가 애초에 없다. 표의
+    # 침묵이지 누락 버그가 아니다(§8.2 가 held_decide 를 승인 게이트의 남은
+    # ask 목록에서 따로 보여준다는 전제).
     # [정직 고지] 이 대응은 사람이 적었다 — `cases.sh` 의 `case_gate_head_and_
     # grouping` 은 이 줄의 «내용과 순서»가 아래 리터럴과 정확히 같은지만 기계로
-    # 잰다. 그 등식은 이 대응표가 뜻으로 맞다는 증명이 아니다. GATE_ROWS 를
-    # 재정렬하거나 새 행을 끼워 넣으면, 이 줄과 위 대응표와 `case_gate_head_
-    # and_grouping` 의 기대 리터럴을 함께 옮겨라 — 셋 중 하나만 고치면 이
-    # 줄이 조용히 낡은 설명이 된다.
+    # 잰다. 그 등식은 이 대응표가 뜻으로 맞다는 증명이 아니다. 「막힌 것」·
+    # 「미적용 수정」·「질문」이 여러 행을 한 구절로 묶는 경계도 마찬가지로
+    # 사람의 읽기다 — 그 경계에 동의하지 않는 미래 독자는 "원래 그렇게
+    # 도출됐다"고 가정하지 말고 이 줄 자체를 고쳐라. GATE_ROWS 를 재정렬하거나
+    # 새 행을 끼워 넣으면, 이 줄과 위 대응표와 `case_gate_head_and_grouping`
+    # 의 기대 리터럴을 함께 옮겨라 — 셋 중 하나만 고치면 이 줄이 조용히 낡은
+    # 설명이 된다.
     out.append("순서: 열린 결정 먼저 · 그다음 관측 대기 · 막힌 것 · 미적용 수정 · 질문")
     prev_anchor = None
     for row in GATE_ROWS:
