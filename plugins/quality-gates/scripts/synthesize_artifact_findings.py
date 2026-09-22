@@ -310,12 +310,12 @@ def main():
         # 사람이다 — 미판정은 라벨을 달아 stderr 로 보인다(items="open").
         L = Ledger(items="open")
         phase_key(args.findings, ledger=L)
-        disp_line, plumb_line, advisories = disposition_lines(
+        disp_line, plumb_line, gloss_line, advisories = disposition_lines(
             L.report(), L.held_by_class())
         # stdout 이 아니라 stderr 다 — key 단계의 stdout 은 phase_synth 가 다시
         # 읽는 findings 문서라, 거기에 키를 더하면 `_is_findings_doc` 스키마
         # 판정을 건드린다.
-        for line in (disp_line, plumb_line, *advisories):
+        for line in (disp_line, plumb_line, gloss_line, *advisories):
             sys.stderr.write(line + "\n")
     else:
         findings_path = args.findings[0] if args.findings else ""

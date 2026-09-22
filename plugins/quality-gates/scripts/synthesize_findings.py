@@ -479,7 +479,7 @@ def render(kept, suppressed_count, dropped_malformed, report, held_classes):
         # SKILL은 stdout만 읽어 counts=0을 보고 `## Review gate: clean`을
         # 찍었다 — 버려진 CRITICAL 주장이 **깨끗함으로 렌더**됐다는 뜻이다
         # (2026-08-04 재현, exit 0). 소실을 stdout에서 볼 수 있게 만든다.
-        disp_line, plumb_line, advisories = disposition_lines(report, held_classes)
+        disp_line, plumb_line, gloss_line, advisories = disposition_lines(report, held_classes)
         for a in advisories:
             print(a, file=sys.stderr)
         out = [
@@ -487,7 +487,7 @@ def render(kept, suppressed_count, dropped_malformed, report, held_classes):
             "",
             f"No high-confidence findings. {suppressed_count} low-confidence "
             "findings suppressed.",
-            disp_line, plumb_line,
+            disp_line, plumb_line, gloss_line,
         ]
         if dropped_malformed > 0:
             out.append(
@@ -529,12 +529,12 @@ def render(kept, suppressed_count, dropped_malformed, report, held_classes):
     if suppressed_count > 0:
         counts_line += f" — {suppressed_count} suppressed (conf <= 4)"
 
-    disp_line, plumb_line, advisories = disposition_lines(report, held_classes)
+    disp_line, plumb_line, gloss_line, advisories = disposition_lines(report, held_classes)
     for a in advisories:
         print(a, file=sys.stderr)
 
     out = ["## Review Findings (Synthesized)", "", counts_line,
-           disp_line, plumb_line, ""]
+           disp_line, plumb_line, gloss_line, ""]
     degrade_lines = _degrade_block(report["degraded"], report["reasons"])
     if degrade_lines:
         out.extend(degrade_lines)
