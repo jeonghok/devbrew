@@ -389,6 +389,14 @@ def per_adapter(args: argparse.Namespace) -> int:
         out.append("attributions: []")
     out.append(f"attribution_status: {'degraded' if degraded else 'closed'}")
     out.append(f"degrade_causes: [{', '.join(causes)}]")
+    # AC13 — (F,F) 구멍의 공시(설계 §6.4.2). **판정을 막지 않는다**: 이 줄은 기존
+    # 가드 «위에» 얹힌다. `granularity == bulk && pre_existing > 0` 은 여전히
+    # degraded 이고 `bulk-pre-existing` 사유를 낸다. 이 단서 없이 구현하면 가드가
+    # 조용히 사라진다.
+    if counts["pre_existing"] > 0:
+        out.append("resolution_disclosure: " + yaml_str(
+            f"양측 빨강 unit {counts['pre_existing']}개 — 그 안의 새 실패는 "
+            "이 해상도(unit 당 종료 코드 하나)에서 보이지 않는다"))
     # counts는 flow-mapping(한 줄)으로 emit한다 — 블록 스타일(키 한 줄씩)로 쓰면
     # `silent_drop`/`baseline_unrunnable`이 카운트 키와 verdict_input 플래그 키에서
     # 동시에 등장해, 순진한 "첫 매치" 파서(소비자 다수가 그렇다 — Task 11 참고)가
@@ -513,6 +521,13 @@ def _aggregate(args: argparse.Namespace) -> int:
                + ", ".join(sorted(causes, key=DEGRADE_CAUSES.index)) + "]")
     if bool(causes) != bool(degraded):
         fail4(f"내부 불일치: degraded={degraded} 인데 degrade_causes={causes}")
+    # 집계는 per-adapter 의 공시 «문자열» 을 옮기지 않는다 — 같은 사실을 두 자리가
+    # 따로 말하면 어긋날 수 있다. 수는 여기서 다시 센다.
+    pre_existing_total = sum(c["pre_existing"] for c in per_adapter_counts.values())
+    if pre_existing_total > 0:
+        out.append("resolution_disclosure: " + yaml_str(
+            f"양측 빨강 unit {pre_existing_total}개 — 그 안의 새 실패는 "
+            "이 해상도(unit 당 종료 코드 하나)에서 보이지 않는다"))
     if adapters:
         out.append("per_adapter:")
         for runner in adapters:
