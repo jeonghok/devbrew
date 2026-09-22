@@ -25,6 +25,13 @@
 #    세어지며, 그 자신의 질문(선택지 「열기 / 열지 않음」 둘뿐)이라는 문구 — 다른 항목의
 #    질문에 얹는 것도, 분할 밖의 부가물인 것도 아니라는 결정성 명문화. body-unique.
 #    (열린 finding 리뷰 발견: 이 배칭이 결정 (a)/(b) 둘 다로 읽혀 원문이 비결정적이었다.)
+# 5. 존재 — Task 13(AC17″): `AskUserQuestion` 각 선택지 `label` 이 상태별 라벨만이 아니라
+#    `replacement` 압축을 붙인다는 규약, 같은 라운드 두 항목이 같은 label 을 갖지 않는다는
+#    규약, 그 금지가 부재-겹침 경우에 공허해지지 않도록 부재 건수를 공시한다는 규약 —
+#    셋 다 body-unique. **이 축의 한계** — 이 락이 잴 수 있는 것은 이 규약이 절차서·
+#    SKILL 본문에 **적혀 있는가**뿐이다. 라벨 조립은 엔진이 아니라 런타임의
+#    오케스트레이터가 하므로, 오케스트레이터가 실제로 이 규약을 **지키는가**는 이 락의
+#    도달 밖이다(e2e 로만 눈으로 본다).
 set -u -o pipefail
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "shared/docreview/references/reviewing-document.md"
@@ -79,5 +86,23 @@ assert_contains "$REF_BODY" '같은 4개씩 분할에 함께 세어지며' \
   "절차서 본문이 추가 라운드 선택지를 별개 항목으로 같은 4개씩 분할에 세어 넣는다고 적는다 (결정성, R23)"
 assert_contains "$SKILL_BODY" '같은 4개씩 분할에 함께 세어지며' \
   "reviewing-spec ## 게이트 본문이 같은 결정성 문구를 적는다 (R23)"
+
+# ── 5. 존재 — AskUserQuestion 라벨의 항목별 내용 (AC17″, body-unique) ────────────
+# 이 락이 잴 수 있는 것은 규약의 실재뿐이다 — 아래 세 단언이 통과해도 오케스트레이터가
+# 런타임에 그 규약을 실제로 지킨다는 증거는 아니다(위 축 5 설명 참조).
+assert_contains "$REF_BODY" 'replacement 를 1–5 낱말로 압축' \
+  "절차서 본문이 라벨을 상태별 라벨 + replacement 1–5 낱말 압축으로 조립한다고 적는다"
+assert_contains "$SKILL_BODY" 'replacement 를 1–5 낱말로 압축' \
+  "reviewing-spec ## 게이트 본문이 같은 라벨 압축 규약을 적는다"
+
+assert_contains "$REF_BODY" '같은 라벨을 갖지 않는다' \
+  "절차서 본문이 같은 라운드의 두 항목은 같은 라벨을 갖지 않는다고 적는다"
+assert_contains "$SKILL_BODY" '같은 라벨을 갖지 않는다' \
+  "reviewing-spec ## 게이트 본문이 같은 라벨 중복 금지를 적는다"
+
+assert_contains "$REF_BODY" '부재 건수를 함께 공시' \
+  "절차서 본문이 replacement 양쪽 부재로 라벨이 겹치는 경우 부재 건수를 공시한다고 적는다"
+assert_contains "$SKILL_BODY" '부재 건수를 함께 공시' \
+  "reviewing-spec ## 게이트 본문이 같은 부재 공시 규약을 적는다"
 
 finish
