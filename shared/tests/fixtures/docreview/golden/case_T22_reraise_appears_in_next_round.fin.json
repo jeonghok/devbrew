@@ -12,6 +12,8 @@
    "blocks": [],
    "supersedes": null,
    "evidence": "브리프 §2 C3 vs 문서 §3",
+   "replacement": null,
+   "if_unfixed": null,
    "f": "f1",
    "origin": "reviewer",
    "immutable": false,
@@ -20,14 +22,16 @@
    "id": "fee27fc9#r2.1",
    "lineage": "fee27fc9#r2.1",
    "decision_view": {
-    "change": "Non-goals 가 브리프의 범위 항목 하나를 조용히 뺐다",
+    "if_unfixed": "(리뷰어가 안 적음)",
+    "replacement": "(대체안 미작성)",
     "basis": "브리프 §2 C3 vs 문서 §3",
     "alternatives": [
-     "채택(적용)",
-     "기각(원복)",
-     "보류"
+     "고친다(채택)",
+     "그대로 둔다(기각)",
+     "나중에 정한다(보류)"
     ],
-    "impact": "#3-non-goals · 인용 0 섹션",
+    "impact": "#3-non-goals (범위가 넓어지거나 좁아짐) · 인용 0 섹션",
+    "category_unglossed": null,
     "auto": false
    }
   },
@@ -50,13 +54,15 @@
    "id": "fee27fc9#r2.2",
    "lineage": "fee27fc9#r1.1",
    "decision_view": {
-    "change": "채택 후 미적용(expired): Non-goals 가 브리프의 범위 항목 하나를 조용히 뺐다",
+    "if_unfixed": "(리뷰어가 안 적음)",
+    "replacement": "(대체안 미작성)",
     "basis": "라운드 2 에 채택 변경 관측 없음 (D1.1)",
     "alternatives": [
-     "채택(적용)",
-     "기각(원복)"
+     "고친다(채택)",
+     "그대로 둔다(기각)"
     ],
-    "impact": "#3-non-goals · 인용 0 섹션",
+    "impact": "#3-non-goals (범위가 넓어지거나 좁아짐) · 인용 0 섹션",
+    "category_unglossed": null,
     "auto": true
    }
   }

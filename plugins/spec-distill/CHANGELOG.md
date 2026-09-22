@@ -1,5 +1,27 @@
 # Changelog
 
+## [4.1.0] — 2026-09-22
+
+minor 인 이유 — 새 surface 가 둘이다: 리뷰어 출력 스키마의 칸 둘(`replacement`·`if_unfixed`, `doc-critic`·`doc-critic-web`·`doc-recritic` 세 에이전트 + codex 러너 프롬프트)과 `disposition_lines()`(공유 `shared/adjudication/render_disposition.py`, 심볼릭 링크로 배송)의 4-튜플 반환. 후자는 호출 계약이 바뀐다 — 위치 언패킹이 깨진다(기존 3-튜플 언패킹은 `ValueError`). 다만 이 플러그인 자신은 그 함수의 호출자가 0 이고(소비자 셋은 전부 `plugins/quality-gates/scripts/`, 전문은 `plugins/quality-gates/CHANGELOG.md` `[7.7.0]`), `shared/adjudication/` 은 배포 심볼릭 링크로만 나가 외부 플러그인이 부를 표면이 아니므로 이 플러그인 쪽에서 깨지는 외부 계약은 없다. 설계 `docs/superpowers/specs/2026-09-21-designer-lens-review-design.md` §5.7·§5.8·§5.9·§6.
+
+### Changed
+
+- **decision_view 의 동어반복 제거.** 「변경」 줄은 `it["summary"]` 였고 헤더가 이미 그 문자열을 냈다 — 정보량 0 인 줄이었다. 대신 `replacement`(「고치면 무엇이 되는가」)·`if_unfixed`(「그대로 두면 무엇이 남는가」) 두 칸을 낸다. 부재 리터럴 둘은 **다르게** 둔다 — 침묵(「(대체안 미작성)」·「(리뷰어가 안 적음)」)과 판정(「대체안 없음 — 그냥 뺀다」, 리뷰어가 그 문자열을 실제로 냈을 때만)은 다른 사실이라, 같은 글자로 메우면 아무도 제안하지 않은 삭제가 제안으로 전달된다.
+- **`PUBLIC_FIELDS`(`docreview_state.py`)에 `replacement`·`if_unfixed` 를 top-level 로 추가.** 닫힌 열거가 셋이다 — `PROFILE_FIELDS` · `normalize()` 반환 · `PUBLIC_FIELDS`. 앞의 둘만 고치면 새 칸이 렌더까지는 가도 원장에 안 남아 다음 라운드가 못 본다. `decision_view` 통로는 `disposition == "decide"` 에만 열리므로(`docreview_route.py` 의 `_remap_blocks`, decide 분기에서만 `_decision_view()` 를 부른다) 그쪽에만 실으면 `fix`·`defer`·`ask` 로 난 항목의 대체안이 원장에 한 글자도 안 남는다.
+- **선택지 라벨이 상태의 함수가 됐다** (`choice_label(choice, kind)`). `cmd_decide` 가 `kind == "post"` 인 finding 의 `reject` 선택에 `kind: "revert"` permit 을 만들므로(그 자리에서 「그대로 둔다」는 실제로는 원복이다) 상태를 안 가리는 고정 라벨은 그 자리에서 동작을 **반대로** 설명하고 있었다(codex 단독 적발) — 그 결함을 고치는 김에 새 결함을 만드는 길이었다. 라벨 리터럴은 `choice_label()` 한 곳에만 산다 — 이전엔 아홉 자리에 복제돼 있었다.
+- **게이트 「자리」줄에 category 사람말을 붙인다** (`CATEGORY_GLOSS` · `category_gloss()`). 사상 코퍼스는 **네 프로필(brief·design-doc·seed·generic)의 층 1·2 축 전부 + 엔진이 직접 만드는 category**(`frozen_change`·`other`) 다 — 렌더가 프로필별이 아니라 엔진 하나뿐이라, 두 프로필로 좁히면 가장 흔한 항목(`frozen_change`)이 상시 advisory 경로가 된다. 사상 없는 category 는 원래 이름을 그대로 내고 `category_unglossed` 로 그 사실을 공시한다(조용히 빈칸으로 두지 않는다). `CATEGORY_GLOSS` 는 `overdesign` 을 **이미** 담고 있는데, 그 축을 선언하는 프로필은 아직 하나도 없다 — 그 축을 더하는 후속 PR 이 `docreview_state.py` 를 0줄 건드리고도 단독 머지되게 하기 위해서다. 여분 항목은 무해하다: `test_docreview_profile_schema.sh` 는 ∀(프로필에서 도출한 이름 전부에 사상이 있는가) 만 재고, 사상에 프로필보다 많은 이름이 있는 것은 그 축의 부정이 아니다.
+- **「대안」줄을 조건 없이 낸다.** `shared/tests/fixtures/docreview/cases.sh` 의 「제안 = 수용」 락이 이 줄의 존재를 발동 조건으로 쓴다 — 사라지면(예: 대안이 비었다고 줄 자체를 생략하면) 그 단언이 평범한 open·재상승 항목에 대한 렌더-측 채널을 통째로 잃는다.
+- **게이트 머리에 순서의 뜻을, 같은 자리 항목에 묶음 표시를.** `GATE_ROWS` 10행은 이미 결정론이지만 «상태 범주» 순이라 그 뜻이 안 보였다 — 순위를 새로 매기지 않고(오케스트레이터가 순위를 매기면 그 자체가 판단이고 사용자가 그 위험을 받아들인다고 말한 적이 없다) 있는 순서의 뜻만 한 줄로 낸다(「열린 결정 먼저 · 그다음 관측 대기 · 막힌 것 · 미적용 수정 · 질문」). 같은 자리를 건드리는 연속 항목은 「같은 자리」로 묶어 «표시»만 한다 — 질문 수도 항목별 선택권도 안 바꾼다.
+- **`AskUserQuestion` 라벨의 항목별 내용을 규약으로 못 박았다** (`reviewing-spec` `## 게이트`). 상태별 라벨만 담으면 같은 라운드의 여러 항목이 전부 같은 글자가 되어 「라벨만 읽고 고른다」가 원리적으로 안 닫힌다 — 라벨은 상태별 라벨 + `replacement` 1–5 낱말 압축이고, 같은 라운드의 두 항목은 같은 라벨을 갖지 않는다(둘 다 부재면 부재 건수를 공시해 규약이 공허해지지 않게 한다). **한계 공시** — 이 규약을 재는 락(`shared/tests/test_docreview_round_gate_split.sh`, AC17″)은 규약의 실재(문구가 절차서·SKILL 본문에 있는가)만 재고, 오케스트레이터가 런타임에 그 규약을 실제로 지키는지는 못 잰다. 라벨을 짓는 것은 엔진이 아니라 런타임의 오케스트레이터다.
+- `doc-critic`·`doc-critic-web`·`doc-recritic` 출력 스키마에 `replacement`·`if_unfixed` 두 칸을 추가(에이전트 정의). `added` 항목(재비판이 새로 낸 finding)도 같은 `normalize()` 를 지나므로 두 칸을 실을 수 있는데, 에이전트 본문에 안 적으면 그 경로가 대체안 없이 렌더로 간다.
+- codex 러너 프롬프트(`run_docreview_codex_reviewer.sh`)가 출력 형식 예시에 `replacement`·`if_unfixed` 를 요구한다 — codex finding 도 Claude 쪽과 같은 `normalize()` 를 지나 같은 두 칸을 낼 수 있는데, 프롬프트에 적어야 실제로 난다.
+- 엔진 링크(`scripts/{docreview_state,docreview_route,run_docreview_codex_reviewer.sh}` · `scripts/{adjudication,render_disposition}.py`, 전부 심볼릭 링크)가 위 전부와 `render_disposition.py` 의 4-튜플 반환을 함께 나른다(cache key) — 후자는 이 플러그인의 호출자가 여전히 0 이다.
+
+### Fixed
+
+- **`case_decision_view_absence_is_literal` 가 실제로 T35 시퀀스를 타지 않던 결함.** 케이스 주석은 "route_r1 → next_round → ..." 라고 적었지만 코드는 bare `r1` 을 불러 round 1 을 전혀 finalize 하지 않고 건너뛰었다 — 엔진이 실제 운용에서 도달할 수 없는 상태(round 1 미완결)를 테스트하고 있었다. `route_r1` 로 교체해 주석을 사실로 만들었다.
+- **`held_fix`·`held_decide` 대응의 자기모순을 없앴다.** 「미적용 수정」 대응에 `held_fix` 를 넣어 놓고 바로 아래 `held_decide` 문단은 "보류는 어느 구절도 못 담는다"고 적어 `held_fix` 자신이 그 문장의 반례였다. 실제 이유는 더 좁다 — 「미적용 수정」은 `fixes` 원장 세 행을 하위 상태와 무관하게 «원장 전체» 로 묶지만(pending·escalated·held 셋 다 「아직 적용 안 됨」은 같은 사실), `decides` segment 의 세 구절은 각각 특정 하위 상태만 가리켜 「상태 무관」 자리가 애초에 없다. 코드 동작은 안 바뀐다 — 주석뿐이다.
+
 ## [4.0.1] — 2026-09-22
 
 ### Fixed

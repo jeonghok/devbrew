@@ -372,7 +372,7 @@ assert_grep "$OUT" 'sources_failed: *[1-9]' "입력 실패가 원장에 실린�
 note "── 처분 회계 (T1-C, key 단계)"
 # R3 (adjudication-topology Task 15c) — 위 T1-B 는 `--phase synth` 의 원장(YAML
 # stdout, disposition_report())만 값으로 잰다. `main()` 의 `key` 분기(:299-317)가
-# `disposition_lines()` 로 stderr 에 내는 처분 두 줄(**처분:**/**배관 손실:**)은
+# `disposition_lines()` 로 stderr 에 내는 처분 세 줄(**처분:**/**배관 손실:**/풀이줄)은
 # 이 파일 어디서도 검사되지 않았다 — 두 렌더 분기 중 한쪽만 잠겨 있던 Critical
 # (synth 의 :482 clean 분기)과 같은 부류, `key`/`synth` 축으로 다른 자리다.
 # 실패 소스(findings 문서 아님 — codex_failed 뿐인 dict) 하나 + 파손 항목
@@ -397,6 +397,8 @@ assert_grep "$KEY_ERR" '\*\*배관 손실:\*\* 2 ' \
   "key 단계 배관줄 — 값 2(항목 파손 1 + source_failed 1)"
 assert_grep "$KEY_ERR" '차단: 예' \
   "key 단계 배관줄 — held 가 비지 않았으니 degraded(차단: 예)"
+assert_grep "$KEY_ERR" '↳ 억제=규칙이 자른 것' \
+  "key 단계에서도 회계어 풀이 줄이 난다 (AC21)"
 
 rm -rf "$tmp"
 finish

@@ -131,14 +131,18 @@ docreview:
       edit_scope: '#3-non-goals'
       blocks: []
       evidence: 브리프 §2 C3 vs 문서 §3
+      replacement: null
+      if_unfixed: null
       decision_view:
-        change: Non-goals 가 브리프의 범위 항목 하나를 조용히 뺐다
+        if_unfixed: (리뷰어가 안 적음)
+        replacement: (대체안 미작성)
         basis: 브리프 §2 C3 vs 문서 §3
         alternatives:
-        - 채택(적용)
-        - 기각(원복)
-        - 보류
-        impact: '#3-non-goals · 인용 0 섹션'
+        - 고친다(채택)
+        - 그대로 둔다(기각)
+        - 나중에 정한다(보류)
+        impact: '#3-non-goals (범위가 넓어지거나 좁아짐) · 인용 0 섹션'
+        category_unglossed: null
         auto: false
       state: null
       promotion: null
@@ -159,6 +163,8 @@ docreview:
       edit_scope: '#1-context'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view: null
       state: null
       promotion: null
@@ -180,6 +186,8 @@ docreview:
       blocks:
       - 9dea7cf3#r1.1
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view: null
       state: null
       promotion: null
@@ -200,14 +208,18 @@ docreview:
       edit_scope: '#12-files-to-modify'
       blocks: []
       evidence: §5 가 c.py 를 참조한다
+      replacement: null
+      if_unfixed: null
       decision_view:
-        change: c.py 누락 — 파일 목록이 실제 변경과 다르다
+        if_unfixed: (리뷰어가 안 적음)
+        replacement: (대체안 미작성)
         basis: §5 가 c.py 를 참조한다
         alternatives:
-        - 채택(적용)
-        - 기각(원복)
-        - 보류
-        impact: '#12-files-to-modify · 인용 1 섹션'
+        - 고친다(채택)
+        - 그대로 둔다(기각)
+        - 나중에 정한다(보류)
+        impact: '#12-files-to-modify (TBD·빈 절) · 인용 1 섹션'
+        category_unglossed: null
         auto: false
       state: null
       promotion: null
@@ -228,6 +240,8 @@ docreview:
       edit_scope: '#12-files-to-modify'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view: null
       state: null
       promotion: null
@@ -248,14 +262,18 @@ docreview:
       edit_scope: '#2-goals'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view:
-        change: 목표 B 가 두 가지로 읽힌다
+        if_unfixed: (리뷰어가 안 적음)
+        replacement: (대체안 미작성)
         basis: (근거 없음)
         alternatives:
-        - 채택(적용)
-        - 기각(원복)
-        - 보류
-        impact: '#2-goals · 인용 0 섹션'
+        - 고친다(채택)
+        - 그대로 둔다(기각)
+        - 나중에 정한다(보류)
+        impact: '#2-goals (두 가지로 읽힘) · 인용 0 섹션'
+        category_unglossed: null
         auto: true
       state: null
       promotion: protected
@@ -276,6 +294,8 @@ docreview:
       edit_scope: '#handoff-context'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view: null
       state: null
       promotion: null
@@ -296,6 +316,8 @@ docreview:
       edit_scope: '#handoff-context'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view: null
       state: null
       promotion: null
@@ -316,14 +338,18 @@ docreview:
       edit_scope: '#5-architecture'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view:
-        change: §5 의 데이터 흐름에 소비자 없는 산출물이 있다 — 의도인가?
+        if_unfixed: (리뷰어가 안 적음)
+        replacement: (대체안 미작성)
         basis: (근거 없음)
         alternatives:
-        - 채택(적용)
-        - 기각(원복)
-        - 보류
-        impact: '#5-architecture · 인용 0 섹션'
+        - 고친다(채택)
+        - 그대로 둔다(기각)
+        - 나중에 정한다(보류)
+        impact: '#5-architecture (데이터가 끊김) · 인용 0 섹션'
+        category_unglossed: null
         auto: true
       state: null
       promotion: protected
@@ -344,6 +370,8 @@ docreview:
       edit_scope: '#1-context'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view: null
       state: rejected
       promotion: null
@@ -364,6 +392,8 @@ docreview:
       edit_scope: '#2-goals'
       blocks: []
       evidence: null
+      replacement: null
+      if_unfixed: null
       decision_view: null
       state: null
       promotion: null
@@ -384,14 +414,18 @@ docreview:
       edit_scope: '#12-files-to-modify'
       blocks: []
       evidence: 섹션 '12. Files to Modify' (#12-files-to-modify) modified — hash 62a715899d27→5d9a206e6f82
+      replacement: null
+      if_unfixed: null
       decision_view:
-        change: 'finding 없이 바뀜: 12. Files to Modify (modified)'
+        if_unfixed: (리뷰어가 안 적음)
+        replacement: (대체안 미작성)
         basis: 섹션 '12. Files to Modify' (#12-files-to-modify) modified — hash 62a715899d27→5d9a206e6f82
         alternatives:
-        - 채택(적용)
-        - 기각(원복)
-        - 보류
-        impact: '#12-files-to-modify · 인용 1 섹션'
+        - 현재 변경 유지(채택)
+        - 이전 상태로 원복(기각)
+        - 나중에 정한다(보류)
+        impact: '#12-files-to-modify (얼림 검사가 잡은 변경) · 인용 1 섹션'
+        category_unglossed: null
         auto: true
       state: null
       promotion: null

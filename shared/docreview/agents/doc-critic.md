@@ -59,7 +59,7 @@ input_slots:
 
 ## 출력 형식
 
-두 블록을 순서대로. 각 블록은 YAML 리스트다. 항목 키: `ref`(자기 출력 안에서만 유효한 임시 참조, `c1`·`c2`…) · `layer` · `category`(프로필 rubric 의 값) · `anchor`(문서의 헤딩 앵커) · `disposition` · `summary`(한 문장) · `edit_scope`(선택) · `blocks`(ask 전용) · `supersedes`(선택) · `evidence`(**`decide` 에는 필수** — 문서에서 인용한다. 근거 없이 사용자에게 결정을 요구하지 않는다).
+두 블록을 순서대로. 각 블록은 YAML 리스트다. 항목 키: `ref`(자기 출력 안에서만 유효한 임시 참조, `c1`·`c2`…) · `layer` · `category`(프로필 rubric 의 값) · `anchor`(문서의 헤딩 앵커) · `disposition` · `summary`(한 문장) · `edit_scope`(선택) · `blocks`(ask 전용) · `supersedes`(선택) · `evidence`(**`decide` 에는 필수** — 문서에서 인용한다. 근거 없이 사용자에게 결정을 요구하지 않는다) · `replacement`(**`decide` 에는 필수** — 「고치면 무엇이 되는가」. **삭제를 제안할 때는 「대체안 없음 — 그냥 뺀다」를 명시적으로 쓴다.** 칸을 비우는 것은 삭제 제안이 **아니다**) · `if_unfixed`(「그대로 두면 무엇이 남는가」 — 문제의 재진술이 아니라 **결과**).
 
 ````
 ```docreview-layer1
@@ -70,6 +70,8 @@ input_slots:
   disposition: decide
   summary: "..."
   evidence: "..."
+  replacement: "..."
+  if_unfixed: "..."
 ```
 ````
 

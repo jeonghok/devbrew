@@ -47,20 +47,20 @@ _DR_ABSORB_GROUP_DEAD = (
     "`_rejected` 가 아닌 멤버)가 비면 대표를 고를 대상이 없어 `continue` 하지만, "
     "그 그룹의 멤버는 전부 이미 `_rejected` 이고 그 표시는 `_apply_recritic()` "
     "에서 `it[\"_rejected\"] = ...` 와 **같은 자리에서** `L.reject(f, ...)` 가 "
-    "함께 불려 이미 회계됐다(:229-230) — 이 continue 는 이미 처분된 항목을 "
+    "함께 불려 이미 회계됐다(:311-312) — 이 continue 는 이미 처분된 항목을 "
     "대표-선정에서만 제외할 뿐 새로 버리는 항목이 없다."
 )
 _DR_ABSORBED_ALREADY = (
     "C6(1) — `_classify_items()` 의 `if it.get('_absorbed_into'): continue`. "
     "`_absorbed_into` 는 `_absorb_same_as()` 가 대표를 정할 때 **같은 자리에서** "
-    "`L.absorbed(m, into=keep)` 와 함께 대입된다(:316-317) — 이 continue 시점엔 "
+    "`L.absorbed(m, into=keep)` 와 함께 대입된다(:397-398) — 이 continue 시점엔 "
     "이미 회계가 끝난 항목이다."
 )
 _DR_REJECTED_ALREADY = (
     "C6(1) — `_classify_items()` 의 `if it.get('_rejected'): continue`. "
     "`_rejected` 는 `_apply_recritic()` 에서 `L.reject(f, ...)` 와 같은 자리에서 "
-    "대입된다(:229-230) — 이미 회계된 항목이고, 이 continue **직전** 세 줄이 "
-    "그 항목을 `rejected_items` 에 담아 반환값에 실어(:332-334) 파이프라인에서도 "
+    "대입된다(:311-312) — 이미 회계된 항목이고, 이 continue **직전** 세 줄이 "
+    "그 항목을 `rejected_items` 에 담아 반환값에 실어(:413-415) 파이프라인에서도 "
     "사라지지 않는다(continue 이전에 보존이 먼저 실행된다)."
 )
 _DR_ESCALATED_NOT_DUE = (
@@ -135,7 +135,7 @@ _DR_RERAISE_ALREADY_DECIDED = (
 _DR_LINEAGE_NOT_RERAISE = (
     "C6(1) — `_resolve_ids_and_lineage()` 의 전방 포인터 루프"
     "(`if it.get('_source') != 'reraise'): continue`). 이 시점의 `it` 는 이미 "
-    "직전 루프(:446-451)에서 id·bucket 을 배정받아 처분이 끝난 항목이다 — 이 "
+    "직전 루프(:576-581)에서 id·bucket 을 배정받아 처분이 끝난 항목이다 — 이 "
     "두 번째 루프는 `_source == 'reraise'` 인 항목에만 적용되는 **추가** "
     "부기(만료된 `decides` 레코드에 `superseded_by` 전방 포인터를 단다)이고, "
     "그 조건에 안 맞는 항목은 이 부기가 필요 없을 뿐 그 항목 자체가 버려지는 "
@@ -166,18 +166,18 @@ EXEMPT = {
     # 다음 삽입에서 또 stale 해지는, 리뷰가 잡은 바로 그 함정이다. 재앵커가 필요한
     # 이유(무엇이 위에서 늘었는가)만 남긴다: I1 정정(`_decision_view` 에 `st` 인자
     # 추가 + 헤더 주석)과 그 앞의 import 목록 확장이 이 파일 앞부분 줄 수를 늘렸다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 97,
+    ("plugins/quality-gates/scripts/docreview_route.py", 101,
      "return in _permit_covers @ if int(p['round']) == n and anchor in p['apply_anchors']"):
         _DR_PERMIT_SEARCH,
     # T6b — docreview_route.py 아홉 자리 나머지. 사유는 위 `_DR_*` 상수 참조.
     # PR 3 최종 리뷰 F6 — `cmd_prepare` 의 critic 디코드 실패 분기(sentinel 깨짐 = critic 사망)가 위에서 줄을 늘렸다.
     # PR 3 qg iter 1 · 2 — 공유 시점 판별(`_round_staleness`)과 `cmd_prepare` 의 critic 시점 판별이 위에서 줄을
     # 늘렸다(가드 텍스트 · 사유 무변경).
-    ("plugins/quality-gates/scripts/docreview_route.py", 372,
+    ("plugins/quality-gates/scripts/docreview_route.py", 392,
      "continue in _absorb_same_as @ if not live"): _DR_ABSORB_GROUP_DEAD,
-    ("plugins/quality-gates/scripts/docreview_route.py", 391,
+    ("plugins/quality-gates/scripts/docreview_route.py", 411,
      "continue in _classify_items @ if it.get('_absorbed_into')"): _DR_ABSORBED_ALREADY,
-    ("plugins/quality-gates/scripts/docreview_route.py", 396,
+    ("plugins/quality-gates/scripts/docreview_route.py", 416,
      "continue in _classify_items @ if it.get('_rejected')"): _DR_REJECTED_ALREADY,
     # Task 2 — escalated 예약을 재상승(AC21)과 대칭으로 맞추면서 줄번호가 밀렸다.
     # F-2/F-3 재리뷰(Ruling 20·21) 가 한 번 더 바꿨다: dedup continue(옛 404)는
@@ -185,25 +185,60 @@ EXEMPT = {
     # (`scan()` 이 그 호출을 disposition 으로 자동 인식해 guarded=True) — 그래서
     # 아래 목록에서 통째로 빠졌다(EXEMPT_BASELINE 주석 참조). 대신 F-3 이 새
     # discard 자리(fix 가 지금도 escalated 상태인지 검사)를 하나 늘렸다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 462,
+    ("plugins/quality-gates/scripts/docreview_route.py", 482,
      "continue in _auto_decides @ if int(e['round']) >= n"): _DR_ESCALATED_NOT_DUE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 467,
+    ("plugins/quality-gates/scripts/docreview_route.py", 487,
      "continue in _auto_decides @ if not f0"): _DR_ESCALATED_TARGET_GONE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 478,
+    ("plugins/quality-gates/scripts/docreview_route.py", 498,
      "continue in _auto_decides @ if not fx0 or fx0.get('state') != 'escalated'"):
         _DR_ESCALATED_FIX_NOT_LIVE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 503,
+    ("plugins/quality-gates/scripts/docreview_route.py", 523,
      "continue in _auto_decides @ if not f0"): _DR_RERAISE_TARGET_GONE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 514,
+    ("plugins/quality-gates/scripts/docreview_route.py", 534,
      "continue in _auto_decides @ if not d0 or d0.get('state') != 'expired'"):
         _DR_RERAISE_ALREADY_DECIDED,
     # Task 5 — 재상승 후속의 kind·prev_hash 승계 주석이 `_auto_decides` 재상승 갈래
     # 위에 끼어들며 아래로 밀렸다(옛 509 → fix round 1 M3 의 확장 주석까지 더해
     # 521). 가드 텍스트 자체는 그대로다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 566,
+    ("plugins/quality-gates/scripts/docreview_route.py", 586,
      "continue in _resolve_ids_and_lineage @ if it.get('_source') != 'reraise'"):
         _DR_LINEAGE_NOT_RERAISE,
 }
+
+# [PR 3 마무리 — EXEMPT 재앵커 통합 메모] 위 `docreview_route.py` 열 자리 전부가 이
+# PR 에서 다시 밀렸다. 개별 항목 앞 주석이 각자 자기 원인을 이미 적어 뒀으니 여기서는
+# 되풀이하지 않는다 — 대신 «무엇이 이 파일의 discard 분기들보다 «위»에서 늘었는가»를
+# 한자리에 모은다(숫자가 아니라 원인으로, 위 "줄번호는 매 재앵커마다 실측으로 갱신한다"
+# 의 경고를 그대로 따른다): `normalize()` 가 `replacement`·`if_unfixed` 두 칸을 새로
+# 지어 리뷰어가 적어도 조용히 안 버려지게 했고, `_decision_view()` 가 같은 두 칸에
+# 더해 `category_gloss()` 로 뽑은 category 사람말과, 사상이 없을 때 침묵 대신 공시하는
+# `category_unglossed` 플래그를 더했다. 그 둘이 쓰는 `category_gloss`·`choice_label`
+# 을 위쪽 `from docreview_state import (...)` 에 새로 끌어왔다. 지금 앵커가 맞는지는
+# 이 프로즈가 아니라 `bash shared/tests/test_adjudication_wiring.sh` 의
+# `exempt_stale=0` 이 매 실행마다 실측으로 답한다.
+#
+# ⚠ 재앵커할 때 기계가 못 잡는 함정 — `_DR_ESCALATED_TARGET_GONE`(escalated 예약)과
+# `_DR_RERAISE_TARGET_GONE`(reraise 예약) 두 자리의 `exempt_key` 세 번째 성분(정체
+# 문자열)이 «바이트 그대로 같다»: 둘 다 `"continue in _auto_decides @ if not f0"` 다
+# — 두 예약 종류가 같은 모양의 방어를 형제로 각자 따로 두기 때문이다(위 두 상수의
+# 본문이 서로 "형제와 문자 그대로 같은 이유·같은 모양"이라고 스스로 말한다). `EXEMPT`
+# 는 (경로, 줄, 정체) 3-튜플을 키로 쓰는 dict 이므로 이 둘은 «줄번호»로만 구별된다 —
+# 재앵커하며 실측한 두 새 줄번호를 반대로(escalated 자리에 reraise 의 줄을, 그
+# 반대로) 배정해도 키 «집합»은 스왑 전과 바이트 단위로 똑같다. `stale_exempt()` 는
+# 집합 소속만 보고 각 키의 사유(값)는 절대 안 읽으므로, 이 스왑은 `exempt_stale=0`
+# 그대로 GREEN 을 낸다 — 그런데 두 키는 이제 «서로 반대» 분기를 가리키는 채로 조용히
+# 자리 잡는다. 이 함정은 `stale_terminal()` 도 못 잡는다 — 그쪽은 `TERMINAL_
+# CONSUMERS` 의 IMPORT/ANCHOR 존재만 재고 이 dict 는 아예 안 본다.
+#
+# 우회는 기계가 아니라 사람이 진다 — «순서로 먼저 짝짓고, 내용을 읽어 확인»한다.
+# 두 정체 문자열이 같으므로 순서(EXEMPT 안에서 먼저 나오는 것이 escalated, 나중이
+# reraise — 코드 자신도 `_auto_decides` 안에서 escalated 예약 순회가 reraise 예약
+# 순회보다 먼저 온다)로 잠정 배정한 뒤, 실제 코드를 읽어 확인한다: escalated 분기는
+# `esc_unconsumed` 를 증가시키는 블록 안에, reraise 분기는 `reraise_unconsumed` 를
+# 증가시키는 블록 안에 있다 — guard 문자열은 둘을 못 가르고 변수 이름이 가른다.
+#
+# 이 지식은 한때 이 리뷰 사이클의(git-ignored, 세션이 끝나면 지워지는) 리포트
+# 파일에만 적혀 있었다 — 여기 적지 않으면 다음 재앵커에게는 이 함정 자체가 안 보인다.
 
 # Task 11 수정 라운드 1 — `derive_consumers()` 의 import·앵커 대칭 가정이
 # 깨지는 자리를 명시적으로 등재한다. 그 가정("원장을 import 하는 파일은

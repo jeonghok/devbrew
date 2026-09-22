@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""처분 두 줄 — 네 소비자가 공유하는 렌더.
+"""처분 세 줄 — 세 소비자가 공유하는 렌더.
 
 회계 모듈(`adjudication.py`)은 «회계만» 한다(모듈 docstring:3-5). 서식은
 이 파일의 몫이고, 여기 한 벌만 둔다 — 사본이 넷이면 한 칸을 고칠 때 셋이
@@ -12,10 +12,16 @@ blocks() 가 읽지 않고, `unknown_counts` 는 counts dict 에 없지만 block
 
 
 def disposition_lines(report, held_classes):
-    """`Ledger.report()` 와 `held_by_class()` 로 두 줄을 만든다.
+    """`Ledger.report()` 와 `held_by_class()` 로 세 줄을 만든다.
 
-    반환은 `(처분줄, 배관줄, advisory목록)`. advisory 는 미지 접두가 있을 때만
-    비어 있지 않다 — 회계 모듈이 아니라 소비자가 내는 것이 계약이다.
+    반환은 `(처분줄, 배관줄, 풀이줄, advisory목록)` **4-튜플**. 풀이 줄은 앞 두 줄
+    «둘 다»의 낱말을 푸므로 어느 한쪽 문자열 안에 개행으로 넣지 않는다 — 그러면 그
+    줄이 다른 줄의 낱말을 설명하는 꼴이 된다. 기존 3-튜플 언패킹은 `ValueError` 로
+    소리 내며 깨진다(조용히 넘어가지 않는 것이 이 선택의 핵심이다).
+
+    회계 낱말은 **그대로 둔다** — 바꾸는 것이 아니라 사람말을 옆에 붙인다.
+    advisory 는 미지 접두가 있을 때만 비어 있지 않다 — 회계 모듈이 아니라
+    소비자가 내는 것이 계약이다.
     """
     c = report["counts"]
     # `.get()` 이 아니라 첨자다 — 이 키는 `report()` 가 항상 낸다. 없으면
@@ -32,6 +38,12 @@ def disposition_lines(report, held_classes):
     line2 = ("**배관 손실:** %d · 셀 수 없음 %d     (차단: %s)"
              % (plumbing, len(unknown), "예" if report["degraded"] else "아니오"))
 
+    # 「배관 손실」의 풀이는 **바로 위 `plumbing` 의 실제 합**을 따라 적는다 —
+    # sources_failed(입력이 죽었다) + 항목 파손 + 기타 + coerced(값을 보정했다).
+    # 「판정에 못 들어간 것」으로 적으면 그 칸이 세는 것과 다른 말이 된다.
+    line3 = ("↳ 억제=규칙이 자른 것 · 흡수=같은 것끼리 합친 것 · 미판정=볼 사람이 없던 것"
+             " · 배관 손실=입력이 죽었거나 항목이 깨졌거나 값을 보정한 것")
+
     advisories = []
     # `held` 는 «분해해서» 싣는다 — 세 클래스가 두 칸에 나뉘어 들어간다.
     # 그 분해가 무손실인지 여기서 «읽어» 확인한다: 갈리면 두 칸의 합이 실제
@@ -45,7 +57,7 @@ def disposition_lines(report, held_classes):
             "[adjudication] hold 사유 %d건이 알려진 접두(「판정자 부재: 」·"
             "「항목 파손: 」)에 안 걸린다 — 배관 칸에 실었으나 분류되지 않았다."
             % held_classes["기타"])
-    return line1, line2, advisories
+    return line1, line2, line3, advisories
 
 
 def disposition_report(report, held_classes):
