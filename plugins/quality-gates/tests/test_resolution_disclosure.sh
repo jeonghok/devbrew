@@ -28,9 +28,20 @@ adapter() {
 DISCLOSURE='resolution_disclosure: "양측 빨강 unit'
 
 case_per_adapter_present() {
-  local out; out=$(adapter 'u1' "$(printf 'u1\tfail\t1')" "$(printf 'u1\tfail\t1')" file pytest)
+  # unit 둘 — pre_existing==1 로는 상수 "1"을 하드코딩한 mutation과 실제 개수를
+  # 구별할 수 없다(Task 6 mutation 으로 실측: 상수 치환이 GREEN 으로 남았다).
+  # 값을 실제 개수와 다른 2로 만들어야 「공시가 실제 개수를 싣는다」가 상수를 배제한다.
+  local out; out=$(adapter "$(printf 'u1\nu2')" \
+    "$(printf 'u1\tfail\t1\nu2\tfail\t1')" "$(printf 'u1\tfail\t1\nu2\tfail\t1')" file pytest)
   assert_grep "$out" '^resolution_disclosure: ' "pre_existing>0 이면 공시 줄이 있다"
-  assert_grep "$out" 'unit 1개'                  "공시가 실제 개수를 싣는다"
+  assert_grep "$out" 'unit 2개'                  "공시가 실제 개수를 싣는다(상수 1이 아니다)"
+  # 전체 줄을 고정 — 개수만 재는 위 단언은 문구 중간의 조사 하나가 바뀌어도
+  # (예: "실패는" → "실패가") 못 잡는다(Task 6 mutation 으로 실측: GREEN 으로
+  # 남았다). 정확한 한 줄을 통째로 대조해야 문구 자체가 이빨의 대상이 된다.
+  local line; line=$(printf '%s\n' "$out" | grep '^resolution_disclosure: ')
+  assert_eq "$line" \
+    'resolution_disclosure: "양측 빨강 unit 2개 — 그 안의 새 실패는 이 해상도(unit 당 종료 코드 하나)에서 보이지 않는다"' \
+    "공시 문구 전체가 정확히 고정된 문자열이다(조사 하나만 바뀌어도 이 단언이 깨진다)"
   cleanup
 }
 
@@ -83,10 +94,15 @@ adapter_yaml() {   # adapter_yaml <destfile> <expected> <baseline TSV> <head TSV
 }
 
 case_aggregate_carries_disclosure() {
-  # ★ 이 케이스가 이 락의 존재 이유다. 어댑터 둘 — 하나(pytest)는 unit 둘 다
-  # 양측 fail(pre_existing 2), 하나(shell)는 pre_existing 0 — 을 실제 per-adapter
-  # 모드로 만들어 --aggregate 로 돌린다. 기대: 최상위 resolution_disclosure 가
-  # 있고 N == 2(두 어댑터의 «합» — 어댑터 개수도, 한쪽 값도 아니다).
+  # ★ 이 케이스가 이 락의 존재 이유다. 어댑터 «셋» — pytest(unit 둘 다 양측 fail,
+  # pre_existing 2), shell·go(둘 다 pre_existing 0) — 을 실제 per-adapter 모드로
+  # 만들어 --aggregate 로 돌린다. 기대: 최상위 resolution_disclosure 가 있고
+  # N == 2(세 어댑터의 «합» — 어댑터 «개수»(3)와 일부러 다르게 만들어, 합을 개수로
+  # 바꿔치기하는 mutation 이 이 단언 하나만으로는 안 잡히는 것을 막는다. Task 6
+  # mutation 실측: 어댑터 둘 · pre_existing 합 2 였던 이전 fixture는 개수(2)와
+  # 합(2)이 우연히 같아 `len(per_adapter_counts)`로 바꿔치기해도 이 단언이
+  # GREEN 으로 남았다 — 별개 케이스(`case_aggregate_absent_when_all_zero`)가
+  # 대신 잡았을 뿐, 이 단언 자신은 이빨이 없었다).
   T=$(mktemp -d) || exit 1
   adapter_yaml "$T/pytest.yaml" \
     "$(printf 'u1\nu2')" \
@@ -96,11 +112,14 @@ case_aggregate_carries_disclosure() {
   adapter_yaml "$T/shell.yaml" \
     "$(printf 'u3')" "$(printf 'u3\tpass\t0')" "$(printf 'u3\tpass\t0')" \
     file shell
+  adapter_yaml "$T/go.yaml" \
+    "$(printf 'u4')" "$(printf 'u4\tpass\t0')" "$(printf 'u4\tpass\t0')" \
+    package go
   local out
-  out=$(python3 "$DIFF" --aggregate --expected-adapters 2 "$T/pytest.yaml" "$T/shell.yaml")
+  out=$(python3 "$DIFF" --aggregate --expected-adapters 3 "$T/pytest.yaml" "$T/shell.yaml" "$T/go.yaml")
   assert_grep "$out" '^resolution_disclosure: ' "집계 최상위에 공시 줄이 있다"
   assert_grep "$out" "$DISCLOSURE"               "공시 문구가 집계에서도 같다"
-  assert_grep "$out" 'unit 2개'                  "집계의 N 은 두 어댑터의 합(2), 어댑터 개수(2 도 맞지만 우연)나 한쪽 값(2)이 아니라 재도출된 합"
+  assert_grep "$out" 'unit 2개'                  "집계의 N 은 세 어댑터의 합(2)이다 — 어댑터 개수(3)로 바꿔치기하면 이 단언이 깨진다"
   cleanup
 }
 

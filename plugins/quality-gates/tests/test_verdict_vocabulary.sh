@@ -72,6 +72,28 @@ case_reason_enum_is_closed_and_accounted() {
   # 오판할 수 있다** — 이것은 정적 분석의 근본 한계이고, 여기서는 "오늘 이
   # 소스가 실제로 갖고 있는 리터럴 add() 호출" 이상을 주장하지 않는다.
   #
+  # **둘째 스코프 한계(Task 6 mutation 실측, ★NB1) — `inspect.getsource(verdict.
+  # decide)` 는 decide() «자기 본문만» 읽는다.** 리터럴 `add("angle-absent")` 를
+  # decide() 가 호출하는 **헬퍼 함수**로 추출하면(decide() 는 그 헬퍼를 부르기만
+  # 함) 정규식이 그 헬퍼의 소스를 보지 않으므로 이 케이스의 88개 단언이 전부
+  # GREEN 인 채로 남는다 — 그런데 그 상태에서 `decide(angle_absent=True)` 는
+  # 실제로 `reason: angle-absent` 를 낸다(실측: mutant 파일
+  # `/Users/jeonghokim/.claude/jobs/58376a1b/tmp/task6/findingB/apply_helper_mutation.py`,
+  # 결과 로그 `T4_FindingB_run1.log`, MISSING/STALE/OVERLAP 셋 다 빈 채로 88/88
+  # PASS). 이것은 "리터럴이 아닌 형태" 한계(위 문단)와는 **다른 축** 이다 —
+  # 저건 리터럴이되 변수를 거치는 경로, 이건 리터럴이되 **다른 함수 본문에 있는**
+  # 경로다.
+  #
+  # 둘째 독립 증인(아래 `AXES:`) — `decide()` 의 **키워드 전용 파라미터 집합**을
+  # 핀한다. `add()` 호출을 어떻게 감추든, 그 조건을 CLI/호출자가 켤 방법이
+  # 있으려면 거의 항상 새 파라미터가 하나 는다(오늘의 세 배선 방식 — 본문 리터럴
+  # · 변수 경유 · 헬퍼 추출 — 전부 새 파라미터를 요구했다: `angle_absent` 없이는
+  # 어떤 방식으로도 그 사유를 켤 수 없다). **`OVERLAP` 을 대체하지 않는다** —
+  # `CAUSE_TO_REASON` 경유로 배선되는 사유(예: 오늘의 `smeared`)는 새 파라미터가
+  # 필요 없고(기존 `differential_text` 축을 그대로 씀), `OVERLAP` 이 바로 그
+  # 경로를 잡는다. 둘은 상호 보완이다 — 파라미터 축은 헬퍼-추출처럼 **새 축**이
+  # 열리는 배선을, `OVERLAP`은 **기존 축**(차등 산출물)에 얹히는 배선을 잡는다.
+  #
   # 실측 3분할(코디네이터 정정 — 최초 지시의 5값 목록은 방향이 둘 다 틀렸었다):
   #   차등 축 산출 가능(5): scope-empty · baseline-unrunnable · silent-drop ·
   #                        error-axis · granularity-smear (CAUSE_TO_REASON.values())
@@ -88,11 +110,14 @@ produced = set(verdict.CAUSE_TO_REASON.values()) | flag_produced
 print('MISSING:' + ','.join(sorted(set(verdict.REASONS) - (produced | debt))))
 print('STALE:'   + ','.join(sorted((produced | debt) - set(verdict.REASONS))))
 print('OVERLAP:' + ','.join(sorted(debt & produced)))
-print('N:%d' % len(verdict.REASONS))")
+print('N:%d' % len(verdict.REASONS))
+print('AXES:' + ','.join(sorted(inspect.signature(verdict.decide).parameters)))")
   assert_grep "$got" '^MISSING:$' "열거의 모든 사유가 산출자 또는 부채 목록에 귀속된다"
   assert_grep "$got" '^STALE:$'   "부채 목록·매핑에 열거 밖 이름이 없다"
   assert_grep "$got" '^OVERLAP:$' "부채 목록에 이미 산출자가 생긴 이름이 남아 있지 않다"
   assert_grep "$got" '^N:11$'     "사유 열거는 정확히 열한 값이다"
+  assert_grep "$got" '^AXES:defect,differential_text,extra_reasons,legacy_verdict,review_blocked$' \
+    "decide() 의 키워드 전용 파라미터 집합이 다섯이다 — 새 축마다 파라미터가 하나 는다(OVERLAP 이 못 잡는 헬퍼-추출 배선의 둘째 독립 증인)"
 }
 
 case_unknown_reason_is_fail_closed() {
