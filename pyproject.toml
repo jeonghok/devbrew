@@ -1,0 +1,18 @@
+# devbrew 는 배포되는 패키지가 아니다 — 이 파일이 고정하는 것은 **개발·검증 환경** 뿐이다.
+# `package = false` 가 uv 에게 빌드하지 말라고 말한다(uv.lock 에 source = { virtual = "." }).
+#
+# 출하 요구사항은 여전히 Python 하나다. uv 는 여기(리포)에서만 쓴다 — 사용자에게 요구하는
+# 것을 늘리지 않는다(Non-goal 6).
+[project]
+name = "devbrew"
+version = "0"
+# **개발** 바닥. 출하 바닥의 정본은 `shared/python/devbrew-python.sh` 의 FLOOR_* 다.
+# 지금 두 숫자는 같지만 **같은 사실이 아니다** — 한 자리에 적으면 갈라지는 날 조용히
+# 거짓이 된다(설계 §4). 집행자도 다르다: 이쪽은 uv, 저쪽은 훅의 해석기.
+requires-python = ">=3.12"
+
+[dependency-groups]
+dev = ["pyyaml"]
+
+[tool.uv]
+package = false

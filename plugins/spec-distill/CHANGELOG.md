@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.2.1] — 2026-09-22
+## [4.0.1] — 2026-09-22
 
 ### Fixed
 
@@ -11,6 +11,28 @@
 ### Added
 
 - `shared/tests/test_docreview_layer1_wiring.sh` — 위임(agent 가 프로필을 참조하는가)과 소유(프로필 넷이 각자 관계를 갖는가)를 **함께** 잰다. 한쪽만 재면 다른 쪽이 조용히 빈다. 프로필 코퍼스는 글롭 도출이라 다섯째 자리가 생겨도 자동으로 계약에 든다. 판정 관계 네 줄이 서로 다름을 별도 축(B2)으로 재 복사-붙여넣기 재발을 막는다.
+
+## [4.0.0] — 2026-09-22
+
+major 인 이유 — **설치 요구사항이 하나 늘어난다.** 이 플러그인의 훅은 이제 Python 3.12
+이상을 요구하고, 바닥 미만 머신에서는 돌지 않는다(막지는 않는다 — 건너뛴다).
+
+### Changed
+
+- **훅이 `python3` 를 직접 부르지 않는다.** `hooks.json` 의 자리가 `sh
+  ${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh --event … --plugin … --hook … <훅.py>` 로
+  바뀌었다. 해석기는 kill switch 를 먼저 보고(정본과 같은 판정), `$DEVBREW_PYTHON` →
+  `python3` → PATH 의 `python3.*` 순으로 바닥을 만족하는 인터프리터를 찾아 `exec` 한다.
+  마이너 버전을 열거하지 않으며 `python3` 로 fallback 하지 않는다.
+- **TTL-GC 자식을 `sys.executable` 로 띄운다** (`scripts/hook_common.py`). `python3` 로
+  띄우면 해석의 효력이 프로세스 경계에서 끊겨 자식만 바닥 미만으로 떨어진다.
+
+### Added
+
+- `scripts/devbrew-python.sh` — `shared/python/devbrew-python.sh` 의 물리 사본
+  (`# copy-of:`). 심볼릭 링크면 `plugin-audit` 의 containment 검사가 `shared/` 로 풀려
+  거짓 「kill switch 부재」를 낸다.
+- README 에 `Python 3.12+` prerequisite 와 바닥의 **도출 규칙**.
 
 ## [3.2.0] — 2026-09-19
 
