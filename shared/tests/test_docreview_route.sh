@@ -76,4 +76,5 @@ case_labels_are_kind_dependent
 case_labels_pre_site
 case_gate_render_six_lines
 case_gate_head_and_grouping
+case_gate_grouping_marker
 finish

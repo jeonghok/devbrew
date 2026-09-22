@@ -2307,10 +2307,82 @@ case_gate_head_and_grouping() {
   # 질문 수)가 같다. gate_summary 의 버킷을 세면 그 수가 나온다 — 렌더와 독립인
   # 채널이라 순환이 아니다.
   local n_items; n_items="$(py docreview_state.py gate --state-dir "$d" | jgets 'len(d["open_decide"]) + len(d["unapplied_fix"]) + len(d["blocking_ask_open"])')"
-  local n_headers; n_headers="$(printf '%s\n' "$render" | grep -cE '^\[(decide|미적용 fix|ask 비차단)' || true)"
+  # [리뷰] 접두사만 보면 `_rg_held_decide` 의 「[decide 보류]」도 "^\[decide" 에 걸린다 —
+  # held_decide 는 n_items(세 버킷)에 안 들어가므로 그 오탐이 등식을 조용히 깬다.
+  # 닫는 대괄호까지 앵커해 정확히 세 렌더러의 리터럴 형태만 잡는다.
+  local n_headers; n_headers="$(printf '%s\n' "$render" | grep -cE '^\[decide( auto)?\]|^\[미적용 fix\]|^\[ask 비차단\]' || true)"
   [ "${n_items:-0}" -gt 0 ] \
     && ok "AC18' 양의 짝: 이 케이스에 열린 항목이 ${n_items}개 있다 (아래 등식이 0 == 0 으로 통과하지 않는다)" \
     || no "AC18': 열린 항목이 0개다 — 아래 등식이 공허하다. 항목을 만드는 픽스처로 바꿔라"
   assert_eq "$n_headers" "$n_items" "AC18': 묶음이 항목 수를 바꾸지 않는다(질문 수 불변)"
+  rm -rf "$d"
+}
+
+# ── 같은 anchor 항목이 실제로 붙어서 보인다 (AC18' 의 나머지 절반) ──────────
+# AC18' 는 두 절이다 — 「같은 anchor 의 열린 항목이 한 덩어리로 묶여 렌더된다」
+# (묶음 자체) 와 「질문 수·선택권은 그대로다」(제약, 위 case_gate_head_and_
+# grouping 이 이미 잰다). 위 케이스는 제약만 잰다 — 묶음 표시(`out.append("  ┆
+# 같은 자리…")`) 를 통째로 지워도 안 흔들린다(리뷰 실측 — 178개 단언 전부
+# 그린으로 남았다). 그 절반을 여기서 잰다. 세 단언:
+#  ① 전제 — 이 상태에 같은 anchor 를 가진 «열린»(row.open) 항목이 N≥2 있다.
+#     render_gate() 를 부르지 않는 채널로만 계산한다: `gate-rows` 의 행 순서
+#     (GATE_ROWS 자체가 아니라 그 순서를 낸 CLI 출력) + `gate`(--render 없이)
+#     의 버킷 + `load_state` 의 anchor. 렌더 문자열을 파싱하지 않으므로 이
+#     전제는 렌더와 독립이다.
+#  ② 그 인접 쌍의 둘째 항목 바로 앞줄이 마커다(묶음이 실제로 난다).
+#  ③ anchor 가 다른 인접 쌍 앞에는 마커가 «없다»(무조건 출력이면 여기서 걸림).
+case_gate_grouping_marker() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "묶음 마커: route_r1 실패"; return; }
+  local render; render="$(py docreview_state.py gate --state-dir "$d" --render)"
+  local rows bucket calc
+  rows="$(py docreview_state.py gate-rows)"
+  bucket="$(py docreview_state.py gate --state-dir "$d")"
+  calc="$(python3 -c '
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from docreview_state import load_state
+rows = json.loads(sys.argv[3])
+g = json.loads(sys.argv[4])
+st = load_state(sys.argv[2])
+order = []
+for r in rows:
+    order.extend(g[r["name"]])
+anchors = [(fid, (st["findings"].get(fid) or {}).get("anchor")) for fid in order]
+same_pairs = [(anchors[i - 1][0], anchors[i][0], anchors[i][1])
+              for i in range(1, len(anchors))
+              if anchors[i][1] and anchors[i][1] == anchors[i - 1][1]]
+diff_pairs = [(anchors[i - 1][0], anchors[i][0])
+              for i in range(1, len(anchors))
+              if anchors[i][1] and anchors[i - 1][1] and anchors[i][1] != anchors[i - 1][1]]
+group_size = 0
+if same_pairs:
+    target_anchor = same_pairs[0][2]
+    group_size = sum(1 for _, a in anchors if a == target_anchor)
+print(json.dumps({"n_same_anchor_open_pairs": len(same_pairs), "group_size": group_size,
+                   "same_pair": same_pairs[0] if same_pairs else None,
+                   "diff_pair": diff_pairs[0] if diff_pairs else None}, ensure_ascii=False))
+' "$SCRIPTS" "$d" "$rows" "$bucket")"
+  local n_pairs group_size anchor_val fid_same1 fid_same2 fid_diff1 fid_diff2
+  n_pairs="$(printf '%s' "$calc" | jgets 'd["n_same_anchor_open_pairs"]')"
+  group_size="$(printf '%s' "$calc" | jgets 'd["group_size"]')"
+  [ "${n_pairs:-0}" -gt 0 ] && [ "${group_size:-0}" -ge 2 ] \
+    && ok "AC18' 전제: 이 상태에 같은 anchor 를 가진 열린 항목이 ${group_size}개(인접 쌍 ${n_pairs}) 있다 — 아래 마커 단언이 도달 불가능한 상태를 재지 않는다" \
+    || { no "AC18' 전제: 같은 anchor 인접 쌍이 없다 — 마커 단언이 공허하다. 항목을 만드는 픽스처로 바꿔라"; rm -rf "$d"; return; }
+  fid_same1="$(printf '%s' "$calc" | jgets 'd["same_pair"][0]')"
+  fid_same2="$(printf '%s' "$calc" | jgets 'd["same_pair"][1]')"
+  anchor_val="$(printf '%s' "$calc" | jgets 'd["same_pair"][2]')"
+  fid_diff1="$(printf '%s' "$calc" | jgets 'd["diff_pair"][0] if d["diff_pair"] else ""')"
+  fid_diff2="$(printf '%s' "$calc" | jgets 'd["diff_pair"][1] if d["diff_pair"] else ""')"
+  # 인접 쌍의 둘째 항목이 렌더에서 처음 나오는 줄 바로 앞줄을 뽑는다 — 헤더
+  # 리터럴 형식(대안 구분자 「—」/「→」)이 렌더러마다 달라 fid 자체를 찾는다.
+  local before_same before_diff
+  before_same="$(printf '%s\n' "$render" | awk -v f="$fid_same2" '{l[NR]=$0} index($0,f) && !hit {hit=NR} END{if (hit>1) print l[hit-1]}')"
+  before_diff="$(printf '%s\n' "$render" | awk -v f="$fid_diff2" '{l[NR]=$0} index($0,f) && !hit {hit=NR} END{if (hit>1) print l[hit-1]}')"
+  assert_grep "$before_same" '^  ┆ 같은 자리\(' \
+    "AC18': 같은 anchor(${anchor_val}) 인접 쌍(${fid_same1} → ${fid_same2}) 앞에 묶음 마커가 실제로 붙는다"
+  case "$before_diff" in
+    '  ┆ 같은 자리'*) no "AC18': anchor 가 다른 인접 쌍(${fid_diff1} → ${fid_diff2}) 앞에도 마커가 붙었다 — 무조건 출력이다" ;;
+    *) ok "AC18': anchor 가 다른 인접 쌍(${fid_diff1} → ${fid_diff2}) 앞에는 마커가 없다" ;;
+  esac
   rm -rf "$d"
 }
