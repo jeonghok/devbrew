@@ -153,13 +153,25 @@ has "$DL" '왜곡'          "AC6: design 불릿에 술어 ②(왜곡)가 있다"
 # (`| \`<tag>\` |`)로 좁히고, 표 자체의 행 수에 양의 대조를 건다(design 5행 ·
 # brief 4행 — bent: 행 하나만 brief 에서 빠진다). 대조가 없으면 빈 표나
 # 행이 다 날아간 표도 개별 태그 검사를 우연히 통과시킬 수 있다.
+#
+# 행이 «있다»만으로는 부족하다 — 이름만 있고 정의(「언제」 칸)가 없으면 리뷰어가
+# 그 태그의 경계를 모른다. test_docreview_profiles.sh:47-57 이 층 2 범주 불릿에
+# 거는 것과 같은 원칙(`^- \`${c}\` — [^[:space:]]`, 이름 뒤 공백 아닌 것)을 표-행
+# 형태로 옮긴다: 이름 칸의 구분자 뒤에 공백·파이프가 아닌 문자가 있어야 한다.
+tag_row_defined() {  # tag_row_defined <본문> <태그(콜론 포함)> — 표 행이 있고 정의 칸이 비어있지 않다
+  printf '%s\n' "$1" | grep -Eq -- '^\| `'"$2"'` \| [^|[:space:]]'
+}
 for tag in 'delete:' 'yagni:' 'shrink:' 'altitude:'; do
-  row="| \`$tag\` |"
-  has "$BB" "$row" "AC7: brief 본문에 태그 $tag 가 표 «행»으로 있다"
-  has "$DB" "$row" "AC7: design 본문에 태그 $tag 가 표 «행»으로 있다"
+  tag_row_defined "$BB" "$tag" \
+    && ok "AC7: brief 본문에 태그 $tag 가 표 «행»으로 있고 정의가 비어있지 않다" \
+    || no "AC7: brief 본문에 태그 $tag 가 표 «행»이 없거나 정의가 비어있다"
+  tag_row_defined "$DB" "$tag" \
+    && ok "AC7: design 본문에 태그 $tag 가 표 «행»으로 있고 정의가 비어있지 않다" \
+    || no "AC7: design 본문에 태그 $tag 가 표 «행»이 없거나 정의가 비어있다"
 done
-row="| \`bent:\` |"
-has   "$DB" "$row" "AC7: design 본문에 태그 bent: 가 표 «행»으로 있다 (술어 ②)"
+tag_row_defined "$DB" 'bent:' \
+  && ok "AC7: design 본문에 태그 bent: 가 표 «행»으로 있고 정의가 비어있지 않다 (술어 ②)" \
+  || no "AC7: design 본문에 태그 bent: 가 표 «행»이 없거나 정의가 비어있다 (술어 ②)"
 hasnt "$BB" '`bent:`' "AC7: brief 본문에 태그 bent: 가 «없다» (술어 ② 는 design 자리의 것)"
 
 tag_table_row_count() { # tag_table_row_count <본문> — 판정 표에서 "| `<태그>:` |" 형태의 행 수
@@ -204,6 +216,28 @@ DFENCE="$(judgment_fence_of "$DB")"
   || no "양의 짝: «판정 한 줄» 펜스 추출 실패 — 아래 천장 검사가 공허할 수 있다 (brief='${BFENCE:-}' design='${DFENCE:-}')"
 has "$BFENCE" '└ 천장' "AC7: brief 판정 한 줄 «펜스 안»에 천장 규약이 있다 (프로즈 헤딩이 아니라 템플릿 그 자체)"
 has "$DFENCE" '└ 천장' "AC7: design 판정 한 줄 «펜스 안»에 천장 규약이 있다 (프로즈 헤딩이 아니라 템플릿 그 자체)"
+
+# 필드 사상 — 「└ 천장」은 스키마 필드가 없다(shared/docreview/scripts, plugins/spec-distill/scripts,
+# plugins/spec-distill/agents 전체에서 git grep 천장 로 확인 — 프로필·이 락 밖엔 0건). summary 는
+# 렌더될 때 파이프-표 행 한 칸이 된다(docreview_state.py:861) — 천장 줄의 개행이 그리로 섞이면
+# 그 행이 깨진다. 「필드 사상」한 줄 문단이 네 슬롯(anchor·summary·replacement·if_unfixed)을 전부
+# 배정하고, 천장이 대체안과 함께 replacement 로 가며 개행 없는 한 줄이라는 것을 명시하는지를,
+# 그 문단 «안»에서만 잰다(펜스 검사와 같은 discipline — 앵커를 좁혀 body-unique 하게 만든다).
+field_mapping_line_of() {  # field_mapping_line_of <본문> — "**필드 사상**" 로 시작하는 한 줄 문단만
+  printf '%s\n' "$1" | grep '^\*\*필드 사상\*\*' | head -1
+}
+BMAP="$(field_mapping_line_of "$BB")"
+DMAP="$(field_mapping_line_of "$DB")"
+[ -n "$BMAP" ] && [ -n "$DMAP" ] \
+  && ok "양의 짝: 두 프로필의 «필드 사상» 문단을 추출했다 (아래 검사가 공허하지 않다)" \
+  || no "양의 짝: «필드 사상» 문단 추출 실패 — 아래 검사가 공허할 수 있다"
+has "$BMAP" '천장: <조건>` 은 함께 `replacement` 에 싣는다' \
+  "AC7: brief «필드 사상» 이 천장의 목적지를 replacement 로 명시한다"
+has "$DMAP" '천장: <조건>` 은 함께 `replacement` 에 싣는다' \
+  "AC7: design «필드 사상» 이 천장의 목적지를 replacement 로 명시한다"
+has "$BMAP" '개행 없이' "AC7: brief «필드 사상» 이 무개행 규칙을 명시한다"
+has "$DMAP" '개행 없이' "AC7: design «필드 사상» 이 무개행 규칙을 명시한다"
+
 has "$BB" 'no-trigger' "AC7: brief 본문에 되돌릴 길 없음의 공시가 있다"
 has "$DB" 'no-trigger' "AC7: design 본문에 되돌릴 길 없음의 공시가 있다"
 has "$BB" '헤지형' "AC7: brief 본문에 금지 어법이 있다"
