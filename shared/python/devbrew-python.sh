@@ -147,9 +147,28 @@ if [ -n "${DEVBREW_PYTHON-}" ]; then
 fi
 
 # ── 2. python3 — 흔한 경우, spawn 1회로 끝난다 ──────────────────────────────
-if probe python3; then
+# 이름을 셸 탐색에 맡기지 않는다. 셸은 PATH 의 빈 항목·`.`·상대 경로(빈 PATH 포함)를 cwd 로
+# 풀고, 훅의 cwd 는 사용자가 연 리포다 — 거기의 `./python3` 가 실행된다〔/bin/sh·dash·ksh·zsh
+# 실측〕. 절대 경로 항목만 PATH 순서대로 보고 **첫** `python3` 에서 멈춘다. 셸 탐색도 첫 매치에서
+# 멈추므로 절대 경로만 있는 PATH 에서는 결과가 같다 — 그것이 바닥 미만이면 다음 `python3` 를
+# 찾지 않고 3단계로 간다.
+FIRST_PY3=""
+first_python3() {   # scan_path 와 같은 분할 관용구. 함수 안이라 `set --` 가 훅의 argv 를 건드리지 않는다
+  _ifs_save="$IFS"
+  IFS=":"; set -f
+  set -- ${PATH-}
+  set +f; IFS="$_ifs_save"
+  for _dir in "$@"; do
+    case "$_dir" in /*) ;; *) continue ;; esac
+    if [ -f "$_dir/python3" ] && [ -x "$_dir/python3" ]; then
+      FIRST_PY3="$_dir/python3"; return 0
+    fi
+  done
+  return 1
+}
+if first_python3 && probe "$FIRST_PY3"; then
   note_best
-  if satisfies; then exec python3 "$@"; fi
+  if satisfies; then exec "$FIRST_PY3" "$@"; fi
 fi
 
 # ── 3. PATH 글롭 — 마이너 버전을 열거하지 않는다 (C4) ───────────────────────
@@ -160,7 +179,7 @@ scan_path() {   # 함수 안이라 `set --` 가 **이 함수의** 위치인자�
   set -- ${PATH-}
   set +f; IFS="$_ifs_save"
   for _dir in "$@"; do
-    [ -n "$_dir" ] || _dir="."
+    case "$_dir" in /*) ;; *) continue ;; esac   # 빈 항목·`.`·상대 경로는 cwd 다 (2단계 주석)
     for _cand in "$_dir"/python3.*; do
       [ -f "$_cand" ] || continue
       [ -x "$_cand" ] || continue
