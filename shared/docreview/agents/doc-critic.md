@@ -44,14 +44,14 @@ input_slots:
 
 **먼저 층 1 만** 검토해 `docreview-layer1` 블록을 낸다. 이때 상세(층 2)는 아직 보지 않는다 — 큰 그림의 판단이 상세에 오염되지 않게 한다. 그다음 층 2 를 검토해 `docreview-layer2` 블록을 낸다.
 
-- **층 1** — `ground_truth` 와 문서가 하나의 그림으로 정합한가. 목표·문제정의·범위·아키텍처·컴포넌트 관계·데이터 흐름·trade-off·구현 가능성. 구현 가능성 finding 은 리포의 파일·심볼을 실제로 읽어 확인한 근거를 `evidence` 에 인용한다.
+- **층 1** — 프로필 `layer_rubric.layer1` 의 항목으로 본다. **무엇과 대조하는지는 그 프로필이 말한다** — 각 프로필 본문의 「**층 1 판정 관계** —」 줄이 그 자리의 관계를 소유한다. 리포 사실을 단정하는 finding 은 파일·심볼을 실제로 읽어 확인한 근거를 `evidence` 에 인용한다.
 - **층 2** — 프로필 `layer_rubric.layer2` 의 항목. 그 목록이 비어 있으면 `docreview-layer2` 블록에 빈 리스트(`[]`)를 낸다.
 
 ## 처분
 
 `disposition` 은 프로필 `allowed_dispositions` 안에서 고른다:
 
-- `decide` — 사용자가 결정할 일. 방향의 결함, 보호 부류(목표·범위·제약·Non-goal·아키텍처·trade-off·AC)를 바꾸는 것. `summary` 에 변경 내용을, `evidence` 에 근거를 담는다.
+- `decide` — 사용자가 결정할 일. 방향의 결함, 보호 부류(목표·범위·제약·Non-goal·아키텍처·trade-off·AC)를 바꾸는 것. `evidence` 에 근거를, `replacement`·`if_unfixed` 에 대안과 그대로 두면 남는 결과를 담는다.
 - `ask` — 답이 있어야 다른 fix 를 할 수 있는 질문. 그 fix 의 `ref` 를 `blocks` 에 적는다.
 - `fix` — 저자가 바로 고칠 상세. `edit_scope` 에 고칠 자리(기본은 `anchor`, 새 섹션은 `insert-after:#x`).
 - `defer` — plan 이 도출·관측할 일(프로필이 허용할 때만). 자동 검증 절차·삭제 전수 같은 것.
@@ -59,7 +59,7 @@ input_slots:
 
 ## 출력 형식
 
-두 블록을 순서대로. 각 블록은 YAML 리스트다. 항목 키: `ref`(자기 출력 안에서만 유효한 임시 참조, `c1`·`c2`…) · `layer` · `category`(프로필 rubric 의 값) · `anchor`(문서의 헤딩 앵커) · `disposition` · `summary`(한 문장) · `edit_scope`(선택) · `blocks`(ask 전용) · `supersedes`(선택) · `evidence`(**`decide` 에는 필수** — 문서에서 인용한다. 근거 없이 사용자에게 결정을 요구하지 않는다).
+두 블록을 순서대로. 각 블록은 YAML 리스트다. 항목 키: `ref`(자기 출력 안에서만 유효한 임시 참조, `c1`·`c2`…) · `layer` · `category`(프로필 rubric 의 값) · `anchor`(문서의 헤딩 앵커) · `disposition` · `summary`(한 문장) · `edit_scope`(선택) · `blocks`(ask 전용) · `supersedes`(선택) · `evidence`(**`decide` 에는 필수** — 문서에서 인용한다. 근거 없이 사용자에게 결정을 요구하지 않는다) · `replacement`(**`decide` 에는 필수** — 「고치면 무엇이 되는가」. **삭제를 제안할 때는 「대체안 없음 — 그냥 뺀다」를 명시적으로 쓴다.** 칸을 비우는 것은 삭제 제안이 **아니다**) · `if_unfixed`(「그대로 두면 무엇이 남는가」 — 문제의 재진술이 아니라 **결과**).
 
 ````
 ```docreview-layer1
@@ -70,6 +70,8 @@ input_slots:
   disposition: decide
   summary: "..."
   evidence: "..."
+  replacement: "..."
+  if_unfixed: "..."
 ```
 ````
 

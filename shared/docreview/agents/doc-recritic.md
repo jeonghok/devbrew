@@ -43,6 +43,7 @@ input_slots:
 - 같은 결함이 둘 이상이면 `same_as` 에 그 `f` 번호들을 묶는다.
 
 놓친 결함이 있으면 `added` 에 새 finding 을 낸다(형식은 `f` 없이 critic 항목과 같다).
+critic 항목과 **같은 칸을 싣는다** — `replacement`·`if_unfixed` 도 그렇다. 같은 정규화를 지나므로 안 적으면 그 자리가 빈 채로 렌더까지 간다.
 
 ## 출력 형식
 
@@ -68,6 +69,8 @@ added:
     layer: 1
     disposition: ask
     summary: "..."
+    replacement: "..."
+    if_unfixed: "..."
 ```
 ````
 

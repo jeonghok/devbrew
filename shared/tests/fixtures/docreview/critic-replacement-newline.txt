@@ -1,0 +1,19 @@
+층 1 만.
+
+```docreview-layer1
+- ref: c1
+  layer: 1
+  category: overdesign
+  anchor: "#2-goals"
+  disposition: decide
+  summary: "delete: 안 쓰는 옵션이 있다"
+  evidence: "§5 참조"
+  replacement: "옵션을 뺀다.\n        └ 천장: 다시 요청되면"
+  if_unfixed: "옵션이 죽은 채 남는다"
+```
+
+층 2.
+
+```docreview-layer2
+[]
+```

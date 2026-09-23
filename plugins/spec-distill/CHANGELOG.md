@@ -1,5 +1,180 @@
 # Changelog
 
+## [4.2.1] — 2026-09-23
+
+patch 인 이유 — 전부 `Fixed` 다. 새 필드·새 커맨드·새 surface 는 없다. 하나 새
+행동처럼 보이는 것(필드 값의 공백을 뭉치고 그 강제를 계수하는 것)은 프로필이
+이미 말하던 규칙(「한 줄, 개행 없이」)을 아무것도 강제하지 않던 자리에 강제를
+채운 것이라 결함의 수정이지 새 능력이 아니다. 4.2.0 이 새로 들인 갈래 2 필드
+(`replacement`·`if_unfixed`) 가 실제로 쓰이기 시작하면서(PR 4 종단 리뷰) 갈래
+사이 이음매에서 드러난 결함 일곱을 닫는다 — 사람이 손으로 고쳤다면 놓쳤을
+자리들이다.
+
+### Fixed
+
+- **escalated·reraise 후속이 `replacement`·`if_unfixed` 를 잃어 리뷰어의 판단을 침묵으로 오독시켰다.** `docreview_route.py` 의 `_auto_decides` 가 짓는 escalated·reraise 두 후속 dict 는 원본 finding(f0)에서 layer·category·anchor 등 여덟 필드를 물려받지만 `replacement`·`if_unfixed` 는 빠져 있었다 — 이 dict 들은 `normalize()` 를 거치지 않으므로 두 키가 아예 존재하지 않았고, 렌더는 「값이 있는데 못 읽었다」를 「(대체안 미작성)」(리뷰어가 정말 아무것도 안 쓴 경우의 리터럴)으로 냈다. 침묵과 판단이 다르게 읽혀야 한다는, 이 기능 전체가 존재하는 이유인 그 계약을 후속 항목에서 다시 깬 것이다. `f0.get("replacement")`/`f0.get("if_unfixed")` 로 원본 값을 잇고, `test_docreview_route.sh` 에 두 락(`case_I1_escalated_carries_replacement_fields`·`case_I1_reraise_carries_replacement_fields`)을 추가 — reraise 쪽을 escalated 와 별도로 덮는 이유는, 출시된 `overdesign` 축이 `decide` finding 만 내고 escalate 경로를 안 타 그쪽 락이 혼자서는 못 잡기 때문이다. 골든 픽스처(`case_T22_reraise_appears_in_next_round.fin.json`)도 두 키를 null 로 내도록 재생성했다(`normalize()` 가 부재를 null 로 내는 것과 같은 스키마).
+
+- **처분 안내 · agent persona 사본 넷 · codex 프롬프트가 갈래 2 이전 필드 사상을 가리키고 있었다.** `design-doc.md` 의 처분 안내 줄이 「변경 내용 · 근거 · 대안 · 영향을 summary/evidence 에 채운다」는 옛 문구 그대로였는데, 몇 줄 위 필드 사상은 이미 대안을 `replacement` 로, 그대로 두면 남는 결과를 `if_unfixed` 로 보낸다 — 옛 문구를 따르면 대안이 summary 에 뭉쳐 게이트가 헤더에 문제+대안을 욱여넣은 채 「고치면: (대체안 미작성)」을 낸다(바로 위 항목과 같은 부류의 역전). `brief.md` 는 같은 어휘의 처분 안내 줄이 없어 대응하는 결함이 없다 — 확인만 하고 손대지 않았다. `shared/docreview/agents/{doc-critic,doc-critic-web}.md` 와 그 copy-of 사본(`plugins/spec-distill/agents/{doc-critic,doc-critic-web}.md`, byte-identical) 네 벌도 전부 `summary` 에 **변경 내용**을 담으라고 했다 — 그 항목은 이제 렌더에 없다. 네 파일 모두 `evidence`·`replacement`·`if_unfixed` 세 칸으로 고쳤다. `run_docreview_codex_reviewer.sh`(symlink, `quality-gates` 도 동일 파일을 심볼릭 링크로 배송)의 codex 프롬프트에 낀 콤마 스플라이스도 마침표로 갈랐다.
+
+- **`replacement` 는 한 줄이라야 하는데, 그 규칙 바로 위 템플릿 자체가 두 줄이었다.** `brief.md`·`design-doc.md` 두 프로필의 판정 한 줄 펜스가 대안 줄 + 들여쓴 `└ 천장` 줄의 두 줄 모양이었던 반면, 바로 아래 필드 사상 문단은 둘을 `replacement` 에 한 줄·개행 없이 실으라고 했다 — 펜스를 그대로 베끼면 그 모순이 실제 개행으로 나타나 렌더의 여섯 줄 게이트 블록이 여덟 줄이 되고 `└ 천장` 조각이 다음 줄 첫 칸에 떨어져 최상위 게이트 줄과 구별되지 않는다. 펜스를 `<대안>. └ 천장: <조건>` 한 줄로 합치고, 「└ 들여쓰기는…」 문구도 더 이상 없는 들여쓰기를 안 가리키게 고쳤다. `test_overdesign_rubric.sh` 에 펜스가 실제로 한 줄인지 재는 락 둘을 추가(옛 두 줄 모양으로 RED, 고친 모양으로 GREEN 실측). 엔진 쪽 강제 — 값을 한 줄로 뭉치고 그 강제를 계수하는 것 — 은 `quality-gates` `[8.2.1]` 참조(심볼릭 링크로 양쪽에 같은 파일이 나간다).
+
+- **AC7·AC11 배너가 이름과 실측 사이가 벌어져 있었다 — mutation 으로 증명.** AC7(「판정 한 줄의 형식」)은 `└ 천장` 잔해 유무 하나만 쟀다 — 템플릿 줄(`<앵커>: <태그> <무엇이 과한가>. <더 단순한 대안>.`) 을 통째로 지워도 「└ 천장」 잔해만 남으면 그대로 통과했다. AC11(「상한 N=3 과 그 근거」)은 숫자도 근거 문장도 안 읽어 「3건」→「30건」과 근거 문장을 통째로 지워도 통과했다. 템플릿 다섯 슬롯(`<앵커>`·`<태그>`·`<무엇이 과한가>`·`<더 단순한 대안>`·`<이 판정이 틀릴 조건>`) 개별 실패로, 상한 숫자는 부분 문자열로 안 걸리는 `has … '3건'` 로, 근거는 결론절 「한 호출을 혼자 채우지 못한다」로 각각 핀. 두 mutation 모두 옛 배너로는 GREEN, 새 배너로는 RED 를 실측했다 — 프로필 파일 자체는 이미 옳은 모양이라 손대지 않았다.
+
+- **AC18′ 첫 절(같은 anchor 항목이 인접해 묶음 마커를 갖는다는 보장)을 철회하고, 같은 자리의 사실 오류 둘을 고쳤다.** `GATE_ROWS` 를 정렬하는 id prefix 가 `(layer, category, anchor)` 의 sha1 추첨이라, 같은 anchor 라도 category 가 다르면(overdesign·architecture 조합이 가장 흔한 입력) 인접이 보장되지 않는다 — 보장하려면 게이트를 재정렬해야 하는데 그것은 「오케스트레이터가 새 순위를 매기지 않는다」는 원칙과 부딪힌다. 사용자는 재정렬 대신 AC18′ 첫 절 철회를 선택했다(둘째 절 — 질문 수·선택권 불변 — 은 그대로 선다. 설계 결정 기록에 P23 재결정으로 기록). 뒤이은 수정이 같은 자리의 사실 오류 둘을 고쳤다 — 두 트리에서 서로 다른 줄(이 브랜치 91, origin/main 85)을 가리키던 인용을 다음 편집에서도 안 썩게 `_bucket()` 심볼 인용으로 바꾸고, 「인접하지 않은 항목은 절대 마커를 안 갖는다」는 거짓 전칭부정을 재리뷰의 구성적 반증(#2-goals 에 열린 항목이 overdesign·architecture 둘뿐이면 인접이 강제돼 마커가 붙는다)으로 잡아낸 뒤 참인 약한 문장(「인접이 보장되지 않는다」)으로 교체했다. AC19′·AC19″ 의 다른 줄 인용은 범위 밖이라 손대지 않았다.
+
+### Known gaps
+
+- **`normalize()` 의 disposition 강제가 critic/codex 경로에서 여전히 소실될 수 있다 — 오늘의 마스킹은 보장이 아니다.** `ledger.coerced("disposition", disp, None)` 은 `cmd_prepare` 의 Ledger 로 불려 그 라운드 events 만 `cmd_finalize` 로 넘어가는 탓에 조용히 소실된다 — `replacement` 강제가 가졌던 것과 같은 경계 결함이다(위 항목). 오늘은 `_apply_recritic` 의 무조건 `None → "ask"` 루프가 우연히 가리고 있을 뿐이고, 재비판 verdict 가 아직 None 인 항목에 처분을 직접 매기는 경로에서는 그 루프가 안 돌아 계수가 **0 으로 끝난다** — 과소집계가 아니라 총 소실이다. 결함 자리에 발견 마커만 달았고 행동은 바꾸지 않았으며 락도 추가하지 않았다 — `ev()` 래퍼로 옮기는 것은 prepare→finalize 계약을 바꾸는 별도 작업이고, 지금 락을 추가하면 알려진 결함을 의도된 것처럼 고정하게 된다.
+- 이번에도 `tools/adjudication/check_wiring.py` 의 줄-핀 EXEMPT 키 열 자리가 재앵커됐다(주석 6줄이 밀어 전부 이동, 가드 텍스트·사유는 무변경) — 이 기능에서 벌써 네 번째다. 줄번호로 면제를 고정하는 방식의 상시 세금으로 기록해 둔다.
+
+## [4.2.0] — 2026-09-23
+
+minor 인 이유 — 새 surface 가 하나다: 두 문서 자리(`brief.md`·`design-doc.md`)의
+`layer_rubric.layer1` 에 축 `overdesign` 이 늘어(brief 1→2, design-doc 8→9) 리뷰어가 받는 계약이
+바뀐다. 설계 `docs/superpowers/specs/2026-09-21-designer-lens-review-design.md` §5.1~§5.6.
+
+### Added
+
+- **새 축 `overdesign`.** 두 문서 자리 모두에 신설. **실측** — design-doc 기존 여덟 축은
+  프로필 본문을 읽으면 전부 「맞는가」 방향(정렬·정합·준수·폐쇄·존재)이고, 새 축의 술어 셋(①
+  과함 · ② 왜곡 · ③ 층위 이탈)과 겹치는 자리는 정확히 둘뿐이다 — `data_flow` 의 「소비자 없는
+  산출물」이 ponytail `delete:` 와, 층 2 `scope_creep`(분해 안 되는 묶음)이 「과함」과 부분적으로
+  겹친다. 절차를 얹어도 「같은 것을 겨누는가」에서 「goal 에 비해 과한가」는 안 나온다(§1.1).
+  ★ **두 자리에서 술어 ① 의 기준은 같은 모양이다** — 「**상류가 말한 goal** 대비 과한가」.
+  brief 의 상류는 사용자 원문, design-doc 의 상류는 브리프 §1 Goal 이라 **상류만 다르다**(§5.1).
+- **술어 ② 는 brief 자리에 없다** — 그 술어의 대상은 구조·구현이고 brief 자리에는 그것이 없다
+  (D11). brief 는 ①③ 만, design-doc 은 ①②③ 전부를 갖는다.
+- **태그 다섯**(`delete:`·`yagni:`·`shrink:`·`bent:`·`altitude:`) — 셋(`delete:`·`yagni:`·
+  `shrink:`)은 ponytail(`DietrichGebert/ponytail` HEAD `e3ba2aa`)에서 그대로 가져왔고, 둘
+  (`bent:`·`altitude:`)은 이 리포에서 만들었다. **「외부에 없더라」는 측정이고 「그러면 리포에서
+  만든다」는 결정이다** — ponytail 저장소 전수 grep 이 술어 ②③ 의 판정 기준을 0건으로 확인했고
+  (측정), 그 근거로 ②③ 을 리포 자신(D22 · CLAUDE.md Forbidden Patterns · design-doc 층 2
+  `testing` 의 반대 방향)에서 만들기로 한 것은 별도의 선택이다. 이것은 브리프 C26 의 확정
+  (「과설계 판정 기준을 외부 자료를 전문 조사해 끌어온다」)을 근거를 대고 뒤집은 **P23 재결정**으로
+  기록했다 — 설계 [결정 기록](../../docs/superpowers/specs/2026-09-21-designer-lens-review-design.md#결정-기록)
+  표 세 번째 행, 사용자 동의 2026-09-21(리뷰 라운드 1 · D1.7).
+- 판정 한 줄의 형식(`<앵커>: <태그> <무엇이 과한가>. <더 단순한 대안>.` + `└ 천장:`), 금지 어법
+  (헤지형 의문문 금지), Lazy Ladder 문서판 5단(ponytail 7단 정본을 문서 자리로 접음, 「성립하는
+  첫 단에서 멈춘다」), 오탐 가드 여덟(ponytail 다섯 + 재논쟁 금지 + 「사다리는 해답을 줄이지
+  읽기를 줄이지 않는다」 + 스코프 배제), 상한 N=3.
+- **사다리의 "higher rung" 모호성을 이 설계가 정의한다.** ponytail 원문 `Two rungs work → take
+  the higher one` 은 「higher」의 방향이 저장소 어디에도 정의돼 있지 않다(전수 grep 확인). 이
+  설계는 **번호가 작은 쪽**(더 많이 자르는 해석)을 채택했다 — 「첫 단에서 멈춘다」와 일관되기
+  때문이다. **그 대가** — 작은 쪽은 언제나 더 많이 자르는 해석이라 동점마다 판정이 절감 쪽으로
+  기울어 §7·OQ-E 의 「한 방향 압력」을 **증폭한다.** 균형 장치는 `└ 천장` 하나뿐이고, 그것은
+  줄임을 되돌릴 조건을 적을 뿐 줄임 자체를 막지 않는다(§5.3). 이 비대칭은 이번 설계에서
+  해소되지 않는다.
+- **0건 출구는 ponytail 원문의 부분 이식이다.** `overdesign` finding 이 하나도 없으면 「이
+  문서는 이미 최소다.」 한 줄만 적고 정당화를 붙이지 않는다 — 여기까지는 원문 그대로다. 원문의
+  `... and stop.` 은 **가져오지 않는다** — `doc-critic` 은 `docreview-layer1`·`docreview-layer2`
+  두 sentinel 블록을 항상 내야 하고, 층 1 이 비면 엔진이 `critic_dead`(주 판정자 사망)로 읽어
+  라운드가 「미검증」으로 닫힌다(`docreview_route.py:156-168`). 과설계가 0건이어도 기존 축의
+  결함은 있을 수 있으므로 0건 규약은 「이 축의 finding 을 지어내지 않는다」로만 한정하고, 리뷰
+  자체를 끝내는 `and stop.` 의 의미는 이 자리에 없다(§5.4).
+- **상한은 판정자별이고 라운드 총량을 약속하지 않는다.** N=3 은 한 판정자가 한 라운드에 낼 수
+  있는 이 축의 finding 수다 — 게이트가 `AskUserQuestion` 을 4개씩 나눠 부르므로 3 이면 판정자
+  하나가 한 호출을 혼자 채우지 못한다는 근거다. 총량은 **2N+α** 다(판정자 둘이 각 3건이면
+  6건이라 한 호출의 질문 네 개가 전부 이 축일 수 있다) — 게이트는 상태 범주·id 순으로만
+  정렬하고 축별 자리를 예약하지 않는다. **이 상한을 강제하는 기계는 없다** — 프로필
+  frontmatter 에 담을 필드가 없어 강제 없는 rubric 산문으로만 존재한다(§5.4).
+- **`layer1:` 은 한 줄로 적는다 — 줄바꿈이 판정자 하나를 조용히 끈다.** codex 러너의 프로필
+  파서는 줄 단위(`run_docreview_codex_reviewer.sh:302` 의
+  `re.fullmatch(r"  ([a-z_][a-z0-9_]*): (.+)", line)`)이고, 이어진 줄은 `line outside the line
+  grammar` 로 rc 5 `profile_parse_ambiguous` 다. T13 의 `lay_of` 도 `head -1` 이라 첫 줄만 읽어
+  축을 덜 잰다. 반면 Python 게이트는 PyYAML 이라 **통과한다**(`docreview_state.py:120-126`).
+  즉 줄바꿈 하나로 codex 축만 죽고 락은 조용히 덜 재는데 Python 쪽은 GREEN 이라, 그 죽음이 §7
+  위험의 「축이 무이빨」 오진으로 읽힌다. 현행 네 프로필은 전부 한 줄이다(§5.1).
+- **T13(`test_brief_review_ng3.sh`)을 부재 열거(금지 셋) → 허용 목록으로 전환한다 — fail-open
+  이었던 것을 fail-closed 로 바꾼다.** 옛 판정은 `goal_fit`·`architecture`·`tradeoffs` 셋만
+  금지해 나머지 다섯 축(`problem_definition`·`scope`·`component_relations`·`data_flow`·
+  `feasibility`)이 brief 자리에 새어 들어가도 무언이었다. 새 단언 ④가 `brief 층1 ∩ design 층1
+  ⊆ SHARED` 를 허용 목록으로 재고 `SHARED = {overdesign}` 을 락 파일에 명시 열거한다 — 목록
+  밖 공유는 전부 걸린다. 새 단언 ⑤는 `SHARED` 의 각 축이 두 프로필 본문에서 서로 다른
+  문장으로(자기 상류를 기준어로 — brief 는 「사용자 원문」, design-doc 은 「브리프 §1 Goal」)
+  정의됨을 잰다. **⑤ 의 한계** — 리터럴 핀이고 **바이트를 잰다.** 두 불릿을 무의미하게 다르게
+  써도 통과하고, 잡는 것은 한쪽을 다른 쪽에 통째로 베껴 넣는 것뿐이다. 의미는 못 잰다(§5.6).
+  기존 단언 ①②③ 은 그대로 남는다.
+- `shared/tests/test_docreview_profile_schema.sh` 는 프로필에서 도출한 이름 전부에 사상이
+  있는가만 재므로 `overdesign` 이 두 자리에 실려도 새 RED 를 내지 않는다.
+
+### Known gaps
+
+- **계측기 부재(OQ-A).** 게이트 회계에 「열린 `decide` 수」도 「카테고리별 수」도 없다. **이
+  변경이 무엇을 바꿨는지 원리적으로 못 잰다** — 사전 baseline 없이 두 갈래(축 신설 · 렌더 밀도)를
+  한꺼번에 고치면 증거가 사후 인상뿐이고, 그 인상은 아래 수용률 역설로 낙관 편향된다. 계측 칸
+  추가는 이번 범위 밖(브리프 S5).
+- **수용률 역설(OQ-F).** 설명이 좋아지면(갈래 2) 팀 정확도가 아니라 AI 제안의 **수용률**이
+  오른다(«bansal-chi2021» «automation-bias»). 갈래 2 의 성공이 갈래 1(새 축)의 판정을 무르게
+  만들 수 있고, 「멈칫」이 사라진 것이 판단이 좋아진 신호가 아닐 수 있다 — 두 goal 이 독립이라는
+  전제가 여기서 깨진다. 완화 불가. 측정 수단은 OQ-A 에 종속.
+- **한 방향 압력(OQ-E).** 사다리는 「쓰인 것」에만 적용되어 판정이 항상 「줄여라」로 나고
+  과소설계는 원리적으로 못 잡는다. ponytail 원문도 한 방향이고 균형을 리뷰어 **밖**(빌드
+  페르소나의 하한선 + 다른 패스로의 라우팅)에서 잡는다. 이 설계는 `└ 천장` 장치로 리뷰어
+  **안**에 일부를 들이는데 **검증된 선례가 없다.**
+- **rubric 항목 수 증가(OQ-G).** design-doc 은 이미 층 1 아홉 + 층 2 일곱이 된다. 체크리스트
+  항목 수를 늘리면 평가자 간 신뢰도가 떨어진다(«checklist-length-reliability») — 그 임계가
+  어디인지 이 변경은 모른다.
+- 그 밖에 이 PR 이 닫지 않는 것 — 반증 불가 축(OQ-D, `doc-recritic` 은 `reject` 에만 문서 내
+  인용을 요구하는데 「이건 과설계다」는 문서 내용으로 반증되지 않는다) · 상한의 무이빨(강제하는
+  기계가 없다) · T13 ⑤ 의 바이트 판정 한계(위 참조) · 설치 캐시(실행 시 agent 정의는 리포가
+  아니라 설치 캐시에서 온다 — 이번 태스크 범위 밖, 다음 태스크에서 확인).
+
+## [4.1.0] — 2026-09-22
+
+minor 인 이유 — 새 surface 가 둘이다: 리뷰어 출력 스키마의 칸 둘(`replacement`·`if_unfixed`, `doc-critic`·`doc-critic-web`·`doc-recritic` 세 에이전트 + codex 러너 프롬프트)과 `disposition_lines()`(공유 `shared/adjudication/render_disposition.py`, 심볼릭 링크로 배송)의 4-튜플 반환. 후자는 호출 계약이 바뀐다 — 위치 언패킹이 깨진다(기존 3-튜플 언패킹은 `ValueError`). 다만 이 플러그인 자신은 그 함수의 호출자가 0 이고(소비자 셋은 전부 `plugins/quality-gates/scripts/`, 전문은 `plugins/quality-gates/CHANGELOG.md` `[7.7.0]`), `shared/adjudication/` 은 배포 심볼릭 링크로만 나가 외부 플러그인이 부를 표면이 아니므로 이 플러그인 쪽에서 깨지는 외부 계약은 없다. 설계 `docs/superpowers/specs/2026-09-21-designer-lens-review-design.md` §5.7·§5.8·§5.9·§6.
+
+### Changed
+
+- **decision_view 의 동어반복 제거.** 「변경」 줄은 `it["summary"]` 였고 헤더가 이미 그 문자열을 냈다 — 정보량 0 인 줄이었다. 대신 `replacement`(「고치면 무엇이 되는가」)·`if_unfixed`(「그대로 두면 무엇이 남는가」) 두 칸을 낸다. 부재 리터럴 둘은 **다르게** 둔다 — 침묵(「(대체안 미작성)」·「(리뷰어가 안 적음)」)과 판정(「대체안 없음 — 그냥 뺀다」, 리뷰어가 그 문자열을 실제로 냈을 때만)은 다른 사실이라, 같은 글자로 메우면 아무도 제안하지 않은 삭제가 제안으로 전달된다.
+- **`PUBLIC_FIELDS`(`docreview_state.py`)에 `replacement`·`if_unfixed` 를 top-level 로 추가.** 닫힌 열거가 셋이다 — `PROFILE_FIELDS` · `normalize()` 반환 · `PUBLIC_FIELDS`. 앞의 둘만 고치면 새 칸이 렌더까지는 가도 원장에 안 남아 다음 라운드가 못 본다. `decision_view` 통로는 `disposition == "decide"` 에만 열리므로(`docreview_route.py` 의 `_remap_blocks`, decide 분기에서만 `_decision_view()` 를 부른다) 그쪽에만 실으면 `fix`·`defer`·`ask` 로 난 항목의 대체안이 원장에 한 글자도 안 남는다.
+- **선택지 라벨이 상태의 함수가 됐다** (`choice_label(choice, kind)`). `cmd_decide` 가 `kind == "post"` 인 finding 의 `reject` 선택에 `kind: "revert"` permit 을 만들므로(그 자리에서 「그대로 둔다」는 실제로는 원복이다) 상태를 안 가리는 고정 라벨은 그 자리에서 동작을 **반대로** 설명하고 있었다(codex 단독 적발) — 그 결함을 고치는 김에 새 결함을 만드는 길이었다. 라벨 리터럴은 `choice_label()` 한 곳에만 산다 — 이전엔 아홉 자리에 복제돼 있었다.
+- **게이트 「자리」줄에 category 사람말을 붙인다** (`CATEGORY_GLOSS` · `category_gloss()`). 사상 코퍼스는 **네 프로필(brief·design-doc·seed·generic)의 층 1·2 축 전부 + 엔진이 직접 만드는 category**(`frozen_change`·`other`) 다 — 렌더가 프로필별이 아니라 엔진 하나뿐이라, 두 프로필로 좁히면 가장 흔한 항목(`frozen_change`)이 상시 advisory 경로가 된다. 사상 없는 category 는 원래 이름을 그대로 내고 `category_unglossed` 로 그 사실을 공시한다(조용히 빈칸으로 두지 않는다). `CATEGORY_GLOSS` 는 `overdesign` 을 **이미** 담고 있는데, 그 축을 선언하는 프로필은 아직 하나도 없다 — 그 축을 더하는 후속 PR 이 `docreview_state.py` 를 0줄 건드리고도 단독 머지되게 하기 위해서다. 여분 항목은 무해하다: `test_docreview_profile_schema.sh` 는 ∀(프로필에서 도출한 이름 전부에 사상이 있는가) 만 재고, 사상에 프로필보다 많은 이름이 있는 것은 그 축의 부정이 아니다.
+- **「대안」줄을 조건 없이 낸다.** `shared/tests/fixtures/docreview/cases.sh` 의 「제안 = 수용」 락이 이 줄의 존재를 발동 조건으로 쓴다 — 사라지면(예: 대안이 비었다고 줄 자체를 생략하면) 그 단언이 평범한 open·재상승 항목에 대한 렌더-측 채널을 통째로 잃는다.
+- **게이트 머리에 순서의 뜻을, 같은 자리 항목에 묶음 표시를.** `GATE_ROWS` 10행은 이미 결정론이지만 «상태 범주» 순이라 그 뜻이 안 보였다 — 순위를 새로 매기지 않고(오케스트레이터가 순위를 매기면 그 자체가 판단이고 사용자가 그 위험을 받아들인다고 말한 적이 없다) 있는 순서의 뜻만 한 줄로 낸다(「열린 결정 먼저 · 그다음 관측 대기 · 막힌 것 · 미적용 수정 · 질문」). 같은 자리를 건드리는 연속 항목은 「같은 자리」로 묶어 «표시»만 한다 — 질문 수도 항목별 선택권도 안 바꾼다.
+- **`AskUserQuestion` 라벨의 항목별 내용을 규약으로 못 박았다** (`reviewing-spec` `## 게이트`). 상태별 라벨만 담으면 같은 라운드의 여러 항목이 전부 같은 글자가 되어 「라벨만 읽고 고른다」가 원리적으로 안 닫힌다 — 라벨은 상태별 라벨 + `replacement` 1–5 낱말 압축이고, 같은 라운드의 두 항목은 같은 라벨을 갖지 않는다(둘 다 부재면 부재 건수를 공시해 규약이 공허해지지 않게 한다). **한계 공시** — 이 규약을 재는 락(`shared/tests/test_docreview_round_gate_split.sh`, AC17″)은 규약의 실재(문구가 절차서·SKILL 본문에 있는가)만 재고, 오케스트레이터가 런타임에 그 규약을 실제로 지키는지는 못 잰다. 라벨을 짓는 것은 엔진이 아니라 런타임의 오케스트레이터다.
+- `doc-critic`·`doc-critic-web`·`doc-recritic` 출력 스키마에 `replacement`·`if_unfixed` 두 칸을 추가(에이전트 정의). `added` 항목(재비판이 새로 낸 finding)도 같은 `normalize()` 를 지나므로 두 칸을 실을 수 있는데, 에이전트 본문에 안 적으면 그 경로가 대체안 없이 렌더로 간다.
+- codex 러너 프롬프트(`run_docreview_codex_reviewer.sh`)가 출력 형식 예시에 `replacement`·`if_unfixed` 를 요구한다 — codex finding 도 Claude 쪽과 같은 `normalize()` 를 지나 같은 두 칸을 낼 수 있는데, 프롬프트에 적어야 실제로 난다.
+- 엔진 링크(`scripts/{docreview_state,docreview_route,run_docreview_codex_reviewer.sh}` · `scripts/{adjudication,render_disposition}.py`, 전부 심볼릭 링크)가 위 전부와 `render_disposition.py` 의 4-튜플 반환을 함께 나른다(cache key) — 후자는 이 플러그인의 호출자가 여전히 0 이다.
+
+### Fixed
+
+- **`case_decision_view_absence_is_literal` 가 실제로 T35 시퀀스를 타지 않던 결함.** 케이스 주석은 "route_r1 → next_round → ..." 라고 적었지만 코드는 bare `r1` 을 불러 round 1 을 전혀 finalize 하지 않고 건너뛰었다 — 엔진이 실제 운용에서 도달할 수 없는 상태(round 1 미완결)를 테스트하고 있었다. `route_r1` 로 교체해 주석을 사실로 만들었다.
+- **`held_fix`·`held_decide` 대응의 자기모순을 없앴다.** 「미적용 수정」 대응에 `held_fix` 를 넣어 놓고 바로 아래 `held_decide` 문단은 "보류는 어느 구절도 못 담는다"고 적어 `held_fix` 자신이 그 문장의 반례였다. 실제 이유는 더 좁다 — 「미적용 수정」은 `fixes` 원장 세 행을 하위 상태와 무관하게 «원장 전체» 로 묶지만(pending·escalated·held 셋 다 「아직 적용 안 됨」은 같은 사실), `decides` segment 의 세 구절은 각각 특정 하위 상태만 가리켜 「상태 무관」 자리가 애초에 없다. 코드 동작은 안 바뀐다 — 주석뿐이다.
+
+## [4.0.1] — 2026-09-22
+
+### Fixed
+
+- **`doc-critic` 층 1 이 축 이름과 판정 관계를 리터럴 산문으로 쥐고 있었다 — 네 자리 중 하나에만 맞는 문장이었다.** 본문(`shared/docreview/agents/doc-critic.md:47` + 사본 셋)이 「목표·문제정의·범위·아키텍처·컴포넌트 관계·데이터 흐름·trade-off·구현 가능성」을 열거했는데 그것은 design-doc 프로필의 `layer_rubric.layer1` 뿐이다. brief 는 `[direction]`, seed 는 `[unfounded_addition, …]`, `/qg` generic 은 `[logic, assumption]` 이다. 한편 codex 러너는 이미 프로필의 `layer_rubric.layer1` 을 읽어 프롬프트에 싣는다(`run_docreview_codex_reviewer.sh:372`·`:427`) — **같은 라운드의 두 판정자가 다른 rubric 으로 돌고 있었다.** 그 줄을 붙드는 락은 **하나도 없었다**(테스트 전수 grep 0건).
+- **판정 관계를 프로필로 옮긴다.** agent 본문은 `layer_rubric.layer1` 을 참조하고, 「무엇과 대조하는가」는 각 프로필 본문의 「**층 1 판정 관계** —」 줄이 소유한다. 축 이름만 넘기고 관계를 리터럴로 두면 넷 중 하나에만 맞던 문장이 넷 중 둘에만 맞는 문장이 될 뿐이다.
+- **근거 요구의 조건절은 남기되 축 이름에서 푼다.** 「**구현 가능성** finding 은 …」 → 「**리포 사실을 단정하는** finding 은 …」. 축이 사라져도 요구가 같이 사라지지 않는다. 「예외 없이 모든 층 1 finding」으로 넓히지 않는다 — 문서 내부 모순처럼 리포를 볼 필요가 없는 finding 에까지 인용을 요구하면 그 판정이 갈 곳을 잃는다.
+
+### Added
+
+- `shared/tests/test_docreview_layer1_wiring.sh` — 위임(agent 가 프로필을 참조하는가)과 소유(프로필 넷이 각자 관계를 갖는가)를 **함께** 잰다. 한쪽만 재면 다른 쪽이 조용히 빈다. 프로필 코퍼스는 글롭 도출이라 다섯째 자리가 생겨도 자동으로 계약에 든다. 판정 관계 네 줄이 서로 다름을 별도 축(B2)으로 재 복사-붙여넣기 재발을 막는다.
+
+## [4.0.0] — 2026-09-22
+
+major 인 이유 — **설치 요구사항이 하나 늘어난다.** 이 플러그인의 훅은 이제 Python 3.12
+이상을 요구하고, 바닥 미만 머신에서는 돌지 않는다(막지는 않는다 — 건너뛴다).
+
+### Changed
+
+- **훅이 `python3` 를 직접 부르지 않는다.** `hooks.json` 의 자리가 `sh
+  ${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh --event … --plugin … --hook … <훅.py>` 로
+  바뀌었다. 해석기는 kill switch 를 먼저 보고(정본과 같은 판정), `$DEVBREW_PYTHON` →
+  `python3` → PATH 의 `python3.*` 순으로 바닥을 만족하는 인터프리터를 찾아 `exec` 한다.
+  마이너 버전을 열거하지 않으며 `python3` 로 fallback 하지 않는다.
+- **TTL-GC 자식을 `sys.executable` 로 띄운다** (`scripts/hook_common.py`). `python3` 로
+  띄우면 해석의 효력이 프로세스 경계에서 끊겨 자식만 바닥 미만으로 떨어진다.
+
+### Added
+
+- `scripts/devbrew-python.sh` — `shared/python/devbrew-python.sh` 의 물리 사본
+  (`# copy-of:`). 심볼릭 링크면 `plugin-audit` 의 containment 검사가 `shared/` 로 풀려
+  거짓 「kill switch 부재」를 낸다.
+- README 에 `Python 3.12+` prerequisite 와 바닥의 **도출 규칙**.
+
 ## [3.2.0] — 2026-09-19
 
 minor 인 이유 — 새 surface 가 셋이다: seed 자리의 문서 리뷰 엔진 배선(재설계 PR 5), 스크립트 셋(`scripts/seed_review_log.py` · `scripts/seed_edit_diff.py` · `scripts/seed_provenance.py`), 번들 조립기의 `--for detect|recritic`. 지운 넷(격리 critic · seed 전용 codex 러너 · 빌더 · 체크리스트)은 `framing-requests` 안에서만 쓰이던 내부 파일이라 이 플러그인 밖의 호출 계약은 바뀌지 않는다. 설계 `docs/superpowers/specs/2026-09-16-framing-intent-drift-design.md`.

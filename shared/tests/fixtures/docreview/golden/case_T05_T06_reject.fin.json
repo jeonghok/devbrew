@@ -12,6 +12,8 @@
    "blocks": [],
    "supersedes": null,
    "evidence": "브리프 §2 C3 vs 문서 §3",
+   "replacement": null,
+   "if_unfixed": null,
    "f": "f1",
    "origin": "reviewer",
    "immutable": false,
@@ -20,14 +22,16 @@
    "id": "fee27fc9#r1.1",
    "lineage": "fee27fc9#r1.1",
    "decision_view": {
-    "change": "Non-goals 가 브리프의 범위 항목 하나를 조용히 뺐다",
+    "if_unfixed": "(리뷰어가 안 적음)",
+    "replacement": "(대체안 미작성)",
     "basis": "브리프 §2 C3 vs 문서 §3",
     "alternatives": [
-     "채택(적용)",
-     "기각(원복)",
-     "보류"
+     "고친다(채택)",
+     "그대로 둔다(기각)",
+     "나중에 정한다(보류)"
     ],
-    "impact": "#3-non-goals · 인용 0 섹션",
+    "impact": "#3-non-goals (범위가 넓어지거나 좁아짐) · 인용 0 섹션",
+    "category_unglossed": null,
     "auto": false
    }
   },
@@ -41,6 +45,8 @@
    "blocks": [],
    "supersedes": null,
    "evidence": null,
+   "replacement": null,
+   "if_unfixed": null,
    "f": "f3",
    "origin": "reviewer",
    "immutable": false,
@@ -61,6 +67,8 @@
    ],
    "supersedes": null,
    "evidence": null,
+   "replacement": null,
+   "if_unfixed": null,
    "f": "f4",
    "origin": "reviewer",
    "immutable": false,
@@ -79,6 +87,8 @@
    "blocks": [],
    "supersedes": null,
    "evidence": "§5 가 c.py 를 참조한다",
+   "replacement": null,
+   "if_unfixed": null,
    "f": "f6",
    "origin": "reviewer",
    "immutable": false,
@@ -87,14 +97,16 @@
    "id": "9dea7cf3#r1.1",
    "lineage": "9dea7cf3#r1.1",
    "decision_view": {
-    "change": "c.py 누락 — 파일 목록이 실제 변경과 다르다",
+    "if_unfixed": "(리뷰어가 안 적음)",
+    "replacement": "(대체안 미작성)",
     "basis": "§5 가 c.py 를 참조한다",
     "alternatives": [
-     "채택(적용)",
-     "기각(원복)",
-     "보류"
+     "고친다(채택)",
+     "그대로 둔다(기각)",
+     "나중에 정한다(보류)"
     ],
-    "impact": "#12-files-to-modify · 인용 1 섹션",
+    "impact": "#12-files-to-modify (TBD·빈 절) · 인용 1 섹션",
+    "category_unglossed": null,
     "auto": false
    }
   },
@@ -108,6 +120,8 @@
    "blocks": [],
    "supersedes": null,
    "evidence": null,
+   "replacement": null,
+   "if_unfixed": null,
    "f": "f7",
    "origin": "reviewer",
    "immutable": false,
@@ -126,6 +140,8 @@
    "blocks": [],
    "supersedes": null,
    "evidence": null,
+   "replacement": null,
+   "if_unfixed": null,
    "f": "f8",
    "origin": "auto",
    "immutable": false,
@@ -136,14 +152,16 @@
    "id": "11adb9c3#r1.1",
    "lineage": "11adb9c3#r1.1",
    "decision_view": {
-    "change": "목표 B 가 두 가지로 읽힌다",
+    "if_unfixed": "(리뷰어가 안 적음)",
+    "replacement": "(대체안 미작성)",
     "basis": "(근거 없음)",
     "alternatives": [
-     "채택(적용)",
-     "기각(원복)",
-     "보류"
+     "고친다(채택)",
+     "그대로 둔다(기각)",
+     "나중에 정한다(보류)"
     ],
-    "impact": "#2-goals · 인용 0 섹션",
+    "impact": "#2-goals (두 가지로 읽힘) · 인용 0 섹션",
+    "category_unglossed": null,
     "auto": true
    }
   },
@@ -157,6 +175,8 @@
    "blocks": [],
    "supersedes": null,
    "evidence": null,
+   "replacement": null,
+   "if_unfixed": null,
    "f": "f9",
    "origin": "reviewer",
    "immutable": false,
@@ -175,6 +195,8 @@
    "blocks": [],
    "supersedes": null,
    "evidence": null,
+   "replacement": null,
+   "if_unfixed": null,
    "f": "f10",
    "origin": "reviewer",
    "immutable": false,
@@ -193,6 +215,8 @@
    "blocks": [],
    "supersedes": null,
    "evidence": null,
+   "replacement": null,
+   "if_unfixed": null,
    "f": "a1",
    "origin": "auto",
    "immutable": false,
@@ -203,14 +227,16 @@
    "id": "1615824b#r1.1",
    "lineage": "1615824b#r1.1",
    "decision_view": {
-    "change": "§5 의 데이터 흐름에 소비자 없는 산출물이 있다 — 의도인가?",
+    "if_unfixed": "(리뷰어가 안 적음)",
+    "replacement": "(대체안 미작성)",
     "basis": "(근거 없음)",
     "alternatives": [
-     "채택(적용)",
-     "기각(원복)",
-     "보류"
+     "고친다(채택)",
+     "그대로 둔다(기각)",
+     "나중에 정한다(보류)"
     ],
-    "impact": "#5-architecture · 인용 0 섹션",
+    "impact": "#5-architecture (데이터가 끊김) · 인용 0 섹션",
+    "category_unglossed": null,
     "auto": true
    }
   }

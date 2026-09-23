@@ -1,0 +1,27 @@
+층 1·2 를 봤다.
+
+```docreview-layer1
+- ref: c1
+  layer: 1
+  category: goal_fit
+  anchor: "#2-goals"
+  disposition: decide
+  summary: "Goals 가 브리프의 goal 과 다른 것을 겨눈다"
+  evidence: "브리프 §1 vs 문서 §2"
+  replacement: "§2 를 브리프 §1 의 goal 한 문장으로 되돌린다"
+  if_unfixed: "설계 전체가 다른 문제를 잘 푸는 쪽으로 굳는다"
+```
+
+층 2.
+
+```docreview-layer2
+- ref: c2
+  layer: 2
+  category: placeholder
+  anchor: "#12-files-to-modify"
+  disposition: fix
+  summary: "§5 에 TBD 가 남아 있다"
+  edit_scope: "#12-files-to-modify"
+  replacement: "TBD 를 실제 컴포넌트 이름으로 채운다"
+  if_unfixed: "plan 이 그 자리를 스스로 지어낸다"
+```

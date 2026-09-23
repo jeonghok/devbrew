@@ -9,6 +9,10 @@ v1.32.0 behaviors:
 - frontmatter-scan sub-feature: warn about the dead `allowedTools` key and
   wrong-layer kebab keys in plugins/*/agents/*.md (v2.11.0: the advice used
   to point at camelCase `allowedTools`, which is not a real subagent field).
+- `$DEVBREW_PYTHON` was ignored by the interpreter resolver (env
+  `DEVBREW_PYTHON_IGNORED`) -> one stdout JSON doc carrying both
+  `systemMessage` and `additionalContext`. This is the only stdout writer
+  in this hook; everything else goes to stderr.
 
 In-flight pipeline detection was removed in v1.32.0 — pipelines no longer
 span turns, so there is nothing to "resume" across sessions.
@@ -110,6 +114,34 @@ def _scan_agent_frontmatter_keys(payload: dict) -> None:
             continue
 
 
+def _emit_python_ignored_notice() -> None:
+    """해석기가 `$DEVBREW_PYTHON` 을 버렸다는 사실을 모델·사람 양쪽에 알린다.
+
+    이 자리가 사는 경우는 하나다 — 해석기가 **다른** 인터프리터로 exec 했을 때.
+    해석이 통째로 실패하면 이 훅은 아예 돌지 않고 해석기가 직접 안내를 낸다
+    (`shared/python/devbrew-python.sh` 4단계). 두 출구는 배타적이라 stdout 에
+    JSON 문서가 둘이 되지 않는다.
+
+    `ensure_ascii` 를 끄지 않는다 — 비-UTF-8 locale 에서 print 가
+    UnicodeEncodeError 로 죽으면 조언 훅이 세션 시작을 시끄럽게 만든다.
+    \\uXXXX 이스케이프는 같은 JSON 이다.
+    """
+    reason = os.environ.get("DEVBREW_PYTHON_IGNORED", "")
+    if not reason:
+        return
+    msg = (
+        f"[devbrew] $DEVBREW_PYTHON 을 쓰지 않았다: {reason}. "
+        "이 세션의 훅은 PATH 에서 찾은 다른 인터프리터로 돌고 있다."
+    )
+    print(json.dumps({
+        "systemMessage": msg,
+        "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": msg,
+        },
+    }))
+
+
 def _self_session_id(payload: dict) -> str:
     return payload.get("session_id", "") or ""
 
@@ -170,6 +202,9 @@ def main() -> int:
     self_sid = _self_session_id(payload)
     _emit_legacy_v1_advisory(payload, self_sid)
     _scan_agent_frontmatter_keys(payload)
+    # stdout 을 쓰는 **유일한** 자리다. 위 둘은 전부 stderr 로 나간다 —
+    # 여기에 두 번째 print 를 더하면 훅의 stdout 이 JSON 문서 둘이 된다(C7).
+    _emit_python_ignored_notice()
     return 0
 
 

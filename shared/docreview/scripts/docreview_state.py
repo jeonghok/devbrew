@@ -514,8 +514,13 @@ def cmd_begin_round(a) -> int:
 
 # ── 전이 ────────────────────────────────────────────────────────────────
 PUBLIC_FIELDS = ("id", "lineage", "bucket", "supersedes", "origin", "layer", "category", "anchor",
-                 "disposition", "summary", "edit_scope", "blocks", "evidence", "decision_view",
-                 "state", "promotion", "promoted_from", "immutable", "kind")
+                 "disposition", "summary", "edit_scope", "blocks", "evidence",
+                 # 갈래 2 — top-level 이다. `decision_view` 통로는 disposition == "decide"
+                 # 에만 열리므로(docreview_route.py:660-661, `_remap_blocks` 안의 게이트 —
+                 # 이 앵커는 PR 3 안에서 두 번 밀렸다. 재측정 없이 베끼지 말 것) 그쪽에만
+                 # 실으면 fix·defer·ask 로 난 항목의 대체안이 원장에 한 글자도 안 남는다.
+                 "replacement", "if_unfixed",
+                 "decision_view", "state", "promotion", "promoted_from", "immutable", "kind")
 
 
 GateRow = collections.namedtuple("GateRow", "name ledger pred open blocks render")
@@ -1088,7 +1093,64 @@ def gate_summary(st) -> dict:
     return g
 
 
-_CHOICE_LABEL = {"adopt": "채택(적용)", "reject": "기각(원복)", "hold": "보류"}
+# category 의 사람말 — 렌더가 쓰는 유일한 자리. 코퍼스는 네 프로필(brief · design-doc ·
+# seed · generic)의 층 1·2 축 전부 + 엔진이 직접 만드는 category 다. 렌더는 프로필별이
+# 아니라 엔진 하나이므로 두 프로필로 좁히면 가장 흔한 항목(frozen_change)이 상시
+# advisory 경로가 된다. `shared/tests/test_docreview_profile_schema.sh` 가 «프로필에서
+# 도출한 이름 전부에 사상이 있는가»를 ∀ 로 재므로, 새 축이 사상 없이 들어오면 RED 다.
+# 여분 항목은 무해하다 — `overdesign` 은 프로필보다 먼저 들어와 있다(그 축을 더하는 PR 이
+# 이 파일을 0줄 건드려야 단독 머지가 가능하기 때문이다).
+CATEGORY_GLOSS = {
+    # brief 층 1·2
+    "direction": "방향의 반증", "distortion": "원문의 뜻이 바뀜",
+    "omission": "원문에 있는 것이 빠짐", "invention": "원문에 없는 것이 들어옴",
+    "provenance_mislabel": "출처 표기가 틀림", "authority_syntax": "열린 것을 확정으로 못박음",
+    "evidence_unsupported": "근거가 요약을 안 받침",
+    # design-doc 층 1·2
+    "goal_fit": "목표가 다른 것을 겨눔", "problem_definition": "문제 정의가 어긋남",
+    "scope": "범위가 넓어지거나 좁아짐", "architecture": "확정 제약 위반",
+    "component_relations": "의존 방향이 안 닫힘", "data_flow": "데이터가 끊김",
+    "tradeoffs": "기각 사유가 확정과 모순", "feasibility": "단정한 리포 사실이 없음",
+    "placeholder": "TBD·빈 절", "ambiguity": "두 가지로 읽힘",
+    "scope_creep": "분해 안 되는 묶음", "approaches_comparison": "대안 비교 없는 단정",
+    "isolation": "컴포넌트 경계가 흐림", "testing": "검증 전략 부재",
+    "handoff_incomplete": "이어갈 컨텍스트 부족",
+    # seed 층 1
+    "unfounded_addition": "원문에 없는 요구가 더해짐", "example_as_requirement": "예시가 요구로 승격됨",
+    "premature_closure": "열어 둔 선택이 닫힘", "inference_as_decision": "추론이 결정처럼 쓰임",
+    # generic 층 1·2
+    "logic": "결론이 전제에서 안 따라 나옴", "assumption": "말해지지 않은 전제",
+    "completeness": "약속하고 안 채운 자리", "evidence": "근거 없는 단정",
+    "actionability": "무엇을 할지 알 수 없음", "structure": "목차와 본문의 불일치",
+    # 엔진이 직접 만드는 것
+    "frozen_change": "얼림 검사가 잡은 변경", "other": "분류 없음",
+    # 갈래 1 이 더할 축 — 프로필보다 먼저 여기 선다(위 문단)
+    "overdesign": "goal 대비 과함",
+}
+
+
+def category_gloss(cat):
+    """사람말 또는 None. **없으면 조용히 빈칸으로 두지 않는다** — 부르는 쪽이
+    원래 이름을 그대로 내고 그 사실을 렌더에 한 줄로 공시한다."""
+    return CATEGORY_GLOSS.get(cat)
+
+
+# 선택지 라벨은 **상태의 함수**다. `cmd_decide` 가 kind=post 에서 reject 에 revert
+# permit 을 만드므로(위 `cmd_decide` 의 post 분기 — `kind: "revert"` permit 을 여는
+# 자리) 고정 라벨을 사람말로 바꾸면 그 자리에서 «동작을 반대로 설명»하게 된다.
+# 회계어(채택·기각·보류)는 괄호 안에 그대로 보존한다 — 낱말을 바꾸는 것이 아니라
+# 사람말을 앞에 두는 것이다.
+_CHOICE_LABEL = {
+    "pre":  {"adopt": "고친다(채택)",        "reject": "그대로 둔다(기각)",      "hold": "나중에 정한다(보류)"},
+    "post": {"adopt": "현재 변경 유지(채택)", "reject": "이전 상태로 원복(기각)", "hold": "나중에 정한다(보류)"},
+}
+
+
+def choice_label(choice, kind) -> str:
+    """선택지 라벨 — 리터럴이 사는 유일한 자리. `kind` 가 없으면 `pre` 로 읽는다
+    (`record_findings` 가 기록 시점에 `it.get("kind") or "pre"` 로 강제하므로
+    원장에서 온 값은 항상 둘 중 하나다 — None 은 원장 밖 호출부에서만 온다)."""
+    return _CHOICE_LABEL.get(kind or "pre", _CHOICE_LABEL["pre"])[choice]
 
 
 def _post_kind_notice(d) -> str:
@@ -1104,20 +1166,30 @@ def _post_kind_notice(d) -> str:
 
 
 def _rg_decide(st, g, fid):
-    # [Task 4 — §6.4 한계 (a)] 「대안:」 줄은 `dv.get("alternatives")`(docreview_route.py
-    # `_decision_view` 의 상수 목록)가 아니라 `decide_choices` 로 낸다 — 그쪽은 라우팅
-    # 시점(record_findings 이전)에 불려 이 id 를 못 보므로 여기가 «제안 = 수용» 이
-    # 실제로 성립하는 유일한 자리다(위 `decide_choices` 헤더 코멘트). `dv` 는 변경·근거·
-    # 영향 세 필드에는 여전히 쓴다 — 그 셋은 항목별 서술이라 선택지 축과 무관하다.
+    # [Task 4 — §6.4 한계 (a)] 「대안:」 줄은 `dv.get("alternatives")` 가 아니라
+    # `decide_choices` 로 낸다 — 그쪽은 라우팅 시점에 이 id 를 못 보므로 여기가
+    # «제안 = 수용» 이 실제로 성립하는 유일한 자리다. `dv` 는 항목별 서술 네 필드에
+    # 여전히 쓴다.
+    # [갈래 2] 「변경」이 사라지고 「그대로 두면 / 고치면」 둘로 갈린다 — 헤더가 이미
+    # 「무엇이 문제인가」를 내므로 동어반복이 원리적으로 불가능해진다. 「영향」은
+    # 「자리」다(anchor + 인용수는 영향이 아니라 위치다). **「대안」 줄은 조건부로
+    # 내지 않는다** — 그 줄이 `cases.sh` 의 「제안 = 수용」 락의 발동 조건이고,
+    # 형제 `_rg_expired` 가 똑같은 실패를 이미 한 번 고쳤다.
     f = st["findings"][fid]
     dv = f.get("decision_view") or {}
-    alternatives = [_CHOICE_LABEL[c] for c in decide_choices(st, fid)]
     d = st["decides"].get(fid) or {}
-    return ["[decide%s] %s — %s%s" % (" auto" if dv.get("auto") else "", fid, f.get("summary"), _post_kind_notice(d)),
-            "  변경: %s" % dv.get("change", f.get("summary")),
-            "  근거: %s" % dv.get("basis", f.get("evidence") or "—"),
-            "  대안: %s" % " / ".join(alternatives),
-            "  영향: %s" % dv.get("impact", f.get("anchor"))]
+    alternatives = [choice_label(c, d.get("kind")) for c in decide_choices(st, fid)]
+    lines = ["[decide%s] %s — %s%s" % (" auto" if dv.get("auto") else "", fid, f.get("summary"), _post_kind_notice(d)),
+             "  그대로 두면: %s" % dv.get("if_unfixed", "(리뷰어가 안 적음)"),
+             "  고치면: %s" % dv.get("replacement", "(대체안 미작성)"),
+             "  근거: %s" % dv.get("basis", f.get("evidence") or "—"),
+             "  자리: %s" % dv.get("impact", f.get("anchor")),
+             "  대안: %s" % " / ".join(alternatives)]
+    # 사람말이 없는 category 는 원래 이름으로 나가되 그 사실을 «말한다». 조용히
+    # 빈칸으로 두면 사상이 낡았다는 것이 아무 데도 안 남는다(D13-③ 이 안 닫힌다).
+    if dv.get("category_unglossed"):
+        lines.append("  ↳ 사람말 사상 없음: %s — 원래 이름 그대로 낸다" % dv["category_unglossed"])
+    return lines
 
 
 def _rg_adopted(st, g, fid):
@@ -1134,7 +1206,7 @@ def _rg_expired(st, g, fid):
     # 닫으려던 「제안 ≠ 수용」이 형제 렌더러에 그대로 있었다. `decide_choices` 로
     # 통일한다(M3 부산물 — `_rg_decide` 와 라벨 어휘도 이제 같다).
     d = st["decides"].get(fid) or {}
-    alt = " / ".join(_CHOICE_LABEL[c] for c in decide_choices(st, fid))
+    alt = " / ".join(choice_label(c, d.get("kind")) for c in decide_choices(st, fid))
     return ["[만료·차단] %s — %s (%s%s)" % (fid, st["findings"][fid].get("summary"), alt, _post_kind_notice(d))]
 
 
@@ -1220,11 +1292,53 @@ def render_gate(st, g) -> str:
     out.append("라운드 %d · 재리뷰 %d/%d%s%s" % (g["round"], g["rereview_count"], REREVIEW_CAP,
                                               " · 상한 도달" if g["cap_reached"] else "",
                                               " · stagnation" if g["stagnation"] else ""))
+    # [Task 9 ⓓ] GATE_ROWS 10행의 순서는 이미 결정론이지만 «상태 범주» 순이라 그
+    # 뜻이 안 보였다. 순위를 새로 매기지 않는다 — 오케스트레이터가 순위를 매기면
+    # 그 순위 자체가 판단이고 사용자가 그 위험을 받아들인다고 말한 적이 없다.
+    # 있는 순서의 뜻만 낸다. 이 한 줄의 내용은 GATE_ROWS 의 순서에서 읽는다 —
+    # 구절 ↔ 행(`.name`) 대응은 다음과 같다:
+    #   열린 결정        → open_decide
+    #   그다음 관측 대기  → adopted (그 렌더러 자신이 "다음 라운드 diff 가 적용을
+    #                       관측해야 닫힌다" 고 말한다 — _rg_adopted)
+    #   막힌 것          → blocked_expired · superseded_expired
+    #   미적용 수정       → unapplied_fix · escalated_fix · held_fix
+    #   질문             → blocking_ask_open · ask_open
+    # 「미적용 수정」은 fixes 원장 세 행(6·7·8) 전체를 하위 상태와 무관하게
+    # 뜻으로 묶는다 — pending/intent_passed 든 escalated 든 held 든, 셋 다
+    # 「아직 적용되지 않은 fix」라는 사실은 같다(적용됐으면 애초에 이 원장에
+    # 안 남는다). held_fix 가 여기 들어가는 것은 held_fix 만의 특별 취급이
+    # 아니라 이 구절이 «상태 무관·원장 전체»를 가리키기 때문이다.
+    # [Task 9 정정] held_decide 가 다섯 구절 밖인 이유는 그래서 "보류
+    # 라는 개념은 어느 구절도 못 담는다"가 아니다 — held_fix 가 바로 그 반례다.
+    # 진짜 이유는 더 좁다: decides 원장 segment(열린 결정·관측 대기·막힌 것)는
+    # fixes 와 달리 «상태 무관·원장 전체»를 가리키는 구절이 없다 — 세 구절이
+    # 각각 open_decide·adopted·(blocked_expired·superseded_expired) 라는 특정
+    # 하위 상태만 가리키므로 held_decide 를 담을 자리가 애초에 없다. 표의
+    # 침묵이지 누락 버그가 아니다(§8.2 가 held_decide 를 승인 게이트의 남은
+    # ask 목록에서 따로 보여준다는 전제).
+    # [정직 고지] 이 대응은 사람이 적었다 — `cases.sh` 의 `case_gate_head_and_
+    # grouping` 은 이 줄의 «내용과 순서»가 아래 리터럴과 정확히 같은지만 기계로
+    # 잰다. 그 등식은 이 대응표가 뜻으로 맞다는 증명이 아니다. 「막힌 것」·
+    # 「미적용 수정」·「질문」이 여러 행을 한 구절로 묶는 경계도 마찬가지로
+    # 사람의 읽기다 — 그 경계에 동의하지 않는 미래 독자는 "원래 그렇게
+    # 도출됐다"고 가정하지 말고 이 줄 자체를 고쳐라. GATE_ROWS 를 재정렬하거나
+    # 새 행을 끼워 넣으면, 이 줄과 위 대응표와 `case_gate_head_and_grouping`
+    # 의 기대 리터럴을 함께 옮겨라 — 셋 중 하나만 고치면 이 줄이 조용히 낡은
+    # 설명이 된다.
+    out.append("순서: 열린 결정 먼저 · 그다음 관측 대기 · 막힌 것 · 미적용 수정 · 질문")
+    prev_anchor = None
     for row in GATE_ROWS:
         fn = GATE_RENDERERS.get(row.render) if row.render else None
         if fn is None:
             continue
         for fid in g[row.name]:
+            # [Task 9 ⓓ] 묶음은 «표시»다 — 질문 수도 항목별 선택권도 안 바꾼다
+            # (D24). 같은 자리를 건드리는 항목이 연달아 오면 그 사실만 한 줄로
+            # 보인다.
+            anchor = (st["findings"].get(fid) or {}).get("anchor")
+            if anchor and anchor == prev_anchor:
+                out.append("  ┆ 같은 자리(%s)" % anchor)
+            prev_anchor = anchor
             out.extend(fn(st, g, fid))
     c = g["counts"]
     out.append("기각 %d건(재비판) · 사용자 기각 %d · drop %d · bucket 충돌 %d · 계보 지목 불일치 %d · 기각 계보 재상승 %d · 미소비 재상승 예약 %d · 미소비 상향 예약 %d"
