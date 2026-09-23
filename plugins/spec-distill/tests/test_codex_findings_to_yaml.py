@@ -285,6 +285,32 @@ class DocreviewKeys(unittest.TestCase):
         doc = yaml.safe_load(out)
         self.assertEqual(doc["findings"][0]["blocks"], ["x2", "x3"])
 
+    def test_docreview_keyset_carries_replacement_and_if_unfixed(self):
+        """러너 프롬프트가 `decide` 에 `replacement`·`if_unfixed` 를 **요구**한다
+        (`run_docreview_codex_reviewer.sh`). 그 둘이 keyset 밖이면 codex 가 적은 값이
+        여기서 버려지고, 게이트는 값이 있었는데도 「(대체안 미작성)」·「(리뷰어가 안
+        적음)」을 낸다 — 침묵과 판정을 다른 글자로 가른다는 계약이 뒤집힌다. 값은
+        `overdesign` 판정 한 줄 모양(`└ 천장: …` — `: ` 를 품는다)으로 넣어 인용
+        분기까지 태우고, 파서로 되읽어 **바이트 그대로** 돌아오는지 잰다."""
+        repl = "인라인 json.dumps 한 줄. └ 천장: 두 번째 형식이 실제로 요청될 때"
+        unfixed = "새 파일 5개가 JSON 한 줄짜리 요구를 위해 남는다."
+        import json as _json
+        payload = _wrap(_json.dumps([{"ref": "x1", "layer": 1, "category": "overdesign",
+                                      "anchor": "#a", "disposition": "decide",
+                                      "summary": "yagni: s", "evidence": "e",
+                                      "replacement": repl, "if_unfixed": unfixed}],
+                                    ensure_ascii=False))
+        out = run(payload, argv_extra=("--emit-keys", "docreview"))
+        self.assertIn("replacement:", out)
+        self.assertIn("if_unfixed:", out)
+        try:
+            import yaml  # noqa: PLC0415
+        except ImportError:  # pragma: no cover - 환경 의존
+            return
+        f = yaml.safe_load(out)["findings"][0]
+        self.assertEqual(f["replacement"], repl)
+        self.assertEqual(f["if_unfixed"], unfixed)
+
     def test_default_and_design_bytes_unchanged(self):
         # AC18: docreview keyset 추가가 기존 두 keyset 의 출력을 바꾸지 않는다.
         payload = _wrap('[{"file":"a.py","line":3,"severity":"high","summary":"s","proposed_fix":"f"}]')
