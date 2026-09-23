@@ -1772,4 +1772,42 @@ msgs=[x for x in d["failures"] if "internal_research" in x]
 import re
 print("HASCOUNT" if any(re.search(r"[0-9]+건|[0-9]+개", m) for m in msgs) else "CLEAN")' | grep -q CLEAN \
   && ok "V2-④: 차단 메시지에 개수가 없다" || no "V2-④: 차단 메시지에 개수가 들어갔다 (⟨C5⟩)"
+# V2-⑤ — 확인 줄 ∀. payload 의 모든 RC<n> 마다 audit §5 에 `확인 RC<n> — {확인|반증|미확인} — …`.
+v2mut c5a 'import sys,pathlib,re
+a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding="utf-8")
+s=re.sub(r"^- 확인 RC3 .*$\n","",s,flags=re.M); a.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q 'RC3' <<<"$V2OUT"; } \
+  && ok "V2-⑤ red: 확인 줄을 지우면 red (그 id 를 이름으로 댄다)" || no "V2-⑤: 확인 줄 부재가 통과됐다 (rc=$V2RC)"
+
+# 판정 어휘 밖의 줄은 확인 줄이 아니다 — 모양만 비슷한 줄로 만족되지 않는다.
+v2mut c5b 'import sys,pathlib
+a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding="utf-8")
+a.write_text(s.replace("- 확인 RC3 — 확인 —","- 확인 RC3 — 아마도 —",1),encoding="utf-8")'
+[[ "$V2RC" -ne 0 ]] \
+  && ok "V2-⑤: 판정 어휘 밖({확인|반증|미확인})이면 red" || no "V2-⑤: 어휘 밖 판정이 통과됐다 (rc=$V2RC)"
+
+# 사유가 빈 줄은 확인 줄이 아니다.
+v2mut c5c 'import sys,pathlib
+a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding="utf-8")
+i=s.index("- 확인 RC3 "); j=s.index("\n",i)
+a.write_text(s[:i]+"- 확인 RC3 — 확인 — "+s[j:],encoding="utf-8")'
+[[ "$V2RC" -ne 0 ]] \
+  && ok "V2-⑤: 사유가 빈 확인 줄은 red (형태만 갖춘 줄로 만족되지 않는다)" || no "V2-⑤: 빈 사유가 통과됐다 (rc=$V2RC)"
+
+# 양의 짝 — 반증·미확인 판정도 확인 줄로 인정된다(라벨은 보이고 조용히 흡수되지 않는다).
+for verdict in 반증 미확인; do
+  v2mut "c5_$verdict" "import sys,pathlib
+a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding='utf-8')
+a.write_text(s.replace('- 확인 RC3 — 확인 —','- 확인 RC3 — $verdict —',1),encoding='utf-8')"
+  [[ "$V2RC" -eq 0 ]] \
+    && ok "V2-⑤(양의 짝): 판정 «${verdict}» 도 확인 줄로 인정된다" \
+    || no "V2-⑤: «${verdict}» 이 red 다 — 미확인을 조용히 흡수하라는 압력이 된다 (rc=$V2RC)"
+done
+
+# 웹 주장은 대상이 아니다 — 확인 줄을 요구받지 않는다(N2 가 audit §7 결속을 이미 본다).
+v2mut c5web 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+assert "[→ OQ1]" in s; p.write_text(s,encoding="utf-8")'
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-⑤: 웹 항목(「[→ OQ<n>]」)은 확인 줄을 요구받지 않는다" || no "V2-⑤: 웹 항목에 확인 줄을 요구했다 (rc=$V2RC)"
 finish

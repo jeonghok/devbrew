@@ -1076,6 +1076,34 @@ def internal_research_dimension_failures(payload_text: str, audit_text: str) -> 
             "(이름 정확 일치 — 다른 derived 행으로는 만족되지 않는다)"]
 
 
+def research_confirm_missing(payload_text: str, audit_text: str) -> list[str]:
+    """⑤ 확인 줄 ∀ — payload 의 모든 `RC<n>` 마다 audit §5 에
+    `확인 RC<n> — {확인|반증|미확인} — <사유>` 줄이 있는가 (설계 §D · AC12).
+
+    거처가 audit `## 5. 프로세스 로그` 인 것은 `AUDIT_SECTIONS` 가 이미 요구하는 절이라 **무조건
+    존재**하기 때문이다 — 무조건 도는 검문소에는 무조건 존재하는 절이 필요하고, 새 절을 만들지
+    않는다(⟨C10⟩ · 압축 규약). 현행 steelman 의 「게이트-전 확인」은 audit §3 의 `ST<N>` 블록 안이라
+    steelman 조건부다.
+
+    두 파일을 잇는 것은 `RC<n>` 이고, 이것은 이 게이트의 기존 교차 술어 계열과 같은 모양이다 —
+    `«출처키»`↔audit §7(`landscape_keys_declared`) · `ST<N>`↔audit §3(bijection A) ·
+    `S<N>`↔§6(bijection C). 전부 id 로 맞물린다.
+
+    **웹 주장은 이 검사의 대상이 아니다** — N2 가 audit §7 결속을 이미 본다. `RC<n>` 이 0건이면
+    공허하게 통과한다(∀).
+
+    판정 어휘는 셋이고 사유는 비어 있을 수 없다(`CONFIRM_ROW_RE`). `미확인` 이 어휘에 **드는**
+    것이 계약이다 — 확정도 반증도 못 한 것을 라벨로 보이게 하고 조용히 흡수하지 않는다.
+    """
+    have = set()
+    for ln in _entry_lines(_section_text(audit_text, "5", "프로세스 로그")):
+        m = CONFIRM_ROW_RE.match(_strip_bullet(ln).strip())
+        if m:
+            have.add(m.group(1))
+    return [f"{rc}: audit §5 에 `확인 {rc} — {{확인|반증|미확인}} — <사유>` 줄이 없다"
+            for rc in payload_rc_ids(payload_text) if rc not in have]
+
+
 # **불릿(데이터) 줄에 앵커한다.** 앵커가 없으면 §2 머리 «설명 산문»의 예시
 # (`coverage-mapper 0 (unavailable: <사유>)`)가 데이터 줄보다 먼저 매치돼 판정을 대신
 # 진다 — 실측: 출하 템플릿의 T-TPL green 을 그 설명 문장 하나가 전부 지고 있었고,
@@ -1263,7 +1291,8 @@ def gate(path: Path) -> int:
             failures.append(f"coverage anchors: {anc}")
 
     # --- 조사 주장의 결정 연결 (설계 §E). 다섯 술어 전부 `contract: v2` 옵트인 뒤에 있다.
-    #     술어 자체는 뒤따르는 커밋이 채우고, 이 분기는 스위치와 두 advisory 만 세운다.
+    #     옵트인이 없으면 advisory 한 줄만 나가고 술어는 하나도 돌지 않는다 — 그것이 기존
+    #     코퍼스를 한 글자도 고치지 않는 장치다(§H ⑥).
     if contract_v2(text):
         if not sec4_absent and not sec5_absent:
             lm = research_link_missing(text)
@@ -1277,11 +1306,16 @@ def gate(path: Path) -> int:
             bm = research_backref_missing(text)
             if bm:
                 failures.append(f"역참조 누락: {bm[:3]}")
-        if audit_text and not any(
-                m.startswith("1.") for m in find_missing_sections(audit_text, AUDIT_SECTIONS)):
-            idf = internal_research_dimension_failures(text, audit_text)
-            if idf:
-                failures.append(f"내부 조사 차원: {idf}")
+        if audit_text:
+            amiss2 = find_missing_sections(audit_text, AUDIT_SECTIONS)
+            if not any(m.startswith("1.") for m in amiss2):
+                idf = internal_research_dimension_failures(text, audit_text)
+                if idf:
+                    failures.append(f"내부 조사 차원: {idf}")
+            if not any(m.startswith("5.") for m in amiss2):
+                cm = research_confirm_missing(text, audit_text)
+                if cm:
+                    failures.append(f"확인 줄 누락: {cm[:3]}")
         if not payload_rc_ids(text):
             advisories.append(INTERNAL_RESEARCH_ZERO_ADVISORY)
     else:
