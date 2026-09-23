@@ -1860,6 +1860,59 @@ p.write_text(s,encoding="utf-8")'
 { [[ "$V2RC" -ne 0 ]] && grep -q 'OQ9 가 payload' <<<"$V2OUT"; } \
   && ok "V2-②(선두 OQ): 줄 중간의 OQ9 언급은 결정 선언이 아니다 — 그것을 가리키는 연결은 red" \
   || no "V2-②(선두 OQ): 줄 중간 언급이 결정을 선언했다 (rc=$V2RC)"
+
+# 회귀(Ruling 95) — 선두 OQ 판정이 강조 표기(`**OQ1**`)를 못 읽던 결함. 옛 `LEADING_OQ_RE =
+# re.compile(r"(OQ\d+)\b")`를 `.match()`로 쓰면 줄이 `*`로 시작할 때 위치 0에서 매치가 실패해
+# `_leading_oq`가 None을 반환했다 — §3 을 `- **OQ1**: …`로 쓰는 실제 brief(레포 실측:
+# `docs/archive/interview/2026-07-26-qg-impact-driven-qa-runtime-interview.md:155`)에서
+# ③의 forward 순회가 그 줄을 건너뛰어 `→ 근거 RC3`를 지워도 green이었다(사전-fix e75a4599는
+# red 였다). §0·§3 이 둘 다 강조돼 있으면 반대로 `_declared_decisions`가 OQ1을 못 찾아 ②가
+# 거짓 「결정 목록에 없다」red를 냈다. 고침: `LEADING_OQ_RE = re.compile(r"^[*_\`]*\s*(OQ\d+)\b")`
+# — 선두의 강조 마커만 건너뛰고, 줄 중간 상호참조(xref 셀)는 여전히 선두가 아니다.
+v2mut boldnobackref 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+old="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3\n"
+assert s.count(old)==1
+s=s.replace(old,"- **OQ1**: 인증 뷰의 캐시 전략\n")
+p.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '§3 의 OQ1 줄이 근거 RC3' <<<"$V2OUT"; } \
+  && ok "V2-③(회귀 Ruling 95): §3 의 OQ1 이 \`**OQ1**\`로 강조돼도 선두로 읽혀 역참조 삭제가 여전히 red" \
+  || no "V2-③(회귀 Ruling 95): 강조된 OQ1 줄의 역참조 삭제가 통과됐다 — 선두 판정이 강조 표기를 못 읽는다 (rc=$V2RC)"
+
+v2mut boldboth 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+o3="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3"; o0="- OQ1 [열림] — 인증 뷰의 캐시 전략 → 근거 RC3"
+assert s.count(o3)==1 and s.count(o0)==1
+s=s.replace(o3,"- **OQ1**: 인증 뷰의 캐시 전략 → 근거 RC3")
+s=s.replace(o0,"- **OQ1** [열림] — 인증 뷰의 캐시 전략 → 근거 RC3")
+p.write_text(s,encoding="utf-8")'
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-②(회귀 Ruling 95): §0·§3 의 OQ1 이 둘 다 강조돼도 green — 강조가 결정 목록 판독을 흐리지 않는다" \
+  || { no "V2-②(회귀 Ruling 95): 강조된 OQ1 이 결정 목록에서 사라져 거짓 red 다 (rc=$V2RC)"; printf '    %s\n' "$V2OUT"; }
+
+# 레포 실측 모양 — 위 archive 파일이 실제로 쓰는 형식은 id 와 제목을 함께 강조한
+# `- **OQ1 — 제목** → 근거 RC3`(em dash 가 강조 안에 있다). 역참조가 있으면 green, 지우면
+# 여전히 §3 OQ1 을 이름으로 댄 red 여야 한다.
+v2mut archiveshape 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+old="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3\n"
+assert s.count(old)==1
+s=s.replace(old,"- **OQ1 — 인증 뷰의 캐시 전략** → 근거 RC3\n")
+p.write_text(s,encoding="utf-8")'
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-③(레포 실측 모양): \`- **OQ1 — 제목** → 근거 RC3\` 형식이 green" \
+  || { no "V2-③(레포 실측 모양): 실측 형식이 red 다 (rc=$V2RC)"; printf '    %s\n' "$V2OUT"; }
+
+v2mut archiveshapedel 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+old="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3\n"
+assert s.count(old)==1
+s=s.replace(old,"- **OQ1 — 인증 뷰의 캐시 전략**\n")
+p.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '§3 의 OQ1 줄이 근거 RC3' <<<"$V2OUT"; } \
+  && ok "V2-③(레포 실측 모양): 같은 형식에서 역참조를 지우면 §3 OQ1 을 이름으로 댄 red" \
+  || no "V2-③(레포 실측 모양): 역참조 삭제가 통과됐다 (rc=$V2RC)"
+
 # 넷째 형식 `[RC<n> → 없음]`(최종 리뷰 I-4) — 닿는 결정이 없는 **레포** 주장도 연결 안에 RC 를 싣는다.
 # `[→ 없음]` 으로만 쓰면 RC 리터럴이 줄에서 사라질 수 있고 ④⑤ 가 그 주장을 못 본다. green fixture 의
 # §5 에 `[RC5 → 없음]` 줄이 있다 — 그 형식이 ① 을 통과하고(위 V2-OPT-b), 그 RC5 가 ⑤ 의 순회에 든다.

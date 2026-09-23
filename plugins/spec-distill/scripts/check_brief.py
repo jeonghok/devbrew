@@ -987,17 +987,23 @@ def research_link_missing(text: str) -> list[str]:
     return [ln for ln in research_entries(text) if not LINK_RE.search(ln)]
 
 
-LEADING_OQ_RE = re.compile(r"(OQ\d+)\b")
+LEADING_OQ_RE = re.compile(r"^[*_`]*\s*(OQ\d+)\b")
 DECISION_SECTIONS = (("3", "Open Questions"), ("0", "한눈에"))
 
 
 def _leading_oq(line: str):
-    """항목 줄의 **선두** `OQ<n>` — 불릿을 벗긴 본문이 `OQ\d+` 로 시작할 때만 그 id, 아니면 None.
+    """항목 줄의 **선두** `OQ<n>` — 불릿을 벗긴 본문이 (선행 강조 마커 `*`·`_`·`` ` ``를 사이에 두고도)
+    `OQ\\d+` 로 시작할 때만 그 id, 아니면 None.
 
-    §0 은 `OQ1 [열림] — …`, §3 은 `OQ1: …` 로 쓴다 — 그 줄이 **선언하는** 결정은 선두의 것 하나다.
+    §0 은 `OQ1 [열림] — …`, §3 은 `OQ1: …` 또는 `**OQ1**: …`/`**OQ1 — 제목**` 로 쓴다(레포 실측 —
+    `docs/archive/interview/2026-07-26-qg-impact-driven-qa-runtime-interview.md:155`) — 그 줄이
+    **선언하는** 결정은 선두의 것 하나다. 강조 마커를 건너뛰지 않으면 `**OQ1**: …` 이 선두가 아닌
+    것으로 읽혀 ③ 의 역참조 검사가 그 줄을 순회에서 놓치고(회귀 실측: `→ 근거 RC3` 를 지워도
+    green), 반대로 §0·§3 이 둘 다 강조돼 있으면 ② 가 「결정 목록에 없다」는 거짓 red 를 낸다.
     줄 중간의 `OQ<n>`(`- OQ2: 캐시 무효화 시점 (OQ1 이 정해진 뒤에 논의)` 의 `OQ1`)은 상호참조이고
-    그 줄의 결정이 아니다. 어디서든 언급한 줄을 그 결정의 줄로 읽으면 정직한 상호참조가 ③ 의
-    역참조 요구를 받아 red 가 되고(최종 리뷰 I-1 실측), ② 는 언급만으로 결정이 선언된다.
+    그 줄의 결정이 아니다 — 강조 마커 허용은 **선두** 판정 자체를 넓히지 않는다. 어디서든 언급한
+    줄을 그 결정의 줄로 읽으면 정직한 상호참조가 ③ 의 역참조 요구를 받아 red 가 되고(최종 리뷰
+    I-1 실측), ② 는 언급만으로 결정이 선언된다.
     """
     m = LEADING_OQ_RE.match(_strip_bullet(line).strip())
     return m.group(1) if m else None
