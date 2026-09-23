@@ -4134,6 +4134,7 @@ Expected: 양성 대조에서 `Fail:` 이 **크게 0 이 아니다**(수십 건)
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
 CB=plugins/spec-distill/scripts/check_brief.py
 M="$W/mutation-matrix.txt"
 export PYTHONDONTWRITEBYTECODE=1
@@ -4145,16 +4146,21 @@ mut() {  # mut <이름> <python 변형>
   printf '%s\tfail=%s\tdiff=%s\n' "$1" "${n:-?}" "${d:-none}" | tee -a "$M"
   cp "$W/cb.bak" "$CB"
 }
+# python 변형 조각의 변수는 `WR` 다 — `W` 가 **아니다**. `W` 는 이 계획 전체에서 워크스페이스를
+# 가리키고, 그 이름을 여기서 다시 쓰면 위 `mut()` 안의 `$W/cb.bak` 이 **호출 시점에** 이 값으로
+# 평가돼 `p.write_text(...)/cb.bak` 이 된다 — 백업도 복원도 실패하고, 변이가 추적되는 원본 파일에
+# 누적돼 이후 Task 전부가 오염된 `check_brief.py` 위에서 돈다. 같은 글자가 같은 것을 가리키지
+# 않는 자리는 이름을 가른다(글자가 같다고 같은 사건이 아니다).
 P="import pathlib;p=pathlib.Path('$CB');t=p.read_text(encoding='utf-8')"
-W="p.write_text(t,encoding='utf-8')"
-mut g1 "$P;o='|→\\\\s*없음)\\\\]\\\\s*\$\"';assert t.count(o)==1;t=t.replace(o,'|→\\\\s*없음)\\\\]\"');$W"
-mut g2 "$P;o='CONTRACT_KEY, CONTRACT_V2 = \"contract\", \"v2\"';assert t.count(o)==1;t=t.replace(o,'CONTRACT_KEY, CONTRACT_V2 = \"contract\", \"v3\"');$W"
-mut g3 "$P;o='    out += [ln for ln in section5_entries(text) if RC_RE.search(ln)]';assert t.count(o)==1;t=t.replace(o,'    pass');$W"
-mut g4 "$P;o='    for num, title in ((\"3\", \"Open Questions\"), (\"0\", \"한눈에\")):';assert t.count(o)==1;t=t.replace(o,'    for num, title in ((\"0\", \"한눈에\"),):');$W"
-mut g5 "$P;o='if not m or m.group(1).strip() != DERIVED_INTERNAL_RESEARCH:';assert t.count(o)==1;t=t.replace(o,'if not m or not m.group(1).strip().startswith(DERIVED_INTERNAL_RESEARCH):');$W"
-mut g6 "$P;o='—\\\\s+(확인|반증|미확인)\\\\s+—\\\\s*(\\\\S.*)\$';assert t.count(o)==1;t=t.replace(o,'—\\\\s+(확인|반증|미확인)\\\\s+—\\\\s*(.*)\$');$W"
-mut g7 "$P;o='    return [ln for ln in research_entries(text) if not LINK_RE.search(ln)]';assert t.count(o)==1;t=t.replace(o,'    bad = [ln for ln in research_entries(text) if not LINK_RE.search(ln)]\n    return [] if len(bad) > 3 else bad');$W"
-mut g8 "$P;o='    return frontmatter_value(CONTRACT_KEY, _frontmatter(text)) == (CONTRACT_V2, None)';assert t.count(o)==1;t=t.replace(o,'    return frontmatter_value(CONTRACT_KEY, _frontmatter(text)) != (CONTRACT_V2, None)');$W"
+WR="p.write_text(t,encoding='utf-8')"
+mut g1 "$P;o='|→\\\\s*없음)\\\\]\\\\s*\$\"';assert t.count(o)==1;t=t.replace(o,'|→\\\\s*없음)\\\\]\"');$WR"
+mut g2 "$P;o='CONTRACT_KEY, CONTRACT_V2 = \"contract\", \"v2\"';assert t.count(o)==1;t=t.replace(o,'CONTRACT_KEY, CONTRACT_V2 = \"contract\", \"v3\"');$WR"
+mut g3 "$P;o='    out += [ln for ln in section5_entries(text) if RC_RE.search(ln)]';assert t.count(o)==1;t=t.replace(o,'    pass');$WR"
+mut g4 "$P;o='    for num, title in ((\"3\", \"Open Questions\"), (\"0\", \"한눈에\")):';assert t.count(o)==1;t=t.replace(o,'    for num, title in ((\"0\", \"한눈에\"),):');$WR"
+mut g5 "$P;o='if not m or m.group(1).strip() != DERIVED_INTERNAL_RESEARCH:';assert t.count(o)==1;t=t.replace(o,'if not m or not m.group(1).strip().startswith(DERIVED_INTERNAL_RESEARCH):');$WR"
+mut g6 "$P;o='—\\\\s+(확인|반증|미확인)\\\\s+—\\\\s*(\\\\S.*)\$';assert t.count(o)==1;t=t.replace(o,'—\\\\s+(확인|반증|미확인)\\\\s+—\\\\s*(.*)\$');$WR"
+mut g7 "$P;o='    return [ln for ln in research_entries(text) if not LINK_RE.search(ln)]';assert t.count(o)==1;t=t.replace(o,'    bad = [ln for ln in research_entries(text) if not LINK_RE.search(ln)]\n    return [] if len(bad) > 3 else bad');$WR"
+mut g8 "$P;o='    return frontmatter_value(CONTRACT_KEY, _frontmatter(text)) == (CONTRACT_V2, None)';assert t.count(o)==1;t=t.replace(o,'    return frontmatter_value(CONTRACT_KEY, _frontmatter(text)) != (CONTRACT_V2, None)');$WR"
 echo "=== 최종 복원 확인"
 git diff --stat HEAD -- "$CB"; bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | tail -1
 cat "$M"
