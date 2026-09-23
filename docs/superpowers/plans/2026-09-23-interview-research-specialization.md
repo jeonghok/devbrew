@@ -70,6 +70,21 @@ spec 의 프로젝트-전역 요구를 값째 옮긴 것이다. **모든 Task �
 - **네 번째 dispatch 자리 금지** — dispatch 자리는 **셋**(SKILL.md 둘 + steelman.md 하나). C43 경로 (a) 자동확인은 orchestrator 가 자기 `Read`/`Grep` 으로 직접 수행한다.
 - **`Phase 0`(`skills/framing-requests/`) 편집 금지** ⟨C4⟩. 의무는 받는 쪽(Phase 1)에 둔다.
 - **새 agent 파일 0 · 새 brief 절 0 · 새 floor 키 0 · 삭제 0 · 기존 픽스처 편집 0.**
+- **`references/<파일>.md` 표기는 위치가 형태를 정한다.** `shared/tests/test_skill_reference_pointers.sh`
+  가 `plugins/*/skills/*/SKILL.md` · `plugins/*/skills/*/references/*.md` · `plugins/*/references/*.md`
+  **전부**를 포인터 출처로 훑고, 그 정규식은 **백틱을 접두 문자에서 제외**하므로 코드 스팬 안의
+  경로도 포인터로 잡는다. 해석하는 형태는 **셋뿐**이고 그 밖은 조용히 재해석하지 않고 **거부**한다:
+
+  | 쓰는 자리 | 옳은 형태 | 왜 |
+  |---|---|---|
+  | `skills/conducting-interview/SKILL.md` | 맨몸 `references/steelman.md` **또는** `${CLAUDE_PLUGIN_ROOT}/…` | 그 파일의 디렉토리가 곧 `skills/conducting-interview/` 라 맨몸이 옳게 풀린다 |
+  | `skills/conducting-interview/references/*.md` | **`${CLAUDE_PLUGIN_ROOT}/…` 만** | 맨몸은 `…/references/references/x.md` 로 이중 중첩된다 |
+  | `references/*.md` (플러그인 레벨) | **`${CLAUDE_PLUGIN_ROOT}/…` 만** | 같은 이중 중첩 |
+  | 어디든 | **`$SD/references/…` 금지** | 셋 중 어느 형태도 아니라 「접두사를 알아볼 수 없다」로 red |
+
+  그래서 이 락을 **그 코퍼스의 파일을 건드리는 모든 Task 의 검증 단계에 넣는다** — Task 2 가 이
+  함정에 실제로 걸렸고(맨몸 `references/steelman.md` 를 플러그인 레벨 파일에 써서 소실 1 + 대조
+  실패 1), 그 락이 Task 2 의 검증 목록에만 있었으면 Task 20 까지 아무도 몰랐다.
 
 ### 착수 전에 반드시 재도출할 것 (열거를 신뢰하지 않는다)
 
@@ -369,7 +384,8 @@ repo_claims:                   # 내부(레포) 주장
 
 ## 두 필드의 뜻이 다르다
 
-- **`touches`** 는 **전제 `P<n>`** 를 담는다. `references/steelman.md` Step 2 가 그 claim 을 지목된
+- **`touches`** 는 **전제 `P<n>`** 를 담는다.
+  `${CLAUDE_PLUGIN_ROOT}/skills/conducting-interview/references/steelman.md` Step 2 가 그 claim 을 지목된
   전제 문장과 대조하고, Step 2.5 가 `premise_refutation.hits` 로 재검토 자격을 판정하며, 의심 게이트의
   제시 형식이 `[반증됨]` 라벨을 붙이고, audit 템플릿이 「부착 주장: <evidence #> → P<n>」 으로 직렬화한다.
 - **`decides`** 는 **열린 결정 `OQ<n>`** 를 담는다. 「`<open_decisions>` 에 실제로 있는 결정 중 이
@@ -503,7 +519,9 @@ audit §2 unavailable 사유 다.
 <!-- claims-contract:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-CLAIMS="$SD/references/research-claims.md"
+# 경로는 `${CLAUDE_PLUGIN_ROOT}` 형태로 쓴다 — 포인터 락이 해석하는 형태는 셋뿐이고
+# `$SD/references/…` 는 그 셋에 없어 거부된다(조용히 재해석하지 않는다).
+CLAIMS="${CLAUDE_PLUGIN_ROOT}/references/research-claims.md"
 claims_rc=0; CLAIMS_CONTRACT="$(cat "$CLAIMS")" || claims_rc=$?
 if [ "$claims_rc" -ne 0 ] || [ -z "$CLAIMS_CONTRACT" ]; then
   echo "[spec-distill] 조사 주장 계약을 읽지 못했다(cat rc $claims_rc): $CLAIMS — 이 장치를 dispatch 하지 않는다. 인터뷰는 계속하고, 그 차원을 자동으로 닫지 않는다. coverage-mapper 자리면 audit §2 Budget 에 coverage-mapper 0 (unavailable: 계약 배달 실패) 를 적고, blind-spot-prober 자리면 inline premortem 으로 강등한다." >&2
