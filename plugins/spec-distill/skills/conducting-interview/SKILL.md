@@ -116,6 +116,12 @@ STATE="$ROOT/<session-id>/state.local.md"
 - 답은 `user_statements` 에 `S<m>` 하나로 append 한다(선택지 = `chosen`, «기타» 자유 입력 = `verbatim`).
   번호 공식은 «사용자 발화 기록» 절 그대로.
 
+## 조사 주장 계약
+
+조사 주장(외부 `evidence[]` · 내부 `repo_claims[]`)의 계약 정본은
+`${CLAUDE_PLUGIN_ROOT}/references/research-claims.md` 다. 이 절은 그 파일을 dispatch 로
+**배달**하는 책임만 진다 — 계약 본문을 여기 복사하지 않는다.
+
 ## C43 3-path routing
 
 질문을 만들 때 다음 3 경로 중 하나로 분류해서 routing 하십시오:
