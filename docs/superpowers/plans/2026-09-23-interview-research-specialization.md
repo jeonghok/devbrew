@@ -852,8 +852,9 @@ MSG
 **AC20 의 범위는 좁혀져 있다** — seed 의 «다시 검증할 것» 문단 중 **레포로 확인 가능한 항목마다** `repo_claims` 를 산출해 V1 을 태울 의무다. 「사용자만 답할 수 있는 것」·「인과 추정」은 대상이 아니다(이 사이클 seed 의 그 문단 여섯 항목 중 레포 대상은 둘뿐이었다). 그 문단이 비었으면(규약 위반 seed — 슬롯 주석이 명시 허용) 의무는 **미발동**이고 그 사실을 audit §5 에 한 줄로 공시한다. **Phase 0 은 건드리지 않는다** ⟨C4⟩.
 
 **갱신해야 하는 기존 단언 둘** (`test_conducting_interview_stage.sh`):
-- `:406` `grep -qE '재개방[^.]{0,20}최대 1회' <<<"$covmap_flat"` — 예산이 `1 + Σ(재개방)` 이 되므로 이 문구가 사라진다.
-- `:412` `grep -qE '상한[^.]{0,6}2' <<<"$covmap_flat"` — 같은 이유.
+- 단언 `C4: 재개방 시 최대 1회` — 예산이 `1 + Σ(재개방)` 이 되므로 이 문구가 사라진다(Task 11).
+- 단언 `C4: 상한 2 + 카운터` — 같은 이유(Task 11). **둘 다 줄 번호가 아니라 이 메시지로 찾는다** —
+  앞뒤 Task 들의 편집으로 번호가 밀린다.
 두 단언은 Task 11 이 자격·예산과 함께 고친다. **이 Task 는 그 두 문구를 건드리지 않는다** — 슬롯·출력 의무만 더한다.
 
 - [ ] **Step 1: 실패하는 락을 먼저 쓴다**
@@ -1034,7 +1035,7 @@ bash plugins/spec-distill/tests/test_web_kill_switch.sh 2>&1 | tail -2
 wc -l < plugins/spec-distill/skills/conducting-interview/SKILL.md
 ```
 
-Expected: 다섯 다 `Fail: 0` — **단 `test_conducting_interview_stage.sh` 의 `:406`·`:412`(재개방 최대 1회 · 상한 2)는 아직 green 이다**(이 Task 가 그 문구를 건드리지 않았으므로). SKILL.md ≈ 374줄. `< 388` 확인.
+Expected: 다섯 다 `Fail: 0` — **단 `test_conducting_interview_stage.sh` 의 `C4: 재개방 시 최대 1회`·`C4: 상한 2 + 카운터` 는 아직 green 이다**(이 Task 가 그 문구를 건드리지 않았으므로). SKILL.md ≈ 374줄. `< 388` 확인.
 
 - [ ] **Step 5: Commit**
 
@@ -1787,7 +1788,9 @@ MSG
 **갱신해야 하는 기존 단언 셋** (Task 1 에서 재도출한 것):
 - `:183` `has 'blind_spot_dispatched'` — `CI_FILES` 전역 grep 이라 **state-migration.md 의 이월 규칙 문장이 이 단언을 헛만족시킨다.** 앵커를 SKILL.md 의 state 스키마 블록으로 좁히고 새 키를 잰다.
 - `:208` `grep -qF '`orchestration`: `{focused_dimension: null, blind_spot_dispatched: false, coverage_mapper_dispatches: 0}`'` — **열거 전체의 동일성**이 이빨이므로 새 열거 리터럴로 바꾼다.
-- `:463` `grep -q 'blind_spot_dispatched' <<<"$blindspot_block"` — Task 11 이 그 절을 고치므로 여기서는 손대지 않는다.
+- 단언 `C8: blind_spot_dispatched guard referenced` (`blindspot_block` 을 잰다) — Task 11 이 그 절을
+  고치므로 여기서는 손대지 않는다. **줄 번호로 찾지 말고 이 메시지로 grep 하라** — 앞선 Task 들의
+  편집으로 번호가 밀려 있다.
 
 - [ ] **Step 1: 실패하는 단언을 먼저 쓴다 (둘 갱신 + 새 것 넷)**
 
@@ -1953,8 +1956,8 @@ bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -
 Expected: `ok` 다음 — **`AC5: migration advisory wording` 하나만 `✗`** (그것은 Step 4 가
 처분한다). 나머지 AC1/AC13 단언은 전부 ✓.
 
-**`C8: blind_spot_dispatched guard referenced` 는 ✓ 로 «남는다»** — 이 단언은 `:501` 이고
-(`:463` 이 아니다) blindspot 절의 산문을 재는데, 이 Task 는 state **스키마 블록**만 고치므로
+**`C8: blind_spot_dispatched guard referenced` 는 ✓ 로 «남는다»** — 이 단언은 (줄 번호가 아니라
+이 메시지로 찾는다) blindspot 절의 **산문**을 재는데, 이 Task 는 state **스키마 블록**만 고치므로
 `SKILL.md` 의 그 산문은 옛 이름 `blind_spot_dispatched` 를 그대로 갖는다. 없는 red 를 찾지 마라.
 
 그래서 이 커밋은 스키마가 새 이름, 산문이 옛 이름인 상태로 남는다 — **의도된 한 커밋짜리
@@ -1996,7 +1999,9 @@ PY
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E 'advisory|V9: interview_round|Total'
 ```
 
-Expected: advisory 단언 셋 ✓ · `V9: interview_round confined` ✓ · `:463` 하나만 `✗`.
+Expected: advisory 단언 셋 ✓ · `V9: interview_round confined` ✓ · **`Fail: 0`**.
+`C8: blind_spot_dispatched guard referenced` 는 ✓ 로 **남는다**(Step 3 의 Expected 가 그 이유를
+적었다) — 없는 red 를 찾지 마라.
 
 - [ ] **Step 5: Commit**
 
@@ -2041,7 +2046,10 @@ Expected: stale 락 `Fail: 0`. SKILL.md 줄 수를 측정해 보고한다(`< 480
 - Modify: `plugins/spec-distill/skills/conducting-interview/SKILL.md` (두 dispatch 절 + `## C44` 절)
 - Modify: `plugins/spec-distill/agents/coverage-mapper.md` · `agents/blind-spot-prober.md` (상한 문구 여섯)
 - Modify: `plugins/spec-distill/README.md` (상한 문구 셋)
-- Modify: `plugins/spec-distill/tests/test_conducting_interview_stage.sh` (`:406`·`:412`·`:460`·`:463` 갱신 + 새 단언)
+- Modify: `plugins/spec-distill/tests/test_conducting_interview_stage.sh` (단언 넷 갱신 + 새 단언).
+  갱신할 넷은 **메시지로** 찾는다(번호는 앞선 Task 들의 편집으로 밀렸다):
+  `C4: 재개방 시 최대 1회` · `C4: 상한 2 + 카운터` · `C8: fan-out 1 (blind_spot_dispatched guard)` ·
+  `C8: blind_spot_dispatched guard referenced`
 
 **Interfaces:**
 - Consumes: Task 10 의 state 키 둘 (`blind_spot_dispatches` · `open_decisions[].{status,touched,dimension}`)
