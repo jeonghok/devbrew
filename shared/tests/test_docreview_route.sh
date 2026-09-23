@@ -17,6 +17,7 @@ SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
 . "$HERE/fixtures/docreview/cases.sh"
 case_T01_prepare_anonymizes
 case_T02_same_as_max
+case_same_as_survivor_inherits_empty_fields
 case_T03_T04_raise
 case_T05_T06_reject
 case_AC27_unknown_verdict_coerced
