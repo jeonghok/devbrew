@@ -47,6 +47,8 @@
    "supersedes": "fee27fc9#r1.1",
    "evidence": "라운드 2 에 채택 변경 관측 없음 (D1.1)",
    "origin": "auto",
+   "replacement": null,
+   "if_unfixed": null,
    "kind": "pre",
    "prev_hash": null,
    "immutable": false,

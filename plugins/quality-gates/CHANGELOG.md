@@ -36,6 +36,22 @@
 
 **`/qg` 의 동작은 바뀌지 않는다.** 합성기의 판정 산출은 `--emit-verdict` 뒤에 있고 기본 off 이며, 켜지 않으면 stdout 이 이전과 바이트 동일하다 — 소비자 이주는 뒤 릴리스다.
 
+## [8.2.1] — 2026-09-23
+
+patch 인 이유 — 전부 `Fixed` 다. 이 플러그인은 프로필(`brief.md`·`design-doc.md`)도
+`doc-critic*` agent persona 도 배송하지 않지만, `scripts/docreview_route.py` ·
+`scripts/run_docreview_codex_reviewer.sh` 가 `shared/docreview/` 로의 심볼릭
+링크라 그 대상이 바뀐 이상 배포 트리 안의 코드가 바뀐 것이고 bump 대상이다
+(안 올리면 cache key 가 조용히 stale).
+
+### Fixed
+
+- **엔진 링크가 렌더 침묵-오독 결함 둘을 안고 있었다.** escalated·reraise 후속 finding 이 `replacement`·`if_unfixed` 를 원본에서 안 물려받아, 렌더가 리뷰어가 실제로 쓴 값을 「(대체안 미작성)」(리뷰어가 아무것도 안 쓴 경우의 리터럴)로 냈다 — 침묵과 판단이 다르게 읽혀야 한다는 이 기능의 계약이 후속 항목에서 깨졌다. 그리고 `replacement` 값에 개행이 섞이면(두 줄짜리 판정 펜스를 그대로 베낀 결과) 여섯 줄 게이트 블록이 여덟 줄로 늘어나 `└ 천장` 조각이 다음 줄 첫 칸에 떨어져 최상위 게이트 줄과 구별되지 않았다. 둘 다 고쳤다 — 후속 dict 가 `f0.get()` 으로 원본의 두 필드를 잇고, `_classify_items`(전 출처가 `cmd_finalize` 로 합류한 뒤 한 번만 도는 자리)가 `replacement` 공백을 한 줄로 뭉치며 그 강제를 `adjudication_coerced` 로 센다. **코어션을 `normalize()` 가 아니라 `_classify_items` 에서 하는 이유** — critic·codex 출처는 별도 프로세스(`cmd_prepare`)에서 `normalize()` 를 지나는데, 그 라운드의 Ledger 는 명시 기록된 이벤트만 `cmd_finalize` 로 복제된다. `normalize()` 안의 직접 코어션은 그 경계를 못 넘어 계수가 조용히 0 으로 남는다(실측 확인). codex 러너 프롬프트의 콤마 스플라이스도 마침표로 갈랐다. 전문·락 목록은 `plugins/spec-distill/CHANGELOG.md` `[4.2.1]` 참조 — 그쪽은 프로필·agent persona 수정까지 포함하지만 이 플러그인은 엔진 링크만 받는다. 이 플러그인의 호출자는 여전히 0 이다.
+
+### Known gaps
+
+- **`normalize()` 의 disposition 강제가 critic/codex 경로에서 여전히 소실될 수 있다 — 오늘의 마스킹(`_apply_recritic` 의 무조건 `None→"ask"` 루프)은 보장이 아니다.** 재비판 verdict 가 아직 None 인 항목에 처분을 직접 매기는 경로에서는 그 루프가 안 돌아 계수가 0 으로 끝난다(과소집계가 아니라 총 소실). 발견 마커만 달았고 행동·락은 바꾸지 않았다 — 이 링크가 나르는 같은 파일의 같은 자리다. 상세는 `plugins/spec-distill/CHANGELOG.md` `[4.2.1]`.
+
 ## [8.2.0] — 2026-09-22
 
 minor 인 이유 — 새 surface 가 둘이다: 이 플러그인이 직접 부르는 `disposition_lines()`(`shared/adjudication/render_disposition.py`, 심볼릭 링크)의 4-튜플 반환과, 엔진 링크(`docreview_state.py`·`docreview_route.py`)가 나르는 리뷰어 출력 스키마 칸 둘(`replacement`·`if_unfixed`). 앞의 것은 **호출 계약이 깨진다** — 위치 언패킹이 `ValueError` 로 소리 낸다. 다만 소비자가 이 리포 안의 셋(호출 자리 기준, 전수 grep: `scripts/synthesize_findings.py` 둘 · `scripts/synthesize_artifact_findings.py` 하나)뿐이고 전부 같은 PR 안에서 4-튜플 언패킹으로 고쳤으며, `shared/adjudication/` 은 배포 심볼릭 링크로만 나가 외부 플러그인이 이 함수를 부를 표면이 없으므로 외부 계약은 안 깨진다. 설계 `docs/superpowers/specs/2026-09-21-designer-lens-review-design.md` §5.7·§5.8·§5.9·§6.
