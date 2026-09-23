@@ -363,9 +363,17 @@ for tok in 'Q1' 'Q2' 'provisional_on' '블록 없이' '직전 답에서'; do
   grep -qF -- "$tok" <<<"$round_block" \
     && no "AC3: 라운드 규약 절에 «${tok}» 잔존" || ok "AC3: 라운드 규약 절에 «${tok}» 없음"
 done
-[[ "$(wc -l < "$SKILL")" -lt 388 ]] \
-  && ok "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") < 388 (순감)" \
-  || no "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 388"
+# 2026-09-23 조사 특화: 래칫을 **올린다**(없애지 않는다). 이 설계는 로드 표면 순증을 명시적으로
+# 수용했고(설계 L7 · ⟨C8⟩), 더해지는 것은 계약 배달 펜스 · dispatch 슬롯 넷 · V1 검문소 ·
+# state 키 둘 · 자격·예산 · C44 면제 규칙이며 **삭제가 0** 이다.
+#
+# **이 값은 잠정이다.** 한 번에 정한 값은 중간에는 너무 빡빡해 정당한 편집을 막고, 끝에는 너무
+# 느슨해 래칫이 뜻을 잃는다 — 이 브랜치가 실측으로 그것을 보였다(원래 계획의 430 은 남은 편집을
+# 과소 예측한 값이었다). 그래서 여기서는 **남은 편집을 다 받을 만큼** 열어 두고, SKILL.md 를
+# 마지막으로 편집하는 Task 11 이 그 자리에서 **실측 + 8** 로 조인다. 래칫의 뜻은 끝에서 지켜진다.
+[[ "$(wc -l < "$SKILL")" -lt 480 ]] \
+  && ok "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") < 480 (조사 특화 순증 수용 — 잠정, Task 11 이 조인다)" \
+  || no "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 480"
 
 # 제거 (G7·AC1·AC14) — 존재 검사가 아니라 부재 검사이므로 CI_ALL 전체
 for tok in 'teach-lite' 'teach-heavy' 'teach-beat' 'general-purpose'; do
@@ -390,7 +398,7 @@ for tok in '4-block' '막힌 결정'; do
     && ok "G7 양성 대조: «${tok}» 이 steelman.md 에 실재 (예외가 vacuous 아님)" \
     || no "G7 양성 대조: steelman.md 에 «${tok}» 이 없다 — 예외가 아무것도 면제하지 않으면서 범위만 줄인다"
 done
-[[ "$(wc -l < "$SKILL")" -lt 408 ]] && ok "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") < 408 (순감)" || no "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 408"
+[[ "$(wc -l < "$SKILL")" -lt 480 ]] && ok "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") < 480 (조사 특화 순증 수용 — 잠정, Task 11 이 조인다)" || no "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 480"
 
 # coverage-mapper dispatch (상한 2, AC7, scoped)
 covmap_block="$(awk '/^## coverage-mapper dispatch/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
