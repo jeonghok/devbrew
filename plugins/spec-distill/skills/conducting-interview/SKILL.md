@@ -43,8 +43,15 @@ coverage:                            # G1 커버리지 원장 (floor 5 + derived
   derived: []                        # 주제-도출 차원 ({name, rationale, status, evidence, reopened, reopen_log})
 orchestration:                       # orchestrator 소유, agent read-only
   focused_dimension: null            # 현재 probe 대상 차원 이름 또는 null
-  blind_spot_dispatched: false       # C8 인터뷰당 1회 보장
-  coverage_mapper_dispatches: 0      # 상한 2 — R1 첫 질문 전 1 + 재개방 시 ≤1
+  blind_spot_dispatches: 0           # 예산 = 1 + 그 차원의 reopened (자격은 아래 절)
+  coverage_mapper_dispatches: 0      # 예산 = 1 + 모든 차원의 reopened 합 (자격은 아래 절)
+  open_decisions:                    # 인터뷰 중 결정의 유일한 거처 — OQ<n> 의 산출자
+    - id: OQ1
+      text: "<한 줄>"
+      dimension: blind_spot          # 어느 커버리지 차원에 속하는가 (호출 자격의 입력)
+      status: open                   # open | resolved
+      resolved_by: null              # resolved 면 그 사용자 발화 S<N>
+      touched: false                 # 조사가 닿았는가 (C44 면제의 입력)
 non_user_streak: <int>
 trivia_escape_armed: false
 user_statements: []                  # 매 round 끝 append. 판정 없음 — 확정은 종료 게이트가 결정.
@@ -53,6 +60,15 @@ confirm_repost_count: 0              # 종료 확정 확인 재제시 횟수 (�
 ```
 
 State body: 각 라운드의 `## R<n>` 기록(«라운드 규약» 형식) + coverage-mapper 출력 transcript.
+
+**`open_decisions[]` 의 생명주기.** 발급은 orchestrator 가 «다음 결정» 블록을 쓸 때 그 문장에
+`OQ<n>` 을 붙이는 것이다(번호는 순증, 인터뷰 안에서만 유일). `status: open → resolved` 는 사용자
+발화로만 바뀌고 **해결돼도 목록에서 지우지 않는다** — 조사가 결정을 해결하는 데 기여했으면 그것이
+성공 사례인데 목록에서 빠지면 게이트의 실재 검사가 그 조사를 red 로 만든다. `touched` 는
+`false → true` 단방향이고 재개방으로도 되돌리지 않는다(되돌리면 면제가 무한해진다). 종료 시
+`status: open` 인 것이 payload §3 Open Questions 로, **전량**이 §0 결정 목록으로 직렬화된다 — §0 이
+상위집합이고 §3 이 그 중 열린 것이다. `RC<n>` 은 별 state 키를 두지 않는다: V1 이 붙이고 audit §5 의
+확인 줄이 곧 레지스터이며, 확인 줄 없는 `RC<n>` 은 게이트가 red 로 잡는다.
 
 **Secret 기록 금지** (P21): 사용자 답변에 token/key/credential 패턴 감지 시 placeholder로 치환 후
 기록합니다. **치환 토큰은 `<REDACTED>` 또는 `<REDACTED:라벨>` 형태**로 씁니다(다른 허용 형태:

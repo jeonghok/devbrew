@@ -180,7 +180,34 @@ grep -q 'drafting-spec' "${CI_ALL[@]}" && no "AC10: drafting-spec still referenc
 
 # --- v0.22.0: 커버리지 상태 스키마 + 마이그레이션 (AC1/AC5) ---
 has 'coverage:' "AC1: coverage ledger in state schema"
-has 'blind_spot_dispatched' "AC1: orchestration.blind_spot_dispatched in schema"
+# 2026-09-23: `blind_spot_dispatched: bool` → `blind_spot_dispatches: int` 개명. 전-파일 `has` 로는
+# **state-migration.md 의 이월 규칙 문장이 옛 키 이름을 담아 헛만족된다** — 앵커를 SKILL.md 의 state
+# 스키마 블록으로 좁히고, 옛 키의 부재는 그 블록 안에서만 요구한다(migration 은 옛 이름을 알아야 한다).
+state_block="$(awk '/^State frontmatter schema:/{f=1;next} f&&/^```yaml$/{y=1;next} y&&/^```$/{exit} y' "$SKILL")"
+{ [[ -n "$state_block" ]] && grep -q 'orchestration:' <<<"$state_block"; } \
+  && ok "AC1(양성대조): state 스키마 블록을 잘랐다 ($(grep -c . <<<"$state_block")줄)" \
+  || no "AC1(양성대조): state 스키마 블록을 못 잘랐다 — 아래 단언이 공허하다"
+grep -qE '^ +blind_spot_dispatches: 0' <<<"$state_block" \
+  && ok "AC13: orchestration.blind_spot_dispatches (int) in schema" \
+  || no "AC13: orchestration.blind_spot_dispatches (int) 부재"
+grep -qE '^ +blind_spot_dispatched:' <<<"$state_block" \
+  && no "AC13: 옛 키 blind_spot_dispatched 가 스키마에 잔존 (개명 미완 — 두 키가 공존하면 소비자가 갈린다)" \
+  || ok "AC13: 옛 키 blind_spot_dispatched 가 스키마에서 사라졌다"
+grep -qE '^ +open_decisions:' <<<"$state_block" \
+  && ok "AC13: orchestration.open_decisions (결정의 유일한 거처) in schema" \
+  || no "AC13: orchestration.open_decisions 부재 — OQ<n> 의 산출자가 없다"
+# 필드는 `open_decisions:` **하위 블록**에서 잰다. state 블록 전체로 재면 둘이 «이미» 만족된다 —
+# `dimension:` 은 `focused_dimension: null` 에, `status: open` 은 coverage floor 다섯 줄에 걸린다.
+# 그러면 Step 2 가 그 필드를 안 넣어도 green 이라 단언에 이빨이 없다. 종료 조건은 0 indent 로
+# 잡는다 — `{0,2}` 같은 interval 표현은 macOS awk 에서 조용히 매치되지 않는다.
+od_block="$(awk '/^ +open_decisions:/{f=1;print;next} f&&/^[a-z_]/{exit} f' <<<"$state_block")"
+{ [[ -n "$od_block" ]] && grep -qE '^ +open_decisions:' <<<"$od_block"; } \
+  && ok "AC13(양성대조): open_decisions 하위 블록을 잘랐다 ($(grep -c . <<<"$od_block")줄)" \
+  || no "AC13(양성대조): open_decisions 하위 블록을 못 잘랐다 — 아래 필드 단언이 공허하다"
+for fld in 'id: OQ' 'dimension:' 'status: open' 'resolved_by:' 'touched: false'; do
+  grep -qE "^ +-? *${fld}" <<<"$od_block" \
+    && ok "AC13: open_decisions 항목 필드 «${fld}»" || no "AC13: open_decisions 항목 필드 «${fld}» 부재"
+done
 # v0.57.0: 정체 트리거(streak·에피소드) 전량 제거 — coverage-mapper dispatch 는 R1 필수 1회 +
 # 재개방 시 최대 1회로 바뀌어 «두 디스크 값 비교» 바운드 자체가 불필요해졌다. 부재로 반전한다.
 for tok in no_progress_streak stall_episode coverage_mapper_dispatched_episode; do
@@ -198,16 +225,30 @@ grep -q 'pending_locked_decisions' "${CI_ALL[@]}" \
 has 'user_statements' "AC1: user_statements가 state 스키마에 존재"
 # AC5: 마이그레이션 — 구세션 감지 + fresh seed + advisory
 has 'coverage.*부재|coverage 부재|interview_round.*존재' "AC5: legacy detection (interview_round present / coverage absent)"
-has 'state schema migration.*coverage' "AC5: migration advisory wording"
+# 2026-09-23: advisory 문구가 이 릴리스의 내용(개명 + 신설 키)을 말한다. 「무엇이 바뀌었는지」를
+# 사용자에게 알리는 줄이라 릴리스마다 내용이 바뀌는 것이 정상이고, 락은 그 줄이 **있는가**와
+# **이 릴리스의 두 변화를 이름으로 대는가**를 잰다.
+has 'state schema migration' "AC5: migration advisory 줄 실재"
+has 'blind_spot_dispatched -> blind_spot_dispatches' "AC13: advisory 가 개명을 이름으로 댄다"
+has 'open_decisions added' "AC13: advisory 가 신설 키를 이름으로 댄다"
 # Task 11b: 절 전문이 SKILL에서 $MIG_REF 로 옮겨졌다(조건부 로드) — 윈도우도 거기서 뜬다.
 mig_block="$(awk '/^## In-flight state migration/{f=1;print;next} /^## /{f=0} f' "$MIG_REF")"
 # v0.57.0: migration 절도 orchestration 열거를 담고 있다 — 필드 교체를 소유한 태스크가 그
 # 필드의 모든 자리를 책임진다. 음의 grep 대신 **정확히 일치**하는 전체 열거 리터럴을 요구한다 —
 # `coverage_mapper_dispatches` 하나로 정확히 끝나는 열거만 통과하므로 정체 트리거 필드가
 # 끼어들거나 대체돼도 이 리터럴과 달라져 RED다. 부분 토큰 공존이 아니라 **열거 전체의 동일성**이 이빨이다.
-{ grep -qF '`orchestration`: `{focused_dimension: null, blind_spot_dispatched: false, coverage_mapper_dispatches: 0}`' <<<"$mig_block"; } \
-  && ok "AC5(v0.57.0): migration 절의 orchestration 열거가 정확히 coverage_mapper_dispatches 로 끝난다 (정체 트리거 필드 없음)" \
-  || no "AC5(v0.57.0): migration 절의 orchestration 열거가 정확히 coverage_mapper_dispatches 로 끝난다 (정체 트리거 필드 없음)"
+{ grep -qF '`orchestration`: `{focused_dimension: null, blind_spot_dispatches: 0, coverage_mapper_dispatches: 0, open_decisions: []}`' <<<"$mig_block"; } \
+  && ok "AC13: migration 절의 orchestration 열거가 새 네 키와 정확히 일치 (정체 트리거 필드 없음)" \
+  || no "AC13: migration 절의 orchestration 열거가 새 네 키와 다르다 (정체 트리거 필드 없음)"
+# 개명은 «부재 키만 채운다» 로 안 된다 — 이미 dispatch 한 세션이 0 을 받아 AP16 가드가 재무장된다.
+# 이월 규칙 셋(값 이월 · 옛 키 삭제 · 신설 키 기본값)을 문구로 요구한다.
+mig_flat="$(tr '\n' ' ' <<<"$mig_block" | tr -s ' ')"
+grep -qF 'blind_spot_dispatched: true` 가 있으면 `blind_spot_dispatches: 1`' <<<"$mig_flat" \
+  && ok "AC13: 이월 규칙 — true → 1" || no "AC13: 이월 규칙(true → 1) 부재 — AP16 가드가 재무장된다"
+grep -qE '옛 키 `blind_spot_dispatched` 를 \*\*지운다\*\*' <<<"$mig_flat" \
+  && ok "AC13: 이월 후 옛 키 삭제" || no "AC13: 옛 키 삭제 규칙 부재 — 두 키가 공존한다"
+grep -qF '`open_decisions` 는 부재 시 `[]`' <<<"$mig_flat" \
+  && ok "AC13: open_decisions 기본값 []" || no "AC13: open_decisions 기본값 규칙 부재"
 # v0.57.0 C2: 발동 조건이 «구조 통째 부재» 면 **실제 업그레이드 경로가 통째로 빠진다** —
 # 직전 릴리스 세션은 `coverage`·`orchestration` 을 이미 갖고 이 릴리스가 더한 세 키
 # (`reopened`·`reopen_log`·`coverage_mapper_dispatches`)만 없어서 어느 조건에도 안 걸린 채
