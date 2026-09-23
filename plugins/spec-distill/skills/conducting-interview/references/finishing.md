@@ -2,7 +2,7 @@
 
 이 stage 전체가 **확산**이고(라운드 질문·landscape sweep·steelman·blind-spot premortem), Step A 는 그 결과를 **압축**해 payload 로 내보낸다 — 압축 규약 정본은 `${CLAUDE_PLUGIN_ROOT}/references/compression.md` 다. 남기는 불변량은 의도·steering·방향·goal 넷, 나머지 원자료(질문 라운드 전문·landscape 원문·steelman 중간 추론)는 audit 에 남는다.
 
-오늘부터 `interview-brief` 도 이 규약을 **게이트로 집행**한다 — payload 외부 URL 금지(N1a) · §6 은 `S1` 만(N1b) · landscape 원자료는 audit 결속(N2). 집행 지점만 seed 와 다르다: seed 는 `check_seed.py`, brief 는 아래 Step A ⑤ 의 `check_brief.py`.
+오늘부터 `interview-brief` 도 이 규약을 **게이트로 집행**한다 — payload 외부 URL 금지(N1a) · §6 은 `S1` 만(N1b) · landscape 원자료는 audit 결속(N2). 집행 지점만 seed 와 다르다: seed 는 `check_seed.py`, brief 는 아래 Step A ⑦ 의 `check_brief.py`.
 
 종료 driver는 **커버리지 원장의 floor 5차원이 전부 `closed`** 인 것이다(고정 라운드 수 아님, G1).
 다음을 모두 만족하면 brief를 작성합니다:
@@ -82,7 +82,47 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    설명 산문에 적은 숫자는 세어지지 않습니다. dispatch 가 불가능했던 환경이면
    `coverage-mapper 0 (unavailable: <이유>)` — 게이트는 이를 advisory 로 통과시키고 Step B 가
    사람에게 보입니다.
-5. **기계적 게이트 검증** — 직렬화 직후. payload 경로만 넘기면 게이트가 `audit_file`로
+5. **조사 주장의 인계 — 세 방향을 같은 id 로 맞물린다.** 하류는 brief 파일 경로를 받으므로
+   §4·§5 를 포함한 전문을 읽을 수 있다. 하류에 **지시를 걸지 않고** 「읽을 이유」까지만 만든다.
+
+   - **결정 연결(§4 · §5 → 결정)** — 조사 항목 줄 **끝**에 `[RC3 → OQ1]`(레포) 또는
+     `[→ OQ1]`(웹) 또는 `[→ 없음]`(닿는 결정 없음). 복수는 `[RC3 → OQ1 · OQ4]` 로 전부
+     직렬화한다. **하위 불릿으로 쓰지 않는다** — 게이트가 들여쓴 불릿도 §4 항목으로 세므로
+     즉시 red 다.
+   - **역참조(§3 → 근거)** — 그 OQ 줄이 근거의 **id** 를 담는다: `- OQ1: <한 줄> → 근거 RC3`.
+     §3 항목은 그 자체가 열린 결정이라 연결의 *대상*이고 출처가 아니다.
+   - **요약 상호참조(§0 → 근거)** — §0 의 결정 목록도 같은 id 를 쓰고 **상태 토큰**을 단다:
+     `- OQ1 [열림] — <한 줄> → 근거 RC3` / `- OQ1 [해결 ⟨S10⟩] — <한 줄> → 근거 RC3`.
+     `[해결 …]` 이 붙은 결정은 §3 에서 빠지고 §0 에만 남는다 — **§3 은 미해결의 목록이다.**
+     §0 은 상위집합이므로 state `orchestration.open_decisions[]` **전량**이 여기 직렬화되고,
+     그중 `status: open` 인 것만 §3 으로 간다. 이 목록은 **불릿 줄**이어야 한다(게이트가
+     `- `/`* ` 로 시작하는 줄만 항목으로 읽는다).
+
+   해결된 결정을 §0 에서 지우지 않는 이유: 조사가 그 결정을 해결하는 데 기여했으면 그것이 성공
+   사례인데, 목록에서 빠지면 게이트의 실재 검사가 그 조사를 red 로 만든다. 「열림」은 상태 토큰이
+   말하고 목록에서의 부재가 말하지 않는다.
+
+   **§2 는 대상이 아니다** — 근거가 사용자 발화(`evidence: S<N>`)이고 ✎ 블록은 bijection B(§2 본문
+   ↔ frontmatter)의 대상 밖이라, 거기에 새 술어를 걸면 그 bijection 과 이음매가 생긴다.
+
+6. **V2 검문소 — 무조건, 누락 대조만.** payload 의 모든 `RC<n>` 에 대응하는 확인 줄이 audit
+   `## 5. 프로세스 로그` 에 있는지 대조한다. **확인 «행위» 는 V1 이 라운드 안에서 이미 했으므로
+   여기서 다시 확인하지 않고 누락 대조만 한다.** 이 검문소는 웹 스위치와 steelman trigger 어느
+   것에도 종속되지 않는다.
+
+   ```bash
+   # payload 의 RC<n> 전량 ↔ audit §5 의 확인 줄 — 차집합이 비어야 한다
+   PL="docs/superpowers/interview/<file>"; AD="${PL%.md}.audit.md"
+   comm -23 <(grep -oE '(^|[^A-Za-z])RC[0-9]+' "$PL" | grep -oE 'RC[0-9]+' | sort -u) \
+            <(grep -oE '^- 확인 RC[0-9]+' "$AD" | grep -oE 'RC[0-9]+' | sort -u)
+   ```
+   출력이 있으면 그 `RC<n>` 의 확인 줄이 없다 — V1 을 태우지 않은 주장이므로 payload 에서 빼거나
+   확인해서 줄을 적는다. 게이트도 같은 것을 본다(형태 ∀).
+
+   V1 판정이 `반증` 이었던 항목은 그 항목이 닿는 확정을 payload §5 에 *원래 / 재결정 / 근거* 세 칸으로
+   남긴다. **재결정 자체는 사용자 동의로만 한다**(P23) — 이 규약은 기록 형식이고 판정 권한이 아니다.
+
+7. **기계적 게이트 검증** — 직렬화 직후. payload 경로만 넘기면 게이트가 `audit_file`로
    audit을 해석합니다:
    ```bash
    SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -96,7 +136,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 
 ### Step A.5 — brief 리뷰 파이프라인 진입 (Law 2 분리 리뷰, v0.24.0)
 
-게이트(Step A 5)를 통과한 payload는 **Law 1 구조 자기검사**를 마친 것이고, 아직 **분리 리뷰**를
+게이트(Step A 7)를 통과한 payload는 **Law 1 구조 자기검사**를 마친 것이고, 아직 **분리 리뷰**를
 받지 않았습니다. 여기서 `reviewing-brief` skill로 넘깁니다 — 문서 리뷰 엔진이 층 1(방향성)·층 2(충실도)를
 보며, 절차는 그 skill이 소유합니다(여기에 복제하지 않습니다).
 
@@ -220,12 +260,17 @@ state 의 `brief_review_degradations` 원장(BRIEF_REVIEW skip record 포함)·�
 
 `check_brief.py gate` 의 `advisories` 도 이 텍스트에 싣습니다 — `coverage-mapper 0
 (unavailable: …)` 은 게이트가 관측할 수 없는 사실(실제 dispatch 여부)을 사람에게 넘기는
-유일한 자리입니다.
+유일한 자리입니다. 조사 축의 advisory 둘도 같은 자리로 옵니다:
+
+- **`내부 조사 0건`** — 이 brief 가 레포 주장(`RC<n>`)을 하나도 싣지 않았다. 게이트는 「조사를
+  했어야 했는가」를 알 수 없다(이 스크립트는 brief 파일만 읽는다) — 그 판단이 여기서 사람에게 간다.
+- **`신 계약 미적용 brief`** — payload frontmatter 에 `contract: v2` 가 없어 조사 축의 술어 다섯이
+  전부 미발동이다. 옵트인의 fail-open 방향을 이 줄이 공시한다.
 
 ```javascript
 AskUserQuestion({
   questions: [{
-    question: "interview brief 완결: <brief-path> (구조 게이트 통과, 리뷰 <게이트 결과 한 줄 — 도달 사유 · 열린 항목 수 · 리뷰 완료가 아니면 그 사유(unreviewed_reason)>). 확정 후보·리뷰 게이트 결과·readback gap은 위 목록대로. 게이트 advisory: <check_brief 의 advisories 한 줄씩 (예: coverage-mapper 0 (unavailable: …)) | 없음>. degrade: <record 한 줄씩 | degrade 없음>. 다음 단계?",
+    question: "interview brief 완결: <brief-path> (구조 게이트 통과, 리뷰 <게이트 결과 한 줄 — 도달 사유 · 열린 항목 수 · 리뷰 완료가 아니면 그 사유(unreviewed_reason)>). 확정 후보·리뷰 게이트 결과·readback gap은 위 목록대로. 게이트 advisory: <check_brief 의 advisories 한 줄씩 (예: coverage-mapper 0 (unavailable: …) · 내부 조사 0건 · 신 계약 미적용 brief) | 없음>. degrade: <record 한 줄씩 | degrade 없음>. 다음 단계?",
     header: "Proceed",
     options: [
       {label: "확정하고 /compact 후 brainstorming (권장)", description: "확정 후보를 status: confirmed로 반영 → 재저장 → 게이트 재실행 → verbatim /compact 노출. 긴 인터뷰 context 정리 이점."},

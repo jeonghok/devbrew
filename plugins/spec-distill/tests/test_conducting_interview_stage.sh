@@ -793,6 +793,35 @@ total_ir_count="$(ci_cat_all | grep -c interview_round)"
   && ok "V9: interview_round confined to migration section (mig=$mig_ir_count total=$total_ir_count)" \
   || no "V9: interview_round confined to migration section (mig=$mig_ir_count total=$total_ir_count)"
 
+# V2 검문소 + 인계 세 방향 (설계 §D · AC7 · AC19). 절 윈도우는 그것이 사는 $FIN 에서 뜬다.
+fin_stepA="$(awk '/^### Step A — brief 작성/{f=1;print;next} /^### /{f=0} f' "$FIN")"
+fin_stepA_flat="$(tr '\n' ' ' <<<"$fin_stepA" | tr -s ' ')"
+{ [[ -n "$fin_stepA" ]] && grep -qF 'Coverage Ledger' <<<"$fin_stepA"; } \
+  && ok "V2(양성대조): Step A 절을 잘랐다 ($(grep -c . <<<"$fin_stepA")줄)" \
+  || no "V2(양성대조): Step A 절을 못 잘랐다 — 아래 단언이 공허하다"
+grep -qF 'V2' <<<"$fin_stepA" && ok "V2: Step A 에 V2 검문소" || no "V2: Step A 에 V2 검문소 부재"
+grep -qF '누락 대조만 한다' <<<"$fin_stepA_flat" \
+  && ok "V2: 누락 대조만 (확인 행위는 V1 이 이미 했다)" || no "V2: 누락 대조 범위 문구 부재"
+grep -qF '무조건' <<<"$fin_stepA_flat" && ok "V2: 무조건 발동" || no "V2: 무조건 발동 문구 부재"
+grep -qF '*원래 / 재결정 / 근거*' <<<"$fin_stepA_flat" \
+  && ok "AC7: 반증의 세 칸 기록" || no "AC7: 반증 세 칸 부재"
+grep -qF '재결정 자체는 사용자 동의로만' <<<"$fin_stepA_flat" \
+  && ok "AC7/P23: 재결정은 사용자 동의로만" || no "AC7/P23: 재결정 권한 문구 부재 — 기록 형식이 판정 권한으로 읽힌다"
+for form in '[RC3 → OQ1]' '[→ OQ1]' '[→ 없음]' '→ 근거 RC3' '[해결 ⟨S10⟩]'; do
+  grep -qF -- "$form" <<<"$fin_stepA" \
+    && ok "AC19: 직렬화 형식 «${form}»" || no "AC19: 직렬화 형식 «${form}» 부재"
+done
+grep -qF '§3 은 미해결의 목록이다' <<<"$fin_stepA_flat" \
+  && ok "AC19: §0 이 상위집합 · §3 이 그 중 열린 것" || no "AC19: §0/§3 포함 관계 문구 부재"
+grep -qF '§2 는 대상이 아니다' <<<"$fin_stepA_flat" \
+  && ok "AC19: §2 는 새 술어의 대상이 아니다 (bijection B 와의 이음매 회피)" || no "AC19: §2 제외 문구 부재"
+# Step B — 게이트 advisory 배달. 새 advisory 둘의 이름을 대야 한다.
+fin_stepB="$(awk '/^#### B-2 —/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
+grep -qF '내부 조사 0건' <<<"$fin_stepB" \
+  && ok "AC11: Step B 가 «내부 조사 0건» advisory 를 싣는다" || no "AC11: Step B 에 «내부 조사 0건» 부재"
+grep -qF '신 계약 미적용 brief' <<<"$fin_stepB" \
+  && ok "AC23: Step B 가 «신 계약 미적용 brief» advisory 를 싣는다" || no "AC23: Step B 에 «신 계약 미적용 brief» 부재"
+
 # --- v0.23.0: 발화 기록 producer (AC1 positive, §8.2) ---
 # 전-파일 grep은 헤더-satisfiable 함정에 걸린다(섹션 제목만 남겨도 통과) → awk 블록 스코프 +
 # body-unique 문구로 잠근다. mutation: 아래 yaml 블록을 지우면 RED여야 한다.
