@@ -2708,7 +2708,9 @@ MSG
 **Files:**
 - Modify: `plugins/spec-distill/templates/interview-brief-template.md`
 - Modify: `plugins/spec-distill/templates/interview-audit-template.md`
-- Modify: `plugins/spec-distill/tests/test_audit_template_gate_shape.py` (새 절 모양 확인 — 기존 단언 유지)
+- **재실행만**: `plugins/spec-distill/tests/test_audit_template_gate_shape.py` — 편집하지 않는다.
+  audit §5 확인-줄 모양은 셸 락이 이미 `^- 확인 RC[0-9]+ — (확인|반증|미확인) — ` 로 재므로 python
+  쪽에 중복 단언을 두지 않는다. Step 4 가 이 파일을 읽기 전용으로 돌려 회귀만 확인한다.
 
 **Interfaces:**
 - Consumes: Task 12 의 직렬화 형식 전량
@@ -2741,7 +2743,7 @@ for form in '[RC3 → OQ1]' '[→ OQ1]' '[→ 없음]' '→ 근거 RC3'; do
 done
 grep -qE '^- OQ1 \\[열림\\] ' "$TPL_B" \\
   && ok "AC19: §0 결정 목록이 불릿 + 상태 토큰" || no "AC19: §0 결정 목록이 불릿 줄이 아니다 (게이트가 항목으로 못 읽는다)"
-grep -qF 'OQ1 [해결 ⟨S10⟩]' "$TPL_B" \\
+grep -qF 'OQ4 [해결 ⟨S10⟩]' "$TPL_B" \\
   && ok "AC19: §0 의 해결 상태 토큰 예시" || no "AC19: 해결 상태 토큰 예시 부재"
 grep -qF 'derived:internal_research —' "$TPL_A" \\
   && ok "AC19: audit 템플릿 §1 의 derived:internal_research 행" || no "AC19: derived:internal_research 행 부재"
@@ -2768,7 +2770,11 @@ t = p.read_text(encoding="utf-8")
 
 # ① frontmatter — 옵트인 스위치
 old = "next_phase: superpowers:brainstorming\n"
-new = "next_phase: superpowers:brainstorming\ncontract: v2    # 조사 축 술어 다섯의 옵트인 스위치 — 빼면 전부 미발동 + advisory\n"
+# 락이 `^contract: v2$`(exact-line)로 재므로 **트레일링 주석을 달지 않는다** — 달면 그 정규식이
+# 절대 맞지 않는다. 주석은 윗줄 독립 `#` 로 둔다.
+new = ("next_phase: superpowers:brainstorming\n"
+       "# contract: v2 — 조사 축 술어 다섯의 옵트인 스위치. 빼면 전부 미발동 + advisory\n"
+       "contract: v2\n")
 assert t.count(old) == 1
 t = t.replace(old, new)
 
@@ -3153,6 +3159,7 @@ source: spec-distill conducting-interview 3.3.0
 ## 7. 확산 원자료
 
 - «nextjs-docs» — https://nextjs.org/docs/app — 픽스처용 선언
+- «other» — https://example.com/other — 무엇을 확인했나
 - «islands» — https://example.com/islands — 픽스처용 선언
 ```
 
