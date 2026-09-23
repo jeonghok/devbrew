@@ -159,7 +159,7 @@ spec 의 프로젝트-전역 요구를 값째 옮긴 것이다. **모든 Task �
 ### Task 1: Baseline 과 전수 재도출 (측정 전용 · 커밋 없음)
 
 **Files:**
-- Create: `$CLAUDE_JOB_DIR/tmp/baseline.txt` (리포 밖 — 커밋하지 않는다)
+- Create: `.superpowers/sdd/2026-09-23-interview-research-specialization/baseline.txt` (SDD 워크스페이스 — 추적 대상 밖이고 커밋하지 않는다)
 - Read only: 리포 전역
 
 **Interfaces:**
@@ -172,7 +172,8 @@ spec 의 프로젝트-전역 요구를 값째 옮긴 것이다. **모든 Task �
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
-B="$CLAUDE_JOB_DIR/tmp/baseline.txt"
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
+B="$W/baseline.txt"
 : > "$B"
 for f in plugins/*/tests/*.sh shared/tests/*.sh; do
   case "$(basename "$f")" in assert.sh|presence_corpus.sh) continue ;; esac
@@ -181,7 +182,14 @@ for f in plugins/*/tests/*.sh shared/tests/*.sh; do
   # `shared/tests/test_assert_behavior.sh` 가 그 접두를 「진단 grep 다섯 자리의 계약」으로 못 박는다.
   # 접두 없이 세면 설명 문구에 그 글자를 담은 **통과** 줄이 실패로 잡힌다(실측: 그 파일이 rc 0 인데 1).
   nfail="$(printf '%s\n' "$out" | grep -c '^  ✗ ' || true)"
-  printf '%s\trc=%s\tfail_lines=%s\n' "$f" "$rc" "$nfail" >> "$B"
+  # **이미 RED 인 파일의 «새» 실패**를 잡는 세 번째 필드. `rc!=0` 인데 `fail_lines=0` 인 파일은
+  # (단언 실패가 아니라 조기 중단이라 `  ✗ ` 줄을 안 낸다) 두 술어가 둘 다 포화라 새 실패가
+  # 어느 쪽도 움직이지 않는다 — AC18 이 경고하는 바로 그 구멍이다. 실측: 착수 시
+  # `plugins/quality-gates/tests/test_codex_backward_compat.sh` 가 `rc=1 fail_lines=0` 이다.
+  # 특정 파일 이름을 박지 않고 `rc!=0` 전부에 건다 — 다음에 다른 파일이 RED 가 되어도 자동 대상이다.
+  # GREEN 파일은 `-` 로 둔다: 통과 출력의 해시는 무해한 문구 변화에도 흔들려 소음만 된다.
+  if [ "$rc" -eq 0 ]; then h="-"; else h="$(printf '%s\n' "$out" | shasum -a 256 | cut -c1-16)"; fi
+  printf '%s\trc=%s\tfail_lines=%s\touthash=%s\n' "$f" "$rc" "$nfail" "$h" >> "$B"
 done
 sort "$B" | tail -n +1
 grep -c . "$B"
@@ -193,8 +201,9 @@ Expected: 각 줄이 `<경로>	rc=<n>	fail_lines=<n>`. 마지막 두 출력은 �
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/spec-distill/tests -p 'test_*.py' -v 2>&1 | tail -20 \
-  | tee -a "$CLAUDE_JOB_DIR/tmp/baseline.txt"
+  | tee -a "$W/baseline.txt"
 ```
 
 Expected: `OK` 또는 `FAILED (failures=N)`. 그 값을 baseline 으로 기록한다.
@@ -274,8 +283,9 @@ Expected: MARKER_SITES **1건**(`SKILL.md:125`) · FX_S4 **81** · SKILL_LINES *
 - [ ] **Step 5: 커밋하지 않는다 — baseline 을 출력으로 남긴다**
 
 ```bash
-cat "$CLAUDE_JOB_DIR/tmp/baseline.txt"
-cat "$CLAUDE_JOB_DIR/tmp/cap-sites.txt"
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
+cat "$W/baseline.txt"
+cat "$W/cap-sites.txt"
 ```
 
 Expected: 두 파일의 내용이 보인다. **이 Task 는 리포를 바꾸지 않으므로 커밋이 없다.** `git status` 가 clean 이어야 한다:
@@ -460,7 +470,8 @@ Task 18 의 정식 락 전에, 이 Task 의 산출을 잴 최소 검증을 임�
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
-cat > "$CLAUDE_JOB_DIR/tmp/probe-fence.sh" <<'EOS'
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
+cat > "$W/probe-fence.sh" <<'EOS'
 set -u
 ROOT="/Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden"
 SK="$ROOT/plugins/spec-distill/skills/conducting-interview/SKILL.md"
@@ -468,12 +479,12 @@ awk '/<!-- claims-contract:begin -->/ {g=1; next}
      /<!-- claims-contract:end -->/ {g=0}
      g && /^```bash$/ {b=1; next}
      g && b && /^```$/ {b=0; next}
-     g && b' "$SK" > "$CLAUDE_JOB_DIR/tmp/fence.sh"
-n=$(grep -c . "$CLAUDE_JOB_DIR/tmp/fence.sh" || true)
+     g && b' "$SK" > "$W/fence.sh"
+n=$(grep -c . "$W/fence.sh" || true)
 echo "fence_lines=$n"
-bash -n "$CLAUDE_JOB_DIR/tmp/fence.sh" && echo "syntax=ok" || echo "syntax=BROKEN"
+bash -n "$W/fence.sh" && echo "syntax=ok" || echo "syntax=BROKEN"
 EOS
-bash "$CLAUDE_JOB_DIR/tmp/probe-fence.sh"
+bash "$W/probe-fence.sh"
 ```
 
 Expected: `fence_lines=0` + `syntax=ok`(빈 파일은 문법 통과) — **마커가 없으므로 아직 아무것도 잘리지 않는다.** 이것이 RED 상태다.
@@ -509,7 +520,8 @@ Expected(Step 2 검증): `grep -c 'claims-contract:' plugins/spec-distill/skills
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
-bash "$CLAUDE_JOB_DIR/tmp/probe-fence.sh"
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
+bash "$W/probe-fence.sh"
 ```
 
 Expected: `fence_lines=9` (± 공백 줄) + `syntax=ok`.
@@ -518,17 +530,18 @@ Expected: `fence_lines=9` (± 공백 줄) + `syntax=ok`.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
 SD_REAL="$(pwd)/plugins/spec-distill"
-NOPROF="$CLAUDE_JOB_DIR/tmp/pr-noclaims"; rm -rf "$NOPROF"; mkdir -p "$NOPROF/references"
+NOPROF="$W/pr-noclaims"; rm -rf "$NOPROF"; mkdir -p "$NOPROF/references"
 echo "--- 실제 루트"
-( env -i PATH=/usr/bin:/bin CLAUDE_PLUGIN_ROOT="$SD_REAL" bash "$CLAUDE_JOB_DIR/tmp/fence.sh" ) \
-  > "$CLAUDE_JOB_DIR/tmp/ok.out" 2>"$CLAUDE_JOB_DIR/tmp/ok.err"; echo "rc=$?"
-diff <(cat "$CLAUDE_JOB_DIR/tmp/ok.out") plugins/spec-distill/references/research-claims.md && echo "stdout == 계약 내용"
+( env -i PATH=/usr/bin:/bin CLAUDE_PLUGIN_ROOT="$SD_REAL" bash "$W/fence.sh" ) \
+  > "$W/ok.out" 2>"$W/ok.err"; echo "rc=$?"
+diff <(cat "$W/ok.out") plugins/spec-distill/references/research-claims.md && echo "stdout == 계약 내용"
 echo "--- 계약 없는 루트"
-( env -i PATH=/usr/bin:/bin CLAUDE_PLUGIN_ROOT="$NOPROF" bash "$CLAUDE_JOB_DIR/tmp/fence.sh" ) \
-  > "$CLAUDE_JOB_DIR/tmp/no.out" 2>"$CLAUDE_JOB_DIR/tmp/no.err"; echo "rc=$?"
-grep -c . "$CLAUDE_JOB_DIR/tmp/no.out"
-grep -o 'dispatch 하지 않는다' "$CLAUDE_JOB_DIR/tmp/no.err"
+( env -i PATH=/usr/bin:/bin CLAUDE_PLUGIN_ROOT="$NOPROF" bash "$W/fence.sh" ) \
+  > "$W/no.out" 2>"$W/no.err"; echo "rc=$?"
+grep -c . "$W/no.out"
+grep -o 'dispatch 하지 않는다' "$W/no.err"
 ```
 
 Expected: 실제 루트 `rc=0` + `stdout == 계약 내용` · 계약 없는 루트 `rc=1` + stdout `0` 줄 + stderr 에 `dispatch 하지 않는다`.
@@ -1293,7 +1306,8 @@ Expected: `ok`. 두 천장이 같은 값(430)이 된다 — 다른 값 둘을 �
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
-L="$CLAUDE_JOB_DIR/tmp/loadsurface.txt"; : > "$L"
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
+L="$W/loadsurface.txt"; : > "$L"
 SK=plugins/spec-distill/skills/conducting-interview/SKILL.md
 {
   echo "# 무조건 로드 (SKILL.md 본문)"
@@ -1315,14 +1329,15 @@ Expected: 세 줄 + 헤더. **이 값을 Task 20 의 CHANGELOG 가 인용한다.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '줄 수|Total'
 echo "--- 변이: SKILL.md 에 50줄을 더해 래칫이 RED 를 내는지"
 SK=plugins/spec-distill/skills/conducting-interview/SKILL.md
-cp "$SK" "$CLAUDE_JOB_DIR/tmp/skill.bak"
+cp "$SK" "$W/skill.bak"
 python3 -c "
 import pathlib; p=pathlib.Path('$SK'); p.write_text(p.read_text(encoding='utf-8')+'\n'*50, encoding='utf-8')"
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '줄 수'
-cp "$CLAUDE_JOB_DIR/tmp/skill.bak" "$SK"
+cp "$W/skill.bak" "$SK"
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '줄 수|Total'
 ```
 
@@ -1500,8 +1515,9 @@ Expected: `ok` 다음 ✓ 다섯 + `Fail: 0`.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
 SK=plugins/spec-distill/skills/conducting-interview/SKILL.md
-cp "$SK" "$CLAUDE_JOB_DIR/tmp/skill.bak"
+cp "$SK" "$W/skill.bak"
 python3 -c "
 import pathlib
 p=pathlib.Path('$SK'); t=p.read_text(encoding='utf-8')
@@ -1509,7 +1525,7 @@ old='- `## R<n>` 은 1부터 순증한다.'
 assert t.count(old)==1
 p.write_text(t.replace(old, old+'\n- 옛 표기 Q1 을 쓴다.'), encoding='utf-8')"
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '«Q1»'
-cp "$CLAUDE_JOB_DIR/tmp/skill.bak" "$SK"
+cp "$W/skill.bak" "$SK"
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '«Q1»|Total'
 ```
 
@@ -3955,8 +3971,9 @@ Expected: `Fail: 0`. `errexit` 모드도 통과해야 한다(앞 블록의 `set 
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
 LOCK=plugins/spec-distill/tests/test_research_claims_contract.sh
-BK="$CLAUDE_JOB_DIR/tmp/mut"; rm -rf "$BK"; mkdir -p "$BK"
+BK="$W/mut"; rm -rf "$BK"; mkdir -p "$BK"
 for f in plugins/spec-distill/references/research-claims.md \
          plugins/spec-distill/skills/conducting-interview/SKILL.md \
          plugins/spec-distill/skills/conducting-interview/references/steelman.md \
@@ -3999,8 +4016,9 @@ Expected: 양성 대조에서 `Fail:` 이 **0 이 아니다** → 복원 후 `Fa
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
 LOCK=plugins/spec-distill/tests/test_research_claims_contract.sh
-BK="$CLAUDE_JOB_DIR/tmp/mut"; rm -rf "$BK"; mkdir -p "$BK"
+BK="$W/mut"; rm -rf "$BK"; mkdir -p "$BK"
 for f in plugins/spec-distill/references/research-claims.md \
          plugins/spec-distill/skills/conducting-interview/SKILL.md \
          plugins/spec-distill/skills/conducting-interview/references/steelman.md \
@@ -4065,7 +4083,7 @@ MSG
 
 **Files:**
 - Modify: `plugins/spec-distill/tests/test_check_brief.sh` (변이 결과가 드러낸 이빨 공백을 메우는 단언만)
-- Create: `$CLAUDE_JOB_DIR/tmp/mutation-matrix.txt` (기록 — 커밋하지 않는다)
+- Create: `.superpowers/sdd/2026-09-23-interview-research-specialization/mutation-matrix.txt` (SDD 워크스페이스 — 추적 대상 밖이고 커밋하지 않는다)
 
 **Interfaces:**
 - Consumes: Task 15·16·17 의 술어 다섯
@@ -4092,19 +4110,20 @@ MSG
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
 CB=plugins/spec-distill/scripts/check_brief.py
-M="$CLAUDE_JOB_DIR/tmp/mutation-matrix.txt"; : > "$M"
+M="$W/mutation-matrix.txt"; : > "$M"
 export PYTHONDONTWRITEBYTECODE=1
 find . -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null
 echo "=== 양성 대조: gate() 의 실패 목록을 통째로 비운다 → 반드시 대량 RED"
-cp "$CB" "$CLAUDE_JOB_DIR/tmp/cb.bak"
+cp "$CB" "$W/cb.bak"
 python3 -c "
 import pathlib; p=pathlib.Path('$CB'); t=p.read_text(encoding='utf-8')
 old='    ok = not failures'
 assert t.count(old)==1
 p.write_text(t.replace(old,'    failures = []\n    ok = not failures'),encoding='utf-8')"
 bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | tail -1 | tee -a "$M"
-cp "$CLAUDE_JOB_DIR/tmp/cb.bak" "$CB"
+cp "$W/cb.bak" "$CB"
 git diff --stat HEAD -- "$CB" | tail -1
 bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | tail -1
 ```
@@ -4116,15 +4135,15 @@ Expected: 양성 대조에서 `Fail:` 이 **크게 0 이 아니다**(수십 건)
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
 CB=plugins/spec-distill/scripts/check_brief.py
-M="$CLAUDE_JOB_DIR/tmp/mutation-matrix.txt"
+M="$W/mutation-matrix.txt"
 export PYTHONDONTWRITEBYTECODE=1
 mut() {  # mut <이름> <python 변형>
-  cp "$CB" "$CLAUDE_JOB_DIR/tmp/cb.bak"
-  if ! python3 -c "$2"; then echo "$1	변이 적용 실패(앵커 불일치)" | tee -a "$M"; cp "$CLAUDE_JOB_DIR/tmp/cb.bak" "$CB"; return; fi
+  cp "$CB" "$W/cb.bak"
+  if ! python3 -c "$2"; then echo "$1	변이 적용 실패(앵커 불일치)" | tee -a "$M"; cp "$W/cb.bak" "$CB"; return; fi
   n="$(bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | sed -n 's/.*Fail: \([0-9]*\).*/\1/p' | tail -1)"
   d="$(git diff --numstat HEAD -- "$CB" | awk '{print $1"+/"$2"-"}')"
   printf '%s\tfail=%s\tdiff=%s\n' "$1" "${n:-?}" "${d:-none}" | tee -a "$M"
-  cp "$CLAUDE_JOB_DIR/tmp/cb.bak" "$CB"
+  cp "$W/cb.bak" "$CB"
 }
 P="import pathlib;p=pathlib.Path('$CB');t=p.read_text(encoding='utf-8')"
 W="p.write_text(t,encoding='utf-8')"
@@ -4180,7 +4199,8 @@ Expected: `(a) … 새 술어로 red 0` · `(a2)` 가 착수 전과 같은 값(8
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
-awk -F'\t' '$2=="fail=0"{print "이빨 공백: "$1}' "$CLAUDE_JOB_DIR/tmp/mutation-matrix.txt" || true
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
+awk -F'\t' '$2=="fail=0"{print "이빨 공백: "$1}' "$W/mutation-matrix.txt" || true
 ```
 
 Expected: 출력 없음. 있으면 위 Step 2 의 처방대로 단언을 더하거나 한계를 공시하고, 그 편집을 이 Task 의 커밋에 넣는다.
@@ -4232,7 +4252,8 @@ MSG
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
-A="$CLAUDE_JOB_DIR/tmp/after.txt"; : > "$A"
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
+A="$W/after.txt"; : > "$A"
 for f in plugins/*/tests/*.sh shared/tests/*.sh; do
   case "$(basename "$f")" in assert.sh|presence_corpus.sh) continue ;; esac
   out="$(bash "$f" 2>&1)"; rc=$?
@@ -4240,19 +4261,32 @@ for f in plugins/*/tests/*.sh shared/tests/*.sh; do
   # `shared/tests/test_assert_behavior.sh` 가 그 접두를 「진단 grep 다섯 자리의 계약」으로 못 박는다.
   # 접두 없이 세면 설명 문구에 그 글자를 담은 **통과** 줄이 실패로 잡힌다(실측: 그 파일이 rc 0 인데 1).
   nfail="$(printf '%s\n' "$out" | grep -c '^  ✗ ' || true)"
-  printf '%s\trc=%s\tfail_lines=%s\n' "$f" "$rc" "$nfail" >> "$A"
+  # **이미 RED 인 파일의 «새» 실패**를 잡는 세 번째 필드. `rc!=0` 인데 `fail_lines=0` 인 파일은
+  # (단언 실패가 아니라 조기 중단이라 `  ✗ ` 줄을 안 낸다) 두 술어가 둘 다 포화라 새 실패가
+  # 어느 쪽도 움직이지 않는다 — AC18 이 경고하는 바로 그 구멍이다. 실측: 착수 시
+  # `plugins/quality-gates/tests/test_codex_backward_compat.sh` 가 `rc=1 fail_lines=0` 이다.
+  # 특정 파일 이름을 박지 않고 `rc!=0` 전부에 건다 — 다음에 다른 파일이 RED 가 되어도 자동 대상이다.
+  # GREEN 파일은 `-` 로 둔다: 통과 출력의 해시는 무해한 문구 변화에도 흔들려 소음만 된다.
+  if [ "$rc" -eq 0 ]; then h="-"; else h="$(printf '%s\n' "$out" | shasum -a 256 | cut -c1-16)"; fi
+  printf '%s\trc=%s\tfail_lines=%s\touthash=%s\n' "$f" "$rc" "$nfail" "$h" >> "$A"
 done
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/spec-distill/tests -p 'test_*.py' 2>&1 | tail -3 | tee -a "$A"
-echo "=== baseline 대조 (왼쪽=착수 전 · 오른쪽=지금)"
-join -t$'\t' -j1 <(sort "$CLAUDE_JOB_DIR/tmp/baseline.txt") <(sort "$A") 2>/dev/null \
-  | awk -F'\t' '$2!=$4 || $3!=$5 {print "CHANGED: "$0}'
-echo "=== baseline 에 없던 파일 (새 락)"
-comm -13 <(cut -f1 "$CLAUDE_JOB_DIR/tmp/baseline.txt" | sort) <(cut -f1 "$A" | sort)
+echo "=== baseline 대조 — 데이터 줄 전체를 diff 한다"
+# 필드별 join 을 쓰지 않는다: 필드가 넷이 되어 인덱스가 어긋나기 쉽고, 두 파일에는 산문 줄이
+# 섞여 있어(python tail · `=== … ===` 블록) 키 추출이 브리틀하다. 탭이 있는 데이터 줄만 골라
+# 줄 전체를 비교하면 rc · 실패 줄 수 · 출력 해시 셋이 한 번에 대조된다.
+grep '	rc=' "$W/baseline.txt" | sort > "$W/base-data.txt"
+grep '	rc=' "$A" | sort > "$W/after-data.txt"
+diff "$W/base-data.txt" "$W/after-data.txt" && echo "데이터 줄 완전 동일"
+echo "=== baseline 에 없던 파일 (새 락 — 여기 나오는 것은 정상)"
+comm -13 <(cut -f1 "$W/base-data.txt") <(cut -f1 "$W/after-data.txt")
 echo "=== 지금 RED 인 것 전부"
-awk -F'\t' '$2!="rc=0" || $3!="fail_lines=0"' "$A"
+awk -F'\t' '$2!="rc=0"' "$W/after-data.txt"
 ```
 
-Expected: `CHANGED:` 줄이 **없거나**, 있으면 그 전부가 이 작업이 의도적으로 고친 락(실패 줄 수가 baseline 보다 **줄거나 같다**)이다. 새 락 `test_research_claims_contract.sh` 가 `comm -13` 에 나오고 `rc=0 fail_lines=0`. 「지금 RED 인 것」은 Task 1 이 못 박은 선재 RED 집합과 **같아야 한다** — 하나라도 늘면 그것이 새 RED 이고 AC18 위반이다.
+Expected: `diff` 가 **조용하거나**, 나온 줄이 전부 이 작업이 의도적으로 고친 락이다(실패 줄 수가 baseline 보다 **줄거나 같다**). 새 락 `test_research_claims_contract.sh` 가 `comm -13` 에 나오고 `rc=0 fail_lines=0 outhash=-`. 「지금 RED 인 것」은 Task 1 이 못 박은 선재 RED 집합과 **같아야 한다** — 하나라도 늘면 새 RED 이고 AC18 위반이다.
+
+**`outhash` 가 움직였는데 rc·실패 줄 수가 그대로면** 이미 RED 인 파일 «안»에서 실패의 내용이 바뀐 것이다. 그 파일을 직접 돌려 출력을 눈으로 대조하고, 우리가 새 실패를 더한 것인지 기존 실패의 문면이 바뀐 것인지 가른다. 이 필드가 없으면 그 구별이 원리적으로 불가능하다 — 착수 시 `plugins/quality-gates/tests/test_codex_backward_compat.sh` 가 `rc=1 fail_lines=0` 으로 두 술어가 이미 포화였다.
 
 - [ ] **Step 2: `EXEMPT_SLOTS_BASELINE` 과 처분 회계를 최종 확인 (이월 해소 · AC24)**
 
@@ -4278,13 +4312,14 @@ Expected: 「면제 목록 5 <= baseline 5」 ✓ · 「선언 ↔ 전달 일치
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
 export DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 PYTHONDONTWRITEBYTECODE=1
 echo "=== ① 계약 배달 펜스는 웹 스위치와 무관하다 (차가운 셸 실행)"
 awk '/<!-- claims-contract:begin -->/ {g=1; next} /<!-- claims-contract:end -->/ {g=0}
      g && /^```bash$/ {b=1; next} g && b && /^```$/ {b=0; next} g && b' \
-  plugins/spec-distill/skills/conducting-interview/SKILL.md > "$CLAUDE_JOB_DIR/tmp/f.sh"
+  plugins/spec-distill/skills/conducting-interview/SKILL.md > "$W/f.sh"
 ( env -i PATH=/usr/bin:/bin DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 \
-    CLAUDE_PLUGIN_ROOT="$(pwd)/plugins/spec-distill" bash "$CLAUDE_JOB_DIR/tmp/f.sh" ) >/dev/null 2>&1
+    CLAUDE_PLUGIN_ROOT="$(pwd)/plugins/spec-distill" bash "$W/f.sh" ) >/dev/null 2>&1
 echo "rc=$?  (0 이어야 한다 — 스위치와 무관)"
 echo "=== ② 게이트 술어 다섯이 웹 스위치와 무관하다"
 python3 plugins/spec-distill/scripts/check_brief.py gate \
