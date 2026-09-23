@@ -3536,6 +3536,8 @@ MSG
 **Files:**
 - Modify: `plugins/spec-distill/scripts/check_brief.py`
 - Modify: `plugins/spec-distill/tests/test_check_brief.sh`
+- Modify: `plugins/spec-distill/skills/conducting-interview/SKILL.md` (C43 표 뒤 — 산출자, 아래 Step 0)
+- Modify: `plugins/spec-distill/tests/test_conducting_interview_stage.sh` (그 산출자의 락 셋)
 
 **Interfaces:**
 - Consumes: Task 14 의 `payload_rc_ids` · 기존 `LEDGER_ROW_RE`·`_strip_bullet` · **Task 15 가 같은
@@ -3548,6 +3550,124 @@ MSG
 **이름은 정확 일치다** — 접두 일치로 두면 무관한 차원으로 갈음된다. 이 사이클의 audit §1 에 이미 `derived:internal_research_apparatus` 가 살아 있고 그것은 「내부 조사 장치의 형태」라는 **다른** 차원이다.
 
 **`closed` 요구가 보는 것은 「앵커 형태의 근거가 적혀 있는가」까지다(L9)** — `coverage_anchor_failures` 가 form-only 이고 `gate()` 가 넘기는 집합이 payload·audit §6 앵커 전량이므로 `⟨S1⟩` 하나로도 통과한다. 그 앵커가 이 차원을 닫는가는 사람과 리뷰의 몫이다. **이 술어는 그 이상을 주장하지 않는다.**
+
+- [ ] **Step 0: 산출자를 먼저 배선한다 — `internal_research` 차원을 누가 원장에 넣는가**
+
+이 Task 의 술어 ④는 「payload 가 레포 주장을 하나라도 실으면 audit §1 에 **정확히**
+`derived:internal_research` 라는 이름의 행이 있고 상태가 `closed`」를 요구한다. 그런데 그 이름을
+말하는 «지시» 가 리포 어디에도 없다 — 선점검에서 `plugins/spec-distill` 의 production 전체를 훑어
+**0건**이었다(계획 안에서는 audit 템플릿·게이트 술어·픽스처에만 나온다).
+
+그 결과가 **게이트가 조사를 한 것을 벌하는** 구조다. audit §1 은 `finishing.md` Step A 항목 4 가
+`state.coverage` 를 직렬화한 것이고, **닫힌 행은 그 차원을 닫은 사용자 발화 `S<N>` 을 인용해야
+한다**(그 항목이 명시한다). 그러니 이 행은 (1) 인터뷰 중 `coverage.derived[]` 에 admit 되고
+(2) 사용자 발화로 닫혀야 존재할 수 있다. 종료 시점에 발견하면 이미 늦다 — 그때 닫으면 닫힘 규칙
+(「그 차원에 관한 질문에 사용자가 답한 S 를 근거로만 닫는다」)을 어긴다. 그리고 이름이 **정확 일치**라
+coverage-mapper 의 자연스러운 제안으로는 맞지 않는다: 이 사이클의 audit §1 에 실제로
+`derived:internal_research_apparatus` 가 살아 있고 그것은 **다른** 차원이다.
+
+**술어를 만들기 전에 산출자를 배선한다.** C43 표 바로 뒤, 경로 (a) 의 산출을 말하는 그 자리다.
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+python3 - <<'PY'
+import pathlib
+p = pathlib.Path("plugins/spec-distill/skills/conducting-interview/SKILL.md")
+t = p.read_text(encoding="utf-8")
+old = """매 라운드의 «지금 이해»·«질문» 에 어떤 path 인지 명시하십시오 — 경로 (a) 로 찾을 수 있는 것은 묻기 전에
+먼저 찾아 «지금 이해»에 싣습니다.
+"""
+new = """매 라운드의 «지금 이해»·«질문» 에 어떤 path 인지 명시하십시오 — 경로 (a) 로 찾을 수 있는 것은 묻기 전에
+먼저 찾아 «지금 이해»에 싣습니다.
+
+**경로 (a) 가 `repo_claims[]` 를 처음 산출하면 그 자리에서 derived 차원 internal_research 를 원장에
+admit 한다**(coverage-mapper 제안과 무관 — 조사 행위가 그 차원을 함의한다). 이름은 그 글자대로 쓴다:
+게이트가 **정확 일치**로 재고 `internal_research_apparatus` 같은 유사 이름으로는 만족되지 않는다.
+그 차원은 **레포 주장의 처분 S** 로 닫고 evidence 에 그 S 를 인용한다 — 종료 시점엔 늦다(닫힘 규칙).
+"""
+assert t.count(old) == 1
+p.write_text(t.replace(old, new), encoding="utf-8")
+print("ok")
+PY
+wc -l < plugins/spec-distill/skills/conducting-interview/SKILL.md
+```
+
+Expected: `ok` 다음 SKILL.md **448줄** — 443 에서 **정확히 +5**(빈 줄 1 + 산문 4). 천장은 Task 11 이
+실측+8 로 조인 **451** 이므로 통과하고 여유가 3줄 남는다.
+
+**449 를 넘으면 멈추고 보고하라.** 천장을 다시 올리는 것은 이 Task 의 범위가 아니다 — Task 11 이
+그 값을 실측에 근거해 정했고, 래칫이 남긴 여유를 다 쓰는 것은 이 Task 가 결정할 일이 아니다.
+산문을 이보다 늘려야 한다고 판단되면 그 판단을 보고하고 멈춘다.
+
+락으로 못 박는다:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+python3 - <<'PY'
+import pathlib
+p = pathlib.Path("plugins/spec-distill/tests/test_conducting_interview_stage.sh")
+t = p.read_text(encoding="utf-8")
+anchor = "c43_block=\"$(awk '/^## C43 /{f=1;print;next} /^## /{f=0} f' \"$SKILL\")\""
+assert t.count(anchor) == 1, t.count(anchor)
+add = """
+# AC10 산출자 — 게이트가 요구하는 `derived:internal_research` 를 «누가 원장에 넣는가». 이 지시가
+# 없으면 게이트는 레포 주장을 실은 brief 를 막고, 저자는 종료 시점에 그것을 고칠 수 없다(닫힘
+# 규칙이 사용자 발화를 요구한다) — 게이트가 조사를 한 것을 벌한다. 소비자는 Task 16 의 술어 ④다.
+c43_flat="$(tr '\\n' ' ' <<<"$c43_block" | tr -s ' ')"
+grep -qF 'derived 차원 internal_research 를 원장에' <<<"$c43_flat" \\
+  && ok "AC10(산출자): 경로 (a) 가 internal_research 차원의 admit 을 지시한다" \\
+  || no "AC10(산출자): admit 지시 부재 — 게이트가 산출자 없는 것을 막는다"
+grep -qF '레포 주장의 처분 S' <<<"$c43_flat" \\
+  && ok "AC10(산출자·닫힘): 그 차원을 닫는 발화를 지목한다" \\
+  || no "AC10(산출자·닫힘): 닫는 S 를 지목하지 않는다 — 닫힌 행의 evidence 를 채울 근거가 없다"
+grep -qF '정확 일치' <<<"$c43_flat" \\
+  && ok "AC10(산출자·이름): 정확 일치를 못 박는다" \\
+  || no "AC10(산출자·이름): 정확 일치 문구 부재 — 비슷한 이름으로 갈음된다"
+"""
+p.write_text(t.replace(anchor, anchor + add), encoding="utf-8")
+print("ok")
+PY
+bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E 'AC10\(산출자|줄 수|Total'
+bash plugins/spec-distill/tests/test_stale_terms.sh 2>&1 | tail -1
+```
+
+Expected: `ok` 다음 `✓ AC10(산출자)` 셋 + 줄 수 단언 둘 ✓ + `Fail: 0`. stale 락도 `Fail: 0` — 새 문면에
+production 금지 어휘(`provisional_on` · `직전 답에서` · `깊이 측정` 등)를 넣지 않았다.
+
+- [ ] **Step 0.5: 세 단언이 서로 다른 것을 재는지 변이 셋으로 잰다**
+
+각 변이는 **정확히 하나**를 ✗ 로 만들어야 한다 — 둘 이상이 함께 ✗ 가 되면 그 단언들이 같은 리터럴을
+공유하는 것이다.
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+SK=plugins/spec-distill/skills/conducting-interview/SKILL.md
+mut() {   # $1 = 찾을 문자열, $2 = 바꿀 문자열
+  python3 -c "
+import pathlib, sys
+p = pathlib.Path(sys.argv[1]); t = p.read_text(encoding='utf-8')
+old, new = sys.argv[2], sys.argv[3]
+assert t.count(old) == 1, '앵커 %d건' % t.count(old)
+p.write_text(t.replace(old, new), encoding='utf-8')" "$SK" "$1" "$2"
+  bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '^  ✗ .*AC10\(산출자'
+  git checkout HEAD -- "$SK"
+}
+echo "--- 변이 1 (admit 축)"
+mut 'derived 차원 internal_research 를 원장에' 'derived 차원을 원장에'
+echo "--- 변이 2 (닫힘 축)"
+mut '레포 주장의 처분 S' '어떤 발화'
+echo "--- 변이 3 (이름 축)"
+mut '정확 일치' '접두 일치'
+echo "--- 복원 후"
+bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E 'AC10\(산출자|Total'
+```
+
+Expected: 변이 1 → `✗ AC10(산출자)` 하나만. 변이 2 → `✗ AC10(산출자·닫힘)` 하나만. 변이 3 →
+`✗ AC10(산출자·이름)` 하나만. 복원 후 ✓ 셋 + `Fail: 0`.
+
+한 변이가 둘 이상을 ✗ 로 만들면 공유하지 않는 문구로 갈라 다시 잰다. 아무것도 ✗ 로 만들지 않으면
+그 축의 단언이 그 자리를 재지 않는 것이다. 복원은 `git checkout HEAD --` 다(`git checkout --` 는
+index 로 되돌아가 변이가 남을 수 있다).
 
 - [ ] **Step 1: red 셋과 양의 짝을 먼저 쓴다**
 
