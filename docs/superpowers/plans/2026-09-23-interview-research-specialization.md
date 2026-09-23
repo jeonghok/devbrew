@@ -4659,7 +4659,17 @@ echo "=== 지금 RED 인 것 전부"
 awk -F'\t' '$2!="rc=0"' "$W/after-data.txt"
 ```
 
-Expected: `diff` 가 **조용하거나**, 나온 줄이 전부 이 작업이 의도적으로 고친 락이다(실패 줄 수가 baseline 보다 **줄거나 같다**). 새 락 `test_research_claims_contract.sh` 가 `comm -13` 에 나오고 `rc=0 fail_lines=0 outhash=-`. 「지금 RED 인 것」은 Task 1 이 못 박은 선재 RED 집합과 **같아야 한다** — 하나라도 늘면 새 RED 이고 AC18 위반이다.
+Expected: `diff` 가 내는 것은 **정확히 한 줄의 추가**여야 한다 — 새 락
+`test_research_claims_contract.sh` 의 `rc=0 fail_lines=0 outhash=-`. 그 줄은 `comm -13` 에도 나온다.
+
+근거(선점검에서 실측): baseline 의 글롭은 이 Step 의 것과 **같은 문자열**이고, 지금 그 글롭이 내는
+파일은 205개이며 제외 둘(`assert.sh` · `presence_corpus.sh`)을 빼면 **baseline 의 데이터 줄 203개와
+정확히 일치**한다. 모든 락이 착수 시에도 지금도 `rc=0 fail_lines=0 outhash=-` 이거나 선재 RED 넷
+그대로이므로, 새 락 하나를 뺀 나머지 줄은 **바이트 동일**해야 한다.
+
+**추가 한 줄 말고 무엇이든 나오면 멈추고 보고하라.** 변경(`<`/`>` 짝)이 나오면 그 락의 rc·실패 줄
+수·출력 해시 중 무엇이 움직였는지 밝히고, 이 작업이 의도적으로 고친 자리인지 판정한다. 「지금 RED
+인 것」은 Task 1 이 못 박은 선재 RED 집합과 **같아야 한다** — 하나라도 늘면 새 RED 이고 AC18 위반이다.
 
 **`outhash` 가 움직였는데 rc·실패 줄 수가 그대로면** 이미 RED 인 파일 «안»에서 실패의 내용이 바뀐 것이다. 그 파일을 직접 돌려 출력을 눈으로 대조하고, 우리가 새 실패를 더한 것인지 기존 실패의 문면이 바뀐 것인지 가른다. 이 필드가 없으면 그 구별이 원리적으로 불가능하다 — 착수 시 `plugins/quality-gates/tests/test_codex_backward_compat.sh` 가 `rc=1 fail_lines=0` 으로 두 술어가 이미 포화였다.
 
