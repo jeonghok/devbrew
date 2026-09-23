@@ -122,6 +122,27 @@ STATE="$ROOT/<session-id>/state.local.md"
 `${CLAUDE_PLUGIN_ROOT}/references/research-claims.md` 다. 이 절은 그 파일을 dispatch 로
 **배달**하는 책임만 진다 — 계약 본문을 여기 복사하지 않는다.
 
+`${CLAIMS_CONTRACT}` 에는 경로가 아니라 **계약 파일의 내용**을 싣는다 — 플러그인 캐시는 사용자
+프로젝트 밖이라 subagent 의 Read 가 거부된다. dispatch 직전(재dispatch 포함)에 아래 펜스를 돌려
+그 stdout 전문을 세 dispatch 의 `<claims_contract>` 슬롯에 싣는다. rc 가 0 이 아니면 **그 장치를
+dispatch 하지 않는다** — 인터뷰는 계속하되 그 차원을 자동으로 닫지 않고, 공시는 loud advisory +
+audit §2 unavailable 사유 다.
+
+<!-- claims-contract:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+# 경로는 `${CLAUDE_PLUGIN_ROOT}` 형태로 쓴다 — 포인터 락이 해석하는 형태는 셋뿐이고
+# `$SD/references/…` 는 그 셋에 없어 거부된다(조용히 재해석하지 않는다).
+CLAIMS="${CLAUDE_PLUGIN_ROOT}/references/research-claims.md"
+claims_rc=0; CLAIMS_CONTRACT="$(cat "$CLAIMS")" || claims_rc=$?
+if [ "$claims_rc" -ne 0 ] || [ -z "$CLAIMS_CONTRACT" ]; then
+  echo "[spec-distill] 조사 주장 계약을 읽지 못했다(cat rc $claims_rc): $CLAIMS — 이 장치를 dispatch 하지 않는다. 인터뷰는 계속하고, 그 차원을 자동으로 닫지 않는다. coverage-mapper 자리면 audit §2 Budget 에 coverage-mapper 0 (unavailable: 계약 배달 실패) 를 적고, blind-spot-prober 자리면 inline premortem 으로 강등한다." >&2
+  exit 1
+fi
+printf '%s\n' "$CLAIMS_CONTRACT"
+```
+<!-- claims-contract:end -->
+
 ## C43 3-path routing
 
 질문을 만들 때 다음 3 경로 중 하나로 분류해서 routing 하십시오:
