@@ -36,6 +36,15 @@
 
 **`/qg` 의 동작은 바뀌지 않는다.** 합성기의 판정 산출은 `--emit-verdict` 뒤에 있고 기본 off 이며, 켜지 않으면 stdout 이 이전과 바이트 동일하다 — 소비자 이주는 뒤 릴리스다.
 
+## [8.2.2] — 2026-09-23
+
+patch 인 이유 — 전부 `Fixed` 다. 설계·동작 변경 없음.
+
+### Fixed
+
+- **SKILL 제목 두 개가 8.0.0 bump 뒤에도 `(v7.0.0)` 이었다** — `skills/quality-pipeline/SKILL.md` · `skills/publishing-pr-understanding/SKILL.md`. `tests/harness/test_skill_orchestration_behavior.sh` 가 이것을 FAIL 둘로 잡고 있었다: 음의 락(틀린 major 를 단 제목)과, 그보다 무거운 양의 대조(shipped major 를 단 제목이 0개 — 이 상태에서는 제목 버전을 전부 지워도 음의 락이 공허 통과한다). 둘 다 `(v8.0.0)` 으로 고쳐 두 FAIL 을 해소했다. 같은 스위트의 선재 FAIL 둘(`iter cap near Review gate AskUserQuestion` · `R1b→R8 unclaimed 집행 사슬`)은 이 수정과 무관하며 그대로다.
+- **`shared/tests/test_python_floor.sh` 에 실행비트가 없었다** (`100644`). `scripts/run-test-selection.sh` 의 shell 어댑터는 `tests/*.sh` 경로 **그리고** `-x` 로 claim 하므로, 이 락은 Runtime 게이트의 차등 테스트 축에서 `unclaimed` 로 떨어져 `verification` 차원을 degrade 시켰다. 파일은 플러그인 밖(`shared/`)이지만 증상이 이 플러그인의 게이트에서 나므로 여기 적는다. 리포에 같은 상태의 `tests/*.sh` 가 더 있다 — 이 항목은 그것들을 고치지 않는다.
+
 ## [8.2.1] — 2026-09-23
 
 patch 인 이유 — 전부 `Fixed` 다. 이 플러그인은 프로필(`brief.md`·`design-doc.md`)도
