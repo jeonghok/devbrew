@@ -41,12 +41,13 @@ devbrew 몫으로 좁힌 것은 설계 리뷰 라운드 1 의 결정이다 — D
 
 ## Goal
 
-**devbrew 훅의 진입 사슬**(훅 command 의 셸 → 해석기 → 해석기가 고르는 인터프리터)이 PATH 의 **절대 경로가
-아닌 항목**(빈 항목 · `.` · 상대 경로 · 빈 PATH)을 통해 **작업 디렉토리의 파일로 풀리지 않게** 한다.
+**훅 command 와 해석기가 스스로 하는 PATH 탐색**(훅 command 의 `sh` 탐색 · 해석기가 인터프리터 **파일**을 고르는
+탐색)이 PATH 의 **절대 경로가 아닌 항목**(빈 항목 · `.` · 상대 경로 · 빈 PATH)을 쓰지 않게 한다.
 
-진입 사슬 밖에서 devbrew 가 여는 자리 — 훅 파이썬이 띄우는 명령과 스킬이 Bash 도구로 부르는 bare 이름 — 는
-이 설계의 범위가 아니다(알려진 한계 L6). 절대 경로 항목이 cwd 를 가리키는 경우와 사용자가 지정한
-`DEVBREW_PYTHON` 도 범위 밖이다(L2 · Non-goals).
+이 Goal 은 «사슬이 닫혔다»가 아니라 «이 두 탐색이 비-절대 항목을 쓰지 않는다»는 메커니즘 주장이다. 고른
+파일이 그 뒤에 하는 일(`#!/usr/bin/env` shim 의 탐색 — L7), 진입 사슬 밖에서 devbrew 가 여는 자리(훅 파이썬이
+띄우는 명령 · 스킬이 Bash 도구로 부르는 bare 이름 — L6), 절대 경로 항목이 cwd 를 가리키는 경우(L2), 사용자가
+지정한 `DEVBREW_PYTHON`(Non-goals)은 범위 밖이다.
 
 ## Context / Why
 
@@ -170,7 +171,8 @@ probe 하고, 바닥을 만족하면 그 경로로 exec 한다.
   찾지 않고** step 3 로 간다(지금과 같다 — D3). **`scan_path` 와 다른 점이 여기다**: `scan_path` 는 후보가
   탈락하면 `continue` 해 다음 후보를 보지만, `first_python3` 는 분할 관용구만 빌리고 **첫 `-f`·`-x` 매치에서
   루프를 끝낸다.** 탈락 판정은 루프 밖에서 한다.
-- `-f` 는 심볼릭 링크를 따라간다 — 홈브루·pyenv shim 처럼 링크인 `python3` 가 지금처럼 잡힌다.
+- `-f` 는 심볼릭 링크를 따라간다 — 홈브루처럼 링크인 `python3` 가 지금처럼 잡힌다. pyenv·asdf shim 은 링크가
+  아니라 `#!/usr/bin/env bash` 스크립트이고, 그것도 실행 가능한 정규 파일이라 지금처럼 잡힌다(그 뒤의 탐색은 L7).
 - 디렉토리나 실행 비트 없는 파일은 건너뛴다 — 셸 탐색도 그렇다.
 
 ### 4. 두 함수의 분할 코드
@@ -254,7 +256,10 @@ POSIX 가 경로를 정하지는 않지만 macOS·Linux 에서 실재하고, 해
    (AC8 은 셸 탐색도 첫 매치 `A/python3` 에서 멈추므로 GREEN 이다).
    (m3) `first_python3` 가 첫 후보 탈락 시 다음 `python3` 로 `continue` → AC8 만 RED.
    (m4) 훅 command 한 자리를 `sh …` 로 → AC9 의 그 자리만 RED.
-   각 변이의 RED 집합이 위에 적은 것과 **정확히** 같아야 한다 — 더 넓으면 축이 분리되지 않은 것이다.
+   각 변이의 RED 집합이 위에 적은 것과 **정확히** 같아야 한다 — 더 넓으면 축이 분리되지 않은 것이다. **판정
+   범위는 이 설계가 더하는 새 단언(AC1~AC4 · AC8 · AC9 실행분)뿐이다.** 정본 해석기만 바꾸는 m1~m3 는 축 B 의
+   사본 바이트 비교(`test_python_floor.sh:391-395`)와 `test_copy_of_contract.sh` 도 RED 로 만드는데, 그것은 변이가
+   사본과 어긋났다는 정상 신호라 판정에서 뺀다(사본까지 함께 변이하면 사라진다).
 3. `bash shared/tests/test_copy_of_contract.sh` · `bash shared/tests/test_changelog_integrity.sh` ·
    `bash plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh` 통과.
 4. 회고 리뷰의 재현표와 step 2 측정(Context/Why 2)을 격리 디렉토리에서 다시 돌려, 전부 「미접촉」으로 바뀐 것을 본다.
@@ -275,8 +280,12 @@ POSIX 가 경로를 정하지는 않지만 macOS·Linux 에서 실재하고, 해
 
 ## 알려진 한계
 
-- **L1** PATH 에 상대 경로(예: `.venv/bin`)를 넣어 인터프리터를 쓰던 사용자는 훅이 그 인터프리터를 못 찾는다.
-  `SessionStart` 안내가 `DEVBREW_PYTHON` 을 알려 준다(설계 §5).
+- **L1** PATH 에 상대 경로(예: `.venv/bin`)나 **전개되지 않은 틸드**(예: `PATH="~/bin:$PATH"` 처럼 따옴표 안에
+  쓴 `~`)를 넣어 인터프리터를 쓰던 사용자는 훅이 그 인터프리터를 못 찾는다. 틸드는 실측이 있다(2026-09-23):
+  macOS `/bin/sh`(bash 3.2)는 PATH 의 글자 그대로 `~/tbin` 을 명령 탐색에서 `$HOME/tbin` 으로 **전개했고**
+  `dash` 는 전개하지 않았다 — 즉 macOS 에서는 지금 step 2 가 그 `python3` 를 찾고 있고 이 설계 뒤로는 못 찾는다
+  (step 3 글롭은 지금도 `~` 를 전개하지 않는다). 사용자가 이 동작 변경을 받아들였다(D7). `SessionStart` 안내가
+  `DEVBREW_PYTHON` 을 알려 준다(설계 §5).
 - **L2** 절대 경로 항목이라도 쓰기 가능한 디렉토리(예: `/tmp`)라면 이 설계는 막지 못한다. 그것은 PATH 를 설정한
   사람의 선택이고, cwd 가 공격자 리포인 이 문서의 위협과 다르다.
 - **L3** 끝 빈 항목의 step 3 케이스는 이 설계 전에도 안전했다(필드 분할). AC1 이 그 형태를 싣지 않는 이유다 —
@@ -289,6 +298,11 @@ POSIX 가 경로를 정하지는 않지만 macOS·Linux 에서 실재하고, 해
   사용자 리포 cwd 에서 `qg-worktree.sh` 를 띄우는데, 그 스크립트는 `#!/usr/bin/env bash`(PATH 로 `bash` 탐색)이고
   본문이 bare `git` 을 부른다. 발동은 그 세션에 qg 워크트리 상태가 있을 때뿐이다. (b) 스킬·커맨드 본문이 Bash
   도구로 부르는 bare `bash`·`python3`. 둘 다 이 PR 에서 재지 않았고 후속으로 넘긴다.
+- **L7** 고른 인터프리터(또는 step 3 가 probe 하는 후보)가 `#!/usr/bin/env <x>` shebang 스크립트면 — pyenv·asdf
+  shim 이 그렇다 — 그 스크립트의 PATH 탐색은 이 설계 밖이다. 실측(2026-09-23, 격리): 절대 디렉토리에 둔
+  `#!/usr/bin/env bash` 스크립트를 PATH `<abs>::/usr/bin:/bin` 과 `.:<abs>:/usr/bin:/bin` 에서 실행하면 **cwd 의
+  `bash` 가 돌았고**, 절대 항목만일 때는 진짜 `bash` 가 돌았다. shim 후보를 거부하면 Goal 2 와 D3 를 어기므로
+  거부하지 않는다.
 
 ## 결정 기록
 
@@ -307,6 +321,12 @@ POSIX 가 경로를 정하지는 않지만 macOS·Linux 에서 실재하고, 해
   지적했다 — qg SessionEnd 가 띄우는 `qg-worktree.sh` 와 cwd 를 가리키는 절대 경로. 사용자가 「진입 사슬로 좁히고
   L6」을 골랐다(2026-09-23). 기각한 쪽은 SessionEnd 호출까지 이 PR 에 넣는 것 — 스크립트 안의 bare `git` 이 남아
   어차피 닫히지 않는다. AC2 전제와 AC4 fixture 명시도 같은 라운드의 채택이다.
+- **D7 — Goal 을 «사슬이 닫혔다»에서 «두 탐색이 비-절대 항목을 쓰지 않는다»로 바꾸고, 틸드 동작 변경을
+  받아들인다.** 리뷰 세 라운드가 연속으로 Goal 경계에서 새 자리를 찾았다(`sh` → SessionEnd·스킬 → env-shebang
+  shim). 경계를 더 좁혀 열거해도 같은 모양이 반복되는 것은 Goal 이 닫힘을 주장했기 때문이라, 메커니즘 주장으로
+  바꿔 반복을 멈췄다. shim 은 실측 뒤 L7 로 넘겼다. 틸드는 macOS `/bin/sh` 가 전개한다는 실측을 보고, `$HOME`
+  전개로 보존하는 대신 L1 의 동작 변경으로 받아들였다(구조 추가 없음 · Linux `dash` 와 일치). 사용자 결정
+  (2026-09-23). 재리뷰 상한에서 추가 라운드는 열지 않았다 — 이 항목의 문면은 리뷰를 받지 않았다.
 
 ## Metadata
 
@@ -321,4 +341,3 @@ POSIX 가 경로를 정하지는 않지만 macOS·Linux 에서 실재하고, 해
 1. 카나리 fixture 의 정확한 모양과 축 이름(기존 축 A~H 옆에 둘지, 축 A 안에 둘지).
 2. hooks.json 의 command 문자열을 재는 **다른 락** 전수 — `sh ${CLAUDE_PLUGIN_ROOT}` 를 리터럴로 기대하는 자리를
    리포 전체에서 grep 해 함께 갱신한다(축 C 만이라고 가정하지 않는다).
-| 4af48fd0#r2.2 | 변이의 「자기 축만 RED」가 행동 검사만을 뜻하는지 전체 락을 뜻하는지 구분되지 않는다. |
