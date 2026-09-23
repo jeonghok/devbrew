@@ -405,12 +405,12 @@ def _absorb_same_as(items, same_as, L):
         keep = max(live, key=lambda m: (RANK[items[m]["disposition"]], m))
         # 생존자는 처분 순위와 f 번호로 갈리고 f 번호는 요약의 sha1 순이라, 산문 칸을 적은
         # 쪽이 흡수될 수 있다. 생존자의 빈 칸만 형제에게서 채운다 — 적힌 칸은 덮지 않는다.
+        # 오름차순이라 마지막에 쓴 값(처분이 가장 높은 형제의 것)이 남는다.
         for k in ("evidence", "replacement", "if_unfixed"):
             if not items[keep].get(k):
-                for m in sorted(live, key=lambda m: (-RANK[items[m]["disposition"]], m)):
+                for m in sorted(live, key=lambda m: (RANK[items[m]["disposition"]], m)):
                     if items[m].get(k):
                         items[keep][k] = items[m][k]
-                        break
         for m in live:
             keep_of[m] = keep
             if m != keep:
