@@ -1735,14 +1735,16 @@ path = sys.argv[1]
 src = open(path, encoding="utf-8").read()
 tree = ast.parse(src)
 
+# 술어 다섯 + 그 둘(②·③)이 결정 줄을 판독하는 헬퍼 둘. 헬퍼는 판정의 일부를 쥐므로(선두 OQ 규칙 —
+# 최종 리뷰 I-1) 호출 그래프를 따라가지 않는 이 락의 대상에 이름으로 넣는다.
 TARGET_FUNCS = ("research_link_missing", "research_link_targets_missing",
                 "research_backref_missing", "internal_research_dimension_failures",
-                "research_confirm_missing")
+                "research_confirm_missing", "_declared_decisions", "_leading_oq")
 
 func_nodes = {n.name: n for n in ast.walk(tree)
               if isinstance(n, ast.FunctionDef) and n.name in TARGET_FUNCS}
 if set(func_nodes) != set(TARGET_FUNCS):
-    print("NO\t다섯 함수 이름 집합이 일치하지 않는다 (found=%s)" % sorted(func_nodes)); sys.exit(0)
+    print("NO\t대상 함수 이름 집합이 일치하지 않는다 (found=%s)" % sorted(func_nodes)); sys.exit(0)
 
 gate_node = next((n for n in ast.walk(tree)
                    if isinstance(n, ast.FunctionDef) and n.name == "gate"), None)
@@ -1781,11 +1783,11 @@ for name, stmts in groups:
 if bad:
     print("NO\t" + " | ".join(bad))
 else:
-    print("YES\t다섯 함수 + contract_v2 블록 전부 개수 술어(len 호출·정수 리터럴 비교) 없음")
+    print("YES\t술어 다섯 + 결정 판독 헬퍼 둘 + contract_v2 블록 전부 개수 술어(len 호출·정수 리터럴 비교) 없음")
 PY
 )"
 case "$c5static" in
-  YES*) ok "⟨C5⟩(정적): 다섯 술어와 옵트인 블록에 개수 술어가 없다" ;;
+  YES*) ok "⟨C5⟩(정적): 다섯 술어 · 결정 판독 헬퍼 둘 · 옵트인 블록에 개수 술어가 없다" ;;
   *)    no "⟨C5⟩(정적): $c5static" ;;
 esac
 
@@ -1826,6 +1828,38 @@ assert s.count(old)==1
 s=s.replace(old,"- OQ1 [열림] — 인증 뷰의 캐시 전략"); p.write_text(s,encoding="utf-8")'
 { [[ "$V2RC" -ne 0 ]] && grep -q '역참조' <<<"$V2OUT"; } \
   && ok "V2-③: §0 의 역참조만 지워도 red (양쪽 ∀)" || no "V2-③: §0 쪽 ∀ 가 없다 (rc=$V2RC)"
+# ③·② 「그 OQ<n> 줄」= 선두가 그 OQ<n> 인 항목 줄(최종 리뷰 I-1). 줄 중간의 `OQ1` 은 상호참조이지
+# 그 줄의 결정이 아니다 — 어디서든 언급한 줄에 근거 id 를 요구하면 정직한 상호참조가 red 가 된다.
+# 세 칸: 상호참조 줄 → green / 상호참조가 있어도 진짜 역참조 삭제 → 여전히 red / 줄 중간 언급은
+# ② 의 선언이 아니다 → red.
+v2mut xref 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+o3="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3\n"; o0="- OQ4 [해결 ⟨S1⟩] — 렌더링 전략 → 근거 RC3\n"
+assert s.count(o3)==1 and s.count(o0)==1
+s=s.replace(o3,o3+"- OQ2: 캐시 무효화 시점 (OQ1 이 정해진 뒤에 논의)\n")
+s=s.replace(o0,o0+"- OQ2 [열림] — 캐시 무효화 시점 (OQ1 이 정해진 뒤에 논의)\n")
+p.write_text(s,encoding="utf-8")'
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-③(선두 OQ): §3·§0 의 상호참조 줄(줄 중간 OQ1)은 근거 id 를 요구받지 않는다 — green" \
+  || { no "V2-③(선두 OQ): 정직한 상호참조가 red 다 — 줄 중간 언급을 그 결정의 줄로 읽는다 (rc=$V2RC)"; printf '    %s\n' "$V2OUT"; }
+v2mut xrefdel 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+o3="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3\n"
+assert s.count(o3)==1
+s=s.replace(o3,"- OQ1: 인증 뷰의 캐시 전략\n- OQ2: 캐시 무효화 시점 (OQ1 이 정해진 뒤에 논의)\n")
+p.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '§3 의 OQ1 줄이 근거 RC3' <<<"$V2OUT"; } \
+  && ok "V2-③(선두 OQ): 상호참조가 있어도 §3 의 진짜 역참조를 지우면 여전히 red" \
+  || no "V2-③(선두 OQ): 진짜 역참조 삭제가 통과됐다 — 선두 규칙이 검사를 느슨하게 했다 (rc=$V2RC)"
+v2mut xrefdecl 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+o3="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3\n"
+assert s.count(o3)==1 and s.count("[→ OQ1]")==1
+s=s.replace(o3,o3+"- OQ2: 캐시 무효화 시점 (OQ9 와 견줄 것)\n").replace("[→ OQ1]","[→ OQ9]")
+p.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q 'OQ9 가 payload' <<<"$V2OUT"; } \
+  && ok "V2-②(선두 OQ): 줄 중간의 OQ9 언급은 결정 선언이 아니다 — 그것을 가리키는 연결은 red" \
+  || no "V2-②(선두 OQ): 줄 중간 언급이 결정을 선언했다 (rc=$V2RC)"
 # V2-④ — 이름 정확 일치 derived + closed. **red 가 셋** 필요하다: 행 부재 · 이름 다름 · open.
 # 라운드 1 실측: `- derived:unrelated-ui — open — ` 한 줄이 기존 두 함수를 **둘 다** 통과했다.
 v2mut d4a 'import sys,pathlib

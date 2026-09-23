@@ -984,15 +984,39 @@ def research_link_missing(text: str) -> list[str]:
     return [ln for ln in research_entries(text) if not LINK_RE.search(ln)]
 
 
+LEADING_OQ_RE = re.compile(r"(OQ\d+)\b")
+DECISION_SECTIONS = (("3", "Open Questions"), ("0", "한눈에"))
+
+
+def _leading_oq(line: str):
+    """항목 줄의 **선두** `OQ<n>` — 불릿을 벗긴 본문이 `OQ\d+` 로 시작할 때만 그 id, 아니면 None.
+
+    §0 은 `OQ1 [열림] — …`, §3 은 `OQ1: …` 로 쓴다 — 그 줄이 **선언하는** 결정은 선두의 것 하나다.
+    줄 중간의 `OQ<n>`(`- OQ2: 캐시 무효화 시점 (OQ1 이 정해진 뒤에 논의)` 의 `OQ1`)은 상호참조이고
+    그 줄의 결정이 아니다. 어디서든 언급한 줄을 그 결정의 줄로 읽으면 정직한 상호참조가 ③ 의
+    역참조 요구를 받아 red 가 되고(최종 리뷰 I-1 실측), ② 는 언급만으로 결정이 선언된다.
+    """
+    m = LEADING_OQ_RE.match(_strip_bullet(line).strip())
+    return m.group(1) if m else None
+
+
 def _declared_decisions(text: str) -> set:
     """payload §3 Open Questions ∪ §0 한눈에 의 결정 목록에 실재하는 `OQ<n>` 집합.
 
     §0 이 상위집합이고 §3 이 그 중 열린 것이다(설계 §H ②). **상태 토큰은 보지 않는다** —
     §0 은 해결된 결정도 `[해결 ⟨S<N>⟩]` 를 달고 남으므로, 「열려 있는가」를 보면 그 결정을
     해결하는 데 기여한 조사가 red 가 된다(설계 L3 · R11).
+
+    **선언은 항목 줄의 선두 `OQ<n>` 뿐이다**(`_leading_oq`) — ③ 이 「그 `OQ<n>` 줄」을 읽는 규칙과
+    같다. 줄 중간·산문의 언급은 결정을 선언하지 않는다.
     """
-    return set(OQ_RE.findall(_section_text(text, "3", "Open Questions"))) | \
-        set(OQ_RE.findall(_section_text(text, "0", "한눈에")))
+    out = set()
+    for num, title in DECISION_SECTIONS:
+        for ln in _entry_lines(_section_text(text, num, title)):
+            oq = _leading_oq(ln)
+            if oq:
+                out.add(oq)
+    return out
 
 
 def research_link_targets_missing(text: str) -> list[str]:
@@ -1019,6 +1043,10 @@ def research_backref_missing(text: str) -> list[str]:
     통과하고, 라운드 1 이 지목한 구멍이 자리만 옮겨 남는다. 방향을 뒤집어 「그 `OQ<n>` 줄이 근거
     id 를 포함하는가」를 §3·§0 **양쪽**에서 본다.
 
+    **「그 `OQ<n>` 줄」은 선두가 그 `OQ<n>` 인 항목 줄이다**(`_leading_oq`). 줄 중간에 다른 결정을
+    언급한 상호참조 줄은 그 결정의 줄이 아니다 — 거기에 근거 id 를 요구하면 정직한 상호참조가
+    막힌다(최종 리뷰 I-1).
+
     웹 항목(`[→ OQ…]`)과 sentinel 은 id 가 없으므로 이 검사의 대상이 아니다 — 웹 출처는
     «출처키»↔audit §7(N2)가 이미 결속한다.
     """
@@ -1032,12 +1060,12 @@ def research_backref_missing(text: str) -> list[str]:
     if not want:
         return []
     fails = set()
-    for num, title in (("3", "Open Questions"), ("0", "한눈에")):
+    for num, title in DECISION_SECTIONS:
         for ln in _entry_lines(_section_text(text, num, title)):
-            for oq in set(OQ_RE.findall(ln)):
-                for rc in want.get(oq, ()):
-                    if rc not in ln:
-                        fails.add(f"§{num} 의 {oq} 줄이 근거 {rc} 를 되가리키지 않는다")
+            oq = _leading_oq(ln)
+            for rc in want.get(oq, ()):
+                if rc not in ln:
+                    fails.add(f"§{num} 의 {oq} 줄이 근거 {rc} 를 되가리키지 않는다")
     return sorted(fails)
 
 
