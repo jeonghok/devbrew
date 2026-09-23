@@ -847,14 +847,14 @@ MSG
 
 **Interfaces:**
 - Consumes: Task 4 의 태그·var·kind 삼중쌍 (`claims_contract`/`CLAIMS_CONTRACT`/`repo_context` · `open_decisions`/`OPEN_DECISIONS`/`task`) — **글자째 같아야 한다**
-- Produces: AC20 의무 문면 — Task 7 의 V1 이 그 산출을 받는다.
+- Produces: AC20 의무 문면 — Task 8 의 V1 이 그 산출을 받는다.
 
 **AC20 의 범위는 좁혀져 있다** — seed 의 «다시 검증할 것» 문단 중 **레포로 확인 가능한 항목마다** `repo_claims` 를 산출해 V1 을 태울 의무다. 「사용자만 답할 수 있는 것」·「인과 추정」은 대상이 아니다(이 사이클 seed 의 그 문단 여섯 항목 중 레포 대상은 둘뿐이었다). 그 문단이 비었으면(규약 위반 seed — 슬롯 주석이 명시 허용) 의무는 **미발동**이고 그 사실을 audit §5 에 한 줄로 공시한다. **Phase 0 은 건드리지 않는다** ⟨C4⟩.
 
 **갱신해야 하는 기존 단언 둘** (`test_conducting_interview_stage.sh`):
 - `:406` `grep -qE '재개방[^.]{0,20}최대 1회' <<<"$covmap_flat"` — 예산이 `1 + Σ(재개방)` 이 되므로 이 문구가 사라진다.
 - `:412` `grep -qE '상한[^.]{0,6}2' <<<"$covmap_flat"` — 같은 이유.
-두 단언은 Task 10 이 자격·예산과 함께 고친다. **이 Task 는 그 두 문구를 건드리지 않는다** — 슬롯·출력 의무만 더한다.
+두 단언은 Task 11 이 자격·예산과 함께 고친다. **이 Task 는 그 두 문구를 건드리지 않는다** — 슬롯·출력 의무만 더한다.
 
 - [ ] **Step 1: 실패하는 락을 먼저 쓴다**
 
@@ -1248,7 +1248,7 @@ bash plugins/spec-distill/tests/test_web_kill_switch.sh 2>&1 | tail -2
 wc -l < plugins/spec-distill/skills/conducting-interview/SKILL.md
 ```
 
-Expected: 다섯 다 `Fail: 0`. 「축 A① 앵커 수 == dispatch 수」가 여전히 ✓ (**새 dispatch 자리를 만들지 않았다** — AC24). SKILL.md ≈ 384줄 — **`< 388` 의 마지막 여유다. Task 7 이 넘길 것이므로 Task 11 이 천장을 처분한다.**
+Expected: 다섯 다 `Fail: 0`. 「축 A① 앵커 수 == dispatch 수」가 여전히 ✓ (**새 dispatch 자리를 만들지 않았다** — AC24). SKILL.md ≈ 384줄 — **`< 388` 의 마지막 여유다. Task 8 이 넘길 것이므로 Task 7 이 천장을 처분한다.**
 
 - [ ] **Step 5: Commit**
 
