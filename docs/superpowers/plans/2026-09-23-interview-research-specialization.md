@@ -2842,7 +2842,7 @@ old = """- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>
 """
 new = """- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>
 - 위험 — 숨은 가정 | <내용> — RC3 (plugins/x/y.py#sym) [RC3 → OQ1]
-- 기각 — <원래> / <재결정> / <근거 RC4 반증> — V1 판정이 반증이었을 때의 세 칸
+- 기각 — <원래> / <재결정> / <근거 RC4 반증> — V1 판정이 반증이었을 때의 세 칸 [→ 없음]
 """
 assert t.count(old) == 1
 t = t.replace(old, new)
@@ -3544,6 +3544,12 @@ Expected: `Fail: 0`.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+# failures 만 읽는다 — 출력 전체를 grep 하면 contract 없는 픽스처가 싣는 v1 공시 advisory(「결정 연결 술어 다섯…」)가
+# 전량을 거짓 회귀로 만든다. JSON 이 아니면 PARSE_FAIL 을 내 회귀로 센다(조용한 0 금지).
+fails() { python3 -c 'import json,sys
+try: d=json.load(sys.stdin)
+except Exception: print("PARSE_FAIL"); sys.exit()
+print("\n".join(d.get("failures",[])))'; }
 n=0; bad=0
 for f in plugins/spec-distill/tests/fixtures/*.md; do
   case "$f" in *.audit.md) continue ;; esac
@@ -3551,7 +3557,7 @@ for f in plugins/spec-distill/tests/fixtures/*.md; do
   grep -q '^## 4\. External Landscape' "$f" || continue
   n=$((n+1))
   out="$(PYTHONDONTWRITEBYTECODE=1 python3 plugins/spec-distill/scripts/check_brief.py gate "$f" 2>/dev/null)"
-  printf '%s' "$out" | grep -qE '결정 연결|역참조|연결 대상' && { bad=$((bad+1)); echo "REGRESSION: $f"; }
+  printf '%s' "$out" | fails | grep -qE 'PARSE_FAIL|결정 연결|역참조|연결 대상' && { bad=$((bad+1)); echo "REGRESSION: $f"; }
 done
 echo "§4 보유 · contract 없음 픽스처 $n 개 중 새 술어로 red 가 된 것 $bad 개"
 ```
@@ -3876,12 +3882,18 @@ Expected: 앞 둘은 `[]`(라운드 1 의 실측 재현 — 그 한 줄이 둘 �
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+# failures 만 읽는다 — 출력 전체를 grep 하면 contract 없는 픽스처가 싣는 v1 공시 advisory(「결정 연결 술어 다섯…」)가
+# 전량을 거짓 회귀로 만든다. JSON 이 아니면 PARSE_FAIL 을 내 회귀로 센다(조용한 0 금지).
+fails() { python3 -c 'import json,sys
+try: d=json.load(sys.stdin)
+except Exception: print("PARSE_FAIL"); sys.exit()
+print("\n".join(d.get("failures",[])))'; }
 bad=0
 for f in plugins/spec-distill/tests/fixtures/*.md; do
   case "$f" in *.audit.md) continue ;; esac
   grep -q '^contract: v2$' "$f" && continue
   out="$(PYTHONDONTWRITEBYTECODE=1 python3 plugins/spec-distill/scripts/check_brief.py gate "$f" 2>/dev/null)"
-  printf '%s' "$out" | grep -q '내부 조사 차원' && { bad=$((bad+1)); echo "REGRESSION: $f"; }
+  printf '%s' "$out" | fails | grep -qE 'PARSE_FAIL|내부 조사 차원' && { bad=$((bad+1)); echo "REGRESSION: $f"; }
 done
 echo "새 술어 ④ 로 red 가 된 기존 픽스처 $bad 개"
 bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | tail -2
@@ -4730,20 +4742,27 @@ Expected: **g1–g8 전부 `fail=` 이 0 이 아니고 `diff=` 가 `none` 이 �
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
 export PYTHONDONTWRITEBYTECODE=1
 echo "=== (a) contract 없는 픽스처 전량: 새 술어로 red 가 되지 않는다"
+# failures 만 읽는다 — 출력 전체를 grep 하면 contract 없는 픽스처가 싣는 v1 공시 advisory(「결정 연결 술어 다섯…」)가
+# 전량을 거짓 회귀로 만든다. JSON 이 아니면 PARSE_FAIL 을 내 회귀로 센다(조용한 0 금지).
+fails() { python3 -c 'import json,sys
+try: d=json.load(sys.stdin)
+except Exception: print("PARSE_FAIL"); sys.exit()
+print("\n".join(d.get("failures",[])))'; }
 tot=0; reg=0
 for f in plugins/spec-distill/tests/fixtures/*.md; do
   case "$f" in *.audit.md) continue ;; esac
   grep -q '^contract: v2$' "$f" && continue
   tot=$((tot+1))
   out="$(python3 plugins/spec-distill/scripts/check_brief.py gate "$f" 2>/dev/null)"
-  printf '%s' "$out" | grep -qE '결정 연결|역참조|연결 대상|내부 조사 차원|확인 줄 누락' \
+  printf '%s' "$out" | fails | grep -qE 'PARSE_FAIL|결정 연결|역참조|연결 대상|내부 조사 차원|확인 줄 누락' \
     && { reg=$((reg+1)); echo "REGRESSION: $f"; }
 done
 echo "(a) 검사한 픽스처 $tot · 새 술어로 red $reg"
 echo "=== (a2) 그중 §4 를 가진 것 수 (착수 전 81 과 같아야 한다)"
 grep -rl '^## 4\. External Landscape' plugins/spec-distill/tests/fixtures | wc -l
 echo "=== (a3) 기존 픽스처가 한 글자도 안 바뀌었다"
-git diff --stat HEAD~12 -- plugins/spec-distill/tests/fixtures/ | grep -v 'v2-valid' | tail -3 || echo "v2 fixture 외 변경 없음 ✓"
+# 기준은 브랜치 분기점이다 — HEAD~N 은 실행 시점마다 다른 커밋을 가리킨다.
+git diff --name-only "$(git merge-base origin/main HEAD)" HEAD -- plugins/spec-distill/tests/fixtures/ | grep -v 'v2-valid' || echo "v2 fixture 외 변경 없음 ✓"
 echo "=== (b) contract: v2 를 넣으면 다섯이 전부 발동한다 — Task 17 Step 4 를 재실행"
 ```
 
