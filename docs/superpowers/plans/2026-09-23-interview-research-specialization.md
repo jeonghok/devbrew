@@ -1294,10 +1294,15 @@ cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burd
 SK=plugins/spec-distill/skills/conducting-interview/SKILL.md
 now=$(wc -l < "$SK"); echo "now=$now  baseline=340  delta=$((now-340))"
 grep -n 'SKILL.md 줄 수' plugins/spec-distill/tests/test_conducting_interview_stage.sh
-echo "남은 Task 예측: V1 10 + state 9 + 자격예산 12 + C44 7 = 38 → 예상 최종 $((now+38))"
+# 남은 SKILL.md 편집자의 예측은 **관측된 증가율**에서 낸다(계획의 옛 추정 38 은 과소였다):
+#   Task 2 +6 · Task 3 +21 · Task 5 +11 이 실측이고, 남은 것은 Task 6 ≈+11 · Task 8 ≈+18 ·
+#   Task 9 ≈0(같은 줄 교체) · Task 10 ≈+19 · Task 11 ≈+31 = **≈+79**.
+echo "남은 예측 ≈79 → 예상 최종 ≈$((now+79))"
 ```
 
-Expected: `now=384 baseline=340 delta=44`, 두 천장 `388`·`408`, 예상 최종 `422`. **422 > 408 이므로 천장 둘 다 올려야 한다.**
+Expected: `now=378 baseline=340 delta=38`, 두 천장 `388`·`408`, 예상 최종 ≈`457`. **457 > 408 이므로 천장 둘 다 올려야 하고, 이 Task 는 Task 6 «앞»에서 돈다** — Task 6 만으로 이미 ≈389 가 되어 `< 388` 에 부딪히기 때문이다(Ruling 18).
+
+측정값이 다르면 그 값을 보고하고 남은 예측을 그 자리에서 다시 계산한다. **이 문서의 숫자를 기대값으로 고정하지 않는다** — 관측된 증가율이 계획의 추정보다 정확했다는 것이 이 Task 의 교훈이다.
 
 - [ ] **Step 2: 천장을 «예상 최종 + 8» 로 올린다 — 근거를 주석으로 함께 적는다**
 
@@ -1313,24 +1318,27 @@ old = '''[[ "$(wc -l < "$SKILL")" -lt 388 ]] \\
   || no "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 388"'''
 new = '''# 2026-09-23 조사 특화: 래칫을 **올린다**(없애지 않는다). 이 설계는 로드 표면 순증을 명시적으로
 # 수용했고(설계 L7 · ⟨C8⟩), 더해지는 것은 계약 배달 펜스 · dispatch 슬롯 넷 · V1 검문소 ·
-# state 키 둘 · 자격·예산 · C44 면제 규칙이며 **삭제가 0** 이다. 값은 실측 + 8 이므로 다음
-# 편집이 8줄 넘게 늘리면 다시 소리가 난다 — 순감 주장을 순증 수용으로 바꾼 것이지 상한을
-# 없앤 것이 아니다.
-[[ "$(wc -l < "$SKILL")" -lt 430 ]] \\
-  && ok "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") < 430 (조사 특화 순증 수용, 실측+8)" \\
-  || no "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 430"'''
+# state 키 둘 · 자격·예산 · C44 면제 규칙이며 **삭제가 0** 이다.
+#
+# **이 값은 잠정이다.** 한 번에 정한 값은 중간에는 너무 빡빡해 정당한 편집을 막고, 끝에는 너무
+# 느슨해 래칫이 뜻을 잃는다 — 이 브랜치가 실측으로 그것을 보였다(원래 계획의 430 은 남은 편집을
+# 과소 예측한 값이었다). 그래서 여기서는 **남은 편집을 다 받을 만큼** 열어 두고, SKILL.md 를
+# 마지막으로 편집하는 Task 11 이 그 자리에서 **실측 + 8** 로 조인다. 래칫의 뜻은 끝에서 지켜진다.
+[[ "$(wc -l < "$SKILL")" -lt 480 ]] \\
+  && ok "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") < 480 (조사 특화 순증 수용 — 잠정, Task 11 이 조인다)" \\
+  || no "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 480"'''
 assert t.count(old) == 1, "천장 1 앵커 불일치"
 t = t.replace(old, new)
 
 old2 = '''[[ "$(wc -l < "$SKILL")" -lt 408 ]] && ok "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") < 408 (순감)" || no "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 408"'''
-new2 = '''[[ "$(wc -l < "$SKILL")" -lt 430 ]] && ok "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") < 430 (조사 특화 순증 수용, 실측+8)" || no "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 430"'''
+new2 = '''[[ "$(wc -l < "$SKILL")" -lt 480 ]] && ok "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") < 480 (조사 특화 순증 수용 — 잠정, Task 11 이 조인다)" || no "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 480"'''
 assert t.count(old2) == 1, "천장 2 앵커 불일치"
 p.write_text(t.replace(old2, new2), encoding="utf-8")
 print("ok")
 PY
 ```
 
-Expected: `ok`. 두 천장이 같은 값(430)이 된다 — 다른 값 둘을 두면 어느 쪽이 실제 상한인지 모호해진다.
+Expected: `ok`. 두 천장이 같은 값(480)이 된다 — 다른 값 둘을 두면 어느 쪽이 실제 상한인지 모호해진다. **이 값은 잠정이고 Task 11 이 실측 + 8 로 조인다.**
 
 - [ ] **Step 3: 로드 표면 순증을 배포 경로에서 실측한다**
 
@@ -1363,17 +1371,17 @@ Expected: 세 줄 + 헤더. **이 값을 Task 20 의 CHANGELOG 가 인용한다.
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
 W=.superpowers/sdd/2026-09-23-interview-research-specialization
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '줄 수|Total'
-echo "--- 변이: SKILL.md 에 50줄을 더해 래칫이 RED 를 내는지"
+echo "--- 변이: SKILL.md 에 120줄을 더해 래칫이 RED 를 내는지 (잠정 천장 480 을 확실히 넘는 폭)"
 SK=plugins/spec-distill/skills/conducting-interview/SKILL.md
 cp "$SK" "$W/skill.bak"
 python3 -c "
-import pathlib; p=pathlib.Path('$SK'); p.write_text(p.read_text(encoding='utf-8')+'\n'*50, encoding='utf-8')"
+import pathlib; p=pathlib.Path('$SK'); p.write_text(p.read_text(encoding='utf-8')+'\n'*120, encoding='utf-8')"
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '줄 수'
 cp "$W/skill.bak" "$SK"
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '줄 수|Total'
 ```
 
-Expected: 변이 전 ✓ 둘 → 변이 후 **✗ 둘** → 복원 후 ✓ 둘 + `Fail: 0`. 변이 후 ✓ 가 나오면 래칫이 이빨을 잃은 것이므로 값을 다시 계산한다.
+Expected: 변이 전 ✓ 둘 → 변이 후 **✗ 둘** → 복원 후 ✓ 둘 + `Fail: 0`. 변이 후 ✓ 가 나오면 래칫이 이빨을 잃은 것이므로 값을 다시 계산한다. 120줄은 잠정 천장 480 을 확실히 넘기려는 폭이고, 이 Task 가 끝난 직후의 실제 줄 수와 무관하게 발화해야 한다.
 
 - [ ] **Step 5: Commit**
 
@@ -1498,7 +1506,7 @@ bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -
 wc -l < plugins/spec-distill/skills/conducting-interview/SKILL.md
 ```
 
-Expected: `ok` 다음 `Fail: 0`, SKILL.md ≈ 404줄 (`< 430`).
+Expected: `ok` 다음 `Fail: 0`. SKILL.md 줄 수를 측정해 보고한다(`< 480`).
 
 - [ ] **Step 3: 라운드 규약 절의 기존 부재 락이 여전히 green 인지 확인**
 
@@ -1967,7 +1975,7 @@ Claude-Session: https://claude.ai/code/session_01D5Xd9k8aYnt5ojzb9MU1J7
 MSG
 ```
 
-Expected: stale 락 `Fail: 0`, SKILL.md ≈ 424줄 (`< 430` — **여유 6줄**).
+Expected: stale 락 `Fail: 0`. SKILL.md 줄 수를 측정해 보고한다(`< 480`).
 
 ---
 
@@ -2165,7 +2173,7 @@ bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -
 wc -l < plugins/spec-distill/skills/conducting-interview/SKILL.md
 ```
 
-Expected: `ok` 다음 `Fail: 0`. **SKILL.md 줄 수가 430 을 넘으면** Task 7 의 천장을 실측+8 로 다시 올리고 그 커밋에 이유를 적는다(이 Task 의 커밋에 함께 넣는다).
+Expected: `ok` 다음 `Fail: 0`. SKILL.md 줄 수를 측정해 보고한다. **480 을 넘으면** 잠정 천장이 모자란 것이므로 이 Task 의 커밋에서 실측 + 8 로 올리고 이유를 적는다.
 
 - [ ] **Step 3: agent 파일 여섯 자리와 README 셋을 고친다**
 
@@ -2229,6 +2237,50 @@ grep -c 'RHYTHM_GUARD_THRESHOLD' plugins/spec-distill/skills/conducting-intervie
 ```
 
 Expected: 매처의 stdout 이 **비고** stderr 가 `총 0 줄`. 무관한 셋은 각각 `1`·`1`·`2` 이상 — **건드리지 않았다**. 매처가 한 줄이라도 내면 그 자리가 미교체이거나, 새로 쓴 문면이 우연히 옛 표기와 같아진 것이다.
+
+- [ ] **Step 4.5: 잠정 천장을 실측 + 8 로 조인다 (Task 7 이 이 Task 에 넘긴 것)**
+
+Task 7 이 SKILL.md 줄 수 천장을 **잠정 480** 으로 열어 뒀다. 한 번에 정한 값은 중간에는 정당한 편집을 막고 끝에는 래칫의 뜻을 잃기 때문이다. **이 Task 가 SKILL.md 를 마지막으로 편집하므로 여기서 조인다** — 이 절차가 없으면 잠정값이 영구화되고 래칫은 이름만 남는다.
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+SK=plugins/spec-distill/skills/conducting-interview/SKILL.md
+FINAL=$(wc -l < "$SK"); TIGHT=$((FINAL + 8))
+echo "실측 $FINAL → 조인 천장 $TIGHT"
+python3 - "$TIGHT" <<'PY'
+import pathlib, re, sys
+tight = sys.argv[1]
+p = pathlib.Path("plugins/spec-distill/tests/test_conducting_interview_stage.sh")
+t = p.read_text(encoding="utf-8")
+n = t.count("-lt 480 ")
+assert n == 2, "잠정 천장 480 이 %d자리 (2 기대 — Task 7 이 둘을 같은 값으로 뒀다)" % n
+t = t.replace("-lt 480 ", "-lt " + tight + " ")
+t = t.replace("< 480 (조사 특화 순증 수용 — 잠정, Task 11 이 조인다)",
+              "< " + tight + " (조사 특화 순증 수용 — 실측 + 8, Task 11 이 조였다)")
+t = t.replace("≥ 480", "≥ " + tight)
+p.write_text(t, encoding="utf-8")
+print("천장 480 → " + tight)
+PY
+bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '줄 수|Total'
+```
+
+Expected: `천장 480 → <실측+8>` 다음 ✓ 둘 + `Fail: 0`.
+
+- [ ] **Step 4.6: 조인 천장이 이빨을 갖는지 변이로 확인한다**
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
+SK=plugins/spec-distill/skills/conducting-interview/SKILL.md
+cp "$SK" "$W/skill-tighten.bak"
+python3 -c "
+import pathlib; p=pathlib.Path('$SK'); p.write_text(p.read_text(encoding='utf-8')+'\n'*9, encoding='utf-8')"
+bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '줄 수'
+cp "$W/skill-tighten.bak" "$SK"
+bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '줄 수|Total'
+```
+
+Expected: 9줄을 더하면 **✗ 둘**(실측+8 이므로 9줄이 넘긴다) → 복원 후 ✓ 둘 + `Fail: 0`. 9줄 변이가 green 이면 조이기가 안 된 것이다 — `-lt` 값이 실제로 바뀌었는지 확인한다.
 
 - [ ] **Step 5: 전체 확인 + Commit**
 
