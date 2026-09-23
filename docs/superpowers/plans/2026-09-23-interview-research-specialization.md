@@ -2570,7 +2570,7 @@ new = """5. **조사 주장의 인계 — 세 방향을 같은 id 로 맞물린�
    ```bash
    # payload 의 RC<n> 전량 ↔ audit §5 의 확인 줄 — 차집합이 비어야 한다
    PL="docs/superpowers/interview/<file>"; AD="${PL%.md}.audit.md"
-   comm -23 <(grep -oE '(^|[^A-Za-z])RC[0-9]+' "$PL" | grep -oE 'RC[0-9]+' | sort -u) \
+   comm -23 <(grep -oE '(^|[^A-Za-z])RC[0-9]+' "$PL" | grep -oE 'RC[0-9]+' | sort -u) \\
             <(grep -oE '^- 확인 RC[0-9]+' "$AD" | grep -oE 'RC[0-9]+' | sort -u)
    ```
    출력이 있으면 그 `RC<n>` 의 확인 줄이 없다 — V1 을 태우지 않은 주장이므로 payload 에서 빼거나
