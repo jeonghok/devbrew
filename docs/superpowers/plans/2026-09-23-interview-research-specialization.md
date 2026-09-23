@@ -3320,7 +3320,7 @@ Expected: 세 문면이 code·design 양쪽에서 각각 ≥1.
 
 **Files:**
 - Modify: `plugins/spec-distill/scripts/check_brief.py`
-- Create: `tests/fixtures/interview-brief-v2-nolink.md`(+audit) · `-badtarget.md`(+audit) · `-nobackref.md`(+audit)
+- (파일 없음) red 셋(연결 삭제 · 없는 대상 · 역참조 삭제)은 `v2mut()` 가 green fixture 에서 **런타임 생성**한다 — 픽스처 파일을 늘리지 않는다
 - Modify: `plugins/spec-distill/tests/test_check_brief.sh`
 
 **Interfaces:**
