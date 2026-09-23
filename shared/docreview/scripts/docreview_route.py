@@ -406,10 +406,11 @@ def _absorb_same_as(items, same_as, L):
         # 생존자는 처분 순위와 f 번호로 갈리고 f 번호는 요약의 sha1 순이라, 산문 칸을 적은
         # 쪽이 흡수될 수 있다. 생존자의 빈 칸만 형제에게서 채운다 — 적힌 칸은 덮지 않는다.
         # 오름차순이라 마지막에 쓴 값(처분이 가장 높은 형제의 것)이 남는다.
+        # 공백뿐인 값은 뒤의 접기에서 None 이 되므로 빈 칸으로 친다.
         for k in ("evidence", "replacement", "if_unfixed"):
-            if not items[keep].get(k):
+            if not (items[keep].get(k) or "").strip():
                 for m in sorted(live, key=lambda m: (RANK[items[m]["disposition"]], m)):
-                    if items[m].get(k):
+                    if (items[m].get(k) or "").strip():
                         items[keep][k] = items[m][k]
         for m in live:
             keep_of[m] = keep
@@ -427,6 +428,9 @@ def _classify_items(items, st, prof, sections, n, L):
     allowed = prof["allowed_dispositions"]
     final, rejected_items = [], []
     for f, it in items.items():
+        # 흡수된 항목은 렌더되지 않는다 — 그 값의 접기를 세면 생존자가 물려받은 같은 값이 두 번 센다.
+        if it.get("_absorbed_into"):
+            continue
         repl = it.get("replacement")
         if repl:
             collapsed = re.sub(r"\s+", " ", repl).strip()
@@ -441,8 +445,6 @@ def _classify_items(items, st, prof, sections, n, L):
                 # 헤더 주석 참조 — cmd_prepare 의 L 은 프로세스 경계를 못 넘는다.
                 L.coerced("replacement", repl, collapsed)
             it["replacement"] = collapsed or None
-        if it.get("_absorbed_into"):
-            continue
         if it.get("_rejected"):
             it["state"] = "rejected"
             it["origin"] = "reviewer"
