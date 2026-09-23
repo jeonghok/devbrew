@@ -112,13 +112,54 @@ done
 [[ -z "$leak" ]] \
   && ok "T13: 충실도 축(brief 층 2 전부)이 design 자리 rubric 에 없다" \
   || no "T13: design 자리 rubric 이 brief 자리의 충실도 축을 흡수했다:$leak"
-leak2=""
-for _did in goal_fit architecture tradeoffs; do
-  printf '%s' "$L1_B" | grep -qF "$_did" && leak2="$leak2 $_did"
+# ── T13 ④ : 층 1 의 공유는 «허용 목록»이다 (부재 열거 → 허용 목록) ──────────
+# 옛 판정은 금지 셋(goal_fit·architecture·tradeoffs)이라 그 밖은 전부 통과했다 —
+# problem_definition·scope·component_relations·data_flow·feasibility 다섯이 brief 에
+# 들어가도 무언이었다(fail-open). 허용 목록으로 뒤집으면 목록 밖 공유가 전부 걸린다.
+#
+# SHARED 는 «의도적으로 두 자리가 함께 쓰는» 축이다. 여기 이름을 더하는 것은 자리
+# 경계를 한 칸 여는 결정이라 diff 에 한 줄로 드러나야 한다.
+SHARED="overdesign"
+shared_leak=""
+n_l1b=0
+for _bid in $(printf '%s' "$L1_B" | tr -d '[]' | tr ',' ' '); do
+  n_l1b=$((n_l1b+1))
+  printf '%s' "$L1_D" | grep -qF "$_bid" || continue
+  printf '%s\n' $SHARED | grep -qxF "$_bid" || shared_leak="$shared_leak $_bid"
 done
-[[ -z "$leak2" ]] \
-  && ok "T13: 설계 축(goal_fit·architecture·tradeoffs)이 brief 자리 rubric 에 없다" \
-  || no "T13: brief 자리 rubric 이 design 자리의 설계 축을 흡수했다:$leak2"
+[[ "$n_l1b" -ge 2 ]] \
+  && ok "T13④: brief 층 1 에서 축 ${n_l1b}개를 읽었다 (아래 판정의 양의 짝)" \
+  || no "T13④: brief 층 1 에서 축을 ${n_l1b}개만 읽었다 — 아래 판정이 공허하다"
+[[ -n "$SHARED" ]] \
+  && ok "T13④ 양성 대조: SHARED 가 비어 있지 않다 ($SHARED)" \
+  || no "T13④: SHARED 가 빈 집합이다 — 허용 목록 판정이 「전부 금지」로 퇴행했다"
+[[ -z "$shared_leak" ]] \
+  && ok "T13④: brief 층 1 ∩ design 층 1 ⊆ SHARED {$SHARED}" \
+  || no "T13④: 목록 밖 공유가 있다:$shared_leak (자리 경계가 무너졌다 — SHARED 를 늘리려면 같은 커밋에서 이 줄을 고쳐라)"
+
+# ── T13 ⑤ : SHARED 의 각 축이 두 자리에서 «다른 문장»으로 정의된다 ──────────
+# 한계 공시 — 이것은 리터럴 핀이고 «바이트»를 잰다. 두 불릿을 무의미하게 다르게
+# 써도 통과한다. 잡는 것은 한쪽을 다른 쪽에 «통째로 베껴 넣는 것»뿐이고, 의미는 못
+# 잰다. 그래서 기준어 축(각자 자기 상류를 담는가)을 함께 둔다.
+bullet_of() { grep "^- \`$2\`" "$1" | head -1; }   # bullet_of <프로필> <축>
+for _ax in $SHARED; do
+  b_line="$(bullet_of "$PROF_BRIEF" "$_ax")"; d_line="$(bullet_of "$PROF_DESIGN" "$_ax")"
+  if [[ -n "$b_line" && -n "$d_line" ]]; then
+    ok "T13⑤ 양의 짝: 두 프로필에 $_ax 불릿이 실재한다"
+  else
+    no "T13⑤: $_ax 불릿이 없다 (brief='$b_line' design='$d_line') — 아래 판정이 공허하다"
+    continue
+  fi
+  [[ "$b_line" != "$d_line" ]] \
+    && ok "T13⑤: $_ax 가 두 자리에서 다른 문장으로 정의된다" \
+    || no "T13⑤: $_ax 불릿이 두 자리에서 바이트로 같다 — 한쪽을 통째로 베꼈다"
+  printf '%s' "$b_line" | grep -qF '사용자 원문' \
+    && ok "T13⑤: brief 의 $_ax 가 자기 상류(사용자 원문)를 기준어로 담는다" \
+    || no "T13⑤: brief 의 $_ax 에 자기 상류 기준어가 없다"
+  printf '%s' "$d_line" | grep -qF '브리프 §1 Goal' \
+    && ok "T13⑤: design 의 $_ax 가 자기 상류(브리프 §1 Goal)를 기준어로 담는다" \
+    || no "T13⑤: design 의 $_ax 에 자기 상류 기준어가 없다"
+done
 
 # --- T12 / AC16 : state 의존 부재 (정확 토큰) --------------------------------
 # `state` 단독 grep은 쓰지 않는다 — check_brief.py에서 모든 매칭이 `statement`이거나

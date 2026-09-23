@@ -58,7 +58,7 @@ input_slots:
 
 `disposition` 은 프로필 `allowed_dispositions` 안에서 고른다:
 
-- `decide` — 사용자가 결정할 일. 방향의 결함, 보호 부류(목표·범위·제약·Non-goal·아키텍처·trade-off·AC)를 바꾸는 것. `summary` 에 변경 내용을, `evidence` 에 근거를 담는다.
+- `decide` — 사용자가 결정할 일. 방향의 결함, 보호 부류(목표·범위·제약·Non-goal·아키텍처·trade-off·AC)를 바꾸는 것. `evidence` 에 근거를, `replacement`·`if_unfixed` 에 대안과 그대로 두면 남는 결과를 담는다.
 - `ask` — 답이 있어야 다른 fix 를 할 수 있는 질문. 그 fix 의 `ref` 를 `blocks` 에 적는다.
 - `fix` — 저자가 바로 고칠 상세. `edit_scope` 에 고칠 자리(기본은 `anchor`, 새 섹션은 `insert-after:#x`).
 - `defer` — plan 이 도출·관측할 일(프로필이 허용할 때만). 자동 검증 절차·삭제 전수 같은 것.
