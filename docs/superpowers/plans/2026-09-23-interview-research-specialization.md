@@ -2967,7 +2967,7 @@ Expected: `test_check_brief.sh` `Fail: 0` — **템플릿은 픽스처가 아니
   Task 15·16·17 이 이 넷을 그대로 쓴다.
 
 **「조사 항목」의 순회 정의** (설계 §E 와 **같은 문면**이어야 한다 — AC9 가 코드 주석과 설계의 문면 일치를 요구한다):
-- payload §4 의 **모든** 항목 줄
+- payload §4 의 모든 항목 줄
 - payload §5 의 항목 줄 중 **`RC<n>` 리터럴을 가진 줄**
 - **§3 은 순회 범위에 없다** — 연결의 대상이라 자기지시가 된다
 
@@ -3009,6 +3009,7 @@ grep -q '내부 조사 0건' <<<"$V2OUT" \\
 # V2-OPT-c: contract: v2 인데 RC<n> 0건 → green + 「내부 조사 0건」 advisory
 cp "$FXV" "$TMPD/z.md"; cp "${FXV%.md}.audit.md" "$TMPD/z.audit.md"
 sed -i.bak 's|^audit_file:.*|audit_file: z.audit.md|' "$TMPD/z.md"; rm -f "$TMPD/z.md.bak"
+sed -i.bak 's|^payload:.*|payload: z.md|' "$TMPD/z.audit.md"; rm -f "$TMPD/z.audit.md.bak"
 python3 - "$TMPD/z.md" "$TMPD/z.audit.md" <<'PYX'
 import re, sys, pathlib
 # 레포 주장을 통째로 뺀다: §4·§5 의 연결에서 RC 를 지우고(웹 형태로), §3·§0 의 역참조와
@@ -3020,7 +3021,8 @@ s = re.sub(r"^- 위험 — .*RC\\d+.*$\\n", "", s, flags=re.M)
 pl.write_text(s, encoding="utf-8")
 ad = pathlib.Path(sys.argv[2]); a = ad.read_text(encoding="utf-8")
 a = re.sub(r"^- 확인 RC\\d+ .*$\\n", "", a, flags=re.M)
-a = a.replace("- derived:internal_research — closed — 내부 조사 축 (@S1)\\n", "")
+# 행을 지우면 기존 AC10(`coverage_ledger_failures` — derived 행 ≥1 또는 N/A sentinel)이 먼저 red 다
+a = a.replace("- derived:internal_research — closed — 내부 조사 축 (@S1)\\n", "- derived: N/A\\n")
 ad.write_text(a, encoding="utf-8")
 PYX
 v2run "$TMPD/z.md"
@@ -3031,6 +3033,7 @@ v2run "$TMPD/z.md"
 # V2-DEF: §3 은 순회 범위 밖 — §3 항목에 연결이 없어도 red 가 아니다.
 cp "$FXV" "$TMPD/d.md"; cp "${FXV%.md}.audit.md" "$TMPD/d.audit.md"
 sed -i.bak 's|^audit_file:.*|audit_file: d.audit.md|' "$TMPD/d.md"; rm -f "$TMPD/d.md.bak"
+sed -i.bak 's|^payload:.*|payload: d.md|' "$TMPD/d.audit.md"; rm -f "$TMPD/d.audit.md.bak"
 v2run "$TMPD/d.md"
 [[ "$V2RC" -eq 0 ]] \\
   && ok "V2-DEF: §3 항목이 줄끝 연결을 갖지 않아도 green (§3 은 대상이고 출처가 아니다)" \\
@@ -3181,7 +3184,7 @@ Expected(Step 2 검증): `python3 plugins/spec-distill/scripts/check_brief.py ga
 # ── 조사 주장의 결정 연결 (2026-09-22-interview-research-specialization-design §E · §H) ─────
 #
 # **「조사 항목」의 순회 정의** — 설계 §E 와 같은 문면이고 이 셋이 전부다:
-#   · payload §4 의 **모든** 항목 줄 (프로필상 전부 landscape 다)
+#   · payload §4 의 모든 항목 줄(프로필상 전부 landscape 다)
 #   · payload §5 의 항목 줄 중 **`RC<n>` 리터럴을 가진 줄** — 네 모양(기각·보류·검토·위험) 중
 #     어느 것인지는 묻지 않는다. `RC<n>` 이 있으면 레포 주장을 실은 줄이고 없으면 아니다.
 #   · **§3 은 순회 범위에 없다.** §3 항목은 그 자체가 «열린 결정» 이라 연결의 *대상*이고
@@ -3283,10 +3286,11 @@ AC9 는 「순회 정의가 코드 주석과 이 설계에 **같은 문면**으�
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
-for s in '§4 의 **모든** 항목 줄' '§3 은 순회 범위에 없다' '위치는 **줄 끝**'; do
+# -F 필수 — `**` 는 BRE 메타문자라 없으면 볼드 없는 문면에도 거짓 ≥1 이 나온다. 셋 다 code·design ≥1 이어야 한다.
+for s in '§4 의 모든 항목 줄(프로필상 전부 landscape 다)' '§3 은 순회 범위에 없다' '위치는 **줄 끝**'; do
   printf '%s → code:%s design:%s\n' "$s" \
-    "$(grep -c -- "$s" plugins/spec-distill/scripts/check_brief.py)" \
-    "$(grep -c -- "$s" docs/superpowers/specs/2026-09-22-interview-research-specialization-design.md)"
+    "$(grep -cF -- "$s" plugins/spec-distill/scripts/check_brief.py)" \
+    "$(grep -cF -- "$s" docs/superpowers/specs/2026-09-22-interview-research-specialization-design.md)"
 done
 git add plugins/spec-distill/scripts/check_brief.py plugins/spec-distill/tests/
 git commit -F - <<'MSG'
