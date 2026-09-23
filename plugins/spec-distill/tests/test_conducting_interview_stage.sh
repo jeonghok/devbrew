@@ -634,6 +634,21 @@ grep -qF 'open_decisions' <<<"$rhythm_block" \
 # 끝까지 간다(AC23) — 중간 헤딩 하나가 아래 부재 락 셋을 공허하게 만든다.
 STEELMAN="$FIN_DIR/steelman.md"
 [[ -f "$STEELMAN" ]] && ok "코퍼스: references/steelman.md 실재 (AC4)" || no "코퍼스: references/steelman.md 부재 (AC4)"
+# AC12 산출자 — steelman 경로의 리포 주장이 audit §5 확인 줄을 «낸다». 소비자(구조 게이트의
+# 확인-줄 ∀ 술어)는 주장의 출처를 보지 않으므로, 이 파일이 §5 를 말하지 않으면 게이트가 아무
+# 지시도 산출하지 않는 것을 막는다. 술어와 이 문면은 같은 릴리스에서 함께 서야 한다.
+#
+# 축을 셋으로 가른다. `확인 RC` 하나로 재면 «어느 절에 쓰는가»를 못 잰다 — 「§5」를 「§3」으로
+# 바꿔도 그 리터럴은 남아 통과한다. 절 · 형식 · 이중확인-방지를 각각 잰다.
+grep -qF 'audit §5 줄도 함께 남긴다' "$STEELMAN" \
+  && ok "AC12(산출자·절): steelman.md 가 기록 절로 audit §5 를 지목한다" \
+  || no "AC12(산출자·절): §5 지목이 없다 — 게이트가 산출자 없는 것을 막는다"
+grep -qF '확인 RC<n> — {확인|반증|미확인}' "$STEELMAN" \
+  && ok "AC12(산출자·형식): 확인 줄 형식이 판정 어휘 셋과 함께 있다" \
+  || no "AC12(산출자·형식): 확인 줄 형식이 없거나 판정 어휘 셋이 빠졌다"
+grep -qF '확인 «행위» 는 한 번이고' "$STEELMAN" \
+  && ok "AC12(산출자·1회): 확인 행위 1회 · 기록 두 자리가 명시됐다" \
+  || no "AC12(산출자·1회): 행위 1회 / 기록 2자리 구분이 없다 — Step 2 를 두 번 돌게 읽힌다"
 r3_block="$(awk '/^### R3 — Steelman/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$STEELMAN")"
 [[ "$(printf '%s\n' "$r3_block" | grep -c .)" -ge 40 ]] \
   && ok "R3: r3_block 이 40줄 이상 (공허 아님)" || no "R3: r3_block 이 비었거나 잘렸다 — 첫 헤딩 또는 중간 ##/### 헤딩을 보라 (AC23)"
