@@ -3613,6 +3613,8 @@ MSG
 **Files:**
 - Modify: `plugins/spec-distill/scripts/check_brief.py`
 - Modify: `plugins/spec-distill/tests/test_check_brief.sh`
+- Modify: `plugins/spec-distill/skills/conducting-interview/references/steelman.md` (§5 기록 의무 — 아래 Step 0)
+- Modify: `plugins/spec-distill/tests/test_conducting_interview_stage.sh` (그 의무의 락 둘)
 
 **Interfaces:**
 - Consumes: Task 8 의 확인 줄 형식 · Task 14 의 `payload_rc_ids`
@@ -3621,6 +3623,117 @@ MSG
 **웹 주장은 대상이 아니다** — N2(`landscape_keys_declared`)가 audit §7 결속을 이미 본다.
 
 **거처가 audit §5 인 이유** — `AUDIT_SECTIONS` 가 이미 요구하는 절이라 **무조건 존재**하고 새 절을 만들지 않는다(⟨C10⟩ · 압축 규약). 무조건 도는 검문소에는 무조건 존재하는 절이 필요하다.
+
+- [ ] **Step 0: 산출자를 먼저 배선한다 — `steelman.md` 가 §5 의무를 말하게 한다**
+
+술어 ⑤ 는 payload 의 **모든** `RC<n>` 마다 audit §5 줄을 요구한다. 그런데 `references/steelman.md`
+는 자기 판정을 audit **§3** 의 `ST<N>` 블록에만 적으라고 말한다(`:51` · `:58` · `:60` · `:71` ·
+`:74` 다섯 자리 전부 §3 이다). §5 의무는 `SKILL.md` 의 V1 문장 하나에만 있고, R3 에서 **실제로
+읽히는 더 구체적인 파일**이 침묵한다.
+
+그 결과가 **소비자만 있고 산출자가 없는** 게이트다 — steelman 경로의 리포 주장이 payload §5 항목에
+`[RC3 → OQ1]` 로 실리면 게이트는 `확인 RC3` 을 요구하지만, R3 독자에게 그것을 쓰라고 말하는 지시는
+없다. 술어를 만들기 **전에** 산출자를 배선한다.
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+python3 - <<'PY'
+import pathlib
+p = pathlib.Path("plugins/spec-distill/skills/conducting-interview/references/steelman.md")
+t = p.read_text(encoding="utf-8")
+old = "- 결과는 audit §3 `#### ST<N>` 블록의 「게이트-전 확인」 소절에 주장별 한 줄로 남는다."
+add = (
+    "\n- **리포 주장(`repo_claims[]`)에는 audit §5 줄도 함께 남긴다** — "
+    "`- 확인 RC<n> — {확인|반증|미확인} — <경로>#<앵커> — <사유>`.\n"
+    "  확인 «행위» 는 한 번이고(이 Step 2 가 V1 의 특수 경우다) 기록이 두 자리다: §3 은 이\n"
+    "  steelman 블록의 문맥을, §5 는 인터뷰 전체의 무조건 원장을 갖는다. §5 를 빼면 구조 게이트의\n"
+    "  확인-줄 ∀ 술어가 그 `RC<n>` 을 이름으로 대며 막는다 — 그 술어는 주장이 steelman 에서\n"
+    "  왔는지 보지 않는다."
+)
+assert t.count(old) == 1
+p.write_text(t.replace(old, old + add), encoding="utf-8")
+print("ok")
+PY
+```
+
+그 의무를 락으로 못 박는다. 락은 이미 `STEELMAN="$FIN_DIR/steelman.md"` 를 `:527` 에서 세우고
+`:528` 에서 실재를 잰다 — 그 변수를 쓴다. **아래 앵커가 그 파일에 정확히 한 번 나오는지 먼저
+확인하고**, 이름이 다르면 실제 이름을 찾아 쓰고 그 사실을 보고한다(추측한 이름으로 앵커를 세우지
+않는다).
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+python3 - <<'PY'
+import pathlib
+p = pathlib.Path("plugins/spec-distill/tests/test_conducting_interview_stage.sh")
+t = p.read_text(encoding="utf-8")
+anchor = '[[ -f "$STEELMAN" ]] && ok "코퍼스: references/steelman.md 실재 (AC4)" || no "코퍼스: references/steelman.md 부재 (AC4)"'
+assert t.count(anchor) == 1, t.count(anchor)
+add = (
+    "\n# AC12 산출자 — steelman 경로의 리포 주장이 audit §5 확인 줄을 «낸다». 소비자(구조 게이트의\n"
+    "# 확인-줄 ∀ 술어)는 주장의 출처를 보지 않으므로, 이 파일이 §5 를 말하지 않으면 게이트가 아무\n"
+    "# 지시도 산출하지 않는 것을 막는다. 술어와 이 문면은 같은 릴리스에서 함께 서야 한다.\n"
+    "#\n"
+    "# 축을 셋으로 가른다. `확인 RC` 하나로 재면 «어느 절에 쓰는가»를 못 잰다 — 「§5」를 「§3」으로\n"
+    "# 바꿔도 그 리터럴은 남아 통과한다. 절 · 형식 · 이중확인-방지를 각각 잰다.\n"
+    "grep -qF 'audit §5 줄도 함께 남긴다' \"$STEELMAN\" \\\n"
+    "  && ok \"AC12(산출자·절): steelman.md 가 기록 절로 audit §5 를 지목한다\" \\\n"
+    "  || no \"AC12(산출자·절): §5 지목이 없다 — 게이트가 산출자 없는 것을 막는다\"\n"
+    "grep -qF '확인 RC<n> — {확인|반증|미확인}' \"$STEELMAN\" \\\n"
+    "  && ok \"AC12(산출자·형식): 확인 줄 형식이 판정 어휘 셋과 함께 있다\" \\\n"
+    "  || no \"AC12(산출자·형식): 확인 줄 형식이 없거나 판정 어휘 셋이 빠졌다\"\n"
+    "grep -qF '확인 «행위» 는 한 번이고' \"$STEELMAN\" \\\n"
+    "  && ok \"AC12(산출자·1회): 확인 행위 1회 · 기록 두 자리가 명시됐다\" \\\n"
+    "  || no \"AC12(산출자·1회): 행위 1회 / 기록 2자리 구분이 없다 — Step 2 를 두 번 돌게 읽힌다\""
+)
+p.write_text(t.replace(anchor, anchor + add), encoding="utf-8")
+print("ok")
+PY
+bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E 'AC12\(산출자|Total'
+bash shared/tests/test_skill_reference_pointers.sh 2>&1 | tail -1
+bash plugins/spec-distill/tests/test_stale_terms.sh 2>&1 | tail -1
+```
+
+Expected: `ok` 둘 다음 `✓ AC12(산출자·절)` · `✓ AC12(산출자·형식)` · `✓ AC12(산출자·1회)` 셋 +
+`Fail: 0`. 포인터 락과 stale 락도 `Fail: 0` — `steelman.md` 는 `references/` 아래라 포인터 락의
+대상이고, 새 문면에 경로도 루트 토큰도 넣지 않았으므로 변화가 없어야 한다.
+
+- [ ] **Step 0.5: 세 단언이 서로 다른 것을 재는지 변이 셋으로 잰다**
+
+부재 락이 아니라 **존재** 락이므로 통과가 정답이다 — 모양으로는 이빨을 판별할 수 없다. 그리고
+세 단언이 같은 것을 재면 축을 셋으로 가른 것이 장식이다. **각 변이는 정확히 하나를 ✗ 로 만들어야
+한다** — 둘 이상이 함께 ✗ 가 되면 그 변이가 축을 분리하지 못한 것이다.
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+ST=plugins/spec-distill/skills/conducting-interview/references/steelman.md
+mut() {   # $1 = 찾을 문자열, $2 = 바꿀 문자열
+  python3 -c "
+import pathlib, sys
+p = pathlib.Path(sys.argv[1]); t = p.read_text(encoding='utf-8')
+old, new = sys.argv[2], sys.argv[3]
+assert t.count(old) == 1, '앵커 %d건' % t.count(old)
+p.write_text(t.replace(old, new), encoding='utf-8')" "$ST" "$1" "$2"
+  bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '^  ✗ .*AC12\(산출자'
+  git checkout HEAD -- "$ST"
+}
+echo "--- 변이 1 (절 축): §5 → §3"
+mut 'audit §5 줄도 함께 남긴다' 'audit §3 줄도 함께 남긴다'
+echo "--- 변이 2 (형식 축): 판정 어휘 셋을 지운다"
+mut '확인 RC<n> — {확인|반증|미확인}' '확인 RC<n>'
+echo "--- 변이 3 (이중확인 축): 행위 1회 문구를 지운다"
+mut '확인 «행위» 는 한 번이고' '확인은'
+echo "--- 복원 후"
+bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E 'AC12\(산출자|Total'
+```
+
+Expected: 변이 1 → `✗ AC12(산출자·절)` **하나만**. 변이 2 → `✗ AC12(산출자·형식)` 하나만.
+변이 3 → `✗ AC12(산출자·1회)` 하나만. 복원 후 ✓ 셋 + `Fail: 0`.
+
+한 변이가 **둘 이상**을 ✗ 로 만들면 그 두 단언이 같은 리터럴을 공유하는 것이므로, 공유하지 않는
+문구로 갈라 다시 잰다. 한 변이가 **아무것도** ✗ 로 만들지 않으면 그 축의 단언이 그 자리를 재지
+않는 것이므로, 그 단언의 `grep` 대상을 변이가 실제로 건드린 문구로 바꾼다. `git checkout HEAD --`
+로 복원한다(`git checkout --` 는 index 로 되돌아가 변이가 남을 수 있다).
 
 - [ ] **Step 1: red/green 짝을 먼저 쓴다**
 
