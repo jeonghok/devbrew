@@ -62,6 +62,12 @@ def normalize(item, layer_default, prefix, idx, ledger):
     disp = item.get("disposition")
     disp = str(disp).strip() if disp else None
     if disp is not None and disp not in RANK:
+        # 알려진 미계수 강제 — 이 `ledger.coerced()` 는 critic/codex 경로에서 조용히
+        # 소실된다. `normalize()` 는 `cmd_prepare` 의 Ledger 로 불려 그 라운드 events 만
+        # `cmd_finalize` 로 넘어가기 때문이다(일반 규칙은 아래 `replacement`/`if_unfixed`
+        # 주석 참조). `_apply_recritic` 의 무조건 `None → "ask"` 루프가 오늘은 가려
+        # 주지만 **보장이 아니다** — 재비판 verdict 가 아직 `None` 인 항목에 처분을
+        # 직접 매기면 그 루프가 안 돌아 계수가 0 으로 끝난다.
         ledger.coerced("disposition", disp, None)
         disp = None
     try:
