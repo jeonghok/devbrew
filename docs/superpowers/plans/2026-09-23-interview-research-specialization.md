@@ -82,6 +82,20 @@ spec 의 프로젝트-전역 요구를 값째 옮긴 것이다. **모든 Task �
   | `references/*.md` (플러그인 레벨) | **`${CLAUDE_PLUGIN_ROOT}/…` 만** | 같은 이중 중첩 |
   | 어디든 | **`$SD/references/…` 금지** | 셋 중 어느 형태도 아니라 「접두사를 알아볼 수 없다」로 red |
 
+  **그리고 두 락이 같은 토큰에 반대 요구를 건다.** `shared/tests/test_plugin_root_no_cwd_fallback.sh`
+  의 축 3 은 `references/` 아래 파일의 **본문에 `CLAUDE_PLUGIN_ROOT` 가 있으면** 그 파일을 대상에
+  등록하고(`if "CLAUDE_PLUGIN_ROOT" in body`), 그 순간 「어느 SKILL.md 가 이 파일을 절대 형태로
+  `Read` 하는 줄 + 같은 절의 치환 안내 문장」을 요구한다. 이 설계는 계약 파일을 **`Read` 하지 않는다** —
+  `cat` 으로 dispatch 슬롯에 싣는 것이 요점이다(설치본에서 subagent 의 Read 가 거부되므로). 그래서:
+
+  > **플러그인 레벨 `references/*.md` 의 본문에는 경로도 루트 토큰도 넣지 않는다.** 다른 파일을
+  > 가리켜야 하면 **이름만** 쓴다(`steelman.md`) 또는 절차 이름으로 부른다. 리포의 기존 관습이
+  > 이미 그것이다 — 형제 넷(`compression.md` · `proceed-gate.md` · `reviewing-document.md` ·
+  > `trivia-escape.md`) 전부가 `CLAUDE_PLUGIN_ROOT` 를 **0개** 담는다.
+
+  Task 2 가 이 충돌에 실제로 걸렸다: 포인터 락을 고치려고 루트 토큰을 넣었고 그것이 축 3 을 깨뜨렸다.
+  한 RED 를 다른 RED 로 바꾼 것이다. 두 락을 **함께** 돌려야 그 교환이 보인다.
+
   그래서 이 락을 **그 코퍼스의 파일을 건드리는 모든 Task 의 검증 단계에 넣는다** — Task 2 가 이
   함정에 실제로 걸렸고(맨몸 `references/steelman.md` 를 플러그인 레벨 파일에 써서 소실 1 + 대조
   실패 1), 그 락이 Task 2 의 검증 목록에만 있었으면 Task 20 까지 아무도 몰랐다.
