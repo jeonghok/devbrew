@@ -45,13 +45,13 @@ orchestration:                       # orchestrator 소유, agent read-only
   focused_dimension: null            # 현재 probe 대상 차원 이름 또는 null
   blind_spot_dispatches: 0           # 예산 = 1 + 그 차원의 reopened (자격은 아래 절)
   coverage_mapper_dispatches: 0      # 예산 = 1 + 모든 차원의 reopened 합 (자격은 아래 절)
-  open_decisions:                    # 인터뷰 중 결정의 유일한 거처 — OQ<n> 의 산출자
-    - id: OQ1
-      text: "<한 줄>"
-      dimension: blind_spot          # 어느 커버리지 차원에 속하는가 (호출 자격의 입력)
-      status: open                   # open | resolved
-      resolved_by: null              # resolved 면 그 사용자 발화 S<N>
-      touched: false                 # 조사가 닿았는가 (C44 면제의 입력)
+  open_decisions: []                 # 결정의 유일한 거처 — OQ<n> 의 산출자. 시작은 빈 목록이고 항목 형식은:
+  #   - id: OQ<n>                    # 발급 시 순증 (라운드 규약 «다음 결정»)
+  #     text: "<한 줄>"
+  #     dimension: <차원 이름>        # 어느 커버리지 차원에 속하는가 (호출 자격의 입력)
+  #     status: open                 # open | resolved
+  #     resolved_by: null            # resolved 면 그 사용자 발화 S<N>
+  #     touched: false               # 조사가 닿았는가 (C44 면제의 입력)
 non_user_streak: <int>
 trivia_escape_armed: false
 user_statements: []                  # 매 round 끝 append. 판정 없음 — 확정은 종료 게이트가 결정.
@@ -153,6 +153,7 @@ OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지> · 트레이�
 조사 주장(외부 `evidence[]` · 내부 `repo_claims[]`)의 계약 정본은
 `${CLAUDE_PLUGIN_ROOT}/references/research-claims.md` 다. 이 절은 그 파일을 dispatch 로
 **배달**하는 책임만 진다 — 계약 본문을 여기 복사하지 않는다.
+`${OPEN_DECISIONS}` 에는 `open_decisions[]` 중 `status: open` 인 것만 한 줄에 하나씩 `OQ<n>: <한 줄>` 로 싣는다(없으면 빈 값).
 
 `${CLAIMS_CONTRACT}` 에는 경로가 아니라 **계약 파일의 내용**을 싣는다 — 플러그인 캐시는 사용자
 프로젝트 밖이라 subagent 의 Read 가 거부된다. dispatch 직전(재dispatch 포함)에 아래 펜스를 돌려

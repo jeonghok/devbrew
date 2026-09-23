@@ -44,6 +44,7 @@ user_sourced_items:
 
 - OQ1 [열림] — <한 줄> → 근거 RC3
 - OQ4 [해결 ⟨S10⟩] — <한 줄> → 근거 RC3
+- OQ5 [열림] — <한 줄>
 
 ## 1. Goal · Non-goal
 
@@ -67,7 +68,7 @@ user_sourced_items:
 (미해결 명시 — "유추 금지". 탐색 대상이므로 앞쪽에 온다.)
 
 - OQ1: ... → 근거 RC3
-- OQ4: ... (조사가 닿지 않은 열린 결정은 역참조가 없다)
+- OQ5: ... (조사가 닿지 않은 열린 결정은 역참조가 없다)
 
 ## 4. External Landscape
 

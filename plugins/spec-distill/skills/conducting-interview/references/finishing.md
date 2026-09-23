@@ -113,11 +113,14 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    것에도 종속되지 않는다.
 
    ```bash
-   # payload 의 RC<n> 전량 ↔ audit §5 의 확인 줄 — 차집합이 비어야 한다
+   # payload 조사 항목(§4 · §5 의 불릿 줄)의 RC<n> 전량 ↔ audit §5 불릿 줄의 확인 줄 — 차집합이 비어야 한다.
+   # 불릿은 `-`·`*` 둘 다, 들여쓰기 허용 — 게이트의 항목 판독과 같은 관례다. §3·§0 의 역참조는 출처가 아니다.
    PL="docs/superpowers/interview/<file>"
    AD="${PL%.md}.audit.md"
-   comm -23 <(grep -oE '(^|[^A-Za-z])RC[0-9]+' "$PL" | grep -oE 'RC[0-9]+' | sort -u) \
-            <(grep -oE '^- 확인 RC[0-9]+' "$AD" | grep -oE 'RC[0-9]+' | sort -u)
+   comm -23 <(awk '/^## [0-9]+\./{f=($2=="4."||$2=="5.")} f' "$PL" | grep -E '^[[:space:]]*[-*][[:space:]]' \
+                | grep -oE '(^|[^A-Za-z])RC[0-9]+' | grep -oE 'RC[0-9]+' | sort -u) \
+            <(awk '/^## [0-9]+\./{f=($2=="5.")} f' "$AD" | grep -oE '^[[:space:]]*[-*][[:space:]]+확인 RC[0-9]+' \
+                | grep -oE 'RC[0-9]+' | sort -u)
    ```
    출력이 있으면 그 `RC<n>` 의 확인 줄이 없다 — V1 을 태우지 않은 주장이므로 payload 에서 빼거나
    확인해서 줄을 적는다. 게이트도 같은 것을 본다(형태 ∀).

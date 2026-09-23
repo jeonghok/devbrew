@@ -86,6 +86,12 @@ fi
 assert_contains "$(prose_of "$SEC")" "$PHRASE" \
   "A: 절 산문이 \`\${CLAIMS_CONTRACT}\` 에 경로가 아니라 계약 파일의 내용을 싣는다고 말한다 (body-unique)"
 
+# A2 — `${OPEN_DECISIONS}` 렌더 형식(최종 리뷰 M-4). 세 dispatch 가 같은 슬롯을 싣는데 무엇을 어떤 모양으로
+#      싣는지 정한 자리가 없으면 해결된 결정까지 실리거나(장치가 닫힌 결정에 `decides` 를 단다) id 없는
+#      문장이 실린다. 열린 것만 · id 형식을 한 리터럴로 문다(`resolved` 로 바꾸면 사라진다). 평탄화해 재줄바꿈에 관용.
+assert_contains "$(prose_of "$SEC" | tr '\n' ' ' | tr -s ' ')" '`${OPEN_DECISIONS}` 에는 `open_decisions[]` 중 `status: open` 인 것만 한 줄에 하나씩 `OQ<n>: <한 줄>` 로 싣는다' \
+  "A2: 절 산문이 \`\${OPEN_DECISIONS}\` 의 렌더 형식(열린 것만 · OQ<n>: <한 줄>)을 정의한다"
+
 # B — 양의 짝: 슬롯 개수. SKILL.md 2(coverage-mapper · blind-spot-prober) + steelman.md 1.
 n_sk="$(grep -oF "$SLOT" "$SKILL" | wc -l | tr -d ' ')"
 n_st="$(grep -oF "$SLOT" "$STEEL" | wc -l | tr -d ' ')"

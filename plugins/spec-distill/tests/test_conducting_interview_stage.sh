@@ -204,10 +204,15 @@ od_block="$(awk '/^ +open_decisions:/{f=1;print;next} f&&/^[a-z_]/{exit} f' <<<"
 { [[ -n "$od_block" ]] && grep -qE '^ +open_decisions:' <<<"$od_block"; } \
   && ok "AC13(양성대조): open_decisions 하위 블록을 잘랐다 ($(grep -c . <<<"$od_block")줄)" \
   || no "AC13(양성대조): open_decisions 하위 블록을 못 잘랐다 — 아래 필드 단언이 공허하다"
+# 항목 형식은 주석으로 싣는다(최종 리뷰 M-7) — 예시 항목을 YAML 값으로 실으면 새 세션이 그대로 seed 해
+# 유령 `OQ1` 이 생긴다. 필드 단언은 주석 줄(`#`)을 허용하고, 값으로서의 초기 상태는 빈 목록이어야 한다.
 for fld in 'id: OQ' 'dimension:' 'status: open' 'resolved_by:' 'touched: false'; do
-  grep -qE "^ +-? *${fld}" <<<"$od_block" \
+  grep -qE "^ +(# +)?-? *${fld}" <<<"$od_block" \
     && ok "AC13: open_decisions 항목 필드 «${fld}»" || no "AC13: open_decisions 항목 필드 «${fld}» 부재"
 done
+{ grep -qE '^ +open_decisions: \[\] ' <<<"$od_block" && ! grep -qE '^ +-[[:space:]]' <<<"$od_block"; } \
+  && ok "AC13: open_decisions 의 초기값이 빈 목록이고 값으로서의 예시 항목이 없다 (유령 OQ 방지)" \
+  || no "AC13: open_decisions 가 예시 항목을 값으로 싣는다 — 새 세션이 그대로 seed 하면 유령 OQ 가 생긴다"
 # v0.57.0: 정체 트리거(streak·에피소드) 전량 제거 — coverage-mapper dispatch 는 R1 필수 1회 +
 # 재개방 시 최대 1회로 바뀌어 «두 디스크 값 비교» 바운드 자체가 불필요해졌다. 부재로 반전한다.
 for tok in no_progress_streak stall_episode coverage_mapper_dispatched_episode; do
@@ -424,8 +429,10 @@ for step in '경로 실재' '앵커 실재' '주장이 그 자리와 맞는가';
 done
 grep -qE '확인[^.]{0,6}반증[^.]{0,6}미확인' <<<"$round_flat" \
   && ok "V1: 결과 어휘 셋 {확인, 반증, 미확인}" || no "V1: 결과 어휘 셋 부재"
-grep -qF '확인 RC' <<<"$round_block" \
-  && ok "V1: audit §5 확인 줄 형식(확인 RC<n> — …)" || no "V1: audit §5 확인 줄 형식 부재"
+# 기록 «절» 까지 문다(최종 리뷰 M-1) — `확인 RC` 만 재면 `## 5. 프로세스 로그` 를 `## 3. Steelman 원문` 으로
+# 바꿔도 통과한다. 게이트 ⑤ 는 audit §5 만 읽는다.
+grep -qF 'audit `## 5. 프로세스 로그` 에 한 줄로 적는다: `- 확인 RC' <<<"$round_flat" \
+  && ok "V1: audit §5 확인 줄 형식(확인 RC<n> — …) · 기록 절이 §5 프로세스 로그" || no "V1: audit §5 확인 줄 형식 부재 또는 기록 절이 §5 가 아니다"
 # 비종속 — trigger 도 웹 스위치도 이 검문소를 끄지 않는다. 문구로 못 박는다(설계 AC6).
 grep -qF 'steelman trigger 와 DEVBREW_SPEC_DISTILL_DISABLE_WEB 어느 것에도 종속되지 않는다' <<<"$round_flat" \
   && ok "V1: trigger·웹 스위치 비종속 명시" || no "V1: 비종속 문구 부재 — 조건부로 읽힐 수 있다"
@@ -853,6 +860,51 @@ grep -qF 'V2' <<<"$fin_stepA" && ok "V2: Step A 에 V2 검문소" || no "V2: Ste
 grep -qF '누락 대조만 한다' <<<"$fin_stepA_flat" \
   && ok "V2: 누락 대조만 (확인 행위는 V1 이 이미 했다)" || no "V2: 누락 대조 범위 문구 부재"
 grep -qF '무조건' <<<"$fin_stepA_flat" && ok "V2: 무조건 발동" || no "V2: 무조건 발동 문구 부재"
+# V2 대조 펜스를 **실행**해 잰다(최종 리뷰 M-2). 문구가 아니라 동작이 게이트 ⑤ 와 같은 형태여야 한다 —
+# payload 쪽은 §4·§5 의 불릿 줄만(§3·§0 역참조와 산문은 출처가 아니다), audit 쪽은 §5 의 `-`·`*` 불릿
+# (들여쓰기 허용). 옛 조각은 `^- 확인 RC` 만 보고 payload 전문을 grep 해 두 방향 모두 게이트와 어긋났다.
+V2_SCR="$(mktemp -d -t sd-v2frag-XXXXXX)"
+if [[ -n "$V2_SCR" && -d "$V2_SCR" ]]; then
+  awk '/V2 검문소 — 무조건, 누락 대조만/{m=1} m&&/^ *```bash$/{f=1;next} f&&/^ *```$/{exit} f' "$FIN" \
+    | sed 's/^   //' > "$V2_SCR/frag.sh"
+  { [[ -s "$V2_SCR/frag.sh" ]] && grep -qF 'comm -23' "$V2_SCR/frag.sh" && bash -n "$V2_SCR/frag.sh" 2>/dev/null \
+      && grep -qF 'PL="docs/superpowers/interview/<file>"' "$V2_SCR/frag.sh"; } \
+    && ok "V2(실행·양성대조): 대조 펜스를 잘랐다 · bash -n 통과 · PL 자리 확인" \
+    || no "V2(실행·양성대조): 대조 펜스를 못 잘랐거나 문법이 깨졌다 — 아래 실행 단언이 공허하다"
+  FXV2="$REPO_ROOT/plugins/spec-distill/tests/fixtures/interview-brief-v2-valid"
+  v2frag() {   # v2frag <셀> <python 변형> → 그 셀의 펜스 stdout 을 V2FRAG 에
+    local cell="$1"
+    cp "$FXV2.md" "$V2_SCR/$cell.md"; cp "$FXV2.audit.md" "$V2_SCR/$cell.audit.md"
+    PYTHONDONTWRITEBYTECODE=1 python3 -c "$2" "$V2_SCR/$cell.md" "$V2_SCR/$cell.audit.md"
+    sed "s|docs/superpowers/interview/<file>|$V2_SCR/$cell.md|" "$V2_SCR/frag.sh" > "$V2_SCR/$cell.sh"
+    V2FRAG="$(bash "$V2_SCR/$cell.sh" 2>&1)"
+  }
+  v2frag base 'pass'
+  [[ -z "$V2FRAG" ]] && ok "V2(실행): 정상 쌍이면 출력이 비었다" || no "V2(실행): 정상 쌍에서 출력이 있다: ${V2FRAG}"
+  v2frag star 'import sys,pathlib
+a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding="utf-8"); assert s.count("- 확인 RC3 ")==1
+a.write_text(s.replace("- 확인 RC3 ","  * 확인 RC3 "),encoding="utf-8")'
+  [[ -z "$V2FRAG" ]] && ok "V2(실행): 들여쓴 * 불릿 확인 줄도 확인 줄로 읽는다 (게이트와 같은 관례)" \
+    || no "V2(실행): * 불릿·들여쓰기 확인 줄을 못 읽는다 — 게이트는 통과하는데 V2 가 누락이라 말한다: ${V2FRAG}"
+  v2frag backref 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3\n"; assert s.count(o)==1
+s=s.replace(o,o+"- OQ7: 무엇 → 근거 RC7\n").replace("TTFP를 줄이는 것이 진짜 목표다.","TTFP를 줄이는 것이 진짜 목표다. RC8 은 산문 언급이다.")
+p.write_text(s,encoding="utf-8")'
+  [[ -z "$V2FRAG" ]] && ok "V2(실행): §3 역참조 · 산문의 RC 는 출처가 아니다 — 확인 줄을 요구하지 않는다" \
+    || no "V2(실행): 조사 항목 밖의 RC 에 확인 줄을 요구했다 (게이트 ⑤ 의 순회와 다르다): ${V2FRAG}"
+  v2frag miss 'import sys,pathlib,re
+a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding="utf-8")
+a.write_text(re.sub(r"^- 확인 RC5 .*\n","",s,flags=re.M),encoding="utf-8")'
+  [[ "$V2FRAG" == "RC5" ]] && ok "V2(실행): §5 [RC5 → 없음] 줄의 확인 줄이 빠지면 그 id 하나만 낸다" \
+    || no "V2(실행): 누락을 못 잡았거나 다른 것도 냈다: «${V2FRAG}»"
+  v2frag other 'import sys,pathlib
+a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding="utf-8"); o="- 확인 RC5 "; assert s.count(o)==1
+i=s.index(o); j=s.index("\n",i)+1; line=s[i:j]; s=s[:i]+s[j:]
+s=s.replace("## 6. 사용자 원문\n","## 6. 사용자 원문\n\n"+line,1); a.write_text(s,encoding="utf-8")'
+  [[ "$V2FRAG" == "RC5" ]] && ok "V2(실행): audit §5 밖(§6)에 옮긴 확인 줄은 인정하지 않는다" \
+    || no "V2(실행): §5 밖의 확인 줄을 인정했다: «${V2FRAG}»"
+fi
+rm -rf "$V2_SCR"
 grep -qF '*원래 / 재결정 / 근거*' <<<"$fin_stepA_flat" \
   && ok "AC7: 반증의 세 칸 기록" || no "AC7: 반증 세 칸 부재"
 grep -qF '재결정 자체는 사용자 동의로만' <<<"$fin_stepA_flat" \
@@ -1428,6 +1480,34 @@ grep -qE '^- OQ1 \[열림\] ' "$TPL_B" \
   && ok "AC19: §0 결정 목록이 불릿 + 상태 토큰" || no "AC19: §0 결정 목록이 불릿 줄이 아니다 (게이트가 항목으로 못 읽는다)"
 grep -qF 'OQ4 [해결 ⟨S10⟩]' "$TPL_B" \
   && ok "AC19: §0 의 해결 상태 토큰 예시" || no "AC19: 해결 상태 토큰 예시 부재"
+# 템플릿이 자기 규칙과 모순하지 않는다(최종 리뷰 M-3) — 「해결된 결정은 §3 에서 빠지고 §0 에만 남는다」 ·
+# 「§0 이 상위집합」. §0 에서 `[해결 …]` 인 결정이 §3 에 열린 결정으로 있으면 템플릿이 그 모순을 가르친다.
+# 결정 id 는 게이트와 같은 규칙(항목 줄의 **선두** OQ<n>)으로 읽는다. 원소 0 이면 공허하므로 양성 대조를 먼저.
+tpl_oq="$(PYTHONDONTWRITEBYTECODE=1 python3 - "$TPL_B" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+def sec(num):
+    m = re.search(rf"^## {num}\.[^\n]*\n(.*?)(?=^## \d+\.|\Z)", text, re.M | re.S)
+    return m.group(1) if m else ""
+def lead(s):
+    out = {}
+    for ln in s.splitlines():
+        m = re.match(r"^\s*[-*]\s+(OQ\d+)\b(.*)$", ln)
+        if m: out.setdefault(m.group(1), []).append(m.group(2))
+    return out
+s0, s3 = lead(sec(0)), lead(sec(3))
+resolved = {k for k, v in s0.items() if any("[해결" in x for x in v)}
+print(("YES" if s0 and s3 and resolved else "NO") + "\t양성대조: §0·§3 결정 줄과 §0 의 해결 결정을 읽었다")
+bad = sorted(resolved & set(s3))
+print(("NO" if bad else "YES") + "\t§0 에서 해결된 결정이 §3 에 없다" + (f" (위반: {bad})" if bad else ""))
+miss = sorted(set(s3) - set(s0))
+print(("NO" if miss else "YES") + "\t§3 의 결정이 전부 §0 에 있다 (§0 이 상위집합)" + (f" (누락: {miss})" if miss else ""))
+PY
+)"
+[[ "$(grep -c . <<<"$tpl_oq")" -eq 3 ]] && ok "AC19(템플릿 결정 목록): 단언 3행" || no "AC19(템플릿 결정 목록): 단언이 3행이 아니다: $tpl_oq"
+while IFS=$'\t' read -r tag msg; do
+  case "$tag" in YES) ok "AC19(템플릿 결정 목록): $msg" ;; *) no "AC19(템플릿 결정 목록): $msg" ;; esac
+done <<<"$tpl_oq"
 # span 에 **상태** 를 넣는다. 이름만 재면 `closed` → `open` 변이가 통과하고(리뷰 실측: 287/287/0),
 # 그러면 템플릿이 `open` 을 가르쳐 이 템플릿을 베이스로 만든 fixture 가 Task 16 의 술어 ④에서 red 가
 # 된다 — 이 Task 가 막으려고 존재하는 실패 그 자체다. 실측 네 칸: 원본 O · closed→open X(잡음) ·
