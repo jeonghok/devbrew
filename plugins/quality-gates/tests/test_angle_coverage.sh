@@ -32,10 +32,13 @@ print('\n'.join(angles.ANGLES))")"
 BLOCKING="$(python3 -c "
 import sys; sys.path.insert(0,'$PLUGIN_ROOT/scripts'); import angles
 print('\n'.join(angles.BLOCKING_ANGLES))")"
+REASONS="$(python3 -c "
+import sys; sys.path.insert(0,'$PLUGIN_ROOT/scripts'); import angles
+print('\n'.join(angles.ABSENT_REASONS))")"
 
 # 도출이 실패하면(모듈 부재·문법 오류) 아래 전부가 «빈 코퍼스 위의 통과»가 된다.
 # 침묵하지 않고 여기서 먼저 밝힌다 — vacuous 락은 통과가 곧 증거가 아니다.
-if [ -z "$ANGLES" ] || [ -z "$BLOCKING" ]; then
+if [ -z "$ANGLES" ] || [ -z "$BLOCKING" ] || [ -z "$REASONS" ]; then
   no "angles.py 에서 열거를 도출하지 못했다 — 아래 단언은 아무것도 재지 않는다"
   # `finish` 는 «종료하지 않는다» — 값을 반환할 뿐이다(`shared/tests/assert.sh:111-114`).
   # 뒤에 `exit` 가 없으면 스크립트가 그대로 계속 돌아 빈 코퍼스 위에서 단언을 쌓는다.
@@ -97,6 +100,25 @@ case_state_grammar_is_closed() {
   done
 }
 
+case_absent_reason_grammar_is_closed() {
+  # I1 (컨트롤러 ruling T2-a · 설계 §15) — `absent(<사유>)` 는 어느 각도에도 쓸 수
+  # 있다. 사유는 `ANGLES`/`BLOCKING` 과 같은 방식으로 **모듈에게 물어** 가져온다.
+  local f="$TMP/reason.txt" rc st
+  # 문법 «안» — 두 사유 모두 선다
+  while IFS= read -r st; do
+    [ -n "$st" ] || continue
+    write_angles "$f" "security: absent($st)" "adjudication: filled" "different-premise: filled"
+    rc=0; python3 "$A" --angles "$f" >/dev/null 2>&1 || rc=$?
+    assert_eq "$rc" "0" "'absent($st)' 는 문법 안이다"
+  done <<< "$REASONS"
+  # 문법 «밖» — 빈 괄호·모르는 사유·안 닫힌 괄호는 exit 4
+  for st in "absent()" "absent(bogus)" "absent(not-installed"; do
+    write_angles "$f" "security: $st" "adjudication: filled" "different-premise: filled"
+    rc=0; python3 "$A" --angles "$f" >/dev/null 2>&1 || rc=$?
+    assert_eq "$rc" "4" "'$st' 는 문법 밖이라 exit 4"
+  done
+}
+
 case_unknown_angle_is_fail_closed() {
   local f="$TMP/unknown.txt" rc=0
   write_angles "$f" "security: filled" "adjudication: filled" \
@@ -113,6 +135,20 @@ case_duplicate_angle_is_fail_closed() {
                     "adjudication: filled" "different-premise: filled"
   python3 "$A" --angles "$f" >/dev/null 2>&1 || rc=$?
   assert_eq "$rc" "4" "같은 각도가 두 번 나오면 exit 4"
+}
+
+case_malformed_extra_line_is_fail_closed() {
+  # I2 — 세 각도가 전부 유효해도 서식이 아닌 «여분» 줄이 섞이면 exit 4 여야 한다.
+  # `security:absent`(콜론 뒤 공백 없음)는 `_LINE` 패턴 밖이라 `parse()` 의
+  # 「서식이 아니다」 절이 이 줄에서 발동해야 한다. 그 절이 조용히 `continue` 로
+  # 바뀌어도(누락 각도 검사만으로는 못 잡는다 — 세 각도가 이미 다 채워져 있어서)
+  # 이 케이스가 없으면 스위트가 그대로 GREEN 이다. 컨트롤러 지시대로 이 케이스의
+  # 이빨은 mutation 으로 직접 확인했다(리포트 "Fix round 1" 절 참고).
+  local f="$TMP/malformed-extra.txt" rc=0
+  write_angles "$f" "security: filled" "adjudication: filled" \
+                    "different-premise: filled" "security:absent"
+  python3 "$A" --angles "$f" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "4" "형식이 아닌 여분 줄이 섞이면 exit 4"
 }
 
 case_blocking_angles_are_exactly_two() {
@@ -149,6 +185,33 @@ case_absent_non_blocking_angle_discloses_only() {
   assert_grep "$out"     '^  different-premise: absent$' "부재가 산출물에 **드러난다**"
   assert_grep "$out"     '^angle_absent: false$'         "그래도 막지 않는다"
   assert_not_grep "$out" '^angle_absent: true$'          "막는다고 말하지 않는다"
+}
+
+case_absent_reason_blocks_when_angle_is_blocking() {
+  # I1 — 사유가 있어도 **막는 각도**(BLOCKING_ANGLES)면 여전히 막는다. 사유는
+  # 「무엇 때문에 부재했는가」를 공시할 뿐 막는지 여부는 여전히 각도가 가른다.
+  local f="$TMP/reason-block.txt" out a b
+  while IFS= read -r a; do
+    [ -n "$a" ] || continue
+    : > "$f"
+    while IFS= read -r b; do
+      [ -n "$b" ] || continue
+      if [ "$b" = "$a" ]; then printf '%s: absent(not-derived)\n' "$b" >> "$f"
+      else printf '%s: filled\n' "$b" >> "$f"; fi
+    done <<< "$ANGLES"
+    out="$(python3 "$A" --angles "$f")"
+    assert_grep "$out" '^angle_absent: true$' "'$a' 가 absent(not-derived) 면 여전히 막는다"
+  done <<< "$BLOCKING"
+}
+
+case_absent_reason_on_non_blocking_angle_discloses_only() {
+  # I1 — AC12 짝. 「다른 전제」의 부재는 사유가 붙어도 공시만 하고 막지 않는다.
+  local f="$TMP/dp-reason.txt" out
+  write_angles "$f" "security: filled" "adjudication: filled" "different-premise: absent(not-installed)"
+  out="$(python3 "$A" --angles "$f")"
+  assert_grep "$out"     '^  different-premise: absent\(not-installed\)$' "부재 사유가 산출물에 그대로 드러난다"
+  assert_grep "$out"     '^angle_absent: false$'                          "그래도 막지 않는다"
+  assert_not_grep "$out" '^angle_absent: true$'                           "막는다고 말하지 않는다"
 }
 
 case_self_adjudication_is_rejected() {
@@ -221,11 +284,15 @@ case_non_utf8_is_fail_closed() {
 case_all_three_filled_is_ok
 case_every_angle_is_required
 case_state_grammar_is_closed
+case_absent_reason_grammar_is_closed
 case_unknown_angle_is_fail_closed
 case_duplicate_angle_is_fail_closed
+case_malformed_extra_line_is_fail_closed
 case_blocking_angles_are_exactly_two
 case_absent_blocking_angle_sets_the_flag
 case_absent_non_blocking_angle_discloses_only
+case_absent_reason_blocks_when_angle_is_blocking
+case_absent_reason_on_non_blocking_angle_discloses_only
 case_self_adjudication_is_rejected
 case_folding_into_a_silent_reviewer_is_ok
 case_security_angle_may_fold_into_its_own_author
