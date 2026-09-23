@@ -20,6 +20,7 @@ from collections import defaultdict
 
 from adjudication import Ledger
 from render_disposition import disposition_lines
+import angles as _angles
 import verdict as _verdict          # 새 책임은 새 모듈 — 여기는 진입점일 뿐이다
 
 
@@ -581,6 +582,9 @@ def main():
     ap.add_argument("--differential", default=None)
     ap.add_argument("--reason", action="append", default=[])
     ap.add_argument("--legacy-verdict", default=None)
+    # 각도 상태 — 기본 off. 오케스트레이터 배선은 PR4 다(계획 R-E). 안 주면
+    # stdout 이 이 PR 이전과 바이트 동일하다.
+    ap.add_argument("--angles", default=None)
     args = ap.parse_args()
 
     if args.differential is not None and args.differential == "":
@@ -590,6 +594,10 @@ def main():
     if args.legacy_verdict is not None and args.legacy_verdict == "":
         print("synthesize_findings.py: --legacy-verdict 는 빈 문자열을 받지 않는다",
               file=sys.stderr)
+        sys.exit(2)
+    if args.angles is not None and args.angles == "":
+        print("synthesize_findings.py: --angles 는 빈 문자열을 받지 않는다 "
+              "(플래그를 생략하거나 실제 경로를 줘라)", file=sys.stderr)
         sys.exit(2)
 
     # I1 (리뷰 라운드 2) — 위 두 검사는 세 판정 입력 플래그 중 딱 한 모양
@@ -617,6 +625,11 @@ def main():
         if args.legacy_verdict is not None:
             print("synthesize_findings.py: --legacy-verdict 는 --emit-verdict "
                   "없이는 의미가 없다 (함께 주거나 --legacy-verdict 을 빼라)",
+                  file=sys.stderr)
+            sys.exit(2)
+        if args.angles is not None:
+            print("synthesize_findings.py: --angles 는 --emit-verdict "
+                  "없이는 의미가 없다 (함께 주거나 --angles 를 빼라)",
                   file=sys.stderr)
             sys.exit(2)
 
@@ -651,13 +664,39 @@ def main():
     # 성공한 실행으로 읽힌다 — 실측(이전 라운드): 549바이트 완전한 보고서 +
     # rc=4 조합.
     decision = None
+    angle_states = None
     if args.emit_verdict:
-        # `report["degraded"]`(공시)가 아니라 `blocks()`(차단)다 — 헌장은 모델 다양성
+        # `report["degraded"]`(공시)가 아니라 차단 쪽 술어다 — 헌장은 모델 다양성
         # 손실 같은 degrade 를 공시만 하고 막지 않는다. 여기서 둘을 섞으면 이 PR 이
         # 조용히 게이트를 넓힌다.
+        #
+        # 차단 셋을 **두 사유로** 가른다(설계 §6.4.3): 항목 소실·미상은
+        # `findings-lost`, 주 판정자 사망은 `angle-absent` — 아무도 그 축을 «안 본»
+        # 것이라 각도가 `absent` 인 것과 같은 사실이다(§6.3.5 의 표).
+        angle_absent = ledger.primary_source_failed()
+        if args.angles is not None:
+            angle_states = _angles.parse(_angles.read_or_fail4(args.angles))
+            # AC10a — 수행자 집합은 이 실행이 실제로 «낸» finding 에서 도출한다
+            # (계획 R-H). 각도 파일 자신에서 뽑으면 자기-일관성 검사이지 Law 2
+            # 검사가 아니다. `sources`(dedup 이 병합하며 만든 목록) 우선, 없으면
+            # `agent` — `render()` 가 Source 칼럼을 채울 때 쓰는 것과 **같은
+            # 관용구**다. `kept` 가 아니라 `findings` 를 보는 이유: 억제된 것도
+            # 「낸 것」이다(냈기 때문에 억제됐다).
+            authors = set()
+            for f in findings:
+                srcs = f.get("sources") or [f.get("agent", "?")]
+                if not isinstance(srcs, (list, tuple)):
+                    srcs = [srcs]
+                for s in srcs:
+                    s = str(s)
+                    if s and s != "?":
+                        authors.add(s)
+            _angles.check_self_adjudication(angle_states, authors)
+            angle_absent = angle_absent or _angles.blocks(angle_states)
         decision = _verdict.decide(
             defect=bool(kept),                    # 계획 R-B — severity 를 묻지 않는다
-            review_blocked=ledger.blocks(),
+            review_blocked=ledger.items_unaccounted(),
+            angle_absent=angle_absent,
             differential_text=_verdict.read_or_none(args.differential),
             extra_reasons=args.reason,
             legacy_verdict=args.legacy_verdict,
@@ -671,6 +710,12 @@ def main():
                             report, ledger.held_by_class()))
 
     if args.emit_verdict:
+        # `render()` 가 낸 Markdown 본문 **뒤**의 평문 꼬리다 — PR2 가 `verdict:`
+        # 를 같은 자리에 같은 모양으로 붙였고(계획 R-J), 그래야 「off 출력은 on
+        # 출력의 바이트 접두」가 유지된다. 각도가 판정보다 **앞**인 것은 읽는
+        # 순서다: 무엇을 봤는지가 그 판정의 근거다.
+        if angle_states is not None:
+            sys.stdout.write(_angles.render(angle_states))
         sys.stdout.write(_verdict.render(decision))
 
 

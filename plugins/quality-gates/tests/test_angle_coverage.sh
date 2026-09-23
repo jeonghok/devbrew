@@ -19,6 +19,7 @@ PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd -- "$PLUGIN_ROOT/../.." && pwd)"
 . "$REPO_ROOT/shared/tests/assert.sh"
 A="$PLUGIN_ROOT/scripts/angles.py"
+SYNTH="$PLUGIN_ROOT/scripts/synthesize_findings.py"
 export PYTHONDONTWRITEBYTECODE=1
 
 TMP="$(mktemp -d -t angles-XXXXXX)" || exit 1
@@ -52,6 +53,133 @@ write_angles() {
   : > "$f"
   local kv
   for kv in "$@"; do printf '%s\n' "$kv" >> "$f"; done
+}
+
+# mk_inputs <디렉토리> — 판정 0 · finding 0 인 «깨끗한» 입력 한 벌.
+# 이 벌을 기준으로 각도만 바꿔 가며 AC11·AC12 를 가른다: 각도 말고는 clean 을
+# 막을 것이 아무것도 없어야 「각도가 막았다」가 입증된다.
+mk_inputs() {
+  printf 'verdicts: []\n' > "$1/adv.yaml"
+  printf '[]\n' > "$1/f.yaml"
+}
+
+case_synth_angles_off_is_byte_prefix_of_on() {
+  # `--angles` 를 안 주면 stdout 이 이 PR 이전과 같아야 한다(계획 R-E). rc 를
+  # 먼저 재는 이유는 PR2 Ruling T6-a 와 같다 — 죽은 경로의 빈 출력은 어떤
+  # 접두 검사도 트리비얼하게 통과시킨다.
+  local T; T=$(mktemp -d); mk_inputs "$T"
+  local f="$T/angles.txt"
+  write_angles "$f" "security: filled" "adjudication: filled" "different-premise: filled"
+  local off on off_rc=0 on_rc=0
+  off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict) || off_rc=$?
+  on=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f") || on_rc=$?
+  assert_eq "$off_rc" "0" "각도 없는 경로가 정상 종료한다"
+  assert_eq "$on_rc"  "0" "각도 있는 경로가 정상 종료한다"
+  assert_not_grep "$off" '^angles:$' "--angles 를 안 주면 angles: 블록이 없다"
+  assert_grep     "$on"  '^angles:$' "--angles 가 angles: 블록을 켠다"
+  assert_grep     "$on"  '^verdict: clean$' "셋 다 filled 면 clean 이다"
+  # Ruling P2 — 이름이 주장하는 것을 실제로 잰다: `on` 에서 `angles:` 블록(헤더
+  # 1줄 + 각도 개수만큼의 줄, `ANGLES` 에서 도출해 하드코딩하지 않는다)을 빼면
+  # `off` 와 바이트 단위로 같아야 한다(R-J 의 불변식). 블록은 `on` 의 render()
+  # 본문 «뒤», `verdict:` 줄 «앞»에 온다 — 맨 앞이 아니라 그 위치에서 정확히
+  # `angles:` 줄과 그 다음 각도-수만큼의 줄만 잘라낸다.
+  local angle_lines; angle_lines=$(printf '%s\n' "$ANGLES" | wc -l | tr -d ' ')
+  local on_tail; on_tail=$(printf '%s\n' "$on" | awk -v n="$angle_lines" '
+    /^angles:$/ { skip = n; next }
+    skip > 0 { skip--; next }
+    { print }
+  ')
+  assert_eq "$on_tail" "$off" \
+    "off 는 on 에서 angles: 블록(헤더 1줄 + 각도 ${angle_lines}줄)을 뺀 것과 바이트 동일하다"
+  rm -rf "$T"
+}
+
+case_synth_blocking_absent_is_not_certified() {
+  # ★ AC11 의 **양의 짝**. 각도 coverage 락의 존재 이유가 이 케이스다 —
+  # 「상태가 있는가」만 재는 락은 통째로 지워도 통과한다(음의 락). 부재가
+  # 실제로 `clean` 을 «막는지» 를 여기서 관측한다.
+  local T a b f out
+  while IFS= read -r a; do
+    [ -n "$a" ] || continue
+    T=$(mktemp -d); mk_inputs "$T"; f="$T/angles.txt"; : > "$f"
+    while IFS= read -r b; do
+      [ -n "$b" ] || continue
+      if [ "$b" = "$a" ]; then printf '%s: absent\n' "$b" >> "$f"
+      else printf '%s: filled\n' "$b" >> "$f"; fi
+    done <<< "$ANGLES"
+    out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+            --emit-verdict --angles "$f")
+    assert_grep     "$out" '^verdict: not-certified$' "'$a' 가 absent 면 미판정 (AC11)"
+    assert_grep     "$out" '^reason: angle-absent$'   "'$a' 의 사유가 angle-absent 다"
+    assert_not_grep "$out" '^verdict: clean$'          "'$a' 가 absent 인데 clean 이 아니다"
+    assert_grep     "$out" "^  $a: absent\$"           "그 부재가 산출물에 드러난다"
+    rm -rf "$T"
+  done <<< "$BLOCKING"
+}
+
+case_synth_different_premise_absent_stays_clean() {
+  # AC12 — 모델 다양성 손실은 공시하고 막지 않는다. 위 케이스와 이 케이스가
+  # **짝**이다: 하나만 두면 「전부 막는다」와 「전부 안 막는다」를 구별 못 한다.
+  local T; T=$(mktemp -d); mk_inputs "$T"
+  local f="$T/angles.txt"
+  write_angles "$f" "security: filled" "adjudication: filled" "different-premise: absent"
+  local out; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+                     --emit-verdict --angles "$f")
+  assert_grep     "$out" '^verdict: clean$'               "다른 전제의 부재는 막지 않는다 (AC12)"
+  assert_grep     "$out" '^  different-premise: absent$'  "그래도 공시된다"
+  assert_not_grep "$out" '^reason: angle-absent$'         "사유가 서지 않는다"
+  rm -rf "$T"
+}
+
+case_synth_self_adjudication_is_atomic_failure() {
+  # AC10a 를 합성기 층에서. **그리고 fail4 의 원자성** — 실패 경로에서 stdout 이
+  # 비어 있어야 한다. 비어 있지 않으면 rc 를 안 보는 줄-지향 소비자가 완전해
+  # 보이는 보고서를 성공으로 읽는다(PR2 Ruling T5-b 가 산 자리).
+  local T; T=$(mktemp -d)
+  printf 'verdicts: []\n' > "$T/adv.yaml"
+  printf -- '- {agent: security-reviewer, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/f.yaml"
+  local f="$T/angles.txt"
+  write_angles "$f" "security: filled" "adjudication: folded_into:security-reviewer" \
+                    "different-premise: filled"
+  local out rc=0
+  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+          --emit-verdict --angles "$f" 2>/dev/null) || rc=$?
+  assert_eq "$rc" "4" "finding 을 낸 리뷰어에게 판정 각도를 접으면 exit 4 (AC10a)"
+  assert_eq "$out" ""  "실패 경로의 stdout 이 비어 있다 (fail4 는 원자적이다)"
+  rm -rf "$T"
+}
+
+case_synth_angles_flag_hygiene() {
+  # PR2 의 I1 이 세 플래그에 건 대칭을 네 번째 플래그에도 건다. 안 걸면 값을
+  # 구하고도 `--emit-verdict` 를 빼먹은 호출자가 rc=0 + 완전해 보이는 보고서를
+  # 받고, 각도 축이 그 실행에서 빠졌다는 사실이 어느 채널에도 안 남는다.
+  local T; T=$(mktemp -d); mk_inputs "$T"
+  local f="$T/angles.txt"
+  write_angles "$f" "security: filled" "adjudication: filled" "different-premise: filled"
+  local rc=0
+  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+    --angles "$f" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "2" "--angles 는 --emit-verdict 없이는 usage 오류(exit 2)"
+  rc=0
+  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+    --emit-verdict --angles "" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "2" "빈 --angles 는 usage 오류(exit 2)"
+  rm -rf "$T"
+}
+
+case_synth_primary_source_death_is_angle_absent() {
+  # C3 의 **관측 가능한 결과**. 주 판정자(여기서는 `--findings` 가 가리키는 파일)가
+  # 통째로 죽으면 그것은 「항목을 잃었다」가 아니라 「아무도 안 봤다」다 — PR2 는
+  # 이 실행을 `findings-lost` 로 보고했다. `--angles` 없이도 서야 한다: 이 사유의
+  # 산출자는 각도 파일이 아니라 원장이다.
+  local T; T=$(mktemp -d)
+  printf 'verdicts: []\n' > "$T/adv.yaml"
+  local out; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" \
+                     --findings "$T/does-not-exist.yaml" --emit-verdict)
+  assert_grep     "$out" '^verdict: not-certified$' "주 입력이 죽으면 미판정"
+  assert_grep     "$out" '^reason: angle-absent$'   "사유가 angle-absent 다 (findings-lost 가 아니다)"
+  assert_not_grep "$out" '^reason: findings-lost$'  "항목 소실로 오보고하지 않는다"
+  rm -rf "$T"
 }
 
 case_all_three_filled_is_ok() {
@@ -300,4 +428,10 @@ case_forbidden_set_is_adjudication_only
 case_missing_file_is_fail_closed
 case_empty_flag_is_usage_error
 case_non_utf8_is_fail_closed
+case_synth_angles_off_is_byte_prefix_of_on
+case_synth_blocking_absent_is_not_certified
+case_synth_different_premise_absent_stays_clean
+case_synth_self_adjudication_is_atomic_failure
+case_synth_angles_flag_hygiene
+case_synth_primary_source_death_is_angle_absent
 finish
