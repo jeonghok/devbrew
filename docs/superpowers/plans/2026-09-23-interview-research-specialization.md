@@ -1399,7 +1399,7 @@ test(spec-distill): SKILL.md 순감 래칫을 순증 수용으로 다시 조인�
 래칫을 «없애지» 않고 «실측 + 8» 로 다시 조인다: 다음 편집이 8줄 넘게 늘리면 다시 소리가 난다.
 값이 둘로 갈리지 않게 두 단언을 같은 값으로 맞춘다.
 
-이빨 확인: 50줄 변이가 두 단언을 RED 로 만드는 것을 실측했다.
+이빨 확인: 120줄 변이가 두 단언을 RED 로 만드는 것을 실측했다(잠정 천장 480 을 확실히 넘기는 폭).
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01D5Xd9k8aYnt5ojzb9MU1J7
