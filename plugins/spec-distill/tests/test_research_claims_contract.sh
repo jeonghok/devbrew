@@ -12,14 +12,16 @@
 #      「dispatch 하지 않는다」를 말하고 rc 1 로 끝난다
 #   X  그 펜스를 차가운 셸에서 실행 — 실제 루트면 stdout 이 계약 내용(rc 0), 계약 없는 루트면 rc 1 + 빈 stdout
 #   D  정합 — 정본의 필드 이름 집합 == steelman-builder 사본의 것 (집합 등호)
-#   E  `fail-closed` 값의 회귀 감지 — 처분 락은 어휘만 보고 값을 단언하지 않는다
+#   E  `fail-closed` 값의 회귀 감지 — 처분 락은 어휘만 보고 값을 단언하지 않는다. 필드 등호
+#      (부분 문자열이 아니다) + 그 줄의 `fail-(open|closed)` 토큰이 정확히 하나임을 함께 잰다
+#      (필드 등호만으로는 `disclosure=` 뒤에 반대 값을 이어붙여도 안 잡힌다)
 # 실제 agent 는 부르지 않는다.
 #
 # 알려진 한계(축 A): `assert_contains` 는 순수 문자열 포함 검사라, PHRASE 리터럴을 그대로 두고
-# 바로 뒤에 그 원칙을 부정하는 절을 붙이는 변이(표기 유지·의미만 반전)를 잡지 못한다(실측 —
-# Task 18 m7: "...싣는다는 문구는 이제 무시하고 실제로는 경로 문자열만 싣는다" 를 이어 붙여도
-# green). 펜스 자체(C·X)가 그 절의 실제 동작을 재므로 실행 경로는 여전히 커버되지만, 산문이
-# 자기모순으로 갈라지는 것은 이 락이 아니라 사람 리뷰(문서 리뷰)의 몫이다.
+# 바로 뒤에 그 원칙을 부정하는 절을 이어붙이는 변이(표기 유지·의미만 반전 — 예:
+# "...싣는다는 문구는 이제 무시하고 실제로는 경로 문자열만 싣는다")는 잡지 못하고 green 으로
+# 남는다(실측). 펜스 자체(C·X)가 그 절의 실제 동작을 재므로 실행 경로는 여전히 커버되지만,
+# 산문이 자기모순으로 갈라지는 것은 이 락이 아니라 사람 리뷰(문서 리뷰)의 몫이다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT/plugins/spec-distill"
@@ -143,14 +145,27 @@ for f in decides id; do
     && ok "D: 정본에 신설 필드 \`$f\`" || no "D: 정본에 신설 필드 \`$f\` 부재 (등호가 둘 다 빠진 채로 성립할 수 있다)"
 done
 
-# E — `fail-closed` 값의 회귀 감지. 처분 락은 `fail-(open|closed)` 어휘만 보고 값을 단언하지
-#     않는다(그 파일이 스스로 공시한다). 세 dispatch 자리의 값이 `closed` 임을 여기서 못 박는다.
-#     대상은 «계약 슬롯을 싣는 dispatch» 로 도출한다 — 자리 목록을 리터럴로 열거하지 않는다.
-disp_total=0; disp_closed=0
+# E — `fail-closed` 값의 회귀 감지. 처분 락(`test_dispatch_disposition.sh` 축 A④)은
+#     `consumer=(\S+)\s+·\s+fail-(open|closed)(?:\s+·\s+disclosure=(.+?))?` 로 필드를
+#     구분자 ` · ` 로 나눠 어휘만 검증하고 그 파일이 스스로 「값이 저자 손에 있는 한 축 B 급
+#     이빨은 이 축에서 나오지 않는다」고 공시한다. 이 축은 그 값을 여기서 못 박는다 — **부분
+#     문자열이 아니라 필드 등호**로: 같은 구분자로 나눠 `fail-` 로 시작하는 필드를 골라 그
+#     값이 정확히 `fail-closed` 인지 비교한다. 그것만으로는 부족하다 — `disclosure=` 필드
+#     뒤에 반대 절(`... (교정: 실제 구현은 fail-open 이다)`)을 이어붙여도 `fail-` 필드 자체는
+#     `fail-closed` 그대로라 필드 등호를 통과한다(리뷰 실측). 그래서 그 줄 전체에서
+#     `fail-(open|closed)` 토큰이 **정확히 하나**인지를 별도로 잰다 — 이어붙은 반대 값은
+#     토큰을 둘로 늘린다. 대상은 «계약 슬롯을 싣는 dispatch» 로 도출한다 — 자리 목록을
+#     리터럴로 열거하지 않는다.
+SEP='**처분** — '
+disp_total=0; disp_field_eq=0; disp_single_token=0
 for f in "$SKILL" "$STEEL"; do
   while IFS= read -r ln; do
     disp_total=$((disp_total + 1))
-    case "$ln" in *"fail-closed"*) disp_closed=$((disp_closed + 1)) ;; esac
+    after="${ln#*"$SEP"}"
+    faildir_field="$(printf '%s\n' "$after" | awk -F' · ' '{for (i=1;i<=NF;i++) if ($i ~ /^fail-/) print $i}')"
+    [ "$faildir_field" = "fail-closed" ] && disp_field_eq=$((disp_field_eq + 1))
+    n_tok="$(grep -oE 'fail-(open|closed)' <<<"$ln" | wc -l | tr -d ' ')"
+    [ "$n_tok" = "1" ] && disp_single_token=$((disp_single_token + 1))
   done < <(grep -nE '^\s*(//|#)?\s*\*\*처분\*\*\s+—' "$f" | cut -d: -f2- )
 done
 if [ "$disp_total" -ge 3 ]; then
@@ -158,8 +173,10 @@ if [ "$disp_total" -ge 3 ]; then
 else
   no "E 양성대조: 처분 앵커 도출이 ${disp_total}건 — 3 미만이면 아래 등식이 공허하다"
 fi
-assert_eq "$disp_closed" "$disp_total" \
-  "E: 이 자리의 처분 앵커 전부가 fail-closed (계약 배달 실패 시 «그 dispatch» 를 막는다 — 인터뷰는 막지 않는다)"
+assert_eq "$disp_field_eq" "$disp_total" \
+  "E: 이 자리의 처분 앵커 전부가 fail-closed (필드 등호 — \`consumer=... · fail-<값> · disclosure=...\` 로 나눈 <값> 자체를 비교, 부분 문자열이 아니다)"
+assert_eq "$disp_single_token" "$disp_total" \
+  "E: 각 처분 줄에 \`fail-(open|closed)\` 토큰이 정확히 하나 (둘 이상이면 뒤에 반대 값을 이어붙인 것 — 필드 등호만으로는 못 잡는다)"
 
 # X — 실행. 문구가 있다는 것과 그 문구가 **돌아간다**는 것은 다른 사실이다.
 BASE="/usr/bin:/bin"
