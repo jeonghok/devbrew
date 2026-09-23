@@ -20,6 +20,12 @@ input_slots:
   - tag: web_disabled
     var: WEB_DISABLED
     kind: task
+  - tag: claims_contract
+    var: CLAIMS_CONTRACT
+    kind: repo_context
+  - tag: open_decisions
+    var: OPEN_DECISIONS
+    kind: task
 description: >
   Use this agent during a spec-distill coverage-driven interview to propose
   topic-derived coverage dimensions (this topic needs dimension X because …) and
@@ -52,6 +58,10 @@ admit 판정은 orchestrator가 합니다(G2, Law 2).
 - 원장 상태(floor + 이미 admit된 derived).
 - 재개방 dispatch면 그 차원의 `reopen_log` 마지막 항목.
 - (있으면) 현재까지의 사용자 제약 요지, External Landscape 발췌.
+- `<claims_contract>` 조사 주장 계약의 **내용 전문**. 아래 출력의 `evidence[]`·`repo_claims[]` 가
+  이 계약을 따른다.
+- `<open_decisions>` 지금 열린 결정 목록(`OQ<n>` + 한 줄). `decides` 는 이 목록에 실제로 있는 것만
+  담고 목록에 없는 id 를 지어내지 않는다.
 
 ## Output 형식 (이 형식을 정확히 준수 — conducting-interview가 advisory로 소비)
 
@@ -63,6 +73,20 @@ neglect_flag: true | false
 neglected_dimensions:
   - "<focused 집중으로 방치된 차원 이름>"
 confidence: 0.0-1.0
+evidence:                      # 외부(웹) 주장 — <claims_contract> 계약 그대로
+  - url: "https://..."
+    supports: current | alternative | both
+    claim: "<이 출처가 뒷받침하는 것>"
+    touches: []                # 전제 P<n>
+    decides: [OQ1]             # 닿는 «열린 결정». 빈 배열 허용
+repo_claims:                   # 내부(레포) 주장 — 같은 계약
+  - id: RC3
+    path: "<repo 상대경로>"
+    anchor: "<심볼 | 헤딩 | 원문 인용>"
+    line: 123                  # 선택
+    claim: "<주장>"
+    touches: []
+    decides: [OQ1]
 ```
 
 ## 동작 규칙
@@ -72,6 +96,11 @@ confidence: 0.0-1.0
 3. **derived, not floor**: 고정 floor 5개를 재정의·삭제하지 않는다. floor 위 차원만 제안.
 4. **bounded dispatch**: R1 첫 질문 전 1회 + 재개방 시 ≤1회, 상한 2(conducting-interview 가 제어).
 5. **confidence < 0.5** 면 `neglect_flag: false` — 약한 신호로 산만하게 하지 않음.
+6. **차원 제안의 근거를 주장으로 낸다.** 제안한 차원마다 그것을 요구하는 근거를 `repo_claims[]`
+   (레포) 또는 `evidence[]`(웹) 로 함께 내고, 레포 주장은 `path`·`anchor` 없이 내지 않는다.
+   판정 전에 구현을 읽는다 — 인덱스·목차·description 필드만 읽고 판정하지 않는다.
+7. **계약을 못 받았으면**(`<claims_contract>` 가 비었으면) 주장을 내지 않고 그 사실을 첫 줄에
+   적는다. 계약 없는 조사는 계약 있는 조사와 산출물에서 구별되지 않는다.
 
 ## 사용하지 않는 경우
 

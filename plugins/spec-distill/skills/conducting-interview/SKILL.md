@@ -230,13 +230,24 @@ fi
 
 ```
 Agent({ description: "Map coverage dimensions", subagent_type: "spec-distill:coverage-mapper",
-        prompt: "seed 원문 전량(§6 S1 이 될 값 그대로): <seed>${SEED_TEXT}</seed>. seed 의 «다시 검증할 것 —» 문단(Phase 0 이 추론·외부·열린 것으로 아는 항목. 규약 위반 seed 면 빈 값): <reverify>${SEED_REVERIFY}</reverify>. coverage 원장 상태(열린/닫힌 차원 요약 · focused_dimension · 재개방이면 reopen_log 마지막 항목): <ledger_state>${LEDGER_STATE}</ledger_state>. web_disabled(true면 WebSearch/WebFetch 사용 금지, codebase 근거만): <web_disabled>${WEB_DISABLED}</web_disabled>. 이 주제가 요구하는 derived 차원과 neglect를 제안." })
-// **처분** — consumer=orchestrator · fail-open · disclosure=advisory
+        prompt: "seed 원문 전량(§6 S1 이 될 값 그대로): <seed>${SEED_TEXT}</seed>. seed 의 «다시 검증할 것 —» 문단(Phase 0 이 추론·외부·열린 것으로 아는 항목. 규약 위반 seed 면 빈 값): <reverify>${SEED_REVERIFY}</reverify>. coverage 원장 상태(열린/닫힌 차원 요약 · focused_dimension · 재개방이면 reopen_log 마지막 항목): <ledger_state>${LEDGER_STATE}</ledger_state>. web_disabled(true면 WebSearch/WebFetch 사용 금지, codebase 근거만): <web_disabled>${WEB_DISABLED}</web_disabled>. 조사 주장 계약(내용 전문): <claims_contract>${CLAIMS_CONTRACT}</claims_contract>. 지금 열린 결정: <open_decisions>${OPEN_DECISIONS}</open_decisions>. 이 주제가 요구하는 derived 차원과 neglect를 제안." })
+// **처분** — consumer=orchestrator · fail-closed · disclosure=loud advisory + audit §2 unavailable 사유
 ```
 
-출력(`derived_dimensions[] + neglect_flag`)은 **advisory** — orchestrator가 원장에 admit할지 판정한다.
-`neglect_flag: true`면 다음 probe에서 neglected 차원 하나를 추천 답안으로 제시. 복수 dispatch 시
-name 기준 union·dedup.
+출력(`derived_dimensions[] + neglect_flag` + `evidence[]`/`repo_claims[]`)은 **advisory** —
+orchestrator가 원장에 admit할지 판정한다. `neglect_flag: true`면 다음 probe에서 neglected 차원
+하나를 추천 답안으로 제시. 복수 dispatch 시 name 기준 union·dedup. 주장은 «지금 이해»에 싣기 전에
+라운드 규약의 V1 을 탄다.
+
+**계약 배달 실패 시** — `## 조사 주장 계약` 펜스의 rc 가 0 이 아니면 이 dispatch 를 하지 않는다.
+인터뷰는 계속하고, 그 차원을 자동으로 닫지 않으며, 공시는 loud advisory + audit §2 unavailable 사유
+다: audit §2 Budget 의 불릿 줄에 `coverage-mapper 0 (unavailable: 계약 배달 실패)` 를 적는다 —
+게이트가 advisory 로 통과시키고 Step B 가 사람에게 보인다.
+
+**첫 dispatch 의 검증 의무(D6)** — seed 의 «다시 검증할 것» 문단 중 **레포로 확인 가능한 항목마다**
+`repo_claims` 를 산출해 V1 을 태운다. 「사용자만 답할 수 있는 것」과 「인과 추정」은 대상이 아니다.
+그 문단이 비어 있으면(규약 위반 seed — 위 슬롯 주석이 명시 허용) 이 의무는 미발동이고, 그 사실을
+audit §5 에 한 줄로 공시한다. Phase 0 은 건드리지 않는다 — 의무는 받는 쪽에 있다.
 
 ## 닫힘 · 재개방
 

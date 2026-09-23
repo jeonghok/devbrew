@@ -49,4 +49,21 @@ grep -q 'derived_dimensions' "$AGENT" \
   && ok "Output: derived_dimensions 키 존재" || no "derived_dimensions 키 부재"
 grep -q 'neglect_flag' "$AGENT" \
   && ok "Output: neglect_flag 키 존재" || no "neglect_flag 키 부재"
+
+# 조사 주장 계약 배선 — 슬롯 둘의 선언과 출력 의무. 슬롯의 var·kind 는 형제 둘과 글자째 같아야
+# 한다(`tools/adjudication/check_slots.py` 의 var_mismatch 가 갈라짐을 잡지만, 그 락이 죽으면
+# 이 자리가 마지막 방어선이다).
+for tag in claims_contract open_decisions; do
+  grep -qE "^  - tag: ${tag}$" <<<"$FM" && ok "슬롯 태그 $tag" || no "슬롯 태그 $tag 부재"
+done
+grep -q 'var: CLAIMS_CONTRACT' <<<"$FM" && ok "슬롯 var CLAIMS_CONTRACT" || no "슬롯 var CLAIMS_CONTRACT 부재"
+grep -q 'var: OPEN_DECISIONS' <<<"$FM" && ok "슬롯 var OPEN_DECISIONS" || no "슬롯 var OPEN_DECISIONS 부재"
+grep -q 'kind: repo_context' <<<"$FM" && ok "claims_contract 의 kind 가 repo_context" || no "kind: repo_context 부재"
+# 출력 의무 — 스키마 키 둘이 본문에 실재한다(존재 검사라 frontmatter 를 뺀 본문에서 잰다:
+# description 이 같은 낱말을 담아도 출력 스키마를 지우면 RED 다).
+BODY="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{f=0;b=1;next} b' "$AGENT")"
+for tok in repo_claims evidence decides; do
+  grep -qE "^[[:space:]]*-?[[:space:]]*${tok}:" <<<"$BODY" \
+    && ok "출력 의무: $tok 키가 본문 스키마에 있다" || no "출력 의무: $tok 키 부재"
+done
 finish
