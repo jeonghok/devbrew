@@ -680,17 +680,19 @@ def main():
             # (계획 R-H). 각도 파일 자신에서 뽑으면 자기-일관성 검사이지 Law 2
             # 검사가 아니다. `sources`(dedup 이 병합하며 만든 목록) 우선, 없으면
             # `agent` — `render()` 가 Source 칼럼을 채울 때 쓰는 것과 **같은
-            # 관용구**다. `kept` 가 아니라 `findings` 를 보는 이유: 억제된 것도
-            # 「낸 것」이다(냈기 때문에 억제됐다).
+            # 관용구**다. 판정 적용 «전» 의 입력(`raw`)과 dedup 뒤의 `findings`
+            # (승격분 포함)를 함께 본다: 기각·억제된 것도 「낸 것」이다(냈기
+            # 때문에 기각·억제된 것이다).
             authors = set()
-            for f in findings:
-                srcs = f.get("sources") or [f.get("agent", "?")]
-                if not isinstance(srcs, (list, tuple)):
-                    srcs = [srcs]
-                for s in srcs:
-                    s = str(s)
-                    if s and s != "?":
-                        authors.add(s)
+            for f in findings + raw:
+                if isinstance(f, dict):
+                    srcs = f.get("sources") or [f.get("agent", "?")]
+                    if not isinstance(srcs, (list, tuple)):
+                        srcs = [srcs]
+                    for s in srcs:
+                        s = str(s)
+                        if s and s != "?":
+                            authors.add(s)
             _angles.check_self_adjudication(angle_states, authors)
             angle_absent = angle_absent or _angles.blocks(angle_states)
         decision = _verdict.decide(

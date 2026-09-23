@@ -202,6 +202,79 @@ case_synth_suppressed_finding_still_counts_as_authored() {
   rm -rf "$T"
 }
 
+# mk_rejected <디렉토리> <저자> — <저자> 의 유일한 finding 을 adversarial 이 기각한 입력.
+mk_rejected() {
+  printf 'verdicts:\n  - {finding_id: %s-a.py-1, verdict: reject}\n' "$2" > "$1/adv.yaml"
+  printf -- '- {agent: %s, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: rejected-one, proposed_fix: f}\n' "$2" > "$1/f.yaml"
+}
+
+case_synth_rejected_finding_still_counts_as_authored() {
+  # AC10a 는 «생존»이 아니라 «저자»를 묻는다 — 기각된 finding 도 「낸 것」이다.
+  # 판정이 X 에게 접혔는데 X 의 유일한 finding 이 기각됐다면 X 가 자기 finding 을
+  # 판정한 것이다(Law 2). 판정 적용이 기각분을 버린 «뒤» 에 저자를 뽑으면 rc 0 +
+  # verdict: clean 으로 샌다.
+  local T; T=$(mktemp -d); mk_rejected "$T" scout
+  # 전제 확인 — 이 픽스처의 finding 은 실제로 기각된다(표에 안 실린다).
+  local off; off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  assert_not_grep "$off" 'rejected-one' "전제: 픽스처의 finding 은 기각돼 표에 없다"
+  assert_grep     "$off" '^verdict: clean$' "전제: --angles 없이는 clean 이다"
+  local f="$T/angles.txt"
+  write_angles "$f" "security: filled" "adjudication: folded_into:scout" \
+                    "different-premise: filled"
+  local out rc=0
+  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+          --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  assert_eq "$rc" "4" "기각된 finding 만 낸 리뷰어에게 판정 각도를 접어도 exit 4 (AC10a)"
+  assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다"
+  assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다"
+  rm -rf "$T"
+}
+
+case_synth_promoted_finding_counts_as_authored() {
+  # 승격된 finding(adversarial 의 `new_findings:`, 저자 `adversarial`)도 「낸 것」이다.
+  # 판정 적용 전 입력(`raw`)에는 없고 dedup 뒤 목록에만 있다 — 저자를 `raw` 에서만
+  # 뽑는 변이가 이 케이스 없이 스위트를 GREEN 으로 남겼다.
+  local T; T=$(mktemp -d)
+  printf 'verdicts: []\nnew_findings:\n  - {file: b.py, line: 2, severity: IMPORTANT, summary: promoted-one}\n' > "$T/adv.yaml"
+  printf '[]\n' > "$T/f.yaml"
+  local off; off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  assert_grep "$off" 'promoted-one' "전제: 픽스처의 new_findings 가 승격돼 표에 실린다"
+  local f="$T/angles.txt"
+  write_angles "$f" "security: filled" "adjudication: folded_into:adversarial" \
+                    "different-premise: filled"
+  local out rc=0
+  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+          --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  assert_eq "$rc" "4" "승격된 finding 의 저자에게 판정 각도를 접으면 exit 4 (AC10a)"
+  assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다"
+  assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다"
+  # 억제된 승격분 — `raw` 에 없고 억제 뒤 `kept` 에도 없다. dedup 뒤 목록만 이 저자를
+  # 본다. 저자를 `kept + raw` 에서 뽑는 변이(억제분 제외)를 이것만 가른다.
+  printf 'verdicts: []\nnew_findings:\n  - {file: b.py, line: 2, severity: SUGGESTION, confidence: 3, summary: promoted-low}\n' > "$T/adv.yaml"
+  off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  assert_grep "$off" 'No high-confidence findings\. 1 low-confidence' "전제: 승격분이 억제된다"
+  rc=0; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+          --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  assert_eq "$rc" "4" "억제된 승격분의 저자에게 접어도 exit 4 (R-H)"
+  assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다 (억제된 승격분)"
+  rm -rf "$T"
+}
+
+case_synth_rejected_finding_of_another_reviewer_is_ok() {
+  # 위 케이스의 양의 짝 — 기각된 finding 의 저자가 접힌 수행자가 아니면 정상이다.
+  # 이것이 없으면 「기각이 있으면 전부 막는다」와 구별되지 않는다.
+  local T; T=$(mktemp -d); mk_rejected "$T" security-reviewer
+  local f="$T/angles.txt"
+  write_angles "$f" "security: filled" "adjudication: folded_into:scout" \
+                    "different-premise: filled"
+  local out rc=0
+  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+          --emit-verdict --angles "$f" 2>/dev/null) || rc=$?
+  assert_eq   "$rc"  "0"               "다른 리뷰어의 기각된 finding 은 접기를 막지 않는다"
+  assert_grep "$out" '^verdict: clean$' "판정이 clean 으로 선다"
+  rm -rf "$T"
+}
+
 case_synth_angles_flag_hygiene() {
   # PR2 의 I1 이 세 플래그에 건 대칭을 네 번째 플래그에도 건다. 안 걸면 값을
   # 구하고도 `--emit-verdict` 를 빼먹은 호출자가 rc=0 + 완전해 보이는 보고서를
@@ -514,6 +587,9 @@ case_synth_different_premise_absent_stays_clean
 case_synth_self_adjudication_is_atomic_failure
 case_synth_folding_into_a_silent_reviewer_is_ok
 case_synth_suppressed_finding_still_counts_as_authored
+case_synth_rejected_finding_still_counts_as_authored
+case_synth_promoted_finding_counts_as_authored
+case_synth_rejected_finding_of_another_reviewer_is_ok
 case_synth_angles_flag_hygiene
 case_synth_primary_source_death_is_angle_absent
 finish
