@@ -534,8 +534,11 @@ Agent({
 })
 ```
 
-재비판의 `${DOCUMENT}` 는 **`$BUNDLE_RC` 의 내용**입니다 — 탐지와 다른 번들입니다. 입력 슬롯은 정확히 셋(그
-번들 · `prep.json` 의 `items` · 프로필)이고, dispatch 사유도 이전 대화도 어느 리뷰어가 냈는지도 넣지 않습니다.
+재비판의 `${DOCUMENT}` 는 **`$BUNDLE_RC` 의 내용**입니다 — 탐지와 다른 번들입니다. 입력 슬롯은
+넷이고 그중 `diff` 는 선택입니다(그 번들 · `prep.json` 의 `items` · 프로필 · `diff`(선택)) —
+이 자리(문서 경로)는 `diff` 를 싣지 않습니다. 싣는 것은 코드 경로뿐이고, 재비판자는 `diff` 를
+못 받으면 「이 변경이 도입했는가」 축을 쓰지 않습니다. dispatch 사유도 이전 대화도 어느 리뷰어가
+냈는지도 넣지 않습니다.
 `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` 이면 dispatch 하지 않고 7단계를 `--recritic-skipped` 로 돕니다.
 
 ```
