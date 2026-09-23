@@ -1004,6 +1004,29 @@ case_AC27_unknown_verdict_coerced() {
 # `case_reraise_successor_immune_to_recritic` 의 주석에서 실측 확인됨). f1 은 known
 # item 이라 unknown-f hold 를 안 타므로 union-find 단계까지 실제로 도달한다 — 그
 # 사실을 먼저 단언(hold==0)한 뒤에 coerced 를 본다.
+# `normalize()` 는 `cmd_prepare` 에서 critic·codex 항목을 정규화하며 원장을 부른다 — 파손 항목은
+# `hold`, 어휘 밖 처분은 `coerced`. prepare 의 원장은 `events` 로 기록된 호출만 finalize 로 넘기므로
+# 그 호출이 기록되지 않으면 파손 항목이 계수 없이 사라져 `blocks` 가 거짓이 된다(실측 held=0 ·
+# coerced=0 · blocks=False). 어휘 밖 처분에는 재비판이 처분을 «직접» 매긴다 — 그러면 `_apply_recritic`
+# 의 `None → "ask"` 스윕이 돌지 않아 그 경로로 가려지지 않는다. `normalize()` 호출 자리는 셋(critic 층 1 ·
+# critic 층 2 · codex)이라 파손 항목을 자리마다 하나씩 둔다 — 한 자리만 되돌려도 held 가 3 에서 떨어진다.
+case_normalize_hold_and_coerced_reach_finalize() {
+  local cr cx rt d f3
+  cr="$(mktemp -t cr-XXXXXX.txt)"; cx="$(mktemp -t cx-XXXXXX.yaml)"; rt="$(mktemp -t rt-XXXXXX.txt)"
+  printf '```docreview-layer1\n- ref: c1\n  category: scope\n  anchor: "#2-goals"\n  disposition: decide\n  summary: "정상 항목"\n- ref: c2\n  category: scope\n  summary: "앵커 없는 항목"\n- ref: c3\n  category: scope\n  anchor: "#3-non-goals"\n  disposition: bogus\n  summary: "어휘 밖 처분"\n```\n```docreview-layer2\n- ref: c4\n  category: placeholder\n  anchor: "#12-files-to-modify"\n```\n' > "$cr"
+  printf 'findings:\n  - agent: codex-reviewer\n    ref: x1\n    layer: 1\n    category: scope\n    disposition: decide\n    summary: "codex 앵커 없는 항목"\nmeta:\n  codex_failed: false\n' > "$cx"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$cr")" --codex "$(codex_now "$d" "$cx")" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'sorted(i["summary"] for i in d["items"])')" "['어휘 밖 처분', '정상 항목']" "normalize 원장: 세 자리의 파손 항목이 전부 prep 에서 빠진다(전제)"
+  f3="$(jget "$d/prep.json" '[i["f"] for i in d["items"] if i["summary"]=="어휘 밖 처분"][0]')"
+  printf '```docreview-recritic\nverdicts:\n  - f: "%s"\n    verdict: raise\n    to: decide\nadded: []\n```\n' "$f3" > "$rt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_held"]')" "3" "normalize 원장: 세 자리(critic 층 1 · 층 2 · codex)의 파손 항목 hold 가 전부 finalize 원장에 닿는다"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_held_by_class"]["항목 파손"]')" "3" "normalize 원장: 그 hold 는 「항목 파손」 부류로 센다"
+  assert_eq "$(jget "$d/fin.json" 'd["blocks"]')" "True" "normalize 원장: 항목이 소실됐으므로 라운드를 막는다"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"]')" "1" "normalize 원장: 어휘 밖 처분의 강제가 재비판이 처분을 직접 매긴 경로에서도 센다"
+  rm -rf "$d" "$cr" "$cx" "$rt"
+}
 case_AC7b_unknown_same_as_target_coerced() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-r1.txt" "$FX/codex-failed.yaml" "--skip")"
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep.json"
