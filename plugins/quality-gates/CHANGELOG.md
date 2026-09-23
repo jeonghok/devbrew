@@ -3,6 +3,14 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [8.2.3] — 2026-09-23
+
+patch 인 이유 — 전부 `Fixed` 다. 이 플러그인의 `scripts/codex_findings_to_yaml.py` · `scripts/docreview_route.py` 는 `shared/` 로의 심볼릭 링크라 그 대상이 바뀐 이상 배포 트리 안의 코드가 바뀐 것이다(안 올리면 cache key 가 조용히 stale).
+
+### Fixed
+
+- **codex 변환기가 docreview keyset 에서 `replacement`·`if_unfixed` 를 버렸고, `same_as` 흡수가 흡수된 쪽의 산문 칸을 함께 버렸다.** 둘 다 값이 있는데 게이트가 「(대체안 미작성)」을 내게 했다. 전문·락은 `plugins/spec-distill/CHANGELOG.md` `[4.2.2]`. `default`·`design` keyset 의 출력 바이트는 그대로다(커밋된 고정 바이트 락 GREEN). 이 플러그인의 docreview 호출자는 여전히 0 이다.
+
 ## [8.2.2] — 2026-09-23
 
 patch 인 이유 — 전부 `Fixed` 다. 설계·동작 변경 없음.
