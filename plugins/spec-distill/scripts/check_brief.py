@@ -974,6 +974,73 @@ def payload_rc_ids(text: str) -> list[str]:
     return sorted({rc for ln in research_entries(text) for rc in RC_RE.findall(ln)})
 
 
+def research_link_missing(text: str) -> list[str]:
+    """① 연결 ∀ — 조사 항목마다 줄 **끝**에 `[RC<n> → OQ<n>]` · `[→ OQ<n>]` · `[→ 없음]` 하나.
+
+    ∀ 이고 개수 술어가 아니다. 순회할 항목이 0건이면 공허하게 통과한다 — `landscape_unkeyed` 의
+    docstring 이 같은 판단을 이미 적었다: 「web-off brief는 §4에 순회할 항목이 없어 공허하게
+    통과하는 것이 옳다 — 조사하지 않았으면 인용할 것도 없다」.
+    """
+    return [ln for ln in research_entries(text) if not LINK_RE.search(ln)]
+
+
+def _declared_decisions(text: str) -> set:
+    """payload §3 Open Questions ∪ §0 한눈에 의 결정 목록에 실재하는 `OQ<n>` 집합.
+
+    §0 이 상위집합이고 §3 이 그 중 열린 것이다(설계 §H ②). **상태 토큰은 보지 않는다** —
+    §0 은 해결된 결정도 `[해결 ⟨S<N>⟩]` 를 달고 남으므로, 「열려 있는가」를 보면 그 결정을
+    해결하는 데 기여한 조사가 red 가 된다(설계 L3 · R11).
+    """
+    return set(OQ_RE.findall(_section_text(text, "3", "Open Questions"))) | \
+        set(OQ_RE.findall(_section_text(text, "0", "한눈에")))
+
+
+def research_link_targets_missing(text: str) -> list[str]:
+    """② 연결 대상 실재 — 쓰인 `OQ<n>` 이 §3 또는 §0 의 결정 목록에 있는가.
+
+    `[→ 없음]` 은 대상이 아니다. 연결이 0건이면 공허하게 통과한다(① 이 연결 부재를 따로 잡는다).
+    """
+    declared = _declared_decisions(text)
+    fails = set()
+    for ln in research_entries(text):
+        m = LINK_RE.search(ln)
+        if not m:
+            continue        # ① 이 잡는다
+        for oq in OQ_RE.findall(m.group(0)):
+            if oq not in declared:
+                fails.add(f"{oq} 가 payload §3·§0 의 결정 목록에 없다")
+    return sorted(fails)
+
+
+def research_backref_missing(text: str) -> list[str]:
+    """③ 역참조 ∀ — 연결에 쓰인 `RC<n>` 이 그 `OQ<n>` 줄 **전부**에 되나타난다.
+
+    **∃ 가 아니다**(설계 §H ④). ∃ 로 두면 §0 줄 하나로 만족돼 §3 의 `→ 근거 RC3` 을 지워도
+    통과하고, 라운드 1 이 지목한 구멍이 자리만 옮겨 남는다. 방향을 뒤집어 「그 `OQ<n>` 줄이 근거
+    id 를 포함하는가」를 §3·§0 **양쪽**에서 본다.
+
+    웹 항목(`[→ OQ…]`)과 sentinel 은 id 가 없으므로 이 검사의 대상이 아니다 — 웹 출처는
+    «출처키»↔audit §7(N2)가 이미 결속한다.
+    """
+    want: dict = {}
+    for ln in research_entries(text):
+        m = LINK_RE.search(ln)
+        if not m or not m.group(1):
+            continue
+        for oq in OQ_RE.findall(m.group(0)):
+            want.setdefault(oq, set()).add(m.group(1))
+    if not want:
+        return []
+    fails = set()
+    for num, title in (("3", "Open Questions"), ("0", "한눈에")):
+        for ln in _entry_lines(_section_text(text, num, title)):
+            for oq in set(OQ_RE.findall(ln)):
+                for rc in want.get(oq, ()):
+                    if rc not in ln:
+                        fails.add(f"§{num} 의 {oq} 줄이 근거 {rc} 를 되가리키지 않는다")
+    return sorted(fails)
+
+
 # **불릿(데이터) 줄에 앵커한다.** 앵커가 없으면 §2 머리 «설명 산문»의 예시
 # (`coverage-mapper 0 (unavailable: <사유>)`)가 데이터 줄보다 먼저 매치돼 판정을 대신
 # 진다 — 실측: 출하 템플릿의 T-TPL green 을 그 설명 문장 하나가 전부 지고 있었고,
@@ -1163,6 +1230,18 @@ def gate(path: Path) -> int:
     # --- 조사 주장의 결정 연결 (설계 §E). 다섯 술어 전부 `contract: v2` 옵트인 뒤에 있다.
     #     술어 자체는 뒤따르는 커밋이 채우고, 이 분기는 스위치와 두 advisory 만 세운다.
     if contract_v2(text):
+        if not sec4_absent and not sec5_absent:
+            lm = research_link_missing(text)
+            if lm:
+                failures.append(
+                    "조사 항목에 결정 연결 없음 (줄 끝에 `[RC<n> → OQ<n>]` · `[→ OQ<n>]` · "
+                    f"`[→ 없음]` 중 하나): {lm[:3]}")
+            tm = research_link_targets_missing(text)
+            if tm:
+                failures.append(f"결정 연결 대상 부재: {tm[:3]}")
+            bm = research_backref_missing(text)
+            if bm:
+                failures.append(f"역참조 누락: {bm[:3]}")
         if not payload_rc_ids(text):
             advisories.append(INTERNAL_RESEARCH_ZERO_ADVISORY)
     else:

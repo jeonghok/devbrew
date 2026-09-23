@@ -1660,4 +1660,70 @@ while IFS=$'\t' read -r tag name; do
     NO)  no "V2-DEF(직접): $name" ;;
   esac
 done <<< "$v2def_direct"
+# V2-①②③ — red/green 짝. red 는 green 에서 **한 가지만** 망가뜨려 만든다(원인 분리).
+v2mut() {   # v2mut <셀> <python 변형 코드> → $TMPD/<셀>.md 를 만들고 게이트를 돌린다
+  local cell="$1" code="$2"
+  cp "$FXV" "$TMPD/$cell.md"; cp "${FXV%.md}.audit.md" "$TMPD/$cell.audit.md"
+  sed -i.bak "s|^audit_file:.*|audit_file: $cell.audit.md|" "$TMPD/$cell.md"; rm -f "$TMPD/$cell.md.bak"
+  # 짝의 반대편도 — 빠지면 `audit_pairing_errors` 가 변이와 무관하게 먼저 red 라 rc≠0 단언이 공허해진다
+  sed -i.bak "s|^payload:.*|payload: $cell.md|" "$TMPD/$cell.audit.md"; rm -f "$TMPD/$cell.audit.md.bak"
+  PYTHONDONTWRITEBYTECODE=1 python3 -c "$code" "$TMPD/$cell.md" "$TMPD/$cell.audit.md"
+  V2OUT="$(python3 "$SCRIPT" gate "$TMPD/$cell.md" 2>/dev/null)"; V2RC=$?
+}
+
+# ① 연결 ∀ — §4 항목의 줄끝 연결을 지운다
+v2mut nolink 'import sys,pathlib,re
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+s=s.replace(" [→ OQ1]\n","\n",1); p.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT"; } \
+  && ok "V2-①: §4 항목의 줄끝 연결을 지우면 red" || no "V2-①: 연결 부재가 통과됐다 (rc=$V2RC)"
+grep -qE '[0-9]+건|개수' <<<"$(printf '%s' "$V2OUT" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("\n".join(x for x in d["failures"] if "연결" in x))')" \
+  && no "V2-①: 차단 메시지에 개수가 들어갔다 (⟨C5⟩ — 재서 막으면 사후 장치다)" \
+  || ok "V2-①: 차단 메시지에 개수가 없다"
+
+# ① sentinel — `[→ 없음]` 은 red 가 아니다
+v2mut sentinel 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+s=s.replace(" [→ OQ1]"," [→ 없음]",1); p.write_text(s,encoding="utf-8")'
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-①(양의 짝): [→ 없음] sentinel 은 정직한 답이고 red 가 아니다" \
+  || no "V2-①: sentinel 이 red 다 — 계약의 「빈 배열 허용」과 충돌하고 필러 절 압력을 만든다 (rc=$V2RC)"
+
+# ② 연결 대상 실재 — §3·§0 에 없는 OQ 를 가리킨다
+v2mut badtarget 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+s=s.replace("[→ OQ1]","[→ OQ9]",1); p.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q 'OQ9' <<<"$V2OUT"; } \
+  && ok "V2-②: §3·§0 에 없는 OQ 를 가리키면 red (그 id 를 이름으로 댄다)" \
+  || no "V2-②: 없는 대상이 통과됐다 (rc=$V2RC)"
+
+# ② 상태는 보지 않는다 — 해결된 결정에 연결해도 green (L3, 의도된 한계)
+v2mut resolved 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+s=s.replace("[RC3 → OQ1 · OQ4]","[RC3 → OQ4]",1)
+s=s.replace("- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3","- OQ1: 인증 뷰의 캐시 전략")
+s=s.replace("- OQ1 [열림] — 인증 뷰의 캐시 전략 → 근거 RC3","- OQ1 [열림] — 인증 뷰의 캐시 전략")
+s=s.replace("[→ OQ1]","[→ OQ4]",1); p.write_text(s,encoding="utf-8")'
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-②(L3): 해결된 결정에 연결해도 green — 상태를 보면 성공이 red 가 된다" \
+  || no "V2-②: 상태 토큰을 검사한다 (rc=$V2RC) — R11 이 기각한 방향이다"
+
+# ③ 역참조 ∀ — §3 의 역참조만 지운다(§0 은 남긴다). ∃ 면 이것이 통과한다.
+v2mut nobackref 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+old="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3"
+assert s.count(old)==1
+s=s.replace(old,"- OQ1: 인증 뷰의 캐시 전략"); p.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '역참조' <<<"$V2OUT"; } \
+  && ok "V2-③: §3 의 역참조만 지워도 red (∀ 다 — ∃ 면 §0 하나로 만족된다)" \
+  || no "V2-③: ∃ 로 새 있다 — 라운드 1 이 지목한 구멍이 자리만 옮겼다 (rc=$V2RC)"
+
+# ③ §0 쪽도 같은 ∀
+v2mut nobackref0 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+old="- OQ1 [열림] — 인증 뷰의 캐시 전략 → 근거 RC3"
+assert s.count(old)==1
+s=s.replace(old,"- OQ1 [열림] — 인증 뷰의 캐시 전략"); p.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '역참조' <<<"$V2OUT"; } \
+  && ok "V2-③: §0 의 역참조만 지워도 red (양쪽 ∀)" || no "V2-③: §0 쪽 ∀ 가 없다 (rc=$V2RC)"
 finish
