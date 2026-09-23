@@ -35,7 +35,7 @@
 - [Task 17: 술어 ⑤ — 확인 줄 ∀ (AC12)](#task-17-술어-⑤-확인-줄-ac12)
 - [Task 18: 새 락 `tests/test_research_claims_contract.sh` — 여섯 축 (AC16 + 이월 해소)](#task-18-새-락-teststestresearchclaimscontractsh-여섯-축-ac16-이월-해소)
 - [Task 19: 게이트 술어 다섯의 변이 · 양성 대조 · 픽스처 회귀 0 양방향 (Verification 4·5·7)](#task-19-게이트-술어-다섯의-변이-양성-대조-픽스처-회귀-0-양방향-verification-457)
-- [Task 20: 릴리스 — `3.3.0` · 전체 스위트 · baseline 대조 · web-off 실측 (AC17 · AC18 · AC24)](#task-20-릴리스-330-전체-스위트-baseline-대조-web-off-실측-ac17-ac18-ac24)
+- [Task 20: 릴리스 — `4.3.0` · 전체 스위트 · baseline 대조 · web-off 실측 (AC17 · AC18 · AC24)](#task-20-릴리스-430-전체-스위트-baseline-대조-web-off-실측-ac17-ac18-ac24)
 - [Deferred to plan — 일곱 항목의 처분](#deferred-to-plan--일곱-항목의-처분)
 - [Open Questions — 계획이 답하지 않는 것](#open-questions--계획이-답하지-않는-것)
 
@@ -58,7 +58,7 @@ spec 의 프로젝트-전역 요구를 값째 옮긴 것이다. **모든 Task �
   Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
   Claude-Session: https://claude.ai/code/session_01D5Xd9k8aYnt5ojzb9MU1J7
   ```
-- **SemVer bump** — `plugins/spec-distill/` 을 건드리는 PR 은 같은 커밋에서 `plugin.json` bump 를 갖는다. 이 작업의 목표값은 `3.2.0 → 3.3.0`(minor = 새 surface). 릴리스 Task 20 에서 한 번에 올린다(브랜치 중간에 올리면 먼저 머지되는 쪽이 이긴다).
+- **SemVer bump** — `plugins/spec-distill/` 을 건드리는 PR 은 같은 커밋에서 `plugin.json` bump 를 갖는다. 이 작업의 목표값은 `4.2.1 → 4.3.0`(minor = 새 surface — 착수 뒤 main 이 4.2.1 로 움직였다, Ruling 89). 릴리스 Task 20 에서 한 번에 올린다(브랜치 중간에 올리면 먼저 머지되는 쪽이 이긴다).
 - **python 테스트 실행** — python 테스트는 `python3 -m unittest` 로만 돌린다. 파일을 직접 실행하지 않는다.
 - **`PYTHONDONTWRITEBYTECODE=1`** — 변이(mutation) 검증 시 필수. 같은 길이 변이는 stale `.pyc` 를 못 넘어 거짓 GREEN·거짓 RED 를 둘 다 낸다.
 - **Korean-primary 문서** — 영어는 식별자(`RC<n>`·`OQ<n>`·`contract: v2`·P#·AC#)·고유명사·코드·원문 인용·번역 어색한 기술어(`frontmatter`·`subagent`·`sentinel`)에만.
@@ -134,7 +134,7 @@ spec 의 프로젝트-전역 요구를 값째 옮긴 것이다. **모든 Task �
 
 **설계 Files to Modify 의 한 행을 정정한다.** 그 표는 `tests/test_brief_agents.sh` 를 「새 슬롯·문구를 반영해 확장」 대상으로 적었지만, **그 락은 세 조사 agent 를 보지 않는다** — `ALL=("doc-critic" "doc-critic-web" "doc-recritic" "brief-readback")` 이고 IB(주입 경계) 블록의 대상은 머리에 `# copy-of:` 마커를 단 엔진 사본 + `brief-readback` 이다. 세 조사 agent 의 도구·스키마 표면을 재는 락은 `test_steelman_builder_scope.sh` · `test_coverage_mapper_frontmatter.sh` · `test_blind_spot_prober_frontmatter.sh` 셋이고, 이 계획은 그 셋을 확장한다. `test_brief_agents.sh` 는 **편집하지 않고 green 유지만 확인한다**(Task 20 Step 1).
 
-| `plugins/spec-distill/.claude-plugin/plugin.json` · `CHANGELOG.md` · `README.md` | `3.3.0` + 항목 + Principles Instantiated | 수정 |
+| `plugins/spec-distill/.claude-plugin/plugin.json` · `CHANGELOG.md` · `README.md` | `4.3.0` + 항목 + Principles Instantiated | 수정 |
 
 **파일을 쪼개지 않는 이유** — 이 리포는 새 책임을 별도 모듈로 내보내고 기존 파일엔 진입 한 줄만 둔다. 계약 정본이 새 파일이 된 것이 그 규율이고, `check_brief.py` 의 술어 다섯은 그 파일의 기존 술어 26개와 **같은 코퍼스·같은 헬퍼**(`_section_text`·`_entry_lines`·`LEDGER_ROW_RE`)를 쓰므로 쪼개면 §6 경계 계산이 두 곳으로 갈린다(그 갈라짐이 v0.47.0 의 통로였다).
 
@@ -160,7 +160,7 @@ spec 의 프로젝트-전역 요구를 값째 옮긴 것이다. **모든 Task �
 | AC14 C44 면제 + 산출자 + **계수 먼저, 표시 나중** | Task 11 |
 | AC15 리터럴 마커 제거 + `plugins/` 잔존 0 | Task 9 |
 | AC16 새 락 다섯 축(+ D 집합 등호) | Task 18 (여섯 축 — 다섯 + 이월 해소 E) |
-| AC17 `3.3.0` + CHANGELOG + `test_readme_sync.sh` | Task 20 |
+| AC17 `4.3.0` + CHANGELOG + `test_readme_sync.sh` | Task 20 |
 | AC18 새 RED 0 — **실패 줄 수까지** 대조 | Task 1(baseline) · Task 20 Step 1(대조) |
 | AC19 템플릿 둘의 예시 = green fixture 모양 | Task 13 |
 | AC20 「레포로 확인 가능한 항목마다」 + 빈 문단 시 미발동 공시 | Task 5 |
@@ -1650,7 +1650,7 @@ p.write_text(t.replace(anchor, new), encoding="utf-8")
 
 q = pathlib.Path("plugins/spec-distill/tests/test_stale_terms.sh")
 s = q.read_text(encoding="utf-8")
-# V12 의 정규식에 얹지 않는다 — V12 의 메시지가 「v0.57.0 제거 어휘」라고 말하므로 3.3.0 의 마커를
+# V12 의 정규식에 얹지 않는다 — V12 의 메시지가 「v0.57.0 제거 어휘」라고 말하므로 4.3.0 의 마커를
 # 거기 넣으면 잔존이 잡힐 때 사람이 엉뚱한 릴리스를 본다. 이 파일이 자기 머리 주석에서 이미 그
 # 규칙을 적어 두었다. 다음 빈 번호로 새 블록을 만든다.
 v12_end = """  ok "V12: v0.57.0 제거 어휘 production 잔존 0"
@@ -1658,8 +1658,8 @@ fi
 """
 assert s.count(v12_end) == 1
 v14 = v12_end + r"""
-# V14 (3.3.0): 조사 특화가 폐기한 리터럴 마커 — production 잔존 0.
-# 번호는 V12 에 얹지 않는다 — 그 블록의 메시지가 「v0.57.0 제거 어휘」라고 말하므로 3.3.0 의
+# V14 (4.3.0): 조사 특화가 폐기한 리터럴 마커 — production 잔존 0.
+# 번호는 V12 에 얹지 않는다 — 그 블록의 메시지가 「v0.57.0 제거 어휘」라고 말하므로 4.3.0 의
 # 마커를 그 정규식에 넣으면 잔존이 잡힐 때 사람이 엉뚱한 릴리스를 본다. 이 파일의 머리 주석이
 # 이미 그 규칙이다(「재사용하면 두 무관한 락이 같은 이름으로 헷갈린다」). V11 은 3.0.0 에서
 # 대상과 함께 지웠고 번호를 재사용하지 않으므로 다음 빈 번호는 V14 다.
@@ -1670,7 +1670,7 @@ scan -InE 'from-code\]\[auto-confirmed' "${prod_files[@]}"
 if [[ $SCAN_RC -ge 2 ]]; then
   no "V14: grep 자체 실패(exit=$SCAN_RC):"; printf '%s\n' "$SCAN_OUT"
 elif [[ $SCAN_RC -eq 0 ]]; then
-  no "V14: 3.3.0 이 폐기한 리터럴 마커 [from-code][auto-confirmed] 가 production 에 잔존:"
+  no "V14: 4.3.0 이 폐기한 리터럴 마커 [from-code][auto-confirmed] 가 production 에 잔존:"
   printf '%s\n' "$SCAN_OUT"
 else
   ok "V14: 리터럴 마커 [from-code][auto-confirmed] production 잔존 0"
@@ -1683,7 +1683,7 @@ bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -
 bash plugins/spec-distill/tests/test_stale_terms.sh 2>&1 | grep -E 'V14|Total'
 ```
 
-Expected: `ok` 다음 — stage 락에서 `✗ AC15: 리터럴 마커 … 잔존` + `✗ AC15(양의 짝)` + `✗ AC24`, stale 락에서 `✗ V14: 3.3.0 이 폐기한 리터럴 마커 … 가 production 에 잔존`.
+Expected: `ok` 다음 — stage 락에서 `✗ AC15: 리터럴 마커 … 잔존` + `✗ AC15(양의 짝)` + `✗ AC24`, stale 락에서 `✗ V14: 4.3.0 이 폐기한 리터럴 마커 … 가 production 에 잔존`.
 
 - [ ] **Step 2: C43 (a) 행을 고친다**
 
@@ -1754,7 +1754,7 @@ feat(spec-distill): C43 경로 (a) 를 계약 산출로 — 리터럴 마커 폐
 부재 락엔 양의 짝을 둔다 — 마커가 사라진 자리에 계약 산출 요구가 들어왔는지, 그리고 직접 수행
 문구가 있는지를 함께 잰다. 마커 리터럴은 `test_stale_terms.sh` 의 **V14 신설**으로 production 부재를
 재게 해 되살아나면 소리가 나게 한다 — V12 에 얹지 않는다(그 블록의 메시지가 「v0.57.0 제거 어휘」라고
-말하므로 3.3.0 의 마커를 거기 넣으면 잔존이 잡힐 때 엉뚱한 릴리스를 가리킨다).
+말하므로 4.3.0 의 마커를 거기 넣으면 잔존이 잡힐 때 엉뚱한 릴리스를 가리킨다).
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01D5Xd9k8aYnt5ojzb9MU1J7
@@ -1944,7 +1944,7 @@ t = t.replace(old, new)
 
 old2 = """[spec-distill v0.57.0] state schema migration: reopen ledger + coverage_mapper_dispatches added (stall trigger retired).
 """
-new2 = """[spec-distill 3.3.0] state schema migration: blind_spot_dispatched -> blind_spot_dispatches (value carried), open_decisions added.
+new2 = """[spec-distill 4.3.0] state schema migration: blind_spot_dispatched -> blind_spot_dispatches (value carried), open_decisions added.
 """
 assert t.count(old2) == 1
 p.write_text(t.replace(old2, new2), encoding="utf-8")
@@ -2342,9 +2342,9 @@ sub("plugins/spec-distill/README.md", [
  ("`blind-spot-prober`(적대적 premortem, fan-out 1)가 blind-spot floor 차원 구현으로 신설되었다.",
   "`blind-spot-prober`(적대적 premortem)가 blind-spot floor 차원 구현으로 신설되었다."),
  ("- **C4** coverage-mapper agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — advisory 주제-도출 차원 제안자, dispatch 상한 2) + **blind-spot-prober** agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — 적대적 premortem, fan-out 1).",
-  "- **C4** coverage-mapper agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — advisory 주제-도출 차원 제안자) + **blind-spot-prober** agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — 적대적 premortem). 둘 다 dispatch 는 **자격 + 예산**이다(3.3.0): 자격 = 그 차원에 닿는 열린 결정이 아직 있는가, 예산 = `1 + 재개방`."),
+  "- **C4** coverage-mapper agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — advisory 주제-도출 차원 제안자) + **blind-spot-prober** agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — 적대적 premortem). 둘 다 dispatch 는 **자격 + 예산**이다(4.3.0): 자격 = 그 차원에 닿는 열린 결정이 아직 있는가, 예산 = `1 + 재개방`."),
  ("상한이 선언된 것: coverage-mapper dispatch 상한 2 + blind-spot-prober fan-out 1(interview) ·",
-  "상한이 선언된 것: coverage-mapper·blind-spot-prober 는 **자격 + 예산**(자격 = 그 차원에 닿는 열린 결정이 아직 있는가 · 예산 = `1 + 재개방`, 3.3.0) ·"),
+  "상한이 선언된 것: coverage-mapper·blind-spot-prober 는 **자격 + 예산**(자격 = 그 차원에 닿는 열린 결정이 아직 있는가 · 예산 = `1 + 재개방`, 4.3.0) ·"),
 ])
 print("ok")
 PY
@@ -3073,7 +3073,7 @@ name: sample-topic-v2
 type: interview-brief
 created_at: 2026-09-23
 session_id: testsessionv2
-source: spec-distill conducting-interview 3.3.0
+source: spec-distill conducting-interview 4.3.0
 next_phase: superpowers:brainstorming
 contract: v2
 audit_file: interview-brief-v2-valid.audit.md
@@ -3134,7 +3134,7 @@ type: interview-audit
 payload: interview-brief-v2-valid.md
 created_at: 2026-09-23
 session_id: testsessionv2
-source: spec-distill conducting-interview 3.3.0
+source: spec-distill conducting-interview 4.3.0
 ---
 
 # Sample Topic v2 — Interview Audit
@@ -4845,7 +4845,7 @@ MSG
 
 ---
 
-### Task 20: 릴리스 — `3.3.0` · 전체 스위트 · baseline 대조 · web-off 실측 (AC17 · AC18 · AC24)
+### Task 20: 릴리스 — `4.3.0` · 전체 스위트 · baseline 대조 · web-off 실측 (AC17 · AC18 · AC24)
 
 **Files:**
 - Modify: `plugins/spec-distill/.claude-plugin/plugin.json`
@@ -4853,10 +4853,14 @@ MSG
 - Modify: `plugins/spec-distill/README.md`
 
 **Interfaces:**
-- Consumes: Task 1 의 `baseline.txt` · Task 7 의 `loadsurface.txt` · Task 19 의 `mutation-matrix.txt`
+- Consumes: main tip 을 Task 1 과 같은 스크립트로 잰 `baseline-main.txt`(Ruling 89 — 착수 시점의 `baseline.txt` 는 옛 base 의 사실이다) · Task 7 의 `loadsurface.txt` · Task 19 의 `mutation-matrix.txt`
 - Produces: 릴리스. 이 Task 뒤에는 사용자 e2e 와 PR 만 남는다.
 
-**버전은 머지 직전에 정한다** — 브랜치 안에서 먼저 올리면 먼저 머지되는 쪽이 이긴다. 그래서 이 Task 가 마지막이다. `3.2.0 → 3.3.0`(minor = 새 surface)이고, 머지 시점에 `origin/main` 의 값이 이미 `3.3.0` 이면 `3.4.0` 으로 올린다.
+**버전은 머지 직전에 정한다** — 브랜치 안에서 먼저 올리면 먼저 머지되는 쪽이 이긴다. 그래서 이 Task 가 마지막이다. `4.2.1 → 4.3.0`(minor = 새 surface — 브랜치 착수 뒤 main 이 3.2.0 → 4.2.1 로 움직였다)이고, 머지 시점에 `origin/main` 의 값이 이미 `4.3.0` 이면 `4.4.0` 으로 올린다.
+
+**이 Task 는 origin/main 을 병합한 트리 위에서 돈다.** 코디네이터가 Task 19 뒤에 `origin/main` 을 **merge** 로
+들였다(rebase 아님). 그래서 `plugin.json` 은 main 의 `4.2.1` 이고, AC18 의 대조 기준은 병합 대상인 main tip 을 같은
+스크립트로 잰 `baseline-main.txt` 다 — 이 브랜치가 더한 락(`test_research_claims_contract.sh`) 한 줄을 뺀 나머지가 같아야 한다.
 
 - [ ] **Step 1: 전체 스위트를 돌려 baseline 과 대조한다 (AC18)**
 
@@ -4887,7 +4891,7 @@ echo "=== baseline 대조 — 데이터 줄 전체를 diff 한다"
 # 필드별 join 을 쓰지 않는다: 필드가 넷이 되어 인덱스가 어긋나기 쉽고, 두 파일에는 산문 줄이
 # 섞여 있어(python tail · `=== … ===` 블록) 키 추출이 브리틀하다. 탭이 있는 데이터 줄만 골라
 # 줄 전체를 비교하면 rc · 실패 줄 수 · 출력 해시 셋이 한 번에 대조된다.
-grep '	rc=' "$W/baseline.txt" | sort > "$W/base-data.txt"
+grep '	rc=' "$W/baseline-main.txt" | sort > "$W/base-data.txt"
 grep '	rc=' "$A" | sort > "$W/after-data.txt"
 diff "$W/base-data.txt" "$W/after-data.txt" && echo "데이터 줄 완전 동일"
 echo "=== baseline 에 없던 파일 (새 락 — 여기 나오는 것은 정상)"
@@ -4960,6 +4964,23 @@ unset DEVBREW_SPEC_DISTILL_DISABLE_WEB
 
 Expected: ① `rc=0` · ② `pass: True` 이고 advisories 는 `WEB_DISABLED_ADVISORY` 하나(=1) · ③ `1` · ④ 각각 ≥1 · ⑤ `Fail: 0`. **이 다섯이 §B 의 주장을 구조적으로 확인한다.** 실제 한 사이클 e2e 는 자동화하지 않으므로 아래 Step 5 가 사용자에게 넘긴다.
 
+- [ ] **Step 3.5: 이 브랜치가 박은 옛 버전 문자열을 최종 버전으로**
+
+브랜치 중간에 `3.3.0` 을 목표로 적은 자리가 커밋돼 있다 — 그중 `state-migration.md` 의 advisory 는 **사용자에게 보이는
+공시**라 틀리면 거짓 공시다. 자리는 열거하지 않고 도출한다: 분기점 이후 «추가된» 줄 중 `3.3.0` 을 담은 것.
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+MB="$(git merge-base origin/main HEAD)"
+git diff -U0 "$MB" HEAD -- . ':!docs/superpowers/plans/*' \
+  | awk '/^\+\+\+ /{f=substr($0,7)} /^\+[^+]/ && /3\.3\.0/{print f}' | sort | uniq -c
+```
+
+Expected(병합 직후 실측): 설계 2 · README 2 · `state-migration.md` 1 · v2 픽스처 쌍 2 · `test_stale_terms.sh` 3 = **10줄**.
+각 줄의 `3.3.0` 을 `4.3.0` 으로 바꾼다(설계 AC17 줄에는 「— 착수 뒤 main 이 4.2.1 로 움직여 minor 를 다시 셈」 을 덧붙인다).
+기존 CHANGELOG 의 `[3.3.0]` 언급(quality-gates 이력)은 이 브랜치가 추가한 줄이 아니므로 위 도출에 잡히지 않는다 — 건드리지 않는다.
+바꾼 뒤 같은 명령을 다시 돌려 **출력 0줄**, 그리고 `test_stale_terms.sh` · `test_check_brief.sh` · `test_conducting_interview_stage.sh` 가 `Fail: 0`.
+
 - [ ] **Step 4: 버전 · CHANGELOG · README**
 
 ```bash
@@ -4969,19 +4990,19 @@ python3 - <<'PY'
 import json, pathlib
 p = pathlib.Path("plugins/spec-distill/.claude-plugin/plugin.json")
 d = json.loads(p.read_text(encoding="utf-8"))
-assert d["version"] == "3.2.0", d["version"]
-d["version"] = "3.3.0"
+assert d["version"] == "4.2.1", d["version"]
+d["version"] = "4.3.0"
 p.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print("version ->", d["version"])
 PY
 ```
 
-Expected: `origin/main` 이 `3.2.0` 이고 새 값이 `3.3.0`. **`origin/main` 이 이미 `3.3.0` 이면 `3.4.0` 으로 올리고 CHANGELOG 헤딩도 맞춘다.**
+Expected: `origin/main` 이 `4.2.1` 이고 새 값이 `4.3.0`. **`origin/main` 이 이미 `4.3.0` 이면 `4.4.0` 으로 올리고 CHANGELOG 헤딩도 맞춘다.**
 
 `CHANGELOG.md` 맨 위(`# Changelog` 다음)에 넣을 항목:
 
 ```markdown
-## [3.3.0] — 2026-09-23
+## [4.3.0] — 2026-09-23
 
 minor 인 이유 — 새 surface 가 셋이다: 조사 주장 계약의 정본(`references/research-claims.md`)과 그
 배달 펜스, 세 dispatch 자리의 입력 슬롯 둘(`claims_contract` · `open_decisions`), 그리고
@@ -5067,13 +5088,13 @@ minor 인 이유 — 새 surface 가 셋이다: 조사 주장 계약의 정본(`
 `README.md` 의 `## Principles Instantiated` 에 추가할 줄:
 
 ```markdown
-- **Law 1 (Clarity) — 조사가 방향에 닿는가 (3.3.0)** — 조사 주장의 계약(`references/research-claims.md`)이
+- **Law 1 (Clarity) — 조사가 방향에 닿는가 (4.3.0)** — 조사 주장의 계약(`references/research-claims.md`)이
   네 자리에 걸리고 검문소 셋(라운드 안 V1 · 종료 누락 대조 V2 · 게이트 V3)이 그것을 집행한다. 게이트의
   술어 다섯은 **전부 ∀ 형태**이고 차단 판정에 개수가 없다 — 재서 **막으면** 사후 장치이고 재서
   **보이면** 공시다(2026-09-10 에 걷어낸 사후 깊이 측정 계열과 양립하는 근거가 그 구분이다). 「조사를
   했어야 했는가」는 기계가 알 수 없고(`check_brief.py` 는 brief 파일만 읽는다) 0건 advisory 가 Step B
   게이트로 사람에게 간다.
-- **P17 (User sovereignty) — dispatch 통제가 자격 + 예산 (3.3.0)** — 다시 부를 «자격» 은 「그 차원에
+- **P17 (User sovereignty) — dispatch 통제가 자격 + 예산 (4.3.0)** — 다시 부를 «자격» 은 「그 차원에
   닿는 열린 결정이 아직 있는가」이고, 그 위의 예산은 `1 + 재개방` 이다. 재개방은 정의상 사용자 답이
   걸린 사건이라 **사용자가 시계다** — 숫자 상한이 아니라 사용자 참여가 총량을 묶는다.
 ```
@@ -5092,7 +5113,7 @@ done
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/spec-distill/tests -p 'test_*.py' 2>&1 | tail -3
 git add plugins/spec-distill/.claude-plugin/plugin.json plugins/spec-distill/CHANGELOG.md plugins/spec-distill/README.md
 git commit -F - <<'MSG'
-release(spec-distill): 3.3.0 — 인터뷰의 조사 특화
+release(spec-distill): 4.3.0 — 인터뷰의 조사 특화
 
 새 surface 셋(계약 정본 + 배달 펜스 · dispatch 슬롯 둘 · 게이트 술어 다섯)이라 minor 다. 삭제는
 리터럴 마커 하나뿐이라 호출 계약은 줄지 않는다.
