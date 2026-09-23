@@ -1,5 +1,92 @@
 # Changelog
 
+## [4.3.0] — 2026-09-23
+
+minor 인 이유 — 새 surface 가 셋이다: 조사 주장 계약의 정본(`references/research-claims.md`)과 그
+배달 펜스, 세 dispatch 자리의 입력 슬롯 둘(`claims_contract` · `open_decisions`), 그리고
+`check_brief.py` 의 조사 축 술어 다섯. 삭제는 리터럴 마커 하나(`[from-code][auto-confirmed]`,
+15사이클 0건)뿐이라 호출 계약은 줄지 않는다. 설계
+`docs/superpowers/specs/2026-09-22-interview-research-specialization-design.md`.
+
+### Added
+
+- **조사 주장 계약이 정본을 갖는다.** `references/research-claims.md` 가 `evidence[]`(외부) ·
+  `repo_claims[]`(내부) 두 모양을 담고 신설 필드 둘을 정의한다 — `decides`(닿는 열린 결정 `OQ<n>`)와
+  `id: RC<n>`(payload·audit 을 잇는 id). 기존 `touches`(전제 `P<n>`)의 뜻은 **바뀌지 않는다**:
+  `steelman.md` Step 2 대조 · Step 2.5 재검토 자격 · 4-block 라벨 · audit 템플릿의 「부착 주장 → P<n>」
+  넷이 그 키잉에 의존한다.
+- **계약이 네 자리에 걸린다.** dispatch 셋(`coverage-mapper` · `blind-spot-prober` ·
+  `steelman-builder`)이 `<claims_contract>`·`<open_decisions>` 두 슬롯을 받고, C43 경로 (a) 자동확인은
+  orchestrator 가 직접 수행한다(네 번째 dispatch 자리를 만들지 않는다 — 기본 탑재 subagent 는
+  처분 락의 agent 집합 밖이라 앵커만 +1 되어 「앵커 수 == dispatch 수」가 red 가 된다).
+- **검문소 셋.** V1(라운드 규약 안, 무조건 — 경로 → 앵커 → 「그 자리가 주장과 맞는가」) ·
+  V2(`finishing.md`, 무조건, 누락 대조만) · V3(게이트, 형태 ∀). 앞 둘은 웹 스위치와 steelman
+  trigger 에 종속되지 않는다.
+- **state `orchestration.open_decisions[]`** — 인터뷰 중 결정의 유일한 거처이자 `OQ<n>` 의 산출자.
+  해결된 결정도 지우지 않고 상태 토큰으로 구분한다.
+- **게이트 술어 다섯** — 연결 ∀ · 연결 대상 실재 · 역참조 ∀(§3·§0 양쪽) · 이름 정확 일치
+  `derived:internal_research` + `closed`(조건부) · 확인 줄 ∀. **차단 판정에 개수가 없다** — 전부 ∀ 이고
+  순회 항목이 0건이면 공허 통과한다. 개수는 조건 분기와 advisory 에만 들어간다.
+- **`contract: v2` 옵트인** — 술어 다섯이 이 frontmatter 필드가 있을 때만 발동한다. 기존 §4 보유
+  픽스처 81개를 한 글자도 고치지 않는 장치이고, 없을 때는 advisory 「신 계약 미적용 brief」가
+  Step B 게이트로 간다. 「내부 조사 0건」도 같은 채널이다 — 침묵과 0 은 다른 사실이다.
+- 락: `tests/test_research_claims_contract.sh` 여섯 축(A 산문 · B 양의 짝 · C 펜스 · X 차가운 셸
+  실행 · D 정본↔사본 집합 등호 · E `fail-closed` 값). 축 E 가 처분 락의 공시된 한계(어휘만 보고 값을
+  단언하지 않는다)를 이 자리에서 메운다. 게이트 술어 다섯의 mutation 매트릭스(g1–g8)로 이빨을
+  실측했다 — g1(표기 · `$` 줄끝 앵커)·g7(⟨C5⟩ 개수 가드 삽입) 이 최초 toothless 였고
+  `test_check_brief.sh` 단언으로 닫았다. g7 은 리터럴 임계값(`> 3`)에 맞춘 동적 단언 하나뿐이라
+  다른 임계값(예: `>= 10`)엔 무력했던 것을 재비판이 드러내, 다섯 술어 함수 + `contract: v2` 분기
+  전체를 대상으로 하는 임계값-무관 정적 AST 락(⟨C5⟩(정적) — `len()` 호출·정수 리터럴 비교 부재를
+  잰다)을 추가로 얹어 닫았다.
+
+### Changed
+
+- **dispatch 통제가 상한에서 «자격 + 예산»으로.** 자격 = 그 장치가 채우는 차원에 닿는 열린 결정이
+  아직 있는가(열린 결정이 0이면 예산이 남아도 부르지 않는다) · 예산 = `1 + 재개방`. 옛 문구
+  (`상한 2` · `fan-out 1` · `인터뷰당 1회` · `bounded dispatch`)는 두 장치의 **열네 자리**에서
+  교체했다 — 착수 시 grep 으로 전수 재도출했고 설계가 열거한 여섯은 `agents/` 만의 전수였다.
+  엔진의 `재리뷰 상한 2` · 확정 재제시 `상한 2회` · `rhythm guard 3` 은 **다른 것을 세므로 건드리지
+  않았다**.
+- **C44 면제.** 산출 항목의 `decides` 가 `status: open` 이고 `touched: false` 인 결정을 하나라도
+  담으면 `non_user_streak` +0, 아니면 +1. **순서가 계약이다 — 「계수 먼저, 표시 나중」**: 반대로 두면
+  계수 시점에 「아직 안 닿은 것」이 항상 공집합이라 첫 연결부터 +1 이 되고 면제가 영구히 발화하지
+  않는다. 면제 예산은 그 집합 크기로 유한하다.
+- **처분 방향 셋이 `fail-open` → `fail-closed`.** 막는 것은 «그 dispatch» 이고 인터뷰가 아니다 —
+  계약 펜스가 실패하면 그 장치를 부르지 않고, 인터뷰는 계속하며 그 차원을 자동으로 닫지 않고
+  advisory 가 사람에게 간다.
+- **`blind_spot_dispatched: bool` → `blind_spot_dispatches: int`** — 개명이라 값을 이월한다
+  (`true → 1`, `false → 0`)고 옛 키를 지운다. 부재 키 규칙만 쓰면 이미 dispatch 한 세션이 `0` 을
+  받아 AP16 가드가 재무장된다.
+- 템플릿 둘이 세 방향을 예시로 보인다 — 템플릿이 red 를 가르치면 첫 게이트가 항상 red 다.
+- SKILL.md 순감 래칫 둘을 순증 수용으로 다시 조였다(실측 + 8). 설계가 로드 표면 순증을 명시적으로
+  수용했고 삭제가 0이다.
+
+### Removed
+
+- 리터럴 마커 `[from-code][auto-confirmed]` — 15사이클 0건이고 같은 행위가 audit §5 에
+  `auto-confirmed:` 라는 다른 표기로 이미 실재했다. 갈라진 사본은 「한쪽만 고치는」 결함을 부른다.
+  개념은 계약으로 흡수된다.
+
+### 알려진 한계 (설계 §알려진 한계 전량이 그대로 유효하다)
+
+- **조건부 발동이 피검자 산출물에 앵커돼 있다** — `RC<n>` 을 0건 내면 술어 넷이 발동하지 않는다.
+  `check_brief.py` 는 brief 파일만 읽으므로(모듈 불변식) 「조사를 했어야 했는가」를 알 방법이 없다.
+  backstop 은 0건 advisory 가 Step B 게이트 텍스트로 사람에게 가는 것이다.
+- **면제 판정은 자기 신고다** — `non_user_streak`·`touched` 는 세션 state 에만 살고 게이트는 state 를
+  읽지 않는다. 이 릴리스가 더한 것은 산출자와 거처이고, 값이 정직한지는 여전히 모델의 자기 신고다.
+- **「열려 있음」은 검사하지 않는다** — 연결 대상 실재는 목록에 있는가만 보고 상태 토큰은 보지 않는다.
+  의도된 선택이다: 상태를 보면 결정을 해결하는 데 기여한 조사가 red 가 된다.
+- **V1 의 3단계는 기계가 대신할 수 없다** — 「주장이 그 자리와 맞는가」는 내용 이해다. V2·V3 가 보는
+  것은 「그 확인 줄이 항목마다 있는가」까지다.
+- **정본과 사본이 둘 남는다** — 락 축 D 가 필드 이름 집합의 등호를 지키지만 **설명 산문의 갈라짐은
+  못 잡는다**.
+- **`derived` 행의 `closed` 요구는 「근거가 적혀 있는가」까지다** — `coverage_anchor_failures` 가
+  form-only 라 실재하는 아무 `S<N>` 이든 받는다.
+- **확인 판정이 두 자리에 기록된다** — steelman 경로는 audit §3(`ST<N>` 블록)과 §5(`확인 RC<n>`)에
+  같은 판정을 적는다. 확인 «행위» 는 한 번이고 기록만 둘이다.
+- **§H 표기층은 리뷰로 검증되지 않았다** — 설계 라운드 3 을 돌지 않았고, 이 릴리스의 red/green 짝과
+  변이가 그 절의 유일한 검증이다.
+
 ## [4.2.1] — 2026-09-23
 
 patch 인 이유 — 전부 `Fixed` 다. 새 필드·새 커맨드·새 surface 는 없다. 하나 새
