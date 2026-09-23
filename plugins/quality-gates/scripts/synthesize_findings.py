@@ -571,19 +571,21 @@ def main():
     ap.add_argument("--adversarial", default="")
     ap.add_argument("--findings", default="")
     # 판정 어휘는 `verdict.py` 가 갖는다. 여기서는 입력을 모아 넘기기만 한다.
-    # 기본 off — 켜지 않으면 stdout 이 이 PR 이전과 바이트 동일하다(소비자 이주는 PR4).
+    # 기본 off — 켜지 않으면 `verdict:`(와 `angles:`) 꼬리 없이 본 보고서만 나가고,
+    # 그것은 성공한 켠 출력의 바이트 접두다(계획 R-J). 소비자 이주는 PR4.
     ap.add_argument("--emit-verdict", action="store_true")
     # 기본값을 `""` 로 두면 "플래그를 안 줬다" 와 "빈 경로를 줬다" 가 같은 값이
     # 된다 — 값을 못 구한 호출자가 `--differential "$DIFF_YAML"` 을 빈 변수로
     # 호출하면 차등 축이 조용히 사라지고 `clean` 으로 인증된다(`verdict.py` 의
-    # `read_or_none()` docstring 이 금지한 바로 그 새는 경로 — Ruling T5-a, Task 4
-    # 리뷰가 한 층 아래서 잡은 결함을 이 층에서 되살리지 않는다). 기본값을 `None`
+    # `read_or_none()` docstring 이 금지한 바로 그 새는 경로 — Ruling T5-a. 한 층
+    # 아래가 막은 결함을 이 층에서 되살리지 않는다). 기본값을 `None`
     # 으로 둬 두 경우를 구별하고, 명시적으로 빈 문자열을 주면 usage 오류(exit 2)다.
     ap.add_argument("--differential", default=None)
     ap.add_argument("--reason", action="append", default=[])
     ap.add_argument("--legacy-verdict", default=None)
     # 각도 상태 — 기본 off. 오케스트레이터 배선은 PR4 다(계획 R-E). 안 주면
-    # stdout 이 이 PR 이전과 바이트 동일하다.
+    # `angles:` 블록을 싣지 않는다. 다만 주 판정자 사망은 `--angles` 유무와
+    # 무관하게 `--emit-verdict` 아래서 `angle-absent` 로 보고된다.
     ap.add_argument("--angles", default=None)
     args = ap.parse_args()
 
@@ -658,8 +660,8 @@ def main():
 
     # Ruling T5-b — 판정 «계산» 은 본 보고서를 쓰기 «전» 에 한다. `_verdict.
     # read_or_none()` 의 fail4 가 여기서 터지면 stdout 이 아직 비어 있다(이
-    # 리포의 fail4 계약: 원자적·무출력 — Task 2 리뷰가 diff-test-results.py 의
-    # `_aggregate` 에서 이미 확인한 바로 그 계약). 뒤에 두면 완전해 보이는
+    # 리포의 fail4 계약: 원자적·무출력 — diff-test-results.py 의 `_aggregate` 와
+    # 같은 계약). 뒤에 두면 완전해 보이는
     # 보고서가 이미 나간 뒤 rc=4 가 되어, rc 를 보지 않는 줄-지향 소비자에게는
     # 성공한 실행으로 읽힌다 — 실측(이전 라운드): 549바이트 완전한 보고서 +
     # rc=4 조합.
@@ -667,8 +669,8 @@ def main():
     angle_states = None
     if args.emit_verdict:
         # `report["degraded"]`(공시)가 아니라 차단 쪽 술어다 — 헌장은 모델 다양성
-        # 손실 같은 degrade 를 공시만 하고 막지 않는다. 여기서 둘을 섞으면 이 PR 이
-        # 조용히 게이트를 넓힌다.
+        # 손실 같은 degrade 를 공시만 하고 막지 않는다. 여기서 둘을 섞으면 이
+        # 합성기가 조용히 게이트를 넓힌다.
         #
         # 차단 셋을 **두 사유로** 가른다(설계 §6.4.3): 항목 소실·미상은
         # `findings-lost`, 주 판정자 사망은 `angle-absent` — 아무도 그 축을 «안 본»

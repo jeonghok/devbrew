@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # test_angle_coverage.sh — AC10 · AC10a · AC11 · AC12 (설계 §6.3.1 · §6.3.2).
 #
-# 이 락이 `test_review_floor_lock.sh` 를 **교체**한다(Task 4 가 그것을 지운다).
-# 옛 락의 앵커는 SKILL.md 의 명단 리터럴이었고 그것은 **피검자가 쥔 앵커**였다 —
-# 모델이 산문을 고치면 락이 따라 움직인다. 새 앵커는 합성기가 쓰는 모듈의
-# ∀ 관계다: 각도 셋 전부가 상태를 갖지 않으면 exit 4 이고, 그 「셋」은 이 락이
-# 열거하지 않고 `angles.py` 에서 **도출**한다.
+# 이 락의 앵커는 SKILL.md 의 명단 리터럴이 아니다 — 그것은 **피검자가 쥔 앵커**라
+# 모델이 산문을 고치면 락이 따라 움직인다. 앵커는 합성기가 쓰는 모듈의 ∀ 관계다:
+# 각도 셋 전부가 상태를 갖지 않으면 exit 4 이고, 그 「셋」은 이 락이 열거하지 않고
+# `angles.py` 에서 **도출**한다.
 #
 # **이 락이 재지 «않는» 것(설계 §15-4)** — 「각도가 상태를 가졌는가」는 재지만
 # 「그 상태가 참인가」는 못 잰다. 모델이 세 각도를 전부 `folded_into:` 로 주장하면
@@ -64,8 +63,8 @@ mk_inputs() {
 }
 
 case_synth_angles_off_equals_on_minus_block() {
-  # `--angles` 를 안 주면 stdout 이 이 PR 이전과 같아야 한다(계획 R-E). rc 를
-  # 먼저 재는 이유는 PR2 Ruling T6-a 와 같다 — 죽은 경로의 빈 출력은 어떤
+  # `--angles` 를 안 주면 `angles:` 블록이 없고, 나머지 stdout 은 블록을 뺀 on 과
+  # 같아야 한다(계획 R-E). rc 를 먼저 재는 이유 — 죽은 경로의 빈 출력은 어떤
   # 접두 검사도 트리비얼하게 통과시킨다.
   local T; T=$(mktemp -d); mk_inputs "$T"
   local f="$T/angles.txt"
@@ -277,6 +276,7 @@ case_synth_promoted_finding_counts_as_authored() {
   rc=0; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
           --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
   assert_eq "$rc" "4" "억제된 승격분의 저자에게 접어도 exit 4 (R-H)"
+  assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다 (억제된 승격분)"
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다 (억제된 승격분)"
   rm -rf "$T"
 }
@@ -370,7 +370,11 @@ case_state_grammar_is_closed() {
   # 문법 «밖» — 전부 exit 4. `folded_into:` 뒤가 비거나 공백이 섞인 것도 포함한다.
   # `folded_into:a/b` 는 한 토큰이라 줄 서식(`_LINE`)을 통과한다 — 수행자 이름
   # 검사(`_PERFORMER`)만 이것을 막는다. 이 값이 없으면 그 검사를 꺼도 GREEN 이었다.
-  for st in "maybe" "folded_into:" "FILLED" "folded_into:two words" "folded_into:a/b"; do
+  # 대문자·밑줄 수행자도 같은 검사만 막는다 — 수행자는 finding 의 `agent:`(소문자
+  # kebab)와 정확 일치로 비교되므로(AC10a), `Security-Reviewer` 를 받으면
+  # `security-reviewer` 가 낸 finding 과 다른 이름으로 조용히 통과한다.
+  for st in "maybe" "folded_into:" "FILLED" "folded_into:two words" "folded_into:a/b" \
+            "folded_into:Security-Reviewer" "folded_into:security_reviewer"; do
     write_angles "$f" "security: $st" "adjudication: filled" "different-premise: filled"
     rc=0; python3 "$A" --angles "$f" >/dev/null 2>&1 || rc=$?
     assert_eq "$rc" "4" "'$st' 는 문법 밖이라 exit 4"
@@ -460,7 +464,7 @@ case_blocking_angles_are_exactly_two() {
 }
 
 case_absent_blocking_angle_sets_the_flag() {
-  # AC11 의 «산출자» 쪽. 판정 «값» 은 Task 4 의 합성기 경로가 잰다.
+  # AC11 의 «산출자» 쪽. 판정 «값» 은 합성기 경로(`case_synth_*`)가 잰다.
   local f="$TMP/absent.txt" out a b
   while IFS= read -r a; do
     [ -n "$a" ] || continue

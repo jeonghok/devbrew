@@ -27,7 +27,7 @@ REASONS = (
     "merge-conflict",       # 끝점 합치기가 rc 1 (§6.2.4 · AC7)
     "scope-empty",          # 대조할 대상이 0 인데 변경은 있다
     "findings-lost",        # 리뷰 항목이 소실됐거나 셀 수 없다
-    "angle-absent",         # 보안 또는 판정 각도가 absent (§6.3.1 — PR3 가 배선한다)
+    "angle-absent",         # 보안 또는 판정 각도가 absent (§6.3.1)
     "baseline-unrunnable",  # 기준선 축이 안 돌아 귀속의 한쪽이 없음
     "silent-drop",          # 영향분으로 고른 unit 이 HEAD 에서 미확인
     "error-axis",           # 어느 축이든 error 상태가 닿음
@@ -135,10 +135,10 @@ def decide(*, defect=False, review_blocked=False, angle_absent=False,
     # «잃은» 것이라 `findings-lost` 이고, 셋째(주 판정자 사망)는 아무도 그 축을
     # «안 본» 것이라 `angle-absent` 다 — 각도가 `absent` 인 것과 같은 사실이다
     # (§6.3.5 의 표: 「도출이 잘못돼 아무도 안 불림 → 각도 absent」).
-    # PR2 는 셋을 `findings-lost` 하나로 접고 있었고(I2 가 기록한 알려진 편차),
-    # 그 분리에 필요한 공개 accessor 둘을 이 PR 이 `Ledger` 에 세웠다.
     # 호출자는 `review_blocked=ledger.items_unaccounted()` 와
-    # `angle_absent=(각도 absent) or ledger.primary_source_failed()` 로 준다.
+    # `angle_absent=(막는 각도 — 보안·판정 — 가 absent) or
+    # ledger.primary_source_failed()` 로 준다. 다른 전제 각도의 부재는 공시만
+    # 하므로(AC12) 이 인자에 절대 닿지 않는다.
     if review_blocked:
         add("findings-lost")
     if angle_absent:

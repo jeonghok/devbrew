@@ -3,7 +3,8 @@
 
 **각도는 에이전트가 아니다.** 각도는 「채워졌는가」의 술어이고 수행자는 스코프가
 정한다(§6.3.1). 그래서 이 모듈은 **수행자 명단을 갖지 않는다** — 명단을 넣으면
-이 PR 이 지우는 `test_review_floor_lock.sh` 를 파이썬으로 다시 쓰는 것이다.
+그것이 곧 명단 리터럴을 고정하는 락이 되어, 스코프가 수행자를 바꿀 때마다
+각도가 아니라 이름을 재게 된다.
 
 **판정 값은 내지 않는다.** 이 모듈이 내는 것은 「막는가」라는 불리언 하나이고,
 그것을 `not-certified (angle-absent)` 로 번역하는 것은 `verdict.py` 다. 그래서
@@ -44,7 +45,10 @@ ABSENT_REASONS = ("not-installed", "not-derived")
 # 갈림이 조용하다. 총 함수의 입력을 관대한 파서에 맡기면 AC10 의 「하나라도 없으면
 # 실패」가 그 관대함만큼 새어 나간다. 상태는 **공백 없는 한 토큰**이다.
 _LINE = re.compile(r"^([a-z-]+): (\S+)$")
-_PERFORMER = re.compile(r"^[A-Za-z0-9_-]+$")
+# 수행자는 finding 의 `agent:` 와 **정확히** 같아야 한다(AC10a). 이 리포의
+# `agent:` 는 전부 소문자 kebab 이라, 대문자·밑줄을 받으면 `Security-Reviewer` 가
+# `security-reviewer` 와 다른 문자열로 조용히 비교를 통과한다.
+_PERFORMER = re.compile(r"^[a-z0-9-]+$")
 _ABSENT_PREFIX = "absent("
 _ABSENT_REASON = re.compile(r"^absent\(([a-z-]+)\)$")
 
@@ -67,7 +71,6 @@ def read_or_fail4(path):
     **형제와 같은 점** — 두 절(`OSError` · `UnicodeDecodeError`)을 **둘 다** 둔다.
     `UnicodeDecodeError` 는 `ValueError` 의 하위이지 `OSError` 가 아니라서, 앞
     절만 두면 비-UTF-8 입력이 raw traceback + exit 1 로 0/2/4 계약을 탈출한다.
-    이 리포에서 네 번 재발한 모양이다.
     """
     try:
         with open(path, encoding="utf-8") as f:
@@ -93,7 +96,8 @@ def _validated_state(name, state):
         if not performer:
             fail4(f"'{name}' 의 {FOLDED_PREFIX} 에 수행자가 없다")
         if not _PERFORMER.match(performer):
-            fail4(f"'{name}' 의 수행자 이름이 아니다: {performer!r}")
+            fail4(f"'{name}' 의 수행자 이름이 아니다: {performer!r} "
+                  "(소문자·숫자·하이픈만 — finding 의 `agent:` 와 정확히 같아야 한다)")
         return state
     if state.startswith(_ABSENT_PREFIX):
         m = _ABSENT_REASON.match(state)
