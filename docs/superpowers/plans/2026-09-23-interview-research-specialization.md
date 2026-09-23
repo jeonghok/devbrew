@@ -1751,8 +1751,9 @@ feat(spec-distill): C43 경로 (a) 를 계약 산출로 — 리터럴 마커 폐
 무조건화하면 DISABLE_WEB=1 세션에서 ∀ 술어가 순회할 항목이 0건이라 공허하게 통과한다.
 
 부재 락엔 양의 짝을 둔다 — 마커가 사라진 자리에 계약 산출 요구가 들어왔는지, 그리고 직접 수행
-문구가 있는지를 함께 잰다. 마커 리터럴은 `test_stale_terms.sh` V12 의 production 부재 목록에도
-올려 되살아나면 소리가 나게 한다.
+문구가 있는지를 함께 잰다. 마커 리터럴은 `test_stale_terms.sh` 의 **V14 신설**으로 production 부재를
+재게 해 되살아나면 소리가 나게 한다 — V12 에 얹지 않는다(그 블록의 메시지가 「v0.57.0 제거 어휘」라고
+말하므로 3.3.0 의 마커를 거기 넣으면 잔존이 잡힐 때 엉뚱한 릴리스를 가리킨다).
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01D5Xd9k8aYnt5ojzb9MU1J7
@@ -2057,6 +2058,13 @@ Expected: stale 락 `Fail: 0`. SKILL.md 줄 수를 측정해 보고한다(`< 480
 
 **교체 대상 열거를 신뢰하지 않는다** — Task 1 Step 3 이 낸 `cap-sites.txt` 를 그대로 쓴다. 설계 AC22 의 「여섯」은 `agents/` 만의 전수였다.
 
+**그 매처는 «선언된 리터럴»만 잰다 — 개념 별칭은 따로 훑는다.** `cap-sites.py` 의 키는
+`상한 2`·`fan-out 1`·`인터뷰당 1회`·`bounded …` 다. covmap 절은 **같은 하드 카운트를 다른 말로**
+세 번 더 말한다 — `dispatch 는 둘뿐이다` · `재개방 시 최대 1회` · `두 번째 재개방부터는 없다`.
+매처가 그것을 매치하지 않으므로 **「총 0 줄」이 거짓 clean 이 될 수 있다.** 그 셋은 Step 2 가
+교체하고 Step 1 의 부재 락 셋이 지키며 Step 4 가 따로 훑는다. 매처 자신은 손대지 않는다 —
+Task 1 이 기록한 15/14 기준선이 그 키에 묶여 있다.
+
 - [ ] **Step 1: cap-sites 를 다시 세고 실패하는 단언을 쓴다**
 
 ```bash
@@ -2098,7 +2106,16 @@ new2 = """{ grep -qF '1 + Σ' <<<"$covmap_flat" && grep -qF 'coverage_mapper_dis
   && ok "X4: 예산 식 + 카운터" || no "X4: 예산 식/카운터 부재"
 # 옛 어휘의 부재 — 한쪽만 고치면 두 상한이 공존해 어느 쪽이 계약인지 모른다.
 grep -qE '상한 2' <<<"$covmap_block" \\
-  && no "X4: 옛 «상한 2» 가 이 절에 잔존 (예산 식과 공존)" || ok "X4: 옛 «상한 2» 제거됨\""""
+  && no "X4: 옛 «상한 2» 가 이 절에 잔존 (예산 식과 공존)" || ok "X4: 옛 «상한 2» 제거됨\"
+# 위에서 지운 `재개방 ... 최대 1회` 단언을 **뒤집어** 되살린다. 그냥 지우면 그 산문이 남아도
+# 아무것도 막지 않는다 — 그리고 이 절의 번호 목록은 하드 카운트를 세 가지 «다른 표현»으로
+# 말한다(`둘뿐이다` · `최대 1회` · `두 번째 재개방부터는 없다`). 식별자만 재는 매처로는 잡히지
+# 않는다. 세 표현 전부의 부재를 요구하고, 양의 짝은 바로 위 예산 식 단언이다.
+for tok in '둘뿐이다' '최대 1회' '두 번째 재개방부터는 없다'; do
+  grep -qF -- "$tok" <<<"$covmap_block" \\
+    && no "X4: 옛 하드 카운트 «${tok}» 가 이 절에 잔존 — 예산 식과 모순한다" \\
+    || ok "X4: 옛 하드 카운트 «${tok}» 제거됨"
+done"""
 assert t.count(old2) == 1
 t = t.replace(old2, new2)
 
@@ -2147,10 +2164,15 @@ assert t.count(old4) == 1
 p.write_text(t.replace(old4, new4), encoding="utf-8")
 print("ok")
 PY
-bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -cE '✗'
+bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -cE '^  ✗ '
 ```
 
-Expected: `✗` 15건 내외.
+Expected: `✗` **정확히 17건**. 내역 — covmap 자격·자격우선·예산식 3 + covmap 예산식·카운터 1 +
+covmap 옛 `상한 2` 부재 1 + covmap 옛 하드 카운트 셋 3 + prober 자격·예산·옛키·옛하드 4 +
+C44 면제 다섯 5 = 17.
+
+**숫자가 다르면 멈추고 보고하라.** 이 기대값은 처음 「15건 내외」였다 — 이 브랜치에서 애매한
+기대값이 이빨 공백을 정확히 가린 전례가 있으므로(Task 10) 여기서도 정확히 요구한다.
 
 - [ ] **Step 2: SKILL.md 의 두 dispatch 절과 C44 절을 고친다**
 
@@ -2179,6 +2201,23 @@ new = """**호출 자격이 예산보다 앞선다.** 다시 부를 자격은 �
 일어나고 라운드는 사용자 답으로만 도므로 사용자가 시계다.
 
 카운터 `orchestration.coverage_mapper_dispatches`. 종료 시 audit §2 에 `coverage-mapper <k>`
+"""
+assert t.count(old) == 1
+t = t.replace(old, new)
+
+# ①-b 번호 목록도 새 계약을 말해야 한다. 「둘뿐이다」·「최대 1회」·「두 번째 재개방부터는 없다」
+# 셋은 예산 `1 + Σ(reopened)` 와 정면으로 모순하고, 남겨 두면 한 절이 두 규칙을 말한다.
+old = """orchestrator, G2). dispatch 는 둘뿐이다:
+"""
+new = """orchestrator, G2). 첫 dispatch 는 필수이고 그 뒤는 자격과 예산이 정한다:
+"""
+assert t.count(old) == 1
+t = t.replace(old, new)
+
+old = """2. **재개방 시 최대 1회.** 재개방이 새 파생 차원을 함의할 수 있어서다. 두 번째 재개방부터는 없다.
+"""
+new = """2. **재개방마다 한 번의 예산이 열린다.** 재개방이 새 파생 차원을 함의할 수 있어서다 — 그래서
+   예산이 `1 + 재개방 합` 이다. 자격이 없으면 예산이 남아도 부르지 않는다.
 """
 assert t.count(old) == 1
 t = t.replace(old, new)
@@ -2285,13 +2324,19 @@ cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burd
 echo "--- 두 장치의 옛 상한 문구 잔존 (0이어야 한다) — Task 1 의 같은 매처로"
 W=.superpowers/sdd/2026-09-23-interview-research-specialization
 python3 "$W/cap-sites.py" . || true
+echo "--- 개념 별칭 — 매처의 키가 못 보는 같은 하드 카운트 (0 이어야 한다)"
+CM=plugins/spec-distill/skills/conducting-interview/SKILL.md
+covmap="$(awk '/^## coverage-mapper dispatch/{f=1;print;next} /^## /{f=0} f' "$CM")"
+for tok in '둘뿐이다' '최대 1회' '두 번째 재개방부터는 없다'; do
+  if grep -qF -- "$tok" <<<"$covmap"; then echo "  ✗ «${tok}» 잔존"; else echo "  ✓ «${tok}» 없음"; fi
+done
 echo "--- 무관한 상한은 그대로여야 한다"
 grep -rc '재리뷰 상한 2' plugins/spec-distill/skills/reviewing-spec/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md
 grep -c '상한 2회' plugins/spec-distill/skills/conducting-interview/references/finishing.md
 grep -c 'RHYTHM_GUARD_THRESHOLD' plugins/spec-distill/skills/conducting-interview/SKILL.md
 ```
 
-Expected: 매처의 stdout 이 **비고** stderr 가 `총 0 줄`. 무관한 셋은 각각 `1`·`1`·`2` 이상 — **건드리지 않았다**. 매처가 한 줄이라도 내면 그 자리가 미교체이거나, 새로 쓴 문면이 우연히 옛 표기와 같아진 것이다.
+Expected: 매처의 stdout 이 **비고** stderr 가 `총 0 줄`. 그리고 **개념 별칭 셋 다 `✓`**. 무관한 셋은 각각 `1`·`1`·`2` 이상 — **건드리지 않았다**. 매처가 한 줄이라도 내면 그 자리가 미교체이거나, 새로 쓴 문면이 우연히 옛 표기와 같아진 것이다.
 
 - [ ] **Step 4.5: 잠정 천장을 실측 + 8 로 조인다 (Task 7 이 이 Task 에 넘긴 것)**
 
@@ -2433,7 +2478,7 @@ grep -qF '신 계약 미적용 brief' <<<"$fin_stepB" \\
 """ + anchor
 p.write_text(t.replace(anchor, new), encoding="utf-8")
 PY
-bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -cE '✗'
+bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -cE '^  ✗ '
 ```
 
 Expected: `✗` 13건 내외.
@@ -2646,7 +2691,7 @@ finish
 p.write_text(t[: -len(anchor)] + new, encoding="utf-8")
 print("ok")
 PY
-bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -cE '✗'
+bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -cE '^  ✗ '
 ```
 
 Expected: `✗` 9건.
@@ -2920,7 +2965,7 @@ finish
 p.write_text(t[: -len(anchor)] + new, encoding="utf-8")
 print("ok")
 PY
-bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | grep -cE '✗'
+bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | grep -cE '^  ✗ '
 ```
 
 Expected: `✗` 6건 내외(fixture 부재 + advisory 부재).
@@ -3275,7 +3320,7 @@ finish
 p.write_text(t[: -len(anchor)] + new, encoding="utf-8")
 print("ok")
 PY
-bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | grep -cE '✗'
+bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | grep -cE '^  ✗ '
 ```
 
 Expected: `✗` 5건 내외(술어가 없으므로 red 를 기대한 셀이 전부 통과한다).
@@ -3507,7 +3552,7 @@ finish
 p.write_text(t[: -len(anchor)] + new, encoding="utf-8")
 print("ok")
 PY
-bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | grep -cE '✗'
+bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | grep -cE '^  ✗ '
 ```
 
 Expected: `✗` 3건(red 셋이 아직 통과한다).
@@ -3816,7 +3861,7 @@ finish
 p.write_text(t[: -len(anchor)] + new, encoding="utf-8")
 print("ok")
 PY
-bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | grep -cE '✗'
+bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | grep -cE '^  ✗ '
 ```
 
 Expected: `✗` 3건.
