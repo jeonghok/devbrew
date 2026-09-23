@@ -1689,6 +1689,37 @@ s=s.replace(" [→ OQ1]"," [→ 없음]",1); p.write_text(s,encoding="utf-8")'
   && ok "V2-①(양의 짝): [→ 없음] sentinel 은 정직한 답이고 red 가 아니다" \
   || no "V2-①: sentinel 이 red 다 — 계약의 「빈 배열 허용」과 충돌하고 필러 절 압력을 만든다 (rc=$V2RC)"
 
+# ① 위치(Task 19 변이 g1 이 드러낸 공백) — 연결이 줄 끝이 아니라 줄 중간에 있으면(뒤에 다른
+# 문자가 붙으면) 여전히 red. `LINK_RE` 의 `$` 앵커가 없으면 이 fixture 가 조용히 green 이 된다
+# (mutation-matrix.txt g1 실측: fail=0 → 이 단언 추가 후 fail>0 로 확인).
+v2mut midline 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+s=s.replace(" [→ OQ1]"," [→ OQ1] (메모)",1); p.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT"; } \
+  && ok "V2-①(위치): 연결 뒤에 꼬리 문자가 붙으면 줄끝이 아니므로 red (LINK_RE 의 \$ 앵커)" \
+  || no "V2-①: 줄 중간 연결이 통과됐다 — \$ 앵커가 무력화됐을 수 있다 (rc=$V2RC)"
+
+# ① 개수 무관(Task 19 변이 g7 이 드러낸 공백) — 연결 누락이 4건 이상이어도 전부 red. ⟨C5⟩
+# (차단 판정에 개수 술어를 두지 않는다)의 실측: 메시지의 `[:3]` 은 표시 문면만 조이고 판정은
+# `if lm:` 로 여전히 개수 무관이다 — 이 단언이 없으면 「4건 넘으면 조용히 통과」로 바뀌어도
+# 스위트가 못 잡는다(mutation-matrix.txt g7 실측: fail=0 → 이 단언 추가 후 fail>0 로 확인).
+# audit §7 에도 같은 키를 선언해 「landscape keys not declared」가 섞여 원인이 두 갈래로
+# 안 갈리게 한다(원인 분리).
+v2mut manylink 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+extra="".join(f"- 여분 항목 {i} «src{i}» — [중립] — 사유 {i}\n" for i in range(1,5))
+assert s.count("## 5. 기각")==1
+s=s.replace("## 5. 기각", extra+"\n## 5. 기각", 1)
+p.write_text(s,encoding="utf-8")
+a=pathlib.Path(sys.argv[2]); t=a.read_text(encoding="utf-8")
+extra_audit="".join(f"- «src{i}» — https://example.com/src{i} — 픽스처용 선언\n" for i in range(1,5))
+assert t.count("## 7. 확산 원자료\n\n")==1
+t=t.replace("## 7. 확산 원자료\n\n", "## 7. 확산 원자료\n\n"+extra_audit, 1)
+a.write_text(t,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT"; } \
+  && ok "V2-①(⟨C5⟩): 연결 누락 4건도 전부 red — 개수가 차단을 끄지 않는다" \
+  || no "V2-①: 연결 누락 다건이 통과됐다 — 개수 임계가 차단에 끼어들었을 수 있다 (rc=$V2RC)"
+
 # ② 연결 대상 실재 — §3·§0 에 없는 OQ 를 가리킨다
 v2mut badtarget 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
