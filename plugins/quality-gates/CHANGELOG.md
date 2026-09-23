@@ -36,6 +36,23 @@
 
 **`/qg` 의 동작은 바뀌지 않는다.** 합성기의 판정 산출은 `--emit-verdict` 뒤에 있고 기본 off 이며, 켜지 않으면 stdout 이 이전과 바이트 동일하다 — 소비자 이주는 뒤 릴리스다.
 
+## [8.2.3] — 2026-09-23
+
+patch 인 이유 — 전부 `Fixed` 다. 이 플러그인의 `scripts/codex_findings_to_yaml.py` · `scripts/docreview_route.py` 는 `shared/` 로의 심볼릭 링크라 그 대상이 바뀐 이상 배포 트리 안의 코드가 바뀐 것이다(안 올리면 cache key 가 조용히 stale).
+
+### Fixed
+
+- **codex 변환기가 docreview keyset 에서 `replacement`·`if_unfixed` 를 버렸고, `same_as` 흡수가 흡수된 쪽의 산문 칸을 함께 버렸다.** 둘 다 값이 있는데 게이트가 「(대체안 미작성)」을 내게 했다. 전문·락은 `plugins/spec-distill/CHANGELOG.md` `[4.2.2]`. `default`·`design` keyset 의 출력 바이트는 그대로다(커밋된 고정 바이트 락 GREEN). 이 플러그인의 docreview 호출자는 여전히 0 이다.
+
+## [8.2.2] — 2026-09-23
+
+patch 인 이유 — 전부 `Fixed` 다. 설계·동작 변경 없음.
+
+### Fixed
+
+- **SKILL 제목 두 개가 8.0.0 bump 뒤에도 `(v7.0.0)` 이었다** — `skills/quality-pipeline/SKILL.md` · `skills/publishing-pr-understanding/SKILL.md`. `tests/harness/test_skill_orchestration_behavior.sh` 가 이것을 FAIL 둘로 잡고 있었다: 음의 락(틀린 major 를 단 제목)과, 그보다 무거운 양의 대조(shipped major 를 단 제목이 0개 — 이 상태에서는 제목 버전을 전부 지워도 음의 락이 공허 통과한다). 둘 다 `(v8.0.0)` 으로 고쳐 두 FAIL 을 해소했다. 같은 스위트의 선재 FAIL 둘(`iter cap near Review gate AskUserQuestion` · `R1b→R8 unclaimed 집행 사슬`)은 이 수정과 무관하며 그대로다.
+- **`shared/tests/test_python_floor.sh` 에 실행비트가 없었다** (`100644`). `scripts/run-test-selection.sh` 의 shell 어댑터는 `tests/*.sh` 경로 **그리고** `-x` 로 claim 하므로, 이 락은 Runtime 게이트의 차등 테스트 축에서 `unclaimed` 로 떨어져 `verification` 차원을 degrade 시켰다. 파일은 플러그인 밖(`shared/`)이지만 증상이 이 플러그인의 게이트에서 나므로 여기 적는다. 리포에 같은 상태의 `tests/*.sh` 가 더 있다 — 이 항목은 그것들을 고치지 않는다.
+
 ## [8.2.1] — 2026-09-23
 
 patch 인 이유 — 전부 `Fixed` 다. 이 플러그인은 프로필(`brief.md`·`design-doc.md`)도

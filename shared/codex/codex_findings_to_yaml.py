@@ -68,9 +68,11 @@ DESIGN_KEYS = ("file", "line", "category", "target_section",
                "severity", "confidence", "summary", "proposed_fix")
 # docreview 엔진(설계 §6.2)의 리뷰어 출력 필드 전부. `blocks`만 리스트값이다
 # (`ask` 전용 — 그 답이 전제인 fix 의 ref 목록, D16). `supersedes`는 값 하나(이전
-# 라운드 finding id)라 리스트가 아니다.
+# 라운드 finding id)라 리스트가 아니다. `replacement`·`if_unfixed` 는 러너 프롬프트가
+# `decide` 에 요구하는 두 칸이다 — 여기 없으면 codex 가 적은 값이 이 변환에서 버려진다.
 DOCREVIEW_KEYS = ("ref", "layer", "category", "anchor", "disposition", "summary",
-                  "edit_scope", "blocks", "supersedes", "evidence")
+                  "edit_scope", "blocks", "supersedes", "evidence",
+                  "replacement", "if_unfixed")
 
 # yaml_emit의 flow-list 렌더 분기가 발동해도 되는 키의 **닫힌 집합**. `isinstance(v,
 # list)`만으로 분기하면 안 된다 — codex 출력은 신뢰 안 되는 외부 LLM 생성 입력이고,
