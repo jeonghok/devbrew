@@ -934,6 +934,44 @@ case_T02_same_as_max() {
   assert_eq "$(jget "$d/fin.json" '[x["blocks"] for x in d["findings"] if "b.py" in x["summary"]][0] == [ [x["id"] for x in d["findings"] if "c.py" in x["summary"]][0] ]')" "True" "T02: blocks 가 남은 쪽의 최종 id 를 따라간다"
   rm -rf "$d"
 }
+# same_as 흡수는 판정자 하나만 남긴다 — 처분이 같으면 생존자는 f 번호 순으로 갈리고, f 번호는
+# 요약의 sha1 순(익명화)이라 출처와 무관하다. 한쪽만 `replacement`·`if_unfixed` 를 적었는데 생존자가
+# 빈 쪽이면 흡수된 쪽의 값이 함께 사라져 게이트가 「(대체안 미작성)」을 냈다(Task 20 e2e 실측).
+# 값은 늘 크리틱 쪽에만 싣고 두 요약을 **맞바꿔 두 번** 돌린다 — 요약이 f 순서를 정하므로 한 번은
+# 빈 쪽이 반드시 생존자다. 그 방향이 실제로 돌았는지를 마지막에 따로 단언한다(한 방향만 재고
+# 양방향이라 주장하는 공허 통과를 막는다).
+# 판정 헬퍼의 실패 계수(`_ASSERT_FAIL`)는 셸 변수라 `$( )` 서브셸 안에서 세면 사라진다 — 그래서
+# 이 헬퍼는 직접 부르고 결과는 전역 `_SAF_EMPTY_SURVIVED` 로 돌려준다.
+_same_as_fields_run() {   # _same_as_fields_run <크리틱 요약> <코덱스 요약> [replacement YAML 리터럴] [기대 replacement] [기대 coerced] — 생존자가 코덱스면 전역에 +1
+  local repl_lit="${3:-인라인 한 줄. └ 천장: 둘째 형식이 요청될 때}" repl_want="${4:-인라인 한 줄. └ 천장: 둘째 형식이 요청될 때}" coerced_want="${5:-0}"
+  local cr cx d fc fx rt q
+  cr="$(mktemp -t cr-XXXXXX.txt)"; cx="$(mktemp -t cx-XXXXXX.yaml)"; rt="$(mktemp -t rt-XXXXXX.txt)"
+  printf '```docreview-layer1\n- ref: c1\n  category: overdesign\n  anchor: "#51-parts"\n  disposition: decide\n  summary: "%s"\n  evidence: "크리틱 근거"\n  replacement: "%s"\n  if_unfixed: "크리틱 결과"\n```\n```docreview-layer2\n[]\n```\n' "$1" "$repl_lit" > "$cr"
+  printf 'findings:\n  - agent: codex-reviewer\n    ref: x1\n    layer: 1\n    category: overdesign\n    anchor: "#51-parts"\n    disposition: decide\n    summary: "%s"\n    evidence: "코덱스 근거"\nmeta:\n  codex_failed: false\n' "$2" > "$cx"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$cr")" --codex "$(codex_now "$d" "$cx")" > "$d/prep.json"
+  fc="$(jget "$d/prep.json" "[i['f'] for i in d['items'] if i['summary']=='$1'][0]")"
+  fx="$(jget "$d/prep.json" "[i['f'] for i in d['items'] if i['summary']=='$2'][0]")"
+  printf '```docreview-recritic\nverdicts:\n  - f: "%s"\n    verdict: confirm\n    same_as: ["%s"]\nadded: []\n```\n' "$fx" "$fc" > "$rt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
+  q='[x for x in d["findings"] if x["category"]=="overdesign"]'
+  assert_eq "$(jget "$d/fin.json" "len($q), d[\"adjudication_absorbed\"]")" "(1, 1)" "same_as 필드($1): 둘이 하나로 흡수된다(전제)"
+  assert_eq "$(jget "$d/fin.json" "$q[0][\"replacement\"]")" "$repl_want" "same_as 필드($1): 생존자에 replacement 가 남는다"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"]')" "$coerced_want" "same_as 필드($1): replacement 개행 접기는 값 하나에 정확히 $coerced_want 번 센다(흡수된 쪽은 렌더되지 않으므로 세지 않는다)"
+  assert_eq "$(jget "$d/fin.json" "$q[0][\"if_unfixed\"]")" "크리틱 결과" "same_as 필드($1): 생존자에 if_unfixed 가 남는다"
+  assert_eq "$(jget "$d/fin.json" "$q[0][\"evidence\"] == ('코덱스 근거' if $q[0][\"summary\"] == '$2' else '크리틱 근거')")" "True" "same_as 필드($1): 생존자가 이미 적은 evidence 는 덮지 않는다"
+  if [ "$(jget "$d/fin.json" "$q[0][\"summary\"]")" = "$2" ]; then _SAF_EMPTY_SURVIVED=$((_SAF_EMPTY_SURVIVED+1)); fi
+  rm -rf "$d" "$cr" "$cx" "$rt"
+}
+case_same_as_survivor_inherits_empty_fields() {
+  _SAF_EMPTY_SURVIVED=0
+  _same_as_fields_run "yagni: 첫째 요약" "yagni: 둘째 요약"
+  _same_as_fields_run "yagni: 둘째 요약" "yagni: 첫째 요약"
+  # 옛 두 줄 펜스를 베낀 값(YAML 이스케이프 `\n`) — 물려받은 값의 접기가 생존자 쪽에서 한 번만 세지는가
+  _same_as_fields_run "yagni: 첫째 요약" "yagni: 둘째 요약" '인라인 한 줄.\n  └ 천장: 둘째 형식이 요청될 때' "인라인 한 줄. └ 천장: 둘째 형식이 요청될 때" 1
+  _same_as_fields_run "yagni: 둘째 요약" "yagni: 첫째 요약" '인라인 한 줄.\n  └ 천장: 둘째 형식이 요청될 때' "인라인 한 줄. └ 천장: 둘째 형식이 요청될 때" 1
+  assert_eq "$_SAF_EMPTY_SURVIVED" "2" "same_as 필드: 맞바꾼 두 쌍 각각에서 정확히 한 번씩 빈 쪽이 생존자였다(채움 방향이 실제로 돌았다)"
+}
 case_T03_T04_raise() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   assert_eq "$(fsum "$d" 'Non-goals' '["disposition"]')" "decide" "T03: raise to=decide (이미 decide) — 유지"
