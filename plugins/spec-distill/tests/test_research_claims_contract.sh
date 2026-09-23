@@ -96,6 +96,15 @@ m_st="$(grep -oF "$SLOT2" "$STEEL" | wc -l | tr -d ' ')"
 assert_eq "$m_sk" "2" "B: SKILL.md 의 \`open_decisions\` 슬롯이 2개 (계약만 있고 결정 목록이 없으면 decides 를 채울 수 없다)"
 assert_eq "$m_st" "1" "B: steelman.md 의 \`open_decisions\` 슬롯이 1개"
 
+# F — 결정 연결 형식 넷과 레포 주장의 RC 상시 탑재(최종 리뷰 I-4). 정본이 말하지 않으면 계약을
+#     받은 장치가 닿는 결정 없는 레포 주장을 `[→ 없음]` 으로 내려 RC 를 잃는다. 줄바꿈에 관용하도록
+#     평탄화하고, 리터럴에 극성(「항상 … 싣는다」)과 짝(「웹 주장만 쓴다」)을 함께 문다.
+CANON_FLAT="$(tr '\n' ' ' < "$CANON" | tr -s ' ')"
+assert_contains "$CANON_FLAT" '레포 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]`, 웹 `[→ OQ<n>]` · `[→ 없음]`' \
+  "F: 정본이 결정 연결 형식 넷(레포 둘 · 웹 둘)을 댄다"
+assert_contains "$CANON_FLAT" '**레포 주장은 연결 안에 항상 `RC<n>` 을 싣는다** — 닿는 결정이 없어도 `[RC<n> → 없음]` 이고, `[→ …]` 는 웹 주장만 쓴다' \
+  "F: 정본이 레포 주장의 RC 상시 탑재와 웹 전용 형식을 못 박는다"
+
 # C — 내용을 얻는 펜스.
 FENCE="$SCRATCH/fence.sh"; cut_marked "$SKILL" > "$FENCE"
 n_fence="$(grep -c . "$FENCE" || true)"

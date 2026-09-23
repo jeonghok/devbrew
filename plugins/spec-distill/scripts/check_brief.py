@@ -920,13 +920,15 @@ def coverage_anchor_failures(audit_text: str, anchors: set) -> list[str]:
 # 개수를 넣지 않는다.
 RC_RE = re.compile(r"(?<![A-Za-z])RC\d+\b")
 OQ_RE = re.compile(r"(?<![A-Za-z])OQ\d+\b")
-# 줄 끝 연결 — 셋 중 하나(§H ③). `[→ 없음]` sentinel 은 정직한 답이고 red 가 아니다: §A 계약이
+# 줄 끝 연결 — 넷 중 하나(§H ③ + 최종 리뷰 I-4): 레포 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]`,
+# 웹 `[→ OQ<n>]` · `[→ 없음]`. `없음` sentinel 은 정직한 답이고 red 가 아니다: §A 계약이
 # 「빈 배열은 허용이고 거짓 연결보다 낫다」를 못 박으므로 sentinel 없는 ∀ 는 그 계약과 충돌하고
 # 「필러 절」 압력을 만든다. **「없음」의 개수는 세지 않는다.**
+# 레포 주장의 sentinel 이 `RC<n>` 을 싣는 이유: 닿는 결정이 없는 레포 주장을 `[→ 없음]` 으로만 쓰면
+# `RC<n>` 리터럴이 줄에서 사라질 수 있고, 그러면 `payload_rc_ids` 밖이라 ④⑤ 가 그 주장을 못 본다.
+# group(1) = 레포 id(웹이면 None) · group(2) = 대상(`OQ…` 목록 또는 `없음`).
 LINK_RE = re.compile(
-    r"\[(?:(RC\d+)\s*→\s*(OQ\d+(?:\s*·\s*OQ\d+)*)"
-    r"|→\s*(OQ\d+(?:\s*·\s*OQ\d+)*)"
-    r"|→\s*없음)\]\s*$")
+    r"\[(?:(RC\d+)\s*)?→\s*(OQ\d+(?:\s*·\s*OQ\d+)*|없음)\]\s*$")
 CONTRACT_KEY, CONTRACT_V2 = "contract", "v2"
 DERIVED_INTERNAL_RESEARCH = "derived:internal_research"
 CONFIRM_ROW_RE = re.compile(r"^확인\s+(RC\d+)\s+—\s+(확인|반증|미확인)\s+—\s*(\S.*)$")
@@ -975,7 +977,8 @@ def payload_rc_ids(text: str) -> list[str]:
 
 
 def research_link_missing(text: str) -> list[str]:
-    """① 연결 ∀ — 조사 항목마다 줄 **끝**에 `[RC<n> → OQ<n>]` · `[→ OQ<n>]` · `[→ 없음]` 하나.
+    """① 연결 ∀ — 조사 항목마다 줄 **끝**에 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]` · `[→ OQ<n>]` ·
+    `[→ 없음]` 하나.
 
     ∀ 이고 개수 술어가 아니다. 순회할 항목이 0건이면 공허하게 통과한다 — `landscape_unkeyed` 의
     docstring 이 같은 판단을 이미 적었다: 「web-off brief는 §4에 순회할 항목이 없어 공허하게
@@ -1022,7 +1025,8 @@ def _declared_decisions(text: str) -> set:
 def research_link_targets_missing(text: str) -> list[str]:
     """② 연결 대상 실재 — 쓰인 `OQ<n>` 이 §3 또는 §0 의 결정 목록에 있는가.
 
-    `[→ 없음]` 은 대상이 아니다. 연결이 0건이면 공허하게 통과한다(① 이 연결 부재를 따로 잡는다).
+    `없음` sentinel(`[→ 없음]` · `[RC<n> → 없음]`)은 대상이 아니다. 연결이 0건이면 공허하게
+    통과한다(① 이 연결 부재를 따로 잡는다).
     """
     declared = _declared_decisions(text)
     fails = set()
@@ -1047,8 +1051,12 @@ def research_backref_missing(text: str) -> list[str]:
     언급한 상호참조 줄은 그 결정의 줄이 아니다 — 거기에 근거 id 를 요구하면 정직한 상호참조가
     막힌다(최종 리뷰 I-1).
 
-    웹 항목(`[→ OQ…]`)과 sentinel 은 id 가 없으므로 이 검사의 대상이 아니다 — 웹 출처는
+    웹 항목(`[→ OQ…]`)과 sentinel 은 결정 대상이 없으므로 이 검사의 대상이 아니다 — 웹 출처는
     «출처키»↔audit §7(N2)가 이미 결속한다.
+
+    **반대 방향도 같은 함수에서 본다**(Ruling 76): §3·§0 항목 줄이 가리키는 `RC<n>` 은 조사 항목
+    (§4·§5)에 실재해야 한다 — `payload_rc_ids ⊇ 인용 RC`. 없으면 역참조가 출처 없는 id 를 가리키고,
+    그 id 는 확인 줄 ∀(⑤)의 순회 밖이라 아무 검사도 받지 않는다. 개수는 세지 않는다(⟨C5⟩).
     """
     want: dict = {}
     for ln in research_entries(text):
@@ -1057,8 +1065,7 @@ def research_backref_missing(text: str) -> list[str]:
             continue
         for oq in OQ_RE.findall(m.group(0)):
             want.setdefault(oq, set()).add(m.group(1))
-    if not want:
-        return []
+    sourced = set(payload_rc_ids(text))
     fails = set()
     for num, title in DECISION_SECTIONS:
         for ln in _entry_lines(_section_text(text, num, title)):
@@ -1066,6 +1073,8 @@ def research_backref_missing(text: str) -> list[str]:
             for rc in want.get(oq, ()):
                 if rc not in ln:
                     fails.add(f"§{num} 의 {oq} 줄이 근거 {rc} 를 되가리키지 않는다")
+            for rc in set(RC_RE.findall(ln)) - sourced:
+                fails.add(f"§{num} 의 {oq or '항목'} 줄이 가리키는 근거 {rc} 가 조사 항목(§4·§5)에 없다")
     return sorted(fails)
 
 
@@ -1326,14 +1335,14 @@ def gate(path: Path) -> int:
             lm = research_link_missing(text)
             if lm:
                 failures.append(
-                    "조사 항목에 결정 연결 없음 (줄 끝에 `[RC<n> → OQ<n>]` · `[→ OQ<n>]` · "
-                    f"`[→ 없음]` 중 하나): {lm[:3]}")
+                    "조사 항목에 결정 연결 없음 (줄 끝에 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]` · "
+                    f"`[→ OQ<n>]` · `[→ 없음]` 중 하나): {lm[:3]}")
             tm = research_link_targets_missing(text)
             if tm:
                 failures.append(f"결정 연결 대상 부재: {tm[:3]}")
             bm = research_backref_missing(text)
             if bm:
-                failures.append(f"역참조 누락: {bm[:3]}")
+                failures.append(f"역참조 불일치: {bm[:3]}")
         if audit_text:
             amiss2 = find_missing_sections(audit_text, AUDIT_SECTIONS)
             if not any(m.startswith("1.") for m in amiss2):

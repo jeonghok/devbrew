@@ -1860,6 +1860,32 @@ p.write_text(s,encoding="utf-8")'
 { [[ "$V2RC" -ne 0 ]] && grep -q 'OQ9 가 payload' <<<"$V2OUT"; } \
   && ok "V2-②(선두 OQ): 줄 중간의 OQ9 언급은 결정 선언이 아니다 — 그것을 가리키는 연결은 red" \
   || no "V2-②(선두 OQ): 줄 중간 언급이 결정을 선언했다 (rc=$V2RC)"
+# 넷째 형식 `[RC<n> → 없음]`(최종 리뷰 I-4) — 닿는 결정이 없는 **레포** 주장도 연결 안에 RC 를 싣는다.
+# `[→ 없음]` 으로만 쓰면 RC 리터럴이 줄에서 사라질 수 있고 ④⑤ 가 그 주장을 못 본다. green fixture 의
+# §5 에 `[RC5 → 없음]` 줄이 있다 — 그 형식이 ① 을 통과하고(위 V2-OPT-b), 그 RC5 가 ⑤ 의 순회에 든다.
+v2mut rcnone 'import sys,pathlib,re
+p=pathlib.Path(sys.argv[1]); assert p.read_text(encoding="utf-8").count("[RC5 → 없음]")==1
+a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding="utf-8")
+assert len(re.findall(r"^- 확인 RC5 .*$\n",s,flags=re.M))==1
+a.write_text(re.sub(r"^- 확인 RC5 .*$\n","",s,flags=re.M),encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q 'RC5' <<<"$V2OUT"; } \
+  && ok "V2-①(넷째 형식): [RC5 → 없음] 줄의 RC5 가 확인 줄 ∀ 의 순회에 든다 — 확인 줄을 지우면 red" \
+  || no "V2-①(넷째 형식): [RC<n> → 없음] 의 RC 가 순회 밖이다 (rc=$V2RC)"
+# ③ 의 반대 방향(Ruling 76) — §3·§0 이 가리키는 RC 는 조사 항목(§4·§5)에 실재해야 한다.
+v2mut dangling 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+o3="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3\n"; o0="- OQ4 [해결 ⟨S1⟩] — 렌더링 전략 → 근거 RC3\n"
+assert s.count(o3)==1 and s.count(o0)==1 and "RC9" not in s
+s=s.replace(o3,o3+"- OQ2: 세션 저장소 → 근거 RC9\n").replace(o0,o0+"- OQ2 [열림] — 세션 저장소 → 근거 RC9\n")
+p.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q 'RC9 가 조사 항목' <<<"$V2OUT"; } \
+  && ok "V2-③(역방향): §3·§0 이 조사 항목에 없는 RC9 를 가리키면 red (그 id 를 이름으로 댄다)" \
+  || no "V2-③(역방향): 출처 없는 역참조가 통과됐다 (rc=$V2RC)"
+printf '%s' "$V2OUT" | python3 -c 'import json,re,sys
+d=json.load(sys.stdin)
+msgs=[x for x in d["failures"] if "역참조" in x]
+print("CLEAN" if msgs and not any(re.search(r"[0-9]+건|[0-9]+개", m) for m in msgs) else "BAD")' | grep -q CLEAN \
+  && ok "V2-③(역방향): 차단 메시지에 개수가 없다 (⟨C5⟩)" || no "V2-③(역방향): 메시지가 없거나 개수가 들어갔다 (⟨C5⟩)"
 # V2-④ — 이름 정확 일치 derived + closed. **red 가 셋** 필요하다: 행 부재 · 이름 다름 · open.
 # 라운드 1 실측: `- derived:unrelated-ui — open — ` 한 줄이 기존 두 함수를 **둘 다** 통과했다.
 v2mut d4a 'import sys,pathlib

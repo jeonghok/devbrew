@@ -31,6 +31,7 @@ source: spec-distill conducting-interview 4.3.0
 
 - round 1: (d) ontological — 진짜 목표 재구성
 - 확인 RC3 — 확인 — plugins/spec-distill/scripts/check_brief.py#coverage_anchor_failures — 주장과 일치
+- 확인 RC5 — 미확인 — plugins/spec-distill/scripts/check_brief.py#gate — 세션 키를 다루는 자리인지 확정하지 못했다
 
 ## 6. 사용자 원문
 

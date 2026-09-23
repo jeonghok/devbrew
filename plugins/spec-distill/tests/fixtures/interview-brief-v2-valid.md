@@ -47,6 +47,7 @@ TTFP를 줄이는 것이 진짜 목표다.
 - 기각 — N/A — 전부 first-time defend+lock
 - 검토 — steelman 0건: 검토한 방향 1개 · 전제 P1 · trigger 후보 landscape 모순 → 기각 이유 모순 없음
 - 위험 — 숨은 가정 | 캐시 계층이 인증 뷰를 이미 다룬다 — RC3 [RC3 → OQ1 · OQ4]
+- 위험 — 실패 양식 | 세션 키 충돌은 열린 결정과 무관하다 — RC5 (plugins/spec-distill/scripts/check_brief.py#gate) [RC5 → 없음]
 
 ## 6. 사용자 원문
 - **S1** 🗣 최초 요청:

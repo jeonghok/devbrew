@@ -420,6 +420,14 @@ grep -qF 'steelman trigger 와 DEVBREW_SPEC_DISTILL_DISABLE_WEB 어느 것에도
 # §3 은 순회 범위 밖이라는 것도 여기서 못 박는다(자기지시 방지 — 설계 §E).
 grep -qF '§3 은 연결의 대상이고 출처가 아니다' <<<"$round_flat" \
   && ok "V1: §3 이 대상이고 출처가 아님을 명시" || no "V1: §3 의 역할 구분 부재"
+# 계약 산출 규칙의 형식 넷(최종 리뷰 I-4) — 넷째가 빠지면 레포 주장이 `[→ 없음]` 으로 RC 를 잃는다.
+for form in '[RC3 → OQ1]' '[RC3 → 없음]' '[→ OQ1]' '[→ 없음]'; do
+  grep -qF -- "$form" <<<"$round_block" \
+    && ok "AC19: 라운드 규약의 결정 연결 형식 «${form}»" || no "AC19: 라운드 규약의 결정 연결 형식 «${form}» 부재"
+done
+grep -qF '레포 주장은 연결 안에 항상 `RC<n>` 을 싣는다' <<<"$round_flat" \
+  && ok "AC19: 라운드 규약 — 레포 주장은 연결 안에 항상 RC 를 싣는다" \
+  || no "AC19: 라운드 규약에서 RC 상시 탑재 규칙이 없거나 뒤집혔다"
 
 # 2026-09-23: 이 절이 이제 `OQ<n>` 표기를 담는다(결정 연결). 옛 `Q<n>` 어휘의 부재는
 # **단어 경계**로 재야 한다 — `-F 'Q1'` 은 `OQ1` 안의 두 글자를 매치해 정당한 입력을 거부한다.
@@ -822,10 +830,21 @@ grep -qF '*원래 / 재결정 / 근거*' <<<"$fin_stepA_flat" \
   && ok "AC7: 반증의 세 칸 기록" || no "AC7: 반증 세 칸 부재"
 grep -qF '재결정 자체는 사용자 동의로만' <<<"$fin_stepA_flat" \
   && ok "AC7/P23: 재결정은 사용자 동의로만" || no "AC7/P23: 재결정 권한 문구 부재 — 기록 형식이 판정 권한으로 읽힌다"
-for form in '[RC3 → OQ1]' '[→ OQ1]' '[→ 없음]' '→ 근거 RC3' '[해결 ⟨S10⟩]'; do
+for form in '[RC3 → OQ1]' '[RC3 → 없음]' '[→ OQ1]' '[→ 없음]' '→ 근거 RC3' '[해결 ⟨S10⟩]'; do
   grep -qF -- "$form" <<<"$fin_stepA" \
     && ok "AC19: 직렬화 형식 «${form}»" || no "AC19: 직렬화 형식 «${form}» 부재"
 done
+# 넷째 형식의 존재 이유(최종 리뷰 I-4) — 레포 주장이 `[→ 없음]` 으로만 쓰이면 RC 리터럴이 줄에서
+# 사라져 V2 대조 · 게이트 ④⑤ 가 그 주장을 못 본다. 리터럴에 극성(「항상 … 싣는다」)과 짝(「웹 주장만」)을
+# 함께 문다 — 「싣지 않는다」·「레포 주장만」 으로 뒤집으면 리터럴이 사라진다.
+grep -qF '**레포 주장은 연결 안에 항상 `RC<n>` 을 싣는다**(웹 주장만 `[→ …]`)' <<<"$fin_stepA_flat" \
+  && ok "AC19: 레포 주장은 연결 안에 항상 RC 를 싣는다 (웹 주장만 [→ …])" \
+  || no "AC19: 레포 주장의 RC 상시 탑재 규칙이 없거나 뒤집혔다 — RC 가 줄에서 사라져 ④⑤ 밖으로 빠진다"
+# 연결의 «위치»(M-5) — 게이트의 `LINK_RE` 는 `$` 앵커라 줄 끝만 받는다. 「줄 머리」 로 바뀌면 지시가
+# 사용자를 red 로 이끈다. 위치 낱말을 리터럴 안에 문다.
+grep -qF '조사 항목 줄 **끝**에 넷 중 하나' <<<"$fin_stepA_flat" \
+  && ok "AC19: 결정 연결의 위치 = 조사 항목 줄 끝 (게이트 LINK_RE 의 \$ 앵커와 같은 자리)" \
+  || no "AC19: 결정 연결 위치가 «줄 끝» 이 아니거나 형식 수가 넷이 아니다 — 게이트는 줄 끝만 받는다"
 grep -qF '§3 은 미해결의 목록이다' <<<"$fin_stepA_flat" \
   && ok "AC19: §0 이 상위집합 · §3 이 그 중 열린 것" || no "AC19: §0/§3 포함 관계 문구 부재"
 grep -qF '§2 는 대상이 아니다' <<<"$fin_stepA_flat" \
@@ -1355,9 +1374,12 @@ TPL_A="$REPO_ROOT/plugins/spec-distill/templates/interview-audit-template.md"
 [[ -f "$TPL_B" && -f "$TPL_A" ]] && ok "템플릿 둘 실재" || no "템플릿 둘 중 하나가 없다"
 grep -qE '^contract: v2$' "$TPL_B" \
   && ok "AC23: payload 템플릿이 contract: v2 를 넣는다" || no "AC23: contract: v2 부재 — 새 술어가 영구 미발동이다"
-for form in '[RC3 → OQ1]' '[→ OQ1]' '[→ 없음]' '→ 근거 RC3'; do
+for form in '[RC3 → OQ1]' '[RC4 → 없음]' '[→ OQ1]' '[→ 없음]' '→ 근거 RC3' '`[RC<n> → 없음]`'; do
   grep -qF -- "$form" "$TPL_B" && ok "AC19: payload 템플릿 예시 «${form}»" || no "AC19: payload 템플릿 예시 «${form}» 부재"
 done
+grep -qF '레포 주장은 연결 안에 항상 `RC<n>` 을 싣는다(웹 주장만 `[→ …]`)' "$TPL_B" \
+  && ok "AC19: payload 템플릿 — 레포 주장은 연결 안에 항상 RC 를 싣는다" \
+  || no "AC19: payload 템플릿에서 RC 상시 탑재 규칙이 없거나 뒤집혔다"
 grep -qE '^- OQ1 \[열림\] ' "$TPL_B" \
   && ok "AC19: §0 결정 목록이 불릿 + 상태 토큰" || no "AC19: §0 결정 목록이 불릿 줄이 아니다 (게이트가 항목으로 못 읽는다)"
 grep -qF 'OQ4 [해결 ⟨S10⟩]' "$TPL_B" \
