@@ -188,6 +188,11 @@ printf '%s\n' "$CLAIMS_CONTRACT"
 매 라운드의 «지금 이해»·«질문» 에 어떤 path 인지 명시하십시오 — 경로 (a) 로 찾을 수 있는 것은 묻기 전에
 먼저 찾아 «지금 이해»에 싣습니다.
 
+**경로 (a) 가 `repo_claims[]` 를 처음 산출하면 그 자리에서 derived 차원 internal_research 를 원장에
+admit 한다**(coverage-mapper 제안과 무관 — 조사 행위가 그 차원을 함의한다). 이름은 그 글자대로 쓴다:
+게이트가 **정확 일치**로 재고 `internal_research_apparatus` 같은 유사 이름으로는 만족되지 않는다.
+그 차원은 **레포 주장의 처분 S** 로 닫고 evidence 에 그 S 를 인용한다 — 종료 시점엔 늦다(닫힘 규칙).
+
 ## 사용자 발화 기록 (G1, AC1)
 
 매 round 끝에 사용자가 실제로 답한 것을 `user_statements`에 append합니다. **여기서 무엇도
