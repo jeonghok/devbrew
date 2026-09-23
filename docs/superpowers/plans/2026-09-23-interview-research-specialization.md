@@ -4143,7 +4143,7 @@ v2mut c5web 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
 assert "[→ OQ1]" in s; p.write_text(s,encoding="utf-8")'
 [[ "$V2RC" -eq 0 ]] \\
-  && ok "V2-⑤: 웹 항목(`[→ OQ<n>]`)은 확인 줄을 요구받지 않는다" || no "V2-⑤: 웹 항목에 확인 줄을 요구했다 (rc=$V2RC)"
+  && ok "V2-⑤: 웹 항목(「[→ OQ<n>]」)은 확인 줄을 요구받지 않는다" || no "V2-⑤: 웹 항목에 확인 줄을 요구했다 (rc=$V2RC)"
 finish
 """
 p.write_text(t[: -len(anchor)] + new, encoding="utf-8")
