@@ -1720,6 +1720,75 @@ a.write_text(t,encoding="utf-8")'
   && ok "V2-①(⟨C5⟩): 연결 누락 4건도 전부 red — 개수가 차단을 끄지 않는다" \
   || no "V2-①: 연결 누락 다건이 통과됐다 — 개수 임계가 차단에 끼어들었을 수 있다 (rc=$V2RC)"
 
+# ⟨C5⟩(정적) — 위 동적 셀(manylink)은 4건이라는 리터럴 임계에 맞춰 만든 것이라, 다른 임계값
+# (예: `>= 10`)이나 `len()` 없이 개수를 세는 형태(`sum(1 for _ in bad) > N`)에는 손이 안 닿는다
+# (Task 19 fix round 1 — 리뷰가 이 fitted-to-literal 갭을 지목). AST 로 다섯 술어 함수 +
+# gate() 의 `if contract_v2(text):` 블록 본문을 직접 파싱해, `len(...)` 호출과 정수 리터럴
+# 비교(`Compare` 피연산자에 int `Constant`)가 하나도 없는지 임계값과 무관하게 확인한다.
+# 양성 대조 둘 — (1) 발견된 함수 이름 집합이 정확히 다섯과 같다(개명해도 공허통과 안 됨)
+# (2) `contract_v2` If-노드를 실제로 찾았다 — 둘 중 하나라도 깨지면 그 사실 자체를 NO 로
+# 보고한다(「개수 술어 없음」으로 오판하지 않는다).
+c5static="$(PYTHONDONTWRITEBYTECODE=1 python3 - "$SCRIPT" <<'PY'
+import ast, sys
+
+path = sys.argv[1]
+src = open(path, encoding="utf-8").read()
+tree = ast.parse(src)
+
+TARGET_FUNCS = ("research_link_missing", "research_link_targets_missing",
+                "research_backref_missing", "internal_research_dimension_failures",
+                "research_confirm_missing")
+
+func_nodes = {n.name: n for n in ast.walk(tree)
+              if isinstance(n, ast.FunctionDef) and n.name in TARGET_FUNCS}
+if set(func_nodes) != set(TARGET_FUNCS):
+    print("NO\t다섯 함수 이름 집합이 일치하지 않는다 (found=%s)" % sorted(func_nodes)); sys.exit(0)
+
+gate_node = next((n for n in ast.walk(tree)
+                   if isinstance(n, ast.FunctionDef) and n.name == "gate"), None)
+contract_if = None
+if gate_node is not None:
+    for n in ast.walk(gate_node):
+        if (isinstance(n, ast.If) and isinstance(n.test, ast.Call)
+                and isinstance(n.test.func, ast.Name) and n.test.func.id == "contract_v2"):
+            contract_if = n; break
+if contract_if is None:
+    print("NO\tgate() 안에서 `if contract_v2(text):` If-노드를 찾지 못했다"); sys.exit(0)
+
+def offenders(nodes):
+    out = []
+    for n in nodes:
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "len":
+            out.append("line %d len()" % n.lineno)
+        elif isinstance(n, ast.Compare):
+            for op in [n.left] + list(n.comparators):
+                if isinstance(op, ast.Constant) and isinstance(op.value, int) and not isinstance(op.value, bool):
+                    out.append("line %d int(%r) 비교" % (n.lineno, op.value))
+    return out
+
+groups = [(name, [node]) for name, node in sorted(func_nodes.items())]
+groups.append(("gate()/contract_v2", contract_if.body))
+
+bad = []
+for name, stmts in groups:
+    ns = []
+    for s in stmts:
+        ns.extend(ast.walk(s))
+    off = offenders(ns)
+    if off:
+        bad.append(name + ": " + "; ".join(off))
+
+if bad:
+    print("NO\t" + " | ".join(bad))
+else:
+    print("YES\t다섯 함수 + contract_v2 블록 전부 개수 술어(len 호출·정수 리터럴 비교) 없음")
+PY
+)"
+case "$c5static" in
+  YES*) ok "⟨C5⟩(정적): 다섯 술어와 옵트인 블록에 개수 술어가 없다" ;;
+  *)    no "⟨C5⟩(정적): $c5static" ;;
+esac
+
 # ② 연결 대상 실재 — §3·§0 에 없는 OQ 를 가리킨다
 v2mut badtarget 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
