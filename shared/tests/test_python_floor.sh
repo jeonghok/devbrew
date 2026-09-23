@@ -56,8 +56,10 @@ fi
 # 고르므로, 남아 있으면 fixture 가 아니라 개발자 환경을 잰다〔실측: DEVBREW_SKIP_HOOKS=qg:h 가
 # export 된 셸에서 36건 RED〕 — 만족하는 $DEVBREW_PYTHON 이면 음성 단언이 조용히 공허해진다.
 # 이름은 셸 내장 `compgen -e` 로 도출한다: 손으로 쓴 목록은 내일 생길 스위치를 못 본다.
+# 증인은 «다른 수단»(자식 프로세스 `env`)으로 잰다 — 같은 `compgen` 으로 재면 그것이 고장 났을 때
+# 정리와 증인이 함께 아무것도 못 보고 GREEN 이다〔리뷰 실측: `enable -n compgen`〕.
 for _v in $(compgen -e DEVBREW_); do unset "$_v"; done
-assert_eq "$(compgen -e DEVBREW_ | wc -l | tr -d ' ')" "0" \
+assert_eq "$(env | grep -c '^DEVBREW_')" "0" \
   "증인: 물려받은 DEVBREW_* 환경 변수를 전부 비웠다 (fixture 만 잰다)"
 
 # 출하 바닥은 **해석기에서 도출한다** — 숫자를 이 락에 리터럴로 핀하면 바닥이 움직이는 날
@@ -508,17 +510,22 @@ assert_contains "$out" "arg=[a b]" "I/RF5: 공백이 든 인자가 쪼개지지 
 
 note "── 축 B: 배포 — 물리 사본 (AC11 · C9 · C10) ───────────────────────────"
 
-# 사본 자리와 hooks.json 을 리터럴로 열거하지 않는다. 목록은 네 번째 플러그인이 훅을 얻는 것도,
-# 마커 없는 사본이 새로 생기는 것도 못 본다 — 후자는 `test_copy_of_contract.sh` 축 1b 도 안 본다
-# (마커가 있는 파일만 훑는다). 추적 파일에서 두 집합을 따로 도출해 서로 대조한다:
-#   (a) 있는 사본 — shared/python/ 밖의 추적된 devbrew-python.sh 전부(심볼릭 링크 포함)
+# 사본 자리와 hooks.json 을 리터럴로 열거하지 않는다. 목록은 네 번째 플러그인이 훅을 얻는 것을
+# 못 보고, 그 플러그인에 사본이 «빠진» 것은 `test_copy_of_contract.sh` 도 못 본다(있는 파일만
+# 훑는다). 두 집합을 따로 도출해 서로 대조한다:
+#   (a) 있는 사본 — shared/python/ 밖의 devbrew-python.sh 전부(심볼릭 링크 포함)
 #   (b) 있어야 할 사본 — hooks.json 이 해석기를 부르는 플러그인마다 하나
-HOOKS_JSONS="$(git ls-files 'plugins/*/hooks/hooks.json')"
-COPY_FILES="$(git ls-files '*devbrew-python.sh' | grep -v '^shared/python/' | sort)"
+# **index 만 보지 않는다** — `--others --exclude-standard` 가 없으면 아직 `git add` 하지 않은 새
+# hooks.json·사본이 양쪽에서 똑같이 빠져 커밋 전 실행이 GREEN 이다. 형제 락과 같은 플래그다
+# (test_copy_of_contract.sh · test_guards_coverage_bidirectional.sh).
+HOOKS_JSONS="$(git ls-files --cached --others --exclude-standard 'plugins/*/hooks/hooks.json' | sort -u)"
+COPY_FILES="$(git ls-files --cached --others --exclude-standard '*devbrew-python.sh' | grep -v '^shared/python/' | sort -u)"
 REQ_COPIES="$(for hj in $HOOKS_JSONS; do
                 grep -q 'scripts/devbrew-python\.sh' "$hj" && printf '%s/scripts/devbrew-python.sh\n' "${hj%/hooks/hooks.json}"
               done | sort)"
 assert_eq "$COPY_FILES" "$REQ_COPIES" "B/AC11: 있는 사본 집합 = hooks.json 이 해석기를 부르는 플러그인 집합 (남는 사본도 빠진 사본도 없다)"
+[ "$COPY_FILES" = "$REQ_COPIES" ] || { printf '      있는데 불필요(왼쪽) · 필요한데 없음(오른쪽):\n'
+  comm -3 <(printf '%s\n' "$COPY_FILES") <(printf '%s\n' "$REQ_COPIES") | sed 's/^/        /'; }
 n_copy=0
 for c in $(printf '%s\n%s\n' "$COPY_FILES" "$REQ_COPIES" | sort -u); do
   n_copy=$((n_copy+1))
@@ -653,7 +660,7 @@ for hj in $HOOKS_JSONS; do   # 축 B 머리에서 git ls-files 로 도출했다
 $hj_cmds
 EOF
 done
-assert_eq "$n_cmd" "4" "C/AC1: hooks.json 3 파일에서 호출 자리 4건을 셌다"
+assert_eq "$n_cmd" "4" "C/AC1: hooks.json $(printf '%s\n' "$HOOKS_JSONS" | grep -c .)개 파일에서 호출 자리 4건을 셌다"
 assert_eq "$n_bare" "0" "C/AC1: bare python3 로 시작하는 자리가 0 이다"
 
 # AC9 (설계 2026-09-23) — 위는 command 의 «모양» 이다. 실제로 cwd 의 `sh` 를 안 집는지는 실행으로
@@ -696,8 +703,13 @@ assert_eq "$n_shexec" "4" "C/AC9: 실행으로 잰 command 자리가 4건이다"
 # plugin-audit 가 사본을 읽지조차 않았고, 사본을 통째로 지워도 True 였다〔실측〕.
 # 배선이 생긴 지금부터는 command 의 `.sh` 와 `.py` 를 **둘 다** 판독하므로,
 # 해석기가 심볼릭 링크면 `.resolve()` 가 `shared/` 로 풀려 containment 가 거부되고
-# 세 플러그인 모두에 거짓 「kill switch 부재」가 난다(C9·R13).
-for p in project-init quality-gates spec-distill; do
+# 해석기를 부르는 플러그인 모두에 거짓 「kill switch 부재」가 난다(C9·R13). 대상 플러그인은
+# 축 B 의 REQ_COPIES(hooks.json 이 해석기를 부르는 플러그인)에서 도출한다 — 새로 배선된 플러그인이
+# 이 판정에서 조용히 빠지지 않게.
+n_audit=0
+for c in $REQ_COPIES; do
+  p="${c#plugins/}"; p="${p%%/*}"
+  n_audit=$((n_audit+1))
   v="$(python3 plugins/plugin-audit/scripts/check-shape-completeness.py "plugins/$p" 2>/dev/null \
       | python3 -c 'import json,sys
 try: d = json.load(sys.stdin)["shape_gaps"]
@@ -706,6 +718,8 @@ m = [g["present"] for g in d if g["requirement"] == "hooks_killswitch"]
 print(m[0] if m else "absent")')"
   assert_eq "$v" "True" "C/AC11: plugin-audit 가 $p 의 hooks_killswitch 를 참으로 낸다"
 done
+[ "$n_audit" -ge 1 ] && ok "C/AC11: 감사기 판정 대상 ${n_audit}개를 도출했다 (vacuous 아님)" \
+  || no "C/AC11: 감사기 판정 대상을 하나도 도출하지 못했다"
 
 note "── 축 C2: PATH 격리 시뮬레이션 (AC12 · L3) ───────────────────────────"
 # **먼저 이 PATH 의 python3 가 정말 바닥 미만인지 확인한다.** Apple 이 그것을 올리면
