@@ -2253,10 +2253,10 @@ new = """`non_user_streak >= DEVBREW_SPEC_DISTILL_RHYTHM_GUARD_THRESHOLD` (defau
 → 다음 probe의 질문은 **반드시 (b) judgment path** (사용자에게 직접 질문)로 라우팅. 강제.
 
 **조사 산출의 면제.** 조사가 결정에 닿았으면 그 probe 는 streak 을 올리지 않는다 — 압착의 대가를
-가드의 계수 방식에서 지불하되, 면제 예산이 유한하도록 집합 원소에 묶는다. 산출자는
-**orchestrator** 이고 거처는 `orchestration.open_decisions[]` 의 `touched` 필드다(별 키를 두지 않는다).
+가드의 계수 방식에서 지불하되, 면제 예산이 유한하도록 집합 원소에 묶는다. 산출자는 orchestrator
+이고 거처는 `orchestration.open_decisions[]` 의 `touched` 필드다(별 키를 두지 않는다).
 
-> 산출 항목의 `decides` 가 **`status: open` 이고 `touched: false` 인 결정**을 하나라도 담으면
+> 산출 항목의 `decides` 가 status: open 이고 touched: false 인 결정을 하나라도 담으면
 > `non_user_streak` **+0**. 그렇지 않으면 **+1**. 그 계수 **뒤에** 그 원소들의 `touched` 를 `true` 로
 > 올린다. **열린 결정이 0이면 면제도 0이다.**
 
@@ -4231,17 +4231,27 @@ FB="$(fail_branch "$FENCE")"
 # D — 정합: 정본과 사본의 필드 이름 집합이 **집합 등호**.
 #     ⊇ 하나만 요구하면 사본이 `decides`·`id` 를 빠뜨려도 green 이고, 그 방향이 바로 이 축의
 #     근거로 인용한 「한쪽만 고치는」 결함이다.
-for pair in "evidence:^evidence:\$:^repo_claims:\$" "repo_claims:^repo_claims:\$:^\`\`\`\$"; do
-  blk="${pair%%:*}"; rest="${pair#*:}"; s_re="${rest%%:*}"; e_re="${rest#*:}"
+#     정규식을 한 문자열에 콜론으로 패킹하지 않는다 — 정규식 자체가 `:` 를 담아 구분자와
+#     충돌하고, 그 충돌은 조용하지 않지만 **엉뚱하게** 터진다: 실측에서 `s_re` 가 `^evidence`
+#     로 잘리고 `e_re` 가 `$:^repo_claims:$` 가 되어 awk 가 「정규식 구문 오류」로 죽었다.
+#     블록마다 명시 호출한다.
+cmp_block() {   # cmp_block <라벨> <시작 정규식> <끝 정규식>
+  local blk="$1" s_re="$2" e_re="$3" k_canon k_copy
   k_canon="$(keys_of "$CANON" "$s_re" "$e_re")"
   k_copy="$(keys_of "$COPY" "$s_re" "$e_re")"
   if [ -z "$k_canon" ] || [ -z "$k_copy" ]; then
     no "D($blk) 양성대조: 키 집합 도출이 비었다 (정본='$k_canon' 사본='$k_copy') — 아래 등호가 공허하다"
   else
-    ok "D($blk) 양성대조: 정본 $(printf '%s' "$k_canon" | wc -l | tr -d ' ')키 · 사본 $(printf '%s' "$k_copy" | wc -l | tr -d ' ')키 도출"
+    ok "D($blk) 양성대조: 정본 $(printf '%s\n' "$k_canon" | grep -c .)키 · 사본 $(printf '%s\n' "$k_copy" | grep -c .)키 도출"
   fi
   assert_eq "$k_copy" "$k_canon" "D($blk): 정본과 사본의 필드 이름 집합이 같다 (집합 등호 — ⊇ 로는 사본의 누락을 못 잡는다)"
-done
+}
+# 시작·끝 정규식에 `$` 앵커를 쓰지 않는다 — 정본의 `evidence:` 줄에는 정렬 공백과 주석이 붙어
+# 있어 `^evidence:$` 가 매치하지 않는다(실측: 그 앵커로는 정본 쪽 도출이 통째로 비었다).
+# `^evidence:` · `^repo_claims:` 는 두 파일에서 각각 정확히 한 줄만 매치하고(실측), 여는 펜스는
+# ```yaml 이라 `^```$` 는 닫는 펜스만 잡는다.
+cmp_block evidence    '^evidence:'    '^repo_claims:'
+cmp_block repo_claims '^repo_claims:' '^```$'
 # 신설 필드 둘이 실제로 그 집합에 있는지 — 등호만 요구하면 둘 다 빠져도 green 이다.
 for f in decides id; do
   grep -qE "^[[:space:]]*-?[[:space:]]*${f}:" "$CANON" \
