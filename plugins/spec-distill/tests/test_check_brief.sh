@@ -1810,4 +1810,39 @@ p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
 assert "[→ OQ1]" in s; p.write_text(s,encoding="utf-8")'
 [[ "$V2RC" -eq 0 ]] \
   && ok "V2-⑤: 웹 항목(「[→ OQ<n>]」)은 확인 줄을 요구받지 않는다" || no "V2-⑤: 웹 항목에 확인 줄을 요구했다 (rc=$V2RC)"
+
+# V2-옵트인 격리 (fix round 1) — `contract: v2` 가 없으면 술어 다섯(①~⑤)이 전부 미발동이어야
+# 한다. Step 4 의 all-broken 변이 다섯을 그대로 겹쳐 쓰되 `contract: v2` 줄만 먼저 지운다 —
+# 옵트인이 없는데 술어 하나라도 발동하면(예: 어느 술어가 `contract_v2(text)` 분기 밖으로
+# 나가면) 이 다섯 파괴 중 하나가 red 를 내야 정상인데, red 가 하나도 없어야 옳다(v1 공시만).
+v2mut optguard 'import re, sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
+old0 = "contract: v2\n"
+assert s.count(old0) == 1, "contract 앵커 %d건" % s.count(old0)
+s = s.replace(old0, "", 1)
+old1 = " [→ OQ1]"
+assert s.count(old1) == 1, "① 앵커 %d건" % s.count(old1)
+s = s.replace(old1, "", 1)
+old2 = "[→ 없음]"
+assert s.count(old2) == 1, "② 앵커 %d건" % s.count(old2)
+s = s.replace(old2, "[→ OQ9]", 1)
+old3 = " → 근거 RC3"
+assert s.count(old3) >= 1, "③ 앵커 %d건" % s.count(old3)
+s = s.replace(old3, "", 1)
+p.write_text(s, encoding="utf-8")
+a = pathlib.Path(sys.argv[2]); q = a.read_text(encoding="utf-8")
+old4 = "derived:internal_research — closed —"
+assert q.count(old4) == 1, "④ 앵커 %d건" % q.count(old4)
+q = q.replace(old4, "derived:internal_research — open —", 1)
+old5 = re.compile(r"^- 확인 RC3 .*$\n", re.M)
+assert len(old5.findall(q)) == 1, "⑤ 앵커 %d건" % len(old5.findall(q))
+q = old5.sub("", q, count=1)
+a.write_text(q, encoding="utf-8")'
+v2opt_check="$(printf '%s' "$V2OUT" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+ok = (len(d["failures"]) == 0) and any("신 계약 미적용 brief" in a for a in d.get("advisories", []))
+print("YES" if ok else "NO")' 2>/dev/null)"
+{ [[ "$V2RC" -eq 0 ]] && [[ "$v2opt_check" == "YES" ]]; } \
+  && ok "V2-옵트인 격리: contract 없는 brief 는 다섯 술어가 전부 깨져도 green (v1 공시만)" \
+  || no "V2-옵트인 격리: rc=$V2RC · 검사=$v2opt_check — 계약 없는 payload 에서 새 술어가 발동했다 (failures 비었는지·v1 advisory 있는지 확인)"
 finish
