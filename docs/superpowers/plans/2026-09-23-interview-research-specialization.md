@@ -1815,8 +1815,16 @@ grep -qE '^ +blind_spot_dispatched:' <<<"$state_block" \\
 grep -qE '^ +open_decisions:' <<<"$state_block" \\
   && ok "AC13: orchestration.open_decisions (결정의 유일한 거처) in schema" \\
   || no "AC13: orchestration.open_decisions 부재 — OQ<n> 의 산출자가 없다"
+# 필드는 `open_decisions:` **하위 블록**에서 잰다. state 블록 전체로 재면 둘이 «이미» 만족된다 —
+# `dimension:` 은 `focused_dimension: null` 에, `status: open` 은 coverage floor 다섯 줄에 걸린다.
+# 그러면 Step 2 가 그 필드를 안 넣어도 green 이라 단언에 이빨이 없다. 종료 조건은 0 indent 로
+# 잡는다 — `{0,2}` 같은 interval 표현은 macOS awk 에서 조용히 매치되지 않는다.
+od_block="$(awk '/^ +open_decisions:/{f=1;print;next} f&&/^[a-z_]/{exit} f' <<<"$state_block")"
+{ [[ -n "$od_block" ]] && grep -qE '^ +open_decisions:' <<<"$od_block"; } \\
+  && ok "AC13(양성대조): open_decisions 하위 블록을 잘랐다 ($(grep -c . <<<"$od_block")줄)" \\
+  || no "AC13(양성대조): open_decisions 하위 블록을 못 잘랐다 — 아래 필드 단언이 공허하다"
 for fld in 'id: OQ' 'dimension:' 'status: open' 'resolved_by:' 'touched: false'; do
-  grep -qF -- "$fld" <<<"$state_block" \\
+  grep -qE "^ +-? *${fld}" <<<"$od_block" \\
     && ok "AC13: open_decisions 항목 필드 «${fld}»" || no "AC13: open_decisions 항목 필드 «${fld}» 부재"
 done"""
 assert t.count(old) == 1
@@ -1845,7 +1853,13 @@ PY
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '✗|Total'
 ```
 
-Expected: `✗` 10건 내외, `Fail: 10`.
+Expected: `✗` **정확히 13건**, `Fail: 13`. 내역 — 스키마 셋(`blind_spot_dispatches` 부재 ·
+옛 키 잔존 · `open_decisions:` 부재) + `open_decisions` 하위 블록 양성대조 1 + 필드 다섯 +
+열거 동일성 1 + 이월 규칙 셋. `AC1(양성대조)`(state 블록 절단)만 이 시점에 ✓ 다.
+
+**숫자가 다르면 멈추고 보고하라.** 이 기대값은 처음 「10건 내외」였고, 그때 실제 ✗ 도 10 이었다 —
+필드 단언 둘이 기존 스키마에 이미 만족돼(위 주석) 애매한 기대값이 그 이빨 공백을 정확히 가렸다.
+여기서 숫자를 정확히 요구하는 것은 그 은폐를 다시 열지 않기 위해서다.
 
 - [ ] **Step 2: SKILL.md 의 state 스키마를 고친다**
 
@@ -1935,7 +1949,17 @@ PY
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E '✗|Total'
 ```
 
-Expected: `ok` 다음 — `:463` 의 `blind_spot_dispatched guard referenced`(blindspot_block) 하나만 `✗`. 그 절은 Task 11 이 고친다. **나머지 AC1/AC5/AC13 단언은 전부 ✓.**
+Expected: `ok` 다음 — **`AC5: migration advisory wording` 하나만 `✗`** (그것은 Step 4 가
+처분한다). 나머지 AC1/AC13 단언은 전부 ✓.
+
+**`C8: blind_spot_dispatched guard referenced` 는 ✓ 로 «남는다»** — 이 단언은 `:501` 이고
+(`:463` 이 아니다) blindspot 절의 산문을 재는데, 이 Task 는 state **스키마 블록**만 고치므로
+`SKILL.md` 의 그 산문은 옛 이름 `blind_spot_dispatched` 를 그대로 갖는다. 없는 red 를 찾지 마라.
+
+그래서 이 커밋은 스키마가 새 이름, 산문이 옛 이름인 상태로 남는다 — **의도된 한 커밋짜리
+불일치**다. 산문 개명과 옛 이름의 부재 락(X4)은 Task 11 이 자격·예산 문구와 «함께» 넣는다(그
+문구가 새 이름의 의미를 말하는 자리라 쪼개면 산문이 두 번 고쳐진다). Task 11 이 미뤄지면 그
+불일치가 락 없이 남는다는 것을 알고 넘긴다.
 
 - [ ] **Step 4: advisory 문구 단언과 interview_round 봉쇄를 확인**
 
@@ -1946,7 +1970,10 @@ cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burd
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E 'migration advisory|V9: interview_round|Total'
 ```
 
-Expected: `✗ AC5: migration advisory wording` 이 나온다면 advisory 문구를 고친다 — 새 문구가 `coverage` 를 담지 않기 때문이다. 해소: 그 단언의 술어를 이 릴리스의 실제 내용으로 바꾼다.
+Expected: `✗ AC5: migration advisory wording` 이 **반드시** 나온다 — 그 술어가
+`'state schema migration.*coverage'` 이고 Step 3 의 새 advisory 에 `coverage` 가 없기 때문이다.
+나오지 않으면 Step 3 의 치환이 안 먹은 것이므로 멈추고 보고한다. 해소는 아래 블록이다: 그 단언의
+술어를 이 릴리스의 실제 내용(개명 + 신설 키)으로 바꾼다.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
