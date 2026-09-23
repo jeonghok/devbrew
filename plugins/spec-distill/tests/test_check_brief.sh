@@ -1726,4 +1726,50 @@ assert s.count(old)==1
 s=s.replace(old,"- OQ1 [열림] — 인증 뷰의 캐시 전략"); p.write_text(s,encoding="utf-8")'
 { [[ "$V2RC" -ne 0 ]] && grep -q '역참조' <<<"$V2OUT"; } \
   && ok "V2-③: §0 의 역참조만 지워도 red (양쪽 ∀)" || no "V2-③: §0 쪽 ∀ 가 없다 (rc=$V2RC)"
+# V2-④ — 이름 정확 일치 derived + closed. **red 가 셋** 필요하다: 행 부재 · 이름 다름 · open.
+# 라운드 1 실측: `- derived:unrelated-ui — open — ` 한 줄이 기존 두 함수를 **둘 다** 통과했다.
+v2mut d4a 'import sys,pathlib
+a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding="utf-8")
+old="- derived:internal_research — closed — 내부 조사 축 (@S1)\n"
+assert s.count(old)==1
+a.write_text(s.replace(old,""),encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q 'derived:internal_research' <<<"$V2OUT"; } \
+  && ok "V2-④ red1: 행 부재 → red (이름을 댄다)" || no "V2-④ red1: 행 부재가 통과됐다 (rc=$V2RC)"
+
+v2mut d4b 'import sys,pathlib
+a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding="utf-8")
+a.write_text(s.replace("derived:internal_research —","derived:internal_research_apparatus —",1),encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q 'derived:internal_research' <<<"$V2OUT"; } \
+  && ok "V2-④ red2: 이름이 다르면 red (접두 일치가 아니다 — _apparatus 로 갈음되지 않는다)" \
+  || no "V2-④ red2: 접두 일치로 갈음됐다 (rc=$V2RC) — 무관한 차원이 요구를 채운다"
+
+v2mut d4c 'import sys,pathlib
+a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding="utf-8")
+a.write_text(s.replace("derived:internal_research — closed —","derived:internal_research — open —",1),encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q 'closed' <<<"$V2OUT"; } \
+  && ok "V2-④ red3: 상태가 open 이면 red" || no "V2-④ red3: open 행이 통과됐다 (rc=$V2RC)"
+
+# 양의 짝 — RC<n> 0건이면 요구가 미발동이라 `derived: N/A` sentinel 로 통과한다.
+v2mut d4d 'import sys,pathlib,re
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+s=re.sub(r"\[RC\d+ → ","[→ ",s); s=re.sub(r" ?→ 근거 RC\d+","",s)
+s=re.sub(r"^- 위험 — .*RC\d+.*$\n","",s,flags=re.M); p.write_text(s,encoding="utf-8")
+a=pathlib.Path(sys.argv[2]); q=a.read_text(encoding="utf-8")
+q=re.sub(r"^- 확인 RC\d+ .*$\n","",q,flags=re.M)
+q=q.replace("- derived:internal_research — closed — 내부 조사 축 (@S1)","- derived: N/A")
+a.write_text(q,encoding="utf-8")'
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-④(양의 짝): RC<n> 0건이면 derived: N/A sentinel 로 통과 (조건부 발동)" \
+  || no "V2-④: 0건인데 derived 행을 요구했다 (rc=$V2RC) — 기존 픽스처 전량이 red 가 된다"
+
+# 차단 메시지에 개수가 없다 (⟨C5⟩)
+v2mut d4e 'import sys,pathlib
+a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding="utf-8")
+a.write_text(s.replace("- derived:internal_research — closed — 내부 조사 축 (@S1)\n",""),encoding="utf-8")'
+printf '%s' "$V2OUT" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+msgs=[x for x in d["failures"] if "internal_research" in x]
+import re
+print("HASCOUNT" if any(re.search(r"[0-9]+건|[0-9]+개", m) for m in msgs) else "CLEAN")' | grep -q CLEAN \
+  && ok "V2-④: 차단 메시지에 개수가 없다" || no "V2-④: 차단 메시지에 개수가 들어갔다 (⟨C5⟩)"
 finish

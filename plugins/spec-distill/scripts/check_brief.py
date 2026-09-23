@@ -1041,6 +1041,41 @@ def research_backref_missing(text: str) -> list[str]:
     return sorted(fails)
 
 
+def internal_research_dimension_failures(payload_text: str, audit_text: str) -> list[str]:
+    """④ 이름 정확 일치 derived (조건부) — 레포 주장이 ≥1 이면 audit §1 에 **정확히**
+    `derived:internal_research` 행이 있고 상태가 **`closed`** 여야 한다.
+
+    **조건부다.** `landscape_keys_declared` 가 같은 관습을 쓴다: 「payload가 landscape를 실었다는
+    사실을 조건으로 건다 — 키가 없으면 공집합 ⊆ 무엇이든으로 자동 만족되므로 kill switch 코드가
+    필요 없다」. 여기서는 payload 가 레포 주장을 실었다는 사실이 조건이고, 0건이면 요구가
+    발동하지 않으므로 `derived: N/A` sentinel 을 쓰는 기존 픽스처는 red 가 되지 않는다.
+    조건을 산출물에 두는 대가는 설계 L1 에 적혀 있다.
+
+    **이름은 정확 일치다.** 접두 일치로 두면 무관한 차원으로 갈음된다 — 실재하는 반례가 있다:
+    `derived:internal_research_apparatus` 는 「내부 조사 장치의 형태」라는 **다른** 차원이다.
+
+    **`closed` 요구가 보는 것은 여기까지다**: `coverage_anchor_failures` 가 그 행의 evidence 에서
+    실재하는 `S<N>` 앵커를 요구하지만 그 함수는 form-only 라(자기 docstring 이 공시한다) 「그 S 가
+    닫힘을 정당화하는가」는 보지 않는다. 즉 이 검사는 **「앵커 형태의 근거가 적혀 있는가」까지**이고
+    그 앵커가 이 차원을 닫는가는 사람과 리뷰의 몫이다(설계 L9).
+
+    **개수 술어가 아니다.** `payload_rc_ids` 의 비어 있음/아님만 **조건 분기**로 쓰고, 개수는
+    차단 판정에도 메시지 문면에도 넣지 않는다.
+    """
+    if not payload_rc_ids(payload_text):
+        return []
+    for ln in _entry_lines(_section_text(audit_text, "1", "Coverage Ledger")):
+        m = LEDGER_ROW_RE.match(_strip_bullet(ln).strip())
+        if not m or m.group(1).strip() != DERIVED_INTERNAL_RESEARCH:
+            continue
+        status = m.group(2).strip()
+        if status != "closed":
+            return [f"{DERIVED_INTERNAL_RESEARCH} 행의 상태가 {status!r} != closed"]
+        return []
+    return [f"레포 주장이 있는데 audit §1 에 {DERIVED_INTERNAL_RESEARCH} 행이 없다 "
+            "(이름 정확 일치 — 다른 derived 행으로는 만족되지 않는다)"]
+
+
 # **불릿(데이터) 줄에 앵커한다.** 앵커가 없으면 §2 머리 «설명 산문»의 예시
 # (`coverage-mapper 0 (unavailable: <사유>)`)가 데이터 줄보다 먼저 매치돼 판정을 대신
 # 진다 — 실측: 출하 템플릿의 T-TPL green 을 그 설명 문장 하나가 전부 지고 있었고,
@@ -1242,6 +1277,11 @@ def gate(path: Path) -> int:
             bm = research_backref_missing(text)
             if bm:
                 failures.append(f"역참조 누락: {bm[:3]}")
+        if audit_text and not any(
+                m.startswith("1.") for m in find_missing_sections(audit_text, AUDIT_SECTIONS)):
+            idf = internal_research_dimension_failures(text, audit_text)
+            if idf:
+                failures.append(f"내부 조사 차원: {idf}")
         if not payload_rc_ids(text):
             advisories.append(INTERNAL_RESEARCH_ZERO_ADVISORY)
     else:
