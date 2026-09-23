@@ -4636,8 +4636,11 @@ run_mut() {  # run_mut <이름> <python 변형>
 }
 SK=plugins/spec-distill/skills/conducting-interview/SKILL.md
 CP=plugins/spec-distill/agents/steelman-builder.md
-run_mut m1 "import pathlib;p=pathlib.Path('$SK');t=p.read_text(encoding='utf-8');assert t.count('<claims_contract>')==2;p.write_text(t.replace('<claims_contract>','<claims-contract>',1),encoding='utf-8')"
-run_mut m2 "import pathlib;p=pathlib.Path('$SK');t=p.read_text(encoding='utf-8');assert t.count('fail-closed')>=2;p.write_text(t.replace('fail-closed','fail-open',1),encoding='utf-8')"
+# 앵커는 슬롯 «전체» 다 — 여는 태그만으로 세면 산문의 태그 언급(SKILL.md 에 하나 있다)까지 세어 전제가 3 으로 깨진다.
+# `\${CLAIMS_CONTRACT}` 의 `$` 는 탈출해야 한다 — 큰따옴표 안이라 안 하면 bash 가 먼저 확장한다.
+run_mut m1 "import pathlib;p=pathlib.Path('$SK');t=p.read_text(encoding='utf-8');o='<claims_contract>\${CLAIMS_CONTRACT}</claims_contract>';assert t.count(o)==2;p.write_text(t.replace(o,'<claims-contract>\${CLAIMS_CONTRACT}</claims-contract>',1),encoding='utf-8')"
+# 처분 줄을 지목한다 — 맨몸 `fail-closed` 의 첫 출현은 무관한 산문(P21 치환 규칙)이라 축 E 를 안 건드린다.
+run_mut m2 "import pathlib;p=pathlib.Path('$SK');t=p.read_text(encoding='utf-8');o='consumer=orchestrator · fail-closed · disclosure=loud advisory + inline premortem';assert t.count(o)==1;p.write_text(t.replace(o,o.replace('fail-closed','fail-open')),encoding='utf-8')"
 run_mut m3 "import pathlib;p=pathlib.Path('$SK');t=p.read_text(encoding='utf-8');p.write_text(t.replace('<!-- claims-contract:begin -->\n',''),encoding='utf-8')"
 run_mut m4 "import pathlib,re;p=pathlib.Path('$CP');t=p.read_text(encoding='utf-8');t2=re.sub(r'\n +decides: \[OQ1\][^\n]*','',t,count=1);assert t2!=t;p.write_text(t2,encoding='utf-8')"
 run_mut m5 "import pathlib;p=pathlib.Path('$SK');t=p.read_text(encoding='utf-8');assert t.count('  exit 1\n')>=1;p.write_text(t.replace('  exit 1\n','  exit 0\n',1),encoding='utf-8')"
