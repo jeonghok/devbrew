@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.3.0] — 2026-09-24
+
+minor 인 이유 — `shared/docreview/` 의 agent 표면(재비판자의 입력 슬롯)이 늘었다. 슬롯이 optional 이라 기존 dispatch 는 그대로 통과한다(major 아님).
+
+### Added
+
+- **`agents/doc-recritic.md` 에 `diff` 선택 슬롯**(`kind: repo_context`, `optional: true`) — 재비판자가 「이 변경이 도입했는가」 축을 쓸 수 있다(설계 §6.3.4, AC18). 페르소나 본문의 입력 목록도 `diff` 를 나열하고, 그것이 프레이밍이 아니라 그 축을 위한 **1차 자료**임을 명시한다. **이 플러그인의 문서 경로 — `reviewing-spec` · `reviewing-brief` · `framing-requests`, 세 dispatch 자리 전부 — 는 `diff` 를 싣지 않는다**고 그 자리에서 명시한다: 싣는 것은 코드 경로뿐이고, 못 받으면 재비판자는 그 축을 쓰지 않는다. 정본은 `shared/docreview/agents/doc-recritic.md` 이고 `plugins/spec-distill/agents/doc-recritic.md` 는 그 바이트 사본이다.
+
+### Changed
+
+- **`shared/adjudication/adjudication.py`(symlink 로 이 플러그인에도 배송되는 정본)의 `Ledger` 가 `items_unaccounted()` · `primary_source_failed()` 두 accessor 를 얻었다.** 기존 `blocks()` 는 그 둘의 `or` 로 **값 동치**(독립 진리표 대조) — `docreview_route.py` 등 다른 소비자는 안 깨진다.
+
 ## [4.2.2] — 2026-09-23
 
 patch 인 이유 — 전부 `Fixed` 다. 새 필드·새 surface 없음.

@@ -3,6 +3,26 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [8.4.0] — 2026-09-24
+
+각도 바닥 — 세 각도의 상태가 총 함수가 되고, 보안·판정의 부재가 `clean` 을 막는다 (설계 §6.3, AC10 · AC10a · AC11 · AC12). **호출자 배선은 PR4 다** — `--angles` 를 안 주면 stdout 은 대부분 이전과 바이트 동일하다. **예외 하나**: 주 source(primary source)가 죽으면 `--emit-verdict` 산출의 사유가 이전 `findings-lost` 대신 `angle-absent` 로 나간다(설계 §6.4.3 의 의도된 배정) — 이 한 경로는 `--angles` 유무와 무관하게 바이트가 갈린다.
+
+### Added
+
+- **`scripts/angles.py`** — 각도 이름 셋(`security` · `adjudication` · `different-premise`)과 상태 문법(`filled` · `folded_into:<수행자>` · `absent` · `absent(<사유>)`)의 소유자. 상태는 **총 함수**라 하나라도 없으면 `exit 4` 다(AC10). 부재 사유는 닫힌 둘 — `not-installed` · `not-derived` — 로 그대로(verbatim) 공시되고, 막는 각도(보안·판정)에서는 사유가 있어도 `absent` 와 똑같이 막는다(Ruling T2-a). 판정 각도를 그 실행에서 finding 을 «낸» 리뷰어에게 접으면 `exit 4`(AC10a) — 보안 각도에는 걸지 않는다. 저자 집합은 그 실행이 **삼킨 모든 finding**(기각·억제분 포함)에서 도출하고, `agent` 는 항상 세고 리뷰어가 준 `sources` 는 **더하기만** 한다(절대 `agent` 를 가리지 않는다) — 기각된 finding 뒤에 숨거나 `sources` 를 스푸핑해 자기 자신을 판정하는 두 우회 경로를 닫는다(Ruling T6-a · T6-b). 각도는 에이전트가 아니므로 이 모듈은 수행자 명단을 갖지 않는다.
+- **`synthesize_findings.py --angles <경로>`** — 기본 off. 주면 `angles:` 블록을 `verdict:` 앞에 싣고 부재를 판정에 반영한다. `--emit-verdict` 없이 주거나 빈 문자열이면 `exit 2`(PR2 의 I1 이 세 플래그에 건 대칭을 네 번째에도).
+- **`tests/test_angle_coverage.sh`** — §6.3.2 의 ∀ 총 함수 + **양의 짝**(부재 + `clean` = RED). `test_review_floor_lock.sh` 의 교체다.
+- **`Ledger.items_unaccounted()` · `Ledger.primary_source_failed()`**(`shared/adjudication/`) — `blocks()` 가 접고 있던 세 조건을 두 술어로 가른다. `blocks()` 는 그 둘의 `or` 로 **값 동치**(독립 진리표 8조합 전수 대조).
+
+### Changed
+
+- **`verdict.decide()` 에 축이 하나 늘었다(`angle_absent`).** 주 판정자 사망이 이제 `findings-lost` 가 아니라 `angle-absent` 로 나간다 — 설계 §6.4.3 의 배정이고 PR2 의 I2 가 「공개 accessor 가 없어서」 접어 둔 자리다. 항목 소실·미상은 그대로 `findings-lost` 다. 호출자-전용 부채가 **다섯에서 넷**으로 줄었다(남은 넷: `trivia` · `kill-switch` · `declaration-invalid` · `merge-conflict` — 전부 PR4).
+- **`references/runtime-gate.md`** — 절단 문단이 완화책을 밝힌다(`verdict.causes_of()` 의 「정확히 한 번」이 0회 절단을 `exit 4` 로 잡는다).
+
+### Removed
+
+- **`tests/test_review_floor_lock.sh`** — 명단-리터럴 락. 앵커가 SKILL.md 산문이라 **피검자가 쥐고 있었다**. `test_angle_coverage.sh` 가 그 자리를 대신하며, 앵커는 합성기가 쓰는 모듈의 ∀ 관계다. 교체와 삭제는 같은 커밋이다(§6.3.2 — 교체 없는 삭제는 C13 위반).
+
 ## [8.3.1] — 2026-09-23
 
 리뷰 라운드 2(PR #166 단일 수정 웨이브) — Important 셋(I1~I3) + Minor 넷(Ruling F-3).
