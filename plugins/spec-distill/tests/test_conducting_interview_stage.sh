@@ -1326,8 +1326,13 @@ grep -qE '^- OQ1 \[열림\] ' "$TPL_B" \
   && ok "AC19: §0 결정 목록이 불릿 + 상태 토큰" || no "AC19: §0 결정 목록이 불릿 줄이 아니다 (게이트가 항목으로 못 읽는다)"
 grep -qF 'OQ4 [해결 ⟨S10⟩]' "$TPL_B" \
   && ok "AC19: §0 의 해결 상태 토큰 예시" || no "AC19: 해결 상태 토큰 예시 부재"
-grep -qF 'derived:internal_research —' "$TPL_A" \
-  && ok "AC19: audit 템플릿 §1 의 derived:internal_research 행" || no "AC19: derived:internal_research 행 부재"
+# span 에 **상태** 를 넣는다. 이름만 재면 `closed` → `open` 변이가 통과하고(리뷰 실측: 287/287/0),
+# 그러면 템플릿이 `open` 을 가르쳐 이 템플릿을 베이스로 만든 fixture 가 Task 16 의 술어 ④에서 red 가
+# 된다 — 이 Task 가 막으려고 존재하는 실패 그 자체다. 실측 네 칸: 원본 O · closed→open X(잡음) ·
+# 유사 이름 X(여전히 잡음) · 근거 문면만 교체 O(거짓 RED 없음).
+grep -qF 'derived:internal_research — closed —' "$TPL_A" \
+  && ok "AC19: audit 템플릿 §1 의 derived:internal_research 행이 closed 상태로 있다" \
+  || no "AC19: derived:internal_research 행이 없거나 상태가 closed 가 아니다 — 템플릿이 red 를 가르친다"
 grep -qE '^- 확인 RC[0-9]+ — (확인|반증|미확인) — ' "$TPL_A" \
   && ok "AC19: audit 템플릿 §5 의 확인 줄" || no "AC19: 확인 줄 예시 부재"
 finish
