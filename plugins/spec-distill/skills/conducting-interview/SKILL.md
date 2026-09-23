@@ -165,7 +165,7 @@ printf '%s\n' "$CLAIMS_CONTRACT"
 
 | Path | When | Action |
 |---|---|---|
-| (a) **factual / landscape** | 답이 codebase/git history *또는 외부 prior-art*에 있는 경우 | codebase는 grep/Read *auto-confirm*; 외부는 web sweep(아래 R2). 마커 `[from-code][auto-confirmed]` 또는 `[from-web]`. streak +1. |
+| (a) **factual / landscape** | 답이 codebase/git history *또는 외부 prior-art*에 있는 경우 | codebase 는 **orchestrator 가 자기 `Read`/`Grep` 으로 직접 확인하고 subagent 를 부르지 않는다** — 산출은 계약(`## 조사 주장 계약`)의 `repo_claims[]` 이고 라운드 규약의 V1 을 탄다. 웹 스위치와 무관해서 **내부 축의 주 생산자**다. 외부는 web sweep(아래 R2), 표기 `[from-web]`. streak 은 C44 의 면제 규칙이 정한다. |
 | (b) **judgment** | 사용자 선호/우선순위/제약 | 사용자에게 묻기 (default path). |
 | (d) **ontological** | "이게 무엇인가" 종류 (essence/root cause 등) | essence/root cause 류 — 라벨 강제 없음. 사용자에게 묻기. |
 

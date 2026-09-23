@@ -1082,6 +1082,19 @@ grep -qE 'path \(a\|b\|c\|d\)' "$TPL" && no "AC10: 템플릿 §5 에 경로 (c) 
 # 수를 서로 지배시킨다**: 선언한 수(헤딩·산문)가 실제 표 행 수와 같아야 한다. 어느 쪽을
 # 건드려도 짝이 어긋나면 RED 다(행 삭제·행 추가·숫자 변경 세 방향 전부).
 c43_block="$(awk '/^## C43 /{f=1;print;next} /^## /{f=0} f' "$SKILL")"
+# AC15 — 리터럴 마커 폐기. 개념은 계약으로 흡수된다. 같은 행위가 audit §5 에 `auto-confirmed:`
+# 라는 다른 표기로 이미 실재해 표기가 둘로 갈려 있었다(갈라진 사본 = 한쪽만 고치는 결함).
+grep -qF '[from-code][auto-confirmed]' "${CI_ALL[@]}" \
+  && no "AC15: 리터럴 마커 [from-code][auto-confirmed] 잔존" \
+  || ok "AC15: 리터럴 마커 폐기됨"
+# 양의 짝 — 부재 락은 대상 절을 통째로 지워도 통과하므로, 그 자리에 «무엇이 들어왔는가»를 함께 잰다.
+grep -qF 'repo_claims' <<<"$c43_block" \
+  && ok "AC15(양의 짝): C43 표가 계약 산출(repo_claims)을 요구한다" \
+  || no "AC15(양의 짝): C43 표에 계약 산출 요구가 없다 — 마커만 사라지고 대체물이 없다"
+grep -qF 'subagent 를 부르지 않는다' <<<"$c43_block" \
+  && ok "AC24: 경로 (a) 는 orchestrator 가 직접 수행한다 (네 번째 dispatch 자리 없음)" \
+  || no "AC24: 경로 (a) 의 직접 수행 문구 부재 — 네 번째 dispatch 자리로 읽힐 수 있다"
+
 c43_rows="$(grep -cE '^\| \([a-z]\) \*\*' <<<"$c43_block" || true)"
 c43_head_n="$(sed -n 's/^## C43 \([0-9][0-9]*\)-path.*/\1/p' <<<"$c43_block" | head -1)"
 c43_prose_n="$(sed -n 's/.*다음 \([0-9][0-9]*\) 경로 중.*/\1/p' <<<"$c43_block" | head -1)"

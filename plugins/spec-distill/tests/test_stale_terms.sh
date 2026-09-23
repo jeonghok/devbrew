@@ -79,6 +79,24 @@ else
   ok "V12: v0.57.0 제거 어휘 production 잔존 0"
 fi
 
+# V14 (3.3.0): 조사 특화가 폐기한 리터럴 마커 — production 잔존 0.
+# 번호는 V12 에 얹지 않는다 — 그 블록의 메시지가 「v0.57.0 제거 어휘」라고 말하므로 3.3.0 의
+# 마커를 그 정규식에 넣으면 잔존이 잡힐 때 사람이 엉뚱한 릴리스를 본다. 이 파일의 머리 주석이
+# 이미 그 규칙이다(「재사용하면 두 무관한 락이 같은 이름으로 헷갈린다」). V11 은 3.0.0 에서
+# 대상과 함께 지웠고 번호를 재사용하지 않으므로 다음 빈 번호는 V14 다.
+# 개념은 계약(`repo_claims[]`)으로 흡수됐고, 같은 행위의 audit §5 표기(`auto-confirmed:`)는
+# **남는다** — 그래서 대괄호 쌍까지 포함해서 잰다. `auto-confirmed` 단독을 재면 정당한 표기가
+# RED 가 된다(폐기된 것은 마커 리터럴이고 개념이 아니다).
+scan -InE 'from-code\]\[auto-confirmed' "${prod_files[@]}"
+if [[ $SCAN_RC -ge 2 ]]; then
+  no "V14: grep 자체 실패(exit=$SCAN_RC):"; printf '%s\n' "$SCAN_OUT"
+elif [[ $SCAN_RC -eq 0 ]]; then
+  no "V14: 3.3.0 이 폐기한 리터럴 마커 [from-code][auto-confirmed] 가 production 에 잔존:"
+  printf '%s\n' "$SCAN_OUT"
+else
+  ok "V14: 리터럴 마커 [from-code][auto-confirmed] production 잔존 0"
+fi
+
 # V7b-1: interview_round는 migration 섹션에만 (Task 11b: 그 섹션 전문이 SKILL.md 밖
 # references/state-migration.md 로 옮겨갔다 — SKILL.md 자신은 이제 포인터만 갖고 조건절 산문에도
 # 리터럴 `interview_round`를 쓰지 않으므로, 확인 대상이 「SKILL 안의 한 섹션」에서 「그 전용
