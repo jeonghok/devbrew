@@ -579,9 +579,9 @@ for hj in plugins/project-init/hooks/hooks.json \
     n_cmd=$((n_cmd+1))
     case "$cmd" in
       "python3 "*) n_bare=$((n_bare+1)); no "C/AC1: bare python3 로 시작하는 자리가 남아 있다: $hj — $cmd" ;;
-      "sh \${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh "*)
-        ok "C/AC1: $hj 의 자리가 sh <해석기> 를 경유한다" ;;
-      *) no "C/AC1: $hj 의 command 가 기대 형태가 아니다: $cmd" ;;
+      "/bin/sh \${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh "*)
+        ok "C/AC9: $hj 의 자리가 /bin/sh <해석기> 를 경유한다" ;;
+      *) no "C/AC9: $hj 의 command 가 기대 형태(/bin/sh <해석기>)가 아니다: $cmd" ;;
     esac
     # 훅 .py 는 «마지막 토큰» 이어야 한다 — project-init 의 test_command_contract.py:125 가
     # `h["command"].split()[-1]` 로 훅 스크립트를 뽑는다. 순서를 바꾸면 그 락이 조용히
@@ -620,6 +620,43 @@ EOF
 done
 assert_eq "$n_cmd" "4" "C/AC1: hooks.json 3 파일에서 호출 자리 4건을 셌다"
 assert_eq "$n_bare" "0" "C/AC1: bare python3 로 시작하는 자리가 0 이다"
+
+# AC9 (설계 2026-09-23) — 위는 command 의 «모양» 이다. 실제로 cwd 의 `sh` 를 안 집는지는 실행으로
+# 잰다: 훅처럼 `/bin/sh -c "<command>"` 로, cwd 에 카나리 `sh` 를 두고 PATH 앞에 빈 항목을 둔다.
+# 해석기에 닿으면 그 플러그인의 kill switch 가 곧바로 끝내 훅 파이썬은 돌지 않는다.
+# 양의 짝: 같은 command 의 앞 `/bin/sh ` 를 bare `sh ` 로 바꾸면 카나리가 돌아야 한다 — 이것이
+# 없으면 「카나리 없음」은 카나리가 고장 나도 통과한다.
+SH_CWD="$TMP/shcwd"; SH_MARK="$TMP/sh-canary.ran"
+mkdir -p "$SH_CWD"
+printf '#!/bin/sh\n: > "%s"\n' "$SH_MARK" > "$SH_CWD/sh"; chmod +x "$SH_CWD/sh"
+run_hook_cmd() {   # run_hook_cmd <플러그인 디렉토리> <kill switch 변수> <command>
+  rm -f "$SH_MARK"
+  (cd "$SH_CWD" && env PATH=":/usr/bin:/bin" CLAUDE_PLUGIN_ROOT="$ROOT/$1" "$2=1" \
+     /bin/sh -c "$3" </dev/null >/dev/null 2>&1)
+}
+n_shexec=0
+for hj in plugins/project-init/hooks/hooks.json \
+          plugins/quality-gates/hooks/hooks.json \
+          plugins/spec-distill/hooks/hooks.json; do
+  hj_cmds="$(cmds_of "$hj")"
+  plugin_dir="${hj%/hooks/hooks.json}"
+  while IFS= read -r pair; do
+    [ -n "$pair" ] || continue
+    cmd="${pair#* }"
+    pl_arg="$(flag_val --plugin "$cmd")"
+    ks_var="DEVBREW_$(printf '%s' "$pl_arg" | tr 'a-z-' 'A-Z_')_DISABLE"
+    n_shexec=$((n_shexec+1))
+    run_hook_cmd "$plugin_dir" "$ks_var" "$cmd"
+    if [ -f "$SH_MARK" ]; then no "C/AC9: $hj ($pl_arg) — command 가 cwd 의 sh 를 실행했다: $cmd"
+    else ok "C/AC9: $hj ($pl_arg) — command 가 cwd 의 sh 를 집지 않는다"; fi
+    run_hook_cmd "$plugin_dir" "$ks_var" "sh ${cmd#/bin/sh }"
+    if [ -f "$SH_MARK" ]; then ok "C/AC9: 양의 짝 — 같은 command 를 bare sh 로 부르면 카나리가 돈다 ($pl_arg)"
+    else no "C/AC9: 양의 짝이 안 돈다 ($pl_arg) — 위 「카나리 없음」이 헛돈다"; fi
+  done <<EOF
+$hj_cmds
+EOF
+done
+assert_eq "$n_shexec" "4" "C/AC9: 실행으로 잰 command 자리가 4건이다"
 
 # ── AC11 의 «감사기» 절반 — 이 자리에서 비로소 이빨이 생긴다 ─────────────────
 # Task 2 에서는 이 단언이 아무것도 재지 못했다: `hooks.json` 이 해석기를 가리키지 않아

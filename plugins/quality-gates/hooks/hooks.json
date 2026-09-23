@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh --event SessionStart --plugin quality-gates --hook session-start-advisor ${CLAUDE_PLUGIN_ROOT}/hooks/session-start-advisor.py"
+            "command": "/bin/sh ${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh --event SessionStart --plugin quality-gates --hook session-start-advisor ${CLAUDE_PLUGIN_ROOT}/hooks/session-start-advisor.py"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh --event SessionEnd --plugin quality-gates --hook session-end-cleanup ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.py"
+            "command": "/bin/sh ${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh --event SessionEnd --plugin quality-gates --hook session-end-cleanup ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.py"
           }
         ]
       }

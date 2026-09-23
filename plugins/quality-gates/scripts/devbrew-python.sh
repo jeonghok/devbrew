@@ -1,7 +1,7 @@
 #!/bin/sh
 # copy-of: shared/python/devbrew-python.sh
 # devbrew 훅의 Python 인터프리터 해석기. 훅 `command` 가
-# `sh <이 파일> --event E --plugin P --hook H <훅.py>` 로 부르고,
+# `/bin/sh <이 파일> --event E --plugin P --hook H <훅.py>` 로 부르고,
 # 바닥을 만족하는 인터프리터를 찾아 exec 한다.
 #
 # 출하 바닥 도출 규칙 — 「2026-10 이후에도 패치를 받는 버전 중 최빈」.
