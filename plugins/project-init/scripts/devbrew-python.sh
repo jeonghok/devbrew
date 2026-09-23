@@ -1,7 +1,7 @@
 #!/bin/sh
 # copy-of: shared/python/devbrew-python.sh
 # devbrew 훅의 Python 인터프리터 해석기. 훅 `command` 가
-# `sh <이 파일> --event E --plugin P --hook H <훅.py>` 로 부르고,
+# `/bin/sh <이 파일> --event E --plugin P --hook H <훅.py>` 로 부르고,
 # 바닥을 만족하는 인터프리터를 찾아 exec 한다.
 #
 # 출하 바닥 도출 규칙 — 「2026-10 이후에도 패치를 받는 버전 중 최빈」.
@@ -128,7 +128,7 @@ satisfies() {
 # IGNORED 와 IGNORED_REASON 은 채널이 다르다. IGNORED 는 $DEVBREW_PYTHON 의 실제 경로를
 # «그대로» 담는다 — 사용자 경로에 `"`·`\` 가 있을 수 있고, 그 값은 환경변수
 # DEVBREW_PYTHON_IGNORED 로만 나간다(Task 5 의 Python 이 json.dumps 로 안전하게 직렬화한다).
-# IGNORED_REASON 은 숫자와 고정 리터럴만 담는다 — 아래 손으로 조립한 JSON(:169 부근)에
+# IGNORED_REASON 은 숫자와 고정 리터럴만 담는다 — 아래 손으로 조립한 JSON(4단계)에
 # 들어가는 것은 이쪽뿐이다. 사용자 경로가 손으로 조립한 문자열에 섞이면 따옴표 하나로
 # stdout 이 JSON 이 아니게 된다〔실측: Expecting ',' delimiter〕 — 그 조합(DEVBREW_PYTHON
 # 설정 + SessionStart)은 한 번도 파싱되지 않았었다.
@@ -148,9 +148,28 @@ if [ -n "${DEVBREW_PYTHON-}" ]; then
 fi
 
 # ── 2. python3 — 흔한 경우, spawn 1회로 끝난다 ──────────────────────────────
-if probe python3; then
+# 이름을 셸 탐색에 맡기지 않는다. 셸은 PATH 의 빈 항목·`.`·상대 경로(빈 PATH 포함)를 cwd 로
+# 풀고, 훅의 cwd 는 사용자가 연 리포다 — 거기의 `./python3` 가 실행된다〔/bin/sh·dash·ksh·zsh
+# 실측〕. 절대 경로 항목만 PATH 순서대로 보고 **첫** `python3` 에서 멈춘다. 셸 탐색도 첫 매치에서
+# 멈추므로 절대 경로만 있는 PATH 에서는 결과가 같다 — 그것이 바닥 미만이면 다음 `python3` 를
+# 찾지 않고 3단계로 간다.
+FIRST_PY3=""
+first_python3() {   # scan_path 와 같은 분할 관용구. 함수 안이라 `set --` 가 훅의 argv 를 건드리지 않는다
+  _ifs_save="$IFS"
+  IFS=":"; set -f
+  set -- ${PATH-}
+  set +f; IFS="$_ifs_save"
+  for _dir in "$@"; do
+    case "$_dir" in /*) ;; *) continue ;; esac
+    if [ -f "$_dir/python3" ] && [ -x "$_dir/python3" ]; then
+      FIRST_PY3="$_dir/python3"; return 0
+    fi
+  done
+  return 1
+}
+if first_python3 && probe "$FIRST_PY3"; then
   note_best
-  if satisfies; then exec python3 "$@"; fi
+  if satisfies; then exec "$FIRST_PY3" "$@"; fi
 fi
 
 # ── 3. PATH 글롭 — 마이너 버전을 열거하지 않는다 (C4) ───────────────────────
@@ -161,7 +180,7 @@ scan_path() {   # 함수 안이라 `set --` 가 **이 함수의** 위치인자�
   set -- ${PATH-}
   set +f; IFS="$_ifs_save"
   for _dir in "$@"; do
-    [ -n "$_dir" ] || _dir="."
+    case "$_dir" in /*) ;; *) continue ;; esac   # 빈 항목·`.`·상대 경로는 cwd 다 (2단계 주석)
     for _cand in "$_dir"/python3.*; do
       [ -f "$_cand" ] || continue
       [ -x "$_cand" ] || continue

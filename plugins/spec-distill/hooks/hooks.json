@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh --event SessionEnd --plugin spec-distill --hook session-end-cleanup ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.py",
+            "command": "/bin/sh ${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh --event SessionEnd --plugin spec-distill --hook session-end-cleanup ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.py",
             "timeout": 10
           }
         ]
