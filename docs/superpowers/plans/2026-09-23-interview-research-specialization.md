@@ -1609,7 +1609,7 @@ MSG
 **Files:**
 - Modify: `plugins/spec-distill/skills/conducting-interview/SKILL.md` (C43 표의 (a) 행)
 - Modify: `plugins/spec-distill/tests/test_conducting_interview_stage.sh` (마커 부재 + 계약 산출 단언)
-- Modify: `plugins/spec-distill/tests/test_stale_terms.sh` (V13 — 마커 리터럴을 production 부재 목록에)
+- Modify: `plugins/spec-distill/tests/test_stale_terms.sh` (**V14 신설** — 마커 리터럴 production 잔존 0. V12·V13 에 얹지 않는다 — 그 메시지들이 다른 릴리스를 말한다)
 
 **Interfaces:**
 - Consumes: Task 2 의 계약 · Task 8 의 V1
@@ -1649,17 +1649,40 @@ p.write_text(t.replace(anchor, new), encoding="utf-8")
 
 q = pathlib.Path("plugins/spec-distill/tests/test_stale_terms.sh")
 s = q.read_text(encoding="utf-8")
-old = "scan -InE 'no_progress_streak|stall_episode|coverage_mapper_dispatched_episode|teach-lite|teach-heavy|teach-beat' \"${prod_files[@]}\""
-new2 = "scan -InE 'no_progress_streak|stall_episode|coverage_mapper_dispatched_episode|teach-lite|teach-heavy|teach-beat|from-code\\]\\[auto-confirmed' \"${prod_files[@]}\""
-assert s.count(old) == 1
-q.write_text(s.replace(old, new2), encoding="utf-8")
+# V12 의 정규식에 얹지 않는다 — V12 의 메시지가 「v0.57.0 제거 어휘」라고 말하므로 3.3.0 의 마커를
+# 거기 넣으면 잔존이 잡힐 때 사람이 엉뚱한 릴리스를 본다. 이 파일이 자기 머리 주석에서 이미 그
+# 규칙을 적어 두었다. 다음 빈 번호로 새 블록을 만든다.
+v12_end = """  ok "V12: v0.57.0 제거 어휘 production 잔존 0"
+fi
+"""
+assert s.count(v12_end) == 1
+v14 = v12_end + r"""
+# V14 (3.3.0): 조사 특화가 폐기한 리터럴 마커 — production 잔존 0.
+# 번호는 V12 에 얹지 않는다 — 그 블록의 메시지가 「v0.57.0 제거 어휘」라고 말하므로 3.3.0 의
+# 마커를 그 정규식에 넣으면 잔존이 잡힐 때 사람이 엉뚱한 릴리스를 본다. 이 파일의 머리 주석이
+# 이미 그 규칙이다(「재사용하면 두 무관한 락이 같은 이름으로 헷갈린다」). V11 은 3.0.0 에서
+# 대상과 함께 지웠고 번호를 재사용하지 않으므로 다음 빈 번호는 V14 다.
+# 개념은 계약(`repo_claims[]`)으로 흡수됐고, 같은 행위의 audit §5 표기(`auto-confirmed:`)는
+# **남는다** — 그래서 대괄호 쌍까지 포함해서 잰다. `auto-confirmed` 단독을 재면 정당한 표기가
+# RED 가 된다(폐기된 것은 마커 리터럴이고 개념이 아니다).
+scan -InE 'from-code\]\[auto-confirmed' "${prod_files[@]}"
+if [[ $SCAN_RC -ge 2 ]]; then
+  no "V14: grep 자체 실패(exit=$SCAN_RC):"; printf '%s\n' "$SCAN_OUT"
+elif [[ $SCAN_RC -eq 0 ]]; then
+  no "V14: 3.3.0 이 폐기한 리터럴 마커 [from-code][auto-confirmed] 가 production 에 잔존:"
+  printf '%s\n' "$SCAN_OUT"
+else
+  ok "V14: 리터럴 마커 [from-code][auto-confirmed] production 잔존 0"
+fi
+"""
+q.write_text(s.replace(v12_end, v14), encoding="utf-8")
 print("ok")
 PY
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E 'AC15|AC24|Total'
-bash plugins/spec-distill/tests/test_stale_terms.sh 2>&1 | grep -E 'V12|Total'
+bash plugins/spec-distill/tests/test_stale_terms.sh 2>&1 | grep -E 'V14|Total'
 ```
 
-Expected: `ok` 다음 — stage 락에서 `✗ AC15: 리터럴 마커 … 잔존` + `✗ AC15(양의 짝)` + `✗ AC24`, stale 락에서 `✗ V12: … production 에 잔존`.
+Expected: `ok` 다음 — stage 락에서 `✗ AC15: 리터럴 마커 … 잔존` + `✗ AC15(양의 짝)` + `✗ AC24`, stale 락에서 `✗ V14: 3.3.0 이 폐기한 리터럴 마커 … 가 production 에 잔존`.
 
 - [ ] **Step 2: C43 (a) 행을 고친다**
 
@@ -1676,7 +1699,7 @@ p.write_text(t.replace(old, new), encoding="utf-8")
 print("ok")
 PY
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -E 'AC15|AC24|C43:|Total'
-bash plugins/spec-distill/tests/test_stale_terms.sh 2>&1 | grep -E 'V12|Total'
+bash plugins/spec-distill/tests/test_stale_terms.sh 2>&1 | grep -E 'V14|Total'
 ```
 
 Expected: `ok` 다음 stage 락 `Fail: 0`(AC15 둘 + AC24 ✓, C43 행 수·헤딩·산문 일치 ✓), stale 락 `Fail: 0`.
@@ -1691,7 +1714,7 @@ echo "--- 리터럴"
 grep -rn 'from-code\]\[auto-confirmed' plugins/ shared/ tools/ || echo "0건 ✓"
 echo "--- 개념 별칭 (마커 규약을 다른 이름으로 부르는 자리)"
 grep -rn '마커 규약\|\[from-code\]' plugins/ shared/ tools/ || echo "0건 ✓"
-echo "--- 숨은 디렉토리까지 (셸 grep 은 `.` 재귀서 숨김 디렉토리를 건너뛴다)"
+echo "--- 숨은 디렉토리까지 (셸 grep 은 「.」 재귀서 숨김 디렉토리를 건너뛴다)"
 grep -rn --include='*.md' --include='*.py' --include='*.sh' 'from-code\]\[auto-confirmed' . 2>/dev/null | grep -v '^\./docs/archive' | grep -v '^\./docs/superpowers' || echo "0건 ✓"
 ```
 
@@ -1705,7 +1728,9 @@ bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -
 wc -l < plugins/spec-distill/skills/conducting-interview/SKILL.md
 ```
 
-Expected: `C43(양성대조)` ✓ · `C43: 헤딩이 선언한 경로 수 3 == 표 행 수 3` ✓ · `C43: 산문이 선언한 경로 수 3 == 표 행 수 3` ✓ · `C43: SKILL·README 의 «<n>-path» 표기가 하나뿐이고 표 행 수 3 와 같다` ✓. SKILL.md ≈ 404줄.
+Expected: `C43(양성대조)` ✓ · `C43: 헤딩이 선언한 경로 수 3 == 표 행 수 3` ✓ · `C43: 산문이 선언한 경로 수 3 == 표 행 수 3` ✓ · `C43: SKILL·README 의 «<n>-path» 표기가 하나뿐이고 표 행 수 3 와 같다` ✓. SKILL.md 는 **401줄에서 변하지 않는다** — 이 Task 는 표 한 행을 (더 긴) 한 행으로 교체하므로
+줄 수가 늘지 않는다. 늘어났으면 표 행을 여러 줄로 쪼갠 것이고, 그러면 C43 행 수 일치 단언이
+깨진다.
 
 - [ ] **Step 5: Commit**
 
