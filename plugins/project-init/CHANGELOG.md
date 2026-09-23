@@ -5,6 +5,16 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [4.0.1] — 2026-09-24
+
+patch 인 이유 — 보안 수정이다. 절대 경로 항목만 있는 PATH 에서는 고르는 인터프리터가 전과 같다.
+
+### Security
+
+- **훅 해석기가 PATH 의 절대 경로가 아닌 항목을 통해 작업 디렉토리의 파일을 실행했다.** 빈 항목 · `.` · 상대 경로 · 빈 PATH 는 셸이 cwd 로 풀고, 훅의 cwd 는 사용자가 연 리포다. 그런 PATH 를 가진 사용자가 공격자가 만든 리포에서 Bash 도구를 쓰면 `PostToolUse` 에서 리포 안의 `python3` · `python3.<무엇이든>` 이 실행됐다(격리 재현). `scripts/devbrew-python.sh` 의 두 탐색 — 2단계 `python3` 와 3단계 `python3.*` 글롭 — 이 이제 절대 경로 항목만 본다. `hooks/hooks.json` 의 자리도 해석기를 bare `sh` 대신 `/bin/sh` 로 부른다 — bare `sh` 도 같은 탐색으로 cwd 의 `sh` 를 집었다.
+- **대가** — PATH 에 상대 경로나 따옴표 안의 `~`(전개되지 않은 틸드)로 인터프리터를 두던 사용자는 훅이 그것을 못 찾는다. `$DEVBREW_PYTHON` 에 절대 경로를 지정하라.
+- **범위** — 훅 command 의 `sh` 탐색과 해석기가 인터프리터 파일을 고르는 탐색만 닫는다. 고른 인터프리터가 `#!/usr/bin/env` shim(pyenv · asdf)일 때 그 안의 탐색과, 그런 PATH 가 devbrew 밖에서 이미 여는 노출은 이 수정 밖이다. 설계 `docs/superpowers/specs/2026-09-23-python-resolver-absolute-path-only-design.md` 의 L4 · L7.
+
 ## [4.0.0] — 2026-09-22
 
 major 인 이유 — **설치 요구사항이 하나 늘어난다.** 이 플러그인의 훅은 이제 Python 3.12

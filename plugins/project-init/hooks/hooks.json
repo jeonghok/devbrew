@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh --event PostToolUse --plugin project-init --hook post-tool-use ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use.py",
+            "command": "/bin/sh ${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh --event PostToolUse --plugin project-init --hook post-tool-use ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use.py",
             "timeout": 10
           }
         ]

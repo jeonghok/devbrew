@@ -5,7 +5,7 @@
 # 훅이 읽지 않는다는 것이 이 설계의 출발점이다(설계 Context/Why 3).
 #
 # 축 A 해석기 행동 · B 배포(물리 사본) · C 배선(hooks.json) · D 두 바닥 · E 훅 자식 ·
-# F 도출 규칙의 산출물 기록 · G prerequisite · H uv.lock 핀.
+# F 도출 규칙의 산출물 기록 · G prerequisite · H uv.lock 핀 · I 비-절대 PATH 항목.
 #
 # **이 락이 스스로 못 지키는 것** — fixture 로 쓰는 가짜 인터프리터가 「바닥을 만족한다」고
 # 거짓말하는 것 자체는 못 잰다. 그것이 이 락의 «측정 수단»이기 때문이다. 대신 축 A 는 같은
@@ -367,6 +367,123 @@ assert_eq "$(field mentions_ignored "$bad_report")" "yes" "A14/AC8: 그 안내�
 assert_file_grep "$ROOT/$RESOLVER" 'DEVBREW_[A-Z0-9_]+_DISABLE' \
   "A11: 해석기 본문에 plugin-audit 가 읽을 수 있는 구체 kill switch 이름이 있다"
 
+note "── 축 I: 비-절대 PATH 항목 (설계 2026-09-23 AC1~AC4 · AC8) ──────────────"
+# 해석기의 두 탐색(2단계 `python3` · 3단계 `python3.*`)이 PATH 의 절대 경로가 아닌 항목
+# (빈 항목 · `.` · 상대 경로 · 빈 PATH)을 쓰지 않는다는 것을 **실행으로** 잰다. 훅의 cwd 는
+# 사용자가 연 리포라, 그런 항목을 쓰는 것은 곧 「리포 안의 파일을 실행한다」다.
+#
+# 카나리 = 실행되는 순간 자기 마커를 남기고 바닥을 만족한다고 답하는 가짜 인터프리터. 마커는
+# 셸 내장 리다이렉션으로 남긴다 — 좁힌 PATH 에 `touch` 가 없다. cwd 는 셋으로 가른다:
+# c1 은 점 있는 카나리만(3단계만 겨눈다), c2 는 점 없는 카나리만(2단계만 겨눈다), c4 는 둘 다.
+# 한 cwd 에 섞으면 한 변이가 두 탐색을 함께 RED 로 만들어 어느 쪽이 새는지 가를 수 없다.
+I_MARK="$TMP/i-canary.ran"
+mk_canary() {   # mk_canary <경로> — 실행되면 $I_MARK 를 남기고, -c 에는 출하 바닥을 답한다
+  printf '#!/bin/sh\n: > "%s"\n[ "$1" = "-c" ] && { echo "%s %s"; exit 0; }\nexec "$@"\n' \
+    "$I_MARK" "$FLOOR_MAJOR_VAL" "$FLOOR_MINOR_VAL" > "$1"
+  chmod +x "$1"
+}
+mkdir -p "$TMP/c1/rel" "$TMP/c2/rel" "$TMP/c4" "$TMP/a8b"
+mk_canary "$TMP/c1/python3.99"
+mk_canary "$TMP/c1/rel/python3.99"
+mk_canary "$TMP/c2/python3"
+mk_canary "$TMP/c2/rel/python3"
+mk_canary "$TMP/c4/python3"
+mk_canary "$TMP/c4/python3.99"
+mk_canary "$TMP/a8b/python3"
+
+run_in() {   # run_in <cwd> <PATH> — SessionEnd 라 해석에 실패하면 stdout 이 비어 있다
+  rm -f "$I_MARK"
+  (cd "$1" && printf '%s' "$PAY" | env PATH="$2" /bin/sh "$R" \
+     --event SessionEnd --plugin qg --hook h "$TARGET" 2>/dev/null)
+}
+
+# 증인 — 절대 경로 부분(`/bin`·`/usr/sbin`)에 python 이 있으면 되돌린 셸 탐색이 그것을 먼저
+# 만나 cwd 에 닿지 않는다(끝 빈 항목 형태). 그러면 아래 단언은 변이로도 RED 가 안 되는 장식이다.
+for d in /bin /usr/sbin; do
+  i_py=""
+  for f in "$d"/python3*; do [ -e "$f" ] && i_py="$f"; done
+  if [ -n "$i_py" ]; then no "I: 증인 — $d 에 python 이 있다($i_py). 축 I 의 절대 경로 부분을 다시 골라라"
+  else ok "I: 증인 — $d 에 python3* 가 없다"; fi
+done
+
+# AC1 — 3단계. 끝 빈 항목은 싣지 않는다: 그 형태는 IFS 분할이 끝 빈 필드를 버려 수정 전에도
+# 안전했고, 변이로 RED 가 될 수 없는 케이스는 단언이 아니라 장식이다(설계 L3).
+for p in ":/bin" "/bin::/usr/sbin" ".:/bin" "rel:/bin"; do
+  run_in "$TMP/c1" "$p" >/dev/null
+  if [ -f "$I_MARK" ]; then no "I/AC1: PATH='$p' — 3단계가 cwd 의 python3.* 를 실행했다"
+  else ok "I/AC1: PATH='$p' — 3단계가 cwd 의 python3.* 를 실행하지 않는다"; fi
+done
+
+# AC2 — 2단계. 셸 탐색은 끝 빈 항목·상대 경로·빈 PATH 도 cwd 로 푼다〔설계 Context/Why 2 실측〕.
+for p in ":/bin" "/bin::/usr/sbin" ".:/bin" "rel:/bin" "/bin:" ""; do
+  run_in "$TMP/c2" "$p" >/dev/null
+  if [ -f "$I_MARK" ]; then no "I/AC2: PATH='$p' — 2단계가 cwd 의 python3 를 실행했다"
+  else ok "I/AC2: PATH='$p' — 2단계가 cwd 의 python3 를 실행하지 않는다"; fi
+done
+
+# AC3 — 양성 대조. 같은 카나리를 절대 경로로 주면 돈다. 이것이 없으면 위 「마커 없음」은
+# 카나리가 고장 나도 통과한다.
+for d in c1 c1/rel c2 c2/rel a8b; do
+  out="$(run_in "$TMP" "$TMP/$d:/bin")"
+  if [ -f "$I_MARK" ]; then ok "I/AC3: 절대 경로로 준 카나리는 돈다 ($d)"
+  else no "I/AC3: 절대 경로로 준 카나리도 안 돈다 ($d) — 축 I 의 「마커 없음」이 헛돈다"; fi
+  assert_contains "$out" "TARGET-RAN" "I/AC3: 그 카나리가 대상을 exec 한다 ($d)"
+done
+
+# AC4 — 올바른 선택. cwd 에 점 없는 것과 있는 것을 **둘 다** 둔다: `python3.99` 만 두면 원래
+# 코드도 2단계에서 절대 디렉토리로 끝나 어떤 변이에서도 GREEN 이다.
+out="$(run_in "$TMP/c4" ":$TMP/plainfloor")"
+if [ -f "$I_MARK" ]; then no "I/AC4: 앞 빈 항목이 cwd 카나리를 집었다"
+else ok "I/AC4: cwd 카나리(python3 · python3.99)가 돌지 않는다"; fi
+assert_contains "$out" "TARGET-RAN" "I/AC4: 절대 디렉토리의 바닥 만족 python3 로 대상이 돈다"
+assert_contains "$out" "PAYLOAD-INTACT" "I/AC4: payload 가 온전하다"
+
+# AC8 — 2단계는 첫 `python3` 만 본다(설계 D3). plain/python3 는 바닥 미만, a8b/python3 는 바닥 만족
+# 카나리이고, 어디에도 `python3.*` 가 없어 3단계는 빈손이다. 셸 탐색도 첫 매치에서 멈추므로 2단계를
+# 셸 탐색으로 되돌려도 GREEN 이고, 「다음 python3 를 찾는」 변이에서만 RED 다.
+out="$(run_in "$TMP" "$TMP/plain:$TMP/a8b")"
+if [ -f "$I_MARK" ]; then no "I/AC8: 첫 python3 가 바닥 미만인데 다음 python3 로 넘어갔다"
+else ok "I/AC8: 첫 python3 가 바닥 미만이면 다음 python3 를 찾지 않는다"; fi
+assert_not_contains "$out" "TARGET-RAN" "I/AC8: 대상이 돌지 않는다"
+
+# 설계 Goal 2 의 경계 — 셸 탐색과 같은 것을 고르는가. `first_python3` 는 셸 탐색을 흉내 내므로,
+# 흉내가 어긋나기 쉬운 자리를 셸 탐색의 답과 대조한다(Review Focus). 대상이 돌면 절대 디렉토리
+# `$TMP/plainfloor` 의 python3 가 골라진 것이다 — 다른 후보는 전부 바닥 미만이거나 실행 불가다.
+mkdir -p "$TMP/lnk" "$TMP/dirpy/python3" "$TMP/noexec"
+ln -s "$TMP/plainfloor/python3" "$TMP/lnk/python3"
+printf '#!/bin/sh\necho "%s %s"\n' "$FLOOR_MAJOR_VAL" "$FLOOR_MINOR_VAL" > "$TMP/noexec/python3"   # 실행 비트 없음
+out="$(run_in "$TMP" "$TMP/lnk:/bin")"
+assert_contains "$out" "TARGET-RAN" "I/RF1: 심볼릭 링크인 python3(홈브루 모양)를 고른다"
+out="$(run_in "$TMP" "$TMP/dirpy:$TMP/plainfloor")"
+assert_contains "$out" "TARGET-RAN" "I/RF2: 이름이 python3 인 디렉토리는 건너뛰고 다음 항목의 python3 를 고른다"
+out="$(run_in "$TMP" "$TMP/noexec:$TMP/plainfloor")"
+assert_contains "$out" "TARGET-RAN" "I/RF3: 실행 비트 없는 python3 는 건너뛰고 다음 항목의 python3 를 고른다"
+
+# 전개되지 않은 틸드(`PATH="~/tb:…"` 처럼 따옴표 안의 `~`)도 절대 경로가 아니다. macOS /bin/sh 는
+# 명령 탐색에서 그것을 $HOME 으로 전개하므로 2단계를 셸 탐색으로 되돌리면 이 단언이 RED 다 —
+# 설계 L1 이 받아들인 동작 변경이 이것이다.
+mkdir -p "$TMP/home/tb"
+mk_canary "$TMP/home/tb/python3"
+rm -f "$I_MARK"
+(cd "$TMP" && printf '%s' "$PAY" | env HOME="$TMP/home" PATH='~/tb:/bin' /bin/sh "$R" \
+   --event SessionEnd --plugin qg --hook h "$TARGET" >/dev/null 2>&1)
+if [ -f "$I_MARK" ]; then no "I/RF4: PATH 의 글자 그대로 '~/tb' 를 따라 python3 를 실행했다"
+else ok "I/RF4: PATH 의 글자 그대로 '~/tb' 는 절대 경로가 아니라 건너뛴다 (설계 L1)"; fi
+
+# RF4 의 양의 짝 — 같은 카나리를 절대 경로로 주면 돈다. 이것이 없으면 위 「건너뛴다」는
+# 카나리가 고장 나도 통과한다.
+run_in "$TMP" "$TMP/home/tb:/bin" >/dev/null
+if [ -f "$I_MARK" ]; then ok "I/RF4: 양의 짝 — '~/tb' 의 카나리는 절대 경로로 주면 돈다"
+else no "I/RF4: 양의 짝이 안 돈다 — 위 「건너뛴다」가 헛돈다"; fi
+
+# 2단계가 exec 할 때 훅 argv 가 공백까지 그대로 가는가 — 새 exec 자리다.
+ARGS_TARGET="$TMP/args.sh"
+printf '#!/bin/sh\necho "argc=$#"\nfor a in "$@"; do echo "arg=[$a]"; done\n' > "$ARGS_TARGET"; chmod +x "$ARGS_TARGET"
+out="$(printf '%s' "$PAY" | env PATH="$PATH_PLAINFLOOR" /bin/sh "$R" \
+   --event SessionEnd --plugin qg --hook h "$ARGS_TARGET" "a b" "" "c" 2>/dev/null)"
+assert_contains "$out" "argc=3" "I/RF5: 2단계 exec 가 훅 인자 개수를 보존한다 (빈 인자 포함)"
+assert_contains "$out" "arg=[a b]" "I/RF5: 공백이 든 인자가 쪼개지지 않는다"
+
 note "── 축 B: 배포 — 물리 사본 (AC11 · C9 · C10) ───────────────────────────"
 
 COPY_PLUGINS="project-init quality-gates spec-distill"
@@ -468,9 +585,9 @@ for hj in plugins/project-init/hooks/hooks.json \
     n_cmd=$((n_cmd+1))
     case "$cmd" in
       "python3 "*) n_bare=$((n_bare+1)); no "C/AC1: bare python3 로 시작하는 자리가 남아 있다: $hj — $cmd" ;;
-      "sh \${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh "*)
-        ok "C/AC1: $hj 의 자리가 sh <해석기> 를 경유한다" ;;
-      *) no "C/AC1: $hj 의 command 가 기대 형태가 아니다: $cmd" ;;
+      "/bin/sh \${CLAUDE_PLUGIN_ROOT}/scripts/devbrew-python.sh "*)
+        ok "C/AC9: $hj 의 자리가 /bin/sh <해석기> 를 경유한다" ;;
+      *) no "C/AC9: $hj 의 command 가 기대 형태(/bin/sh <해석기>)가 아니다: $cmd" ;;
     esac
     # 훅 .py 는 «마지막 토큰» 이어야 한다 — project-init 의 test_command_contract.py:125 가
     # `h["command"].split()[-1]` 로 훅 스크립트를 뽑는다. 순서를 바꾸면 그 락이 조용히
@@ -509,6 +626,43 @@ EOF
 done
 assert_eq "$n_cmd" "4" "C/AC1: hooks.json 3 파일에서 호출 자리 4건을 셌다"
 assert_eq "$n_bare" "0" "C/AC1: bare python3 로 시작하는 자리가 0 이다"
+
+# AC9 (설계 2026-09-23) — 위는 command 의 «모양» 이다. 실제로 cwd 의 `sh` 를 안 집는지는 실행으로
+# 잰다: 훅처럼 `/bin/sh -c "<command>"` 로, cwd 에 카나리 `sh` 를 두고 PATH 앞에 빈 항목을 둔다.
+# 해석기에 닿으면 그 플러그인의 kill switch 가 곧바로 끝내 훅 파이썬은 돌지 않는다.
+# 양의 짝: 같은 command 의 앞 `/bin/sh ` 를 bare `sh ` 로 바꾸면 카나리가 돌아야 한다 — 이것이
+# 없으면 「카나리 없음」은 카나리가 고장 나도 통과한다.
+SH_CWD="$TMP/shcwd"; SH_MARK="$TMP/sh-canary.ran"
+mkdir -p "$SH_CWD"
+printf '#!/bin/sh\n: > "%s"\n' "$SH_MARK" > "$SH_CWD/sh"; chmod +x "$SH_CWD/sh"
+run_hook_cmd() {   # run_hook_cmd <플러그인 디렉토리> <kill switch 변수> <command>
+  rm -f "$SH_MARK"
+  (cd "$SH_CWD" && env PATH=":/usr/bin:/bin" CLAUDE_PLUGIN_ROOT="$ROOT/$1" "$2=1" \
+     /bin/sh -c "$3" </dev/null >/dev/null 2>&1)
+}
+n_shexec=0
+for hj in plugins/project-init/hooks/hooks.json \
+          plugins/quality-gates/hooks/hooks.json \
+          plugins/spec-distill/hooks/hooks.json; do
+  hj_cmds="$(cmds_of "$hj")"
+  plugin_dir="${hj%/hooks/hooks.json}"
+  while IFS= read -r pair; do
+    [ -n "$pair" ] || continue
+    cmd="${pair#* }"
+    pl_arg="$(flag_val --plugin "$cmd")"
+    ks_var="DEVBREW_$(printf '%s' "$pl_arg" | tr 'a-z-' 'A-Z_')_DISABLE"
+    n_shexec=$((n_shexec+1))
+    run_hook_cmd "$plugin_dir" "$ks_var" "$cmd"
+    if [ -f "$SH_MARK" ]; then no "C/AC9: $hj ($pl_arg) — command 가 cwd 의 sh 를 실행했다: $cmd"
+    else ok "C/AC9: $hj ($pl_arg) — command 가 cwd 의 sh 를 집지 않는다"; fi
+    run_hook_cmd "$plugin_dir" "$ks_var" "sh ${cmd#/bin/sh }"
+    if [ -f "$SH_MARK" ]; then ok "C/AC9: 양의 짝 — 같은 command 를 bare sh 로 부르면 카나리가 돈다 ($pl_arg)"
+    else no "C/AC9: 양의 짝이 안 돈다 ($pl_arg) — 위 「카나리 없음」이 헛돈다"; fi
+  done <<EOF
+$hj_cmds
+EOF
+done
+assert_eq "$n_shexec" "4" "C/AC9: 실행으로 잰 command 자리가 4건이다"
 
 # ── AC11 의 «감사기» 절반 — 이 자리에서 비로소 이빨이 생긴다 ─────────────────
 # Task 2 에서는 이 단언이 아무것도 재지 못했다: `hooks.json` 이 해석기를 가리키지 않아
