@@ -1272,8 +1272,25 @@ c43_flat="$(tr '\n' ' ' <<<"$c43_block" | tr -s ' ' | sed 's/\*\*//g')"
 # 「정확 일치가 필요 없다」로 뒤집어도 여전히 매치했다(리뷰 지적). 이제 각 앵커는 뒤집으면
 # 리터럴 자체가 사라지도록 동사/한정어 쪽까지 문다.
 grep -qF 'derived 차원 internal_research 를 원장에 admit 한다' <<<"$c43_flat" \
-  && ok "AC10(산출자): 경로 (a) 가 internal_research 차원의 admit 을 지시한다" \
+  && ok "AC10(산출자): internal_research 차원의 admit 을 지시한다" \
   || no "AC10(산출자): admit 지시 부재(또는 극성 반전) — 게이트가 산출자 없는 것을 막는다"
+# 조건의 폭(최종 리뷰 I-2) — RC 산출자는 넷이다(경로 a · coverage-mapper · blind-spot-prober ·
+# steelman). 「경로 (a) 가 … 산출하면」 으로 좁혀 있으면 mapper 첫 dispatch(D6 의무)가 repo_claims
+# 를 낸 인터뷰에 admit 지시가 없고 게이트 ④ 가 red 이며 유일한 탈출이 RC 삭제다. 조건과 동사를 한
+# 리터럴로 문다 — 좁히면(산출자를 빼면) 리터럴이 사라진다.
+grep -qF '어느 자리든(경로 (a) · coverage-mapper · blind-spot-prober · steelman) `repo_claims[]` 가 처음 산출되면 그 자리에서 derived 차원 internal_research 를 원장에 admit 한다' <<<"$c43_flat" \
+  && ok "AC10(산출자·조건): 어느 산출자든 repo_claims 첫 산출이면 internal_research 를 admit 한다" \
+  || no "AC10(산출자·조건): admit 조건이 산출자 넷을 다 덮지 않는다(또는 극성 반전) — mapper·prober·steelman 경로가 ④ 에 막힌다"
+# 그 문장을 나머지 산출자 절이 가리킨다 — 각 절을 읽는 턴이 C43 절을 안 읽고 지나가도 admit 이 돈다.
+i2_prober="$(awk '/^## blind-spot-prober dispatch/{f=1;next} /^## /{f=0} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
+i2_r3="$(awk '/^### R3 — Steelman/{f=1;next} /^##+ /{f=0} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
+i2_d6="$(awk '/^\*\*첫 dispatch 의 검증 의무\(D6\)\*\*/{f=1} f&&/^$/{exit} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
+for pair in "D6:$i2_d6" "prober:$i2_prober" "steelman(R3):$i2_r3"; do
+  lbl="${pair%%:*}"; body="${pair#*:}"
+  { [[ -n "$body" ]] && grep -qF 'C43 절의 internal_research admit' <<<"$body"; } \
+    && ok "AC10(산출자·포인터): ${lbl} 절이 C43 절의 admit 을 가리킨다" \
+    || no "AC10(산출자·포인터): ${lbl} 절이 비었거나 admit 포인터가 없다"
+done
 grep -qF '그 차원은 레포 주장의 처분 S 로 닫고' <<<"$c43_flat" \
   && ok "AC10(산출자·닫힘): 그 차원을 닫는 발화를 지목한다" \
   || no "AC10(산출자·닫힘): 닫는 S 를 지목하지 않는다(또는 극성 반전) — 닫힌 행의 evidence 를 채울 근거가 없다"

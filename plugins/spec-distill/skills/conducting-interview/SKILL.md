@@ -188,8 +188,8 @@ printf '%s\n' "$CLAIMS_CONTRACT"
 매 라운드의 «지금 이해»·«질문» 에 어떤 path 인지 명시하십시오 — 경로 (a) 로 찾을 수 있는 것은 묻기 전에
 먼저 찾아 «지금 이해»에 싣습니다.
 
-**경로 (a) 가 `repo_claims[]` 를 처음 산출하면 그 자리에서 derived 차원 internal_research 를 원장에
-admit 한다**(coverage-mapper 제안과 무관 — 조사 행위가 그 차원을 함의한다). 이름은 그 글자대로 쓴다:
+**어느 자리든(경로 (a) · coverage-mapper · blind-spot-prober · steelman) `repo_claims[]` 가 처음 산출되면
+그 자리에서 derived 차원 internal_research 를 원장에 admit 한다**(coverage-mapper 제안과 무관 — 조사 행위가 그 차원을 함의한다). 이름은 그 글자대로 쓴다:
 게이트가 **정확 일치**로 재고 `internal_research_apparatus` 같은 유사 이름으로는 만족되지 않는다.
 그 차원은 **레포 주장의 처분 S** 로 닫고 evidence 에 그 S 를 인용한다 — 종료 시점엔 늦다(닫힘 규칙).
 
@@ -305,7 +305,7 @@ orchestrator가 원장에 admit할지 판정한다. `neglect_flag: true`면 다�
 게이트가 advisory 로 통과시키고 Step B 가 사람에게 보인다.
 
 **첫 dispatch 의 검증 의무(D6)** — seed 의 «다시 검증할 것» 문단 중 **레포로 확인 가능한 항목마다**
-`repo_claims` 를 산출해 V1 을 태운다. 「사용자만 답할 수 있는 것」과 「인과 추정」은 대상이 아니다.
+`repo_claims` 를 산출해 V1 을 태운다(첫 산출이면 C43 절의 internal_research admit 도). 「사용자만 답할 수 있는 것」과 「인과 추정」은 대상이 아니다.
 그 문단이 비어 있으면(규약 위반 seed — 위 슬롯 주석이 명시 허용) 이 의무는 미발동이고, 그 사실을
 audit §5 에 한 줄로 공시한다. Phase 0 은 건드리지 않는다 — 의무는 받는 쪽에 있다.
 
@@ -353,7 +353,8 @@ Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind
 계속하고 그 차원을 자동으로 닫지 않는다.
 
 **강등된 inline premortem 도 같은 계약을 쓴다** — orchestrator 가 자기 `Read`/`Grep` 으로 레포
-근거를 확인하고 `repo_claims` 를 산출해 V1 을 태운다. 웹 근거만 사라지고 내부 축은 돈다.
+근거를 확인하고 `repo_claims` 를 산출해 V1 을 태운다. 웹 근거만 사라지고 내부 축은 돈다. prober 경로든 강등
+경로든 `repo_claims` 의 첫 산출이면 C43 절의 internal_research admit 이 여기서도 돈다.
 
 ## 5 통과 의례 (Law 1 구조 게이트, R1–R5)
 
@@ -389,7 +390,7 @@ steelman · blind-spot premortem · coverage-mapper 넷이 전부 그 장치다.
 의심 trigger = landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의 충돌. 절차 전문(전제 도출 ·
 `steelman-builder` dispatch · 게이트-전 확인 · 게이트 제시 블록 · 유지/보완/전환/보류 게이트 · 기록 · steelman 0건의
 `검토 —` 항목 · web 비활성 시 steelman 자동 생략)은 `references/steelman.md` 다 — R3 에 들어갈 때 그 파일을 Read 한다.
-builder 출력은 verbatim 으로 다룬다(약화·편집 금지). 보류는 §3 OQ 에도 박제한다.
+builder 출력은 verbatim 으로 다룬다(약화·편집 금지). 보류는 §3 OQ 에도 박제한다. builder 의 `repo_claims` 가 첫 산출이면 C43 절의 internal_research admit 이 여기서도 돈다.
 
 ## seed 를 입력으로 받았을 때
 
