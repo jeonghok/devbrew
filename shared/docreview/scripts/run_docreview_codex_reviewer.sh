@@ -437,7 +437,7 @@ print("\n" + pre)
 print("\n<document>\n" + doc + "\n</document>")
 print('\nEmit ONE fenced JSON block. `disposition` is required unless you cannot judge it.')
 print('`replacement` is required for `decide` — what the document becomes if fixed. '
-      'To propose deletion, write the literal `대체안 없음 — 그냥 뺀다`, leaving the field '
+      'To propose deletion, write the literal `대체안 없음 — 그냥 뺀다`. Leaving the field '
       'empty is NOT a deletion proposal. `if_unfixed` states what remains if nothing changes '
       '(the consequence, not a restatement of the problem).')
 print('```json\n{"findings":[{"ref":"x1","layer":1,"category":"...","anchor":"#slug",'

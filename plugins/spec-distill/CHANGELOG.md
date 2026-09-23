@@ -1,5 +1,32 @@
 # Changelog
 
+## [4.2.1] — 2026-09-23
+
+patch 인 이유 — 전부 `Fixed` 다. 새 필드·새 커맨드·새 surface 는 없다. 하나 새
+행동처럼 보이는 것(필드 값의 공백을 뭉치고 그 강제를 계수하는 것)은 프로필이
+이미 말하던 규칙(「한 줄, 개행 없이」)을 아무것도 강제하지 않던 자리에 강제를
+채운 것이라 결함의 수정이지 새 능력이 아니다. 4.2.0 이 새로 들인 갈래 2 필드
+(`replacement`·`if_unfixed`) 가 실제로 쓰이기 시작하면서(PR 4 종단 리뷰) 갈래
+사이 이음매에서 드러난 결함 일곱을 닫는다 — 사람이 손으로 고쳤다면 놓쳤을
+자리들이다.
+
+### Fixed
+
+- **escalated·reraise 후속이 `replacement`·`if_unfixed` 를 잃어 리뷰어의 판단을 침묵으로 오독시켰다.** `docreview_route.py` 의 `_auto_decides` 가 짓는 escalated·reraise 두 후속 dict 는 원본 finding(f0)에서 layer·category·anchor 등 여덟 필드를 물려받지만 `replacement`·`if_unfixed` 는 빠져 있었다 — 이 dict 들은 `normalize()` 를 거치지 않으므로 두 키가 아예 존재하지 않았고, 렌더는 「값이 있는데 못 읽었다」를 「(대체안 미작성)」(리뷰어가 정말 아무것도 안 쓴 경우의 리터럴)으로 냈다. 침묵과 판단이 다르게 읽혀야 한다는, 이 기능 전체가 존재하는 이유인 그 계약을 후속 항목에서 다시 깬 것이다. `f0.get("replacement")`/`f0.get("if_unfixed")` 로 원본 값을 잇고, `test_docreview_route.sh` 에 두 락(`case_I1_escalated_carries_replacement_fields`·`case_I1_reraise_carries_replacement_fields`)을 추가 — reraise 쪽을 escalated 와 별도로 덮는 이유는, 출시된 `overdesign` 축이 `decide` finding 만 내고 escalate 경로를 안 타 그쪽 락이 혼자서는 못 잡기 때문이다. 골든 픽스처(`case_T22_reraise_appears_in_next_round.fin.json`)도 두 키를 null 로 내도록 재생성했다(`normalize()` 가 부재를 null 로 내는 것과 같은 스키마).
+
+- **처분 안내 · agent persona 사본 넷 · codex 프롬프트가 갈래 2 이전 필드 사상을 가리키고 있었다.** `design-doc.md` 의 처분 안내 줄이 「변경 내용 · 근거 · 대안 · 영향을 summary/evidence 에 채운다」는 옛 문구 그대로였는데, 몇 줄 위 필드 사상은 이미 대안을 `replacement` 로, 그대로 두면 남는 결과를 `if_unfixed` 로 보낸다 — 옛 문구를 따르면 대안이 summary 에 뭉쳐 게이트가 헤더에 문제+대안을 욱여넣은 채 「고치면: (대체안 미작성)」을 낸다(바로 위 항목과 같은 부류의 역전). `brief.md` 는 같은 어휘의 처분 안내 줄이 없어 대응하는 결함이 없다 — 확인만 하고 손대지 않았다. `shared/docreview/agents/{doc-critic,doc-critic-web}.md` 와 그 copy-of 사본(`plugins/spec-distill/agents/{doc-critic,doc-critic-web}.md`, byte-identical) 네 벌도 전부 `summary` 에 **변경 내용**을 담으라고 했다 — 그 항목은 이제 렌더에 없다. 네 파일 모두 `evidence`·`replacement`·`if_unfixed` 세 칸으로 고쳤다. `run_docreview_codex_reviewer.sh`(symlink, `quality-gates` 도 동일 파일을 심볼릭 링크로 배송)의 codex 프롬프트에 낀 콤마 스플라이스도 마침표로 갈랐다.
+
+- **`replacement` 는 한 줄이라야 하는데, 그 규칙 바로 위 템플릿 자체가 두 줄이었다.** `brief.md`·`design-doc.md` 두 프로필의 판정 한 줄 펜스가 대안 줄 + 들여쓴 `└ 천장` 줄의 두 줄 모양이었던 반면, 바로 아래 필드 사상 문단은 둘을 `replacement` 에 한 줄·개행 없이 실으라고 했다 — 펜스를 그대로 베끼면 그 모순이 실제 개행으로 나타나 렌더의 여섯 줄 게이트 블록이 여덟 줄이 되고 `└ 천장` 조각이 다음 줄 첫 칸에 떨어져 최상위 게이트 줄과 구별되지 않는다. 펜스를 `<대안>. └ 천장: <조건>` 한 줄로 합치고, 「└ 들여쓰기는…」 문구도 더 이상 없는 들여쓰기를 안 가리키게 고쳤다. `test_overdesign_rubric.sh` 에 펜스가 실제로 한 줄인지 재는 락 둘을 추가(옛 두 줄 모양으로 RED, 고친 모양으로 GREEN 실측). 엔진 쪽 강제 — 값을 한 줄로 뭉치고 그 강제를 계수하는 것 — 은 `quality-gates` `[8.2.1]` 참조(심볼릭 링크로 양쪽에 같은 파일이 나간다).
+
+- **AC7·AC11 배너가 이름과 실측 사이가 벌어져 있었다 — mutation 으로 증명.** AC7(「판정 한 줄의 형식」)은 `└ 천장` 잔해 유무 하나만 쟀다 — 템플릿 줄(`<앵커>: <태그> <무엇이 과한가>. <더 단순한 대안>.`) 을 통째로 지워도 「└ 천장」 잔해만 남으면 그대로 통과했다. AC11(「상한 N=3 과 그 근거」)은 숫자도 근거 문장도 안 읽어 「3건」→「30건」과 근거 문장을 통째로 지워도 통과했다. 템플릿 다섯 슬롯(`<앵커>`·`<태그>`·`<무엇이 과한가>`·`<더 단순한 대안>`·`<이 판정이 틀릴 조건>`) 개별 실패로, 상한 숫자는 부분 문자열로 안 걸리는 `has … '3건'` 로, 근거는 결론절 「한 호출을 혼자 채우지 못한다」로 각각 핀. 두 mutation 모두 옛 배너로는 GREEN, 새 배너로는 RED 를 실측했다 — 프로필 파일 자체는 이미 옳은 모양이라 손대지 않았다.
+
+- **AC18′ 첫 절(같은 anchor 항목이 인접해 묶음 마커를 갖는다는 보장)을 철회하고, 같은 자리의 사실 오류 둘을 고쳤다.** `GATE_ROWS` 를 정렬하는 id prefix 가 `(layer, category, anchor)` 의 sha1 추첨이라, 같은 anchor 라도 category 가 다르면(overdesign·architecture 조합이 가장 흔한 입력) 인접이 보장되지 않는다 — 보장하려면 게이트를 재정렬해야 하는데 그것은 「오케스트레이터가 새 순위를 매기지 않는다」는 원칙과 부딪힌다. 사용자는 재정렬 대신 AC18′ 첫 절 철회를 선택했다(둘째 절 — 질문 수·선택권 불변 — 은 그대로 선다. 설계 결정 기록에 P23 재결정으로 기록). 뒤이은 수정이 같은 자리의 사실 오류 둘을 고쳤다 — 두 트리에서 서로 다른 줄(이 브랜치 91, origin/main 85)을 가리키던 인용을 다음 편집에서도 안 썩게 `_bucket()` 심볼 인용으로 바꾸고, 「인접하지 않은 항목은 절대 마커를 안 갖는다」는 거짓 전칭부정을 재리뷰의 구성적 반증(#2-goals 에 열린 항목이 overdesign·architecture 둘뿐이면 인접이 강제돼 마커가 붙는다)으로 잡아낸 뒤 참인 약한 문장(「인접이 보장되지 않는다」)으로 교체했다. AC19′·AC19″ 의 다른 줄 인용은 범위 밖이라 손대지 않았다.
+
+### Known gaps
+
+- **`normalize()` 의 disposition 강제가 critic/codex 경로에서 여전히 소실될 수 있다 — 오늘의 마스킹은 보장이 아니다.** `ledger.coerced("disposition", disp, None)` 은 `cmd_prepare` 의 Ledger 로 불려 그 라운드 events 만 `cmd_finalize` 로 넘어가는 탓에 조용히 소실된다 — `replacement` 강제가 가졌던 것과 같은 경계 결함이다(위 항목). 오늘은 `_apply_recritic` 의 무조건 `None → "ask"` 루프가 우연히 가리고 있을 뿐이고, 재비판 verdict 가 아직 None 인 항목에 처분을 직접 매기는 경로에서는 그 루프가 안 돌아 계수가 **0 으로 끝난다** — 과소집계가 아니라 총 소실이다. 결함 자리에 발견 마커만 달았고 행동은 바꾸지 않았으며 락도 추가하지 않았다 — `ev()` 래퍼로 옮기는 것은 prepare→finalize 계약을 바꾸는 별도 작업이고, 지금 락을 추가하면 알려진 결함을 의도된 것처럼 고정하게 된다.
+- 이번에도 `tools/adjudication/check_wiring.py` 의 줄-핀 EXEMPT 키 열 자리가 재앵커됐다(주석 6줄이 밀어 전부 이동, 가드 텍스트·사유는 무변경) — 이 기능에서 벌써 네 번째다. 줄번호로 면제를 고정하는 방식의 상시 세금으로 기록해 둔다.
+
 ## [4.2.0] — 2026-09-23
 
 minor 인 이유 — 새 surface 가 하나다: 두 문서 자리(`brief.md`·`design-doc.md`)의
