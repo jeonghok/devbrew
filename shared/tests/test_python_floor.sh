@@ -52,6 +52,14 @@ fi
 
 . "$ROOT/shared/tests/assert.sh"
 
+# 개발자 셸의 DEVBREW_* 를 물려받지 않는다. 해석기와 훅은 이 변수들로 kill switch 와 인터프리터를
+# 고르므로, 남아 있으면 fixture 가 아니라 개발자 환경을 잰다〔실측: DEVBREW_SKIP_HOOKS=qg:h 가
+# export 된 셸에서 36건 RED〕 — 만족하는 $DEVBREW_PYTHON 이면 음성 단언이 조용히 공허해진다.
+# 이름은 셸 내장 `compgen -e` 로 도출한다: 손으로 쓴 목록은 내일 생길 스위치를 못 본다.
+for _v in $(compgen -e DEVBREW_); do unset "$_v"; done
+assert_eq "$(compgen -e DEVBREW_ | wc -l | tr -d ' ')" "0" \
+  "증인: 물려받은 DEVBREW_* 환경 변수를 전부 비웠다 (fixture 만 잰다)"
+
 # 출하 바닥은 **해석기에서 도출한다** — 숫자를 이 락에 리터럴로 핀하면 바닥이 움직이는 날
 # stale-red 가 된다(리포에 전례가 있다). 도출이 비면 아래 대조가 전부 헛돌므로 **증인을
 # 먼저 세운다** — 재도출 락은 보간 실패를 스스로 못 잡는다.
@@ -169,6 +177,20 @@ note "── 축 A: 해석기 행동 ──────────────�
 out="$(run_resolver "$PATH_FLOOR" DEVBREW_QUALITY_GATES_DISABLE=1 /bin/sh "$R" \
         --event SessionStart --plugin quality-gates --hook session-start-advisor "$TARGET")"
 assert_eq "$out" "" "A1/AC5a: DEVBREW_QUALITY_GATES_DISABLE=1 이면 stdout 이 비고 훅이 안 돈다"
+
+# A1b (AC5a 의 exec 갈래별 짝) A1 의 PATH_FLOOR 는 3단계(글롭)에서야 만족 후보를 만난다. 그래서
+#     kill switch 판정을 1·2단계 «아래» 로 옮겨도 A1 은 GREEN 인데 끈 훅이 그 두 갈래로 돈다
+#     〔#162 회고 리뷰 실측: 131/131〕. exec 갈래마다 만족 후보를 하나씩 두고 스위치를 켠다.
+#     양의 짝(스위치 없이 같은 갈래로 exec 한다)은 A9 · A17 · A5 다.
+out="$(run_resolver "$PATH_SUB" DEVBREW_QUALITY_GATES_DISABLE=1 "DEVBREW_PYTHON=$TMP/floor/python3.99" \
+        /bin/sh "$R" --event SessionEnd --plugin quality-gates --hook session-end-cleanup "$TARGET")"
+assert_not_contains "$out" "TARGET-RAN" "A1b: 스위치가 켜지면 1단계(\$DEVBREW_PYTHON)로도 exec 하지 않는다"
+out="$(run_resolver "$PATH_PLAINFLOOR" DEVBREW_QUALITY_GATES_DISABLE=1 \
+        /bin/sh "$R" --event SessionEnd --plugin quality-gates --hook session-end-cleanup "$TARGET")"
+assert_not_contains "$out" "TARGET-RAN" "A1b: 스위치가 켜지면 2단계(bare python3)로도 exec 하지 않는다"
+out="$(run_resolver "$PATH_FLOOR" DEVBREW_QUALITY_GATES_DISABLE=1 \
+        /bin/sh "$R" --event SessionEnd --plugin quality-gates --hook session-end-cleanup "$TARGET")"
+assert_not_contains "$out" "TARGET-RAN" "A1b: 스위치가 켜지면 3단계(python3.* 글롭)로도 exec 하지 않는다"
 
 # A2 (AC5b) 전체 토큰 — 부분 일치는 끄지 않는다
 out="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS=quality-gates:session-start /bin/sh "$R" \
@@ -486,10 +508,19 @@ assert_contains "$out" "arg=[a b]" "I/RF5: 공백이 든 인자가 쪼개지지 
 
 note "── 축 B: 배포 — 물리 사본 (AC11 · C9 · C10) ───────────────────────────"
 
-COPY_PLUGINS="project-init quality-gates spec-distill"
+# 사본 자리와 hooks.json 을 리터럴로 열거하지 않는다. 목록은 네 번째 플러그인이 훅을 얻는 것도,
+# 마커 없는 사본이 새로 생기는 것도 못 본다 — 후자는 `test_copy_of_contract.sh` 축 1b 도 안 본다
+# (마커가 있는 파일만 훑는다). 추적 파일에서 두 집합을 따로 도출해 서로 대조한다:
+#   (a) 있는 사본 — shared/python/ 밖의 추적된 devbrew-python.sh 전부(심볼릭 링크 포함)
+#   (b) 있어야 할 사본 — hooks.json 이 해석기를 부르는 플러그인마다 하나
+HOOKS_JSONS="$(git ls-files 'plugins/*/hooks/hooks.json')"
+COPY_FILES="$(git ls-files '*devbrew-python.sh' | grep -v '^shared/python/' | sort)"
+REQ_COPIES="$(for hj in $HOOKS_JSONS; do
+                grep -q 'scripts/devbrew-python\.sh' "$hj" && printf '%s/scripts/devbrew-python.sh\n' "${hj%/hooks/hooks.json}"
+              done | sort)"
+assert_eq "$COPY_FILES" "$REQ_COPIES" "B/AC11: 있는 사본 집합 = hooks.json 이 해석기를 부르는 플러그인 집합 (남는 사본도 빠진 사본도 없다)"
 n_copy=0
-for p in $COPY_PLUGINS; do
-  c="plugins/$p/scripts/devbrew-python.sh"
+for c in $(printf '%s\n%s\n' "$COPY_FILES" "$REQ_COPIES" | sort -u); do
   n_copy=$((n_copy+1))
   if [ -L "$c" ]; then
     no "B/AC11: $c 가 심볼릭 링크다 — 감사기 containment 가 shared/ 로 풀려 거짓 gap 을 낸다"
@@ -515,7 +546,7 @@ for p in $COPY_PLUGINS; do
     no "B/C10: $c 에 copy-of 마커가 없다 — 위 바이트 비교에서 조용히 빠진다"
   fi
 done
-[ "$n_copy" -eq 3 ] && ok "B: 사본 자리 3건을 훑었다 (vacuous 아님)" || no "B: 사본 자리가 3이 아니다 ($n_copy)"
+[ "$n_copy" -ge 1 ] && ok "B: 사본 자리 ${n_copy}건을 훑었다 (vacuous 아님)" || no "B: 사본 자리를 하나도 도출하지 못했다 — 축 B 가 아무것도 안 잰다"
 
 # **감사기 판정은 여기서 재지 않는다.** `hooks.json` 이 아직 해석기를 가리키지 않으므로
 # plugin-audit 는 사본을 읽지조차 않는다 — 사본을 통째로 지워도 `hooks_killswitch` 는
@@ -572,9 +603,7 @@ flag_val() {   # flag_val <플래그> <command 문자열> → 그 플래그 «�
 }
 
 n_cmd=0; n_bare=0
-for hj in plugins/project-init/hooks/hooks.json \
-          plugins/quality-gates/hooks/hooks.json \
-          plugins/spec-distill/hooks/hooks.json; do
+for hj in $HOOKS_JSONS; do   # 축 B 머리에서 git ls-files 로 도출했다
   # 명령 치환을 heredoc 본문에 **직접** 넣지 않는다 — 그 형태가 본문 내용에 따라 파싱이
   # 깨진 전례가 이 리포에 있다. 변수에 먼저 받는다(형제 락 test_copy_of_contract.sh 와 같은 꼴).
   hj_cmds="$(cmds_of "$hj")"
@@ -641,9 +670,7 @@ run_hook_cmd() {   # run_hook_cmd <플러그인 디렉토리> <kill switch 변�
      /bin/sh -c "$3" </dev/null >/dev/null 2>&1)
 }
 n_shexec=0
-for hj in plugins/project-init/hooks/hooks.json \
-          plugins/quality-gates/hooks/hooks.json \
-          plugins/spec-distill/hooks/hooks.json; do
+for hj in $HOOKS_JSONS; do   # 축 B 머리에서 git ls-files 로 도출했다
   hj_cmds="$(cmds_of "$hj")"
   plugin_dir="${hj%/hooks/hooks.json}"
   while IFS= read -r pair; do
