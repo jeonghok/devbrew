@@ -347,8 +347,7 @@ git commit -m "fix(python): 해석기가 절대 경로 PATH 항목만 탐색한�
 상대 경로 · 빈 PATH 가 훅 cwd(사용자가 연 리포)의 파일을 실행하던 경로다.
 락 축 I 가 카나리로 잰다(AC1~AC4 · AC8 · RF1~RF5).
 
-Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01DoWsYcqU2xD45bduD3sKwu"
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 git status --short
 ```
 
@@ -514,8 +513,7 @@ bare sh 도 PATH 탐색을 타서 앞 빈 항목 · '.' 이 있으면 훅 cwd �
 실행했다. 네 자리 모두 /bin/sh 로. 락 축 C 가 모양(AC9)과 실행
 (cwd 카나리 sh + 양의 짝)을 함께 잰다.
 
-Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01DoWsYcqU2xD45bduD3sKwu"
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 git status --short
 ```
 
@@ -618,8 +616,7 @@ git commit -m "chore(release): project-init 4.0.1 · quality-gates 8.2.3 · spec
 훅 command · 인자 · 출력 계약이 그대로다(설계 AC7). 사용자에게 보이는 변화는
 비-절대 PATH 항목에만 인터프리터를 둔 경우뿐이다(설계 L1).
 
-Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01DoWsYcqU2xD45bduD3sKwu"
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 git status --short
 ```
 
@@ -780,10 +777,10 @@ Expected: `== /bin/dash: Total: 173 | Pass: 173 | Fail: 0` · `== /bin/ksh: Tota
 
 ```bash
 git status --short
-git log --oneline a9590ba8..HEAD
+git log --oneline f19184ac..HEAD
 ```
 
-Expected: `git status` 출력 없음. 커밋 3개(Task 1·2·3).
+Expected: `git status` 출력 없음. plan 수정 커밋 1개(`docs(plan): …`) 위에 Task 1·2·3 의 커밋 3개(`fix(python)` · `fix(hooks)` · `chore(release)`). `f19184ac` 는 이 plan 의 첫 커밋이다.
 
 - [ ] **Step 7: 머지 직전 base 재확인**
 
