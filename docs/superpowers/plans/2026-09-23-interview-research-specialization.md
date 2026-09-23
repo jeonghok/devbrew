@@ -177,7 +177,10 @@ B="$CLAUDE_JOB_DIR/tmp/baseline.txt"
 for f in plugins/*/tests/*.sh shared/tests/*.sh; do
   case "$(basename "$f")" in assert.sh|presence_corpus.sh) continue ;; esac
   out="$(bash "$f" 2>&1)"; rc=$?
-  nfail="$(printf '%s\n' "$out" | grep -c '✗' || true)"
+  # 접두 `  ✗ ` 로 센다 — `assert.sh` 의 `no()` 가 `printf '  ✗ %s\n'` 로 내고
+  # `shared/tests/test_assert_behavior.sh` 가 그 접두를 「진단 grep 다섯 자리의 계약」으로 못 박는다.
+  # 접두 없이 세면 설명 문구에 그 글자를 담은 **통과** 줄이 실패로 잡힌다(실측: 그 파일이 rc 0 인데 1).
+  nfail="$(printf '%s\n' "$out" | grep -c '^  ✗ ' || true)"
   printf '%s\trc=%s\tfail_lines=%s\n' "$f" "$rc" "$nfail" >> "$B"
 done
 sort "$B" | tail -n +1
@@ -200,20 +203,55 @@ Expected: `OK` 또는 `FAILED (failures=N)`. 그 값을 baseline 으로 기록�
 
 설계 AC22 의 열거를 신뢰하지 않는다. **두 장치(coverage-mapper · blind-spot-prober)의 상한 문구만** 대상이고, 엔진의 `재리뷰 상한 2` · `confirm_repost_count` 의 `상한 2회` · `finishing.md` 재제시 `상한 2회` · `rhythm guard 3` 은 **대상이 아니다**(다른 것을 센다).
 
+**line-wide `grep -v` 를 쓰지 않는다.** 배제 문구가 진짜 자리와 **같은 줄**에 있으면 그 자리까지 함께 버려지고(`README.md:130` 은 `coverage-mapper dispatch 상한 2` 와 `재리뷰 상한 2` 를 한 줄에 담는다), 반대로 배제 문구와 글자가 다른 무관한 자리는 통과한다(`README.md:93` 의 `재제시에는 상한 2회`). 둘 다 실측된 오분류다. 매처를 워크스페이스에 파일로 두고 Task 11 이 **같은 파일을 다시 쓴다** — 사본을 두면 한쪽만 고치는 결함이 된다.
+
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
-grep -rn '상한 2\|fan-out 1\|인터뷰당 1회\|bounded dispatch\|bounded to two per interview' \
-  plugins/spec-distill --include='*.md' | grep -v '/tests/' | grep -v 'CHANGELOG' \
-  | grep -v '재리뷰 상한 2' | grep -v 'confirm_repost_count' | grep -v '확정 후보를 고쳐' | grep -v '목록을 재제시' \
-  | tee "$CLAUDE_JOB_DIR/tmp/cap-sites.txt"
-grep -c . "$CLAUDE_JOB_DIR/tmp/cap-sites.txt"
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
+cat > "$W/cap-sites.py" <<'EOS'
+#!/usr/bin/env python3
+"""두 장치(coverage-mapper · blind-spot-prober)의 옛 상한 문구 자리를 도출한다.
+
+배제는 **개념 정밀**이다 — 줄 단위 `grep -v` 는 같은 줄의 진짜 자리를 함께 버린다(실측:
+README.md:130). 다른 것을 세는 상한 셋을 각각 그 자리에서만 뺀다:
+  · 엔진 재리뷰 상한   — `상한 2` 바로 앞이 `재리뷰 `
+  · 확정 재제시 상한   — `상한 2` 바로 뒤가 `회`
+  · confirm_repost_count — 그 식별자를 담은 줄
+"""
+import re
+import sys
+from pathlib import Path
+
+TARGET = re.compile(
+    r"(?<!재리뷰 )상한 2(?!회)"
+    r"|fan-out 1"
+    r"|인터뷰당 1회"
+    r"|bounded dispatch"
+    r"|bounded to two per interview")
+root = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
+hits = 0
+for f in sorted(root.glob("plugins/spec-distill/**/*.md")):
+    rel = str(f)
+    if "/tests/" in rel or f.name == "CHANGELOG.md":
+        continue
+    for i, ln in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+        if "confirm_repost_count" in ln:
+            continue
+        if TARGET.search(ln):
+            hits += 1
+            print("%s:%d:%s" % (rel, i, ln.strip()[:150]))
+print("총 %d 줄" % hits, file=sys.stderr)
+EOS
+python3 "$W/cap-sites.py" . | tee "$W/cap-sites.txt"
+grep -c . "$W/cap-sites.txt"
 ```
 
-Expected: **14건**(관측값 — agents/ 6 + SKILL.md 5 + README.md 3). 14가 아니면 그 차이를 먼저 설명하고 Task 10 의 대상 목록을 그 실측으로 바꾼다. 세부:
+Expected: **원시 매치 줄 15 · 개념 자리 14.** 수가 하나 어긋나는 이유는 `SKILL.md` 의 한 문장이 두 줄로 줄바꿈돼 있어(`**인터뷰당 1회**` / `dispatch한다(fan-out 1, C8)`) 한 자리가 두 줄로 세어지기 때문이다. 다른 값이 나오면 그 차이를 먼저 설명하고 Task 11 의 대상 목록을 그 실측으로 바꾼다. 세부(개념 자리 14):
 - `agents/blind-spot-prober.md` — frontmatter description `(fan-out 1)` · 본문 규칙 4 `**fan-out 1**: 인터뷰당 1회 dispatch(C8).` · 「사용하지 않는 경우」 `재dispatch 금지 — fan-out 1, AC6`
 - `agents/coverage-mapper.md` — frontmatter description `dispatch is bounded to two per interview.` · H1 `(상한 2 dispatch …)` · 본문 규칙 4 `**bounded dispatch**: … 상한 2`
 - `SKILL.md` — state 주석 `# C8 인터뷰당 1회 보장` · state 주석 `# 상한 2 — R1 첫 질문 전 1 + 재개방 시 ≤1` · 헤딩 `## coverage-mapper dispatch (상한 2)` · 본문 `상한 2, 카운터 …` · 본문 `**인터뷰당 1회** dispatch한다(fan-out 1, C8)`
-- `README.md` — `:65` `(적대적 premortem, fan-out 1)` · `:123` `dispatch 상한 2) + … fan-out 1` · `:130` `coverage-mapper dispatch 상한 2 + blind-spot-prober fan-out 1(interview)`
+- `README.md` — `:65` `(적대적 premortem, fan-out 1)` · `:123` `dispatch 상한 2) + … fan-out 1` · `:130` `coverage-mapper dispatch 상한 2 + blind-spot-prober fan-out 1(interview)`.
+  **`:93` 은 대상이 아니다** — `재제시에는 상한 2회` 는 확정 재제시 상한(P17)이고 다른 것을 센다.
 
 - [ ] **Step 4: 리터럴 마커 · 픽스처 · 줄 수 · floor 리터럴 계수 재도출**
 
@@ -1912,13 +1950,13 @@ Expected: stale 락 `Fail: 0`, SKILL.md ≈ 424줄 (`< 430` — **여유 6줄**)
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
-cat "$CLAUDE_JOB_DIR/tmp/cap-sites.txt" 2>/dev/null || bash -c '
-grep -rn "상한 2\|fan-out 1\|인터뷰당 1회\|bounded dispatch\|bounded to two per interview" \
-  plugins/spec-distill --include="*.md" | grep -v "/tests/" | grep -v CHANGELOG \
-  | grep -v "재리뷰 상한 2" | grep -v "confirm_repost_count" | grep -v "확정 후보를 고쳐" | grep -v "목록을 재제시"'
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
+python3 "$W/cap-sites.py" .
 ```
 
-Expected: 14건 (agents 6 + SKILL.md 5 + README 3). **이 목록이 이 Task 의 교체 대상 전량이다.** SKILL.md 의 state 주석 둘은 Task 10 이 이미 고쳤으므로 남은 것은 12건이다 — 목록이 그것을 반영해야 한다.
+Task 1 이 워크스페이스에 둔 **같은 매처**를 다시 쓴다 — 여기서 정규식을 다시 적으면 사본이 둘이 되고 「한쪽만 고치는」 결함이 된다.
+
+Expected: Task 10 이 SKILL.md 의 state 주석 둘을 이미 고쳤으므로 **원시 매치 줄 13 · 개념 자리 12** 가 남는다(착수 시 15/14 에서 둘 감소). 다른 값이 나오면 Task 10 이 무엇을 바꿨는지 먼저 확인한다. **이 목록이 이 Task 의 교체 대상 전량이다** — 이 문서의 숫자를 기대값으로 고정하지 않는다.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
@@ -2133,18 +2171,16 @@ Expected: `ok` 다음 — E10 두 단언 ✓ (`최대 N회`·`N회까지`·`N-N�
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
-echo "--- 두 장치의 옛 상한 문구 잔존 (0이어야 한다)"
-grep -rn '상한 2\|fan-out 1\|인터뷰당 1회\|bounded dispatch\|bounded to two per interview' \
-  plugins/spec-distill --include='*.md' | grep -v '/tests/' | grep -v CHANGELOG \
-  | grep -v '재리뷰 상한 2' | grep -v 'confirm_repost_count' | grep -v '확정 후보를 고쳐' | grep -v '목록을 재제시' \
-  || echo "0건 ✓"
+echo "--- 두 장치의 옛 상한 문구 잔존 (0이어야 한다) — Task 1 의 같은 매처로"
+W=.superpowers/sdd/2026-09-23-interview-research-specialization
+python3 "$W/cap-sites.py" . || true
 echo "--- 무관한 상한은 그대로여야 한다"
 grep -rc '재리뷰 상한 2' plugins/spec-distill/skills/reviewing-spec/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md
 grep -c '상한 2회' plugins/spec-distill/skills/conducting-interview/references/finishing.md
 grep -c 'RHYTHM_GUARD_THRESHOLD' plugins/spec-distill/skills/conducting-interview/SKILL.md
 ```
 
-Expected: 첫 블록 `0건 ✓`. 무관한 셋은 각각 `1`·`1`·`2` 이상 — **건드리지 않았다**.
+Expected: 매처의 stdout 이 **비고** stderr 가 `총 0 줄`. 무관한 셋은 각각 `1`·`1`·`2` 이상 — **건드리지 않았다**. 매처가 한 줄이라도 내면 그 자리가 미교체이거나, 새로 쓴 문면이 우연히 옛 표기와 같아진 것이다.
 
 - [ ] **Step 5: 전체 확인 + Commit**
 
@@ -3709,7 +3745,7 @@ MSG
 
 ```bash
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/references/research-claims.md plugins/spec-distill/skills/conducting-interview/SKILL.md plugins/spec-distill/skills/conducting-interview/references/steelman.md plugins/spec-distill/agents/steelman-builder.md plugins/spec-distill/agents/coverage-mapper.md plugins/spec-distill/agents/blind-spot-prober.md
+# guards: plugins/spec-distill/references/research-claims.md plugins/spec-distill/skills/conducting-interview/SKILL.md plugins/spec-distill/skills/conducting-interview/references/steelman.md plugins/spec-distill/agents/steelman-builder.md
 #
 # 조사 주장 계약이 **경로가 아니라 내용으로** 세 dispatch 에 배달되는가, 그리고 정본과 사본이
 # 갈라지지 않는가. 설치본에서 계약 파일은 플러그인 캐시(사용자 cwd 밖)에 있어 subagent 의 Read 가
@@ -3737,8 +3773,6 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/skills/conducting-interview/SKILL.md"
   echo "plugins/spec-distill/skills/conducting-interview/references/steelman.md"
   echo "plugins/spec-distill/agents/steelman-builder.md"
-  echo "plugins/spec-distill/agents/coverage-mapper.md"
-  echo "plugins/spec-distill/agents/blind-spot-prober.md"
   exit 0
 fi
 
@@ -3871,7 +3905,7 @@ bash plugins/spec-distill/tests/test_research_claims_contract.sh
 bash plugins/spec-distill/tests/test_research_claims_contract.sh --emit-scanned | wc -l
 ```
 
-Expected: `Fail: 0` · `--emit-scanned` 가 `6`.
+Expected: `Fail: 0` · `--emit-scanned` 가 `4`. **넷만 선언한다** — 두 agent 파일(`coverage-mapper.md` · `blind-spot-prober.md`)은 이 락의 어느 축도 읽지 않으므로 `# guards:` 에 올리면 거짓 커버리지다. 그 둘의 슬롯은 자기 frontmatter 락이 잰다(Task 5 · Task 6).
 
 - [ ] **Step 3: 축 X 를 더한다 (차가운 셸 실행)**
 
@@ -3961,9 +3995,26 @@ Expected: 양성 대조에서 `Fail:` 이 **0 이 아니다** → 복원 후 `Fa
 | m5 | 제약의 부정형 | 펜스의 `exit 1` 을 `exit 0` 으로 | C · X |
 | m6 | 표기 | 산문의 body-unique 문구를 펜스 안 `echo` 로 옮긴다 | A |
 
+**Bash 도구는 호출마다 새 셸이다** — Step 4 의 `restore()`·`$BK` 는 이 호출로 넘어오지 않는다. 그래서 이 Step 은 자기완결이고 백업을 다시 뜬다.
+
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
 LOCK=plugins/spec-distill/tests/test_research_claims_contract.sh
+BK="$CLAUDE_JOB_DIR/tmp/mut"; rm -rf "$BK"; mkdir -p "$BK"
+for f in plugins/spec-distill/references/research-claims.md \
+         plugins/spec-distill/skills/conducting-interview/SKILL.md \
+         plugins/spec-distill/skills/conducting-interview/references/steelman.md \
+         plugins/spec-distill/agents/steelman-builder.md; do
+  cp "$f" "$BK/$(basename "$f")"
+done
+restore() { for f in "$BK"/*; do
+  b="$(basename "$f")"
+  case "$b" in
+    research-claims.md) cp "$f" plugins/spec-distill/references/"$b" ;;
+    SKILL.md) cp "$f" plugins/spec-distill/skills/conducting-interview/"$b" ;;
+    steelman.md) cp "$f" plugins/spec-distill/skills/conducting-interview/references/"$b" ;;
+    steelman-builder.md) cp "$f" plugins/spec-distill/agents/"$b" ;;
+  esac; done; }
 run_mut() {  # run_mut <이름> <python 변형>
   PYTHONDONTWRITEBYTECODE=1 python3 -c "$2" || { echo "$1: 변이 적용 실패(앵커 불일치)"; restore; return; }
   printf '%s: ' "$1"; bash "$LOCK" 2>&1 | tail -1
@@ -4185,7 +4236,10 @@ A="$CLAUDE_JOB_DIR/tmp/after.txt"; : > "$A"
 for f in plugins/*/tests/*.sh shared/tests/*.sh; do
   case "$(basename "$f")" in assert.sh|presence_corpus.sh) continue ;; esac
   out="$(bash "$f" 2>&1)"; rc=$?
-  nfail="$(printf '%s\n' "$out" | grep -c '✗' || true)"
+  # 접두 `  ✗ ` 로 센다 — `assert.sh` 의 `no()` 가 `printf '  ✗ %s\n'` 로 내고
+  # `shared/tests/test_assert_behavior.sh` 가 그 접두를 「진단 grep 다섯 자리의 계약」으로 못 박는다.
+  # 접두 없이 세면 설명 문구에 그 글자를 담은 **통과** 줄이 실패로 잡힌다(실측: 그 파일이 rc 0 인데 1).
+  nfail="$(printf '%s\n' "$out" | grep -c '^  ✗ ' || true)"
   printf '%s\trc=%s\tfail_lines=%s\n' "$f" "$rc" "$nfail" >> "$A"
 done
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/spec-distill/tests -p 'test_*.py' 2>&1 | tail -3 | tee -a "$A"
