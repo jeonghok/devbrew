@@ -16,8 +16,8 @@ next_phase: superpowers:writing-plans
 (빈 필드·`.`·상대 경로)을 통해 **작업 디렉토리 안의 파일을 실행**한다. 훅의 작업 디렉토리는 사용자가 연
 리포다. 해석기의 두 탐색 단계(step 2 bare `python3` · step 3 `python3.*` 글롭)가 모두 절대 경로 항목만
 보게 고치고, 해석기를 부르는 훅 command 4자리도 bare `sh` 대신 `/bin/sh` 로 부른다. 배포 사본 3개는
-재생성하고, 락에 이 축을 새로 세운다. **범위는 devbrew 가 실행하는 명령뿐이다** — 그런 PATH 를 가진 환경은
-devbrew 밖에서도 이미 노출돼 있다(Context/Why 5).
+재생성하고, 락에 이 축을 새로 세운다. **범위는 훅의 진입 사슬뿐이다** — 그런 PATH 를 가진 환경은
+devbrew 밖에서도 이미 노출돼 있고(Context/Why 5), 진입 사슬 밖의 devbrew 자리는 후속이다(L6).
 
 **Implicit context** —
 
@@ -41,8 +41,12 @@ devbrew 몫으로 좁힌 것은 설계 리뷰 라운드 1 의 결정이다 — D
 
 ## Goal
 
-**devbrew 가 실행하는 명령**(훅 command 의 셸 · 해석기가 고르는 인터프리터)이, PATH 에 어떤 항목이 있든
-**작업 디렉토리의 파일로 풀리지 않게** 한다.
+**devbrew 훅의 진입 사슬**(훅 command 의 셸 → 해석기 → 해석기가 고르는 인터프리터)이 PATH 의 **절대 경로가
+아닌 항목**(빈 항목 · `.` · 상대 경로 · 빈 PATH)을 통해 **작업 디렉토리의 파일로 풀리지 않게** 한다.
+
+진입 사슬 밖에서 devbrew 가 여는 자리 — 훅 파이썬이 띄우는 명령과 스킬이 Bash 도구로 부르는 bare 이름 — 는
+이 설계의 범위가 아니다(알려진 한계 L6). 절대 경로 항목이 cwd 를 가리키는 경우와 사용자가 지정한
+`DEVBREW_PYTHON` 도 범위 밖이다(L2 · Non-goals).
 
 ## Context / Why
 
@@ -105,8 +109,8 @@ step 2 는 따로 쟀다(2026-09-23, 격리 임시 디렉토리, cwd 에 `python
 사용자는 **bare 이름으로 명령을 부르는 모든 도구**에 대해 이미 노출돼 있다. Claude Code 가 세션 시작에 bare
 `git` 을 부르는지는 재지 않았다.
 
-그래서 이 설계의 몫은 「그런 환경을 안전하게 만든다」가 아니라 **「devbrew 가 그 노출을 더하거나 증폭하지
-않는다」**다. 방어 심층의 한 겹이고, Security 항목도 그 범위로 적는다(D4).
+그래서 이 설계의 몫은 「그런 환경을 안전하게 만든다」가 아니라 **「devbrew 훅의 진입 사슬이 그 노출을 더하거나
+증폭하지 않는다」**다. 방어 심층의 한 겹이고, Security 항목도 그 범위로 적는다(D4 · D6).
 
 ## Goals
 
@@ -202,14 +206,18 @@ POSIX 가 경로를 정하지는 않지만 macOS·Linux 에서 실재하고, 해
   `.` 으로 바꾸고, `.` 과 `rel` 은 빈 값이 아니라 그대로 글롭된다.
 - **AC2** step 2 — cwd 에 카나리 `python3`(점 없음)와 `rel/python3` 를 두고, PATH 여섯 형태(AC1 의 넷 + 끝 빈
   항목 + 빈 문자열 `PATH=`)마다 해석기를 실행한다. 상대 경로 형태는 `rel/python3` 를, 나머지는 cwd 의 `python3`
-  를 겨눈다. **마커가 생기지 않는다.**
+  를 겨눈다. **AC1 과 같은 전제로, PATH 의 절대 경로 부분(예: `/bin`)에는 `python3` 가 없다** — `/usr/bin` 처럼
+  `python3` 가 있는 디렉토리를 쓰면 되돌린 셸 탐색도 그것을 먼저 만나 cwd 에 닿지 않는다. **마커가 생기지 않는다.**
   *변이*: step 2 를 `probe python3` / `exec python3` 로 되돌리면 여섯 모두 RED(Context/Why 2 의 step 2 측정 —
   빈 PATH 는 `/bin/sh` 에서 cwd 로 풀린다). AC2 의 cwd 에는 점 있는 `python3.*` 가 없으므로 step 3 변이(m1)로는
   RED 가 되지 않는다 — 두 축이 갈린다.
 - **AC3** 양성 대조 — AC1·AC2 의 카나리 디렉토리를 **절대 경로로** PATH 에 넣으면 마커가 생기고 대상이 돈다.
   이것이 없으면 AC1·AC2 의 「마커 없음」은 카나리가 고장 나도 통과한다.
-- **AC4** 올바른 선택 — PATH 가 앞 빈 항목 + 바닥 만족 인터프리터가 있는 절대 디렉토리일 때, cwd 카나리가
-  아니라 **그 절대 디렉토리의 인터프리터로** 대상이 돌고 payload 가 온전하다.
+- **AC4** 올바른 선택 — cwd 에 카나리 `python3` 와 `python3.99` 를 **둘 다** 두고, PATH 는 앞 빈 항목 + 바닥 만족
+  `python3` 가 있는 절대 디렉토리다. cwd 카나리가 아니라 **그 절대 디렉토리의 `python3` 로** 대상이 돌고 payload 가
+  온전하며 카나리 마커가 없다.
+  *변이*: m2 에서 RED — 되돌린 셸 탐색이 앞 빈 항목의 cwd `python3` 를 먼저 집는다. `python3.99` 만 두면 원래
+  코드도 step 2 에서 절대 디렉토리로 끝나 어떤 변이에서도 GREEN 인 장식이 되므로 둘 다 둔다.
 - **AC5** 무회귀 — `shared/tests/test_python_floor.sh` 의 기존 단언이 전부 통과한다(현재 131/131, 축 C 의 기대
   형태는 AC9 에 맞춰 갱신한 뒤). 해석 경로(step 2·3)에 닿는 기존 케이스는 전부 절대 경로 PATH 를 쓰고(Goal 2),
   `PATH=` 로 도는 A4a 는 kill switch 에서 먼저 끝난다.
@@ -230,7 +238,7 @@ POSIX 가 경로를 정하지는 않지만 macOS·Linux 에서 실재하고, 해
 
 | 파일 | 변경 |
 |---|---|
-| `shared/python/devbrew-python.sh` | step 2 → `first_python3`, step 3 `:163` 교체 |
+| `shared/python/devbrew-python.sh` | step 2 → `first_python3`, step 3 `:163` 교체, 머리말 `:2-3` 의 호출 형태를 `/bin/sh <이 파일>` 로 |
 | `plugins/{project-init,quality-gates,spec-distill}/scripts/devbrew-python.sh` | 정본에서 재생성(copy-of) |
 | `plugins/quality-gates/hooks/hooks.json` · `plugins/spec-distill/hooks/hooks.json` · `plugins/project-init/hooks/hooks.json` | 훅 4자리 `sh` → `/bin/sh` (AC9) |
 | `shared/tests/test_python_floor.sh` | 새 축(AC1~AC4 · AC8 · AC9 실행분) + 축 C 기대 형태 갱신(AC9). `# guards:` 는 이미 `shared/python/**` 와 `plugins/*/hooks/hooks.json` 을 덮는다 |
@@ -242,15 +250,15 @@ POSIX 가 경로를 정하지는 않지만 macOS·Linux 에서 실재하고, 해
 1. `bash shared/tests/test_python_floor.sh` — 기존 131 + 새 축 전부 PASS.
 2. **변이 4종** (커밋 후, `git checkout HEAD --` 로 복원하고 `git diff HEAD` 로 확인):
    (m1) step 3 의 `case` 를 원래 줄로 → AC1 의 네 형태가 RED, AC2 · AC8 · AC9 는 GREEN.
-   (m2) step 2 를 `probe python3`/`exec python3` 로 → AC2 의 여섯 형태가 RED, AC1 · AC9 는 GREEN.
+   (m2) step 2 를 `probe python3`/`exec python3` 로 → AC2 의 여섯 형태와 AC4 가 RED, AC1 · AC8 · AC9 는 GREEN
+   (AC8 은 셸 탐색도 첫 매치 `A/python3` 에서 멈추므로 GREEN 이다).
    (m3) `first_python3` 가 첫 후보 탈락 시 다음 `python3` 로 `continue` → AC8 만 RED.
    (m4) 훅 command 한 자리를 `sh …` 로 → AC9 의 그 자리만 RED.
-   각 변이가 **자기 축만** RED 로 만들어야 한다 — 한 변이가 여러 축을 무너뜨리면 축이 분리되지 않은 것이다.
-   m2 가 AC8 을 함께 RED 로 만드는지는 m2 의 모양에 달렸다(셸 탐색은 첫 매치만 본다) — 결과를 그대로 기록한다.
+   각 변이의 RED 집합이 위에 적은 것과 **정확히** 같아야 한다 — 더 넓으면 축이 분리되지 않은 것이다.
 3. `bash shared/tests/test_copy_of_contract.sh` · `bash shared/tests/test_changelog_integrity.sh` ·
    `bash plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh` 통과.
 4. 회고 리뷰의 재현표와 step 2 측정(Context/Why 2)을 격리 디렉토리에서 다시 돌려, 전부 「미접촉」으로 바뀐 것을 본다.
-5. 셸 셋(`/bin/sh` · `dash` · `ksh` 중 이 머신에 있는 것)에서 새 축을 돌린다 — 해석기는 `sh` 로 불린다.
+5. 셸 셋(`/bin/sh` · `dash` · `ksh` 중 이 머신에 있는 것)으로 해석기 본문을 직접 실행해 새 축을 돌린다.
 
 ## Rejected Alternatives
 
@@ -274,9 +282,13 @@ POSIX 가 경로를 정하지는 않지만 macOS·Linux 에서 실재하고, 해
 - **L3** 끝 빈 항목의 step 3 케이스는 이 설계 전에도 안전했다(필드 분할). AC1 이 그 형태를 싣지 않는 이유다 —
   m1 변이로 RED 가 될 수 없는 케이스는 단언이 아니라 장식이다.
 - **L4** 환경 전체의 노출(Context/Why 5). PATH 에 절대 경로가 아닌 항목이 있는 사용자는 devbrew 밖에서 이미
-  노출돼 있다 — 이 설계는 devbrew 가 그것을 더하지 않게 할 뿐이다.
+  노출돼 있다 — 이 설계는 훅의 진입 사슬이 그것을 더하지 않게 할 뿐이다.
 - **L5** `/bin/sh` 의 실재는 macOS(이 머신)에서만 쟀다. Linux 는 관례상 실재하고 해석기 shebang 이 이미 같은
   경로를 전제하지만, Windows(Git Bash 등) 경로는 이 리포가 잰 적이 없다.
+- **L6** 진입 사슬 밖에서 devbrew 가 여는 자리. (a) `plugins/quality-gates/hooks/session-end-cleanup.py:55-58` 이
+  사용자 리포 cwd 에서 `qg-worktree.sh` 를 띄우는데, 그 스크립트는 `#!/usr/bin/env bash`(PATH 로 `bash` 탐색)이고
+  본문이 bare `git` 을 부른다. 발동은 그 세션에 qg 워크트리 상태가 있을 때뿐이다. (b) 스킬·커맨드 본문이 Bash
+  도구로 부르는 bare `bash`·`python3`. 둘 다 이 PR 에서 재지 않았고 후속으로 넘긴다.
 
 ## 결정 기록
 
@@ -290,6 +302,11 @@ POSIX 가 경로를 정하지는 않지만 macOS·Linux 에서 실재하고, 해
   cwd 로 푼다는 것을 쟀다(Context/Why 5). 사용자가 「`/bin/sh` + Goal 좁힘」을 골랐다(2026-09-23). 기각한 쪽은
   「Goal 만 좁히고 `sh` 를 한계로 둔다」 — devbrew 자신이 여는 자리를 남겨 둘 이유가 없다.
 - **D5 — 빈 PATH 를 AC2 의 여섯째 형태로, AC2 의 상대 경로 카나리를 `rel/python3` 로 명시한다.** 리뷰 라운드 1 채택.
+- **D6 — Goal 을 훅의 진입 사슬로 좁히고, 사슬 밖 devbrew 자리는 L6 으로 넘긴다.** 리뷰 라운드 2 가 D4 의 Goal
+  문장(「devbrew 가 실행하는 명령」 · 「PATH 에 어떤 항목이 있든」)이 설계가 덮는 것보다 넓다는 것을 두 방향에서
+  지적했다 — qg SessionEnd 가 띄우는 `qg-worktree.sh` 와 cwd 를 가리키는 절대 경로. 사용자가 「진입 사슬로 좁히고
+  L6」을 골랐다(2026-09-23). 기각한 쪽은 SessionEnd 호출까지 이 PR 에 넣는 것 — 스크립트 안의 bare `git` 이 남아
+  어차피 닫히지 않는다. AC2 전제와 AC4 fixture 명시도 같은 라운드의 채택이다.
 
 ## Metadata
 
@@ -302,6 +319,6 @@ POSIX 가 경로를 정하지는 않지만 macOS·Linux 에서 실재하고, 해
 ### Deferred to plan
 
 1. 카나리 fixture 의 정확한 모양과 축 이름(기존 축 A~H 옆에 둘지, 축 A 안에 둘지).
-2. AC1 의 상대 경로 형태에서 cwd 아래 디렉토리 이름.
-3. hooks.json 의 command 문자열을 재는 **다른 락** 전수 — `sh ${CLAUDE_PLUGIN_ROOT}` 를 리터럴로 기대하는 자리를
+2. hooks.json 의 command 문자열을 재는 **다른 락** 전수 — `sh ${CLAUDE_PLUGIN_ROOT}` 를 리터럴로 기대하는 자리를
    리포 전체에서 grep 해 함께 갱신한다(축 C 만이라고 가정하지 않는다).
+| 4af48fd0#r2.2 | 변이의 「자기 축만 RED」가 행동 검사만을 뜻하는지 전체 락을 뜻하는지 구분되지 않는다. |
