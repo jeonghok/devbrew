@@ -3268,8 +3268,13 @@ Expected: 세 문면이 code·design 양쪽에서 각각 ≥1.
 - Modify: `plugins/spec-distill/tests/test_check_brief.sh`
 
 **Interfaces:**
-- Consumes: Task 14 의 헬퍼 넷
-- Produces: `research_link_missing` · `research_link_targets_missing` · `research_backref_missing` 셋. Task 19 의 변이가 이 셋을 흔든다.
+- Consumes: Task 14 의 python 헬퍼 넷 · Task 14 가 **같은 락 파일에 이미 세운 셸 헬퍼** `FXV`(green
+  fixture 경로) 와 `v2run()`.
+- Produces: 술어 셋 `research_link_missing` · `research_link_targets_missing` ·
+  `research_backref_missing`. Task 19 의 변이가 이 셋을 흔든다.
+  **그리고 셸 헬퍼 `v2mut()`** — `test_check_brief.sh` 안의 함수로, green fixture 쌍을 `$TMPD` 로
+  복사해 `audit_file:` 을 고치고 한 가지만 망가뜨린 뒤 게이트를 돌려 `$V2OUT`·`$V2RC` 를 채운다.
+  **Task 16·17 이 이 함수를 그대로 쓴다 — 재정의하지 않는다.**
 
 **③ 이 ∀ 인 이유** — 단수·∃ 로 두면 §0 줄 하나로 만족돼 §3 의 `→ 근거 RC3` 을 지워도 통과한다. 라운드 1 이 지목한 구멍이 자리만 옮겨 남는다. 방향을 뒤집어 **`OQ<n>` 줄이 그 근거 id 를 포함하는가**를 본다.
 
@@ -3533,7 +3538,9 @@ MSG
 - Modify: `plugins/spec-distill/tests/test_check_brief.sh`
 
 **Interfaces:**
-- Consumes: Task 14 의 `payload_rc_ids` · 기존 `LEDGER_ROW_RE`·`_strip_bullet`
+- Consumes: Task 14 의 `payload_rc_ids` · 기존 `LEDGER_ROW_RE`·`_strip_bullet` · **Task 15 가 같은
+  락 파일에 이미 정의한 셸 헬퍼 `v2mut()`**(재정의하지 말고 그대로 호출한다 — 두 정의가 생기면
+  뒤의 것이 앞의 것을 조용히 덮는다).
 - Produces: `internal_research_dimension_failures(payload_text, audit_text)`.
 
 **red 가 셋 필요하다** — 행 부재 · **이름 다름** · 상태 `open`. 라운드 1 이 실측했다: `- derived:unrelated-ui — open — ` 한 줄이 `coverage_ledger_failures` 와 `coverage_anchor_failures` **둘 다** 통과했다. 그래서 하한은 「행이 하나 있는가」가 아니라 **셋 전부**여야 한다.
@@ -3741,8 +3748,11 @@ MSG
 - Modify: `plugins/spec-distill/tests/test_conducting_interview_stage.sh` (그 의무의 락 둘)
 
 **Interfaces:**
-- Consumes: Task 8 의 확인 줄 형식 · Task 14 의 `payload_rc_ids`
-- Produces: `research_confirm_missing(payload_text, audit_text)` — 두 파일을 잇는 마지막 교차 술어. 기존 계열과 같은 모양이다: `«출처키»`↔audit §7(`landscape_keys_declared`) · `ST<N>`↔audit §3(bijection A) · `S<N>`↔§6(bijection C). **전부 id 로 맞물린다.**
+- Consumes: Task 8 의 확인 줄 형식 · Task 14 의 `payload_rc_ids` · **Task 15 가 같은 락 파일에 이미
+  정의한 셸 헬퍼 `v2mut()`** 과 Task 14 의 `FXV`(재정의하지 않는다).
+- Produces: `research_confirm_missing(payload_text, audit_text)` — 두 파일을 잇는 마지막 교차 술어.
+  기존 계열과 같은 모양이다: `«출처키»`↔audit §7(`landscape_keys_declared`) · `ST<N>`↔audit §3
+  (bijection A) · `S<N>`↔§6(bijection C). **전부 id 로 맞물린다.**
 
 **웹 주장은 대상이 아니다** — N2(`landscape_keys_declared`)가 audit §7 결속을 이미 본다.
 
