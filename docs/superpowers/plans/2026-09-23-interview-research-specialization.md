@@ -1858,7 +1858,7 @@ Expected: `✗` **정확히 13건**, `Fail: 13`. 내역 — 스키마 셋(`blind
 옛 키 잔존 · `open_decisions:` 부재) + `open_decisions` 하위 블록 양성대조 1 + 필드 다섯 +
 열거 동일성 1 + 이월 규칙 셋. `AC1(양성대조)`(state 블록 절단)만 이 시점에 ✓ 다.
 
-**숫자가 다르면 멈추고 보고하라.** 이 기대값은 처음 「10건 내외」였고, 그때 실제 ✗ 도 10 이었다 —
+**숫자가 다르면 멈추고 보고하라.** 이 기대값은 처음 어림수였고, 그때 실제 ✗ 도 그 어림수와 같았다 —
 필드 단언 둘이 기존 스키마에 이미 만족돼(위 주석) 애매한 기대값이 그 이빨 공백을 정확히 가렸다.
 여기서 숫자를 정확히 요구하는 것은 그 은폐를 다시 열지 않기 위해서다.
 
@@ -2171,7 +2171,7 @@ Expected: `✗` **정확히 17건**. 내역 — covmap 자격·자격우선·예
 covmap 옛 `상한 2` 부재 1 + covmap 옛 하드 카운트 셋 3 + prober 자격·예산·옛키·옛하드 4 +
 C44 면제 다섯 5 = 17.
 
-**숫자가 다르면 멈추고 보고하라.** 이 기대값은 처음 「15건 내외」였다 — 이 브랜치에서 애매한
+**숫자가 다르면 멈추고 보고하라.** 이 기대값은 처음 어림수였다 — 이 브랜치에서 애매한
 기대값이 이빨 공백을 정확히 가린 전례가 있으므로(Task 10) 여기서도 정확히 요구한다.
 
 - [ ] **Step 2: SKILL.md 의 두 dispatch 절과 C44 절을 고친다**
@@ -2481,7 +2481,14 @@ PY
 bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -cE '^  ✗ '
 ```
 
-Expected: `✗` 13건 내외.
+Expected: `✗` **정확히 14건** (양성대조 1건은 ✓). 내역 — V2 검문소·누락대조·무조건 3 +
+반증 세 칸·재결정 권한 2 + 직렬화 형식 다섯 5 + §0/§3 포함관계 1 + §2 제외 1 +
+Step B advisory 둘 2 = 14.
+
+**숫자가 다르면 멈추고 보고하라.** 이 기대값은 처음 어림수였다 — 이 브랜치에서 애매한
+기대값이 이빨 공백을 정확히 가린 전례가 있으므로(Task 10) 정확히 요구한다. 선점검에서 확인한 것:
+`### Step A — brief 작성` 절 절단이 70줄을 내고 `Coverage Ledger` 가 그 안에 있어 양성대조가
+성립하며, `V2` 와 `무조건` 은 지금 그 절에 **0건**이라 두 단언이 미리 만족되지 않는다.
 
 - [ ] **Step 2: Step A 에 V2 와 인계 세 방향을 넣는다**
 
@@ -2554,7 +2561,16 @@ grep -rn 'Step A 5\|Step A ⑤\|Step A(5)\|위 3의 sentinel\|Step A 4' \
   plugins/spec-distill --include='*.md' | grep -v CHANGELOG
 ```
 
-Expected: `finishing.md:5`(`아래 Step A ⑤ 의 check_brief.py`) · `finishing.md:99`(`게이트(Step A 5)를 통과한 payload`) 등. **그 참조를 새 번호로 고친다:**
+Expected: **정확히 세 건**이고 그중 둘만 고친다 (선점검에서 전수 열거했다):
+
+| 자리 | 가리키는 것 | 처분 |
+|---|---|---|
+| `finishing.md:5` | `아래 Step A ⑤ 의 check_brief.py` | ⑤ → ⑦ |
+| `finishing.md:95` | `위 3의 sentinel을 빠뜨리면` | **그대로** — 항목 3 은 번호가 안 바뀐다 |
+| `finishing.md:99` | `게이트(Step A 5)를 통과한 payload` | 5 → 7 |
+
+네 건 이상 나오면 멈추고 보고하라 — 아래 python 이 고치는 것은 둘뿐이므로 나머지가 stale 로 남는다.
+**그 참조를 새 번호로 고친다:**
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
@@ -2968,7 +2984,20 @@ PY
 bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | grep -cE '^  ✗ '
 ```
 
-Expected: `✗` 6건 내외(fixture 부재 + advisory 부재).
+Expected: `✗` **정확히 5건**, `✓` 1건. 셀별로 재라 — 합계보다 이것이 계약이다:
+
+| 단언 | Step 1 | 왜 |
+|---|---|---|
+| `V2-OPT-a` (미적용 advisory) | ✗ | advisory 가 아직 없다 |
+| `V2 green fixture 실재` | ✗ | `$FXV` 는 Step 2 가 만든다 |
+| `V2-OPT-b: green` | ✗ | 없는 파일에 게이트를 돌리면 rc 1 (실측) |
+| `V2-OPT-b: 0건 advisory 안 뜬다` | **✓** | **공허하다** — 아래 경고 |
+| `V2-OPT-c` (0건 advisory) | ✗ | fixture 가 없어 rc 1 |
+| `V2-DEF` (§3 은 범위 밖) | ✗ | fixture 가 없어 rc 1 |
+
+**Step 1 의 ✓ 를 증거로 읽지 마라.** 그 단언은 「advisory 가 뜨지 않는다」를 요구하는데, 지금은
+advisory 자체가 구현되지 않아 **어떤 입력에도 안 뜬다** — 통과가 술어의 정확성을 말하지 않는다.
+그 ✓ 가 의미를 갖는 것은 Step 2·3 뒤에 **여전히** ✓ 일 때다. 숫자가 다르면 멈추고 보고하라.
 
 - [ ] **Step 2: green fixture 쌍을 만든다**
 
@@ -3323,7 +3352,22 @@ PY
 bash plugins/spec-distill/tests/test_check_brief.sh 2>&1 | grep -cE '^  ✗ '
 ```
 
-Expected: `✗` 5건 내외(술어가 없으므로 red 를 기대한 셀이 전부 통과한다).
+Expected: `✗` **정확히 4건**, `✓` 3건. 셀별로 재라 — 합계보다 이것이 계약이다:
+
+| 단언 | Step 1 | 왜 |
+|---|---|---|
+| `V2-①` 연결 삭제 → red | ✗ | 술어가 없어 green 이다 |
+| `V2-①` 차단 메시지에 개수 없음 | **✓** | **공허하다** — `failures` 가 비어 있다 |
+| `V2-①(양의 짝)` sentinel green | **✓** | **공허하다** — 전부 green 이다 |
+| `V2-②` 없는 OQ → red | ✗ | 술어가 없다 |
+| `V2-②(L3)` 해결된 결정 green | **✓** | **공허하다** — 전부 green 이다 |
+| `V2-③` §3 역참조 삭제 → red | ✗ | 술어가 없다 |
+| `V2-③` §0 역참조 삭제 → red | ✗ | 술어가 없다 |
+
+**Step 1 의 ✓ 셋을 증거로 읽지 마라.** 술어가 하나도 없으므로 **모든 입력이 green** 이고, 「green
+이어야 한다」를 요구하는 단언은 전부 자동으로 통과한다. 그 셋이 의미를 갖는 것은 Step 2 뒤에
+**여전히** ✓ 일 때다 — 그때 비로소 「술어가 정직한 답과 의도된 한계를 red 로 만들지 않는다」를 말한다.
+숫자가 다르면 멈추고 보고하라.
 
 - [ ] **Step 2: 술어 셋을 구현한다**
 
@@ -3441,7 +3485,7 @@ done
 echo "§4 보유 · contract 없음 픽스처 $n 개 중 새 술어로 red 가 된 것 $bad 개"
 ```
 
-Expected: `$n` ≈ 81, `$bad` **= 0**. 하나라도 있으면 옵트인 판독이 깨진 것이다.
+Expected: `$n` **= 81**(Task 1 이 실측한 값이다 — `≈` 가 아니다), `$bad` **= 0**. 하나라도 있으면 옵트인 판독이 깨진 것이다.
 
 - [ ] **Step 5: Commit**
 
