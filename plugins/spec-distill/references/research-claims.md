@@ -27,8 +27,8 @@ repo_claims:                   # 내부(레포) 주장
 ## 두 필드의 뜻이 다르다
 
 - **`touches`** 는 **전제 `P<n>`** 를 담는다.
-  `${CLAUDE_PLUGIN_ROOT}/skills/conducting-interview/references/steelman.md` Step 2 가 그 claim 을 지목된
-  전제 문장과 대조하고, Step 2.5 가 `premise_refutation.hits` 로 재검토 자격을 판정하며, 의심 게이트의
+  `steelman.md` Step 2 가 그 claim 을 지목된 전제 문장과 대조하고, Step 2.5 가
+  `premise_refutation.hits` 로 재검토 자격을 판정하며, 의심 게이트의
   제시 형식이 `[반증됨]` 라벨을 붙이고, audit 템플릿이 「부착 주장: <evidence #> → P<n>」 으로 직렬화한다.
 - **`decides`** 는 **열린 결정 `OQ<n>`** 를 담는다. 「`<open_decisions>` 에 실제로 있는 결정 중 이
   주장이 닿는 것」이고, 목록에 없는 id 를 지어내지 않는다. **빈 배열은 허용이고 거짓 연결보다 낫다.**
