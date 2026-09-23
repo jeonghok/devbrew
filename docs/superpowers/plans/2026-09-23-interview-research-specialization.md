@@ -3698,6 +3698,24 @@ bash plugins/spec-distill/tests/test_stale_terms.sh 2>&1 | tail -1
 Expected: `ok` 다음 `✓ AC10(산출자)` 셋 + 줄 수 단언 둘 ✓ + `Fail: 0`. stale 락도 `Fail: 0` — 새 문면에
 production 금지 어휘(`provisional_on` · `직전 답에서` · `깊이 측정` 등)를 넣지 않았다.
 
+- [ ] **Step 0.4: Step 0 산출물을 먼저 커밋한다**
+
+Step 0.5 의 변이는 `git checkout HEAD --` 로 복원한다 — HEAD 에 Step 0 이 없으면 복원이 Step 0 의 편집까지
+지운다(Task 16 에서 실제로 일어났다: SKILL.md 가 산출자 문구 없는 443줄로 되돌아갔다). Step 5 의 커밋은 술어
+두 파일만 담으므로 Step 0 의 두 파일은 여기서 따로 커밋한다.
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+git commit --only -F - -- plugins/spec-distill/skills/conducting-interview/SKILL.md plugins/spec-distill/tests/test_conducting_interview_stage.sh <<'MSG'
+feat(spec-distill): AC10 산출자 배선 — 경로 (a) 가 internal_research 차원을 원장에 admit
+
+게이트 술어 ④ 가 요구하는 이름의 행을 인터뷰 중에 누가 원장에 넣는지 지시한다 — 없으면 게이트가 조사를 한 것을 벌한다.
+MSG
+git show --stat HEAD | tail -1
+```
+
+Expected: `2 files changed`.
+
 - [ ] **Step 0.5: 세 단언이 서로 다른 것을 재는지 변이 셋으로 잰다**
 
 각 변이는 **정확히 하나**를 ✗ 로 만들어야 한다 — 둘 이상이 함께 ✗ 가 되면 그 단언들이 같은 리터럴을
@@ -4021,6 +4039,24 @@ bash plugins/spec-distill/tests/test_stale_terms.sh 2>&1 | tail -1
 Expected: `ok` 둘 다음 `✓ AC12(산출자·절)` · `✓ AC12(산출자·형식)` · `✓ AC12(산출자·1회)` 셋 +
 `Fail: 0`. 포인터 락과 stale 락도 `Fail: 0` — `steelman.md` 는 `references/` 아래라 포인터 락의
 대상이고, 새 문면에 경로도 루트 토큰도 넣지 않았으므로 변화가 없어야 한다.
+
+- [ ] **Step 0.4: Step 0 산출물을 먼저 커밋한다**
+
+Step 0.5 의 변이는 `git checkout HEAD --` 로 복원한다 — HEAD 에 Step 0 이 없으면 복원이 Step 0 의 편집까지
+지운다(Task 16 에서 실제로 일어났다: SKILL.md 가 산출자 문구 없는 443줄로 되돌아갔다). Step 5 의 커밋은 술어
+두 파일만 담으므로 Step 0 의 두 파일은 여기서 따로 커밋한다.
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/interview-research-burden
+git commit --only -F - -- plugins/spec-distill/skills/conducting-interview/references/steelman.md plugins/spec-distill/tests/test_conducting_interview_stage.sh <<'MSG'
+feat(spec-distill): AC12 산출자 배선 — steelman 이 §5 확인 줄 의무를 말한다
+
+게이트 술어 ⑤ 가 요구하는 확인 줄을 steelman 경로가 남기도록 지시한다 — 산출자 없는 술어는 정직한 brief 를 막는다.
+MSG
+git show --stat HEAD | tail -1
+```
+
+Expected: `2 files changed`.
 
 - [ ] **Step 0.5: 세 단언이 서로 다른 것을 재는지 변이 셋으로 잰다**
 
