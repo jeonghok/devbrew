@@ -30,12 +30,18 @@ if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
   # dispatch 없이 아래 「Web 부재 시 graceful degradation」 절로 간다.
 else
   Agent({ description: "Steelman both cases", subagent_type: "spec-distill:steelman-builder",
-          prompt: "의심 방향: <direction>${SUSPECT_DIRECTION}</direction>. trigger: <trigger>${TRIGGER}</trigger>. 사용자 goal(원문): <goal>${GOAL}</goal>. 핵심 전제: <premises>${PREMISES}</premises>. 사용자가 지금까지 말한 제약(원문 전량): <constraints>${CONSTRAINTS}</constraints>. 양쪽 최강 케이스를 같은 기준으로, 전제 반증 판정과 추천을." })
-  # **처분** — consumer=orchestrator · fail-open · disclosure=loud advisory
+          prompt: "의심 방향: <direction>${SUSPECT_DIRECTION}</direction>. trigger: <trigger>${TRIGGER}</trigger>. 사용자 goal(원문): <goal>${GOAL}</goal>. 핵심 전제: <premises>${PREMISES}</premises>. 사용자가 지금까지 말한 제약(원문 전량): <constraints>${CONSTRAINTS}</constraints>. 조사 주장 계약(내용 전문): <claims_contract>${CLAIMS_CONTRACT}</claims_contract>. 지금 열린 결정: <open_decisions>${OPEN_DECISIONS}</open_decisions>. 양쪽 최강 케이스를 같은 기준으로, 전제 반증 판정과 추천을." })
+  # **처분** — consumer=orchestrator · fail-closed · disclosure=loud advisory + 수동 의심 게이트 전환
 fi
 ```
 
 한 방향당 steelman 1회 — 새 근거 없으면 재steelman 금지(AP16).
+
+두 슬롯은 `conducting-interview/SKILL.md` 의 `## 조사 주장 계약` 펜스와 `orchestration.open_decisions[]`
+에서 온다. 계약 펜스의 rc 가 0 이 아니면 **dispatch 하지 않는다** — `fail-closed` 가 막는 것은 «그
+dispatch» 이고 인터뷰가 아니다. 그때 공시는 loud advisory + 수동 의심 게이트 전환 이고, 아래
+「Web 부재 시 graceful degradation」 과 같은 경로로 간다(§5 항목은 사용자 판단을 근거로 기록하고
+계약 배달 실패 사유를 명시한다).
 
 #### Step 2 — 게이트-전 확인 (orchestrator, Read/Grep)
 
