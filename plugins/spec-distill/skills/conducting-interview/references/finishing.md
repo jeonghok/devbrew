@@ -112,7 +112,8 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 
    ```bash
    # payload 의 RC<n> 전량 ↔ audit §5 의 확인 줄 — 차집합이 비어야 한다
-   PL="docs/superpowers/interview/<file>"; AD="${PL%.md}.audit.md"
+   PL="docs/superpowers/interview/<file>"
+   AD="${PL%.md}.audit.md"
    comm -23 <(grep -oE '(^|[^A-Za-z])RC[0-9]+' "$PL" | grep -oE 'RC[0-9]+' | sort -u) \
             <(grep -oE '^- 확인 RC[0-9]+' "$AD" | grep -oE 'RC[0-9]+' | sort -u)
    ```

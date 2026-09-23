@@ -2576,7 +2576,10 @@ new = """5. **조사 주장의 인계 — 세 방향을 같은 id 로 맞물린�
 
    ```bash
    # payload 의 RC<n> 전량 ↔ audit §5 의 확인 줄 — 차집합이 비어야 한다
-   PL="docs/superpowers/interview/<file>"; AD="${PL%.md}.audit.md"
+   # 한 줄에 두 대입을 쓰지 않는다 — `test_finishing_block_scope.py` 의 `ASSIGN_RE` 는 **줄 시작**
+   # 대입만 인식해 두 번째를 미정의 사용으로 오판한다(실측: 이 브랜치가 그 RED 를 만들었다).
+   PL="docs/superpowers/interview/<file>"
+   AD="${PL%.md}.audit.md"
    comm -23 <(grep -oE '(^|[^A-Za-z])RC[0-9]+' "$PL" | grep -oE 'RC[0-9]+' | sort -u) \\
             <(grep -oE '^- 확인 RC[0-9]+' "$AD" | grep -oE 'RC[0-9]+' | sort -u)
    ```
