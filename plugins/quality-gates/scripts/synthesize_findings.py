@@ -678,18 +678,23 @@ def main():
             angle_states = _angles.parse(_angles.read_or_fail4(args.angles))
             # AC10a — 수행자 집합은 이 실행이 실제로 «낸» finding 에서 도출한다
             # (계획 R-H). 각도 파일 자신에서 뽑으면 자기-일관성 검사이지 Law 2
-            # 검사가 아니다. `sources`(dedup 이 병합하며 만든 목록) 우선, 없으면
-            # `agent` — `render()` 가 Source 칼럼을 채울 때 쓰는 것과 **같은
-            # 관용구**다. 판정 적용 «전» 의 입력(`raw`)과 dedup 뒤의 `findings`
+            # 검사가 아니다. 판정 적용 «전» 의 입력(`raw`)과 dedup 뒤의 `findings`
             # (승격분 포함)를 함께 본다: 기각·억제된 것도 「낸 것」이다(냈기
             # 때문에 기각·억제된 것이다).
+            #
+            # 항목마다 `agent` 는 **항상** 센다. `sources` 는 거기에 «더할» 뿐
+            # `agent` 를 대신하지 않는다 — `raw` 의 `sources` 는 리뷰어가 준
+            # 비신뢰 값이라, 그것이 `agent` 를 가리면 저자가 이름을 달리 적는
+            # 것만으로 AC10a 가 조용해진다. dedup 뒤 항목의 `sources` 는 dedup 이
+            # `agent` 들로 만든 목록이다. 더 세는 쪽은 AC10a 를 엄격하게 할
+            # 뿐이다(fail-closed).
             authors = set()
             for f in findings + raw:
                 if isinstance(f, dict):
-                    srcs = f.get("sources") or [f.get("agent", "?")]
+                    srcs = f.get("sources") or []
                     if not isinstance(srcs, (list, tuple)):
                         srcs = [srcs]
-                    for s in srcs:
+                    for s in [f.get("agent", "?")] + list(srcs):
                         s = str(s)
                         if s and s != "?":
                             authors.add(s)

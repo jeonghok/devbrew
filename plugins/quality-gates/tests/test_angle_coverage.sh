@@ -230,6 +230,27 @@ case_synth_rejected_finding_still_counts_as_authored() {
   rm -rf "$T"
 }
 
+case_synth_reviewer_sources_do_not_displace_agent() {
+  # 판정 적용 전 입력의 `sources` 는 리뷰어가 준 비신뢰 값이다. 그것이 `agent` 를
+  # 대신하면 기각된 finding 에 `sources: [다른-이름]` 만 적어도 AC10a 가 조용해진다.
+  # 리스트 아닌 참 값(`{a: 1}`)도 같은 방식으로 `agent` 를 가릴 수 있다 — 둘 다 잰다.
+  local T srcs off out rc
+  for srcs in '[someone-else]' '{a: 1}'; do
+    T=$(mktemp -d); mk_rejected "$T" scout
+    printf -- '- {agent: scout, sources: %s, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: rejected-one, proposed_fix: f}\n' "$srcs" > "$T/f.yaml"
+    off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+    assert_not_grep "$off" 'rejected-one' "전제: sources=$srcs 인 finding 도 기각돼 표에 없다"
+    write_angles "$T/angles.txt" "security: filled" "adjudication: folded_into:scout" \
+                                 "different-premise: filled"
+    rc=0; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
+                  --emit-verdict --angles "$T/angles.txt" 2>"$T/err") || rc=$?
+    assert_eq "$rc" "4" "sources=$srcs 가 agent 를 가리지 않는다 — 기각된 finding 의 저자에게 접으면 exit 4"
+    assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다 (sources=$srcs)"
+    assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다 (sources=$srcs)"
+    rm -rf "$T"
+  done
+}
+
 case_synth_promoted_finding_counts_as_authored() {
   # 승격된 finding(adversarial 의 `new_findings:`, 저자 `adversarial`)도 「낸 것」이다.
   # 판정 적용 전 입력(`raw`)에는 없고 dedup 뒤 목록에만 있다 — 저자를 `raw` 에서만
@@ -588,6 +609,7 @@ case_synth_self_adjudication_is_atomic_failure
 case_synth_folding_into_a_silent_reviewer_is_ok
 case_synth_suppressed_finding_still_counts_as_authored
 case_synth_rejected_finding_still_counts_as_authored
+case_synth_reviewer_sources_do_not_displace_agent
 case_synth_promoted_finding_counts_as_authored
 case_synth_rejected_finding_of_another_reviewer_is_ok
 case_synth_angles_flag_hygiene
