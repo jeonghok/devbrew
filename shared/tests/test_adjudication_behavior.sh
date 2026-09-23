@@ -135,7 +135,7 @@ assert_contains "$OUT" "파손=2" "held_by_class: 항목 파손"
 assert_contains "$OUT" "기타=1" "held_by_class: 미지 접두는 «기타» 로 — 조용히 사라지지 않는다 (U4)"
 assert_contains "$OUT" "합=4"   "held_by_class 의 합 == held 총계. 어느 항목도 분류에서 빠지지 않는다"
 
-note "── 5. blocks() 의 세 조건을 «가르는» 공개 accessor (PR3)"
+note "── 8. blocks() 의 세 조건을 «가르는» 공개 accessor (PR3)"
 
 # 왜 이것이 필요한가: 소비자(qg)가 셋을 **다른 사유**로 렌더한다 — 앞 둘은
 # `findings-lost`(항목을 잃었다), 셋째는 `angle-absent`(아무도 그 축을 안 봤다).
@@ -166,7 +166,13 @@ print(L.items_unaccounted(), L.primary_source_failed(), L.blocks(), L.report()["
 assert_eq "$out" "False False False True" \
   "보조 실패는 두 accessor 다 거짓이고 blocks 도 아니다 — degraded 만 참 (헌장)"
 
-# 동치 — `blocks()` 를 다시 쓴 뒤에도 값이 같다. 네 조합 전수.
+# 동치 — 여덟(h,u,p) 조합 전수를, 코드 밖에서 손으로 적은 **독립** 진리표와 대조한다.
+# 이전 판은 `blocks() != (items_unaccounted() or primary_source_failed())` 로 뒤쪽을
+# 다시 만들어 비교했다 — 그런데 그 우변은 오늘 `blocks()` 의 본문 그 자체라, 어느
+# 쪽이 틀려도 항상 같이 틀려서 이 단언이 원리적으로 못 깨진다(실측: `items_unaccounted`
+# 를 `return True` 로 바꿔도 MISMATCH:0 이 그대로 났다). 여기서는 세 함수 각각을
+# `bool(h or u or p)` · `bool(h or u)` · `bool(p)` 라는, 이 파일이 세운 진리표와
+# 대조한다 — 코드를 참조하지 않으므로 어느 함수가 깨져도 그 함수만 따로 RED 다.
 out="$(run 'from adjudication import Ledger
 def mk(h, u, p):
     L = Ledger(items="open")
@@ -174,10 +180,17 @@ def mk(h, u, p):
     if u: L.uncountable("i", "미상")
     if p: L.source_failed("r", "죽음", primary=True)
     return L
-bad = [(h,u,p) for h in (0,1) for u in (0,1) for p in (0,1)
-       if mk(h,u,p).blocks() != (mk(h,u,p).items_unaccounted()
-                                 or mk(h,u,p).primary_source_failed())]
+bad = []
+for h in (0, 1):
+    for u in (0, 1):
+        for p in (0, 1):
+            L = mk(h, u, p)
+            got = (L.blocks(), L.items_unaccounted(), L.primary_source_failed())
+            want = (bool(h or u or p), bool(h or u), bool(p))
+            if got != want:
+                bad.append((h, u, p))
 print("MISMATCH:%d" % len(bad))')"
-assert_eq "$out" "MISMATCH:0" "blocks() == items_unaccounted() or primary_source_failed() (8조합 전수)"
+assert_eq "$out" "MISMATCH:0" \
+  "blocks()·items_unaccounted()·primary_source_failed() 각각이 독립 진리표와 일치한다 (8조합 전수)"
 
 finish
