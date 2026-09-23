@@ -4957,9 +4957,10 @@ awk '/^## C43 /{f=1} f && /\(a\) \*\*factual/{print; exit}' \
 echo "=== ④ 강등되는 것은 웹 축뿐이다 — 두 강등 경로가 이름으로 선언돼 있다"
 grep -c 'inline premortem' plugins/spec-distill/skills/conducting-interview/SKILL.md
 grep -c '수동 의심 게이트' plugins/spec-distill/skills/conducting-interview/references/steelman.md
+unset DEVBREW_SPEC_DISTILL_DISABLE_WEB
+# ⑤ 는 스위치를 «푼 뒤» 돈다 — 그 락의 평시 서브케이스는 스스로 unset 하지 않아 위 export 를 물려받으면 Fail 12 다(실측).
 echo "=== ⑤ 웹 kill switch 락"
 bash plugins/spec-distill/tests/test_web_kill_switch.sh 2>&1 | tail -2
-unset DEVBREW_SPEC_DISTILL_DISABLE_WEB
 ```
 
 Expected: ① `rc=0` · ② `pass: True` 이고 advisories 는 `WEB_DISABLED_ADVISORY` 하나(=1) · ③ `1` · ④ 각각 ≥1 · ⑤ `Fail: 0`. **이 다섯이 §B 의 주장을 구조적으로 확인한다.** 실제 한 사이클 e2e 는 자동화하지 않으므로 아래 Step 5 가 사용자에게 넘긴다.
