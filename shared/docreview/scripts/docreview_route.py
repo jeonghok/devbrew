@@ -15,6 +15,7 @@ import hashlib
 import json
 import re
 import sys
+import types
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점의 형제를 읽는다
@@ -62,12 +63,6 @@ def normalize(item, layer_default, prefix, idx, ledger):
     disp = item.get("disposition")
     disp = str(disp).strip() if disp else None
     if disp is not None and disp not in RANK:
-        # 알려진 미계수 강제 — 이 `ledger.coerced()` 는 critic/codex 경로에서 조용히
-        # 소실된다. `normalize()` 는 `cmd_prepare` 의 Ledger 로 불려 그 라운드 events 만
-        # `cmd_finalize` 로 넘어가기 때문이다(일반 규칙은 아래 `replacement`/`if_unfixed`
-        # 주석 참조). `_apply_recritic` 의 무조건 `None → "ask"` 루프가 오늘은 가려
-        # 주지만 **보장이 아니다** — 재비판 verdict 가 아직 `None` 인 항목에 처분을
-        # 직접 매기면 그 루프가 안 돌아 계수가 0 으로 끝난다.
         ledger.coerced("disposition", disp, None)
         disp = None
     try:
@@ -83,12 +78,8 @@ def normalize(item, layer_default, prefix, idx, ledger):
         "evidence": (str(item["evidence"]) if item.get("evidence") else None),
         # 갈래 2 의 칸 둘. 여기 없으면 리뷰어가 무엇을 적든 «조용히» 버려진다 —
         # 이 dict 는 입력을 갱신하는 것이 아니라 처음부터 새로 짓는다. 개행 강제는
-        # 여기가 아니라 `_classify_items`(I4) — 이 함수는 `cmd_prepare`(critic/codex)
-        # 에서도 불리는데, 그 라운드의 Ledger 는 `events` 로 기록된 호출만 `cmd_finalize`
-        # 로 넘어간다(`ev()` 래퍼를 거치지 않는 직접 `ledger.coerced()` 호출은 프로세스
-        # 경계를 못 넘어 fin.json 의 adjudication_coerced 에 조용히 안 잡힌다 — 실측).
-        # `_classify_items` 는 두 출처(critic/codex 와 recritic added) 를 합친 뒤
-        # `cmd_finalize` 자신의 L 로 한 번만 돌므로 그 경계가 없다.
+        # 여기가 아니라 `_classify_items`(I4) — 모든 출처(critic/codex 와 recritic added)가
+        # 합류하고 same_as 흡수가 끝난 뒤 한 번만 도는 자리라서다.
         "replacement": (str(item["replacement"]) if item.get("replacement") else None),
         "if_unfixed": (str(item["if_unfixed"]) if item.get("if_unfixed") else None),
     }
@@ -147,6 +138,12 @@ def cmd_prepare(a) -> int:
         getattr(L, name)(*args)
         events.append([name] + list(args))
 
+    # `normalize()` 가 부르는 원장 호출(파손 항목 `hold` · 어휘 밖 처분 `coerced`)도 `ev` 로 기록한다 —
+    # finalize 는 `events` 만 재생하므로, 이 원장을 직접 넘기면 그 호출이 프로세스 경계에서 사라져
+    # 파손 항목이 계수 없이 빠지고 `blocks` 가 거짓이 된다. 이름을 열거해 두어 `normalize()` 가 다른
+    # 메서드를 부르면 조용히 사라지지 않고 AttributeError 로 죽는다.
+    rec = types.SimpleNamespace(hold=lambda *a: ev("hold", *a), coerced=lambda *a: ev("coerced", *a))
+
     degrade = {"critic_dead": False, "layer2_missing": False, "codex_absent": False, "codex_reason": None}
     items = []
     critic = Path(a.critic)
@@ -176,7 +173,7 @@ def cmd_prepare(a) -> int:
         ev("source_failed", "doc-critic", "layer1 block %s" % (critic_why or "not a list"), True)
     else:
         for i, it in enumerate(l1, 1):
-            n1 = normalize(it, 1, "c", i, L)
+            n1 = normalize(it, 1, "c", i, rec)
             if n1:
                 items.append(("critic", n1))
         l2, e2 = extract_block(text, "docreview-layer2")
@@ -186,7 +183,7 @@ def cmd_prepare(a) -> int:
                 ev("uncountable", "layer2", "block %s" % (e2 or "not a list"))
         else:
             for i, it in enumerate(l2, 1):
-                n2 = normalize(it, 2, "c", 100 + i, L)
+                n2 = normalize(it, 2, "c", 100 + i, rec)
                 if n2:
                     items.append(("critic", n2))
     cx, stale = None, None
@@ -204,7 +201,7 @@ def cmd_prepare(a) -> int:
         ev("source_failed", "codex", degrade["codex_reason"], False)
     else:
         for i, it in enumerate(cx.get("findings") or [], 1):
-            nx = normalize(it, 2, "x", i, L)
+            nx = normalize(it, 2, "x", i, rec)
             if nx:
                 items.append(("codex", nx))
     # 익명화 — 출처 순서를 복원할 수 없게 정렬한다(P9)
@@ -403,6 +400,15 @@ def _absorb_same_as(items, same_as, L):
         if not live:
             continue
         keep = max(live, key=lambda m: (RANK[items[m]["disposition"]], m))
+        # 생존자는 처분 순위와 f 번호로 갈리고 f 번호는 요약의 sha1 순이라, 산문 칸을 적은
+        # 쪽이 흡수될 수 있다. 생존자의 빈 칸만 형제에게서 채운다 — 적힌 칸은 덮지 않는다.
+        # 오름차순이라 마지막에 쓴 값(처분이 가장 높은 형제의 것)이 남는다.
+        # 공백뿐인 값은 뒤의 접기에서 None 이 되므로 빈 칸으로 친다.
+        for k in ("evidence", "replacement", "if_unfixed"):
+            if not (items[keep].get(k) or "").strip():
+                for m in sorted(live, key=lambda m: (RANK[items[m]["disposition"]], m)):
+                    if (items[m].get(k) or "").strip():
+                        items[keep][k] = items[m][k]
         for m in live:
             keep_of[m] = keep
             if m != keep:
@@ -419,6 +425,9 @@ def _classify_items(items, st, prof, sections, n, L):
     allowed = prof["allowed_dispositions"]
     final, rejected_items = [], []
     for f, it in items.items():
+        # 흡수된 항목은 렌더되지 않는다 — 그 값의 접기를 세면 생존자가 물려받은 같은 값이 두 번 센다.
+        if it.get("_absorbed_into"):
+            continue
         repl = it.get("replacement")
         if repl:
             collapsed = re.sub(r"\s+", " ", repl).strip()
@@ -429,12 +438,10 @@ def _classify_items(items, st, prof, sections, n, L):
                 # 다음 줄 첫 칸에 떨어져 최상위 게이트 줄과 구별이 안 된다. 항목이 아니라 값을
                 # 바꾸는 것이므로 hold 가 아니라 coerced 다(CLAUDE.md 「강제는 계수하되 소실이
                 # 아니다」) — 이 대체가 게이트 판정 자체를 바꾸지는 않으므로 gate=False(기본값).
-                # 여기(모든 출처가 합류한 뒤, cmd_finalize 자신의 L)서 하는 이유는 normalize()
-                # 헤더 주석 참조 — cmd_prepare 의 L 은 프로세스 경계를 못 넘는다.
+                # 여기서 하는 이유는 모든 출처가 합류하고 same_as 흡수가 끝난 뒤라서다 — 생존자가
+                # 물려받은 값을 한 번만 접는다.
                 L.coerced("replacement", repl, collapsed)
             it["replacement"] = collapsed or None
-        if it.get("_absorbed_into"):
-            continue
         if it.get("_rejected"):
             it["state"] = "rejected"
             it["origin"] = "reviewer"

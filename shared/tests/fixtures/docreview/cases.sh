@@ -934,6 +934,44 @@ case_T02_same_as_max() {
   assert_eq "$(jget "$d/fin.json" '[x["blocks"] for x in d["findings"] if "b.py" in x["summary"]][0] == [ [x["id"] for x in d["findings"] if "c.py" in x["summary"]][0] ]')" "True" "T02: blocks 가 남은 쪽의 최종 id 를 따라간다"
   rm -rf "$d"
 }
+# same_as 흡수는 판정자 하나만 남긴다 — 처분이 같으면 생존자는 f 번호 순으로 갈리고, f 번호는
+# 요약의 sha1 순(익명화)이라 출처와 무관하다. 한쪽만 `replacement`·`if_unfixed` 를 적었는데 생존자가
+# 빈 쪽이면 흡수된 쪽의 값이 함께 사라져 게이트가 「(대체안 미작성)」을 냈다(Task 20 e2e 실측).
+# 값은 늘 크리틱 쪽에만 싣고 두 요약을 **맞바꿔 두 번** 돌린다 — 요약이 f 순서를 정하므로 한 번은
+# 빈 쪽이 반드시 생존자다. 그 방향이 실제로 돌았는지를 마지막에 따로 단언한다(한 방향만 재고
+# 양방향이라 주장하는 공허 통과를 막는다).
+# 판정 헬퍼의 실패 계수(`_ASSERT_FAIL`)는 셸 변수라 `$( )` 서브셸 안에서 세면 사라진다 — 그래서
+# 이 헬퍼는 직접 부르고 결과는 전역 `_SAF_EMPTY_SURVIVED` 로 돌려준다.
+_same_as_fields_run() {   # _same_as_fields_run <크리틱 요약> <코덱스 요약> [replacement YAML 리터럴] [기대 replacement] [기대 coerced] — 생존자가 코덱스면 전역에 +1
+  local repl_lit="${3:-인라인 한 줄. └ 천장: 둘째 형식이 요청될 때}" repl_want="${4:-인라인 한 줄. └ 천장: 둘째 형식이 요청될 때}" coerced_want="${5:-0}"
+  local cr cx d fc fx rt q
+  cr="$(mktemp -t cr-XXXXXX.txt)"; cx="$(mktemp -t cx-XXXXXX.yaml)"; rt="$(mktemp -t rt-XXXXXX.txt)"
+  printf '```docreview-layer1\n- ref: c1\n  category: overdesign\n  anchor: "#51-parts"\n  disposition: decide\n  summary: "%s"\n  evidence: "크리틱 근거"\n  replacement: "%s"\n  if_unfixed: "크리틱 결과"\n```\n```docreview-layer2\n[]\n```\n' "$1" "$repl_lit" > "$cr"
+  printf 'findings:\n  - agent: codex-reviewer\n    ref: x1\n    layer: 1\n    category: overdesign\n    anchor: "#51-parts"\n    disposition: decide\n    summary: "%s"\n    evidence: "코덱스 근거"\nmeta:\n  codex_failed: false\n' "$2" > "$cx"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$cr")" --codex "$(codex_now "$d" "$cx")" > "$d/prep.json"
+  fc="$(jget "$d/prep.json" "[i['f'] for i in d['items'] if i['summary']=='$1'][0]")"
+  fx="$(jget "$d/prep.json" "[i['f'] for i in d['items'] if i['summary']=='$2'][0]")"
+  printf '```docreview-recritic\nverdicts:\n  - f: "%s"\n    verdict: confirm\n    same_as: ["%s"]\nadded: []\n```\n' "$fx" "$fc" > "$rt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
+  q='[x for x in d["findings"] if x["category"]=="overdesign"]'
+  assert_eq "$(jget "$d/fin.json" "len($q), d[\"adjudication_absorbed\"]")" "(1, 1)" "same_as 필드($1): 둘이 하나로 흡수된다(전제)"
+  assert_eq "$(jget "$d/fin.json" "$q[0][\"replacement\"]")" "$repl_want" "same_as 필드($1): 생존자에 replacement 가 남는다"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"]')" "$coerced_want" "same_as 필드($1): replacement 개행 접기는 값 하나에 정확히 $coerced_want 번 센다(흡수된 쪽은 렌더되지 않으므로 세지 않는다)"
+  assert_eq "$(jget "$d/fin.json" "$q[0][\"if_unfixed\"]")" "크리틱 결과" "same_as 필드($1): 생존자에 if_unfixed 가 남는다"
+  assert_eq "$(jget "$d/fin.json" "$q[0][\"evidence\"] == ('코덱스 근거' if $q[0][\"summary\"] == '$2' else '크리틱 근거')")" "True" "same_as 필드($1): 생존자가 이미 적은 evidence 는 덮지 않는다"
+  if [ "$(jget "$d/fin.json" "$q[0][\"summary\"]")" = "$2" ]; then _SAF_EMPTY_SURVIVED=$((_SAF_EMPTY_SURVIVED+1)); fi
+  rm -rf "$d" "$cr" "$cx" "$rt"
+}
+case_same_as_survivor_inherits_empty_fields() {
+  _SAF_EMPTY_SURVIVED=0
+  _same_as_fields_run "yagni: 첫째 요약" "yagni: 둘째 요약"
+  _same_as_fields_run "yagni: 둘째 요약" "yagni: 첫째 요약"
+  # 옛 두 줄 펜스를 베낀 값(YAML 이스케이프 `\n`) — 물려받은 값의 접기가 생존자 쪽에서 한 번만 세지는가
+  _same_as_fields_run "yagni: 첫째 요약" "yagni: 둘째 요약" '인라인 한 줄.\n  └ 천장: 둘째 형식이 요청될 때' "인라인 한 줄. └ 천장: 둘째 형식이 요청될 때" 1
+  _same_as_fields_run "yagni: 둘째 요약" "yagni: 첫째 요약" '인라인 한 줄.\n  └ 천장: 둘째 형식이 요청될 때' "인라인 한 줄. └ 천장: 둘째 형식이 요청될 때" 1
+  assert_eq "$_SAF_EMPTY_SURVIVED" "2" "same_as 필드: 맞바꾼 두 쌍 각각에서 정확히 한 번씩 빈 쪽이 생존자였다(채움 방향이 실제로 돌았다)"
+}
 case_T03_T04_raise() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   assert_eq "$(fsum "$d" 'Non-goals' '["disposition"]')" "decide" "T03: raise to=decide (이미 decide) — 유지"
@@ -966,6 +1004,29 @@ case_AC27_unknown_verdict_coerced() {
 # `case_reraise_successor_immune_to_recritic` 의 주석에서 실측 확인됨). f1 은 known
 # item 이라 unknown-f hold 를 안 타므로 union-find 단계까지 실제로 도달한다 — 그
 # 사실을 먼저 단언(hold==0)한 뒤에 coerced 를 본다.
+# `normalize()` 는 `cmd_prepare` 에서 critic·codex 항목을 정규화하며 원장을 부른다 — 파손 항목은
+# `hold`, 어휘 밖 처분은 `coerced`. prepare 의 원장은 `events` 로 기록된 호출만 finalize 로 넘기므로
+# 그 호출이 기록되지 않으면 파손 항목이 계수 없이 사라져 `blocks` 가 거짓이 된다(실측 held=0 ·
+# coerced=0 · blocks=False). 어휘 밖 처분에는 재비판이 처분을 «직접» 매긴다 — 그러면 `_apply_recritic`
+# 의 `None → "ask"` 스윕이 돌지 않아 그 경로로 가려지지 않는다. `normalize()` 호출 자리는 셋(critic 층 1 ·
+# critic 층 2 · codex)이라 파손 항목을 자리마다 하나씩 둔다 — 한 자리만 되돌려도 held 가 3 에서 떨어진다.
+case_normalize_hold_and_coerced_reach_finalize() {
+  local cr cx rt d f3
+  cr="$(mktemp -t cr-XXXXXX.txt)"; cx="$(mktemp -t cx-XXXXXX.yaml)"; rt="$(mktemp -t rt-XXXXXX.txt)"
+  printf '```docreview-layer1\n- ref: c1\n  category: scope\n  anchor: "#2-goals"\n  disposition: decide\n  summary: "정상 항목"\n- ref: c2\n  category: scope\n  summary: "앵커 없는 항목"\n- ref: c3\n  category: scope\n  anchor: "#3-non-goals"\n  disposition: bogus\n  summary: "어휘 밖 처분"\n```\n```docreview-layer2\n- ref: c4\n  category: placeholder\n  anchor: "#12-files-to-modify"\n```\n' > "$cr"
+  printf 'findings:\n  - agent: codex-reviewer\n    ref: x1\n    layer: 1\n    category: scope\n    disposition: decide\n    summary: "codex 앵커 없는 항목"\nmeta:\n  codex_failed: false\n' > "$cx"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$cr")" --codex "$(codex_now "$d" "$cx")" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'sorted(i["summary"] for i in d["items"])')" "['어휘 밖 처분', '정상 항목']" "normalize 원장: 세 자리의 파손 항목이 전부 prep 에서 빠진다(전제)"
+  f3="$(jget "$d/prep.json" '[i["f"] for i in d["items"] if i["summary"]=="어휘 밖 처분"][0]')"
+  printf '```docreview-recritic\nverdicts:\n  - f: "%s"\n    verdict: raise\n    to: decide\nadded: []\n```\n' "$f3" > "$rt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_held"]')" "3" "normalize 원장: 세 자리(critic 층 1 · 층 2 · codex)의 파손 항목 hold 가 전부 finalize 원장에 닿는다"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_held_by_class"]["항목 파손"]')" "3" "normalize 원장: 그 hold 는 「항목 파손」 부류로 센다"
+  assert_eq "$(jget "$d/fin.json" 'd["blocks"]')" "True" "normalize 원장: 항목이 소실됐으므로 라운드를 막는다"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"]')" "1" "normalize 원장: 어휘 밖 처분의 강제가 재비판이 처분을 직접 매긴 경로에서도 센다"
+  rm -rf "$d" "$cr" "$cx" "$rt"
+}
 case_AC7b_unknown_same_as_target_coerced() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-r1.txt" "$FX/codex-failed.yaml" "--skip")"
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep.json"
@@ -2459,12 +2520,9 @@ case_recritic_added_carries_fields() {
 # 낸다(「고치면: %s」)이므로 개행이 섞이면 여섯 줄 블록이 여덟 줄이 되고 `└ 천장`
 # 조각이 다음 줄 첫 칸에 떨어져 최상위 게이트 줄과 구별이 안 된다. critic-
 # replacement-newline.txt 는 그 실패 모양(펜스의 옛 두 줄 그대로)을 그대로 낸다.
-# 강제는 normalize() 가 아니라 `_classify_items` 에서 한다 — critic/codex 출처는
-# `cmd_prepare`(별도 프로세스)에서 normalize() 를 지나는데, 그 라운드의 Ledger 는
-# `events` 로 기록된 호출만 `cmd_finalize` 로 넘어간다(직접 `ledger.coerced()` 호출은
-# 프로세스 경계를 못 넘는다 — 실측: normalize() 에 강제를 두면 값은 한 줄로 바뀌어도
-# `adjudication_coerced` 는 0으로 남는다). `_classify_items` 는 두 출처(critic/codex ·
-# recritic added)가 합류한 뒤 `cmd_finalize` 자신의 L 로 한 번만 돌므로 그 경계가 없다.
+# 강제는 normalize() 가 아니라 `_classify_items` 에서 한다 — 두 출처(critic/codex ·
+# recritic added)가 합류하고 same_as 흡수가 끝난 뒤 한 번만 도는 자리라, 생존자가
+# 물려받은 값을 한 번만 접고 한 번만 센다.
 case_I4_replacement_newline_collapsed() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-replacement-newline.txt" "$FX/codex-failed.yaml" --skip)" \
     || { no "I4 개행 강제: route_r1 실패"; return; }

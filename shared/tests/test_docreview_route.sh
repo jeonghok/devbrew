@@ -17,10 +17,12 @@ SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
 . "$HERE/fixtures/docreview/cases.sh"
 case_T01_prepare_anonymizes
 case_T02_same_as_max
+case_same_as_survivor_inherits_empty_fields
 case_T03_T04_raise
 case_T05_T06_reject
 case_AC27_unknown_verdict_coerced
 case_AC7b_unknown_same_as_target_coerced
+case_normalize_hold_and_coerced_reach_finalize
 case_T07_codex_no_disposition
 case_T08_defer_disallowed
 case_T09_disallowed_up
