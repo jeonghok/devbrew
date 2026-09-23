@@ -97,10 +97,11 @@ case_reason_enum_is_closed_and_accounted() {
   # 실측 3분할(코디네이터 정정 — 최초 지시의 5값 목록은 방향이 둘 다 틀렸었다):
   #   차등 축 산출 가능(5): scope-empty · baseline-unrunnable · silent-drop ·
   #                        error-axis · granularity-smear (CAUSE_TO_REASON.values())
-  #   모듈 자신의 플래그로 산출 가능(1): findings-lost (decide() 소스에서 도출)
-  #   호출자-전용 부채, 이 PR 에 산출자 없음(5): trivia · kill-switch ·
-  #                        declaration-invalid · merge-conflict · angle-absent
-  local debt="angle-absent declaration-invalid kill-switch merge-conflict trivia"
+  #   모듈 자신의 플래그로 산출 가능(2): findings-lost · angle-absent
+  #                        (decide() 소스에서 도출)
+  #   호출자-전용 부채, 이 PR 에 산출자 없음(4): trivia · kill-switch ·
+  #                        declaration-invalid · merge-conflict
+  local debt="declaration-invalid kill-switch merge-conflict trivia"
   local got; got=$(python3 -c "
 import re, inspect, sys
 sys.path.insert(0,'$PLUGIN_ROOT/scripts'); import verdict
@@ -116,8 +117,8 @@ print('AXES:' + ','.join(sorted(inspect.signature(verdict.decide).parameters)))"
   assert_grep "$got" '^STALE:$'   "부채 목록·매핑에 열거 밖 이름이 없다"
   assert_grep "$got" '^OVERLAP:$' "부채 목록에 이미 산출자가 생긴 이름이 남아 있지 않다"
   assert_grep "$got" '^N:11$'     "사유 열거는 정확히 열한 값이다"
-  assert_grep "$got" '^AXES:defect,differential_text,extra_reasons,legacy_verdict,review_blocked$' \
-    "decide() 의 키워드 전용 파라미터 집합이 다섯이다 — 새 축마다 파라미터가 하나 는다(OVERLAP 이 못 잡는 헬퍼-추출 배선의 둘째 독립 증인)"
+  assert_grep "$got" '^AXES:angle_absent,defect,differential_text,extra_reasons,legacy_verdict,review_blocked$' \
+    "decide() 의 키워드 전용 파라미터 집합이 여섯이다 — 새 축마다 파라미터가 하나 는다(OVERLAP 이 못 잡는 헬퍼-추출 배선의 둘째 독립 증인)"
 }
 
 case_unknown_reason_is_fail_closed() {
@@ -149,6 +150,24 @@ case_review_blocked_is_not_certified() {
   local out; out=$(python3 "$V" --review-blocked)
   assert_grep "$out" '^verdict: not-certified$' "리뷰 축 차단은 미판정을 만든다"
   assert_grep "$out" '^reason: findings-lost$'  "findings-lost 가 reason 이 된다"
+}
+
+case_angle_absent_is_not_certified() {      # AC11 의 «값» 쪽
+  local out; out=$(python3 "$V" --angle-absent)
+  assert_grep "$out"     '^verdict: not-certified$' "각도 부재는 미판정을 만든다"
+  assert_grep "$out"     '^reason: angle-absent$'   "angle-absent 가 reason 이 된다"
+  assert_not_grep "$out" '^verdict: clean$'          "clean 이 아니다 (AC11)"
+}
+
+case_angle_absent_and_findings_lost_are_distinct() {
+  # 둘은 **다른 사유**다. 같은 실행에서 둘 다 서면 reasons 에 둘 다 남고,
+  # `reason:` 은 열거 순서에서 앞선 `findings-lost` 다. 이 케이스가 없으면
+  # 「둘을 하나로 다시 접는」 회귀가 GREEN 으로 지나간다 — PR2 가 갖고 있던
+  # 바로 그 접힘이다(I2).
+  local out; out=$(python3 "$V" --angle-absent --review-blocked)
+  assert_grep "$out" '^verdict: not-certified$' "둘 다면 여전히 미판정"
+  assert_grep "$out" '^reason: findings-lost$'  "reason 은 열거 순서상 앞선 쪽"
+  assert_grep "$out" 'angle-absent'             "그래도 angle-absent 가 reasons 에서 소실되지 않는다"
 }
 
 case_review_blocked_survives_under_defect() {
@@ -629,6 +648,8 @@ case_unknown_reason_is_fail_closed
 case_not_certified_always_has_reason
 case_kill_switch_is_not_certified
 case_review_blocked_is_not_certified
+case_angle_absent_is_not_certified
+case_angle_absent_and_findings_lost_are_distinct
 case_review_blocked_survives_under_defect
 case_precedence_defect_wins
 case_precedence_not_certified_beats_clean
