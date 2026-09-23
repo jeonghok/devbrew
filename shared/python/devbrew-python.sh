@@ -127,7 +127,7 @@ satisfies() {
 # IGNORED 와 IGNORED_REASON 은 채널이 다르다. IGNORED 는 $DEVBREW_PYTHON 의 실제 경로를
 # «그대로» 담는다 — 사용자 경로에 `"`·`\` 가 있을 수 있고, 그 값은 환경변수
 # DEVBREW_PYTHON_IGNORED 로만 나간다(Task 5 의 Python 이 json.dumps 로 안전하게 직렬화한다).
-# IGNORED_REASON 은 숫자와 고정 리터럴만 담는다 — 아래 손으로 조립한 JSON(:169 부근)에
+# IGNORED_REASON 은 숫자와 고정 리터럴만 담는다 — 아래 손으로 조립한 JSON(4단계)에
 # 들어가는 것은 이쪽뿐이다. 사용자 경로가 손으로 조립한 문자열에 섞이면 따옴표 하나로
 # stdout 이 JSON 이 아니게 된다〔실측: Expecting ',' delimiter〕 — 그 조합(DEVBREW_PYTHON
 # 설정 + SessionStart)은 한 번도 파싱되지 않았었다.

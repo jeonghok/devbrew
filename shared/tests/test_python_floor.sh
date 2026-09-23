@@ -470,6 +470,12 @@ rm -f "$I_MARK"
 if [ -f "$I_MARK" ]; then no "I/RF4: PATH 의 글자 그대로 '~/tb' 를 따라 python3 를 실행했다"
 else ok "I/RF4: PATH 의 글자 그대로 '~/tb' 는 절대 경로가 아니라 건너뛴다 (설계 L1)"; fi
 
+# RF4 의 양의 짝 — 같은 카나리를 절대 경로로 주면 돈다. 이것이 없으면 위 「건너뛴다」는
+# 카나리가 고장 나도 통과한다.
+run_in "$TMP" "$TMP/home/tb:/bin" >/dev/null
+if [ -f "$I_MARK" ]; then ok "I/RF4: 양의 짝 — '~/tb' 의 카나리는 절대 경로로 주면 돈다"
+else no "I/RF4: 양의 짝이 안 돈다 — 위 「건너뛴다」가 헛돈다"; fi
+
 # 2단계가 exec 할 때 훅 argv 가 공백까지 그대로 가는가 — 새 exec 자리다.
 ARGS_TARGET="$TMP/args.sh"
 printf '#!/bin/sh\necho "argc=$#"\nfor a in "$@"; do echo "arg=[$a]"; done\n' > "$ARGS_TARGET"; chmod +x "$ARGS_TARGET"
