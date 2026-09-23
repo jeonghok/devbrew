@@ -104,8 +104,8 @@ spec 의 프로젝트-전역 요구를 값째 옮긴 것이다. **모든 Task �
 
 설계 AC22 는 옛 상한 문구를 「여섯 자리」로 열거했다. **그 여섯은 `agents/` 두 파일만의 전수다** — 본 계획이 Task 1 에서 grep 으로 재도출해 SKILL.md 5건 + README.md 3건이 더 있음을 확인했다. 같은 이유로 아래 셋은 **매 착수 시 grep 으로 다시 세고**, 이 문서의 숫자를 기대값으로 고정하지 않는다:
 
-- 두 장치의 옛 상한 문구 자리 (Task 1 · Task 10)
-- `[from-code][auto-confirmed]` 리터럴 잔존 (Task 1 · Task 8)
+- 두 장치의 옛 상한 문구 자리 (Task 1 · Task 11)
+- `[from-code][auto-confirmed]` 리터럴 잔존 (Task 1 · Task 9)
 - `## 4. External Landscape` 를 가진 픽스처 수 (Task 1 · Task 19)
 
 ---
@@ -334,7 +334,7 @@ Expected: 빈 출력.
 
 **Interfaces:**
 - Consumes: 없음
-- Produces: 계약 정본의 필드 이름 집합 — `evidence[]` = `{url, supports, claim, touches, decides}` · `repo_claims[]` = `{id, path, anchor, line, claim, touches, decides}`. Task 4 의 사본(steelman-builder.md)과 Task 18 축 D 가 이 집합에 **집합 등호**로 묶인다. 상수 `RC<n>`·`OQ<n>` 토큰 표기가 Task 7·14 의 정규식 대상이다.
+- Produces: 계약 정본의 필드 이름 집합 — `evidence[]` = `{url, supports, claim, touches, decides}` · `repo_claims[]` = `{id, path, anchor, line, claim, touches, decides}`. Task 4 의 사본(steelman-builder.md)과 Task 18 축 D 가 이 집합에 **집합 등호**로 묶인다. 상수 `RC<n>`·`OQ<n>` 토큰 표기가 Task 8(확인 줄 형식)·14(게이트 정규식)의 대상이다.
 
 **왜 SKILL.md 를 같은 Task 에서 건드리는가** — `shared/tests/test_skill_reference_pointers.sh` 가 역방향(고아 없음)을 잰다: git-tracked `plugins/*/references/*.md` 는 어떤 SKILL.md 로부터든 가리켜져야 한다. 포인터는 **`${CLAUDE_PLUGIN_ROOT}/references/research-claims.md` 형태로 글자 그대로** 써야 해석된다(접두사 → 루트가 1:1, 열거 밖 접두사는 loud FAIL).
 
@@ -1075,7 +1075,7 @@ MSG
 - Consumes: Task 4·5 의 태그·var·kind 삼중쌍 (같은 글자)
 - Produces: web-off 강등 경로에서도 같은 계약을 쓰는 inline premortem 규약 — Task 20 의 web-off 실측이 이것을 잰다.
 
-**E10 락을 밟지 않는다** — `test_blind_spot_prober_frontmatter.sh:45` 가 이 파일에 대해 `최대 [0-9]+회|[0-9]+회까지|[0-9]–[0-9]회|[0-9]-[0-9]회|max_[a-z_]+ *= *[0-9]` 부재를 요구한다. 그래서 예산 문구는 `1 + 재개방 횟수` 처럼 쓰고 `최대 N회`·`N회까지`·`N-N회` 를 쓰지 않는다. (상한 문구 자체의 교체는 Task 10 이다 — 이 Task 는 슬롯·출력 의무만.)
+**E10 락을 밟지 않는다** — `test_blind_spot_prober_frontmatter.sh:45` 가 이 파일에 대해 `최대 [0-9]+회|[0-9]+회까지|[0-9]–[0-9]회|[0-9]-[0-9]회|max_[a-z_]+ *= *[0-9]` 부재를 요구한다. 그래서 예산 문구는 `1 + 재개방 횟수` 처럼 쓰고 `최대 N회`·`N회까지`·`N-N회` 를 쓰지 않는다. (상한 문구 자체의 교체는 Task 11 이다 — 이 Task 는 슬롯·출력 의무만.)
 
 - [ ] **Step 1: 실패하는 락을 먼저 쓴다**
 
@@ -1281,11 +1281,11 @@ MSG
 
 **Interfaces:**
 - Consumes: Task 1 의 `SKILL_LINES` baseline (340) · Task 2·3·5·6 의 누적 증가
-- Produces: 새 천장 값 둘 — Task 8·11 이 이 값 아래에 머무는지 매 Step 에서 확인한다. 그리고 `loadsurface.txt` — Task 20 의 CHANGELOG 항목이 이 실측값을 인용한다.
+- Produces: 새 천장 값 둘 — Task 6·8·10·11 이 이 값 아래에 머무는지 매 Step 에서 확인한다. 그리고 `loadsurface.txt` — Task 20 의 CHANGELOG 항목이 이 실측값을 인용한다.
 
 **왜 이 Task 가 여기 있는가** — `test_conducting_interview_stage.sh` 는 SKILL.md 줄 수에 **순감 래칫 둘**을 걸어 두었다: `:366` `< 388` 과 `:393` `< 408`. 무게 감축 작업이 세운 것이다. 이 설계는 로드 표면 순증을 **명시적으로 수용**했고(L7: 「삭제가 0이므로 새 reference 1 + 슬롯 둘 + 술어 다섯이 그대로 더해진다. ⟨C8⟩ 이 그 대가를 명시적으로 수용했고 양은 계획 단계가 실측한다」) `### Deferred to plan` 이 「로드 표면 순증 실측」을 계획에 넘겼다. **래칫을 «없애지» 않고 «실측값 + 1» 로 다시 조인다** — 래칫이 래칫으로 남는다.
 
-**Task 8·11 이 더 쓸 양의 예측** (Step 1 이 실측으로 교체한다): V1 ≈ 10줄 · C43 행 ≈ 0줄(같은 줄 교체) · state `open_decisions[]` 블록 ≈ 9줄 · 자격·예산 ≈ 12줄 · C44 면제 ≈ 7줄 ⇒ ≈ 38줄.
+**Task 6·8·10·11 이 더 쓸 양의 예측** (Step 1 이 실측으로 교체한다): V1 ≈ 10줄 · C43 행 ≈ 0줄(같은 줄 교체) · state `open_decisions[]` 블록 ≈ 9줄 · 자격·예산 ≈ 12줄 · C44 면제 ≈ 7줄 ⇒ ≈ 38줄.
 
 - [ ] **Step 1: 현재값과 남은 예측을 한 표로 낸다**
 
