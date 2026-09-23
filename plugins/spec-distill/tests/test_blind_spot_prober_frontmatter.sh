@@ -52,4 +52,17 @@ if grep -qE '병렬.{0,8}금지|투기적.{0,8}금지' "$AGENT"; then
 else
   ok "E10: 병렬 금지 문구 없음"
 fi
+
+# 조사 주장 계약 배선 — 형제 둘과 글자째 같은 삼중쌍.
+for tag in claims_contract open_decisions; do
+  grep -qE "^  - tag: ${tag}$" <<<"$FM" && ok "슬롯 태그 $tag" || no "슬롯 태그 $tag 부재"
+done
+grep -q 'var: CLAIMS_CONTRACT' <<<"$FM" && ok "슬롯 var CLAIMS_CONTRACT" || no "슬롯 var CLAIMS_CONTRACT 부재"
+grep -q 'var: OPEN_DECISIONS' <<<"$FM" && ok "슬롯 var OPEN_DECISIONS" || no "슬롯 var OPEN_DECISIONS 부재"
+grep -q 'kind: repo_context' <<<"$FM" && ok "claims_contract 의 kind 가 repo_context" || no "kind: repo_context 부재"
+BODY="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{f=0;b=1;next} b' "$AGENT")"
+for tok in repo_claims decides; do
+  grep -qE "^[[:space:]]*-?[[:space:]]*${tok}:" <<<"$BODY" \
+    && ok "출력 의무: $tok 키가 본문 스키마에 있다" || no "출력 의무: $tok 키 부재"
+done
 finish

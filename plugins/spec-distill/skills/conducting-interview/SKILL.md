@@ -276,14 +276,21 @@ codebase 근거·사용자 판단으로 기록).
 
 ```
 Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind-spot-prober",
-        prompt: "지금까지의 framing(재구성된 문제정의 + 사용자 제약 요지): <framing>${FRAMING}</framing>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
-// **처분** — consumer=orchestrator · fail-open · disclosure=loud advisory
+        prompt: "지금까지의 framing(재구성된 문제정의 + 사용자 제약 요지): <framing>${FRAMING}</framing>. 조사 주장 계약(내용 전문): <claims_contract>${CLAIMS_CONTRACT}</claims_contract>. 지금 열린 결정: <open_decisions>${OPEN_DECISIONS}</open_decisions>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
+// **처분** — consumer=orchestrator · fail-closed · disclosure=loud advisory + inline premortem 강등
 ```
 
 출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 payload §5 `## 5. 기각 · Blind Spots`의
 **`위험` 항목**(`- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>`)으로 기록하고, 다음 라운드의
 «지금 이해»에 실어 사용자 처분 S 를 받은 뒤 `blind_spot` floor 차원을 closed 로 전이한다. web 비활성 시 advisory:
 `[spec-distill] web 비활성 — blind-spot-prober 자동 생략, inline premortem으로 전환`.
+
+**계약 배달 실패 시** — `## 조사 주장 계약` 펜스의 rc 가 0 이 아니면 이 dispatch 를 하지 않는다.
+공시는 loud advisory + inline premortem 강등 이고, web 비활성 경로와 같은 곳으로 간다. 인터뷰는
+계속하고 그 차원을 자동으로 닫지 않는다.
+
+**강등된 inline premortem 도 같은 계약을 쓴다** — orchestrator 가 자기 `Read`/`Grep` 으로 레포
+근거를 확인하고 `repo_claims` 를 산출해 V1 을 태운다. 웹 근거만 사라지고 내부 축은 돈다.
 
 ## 5 통과 의례 (Law 1 구조 게이트, R1–R5)
 

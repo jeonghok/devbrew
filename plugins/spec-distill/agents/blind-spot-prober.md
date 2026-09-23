@@ -7,6 +7,12 @@ input_slots:
   - tag: framing
     var: FRAMING
     kind: orchestrator_framing
+  - tag: claims_contract
+    var: CLAIMS_CONTRACT
+    kind: repo_context
+  - tag: open_decisions
+    var: OPEN_DECISIONS
+    kind: task
 description: >
   Use this agent once per spec-distill interview to run an adversarial premortem on
   the current problem framing — surfacing hidden assumptions and failure modes the
@@ -37,6 +43,9 @@ failure mode(unknown-unknown)를 웹 근거와 함께 표면화합니다. 당신
 
 - 현재 재구성된 문제정의(Reframed Problem) + 지금까지 사용자가 말한 제약의 요지.
 - (있으면) External Landscape 발췌.
+- `<claims_contract>` 조사 주장 계약의 **내용 전문**. 아래 출력의 주장이 이 계약을 따른다.
+- `<open_decisions>` 지금 열린 결정 목록(`OQ<n>` + 한 줄). `decides` 는 이 목록에 실제로 있는 것만
+  담고 목록에 없는 id 를 지어내지 않는다.
 
 ## Required research (출력 전)
 
@@ -57,6 +66,14 @@ failure_modes:
     evidence:
       - "https://..."
 confidence: 0.0-1.0
+repo_claims:                   # 내부(레포) 주장 — <claims_contract> 계약 그대로
+  - id: RC3
+    path: "<repo 상대경로>"
+    anchor: "<심볼 | 헤딩 | 원문 인용>"
+    line: 123                  # 선택
+    claim: "<주장>"
+    touches: []                # 전제 P<n>
+    decides: [OQ1]             # 닿는 «열린 결정». 빈 배열 허용
 ```
 
 ## 동작 규칙
@@ -68,6 +85,9 @@ confidence: 0.0-1.0
    가정만 노출 — 단일 책임(R6 분리 근거).
 4. **fan-out 1**: 인터뷰당 1회 dispatch(C8).
 5. **confidence < 0.4** 면 "표면화된 blind-spot 약함 — framing 견고"를 명시(억지 premortem 금지).
+6. **숨은 가정의 근거를 레포에서 댈 수 있으면 `repo_claims[]` 로 낸다.** `path`·`anchor` 없이
+   내지 않고, 판정 전에 구현을 읽는다 — 인덱스·목차·description 필드만 읽고 판정하지 않는다.
+7. **계약을 못 받았으면**(`<claims_contract>` 가 비었으면) 주장을 내지 않고 그 사실을 첫 줄에 적는다.
 
 ## 사용하지 않는 경우
 
