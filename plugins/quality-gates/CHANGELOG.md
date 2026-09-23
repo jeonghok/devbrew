@@ -3,6 +3,14 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [8.2.4] — 2026-09-24
+
+patch 인 이유 — 전부 `Fixed` 다. `scripts/docreview_route.py` 는 `shared/docreview/` 로의 심볼릭 링크라 그 대상이 바뀐 이상 배포 트리 안의 코드가 바뀐 것이다.
+
+### Fixed
+
+- **엔진 링크가 critic·codex 의 파손 항목을 계수 없이 흘려 `blocks` 를 거짓으로 냈다.** `normalize()` 의 `hold`·`coerced` 가 prepare→finalize 경계에서 사라졌다. 이제 파손 항목이 있는 라운드는 막힌다. 전문·락은 `plugins/spec-distill/CHANGELOG.md` `[4.2.3]`. 이 플러그인의 docreview 호출자는 여전히 0 이다.
+
 ## [8.2.3] — 2026-09-23
 
 patch 인 이유 — 전부 `Fixed` 다. 이 플러그인의 `scripts/codex_findings_to_yaml.py` · `scripts/docreview_route.py` 는 `shared/` 로의 심볼릭 링크라 그 대상이 바뀐 이상 배포 트리 안의 코드가 바뀐 것이다(안 올리면 cache key 가 조용히 stale).
