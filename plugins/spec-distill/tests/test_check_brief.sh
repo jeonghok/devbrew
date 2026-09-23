@@ -1560,4 +1560,67 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-floor-evidence-empty.md" 2>/d
   && ok "AC3(j): 근거 빈 행은 «evidence empty» 로 남는다 (조이기가 정당한 입력을 안 삼킨다)" \
   || { no "AC3(j): 근거 빈 행이 «읽을 수 없음» 으로 재분류됐다 — 구분자를 과하게 조였다"; printf '    %s\n' "$out"; }
 
+# === 2026-09-23 조사 축 (설계 2026-09-22-interview-research-specialization-design) ==========
+# V2-OPT: 옵트인. `contract: v2` 가 없는 payload 는 새 술어 다섯이 전부 미발동이고 advisory 하나.
+# V2-DEF: 「조사 항목」 순회 정의 — §4 전부 + §5 의 RC<n> 줄. §3 제외.
+FXV="$FX/interview-brief-v2-valid.md"
+v2run() {   # v2run <payload> → stdout=JSON, 전역 V2RC 에 rc
+  V2OUT="$(python3 "$SCRIPT" gate "$1" 2>/dev/null)"; V2RC=$?
+}
+
+# V2-OPT-a: 기존 정상 쌍(contract 키 없음) → green + 「신 계약 미적용」 advisory
+v2run "$FX/interview-brief-valid.md"
+{ [[ "$V2RC" -eq 0 ]] && grep -q '신 계약 미적용 brief' <<<"$V2OUT"; } \
+  && ok "V2-OPT-a: contract 없는 기존 payload 는 green + 미적용 advisory (침묵과 0 을 가른다)" \
+  || no "V2-OPT-a: rc=$V2RC · advisory 부재 — 옵트인이 조용히 통과한다"
+
+# V2-OPT-b: `contract: v2` green fixture → green + 「내부 조사 0건」 이 **아니다**(RC 를 싣는다)
+[[ -f "$FXV" ]] && ok "V2 green fixture 실재" || no "V2 green fixture 부재: $FXV"
+v2run "$FXV"
+{ [[ "$V2RC" -eq 0 ]] && ! grep -q '신 계약 미적용 brief' <<<"$V2OUT"; } \
+  && ok "V2-OPT-b: contract: v2 green fixture 는 green 이고 미적용 advisory 가 없다" \
+  || no "V2-OPT-b: rc=$V2RC · 미적용 advisory 가 남았다 — 옵트인 판독이 깨졌다"
+grep -q '내부 조사 0건' <<<"$V2OUT" \
+  && no "V2-OPT-b: green fixture 가 RC<n> 을 싣는데 «내부 조사 0건» advisory 가 떴다" \
+  || ok "V2-OPT-b: 0건 advisory 가 뜨지 않는다 (양의 짝)"
+
+# V2-OPT-c: contract: v2 인데 RC<n> 0건 → green + 「내부 조사 0건」 advisory
+cp "$FXV" "$TMPD/z.md"; cp "${FXV%.md}.audit.md" "$TMPD/z.audit.md"
+sed -i.bak 's|^audit_file:.*|audit_file: z.audit.md|' "$TMPD/z.md"; rm -f "$TMPD/z.md.bak"
+# audit 의 payload: 역참조도 새 파일명으로 맞춘다 — audit_pairing_errors 가 이 필드를
+# payload 파일명과 대조하므로, 리네임만 하고 이 필드를 안 고치면 RC 제거와 무관한
+# 「다른 인터뷰의 audit」 red 가 먼저 뜬다(리포의 기존 관습 — :492·:1125·:1144·:1415 와 동형).
+sed -i.bak 's|^payload:.*|payload: z.md|' "$TMPD/z.audit.md"; rm -f "$TMPD/z.audit.md.bak"
+python3 - "$TMPD/z.md" "$TMPD/z.audit.md" <<'PYX'
+import re, sys, pathlib
+# 레포 주장을 통째로 뺀다: §4·§5 의 연결에서 RC 를 지우고(웹 형태로), §3·§0 의 역참조와
+# audit 의 확인 줄을 뺀다 — 「0건」 상태를 만드는 것이 목적이다. derived:internal_research
+# 행은 **지우지 않고 N/A sentinel로 바꾼다** — 통째로 지우면 이 변이와 무관한 기존
+# AC10(coverage_ledger_failures: derived 행 ≥1 또는 N/A sentinel 필수)이 먼저 red를
+# 낸다. 새 predicate ④는 RC<n> 0건이면 derived:internal_research 요구를 미발동시킬
+# 뿐 "행이 있으면 안 된다"고 말하지 않으므로, sentinel 치환이 두 계약을 동시에 만족한다.
+pl = pathlib.Path(sys.argv[1]); s = pl.read_text(encoding="utf-8")
+s = re.sub(r"\[RC\d+ → ", "[→ ", s)
+s = re.sub(r" ?→ 근거 RC\d+", "", s)
+s = re.sub(r"^- 위험 — .*RC\d+.*$\n", "", s, flags=re.M)
+pl.write_text(s, encoding="utf-8")
+ad = pathlib.Path(sys.argv[2]); a = ad.read_text(encoding="utf-8")
+a = re.sub(r"^- 확인 RC\d+ .*$\n", "", a, flags=re.M)
+a = a.replace("- derived:internal_research — closed — 내부 조사 축 (@S1)\n",
+              "- derived: N/A\n")
+ad.write_text(a, encoding="utf-8")
+PYX
+v2run "$TMPD/z.md"
+{ [[ "$V2RC" -eq 0 ]] && grep -q '내부 조사 0건' <<<"$V2OUT"; } \
+  && ok "V2-OPT-c: RC<n> 0건이면 green + «내부 조사 0건» advisory (∀ 는 공허 통과)" \
+  || no "V2-OPT-c: rc=$V2RC — 0건이 차단됐거나 advisory 가 없다. 개수 술어가 끼어들었을 수 있다"
+
+# V2-DEF: §3 은 순회 범위 밖 — §3 항목에 연결이 없어도 red 가 아니다.
+cp "$FXV" "$TMPD/d.md"; cp "${FXV%.md}.audit.md" "$TMPD/d.audit.md"
+sed -i.bak 's|^audit_file:.*|audit_file: d.audit.md|' "$TMPD/d.md"; rm -f "$TMPD/d.md.bak"
+sed -i.bak 's|^payload:.*|payload: d.md|' "$TMPD/d.audit.md"; rm -f "$TMPD/d.audit.md.bak"
+v2run "$TMPD/d.md"
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-DEF: §3 항목이 줄끝 연결을 갖지 않아도 green (§3 은 대상이고 출처가 아니다)" \
+  || no "V2-DEF: §3 이 순회 범위에 들어갔다 — 자기지시로 술어가 공허해진다"
 finish

@@ -902,6 +902,78 @@ def coverage_anchor_failures(audit_text: str, anchors: set) -> list[str]:
     return fails
 
 
+# ── 조사 주장의 결정 연결 (2026-09-22-interview-research-specialization-design §E · §H) ─────
+#
+# **「조사 항목」의 순회 정의** — 설계 §E 와 같은 문면이고 이 셋이 전부다:
+#   · payload §4 의 **모든** 항목 줄 (프로필상 전부 landscape 다)
+#   · payload §5 의 항목 줄 중 **`RC<n>` 리터럴을 가진 줄** — 네 모양(기각·보류·검토·위험) 중
+#     어느 것인지는 묻지 않는다. `RC<n>` 이 있으면 레포 주장을 실은 줄이고 없으면 아니다.
+#   · **§3 은 순회 범위에 없다.** §3 항목은 그 자체가 «열린 결정» 이라 연결의 *대상*이고
+#     출처가 아니다 — 거기에 연결을 걸면 자기지시가 되어 술어가 공허해진다.
+#
+# 연결의 위치는 **줄 끝**이고 하위 불릿은 금지다: `ENTRY_BULLET_RE`(`^\s*[-*]\s`)가 들여쓴
+# 불릿도 §4 항목으로 세므로 하위 불릿 형태는 즉시 `unkeyed landscape entries` red 가 된다.
+#
+# **개수 술어를 두지 않는다**(설계 ⟨C5⟩·X7·AC8). 아래 술어는 전부 ∀ 이고 순회할 항목이 0건이면
+# 공허하게 통과한다 — `landscape_unkeyed` 가 §4 에 대해 이미 하는 것과 같은 형태다. 개수가
+# 들어가는 곳은 **조건 분기와 advisory** 뿐이고 둘 다 무엇도 막지 않는다. 차단 메시지 문면에도
+# 개수를 넣지 않는다.
+RC_RE = re.compile(r"(?<![A-Za-z])RC\d+\b")
+OQ_RE = re.compile(r"(?<![A-Za-z])OQ\d+\b")
+# 줄 끝 연결 — 셋 중 하나(§H ③). `[→ 없음]` sentinel 은 정직한 답이고 red 가 아니다: §A 계약이
+# 「빈 배열은 허용이고 거짓 연결보다 낫다」를 못 박으므로 sentinel 없는 ∀ 는 그 계약과 충돌하고
+# 「필러 절」 압력을 만든다. **「없음」의 개수는 세지 않는다.**
+LINK_RE = re.compile(
+    r"\[(?:(RC\d+)\s*→\s*(OQ\d+(?:\s*·\s*OQ\d+)*)"
+    r"|→\s*(OQ\d+(?:\s*·\s*OQ\d+)*)"
+    r"|→\s*없음)\]\s*$")
+CONTRACT_KEY, CONTRACT_V2 = "contract", "v2"
+DERIVED_INTERNAL_RESEARCH = "derived:internal_research"
+CONFIRM_ROW_RE = re.compile(r"^확인\s+(RC\d+)\s+—\s+(확인|반증|미확인)\s+—\s*(\S.*)$")
+
+INTERNAL_RESEARCH_ZERO_ADVISORY = (
+    "[spec-distill] 내부 조사 0건 — 이 brief 는 레포 주장(`RC<n>`)을 하나도 싣지 않았다. 이 게이트는 "
+    "brief 파일만 읽으므로 「조사를 했어야 했는가」를 알 방법이 없다 — 그 판단은 Step B 게이트에서 "
+    "사람이 한다."
+)
+CONTRACT_V1_ADVISORY = (
+    "[spec-distill] 신 계약 미적용 brief — payload frontmatter 에 `contract: v2` 가 없어 조사 주장의 "
+    "결정 연결 술어 다섯(연결 ∀ · 연결 대상 실재 · 역참조 ∀ · 이름 정확 일치 derived · 확인 줄 ∀)이 "
+    "전부 미발동이다. 옵트인의 fail-open 방향을 이 줄이 공시한다."
+)
+
+
+def contract_v2(text: str) -> bool:
+    """payload frontmatter 의 `contract: v2` 옵트인 스위치 (설계 §H ⑥).
+
+    새 술어 다섯은 이 필드가 있을 때만 발동한다. 없으면 전부 미발동이고 `advisories` 에
+    「신 계약 미적용 brief」 한 줄이 실린다 — 침묵과 0 은 다른 사실이다.
+
+    **왜 옵트인인가**: §4 항목에 연결을 ∀ 로 요구하면 `## 4. External Landscape` 를 가진 payload
+    픽스처 전량이 red 가 되고 그중 `interview-brief-valid.md` 는 스위트 다수의 베이스다. 일괄
+    편집은 회귀 생산원이고 optional 은 이빨 0이다 — 세 번째 길이 이것이다. 값 판독은
+    `frontmatter_value` 하나를 쓴다(중복 키·개행 포획·부분 비교를 그 함수가 이미 닫았다).
+    """
+    return frontmatter_value(CONTRACT_KEY, _frontmatter(text)) == (CONTRACT_V2, None)
+
+
+def research_entries(text: str) -> list[str]:
+    """위 순회 정의 그대로 — §4 의 모든 항목 줄 + §5 에서 `RC<n>` 을 가진 줄. §3 은 제외."""
+    out = _entry_lines(_section_text(text, "4", "External Landscape"))
+    out += [ln for ln in section5_entries(text) if RC_RE.search(ln)]
+    return out
+
+
+def payload_rc_ids(text: str) -> list[str]:
+    """payload 가 실은 레포 주장 id 전량 — **순회 정의 안에서만** 센다.
+
+    코퍼스를 payload 전문으로 넓히지 않는다: §3 의 `→ 근거 RC3` 역참조와 §0 요약도 같은 리터럴을
+    담으므로, 전문을 세면 확인 줄 ∀ 가 «출처 없는 역참조» 에도 확인 줄을 요구한다. 출처는 §4·§5 이고
+    §3·§0 은 그것을 가리키는 자리다(설계 §D).
+    """
+    return sorted({rc for ln in research_entries(text) for rc in RC_RE.findall(ln)})
+
+
 # **불릿(데이터) 줄에 앵커한다.** 앵커가 없으면 §2 머리 «설명 산문»의 예시
 # (`coverage-mapper 0 (unavailable: <사유>)`)가 데이터 줄보다 먼저 매치돼 판정을 대신
 # 진다 — 실측: 출하 템플릿의 T-TPL green 을 그 설명 문장 하나가 전부 지고 있었고,
@@ -1087,6 +1159,14 @@ def gate(path: Path) -> int:
             audit_text, payload_verbatim_anchors(text) | verbatim_anchors(audit_text))
         if anc:
             failures.append(f"coverage anchors: {anc}")
+
+    # --- 조사 주장의 결정 연결 (설계 §E). 다섯 술어 전부 `contract: v2` 옵트인 뒤에 있다.
+    #     술어 자체는 뒤따르는 커밋이 채우고, 이 분기는 스위치와 두 advisory 만 세운다.
+    if contract_v2(text):
+        if not payload_rc_ids(text):
+            advisories.append(INTERNAL_RESEARCH_ZERO_ADVISORY)
+    else:
+        advisories.append(CONTRACT_V1_ADVISORY)
 
     ok = not failures
     # 킬 스위치가 verdict를 뒤집을 수 있으면 **반드시** 말한다. v0.44.0 N1a 이후
