@@ -227,17 +227,40 @@ printf '%s\n' "$CLAIMS_CONTRACT"
 
 → 다음 probe의 질문은 **반드시 (b) judgment path** (사용자에게 직접 질문)로 라우팅. 강제.
 
-## coverage-mapper dispatch (상한 2)
+**조사 산출의 면제.** 조사가 결정에 닿았으면 그 probe 는 streak 을 올리지 않는다 — 압착의 대가를
+가드의 계수 방식에서 지불하되, 면제 예산이 유한하도록 집합 원소에 묶는다. 산출자는 orchestrator
+이고 거처는 `orchestration.open_decisions[]` 의 `touched` 필드다(별 키를 두지 않는다).
+
+> 산출 항목의 `decides` 가 status: open 이고 touched: false 인 결정을 하나라도 담으면
+> `non_user_streak` **+0**. 그렇지 않으면 **+1**. 그 계수 **뒤에** 그 원소들의 `touched` 를 `true` 로
+> 올린다. **열린 결정이 0이면 면제도 0이다.**
+
+**순서가 계약이다 — 「계수 먼저, 표시 나중」.** 표시가 계수보다 앞서면 계수 시점에 「아직 안 닿은
+것」이 항상 공집합이라 **첫 연결부터 +1** 이 되고 면제가 영구히 발화하지 않는다.
+
+`touched` 는 단방향이고 재개방으로도 되돌리지 않는다 — 되돌리면 면제가 무한해진다. 그래서 면제
+예산은 `|{status: open, touched: false}|` 로 유한하고, **그 집합이 줄어드는 데 의존하지 않는다**:
+줄지 않아도 같은 결정의 두 번째 연결이 면제되지 않으므로 예산이 고갈된다.
+
+## coverage-mapper dispatch (자격 + 예산)
 
 `coverage-mapper` 는 고정 floor 위 **주제-도출 차원**을 *제안*하는 advisory 에이전트다(admit 은
-orchestrator, G2). dispatch 는 둘뿐이다:
+orchestrator, G2). 첫 dispatch 는 필수이고 그 뒤는 자격과 예산이 정한다:
 
 1. **R1 첫 질문 전 필수 1회.** 입력: seed 전문(S1)과 그 «다시 검증할 것» 문단, 원장 초기 상태.
    출력의 derived 차원을 admit 한 뒤에야 R1 질문이 나간다. 인자 없이 부른 경로에서는 R1 답을
    받은 뒤 R2 전에.
-2. **재개방 시 최대 1회.** 재개방이 새 파생 차원을 함의할 수 있어서다. 두 번째 재개방부터는 없다.
+2. **재개방마다 한 번의 예산이 열린다.** 재개방이 새 파생 차원을 함의할 수 있어서다 — 그래서
+   예산이 `1 + 재개방 합` 이다. 자격이 없으면 예산이 남아도 부르지 않는다.
 
-상한 2, 카운터 `orchestration.coverage_mapper_dispatches`. 종료 시 audit §2 에 `coverage-mapper <k>`
+**호출 자격이 예산보다 앞선다.** 다시 부를 자격은 「그 장치가 채우는 차원에 **닿는 열린 결정이
+아직 있는가**」다 — `orchestration.open_decisions[]` 에서 `dimension` 이 그 차원이고 `status: open`
+인 항목이 하나라도 있는가. **열린 결정이 0이면 자격이 없다 — 예산이 남아도 부르지 않는다.**
+자격을 채웠으면 예산을 본다: `coverage_mapper_dispatches < 1 + Σ(모든 차원의 reopened)`.
+재개방이 연료다 — 재개방은 정의상 「새 답·외부 근거·코드 사실이 그 차원의 닫힘 근거 S 와 충돌」해야
+일어나고 라운드는 사용자 답으로만 도므로 사용자가 시계다.
+
+카운터 `orchestration.coverage_mapper_dispatches`. 종료 시 audit §2 에 `coverage-mapper <k>`
 를 쓰고 게이트가 k≥1 을 검사한다. dispatch 가 불가능한 환경(Agent 도구 부재)은
 `coverage-mapper 0 (unavailable: <이유>)` 로 적는다 — 게이트는 advisory 로 통과시키고 Step B 가
 사람에게 보인다(침묵과 0 은 다르다).
@@ -300,9 +323,12 @@ skepticism = steelman 판정 S · blind_spot = 숨은 가정·실패 양식 처�
 
 ## blind-spot-prober dispatch (C8 — blind_spot floor 차원)
 
-`blind_spot` floor 차원의 **첫 open→in-progress 전이** 시 `blind-spot-prober`를 **인터뷰당 1회**
-dispatch한다(fan-out 1, C8). `orchestration.blind_spot_dispatched`가 false일 때만 — dispatch 후
-true로 세팅(재dispatch 금지). kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구
+`blind_spot` floor 차원의 **첫 open→in-progress 전이** 시 `blind-spot-prober`를 dispatch 한다.
+**자격이 예산보다 앞선다** — `orchestration.open_decisions[]` 에 `dimension: blind_spot` 이고
+`status: open` 인 항목, 즉 그 차원에 **닿는 열린 결정이 아직 있는가**를 먼저 본다. 열린 결정이
+0이면 자격이 없다 — 예산이 남아도 부르지 않는다. 자격을 채웠으면 예산:
+`blind_spot_dispatches < 1 + coverage.floor.blind_spot.reopened`. dispatch 마다 카운터를 +1 한다.
+kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구
 부재면 dispatch 대신 loud advisory 후 **inline premortem**으로 전환한다(C5, §5 위험 항목을
 codebase 근거·사용자 판단으로 기록).
 

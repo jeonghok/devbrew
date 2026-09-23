@@ -442,9 +442,9 @@ done
 # 느슨해 래칫이 뜻을 잃는다 — 이 브랜치가 실측으로 그것을 보였다(원래 계획의 430 은 남은 편집을
 # 과소 예측한 값이었다). 그래서 여기서는 **남은 편집을 다 받을 만큼** 열어 두고, SKILL.md 를
 # 마지막으로 편집하는 Task 11 이 그 자리에서 **실측 + 8** 로 조인다. 래칫의 뜻은 끝에서 지켜진다.
-[[ "$(wc -l < "$SKILL")" -lt 480 ]] \
-  && ok "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") < 480 (조사 특화 순증 수용 — 잠정, Task 11 이 조인다)" \
-  || no "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 480"
+[[ "$(wc -l < "$SKILL")" -lt 451 ]] \
+  && ok "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") < 451 (조사 특화 순증 수용 — 실측 + 8, Task 11 이 조였다)" \
+  || no "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 451"
 
 # 제거 (G7·AC1·AC14) — 존재 검사가 아니라 부재 검사이므로 CI_ALL 전체
 for tok in 'teach-lite' 'teach-heavy' 'teach-beat' 'general-purpose'; do
@@ -469,7 +469,7 @@ for tok in '4-block' '막힌 결정'; do
     && ok "G7 양성 대조: «${tok}» 이 steelman.md 에 실재 (예외가 vacuous 아님)" \
     || no "G7 양성 대조: steelman.md 에 «${tok}» 이 없다 — 예외가 아무것도 면제하지 않으면서 범위만 줄인다"
 done
-[[ "$(wc -l < "$SKILL")" -lt 480 ]] && ok "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") < 480 (조사 특화 순증 수용 — 잠정, Task 11 이 조인다)" || no "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 480"
+[[ "$(wc -l < "$SKILL")" -lt 451 ]] && ok "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") < 451 (조사 특화 순증 수용 — 실측 + 8, Task 11 이 조였다)" || no "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 451"
 
 # coverage-mapper dispatch (상한 2, AC7, scoped)
 covmap_block="$(awk '/^## coverage-mapper dispatch/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
@@ -482,14 +482,34 @@ covmap_block="$(awk '/^## coverage-mapper dispatch/{f=1;print;next} /^## /{f=0} 
 covmap_flat="$(tr '\n' ' ' <<<"$covmap_block" | tr -s ' ')"
 grep -qE 'R1[^.]{0,30}첫 질문 전[^.]{0,20}필수 1회' <<<"$covmap_flat" \
   && ok "C4: R1 첫 질문 전 필수 1회" || no "C4: R1 필수 dispatch 규칙 부재"
-grep -qE '재개방[^.]{0,20}최대 1회' <<<"$covmap_flat" \
-  && ok "C4: 재개방 시 최대 1회" || no "C4: 재개방 dispatch 규칙 부재"
+# 2026-09-23: 예산이 `1 + 재개방` 이 되고 그 위에 **자격**(⟨C12⟩ 문면)이 얹혔다. 옛 `재개방 시
+# 최대 1회`·`상한 2` 는 이 계약을 더 이상 서술하지 않는다 — 교체한다. 자격과 예산을 **둘 다**
+# 요구하는 것이 요점이다: 예산만으로는 「닿는 결정이 아직 열려 있는가」라는 재개 조건을 구현하지
+# 못한다(라운드 1 이 그것을 잡았다).
+grep -qF '닿는 열린 결정이 아직 있는가' <<<"$covmap_flat" \
+  && ok "C12: 호출 자격 = 그 차원에 닿는 열린 결정이 아직 있는가" || no "C12: 호출 자격 문구 부재"
+grep -qF '열린 결정이 0이면 자격이 없다 — 예산이 남아도 부르지 않는다' <<<"$covmap_flat" \
+  && ok "C12: 자격이 예산보다 앞선다" || no "C12: 자격 우선 문구 부재 — 예산만으로 부를 수 있게 읽힌다"
+grep -qF 'coverage_mapper_dispatches < 1 + Σ(모든 차원의 reopened)' <<<"$covmap_flat" \
+  && ok "X4: coverage-mapper 예산 = 1 + 재개방 합" || no "X4: coverage-mapper 예산 식 부재"
 # 인자 없는 경로의 첫 dispatch 시점은 이 절이 정본이다(라운드 규약 절은 여기를 가리키기만 한다).
 grep -qF '인자 없이 부른 경로에서는 R1 답을 받은 뒤 R2 전에' <<<"$covmap_flat" \
   && ok "AC3: 인자 없는 경로의 coverage-mapper 첫 dispatch — R1 답 뒤 R2 전 (정본 자리)" \
   || no "AC3: coverage-mapper 절에서 인자 없는 경로의 첫 dispatch 시점이 사라졌다"
-{ grep -qE '상한[^.]{0,6}2' <<<"$covmap_flat" && grep -qF 'coverage_mapper_dispatches' <<<"$covmap_block"; } \
-  && ok "C4: 상한 2 + 카운터" || no "C4: 상한 2/카운터 부재"
+{ grep -qF '1 + Σ' <<<"$covmap_flat" && grep -qF 'coverage_mapper_dispatches' <<<"$covmap_block"; } \
+  && ok "X4: 예산 식 + 카운터" || no "X4: 예산 식/카운터 부재"
+# 옛 어휘의 부재 — 한쪽만 고치면 두 상한이 공존해 어느 쪽이 계약인지 모른다.
+grep -qE '상한 2' <<<"$covmap_block" \
+  && no "X4: 옛 «상한 2» 가 이 절에 잔존 (예산 식과 공존)" || ok "X4: 옛 «상한 2» 제거됨"
+# 위에서 지운 `재개방 ... 최대 1회` 단언을 **뒤집어** 되살린다. 그냥 지우면 그 산문이 남아도
+# 아무것도 막지 않는다 — 그리고 이 절의 번호 목록은 하드 카운트를 세 가지 «다른 표현»으로
+# 말한다(`둘뿐이다` · `최대 1회` · `두 번째 재개방부터는 없다`). 식별자만 재는 매처로는 잡히지
+# 않는다. 세 표현 전부의 부재를 요구하고, 양의 짝은 바로 위 예산 식 단언이다.
+for tok in '둘뿐이다' '최대 1회' '두 번째 재개방부터는 없다'; do
+  grep -qF -- "$tok" <<<"$covmap_block" \
+    && no "X4: 옛 하드 카운트 «${tok}» 가 이 절에 잔존 — 예산 식과 모순한다" \
+    || ok "X4: 옛 하드 카운트 «${tok}» 제거됨"
+done
 grep -qE 'coverage-mapper 0 \(unavailable' <<<"$covmap_block" \
   && ok "C4: unavailable sentinel 규약" || no "C4: unavailable sentinel 부재"
 grep -q 'advisory' <<<"$covmap_block" \
@@ -536,12 +556,16 @@ blindspot_block="$(awk '/^## blind-spot-prober dispatch/{f=1;print;next} /^## /{
 grep -qE 'open→in-progress' <<<"$blindspot_block" \
   && ok "AC6: dispatch on blind_spot floor's first open→in-progress transition" \
   || no "AC6: dispatch on blind_spot floor's first open→in-progress transition"
+grep -qF '닿는 열린 결정이 아직 있는가' <<<"$blindspot_block" \
+  && ok "C12: prober 호출 자격" || no "C12: prober 호출 자격 문구 부재"
+grep -qF 'blind_spot_dispatches < 1 + coverage.floor.blind_spot.reopened' <<<"$blindspot_block" \
+  && ok "X4: prober 예산 = 1 + 그 차원의 재개방" || no "X4: prober 예산 식 부재"
+grep -qE 'blind_spot_dispatched([^e]|$)' <<<"$blindspot_block" \
+  && no "X4: 옛 키 blind_spot_dispatched 가 이 절에 잔존 (개명 미완)" \
+  || ok "X4: 옛 키 blind_spot_dispatched 제거됨"
 grep -qE 'fan-out 1|인터뷰당 1회' <<<"$blindspot_block" \
-  && ok "C8: fan-out 1 (blind_spot_dispatched guard)" \
-  || no "C8: fan-out 1 (blind_spot_dispatched guard)"
-grep -q 'blind_spot_dispatched' <<<"$blindspot_block" \
-  && ok "C8: blind_spot_dispatched guard referenced" \
-  || no "C8: blind_spot_dispatched guard referenced"
+  && no "X4: 옛 «fan-out 1 / 인터뷰당 1회» 가 이 절에 잔존 (예산 식과 공존)" \
+  || ok "X4: 옛 하드 1회 문구 제거됨"
 grep -qE 'web 비활성|inline premortem' <<<"$blindspot_block" \
   && ok "C5: web-absent loud degrade to inline premortem" \
   || no "C5: web-absent loud degrade to inline premortem"
@@ -558,6 +582,20 @@ grep -qE '직전 N probe|N probe 동안' <<<"$rhythm_block" \
 grep -qi 'round' <<<"$rhythm_block" \
   && no "AC9: rhythm-guard no longer references round" \
   || ok "AC9: rhythm-guard no longer references round"
+# AC14 — 면제 규칙. **순서가 이빨이다**: 표시가 계수보다 앞서면 계수 시점에 「아직 안 닿은 것」이
+# 항상 공집합이라 첫 연결부터 +1 이 되고 면제가 영구히 발화하지 않는다. 그러면 ⟨C13⟩ 재결정의
+# 유한화 논거(「첫 연결은 +0, 두 번째부터 +1」)가 함께 무너진다(라운드 2 가 이 반전을 잡았다).
+rhythm_flat="$(tr '\n' ' ' <<<"$rhythm_block" | tr -s ' ')"
+grep -qF '계수 먼저, 표시 나중' <<<"$rhythm_flat" \
+  && ok "AC14: 면제의 순서 — 계수 먼저, 표시 나중" || no "AC14: 순서 문구 부재 — 반전되면 면제가 영구히 거짓이다"
+grep -qF 'status: open 이고 touched: false 인 결정' <<<"$rhythm_flat" \
+  && ok "AC14: 면제 조건의 대상 집합" || no "AC14: 면제 조건의 대상 집합 부재"
+grep -qF '열린 결정이 0이면 면제도 0이다' <<<"$rhythm_flat" \
+  && ok "AC14: 열린 결정 0 → 면제 0" || no "AC14: 공집합 경로 부재"
+grep -qF '산출자는 orchestrator' <<<"$rhythm_flat" \
+  && ok "AC14: touched 의 산출자 명시" || no "AC14: 산출자 부재 — 소비자만 있고 산출자가 없다"
+grep -qF 'open_decisions' <<<"$rhythm_block" \
+  && ok "AC14: 면제가 open_decisions 를 읽는다 (거처 일치)" || no "AC14: 거처 참조 부재"
 
 # R3 트리거 용어 교체 + OQ 좌표 (scoped)
 # v0.23.0: payload가 9섹션 → 8섹션(§0–§7)이 되면서 OQ 좌표가 §8 → §3으로 이동했다.

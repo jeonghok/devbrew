@@ -18,7 +18,9 @@ description: >
   the current problem framing — surfacing hidden assumptions and failure modes the
   interview turn is blind to (unknown-unknowns), grounded in web evidence.
   Independent adversary, read-only by design (Law 2 frontmatter scoping). Dispatched
-  on the blind_spot floor dimension's first open→in-progress transition (fan-out 1).
+  on the blind_spot floor dimension's first open→in-progress transition; eligibility is
+  whether an open decision still touches that dimension, and the budget on top of it is
+  1 plus that dimension's reopen count.
   Output is recorded by conducting-interview into the brief's Blind Spots & Premortem.
 
   <example>Context: The blind_spot floor dimension just opened for its first probe.
@@ -83,7 +85,9 @@ repo_claims:                   # 내부(레포) 주장 — <claims_contract> 계
    inline premortem으로 강등(C5) — 그 경우 evidence는 codebase 근거 또는 사용자 판단.
 3. **premortem, not steelman**: 대안을 옹호하지 않는다(그건 steelman-builder). 실패양식·숨은
    가정만 노출 — 단일 책임(R6 분리 근거).
-4. **fan-out 1**: 인터뷰당 1회 dispatch(C8).
+4. **자격 + 예산**: 다시 부를 자격은 그 차원에 닿는 열린 결정이 아직 있는가다 — 열린 결정이 0이면
+   자격이 없다. 자격을 채웠으면 예산은 `1 + 그 차원의 재개방 횟수` 이고, 통제는
+   conducting-interview 가 한다.
 5. **confidence < 0.4** 면 "표면화된 blind-spot 약함 — framing 견고"를 명시(억지 premortem 금지).
 6. **숨은 가정의 근거를 레포에서 댈 수 있으면 `repo_claims[]` 로 낸다.** `path`·`anchor` 없이
    내지 않고, 판정 전에 구현을 읽는다 — 인덱스·목차·description 필드만 읽고 판정하지 않는다.
@@ -92,4 +96,4 @@ repo_claims:                   # 내부(레포) 주장 — <claims_contract> 계
 ## 사용하지 않는 경우
 
 - trivia 요청(P12).
-- blind_spot floor 차원이 이미 closed(재dispatch 금지 — fan-out 1, AC6).
+- blind_spot floor 차원에 닿는 열린 결정이 0(자격 없음) 또는 예산 고갈.
