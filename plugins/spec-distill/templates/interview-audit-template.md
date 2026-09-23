@@ -16,7 +16,10 @@ source: spec-distill conducting-interview v0.57.0
 (커버리지 원장 직렬화 — floor 5행(전부 closed + evidence) + derived(≥1행 OR N/A sentinel).
  orchestrator가 state.local.md에서 직렬화한다. evidence는 실재 `S<N>` 앵커를 인용해야 한다(AC3).
  아래의 `S1`은 **예시**이며, 실제로는 그 차원의 닫힘을 근거한 실제 `S<N>`으로 — 행마다
- 서로 다른 발화로 — 바뀐다.)
+ 서로 다른 발화로 — 바뀐다.
+ payload 가 레포 주장(`RC<n>`)을 하나라도 실으면 **정확히 `derived:internal_research`** 라는
+ 이름의 행이 있고 상태가 `closed` 여야 한다 — 이름이 다른 derived 행이나 `open` 행으로는
+ 만족되지 않는다. 레포 주장이 0건이면 이 요구가 발동하지 않으므로 `- derived: N/A` 로 통과한다.)
 
 - floor:root_problem — closed — <evidence> (@S1)
 - floor:landscape — closed — <evidence> (@S1)
@@ -24,6 +27,7 @@ source: spec-distill conducting-interview v0.57.0
 - floor:blind_spot — closed — <evidence> (@S1)
 - floor:open_questions — closed — <evidence> (@S1)
 - derived:<name> — closed — <rationale>; <evidence> (@S1)
+- derived:internal_research — closed — 내부(레포) 조사 축; <evidence> (@S1)
 
 (재개방된 차원은 행 끝에 «(재개방 <n>회 — <사유>)», 박제는 «사용자-승인 박제(@S<N>) —
  §Open Questions 참조». 모든 closed 행의 evidence 는 실재 S<N> 을 인용한다.)
@@ -76,6 +80,16 @@ source: spec-distill conducting-interview v0.57.0
 
 - round <n>: <path (a|b|d)> — <한 줄 요약>
 
+(V1 검문소의 확인 줄 — payload 의 `RC<n>` 마다 한 줄. 판정은 {확인, 반증, 미확인} 셋이고
+ `미확인` 은 라벨로 **보인다**(조용히 흡수하지 않는다). 게이트가 이 줄을 payload 의 `RC<n>` 전량과
+ 대조한다. steelman 경로의 주장도 여기 적는다 — 확인 «행위» 는 한 번이고 기록만 §3·§5 둘이다.)
+
+- 확인 RC3 — 확인 — <경로>#<앵커> — 주장과 일치
+- 확인 RC4 — 반증 — <경로>#<앵커> — 그 자리는 <실제>이고 주장은 <주장>이었다
+- 확인 RC5 — 미확인 — <경로>#<앵커> — <왜 확정하지 못했는가>
+
+(D6 의무가 미발동이면 그 사실을 한 줄로: `- D6 검증 의무 미발동 — seed 의 «다시 검증할 것» 문단이 비었다`)
+
 ### brief 리뷰 (reviewing-brief — 문서 리뷰 엔진)
 
 (순수 텔레메트리 — **기록이며 게이트 통과 조건이 아니다.** `reviewing-brief` 가 Step B 로 돌아가기 전에
@@ -106,3 +120,4 @@ source: spec-distill conducting-interview v0.57.0
  같은 키를 써도 여기는 한 번만 선언하면 된다.)
 
 - «example» — https://example.com — 무엇을 확인했나
+- «other» — https://example.com/other — 무엇을 확인했나

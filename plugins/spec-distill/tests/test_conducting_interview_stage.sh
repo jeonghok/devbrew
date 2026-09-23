@@ -1311,4 +1311,23 @@ done <<<"$switches"
   && ok "C6: 코드가 읽는 모든 DEVBREW_SPEC_DISTILL_*DISABLE* 이 README 등재부에 있다" \
   || no "C6: README 스위치 목록에 없는 kill switch:$ks_missing — 등재부가 보안 컨트롤을 감춘다"
 
+
+# --- 2026-09-23 템플릿 둘이 조사 축의 세 방향을 예시로 보인다 (AC19 · AC23) ------------------
+# 템플릿이 red 를 가르치면 첫 게이트가 항상 red 다 — 이 플러그인이 sentinel 에서 이미 겪었다.
+TPL_B="$REPO_ROOT/plugins/spec-distill/templates/interview-brief-template.md"
+TPL_A="$REPO_ROOT/plugins/spec-distill/templates/interview-audit-template.md"
+[[ -f "$TPL_B" && -f "$TPL_A" ]] && ok "템플릿 둘 실재" || no "템플릿 둘 중 하나가 없다"
+grep -qE '^contract: v2$' "$TPL_B" \
+  && ok "AC23: payload 템플릿이 contract: v2 를 넣는다" || no "AC23: contract: v2 부재 — 새 술어가 영구 미발동이다"
+for form in '[RC3 → OQ1]' '[→ OQ1]' '[→ 없음]' '→ 근거 RC3'; do
+  grep -qF -- "$form" "$TPL_B" && ok "AC19: payload 템플릿 예시 «${form}»" || no "AC19: payload 템플릿 예시 «${form}» 부재"
+done
+grep -qE '^- OQ1 \[열림\] ' "$TPL_B" \
+  && ok "AC19: §0 결정 목록이 불릿 + 상태 토큰" || no "AC19: §0 결정 목록이 불릿 줄이 아니다 (게이트가 항목으로 못 읽는다)"
+grep -qF 'OQ4 [해결 ⟨S10⟩]' "$TPL_B" \
+  && ok "AC19: §0 의 해결 상태 토큰 예시" || no "AC19: 해결 상태 토큰 예시 부재"
+grep -qF 'derived:internal_research —' "$TPL_A" \
+  && ok "AC19: audit 템플릿 §1 의 derived:internal_research 행" || no "AC19: derived:internal_research 행 부재"
+grep -qE '^- 확인 RC[0-9]+ — (확인|반증|미확인) — ' "$TPL_A" \
+  && ok "AC19: audit 템플릿 §5 의 확인 줄" || no "AC19: 확인 줄 예시 부재"
 finish
