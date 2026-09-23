@@ -359,7 +359,37 @@ grep -qE '인자 없이 `/interview` 를 부른 경로의 R1\*\* 은[^.]{0,60}«
   && ok "AC3: 인자 없는 R1 — «지금 이해» 는 «아직 없음»" || no "AC3: 인자 없는 R1 모양 부재"
 # 부재 — 새 규약 절 안에 옛 형식이 남았는지를 잰다. `Q1`·`Q2` 는 `OQ1`·`OQ2` 표기와 겹칠 수 있어
 # 전-파일로 재지 않고 이 절로 좁힌다. production 전체의 제거 어휘 부재는 test_stale_terms.sh V13 이 잰다.
-for tok in 'Q1' 'Q2' 'provisional_on' '블록 없이' '직전 답에서'; do
+# V1 검문소 — 조사 주장을 «지금 이해»에 싣기 **전에** 도는 무조건 확인(설계 §D).
+# 라운드 «안» 이라야 반증이 방향에 영향을 줄 라운드가 남는다 — `finishing.md` 는 floor 5 가
+# 전부 닫힌 뒤에만 읽히므로 거기서만 확인하면 반증이 마지막 라운드 «후» 에 나온다.
+round_flat="$(tr '\n' ' ' <<<"$round_block" | tr -s ' ')"
+{ [[ -n "$round_block" ]] && grep -qF 'V1' <<<"$round_block"; } \
+  && ok "V1: 라운드 규약 절에 V1 검문소가 있다" || no "V1: 라운드 규약 절에 V1 검문소 부재"
+for step in '경로 실재' '앵커 실재' '주장이 그 자리와 맞는가'; do
+  grep -qF -- "$step" <<<"$round_flat" \
+    && ok "V1: 단계 «${step}»" || no "V1: 단계 «${step}» 부재"
+done
+grep -qE '확인[^.]{0,6}반증[^.]{0,6}미확인' <<<"$round_flat" \
+  && ok "V1: 결과 어휘 셋 {확인, 반증, 미확인}" || no "V1: 결과 어휘 셋 부재"
+grep -qF '확인 RC' <<<"$round_block" \
+  && ok "V1: audit §5 확인 줄 형식(확인 RC<n> — …)" || no "V1: audit §5 확인 줄 형식 부재"
+# 비종속 — trigger 도 웹 스위치도 이 검문소를 끄지 않는다. 문구로 못 박는다(설계 AC6).
+grep -qF 'steelman trigger 와 DEVBREW_SPEC_DISTILL_DISABLE_WEB 어느 것에도 종속되지 않는다' <<<"$round_flat" \
+  && ok "V1: trigger·웹 스위치 비종속 명시" || no "V1: 비종속 문구 부재 — 조건부로 읽힐 수 있다"
+# §3 은 순회 범위 밖이라는 것도 여기서 못 박는다(자기지시 방지 — 설계 §E).
+grep -qF '§3 은 연결의 대상이고 출처가 아니다' <<<"$round_flat" \
+  && ok "V1: §3 이 대상이고 출처가 아님을 명시" || no "V1: §3 의 역할 구분 부재"
+
+# 2026-09-23: 이 절이 이제 `OQ1`·`OQ4` 표기를 담는다(결정 연결). 옛 `Q<n>` 어휘의 부재는
+# **단어 경계**로 재야 한다 — `-F 'Q1'` 은 `OQ1` 안의 두 글자를 매치해 정당한 입력을 거부한다.
+# 락의 머리 주석이 이미 그 겹침을 예고했고(「`Q1`·`Q2` 는 `OQ1`·`OQ2` 표기와 겹칠 수 있어」),
+# 이번 편집이 그 예고를 실현시켰다. 좁히기의 방향은 fail-closed 다: `Q1` 단독 표기는 여전히 RED.
+for tok in 'Q1' 'Q2'; do
+  grep -qE "(^|[^A-Za-z])${tok}([^0-9]|$)" <<<"$round_block" \
+    && no "AC3: 라운드 규약 절에 «${tok}» 잔존 (단어 경계 — OQ<n> 은 대상 아님)" \
+    || ok "AC3: 라운드 규약 절에 «${tok}» 없음 (단어 경계)"
+done
+for tok in 'provisional_on' '블록 없이' '직전 답에서'; do
   grep -qF -- "$tok" <<<"$round_block" \
     && no "AC3: 라운드 규약 절에 «${tok}» 잔존" || ok "AC3: 라운드 규약 절에 «${tok}» 없음"
 done
