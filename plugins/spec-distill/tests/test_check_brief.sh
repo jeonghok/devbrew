@@ -1623,4 +1623,41 @@ v2run "$TMPD/d.md"
 [[ "$V2RC" -eq 0 ]] \
   && ok "V2-DEF: §3 항목이 줄끝 연결을 갖지 않아도 green (§3 은 대상이고 출처가 아니다)" \
   || no "V2-DEF: §3 이 순회 범위에 들어갔다 — 자기지시로 술어가 공허해진다"
+
+# V2-DEF(직접, 리뷰 F2): 위 V2-DEF 는 게이트 rc(라벨)만 재고, `research_entries`의 **본문**은
+# 못 본다 — v2-valid fixture 의 §3 유일 RC(`RC3`)가 §5 위험 줄에도 있어 §3 을 순회에 섞는 변이를
+# 넣어도 set 기반 `payload_rc_ids`로는 §3 포함 여부가 구별되지 않는다(실측: 리뷰가 그 변이로
+# 스위트 전체 무변화를 확인). 여기서는 `check_brief` 모듈을 직접 import 해 `research_entries`가
+# 돌려주는 줄 자체를 §3·§4·§5 원본 줄 집합과 대조한다.
+v2def_direct="$(PYTHONDONTWRITEBYTECODE=1 python3 - "$SCRIPT" "$FXV" <<'PY'
+import importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location("cb_v2def", sys.argv[1])
+cb = importlib.util.module_from_spec(spec); spec.loader.exec_module(cb)
+text = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+entries = cb.research_entries(text)
+sec3_lines = set(cb._entry_lines(cb._section_text(text, "3", "Open Questions")))
+sec4_lines = set(cb._entry_lines(cb._section_text(text, "4", "External Landscape")))
+sec5_rc_lines = {ln for ln in cb.section5_entries(text) if cb.RC_RE.search(ln)}
+leaked = [ln for ln in entries if ln in sec3_lines]
+print(("NO\t" if leaked else "YES\t") + "research_entries 가 §3 줄을 반환하지 않는다 (본문 검사 a)")
+print(("YES\t" if sec4_lines and sec4_lines.issubset(set(entries)) else "NO\t")
+      + "research_entries 가 §4 항목 줄 전부를 담는다 (양의 짝 b-1)")
+print(("YES\t" if sec5_rc_lines and sec5_rc_lines.issubset(set(entries)) else "NO\t")
+      + "research_entries 가 §5 의 RC<n> 보유 줄을 최소 1개 담는다 (양의 짝 b-2)")
+PY
+)"
+v2def_rc=$?
+[[ "$v2def_rc" -eq 0 ]] \
+  && ok "V2-DEF(직접): 헬퍼 호출이 정상 종료했다 (rc=0)" \
+  || no "V2-DEF(직접): 헬퍼 호출이 rc=$v2def_rc 로 죽었다: $v2def_direct"
+v2def_rows="$(grep -cE '^(YES|NO)'$'\t' <<<"$v2def_direct" || true)"
+[[ "$v2def_rows" -eq 3 ]] \
+  && ok "V2-DEF(직접): 단언이 정확히 3행이다" \
+  || no "V2-DEF(직접): 단언이 3행이 아니라 $v2def_rows — 출력이 비었거나 잘렸다"
+while IFS=$'\t' read -r tag name; do
+  case "$tag" in
+    YES) ok "V2-DEF(직접): $name" ;;
+    NO)  no "V2-DEF(직접): $name" ;;
+  esac
+done <<< "$v2def_direct"
 finish

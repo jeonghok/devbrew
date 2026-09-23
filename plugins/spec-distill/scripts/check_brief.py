@@ -905,7 +905,7 @@ def coverage_anchor_failures(audit_text: str, anchors: set) -> list[str]:
 # ── 조사 주장의 결정 연결 (2026-09-22-interview-research-specialization-design §E · §H) ─────
 #
 # **「조사 항목」의 순회 정의** — 설계 §E 와 같은 문면이고 이 셋이 전부다:
-#   · payload §4 의 **모든** 항목 줄 (프로필상 전부 landscape 다)
+#   · payload §4 의 모든 항목 줄(프로필상 전부 landscape 다)
 #   · payload §5 의 항목 줄 중 **`RC<n>` 리터럴을 가진 줄** — 네 모양(기각·보류·검토·위험) 중
 #     어느 것인지는 묻지 않는다. `RC<n>` 이 있으면 레포 주장을 실은 줄이고 없으면 아니다.
 #   · **§3 은 순회 범위에 없다.** §3 항목은 그 자체가 «열린 결정» 이라 연결의 *대상*이고
