@@ -328,13 +328,13 @@ skepticism = steelman 판정 S · blind_spot = 숨은 가정·실패 양식 처�
 
 ## blind-spot-prober dispatch (C8 — blind_spot floor 차원)
 
-`blind_spot` floor 차원의 **첫 open→in-progress 전이** 시 `blind-spot-prober`를 dispatch 한다.
+`blind_spot` floor 차원의 **첫 open→in-progress 전이** 시 `blind-spot-prober`를 1회 필수로 dispatch 한다 —
+**첫 dispatch 는 자격을 보지 않는다**(그 차원의 결정은 prober 출력 뒤에야 생긴다). 재호출부터는
 **자격이 예산보다 앞선다** — `orchestration.open_decisions[]` 에 `dimension: blind_spot` 이고
 `status: open` 인 항목, 즉 그 차원에 **닿는 열린 결정이 아직 있는가**를 먼저 본다. 열린 결정이
 0이면 자격이 없다 — 예산이 남아도 부르지 않는다. 자격을 채웠으면 예산:
 `blind_spot_dispatches < 1 + coverage.floor.blind_spot.reopened`. dispatch 마다 카운터를 +1 한다.
-kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구
-부재면 dispatch 대신 loud advisory 후 **inline premortem**으로 전환한다(C5, §5 위험 항목을
+kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구 부재면 dispatch 대신 loud advisory 후 **inline premortem**으로 전환한다(C5, §5 위험 항목을
 codebase 근거·사용자 판단으로 기록).
 
 ```

@@ -578,6 +578,21 @@ grep -qE 'open→in-progress' <<<"$blindspot_block" \
   || no "AC6: dispatch on blind_spot floor's first open→in-progress transition"
 grep -qF '닿는 열린 결정이 아직 있는가' <<<"$blindspot_block" \
   && ok "C12: prober 호출 자격" || no "C12: prober 호출 자격 문구 부재"
+# 첫 dispatch 와 재호출의 구분(최종 리뷰 I-5). ⟨C12⟩ 는 «다시» 부를 자격이고, prober 의 첫 dispatch 에
+# 「dimension: blind_spot 인 열린 결정」 자격을 걸면 구조적으로 굶는다 — 그 차원의 결정은 prober 출력
+# 뒤에야 생긴다. mapper 절의 「첫 dispatch 는 필수」 와 같은 모양이어야 한다. 셋을 본문 리터럴로 문다:
+# 첫 dispatch 면제(극성 「보지 않는다」) · 재호출의 자격 우선 · 0 이면 자격 없음. 마지막이 없으면
+# 「0이어도 자격은 있다 — 예산만 본다」 로 뒤집어도 스위트가 green 이었다(리뷰 변이 (a), 293/293/0).
+bs_flat_nb="$(tr '\n' ' ' <<<"$blindspot_block" | tr -s ' ' | sed 's/\*\*//g')"
+grep -qF '1회 필수로 dispatch 한다 — 첫 dispatch 는 자격을 보지 않는다' <<<"$bs_flat_nb" \
+  && ok "C12/I-5: prober 첫 dispatch 는 1회 필수이고 자격을 보지 않는다" \
+  || no "C12/I-5: prober 첫 dispatch 가 자격에 걸린다(또는 필수가 아니다) — blind_spot 결정은 prober 출력 뒤에야 생겨 첫 호출이 굶는다"
+grep -qF '재호출부터는 자격이 예산보다 앞선다' <<<"$bs_flat_nb" \
+  && ok "C12/I-5: prober 재호출부터 자격이 예산보다 앞선다" \
+  || no "C12/I-5: prober 재호출의 자격 우선 문구가 없거나 첫 dispatch 까지 덮는다"
+grep -qF '열린 결정이 0이면 자격이 없다 — 예산이 남아도 부르지 않는다' <<<"$bs_flat_nb" \
+  && ok "C12: prober — 열린 결정이 0이면 자격이 없다 (예산이 남아도)" \
+  || no "C12: prober 자격 우선 본문이 없거나 뒤집혔다 — 예산만으로 재호출할 수 있게 읽힌다"
 grep -qF 'blind_spot_dispatches < 1 + coverage.floor.blind_spot.reopened' <<<"$blindspot_block" \
   && ok "X4: prober 예산 = 1 + 그 차원의 재개방" || no "X4: prober 예산 식 부재"
 grep -qE 'blind_spot_dispatched([^e]|$)' <<<"$blindspot_block" \
