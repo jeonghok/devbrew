@@ -3354,6 +3354,8 @@ v2mut() {   # v2mut <셀> <python 변형 코드> → $TMPD/<셀>.md 를 만들�
   local cell="$1" code="$2"
   cp "$FXV" "$TMPD/$cell.md"; cp "${FXV%.md}.audit.md" "$TMPD/$cell.audit.md"
   sed -i.bak "s|^audit_file:.*|audit_file: $cell.audit.md|" "$TMPD/$cell.md"; rm -f "$TMPD/$cell.md.bak"
+  # 짝의 반대편도 — 빠지면 `audit_pairing_errors` 가 변이와 무관하게 먼저 red 라 rc≠0 단언이 공허해진다
+  sed -i.bak "s|^payload:.*|payload: $cell.md|" "$TMPD/$cell.audit.md"; rm -f "$TMPD/$cell.audit.md.bak"
   PYTHONDONTWRITEBYTECODE=1 python3 -c "$code" "$TMPD/$cell.md" "$TMPD/$cell.audit.md"
   V2OUT="$(python3 "$SCRIPT" gate "$TMPD/$cell.md" 2>/dev/null)"; V2RC=$?
 }
@@ -4221,6 +4223,7 @@ T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 FXV=plugins/spec-distill/tests/fixtures/interview-brief-v2-valid
 cp "$FXV.md" "$T/all.md"; cp "$FXV.audit.md" "$T/all.audit.md"
 sed -i.bak 's|^audit_file:.*|audit_file: all.audit.md|' "$T/all.md"; rm -f "$T/all.md.bak"
+sed -i.bak 's|^payload:.*|payload: all.md|' "$T/all.audit.md"; rm -f "$T/all.audit.md.bak"
 python3 - "$T/all.md" "$T/all.audit.md" <<'PY'
 import re, sys, pathlib
 p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
