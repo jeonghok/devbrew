@@ -1446,7 +1446,7 @@ round_flat="$(tr '\\n' ' ' <<<"$round_block" | tr -s ' ')"
   && ok "V1: 라운드 규약 절에 V1 검문소가 있다" || no "V1: 라운드 규약 절에 V1 검문소 부재"
 for step in '경로 실재' '앵커 실재' '주장이 그 자리와 맞는가'; do
   grep -qF -- "$step" <<<"$round_flat" \\
-    && ok "V1: 단계 «$step»" || no "V1: 단계 «$step» 부재"
+    && ok "V1: 단계 «${step}»" || no "V1: 단계 «${step}» 부재"
 done
 grep -qE '확인[^.]{0,6}반증[^.]{0,6}미확인' <<<"$round_flat" \\
   && ok "V1: 결과 어휘 셋 {확인, 반증, 미확인}" || no "V1: 결과 어휘 셋 부재"
@@ -1506,7 +1506,10 @@ bash plugins/spec-distill/tests/test_conducting_interview_stage.sh 2>&1 | grep -
 wc -l < plugins/spec-distill/skills/conducting-interview/SKILL.md
 ```
 
-Expected: `ok` 다음 `Fail: 0`. SKILL.md 줄 수를 측정해 보고한다(`< 480`).
+Expected: `ok` 다음 **`Fail: 1`** — V1 단언 여덟은 green 이 되지만 같은 편집이 아래 Step 3 의
+충돌을 **이 자리에서** 발화시킨다(`✗ AC3: 라운드 규약 절에 «Q1» 잔존`). `Fail: 0` 이 나오면
+`OQ1` 이 절 안에 안 들어갔다는 뜻이므로 새 문면을 다시 본다. SKILL.md 줄 수를 측정해
+보고한다(`< 480`).
 
 - [ ] **Step 3: 라운드 규약 절의 기존 부재 락이 여전히 green 인지 확인**
 
@@ -1529,7 +1532,7 @@ old = """for tok in 'Q1' 'Q2' 'provisional_on' '블록 없이' '직전 답에서
   grep -qF -- "$tok" <<<"$round_block" \\
     && no "AC3: 라운드 규약 절에 «${tok}» 잔존" || ok "AC3: 라운드 규약 절에 «${tok}» 없음"
 done"""
-new = """# 2026-09-23: 이 절이 이제 `OQ1`·`OQ4` 표기를 담는다(결정 연결). 옛 `Q<n>` 어휘의 부재는
+new = """# 2026-09-23: 이 절이 이제 `OQ<n>` 표기를 담는다(결정 연결). 옛 `Q<n>` 어휘의 부재는
 # **단어 경계**로 재야 한다 — `-F 'Q1'` 은 `OQ1` 안의 두 글자를 매치해 정당한 입력을 거부한다.
 # 락의 머리 주석이 이미 그 겹침을 예고했고(「`Q1`·`Q2` 는 `OQ1`·`OQ2` 표기와 겹칠 수 있어」),
 # 이번 편집이 그 예고를 실현시켰다. 좁히기의 방향은 fail-closed 다: `Q1` 단독 표기는 여전히 RED.
@@ -1789,7 +1792,7 @@ grep -qE '^ +open_decisions:' <<<"$state_block" \\
   || no "AC13: orchestration.open_decisions 부재 — OQ<n> 의 산출자가 없다"
 for fld in 'id: OQ' 'dimension:' 'status: open' 'resolved_by:' 'touched: false'; do
   grep -qF -- "$fld" <<<"$state_block" \\
-    && ok "AC13: open_decisions 항목 필드 «$fld»" || no "AC13: open_decisions 항목 필드 «$fld» 부재"
+    && ok "AC13: open_decisions 항목 필드 «${fld}»" || no "AC13: open_decisions 항목 필드 «${fld}» 부재"
 done"""
 assert t.count(old) == 1
 t = t.replace(old, new)
@@ -2362,7 +2365,7 @@ grep -qF '재결정 자체는 사용자 동의로만' <<<"$fin_stepA_flat" \\
   && ok "AC7/P23: 재결정은 사용자 동의로만" || no "AC7/P23: 재결정 권한 문구 부재 — 기록 형식이 판정 권한으로 읽힌다"
 for form in '[RC3 → OQ1]' '[→ OQ1]' '[→ 없음]' '→ 근거 RC3' '[해결 ⟨S10⟩]'; do
   grep -qF -- "$form" <<<"$fin_stepA" \\
-    && ok "AC19: 직렬화 형식 «$form»" || no "AC19: 직렬화 형식 «$form» 부재"
+    && ok "AC19: 직렬화 형식 «${form}»" || no "AC19: 직렬화 형식 «${form}» 부재"
 done
 grep -qF '§3 은 미해결의 목록이다' <<<"$fin_stepA_flat" \\
   && ok "AC19: §0 이 상위집합 · §3 이 그 중 열린 것" || no "AC19: §0/§3 포함 관계 문구 부재"
@@ -2576,7 +2579,7 @@ TPL_A="$REPO_ROOT/plugins/spec-distill/templates/interview-audit-template.md"
 grep -qE '^contract: v2$' "$TPL_B" \\
   && ok "AC23: payload 템플릿이 contract: v2 를 넣는다" || no "AC23: contract: v2 부재 — 새 술어가 영구 미발동이다"
 for form in '[RC3 → OQ1]' '[→ OQ1]' '[→ 없음]' '→ 근거 RC3'; do
-  grep -qF -- "$form" "$TPL_B" && ok "AC19: payload 템플릿 예시 «$form»" || no "AC19: payload 템플릿 예시 «$form» 부재"
+  grep -qF -- "$form" "$TPL_B" && ok "AC19: payload 템플릿 예시 «${form}»" || no "AC19: payload 템플릿 예시 «${form}» 부재"
 done
 grep -qE '^- OQ1 \\[열림\\] ' "$TPL_B" \\
   && ok "AC19: §0 결정 목록이 불릿 + 상태 토큰" || no "AC19: §0 결정 목록이 불릿 줄이 아니다 (게이트가 항목으로 못 읽는다)"
@@ -3633,8 +3636,8 @@ for verdict in 반증 미확인; do
 a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding='utf-8')
 a.write_text(s.replace('- 확인 RC3 — 확인 —','- 확인 RC3 — $verdict —',1),encoding='utf-8')"
   [[ "$V2RC" -eq 0 ]] \\
-    && ok "V2-⑤(양의 짝): 판정 «$verdict» 도 확인 줄로 인정된다" \\
-    || no "V2-⑤: «$verdict» 이 red 다 — 미확인을 조용히 흡수하라는 압력이 된다 (rc=$V2RC)"
+    && ok "V2-⑤(양의 짝): 판정 «${verdict}» 도 확인 줄로 인정된다" \\
+    || no "V2-⑤: «${verdict}» 이 red 다 — 미확인을 조용히 흡수하라는 압력이 된다 (rc=$V2RC)"
 done
 
 # 웹 주장은 대상이 아니다 — 확인 줄을 요구받지 않는다(N2 가 audit §7 결속을 이미 본다).
