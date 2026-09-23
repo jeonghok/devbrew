@@ -56,6 +56,14 @@
 
 **`/qg` 의 동작은 바뀌지 않는다.** 합성기의 판정 산출은 `--emit-verdict` 뒤에 있고 기본 off 이며, 켜지 않으면 stdout 이 이전과 바이트 동일하다 — 소비자 이주는 뒤 릴리스다.
 
+## [8.2.4] — 2026-09-24
+
+patch 인 이유 — 전부 `Fixed` 다. `scripts/docreview_route.py` 는 `shared/docreview/` 로의 심볼릭 링크라 그 대상이 바뀐 이상 배포 트리 안의 코드가 바뀐 것이다.
+
+### Fixed
+
+- **엔진 링크가 critic·codex 의 파손 항목을 계수 없이 흘려 `blocks` 를 거짓으로 냈다.** `normalize()` 의 `hold`·`coerced` 가 prepare→finalize 경계에서 사라졌다. 이제 파손 항목이 있으면 `fin.json` 의 `blocks` 가 참이다(게이트 요약 필드는 그대로). 전문·락은 `plugins/spec-distill/CHANGELOG.md` `[4.2.3]`. 이 플러그인의 docreview 호출자는 여전히 0 이다.
+
 ## [8.2.3] — 2026-09-23
 
 patch 인 이유 — 전부 `Fixed` 다. 이 플러그인의 `scripts/codex_findings_to_yaml.py` · `scripts/docreview_route.py` 는 `shared/` 로의 심볼릭 링크라 그 대상이 바뀐 이상 배포 트리 안의 코드가 바뀐 것이다(안 올리면 cache key 가 조용히 stale).
