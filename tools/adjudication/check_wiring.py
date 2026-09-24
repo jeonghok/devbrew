@@ -144,11 +144,9 @@ _DR_LINEAGE_NOT_RERAISE = (
 
 EXEMPT = {
     # ("plugins/.../foo.py", 146): "C6(1) 제자리 변형 루프 — 버려지는 항목이 없다",
-    # Task 10 이 파일 상단에 `from render_disposition import disposition_lines`
-    # 를 더해 이 줄이 358→359 로 밀렸다 — 인용 자체는 무변경(내용은 그대로다).
-    # qg-verdict-vocabulary-pr2 Task 5 가 같은 import 블록에 `import verdict as
-    # _verdict` 를 한 줄 더해 359→360 으로 다시 밀렸다 — 인용 내용은 여전히 무변경.
-    ("plugins/quality-gates/scripts/synthesize_findings.py", 360,
+    # qg-angle-floor-pr3 Task 4 가 같은 import 블록에 `import angles as _angles`
+    # 를 한 줄 더했다 — 인용 내용은 무변경.
+    ("plugins/quality-gates/scripts/synthesize_findings.py", 361,
      "continue in dedup @ if f.get('promoted')"):
         "C6(1) — dedup() 의 이 continue 는 `promoted` 항목을 그룹핑에서만 "
         "제외한다. 항목 자체는 이 loop 이전에 계산된 `passthrough` 리스트에 "

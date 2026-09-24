@@ -135,4 +135,62 @@ assert_contains "$OUT" "파손=2" "held_by_class: 항목 파손"
 assert_contains "$OUT" "기타=1" "held_by_class: 미지 접두는 «기타» 로 — 조용히 사라지지 않는다 (U4)"
 assert_contains "$OUT" "합=4"   "held_by_class 의 합 == held 총계. 어느 항목도 분류에서 빠지지 않는다"
 
+note "── 8. blocks() 의 세 조건을 «가르는» 공개 accessor (PR3)"
+
+# 왜 이것이 필요한가: 소비자(qg)가 셋을 **다른 사유**로 렌더한다 — 앞 둘은
+# `findings-lost`(항목을 잃었다), 셋째는 `angle-absent`(아무도 그 축을 안 봤다).
+# `blocks()` 하나만 공개하면 그 구별이 소비자 쪽에서 복원 불가능하다.
+
+out="$(run 'from adjudication import Ledger
+L = Ledger(items="open"); L.hold("x", "판정자 부재")
+print(L.items_unaccounted(), L.primary_source_failed(), L.blocks())')"
+assert_eq "$out" "True False True" "hold 는 items_unaccounted 만 올린다"
+
+out="$(run 'from adjudication import Ledger
+L = Ledger(items="open"); L.uncountable("issues", "셀 수 없음")
+print(L.items_unaccounted(), L.primary_source_failed(), L.blocks())')"
+assert_eq "$out" "True False True" "uncountable 도 items_unaccounted 쪽이다"
+
+# ★ 이 PR 이 사는 이유가 이 한 줄이다 — 주 판정자가 죽었을 때 items_unaccounted 가
+#   **거짓**이어야 소비자가 그 실행을 「항목을 잃었다」가 아니라 「아무도 안 봤다」로
+#   렌더할 수 있다. 여기가 True 로 돌아오면 PR2 의 접힘이 그대로 남은 것이다.
+out="$(run 'from adjudication import Ledger
+L = Ledger(items="open"); L.source_failed("reviewer", "죽음", primary=True)
+print(L.items_unaccounted(), L.primary_source_failed(), L.blocks())')"
+assert_eq "$out" "False True True" "주 source 실패는 primary_source_failed 만 올린다"
+
+# 양성 대조 — 보조 실패는 어느 쪽도 올리지 않는다(공시만 한다).
+out="$(run 'from adjudication import Ledger
+L = Ledger(items="open"); L.source_failed("codex", "미설치", primary=False)
+print(L.items_unaccounted(), L.primary_source_failed(), L.blocks(), L.report()["degraded"])')"
+assert_eq "$out" "False False False True" \
+  "보조 실패는 두 accessor 다 거짓이고 blocks 도 아니다 — degraded 만 참 (헌장)"
+
+# 동치 — 여덟(h,u,p) 조합 전수를, 코드 밖에서 손으로 적은 **독립** 진리표와 대조한다.
+# 이전 판은 `blocks() != (items_unaccounted() or primary_source_failed())` 로 뒤쪽을
+# 다시 만들어 비교했다 — 그런데 그 우변은 오늘 `blocks()` 의 본문 그 자체라, 어느
+# 쪽이 틀려도 항상 같이 틀려서 이 단언이 원리적으로 못 깨진다(실측: `items_unaccounted`
+# 를 `return True` 로 바꿔도 MISMATCH:0 이 그대로 났다). 여기서는 세 함수 각각을
+# `bool(h or u or p)` · `bool(h or u)` · `bool(p)` 라는, 이 파일이 세운 진리표와
+# 대조한다 — 코드를 참조하지 않으므로 어느 함수가 깨져도 그 함수만 따로 RED 다.
+out="$(run 'from adjudication import Ledger
+def mk(h, u, p):
+    L = Ledger(items="open")
+    if h: L.hold("x", "판정자 부재")
+    if u: L.uncountable("i", "미상")
+    if p: L.source_failed("r", "죽음", primary=True)
+    return L
+bad = []
+for h in (0, 1):
+    for u in (0, 1):
+        for p in (0, 1):
+            L = mk(h, u, p)
+            got = (L.blocks(), L.items_unaccounted(), L.primary_source_failed())
+            want = (bool(h or u or p), bool(h or u), bool(p))
+            if got != want:
+                bad.append((h, u, p))
+print("MISMATCH:%d" % len(bad))')"
+assert_eq "$out" "MISMATCH:0" \
+  "blocks()·items_unaccounted()·primary_source_failed() 각각이 독립 진리표와 일치한다 (8조합 전수)"
+
 finish

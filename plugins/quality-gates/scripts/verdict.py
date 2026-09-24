@@ -27,7 +27,7 @@ REASONS = (
     "merge-conflict",       # 끝점 합치기가 rc 1 (§6.2.4 · AC7)
     "scope-empty",          # 대조할 대상이 0 인데 변경은 있다
     "findings-lost",        # 리뷰 항목이 소실됐거나 셀 수 없다
-    "angle-absent",         # 보안 또는 판정 각도가 absent (§6.3.1 — PR3 가 배선한다)
+    "angle-absent",         # 보안 또는 판정 각도가 absent (§6.3.1)
     "baseline-unrunnable",  # 기준선 축이 안 돌아 귀속의 한쪽이 없음
     "silent-drop",          # 영향분으로 고른 unit 이 HEAD 에서 미확인
     "error-axis",           # 어느 축이든 error 상태가 닿음
@@ -107,8 +107,8 @@ def defect_flag_of(differential_text):
     return hits[0] == "true"
 
 
-def decide(*, defect=False, review_blocked=False, differential_text=None,
-           extra_reasons=(), legacy_verdict=None):
+def decide(*, defect=False, review_blocked=False, angle_absent=False,
+           differential_text=None, extra_reasons=(), legacy_verdict=None):
     reasons = []
 
     def add(r):
@@ -129,27 +129,20 @@ def decide(*, defect=False, review_blocked=False, differential_text=None,
 
     # 헌장 — 막는 것은 「항목이 소실됐거나 셀 수 없거나 주 판정자가 죽었을 때」다.
     # 모델 다양성 손실 같은 나머지 degrade 는 공시만 한다. 그래서 원장의
-    # `degraded`(공시)가 아니라 `blocks()`(차단)를 받는다.
+    # `degraded`(공시)가 아니라 차단 쪽 술어를 받는다.
     #
-    # I2 (리뷰 라운드 2 · Ruling F-2) — 알려진 편차, 기록만 하고 여기서 고치지
-    # 않는다. `blocks()`(shared/adjudication/adjudication.py) 는 헌장의 세
-    # 차단 조건을 **각각 독립적으로** 나른다 — `held`(항목 소실) ·
-    # `unknown`(셀 수 없음) · `_has_primary_source_failure()`(그 축의 주
-    # 판정자 죽음). 설계 §6.4.3 은 처음 둘을 `findings-lost`, 셋째를
-    # `angle-absent`(PR3 배선)로 나눠 배정한다. 그런데 이 아래 한 줄은
-    # `review_blocked`(= `blocks()`) 참이면 무조건 `findings-lost`
-    # 하나로만 접는다 — 주 판정자가 죽은 실행도 "항목이 소실됐다"로 보고된다.
-    #
-    # 정밀하게 가르려면 `Ledger` 가 `_has_primary_source_failure()` 를 공개
-    # accessor 로 내야 하는데, `Ledger` 는 `shared/adjudication/` 에 살고 이
-    # PR 의 Global Constraints 는 그 디렉토리를 건드리지 못하게 막는다 —
-    # 건드리면 spec-distill 소비자와 `shared/tests/test_adjudication_wiring.sh`
-    # 까지 이 PR 범위로 끌려 들어온다. 판정 **값** 은 어느 쪽이든
-    # `not-certified` 로 같으므로 이 편차로 게이트가 넓어지지는 않는다 —
-    # 넓어지는 것은 `reason:` 라벨의 정밀도뿐이다. `angle-absent` 를 실제로
-    # 배선하는 PR 이 이 분리의 소유자다.
+    # 그 셋은 **두 사유로 갈린다**(설계 §6.4.3). 앞 둘(소실·미상)은 항목을
+    # «잃은» 것이라 `findings-lost` 이고, 셋째(주 판정자 사망)는 아무도 그 축을
+    # «안 본» 것이라 `angle-absent` 다 — 각도가 `absent` 인 것과 같은 사실이다
+    # (§6.3.5 의 표: 「도출이 잘못돼 아무도 안 불림 → 각도 absent」).
+    # 호출자는 `review_blocked=ledger.items_unaccounted()` 와
+    # `angle_absent=(막는 각도 — 보안·판정 — 가 absent) or
+    # ledger.primary_source_failed()` 로 준다. 다른 전제 각도의 부재는 공시만
+    # 하므로(AC12) 이 인자에 절대 닿지 않는다.
     if review_blocked:
         add("findings-lost")
+    if angle_absent:
+        add("angle-absent")
 
     if legacy_verdict is not None:
         if legacy_verdict not in LEGACY_VERDICTS:
@@ -190,6 +183,7 @@ def main():
     ap.add_argument("--differential", default=None)
     ap.add_argument("--defect", action="store_true")
     ap.add_argument("--review-blocked", action="store_true")
+    ap.add_argument("--angle-absent", action="store_true")
     ap.add_argument("--reason", action="append", default=[])
     ap.add_argument("--legacy-verdict", default=None)
     args = ap.parse_args()
@@ -211,6 +205,7 @@ def main():
     sys.stdout.write(render(decide(
         defect=args.defect,
         review_blocked=args.review_blocked,
+        angle_absent=args.angle_absent,
         differential_text=read_or_none(args.differential),
         extra_reasons=args.reason,
         legacy_verdict=args.legacy_verdict,

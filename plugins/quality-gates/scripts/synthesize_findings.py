@@ -20,6 +20,7 @@ from collections import defaultdict
 
 from adjudication import Ledger
 from render_disposition import disposition_lines
+import angles as _angles
 import verdict as _verdict          # 새 책임은 새 모듈 — 여기는 진입점일 뿐이다
 
 
@@ -570,17 +571,22 @@ def main():
     ap.add_argument("--adversarial", default="")
     ap.add_argument("--findings", default="")
     # 판정 어휘는 `verdict.py` 가 갖는다. 여기서는 입력을 모아 넘기기만 한다.
-    # 기본 off — 켜지 않으면 stdout 이 이 PR 이전과 바이트 동일하다(소비자 이주는 PR4).
+    # 기본 off — 켜지 않으면 `verdict:`(와 `angles:`) 꼬리 없이 본 보고서만 나가고,
+    # 그것은 성공한 켠 출력의 바이트 접두다(계획 R-J). 소비자 이주는 PR4.
     ap.add_argument("--emit-verdict", action="store_true")
     # 기본값을 `""` 로 두면 "플래그를 안 줬다" 와 "빈 경로를 줬다" 가 같은 값이
     # 된다 — 값을 못 구한 호출자가 `--differential "$DIFF_YAML"` 을 빈 변수로
     # 호출하면 차등 축이 조용히 사라지고 `clean` 으로 인증된다(`verdict.py` 의
-    # `read_or_none()` docstring 이 금지한 바로 그 새는 경로 — Ruling T5-a, Task 4
-    # 리뷰가 한 층 아래서 잡은 결함을 이 층에서 되살리지 않는다). 기본값을 `None`
+    # `read_or_none()` docstring 이 금지한 바로 그 새는 경로 — Ruling T5-a. 한 층
+    # 아래가 막은 결함을 이 층에서 되살리지 않는다). 기본값을 `None`
     # 으로 둬 두 경우를 구별하고, 명시적으로 빈 문자열을 주면 usage 오류(exit 2)다.
     ap.add_argument("--differential", default=None)
     ap.add_argument("--reason", action="append", default=[])
     ap.add_argument("--legacy-verdict", default=None)
+    # 각도 상태 — 기본 off. 오케스트레이터 배선은 PR4 다(계획 R-E). 안 주면
+    # `angles:` 블록을 싣지 않는다. 다만 주 판정자 사망은 `--angles` 유무와
+    # 무관하게 `--emit-verdict` 아래서 `angle-absent` 로 보고된다.
+    ap.add_argument("--angles", default=None)
     args = ap.parse_args()
 
     if args.differential is not None and args.differential == "":
@@ -590,6 +596,10 @@ def main():
     if args.legacy_verdict is not None and args.legacy_verdict == "":
         print("synthesize_findings.py: --legacy-verdict 는 빈 문자열을 받지 않는다",
               file=sys.stderr)
+        sys.exit(2)
+    if args.angles is not None and args.angles == "":
+        print("synthesize_findings.py: --angles 는 빈 문자열을 받지 않는다 "
+              "(플래그를 생략하거나 실제 경로를 줘라)", file=sys.stderr)
         sys.exit(2)
 
     # I1 (리뷰 라운드 2) — 위 두 검사는 세 판정 입력 플래그 중 딱 한 모양
@@ -619,6 +629,11 @@ def main():
                   "없이는 의미가 없다 (함께 주거나 --legacy-verdict 을 빼라)",
                   file=sys.stderr)
             sys.exit(2)
+        if args.angles is not None:
+            print("synthesize_findings.py: --angles 는 --emit-verdict "
+                  "없이는 의미가 없다 (함께 주거나 --angles 를 빼라)",
+                  file=sys.stderr)
+            sys.exit(2)
 
     ledger = Ledger(items="open")
 
@@ -645,19 +660,52 @@ def main():
 
     # Ruling T5-b — 판정 «계산» 은 본 보고서를 쓰기 «전» 에 한다. `_verdict.
     # read_or_none()` 의 fail4 가 여기서 터지면 stdout 이 아직 비어 있다(이
-    # 리포의 fail4 계약: 원자적·무출력 — Task 2 리뷰가 diff-test-results.py 의
-    # `_aggregate` 에서 이미 확인한 바로 그 계약). 뒤에 두면 완전해 보이는
+    # 리포의 fail4 계약: 원자적·무출력 — diff-test-results.py 의 `_aggregate` 와
+    # 같은 계약). 뒤에 두면 완전해 보이는
     # 보고서가 이미 나간 뒤 rc=4 가 되어, rc 를 보지 않는 줄-지향 소비자에게는
     # 성공한 실행으로 읽힌다 — 실측(이전 라운드): 549바이트 완전한 보고서 +
     # rc=4 조합.
     decision = None
+    angle_states = None
     if args.emit_verdict:
-        # `report["degraded"]`(공시)가 아니라 `blocks()`(차단)다 — 헌장은 모델 다양성
-        # 손실 같은 degrade 를 공시만 하고 막지 않는다. 여기서 둘을 섞으면 이 PR 이
-        # 조용히 게이트를 넓힌다.
+        # `report["degraded"]`(공시)가 아니라 차단 쪽 술어다 — 헌장은 모델 다양성
+        # 손실 같은 degrade 를 공시만 하고 막지 않는다. 여기서 둘을 섞으면 이
+        # 합성기가 조용히 게이트를 넓힌다.
+        #
+        # 차단 셋을 **두 사유로** 가른다(설계 §6.4.3): 항목 소실·미상은
+        # `findings-lost`, 주 판정자 사망은 `angle-absent` — 아무도 그 축을 «안 본»
+        # 것이라 각도가 `absent` 인 것과 같은 사실이다(§6.3.5 의 표).
+        angle_absent = ledger.primary_source_failed()
+        if args.angles is not None:
+            angle_states = _angles.parse(_angles.read_or_fail4(args.angles))
+            # AC10a — 수행자 집합은 이 실행이 실제로 «낸» finding 에서 도출한다
+            # (계획 R-H). 각도 파일 자신에서 뽑으면 자기-일관성 검사이지 Law 2
+            # 검사가 아니다. 판정 적용 «전» 의 입력(`raw`)과 dedup 뒤의 `findings`
+            # (승격분 포함)를 함께 본다: 기각·억제된 것도 「낸 것」이다(냈기
+            # 때문에 기각·억제된 것이다).
+            #
+            # 항목마다 `agent` 는 **항상** 센다. `sources` 는 거기에 «더할» 뿐
+            # `agent` 를 대신하지 않는다 — `raw` 의 `sources` 는 리뷰어가 준
+            # 비신뢰 값이라, 그것이 `agent` 를 가리면 저자가 이름을 달리 적는
+            # 것만으로 AC10a 가 조용해진다. dedup 뒤 항목의 `sources` 는 dedup 이
+            # `agent` 들로 만든 목록이다. 더 세는 쪽은 AC10a 를 엄격하게 할
+            # 뿐이다(fail-closed).
+            authors = set()
+            for f in findings + raw:
+                if isinstance(f, dict):
+                    srcs = f.get("sources") or []
+                    if not isinstance(srcs, (list, tuple)):
+                        srcs = [srcs]
+                    for s in [f.get("agent", "?")] + list(srcs):
+                        s = str(s)
+                        if s and s != "?":
+                            authors.add(s)
+            _angles.check_self_adjudication(angle_states, authors)
+            angle_absent = angle_absent or _angles.blocks(angle_states)
         decision = _verdict.decide(
             defect=bool(kept),                    # 계획 R-B — severity 를 묻지 않는다
-            review_blocked=ledger.blocks(),
+            review_blocked=ledger.items_unaccounted(),
+            angle_absent=angle_absent,
             differential_text=_verdict.read_or_none(args.differential),
             extra_reasons=args.reason,
             legacy_verdict=args.legacy_verdict,
@@ -671,6 +719,12 @@ def main():
                             report, ledger.held_by_class()))
 
     if args.emit_verdict:
+        # `render()` 가 낸 Markdown 본문 **뒤**의 평문 꼬리다 — PR2 가 `verdict:`
+        # 를 같은 자리에 같은 모양으로 붙였고(계획 R-J), 그래야 「off 출력은 on
+        # 출력의 바이트 접두」가 유지된다. 각도가 판정보다 **앞**인 것은 읽는
+        # 순서다: 무엇을 봤는지가 그 판정의 근거다.
+        if angle_states is not None:
+            sys.stdout.write(_angles.render(angle_states))
         sys.stdout.write(_verdict.render(decision))
 
 
