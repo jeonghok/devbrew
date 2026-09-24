@@ -2090,24 +2090,38 @@ p.write_text(s,encoding='utf-8')"
   { [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT"; } \
     && ok "V2-①(⟨C5⟩ 동적): 연결 누락 ${n}건도 red" \
     || no "V2-①(⟨C5⟩ 동적): 연결 누락 ${n}건이 통과됐다 (rc=$V2RC) — 개수 임계가 들어갔다"
-  # 메시지 문면도 — 누락이 여럿일 때만 붙는 「외 N건」 같은 접미는 1건짜리 nolink 셀에 안 보인다.
-  # 차단 메시지는 막힌 모델이 읽는 채널이라 탐지기의 면제(대소문자 등)도 싣지 않는다.
-  v2msg="$(printf '%s' "$V2OUT" | python3 -c 'import json,re,sys
+  # 메시지 문면 — 모양을 열거하지 않고 도출한다(개수 낱말 denylist 는 「9 건」·「총 12줄」·괄호 안 접미를
+  # 못 봤다). ① 메시지는 「<머리>): <인용 줄 목록>」 이고, 목록은 `- ` 로 시작하는 문자열의 list 여야 하며
+  # (원소로 끼운 개수를 막는다), 머리는 누락 1·5·12 건에서 **바이트로 같아야** 한다 — 개수 누출은 정의상
+  # n 에 따라 변한다. 차단 메시지는 막힌 모델이 읽는 채널이라 탐지기의 면제도 싣지 않는다 — 그 검사는
+  # `rc<숫자>`·「대소문자」 두 표현만 문다(면제를 가르치는가는 의미 성질이라 문면으로 도출할 수 없다 —
+  # 나머지 표현은 리뷰의 몫).
+  v2msg="$(printf '%s' "$V2OUT" | python3 -c 'import ast,json,re,sys
 d=json.load(sys.stdin); m=[x for x in d["failures"] if "결정 연결 없음" in x]
-head=[re.sub(r"\): \[.*\]", "):", x, flags=re.S) for x in m]   # 인용된 줄 목록만 걷어 내고 앞뒤 문면 전체를 본다
-print("CLEAN" if m and not any(re.search(r"[0-9]+건|[0-9]+개|개수", h) or re.search(r"(?<![A-Za-z])rc[0-9]", h) or "대소문자" in h for h in head) else "DIRTY")' 2>/dev/null)"
-  [[ "$v2msg" == CLEAN ]] \
-    && ok "V2-①(⟨C5⟩ 메시지·${n}건): 차단 메시지에 개수도 판독 면제도 없다" \
-    || no "V2-①(⟨C5⟩ 메시지·${n}건): 차단 메시지에 개수나 판독 면제 힌트가 있다 (또는 메시지 부재)"
+if len(m)!=1: print("DIRTY\t① 메시지가 하나가 아니다"); sys.exit()
+g=re.fullmatch(r"(?s)(?P<head>.*?)\): (?P<tail>\[.*\])", m[0])
+if not g: print("DIRTY\t머리): [목록] 모양이 아니다"); sys.exit()
+try: tail=ast.literal_eval(g["tail"])
+except Exception: print("DIRTY\t목록 뒤에 무언가 붙었다"); sys.exit()
+if not (isinstance(tail,list) and tail and all(isinstance(t,str) and t.startswith("- ") for t in tail)):
+    print("DIRTY\t목록 원소가 인용 줄이 아니다"); sys.exit()
+h=g["head"]
+if re.search(r"(?<![A-Za-z])rc[0-9]", h) or "대소문자" in h: print("DIRTY\t판독 면제 힌트"); sys.exit()
+print("OK\t"+h)' 2>/dev/null)"
+  if [[ "$n" == 1 ]]; then V2HEAD1="${v2msg#*$'\t'}"; fi
+  { [[ "${v2msg%%$'\t'*}" == OK ]] && [[ "${v2msg#*$'\t'}" == "$V2HEAD1" ]]; } \
+    && ok "V2-①(⟨C5⟩ 메시지·${n}건): 머리가 누락 1건과 같고 목록은 인용 줄뿐 — 개수·면제 없음" \
+    || no "V2-①(⟨C5⟩ 메시지·${n}건): ${v2msg%%$'\t'*} — 머리가 n 에 따라 변했거나 목록이 인용 줄만이 아니다"
 done
 
 # qg iter 1 — 옵트인 키가 **있는데** 판독이 안 되면 부재가 아니다. 중복 키 · 다른 값을 v1 으로 읽으면 다섯
 # 술어가 조용히 꺼지고 advisory 는 「없다」고 오진한다. 셋 다 ① 을 함께 깨 둔다 — 조용한 v1 강등이면 green.
-for shape in dup upper v3 empty spacecolon key indent; do
+for shape in dup upper v3 empty spacecolon key indent dq sq; do
   v2mut "contract_$shape" "import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding='utf-8'); o='contract: v2\n'; assert s.count(o)==1
 n={'dup':'contract: v2\ncontract: v2\n','upper':'contract: V2\n','v3':'contract: v3\n','empty':'contract:\n',
-   'spacecolon':'contract : v2\n','key':'Contract: v2\n','indent':'  contract: v2\n'}['$shape']
+   'spacecolon':'contract : v2\n','key':'Contract: v2\n','indent':'  contract: v2\n',
+   'dq':'\"contract\": v2\n','sq':\"'contract': v2\n\"}['$shape']
 s=s.replace(o,n); o2=' [→ OQ1]\n'; assert s.count(o2)==1; s=s.replace(o2,'\n'); p.write_text(s,encoding='utf-8')"
   { [[ "$V2RC" -ne 0 ]] && grep -q 'contract 옵트인 판독 불가' <<<"$V2OUT" && ! grep -q '신 계약 미적용' <<<"$V2OUT"; } \
     && ok "V2-옵트인(판독 불가 «${shape}»): 있는데 못 읽는 contract 는 red — v1 으로 강등되지 않는다" \
@@ -2158,6 +2172,48 @@ assert s.count(' → 근거 RC3')==3; s=s.replace(' → 근거 RC3',''); p.write
     && ok "V2-①(§5 줄 단위·${shape}): 버리는 [RC3 → 없음] 이 실제 주장 줄의 웹 연결을 세탁하지 못한다" \
     || no "V2-①(§5 줄 단위·${shape}): 레포 주장 줄의 웹 연결이 세탁됐다 (rc=$V2RC)"
 done
+# qg iter 4 — 연결 괄호는 줄마다 정확히 하나. `LINK_RE` 는 줄 끝만 보므로 실제 결정을 앞 괄호에 두고 버리는
+# 연결을 끝에 달면 ①②③ 이 끝 괄호만 읽는다 — 버리는 줄을 같은 줄 안으로 옮긴 세탁.
+v2mut doublelink5 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+o="[RC3 → OQ1 · OQ4]\n"; assert s.count(o)==1; s=s.replace(o,"[→ OQ1 · OQ4] [RC3 → 없음]\n")
+assert s.count(" → 근거 RC3")==3; s=s.replace(" → 근거 RC3",""); p.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -qF '[→ OQ1 · OQ4] [RC3 → 없음]' <<<"$V2OUT"; } \
+  && ok "V2-①(연결 하나·§5): 한 줄의 연결 괄호 둘은 세탁이다 — red" \
+  || no "V2-①(연결 하나·§5): 앞 괄호의 결정이 끝 괄호 뒤에 숨었다 (rc=$V2RC)"
+v2mut doublelink4 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o=" — 데이터 형태와 부합 [→ OQ1]\n"
+assert s.count(o)==1; p.write_text(s.replace(o," — 데이터 형태와 부합 [→ OQ1] [→ 없음]\n"),encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT"; } \
+  && ok "V2-①(연결 하나·§4): 웹 항목의 연결 괄호 둘도 red" \
+  || no "V2-①(연결 하나·§4): 웹 항목의 이중 연결이 통과됐다 (rc=$V2RC)"
+# 양의 짝 — 같은 id 의 레포 연결이 두 줄에 있는 것 자체는 정직하다: 주장 줄은 제 결정을 싣고, 템플릿이
+# 가르치는 반증 기록 줄(`<근거 RC<n> 반증> … [RC<n> → 없음]`)이 같은 id 로 따로 선다. 「같은 RC 두 연결 →
+# red」는 이중 연결 수정의 가장 그럴듯한 과잉형이다.
+v2mut refuterecord 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o="- 기각 — N/A — 전부 first-time defend+lock\n"
+assert s.count(o)==1; p.write_text(s.replace(o,"- 기각 — 서버 캐시 신설 / 기존 계층 재사용 / 근거 RC3 반증 [RC3 → 없음]\n"),encoding="utf-8")'
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-①(양의 짝): 주장 줄 + 같은 id 의 반증 기록 줄 [RC3 → 없음] 은 green" \
+  || no "V2-①: 정직한 반증 기록 줄이 red (rc=$V2RC) — 같은 id 두 연결을 세탁으로 오인"
+# 양의 짝 — §5 줄이 이미 연결된 id 를 상호참조하는 것도 정직하다(§4 의 xrefother 와 같은 판단의 §5 쪽).
+v2mut sec5xref 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o="| 세션 키 충돌은 열린 결정과 무관하다 — RC5"
+assert s.count(o)==1; p.write_text(s.replace(o,"| RC3 의 캐시 계층과 달리 세션 키 충돌은 열린 결정과 무관하다 — RC5"),encoding="utf-8")'
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-①(§5·양의 짝): 자기 연결 [RC5 → 없음] 을 가진 줄이 연결된 RC3 을 언급해도 green" \
+  || no "V2-①(§5): 정직한 상호참조가 red (rc=$V2RC) — 줄의 RC 집합 = 연결 id 로 오인"
+# 양의 짝 — `linked` 의 §4 절반. §4 줄의 레포 형식 연결도 그 id 를 연결한 것이다.
+v2mut sec4repolink 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o="- 부분 하이드레이션 «islands» — [중립] — 이 결정과 무관 [→ 없음]\n"
+assert s.count(o)==1; s=s.replace(o,o+"- 레포 캐시 어댑터 «islands» — [취함] — RC9 (plugins/spec-distill/scripts/check_brief.py#gate) [RC9 → 없음]\n")
+p.write_text(s,encoding="utf-8")
+a=pathlib.Path(sys.argv[2]); q=a.read_text(encoding="utf-8"); o="- 확인 RC5 "; assert q.count(o)==1
+a.write_text(q.replace(o,"- 확인 RC9 — 확인 — check_brief.py#gate 에 있다\n"+o),encoding="utf-8")'
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-①(§4 레포 연결·양의 짝): §4 줄의 [RC9 → 없음] 도 RC9 를 연결한다 — green" \
+  || no "V2-①(§4 레포 연결): §4 의 레포 형식 연결이 연결로 세어지지 않았다 (rc=$V2RC)"
+
 # 양의 짝 — §4 는 전역. 자기 연결([RC3 → OQ4])을 가진 RC3 을 다른 결정(OQ1)의 웹 항목이 상호참조해도 green.
 v2mut xrefother 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")

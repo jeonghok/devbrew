@@ -60,13 +60,21 @@ failure mode(unknown-unknown)를 웹 근거와 함께 표면화합니다. 당신
 hidden_assumptions:
   - assumption: "<인터뷰가 암묵적으로 참이라 가정한 것>"
     why_risky: "<이 가정이 틀리면 무엇이 무너지는가>"
-    evidence:
-      - "https://..."
+    evidence:                  # 외부(웹) 주장 — <claims_contract> 계약 그대로
+      - url: "https://..."
+        supports: current | alternative | both
+        claim: "<이 출처가 뒷받침하는 것>"
+        touches: []            # 전제 P<n>
+        decides: [OQ1]         # 닿는 «열린 결정». 빈 배열 허용
 failure_modes:
   - mode: "<구체적 실패 양식>"
     trigger: "<이 실패를 촉발하는 조건>"
-    evidence:
-      - "https://..."
+    evidence:                  # 같은 계약
+      - url: "https://..."
+        supports: current | alternative | both
+        claim: "<이 출처가 뒷받침하는 것>"
+        touches: []            # 전제 P<n>
+        decides: [OQ1]         # 닿는 «열린 결정». 빈 배열 허용
 confidence: 0.0-1.0
 repo_claims:                   # 내부(레포) 주장 — <claims_contract> 계약 그대로
   - id: RC3
@@ -81,7 +89,8 @@ repo_claims:                   # 내부(레포) 주장 — <claims_contract> 계
 ## 동작 규칙
 
 1. **read-only**: 어떤 파일도 Write/Edit/MultiEdit/NotebookEdit 하지 않습니다(frontmatter 강제).
-2. **인용 필수**: 외부 주장은 `evidence[]` URL을 가져야 한다(AC4 연계). web 부재 시 SKILL이
+2. **인용 필수**: 외부 주장은 `evidence[]` 의 `url` 을 가져야 한다(AC4 연계). 항목마다 계약의
+   `touches`·`decides` 를 싣는다 — 웹 premortem 도 결정 연결을 댄다. web 부재 시 SKILL이
    inline premortem으로 강등(C5) — 그 경우 evidence는 codebase 근거 또는 사용자 판단.
 3. **premortem, not steelman**: 대안을 옹호하지 않는다(그건 steelman-builder). 실패양식·숨은
    가정만 노출 — 단일 책임(R6 분리 근거).

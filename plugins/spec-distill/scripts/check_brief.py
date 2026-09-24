@@ -932,6 +932,10 @@ OQ_RE = re.compile(r"(?<![A-Za-z])OQ\d+(?![0-9A-Za-z_])")
 # group(1) = 레포 id(웹이면 None) · group(2) = 대상(`OQ…` 목록 또는 `없음`).
 LINK_RE = re.compile(
     r"\[(?:(RC\d+)\s*)?→\s*(OQ\d+(?:\s*·\s*OQ\d+)*|없음)\]\s*$")
+# 같은 모양의 앵커 없는 짝 — 한 줄의 연결 괄호를 **전부** 센다. `LINK_RE` 는 줄 끝 하나만 보므로
+# `RC3 [→ OQ1] [RC3 → 없음]` 처럼 실제 결정을 앞 괄호에 두고 버리는 연결을 끝에 달면 ①②③ 이 전부
+# 끝 괄호만 읽는다. 연결은 줄마다 **정확히 하나**다(복수 결정은 `[RC3 → OQ1 · OQ4]` 한 괄호).
+LINK_ANY_RE = re.compile(r"\[(?:RC\d+\s*)?→\s*(?:OQ\d+(?:\s*·\s*OQ\d+)*|없음)\]")
 CONTRACT_KEY, CONTRACT_V2 = "contract", "v2"
 DERIVED_INTERNAL_RESEARCH = "derived:internal_research"
 CONFIRM_ROW_RE = re.compile(r"^확인\s+(RC\d+)\s+—\s+(확인|반증|미확인)\s+—\s*(\S.*)$")
@@ -976,7 +980,7 @@ def contract_unreadable(text: str):
     # 존재는 `frontmatter_value` 와 **독립으로** 본다: 그 함수는 값이 빈 키(`contract:` ·
     # `contract: ""` · `contract: # v2`)도 「key absent」로 돌려주고, 키 모양이 다른 줄(`Contract:` ·
     # 들여쓴 키 · `contract :`)은 아예 찾지 않는다. 사람 눈에 키가 보이는 줄이면 부재가 아니다.
-    if not re.search(r"(?im)^\s*contract\s*:", fm):
+    if not re.search(r"(?im)^\s*[\"']?contract[\"']?\s*:", fm):
         return None
     val, err = frontmatter_value(CONTRACT_KEY, fm)
     if err == f"{CONTRACT_KEY} key absent":
@@ -986,15 +990,22 @@ def contract_unreadable(text: str):
     return None if val == CONTRACT_V2 else f"{CONTRACT_KEY} 값 {val!r} 은 알 수 없는 계약이다 (`v2` 만 있다)"
 
 
+def _research_entries_split(text: str) -> tuple[list[str], list[str]]:
+    """순회 정의의 두 절 — (§4 의 모든 항목 줄, §5 에서 `RC<n>` 을 가진 줄). 정의는 여기 하나다:
+    ① 은 두 절을 다르게 판정하므로 나눠 받고, 나머지 술어는 `research_entries` 로 합쳐 받는다."""
+    e4 = _entry_lines(_section_text(text, "4", "External Landscape"))
+    e5 = [ln for ln in section5_entries(text) if RC_RE.search(ln)]
+    return e4, e5
+
+
 def research_entries(text: str) -> list[str]:
     """위 순회 정의 그대로 — §4 의 모든 항목 줄 + §5 에서 `RC<n>` 을 가진 줄. §3 은 제외.
 
     id 는 리터럴 `RC\\d+` 뿐이다 — `RC 3` · `rc3` · 전각 `ＲＣ3` · `RC3a` 같은 근사 표기는 id 가 아니라서
     어느 술어에도 보이지 않는다(조건부 발동이 피검자 산출물에 앵커된 설계 L1 의 한 변형).
     """
-    out = _entry_lines(_section_text(text, "4", "External Landscape"))
-    out += [ln for ln in section5_entries(text) if RC_RE.search(ln)]
-    return out
+    e4, e5 = _research_entries_split(text)
+    return e4 + e5
 
 
 def payload_rc_ids(text: str) -> list[str]:
@@ -1028,12 +1039,15 @@ def research_link_missing(text: str) -> list[str]:
 
     두 절 모두에서, 어느 연결에도 실리지 않은 `RC<n>` 을 담은 줄은 연결 없음이다(다른 id 의 레포 연결
     `[RC5 → …]` 뒤에 숨는 모양). 남는 것: 같은 id 의 버리는 레포 연결 뒤에서 다른 id 의 연결로 실제
-    결정을 다는 §5 줄, 그리고 웹 항목으로 위장한 레포 주장(«출처키» 와 audit §7 선언이 필요해 비싸고
-    보인다)은 이 술어가 가르지 못한다. 웹 항목의 `RC<n>` 모양 문자열(릴리스 후보)은 레포 id 로 읽혀
-    red 다 — 전부 알려진 한계.
+    결정을 다는 §5 줄, 그리고 웹 항목으로 위장한 레포 주장(이미 선언된 «출처키» 를 다시 쓰면 audit §7
+    을 고치지 않고도 통과한다)은 이 술어가 가르지 못한다. 웹 항목의 `RC<n>` 모양 문자열(릴리스 후보)은
+    레포 id 로 읽혀 red 다 — 전부 알려진 한계. **이 술어는 형태 검사다** — 줄 끝 연결의 모양과 id 의
+    출현만 보고, 그 연결이 참인지는 V1(내용 확인)과 확인 줄 ∀ 가 진다.
+
+    연결 괄호는 줄마다 정확히 하나다 — 줄 끝 연결을 떼고도 연결 모양 괄호(`LINK_ANY_RE`)가 남으면 연결
+    없음이다. 둘 이상이면 끝 괄호만 읽혀 앞 괄호의 결정이 ②③ 을 피한다(개수를 세지 않고 잔여 유무만 본다).
     """
-    e4 = _entry_lines(_section_text(text, "4", "External Landscape"))
-    e5 = [ln for ln in section5_entries(text) if RC_RE.search(ln)]
+    e4, e5 = _research_entries_split(text)
     linked = set()
     for ln in e4 + e5:
         m = LINK_RE.search(ln)
@@ -1041,11 +1055,13 @@ def research_link_missing(text: str) -> list[str]:
             linked.add(m.group(1))
     out = []
     for ln in e4:
-        if not LINK_RE.search(ln) or set(RC_RE.findall(ln)) - linked:
+        if (not LINK_RE.search(ln) or LINK_ANY_RE.search(LINK_RE.sub("", ln))
+                or set(RC_RE.findall(ln)) - linked):
             out.append(ln)
     for ln in e5:
         m = LINK_RE.search(ln)
-        if not m or m.group(1) is None or set(RC_RE.findall(ln)) - linked:
+        if (not m or m.group(1) is None or LINK_ANY_RE.search(LINK_RE.sub("", ln))
+                or set(RC_RE.findall(ln)) - linked):
             out.append(ln)
     return out
 
@@ -1406,8 +1422,8 @@ def gate(path: Path) -> int:
             if lm:
                 failures.append(
                     "조사 항목에 결정 연결 없음 (줄 끝에 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]` · "
-                    "`[→ OQ<n>]` · `[→ 없음]` 중 하나 — §5 의 레포 주장 줄은 앞의 둘만이고, 모든 `RC<n>` 은 "
-                    "어느 항목 줄의 `[RC<n> → …]` 에 실린다. 웹 출처 문자열의 `RC<n>` 모양(릴리스 후보 등)도 "
+                    "`[→ OQ<n>]` · `[→ 없음]` 중 **하나** — 레포 주장 줄은 자기 `RC<n>` 을 줄 끝 "
+                    "`[RC<n> → …]` 에 싣는다. 웹 출처 문자열의 `RC<n>` 모양(릴리스 후보 등)도 "
                     "레포 id 로 읽힌다 — 「release candidate 1」 처럼 풀어 쓰고, 웹 항목을 레포 주장으로 바꿔 "
                     f"달지 말 것): {lm[:3]}")
             tm = research_link_targets_missing(text)

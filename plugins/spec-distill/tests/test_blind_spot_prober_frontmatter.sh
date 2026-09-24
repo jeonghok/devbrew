@@ -77,4 +77,14 @@ grep -qiF -- '재dispatch 금지' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문�
 grep -qF -- 'eligibility is' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
 grep -qF -- 'whether an open decision still touches that dimension' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
 grep -qF -- '1 plus that dimension'\''s reopen count' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
+# 웹 근거도 계약 모양이다(스펙 §B — prober 의 출력 의무는 coverage-mapper 와 같다). URL 문자열 목록이면
+# `decides` 가 없어 웹 premortem 이 결정 연결을 영영 못 댄다. 양의 짝: 계약 객체의 `url:` 키.
+grep -qE '^[[:space:]]*-[[:space:]]*"https://' <<<"$BODY" \
+  && no "웹 근거가 URL 문자열 목록이다 — 계약 객체(url·supports·claim·touches·decides)가 아니다" \
+  || ok "웹 근거가 URL 문자열 목록이 아니다"
+ev_n="$(grep -cE '^[[:space:]]*-[[:space:]]*url:[[:space:]]*"https://' <<<"$BODY")"
+dec_n="$(grep -cE '^[[:space:]]*decides:' <<<"$BODY")"
+{ [[ "$ev_n" -ge 2 ]] && [[ "$dec_n" -ge 3 ]]; } \
+  && ok "웹 근거 계약 객체: hidden_assumptions·failure_modes 두 자리 모두 url + decides (repo_claims 포함 decides ≥3)" \
+  || no "웹 근거 계약 객체 부재: url 항목 ${ev_n} · decides 키 ${dec_n}"
 finish
