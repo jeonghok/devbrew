@@ -394,7 +394,23 @@ def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
             # 판정자의 `downgrade` 와 같은 칸(`adjusted_severity`)을 쓴다.
             f = dict(f)
             if "adjusted_severity" in v:
-                f["severity"] = v["adjusted_severity"]
+                # Task 7 row 31 — raise-only-up guard. `recritic_bridge.py` 는
+                # 자신이 아는 cur_sev(map.json 값)로 이미 위인지 검사하지만,
+                # 그 map 이 이 finding 의 «실제» severity 와 다르면(스테일
+                # map.json) bridge 눈에는 정당한 raise 인데 여기서 그대로
+                # 적용하면 실제 finding 을 조용히 내리는 raise 가 된다 — CRITICAL
+                # 이 낮은 raise 하나로 IMPORTANT 가 된다. 여기서 실제 finding
+                # 의 (정규화된) severity 와 다시 비교해, 지금보다 «진짜로»
+                # 높지 않으면 적용하지 않고 강제로 기록한다(bridge 의 `to`
+                # 강제와 같은 모양 — `ledger.coerced(field, frm, to, gate=True)`).
+                new_sev = v["adjusted_severity"]
+                cur_sev = _norm_sev(f)
+                new_rank = SEV_ORDER.get(new_sev, SEV_ORDER["SUGGESTION"])
+                cur_rank = SEV_ORDER.get(cur_sev, SEV_ORDER["SUGGESTION"])
+                if new_rank < cur_rank:
+                    f["severity"] = new_sev
+                elif ledger is not None:
+                    ledger.coerced("adjusted_severity", new_sev, cur_sev, gate=True)
             if "adjusted_confidence" in v:
                 f["confidence"] = v["adjusted_confidence"]
         if ledger is not None:

@@ -274,6 +274,63 @@ case_colliding_ids_with_raise_ignored_for_one_severity_are_not_resolved() {
   rm -rf "$T"
 }
 
+case_colliding_ids_with_raise_to_different_targets_are_not_resolved() {
+  # Task 7 row 30 / 컨트롤러 M1 — 콜라이딩 서명 비교가 `verdict` 종류만 보고
+  # `adjusted_severity` 를 빼면, 둘 다 «실제로 오른» raise(둘 다 verdict="raise")
+  # 인데 «어디까지» 오르는지가 다를 때 서명이 같다고 보고 하나를 골라 합친다 —
+  # 더 높이 오른 쪽이 조용히 사라진다(silent raise loss). 기존
+  # `..._raise_that_differs_per_severity_...`·`..._raise_ignored_for_one_severity_...`
+  # 는 무시된 raise(confirm)와 적용된 raise(raise)가 섞여 있어 verdict 종류만
+  # 봐도 이미 다르다 — M1 의 구멍을 못 잡는다. 여기는 둘 다 SUGGESTION 에서
+  # 시작해 둘 다 실제로 오르게 만든다(f1 → IMPORTANT, f2 → CRITICAL) — verdict
+  # 는 둘 다 "raise" 로 같지만 adjusted_severity 가 다르다.
+  local T; T=$(mktemp -d)
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: SUGGESTION\n  confidence: 8\n  summary: "하나"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: SUGGESTION\n  confidence: 8\n  summary: "둘"\n' > "$T/findings.yaml"
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: raise
+    to: IMPORTANT
+  - f: f2
+    verdict: raise
+    to: CRITICAL'
+  local out; out=$(synth "$T")
+  assert_contains "$out" '0 CRITICAL / 0 IMPORTANT / 1 SUGGESTION' "둘 다 오른 raise 인데 도착지가 다르면 severity 는 조용히 안 바뀐다 (severity 소실 없음)"
+  out=$(synth "$T" --emit-verdict)
+  assert_grep     "$out" 'findings-lost'    "verdict 만 같고 adjusted_severity 가 다른 raise 는 합쳐 적용하지 않는다 (보류)"
+  assert_not_grep "$out" '^verdict: clean$' "clean 이 아니다"
+  rm -rf "$T"
+}
+
+case_raise_cannot_lower_when_map_is_stale() {
+  # Task 7 row 31 — apply_verdicts 의 raise-only-up guard. bridge 는 자신이 아는
+  # cur_sev(map.json 값)로 이미 위인지 검사하지만, map.json 이 스테일하면(실제
+  # finding 은 CRITICAL 인데 map 은 옛 값 SUGGESTION 을 쥔 채로) bridge 눈에는
+  # 정당한 raise(SUGGESTION→IMPORTANT)인데 실제로는 CRITICAL 을 IMPORTANT 로
+  # «내리는» 결과가 나온다. synthesize_findings.py 의 apply_verdicts 가 실제
+  # finding 의 (정규화된) severity 와 다시 비교해 막아야 한다.
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml" "scout" "a.py" "3" "CRITICAL"
+  prep "$T"
+  python3 -c "
+import json
+p = '$T/map.json'
+m = json.load(open(p))
+for k in m:
+    m[k]['severity'] = 'SUGGESTION'
+json.dump(m, open(p, 'w'))
+"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: raise
+    to: IMPORTANT'
+  local out; out=$(synth "$T")
+  assert_contains "$out" '1 CRITICAL / 0 IMPORTANT' "스테일 맵이 낮다고 우겨도 실제 CRITICAL 은 안 내려간다"
+  out=$(synth "$T" --emit-verdict)
+  assert_contains "$out" '판정 degrade' "그 저지는 게이트 강제로 공시된다 (gate=True)"
+  rm -rf "$T"
+}
+
 case_missing_verdict_is_unadjudicated() {
   local T; T=$(mktemp -d); one_finding "$T/findings.yaml"; prep "$T"
   reply "$T/reply.txt" 'verdicts: []'
@@ -599,6 +656,8 @@ case_colliding_ids_with_partial_verdicts_are_not_resolved
 case_colliding_ids_with_matching_verdicts_are_resolved
 case_colliding_ids_with_raise_that_differs_per_severity_are_not_resolved
 case_colliding_ids_with_raise_ignored_for_one_severity_are_not_resolved
+case_colliding_ids_with_raise_to_different_targets_are_not_resolved
+case_raise_cannot_lower_when_map_is_stale
 case_missing_verdict_is_unadjudicated
 case_same_as_keeps_both
 case_added_becomes_promoted_by_doc_recritic

@@ -150,7 +150,9 @@ EXEMPT = {
     # PR4a Task 4 — `import recritic_bridge as _bridge` 한 줄 · docstring 갱신(Inputs
     # 절에 `--recritic` 세 플래그 설명 추가) · `promote_new_findings`의 저자 코멘트
     # 세 줄이 위에서 늘어 410 → 418. 가드 텍스트·사유 무변경 — 실측으로 재앵커한다.
-    ("plugins/quality-gates/scripts/synthesize_findings.py", 418,
+    # Task 7 row 31 — apply_verdicts 에 raise-only-up guard 를 더하며 위가 16줄
+    # 늘어 418 → 434. 가드 텍스트·사유 무변경 — 실측으로 재앵커한다.
+    ("plugins/quality-gates/scripts/synthesize_findings.py", 434,
      "continue in dedup @ if f.get('promoted')"):
         "C6(1) — dedup() 의 이 continue 는 `promoted` 항목을 그룹핑에서만 "
         "제외한다. 항목 자체는 이 loop 이전에 계산된 `passthrough` 리스트에 "
