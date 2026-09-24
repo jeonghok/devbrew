@@ -27,8 +27,28 @@ import verdict as _verdict          # 새 책임은 새 모듈 — 여기는 진
 SEV_ORDER = {"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 2}
 
 
-def load_yaml(path, ledger=None):
-    """Return `(list, dropped)` — 이 경로도 `_as_list` 초크포인트를 통과한다.
+def _read_source(path, ledger=None):
+    """경로가 «주어진» YAML 을 읽는다. Returns `(data, dead)`.
+
+    못 읽는 것은 전부 **주 입력 실패**다 — 파일 없음·권한(`OSError`), 비-UTF-8
+    (`UnicodeDecodeError` 는 `ValueError` 의 하위라 `OSError` 절이 안 잡는다),
+    YAML 파손(`yaml.YAMLError`). 예전에는 `FileNotFoundError` 만 잡아 나머지 셋이
+    raw traceback + exit 1 로 0/2/4 계약을 탈출했다.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            return yaml.safe_load(f), False
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        why = type(exc).__name__
+        if ledger is not None:
+            ledger.source_failed(str(path), why, primary=True)
+        print(f"[synthesize_findings] 입력을 읽지 못했다: {path} ({why}) "
+              "— 이 축의 주 입력 실패다", file=sys.stderr)
+        return None, True
+
+
+def load_findings(path, ledger=None):
+    """Return `(list, dropped, dead)` — `dead` 는 «경로를 줬는데» 못 읽었다는 뜻이다.
 
     예전에는 여기서만 `or []`로 끝나서 `findings: "CRITICAL: ..."` 같은 스칼라가
     그대로 반환되고 apply_verdicts가 **글자 단위로** 순회했다(문자 하나당 드롭 1건).
@@ -43,36 +63,57 @@ def load_yaml(path, ledger=None):
     if not path:
         # 경로가 아예 없다 — 실패가 아니다. 여기서 source_failed 를 올리면
         # 정상 실행이 degraded 가 된다.
-        return [], 0
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = yaml.safe_load(f) or []
-    except FileNotFoundError:
-        # 경로는 주어졌는데 파일이 없다 — 입력 실패다.
-        if ledger is not None:
-            ledger.source_failed(str(path), "FileNotFoundError", primary=True)
-        return [], 0
+        return [], 0, False
+    data, dead = _read_source(path, ledger)
+    if dead:
+        return [], 0, True
+    # 빈 finding 파일은 「발견 0」이다 — 실패가 아니다. 판정자 문서와 다르다
+    # (`load_yaml_doc` 참고): 탐지 리뷰어는 정당하게 아무것도 안 낼 수 있다.
+    data = data or []
     if isinstance(data, dict) and "verdicts" in data:
-        return _as_list(data.get("verdicts"), "verdicts", ledger)
-    if isinstance(data, dict) and "findings" in data:
-        return _as_list(data.get("findings"), "findings", ledger)
-    return _as_list(data, "findings document", ledger)
+        items, dropped = _as_list(data.get("verdicts"), "verdicts", ledger)
+    elif isinstance(data, dict) and "findings" in data:
+        items, dropped = _as_list(data.get("findings"), "findings", ledger)
+    else:
+        items, dropped = _as_list(data, "findings document", ledger)
+    return items, dropped, False
 
 
-def load_yaml_doc(path):
-    """Load a YAML file and return the raw parsed document (no key flattening).
+def load_yaml(path, ledger=None):
+    """`load_findings` 의 앞 둘 — `(list, dropped)`. 기존 호출자의 계약."""
+    items, dropped, _dead = load_findings(path, ledger)
+    return items, dropped
 
-    load_yaml() flattens `{verdicts: [...]}` down to the list, which discards
-    every sibling key. The adversarial document now carries a second top-level
-    key (`new_findings`), so the raw document has to survive the load.
+
+def load_yaml_doc(path, ledger=None):
+    """판정자 문서를 키 평탄화 없이 읽는다. Returns `(doc, dead)`.
+
+    load_yaml() 은 `{verdicts: [...]}` 를 목록으로 평탄화해 형제 키를 버린다. 판정자
+    문서는 둘째 최상위 키(`new_findings`)를 가지므로 원형 그대로 살아야 한다.
+
+    `dead` — 경로를 줬는데 문서를 못 얻었다. 못 읽음(`_read_source`) · **빈 문서** ·
+    매핑도 목록도 아닌 값(스칼라) 전부다. 판정 각도의 유일한 판정자가 아무것도 남기지
+    않았으므로 **주 입력 실패**다(설계 §6.4.3 — 「주 판정자 사망」은 `angle-absent`).
+    예전에는 전부 `None` 으로 접혀 「이 실행은 판정자를 안 썼다」와 구별되지 않았고,
+    finding 이 0 인 실행은 그대로 `clean` 이었다(PR3 최종 리뷰 ★부채 A).
+
+    빈 문서가 finding 파일과 달리 사망인 이유: 판정자는 판정할 것이 없어도
+    `verdicts: []` 를 낸다. 빈 출력은 「판정 0」이 아니라 「출력 없음」이다.
+    경로가 아예 없으면(`not path`) 실패가 아니다 — `(None, False)`.
     """
     if not path:
-        return None
-    try:
-        with open(path, encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    except FileNotFoundError:
-        return None
+        return None, False
+    doc, dead = _read_source(path, ledger)
+    if dead:
+        return None, True
+    if isinstance(doc, (dict, list)):
+        return doc, False
+    why = "empty document" if doc is None else "expected mapping or list, got %s" % type(doc).__name__
+    if ledger is not None:
+        ledger.source_failed(str(path), why, primary=True)
+    print(f"[synthesize_findings] 판정자 문서를 쓸 수 없다: {path} ({why}) "
+          "— 판정 각도의 주 입력 실패다", file=sys.stderr)
+    return None, True
 
 
 def _as_list(value, what, ledger=None):
@@ -289,7 +330,7 @@ def promote_new_findings(raw_new, existing, ledger=None):
     return promoted, dropped
 
 
-def apply_verdicts(findings, verdicts, ledger=None):
+def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
     """Apply adversarial verdicts. Returns (out, dropped_malformed).
 
     `dropped`를 세는 이유: 예전에는 non-mapping finding을 맨 `continue`로 버렸다 —
@@ -304,6 +345,11 @@ def apply_verdicts(findings, verdicts, ledger=None):
     #8 — `ledger`가 주어지면 판정이 없는 finding(fail-open으로 keep)을
     `hold()`로 센다. 이 채널은 위 `dropped`(non-mapping)와 다르다: 건드리지
     않고 그대로 둔다.
+
+    `adjudicator_dead` — 판정자 문서가 죽었으면(주 입력 실패가 이미 원장에 있다)
+    판정 없는 finding 을 항목마다 `hold()` 하지 않는다. 판정자 사망은 **한 사건**이고
+    그것은 `angle-absent` 로 나간다(PR4a 계획 R-K) — 항목마다 다시 세면
+    `findings-lost` 가 열거 순서상 먼저 나가 사유가 뒤바뀐다.
     """
     by_id = {v.get("finding_id"): v for v in verdicts if isinstance(v, dict)}
     out = []
@@ -325,8 +371,9 @@ def apply_verdicts(findings, verdicts, ledger=None):
             # 유지한다(fail-open — 다음 소비자가 사람이다). 다만 «세지 않으면»
             # 판정이 있었던 것과 구별되지 않는다. 형제
             # synthesize_artifact_findings.py:197 에 unadjudicated += 1 이 있다.
-            if ledger is not None:
-                ledger.hold(finding_id(f), "판정자 부재: adversarial 판정 없음")
+            # 판정자가 통째로 죽었으면 그 사실은 원장에 이미 한 번 있다(R-K).
+            if ledger is not None and not adjudicator_dead:
+                ledger.hold(finding_id(f), "판정자 부재: 판정자 판정 없음")
             out.append(f)
             continue
         verdict = v.get("verdict", "confirm")
@@ -334,7 +381,9 @@ def apply_verdicts(findings, verdicts, ledger=None):
             if ledger is not None:
                 ledger.reject(finding_id(f), "adversarial 기각")
             continue
-        if verdict == "downgrade":
+        if verdict in ("downgrade", "raise"):
+            # `raise` — 재비판자가 severity 를 «올린» 판정(PR4a 계획 R-O). 옛
+            # 판정자의 `downgrade` 와 같은 칸(`adjusted_severity`)을 쓴다.
             f = dict(f)
             if "adjusted_severity" in v:
                 f["severity"] = v["adjusted_severity"]
@@ -637,12 +686,12 @@ def main():
 
     ledger = Ledger(items="open")
 
-    doc = load_yaml_doc(args.adversarial) if args.adversarial else None
+    doc, adjudicator_dead = load_yaml_doc(args.adversarial, ledger=ledger)
     verdicts, dropped_verdicts = extract_verdicts(doc, ledger=ledger)
-    raw, dropped_raw = (load_yaml(args.findings, ledger=ledger)
-                        if args.findings else ([], 0))
+    raw, dropped_raw, findings_dead = load_findings(args.findings, ledger=ledger)
 
-    findings, dropped_primary = apply_verdicts(raw, verdicts, ledger=ledger)
+    findings, dropped_primary = apply_verdicts(raw, verdicts, ledger=ledger,
+                                               adjudicator_dead=adjudicator_dead)
     new_raw, dropped_newlist = extract_new_findings(doc, ledger=ledger)
     promoted, dropped_promoted = promote_new_findings(new_raw, findings,
                                                       ledger=ledger)
@@ -701,6 +750,15 @@ def main():
                         if s and s != "?":
                             authors.add(s)
             _angles.check_self_adjudication(angle_states, authors)
+            # 계획 R-L — 관측된 주 입력 사망을 선언 위에 얹는다. AC10a 는 «선언»에
+            # 걸었다(선언 자체가 Law 2 를 어기면 판정자 생사와 무관하게 거부).
+            # 차단과 렌더는 «실효»에 건다 — 꼬리가 자기모순이 되지 않게.
+            dead_angles = []
+            if findings_dead:
+                dead_angles.append("security")
+            if adjudicator_dead:
+                dead_angles.append("adjudication")
+            angle_states = _angles.with_dead_sources(angle_states, dead_angles)
             angle_absent = angle_absent or _angles.blocks(angle_states)
         decision = _verdict.decide(
             defect=bool(kept),                    # 계획 R-B — severity 를 묻지 않는다

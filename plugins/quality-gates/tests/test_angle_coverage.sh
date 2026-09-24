@@ -329,6 +329,133 @@ case_synth_primary_source_death_is_angle_absent() {
   rm -rf "$T"
 }
 
+case_synth_missing_adjudicator_doc_is_angle_absent() {
+  # 부채 A (PR3 최종 리뷰) — 판정자 문서 경로를 줬는데 파일이 없다. 전에는
+  # `load_yaml_doc` 이 None 을 돌려 「판정자를 안 썼다」와 같아졌고, finding 이
+  # 0 이면 그대로 `clean` 이었다. 이제 주 입력 실패다(§6.4.3 — angle-absent).
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/f.yaml"
+  local out rc=0
+  out=$(python3 "$SYNTH" --adversarial "$T/gone.yaml" --findings "$T/f.yaml" --emit-verdict) || rc=$?
+  assert_eq "$rc" "0" "판정자 문서 부재는 호출 오류가 아니다 (rc 0)"
+  assert_grep     "$out" '^verdict: not-certified$' "판정자 문서가 없으면 clean 이 아니다"
+  assert_grep     "$out" '^reason: angle-absent$'   "사유는 angle-absent 다"
+  assert_not_grep "$out" '^verdict: clean$'         "clean 으로 렌더되지 않는다"
+  rm -rf "$T"
+}
+
+case_synth_unusable_adjudicator_doc_is_angle_absent() {
+  # 부채 A 의 형제들 — 빈 파일 · YAML 파손 · 스칼라 · 비-UTF-8. 넷 다 「판정자가
+  # 아무것도 남기지 않았다」이고, 넷 다 traceback(exit 1)이 아니라 rc 0 + 미판정이다.
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/f.yaml"
+  : > "$T/empty.yaml"
+  printf 'verdicts: [\n' > "$T/broken.yaml"
+  printf '5\n' > "$T/scalar.yaml"
+  printf 'verdicts: []\n# \xff\xfe\n' > "$T/nonutf8.yaml"
+  local k out rc
+  for k in empty broken scalar nonutf8; do
+    rc=0
+    out=$(python3 "$SYNTH" --adversarial "$T/$k.yaml" --findings "$T/f.yaml" --emit-verdict 2>/dev/null) || rc=$?
+    assert_eq "$rc" "0" "판정자 문서 '$k' — rc 0 (traceback 이 아니다)"
+    assert_grep "$out" '^reason: angle-absent$' "판정자 문서 '$k' — angle-absent"
+  done
+  rm -rf "$T"
+}
+
+case_synth_dead_adjudicator_with_findings_is_not_findings_lost() {
+  # 계획 R-K — 판정자 사망은 한 사건이다. finding 이 있어도 항목마다 「판정자 부재」
+  # 보류를 쌓지 않는다. 전에는 그 보류가 `findings-lost` 를 켜서 열거 순서상 먼저
+  # 나갔다. finding 이 살아 있으므로 판정은 defect 이고, 사유 목록에는 angle-absent
+  # 만 있어야 한다.
+  local T; T=$(mktemp -d)
+  cat > "$T/f.yaml" <<'YAML'
+- agent: scout
+  file: a.py
+  line: 3
+  severity: IMPORTANT
+  confidence: 8
+  summary: "x"
+YAML
+  local out
+  out=$(python3 "$SYNTH" --adversarial "$T/gone.yaml" --findings "$T/f.yaml" --emit-verdict)
+  assert_grep     "$out" '^verdict: defect$'              "finding 은 살아남는다 (사람 쪽 fail-open)"
+  assert_grep     "$out" '^reasons: \[angle-absent\]$'    "사유 목록은 angle-absent 하나다"
+  assert_not_grep "$out" 'findings-lost'                  "항목 소실로 세지 않는다 (R-K)"
+  rm -rf "$T"
+}
+
+case_synth_adjudicator_given_but_absent_differs_from_not_given() {
+  # 대조 — 판정자 경로를 «안 준» 실행은 사망이 아니다(오늘 동작 그대로). finding 0
+  # 이면 clean 이다. 이 짝이 없으면 「경로 유무와 무관하게 전부 미판정」으로 구현해도
+  # 위 케이스들이 통과한다.
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/f.yaml"
+  local out
+  out=$(python3 "$SYNTH" --findings "$T/f.yaml" --emit-verdict)
+  assert_grep "$out" '^verdict: clean$' "판정자 경로를 안 주면 사망이 아니다 (finding 0 → clean)"
+  rm -rf "$T"
+}
+
+case_synth_effective_angles_show_the_dead_source() {
+  # 계획 R-L — 선언은 filled 인데 판정자가 죽었다. 꼬리는 자기모순이면 안 된다:
+  # 실효 상태 `absent(source-failed)` 가 angles: 블록에 서고, 그 아래 사유가
+  # angle-absent 다. finding 파일이 죽으면 보안 각도가 같은 표시를 받는다.
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/f.yaml"
+  printf 'verdicts: []\n' > "$T/adv.yaml"
+  local f="$T/angles.txt" out
+  write_angles "$f" "security: filled" "adjudication: filled" "different-premise: filled"
+  out=$(python3 "$SYNTH" --adversarial "$T/gone.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f")
+  assert_grep     "$out" '^  adjudication: absent\(source-failed\)$' "판정자 사망이 판정 각도의 실효 상태로 보인다"
+  assert_grep     "$out" '^  security: filled$'                      "살아 있는 축은 선언 그대로다"
+  assert_not_grep "$out" '^  adjudication: filled$'                  "죽은 축을 filled 로 싣지 않는다 (자기모순 없음)"
+  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/gone.yaml" --emit-verdict --angles "$f")
+  assert_grep     "$out" '^  security: absent\(source-failed\)$'     "finding 파일 사망은 보안 각도의 실효 상태다"
+  assert_grep     "$out" '^  adjudication: filled$'                  "판정자는 살아 있다"
+  assert_grep     "$out" '^reason: angle-absent$'                    "사유와 각도 블록이 같은 사실을 말한다"
+  rm -rf "$T"
+}
+
+case_synth_dead_adjudicator_does_not_launder_self_adjudication() {
+  # 계획 R-L 의 경계 — AC10a 는 «선언»에 건다. 판정자가 죽어 실효 상태가
+  # `absent(source-failed)` 로 덮여도, 선언이 자기 판정(`folded_into:<그 실행의 저자>`)
+  # 이면 거부해야 한다. 실효 상태에 걸면 판정자 사망이 Law 2 위반 선언을 «세탁»한다
+  # (계획 모의 실행 변이 6b 가 rc 4 → rc 0 · `verdict: defect` 로 측정한 구멍).
+  local T; T=$(mktemp -d)
+  printf -- '- agent: security-reviewer\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  local f="$T/angles.txt" out rc=0 err
+  write_angles "$f" "security: filled" "adjudication: folded_into:security-reviewer" "different-premise: filled"
+  out=$(python3 "$SYNTH" --adversarial "$T/gone.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  err="$(cat "$T/err")"
+  assert_eq       "$rc"  "4"                   "판정자가 죽어도 자기 판정 선언은 exit 4"
+  assert_eq       "$out" ""                    "실패는 원자적이다 (빈 stdout)"
+  assert_contains "$err" "자기 finding 자기 판정" "원인이 자기 판정이다 (실효 상태로 세탁되지 않는다)"
+  rm -rf "$T"
+}
+
+case_dead_sources_only_for_blocking_angles() {
+  # `with_dead_sources` 는 막는 각도만 받는다 — 다른 전제 각도의 사망은 차단 축이 아니다
+  # (AC12). 합성기는 그 이름을 넘기지 않으므로 이 가드는 모듈 API 수준에서만 잴 수 있다
+  # (모의 실행 변이 8 — 합성기 경로로는 GREEN 이었다).
+  local rc=0
+  python3 -c "
+import sys; sys.path.insert(0, '$PLUGIN_ROOT/scripts'); import angles
+angles.with_dead_sources({'security': 'filled', 'adjudication': 'filled', 'different-premise': 'filled'}, ['different-premise'])
+" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "4" "막는 각도가 아닌 이름을 사망으로 얹으면 exit 4"
+}
+
+case_orchestrator_may_declare_source_failed() {
+  # 계획 R-L — `absent(source-failed)` 는 문법 «안»의 값이다. 오케스트레이터도
+  # 「디스패치했는데 아무것도 안 돌아왔다」를 그 값으로 적을 수 있다.
+  local f="$TMP/sf.txt" out rc=0
+  write_angles "$f" "security: filled" "adjudication: absent(source-failed)" "different-premise: filled"
+  out="$(python3 "$A" --angles "$f")" || rc=$?
+  assert_eq   "$rc" "0" "absent(source-failed) 는 문법 안이다"
+  assert_grep "$out" '^angle_absent: true$' "판정 각도의 source-failed 는 막는다"
+}
+
 case_all_three_filled_is_ok() {
   local f="$TMP/ok.txt" out rc=0
   write_angles "$f" "security: filled" "adjudication: filled" "different-premise: filled"
@@ -444,13 +571,12 @@ case_comment_and_blank_lines_are_skipped() {
   assert_grep "$out" '^  security: filled$' "주석 속 상태는 읽히지 않는다"
 }
 
-case_absent_reasons_are_exactly_two() {
-  # 사유 열거 자체를 핀한다(컨트롤러 ruling T2-a). 위 문법 케이스는 사유를 모듈에서
-  # «도출»해 돌므로, 열거에 사유를 하나 더 넣어도 도출이 함께 늘어 GREEN 이었다 —
-  # 닫힌 열거가 조용히 넓어지는 경로다.
-  local got; got="$(printf '%s\n' "$REASONS" | sort | tr '\n' ' ')"
-  assert_eq "$got" "not-derived not-installed " \
-    "부재 사유는 not-installed · not-derived 둘뿐이다 (T2-a)"
+case_absent_reasons_are_exactly_three() {
+  # 리터럴 핀 — 모듈에서 도출하면 사유를 몰래 넓히는 변이와 함께 늘어난다(PR3 변이 23).
+  # 셋째 `source-failed` 는 계획 R-L: 관측된 주 입력 사망을 선언 위에 얹는 값이다.
+  assert_eq "$(printf '%s\n' "$REASONS" | sort | tr '\n' ' ')" \
+            "not-derived not-installed source-failed " \
+            "부재 사유는 not-installed · not-derived · source-failed 셋뿐이다"
 }
 
 case_blocking_angles_are_exactly_two() {
@@ -593,7 +719,7 @@ case_unknown_angle_is_fail_closed
 case_duplicate_angle_is_fail_closed
 case_malformed_extra_line_is_fail_closed
 case_comment_and_blank_lines_are_skipped
-case_absent_reasons_are_exactly_two
+case_absent_reasons_are_exactly_three
 case_blocking_angles_are_exactly_two
 case_absent_blocking_angle_sets_the_flag
 case_absent_non_blocking_angle_discloses_only
@@ -618,4 +744,12 @@ case_synth_promoted_finding_counts_as_authored
 case_synth_rejected_finding_of_another_reviewer_is_ok
 case_synth_angles_flag_hygiene
 case_synth_primary_source_death_is_angle_absent
+case_synth_missing_adjudicator_doc_is_angle_absent
+case_synth_unusable_adjudicator_doc_is_angle_absent
+case_synth_dead_adjudicator_with_findings_is_not_findings_lost
+case_synth_adjudicator_given_but_absent_differs_from_not_given
+case_synth_effective_angles_show_the_dead_source
+case_synth_dead_adjudicator_does_not_launder_self_adjudication
+case_dead_sources_only_for_blocking_angles
+case_orchestrator_may_declare_source_failed
 finish

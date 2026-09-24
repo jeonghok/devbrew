@@ -36,9 +36,13 @@ FOLDED_PREFIX = "folded_into:"
 # 「그래서 각도 상태에 사유를 싣는다」 · 컨트롤러 ruling T2-a). `absent` 단독은
 # 사유 없는 부재이고, `absent(<사유>)` 는 「감지됐는데 스코프가 안 불렀다」
 # (not-derived) 와 「설치가 안 돼 있어서 못 불렀다」(not-installed) 를 갈라 공시한다.
+# `source-failed` 는 「불렀는데 아무것도 안 돌아왔다」다 — 합성기가 관측한 주 입력
+# 사망을 선언 위에 얹을 때 쓰고(`with_dead_sources`), 오케스트레이터도 같은 값을
+# 쓸 수 있다(PR4a 계획 R-L).
 # 사유가 이 집합 밖이면(오탈자 포함) exit 4 — 닫힌 열거를 임의 토큰으로 몰래
 # 넓히는 경로를 막는다.
-ABSENT_REASONS = ("not-installed", "not-derived")
+SOURCE_FAILED = "source-failed"
+ABSENT_REASONS = ("not-installed", "not-derived", SOURCE_FAILED)
 
 # 엄격 서식 — YAML 을 쓰지 않는다(계획 R-I). 상태 값 안에 콜론이 있어서
 # (`folded_into:security-reviewer`) YAML 은 따옴표·공백에 따라 해석이 갈리고 그
@@ -174,6 +178,26 @@ def is_absent(state):
     물으면 `absent(bogus)` 같은 문법 밖 값도 참을 낼 수 있다.
     """
     return state == ABSENT or state.startswith(_ABSENT_PREFIX)
+
+
+def with_dead_sources(states, dead_angles):
+    """선언된 상태 위에 «관측된» 주 입력 사망을 얹은 실효 상태를 돌려준다.
+
+    선언은 오케스트레이터가 쓴 것이고, 사망은 합성기가 입력을 읽다가 본 것이다.
+    둘이 어긋나면(선언 `filled` · 판정자 문서 없음) 관측이 이긴다 — 그러지 않으면
+    꼬리가 `adjudication: filled` 를 싣고 바로 아래 `reason: angle-absent` 를 싣는
+    자기모순이 된다(PR3 부채).
+
+    입력 `states` 는 바꾸지 않는다 — AC10a 검사는 **선언**에 걸어야 하므로 호출자가
+    둘을 함께 쥔다. 막는 각도가 아닌 이름이 오면 프로그래밍 오류라 exit 4 다
+    (다른 전제 각도의 사망은 차단 축이 아니다 — AC12).
+    """
+    out = dict(states)
+    for a in dead_angles:
+        if a not in BLOCKING_ANGLES:
+            fail4(f"with_dead_sources: '{a}' 는 막는 각도가 아니다")
+        out[a] = f"{ABSENT}({SOURCE_FAILED})"
+    return out
 
 
 def blocks(states):
