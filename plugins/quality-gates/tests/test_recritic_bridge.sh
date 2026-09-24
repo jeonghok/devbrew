@@ -228,6 +228,52 @@ case_colliding_ids_with_matching_verdicts_are_resolved() {
   rm -rf "$T"
 }
 
+case_colliding_ids_with_raise_that_differs_per_severity_are_not_resolved() {
+  # Important (fix round 2) — 라운드 1 의 서명 비교(원문 v 의 verdict·to)는 «변환
+  # 후» 값을 안 봐서, 같은 `raise to` 라도 f 마다 cur_sev 가 달라 실제로는 오르거나
+  # (raise 는 위로만) 무시되는 차이를 놓쳤다. Case A — SUGGESTION+CRITICAL 콜라이드,
+  # 둘 다 `raise to: IMPORTANT`. SUGGESTION 은 오르고 CRITICAL 은 무시돼야 하는데,
+  # 라운드 1은 원문이 같다(둘 다 "raise IMPORTANT")고 보고 오른 쪽의 conv 를 대표로
+  # 골라 CRITICAL 까지 IMPORTANT 로 «내려» 버렸다(그 뒤 dedup 이 흡수까지 했다).
+  local T; T=$(mktemp -d)
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: SUGGESTION\n  confidence: 8\n  summary: "하나"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "둘"\n' > "$T/findings.yaml"
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: raise
+    to: IMPORTANT
+  - f: f2
+    verdict: raise
+    to: IMPORTANT'
+  local out; out=$(synth "$T")
+  assert_contains "$out" '1 CRITICAL' "CRITICAL 은 조용히 내려가지 않고 그대로 남는다"
+  out=$(synth "$T" --emit-verdict)
+  assert_grep     "$out" 'findings-lost'    "실제로 오른 raise 와 무시된 raise 를 같다고 보지 않는다"
+  assert_not_grep "$out" '^verdict: clean$' "clean 이 아니다"
+  rm -rf "$T"
+}
+
+case_colliding_ids_with_raise_ignored_for_one_severity_are_not_resolved() {
+  # Important (fix round 2) Case B — CRITICAL(먼저 f1) + IMPORTANT(f2), 둘 다
+  # `raise to: CRITICAL`. f1 은 이미 그 severity 라 raise 가 무시되고(같은 레벨은
+  # 「위로 오르는」게 아니다) f2 는 실제로 오른다. 첫 judged 키(무시된 confirm)를
+  # 대표로 고르면 IMPORTANT 가 영원히 안 오르고 hold 도 없다.
+  local T; T=$(mktemp -d)
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "하나"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "둘"\n' > "$T/findings.yaml"
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: raise
+    to: CRITICAL
+  - f: f2
+    verdict: raise
+    to: CRITICAL'
+  local out; out=$(synth "$T" --emit-verdict)
+  assert_grep     "$out" 'findings-lost'    "무시된 raise 와 실제로 오른 raise 를 같다고 보지 않는다"
+  assert_not_grep "$out" '^verdict: clean$' "clean 이 아니다"
+  rm -rf "$T"
+}
+
 case_missing_verdict_is_unadjudicated() {
   local T; T=$(mktemp -d); one_finding "$T/findings.yaml"; prep "$T"
   reply "$T/reply.txt" 'verdicts: []'
@@ -363,8 +409,13 @@ added:
     severity: Critical
     summary: "대소문자 섞인 severity"'
   local out; out=$(synth "$T")
-  assert_contains     "$out" '1 CRITICAL' "대소문자 섞인 severity 도 CRITICAL 로 접힌다"
-  assert_not_contains "$out" '미지'       "case-fold 된 값은 미지로 강등되지 않는다"
+  # fix round 2 (Minor, 이빨 없음 정리) — "미지" 는 이 stdout 에 절대 리터럴로
+  # 안 뜬다: 접지 «않아도» severity 는 bridge 에서 UNKNOWN("미지")으로 강제된
+  # 뒤 render() 의 `_norm_sev` 가 그 문자열을 다시 SUGGESTION 으로 접어버린다
+  # (`_norm_sev` 는 어휘 밖 값을 전부 SUGGESTION 으로 낸다) — "not-contains 미지"
+  # 는 접든 안 접든 항상 참이라 대소문자 접기의 증인이 못 된다. 증인은
+  # "1 CRITICAL"(접으면 CRITICAL 로 남고, 안 접으면 SUGGESTION 으로 떨어진다) 뿐이다.
+  assert_contains "$out" '1 CRITICAL' "대소문자 섞인 severity 도 CRITICAL 로 접힌다"
   rm -rf "$T"
 }
 
@@ -392,8 +443,10 @@ added:
     disposition: CRITICAL
     summary: "severity 대신 disposition 으로 돌아왔다"'
   local out; out=$(synth "$T")
-  assert_contains     "$out" '1 CRITICAL' "severity 가 없으면 disposition 으로 대신 잡는다"
-  assert_not_contains "$out" '미지'       "disposition 이 있으면 미지로 떨어지지 않는다"
+  # fix round 2 — 같은 이유로 "not-contains 미지" 를 뺐다(case_added_severity_case_folds
+  # 참조): `_norm_sev` 가 미판별 값을 전부 SUGGESTION 으로 접어 stdout 에 "미지"가
+  # 리터럴로 뜰 일이 없다. 증인은 "1 CRITICAL" 뿐이다.
+  assert_contains "$out" '1 CRITICAL' "severity 가 없으면 disposition 으로 대신 잡는다"
   rm -rf "$T"
 }
 
@@ -544,6 +597,8 @@ case_duplicate_verdicts_for_one_f_are_held
 case_colliding_ids_with_split_verdicts_are_not_resolved
 case_colliding_ids_with_partial_verdicts_are_not_resolved
 case_colliding_ids_with_matching_verdicts_are_resolved
+case_colliding_ids_with_raise_that_differs_per_severity_are_not_resolved
+case_colliding_ids_with_raise_ignored_for_one_severity_are_not_resolved
 case_missing_verdict_is_unadjudicated
 case_same_as_keeps_both
 case_added_becomes_promoted_by_doc_recritic

@@ -193,23 +193,25 @@ def to_adjudication_doc(block_text, mapping, ledger, diff_text=None):
             ledger.hold(fid, "항목 파손: 같은 finding_id 의 일부 f 만 판정됐다 "
                              "(전부 판정돼야 적용된다)")
         elif judged:
-            # 「동일」의 기준은 **verdict 종류(+raise 면 to)** 뿐이다 — reject 의
-            # evidence 문구까지 같으라고 요구하지 않는다(각 f 가 독립적으로 같은
-            # 결론에 도달한 것과, 문구를 토씨까지 맞춘 것은 다른 요구다). 대표로
-            # 쓰는 conv 는 첫 judged 키의 것 — 결정론적이고, 다른 판정 로직(먼저
-            # 온 것이 이긴다)과 같은 규율이다.
+            # fix round 2 — 「동일」의 기준은 **변환 후** 판정(verdict 종류 +
+            # adjusted_severity)이다, reason 만 뺀다. 원문(raw v)의 raise/to 로
+            # 비교하면(라운드 1의 결함) 같은 `to` 를 말해도 f 마다 cur_sev 가
+            # 달라 실제로는 오르거나(더 낮은 severity 였던 f) 무시되는데(이미
+            # 그 severity 이상이던 f, raise 는 위로만) 신호가 같아 보인다 — 무시된
+            # raise 의 conv 는 confirm(severity 불변)인데, 오른 conv 는 raise+
+            # adjusted_severity 다. 원문 신호가 같다고 대표를 골라 적용하면 오른
+            # 쪽의 adjusted_severity 가 무시된 쪽에도 그대로 씌워지거나(내려감),
+            # 무시된 쪽의 confirm 이 오른 쪽에도 씌워져(안 오름) 둘 다 fail-open
+            # 이다. 변환 후 값으로 비교하면 이 차이가 바로 드러난다. reason 은
+            # 제외한다 — 두 reject 가 문구만 달라도 합쳐진다(evidence 텍스트는
+            # `apply_verdicts` 가 어차피 고정 라벨로만 기록해 표에 안 실린다).
+            # 대표로 쓰는 conv 는 첫 judged 키의 것 — 결정론적이다.
             convs = []
-            sigs = []
             for key in judged:
-                v = by_f[key]
-                convs.append(_verdict_for(v, mapping[key]["severity"], fid, ledger))
-                kind = v.get("verdict") if isinstance(v, dict) else None
-                if kind == "raise":
-                    to_raw = v.get("to")
-                    to_folded = to_raw.strip().upper() if isinstance(to_raw, str) else to_raw
-                    sigs.append(("raise", to_folded))
-                else:
-                    sigs.append((kind, None))
+                convs.append(_verdict_for(by_f[key], mapping[key]["severity"], fid, ledger))
+            sigs = []
+            for conv in convs:
+                sigs.append((conv.get("verdict"), conv.get("adjusted_severity")))
             same = True
             for s in sigs[1:]:
                 if s != sigs[0]:
