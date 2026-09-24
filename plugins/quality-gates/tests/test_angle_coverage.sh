@@ -559,6 +559,18 @@ case_synth_finding_without_agent_is_rejected_under_angles() {
   assert_eq           "$rc"  "4"     "agent: null 도 --angles 아래서 exit 4 (missing_agent 로 센다)"
   assert_contains     "$err" "AC10a" "원인이 AC10a 신원 계약이다 (agent: null)"
   assert_not_contains "$err" "'None'" "None 을 문법 밖 저자로 잘못 나열하지 않는다"
+  # 재비판 라운드 2 — 위 가드는 «agent 도 None 인» sources 의 None 만 눌러야 한다.
+  # agent 가 문법 안(security-reviewer)인데 리뷰어가 `sources: [null]` 을 직접
+  # 적으면 그 None 은 dedup 파생물이 아니라 비신뢰 필드 그 자체다(R-M) — 문법 밖
+  # 저자로 여전히 막아야 한다. 이전 가드(`if s is not None`)는 이 경우도 조용히
+  # 통과시켰다(rc 0 + verdict: defect, 재비판이 측정).
+  printf -- '- agent: security-reviewer\n  sources: [null]\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  local out2; rc=0
+  out2=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  err="$(cat "$T/err")"
+  assert_eq       "$rc"   "4"     "agent 는 문법 안인데 sources: [null] 이면 여전히 exit 4"
+  assert_eq       "$out2" ""      "실패는 원자적이다 (sources: [null])"
+  assert_contains "$err"  "AC10a" "원인이 AC10a 신원 계약이다 (sources: [null])"
   rm -rf "$T"
 }
 

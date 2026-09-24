@@ -758,14 +758,20 @@ def main():
                     if not isinstance(srcs, (list, tuple)):
                         srcs = [srcs]
                     for s in srcs:
+                        # 재비판 라운드 2 — 이전 가드(`if s is not None`)는 신원
+                        # 계약을 fail-open 했다: 리뷰어가 명시적으로 적은
+                        # `sources: [null]` 도 조용히 건너뛰었다. 이 가드가 억눌러야
+                        # 하는 것은 «dedup() 이 agent 에서 파생시킨 None» 뿐이다 —
                         # dedup() 은 그룹(단일 항목 그룹 포함)마다 `sources` 를
-                        # `agent` 에서 다시 만든다 — `agent: null` 이 dedup 뒤
-                        # `sources: [None]` 으로도 남는다. 위와 같은 값을 이미 위
-                        # `agent` 검사가 missing_agent 로 셌으니, 여기서 또 `str(None)`
-                        # == 'None' 을 문법 밖 저자로 세면 이중으로 잘못 판정한다.
+                        # `agent` 에서 다시 만들므로(`agent: null` → `sources:
+                        # [None]`), 그 None 은 **agent 도 None 일 때만** 나온다(위
+                        # `a` 검사가 이미 missing_agent 로 셌다). 리뷰어가 적은
+                        # `sources: [null]` 은 agent 가 다른 값이라 이 조건에
+                        # 걸리지 않고 `str(None)` == 'None' 으로 흘러 문법 밖
+                        # 저자가 된다(R-M — 비신뢰 필드는 그대로 검사한다).
                         # 조건 블록으로 쓴다(continue 아님) — 버리는 분기는 회계
                         # 배선을 요구한다(shared/tests/test_adjudication_wiring.sh).
-                        if s is not None:
+                        if not (s is None and a is None):
                             s = str(s)
                             if s and s != "?":
                                 authors.add(s)
