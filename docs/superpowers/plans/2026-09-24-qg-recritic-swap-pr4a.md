@@ -6,7 +6,7 @@
 
 **Architecture:** 새 책임은 새 모듈로 간다 — `scripts/recritic_bridge.py` 가 익명화(`f<n>` ↔ `finding_id`)와 재비판 블록 → 판정자 문서 변환을 갖고, 합성기는 `--recritic` 진입 한 벌로 그것을 **같은 프로세스·같은 원장**에서 부른다. 판정자 문서의 사망은 합성기의 한 자리(`load_yaml_doc` · 브리지의 `load_recritic`)에서 **주 입력 실패**로 확정되고, 그 사실은 각도 상태 위에 `absent(source-failed)` 로 얹혀 꼬리가 자기모순이 되지 않는다. 사본 집합 = 디스패치 집합(AC22)은 기존 `test_dispatch_disposition.sh` 에 기대지 않는 새 ∀ 락이 진다.
 
-**Tech Stack:** Python 3.12+ (표준 라이브러리 + PyYAML — 합성기가 이미 쓴다) · bash 3.2 호환 회귀 락 · `shared/tests/assert.sh`
+**Tech Stack:** Python 3.9+ (시스템 `python3` — 3.10+ 문법을 쓰지 않는다. 표준 라이브러리 + PyYAML — 합성기가 이미 쓴다) · bash 3.2 호환 회귀 락 · `shared/tests/assert.sh`
 
 **Spec:** `docs/superpowers/specs/2026-09-21-qg-target-derived-judgment-design.md` — §6.3.3(재비판 빈 입력) · §6.3.4(diff 슬롯 · 변환 계층 · AC22 범위) · §6.3.5(처분 회계의 기대값 앵커) · §6.4.3(주 판정자 사망 = `angle-absent`) · §11(AC17 · AC22) · §12(`adversarial.md` 제거 · qg 사본 하나) · §13(mutation) · §16(4a · 4b 분할 재결정)
 
@@ -24,7 +24,8 @@
 - **fail4 계약은 원자적이다** — 실패 경로에서 stdout 에 아무것도 쓰지 않는다. 판정 «계산»은 본 보고서를 쓰기 **전**에 끝낸다(PR2 Ruling T5-b).
 - **exit 코드 셋** — `0` 정상 · `2` 잘못된 **호출** · `4` 실패한 **판정**. 파이썬 traceback(exit 1)은 계약 위반이다.
 - **리뷰어가 준 필드는 불신한다**(PR3 T6-b). `agent` · `sources` · `f` · `to` · `same_as` 는 전부 비신뢰 입력이다.
-- **`recritic_bridge.py` 에는 컴프리헨션을 쓰지 않는다** — `shared/tests/test_adjudication_wiring.sh` 의 `COMP_BASELINE=40` 은 회귀 천장이다. 이 파일은 `adjudication` 을 import 하므로 L1 판정기(`tools/adjudication/check_wiring.py`)의 모집단에 든다 — `for` 안의 버리는 분기(`continue`·`break`·`return`)는 처분 호출을 가져야 하고, 처분 앵커가 없으므로 `TERMINAL_CONSUMERS` 에 사유와 함께 등재한다(Task 4 Step 6).
+- **`recritic_bridge.py` 는 `adjudication` 을 import 하지 않는다 — 원장은 호출자(합성기)가 인자로 넘긴다.** import 하면 `check_wiring.derive_consumers()` 가 그 파일을 회계 소비자로 세고, `shared/tests/test_adjudication_consumed.sh` 가 「소비자의 폐포가 여덟 카운트를 전부 읽는다」를 요구해 RED 다 — 그 락에는 면제 장치가 없다(계획 모의 실행 A2 의 측정). 대가: 브리지는 L1 판정기의 모집단 밖이다. 그래서 **브리지의 `for` 안에는 버리는 분기(`continue`·`break`·`return`)를 두지 않는다** — 조건 블록으로 쓴다. 회계의 그물은 `test_recritic_bridge.sh` 의 행동 단언이다.
+- **`recritic_bridge.py` 에는 컴프리헨션을 쓰지 않는다** — 같은 규율을 합성기 쪽과 맞춘다(`shared/tests/test_adjudication_wiring.sh` 의 `COMP_BASELINE=40` 은 합성기의 회귀 천장이다).
 - **선재 RED 기준선은 rc 가 아니라 «실패 파일 이름 + 실패 줄 수»로 잡는다**(§13). 앵커는 `^[[:space:]]*✗` 다(BSD `grep -E` 는 `\s` 를 오류 없이 0건으로 낸다).
 - **버전 번호는 브랜치에서 정하지 않는다** — 머지 직전에 `origin/main` 을 다시 보고 정한다.
 - **최신화는 merge, rebase 금지.** 세션은 워크트리 격리 — 메인 체크아웃으로 `cd` 금지, bare `git stash` 금지.
@@ -214,6 +215,8 @@ Task 1 이 코드로 확증하고, 없으면 **BLOCKED** 로 보고한다.
 | `plugins/quality-gates/agents/security-reviewer.md` | description 의 `adversarial.md` 인용 → 자기 `## Output format` |
 | `plugins/quality-gates/README.md` · `commands/qg.md` | `adversarial` → 재비판(doc-recritic) |
 | `plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh` · `tests/test_worktree.sh` · `tests/test_codex_dispatch_invariant.sh` · `tests/test_agent_model_mutation.sh` · `tests/harness/agent_stub.py` · (Task 1 인벤토리가 더 찾는 자리) | `adversarial` 참조 이주 |
+| `shared/tests/fixtures/adjudication/names_ok.md` | 픽스처의 실재 이름 `quality-gates:adversarial` → `quality-gates:doc-recritic` (`test_dispatch_name_defined.sh` 의 `fx_ok` 가 실제 리포 정의와 대조한다) |
+| `tools/adjudication/check_slots.py` | `EXEMPT_SLOTS` 의 adversarial 항목 제거 + `EXEMPT_SLOTS_BASELINE` 하나 내림 |
 | `plugins/quality-gates/CHANGELOG.md` · `.claude-plugin/plugin.json` | bump |
 
 **제거**
@@ -285,7 +288,9 @@ for f in plugins/quality-gates/tests/*.sh plugins/quality-gates/tests/harness/*.
          shared/tests/*.sh plugins/spec-distill/tests/*.sh; do
   [ -f "$f" ] || continue
   o="$(PYTHONDONTWRITEBYTECODE=1 bash "$f" 2>&1)"; rc=$?
-  n="$(printf '%s\n' "$o" | grep -cE '^[[:space:]]*✗' || true)"
+  # 실패 줄 앵커는 둘이다 — assert.sh 계열의 `✗` 와 하네스(test_skill_orchestration_behavior.sh
+  # 등)의 `FAIL:`. `✗` 만 세면 `FAIL:` 을 쓰는 락 안의 새 실패가 원리적으로 안 보인다(모의 실행 A6).
+  n="$(printf '%s\n' "$o" | grep -cE '^[[:space:]]*✗|^FAIL:' || true)"
   printf '%s\t%s\t%s\n' "$f" "$rc" "$n" >> "$OUT"
 done
 wc -l < "$OUT"
@@ -299,7 +304,7 @@ cd "$(git rev-parse --show-toplevel)"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/quality-gates/tests -p "test_*.py" 2>&1 | tail -3
 ```
 
-**보고서에 적는 것** — 총 행 수, rc≠0 또는 ✗≠0 인 행 전부(경로·rc·줄 수). 앞 PR 의 숫자를 베끼지 않는다 — 측정이다. (참고로 PR3 종료 시점에는 셋이었다: qg `test_codex_backward_compat.sh` 1/0 · qg `test_runner_adapters.sh` 1/1 · spec-distill `test_no_write_matcher_hooks_repo.sh` 1/1. 다르면 다르다고 적는다.)
+**보고서에 적는 것** — 총 행 수, rc≠0 또는 ✗≠0 인 행 전부(경로·rc·줄 수). 앞 PR 의 숫자를 베끼지 않는다 — 측정이다. (참고: PR3 종료 시점의 기록은 셋이었다 — qg `test_codex_backward_compat.sh` 1/0 · qg `test_runner_adapters.sh` 1/1 · spec-distill `test_no_write_matcher_hooks_repo.sh` 1/1. 그러나 그 기록은 `plugins/quality-gates/tests/harness/` 를 돌지 않았고 `✗` 만 셌다. 계획 모의 실행이 base 57fe77cc 에서 **넷째**를 쟀다: `harness/test_skill_orchestration_behavior.sh` rc 1 · `FAIL:` 2 줄(`iter cap near Review gate AskUserQuestion (… distance 280 > 160)` · `R1b→R8 unclaimed 집행 사슬`). 다르면 다르다고 적는다. **하네스의 `FAIL:` 줄 이름도 기록한다** — Task 6 이 이 파일을 가장 많이 고치므로, 종료 시점의 `FAIL:` 집합이 착수 시점의 부분집합인지를 이름으로 대조한다.)
 
 - [ ] **Step 4: `adversarial` 참조 인벤토리 — 식별자가 아니라 개념 별칭으로**
 
@@ -459,6 +464,35 @@ case_synth_effective_angles_show_the_dead_source() {
   rm -rf "$T"
 }
 
+case_synth_dead_adjudicator_does_not_launder_self_adjudication() {
+  # 계획 R-L 의 경계 — AC10a 는 «선언»에 건다. 판정자가 죽어 실효 상태가
+  # `absent(source-failed)` 로 덮여도, 선언이 자기 판정(`folded_into:<그 실행의 저자>`)
+  # 이면 거부해야 한다. 실효 상태에 걸면 판정자 사망이 Law 2 위반 선언을 «세탁»한다
+  # (계획 모의 실행 변이 6b 가 rc 4 → rc 0 · `verdict: defect` 로 측정한 구멍).
+  local T; T=$(mktemp -d)
+  printf -- '- agent: security-reviewer\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  local f="$T/angles.txt" out rc=0 err
+  write_angles "$f" "security: filled" "adjudication: folded_into:security-reviewer" "different-premise: filled"
+  out=$(python3 "$SYNTH" --adversarial "$T/gone.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  err="$(cat "$T/err")"
+  assert_eq       "$rc"  "4"                   "판정자가 죽어도 자기 판정 선언은 exit 4"
+  assert_eq       "$out" ""                    "실패는 원자적이다 (빈 stdout)"
+  assert_contains "$err" "자기 finding 자기 판정" "원인이 자기 판정이다 (실효 상태로 세탁되지 않는다)"
+  rm -rf "$T"
+}
+
+case_dead_sources_only_for_blocking_angles() {
+  # `with_dead_sources` 는 막는 각도만 받는다 — 다른 전제 각도의 사망은 차단 축이 아니다
+  # (AC12). 합성기는 그 이름을 넘기지 않으므로 이 가드는 모듈 API 수준에서만 잴 수 있다
+  # (모의 실행 변이 8 — 합성기 경로로는 GREEN 이었다).
+  local rc=0
+  python3 -c "
+import sys; sys.path.insert(0, '$PLUGIN_ROOT/scripts'); import angles
+angles.with_dead_sources({'security': 'filled', 'adjudication': 'filled', 'different-premise': 'filled'}, ['different-premise'])
+" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "4" "막는 각도가 아닌 이름을 사망으로 얹으면 exit 4"
+}
+
 case_orchestrator_may_declare_source_failed() {
   # 계획 R-L — `absent(source-failed)` 는 문법 «안»의 값이다. 오케스트레이터도
   # 「디스패치했는데 아무것도 안 돌아왔다」를 그 값으로 적을 수 있다.
@@ -470,7 +504,7 @@ case_orchestrator_may_declare_source_failed() {
 }
 ```
 
-`case_absent_reasons_are_exactly_three` 는 파일 끝 호출 목록에서 옛 이름 자리에, 새 케이스 여섯은 `case_synth_primary_source_death_is_angle_absent` 줄 뒤에 둔다.
+`case_absent_reasons_are_exactly_three` 는 파일 끝 호출 목록에서 옛 이름 자리에, 새 케이스 여덟은 `case_synth_primary_source_death_is_angle_absent` 줄 뒤에 둔다.
 
 - [ ] **Step 2: 돌려서 RED 를 본다**
 
@@ -479,7 +513,7 @@ cd "$(git rev-parse --show-toplevel)"
 PYTHONDONTWRITEBYTECODE=1 bash plugins/quality-gates/tests/test_angle_coverage.sh 2>&1 | grep -E '✗|Total'
 ```
 
-**기대** — RED. 적어도: `부재 사유는 … 셋뿐이다` · `판정자 문서가 없으면 clean 이 아니다` · 네 형제의 rc 또는 angle-absent · `사유 목록은 angle-absent 하나다` · `판정자 사망이 판정 각도의 실효 상태로 보인다` · `absent(source-failed) 는 문법 안이다`. `판정자 경로를 안 주면 사망이 아니다` 는 **이미 GREEN** 이어야 한다(대조) — RED 면 멈추고 보고한다.
+**기대** — RED. 적어도: `부재 사유는 … 셋뿐이다` · `판정자 문서가 없으면 clean 이 아니다` · 네 형제의 rc 또는 angle-absent · `사유 목록은 angle-absent 하나다` · `판정자 사망이 판정 각도의 실효 상태로 보인다` · `absent(source-failed) 는 문법 안이다`. `판정자 경로를 안 주면 사망이 아니다` 는 **이미 GREEN** 이어야 한다(대조) — RED 면 멈추고 보고한다. `case_synth_dead_adjudicator_does_not_launder_self_adjudication` 도 **이미 GREEN** 이다(오늘 코드는 실효 상태가 없어 선언에 건다) — 이 케이스는 Step 5 의 순서(AC10a 를 `with_dead_sources` «앞»에서 선언에 건다)를 지키는 회귀 가드다. `case_dead_sources_only_for_blocking_angles` 는 함수가 없어 RED(`AttributeError` → rc 1)다.
 
 - [ ] **Step 3: `angles.py` 를 고친다**
 
@@ -926,6 +960,8 @@ bash plugins/quality-gates/tests/test_angle_coverage.sh 2>&1 | grep -E '✗|Tota
 bash plugins/quality-gates/tests/test_verdict_vocabulary.sh 2>&1 | tail -1
 ```
 
+**`sources` 쪽 문법 밖 값(모의 실행 A1).** 기존 `case_synth_reviewer_sources_do_not_displace_agent` 는 `for srcs in '[someone-else]' '{a: 1}'` 두 값으로 돈다. 새 저자 루프는 리스트 아닌 `sources` 를 `[srcs]` 로 감싸 `str()` 하므로 `"{'a': 1}"` 이 저자 집합에 들어가고, 그것은 문법 밖이라 **신원 계약이 먼저** exit 4 를 낸다 — rc 4 · `AC10a` 단언은 GREEN 이지만 그 iteration 이 재던 것(`sources` 가 `agent` 를 가리지 않는다)은 조용히 사라진다. 처리: 루프 값을 `'[someone-else]' 'someone-else'`(문법 안 스칼라 — 리스트 아닌 참 값의 축은 유지)로 바꾸고, `{a: 1}` 모양은 `case_synth_author_identity_is_grammar_checked` 의 이름 목록에 더한다(`printf` 로 `sources: {a: 1}` 을 쓰는 한 줄 변형 — 그 케이스는 `agent: security-reviewer` + `sources: {a: 1}` 에서 exit 4 · `AC10a` · 문법 밖 저자 메시지를 단언한다).
+
 **기대** — `Fail: 0` 둘. `test_angle_coverage.sh` 의 **기존** AC10a 케이스들(PR3 가 쓴 것)의 픽스처가 `agent:` 없는 finding 이나 문법 밖 이름을 `--angles` 와 함께 쓰고 있으면 이제 exit 4 다 — 그 픽스처를 문법 안 이름으로 고치되, 고친 케이스가 원래 재던 것(자기 판정 · 억제분 · 기각분 · sources · 승격분)을 **여전히** 재는지 확인한다(원인 단언 `AC10a` 가 **자기 판정** 메시지에서 오는지 — 신원 메시지에서도 `AC10a` 가 나오므로, 자기 판정 케이스는 stderr 에 `자기 finding 자기 판정` 문구가 있는지를 추가로 단언한다).
 
 - [ ] **Step 6: 면제 키 재앵커 (C4) · 커밋**
@@ -950,7 +986,7 @@ Co-Authored-By: <이 커밋을 쓴 실제 모델> <noreply@anthropic.com>"
 - Create: `plugins/quality-gates/scripts/recritic_bridge.py`
 - Create: `plugins/quality-gates/tests/test_recritic_bridge.sh` (모드 100755)
 - Modify: `plugins/quality-gates/scripts/synthesize_findings.py` (`--recritic` 세 플래그 · `promote_new_findings(author=)` · `render(recritic_zero=)` · 모듈 docstring)
-- Modify: `tools/adjudication/check_wiring.py` (면제 키 — 밀렸을 때만 · `TERMINAL_CONSUMERS` 에 브리지 등재)
+- Modify: `tools/adjudication/check_wiring.py` (면제 키 — 밀렸을 때만)
 
 **Interfaces:**
 - Consumes: Task 2 의 `load_findings(path, ledger) -> (list, dropped, dead)` · `apply_verdicts(..., adjudicator_dead=)` 의 `raise` 분기 · `_normalize_identity` · `_norm_sev` · `finding_id`
@@ -1238,6 +1274,32 @@ added: []'
   rm -rf "$T"
 }
 
+case_recritic_zero_not_claimed_when_added_is_suppressed_or_broken() {
+  # AC17 의 음의 짝 — 재비판자가 `added` 를 냈다면, 그것이 억제되거나(conf ≤ 4 비-CRITICAL)
+  # 파손돼 표에 안 실려도 「재비판 0」이 아니다. 모의 실행 변이 20(`not new_raw` 항 제거)이
+  # GREEN 이었다: kept > 0 인 케이스만 있어서 빈 분기를 태우지 못했다.
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/findings.yaml"; prep "$T"
+  reply "$T/reply.txt" 'verdicts: []
+added:
+  - file: lib.py
+    line: 4
+    severity: SUGGESTION
+    confidence: 3
+    summary: "약한 신규 발견"'
+  local out; out=$(synth "$T")
+  assert_contains     "$out" 'No high-confidence findings. 1 low-confidence' "억제된 added 가 억제로 세어진다 (전제)"
+  assert_not_contains "$out" '탐지 0 · 재비판 0'                           "억제된 added 가 있으면 재비판 0 이 아니다"
+  reply "$T/reply.txt" 'verdicts: []
+added:
+  - file: lib.py
+    severity: IMPORTANT'
+  out=$(synth "$T" 2>/dev/null)
+  assert_contains     "$out" 'dropped as malformed'   "summary 없는 added 는 파손으로 세어진다 (전제)"
+  assert_not_contains "$out" '탐지 0 · 재비판 0'      "파손된 added 가 있어도 재비판 0 이 아니다"
+  rm -rf "$T"
+}
+
 case_dead_recritic_is_not_clean() {
   # 부채 A 의 재비판 경로판 — 응답 파일 없음 · 펜스 없음 · YAML 파손 · 매핑 파일 없음.
   local T; T=$(mktemp -d)
@@ -1343,6 +1405,7 @@ case_same_as_keeps_both
 case_added_becomes_promoted_by_doc_recritic
 case_added_file_derivation_is_single_file_only
 case_recritic_zero_is_stated
+case_recritic_zero_not_claimed_when_added_is_suppressed_or_broken
 case_dead_recritic_is_not_clean
 case_truncated_block_is_dead_adjudicator
 case_last_block_wins
@@ -1366,7 +1429,7 @@ bash -n plugins/quality-gates/tests/test_recritic_bridge.sh && echo "syntax ok"
 PYTHONDONTWRITEBYTECODE=1 bash plugins/quality-gates/tests/test_recritic_bridge.sh 2>&1 | tail -5
 ```
 
-**기대** — 모듈이 없어 거의 전부 RED. `case_recritic_zero_is_stated` 의 대조(「재비판 경로가 아니면 그 줄을 싣지 않는다」)는 GREEN 이어야 한다.
+**기대** — 모듈이 없어 대부분 RED. 모의 실행에서 63 건 중 13 건이 GREEN 이었다: `case_flag_hygiene` 다섯은 **argparse 가 모르는 플래그를 exit 2 로 거부해서 공허하게** GREEN 이고(구현 뒤에는 명시 검사가 이빨을 갖는다 — Task 7 의 변이 28 이 그것을 잰다), 부정 단언 여섯과 원자성 하나, 그리고 `case_recritic_zero_is_stated` 의 대조(「재비판 경로가 아니면 그 줄을 싣지 않는다」)다. 그 밖의 GREEN 은 이유를 적는다.
 
 - [ ] **Step 3: `recritic_bridge.py` 를 쓴다**
 
@@ -1398,7 +1461,9 @@ import sys
 
 import yaml
 
-from adjudication import Ledger
+# `adjudication` 을 import 하지 않는다 — 원장은 호출자(합성기)가 넘긴다(Global Constraints ·
+# 모의 실행 A2). 그래서 이 파일의 `for` 안에는 버리는 분기를 두지 않는다: L1 판정기가 이
+# 파일을 안 보므로 처분 누락을 잡을 기계가 없다. 조건 블록으로 쓴다.
 
 ADJUDICATOR = "doc-recritic"          # 승격 저자 = 재비판자 agent 의 frontmatter name:
 BLOCK = "docreview-recritic"
@@ -1592,7 +1657,7 @@ def load_recritic(recritic_path, map_path, diff_path, ledger):
 
 def cmd_prepare(a):
     from synthesize_findings import load_findings
-    findings, _dropped, dead = load_findings(a.findings, ledger=Ledger())
+    findings, _dropped, dead = load_findings(a.findings, ledger=None)
     if dead:
         print(f"recritic_bridge.py: finding 파일을 읽지 못했다: {a.findings}", file=sys.stderr)
         return 4
@@ -1629,7 +1694,7 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-**컴프리헨션 0 · 버리는 분기의 처분.** 위 코드에는 컴프리헨션이 없다(`_DIFF_FILE.findall` 결과를 `for` 로 돈다). `to_adjudication_doc` 의 `return` 들은 전부 `_dead()` 를 거쳐 `source_failed` 를 부른다. `check_wiring.py` 가 `return _dead(...)` 를 처분 호출로 인정하지 않으면(처분 호출이 헬퍼 안에 있다) — **헬퍼를 풀어 각 분기에서 `ledger.source_failed(...)` 를 직접 부른다.** 면제를 추가하지 않는다. Step 6 이 그것을 잰다.
+**컴프리헨션 0 · `for` 안 버리는 분기 0.** 위 코드에는 컴프리헨션이 없고(`_DIFF_FILE.findall` 결과를 `for` 로 돈다), `for` 안에 `continue`·`break`·`return` 이 없다 — 전부 조건 블록이다. 이 파일은 L1 판정기의 모집단 밖이라(Global Constraints) 그 규율을 지키는 것은 이 코드 자신과 `test_recritic_bridge.sh` 의 행동 단언뿐이다. `to_adjudication_doc` 의 `return` 들은 `for` 밖이고 전부 `_dead()` 를 거쳐 `source_failed` 를 부른다.
 
 - [ ] **Step 4: 합성기에 `--recritic` 을 배선한다**
 
@@ -1767,26 +1832,17 @@ bash plugins/quality-gates/tests/test_angle_coverage.sh 2>&1 | tail -1
 cd "$(git rev-parse --show-toplevel)"
 export PYTHONDONTWRITEBYTECODE=1
 bash shared/tests/test_adjudication_wiring.sh 2>&1 | grep -E '✗|Total|comprehensions|UNWIRED|unwired' | head -20
+bash shared/tests/test_adjudication_consumed.sh 2>&1 | grep -E '✗|UNCONSUMED|Total' | head -10
 for t in test_synthesize_findings.sh test_synthesize_disposition.sh test_synthesize_promoted_findings.sh \
          test_verdict_vocabulary.sh test_skill_drop_notice_consumed.sh test_codex_result_banner.sh; do
   printf '%s: ' "$t"; bash "plugins/quality-gates/tests/$t" 2>&1 | grep -E 'Total|FAIL=' | tail -1
 done
 bash shared/tests/test_no_new_duplication.sh 2>&1 | tail -1
 python3 -m unittest plugins/quality-gates/tests/test_synthesize_findings_adjudication.py 2>&1 | tail -2
+grep -nE '^(from|import) adjudication' plugins/quality-gates/scripts/recritic_bridge.py && echo "브리지가 adjudication 을 import 한다 — Global Constraints 위반" || echo "OK 브리지 import 없음"
 ```
 
-**`TERMINAL_CONSUMERS` 등재.** 브리지는 `adjudication` 을 import 하지만 처분 앵커(`consumer=`)가 없다 — 앵커는 합성기에 있다. 그대로 두면 `test_adjudication_wiring.sh` 의 단언 2(`(IMPORT \ ANCHOR) ⊆ TERMINAL_CONSUMERS`)가 RED 다. `tools/adjudication/check_wiring.py` 의 `TERMINAL_CONSUMERS` 에 한 항목을 더한다(기존 항목의 모양 그대로 — 사유는 C6 번호 + 본문 40자 이상):
-
-```python
-    "plugins/quality-gates/scripts/recritic_bridge.py":
-        "C6(2) — PR4a, 합성기(synthesize_findings.py)가 같은 프로세스에서 import 하는 "
-        "변환 모듈이라 자기 dispatch 자리가 없다 — 처분 앵커는 합성기의 consumer= 에 "
-        "있다. 원장 메서드를 직접 부르므로 L1 모집단에 두어 버리는 분기를 잰다",
-```
-
-앵커 없는 import 를 피하려고 `Ledger` import 를 지우지 **않는다** — 그러면 이 파일이 L1 판정기의 모집단에서 빠져 버리는 분기의 처분 검사가 조용히 꺼진다.
-
-**기대** — 전부 GREEN. `test_adjudication_wiring.sh` 가 `recritic_bridge.py` 의 버리는 분기를 `unwired` 로 보고하면 Step 3 의 지시대로 헬퍼를 풀어 직접 부른다(면제 추가 금지). 컴프리헨션 수가 40 을 넘으면 이 Task 가 더한 것이다 — 루프로 바꾼다. 면제 키는 Task 2 Step 8 과 같은 절차로 재앵커한다.
+**기대** — 전부 GREEN · `OK 브리지 import 없음`. 브리지가 `adjudication` 을 import 하면 `test_adjudication_consumed.sh` 가 `UNCONSUMED …recritic_bridge.py` 로 RED 이고 그 락에는 면제 장치가 없다 — import 를 지운다(`TERMINAL_CONSUMERS` 에 등재하지 않는다: 그 목록은 wiring 락만 면제한다). 컴프리헨션 수가 40 을 넘으면 이 Task 가 합성기에 더한 것이다 — 루프로 바꾼다. 면제 키는 Task 2 Step 8 과 같은 절차로 재앵커한다(모의 실행 실측: Task 2 뒤 410, Task 4 뒤 418 — 번호를 베끼지 말고 다시 잰다).
 
 - [ ] **Step 7: 커밋**
 
@@ -1816,7 +1872,7 @@ Co-Authored-By: <이 커밋을 쓴 실제 모델> <noreply@anthropic.com>"
 
 ```bash
 #!/usr/bin/env bash
-# guards: plugins/*/agents/*.md plugins/*/skills/*/SKILL.md shared/docreview/agents/*.md
+# guards: plugins/*/agents/*.md plugins/*/skills/** plugins/*/commands/** plugins/*/hooks/** plugins/*/scripts/*.js shared/docreview/agents/*.md
 #
 # AC22 (설계 §6.3.4 · §11) — docreview agent 의 **사본 집합과 디스패치 집합이 정확히
 # 일치한다.** 디스패치하는데 사본이 없어도, 사본이 있는데 디스패치하지 않아도 RED.
@@ -1833,7 +1889,12 @@ Co-Authored-By: <이 커밋을 쓴 실제 모델> <noreply@anthropic.com>"
 # 파일 밖 기대값(EXPECTED)과 등호를 함께 둔다. 새 사본을 더하면 이 핀도 고친다 — 의도다.
 set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
-  git ls-files -- 'plugins/*/agents/*.md' 'plugins/*/skills/*/SKILL.md' 'shared/docreview/agents/*.md'
+  # 선언을 되뇌지 않는다 — 검출기(`copyset.py`)가 실제로 여는 파일 선택 규칙과 같은
+  # 경로를 낸다(가드 커버리지 락의 방향 A 가 자기 반복으로 GREEN 이 되지 않게).
+  _R="$(cd "$(dirname "$0")/../.." && pwd)"
+  git -C "$_R" ls-files --cached --others --exclude-standard -- \
+    'plugins/*/agents/*.md' 'plugins/*/skills/**' 'plugins/*/commands/**' \
+    'plugins/*/hooks/**' 'plugins/*/scripts/*.js' 'shared/docreview/agents/*.md'
   exit 0
 fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -1855,8 +1916,13 @@ files = subprocess.run(
 NAME = re.compile(r"^name:\s*(\S+)\s*$", re.M)
 MARK = re.compile(r"^[ \t]*(?:#|//|<!--)[ \t]*copy-of:[ \t]*(\S+)")
 def read(p):
-    with open(os.path.join(root, p), encoding="utf-8") as fh:
-        return fh.read()
+    # 인덱스에는 있는데 워킹트리에서 지워진 파일(`git ls-files --cached`)은 빈 문자열로 —
+    # 죽으면 stdout 이 비어 모든 값이 「비었다」로 오보된다(모의 실행 A3).
+    try:
+        with open(os.path.join(root, p), encoding="utf-8") as fh:
+            return fh.read()
+    except (OSError, UnicodeDecodeError):
+        return ""
 canon = {}
 for f in files:
     if re.fullmatch(r"shared/docreview/agents/[^/]+\.md", f):
@@ -1889,10 +1955,7 @@ if canon:
             re.fullmatch(r"plugins/([^/]+)/scripts/[^/]+\.js", f)
         if not m:
             continue
-        try:
-            text = read(f)
-        except (OSError, UnicodeDecodeError):
-            continue
+        text = read(f)
         for line in text.splitlines():
             for dm in D.finditer(line):
                 dispatch.add((dm.group(1) or m.group(1), dm.group(2)))
@@ -1911,7 +1974,9 @@ scan() { python3 "$TMPD/copyset.py" "$1"; }
 kv() { printf '%s\n' "$2" | sed -n "s/^$1=//p"; }
 
 note "── 실제 리포"
-OUT="$(scan "$REPO_ROOT")"
+OUT="$(scan "$REPO_ROOT")"; SRC=$?
+# 검출기가 죽으면 아래 빈 값 단언이 전부 거짓으로 GREEN/RED 한다 — rc 를 먼저 단언한다.
+assert_eq "$SRC" "0" "검출기가 정상 종료한다"
 printf '%s\n' "$OUT" | sed 's/^/      /'
 CANON="$(kv CANON "$OUT")"; COPIES="$(kv COPIES "$OUT")"; DISPATCH="$(kv DISPATCH "$OUT")"
 [ -n "$CANON" ]    && ok "docreview 정본이 도출된다"      || no "docreview 정본을 도출하지 못했다 — 아래는 빈 코퍼스다"
@@ -1981,7 +2046,7 @@ PYTHONDONTWRITEBYTECODE=1 bash shared/tests/test_docreview_copy_set.sh 2>&1 | ta
 PYTHONDONTWRITEBYTECODE=1 bash plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh 2>&1 | tail -3
 ```
 
-**기대** — `Fail: 0`. 실제 리포 `COPIES` · `DISPATCH` 가 둘 다 spec-distill 셋. 픽스처 다섯 줄 전부 GREEN. 가드 커버리지 락 GREEN(`# guards:` 의 글롭 셋이 각각 `--emit-scanned` 목록의 하나 이상을 덮는다).
+**기대** — `Fail: 0`. 실제 리포 `COPIES` · `DISPATCH` 가 둘 다 spec-distill 셋. 픽스처 다섯 줄 전부 GREEN. 가드 커버리지 락 GREEN(`# guards:` 의 글롭 여섯이 각각 `--emit-scanned` 목록의 하나 이상을 덮고, 그 목록의 모든 경로가 글롭 하나 이상에 든다).
 
 **실제 리포에서 `COPY_NOT_DISPATCHED` 나 `DISPATCHED_NOT_COPIED` 가 비지 않으면** — 그것은 이 락이 찾은 **실재 결함**이다. 락을 고쳐 GREEN 으로 만들지 말고 멈춰 보고한다.
 
@@ -1990,14 +2055,15 @@ PYTHONDONTWRITEBYTECODE=1 bash plugins/quality-gates/tests/test_guards_coverage_
 ```bash
 cd "$(git rev-parse --show-toplevel)"
 export PYTHONDONTWRITEBYTECODE=1
-rm plugins/spec-distill/agents/doc-critic-web.md
-git diff HEAD --stat -- plugins/spec-distill/agents/     # blast radius ≠ 0 확인
-bash shared/tests/test_docreview_copy_set.sh >/dev/null 2>&1; echo "사본 제거 변이 rc=$? (0 이면 이빨 없음)"
+git rm -q plugins/spec-distill/agents/doc-critic-web.md     # 인덱스에서도 — 워킹트리만 지우면 다른 경로로 RED 가 난다
+git diff HEAD --stat -- plugins/spec-distill/agents/        # blast radius ≠ 0 확인
+out="$(bash shared/tests/test_docreview_copy_set.sh 2>&1)"; echo "사본 제거 변이 rc=$? (0 이면 이빨 없음)"
+printf '%s\n' "$out" | grep -E 'DISPATCHED_NOT_COPIED=|Traceback|✗'
 git checkout HEAD -- plugins/spec-distill/agents/doc-critic-web.md
-git status --porcelain plugins/spec-distill/agents/     # 비어야 한다
+git status --porcelain plugins/spec-distill/agents/        # 비어야 한다 (인덱스와 워킹트리 둘 다 복원)
 ```
 
-**기대** — `rc=1`. 복원 뒤 `git status` 가 비어 있다. **이 변이는 커밋하지 않는다.**
+**기대** — `rc=1` **그리고** `DISPATCHED_NOT_COPIED=spec-distill:doc-critic-web` 줄이 있고 `Traceback` 이 없다. ✗ 는 `디스패치하는데 사본이 없는 것이 없다` · `사본 집합 == 파일 밖 기대값` 둘이다(모의 실행 실측). rc=1 만 보고 판정하지 않는다 — 검출기가 죽어도 rc=1 이다. 복원 뒤 `git status` 가 비어 있다. **이 변이는 커밋하지 않는다.**
 
 - [ ] **Step 4: 커밋**
 
@@ -2208,7 +2274,7 @@ Agent({
 | 같은 파일 | 171 · 174 · 191 · 201 행 | `first_line 'subagent_type.*quality-gates:adversarial'` → `quality-gates:doc-recritic`, 라벨 「Review gate re-critique dispatch」. 주석의 「adversarial dispatch」도. 근접도 상한(160)은 재비판 절이 탐지 뒤로 옮겨 오히려 줄 수 있다 — 실측으로 확인하고, **늘려야 하면** 그 이유를 주석에 적는다 |
 | 같은 파일 | 181 행 `for agent in adversarial test-scope-validator security-reviewer runtime-verifier` | `adversarial` → `doc-recritic` |
 | 같은 파일 | 485 행 R2-AC5 `for p in security-reviewer adversarial` | `security-reviewer` 는 persona 에서, 관문 D 는 **프로필**에서 찾는다: 루프는 `security-reviewer` 하나로 두고, 바로 뒤에 `references/recritic-code-profile.md` 에 `verifier-writable` 이 있는지 보는 단언을 더한다(라벨 「re-critic code profile has the verifier-writable-artifact check (moved from adversarial persona, PR4a R-Q)」) |
-| 같은 파일 | (새 단언) | 재비판 디스패치 펜스에서 30 줄 안에 `recritic-code-profile.md` 가 나오는지 · 재비판 절 본문에 `탐지 결과가 0건이어도 디스패치한다` 가 있는지 · `git show` 와 `format-patch` 를 쓰지 말라는 문장이 있는지(body-unique 문구로 — 머리 글줄로 만족되지 않게) |
+| 같은 파일 | (새 단언) | 재비판 디스패치 줄(`subagent_type: "quality-gates:doc-recritic"`)의 **앞** 30 줄 안에 `recritic-code-profile.md` 가 나오는지(3e 의 `cat` 줄은 디스패치보다 약 16 줄 앞이다 — 「뒤 30 줄」로 구현하면 RED) · 디스패치 펜스에 `<diff>${DIFF}</diff>` 가 있는지(코드 경로는 diff 를 싣는다 — `test_agent_input_slots.sh` 는 diff 가 optional 이라 이것을 못 잰다) · 그 처분 줄이 `fail-closed` 인지(R-R 이 사실이라는 것을 재는 유일한 자리) · 재비판 절 본문에 `탐지 결과가 0건이어도 디스패치한다` 가 있는지 · `git show` 와 `format-patch` 를 쓰지 말라는 문장이 있는지(body-unique 문구로 — 머리 글줄로 만족되지 않게) |
 | `tests/harness/agent_stub.py` | 28 행 docstring 목록 | `adversarial` → `doc-recritic` |
 | `tests/test_worktree.sh` | 144 행 T8 루프(`project_dir` 입력 선언) | `adversarial` 을 **빼기만** 한다 — `doc-recritic` 은 설계상 `project_dir` 슬롯이 없다(3i) |
 | 같은 파일 | 167 행 T5 루프(디스패치 15 줄 안 `project_dir:`) | `adversarial` 을 **빼기만** 한다(같은 이유) |
@@ -2216,6 +2282,10 @@ Agent({
 | `tests/test_agent_model_mutation.sh` | 20 · 21 행 | 두 쌍을 지운다(대상 파일이 사라진다). 이 락의 변이 쌍 수를 단언하는 줄이 있으면 그 기대값을 함께 줄이고 이유를 주석에 적는다 |
 | `scripts/synthesize_findings.py` | docstring·주석의 「adversarial 판정」 | 「판정자 판정」 — **`--adversarial` 플래그 이름과 `promote_new_findings` 의 `author` 기본값은 그대로**(R-N) |
 | `shared/tests/test_docreview_copy_set.sh` | `EXPECTED` | `"quality-gates:doc-recritic spec-distill:doc-critic spec-distill:doc-critic-web spec-distill:doc-recritic"` |
+| `shared/tests/fixtures/adjudication/names_ok.md` | 1 행 「Dispatch `quality-gates:adversarial` for Phase 1.5.」 | 실재 이름으로 — `quality-gates:doc-recritic`. **이 픽스처는 `test_dispatch_name_defined.sh` 의 `fx_ok`(「실재하는 이름을 통과시킨다」)가 실제 리포의 정의 집합과 대조한다** — 그대로 두면 `adversarial.md` 삭제만으로 그 락이 RED 다(모의 실행 A5 에서 측정) |
+| `tools/adjudication/check_slots.py` | 53 행 `EXEMPT_SLOTS` 의 `("quality-gates:adversarial", "phase1_findings")` | 항목을 지우고 `EXEMPT_SLOTS_BASELINE` 을 하나 내린다(모의 실행 실측 5 → 4 — 다시 센다). 이 락은 낡은 면제를 스스로 잡지 않으므로 남겨 두면 없는 agent 의 면제가 조용히 산다 |
+| `plugins/quality-gates/tests/test_synthesize_promoted_findings.sh` | 4 행 머리 주석 「never reads agents/adversarial.md」 | `keep` — 「읽지 않는다」는 부정 진술이라 파일이 사라져도 참이다. 인벤토리에 사유를 적는다 |
+| `shared/tests/assert.sh` · `shared/tests/test_assert_behavior.sh` | 이관 이력 주석(「Gate 2 adversarial confirmed this gap」 · `test_adversarial_model_consistency.sh:39` 인용) | `keep` — 이관 **이력**의 원문 인용이다(리포 메모리: 삭제된 규칙이 거짓 인용을 남긴다 — 그러나 이 주석은 「그 파일에서 옮겨 왔다」는 과거 사실이라 참으로 남는다). 인벤토리에 사유를 적는다 |
 
 - [ ] **Step 5: 지운다 — 같은 커밋**
 
@@ -2232,12 +2302,14 @@ git rm plugins/quality-gates/agents/adversarial.md \
 ```bash
 cd "$(git rev-parse --show-toplevel)"
 git grep -nE 'quality-gates:adversarial|agents/adversarial\.md|test_adversarial_(behavior|persona|model_consistency)' -- \
-  plugins shared tools ':!plugins/quality-gates/CHANGELOG.md' || echo "OK 잔여 0"
+  plugins shared tools ':!plugins/quality-gates/CHANGELOG.md' \
+  ':!plugins/quality-gates/tests/test_synthesize_promoted_findings.sh' \
+  ':!shared/tests/assert.sh' ':!shared/tests/test_assert_behavior.sh' || echo "OK 잔여 0"
 git grep -nwE 'adversarial' -- plugins/quality-gates/skills/quality-pipeline plugins/quality-gates/commands plugins/quality-gates/README.md \
   | grep -v 'artifact-adversarial' | grep -v 'P11'
 ```
 
-**기대** — 첫 명령 `OK 잔여 0`. 둘째 명령의 남은 줄은 전부 인벤토리의 `keep` 행이어야 한다 — 아니면 고친다.
+**기대** — 첫 명령 `OK 잔여 0`(제외한 세 파일은 Step 4 표의 `keep` 행이다 — 제외 목록을 늘려 잔여를 숨기지 않는다: 새 제외는 표에 `keep` 행과 사유가 먼저 있어야 한다). 둘째 명령의 남은 줄은 전부 인벤토리의 `keep` 행이어야 한다 — 아니면 고친다.
 
 - [ ] **Step 7: 닿은 락 전부를 돌린다**
 
@@ -2262,7 +2334,9 @@ bash plugins/quality-gates/scripts/check-allowed-tools-order.sh; echo "allowed-t
 python3 -m unittest discover -s plugins/quality-gates/tests -p "test_*.py" 2>&1 | tail -3
 ```
 
-**기대** — 전부 rc=0 · ✗=0(`test_dispatch_name_defined.sh` 가 없는 이름이면 `MISSING` 이 나와도 된다 — 그 경우 보고서에 적는다). 주의할 자리:
+**기대** — 전부 rc=0 · ✗=0, **단 하네스 `test_skill_orchestration_behavior.sh` 는 예외**: 착수 시점에 이미 rc 1 · `FAIL:` 2 줄이다(Task 1). 이 파일은 `FAIL:` 줄의 **이름 집합**이 착수 시점의 부분집합인지로 판정한다 — 새 `FAIL:` 이름이 하나라도 있으면 회귀다. 선재 FAIL 둘은 이 Task 가 고치지 않는다(범위 밖 — 고쳐지면 보고서에 적는다). 주의할 자리:
+
+- `test_dispatch_name_defined.sh` — `fx_ok` 픽스처(`shared/tests/fixtures/adjudication/names_ok.md`)를 Step 4 대로 고치지 않으면 `실재하는 이름을 통과시킨다` 가 RED 다.
 
 - `test_runtime_contract_invariance.sh` 의 `case_no_new_surfaces` 는 `agents/` 파일 수 **7** 을 단언한다 — `adversarial` 이 빠지고 `doc-recritic` 이 들어와 여전히 7 이다. RED 면 수를 다시 센다.
 - `test_agent_input_slots.sh` 가 `PROBLEM undelivered … doc-recritic` 을 내면 3e 의 펜스가 슬롯 넷 중 하나를 안 싣고 있는 것이다.
@@ -2272,7 +2346,8 @@ python3 -m unittest discover -s plugins/quality-gates/tests -p "test_*.py" 2>&1 
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-git add -A plugins/quality-gates shared/tests/test_docreview_copy_set.sh
+git add -A plugins/quality-gates shared/tests/test_docreview_copy_set.sh \
+  shared/tests/fixtures/adjudication/names_ok.md tools/adjudication/check_slots.py
 git status --porcelain            # 이 Task 밖의 경로가 섞였으면 멈춘다
 git diff --cached --stat | tail -3
 git commit -m "feat(qg): Review gate 판정자를 공유 재비판자로 — adversarial 제거 (§12 같은 커밋)" \
@@ -2296,6 +2371,10 @@ Co-Authored-By: <이 커밋을 쓴 실제 모델> <noreply@anthropic.com>"
 **★ 이 Task 의 계약 — 아래 표의 「기대」는 «가설»이다.** PR3 에서는 RED-기대 행 일곱이 처음에 GREEN 이었고, 변이가 **제품 Law 2 우회 둘**을 찾았다. 관측이 기대와 다르면 그 자리에서 락을 고치고 다시 잰다 — 기대값을 관측에 맞춰 내리지 않는다.
 
 **방법(매 변이).** ① 적용 — 원문 `old` 가 파일에 **정확히 한 번** 나와야 한다(0 회면 적용 거부: blast radius 0) ② `git diff HEAD --stat` ≠ 0 확인 ③ `.py` 면 `python3 -m py_compile`(문법이 깨진 변이는 거짓 RED) ④ 락 묶음을 돌리고 ✗ 줄과 그 문구를 기록 ⑤ `git checkout HEAD -- <경로>` ⑥ `git diff HEAD` 가 빈지 확인. 전 과정 `PYTHONDONTWRITEBYTECODE=1`.
+
+**러너를 파이썬으로 쓰면** 락 출력을 `errors="replace"` 로 읽고 적용→복원을 `try/finally` 로 감싼다. `assert.sh` 의 `head -c 400` 이 한글을 바이트 중간에서 잘라 비-UTF-8 출력을 내고, 엄격 디코딩이 러너를 죽이면 **파일이 변이된 채 남는다**(모의 실행에서 한 번 일어났다). 매 변이 뒤 `git diff HEAD` 확인이 그 마지막 그물이다.
+
+**모의 실행의 사전 측정(참고 — 가설 칸을 대신하지 않는다):** 양성 대조 · 1 · 4 · 5 · 10 · 13 · 15 · 16 · 19 · 21 은 기대대로 RED 였고, 6(6b) · 20 은 GREEN 이라 Task 2 · 4 가 닫는 케이스를 미리 넣었으며, 8 은 도달 불가 가드였다. 실행자는 이 표 전부를 **다시** 잰다 — 코드는 모의 실행의 것이 아니다.
 
 **락 묶음 (py)** — `test_recritic_bridge.sh` · `test_angle_coverage.sh` · `test_verdict_vocabulary.sh` · `test_synthesize_{findings,disposition,promoted_findings}.sh` · `test_skill_drop_notice_consumed.sh` · `shared/tests/test_adjudication_{behavior,consumed,wiring}.sh` · `unittest test_synthesize_findings_adjudication`.
 **락 묶음 (doc)** — `shared/tests/test_docreview_copy_set.sh` · `test_dispatch_disposition.sh` · `test_agent_input_slots.sh` · `test_copy_of_contract.sh` · `harness/test_skill_orchestration_behavior.sh`.
@@ -2329,9 +2408,9 @@ git diff HEAD --stat -- plugins/quality-gates/scripts/recritic_bridge.py
 | 3 | 삭제 | `synthesize_findings.py` | `_read_source` 의 `except` 에서 `UnicodeDecodeError` 제거 | nonutf8 케이스 RED | |
 | 4 | 불일치 | `synthesize_findings.py` | `apply_verdicts(..., adjudicator_dead=adjudicator_dead)` → 인자 생략(R-K 되돌림) | `case_synth_dead_adjudicator_with_findings_is_not_findings_lost` RED | |
 | 5 | 불일치 | `synthesize_findings.py` | `angle_states = _angles.with_dead_sources(...)` → `angle_states = declared` | `case_synth_effective_angles_show_the_dead_source` RED | |
-| 6 | 불일치 | `synthesize_findings.py` | `check_self_adjudication(declared, …)` → `(angle_states, …)` | **GREEN 예상 — 등가 여부를 잰다**(판정자가 죽은 실행에서 folded 선언이 `absent(source-failed)` 로 덮이면 AC10a 가 조용해진다). GREEN 이면 「판정자 사망 + 자기 판정 선언」 케이스를 더해 닫는다 | |
+| 6 | 불일치 | `synthesize_findings.py` | `check_self_adjudication` 호출을 `with_dead_sources` 대입 **뒤**로 옮기고 `angle_states` 를 넘긴다(문면 그대로 인자만 바꾸면 그 줄 시점의 `angle_states` 가 `None` 이라 TypeError 로 거짓 RED — 모의 실행 6a) | `case_synth_dead_adjudicator_does_not_launder_self_adjudication` RED(모의 실행 6b 가 이 케이스 없이 GREEN 이던 **Law 2 구멍** — Task 2 가 케이스를 더해 닫았다) | |
 | 7 | 추가 | `angles.py` | `ABSENT_REASONS` 에 `skipped` 추가 | `case_absent_reasons_are_exactly_three` RED | |
-| 8 | 변형 | `angles.py` | `with_dead_sources` 가 `different-premise` 도 받음(가드 제거) | 직접 잴 케이스 없음 — **구멍 후보**. GREEN 이면 모듈 케이스로 닫는다 | |
+| 8 | 변형 | `angles.py` | `with_dead_sources` 가 `different-premise` 도 받음(가드 제거) | `case_dead_sources_only_for_blocking_angles` RED(합성기 경로로는 도달 불가 가드라 모듈 수준에서만 잰다 — 모의 실행 8) | |
 | 9 | 삭제 | `angles.py` | `check_author_identity` 의 `missing_agent` 조건 제거 | `case_synth_finding_without_agent_is_rejected_under_angles` RED | |
 | 10 | 변형 | `angles.py` | `check_author_identity` 가 `a.lower()` 로 검사(정규화 도입) | `Security-Reviewer` 행 RED | |
 | 11 | 불일치 | `synthesize_findings.py` | `check_author_identity` 호출을 `check_self_adjudication` **뒤**로 | GREEN 예상(둘 다 exit 4) — 원인 단언이 자기 판정 메시지를 기대하는 케이스가 RED 인지 본다 | |
@@ -2343,14 +2422,16 @@ git diff HEAD --stat -- plugins/quality-gates/scripts/recritic_bridge.py
 | 17 | 변형 | `recritic_bridge.py` | `_single_diff_file` 이 여러 파일이면 첫 파일 반환 | 여러 파일 → 미지 단언 RED | |
 | 18 | 변형 | `recritic_bridge.py` | `anonymize` 가 `agent` 를 항목에 남김 | 출처 지움 단언 RED | |
 | 19 | 불일치 | `recritic_bridge.py` | `anonymize` 가 정규화 없이 `finding_id(f)` | `case_identity_parity_with_weird_fields` RED | |
-| 20 | 삭제 | `synthesize_findings.py` | `recritic_zero` 계산에서 `not new_raw` 항 제거 | GREEN 예상 — 「added 가 있는데도 재비판 0 줄」 케이스가 없으면 **구멍**. 더해서 닫는다 | |
+| 20 | 삭제 | `synthesize_findings.py` | `recritic_zero` 계산에서 `not new_raw` 항 제거 | `case_recritic_zero_not_claimed_when_added_is_suppressed_or_broken` RED(모의 실행에서 이 케이스 없이 GREEN 이던 **거짓 진술 구멍** — Task 4 가 케이스를 더해 닫았다) | |
 | 21 | 불일치 | `synthesize_findings.py` | `author=adjudicator` 인자 제거(기본값 adversarial) | `case_added_becomes_promoted_by_doc_recritic` RED | |
 | 22 | 삭제 | `test_docreview_copy_set.sh` 대상 | qg 사본 `agents/doc-recritic.md` 삭제 | `디스패치하는데 사본이 없는 것이 없다` · 핀 RED | |
 | 23 | 불일치 | `SKILL.md` | 재비판 펜스의 `quality-gates:doc-recritic` → `spec-distill:doc-recritic` | AC22 락 `COPY_NOT_DISPATCHED` RED — **기존 `test_dispatch_disposition.sh` 는 GREEN 이어야 한다**(사각지대 재확인, 이 행의 요점) | |
-| 24 | 삭제 | `SKILL.md` | 재비판 펜스의 `<diff>${DIFF}</diff>` 줄 제거 | `test_agent_input_slots.sh` 는 GREEN(diff 는 optional) — **이 PR 의 디스패치 계약(코드 경로는 diff 를 싣는다)을 재는 락이 없으면 구멍**. 하네스 단언으로 닫는다 | |
-| 25 | 변형 | `SKILL.md` | 처분 줄 `fail-closed` → `fail-open` | 어떤 락도 RED 가 아니면 **구멍 후보** — R-R 이 사실이라는 것을 재는 락이 없다. 하네스에 「재비판 처분은 fail-closed」 단언을 더해 닫을지 판단하고 판단을 적는다 | |
+| 24 | 삭제 | `SKILL.md` | 재비판 펜스의 `<diff>${DIFF}</diff>` 줄 제거 | 하네스의 새 단언(Task 6 Step 4 표 — 「디스패치 펜스에 `<diff>` 가 있다」) RED. `test_agent_input_slots.sh` 는 GREEN 이어야 한다(diff 는 optional — 그 락만으로는 못 잰다는 것이 이 행의 요점) | |
+| 25 | 변형 | `SKILL.md` | 처분 줄 `fail-closed` → `fail-open` | 하네스의 새 단언(「재비판 처분은 fail-closed」) RED. `test_dispatch_disposition.sh` 는 GREEN 이어야 한다(두 값 다 닫힌 어휘 안이다) | |
 | 26 | 삭제 | `recritic-code-profile.md` | 관문 D 문단 삭제 | 하네스 R2-AC5 의 프로필 단언 RED | |
 | 27 | 불일치 | 사본 | qg 사본에서 `diff` 슬롯 4 줄 제거 | `test_copy_of_contract.sh` RED | |
+| 28 | 삭제 | `synthesize_findings.py` | `--adversarial` · `--recritic` 배타 검사 블록 제거 | `case_flag_hygiene` 의 「함께 줄 수 없다 (exit 2)」 RED. Task 4 Step 2 에서 이 케이스들은 argparse 가 모르는 플래그를 거부해 **공허하게** GREEN 이었다 — 구현 뒤의 이빨은 이 변이로만 확인된다(모의 실행 A8) | |
+| 29 | 불일치 | `test_docreview_copy_set.sh` | `copyset.py` 의 디스패치 정규식에서 접두 그룹을 뺀다(`(?:([A-Za-z0-9_-]+):)?` 삭제 — 이름만 본다) | 픽스처 `fx-cross` 의 「spec-distill: 접두로 디스패치하면 잡는다」 RED(검출기가 기존 락과 같은 사각지대로 돌아가는지를 잰다) | |
 
 - [ ] **Step 3: 구멍을 닫고 다시 잰다**
 
@@ -2365,7 +2446,7 @@ git diff HEAD --stat -- plugins/quality-gates/scripts/recritic_bridge.py
 
 - [ ] **Step 5: 보고서 · 미러 · 커밋**
 
-`$CLAUDE_JOB_DIR/tmp/pr4a-mutations.md` 에 완성된 표(27 + 2 + 양성 대조)와 구멍마다 한 줄 진단을 쓰고 미러로 복사한다. PR 본문이 표 **자체**를 싣는다(포인터 금지).
+`$CLAUDE_JOB_DIR/tmp/pr4a-mutations.md` 에 완성된 표(29 + 2 + 양성 대조)와 구멍마다 한 줄 진단을 쓰고 미러로 복사한다. PR 본문이 표 **자체**를 싣는다(포인터 금지).
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
@@ -2377,7 +2458,7 @@ git commit -m "test(qg,shared): 변이가 드러낸 락의 구멍을 닫는다" 
 Co-Authored-By: <이 커밋을 쓴 실제 모델> <noreply@anthropic.com>"
 ```
 
-구멍이 0 이면 커밋할 것이 없다 — 보고서에 「27 행 전부 기대대로」를 관측 로그와 함께 적는다. PR3 에서 일곱 행이 거짓이었으므로 0 은 한 번 더 의심할 값이다.
+구멍이 0 이면 커밋할 것이 없다 — 보고서에 「29 행 전부 기대대로」를 관측 로그와 함께 적는다. PR3 에서 일곱 행이 거짓이었으므로 0 은 한 번 더 의심할 값이다.
 
 ---
 
@@ -2407,7 +2488,7 @@ cp "$CLAUDE_JOB_DIR/tmp/pr4a-final.tsv" ~/.claude/sdd-mirror/qg-recritic-swap-pr
 2. `shared/tests/test_docreview_copy_set.sh` **추가**(0/0)
 3. `test_adversarial_persona.sh` · `test_adversarial_model_consistency.sh` **삭제**
 4. (파이썬) `test_adversarial_behavior.py` 가 unittest 목록에서 빠짐
-5. 그 밖의 행은 **rc 와 실패 줄 수가 둘 다 같다**
+5. 그 밖의 행은 **rc 와 실패 줄 수(`✗` + `FAIL:`)가 둘 다 같다** — 하네스 `test_skill_orchestration_behavior.sh` 는 여기에 더해 `FAIL:` 줄의 **이름 집합**이 착수 시점의 부분집합이어야 한다(Task 1 이 적은 이름과 대조)
 
 **rc 가 그대로여도 실패 줄 수가 늘면 회귀다.** 착수 시점에 이미 RED 인 파일(선재 RED)의 세 번째 칸을 본다.
 
@@ -2551,7 +2632,7 @@ PR 제목: `qg 재비판 교체 — adversarial → 공유 재비판자 · 변�
 - **변환 계층의 판정 쪽 효과가 이 PR 에서는 락에서만 참이다.** 오케스트레이터가 `--emit-verdict` 를 안 싣으므로 사람이 보는 것은 본 보고서의 degrade 공시(마커 → Not-clean override)뿐이다. 그 경로는 `case_dead_recritic_is_not_clean` 의 마지막 단언이 잰다. 판정 값 자체는 PR4b 부터 사람에게 보인다.
 - **재비판자는 `<document>` 로 받은 경로의 코드를 스스로 읽는다.** 그 경로 목록이 리뷰 스코프와 어긋나면(오케스트레이터 실수) 재비판자는 다른 코드를 보고 판정한다 — 이 PR 에 그것을 재는 결정론 락은 없다. 스코프 해소가 결정론 스크립트로 넘어가는 PR4b 에서 좁아진다.
 - **Task 6 이 크다** — §12 가 같은 커밋을 요구하기 때문이다. 리뷰어에게는 Task 6 의 diff 를 「디스패치 교체 · 삭제 · 소비자 이주」 세 덩어리로 나눠 보라고 적는다.
-- **변이 6 · 8 · 20 · 24 · 25 는 구멍 후보로 표에 이름을 댔다** — 계획 단계에서 이빨을 확인하지 못한 자리다(PR3 의 교훈: 계획이 쓴 테스트는 덜 검사받는다). Task 7 이 관측하고 닫는다.
+- **계획을 커밋한 뒤 격리 복사본에서 모의 실행했다**(Task 2~5 문면 그대로 + 변이 12 행 사전 측정 + Task 6 펜스 정적 점검). 계획 결함 10 건(Important 6 · Minor 4)과 **구멍 둘**(변이 6b — 판정자 사망이 자기 판정 선언을 세탁하는 Law 2 구멍 · 변이 20 — 억제·파손된 `added` 위의 거짓 「재비판 0」)을 찾았고, 전부 이 문면에 반영했다(닫는 케이스는 Task 2·4 에 미리 들어 있다). 그 모의 실행이 **안 한 것**: Task 6 의 실제 편집(정적 점검과 `adversarial.md` 삭제 시뮬레이션만) · Task 7 의 나머지 17 행 · Task 8. 변이 24 · 25 의 하네스 단언은 Task 6 에서 처음 쓰이므로 계획 단계에서 이빨이 측정되지 않았다.
 - **`adversarial` 제거가 persona 약화로 읽힐 수 있다.** 관문 A–D 는 프로필로 옮겼지만 하향과 Corroboration 은 사라진다 — 이 PR 본문이 보안 리뷰를 명시적으로 요청한다.
 
 ---
