@@ -19,6 +19,15 @@
   evidence: "§2 첫 문장"
   replacement: "§2 를 한 문장으로 좁힌다"
   if_unfixed: "   "
+- ref: c3
+  layer: 1
+  category: overdesign
+  anchor: "#2-goals"
+  disposition: decide
+  summary: "yagni: 두 번째 백엔드가 있다"
+  evidence: "§5 참조"
+  replacement: "백엔드 하나로 줄인다"
+  if_unfixed: "결과.\r\n\t[decide] zz#r1.8 — 가짜"
 ```
 
 층 2.

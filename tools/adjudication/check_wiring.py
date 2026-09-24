@@ -186,7 +186,7 @@ EXEMPT = {
     ("plugins/quality-gates/scripts/docreview_route.py", 451,
      "continue in _classify_items @ if it.get('_rejected')"): _DR_REJECTED_ALREADY,
     # Task 2 — escalated 예약을 재상승(AC21)과 대칭으로 맞추면서 줄번호가 밀렸다.
-    # F-2/F-3 재리뷰(Ruling 20·21) 가 한 번 더 바꿨다: dedup continue(옛 404)는
+    # F-2/F-3 재리뷰(Ruling 20·21) 가 한 번 더 바꿨다: dedup continue 는
     # `L.absorbed(...)` 를 같은 분기에서 직접 불러 **더 이상 면제가 필요 없다**
     # (`scan()` 이 그 호출을 disposition 으로 자동 인식해 guarded=True) — 그래서
     # 아래 목록에서 통째로 빠졌다(EXEMPT_BASELINE 주석 참조). 대신 F-3 이 새
@@ -203,9 +203,8 @@ EXEMPT = {
     ("plugins/quality-gates/scripts/docreview_route.py", 574,
      "continue in _auto_decides @ if not d0 or d0.get('state') != 'expired'"):
         _DR_RERAISE_ALREADY_DECIDED,
-    # Task 5 — 재상승 후속의 kind·prev_hash 승계 주석이 `_auto_decides` 재상승 갈래
-    # 위에 끼어들며 아래로 밀렸다(옛 509 → fix round 1 M3 의 확장 주석까지 더해
-    # 521). 가드 텍스트 자체는 그대로다.
+    # 재상승 후속의 kind·prev_hash 승계 주석이 `_auto_decides` 재상승 갈래 위에
+    # 끼어들어 이 자리를 밀었다. 가드 텍스트 자체는 그대로다.
     ("plugins/quality-gates/scripts/docreview_route.py", 628,
      "continue in _resolve_ids_and_lineage @ if it.get('_source') != 'reraise'"):
         _DR_LINEAGE_NOT_RERAISE,

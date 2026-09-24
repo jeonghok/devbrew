@@ -3,7 +3,7 @@
 ```docreview-layer1
 - ref: c1
   layer: 1
-  category: security
+  category: zz_unmapped_axis
   anchor: "#2-goals"
   disposition: decide
   summary: "Goals 가 신뢰 경계를 말하지 않는다"

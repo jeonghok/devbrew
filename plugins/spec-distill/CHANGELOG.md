@@ -6,13 +6,12 @@ patch 인 이유 — 설계자 시선 리뷰 기능 전체(#160~#170)를 합성 
 
 ### Fixed
 
-- **`if_unfixed` 가 개행·공백 강제를 받지 않았다.** `_classify_items` 의 I4 접기가 `replacement` 한 칸에만 돌았는데, `if_unfixed` 도 게이트 렌더의 한 줄 슬롯(「그대로 두면: %s」)에 들어간다. 개행 낀 값은 다음 줄 첫 칸에 떨어져 진짜 게이트 줄(`[decide] …`)과 구별되지 않았고(재현됨), 공백뿐인 값은 참으로 읽혀 AC15 부재 리터럴 대신 빈 줄이 섰다. 두 칸 모두 같은 접기와 같은 `coerced` 계수를 받는다. 승인 판정은 JSON 요약에서 오므로 막힘·승인은 바뀌지 않았고, 표시가 오도될 수 있었다.
-- **`record-findings` 경로의 decide 렌더가 원장 최상위의 두 칸을 안 읽었다.** `decision_view` 스냅샷에 칸이 없으면 값이 원장에 있어도 부재 리터럴이 났다 — 이제 같은 칸의 최상위 값으로 떨어진다(요약으로 메우지 않는다 — AC15).
+- **`if_unfixed` 가 개행·공백 강제를 받지 않았다.** `_classify_items` 의 I4 접기가 `replacement` 한 칸에만 돌았는데, `if_unfixed` 도 게이트 렌더의 한 줄 슬롯(「그대로 두면: %s」)에 들어간다. 개행 낀 값은 다음 줄 첫 칸에 떨어져 진짜 게이트 줄(`[decide] …`)과 구별되지 않았고(재현됨), 공백뿐인 값은 참으로 읽혀 AC15 부재 리터럴 대신 값이 빈 「그대로 두면:」 줄이 섰다. 두 칸 모두 같은 접기와 같은 `coerced` 계수를 받는다. 승인 판정은 JSON 요약에서 오므로 막힘·승인은 바뀌지 않았고, 표시가 오도될 수 있었다.
 
 ### Added
 
-- **`shared/tests/test_docreview_agent_fields.sh`** — 탐지 리뷰어 사본 넷의 「출력 형식」 절과 재비판자 사본 둘의 `added` 규약이 두 칸을 요구하는지 잰다(AC19 · AC19″). 이전에는 본문에서 그 요구를 지워도 엔진 스위트 전부가 녹색이었다.
-- **case 셋** — `if_unfixed` 개행·공백 접기, 사상 없는 category 의 공시(AC19′ — 그 갈래를 태우는 case 가 없었다), same_as 생존자의 `evidence` 상속.
+- **`shared/tests/test_docreview_agent_fields.sh`** — 탐지 리뷰어 사본 넷의 층 1 출력 예시와 「출력 형식」 절, 재비판자 사본 둘의 `added` 규약이 두 칸을 요구하는지 잰다(AC19 · AC19″). 이전에는 본문에서 그 요구를 지워도 엔진 스위트 전부가 녹색이었다.
+- **case 둘 + 기존 case 확장** — `if_unfixed` 개행·공백·`\r`·탭 접기, 사상 없는 category 의 공시(AC19′ — 그 갈래를 태우는 case 가 없었다). 그리고 `case_same_as_survivor_inherits_empty_fields` 에 same_as 생존자의 `evidence` 상속과 공백뿐인 생존자 값(공백 = 빈 칸) 쌍을 더했다.
 
 ### Changed
 

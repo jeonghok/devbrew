@@ -1178,8 +1178,8 @@ def _rg_decide(st, g, fid):
     d = st["decides"].get(fid) or {}
     alternatives = [choice_label(c, d.get("kind")) for c in decide_choices(st, fid)]
     lines = ["[decide%s] %s — %s%s" % (" auto" if dv.get("auto") else "", fid, f.get("summary"), _post_kind_notice(d)),
-             "  그대로 두면: %s" % dv.get("if_unfixed", f.get("if_unfixed") or "(리뷰어가 안 적음)"),
-             "  고치면: %s" % dv.get("replacement", f.get("replacement") or "(대체안 미작성)"),
+             "  그대로 두면: %s" % dv.get("if_unfixed", "(리뷰어가 안 적음)"),
+             "  고치면: %s" % dv.get("replacement", "(대체안 미작성)"),
              "  근거: %s" % dv.get("basis", f.get("evidence") or "—"),
              "  자리: %s" % dv.get("impact", f.get("anchor")),
              "  대안: %s" % " / ".join(alternatives)]
