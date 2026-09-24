@@ -331,6 +331,64 @@ json.dump(m, open(p, 'w'))
   rm -rf "$T"
 }
 
+case_adversarial_downgrade_can_still_lower_severity() {
+  # Task 7 row 31 fix round 1, Important — raise-only-up guard 는 `raise` 에만
+  # 걸어야 한다. 옛 --adversarial 판정자의 `downgrade` 는 그 이름 자체가
+  # 「내린다」는 뜻이라 여기서 막으면 그 동사의 핵심 기능이 거부된다. 이 경로는
+  # recritic_bridge.py 를 거치지 않는다(직접 --adversarial 문서) — 그 문서는
+  # finding_id 로 직접 잇는다.
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml" "scout" "a.py" "3" "CRITICAL"
+  printf 'verdicts:\n  - finding_id: scout-a.py-3\n    verdict: downgrade\n    adjusted_severity: IMPORTANT\n' > "$T/adv.yaml"
+  local out; out=$(python3 "$SYNTH" --findings "$T/findings.yaml" --adversarial "$T/adv.yaml")
+  assert_contains "$out" '0 CRITICAL / 1 IMPORTANT' "downgrade 는 여전히 CRITICAL 을 IMPORTANT 로 내린다 (raise 전용 가드가 downgrade 를 막지 않는다)"
+  rm -rf "$T"
+}
+
+case_adversarial_raise_lowercase_severity_folds_before_guard() {
+  # Task 7 row 31 fix round 1, Minor — 가드의 비교 «전에» adjusted_severity 를
+  # 접어야 한다. 접지 않으면 소문자 `critical` 이 SEV_ORDER 밖으로 떨어져
+  # SUGGESTION 랭크로 오판되고, 진짜 raise(SUGGESTION→CRITICAL)가 «이미 그
+  # 랭크」로 오판돼 저지당한다. bridge 는 이미 `_verdict_for` 에서 접어 보내므로
+  # (recritic_bridge.py:101) 이 결함은 bridge 경로로는 안 보인다 — --adversarial
+  # 직접 경로로 잰다.
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml" "scout" "a.py" "3" "SUGGESTION"
+  printf 'verdicts:\n  - finding_id: scout-a.py-3\n    verdict: raise\n    adjusted_severity: critical\n' > "$T/adv.yaml"
+  local out; out=$(python3 "$SYNTH" --findings "$T/findings.yaml" --adversarial "$T/adv.yaml")
+  assert_contains "$out" '1 CRITICAL / 0 IMPORTANT' "소문자 adjusted_severity 도 비교 전에 접혀 진짜 raise 로 인식된다"
+  rm -rf "$T"
+}
+
+case_raise_only_up_guard_normalizes_current_severity() {
+  # Task 7 row 31 fix round 1, Minor — 가드는 f.get("severity") 원문이 아니라
+  # _norm_sev(f) 로 «정규화된» 현재 severity 와 비교해야 한다. 대소문자가 섞인
+  # severity("Critical")를 raw 로 비교하면 SEV_ORDER 밖으로 떨어져 SUGGESTION
+  # 랭크로 오판되고, 스테일 raise(IMPORTANT)가 «이미 그 위» 로 오판돼 CRITICAL
+  # 이 조용히 내려간다.
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml" "scout" "a.py" "3" "Critical"
+  printf 'verdicts:\n  - finding_id: scout-a.py-3\n    verdict: raise\n    adjusted_severity: IMPORTANT\n' > "$T/adv.yaml"
+  local out; out=$(python3 "$SYNTH" --findings "$T/findings.yaml" --adversarial "$T/adv.yaml")
+  assert_contains "$out" '1 CRITICAL / 0 IMPORTANT' "대소문자 섞인 현재 severity 도 정규화해 비교한다 — CRITICAL 이 안 내려간다"
+  rm -rf "$T"
+}
+
+case_raise_to_same_severity_is_noop_not_degrade() {
+  # Task 7 row 31 fix round 1, Minor 2 — 같은 랭크로의 raise(변화 없음)는
+  # gate=False 강제다(bridge 의 같은 사건 recritic_bridge.py:106,
+  # `ledger.coerced("to", to_raw, cur_sev, gate=False)` 과 같은 모양) — 판정
+  # 결과를 안 바꾸므로 degrade 로 공시하면 안 된다. «내리는» raise 만
+  # gate=True(판정 결과를 바꾼다 — CRITICAL 이 내려가는 것을 막았다).
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml" "scout" "a.py" "3" "CRITICAL"
+  printf 'verdicts:\n  - finding_id: scout-a.py-3\n    verdict: raise\n    adjusted_severity: CRITICAL\n' > "$T/adv.yaml"
+  local out; out=$(python3 "$SYNTH" --findings "$T/findings.yaml" --adversarial "$T/adv.yaml")
+  assert_contains     "$out" '1 CRITICAL / 0 IMPORTANT' "같은 랭크로의 raise 는 severity 를 그대로 둔다"
+  assert_not_contains "$out" '판정 degrade' "같은 랭크 강제는 gate=False 다 — degrade 로 공시되지 않는다"
+  rm -rf "$T"
+}
+
 case_missing_verdict_is_unadjudicated() {
   local T; T=$(mktemp -d); one_finding "$T/findings.yaml"; prep "$T"
   reply "$T/reply.txt" 'verdicts: []'
@@ -658,6 +716,10 @@ case_colliding_ids_with_raise_that_differs_per_severity_are_not_resolved
 case_colliding_ids_with_raise_ignored_for_one_severity_are_not_resolved
 case_colliding_ids_with_raise_to_different_targets_are_not_resolved
 case_raise_cannot_lower_when_map_is_stale
+case_adversarial_downgrade_can_still_lower_severity
+case_adversarial_raise_lowercase_severity_folds_before_guard
+case_raise_only_up_guard_normalizes_current_severity
+case_raise_to_same_severity_is_noop_not_degrade
 case_missing_verdict_is_unadjudicated
 case_same_as_keeps_both
 case_added_becomes_promoted_by_doc_recritic

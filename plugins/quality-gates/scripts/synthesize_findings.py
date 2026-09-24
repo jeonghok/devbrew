@@ -394,23 +394,56 @@ def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
             # 판정자의 `downgrade` 와 같은 칸(`adjusted_severity`)을 쓴다.
             f = dict(f)
             if "adjusted_severity" in v:
-                # Task 7 row 31 — raise-only-up guard. `recritic_bridge.py` 는
-                # 자신이 아는 cur_sev(map.json 값)로 이미 위인지 검사하지만,
-                # 그 map 이 이 finding 의 «실제» severity 와 다르면(스테일
-                # map.json) bridge 눈에는 정당한 raise 인데 여기서 그대로
-                # 적용하면 실제 finding 을 조용히 내리는 raise 가 된다 — CRITICAL
-                # 이 낮은 raise 하나로 IMPORTANT 가 된다. 여기서 실제 finding
-                # 의 (정규화된) severity 와 다시 비교해, 지금보다 «진짜로»
-                # 높지 않으면 적용하지 않고 강제로 기록한다(bridge 의 `to`
-                # 강제와 같은 모양 — `ledger.coerced(field, frm, to, gate=True)`).
                 new_sev = v["adjusted_severity"]
-                cur_sev = _norm_sev(f)
-                new_rank = SEV_ORDER.get(new_sev, SEV_ORDER["SUGGESTION"])
-                cur_rank = SEV_ORDER.get(cur_sev, SEV_ORDER["SUGGESTION"])
-                if new_rank < cur_rank:
+                if verdict == "raise":
+                    # Task 7 row 31 fix round 1 — raise-only-up guard. **`raise`
+                    # 에만** 건다 — `downgrade` 는 범위 밖이다: 그 동사 자체가
+                    # 「내린다」는 뜻이라(옛 --adversarial 판정자의 핵심 기능),
+                    # 여기서 막으면 그 경로가 통째로 죽는다(fix round 1 Important,
+                    # `case_adversarial_downgrade_can_still_lower_severity` 가
+                    # 이 자리를 잰다).
+                    #
+                    # `recritic_bridge.py` 는 자신이 아는 cur_sev(map.json 값)로
+                    # 이미 위인지 검사하지만, 그 map 이 이 finding 의 «실제»
+                    # severity 와 다르면(스테일 map.json) bridge 눈에는 정당한
+                    # raise 인데 여기서 그대로 적용하면 실제 finding 을 조용히
+                    # 내리는 raise 가 된다 — CRITICAL 이 낮은 raise 하나로
+                    # IMPORTANT 가 된다. 여기서 실제 finding 의 (정규화된)
+                    # severity 와 다시 비교해, 지금보다 «진짜로» 높지 않으면
+                    # 적용하지 않는다.
+                    #
+                    # `new_sev` 는 비교 «전에» 접는다(`_verdict_for` 와 같은
+                    # 규율 — recritic_bridge.py 의 `to_raw.strip().upper()`) —
+                    # `--adversarial` 직접 경로는 bridge 를 거치지 않아 접히지
+                    # 않은 원문이 그대로 온다. 안 접으면 소문자 `critical` 이
+                    # `SEV_ORDER` 밖으로 떨어져 SUGGESTION 랭크로 오판되고 진짜
+                    # raise 가 저지당한다(fix round 1 Minor,
+                    # `case_adversarial_raise_lowercase_severity_folds_before_guard`).
+                    # `cur_sev` 는 `f.get("severity")` 원문이 아니라 `_norm_sev(f)`
+                    # 로 정규화해 비교한다 — 대소문자가 섞인 현재 severity
+                    # ("Critical")를 raw 로 비교하면 같은 방향으로 오판된다
+                    # (`case_raise_only_up_guard_normalizes_current_severity`).
+                    folded = new_sev.strip().upper() if isinstance(new_sev, str) else new_sev
+                    cur_sev = _norm_sev(f)
+                    new_rank = SEV_ORDER.get(folded, SEV_ORDER["SUGGESTION"])
+                    cur_rank = SEV_ORDER.get(cur_sev, SEV_ORDER["SUGGESTION"])
+                    if new_rank < cur_rank:
+                        f["severity"] = folded
+                    elif ledger is not None:
+                        # fix round 1 Minor 2 — 게이트는 «판정 결과가 바뀌는지»
+                        # 로만 켠다(CLAUDE.md 헌장). 같은 랭크(변화 없음)는
+                        # gate=False — bridge 의 같은 사건(recritic_bridge.py:106,
+                        # `ledger.coerced("to", to_raw, cur_sev, gate=False)`)과
+                        # 정확히 같은 모양이다. «내리는» raise 만 gate=True —
+                        # 저지하지 않았으면 severity 가 실제로 내려갔을 것이므로
+                        # 그 저지가 판정 결과를 바꿨다
+                        # (`case_raise_to_same_severity_is_noop_not_degrade` 가
+                        # gate=False 쪽을, 위 스테일-맵 케이스가 gate=True 쪽을
+                        # 각각 잰다).
+                        gate = new_rank > cur_rank
+                        ledger.coerced("adjusted_severity", folded, cur_sev, gate=gate)
+                else:
                     f["severity"] = new_sev
-                elif ledger is not None:
-                    ledger.coerced("adjusted_severity", new_sev, cur_sev, gate=True)
             if "adjusted_confidence" in v:
                 f["confidence"] = v["adjusted_confidence"]
         if ledger is not None:
