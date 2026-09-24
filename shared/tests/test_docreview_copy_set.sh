@@ -76,10 +76,13 @@ dispatch = set()
 if canon:
     names = sorted(canon, key=len, reverse=True)
     # 표기 필터가 이름 매칭보다 먼저 걸린다(형제 test_dispatch_disposition.sh:93 와
-    # 같은 규율). `subagent_type`/`agentType` 는 여기서는 콜론을 요구하지 않는다 —
-    # `subagent_type="..."`(= 표기) 와 `"agentType": "..."`(JSON 키, 이름과 콜론
-    # 사이에 닫는 따옴표가 낀다) 둘 다 콜론-직결 요구로는 못 잡는다(리뷰 실측).
-    NOTATION = re.compile(r'subagent_type|agentType|Agent\(|^\s*agent:\s')
+    # 같은 규율). `subagent_type`/`agentType` 뒤에 `:`·`=` 구분자(사이에 닫는
+    # 따옴표 하나는 허용)를 요구한다 — 구분자 없이 키워드만 요구하면(라운드 1의
+    # 실수) 산문 속 "subagent_type 필드에 ... doc-recritic ..." 같은 문장이
+    # 디스패치로 오판된다(리뷰 실측). 구분자를 다시 앵커로 걸되, `subagent_type="..."`
+    # (= 표기)와 `"agentType": "..."`(JSON 키, 이름과 콜론 사이에 닫는 따옴표가
+    # 낀다) 는 여전히 잡는다 — 둘 다 구분자 앞에 선택적 닫는 따옴표 하나만 있다.
+    NOTATION = re.compile(r'subagent_type["\']?\s*[:=]|agentType["\']?\s*[:=]|Agent\(|^\s*agent:\s')
     # 경계도 형제와 다르다: `=`·`(`·backtick 을 이름 앞에 허용해
     # `subagent_type="..."`·백틱 인용을 잡는다. `-` 는 경계가 아니다(형제와 동일 —
     # `adversarial` 이 `artifact-adversarial` 을 먹지 않게).
@@ -184,6 +187,14 @@ printf -- '---\nname: doc-recritic\n---\n갈라진 본문\n' > "$F/plugins/quali
 O="$(scan "$F")"
 assert_eq "$(kv COPY_NOT_DISPATCHED "$O")" "quality-gates:doc-recritic" \
   "마커를 뺀 같은 이름의 파일도 사본으로 센다 — 마커를 지워 빠져나가지 못한다"
+
+F="$TMPD/fx-prose-bait"; mkfix "$F"
+mkdir -p "$F/plugins/quality-gates/skills/q"
+printf '%s\n' 'doc-recritic 를 부를 때는 subagent_type 필드에 플러그인 접두를 반드시 붙여야 한다.' \
+  > "$F/plugins/quality-gates/skills/q/SKILL.md"
+O="$(scan "$F")"
+assert_eq "$(kv COPY_NOT_DISPATCHED "$O")$(kv DISPATCHED_NOT_COPIED "$O")" "" \
+  "산문 속 «subagent_type ... doc-recritic» 동거는 디스패치가 아니다 — 사본 없는 qg 는 그대로 GREEN"
 
 F="$TMPD/fx-unmarked-quoted"; mkfix "$F"
 mkdir -p "$F/plugins/quality-gates/agents"
