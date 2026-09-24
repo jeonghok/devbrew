@@ -511,7 +511,7 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
       RV="<1 에서 만든 절대 경로>"
       python3 "$QG/scripts/recritic_bridge.py" prepare --findings "$RV/findings.yaml" \
         --out-findings "$RV/recritic-findings.yaml" --out-map "$RV/recritic-map.json"
-      cat "$QG/references/recritic-code-profile.md"
+      cat "${CLAUDE_PLUGIN_ROOT}/references/recritic-code-profile.md"
       ```
 
       `prepare` 가 0 이 아닌 코드로 끝나면 재비판을 디스패치하지 않는다 — 이 뒤에 도는
