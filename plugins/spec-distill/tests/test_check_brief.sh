@@ -1661,21 +1661,22 @@ while IFS=$'\t' read -r tag name; do
   esac
 done <<< "$v2def_direct"
 # V2-①②③ — red/green 짝. red 는 green 에서 **한 가지만** 망가뜨려 만든다(원인 분리).
-v2mut() {   # v2mut <셀> <python 변형 코드> → $TMPD/<셀>.md 를 만들고 게이트를 돌린다
-  local cell="$1" code="$2"
+v2mut() {   # v2mut <셀> <python 변형 코드> [noop] → $TMPD/<셀>.md 를 만들고 게이트를 돌린다
+  local cell="$1" code="$2" noop="${3:-}"
   cp "$FXV" "$TMPD/$cell.md"; cp "${FXV%.md}.audit.md" "$TMPD/$cell.audit.md"
   sed -i.bak "s|^audit_file:.*|audit_file: $cell.audit.md|" "$TMPD/$cell.md"; rm -f "$TMPD/$cell.md.bak"
   # 짝의 반대편도 — 빠지면 `audit_pairing_errors` 가 변이와 무관하게 먼저 red 라 rc≠0 단언이 공허해진다
   sed -i.bak "s|^payload:.*|payload: $cell.md|" "$TMPD/$cell.audit.md"; rm -f "$TMPD/$cell.audit.md.bak"
   # 계측의 양성 대조 — 변형기가 죽거나(assert) 아무것도 안 바꾸면 게이트는 원본 green fixture 를 재고,
-  # green 기대 셀은 공허한 ✓ 를 낸다. 설계상 무변형인 셀만 V2MUT_NOOP=1 로 밝힌다.
+  # green 기대 셀은 공허한 ✓ 를 낸다. 설계상 무변형인 셀만 셋째 인자 `noop` 으로 밝힌다 — 환경 변수로
+  # 받으면 POSIX 모드(`sh <file>`)에서 함수 앞 접두 할당이 호출 뒤에도 남아 이후 셀의 가드를 끈다.
   local before; before="$(cat "$TMPD/$cell.md" "$TMPD/$cell.audit.md" | cksum)"
   PYTHONDONTWRITEBYTECODE=1 python3 -c "$code" "$TMPD/$cell.md" "$TMPD/$cell.audit.md"
   local mrc=$?
   if [[ "$mrc" -ne 0 ]]; then
     no "v2mut ${cell}: 변형기 실패 (rc=${mrc}) — 셀이 원본 fixture 를 재고 있다"; V2OUT=""; V2RC=99; return
   fi
-  if [[ "${V2MUT_NOOP:-0}" != 1 && "$(cat "$TMPD/$cell.md" "$TMPD/$cell.audit.md" | cksum)" == "$before" ]]; then
+  if [[ "$noop" != noop && "$(cat "$TMPD/$cell.md" "$TMPD/$cell.audit.md" | cksum)" == "$before" ]]; then
     no "v2mut ${cell}: 변형이 아무것도 바꾸지 않았다 — 셀이 공허하다"; V2OUT=""; V2RC=99; return
   fi
   V2OUT="$(python3 "$SCRIPT" gate "$TMPD/$cell.md" 2>/dev/null)"; V2RC=$?
@@ -2028,9 +2029,9 @@ a.write_text(s.replace('- 확인 RC3 — 확인 —','- 확인 RC3 — $verdict 
 done
 
 # 웹 주장은 대상이 아니다 — 확인 줄을 요구받지 않는다(N2 가 audit §7 결속을 이미 본다).
-V2MUT_NOOP=1 v2mut c5web 'import sys,pathlib
+v2mut c5web 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
-assert "[→ OQ1]" in s; p.write_text(s,encoding="utf-8")'
+assert "[→ OQ1]" in s; p.write_text(s,encoding="utf-8")' noop
 [[ "$V2RC" -eq 0 ]] \
   && ok "V2-⑤: 웹 항목(「[→ OQ<n>]」)은 확인 줄을 요구받지 않는다" || no "V2-⑤: 웹 항목에 확인 줄을 요구했다 (rc=$V2RC)"
 
@@ -2093,15 +2094,70 @@ done
 
 # qg iter 1 — 옵트인 키가 **있는데** 판독이 안 되면 부재가 아니다. 중복 키 · 다른 값을 v1 으로 읽으면 다섯
 # 술어가 조용히 꺼지고 advisory 는 「없다」고 오진한다. 셋 다 ① 을 함께 깨 둔다 — 조용한 v1 강등이면 green.
-for shape in dup upper v3; do
+for shape in dup upper v3 empty spacecolon key indent; do
   v2mut "contract_$shape" "import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding='utf-8'); o='contract: v2\n'; assert s.count(o)==1
-n={'dup':'contract: v2\ncontract: v2\n','upper':'contract: V2\n','v3':'contract: v3\n'}['$shape']
+n={'dup':'contract: v2\ncontract: v2\n','upper':'contract: V2\n','v3':'contract: v3\n','empty':'contract:\n',
+   'spacecolon':'contract : v2\n','key':'Contract: v2\n','indent':'  contract: v2\n'}['$shape']
 s=s.replace(o,n); o2=' [→ OQ1]\n'; assert s.count(o2)==1; s=s.replace(o2,'\n'); p.write_text(s,encoding='utf-8')"
   { [[ "$V2RC" -ne 0 ]] && grep -q 'contract 옵트인 판독 불가' <<<"$V2OUT" && ! grep -q '신 계약 미적용' <<<"$V2OUT"; } \
     && ok "V2-옵트인(판독 불가 «${shape}»): 있는데 못 읽는 contract 는 red — v1 으로 강등되지 않는다" \
     || no "V2-옵트인(판독 불가 «${shape}»): 조용히 v1 으로 떨어졌다 (rc=$V2RC)"
 done
+
+# 양의 짝 — `contract` 로 시작하는 다른 키(`contract_version:`)는 옵트인 키가 아니다. 부재로 읽혀 v1 공시.
+v2mut contract_otherkey "import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding='utf-8'); o='contract: v2\n'; assert s.count(o)==1
+p.write_text(s.replace(o,'contract_version: 3\n'),encoding='utf-8')"
+{ [[ "$V2RC" -eq 0 ]] && grep -q '신 계약 미적용' <<<"$V2OUT" && ! grep -q '옵트인 판독 불가' <<<"$V2OUT"; } \
+  && ok "V2-옵트인(양의 짝): contract_version 같은 다른 키는 옵트인 키가 아니다 — v1 공시" \
+  || no "V2-옵트인(양의 짝): 다른 키를 옵트인 키로 읽었다 (rc=$V2RC)"
+
+# qg iter 2 — 선두 OQ 의 id 경계. `\b` 면 `OQ1은` 이 선두 결정으로 안 읽혀 그 줄이 ③ 순회에서 빠진다.
+v2mut oqparticle 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3\n"
+assert s.count(o)==1; p.write_text(s.replace(o,"- OQ1은 인증 뷰의 캐시 전략이다\n"),encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '§3 의 OQ1 줄이 근거 RC3 를' <<<"$V2OUT"; } \
+  && ok "V2-③(선두 OQ 경계): 조사가 붙은 「OQ1은」 줄도 OQ1 의 줄이다 — 역참조가 없으면 red" \
+  || no "V2-③(선두 OQ 경계): 「OQ1은」 줄이 순회에서 빠졌다 (rc=$V2RC)"
+v2mut oqparticleok 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3\n"
+assert s.count(o)==1; p.write_text(s.replace(o,"- OQ1은 인증 뷰의 캐시 전략이다 → 근거 RC3\n"),encoding="utf-8")'
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-③(선두 OQ 경계·양의 짝): 「OQ1은」 줄이 RC3 를 가리키면 green" \
+  || no "V2-③(선두 OQ 경계): 정직한 「OQ1은」 줄이 red (rc=$V2RC)"
+
+# qg iter 2 — 다른 id 의 레포 연결. 본문 RC3 에 `[RC5 → …]` 를 달면 RC3 는 어느 연결에도 안 실려 역참조를 피한다.
+v2mut otherrclink 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+o="[RC3 → OQ1 · OQ4]"; assert s.count(o)==1; s=s.replace(o,"[RC5 → OQ1 · OQ4]")
+assert s.count(" → 근거 RC3")==3; s=s.replace(" → 근거 RC3"," → 근거 RC5"); p.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -q 'RC3' <<<"$V2OUT"; } \
+  && ok "V2-①(전역): 어느 연결에도 실리지 않은 RC3 — 다른 id 의 레포 연결로는 red" \
+  || no "V2-①(전역): RC3 가 다른 id 의 연결 뒤에 숨어 역참조를 피했다 (rc=$V2RC)"
+
+# qg iter 2 — §4 줄도 같은 규칙 아래다. 자기 연결이 없는 RC7 을 §4 웹 항목에 실으면 red …
+v2mut sec4rc 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o=" — 데이터 형태와 부합 [→ OQ1]\n"
+assert s.count(o)==1; p.write_text(s.replace(o," — 데이터 형태와 부합 — RC7 [→ OQ1]\n"),encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -q 'RC7' <<<"$V2OUT"; } \
+  && ok "V2-①(§4): 자기 레포 연결이 없는 RC7 을 실은 §4 줄은 red" \
+  || no "V2-①(§4): §4 의 연결 없는 레포 주장이 통과됐다 (rc=$V2RC)"
+# … 양의 짝 — 이미 자기 연결을 가진 RC3 을 웹 항목이 상호참조로 언급하는 것은 정직하다(줄 단위면 I-1 형 회귀).
+v2mut sec4xref 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o=" — 데이터 형태와 부합 [→ OQ1]\n"
+assert s.count(o)==1; p.write_text(s.replace(o," — 데이터 형태와 부합 (RC3 과 같은 결론) [→ OQ1]\n"),encoding="utf-8")'
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-①(§4·양의 짝): 자기 연결을 가진 RC3 의 상호참조는 웹 항목에서도 green" \
+  || no "V2-①(§4): 정직한 상호참조가 red (rc=$V2RC) — 출처를 레포로 바꿔 달라는 압력"
+
+# qg iter 2 — §5 하위 불릿. §4 는 `unkeyed` 가 먼저 red 라 ① 의 순회 규칙이 §5 에서만 따로 드러난다.
+v2mut sec5subbullet 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o=" — RC3 [RC3 → OQ1 · OQ4]\n"
+assert s.count(o)==1; p.write_text(s.replace(o," — RC3\n  - [RC3 → OQ1 · OQ4]\n"),encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -q 'RC3' <<<"$V2OUT"; } \
+  && ok "V2-①(§5 하위 불릿): 레포 주장의 연결을 하위 불릿으로 내리면 red" \
+  || no "V2-①(§5 하위 불릿): 다음 줄의 연결이 받아들여졌다 (rc=$V2RC)"
 
 # qg iter 1 — AC10 의 역: RC≥1 인데 audit 에 `derived: N/A` sentinel 만 있으면 red. d4d(RC 0건 + N/A → green)
 # 의 짝이다 — sentinel 이 요구를 조용히 면제하면 안 된다.
@@ -2126,7 +2182,7 @@ s=s.replace(o6,o6+"\n"+line,1); a.write_text(s,encoding="utf-8")'
 v2mut subbullet 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o=" — 데이터 형태와 부합 [→ OQ1]\n"
 assert s.count(o)==1; p.write_text(s.replace(o," — 데이터 형태와 부합\n  - [→ OQ1]\n"),encoding="utf-8")'
-[[ "$V2RC" -ne 0 ]] \
+{ [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT"; } \
   && ok "V2-①(하위 불릿): 연결을 하위 불릿으로 내리면 red" \
   || no "V2-①(하위 불릿): 하위 불릿 연결이 통과됐다 (rc=$V2RC)"
 

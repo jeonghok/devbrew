@@ -970,16 +970,26 @@ def contract_unreadable(text: str):
     읽으면 다섯 술어가 조용히 꺼지고 advisory 는 「없다」고 오진한다 — `frontmatter_errors` 가 금지한
     「오류를 key absent 로 뭉개기」와 같은 결함이다.
     """
-    val, err = frontmatter_value(CONTRACT_KEY, _frontmatter(text))
-    if err == f"{CONTRACT_KEY} key absent":
+    fm = _frontmatter(text)
+    # 존재는 `frontmatter_value` 와 **독립으로** 본다: 그 함수는 값이 빈 키(`contract:` ·
+    # `contract: ""` · `contract: # v2`)도 「key absent」로 돌려주고, 키 모양이 다른 줄(`Contract:` ·
+    # 들여쓴 키 · `contract :`)은 아예 찾지 않는다. 사람 눈에 키가 보이는 줄이면 부재가 아니다.
+    if not re.search(r"(?im)^\s*contract\s*:", fm):
         return None
+    val, err = frontmatter_value(CONTRACT_KEY, fm)
+    if err == f"{CONTRACT_KEY} key absent":
+        return f"{CONTRACT_KEY} 키 줄은 있는데 `contract: v2` 로 읽히지 않는다 (빈 값 또는 키 모양)"
     if err:
         return err
     return None if val == CONTRACT_V2 else f"{CONTRACT_KEY} 값 {val!r} 은 알 수 없는 계약이다 (`v2` 만 있다)"
 
 
 def research_entries(text: str) -> list[str]:
-    """위 순회 정의 그대로 — §4 의 모든 항목 줄 + §5 에서 `RC<n>` 을 가진 줄. §3 은 제외."""
+    """위 순회 정의 그대로 — §4 의 모든 항목 줄 + §5 에서 `RC<n>` 을 가진 줄. §3 은 제외.
+
+    id 는 리터럴 `RC\\d+` 뿐이다 — `RC 3` · `rc3` · 전각 `ＲＣ3` · `RC3a` 같은 근사 표기는 id 가 아니라서
+    어느 술어에도 보이지 않는다(조건부 발동이 피검자 산출물에 앵커된 설계 L1 의 한 변형).
+    """
     out = _entry_lines(_section_text(text, "4", "External Landscape"))
     out += [ln for ln in section5_entries(text) if RC_RE.search(ln)]
     return out
@@ -1003,14 +1013,24 @@ def research_link_missing(text: str) -> list[str]:
     docstring 이 같은 판단을 이미 적었다: 「web-off brief는 §4에 순회할 항목이 없어 공허하게
     통과하는 것이 옳다 — 조사하지 않았으면 인용할 것도 없다」.
 
-    **`RC<n>` 을 실은 줄은 레포 형식 연결이어야 한다**(§H ③ · 최종 리뷰 I-4 「레포 주장은 연결 안에
-    항상 `RC<n>` 을 싣는다」). 웹 형식 `[→ OQ<n>]` 을 달면 ③ 의 역참조 요구가 통째로 빠지므로(`want`
-    는 연결의 `RC<n>` 으로만 만든다), 그 줄은 연결이 없는 것과 같이 센다.
+    **모든 레포 주장은 어느 항목 줄의 레포 형식 연결 `[RC<n> → …]` 에 한 번은 실린다**(§H ③ · 최종
+    리뷰 I-4 「레포 주장은 연결 안에 항상 `RC<n>` 을 싣는다」). ③ 의 역참조 요구는 연결의 `RC<n>` 으로만
+    만들어지므로(`want`), 어느 연결에도 실리지 않은 `RC<n>` 은 역참조 ∀ 를 통째로 피한다 — 웹 형식
+    `[→ …]` 을 달든 다른 id 의 레포 연결 `[RC5 → …]` 을 달든 같다. 그 id 를 실은 줄을 연결 없음으로
+    센다. **판정은 줄 단위가 아니라 전역이다**: 이미 자기 연결을 가진 `RC<n>` 을 다른 항목(웹 항목
+    포함)이 상호참조로 언급하는 것은 정직한 모양이고 red 가 아니다 — 줄 단위로 두면 결정 상호참조를
+    red 로 만든 I-1 과 같은 회귀가 된다. 대가: 웹 항목의 `RC<n>` 모양 문자열(릴리스 후보 `RC1`)은
+    레포 id 로 읽혀 red 다(알려진 한계).
     """
-    out = []
-    for ln in research_entries(text):
+    entries = research_entries(text)
+    linked = set()
+    for ln in entries:
         m = LINK_RE.search(ln)
-        if not m or (m.group(1) is None and RC_RE.search(ln)):
+        if m and m.group(1):
+            linked.add(m.group(1))
+    out = []
+    for ln in entries:
+        if not LINK_RE.search(ln) or set(RC_RE.findall(ln)) - linked:
             out.append(ln)
     return out
 
@@ -1371,8 +1391,9 @@ def gate(path: Path) -> int:
             if lm:
                 failures.append(
                     "조사 항목에 결정 연결 없음 (줄 끝에 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]` · "
-                    "`[→ OQ<n>]` · `[→ 없음]` 중 하나 — `RC<n>` 을 실은 레포 주장은 앞의 둘만): "
-                    f"{lm[:3]}")
+                    "`[→ OQ<n>]` · `[→ 없음]` 중 하나 — 모든 `RC<n>` 은 어느 항목 줄의 `[RC<n> → …]` 에 "
+                    "한 번은 실린다. 웹 출처의 릴리스 후보 표기 `RC1` 도 id 로 읽히니 `rc1` 로 쓰고, "
+                    f"웹 항목을 레포 주장으로 바꿔 달지 말 것): {lm[:3]}")
             tm = research_link_targets_missing(text)
             if tm:
                 failures.append(f"결정 연결 대상 부재: {tm[:3]}")
@@ -1391,8 +1412,8 @@ def gate(path: Path) -> int:
                     failures.append(f"확인 줄 누락: {cm[:3]}")
         if not payload_rc_ids(text):
             advisories.append(INTERNAL_RESEARCH_ZERO_ADVISORY)
-    elif contract_unreadable(text):
-        failures.append(f"frontmatter: contract 옵트인 판독 불가 — {contract_unreadable(text)}")
+    elif (unreadable := contract_unreadable(text)):
+        failures.append(f"frontmatter: contract 옵트인 판독 불가 — {unreadable}")
     else:
         advisories.append(CONTRACT_V1_ADVISORY)
 

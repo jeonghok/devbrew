@@ -424,7 +424,7 @@ round_flat="$(tr '\n' ' ' <<<"$round_block" | tr -s ' ')"
 { [[ -n "$round_block" ]] && grep -qF 'V1' <<<"$round_block"; } \
   && ok "V1: 라운드 규약 절에 V1 검문소가 있다" || no "V1: 라운드 규약 절에 V1 검문소 부재"
 # AC6 — 순서가 요점이다. 극성 낱말(「전에」)을 리터럴에 넣어 「실은 뒤」 반전을 잡는다(qg iter 1).
-grep -qF 'V1 검문소 — 조사 주장을 «지금 이해»에 싣기 전에' <<<"$round_flat" \
+grep -qF 'V1 검문소 — 조사 주장을 «지금 이해»에 싣기 전에.**' <<<"$round_flat" \
   && ok "V1(AC6): «지금 이해»에 싣기 «전에» 돈다" || no "V1(AC6): 순서 문구 부재 또는 반전 — 반증이 방향에 닿을 라운드가 사라진다"
 for step in '경로 실재' '앵커 실재' '주장이 그 자리와 맞는가'; do
   grep -qF -- "$step" <<<"$round_flat" \
@@ -875,19 +875,19 @@ if [[ -n "$V2_SCR" && -d "$V2_SCR" ]]; then
     && ok "V2(실행·양성대조): 대조 펜스를 잘랐다 · bash -n 통과 · PL 자리 확인" \
     || no "V2(실행·양성대조): 대조 펜스를 못 잘랐거나 문법이 깨졌다 — 아래 실행 단언이 공허하다"
   FXV2="$REPO_ROOT/plugins/spec-distill/tests/fixtures/interview-brief-v2-valid"
-  v2frag() {   # v2frag <셀> <python 변형> → 그 셀의 펜스 stdout 을 V2FRAG 에
-    local cell="$1"
+  v2frag() {   # v2frag <셀> <python 변형> [noop] → 그 셀의 펜스 stdout 을 V2FRAG 에
+    local cell="$1" noop="${3:-}"
     cp "$FXV2.md" "$V2_SCR/$cell.md"; cp "$FXV2.audit.md" "$V2_SCR/$cell.audit.md"
     # 계측의 양성 대조 — 변형기가 죽거나 아무것도 안 바꾸면 원본 쌍을 재는 공허한 셀이 된다
     local before; before="$(cat "$V2_SCR/$cell.md" "$V2_SCR/$cell.audit.md" | cksum)"
     PYTHONDONTWRITEBYTECODE=1 python3 -c "$2" "$V2_SCR/$cell.md" "$V2_SCR/$cell.audit.md" \
       || no "v2frag ${cell}: 변형기 실패 — 셀이 원본 쌍을 재고 있다"
-    [[ "${V2FRAG_NOOP:-0}" == 1 || "$(cat "$V2_SCR/$cell.md" "$V2_SCR/$cell.audit.md" | cksum)" != "$before" ]] \
+    [[ "$noop" == noop || "$(cat "$V2_SCR/$cell.md" "$V2_SCR/$cell.audit.md" | cksum)" != "$before" ]] \
       || no "v2frag ${cell}: 변형이 아무것도 바꾸지 않았다 — 셀이 공허하다"
     sed "s|docs/superpowers/interview/<file>|$V2_SCR/$cell.md|" "$V2_SCR/frag.sh" > "$V2_SCR/$cell.sh"
     V2FRAG="$(bash "$V2_SCR/$cell.sh" 2>&1)"
   }
-  V2FRAG_NOOP=1 v2frag base 'pass'
+  v2frag base 'pass' noop
   [[ -z "$V2FRAG" ]] && ok "V2(실행): 정상 쌍이면 출력이 비었다" || no "V2(실행): 정상 쌍에서 출력이 있다: ${V2FRAG}"
   v2frag star 'import sys,pathlib
 a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding="utf-8"); assert s.count("- 확인 RC3 ")==1
@@ -1381,7 +1381,7 @@ done
 # AC20 — D6 의무의 내용과 극성. 포인터만 물면 「repo_claims 를 산출하지 않는다」로 뒤집어도 통과한다(qg iter 1).
 for lit in '**레포로 확인 가능한 항목마다** `repo_claims` 를 산출해 V1 을 태운다' \
            '「사용자만 답할 수 있는 것」과 「인과 추정」은 대상이 아니다' \
-           'audit §5 에 한 줄로 공시한다'; do
+           '그 문단이 비어 있으면(규약 위반 seed — 위 슬롯 주석이 명시 허용) 이 의무는 미발동이고, 그 사실을 audit §5 에 한 줄로 공시한다.'; do
   grep -qF -- "$lit" <<<"$i2_d6" && ok "AC20(D6): «${lit}»" || no "AC20(D6): 의무 문구 «${lit}» 부재 또는 반전"
 done
 grep -qF '그 차원은 레포 주장의 처분 S 로 닫고' <<<"$c43_flat" \
