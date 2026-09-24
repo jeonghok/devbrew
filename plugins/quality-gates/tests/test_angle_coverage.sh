@@ -410,6 +410,7 @@ case_synth_effective_angles_show_the_dead_source() {
   assert_grep     "$out" '^  adjudication: absent\(source-failed\)$' "판정자 사망이 판정 각도의 실효 상태로 보인다"
   assert_grep     "$out" '^  security: filled$'                      "살아 있는 축은 선언 그대로다"
   assert_not_grep "$out" '^  adjudication: filled$'                  "죽은 축을 filled 로 싣지 않는다 (자기모순 없음)"
+  assert_grep     "$out" '^reason: angle-absent$'                    "사유와 각도 블록이 같은 사실을 말한다 (판정자 사망)"
   out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/gone.yaml" --emit-verdict --angles "$f")
   assert_grep     "$out" '^  security: absent\(source-failed\)$'     "finding 파일 사망은 보안 각도의 실효 상태다"
   assert_grep     "$out" '^  adjudication: filled$'                  "판정자는 살아 있다"

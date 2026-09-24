@@ -726,7 +726,7 @@ def main():
         # 것이라 각도가 `absent` 인 것과 같은 사실이다(§6.3.5 의 표).
         angle_absent = ledger.primary_source_failed()
         if args.angles is not None:
-            angle_states = _angles.parse(_angles.read_or_fail4(args.angles))
+            declared = _angles.parse(_angles.read_or_fail4(args.angles))
             # AC10a — 수행자 집합은 이 실행이 실제로 «낸» finding 에서 도출한다
             # (계획 R-H). 각도 파일 자신에서 뽑으면 자기-일관성 검사이지 Law 2
             # 검사가 아니다. 판정 적용 «전» 의 입력(`raw`)과 dedup 뒤의 `findings`
@@ -749,7 +749,7 @@ def main():
                         s = str(s)
                         if s and s != "?":
                             authors.add(s)
-            _angles.check_self_adjudication(angle_states, authors)
+            _angles.check_self_adjudication(declared, authors)
             # 계획 R-L — 관측된 주 입력 사망을 선언 위에 얹는다. AC10a 는 «선언»에
             # 걸었다(선언 자체가 Law 2 를 어기면 판정자 생사와 무관하게 거부).
             # 차단과 렌더는 «실효»에 건다 — 꼬리가 자기모순이 되지 않게.
@@ -758,7 +758,7 @@ def main():
                 dead_angles.append("security")
             if adjudicator_dead:
                 dead_angles.append("adjudication")
-            angle_states = _angles.with_dead_sources(angle_states, dead_angles)
+            angle_states = _angles.with_dead_sources(declared, dead_angles)
             angle_absent = angle_absent or _angles.blocks(angle_states)
         decision = _verdict.decide(
             defect=bool(kept),                    # 계획 R-B — severity 를 묻지 않는다
