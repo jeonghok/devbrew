@@ -40,7 +40,7 @@ files = subprocess.run(
     ["git", "-C", root, "ls-files", "--cached", "--others", "--exclude-standard",
      "--", "plugins", "shared"],
     capture_output=True, text=True, check=True).stdout.split("\n")
-NAME = re.compile(r"^name:\s*(\S+)\s*$", re.M)
+NAME = re.compile(r'^name:\s*["\']?([^"\'\s#]+)["\']?\s*(?:#.*)?$', re.M)
 MARK = re.compile(r"^[ \t]*(?:#|//|<!--)[ \t]*copy-of:[ \t]*(\S+)")
 def read(p):
     # 인덱스에는 있는데 워킹트리에서 지워진 파일(`git ls-files --cached`)은 빈 문자열로 —
@@ -75,8 +75,17 @@ for f in files:
 dispatch = set()
 if canon:
     names = sorted(canon, key=len, reverse=True)
-    D = re.compile(r'(?:subagent_type:|agentType:|Agent\()\s*["\']?(?:([A-Za-z0-9_-]+):)?('
-                   + "|".join(re.escape(n) for n in names) + r')(?=["\'\s,)]|$)')
+    # 표기 필터가 이름 매칭보다 먼저 걸린다(형제 test_dispatch_disposition.sh:93 와
+    # 같은 규율). `subagent_type`/`agentType` 는 여기서는 콜론을 요구하지 않는다 —
+    # `subagent_type="..."`(= 표기) 와 `"agentType": "..."`(JSON 키, 이름과 콜론
+    # 사이에 닫는 따옴표가 낀다) 둘 다 콜론-직결 요구로는 못 잡는다(리뷰 실측).
+    NOTATION = re.compile(r'subagent_type|agentType|Agent\(|^\s*agent:\s')
+    # 경계도 형제와 다르다: `=`·`(`·backtick 을 이름 앞에 허용해
+    # `subagent_type="..."`·백틱 인용을 잡는다. `-` 는 경계가 아니다(형제와 동일 —
+    # `adversarial` 이 `artifact-adversarial` 을 먹지 않게).
+    PRE, POST = r'(?:^|[\s"\'=:(`])', r'(?=["\'\s,)`]|$)'
+    def name_re(n):
+        return re.compile(PRE + r'(?:([A-Za-z0-9_-]+):)?' + re.escape(n) + POST)
     for f in files:
         m = re.fullmatch(r"plugins/([^/]+)/(?:skills|commands|hooks)/.+", f) or \
             re.fullmatch(r"plugins/([^/]+)/scripts/[^/]+\.js", f)
@@ -84,8 +93,12 @@ if canon:
             continue
         text = read(f)
         for line in text.splitlines():
-            for dm in D.finditer(line):
-                dispatch.add((dm.group(1) or m.group(1), dm.group(2)))
+            if not NOTATION.search(line):
+                continue
+            for n in names:
+                dm = name_re(n).search(line)
+                if dm:
+                    dispatch.add((dm.group(1) or m.group(1), n))
 def show(s):
     return " ".join(sorted("%s:%s" % p for p in s))
 print("CANON=" + " ".join(sorted(canon)))
@@ -151,11 +164,32 @@ O="$(scan "$F")"
 assert_eq "$(kv DISPATCHED_NOT_COPIED "$O")" "quality-gates:doc-recritic" \
   "접두 없는 디스패치는 그 파일의 플러그인 것이다 — 접두를 빼서 빠져나가지 못한다"
 
+F="$TMPD/fx-agent-call"; mkfix "$F"
+mkdir -p "$F/plugins/quality-gates/skills/q"
+printf 'Agent(subagent_type="quality-gates:doc-recritic", prompt=p)\n' > "$F/plugins/quality-gates/skills/q/SKILL.md"
+O="$(scan "$F")"
+assert_eq "$(kv DISPATCHED_NOT_COPIED "$O")" "quality-gates:doc-recritic" \
+  "«=» 표기 Agent(subagent_type=\"...\") 도 잡는다 — 사본 없이 콜만 있으면 RED"
+
+F="$TMPD/fx-json-key"; mkfix "$F"
+mkdir -p "$F/plugins/quality-gates/scripts"
+printf '{"agentType": "quality-gates:doc-recritic"}\n' > "$F/plugins/quality-gates/scripts/dispatch.js"
+O="$(scan "$F")"
+assert_eq "$(kv DISPATCHED_NOT_COPIED "$O")" "quality-gates:doc-recritic" \
+  "JSON 키 표기 {\"agentType\": \"...\"} 도 잡는다 — 사본 없이 콜만 있으면 RED"
+
 F="$TMPD/fx-unmarked"; mkfix "$F"
 mkdir -p "$F/plugins/quality-gates/agents"
 printf -- '---\nname: doc-recritic\n---\n갈라진 본문\n' > "$F/plugins/quality-gates/agents/doc-recritic.md"
 O="$(scan "$F")"
 assert_eq "$(kv COPY_NOT_DISPATCHED "$O")" "quality-gates:doc-recritic" \
   "마커를 뺀 같은 이름의 파일도 사본으로 센다 — 마커를 지워 빠져나가지 못한다"
+
+F="$TMPD/fx-unmarked-quoted"; mkfix "$F"
+mkdir -p "$F/plugins/quality-gates/agents"
+printf -- '---\nname: "doc-recritic"\n---\n갈라진 본문\n' > "$F/plugins/quality-gates/agents/doc-recritic.md"
+O="$(scan "$F")"
+assert_eq "$(kv COPY_NOT_DISPATCHED "$O")" "quality-gates:doc-recritic" \
+  "따옴표로 감싼 name: 값도 마커 없이 사본으로 센다 — 따옴표로 빠져나가지 못한다"
 
 finish
