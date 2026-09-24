@@ -58,7 +58,7 @@ assert_grep "$rule4" 'spec' "Hard Rule 허용 컨텍스트에 spec 포함"
 inputs_block="$(awk '/^## Inputs/{f=1;print;next} /^## /{f=0} f' "$AGENT")"
 assert_grep "$inputs_block" 'PRIMARY reference axis' "spec이 PRIMARY axis로 선언됨 (Inputs 절)"
 
-echo "== untrusted-input 조항 (형제 security-reviewer·adversarial 과 같은 취지) =="
+echo "== untrusted-input 조항 (형제 security-reviewer·재비판(doc-recritic) 과 같은 취지) =="
 # 이 agent 는 `filtered_diff` 를 받고(이 브랜치가 dispatch 에 추가했다) 그 diff 가
 # 지목한 파일들을 `Read` 로 연다 — 형제 둘과 같은 노출인데 조항이 0 이었다.
 # 형제 락(test_security_reviewer_persona.sh)과 같은 방식으로 «섹션 윈도우»에
