@@ -971,6 +971,8 @@ def contract_unreadable(text: str):
     「오류를 key absent 로 뭉개기」와 같은 결함이다.
     """
     fm = _frontmatter(text)
+    # 키 줄 검색은 frontmatter 전체를 본다 — 다른 키 아래 들여쓴 `contract:`(중첩 매핑 · 블록 스칼라)도
+    # 존재로 읽혀 v1 brief 가 「판독 불가」 red 가 된다. fail-closed 방향이고 코퍼스 0건이라 받아들인다.
     # 존재는 `frontmatter_value` 와 **독립으로** 본다: 그 함수는 값이 빈 키(`contract:` ·
     # `contract: ""` · `contract: # v2`)도 「key absent」로 돌려주고, 키 모양이 다른 줄(`Contract:` ·
     # 들여쓴 키 · `contract :`)은 아예 찾지 않는다. 사람 눈에 키가 보이는 줄이면 부재가 아니다.
@@ -1013,24 +1015,37 @@ def research_link_missing(text: str) -> list[str]:
     docstring 이 같은 판단을 이미 적었다: 「web-off brief는 §4에 순회할 항목이 없어 공허하게
     통과하는 것이 옳다 — 조사하지 않았으면 인용할 것도 없다」.
 
-    **모든 레포 주장은 어느 항목 줄의 레포 형식 연결 `[RC<n> → …]` 에 한 번은 실린다**(§H ③ · 최종
-    리뷰 I-4 「레포 주장은 연결 안에 항상 `RC<n>` 을 싣는다」). ③ 의 역참조 요구는 연결의 `RC<n>` 으로만
-    만들어지므로(`want`), 어느 연결에도 실리지 않은 `RC<n>` 은 역참조 ∀ 를 통째로 피한다 — 웹 형식
-    `[→ …]` 을 달든 다른 id 의 레포 연결 `[RC5 → …]` 을 달든 같다. 그 id 를 실은 줄을 연결 없음으로
-    센다. **판정은 줄 단위가 아니라 전역이다**: 이미 자기 연결을 가진 `RC<n>` 을 다른 항목(웹 항목
-    포함)이 상호참조로 언급하는 것은 정직한 모양이고 red 가 아니다 — 줄 단위로 두면 결정 상호참조를
-    red 로 만든 I-1 과 같은 회귀가 된다. 대가: 웹 항목의 `RC<n>` 모양 문자열(릴리스 후보 `RC1`)은
-    레포 id 로 읽혀 red 다(알려진 한계).
+    **레포 주장은 연결 안에 항상 `RC<n>` 을 싣는다**(§H ③ · 최종 리뷰 I-4). ③ 의 역참조 요구는 연결의
+    `RC<n>` 으로만 만들어지므로(`want`), 레포 주장이 웹 형식 `[→ …]` 을 달면 역참조 ∀ 를 통째로 피한다.
+    두 절이 이 규칙을 다르게 진다:
+
+    - **§5 는 줄 단위다.** §5 가 순회되는 이유가 그 줄이 `RC<n>` 을 싣기 때문이므로(§E) §5 항목은
+      정의상 레포 주장 줄이고, 웹 형식 연결을 달면 연결 없음이다. 전역으로만 보면 같은 id 의 버리는
+      줄 하나(`[RC3 → 없음]`, 하위 불릿 포함)가 실제 주장 줄의 웹 연결을 세탁한다.
+    - **§4 는 전역이다.** §4 항목은 «출처키» 를 가진 웹 항목이라, 거기 적힌 `RC<n>` 은 다른 주장의
+      상호참조다 — 그 id 가 어느 항목 줄의 레포 형식 연결에 한 번은 실려 있으면 green 이다. 줄 단위로
+      두면 결정 상호참조를 red 로 만든 I-1 과 같은 회귀가 된다.
+
+    두 절 모두에서, 어느 연결에도 실리지 않은 `RC<n>` 을 담은 줄은 연결 없음이다(다른 id 의 레포 연결
+    `[RC5 → …]` 뒤에 숨는 모양). 남는 것: 같은 id 의 버리는 레포 연결 뒤에서 다른 id 의 연결로 실제
+    결정을 다는 §5 줄, 그리고 웹 항목으로 위장한 레포 주장(«출처키» 와 audit §7 선언이 필요해 비싸고
+    보인다)은 이 술어가 가르지 못한다. 웹 항목의 `RC<n>` 모양 문자열(릴리스 후보)은 레포 id 로 읽혀
+    red 다 — 전부 알려진 한계.
     """
-    entries = research_entries(text)
+    e4 = _entry_lines(_section_text(text, "4", "External Landscape"))
+    e5 = [ln for ln in section5_entries(text) if RC_RE.search(ln)]
     linked = set()
-    for ln in entries:
+    for ln in e4 + e5:
         m = LINK_RE.search(ln)
         if m and m.group(1):
             linked.add(m.group(1))
     out = []
-    for ln in entries:
+    for ln in e4:
         if not LINK_RE.search(ln) or set(RC_RE.findall(ln)) - linked:
+            out.append(ln)
+    for ln in e5:
+        m = LINK_RE.search(ln)
+        if not m or m.group(1) is None or set(RC_RE.findall(ln)) - linked:
             out.append(ln)
     return out
 
@@ -1391,9 +1406,10 @@ def gate(path: Path) -> int:
             if lm:
                 failures.append(
                     "조사 항목에 결정 연결 없음 (줄 끝에 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]` · "
-                    "`[→ OQ<n>]` · `[→ 없음]` 중 하나 — 모든 `RC<n>` 은 어느 항목 줄의 `[RC<n> → …]` 에 "
-                    "한 번은 실린다. 웹 출처의 릴리스 후보 표기 `RC1` 도 id 로 읽히니 `rc1` 로 쓰고, "
-                    f"웹 항목을 레포 주장으로 바꿔 달지 말 것): {lm[:3]}")
+                    "`[→ OQ<n>]` · `[→ 없음]` 중 하나 — §5 의 레포 주장 줄은 앞의 둘만이고, 모든 `RC<n>` 은 "
+                    "어느 항목 줄의 `[RC<n> → …]` 에 실린다. 웹 출처 문자열의 `RC<n>` 모양(릴리스 후보 등)도 "
+                    "레포 id 로 읽힌다 — 「release candidate 1」 처럼 풀어 쓰고, 웹 항목을 레포 주장으로 바꿔 "
+                    f"달지 말 것): {lm[:3]}")
             tm = research_link_targets_missing(text)
             if tm:
                 failures.append(f"결정 연결 대상 부재: {tm[:3]}")
