@@ -225,7 +225,8 @@ else
 fi
 
 # 10b — 같은 공지가 **primary 리뷰어** 출처의 소실에도 나가야 한다.
-#       케이스 10은 adversarial 승격 경로만 쟀다. apply_verdicts()는 non-mapping
+#       케이스 10은 판정자 승격 경로(promote_new_findings, author="adversarial"
+#       기본값 — R-N 으로 리터럴 존치)만 쟀다. apply_verdicts()는 non-mapping
 #       finding을 카운터도 stderr도 없이 버렸고, 리뷰어가 발견을 문자열로 내면
 #       (LLM 출력에서 흔하다) CRITICAL 주장이 통째로 증발한 뒤 stdout은
 #       `No high-confidence findings.` + exit 0 — **버려진 CRITICAL이 clean으로

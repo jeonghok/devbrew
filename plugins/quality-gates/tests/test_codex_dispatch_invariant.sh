@@ -49,15 +49,18 @@ else
 fi
 
 # 4. Floor dispatch blocks still thread project_dir (contract preserved through rewrite).
+# PR4a: adversarial dropped from this loop — it was deleted and its replacement
+# (doc-recritic, Phase 1.5) has no project_dir dispatch slot by design (the
+# coordinate rides inside <document>, not a separate field).
 c4_bad=0
-for name in security-reviewer adversarial; do
+for name in security-reviewer; do
   awk -v name="quality-gates:$name" '
     $0 ~ name { found=NR }
     found && NR <= found+12 && /project_dir:/ { ok=1; exit }
     END { exit !ok }
   ' "$SKILL" || { c4_bad=1; no "4: floor dispatch block for $name lacks project_dir within 12 lines"; }
 done
-[ "$c4_bad" -eq 0 ] && ok "4: floor dispatch blocks (security-reviewer + adversarial) thread project_dir"
+[ "$c4_bad" -eq 0 ] && ok "4: floor dispatch block (security-reviewer) threads project_dir"
 
 # 5. Negative: the removed pre-2.13.0 fallback structure must be GONE.
 c5_bad=0

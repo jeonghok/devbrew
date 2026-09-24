@@ -127,7 +127,7 @@ CANON="$(kv CANON "$OUT")"; COPIES="$(kv COPIES "$OUT")"; DISPATCH="$(kv DISPATC
 [ -n "$DISPATCH" ] && ok "디스패치 집합이 비지 않는다"    || no "디스패치 집합이 비었다"
 assert_eq "$(kv COPY_NOT_DISPATCHED "$OUT")"   "" "사본이 있는데 디스패치하지 않는 것이 없다"
 assert_eq "$(kv DISPATCHED_NOT_COPIED "$OUT")" "" "디스패치하는데 사본이 없는 것이 없다"
-EXPECTED="spec-distill:doc-critic spec-distill:doc-critic-web spec-distill:doc-recritic"
+EXPECTED="quality-gates:doc-recritic spec-distill:doc-critic spec-distill:doc-critic-web spec-distill:doc-recritic"
 assert_eq "$COPIES"   "$EXPECTED" "사본 집합 == 파일 밖 기대값"
 assert_eq "$DISPATCH" "$EXPECTED" "디스패치 집합 == 파일 밖 기대값"
 

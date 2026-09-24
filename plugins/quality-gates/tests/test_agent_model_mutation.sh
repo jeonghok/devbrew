@@ -16,9 +16,14 @@ cd "$ROOT" || exit 1
 SWEEP="plugins/quality-gates/tests/test_agent_model_unpinned_sweep.sh"
 
 # agent → 그 agent 를 보는 per-agent 락 (spec §설계 2 표)
+# PR4a: adversarial.md 두 쌍(test_adversarial_persona.sh · test_adversarial_model_
+# consistency.sh) 삭제 — 대상 agent·두 락 파일이 이 커밋에서 함께 사라진다. 대체
+# agent doc-recritic 은 공유 정본의 byte-for-byte copy-of 사본이라(model 키 유무를
+# 포함해) 이 플러그인이 독자 model-consistency 락을 두지 않는다 —
+# `shared/tests/test_copy_of_contract.sh` 가 대신 잰다(사본이 원본과 한 바이트라도
+# 다르면 RED). 이 파일의 카운트는 하드코딩된 기대값이 없다(pairs[@] 순회) — 배열
+# 원소 수가 13→11 로 줄었을 뿐, 별도로 낮출 기대값은 없다.
 pairs=(
-  "plugins/quality-gates/agents/adversarial.md|plugins/quality-gates/tests/test_adversarial_persona.sh"
-  "plugins/quality-gates/agents/adversarial.md|plugins/quality-gates/tests/test_adversarial_model_consistency.sh"
   "plugins/quality-gates/agents/security-reviewer.md|plugins/quality-gates/tests/test_security_reviewer_persona.sh"
   "plugins/quality-gates/agents/artifact-critic.md|plugins/quality-gates/tests/test_artifact_critic_frontmatter.sh"
   "plugins/quality-gates/agents/artifact-adversarial.md|plugins/quality-gates/tests/test_artifact_adversarial_frontmatter.sh"

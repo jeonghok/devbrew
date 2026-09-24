@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/*/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md plugins/quality-gates/.claude-plugin/plugin.json plugins/quality-gates/agents/security-reviewer.md plugins/quality-gates/agents/adversarial.md plugins/quality-gates/tests/lib/reconstruct-skill.sh
+# guards: plugins/quality-gates/skills/*/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md plugins/quality-gates/.claude-plugin/plugin.json plugins/quality-gates/agents/security-reviewer.md plugins/quality-gates/agents/doc-recritic.md plugins/quality-gates/references/recritic-code-profile.md plugins/quality-gates/tests/lib/reconstruct-skill.sh
 # test_skill_orchestration_behavior.sh — protocol-shape test for SKILL.md.
 #
 # 위 `# guards:` 는 이 파일이 실제로 여는 것에서 도출했다(R2, adjudication-topology
@@ -8,8 +8,10 @@
 # :274-307 의 major-버전 대조가 그 전량을 읽는다), references/runtime-gate.md 는
 # reconstruct-skill.sh 가 SKILL.md 포인터 자리에 되접어 넣는 그 파일(스플라이스
 # 지점은 reconstruct-skill.sh:41 — :27 은 그 파일의 usage 주석일 뿐이다), plugin.json
-# 은 :274 의 major 판독 대상, security-reviewer.md·adversarial.md 는 :483-491 의
-# verifier-writable 페르소나 검사 대상이다. **이 줄번호는 이 커밋(수정 라운드 2)
+# 은 :274 의 major 판독 대상, security-reviewer.md 는 verifier-writable 페르소나 검사
+# 대상, doc-recritic.md 는 #104 tools 포스처 검사 대상, references/recritic-code-profile.md
+# 는 관문 D(verifier-writable) 검사 대상이다(PR4a 가 adversarial.md 하나였던 이 칸을
+# 셋으로 갈랐다). **이 줄번호는 이 커밋(수정 라운드 2)
 # 시점 기준이다** — m1 정정(라운드 1): 자기 헤더가 넣은 줄을 반영 안 한 편집-전
 # 번호(:193 등)를 인용한 적이 있었다. 이 주석 블록 자체가 이후 더 늘어나면 같은
 # drift 가 반복될 수 있으니, 줄번호를 믿기 전에 `grep -n '^PLUGIN_JSON=\|^AGENTS_DIR='`
@@ -30,7 +32,7 @@
 # 를 먹이면 이 락이 후보에 뜬다(수정 전엔 안 떴다), `test_guards_coverage_
 # bidirectional.sh` 는 이 락 몫이 6/6·전체 105/105 GREEN.
 #
-# **여섯 밖의 파일은 이 스크립트가 열지 않는 것으로, 아래 다섯 변수(SCRIPT_DIR·
+# **일곱 밖의 파일은 이 스크립트가 열지 않는 것으로, 아래 다섯 변수(SCRIPT_DIR·
 # SKILL_MD_REAL·PLUGIN_JSON·SKILLS_ROOT·AGENTS_DIR) + reconstruct-skill.sh 의
 # `source` 한 자리의 모든 사용처를 직접 정독해 확인했다** — 자동화된 grep 전수
 # 검사가 아니다(수정 라운드 1, I3 정정: 이전 판이 "전수 확인"의 근거로 인용한
@@ -75,7 +77,8 @@ if [ "${1:-}" = "--emit-scanned" ]; then
     "$_SOB_REL/skills/quality-pipeline/references/runtime-gate.md" \
     "$_SOB_REL/.claude-plugin/plugin.json" \
     "$_SOB_REL/agents/security-reviewer.md" \
-    "$_SOB_REL/agents/adversarial.md" \
+    "$_SOB_REL/agents/doc-recritic.md" \
+    "$_SOB_REL/references/recritic-code-profile.md" \
     "$_SOB_REL/tests/lib/reconstruct-skill.sh"
   find "$_SOB_QG_ROOT/skills" -maxdepth 2 -name 'SKILL.md' | sort | while IFS= read -r _sob_f; do
     printf '%s\n' "${_sob_f#"$_SOB_REPO_ROOT"/}"
@@ -168,17 +171,17 @@ assert_proximity() {
 }
 
 # Gate dispatch lines.
-review_line=$(first_line 'subagent_type.*quality-gates:adversarial')
+review_line=$(first_line 'subagent_type.*quality-gates:doc-recritic')
 runtime_line=$(first_line 'subagent_type.*runtime-verifier')
 
-assert_line "Review gate adversarial dispatch"   "$review_line"
+assert_line "Review gate re-critique dispatch"   "$review_line"
 assert_line "Runtime gate runtime-verifier dispatch" "$runtime_line"
 
 # Ordering: Review gate < Runtime gate.
 assert_order "Review precedes Runtime" "$review_line" "$runtime_line"
 
 # Four reviewer agents in Review / Runtime gate fan-out (consistency with C1 / AC1).
-for agent in adversarial test-scope-validator security-reviewer runtime-verifier; do
+for agent in doc-recritic test-scope-validator security-reviewer runtime-verifier; do
   if grep -qE "subagent_type[^\"]*\"quality-gates:$agent" "$SKILL_MD"; then
     echo "PASS: $agent dispatch present"
   else
@@ -188,7 +191,7 @@ for agent in adversarial test-scope-validator security-reviewer runtime-verifier
 done
 
 # Review gate iter cap proximity to Review gate section / AskUserQuestion.
-# Use FIRST AskUserQuestion at or after the adversarial dispatch (the
+# Use FIRST AskUserQuestion at or after the re-critique dispatch (the
 # description's top-of-file AskUserQuestion mention is irrelevant; we want the
 # Review-gate decision-tool call).
 askuser_review_line=$(first_line_after 'AskUserQuestion' "$review_line")
@@ -198,7 +201,14 @@ itercap_line=$(first_line 'max_review_iterations')
 # region between the iter cap and the decision tool. Still a tight locality sanity check.
 # Locality bound 120→160 in v2.13.0 scope-driven-composition: step 3의 Tier B/C
 # dispatch 프로즈(codex availability-floor + Tier C 선택 + transparency + graceful)가
-# adversarial dispatch와 iter-boundary 결정 사이 영역을 정당하게 키움. 여전히 tight sanity.
+# 재비판 dispatch와 iter-boundary 결정 사이 영역을 정당하게 키움. 여전히 tight sanity.
+# PR4a 재비판 교체: 이 단언은 착수 시점에 이미 FAIL 이었다(distance 280 > 160, Task 1
+# 베이스라인). Phase 1.5 재비판이 탐지(Tier A/B/C) 뒤로, 즉 review_line 훨씬 뒤로
+# 옮기면서 $askuser_review_line(첫 AskUserQuestion at-or-after review_line)도 같이
+# 밀려 distance 가 324 로 **커졌다**(실측, 280→324) — 예상과 반대 방향. 이 단언의 이름은
+# 바뀌지 않았고(선재 FAIL 이름 집합의 원소), 이 Task 는 그 이름의 RED 를 고치지 않는다
+# (범위 밖) — 160 을 올리지 않는다: 상한을 올리는 것은 이 근접성 sanity 를 무디게 하는
+# 것이지 진짜 수정이 아니다.
 assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 160
 
 # DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS near Runtime gate dispatch — use first mention
@@ -479,10 +489,12 @@ fi
 
 # --- R2-AC5: Law-3 persona hardening (the bypass escaped because reviewers
 #     trusted a verifier-writable artifact; the persona now forces that check).
-#     Anchor on the stable literal `verifier-writable`, which BOTH persona edits
-#     in Task 6 Step 3 include verbatim. ---
+#     Anchor on the stable literal `verifier-writable`, which the security-reviewer
+#     persona AND the re-critic code profile (PR4a — moved off the adversarial
+#     persona, which no longer exists) include verbatim. ---
 AGENTS_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)/agents"
-for p in security-reviewer adversarial; do
+REFERENCES_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)/references"
+for p in security-reviewer; do
   if grep -qi 'verifier-writable' "$AGENTS_DIR/$p.md"; then
     echo "PASS: $p persona has the verifier-writable-artifact check"
   else
@@ -490,6 +502,79 @@ for p in security-reviewer adversarial; do
     fail=$((fail + 1))
   fi
 done
+if grep -qi 'verifier-writable' "$REFERENCES_DIR/recritic-code-profile.md"; then
+  echo "PASS: re-critic code profile has the verifier-writable-artifact check (moved from adversarial persona, PR4a R-Q)"
+else
+  echo "FAIL: re-critic code profile missing the verifier-writable-artifact check (moved from adversarial persona, PR4a R-Q)"
+  fail=$((fail + 1))
+fi
+# doc-recritic itself is a byte-for-byte copy-of the shared persona (Law 2
+# scoping lives upstream, verified by test_copy_of_contract.sh) — this only
+# re-checks the #104 tools posture this SKILL's prose claims for it.
+if grep -qE '^tools:[[:space:]]*Read,[[:space:]]*Grep,[[:space:]]*Glob' "$AGENTS_DIR/doc-recritic.md"; then
+  echo "PASS: doc-recritic persona keeps #104 tools posture (Read, Grep, Glob)"
+else
+  echo "FAIL: doc-recritic persona tools posture changed from Read, Grep, Glob (#104 lock)"
+  fail=$((fail + 1))
+fi
+
+# --- PR4a: Phase 1.5 재비판 dispatch protocol-shape ---
+# recritic-code-profile.md must appear within 30 lines BEFORE the doc-recritic
+# dispatch line (the Phase 1.5 `cat .../recritic-code-profile.md` fence sits
+# ~16 lines ahead of the Agent({...}) fence) — an "after" window would be RED.
+if [[ "$review_line" -gt 0 ]]; then
+  recritic_win_start=$((review_line - 30))
+  [[ "$recritic_win_start" -lt 1 ]] && recritic_win_start=1
+  if awk -v s="$recritic_win_start" -v e="$review_line" \
+      'NR>=s && NR<e && /recritic-code-profile\.md/ {f=1} END{exit !f}' "$SKILL_MD"; then
+    echo "PASS: recritic-code-profile.md referenced within 30 lines before doc-recritic dispatch"
+  else
+    echo "FAIL: recritic-code-profile.md not found within 30 lines before doc-recritic dispatch (line $review_line)"
+    fail=$((fail + 1))
+  fi
+else
+  echo "FAIL: recritic-code-profile.md proximity check skipped — no doc-recritic dispatch line"
+  fail=$((fail + 1))
+fi
+
+# The doc-recritic dispatch fence must carry the <diff>${DIFF}</diff> slot —
+# the code path threads diff (test_agent_input_slots.sh cannot see this: the
+# shared contract declares `diff` optional).
+if [[ "$review_line" -gt 0 ]] && awk -v s="$review_line" -v e="$((review_line + 15))" \
+    'NR>=s && NR<=e && index($0, "<diff>${DIFF}</diff>") {f=1} END{exit !f}' "$SKILL_MD"; then
+  echo "PASS: doc-recritic dispatch fence carries <diff>\${DIFF}</diff> slot"
+else
+  echo "FAIL: doc-recritic dispatch fence missing <diff>\${DIFF}</diff> slot"
+  fail=$((fail + 1))
+fi
+
+# The disposition line on the doc-recritic dispatch must be fail-closed (R-R) —
+# the only place that measures R-R is actually true.
+if [[ "$review_line" -gt 0 ]] && awk -v s="$review_line" -v e="$((review_line + 5))" \
+    'NR>=s && NR<=e && /fail-closed/ {f=1} END{exit !f}' "$SKILL_MD"; then
+  echo "PASS: doc-recritic disposition line is fail-closed (R-R)"
+else
+  echo "FAIL: doc-recritic disposition line missing fail-closed (R-R)"
+  fail=$((fail + 1))
+fi
+
+# AC17 — re-critic dispatches even when detection produced zero findings, and
+# that clause precedes the dispatch fence itself.
+phase15_zero_line=$(first_line '탐지 결과가 0건이어도 디스패치한다')
+assert_line "Phase 1.5 dispatches even when detection has zero findings (AC17)" "$phase15_zero_line"
+assert_order "AC17 zero-findings clause precedes doc-recritic dispatch" "$phase15_zero_line" "$review_line"
+
+# The recritic.diff instructions must forbid git show/format-patch/log -p output,
+# backed by a body-unique rationale line (not header-satisfiable).
+gitshow_line=$(first_line 'git format-patch')
+assert_line "recritic diff prohibits git show/format-patch/log -p output" "$gitshow_line"
+if [[ "$gitshow_line" -gt 0 ]] && awk -v s="$gitshow_line" -v e="$((gitshow_line + 3))" \
+    'NR>=s && NR<=e && index($0, "커밋 메시지") {f=1} END{exit !f}' "$SKILL_MD"; then
+  echo "PASS: git-show prohibition backed by body-unique 커밋 메시지 rationale (not header-satisfiable)"
+else
+  echo "FAIL: git-show prohibition missing body-unique 커밋 메시지 rationale"
+  fail=$((fail + 1))
+fi
 
 # --- v2.3.0 R4: Review-gate findings surfaced before the decision tool ---
 # The Surface-findings step (Step 4.5) must precede the iter-boundary

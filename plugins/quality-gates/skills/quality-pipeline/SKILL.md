@@ -18,6 +18,7 @@ allowed-tools:
   # Group 2 — Review gate scripts
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/recritic_bridge.py:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py:*)
   # Group 3 — Runtime gate scripts
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh:*)
@@ -66,7 +67,7 @@ turn. You dispatch up to two gates serially in order (Runtime gate only when sel
 as a tool result in the same turn, so no Stop hook and no continuation
 sentinel are needed.
 
-**Law 2 (Writer ≠ Reviewer):** you are the orchestrator (writer). `security-reviewer`, `adversarial`, and `test-scope-validator` are read-only reviewers (`tools: Read, Grep, Glob` — fail-closed allowlist). The `runtime-verifier` is a **sandbox executor**: it CAN Write/Edit, but only inside a disposable git-worktree sandbox, and you enforce Law 2 *structurally* — after it runs you compute `qg-worktree.sh mutation-guard <sandbox> <baseline> <snapshot_digest>` and, if `forced_downgrade: yes`, you cap the verdict at FAIL regardless of what the verifier claimed. The `<snapshot_digest>` is the orchestrator-held seal (captured at create-sandbox) that the guard verifies before trusting its snapshot — the verifier cannot reach it (§6.1). Nothing is committed; the sandbox is discarded. You may also apply user-approved Review-gate fixes ("Retry" path) via Edit/Write — those are user-consented.
+**Law 2 (Writer ≠ Reviewer):** you are the orchestrator (writer). `security-reviewer`, 재비판(`doc-recritic`), and `test-scope-validator` are read-only reviewers (`tools: Read, Grep, Glob` — fail-closed allowlist). The `runtime-verifier` is a **sandbox executor**: it CAN Write/Edit, but only inside a disposable git-worktree sandbox, and you enforce Law 2 *structurally* — after it runs you compute `qg-worktree.sh mutation-guard <sandbox> <baseline> <snapshot_digest>` and, if `forced_downgrade: yes`, you cap the verdict at FAIL regardless of what the verifier claimed. The `<snapshot_digest>` is the orchestrator-held seal (captured at create-sandbox) that the guard verifies before trusting its snapshot — the verifier cannot reach it (§6.1). Nothing is committed; the sandbox is discarded. You may also apply user-approved Review-gate fixes ("Retry" path) via Edit/Write — those are user-consented.
 
 **State file:** read `worktree_path` from `.claude/quality-gates/<sid>/pipeline.md`
 only during preflight; never write. Setup script handles creation, /cancel-qg
@@ -82,7 +83,7 @@ handles deletion.
    - [Dispatch Loop](#dispatch-loop) — two gates serialized in order with per-gate iteration
 2. **Per-gate dispatch logic:**
    - [Trivia escape](#trivia-escape) — one-sentence diff → all gates skipped
-   - [Review gate](#review-gate) — scout + Phase 1 + adversarial + synthesizer; iter loop with decision tool at every boundary
+   - [Review gate](#review-gate) — scout + Phase 1 + 재비판(doc-recritic) + synthesizer; iter loop with decision tool at every boundary
    - [Reviewer composition (scope-driven)](#reviewer-composition-scope-driven) — 3-tier + rubric + palette
    - [Runtime gate](#runtime-gate) — 영향 판정 + 기준선 대비 차등 실행 + test-scope-validator/runtime-verifier
 3. **Decision points (AskUserQuestion templates):**
@@ -154,7 +155,7 @@ Parse from `/qg` invocation:
   - **Precedence:** an explicit `gate=` value always wins over `--skip-runtime`; on conflict `gate=` wins and a one-line advisory is printed (see Decision 1). No silent conflict.
 - `plan_path` (optional): defaults to "auto" (`scripts/discover-plan.sh`).
   Threaded as a secondary scope hint to the Runtime gate's test-scope-validator
-  and the Review gate's security-reviewer / adversarial dispatches. The Gate-1
+  and the Review gate's security-reviewer / 재비판(doc-recritic) dispatches. The Gate-1
   plan-verifier was removed in v2.0.0 — plan is no longer verified, only hinted.
 - `spec_path` (optional): defaults to "auto" (`scripts/discover-spec.sh`).
   The project spec is the Acceptance Criteria truth. Consumed by the Runtime
@@ -327,10 +328,10 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
    Re-select every iteration. **No qg-own tool posture changes here (#104 lock kept).**
 
    **Tier A — Floor (스코프 무관, 항상 디스패치; 모델이 스코프 판단으로 뺄 수 없음).**
-   `quality-gates:security-reviewer` (Phase 1) and `quality-gates:adversarial`
-   (Phase 1.5) run **every non-trivia iteration regardless of scope** — their `tools:`
-   posture (`Read, Grep, Glob`, #104 lock) is unchanged. Both MUST include
-   `project_dir: "$project_dir"`:
+   `quality-gates:security-reviewer` (Phase 1) 와 **재비판**(Phase 1.5 — 아래
+   「Phase 1.5 — 재비판」, `quality-gates:doc-recritic`) 은 **every non-trivia iteration
+   regardless of scope** 에 돈다 — `tools:` posture (`Read, Grep, Glob`, #104 lock) is
+   unchanged. `security-reviewer` MUST include `project_dir: "$project_dir"`:
 
    **Kill switch — `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`.** Tier A 를
    *모델이* 스코프 판단으로 뺄 수는 없지만, *사용자는* 끌 수 있다. 이 둘은 다른
@@ -341,9 +342,9 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 
    IF `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`:
    1. 아래 `quality-gates:security-reviewer` Agent 리터럴을 **발행하지 않는다.**
-      바로 다음의 `quality-gates:adversarial` 리터럴과 Tier B(codex)·Tier C 는
-      **그대로 fire 한다** — 꺼지는 것은 이 하나뿐이다.
-   2. `adversarial` 의 `phase1_findings` 슬롯에는 실제로 받은 것만 넣는다
+      Phase 1.5 재비판과 Tier B(codex)·Tier C 는 **그대로 fire 한다** — 꺼지는 것은 이
+      하나뿐이다.
+   2. 재비판의 `findings` 슬롯에는 실제로 받은 것만 넣는다
       (Tier C + codex). 없는 리뷰어 몫을 있는 것처럼 채우거나 대신 지어내지 않는다.
    3. **loud advisory** — 이 줄을 사용자에게 그대로 보인다:
       > `> [quality-gates] security-reviewer disabled via DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1 — 이 iteration 에는 보안 리뷰가 없었다 (Tier A floor 결손).`
@@ -373,20 +374,6 @@ Agent({
     plan_path: <plan_path>${PLAN_PATH}</plan_path> (path or 'auto')
     iteration: <iteration>${ITERATION}</iteration>
     filtered_diff: <filtered_diff>${FILTERED_DIFF}</filtered_diff> (unified diff computed from the resolved review scope, documentation paths excluded)"
-})
-```
-
-```
-Agent({
-  subagent_type: "quality-gates:adversarial",
-  // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-open
-  description: "Adversarial review of Phase-1 findings (Review gate iter N)",
-  prompt: "Re-review findings from Phase-1 reviewers for false positives
-    and missed exploit paths.
-    project_dir: <project_dir>${PROJECT_DIR}</project_dir>
-    phase1_findings: <phase1_findings>${PHASE1_FINDINGS}</phase1_findings> (yaml from security-reviewer + Tier C specialists + codex)
-    filtered_diff: <filtered_diff>${FILTERED_DIFF}</filtered_diff> (so you can verify findings against actual code)
-    iteration: <iteration>${ITERATION}</iteration>"
 })
 ```
 
@@ -506,8 +493,66 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
    gate** (lightness) — fan-out is bounded by the rubric's natural signal-binding, the
    transparency line above, and the recomputed max fan-out declared in the README.
    (A repo-wide `fan-out ≥5` hard-review gate was **removed** from CLAUDE.md and the philosophy doc by the harness-capability-suppression sweep — it is no longer a backstop and must not be cited as one.)
-4. Run `synthesize_findings.py` (`${CLAUDE_PLUGIN_ROOT}/scripts/`)
-   to consolidate findings. **Capture the script's complete stdout** — the
+
+   **Phase 1.5 — 재비판 (판정 각도).** 탐지(Tier A 의 `security-reviewer` · Tier B codex ·
+   Tier C)가 끝난 뒤 **한 번** 디스패치한다. **탐지 결과가 0건이어도 디스패치한다**(AC17 —
+   빈 슬롯도 재비판한다. 놓친 결함은 재비판자가 `added` 로 낸다). 재비판자는 **프레이밍을
+   못 본다** — 이 리뷰가 왜 열렸는지, 어느 리뷰어가 무엇을 냈는지를 싣지 않는다.
+
+   1. **이 iteration 의 중간 파일 디렉토리** `RV` 를 `mktemp -d` 로 만들고 그 경로를 이후
+      펜스에 리터럴로 싣는다(Bash 호출마다 셸이 새로 뜬다). 탐지 결과를 `$RV/findings.yaml`
+      에 YAML 목록으로 쓴다. **각 항목의 `agent:` 는 디스패치한 agent 의 frontmatter
+      `name:` 이다 — 플러그인 접두 없이**(`security-reviewer` · `code-reviewer` …; codex 는
+      `codex`). 리뷰어가 적어 보낸 `agent:` 를 그대로 믿지 않는다 — 찍는 쪽이 너다.
+   2. 익명화와 diff:
+
+      ```bash
+      QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+      RV="<1 에서 만든 절대 경로>"
+      python3 "$QG/scripts/recritic_bridge.py" prepare --findings "$RV/findings.yaml" \
+        --out-findings "$RV/recritic-findings.yaml" --out-map "$RV/recritic-map.json"
+      cat "$QG/references/recritic-code-profile.md"
+      ```
+
+      `prepare` 가 0 이 아닌 코드로 끝나면 재비판을 디스패치하지 않는다 — 4 단계의 합성기가
+      응답 파일의 부재를 판정 각도의 주 입력 실패로 센다(침묵하지 않는다).
+      `$RV/recritic.diff` 에는 `security-reviewer` 에게 준 것과 같은 **raw unified diff**
+      (hunk 만)를 쓴다. `git show` · `git format-patch` · `git log -p` 의 출력은 쓰지 않는다 —
+      그것들은 **커밋 메시지**를 싣고, 커밋 메시지는 작성자의 프레이밍이다.
+   3. 디스패치 — 슬롯 넷을 **그대로** 채운다: `<document>` = `project_dir` 절대 경로와 이
+      iteration 의 리뷰 스코프 경로 목록(재비판자는 그 경로의 코드를 `Read` 한다) ·
+      `<findings>` = `$RV/recritic-findings.yaml` 의 내용 · `<profile>` = 위 `cat` 이 낸
+      내용(경로가 아니라 **내용** — 재비판자는 플러그인 캐시 경로를 읽지 못한다) ·
+      `<diff>` = `$RV/recritic.diff` 의 내용.
+
+```
+Agent({
+  subagent_type: "quality-gates:doc-recritic",
+  // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-closed
+  description: "Framing-blind re-critique of the finding list (Review gate iter N)",
+  prompt: "<document>${DOCUMENT}</document>
+    <findings>${FINDINGS}</findings>
+    <profile>${PROFILE}</profile>
+    <diff>${DIFF}</diff>"
+})
+```
+
+   4. 응답 전문을 요약·전사 없이 `$RV/recritic.txt` 에 **verbatim** 저장한다. 디스패치가
+      실패했거나 응답이 없으면 파일을 만들지 않는다 — 합성기가 그 부재를 판정 각도의 주 입력
+      실패로 세고, 본 보고서의 `**이 실행은 clean이 아니다**` 마커가 Step 4.5 의 Not-clean
+      override 를 켠다.
+
+4. Run `synthesize_findings.py` to consolidate findings:
+
+   ```bash
+   QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+   RV="<Phase 1.5 의 절대 경로>"
+   python3 "$QG/scripts/synthesize_findings.py" --findings "$RV/findings.yaml" \
+     --recritic "$RV/recritic.txt" --recritic-map "$RV/recritic-map.json" \
+     --recritic-diff "$RV/recritic.diff"
+   ```
+
+   **Capture the script's complete stdout** — the
    synthesized Markdown block (counts line + findings table + suggested-fixes
    list, or the empty-state line). You surface this verbatim in step 4.5; do
    NOT reformat or re-summarize it yourself (Law 1 determinism — the script,
@@ -600,7 +645,7 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
    Why this is a separate clause from the dispatch-time banner: the banner is
    emitted mid-iteration, far above the verdict, and a reader who scrolls to the
    verdict (or reads only the `## History` line) never sees it. Tier A floor is
-   `security-reviewer + adversarial`; with one of the two removed, a bare `clean`
+   `security-reviewer` + 재비판(`doc-recritic`); with one of the two removed, a bare `clean`
    over-claims. Same family as the [Not-clean notice override](#review-gate) above —
    *a finding that was never produced is not a finding that was cleared.*
 
@@ -738,7 +783,7 @@ The Review gate reviewer set is composed by scope (spec §5). Selection is
 **model-owned** (lightness) — there is no deterministic selector schema; scout is a
 hint, not an authority. The 3-tier model:
 
-- **Tier A — Floor** (`quality-gates:security-reviewer` + `quality-gates:adversarial`):
+- **Tier A — Floor** (`quality-gates:security-reviewer` + 재비판 `quality-gates:doc-recritic`):
   스코프 무관 항상. `tools: Read, Grep, Glob` (#104 락, 무변경). 모델이 못 뺀다.
 - **Tier B — codex** (availability-floor): `detect_codex.sh` 참이면 무조건, 스코프 무관.
 - **Tier C — Dynamic specialists** (아래 rubric으로 diff 스코프에 맞춰 가감; 최대 6 후보):
@@ -781,15 +826,19 @@ write-capable(pr-review-toolkit inherit-all)이거나 read/web-only(feature-dev:
 
 ## Reviewer dispatch contract
 
-The following four reviewer subagents declare `project_dir` as a REQUIRED
+The following three reviewer subagents declare `project_dir` as a REQUIRED
 dispatch parameter and forbid `pwd`/`git rev-parse` recomputation inside
 the persona. Any dispatch of these agents MUST thread the preflight-frozen
 `$project_dir` value via the `project_dir:` field of the prompt:
 
-- `quality-gates:adversarial`
 - `quality-gates:test-scope-validator`
 - `quality-gates:security-reviewer`
 - `quality-gates:runtime-verifier`
+
+`quality-gates:doc-recritic`(Phase 1.5)은 이 목록에 없다 — 그 입력 슬롯은 공유 정본이
+정한 넷(`document` · `findings` · `profile` · `diff`)뿐이고, `project_dir` 은 별도 슬롯이
+아니라 `<document>` 안에 싣는다. 슬롯 계약은 `shared/tests/test_agent_input_slots.sh` 와
+`shared/tests/test_docreview_agents.sh` 가 잰다.
 
 The contract is verified by:
 - runtime: agent personas reject prompts missing `project_dir:` (see

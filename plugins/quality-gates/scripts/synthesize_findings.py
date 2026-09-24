@@ -229,7 +229,7 @@ def finding_id(f):
 NEW_FINDING_REQUIRED = ("file", "severity", "summary")
 # 승격된 발견의 기본 confidence. suppress()의 바닥(<=4)보다는 위라 표에 실리고,
 # render()의 caveat 임계(<=6) 아래라 `*`가 붙는다 — 이 발견은 어떤 리뷰어의
-# 판정도 통과하지 않았다(adversarial 자신의 주장이다). 보이되 검증 안 됨으로
+# 판정도 통과하지 않았다(판정자 자신의 주장이다). 보이되 검증 안 됨으로
 # 표시하는 것이 정직한 인코딩이다. 리뷰어가 명시적으로 confidence를 주면 그것을 쓴다.
 NEW_FINDING_DEFAULT_CONFIDENCE = 5
 
@@ -278,7 +278,7 @@ def promote_new_findings(raw_new, existing, ledger=None, author="adversarial"):
     항목을 그룹핑에서 **제외**한다 — 승격 이전에는 (file, line, severity) 충돌이
     언제나 "두 리뷰어가 같은 것을 봤다"라 병합이 옳았지만, 승격이 생기면서 충돌이
     "같은 줄의 *다른* 결함"일 수 있게 됐기 때문이다. 병합되면 발견 하나가 조용히
-    사라지고, 더 나쁘게는 살아남은 행의 `sources`에 adversarial이 붙어 **하지 않은
+    사라지고, 더 나쁘게는 살아남은 행의 `sources`에 판정자가 붙어 **하지 않은
     주장을 보증한 것처럼** 렌더된다(2026-08-03 재현, `test_…_promoted_findings.sh`
     케이스 5·6). 실패 방향을 소실이 아니라 중복 쪽으로 돌리는 최소 봉쇄다.
 
@@ -293,7 +293,7 @@ def promote_new_findings(raw_new, existing, ledger=None, author="adversarial"):
             dropped += 1
             if ledger is not None:
                 ledger.hold(repr(item)[:60], "항목 파손: not a mapping")
-            print("[synthesize_findings] dropped malformed adversarial finding: "
+            print("[synthesize_findings] dropped malformed promoted finding: "
                   "not a mapping", file=sys.stderr)
             continue
         missing = [k for k in NEW_FINDING_REQUIRED if not item.get(k)]
@@ -302,14 +302,14 @@ def promote_new_findings(raw_new, existing, ledger=None, author="adversarial"):
             if ledger is not None:
                 ledger.hold(repr(item.get("summary", item))[:60],
                             "항목 파손: missing %s" % ", ".join(missing))
-            print("[synthesize_findings] dropped malformed adversarial finding: "
+            print("[synthesize_findings] dropped malformed promoted finding: "
                   f"missing {', '.join(missing)}", file=sys.stderr)
             continue
         f = dict(item)
         # `sources`는 리뷰어가 준 값을 절대 믿지 않는다. render()가 Source 컬럼에
         # 그대로 찍는 유일한 키인데, 승격 항목은 dedup()의 그룹핑을 건너뛰므로
         # (`promoted: True` → passthrough) 병합이 이 값을 덮어쓸 기회조차 없다.
-        # adversarial 출력에 `sources: [security-reviewer, code-reviewer]`가 실리면
+        # 판정자 출력에 `sources: [security-reviewer, code-reviewer]`가 실리면
         # **아무 리뷰어도 하지 않은 주장이 교차 보증을 받은 것처럼 렌더된다**
         # (2026-08-05 재현). `agent`만 강제하고 이 채널을 열어두면 id 참칭은 막고
         # 표시 계층의 참칭은 그대로 남는다 — 후자가 사용자에게 더 직접적이다.
@@ -330,7 +330,7 @@ def promote_new_findings(raw_new, existing, ledger=None, author="adversarial"):
             while f"{base}-{suffix}" in seen:
                 suffix += 1
             fid = f"{base}-{suffix}"
-            print("[synthesize_findings] adversarial finding id collision on "
+            print("[synthesize_findings] promoted finding id collision on "
                   f"{base}; disambiguated to {fid}", file=sys.stderr)
         seen.add(fid)
         f["finding_id"] = fid
@@ -339,7 +339,7 @@ def promote_new_findings(raw_new, existing, ledger=None, author="adversarial"):
 
 
 def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
-    """Apply adversarial verdicts. Returns (out, dropped_malformed).
+    """Apply adjudicator verdicts. Returns (out, dropped_malformed).
 
     `dropped`를 세는 이유: 예전에는 non-mapping finding을 맨 `continue`로 버렸다 —
     카운터도, stderr도, stdout 공지도 없이. 리뷰어가 발견을 문자열로 내면
@@ -347,7 +347,7 @@ def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
     stdout은 `No high-confidence findings.`, exit 0이었다. 즉 **버려진 CRITICAL이
     clean으로 렌더**됐다 (2026-08-05 재현).
 
-    같은 결함을 adversarial 승격 경로에서는 이미 막아놨었다. 이 함수만 계측
+    같은 결함을 판정자 승격 경로에서는 이미 막아놨었다. 이 함수만 계측
     밖이었다 — 한쪽 출처만 세는 drop 채널은 반쪽짜리 정직성이다.
 
     #8 — `ledger`가 주어지면 판정이 없는 finding(fail-open으로 keep)을
@@ -387,7 +387,7 @@ def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
         verdict = v.get("verdict", "confirm")
         if verdict == "reject":
             if ledger is not None:
-                ledger.reject(finding_id(f), "adversarial 기각")
+                ledger.reject(finding_id(f), "판정자 기각")
             continue
         if verdict in ("downgrade", "raise"):
             # `raise` — 재비판자가 severity 를 «올린» 판정(PR4a 계획 R-O). 옛

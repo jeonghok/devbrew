@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # AC2 / AC10a — security-reviewer persona structural conformance.
 # Verifies the persona file declares the canonical finding YAML schema
-# from the `## Inputs` section of adversarial.md and the forced-findings
+# from its own `## Output format` section and the forced-findings
 # prohibition rule. (앵커로 인용한다 — 줄번호는 그 파일이 늘 때마다 밀린다.)
 set -eu
 REPO_ROOT="$(git rev-parse --show-toplevel)"

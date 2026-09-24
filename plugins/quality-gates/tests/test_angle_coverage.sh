@@ -208,7 +208,9 @@ case_synth_suppressed_finding_still_counts_as_authored() {
   rm -rf "$T"
 }
 
-# mk_rejected <디렉토리> <저자> — <저자> 의 유일한 finding 을 adversarial 이 기각한 입력.
+# mk_rejected <디렉토리> <저자> — <저자> 의 유일한 finding 을 판정자가 기각한 입력
+# (픽스처 파일명 `adv.yaml`·플래그 `--adversarial`·`author="adversarial"` 기본값은
+# R-N 으로 리터럴 유지 — PR4a 가 대체한 것은 디스패치되는 agent 뿐이다).
 mk_rejected() {
   printf 'verdicts:\n  - {finding_id: %s-a.py-1, verdict: reject}\n' "$2" > "$1/adv.yaml"
   printf -- '- {agent: %s, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: rejected-one, proposed_fix: f}\n' "$2" > "$1/f.yaml"
