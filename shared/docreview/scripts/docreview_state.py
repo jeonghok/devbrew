@@ -516,8 +516,8 @@ def cmd_begin_round(a) -> int:
 PUBLIC_FIELDS = ("id", "lineage", "bucket", "supersedes", "origin", "layer", "category", "anchor",
                  "disposition", "summary", "edit_scope", "blocks", "evidence",
                  # 갈래 2 — top-level 이다. `decision_view` 통로는 disposition == "decide"
-                 # 에만 열리므로(docreview_route.py:660-661, `_remap_blocks` 안의 게이트 —
-                 # 이 앵커는 PR 3 안에서 두 번 밀렸다. 재측정 없이 베끼지 말 것) 그쪽에만
+                 # 에만 열리므로(docreview_route.py `_remap_blocks` 의
+                 # `if it["disposition"] == "decide":` 게이트) 그쪽에만
                  # 실으면 fix·defer·ask 로 난 항목의 대체안이 원장에 한 글자도 안 남는다.
                  "replacement", "if_unfixed",
                  "decision_view", "state", "promotion", "promoted_from", "immutable", "kind")
@@ -1098,9 +1098,9 @@ def gate_summary(st) -> dict:
 # 아니라 엔진 하나이므로 두 프로필로 좁히면 가장 흔한 항목(frozen_change)이 상시
 # advisory 경로가 된다. `shared/tests/test_docreview_profile_schema.sh` 가 «프로필에서
 # 도출한 이름 전부에 사상이 있는가»를 ∀ 로 재므로, 새 축이 사상 없이 들어오면 RED 다.
-# 여분 항목은 무해하다 — `overdesign` 은 프로필보다 먼저 들어와 있다(그 축을 더하는 PR 이
-# 이 파일을 0줄 건드려야 단독 머지가 가능하기 때문이다).
 CATEGORY_GLOSS = {
+    # brief · design-doc 공유 층 1
+    "overdesign": "goal 대비 과함",
     # brief 층 1·2
     "direction": "방향의 반증", "distortion": "원문의 뜻이 바뀜",
     "omission": "원문에 있는 것이 빠짐", "invention": "원문에 없는 것이 들어옴",
@@ -1124,8 +1124,6 @@ CATEGORY_GLOSS = {
     "actionability": "무엇을 할지 알 수 없음", "structure": "목차와 본문의 불일치",
     # 엔진이 직접 만드는 것
     "frozen_change": "얼림 검사가 잡은 변경", "other": "분류 없음",
-    # 갈래 1 이 더할 축 — 프로필보다 먼저 여기 선다(위 문단)
-    "overdesign": "goal 대비 과함",
 }
 
 
@@ -1180,8 +1178,8 @@ def _rg_decide(st, g, fid):
     d = st["decides"].get(fid) or {}
     alternatives = [choice_label(c, d.get("kind")) for c in decide_choices(st, fid)]
     lines = ["[decide%s] %s — %s%s" % (" auto" if dv.get("auto") else "", fid, f.get("summary"), _post_kind_notice(d)),
-             "  그대로 두면: %s" % dv.get("if_unfixed", "(리뷰어가 안 적음)"),
-             "  고치면: %s" % dv.get("replacement", "(대체안 미작성)"),
+             "  그대로 두면: %s" % dv.get("if_unfixed", f.get("if_unfixed") or "(리뷰어가 안 적음)"),
+             "  고치면: %s" % dv.get("replacement", f.get("replacement") or "(대체안 미작성)"),
              "  근거: %s" % dv.get("basis", f.get("evidence") or "—"),
              "  자리: %s" % dv.get("impact", f.get("anchor")),
              "  대안: %s" % " / ".join(alternatives)]

@@ -190,8 +190,8 @@ assert_file_grep "$TMPD/err8b" 'bad_regex:fix_anchors' "양의 짝: 사유가 ba
 # 전부 + 엔진이 직접 만드는 category(frozen_change 등)다. 두 프로필로 좁히면 가장 흔한
 # 항목(얼림 검사가 잡은 변경)이 상시 advisory 경로가 된다.
 #
-# 방향은 ∀ 다: 도출한 이름 «전부»가 사상에 있어야 한다. 여분 사상은 무해하다(PR 2 가
-# 더할 축 이름을 이 표가 미리 담는다 — PR 2 는 이 파일을 0줄 건드려야 하므로).
+# 방향은 ∀ 다: 도출한 이름 «전부»가 사상에 있어야 한다. 여분 사상은 무해하다 — 방향은
+# ∀(도출 → 사상)만 잰다.
 note "── category 사람말 사상 — 코퍼스는 열거가 아니라 프로필에서 도출한다"
 MISSING="$(python3 - "$REPO_ROOT" <<'PY'
 import pathlib, sys, yaml

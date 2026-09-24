@@ -77,8 +77,8 @@ def normalize(item, layer_default, prefix, idx, ledger):
         "supersedes": (str(item["supersedes"]) if item.get("supersedes") else None),
         "evidence": (str(item["evidence"]) if item.get("evidence") else None),
         # 갈래 2 의 칸 둘. 여기 없으면 리뷰어가 무엇을 적든 «조용히» 버려진다 —
-        # 이 dict 는 입력을 갱신하는 것이 아니라 처음부터 새로 짓는다. 개행 강제는
-        # 여기가 아니라 `_classify_items`(I4) — 모든 출처(critic/codex 와 recritic added)가
+        # 이 dict 는 입력을 갱신하는 것이 아니라 처음부터 새로 짓는다. 두 칸의 개행·공백
+        # 강제는 여기가 아니라 `_classify_items`(I4) — 모든 출처(critic/codex 와 recritic added)가
         # 합류하고 same_as 흡수가 끝난 뒤 한 번만 도는 자리라서다.
         "replacement": (str(item["replacement"]) if item.get("replacement") else None),
         "if_unfixed": (str(item["if_unfixed"]) if item.get("if_unfixed") else None),
@@ -400,10 +400,11 @@ def _absorb_same_as(items, same_as, L):
         if not live:
             continue
         keep = max(live, key=lambda m: (RANK[items[m]["disposition"]], m))
-        # 생존자는 처분 순위와 f 번호로 갈리고 f 번호는 요약의 sha1 순이라, 산문 칸을 적은
-        # 쪽이 흡수될 수 있다. 생존자의 빈 칸만 형제에게서 채운다 — 적힌 칸은 덮지 않는다.
-        # 오름차순이라 마지막에 쓴 값(처분이 가장 높은 형제의 것)이 남는다.
-        # 공백뿐인 값은 뒤의 접기에서 None 이 되므로 빈 칸으로 친다.
+        # 생존자는 처분 순위와 f 번호로 갈리고 f 번호는 출처와 무관한 정렬(층 · 앵커 ·
+        # category · 요약 sha1) 순이라, 산문 칸을 적은 쪽이 흡수될 수 있다. 생존자의 빈 칸만
+        # 형제에게서 채운다 — 적힌 칸은 덮지 않는다. 오름차순이라 마지막에 쓴 값(처분이 가장
+        # 높은 형제의 것)이 남는다. 공백뿐인 값은 빈 칸으로 친다(뒤의 I4 접기가 대체안 칸 둘을
+        # None 으로 만드는 것과 같은 판정이다).
         for k in ("evidence", "replacement", "if_unfixed"):
             if not (items[keep].get(k) or "").strip():
                 for m in sorted(live, key=lambda m: (RANK[items[m]["disposition"]], m)):
@@ -428,20 +429,21 @@ def _classify_items(items, st, prof, sections, n, L):
         # 흡수된 항목은 렌더되지 않는다 — 그 값의 접기를 세면 생존자가 물려받은 같은 값이 두 번 센다.
         if it.get("_absorbed_into"):
             continue
-        repl = it.get("replacement")
-        if repl:
-            collapsed = re.sub(r"\s+", " ", repl).strip()
-            if collapsed != repl:
-                # I4 — 리뷰어가 프로필 펜스(`### 판정 한 줄`)를 옛 두 줄 모양대로 베끼면
-                # `replacement` 에 개행이 낀다. 렌더는 이 칸을 한 줄로 낸다(docreview_state.py
-                # 「고치면: %s」) — 개행이 섞이면 여섯 줄 블록이 여덟 줄이 되고 `└ 천장` 조각이
-                # 다음 줄 첫 칸에 떨어져 최상위 게이트 줄과 구별이 안 된다. 항목이 아니라 값을
-                # 바꾸는 것이므로 hold 가 아니라 coerced 다(CLAUDE.md 「강제는 계수하되 소실이
-                # 아니다」) — 이 대체가 게이트 판정 자체를 바꾸지는 않으므로 gate=False(기본값).
+        for k in ("replacement", "if_unfixed"):
+            v = it.get(k)
+            collapsed = re.sub(r"\s+", " ", v).strip() if v else v
+            if v and collapsed != v:
+                # I4 — 두 칸은 렌더에서 한 줄 슬롯이다(docreview_state.py `_rg_decide` 의
+                # 「고치면: %s」·「그대로 두면: %s」). 리뷰어가 프로필 펜스(`### 판정 한 줄`)를
+                # 옛 두 줄 모양대로 베끼거나 YAML 블록 스칼라로 적으면 개행이 끼고, 그 조각이
+                # 다음 줄 첫 칸에 떨어져 최상위 게이트 줄과 구별이 안 된다. 공백뿐인 값은 None
+                # 으로 — 참으로 읽히면 부재 리터럴 대신 빈 줄이 선다. 항목이 아니라 값을 바꾸는
+                # 것이므로 hold 가 아니라 coerced 다(CLAUDE.md 「강제는 계수하되 소실이
+                # 아니다」) — 게이트 판정 자체를 바꾸지는 않으므로 gate=False(기본값).
                 # 여기서 하는 이유는 모든 출처가 합류하고 same_as 흡수가 끝난 뒤라서다 — 생존자가
                 # 물려받은 값을 한 번만 접는다.
-                L.coerced("replacement", repl, collapsed)
-            it["replacement"] = collapsed or None
+                L.coerced(k, v, collapsed)
+            it[k] = collapsed or None
         if it.get("_rejected"):
             it["state"] = "rejected"
             it["origin"] = "reviewer"
@@ -518,7 +520,7 @@ def _auto_decides(a, diff, st, prof, sections, n, L):
         if not f0:
             esc_unconsumed += 1   # 대상 finding 부재 — 버리지 않고 센다(공시는 게이트가, 재상승과 같은 규칙)
             continue
-        # F-3 재리뷰(Ruling 20) — 형제 재상승(:533, `if not d0 or d0.get("state") != "expired"`)
+        # F-3 재리뷰(Ruling 20) — 형제 재상승(이 함수의 reraise 순회, `if not d0 or d0.get("state") != "expired"`)
         # 과 같은 모양. `f0` 존재만으로는 이 fix 가 «지금도» escalated 상태인지 모른다 —
         # 예약이 만들어진 뒤 사용자가 drop 하거나(cmd_fix event=drop, 상태 검사 없이
         # 무조건 대입) intent-pass 로 재시도했을 수 있다(둘 다 `st["fixes"][fid]["state"]`

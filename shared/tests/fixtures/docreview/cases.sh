@@ -942,12 +942,13 @@ case_T02_same_as_max() {
 # 양방향이라 주장하는 공허 통과를 막는다).
 # 판정 헬퍼의 실패 계수(`_ASSERT_FAIL`)는 셸 변수라 `$( )` 서브셸 안에서 세면 사라진다 — 그래서
 # 이 헬퍼는 직접 부르고 결과는 전역 `_SAF_EMPTY_SURVIVED` 로 돌려준다.
-_same_as_fields_run() {   # _same_as_fields_run <크리틱 요약> <코덱스 요약> [replacement YAML 리터럴] [기대 replacement] [기대 coerced] — 생존자가 코덱스면 전역에 +1
-  local repl_lit="${3:-인라인 한 줄. └ 천장: 둘째 형식이 요청될 때}" repl_want="${4:-인라인 한 줄. └ 천장: 둘째 형식이 요청될 때}" coerced_want="${5:-0}"
-  local cr cx d fc fx rt q
+_same_as_fields_run() {   # _same_as_fields_run <크리틱 요약> <코덱스 요약> [replacement YAML 리터럴] [기대 replacement] [기대 coerced] [코덱스 evidence | -] — 생존자가 코덱스면 전역에 +1
+  local repl_lit="${3:-인라인 한 줄. └ 천장: 둘째 형식이 요청될 때}" repl_want="${4:-인라인 한 줄. └ 천장: 둘째 형식이 요청될 때}" coerced_want="${5:-0}" cx_ev="${6:-코덱스 근거}"
+  local cr cx d fc fx rt q cx_ev_line="" ev_want
+  [ "$cx_ev" = "-" ] || cx_ev_line="    evidence: \"${cx_ev}\""$'\n'
   cr="$(mktemp -t cr-XXXXXX.txt)"; cx="$(mktemp -t cx-XXXXXX.yaml)"; rt="$(mktemp -t rt-XXXXXX.txt)"
   printf '```docreview-layer1\n- ref: c1\n  category: overdesign\n  anchor: "#51-parts"\n  disposition: decide\n  summary: "%s"\n  evidence: "크리틱 근거"\n  replacement: "%s"\n  if_unfixed: "크리틱 결과"\n```\n```docreview-layer2\n[]\n```\n' "$1" "$repl_lit" > "$cr"
-  printf 'findings:\n  - agent: codex-reviewer\n    ref: x1\n    layer: 1\n    category: overdesign\n    anchor: "#51-parts"\n    disposition: decide\n    summary: "%s"\n    evidence: "코덱스 근거"\nmeta:\n  codex_failed: false\n' "$2" > "$cx"
+  printf 'findings:\n  - agent: codex-reviewer\n    ref: x1\n    layer: 1\n    category: overdesign\n    anchor: "#51-parts"\n    disposition: decide\n    summary: "%s"\n%smeta:\n  codex_failed: false\n' "$2" "$cx_ev_line" > "$cx"
   d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$cr")" --codex "$(codex_now "$d" "$cx")" > "$d/prep.json"
   fc="$(jget "$d/prep.json" "[i['f'] for i in d['items'] if i['summary']=='$1'][0]")"
@@ -959,7 +960,9 @@ _same_as_fields_run() {   # _same_as_fields_run <크리틱 요약> <코덱스 �
   assert_eq "$(jget "$d/fin.json" "$q[0][\"replacement\"]")" "$repl_want" "same_as 필드($1): 생존자에 replacement 가 남는다"
   assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"]')" "$coerced_want" "same_as 필드($1): replacement 개행 접기는 값 하나에 정확히 $coerced_want 번 센다(흡수된 쪽은 렌더되지 않으므로 세지 않는다)"
   assert_eq "$(jget "$d/fin.json" "$q[0][\"if_unfixed\"]")" "크리틱 결과" "same_as 필드($1): 생존자에 if_unfixed 가 남는다"
-  assert_eq "$(jget "$d/fin.json" "$q[0][\"evidence\"] == ('코덱스 근거' if $q[0][\"summary\"] == '$2' else '크리틱 근거')")" "True" "same_as 필드($1): 생존자가 이미 적은 evidence 는 덮지 않는다"
+  # 코덱스 쪽 evidence 가 없으면 생존자가 코덱스일 때 크리틱의 것을 물려받는다 — 있으면 덮지 않는다.
+  if [ "$cx_ev" = "-" ]; then ev_want="크리틱 근거"; else ev_want="$cx_ev"; fi
+  assert_eq "$(jget "$d/fin.json" "$q[0][\"evidence\"] == ('$ev_want' if $q[0][\"summary\"] == '$2' else '크리틱 근거')")" "True" "same_as 필드($1): 생존자의 evidence 는 적혀 있으면 그대로, 비어 있으면 형제에게서 채운다"
   if [ "$(jget "$d/fin.json" "$q[0][\"summary\"]")" = "$2" ]; then _SAF_EMPTY_SURVIVED=$((_SAF_EMPTY_SURVIVED+1)); fi
   rm -rf "$d" "$cr" "$cx" "$rt"
 }
@@ -970,7 +973,10 @@ case_same_as_survivor_inherits_empty_fields() {
   # 옛 두 줄 펜스를 베낀 값(YAML 이스케이프 `\n`) — 물려받은 값의 접기가 생존자 쪽에서 한 번만 세지는가
   _same_as_fields_run "yagni: 첫째 요약" "yagni: 둘째 요약" '인라인 한 줄.\n  └ 천장: 둘째 형식이 요청될 때' "인라인 한 줄. └ 천장: 둘째 형식이 요청될 때" 1
   _same_as_fields_run "yagni: 둘째 요약" "yagni: 첫째 요약" '인라인 한 줄.\n  └ 천장: 둘째 형식이 요청될 때' "인라인 한 줄. └ 천장: 둘째 형식이 요청될 때" 1
-  assert_eq "$_SAF_EMPTY_SURVIVED" "2" "same_as 필드: 맞바꾼 두 쌍 각각에서 정확히 한 번씩 빈 쪽이 생존자였다(채움 방향이 실제로 돌았다)"
+  # 코덱스가 evidence 도 비운 쌍 — 생존자가 코덱스인 쪽에서 evidence 가 크리틱의 것으로 채워지는가
+  _same_as_fields_run "yagni: 첫째 요약" "yagni: 둘째 요약" "" "" 0 -
+  _same_as_fields_run "yagni: 둘째 요약" "yagni: 첫째 요약" "" "" 0 -
+  assert_eq "$_SAF_EMPTY_SURVIVED" "3" "same_as 필드: 맞바꾼 세 쌍 각각에서 정확히 한 번씩 빈 쪽이 생존자였다(채움 방향이 실제로 돌았다)"
 }
 case_T03_T04_raise() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
@@ -2267,7 +2273,7 @@ case_init_relative_doc_refused() {
 }
 
 # ── 칸 둘(replacement·if_unfixed)의 왕복 — 리뷰어 → normalize → 원장 (Task 5) ──────
-# 닫힌 열거가 셋이라(PROFILE_FIELDS · normalize 반환 · PUBLIC_FIELDS) 앞의 둘만 고치면
+# 닫힌 열거가 셋이라(codex 변환의 DOCREVIEW_KEYS · normalize 반환 · PUBLIC_FIELDS) 앞의 둘만 고치면
 # 렌더까지는 도달하고 «원장에는 안 남는다». 그러면 다음 라운드가 그 값을 못 본다.
 case_fields_roundtrip_decide() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-failed.yaml" --skip)" || { no "칸 왕복: route_r1 실패"; return; }
@@ -2517,7 +2523,7 @@ case_recritic_added_carries_fields() {
 # ── I4 — 개행 낀 replacement 는 _classify_items 가 한 줄로 강제하고 그 강제를 센다 ──
 # 프로필 펜스(`### 판정 한 줄`)를 리뷰어가 «펜스가 예전에 두 줄이던 모양 그대로»
 # 베끼면 `replacement` 에 개행이 낀 채 들어올 수 있다 — 렌더는 이 칸을 한 줄로
-# 낸다(「고치면: %s」)이므로 개행이 섞이면 여섯 줄 블록이 여덟 줄이 되고 `└ 천장`
+# 낸다(「고치면: %s」)이므로 개행이 섞이면 여섯 줄 블록의 줄 수가 늘고 `└ 천장`
 # 조각이 다음 줄 첫 칸에 떨어져 최상위 게이트 줄과 구별이 안 된다. critic-
 # replacement-newline.txt 는 그 실패 모양(펜스의 옛 두 줄 그대로)을 그대로 낸다.
 # 강제는 normalize() 가 아니라 `_classify_items` 에서 한다 — 두 출처(critic/codex ·
@@ -2538,12 +2544,53 @@ case_I4_replacement_newline_collapsed() {
   # gate=False 확인은 집계 adjudication_degraded 로는 못 잰다 — 이 픽스처는 codex-failed.yaml
   # 로 codex 를 죽여 source_failed(모델 다양성, primary=False)만으로 이미 degraded=True 다
   # (adjudication.py:_degraded — `bool(sources_failed)` 가 gate 와 무관하게 참여한다). 대신
-  # `reasons()` 가 `gate=True` 인 coerced 만 advisory 줄로 낸다는 사실(adjudication.py:141-149)
+  # `reasons()` 가 `gate=True` 인 coerced 만 advisory 줄로 낸다는 사실(adjudication.py `reasons()` 의 `_coerced` 루프, `if gate:` 갈래)
   # 로 gate=False 를 정확히 겨눈다 — 이 강제가 advisory 에 "강제(게이트 변경): replacement" 줄을
   # «내지 않아야» gate=False 다.
   case "$(jget "$d/fin.json" '"\n".join(d["advisory"])')" in
     *'강제(게이트 변경): replacement'*) no "I4 양의 짝: replacement 강제가 게이트 변경으로 advisory 에 났다 — gate=True 여야 할 이유가 없다" ;;
     *) ok "I4 양의 짝: replacement 강제는 gate=False 라 advisory 의 게이트-변경 줄로 나지 않는다(카운트는 늘지만 차단은 아니다)" ;;
   esac
+  rm -rf "$d"
+}
+
+# ── I4 쌍둥이 — if_unfixed 도 같은 한 줄 슬롯(「그대로 두면: %s」)에 들어간다 ─────────────
+# 개행 낀 값은 한 줄로 접고 센다. 공백뿐인 값은 부재로 친다 — 참으로 읽히면 AC15 의 부재
+# 리터럴 대신 빈 줄이 선다. fixture 의 첫 항목은 개행 뒤에 게이트 줄 모양(`[decide] …`)을
+# 싣는다: 접지 않으면 그 조각이 렌더의 열 0 에 떨어져 진짜 게이트 줄과 구별되지 않는다.
+case_I4_if_unfixed_newline_collapsed() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-if-unfixed-newline.txt" "$FX/codex-failed.yaml" --skip)" \
+    || { no "I4 if_unfixed: route_r1 실패"; return; }
+  assert_eq "$(fsum "$d" '쓰이지 않는 훅' '["if_unfixed"]')" "훅이 죽은 채 남는다. [decide] zz#r1.9 — 가짜 항목" \
+    "I4 if_unfixed: 개행 낀 if_unfixed 가 공백 하나로 뭉쳐 한 줄로 난다"
+  assert_eq "$(fsum "$d" '두 가지로 읽힌다' '["if_unfixed"]')" "None" \
+    "I4 if_unfixed: 공백뿐인 if_unfixed 는 부재(None)로 원장에 남는다"
+  assert_eq "$(fsum "$d" '두 가지로 읽힌다' '["decision_view"]["if_unfixed"]')" "(리뷰어가 안 적음)" \
+    "I4 if_unfixed: 공백뿐인 if_unfixed 는 AC15 부재 리터럴로 렌더된다"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"]')" "2" \
+    "I4 if_unfixed: 두 접기(개행 하나 · 공백뿐 하나)가 각각 coerced 로 계수된다"
+  local gr; gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_not_grep "$gr" '^\[decide\] zz#' "I4 if_unfixed: 값 속 게이트 줄 모양이 렌더의 열 0 에 서지 않는다"
+  assert_grep "$gr" '^  그대로 두면: 훅이 죽은 채 남는다\. \[decide\] zz#r1\.9' "I4 if_unfixed 양의 짝: 그 조각은 「그대로 두면」 줄 안에 산다"
+  rm -rf "$d"
+}
+
+# ── AC19′ — 사람말 사상이 없는 category 는 원래 이름으로 나가고 그 사실을 공시한다 ─────────
+# normalize() 는 임의 category 를 받는다 — rubric 밖 값(여기서는 `security`)을 내는 리뷰어가
+# 실제로 이 갈래를 태운다. 양의 짝(goal_fit)은 공시 줄이 없어야 한다 — 두 항목의 공시 줄
+# 합계가 정확히 1 이다.
+case_category_unglossed_disclosed() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-unglossed.txt" "$FX/codex-failed.yaml" --skip)" \
+    || { no "AC19′ 공시: route_r1 실패"; return; }
+  assert_eq "$(fsum "$d" '신뢰 경계를' '["decision_view"]["category_unglossed"]')" "security" \
+    "AC19′: 사상 없는 category 가 category_unglossed 로 공시된다"
+  assert_contains "$(fsum "$d" '신뢰 경계를' '["decision_view"]["impact"]')" "#2-goals (security) · 인용" \
+    "AC19′: 사상 없는 category 는 「자리」에 원래 이름 그대로 실린다(빈칸이 아니다)"
+  assert_eq "$(fsum "$d" '다른 것을 겨눈다' '["decision_view"]["category_unglossed"]')" "None" \
+    "AC19′ 양의 짝: 사상 있는 category(goal_fit)는 공시하지 않는다"
+  local gr; gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_grep "$gr" '^  ↳ 사람말 사상 없음: security' "AC19′: 게이트 렌더에 사상 부재 공시 줄이 선다"
+  assert_eq "$(printf '%s\n' "$gr" | grep -c '↳ 사람말 사상 없음')" "1" \
+    "AC19′ 양의 짝: 공시 줄은 사상 없는 항목에만 — 렌더 전체에 정확히 하나"
   rm -rf "$d"
 }

@@ -1,0 +1,28 @@
+층 1 만.
+
+```docreview-layer1
+- ref: c1
+  layer: 1
+  category: security
+  anchor: "#2-goals"
+  disposition: decide
+  summary: "Goals 가 신뢰 경계를 말하지 않는다"
+  evidence: "§2 전체"
+  replacement: "§2 에 신뢰 경계 한 줄을 더한다"
+  if_unfixed: "경계가 구현자의 추측으로 정해진다"
+- ref: c2
+  layer: 1
+  category: goal_fit
+  anchor: "#2-goals"
+  disposition: decide
+  summary: "Goals 가 브리프의 goal 과 다른 것을 겨눈다"
+  evidence: "브리프 §1 vs 문서 §2"
+  replacement: "§2 를 브리프 §1 의 goal 한 문장으로 되돌린다"
+  if_unfixed: "설계 전체가 다른 문제를 잘 푸는 쪽으로 굳는다"
+```
+
+층 2.
+
+```docreview-layer2
+[]
+```

@@ -3,6 +3,18 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [8.4.1] — 2026-09-24
+
+patch 인 이유 — 링크로 배송하는 `docreview_route.py` · `docreview_state.py` · `render_disposition.py` · `codex_findings_to_yaml.py` 가 바뀌었다(spec-distill 4.3.1 과 같은 변경).
+
+### Fixed
+
+- **문서 리뷰 게이트의 `if_unfixed` 칸이 개행·공백 강제를 받지 않았다** — 개행 낀 값이 게이트 줄 모양을 열 0 에 세울 수 있었다. `replacement` 와 같은 접기·계수를 받는다. 상세는 spec-distill 4.3.1.
+
+### Changed
+
+- `tools/adjudication/check_wiring.py` 의 EXEMPT 줄 핀 여덟 재앵커 · 사유 문자열의 줄 번호 인용을 심볼 인용으로.
+
 ## [8.4.0] — 2026-09-24
 
 각도 바닥 — 세 각도의 상태가 총 함수가 되고, 보안·판정의 부재가 `clean` 을 막는다 (설계 §6.3, AC10 · AC10a · AC11 · AC12). **호출자 배선은 PR4 다** — `--angles` 를 안 주면 stdout 은 대부분 이전과 바이트 동일하다. **예외 하나**: 주 source(primary source)가 죽으면 `--emit-verdict` 산출의 사유가 이전 `findings-lost` 대신 `angle-absent` 로 나간다(설계 §6.4.3 의 의도된 배정) — 이 한 경로는 `--angles` 유무와 무관하게 바이트가 갈린다.
