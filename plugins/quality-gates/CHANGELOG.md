@@ -3,6 +3,39 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [8.3.1] — 2026-09-23
+
+리뷰 라운드 2(PR #166 단일 수정 웨이브) — Important 셋(I1~I3) + Minor 넷(Ruling F-3).
+
+### Fixed
+
+- **(I1) `synthesize_findings.py` 의 판정 입력 플래그가 `--emit-verdict` 없이도 조용히 버려졌다.** `--differential`·`--reason`·`--legacy-verdict` 를 `--emit-verdict` 없이 주면(빈 문자열 `--differential` 딱 하나만 빼고) rc=0·stderr 없이 흡수됐다 — Ruling T5-a 가 닫은 것과 같은 fail-open 계열. 이제 세 플래그 모두 `--emit-verdict` 없이 주면 usage 오류(exit 2)로 대칭 차단한다. `tests/test_verdict_vocabulary.sh` 에 `case_synth_verdict_flags_without_emit_are_usage_error` 추가, mutation 으로 이빨 확인.
+- **(Minor, Ruling F-3) `case_synth_verdict_failure_is_atomic` 픽스처가 형제 케이스가 이미 고친 green-for-the-wrong-reason 모양을 갖고 있었다.** `case_non_utf8_differential_is_fail_closed` 와 같은 치료(유효한 차등 산출물 본문 + 그 뒤에 나쁜 바이트)를 적용했다.
+
+### Changed
+
+- **(I2) `verdict.py` 의 `add("findings-lost")` 자리 주석이 알려진 편차를 명시한다.** `Ledger.blocks()` 가 나르는 세 차단 조건(항목 소실·셀 수 없음·주 판정자 죽음) 중 처음 둘만 `findings-lost` 고 셋째는 설계상 `angle-absent`(PR3 배선)인데, 이 모듈은 셋 다 `findings-lost` 하나로 접는다 — 정밀하게 가르려면 `shared/adjudication/` 에 공개 accessor 가 필요하고 이 PR 의 Global Constraints 는 그 디렉토리를 못 건드린다. 판정 값은 어느 쪽이든 `not-certified` 로 같아 게이트는 안 넓어진다. 코드·매핑·락 변경 없음(주석만).
+- **(I3) `references/runtime-gate.md` 의 절단-안전성 문장이 사실과 달랐다.** "조용히 사라질 수 있는 것은 진단용 `per_adapter` 꼬리뿐"이라고 적었는데, 이 PR(8.3.0)이 이미 `degrade_causes:`·`resolution_disclosure:` 를 그 앞에 놓았다 — "PR4 가 배선하면 거짓이 된다"가 아니라 **이 커밋 시점에 이미 거짓**이었다. 문장을 정정했다(무엇이 그 구간에 있는지, 오늘 아무도 그것을 판정 입력으로 안 읽는지, 읽기 시작하면 무엇이 안전하지 않아지는지).
+
+### Docs
+
+- `docs/superpowers/plans/2026-09-22-qg-verdict-vocabulary-pr2.md` 의 self-review 문장 하나 정정(Minor, Ruling F-3) — `scope-empty` 는 이 PR 자신의 `CAUSE_TO_REASON` 이 이미 산출자를 주므로 "PR4 의 빚" 목록에서 뺀다.
+
+### Fixed (파일 모드)
+
+- **(Minor, Ruling F-3) `verdict.py`·`test_verdict_vocabulary.sh` 가 100644 였다.** 형제 스크립트/락과 달리 실행 비트가 없었다 — `runtime-gate.md` 가 스킬 직접 실행 표기(`"$QG/scripts/<name>.py"`)를 쓰므로 실행 비트 없는 스크립트를 그 패턴으로 부르면 EACCES 다. 100755 로 맞췄다.
+
+## [8.3.0] — 2026-09-22
+
+### Added
+
+- **판정 어휘 세 값과 닫힌 사유 열거.** `scripts/verdict.py` 가 `clean` · `defect` · `not-certified` 와 11값 사유 열거, 우선순위(`defect > not-certified > clean`), 옛 네 값 매핑표를 한 자리에 갖는다. 사유 없는 `not-certified` 와 열거 밖 사유는 exit 4 로 막는다.
+- **차등 산출물이 degrade 의 원인을 낸다.** `degrade_causes:` 가 `attribution_status: degraded` 한 값에 접혀 있던 여섯 원인을 편다. per-adapter 와 집계 양쪽에서 `degraded == (causes != [])` 를 fail-closed 로 검사한다.
+- **해상도 공시(AC13).** `pre_existing > 0` 인 실행이 「양측 빨강 unit N개 — 그 안의 새 실패는 이 해상도에서 보이지 않는다」를 **per-adapter 와 집계 양쪽에** 낸다. 공시는 판정을 막지 않고 기존 bulk 가드를 대체하지도 않는다.
+- `tests/test_verdict_vocabulary.sh` · `tests/test_resolution_disclosure.sh`.
+
+**`/qg` 의 동작은 바뀌지 않는다.** 합성기의 판정 산출은 `--emit-verdict` 뒤에 있고 기본 off 이며, 켜지 않으면 stdout 이 이전과 바이트 동일하다 — 소비자 이주는 뒤 릴리스다.
+
 ## [8.2.5] — 2026-09-24
 
 patch 인 이유 — 보안 수정이다. 절대 경로 항목만 있는 PATH 에서는 고르는 인터프리터가 전과 같다.

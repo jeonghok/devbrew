@@ -51,6 +51,15 @@ CATEGORIES = [
 # stale red가 첫 실행부터 게이트를 막으면 이 설계는 쓸 수 없다.
 DEFECTS = {"NEW_REGRESSION", "NEW_TEST_RED"}
 
+# degrade 의 원인 — **닫힌 열거**. `per_adapter()` 의 `degraded` 식 여섯 절과 1:1 이고
+# `no-adapters` 만 집계 전용이다(어댑터 0개는 per-adapter 에 존재할 수 없다).
+# 튜플 «순서» 가 집계 목록의 정렬 키다 — 어댑터 입력 순서가 출력 문자열을 바꾸면
+# 같은 사실이 두 표기로 나간다.
+DEGRADE_CAUSES = (
+    "expected-empty", "baseline-unrunnable", "silent-drop",
+    "error-axis", "bulk-pre-existing", "smeared", "no-adapters",
+)
+
 
 def fail4(msg: str) -> NoReturn:
     print(f"diff-test-results: {msg}", file=sys.stderr)
@@ -344,6 +353,27 @@ def per_adapter(args: argparse.Namespace) -> int:
         or smeared
     )
 
+    # `degraded` 는 여섯 원인을 한 bool 로 접는다 — 밖에서는 어느 사유로 미판정인지
+    # 알 수 없다. 설계 §6.4.3 의 `reason` 닫힌 열거가 그 사유를 요구하므로 여기서 편다.
+    # **불변식: `degraded == (causes != [])`.** 아래 목록과 위 식은 같은 술어의 두 표기다.
+    causes = []
+    if not expected:
+        causes.append("expected-empty")
+    if counts["baseline_unrunnable"] > 0:
+        causes.append("baseline-unrunnable")
+    if counts["silent_drop"] > 0:
+        causes.append("silent-drop")
+    if error_axis_seen:
+        causes.append("error-axis")
+    if args.granularity == "bulk" and counts["pre_existing"] > 0:
+        causes.append("bulk-pre-existing")
+    if smeared:
+        causes.append("smeared")
+    if bool(causes) != bool(degraded):
+        # 두 표기가 어긋나면 어느 쪽이 참인지 알 수 없다 — fail-closed.
+        # `assert` 를 쓰지 않는다: `python3 -O` 가 그것을 통째로 지운다.
+        fail4(f"내부 불일치: degraded={degraded} 인데 degrade_causes={causes}")
+
     out = [f"runner: {args.runner}"]
     if attributions:
         out.append("attributions:")
@@ -358,6 +388,15 @@ def per_adapter(args: argparse.Namespace) -> int:
         # 명시적으로 빈 flow-sequence를 낸다.
         out.append("attributions: []")
     out.append(f"attribution_status: {'degraded' if degraded else 'closed'}")
+    out.append(f"degrade_causes: [{', '.join(causes)}]")
+    # AC13 — (F,F) 구멍의 공시(설계 §6.4.2). **판정을 막지 않는다**: 이 줄은 기존
+    # 가드 «위에» 얹힌다. `granularity == bulk && pre_existing > 0` 은 여전히
+    # degraded 이고 `bulk-pre-existing` 사유를 낸다. 이 단서 없이 구현하면 가드가
+    # 조용히 사라진다.
+    if counts["pre_existing"] > 0:
+        out.append("resolution_disclosure: " + yaml_str(
+            f"양측 빨강 unit {counts['pre_existing']}개 — 그 안의 새 실패는 "
+            "이 해상도(unit 당 종료 코드 하나)에서 보이지 않는다"))
     # counts는 flow-mapping(한 줄)으로 emit한다 — 블록 스타일(키 한 줄씩)로 쓰면
     # `silent_drop`/`baseline_unrunnable`이 카운트 키와 verdict_input 플래그 키에서
     # 동시에 등장해, 순진한 "첫 매치" 파서(소비자 다수가 그렇다 — Task 11 참고)가
@@ -383,7 +422,9 @@ def _one(pattern: str, text: str, path: str, what: str) -> str:
     return hits[0]
 
 
-def parse_adapter_yaml(path: str) -> tuple[str, str, dict[str, bool], dict[str, int]]:
+def parse_adapter_yaml(
+    path: str,
+) -> tuple[str, str, dict[str, bool], dict[str, int], list[str]]:
     """per_adapter()가 실제로 내는 형상을 파싱한다.
 
     `counts`는 per_adapter()가 flow-mapping 한 줄로 emit한다(위 주석 참고) — 블록
@@ -394,6 +435,13 @@ def parse_adapter_yaml(path: str) -> tuple[str, str, dict[str, bool], dict[str, 
     text = read_text_or_fail4(path, "aggregate-input")
     runner = _one(r"^runner: (\S+)$", text, path, "runner")
     status = _one(r"^attribution_status: (closed|degraded)$", text, path, "attribution_status")
+    causes_body = _one(r"^degrade_causes: \[(.*)\]$", text, path, "degrade_causes")
+    causes = [c.strip() for c in causes_body.split(",") if c.strip()]
+    unknown = [c for c in causes if c not in DEGRADE_CAUSES]
+    if unknown:
+        fail4(f"{path}: 미지의 degrade_cause {unknown} — 열거는 닫혀 있다")
+    if bool(causes) != (status == "degraded"):
+        fail4(f"{path}: attribution_status={status} 인데 degrade_causes={causes}")
     flags: dict[str, bool] = {}
     for key in ("confirmed_product_defect", "silent_drop", "baseline_unrunnable"):
         flags[key] = _one(rf"^  {key}: (true|false)$", text, path, key) == "true"
@@ -413,7 +461,7 @@ def parse_adapter_yaml(path: str) -> tuple[str, str, dict[str, bool], dict[str, 
         missing = sorted(expected_keys - set(counts))
         extra = sorted(set(counts) - expected_keys)
         fail4(f"{path}: counts 키 불일치 (missing={missing}, extra={extra})")
-    return runner, status, flags, counts
+    return runner, status, flags, counts, causes
 
 
 def _aggregate(args: argparse.Namespace) -> int:
@@ -432,8 +480,9 @@ def _aggregate(args: argparse.Namespace) -> int:
     combined = {"confirmed_product_defect": False, "silent_drop": False,
                 "baseline_unrunnable": False}
     degraded = False
+    causes: list[str] = []
     for path in args.yamls:
-        runner, status, flags, counts = parse_adapter_yaml(path)
+        runner, status, flags, counts, adapter_causes = parse_adapter_yaml(path)
         if runner in adapters:
             # 같은 runner가 두 번 오면 개수 대조가 무력해진다 (다른 어댑터 하나가
             # 통째로 빠져도 총 개수는 맞아떨어질 수 있다).
@@ -446,6 +495,9 @@ def _aggregate(args: argparse.Namespace) -> int:
             # confirmed_product_defect에 삼켜지지 않고 독립적으로 살아남는다.
             combined[key] = combined[key] or flags[key]
         degraded = degraded or status == "degraded"
+        for c in adapter_causes:
+            if c not in causes:
+                causes.append(c)
 
     # runner 이름은 여기서도, per_adapter()의 `runner: {args.runner}`에서도
     # yaml_str()로 따옴표 처리하지 않는다 — parse_adapter_yaml()의 `^runner: (\S+)$`
@@ -458,11 +510,24 @@ def _aggregate(args: argparse.Namespace) -> int:
     # 개수 대조를 통과하므로, 여기서 막지 않으면 `closed` 로 나간다.
     if not adapters:
         degraded = True
+        causes.append("no-adapters")
 
     out = [f"adapters: [{', '.join(adapters)}]", "verdict_input:"]
     for key in ("confirmed_product_defect", "silent_drop", "baseline_unrunnable"):
         out.append(f"  {key}: {'true' if combined[key] else 'false'}")
     out.append(f"attribution_status: {'degraded' if degraded else 'closed'}")
+    # 입력 어댑터 순서가 출력 문자열을 바꾸면 같은 사실이 두 표기로 나간다.
+    out.append("degrade_causes: ["
+               + ", ".join(sorted(causes, key=DEGRADE_CAUSES.index)) + "]")
+    if bool(causes) != bool(degraded):
+        fail4(f"내부 불일치: degraded={degraded} 인데 degrade_causes={causes}")
+    # 집계는 per-adapter 의 공시 «문자열» 을 옮기지 않는다 — 같은 사실을 두 자리가
+    # 따로 말하면 어긋날 수 있다. 수는 여기서 다시 센다.
+    pre_existing_total = sum(c["pre_existing"] for c in per_adapter_counts.values())
+    if pre_existing_total > 0:
+        out.append("resolution_disclosure: " + yaml_str(
+            f"양측 빨강 unit {pre_existing_total}개 — 그 안의 새 실패는 "
+            "이 해상도(unit 당 종료 코드 하나)에서 보이지 않는다"))
     if adapters:
         out.append("per_adapter:")
         for runner in adapters:

@@ -20,6 +20,7 @@ from collections import defaultdict
 
 from adjudication import Ledger
 from render_disposition import disposition_lines
+import verdict as _verdict          # 새 책임은 새 모듈 — 여기는 진입점일 뿐이다
 
 
 SEV_ORDER = {"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 2}
@@ -568,7 +569,56 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--adversarial", default="")
     ap.add_argument("--findings", default="")
+    # 판정 어휘는 `verdict.py` 가 갖는다. 여기서는 입력을 모아 넘기기만 한다.
+    # 기본 off — 켜지 않으면 stdout 이 이 PR 이전과 바이트 동일하다(소비자 이주는 PR4).
+    ap.add_argument("--emit-verdict", action="store_true")
+    # 기본값을 `""` 로 두면 "플래그를 안 줬다" 와 "빈 경로를 줬다" 가 같은 값이
+    # 된다 — 값을 못 구한 호출자가 `--differential "$DIFF_YAML"` 을 빈 변수로
+    # 호출하면 차등 축이 조용히 사라지고 `clean` 으로 인증된다(`verdict.py` 의
+    # `read_or_none()` docstring 이 금지한 바로 그 새는 경로 — Ruling T5-a, Task 4
+    # 리뷰가 한 층 아래서 잡은 결함을 이 층에서 되살리지 않는다). 기본값을 `None`
+    # 으로 둬 두 경우를 구별하고, 명시적으로 빈 문자열을 주면 usage 오류(exit 2)다.
+    ap.add_argument("--differential", default=None)
+    ap.add_argument("--reason", action="append", default=[])
+    ap.add_argument("--legacy-verdict", default=None)
     args = ap.parse_args()
+
+    if args.differential is not None and args.differential == "":
+        print("synthesize_findings.py: --differential 은 빈 문자열을 받지 않는다 "
+              "(플래그를 생략하거나 실제 경로를 줘라)", file=sys.stderr)
+        sys.exit(2)
+    if args.legacy_verdict is not None and args.legacy_verdict == "":
+        print("synthesize_findings.py: --legacy-verdict 는 빈 문자열을 받지 않는다",
+              file=sys.stderr)
+        sys.exit(2)
+
+    # I1 (리뷰 라운드 2) — 위 두 검사는 세 판정 입력 플래그 중 딱 한 모양
+    # (`--differential ""`)만 `--emit-verdict` 앞에서 막았다. `--differential
+    # /some/path`·`--reason x`·`--legacy-verdict x` 는 `--emit-verdict` 없이
+    # 줘도 여기까지 통과해 아래 `if args.emit_verdict:` 블록에서 조용히
+    # 버려지고 rc=0 으로 빠졌다(측정: 셋 다 verdict_lines=0, stderr 없음) —
+    # Ruling T5-a 가 닫은 것과 같은 fail-open 계열이다: 값을 구했지만
+    # `--emit-verdict` 를 빼먹은 호출자가 완전해 보이는 보고서 + rc=0 을 받고,
+    # 판정축 전체가 그 실행에서 빠졌다는 사실이 어느 채널에도 안 남는다. 세
+    # 플래그 모두 `--emit-verdict` 없이는 의미가 없으므로 여기서 대칭으로
+    # 막는다 — exit 2(usage 오류)다, exit 4(판정축 실패)가 아니다: 이것은
+    # 잘못된 *호출*이지 실패한 *판정*이 아니다.
+    if not args.emit_verdict:
+        if args.differential is not None:
+            print("synthesize_findings.py: --differential 은 --emit-verdict "
+                  "없이는 의미가 없다 (함께 주거나 --differential 을 빼라)",
+                  file=sys.stderr)
+            sys.exit(2)
+        if args.reason:
+            print("synthesize_findings.py: --reason 은 --emit-verdict 없이는 "
+                  "의미가 없다 (함께 주거나 --reason 을 빼라)",
+                  file=sys.stderr)
+            sys.exit(2)
+        if args.legacy_verdict is not None:
+            print("synthesize_findings.py: --legacy-verdict 는 --emit-verdict "
+                  "없이는 의미가 없다 (함께 주거나 --legacy-verdict 을 빼라)",
+                  file=sys.stderr)
+            sys.exit(2)
 
     ledger = Ledger(items="open")
 
@@ -593,12 +643,35 @@ def main():
     kept, suppressed = suppress(findings, ledger=ledger)
     kept = sort_findings(kept)
 
+    # Ruling T5-b — 판정 «계산» 은 본 보고서를 쓰기 «전» 에 한다. `_verdict.
+    # read_or_none()` 의 fail4 가 여기서 터지면 stdout 이 아직 비어 있다(이
+    # 리포의 fail4 계약: 원자적·무출력 — Task 2 리뷰가 diff-test-results.py 의
+    # `_aggregate` 에서 이미 확인한 바로 그 계약). 뒤에 두면 완전해 보이는
+    # 보고서가 이미 나간 뒤 rc=4 가 되어, rc 를 보지 않는 줄-지향 소비자에게는
+    # 성공한 실행으로 읽힌다 — 실측(이전 라운드): 549바이트 완전한 보고서 +
+    # rc=4 조합.
+    decision = None
+    if args.emit_verdict:
+        # `report["degraded"]`(공시)가 아니라 `blocks()`(차단)다 — 헌장은 모델 다양성
+        # 손실 같은 degrade 를 공시만 하고 막지 않는다. 여기서 둘을 섞으면 이 PR 이
+        # 조용히 게이트를 넓힌다.
+        decision = _verdict.decide(
+            defect=bool(kept),                    # 계획 R-B — severity 를 묻지 않는다
+            review_blocked=ledger.blocks(),
+            differential_text=_verdict.read_or_none(args.differential),
+            extra_reasons=args.reason,
+            legacy_verdict=args.legacy_verdict,
+        )
+
     # 원장은 «회계»만 한다 — 읽어서 stdout 에 싣는 것은 이 소비자의 책임이다.
     # 라운드 4 이전에는 `held` 만 꺼내 갔고 `degraded`/`reasons` 는 어디로도 가지
     # 않았다: 주 입력이 통째로 죽어도 출력이 clean 과 **바이트 동일**이었다.
     report = ledger.report()
     sys.stdout.write(render(kept, len(suppressed), dropped_malformed,
                             report, ledger.held_by_class()))
+
+    if args.emit_verdict:
+        sys.stdout.write(_verdict.render(decision))
 
 
 if __name__ == "__main__":

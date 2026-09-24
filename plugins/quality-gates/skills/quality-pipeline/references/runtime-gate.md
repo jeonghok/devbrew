@@ -316,8 +316,15 @@ assign_rc=$?
 `_aggregate()` 는 `attribution_status:` 를 세 `verdict_input` 키 **뒤에**, `per_adapter:`
 블록 **앞에** 낸다. 그래서 판정에 쓰이는 키를 잃는 절단은 `attribution_status:` 도 함께
 잃고 `check_qa_ledger.py` 의 "정확히 1개" 검사가 `exit 4` 를 낸다. 조용히 사라질 수 있는
-것은 **진단용 `per_adapter` 꼬리뿐**이며 그 값들은 아래에서 판정 입력이 아니라고 명시된다.
-앞 버전의 *"잘린 파일은 exit 4 가 된다"* 는 보편 주장이라 이 꼬리에 대해 거짓이었다.
+구간은 `attribution_status:` **뒤**, `per_adapter:` **앞** 두 줄 — `degrade_causes:`(항상
+있음)와 `resolution_disclosure:`(사전 존재 unit 이 있을 때만 있음) — 을 포함해 그 뒤
+**진단용 `per_adapter` 꼬리**까지다. 오늘은 이 구간 어떤 키도 게이트가 판정 입력으로 읽지
+않는다(아래에서 판정 입력은 `verdict_input` 3플래그와 `attribution_status` 뿐이라고
+명시한다) — 그래서 이 구간이 조용히 사라져도 오늘의 라우팅은 안전하다. 이 구간을 판정
+입력으로 읽는 소비자가 생기면 사정이 달라진다: 같은 절단이 `attribution_status:` 는 온전히
+남기고 `degrade_causes:`/`resolution_disclosure:` 만 지워, `check_qa_ledger.py` 의 "정확히
+1개" 검사를 통과시키면서 그 소비자에게는 "원인 없음"을 보고한다. 앞 버전의 *"잘린 파일은
+exit 4 가 된다"* 는 보편 주장이라 이 구간 전체에 대해 거짓이었다.
 
 반면 `--assign-rows` 의 소비자에게는 **비어 있음이 적법한 답**이라 절단과 구분되지 않는다.
 그 비대칭이 이 원칙을 어디에 적용할지를 가른다 — 형제 둘을 "고치"거나, 반대로 이 원칙이

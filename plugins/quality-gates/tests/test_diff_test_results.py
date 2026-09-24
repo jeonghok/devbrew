@@ -4,6 +4,7 @@
 AC11 AC13 AC14 AC15 AC16 AC36 AC43 AC48 · T9 T10 T11 T12 T13 T27 T39 T45 · M4 M22
 """
 import importlib.util
+import re
 import subprocess
 import sys
 import tempfile
@@ -756,6 +757,13 @@ def write_adapter_yaml(path: Path, runner, defect, drop, unrunnable, status="clo
     들여쓰기 키:값 줄마다)로 쓰면 이 스크립트가 실제로 만드는 출력과 다른 것을
     파싱하는 셈이라 회귀를 못 잡는다. 8개 카테고리 전부를 채운다 — 집계 파서가
     누락된 카테고리를 exit 4로 잡는지 다른 테스트가 확인한다.
+
+    PR2: `degrade_causes:` 도 함께 낸다 — `parse_adapter_yaml`이 이제 이 키를
+    정확히 1회 요구한다(`_one`). 이 헬퍼가 호출하는 `status`와 불일치하지 않도록
+    `status == "degraded"`일 때만 채우고 `"closed"`일 때는 항상 빈 목록이다 — 이
+    함수의 `drop`/`unrunnable`은 (일부 호출부가 그러듯) `status`와 독립적으로
+    골라질 수 있으므로 그 값을 그대로 원인에 섞으면 status와 어긋나는 조합이
+    생긴다. `status`만이 이 경계의 유일한 소유자다.
     """
     counts_body = ", ".join([
         "still_green: 0",
@@ -767,10 +775,20 @@ def write_adapter_yaml(path: Path, runner, defect, drop, unrunnable, status="clo
         "silent_drop: 0",
         "baseline_unrunnable: 0",
     ])
+    causes: list[str] = []
+    if status == "degraded":
+        if unrunnable:
+            causes.append("baseline-unrunnable")
+        if drop:
+            causes.append("silent-drop")
+        if not causes:
+            causes.append("error-axis")
+    causes_line = f"degrade_causes: [{', '.join(causes)}]\n"
     path.write_text(
         f"runner: {runner}\n"
         "attributions: []\n"
         f"attribution_status: {status}\n"
+        f"{causes_line}"
         f"counts: {{{counts_body}}}\n"
         "verdict_input:\n"
         f"  confirmed_product_defect: {'true' if defect else 'false'}\n"
@@ -907,6 +925,7 @@ class TestAggregate(unittest.TestCase):
                 "runner: pytest\n"
                 "attributions: []\n"
                 "attribution_status: closed\n"
+                "degrade_causes: []\n"
                 "counts: {still_green: 0, new_regression: 1}\n"
                 "verdict_input:\n"
                 "  confirmed_product_defect: true\n"
@@ -1038,6 +1057,121 @@ class TestAggregateRealProducer(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(flag_of(r.stdout, "confirmed_product_defect"), "false")
         self.assertEqual(flag_of(r.stdout, "attribution_status"), "closed")
+
+
+class DegradeCauses(unittest.TestCase):
+    """degrade 의 «원인» 이 밖으로 나간다 (PR2 — 설계 §6.4.3 의 reason 열거 입력)."""
+
+    def causes_of(self, out: str) -> list[str]:
+        """`degrade_causes: [...]` 를 정확히 한 번 읽는다. 0회도 2회도 실패다."""
+        hits = re.findall(r"^degrade_causes: \[(.*)\]$", out, re.M)
+        self.assertEqual(len(hits), 1, f"degrade_causes 줄이 {len(hits)}회: {out}")
+        return [c.strip() for c in hits[0].split(",") if c.strip()]
+
+    def test_clean_run_emits_empty_list_not_absent_line(self):
+        # 부재와 «빈 목록» 은 다른 사실이다. 줄 자체가 없으면 소비자는 이 스크립트가
+        # 옛 판본인지 degrade 가 0인지 구별할 수 없다.
+        rc, out, _ = run_diff(["u"], [("u", "pass", "0")], [("u", "pass", "0")])
+        self.assertEqual(rc, 0, out)
+        self.assertIn("degrade_causes: []", out)
+        self.assertEqual(self.causes_of(out), [])
+
+    def test_every_degraded_run_names_at_least_one_cause(self):
+        # 총 함수 — `degraded == (causes != [])`. 한쪽만 참인 산출은 존재할 수 없다.
+        cases = [
+            ("expected-empty",     [],    [],                      []),
+            ("baseline-unrunnable", ["u"], [("u", "unrun", "0")],  [("u", "pass", "0")]),
+            ("silent-drop",        ["u"], [("u", "pass", "0")],    []),
+            ("error-axis",         ["u"], [("u", "error", "1")],   [("u", "pass", "0")]),
+        ]
+        for name, exp, base, head in cases:
+            with self.subTest(name):
+                rc, out, _ = run_diff(exp, base, head)
+                self.assertEqual(rc, 0, out)
+                self.assertIn("attribution_status: degraded", out)
+                self.assertIn(name, self.causes_of(out))
+
+    def test_bulk_pre_existing_is_its_own_cause(self):
+        # runner 는 `run-test-selection.sh granularity`가 `bulk`로 답하는 러너여야
+        # 한다 (`verify_granularity`가 --runner/--granularity 쌍을 소유자에게
+        # 대조한다) — 실측: pytest→file, cargo→bulk. 기존 bulk 케이스들
+        # (test_true_bulk_adapter_still_degrades_via_existing_clause 등)도 전부
+        # cargo를 쓴다.
+        rc, out, _ = run_diff(["u"], [("u", "fail", "1")], [("u", "fail", "1")],
+                              granularity="bulk", runner="cargo")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("bulk-pre-existing", self.causes_of(out))
+
+    def test_aggregate_unions_causes_in_enum_order(self):
+        # 집계의 목록은 **어댑터 순서와 무관**해야 한다 — 순서가 입력에 의존하면
+        # 같은 사실이 두 문자열로 나가 하류의 대조가 깨진다.
+        #
+        # 실제 프로듀서(run_diff)로 서로 다른 원인의 어댑터 둘을 만든다 —
+        # pytest는 baseline-unrunnable(기준선 행이 unrun), shell은 silent-drop
+        # (head에서 unit 소실)만 낸다. 열거 순서(DEGRADE_CAUSES)는
+        # baseline-unrunnable이 silent-drop보다 앞이므로, 파일을 어느 순서로
+        # 넘기든 합집합 문자열은 같아야 한다.
+        with tempfile.TemporaryDirectory() as d:
+            f_pytest = write_real_adapter_yaml(
+                d, "pytest", ["a"], [("a", "unrun", "-")], [("a", "pass", "0")]
+            )
+            f_shell = write_real_adapter_yaml(
+                d, "shell", ["b"], [("b", "pass", "0")], []
+            )
+            r_forward = subprocess.run(
+                [sys.executable, str(SCRIPT), "--aggregate",
+                 "--expected-adapters", "2", f_pytest, f_shell],
+                capture_output=True, text=True,
+            )
+            r_reverse = subprocess.run(
+                [sys.executable, str(SCRIPT), "--aggregate",
+                 "--expected-adapters", "2", f_shell, f_pytest],
+                capture_output=True, text=True,
+            )
+        self.assertEqual(r_forward.returncode, 0, r_forward.stderr)
+        self.assertEqual(r_reverse.returncode, 0, r_reverse.stderr)
+        causes_forward = self.causes_of(r_forward.stdout)
+        causes_reverse = self.causes_of(r_reverse.stdout)
+        self.assertEqual(causes_forward, causes_reverse,
+                         "입력 순서가 출력 문자열을 바꿨다")
+        self.assertEqual(causes_forward, ["baseline-unrunnable", "silent-drop"])
+
+    def test_aggregate_with_zero_adapters_names_no_adapters(self):
+        # 어댑터 0개는 "결함 없음" 이 아니라 "아무것도 대조하지 않았음" 이다.
+        r = subprocess.run(
+            [sys.executable, str(SCRIPT), "--aggregate", "--expected-adapters", "0"],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("attribution_status: degraded", r.stdout)
+        self.assertEqual(self.causes_of(r.stdout), ["no-adapters"])
+
+    def test_unknown_cause_in_input_is_exit_4(self):
+        # 열거는 닫혀 있다 — 미지의 사유를 조용히 통과시키면 하류의 `reason` 이
+        # 열거 밖 값을 받는다(AC8 위반).
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "bad.yaml"
+            f.write_text(
+                "runner: pytest\n"
+                "attributions: []\n"
+                "attribution_status: degraded\n"
+                "degrade_causes: [made-up]\n"
+                "counts: {still_green: 0, new_regression: 0, pre_existing: 0, "
+                "fixed: 0, new_test_green: 0, new_test_red: 0, silent_drop: 0, "
+                "baseline_unrunnable: 0}\n"
+                "verdict_input:\n"
+                "  confirmed_product_defect: false\n"
+                "  silent_drop: false\n"
+                "  baseline_unrunnable: false\n",
+                encoding="utf-8",
+            )
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT), "--aggregate",
+                 "--expected-adapters", "1", str(f)],
+                capture_output=True, text=True,
+            )
+        self.assertEqual(r.returncode, 4, r.stdout + r.stderr)
+        self.assertEqual(r.stdout.strip(), "")
 
 
 if __name__ == "__main__":
