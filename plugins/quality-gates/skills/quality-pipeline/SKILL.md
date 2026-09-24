@@ -514,8 +514,9 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
       cat "$QG/references/recritic-code-profile.md"
       ```
 
-      `prepare` 가 0 이 아닌 코드로 끝나면 재비판을 디스패치하지 않는다 — 4 단계의 합성기가
-      응답 파일의 부재를 판정 각도의 주 입력 실패로 센다(침묵하지 않는다).
+      `prepare` 가 0 이 아닌 코드로 끝나면 재비판을 디스패치하지 않는다 — 이 뒤에 도는
+      `synthesize_findings.py`(아래 「4. Run synthesize_findings.py」, 이 안쪽 번호 목록의
+      4 가 아니다)가 응답 파일의 부재를 판정 각도의 주 입력 실패로 센다(침묵하지 않는다).
       `$RV/recritic.diff` 에는 `security-reviewer` 에게 준 것과 같은 **raw unified diff**
       (hunk 만)를 쓴다. `git show` · `git format-patch` · `git log -p` 의 출력은 쓰지 않는다 —
       그것들은 **커밋 메시지**를 싣고, 커밋 메시지는 작성자의 프레이밍이다.

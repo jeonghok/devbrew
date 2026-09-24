@@ -511,7 +511,7 @@ fi
 # doc-recritic itself is a byte-for-byte copy-of the shared persona (Law 2
 # scoping lives upstream, verified by test_copy_of_contract.sh) — this only
 # re-checks the #104 tools posture this SKILL's prose claims for it.
-if grep -qE '^tools:[[:space:]]*Read,[[:space:]]*Grep,[[:space:]]*Glob' "$AGENTS_DIR/doc-recritic.md"; then
+if grep -qE '^tools:[[:space:]]*Read,[[:space:]]*Grep,[[:space:]]*Glob$' "$AGENTS_DIR/doc-recritic.md"; then
   echo "PASS: doc-recritic persona keeps #104 tools posture (Read, Grep, Glob)"
 else
   echo "FAIL: doc-recritic persona tools posture changed from Read, Grep, Glob (#104 lock)"
@@ -565,8 +565,13 @@ assert_line "Phase 1.5 dispatches even when detection has zero findings (AC17)" 
 assert_order "AC17 zero-findings clause precedes doc-recritic dispatch" "$phase15_zero_line" "$review_line"
 
 # The recritic.diff instructions must forbid git show/format-patch/log -p output,
-# backed by a body-unique rationale line (not header-satisfiable).
-gitshow_line=$(first_line 'git format-patch')
+# backed by a body-unique rationale line (not header-satisfiable). Anchor on
+# `git format-patch` AND the negation `쓰지 않는다` together — a bare
+# `git format-patch` existence check doesn't lock the prohibition itself: someone
+# could delete "쓰지 않는다" (turning the sentence into something else, or even
+# permissive) while `git format-patch` still appears elsewhere on the line/file,
+# and the old anchor would stay GREEN (fix round 1, Minor 3).
+gitshow_line=$(first_line 'git format-patch.*쓰지 않는다')
 assert_line "recritic diff prohibits git show/format-patch/log -p output" "$gitshow_line"
 if [[ "$gitshow_line" -gt 0 ]] && awk -v s="$gitshow_line" -v e="$((gitshow_line + 3))" \
     'NR>=s && NR<=e && index($0, "커밋 메시지") {f=1} END{exit !f}' "$SKILL_MD"; then

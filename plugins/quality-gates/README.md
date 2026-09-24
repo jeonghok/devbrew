@@ -123,7 +123,7 @@ quality-gates/
 │   ├── build_codex_prompt.py                 # Review gate Phase 1 codex-reviewer용 prompt builder
 │   ├── codex_findings_to_yaml.py             # symlink → ../../../shared/codex/codex_findings_to_yaml.py — Codex JSONL stream → 표준 finding YAML (auth/schema/stderr 처리, --emit-keys default|design)
 │   ├── codex_jsonl.py                        # copy-of shared/codex/codex_jsonl.py — extract_last_agent_message 정본 사본 (설치본에서 sibling import가 살아있게)
-│   ├── recritic_bridge.py                    # Phase 1.5 재비판 익명화 브리지 (`prepare` — findings → agent-stripped f-키, 매핑·raw diff 산출)
+│   ├── recritic_bridge.py                    # Phase 1.5 재비판 익명화 브리지 (`prepare` — findings → agent-stripped f-키 findings + 매핑 산출; raw diff 는 오케스트레이터가 별도로 쓴다)
 │   ├── qg-gc.py                              # TTL 기반 stale 세션 GC (fcntl-locked)
 │   ├── build-pr-context.sh                   # publish: base..HEAD 고정 context blob (diff+내용+이웃 시그니처+커밋메시지) — 빌더의 유일 입력
 │   ├── diagram-facts.sh                      # publish: nodes/edges 산출 (changed files + 이웃 import; repo-root 상대 import만)
@@ -133,7 +133,9 @@ quality-gates/
 │   ├── render-terminal.py                    # publish + Final Summary 공용 STATUS 표 / ASCII diagram / accuracy-warnings 렌더러
 │   └── gh-identity.sh                        # publish: 인증 user login+numeric id 조회 (`gh api user` 캡슐화; empty id는 fail-closed)
 ├── references/
-│   └── recritic-code-profile.md   # Phase 1.5 재비판 코드-경로 프로필 — 판정 어휘 + 관문 A–D(verifier-writable 포함, 이전 판정자 persona 에서 이관, PR4a R-Q)
+│   ├── recritic-code-profile.md   # Phase 1.5 재비판 코드-경로 프로필 — 판정 어휘 + 관문 A–D(verifier-writable 포함, 이전 판정자 persona 에서 이관, PR4a R-Q)
+│   └── docreview-profiles/
+│       └── generic.md             # `/qg critique` 게이트 — non-code 아티팩트 리뷰 프로필(§ 위 v7.4.0 bullet)
 ├── skills/
 │   ├── quality-pipeline/
 │   │   ├── SKILL.md         # 단일 게이트 실행기
@@ -184,7 +186,7 @@ model-based 판정 각도**다: Phase 1/2 리뷰어가 findings 를 내고 그 �
 결정론적 스크립트이므로, 사용자가 보는 모든 finding 은 재비판자의 판정을 거친다. 판정
 관문은 이제 persona 가 아니라 코드 프로필 자리다 — `references/recritic-code-profile.md`
 가 A–D(verifier-writable 포함)를 싣고, persona 자신은 문서 재비판과 동일한 프레이밍-차단
-뼈대만 갖는다(공유 정본 — Task 6 이 이 플러그인에서 편집하지 않는다). `model` 키 부재가
+뼈대만 갖는다(공유 정본 — 이 플러그인은 그 persona 프로즈를 편집하지 않는다). `model` 키 부재가
 그대로 유지되는지는 `shared/tests/test_copy_of_contract.sh`(byte-for-byte copy invariant)
 가 잰다 — 사본이 원본과 한 바이트라도 다르면 그 락이 RED 다. 하네스가 티어를 정하지 않는
 원리(no `model` key → 사용자 `CLAUDE_CODE_SUBAGENT_MODEL` 설정, 없으면 세션 티어, CLI

@@ -38,7 +38,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 
 ### P11 — Cross-Model Adversarial at High-Stakes Moments
 **Law 2 집행.** 되돌리기 어려운 결정(프로덕션 배포·스펙 mutation·보안-crit·스키마 마이그레이션)엔 단일 모델 의견이 부족 — cross-vendor second opinion을 게이트로. Load-bearing: Claude-only 리뷰가 반복적으로 놓친 보안 fail-open을 codex(read-only=leak-proof) 모델 다양성이 적발했다 — 단일 모델은 default, 다중 모델은 opt-in 게이트.
-코드: `plugins/quality-gates/scripts/run_codex_reviewer.sh` · `plugins/quality-gates/agents/adversarial.md`
+코드: `plugins/quality-gates/scripts/run_codex_reviewer.sh` · `plugins/quality-gates/agents/doc-recritic.md` · `plugins/quality-gates/references/recritic-code-profile.md`
 
 ### P12 — Transparency of Planning
 **Law 1 집행.** Agent는 실행 전에 계획을 보이고 사용자가 redirect할 수 있어야 하며, 계획은 chat 요약이 아니라 파일에 기록된다. Load-bearing: 한 문장으로 묘사 가능한 trivia diff(typo·rename·comment-only formatting — 파일 수와 무관하게)만 게이트를 우회하고, behavior·public-API 변경은 자격이 없다 — triviality 판정은 invoking skill의 책임이다.
