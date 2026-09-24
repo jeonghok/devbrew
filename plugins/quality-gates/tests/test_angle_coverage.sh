@@ -156,6 +156,10 @@ case_synth_self_adjudication_is_atomic_failure() {
   assert_eq "$out" ""  "실패 경로의 stdout 이 비어 있다 (fail4 는 원자적이다)"
   # 원인을 핀한다 — rc 4 + 빈 stdout 은 어느 fail4 든 만든다(수행자 문법 오류도).
   assert_contains "$(cat "$T/err")" "AC10a" "exit 4 의 원인이 AC10a 다 (다른 fail4 가 아니다)"
+  # 재비판 Important 2 — 신원 계약 메시지도 "AC10a" 를 포함하므로 위 단언만으로는
+  # 원인이 자기 판정인지 신원 계약인지 못 가른다. 이 픽스처는 저자가 문법 안이므로
+  # 원인은 자기 판정이어야 한다.
+  assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (신원 계약이 아니다)"
   rm -rf "$T"
 }
 
@@ -198,6 +202,9 @@ case_synth_suppressed_finding_still_counts_as_authored() {
   assert_eq "$rc" "4" "억제된 finding 만 낸 리뷰어에게 판정 각도를 접어도 exit 4 (R-H)"
   assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다"
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다"
+  # 재비판 Important 2 — 원인이 자기 판정임을 따로 핀한다(신원 계약 메시지와
+  # AC10a 문구가 겹친다).
+  assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (억제된 finding)"
   rm -rf "$T"
 }
 
@@ -226,6 +233,8 @@ case_synth_rejected_finding_still_counts_as_authored() {
   assert_eq "$rc" "4" "기각된 finding 만 낸 리뷰어에게 판정 각도를 접어도 exit 4 (AC10a)"
   assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다"
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다"
+  # 재비판 Important 2 — 원인이 자기 판정임을 따로 핀한다.
+  assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (기각된 finding)"
   rm -rf "$T"
 }
 
@@ -248,6 +257,8 @@ case_synth_reviewer_sources_do_not_displace_agent() {
     assert_eq "$rc" "4" "sources=$srcs 가 agent 를 가리지 않는다 — 기각된 finding 의 저자에게 접으면 exit 4"
     assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다 (sources=$srcs)"
     assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다 (sources=$srcs)"
+    # 재비판 Important 2 — 원인이 자기 판정임을 따로 핀한다.
+    assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (sources=$srcs)"
     rm -rf "$T"
   done
 }
@@ -270,6 +281,8 @@ case_synth_promoted_finding_counts_as_authored() {
   assert_eq "$rc" "4" "승격된 finding 의 저자에게 판정 각도를 접으면 exit 4 (AC10a)"
   assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다"
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다"
+  # 재비판 Important 2 — 원인이 자기 판정임을 따로 핀한다.
+  assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (승격분)"
   # 억제된 승격분 — `raw` 에 없고 억제 뒤 `kept` 에도 없다. dedup 뒤 목록만 이 저자를
   # 본다. 저자를 `kept + raw` 에서 뽑는 변이(억제분 제외)를 이것만 가른다.
   printf 'verdicts: []\nnew_findings:\n  - {file: b.py, line: 2, severity: SUGGESTION, confidence: 3, summary: promoted-low}\n' > "$T/adv.yaml"
@@ -280,6 +293,8 @@ case_synth_promoted_finding_counts_as_authored() {
   assert_eq "$rc" "4" "억제된 승격분의 저자에게 접어도 exit 4 (R-H)"
   assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다 (억제된 승격분)"
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다 (억제된 승격분)"
+  # 재비판 Important 2 — 원인이 자기 판정임을 따로 핀한다.
+  assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (억제된 승격분)"
   rm -rf "$T"
 }
 
@@ -469,7 +484,12 @@ case_synth_author_identity_is_grammar_checked() {
   printf 'verdicts: []\n' > "$T/adv.yaml"
   local f="$T/angles.txt" name out err rc
   write_angles "$f" "security: filled" "adjudication: folded_into:security-reviewer" "different-premise: filled"
-  for name in 'Security-Reviewer' 'quality-gates:security-reviewer' 'security_reviewer' 'security reviewer'; do
+  # 재비판 Important 1 — trailing \n. 파이썬 `$`(fullmatch 아닌 match)는 마지막
+  # \n 앞에서도 서므로 `"security-reviewer\n"` 가 문법 안으로 오판됐다(성능자
+  # 토큰과 다른 문자열인데도). 이름 목록에 그 값을 더한다 — 아래 loop 는
+  # `%s` 치환이라 셸 변수의 리터럴 `\n`(역슬래시+n, 두 글자)이 YAML 큰따옴표
+  # 이스케이프로 그대로 실려 PyYAML 이 실제 개행으로 읽는다.
+  for name in 'Security-Reviewer' 'quality-gates:security-reviewer' 'security_reviewer' 'security reviewer' 'security-reviewer\n'; do
     printf -- '- agent: "%s"\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' "$name" > "$T/f.yaml"
     rc=0
     out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
@@ -488,6 +508,28 @@ case_synth_author_identity_is_grammar_checked() {
   assert_eq       "$out" ""           "실패는 원자적이다 (sources={a: 1})"
   assert_contains "$err" "AC10a"      "원인이 AC10a 다 (sources={a: 1})"
   assert_contains "$err" "문법 밖 저자" "메시지가 문법 밖 저자를 댄다 (sources={a: 1})"
+  # 재비판 Important 1 형제 — sources 채널의 같은 trailing \n 우회. agent(scout)는
+  # 문법 안이어도 sources 에 섞인 trailing \n 값이 신원 계약을 여전히 막아야 한다.
+  # `\\n`(printf 포맷 문자열 안의 이중 역슬래시)가 printf 자체 이스케이프를 한 겹
+  # 통과해 파일에는 리터럴 `\n`(역슬래시+n) 두 글자로 남는다 — YAML 이 그것을
+  # 개행으로 읽는다.
+  printf -- '- agent: scout\n  sources: ["security-reviewer\\n"]\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  rc=0
+  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  err="$(cat "$T/err")"
+  assert_eq       "$rc"  "4"     "sources 의 trailing \\n 도 exit 4"
+  assert_eq       "$out" ""      "실패는 원자적이다 (sources trailing \\n)"
+  assert_contains "$err" "AC10a" "원인이 AC10a 다 (sources trailing \\n)"
+  # 재비판 Important 1 형제 — 블록 스칼라(`agent: |`)로 적은 trailing \n. 큰따옴표
+  # 이스케이프가 아니라 YAML 리터럴 블록 문법이 같은 문자열("security-reviewer\n")을
+  # 낸다 — 저자를 어떻게 «적었는지»와 무관하게 신원 계약이 막아야 한다.
+  printf -- '- agent: |\n    security-reviewer\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  rc=0
+  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  err="$(cat "$T/err")"
+  assert_eq       "$rc"  "4"     "block-scalar agent 의 trailing \\n 도 exit 4"
+  assert_eq       "$out" ""      "실패는 원자적이다 (block-scalar agent)"
+  assert_contains "$err" "AC10a" "원인이 AC10a 다 (block-scalar agent)"
   rm -rf "$T"
 }
 
@@ -507,6 +549,16 @@ case_synth_finding_without_agent_is_rejected_under_angles() {
   rc=0
   python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict >/dev/null 2>&1 || rc=$?
   assert_eq "$rc" "0" "--angles 없이는 agent 없는 finding 도 통과한다 (계약은 각도 축의 것)"
+  # 재비판 Minor — YAML `null`(agent: null)은 `f.get("agent")` 가 파이썬 `None` 을
+  # 낸다. `str(None)` == 'None' 을 문법 밖 저자로 잘못 세면 `null` 도 「agent 없음」과
+  # 같은 사건인데 다른 경로(신원 불량)로 잘못 분류된다.
+  printf -- '- agent: null\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  rc=0
+  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" >/dev/null 2>"$T/err" || rc=$?
+  err="$(cat "$T/err")"
+  assert_eq           "$rc"  "4"     "agent: null 도 --angles 아래서 exit 4 (missing_agent 로 센다)"
+  assert_contains     "$err" "AC10a" "원인이 AC10a 신원 계약이다 (agent: null)"
+  assert_not_contains "$err" "'None'" "None 을 문법 밖 저자로 잘못 나열하지 않는다"
   rm -rf "$T"
 }
 

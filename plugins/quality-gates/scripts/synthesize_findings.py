@@ -746,18 +746,29 @@ def main():
             missing_agent = 0
             for f in findings + raw:
                 if isinstance(f, dict):
-                    agent = str(f.get("agent", "?"))
-                    if agent in ("", "?"):
+                    # 재비판 Important(경) — `agent: null` 은 `str(None)` == 'None' 이
+                    # 되어 문법 밖 저자로 오판됐다. `None` 은 agent 없음과 같은
+                    # 사건이다(YAML 에서 `null` · `~` · 빈 값이 전부 `None` 이다).
+                    a = f.get("agent")
+                    if a is None or str(a) in ("", "?"):
                         missing_agent += 1
                     else:
-                        authors.add(agent)
+                        authors.add(str(a))
                     srcs = f.get("sources") or []
                     if not isinstance(srcs, (list, tuple)):
                         srcs = [srcs]
                     for s in srcs:
-                        s = str(s)
-                        if s and s != "?":
-                            authors.add(s)
+                        # dedup() 은 그룹(단일 항목 그룹 포함)마다 `sources` 를
+                        # `agent` 에서 다시 만든다 — `agent: null` 이 dedup 뒤
+                        # `sources: [None]` 으로도 남는다. 위와 같은 값을 이미 위
+                        # `agent` 검사가 missing_agent 로 셌으니, 여기서 또 `str(None)`
+                        # == 'None' 을 문법 밖 저자로 세면 이중으로 잘못 판정한다.
+                        # 조건 블록으로 쓴다(continue 아님) — 버리는 분기는 회계
+                        # 배선을 요구한다(shared/tests/test_adjudication_wiring.sh).
+                        if s is not None:
+                            s = str(s)
+                            if s and s != "?":
+                                authors.add(s)
             # 부채 B — 저자 쪽 신원 계약. AC10a 비교 «전»에 둔다: 문법 밖 이름이
             # 섞인 집합으로 비교하면 그 비교 자체가 무의미하다.
             _angles.check_author_identity(authors, missing_agent)

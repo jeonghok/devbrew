@@ -57,7 +57,11 @@ ABSENT_REASONS = ("not-installed", "not-derived", SOURCE_FAILED)
 _LINE = re.compile(r"^([a-z-]+): (\S+)$")
 # 수행자는 finding 의 `agent:` 와 **정확히** 같아야 한다(AC10a). 이 리포의
 # `agent:` 는 전부 소문자 kebab 이라, 대문자·밑줄을 받으면 `Security-Reviewer` 가
-# `security-reviewer` 와 다른 문자열로 조용히 비교를 통과한다.
+# `security-reviewer` 와 다른 문자열로 조용히 비교를 통과한다. **호출부는
+# `.fullmatch()` 를 쓴다** — 파이썬 `re` 의 `$` 는 문자열 맨 끝의 개행 앞에서도
+# 서므로 `.match()` 로는 `"security-reviewer\n"` 가 문법 안으로 오판된다(재비판
+# Important 1). 그러면 그 값이 성능자 토큰 `security-reviewer` 와 다른 문자열인데도
+# 자기 판정 비교를 조용히 피해 간다.
 _PERFORMER = re.compile(r"^[a-z0-9-]+$")
 _ABSENT_PREFIX = "absent("
 _ABSENT_REASON = re.compile(r"^absent\(([a-z-]+)\)$")
@@ -105,7 +109,7 @@ def _validated_state(name, state):
         performer = state[len(FOLDED_PREFIX):]
         if not performer:
             fail4(f"'{name}' 의 {FOLDED_PREFIX} 에 수행자가 없다")
-        if not _PERFORMER.match(performer):
+        if not _PERFORMER.fullmatch(performer):
             fail4(f"'{name}' 의 수행자 이름이 아니다: {performer!r} "
                   "(소문자·숫자·하이픈만 — finding 의 `agent:` 와 정확히 같아야 한다)")
         return state
@@ -169,7 +173,7 @@ def check_author_identity(authors, missing_agent=0):
     """
     bad = []
     for a in sorted(authors):
-        if not _PERFORMER.match(a):
+        if not _PERFORMER.fullmatch(a):
             bad.append(a)
     if bad or missing_agent:
         parts = []
