@@ -957,36 +957,39 @@ _same_as_fields_run() {   # _same_as_fields_run <크리틱 요약> <코덱스 �
   printf '```docreview-recritic\nverdicts:\n  - f: "%s"\n    verdict: confirm\n    same_as: ["%s"]\nadded: []\n```\n' "$fx" "$fc" > "$rt"
   py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
   q='[x for x in d["findings"] if x["category"]=="overdesign"]'
-  assert_eq "$(jget "$d/fin.json" "len($q), d[\"adjudication_absorbed\"]")" "(1, 1)" "same_as 필드($1): 둘이 하나로 흡수된다(전제)"
-  assert_eq "$(jget "$d/fin.json" "$q[0][\"replacement\"]")" "$repl_want" "same_as 필드($1): 생존자에 replacement 가 남는다"
-  assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"]')" "$coerced_want" "same_as 필드($1): replacement 개행 접기는 값 하나에 정확히 $coerced_want 번 센다(흡수된 쪽은 렌더되지 않으므로 세지 않는다)"
-  assert_eq "$(jget "$d/fin.json" "$q[0][\"if_unfixed\"]")" "크리틱 결과" "same_as 필드($1): 생존자에 if_unfixed 가 남는다"
+  assert_eq "$(jget "$d/fin.json" "len($q), d[\"adjudication_absorbed\"]")" "(1, 1)" "same_as 필드[${_SAF_TAG:-단독}]($1): 둘이 하나로 흡수된다(전제)"
+  assert_eq "$(jget "$d/fin.json" "$q[0][\"replacement\"]")" "$repl_want" "same_as 필드[${_SAF_TAG:-단독}]($1): 생존자에 replacement 가 남는다"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"]')" "$coerced_want" "same_as 필드[${_SAF_TAG:-단독}]($1): replacement 개행 접기는 값 하나에 정확히 $coerced_want 번 센다(흡수된 쪽은 렌더되지 않으므로 세지 않는다)"
+  assert_eq "$(jget "$d/fin.json" "$q[0][\"if_unfixed\"]")" "크리틱 결과" "same_as 필드[${_SAF_TAG:-단독}]($1): 생존자에 if_unfixed 가 남는다"
   # 코덱스 쪽 evidence 가 없으면 생존자가 코덱스일 때 크리틱의 것을 물려받는다 — 있으면 덮지 않는다.
   # 코덱스 evidence 가 없거나 공백뿐이면 빈 칸이다 — 생존자가 코덱스일 때 크리틱의 것을 물려받는다.
   case "$cx_ev" in -|*[![:space:]]*) ;; *) cx_ev="-" ;; esac
   if [ "$cx_ev" = "-" ]; then ev_want="크리틱 근거"; else ev_want="$cx_ev"; fi
-  assert_eq "$(jget "$d/fin.json" "$q[0][\"evidence\"] == ('$ev_want' if $q[0][\"summary\"] == '$2' else '크리틱 근거')")" "True" "same_as 필드($1): 생존자의 evidence 는 적혀 있으면 그대로, 비어 있으면 형제에게서 채운다"
+  assert_eq "$(jget "$d/fin.json" "$q[0][\"evidence\"] == ('$ev_want' if $q[0][\"summary\"] == '$2' else '크리틱 근거')")" "True" "same_as 필드[${_SAF_TAG:-단독}]($1): 생존자의 evidence 는 적혀 있으면 그대로, 비어 있으면 형제에게서 채운다"
   if [ "$(jget "$d/fin.json" "$q[0][\"summary\"]")" = "$2" ]; then _SAF_EMPTY_SURVIVED=$((_SAF_EMPTY_SURVIVED+1)); fi
   rm -rf "$d" "$cr" "$cx" "$rt"
 }
-# _saf_pair <인자…> — 두 요약을 맞바꿔 한 번씩 돌리고, 그 쌍에서 코덱스(빈 쪽)가 정확히 한 번 생존했는지 잰다
+# _saf_pair <태그> <인자…> — 두 요약을 맞바꿔 한 번씩 돌리고, 그 쌍에서 코덱스(빈 쪽)가 정확히 한 번 생존했는지
+# 잰다. 태그는 안쪽 단언 라벨에도 붙어 어느 쌍이 떨어졌는지 보인다.
 _saf_pair() {
+  _SAF_TAG="$1"; shift
   _SAF_EMPTY_SURVIVED=0
   _same_as_fields_run "yagni: 첫째 요약" "yagni: 둘째 요약" "$@"
   _same_as_fields_run "yagni: 둘째 요약" "yagni: 첫째 요약" "$@"
-  assert_eq "$_SAF_EMPTY_SURVIVED" "1" "same_as 필드 쌍(${*:-기본}): 맞바꾼 둘 중 정확히 한 번 빈 쪽이 생존자였다(채움 방향이 실제로 돌았다)"
+  assert_eq "$_SAF_EMPTY_SURVIVED" "1" "same_as 필드 쌍[$_SAF_TAG]: 맞바꾼 둘 중 정확히 한 번 빈 쪽이 생존자였다(채움 방향이 실제로 돌았다)"
 }
 case_same_as_survivor_inherits_empty_fields() {
-  _saf_pair
+  _saf_pair 기본
   # 옛 두 줄 펜스를 베낀 값(YAML 이스케이프 `\n`) — 물려받은 값의 접기가 생존자 쪽에서 한 번만 세지는가
-  _saf_pair '인라인 한 줄.\n  └ 천장: 둘째 형식이 요청될 때' "인라인 한 줄. └ 천장: 둘째 형식이 요청될 때" 1
+  _saf_pair 개행 '인라인 한 줄.\n  └ 천장: 둘째 형식이 요청될 때' "인라인 한 줄. └ 천장: 둘째 형식이 요청될 때" 1
   # 아래 쌍들의 `"" ""` 는 `${3:-…}`·`${4:-…}` 에서 기본값으로 떨어진다 — replacement 는 앞 쌍과 같은
   # 기본 한 줄이고, 이 쌍들이 바꾸는 것은 코덱스 쪽 칸뿐이다.
   # 코덱스가 evidence 를 안 적은 쌍 — 생존자가 코덱스인 쪽에서 evidence 가 크리틱의 것으로 채워지는가
-  _saf_pair "" "" 0 -
+  _saf_pair 코덱스-evidence-부재 "" "" 0 -
   # 코덱스가 공백뿐인 evidence·replacement 를 적은 쌍 — 공백은 빈 칸으로 친다. 안 그러면 코덱스가 생존할 때
   # 채움이 건너뛰어지고 replacement 는 뒤의 I4 접기가 None 으로 만들어 크리틱의 값이 흡수와 함께 사라진다.
-  _saf_pair "" "" 0 "   " "   "
+  _saf_pair 코덱스-공백뿐 "" "" 0 "   " "   "
+  _SAF_TAG=""
 }
 case_T03_T04_raise() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
@@ -2557,10 +2560,10 @@ case_I4_replacement_newline_collapsed() {
   # `reasons()` 가 `gate=True` 인 coerced 만 advisory 줄로 낸다는 사실(adjudication.py `reasons()` 의 `_coerced` 루프, `if gate:` 갈래)
   # 로 gate=False 를 정확히 겨눈다 — 이 강제가 advisory 에 "강제(게이트 변경): replacement" 줄을
   # «내지 않아야» gate=False 다.
-  case "$(jget "$d/fin.json" '"\n".join(d["advisory"])')" in
-    *'강제(게이트 변경): replacement'*) no "I4 양의 짝: replacement 강제가 게이트 변경으로 advisory 에 났다 — gate=True 여야 할 이유가 없다" ;;
-    *) ok "I4 양의 짝: replacement 강제는 gate=False 라 advisory 의 게이트-변경 줄로 나지 않는다(카운트는 늘지만 차단은 아니다)" ;;
-  esac
+  # 부재는 등호로 잰다 — 측정이 예외로 죽으면 빈 출력이 "True" 와 달라 RED 다. 접두의 양의 짝은
+  # test_adjudication_behavior.sh §3 에 있다(접두가 바뀌면 거기서 먼저 RED).
+  assert_eq "$(jget "$d/fin.json" 'isinstance(d["advisory"], list) and not any("강제(게이트 변경)" in a for a in d["advisory"])')" "True" \
+    "I4 양의 짝: replacement 강제는 gate=False 라 advisory 의 게이트-변경 줄로 나지 않는다(카운트는 늘지만 차단은 아니다)"
   rm -rf "$d"
 }
 
@@ -2584,10 +2587,8 @@ case_I4_if_unfixed_newline_collapsed() {
     "I4 if_unfixed: 어느 저장값에도 \\r·탭·개행이 남지 않는다"
   assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"]')" "3" \
     "I4 if_unfixed: 세 접기(개행 · 공백뿐 · \\r 탭)가 각각 coerced 로 계수된다"
-  case "$(jget "$d/fin.json" '"\n".join(d["advisory"])')" in
-    *'강제(게이트 변경)'*) no "I4 if_unfixed: 칸 접기가 게이트 변경 강제로 advisory 에 났다 — gate=False 여야 한다" ;;
-    *) ok "I4 if_unfixed: 칸 접기는 어느 칸이든 게이트 변경 강제가 아니다(advisory 에 게이트 변경 줄 없음)" ;;
-  esac
+  assert_eq "$(jget "$d/fin.json" 'isinstance(d["advisory"], list) and not any("강제(게이트 변경)" in a for a in d["advisory"])')" "True" \
+    "I4 if_unfixed: 칸 접기는 어느 칸이든 게이트 변경 강제가 아니다(advisory 에 게이트 변경 줄 없음 — 등호로 잰다)"
   local gr; gr="$(py docreview_state.py gate --state-dir "$d" --render)"
   assert_not_grep "$gr" '^\[decide\] zz#' "I4 if_unfixed: 값 속 게이트 줄 모양이 렌더의 열 0 에 서지 않는다"
   assert_grep "$gr" '^  그대로 두면: 훅이 죽은 채 남는다\. \[decide\] zz#r1\.9' "I4 if_unfixed 양의 짝: 그 조각은 「그대로 두면」 줄 안에 산다"

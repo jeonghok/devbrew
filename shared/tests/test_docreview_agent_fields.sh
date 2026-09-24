@@ -52,9 +52,13 @@ while IFS= read -r f; do
   assert_contains "$s" '칸을 비우는 것은 삭제 제안이 **아니다**' "AC19: $f 출력 형식 — 빈 칸은 삭제 제안이 아니다"
   # 예시 줄은 층 1 펜스 안의 decide 항목에서 — 절 전체로 재면 층 2 의 fix 항목으로 옮겨도 통과한다.
   l1="$(printf '%s\n' "$s" | sed -n '/^```docreview-layer1/,/^```$/p')"
-  assert_grep "$l1" '^  disposition: decide' "AC19: $f 층 1 예시 — 항목이 decide 다(아래 두 줄이 decide 에 붙는다)"
-  assert_grep "$l1" '^  replacement: ' "AC19: $f 층 1 예시 — decide 항목에 replacement 줄이 있다"
-  assert_grep "$l1" '^  if_unfixed: ' "AC19: $f 층 1 예시 — decide 항목에 if_unfixed 줄이 있다"
+  # 항목(`- ref:` 로 시작) 단위로 가른다 — 펜스 어딘가에 세 줄이 흩어져 있는 것으로는 부족하다.
+  assert_eq "$(printf '%s\n' "$l1" | python3 -c '
+import re, sys
+items = re.split(r"(?m)^- ref:", sys.stdin.read())[1:]
+need = (r"(?m)^  disposition: decide\b", r"(?m)^  replacement: ", r"(?m)^  if_unfixed: ")
+print(len(items) >= 1 and any(all(re.search(n, it) for n in need) for it in items))')" "True" \
+    "AC19: $f 층 1 예시 — decide 항목 하나가 replacement·if_unfixed 줄을 함께 갖는다"
 done < <(git ls-files -- 'shared/docreview/agents/doc-critic*.md' 'plugins/*/agents/doc-critic*.md')
 if [ "$n" -ge 4 ]; then
   ok "AC19 양의 짝: 탐지 리뷰어 사본 ${n}개를 쟀다(정본 둘 + 플러그인 사본 둘 이상)"
