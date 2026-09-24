@@ -3,6 +3,37 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [8.5.0] — 2026-09-24
+
+Review gate 의 판정자를 공유 재비판자로 바꾼다 (설계 §6.3.3 · §6.3.4 · §12, AC17 · AC22). **두 게이트 구조와 공개 인자는 그대로다** — 게이트를 합치는 것은 다음 릴리스다.
+
+### Added
+
+- **`quality-gates:doc-recritic`** — 공유 정본 `shared/docreview/agents/doc-recritic.md` 의 `# copy-of:` 사본. Review gate Phase 1.5 의 판정자다. 프레이밍을 못 본다 — 어느 리뷰어가 무엇을 냈는지 받지 않는다. **탐지 0건이어도 디스패치된다**(AC17).
+- **`scripts/recritic_bridge.py`** — 재비판자 계약(`f` · `confirm`/`reject`/`raise` · `added`)과 합성기 계약(`finding_id` · `verdicts` · `new_findings`) 사이의 변환. 판정을 바꾸는 강제(근거 없는 기각 · 매핑 못 하는 `to`)는 원장에 공시되고, 모르는 `f` 는 보류된다. 콜라이딩 `finding_id`(같은 agent·file·line, 다른 severity 로 도출된 여러 `f`)는 그 id 의 `f` 가 **전부** 판정되고 변환 후 판정이 **전부 같아야**(raise 면 `to` 까지) 합쳐 적용한다 — 일부만 판정되면 held(`findings-lost`).
+- **`synthesize_findings.py --recritic <응답> --recritic-map <역매핑> [--recritic-diff <diff>]`** — `--adversarial` 과 배타. 탐지 0 · 재비판 0 이면 본 보고서가 그 사실을 한 줄로 말한다.
+- **`references/recritic-code-profile.md`** — 재비판자의 코드 경로 프로필. `adversarial` 의 판정 관문 A–D(**verifier-writable** 신뢰 앵커 점검 포함)와 근거 기준을 옮겨 실었다.
+- **`shared/tests/test_docreview_copy_set.sh`** — docreview 사본 집합 = 디스패치 집합(AC22). 원소는 `(플러그인, 이름)` 쌍이다 — 기존 처분 락은 이름으로만 키잡아 플러그인 간 동명 사본을 못 가른다.
+- **`plugins/quality-gates/tests/test_recritic_code_profile.sh`** — 옮겨간 관문 규칙을 전체-절(full-clause) 앵커로 잠근다: 관문 A–D, 관문 C 의 precedent 목록, 관문 D 의 verifier-writable + planted 디렉터리, 주입 저항, reject↔evidence, raise-only-up.
+
+### Changed
+
+- **판정자 산출물이 없으면 `clean` 이 아니다.** 판정자 문서 경로를 받고도 문서를 못 얻으면(없음 · 빈 문서 · 파손 · 스칼라 · 비-UTF-8) 판정 각도의 **주 입력 실패**다. 전에는 「판정자를 안 썼다」와 같아져 finding 0 인 실행이 `clean` 이었다. 판정자 사망은 한 사건이라 finding 마다 「판정자 부재」를 다시 세지 않는다 — 사유는 `angle-absent` 다.
+- **각도 부재 사유가 셋이 됐다** — `absent(source-failed)`. 합성기가 관측한 주 입력 사망을 선언 위에 얹어, `angles:` 블록과 `reason:` 이 같은 사실을 말한다.
+- **AC10a 저자 쪽 신원 계약** — `--angles` 실행에서 finding 의 저자(`agent` · `sources`)가 수행자 문법(소문자·숫자·하이픈) 밖이거나 `agent` 가 없으면 `exit 4`. 정규화하지 않는다.
+- **수행자·저자 비교는 전체-문자열 일치다.** `angles.py` 의 `_PERFORMER` 는 `.fullmatch()` 로 검사한다 — `.match()` 였다면 파이썬 `re` 의 `$` 가 문자열 끝 개행 앞에도 서므로 `"security-reviewer\n"` 가 문법 안으로 오판되어 자기 판정 비교를 조용히 피해 갔을 것이다. 리뷰어가 명시적으로 적은 `sources: [null]`(`agent` 는 다른 값)도 `str(None)` == `'None'` 으로 문법 밖 저자가 된다 — `agent` 가 실제로 없을 때만 나오는 `dedup()` 파생 `None` 과 구분해서 검사한다.
+- **승격 finding 의 저자**가 판정자 입력 종류를 따른다 — 재비판 경로는 `doc-recritic`.
+- **판정 결과가 달라질 수 있다** — 재비판자에게는 **하향이 없다**(`raise` 는 위로만). 옛 판정자의 severity 하향(Severity realist check)은 이 경로에서 사라졌다. `apply_verdicts` 는 `raise` 판정을 적용하기 전에 finding 의 (정규화·대소문자 접힘된) **현재** severity 와 다시 비교해, 실제로 severity 를 올리지 않는 `raise` 는 적용하지 않는다 — 브리지가 아는 `map.json` 의 현재 severity 가 stale 하면 정당해 보이는 `raise` 가 실제로는 CRITICAL 을 낮출 수 있기 때문이다. 저지된(내리는) `raise` 는 `gate=True` coercion 으로 원장에 공시되고, 이미 같은 severity 로의 `raise` 는 `gate=False` no-op 이다. `downgrade`(옛 `--adversarial` 경로)는 이 가드 밖이다 — 그대로 내린다.
+- **`docs/philosophy` 코드 맵과 `docs/plugin-authoring.md`** 가 `adversarial.md` 대신 `doc-recritic.md` / `references/recritic-code-profile.md` 를 가리킨다.
+- **SKILL `allowed-tools` 에 `Bash(${CLAUDE_PLUGIN_ROOT}/scripts/recritic_bridge.py:*)`** 가 늘었다(24 → 25 개). `scripts/check-allowed-tools-order.sh` 의 `EXPECTED_ORDER` 도 같은 자리에 맞춰 갱신했다 — 정본은 그 배열이라 SKILL.md 목록이 어긋나면 이 스크립트가 개수·순서 둘 다 잡는다.
+- **Phase 1.5 중간 파일 프로토콜.** 매 iteration 마다 `mktemp -d` 로 만든 디렉토리 하나에 세 파일이 산다: 오케스트레이터가 각 항목의 `agent:` 를 (플러그인 접두 없는) bare agent 이름으로 찍어 쓰는 `findings.yaml`, `recritic_bridge.py prepare` 가 만드는 `recritic-findings.yaml`/`recritic-map.json`, 그리고 재비판자 응답을 요약·전사 없이 그대로 저장하는 `recritic.txt`(verbatim — 디스패치 실패·무응답이면 파일 자체를 안 만든다).
+- **`tools/adjudication/check_slots.py` 의 `EXEMPT_SLOTS_BASELINE` 이 5 → 4.** `agents/adversarial.md` 삭제로 그 agent 의 면제 등재(`phase1_findings`)도 대상을 잃어 지웠다 — 대체 agent `doc-recritic` 의 `findings` 슬롯은 공유 docreview 계약이 `kind: artifact` 로 선언해 애초에 면제 대상이 아니다.
+- **`synthesize_findings.py` 의 rc 를 SKILL 이 소비한다.** 0 이 아닌 rc 나 빈 stdout(usage 오류·판정축 실패·미처리 traceback)은 그 iteration 을 clean 이 아닌 것으로 처리하고 rc·stderr 를 보고한 뒤 멈춘다 — 빈 보고서를 clean 으로 읽지 않는다.
+
+### Removed
+
+- **`agents/adversarial.md`** 와 그 락 셋(`test_adversarial_behavior.py` · `test_adversarial_persona.sh` · `test_adversarial_model_consistency.sh`). 판정 관문은 코드 프로필로, 페르소나 계약은 `shared/tests/test_docreview_agents.sh` 로, 사본 동일성은 `test_copy_of_contract.sh` 로 옮겨 갔다. **잃는 것**: severity 하향 · 서로 다른 리뷰어의 동일 지적 가중(Corroboration — 재비판자는 출처를 못 보므로 원리적으로 불가) · 이 변경과 상호작용하지 않는 선재 결함의 처분(옛 판정자는 downgrade 했으나, 재비판자의 관문 B 는 이제 그런 결함을 `reject` 한다) · 근거 기준의 처분 방향(옛 페르소나는 구체 앵커 없는 CRITICAL/IMPORTANT 를 「의견」으로 보고 `reject`/`downgrade` 했다 — 새 코드 프로필도 같은 문구를 쓰지만 모호하면 `confirm` 한다. 앵커 없는 finding 이 살아남는 쪽으로 기운다. 방향은 fail-safe 다: 노이즈가 늘 뿐 거짓 clean 은 나지 않는다) · `better_fix` 판정 채널(대안 제시를 실어 보내던 자리 — 재비판자 스키마엔 대응 슬롯이 없다) · "Calibration & self-discipline" 절(살아남은 것은 근거 기준의 「근거 없는 `reject` 는 무효로 처리된다」한 줄뿐이다).
+
 ## [8.4.0] — 2026-09-24
 
 각도 바닥 — 세 각도의 상태가 총 함수가 되고, 보안·판정의 부재가 `clean` 을 막는다 (설계 §6.3, AC10 · AC10a · AC11 · AC12). **호출자 배선은 PR4 다** — `--angles` 를 안 주면 stdout 은 대부분 이전과 바이트 동일하다. **예외 하나**: 주 source(primary source)가 죽으면 `--emit-verdict` 산출의 사유가 이전 `findings-lost` 대신 `angle-absent` 로 나간다(설계 §6.4.3 의 의도된 배정) — 이 한 경로는 `--angles` 유무와 무관하게 바이트가 갈린다.

@@ -50,9 +50,13 @@ FORBIDDEN_KINDS = ("prior_verdict", "score", "orchestrator_framing")
 #   · brief/seed 계열 넷(`brief`/`document`/`draft`/`seed`) — 원문 인라인 → ⓑ.
 # 남은 슬롯은 전부 경로·반복자·enum 이다.
 EXEMPT_SLOTS = {
-    ("quality-gates:adversarial", "phase1_findings"):
-        "C6(1) Phase 1/2 리뷰어의 findings 를 verdict(confirm/downgrade/reject)하는 것이 "
-        "이 agent 의 과업이다 — 대응물이 없다",
+    # PR4a — quality-gates:adversarial 이 삭제되고 Phase 1.5 재비판
+    # (quality-gates:doc-recritic, 공유 정본의 copy-of 사본)으로 대체됐다. 그
+    # persona 의 `findings` 슬롯은 공유 docreview 계약이 `kind: artifact` 로
+    # 선언한다 — FORBIDDEN_KINDS(prior_verdict/score/orchestrator_framing) 밖이라
+    # 대응 항목이 필요 없다. 여기 있던 ("quality-gates:adversarial",
+    # "phase1_findings") 항목은 대상 agent 자체가 없어져 지운다(EXEMPT_SLOTS_BASELINE
+    # 5→4, 아래).
     ("quality-gates:artifact-adversarial", "merged_findings"):
         "C6(1) artifact-critic(+codex) 의 merged findings 를 verdict 하는 것이 이 agent 의 "
         "과업이다 — 대응물이 없다",
@@ -89,7 +93,9 @@ EXEMPT_SLOTS = {
 # 간다 — Task 11b Step 4b 가 고친 비대칭과 같은 모양이다). 전부 면제로 넣으면
 # L3(b)가 장식이 되는 것이 설계 M8 이 이 수를 재는 이유다.
 # 2026-09-06 4→5: steelman-builder.premises (위 항목의 사유). 전제 목록은 정의상 orchestrator 종합이다.
-EXEMPT_SLOTS_BASELINE = 5
+# PR4a 5→4: quality-gates:adversarial 항목 삭제(agent 자체가 사라짐; 대체 agent
+# doc-recritic 의 findings 는 kind: artifact 라 면제 대상이 아니다 — 위 주석).
+EXEMPT_SLOTS_BASELINE = 4
 
 # 변수명이 판정·점수를 시사하면 kind 가 금지 셋 중 하나여야 한다.
 # 그러면 면제 등재가 강제되고, 등재는 C6 인용을 요구한다.

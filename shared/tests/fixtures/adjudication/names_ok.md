@@ -1,1 +1,1 @@
-Dispatch `quality-gates:adversarial` for Phase 1.5.
+Dispatch `quality-gates:doc-recritic` for Phase 1.5.

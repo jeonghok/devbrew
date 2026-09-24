@@ -146,7 +146,16 @@ EXEMPT = {
     # ("plugins/.../foo.py", 146): "C6(1) 제자리 변형 루프 — 버려지는 항목이 없다",
     # qg-angle-floor-pr3 Task 4 가 같은 import 블록에 `import angles as _angles`
     # 를 한 줄 더했다 — 인용 내용은 무변경.
-    ("plugins/quality-gates/scripts/synthesize_findings.py", 361,
+    # PR4a Task 2 — `load_findings`/`_read_source` 신설로 밀림, 실측 410.
+    # PR4a Task 4 — `import recritic_bridge as _bridge` 한 줄 · docstring 갱신(Inputs
+    # 절에 `--recritic` 세 플래그 설명 추가) · `promote_new_findings`의 저자 코멘트
+    # 세 줄이 위에서 늘어 410 → 418. 가드 텍스트·사유 무변경 — 실측으로 재앵커한다.
+    # Task 7 row 31 — apply_verdicts 에 raise-only-up guard 를 더하며 위가 늘어
+    # 418 → 434. fix round 1(Important: guard 를 raise 전용으로 좁히고 severity
+    # 접기·gate=False 동률 분기를 더함)이 다시 늘려 434 → 467. 가드 텍스트·사유
+    # 무변경 — 실측으로 재앵커한다(줄번호를 프로즈에 델타로 다시 못박지 않는다,
+    # 위 PR4a Task 4 항목의 교훈과 같다 — `exempt_stale=0` 이 실측으로 답한다).
+    ("plugins/quality-gates/scripts/synthesize_findings.py", 467,
      "continue in dedup @ if f.get('promoted')"):
         "C6(1) — dedup() 의 이 continue 는 `promoted` 항목을 그룹핑에서만 "
         "제외한다. 항목 자체는 이 loop 이전에 계산된 `passthrough` 리스트에 "

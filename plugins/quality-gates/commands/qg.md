@@ -143,7 +143,7 @@ Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable.
 
 ### Gates
 
-- **Review gate** — Iterative code review (scout → Phase 1+2 → adversarial → synthesizer); within-gate fix-loop up to 5 iterations
+- **Review gate** — Iterative code review (scout → Phase 1+2 → 재비판(doc-recritic) → synthesizer); within-gate fix-loop up to 5 iterations
 - **Runtime gate** — Launches app and verifies behavior with browser automation
 
 ### Pipeline Rules (v2.0.0)
