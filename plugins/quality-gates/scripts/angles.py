@@ -9,6 +9,12 @@
 **판정 값은 내지 않는다.** 이 모듈이 내는 것은 「막는가」라는 불리언 하나이고,
 그것을 `not-certified (angle-absent)` 로 번역하는 것은 `verdict.py` 다. 그래서
 여기서 `verdict` 를 import 하지 않는다 — 어휘의 소유자는 하나여야 한다.
+
+**신원 계약 (AC10a, PR4a 계획 R-M).** 수행자 토큰(`folded_into:<수행자>`) ==
+finding 의 `agent:` 원문 == 디스패치한 agent 의 frontmatter `name:`(플러그인 접두
+없음). 두 쪽 다 `_PERFORMER` 문법을 만족해야 하고, 이 모듈은 **정규화하지 않는다** —
+대소문자를 접거나 접두를 떼는 것은 「같은 리뷰어일 것이다」라는 추측이고, 그 추측이
+틀리면 AC10a 가 조용히 열린다. `agent:` 를 찍는 쪽은 오케스트레이터다.
 """
 import argparse
 import re
@@ -150,6 +156,30 @@ def performer_of(state):
     if state.startswith(FOLDED_PREFIX):
         return state[len(FOLDED_PREFIX):]
     return None
+
+
+def check_author_identity(authors, missing_agent=0):
+    """AC10a 의 저자 쪽 — 저자 이름이 전부 수행자 문법 안이어야 한다. 아니면 exit 4.
+
+    수행자 쪽(`_validated_state`)만 문법을 검사하면 `agent: Security-Reviewer` 와
+    `folded_into:security-reviewer` 가 다른 문자열이라 자기 판정이 조용히 통과한다
+    (PR3 최종 리뷰 ★부채 B). `missing_agent` 는 `agent:` 가 없는 finding 수다 —
+    저자 없는 finding 은 어느 수행자와도 안 겹치므로 그것을 허용하면 `agent:` 를
+    빼는 것만으로 AC10a 가 우회된다.
+    """
+    bad = []
+    for a in sorted(authors):
+        if not _PERFORMER.match(a):
+            bad.append(a)
+    if bad or missing_agent:
+        parts = []
+        if bad:
+            parts.append("문법 밖 저자: " + ", ".join(repr(b) for b in bad))
+        if missing_agent:
+            parts.append(f"agent 가 없는 finding {missing_agent}건")
+        fail4("AC10a 를 평가할 수 없다 — " + " · ".join(parts)
+              + " (저자는 디스패치한 agent 의 frontmatter name: 이어야 한다 — "
+              "소문자·숫자·하이픈, 플러그인 접두 없이)")
 
 
 def check_self_adjudication(states, finding_authors):

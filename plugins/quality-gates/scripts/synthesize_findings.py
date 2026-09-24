@@ -739,16 +739,28 @@ def main():
             # 것만으로 AC10a 가 조용해진다. dedup 뒤 항목의 `sources` 는 dedup 이
             # `agent` 들로 만든 목록이다. 더 세는 쪽은 AC10a 를 엄격하게 할
             # 뿐이다(fail-closed).
+            # 이중 계수 — 한 finding 이 raw(판정 전)와 findings(판정 뒤) 둘 다에
+            # 있으면 missing_agent 가 두 번 센다. 검사는 > 0 만 보므로 판정에는
+            # 영향이 없다 — 메시지의 건수는 「관측한 항목 수」로 읽힌다.
             authors = set()
+            missing_agent = 0
             for f in findings + raw:
                 if isinstance(f, dict):
+                    agent = str(f.get("agent", "?"))
+                    if agent in ("", "?"):
+                        missing_agent += 1
+                    else:
+                        authors.add(agent)
                     srcs = f.get("sources") or []
                     if not isinstance(srcs, (list, tuple)):
                         srcs = [srcs]
-                    for s in [f.get("agent", "?")] + list(srcs):
+                    for s in srcs:
                         s = str(s)
                         if s and s != "?":
                             authors.add(s)
+            # 부채 B — 저자 쪽 신원 계약. AC10a 비교 «전»에 둔다: 문법 밖 이름이
+            # 섞인 집합으로 비교하면 그 비교 자체가 무의미하다.
+            _angles.check_author_identity(authors, missing_agent)
             _angles.check_self_adjudication(declared, authors)
             # 계획 R-L — 관측된 주 입력 사망을 선언 위에 얹는다. AC10a 는 «선언»에
             # 걸었다(선언 자체가 Law 2 를 어기면 판정자 생사와 무관하게 거부).
