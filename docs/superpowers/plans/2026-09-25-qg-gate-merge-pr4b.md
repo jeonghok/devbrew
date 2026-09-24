@@ -22,21 +22,23 @@
 - **차등 테스트는 trivia escape 와 kill switch 외에는 생략되지 않는다**(AC2). 게이트 범위를 고르는 인자·질문이 없다(AC1).
 - **토픽 스코프는 이 PR 밖이다**(4c). `resolve-topic.sh` · `combine-tips.sh` 는 **호출하지 않는다**. `declaration-invalid` · `merge-conflict` 의 발화 지점은 4c 의 빚으로 남는다(`test_verdict_vocabulary.sh` 의 `debt` 리터럴).
 - **공개 계약 문자열(`.claude-plugin/marketplace.json` · `plugins/quality-gates/.claude-plugin/plugin.json` 의 `description`) · 루트 `CLAUDE.md` 는 건드리지 않는다**(PR5). `plugin.json` 은 `version` 만 바꾼다.
-- **`shared/docreview/**` · `shared/adjudication/**` · `plugins/spec-distill/**` · `plugins/plugin-audit/**` 는 한 바이트도 바뀌지 않는다.** (R-W 가 plugin-audit 를 건드리지 않게 만든다.)
+- **`shared/**` · `plugins/spec-distill/**` · `plugins/plugin-audit/**` 는 한 바이트도 바뀌지 않는다 — 예외는 하나, `shared/tests/test_plugin_root_no_cwd_fallback.sh`.** 그 락은 레퍼런스 경로를 리터럴(`REP["ref"]`)로 박고 펜스 수 하한(축 2 · 가드 펜스)을 갖는다 — 파일을 옮기고 스텝을 지우면 그 셋이 움직인다. Task 7 이 그 셋만 고친다(모의 실행 실측). (R-W 가 plugin-audit 를 건드리지 않게 만든다.)
 - **fail4 계약은 원자적이다** — 실패 경로에서 stdout 에 아무것도 쓰지 않는다. **exit 코드 셋**: `0` 정상 · `2` 잘못된 **호출** · `4` 실패한 **판정**. 파이썬 traceback(exit 1)은 계약 위반이다.
 - **리뷰어가 준 필드는 불신한다.** `agent` · `sources` · `f` · `to` 는 전부 비신뢰 입력이다. 비신뢰 입력에 거는 정규식은 `fullmatch` 를 쓴다(`$` 는 끝 개행 앞에서도 맞는다).
 - **스윕은 `git grep -n -P -i` 로, 단어 경계 없이, 제외는 매치 단위로** 한다(`git grep -E` 의 `\b` 는 이 git 에서 조용히 0건이다). 파일 단위로 제외하지 않는다 — 한 파일 안에 남길 매치와 지울 매치가 섞여 있다.
 - **규칙을 옮기는 편집은 삭제 쪽 락을 생성 쪽으로 따라가게 한다.** 락을 지우는 행마다 «그 규칙을 이제 무엇이 지키는가»를 인벤토리에 적는다. 「대상 소멸」이면 그렇다고 적는다.
 - **회귀는 열거 목록이 아니라 도출 집합으로 돈다** — `run-suite.sh`(아래 Task 1)가 네 디렉토리의 셸 락 전부를 돈다. Task 안의 「돌릴 락」 목록은 최소 집합이지 전부가 아니다.
-- **선재 RED 기준선은 «실패 파일 이름 + 실패 줄 수»**로 잡는다(`^[[:space:]]*✗|^FAIL:`). 이미 RED 인 파일 안의 새 실패는 rc 로 원리적으로 안 보인다.
+- **선재 RED 기준선은 «실패 파일 이름 + 실패 줄 수»**로 잡는다(`^[[:space:]]*(✗|FAIL[ :])` — `FAIL:` 만이 아니라 `FAIL 5b:` · `FAIL V2a:` 모양도 있다. `\b` 는 쓰지 않는다). 이미 RED 인 파일 안의 새 실패는 rc 로 원리적으로 안 보인다.
 - **`check_wiring.py` 의 `synthesize_findings.py` 면제 키는 줄번호다** — 합성기를 고치는 Task 마다 같은 커밋에서 실측으로 재앵커한다(`exempt_stale=0` 이 답한다). 주석에 델타를 적지 않는다.
 - **버전은 브랜치에서 정하지 않는다** — 머지 직전에 `origin/main` 을 다시 보고 정한다(breaking → major).
 - **최신화는 merge, rebase 금지.** 워크트리 격리 — 세션이 치는 명령에서 메인 체크아웃으로 `cd` 금지, `git -C` 금지(제품 스크립트 안의 `git -C` 는 이 규칙의 대상이 아니다), bare `git stash` 금지.
 - **커밋 트레일러** — 마지막 `-m` 단락 **하나**에 `Spec: docs/superpowers/specs/2026-09-21-qg-target-derived-judgment-design.md#pr4b` 와 `Co-Authored-By: <그 커밋을 쓴 실제 모델>` 두 줄.
+- **명령은 워크트리 루트에서 돈다 — 계산된 경로를 쓰지 않는다.** 이 세션의 워크트리 격리 가드는 계산된 `cd`(`cd "$(git rev-parse …)"`) · git 에 넘기는 셸 배열 · git 을 감싼 `for` 루프 · 변수로 계산한 경로로 도는 `bash`/`python3` 를 거부한다(모의 실행 실측). 계획 문면의 `$CLAUDE_JOB_DIR` 는 **호출 전에 절대 경로 리터럴로 풀어** 쓴다. 파일로 쓴 스크립트(`run-suite.sh`) **안**의 셸 구문은 이 규칙의 대상이 아니다.
 - **`PYTHONDONTWRITEBYTECODE=1`** 로 돌린다. 파이썬 편집마다 `python3 -m py_compile` 로 확인한다.
 - **`plugins/quality-gates/tests/*.sh` 는 git 모드 100755** 여야 한다. 새 테스트 파일은 `chmod +x` 후 `git add`.
 - **워크트리와 `$CLAUDE_JOB_DIR/tmp` 는 세션 재개에 사라진다.** git-ignored 산출물(기준선 · 인벤토리 · 변이 표 · SDD 원장)은 매 갱신마다 `~/.claude/sdd-mirror/qg-gate-merge-pr4b/` 로 복사한다.
 - **계획 문면의 인라인 코드 안 `\``는 백틱 하나를 뜻한다** — 산문 · 표 칸의 인라인 코드에 백틱을 담으려고 쓴 표기다. 파일에 옮길 때 백슬래시를 쓰지 않는다. 펜스 블록(```` ``` ````) 안의 문면은 **글자 그대로** 옮긴다 — 단 bash 펜스 안의 `\`` 는 bash 문법이다(큰따옴표 안의 백틱 이스케이프). 옮기기 전에 목적지 파서로 검증한다(`bash -n` · `python3 -m py_compile`).
+- **계획이 인용한 옛 문구는 원문에서 줄바꿈을 가로지를 수 있고 마크업(굵게 · 백틱)이 계획의 인용과 다를 수 있다.** 한 줄 grep 이 0 이면 앞 서너 단어로 찾아 그 문장 **전체**를 고친다. 인용이 원문과 뜻까지 다르면 멈추고 보고한다(계획 결함).
 - **자기서사 금지.** SKILL · 레퍼런스 · persona 는 모델이 읽고 행동하는 산출물이다 — 새로 쓰는 문장에 「이 문단은 iter-N 에서…」 같은 이력을 넣지 않는다. 이력은 CHANGELOG · PR 본문에 둔다. 지우는 절이 이력만 담고 있으면 같이 지운다.
 
 ## Review Focus
@@ -138,10 +140,12 @@ Task 1 이 코드로 확증하고, 없으면 **BLOCKED** 로 보고한다.
 ### R-X — 봉인 인덱스는 `.git` 안에 둔다 · `create-head` 는 봉인을 **다시 떠서** 트리를 대조한다
 
 **정함.**
-1. `seal-worktree.sh` 의 임시 인덱스 자리를 `git rev-parse --git-path qg-seal-<sid8>.index` 로 옮긴다. 이른 `check-ignore` 가드는 지운다. 봉인 «후» 트리 검사(권위 가드)는 남긴다.
+1. `seal-worktree.sh` 의 임시 인덱스 자리를 `git rev-parse --git-path qg-seal-<sid8>.index` 로 옮긴다. 이른 `check-ignore` 가드는 지운다. 봉인 «후» 트리 검사(권위 가드)는 남긴다. **봉인은 qg 자신의 네임스페이스(`.claude/quality-gates/`)를 워킹트리 쪽에서 집지 않는다** — `git add -A -- . ':(exclude).claude/quality-gates'`.
 2. `create-head <sealed-sha> <sid>` 의 assert 를 「`rt-<sid8>` 샌드박스의 HEAD 와 같다」에서 「`<sealed-sha>` 의 트리가 **지금 다시 뜬 봉인**의 트리와 같다」로 바꾼다. `create-head` 가 `seal-worktree.sh seal <sid>` 를 스스로 한 번 더 부른다.
 
 **왜.** (1) 오늘의 가드는 사용자 리포가 `.claude/` 를 무시하지 않으면 봉인을 거부한다(Review Focus 1). `.git` 안은 `git add -A` 가 원리적으로 집지 않는 자리다 — 설계 §6.4.1 이 못 박은 요건(「git 이 무시하는 자리」)을 리포 설정과 무관하게 만족한다. (2) 샌드박스가 사라지므로 대조 대상이 없다. 설계 §6.4.1 은 「봉인 커밋의 트리가 기대 OID 와 일치」를 요구한다 — 기대 OID 를 오케스트레이터가 따로 옮겨 적게 하면 대조 양쪽이 같은 전사에서 나온다. 다시 뜬 봉인은 워킹트리에서 도출되므로 전사가 없다. `$merge_base` 를 잘못 넘기면(형제 `create-baseline` 과 인자 모양이 같다) 트리가 달라 죽는다. 봉인 뒤 워킹트리가 바뀐 stale 값도 죽는다.
+
+네임스페이스 제외는 모의 실행이 찾은 회귀를 닫는다 — `.claude/` 를 무시하지 않는 리포에서 qg 의 상태(`pipeline.md` · `baseline-cache/` · `worktrees/` 의 중첩 워크트리)가 봉인에 들어가고, 중첩 워크트리가 생긴 **뒤** 다시 뜬 봉인은 그것을 embedded repository 로 집어 트리가 달라진다(`create-sandbox` 뒤 `create-head` 가 거짓으로 죽는다 — `case_head_and_baseline_coexist`). qg 가 쓰는 자리는 리뷰 대상이 아니다.
 
 **틀리면.** `create-head` 가 봉인을 두 번 뜬다(수 ms). 다시 뜬 봉인 커밋은 unreachable 로 남는다 — 순차 합치기 중간 커밋과 같은 처지이고, 그 GC 는 4c 의 빚이다.
 
@@ -274,6 +278,7 @@ Task 1 이 코드로 확증하고, 없으면 **BLOCKED** 로 보고한다.
 | `tests/…` (Task 1 인벤토리가 도출) | 락 이주 |
 | `tools/adjudication/check_wiring.py` | 면제 키 재앵커 |
 | `tools/adjudication/check_slots.py` | 주석의 `runtime-verifier.spec_acceptance_criteria` bullet 제거 |
+| `shared/tests/test_plugin_root_no_cwd_fallback.sh` | **이 PR 이 `shared/` 에서 고치는 유일한 파일** — `REP["ref"]` 경로 · 축 2 하한 · 가드 펜스 하한(Task 7 Step 9) |
 | `plugins/quality-gates/README.md` · `docs/philosophy/devbrew-harness-philosophy.md`(코드 지도의 죽은 포인터만) · `docs/plugin-authoring.md`(죽은 인용만) · `tests/e2e-scenarios.md` | 문서 이주 |
 | `docs/superpowers/specs/2026-09-21-qg-target-derived-judgment-design.md` | §16 P23 재결정(4b · 4c) |
 | `plugins/quality-gates/CHANGELOG.md` · `.claude-plugin/plugin.json`(`version` 만) | bump |
@@ -285,9 +290,9 @@ Task 1 이 코드로 확증하고, 없으면 **BLOCKED** 로 보고한다.
 | `agents/runtime-verifier.md` | §12 · C2. 대상 소멸 — 부팅 표면 검증의 **주장을 거둔다**(§6.5.3). SKILL/레퍼런스 dispatch 블록과 **같은 커밋** |
 | `scripts/detect-runtime.sh` | 런타임 스코프 결정 제거(§6.4.4). 대상 소멸 |
 | `skills/quality-pipeline/references/runtime-gate.md` | `differential-test.md` 로 `git mv` |
-| `tests/test_runtime_verifier_frontmatter.sh` · `tests/test_runtime_verifier_behavior.py` · `tests/test_detect_runtime.sh` · `tests/test_runtime_verdict_precedence.sh` | 대상 소멸. **최종 목록은 Task 1 인벤토리가 도출한다** — 여기 적은 것은 시작점이다 |
+| `tests/test_runtime_verifier_frontmatter.sh` · `tests/test_runtime_verifier_behavior.py` · `tests/test_detect_runtime.sh` | 대상 소멸. **최종 목록은 Task 1 인벤토리가 도출한다** — 여기 적은 것은 시작점이다. `tests/test_runtime_verdict_precedence.sh` 는 **통째로 지우지 않는다** — 약 15 단언이 살아남는 규칙(R-init 표 · R2 필드/비율/비용/시간 추정 금지 · R3 zero-click · R6 exit 라우팅 · 재실행 1회 · 2단 구조 · bulk · R8 unclaimed/러너 부재)을 지킨다(모의 실행 실측). verdict 표 · 총 순서 단언만 `delete`, 나머지는 `retarget` |
 
-**이 PR 밖(범위 불변식 — Task 11 이 대조한다):** `shared/**` · `plugins/spec-distill/**` · `plugins/plugin-audit/**` · `.claude-plugin/marketplace.json` · 루트 `CLAUDE.md` · `plugins/quality-gates/scripts/resolve-topic.sh` · `plugins/quality-gates/scripts/combine-tips.sh` · `plugins/quality-gates/scripts/diff-test-results.py` · `plugins/quality-gates/scripts/run-test-selection.sh` · `plugins/quality-gates/scripts/check_qa_ledger.py` · `plugins/quality-gates/agents/security-reviewer.md` · `plugins/quality-gates/agents/doc-recritic.md` · `plugins/quality-gates/references/recritic-code-profile.md` · `plugins/quality-gates/.claude-plugin/plugin.json` 의 `version` 밖 바이트.
+**이 PR 밖(범위 불변식 — Task 11 이 대조한다):** `shared/**`(단 `shared/tests/test_plugin_root_no_cwd_fallback.sh` 한 파일 제외) · `plugins/spec-distill/**` · `plugins/plugin-audit/**` · `.claude-plugin/marketplace.json` · 루트 `CLAUDE.md` · `plugins/quality-gates/scripts/resolve-topic.sh` · `plugins/quality-gates/scripts/combine-tips.sh` · `plugins/quality-gates/scripts/diff-test-results.py` · `plugins/quality-gates/scripts/run-test-selection.sh` · `plugins/quality-gates/scripts/check_qa_ledger.py` · `plugins/quality-gates/agents/security-reviewer.md` · `plugins/quality-gates/agents/doc-recritic.md` · `plugins/quality-gates/references/recritic-code-profile.md` · `plugins/quality-gates/.claude-plugin/plugin.json` 의 `version` 밖 바이트.
 
 ---
 ### Task 1: 착수 — 전제 확증 · 선재 RED 기준선 · 인벤토리 두 장
@@ -307,7 +312,6 @@ Task 1 이 코드로 확증하고, 없으면 **BLOCKED** 로 보고한다.
 - [ ] **Step 1: PR4a 전제를 확증한다 — 이름만이 아니라 호출 가능성**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git fetch origin --quiet
 git merge-base --is-ancestor f8ef0555 HEAD && echo "OK PR4a in HEAD" || echo "MISSING PR4a"
 PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
@@ -333,7 +337,6 @@ git grep -n -P 'resolve-topic\.sh|combine-tips\.sh' -- plugins/quality-gates/ski
 - [ ] **Step 2: base 이동량을 잰다**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git rev-list --count HEAD..origin/main
 git log --oneline HEAD..origin/main | head -20
 git merge-tree --write-tree --name-only HEAD origin/main | tail -n +2 | head -40
@@ -355,8 +358,8 @@ for f in plugins/quality-gates/tests/*.sh plugins/quality-gates/tests/harness/*.
          shared/tests/*.sh plugins/spec-distill/tests/*.sh; do
   [ -f "$f" ] || continue
   o="$(PYTHONDONTWRITEBYTECODE=1 bash "$f" 2>&1)"; rc=$?
-  # 실패 줄 앵커는 둘이다 — assert.sh 계열의 `✗` 와 하네스의 `FAIL:`.
-  n="$(printf '%s\n' "$o" | grep -cE '^[[:space:]]*✗|^FAIL:' || true)"
+  # 실패 줄 앵커 — assert.sh 계열의 `✗`, 하네스의 `FAIL:`, 그리고 `FAIL 5b:` · `FAIL V2a:` 모양.
+  n="$(printf '%s\n' "$o" | grep -cE '^[[:space:]]*(✗|FAIL[ :])' || true)"
   printf '%s\t%s\t%s\n' "$f" "$rc" "$n" >> "$OUT"
 done
 wc -l < "$OUT"
@@ -366,33 +369,32 @@ awk -F'\t' '$2 != 0 || $3 != 0 {print}' "$OUT"
 ```bash
 chmod +x "$CLAUDE_JOB_DIR/tmp/run-suite.sh"
 bash "$CLAUDE_JOB_DIR/tmp/run-suite.sh" "$CLAUDE_JOB_DIR/tmp/pr4b-baseline.tsv"
-cd "$(git rev-parse --show-toplevel)"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/quality-gates/tests -p "test_*.py" 2>&1 | tail -3
 PYTHONDONTWRITEBYTECODE=1 bash plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh 2>&1 \
-  | grep '^FAIL:' > "$CLAUDE_JOB_DIR/tmp/pr4b-baseline-harness-fails.txt"
+  | grep '^FAIL:' | sed -E 's/ \(.*\)$//' | sort -u > "$CLAUDE_JOB_DIR/tmp/pr4b-baseline-harness-fails.txt"
 cat "$CLAUDE_JOB_DIR/tmp/pr4b-baseline-harness-fails.txt"
 ```
 
-**보고서에 적는 것** — 총 행 수, rc≠0 또는 실패≠0 인 행 전부(경로 · rc · 줄 수), unittest 총수, 하네스 `FAIL:` 줄 **이름** 전부. 앞 PR 의 숫자를 베끼지 않는다 — 측정이다. (참고: PR4a 종료 시점은 210 파일 · 선재 RED 넷 — qg `test_codex_backward_compat.sh` 1/0 · qg `test_runner_adapters.sh` 1/1 · qg `harness/test_skill_orchestration_behavior.sh` 1/2 · spec-distill `test_no_write_matcher_hooks_repo.sh` 1/1 · unittest 193. 다르면 다르다고 적는다.)
+**보고서에 적는 것** — 총 행 수, rc≠0 또는 실패≠0 인 행 전부(경로 · rc · 줄 수), unittest 총수, 하네스 `FAIL:` 줄 **이름** 전부(끝의 괄호 — 줄번호 · 거리 — 는 편집마다 움직이므로 벗겨서 저장한다).
+
+**이름이 같은 채로 안에서 늘어나는 실패를 조심한다.** 하네스의 `FAIL: R1b→R8 unclaimed 집행 사슬` 은 여러 하위 검사를 한 이름에 묶는다 — 기준선에서 이미 RED 인 이름 안에서 하위 검사가 하나 더 깨져도 이름도 줄 수도 안 바뀐다. 그 이름 바로 뒤의 들여쓴 진단 줄도 함께 저장한다: `bash …/test_skill_orchestration_behavior.sh 2>&1 | grep -A8 '^FAIL: R1b→R8' > "$CLAUDE_JOB_DIR/tmp/pr4b-baseline-unclaimed-detail.txt"` — Task 7 · 8 · 11 이 같은 명령으로 다시 떠서 `diff` 한다. 앞 PR 의 숫자를 베끼지 않는다 — 측정이다. (참고: PR4a 종료 시점은 210 파일 · 선재 RED 넷 — qg `test_codex_backward_compat.sh` 1/0 · qg `test_runner_adapters.sh` 1/1 · qg `harness/test_skill_orchestration_behavior.sh` 1/2 · spec-distill `test_no_write_matcher_hooks_repo.sh` 1/1 · unittest 193. 다르면 다르다고 적는다.)
 
 - [ ] **Step 4: 제거 스윕 인벤토리 — 문면의 전수, 매치 단위 처분**
 
 네 스윕을 **`git grep -n -P -i`** 로 돌린다(`-E` 금지 · 단어 경계 금지). 스윕 대상은 리포 전체의 추적 파일이고, 아래 경로는 **줄을 세기만** 하고 인벤토리에 적지 않는다: `docs/superpowers/**` · `docs/archive/**` · `*/CHANGELOG.md`.
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
-X=(':!docs/superpowers/**' ':!docs/archive/**' ':!**/CHANGELOG.md')
-git grep -n -P -i 'SKIP_WITH_EVIDENCE|NEEDS_RESOLUTION|forced_downgrade|block_policy|approved_surfaces|effective_skip_runtime|LEGACY_VERDICTS|legacy.verdict|AC23' -- . "${X[@]}" > "$CLAUDE_JOB_DIR/tmp/sw1.txt"
-git grep -n -P -i 'sandbox|mutation.guard|create-sandbox|runtime-verifier|runtime_verifier|detect-runtime|detect_runtime|RUNTIME_MAX_RESOLUTIONS|DISABLE_RUNTIME_SANDBOX|resolution_iter|evidence_dir' -- . "${X[@]}" > "$CLAUDE_JOB_DIR/tmp/sw2.txt"
-git grep -n -P -i 'Runtime gate|Review gate|runtime-gate|skip-runtime|/qg both|/qg review|/qg runtime|2-gate|two gates|두 게이트|Decision [12]|Tier [ABC]|single-gate|gate scope|gate=' -- . "${X[@]}" > "$CLAUDE_JOB_DIR/tmp/sw3.txt"
-git grep -n -P -i -- '--adversarial|adjudicator = "adversarial"|author="adversarial"|downgrade|ac_coverage|agent: codex\b|codex 는 `codex`|이 실행은 clean이 아니다' -- . "${X[@]}" > "$CLAUDE_JOB_DIR/tmp/sw4.txt"
+git grep -n -P -i 'SKIP_WITH_EVIDENCE|NEEDS_RESOLUTION|forced_downgrade|block_policy|approved_surfaces|effective_skip_runtime|LEGACY_VERDICTS|legacy.verdict|AC23' -- . ':!docs/superpowers/**' ':!docs/archive/**' ':!**/CHANGELOG.md' > "$CLAUDE_JOB_DIR/tmp/sw1.txt"
+git grep -n -P -i 'sandbox|mutation.guard|create-sandbox|runtime-verifier|runtime_verifier|detect-runtime|detect_runtime|RUNTIME_MAX_RESOLUTIONS|DISABLE_RUNTIME_SANDBOX|resolution_iter|evidence_dir' -- . ':!docs/superpowers/**' ':!docs/archive/**' ':!**/CHANGELOG.md' > "$CLAUDE_JOB_DIR/tmp/sw2.txt"
+git grep -n -P -i 'Runtime gate|Review gate|runtime-gate|skip-runtime|/qg both|/qg review|/qg runtime|2-gate|two gates|두 게이트|Decision [12]|Tier [ABC]|single-gate|gate scope|gate=' -- . ':!docs/superpowers/**' ':!docs/archive/**' ':!**/CHANGELOG.md' > "$CLAUDE_JOB_DIR/tmp/sw3.txt"
+git grep -n -P -i -- '--adversarial|adjudicator = "adversarial"|author="adversarial"|downgrade|ac_coverage|agent: codex$|codex 는|이 실행은 clean이 아니다' -- . ':!docs/superpowers/**' ':!docs/archive/**' ':!**/CHANGELOG.md' > "$CLAUDE_JOB_DIR/tmp/sw4.txt"
 wc -l "$CLAUDE_JOB_DIR"/tmp/sw[1-4].txt
-for p in 'docs/superpowers/**' 'docs/archive/**' '**/CHANGELOG.md'; do
-  printf '%s\t' "$p"; git grep -c -P -i 'SKIP_WITH_EVIDENCE|NEEDS_RESOLUTION|sandbox|runtime-verifier|Runtime gate|--adversarial' -- "$p" | awk -F: '{s+=$2} END {print s+0}'
-done
+git grep -c -P -i 'SKIP_WITH_EVIDENCE|NEEDS_RESOLUTION|sandbox|runtime-verifier|Runtime gate|--adversarial' -- 'docs/superpowers/**' | awk -F: '{s+=$2} END {print "docs/superpowers", s+0}'
+git grep -c -P -i 'SKIP_WITH_EVIDENCE|NEEDS_RESOLUTION|sandbox|runtime-verifier|Runtime gate|--adversarial' -- 'docs/archive/**' | awk -F: '{s+=$2} END {print "docs/archive", s+0}'
+git grep -c -P -i 'SKIP_WITH_EVIDENCE|NEEDS_RESOLUTION|sandbox|runtime-verifier|Runtime gate|--adversarial' -- '**/CHANGELOG.md' | awk -F: '{s+=$2} END {print "CHANGELOG", s+0}'
 ```
 
-`sw4.txt` 의 `agent: codex\b` 는 `-P` 라 `\b` 가 정상 동작한다(문제는 `-E` 의 `\b` 다).
+`sw4.txt` 의 `agent: codex$` 는 줄 끝으로 닫는다 — `\b` 로 닫으면 하이픈이 경계라 이미 맞는 `codex-reviewer` 46곳이 전부 걸린다(모의 실행 실측).
 
 각 **매치**를 아래 처분 중 하나로 분류해 `pr4b-sweep-inventory.tsv` 에 쓴다. 한 파일 안에서 매치마다 처분이 다를 수 있다.
 
@@ -409,14 +411,13 @@ done
 
 **`Task` 칸**은 그 매치를 처리할 Task 번호다: 합성기 · 판정 어휘(`--adversarial` · legacy · `downgrade`) → 2, not-clean 마커 → 3, 봉인 · `create-head` → 4, `setup-qg.sh` · `state-file-format.md` → 5, `test-scope-validator.md` · `ac_coverage` → 6, SKILL · 레퍼런스 · qg.md · verifier · detect-runtime · Decision · Tier → 7, 판정 배선 · codex 토큰 · 보안 kill switch 의미 → 8, README · docs → 9.
 
-**반드시 확인하는 것** — `tests/e2e-scenarios.md` 가 「Historical」 절을 가지면 그 절의 매치는 `keep-other`, 나머지는 `edit`. `tools/adjudication/check_slots.py` 의 `runtime-verifier.spec_acceptance_criteria` 주석 bullet 은 `edit`(Task 7). `docs/philosophy/devbrew-harness-philosophy.md` 는 **코드 지도의 파일 포인터**만 `edit`(Task 9)이고, Law 2 scoped exception **산문**은 `keep-other`(근거: PR5 가 `CLAUDE.md` 와 함께 옮긴다).
+**반드시 확인하는 것** — 리포 루트 `README.md` 의 플러그인 목록 줄(「2-gate quality verification pipeline」)은 `edit`(Task 9) 다. `tests/e2e-scenarios.md` 가 「Historical」 절을 가지면 그 절의 매치는 `keep-other`, 나머지는 `edit`. `tools/adjudication/check_slots.py` 의 `runtime-verifier.spec_acceptance_criteria` 주석 bullet 은 `edit`(Task 7). `docs/philosophy/devbrew-harness-philosophy.md` 는 **코드 지도의 파일 포인터**만 `edit`(Task 9)이고, Law 2 scoped exception **산문**은 `keep-other`(근거: PR5 가 `CLAUDE.md` 와 함께 옮긴다).
 
 - [ ] **Step 5: 락 인벤토리 — 제거 · 이주 대상을 «재는» 단언의 전수**
 
 락 집합 `L` 은 **도출한다**:
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git grep -l -P -i 'runtime-gate|reconstruct-skill|quality-pipeline/SKILL|quality-pipeline/references|setup-qg|commands/qg\.md|runtime-verifier|detect-runtime|create-sandbox|mutation.guard|Decision [12]|block_policy|approved_surfaces|effective_skip_runtime|skip-runtime|NEEDS_RESOLUTION|SKIP_WITH_EVIDENCE|Runtime gate|Review gate|Tier [ABC]|--adversarial|legacy.verdict|LEGACY_VERDICTS|ac_coverage|test-scope-validator|codex-reviewer|RUNTIME_MAX_RESOLUTIONS|DISABLE_RUNTIME_SANDBOX|이 실행은 clean이 아니다|seal-worktree|create-head' \
   -- 'plugins/*/tests/**' 'shared/tests/**' 'tools/**' > "$CLAUDE_JOB_DIR/tmp/pr4b-lockset.txt"
 wc -l < "$CLAUDE_JOB_DIR/tmp/pr4b-lockset.txt"
@@ -553,6 +554,40 @@ case_downgrade_is_not_a_verb() {
 `plugins/quality-gates/tests/test_synthesize_findings_adjudication.py` — 클래스 하나를 더한다:
 
 ```python
+class TestRaiseGuard(unittest.TestCase):
+    """`_apply_raise` 는 브리지를 거치지 않는 값에도 서야 한다 — 재비판 경로는 브리지가 먼저
+    접으므로 CLI 로는 이 가드에 닿지 않는다(모의 실행: 접기를 지워도 CLI 케이스는 GREEN)."""
+
+    def _one(self, sev):
+        return {"agent": "security-reviewer", "file": "a.py", "line": 1,
+                "severity": sev, "summary": "s", "confidence": 8}
+
+    def test_lowercase_raise_folds_before_the_guard(self):
+        f = self._one("IMPORTANT")
+        v = {"finding_id": mod.finding_id(f), "verdict": "raise", "adjusted_severity": "critical"}
+        out, _ = mod.apply_verdicts([f], [v], ledger=mod.Ledger(items="open"))
+        self.assertEqual(out[0]["severity"], "CRITICAL", "소문자 critical 이 SUGGESTION 랭크로 떨어지면 raise 가 저지된다")
+
+    def test_mixed_case_current_severity_is_not_lowered(self):
+        f = self._one("Critical")
+        v = {"finding_id": mod.finding_id(mod._normalize_identity(dict(f))), "verdict": "raise",
+             "adjusted_severity": "IMPORTANT"}
+        L = mod.Ledger(items="open")
+        out, _ = mod.apply_verdicts([f], [v], ledger=L)
+        self.assertEqual(mod._norm_sev(out[0]), "CRITICAL", "낡은 매핑의 raise 가 CRITICAL 을 내리면 안 된다")
+        self.assertTrue(any("강제(게이트 변경)" in r for r in L.report()["reasons"]),
+                        "내렸을 raise 는 판정을 바꾼 강제로 공시된다")
+
+    def test_equal_raise_is_not_a_gate_coercion(self):
+        f = self._one("IMPORTANT")
+        v = {"finding_id": mod.finding_id(f), "verdict": "raise", "adjusted_severity": "important"}
+        L = mod.Ledger(items="open")
+        out, _ = mod.apply_verdicts([f], [v], ledger=L)
+        self.assertEqual(out[0]["severity"], "IMPORTANT")
+        self.assertFalse(any("강제(게이트 변경)" in r for r in L.report()["reasons"]),
+                         "같은 등급 raise 는 표기 강제(gate=False)다")
+
+
 class TestPromoteAuthorIsRequired(unittest.TestCase):
 
     def test_promote_new_findings_requires_author(self):
@@ -576,7 +611,6 @@ class TestPromoteAuthorIsRequired(unittest.TestCase):
 - [ ] **Step 2: 실패를 확인한다**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 PYTHONDONTWRITEBYTECODE=1 bash plugins/quality-gates/tests/test_verdict_vocabulary.sh 2>&1 | grep -E '✗' | head
 PYTHONDONTWRITEBYTECODE=1 bash plugins/quality-gates/tests/test_recritic_bridge.sh 2>&1 | grep -E '✗' | head
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest plugins.quality-gates.tests.test_synthesize_findings_adjudication 2>&1 | tail -3 \
@@ -600,7 +634,6 @@ def decide(*, defect=False, review_blocked=False, angle_absent=False,
 4. `main()` 에서 `ap.add_argument("--legacy-verdict", default=None)` 줄, `if args.legacy_verdict is not None and args.legacy_verdict == "":` 블록, `legacy_verdict=args.legacy_verdict,` 인자를 지운다.
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 python3 -m py_compile plugins/quality-gates/scripts/verdict.py
 grep -nE 'LEGACY|legacy|AC23' plugins/quality-gates/scripts/verdict.py || echo "OK verdict.py 깨끗"
 ```
@@ -736,7 +769,6 @@ def _apply_raise(f, adjusted, ledger):
 (e) **`load_yaml_doc` 를 지운다**(호출자가 `--adversarial` 경로뿐이었다). 지우기 전에 확인:
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git grep -n 'load_yaml_doc' -- plugins shared tools ':!**/CHANGELOG.md'
 ```
 
@@ -789,7 +821,6 @@ git grep -n 'load_yaml_doc' -- plugins shared tools ':!**/CHANGELOG.md'
 (h) **남은 자기서사 주석 스윕** — 이 파일에서 `fix round` · `라운드 [0-9]` · `Task [0-9]` · `20[0-9][0-9]-[0-9][0-9]-[0-9][0-9] 재현` · `PR[0-9]` 를 grep 해, 각 주석이 **행동 규칙**(왜 이 코드가 이 모양이어야 하나)을 담으면 이력 부분만 지우고, 이력**만** 담으면 통째로 지운다. docstring 도 같다. **규칙 문장은 지우지 않는다** — 지우면 다음 편집자가 그 코드를 「고친다」.
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 python3 -m py_compile plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/recritic_bridge.py
 grep -nE -- '--adversarial|legacy|downgrade|adjusted_confidence|load_yaml_doc|"adversarial"' plugins/quality-gates/scripts/synthesize_findings.py || echo "OK 합성기 깨끗"
 grep -cE 'fix round|라운드 [0-9]|Task [0-9]' plugins/quality-gates/scripts/synthesize_findings.py
@@ -828,6 +859,14 @@ rf_synth() {
 
 - [ ] **Step 6: `--adversarial` 호출 자리를 옮긴다 — 인벤토리의 `Task=2` 행**
 
+**규모** — 모의 실행 실측: `test_angle_coverage.sh` 에 약 35 자리(옮기기 전 87 단언 RED), `test_verdict_vocabulary.sh` 에 `case_synth_*` 아홉(Step 1 의 넷 밖), `test_recritic_bridge.sh` · `test_synthesize_promoted_findings.sh` · `test_synthesize_disposition.sh` · `test_synthesize_findings.sh` · `test_skill_drop_notice_consumed.sh` 에 몇 자리. 한 파일에 자리가 열 개 이상이면 그 파일 안에 `rf_*` 를 감싼 작은 헬퍼(예: `adv_case <dir> <verdicts-block>`)를 두고 옮긴다 — 자리마다 손으로 펼치지 않는다.
+
+**이빨을 잃는 변환 둘 — 모의 실행 실측(변이로 확인):**
+1. **합성기 내부 가드를 재던 케이스는 CLI 변환으로 재지 못한다.** `case_adversarial_raise_lowercase_severity_folds_before_guard` · `case_raise_only_up_guard_normalizes_current_severity`(`test_recritic_bridge.sh`)는 `_apply_raise` 의 접기를 잰다 — 그런데 재비판 경로는 브리지(`_verdict_for`)가 값을 **먼저** 접어 합성기 가드에 소문자가 닿지 않는다. CLI 로 옮기면 접기를 지워도 GREEN 이다. 이 둘은 **`test_synthesize_findings_adjudication.py` 의 단위 테스트로 옮긴다**(아래 Step 1 에 추가한 `TestRaiseGuard`).
+2. **다른 플래그의 운반체로 `--adversarial` 을 쓰던 케이스** — `test_verdict_vocabulary.sh` 의 `case_synth_verdict_flags_without_emit_are_usage_error` 는 세 단언 모두 `--adversarial X` 를 곁들여 부른다. 옮기지 않으면 argparse 가 모르는 인자로 exit 2 를 먼저 내 **세 단언이 공허하게 GREEN** 이다. 운반체를 빼고(`--findings` 만 둔다) `--legacy-verdict` 단언은 지운다. **exit 2 를 기대하는 단언은 전부 stderr 의 사유 문장도 함께 잰다**(예: `--emit-verdict 없이는 의미가 없다`) — rc 만 재면 「모르는 인자」가 같은 2 를 낸다.
+
+**`rf_prep` 의 번호** — `anonymize()` 는 매핑이 아닌 항목을 **건너뛰고** 번호를 매긴다. 파손 항목이 섞인 findings.yaml 에서는 그 뒤 항목의 `f<n>` 이 하나씩 당겨진다.
+
 `convert` 행은 아래 표대로 옮긴다. **케이스의 의도(주석 · 단언 메시지)를 먼저 읽고**, 옮긴 뒤 같은 단언이 같은 이유로 GREEN 인지 본다.
 
 | 옛 판정자 문서 | 재비판 응답 블록(`rf_reply` 의 둘째 인자) |
@@ -846,33 +885,30 @@ rf_synth() {
 - [ ] **Step 7: 면제 키를 재앵커하고 통과를 확인한다**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
-grep -n "if f.get('promoted')" plugins/quality-gates/scripts/synthesize_findings.py
+grep -n 'if f.get("promoted"):' plugins/quality-gates/scripts/synthesize_findings.py
 grep -n 'continue' plugins/quality-gates/scripts/synthesize_findings.py | head
 ```
 
 `dedup()` 안 `if f.get("promoted"):` 다음 줄 `continue` 의 **줄번호**를 `tools/adjudication/check_wiring.py` 의 `("plugins/quality-gates/scripts/synthesize_findings.py", 467,` 에 넣는다. 그 위 재앵커 이력 주석(「PR4a Task 4 — …」 · 「Task 7 row 31 — …」)은 **지우고** 한 줄만 남긴다: `# 줄번호 키 — 합성기를 고치는 PR 마다 실측으로 재앵커한다(exempt_stale=0 이 답한다).`
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 export PYTHONDONTWRITEBYTECODE=1
 for t in plugins/quality-gates/tests/test_verdict_vocabulary.sh plugins/quality-gates/tests/test_recritic_bridge.sh \
          plugins/quality-gates/tests/test_angle_coverage.sh plugins/quality-gates/tests/test_synthesize_promoted_findings.sh \
          plugins/quality-gates/tests/test_synthesize_disposition.sh plugins/quality-gates/tests/test_synthesize_findings.sh \
          shared/tests/test_adjudication_wiring.sh shared/tests/test_adjudication_consumed.sh; do
-  printf '%s ' "$t"; bash "$t" 2>&1 | grep -cE '^[[:space:]]*✗|^FAIL:'
+  printf '%s ' "$t"; bash "$t" 2>&1 | grep -cE '^[[:space:]]*(✗|FAIL[ :])'
 done
-python3 tools/adjudication/check_wiring.py 2>&1 | grep -E 'exempt_stale|FAIL' | head
+bash shared/tests/test_adjudication_wiring.sh 2>&1 | grep -E '면제 키|✗' | head   # check_wiring.py 는 CLI 가 없다 — 이 락이 exempt_stale 을 잰다
 python3 -m unittest discover -s plugins/quality-gates/tests -p 'test_synthesize*.py' 2>&1 | tail -3
 bash "$CLAUDE_JOB_DIR/tmp/run-suite.sh" "$CLAUDE_JOB_DIR/tmp/t2.tsv"
 ```
 
-**기대** — 위 락들의 실패 줄 0 · `exempt_stale=0` · unittest OK · `run-suite` 의 rc≠0/실패≠0 행이 **기준선 넷 그대로**(행 단위로 `pr4b-baseline.tsv` 와 대조한다 — `diff <(cut -f1-3 pr4b-baseline.tsv) <(cut -f1-3 t2.tsv)` 의 차이가 이 Task 가 바꾼 파일뿐인지 본다).
+**기대** — 위 락들의 실패 줄 0 · 면제 키 단언 ✓ · unittest OK · `run-suite` 의 rc≠0/실패≠0 행이 **기준선 넷 그대로**(행 단위로 `pr4b-baseline.tsv` 와 대조한다 — `diff <(cut -f1-3 pr4b-baseline.tsv) <(cut -f1-3 t2.tsv)` 의 차이가 이 Task 가 바꾼 파일뿐인지 본다).
 
 - [ ] **Step 8: 커밋**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git add plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/verdict.py \
         plugins/quality-gates/scripts/recritic_bridge.py tools/adjudication/check_wiring.py \
         plugins/quality-gates/tests/lib/recritic_fixture.sh
@@ -990,7 +1026,6 @@ def _degrade_block(report, blocking):
 - [ ] **Step 6: 커밋**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git add plugins/quality-gates/scripts/synthesize_findings.py tools/adjudication/check_wiring.py
 git add -u plugins/quality-gates/tests
 git status --short
@@ -1038,8 +1073,32 @@ case_seal_succeeds_when_claude_dir_not_ignored() {
 }
 ```
 
-2. `case_lock_leak_dies_closed` 는 전제(인덱스가 추적 자리에 있다)가 사라진다 — `delete`. 인벤토리의 「규칙을 잇는 자리」 = `case_seal_succeeds_when_claude_dir_not_ignored` 의 트리 검사 + Task 10 변이(인덱스를 워킹트리 자리로 되돌리면 권위 가드가 die).
-3. `case_index_file_cleaned_up` 가 `find .claude -name 'seal-*'` 로 잔여를 세면 `.git` 쪽으로 바꾼다: `find "$(git rev-parse --git-dir)" -name 'qg-seal-*'`.
+2. 새 케이스 — qg 자신의 네임스페이스는 봉인되지 않는다(모의 실행이 찾은 회귀의 락):
+
+```bash
+case_seal_excludes_qg_namespace() {
+  # .claude/ 를 무시하지 않는 리포에서 qg 의 상태 · 중첩 워크트리가 봉인에 들어가면
+  # create-head 의 재봉인 대조가 거짓으로 죽는다(중첩 워크트리가 embedded repo 로 잡힌다).
+  local R; R=$(mktemp -d); cd "$R" || exit 1
+  git init -q; git config user.email t@t.test; git config user.name tester
+  echo tracked > a.txt; git add -A; git commit -qm base    # .gitignore 없음
+  mkdir -p .claude/quality-gates/sess0002; echo state > .claude/quality-gates/sess0002/pipeline.md
+  git worktree add -q --detach .claude/quality-gates/worktrees/base-sess0002 HEAD
+  echo changed > a.txt
+  local B rc=0; B=$(bash "$SEAL" seal "sess0002xyz") || rc=$?
+  assert_eq "$rc" "0" "qg 상태가 워킹트리에 있어도 봉인이 성공한다"
+  local names; names=$(git ls-tree -r --name-only "$B" 2>/dev/null)
+  assert_not_grep "$names" '^\.claude/quality-gates/' "qg 네임스페이스는 봉인되지 않는다"
+  assert_eq "$(git show "$B:a.txt")" "changed" "리뷰 대상 변경은 봉인된다(양의 짝)"
+  git worktree remove --force .claude/quality-gates/worktrees/base-sess0002 >/dev/null 2>&1
+  cd / && rm -rf "$R"
+}
+```
+
+  파일 끝 `for c in …` 목록에 `case_seal_excludes_qg_namespace` 를 등록한다. 그리고 `test_runtime_contract_invariance.sh` 의 `case_head_and_baseline_coexist`(`create-sandbox` 뒤 `create-head`)는 **이 Task 뒤에도 GREEN** 이어야 한다 — Step 5 의 락 목록에 이미 있다.
+
+3. `case_lock_leak_dies_closed` 는 전제(인덱스가 추적 자리에 있다)가 사라진다 — `delete`. 인벤토리의 「규칙을 잇는 자리」 = `case_seal_succeeds_when_claude_dir_not_ignored` 의 트리 검사 + Task 10 변이(인덱스를 워킹트리 자리로 되돌리면 권위 가드가 die).
+4. `case_index_file_cleaned_up` 가 `find .claude -name 'seal-*'` 로 잔여를 세면 `.git` 쪽으로 바꾼다: `find "$(git rev-parse --git-dir)" -name 'qg-seal-*'`.
 
 `test_runtime_contract_invariance.sh` 의 `case_create_head_asserts_sealed_commit` 을 통째로:
 
@@ -1114,7 +1173,7 @@ SEAL_INDEX=$(git -C "$main_root" rev-parse --git-path "qg-seal-${sid_short}.inde
 case "$SEAL_INDEX" in /*) ;; *) SEAL_INDEX="$main_root/$SEAL_INDEX" ;; esac
 ```
 
-권위 가드의 패턴을 `grep -qE "seal-${sid_short}\.index(\.lock)?$"` 에서 `grep -qE "qg-seal-${sid_short}\.index(\.lock)?$|seal-${sid_short}\.index(\.lock)?$"` 로 넓히고 die 문구의 `($rel)` 를 `($SEAL_INDEX)` 로 바꾼다. 나머지(서브셸의 `export GIT_INDEX_FILE` · `trap` · commit-tree 설정)는 그대로다.
+권위 가드의 패턴을 `grep -qE "seal-${sid_short}\.index(\.lock)?$"` 에서 `grep -qE "qg-seal-${sid_short}\.index(\.lock)?$|seal-${sid_short}\.index(\.lock)?$"` 로 넓히고 die 문구의 `($rel)` 를 `($SEAL_INDEX)` 로 바꾼다. 서브셸의 `git add -A || exit 1` 을 `git add -A -- . ':(exclude).claude/quality-gates' || exit 1` 로 바꾼다(R-X — qg 자신의 상태 · 중첩 워크트리를 봉인하지 않는다). 나머지(`export GIT_INDEX_FILE` · `trap` · commit-tree 설정)는 그대로다.
 
 - [ ] **Step 4: `qg-worktree.sh` 의 `create-head` 를 고친다**
 
@@ -1152,14 +1211,13 @@ case "$SEAL_INDEX" in /*) ;; *) SEAL_INDEX="$main_root/$SEAL_INDEX" ;; esac
 - [ ] **Step 5: 통과 확인**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 export PYTHONDONTWRITEBYTECODE=1
 bash -n plugins/quality-gates/scripts/seal-worktree.sh && bash -n plugins/quality-gates/scripts/qg-worktree.sh && echo "OK 구문"
 for t in plugins/quality-gates/tests/test_seal_no_side_effects.sh plugins/quality-gates/tests/test_runtime_contract_invariance.sh \
          plugins/quality-gates/tests/test_topic_boundary.sh plugins/quality-gates/tests/test_qg_runtime_sandbox.sh \
          plugins/quality-gates/tests/test_qg_mutation_guard.sh plugins/quality-gates/tests/test_worktree.sh \
          plugins/quality-gates/tests/test_qg_worktree_helper.sh; do
-  printf '%s ' "$t"; bash "$t" 2>&1 | grep -cE '^[[:space:]]*✗|^FAIL:'
+  printf '%s ' "$t"; bash "$t" 2>&1 | grep -cE '^[[:space:]]*(✗|FAIL[ :])'
 done
 bash "$CLAUDE_JOB_DIR/tmp/run-suite.sh" "$CLAUDE_JOB_DIR/tmp/t4.tsv"
 ```
@@ -1169,7 +1227,6 @@ bash "$CLAUDE_JOB_DIR/tmp/run-suite.sh" "$CLAUDE_JOB_DIR/tmp/t4.tsv"
 - [ ] **Step 6: 커밋**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git add plugins/quality-gates/scripts/seal-worktree.sh plugins/quality-gates/scripts/qg-worktree.sh
 git add -u plugins/quality-gates/tests
 git status --short
@@ -1348,12 +1405,11 @@ done
 
 (`${a}` 는 중괄호로 쓴다 — bash 3.2 는 `$a` 바로 뒤의 비ASCII 글자 바이트를 변수 이름으로 먹는다.)
 
-(f) `state-file-format.md` 에서 `runtime_max_resolutions` 를 설명하는 줄(과 그 표 행)을 지운다. `## History` 줄 형식이 `Review gate iter N:` 를 쓰면 `qg iter N:` 로 바꾼다(Task 7 SKILL Step 5 가 같은 형식을 쓴다).
+(f) `state-file-format.md` 에서 `runtime_max_resolutions` 를 설명하는 줄(과 그 표 행)을 지운다. `## History` 줄 형식이 `Review gate iter N:` 를 쓰면 `qg iter N:` 로 바꾼다(Task 7 SKILL Step 5 가 같은 형식을 쓴다). 예시의 `Runtime gate: PASS` 줄은 `qg: verdict clean` 으로, `current_gate` 행과 머리 인용의 `Runtime gate resolution-cap reporting` 은 지운다(대상 소멸).
 
 - [ ] **Step 4: 통과 확인**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 bash -n plugins/quality-gates/scripts/setup-qg.sh && echo "OK 구문"
 PYTHONDONTWRITEBYTECODE=1 bash plugins/quality-gates/tests/test_setup_qg.sh 2>&1 | tail -3
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/quality-gates/tests -p 'test_kill_switches.py' 2>&1 | tail -2
@@ -1365,7 +1421,6 @@ bash "$CLAUDE_JOB_DIR/tmp/run-suite.sh" "$CLAUDE_JOB_DIR/tmp/t5.tsv"
 - [ ] **Step 5: 커밋**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git add plugins/quality-gates/scripts/setup-qg.sh plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md
 git add -u plugins/quality-gates/tests
 git status --short
@@ -1403,6 +1458,7 @@ Co-Authored-By: <이 커밋을 쓴 실제 모델>"
 
   (`PERSONA` 가 파일에 없으면 상단에 `PERSONA = Path(__file__).resolve().parents[1] / "agents" / "test-scope-validator.md"` 를 더한다.)
   - `test_fallback_omits_ac_coverage_when_no_spec` 는 전제가 보편이 됐다 — `delete`(규칙을 잇는 자리 = 위 케이스).
+  - 클래스 상수 `TEST_SCOPE_WITH_AC`(스텁 출력 fixture — `ac_coverage` · `Runtime gate` 를 담는다)는 지운 케이스만 썼다 — 함께 지운다. 다른 케이스가 쓰면 `ac_coverage` 블록만 뺀다.
   - `test_test_scope_validator_frontmatter.sh` 가 description 의 `Runtime gate Step 2.5` · `ac_coverage` 를 재면 인벤토리 행대로 `retarget`.
 
 - [ ] **Step 2: 실패를 확인한다** — `python3 -m unittest discover -s plugins/quality-gates/tests -p 'test_test_scope_validator_behavior.py'` 에서 새 케이스가 RED.
@@ -1437,19 +1493,17 @@ Emit nothing else about the spec — there is no per-AC coverage output.
 (옛 진단 문장의 `— AC coverage skipped;` 와 `(v2.0.0 behavior)` 는 사라진다 — 가리키던 출력이 없다. 이 문장을 재는 락이 있으면 인벤토리 행대로 `retarget`.)
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 grep -nE 'ac_coverage|runtime-verifier|Runtime gate|Review gate|Step 2\.5' plugins/quality-gates/agents/test-scope-validator.md || echo "OK persona 깨끗"
 ```
 
 - [ ] **Step 4: 통과 확인**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 export PYTHONDONTWRITEBYTECODE=1
 python3 -m unittest discover -s plugins/quality-gates/tests -p 'test_test_scope_validator*.py' 2>&1 | tail -2
 for t in plugins/quality-gates/tests/test_test_scope_validator_frontmatter.sh plugins/quality-gates/tests/test_agent_frontmatter_keys.sh \
          plugins/quality-gates/tests/test_agent_tools_lock_differential.sh shared/tests/test_agent_input_slots.sh; do
-  printf '%s ' "$t"; bash "$t" 2>&1 | grep -cE '^[[:space:]]*✗|^FAIL:'
+  printf '%s ' "$t"; bash "$t" 2>&1 | grep -cE '^[[:space:]]*(✗|FAIL[ :])'
 done
 ```
 
@@ -1458,7 +1512,6 @@ done
 - [ ] **Step 5: 커밋**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git add plugins/quality-gates/agents/test-scope-validator.md
 git add -u plugins/quality-gates/tests
 git status --short
@@ -1472,6 +1525,8 @@ Co-Authored-By: <이 커밋을 쓴 실제 모델>"
 
 ### Task 7: 한 파이프라인 — SKILL 재작성 · 차등 테스트 레퍼런스 · verifier 제거 (한 커밋)
 
+> **인용한 옛 문구는 줄바꿈을 가로지를 수 있다**(마크다운 산문은 70–90자에서 접혀 있다). 한 줄 grep 이 0 이면 앞 서너 단어로 찾아 그 문장 **전체**를 고친다 — 모의 실행이 이 Task 의 인용 열두 개가 줄을 가로지르는 것을 쟀다.
+>
 > 이 Task 는 **한 커밋**이다. `runtime-verifier` 의 dispatch 블록(레퍼런스)과 그 agent 정의는 같은 커밋에서 사라져야 한다 — 따로 가면 `shared/tests/test_dispatch_disposition.sh` 가 「어디서도 dispatch 되지 않는 agent」로 RED 다(§12). 판정 배선(`--emit-verdict` · `--angles`)은 **Task 8** 이다 — 이 Task 의 Step 4.5 는 오늘의 판정 논리(counts 줄 · not-clean 마커 · 정직-verdict floor)를 이름만 바꿔 유지한다.
 
 **Files:**
@@ -1498,6 +1553,11 @@ Co-Authored-By: <이 커밋을 쓴 실제 모델>"
 # 음의 락(옛 게이트 · verifier 토큰 부재)은 대상을 통째로 지워도 GREEN 이다 — 그래서 양의
 # 짝(새 골격의 존재 · 스텝 집합 · 순서)을 함께 둔다. 코퍼스는 오케스트레이터가 읽는 세 파일이다.
 set -u
+# test_guards_coverage_bidirectional.sh 가 읽는다 — 이 락이 여는 파일(리포 상대)을 낸다.
+[ "${1:-}" = "--emit-scanned" ] && { printf '%s\n' \
+  plugins/quality-gates/skills/quality-pipeline/SKILL.md \
+  plugins/quality-gates/skills/quality-pipeline/references/differential-test.md \
+  plugins/quality-gates/commands/qg.md; exit 0; }
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 . "$(cd "$SCRIPT_DIR/../../.." && pwd)/shared/tests/assert.sh"
@@ -1574,7 +1634,6 @@ finish
 - [ ] **Step 3: 레퍼런스를 옮기고 고친다**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git mv plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md \
        plugins/quality-gates/skills/quality-pipeline/references/differential-test.md
 ```
@@ -1592,7 +1651,7 @@ git mv plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md 
 
 > **호출 주체 불변식 (load-bearing).** `run-test-selection.sh` 는 기준선 측(R4)과
 > HEAD 측(R5b) **둘 다 오케스트레이터가 직접** 호출한다. 어떤 subagent 도 테스트를
-> 돌려 결과를 보고하지 않는다 — 판정 입력은 이 스크립트의 오케스트레이터 호출 결과뿐이다.
+> 돌려 결과를 보고하지 않는다 — 이 호출 결과가 authoritative 다. 판정 입력은 그것뿐이다.
 >
 > **두 호출은 각자의 트리에서 돈다.** 기준선 측은 `create-baseline` 이 기준선 커밋에,
 > HEAD 측은 `create-head` 가 봉인 커밋(`seal-worktree.sh`)에 detached 로 만든 일회용
@@ -1609,7 +1668,7 @@ git mv plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md 
 | `(≤\`SKIP_WITH_EVIDENCE\`)` · `≤SKIP_WITH_EVIDENCE` | 지운다 |
 | 판정값으로 쓰인 `FAIL` · `terminal FAIL` · `거짓 terminal FAIL` | `defect` · (verifier 서술이면 문장째 지운다) |
 | 판정값으로 쓰인 `SKIP` · `SKIP_WITH_EVIDENCE` | `not-certified` |
-| `Runtime 게이트` · `이 게이트` · `the Runtime gate` | `차등 테스트` |
+| `이 게이트`(차등 절차 전체를 가리킬 때만 — R8 의 `이 게이트` 는 `check_qa_ledger.py` 를 가리키므로 **그대로**) · `the Runtime gate` | `차등 테스트` |
 
 테스트 상태값 소문자(`pass` · `fail` · `error` · `unrun` · `absent`)와 귀속 카테고리(`NEW_REGRESSION` · `PRE_EXISTING` · …)는 **바꾸지 않는다** — 차등 기계의 어휘다.
 
@@ -1638,7 +1697,7 @@ git mv plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md 
   그 표 위아래의 「`runtime-verifier` 의 쓰기 범위 안에 있다」 · 「시계를 바로잡는다 — 창의 단위는 "verifier 턴"이 아니다」 · 「`aggregate.yaml` 의 "창 없음" 은 조건부다 … R7 …」 문단은 지운다. 「이 축은 §6.7 S1(잔여 결함)이며 **열려 있다**」 문단은 **남긴다**(열린 잔여의 공시다).
 - **R-init 의 「`$evidence_dir` 은 별도 금지가 아니다」 문단** — 지운다(`$evidence_dir` 은 이제 R8 이 정의한다).
 - **R4 의 「폴백(샌드박스 비활성)에서도 이 스텝 전체를 건너뛴다」 문단** — 통째로 지운다.
-- **R4 의 「판별자를 여기서 직접 구한다」 문단과 그 펜스** — 이것으로: `판별자는 Review Step 1b 가 캐시한 \`worktree_dirty\` · \`degraded\` 다(② 는 매 iteration Step 1b 뒤에 돈다).` 그 아래 판별 표는 남긴다.
+- **R4 의 「판별자를 여기서 직접 구한다」 문단과 그 펜스** — 이것으로: `판별자는 Review Step 1b 가 iteration 1 에서 캐시한 \`worktree_dirty\` · \`degraded\` 다. iteration 2 이상은 Retry 가 파일을 고친 뒤라 캐시가 낡았다 — \`worktree_dirty: yes\` 로 둔다(모름은 dirty 쪽 — R4 를 돈다).` 그 아래 판별 표는 남긴다.
 - **R4 ① 캐시 문단** — `runtime-verifier 는 무제한 Bash 로 그 형제 디렉토리에 쓰라고 지시받는다. 게다가` 를 지우고 문장을 `run 은 저장소가 통제하는 코드를 호스트 권한으로 돌리므로 리뷰 대상 저장소의 평범한 테스트가 캐시 경로를 계산해 쓸 수 있다.` 로 시작한다. 「봉인(digest)을 쓰지 않는 이유」의 `파일에 둔 비밀은 verifier 의 Bash 가 읽는다` → `파일에 둔 비밀은 저장소 코드가 읽는다`.
 - **R4 ② 문단들의 `verifier 의 Bash 와`** — 지운다.
 - **「R4 가 R5 보다 먼저인 이유」 문단** — 이것으로: `**R4 가 R5b 보다 먼저인 이유** — 기준선 실행이 HEAD 축과 **다른 트리에서** 끝나야 한다. 같은 트리에서 코드를 되감았다 복원하면 두 축이 같은 환경이라는 전제가 흐려진다.`
@@ -1709,7 +1768,6 @@ printf 'sealed=%s\nhead_tree_dir=%s\n' "$sealed" "$head_tree_dir"
 **(k) R1b · R2** — test-scope-validator dispatch 의 `description: "Classify scope-relevant test files (Runtime gate)"` → `(differential test)`. R2 의 투명성 앵커 `> Runtime scope: 영향 테스트 …` → `> Differential scope: 영향 테스트 …`. dispatch 블록의 `**처분**` 줄은 **그대로**(`consumer=orchestrator · fail-open · disclosure=R2 산문`) — `disclosure=` 값 「R2 산문」이 본문에 남아 있는지 본다(`shared/tests/test_dispatch_disposition.sh` 축 C).
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 R=plugins/quality-gates/skills/quality-pipeline/references/differential-test.md
 git grep -n -P -i 'verifier|sandbox|샌드박스|R5a|\bR7\b|\bR9\b|mutation.guard|SKIP_WITH_EVIDENCE|NEEDS_RESOLUTION|Runtime gate|Runtime 게이트|폴백' -- "$R" || echo "OK 레퍼런스 깨끗"
 git grep -n -P '(?<![A-Za-z_])(PASS|FAIL)(?![A-Za-z_:])' -- "$R" || echo "OK 판정값 없음"
@@ -2015,12 +2073,11 @@ printf 'Review\t<clean iter N | no scope reviewed (branch <M> ahead) | accepted-
 **(o) 나머지 스윕** — SKILL 전체에서:
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 S=plugins/quality-gates/skills/quality-pipeline/SKILL.md
 git grep -n -P -i 'Runtime gate|Review gate|runtime-verifier|detect-runtime|Decision [12]|block_policy|approved_surfaces|effective_skip_runtime|skip_runtime|NEEDS_RESOLUTION|SKIP_WITH_EVIDENCE|Tier [ABC]|single-gate|gate scope|both gates|RUNTIME_MAX_RESOLUTIONS|DISABLE_RUNTIME_SANDBOX|mutation.guard|create-sandbox|sandbox|ac_coverage|runtime-gate' -- "$S" || echo "OK SKILL 깨끗"
 ```
 
-남은 매치를 줄마다 고친다. `codex` 의 `-s`/`sandbox` 는 이 SKILL 에 나오지 않는다 — 나오면 보고한다.
+남은 매치를 줄마다 고친다. **예외 하나** — Codex skip 안내의 silent 표에 있는 `inside_codex_sandbox` 는 codex CLI 의 격리 사유라 남긴다(표면 락의 토큰 목록에 `sandbox` 가 없는 이유).
 
 - [ ] **Step 5: `commands/qg.md` 를 고친다**
 
@@ -2035,16 +2092,19 @@ git grep -n -P -i 'Runtime gate|Review gate|runtime-verifier|detect-runtime|Deci
 | Quick Reference | `/qg` 행 → `Run the pipeline; git-derived diff (branch + worktree)` · `/qg branch` 행 → `Run on the full-branch diff (vs \`main\`)` · `/qg branch <name>` 행 → `Run against branch \`<name>\` in isolated worktree` · `/qg --paths` 행 → `Scope to matched paths` · `/qg both` · `/qg review` · `/qg runtime` · `/qg --skip-runtime` · `DISABLE_RUNTIME_SANDBOX` 행 **삭제** · 새 행 `\| \`both\` · \`review\` · \`runtime\` · \`--skip-runtime\` \| 제거됨 — 한 줄 공지 후 그대로 진행 \|` |
 | Scope 절의 `Review gate의 **정직-verdict floor**` | `파이프라인의 **정직-verdict floor**` |
 | `### Gates` 절 | `### Pipeline` 으로 바꾸고 본문을 다섯 줄로: `① 스코프 → ② 차등 테스트(기준선 대비, 매 iteration) → ③ 각도 + 리뷰어 → ④ 출처-제거 재비판 → ⑤ 합성 · 판정` 과 fix-loop 한 줄 |
+| Pipeline Rules — Forward-only 항목 | `The Review gate fix-loop applies` → `The fix-loop applies`, `from an earlier gate.` → `from an earlier iteration.` |
+| Pipeline Rules — 반복 항목 | `The Review gate iterates up to 5 times internally;` → `The pipeline iterates up to 5 times;` |
 | Pipeline Rules | `with \`Retry\` / \`Proceed to Runtime gate\` / \`Stop\`` → `with \`Retry\` / \`Accept and finish\` / \`Stop\`` · `AskUserQuestion also fires on Review gate max-iter and Runtime gate NEEDS_RESOLUTION.` → `AskUserQuestion also fires on max-iter, and on the differential test's gap gate (R3) when something was left out.` · 제목 `### Pipeline Rules (v2.0.0)` → `### Pipeline Rules` |
 
-- [ ] **Step 6: `reconstruct-skill.sh` 를 옮긴다** — 스플라이스 헤딩 `/^## Runtime gate$/` → `/^## Differential test$/`, 참조 파일 `"/references/runtime-gate.md"` → `"/references/differential-test.md"`, 오류 문장 두 곳의 파일 이름 · 헤딩 이름을 같이. 머리 주석의 `## Runtime gate` · `runtime-gate.md` · `Step R-init..R9` 도 새 이름으로(`Step R-init..R8`). 소비자 락들의 `FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패` 문구는 인벤토리 `retarget` 행으로 처리한다.
+- [ ] **Step 6: `reconstruct-skill.sh` 를 옮긴다** — 스플라이스 헤딩 `/^## Runtime gate$/` → `/^## Differential test$/`, 참조 파일 `"/references/runtime-gate.md"` → `"/references/differential-test.md"`, 오류 문장 두 곳의 파일 이름 · 헤딩 이름을 같이 — awk 안의 문장은 따옴표가 이스케이프돼 있다(`\"## Runtime gate\"`). 문자열 그대로 치환하지 말고 그 줄을 열어 고친다. 머리 주석의 `## Runtime gate` · `runtime-gate.md` · `Step R-init..R9` 도 새 이름으로(`Step R-init..R8`). 소비자 락들의 `FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패` 문구는 인벤토리 `retarget` 행으로 처리한다.
 
 - [ ] **Step 7: 제거한다**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git rm plugins/quality-gates/agents/runtime-verifier.md plugins/quality-gates/scripts/detect-runtime.sh
 ```
+
+**함정** — `tests/test_agent_model_mutation.sh` 는 agent 쌍 목록에 `runtime-verifier` 를 갖는다(파일 앞쪽의 쌍 표). 그 행을 지우기 **전에** 그 락을 돌리면 `agents/runtime-verifier.md.tmp` 가 untracked 로 남고, 이후 모든 실행이 그 락의 clean-tree 전제에서 죽는다. 쌍 행을 먼저 지우고, 남았으면 `rm -f plugins/quality-gates/agents/runtime-verifier.md.tmp`.
 
 그리고 인벤토리의 `delete-file`(Task=7) 테스트를 `git rm` 한다 — 행마다 「규칙을 잇는 자리」가 채워져 있는지 본다. `tools/adjudication/check_slots.py` 의 주석 bullet `#   · \`runtime-verifier.spec_acceptance_criteria\` — spec 에서 뽑은 {ac_id,text} → ⓑ.` 를 지운다(그 슬롯의 agent 가 사라졌다 — `EXEMPT_SLOTS` 항목이 아니라 주석이라 기준선 수는 안 움직인다).
 
@@ -2052,12 +2112,31 @@ git rm plugins/quality-gates/agents/runtime-verifier.md plugins/quality-gates/sc
 
 `delete` · `retarget` · `invert` 를 행대로. **이빨 보존** — `retarget` 행마다 근거 칸의 변이를 새 앵커에 한 번 태워 RED 를 본 뒤 되돌린다(커밋 전이므로 `git stash` 금지 — 변이는 파일 사본으로 한다: `cp X /tmp/…` 후 편집 → 락 → `cp` 로 복원 → `git diff --stat` 으로 복원 확인). 하네스의 큰 절들(`== 신규 스크립트 배선` · `== R5b·R6 의 HEAD 축 트리 인자` · `== 호출 주체 불변식` · `== 폴백 R5b 미실행` 등)은 인벤토리가 정한 대로 — 예: `create-head` 인자 검사는 `$baseline_sha` → `$sealed` 로 `retarget`, `== 폴백 R5b 미실행` 은 `delete`(대상 소멸: 샌드박스 폴백), `== 호출 주체 불변식` 은 verifier dispatch 블록 대신 「어느 `Agent({…})` 블록 안에도 `run-test-selection.sh` 가 없다」로 `retarget`.
 
-하네스의 `# guards:` 줄에서 `plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md` 를 `…/differential-test.md` 로 바꾼다.
+하네스의 `runtime-gate.md` 는 **세 자리**다: `# guards:` 줄(파일 2행) · `--emit-scanned` 블록이 내는 경로 목록 · 재구성 실패 메시지. 셋 다 `differential-test.md` 로 바꾼다 — `# guards:` 만 바꾸면 `test_guards_coverage_bidirectional.sh` 가 RED 다(모의 실행 실측).
+
+**모의 실행이 확정한 하네스 이주**(인벤토리 행과 대조해 빠진 것이 있으면 인벤토리에 더한다):
+
+| 하네스 자리 | 처분 |
+|---|---|
+| 스텝 창의 끝 앵커 `Step R5a⁰`(R4 창들) | `retarget` → `Step R5b` |
+| 끝 앵커 `Step R7`(R5b · R6 창들) | `retarget` → `Step R8` |
+| 끝 앵커 `Step R9`(R8 창 · unclaimed 사슬 · custody `rt_end`) | `retarget` → `^## Final Summary`(재구성 문서는 레퍼런스 뒤에 SKILL 이 이어지므로 파일 끝이 아니다) |
+| `create-head` 인자 검사의 `$baseline_sha` | `retarget` → `$sealed` |
+| `== 호출 주체 불변식` 의 둘째 단언 `'이 호출 결과가 authoritative'` | `keep` — Step 3(a) 의 머리 인용 블록이 그 문장을 남긴다 |
+| unclaimed 사슬의 `index($0,"non-zero 면") && index($0,"PASS 로 올리지 않는다")` | `retarget` → `"clean 불가"` — 부모 `FAIL:` 이 기준선에서 이미 RED 라 이름 · 줄 수로는 안 보인다(Task 1 Step 3 의 하위 진단 파일로 대조) |
+| custody 절의 `index(line,"PASS 불가")` | `retarget` → `"clean 불가"` |
+| `test_runtime_verdict_precedence.sh` 의 `PASS 불가` · `PASS 로 올리지 않는다` 앵커(세 자리) | `retarget` → `clean 불가`. 같은 파일의 「R4 판별자 자립」 단언은 Step 3(c) 가 뒤집는다 → `invert`(Step 1b 캐시 + iteration 2 이상 dirty) |
+| `test_security_reviewer_kill_switch.sh` 의 미끼 ② `Review gate Tier A floor의` | **이 Task 소유**(Step 4(m) 이 그 문구를 바꾼다) → `retarget` → `보안 각도의` |
+| `test_scout_codex_integration.sh`(`FAIL 5b:`) · `test_skill_orchestration.sh`(`FAIL V2a:`) | 인벤토리 행대로 `retarget` — 새 실패 줄 앵커(`FAIL[ :]`)가 이제 이것들을 센다 |
 
 - [ ] **Step 9: 공유 락 · AC21 · 표면 락을 확인한다**
 
+먼저 `shared/tests/test_plugin_root_no_cwd_fallback.sh` 를 고친다 — 이 PR 이 `shared/` 에서 고치는 **유일한** 파일이다(Global Constraints):
+1. `REP` 의 `"ref"` 항목 경로 `…/references/runtime-gate.md` → `…/references/differential-test.md`(대표 펜스 `/scripts/resolve-baseline.sh` 는 그대로 — R-init 뒤 펜스가 남는다).
+2. 축 2 하한(`-ge 22`)과 가드 펜스 하한을 **이 커밋에서 실측한 값**으로 내린다. 하한 옆 주석에 한 줄: 무엇이 줄였는가(R4 의 `check-review-scope.sh` 펜스 · R5a¹ · R7 · R9 펜스 삭제 — 정직한 삭제). 모의 실행 실측: 축 2 는 22 → 19, 가드 펜스는 45 → 44(Task 8 의 trivia 펜스가 다시 45 로 올린다 — 그때 하한을 다시 올리지는 않는다. 하한은 바닥이지 핀이 아니다).
+3. 이 파일의 다른 바이트는 건드리지 않는다.
+
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 export PYTHONDONTWRITEBYTECODE=1
 for t in plugins/quality-gates/tests/test_one_pipeline_surface.sh \
          plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh \
@@ -2067,11 +2146,11 @@ for t in plugins/quality-gates/tests/test_one_pipeline_surface.sh \
          shared/tests/test_dispatch_disposition.sh shared/tests/test_agent_input_slots.sh \
          shared/tests/test_skill_reference_pointers.sh shared/tests/test_plugin_root_no_cwd_fallback.sh \
          shared/tests/test_docreview_copy_set.sh shared/tests/test_dispatch_name_defined.sh; do
-  printf '%s ' "$t"; bash "$t" 2>&1 | grep -cE '^[[:space:]]*✗|^FAIL:'
+  printf '%s ' "$t"; bash "$t" 2>&1 | grep -cE '^[[:space:]]*(✗|FAIL[ :])'
 done
 bash plugins/quality-gates/scripts/check-allowed-tools-order.sh && echo "OK allowed-tools 순서"
-bash plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh 2>&1 | grep '^FAIL:' > "$CLAUDE_JOB_DIR/tmp/t7-harness-fails.txt"
-comm -13 <(sort "$CLAUDE_JOB_DIR/tmp/pr4b-baseline-harness-fails.txt") <(sort "$CLAUDE_JOB_DIR/tmp/t7-harness-fails.txt")
+bash plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh 2>&1 | grep '^FAIL:' | sed -E 's/ \(.*\)$//' | sort -u > "$CLAUDE_JOB_DIR/tmp/t7-harness-fails.txt"
+comm -13 "$CLAUDE_JOB_DIR/tmp/pr4b-baseline-harness-fails.txt" "$CLAUDE_JOB_DIR/tmp/t7-harness-fails.txt"
 bash "$CLAUDE_JOB_DIR/tmp/run-suite.sh" "$CLAUDE_JOB_DIR/tmp/t7.tsv"
 ```
 
@@ -2082,7 +2161,6 @@ bash "$CLAUDE_JOB_DIR/tmp/run-suite.sh" "$CLAUDE_JOB_DIR/tmp/t7.tsv"
 - [ ] **Step 10: 커밋(한 커밋)**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 chmod +x plugins/quality-gates/tests/test_one_pipeline_surface.sh
 git add plugins/quality-gates/tests/test_one_pipeline_surface.sh \
         plugins/quality-gates/skills/quality-pipeline/SKILL.md \
@@ -2116,7 +2194,7 @@ Co-Authored-By: <이 커밋을 쓴 실제 모델>"
 
 ```bash
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/verdict.py plugins/quality-gates/scripts/angles.py
+# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/verdict.py plugins/quality-gates/scripts/angles.py plugins/quality-gates/scripts/recritic_bridge.py plugins/quality-gates/tests/lib/recritic_fixture.sh
 # test_pipeline_verdict_wiring.sh — 판정 상시 배선 (설계 §6.1 ⑤ · §6.3.5 · §6.4.3, AC2 · AC8–AC12).
 #
 # 합성기 쪽 총 함수는 test_verdict_vocabulary.sh · test_angle_coverage.sh 가 잰다. 이 락은
@@ -2126,6 +2204,12 @@ Co-Authored-By: <이 커밋을 쓴 실제 모델>"
 # 잴 수 없는 것: 모델이 각도 파일을 «참되게» 쓰는가(설계 §15-4). 이 락은 모양과 합성기의
 # 행동만 잰다.
 set -u
+[ "${1:-}" = "--emit-scanned" ] && { printf '%s\n' \
+  plugins/quality-gates/skills/quality-pipeline/SKILL.md \
+  plugins/quality-gates/skills/quality-pipeline/references/differential-test.md \
+  plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/verdict.py \
+  plugins/quality-gates/scripts/angles.py plugins/quality-gates/scripts/recritic_bridge.py \
+  plugins/quality-gates/tests/lib/recritic_fixture.sh; exit 0; }
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 . "$(cd "$SCRIPT_DIR/../../.." && pwd)/shared/tests/assert.sh"
@@ -2320,7 +2404,7 @@ print('AXES:' + ','.join(sorted(inspect.signature(verdict.decide).parameters)))"
 
 파일 머리 주석의 부채 서술(있으면)도 「PR4c」로. `test_angle_coverage.sh` 의 머리 주석 「**오늘 배선이 안 된 것** — `--angles` 는 기본 off 다(계획 R-E). 오케스트레이터가 그것을 «항상» 싣게 만드는 것은 PR4 의 빚이고, 이 락은 그 빚을 재지 못한다.」를 이것으로: `오케스트레이터가 매 실행 \`--angles\` 를 싣는지는 \`test_pipeline_verdict_wiring.sh\` 가 잰다. 이 락은 합성기 쪽 총 함수만 잰다.`
 
-- [ ] **Step 2: 실패를 확인한다** — 배선 락에서 `BAD:0` · `security-reviewer:closed` · `SET:` · `N:1` · `매 iteration`(Task 7 이 이미 적었으면 GREEN) 이 RED. 행동 케이스 셋은 오늘도 GREEN 이어야 한다(합성기는 이미 할 줄 안다 — 이 락이 재는 것은 **배선**이다. 보고서에 적는다). `test_verdict_vocabulary.sh` 는 `OVERLAP`/`MISSING` 이 RED(SKILL 에 아직 `--reason trivia` 가 없다).
+- [ ] **Step 2: 실패를 확인한다** — 배선 락에서 `BAD:0` · `security-reviewer:closed` · `SET:` · `N:1` · `매 iteration`(Task 7 이 이미 적었으면 GREEN) 이 RED. 행동 케이스 셋은 오늘도 GREEN 이어야 한다(합성기는 이미 할 줄 안다 — 이 락이 재는 것은 **배선**이다. 보고서에 적는다). `test_verdict_vocabulary.sh` 는 `MISSING:kill-switch,trivia` 로 RED(SKILL 에 아직 두 리터럴이 없다) — `OVERLAP` 은 비어 있다.
 
 - [ ] **Step 3: SKILL 을 배선한다**
 
@@ -2448,6 +2532,12 @@ print('AXES:' + ','.join(sorted(inspect.signature(verdict.decide).parameters)))"
 
   「**Not-clean notice override …**」 · 「Why this clause exists …」 · 「Why the key is the marker …」 세 문단을 지운다(인벤토리 `invert`/`delete` 행 — 「규칙을 잇는 자리」 = 위 새 본문의 셋째 항목 + `verdict.decide` 의 차단 술어).
 
+  **지운 절을 가리키던 문장도 고친다** — 어느 락도 이것들을 잡지 않는다(모의 실행 실측):
+  - Phase 1.5 의 4번 — 「…본 보고서의 `**이 실행은 clean이 아니다**` 마커가 Step 4.5 의 Not-clean override 를 켠다」 → 「…합성기가 그 부재를 판정 각도의 주 입력 실패로 세고 판정은 `not-certified (angle-absent)` 가 된다」.
+  - Step 1b — 「consumed by the honest-verdict floor at Step 4.5」 → 「consumed by Step 4's `--reason scope-empty` row」, 「the Step 4.5 ELSE-IF branch prints one loud advisory」 → 「Step 4.5 prints one loud advisory」.
+  - Review-scope ownership 인용 — 「or emit the honest "no scope reviewed" verdict. The Step 4.5 floor enforces this structurally」 → 「— Step 4 carries `--reason scope-empty` and the verdict becomes `not-certified (scope-empty)`. That row enforces this structurally」.
+  - 옮긴 Resolved-scope 문단 — 「(the ELSE-IF branch below + loud advisory)」 → 「(Step 4.5's degraded advisory)」.
+
 **(h) `## Final Summary`** — 펜스를 이것으로:
 
 ````markdown
@@ -2496,7 +2586,6 @@ SKILL Step 4 가 싣는 판정 입력:
 - [ ] **Step 6: 통과 확인**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 export PYTHONDONTWRITEBYTECODE=1
 chmod +x plugins/quality-gates/tests/test_pipeline_verdict_wiring.sh
 for t in plugins/quality-gates/tests/test_pipeline_verdict_wiring.sh plugins/quality-gates/tests/test_verdict_vocabulary.sh \
@@ -2505,7 +2594,7 @@ for t in plugins/quality-gates/tests/test_pipeline_verdict_wiring.sh plugins/qua
          plugins/quality-gates/tests/test_skill_drop_notice_consumed.sh plugins/quality-gates/tests/test_check_allowed_tools_order.sh \
          plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh \
          shared/tests/test_dispatch_disposition.sh shared/tests/test_agent_input_slots.sh; do
-  printf '%s ' "$t"; bash "$t" 2>&1 | grep -cE '^[[:space:]]*✗|^FAIL:'
+  printf '%s ' "$t"; bash "$t" 2>&1 | grep -cE '^[[:space:]]*(✗|FAIL[ :])'
 done
 bash plugins/quality-gates/scripts/check-allowed-tools-order.sh && echo "OK allowed-tools 순서"
 bash "$CLAUDE_JOB_DIR/tmp/run-suite.sh" "$CLAUDE_JOB_DIR/tmp/t8.tsv"
@@ -2516,7 +2605,6 @@ bash "$CLAUDE_JOB_DIR/tmp/run-suite.sh" "$CLAUDE_JOB_DIR/tmp/t8.tsv"
 - [ ] **Step 7: 커밋(한 커밋)**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git add plugins/quality-gates/tests/test_pipeline_verdict_wiring.sh \
         plugins/quality-gates/skills/quality-pipeline/SKILL.md \
         plugins/quality-gates/skills/quality-pipeline/references/differential-test.md \
@@ -2578,7 +2666,7 @@ done
 - `Law 2 (Writer ≠ Reviewer) — 순수 read-only reviewer agent …` — 끝 문장(`\`runtime-verifier\`(sandbox-executor)는 예외로 …`)을 `쓰기 권한을 가진 agent 는 디스패치되지 않는다 — 테스트는 오케스트레이터가 자기가 만든 트리에서 직접 돌린다.` 로.
 - `Law 3 (Compounding) — cross-plugin reader contract` — `Runtime gate의 test-scope-validator` → `차등 테스트의 test-scope-validator`.
 - `P8 determinism-economy — self-honest verdict floor` — `verdict를 \`no scope reviewed … NOT certified clean\`으로 교체` → `판정이 \`not-certified (scope-empty)\` 가 된다`. `Review gate가` → `파이프라인이`.
-- `P21 (Secret이 prompt context에 들어가지 않음) (v1.8.0) — Runtime gate의 AskUserQuestion은 …` → `P21 (Secret이 prompt context에 들어가지 않음) — 결정 도구는 결정과 포인터만 묻고 secret 값은 받지 않는다(SKILL Rules R4). regression test: \`tests/test_no_secret_prompts.py\`.`
+- `**P21 (Secret이 prompt context에 들어가지 않음)** (v1.8.0) — Runtime gate의 AskUserQuestion은 …`(원문은 굵게) → `P21 (Secret이 prompt context에 들어가지 않음) — 결정 도구는 결정과 포인터만 묻고 secret 값은 받지 않는다(SKILL Rules R4). regression test: \`tests/test_no_secret_prompts.py\`.`
 - `Law 2 (Writer ≠ Reviewer, 3-way 분리) (v1.9.0)` — 이것으로: `**Law 2 (Writer ≠ Reviewer, 분리)** — writer(originating turn) ≠ \`test-scope-validator\`(차등 테스트 R1b 의 사전 분류 리뷰어) ≠ 테스트 실행(오케스트레이터 · 결정론 스크립트). \`test-scope-validator\` 는 \`tools: Read, Grep, Glob\` fail-closed allowlist.`
 - 나머지 bullet 의 `Review gate` · `Runtime gate` 는 「파이프라인」 · 「차등 테스트」로.
 
@@ -2626,7 +2714,7 @@ done
 합성 — synthesize_findings.py (결정론) → verdict.py
 ```
 
-  그 아래 산문의 `Tier C` → `추가 리뷰어`, `floor(A) + codex(B)` → `각도 수행자`, `## Reviewer composition (scope-driven)` → `## Angles and reviewers (scope-driven)`, `Review gate는 fan-out consent 게이트를` → `파이프라인은 fan-out consent 게이트를`, `security-reviewer + codex + Tier C 최대 6` → `security-reviewer + codex + 추가 리뷰어 최대 6`.
+  그 아래 산문의 `Tier C` → `추가 리뷰어`, `floor(A) + codex(B)` → `각도 수행자`, `## Reviewer composition (scope-driven)` → `## Angles and reviewers (scope-driven)`, `Review gate는 fan-out consent 게이트를` → `파이프라인은 fan-out consent 게이트를`(두 자리 — 원칙 절의 P22 bullet 과 리뷰어 구성 절의 **Fan-out:** 문단 둘 다), `security-reviewer + codex + Tier C 최대 6` → `security-reviewer + codex + 추가 리뷰어 최대 6`.
 
 **(e) `## 파이프라인 흐름 …`** — 제목을 `## 파이프라인 흐름 (single-turn)` 으로, 머리 문단의 `Inter-gate progression과 Review gate fix-loop iteration은` → `fix-loop iteration은`, 다이어그램을 이것으로 바꾸고 「**v1.32.0 변경 요약**」 문단을 지운다:
 
@@ -2679,7 +2767,7 @@ log를 출력하고 plan-기반 분류로 fallback합니다. (v9 에서 AC별 `a
 
 **(g) `## 사전 요건`** — 표의 `Review gate` → `리뷰어`, `chrome-devtools-mcp / playwright … Runtime gate … 브라우저 자동화` 행을 지운다.
 
-**(h) `### Tuning knobs`** — `MAX_REVIEW_ITERATIONS: 5 (Review gate 내부 …)` → `(파이프라인 fix-loop iteration 수)`, `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS` 줄을 지운다.
+**(h) `### Tuning knobs`** — `` `MAX_REVIEW_ITERATIONS`: 5 (Review gate 내부 …) ``(원문은 이름에 백틱) → `(파이프라인 fix-loop iteration 수)`, `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS` 줄을 지운다.
 
 **(i) `### Kill switches (보안 컨트롤)`** — 「**Reviewer 단위 disable (Review gate):**」 → 「**각도 · 리뷰어 단위 disable:**」, 그 표의 `DISABLE_SECURITY_REVIEWER` 행을 이것으로:
 
@@ -2708,7 +2796,6 @@ log를 출력하고 plan-기반 분류로 fallback합니다. (v9 에서 AC별 `a
 **(k) 나머지 스윕** —
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git grep -n -P -i 'Runtime gate|Review gate|runtime-verifier|detect-runtime|2-게이트|2게이트|두 게이트|Decision [12]|block_policy|NEEDS_RESOLUTION|SKIP_WITH_EVIDENCE|RUNTIME_MAX_RESOLUTIONS|Tier [ABC]|ac_coverage|mutation.guard' -- plugins/quality-gates/README.md
 ```
 
@@ -2747,11 +2834,10 @@ git grep -n -P -i 'Runtime gate|Review gate|runtime-verifier|detect-runtime|2-�
 - [ ] **Step 5: 통과 확인**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 export PYTHONDONTWRITEBYTECODE=1
 for t in plugins/quality-gates/tests/test_readme_state_diagram_complete.sh plugins/quality-gates/tests/test_readme_scope_reconcile.sh \
          plugins/quality-gates/tests/test_impact_runtime_docs.sh plugins/quality-gates/tests/test_one_pipeline_surface.sh; do
-  printf '%s ' "$t"; bash "$t" 2>&1 | grep -cE '^[[:space:]]*✗|^FAIL:'
+  printf '%s ' "$t"; bash "$t" 2>&1 | grep -cE '^[[:space:]]*(✗|FAIL[ :])'
 done
 bash "$CLAUDE_JOB_DIR/tmp/run-suite.sh" "$CLAUDE_JOB_DIR/tmp/t9.tsv"
 ```
@@ -2759,7 +2845,6 @@ bash "$CLAUDE_JOB_DIR/tmp/run-suite.sh" "$CLAUDE_JOB_DIR/tmp/t9.tsv"
 - [ ] **Step 6: 커밋**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git add plugins/quality-gates/README.md plugins/quality-gates/tests/test_readme_state_diagram_complete.sh \
         docs/philosophy/devbrew-harness-philosophy.md docs/plugin-authoring.md \
         plugins/quality-gates/tests/e2e-scenarios.md docs/superpowers/specs/2026-09-21-qg-target-derived-judgment-design.md
@@ -2797,6 +2882,7 @@ Co-Authored-By: <이 커밋을 쓴 실제 모델>"
 | 6 | 삭제 | `synthesize_findings.py:main` | `blocking=ledger.blocks()` 인자를 뺀다(기본 False) | `case_primary_death_keeps_not_clean_marker` |
 | 7 | 형태 | `seal-worktree.sh` | 인덱스 자리를 `"$main_root/.claude/quality-gates/seal-${sid_short}.index"` 로 되돌린다(`mkdir -p` 포함) | `test_seal_no_side_effects.sh:case_seal_succeeds_when_claude_dir_not_ignored`(권위 가드가 die → rc 2) |
 | 7b | 삭제 | `seal-worktree.sh` | 7 에 더해 권위 가드(봉인 후 트리 검사)를 지운다 | 같은 케이스의 `봉인 트리에 임시 인덱스(와 .lock)가 없다` |
+| 7c | 삭제 | `seal-worktree.sh` | `':(exclude).claude/quality-gates'` pathspec 을 지운다 | `test_seal_no_side_effects.sh:case_seal_excludes_qg_namespace` + `test_runtime_contract_invariance.sh:case_head_and_baseline_coexist` |
 | 8 | 삭제 | `qg-worktree.sh:create-head` | 트리 대조 `[[ … ]] || die …` 두 줄을 지운다 | `test_runtime_contract_invariance.sh:case_create_head_asserts_sealed_commit` 의 merge_base · stale 음 (양성 짝은 GREEN 유지) |
 | 9 | 형태 | `qg-worktree.sh:create-head` | 트리 대조를 `$2` 와 `git rev-parse HEAD` 의 커밋 대조로 바꾼다 | 같은 케이스의 양의 짝(봉인 커밋 ≠ HEAD) |
 | 10 | 반전 | `setup-qg.sh` | 제거 인자 arm 의 `shift` 뒤에 `echo "Unknown argument: $1" >&2; exit 1` | `test_setup_qg.sh` Case 6 |
@@ -2830,7 +2916,6 @@ Co-Authored-By: <이 커밋을 쓴 실제 모델>"
 - [ ] **Step 3: 구멍을 닫는다** — 기대한 RED 가 안 난 행(생존 변이)마다: 락에 케이스를 더하거나 단언을 좁혀 그 변이를 RED 로 만든 뒤, **다시 같은 변이를 태워** RED 를 확인하고 커밋한다. 닫지 않기로 한 생존은 이유와 함께 표에 남긴다(부채 원장 후보).
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git status --short          # 비어 있어야 한다(변이는 전부 복원됐다)
 git diff HEAD --stat        # 비어 있어야 한다
 mkdir -p ~/.claude/sdd-mirror/qg-gate-merge-pr4b
@@ -2862,14 +2947,13 @@ Co-Authored-By: <이 커밋을 쓴 실제 모델>"
 - [ ] **Step 1: 도출 집합 회귀 — 기준선과 행 단위로**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 bash "$CLAUDE_JOB_DIR/tmp/run-suite.sh" "$CLAUDE_JOB_DIR/tmp/pr4b-final.tsv"
 join -t $'\t' -a1 -a2 -e MISSING -o 0,1.2,1.3,2.2,2.3 \
   <(sort "$CLAUDE_JOB_DIR/tmp/pr4b-baseline.tsv") <(sort "$CLAUDE_JOB_DIR/tmp/pr4b-final.tsv") \
   | awk -F'\t' '$2 != $4 || $3 != $5'
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/quality-gates/tests -p "test_*.py" 2>&1 | tail -3
-PYTHONDONTWRITEBYTECODE=1 bash plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh 2>&1 | grep '^FAIL:' | sort > "$CLAUDE_JOB_DIR/tmp/pr4b-final-harness-fails.txt"
-comm -13 <(sort "$CLAUDE_JOB_DIR/tmp/pr4b-baseline-harness-fails.txt") "$CLAUDE_JOB_DIR/tmp/pr4b-final-harness-fails.txt"
+PYTHONDONTWRITEBYTECODE=1 bash plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh 2>&1 | grep '^FAIL:' | sed -E 's/ \(.*\)$//' | sort -u > "$CLAUDE_JOB_DIR/tmp/pr4b-final-harness-fails.txt"
+comm -13 "$CLAUDE_JOB_DIR/tmp/pr4b-baseline-harness-fails.txt" "$CLAUDE_JOB_DIR/tmp/pr4b-final-harness-fails.txt"
 ```
 
   **기대** — `join` 출력의 모든 행이 설명 가능하다: (a) 이 PR 이 **더한** 락(`MISSING` → `0 0`), (b) 이 PR 이 **지운** 락(`… → MISSING`, 락 인벤토리의 `delete-file` 행과 1:1), (c) 선재 RED 가 **사라진** 행(어느 Task 의 어느 행이 사라지게 했는지). **rc 나 실패 줄 수가 늘어난 행은 0** 이다. 하네스의 `comm -13` 출력은 비어 있다(새 `FAIL:` 이름 0). unittest 총수의 변화를 지운 · 더한 케이스로 설명한다.
@@ -2877,8 +2961,7 @@ comm -13 <(sort "$CLAUDE_JOB_DIR/tmp/pr4b-baseline-harness-fails.txt") "$CLAUDE_
 - [ ] **Step 2: 범위 불변식**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
-git diff --stat origin/main...HEAD -- shared plugins/spec-distill plugins/plugin-audit \
+git diff --stat origin/main...HEAD -- shared ':!shared/tests/test_plugin_root_no_cwd_fallback.sh' plugins/spec-distill plugins/plugin-audit \
   .claude-plugin/marketplace.json CLAUDE.md \
   plugins/quality-gates/scripts/resolve-topic.sh plugins/quality-gates/scripts/combine-tips.sh \
   plugins/quality-gates/scripts/diff-test-results.py plugins/quality-gates/scripts/run-test-selection.sh \
@@ -2889,12 +2972,11 @@ git diff origin/main...HEAD -- plugins/quality-gates/skills/publishing-pr-unders
 git grep -n -P 'resolve-topic\.sh|combine-tips\.sh' -- plugins/quality-gates/skills plugins/quality-gates/commands || echo "OK 4c 스크립트 호출자 0"
 ```
 
-  **기대** — 첫 명령 빈 출력. `plugin.json` 은 `version` 한 줄만(Step 3 뒤). publishing SKILL 은 제목 한 줄만(Step 3 뒤). `OK 4c 스크립트 호출자 0`.
+  **기대** — 첫 명령 빈 출력(`shared/` 의 예외 한 파일은 Task 7 Step 9 의 세 자리만 — `git diff origin/main...HEAD -- shared/tests/test_plugin_root_no_cwd_fallback.sh` 로 따로 본다). `plugin.json` 은 `version` 한 줄만(Step 3 뒤). publishing SKILL 은 제목 한 줄만(Step 3 뒤). `OK 4c 스크립트 호출자 0`.
 
 - [ ] **Step 3: 머지 직전 동기화 · 버전을 정한다**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 git fetch origin --quiet
 git rev-list --count HEAD..origin/main
 git show origin/main:plugins/quality-gates/.claude-plugin/plugin.json | grep '"version"'
@@ -2946,7 +3028,6 @@ git show origin/main:plugins/quality-gates/.claude-plugin/plugin.json | grep '"v
 - [ ] **Step 5: 커밋 · 미러 · push · PR**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
 PYTHONDONTWRITEBYTECODE=1 bash plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh 2>&1 | grep -E 'major' | head -3
 python3 plugins/quality-gates/scripts/check-changelog-korean-primary.py 2>&1 | tail -2
 git add plugins/quality-gates/.claude-plugin/plugin.json plugins/quality-gates/CHANGELOG.md \
