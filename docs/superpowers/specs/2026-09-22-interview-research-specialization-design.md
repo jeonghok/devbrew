@@ -753,7 +753,7 @@ C43 경로 (a) 자동확인  ──┴──────────────
   그 방향이 바로 축 D 의 근거로 인용한 「한쪽만 고치는」 결함이다(라운드 2 `49ed4d39#r2.1`).
   그래서 AC1 이 사본에도 두 필드를 요구하고 `test_steelman_builder_scope.sh` 의 키 앵커 목록에
   `decides`·`id` 를 더한다.
-- **AC17** `.claude-plugin/plugin.json` 이 `4.3.0` 이고 `CHANGELOG.md` 에 해당 항목이 있고
+- **AC17** `.claude-plugin/plugin.json` 이 `4.4.0` 이고 `CHANGELOG.md` 에 해당 항목이 있고
   `tests/test_readme_sync.sh` 가 green 이다 — 착수 뒤 main 이 4.2.1 로 움직여 minor 를 다시 셈.
 - **AC18** 착수 전 baseline 대비 새 RED 0 — rc 뿐 아니라 **실패 줄 수**까지 대조한다. 특히
   `test_steelman_builder_scope.sh` 와 `test_conducting_interview_stage.sh` 가 green 을 유지한다.
@@ -804,7 +804,7 @@ C43 경로 (a) 자동확인  ──┴──────────────
 | `plugins/spec-distill/tests/test_check_brief.sh` + `tests/fixtures/` | AC8–AC12 red/green 짝 |
 | `plugins/spec-distill/tests/test_brief_agents.sh` · `test_steelman_builder_scope.sh` · `test_conducting_interview_stage.sh` | 새 슬롯·문구를 반영해 **확장**(기존 단언은 유지 — AC18) |
 | `tools/adjudication/` | 새 슬롯의 `kind:` 가 `orchestrator_framing` 이면 `EXEMPT_SLOTS_BASELINE`(현재 5) bump 필요 여부를 착수 시 확인 |
-| `plugins/spec-distill/.claude-plugin/plugin.json` | `4.2.1` → `4.3.0` (minor = 새 surface — 착수 뒤 main 이 4.2.1 로 움직여 minor 를 다시 셈) |
+| `plugins/spec-distill/.claude-plugin/plugin.json` | `4.2.1` → `4.4.0` (minor = 새 surface — 착수 뒤 main 이 4.2.1, 다시 4.3.0 으로 움직여 minor 를 다시 셈) |
 | `plugins/spec-distill/CHANGELOG.md`, `README.md` | 항목 + Principles Instantiated |
 
 ## Verification Plan

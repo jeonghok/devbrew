@@ -94,7 +94,22 @@ class Ledger:
         self._suppressed.append((item, why))
 
     # ── 파생 술어 ─────────────────────────────────────────────────────
-    def _has_primary_source_failure(self):
+    def items_unaccounted(self):
+        """항목이 소실됐거나 셀 수 없다 — `blocks()` 의 앞 두 조건.
+
+        `primary_source_failed()` 와 **나뉘어** 있는 이유는 소비자가 둘을 다른
+        사유로 렌더하기 때문이다(qg 의 `findings-lost` 대 `angle-absent`).
+        `blocks()` 하나만 공개하면 그 구별이 소비자 쪽에서 복원 불가능하다 —
+        「항목을 잃었다」와 「아무도 그 축을 안 봤다」가 같은 라벨로 나간다.
+        """
+        return bool(self._held) or bool(self._unknown)
+
+    def primary_source_failed(self):
+        """그 축의 주(主) 판정자가 죽었다 — `blocks()` 의 셋째 조건.
+
+        보조(모델 다양성) 손실은 여기 안 든다 — 그것은 `report()["degraded"]` 가
+        공시하고 차단하지 않는다(헌장).
+        """
         return any(primary for (_n, _w, primary) in self._sources_failed)
 
     def _has_gate_coercion(self):
@@ -129,9 +144,7 @@ class Ledger:
         `case_T40_codex_absent_first_line` · `case_T43_recritic_dead`
         (`shared/tests/fixtures/docreview/cases.sh`)가 깨진다 — 화석이 아니라 계약이다.
         """
-        return (bool(self._held)
-                or bool(self._unknown)
-                or self._has_primary_source_failure())
+        return self.items_unaccounted() or self.primary_source_failed()
 
     def _degraded(self):
         return (self.blocks()

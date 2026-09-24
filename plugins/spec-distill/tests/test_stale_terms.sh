@@ -79,8 +79,8 @@ else
   ok "V12: v0.57.0 제거 어휘 production 잔존 0"
 fi
 
-# V14 (4.3.0): 조사 특화가 폐기한 리터럴 마커 — production 잔존 0.
-# 번호는 V12 에 얹지 않는다 — 그 블록의 메시지가 「v0.57.0 제거 어휘」라고 말하므로 4.3.0 의
+# V14 (4.4.0): 조사 특화가 폐기한 리터럴 마커 — production 잔존 0.
+# 번호는 V12 에 얹지 않는다 — 그 블록의 메시지가 「v0.57.0 제거 어휘」라고 말하므로 4.4.0 의
 # 마커를 그 정규식에 넣으면 잔존이 잡힐 때 사람이 엉뚱한 릴리스를 본다. 이 파일의 머리 주석이
 # 이미 그 규칙이다(「재사용하면 두 무관한 락이 같은 이름으로 헷갈린다」). V11 은 3.0.0 에서
 # 대상과 함께 지웠고 번호를 재사용하지 않으므로 다음 빈 번호는 V14 다.
@@ -91,7 +91,7 @@ scan -InE 'from-code\]\[auto-confirmed' "${prod_files[@]}"
 if [[ $SCAN_RC -ge 2 ]]; then
   no "V14: grep 자체 실패(exit=$SCAN_RC):"; printf '%s\n' "$SCAN_OUT"
 elif [[ $SCAN_RC -eq 0 ]]; then
-  no "V14: 4.3.0 이 폐기한 리터럴 마커 [from-code][auto-confirmed] 가 production 에 잔존:"
+  no "V14: 4.4.0 이 폐기한 리터럴 마커 [from-code][auto-confirmed] 가 production 에 잔존:"
   printf '%s\n' "$SCAN_OUT"
 else
   ok "V14: 리터럴 마커 [from-code][auto-confirmed] production 잔존 0"

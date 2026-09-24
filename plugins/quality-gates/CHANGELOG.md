@@ -3,6 +3,85 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [8.4.0] — 2026-09-24
+
+각도 바닥 — 세 각도의 상태가 총 함수가 되고, 보안·판정의 부재가 `clean` 을 막는다 (설계 §6.3, AC10 · AC10a · AC11 · AC12). **호출자 배선은 PR4 다** — `--angles` 를 안 주면 stdout 은 대부분 이전과 바이트 동일하다. **예외 하나**: 주 source(primary source)가 죽으면 `--emit-verdict` 산출의 사유가 이전 `findings-lost` 대신 `angle-absent` 로 나간다(설계 §6.4.3 의 의도된 배정) — 이 한 경로는 `--angles` 유무와 무관하게 바이트가 갈린다.
+
+### Added
+
+- **`scripts/angles.py`** — 각도 이름 셋(`security` · `adjudication` · `different-premise`)과 상태 문법(`filled` · `folded_into:<수행자>` · `absent` · `absent(<사유>)`)의 소유자. 상태는 **총 함수**라 하나라도 없으면 `exit 4` 다(AC10). 부재 사유는 닫힌 둘 — `not-installed` · `not-derived` — 로 그대로(verbatim) 공시되고, 막는 각도(보안·판정)에서는 사유가 있어도 `absent` 와 똑같이 막는다(Ruling T2-a). 판정 각도를 그 실행에서 finding 을 «낸» 리뷰어에게 접으면 `exit 4`(AC10a) — 보안 각도에는 걸지 않는다. 저자 집합은 그 실행이 **삼킨 모든 finding**(기각·억제분 포함)에서 도출하고, `agent` 는 항상 세고 리뷰어가 준 `sources` 는 **더하기만** 한다(절대 `agent` 를 가리지 않는다) — 기각된 finding 뒤에 숨거나 `sources` 를 스푸핑해 자기 자신을 판정하는 두 우회 경로를 닫는다(Ruling T6-a · T6-b). 각도는 에이전트가 아니므로 이 모듈은 수행자 명단을 갖지 않는다.
+- **`synthesize_findings.py --angles <경로>`** — 기본 off. 주면 `angles:` 블록을 `verdict:` 앞에 싣고 부재를 판정에 반영한다. `--emit-verdict` 없이 주거나 빈 문자열이면 `exit 2`(PR2 의 I1 이 세 플래그에 건 대칭을 네 번째에도).
+- **`tests/test_angle_coverage.sh`** — §6.3.2 의 ∀ 총 함수 + **양의 짝**(부재 + `clean` = RED). `test_review_floor_lock.sh` 의 교체다.
+- **`Ledger.items_unaccounted()` · `Ledger.primary_source_failed()`**(`shared/adjudication/`) — `blocks()` 가 접고 있던 세 조건을 두 술어로 가른다. `blocks()` 는 그 둘의 `or` 로 **값 동치**(독립 진리표 8조합 전수 대조).
+
+### Changed
+
+- **`verdict.decide()` 에 축이 하나 늘었다(`angle_absent`).** 주 판정자 사망이 이제 `findings-lost` 가 아니라 `angle-absent` 로 나간다 — 설계 §6.4.3 의 배정이고 PR2 의 I2 가 「공개 accessor 가 없어서」 접어 둔 자리다. 항목 소실·미상은 그대로 `findings-lost` 다. 호출자-전용 부채가 **다섯에서 넷**으로 줄었다(남은 넷: `trivia` · `kill-switch` · `declaration-invalid` · `merge-conflict` — 전부 PR4).
+- **`references/runtime-gate.md`** — 절단 문단이 완화책을 밝힌다(`verdict.causes_of()` 의 「정확히 한 번」이 0회 절단을 `exit 4` 로 잡는다).
+
+### Removed
+
+- **`tests/test_review_floor_lock.sh`** — 명단-리터럴 락. 앵커가 SKILL.md 산문이라 **피검자가 쥐고 있었다**. `test_angle_coverage.sh` 가 그 자리를 대신하며, 앵커는 합성기가 쓰는 모듈의 ∀ 관계다. 교체와 삭제는 같은 커밋이다(§6.3.2 — 교체 없는 삭제는 C13 위반).
+
+## [8.3.1] — 2026-09-23
+
+리뷰 라운드 2(PR #166 단일 수정 웨이브) — Important 셋(I1~I3) + Minor 넷(Ruling F-3).
+
+### Fixed
+
+- **(I1) `synthesize_findings.py` 의 판정 입력 플래그가 `--emit-verdict` 없이도 조용히 버려졌다.** `--differential`·`--reason`·`--legacy-verdict` 를 `--emit-verdict` 없이 주면(빈 문자열 `--differential` 딱 하나만 빼고) rc=0·stderr 없이 흡수됐다 — Ruling T5-a 가 닫은 것과 같은 fail-open 계열. 이제 세 플래그 모두 `--emit-verdict` 없이 주면 usage 오류(exit 2)로 대칭 차단한다. `tests/test_verdict_vocabulary.sh` 에 `case_synth_verdict_flags_without_emit_are_usage_error` 추가, mutation 으로 이빨 확인.
+- **(Minor, Ruling F-3) `case_synth_verdict_failure_is_atomic` 픽스처가 형제 케이스가 이미 고친 green-for-the-wrong-reason 모양을 갖고 있었다.** `case_non_utf8_differential_is_fail_closed` 와 같은 치료(유효한 차등 산출물 본문 + 그 뒤에 나쁜 바이트)를 적용했다.
+
+### Changed
+
+- **(I2) `verdict.py` 의 `add("findings-lost")` 자리 주석이 알려진 편차를 명시한다.** `Ledger.blocks()` 가 나르는 세 차단 조건(항목 소실·셀 수 없음·주 판정자 죽음) 중 처음 둘만 `findings-lost` 고 셋째는 설계상 `angle-absent`(PR3 배선)인데, 이 모듈은 셋 다 `findings-lost` 하나로 접는다 — 정밀하게 가르려면 `shared/adjudication/` 에 공개 accessor 가 필요하고 이 PR 의 Global Constraints 는 그 디렉토리를 못 건드린다. 판정 값은 어느 쪽이든 `not-certified` 로 같아 게이트는 안 넓어진다. 코드·매핑·락 변경 없음(주석만).
+- **(I3) `references/runtime-gate.md` 의 절단-안전성 문장이 사실과 달랐다.** "조용히 사라질 수 있는 것은 진단용 `per_adapter` 꼬리뿐"이라고 적었는데, 이 PR(8.3.0)이 이미 `degrade_causes:`·`resolution_disclosure:` 를 그 앞에 놓았다 — "PR4 가 배선하면 거짓이 된다"가 아니라 **이 커밋 시점에 이미 거짓**이었다. 문장을 정정했다(무엇이 그 구간에 있는지, 오늘 아무도 그것을 판정 입력으로 안 읽는지, 읽기 시작하면 무엇이 안전하지 않아지는지).
+
+### Docs
+
+- `docs/superpowers/plans/2026-09-22-qg-verdict-vocabulary-pr2.md` 의 self-review 문장 하나 정정(Minor, Ruling F-3) — `scope-empty` 는 이 PR 자신의 `CAUSE_TO_REASON` 이 이미 산출자를 주므로 "PR4 의 빚" 목록에서 뺀다.
+
+### Fixed (파일 모드)
+
+- **(Minor, Ruling F-3) `verdict.py`·`test_verdict_vocabulary.sh` 가 100644 였다.** 형제 스크립트/락과 달리 실행 비트가 없었다 — `runtime-gate.md` 가 스킬 직접 실행 표기(`"$QG/scripts/<name>.py"`)를 쓰므로 실행 비트 없는 스크립트를 그 패턴으로 부르면 EACCES 다. 100755 로 맞췄다.
+
+## [8.3.0] — 2026-09-22
+
+### Added
+
+- **판정 어휘 세 값과 닫힌 사유 열거.** `scripts/verdict.py` 가 `clean` · `defect` · `not-certified` 와 11값 사유 열거, 우선순위(`defect > not-certified > clean`), 옛 네 값 매핑표를 한 자리에 갖는다. 사유 없는 `not-certified` 와 열거 밖 사유는 exit 4 로 막는다.
+- **차등 산출물이 degrade 의 원인을 낸다.** `degrade_causes:` 가 `attribution_status: degraded` 한 값에 접혀 있던 여섯 원인을 편다. per-adapter 와 집계 양쪽에서 `degraded == (causes != [])` 를 fail-closed 로 검사한다.
+- **해상도 공시(AC13).** `pre_existing > 0` 인 실행이 「양측 빨강 unit N개 — 그 안의 새 실패는 이 해상도에서 보이지 않는다」를 **per-adapter 와 집계 양쪽에** 낸다. 공시는 판정을 막지 않고 기존 bulk 가드를 대체하지도 않는다.
+- `tests/test_verdict_vocabulary.sh` · `tests/test_resolution_disclosure.sh`.
+
+**`/qg` 의 동작은 바뀌지 않는다.** 합성기의 판정 산출은 `--emit-verdict` 뒤에 있고 기본 off 이며, 켜지 않으면 stdout 이 이전과 바이트 동일하다 — 소비자 이주는 뒤 릴리스다.
+
+## [8.2.5] — 2026-09-24
+
+patch 인 이유 — 보안 수정이다. 절대 경로 항목만 있는 PATH 에서는 고르는 인터프리터가 전과 같다.
+
+### Security
+
+- **훅 해석기가 PATH 의 절대 경로가 아닌 항목을 통해 작업 디렉토리의 파일을 실행했다.** 빈 항목 · `.` · 상대 경로 · 빈 PATH 는 셸이 cwd 로 풀고, 훅의 cwd 는 사용자가 연 리포다. 그런 PATH 를 가진 사용자가 공격자가 만든 리포를 열면 `SessionStart`·`SessionEnd` 에서 리포 안의 `python3` · `python3.<무엇이든>` 이 실행됐다(격리 재현). `scripts/devbrew-python.sh` 의 두 탐색 — 2단계 `python3` 와 3단계 `python3.*` 글롭 — 이 이제 절대 경로 항목만 본다. `hooks/hooks.json` 의 두 자리도 해석기를 bare `sh` 대신 `/bin/sh` 로 부른다 — bare `sh` 도 같은 탐색으로 cwd 의 `sh` 를 집었다.
+- **대가** — PATH 에 상대 경로나 따옴표 안의 `~`(전개되지 않은 틸드)로 인터프리터를 두던 사용자는 훅이 그것을 못 찾는다. `SessionStart` 안내대로 `$DEVBREW_PYTHON` 에 절대 경로를 지정하라.
+- **범위** — 훅 command 의 `sh` 탐색과 해석기가 인터프리터 파일을 고르는 탐색만 닫는다. 고른 인터프리터가 `#!/usr/bin/env` shim(pyenv · asdf)일 때 그 안의 탐색, SessionEnd 훅이 띄우는 `scripts/qg-worktree.sh`(`#!/usr/bin/env bash`), 그리고 그런 PATH 가 devbrew 밖에서 이미 여는 노출은 이 수정 밖이다. 설계 `docs/superpowers/specs/2026-09-23-python-resolver-absolute-path-only-design.md` 의 L4 · L6 · L7.
+
+## [8.2.4] — 2026-09-24
+
+patch 인 이유 — 전부 `Fixed` 다. `scripts/docreview_route.py` 는 `shared/docreview/` 로의 심볼릭 링크라 그 대상이 바뀐 이상 배포 트리 안의 코드가 바뀐 것이다.
+
+### Fixed
+
+- **엔진 링크가 critic·codex 의 파손 항목을 계수 없이 흘려 `blocks` 를 거짓으로 냈다.** `normalize()` 의 `hold`·`coerced` 가 prepare→finalize 경계에서 사라졌다. 이제 파손 항목이 있으면 `fin.json` 의 `blocks` 가 참이다(게이트 요약 필드는 그대로). 전문·락은 `plugins/spec-distill/CHANGELOG.md` `[4.2.3]`. 이 플러그인의 docreview 호출자는 여전히 0 이다.
+
+## [8.2.3] — 2026-09-23
+
+patch 인 이유 — 전부 `Fixed` 다. 이 플러그인의 `scripts/codex_findings_to_yaml.py` · `scripts/docreview_route.py` 는 `shared/` 로의 심볼릭 링크라 그 대상이 바뀐 이상 배포 트리 안의 코드가 바뀐 것이다(안 올리면 cache key 가 조용히 stale).
+
+### Fixed
+
+- **codex 변환기가 docreview keyset 에서 `replacement`·`if_unfixed` 를 버렸고, `same_as` 흡수가 흡수된 쪽의 산문 칸을 함께 버렸다.** 둘 다 값이 있는데 게이트가 「(대체안 미작성)」을 내게 했다. 전문·락은 `plugins/spec-distill/CHANGELOG.md` `[4.2.2]`. `default`·`design` keyset 의 출력 바이트는 그대로다(커밋된 고정 바이트 락 GREEN). 이 플러그인의 docreview 호출자는 여전히 0 이다.
+
 ## [8.2.2] — 2026-09-23
 
 patch 인 이유 — 전부 `Fixed` 다. 설계·동작 변경 없음.

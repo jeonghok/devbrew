@@ -33,9 +33,11 @@ for a in doc-critic doc-recritic; do
   assert_not_grep "$(sed -n '/^---$/,/^---$/p' "$f")" '^disallowedTools:' "$a: frontmatter 에 disallowedTools 키 없음(allowlist 단독 원칙)"
   assert_grep "$(sed -n '/^---$/,/^---$/p' "$f")" '^name: '"$a"'$' "$a: name 일치"
 done
-# recritic 슬롯 정확히 셋 (AC9)
+# recritic 슬롯 정확히 넷, diff 만 optional (AC9 · AC18)
 SL="$(fm "$A/doc-recritic.md" '[s["tag"] for s in yaml.safe_load(t[4:t.find(chr(10)+"---"+chr(10),4)])["input_slots"]]')"
-assert_eq "$SL" "['document', 'findings', 'profile']" "doc-recritic: 입력 슬롯 정확히 셋 — dispatch 사유·이력·출처 라벨 슬롯 없음 (AC9)"
+assert_eq "$SL" "['document', 'findings', 'profile', 'diff']" "doc-recritic: 입력 슬롯 정확히 넷 — diff 만 optional, dispatch 사유·이력·출처 라벨 슬롯 없음 (AC9 · AC18)"
+OPT="$(fm "$A/doc-recritic.md" '[s["tag"] for s in yaml.safe_load(t[4:t.find(chr(10)+"---"+chr(10),4)])["input_slots"] if s.get("optional")]')"
+assert_eq "$OPT" "['diff']" "doc-recritic: optional 인 슬롯은 diff 하나뿐 (나머지 셋은 필수)"
 KINDS="$(fm "$A/doc-recritic.md" 'sorted(set(s["kind"] for s in yaml.safe_load(t[4:t.find(chr(10)+"---"+chr(10),4)])["input_slots"]))')"
 assert_eq "$KINDS" "['artifact', 'repo_context']" "doc-recritic: kind 는 artifact·repo_context 만 (prior_verdict·orchestrator_framing 없음)"
 # critic 은 문서·프로필·(선택)이력 셋

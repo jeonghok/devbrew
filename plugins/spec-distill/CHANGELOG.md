@@ -1,6 +1,6 @@
 # Changelog
 
-## [4.3.0] — 2026-09-23
+## [4.4.0] — 2026-09-24
 
 minor 인 이유 — 새 surface 가 셋이다: 조사 주장 계약의 정본(`references/research-claims.md`)과 그
 배달 펜스, 세 dispatch 자리의 입력 슬롯 둘(`claims_contract` · `open_decisions`), 그리고
@@ -111,6 +111,53 @@ minor 인 이유 — 새 surface 가 셋이다: 조사 주장 계약의 정본(`
 - **§4 가 없는 payload 는 §5 의 `RC<n>` 줄 연결도 검사하지 않는다** — 연결 ∀ · 연결 대상 실재 · 역참조
   셋은 §4 와 §5 가 둘 다 있을 때만 돈다. §4 부재는 이미 다른 red(누락 절)라 게이트를 통과하지는 않지만,
   그 red 를 고치기 전에는 §5 연결의 결함이 함께 보고되지 않는다.
+
+## [4.3.0] — 2026-09-24
+
+minor 인 이유 — `shared/docreview/` 의 agent 표면(재비판자의 입력 슬롯)이 늘었다. 슬롯이 optional 이라 기존 dispatch 는 그대로 통과한다(major 아님).
+
+### Added
+
+- **`agents/doc-recritic.md` 에 `diff` 선택 슬롯**(`kind: repo_context`, `optional: true`) — 재비판자가 「이 변경이 도입했는가」 축을 쓸 수 있다(설계 §6.3.4, AC18). 페르소나 본문의 입력 목록도 `diff` 를 나열하고, 그것이 프레이밍이 아니라 그 축을 위한 **1차 자료**임을 명시한다. **이 플러그인의 문서 경로 — `reviewing-spec` · `reviewing-brief` · `framing-requests`, 세 dispatch 자리 전부 — 는 `diff` 를 싣지 않는다**고 그 자리에서 명시한다: 싣는 것은 코드 경로뿐이고, 못 받으면 재비판자는 그 축을 쓰지 않는다. 정본은 `shared/docreview/agents/doc-recritic.md` 이고 `plugins/spec-distill/agents/doc-recritic.md` 는 그 바이트 사본이다.
+
+### Changed
+
+- **`shared/adjudication/adjudication.py`(symlink 로 이 플러그인에도 배송되는 정본)의 `Ledger` 가 `items_unaccounted()` · `primary_source_failed()` 두 accessor 를 얻었다.** 기존 `blocks()` 는 그 둘의 `or` 로 **값 동치**(독립 진리표 대조) — `docreview_route.py` 등 다른 소비자는 안 깨진다.
+
+## [4.2.4] — 2026-09-24
+
+patch 인 이유 — 보안 수정이다. 절대 경로 항목만 있는 PATH 에서는 고르는 인터프리터가 전과 같다.
+
+### Security
+
+- **훅 해석기가 PATH 의 절대 경로가 아닌 항목을 통해 작업 디렉토리의 파일을 실행했다.** 빈 항목 · `.` · 상대 경로 · 빈 PATH 는 셸이 cwd 로 풀고, 훅의 cwd 는 사용자가 연 리포다. 그런 PATH 를 가진 사용자가 공격자가 만든 리포를 열면 `SessionEnd` 에서 리포 안의 `python3` · `python3.<무엇이든>` 이 실행됐다(격리 재현). `scripts/devbrew-python.sh` 의 두 탐색 — 2단계 `python3` 와 3단계 `python3.*` 글롭 — 이 이제 절대 경로 항목만 본다. `hooks/hooks.json` 의 자리도 해석기를 bare `sh` 대신 `/bin/sh` 로 부른다 — bare `sh` 도 같은 탐색으로 cwd 의 `sh` 를 집었다.
+- **대가** — PATH 에 상대 경로나 따옴표 안의 `~`(전개되지 않은 틸드)로 인터프리터를 두던 사용자는 훅이 그것을 못 찾는다. `$DEVBREW_PYTHON` 에 절대 경로를 지정하라.
+- **범위** — 훅 command 의 `sh` 탐색과 해석기가 인터프리터 파일을 고르는 탐색만 닫는다. 고른 인터프리터가 `#!/usr/bin/env` shim(pyenv · asdf)일 때 그 안의 탐색과, 그런 PATH 가 devbrew 밖에서 이미 여는 노출은 이 수정 밖이다. 설계 `docs/superpowers/specs/2026-09-23-python-resolver-absolute-path-only-design.md` 의 L4 · L7.
+
+## [4.2.3] — 2026-09-24
+
+patch 인 이유 — 이미 적혀 있던 회계 계약(「항목이 소실되면 막는다」)이 한 경로에서 집행되지 않던 결함의 수정이다. 새 필드·새 surface 없음. **다만 동작이 바뀐다** — 아래 첫 항목.
+
+### Fixed
+
+- **critic·codex 의 파손 항목이 계수 없이 사라져 `blocks` 가 거짓이었다.** `cmd_prepare` 는 두 출처의 항목을 `normalize()` 로 정규화하며 원장을 직접 넘겼는데, `cmd_finalize` 는 prepare 가 `events` 로 기록한 호출만 재생한다. 그래서 `normalize()` 의 `hold`(anchor·summary 없는 파손 항목)와 `coerced`(어휘 밖 처분)가 프로세스 경계에서 사라졌다 — 실측 `held=0 · coerced=0 · blocks=False`. 회계 계약은 `blocks() == held > 0 …` 이므로 이것은 차단 통제의 fail-open 이었다. 4.2.1 의 「Known gaps」 가 disposition 강제 하나로 적었던 결함이 실제로는 파손 항목의 소실까지 포함했다. `normalize()` 에는 이제 `hold`·`coerced` 두 이름만 가진 기록 원장을 넘긴다(`ev()` 와 같은 메커니즘 — 다른 메서드를 부르면 조용히 사라지지 않고 `AttributeError` 로 죽는다).
+  - **달라지는 동작:** critic 이든 codex 든 파손 항목을 하나라도 내면 `finalize` 의 보고(`fin.json`)가 이제 `blocks: true` · `adjudication_held ≥ 1` 이고 `advisory` 에 「항목 파손」이 실린다. 보조 출처(codex)의 파손도 같다 — 계약의 「항목이 소실되면 막는다」에 출처 예외가 없다(사용자 결정). **바뀐 것은 이 보고 필드까지다** — 게이트 요약(`approval_ready` · `round_reviewed`)은 held 를 읽지 않으므로, 막는 것은 `fin.json` 의 `blocks` 를 읽는 오케스트레이터다(skill 의 degrade 채널 절이 그것을 읽으라고 요구한다).
+  - **남은 공시 공백(고치지 않음):** codex 가 없는 라운드에서는 게이트 렌더 첫 줄이 `codex 없음` 을 `advisory` 보다 앞서 싣고 끝나, 같은 라운드의 「항목 파손」이 그 줄에 안 보인다(`docreview_state.py` 의 `render_gate`). 정보는 `fin.json` 의 `advisory[]`·`blocks` 로는 닿는다. 층 2 `uncountable` 과 재비판 unknown-f hold 에 이미 있던 가림이고, 이 수정이 그 경로를 더 자주 태운다.
+  - 락 — `normalize()` 호출 자리 셋(critic 층 1 · 층 2 · codex)에 파손 항목을 하나씩 두어 `held == 3` 을 잰다. 한 자리만 원장 직결로 되돌려도 떨어진다. 어휘 밖 처분은 재비판이 처분을 **직접** 매기게 해 `_apply_recritic` 의 `None → "ask"` 스윕이 가려 주지 못하는 경로에서 `coerced == 1` 을 잰다. 변이 다섯(자리 셋 각각 · `hold` 미기록 · `coerced` 미기록)이 전부 RED.
+- 사실과 어긋나게 된 주석 넷(미계수 마커 · 「경계를 못 넘는다」 설명 셋)을 고쳤다. `tools/adjudication/check_wiring.py` 의 EXEMPT 열 자리를 재앵커했다(가드 텍스트·사유 무변경).
+
+## [4.2.2] — 2026-09-23
+
+patch 인 이유 — 전부 `Fixed` 다. 새 필드·새 surface 없음.
+
+### Fixed
+
+- **codex 쪽 finding 이 `replacement`·`if_unfixed` 를 늘 잃었다.** 러너 프롬프트는 `decide` 에 두 칸을 요구하는데, 출력이 지나는 `codex_findings_to_yaml.py` 의 닫힌 키 목록 `DOCREVIEW_KEYS` 가 그 둘을 몰라 변환에서 버렸다. codex 가 값을 적어도 게이트는 「(대체안 미작성)」·「(리뷰어가 안 적음)」을 냈다 — 4.2.1 이 후속 finding 에서 닫은 것과 같은 뒤집힘(값이 있는데 침묵 리터럴)이 codex 입구로 들어오고 있었다. Task 20 e2e(과설계 셋을 심은 설계문서)에서 critic·codex 둘 다 셋을 맞는 태그로 잡았는데 게이트의 `overdesign` 셋이 전부 대체안 없이 떴다.
+- **`same_as` 흡수가 흡수된 쪽의 산문 칸을 함께 버렸다.** 생존자는 (처분 순위, f 번호) 최대이고 f 번호는 요약 sha1 순이라 출처와 무관하게 갈린다 — 한쪽만 `replacement`·`if_unfixed`·`evidence` 를 적었는데 빈 쪽이 남으면 값이 사라졌다. 생존자 선택 규칙은 그대로 두고(변이 ⑩ 이 그 줄을 잡는다) 생존자의 **빈 칸만** 형제에게서 채운다. 적힌 칸은 덮지 않는다. 위 결함만 고쳐도 e2e 증상은 사라지지만 이 결함은 「한쪽만 칸을 가진 쌍」에서 잠복한다.
+
+락 — `test_codex_findings_to_yaml.py` 가 `└ 천장: …`(`: ` 를 품는 값)을 넣어 파서로 **바이트 그대로** 되읽는다. `test_docreview_route.sh` 는 두 요약을 맞바꿔 두 번 돌려 빈 쪽이 생존자인 방향을 반드시 태우고, 그 방향이 실제로 돌았는지를 따로 단언한다. 변이 셋(덮지 않음 가드 제거 · 채움 제거 · `if_unfixed` 만 빼기)이 전부 RED. 헬퍼는 서브셸 없이 부른다 — `$( )` 안의 실패 계수는 사라져 첫 초안이 ✗ 를 찍고도 스위트 rc 0 이었다.
+
+`tools/adjudication/check_wiring.py` 의 EXEMPT 여덟 자리를 +8 재앵커했다(가드 텍스트·사유 무변경). 채움을 `break`·필터 컴프리헨션 없이 쓴 이유는 그 둘이 각각 새 미배선 버리기·컴프리헨션 내포 증가로 잡혔기 때문이다 — 아무것도 버리지 않지만 면제·baseline 을 늘리는 대신 모양을 바꿨다.
 
 ## [4.2.1] — 2026-09-23
 

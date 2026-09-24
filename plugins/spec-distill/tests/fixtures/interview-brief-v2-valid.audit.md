@@ -3,7 +3,7 @@ type: interview-audit
 payload: interview-brief-v2-valid.md
 created_at: 2026-09-23
 session_id: testsessionv2
-source: spec-distill conducting-interview 4.3.0
+source: spec-distill conducting-interview 4.4.0
 ---
 
 # Sample Topic v2 — Interview Audit
