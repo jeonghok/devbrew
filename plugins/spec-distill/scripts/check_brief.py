@@ -918,8 +918,11 @@ def coverage_anchor_failures(audit_text: str, anchors: set) -> list[str]:
 # 공허하게 통과한다 — `landscape_unkeyed` 가 §4 에 대해 이미 하는 것과 같은 형태다. 개수가
 # 들어가는 곳은 **조건 분기와 advisory** 뿐이고 둘 다 무엇도 막지 않는다. 차단 메시지 문면에도
 # 개수를 넣지 않는다.
-RC_RE = re.compile(r"(?<![A-Za-z])RC\d+\b")
-OQ_RE = re.compile(r"(?<![A-Za-z])OQ\d+\b")
+# id 의 끝 경계는 `\b` 가 아니라 ASCII 낱말 문자의 부재다: 한글도 `\w` 라서 `\b` 는 `RC3에`·`OQ1은`
+# 처럼 조사가 붙은 id 를 못 읽는다(한국어 문면에서 흔한 모양). 숫자는 경계 밖이라 `RC1` 이 `RC12`
+# 안에서 맞지 않는다.
+RC_RE = re.compile(r"(?<![A-Za-z])RC\d+(?![0-9A-Za-z_])")
+OQ_RE = re.compile(r"(?<![A-Za-z])OQ\d+(?![0-9A-Za-z_])")
 # 줄 끝 연결 — 넷 중 하나(§H ③ + 최종 리뷰 I-4): 레포 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]`,
 # 웹 `[→ OQ<n>]` · `[→ 없음]`. `없음` sentinel 은 정직한 답이고 red 가 아니다: §A 계약이
 # 「빈 배열은 허용이고 거짓 연결보다 낫다」를 못 박으므로 sentinel 없는 ∀ 는 그 계약과 충돌하고
@@ -954,9 +957,25 @@ def contract_v2(text: str) -> bool:
     **왜 옵트인인가**: §4 항목에 연결을 ∀ 로 요구하면 `## 4. External Landscape` 를 가진 payload
     픽스처 전량이 red 가 되고 그중 `interview-brief-valid.md` 는 스위트 다수의 베이스다. 일괄
     편집은 회귀 생산원이고 optional 은 이빨 0이다 — 세 번째 길이 이것이다. 값 판독은
-    `frontmatter_value` 하나를 쓴다(중복 키·개행 포획·부분 비교를 그 함수가 이미 닫았다).
+    `frontmatter_value` 하나를 쓴다(중복 키·개행 포획·부분 비교를 그 함수가 이미 닫았다). 키가 있는데
+    판독이 안 되는 경우는 부재가 아니다 — `contract_unreadable` 이 게이트에서 red 로 가른다.
     """
     return frontmatter_value(CONTRACT_KEY, _frontmatter(text)) == (CONTRACT_V2, None)
+
+
+def contract_unreadable(text: str):
+    """`contract` 키가 **있는데** `v2` 로 읽히지 않는 경우의 사유, 아니면 None.
+
+    키 부재만 v1(옵트인 안 함)이다. 중복 키 · 공백 섞인 값 · `V2`/`v2.0` 같은 다른 값을 부재와 같이
+    읽으면 다섯 술어가 조용히 꺼지고 advisory 는 「없다」고 오진한다 — `frontmatter_errors` 가 금지한
+    「오류를 key absent 로 뭉개기」와 같은 결함이다.
+    """
+    val, err = frontmatter_value(CONTRACT_KEY, _frontmatter(text))
+    if err == f"{CONTRACT_KEY} key absent":
+        return None
+    if err:
+        return err
+    return None if val == CONTRACT_V2 else f"{CONTRACT_KEY} 값 {val!r} 은 알 수 없는 계약이다 (`v2` 만 있다)"
 
 
 def research_entries(text: str) -> list[str]:
@@ -983,11 +1002,20 @@ def research_link_missing(text: str) -> list[str]:
     ∀ 이고 개수 술어가 아니다. 순회할 항목이 0건이면 공허하게 통과한다 — `landscape_unkeyed` 의
     docstring 이 같은 판단을 이미 적었다: 「web-off brief는 §4에 순회할 항목이 없어 공허하게
     통과하는 것이 옳다 — 조사하지 않았으면 인용할 것도 없다」.
+
+    **`RC<n>` 을 실은 줄은 레포 형식 연결이어야 한다**(§H ③ · 최종 리뷰 I-4 「레포 주장은 연결 안에
+    항상 `RC<n>` 을 싣는다」). 웹 형식 `[→ OQ<n>]` 을 달면 ③ 의 역참조 요구가 통째로 빠지므로(`want`
+    는 연결의 `RC<n>` 으로만 만든다), 그 줄은 연결이 없는 것과 같이 센다.
     """
-    return [ln for ln in research_entries(text) if not LINK_RE.search(ln)]
+    out = []
+    for ln in research_entries(text):
+        m = LINK_RE.search(ln)
+        if not m or (m.group(1) is None and RC_RE.search(ln)):
+            out.append(ln)
+    return out
 
 
-LEADING_OQ_RE = re.compile(r"^[*_`]*\s*(OQ\d+)\b")
+LEADING_OQ_RE = re.compile(r"^[*_`]*\s*(OQ\d+)(?![0-9A-Za-z_])")
 DECISION_SECTIONS = (("3", "Open Questions"), ("0", "한눈에"))
 
 
@@ -1076,10 +1104,11 @@ def research_backref_missing(text: str) -> list[str]:
     for num, title in DECISION_SECTIONS:
         for ln in _entry_lines(_section_text(text, num, title)):
             oq = _leading_oq(ln)
+            line_rcs = set(RC_RE.findall(ln))     # 토큰 비교 — 부분 문자열이면 `RC12` 가 `RC1` 을 만족시킨다
             for rc in want.get(oq, ()):
-                if rc not in ln:
+                if rc not in line_rcs:
                     fails.add(f"§{num} 의 {oq} 줄이 근거 {rc} 를 되가리키지 않는다")
-            for rc in set(RC_RE.findall(ln)) - sourced:
+            for rc in line_rcs - sourced:
                 fails.add(f"§{num} 의 {oq or '항목'} 줄이 가리키는 근거 {rc} 가 조사 항목(§4·§5)에 없다")
     return sorted(fails)
 
@@ -1342,7 +1371,8 @@ def gate(path: Path) -> int:
             if lm:
                 failures.append(
                     "조사 항목에 결정 연결 없음 (줄 끝에 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]` · "
-                    f"`[→ OQ<n>]` · `[→ 없음]` 중 하나): {lm[:3]}")
+                    "`[→ OQ<n>]` · `[→ 없음]` 중 하나 — `RC<n>` 을 실은 레포 주장은 앞의 둘만): "
+                    f"{lm[:3]}")
             tm = research_link_targets_missing(text)
             if tm:
                 failures.append(f"결정 연결 대상 부재: {tm[:3]}")
@@ -1361,6 +1391,8 @@ def gate(path: Path) -> int:
                     failures.append(f"확인 줄 누락: {cm[:3]}")
         if not payload_rc_ids(text):
             advisories.append(INTERNAL_RESEARCH_ZERO_ADVISORY)
+    elif contract_unreadable(text):
+        failures.append(f"frontmatter: contract 옵트인 판독 불가 — {contract_unreadable(text)}")
     else:
         advisories.append(CONTRACT_V1_ADVISORY)
 

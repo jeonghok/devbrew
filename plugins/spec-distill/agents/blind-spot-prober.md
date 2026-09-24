@@ -14,7 +14,7 @@ input_slots:
     var: OPEN_DECISIONS
     kind: task
 description: >
-  Use this agent once per spec-distill interview to run an adversarial premortem on
+  Use this agent during a spec-distill interview to run an adversarial premortem on
   the current problem framing — surfacing hidden assumptions and failure modes the
   interview turn is blind to (unknown-unknowns), grounded in web evidence.
   Independent adversary, read-only by design (Law 2 frontmatter scoping). Dispatched

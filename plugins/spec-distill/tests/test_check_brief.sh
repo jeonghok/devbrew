@@ -1667,7 +1667,17 @@ v2mut() {   # v2mut <셀> <python 변형 코드> → $TMPD/<셀>.md 를 만들�
   sed -i.bak "s|^audit_file:.*|audit_file: $cell.audit.md|" "$TMPD/$cell.md"; rm -f "$TMPD/$cell.md.bak"
   # 짝의 반대편도 — 빠지면 `audit_pairing_errors` 가 변이와 무관하게 먼저 red 라 rc≠0 단언이 공허해진다
   sed -i.bak "s|^payload:.*|payload: $cell.md|" "$TMPD/$cell.audit.md"; rm -f "$TMPD/$cell.audit.md.bak"
+  # 계측의 양성 대조 — 변형기가 죽거나(assert) 아무것도 안 바꾸면 게이트는 원본 green fixture 를 재고,
+  # green 기대 셀은 공허한 ✓ 를 낸다. 설계상 무변형인 셀만 V2MUT_NOOP=1 로 밝힌다.
+  local before; before="$(cat "$TMPD/$cell.md" "$TMPD/$cell.audit.md" | cksum)"
   PYTHONDONTWRITEBYTECODE=1 python3 -c "$code" "$TMPD/$cell.md" "$TMPD/$cell.audit.md"
+  local mrc=$?
+  if [[ "$mrc" -ne 0 ]]; then
+    no "v2mut ${cell}: 변형기 실패 (rc=${mrc}) — 셀이 원본 fixture 를 재고 있다"; V2OUT=""; V2RC=99; return
+  fi
+  if [[ "${V2MUT_NOOP:-0}" != 1 && "$(cat "$TMPD/$cell.md" "$TMPD/$cell.audit.md" | cksum)" == "$before" ]]; then
+    no "v2mut ${cell}: 변형이 아무것도 바꾸지 않았다 — 셀이 공허하다"; V2OUT=""; V2RC=99; return
+  fi
   V2OUT="$(python3 "$SCRIPT" gate "$TMPD/$cell.md" 2>/dev/null)"; V2RC=$?
 }
 
@@ -2018,11 +2028,107 @@ a.write_text(s.replace('- 확인 RC3 — 확인 —','- 확인 RC3 — $verdict 
 done
 
 # 웹 주장은 대상이 아니다 — 확인 줄을 요구받지 않는다(N2 가 audit §7 결속을 이미 본다).
-v2mut c5web 'import sys,pathlib
+V2MUT_NOOP=1 v2mut c5web 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
 assert "[→ OQ1]" in s; p.write_text(s,encoding="utf-8")'
 [[ "$V2RC" -eq 0 ]] \
   && ok "V2-⑤: 웹 항목(「[→ OQ<n>]」)은 확인 줄을 요구받지 않는다" || no "V2-⑤: 웹 항목에 확인 줄을 요구했다 (rc=$V2RC)"
+
+# qg iter 1 — id 경계. `RC1` 이 `RC12` 안에서 맞으면 ③ 의 ∀ 가 접두 충돌로 만족된다(부분 문자열 비교).
+# RC3 → OQ1 을 두고, §0·§3 의 OQ1 줄이 RC30 만 가리키게 한다 — RC30 은 §5 에 출처가 있어 역방향 검사는
+# 조용하다. 오직 순방향의 토큰 비교만이 이 red 를 낸다.
+v2mut rcprefix 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+for o,n in (("- OQ1 [열림] — 인증 뷰의 캐시 전략 → 근거 RC3\n","- OQ1 [열림] — 인증 뷰의 캐시 전략 → 근거 RC30\n"),
+            ("- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3\n","- OQ1: 인증 뷰의 캐시 전략 → 근거 RC30\n")):
+    assert s.count(o)==1,o; s=s.replace(o,n)
+o="## 6. 사용자 원문\n"; assert s.count(o)==1
+s=s.replace(o,"- 위험 — 실패 양식 | 추가 주장 — RC30 (plugins/spec-distill/scripts/check_brief.py#gate) [RC30 → OQ4]\n\n"+o)
+p.write_text(s,encoding="utf-8")
+a=pathlib.Path(sys.argv[2]); q=a.read_text(encoding="utf-8"); o="- 확인 RC5 "; assert q.count(o)==1
+a.write_text(q.replace(o,"- 확인 RC30 — 확인 — check_brief.py#gate 에 있다\n"+o),encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q 'OQ1 줄이 근거 RC3 를' <<<"$V2OUT"; } \
+  && ok "V2-③(id 경계): RC30 만 가리키는 OQ1 줄은 RC3 역참조가 아니다 — red" \
+  || no "V2-③(id 경계): RC30 이 RC3 역참조를 만족시켰다 (rc=$V2RC) — 부분 문자열 비교"
+
+# 양의 짝 — 한국어 조사가 붙은 id(`RC3에`)는 그 id 다. `\b` 경계였다면 한글이 `\w` 라 못 읽어 거짓 red.
+v2mut rcparticle 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3\n"
+assert s.count(o)==1; p.write_text(s.replace(o,"- OQ1: 인증 뷰의 캐시 전략 — RC3에 따르면 캐시가 이미 있다\n"),encoding="utf-8")'
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-③(id 경계·양의 짝): 조사가 붙은 「RC3에」도 RC3 역참조다 — green" \
+  || no "V2-③(id 경계): 조사가 붙은 id 를 못 읽었다 (rc=$V2RC) — 정직한 역참조가 red"
+
+# qg iter 1 — 레포 주장(`RC<n>` 을 실은 줄)이 웹 형식 연결을 달면 ③ 의 요구가 통째로 빠진다(최종 리뷰 I-4
+# 의 미집행). 연결을 `[→ …]` 로 바꾸고 역참조를 전부 지운다 — ① 이 그 줄을 연결 없음으로 세야 한다.
+v2mut repoweblink 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
+o="[RC3 → OQ1 · OQ4]"; assert s.count(o)==1; s=s.replace(o,"[→ OQ1 · OQ4]")
+assert s.count(" → 근거 RC3")==3; s=s.replace(" → 근거 RC3",""); p.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -q 'RC3' <<<"$V2OUT"; } \
+  && ok "V2-①(레포 형식): RC 를 실은 줄의 웹 형식 연결은 연결이 아니다 — red" \
+  || no "V2-①(레포 형식): 레포 주장이 웹 형식 연결로 역참조 ∀ 를 피했다 (rc=$V2RC)"
+
+# qg iter 1 — ① 의 순회가 §5 의 RC 줄까지 닿는다. 기존 ① 셀은 전부 §4 만 건드려, 순회를 §4 로 좁히는
+# 변이가 살아남았다. 레포 주장은 템플릿상 §5 에 있으므로 이것이 주 생산 경로다.
+v2mut sec5nolink 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o=" [RC5 → 없음]\n"
+assert s.count(o)==1; p.write_text(s.replace(o,"\n"),encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -q 'RC5' <<<"$V2OUT"; } \
+  && ok "V2-①(§5): §5 레포 주장 줄의 연결을 지우면 red" \
+  || no "V2-①(§5): §5 줄의 연결 부재가 통과됐다 (rc=$V2RC) — ① 이 §4 만 순회한다"
+
+# qg iter 1 — ⟨C5⟩ 동적 짝: 연결 누락이 1·5·12 건 어느 쪽이어도 red. 정적 AST 락은 `len()` 과 정수 비교만
+# 보므로 슬라이스 truthiness(`lm and not lm[4:]`) 같은 임계를 못 본다 — 개수를 여럿 흔드는 것이 그 짝이다.
+for n in 1 5 12; do
+  v2mut "many$n" "import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding='utf-8'); o='## 5. 기각 · Blind Spots\n'; assert s.count(o)==1
+extra=''.join('- 연결 없는 주장 %d «nextjs-docs» — [중립] — 연결을 잊었다\n' % i for i in range($n))
+s=s.replace('- 부분 하이드레이션 «islands» — [중립] — 이 결정과 무관 [→ 없음]\n','- 부분 하이드레이션 «islands» — [중립] — 이 결정과 무관 [→ 없음]\n'+extra,1)
+p.write_text(s,encoding='utf-8')"
+  { [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT"; } \
+    && ok "V2-①(⟨C5⟩ 동적): 연결 누락 ${n}건도 red" \
+    || no "V2-①(⟨C5⟩ 동적): 연결 누락 ${n}건이 통과됐다 (rc=$V2RC) — 개수 임계가 들어갔다"
+done
+
+# qg iter 1 — 옵트인 키가 **있는데** 판독이 안 되면 부재가 아니다. 중복 키 · 다른 값을 v1 으로 읽으면 다섯
+# 술어가 조용히 꺼지고 advisory 는 「없다」고 오진한다. 셋 다 ① 을 함께 깨 둔다 — 조용한 v1 강등이면 green.
+for shape in dup upper v3; do
+  v2mut "contract_$shape" "import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding='utf-8'); o='contract: v2\n'; assert s.count(o)==1
+n={'dup':'contract: v2\ncontract: v2\n','upper':'contract: V2\n','v3':'contract: v3\n'}['$shape']
+s=s.replace(o,n); o2=' [→ OQ1]\n'; assert s.count(o2)==1; s=s.replace(o2,'\n'); p.write_text(s,encoding='utf-8')"
+  { [[ "$V2RC" -ne 0 ]] && grep -q 'contract 옵트인 판독 불가' <<<"$V2OUT" && ! grep -q '신 계약 미적용' <<<"$V2OUT"; } \
+    && ok "V2-옵트인(판독 불가 «${shape}»): 있는데 못 읽는 contract 는 red — v1 으로 강등되지 않는다" \
+    || no "V2-옵트인(판독 불가 «${shape}»): 조용히 v1 으로 떨어졌다 (rc=$V2RC)"
+done
+
+# qg iter 1 — AC10 의 역: RC≥1 인데 audit 에 `derived: N/A` sentinel 만 있으면 red. d4d(RC 0건 + N/A → green)
+# 의 짝이다 — sentinel 이 요구를 조용히 면제하면 안 된다.
+v2mut d4f 'import sys,pathlib
+a=pathlib.Path(sys.argv[2]); q=a.read_text(encoding="utf-8"); o="- derived:internal_research — closed — 내부 조사 축 (@S1)"
+assert q.count(o)==1; a.write_text(q.replace(o,"- derived: N/A"),encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q 'derived:internal_research' <<<"$V2OUT"; } \
+  && ok "V2-④(AC10 역): RC≥1 인데 derived: N/A 만 있으면 red" \
+  || no "V2-④(AC10 역): sentinel 이 레포 주장 있는 brief 의 derived 요구를 면제했다 (rc=$V2RC)"
+
+# qg iter 1 — ⑤ 의 순회는 audit §5 다. 확인 줄을 §6 으로 옮기면 red(AC12 「audit §5 에 없으면 red」).
+v2mut c5other 'import sys,pathlib
+a=pathlib.Path(sys.argv[2]); s=a.read_text(encoding="utf-8"); o="- 확인 RC5 "; assert s.count(o)==1
+i=s.index(o); j=s.index("\n",i)+1; line=s[i:j]; s=s[:i]+s[j:]
+o6="## 6. 사용자 원문\n"; assert s.count(o6)==1
+s=s.replace(o6,o6+"\n"+line,1); a.write_text(s,encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q 'RC5' <<<"$V2OUT"; } \
+  && ok "V2-⑤(§5 범위): audit §5 밖(§6)으로 옮긴 확인 줄은 인정하지 않는다 — red" \
+  || no "V2-⑤(§5 범위): §5 밖의 확인 줄을 인정했다 (rc=$V2RC)"
+
+# qg iter 1 — AC9 「하위 불릿은 red」. 연결을 들여쓴 하위 불릿으로 내리면 항목 줄 끝에 연결이 없다.
+v2mut subbullet 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o=" — 데이터 형태와 부합 [→ OQ1]\n"
+assert s.count(o)==1; p.write_text(s.replace(o," — 데이터 형태와 부합\n  - [→ OQ1]\n"),encoding="utf-8")'
+[[ "$V2RC" -ne 0 ]] \
+  && ok "V2-①(하위 불릿): 연결을 하위 불릿으로 내리면 red" \
+  || no "V2-①(하위 불릿): 하위 불릿 연결이 통과됐다 (rc=$V2RC)"
 
 # V2-옵트인 격리 (fix round 1) — `contract: v2` 가 없으면 술어 다섯(①~⑤)이 전부 미발동이어야
 # 한다. Step 4 의 all-broken 변이 다섯을 그대로 겹쳐 쓰되 `contract: v2` 줄만 먼저 지운다 —

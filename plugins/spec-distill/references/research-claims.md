@@ -1,10 +1,5 @@
 # 조사 주장 계약 — `evidence[]` 와 `repo_claims[]`
 
-이 파일이 조사 주장 출력 계약의 **정본**이다. 네 자리가 이 계약을 쓴다 — `coverage-mapper` ·
-`blind-spot-prober` · `steelman-builder` 세 dispatch 와, orchestrator 가 직접 수행하는 C43 경로 (a)
-자동확인. `agents/steelman-builder.md` 에 같은 스키마의 인라인 사본이 있고, 두 곳의 필드 이름
-집합은 `tests/test_research_claims_contract.sh` 축 D 가 집합 등호로 묶는다.
-
 ## 형식
 
 ```yaml
@@ -56,6 +51,7 @@ auto-confirm 한 사실」 범주를 만들었다가 **4건 중 3건의 전제�
    닿는 결정이 없어도 `[RC<n> → 없음]` 이고, `[→ …]` 는 웹 주장만 쓴다. `RC<n>` 이 줄에서 빠진 레포
    주장은 확인 줄 대조와 내부 조사 차원 요구 밖으로 빠진다.
 4. `RC<n>` 번호는 **한 인터뷰 안에서만 유일**하다(payload + 그 audit 한 쌍의 범위). `S<N>`·`ST<N>` 과
-   같은 규약이고, 코퍼스 전체의 유일성은 요구하지 않는다.
+   같은 규약이고, 코퍼스 전체의 유일성은 요구하지 않는다. subagent 가 낸 `id` 는 **임시값**이다 —
+   orchestrator 가 V1 에서 인터뷰 전역 순번으로 다시 붙이고, 그 번호만 payload · audit 에 실린다.
 5. 계약을 못 받았으면 조사 주장을 내지 않는다 — 계약 없는 조사는 계약 있는 조사와 산출물에서
    구별되지 않는다.

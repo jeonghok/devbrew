@@ -66,4 +66,15 @@ for tok in repo_claims evidence decides; do
   grep -qE "^[[:space:]]*-?[[:space:]]*${tok}:" <<<"$BODY" \
     && ok "출력 의무: $tok 키가 본문 스키마에 있다" || no "출력 의무: $tok 키 부재"
 done
+
+# AC22 — 옛 하드 상한 문구가 agent 파일 «전체»(frontmatter description 포함)에 남지 않는다. description 은
+# dispatch 판단에 모델이 읽는 필드라, 옛 상한이 남으면 재개방 뒤 정당한 재dispatch 를 거부하게 한다.
+# 양의 짝이 자격+예산 서술의 실재를 문다 — 부재 락만이면 문단을 통째로 지워도 통과한다.
+AGENT_FLAT="$(tr '\n' ' ' < "$AGENT" | tr -s ' ')"
+grep -qF -- 'bounded to two' "$AGENT" && no "AC22: 옛 상한 문구 «bounded to two» 잔존" || ok "AC22: «bounded to two» 없음"
+grep -qF -- 'once per' "$AGENT" && no "AC22: 옛 상한 문구 «once per» 잔존" || ok "AC22: «once per» 없음"
+grep -qF -- '상한 2 dispatch' "$AGENT" && no "AC22: 옛 상한 문구 «상한 2 dispatch» 잔존" || ok "AC22: «상한 2 dispatch» 없음"
+grep -qF -- '상한 2(conducting-interview' "$AGENT" && no "AC22: 옛 상한 문구 «상한 2(conducting-interview» 잔존" || ok "AC22: «상한 2(conducting-interview» 없음"
+grep -qF -- 'dispatch eligibility is whether an open decision still' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
+grep -qF -- '1 plus the total reopen count' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
 finish
