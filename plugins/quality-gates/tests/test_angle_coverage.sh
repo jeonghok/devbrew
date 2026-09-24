@@ -502,7 +502,13 @@ case_synth_author_identity_is_grammar_checked() {
   done
   # 모의 실행 A1 — sources 가 리스트 아닌 참 값(모양 {a: 1})이면 str() 이 문법 밖
   # 문자열을 만든다. agent 자체는 문법 안이어도 신원 계약이 여전히 막는다.
-  printf -- '- agent: security-reviewer\n  sources: {a: 1}\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  # Task 7 row 11 재비판 — agent 를 이 함수의 선언된 자기판정 수행자
+  # (`folded_into:security-reviewer`)와 «다른» 문법-안 이름(code-reviewer)으로
+  # 둔다. 원래 `agent: security-reviewer` 를 쓰면 이 finding 이 «동시에» 자기
+  # 판정 위반도 만들어 check_author_identity/check_self_adjudication 호출
+  # 순서에 이 assert_contains 의 관측이 우연히 얹힌다(둘 다 exit 4 지만 메시지가
+  # 갈린다) — 이 사례가 재려는 것은 신원 «문법» 위반이지 자기판정이 아니다.
+  printf -- '- agent: code-reviewer\n  sources: {a: 1}\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
   rc=0
   out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
   err="$(cat "$T/err")"
