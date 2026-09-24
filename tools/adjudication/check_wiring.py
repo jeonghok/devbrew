@@ -147,7 +147,10 @@ EXEMPT = {
     # qg-angle-floor-pr3 Task 4 가 같은 import 블록에 `import angles as _angles`
     # 를 한 줄 더했다 — 인용 내용은 무변경.
     # PR4a Task 2 — `load_findings`/`_read_source` 신설로 밀림, 실측 410.
-    ("plugins/quality-gates/scripts/synthesize_findings.py", 410,
+    # PR4a Task 4 — `import recritic_bridge as _bridge` 한 줄 · docstring 갱신(Inputs
+    # 절에 `--recritic` 세 플래그 설명 추가) · `promote_new_findings`의 저자 코멘트
+    # 세 줄이 위에서 늘어 410 → 418. 가드 텍스트·사유 무변경 — 실측으로 재앵커한다.
+    ("plugins/quality-gates/scripts/synthesize_findings.py", 418,
      "continue in dedup @ if f.get('promoted')"):
         "C6(1) — dedup() 의 이 continue 는 `promoted` 항목을 그룹핑에서만 "
         "제외한다. 항목 자체는 이 loop 이전에 계산된 `passthrough` 리스트에 "
