@@ -25,10 +25,14 @@ Review gate 의 판정자를 공유 재비판자로 바꾼다 (설계 §6.3.3 ·
 - **승격 finding 의 저자**가 판정자 입력 종류를 따른다 — 재비판 경로는 `doc-recritic`.
 - **판정 결과가 달라질 수 있다** — 재비판자에게는 **하향이 없다**(`raise` 는 위로만). 옛 판정자의 severity 하향(Severity realist check)은 이 경로에서 사라졌다. `apply_verdicts` 는 `raise` 판정을 적용하기 전에 finding 의 (정규화·대소문자 접힘된) **현재** severity 와 다시 비교해, 실제로 severity 를 올리지 않는 `raise` 는 적용하지 않는다 — 브리지가 아는 `map.json` 의 현재 severity 가 stale 하면 정당해 보이는 `raise` 가 실제로는 CRITICAL 을 낮출 수 있기 때문이다. 저지된(내리는) `raise` 는 `gate=True` coercion 으로 원장에 공시되고, 이미 같은 severity 로의 `raise` 는 `gate=False` no-op 이다. `downgrade`(옛 `--adversarial` 경로)는 이 가드 밖이다 — 그대로 내린다.
 - **`docs/philosophy` 코드 맵과 `docs/plugin-authoring.md`** 가 `adversarial.md` 대신 `doc-recritic.md` / `references/recritic-code-profile.md` 를 가리킨다.
+- **SKILL `allowed-tools` 에 `Bash(${CLAUDE_PLUGIN_ROOT}/scripts/recritic_bridge.py:*)`** 가 늘었다(24 → 25 개). `scripts/check-allowed-tools-order.sh` 의 `EXPECTED_ORDER` 도 같은 자리에 맞춰 갱신했다 — 정본은 그 배열이라 SKILL.md 목록이 어긋나면 이 스크립트가 개수·순서 둘 다 잡는다.
+- **Phase 1.5 중간 파일 프로토콜.** 매 iteration 마다 `mktemp -d` 로 만든 디렉토리 하나에 세 파일이 산다: 오케스트레이터가 각 항목의 `agent:` 를 (플러그인 접두 없는) bare agent 이름으로 찍어 쓰는 `findings.yaml`, `recritic_bridge.py prepare` 가 만드는 `recritic-findings.yaml`/`recritic-map.json`, 그리고 재비판자 응답을 요약·전사 없이 그대로 저장하는 `recritic.txt`(verbatim — 디스패치 실패·무응답이면 파일 자체를 안 만든다).
+- **`tools/adjudication/check_slots.py` 의 `EXEMPT_SLOTS_BASELINE` 이 5 → 4.** `agents/adversarial.md` 삭제로 그 agent 의 면제 등재(`phase1_findings`)도 대상을 잃어 지웠다 — 대체 agent `doc-recritic` 의 `findings` 슬롯은 공유 docreview 계약이 `kind: artifact` 로 선언해 애초에 면제 대상이 아니다.
+- **`synthesize_findings.py` 의 rc 를 SKILL 이 소비한다.** 0 이 아닌 rc 나 빈 stdout(usage 오류·판정축 실패·미처리 traceback)은 그 iteration 을 clean 이 아닌 것으로 처리하고 rc·stderr 를 보고한 뒤 멈춘다 — 빈 보고서를 clean 으로 읽지 않는다.
 
 ### Removed
 
-- **`agents/adversarial.md`** 와 그 락 셋(`test_adversarial_behavior.py` · `test_adversarial_persona.sh` · `test_adversarial_model_consistency.sh`). 판정 관문은 코드 프로필로, 페르소나 계약은 `shared/tests/test_docreview_agents.sh` 로, 사본 동일성은 `test_copy_of_contract.sh` 로 옮겨 갔다. **잃는 것**: severity 하향 · 서로 다른 리뷰어의 동일 지적 가중(Corroboration — 재비판자는 출처를 못 보므로 원리적으로 불가) · 이 변경과 상호작용하지 않는 선재 결함의 처분(옛 판정자는 downgrade 했으나, 재비판자의 관문 B 는 이제 그런 결함을 `reject` 한다).
+- **`agents/adversarial.md`** 와 그 락 셋(`test_adversarial_behavior.py` · `test_adversarial_persona.sh` · `test_adversarial_model_consistency.sh`). 판정 관문은 코드 프로필로, 페르소나 계약은 `shared/tests/test_docreview_agents.sh` 로, 사본 동일성은 `test_copy_of_contract.sh` 로 옮겨 갔다. **잃는 것**: severity 하향 · 서로 다른 리뷰어의 동일 지적 가중(Corroboration — 재비판자는 출처를 못 보므로 원리적으로 불가) · 이 변경과 상호작용하지 않는 선재 결함의 처분(옛 판정자는 downgrade 했으나, 재비판자의 관문 B 는 이제 그런 결함을 `reject` 한다) · 근거 기준의 처분 방향(옛 페르소나는 구체 앵커 없는 CRITICAL/IMPORTANT 를 「의견」으로 보고 `reject`/`downgrade` 했다 — 새 코드 프로필도 같은 문구를 쓰지만 모호하면 `confirm` 한다. 앵커 없는 finding 이 살아남는 쪽으로 기운다. 방향은 fail-safe 다: 노이즈가 늘 뿐 거짓 clean 은 나지 않는다) · `better_fix` 판정 채널(대안 제시를 실어 보내던 자리 — 재비판자 스키마엔 대응 슬롯이 없다) · "Calibration & self-discipline" 절(살아남은 것은 근거 기준의 「근거 없는 `reject` 는 무효로 처리된다」한 줄뿐이다).
 
 ## [8.4.0] — 2026-09-24
 

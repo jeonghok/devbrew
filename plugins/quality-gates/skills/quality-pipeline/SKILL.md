@@ -553,6 +553,11 @@ Agent({
      --recritic-diff "$RV/recritic.diff"
    ```
 
+   **rc 를 소비하라.** 이 스크립트가 0 이 아닌 rc 로 끝나거나 stdout 이 비어
+   있으면(usage 오류·판정축 실패·미처리 traceback 전부 이 모양이다) 이 iteration
+   은 **clean 이 아니다** — rc 와 stderr 를 그대로 보고하고 멈춘다. 빈 보고서를
+   clean 으로 읽지 않는다.
+
    **Capture the script's complete stdout** — the
    synthesized Markdown block (counts line + findings table + suggested-fixes
    list, or the empty-state line). You surface this verbatim in step 4.5; do
