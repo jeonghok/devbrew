@@ -94,14 +94,18 @@ def _verdict_for(v, cur_sev, fid, ledger):
         else:
             ledger.coerced("verdict", "reject", "confirm", gate=True)
     elif kind == "raise":
-        to = v.get("to")
+        to_raw = v.get("to")
+        # fix round 1 Minor 4 — `_norm_sev`(synthesize_findings.py) 와 같은 규율로
+        # 대소문자를 접는다. 접지 않으면 `to: critical`(소문자) 이 어휘 밖으로
+        # 오판돼 confirm 으로 강제되고 그 강제가 불필요하게 degrade 공시된다.
+        to = to_raw.strip().upper() if isinstance(to_raw, str) else to_raw
         if to in SEVERITIES:
             if SEVERITIES.index(to) > SEVERITIES.index(cur_sev):
                 out = {"finding_id": fid, "verdict": "raise", "adjusted_severity": to}
             else:
-                ledger.coerced("to", to, cur_sev, gate=False)
+                ledger.coerced("to", to_raw, cur_sev, gate=False)
         else:
-            ledger.coerced("to", to, None, gate=True)
+            ledger.coerced("to", to_raw, None, gate=True)
     else:
         ledger.coerced("verdict", kind, "confirm", gate=True)
     if v.get("same_as"):
@@ -119,11 +123,25 @@ def _dead(ledger, why):
 
 
 def to_adjudication_doc(block_text, mapping, ledger, diff_text=None):
-    """재비판자 응답 원문 → `({"verdicts": [...], "new_findings": [...]}, dead)`.
+    """재비판자 응답 원문 → `({"verdicts": [...], "new_findings": [...], ...}, dead)`.
 
     블록이 없거나(잘린 응답 포함) 깨졌거나 매핑이 아니거나, `verdicts`·`added` 가 목록이
     아니면 **판정자 사망**이다 — 그 출력 전체를 믿을 수 없다(주 입력 실패, §6.4.3).
     펜스가 여럿이면 마지막이 이긴다(`extract_block` 의 규칙).
+
+    반환하는 doc 에는 판정용 두 키(`verdicts`·`new_findings`) 말고 회계 전용 두 키가
+    더 있다 — `_raw_verdict_count`·`_raw_added_count`(fix round 1 Important 1). 둘 다
+    **변환 전** 원문 길이다. 합성기는 이 값으로 「탐지 0 · 재비판 0」을 판단한다 —
+    변환 «후» 길이(`verdicts`/`new_findings`)만 보면 held·파손된 원문(모르는 f 뿐인
+    verdicts, 매핑이 아닌 added 항목)이 0 으로 접혀 재비판 0 을 거짓으로 주장한다.
+    `load_yaml_doc`(옛 경로)의 doc 에는 이 두 키가 없다 — 호출자가 `args.recritic is
+    not None` 으로 이미 갈랐으므로 옛 경로에서 이 키를 찾을 일이 없다.
+
+    콜라이딩 finding_id(같은 agent·file·line, 다른 severity 로 두 finding 이 도출)의
+    f 들은 **전부** 판정돼야, 그리고 그 판정이 **전부 같아야**(raise 면 `to` 까지)
+    합쳐서 적용한다(fix round 1 Important 2, Law 2). 일부만 판정되면(다른 f 는
+    침묵) 그 일부 판정을 조용히 전체에 적용하지 않는다 — 판정 안 된 finding 이
+    판정된 형제의 결론을 뒤집어쓰고 사라지는 fail-open 을 막는다.
     """
     # 지연 import — 합성기가 이 모듈을 import 할 때마다 문서 리뷰 엔진 전체를 끌어오지
     # 않는다(재비판 경로를 안 쓰는 실행의 폭발 반경을 늘리지 않는다).
@@ -150,21 +168,61 @@ def to_adjudication_doc(block_text, mapping, ledger, diff_text=None):
         else:
             by_f[key] = v
 
-    by_id = {}
+    # fix round 1 Important 2 — 콜라이딩 finding_id 를 «f 단위»가 아니라 «fid 단위»로
+    # 묶어, 그 fid 의 f 들이 전부 판정됐는지부터 본다. 일부만 판정되면(다른 f 는
+    # by_f 에 없음) 합치지 않고 hold 한다 — 예전 코드는 이 자리를 검사하지 않아
+    # 판정 안 된 f 를 그냥 «없었던 셈» 치고 판정된 f 하나로 fid 전체를 결정했다.
+    keys_by_fid = {}
     for key in mapping:
-        if key in by_f and key not in split:
-            fid = mapping[key]["finding_id"]
-            conv = _verdict_for(by_f[key], mapping[key]["severity"], fid, ledger)
-            if fid in by_id and by_id[fid] != conv:
-                by_id[fid] = None           # 같은 finding_id 에 갈린 판정 — 고르지 않는다
-            elif fid not in by_id:
-                by_id[fid] = conv
+        fid = mapping[key]["finding_id"]
+        if fid not in keys_by_fid:
+            keys_by_fid[fid] = []
+        keys_by_fid[fid].append(key)
+
+    by_id = {}
+    for fid in keys_by_fid:
+        keys = keys_by_fid[fid]
+        judged = []
+        unjudged = []
+        for key in keys:
+            if key in by_f and key not in split:
+                judged.append(key)
+            else:
+                unjudged.append(key)
+        if judged and unjudged:
+            ledger.hold(fid, "항목 파손: 같은 finding_id 의 일부 f 만 판정됐다 "
+                             "(전부 판정돼야 적용된다)")
+        elif judged:
+            # 「동일」의 기준은 **verdict 종류(+raise 면 to)** 뿐이다 — reject 의
+            # evidence 문구까지 같으라고 요구하지 않는다(각 f 가 독립적으로 같은
+            # 결론에 도달한 것과, 문구를 토씨까지 맞춘 것은 다른 요구다). 대표로
+            # 쓰는 conv 는 첫 judged 키의 것 — 결정론적이고, 다른 판정 로직(먼저
+            # 온 것이 이긴다)과 같은 규율이다.
+            convs = []
+            sigs = []
+            for key in judged:
+                v = by_f[key]
+                convs.append(_verdict_for(v, mapping[key]["severity"], fid, ledger))
+                kind = v.get("verdict") if isinstance(v, dict) else None
+                if kind == "raise":
+                    to_raw = v.get("to")
+                    to_folded = to_raw.strip().upper() if isinstance(to_raw, str) else to_raw
+                    sigs.append(("raise", to_folded))
+                else:
+                    sigs.append((kind, None))
+            same = True
+            for s in sigs[1:]:
+                if s != sigs[0]:
+                    same = False
+            if same:
+                by_id[fid] = convs[0]
+            else:
+                ledger.hold(fid, "항목 파손: 같은 finding_id 에 갈린 재비판 판정")
+        # else: 아무도 이 fid 를 판정하지 않았다 — 판정자 부재는 apply_verdicts()
+        # 가 fail-open 으로 이미 hold 한다(R-K). 여기서 또 세면 이중 계수다.
     verdicts = []
-    for fid, conv in by_id.items():
-        if conv is None:
-            ledger.hold(fid, "항목 파손: 같은 finding_id 에 갈린 재비판 판정")
-        else:
-            verdicts.append(conv)
+    for fid in by_id:
+        verdicts.append(by_id[fid])
 
     single = _single_diff_file(diff_text)
     new_findings = []
@@ -177,14 +235,31 @@ def to_adjudication_doc(block_text, mapping, ledger, diff_text=None):
             if not nf.get("file"):
                 nf["file"] = single or UNKNOWN
                 ledger.coerced("added.file", None, nf["file"], gate=False)
-            if nf.get("severity") not in SEVERITIES:
-                ledger.coerced("added.severity", nf.get("severity"), UNKNOWN, gate=False)
-                nf["severity"] = UNKNOWN
+            # fix round 1 Minor 4·5 — `_norm_sev` 와 같은 규율로 대소문자를 접고
+            # (`Critical` 을 미지로 강등시키지 않는다), severity 가 없으면
+            # `disposition:` 으로 대신 잡는다 — 익명 목록은 severity 를 그 칸에
+            # 실어 보내므로(anonymize()) persona 가 같은 모양을 그대로 되돌려줄
+            # 수 있다.
+            raw_sev = nf.get("severity")
+            sev = raw_sev.strip().upper() if isinstance(raw_sev, str) else raw_sev
+            if sev not in SEVERITIES:
+                raw_disp = nf.get("disposition")
+                disp = raw_disp.strip().upper() if isinstance(raw_disp, str) else raw_disp
+                if disp in SEVERITIES:
+                    ledger.coerced("added.severity", raw_sev, disp, gate=False)
+                    sev = disp
+                else:
+                    ledger.coerced("added.severity", raw_sev, UNKNOWN, gate=False)
+                    sev = UNKNOWN
+            nf["severity"] = sev
+            nf.pop("disposition", None)
             nf.setdefault("line", 0)
             if not nf.get("proposed_fix") and nf.get("replacement"):
                 nf["proposed_fix"] = nf.get("replacement")
             new_findings.append(nf)
-    return {"verdicts": verdicts, "new_findings": new_findings}, False
+    doc = {"verdicts": verdicts, "new_findings": new_findings,
+           "_raw_verdict_count": len(raw_verdicts), "_raw_added_count": len(raw_added)}
+    return doc, False
 
 
 def _read_text(path):
@@ -197,7 +272,16 @@ def _read_text(path):
 
 
 def load_recritic(recritic_path, map_path, diff_path, ledger):
-    """합성기의 `--recritic` 진입점. Returns `(doc, dead)` — `load_yaml_doc` 과 같은 모양."""
+    """합성기의 `--recritic` 진입점. Returns `(doc, dead)` — `load_yaml_doc` 과 같은 모양.
+
+    fix round 1 Important 3 — 역매핑 항목마다 형태를 검증한다. `to_adjudication_doc`
+    은 `mapping[key]["finding_id"]`/`["severity"]` 를 방어 없이 첨자로 읽는다: 항목이
+    매핑이 아니면 TypeError, `severity` 가 `SEVERITIES` 밖(예: `_verdict_for` 의
+    `SEVERITIES.index(cur_sev)`)이면 ValueError, 키 자체가 없으면 KeyError 로 각각
+    exit 1(계약 위반)이 샌다. `map.json` 은 우리가 `prepare` 로 쓴 파일이지만 디스크
+    사이 손상·수동 편집·구버전 포맷도 입력이므로 신뢰하지 않는다 — 여기서 걸러
+    「판정자 사망」으로 돌리면 `to_adjudication_doc` 은 항상 온전한 매핑만 받는다.
+    """
     text, why = _read_text(recritic_path)
     if text is None:
         return _dead(ledger, f"응답 파일 {recritic_path}: {why}")
@@ -210,6 +294,18 @@ def load_recritic(recritic_path, map_path, diff_path, ledger):
         return _dead(ledger, f"역매핑 JSON 파손: {exc}")
     if not isinstance(mapping, dict):
         return _dead(ledger, "역매핑이 객체가 아니다")
+    valid = True
+    for key in mapping:
+        entry = mapping[key]
+        if not isinstance(entry, dict):
+            valid = False
+        elif not isinstance(entry.get("finding_id"), str):
+            valid = False
+        elif entry.get("severity") not in SEVERITIES:
+            valid = False
+    if not valid:
+        return _dead(ledger, "역매핑 항목이 손상됐다 (형식: {finding_id: str, "
+                             "severity: SUGGESTION|IMPORTANT|CRITICAL})")
     diff_text = None
     if diff_path:
         diff_text, why = _read_text(diff_path)

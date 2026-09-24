@@ -846,9 +846,17 @@ def main():
     # 라운드 4 이전에는 `held` 만 꺼내 갔고 `degraded`/`reasons` 는 어디로도 가지
     # 않았다: 주 입력이 통째로 죽어도 출력이 clean 과 **바이트 동일**이었다.
     report = ledger.report()
+    # fix round 1 Important 1 — 변환 «후» 길이(`verdicts`/`new_raw`)만 보면 held·
+    # 파손된 원문(모르는 f 뿐인 verdicts, 매핑이 아닌 added 항목)이 0 으로 접혀
+    # 「재비판 0」을 거짓으로 주장한다. `doc` 의 두 회계 키(변환 «전» 원문 길이,
+    # `recritic_bridge.to_adjudication_doc` docstring 참조)를 함께 봐야 한다 —
+    # 둘 다 0 일 때만 재비판자가 정말 아무것도 안 냈다고 말할 수 있다.
+    raw_verdict_count = doc.get("_raw_verdict_count", 0) if isinstance(doc, dict) else 0
+    raw_added_count = doc.get("_raw_added_count", 0) if isinstance(doc, dict) else 0
     recritic_zero = (args.recritic is not None and not adjudicator_dead
                      and not raw and dropped_raw == 0
-                     and not verdicts and not new_raw)
+                     and not verdicts and not new_raw
+                     and raw_verdict_count == 0 and raw_added_count == 0)
     sys.stdout.write(render(kept, len(suppressed), dropped_malformed,
                             report, ledger.held_by_class(), recritic_zero=recritic_zero))
 

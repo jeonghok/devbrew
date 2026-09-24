@@ -192,6 +192,42 @@ case_colliding_ids_with_split_verdicts_are_not_resolved() {
   rm -rf "$T"
 }
 
+case_colliding_ids_with_partial_verdicts_are_not_resolved() {
+  # Important 2 (fix round 1, Law 2 fail-open) — 콜라이딩 finding_id 의 f 중 «일부만»
+  # 판정되면(다른 f 는 침묵) 그 일부 판정을 전체에 적용하면 안 된다 — 판정 안 된
+  # CRITICAL 이 판정된 IMPORTANT 의 기각을 뒤집어쓰고 조용히 사라진다.
+  local T; T=$(mktemp -d)
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "하나"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "둘"\n' > "$T/findings.yaml"
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: reject
+    evidence: "근거"'
+  local out; out=$(synth "$T" --emit-verdict)
+  assert_grep     "$out" 'findings-lost'    "f2 가 침묵이면 f1 의 기각을 전체에 적용하지 않는다"
+  assert_not_grep "$out" '^verdict: clean$' "clean 이 아니다 — CRITICAL 이 조용히 사라지지 않는다"
+  rm -rf "$T"
+}
+
+case_colliding_ids_with_matching_verdicts_are_resolved() {
+  # Important 2 의 「동일」 기준 정밀화 — reject 의 evidence 문구가 달라도 verdict
+  # 종류가 같으면(둘 다 reject) 콜라이딩 finding_id 에 합쳐 적용한다. 문구까지
+  # 토씨 맞추라는 요구가 아니다(컨트롤러 룰링: "same verdict, and same to for raise").
+  local T; T=$(mktemp -d)
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "하나"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "둘"\n' > "$T/findings.yaml"
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: reject
+    evidence: "근거 하나"
+  - f: f2
+    verdict: reject
+    evidence: "근거 둘 — 문구가 다르다"'
+  local out; out=$(synth "$T" --emit-verdict)
+  assert_grep "$out" '^verdict: clean$' "둘 다 reject 면 evidence 문구가 달라도 합쳐 적용된다"
+  rm -rf "$T"
+}
+
 case_missing_verdict_is_unadjudicated() {
   local T; T=$(mktemp -d); one_finding "$T/findings.yaml"; prep "$T"
   reply "$T/reply.txt" 'verdicts: []'
@@ -295,6 +331,72 @@ added:
   rm -rf "$T"
 }
 
+case_recritic_zero_not_claimed_when_added_or_verdicts_are_malformed() {
+  # Important 1 (fix round 1) — recritic_zero 는 «변환 후» 빈 목록만 봐서, 보류·파손된
+  # 원본까지 0 으로 접었다(P1·P3). 재비판자가 «무언가를 냈는데» 전부 버려진 것은
+  # 재비판 0 이 아니다 — bridge 가 raw verdicts/added 길이를 doc 에 실어 합성기가 본다.
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/findings.yaml"; prep "$T"
+  reply "$T/reply.txt" 'verdicts: []
+added:
+  - "CRITICAL: missed path traversal in lib.py"'
+  local out; out=$(synth "$T" 2>/dev/null)
+  assert_not_contains "$out" '탐지 0 · 재비판 0' "P1 — 매핑이 아닌 added 항목이 있으면 재비판 0 이 아니다"
+  reply "$T/reply.txt" 'verdicts:
+  - f: nope
+    verdict: confirm
+added: []'
+  out=$(synth "$T" 2>/dev/null)
+  assert_not_contains "$out" '탐지 0 · 재비판 0' "P3 — 모르는 f 뿐인 verdicts 가 있으면 재비판 0 이 아니다"
+  rm -rf "$T"
+}
+
+case_added_severity_case_folds() {
+  # Minor 4 (fix round 1) — `added.severity` 는 `_norm_sev` 와 같은 규율로 대소문자를
+  # 접는다. 접지 않으면 정당한 CRITICAL 이 미지로 강등된다.
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/findings.yaml"; prep "$T"
+  reply "$T/reply.txt" 'verdicts: []
+added:
+  - file: lib.py
+    line: 4
+    severity: Critical
+    summary: "대소문자 섞인 severity"'
+  local out; out=$(synth "$T")
+  assert_contains     "$out" '1 CRITICAL' "대소문자 섞인 severity 도 CRITICAL 로 접힌다"
+  assert_not_contains "$out" '미지'       "case-fold 된 값은 미지로 강등되지 않는다"
+  rm -rf "$T"
+}
+
+case_raise_to_case_folds() {
+  # Minor 4 (fix round 1) — raise 의 `to` 도 같은 규율로 대소문자를 접는다.
+  local T; T=$(mktemp -d); one_finding "$T/findings.yaml"; prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: raise
+    to: critical'
+  local out; out=$(synth "$T")
+  assert_contains "$out" '**Findings:** 1 CRITICAL / 0 IMPORTANT' "소문자 to 도 raise 를 적용한다"
+  rm -rf "$T"
+}
+
+case_added_falls_back_to_disposition_when_severity_missing() {
+  # Minor 5 (fix round 1) — 익명 목록은 severity 를 disposition: 으로 싣는다. 재비판자
+  # persona 가 같은 모양을 되돌려주면 severity 가 없어도 disposition 을 대신 잡는다.
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/findings.yaml"; prep "$T"
+  reply "$T/reply.txt" 'verdicts: []
+added:
+  - file: lib.py
+    line: 4
+    disposition: CRITICAL
+    summary: "severity 대신 disposition 으로 돌아왔다"'
+  local out; out=$(synth "$T")
+  assert_contains     "$out" '1 CRITICAL' "severity 가 없으면 disposition 으로 대신 잡는다"
+  assert_not_contains "$out" '미지'       "disposition 이 있으면 미지로 떨어지지 않는다"
+  rm -rf "$T"
+}
+
 case_dead_recritic_is_not_clean() {
   # 부채 A 의 재비판 경로판 — 응답 파일 없음 · 펜스 없음 · YAML 파손 · 매핑 파일 없음.
   local T; T=$(mktemp -d)
@@ -318,6 +420,46 @@ case_dead_recritic_is_not_clean() {
   rm -f "$T/reply.txt"
   out=$(synth "$T" 2>/dev/null)
   assert_contains "$out" '**이 실행은 clean이 아니다**' "--emit-verdict 없이도 not-clean 마커가 선다"
+  rm -rf "$T"
+}
+
+case_malformed_map_entry_is_dead_adjudicator() {
+  # Important 3 (fix round 1) — 역매핑 항목이 손상되면 방어 없는 첨자가 TypeError·
+  # ValueError·KeyError 로 traceback(exit 1)을 낸다. 주 입력 실패로 바꾼다.
+  #
+  # findings 는 비워 둔다(다른 dead-adjudicator 케이스와 같은 모양) — kept=0 이라야
+  # `decide()` 가 `defect` 보다 먼저 `not-certified`/`reason: angle-absent` 로
+  # 떨어진다. 검증 대상은 map.json 자신의 형태이므로 findings 내용과 무관하다.
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/findings.yaml"; prep "$T"
+  local out rc
+
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: confirm'
+  printf '{"f1": "security-reviewer-app.py-10"}' > "$T/map.json"
+  rc=0; out=$(synth "$T" --emit-verdict 2>/dev/null) || rc=$?
+  assert_eq   "$rc" "0" "역매핑 항목이 매핑이 아니다 — rc 0 (traceback 아님)"
+  assert_grep "$out" '^reason: angle-absent$' "역매핑 항목이 매핑이 아니면 판정자 사망이다"
+
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: raise
+    to: CRITICAL'
+  printf '{"f1": {"finding_id": "security-reviewer-app.py-10", "severity": "HIGH"}}' > "$T/map.json"
+  rc=0; out=$(synth "$T" --emit-verdict 2>/dev/null) || rc=$?
+  assert_eq   "$rc" "0" "역매핑 severity 가 어휘 밖 — rc 0 (traceback 아님)"
+  assert_grep "$out" '^reason: angle-absent$' "역매핑 severity 가 어휘 밖이면 판정자 사망이다"
+
+  printf '{"f1": {"finding_id": "security-reviewer-app.py-10"}}' > "$T/map.json"
+  rc=0; out=$(synth "$T" --emit-verdict 2>/dev/null) || rc=$?
+  assert_eq   "$rc" "0" "역매핑에 severity 키가 없다 — rc 0 (traceback 아님)"
+  assert_grep "$out" '^reason: angle-absent$' "역매핑에 severity 키가 없으면 판정자 사망이다"
+
+  printf '{"f1": {"severity": "IMPORTANT"}}' > "$T/map.json"
+  rc=0; out=$(synth "$T" --emit-verdict 2>/dev/null) || rc=$?
+  assert_eq   "$rc" "0" "역매핑에 finding_id 키가 없다 — rc 0 (traceback 아님)"
+  assert_grep "$out" '^reason: angle-absent$' "역매핑에 finding_id 키가 없으면 판정자 사망이다"
   rm -rf "$T"
 }
 
@@ -372,6 +514,11 @@ case_flag_hygiene() {
   assert_eq "$rc" "2" "빈 --recritic 은 exit 2"
   rc=0; python3 "$SYNTH" --findings "$T/findings.yaml" --recritic-diff "$T/x.diff" >/dev/null 2>&1 || rc=$?
   assert_eq "$rc" "2" "--recritic-diff 는 --recritic 없이 의미가 없다"
+  # Minor 7 (fix round 1)
+  rc=0; python3 "$SYNTH" --findings "$T/findings.yaml" --recritic "$T/reply.txt" --recritic-map "" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "2" "빈 --recritic-map 은 exit 2"
+  rc=0; python3 "$SYNTH" --findings "$T/findings.yaml" --recritic "$T/reply.txt" --recritic-map "$T/map.json" --recritic-diff "" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "2" "빈 --recritic-diff 는 exit 2"
   rm -rf "$T"
 }
 
@@ -395,13 +542,20 @@ case_unknown_verdict_value_is_coerced_to_confirm
 case_misspelled_f_is_held_not_matched
 case_duplicate_verdicts_for_one_f_are_held
 case_colliding_ids_with_split_verdicts_are_not_resolved
+case_colliding_ids_with_partial_verdicts_are_not_resolved
+case_colliding_ids_with_matching_verdicts_are_resolved
 case_missing_verdict_is_unadjudicated
 case_same_as_keeps_both
 case_added_becomes_promoted_by_doc_recritic
 case_added_file_derivation_is_single_file_only
 case_recritic_zero_is_stated
 case_recritic_zero_not_claimed_when_added_is_suppressed_or_broken
+case_recritic_zero_not_claimed_when_added_or_verdicts_are_malformed
+case_added_severity_case_folds
+case_raise_to_case_folds
+case_added_falls_back_to_disposition_when_severity_missing
 case_dead_recritic_is_not_clean
+case_malformed_map_entry_is_dead_adjudicator
 case_truncated_block_is_dead_adjudicator
 case_last_block_wins
 case_non_utf8_recritic_is_dead_adjudicator
