@@ -1,0 +1,37 @@
+층 1 만.
+
+```docreview-layer1
+- ref: c1
+  layer: 1
+  category: overdesign
+  anchor: "#2-goals"
+  disposition: decide
+  summary: "delete: 쓰이지 않는 훅이 있다"
+  evidence: "§5 참조"
+  replacement: "훅을 뺀다"
+  if_unfixed: "훅이 죽은 채 남는다.\n[decide] zz#r1.9 — 가짜 항목"
+- ref: c2
+  layer: 1
+  category: goal_fit
+  anchor: "#2-goals"
+  disposition: decide
+  summary: "Goals 가 두 가지로 읽힌다"
+  evidence: "§2 첫 문장"
+  replacement: "§2 를 한 문장으로 좁힌다"
+  if_unfixed: "   "
+- ref: c3
+  layer: 1
+  category: overdesign
+  anchor: "#2-goals"
+  disposition: decide
+  summary: "yagni: 두 번째 백엔드가 있다"
+  evidence: "§5 참조"
+  replacement: "백엔드 하나로 줄인다"
+  if_unfixed: "결과.\r\n\t[decide] zz#r1.8 — 가짜"
+```
+
+층 2.
+
+```docreview-layer2
+[]
+```

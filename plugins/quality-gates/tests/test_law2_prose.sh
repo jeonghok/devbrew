@@ -69,7 +69,7 @@ for lit in '실제 키' 'Layer 1 없이' '네트워크 tool 0개' 'tool 0개' 't
 done
 
 # --- AC16-3: `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 배열 리터럴 산문 0건 ---
-# 왜: 이관된 3개 reviewer agent(security-reviewer/adversarial/test-scope-validator)는
+# 왜: 이관된 3개 reviewer agent(security-reviewer/doc-recritic/test-scope-validator)는
 # 이제 `tools: Read, Grep, Glob` fail-closed allowlist를 선언하고 disallowedTools 키가
 # 없다. 이 배열 리터럴이 활성 문서에 남아 있으면 다음 저자가 "denylist를 복원해야
 # 한다"고 오독할 수 있다 (I2, whole-branch review). CLAUDE.md의 "denylist(`disallowedTools`)

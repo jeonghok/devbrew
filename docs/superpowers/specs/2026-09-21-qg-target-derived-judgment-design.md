@@ -957,11 +957,23 @@ AC21 을 확인한다.
 | **1** | 스코프 기계 — `resolve-topic.sh` · `seal-worktree.sh` · `combine-tips.sh` + `test_topic_boundary.sh` · `test_seal_no_side_effects.sh` | **없음** (새 스크립트만, 호출자 0) |
 | **2** | 판정 어휘 세 값 + 해상도 공시 — `synthesize_findings.py` · `diff-test-results.py` + 락 둘 | 어휘가 바뀐다 (소비자 동반 이주) |
 | **3** | 각도 바닥 — 각도 총 함수 · `test_angle_coverage.sh` · 명단 락 교체 · `doc-critic`/`doc-recritic` 사본 · `shared` diff 슬롯 | 리뷰어 구성이 바뀐다 |
-| **4** | verifier 제거 + 파이프라인 합치기 — SKILL · runtime-gate.md · qg.md · 공개 인자 · 스코프 배선 | **breaking** |
+| **4a** | 재비판 교체 — `adversarial` 자리를 공유 재비판자로 · §6.3.4 변환 계층 · qg `doc-recritic` 사본 · AC17 · AC22 | 판정자가 바뀐다 (두 게이트 구조는 그대로) |
+| **4b** | verifier 제거 + 파이프라인 합치기 — SKILL · runtime-gate.md · qg.md · 공개 인자 · 스코프 배선 · 판정 어휘 상시 배선 | **breaking** |
 | **5** | 공개 계약 · 헌장 · 인용 락 — `marketplace.json` · `plugin.json` · `CLAUDE.md` · `test_charter_citations.sh` | 문자열·조항 |
 
-**순서 제약** — 1 → 2 → 3 → 4 → 5. PR 4 가 PR 1 의 스크립트를 배선하고 PR 2·3 의 어휘를 쓴다.
-PR 5 는 PR 4 가 대상을 지운 뒤라야 인용 락이 GREEN 이 된다.
+**순서 제약** — 1 → 2 → 3 → 4a → 4b → 5. PR 4b 가 PR 1 의 스크립트를 배선하고 PR 2·3 의 어휘를 쓴다.
+PR 5 는 PR 4b 가 대상을 지운 뒤라야 인용 락이 GREEN 이 된다.
+
+**재결정 (P23, 2026-09-24) — PR4 를 4a · 4b 로 나눈다.**
+- **원래** — 다섯 PR 이고 넷째가 「verifier 제거 + 파이프라인 합치기」 하나다.
+- **재결정** — 넷째를 둘로 쪼갠다. 4a 는 오늘의 두 게이트 구조 «안»에서 판정자만 바꾸고(비-breaking),
+  4b 가 게이트를 합친다(breaking).
+- **근거** — PR3 가 사본 · AC17 · AC22 · 변환 계층을 PR4 로 넘겼고(PR3 계획 R-D), 실측한 PR4 의 크기가
+  이 절이 분할한 이유(「한 PR 에 담으면 리뷰가 실질을 못 본다」)를 그대로 재현했다 — 삭제 에이전트 둘 ·
+  테스트 삭제 ~10 · 수정 ~12 · SKILL 962줄 · 레퍼런스 1218줄 재작성에 새 모듈 · 새 락까지. 사람(사용자)이
+  이 재결정에 동의했다.
+- **남는 것** — 선언 조각이 `#pr4a` · `#pr4b` 둘이 된다. 아래 「PR4」를 가리키는 문장(AC23 의 매핑 표
+  제거 등)은 **verifier 가 사라지는 4b** 를 뜻한다 — 매핑 표의 산출자가 거기서 죽는다.
 
 **각 PR 은 자기 `Spec:` 조각을 선언한다**(§6.2.1) — `…-design.md#pr1` … `#pr5`. 같은 값을 쓰면
 PR2~5 가 앞 PR 전부를 합집합으로 재리뷰해 분할이 비용을 **늘린다**.
@@ -976,7 +988,7 @@ PR2~5 가 앞 PR 전부를 합집합으로 재리뷰해 분할이 비용을 **�
   매핑 표도 같이 지운다 — 그 삭제를 PR4 의 체크리스트에 명시한다.
 - 매핑 표가 PR5 까지 살아남으면 그 자체가 결함이다(AC23).
 
-**계획 단위는 PR 하나에 계획 하나다.** `superpowers:writing-plans` 를 다섯 번 부른다 — 다섯을 한
+**계획 단위는 PR 하나에 계획 하나다.** `superpowers:writing-plans` 를 PR 수만큼(4a·4b 분할 뒤 여섯) 부른다 — 여럿을 한
 계획으로 받으면 §16 이 분할한 이유가 계획 층에서 다시 붕괴한다. 각 계획은 그 PR 의 AC 부분집합만
 받고, 앞 PR 의 산출물을 전제로 적는다.
 

@@ -17,6 +17,7 @@ EXPECTED_ORDER=(
   # Group 2 — Review gate scripts
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)'
+  'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/recritic_bridge.py:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py:*)'
   # Group 3 — Runtime gate scripts
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh:*)'

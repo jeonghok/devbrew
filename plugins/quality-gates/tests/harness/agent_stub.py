@@ -24,10 +24,15 @@ its docstring below), never a file path. These tests assert that the
 *fixture* satisfies the *schema*; they cannot detect the agent .md file
 drifting away from either one (wording changes, a renamed severity level,
 a dropped required field in the real prompt). That is a deliberate,
-narrow contract, not an oversight — but it does mean "29 tests covering
-adversarial/security-reviewer/runtime-verifier/test-scope-validator"
+narrow contract, not an oversight — but it does mean "tests covering
+security-reviewer/runtime-verifier/test-scope-validator"
 should not be read as agent-drift protection. If that coverage is ever
 wanted, it needs a test that actually reads the corresponding agents/*.md.
+(PR4a: `quality-gates:adversarial` was deleted and replaced by Phase 1.5
+re-critique, `quality-gates:doc-recritic` — a byte-for-byte copy-of the
+shared persona. It is NOT covered by this stub scheme; its drift guard is
+`shared/tests/test_copy_of_contract.sh`, not a test_*_behavior.py file
+here.)
 """
 from __future__ import annotations
 

@@ -156,6 +156,10 @@ case_synth_self_adjudication_is_atomic_failure() {
   assert_eq "$out" ""  "실패 경로의 stdout 이 비어 있다 (fail4 는 원자적이다)"
   # 원인을 핀한다 — rc 4 + 빈 stdout 은 어느 fail4 든 만든다(수행자 문법 오류도).
   assert_contains "$(cat "$T/err")" "AC10a" "exit 4 의 원인이 AC10a 다 (다른 fail4 가 아니다)"
+  # 재비판 Important 2 — 신원 계약 메시지도 "AC10a" 를 포함하므로 위 단언만으로는
+  # 원인이 자기 판정인지 신원 계약인지 못 가른다. 이 픽스처는 저자가 문법 안이므로
+  # 원인은 자기 판정이어야 한다.
+  assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (신원 계약이 아니다)"
   rm -rf "$T"
 }
 
@@ -198,10 +202,15 @@ case_synth_suppressed_finding_still_counts_as_authored() {
   assert_eq "$rc" "4" "억제된 finding 만 낸 리뷰어에게 판정 각도를 접어도 exit 4 (R-H)"
   assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다"
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다"
+  # 재비판 Important 2 — 원인이 자기 판정임을 따로 핀한다(신원 계약 메시지와
+  # AC10a 문구가 겹친다).
+  assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (억제된 finding)"
   rm -rf "$T"
 }
 
-# mk_rejected <디렉토리> <저자> — <저자> 의 유일한 finding 을 adversarial 이 기각한 입력.
+# mk_rejected <디렉토리> <저자> — <저자> 의 유일한 finding 을 판정자가 기각한 입력
+# (픽스처 파일명 `adv.yaml`·플래그 `--adversarial`·`author="adversarial"` 기본값은
+# R-N 으로 리터럴 유지 — PR4a 가 대체한 것은 디스패치되는 agent 뿐이다).
 mk_rejected() {
   printf 'verdicts:\n  - {finding_id: %s-a.py-1, verdict: reject}\n' "$2" > "$1/adv.yaml"
   printf -- '- {agent: %s, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: rejected-one, proposed_fix: f}\n' "$2" > "$1/f.yaml"
@@ -226,15 +235,19 @@ case_synth_rejected_finding_still_counts_as_authored() {
   assert_eq "$rc" "4" "기각된 finding 만 낸 리뷰어에게 판정 각도를 접어도 exit 4 (AC10a)"
   assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다"
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다"
+  # 재비판 Important 2 — 원인이 자기 판정임을 따로 핀한다.
+  assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (기각된 finding)"
   rm -rf "$T"
 }
 
 case_synth_reviewer_sources_do_not_displace_agent() {
   # 판정 적용 전 입력의 `sources` 는 리뷰어가 준 비신뢰 값이다. 그것이 `agent` 를
   # 대신하면 기각된 finding 에 `sources: [다른-이름]` 만 적어도 AC10a 가 조용해진다.
-  # 리스트 아닌 참 값(`{a: 1}`)도 같은 방식으로 `agent` 를 가릴 수 있다 — 둘 다 잰다.
+  # 리스트 아닌 참 값(문법 안 스칼라 `someone-else`)도 같은 방식으로 `agent` 를
+  # 가릴 수 있다 — 둘 다 잰다. 문법 «밖» 값(`{a: 1}`)은 이제 신원 계약이 먼저
+  # 잡는다 — 그 모양은 `case_synth_author_identity_is_grammar_checked` 가 잰다.
   local T srcs off out rc
-  for srcs in '[someone-else]' '{a: 1}'; do
+  for srcs in '[someone-else]' 'someone-else'; do
     T=$(mktemp -d); mk_rejected "$T" scout
     printf -- '- {agent: scout, sources: %s, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: rejected-one, proposed_fix: f}\n' "$srcs" > "$T/f.yaml"
     off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
@@ -246,6 +259,8 @@ case_synth_reviewer_sources_do_not_displace_agent() {
     assert_eq "$rc" "4" "sources=$srcs 가 agent 를 가리지 않는다 — 기각된 finding 의 저자에게 접으면 exit 4"
     assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다 (sources=$srcs)"
     assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다 (sources=$srcs)"
+    # 재비판 Important 2 — 원인이 자기 판정임을 따로 핀한다.
+    assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (sources=$srcs)"
     rm -rf "$T"
   done
 }
@@ -268,6 +283,8 @@ case_synth_promoted_finding_counts_as_authored() {
   assert_eq "$rc" "4" "승격된 finding 의 저자에게 판정 각도를 접으면 exit 4 (AC10a)"
   assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다"
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다"
+  # 재비판 Important 2 — 원인이 자기 판정임을 따로 핀한다.
+  assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (승격분)"
   # 억제된 승격분 — `raw` 에 없고 억제 뒤 `kept` 에도 없다. dedup 뒤 목록만 이 저자를
   # 본다. 저자를 `kept + raw` 에서 뽑는 변이(억제분 제외)를 이것만 가른다.
   printf 'verdicts: []\nnew_findings:\n  - {file: b.py, line: 2, severity: SUGGESTION, confidence: 3, summary: promoted-low}\n' > "$T/adv.yaml"
@@ -278,6 +295,8 @@ case_synth_promoted_finding_counts_as_authored() {
   assert_eq "$rc" "4" "억제된 승격분의 저자에게 접어도 exit 4 (R-H)"
   assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다 (억제된 승격분)"
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다 (억제된 승격분)"
+  # 재비판 Important 2 — 원인이 자기 판정임을 따로 핀한다.
+  assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (억제된 승격분)"
   rm -rf "$T"
 }
 
@@ -327,6 +346,269 @@ case_synth_primary_source_death_is_angle_absent() {
   assert_grep     "$out" '^reason: angle-absent$'   "사유가 angle-absent 다 (findings-lost 가 아니다)"
   assert_not_grep "$out" '^reason: findings-lost$'  "항목 소실로 오보고하지 않는다"
   rm -rf "$T"
+}
+
+case_synth_missing_adjudicator_doc_is_angle_absent() {
+  # 부채 A (PR3 최종 리뷰) — 판정자 문서 경로를 줬는데 파일이 없다. 전에는
+  # `load_yaml_doc` 이 None 을 돌려 「판정자를 안 썼다」와 같아졌고, finding 이
+  # 0 이면 그대로 `clean` 이었다. 이제 주 입력 실패다(§6.4.3 — angle-absent).
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/f.yaml"
+  local out rc=0
+  out=$(python3 "$SYNTH" --adversarial "$T/gone.yaml" --findings "$T/f.yaml" --emit-verdict) || rc=$?
+  assert_eq "$rc" "0" "판정자 문서 부재는 호출 오류가 아니다 (rc 0)"
+  assert_grep     "$out" '^verdict: not-certified$' "판정자 문서가 없으면 clean 이 아니다"
+  assert_grep     "$out" '^reason: angle-absent$'   "사유는 angle-absent 다"
+  assert_not_grep "$out" '^verdict: clean$'         "clean 으로 렌더되지 않는다"
+  rm -rf "$T"
+}
+
+case_synth_unusable_adjudicator_doc_is_angle_absent() {
+  # 부채 A 의 형제들 — 빈 파일 · YAML 파손 · 스칼라 · 비-UTF-8. 넷 다 「판정자가
+  # 아무것도 남기지 않았다」이고, 넷 다 traceback(exit 1)이 아니라 rc 0 + 미판정이다.
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/f.yaml"
+  : > "$T/empty.yaml"
+  printf 'verdicts: [\n' > "$T/broken.yaml"
+  printf '5\n' > "$T/scalar.yaml"
+  printf 'verdicts: []\n# \xff\xfe\n' > "$T/nonutf8.yaml"
+  local k out rc
+  for k in empty broken scalar nonutf8; do
+    rc=0
+    out=$(python3 "$SYNTH" --adversarial "$T/$k.yaml" --findings "$T/f.yaml" --emit-verdict 2>/dev/null) || rc=$?
+    assert_eq "$rc" "0" "판정자 문서 '$k' — rc 0 (traceback 이 아니다)"
+    assert_grep "$out" '^reason: angle-absent$' "판정자 문서 '$k' — angle-absent"
+  done
+  rm -rf "$T"
+}
+
+case_synth_dead_adjudicator_with_findings_is_not_findings_lost() {
+  # 계획 R-K — 판정자 사망은 한 사건이다. finding 이 있어도 항목마다 「판정자 부재」
+  # 보류를 쌓지 않는다. 전에는 그 보류가 `findings-lost` 를 켜서 열거 순서상 먼저
+  # 나갔다. finding 이 살아 있으므로 판정은 defect 이고, 사유 목록에는 angle-absent
+  # 만 있어야 한다.
+  local T; T=$(mktemp -d)
+  cat > "$T/f.yaml" <<'YAML'
+- agent: scout
+  file: a.py
+  line: 3
+  severity: IMPORTANT
+  confidence: 8
+  summary: "x"
+YAML
+  local out
+  out=$(python3 "$SYNTH" --adversarial "$T/gone.yaml" --findings "$T/f.yaml" --emit-verdict)
+  assert_grep     "$out" '^verdict: defect$'              "finding 은 살아남는다 (사람 쪽 fail-open)"
+  assert_grep     "$out" '^reasons: \[angle-absent\]$'    "사유 목록은 angle-absent 하나다"
+  assert_not_grep "$out" 'findings-lost'                  "항목 소실로 세지 않는다 (R-K)"
+  rm -rf "$T"
+}
+
+case_synth_adjudicator_given_but_absent_differs_from_not_given() {
+  # 대조 — 판정자 경로를 «안 준» 실행은 사망이 아니다(오늘 동작 그대로). finding 0
+  # 이면 clean 이다. 이 짝이 없으면 「경로 유무와 무관하게 전부 미판정」으로 구현해도
+  # 위 케이스들이 통과한다.
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/f.yaml"
+  local out
+  out=$(python3 "$SYNTH" --findings "$T/f.yaml" --emit-verdict)
+  assert_grep "$out" '^verdict: clean$' "판정자 경로를 안 주면 사망이 아니다 (finding 0 → clean)"
+  rm -rf "$T"
+}
+
+case_synth_effective_angles_show_the_dead_source() {
+  # 계획 R-L — 선언은 filled 인데 판정자가 죽었다. 꼬리는 자기모순이면 안 된다:
+  # 실효 상태 `absent(source-failed)` 가 angles: 블록에 서고, 그 아래 사유가
+  # angle-absent 다. finding 파일이 죽으면 보안 각도가 같은 표시를 받는다.
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/f.yaml"
+  printf 'verdicts: []\n' > "$T/adv.yaml"
+  local f="$T/angles.txt" out
+  write_angles "$f" "security: filled" "adjudication: filled" "different-premise: filled"
+  out=$(python3 "$SYNTH" --adversarial "$T/gone.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f")
+  assert_grep     "$out" '^  adjudication: absent\(source-failed\)$' "판정자 사망이 판정 각도의 실효 상태로 보인다"
+  assert_grep     "$out" '^  security: filled$'                      "살아 있는 축은 선언 그대로다"
+  assert_not_grep "$out" '^  adjudication: filled$'                  "죽은 축을 filled 로 싣지 않는다 (자기모순 없음)"
+  assert_grep     "$out" '^reason: angle-absent$'                    "사유와 각도 블록이 같은 사실을 말한다 (판정자 사망)"
+  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/gone.yaml" --emit-verdict --angles "$f")
+  assert_grep     "$out" '^  security: absent\(source-failed\)$'     "finding 파일 사망은 보안 각도의 실효 상태다"
+  assert_grep     "$out" '^  adjudication: filled$'                  "판정자는 살아 있다"
+  assert_grep     "$out" '^reason: angle-absent$'                    "사유와 각도 블록이 같은 사실을 말한다"
+  rm -rf "$T"
+}
+
+case_synth_dead_adjudicator_does_not_launder_self_adjudication() {
+  # 계획 R-L 의 경계 — AC10a 는 «선언»에 건다. 판정자가 죽어 실효 상태가
+  # `absent(source-failed)` 로 덮여도, 선언이 자기 판정(`folded_into:<그 실행의 저자>`)
+  # 이면 거부해야 한다. 실효 상태에 걸면 판정자 사망이 Law 2 위반 선언을 «세탁»한다
+  # (계획 모의 실행 변이 6b 가 rc 4 → rc 0 · `verdict: defect` 로 측정한 구멍).
+  local T; T=$(mktemp -d)
+  printf -- '- agent: security-reviewer\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  local f="$T/angles.txt" out rc=0 err
+  write_angles "$f" "security: filled" "adjudication: folded_into:security-reviewer" "different-premise: filled"
+  out=$(python3 "$SYNTH" --adversarial "$T/gone.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  err="$(cat "$T/err")"
+  assert_eq       "$rc"  "4"                   "판정자가 죽어도 자기 판정 선언은 exit 4"
+  assert_eq       "$out" ""                    "실패는 원자적이다 (빈 stdout)"
+  assert_contains "$err" "자기 finding 자기 판정" "원인이 자기 판정이다 (실효 상태로 세탁되지 않는다)"
+  rm -rf "$T"
+}
+
+case_dead_sources_only_for_blocking_angles() {
+  # `with_dead_sources` 는 막는 각도만 받는다 — 다른 전제 각도의 사망은 차단 축이 아니다
+  # (AC12). 합성기는 그 이름을 넘기지 않으므로 이 가드는 모듈 API 수준에서만 잴 수 있다
+  # (모의 실행 변이 8 — 합성기 경로로는 GREEN 이었다).
+  local rc=0
+  python3 -c "
+import sys; sys.path.insert(0, '$PLUGIN_ROOT/scripts'); import angles
+angles.with_dead_sources({'security': 'filled', 'adjudication': 'filled', 'different-premise': 'filled'}, ['different-premise'])
+" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "4" "막는 각도가 아닌 이름을 사망으로 얹으면 exit 4"
+}
+
+case_orchestrator_may_declare_source_failed() {
+  # 계획 R-L — `absent(source-failed)` 는 문법 «안»의 값이다. 오케스트레이터도
+  # 「디스패치했는데 아무것도 안 돌아왔다」를 그 값으로 적을 수 있다.
+  local f="$TMP/sf.txt" out rc=0
+  write_angles "$f" "security: filled" "adjudication: absent(source-failed)" "different-premise: filled"
+  out="$(python3 "$A" --angles "$f")" || rc=$?
+  assert_eq   "$rc" "0" "absent(source-failed) 는 문법 안이다"
+  assert_grep "$out" '^angle_absent: true$' "판정 각도의 source-failed 는 막는다"
+}
+
+case_synth_author_identity_is_grammar_checked() {
+  # 부채 B (PR3 최종 리뷰) — 수행자 쪽만 문법(`_PERFORMER`)을 검사하고 저자 쪽은 안
+  # 했다. finding `agent: Security-Reviewer` 에 판정 각도를
+  # `folded_into:security-reviewer` 로 접으면 두 문자열이 달라 AC10a 가 조용히
+  # 통과했다(대문자 한 글자로 자기 판정). 이제 저자 이름이 문법 밖이면 판정 자체를
+  # 거부한다(R-M — 정규화하지 않는다: 접는 것은 추측이다).
+  local T; T=$(mktemp -d)
+  printf 'verdicts: []\n' > "$T/adv.yaml"
+  local f="$T/angles.txt" name out err rc
+  write_angles "$f" "security: filled" "adjudication: folded_into:security-reviewer" "different-premise: filled"
+  # 재비판 Important 1 — trailing \n. 파이썬 `$`(fullmatch 아닌 match)는 마지막
+  # \n 앞에서도 서므로 `"security-reviewer\n"` 가 문법 안으로 오판됐다(성능자
+  # 토큰과 다른 문자열인데도). 이름 목록에 그 값을 더한다 — 아래 loop 는
+  # `%s` 치환이라 셸 변수의 리터럴 `\n`(역슬래시+n, 두 글자)이 YAML 큰따옴표
+  # 이스케이프로 그대로 실려 PyYAML 이 실제 개행으로 읽는다.
+  for name in 'Security-Reviewer' 'quality-gates:security-reviewer' 'security_reviewer' 'security reviewer' 'security-reviewer\n'; do
+    printf -- '- agent: "%s"\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' "$name" > "$T/f.yaml"
+    rc=0
+    out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+    err="$(cat "$T/err")"
+    assert_eq       "$rc"  "4"      "저자 '$name' 는 문법 밖이라 exit 4"
+    assert_eq       "$out" ""       "저자 '$name' — 실패는 원자적이다 (빈 stdout)"
+    assert_contains "$err" "AC10a"  "저자 '$name' — 원인이 AC10a 신원 계약이다"
+  done
+  # 모의 실행 A1 — sources 가 리스트 아닌 참 값(모양 {a: 1})이면 str() 이 문법 밖
+  # 문자열을 만든다. agent 자체는 문법 안이어도 신원 계약이 여전히 막는다.
+  # Task 7 row 11 재비판 — agent 를 이 함수의 선언된 자기판정 수행자
+  # (`folded_into:security-reviewer`)와 «다른» 문법-안 이름(code-reviewer)으로
+  # 둔다. 원래 `agent: security-reviewer` 를 쓰면 이 finding 이 «동시에» 자기
+  # 판정 위반도 만들어 check_author_identity/check_self_adjudication 호출
+  # 순서에 이 assert_contains 의 관측이 우연히 얹힌다(둘 다 exit 4 지만 메시지가
+  # 갈린다) — 이 사례가 재려는 것은 신원 «문법» 위반이지 자기판정이 아니다.
+  printf -- '- agent: code-reviewer\n  sources: {a: 1}\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  rc=0
+  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  err="$(cat "$T/err")"
+  assert_eq       "$rc"  "4"          "sources={a: 1} 도 문법 밖 저자를 만든다"
+  assert_eq       "$out" ""           "실패는 원자적이다 (sources={a: 1})"
+  assert_contains "$err" "AC10a"      "원인이 AC10a 다 (sources={a: 1})"
+  assert_contains "$err" "문법 밖 저자" "메시지가 문법 밖 저자를 댄다 (sources={a: 1})"
+  # 재비판 Important 1 형제 — sources 채널의 같은 trailing \n 우회. agent(scout)는
+  # 문법 안이어도 sources 에 섞인 trailing \n 값이 신원 계약을 여전히 막아야 한다.
+  # `\\n`(printf 포맷 문자열 안의 이중 역슬래시)가 printf 자체 이스케이프를 한 겹
+  # 통과해 파일에는 리터럴 `\n`(역슬래시+n) 두 글자로 남는다 — YAML 이 그것을
+  # 개행으로 읽는다.
+  printf -- '- agent: scout\n  sources: ["security-reviewer\\n"]\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  rc=0
+  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  err="$(cat "$T/err")"
+  assert_eq       "$rc"  "4"     "sources 의 trailing \\n 도 exit 4"
+  assert_eq       "$out" ""      "실패는 원자적이다 (sources trailing \\n)"
+  assert_contains "$err" "AC10a" "원인이 AC10a 다 (sources trailing \\n)"
+  # 재비판 Important 1 형제 — 블록 스칼라(`agent: |`)로 적은 trailing \n. 큰따옴표
+  # 이스케이프가 아니라 YAML 리터럴 블록 문법이 같은 문자열("security-reviewer\n")을
+  # 낸다 — 저자를 어떻게 «적었는지»와 무관하게 신원 계약이 막아야 한다.
+  printf -- '- agent: |\n    security-reviewer\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  rc=0
+  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  err="$(cat "$T/err")"
+  assert_eq       "$rc"  "4"     "block-scalar agent 의 trailing \\n 도 exit 4"
+  assert_eq       "$out" ""      "실패는 원자적이다 (block-scalar agent)"
+  assert_contains "$err" "AC10a" "원인이 AC10a 다 (block-scalar agent)"
+  rm -rf "$T"
+}
+
+case_synth_finding_without_agent_is_rejected_under_angles() {
+  # R-M — `agent:` 를 뺀 finding 은 저자가 없다. 건너뛰면 리뷰어가 `agent:` 를 빼는
+  # 것만으로 자기 판정이 된다(PR3 가 닫은 sources 우회와 같은 모양).
+  local T; T=$(mktemp -d)
+  printf 'verdicts: []\n' > "$T/adv.yaml"
+  printf -- '- file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  local f="$T/angles.txt" rc=0 err
+  write_angles "$f" "security: filled" "adjudication: filled" "different-premise: filled"
+  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" >/dev/null 2>"$T/err" || rc=$?
+  err="$(cat "$T/err")"
+  assert_eq       "$rc"  "4"     "agent 없는 finding 은 --angles 아래서 exit 4"
+  assert_contains "$err" "AC10a" "원인이 AC10a 신원 계약이다"
+  # 대조 — --angles 가 없으면 신원 계약은 서지 않는다(오늘 동작 그대로)
+  rc=0
+  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "0" "--angles 없이는 agent 없는 finding 도 통과한다 (계약은 각도 축의 것)"
+  # 재비판 Minor — YAML `null`(agent: null)은 `f.get("agent")` 가 파이썬 `None` 을
+  # 낸다. `str(None)` == 'None' 을 문법 밖 저자로 잘못 세면 `null` 도 「agent 없음」과
+  # 같은 사건인데 다른 경로(신원 불량)로 잘못 분류된다.
+  printf -- '- agent: null\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  rc=0
+  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" >/dev/null 2>"$T/err" || rc=$?
+  err="$(cat "$T/err")"
+  assert_eq           "$rc"  "4"     "agent: null 도 --angles 아래서 exit 4 (missing_agent 로 센다)"
+  assert_contains     "$err" "AC10a" "원인이 AC10a 신원 계약이다 (agent: null)"
+  assert_not_contains "$err" "'None'" "None 을 문법 밖 저자로 잘못 나열하지 않는다"
+  # 재비판 라운드 2 — 위 가드는 «agent 도 None 인» sources 의 None 만 눌러야 한다.
+  # agent 가 문법 안(security-reviewer)인데 리뷰어가 `sources: [null]` 을 직접
+  # 적으면 그 None 은 dedup 파생물이 아니라 비신뢰 필드 그 자체다(R-M) — 문법 밖
+  # 저자로 여전히 막아야 한다. 이전 가드(`if s is not None`)는 이 경우도 조용히
+  # 통과시켰다(rc 0 + verdict: defect, 재비판이 측정).
+  printf -- '- agent: security-reviewer\n  sources: [null]\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  local out2; rc=0
+  out2=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  err="$(cat "$T/err")"
+  assert_eq       "$rc"   "4"     "agent 는 문법 안인데 sources: [null] 이면 여전히 exit 4"
+  assert_eq       "$out2" ""      "실패는 원자적이다 (sources: [null])"
+  assert_contains "$err"  "AC10a" "원인이 AC10a 신원 계약이다 (sources: [null])"
+  rm -rf "$T"
+}
+
+case_synth_well_formed_authors_pass_identity() {
+  # 양성 짝 — 문법 안의 저자만 있으면 신원 검사는 조용하다. 이 짝이 없으면
+  # 「--angles 면 무조건 exit 4」로 구현해도 위 두 케이스가 통과한다.
+  local T; T=$(mktemp -d)
+  printf 'verdicts: []\n' > "$T/adv.yaml"
+  printf -- '- agent: security-reviewer\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n  sources: [security-reviewer, codex]\n' > "$T/f.yaml"
+  local f="$T/angles.txt" rc=0 out
+  write_angles "$f" "security: filled" "adjudication: filled" "different-premise: filled"
+  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f") || rc=$?
+  assert_eq   "$rc" "0" "문법 안의 저자(agent · sources)는 통과한다"
+  assert_grep "$out" '^verdict: defect$' "판정이 선다"
+  rm -rf "$T"
+}
+
+case_reviewer_persona_agent_literal_is_its_name() {
+  # 계약의 리뷰어 쪽 — 페르소나가 출력 형식에 박는 `agent:` 리터럴이 그 agent 의
+  # frontmatter `name:` 과 같고 문법 안이어야 한다. 다르면 오케스트레이터가 찍는
+  # 수행자 토큰(=name)과 finding 의 저자가 갈려 AC10a 가 조용해진다.
+  local p="$PLUGIN_ROOT/agents/security-reviewer.md" name lit
+  name="$(sed -n 's/^name:[[:space:]]*//p' "$p" | head -1)"
+  lit="$(sed -n 's/^- agent:[[:space:]]*//p' "$p" | head -1)"
+  assert_eq "$lit" "$name" "security-reviewer 의 출력 형식 agent: 가 frontmatter name: 과 같다"
+  if printf '%s\n' "$lit" | grep -qE '^[a-z0-9-]+$'; then
+    ok "security-reviewer 의 agent: 가 수행자 문법 안이다"
+  else
+    no "security-reviewer 의 agent: 가 수행자 문법 밖이다: '$lit'"
+  fi
 }
 
 case_all_three_filled_is_ok() {
@@ -444,13 +726,12 @@ case_comment_and_blank_lines_are_skipped() {
   assert_grep "$out" '^  security: filled$' "주석 속 상태는 읽히지 않는다"
 }
 
-case_absent_reasons_are_exactly_two() {
-  # 사유 열거 자체를 핀한다(컨트롤러 ruling T2-a). 위 문법 케이스는 사유를 모듈에서
-  # «도출»해 돌므로, 열거에 사유를 하나 더 넣어도 도출이 함께 늘어 GREEN 이었다 —
-  # 닫힌 열거가 조용히 넓어지는 경로다.
-  local got; got="$(printf '%s\n' "$REASONS" | sort | tr '\n' ' ')"
-  assert_eq "$got" "not-derived not-installed " \
-    "부재 사유는 not-installed · not-derived 둘뿐이다 (T2-a)"
+case_absent_reasons_are_exactly_three() {
+  # 리터럴 핀 — 모듈에서 도출하면 사유를 몰래 넓히는 변이와 함께 늘어난다(PR3 변이 23).
+  # 셋째 `source-failed` 는 계획 R-L: 관측된 주 입력 사망을 선언 위에 얹는 값이다.
+  assert_eq "$(printf '%s\n' "$REASONS" | sort | tr '\n' ' ')" \
+            "not-derived not-installed source-failed " \
+            "부재 사유는 not-installed · not-derived · source-failed 셋뿐이다"
 }
 
 case_blocking_angles_are_exactly_two() {
@@ -593,7 +874,7 @@ case_unknown_angle_is_fail_closed
 case_duplicate_angle_is_fail_closed
 case_malformed_extra_line_is_fail_closed
 case_comment_and_blank_lines_are_skipped
-case_absent_reasons_are_exactly_two
+case_absent_reasons_are_exactly_three
 case_blocking_angles_are_exactly_two
 case_absent_blocking_angle_sets_the_flag
 case_absent_non_blocking_angle_discloses_only
@@ -618,4 +899,16 @@ case_synth_promoted_finding_counts_as_authored
 case_synth_rejected_finding_of_another_reviewer_is_ok
 case_synth_angles_flag_hygiene
 case_synth_primary_source_death_is_angle_absent
+case_synth_missing_adjudicator_doc_is_angle_absent
+case_synth_unusable_adjudicator_doc_is_angle_absent
+case_synth_dead_adjudicator_with_findings_is_not_findings_lost
+case_synth_adjudicator_given_but_absent_differs_from_not_given
+case_synth_effective_angles_show_the_dead_source
+case_synth_dead_adjudicator_does_not_launder_self_adjudication
+case_dead_sources_only_for_blocking_angles
+case_orchestrator_may_declare_source_failed
+case_synth_author_identity_is_grammar_checked
+case_synth_finding_without_agent_is_rejected_under_angles
+case_synth_well_formed_authors_pass_identity
+case_reviewer_persona_agent_literal_is_its_name
 finish

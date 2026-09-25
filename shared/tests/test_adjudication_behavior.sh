@@ -48,6 +48,16 @@ assert_eq "$out" "False" "coerced(gate=False) 는 degraded 가 아니다"
 out="$(run 'from adjudication import Ledger
 L = Ledger(); L.coerced("raised_count", 5, 0, gate=True); print(L.report()["degraded"])')"
 assert_eq "$out" "True" "coerced(gate=True) 는 degraded 다"
+# reasons() 의 문면 — docreview case 들(cases.sh 의 I4 쌍)이 「이 강제는 게이트 변경이 아니다」를
+# 이 접두의 «부재»로 잰다. 그 부재 검사는 접두가 바뀌면 조용히 공허해지므로 여기서 양으로 핀한다.
+out="$(run 'from adjudication import Ledger
+L = Ledger(); L.coerced("if_unfixed", "a\nb", "a b", gate=True)
+print(sum(r.startswith("강제(게이트 변경): if_unfixed") for r in L.reasons()))')"
+assert_eq "$out" "1" "coerced(gate=True) 는 reasons() 에 「강제(게이트 변경): <칸>」 한 줄을 낸다 (부재 검사의 양의 짝)"
+out="$(run 'from adjudication import Ledger
+L = Ledger(); L.coerced("if_unfixed", "a\nb", "a b", gate=False)
+print(sum(r.startswith("강제(게이트 변경)") for r in L.reasons()))')"
+assert_eq "$out" "0" "coerced(gate=False) 는 reasons() 에 게이트 변경 줄을 내지 않는다"
 
 # ── 4. 원리적 미상은 unknown_counts 로 가고 정수 칸엔 안 들어간다
 out="$(run 'from adjudication import Ledger

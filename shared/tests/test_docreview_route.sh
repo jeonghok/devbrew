@@ -83,4 +83,6 @@ case_gate_head_and_grouping
 case_gate_grouping_marker
 case_recritic_added_carries_fields
 case_I4_replacement_newline_collapsed
+case_I4_if_unfixed_newline_collapsed
+case_category_unglossed_disclosed
 finish

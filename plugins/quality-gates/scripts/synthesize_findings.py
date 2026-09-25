@@ -2,13 +2,17 @@
 """Synthesizer (T3-2 refactor) — deterministic finding aggregator.
 
 Replaces agents/synthesizer.md Agent dispatch. The algorithm is fully
-deterministic (no LLM judgment): apply Adversarial verdicts → group/dedup
+deterministic (no LLM judgment): apply adjudicator verdicts → group/dedup
 by (file,line,severity) → suppress non-CRITICAL confidence<=4 (CRITICAL always
 kept; confidence 5-6 shown with a `*` caveat) → sort severity-desc /
 confidence-desc / file-asc → render Markdown table.
 
 Inputs (CLI args):
-  --adversarial PATH   YAML file with `verdicts: [...]` (or top-level list)
+  --adversarial PATH   판정자 문서(옛 모양): `verdicts: [...]` (+ `new_findings:`)
+  --recritic PATH      재비판자(doc-recritic) 응답 원문 — `--recritic-map` 과 함께.
+                       `--adversarial` 과 함께 줄 수 없다
+  --recritic-map PATH  `recritic_bridge.py prepare` 가 쓴 역매핑 JSON
+  --recritic-diff PATH 재비판자에게 준 diff (선택 — added 의 file 도출에만)
   --findings PATH      YAML file with list of raw findings
 
 Output (stdout): Markdown matching agents/synthesizer.md schema.
@@ -22,13 +26,34 @@ from adjudication import Ledger
 from render_disposition import disposition_lines
 import angles as _angles
 import verdict as _verdict          # 새 책임은 새 모듈 — 여기는 진입점일 뿐이다
+import recritic_bridge as _bridge   # 재비판 변환 계층 — 같은 프로세스·같은 원장(PR4a R-N)
 
 
 SEV_ORDER = {"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 2}
 
 
-def load_yaml(path, ledger=None):
-    """Return `(list, dropped)` — 이 경로도 `_as_list` 초크포인트를 통과한다.
+def _read_source(path, ledger=None):
+    """경로가 «주어진» YAML 을 읽는다. Returns `(data, dead)`.
+
+    못 읽는 것은 전부 **주 입력 실패**다 — 파일 없음·권한(`OSError`), 비-UTF-8
+    (`UnicodeDecodeError` 는 `ValueError` 의 하위라 `OSError` 절이 안 잡는다),
+    YAML 파손(`yaml.YAMLError`). 예전에는 `FileNotFoundError` 만 잡아 나머지 셋이
+    raw traceback + exit 1 로 0/2/4 계약을 탈출했다.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            return yaml.safe_load(f), False
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        why = type(exc).__name__
+        if ledger is not None:
+            ledger.source_failed(str(path), why, primary=True)
+        print(f"[synthesize_findings] 입력을 읽지 못했다: {path} ({why}) "
+              "— 이 축의 주 입력 실패다", file=sys.stderr)
+        return None, True
+
+
+def load_findings(path, ledger=None):
+    """Return `(list, dropped, dead)` — `dead` 는 «경로를 줬는데» 못 읽었다는 뜻이다.
 
     예전에는 여기서만 `or []`로 끝나서 `findings: "CRITICAL: ..."` 같은 스칼라가
     그대로 반환되고 apply_verdicts가 **글자 단위로** 순회했다(문자 하나당 드롭 1건).
@@ -43,36 +68,57 @@ def load_yaml(path, ledger=None):
     if not path:
         # 경로가 아예 없다 — 실패가 아니다. 여기서 source_failed 를 올리면
         # 정상 실행이 degraded 가 된다.
-        return [], 0
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = yaml.safe_load(f) or []
-    except FileNotFoundError:
-        # 경로는 주어졌는데 파일이 없다 — 입력 실패다.
-        if ledger is not None:
-            ledger.source_failed(str(path), "FileNotFoundError", primary=True)
-        return [], 0
+        return [], 0, False
+    data, dead = _read_source(path, ledger)
+    if dead:
+        return [], 0, True
+    # 빈 finding 파일은 「발견 0」이다 — 실패가 아니다. 판정자 문서와 다르다
+    # (`load_yaml_doc` 참고): 탐지 리뷰어는 정당하게 아무것도 안 낼 수 있다.
+    data = data or []
     if isinstance(data, dict) and "verdicts" in data:
-        return _as_list(data.get("verdicts"), "verdicts", ledger)
-    if isinstance(data, dict) and "findings" in data:
-        return _as_list(data.get("findings"), "findings", ledger)
-    return _as_list(data, "findings document", ledger)
+        items, dropped = _as_list(data.get("verdicts"), "verdicts", ledger)
+    elif isinstance(data, dict) and "findings" in data:
+        items, dropped = _as_list(data.get("findings"), "findings", ledger)
+    else:
+        items, dropped = _as_list(data, "findings document", ledger)
+    return items, dropped, False
 
 
-def load_yaml_doc(path):
-    """Load a YAML file and return the raw parsed document (no key flattening).
+def load_yaml(path, ledger=None):
+    """`load_findings` 의 앞 둘 — `(list, dropped)`. 기존 호출자의 계약."""
+    items, dropped, _dead = load_findings(path, ledger)
+    return items, dropped
 
-    load_yaml() flattens `{verdicts: [...]}` down to the list, which discards
-    every sibling key. The adversarial document now carries a second top-level
-    key (`new_findings`), so the raw document has to survive the load.
+
+def load_yaml_doc(path, ledger=None):
+    """판정자 문서를 키 평탄화 없이 읽는다. Returns `(doc, dead)`.
+
+    load_yaml() 은 `{verdicts: [...]}` 를 목록으로 평탄화해 형제 키를 버린다. 판정자
+    문서는 둘째 최상위 키(`new_findings`)를 가지므로 원형 그대로 살아야 한다.
+
+    `dead` — 경로를 줬는데 문서를 못 얻었다. 못 읽음(`_read_source`) · **빈 문서** ·
+    매핑도 목록도 아닌 값(스칼라) 전부다. 판정 각도의 유일한 판정자가 아무것도 남기지
+    않았으므로 **주 입력 실패**다(설계 §6.4.3 — 「주 판정자 사망」은 `angle-absent`).
+    예전에는 전부 `None` 으로 접혀 「이 실행은 판정자를 안 썼다」와 구별되지 않았고,
+    finding 이 0 인 실행은 그대로 `clean` 이었다(PR3 최종 리뷰 ★부채 A).
+
+    빈 문서가 finding 파일과 달리 사망인 이유: 판정자는 판정할 것이 없어도
+    `verdicts: []` 를 낸다. 빈 출력은 「판정 0」이 아니라 「출력 없음」이다.
+    경로가 아예 없으면(`not path`) 실패가 아니다 — `(None, False)`.
     """
     if not path:
-        return None
-    try:
-        with open(path, encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    except FileNotFoundError:
-        return None
+        return None, False
+    doc, dead = _read_source(path, ledger)
+    if dead:
+        return None, True
+    if isinstance(doc, (dict, list)):
+        return doc, False
+    why = "empty document" if doc is None else "expected mapping or list, got %s" % type(doc).__name__
+    if ledger is not None:
+        ledger.source_failed(str(path), why, primary=True)
+    print(f"[synthesize_findings] 판정자 문서를 쓸 수 없다: {path} ({why}) "
+          "— 판정 각도의 주 입력 실패다", file=sys.stderr)
+    return None, True
 
 
 def _as_list(value, what, ledger=None):
@@ -183,7 +229,7 @@ def finding_id(f):
 NEW_FINDING_REQUIRED = ("file", "severity", "summary")
 # 승격된 발견의 기본 confidence. suppress()의 바닥(<=4)보다는 위라 표에 실리고,
 # render()의 caveat 임계(<=6) 아래라 `*`가 붙는다 — 이 발견은 어떤 리뷰어의
-# 판정도 통과하지 않았다(adversarial 자신의 주장이다). 보이되 검증 안 됨으로
+# 판정도 통과하지 않았다(판정자 자신의 주장이다). 보이되 검증 안 됨으로
 # 표시하는 것이 정직한 인코딩이다. 리뷰어가 명시적으로 confidence를 주면 그것을 쓴다.
 NEW_FINDING_DEFAULT_CONFIDENCE = 5
 
@@ -214,8 +260,8 @@ def _conf(f):
         return NEW_FINDING_DEFAULT_CONFIDENCE
 
 
-def promote_new_findings(raw_new, existing, ledger=None):
-    """adversarial의 `new_findings:` 항목을 진짜 finding으로 승격한다.
+def promote_new_findings(raw_new, existing, ledger=None, author="adversarial"):
+    """판정자 문서의 `new_findings:` 항목을 진짜 finding으로 승격한다.
 
     Returns (promoted, dropped_malformed).
 
@@ -232,7 +278,7 @@ def promote_new_findings(raw_new, existing, ledger=None):
     항목을 그룹핑에서 **제외**한다 — 승격 이전에는 (file, line, severity) 충돌이
     언제나 "두 리뷰어가 같은 것을 봤다"라 병합이 옳았지만, 승격이 생기면서 충돌이
     "같은 줄의 *다른* 결함"일 수 있게 됐기 때문이다. 병합되면 발견 하나가 조용히
-    사라지고, 더 나쁘게는 살아남은 행의 `sources`에 adversarial이 붙어 **하지 않은
+    사라지고, 더 나쁘게는 살아남은 행의 `sources`에 판정자가 붙어 **하지 않은
     주장을 보증한 것처럼** 렌더된다(2026-08-03 재현, `test_…_promoted_findings.sh`
     케이스 5·6). 실패 방향을 소실이 아니라 중복 쪽으로 돌리는 최소 봉쇄다.
 
@@ -247,7 +293,7 @@ def promote_new_findings(raw_new, existing, ledger=None):
             dropped += 1
             if ledger is not None:
                 ledger.hold(repr(item)[:60], "항목 파손: not a mapping")
-            print("[synthesize_findings] dropped malformed adversarial finding: "
+            print("[synthesize_findings] dropped malformed promoted finding: "
                   "not a mapping", file=sys.stderr)
             continue
         missing = [k for k in NEW_FINDING_REQUIRED if not item.get(k)]
@@ -256,19 +302,22 @@ def promote_new_findings(raw_new, existing, ledger=None):
             if ledger is not None:
                 ledger.hold(repr(item.get("summary", item))[:60],
                             "항목 파손: missing %s" % ", ".join(missing))
-            print("[synthesize_findings] dropped malformed adversarial finding: "
+            print("[synthesize_findings] dropped malformed promoted finding: "
                   f"missing {', '.join(missing)}", file=sys.stderr)
             continue
         f = dict(item)
         # `sources`는 리뷰어가 준 값을 절대 믿지 않는다. render()가 Source 컬럼에
         # 그대로 찍는 유일한 키인데, 승격 항목은 dedup()의 그룹핑을 건너뛰므로
         # (`promoted: True` → passthrough) 병합이 이 값을 덮어쓸 기회조차 없다.
-        # adversarial 출력에 `sources: [security-reviewer, code-reviewer]`가 실리면
+        # 판정자 출력에 `sources: [security-reviewer, code-reviewer]`가 실리면
         # **아무 리뷰어도 하지 않은 주장이 교차 보증을 받은 것처럼 렌더된다**
         # (2026-08-05 재현). `agent`만 강제하고 이 채널을 열어두면 id 참칭은 막고
         # 표시 계층의 참칭은 그대로 남는다 — 후자가 사용자에게 더 직접적이다.
         f.pop("sources", None)
-        f["agent"] = "adversarial"
+        # 승격 저자는 판정자 문서를 «낸» 쪽이다 — 입력 종류가 정한다(재비판 경로는
+        # `recritic_bridge.ADJUDICATOR`). 하드코딩하면 그 자리가 사라진 뒤 유령 저자가
+        # 되고, AC10a 의 저자 집합에 없는 이름이 섞인다(PR3 부채).
+        f["agent"] = author
         f["promoted"] = True
         # 승격 경로도 같은 초크포인트를 쓴다 — `file: [a.py]`가 truthy라 필수-키
         # 검사를 통과한 뒤 sort_findings의 raw 비교에서 TypeError를 냈다.
@@ -281,7 +330,7 @@ def promote_new_findings(raw_new, existing, ledger=None):
             while f"{base}-{suffix}" in seen:
                 suffix += 1
             fid = f"{base}-{suffix}"
-            print("[synthesize_findings] adversarial finding id collision on "
+            print("[synthesize_findings] promoted finding id collision on "
                   f"{base}; disambiguated to {fid}", file=sys.stderr)
         seen.add(fid)
         f["finding_id"] = fid
@@ -289,8 +338,8 @@ def promote_new_findings(raw_new, existing, ledger=None):
     return promoted, dropped
 
 
-def apply_verdicts(findings, verdicts, ledger=None):
-    """Apply adversarial verdicts. Returns (out, dropped_malformed).
+def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
+    """Apply adjudicator verdicts. Returns (out, dropped_malformed).
 
     `dropped`를 세는 이유: 예전에는 non-mapping finding을 맨 `continue`로 버렸다 —
     카운터도, stderr도, stdout 공지도 없이. 리뷰어가 발견을 문자열로 내면
@@ -298,12 +347,17 @@ def apply_verdicts(findings, verdicts, ledger=None):
     stdout은 `No high-confidence findings.`, exit 0이었다. 즉 **버려진 CRITICAL이
     clean으로 렌더**됐다 (2026-08-05 재현).
 
-    같은 결함을 adversarial 승격 경로에서는 이미 막아놨었다. 이 함수만 계측
+    같은 결함을 판정자 승격 경로에서는 이미 막아놨었다. 이 함수만 계측
     밖이었다 — 한쪽 출처만 세는 drop 채널은 반쪽짜리 정직성이다.
 
     #8 — `ledger`가 주어지면 판정이 없는 finding(fail-open으로 keep)을
     `hold()`로 센다. 이 채널은 위 `dropped`(non-mapping)와 다르다: 건드리지
     않고 그대로 둔다.
+
+    `adjudicator_dead` — 판정자 문서가 죽었으면(주 입력 실패가 이미 원장에 있다)
+    판정 없는 finding 을 항목마다 `hold()` 하지 않는다. 판정자 사망은 **한 사건**이고
+    그것은 `angle-absent` 로 나간다(PR4a 계획 R-K) — 항목마다 다시 세면
+    `findings-lost` 가 열거 순서상 먼저 나가 사유가 뒤바뀐다.
     """
     by_id = {v.get("finding_id"): v for v in verdicts if isinstance(v, dict)}
     out = []
@@ -325,19 +379,71 @@ def apply_verdicts(findings, verdicts, ledger=None):
             # 유지한다(fail-open — 다음 소비자가 사람이다). 다만 «세지 않으면»
             # 판정이 있었던 것과 구별되지 않는다. 형제
             # synthesize_artifact_findings.py:197 에 unadjudicated += 1 이 있다.
-            if ledger is not None:
-                ledger.hold(finding_id(f), "판정자 부재: adversarial 판정 없음")
+            # 판정자가 통째로 죽었으면 그 사실은 원장에 이미 한 번 있다(R-K).
+            if ledger is not None and not adjudicator_dead:
+                ledger.hold(finding_id(f), "판정자 부재: 판정자 판정 없음")
             out.append(f)
             continue
         verdict = v.get("verdict", "confirm")
         if verdict == "reject":
             if ledger is not None:
-                ledger.reject(finding_id(f), "adversarial 기각")
+                ledger.reject(finding_id(f), "판정자 기각")
             continue
-        if verdict == "downgrade":
+        if verdict in ("downgrade", "raise"):
+            # `raise` — 재비판자가 severity 를 «올린» 판정(PR4a 계획 R-O). 옛
+            # 판정자의 `downgrade` 와 같은 칸(`adjusted_severity`)을 쓴다.
             f = dict(f)
             if "adjusted_severity" in v:
-                f["severity"] = v["adjusted_severity"]
+                new_sev = v["adjusted_severity"]
+                if verdict == "raise":
+                    # Task 7 row 31 fix round 1 — raise-only-up guard. **`raise`
+                    # 에만** 건다 — `downgrade` 는 범위 밖이다: 그 동사 자체가
+                    # 「내린다」는 뜻이라(옛 --adversarial 판정자의 핵심 기능),
+                    # 여기서 막으면 그 경로가 통째로 죽는다(fix round 1 Important,
+                    # `case_adversarial_downgrade_can_still_lower_severity` 가
+                    # 이 자리를 잰다).
+                    #
+                    # `recritic_bridge.py` 는 자신이 아는 cur_sev(map.json 값)로
+                    # 이미 위인지 검사하지만, 그 map 이 이 finding 의 «실제»
+                    # severity 와 다르면(스테일 map.json) bridge 눈에는 정당한
+                    # raise 인데 여기서 그대로 적용하면 실제 finding 을 조용히
+                    # 내리는 raise 가 된다 — CRITICAL 이 낮은 raise 하나로
+                    # IMPORTANT 가 된다. 여기서 실제 finding 의 (정규화된)
+                    # severity 와 다시 비교해, 지금보다 «진짜로» 높지 않으면
+                    # 적용하지 않는다.
+                    #
+                    # `new_sev` 는 비교 «전에» 접는다(`_verdict_for` 와 같은
+                    # 규율 — recritic_bridge.py 의 `to_raw.strip().upper()`) —
+                    # `--adversarial` 직접 경로는 bridge 를 거치지 않아 접히지
+                    # 않은 원문이 그대로 온다. 안 접으면 소문자 `critical` 이
+                    # `SEV_ORDER` 밖으로 떨어져 SUGGESTION 랭크로 오판되고 진짜
+                    # raise 가 저지당한다(fix round 1 Minor,
+                    # `case_adversarial_raise_lowercase_severity_folds_before_guard`).
+                    # `cur_sev` 는 `f.get("severity")` 원문이 아니라 `_norm_sev(f)`
+                    # 로 정규화해 비교한다 — 대소문자가 섞인 현재 severity
+                    # ("Critical")를 raw 로 비교하면 같은 방향으로 오판된다
+                    # (`case_raise_only_up_guard_normalizes_current_severity`).
+                    folded = new_sev.strip().upper() if isinstance(new_sev, str) else new_sev
+                    cur_sev = _norm_sev(f)
+                    new_rank = SEV_ORDER.get(folded, SEV_ORDER["SUGGESTION"])
+                    cur_rank = SEV_ORDER.get(cur_sev, SEV_ORDER["SUGGESTION"])
+                    if new_rank < cur_rank:
+                        f["severity"] = folded
+                    elif ledger is not None:
+                        # fix round 1 Minor 2 — 게이트는 «판정 결과가 바뀌는지»
+                        # 로만 켠다(CLAUDE.md 헌장). 같은 랭크(변화 없음)는
+                        # gate=False — bridge 의 같은 사건(recritic_bridge.py:106,
+                        # `ledger.coerced("to", to_raw, cur_sev, gate=False)`)과
+                        # 정확히 같은 모양이다. «내리는» raise 만 gate=True —
+                        # 저지하지 않았으면 severity 가 실제로 내려갔을 것이므로
+                        # 그 저지가 판정 결과를 바꿨다
+                        # (`case_raise_to_same_severity_is_noop_not_degrade` 가
+                        # gate=False 쪽을, 위 스테일-맵 케이스가 gate=True 쪽을
+                        # 각각 잰다).
+                        gate = new_rank > cur_rank
+                        ledger.coerced("adjusted_severity", folded, cur_sev, gate=gate)
+                else:
+                    f["severity"] = new_sev
             if "adjusted_confidence" in v:
                 f["confidence"] = v["adjusted_confidence"]
         if ledger is not None:
@@ -454,6 +560,8 @@ def _norm_sev(f):
 # 났는지 stdout 에서 구별할 수 없다.
 DEGRADE_MARKER = "판정 degrade"
 
+RECRITIC_ZERO_LINE = "탐지 0 · 재비판 0 — 재비판자가 돌았고 더한 finding 이 없다."
+
 
 def _degrade_block(degraded, degrade_reasons):
     """degrade 공시 줄들. 사유가 하나도 없어도 degraded 면 머리줄은 나간다.
@@ -472,7 +580,8 @@ def _degrade_block(degraded, degrade_reasons):
     return out
 
 
-def render(kept, suppressed_count, dropped_malformed, report, held_classes):
+def render(kept, suppressed_count, dropped_malformed, report, held_classes,
+           recritic_zero=False):
     findings = kept
     if not findings:
         # drop 공지는 이 분기에도 반드시 나가야 한다. 예전에는 아래 표-있는
@@ -491,6 +600,11 @@ def render(kept, suppressed_count, dropped_malformed, report, held_classes):
             "findings suppressed.",
             disp_line, plumb_line, gloss_line,
         ]
+        if recritic_zero:
+            # AC17 — 침묵과 0 은 다른 사실이다. 재비판자가 «돌았고» 아무것도 더하지
+            # 않았다는 것을 본 보고서가 말한다. 판정자가 죽은 실행에는 이 줄이 없다
+            # (그 사실은 아래 degrade 블록이 말한다).
+            out.append(RECRITIC_ZERO_LINE)
         if dropped_malformed > 0:
             out.append(
                 f"{dropped_malformed} finding(s) dropped as "
@@ -587,6 +701,10 @@ def main():
     # `angles:` 블록을 싣지 않는다. 다만 주 판정자 사망은 `--angles` 유무와
     # 무관하게 `--emit-verdict` 아래서 `angle-absent` 로 보고된다.
     ap.add_argument("--angles", default=None)
+    # 재비판 경로(PR4a R-N). `--adversarial` 과 배타다 — 판정자는 한 실행에 하나다.
+    ap.add_argument("--recritic", default=None)
+    ap.add_argument("--recritic-map", default=None)
+    ap.add_argument("--recritic-diff", default=None)
     args = ap.parse_args()
 
     if args.differential is not None and args.differential == "":
@@ -600,6 +718,24 @@ def main():
     if args.angles is not None and args.angles == "":
         print("synthesize_findings.py: --angles 는 빈 문자열을 받지 않는다 "
               "(플래그를 생략하거나 실제 경로를 줘라)", file=sys.stderr)
+        sys.exit(2)
+
+    for flag, val in (("--recritic", args.recritic), ("--recritic-map", args.recritic_map),
+                      ("--recritic-diff", args.recritic_diff)):
+        if val is not None and val == "":
+            print(f"synthesize_findings.py: {flag} 는 빈 문자열을 받지 않는다", file=sys.stderr)
+            sys.exit(2)
+    if (args.recritic is None) != (args.recritic_map is None):
+        print("synthesize_findings.py: --recritic 과 --recritic-map 은 함께 준다",
+              file=sys.stderr)
+        sys.exit(2)
+    if args.recritic_diff is not None and args.recritic is None:
+        print("synthesize_findings.py: --recritic-diff 는 --recritic 없이 의미가 없다",
+              file=sys.stderr)
+        sys.exit(2)
+    if args.recritic is not None and args.adversarial:
+        print("synthesize_findings.py: --adversarial 과 --recritic 은 함께 줄 수 없다 "
+              "(판정자는 한 실행에 하나다)", file=sys.stderr)
         sys.exit(2)
 
     # I1 (리뷰 라운드 2) — 위 두 검사는 세 판정 입력 플래그 중 딱 한 모양
@@ -637,15 +773,21 @@ def main():
 
     ledger = Ledger(items="open")
 
-    doc = load_yaml_doc(args.adversarial) if args.adversarial else None
+    if args.recritic is not None:
+        doc, adjudicator_dead = _bridge.load_recritic(
+            args.recritic, args.recritic_map, args.recritic_diff, ledger)
+        adjudicator = _bridge.ADJUDICATOR
+    else:
+        doc, adjudicator_dead = load_yaml_doc(args.adversarial, ledger=ledger)
+        adjudicator = "adversarial"
     verdicts, dropped_verdicts = extract_verdicts(doc, ledger=ledger)
-    raw, dropped_raw = (load_yaml(args.findings, ledger=ledger)
-                        if args.findings else ([], 0))
+    raw, dropped_raw, findings_dead = load_findings(args.findings, ledger=ledger)
 
-    findings, dropped_primary = apply_verdicts(raw, verdicts, ledger=ledger)
+    findings, dropped_primary = apply_verdicts(raw, verdicts, ledger=ledger,
+                                               adjudicator_dead=adjudicator_dead)
     new_raw, dropped_newlist = extract_new_findings(doc, ledger=ledger)
     promoted, dropped_promoted = promote_new_findings(new_raw, findings,
-                                                      ledger=ledger)
+                                                      ledger=ledger, author=adjudicator)
     # 모든 출처의 소실을 **한 채널로** 합친다. 하나라도 빠지면 stdout 공지가
     # 반쪽이 되고, 반쪽짜리 공지는 "이 실행은 clean이 아니다"를 말할 자격이 없다.
     # 컨테이너 수준(dropped_raw / dropped_verdicts / dropped_newlist)과 항목
@@ -677,7 +819,7 @@ def main():
         # 것이라 각도가 `absent` 인 것과 같은 사실이다(§6.3.5 의 표).
         angle_absent = ledger.primary_source_failed()
         if args.angles is not None:
-            angle_states = _angles.parse(_angles.read_or_fail4(args.angles))
+            declared = _angles.parse(_angles.read_or_fail4(args.angles))
             # AC10a — 수행자 집합은 이 실행이 실제로 «낸» finding 에서 도출한다
             # (계획 R-H). 각도 파일 자신에서 뽑으면 자기-일관성 검사이지 Law 2
             # 검사가 아니다. 판정 적용 «전» 의 입력(`raw`)과 dedup 뒤의 `findings`
@@ -690,17 +832,55 @@ def main():
             # 것만으로 AC10a 가 조용해진다. dedup 뒤 항목의 `sources` 는 dedup 이
             # `agent` 들로 만든 목록이다. 더 세는 쪽은 AC10a 를 엄격하게 할
             # 뿐이다(fail-closed).
+            # 이중 계수 — 한 finding 이 raw(판정 전)와 findings(판정 뒤) 둘 다에
+            # 있으면 missing_agent 가 두 번 센다. 검사는 > 0 만 보므로 판정에는
+            # 영향이 없다 — 메시지의 건수는 「관측한 항목 수」로 읽힌다.
             authors = set()
+            missing_agent = 0
             for f in findings + raw:
                 if isinstance(f, dict):
+                    # 재비판 Important(경) — `agent: null` 은 `str(None)` == 'None' 이
+                    # 되어 문법 밖 저자로 오판됐다. `None` 은 agent 없음과 같은
+                    # 사건이다(YAML 에서 `null` · `~` · 빈 값이 전부 `None` 이다).
+                    a = f.get("agent")
+                    if a is None or str(a) in ("", "?"):
+                        missing_agent += 1
+                    else:
+                        authors.add(str(a))
                     srcs = f.get("sources") or []
                     if not isinstance(srcs, (list, tuple)):
                         srcs = [srcs]
-                    for s in [f.get("agent", "?")] + list(srcs):
-                        s = str(s)
-                        if s and s != "?":
-                            authors.add(s)
-            _angles.check_self_adjudication(angle_states, authors)
+                    for s in srcs:
+                        # 재비판 라운드 2 — 이전 가드(`if s is not None`)는 신원
+                        # 계약을 fail-open 했다: 리뷰어가 명시적으로 적은
+                        # `sources: [null]` 도 조용히 건너뛰었다. 이 가드가 억눌러야
+                        # 하는 것은 «dedup() 이 agent 에서 파생시킨 None» 뿐이다 —
+                        # dedup() 은 그룹(단일 항목 그룹 포함)마다 `sources` 를
+                        # `agent` 에서 다시 만들므로(`agent: null` → `sources:
+                        # [None]`), 그 None 은 **agent 도 None 일 때만** 나온다(위
+                        # `a` 검사가 이미 missing_agent 로 셌다). 리뷰어가 적은
+                        # `sources: [null]` 은 agent 가 다른 값이라 이 조건에
+                        # 걸리지 않고 `str(None)` == 'None' 으로 흘러 문법 밖
+                        # 저자가 된다(R-M — 비신뢰 필드는 그대로 검사한다).
+                        # 조건 블록으로 쓴다(continue 아님) — 버리는 분기는 회계
+                        # 배선을 요구한다(shared/tests/test_adjudication_wiring.sh).
+                        if not (s is None and a is None):
+                            s = str(s)
+                            if s and s != "?":
+                                authors.add(s)
+            # 부채 B — 저자 쪽 신원 계약. AC10a 비교 «전»에 둔다: 문법 밖 이름이
+            # 섞인 집합으로 비교하면 그 비교 자체가 무의미하다.
+            _angles.check_author_identity(authors, missing_agent)
+            _angles.check_self_adjudication(declared, authors)
+            # 계획 R-L — 관측된 주 입력 사망을 선언 위에 얹는다. AC10a 는 «선언»에
+            # 걸었다(선언 자체가 Law 2 를 어기면 판정자 생사와 무관하게 거부).
+            # 차단과 렌더는 «실효»에 건다 — 꼬리가 자기모순이 되지 않게.
+            dead_angles = []
+            if findings_dead:
+                dead_angles.append("security")
+            if adjudicator_dead:
+                dead_angles.append("adjudication")
+            angle_states = _angles.with_dead_sources(declared, dead_angles)
             angle_absent = angle_absent or _angles.blocks(angle_states)
         decision = _verdict.decide(
             defect=bool(kept),                    # 계획 R-B — severity 를 묻지 않는다
@@ -715,8 +895,19 @@ def main():
     # 라운드 4 이전에는 `held` 만 꺼내 갔고 `degraded`/`reasons` 는 어디로도 가지
     # 않았다: 주 입력이 통째로 죽어도 출력이 clean 과 **바이트 동일**이었다.
     report = ledger.report()
+    # fix round 1 Important 1 — 변환 «후» 길이(`verdicts`/`new_raw`)만 보면 held·
+    # 파손된 원문(모르는 f 뿐인 verdicts, 매핑이 아닌 added 항목)이 0 으로 접혀
+    # 「재비판 0」을 거짓으로 주장한다. `doc` 의 두 회계 키(변환 «전» 원문 길이,
+    # `recritic_bridge.to_adjudication_doc` docstring 참조)를 함께 봐야 한다 —
+    # 둘 다 0 일 때만 재비판자가 정말 아무것도 안 냈다고 말할 수 있다.
+    raw_verdict_count = doc.get("_raw_verdict_count", 0) if isinstance(doc, dict) else 0
+    raw_added_count = doc.get("_raw_added_count", 0) if isinstance(doc, dict) else 0
+    recritic_zero = (args.recritic is not None and not adjudicator_dead
+                     and not raw and dropped_raw == 0
+                     and not verdicts and not new_raw
+                     and raw_verdict_count == 0 and raw_added_count == 0)
     sys.stdout.write(render(kept, len(suppressed), dropped_malformed,
-                            report, ledger.held_by_class()))
+                            report, ledger.held_by_class(), recritic_zero=recritic_zero))
 
     if args.emit_verdict:
         # `render()` 가 낸 Markdown 본문 **뒤**의 평문 꼬리다 — PR2 가 `verdict:`
