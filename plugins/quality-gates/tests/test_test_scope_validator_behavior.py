@@ -13,6 +13,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "harness"))
 from agent_stub import run_agent_stub, assert_yaml_schema  # noqa: E402
 
+PERSONA = Path(__file__).resolve().parents[1] / "agents" / "test-scope-validator.md"
+
 TEST_SCOPE_FROZEN = """
 test_scope_verdicts:
   - file: tests/test_foo.py
@@ -52,57 +54,14 @@ class TestScopeValidatorBehaviorTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             run_agent_stub("test-scope-validator", "p", ": : invalid")
 
-    # --- v2.1.0: ac_coverage advisory block (spec present) + no-spec fallback ---
+    # --- v2.1.0: ac_coverage no longer exists (spec or no spec) ---
 
-    TEST_SCOPE_WITH_AC = """
-test_scope_verdicts:
-  - file: tests/test_foo.py
-    classification: aligned
-    evidence: matches AC3 behavior
-summary: 1 aligned, 0 outdated-suspicion, 0 cherry-pick-suspicion, 0 unclear
-ac_coverage:
-  note: "advisory only — does not block the Runtime gate"
-  items:
-    - id: AC1
-      status: covered
-      covered_by: ["tests/test_foo.py::test_ac1"]
-    - id: AC2
-      status: uncovered
-      covered_by: []
-"""
-
-    TEST_SCOPE_NO_SPEC = """
-test_scope_verdicts:
-  - file: tests/test_foo.py
-    classification: aligned
-    evidence: matches plan item P3
-summary: 1 aligned, 0 outdated-suspicion, 0 cherry-pick-suspicion, 0 unclear
-"""
-
-    def test_ac_coverage_schema_when_spec_present(self):
-        """When a spec is found, ac_coverage carries per-AC verdicts + advisory note."""
-        parsed = run_agent_stub("test-scope-validator", "p", self.TEST_SCOPE_WITH_AC)
-        assert_yaml_schema(
-            parsed,
-            required_keys=["test_scope_verdicts", "ac_coverage", "summary"],
-        )
-        ac = parsed["ac_coverage"]
-        assert_yaml_schema(ac, required_keys=["note", "items"])
-        # note must carry two stable substrings — robust to em-dash glyph variants.
-        self.assertIn("advisory only", ac["note"])
-        self.assertIn("does not block", ac["note"])
-        for item in ac["items"]:
-            assert_yaml_schema(
-                item,
-                required_keys=["id", "status", "covered_by"],
-                enum={"status": ["covered", "uncovered"]},
-            )
-
-    def test_fallback_omits_ac_coverage_when_no_spec(self):
-        """No spec -> ac_coverage omitted; plan-based per-file verdicts still emitted."""
-        parsed = run_agent_stub("test-scope-validator", "p", self.TEST_SCOPE_NO_SPEC)
-        assert_yaml_schema(parsed, required_keys=["test_scope_verdicts", "summary"])
-        self.assertNotIn("ac_coverage", parsed)
+    def test_persona_no_longer_emits_ac_coverage(self):
+        """§6.5.1 7행 — spec AC 런타임 검증이 사라지며 ac_coverage 출력도 사라진다.
+        분류 축(spec AC 1차)은 그대로다."""
+        text = PERSONA.read_text(encoding="utf-8")
+        self.assertNotIn("ac_coverage", text)
+        self.assertIn("spec_path", text, "spec 은 여전히 1차 분류 축이다(양의 짝)")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests for agents/test-scope-validator.md frontmatter — verifies Plugin Shape
 # compliance: allowedTools / disallowedTools / model / cost_class declarations.
-# Mirrors style of test_runtime_verifier_frontmatter.sh.
+# Mirrors the frontmatter-lock style used across quality-gates agent tests.
 
 set -u
 
