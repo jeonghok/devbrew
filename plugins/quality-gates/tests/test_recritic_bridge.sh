@@ -787,6 +787,43 @@ case_primary_death_keeps_not_clean_marker() {
   rm -rf "$T"
 }
 
+case_container_drop_of_findings_document_blocks() {
+  # 컨트롤러 Fix round 1, item 1 — findings 문서 자체가 리스트가 아니면(예: 최상위가
+  # 매핑) `_as_list`(synthesize_findings.py)가 `hold()` 가 아니라
+  # `source_failed(primary=False)` 로 적는다 — `items_unaccounted()`·`blocks()`
+  # 어느 쪽도 안 켜진다. 버려진 CRITICAL 주장은 항목 소실이다(헌장) — 판정이
+  # `clean` 으로 새면 Task 7 이후 SKILL 이 그대로 통과시킨다.
+  local T; T=$(mktemp -d)
+  printf -- 'a:\n  file: app.py\n  line: 10\n  severity: CRITICAL\n  summary: "hardcoded AWS key"\nb:\n  file: app.py\n  line: 11\n  severity: CRITICAL\n  summary: "auth bypass"\n' > "$T/findings.yaml"
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts: []'
+  local out rc=0
+  out=$(synth "$T" --emit-verdict 2>/dev/null) || rc=$?
+  assert_eq           "$rc" "0"                        "컨테이너 소실은 호출 오류가 아니다"
+  assert_contains      "$out" '**이 실행은 clean이 아니다**' "버려진 CRITICAL 2건에 not-clean 마커가 선다"
+  assert_grep          "$out" 'findings-lost'          "사유는 findings-lost 다"
+  assert_not_grep      "$out" '^verdict: clean$'       "clean 이 아니다 — 버려진 CRITICAL 이 조용히 통과하지 않는다"
+  assert_not_contains  "$out" '공시(판정을 막지 않음)' "항목 소실은 공시가 아니라 차단이다"
+  rm -rf "$T"
+}
+
+case_hold_only_is_blocking_without_source_death() {
+  # 컨트롤러 Fix round 1, item 2 — `blocking` 을 `primary_source_failed()` 로만
+  # 좁혀도(items_unaccounted() 항 없이) 이전 스위트가 전부 green 이었다. 주
+  # 판정자는 살아 있고 finding 하나가 «보류»만 되는 경우를 직접 잰다 — 재비판자가
+  # 모르는 f9 만 판정해 f1 은 아무도 판정하지 않은 채로 남는다.
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml"
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f9
+    verdict: confirm'
+  local out; out=$(synth "$T" --emit-verdict)
+  assert_grep "$out" '이 실행은 clean이 아니다' "보류만으로도(주 판정자는 살아 있다) not-clean 마커가 선다"
+  assert_grep "$out" 'findings-lost'              "사유에 findings-lost 가 있다"
+  rm -rf "$T"
+}
+
 case_gate_coercion_is_disclosure_not_block() {
   # 근거 없는 reject 는 confirm 으로 강제된다(게이트 변경). finding 은 남아 defect —
   # 강제 자체는 공시이지 not-clean 마커가 아니다.
@@ -844,4 +881,6 @@ case_downgrade_is_not_a_verb
 case_aux_death_discloses_without_not_clean_marker
 case_primary_death_keeps_not_clean_marker
 case_gate_coercion_is_disclosure_not_block
+case_container_drop_of_findings_document_blocks
+case_hold_only_is_blocking_without_source_death
 finish

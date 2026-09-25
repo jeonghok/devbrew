@@ -473,9 +473,9 @@ def _norm_sev(f):
 
 
 # degrade 공시의 고정 마커. 소실(`dropped as malformed`)과 **다른 사건**이다:
-# 저쪽은 개별 주장이 버려진 것이고, 이쪽은 (차단이면 not-clean 마커, 아니면
-# 공시 머리줄 — `_degrade_block`). 둘을 한 문구로 합치면 어느 쪽이 났는지
-# stdout 에서 구별할 수 없다.
+# 저쪽은 개별 주장이 버려진 것이고, 이쪽은 판정 «경로» 자체가 온전하지 않았던 것
+# (차단이면 not-clean 마커, 아니면 공시 머리줄 — `_degrade_block`). 둘을 한 문구로
+# 합치면 어느 쪽이 났는지 stdout 에서 구별할 수 없다.
 DEGRADE_MARKER = "판정 degrade"
 
 RECRITIC_ZERO_LINE = "탐지 0 · 재비판 0 — 재비판자가 돌았고 더한 finding 이 없다."
@@ -693,6 +693,15 @@ def main():
     # 항목 수준만 세면 컨테이너 소실이 0으로 보고된다.
     dropped_malformed = (dropped_raw + dropped_verdicts + dropped_newlist
                          + dropped_primary + dropped_promoted)
+    # 컨테이너 수준 소실(`dropped_raw`/`dropped_verdicts`/`dropped_newlist`)은
+    # `_as_list`가 `ledger.hold()`가 아니라 `source_failed(primary=False)`로
+    # 적는다 — `items_unaccounted()`도 `blocks()`도 그것만으로는 켜지지 않는다.
+    # 그런데 버려진 주장은 항목 소실이다(헌장 — "판정기가 항목을 버리면
+    # 센다"). `dropped_malformed`를 두 술어에 직접 더해 decide()와 render()가
+    # 같은 사실을 보게 한다 — 한쪽만 더하면 본문에는 not-clean 마커가 서는데
+    # 꼬리는 `verdict: clean`인 자기모순이 된다.
+    review_blocked = ledger.items_unaccounted() or dropped_malformed > 0
+    blocking = ledger.blocks() or dropped_malformed > 0
     findings = findings + promoted          # 기존 뒤에 append — 기존 표 순서를 흔들지 않는다
     findings = dedup(findings, ledger=ledger)
     kept, suppressed = suppress(findings, ledger=ledger)
@@ -764,7 +773,7 @@ def main():
             angle_absent = angle_absent or _angles.blocks(angle_states)
         decision = _verdict.decide(
             defect=bool(kept),                    # 계획 R-B — severity 를 묻지 않는다
-            review_blocked=ledger.items_unaccounted(),
+            review_blocked=review_blocked,
             angle_absent=angle_absent,
             differential_text=_verdict.read_or_none(args.differential),
             extra_reasons=args.reason,
@@ -783,7 +792,7 @@ def main():
                      and raw_verdict_count == 0 and raw_added_count == 0)
     sys.stdout.write(render(kept, len(suppressed), dropped_malformed,
                             report, ledger.held_by_class(), recritic_zero=recritic_zero,
-                            blocking=ledger.blocks()))
+                            blocking=blocking))
 
     if args.emit_verdict:
         # `render()` 가 낸 Markdown 본문 **뒤**의 평문 꼬리다 — `verdict:` 를 같은
