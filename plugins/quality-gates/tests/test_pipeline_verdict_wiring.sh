@@ -35,13 +35,55 @@ case_every_synth_call_emits_verdict_and_angles() {
   got=$(python3 - "$SKILL" "$REF" <<'PY'
 import re, sys
 
+def strip_hash_comment(line):
+    # Fix round 2, Minor B — bash 처럼 «단어 시작 위치» 의 `#` 만 주석으로 지운다.
+    # 단어는 줄 시작 · 공백 뒤 · `;` `|` `&` `(` 뒤(공백 없이 붙어도)에서 시작한다.
+    # 옛 버전(「공백 또는 줄 시작 뒤의 #」)은 `;#`(S7 — 공백 없이 붙은 `;#comment`)를
+    # 못 잡았다. 따옴표 안의 `#` 는 «단어 시작」이라도 절대 안 지운다(P2/P3 — 그
+    # 뒤에 이어지는 `\` continuation 을 삼키면 다음 논리 줄이 통째로 잘못 붙는다).
+    quote = None
+    at_word_start = True
+    i, n = 0, len(line)
+    while i < n:
+        c = line[i]
+        if quote:
+            if c == quote:
+                quote = None
+            elif quote == '"' and c == '\\' and i + 1 < n:
+                i += 1
+            at_word_start = False
+            i += 1
+            continue
+        if c.isspace():
+            at_word_start = True
+            i += 1
+            continue
+        if c in ';|&(':
+            at_word_start = True
+            i += 1
+            continue
+        if c == '#' and at_word_start:
+            return line[:i]
+        if c in ("'", '"'):
+            quote = c
+            at_word_start = False
+            i += 1
+            continue
+        if c == '\\' and i + 1 < n:
+            i += 2
+            at_word_start = False
+            continue
+        at_word_start = False
+        i += 1
+    return line
+
 def strip_comments(line):
-    # `#` — bash 주석(선행 공백 또는 줄 시작 뒤). `//` — Agent({...}) 의사-JS 펜스의
-    # 처분 주석(`  // **처분** — consumer=...synthesize_findings.py...`)은 줄 전체가
-    # 주석이다 — 그 안의 `synthesize_findings.py` 언급을 호출로 오인하면 안 된다.
-    # 줄 «전체»가 `//` 로 시작할 때만 지운다 — `sed -n 's/^x: //p'` 처럼 줄 중간의
-    # `//` 는 셸 문법(빈 치환)이라 건드리지 않는다.
-    line = re.sub(r'(?:(?<=\s)|^)#.*$', '', line)
+    # `//` — Agent({...}) 의사-JS 펜스의 처분 주석(`  // **처분** —
+    # consumer=...synthesize_findings.py...`)은 줄 전체가 주석이다 — 그 안의
+    # `synthesize_findings.py` 언급을 호출로 오인하면 안 된다. 줄 «전체»가 `//`
+    # 로 시작할 때만 지운다 — `sed -n 's/^x: //p'` 처럼 줄 중간의 `//` 는 셸
+    # 문법(빈 치환)이라 건드리지 않는다.
+    line = strip_hash_comment(line)
     if line.lstrip().startswith('//'):
         return ''
     return line
@@ -235,26 +277,72 @@ PY
     "정상 --differential 행이 여전히 표에 남아 있다(새 행이 대체하지 않았다)"
 }
 
-case_r_init_abort_reaches_error_axis() {
-  # Fix round 1, Important 2(plan-mandated, controller ruling) — the Step 4 판정
-  # 입력 표는 원래 ② 가 R6 까지 «도달」한 실행만 다뤘다. `differential-test.md` 의
-  # R-init 가드(TMPDIR 이 검사 트리 안 · `$project_dir` 빈 값 · 저장소 최상위 해소
-  # 실패)는 R6·`check_qa_ledger.py` 가 존재하기도 «전에» exit 1 한다 — kill switch 와
-  # 무관하다. 그 경로에서 어떤 행도 매치하지 않으면 오케스트레이터가 플래그 없이
-  # synthesize_findings.py 를 불러 verdict: clean 이 나갈 수 있다(AC2 위반). 이 락은
-  # 그 포괄 행이 표에 실재하는지 F1(행 삭제) 변이로 잰다.
+case_pre_r6_abort_reaches_error_axis_catchall() {
+  # Fix round 1, Important 2 → Fix round 2, finding A(open) — 컨트롤러 ruling 은
+  # «R-init 가드»만이 아니라 진짜 포괄이다: ② 가 kill switch 없이 R6 집계까지
+  # «어느 스텝에서든» 끝나지 못하면(R-init 가드 · R3 갭 게이트의 `중단` 선택 ·
+  # 그 밖의 R1–R5 중단) 전부 이 행이다. Fix round 1 판은 R-init 만 이름 붙여 실제
+  # 포괄이 아니었다 — R3 의 `중단` 은 여전히 어떤 행에도 안 걸렸다. 이제 같은 줄에
+  # `R6` · `중단` · `--reason error-axis` 뿐 아니라 `R-init` 과 `R3` 이 «함께» 있는지
+  # 잰다 — 후자 둘이 없으면 R-init 전용으로 좁혀진 것이다(narrow-back 변이가 이걸
+  # 잡는다). R2·R4·R5b 가 degrade 로 R6 까지 이어지는 정상 경로는 이 행의 대상이
+  # «아니다» — 그건 R6-non-zero 행이 잡는다(그 행은 `중단` 을 안 써서 이 검색에
+  # 안 걸린다, 겹쳐도 무방하지만 오늘은 안 겹친다).
   local got
   got=$(python3 - "$SKILL" <<'PY'
 import sys
 text = open(sys.argv[1], encoding="utf-8").read()
-rows = [l for l in text.splitlines() if "R-init" in l and "중단" in l]
+rows = [l for l in text.splitlines()
+        if "R6" in l and "중단" in l and "error-axis" in l]
 print(f"ROWS:{len(rows)}")
-ok = sum(1 for l in rows if "--reason error-axis" in l)
+ok = sum(1 for l in rows
+         if "--reason error-axis" in l and "R-init" in l and "R3" in l)
 print(f"OK:{ok}")
 PY
 )
-  assert_grep "$got" '^ROWS:1$' "R-init 가드 중단(kill switch 와 무관)을 담은 행이 정확히 하나 있다"
-  assert_grep "$got" '^OK:1$'   "그 행이 --reason error-axis 를 싣는다"
+  assert_grep "$got" '^ROWS:1$' "R6 집계 전 어느 스텝에서든 중단을 담은 행이 정확히 하나 있다"
+  assert_grep "$got" '^OK:1$'   "그 행이 --reason error-axis 를 싣고 R-init·R3 를 «함께» 언급한다(R-init 전용으로 좁히면 RED)"
+}
+
+case_pre_r6_abort_catchall_mirrored_in_reference() {
+  # Fix round 2, finding A — 레퍼런스 R8 의 판정 입력 표도 SKILL Step 4 와 같은
+  # 포괄 행을 거울처럼 갖고 있어야 한다. 미러 행 삭제(F1 계열)를 독립적으로 잡는다.
+  local got
+  got=$(python3 - "$REF" <<'PY'
+import sys
+text = open(sys.argv[1], encoding="utf-8").read()
+rows = [l for l in text.splitlines()
+        if "R6" in l and "중단" in l and "error-axis" in l]
+print(f"ROWS:{len(rows)}")
+ok = sum(1 for l in rows
+         if "--reason error-axis" in l and "R-init" in l and "R3" in l)
+print(f"OK:{ok}")
+PY
+)
+  assert_grep "$got" '^ROWS:1$' "레퍼런스 R8 표에도 같은 포괄 행이 정확히 하나 있다"
+  assert_grep "$got" '^OK:1$'   "그 행이 --reason error-axis 를 싣고 R-init·R3 를 함께 언급한다"
+}
+
+case_r3_stop_choice_routes_to_error_axis() {
+  # Fix round 2, finding A — R3 갭 게이트의 `중단` 선택지는 (fix round 1까지) 어디로도
+  # 가지 않았다: 사용자가 고르면 파이프라인이 조용히 죽었다. 레퍼런스 R3 절 자신이
+  # 「② 를 끝내고 SKILL Step 4 로 간다 — --reason error-axis」 를 명시하는지 R3
+  # 섹션 창(다음 **Step R4 전까지)으로 좁혀 잰다 — 창 밖(예: 포괄 행 자신의 `중단`
+  # 언급)이 대신 만족시키지 못하게.
+  local got
+  got=$(python3 - "$REF" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+m = re.search(r'\*\*Step R3 —.*?(?=\*\*Step R4 )', text, re.S)
+window = m.group(0) if m else ""
+print(f"WINDOW_LEN:{len(window)}")
+print(f"HAS_STOP:{1 if '중단' in window else 0}")
+print(f"HAS_ROUTE:{1 if '--reason error-axis' in window else 0}")
+PY
+)
+  assert_grep "$got" '^WINDOW_LEN:[1-9]' "R3 섹션 창을 찾았다(0 이면 앵커가 깨졌다)"
+  assert_grep "$got" '^HAS_STOP:1$'  "R3 창에 「중단」 선택지가 있다"
+  assert_grep "$got" '^HAS_ROUTE:1$' "R3 창 자신이 --reason error-axis 라우트를 적는다(창 밖 포괄 행이 대신 못 채운다)"
 }
 
 case_security_kill_switch_routes_to_absent() {
@@ -325,7 +413,8 @@ for c in case_every_synth_call_emits_verdict_and_angles case_blocking_angle_disp
          case_differential_runs_inside_every_iteration \
          case_security_switch_is_not_certified_even_with_zero_findings \
          case_different_premise_absent_is_disclosed_not_blocked case_caller_reasons_reach_the_verdict \
-         case_degraded_ledger_row_reaches_silent_drop case_r_init_abort_reaches_error_axis \
+         case_degraded_ledger_row_reaches_silent_drop case_pre_r6_abort_reaches_error_axis_catchall \
+         case_pre_r6_abort_catchall_mirrored_in_reference case_r3_stop_choice_routes_to_error_axis \
          case_security_kill_switch_routes_to_absent case_differential_kill_switch_env_name_is_pinned; do
   "$c"
 done

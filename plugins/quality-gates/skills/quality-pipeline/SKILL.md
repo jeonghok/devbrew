@@ -510,7 +510,7 @@ Agent({
    | 조건 | 합성기에 싣는 것 |
    |---|---|
    | ② 가 돌았고 R6 집계가 exit 0 · `verdict_input` 3키와 `attribution_status` 를 다 읽었다 | `--differential "<$aggregate_yaml 절대 경로>"` |
-   | ② 가 kill switch 없이 R-init 가드에서 중단됐다(TMPDIR 담김 · `$project_dir` 빈 값 · 저장소 최상위 해소 실패 등, 원인 무관 — R6·`check_qa_ledger.py` 가 존재하기도 전이다) | `--differential` 을 싣지 않고 `--reason error-axis` |
+   | ② 가 kill switch 없이 R6 집계까지 끝나지 못했다(R-init 가드 · R3 갭 게이트의 `중단` 선택 · 그 밖에 R1–R5 어느 스텝에서든 중단 — 원인 무관. R2·R4·R5b 내부 실패가 degrade 로 R6 까지 이어지는 정상 경로는 아래 R6-non-zero 행이 잡으므로 여기 해당 안 됨) | `--differential` 을 싣지 않고 `--reason error-axis` |
    | ② 의 R6 어댑터별 호출 또는 집계 호출이 non-zero, 또는 키를 못 읽었다 | `--differential` 을 싣지 않고 `--reason error-axis` |
    | ② 의 `check_qa_ledger.py` 가 non-zero | `--reason silent-drop` |
    | ② 가 kill switch 로 생략됐다(Step 1c) | `--reason kill-switch` |

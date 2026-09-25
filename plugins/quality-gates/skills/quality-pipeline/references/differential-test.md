@@ -356,7 +356,9 @@ R2 의 5번이 곧 생략 목록이다. **생략 목록이 비어 있으면 `Ask
 
 비어 있지 않으면 정확히 1회 `AskUserQuestion`: 생략 목록을 보여주고
 `그대로 진행` / `범위 넓혀서 다시 계획` / `중단`. 질문 빈도가 생략의 양에
-비례하므로, 질문이 뜰 때는 반드시 정보가 있다.
+비례하므로, 질문이 뜰 때는 반드시 정보가 있다. **`중단`을 고르면** ② 를 여기서
+끝내고 SKILL Step 4 로 간다 — `--differential` 을 싣지 않고 `--reason error-axis`
+(R8 의 포괄 행과 같은 사유). 파이프라인을 조용히 죽이지 않는다.
 
 **Step R4 — 기준선 측 (오케스트레이터 단독).**
 
@@ -942,7 +944,7 @@ SKILL Step 4 가 싣는 판정 입력:
 | 이 스텝의 결과 | 합성기에 |
 |---|---|
 | R6 집계 exit 0 · 3키와 `attribution_status` 를 다 읽음 | `--differential "$aggregate_yaml"` — `degrade_causes` 는 `verdict.py` 가 사유로 옮긴다 |
-| ② 가 kill switch 없이 R-init 가드에서 중단됐다(원인 무관 — R6·`check_qa_ledger.py` 가 존재하기도 전이다) | `--reason error-axis` (`--differential` 없음) |
+| ② 가 kill switch 없이 R6 집계까지 끝나지 못했다(R-init 가드 · R3 의 `중단` 선택 · 그 밖에 R1–R5 어느 스텝에서든 중단, 원인 무관 — R2·R4·R5b 내부 실패가 degrade 로 R6 까지 이어지는 정상 경로는 제외) | `--reason error-axis` (`--differential` 없음) |
 | R6 어느 호출이든 non-zero · 키 판독 실패 | `--reason error-axis` (`--differential` 없음) |
 | `check_qa_ledger.py` non-zero | `--reason silent-drop` |
 | `check_qa_ledger.py` exit 0 이지만 원장(`runtime-evidence.md`)의 floor 5차원 중 하나라도 `degraded` 이거나 `unclaimed` unit 이 있다(그 게이트는 원장 내부 일관성만 보고 이 경우도 exit 0 을 낼 수 있다) | `--reason silent-drop` |
