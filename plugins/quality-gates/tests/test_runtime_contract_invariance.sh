@@ -281,68 +281,50 @@ case_head_and_baseline_coexist() {
   cd / && rm -rf "$REPO"
 }
 
-# T92 + AC65′ (§11 ⑬ 후속, /qg iter-7 security-reviewer CRITICAL):
-# create-head 의 sha 는 **선언된 자유 변수가 아니다** — 이 세션 샌드박스의 봉인 커밋과
-# 대조되고 다르면 죽는다.
-#
-# 왜 이것이 없으면 위험한가. 바로 위 형제 `create-baseline "$merge_base" <sid>` 와 인자
-# 모양이 같아서, `$merge_base` 를 넘기는 실수 하나로 HEAD 축이 기준선의 바이트 복사본이
-# 된다. 그러면 전 unit 이 `(P,P) → STILL_GREEN → closed` 로 접혀 **degrade 신호 하나 없이
-# PASS** 가 난다 — R7 은 자기 baseline_sha 로 샌드박스만 보므로 HEAD 트리가 어느 커밋에서
-# 왔는지 알지 못한다. 형제 잔여(`--baseline-detected` 등)는 최소한 부재가 fail-closed 인데
-# 이 축은 **오값**이라 그조차 아니었다.
-#
-# 세 축 + 양의 짝. 음만 재면 "언제나 거부" 로 만드는 변경이 통과한다.
-#
-# **효과 없는 변이 하나를 정직하게 기록한다.** 엄격 동일(`==`)을 접두 매치로 느슨하게
-# 하는 mutation 은 이 케이스에서 GREEN 이다 — 그리고 그것은 락의 구멍이 아니라 **도달
-# 가능한 입력에서 동작이 같기 때문**이다: `merge_base` 와 브랜치 tip 은 봉인 커밋과
-# 다른 40자라 접두로도 실패하고, 빈 인자는 `make_detached_worktree` 의
-# `rev-parse --verify` 가 fail-closed 로 잡는다. 여기에 억지 assert 를 붙이면 재는 것이
-# 없는 락이 하나 늘 뿐이므로 붙이지 않는다.
+# create-head 의 sha 는 **선언된 자유 변수가 아니다** — 지금 다시 뜬 봉인의 트리와
+# 대조되고 다르면 죽는다(설계 §6.4.1 — 「봉인 커밋의 트리가 기대 OID 와 일치」).
+# `$merge_base` 를 넘기는 실수(형제 create-baseline 과 인자 모양이 같다)면 HEAD 축이
+# 기준선의 바이트 복사본이 되어 전 unit 이 STILL_GREEN 으로 접힌다. 세 축 + 양의 짝.
 case_create_head_asserts_sealed_commit() {
   REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
   git init -q; git config user.email t@t.test; git config user.name tester
   git checkout -q -b main; echo v1 > a.txt; git add a.txt; git commit -qm v1
   local mb; mb=$(git rev-parse HEAD)
   git checkout -q -b feature; echo v2 > a.txt; git commit -qam v2
-  local tip; tip=$(git rev-parse HEAD)
+  echo v3 > a.txt                                   # 미커밋 변경 — 봉인이 담아야 한다
+  local SEAL="$PLUGIN_ROOT/scripts/seal-worktree.sh"
+  local sealed; sealed=$(bash "$SEAL" seal "sess7777") || { no "봉인 실패"; cd / && rm -rf "$REPO"; return; }
 
-  # 음 ①: 샌드박스가 없으면 붙을 봉인 커밋이 없다 → 거부
-  if bash "$WT" create-head "$tip" "sess7777" >/dev/null 2>&1; then
-    no "샌드박스 없이 create-head 가 통과함"
+  # 양의 짝: 방금 뜬 봉인은 받아들인다
+  local h
+  if h=$(bash "$WT" create-head "$sealed" "sess7777" 2>/dev/null) && [[ "$(cat "$h/a.txt")" == "v3" ]]; then
+    ok "봉인 커밋 → create-head 수락 · 트리에 미커밋 변경이 있다 (양의 짝)"
+    bash "$WT" remove "$h" >/dev/null 2>&1
   else
-    ok "샌드박스 부재 → create-head 거부"
+    no "봉인 커밋인데 create-head 가 거부했거나 트리가 봉인과 다르다"
   fi
 
-  local sb sealed
-  if ! sb=$(bash "$WT" create-sandbox "sess7777"); then
-    no "create-sandbox 실패"; cd / && rm -rf "$REPO"; return
-  fi
-  sealed=$(printf '%s\n' "$sb" | sed -n 2p)
-
-  # 양의 짝: 봉인 커밋은 받아들인다 (음만 재면 "언제나 거부" 가 통과한다)
-  if bash "$WT" create-head "$sealed" "sess7777" >/dev/null 2>&1; then
-    ok "봉인 커밋 B → create-head 수락 (양의 짝)"
-    bash "$WT" remove "$(pwd)/.claude/quality-gates/worktrees/head-sess7777" >/dev/null 2>&1
-  else
-    no "봉인 커밋인데 create-head 가 거부함"
-  fi
-
-  # 음 ②: merge_base — 형제 호출과 인자 모양이 같아 가장 현실적인 오값
+  # 음 ①: merge_base — 형제 호출과 인자 모양이 같아 가장 현실적인 오값
   if bash "$WT" create-head "$mb" "sess7777" >/dev/null 2>&1; then
-    no "merge_base 가 통과함 — HEAD 축이 기준선 복사본이 되어 degrade 없이 PASS"
+    no "merge_base 가 통과함 — HEAD 축이 기준선 복사본이 된다"
   else
-    ok "merge_base → create-head 거부 (차등 구조적 0 봉쇄)"
+    ok "merge_base → create-head 거부"
   fi
 
-  # 음 ③: 봉인 전 브랜치 tip — 재시도가 새 B 를 만든 뒤 옛 값을 재사용하는 축
-  if bash "$WT" create-head "$tip" "sess7777" >/dev/null 2>&1; then
-    no "봉인 아닌 커밋(브랜치 tip)이 통과함 — 재시도 stale 축이 열려 있다"
+  # 음 ②: 봉인 뒤 워킹트리가 바뀐 stale 봉인
+  echo v4 > a.txt
+  if bash "$WT" create-head "$sealed" "sess7777" >/dev/null 2>&1; then
+    no "봉인 뒤 워킹트리가 바뀌었는데 옛 봉인이 통과함"
   else
-    ok "비-봉인 커밋 → create-head 거부 (재시도 stale 봉쇄)"
+    ok "stale 봉인 → create-head 거부"
   fi
 
+  # 음 ③: 커밋이 아닌 값
+  if bash "$WT" create-head "not-a-commit" "sess7777" >/dev/null 2>&1; then
+    no "커밋이 아닌 값이 통과함"
+  else
+    ok "커밋 아닌 값 → create-head 거부"
+  fi
   cd / && rm -rf "$REPO"
 }
 

@@ -93,47 +93,44 @@ case_index_file_cleaned_up() {
   echo "x" >> a.txt
   local B; B=$(bash "$SEAL" seal "$SID")
   assert_grep "$B" '^[0-9a-f]{40}$' "봉인 커밋이 40자 hex 다(전제 확인)"
-  local left; left=$(find .claude -name 'seal-*' 2>/dev/null | grep -c .)
+  local left; left=$(find "$(git rev-parse --git-dir)" -name 'qg-seal-*' 2>/dev/null | grep -c .)
   assert_eq "$left" "0" "봉인 후 임시 인덱스 파일이 남지 않는다"
   cleanup
 }
 
-# ★ 양성 대조 — 인덱스 자리가 git-ignored 가 아니면 **죽어야** 한다(fail-closed).
-#    이 케이스가 없으면 위의 부재 단언들은 「그냥 통과」할 수 있다.
-case_fails_closed_when_not_ignored() {
-  REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
-  git init -q .
-  git config user.email t@t.test; git config user.name tester
-  git checkout -q -b main
+# 흔한 사용자 리포 — .claude/ 를 무시하지 않는다(.claude/settings.json 을 커밋한다).
+# 봉인은 성공해야 하고, 봉인 트리에 임시 인덱스가 없어야 한다(AC14).
+case_seal_succeeds_when_claude_dir_not_ignored() {
+  local R; R=$(mktemp -d); cd "$R" || exit 1
+  git init -q; git config user.email t@t.test; git config user.name tester
+  mkdir -p .claude; echo '{}' > .claude/settings.json
   echo tracked > a.txt; git add -A; git commit -qm base    # .gitignore 없음
-  local out rc
-  out=$(bash "$SEAL" seal "$SID" 2>&1); rc=$?
-  assert_eq "$rc" "2" "인덱스 자리가 ignored 가 아니면 exit 2"
-  assert_grep "$out" 'git-ignored'    "사유가 메시지에 있다"
-  cleanup
+  echo changed > a.txt
+  local B rc=0; B=$(bash "$SEAL" seal "sess0001xyz") || rc=$?
+  assert_eq "$rc" "0" "무시 설정이 없어도 봉인이 성공한다"
+  local names; names=$(git ls-tree -r --name-only "$B" 2>/dev/null)
+  assert_not_grep "$names" 'seal-.*\.index' "봉인 트리에 임시 인덱스(와 .lock)가 없다"
+  assert_grep     "$names" '^\.claude/settings\.json$' "추적 파일은 그대로 봉인된다(양의 짝)"
+  assert_eq "$(git show "$B:a.txt")" "changed" "워킹트리 수정이 봉인에 반영된다"
+  cd / && rm -rf "$R"
 }
 
-# ★ fix round 1 IMPORTANT-2 — .gitignore 가 인덱스 리터럴은 덮지만 그 `.lock`
-#   형제는 덮지 않는 자리. check-ignore 이른 가드는 `$rel`(인덱스 자체)만 보므로
-#   통과하고, `add -A` 는 자신이 방금 잠근 `.lock` 을 미추적 파일로 주워 트리에
-#   넣는다 — 그 결과를 권위 있는 가드가 잡아야 한다(위치가 아니라 결과).
-#   스크립트는 건드리지 않고 fixture 로만 그 틈을 재현한다.
-case_lock_leak_dies_closed() {
-  local sid_short="${SID:0:8}"    # 전역 SID 에서 도출 — 수동 리터럴은 SID 가 바뀌면 갈린다
-  REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
-  git init -q .
-  git config user.email t@t.test; git config user.name tester
-  git checkout -q -b main
-  printf '.claude/quality-gates/seal-%s.index\n' "$sid_short" > .gitignore   # .lock 형제는 안 덮는다
-  echo tracked > a.txt
-  git add -A; git commit -qm base
-  echo "uncommitted" >> a.txt          # add -A 가 할 일이 있어야 인덱스를 쓰고 락을 잡는다
-
-  local out rc
-  out=$(bash "$SEAL" seal "$SID" 2>&1); rc=$?
-  assert_eq "$rc" "2" ".lock 형제만 새는 자리에서도 exit 2 (fail-closed)"
-  assert_grep "$out" 'sealed tree contains' "권위 있는(봉인 후) 가드가 잡았다 — 이른 가드(AC14 usage 문구)가 아니다"
-  cleanup
+# .claude/ 를 무시하지 않는 리포에서 qg 의 상태 · 중첩 워크트리가 봉인에 들어가면
+# create-head 의 재봉인 대조가 거짓으로 죽는다(중첩 워크트리가 embedded repo 로 잡힌다).
+case_seal_excludes_qg_namespace() {
+  local R; R=$(mktemp -d); cd "$R" || exit 1
+  git init -q; git config user.email t@t.test; git config user.name tester
+  echo tracked > a.txt; git add -A; git commit -qm base    # .gitignore 없음
+  mkdir -p .claude/quality-gates/sess0002; echo state > .claude/quality-gates/sess0002/pipeline.md
+  git worktree add -q --detach .claude/quality-gates/worktrees/base-sess0002 HEAD
+  echo changed > a.txt
+  local B rc=0; B=$(bash "$SEAL" seal "sess0002xyz") || rc=$?
+  assert_eq "$rc" "0" "qg 상태가 워킹트리에 있어도 봉인이 성공한다"
+  local names; names=$(git ls-tree -r --name-only "$B" 2>/dev/null)
+  assert_not_grep "$names" '^\.claude/quality-gates/' "qg 네임스페이스는 봉인되지 않는다"
+  assert_eq "$(git show "$B:a.txt")" "changed" "리뷰 대상 변경은 봉인된다(양의 짝)"
+  git worktree remove --force .claude/quality-gates/worktrees/base-sess0002 >/dev/null 2>&1
+  cd / && rm -rf "$R"
 }
 
 case_usage() {
@@ -146,8 +143,8 @@ case_usage() {
 }
 
 for c in case_seal_content case_no_index_in_tree case_no_side_effects \
-         case_index_file_cleaned_up case_fails_closed_when_not_ignored \
-         case_lock_leak_dies_closed case_usage; do
+         case_index_file_cleaned_up case_seal_succeeds_when_claude_dir_not_ignored \
+         case_seal_excludes_qg_namespace case_usage; do
   echo "== $c"; $c
 done
 finish
