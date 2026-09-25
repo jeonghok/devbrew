@@ -585,7 +585,8 @@ fi
 비정상 종료·`run` 비정상 종료·캐시 `exit 4` 로 빠지는 경로에도 같은 조건부 폐기를 둔다.
 남기면 다음 `create-baseline` 이 `qg-worktree.sh:88-91` 의 "refuse to clobber existing
 path" 에 걸려 **그 세션은 영영 clean 에 도달하지 못한다** — R6 이 `head-<sid8>` 에 대해
-이미 이름 붙이고 닫은 실패이고(`:1495-1502`), 기준선 축에는 그 규칙이 없었다.
+이미 이름 붙이고 닫은 실패이고(아래 R6 의 「이 폐기는 R6 의 *모든* 종료 경로에서
+실행한다」 문단), 기준선 축에는 그 규칙이 없었다.
 
 `granularity ∈ {file, package}` 에서 bulk-green 이 나오면 **unit 별 `pass` 행으로
 분해해** 기록한다 — 집합 전체가 통과했으므로 각 unit 이 통과했다. `BULK` 키는
@@ -770,21 +771,33 @@ codex).** 그러지 않으면 *"마지막 호출의 결과가 authoritative"* �
 여기서 위험은 false green 이 아니라 false red 이고, **무한 재실행이 바로 false green
 경로**이므로 1회로 잠근다.
 
-그다음 어댑터 YAML 들을 집계한다:
+그다음 어댑터 YAML 들을 집계한다. **`$adapter_count == 0`(R1a 감지 0개)이면 glob 을 아예
+쓰지 않는다** — 매치 없는 glob 은 셸에 따라 이 호출 자체를 죽인다(zsh 는 기본값에서
+`no matches found: …` 로 명령을 실행하지도 않고 rc 1, bash 기본값은 리터럴 패턴 문자열을
+인자로 넘겨 스크립트가 그 이름의 파일을 못 읽어 exit 4) — 둘 다 `error-axis` 로 떨어지는데,
+실제 사실은 *"대조가 실패했다"* 가 아니라 *"어댑터가 없다"* 다(§6.7 계열과 같은 오분류
+축). `diff-test-results.py --aggregate --expected-adapters 0`(파일 인자 없음)은 이미
+`degrade_causes: [no-adapters]` 로 정직하게 답한다(→ `verdict.py` 의 `CAUSE_TO_REASON` 이
+`scope-empty` 로 옮긴다) — glob 을 건너뛰기만 하면 그 정직한 답이 그대로 도착한다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-"$QG/scripts/diff-test-results.py" --aggregate \
-  --expected-adapters "$adapter_count" "$qg_run_tmp"/per-adapter-*.yaml > "$aggregate_yaml"
+if [ "$adapter_count" -eq 0 ]; then
+  "$QG/scripts/diff-test-results.py" --aggregate \
+    --expected-adapters 0 > "$aggregate_yaml"
+else
+  "$QG/scripts/diff-test-results.py" --aggregate \
+    --expected-adapters "$adapter_count" "$qg_run_tmp"/per-adapter-*.yaml > "$aggregate_yaml"
+fi
 ```
 
-**glob 이지 모델이 만든 배열이 아니다 (/qg iter-8 iteration 3, F11).** 앞 버전은
-`"${per_adapter_yamls[@]}"` 를 넘겼는데 그 이름은 **이 문서 어디에서도 대입되지 않는다** —
-feature 커밋 이래 사용 1건·대입 0건이었다. 배열을 되살리면 `--expected-adapters` 의 개수
-대조가 *"생산된 YAML 개수 vs 기대 개수"* 가 아니라 *"모델이 적은 목록의 길이 vs 기대
-개수"* 가 되어 대조 양쪽이 같은 출처에서 나온다. `$qg_run_tmp` 는 실행마다 새로 만들어져
-stale 파일을 주울 수 없으므로, glob 은 **실제 생산물**을 세게 만들어 그 개수 대조에
-비로소 이빨을 준다.
+**어댑터가 1개 이상일 때는 glob 이지 모델이 만든 배열이 아니다 (/qg iter-8 iteration 3,
+F11).** 앞 버전은 `"${per_adapter_yamls[@]}"` 를 넘겼는데 그 이름은 **이 문서 어디에서도
+대입되지 않는다** — feature 커밋 이래 사용 1건·대입 0건이었다. 배열을 되살리면
+`--expected-adapters` 의 개수 대조가 *"생산된 YAML 개수 vs 기대 개수"* 가 아니라 *"모델이
+적은 목록의 길이 vs 기대 개수"* 가 되어 대조 양쪽이 같은 출처에서 나온다. `$qg_run_tmp` 는
+실행마다 새로 만들어져 stale 파일을 주울 수 없으므로, glob 은 **실제 생산물**을 세게 만들어
+그 개수 대조에 비로소 이빨을 준다.
 
 집계까지 끝나면 **이제** HEAD 축 트리를 폐기한다 (R4③ 이 기준선 트리를 폐기하는 것과
 대칭 — 두 트리 다 일회용이지만 HEAD 축의 수명은 **자기 축의 실행 + flaky 재실행 + 대조**
@@ -947,4 +960,11 @@ SKILL Step 4 가 싣는 판정 입력:
 | ② 가 kill switch 없이 R6 집계까지 끝나지 못했다(R-init 가드 · R3 의 `중단` 선택 · 그 밖에 R1–R5 어느 스텝에서든 중단, 원인 무관 — R2·R4·R5b 내부 실패가 degrade 로 R6 까지 이어지는 정상 경로는 제외) | `--reason error-axis` (`--differential` 없음) |
 | R6 어느 호출이든 non-zero · 키 판독 실패 | `--reason error-axis` (`--differential` 없음) |
 | `check_qa_ledger.py` non-zero | `--reason silent-drop` |
-| `check_qa_ledger.py` exit 0 이지만 원장(`runtime-evidence.md`)의 floor 5차원 중 하나라도 `degraded` 이거나 `unclaimed` unit 이 있다(그 게이트는 원장 내부 일관성만 보고 이 경우도 exit 0 을 낼 수 있다) | `--reason silent-drop` |
+| `check_qa_ledger.py` exit 0 이지만 원장(`runtime-evidence.md`)의 `floor:verification` 이 `degraded` 이거나 `unclaimed` unit 이 있다(그 게이트는 원장 내부 일관성만 보고 이 경우도 exit 0 을 낼 수 있다) | `--reason silent-drop` |
+
+**판정 옆 차등 요약과 kept=0 라우팅은 SKILL 이 진다.** `$aggregate_yaml` 의
+`resolution_disclosure:` 줄과 이번 iteration `per-adapter-*.yaml` 의 non-green
+`attributions:` 행(unit · 분류)을 판정 줄 옆에 verbatim 으로 보이는 것, 그리고
+`verdict: defect` 이면서 kept = 0(`confirmed_product_defect: true` 가 유일한 원인)일 때
+Final Summary 대신 Fix-loop decision 으로 라우팅하는 것은 SKILL Step 4.5 의 일이다 —
+이 레퍼런스는 그 입력(`$aggregate_yaml` · per-adapter YAML)만 만든다.

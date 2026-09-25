@@ -239,7 +239,7 @@ plugin_installed() {
   return 1
 }
 
-# Check pr-review-toolkit (required for the Review gate)
+# Check pr-review-toolkit (optional additional reviewer for ③ angles/reviewers)
 PR_REVIEW_FOUND=false
 if plugin_installed "pr-review-toolkit"; then
   PR_REVIEW_FOUND=true
@@ -248,8 +248,8 @@ fi
 
 if [[ "$PR_REVIEW_FOUND" == "false" ]]; then
   echo "⚠️  Warning: pr-review-toolkit plugin not found" >&2
-  echo "   The Review gate (PR Review) requires this plugin for code review agents" >&2
-  echo "   Pipeline will continue but the Review gate may have limited functionality" >&2
+  echo "   pr-review-toolkit supplies code-reviewer as an additional reviewer in ③ (angles/reviewers)" >&2
+  echo "   Pipeline will continue with the angle performers + whatever specialists are installed" >&2
   echo "" >&2
 fi
 

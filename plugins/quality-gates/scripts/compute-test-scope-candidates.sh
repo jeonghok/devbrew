@@ -8,13 +8,15 @@
 #
 # Inputs:
 #   $PWD            — must be a git working tree
-#   (no env vars)   — the review range is derived here, from git alone. The Review
-#                     gate's own scope resolution (SKILL.md "Review gate" step 1) is
-#                     model-owned and may differ; this script does not read it.
+#   (no env vars)   — the review range is derived here, from git alone. The SKILL's
+#                     own scope resolution ("Review" section Step 1) is model-owned
+#                     and may differ; this script does not read it.
 #
 # Output (stdout):
 #   Default: zero or more lines, one path per line. Paths are repo-relative.
-#            Empty stdout means "no candidates" (skill should silently skip Step 2.5).
+#            Empty stdout means "no candidates" — this does NOT mean skip R1b.
+#            differential-test.md's empty-scope fail-safe still dispatches
+#            test-scope-validator and records the gap.
 #   --total: a single integer line.
 #
 # Exit: 0 = success (including a genuinely empty result — no candidates)

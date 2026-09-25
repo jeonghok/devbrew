@@ -525,7 +525,7 @@ C2 가 `PASS` / `FAIL` / `SKIP_WITH_EVIDENCE` / `NEEDS_RESOLUTION` 의 산출자
 | `error-axis` | 어느 축이든 `error` 상태가 닿음(수집 에러·import 실패의 대칭 경우) |
 | `granularity-smear` | bulk 도말 또는 `smeared` — 한 종료 코드가 전 unit 에 발림 |
 | `angle-absent` | 보안 또는 판정 각도가 `absent`(§6.3.1) |
-| `scope-empty` | **resolved scope 가 0 인데 `check-review-scope.sh` 가 `changes_exist: yes` 를 냄** — 오늘의 「정직-verdict floor」가 내던 false-clean 차단이 이 사유로 옮겨온다. 진짜 변경 없음(genuine no-op)은 `scope-empty` 가 아니라 `clean` 이다 |
+| `scope-empty` | **resolved scope 가 0 인데 `check-review-scope.sh` 가 `changes_exist: yes` 를 냄**, 또는 ②(차등 테스트)의 R1b 가 고르는 test unit 이 0개(`expected-empty`) — 오늘의 「정직-verdict floor」가 내던 false-clean 차단이 이 사유로 옮겨온다. **재결정 (P23, 2026-09-26, §16)**: ② 가 상시 도는 이상 진짜 변경 없음(genuine no-op)과 docs/config-only 변경도 R1b 가 고르는 unit 이 0개면 `scope-empty` 다 — `clean` 이 아니다(관측 없음은 음성 결과가 아니다) |
 | `declaration-invalid` | 트레일러가 있으나 가리키는 경로가 실재하지 않거나, **한 브랜치가 서로 다른 토픽 키를 단 커밋을 함께 담음** |
 | `trivia` | trivia escape 로 파이프라인 전체가 생략됨 — C4 가 허용한 두 탈출구 중 나머지 하나다. `clean` 으로 렌더하면 「테스트 없는 clean 은 나오지 않는다」가 거짓이 된다 |
 | `findings-lost` | 리뷰 항목이 **소실됐거나 셀 수 없다** — 헌장이 막으라고 지정한 세 조건 중 둘이다(나머지 「주 판정자 사망」은 `angle-absent` 가 받는다). §6.3.4 의 강제(coercion) 계수가 소실로 판정되면 여기로 온다 |
@@ -987,6 +987,23 @@ AC21 을 확인한다.
 - **남는 것** — 선언 조각이 `#pr4c` 하나 더 는다. 4b 와 4c 사이 한 릴리스 동안 `Spec:`
   트레일러는 효과가 없다. HEAD 축의 봉인은 4b 가 먼저 배선한다 — 샌드박스가 사라지면
   `create-head` 가 붙을 커밋이 봉인뿐이기 때문이다.
+
+**재결정 (P23, 2026-09-26) — 「genuine no-op = clean」 을 「genuine no-op = not-certified
+(scope-empty)」 로 되돌린다.**
+- **원래** — §6.4.3 의 `scope-empty` 행: resolved scope 가 0 인데 `changes_exist: yes` 일
+  때만 발동하고, 진짜 변경 없음(genuine no-op)은 `scope-empty` 가 아니라 `clean` 이다.
+- **재결정** — ②(차등 테스트)가 AC2 대로 상시 도는 이상, R1b 가 고르는 test unit 이
+  0개(`expected-empty`)인 실행은 `scope-empty` → `not-certified (scope-empty)` 다 — 이것은
+  **진짜 무변경(genuine no-op)과 docs/config-only 변경을 포함한다.** 출하된 동작을 유지하는
+  재결정이다(PR4b 최종 리뷰 I2 ruling).
+- **근거** — 「관측 없음은 음성 결과가 아니다」(레퍼런스 규율)와 AC2(② 상시)가 함께 서면
+  무변경 diff 도 R1b 가 고르는 unit 이 0개인 한 **테스트 관측이 0** 이다 — `clean` 은
+  "검증했고 확증 결함 없음"(§6.4.3)인데 관측 0건은 검증이 아니다. 틀리면 문서 전용 · 무변경
+  실행이 `clean` 대신 `not-certified` 로 보인다(방향 안전 — 결함을 놓치는 쪽이 아니라 과소
+  인증하는 쪽으로 기운다). 사람(사용자)이 뒤집을 수 있는 자리로 PR 본문에 별도로 적었다.
+- **남는 것** — genuine no-op 을 `clean` 으로 보고 싶은 소비자(예: docs-only PR 의 자동
+  머지 게이트)는 이 사유를 `clean` 과 같게 취급하는 판단을 스스로 내려야 한다 — 판정
+  어휘 자신은 그 판단을 대신하지 않는다.
 
 **각 PR 은 자기 `Spec:` 조각을 선언한다**(§6.2.1) — `…-design.md#pr1` … `#pr5`. 같은 값을 쓰면
 PR2~5 가 앞 PR 전부를 합집합으로 재리뷰해 분할이 비용을 **늘린다**.

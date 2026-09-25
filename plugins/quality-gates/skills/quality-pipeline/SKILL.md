@@ -515,7 +515,7 @@ Agent({
    | ② 의 `check_qa_ledger.py` 가 non-zero | `--reason silent-drop` |
    | ② 가 kill switch 로 생략됐다(Step 1c) | `--reason kill-switch` |
    | `$resolved_scope_file_count == 0` 이고 캐시한 `$changes_exist == yes` (정직-verdict floor) | `--reason scope-empty` |
-   | ② 의 `check_qa_ledger.py` 는 exit 0 인데 R8 원장(`runtime-evidence.md`)의 floor 5차원 중 하나라도 `degraded` 이거나 `unclaimed` unit 이 있다(그 게이트는 원장 내부 일관성만 보고 이 경우도 exit 0 을 낼 수 있다) | `--reason silent-drop` |
+   | ② 의 `check_qa_ledger.py` 는 exit 0 인데 R8 원장(`runtime-evidence.md`)의 `floor:verification` 이 `degraded` 이거나 `unclaimed` unit 이 있다(그 게이트는 원장 내부 일관성만 보고 이 경우도 exit 0 을 낼 수 있다) | `--reason silent-drop` |
 
    ```bash
    QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -553,13 +553,30 @@ Agent({
      `> [quality-gates] scope check degraded (detached HEAD / no base branch / unrelated history / shallow) — empty-scope detection skipped (fail-open; this run's scope-empty floor input is unavailable — the other reasons in Step 4's table still apply normally).`
    - ② 에 `granularity: bulk` 어댑터가 있었으면 `커버리지 미보장(러너가 선택을 무시함)` 을
      함께 보인다(레퍼런스 R8).
+   - **차등 요약 (판정 줄 옆).** ② 가 이번 iteration 에 R6 집계까지 돌았으면(`$aggregate_yaml`
+     이 이번 iteration 것으로 존재) 판정 줄 바로 옆에 그대로 보인다 — 요약·재서술 없이:
+     - `$aggregate_yaml` 에 `resolution_disclosure:` 줄이 있으면 그 줄을 **verbatim** 인용한다
+       (양측 빨강 unit 의 해상도 구멍 공시, §6.4.2).
+     - 이번 iteration 의 `$qg_run_tmp/per-adapter-*.yaml` 각각의 `attributions:` 항목 중
+       `verdict:` 가 `STILL_GREEN` 이 **아닌** 것을 `<unit> · <verdict>` 한 줄씩 나열한다
+       (예: `tests/test_foo.py::test_x · NEW_REGRESSION`) — 귀속(unit · 분류)이지 판정이
+       아니다, 판정은 여전히 `verdict:` 줄이 정한다. 0개면 이 항목 자체를 생략한다("없음"을
+       적지 않는다).
+     ② 가 이번 iteration 에 kill switch 로 건너뛰었거나 R6 집계 전에 error-axis 로 끝났으면
+     (`$aggregate_yaml` 없음) 이 차등 요약 전체를 생략한다 — 낼 것이 없다.
 
    그다음:
    - `verdict: clean` → 루프를 나가 [Final Summary](#final-summary).
    - `defect` 또는 `not-certified` 이고 **kept > 0**(`**Findings:**` counts 줄의 세
      severity 합 ≥ 1) → Step 5 의 결정 도구.
-   - `defect` 또는 `not-certified` 이고 kept = 0 → 고칠 제안이 없다. 루프를 나가
-     Final Summary(판정 그대로).
+   - `verdict: defect` 이고 kept = 0 — 이 결함은 리뷰 findings 가 아니라 **차등 테스트**에서
+     왔다(`$aggregate_yaml` 의 `confirmed_product_defect: true`, §6.4.3). 고칠 제안이
+     없다고 Final Summary 로 직행하지 않는다 — Step 5 의 [Fix-loop
+     decision](#fix-loop-decision) 를 그대로 부르되, `<summary>` 슬롯에는 바로 위에서 뽑은
+     non-green 귀속 행 목록(`<unit> · <verdict>`, 쉼표로 이어 붙인다)을 회귀 목록으로
+     넣는다 — `**Findings:**` counts 줄이 없으므로 그것을 대신한다.
+   - `not-certified` 이고 kept = 0 → 고칠 제안이 없다. 루프를 나가 Final Summary(판정
+     그대로).
 
    **Resolved-scope file count (floor input — reuse, not a new measurement).**
    `$resolved_scope_file_count` = the size of the file set you actually resolved
@@ -579,14 +596,20 @@ Agent({
    an already-known value; do not re-measure (re-deriving it risks landing on an
    answer that no longer matches the set you actually reviewed).
 
-5. **Decision tool (kept > 0 only).** Invoke [Fix-loop
-   decision](#fix-loop-decision). Fill its `<summary>` slot by
-   **verbatim-copying the `**Findings:**` counts line** from step 4's stdout
-   (deterministic extraction — do NOT author a fresh sentence). Append one
-   `## History` line of the form
+5. **Decision tool.** Invoked when kept > 0, or when `verdict: defect` with kept = 0
+   and the defect came from the differential test (Step 4.5's routing above). Invoke
+   [Fix-loop decision](#fix-loop-decision).
+   - kept > 0: fill `<summary>` by **verbatim-copying the `**Findings:**` counts
+     line** from step 4's stdout (deterministic extraction — do NOT author a fresh
+     sentence).
+   - kept = 0, defect from the differential test: fill `<summary>` with the
+     non-green attribution list you surfaced in Step 4.5 (`<unit> · <verdict>`,
+     comma-joined) — there is no `**Findings:**` counts line to copy in this case.
+   Append one `## History` line of the form
    `qg iter N: <c> CRITICAL / <i> IMPORTANT / <s> SUGGESTION → user chose <choice>`
-   (severity triplet copied from the same counts line; see
-   [state-file-format](references/state-file-format.md#history)).
+   (severity triplet copied from the same counts line when one exists —
+   `0 CRITICAL / 0 IMPORTANT / 0 SUGGESTION` when the trigger was the differential
+   test instead; see [state-file-format](references/state-file-format.md#history)).
 
 If iteration N=5 ends with kept > 0: run step 4.5's surface first (same as
 above), then invoke [Max-iter decision](#max-iter-decision)

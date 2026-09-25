@@ -3084,6 +3084,10 @@ gh pr create --base main --head feature/qg-gate-merge-pr4b \
 | 원장 파일 이름 `runtime-evidence.md` 에 옛 게이트 이름 | **해소하지 않는다** | R-AG — `qg-gc.py` 세션 표식 |
 | 각도 파일은 모델이 쓴다 — 락은 형식만 잰다 | **해소하지 않는다** | 설계 §15-4 · `test_pipeline_verdict_wiring.sh` 머리 주석 |
 | `check_wiring.py` 의 줄번호-키 면제 | **해소하지 않는다(구조적)** | 매 PR 재앵커 |
+| 결정론 차등 요약 렌더러 — `verdict.py`/합성기가 `resolution_disclosure` + non-green 귀속 행을 직접 stdout 에 찍는 것(SKILL 이 파일을 읽어 조립하는 대신) | 후속 | 최종 리뷰 I1 ruling — 모델이 읽는 표면을 먼저 닫는 쪽이 이 PR 범위에 맞다 |
+| 쓰기 가능 추가 리뷰어(`pr-review-toolkit` 등)가 봉인 뒤에 돈다 — 그 사이 워킹트리가 바뀌면 `clean` 이 이미 사라진 트리를 인증할 수 있다(Step 4 에 재-seal 비교 없음) | 후속 | 최종 리뷰 M5 ruling — Law 2 가 이미 외부 리뷰어를 advisory 로 묶는다; 새 표면을 더하면 새 결함의 창이 열린다 |
+| `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST` 가 스크립트로 집행되지 않는다 — `run-test-selection.sh`/`qg-worktree.sh` 의 probe·create-baseline·create-head 가 이 스위치를 직접 확인하지 않고, 모델이 산문(Step 1c)을 읽어야만 ② 를 건너뛴다 | 후속 | 최종 리뷰 M7 ruling — 문서화된 스위치다; 새 표면을 더하면 새 결함의 창이 열린다 |
+| `agents/security-reviewer.md` 의 「Review gate」 문구(:3, :25) | **해소하지 않는다** | 최종 리뷰 M4 ruling — 계획의 범위 불변식(security-reviewer.md 한 바이트도 안 바뀐다); persona 편집은 보안 리뷰 대상 |
 
 ---
 

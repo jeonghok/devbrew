@@ -18,7 +18,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
 - **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — 파이프라인 내부 fix-loop이 `max_review_iterations=5` + repeat-detection (no-progress check) + kill switch로 묶임.
 - **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (`*.local.md` gitignore 패턴으로 자동 제외; TTL sweep + SessionEnd hook으로 폴더 GC).
 - **P8 determinism-economy (harness lightness — trust the model)** (v2.5.0) — 암묵 session scope로 파이프라인이 돌 때 그 사실을 사용자-가시 한 줄로 밝히는 **scope 투명성**. 버려진 결정론적 under-coverage 경고를 결정론 가드가 아니라 *모델 행동*으로 대체(git 비교·차단 없음). 자연어 scope 의도는 별도 parser 없이 모델이 branch scope로 해석 — `/qg branch`는 결정론적 escape hatch로 유지. devbrew P8 determinism-economy refinement("Zero hooks" 일반화) instantiation.
-- **P8 determinism-economy — self-honest verdict floor** (v2.6.0; routing 제거·단순화 v2.7.0) — 파이프라인이 *검토받았다고 믿는 scope*와 *resolve한 scope*가 발산할 때(빈 세션 → resolved scope 0 → "clean"의 false-clean)를 봉쇄. read-only `scripts/check-review-scope.sh`가 `changes_exist`를 결정론으로 emit하고, SKILL이 iter-1에서 1회 호출·캐시해 **정직-verdict floor**(load-bearing, kill 불가)가 `resolved scope 0 AND changes_exist == yes`이면 판정이 `not-certified (scope-empty)` 가 된다. **무엇을 리뷰할지(routing)는 모델이 소유** — v2.7.0에서 v2.6.0의 redirect 게이트·`$effective_diff_scope` 배선·redirect kill switch를 제거하고 `/qg branch` escape hatch + honesty norm 한 줄로 대체(dogfood 5버그가 전부 routing 재구성에서 나왔고 floor의 load-bearing 입력 `changes_exist`는 틀린 적 없음). 결정론은 무결성 floor 한 점에만; routing/자연어는 모델 신뢰. genuine no-op·session 기본값·`/qg branch`는 무변경. regression: `tests/test_check_review_scope.sh`, `tests/test_qg_false_clean_floor.sh`.
+- **P8 determinism-economy — self-honest verdict floor** (v2.6.0; routing 제거·단순화 v2.7.0) — 파이프라인이 *검토받았다고 믿는 scope*와 *resolve한 scope*가 발산할 때(빈 세션 → resolved scope 0 → "clean"의 false-clean)를 봉쇄. read-only `scripts/check-review-scope.sh`가 `changes_exist`를 결정론으로 emit하고, SKILL이 iter-1에서 1회 호출·캐시해 **정직-verdict floor**(load-bearing, kill 불가)가 `resolved scope 0 AND changes_exist == yes`이면 판정이 `not-certified (scope-empty)` 가 된다. **무엇을 리뷰할지(routing)는 모델이 소유** — v2.7.0에서 v2.6.0의 redirect 게이트·`$effective_diff_scope` 배선·redirect kill switch를 제거하고 `/qg branch` escape hatch + honesty norm 한 줄로 대체(dogfood 5버그가 전부 routing 재구성에서 나왔고 floor의 load-bearing 입력 `changes_exist`는 틀린 적 없음). 결정론은 무결성 floor 한 점에만; routing/자연어는 모델 신뢰. session 기본값·`/qg branch` 자체의 스코프 **선택**(routing)은 무변경이지만, 이 floor 가 보는 것과 **별개로** ② 차등 테스트가 상시 도는 v9.0.0 이후는 R1b 가 고르는 test unit 이 0개인 실행도 `expected-empty` → `not-certified (scope-empty)` 다(관측 없음은 음성 결과가 아니다 — §6.4.3 P23 재결정, 2026-09-26) — **진짜 무변경(genuine no-op)과 docs/config-only 변경을 포함한다.** regression: `tests/test_check_review_scope.sh`, `tests/test_qg_false_clean_floor.sh`.
 - **P21 (Secret이 prompt context에 들어가지 않음)** — 결정 도구는 결정과 포인터만 묻고 secret 값은 받지 않는다(SKILL Rules R4). regression test: `tests/test_no_secret_prompts.py`.
 - **Law 2 (Writer ≠ Reviewer, 분리)** — writer(originating turn) ≠ `test-scope-validator`(차등 테스트 R1b 의 사전 분류 리뷰어) ≠ 테스트 실행(오케스트레이터 · 결정론 스크립트). `test-scope-validator` 는 `tools: Read, Grep, Glob` fail-closed allowlist.
 - **P2 (Categorical signal, no numeric scoring)** (v1.9.0) — `test-scope-validator`는 정확히 4-way enum 분류 (`aligned` / `outdated-suspicion` / `cherry-pick-suspicion` / `unclear`)만 emit. percentage, confidence, X/Y rating 모두 금지. summary의 counter 정수 (`1 aligned, 0 outdated…`) 는 허용. devbrew P2 "수치 스코어링 ban" instantiation.
@@ -262,7 +262,9 @@ dispatch-수 기반 consent 게이트 주장은 documented-not-implemented였음
 anti-corollary(subagent spray) instantiation은 **transparency 라인(매 iter 선택/제외 가시화)
 + 선언된 max fan-out** 기반으로 억제한다 (리포 전역 `fan-out ≥5` 하드 게이트는 억제 sweep에서 제거됐다 — 없는 백스톱을 근거로 들지 않는다).
 재계산 max fan-out: **Phase 1 병렬 ≤ 8**(security-reviewer + codex + 추가 리뷰어 최대 6),
-**총/iteration ≤ 10**(+ 재비판 + synthesizer; code-simplifier Phase 3 없음).
+**총/iteration ≤ 10**(Phase 1 의 8 + 재비판(doc-recritic) + test-scope-validator(차등 테스트
+R1b, 매 iteration 디스패치) = 10; `synthesize_findings.py` 는 스크립트 호출이지 dispatch 가
+아니므로 이 집계에 안 든다; code-simplifier Phase 3 없음).
 
 ## 파이프라인 흐름 (single-turn)
 
@@ -439,6 +441,13 @@ log를 출력하고 plan-기반 분류로 fallback합니다.
 ### Kill switches (보안 컨트롤)
 
 CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component 비활성화 경로는 환경 변수 한 번으로 cover되어야 함. 아래는 source-of-truth 인벤토리.
+
+**보안 — 기본값이 대상 저장소의 코드를 호스트 권한으로 실행한다.** ② 차등 테스트가 매
+`/qg`(`/qg branch <name>` 로 남의 브랜치를 검사할 때 포함)마다 상시 도는 v9.0.0 이후,
+기준선·HEAD 두 트리에서 어댑터의 `setup_cmd`(`npm ci` 등 install lifecycle 스크립트) ·
+테스트 스위트가 **기본으로, 별도 동의 질문 없이** 호스트 권한으로 돈다 — 이전에는 게이트
+범위 질문에서 "Run both gates" 를 골라야만 닿던 표면이다. 끄는 스위치는 아래
+`DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 하나다.
 
 **전역 (모든 hook + 모든 reviewer 비활성화):**
 

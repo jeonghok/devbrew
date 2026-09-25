@@ -34,7 +34,10 @@
 # Kill switch: DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1 — `create` exits 2
 # with a loud message.
 # Kill switch: DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1 — `create-sandbox` exits 3
-# (distinct from die's exit 2) so the orchestrator can fall back to read-only.
+# (distinct from die's exit 2). The qg pipeline no longer calls `create-sandbox` —
+# its only consumer is plugin-audit's own test isolation
+# (plugins/plugin-audit/scripts/run-own-tests.sh), and this switch has effect
+# there only.
 
 set -u
 

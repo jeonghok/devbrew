@@ -36,10 +36,14 @@ target_branch: "<branch name>"       # OPTIONAL — paired with worktree_path
 
 - [2026-05-27T10:00:00Z] Pipeline started
 - [2026-05-27T10:05:00Z] qg iter 1: 1 CRITICAL / 2 IMPORTANT / 1 SUGGESTION → user chose Retry
-- [2026-05-27T10:08:00Z] qg iter 2: clean
-- [2026-05-27T10:12:00Z] qg: verdict clean
-- [2026-05-27T10:12:01Z] Pipeline complete
 ```
+
+A `clean` (or `not-certified`/`defect` with kept = 0 and no differential-test
+origin) iteration appends **no** `## History` line — SKILL Step 5 only runs (and
+appends) when kept > 0, or when a differential-test-origin `defect` with kept = 0
+routes there instead of Final Summary. Neither a `qg iter N: clean` line nor a
+`Pipeline complete` line is ever written by any script — the example above shows
+the only two lines this section actually contains after one non-clean iteration.
 
 ## Removed Fields (vs v1.x)
 
@@ -50,11 +54,11 @@ The following v1.x fields are **no longer written or read**:
 | `status` | No cross-turn state machine. Pipeline is single-turn. |
 | `consecutive_no_signal` | `<qg-signal>` tag removed. |
 | `max_review_iterations` | Hard-coded constant in SKILL (5). |
-| `runtime_resolution_iter` | Hard-coded constant in SKILL — the env-override switch it named is removed (Task 7, one pipeline). |
+| `runtime_resolution_iter` | The resolution loop it counted iterations for is removed entirely — there is no successor constant or field. |
 | `last_runtime_needed_hash` | Repeat detection moves to inline AskUserQuestion. |
 | `review_iteration` | Phantom field — counter lives in `## History` section only (I11 v1.32.1). |
-| `skip_runtime` | Argument removed (Task 7, one pipeline) — no gate scope to skip. |
-| `single_gate` | Argument removed (Task 7, one pipeline) — no gate scope to choose. |
+| `skip_runtime` | Argument removed — no gate scope to skip. |
+| `single_gate` | Argument removed — no gate scope to choose. |
 | `plan_file` | Passed as SKILL invocation arg. |
 | `pr_url` | Passed as SKILL invocation arg. |
 | `available_plugins` | SKILL re-derives inline (cheap). |

@@ -254,27 +254,47 @@ case_degraded_ledger_row_reaches_silent_drop() {
   # silent-drop 은 위 non-zero 행에만」으로 바꿔치기) 둘 다 창 안 다른 행이 리터럴을
   # 대신 만족시켜 GREEN 으로 남았다. 이제 *이 행 자신*(degraded· unclaimed 를 동시에 담은
   # «그 줄»)에서만 잰다 — 다른 행이 대신 만족시킬 수 없다.
+  #
+  # 최종 리뷰 M2 — 이 행은 `floor:attribution` degraded 에도 발화했는데, 그 값은
+  # `--differential` 행(위)이 이미 `degrade_causes` 로 옮기는 것과 겹치고, `silent-drop` 이
+  # REASONS 에서 먼저 정렬돼 더 구체적인 사유(baseline-unrunnable · error-axis ·
+  # granularity-smear)를 덮어썼다. `floor:verification` degraded 이거나 `unclaimed` unit
+  # 존재로 좁혔다 — SKILL.md 와 레퍼런스(R8 표 미러) 양쪽에서. 이제 두 파일을 함께 스캔하고
+  # 좁힌 표기(`floor:verification`)가 있는지, 「floor 5차원」으로 도로 넓어지지 않았는지도 잰다.
   local got
-  got=$(python3 - "$SKILL" <<'PY'
+  got=$(python3 - "$SKILL" "$REF" <<'PY'
 import sys
-text = open(sys.argv[1], encoding="utf-8").read()
-rows = [l for l in text.splitlines() if "degraded" in l and "unclaimed" in l]
+rows = []
+for path in sys.argv[1:3]:
+    text = open(path, encoding="utf-8").read()
+    # "exit 0" 도 요구한다 — REF 에는 이 목표 행과 무관하게 degraded·unclaimed 를
+    # 둘 다 언급하는 다른 산문(R8 표의 일반 설명 행 · unclaimed 단독 규칙 문단)이
+    # 있어, 그 둘만으로는 목표 행(판정 입력 라우팅 행)을 못 가른다.
+    rows += [l for l in text.splitlines()
+             if "degraded" in l and "unclaimed" in l and "exit 0" in l]
 print(f"ROWS:{len(rows)}")
 ok = 0
+narrow_ok = 0
 for l in rows:
     has_reason = "--reason silent-drop" in l
     negated = any(neg in l for neg in ("싣지 않는다", "없음", "공시만"))
     if has_reason and not negated:
         ok += 1
+    if "floor:verification" in l and "5차원" not in l:
+        narrow_ok += 1
 print(f"OK:{ok}")
+print(f"NARROW_OK:{narrow_ok}")
 PY
 )
-  assert_grep "$got" '^ROWS:1$' "degraded 이면서 unclaimed 인 조건을 담은 행이 정확히 하나 있다"
-  assert_grep "$got" '^OK:1$'   "그 행 자신이 --reason silent-drop 을 싣고 부정형(싣지 않는다·없음·공시만)을 담지 않는다"
+  assert_grep "$got" '^ROWS:2$' "degraded 이면서 unclaimed 인 조건을 담은 행이 SKILL·레퍼런스 각각 하나씩(합쳐 둘) 있다"
+  assert_grep "$got" '^OK:2$'   "그 행들 자신이 --reason silent-drop 을 싣고 부정형(싣지 않는다·없음·공시만)을 담지 않는다"
+  assert_grep "$got" '^NARROW_OK:2$' "그 행들이 floor:verification 으로 좁혀졌고 「floor 5차원」으로 도로 넓어지지 않았다"
   # 양의 짝 — 새 행이 정상 경로(check_qa_ledger.py 가 돌아 원장이 전부 filled 인 실행)의
   # --differential 행을 밀어내지 않았다.
   assert_grep "$(cat "$SKILL")" -- '--differential "<\$aggregate_yaml' \
-    "정상 --differential 행이 여전히 표에 남아 있다(새 행이 대체하지 않았다)"
+    "정상 --differential 행이 SKILL 표에 여전히 남아 있다(새 행이 대체하지 않았다)"
+  assert_grep "$(cat "$REF")" -- '--differential "\$aggregate_yaml"' \
+    "정상 --differential 행이 레퍼런스 R8 표에도 여전히 남아 있다(새 행이 대체하지 않았다)"
 }
 
 case_pre_r6_abort_reaches_error_axis_catchall() {
@@ -408,6 +428,51 @@ PY
   assert_grep "$got" '^IDX_ROWS:1$'    "kill-switch 색인에도 같은 정확한 철자의 행이 하나 있다"
 }
 
+case_differential_defect_zero_kept_routes_to_fixloop() {
+  # 최종 리뷰 I1 — 리뷰 findings 없이(kept=0) 차등 테스트가 `confirmed_product_defect: true`
+  # 를 낸 실행은 Final Summary 로 직행하지 않고 Fix-loop decision 으로 간다(회귀 목록을
+  # <summary> 로), 그리고 판정 줄 옆에 resolution_disclosure + non-green(STILL_GREEN 이
+  # 아닌) 귀속 행을 verbatim 으로 보인다. 독립 앵커 둘 — 어느 한쪽 문장을 지워도 그 앵커만
+  # RED 가 된다(라우팅 문장 삭제 → HAS_ROUTE RED, 공시 불릿 삭제 → HAS_DISCLOSURE RED).
+  local got
+  got=$(python3 - "$SKILL" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+m = re.search(r'\*\*Step 4\.5 —.*?(?=\n## Fix-loop decision)', text, re.S)
+window = m.group(0) if m else ""
+print(f"WINDOW_LEN:{len(window)}")
+print(f"HAS_DISCLOSURE:{1 if ('resolution_disclosure:' in window and 'STILL_GREEN' in window) else 0}")
+print(f"HAS_ROUTE:{1 if ('차등 테스트' in window and 'confirmed_product_defect: true' in window and 'Fix-loop decision' in window and 'kept = 0' in window) else 0}")
+PY
+)
+  assert_grep "$got" '^WINDOW_LEN:[1-9]' "Step 4.5–Fix-loop decision 창을 찾았다(0 이면 앵커가 깨졌다)"
+  assert_grep "$got" '^HAS_DISCLOSURE:1$' "판정 줄 옆에 resolution_disclosure + non-green(STILL_GREEN 아님) 귀속 표시가 있다"
+  assert_grep "$got" '^HAS_ROUTE:1$' "defect · kept=0 · 차등 테스트 기원은 Final Summary 대신 Fix-loop decision 으로 간다"
+}
+
+case_zero_adapter_aggregate_skips_glob() {
+  # 최종 리뷰 M3 — `$adapter_count == 0` 이면 R6 집계 호출이 `per-adapter-*.yaml` glob 을
+  # 아예 안 쓴다(매치 없는 glob 이 쉘에 따라 명령을 통째로 죽이거나(zsh) 리터럴 파일명을
+  # 넘겨 exit 4 를 내(bash) error-axis 로 오분류됐다 — 실제 사실은 no-adapters 다). then
+  # 분기는 glob 없이 `--expected-adapters 0`, else 분기만 glob 을 쓴다.
+  local got
+  got=$(python3 - "$REF" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+m = re.search(r'if \[ "\$adapter_count" -eq 0 \]; then\n(.*?)\nelse\n(.*?)\nfi', text, re.S)
+print(f"FOUND:{1 if m else 0}")
+then_body, else_body = (m.group(1), m.group(2)) if m else ("", "")
+print(f"THEN_HAS_AGG:{1 if ('diff-test-results.py' in then_body and '--aggregate' in then_body) else 0}")
+print(f"THEN_NO_GLOB:{1 if 'per-adapter-*.yaml' not in then_body else 0}")
+print(f"ELSE_HAS_GLOB:{1 if 'per-adapter-*.yaml' in else_body else 0}")
+PY
+)
+  assert_grep "$got" '^FOUND:1$'         "adapter_count==0 분기(if/else/fi)를 찾았다"
+  assert_grep "$got" '^THEN_HAS_AGG:1$'  "0 분기도 diff-test-results.py --aggregate 를 부른다(무응답이 아니다)"
+  assert_grep "$got" '^THEN_NO_GLOB:1$'  "0 분기는 per-adapter-*.yaml glob 을 쓰지 않는다(매치 없는 glob 회피)"
+  assert_grep "$got" '^ELSE_HAS_GLOB:1$' "1개 이상 분기는 여전히 glob 을 쓴다(정상 경로 안 밀림)"
+}
+
 for c in case_every_synth_call_emits_verdict_and_angles case_blocking_angle_dispatches_are_fail_closed \
          case_reason_literals_are_closed_and_pinned case_angle_template_is_total \
          case_differential_runs_inside_every_iteration \
@@ -415,7 +480,8 @@ for c in case_every_synth_call_emits_verdict_and_angles case_blocking_angle_disp
          case_different_premise_absent_is_disclosed_not_blocked case_caller_reasons_reach_the_verdict \
          case_degraded_ledger_row_reaches_silent_drop case_pre_r6_abort_reaches_error_axis_catchall \
          case_pre_r6_abort_catchall_mirrored_in_reference case_r3_stop_choice_routes_to_error_axis \
-         case_security_kill_switch_routes_to_absent case_differential_kill_switch_env_name_is_pinned; do
+         case_security_kill_switch_routes_to_absent case_differential_kill_switch_env_name_is_pinned \
+         case_differential_defect_zero_kept_routes_to_fixloop case_zero_adapter_aggregate_skips_glob; do
   "$c"
 done
 finish
