@@ -1,5 +1,28 @@
 # Changelog
 
+## [4.3.1] — 2026-09-24
+
+patch 인 이유 — 설계자 시선 리뷰 기능 전체(#160~#170)를 합성 브랜치로 `/qg review` 한 뒤의 후속이다. 적혀 있던 계약(AC15 · AC19 · AC19′ · AC19″)을 집행하거나 잠그는 수정이고 새 surface 가 없다.
+
+### Fixed
+
+- **`if_unfixed` 가 개행·공백 강제를 받지 않았다.** `_classify_items` 의 I4 접기가 `replacement` 한 칸에만 돌았는데, `if_unfixed` 도 게이트 렌더의 한 줄 슬롯(「그대로 두면: %s」)에 들어간다. 개행 낀 값은 다음 줄 첫 칸에 떨어져 진짜 게이트 줄(`[decide] …`)과 구별되지 않았고(재현됨), 공백뿐인 값은 참으로 읽혀 AC15 부재 리터럴 대신 값이 빈 「그대로 두면:」 줄이 섰다. 두 칸 모두 같은 접기와 같은 `coerced` 계수를 받는다. 승인 판정은 JSON 요약에서 오므로 막힘·승인은 바뀌지 않았고, 표시가 오도될 수 있었다.
+
+### Added
+
+- **`shared/tests/test_docreview_agent_fields.sh`** — 탐지 리뷰어 사본 넷의 층 1 출력 예시와 「출력 형식」 절, 재비판자 사본 둘의 `added` 규약이 두 칸을 요구하는지 잰다(AC19 · AC19″). 이전에는 본문에서 그 요구를 지워도 엔진 스위트 전부가 녹색이었다.
+- **case 둘 + 기존 case 확장** — `if_unfixed` 개행·공백·`\r`·탭 접기, 사상 없는 category 의 공시(AC19′ — 그 갈래를 태우는 case 가 없었다). 그리고 `case_same_as_survivor_inherits_empty_fields` 에 same_as 생존자의 `evidence` 상속과 공백뿐인 생존자 값(공백 = 빈 칸) 쌍을 더했다.
+
+### Changed
+
+- **`shared/tests/test_docreview_profile_schema.sh` 에 실행비트** — qg 의 shell 어댑터는 실행비트로 테스트를 고른다. 그래서 이 파일의 AC19′ ∀-락은 `/qg` 에서 한 번도 돌지 않았다.
+- 스택의 뒤 PR 이 밀어 낡은 줄 번호 인용을 심볼 인용으로 바꿨다(`docreview_route.py` · `docreview_state.py` · `tools/adjudication/check_wiring.py` 사유 문자열 · 테스트 주석). 과도기 서술(「PR 2 가 더할 축」)과 틀린 이름(`PROFILE_FIELDS` → `DOCREVIEW_KEYS`)도 고쳤다. `check_wiring.py` 의 EXEMPT 줄 핀 여덟을 다시 앵커했다.
+
+### Known gaps
+
+- `summary`·`evidence`·`category` 도 한 줄 슬롯에 접기 없이 들어간다 — 이 기능 이전부터 있던 표시 경로이고 여기서 넓히지 않았다. `summary` 는 f 번호 정렬 키이기도 해서 접기가 번호를 바꾼다.
+- `normalize()` 가 목록형 `replacement`·`if_unfixed` 를 계수 없이 `str()` 한다(`evidence` 와 같은 선재 모양).
+
 ## [4.3.0] — 2026-09-24
 
 minor 인 이유 — `shared/docreview/` 의 agent 표면(재비판자의 입력 슬롯)이 늘었다. 슬롯이 optional 이라 기존 dispatch 는 그대로 통과한다(major 아님).

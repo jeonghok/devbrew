@@ -3,6 +3,18 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [8.5.1] — 2026-09-25
+
+patch 인 이유 — 링크로 배송하는 `docreview_route.py` · `docreview_state.py` · `render_disposition.py` · `codex_findings_to_yaml.py` 가 바뀌었다(spec-distill 4.3.1 과 같은 변경).
+
+### Fixed
+
+- **문서 리뷰 게이트의 `if_unfixed` 칸이 개행·공백 강제를 받지 않았다** — 개행 낀 값이 게이트 줄 모양을 열 0 에 세울 수 있었다. `replacement` 와 같은 접기·계수를 받는다. 상세는 spec-distill 4.3.1.
+
+### Changed
+
+- `tools/adjudication/check_wiring.py` 의 EXEMPT 줄 핀 여덟 재앵커 · 사유 문자열의 줄 번호 인용을 심볼 인용으로.
+
 ## [8.5.0] — 2026-09-24
 
 Review gate 의 판정자를 공유 재비판자로 바꾼다 (설계 §6.3.3 · §6.3.4 · §12, AC17 · AC22). **두 게이트 구조와 공개 인자는 그대로다** — 게이트를 합치는 것은 다음 릴리스다.

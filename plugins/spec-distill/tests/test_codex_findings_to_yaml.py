@@ -286,7 +286,7 @@ class DocreviewKeys(unittest.TestCase):
         self.assertEqual(doc["findings"][0]["blocks"], ["x2", "x3"])
 
     def test_docreview_keyset_carries_replacement_and_if_unfixed(self):
-        """러너 프롬프트가 `decide` 에 `replacement`·`if_unfixed` 를 **요구**한다
+        """러너 프롬프트가 `replacement`(`decide` 에 필수)·`if_unfixed` 를 요청한다
         (`run_docreview_codex_reviewer.sh`). 그 둘이 keyset 밖이면 codex 가 적은 값이
         여기서 버려지고, 게이트는 값이 있었는데도 「(대체안 미작성)」·「(리뷰어가 안
         적음)」을 낸다 — 침묵과 판정을 다른 글자로 가른다는 계약이 뒤집힌다. 값은
