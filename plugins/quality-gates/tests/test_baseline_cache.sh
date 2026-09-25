@@ -165,21 +165,22 @@ case_error_not_cached_pass_still_cached() {
   rmroot
 }
 
-# /qg iter-1 CRITICAL conf 8 (security-reviewer 제기, 실행 검증자가 손으로 행을 심어 재현).
+# /qg iter-1 CRITICAL conf 8 (security-reviewer 제기, 실행 검증자가 손으로 행을 심어 재현
+# — 당시 아키텍처의 runtime-verifier 서브에이전트가 무제한 Bash 로 그 형제 디렉토리에
+# 쓰라고 지시받아 위협이 성립했다). Task 7(한 파이프라인) 이후 runtime-verifier 는
+# 삭제됐지만 위협은 남는다 — 캐시는 `.claude/quality-gates/baseline-cache/<mb[0:12]>.md` 에
+# 살고, R4/R5b 의 `run` 은 오케스트레이터 자신이 **호스트 사용자 권한으로** 돌리며 그
+# 대상은 저장소가 통제하는 코드(`bash tests/*.sh` · npm lifecycle · `make` · build.rs)다 —
+# **적대적 subagent 조차 필요 없다** — 리뷰 대상 저장소의 평범한 테스트 하나가
+# `git merge-base` 한 번으로 경로를 계산해 쓸 수 있다.
 #
-# 캐시는 `.claude/quality-gates/baseline-cache/<mb[0:12]>.md` 에 살고, runtime-verifier 는
-# 무제한 Bash 를 들고 **그 형제 디렉토리에 쓰라고 명시적으로 지시**받는다. 게다가 `run` 은
-# 저장소가 통제하는 코드(`bash tests/*.sh` · npm lifecycle · `make` · build.rs)를 호스트
-# 사용자 권한으로 돌리므로 **적대적 subagent 조차 필요 없다** — 리뷰 대상 저장소의 평범한
-# 테스트 하나가 `git merge-base` 한 번으로 경로를 계산해 쓸 수 있다.
-#
-# 사슬: 심어진 fail → 전량 적중 → SKILL.md R4② 가 "미적중분이 있을 때만" 기준선
-# 워크트리를 만들므로 **기준선 테스트가 하나도 안 돈다** → (F,F)=PRE_EXISTING → DEFECTS
-# 밖 → confirmed_product_defect:false → PASS.
+# 사슬: 심어진 fail → 전량 적중 → R4② 가 "미적중분이 있을 때만" 기준선
+# 워크트리를 만들므로 **기준선 테스트가 하나도 안 돈다** → (F,F)=PRE_EXISTING → 결함
+# 밖 → not-certified 조차 아닌 clean(오판).
 #
 # 봉인(digest)이 아니라 재검증인 이유: 캐시는 실행 사이에 살아남는 것이 존재 이유라
-# 세션 컨텍스트의 비밀로 봉인할 수 없고, 파일에 둔 비밀은 verifier 의 Bash 가 읽는다.
-# 방향 비대칭은 비밀을 요구하지 않는다.
+# 세션 컨텍스트의 비밀로 봉인할 수 없고, 파일에 둔 비밀은 저장소가 통제하는 코드가
+# 오케스트레이터의 호스트 권한 Bash 를 통해 읽는다. 방향 비대칭은 비밀을 요구하지 않는다.
 case_planted_fail_is_not_served_as_hit() {
   mkroot
   printf '%s\nmerge_base: %s\n---\npytest\tv.py\tfail\t1\npytest\tw.py\tpass\t0\n' \

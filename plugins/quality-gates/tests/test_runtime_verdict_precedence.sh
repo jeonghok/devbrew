@@ -274,8 +274,8 @@ case_skill_r6_error_never_passes() {
   [[ $(count_in "$w" '어댑터별 호출과 `--aggregate` 호출 **양쪽**') -ge 1 ]] \
     || { echo "    누락: 두 호출(어댑터별·집계) 모두 커버한다는 명시"; bad=1; }
   printf '%s\n' "$w" | grep -F '그 외 non-zero' | grep -F '**`degraded`** 로 적는다' \
-    | grep -qF '캡처 실패를' \
-    || { echo "    누락: 오류 행이 같은 줄에서 degraded + 캡처-실패 문구로 라우팅"; bad=1; }
+    | grep -qF '캡처 실패를 "결함 없음"으로 읽지 않는다' \
+    || { echo "    누락 또는 극성 뒤집힘: 오류 행이 같은 줄에서 degraded + '캡처 실패를 \"결함 없음\"으로 읽지 않는다' 로 라우팅해야 함"; bad=1; }
   [[ $bad -eq 0 ]] && ok "R6: 실패한 대조/집계 → degraded (clean 불가)" \
                    || no "R6 exit-code 라우팅 락 실패"
 }
@@ -406,6 +406,24 @@ case_flaky_is_a_note_not_a_category() {
     || no "flaky 기록 위치 미지정 — 관측이 사라진다"
 }
 
+# Fix round 1 (Important #1) — R8 이 원장을 **새로 쓴다**(overwrite)고 지시해야 한다.
+# R-AC(② 는 매 iteration 돈다)와 "이어 쓴다"(append)가 함께 있으면 두 번째 iteration
+# 부터 5차원 전부가 파일에 두 번 나타나 `check_qa_ledger.py` 가 "두 번 선언됨"으로
+# 전부 거부한다(behavioral 확인: test_qa_ledger.sh 의 case_appended_ledger_rejected) —
+# Retry 가 있는 실행은 영원히 clean 에 도달하지 못한다. 양+음 쌍으로 잠근다: "이어 쓴다"
+# 재도입은 금지(음), "새로 쓴다" 지시는 실재해야 한다(양).
+case_ledger_overwrites_not_appends() {
+  local w; w=$(section_window '**Step R8' '## Final Summary')
+  local bad=0
+  if printf '%s\n' "$w" | grep -qF '원장을 이어 쓴다'; then
+    bad=1; echo "    (regress) R8 이 원장을 '이어 쓴다'고 지시 — Retry 가 doubled ledger 로 영원히 거부된다"
+  fi
+  [[ $(count_in "$w" '이어 쓰지 않는다') -ge 1 ]] \
+    || { bad=1; echo "    (누락) '이어 쓰지 않는다' 명시 부재"; }
+  [[ $bad -eq 0 ]] && ok "R8 원장은 새로 쓴다(overwrite) — 이어 쓰기 재도입 0회" \
+                   || no "R8 원장 쓰기 지시 락 실패"
+}
+
 # T78 (대상 소멸 — Task 7): `DISABLE_RUNTIME_SANDBOX` 에서도 R4 를 건너뛰던 폴백
 # 문단 자체가 differential-test.md 의 R4 에서 통째로 지워졌다(R-V 의 새 kill switch
 # `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 은 ② 전체를 건너뛰지 R4 한
@@ -422,6 +440,7 @@ for c in case_unclaimed_row_is_produced case_runner_absent_is_distinguishable \
          case_rinit_discriminator_table case_r4_resolves_discriminator_itself \
          case_same_as_head_never_unqualified \
          case_r4_probe_step_is_locked case_baseline_detected_source_is_probe_forall \
+         case_ledger_overwrites_not_appends \
          case_flaky_is_a_note_not_a_category; do
   echo "== $c"; $c
 done

@@ -55,7 +55,7 @@ you call `AskUserQuestion` and branch on the user's response — the response ar
 as a tool result in the same turn, so no Stop hook and no continuation sentinel are
 needed.
 
-**Law 2 (Writer ≠ Reviewer):** you are the orchestrator (writer). `security-reviewer`, 재비판(`doc-recritic`), and `test-scope-validator` are read-only reviewers (`tools: Read, Grep, Glob` — fail-closed allowlist). No agent with write access is dispatched. You run the tests yourself — both axes of the differential test, on trees you create — and you may apply user-approved fixes ("Retry" path) via Edit/Write; those are user-consented.
+**Law 2 (Writer ≠ Reviewer):** you are the orchestrator (writer). `security-reviewer`, 재비판(`doc-recritic`), and `test-scope-validator` are read-only reviewers (`tools: Read, Grep, Glob` — fail-closed allowlist) — no qg-own agent has write access. External extra reviewers (e.g. `pr-review-toolkit`, chosen per [Angles and reviewers](#angles-and-reviewers-scope-driven)) may be write-capable upstream, but they are advisory — you own fixes; their output is findings YAML, never a commit. You run the tests yourself — both axes of the differential test, on trees you create — and you may apply user-approved fixes ("Retry" path) via Edit/Write; those are user-consented.
 
 **State file:** read `worktree_path` from `.claude/quality-gates/<sid>/pipeline.md`
 only during preflight; never write. Setup script handles creation, /cancel-qg
@@ -213,7 +213,8 @@ The script takes **no arguments** — scope resolution (what to review) is yours
 the script's. Parse the structured stdout and cache `$changes_exist`,
 `$branch_ahead_count` (the changed-file count on `merge_base..HEAD`),
 `$worktree_dirty`, `$base` (display name), and `$degraded`. There is **no routing**
-here: this signal exists only to feed the Step 4.5 verdict floor.
+here: this signal feeds the Step 4.5 verdict floor and R4's baseline-vs-HEAD
+selection (reference R4).
 
 - `$degraded == yes` → the changes-exist signal is unavailable (detached HEAD /
   no base branch / unrelated history / shallow). This run is NOT floor-protected;
@@ -596,7 +597,7 @@ Agent({
    [state-file-format](references/state-file-format.md#history)).
 
 If iteration N=5 ends with kept > 0: run step 4.5's surface first (same as
-above), then invoke [Review max-iter decision](#review-max-iter-decision)
+above), then invoke [Max-iter decision](#max-iter-decision)
 instead of the normal iter-boundary decision. Fill that template's
 `Last findings: <summary>` slot with the same verbatim counts line (the
 template text itself is unchanged).
@@ -847,7 +848,7 @@ State file cleanup is deferred to /cancel-qg or SessionEnd cleanup hook.
 edit working-tree files for user-consented fixes only.
 
 **R2 (state file write invariant):** never write `pipeline.md` frontmatter.
-You MAY append a single line to the `## History` section per gate verdict;
+You MAY append a single line to the `## History` section per iteration verdict;
 do not modify any other content. Frontmatter is owned by setup-qg.sh.
 
 **R3 (no fake user messages):** v1.32.0 has no Stop hook continuation, no

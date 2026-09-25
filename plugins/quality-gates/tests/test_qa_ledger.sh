@@ -181,6 +181,26 @@ case_duplicate_floor_dimension() {
   cleanup
 }
 
+# Fix round 1 (Important #1) — R8 이 "이어 쓴다"(append)로 원장을 관리했다면 Retry 가
+# 도는 두 번째 iteration부터 5차원 전부가 이 파일에 두 번씩 나타난다. 그 시나리오를
+# 그대로 재현해 exit 이 non-zero 인지, 그리고 5차원 **전부**가 "두 번 선언됨"으로
+# 잡히는지 잰다 — differential-test.md 의 R8 이 "새로 쓴다"(overwrite)로 지시해야 하는
+# 이유가 바로 이것이다(이 케이스가 그 지시의 대가를 보여준다).
+case_appended_ledger_rejected() {
+  setup; write_ledger "$TMP/l.md"
+  write_ledger "$TMP/second.md"
+  cat "$TMP/second.md" >> "$TMP/l.md"
+  run_ledger "$TMP/l.md" && no "두 iteration 을 이어 쓴(appended) 원장이 통과함" \
+                         || ok "이어 쓴(appended) 원장 → non-zero (Retry 시나리오)"
+  local out
+  out="$(python3 "$LEDGER" --aggregate "$TMP/agg.yaml" --assign-rows "$TMP/assign.tsv" "$TMP/l.md" 2>&1)"
+  local dup_count
+  dup_count=$(printf '%s\n' "$out" | grep -cF '이 두 번 선언됨')
+  [[ "$dup_count" -eq 5 ]] && ok "5차원 전부가 중복으로 잡힘 (got $dup_count)" \
+                           || no "중복 판정이 5차원 전부를 덮지 않음 (got $dup_count, expected 5)"
+  cleanup
+}
+
 # 명명 derived의 status가 {closed,degraded} 밖이면 non-zero. 픽스처는 문법을
 # 완전히 만족해서 DERIVED_NAMED_RE에 실제로 매치해야 한다 — status/evidence가
 # 아예 없는 픽스처는 문법위반 분기로 새서 이 검사 자체에 닿지 못한다.
@@ -515,7 +535,8 @@ for c in case_complete case_each_missing_dimension case_degraded_is_valid \
          case_unknown_status case_empty_evidence case_derived_reason_required \
          case_derived_named case_heading_does_not_satisfy \
          case_c1_no_false_contradiction case_stdin_utf8_locale_independent \
-         case_duplicate_floor_dimension case_derived_named_bad_status \
+         case_duplicate_floor_dimension case_appended_ledger_rejected \
+         case_derived_named_bad_status \
          case_transcription_matches_machine \
          case_aggregate_is_mandatory_and_fail_closed \
          case_unclaimed_forces_degraded \

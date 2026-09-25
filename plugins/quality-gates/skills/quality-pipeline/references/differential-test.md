@@ -59,8 +59,8 @@ aggregate_yaml="$qg_run_tmp/aggregate.yaml"      # 실행당 1개 (R6 집계)
 
 **이 블록에 `git` 이 새로 들어왔다.** `allowed-tools` 에 항목이 없는 맨 셸 명령이 하나
 늘었고(`pwd`·`printf`·`echo`·`cd`·`mv` 와 같은 부류), 그 부류가 항목을 필요로 하는지는
-여전히 **미측정**이다(§11 ㉜). 항목을 늘리지 않는 판단은 그대로다 — 예정된 Runtime 실측이
-이제 이 명령까지 함께 관측한다.
+여전히 **미측정**이다(§11 ㉜). 항목을 늘리지 않는 판단은 그대로다 — 예정된 차등 테스트
+실측이 이제 이 명령까지 함께 관측한다.
 
 **빈 `$sealed_root` 검사가 따로 있는 이유는 `$project_dir` 의 것과 같다.** `rev-parse` 가
 0 을 내면서 빈 문자열을 낼 경로가 있으면 이어지는 `cd ""` 가 0 을 반환해 패턴이 조용히
@@ -168,7 +168,7 @@ iter-4, IMPORTANT), 도입부만 읽는 구현자는 제거된 동작을 되살�
 원래 형태가 인용 가능한 채로 남으면 좁히지 않은 것과 같다. 도입 문장을 표에 맞췄다.
 **알려진 미해소:** 이 규칙을 읽는 스크립트는 없다 —
 오케스트레이터 산문이다. 부분 변조(base 를 브랜치 중간 커밋으로 이동)는 이 표의 어느
-행에도 걸리지 않는다. Review 게이트의 changes-exist floor 는 이 키를 읽지
+행에도 걸리지 않는다. Review Step 1b 의 changes-exist floor 는 이 키를 읽지
 않는다 — 거기서는 `worktree_dirty` 가 변경을 잡으므로 정상 케이스가 죽지 않는다.
 
 `degraded: no` 일 때는 baseline 한 줄을 그대로 출력한다 — `ahead` 는 **부분 변조
@@ -447,7 +447,7 @@ baseline_wt=$("$QG/scripts/qg-worktree.sh" create-baseline \
 **행 파일을 채우는 것이 이 표의 요점이다.** 방향은 이 표가 없어도 fail-closed 지만
 (`probe ""` 는 `usable: yes` 를 못 내고 `run ""` 은 행을 0개 낸다), **보고되는 사유가
 틀린다** — 행 부재는 R6 에서 `SILENT_DROP`("고른 것이 사라졌다")으로 라벨되지
-`BASELINE_UNRUNNABLE`("기준선을 못 돌렸다")이 아니다. 위의 세 스킵 경로가 전부 같은
+`BASELINE_UNRUNNABLE`("기준선을 못 돌렸다")이 아니다. 위의 두 스킵 경로가 전부 같은
 채우기를 지시하는 이유가 그것이고, 이 경로에만 지시가 없었다. 그리고 지시가 없는 자리에서
 모델이 `--baseline-detected` 에 `"$runner"` 를 즉흥으로 넘기면 그 값은 **근거 있는 관측**
 으로 읽힌다(아래 문단이 이미 기록한 fail-open).
@@ -841,8 +841,12 @@ degrade 로 빠지는 경로에서도 폐기를 먼저 수행한 뒤 R8 로 간�
 **Step R8 — 원장 + 판정 입력.**
 
 `evidence_dir = "$project_dir/.claude/quality-gates/$CLAUDE_CODE_SESSION_ID/"` 다. 그 아래
-`runtime-evidence.md` 에 floor 5차원 원장을 이어 쓴다(없으면 새로 만든다 · spec-distill
-커버리지 원장과 같은 줄 모양):
+`runtime-evidence.md` 에 floor 5차원 원장을 **새로 쓴다**(없으면 새로 만든다, 있으면
+덮어쓴다 — **이어 쓰지 않는다**. R-AC 로 ② 는 매 iteration 도는데, 이어 쓰면 두 번째
+iteration부터 5차원 전부가 이 파일에 두 번씩 나타나 `check_qa_ledger.py` 가 "floor 차원
+… 두 번 선언됨"으로 전부 거부한다 — Retry 가 있는 실행은 영원히 clean 에 도달하지 못한다.
+spec-distill 커버리지 원장과 같은 줄 모양이되, 그쪽은 세션에 걸쳐 이어 쓰는 다른 계약이다
+— 여기서는 따르지 않는다):
 
 ```
 - floor:changed      — closed   — <무엇이 바뀌었나; 러너 특정>
@@ -859,6 +863,10 @@ degrade 로 빠지는 경로에서도 폐기를 먼저 수행한 뒤 R8 로 간�
 |---|---|---|
 | **영향분**을 못 돌림 (러너 부재 exit 3 · baseline 불가 · 귀속 불가 · `unclaimed` 존재) | `verification` 또는 `attribution` 이 **`degraded`** | **불가** |
 | **영향분과 무관한** 표면을 안 돌림 (다른 러너 부재 · 자동화 불가 플로우 · 미선택분 · `미실행 러너`) | `gap` 에 **열거하고 `closed`** | 가능 |
+
+**이 표는 여기서 판정을 내리지 않는다.** 이 창이 하는 일은 원장에 상태를 적는 것뿐이고,
+`degraded` 인 floor 차원이 있다는 사실을 오케스트레이터가 사유로 들고 SKILL 의 ⑤
+합성 · 판정 으로 가져가야 실제 판정에 반영된다.
 
 R6 이 낸 `attribution_status` 를 그대로 `floor:attribution` 의 status 로 옮긴다 —
 집계값을 원장에 안 옮기면 그 캡처는 아무 데도 닿지 않는다. verdict 입력은

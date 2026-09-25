@@ -32,11 +32,11 @@ target_branch: "<branch name>"       # OPTIONAL — paired with worktree_path
 
 ## History
 
-(SKILL appends one line per gate verdict for in-turn observability.)
+(SKILL appends one line per iteration verdict for in-turn observability.)
 
 - [2026-05-27T10:00:00Z] Pipeline started
 - [2026-05-27T10:05:00Z] qg iter 1: 1 CRITICAL / 2 IMPORTANT / 1 SUGGESTION → user chose Retry
-- [2026-05-27T10:08:00Z] qg iter 2: PASS
+- [2026-05-27T10:08:00Z] qg iter 2: clean
 - [2026-05-27T10:12:00Z] qg: verdict clean
 - [2026-05-27T10:12:01Z] Pipeline complete
 ```
@@ -50,11 +50,11 @@ The following v1.x fields are **no longer written or read**:
 | `status` | No cross-turn state machine. Pipeline is single-turn. |
 | `consecutive_no_signal` | `<qg-signal>` tag removed. |
 | `max_review_iterations` | Hard-coded constant in SKILL (5). |
-| `runtime_resolution_iter` | Hard-coded constant in SKILL (default 3, env override). |
+| `runtime_resolution_iter` | Hard-coded constant in SKILL — the env-override switch it named is removed (Task 7, one pipeline). |
 | `last_runtime_needed_hash` | Repeat detection moves to inline AskUserQuestion. |
 | `review_iteration` | Phantom field — counter lives in `## History` section only (I11 v1.32.1). |
-| `skip_runtime` | Passed as SKILL invocation arg. |
-| `single_gate` | Passed as SKILL invocation arg. |
+| `skip_runtime` | Argument removed (Task 7, one pipeline) — no gate scope to skip. |
+| `single_gate` | Argument removed (Task 7, one pipeline) — no gate scope to choose. |
 | `plan_file` | Passed as SKILL invocation arg. |
 | `pr_url` | Passed as SKILL invocation arg. |
 | `available_plugins` | SKILL re-derives inline (cheap). |

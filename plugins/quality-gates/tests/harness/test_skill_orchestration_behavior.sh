@@ -640,6 +640,20 @@ if [[ $r5b_route -eq 1 ]]; then
   fi
 fi
 
+# Fix round 1 (Important #3) — differential-test.md 가 "행 부재의 귀속 카테고리 이름을
+# 이 창에 리터럴로 적지 않는다 — 이 창에 그 토큰이 0회여야 한다는 회귀 락이 있다" 고
+# 주장하는데, 그 락(옛 == 폴백 R5b 미실행 절의 route_stale)은 Task 7 이 대상 소멸로
+# 지웠다 — 이 창에 SILENT_DROP 을 심어도 통과하는 상태였다. 여기서 그 락을 복원한다.
+# 양의 짝은 $r5b_body 가 비어 있지 않다는 위 가드가 이미 선다.
+if [[ -n "${r5b_body:-}" ]]; then
+  if grep -qF 'SILENT_DROP' <<<"$r5b_body"; then
+    echo "FAIL: R5b 창에 SILENT_DROP 잔존 — 행 부재가 '기준선을 못 돌렸다' 대신 '고른 것이 사라졌다'로 오라벨될 수 있다"
+    fail=$((fail + 1))
+  else
+    echo "PASS: R5b 창에 SILENT_DROP 0회 (귀속 카테고리 이름 재도입 봉쇄)"
+  fi
+fi
+
 # 대상 소멸 (Task 7) — NEEDS_RESOLUTION 재시도 경로("재시도의 R5b" 문단, 'Yes, retry'
 # 옵션)가 통째로 사라졌다. 재시도는 이제 fix-loop 의 Retry 하나이고, R5b 는 매
 # iteration 처음부터 다시 돈다(R-AC) — "재호출 vs 재사용" 반전 축 자체가 없다.
