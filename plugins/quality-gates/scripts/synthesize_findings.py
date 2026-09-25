@@ -28,7 +28,7 @@ from adjudication import Ledger
 from render_disposition import disposition_lines
 import angles as _angles
 import verdict as _verdict          # 새 책임은 새 모듈 — 여기는 진입점일 뿐이다
-import recritic_bridge as _bridge   # 재비판 변환 계층 — 같은 프로세스·같은 원장(PR4a R-N)
+import recritic_bridge as _bridge   # 재비판 변환 계층 — 같은 프로세스·같은 원장
 
 
 SEV_ORDER = {"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 2}
@@ -100,7 +100,7 @@ def _as_list(value, what, ledger=None):
     `verdicts: {a: 1}` sail through it and reach a `for` loop, where a scalar
     raises `TypeError: 'int' object is not iterable` and kills the whole
     synthesis: exit 1, **stdout completely empty**, every other reviewer's real
-    CRITICAL destroyed along with it (2026-08-05 재현).
+    CRITICAL destroyed along with it.
 
     이것이 ingestion 한 곳에서 타입을 확정하는 이유다. 소비 지점마다 가드를
     덧대면 malformed가 한 겹씩 새고(`_conf`의 docstring과 같은 논거), 실제로
@@ -212,7 +212,7 @@ def _conf(f):
     finding is ordered, filtered, or displayed. 예전에는 그 자리마다 맨 `int()`가
     있었다: 어느 리뷰어든 `confidence: high`나 YAML null 하나를 실으면
     ValueError/TypeError로 합성 전체가 죽고 **stdout이 완전히 비었다**. 같이 죽는
-    것에는 다른 리뷰어의 진짜 CRITICAL도 포함된다 (2026-08-04 재현).
+    것에는 다른 리뷰어의 진짜 CRITICAL도 포함된다.
 
     소비 지점마다 가드를 붙이지 않고 여기 한 곳에서 강제하는 이유: 부분 가드는
     malformed 입력 앞에서 한 겹씩 샌다 — 새 소비자가 생기면 그 자리에서 다시
@@ -251,8 +251,8 @@ def promote_new_findings(raw_new, existing, *, author, ledger=None):
     언제나 "두 리뷰어가 같은 것을 봤다"라 병합이 옳았지만, 승격이 생기면서 충돌이
     "같은 줄의 *다른* 결함"일 수 있게 됐기 때문이다. 병합되면 발견 하나가 조용히
     사라지고, 더 나쁘게는 살아남은 행의 `sources`에 판정자가 붙어 **하지 않은
-    주장을 보증한 것처럼** 렌더된다(2026-08-03 재현, `test_…_promoted_findings.sh`
-    케이스 5·6). 실패 방향을 소실이 아니라 중복 쪽으로 돌리는 최소 봉쇄다.
+    주장을 보증한 것처럼** 렌더된다(`test_…_promoted_findings.sh` 케이스 5·6).
+    실패 방향을 소실이 아니라 중복 쪽으로 돌리는 최소 봉쇄다.
 
     범위 밖(설계 §11 CHECKS-07): dedup() 자체의 키 설계와 `sources`가 "같은 좌표에
     보고한 agent"인지 "이 발견에 동의한 agent"인지의 의미론은 여전히 미해결이다.
@@ -282,8 +282,8 @@ def promote_new_findings(raw_new, existing, *, author, ledger=None):
         # 그대로 찍는 유일한 키인데, 승격 항목은 dedup()의 그룹핑을 건너뛰므로
         # (`promoted: True` → passthrough) 병합이 이 값을 덮어쓸 기회조차 없다.
         # 판정자 출력에 `sources: [security-reviewer, code-reviewer]`가 실리면
-        # **아무 리뷰어도 하지 않은 주장이 교차 보증을 받은 것처럼 렌더된다**
-        # (2026-08-05 재현). `agent`만 강제하고 이 채널을 열어두면 id 참칭은 막고
+        # **아무 리뷰어도 하지 않은 주장이 교차 보증을 받은 것처럼 렌더된다**.
+        # `agent`만 강제하고 이 채널을 열어두면 id 참칭은 막고
         # 표시 계층의 참칭은 그대로 남는다 — 후자가 사용자에게 더 직접적이다.
         f.pop("sources", None)
         f["agent"] = author
@@ -507,7 +507,7 @@ def render(kept, suppressed_count, dropped_malformed, report, held_classes,
         # 도달 불가였다. 그 조합(전부 malformed → kept 0 → suppressed 0)에서
         # SKILL은 stdout만 읽어 counts=0을 보고 `## Review gate: clean`을
         # 찍었다 — 버려진 CRITICAL 주장이 **깨끗함으로 렌더**됐다는 뜻이다
-        # (2026-08-04 재현, exit 0). 소실을 stdout에서 볼 수 있게 만든다.
+        # (exit 0). 소실을 stdout에서 볼 수 있게 만든다.
         disp_line, plumb_line, gloss_line, advisories = disposition_lines(report, held_classes)
         for a in advisories:
             print(a, file=sys.stderr)
@@ -603,7 +603,7 @@ def main():
     ap.add_argument("--findings", default="")
     # 판정 어휘는 `verdict.py` 가 갖는다. 여기서는 입력을 모아 넘기기만 한다.
     # 기본 off — 켜지 않으면 `verdict:`(와 `angles:`) 꼬리 없이 본 보고서만 나가고,
-    # 그것은 성공한 켠 출력의 바이트 접두다(계획 R-J). 소비자 이주는 PR4.
+    # 그것은 성공한 켠 출력의 바이트 접두다.
     ap.add_argument("--emit-verdict", action="store_true")
     # 기본값을 `""` 로 두면 "플래그를 안 줬다" 와 "빈 경로를 줬다" 가 같은 값이
     # 된다 — 값을 못 구한 호출자가 `--differential "$DIFF_YAML"` 을 빈 변수로
@@ -613,11 +613,11 @@ def main():
     # 으로 둬 두 경우를 구별하고, 명시적으로 빈 문자열을 주면 usage 오류(exit 2)다.
     ap.add_argument("--differential", default=None)
     ap.add_argument("--reason", action="append", default=[])
-    # 각도 상태 — 기본 off. 오케스트레이터 배선은 PR4 다(계획 R-E). 안 주면
-    # `angles:` 블록을 싣지 않는다. 다만 주 판정자 사망은 `--angles` 유무와
-    # 무관하게 `--emit-verdict` 아래서 `angle-absent` 로 보고된다.
+    # 각도 상태 — 기본 off. 안 주면 `angles:` 블록을 싣지 않는다. 다만 주 판정자
+    # 사망은 `--angles` 유무와 무관하게 `--emit-verdict` 아래서 `angle-absent` 로
+    # 보고된다.
     ap.add_argument("--angles", default=None)
-    # 재비판 경로(PR4a R-N) — 판정자는 한 실행에 하나다.
+    # 재비판 경로 — 판정자는 한 실행에 하나다.
     ap.add_argument("--recritic", default=None)
     ap.add_argument("--recritic-map", default=None)
     ap.add_argument("--recritic-diff", default=None)
@@ -779,10 +779,10 @@ def main():
                             report, ledger.held_by_class(), recritic_zero=recritic_zero))
 
     if args.emit_verdict:
-        # `render()` 가 낸 Markdown 본문 **뒤**의 평문 꼬리다 — PR2 가 `verdict:`
-        # 를 같은 자리에 같은 모양으로 붙였고(계획 R-J), 그래야 「off 출력은 on
-        # 출력의 바이트 접두」가 유지된다. 각도가 판정보다 **앞**인 것은 읽는
-        # 순서다: 무엇을 봤는지가 그 판정의 근거다.
+        # `render()` 가 낸 Markdown 본문 **뒤**의 평문 꼬리다 — `verdict:` 를 같은
+        # 자리에 같은 모양으로 둬야 「off 출력은 on 출력의 바이트 접두」가
+        # 유지된다. 각도가 판정보다 **앞**인 것은 읽는 순서다: 무엇을 봤는지가
+        # 그 판정의 근거다.
         if angle_states is not None:
             sys.stdout.write(_angles.render(angle_states))
         sys.stdout.write(_verdict.render(decision))

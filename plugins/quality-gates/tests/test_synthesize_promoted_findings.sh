@@ -251,10 +251,14 @@ fi
 
 # 10c — R-AD: 대상 소멸. `new_findings: 5`(스칼라)는 옛 --adversarial 문서를
 # 직접 읽던 시절의 모양이다. 재비판 경로에서는 `recritic_bridge.to_adjudication_doc`
-# 가 `added` 를 항상 list 로 만들어(아니면 판정자 사망으로 처리) 이 doc 이 CLI 로
-# 다시 나타날 수 없다 — `extract_new_findings` 의 비-list 방어는 이제 단위 테스트
-# 로만 닿는다. 후속: test_synthesize_findings_adjudication.py::
-# TestMalformedContainerAtDocLevel.test_new_findings_scalar_is_not_a_crash
+# 가 `added` 가 list 가 아니면 그 자리에서 판정자 사망(`_dead`)으로 돌려버려 이
+# doc 이 옛 모양 그대로 CLI 로 다시 나타날 수 없다 — 그러나 그 방어 «자체»는
+# 재비판 경로에서 여전히 도달 가능하다(옛 malformed 값이 아니라 진짜 재비판자
+# 응답의 `added: 5` 로). 그 살아 있는 방어를 재는 CLI 락은
+# test_recritic_bridge.sh::case_malformed_top_level_container_kills_adjudicator_not_the_run 다.
+# `extract_new_findings` 의 비-list 방어 자체(그 함수 호출부만)는 추가로
+# test_synthesize_findings_adjudication.py::
+# TestMalformedContainerAtDocLevel.test_new_findings_scalar_is_not_a_crash 가 잰다.
 
 # 10d — severity가 비-스칼라여도 죽지 않는다(`_norm_sev`의 멤버십 검사가 unhashable).
 cat > "$tmp/findings_listsev.yaml" <<'Y'
@@ -343,8 +347,11 @@ else
 fi
 
 # --- 13 — R-AD: 대상 소멸. `new_findings:` 가 매핑(`first:`·`second:`)인 옛
-# --adversarial 문서 모양이다. 재비판 경로는 `added` 를 항상 list 로 만들어(아니면
-# 판정자 사망) 이 doc 이 CLI 로 다시 나타날 수 없다. 후속: 단위 테스트
+# --adversarial 문서 모양이다. 재비판 경로는 `added` 가 매핑이면 판정자 사망으로
+# 돌려버려 이 doc 이 옛 모양 그대로 CLI 로 다시 나타날 수 없다 — 그 살아 있는
+# 방어를 재는 CLI 락은
+# test_recritic_bridge.sh::case_malformed_top_level_container_kills_adjudicator_not_the_run
+# (mapping_added 갈래). 후속 단위 테스트(그 함수 호출부만):
 # test_synthesize_findings_adjudication.py::
 # TestMalformedContainerAtDocLevel.test_new_findings_mapping_is_counted_dropped
 
@@ -360,8 +367,10 @@ else
 fi
 
 # --- 15 — R-AD: 대상 소멸. `verdicts:` 가 매핑인 옛 --adversarial 문서 모양이다.
-# 재비판 경로는 `verdicts` 를 항상 list 로 만들어(아니면 판정자 사망) 이 doc 이
-# CLI 로 다시 나타날 수 없다. 후속: 단위 테스트
+# 재비판 경로는 `verdicts` 가 매핑이면 판정자 사망으로 돌려버려 이 doc 이 옛 모양
+# 그대로 CLI 로 다시 나타날 수 없다 — 그 살아 있는 방어를 재는 CLI 락은
+# test_recritic_bridge.sh::case_malformed_top_level_container_kills_adjudicator_not_the_run
+# (mapping_verdicts 갈래). 후속 단위 테스트(그 함수 호출부만):
 # test_synthesize_findings_adjudication.py::
 # TestMalformedContainerAtDocLevel.test_verdicts_mapping_is_counted_dropped
 finish

@@ -524,6 +524,26 @@ added:
   rm -rf "$T"
 }
 
+case_added_with_neither_severity_nor_disposition_is_kept_as_suggestion() {
+  # Controller fix round 1, Minor 3 — 위 케이스의 형제. severity 도 disposition 도
+  # 없으면 bridge 가 `미지`로 채운다(`to_adjudication_doc`) — `promote_new_findings`
+  # 의 `NEW_FINDING_REQUIRED` 검사는 "미지"가 참 값(truthy)이라 드롭하지 않는다.
+  # 오늘의 동작은 «버림»이 아니라 «SUGGESTION 으로 보이되 검증 안 됨」이다
+  # (`_norm_sev` 가 어휘 밖 값을 전부 SUGGESTION 으로 접는다). 이 케이스가 없으면
+  # 드롭 쪽으로 바뀌어도(또는 그 반대로 CRITICAL 취급으로 바뀌어도) 어떤 락도
+  # 못 잡는다.
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/findings.yaml"; prep "$T"
+  reply "$T/reply.txt" 'verdicts: []
+added:
+  - file: nosev.py
+    summary: "no severity no disposition"'
+  local out; out=$(synth "$T" 2>/dev/null)
+  assert_contains "$out" '| SUGGESTION | nosev.py:0' "severity·disposition 둘 다 없으면 SUGGESTION 으로 보이지 버려지지 않는다"
+  assert_not_contains "$out" 'dropped as malformed' "필수 필드(file·summary)는 다 있으므로 malformed 드롭이 아니다"
+  rm -rf "$T"
+}
+
 case_dead_recritic_is_not_clean() {
   # 부채 A 의 재비판 경로판 — 응답 파일 없음 · 펜스 없음 · YAML 파손 · 매핑 파일 없음.
   local T; T=$(mktemp -d)
@@ -548,6 +568,52 @@ case_dead_recritic_is_not_clean() {
   out=$(synth "$T" 2>/dev/null)
   assert_contains "$out" '**이 실행은 clean이 아니다**' "--emit-verdict 없이도 not-clean 마커가 선다"
   rm -rf "$T"
+}
+
+case_malformed_top_level_container_kills_adjudicator_not_the_run() {
+  # Controller fix round 1, Important 1 — `to_adjudication_doc` 의 이 방어
+  # (`if not isinstance(raw_verdicts, list) or not isinstance(raw_added, list):
+  # return _dead(...)`)가 옛 --adversarial 문서의 컨테이너-스칼라·컨테이너-매핑
+  # malformed 시나리오(구 test_synthesize_promoted_findings.sh 10c·13·15)를 이제
+  # 재비판 경로에서 재는 «살아 있는» 유일한 자리다. 단위 테스트
+  # (test_synthesize_findings_adjudication.py::TestMalformedContainerAtDocLevel)
+  # 는 `extract_verdicts`/`extract_new_findings` 의 `_as_list`만 직접 불러 이
+  # 방어를 건너뛴다 — 실측(이 줄을 `if False:`로 바꾼 변이): `added: 5` 는
+  # `for a in raw_added`에서 TypeError → rc 1 + 빈 stdout(옛 10c 증상 그대로 —
+  # 계약 위반 + 진짜 CRITICAL 소실), 매핑 모양 둘은 죽지 않고 개별 항목이
+  # `hold()`(항목 파손 · 판정자 부재)로 새어 `reasons: [angle-absent]`가
+  # `reasons: [findings-lost]`로 조용히 바뀐다 — 그런데도 그 단위 테스트 셋
+  # 다 GREEN 이었다(별개 함수를 직접 불러 이 방어를 안 거치므로). 여기서 세
+  # 모양을 실제 CLI 로 재비판 경로에 먹여, 진짜 CRITICAL 이 살아남고 사유가
+  # angle-absent(판정자 «사망» — 항목 «소실»이 아니다)인지를 잰다.
+  local shape
+  for shape in scalar_added mapping_added mapping_verdicts; do
+    local T; T=$(mktemp -d)
+    one_finding "$T/findings.yaml" security-reviewer app.py 1 CRITICAL
+    prep "$T"
+    case "$shape" in
+      scalar_added)
+        reply "$T/reply.txt" 'verdicts: []
+added: 5' ;;
+      mapping_added)
+        reply "$T/reply.txt" 'verdicts: []
+added:
+  first: {file: x.py, severity: CRITICAL, summary: s1}
+  second: {file: y.py, severity: CRITICAL, summary: s2}' ;;
+      mapping_verdicts)
+        reply "$T/reply.txt" 'verdicts:
+  a: {f: f1, verdict: reject}
+added: []' ;;
+    esac
+    local out rc=0
+    out=$(synth "$T" --emit-verdict 2>/dev/null) || rc=$?
+    assert_eq "$rc" "0" "$shape — 판정자 사망은 호출 오류가 아니다(rc 0, traceback 이 아니다)"
+    assert_contains "$out" '1 CRITICAL' "$shape — 진짜 CRITICAL 이 소실되지 않는다"
+    assert_grep "$out" '^verdict: defect$' "$shape — 살아남은 finding 이 판정을 낸다"
+    assert_grep "$out" 'angle-absent' "$shape — 사유는 판정자 사망이다"
+    assert_not_grep "$out" 'findings-lost' "$shape — 항목 소실로 오분류하지 않는다(판정자 사망은 한 사건이다 — R-K)"
+    rm -rf "$T"
+  done
 }
 
 case_malformed_map_entry_is_dead_adjudicator() {
@@ -660,9 +726,12 @@ case_adversarial_flag_is_gone() {
   local T; T=$(mktemp -d)
   one_finding "$T/findings.yaml"
   printf 'verdicts: []\n' > "$T/adv.yaml"
-  local rc=0
-  python3 "$SYNTH" --findings "$T/findings.yaml" --adversarial "$T/adv.yaml" >/dev/null 2>&1 || rc=$?
+  local rc=0 err
+  err=$(python3 "$SYNTH" --findings "$T/findings.yaml" --adversarial "$T/adv.yaml" 2>&1 >/dev/null) || rc=$?
   assert_eq "$rc" "2" "--adversarial 은 모르는 인자다(exit 2) — 판정자는 재비판 경로 하나다"
+  # Controller fix round 1, Minor 5 — 사유까지 잰다. exit 2 는 다른 usage 오류
+  # (예: 우연히 같은 rc 를 내는 다른 인자 문제)에서도 나올 수 있다.
+  assert_contains "$err" 'unrecognized arguments' "argparse 가 모르는 인자로 거부한다(다른 exit 2 가 아니다)"
   # 양의 짝 — 같은 입력을 재비판 경로로 주면 선다.
   prep "$T"
   reply "$T/reply.txt" 'verdicts:
@@ -716,7 +785,9 @@ case_recritic_zero_not_claimed_when_added_or_verdicts_are_malformed
 case_added_severity_case_folds
 case_raise_to_case_folds
 case_added_falls_back_to_disposition_when_severity_missing
+case_added_with_neither_severity_nor_disposition_is_kept_as_suggestion
 case_dead_recritic_is_not_clean
+case_malformed_top_level_container_kills_adjudicator_not_the_run
 case_malformed_map_entry_is_dead_adjudicator
 case_truncated_block_is_dead_adjudicator
 case_last_block_wins

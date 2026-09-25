@@ -51,9 +51,11 @@ trap 'rm -rf "$TMPD"' EXIT
 
 # R-AD — 옛 픽스처의 `new_findings: "리스트가 아니다"`(스칼라 컨테이너 소실)는
 # --adversarial 문서 직접 읽기 시절의 모양이다. 재비판 경로(`recritic_bridge.
-# to_adjudication_doc`)는 `added` 를 항상 list 로 만들어(아니면 판정자 사망) 이
-# doc 이 CLI 로 다시 나타날 수 없다(단위 테스트로만 닿는다 —
-# test_synthesize_findings_adjudication.py::TestMalformedContainerAtDocLevel).
+# to_adjudication_doc`)는 `added` 가 list 가 아니면 판정자 사망으로 돌려버려 이
+# doc 이 옛 모양 그대로 CLI 로 다시 나타날 수 없다 — 그 살아 있는 방어는
+# test_recritic_bridge.sh::case_malformed_top_level_container_kills_adjudicator_not_the_run
+# 가 실제 CLI 로 재고, `extract_new_findings`/`extract_verdicts` 호출부만은
+# test_synthesize_findings_adjudication.py::TestMalformedContainerAtDocLevel 이 잰다.
 # 아래 「형태 불량」 finding(항목 파손)이 이미 배관 손실 칸을 1 이상으로 채우므로
 # 그 축은 이 파일 안에서 그대로 산다.
 cat > "$TMPD/findings.yaml" <<'YAML'

@@ -219,10 +219,15 @@ case_legacy_table_is_gone() {
   # AC23 — 옛 판정 어휘의 산출자(runtime-verifier)가 사라졌으므로 매핑표도 없다.
   local hits; hits=$(grep -cE 'LEGACY_VERDICTS|legacy_verdict|AC23' "$V" || true)
   assert_eq "$hits" "0" "verdict.py 에 옛 어휘 매핑의 흔적이 없다(정의·인자·표지)"
-  local rc=0; python3 "$V" --legacy-verdict PASS >/dev/null 2>&1 || rc=$?
+  local rc=0 err
+  err=$(python3 "$V" --legacy-verdict PASS 2>&1 >/dev/null) || rc=$?
   assert_eq "$rc" "2" "verdict.py 는 --legacy-verdict 를 모른다(exit 2)"
-  rc=0; python3 "$SYNTH" --emit-verdict --legacy-verdict PASS >/dev/null 2>&1 || rc=$?
+  # Controller fix round 1, Minor 5 — exit 2 가 다른 usage 오류가 아니라 「모르는
+  # 인자」 그 자체인지를 사유로 확인한다.
+  assert_contains "$err" 'unrecognized arguments' "verdict.py — argparse 가 모르는 인자로 거부한다"
+  rc=0; err=$(python3 "$SYNTH" --emit-verdict --legacy-verdict PASS 2>&1 >/dev/null) || rc=$?
   assert_eq "$rc" "2" "합성기도 --legacy-verdict 를 모른다(exit 2)"
+  assert_contains "$err" 'unrecognized arguments' "합성기 — argparse 가 모르는 인자로 거부한다"
   # 양의 짝 — 같은 CLI 가 살아 있는 인자는 받는다(「언제나 exit 2」 변이를 막는다).
   local out; out=$(python3 "$V" --reason kill-switch)
   assert_grep "$out" '^verdict: not-certified$' "살아 있는 인자는 그대로 선다"
@@ -514,6 +519,12 @@ case_synth_secondary_degrade_does_not_block() {
     verdict: downgrade
     to: SUGGESTION'
   local out; out=$(rf_synth "$T" --emit-verdict)
+  # Controller fix round 1, Minor 2 — 전제(강제가 실제로 일어났다)를 먼저 잰다.
+  # 이게 없으면 bridge 가 언젠가 `downgrade` 를 더 이상 강제하지 않도록 바뀌어도
+  # (예: 조용히 무시) 이 케이스는 finding 이 어차피 억제돼 kept=0·clean 이라
+  # 계속 GREEN 이다 — «차단 안 됨» 을 증명하려면 먼저 «강제가 있었다» 가 참이어야
+  # 한다.
+  assert_grep "$out" "강제\(게이트 변경\): verdict 'downgrade'" "전제 — 모르는 verdict 가 실제로 강제됐다"
   assert_grep "$out" '^verdict: clean$' "보조 축(모델 다양성) 손실만으로는 차단되지 않는다"
   assert_not_grep "$out" '^reason: '   "clean 에는 사유가 없다"
   rm -rf "$T"

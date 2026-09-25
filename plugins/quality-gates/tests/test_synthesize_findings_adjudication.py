@@ -116,14 +116,42 @@ class TestPromoteAuthorIsRequired(unittest.TestCase):
         self.assertEqual(mod._norm_sev({"severity": "Critical"}), "CRITICAL")
         self.assertEqual(mod._norm_sev({"severity": ["CRITICAL"]}), "SUGGESTION")
 
+    def test_promote_new_findings_drops_item_missing_file(self):
+        """Controller fix round 1, Minor 3 — R-AD 로 CLI 전환된 케이스(구 test_
+        synthesize_promoted_findings.sh 10)는 file 결측을 더는 재지 않는다
+        (recritic_bridge 가 file 을 «미지»로 채워 넘겨서 CLI 로는 안 닿는다).
+        `promote_new_findings` 의 `NEW_FINDING_REQUIRED` 자체는 여전히 file 을
+        요구한다 — 그 규칙을 직접 호출로 핀한다."""
+        promoted, dropped = mod.promote_new_findings(
+            [{"severity": "IMPORTANT", "summary": "s"}], [], author="doc-recritic")
+        self.assertEqual(promoted, [])
+        self.assertEqual(dropped, 1, "file 없는 항목은 여전히 malformed 로 드롭된다")
+
+    def test_promote_new_findings_drops_item_missing_severity(self):
+        """같은 이유로 severity 결측 드롭 경로도 CLI 밖에서 핀한다 — bridge 는
+        severity·disposition 이 둘 다 없어야 «미지» 로 채운다(둘 중 하나만 없으면
+        나머지가 대신 잡는다). `promote_new_findings` 자체가 호출자와 무관하게
+        severity 를 요구하는지는 이 직접 호출로만 검사된다."""
+        promoted, dropped = mod.promote_new_findings(
+            [{"file": "a.py", "summary": "s"}], [], author="doc-recritic")
+        self.assertEqual(promoted, [])
+        self.assertEqual(dropped, 1, "severity 없는 항목은 여전히 malformed 로 드롭된다")
+
 
 class TestMalformedContainerAtDocLevel(unittest.TestCase):
     """R-AD — `verdicts:`/`new_findings:` 가 컨테이너 수준에서 매핑·스칼라인 옛
     --adversarial 문서 모양은 CLI 로 다시 나타날 수 없다: `recritic_bridge.
-    to_adjudication_doc` 는 이 두 키를 항상 list 로 만들거나(또는 판정자 사망으로
-    전환) 넘긴다. 그래도 `_as_list` 의 이 방어(항목 수만큼 dropped 로 세고 크래시
-    하지 않는다)는 살아 있어야 한다 — 단위 테스트로만 닿는다(옛
-    test_synthesize_promoted_findings.sh 케이스 10c·13·15)."""
+    to_adjudication_doc` 는 이 두 키가 list 가 아니면 그 자리에서 판정자 사망으로
+    돌려버린다(옛 test_synthesize_promoted_findings.sh 케이스 10c·13·15).
+
+    **그 살아 있는 방어 자체**(`to_adjudication_doc` 의 `if not isinstance(...):
+    return _dead(...)`)는 CLI 로 여전히 도달 가능하다 — 진짜 재비판자 응답의
+    `added: 5`/매핑 등으로. 그 자리는 여기가 아니라
+    test_recritic_bridge.sh::case_malformed_top_level_container_kills_adjudicator_not_the_run
+    가 잰다(Controller fix round 1 — 그 방어를 `if False:` 로 바꿔도 이 파일의
+    단위 테스트 셋은 GREEN 이었다: `extract_new_findings`/`extract_verdicts`
+    를 직접 불러 그 방어를 건너뛰기 때문이다). 이 클래스는 그 아래 계층
+    (`_as_list` — 항목 수만큼 dropped 로 세고 크래시하지 않는다)만 잰다."""
 
     def test_new_findings_scalar_is_not_a_crash(self):
         L = mod.Ledger(items="open")
