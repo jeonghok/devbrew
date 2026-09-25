@@ -41,8 +41,8 @@ echo "== C5 regression lock: codex-depth reconcile (availability-floor vs standa
 # paraphrase that re-contradicts would slip the grep — the dynamic codex review
 # is the backstop for that residue.
 presentE "codex cost = availability-floor, all depths (body-unique)" 'every non-trivia pipeline dispatch when detected'
-goneE    "old 'standard/deep-only' codex-cost claim 제거"            'on each .standard./.deep. Review gate dispatch'
-goneE    "Deep 비용행 codex depth-귀속 제거"                          'Tier C 전문가 다수 \+ codex'
+goneE    "old 'standard/deep-only' codex-cost claim 제거"            'on each .standard./.deep. (Review gate|pipeline) dispatch'
+goneE    "Deep 비용행 codex depth-귀속 제거"                          '(Tier C 전문가|추가 리뷰어) 다수 \+ codex'
 
 echo; echo "readme-scope-reconcile: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -27,7 +27,7 @@ frontmatter 의 키 부재는 `shared/tests/test_docreview_agents.sh` 가, 이 �
 
 **Reference 구현** — 본인 플러그인의 형태와 맞는 것을 읽으세요:
 
-- [`plugins/quality-gates/`](../plugins/quality-gates/) — **writer + reviewer + hook 파이프라인**. 각도별(보안·판정·다른 전제) `tools:` allowlist 격리로 Laws 1–2를 embody. `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`를 shipping.
+- [`plugins/quality-gates/`](../plugins/quality-gates/) — **writer + reviewer + hook 파이프라인**. 보안·판정 두 각도는 `tools:` allowlist 격리(qg 자체 agent 는 모두 쓰기 권한 없음), 다른 전제 각도(codex)는 OS-level read-only 샌드박스 + 별도 프로세스로 Laws 1–2를 embody. `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`를 shipping.
 - [`plugins/project-init/`](../plugins/project-init/) — **git-workflow enforcement**. Compounding hook과 branching-strategy 템플릿으로 Law 3를 embody. `commands/`, `hooks/`, `templates/`를 shipping. `agents/`나 `skills/` 없음 — hooks-and-templates 플러그인도 유효한 형태.
 
 > **새 agent 를 dispatch 하는 자리를 만들면 처분 앵커 한 줄이 함께 온다** —

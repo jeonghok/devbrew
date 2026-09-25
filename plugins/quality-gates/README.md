@@ -10,7 +10,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
 - **Law 3 (Compounding) — 처분 회계(adjudication `Ledger`)** (v7.1.0) — 리뷰 findings 가 버려지는 자리가 `shared/adjudication/adjudication.py` 의 처분(`accept`/`reject`/`hold`/`absorbed`/`coerced`/`source_failed`/`uncountable`/`suppressed`)을 부르고, 그 배선을 `tools/adjudication/` 의 판정기와 `shared/tests/test_adjudication_{wiring,consumed}.sh` 가 강제한다. 소비자는 `synthesize_findings.py`·`synthesize_artifact_findings.py`. **범위**: 강제되는 것은 `.py` 소비자와 `Ledger` import 가 있는 자리이고, `consumer=orchestrator`/`human` 인 dispatch 자리는 `disclosure=` 리터럴 실재까지만 검사된다(CLAUDE.md 축 C 한계).
 - **Law 2 (입력 오염 차단) — `input_slots`** (v7.1.0) — 이 플러그인의 agent 여섯(`security-reviewer`·`doc-recritic`·`artifact-critic`·`artifact-adversarial`·`test-scope-validator`·`pr-understanding-builder`)이 frontmatter 에 받는 입력의 `tag`/`var`/`kind` 를 선언하고, 금지 종류(`prior_verdict`·`score`·`orchestrator_framing`)는 C6 인용과 함께 면제 등재를 요구한다. 집행은 `shared/tests/test_agent_input_slots.sh`. 앞 리뷰어의 판정이 다음 리뷰어의 전제가 되는 것이 Law 2 가 도구로 못 막는 구멍이다.
 - **Law 3 (Compounding)** — Phase 1 single dispatch builder (T2-2/T3-5). Future persona edits land in one place, never drift across two dispatch sections.
-- **Law 2 (Writer ≠ Reviewer)** — 순수 read-only reviewer agent(`security-reviewer`/`doc-recritic`/`test-scope-validator`)가 `tools: Read, Grep, Glob` fail-closed allowlist 선언 (frontmatter scoping으로 물리적 격리 — write/exec/delegation 도구는 목록에 없어 물리적으로 부재; 이름 기반 denylist는 시간에 대해 fail-open이라 대체됨). 쓰기 권한을 가진 agent 는 디스패치되지 않는다 — 테스트는 오케스트레이터가 자기가 만든 트리에서 직접 돌린다.
+- **Law 2 (Writer ≠ Reviewer)** — 순수 read-only reviewer agent(`security-reviewer`/`doc-recritic`/`test-scope-validator`)가 `tools: Read, Grep, Glob` fail-closed allowlist 선언 (frontmatter scoping으로 물리적 격리 — write/exec/delegation 도구는 목록에 없어 물리적으로 부재; 이름 기반 denylist는 시간에 대해 fail-open이라 대체됨). qg 자체 agent 는 모두 쓰기 권한이 없다. 외부 추가 리뷰어(`pr-review-toolkit` 등)는 쓰기 가능할 수 있으나 advisory 이고 fix 는 오케스트레이터가 소유한다 — 테스트는 오케스트레이터가 자기가 만든 트리에서 직접 돌린다.
 - **Law 3 (Compounding)** — scout `rationale` 필드가 매 iteration마다 state 파일에 로깅; reviewer-persona 편집이 학습된 교훈을 인코딩하는 substrate.
 - **Law 3 (Compounding) — cross-plugin reader contract** — 차등 테스트의 test-scope-validator(`scripts/discover-plan.sh`)가 sister-plugin (`superpowers:writing-plans`)의 출력 경로 `docs/superpowers/plans/`를 1순위 source로 명시 consume; convention drift가 silent breakage가 되지 않도록 README "Plan Discovery Sources" 섹션이 reader/writer 약속을 문서화.
 - **P12 anti-corollary (former AP5, trivia ceremony) 회피** — `check-trivia.sh`가 단일 파일·≤3줄 whitespace/rename을 파이프라인 전체 skip. *현재 coverage는 whitespace + rename에 국한. P12 canonical 자격(typo/comment-only/formatting — 파일 수 무관)을 완전히 충족하기 위한 확장은 deferred 항목 — Tier 2 spec은 아카이브됨: `git show pre-slim-archive-2026-07-09:docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md`.*
@@ -35,7 +35,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
   boundary. It gates fix-loop consent (it does NOT gate subagent fan-out —
   that consent gate was never implemented; fan-out is bounded by the
   transparency line + declared max fan-out) — no new principle ID needed.
-- **C66 (Linked Artifact Flow) — spec을 truth로 instantiate** (v2.1.0) — qg가 처음으로 사용자 프로젝트 spec을 읽어(`scripts/discover-spec.sh`) test-scope-validator의 기준 축을 plan items → **spec Acceptance Criteria**로 전환하고, codex 경로(`run_codex_reviewer.sh`)가 spec AC를 `<spec_context>`에 주입한다. cycle 위계(spec=truth ⊃ plan=구현 방식)를 instantiate — spec→test 커버리지를 역방향 walk. plan은 구현-방식 보조 hint로 강등(제거 아님; `discover-plan.sh` byte-identical). **advisory only — 판정을 block하지 않음.** spec 부재 시 loud log + plan-기반 분류로 fallback. kill switch `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1`. (v9 에서 AC별 `ac_coverage` 출력은 사라졌다 — spec AC 런타임 검증이 사라지며 함께 거둔 주장이다.)
+- **C66 (Linked Artifact Flow) — spec을 truth로 instantiate** (v2.1.0) — qg가 처음으로 사용자 프로젝트 spec을 읽어(`scripts/discover-spec.sh`) test-scope-validator의 기준 축을 plan items → **spec Acceptance Criteria**로 전환하고, codex 경로(`run_codex_reviewer.sh`)가 spec AC를 `<spec_context>`에 주입한다. cycle 위계(spec=truth ⊃ plan=구현 방식)를 instantiate — spec→test 커버리지를 역방향 walk. plan은 구현-방식 보조 hint로 강등(제거 아님; `discover-plan.sh` byte-identical). **advisory only — 판정을 block하지 않음.** spec 부재 시 loud log + plan-기반 분류로 fallback. kill switch `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1`.
 - **P21 (Untrusted input — diff is data, not instructions)** (v2.8.0) — 파이프라인의 두 diff-reading reviewer(`security-reviewer`/재비판 `doc-recritic`)가 attacker-influenced `filtered_diff`(및 finding 텍스트)를 데이터로만 다루고 그 안의 prompt-injection·안전성 주장을 verdict 근거로 삼지 않도록 명시. 더해 언어/프레임워크 FP precedent 5건을 기능별 단일 배치(DRY)로 흡수 — suppress-at-source 3(security-reviewer anti-flag) + reject-at-verify 2(재비판 코드 프로필 관문 C, PR4a 부터 `references/recritic-code-profile.md`가 싣는다). 섹션-스코프 grep 회귀 락(`test_security_reviewer_persona.sh`)으로 persona 약화 검출(재비판은 공유 정본의 copy-of 사본이라 이 플러그인이 그 persona 를 직접 lock 하지 않는다 — `shared/tests/test_copy_of_contract.sh` 가 대신 잰다). 신규 P# 0, 결정론 가드 0 (Anthropic *"Using LLMs to Secure Source Code"* 평가 Tier-1; design-lightness).
 - **P21 (Secret이 prompt context에 들어가지 않음) — 출력값 유출 차단으로 확장 (publish sink)** (v2.9.0) — `/qg-publish`가 게시 직전 `secret-scan.py`로 전체 payload(artifact + PR title + 브랜치명 + 커밋메시지; PR-create 시 히스토리까지)에서 시크릿 **값**(quoted string / vendor 패턴 / corpus-substring, keyword는 보조 신호)을 스캔해 hit 시 게시를 FAIL CLOSED로 거부한다 — 스캔 에러·타임아웃도 hit 취급. 기존 인스턴스(v1.8.0, secret 값이 prompt로 들어가지 않음)와 자매지만 방향이 반대다: 여기는 모델이 저술한 텍스트가 GitHub로 **나가기 전** 값 유출을 막는다. regression: `tests/test_secret_scan.py`, `tests/test_secret_scan_fp.py`.
 - **P21 (Untrusted input — diff is data, not instructions) 확장** (v2.9.0) — v2.8.0에서 파이프라인 두 reviewer에 넣은 norm을 `pr-understanding-builder` 페르소나와 publish orchestrator에도 확장한다. PR 코멘트는 id+마커 매칭용 opaque bytes로만 다루고(스크립트가 선택 계산; 모델이 내용을 읽고 지시로 따르지 않음), artifact 내 이미지는 auto-fetch 유출 벡터라 중립화한다.
@@ -47,7 +47,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
   가 "전체 앱 부팅"이 아니라 *"레포에 이미 있는 테스트 중 영향분을 실제로 돌리는 것"*이다.
   `run-test-selection.sh` 가 러너 어댑터 9종을 **집합으로** 감지해 전부 실행한다 — 폴리글랏
   레포에서 우선순위 밖 러너를 버리면 floor 가 의미를 잃는다(이 리포 실측: `.sh` 130개 /
-  `.py` 50개). 부팅되는 앱의 런타임 행위 검증은 v9 에서 대체되지 않고 주장만 거뒀다(위 C4).
+  `.py` 50개). 부팅되는 앱의 런타임 행위 검증은 대체되지 않고 주장만 거뒀다(위 C4).
 - **LD5 (결정론은 모델 주장과 독립인 백스톱) — 호출 주체 분리 (Law 2)** (v3.0.0) — 영향 스코프
   판정은 모델이 하되, `run-test-selection.sh` 는 기준선 측·HEAD 측 **둘 다 오케스트레이터가
   직접** 호출한다. agent 가 테스트 결과를 self-report 하면 오케스트레이터가 받는 것이 raw
@@ -75,8 +75,8 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
   `tests/test_qa_ledger.sh`, `tests/harness/test_skill_orchestration_behavior.sh`.
 - **Law 3 (Compounding) — 문서 리뷰 엔진 기반 (v7.4.0)** — 네 문서 리뷰 자리를 통일하는 `shared/docreview/` 를 호출자 0 으로 심었다. `generic` 프로필(`references/docreview-profiles/generic.md`)이 non-code 아티팩트 자리를 데이터로 선언. `/qg critique` 의 전환(agent·reference 링크 배선, `artifact_commit.sh` 자율 커밋 루프 소멸)은 후속 major PR. 집행은 `shared/tests/test_docreview_*.sh` + 변이 매트릭스.
 - **모집단에 안 들어간 것은 검사되지 않는다 (v7.5.0)** — 심볼릭 링크로 배포되는 러너가 `extract_codex_invocations.py` 의 `is_symlink()` skip 과 `codex_observation.sh` 양쪽 모집단에서 빠져, `test_sandbox_enforced.sh` 가 «통과»하면서도 그 러너를 한 번도 안 봤다. 링크 배포본을 모집단에 넣고 관측 캡처를 basename 이 아니라 «경로»로 키잉했다(같은 basename 후보 둘이 서로를 가렸다). **락의 PASS 는 이빨의 증거가 아니다** — 무엇이 모집단에 있는지를 먼저 물어야 한다. v7.4.0 CHANGELOG 가 「PR 2 에서 다시 판단한다」로 미뤘던 항목이고, 그 판단은 이 릴리스가 했다.
-- **Law 1 · G3 — 「검증하지 못했다」는 일급 판정값** (v9) — 판정은 `clean` · `defect` · `not-certified (<사유>)` 셋이고 사유는 닫힌 열거다(`scripts/verdict.py` 한 곳). kill switch · trivia · 각도 부재 · 차등 축의 해상도 문제는 `clean` 도 실패도 아닌 `not-certified` 로 드러난다. regression: `tests/test_verdict_vocabulary.sh` · `tests/test_pipeline_verdict_wiring.sh`.
-- **C4 — 차등 테스트는 항상** (v9) — 기준선 축(`create-baseline`)과 봉인된 HEAD 축(`seal-worktree.sh` → `create-head`)에서 오케스트레이터가 직접 돌린다. 빠지는 길은 trivia escape 와 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 둘뿐이고 둘 다 `not-certified` 다. 부팅되는 앱의 런타임 행위 검증은 **대체하지 않고 주장을 거둔다**.
+- **Law 1 · G3 — 「검증하지 못했다」는 일급 판정값** — 판정은 `clean` · `defect` · `not-certified (<사유>)` 셋이고 사유는 닫힌 열거다(`scripts/verdict.py` 한 곳). kill switch · trivia · 각도 부재 · 차등 축의 해상도 문제는 `clean` 도 실패도 아닌 `not-certified` 로 드러난다. regression: `tests/test_verdict_vocabulary.sh` · `tests/test_pipeline_verdict_wiring.sh`.
+- **C4 — 차등 테스트는 항상** — 기준선 축(`create-baseline`)과 봉인된 HEAD 축(`seal-worktree.sh` → `create-head`)에서 오케스트레이터가 직접 돌린다. 판정을 내는 경로 안에서 차등 테스트가 빠지는 길은 trivia escape 와 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 둘뿐이고 둘 다 `not-certified` 다(전역 `DEVBREW_QUALITY_GATES_DISABLE=1` 은 다르다 — Preflight P1 에서 판정 자체를 내지 않고 그대로 리턴한다). 부팅되는 앱의 런타임 행위 검증은 **대체하지 않고 주장을 거둔다**.
 
 ## 구조
 
@@ -203,7 +203,7 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 |---|---|---|
 | ① 스코프 | 오케스트레이터 + `check-review-scope.sh` | session(기본) · `branch` · `--paths` |
 | ② 차등 테스트 | 오케스트레이터 + 결정론 스크립트 | 영향분 테스트를 기준선 축과 봉인된 HEAD 축에서 돌려 귀속(`references/differential-test.md`) |
-| ③ 각도 + 리뷰어 | `security-reviewer`(보안) · codex(다른 전제) · 추가 리뷰어(스코프) | 각도 셋은 고정, 수행자는 스코프가 정한다 |
+| ③ 각도 + 리뷰어 | `security-reviewer`(보안) · codex(다른 전제) · 추가 리뷰어(스코프) | 각도 셋과 그 수행자는 고정, 스코프는 추가 리뷰어만 정한다 |
 | ④ 재비판 | `doc-recritic`(판정 각도) | 출처를 못 보는 재비판 — 탐지 0 이어도 돈다 |
 | ⑤ 합성 · 판정 | `synthesize_findings.py` → `verdict.py` | `clean` · `defect` · `not-certified (<사유>)` |
 
@@ -227,8 +227,9 @@ gh I/O·secret-scan·marker-scoped idempotent upsert는 결정론 스크립트�
 
 ## 리뷰어 구성 — 각도 셋 + 추가 리뷰어
 
-리뷰어 구성은 **오케스트레이터가 diff 스코프로 선택**한다(모델 판단 + scout 힌트 + review-pr
-§4 rubric + scope-signal 팔레트). 각도 셋은 고정, 수행자는 스코프가 정한다:
+각도 셋(보안 · 판정 · 다른 전제)과 그 수행자는 고정이다 — 스코프로 빠지지 않는다. **추가
+리뷰어만 오케스트레이터가 diff 스코프로 선택**한다(모델 판단 + scout 힌트 + review-pr
+§4 rubric + scope-signal 팔레트):
 
 ```
 보안 각도 — 매 iteration (모델이 못 뺌)
@@ -269,7 +270,7 @@ anti-corollary(subagent spray) instantiation은 **transparency 라인(매 iter �
 
 ```
 ┌─ single assistant turn ──────────────────────────────────────────────┐
-│                                                                       │
+│                                                                        │
 │   user: /qg                                                           │
 │       │                                                               │
 │       ▼                                                               │
@@ -279,27 +280,29 @@ anti-corollary(subagent spray) instantiation은 **transparency 라인(매 iter �
 │   SKILL preflight  (kill switch)                                      │
 │       │                                                               │
 │       ▼                                                               │
-│   trivia escape? ─── yes ──▶ verdict: not-certified (trivia)          │
-│       │ no                                                            │
-│       ▼                                                               │
-│   qg iter loop (≤5)                                                   │
-│     ① scope (session | branch | --paths)                              │
-│     ② differential test (baseline vs sealed HEAD — every iteration)   │
-│     ③ angles + reviewers (security · codex · specialists)             │
-│     ④ framing-blind re-critique (doc-recritic)                        │
-│     ⑤ synthesize → verdict: clean | defect | not-certified (<reason>) │
-│       │                                                               │
-│       ├── clean ──────────────────────────────────┐                   │
-│       │                                           │                   │
-│       └── findings remain ──▶ AskUserQuestion     │                   │
-│                              ("findings remain..." │                  │
-│                               Retry / Accept and   │                  │
-│                               finish / Stop)       │                  │
-│                                  │ Retry → next iteration             │
-│       ▼                          ▼                                    │
-│   Final summary  (Verdict · Iterations · Outcome · angles)            │
-│                                                                       │
-└───────────────────────────────────────────────────────────────────────┘
+│   trivia escape? ── yes ──▶ verdict: not-certified (trivia) ──────┐   │
+│       │ no                                                        │   │
+│       ▼                                                           │   │
+│   qg iter loop (≤5)                                                │   │
+│     ① scope (session | branch | --paths)                           │   │
+│     ② differential test (baseline vs sealed HEAD — every iteration)│   │
+│     ③ angles + reviewers (security · codex · specialists)          │   │
+│     ④ framing-blind re-critique (doc-recritic)                     │   │
+│     ⑤ synthesize → verdict: clean | defect | not-certified         │   │
+│       │                                                             │   │
+│       ├── clean ──────────────────────────────────────┐            │   │
+│       ├── defect/not-certified, kept = 0 (no fix       │            │   │
+│       │   to offer — stop here, verdict unchanged) ────┤            │   │
+│       │                                                │            │   │
+│       └── defect/not-certified, kept > 0 ──▶ AskUserQuestion        │   │
+│                                    ("findings remain..." │           │   │
+│                                     Retry / Accept and   │           │   │
+│                                     finish / Stop)       │           │   │
+│                                        │ Retry → next iteration     │   │
+│       ▼                                ▼                ▼           ▼   │
+│   Final summary  (Verdict · Iterations · Outcome · angles) ◀────────┘   │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Trivia detector coverage
@@ -377,7 +380,7 @@ export DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1
 | 2 | `./docs/superpowers/plans/*.md` (project-local) | checkbox `- [ ]` / `- [x]` 1개 이상 |
 | 3 | `~/.claude/plans/*.md` (legacy global) | project-local 비었을 때만 consult. hit 시 deprecation 경고 출력 |
 
-선택된 source 내부에서: unchecked checkbox 있는 파일 우선, 동률이면 mtime 가장 최근. 모두 all-checked면 mtime 가장 최근 ("방금 끝낸 plan, PASS 처리 정상").
+선택된 source 내부에서: unchecked checkbox 있는 파일 우선, 동률이면 mtime 가장 최근. 모두 all-checked면 mtime 가장 최근 ("방금 끝낸 plan을 정상적으로 고른 것").
 
 **Soft dependency:** project-local source는 `superpowers:writing-plans` skill이 plan을 저장하는 경로 (`docs/superpowers/plans/`) 와 동일합니다. superpowers 플러그인을 설치하지 않았더라도 동일 경로에 `.md` 파일을 직접 두면 동작합니다.
 
@@ -397,8 +400,7 @@ plan과 달리 **legacy-global 소스는 없습니다** — spec은 프로젝트
 **advisory only.** spec이 발견되면 test-scope-validator가 그것을 1차 축으로 테스트 파일을
 분류하고, codex 경로(`run_codex_reviewer.sh`)가 spec의 AC 섹션을 `<spec_context>`에
 script-internal로 주입합니다. 어느 경우에도 판정을 **막지 않습니다.** spec이 없으면 loud
-log를 출력하고 plan-기반 분류로 fallback합니다. (v9 에서 AC별 `ac_coverage` 출력은
-사라졌다 — spec AC 런타임 검증이 사라지며 함께 거둔 주장이다.)
+log를 출력하고 plan-기반 분류로 fallback합니다.
 
 **kill switch:** `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` — spec이 있어도 no-spec 경로를 강제 (codex `<spec_context>` 비움; validator는 plan-기반 분류).
 
@@ -442,14 +444,14 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_QUALITY_GATES_DISABLE=1` | 모든 quality-gates hook + `qg-gc.py` no-op. `/qg`는 여전히 invocable하지만 hook이 fire하지 않음. |
+| `DEVBREW_QUALITY_GATES_DISABLE=1` | 모든 quality-gates hook + `qg-gc.py` no-op. `/qg`는 invocable 하지만 SKILL Preflight P1 이 즉시 리턴한다 — `setup-qg.sh` 도 agent 도 부르지 않는다(판정 자체가 나지 않는다 — `not-certified` 도 아니다). |
 
 **각도 · 리뷰어 단위 disable:**
 
 | Env var | 효과 |
 |---|---|
 | `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` | optional `codex-reviewer` 완전 skip (model-family diversity layer off). `scripts/detect_codex.sh`가 우선 검사. |
-| `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` | 보안 각도의 `security-reviewer`만 skip. 재비판 · codex · 추가 리뷰어는 여전히 fire. **판정이 `not-certified (angle-absent)` 가 된다** — 탐지 0 이어도(v9 에서 의미가 바뀌었다: 전에는 배너와 advisory 한 줄이었다). 형제 `DISABLE_CODEX`는 다른 전제 각도라 부재를 공시만 한다. |
+| `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` | 보안 각도의 `security-reviewer`만 skip. 재비판 · codex · 추가 리뷰어는 여전히 fire. **판정이 `not-certified (angle-absent)` 가 된다** — 탐지 0 이어도. 형제 `DISABLE_CODEX`는 다른 전제 각도라 부재를 공시만 한다. |
 
 **차등 테스트 · 스코프 단위 disable:**
 
@@ -459,8 +461,8 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 | `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` | spec 발견 시에도 no-spec 경로 강제 (codex `<spec_context>` 비움; validator는 plan-기반 분류). |
 | `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | ② 차등 테스트를 통째로 건너뛴다(리뷰 대상 저장소의 코드를 호스트 권한으로 돌리지 않는다). 판정은 `not-certified (kill-switch)` 다 — `clean` 도 실패도 아니다. |
 
-**`DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX`** 는 qg 파이프라인에서 더 읽히지 않는다(v9 —
-샌드박스 executor 가 사라졌다). `scripts/qg-worktree.sh create-sandbox` 는 남아 있고 그 소비자는
+**`DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX`** 는 qg 파이프라인에서 더 읽히지 않는다
+(샌드박스 executor 가 사라졌다). `scripts/qg-worktree.sh create-sandbox` 는 남아 있고 그 소비자는
 `plugins/plugin-audit` 의 자체 테스트 격리다 — 이 스위치는 그 소비자에게만 효력이 있다.
 
 **Publish 단위 disable (`/qg-publish`, 게이트 아님):**

@@ -3080,6 +3080,7 @@ gh pr create --base main --head feature/qg-gate-merge-pr4b \
 | 동률 raise 의 `gate=False` 공시에 락이 없다(`<=` 변이 생존 — PR4a 이월) | 후속 | 이 표 |
 | RV 중간 파일이 `mktemp -d` — 플러그인 네임스페이스 밖(PR4a 이월) | 후속 | 이 표 |
 | raw `agent: [목록]` 이 `dedup()` 에서 TypeError(선재, PR3 이월) | 후속 | 이 표 |
+| `shared/adjudication/render_disposition.py` 의 회계 줄 `(차단: 예/아니오)` 가 `report["degraded"]` 에 묶여 있다 — 보조 입력 사망만 있는 실행에서 `(차단: 예)` 가 「공시(판정을 막지 않음)」 머리줄 옆, `verdict: clean` 과 함께 선다(공시와 차단은 다른 술어라는 헌장 원칙과 표기가 어긋난다) | 후속 | `shared/` 동결(spec-distill 공동 소비) — 이 표 |
 | 원장 파일 이름 `runtime-evidence.md` 에 옛 게이트 이름 | **해소하지 않는다** | R-AG — `qg-gc.py` 세션 표식 |
 | 각도 파일은 모델이 쓴다 — 락은 형식만 잰다 | **해소하지 않는다** | 설계 §15-4 · `test_pipeline_verdict_wiring.sh` 머리 주석 |
 | `check_wiring.py` 의 줄번호-키 면제 | **해소하지 않는다(구조적)** | 매 PR 재앵커 |
