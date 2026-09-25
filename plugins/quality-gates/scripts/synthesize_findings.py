@@ -473,33 +473,39 @@ def _norm_sev(f):
 
 
 # degrade 공시의 고정 마커. 소실(`dropped as malformed`)과 **다른 사건**이다:
-# 저쪽은 개별 주장이 버려진 것이고, 이쪽은 판정 «경로» 자체가 온전하지 않았던 것
-# (주 입력 사망·셀 수 없음·게이트를 바꾼 강제). 둘을 한 문구로 합치면 어느 쪽이
-# 났는지 stdout 에서 구별할 수 없다.
+# 저쪽은 개별 주장이 버려진 것이고, 이쪽은 (차단이면 not-clean 마커, 아니면
+# 공시 머리줄 — `_degrade_block`). 둘을 한 문구로 합치면 어느 쪽이 났는지
+# stdout 에서 구별할 수 없다.
 DEGRADE_MARKER = "판정 degrade"
 
 RECRITIC_ZERO_LINE = "탐지 0 · 재비판 0 — 재비판자가 돌았고 더한 finding 이 없다."
 
 
-def _degrade_block(degraded, degrade_reasons):
-    """degrade 공시 줄들. 사유가 하나도 없어도 degraded 면 머리줄은 나간다.
+def _degrade_block(report, blocking):
+    """degrade 공시 줄들. 막는 사건이면 not-clean 마커, 아니면 공시 머리줄.
 
-    사유 문자열은 Ledger 가 만들지만 그 안의 item 이름은 리뷰어 저작 YAML 에서
-    온다(`finding_id` = agent-file-line). 표 셀과 같은 문을 통과시킨다 — 개행이
-    raw 로 나가면 이 블록 아래에 가짜 머리줄을 심을 수 있다.
+    공시와 차단은 다른 술어다(헌장). 막는 것은 항목 소실 · 셀 수 없음 · 주 판정자
+    사망(`Ledger.blocks()`)뿐이다 — 보조 입력 사망 · 판정을 바꾼 강제는 드러내되
+    막지 않는다. 마커가 공시 술어에 묶이면 본 보고서는 「clean 이 아니다」, 꼬리는
+    `verdict: clean` 인 자기모순이 난다.
+
+    사유 문자열 안의 item 이름은 리뷰어 저작 YAML 에서 온다 — 표 셀과 같은 문을
+    통과시킨다(개행이 raw 로 나가면 이 블록 아래에 가짜 머리줄을 심을 수 있다).
     """
-    if not degraded:
+    if not report["degraded"]:
         return []
-    out = [
-        f"{DEGRADE_MARKER} — **이 실행은 clean이 아니다**: "
-        "판정 경로가 온전하지 않았다.",
-    ]
-    out.extend(f"- {_cell(r)}" for r in degrade_reasons)
+    if blocking:
+        head = (f"{DEGRADE_MARKER} — **이 실행은 clean이 아니다**: "
+                "판정 경로가 온전하지 않았다.")
+    else:
+        head = f"{DEGRADE_MARKER} — 공시(판정을 막지 않음): 보조 경로가 온전하지 않았다."
+    out = [head]
+    out.extend(f"- {_cell(r)}" for r in report["reasons"])
     return out
 
 
 def render(kept, suppressed_count, dropped_malformed, report, held_classes,
-           recritic_zero=False):
+           recritic_zero=False, blocking=False):
     findings = kept
     if not findings:
         # drop 공지는 이 분기에도 반드시 나가야 한다. 예전에는 아래 표-있는
@@ -530,7 +536,7 @@ def render(kept, suppressed_count, dropped_malformed, report, held_classes,
                 "file/severity/summary) — see stderr. "
                 "**이 실행은 clean이 아니다**: 버려진 주장은 심사되지 않았다."
             )
-        out.extend(_degrade_block(report["degraded"], report["reasons"]))
+        out.extend(_degrade_block(report, blocking))
         return "\n".join(out) + "\n"
 
     counts = {"CRITICAL": 0, "IMPORTANT": 0, "SUGGESTION": 0}
@@ -569,7 +575,7 @@ def render(kept, suppressed_count, dropped_malformed, report, held_classes,
 
     out = ["## Review Findings (Synthesized)", "", counts_line,
            disp_line, plumb_line, gloss_line, ""]
-    degrade_lines = _degrade_block(report["degraded"], report["reasons"])
+    degrade_lines = _degrade_block(report, blocking)
     if degrade_lines:
         out.extend(degrade_lines)
         out.append("")
@@ -776,7 +782,8 @@ def main():
                      and not verdicts and not new_raw
                      and raw_verdict_count == 0 and raw_added_count == 0)
     sys.stdout.write(render(kept, len(suppressed), dropped_malformed,
-                            report, ledger.held_by_class(), recritic_zero=recritic_zero))
+                            report, ledger.held_by_class(), recritic_zero=recritic_zero,
+                            blocking=ledger.blocks()))
 
     if args.emit_verdict:
         # `render()` 가 낸 Markdown 본문 **뒤**의 평문 꼬리다 — `verdict:` 를 같은

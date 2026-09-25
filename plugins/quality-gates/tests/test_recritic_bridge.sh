@@ -758,6 +758,51 @@ case_downgrade_is_not_a_verb() {
   rm -rf "$T"
 }
 
+case_aux_death_discloses_without_not_clean_marker() {
+  # Review Focus 4 · 헌장 — 보조 입력(diff) 사망은 공시하되 막지 않는다.
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml"
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: reject
+    evidence: "app.py:10 은 이미 파라미터 바인딩을 쓴다"'
+  local out; out=$(synth "$T" --recritic-diff "$T/gone.diff" --emit-verdict)
+  assert_grep     "$out" '공시\(판정을 막지 않음\)'            "보조 사망은 공시 머리줄로 드러난다"
+  assert_grep     "$out" '입력 실패\(보조\)'                    "무엇이 죽었는지 사유 줄이 선다"
+  assert_not_grep "$out" '이 실행은 clean이 아니다'             "not-clean 마커는 서지 않는다"
+  assert_grep     "$out" '^verdict: clean$'                     "판정은 막히지 않는다"
+  rm -rf "$T"
+}
+
+case_primary_death_keeps_not_clean_marker() {
+  # 양의 짝 — 주 판정자 사망은 여전히 차단이고 마커가 선다. 탐지 0 으로 둔다 —
+  # finding 이 남으면 defect 가 우선이라 reason 줄이 안 선다(§6.4.3 우선순위).
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/findings.yaml"
+  prep "$T"
+  local out; out=$(synth "$T" --emit-verdict)      # reply.txt 없음 = 재비판자 사망
+  assert_grep "$out" '이 실행은 clean이 아니다' "주 입력 사망은 not-clean 마커를 세운다"
+  assert_grep "$out" '^reason: angle-absent$'   "판정은 angle-absent"
+  rm -rf "$T"
+}
+
+case_gate_coercion_is_disclosure_not_block() {
+  # 근거 없는 reject 는 confirm 으로 강제된다(게이트 변경). finding 은 남아 defect —
+  # 강제 자체는 공시이지 not-clean 마커가 아니다.
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml"
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: reject'
+  local out; out=$(synth "$T" --emit-verdict)
+  assert_grep     "$out" '강제\(게이트 변경\)'          "강제는 공시된다"
+  assert_not_grep "$out" '이 실행은 clean이 아니다'     "강제만으로는 not-clean 마커가 서지 않는다"
+  assert_grep     "$out" '^verdict: defect$'            "finding 이 남아 defect"
+  rm -rf "$T"
+}
+
 case_prepare_strips_source_and_keeps_severity
 case_prepare_empty_states_the_empty_slot
 case_prepare_unreadable_findings_is_fail4_without_outputs
@@ -796,4 +841,7 @@ case_flag_hygiene
 case_adjudicator_name_matches_the_canonical_agent
 case_adversarial_flag_is_gone
 case_downgrade_is_not_a_verb
+case_aux_death_discloses_without_not_clean_marker
+case_primary_death_keeps_not_clean_marker
+case_gate_coercion_is_disclosure_not_block
 finish
