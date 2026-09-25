@@ -902,6 +902,337 @@ def coverage_anchor_failures(audit_text: str, anchors: set) -> list[str]:
     return fails
 
 
+# ── 조사 주장의 결정 연결 (2026-09-22-interview-research-specialization-design §E · §H) ─────
+#
+# **「조사 항목」의 순회 정의** — 설계 §E 와 같은 문면이고 이 셋이 전부다:
+#   · payload §4 의 모든 항목 줄(프로필상 전부 landscape 다)
+#   · payload §5 의 항목 줄 중 **`RC<n>` 리터럴을 가진 줄** — 네 모양(기각·보류·검토·위험) 중
+#     어느 것인지는 묻지 않는다. `RC<n>` 이 있으면 레포 주장을 실은 줄이고 없으면 아니다.
+#   · **§3 은 순회 범위에 없다.** §3 항목은 그 자체가 «열린 결정» 이라 연결의 *대상*이고
+#     출처가 아니다 — 거기에 연결을 걸면 자기지시가 되어 술어가 공허해진다.
+#
+# 연결의 위치는 **줄 끝**이고 하위 불릿은 금지다: `ENTRY_BULLET_RE`(`^\s*[-*]\s`)가 들여쓴
+# 불릿도 §4 항목으로 세므로 하위 불릿 형태는 즉시 `unkeyed landscape entries` red 가 된다.
+#
+# **개수 술어를 두지 않는다**(설계 ⟨C5⟩·X7·AC8). 아래 술어는 전부 ∀ 이고 순회할 항목이 0건이면
+# 공허하게 통과한다 — `landscape_unkeyed` 가 §4 에 대해 이미 하는 것과 같은 형태다. 개수가
+# 들어가는 곳은 **조건 분기와 advisory** 뿐이고 둘 다 무엇도 막지 않는다. 차단 메시지 문면에도
+# 개수를 넣지 않는다.
+# id 의 끝 경계는 `\b` 가 아니라 ASCII 낱말 문자의 부재다: 한글도 `\w` 라서 `\b` 는 `RC3에`·`OQ1은`
+# 처럼 조사가 붙은 id 를 못 읽는다(한국어 문면에서 흔한 모양). 숫자는 경계 밖이라 `RC1` 이 `RC12`
+# 안에서 맞지 않는다.
+RC_RE = re.compile(r"(?<![A-Za-z])RC\d+(?![0-9A-Za-z_])")
+OQ_RE = re.compile(r"(?<![A-Za-z])OQ\d+(?![0-9A-Za-z_])")
+# 줄 끝 연결 — 넷 중 하나(§H ③ + 최종 리뷰 I-4): 레포 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]`,
+# 웹 `[→ OQ<n>]` · `[→ 없음]`. `없음` sentinel 은 정직한 답이고 red 가 아니다: §A 계약이
+# 「빈 배열은 허용이고 거짓 연결보다 낫다」를 못 박으므로 sentinel 없는 ∀ 는 그 계약과 충돌하고
+# 「필러 절」 압력을 만든다. **「없음」의 개수는 세지 않는다.**
+# 레포 주장의 sentinel 이 `RC<n>` 을 싣는 이유: 닿는 결정이 없는 레포 주장을 `[→ 없음]` 으로만 쓰면
+# `RC<n>` 리터럴이 줄에서 사라질 수 있고, 그러면 `payload_rc_ids` 밖이라 ④⑤ 가 그 주장을 못 본다.
+# group(1) = 레포 id(웹이면 None) · group(2) = 대상(`OQ…` 목록 또는 `없음`).
+LINK_RE = re.compile(
+    r"\[(?:(RC\d+)\s*)?→\s*(OQ\d+(?:\s*·\s*OQ\d+)*|없음)\]\s*$")
+# 같은 모양의 앵커 없는 짝 — 한 줄의 연결 괄호를 **전부** 센다. `LINK_RE` 는 줄 끝 하나만 보므로
+# `RC3 [→ OQ1] [RC3 → 없음]` 처럼 실제 결정을 앞 괄호에 두고 버리는 연결을 끝에 달면 ①②③ 이 전부
+# 끝 괄호만 읽는다. 연결은 줄마다 **정확히 하나**다(복수 결정은 `[RC3 → OQ1 · OQ4]` 한 괄호).
+LINK_ANY_RE = re.compile(r"\[(?:RC\d+\s*)?→\s*(?:OQ\d+(?:\s*·\s*OQ\d+)*|없음)\]")
+CONTRACT_KEY, CONTRACT_V2 = "contract", "v2"
+DERIVED_INTERNAL_RESEARCH = "derived:internal_research"
+CONFIRM_ROW_RE = re.compile(r"^확인\s+(RC\d+)\s+—\s+(확인|반증|미확인)\s+—\s*(\S.*)$")
+
+INTERNAL_RESEARCH_ZERO_ADVISORY = (
+    "[spec-distill] 내부 조사 0건 — 이 brief 는 레포 주장(`RC<n>`)을 하나도 싣지 않았다. 이 게이트는 "
+    "brief 파일만 읽으므로 「조사를 했어야 했는가」를 알 방법이 없다 — 그 판단은 Step B 게이트에서 "
+    "사람이 한다."
+)
+CONTRACT_V1_ADVISORY = (
+    "[spec-distill] 신 계약 미적용 brief — payload frontmatter 에 `contract: v2` 가 없어 조사 주장의 "
+    "결정 연결 술어 다섯(연결 ∀ · 연결 대상 실재 · 역참조 ∀ · 이름 정확 일치 derived · 확인 줄 ∀)이 "
+    "전부 미발동이다. 옵트인의 fail-open 방향을 이 줄이 공시한다."
+)
+
+
+def contract_v2(text: str) -> bool:
+    """payload frontmatter 의 `contract: v2` 옵트인 스위치 (설계 §H ⑥).
+
+    새 술어 다섯은 이 필드가 있을 때만 발동한다. 없으면 전부 미발동이고 `advisories` 에
+    「신 계약 미적용 brief」 한 줄이 실린다 — 침묵과 0 은 다른 사실이다.
+
+    **왜 옵트인인가**: §4 항목에 연결을 ∀ 로 요구하면 `## 4. External Landscape` 를 가진 payload
+    픽스처 전량이 red 가 되고 그중 `interview-brief-valid.md` 는 스위트 다수의 베이스다. 일괄
+    편집은 회귀 생산원이고 optional 은 이빨 0이다 — 세 번째 길이 이것이다. 값 판독은
+    `frontmatter_value` 하나를 쓴다(중복 키·개행 포획·부분 비교를 그 함수가 이미 닫았다). 키가 있는데
+    판독이 안 되는 경우는 부재가 아니다 — `contract_unreadable` 이 게이트에서 red 로 가른다.
+    """
+    return frontmatter_value(CONTRACT_KEY, _frontmatter(text)) == (CONTRACT_V2, None)
+
+
+def contract_unreadable(text: str):
+    """`contract` 키가 **있는데** `v2` 로 읽히지 않는 경우의 사유, 아니면 None.
+
+    키 부재만 v1(옵트인 안 함)이다. 중복 키 · 공백 섞인 값 · `V2`/`v2.0` 같은 다른 값을 부재와 같이
+    읽으면 다섯 술어가 조용히 꺼지고 advisory 는 「없다」고 오진한다 — `frontmatter_errors` 가 금지한
+    「오류를 key absent 로 뭉개기」와 같은 결함이다.
+    """
+    fm = _frontmatter(text)
+    # 키 줄 검색은 frontmatter 전체를 본다 — 다른 키 아래 들여쓴 `contract:`(중첩 매핑 · 블록 스칼라)도
+    # 존재로 읽혀 v1 brief 가 「판독 불가」 red 가 된다. fail-closed 방향이고 코퍼스 0건이라 받아들인다.
+    # 존재는 `frontmatter_value` 와 **독립으로** 본다: 그 함수는 값이 빈 키(`contract:` ·
+    # `contract: ""` · `contract: # v2`)도 「key absent」로 돌려주고, 키 모양이 다른 줄(`Contract:` ·
+    # 들여쓴 키 · `contract :`)은 아예 찾지 않는다. 사람 눈에 키가 보이는 줄이면 부재가 아니다.
+    if not re.search(r"(?im)^\s*[\"']?contract[\"']?\s*:", fm):
+        return None
+    val, err = frontmatter_value(CONTRACT_KEY, fm)
+    if err == f"{CONTRACT_KEY} key absent":
+        return f"{CONTRACT_KEY} 키 줄은 있는데 `contract: v2` 로 읽히지 않는다 (빈 값 또는 키 모양)"
+    if err:
+        return err
+    return None if val == CONTRACT_V2 else f"{CONTRACT_KEY} 값 {val!r} 은 알 수 없는 계약이다 (`v2` 만 있다)"
+
+
+def _research_entries_split(text: str) -> tuple[list[str], list[str]]:
+    """순회 정의의 두 절 — (§4 의 모든 항목 줄, §5 에서 `RC<n>` 을 가진 줄). 정의는 여기 하나다:
+    ① 은 두 절을 다르게 판정하므로 나눠 받고, 나머지 술어는 `research_entries` 로 합쳐 받는다."""
+    e4 = _entry_lines(_section_text(text, "4", "External Landscape"))
+    e5 = [ln for ln in section5_entries(text) if RC_RE.search(ln)]
+    return e4, e5
+
+
+def research_entries(text: str) -> list[str]:
+    """위 순회 정의 그대로 — §4 의 모든 항목 줄 + §5 에서 `RC<n>` 을 가진 줄. §3 은 제외.
+
+    id 는 리터럴 `RC\\d+` 뿐이다 — `RC 3` · `rc3` · 전각 `ＲＣ3` · `RC3a` 같은 근사 표기는 id 가 아니라서
+    어느 술어에도 보이지 않는다(조건부 발동이 피검자 산출물에 앵커된 설계 L1 의 한 변형).
+    """
+    e4, e5 = _research_entries_split(text)
+    return e4 + e5
+
+
+def payload_rc_ids(text: str) -> list[str]:
+    """payload 가 실은 레포 주장 id 전량 — **순회 정의 안에서만** 센다.
+
+    코퍼스를 payload 전문으로 넓히지 않는다: §3 의 `→ 근거 RC3` 역참조와 §0 요약도 같은 리터럴을
+    담으므로, 전문을 세면 확인 줄 ∀ 가 «출처 없는 역참조» 에도 확인 줄을 요구한다. 출처는 §4·§5 이고
+    §3·§0 은 그것을 가리키는 자리다(설계 §D).
+    """
+    return sorted({rc for ln in research_entries(text) for rc in RC_RE.findall(ln)})
+
+
+def research_link_missing(text: str) -> list[str]:
+    """① 연결 ∀ — 조사 항목마다 줄 **끝**에 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]` · `[→ OQ<n>]` ·
+    `[→ 없음]` 하나.
+
+    ∀ 이고 개수 술어가 아니다. 순회할 항목이 0건이면 공허하게 통과한다 — `landscape_unkeyed` 의
+    docstring 이 같은 판단을 이미 적었다: 「web-off brief는 §4에 순회할 항목이 없어 공허하게
+    통과하는 것이 옳다 — 조사하지 않았으면 인용할 것도 없다」.
+
+    **레포 주장은 연결 안에 항상 `RC<n>` 을 싣는다**(§H ③ · 최종 리뷰 I-4). ③ 의 역참조 요구는 연결의
+    `RC<n>` 으로만 만들어지므로(`want`), 레포 주장이 웹 형식 `[→ …]` 을 달면 역참조 ∀ 를 통째로 피한다.
+    두 절이 이 규칙을 다르게 진다:
+
+    - **§5 는 줄 단위다.** §5 가 순회되는 이유가 그 줄이 `RC<n>` 을 싣기 때문이므로(§E) §5 항목은
+      정의상 레포 주장 줄이고, 웹 형식 연결을 달면 연결 없음이다. 전역으로만 보면 같은 id 의 버리는
+      줄 하나(`[RC3 → 없음]`, 하위 불릿 포함)가 실제 주장 줄의 웹 연결을 세탁한다.
+    - **§4 는 전역이다.** §4 항목은 «출처키» 를 가진 웹 항목이라, 거기 적힌 `RC<n>` 은 다른 주장의
+      상호참조다 — 그 id 가 어느 항목 줄의 레포 형식 연결에 한 번은 실려 있으면 green 이다. 줄 단위로
+      두면 결정 상호참조를 red 로 만든 I-1 과 같은 회귀가 된다.
+
+    두 절 모두에서, 어느 연결에도 실리지 않은 `RC<n>` 을 담은 줄은 연결 없음이다(다른 id 의 레포 연결
+    `[RC5 → …]` 뒤에 숨는 모양). 남는 것: 같은 id 의 버리는 레포 연결 뒤에서 다른 id 의 연결로 실제
+    결정을 다는 §5 줄, 그리고 웹 항목으로 위장한 레포 주장(이미 선언된 «출처키» 를 다시 쓰면 audit §7
+    을 고치지 않고도 통과한다)은 이 술어가 가르지 못한다. 웹 항목의 `RC<n>` 모양 문자열(릴리스 후보)은
+    레포 id 로 읽혀 red 다 — 전부 알려진 한계. **이 술어는 형태 검사다** — 줄 끝 연결의 모양과 id 의
+    출현만 보고, 그 연결이 참인지는 V1(내용 확인)과 확인 줄 ∀ 가 진다.
+
+    연결 괄호는 줄마다 정확히 하나다(**정확한 연결 문법에 한해**) — 줄 끝 연결을 떼고도 연결 모양
+    괄호(`LINK_ANY_RE`)가 남으면 연결 없음이다. 문법과 다른 근사 괄호(`->` · 쉼표 구분 · 전각 괄호 ·
+    불릿 아닌 이어지는 줄)는 산문으로 읽혀 어느 술어에도 보이지 않는다 — 그 힘은 거짓 `[RC<n> → 없음]`
+    과 같다. 둘 이상이면 끝 괄호만 읽혀 앞 괄호의 결정이 ②③ 을 피한다(개수를 세지 않고 잔여 유무만 본다).
+    """
+    e4, e5 = _research_entries_split(text)
+    linked = set()
+    for ln in e4 + e5:
+        m = LINK_RE.search(ln)
+        if m and m.group(1):
+            linked.add(m.group(1))
+    out = []
+    for ln in e4:
+        if (not LINK_RE.search(ln) or LINK_ANY_RE.search(LINK_RE.sub("", ln))
+                or set(RC_RE.findall(ln)) - linked):
+            out.append(ln)
+    for ln in e5:
+        m = LINK_RE.search(ln)
+        if (not m or m.group(1) is None or LINK_ANY_RE.search(LINK_RE.sub("", ln))
+                or set(RC_RE.findall(ln)) - linked):
+            out.append(ln)
+    return out
+
+
+# 뒤 경계는 `_` 를 건너뛴 뒤에 본다 — `__OQ1__:` 의 닫는 밑줄 강조가 경계를 막지 않게(`OQ1_2` 는 여전히 거부).
+LEADING_OQ_RE = re.compile(r"^[*_`]*\s*(OQ\d+)(?!_*[0-9A-Za-z])")
+DECISION_SECTIONS = (("3", "Open Questions"), ("0", "한눈에"))
+
+
+def _leading_oq(line: str):
+    """항목 줄의 **선두** `OQ<n>` — 불릿을 벗긴 본문이 (선행 강조 마커 `*`·`_`·`` ` ``를 사이에 두고도)
+    `OQ\\d+` 로 시작할 때만 그 id, 아니면 None.
+
+    §0 은 `OQ1 [열림] — …`, §3 은 `OQ1: …` 또는 `**OQ1**: …`/`**OQ1 — 제목**` 로 쓴다(레포 실측 —
+    `docs/archive/interview/2026-07-26-qg-impact-driven-qa-runtime-interview.md:155`) — 그 줄이
+    **선언하는** 결정은 선두의 것 하나다. 강조 마커를 건너뛰지 않으면 `**OQ1**: …` 이 선두가 아닌
+    것으로 읽혀 ③ 의 역참조 검사가 그 줄을 순회에서 놓치고(회귀 실측: `→ 근거 RC3` 를 지워도
+    green), 반대로 §0·§3 이 둘 다 강조돼 있으면 ② 가 「결정 목록에 없다」는 거짓 red 를 낸다.
+    줄 중간의 `OQ<n>`(`- OQ2: 캐시 무효화 시점 (OQ1 이 정해진 뒤에 논의)` 의 `OQ1`)은 상호참조이고
+    그 줄의 결정이 아니다 — 강조 마커 허용은 **선두** 판정 자체를 넓히지 않는다. 어디서든 언급한
+    줄을 그 결정의 줄로 읽으면 정직한 상호참조가 ③ 의 역참조 요구를 받아 red 가 되고(최종 리뷰
+    I-1 실측), ② 는 언급만으로 결정이 선언된다.
+    """
+    m = LEADING_OQ_RE.match(_strip_bullet(line).strip())
+    return m.group(1) if m else None
+
+
+def _declared_decisions(text: str) -> set:
+    """payload §3 Open Questions ∪ §0 한눈에 의 결정 목록에 실재하는 `OQ<n>` 집합.
+
+    §0 이 상위집합이고 §3 이 그 중 열린 것이다(설계 §H ②). **상태 토큰은 보지 않는다** —
+    §0 은 해결된 결정도 `[해결 ⟨S<N>⟩]` 를 달고 남으므로, 「열려 있는가」를 보면 그 결정을
+    해결하는 데 기여한 조사가 red 가 된다(설계 L3 · R11).
+
+    **선언은 항목 줄의 선두 `OQ<n>` 뿐이다**(`_leading_oq`) — ③ 이 「그 `OQ<n>` 줄」을 읽는 규칙과
+    같다. 줄 중간·산문의 언급은 결정을 선언하지 않는다.
+    """
+    out = set()
+    for num, title in DECISION_SECTIONS:
+        for ln in _entry_lines(_section_text(text, num, title)):
+            oq = _leading_oq(ln)
+            if oq:
+                out.add(oq)
+    return out
+
+
+def research_link_targets_missing(text: str) -> list[str]:
+    """② 연결 대상 실재 — 쓰인 `OQ<n>` 이 §3 또는 §0 의 결정 목록에 있는가.
+
+    `없음` sentinel(`[→ 없음]` · `[RC<n> → 없음]`)은 대상이 아니다. 연결이 0건이면 공허하게
+    통과한다(① 이 연결 부재를 따로 잡는다).
+    """
+    declared = _declared_decisions(text)
+    fails = set()
+    for ln in research_entries(text):
+        m = LINK_RE.search(ln)
+        if not m:
+            continue        # ① 이 잡는다
+        for oq in OQ_RE.findall(m.group(0)):
+            if oq not in declared:
+                fails.add(f"{oq} 가 payload §3·§0 의 결정 목록에 없다")
+    return sorted(fails)
+
+
+def research_backref_missing(text: str) -> list[str]:
+    """③ 역참조 ∀ — 연결에 쓰인 `RC<n>` 이 그 `OQ<n>` 줄 **전부**에 되나타난다.
+
+    **∃ 가 아니다**(설계 §H ④). ∃ 로 두면 §0 줄 하나로 만족돼 §3 의 `→ 근거 RC3` 을 지워도
+    통과하고, 라운드 1 이 지목한 구멍이 자리만 옮겨 남는다. 방향을 뒤집어 「그 `OQ<n>` 줄이 근거
+    id 를 포함하는가」를 §3·§0 **양쪽**에서 본다.
+
+    **「그 `OQ<n>` 줄」은 선두가 그 `OQ<n>` 인 항목 줄이다**(`_leading_oq`). 줄 중간에 다른 결정을
+    언급한 상호참조 줄은 그 결정의 줄이 아니다 — 거기에 근거 id 를 요구하면 정직한 상호참조가
+    막힌다(최종 리뷰 I-1).
+
+    웹 항목(`[→ OQ…]`)과 sentinel 은 결정 대상이 없으므로 이 검사의 대상이 아니다 — 웹 출처는
+    «출처키»↔audit §7(N2)가 이미 결속한다.
+
+    **반대 방향도 같은 함수에서 본다**(Ruling 76): §3·§0 항목 줄이 가리키는 `RC<n>` 은 조사 항목
+    (§4·§5)에 실재해야 한다 — `payload_rc_ids ⊇ 인용 RC`. 없으면 역참조가 출처 없는 id 를 가리키고,
+    그 id 는 확인 줄 ∀(⑤)의 순회 밖이라 아무 검사도 받지 않는다. 개수는 세지 않는다(⟨C5⟩).
+    """
+    want: dict = {}
+    for ln in research_entries(text):
+        m = LINK_RE.search(ln)
+        if not m or not m.group(1):
+            continue
+        for oq in OQ_RE.findall(m.group(0)):
+            want.setdefault(oq, set()).add(m.group(1))
+    sourced = set(payload_rc_ids(text))
+    fails = set()
+    for num, title in DECISION_SECTIONS:
+        for ln in _entry_lines(_section_text(text, num, title)):
+            oq = _leading_oq(ln)
+            line_rcs = set(RC_RE.findall(ln))     # 토큰 비교 — 부분 문자열이면 `RC12` 가 `RC1` 을 만족시킨다
+            for rc in want.get(oq, ()):
+                if rc not in line_rcs:
+                    fails.add(f"§{num} 의 {oq} 줄이 근거 {rc} 를 되가리키지 않는다")
+            for rc in line_rcs - sourced:
+                fails.add(f"§{num} 의 {oq or '항목'} 줄이 가리키는 근거 {rc} 가 조사 항목(§4·§5)에 없다")
+    return sorted(fails)
+
+
+def internal_research_dimension_failures(payload_text: str, audit_text: str) -> list[str]:
+    """④ 이름 정확 일치 derived (조건부) — 레포 주장이 ≥1 이면 audit §1 에 **정확히**
+    `derived:internal_research` 행이 있고 상태가 **`closed`** 여야 한다.
+
+    **조건부다.** `landscape_keys_declared` 가 같은 관습을 쓴다: 「payload가 landscape를 실었다는
+    사실을 조건으로 건다 — 키가 없으면 공집합 ⊆ 무엇이든으로 자동 만족되므로 kill switch 코드가
+    필요 없다」. 여기서는 payload 가 레포 주장을 실었다는 사실이 조건이고, 0건이면 요구가
+    발동하지 않으므로 `derived: N/A` sentinel 을 쓰는 기존 픽스처는 red 가 되지 않는다.
+    조건을 산출물에 두는 대가는 설계 L1 에 적혀 있다.
+
+    **이름은 정확 일치다.** 접두 일치로 두면 무관한 차원으로 갈음된다 — 실재하는 반례가 있다:
+    `derived:internal_research_apparatus` 는 「내부 조사 장치의 형태」라는 **다른** 차원이다.
+
+    **`closed` 요구가 보는 것은 여기까지다**: `coverage_anchor_failures` 가 그 행의 evidence 에서
+    실재하는 `S<N>` 앵커를 요구하지만 그 함수는 form-only 라(자기 docstring 이 공시한다) 「그 S 가
+    닫힘을 정당화하는가」는 보지 않는다. 즉 이 검사는 **「앵커 형태의 근거가 적혀 있는가」까지**이고
+    그 앵커가 이 차원을 닫는가는 사람과 리뷰의 몫이다(설계 L9).
+
+    **개수 술어가 아니다.** `payload_rc_ids` 의 비어 있음/아님만 **조건 분기**로 쓰고, 개수는
+    차단 판정에도 메시지 문면에도 넣지 않는다.
+    """
+    if not payload_rc_ids(payload_text):
+        return []
+    # 이름이 맞는 행 **전부**를 본다 — 첫 행에서 멈추면 낡은 `closed` 행이 뒤의 `open` 행을 가린다.
+    statuses = []
+    for ln in _entry_lines(_section_text(audit_text, "1", "Coverage Ledger")):
+        m = LEDGER_ROW_RE.match(_strip_bullet(ln).strip())
+        if m and m.group(1).strip() == DERIVED_INTERNAL_RESEARCH:
+            statuses.append(m.group(2).strip())
+    bad = sorted({st for st in statuses if st != "closed"})
+    if bad:
+        return [f"{DERIVED_INTERNAL_RESEARCH} 행의 상태가 {st!r} != closed" for st in bad]
+    if statuses:
+        return []
+    return [f"레포 주장이 있는데 audit §1 에 {DERIVED_INTERNAL_RESEARCH} 행이 없다 "
+            "(이름 정확 일치 — 다른 derived 행으로는 만족되지 않는다)"]
+
+
+def research_confirm_missing(payload_text: str, audit_text: str) -> list[str]:
+    """⑤ 확인 줄 ∀ — payload 의 모든 `RC<n>` 마다 audit §5 에
+    `확인 RC<n> — {확인|반증|미확인} — <사유>` 줄이 있는가 (설계 §D · AC12).
+
+    거처가 audit `## 5. 프로세스 로그` 인 것은 `AUDIT_SECTIONS` 가 이미 요구하는 절이라 **무조건
+    존재**하기 때문이다 — 무조건 도는 검문소에는 무조건 존재하는 절이 필요하고, 새 절을 만들지
+    않는다(⟨C10⟩ · 압축 규약). 현행 steelman 의 「게이트-전 확인」은 audit §3 의 `ST<N>` 블록 안이라
+    steelman 조건부다.
+
+    두 파일을 잇는 것은 `RC<n>` 이고, 이것은 이 게이트의 기존 교차 술어 계열과 같은 모양이다 —
+    `«출처키»`↔audit §7(`landscape_keys_declared`) · `ST<N>`↔audit §3(bijection A) ·
+    `S<N>`↔§6(bijection C). 전부 id 로 맞물린다.
+
+    **웹 주장은 이 검사의 대상이 아니다** — N2 가 audit §7 결속을 이미 본다. `RC<n>` 이 0건이면
+    공허하게 통과한다(∀).
+
+    판정 어휘는 셋이고 사유는 비어 있을 수 없다(`CONFIRM_ROW_RE`). `미확인` 이 어휘에 **드는**
+    것이 계약이다 — 확정도 반증도 못 한 것을 라벨로 보이게 하고 조용히 흡수하지 않는다.
+    """
+    have = set()
+    for ln in _entry_lines(_section_text(audit_text, "5", "프로세스 로그")):
+        m = CONFIRM_ROW_RE.match(_strip_bullet(ln).strip())
+        if m:
+            have.add(m.group(1))
+    return [f"{rc}: audit §5 에 `확인 {rc} — {{확인|반증|미확인}} — <사유>` 줄이 없다"
+            for rc in payload_rc_ids(payload_text) if rc not in have]
+
+
 # **불릿(데이터) 줄에 앵커한다.** 앵커가 없으면 §2 머리 «설명 산문»의 예시
 # (`coverage-mapper 0 (unavailable: <사유>)`)가 데이터 줄보다 먼저 매치돼 판정을 대신
 # 진다 — 실측: 출하 템플릿의 T-TPL green 을 그 설명 문장 하나가 전부 지고 있었고,
@@ -1087,6 +1418,42 @@ def gate(path: Path) -> int:
             audit_text, payload_verbatim_anchors(text) | verbatim_anchors(audit_text))
         if anc:
             failures.append(f"coverage anchors: {anc}")
+
+    # --- 조사 주장의 결정 연결 (설계 §E). 다섯 술어 전부 `contract: v2` 옵트인 뒤에 있다.
+    #     옵트인이 없으면 advisory 한 줄만 나가고 술어는 하나도 돌지 않는다 — 그것이 기존
+    #     코퍼스를 한 글자도 고치지 않는 장치다(§H ⑥).
+    if contract_v2(text):
+        if not sec4_absent and not sec5_absent:
+            lm = research_link_missing(text)
+            if lm:
+                failures.append(
+                    "조사 항목에 결정 연결 없음 (줄 끝에 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]` · "
+                    "`[→ OQ<n>]` · `[→ 없음]` 중 **하나** — 레포 주장 줄은 자기 `RC<n>` 을 줄 끝 "
+                    "`[RC<n> → …]` 에 싣는다. 웹 출처 문자열의 `RC<n>` 모양(릴리스 후보 등)도 "
+                    "레포 id 로 읽힌다 — 「release candidate 1」 처럼 풀어 쓰고, 웹 항목을 레포 주장으로 바꿔 "
+                    f"달지 말 것): {lm[:3]}")
+            tm = research_link_targets_missing(text)
+            if tm:
+                failures.append(f"결정 연결 대상 부재: {tm[:3]}")
+            bm = research_backref_missing(text)
+            if bm:
+                failures.append(f"역참조 불일치: {bm[:3]}")
+        if audit_text:
+            amiss2 = find_missing_sections(audit_text, AUDIT_SECTIONS)
+            if not any(m.startswith("1.") for m in amiss2):
+                idf = internal_research_dimension_failures(text, audit_text)
+                if idf:
+                    failures.append(f"내부 조사 차원: {idf}")
+            if not any(m.startswith("5.") for m in amiss2):
+                cm = research_confirm_missing(text, audit_text)
+                if cm:
+                    failures.append(f"확인 줄 누락: {cm[:3]}")
+        if not payload_rc_ids(text):
+            advisories.append(INTERNAL_RESEARCH_ZERO_ADVISORY)
+    elif (unreadable := contract_unreadable(text)):
+        failures.append(f"frontmatter: contract 옵트인 판독 불가 — {unreadable}")
+    else:
+        advisories.append(CONTRACT_V1_ADVISORY)
 
     ok = not failures
     # 킬 스위치가 verdict를 뒤집을 수 있으면 **반드시** 말한다. v0.44.0 N1a 이후

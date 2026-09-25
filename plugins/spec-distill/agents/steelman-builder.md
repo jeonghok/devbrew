@@ -19,6 +19,12 @@ input_slots:
   - tag: constraints
     var: CONSTRAINTS
     kind: artifact
+  - tag: claims_contract
+    var: CLAIMS_CONTRACT
+    kind: repo_context
+  - tag: open_decisions
+    var: OPEN_DECISIONS
+    kind: task
 description: >
   Use this agent during a spec-distill interview when a direction is suspect
   (landscape contradiction / known anti-pattern / conflict with a stated user
@@ -61,6 +67,10 @@ direction, for writing files, or for advocating one side.
   목록 자체가 틀렸다고 판단하면 그렇게 말한다.
 - `<constraints>` 사용자가 지금까지 말한 제약의 원문 전량. 이미 닫힌 경로를 대안으로 내지 않기
   위해 읽는다.
+- `<claims_contract>` 조사 주장 계약의 **내용 전문**. 출력의 `evidence[]`·`repo_claims[]` 가 이 계약을
+  따른다. 판정 전에 구현을 읽으라는 지시가 그 안에 있다.
+- `<open_decisions>` 지금 열린 결정 목록(`OQ<n>` + 한 줄). `decides` 는 **이 목록에 실제로 있는 것**만
+  담고 목록에 없는 id 를 지어내지 않는다.
 
 ## Required research (출력 전)
 
@@ -90,12 +100,15 @@ evidence:
     supports: current | alternative | both
     claim: "<이 출처가 뒷받침하는 것>"
     touches: [P1]            # 빈 배열 = 어느 전제에도 닿지 않음
+    decides: [OQ1]           # 닿는 «열린 결정». 빈 배열 허용 — 거짓 연결보다 낫다
 repo_claims:
-  - path: "<repo 상대경로>"
+  - id: RC3                  # payload · audit 을 잇는 id (한 인터뷰 안에서 유일)
+    path: "<repo 상대경로>"
     anchor: "<심볼 | 헤딩 | 원문 인용>"
     line: 123                # 선택 — 보조 정보
     claim: "<주장>"
     touches: []
+    decides: [OQ1]
 ```
 
 ## 동작 규칙
@@ -107,9 +120,12 @@ repo_claims:
    기록합니다. 스스로 hedge 하지 말고 두 케이스 모두 가장 강한 형태로 쓰십시오.
 4. `premise_refutation.hits` 가 비어 있지 않으면 `why` 는 hit 마다 근거 → 전제 문장 지목을 갖습니다.
    지목할 수 없는 hit 은 내지 않습니다.
-5. 모든 `evidence[]` 와 `repo_claims[]` 는 `touches` 를 갖습니다. 빈 배열은 허용이고 거짓 부착보다
-   낫습니다 — 부착은 orchestrator 가 게이트 전에 확인합니다.
-6. `repo_claims[]` 는 `path` 와 `anchor` 없이 내지 않습니다. 줄번호는 보조입니다.
+5. 모든 `evidence[]` 와 `repo_claims[]` 는 `touches` 와 `decides` 를 갖습니다. 둘 다 빈 배열이
+   허용이고 거짓 부착·거짓 연결보다 낫습니다 — 부착은 orchestrator 가 게이트 전에 확인합니다.
+   `touches` 는 전제 `P<n>` 을, `decides` 는 `<open_decisions>` 의 열린 결정 `OQ<n>` 을 담습니다 —
+   **다른 것을 가리키는 다른 필드**이고 서로 갈음하지 않습니다.
+6. `repo_claims[]` 는 `path` 와 `anchor` 없이 내지 않습니다. 줄번호는 보조입니다. `id: RC<n>` 는
+   레포 주장에만 붙습니다.
 7. **한 방향당 1회**: 같은 방향에 대한 재호출은 새 근거가 있을 때만.
 8. `recommendation: refined` 면 `refined_takes` 와 `refined_drops` 를 둘 다 채웁니다.
 9. `<constraints>` 가 이미 닫은 경로는 대안으로 내지 않습니다. 그 경로가 최선이라 판단하면

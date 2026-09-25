@@ -87,7 +87,7 @@ done
 # 키 앵커(줄 시작, 임의 들여쓰기 + 콜론) — 산문 규칙(번호로 시작)의 백틱 인용은
 # 이 형태로 시작하지 않으므로 걸리지 않는다. 순수 리터럴 존재만 보면 산문 인용이
 # 스키마 키 자체가 깨진 것을 가려 GREEN 을 낸다.
-for tok in recommendation premise_refutation premise_list_challenge touches repo_claims anchor refined_takes refined_drops case_for_alternative case_for_current; do
+for tok in recommendation premise_refutation premise_list_challenge touches decides repo_claims anchor refined_takes refined_drops case_for_alternative case_for_current; do
   grep -qE "^[[:space:]]*${tok}:" "$AGENT" && ok "AC1: 스키마 키 $tok 존재" || no "AC1: 스키마 키 $tok 가 없다"
 done
 grep -q '원안의 옹호자' "$AGENT" \
@@ -144,6 +144,15 @@ grep -qE '^[[:space:]]*-?[[:space:]]*path:' <<<"$rc_block" \
   && ok "중첩 키 repo_claims[].path" || no "중첩 키 repo_claims[].path 부재"
 grep -qE '^[[:space:]]*claim:' <<<"$rc_block" \
   && ok "중첩 키 repo_claims[].claim" || no "중첩 키 repo_claims[].claim 부재"
+grep -qE '^[[:space:]]*-?[[:space:]]*id:' <<<"$rc_block" \
+  && ok "중첩 키 repo_claims[].id (payload·audit 을 잇는 RC<n>)" || no "중첩 키 repo_claims[].id 부재"
+grep -qE '^[[:space:]]*decides:' <<<"$rc_block" \
+  && ok "중첩 키 repo_claims[].decides (결정 연결)" || no "중첩 키 repo_claims[].decides 부재"
+grep -qE '^[[:space:]]*decides:' <<<"$ev_block" \
+  && ok "중첩 키 evidence[].decides (결정 연결)" || no "중첩 키 evidence[].decides 부재"
+for tag in claims_contract open_decisions; do
+  grep -qE "^  - tag: ${tag}$" <<<"$fm" && ok "슬롯 태그 $tag" || no "슬롯 태그 $tag 부재"
+done
 
 # 재론(再論) 방지 핵심 규칙 — premise_refutation.hits 가 비면 switched 를 낼 수 없다(동작
 # 규칙 10). 고정 문자열(-F)로 그 절 자체를 잰다: 규칙이 다시 사라지거나 문구가 바뀌면

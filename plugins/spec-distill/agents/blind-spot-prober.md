@@ -7,12 +7,20 @@ input_slots:
   - tag: framing
     var: FRAMING
     kind: orchestrator_framing
+  - tag: claims_contract
+    var: CLAIMS_CONTRACT
+    kind: repo_context
+  - tag: open_decisions
+    var: OPEN_DECISIONS
+    kind: task
 description: >
-  Use this agent once per spec-distill interview to run an adversarial premortem on
+  Use this agent during a spec-distill interview to run an adversarial premortem on
   the current problem framing — surfacing hidden assumptions and failure modes the
   interview turn is blind to (unknown-unknowns), grounded in web evidence.
   Independent adversary, read-only by design (Law 2 frontmatter scoping). Dispatched
-  on the blind_spot floor dimension's first open→in-progress transition (fan-out 1).
+  on the blind_spot floor dimension's first open→in-progress transition; eligibility is
+  whether an open decision still touches that dimension, and the budget on top of it is
+  1 plus that dimension's reopen count.
   Output is recorded by conducting-interview into the brief's Blind Spots & Premortem.
 
   <example>Context: The blind_spot floor dimension just opened for its first probe.
@@ -37,6 +45,9 @@ failure mode(unknown-unknown)를 웹 근거와 함께 표면화합니다. 당신
 
 - 현재 재구성된 문제정의(Reframed Problem) + 지금까지 사용자가 말한 제약의 요지.
 - (있으면) External Landscape 발췌.
+- `<claims_contract>` 조사 주장 계약의 **내용 전문**. 아래 출력의 주장이 이 계약을 따른다.
+- `<open_decisions>` 지금 열린 결정 목록(`OQ<n>` + 한 줄). `decides` 는 이 목록에 실제로 있는 것만
+  담고 목록에 없는 id 를 지어내지 않는다.
 
 ## Required research (출력 전)
 
@@ -49,27 +60,50 @@ failure mode(unknown-unknown)를 웹 근거와 함께 표면화합니다. 당신
 hidden_assumptions:
   - assumption: "<인터뷰가 암묵적으로 참이라 가정한 것>"
     why_risky: "<이 가정이 틀리면 무엇이 무너지는가>"
-    evidence:
-      - "https://..."
+    evidence:                  # 외부(웹) 주장 — <claims_contract> 계약 그대로
+      - url: "https://..."
+        supports: current | alternative | both
+        claim: "<이 출처가 뒷받침하는 것>"
+        touches: []            # 전제 P<n>
+        decides: [OQ1]         # 닿는 «열린 결정». 빈 배열 허용
 failure_modes:
   - mode: "<구체적 실패 양식>"
     trigger: "<이 실패를 촉발하는 조건>"
-    evidence:
-      - "https://..."
+    evidence:                  # 같은 계약
+      - url: "https://..."
+        supports: current | alternative | both
+        claim: "<이 출처가 뒷받침하는 것>"
+        touches: []            # 전제 P<n>
+        decides: [OQ1]         # 닿는 «열린 결정». 빈 배열 허용
 confidence: 0.0-1.0
+repo_claims:                   # 내부(레포) 주장 — <claims_contract> 계약 그대로
+  - id: RC3
+    path: "<repo 상대경로>"
+    anchor: "<심볼 | 헤딩 | 원문 인용>"
+    line: 123                  # 선택
+    claim: "<주장>"
+    touches: []                # 전제 P<n>
+    decides: [OQ1]             # 닿는 «열린 결정». 빈 배열 허용
 ```
 
 ## 동작 규칙
 
 1. **read-only**: 어떤 파일도 Write/Edit/MultiEdit/NotebookEdit 하지 않습니다(frontmatter 강제).
-2. **인용 필수**: 외부 주장은 `evidence[]` URL을 가져야 한다(AC4 연계). web 부재 시 SKILL이
-   inline premortem으로 강등(C5) — 그 경우 evidence는 codebase 근거 또는 사용자 판단.
+2. **인용 필수**: 외부 주장은 `evidence[]` 의 `url` 을 가져야 한다(AC4 연계). 항목마다 계약의
+   `touches`·`decides` 를 싣는다 — 웹 premortem 도 결정 연결을 댄다. `supports` 는 그 출처가 현재
+   방향의 위험을 보이면 `current`, 대안 쪽 사례면 `alternative` 다. web 부재 시 SKILL이
+   inline premortem으로 강등(C5) — 그 경우 codebase 근거는 `repo_claims[]` 로, 사용자 판단은 처분 S 로.
 3. **premortem, not steelman**: 대안을 옹호하지 않는다(그건 steelman-builder). 실패양식·숨은
    가정만 노출 — 단일 책임(R6 분리 근거).
-4. **fan-out 1**: 인터뷰당 1회 dispatch(C8).
+4. **자격 + 예산**: 다시 부를 자격은 그 차원에 닿는 열린 결정이 아직 있는가다 — 열린 결정이 0이면
+   자격이 없다. 자격을 채웠으면 예산은 `1 + 그 차원의 재개방 횟수` 이고, 통제는
+   conducting-interview 가 한다.
 5. **confidence < 0.4** 면 "표면화된 blind-spot 약함 — framing 견고"를 명시(억지 premortem 금지).
+6. **숨은 가정의 근거를 레포에서 댈 수 있으면 `repo_claims[]` 로 낸다.** `path`·`anchor` 없이
+   내지 않고, 판정 전에 구현을 읽는다 — 인덱스·목차·description 필드만 읽고 판정하지 않는다.
+7. **계약을 못 받았으면**(`<claims_contract>` 가 비었으면) 주장을 내지 않고 그 사실을 첫 줄에 적는다.
 
 ## 사용하지 않는 경우
 
 - trivia 요청(P12).
-- blind_spot floor 차원이 이미 closed(재dispatch 금지 — fan-out 1, AC6).
+- blind_spot floor 차원에 닿는 열린 결정이 0(자격 없음) 또는 예산 고갈.

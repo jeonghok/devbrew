@@ -43,8 +43,15 @@ coverage:                            # G1 커버리지 원장 (floor 5 + derived
   derived: []                        # 주제-도출 차원 ({name, rationale, status, evidence, reopened, reopen_log})
 orchestration:                       # orchestrator 소유, agent read-only
   focused_dimension: null            # 현재 probe 대상 차원 이름 또는 null
-  blind_spot_dispatched: false       # C8 인터뷰당 1회 보장
-  coverage_mapper_dispatches: 0      # 상한 2 — R1 첫 질문 전 1 + 재개방 시 ≤1
+  blind_spot_dispatches: 0           # 예산 = 1 + 그 차원의 reopened (자격은 아래 절)
+  coverage_mapper_dispatches: 0      # 예산 = 1 + 모든 차원의 reopened 합 (자격은 아래 절)
+  open_decisions: []                 # 결정의 유일한 거처 — OQ<n> 의 산출자. 시작은 빈 목록이고 항목 형식은:
+  #   - id: OQ<n>                    # 발급 시 순증 (라운드 규약 «다음 결정»)
+  #     text: "<한 줄>"
+  #     dimension: <차원 이름>        # 어느 커버리지 차원에 속하는가 (호출 자격의 입력)
+  #     status: open                 # open | resolved
+  #     resolved_by: null            # resolved 면 그 사용자 발화 S<N>
+  #     touched: false               # 조사가 닿았는가 (C44 면제의 입력)
 non_user_streak: <int>
 trivia_escape_armed: false
 user_statements: []                  # 매 round 끝 append. 판정 없음 — 확정은 종료 게이트가 결정.
@@ -53,6 +60,15 @@ confirm_repost_count: 0              # 종료 확정 확인 재제시 횟수 (�
 ```
 
 State body: 각 라운드의 `## R<n>` 기록(«라운드 규약» 형식) + coverage-mapper 출력 transcript.
+
+**`open_decisions[]` 의 생명주기.** 발급은 orchestrator 가 «다음 결정» 블록을 쓸 때 그 문장에
+`OQ<n>` 을 붙이는 것이다(새 결정이면 새 번호 — 순증, 인터뷰 안에서만 유일 — 이어가는 결정이면 기존 번호).
+`status: open → resolved` 는 사용자 발화로만 바뀌고 **해결돼도 목록에서 지우지 않는다** — 조사가 결정을 해결하는 데 기여했으면 그것이
+성공 사례인데 목록에서 빠지면 게이트의 실재 검사가 그 조사를 red 로 만든다. `touched` 는
+`false → true` 단방향이고 재개방으로도 되돌리지 않는다(되돌리면 면제가 무한해진다). 종료 시
+`status: open` 인 것이 payload §3 Open Questions 로, **전량**이 §0 결정 목록으로 직렬화된다 — §0 이
+상위집합이고 §3 이 그 중 열린 것이다. `RC<n>` 은 별 state 키를 두지 않는다: V1 이 붙이고 audit §5 의
+확인 줄이 곧 레지스터이며, 확인 줄 없는 `RC<n>` 은 게이트가 red 로 잡는다.
 
 **Secret 기록 금지** (P21): 사용자 답변에 token/key/credential 패턴 감지 시 placeholder로 치환 후
 기록합니다. **치환 토큰은 `<REDACTED>` 또는 `<REDACTED:라벨>` 형태**로 씁니다(다른 허용 형태:
@@ -86,7 +102,7 @@ STATE="$ROOT/<session-id>/state.local.md"
  외부 근거(landscape·premortem)가 있으면 여기 싣는다. 재개방이면 «→ <차원> 재개방: <사유>»>
 
 ### 다음 결정
-<무엇을 정하는지 한 줄> · 추천: <첫 선택지> · 트레이드오프: <선택지별 한 줄>
+OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지> · 트레이드오프: <선택지별 한 줄>
 
 ### 질문
 <본문>
@@ -115,6 +131,50 @@ STATE="$ROOT/<session-id>/state.local.md"
   두고 질문으로 무엇을 다룰지 묻는다. coverage-mapper 첫 dispatch 시점은 아래 coverage-mapper 절이 정한다.
 - 답은 `user_statements` 에 `S<m>` 하나로 append 한다(선택지 = `chosen`, «기타» 자유 입력 = `verbatim`).
   번호 공식은 «사용자 발화 기록» 절 그대로.
+- **V1 검문소 — 조사 주장을 «지금 이해»에 싣기 전에.** 계약(`## 조사 주장 계약`)이 산출한
+  `repo_claims[]` 항목마다 orchestrator 가 자기 `Read`/`Grep` 으로 ① 경로 실재 → ② 앵커 실재 →
+  ③ **주장이 그 자리와 맞는가**(구현을 읽는다 — 인덱스·목차·description 필드만 읽고 판정하지
+  않는다) 를 확인하고 ④ 결과를 {확인, 반증, 미확인} 중 하나로 정한 뒤 ⑤ `id: RC<n>` 을 붙여 audit
+  `## 5. 프로세스 로그` 에 한 줄로 적는다: `- 확인 RC3 — 확인 — <경로>#<앵커> — 주장과 일치` /
+  `- 확인 RC4 — 반증 — <경로>#<앵커> — 그 자리는 <실제>이고 주장은 <주장>이었다` /
+  `- 확인 RC5 — 미확인 — <경로>#<앵커> — <왜 확정하지 못했는가>`. `미확인` 은 라벨로 **보인다** —
+  조용히 흡수하지 않는다. 이 검문소는 **steelman trigger 와 DEVBREW_SPEC_DISTILL_DISABLE_WEB 어느
+  것에도 종속되지 않는다.** steelman 경로는 `references/steelman.md` Step 2 가 V1 의 특수 경우이므로
+  두 번 확인하지 않고, 판정만 audit §3 `ST<N>` 과 §5 양쪽에 적는다. 판정이 `반증` 이면 그 항목이
+  닿는 확정을 payload §5 에 *원래 / 재결정 / 근거* 세 칸으로 남기고(재결정 자체는 사용자 동의로만
+  한다 — P23), 그 차원을 재개방할 수 있다.
+- **결정 연결은 §4·§5 에 달고 §3·§0 이 그것을 되가리킨다.** 조사 항목 줄 끝에 레포 `[RC3 → OQ1]` ·
+  `[RC3 → 없음]`, 웹 `[→ OQ1]` · `[→ 없음]` 중 하나를 쓴다 — 레포 주장은 연결 안에 항상 `RC<n>` 을
+  싣는다(`없음` = 닿는 결정 없음). 하위 불릿은 쓰지 않는다 — 게이트가 들여쓴 불릿도 §4 항목으로 세므로
+  즉시 red 다. **§3 은 연결의 대상이고 출처가 아니다** — §3 항목은 그 자체가 열린 결정이라 거기에 연결을 걸면 자기지시가 된다.
+
+## 조사 주장 계약
+
+조사 주장(외부 `evidence[]` · 내부 `repo_claims[]`)의 계약 정본은
+`${CLAUDE_PLUGIN_ROOT}/references/research-claims.md` 다. 이 절은 그 파일을 dispatch 로
+**배달**하는 책임만 진다 — 계약 본문을 여기 복사하지 않는다.
+`${OPEN_DECISIONS}` 에는 `open_decisions[]` 중 `status: open` 인 것만 한 줄에 하나씩 `OQ<n>: <한 줄>` 로 싣는다(없으면 빈 값).
+
+`${CLAIMS_CONTRACT}` 에는 경로가 아니라 **계약 파일의 내용**을 싣는다 — 플러그인 캐시는 사용자
+프로젝트 밖이라 subagent 의 Read 가 거부된다. dispatch 직전(재dispatch 포함)에 아래 펜스를 돌려
+그 stdout 전문을 세 dispatch 의 `<claims_contract>` 슬롯에 싣는다. rc 가 0 이 아니면 **그 장치를
+dispatch 하지 않는다** — 인터뷰는 계속하되 그 차원을 자동으로 닫지 않고, 공시는 loud advisory +
+audit §2 unavailable 사유 다.
+
+<!-- claims-contract:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+# 경로는 `${CLAUDE_PLUGIN_ROOT}` 형태로 쓴다 — 포인터 락이 해석하는 형태는 셋뿐이고
+# `$SD/references/…` 는 그 셋에 없어 거부된다(조용히 재해석하지 않는다).
+CLAIMS="${CLAUDE_PLUGIN_ROOT}/references/research-claims.md"
+claims_rc=0; CLAIMS_CONTRACT="$(cat "$CLAIMS")" || claims_rc=$?
+if [ "$claims_rc" -ne 0 ] || [ -z "$CLAIMS_CONTRACT" ]; then
+  echo "[spec-distill] 조사 주장 계약을 읽지 못했다(cat rc $claims_rc): $CLAIMS — 이 장치를 dispatch 하지 않는다. 인터뷰는 계속하고, 그 차원을 자동으로 닫지 않는다. coverage-mapper 자리면 audit §2 Budget 에 coverage-mapper 0 (unavailable: 계약 배달 실패) 를 적고, blind-spot-prober 자리면 inline premortem 으로 강등한다." >&2
+  exit 1
+fi
+printf '%s\n' "$CLAIMS_CONTRACT"
+```
+<!-- claims-contract:end -->
 
 ## C43 3-path routing
 
@@ -122,12 +182,17 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 | Path | When | Action |
 |---|---|---|
-| (a) **factual / landscape** | 답이 codebase/git history *또는 외부 prior-art*에 있는 경우 | codebase는 grep/Read *auto-confirm*; 외부는 web sweep(아래 R2). 마커 `[from-code][auto-confirmed]` 또는 `[from-web]`. streak +1. |
+| (a) **factual / landscape** | 답이 codebase/git history *또는 외부 prior-art*에 있는 경우 | codebase 는 **orchestrator 가 자기 `Read`/`Grep` 으로 직접 확인하고 subagent 를 부르지 않는다** — 산출은 계약(`## 조사 주장 계약`)의 `repo_claims[]` 이고 라운드 규약의 V1 을 탄다. 웹 스위치와 무관해서 **내부 축의 주 생산자**다. 외부는 web sweep(아래 R2), 표기 `[from-web]`. streak 은 C44 의 면제 규칙이 정한다. |
 | (b) **judgment** | 사용자 선호/우선순위/제약 | 사용자에게 묻기 (default path). |
 | (d) **ontological** | "이게 무엇인가" 종류 (essence/root cause 등) | essence/root cause 류 — 라벨 강제 없음. 사용자에게 묻기. |
 
 매 라운드의 «지금 이해»·«질문» 에 어떤 path 인지 명시하십시오 — 경로 (a) 로 찾을 수 있는 것은 묻기 전에
 먼저 찾아 «지금 이해»에 싣습니다.
+
+**어느 자리든(경로 (a) · coverage-mapper · blind-spot-prober · steelman) `repo_claims[]` 가 처음 산출되면
+그 자리에서 derived 차원 internal_research 를 원장에 admit 한다**(coverage-mapper 제안과 무관 — 조사 행위가 그 차원을 함의한다). 이름은 그 글자대로 쓴다:
+게이트가 **정확 일치**로 재고 `internal_research_apparatus` 같은 유사 이름으로는 만족되지 않는다.
+그 차원은 **레포 주장의 처분 S** 로 닫고 evidence 에 그 S 를 인용한다 — 종료 시점엔 늦다(닫힘 규칙).
 
 ## 사용자 발화 기록 (G1, AC1)
 
@@ -168,17 +233,40 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 → 다음 probe의 질문은 **반드시 (b) judgment path** (사용자에게 직접 질문)로 라우팅. 강제.
 
-## coverage-mapper dispatch (상한 2)
+**조사 산출의 면제.** 조사가 결정에 닿았으면 그 probe 는 streak 을 올리지 않는다 — 압착의 대가를
+가드의 계수 방식에서 지불하되, 면제 예산이 유한하도록 집합 원소에 묶는다. 산출자는 orchestrator
+이고 거처는 `orchestration.open_decisions[]` 의 `touched` 필드다(별 키를 두지 않는다).
+
+> 산출 항목의 `decides` 가 status: open 이고 touched: false 인 결정을 하나라도 담으면
+> `non_user_streak` **+0**. 그렇지 않으면 **+1**. 그 계수 **뒤에** 그 원소들의 `touched` 를 `true` 로
+> 올린다. **열린 결정이 0이면 면제도 0이다.**
+
+**순서가 계약이다 — 「계수 먼저, 표시 나중」.** 표시가 계수보다 앞서면 계수 시점에 「아직 안 닿은
+것」이 항상 공집합이라 **첫 연결부터 +1** 이 되고 면제가 영구히 발화하지 않는다.
+
+`touched` 는 단방향이고 재개방으로도 되돌리지 않는다 — 되돌리면 면제가 무한해진다. 그래서 면제
+예산은 `|{status: open, touched: false}|` 로 유한하고, **그 집합이 줄어드는 데 의존하지 않는다**:
+줄지 않아도 같은 결정의 두 번째 연결이 면제되지 않으므로 예산이 고갈된다.
+
+## coverage-mapper dispatch (자격 + 예산)
 
 `coverage-mapper` 는 고정 floor 위 **주제-도출 차원**을 *제안*하는 advisory 에이전트다(admit 은
-orchestrator, G2). dispatch 는 둘뿐이다:
+orchestrator, G2). 첫 dispatch 는 필수이고 그 뒤는 자격과 예산이 정한다:
 
 1. **R1 첫 질문 전 필수 1회.** 입력: seed 전문(S1)과 그 «다시 검증할 것» 문단, 원장 초기 상태.
    출력의 derived 차원을 admit 한 뒤에야 R1 질문이 나간다. 인자 없이 부른 경로에서는 R1 답을
    받은 뒤 R2 전에.
-2. **재개방 시 최대 1회.** 재개방이 새 파생 차원을 함의할 수 있어서다. 두 번째 재개방부터는 없다.
+2. **재개방마다 한 번의 예산이 열린다.** 재개방이 새 파생 차원을 함의할 수 있어서다 — 그래서
+   예산이 `1 + 재개방 합` 이다. 자격이 없으면 예산이 남아도 부르지 않는다.
 
-상한 2, 카운터 `orchestration.coverage_mapper_dispatches`. 종료 시 audit §2 에 `coverage-mapper <k>`
+**호출 자격이 예산보다 앞선다.** 다시 부를 자격은 「그 장치가 채우는 차원에 **닿는 열린 결정이
+아직 있는가**」다 — `orchestration.open_decisions[]` 에서 `dimension` 이 그 차원이고 `status: open`
+인 항목이 하나라도 있는가. **열린 결정이 0이면 자격이 없다 — 예산이 남아도 부르지 않는다.**
+자격을 채웠으면 예산을 본다: `coverage_mapper_dispatches < 1 + Σ(모든 차원의 reopened)`.
+재개방이 연료다 — 재개방은 정의상 「새 답·외부 근거·코드 사실이 그 차원의 닫힘 근거 S 와 충돌」해야
+일어나고 라운드는 사용자 답으로만 도므로 사용자가 시계다.
+
+카운터 `orchestration.coverage_mapper_dispatches`. 종료 시 audit §2 에 `coverage-mapper <k>`
 를 쓰고 게이트가 k≥1 을 검사한다. dispatch 가 불가능한 환경(Agent 도구 부재)은
 `coverage-mapper 0 (unavailable: <이유>)` 로 적는다 — 게이트는 advisory 로 통과시키고 Step B 가
 사람에게 보인다(침묵과 0 은 다르다).
@@ -203,13 +291,24 @@ fi
 
 ```
 Agent({ description: "Map coverage dimensions", subagent_type: "spec-distill:coverage-mapper",
-        prompt: "seed 원문 전량(§6 S1 이 될 값 그대로): <seed>${SEED_TEXT}</seed>. seed 의 «다시 검증할 것 —» 문단(Phase 0 이 추론·외부·열린 것으로 아는 항목. 규약 위반 seed 면 빈 값): <reverify>${SEED_REVERIFY}</reverify>. coverage 원장 상태(열린/닫힌 차원 요약 · focused_dimension · 재개방이면 reopen_log 마지막 항목): <ledger_state>${LEDGER_STATE}</ledger_state>. web_disabled(true면 WebSearch/WebFetch 사용 금지, codebase 근거만): <web_disabled>${WEB_DISABLED}</web_disabled>. 이 주제가 요구하는 derived 차원과 neglect를 제안." })
-// **처분** — consumer=orchestrator · fail-open · disclosure=advisory
+        prompt: "seed 원문 전량(§6 S1 이 될 값 그대로): <seed>${SEED_TEXT}</seed>. seed 의 «다시 검증할 것 —» 문단(Phase 0 이 추론·외부·열린 것으로 아는 항목. 규약 위반 seed 면 빈 값): <reverify>${SEED_REVERIFY}</reverify>. coverage 원장 상태(열린/닫힌 차원 요약 · focused_dimension · 재개방이면 reopen_log 마지막 항목): <ledger_state>${LEDGER_STATE}</ledger_state>. web_disabled(true면 WebSearch/WebFetch 사용 금지, codebase 근거만): <web_disabled>${WEB_DISABLED}</web_disabled>. 조사 주장 계약(내용 전문): <claims_contract>${CLAIMS_CONTRACT}</claims_contract>. 지금 열린 결정: <open_decisions>${OPEN_DECISIONS}</open_decisions>. 이 주제가 요구하는 derived 차원과 neglect를 제안." })
+// **처분** — consumer=orchestrator · fail-closed · disclosure=loud advisory + audit §2 unavailable 사유
 ```
 
-출력(`derived_dimensions[] + neglect_flag`)은 **advisory** — orchestrator가 원장에 admit할지 판정한다.
-`neglect_flag: true`면 다음 probe에서 neglected 차원 하나를 추천 답안으로 제시. 복수 dispatch 시
-name 기준 union·dedup.
+출력(`derived_dimensions[] + neglect_flag` + `evidence[]`/`repo_claims[]`)은 **advisory** —
+orchestrator가 원장에 admit할지 판정한다. `neglect_flag: true`면 다음 probe에서 neglected 차원
+하나를 추천 답안으로 제시. 복수 dispatch 시 name 기준 union·dedup. 주장은 «지금 이해»에 싣기 전에
+라운드 규약의 V1 을 탄다.
+
+**계약 배달 실패 시** — `## 조사 주장 계약` 펜스의 rc 가 0 이 아니면 이 dispatch 를 하지 않는다.
+인터뷰는 계속하고, 그 차원을 자동으로 닫지 않으며, 공시는 loud advisory + audit §2 unavailable 사유
+다: audit §2 Budget 의 불릿 줄에 `coverage-mapper 0 (unavailable: 계약 배달 실패)` 를 적는다 —
+게이트가 advisory 로 통과시키고 Step B 가 사람에게 보인다.
+
+**첫 dispatch 의 검증 의무(D6)** — seed 의 «다시 검증할 것» 문단 중 **레포로 확인 가능한 항목마다**
+`repo_claims` 를 산출해 V1 을 태운다(첫 산출이면 C43 절의 internal_research admit 도). 「사용자만 답할 수 있는 것」과 「인과 추정」은 대상이 아니다.
+그 문단이 비어 있으면(규약 위반 seed — 위 슬롯 주석이 명시 허용) 이 의무는 미발동이고, 그 사실을
+audit §5 에 한 줄로 공시한다. Phase 0 은 건드리지 않는다 — 의무는 받는 쪽에 있다.
 
 ## 닫힘 · 재개방
 
@@ -230,22 +329,33 @@ skepticism = steelman 판정 S · blind_spot = 숨은 가정·실패 양식 처�
 
 ## blind-spot-prober dispatch (C8 — blind_spot floor 차원)
 
-`blind_spot` floor 차원의 **첫 open→in-progress 전이** 시 `blind-spot-prober`를 **인터뷰당 1회**
-dispatch한다(fan-out 1, C8). `orchestration.blind_spot_dispatched`가 false일 때만 — dispatch 후
-true로 세팅(재dispatch 금지). kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구
-부재면 dispatch 대신 loud advisory 후 **inline premortem**으로 전환한다(C5, §5 위험 항목을
+`blind_spot` floor 차원의 **첫 open→in-progress 전이** 시 `blind-spot-prober`를 1회 필수로 dispatch 한다 —
+**첫 dispatch 는 자격을 보지 않는다**(그 차원의 결정은 prober 출력 뒤에야 생긴다). 재호출부터는
+**자격이 예산보다 앞선다** — `orchestration.open_decisions[]` 에 `dimension: blind_spot` 이고
+`status: open` 인 항목, 즉 그 차원에 **닿는 열린 결정이 아직 있는가**를 먼저 본다. 열린 결정이
+0이면 자격이 없다 — 예산이 남아도 부르지 않는다. 자격을 채웠으면 예산:
+`blind_spot_dispatches < 1 + coverage.floor.blind_spot.reopened`. dispatch 마다 카운터를 +1 한다.
+kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구 부재면 dispatch 대신 loud advisory 후 **inline premortem**으로 전환한다(C5, §5 위험 항목을
 codebase 근거·사용자 판단으로 기록).
 
 ```
 Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind-spot-prober",
-        prompt: "지금까지의 framing(재구성된 문제정의 + 사용자 제약 요지): <framing>${FRAMING}</framing>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
-// **처분** — consumer=orchestrator · fail-open · disclosure=loud advisory
+        prompt: "지금까지의 framing(재구성된 문제정의 + 사용자 제약 요지): <framing>${FRAMING}</framing>. 조사 주장 계약(내용 전문): <claims_contract>${CLAIMS_CONTRACT}</claims_contract>. 지금 열린 결정: <open_decisions>${OPEN_DECISIONS}</open_decisions>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
+// **처분** — consumer=orchestrator · fail-closed · disclosure=loud advisory + inline premortem 강등
 ```
 
 출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 payload §5 `## 5. 기각 · Blind Spots`의
 **`위험` 항목**(`- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>`)으로 기록하고, 다음 라운드의
 «지금 이해»에 실어 사용자 처분 S 를 받은 뒤 `blind_spot` floor 차원을 closed 로 전이한다. web 비활성 시 advisory:
 `[spec-distill] web 비활성 — blind-spot-prober 자동 생략, inline premortem으로 전환`.
+
+**계약 배달 실패 시** — `## 조사 주장 계약` 펜스의 rc 가 0 이 아니면 이 dispatch 를 하지 않는다.
+공시는 loud advisory + inline premortem 강등 이고, web 비활성 경로와 같은 곳으로 간다. 인터뷰는
+계속하고 그 차원을 자동으로 닫지 않는다.
+
+**강등된 inline premortem 도 같은 계약을 쓴다** — orchestrator 가 자기 `Read`/`Grep` 으로 레포
+근거를 확인하고 `repo_claims` 를 산출해 V1 을 태운다. 웹 근거만 사라지고 내부 축은 돈다. prober 경로든 강등
+경로든 `repo_claims` 의 첫 산출이면 C43 절의 internal_research admit 이 여기서도 돈다.
 
 ## 5 통과 의례 (Law 1 구조 게이트, R1–R5)
 
@@ -281,7 +391,7 @@ steelman · blind-spot premortem · coverage-mapper 넷이 전부 그 장치다.
 의심 trigger = landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의 충돌. 절차 전문(전제 도출 ·
 `steelman-builder` dispatch · 게이트-전 확인 · 게이트 제시 블록 · 유지/보완/전환/보류 게이트 · 기록 · steelman 0건의
 `검토 —` 항목 · web 비활성 시 steelman 자동 생략)은 `references/steelman.md` 다 — R3 에 들어갈 때 그 파일을 Read 한다.
-builder 출력은 verbatim 으로 다룬다(약화·편집 금지). 보류는 §3 OQ 에도 박제한다.
+builder 출력은 verbatim 으로 다룬다(약화·편집 금지). 보류는 §3 OQ 에도 박제한다. builder 의 `repo_claims` 가 첫 산출이면 C43 절의 internal_research admit 이 여기서도 돈다.
 
 ## seed 를 입력으로 받았을 때
 

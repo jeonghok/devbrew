@@ -52,4 +52,43 @@ if grep -qE '병렬.{0,8}금지|투기적.{0,8}금지' "$AGENT"; then
 else
   ok "E10: 병렬 금지 문구 없음"
 fi
+
+# 조사 주장 계약 배선 — 형제 둘과 글자째 같은 삼중쌍.
+for tag in claims_contract open_decisions; do
+  grep -qE "^  - tag: ${tag}$" <<<"$FM" && ok "슬롯 태그 $tag" || no "슬롯 태그 $tag 부재"
+done
+grep -q 'var: CLAIMS_CONTRACT' <<<"$FM" && ok "슬롯 var CLAIMS_CONTRACT" || no "슬롯 var CLAIMS_CONTRACT 부재"
+grep -q 'var: OPEN_DECISIONS' <<<"$FM" && ok "슬롯 var OPEN_DECISIONS" || no "슬롯 var OPEN_DECISIONS 부재"
+grep -q 'kind: repo_context' <<<"$FM" && ok "claims_contract 의 kind 가 repo_context" || no "kind: repo_context 부재"
+BODY="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{f=0;b=1;next} b' "$AGENT")"
+for tok in repo_claims decides; do
+  grep -qE "^[[:space:]]*-?[[:space:]]*${tok}:" <<<"$BODY" \
+    && ok "출력 의무: $tok 키가 본문 스키마에 있다" || no "출력 의무: $tok 키 부재"
+done
+
+# AC22 — 옛 하드 상한 문구가 agent 파일 «전체»(frontmatter description 포함)에 남지 않는다. description 은
+# dispatch 판단에 모델이 읽는 필드라, 옛 상한이 남으면 재개방 뒤 정당한 재dispatch 를 거부하게 한다.
+# 양의 짝이 자격+예산 서술의 실재를 문다 — 부재 락만이면 문단을 통째로 지워도 통과한다.
+AGENT_FLAT="$(tr '\n' ' ' < "$AGENT" | tr -s ' ')"
+grep -qiF -- 'once per' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «once per» 잔존" || ok "AC22: «once per» 없음"
+grep -qiF -- 'fan-out 1' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «fan-out 1» 잔존" || ok "AC22: «fan-out 1» 없음"
+grep -qiF -- '인터뷰당 1회' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «인터뷰당 1회» 잔존" || ok "AC22: «인터뷰당 1회» 없음"
+grep -qiF -- '재dispatch 금지' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «재dispatch 금지» 잔존" || ok "AC22: «재dispatch 금지» 없음"
+grep -qF -- 'eligibility is' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
+grep -qF -- 'whether an open decision still touches that dimension' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
+grep -qF -- '1 plus that dimension'\''s reopen count' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
+# 웹 근거도 계약 모양이다(스펙 §B — prober 의 출력 의무는 coverage-mapper 와 같다). URL 문자열 목록이면
+# `decides` 가 없어 웹 premortem 이 결정 연결을 영영 못 댄다. 합계로 세면 한 블록의 추가가 다른 블록의
+# 소실을 갚으므로 **블록마다** 본다: 출력 펜스에서 hidden_assumptions: / failure_modes: 블록을 잘라 각각
+# 계약 객체(`- url: "https://`)와 `decides:` 를 요구하고, URL 문자열 항목은 따옴표·flow 모양까지 전부 거부한다.
+for blk in hidden_assumptions failure_modes; do
+  bt="$(awk -v b="$blk" '/^```yaml$/{y=1;next} y&&/^```$/{exit} y&&$0 ~ "^"b":"{f=1;next} y&&f&&/^[a-z_]+:/{exit} y&&f' "$AGENT")"
+  { [[ -n "$bt" ]] && grep -qE '^[[:space:]]*-[[:space:]]*url:[[:space:]]*"https://' <<<"$bt" \
+      && grep -qE '^[[:space:]]*decides:' <<<"$bt"; } \
+    && ok "웹 근거 계약 객체(${blk}): url + decides" \
+    || no "웹 근거 계약 객체(${blk}): 블록이 없거나 url·decides 가 빠졌다"
+  grep -qE '^[[:space:]]*-[[:space:]]*["'"'"']?https?://|evidence:[[:space:]]*\[' <<<"$bt" \
+    && no "웹 근거(${blk})가 URL 문자열 항목이다 — 계약 객체(url·supports·claim·touches·decides)가 아니다" \
+    || ok "웹 근거(${blk})에 URL 문자열 항목이 없다"
+done
 finish

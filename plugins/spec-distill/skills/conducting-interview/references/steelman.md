@@ -30,12 +30,18 @@ if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
   # dispatch 없이 아래 「Web 부재 시 graceful degradation」 절로 간다.
 else
   Agent({ description: "Steelman both cases", subagent_type: "spec-distill:steelman-builder",
-          prompt: "의심 방향: <direction>${SUSPECT_DIRECTION}</direction>. trigger: <trigger>${TRIGGER}</trigger>. 사용자 goal(원문): <goal>${GOAL}</goal>. 핵심 전제: <premises>${PREMISES}</premises>. 사용자가 지금까지 말한 제약(원문 전량): <constraints>${CONSTRAINTS}</constraints>. 양쪽 최강 케이스를 같은 기준으로, 전제 반증 판정과 추천을." })
-  # **처분** — consumer=orchestrator · fail-open · disclosure=loud advisory
+          prompt: "의심 방향: <direction>${SUSPECT_DIRECTION}</direction>. trigger: <trigger>${TRIGGER}</trigger>. 사용자 goal(원문): <goal>${GOAL}</goal>. 핵심 전제: <premises>${PREMISES}</premises>. 사용자가 지금까지 말한 제약(원문 전량): <constraints>${CONSTRAINTS}</constraints>. 조사 주장 계약(내용 전문): <claims_contract>${CLAIMS_CONTRACT}</claims_contract>. 지금 열린 결정: <open_decisions>${OPEN_DECISIONS}</open_decisions>. 양쪽 최강 케이스를 같은 기준으로, 전제 반증 판정과 추천을." })
+  # **처분** — consumer=orchestrator · fail-closed · disclosure=loud advisory + 수동 의심 게이트 전환
 fi
 ```
 
 한 방향당 steelman 1회 — 새 근거 없으면 재steelman 금지(AP16).
+
+두 슬롯은 `conducting-interview/SKILL.md` 의 `## 조사 주장 계약` 펜스와 `orchestration.open_decisions[]`
+에서 온다. 계약 펜스의 rc 가 0 이 아니면 **dispatch 하지 않는다** — `fail-closed` 가 막는 것은 «그
+dispatch» 이고 인터뷰가 아니다. 그때 공시는 loud advisory + 수동 의심 게이트 전환 이고, 아래
+「Web 부재 시 graceful degradation」 과 같은 경로로 간다(§5 항목은 사용자 판단을 근거로 기록하고
+계약 배달 실패 사유를 명시한다).
 
 #### Step 2 — 게이트-전 확인 (orchestrator, Read/Grep)
 
@@ -50,6 +56,11 @@ fi
 - 「근거 N 중 부착 M」의 M 은 **확인을 통과한 부착**만 센다. 반증된 부착은 `[반증됨]` 라벨로 노출되고
   M 에 들지 않는다(N 에는 든다). 리포 주장은 「리포 주장 K 중 확인 J」로 따로 센다.
 - 결과는 audit §3 `#### ST<N>` 블록의 「게이트-전 확인」 소절에 주장별 한 줄로 남는다.
+- **리포 주장(`repo_claims[]`)에는 audit §5 줄도 함께 남긴다** — `- 확인 RC<n> — {확인|반증|미확인} — <경로>#<앵커> — <사유>`.
+  확인 «행위» 는 한 번이고(이 Step 2 가 V1 의 특수 경우다) 기록이 두 자리다: §3 은 이
+  steelman 블록의 문맥을, §5 는 인터뷰 전체의 무조건 원장을 갖는다. §5 를 빼면 구조 게이트의
+  확인-줄 ∀ 술어가 그 `RC<n>` 을 이름으로 대며 막는다 — 그 술어는 주장이 steelman 에서
+  왔는지 보지 않는다.
 - 반증된 항목은 4-block 에서 빼지 않고 `[반증됨]` 라벨을 단다 — 4-block 의 반증 라벨은 이 하나뿐이고,
   무엇이 반증됐는지(부착 주장인지 리포 주장의 경로·앵커·내용인지)는 audit §3 「게이트-전 확인」 줄이
   말한다. orchestrator 는 verdict 를 대신 내지 않는다.

@@ -14,9 +14,18 @@ state.local.md 로드 시 아래 중 **하나라도** 부재면 *non-mutating re
   **차원은 있는데 `reopened`/`reopen_log` 만 없으면 그 둘만 `0`/`[]` 로 추가**하고
   `status`·`evidence` 는 그대로 둔다 — 진행 중인 인터뷰의 닫힘 판정을 되돌리지 않는다.
 - `coverage.derived` — 없으면 `[]`. 있으면 각 항목에 `reopened`/`reopen_log` 를 같은 규칙으로 보충.
-- `orchestration`: `{focused_dimension: null, blind_spot_dispatched: false, coverage_mapper_dispatches: 0}`
-  — 절이 없으면 이 값 그대로 seed. **있으면 부재 키만** 그 기본값으로 추가한다(직전 릴리스
-  세션에서 실제로 빠져 있는 것은 `coverage_mapper_dispatches` 하나다).
+- `orchestration`: `{focused_dimension: null, blind_spot_dispatches: 0, coverage_mapper_dispatches: 0, open_decisions: []}`
+  — 절이 없으면 이 값 그대로 seed. **있으면 부재 키만** 그 기본값으로 추가한다.
+
+**개명은 「부재 키만 채운다」로 안 된다.** `blind_spot_dispatched: bool` 이
+`blind_spot_dispatches: int` 로 개명됐다. 부재 키 규칙만 쓰면 **이미 dispatch 한 세션이 새 키의
+기본값 `0` 을 받아 AP16 가드가 재무장된다** — 같은 인터뷰가 prober 를 두 번 부른다. 값을 이월한다:
+
+- `blind_spot_dispatched: true` 가 있으면 `blind_spot_dispatches: 1` 로 이월한다. `false` 면 `0`.
+- 이월 뒤 옛 키 `blind_spot_dispatched` 를 **지운다** — 두 키가 공존하면 소비자가 어느 쪽을 읽는지
+  갈리고, 이 파일은 `rereview_count`·`issue_history` 에서 이미 「승계하지 않고 지운다」 선례를 갖는다.
+- `open_decisions` 는 부재 시 `[]` — 부재 키 채우기의 정상 경로다. 진행 중인 인터뷰에는 결정 목록이
+  없으므로 빈 목록이 맞고, 그 세션의 면제는 「열린 결정이 0이면 면제도 0」으로 떨어진다.
 
 구세션(`interview_round` 존재 / `coverage` 통째 부재)은 위 규칙의 한 경우일 뿐이다 — 그때는
 모든 키가 부재라 전부 seed 된다.
@@ -40,7 +49,7 @@ write로 즉시 디스크에 반영합니다(PN1) — coverage-mapper 상한 카
 
 사용자에게 advisory 한 줄 출력:
 ```
-[spec-distill v0.57.0] state schema migration: reopen ledger + coverage_mapper_dispatches added (stall trigger retired).
+[spec-distill 4.4.0] state schema migration: blind_spot_dispatched -> blind_spot_dispatches (value carried), open_decisions added.
 ```
 
 자동 promote 실패 시(파일 corruption 등) → "구세션 in-flight state 호환 실패 — 세션 재시작 권장"
