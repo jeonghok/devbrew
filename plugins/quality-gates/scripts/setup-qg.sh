@@ -19,9 +19,7 @@ fi
 
 # --- Argument Parsing ---
 
-SINGLE_GATE=""
-SKIP_RUNTIME="false"
-GATE_BOTH="false"
+REMOVED_ARGS=""
 PLAN_FILE="auto"
 PR_URL=""
 ENSURE_MODE="false"
@@ -31,13 +29,25 @@ TARGET_BRANCH=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    review|runtime)
-      SINGLE_GATE="$1"
+    review|runtime|both|--skip-runtime)
+      # 제거된 인자 — 한 파이프라인이라 고를 게이트가 없다. 조용히 무시하지 않고
+      # 아래 출력에서 한 줄씩 알린 뒤 정상 진행한다(설계 §6.5.2).
+      REMOVED_ARGS="$REMOVED_ARGS $1"
       shift
       ;;
-    both)
-      # full pipeline, both gates, no gate-scope question (NOT single-gate)
-      GATE_BOTH="true"
+    --paths)
+      # 스코프 override 는 SKILL 이 $ARGUMENTS 에서 직접 읽는다 — 여기서는 소비만 한다.
+      shift
+      if [[ $# -eq 0 ]] || [[ "$1" =~ ^-- ]]; then
+        echo "❌ Error: --paths requires at least one glob" >&2
+        exit 1
+      fi
+      while [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]] && [[ ! "$1" =~ ^(review|runtime|both|branch)$ ]]; do
+        shift
+      done
+      ;;
+    --gc)
+      # qg.md 가 GC 를 이미 돌렸다 — setup 은 무시한다.
       shift
       ;;
     branch)
@@ -48,10 +58,6 @@ while [[ $# -gt 0 ]]; do
         shift
       fi
       BRANCH_MODE="true"
-      ;;
-    --skip-runtime)
-      SKIP_RUNTIME="true"
-      shift
       ;;
     --ensure)
       ENSURE_MODE="true"
@@ -86,16 +92,14 @@ while [[ $# -gt 0 ]]; do
 Quality Gates Pipeline Setup
 
 USAGE:
-  /qg [review|runtime|both] [OPTIONS]
+  /qg [branch [<name>]] [OPTIONS]
 
 ARGUMENTS:
-  review         Run the Review gate only
-  runtime        Run the Runtime gate only
-  both           Run both gates with no gate-scope question
-  (none)         Run full pipeline; ask gate scope (Review only / both) first
+  branch [<name>]      Review the full branch diff (with <name>: in an isolated worktree)
+  (none)               Review git-derived changes (branch + worktree)
 
 OPTIONS:
-  --skip-runtime       Skip the Runtime gate (runtime verification)
+  --paths <glob>...    Scope override — review only the matched paths
   --plan <path>        Specify plan file path (default: auto-detect)
   --pr-url <url>       Specify PR URL
   --session-id <id>    Override session ID (defaults to CLAUDE_CODE_SESSION_ID)
@@ -103,9 +107,12 @@ OPTIONS:
                        already exists (used by skill preflight, not /qg).
   -h, --help           Show this help message
 
+REMOVED (v9): review · runtime · both · --skip-runtime — one pipeline, no gate
+  scope to choose. Passing one prints a one-line notice and the run proceeds.
+
 PIPELINE:
-  Review gate — iterative code review (review → fix → re-review)
-  Runtime gate — launches app and verifies behavior
+  scope → differential test → reviewers → re-critique → verdict
+  (clean · defect · not-certified (<reason>))
 
 STOPPING:
   Use /cancel-qg to cancel an active pipeline
@@ -261,18 +268,6 @@ if plugin_installed "superpowers"; then
   fi
 fi
 
-# --- Validate DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS (P18 unbounded-autonomy guard) ---
-# Default 3. Clamped to 0..10. Non-numeric → warning + default.
-
-runtime_max="${DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS:-3}"
-if ! [[ "$runtime_max" =~ ^[0-9]+$ ]]; then
-  echo "setup-qg: DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS='$runtime_max' is not numeric; defaulting to 3" >&2
-  runtime_max=3
-elif (( runtime_max > 10 )); then
-  echo "setup-qg: DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS='$runtime_max' exceeds maximum 10; clamping to 10" >&2
-  runtime_max=10
-fi
-
 # --- Create State File ---
 
 TEMP_FILE="${STATE_FILE}.tmp.$$"
@@ -282,7 +277,6 @@ cat > "$TEMP_FILE" << EOF
 ---
 session_id: "$SESSION_ID"
 started_at: "$TIMESTAMP"
-runtime_max_resolutions: $runtime_max
 EOF
 
 # worktree_path is optional — only set when /qg branch <name> created one.
@@ -306,34 +300,12 @@ mv "$TEMP_FILE" "$STATE_FILE"
 
 # --- Output Setup Message ---
 
-if [[ -n "$SINGLE_GATE" ]]; then
-  case "$SINGLE_GATE" in
-    review)  GATE_LABEL="Review gate" ;;
-    runtime) GATE_LABEL="Runtime gate" ;;
-  esac
-  echo "🔄 Quality Gates Pipeline — Single Gate Mode"
-  echo ""
-  echo "Gate: ${GATE_LABEL}"
-  if [[ "$SINGLE_GATE" == "runtime" && "$SKIP_RUNTIME" == "true" ]]; then
-    # precedence: explicit gate=runtime wins over --skip-runtime (matches SKILL effective_skip_runtime)
-    echo "      --skip-runtime ignored: gate=runtime wins (precedence)"
-  fi
-else
-  echo "🔄 Quality Gates Pipeline — Full Pipeline"
-  echo ""
-  echo "Gates: Review gate → Runtime gate"
-  if [[ "$GATE_BOTH" == "true" ]]; then
-    echo "       (both gates — no gate-scope question)"
-  fi
-  if [[ "$SKIP_RUNTIME" == "true" ]]; then
-    if [[ "$GATE_BOTH" == "true" ]]; then
-      # precedence: explicit gate=both wins over --skip-runtime; Runtime gate WILL run
-      echo "       --skip-runtime ignored: gate=both wins (precedence); Runtime gate runs"
-    else
-      echo "       Runtime gate skipped (--skip-runtime)"
-    fi
-  fi
-fi
+echo "🔄 Quality Gates Pipeline"
+echo ""
+echo "Pipeline: scope → differential test → reviewers → re-critique → verdict"
+for a in $REMOVED_ARGS; do
+  echo "> [quality-gates] \`${a}\` 인자는 제거됐다 — 이제 한 파이프라인이라 게이트 범위를 고르지 않는다. 그대로 진행한다."
+done
 
 echo ""
 echo "Available plugins: ${AVAILABLE_PLUGINS:-none}"
