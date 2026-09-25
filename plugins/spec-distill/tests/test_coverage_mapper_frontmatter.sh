@@ -49,4 +49,32 @@ grep -q 'derived_dimensions' "$AGENT" \
   && ok "Output: derived_dimensions 키 존재" || no "derived_dimensions 키 부재"
 grep -q 'neglect_flag' "$AGENT" \
   && ok "Output: neglect_flag 키 존재" || no "neglect_flag 키 부재"
+
+# 조사 주장 계약 배선 — 슬롯 둘의 선언과 출력 의무. 슬롯의 var·kind 는 형제 둘과 글자째 같아야
+# 한다(`tools/adjudication/check_slots.py` 의 var_mismatch 가 갈라짐을 잡지만, 그 락이 죽으면
+# 이 자리가 마지막 방어선이다).
+for tag in claims_contract open_decisions; do
+  grep -qE "^  - tag: ${tag}$" <<<"$FM" && ok "슬롯 태그 $tag" || no "슬롯 태그 $tag 부재"
+done
+grep -q 'var: CLAIMS_CONTRACT' <<<"$FM" && ok "슬롯 var CLAIMS_CONTRACT" || no "슬롯 var CLAIMS_CONTRACT 부재"
+grep -q 'var: OPEN_DECISIONS' <<<"$FM" && ok "슬롯 var OPEN_DECISIONS" || no "슬롯 var OPEN_DECISIONS 부재"
+grep -q 'kind: repo_context' <<<"$FM" && ok "claims_contract 의 kind 가 repo_context" || no "kind: repo_context 부재"
+# 출력 의무 — 스키마 키 둘이 본문에 실재한다(존재 검사라 frontmatter 를 뺀 본문에서 잰다:
+# description 이 같은 낱말을 담아도 출력 스키마를 지우면 RED 다).
+BODY="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{f=0;b=1;next} b' "$AGENT")"
+for tok in repo_claims evidence decides; do
+  grep -qE "^[[:space:]]*-?[[:space:]]*${tok}:" <<<"$BODY" \
+    && ok "출력 의무: $tok 키가 본문 스키마에 있다" || no "출력 의무: $tok 키 부재"
+done
+
+# AC22 — 옛 하드 상한 문구가 agent 파일 «전체»(frontmatter description 포함)에 남지 않는다. description 은
+# dispatch 판단에 모델이 읽는 필드라, 옛 상한이 남으면 재개방 뒤 정당한 재dispatch 를 거부하게 한다.
+# 양의 짝이 자격+예산 서술의 실재를 문다 — 부재 락만이면 문단을 통째로 지워도 통과한다.
+AGENT_FLAT="$(tr '\n' ' ' < "$AGENT" | tr -s ' ')"
+grep -qiF -- 'bounded to two' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «bounded to two» 잔존" || ok "AC22: «bounded to two» 없음"
+grep -qiF -- 'once per' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «once per» 잔존" || ok "AC22: «once per» 없음"
+grep -qiF -- '상한 2 dispatch' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «상한 2 dispatch» 잔존" || ok "AC22: «상한 2 dispatch» 없음"
+grep -qiF -- '상한 2(conducting-interview' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «상한 2(conducting-interview» 잔존" || ok "AC22: «상한 2(conducting-interview» 없음"
+grep -qF -- 'dispatch eligibility is whether an open decision still' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
+grep -qF -- '1 plus the total reopen count' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
 finish

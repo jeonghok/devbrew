@@ -5,6 +5,8 @@ created_at: YYYY-MM-DD
 session_id: <uuid>
 source: spec-distill conducting-interview v0.23.0
 next_phase: superpowers:brainstorming
+# contract: v2 — 조사 축 술어 다섯의 옵트인 스위치. 빼면 전부 미발동 + advisory
+contract: v2
 audit_file: <YYYY-MM-DD>-<kebab-topic>-interview.audit.md   # basename만 (같은 디렉토리)
 # user_sourced_items — **사용자 출처 항목만**. `source: inferred`는 여기 들어갈 수 없다(게이트 fail).
 # 모델 추론은 본문 프로즈에 ✎ 표기로만 산다.
@@ -36,6 +38,14 @@ user_sourced_items:
 (무엇 / 왜 / 무엇이 확정 / 무엇이 열려 있음 / 다음 stage. **이 절은 요약이다** — 본문을 여기
  옮겨 적는 자리가 아니라, 다음 세션이 여기만 읽고도 방향을 잡을 수 있어야 하는 자리다.)
 
+**결정 목록** — state `orchestration.open_decisions[]` 전량. `[열림]`/`[해결 ⟨S<N>⟩]` 상태 토큰을
+달고, 해결된 것도 **지우지 않는다**(조사가 그 결정을 해결하는 데 기여했으면 그것이 성공 사례다).
+조사가 닿은 결정은 줄 끝에 `→ 근거 RC<n>` 로 그 근거의 id 를 되가리킨다. 불릿 줄이어야 한다.
+
+- OQ1 [열림] — <한 줄> → 근거 RC3
+- OQ4 [해결 ⟨S10⟩] — <한 줄> → 근거 RC3
+- OQ5 [열림] — <한 줄>
+
 ## 1. Goal · Non-goal
 
 - Goal: ...
@@ -57,18 +67,25 @@ user_sourced_items:
 
 (미해결 명시 — "유추 금지". 탐색 대상이므로 앞쪽에 온다.)
 
-- OQ1: ...
+- OQ1: ... → 근거 RC3
+- OQ5: ... (조사가 닿지 않은 열린 결정은 역참조가 없다)
 
 ## 4. External Landscape
 
 (1항목 = 1줄, **«출처키» 필수** + [취함|피함|중립] + 이유. 그 키가 가리키는 원자료
- URL은 audit `## 7. 확산 원자료`에 선언한다 — payload에는 키만 남는다.)
+ URL은 audit `## 7. 확산 원자료`에 선언한다 — payload에는 키만 남는다.
+ **줄 끝에 결정 연결** 넷 중 하나: 레포 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]`, 웹 `[→ OQ<n>]` ·
+ `[→ 없음]`(`없음` = 닿는 결정 없음). 레포 주장은 연결 안에 항상 `RC<n>` 을 싣는다(웹 주장만 `[→ …]`).
+ 복수는 `[RC3 → OQ1 · OQ4]`. 하위 불릿으로 쓰지 않는다 — 들여쓴 불릿도 §4 항목으로 세어져 red 다.)
 
-- ... «example» — [취함] — 이유
+- ... «example» — [취함] — 이유 [→ OQ1]
+- ... «other» — [중립] — 이유 [→ 없음]
 
 ## 5. 기각 · Blind Spots
 
 (`기각` 항목이 0건이면 `- 기각 — N/A — 전부 first-time defend+lock` 한 줄 명시(빈 섹션 금지).
+ 이 절에서 조사 축의 대상은 **`RC<n>` 리터럴을 가진 줄만**이다 — 네 모양(기각·보류·검토·위험) 중
+ 어느 것인지는 묻지 않는다. `RC<n>` 이 없는 줄은 결정 연결을 요구받지 않는다.
  `verdict:`를 가진 항목은 audit §3의 `ST<N>` 참조가 필수다. verdict 항목이 0건이면 `검토 —` 항목이
  필수다 — 검토한 방향 · 전제 · trigger 후보 · 기각 이유 네 토큰을 담는다.)
 
@@ -77,6 +94,8 @@ user_sourced_items:
 - 보류 — <대안 statement> → §3 OQ1 — verdict: deferred — ST2 — 부착 M/N
 - 검토 — steelman 0건: 검토한 방향 <N>개 · 전제 <P1..Pn> · trigger 후보 <무엇을 봤는가> → 기각 이유 <왜 trigger 가 아닌가>
 - 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>
+- 위험 — 숨은 가정 | <내용> — RC3 (plugins/x/y.py#sym) [RC3 → OQ1]
+- 기각 — <원래> / <재결정> / <근거 RC4 반증> — V1 판정이 반증이었을 때의 세 칸 [RC4 → 없음]
 
 ## 6. 사용자 원문
 

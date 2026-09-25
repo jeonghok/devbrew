@@ -47,20 +47,20 @@ _DR_ABSORB_GROUP_DEAD = (
     "`_rejected` 가 아닌 멤버)가 비면 대표를 고를 대상이 없어 `continue` 하지만, "
     "그 그룹의 멤버는 전부 이미 `_rejected` 이고 그 표시는 `_apply_recritic()` "
     "에서 `it[\"_rejected\"] = ...` 와 **같은 자리에서** `L.reject(f, ...)` 가 "
-    "함께 불려 이미 회계됐다(:311-312) — 이 continue 는 이미 처분된 항목을 "
+    "함께 불려 이미 회계됐다(`_apply_recritic()` 의 reject 갈래) — 이 continue 는 이미 처분된 항목을 "
     "대표-선정에서만 제외할 뿐 새로 버리는 항목이 없다."
 )
 _DR_ABSORBED_ALREADY = (
     "C6(1) — `_classify_items()` 의 `if it.get('_absorbed_into'): continue`. "
     "`_absorbed_into` 는 `_absorb_same_as()` 가 대표를 정할 때 **같은 자리에서** "
-    "`L.absorbed(m, into=keep)` 와 함께 대입된다(:397-398) — 이 continue 시점엔 "
+    "`L.absorbed(m, into=keep)` 와 함께 대입된다(`_absorb_same_as()` 의 `for m in live` 루프) — 이 continue 시점엔 "
     "이미 회계가 끝난 항목이다."
 )
 _DR_REJECTED_ALREADY = (
     "C6(1) — `_classify_items()` 의 `if it.get('_rejected'): continue`. "
     "`_rejected` 는 `_apply_recritic()` 에서 `L.reject(f, ...)` 와 같은 자리에서 "
-    "대입된다(:311-312) — 이미 회계된 항목이고, 이 continue **직전** 세 줄이 "
-    "그 항목을 `rejected_items` 에 담아 반환값에 실어(:413-415) 파이프라인에서도 "
+    "대입된다(`_apply_recritic()` 의 reject 갈래) — 이미 회계된 항목이고, 이 continue **직전** 세 줄이 "
+    "그 항목을 `rejected_items` 에 담아 반환값에 실어(`rejected_items.append(it)`) 파이프라인에서도 "
     "사라지지 않는다(continue 이전에 보존이 먼저 실행된다)."
 )
 _DR_ESCALATED_NOT_DUE = (
@@ -117,7 +117,7 @@ _DR_RERAISE_TARGET_GONE = (
     "(accept/reject/hold/absorbed/coerced/source_failed/uncountable/suppressed) "
     "가 아니라 route 자체의 별도 advisory 채널이다 — `stats['reraise_unconsumed']` "
     "가 `_build_report()` 를 거쳐 출력 JSON 의 `reraise_unconsumed` 필드로 "
-    "그대로 공시된다(:566 `out = _build_report(...)`, `_build_report()` "
+    "그대로 공시된다(`cmd_finalize` 의 `out = _build_report(...)`, `_build_report()` "
     "본문의 같은 이름 필드). CLAUDE.md 의 요구(\"판정기가 항목을 버리면 "
     "센다\")를 만족하는 자리이지 Ledger 소비 대상이 아니다 — `_permit_covers()` "
     "와 같은 이유(위 `_DR_PERMIT_SEARCH`)로 여기 순회 대상(`reraise` 예약)도 "
@@ -135,7 +135,7 @@ _DR_RERAISE_ALREADY_DECIDED = (
 _DR_LINEAGE_NOT_RERAISE = (
     "C6(1) — `_resolve_ids_and_lineage()` 의 전방 포인터 루프"
     "(`if it.get('_source') != 'reraise'): continue`). 이 시점의 `it` 는 이미 "
-    "직전 루프(:576-581)에서 id·bucket 을 배정받아 처분이 끝난 항목이다 — 이 "
+    "직전 루프(같은 함수의 첫 `for it in everything` 루프)에서 id·bucket 을 배정받아 처분이 끝난 항목이다 — 이 "
     "두 번째 루프는 `_source == 'reraise'` 인 항목에만 적용되는 **추가** "
     "부기(만료된 `decides` 레코드에 `superseded_by` 전방 포인터를 단다)이고, "
     "그 조건에 안 맞는 항목은 이 부기가 필요 없을 뿐 그 항목 자체가 버려지는 "
@@ -180,47 +180,38 @@ EXEMPT = {
     # `_absorbed_into` 는 `_classify_items` 의 개행 접기보다 «앞»으로 옮겨졌다 — 흡수된 값의 접기를
     # 세지 않으려고(생존자가 물려받은 같은 값이 두 번 세졌다).
     # 채움은 break·continue·필터 컴프리헨션 없이 쓴다 — 버리는 분기로 잡히지 않게.
-    ("plugins/quality-gates/scripts/docreview_route.py", 430,
+    ("plugins/quality-gates/scripts/docreview_route.py", 431,
      "continue in _classify_items @ if it.get('_absorbed_into')"): _DR_ABSORBED_ALREADY,
-    ("plugins/quality-gates/scripts/docreview_route.py", 449,
+    ("plugins/quality-gates/scripts/docreview_route.py", 451,
      "continue in _classify_items @ if it.get('_rejected')"): _DR_REJECTED_ALREADY,
     # Task 2 — escalated 예약을 재상승(AC21)과 대칭으로 맞추면서 줄번호가 밀렸다.
-    # F-2/F-3 재리뷰(Ruling 20·21) 가 한 번 더 바꿨다: dedup continue(옛 404)는
+    # F-2/F-3 재리뷰(Ruling 20·21) 가 한 번 더 바꿨다: dedup continue 는
     # `L.absorbed(...)` 를 같은 분기에서 직접 불러 **더 이상 면제가 필요 없다**
     # (`scan()` 이 그 호출을 disposition 으로 자동 인식해 guarded=True) — 그래서
     # 아래 목록에서 통째로 빠졌다(EXEMPT_BASELINE 주석 참조). 대신 F-3 이 새
     # discard 자리(fix 가 지금도 escalated 상태인지 검사)를 하나 늘렸다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 515,
+    ("plugins/quality-gates/scripts/docreview_route.py", 517,
      "continue in _auto_decides @ if int(e['round']) >= n"): _DR_ESCALATED_NOT_DUE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 520,
+    ("plugins/quality-gates/scripts/docreview_route.py", 522,
      "continue in _auto_decides @ if not f0"): _DR_ESCALATED_TARGET_GONE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 531,
+    ("plugins/quality-gates/scripts/docreview_route.py", 533,
      "continue in _auto_decides @ if not fx0 or fx0.get('state') != 'escalated'"):
         _DR_ESCALATED_FIX_NOT_LIVE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 561,
+    ("plugins/quality-gates/scripts/docreview_route.py", 563,
      "continue in _auto_decides @ if not f0"): _DR_RERAISE_TARGET_GONE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 572,
+    ("plugins/quality-gates/scripts/docreview_route.py", 574,
      "continue in _auto_decides @ if not d0 or d0.get('state') != 'expired'"):
         _DR_RERAISE_ALREADY_DECIDED,
-    # Task 5 — 재상승 후속의 kind·prev_hash 승계 주석이 `_auto_decides` 재상승 갈래
-    # 위에 끼어들며 아래로 밀렸다(옛 509 → fix round 1 M3 의 확장 주석까지 더해
-    # 521). 가드 텍스트 자체는 그대로다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 626,
+    # 재상승 후속의 kind·prev_hash 승계 주석이 `_auto_decides` 재상승 갈래 위에
+    # 끼어들어 이 자리를 밀었다. 가드 텍스트 자체는 그대로다.
+    ("plugins/quality-gates/scripts/docreview_route.py", 628,
      "continue in _resolve_ids_and_lineage @ if it.get('_source') != 'reraise'"):
         _DR_LINEAGE_NOT_RERAISE,
 }
 
-# [PR 3 마무리 — EXEMPT 재앵커 통합 메모] 위 `docreview_route.py` 열 자리 전부가 이
-# PR 에서 다시 밀렸다. 개별 항목 앞 주석이 각자 자기 원인을 이미 적어 뒀으니 여기서는
-# 되풀이하지 않는다 — 대신 «무엇이 이 파일의 discard 분기들보다 «위»에서 늘었는가»를
-# 한자리에 모은다(숫자가 아니라 원인으로, 위 "줄번호는 매 재앵커마다 실측으로 갱신한다"
-# 의 경고를 그대로 따른다): `normalize()` 가 `replacement`·`if_unfixed` 두 칸을 새로
-# 지어 리뷰어가 적어도 조용히 안 버려지게 했고, `_decision_view()` 가 같은 두 칸에
-# 더해 `category_gloss()` 로 뽑은 category 사람말과, 사상이 없을 때 침묵 대신 공시하는
-# `category_unglossed` 플래그를 더했다. 그 둘이 쓰는 `category_gloss`·`choice_label`
-# 을 위쪽 `from docreview_state import (...)` 에 새로 끌어왔다. 지금 앵커가 맞는지는
-# 이 프로즈가 아니라 `bash shared/tests/test_adjudication_wiring.sh` 의
-# `exempt_stale=0` 이 매 실행마다 실측으로 답한다.
+# [EXEMPT 재앵커] 위 `docreview_route.py` 자리들의 줄 번호는 그 위쪽에 코드가 늘 때마다
+# 밀린다. 지금 앵커가 맞는지는 이 프로즈가 아니라 `bash shared/tests/test_adjudication_wiring.sh`
+# 의 `exempt_stale=0` 이 매 실행마다 실측으로 답한다.
 #
 # ⚠ 재앵커할 때 기계가 못 잡는 함정 — `_DR_ESCALATED_TARGET_GONE`(escalated 예약)과
 # `_DR_RERAISE_TARGET_GONE`(reraise 예약) 두 자리의 `exempt_key` 세 번째 성분(정체
