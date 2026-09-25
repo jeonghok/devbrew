@@ -3103,4 +3103,4 @@ gh pr create --base main --head feature/qg-gate-merge-pr4b \
 
 ## Execution Handoff
 
-계획은 `docs/superpowers/plans/2026-09-25-qg-gate-merge-pr4b.md` 에 있다. SDD 로 돌리면 구현 sonnet · Task 리뷰 opus · 최종 리뷰 fable 이고, 원장은 매 갱신마다 `~/.claude/sdd-mirror/qg-gate-merge-pr4b/` 로 복사한다. Task 7 은 한 커밋에 SKILL · 레퍼런스 · 삭제 · 락 이주가 모이는 가장 큰 Task 다 — 구현자는 sonnet 으로 시작하되 수정 라운드 4 이상이면 한 단계 위 모델로 올린다.
+계획은 `docs/superpowers/plans/2026-09-25-qg-gate-merge-pr4b.md` 에 있다. SDD 로 돌리면 구현 sonnet · Task 리뷰 opus · 최종 리뷰 opus 이고(이 리포에서는 사용자가 풀기 전까지 fable 을 쓰지 않는다), 원장은 매 갱신마다 `~/.claude/sdd-mirror/qg-gate-merge-pr4b/` 로 복사한다. Task 7 은 한 커밋에 SKILL · 레퍼런스 · 삭제 · 락 이주가 모이는 가장 큰 Task 다 — 구현자는 sonnet 으로 시작하되 수정 라운드 4 이상이면 한 단계 위 모델로 올린다.
