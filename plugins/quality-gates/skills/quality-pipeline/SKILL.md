@@ -48,7 +48,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v8.0.0)
+# Quality Gates — In-Turn Orchestrator (v9.0.0)
 
 You are running the **quality-gates pipeline** in a single assistant turn. There is
 **one pipeline and one verdict** — no gate scope to choose. At the fix-loop boundary
