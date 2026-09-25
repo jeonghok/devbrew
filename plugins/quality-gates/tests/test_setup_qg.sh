@@ -101,7 +101,16 @@ RC=$?
 assert "'--paths' 단독이 Unknown argument 로 죽지 않는다" "test '$RC' -eq 0 && ! grep -qi 'Unknown argument' err"
 "$SCRIPT" --paths --session-id "test-pe-$$" >/dev/null 2>err
 RC=$?
-assert "'--paths' 뒤에 glob 이 없으면 exit 1" "test '$RC' -eq 1"
+assert "'--paths' 뒤에 glob 이 없으면 exit 1 + 사유" "test '$RC' -eq 1 && grep -q 'requires at least one glob' err"
+"$SCRIPT" --paths review --session-id "test-pkwonly-$$" >/dev/null 2>err
+RC=$?
+assert "'--paths review'(글롭 없이 키워드부터) 도 글롭 0개로 거부된다" "test '$RC' -eq 1 && grep -q 'requires at least one glob' err"
+"$SCRIPT" --paths 'src/*' review --session-id "test-pkw-$$" >out 2>err
+RC=$?
+assert "'--paths glob review' 는 review 를 글롭으로 삼키지 않고 정확히 한 번 공지한다" "test '$RC' -eq 0 && test \"\$(grep -c '인자는 제거됐다' out)\" -eq 1 && grep -qF -- '\`review\`' out"
+"$SCRIPT" --paths 'src/*' branch qg-fix1-branch-check --session-id "test-pbr-$$" >/dev/null 2>err
+RC=$?
+assert "'--paths glob branch <name>' 는 branch 를 글롭으로 삼키지 않고 워크트리 생성을 시도한다" "test '$RC' -eq 1 && grep -q 'worktree creation failed' err"
 "$SCRIPT" branch review --session-id "test-br-$$" >out 2>&1
 RC=$?
 assert "'branch review' 는 review 를 브랜치 이름으로 삼키지 않고 공지한다" "test '$RC' -eq 0 && grep -qF -- '\`review\` 인자는 제거됐다' out"

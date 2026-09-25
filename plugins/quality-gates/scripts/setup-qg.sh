@@ -37,8 +37,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --paths)
       # 스코프 override 는 SKILL 이 $ARGUMENTS 에서 직접 읽는다 — 여기서는 소비만 한다.
+      # 다음 토큰이 없거나 `--` 로 시작하거나 제거/branch 키워드면 글롭 0개 —
+      # 아래 while 루프가 한 번도 안 돌 조건과 정확히 같아야 한다(그래야 0글롭이
+      # 조용히 통과하지 않는다).
       shift
-      if [[ $# -eq 0 ]] || [[ "$1" =~ ^-- ]]; then
+      if [[ $# -eq 0 ]] || [[ "$1" =~ ^-- ]] || [[ "$1" =~ ^(review|runtime|both|branch)$ ]]; then
         echo "❌ Error: --paths requires at least one glob" >&2
         exit 1
       fi
