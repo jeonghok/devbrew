@@ -30,7 +30,7 @@ Brewing better dev tools for Claude Code.
 
 | Plugin | Description | Category |
 |--------|-------------|----------|
-| [quality-gates](plugins/quality-gates/) | 2-gate quality verification pipeline (review + runtime) | development |
+| [quality-gates](plugins/quality-gates/) | Quality verification pipeline — one pipeline, one verdict (review + differential test) | development |
 | [project-init](plugins/project-init/) | Git workflow initialization: branching strategy, commit conventions, PR process | development |
 
 ## Python

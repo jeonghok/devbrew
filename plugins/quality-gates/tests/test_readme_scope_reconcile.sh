@@ -23,11 +23,11 @@ present "phase-1 병렬 ≤ 8"      'Phase 1 병렬 ≤ 8'
 present "총/iteration ≤ 10"      '총/iteration ≤ 10'
 present "P22 transparency-기반 restate" 'transparency'
 
-echo "== AC10: §166 3-tier + prerequisites =="
-present "§166 3-tier 헤딩"       '3-tier'
-present "Tier A floor"           'Tier A'
-present "Tier B codex"           'Tier B'
-present "prereq: Tier C optional decl (body-unique)" 'Tier C optional dependencies'
+echo "== AC10: 각도 + 리뷰어 구성 + prerequisites (R-AF, Tier 어휘 → 각도 어휘) =="
+present "리뷰어 구성 헤딩"              '리뷰어 구성 — 각도 셋 + 추가 리뷰어'
+present "보안 각도 always-run 표기"      '보안 각도 — 매 iteration (모델이 못 뺌)'
+present "다른 전제 각도(codex) 표기"     '다른 전제 각도 — detect_codex 참이면'
+present "prereq: 추가 리뷰어 optional decl (body-unique)" 'Prerequisites (추가 리뷰어 optional dependencies)'
 present "prereq: pr-review-toolkit named (body-unique)" 'pr-review-toolkit`(code-reviewer'
 present "prereq: feature-dev named (body-unique)"       'feature-dev`(code-architect)'
 
@@ -40,7 +40,7 @@ echo "== C5 regression lock: codex-depth reconcile (availability-floor vs standa
 # Teeth boundary (cf. AC11): the negatives pin the known old phrasings; a fresh
 # paraphrase that re-contradicts would slip the grep — the dynamic codex review
 # is the backstop for that residue.
-presentE "codex cost = availability-floor, all depths (body-unique)" 'every non-trivia Review gate dispatch when detected'
+presentE "codex cost = availability-floor, all depths (body-unique)" 'every non-trivia pipeline dispatch when detected'
 goneE    "old 'standard/deep-only' codex-cost claim 제거"            'on each .standard./.deep. Review gate dispatch'
 goneE    "Deep 비용행 codex depth-귀속 제거"                          'Tier C 전문가 다수 \+ codex'
 

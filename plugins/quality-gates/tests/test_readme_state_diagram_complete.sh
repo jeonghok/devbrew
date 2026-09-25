@@ -31,11 +31,11 @@ EXPECTED_MARKERS=(
   "setup-qg.sh"
   "SKILL preflight"
   "trivia escape"
-  "Review gate iter loop"
-  "Runtime gate dispatch"
+  "qg iter loop"
+  "② differential test"
+  "⑤ synthesize → verdict"
   "AskUserQuestion"
   "findings remain"
-  "Runtime"
   "Final summary"
 )
 missing=()
@@ -50,5 +50,14 @@ if [[ "${#missing[@]}" -gt 0 ]]; then
   printf '  - %s\n' "${missing[@]}"
   exit 1
 fi
+
+# Negative lock — two-gate diagram markers must not survive the one-pipeline
+# merge (positive markers above are the paired mutation target).
+for gone in "Runtime gate dispatch" "Review gate iter loop" "gate scope?" "NEEDS_RESOLUTION"; do
+  if grep -qF "$gone" "$README"; then
+    echo "FAIL: README still carries the two-gate diagram marker: $gone"
+    exit 1
+  fi
+done
 
 echo "PASS: README v1.32.0 pipeline diagram complete (${#EXPECTED_MARKERS[@]} markers + no stateDiagram-v2)"

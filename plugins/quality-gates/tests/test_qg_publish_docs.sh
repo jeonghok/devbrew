@@ -41,7 +41,8 @@ grep -qF 'command-layer opt-in offer' "$README" \
   && no "README still describes the withdrawn command-layer offer" || ok "README free of the withdrawn offer"
 grep -qF 'command-layer opt-in offer' "$PLUGIN_ROOT/skills/publishing-pr-understanding/SKILL.md" \
   && no "publish SKILL still describes the withdrawn command-layer offer" || ok "publish SKILL free of the withdrawn offer"
-# 유지 불변식: '세 번째 게이트' 부정 + gh 게이트 부재는 남아 있어야.
-grep -qF '세 번째 게이트가 아니다' "$README" \
-  && ok "README keeps 'not a third gate'" || no "third-gate framing lost"
+# 유지 불변식: publish 는 파이프라인의 일부가 아니다(v9 — 두 게이트에서 한 파이프라인으로
+# 바뀌며 '세 번째 게이트가 아니다' 문구도 그 어휘를 따라갔다) + gh 게이트 부재는 남아 있어야.
+grep -qF '파이프라인의 일부가 아니다' "$README" \
+  && ok "README keeps 'not part of the pipeline'" || no "third-gate framing lost"
 finish
