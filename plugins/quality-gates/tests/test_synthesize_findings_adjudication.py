@@ -63,6 +63,90 @@ class TestUnadjudicated(unittest.TestCase):
         self.assertEqual(dropped, 1, "기존 dropped 카운터가 그대로 산다")
 
 
+class TestRaiseGuard(unittest.TestCase):
+    """`_apply_raise` 는 브리지를 거치지 않는 값에도 서야 한다 — 재비판 경로는 브리지가 먼저
+    접으므로 CLI 로는 이 가드에 닿지 않는다(모의 실행: 접기를 지워도 CLI 케이스는 GREEN)."""
+
+    def _one(self, sev):
+        return {"agent": "security-reviewer", "file": "a.py", "line": 1,
+                "severity": sev, "summary": "s", "confidence": 8}
+
+    def test_lowercase_raise_folds_before_the_guard(self):
+        f = self._one("IMPORTANT")
+        v = {"finding_id": mod.finding_id(f), "verdict": "raise", "adjusted_severity": "critical"}
+        out, _ = mod.apply_verdicts([f], [v], ledger=mod.Ledger(items="open"))
+        self.assertEqual(out[0]["severity"], "CRITICAL", "소문자 critical 이 SUGGESTION 랭크로 떨어지면 raise 가 저지된다")
+
+    def test_mixed_case_current_severity_is_not_lowered(self):
+        f = self._one("Critical")
+        v = {"finding_id": mod.finding_id(mod._normalize_identity(dict(f))), "verdict": "raise",
+             "adjusted_severity": "IMPORTANT"}
+        L = mod.Ledger(items="open")
+        out, _ = mod.apply_verdicts([f], [v], ledger=L)
+        self.assertEqual(mod._norm_sev(out[0]), "CRITICAL", "낡은 매핑의 raise 가 CRITICAL 을 내리면 안 된다")
+        self.assertTrue(any("강제(게이트 변경)" in r for r in L.report()["reasons"]),
+                        "내렸을 raise 는 판정을 바꾼 강제로 공시된다")
+
+    def test_equal_raise_is_not_a_gate_coercion(self):
+        f = self._one("IMPORTANT")
+        v = {"finding_id": mod.finding_id(f), "verdict": "raise", "adjusted_severity": "important"}
+        L = mod.Ledger(items="open")
+        out, _ = mod.apply_verdicts([f], [v], ledger=L)
+        self.assertEqual(out[0]["severity"], "IMPORTANT")
+        self.assertFalse(any("강제(게이트 변경)" in r for r in L.report()["reasons"]),
+                         "같은 등급 raise 는 표기 강제(gate=False)다")
+
+
+class TestPromoteAuthorIsRequired(unittest.TestCase):
+
+    def test_promote_new_findings_requires_author(self):
+        """기본값이 있으면 판정자 자리가 사라진 뒤 유령 저자가 된다(PR3·PR4a 부채)."""
+        with self.assertRaises(TypeError):
+            mod.promote_new_findings([], [])
+        promoted, dropped = mod.promote_new_findings(
+            [{"file": "a.py", "line": 1, "severity": "IMPORTANT", "summary": "s"}], [],
+            author="doc-recritic")
+        self.assertEqual(dropped, 0)
+        self.assertEqual(promoted[0]["agent"], "doc-recritic")
+
+    def test_fold_sev_is_the_one_fold(self):
+        """raise 가드와 _norm_sev 가 같은 접기를 쓴다 — 둘이 갈리면 소문자 raise 가 저지된다."""
+        self.assertEqual(mod._fold_sev(" critical "), "CRITICAL")
+        self.assertEqual(mod._fold_sev(["CRITICAL"]), ["CRITICAL"])
+        self.assertEqual(mod._norm_sev({"severity": "Critical"}), "CRITICAL")
+        self.assertEqual(mod._norm_sev({"severity": ["CRITICAL"]}), "SUGGESTION")
+
+
+class TestMalformedContainerAtDocLevel(unittest.TestCase):
+    """R-AD — `verdicts:`/`new_findings:` 가 컨테이너 수준에서 매핑·스칼라인 옛
+    --adversarial 문서 모양은 CLI 로 다시 나타날 수 없다: `recritic_bridge.
+    to_adjudication_doc` 는 이 두 키를 항상 list 로 만들거나(또는 판정자 사망으로
+    전환) 넘긴다. 그래도 `_as_list` 의 이 방어(항목 수만큼 dropped 로 세고 크래시
+    하지 않는다)는 살아 있어야 한다 — 단위 테스트로만 닿는다(옛
+    test_synthesize_promoted_findings.sh 케이스 10c·13·15)."""
+
+    def test_new_findings_scalar_is_not_a_crash(self):
+        L = mod.Ledger(items="open")
+        items, dropped = mod.extract_new_findings({"new_findings": 5}, ledger=L)
+        self.assertEqual(items, [])
+        self.assertEqual(dropped, 1, "스칼라 컨테이너는 주장 하나로 센다")
+
+    def test_new_findings_mapping_is_counted_dropped(self):
+        L = mod.Ledger(items="open")
+        items, dropped = mod.extract_new_findings(
+            {"new_findings": {"first": {"file": "x.py"}, "second": {"file": "y.py"}}},
+            ledger=L)
+        self.assertEqual(items, [])
+        self.assertEqual(dropped, 2, "매핑 컨테이너는 항목 수만큼 센다")
+
+    def test_verdicts_mapping_is_counted_dropped(self):
+        L = mod.Ledger(items="open")
+        items, dropped = mod.extract_verdicts(
+            {"verdicts": {"a": {"finding_id": "x", "verdict": "reject"}}}, ledger=L)
+        self.assertEqual(items, [])
+        self.assertEqual(dropped, 1)
+
+
 def _run(argv):
     """`main()` 을 돌려 stdout 을 문자열로 돌려준다.
 

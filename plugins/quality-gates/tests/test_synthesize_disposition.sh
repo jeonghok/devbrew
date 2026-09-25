@@ -15,8 +15,11 @@
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/../../../shared/tests/assert.sh"
+. "$HERE/lib/recritic_fixture.sh"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
+PLUGIN_ROOT="$(cd "$HERE/.." && pwd)"
 SCRIPT="$REPO_ROOT/plugins/quality-gates/scripts/synthesize_findings.py"
+export PYTHONDONTWRITEBYTECODE=1
 
 # `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 이 락의
 # 코퍼스는 상수다(도출이 아니다). `# guards:` 는 `plugins/*/scripts/…` 글롭으로
@@ -46,6 +49,13 @@ fi
 TMPD="$(mktemp -d -t qgdisp-XXXXXX)" || exit 1
 trap 'rm -rf "$TMPD"' EXIT
 
+# R-AD — 옛 픽스처의 `new_findings: "리스트가 아니다"`(스칼라 컨테이너 소실)는
+# --adversarial 문서 직접 읽기 시절의 모양이다. 재비판 경로(`recritic_bridge.
+# to_adjudication_doc`)는 `added` 를 항상 list 로 만들어(아니면 판정자 사망) 이
+# doc 이 CLI 로 다시 나타날 수 없다(단위 테스트로만 닿는다 —
+# test_synthesize_findings_adjudication.py::TestMalformedContainerAtDocLevel).
+# 아래 「형태 불량」 finding(항목 파손)이 이미 배관 손실 칸을 1 이상으로 채우므로
+# 그 축은 이 파일 안에서 그대로 산다.
 cat > "$TMPD/findings.yaml" <<'YAML'
 findings:
   - {agent: sec, file: a.py, line: 1, severity: CRITICAL, summary: kept, confidence: 9}
@@ -56,18 +66,21 @@ findings:
   - {agent: sec, file: d.py, line: 4, severity: IMPORTANT, summary: 판정없음, confidence: 8}
 YAML
 
-cat > "$TMPD/adversarial.yaml" <<'YAML'
-verdicts:
-  - {finding_id: "sec-a.py-1", verdict: confirm}
-  - {finding_id: "sec-b.py-2", verdict: reject}
-  - {finding_id: "sec-c.py-3", verdict: confirm}
-  - {finding_id: "rev-a.py-1", verdict: confirm}
-new_findings: "리스트가 아니다 — 컨테이너 소실"
-YAML
+# anonymize() 는 매핑이 아닌 항목(다섯째)을 건너뛰고 번호를 매긴다 — f1..f4 는
+# 앞 네 매핑 항목, f5 는 (건너뛴 다섯째 다음의) 여섯째 항목 d.py 다.
+rf_prep "$TMPD"
+rf_reply "$TMPD" 'verdicts:
+  - f: f1
+    verdict: confirm
+  - f: f2
+    verdict: reject
+    evidence: "근거"
+  - f: f3
+    verdict: confirm
+  - f: f4
+    verdict: confirm'
 
-OUT="$(PYTHONDONTWRITEBYTECODE=1 python3 "$SCRIPT" \
-        --findings "$TMPD/findings.yaml" \
-        --adversarial "$TMPD/adversarial.yaml" 2>"$TMPD/err.txt")"
+OUT="$(rf_synth "$TMPD" 2>"$TMPD/err.txt")"
 note "$OUT"
 
 assert_grep "$OUT" '수용 [1-9]'      "수용이 세어진다 (accept — T1 표에 없던 행)"
@@ -89,19 +102,20 @@ assert_grep "$OUT" '\*\*배관 손실:\*\* [1-9]' "항목 파손 + 입력 실패
 # 두 분기 중 하나만 잠겨 있었다는 뜻). 배관 손실이 「clean」위에서 사라지는
 # 것이 가장 위험하다 — 입력 실패·항목 파손이 몇 건이든 화면에서 통째로
 # 증발하는데 게이트는 clean 을 찍는다.
-cat > "$TMPD/clean_findings.yaml" <<'YAML'
+mkdir -p "$TMPD/clean"
+cat > "$TMPD/clean/findings.yaml" <<'YAML'
 findings:
   - "CRITICAL: bare string finding — 매핑이 아니다"
   - {agent: sec, file: low.py, line: 9, severity: SUGGESTION, summary: low-conf, confidence: 2}
   - {agent: sec, file: rej.py, line: 3, severity: IMPORTANT, summary: rejected-one, confidence: 8}
 YAML
-cat > "$TMPD/clean_adversarial.yaml" <<'YAML'
-verdicts:
-  - {finding_id: "sec-rej.py-3", verdict: reject}
-YAML
-OUT_CLEAN="$(PYTHONDONTWRITEBYTECODE=1 python3 "$SCRIPT" \
-        --findings "$TMPD/clean_findings.yaml" \
-        --adversarial "$TMPD/clean_adversarial.yaml" 2>"$TMPD/err_clean.txt")"
+# 매핑 아닌 첫째 항목이 건너뛰어져 f1=low.py, f2=rej.py 다.
+rf_prep "$TMPD/clean"
+rf_reply "$TMPD/clean" 'verdicts:
+  - f: f2
+    verdict: reject
+    evidence: "근거"'
+OUT_CLEAN="$(rf_synth "$TMPD/clean" 2>"$TMPD/err_clean.txt")"
 note "$OUT_CLEAN"
 
 assert_grep "$OUT_CLEAN" 'No high-confidence findings' \

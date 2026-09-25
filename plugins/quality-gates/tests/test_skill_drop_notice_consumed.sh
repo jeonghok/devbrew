@@ -14,22 +14,29 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 QG="$ROOT/plugins/quality-gates"
 SKILL="$QG/skills/quality-pipeline/SKILL.md"
 SCRIPT="$QG/scripts/synthesize_findings.py"
+PLUGIN_ROOT="$QG"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+. "$(dirname "$0")/lib/recritic_fixture.sh"
 
 tmp="$(mktemp -d -t qg-dropnotice-XXXXXX)" || exit 1
 trap 'rc=$?; rm -rf "$tmp"; exit $rc' EXIT
 
 # ── (a) 생산자 — 두 출처 모두에서 공지가 stdout에 나온다 ──────────────────────
-cat > "$tmp/adv.yaml" <<'Y'
-verdicts: []
-new_findings:
-  - severity: CRITICAL
-    summary: "no file key"
-Y
+# R-AD — 재비판 경로(recritic_bridge.to_adjudication_doc)는 added 항목의 file 이
+# 없으면 「미지」로 채워 넘긴다(옛 --adversarial 문서처럼 file 없는 항목을 그대로
+# malformed 로 떨어뜨리지 않는다). bridge 가 채우지 않는 필수 필드는 summary 뿐이라
+# 그것이 없는 항목으로 같은 성질(승격 경로의 malformed 드롭)을 잰다.
+mkdir -p "$tmp/a1"
+printf '[]\n' > "$tmp/a1/findings.yaml"
+rf_prep "$tmp/a1"
+rf_reply "$tmp/a1" 'verdicts: []
+added:
+  - file: x.py
+    severity: CRITICAL'
 printf 'findings: []\n' > "$tmp/empty.yaml"
 printf 'findings:\n  - "CRITICAL: bare string finding"\n' > "$tmp/str.yaml"
 
-out_a="$(python3 "$SCRIPT" --adversarial "$tmp/adv.yaml" --findings "$tmp/empty.yaml" 2>/dev/null)"
+out_a="$(rf_synth "$tmp/a1" 2>/dev/null)"
 out_b="$(python3 "$SCRIPT" --findings "$tmp/str.yaml" 2>/dev/null)"
 
 if printf '%s' "$out_a" | grep -q 'dropped as malformed'; then

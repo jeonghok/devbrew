@@ -134,8 +134,6 @@ def to_adjudication_doc(block_text, mapping, ledger, diff_text=None):
     **변환 전** 원문 길이다. 합성기는 이 값으로 「탐지 0 · 재비판 0」을 판단한다 —
     변환 «후» 길이(`verdicts`/`new_findings`)만 보면 held·파손된 원문(모르는 f 뿐인
     verdicts, 매핑이 아닌 added 항목)이 0 으로 접혀 재비판 0 을 거짓으로 주장한다.
-    `load_yaml_doc`(옛 경로)의 doc 에는 이 두 키가 없다 — 호출자가 `args.recritic is
-    not None` 으로 이미 갈랐으므로 옛 경로에서 이 키를 찾을 일이 없다.
 
     콜라이딩 finding_id(같은 agent·file·line, 다른 severity 로 두 finding 이 도출)의
     f 들은 **전부** 판정돼야, 그리고 그 판정이 **전부 같아야**(raise 면 `to` 까지)
@@ -274,7 +272,7 @@ def _read_text(path):
 
 
 def load_recritic(recritic_path, map_path, diff_path, ledger):
-    """합성기의 `--recritic` 진입점. Returns `(doc, dead)` — `load_yaml_doc` 과 같은 모양.
+    """합성기의 `--recritic` 진입점. Returns `(doc, dead)`.
 
     fix round 1 Important 3 — 역매핑 항목마다 형태를 검증한다. `to_adjudication_doc`
     은 `mapping[key]["finding_id"]`/`["severity"]` 를 방어 없이 첨자로 읽는다: 항목이

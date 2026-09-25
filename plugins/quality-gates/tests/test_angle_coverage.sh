@@ -17,6 +17,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd -- "$PLUGIN_ROOT/../.." && pwd)"
 . "$REPO_ROOT/shared/tests/assert.sh"
+. "$SCRIPT_DIR/lib/recritic_fixture.sh"
 A="$PLUGIN_ROOT/scripts/angles.py"
 SYNTH="$PLUGIN_ROOT/scripts/synthesize_findings.py"
 export PYTHONDONTWRITEBYTECODE=1
@@ -54,12 +55,14 @@ write_angles() {
   for kv in "$@"; do printf '%s\n' "$kv" >> "$f"; done
 }
 
-# mk_inputs <디렉토리> — 판정 0 · finding 0 인 «깨끗한» 입력 한 벌.
+# mk_inputs <디렉토리> — 판정 0 · finding 0 인 «깨끗한» 입력 한 벌(재비판 경로).
 # 이 벌을 기준으로 각도만 바꿔 가며 AC11·AC12 를 가른다: 각도 말고는 clean 을
 # 막을 것이 아무것도 없어야 「각도가 막았다」가 입증된다.
 mk_inputs() {
-  printf 'verdicts: []\n' > "$1/adv.yaml"
-  printf '[]\n' > "$1/f.yaml"
+  printf '[]\n' > "$1/findings.yaml"
+  rf_prep "$1"
+  rf_reply "$1" 'verdicts: []
+added: []'
 }
 
 case_synth_angles_off_equals_on_minus_block() {
@@ -70,8 +73,8 @@ case_synth_angles_off_equals_on_minus_block() {
   local f="$T/angles.txt"
   write_angles "$f" "security: filled" "adjudication: filled" "different-premise: filled"
   local off on off_rc=0 on_rc=0
-  off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict) || off_rc=$?
-  on=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f") || on_rc=$?
+  off=$(rf_synth "$T" --emit-verdict) || off_rc=$?
+  on=$(rf_synth "$T" --emit-verdict --angles "$f") || on_rc=$?
   assert_eq "$off_rc" "0" "각도 없는 경로가 정상 종료한다"
   assert_eq "$on_rc"  "0" "각도 있는 경로가 정상 종료한다"
   assert_not_grep "$off" '^angles:$' "--angles 를 안 주면 angles: 블록이 없다"
@@ -115,8 +118,7 @@ case_synth_blocking_absent_is_not_certified() {
       if [ "$b" = "$a" ]; then printf '%s: absent\n' "$b" >> "$f"
       else printf '%s: filled\n' "$b" >> "$f"; fi
     done <<< "$ANGLES"
-    out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-            --emit-verdict --angles "$f")
+    out=$(rf_synth "$T" --emit-verdict --angles "$f")
     assert_grep     "$out" '^verdict: not-certified$' "'$a' 가 absent 면 미판정 (AC11)"
     assert_grep     "$out" '^reason: angle-absent$'   "'$a' 의 사유가 angle-absent 다"
     assert_not_grep "$out" '^verdict: clean$'          "'$a' 가 absent 인데 clean 이 아니다"
@@ -131,8 +133,7 @@ case_synth_different_premise_absent_stays_clean() {
   local T; T=$(mktemp -d); mk_inputs "$T"
   local f="$T/angles.txt"
   write_angles "$f" "security: filled" "adjudication: filled" "different-premise: absent"
-  local out; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-                     --emit-verdict --angles "$f")
+  local out; out=$(rf_synth "$T" --emit-verdict --angles "$f")
   assert_grep     "$out" '^verdict: clean$'               "다른 전제의 부재는 막지 않는다 (AC12)"
   assert_grep     "$out" '^  different-premise: absent$'  "그래도 공시된다"
   assert_not_grep "$out" '^reason: angle-absent$'         "사유가 서지 않는다"
@@ -144,14 +145,14 @@ case_synth_self_adjudication_is_atomic_failure() {
   # 비어 있어야 한다. 비어 있지 않으면 rc 를 안 보는 줄-지향 소비자가 완전해
   # 보이는 보고서를 성공으로 읽는다(PR2 Ruling T5-b 가 산 자리).
   local T; T=$(mktemp -d)
-  printf 'verdicts: []\n' > "$T/adv.yaml"
-  printf -- '- {agent: security-reviewer, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/f.yaml"
+  printf -- '- {agent: security-reviewer, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts: []'
   local f="$T/angles.txt"
   write_angles "$f" "security: filled" "adjudication: folded_into:security-reviewer" \
                     "different-premise: filled"
   local out rc=0
-  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-          --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  out=$(rf_synth "$T" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
   assert_eq "$rc" "4" "finding 을 낸 리뷰어에게 판정 각도를 접으면 exit 4 (AC10a)"
   assert_eq "$out" ""  "실패 경로의 stdout 이 비어 있다 (fail4 는 원자적이다)"
   # 원인을 핀한다 — rc 4 + 빈 stdout 은 어느 fail4 든 만든다(수행자 문법 오류도).
@@ -168,14 +169,16 @@ case_synth_folding_into_a_silent_reviewer_is_ok() {
   # «안 냈으면» 정상이다. 이것이 없으면 「folded_into 를 전부 막는다」나 「저자를 각도
   # 파일에서 뽑는다」(계획 R-H 가 기각한 대안)가 위 케이스와 구별되지 않는다.
   local T; T=$(mktemp -d)
-  printf 'verdicts:\n  - {finding_id: security-reviewer-a.py-1, verdict: confirm}\n' > "$T/adv.yaml"
-  printf -- '- {agent: security-reviewer, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/f.yaml"
+  printf -- '- {agent: security-reviewer, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts:
+  - f: f1
+    verdict: confirm'
   local f="$T/angles.txt"
   write_angles "$f" "security: filled" "adjudication: folded_into:scout" \
                     "different-premise: filled"
   local out rc=0
-  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-          --emit-verdict --angles "$f" 2>/dev/null) || rc=$?
+  out=$(rf_synth "$T" --emit-verdict --angles "$f" 2>/dev/null) || rc=$?
   assert_eq   "$rc"  "0"                      "finding 을 안 낸 리뷰어에게 접는 것은 합성기에서도 정상이다"
   assert_grep "$out" '^  adjudication: folded_into:scout$' "접힌 상태가 그대로 공시된다"
   assert_grep "$out" '^verdict: '             "판정이 선다"
@@ -187,18 +190,20 @@ case_synth_suppressed_finding_still_counts_as_authored() {
   # finding 만 낸 리뷰어가 자기 판정을 할 수 있다. 저자를 `kept` 에서 뽑는 변이가
   # 이 케이스 없이 스위트 전체를 GREEN 으로 남겼다(변이 표 16행).
   local T; T=$(mktemp -d)
-  printf 'verdicts:\n  - {finding_id: scout-a.py-1, verdict: confirm}\n' > "$T/adv.yaml"
-  printf -- '- {agent: scout, file: a.py, line: 1, severity: SUGGESTION, confidence: 3, summary: s, proposed_fix: f}\n' > "$T/f.yaml"
+  printf -- '- {agent: scout, file: a.py, line: 1, severity: SUGGESTION, confidence: 3, summary: s, proposed_fix: f}\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts:
+  - f: f1
+    verdict: confirm'
   # 전제 확인 — 이 픽스처의 유일한 finding 이 실제로 «억제» 경로를 탄다. 안 타면
   # 아래 exit 4 는 억제와 무관한 이유로 선다.
-  local off; off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  local off; off=$(rf_synth "$T" --emit-verdict)
   assert_grep "$off" 'No high-confidence findings\. 1 low-confidence' "전제: 픽스처의 finding 은 억제된다"
   local f="$T/angles.txt"
   write_angles "$f" "security: filled" "adjudication: folded_into:scout" \
                     "different-premise: filled"
   local out rc=0
-  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-          --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  out=$(rf_synth "$T" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
   assert_eq "$rc" "4" "억제된 finding 만 낸 리뷰어에게 판정 각도를 접어도 exit 4 (R-H)"
   assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다"
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다"
@@ -208,12 +213,15 @@ case_synth_suppressed_finding_still_counts_as_authored() {
   rm -rf "$T"
 }
 
-# mk_rejected <디렉토리> <저자> — <저자> 의 유일한 finding 을 판정자가 기각한 입력
-# (픽스처 파일명 `adv.yaml`·플래그 `--adversarial`·`author="adversarial"` 기본값은
-# R-N 으로 리터럴 유지 — PR4a 가 대체한 것은 디스패치되는 agent 뿐이다).
+# mk_rejected <디렉토리> <저자> — <저자> 의 유일한 finding 을 재비판자가 근거를 대고
+# 기각한 입력(재비판 경로 — f1 은 findings.yaml 의 유일 항목이다).
 mk_rejected() {
-  printf 'verdicts:\n  - {finding_id: %s-a.py-1, verdict: reject}\n' "$2" > "$1/adv.yaml"
-  printf -- '- {agent: %s, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: rejected-one, proposed_fix: f}\n' "$2" > "$1/f.yaml"
+  printf -- '- {agent: %s, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: rejected-one, proposed_fix: f}\n' "$2" > "$1/findings.yaml"
+  rf_prep "$1"
+  rf_reply "$1" 'verdicts:
+  - f: f1
+    verdict: reject
+    evidence: "근거"'
 }
 
 case_synth_rejected_finding_still_counts_as_authored() {
@@ -223,15 +231,14 @@ case_synth_rejected_finding_still_counts_as_authored() {
   # verdict: clean 으로 샌다.
   local T; T=$(mktemp -d); mk_rejected "$T" scout
   # 전제 확인 — 이 픽스처의 finding 은 실제로 기각된다(표에 안 실린다).
-  local off; off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  local off; off=$(rf_synth "$T" --emit-verdict)
   assert_not_grep "$off" 'rejected-one' "전제: 픽스처의 finding 은 기각돼 표에 없다"
   assert_grep     "$off" '^verdict: clean$' "전제: --angles 없이는 clean 이다"
   local f="$T/angles.txt"
   write_angles "$f" "security: filled" "adjudication: folded_into:scout" \
                     "different-premise: filled"
   local out rc=0
-  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-          --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  out=$(rf_synth "$T" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
   assert_eq "$rc" "4" "기각된 finding 만 낸 리뷰어에게 판정 각도를 접어도 exit 4 (AC10a)"
   assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다"
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다"
@@ -249,13 +256,12 @@ case_synth_reviewer_sources_do_not_displace_agent() {
   local T srcs off out rc
   for srcs in '[someone-else]' 'someone-else'; do
     T=$(mktemp -d); mk_rejected "$T" scout
-    printf -- '- {agent: scout, sources: %s, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: rejected-one, proposed_fix: f}\n' "$srcs" > "$T/f.yaml"
-    off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+    printf -- '- {agent: scout, sources: %s, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: rejected-one, proposed_fix: f}\n' "$srcs" > "$T/findings.yaml"
+    off=$(rf_synth "$T" --emit-verdict)
     assert_not_grep "$off" 'rejected-one' "전제: sources=$srcs 인 finding 도 기각돼 표에 없다"
     write_angles "$T/angles.txt" "security: filled" "adjudication: folded_into:scout" \
                                  "different-premise: filled"
-    rc=0; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-                  --emit-verdict --angles "$T/angles.txt" 2>"$T/err") || rc=$?
+    rc=0; out=$(rf_synth "$T" --emit-verdict --angles "$T/angles.txt" 2>"$T/err") || rc=$?
     assert_eq "$rc" "4" "sources=$srcs 가 agent 를 가리지 않는다 — 기각된 finding 의 저자에게 접으면 exit 4"
     assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다 (sources=$srcs)"
     assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다 (sources=$srcs)"
@@ -266,20 +272,22 @@ case_synth_reviewer_sources_do_not_displace_agent() {
 }
 
 case_synth_promoted_finding_counts_as_authored() {
-  # 승격된 finding(adversarial 의 `new_findings:`, 저자 `adversarial`)도 「낸 것」이다.
+  # 승격된 finding(재비판자의 `added:`, 저자 `doc-recritic`)도 「낸 것」이다.
   # 판정 적용 전 입력(`raw`)에는 없고 dedup 뒤 목록에만 있다 — 저자를 `raw` 에서만
   # 뽑는 변이가 이 케이스 없이 스위트를 GREEN 으로 남겼다.
   local T; T=$(mktemp -d)
-  printf 'verdicts: []\nnew_findings:\n  - {file: b.py, line: 2, severity: IMPORTANT, summary: promoted-one}\n' > "$T/adv.yaml"
-  printf '[]\n' > "$T/f.yaml"
-  local off; off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
-  assert_grep "$off" 'promoted-one' "전제: 픽스처의 new_findings 가 승격돼 표에 실린다"
+  printf '[]\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts: []
+added:
+  - {file: b.py, line: 2, severity: IMPORTANT, summary: promoted-one}'
+  local off; off=$(rf_synth "$T" --emit-verdict)
+  assert_grep "$off" 'promoted-one' "전제: 픽스처의 added 가 승격돼 표에 실린다"
   local f="$T/angles.txt"
-  write_angles "$f" "security: filled" "adjudication: folded_into:adversarial" \
+  write_angles "$f" "security: filled" "adjudication: folded_into:doc-recritic" \
                     "different-premise: filled"
   local out rc=0
-  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-          --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  out=$(rf_synth "$T" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
   assert_eq "$rc" "4" "승격된 finding 의 저자에게 판정 각도를 접으면 exit 4 (AC10a)"
   assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다"
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다"
@@ -287,11 +295,12 @@ case_synth_promoted_finding_counts_as_authored() {
   assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (승격분)"
   # 억제된 승격분 — `raw` 에 없고 억제 뒤 `kept` 에도 없다. dedup 뒤 목록만 이 저자를
   # 본다. 저자를 `kept + raw` 에서 뽑는 변이(억제분 제외)를 이것만 가른다.
-  printf 'verdicts: []\nnew_findings:\n  - {file: b.py, line: 2, severity: SUGGESTION, confidence: 3, summary: promoted-low}\n' > "$T/adv.yaml"
-  off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  rf_reply "$T" 'verdicts: []
+added:
+  - {file: b.py, line: 2, severity: SUGGESTION, confidence: 3, summary: promoted-low}'
+  off=$(rf_synth "$T" --emit-verdict)
   assert_grep "$off" 'No high-confidence findings\. 1 low-confidence' "전제: 승격분이 억제된다"
-  rc=0; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-          --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  rc=0; out=$(rf_synth "$T" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
   assert_eq "$rc" "4" "억제된 승격분의 저자에게 접어도 exit 4 (R-H)"
   assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다 (억제된 승격분)"
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다 (억제된 승격분)"
@@ -308,8 +317,7 @@ case_synth_rejected_finding_of_another_reviewer_is_ok() {
   write_angles "$f" "security: filled" "adjudication: folded_into:scout" \
                     "different-premise: filled"
   local out rc=0
-  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-          --emit-verdict --angles "$f" 2>/dev/null) || rc=$?
+  out=$(rf_synth "$T" --emit-verdict --angles "$f" 2>/dev/null) || rc=$?
   assert_eq   "$rc"  "0"               "다른 리뷰어의 기각된 finding 은 접기를 막지 않는다"
   assert_grep "$out" '^verdict: clean$' "판정이 clean 으로 선다"
   rm -rf "$T"
@@ -323,12 +331,10 @@ case_synth_angles_flag_hygiene() {
   local f="$T/angles.txt"
   write_angles "$f" "security: filled" "adjudication: filled" "different-premise: filled"
   local rc=0
-  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-    --angles "$f" >/dev/null 2>&1 || rc=$?
+  rf_synth "$T" --angles "$f" >/dev/null 2>&1 || rc=$?
   assert_eq "$rc" "2" "--angles 는 --emit-verdict 없이는 usage 오류(exit 2)"
   rc=0
-  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-    --emit-verdict --angles "" >/dev/null 2>&1 || rc=$?
+  rf_synth "$T" --emit-verdict --angles "" >/dev/null 2>&1 || rc=$?
   assert_eq "$rc" "2" "빈 --angles 는 usage 오류(exit 2)"
   rm -rf "$T"
 }
@@ -339,9 +345,11 @@ case_synth_primary_source_death_is_angle_absent() {
   # 이 실행을 `findings-lost` 로 보고했다. `--angles` 없이도 서야 한다: 이 사유의
   # 산출자는 각도 파일이 아니라 원장이다.
   local T; T=$(mktemp -d)
-  printf 'verdicts: []\n' > "$T/adv.yaml"
-  local out; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" \
-                     --findings "$T/does-not-exist.yaml" --emit-verdict)
+  printf '[]\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts: []'
+  local out; out=$(python3 "$SYNTH" --findings "$T/does-not-exist.yaml" \
+                     --recritic "$T/reply.txt" --recritic-map "$T/map.json" --emit-verdict)
   assert_grep     "$out" '^verdict: not-certified$' "주 입력이 죽으면 미판정"
   assert_grep     "$out" '^reason: angle-absent$'   "사유가 angle-absent 다 (findings-lost 가 아니다)"
   assert_not_grep "$out" '^reason: findings-lost$'  "항목 소실로 오보고하지 않는다"
@@ -350,12 +358,13 @@ case_synth_primary_source_death_is_angle_absent() {
 
 case_synth_missing_adjudicator_doc_is_angle_absent() {
   # 부채 A (PR3 최종 리뷰) — 판정자 문서 경로를 줬는데 파일이 없다. 전에는
-  # `load_yaml_doc` 이 None 을 돌려 「판정자를 안 썼다」와 같아졌고, finding 이
-  # 0 이면 그대로 `clean` 이었다. 이제 주 입력 실패다(§6.4.3 — angle-absent).
+  # 없는 판정자 문서가 「판정자를 안 썼다」와 같아졌고, finding 이 0 이면 그대로
+  # `clean` 이었다. 이제 주 입력 실패다(§6.4.3 — angle-absent).
   local T; T=$(mktemp -d)
-  printf '[]\n' > "$T/f.yaml"
+  printf '[]\n' > "$T/findings.yaml"
   local out rc=0
-  out=$(python3 "$SYNTH" --adversarial "$T/gone.yaml" --findings "$T/f.yaml" --emit-verdict) || rc=$?
+  out=$(python3 "$SYNTH" --findings "$T/findings.yaml" \
+          --recritic "$T/gone.txt" --recritic-map "$T/gone.json" --emit-verdict) || rc=$?
   assert_eq "$rc" "0" "판정자 문서 부재는 호출 오류가 아니다 (rc 0)"
   assert_grep     "$out" '^verdict: not-certified$' "판정자 문서가 없으면 clean 이 아니다"
   assert_grep     "$out" '^reason: angle-absent$'   "사유는 angle-absent 다"
@@ -364,20 +373,22 @@ case_synth_missing_adjudicator_doc_is_angle_absent() {
 }
 
 case_synth_unusable_adjudicator_doc_is_angle_absent() {
-  # 부채 A 의 형제들 — 빈 파일 · YAML 파손 · 스칼라 · 비-UTF-8. 넷 다 「판정자가
+  # 부채 A 의 형제들 — 빈 응답 · YAML 파손 · 스칼라 블록 · 비-UTF-8. 넷 다 「판정자가
   # 아무것도 남기지 않았다」이고, 넷 다 traceback(exit 1)이 아니라 rc 0 + 미판정이다.
   local T; T=$(mktemp -d)
-  printf '[]\n' > "$T/f.yaml"
-  : > "$T/empty.yaml"
-  printf 'verdicts: [\n' > "$T/broken.yaml"
-  printf '5\n' > "$T/scalar.yaml"
-  printf 'verdicts: []\n# \xff\xfe\n' > "$T/nonutf8.yaml"
+  printf '[]\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  : > "$T/empty.txt"
+  printf '```docreview-recritic\nverdicts: [\n```\n' > "$T/broken.txt"
+  printf '```docreview-recritic\n5\n```\n' > "$T/scalar.txt"
+  printf '```docreview-recritic\nverdicts: []\n```\n# \xff\xfe\n' > "$T/nonutf8.txt"
   local k out rc
   for k in empty broken scalar nonutf8; do
     rc=0
-    out=$(python3 "$SYNTH" --adversarial "$T/$k.yaml" --findings "$T/f.yaml" --emit-verdict 2>/dev/null) || rc=$?
-    assert_eq "$rc" "0" "판정자 문서 '$k' — rc 0 (traceback 이 아니다)"
-    assert_grep "$out" '^reason: angle-absent$' "판정자 문서 '$k' — angle-absent"
+    out=$(python3 "$SYNTH" --findings "$T/findings.yaml" --recritic "$T/$k.txt" \
+            --recritic-map "$T/map.json" --emit-verdict 2>/dev/null) || rc=$?
+    assert_eq "$rc" "0" "판정자 응답 '$k' — rc 0 (traceback 이 아니다)"
+    assert_grep "$out" '^reason: angle-absent$' "판정자 응답 '$k' — angle-absent"
   done
   rm -rf "$T"
 }
@@ -388,7 +399,7 @@ case_synth_dead_adjudicator_with_findings_is_not_findings_lost() {
   # 나갔다. finding 이 살아 있으므로 판정은 defect 이고, 사유 목록에는 angle-absent
   # 만 있어야 한다.
   local T; T=$(mktemp -d)
-  cat > "$T/f.yaml" <<'YAML'
+  cat > "$T/findings.yaml" <<'YAML'
 - agent: scout
   file: a.py
   line: 3
@@ -397,7 +408,8 @@ case_synth_dead_adjudicator_with_findings_is_not_findings_lost() {
   summary: "x"
 YAML
   local out
-  out=$(python3 "$SYNTH" --adversarial "$T/gone.yaml" --findings "$T/f.yaml" --emit-verdict)
+  out=$(python3 "$SYNTH" --findings "$T/findings.yaml" \
+          --recritic "$T/gone.txt" --recritic-map "$T/gone.json" --emit-verdict)
   assert_grep     "$out" '^verdict: defect$'              "finding 은 살아남는다 (사람 쪽 fail-open)"
   assert_grep     "$out" '^reasons: \[angle-absent\]$'    "사유 목록은 angle-absent 하나다"
   assert_not_grep "$out" 'findings-lost'                  "항목 소실로 세지 않는다 (R-K)"
@@ -421,16 +433,19 @@ case_synth_effective_angles_show_the_dead_source() {
   # 실효 상태 `absent(source-failed)` 가 angles: 블록에 서고, 그 아래 사유가
   # angle-absent 다. finding 파일이 죽으면 보안 각도가 같은 표시를 받는다.
   local T; T=$(mktemp -d)
-  printf '[]\n' > "$T/f.yaml"
-  printf 'verdicts: []\n' > "$T/adv.yaml"
+  printf '[]\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts: []'
   local f="$T/angles.txt" out
   write_angles "$f" "security: filled" "adjudication: filled" "different-premise: filled"
-  out=$(python3 "$SYNTH" --adversarial "$T/gone.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f")
+  out=$(python3 "$SYNTH" --findings "$T/findings.yaml" \
+          --recritic "$T/gone.txt" --recritic-map "$T/gone.json" --emit-verdict --angles "$f")
   assert_grep     "$out" '^  adjudication: absent\(source-failed\)$' "판정자 사망이 판정 각도의 실효 상태로 보인다"
   assert_grep     "$out" '^  security: filled$'                      "살아 있는 축은 선언 그대로다"
   assert_not_grep "$out" '^  adjudication: filled$'                  "죽은 축을 filled 로 싣지 않는다 (자기모순 없음)"
   assert_grep     "$out" '^reason: angle-absent$'                    "사유와 각도 블록이 같은 사실을 말한다 (판정자 사망)"
-  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/gone.yaml" --emit-verdict --angles "$f")
+  out=$(python3 "$SYNTH" --findings "$T/gone.yaml" \
+          --recritic "$T/reply.txt" --recritic-map "$T/map.json" --emit-verdict --angles "$f")
   assert_grep     "$out" '^  security: absent\(source-failed\)$'     "finding 파일 사망은 보안 각도의 실효 상태다"
   assert_grep     "$out" '^  adjudication: filled$'                  "판정자는 살아 있다"
   assert_grep     "$out" '^reason: angle-absent$'                    "사유와 각도 블록이 같은 사실을 말한다"
@@ -443,10 +458,11 @@ case_synth_dead_adjudicator_does_not_launder_self_adjudication() {
   # 이면 거부해야 한다. 실효 상태에 걸면 판정자 사망이 Law 2 위반 선언을 «세탁»한다
   # (계획 모의 실행 변이 6b 가 rc 4 → rc 0 · `verdict: defect` 로 측정한 구멍).
   local T; T=$(mktemp -d)
-  printf -- '- agent: security-reviewer\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  printf -- '- agent: security-reviewer\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/findings.yaml"
   local f="$T/angles.txt" out rc=0 err
   write_angles "$f" "security: filled" "adjudication: folded_into:security-reviewer" "different-premise: filled"
-  out=$(python3 "$SYNTH" --adversarial "$T/gone.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  out=$(python3 "$SYNTH" --findings "$T/findings.yaml" \
+          --recritic "$T/gone.txt" --recritic-map "$T/gone.json" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
   err="$(cat "$T/err")"
   assert_eq       "$rc"  "4"                   "판정자가 죽어도 자기 판정 선언은 exit 4"
   assert_eq       "$out" ""                    "실패는 원자적이다 (빈 stdout)"
@@ -483,18 +499,22 @@ case_synth_author_identity_is_grammar_checked() {
   # 통과했다(대문자 한 글자로 자기 판정). 이제 저자 이름이 문법 밖이면 판정 자체를
   # 거부한다(R-M — 정규화하지 않는다: 접는 것은 추측이다).
   local T; T=$(mktemp -d)
-  printf 'verdicts: []\n' > "$T/adv.yaml"
+  printf '[]\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts: []'
   local f="$T/angles.txt" name out err rc
   write_angles "$f" "security: filled" "adjudication: folded_into:security-reviewer" "different-premise: filled"
   # 재비판 Important 1 — trailing \n. 파이썬 `$`(fullmatch 아닌 match)는 마지막
   # \n 앞에서도 서므로 `"security-reviewer\n"` 가 문법 안으로 오판됐다(성능자
   # 토큰과 다른 문자열인데도). 이름 목록에 그 값을 더한다 — 아래 loop 는
   # `%s` 치환이라 셸 변수의 리터럴 `\n`(역슬래시+n, 두 글자)이 YAML 큰따옴표
-  # 이스케이프로 그대로 실려 PyYAML 이 실제 개행으로 읽는다.
+  # 이스케이프로 그대로 실려 PyYAML 이 실제 개행으로 읽는다. `verdicts: []` 는
+  # 어느 f 도 가리키지 않으므로 findings.yaml 을 매 반복 갈아 끼워도 map.json 은
+  # 안 다시 만든다 — 참조되지 않는다.
   for name in 'Security-Reviewer' 'quality-gates:security-reviewer' 'security_reviewer' 'security reviewer' 'security-reviewer\n'; do
-    printf -- '- agent: "%s"\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' "$name" > "$T/f.yaml"
+    printf -- '- agent: "%s"\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' "$name" > "$T/findings.yaml"
     rc=0
-    out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+    out=$(rf_synth "$T" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
     err="$(cat "$T/err")"
     assert_eq       "$rc"  "4"      "저자 '$name' 는 문법 밖이라 exit 4"
     assert_eq       "$out" ""       "저자 '$name' — 실패는 원자적이다 (빈 stdout)"
@@ -508,9 +528,9 @@ case_synth_author_identity_is_grammar_checked() {
   # 판정 위반도 만들어 check_author_identity/check_self_adjudication 호출
   # 순서에 이 assert_contains 의 관측이 우연히 얹힌다(둘 다 exit 4 지만 메시지가
   # 갈린다) — 이 사례가 재려는 것은 신원 «문법» 위반이지 자기판정이 아니다.
-  printf -- '- agent: code-reviewer\n  sources: {a: 1}\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  printf -- '- agent: code-reviewer\n  sources: {a: 1}\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/findings.yaml"
   rc=0
-  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  out=$(rf_synth "$T" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
   err="$(cat "$T/err")"
   assert_eq       "$rc"  "4"          "sources={a: 1} 도 문법 밖 저자를 만든다"
   assert_eq       "$out" ""           "실패는 원자적이다 (sources={a: 1})"
@@ -521,9 +541,9 @@ case_synth_author_identity_is_grammar_checked() {
   # `\\n`(printf 포맷 문자열 안의 이중 역슬래시)가 printf 자체 이스케이프를 한 겹
   # 통과해 파일에는 리터럴 `\n`(역슬래시+n) 두 글자로 남는다 — YAML 이 그것을
   # 개행으로 읽는다.
-  printf -- '- agent: scout\n  sources: ["security-reviewer\\n"]\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  printf -- '- agent: scout\n  sources: ["security-reviewer\\n"]\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/findings.yaml"
   rc=0
-  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  out=$(rf_synth "$T" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
   err="$(cat "$T/err")"
   assert_eq       "$rc"  "4"     "sources 의 trailing \\n 도 exit 4"
   assert_eq       "$out" ""      "실패는 원자적이다 (sources trailing \\n)"
@@ -531,9 +551,9 @@ case_synth_author_identity_is_grammar_checked() {
   # 재비판 Important 1 형제 — 블록 스칼라(`agent: |`)로 적은 trailing \n. 큰따옴표
   # 이스케이프가 아니라 YAML 리터럴 블록 문법이 같은 문자열("security-reviewer\n")을
   # 낸다 — 저자를 어떻게 «적었는지»와 무관하게 신원 계약이 막아야 한다.
-  printf -- '- agent: |\n    security-reviewer\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  printf -- '- agent: |\n    security-reviewer\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/findings.yaml"
   rc=0
-  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  out=$(rf_synth "$T" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
   err="$(cat "$T/err")"
   assert_eq       "$rc"  "4"     "block-scalar agent 의 trailing \\n 도 exit 4"
   assert_eq       "$out" ""      "실패는 원자적이다 (block-scalar agent)"
@@ -545,24 +565,26 @@ case_synth_finding_without_agent_is_rejected_under_angles() {
   # R-M — `agent:` 를 뺀 finding 은 저자가 없다. 건너뛰면 리뷰어가 `agent:` 를 빼는
   # 것만으로 자기 판정이 된다(PR3 가 닫은 sources 우회와 같은 모양).
   local T; T=$(mktemp -d)
-  printf 'verdicts: []\n' > "$T/adv.yaml"
-  printf -- '- file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  printf '[]\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts: []'
+  printf -- '- file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/findings.yaml"
   local f="$T/angles.txt" rc=0 err
   write_angles "$f" "security: filled" "adjudication: filled" "different-premise: filled"
-  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" >/dev/null 2>"$T/err" || rc=$?
+  rf_synth "$T" --emit-verdict --angles "$f" >/dev/null 2>"$T/err" || rc=$?
   err="$(cat "$T/err")"
   assert_eq       "$rc"  "4"     "agent 없는 finding 은 --angles 아래서 exit 4"
   assert_contains "$err" "AC10a" "원인이 AC10a 신원 계약이다"
   # 대조 — --angles 가 없으면 신원 계약은 서지 않는다(오늘 동작 그대로)
   rc=0
-  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict >/dev/null 2>&1 || rc=$?
+  rf_synth "$T" --emit-verdict >/dev/null 2>&1 || rc=$?
   assert_eq "$rc" "0" "--angles 없이는 agent 없는 finding 도 통과한다 (계약은 각도 축의 것)"
   # 재비판 Minor — YAML `null`(agent: null)은 `f.get("agent")` 가 파이썬 `None` 을
   # 낸다. `str(None)` == 'None' 을 문법 밖 저자로 잘못 세면 `null` 도 「agent 없음」과
   # 같은 사건인데 다른 경로(신원 불량)로 잘못 분류된다.
-  printf -- '- agent: null\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  printf -- '- agent: null\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/findings.yaml"
   rc=0
-  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" >/dev/null 2>"$T/err" || rc=$?
+  rf_synth "$T" --emit-verdict --angles "$f" >/dev/null 2>"$T/err" || rc=$?
   err="$(cat "$T/err")"
   assert_eq           "$rc"  "4"     "agent: null 도 --angles 아래서 exit 4 (missing_agent 로 센다)"
   assert_contains     "$err" "AC10a" "원인이 AC10a 신원 계약이다 (agent: null)"
@@ -572,9 +594,9 @@ case_synth_finding_without_agent_is_rejected_under_angles() {
   # 적으면 그 None 은 dedup 파생물이 아니라 비신뢰 필드 그 자체다(R-M) — 문법 밖
   # 저자로 여전히 막아야 한다. 이전 가드(`if s is not None`)는 이 경우도 조용히
   # 통과시켰다(rc 0 + verdict: defect, 재비판이 측정).
-  printf -- '- agent: security-reviewer\n  sources: [null]\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/f.yaml"
+  printf -- '- agent: security-reviewer\n  sources: [null]\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n' > "$T/findings.yaml"
   local out2; rc=0
-  out2=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
+  out2=$(rf_synth "$T" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
   err="$(cat "$T/err")"
   assert_eq       "$rc"   "4"     "agent 는 문법 안인데 sources: [null] 이면 여전히 exit 4"
   assert_eq       "$out2" ""      "실패는 원자적이다 (sources: [null])"
@@ -586,11 +608,12 @@ case_synth_well_formed_authors_pass_identity() {
   # 양성 짝 — 문법 안의 저자만 있으면 신원 검사는 조용하다. 이 짝이 없으면
   # 「--angles 면 무조건 exit 4」로 구현해도 위 두 케이스가 통과한다.
   local T; T=$(mktemp -d)
-  printf 'verdicts: []\n' > "$T/adv.yaml"
-  printf -- '- agent: security-reviewer\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n  sources: [security-reviewer, codex]\n' > "$T/f.yaml"
+  printf -- '- agent: security-reviewer\n  file: a.py\n  line: 1\n  severity: IMPORTANT\n  confidence: 8\n  summary: "x"\n  sources: [security-reviewer, codex]\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts: []'
   local f="$T/angles.txt" rc=0 out
   write_angles "$f" "security: filled" "adjudication: filled" "different-premise: filled"
-  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict --angles "$f") || rc=$?
+  out=$(rf_synth "$T" --emit-verdict --angles "$f") || rc=$?
   assert_eq   "$rc" "0" "문법 안의 저자(agent · sources)는 통과한다"
   assert_grep "$out" '^verdict: defect$' "판정이 선다"
   rm -rf "$T"

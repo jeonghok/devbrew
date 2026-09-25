@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""판정 어휘 — 세 값과 닫힌 사유 열거 (설계 §6.4.3, AC8 · AC9 · AC23).
+"""판정 어휘 — 세 값과 닫힌 사유 열거 (설계 §6.4.3, AC8 · AC9).
 
 **판정 어휘를 이 파일 밖에 두지 않는다.** 산출자가 여럿이면 우선순위
 (`defect > not-certified > clean`)를 적용할 자리가 없어진다.
@@ -46,19 +46,6 @@ CAUSE_TO_REASON = {
     "bulk-pre-existing": "granularity-smear",
     "smeared": "granularity-smear",
 }
-
-# ── AC23 — 옛 판정 어휘 매핑표. **PR4 가 산출자(runtime-verifier)와 함께 이 블록을
-#    통째로 지운다.** PR5 시점에 남아 있으면 그 자체가 결함이다.
-#    값만 옮긴다 — 사유는 옮기지 않는다. `SKIP_WITH_EVIDENCE` 는 여러 원인을 한 값에
-#    접은 것이라 사유를 복원할 수 없고, 사유 없는 `not-certified` 는 AC8 위반이라
-#    낼 수 없다. 그래서 호출자가 `--reason` 을 함께 주지 않으면 fail-closed 다.
-LEGACY_VERDICTS = {
-    "PASS": "clean",
-    "FAIL": "defect",
-    "SKIP_WITH_EVIDENCE": "not-certified",
-    "NEEDS_RESOLUTION": "not-certified",
-}
-# ── AC23 블록 끝 ──────────────────────────────────────────────────────────
 
 
 def fail4(msg):
@@ -108,7 +95,7 @@ def defect_flag_of(differential_text):
 
 
 def decide(*, defect=False, review_blocked=False, angle_absent=False,
-           differential_text=None, extra_reasons=(), legacy_verdict=None):
+           differential_text=None, extra_reasons=()):
     reasons = []
 
     def add(r):
@@ -144,16 +131,6 @@ def decide(*, defect=False, review_blocked=False, angle_absent=False,
     if angle_absent:
         add("angle-absent")
 
-    if legacy_verdict is not None:
-        if legacy_verdict not in LEGACY_VERDICTS:
-            fail4(f"미지의 옛 판정값 '{legacy_verdict}'")
-        mapped = LEGACY_VERDICTS[legacy_verdict]
-        if mapped == "defect":
-            defect = True
-        elif mapped == "not-certified" and not reasons:
-            fail4(f"'{legacy_verdict}' 는 사유를 싣지 않는다 — "
-                  "사유 없는 not-certified 는 AC8 위반이다. --reason 을 함께 줘라")
-
     reasons.sort(key=REASONS.index)
     if defect:
         return {"verdict": "defect", "reason": None, "reasons": reasons}
@@ -185,7 +162,6 @@ def main():
     ap.add_argument("--review-blocked", action="store_true")
     ap.add_argument("--angle-absent", action="store_true")
     ap.add_argument("--reason", action="append", default=[])
-    ap.add_argument("--legacy-verdict", default=None)
     args = ap.parse_args()
     # 기본값을 `""` 로 두면 "플래그를 안 줬다" 와 "빈 경로를 줬다" 가 같은 값이
     # 된다 — 값을 못 구한 호출자가 `--differential "$DIFF_YAML"` 을 빈 변수로
@@ -198,17 +174,12 @@ def main():
         print("verdict.py: --differential 은 빈 문자열을 받지 않는다 "
               "(플래그를 생략하거나 실제 경로를 줘라)", file=sys.stderr)
         return 2
-    if args.legacy_verdict is not None and args.legacy_verdict == "":
-        print("verdict.py: --legacy-verdict 는 빈 문자열을 받지 않는다",
-              file=sys.stderr)
-        return 2
     sys.stdout.write(render(decide(
         defect=args.defect,
         review_blocked=args.review_blocked,
         angle_absent=args.angle_absent,
         differential_text=read_or_none(args.differential),
         extra_reasons=args.reason,
-        legacy_verdict=args.legacy_verdict,
     )))
     return 0
 
