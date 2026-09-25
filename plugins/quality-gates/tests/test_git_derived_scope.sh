@@ -63,8 +63,13 @@ grep -qF 'do NOT silently treat it as 0' <<<"$DEF" \
 # 작업이 건드리지 않는다 (양성 대조 — GREEN 이 정답). 표면 문구는 Task8(R-AA)
 # 가 `NOT certified clean` 에서 닫힌 사유 열거 `scope-empty` 로 바꿨다 — 대상은
 # 그 이동을 따라간다.
-grep -qF 'scope-empty' "$SK" \
-  && ok "양성 대조: 정직-verdict floor 문구 생존" \
-  || no "양성 대조 실패: floor 문구가 사라졌다"
+#
+# Fix round 1, Minor 6 — `scope-empty` 단독 리터럴은 파일에 4곳(Step 1b 소개 ·
+# honesty-norm 인용 두 곳 · floor 행 자신)에 있어, floor 행 자체를 지워도 나머지
+# 세 곳이 대신 만족시켜 GREEN 으로 남았다. floor 행 자신에만 있는 세 조각(0 카운트
+# 조건 · changes_exist 조건 · scope-empty 사유)이 «같은 줄»에 함께 있는지로 좁힌다.
+grep -qE 'resolved_scope_file_count == 0.*changes_exist == yes.*scope-empty' "$SK" \
+  && ok "양성 대조: 정직-verdict floor 행 자신이 생존(같은 줄에 세 조각 모두)" \
+  || no "양성 대조 실패: floor 행이 사라졌거나 세 조각이 흩어졌다"
 
 exit $FAIL

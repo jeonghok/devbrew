@@ -942,6 +942,7 @@ SKILL Step 4 가 싣는 판정 입력:
 | 이 스텝의 결과 | 합성기에 |
 |---|---|
 | R6 집계 exit 0 · 3키와 `attribution_status` 를 다 읽음 | `--differential "$aggregate_yaml"` — `degrade_causes` 는 `verdict.py` 가 사유로 옮긴다 |
+| ② 가 kill switch 없이 R-init 가드에서 중단됐다(원인 무관 — R6·`check_qa_ledger.py` 가 존재하기도 전이다) | `--reason error-axis` (`--differential` 없음) |
 | R6 어느 호출이든 non-zero · 키 판독 실패 | `--reason error-axis` (`--differential` 없음) |
 | `check_qa_ledger.py` non-zero | `--reason silent-drop` |
 | `check_qa_ledger.py` exit 0 이지만 원장(`runtime-evidence.md`)의 floor 5차원 중 하나라도 `degraded` 이거나 `unclaimed` unit 이 있다(그 게이트는 원장 내부 일관성만 보고 이 경우도 exit 0 을 낼 수 있다) | `--reason silent-drop` |

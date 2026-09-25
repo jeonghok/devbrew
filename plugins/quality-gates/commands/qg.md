@@ -116,7 +116,11 @@ qg는 "clean"이라 하지 않는다 — read-only `check-review-scope.sh`가 `c
 emit하고, 파이프라인의 **정직-verdict floor**가 `resolved scope 0 AND changes_exist == yes`이면
 판정이 `not-certified (scope-empty)` 가 된다(load-bearing, kill 불가). 무엇을
 리뷰할지(routing)는 모델이 소유 — 빈 scope면 모델이 `/qg branch`(전체 브랜치 리뷰)를 제안한다.
-진짜 변경 없음(genuine no-op)은 그대로 `clean`; 신호가 degraded면 fail-open + loud advisory.
+진짜 변경 없음(genuine no-op)도 더는 무조건 `clean` 이 아니다 — ②(차등 테스트)가 매
+iteration 도는 한, R1b 가 영향 unit 을 0개 고르면 차등 테스트 자신이 `expected-empty`
+를 내고 그것이 `not-certified (scope-empty)` 로 판정된다(정직-verdict floor 와는 별도
+경로 — resolved scope 0 문제가 아니라 test unit 0 문제다). 신호가 degraded면
+fail-open + loud advisory.
 
 암묵 session scope로 돌 때 qg는 그 사실을 한 줄로 밝힌다 (`Review scope: session (N files)` — 전체
 PR/브랜치는 `/qg branch`). 자연어로 브랜치/전체 리뷰 의도를 말하면 모델이 `/qg branch`(branch

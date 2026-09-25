@@ -223,7 +223,7 @@ The script takes **no arguments** — scope resolution (what to review) is yours
 the script's. Parse the structured stdout and cache `$changes_exist`,
 `$branch_ahead_count` (the changed-file count on `merge_base..HEAD`),
 `$worktree_dirty`, `$base` (display name), and `$degraded`. There is **no routing**
-here: this signal feeds the Step 4.5 verdict floor and R4's baseline-vs-HEAD
+here: this signal feeds Step 4's `--reason scope-empty` row and R4's baseline-vs-HEAD
 selection (reference R4).
 
 - `$degraded == yes` → the changes-exist signal is unavailable (detached HEAD /
@@ -510,6 +510,7 @@ Agent({
    | 조건 | 합성기에 싣는 것 |
    |---|---|
    | ② 가 돌았고 R6 집계가 exit 0 · `verdict_input` 3키와 `attribution_status` 를 다 읽었다 | `--differential "<$aggregate_yaml 절대 경로>"` |
+   | ② 가 kill switch 없이 R-init 가드에서 중단됐다(TMPDIR 담김 · `$project_dir` 빈 값 · 저장소 최상위 해소 실패 등, 원인 무관 — R6·`check_qa_ledger.py` 가 존재하기도 전이다) | `--differential` 을 싣지 않고 `--reason error-axis` |
    | ② 의 R6 어댑터별 호출 또는 집계 호출이 non-zero, 또는 키를 못 읽었다 | `--differential` 을 싣지 않고 `--reason error-axis` |
    | ② 의 `check_qa_ledger.py` 가 non-zero | `--reason silent-drop` |
    | ② 가 kill switch 로 생략됐다(Step 1c) | `--reason kill-switch` |
@@ -549,7 +550,7 @@ Agent({
      `**이 실행은 clean이 아니다**`, 아니면 `공시(판정을 막지 않음)`. 판정은 바꾸지
      않는다(그 사실은 이미 `verdict:` 에 반영돼 있다). `dropped as malformed` 줄도 같다.
    - 캐시한 `$degraded == yes` 이고 `$resolved_scope_file_count == 0` 이면 advisory 한 줄:
-     `> [quality-gates] scope check degraded (detached HEAD / no base branch / unrelated history / shallow) — empty-scope detection skipped (fail-open; verdict not floor-protected this run).`
+     `> [quality-gates] scope check degraded (detached HEAD / no base branch / unrelated history / shallow) — empty-scope detection skipped (fail-open; this run's scope-empty floor input is unavailable — the other reasons in Step 4's table still apply normally).`
    - ② 에 `granularity: bulk` 어댑터가 있었으면 `커버리지 미보장(러너가 선택을 무시함)` 을
      함께 보인다(레퍼런스 R8).
 
@@ -811,8 +812,10 @@ printf 'Verdict\t<마지막 verdict: 값 — not-certified 면 (<reason>) 포함
   | $QG/scripts/render-terminal.py table --title "Quality Gates — Complete"
 ```
 
-Then print the last synthesizer output's `angles:` block verbatim, and the appended
-`## History` lines from the state file as an indented tree beneath.
+Then print the last synthesizer output's `angles:` block verbatim if any (the
+trivia escape has none — it calls `verdict.py` directly, never the synthesizer),
+and the appended `## History` lines from the state file as an indented tree
+beneath.
 
 State file cleanup is deferred to /cancel-qg or SessionEnd cleanup hook.
 

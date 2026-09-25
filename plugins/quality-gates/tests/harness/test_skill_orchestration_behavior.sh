@@ -411,7 +411,13 @@ assert_line "review-scope ownership honesty norm present" "$(first_line 'You own
 # glue between the two conditions is no longer pinned to the literal "AND").
 assert_line "floor keyed on resolved_scope_file_count == 0 AND changes_exist == yes" \
   "$(first_line 'resolved_scope_file_count == 0.*changes_exist == yes')"
-assert_line "honest floor label present"                    "$(first_line 'not-certified \\(scope-empty\\)')"
+# Fix round 1, Minor 6 — the old target `not-certified \(scope-empty\)` matched the
+# honesty-norm quote line (SKILL.md:241), not the floor row itself; deleting the
+# floor row alone left this GREEN. Tie it to the SAME line as the check above
+# (unique to the floor row — the honesty-norm line lacks the literal
+# `resolved_scope_file_count == 0` token) and require the reason token there too.
+assert_line "honest floor label present" \
+  "$(first_line 'resolved_scope_file_count == 0.*changes_exist == yes.*scope-empty')"
 
 # AC6: degraded signal still emits a loud fail-open advisory.
 assert_line "degraded scope advisory present" "$(first_line 'scope check degraded')"
