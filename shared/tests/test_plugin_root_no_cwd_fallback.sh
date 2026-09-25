@@ -169,7 +169,7 @@ READ = re.compile(r"^\s*Read\s+(\S+\.md)\s*$")
 SET_U = re.compile(r"^\s*set\s+(-[A-Za-z]*u|-o\s+nounset)")
 INTERP = {"python3", "python", "bash", "sh", "node", "exec", "env"}
 REP = {"skill": ("plugins/quality-gates/skills/quality-pipeline/SKILL.md", "/scripts/check-review-scope.sh"),
-       "ref": ("plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md", "/scripts/resolve-baseline.sh")}
+       "ref": ("plugins/quality-gates/skills/quality-pipeline/references/differential-test.md", "/scripts/resolve-baseline.sh")}
 
 
 def emit(tag, path, line, text):
@@ -488,8 +488,10 @@ for ax in A1 A1B A2 A2B A3 C3 C4 C5 C6; do
   [ "$n" -eq 0 ] || show "$ax"
 done
 # 하한 — 코퍼스가 무너지면(태그 · 들여쓰기 인식 · 경로) 축 2 · 3 이 공허하게 통과한다.
-[ "${n_a2:-0}" -ge 22 ] && ok "축 2 대상 reference 펜스 ${n_a2}곳 (하한 22)" \
-  || no "축 2 대상 reference 펜스가 ${n_a2:-0}곳 — 하한 22 미달(들여쓴 펜스 인식이 무너졌나?)"
+# 22→19 (Task 7, qg-gate-merge-pr4b) — R4 의 check-review-scope.sh 펜스 재호출 · R5a¹ ·
+# R7 · R9 펜스가 differential-test.md 에서 정직하게 삭제됐다(대상 소멸, 대체 없음).
+[ "${n_a2:-0}" -ge 19 ] && ok "축 2 대상 reference 펜스 ${n_a2}곳 (하한 19)" \
+  || no "축 2 대상 reference 펜스가 ${n_a2:-0}곳 — 하한 19 미달(들여쓴 펜스 인식이 무너졌나?)"
 [ "${n_a3:-0}" -ge 2 ] && ok "축 3 대상 reference ${n_a3}개 (하한 2)" \
   || no "축 3 대상 reference 가 ${n_a3:-0}개 — 하한 2 미달"
 # 가드 회계 — 가드가 정규식 밖 형태로 다시 쓰이면 그 자리는 C3 · C4 · C5 · 축 2b 에서 조용히 빠진다.
@@ -500,7 +502,9 @@ done
 # 삭제의 공시다. 확인 없이 내리면 그만큼의 집행이 영구히 사라진다. 이 공시에는 독립된 증인이 없고
 # (핀은 이 파일 «안»의 두 자리 숫자다) 핀은 내려가기만 하므로, 못 잡는 다섯 경우는 머리말
 # 「회계의 이빨」에 적혀 있다.
-N_GUARD_FENCE_MIN=45
+# 45→44 (Task 7, qg-gate-merge-pr4b) — 같은 삭제(R4 재호출 · R5a¹ · R7 · R9 펜스)가
+# 가드를 지나는 펜스도 하나 줄였다. 정직한 삭제이지 가드 재작성이 아니다.
+N_GUARD_FENCE_MIN=44
 n_guard="$(awk -F'\t' '$1=="N_GUARD" {print $2}' "$TMP/report.tsv")"
 n_guard_fence="$(awk -F'\t' '$1=="N_GUARD" {print $3}' "$TMP/report.tsv")"
 [ "${n_guard_fence:-0}" -ge "$N_GUARD_FENCE_MIN" ] \

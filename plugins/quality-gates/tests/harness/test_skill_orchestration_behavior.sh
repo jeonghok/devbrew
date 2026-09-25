@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/*/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md plugins/quality-gates/.claude-plugin/plugin.json plugins/quality-gates/agents/security-reviewer.md plugins/quality-gates/agents/doc-recritic.md plugins/quality-gates/references/recritic-code-profile.md plugins/quality-gates/tests/lib/reconstruct-skill.sh
+# guards: plugins/quality-gates/skills/*/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/.claude-plugin/plugin.json plugins/quality-gates/agents/security-reviewer.md plugins/quality-gates/agents/doc-recritic.md plugins/quality-gates/references/recritic-code-profile.md plugins/quality-gates/tests/lib/reconstruct-skill.sh
 # test_skill_orchestration_behavior.sh — protocol-shape test for SKILL.md.
 #
 # 위 `# guards:` 는 이 파일이 실제로 여는 것에서 도출했다(R2, adjudication-topology
 # Task 15c) — quality-pipeline/SKILL.md 는 `plugins/quality-gates/skills/*/SKILL.md`
 # 로 잡히고(case 에서 `*` 는 `/` 를 넘으므로 다른 skill 의 SKILL.md 도 함께 잡힌다 —
-# :274-307 의 major-버전 대조가 그 전량을 읽는다), references/runtime-gate.md 는
+# :274-307 의 major-버전 대조가 그 전량을 읽는다), references/differential-test.md 는
 # reconstruct-skill.sh 가 SKILL.md 포인터 자리에 되접어 넣는 그 파일(스플라이스
 # 지점은 reconstruct-skill.sh:41 — :27 은 그 파일의 usage 주석일 뿐이다), plugin.json
 # 은 :274 의 major 판독 대상, security-reviewer.md 는 verifier-writable 페르소나 검사
@@ -65,7 +65,7 @@
 # 그 여섯(SKILLS_ROOT 의 동적 find 로 나오는 SKILL.md 전량 + 나머지 넷)을 낸다 —
 # 본 실행이 읽는 것과 같은 명령(`find "$SKILLS_ROOT" -maxdepth 2 -name
 # 'SKILL.md'`)을 재사용해 드리프트 여지를 없앴다. **PATH shim 계측으로도 확증**
-# (재리뷰) — `runtime-gate.md` 는 awk `getline` 내부 읽기라 이 emit 목록에 인자로는
+# (재리뷰) — `differential-test.md` 는 awk `getline` 내부 읽기라 이 emit 목록에 인자로는
 # 안 나타나지만 실제로 읽히므로, 위 6경로는 과대 신고가 아니라 실제로 읽는 것과
 # 정확히 일치한다.
 if [ "${1:-}" = "--emit-scanned" ]; then
@@ -74,7 +74,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   _SOB_REPO_ROOT="$(cd -- "$_SOB_QG_ROOT/../.." && pwd)"
   _SOB_REL="${_SOB_QG_ROOT#"$_SOB_REPO_ROOT"/}"
   printf '%s\n' \
-    "$_SOB_REL/skills/quality-pipeline/references/runtime-gate.md" \
+    "$_SOB_REL/skills/quality-pipeline/references/differential-test.md" \
     "$_SOB_REL/.claude-plugin/plugin.json" \
     "$_SOB_REL/agents/security-reviewer.md" \
     "$_SOB_REL/agents/doc-recritic.md" \
@@ -105,13 +105,14 @@ SKILL_MD_REAL="$(cd -- "$SCRIPT_DIR/../.." && pwd)/skills/quality-pipeline/SKILL
 
 test -f "$SKILL_MD_REAL" || { echo "FAIL: SKILL.md not found at $SKILL_MD_REAL"; exit 1; }
 
-# Task 31(무게 감축): Runtime gate 절차 전문이 references/runtime-gate.md 로 분리됐다.
-# 이 파일의 모든 검사는 원래 단일 SKILL.md 를 줄 번호로 분석하도록 설계됐으므로,
-# 분할 전과 동일한 논리적 문서를 재구성해 그 위에서 돈다 — 그래야 R-init..R9 앵커가
-# 여전히 잡힌다. 재구성 실패(포인터 소실 등)는 조용히 원본으로 폴백하지 않고 FAIL 한다.
+# Task 31(무게 감축): 차등 테스트 절차 전문이 references/differential-test.md 로
+# 분리됐다. 이 파일의 모든 검사는 원래 단일 SKILL.md 를 줄 번호로 분석하도록
+# 설계됐으므로, 분할 전과 동일한 논리적 문서를 재구성해 그 위에서 돈다 — 그래야
+# R-init..R8 앵커가 여전히 잡힌다. 재구성 실패(포인터 소실 등)는 조용히 원본으로
+# 폴백하지 않고 FAIL 한다.
 . "$SCRIPT_DIR/../lib/reconstruct-skill.sh"
 if ! SKILL_MD="$(reconstruct_skill_md "$SKILL_MD_REAL")"; then
-  echo "FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패 (아래 모든 검사가 공허해질 것을 막기 위해 중단)"
+  echo "FAIL: SKILL.md ↔ references/differential-test.md 재구성 실패 (아래 모든 검사가 공허해질 것을 막기 위해 중단)"
   exit 1
 fi
 trap 'rm -f "$SKILL_MD"' EXIT
@@ -172,16 +173,11 @@ assert_proximity() {
 
 # Gate dispatch lines.
 review_line=$(first_line 'subagent_type.*quality-gates:doc-recritic')
-runtime_line=$(first_line 'subagent_type.*runtime-verifier')
+assert_line "Phase 1.5 재비판 dispatch (doc-recritic)" "$review_line"
 
-assert_line "Review gate re-critique dispatch"   "$review_line"
-assert_line "Runtime gate runtime-verifier dispatch" "$runtime_line"
-
-# Ordering: Review gate < Runtime gate.
-assert_order "Review precedes Runtime" "$review_line" "$runtime_line"
-
-# Four reviewer agents in Review / Runtime gate fan-out (consistency with C1 / AC1).
-for agent in doc-recritic test-scope-validator security-reviewer runtime-verifier; do
+# 각도 수행자 3종이 fan-out 에 있다 (보안 · 판정 · 다른 전제). runtime-verifier 는
+# 대상 소멸(Task 7) — 4종 fan-out 이 이제 3종이다.
+for agent in doc-recritic test-scope-validator security-reviewer; do
   if grep -qE "subagent_type[^\"]*\"quality-gates:$agent" "$SKILL_MD"; then
     echo "PASS: $agent dispatch present"
   else
@@ -190,79 +186,28 @@ for agent in doc-recritic test-scope-validator security-reviewer runtime-verifie
   fi
 done
 
-# Review gate iter cap proximity to Review gate section / AskUserQuestion.
+# Fix-loop iter cap proximity to the fix-loop AskUserQuestion.
 # Use FIRST AskUserQuestion at or after the re-critique dispatch (the
 # description's top-of-file AskUserQuestion mention is irrelevant; we want the
-# Review-gate decision-tool call).
+# fix-loop decision-tool call).
 askuser_review_line=$(first_line_after 'AskUserQuestion' "$review_line")
 itercap_line=$(first_line 'max_review_iterations')
-# Locality bound widened 100→120 in v2.6.0 review-iter3: the Step-1 $effective_diff_scope
-# single-source paragraph + scout/dispatch annotations legitimately grew the Review-gate
-# region between the iter cap and the decision tool. Still a tight locality sanity check.
-# Locality bound 120→160 in v2.13.0 scope-driven-composition: step 3의 Tier B/C
-# dispatch 프로즈(codex availability-floor + Tier C 선택 + transparency + graceful)가
-# 재비판 dispatch와 iter-boundary 결정 사이 영역을 정당하게 키움. 여전히 tight sanity.
-# PR4a 재비판 교체: 이 단언은 착수 시점에 이미 FAIL 이었다(distance 280 > 160, Task 1
-# 베이스라인). Phase 1.5 재비판이 탐지(Tier A/B/C) 뒤로, 즉 review_line 훨씬 뒤로
-# 옮기면서 $askuser_review_line(첫 AskUserQuestion at-or-after review_line)도 같이
-# 밀려 distance 가 324 로 **커졌다**(실측, 280→324) — 예상과 반대 방향. 이 단언의 이름은
-# 바뀌지 않았고(선재 FAIL 이름 집합의 원소), 이 Task 는 그 이름의 RED 를 고치지 않는다
-# (범위 밖) — 160 을 올리지 않는다: 상한을 올리는 것은 이 근접성 sanity 를 무디게 하는
-# 것이지 진짜 수정이 아니다.
+# 선재 RED 락 — 이름 불변. Task 1 베이스라인에서 이미 FAIL(distance > 160). 이 Task
+# 는 그 이름의 RED 를 고치지 않는다(범위 밖) — 160 을 올리지 않는다: 상한을 올리는
+# 것은 이 근접성 sanity 를 무디게 하는 것이지 진짜 수정이 아니다.
 assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 160
 
-# DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS near Runtime gate dispatch — use first mention
-# AT OR AFTER the Runtime gate dispatch line (the top-of-file "up to ..." preview
-# mention is irrelevant; we want the Runtime NEEDS_RESOLUTION section reference).
-runtime_max_line=$(first_line_after 'DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS' "$runtime_line")
-assert_proximity "RUNTIME_MAX_RESOLUTIONS near Runtime dispatch" "$runtime_line" "$runtime_max_line" 100
-
-# Retry-path AskUserQuestion (I6) between Review gate dispatch and Runtime gate dispatch.
-retry_line=$(first_line 'Retry: error handling|Retry failed')
-if [[ "$retry_line" -gt 0 && "$retry_line" -gt "$review_line" && "$retry_line" -lt "$runtime_line" ]]; then
-  echo "PASS: Retry block between Review gate ($review_line) and Runtime gate ($runtime_line) at $retry_line"
-else
-  echo "FAIL: Retry block not between Review gate ($review_line) and Runtime gate ($runtime_line); found at $retry_line"
-  fail=$((fail + 1))
-fi
-
-# --- v2.2.0 sandbox-executor protocol-shape ---
-
-# create-sandbox must be invoked, and BEFORE the runtime-verifier dispatch.
-sandbox_line=$(first_line 'create-sandbox')
-assert_line "create-sandbox invoked" "$sandbox_line"
-assert_order "create-sandbox precedes runtime-verifier dispatch" "$sandbox_line" "$runtime_line"
-
-# mutation-guard must be invoked AFTER the runtime-verifier dispatch.
-#
-# 앵커는 **호출 줄**이어야 한다 — 이름 첫 등장이 아니다. 앞 버전은
-# `first_line_after 'mutation-guard'` 였는데, 그 이름은 산문에서도 불린다(R5b 가 왜
-# 자기 트리에서 도는지를 설명하는 §11 ⑬/S4 문단이 R7 호출보다 **앞선다**). 그러면
-# `$guard_line` 이 산문 줄을 가리키고, 아래 3-arg 검사는 실제 호출이 멀쩡한데도 FAIL 을
-# 낸다 — 반대 방향(호출에서 인자를 지워도 산문에 `snapshot_digest` 가 있으면 GREEN)이
-# 더 나쁘다. 이 파일이 :588 에서 스스로 적어 둔 grep-매치-주석 함정의 같은 사례다.
-# 실행 줄만 고르도록 `scripts/` 접두를 같은 줄에서 요구한다.
-guard_line=$(first_line_after 'scripts/qg-worktree\.sh" mutation-guard' "$runtime_line")
-assert_line "mutation-guard invoked after runtime dispatch" "$guard_line"
-
-# forced_downgrade must be referenced (verdict gating on the guard result).
-assert_line "forced_downgrade referenced" "$(first_line 'forced_downgrade')"
-
-# Upfront Execution Plan section present, and before the Review gate dispatch.
-upfront_line=$(first_line 'Upfront Execution Plan|Execution Plan')
-assert_line "Upfront Execution Plan section present" "$upfront_line"
-
-# requires_decision drives the upfront gate.
-assert_line "requires_decision referenced in plan gate" "$(first_line 'requires_decision')"
-
-# Blocked-path routing references the three policies.
-assert_line "block policy stop/skip/ask present" "$(first_line 'block_policy|stop / skip / ask|stop/skip/ask')"
-
-# Kill-switch fallback present.
-assert_line "runtime sandbox kill switch present" "$(first_line 'DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX')"
-
-# spec_acceptance_criteria threaded to the verifier.
-assert_line "spec_acceptance_criteria threaded" "$(first_line 'spec_acceptance_criteria')"
+# 대상 소멸 (Task 7 — runtime-verifier · Decision 1/2 · Upfront Execution Plan ·
+# block_policy · DISABLE_RUNTIME_SANDBOX · Runtime gate 그 자체가 SKILL.md 에서
+# 사라졌다). 이 자리에 있던 락들: 「Runtime gate runtime-verifier dispatch」·
+# 「Review precedes Runtime」·「RUNTIME_MAX_RESOLUTIONS near Runtime dispatch」·
+# 「Retry-path AskUserQuestion between Review/Runtime gate」·「create-sandbox
+# invoked (+ precedes runtime-verifier)」·「mutation-guard invoked after runtime
+# dispatch」·「forced_downgrade referenced」·「Upfront Execution Plan section
+# present」·「requires_decision referenced in plan gate」·「block policy
+# stop/skip/ask present」·「runtime sandbox kill switch present」·
+# 「spec_acceptance_criteria threaded」. 후계는 test_one_pipeline_surface.sh 의
+# 음의 락(부재 확인) + 이 파일 아래 R6/R8 창 락이다.
 
 # SKILL 제목의 버전이 **shipped major 와 일치**한다 — 이 플러그인의 모든
 # skills/*/SKILL.md 에 대해.
@@ -324,168 +269,15 @@ else
 fi
 
 # --- v2.2.0 mutation-guard hardening protocol-shape ---
-
-# C-C: the mutation-guard step (R7 since the impact-driven rewrite; R4 before it)
-# must route an errored/garbled guard as ≤FAIL, never PASS.
-#
-# Anchor history: this block used to anchor on `exit 4`, asserted to be "unique to
-# the R4 routing table". That premise died when the impact-driven R4 (baseline
-# side) introduced a baseline-cache corruption advisory that also says `exit 4`,
-# ~184 lines EARLIER than the guard table. The anchor slid backwards and the
-# AT/AFTER assertions became satisfiable by R5a¹'s unrelated "surface stderr
-# verbatim" sentence — measured: deleting `**stderr verbatim**` from the guard row
-# still printed PASS. Two fixes, both required:
-#   (a) anchor on the routing table's own heading (`R7 exit-code routing`), and
-#       assert the heading EXISTS — if it is renamed, $r7_tbl becomes 0 and every
-#       `first_line_after … 0` degenerates into a whole-file search, i.e. the same
-#       vacuous-pass failure in a new costume;
-#   (b) use BODY-UNIQUE needles for the two row phrases. `**stderr verbatim**`
-#       (bold) and `indeterminate ≠ clean` exist only in the table row — the
-#       heading's own "an indeterminate guard is never a PASS" would otherwise
-#       satisfy a bare `indeterminate` needle (header-satisfiable = no teeth).
-#       The bold needle is written `[*][*]…` and NOT `\*\*…`: macOS awk strips the
-#       backslash during `-v` assignment, leaving a leading `**` that dies with
-#       "illegal primary in regular expression" and yields a silent NO-MATCH.
-# `exit 4` / `guard_error` remain existence checks WITHIN R7 (the digest-mismatch
-# paragraph below the table repeats both), which is what the base file had.
-r7_tbl=$(first_line 'R7 exit-code routing')
-assert_line "R7 routing-table anchor present"         "$r7_tbl"
-assert_line "R7 routes guard exit 4 as FAIL"          "$(first_line_after 'exit 4' "$r7_tbl")"
-assert_line "R7 surfaces guard_error"                 "$(first_line_after 'guard_error' "$r7_tbl")"
-assert_line "R7 surfaces guard stderr verbatim"       "$(first_line_after '[*][*]stderr verbatim[*][*]' "$r7_tbl")"
-assert_line "R7 never-PASS for indeterminate guard"   "$(first_line_after 'indeterminate ≠ clean' "$r7_tbl")"
-
-# I-A/I-B: fallback caps at SKIP_WITH_EVIDENCE (never PASS) + single runtime_project_dir.
-assert_line "runtime_project_dir variable used"      "$(first_line 'runtime_project_dir')"
-assert_line "fallback caps at SKIP_WITH_EVIDENCE"    "$(first_line 'SKIP_WITH_EVIDENCE.*never PASS|never PASS.*SKIP_WITH_EVIDENCE')"
-# I-B: the R3 dispatch project_dir must NOT hardcode sandbox_dir (use runtime_project_dir).
-# v6.6.0 (L3 slot tagging) retagged the dispatch prompt from `project_dir: "$runtime_project_dir"`
-# to the `<tag>${VAR}</tag>` slot idiom — `project_dir: <project_dir>${RUNTIME_PROJECT_DIR}</project_dir>`.
-#
-# 수정 라운드 1, I1 최초 정정 — 아래 grep 하나만으로는 "never a hardcoded sandbox_dir"
-# 가 거짓이었다: **재구성 문서 전체에 대한 ∃-검사**라, 실제 dispatch 를 `${SANDBOX_DIR}`
-# 로 하드코딩하고 문서 아무 곳에나 올바른 리터럴을 담은 산문 한 줄만 추가해도 PASS
-# 였다(리뷰어 변이로 확증). 아래 음의 짝(정확히 그 `${SANDBOX_DIR}` 리터럴의 부재)을
-# 추가했다.
-#
-# 수정 라운드 2, N1 정정 — 라운드 1은 그 음의 짝이 "never a hardcoded sandbox_dir"
-# 문장을 **참으로 만든다**고 적었다. 그것도 거짓이었다 — 재리뷰 실측: (a) decoy +
-# `project_dir:` 뒤 공백 두 개 + `${SANDBOX_DIR}`, (b) decoy + 전혀 다른 변수명
-# `${QG_SANDBOX}` 하드코딩, 둘 다 이 grep 쌍을 우회한다(신규 FAIL 0). 이 음의 짝이
-# 실제로 보장하는 것은 **"정확히 그 `${SANDBOX_DIR}` 슬롯 리터럴(그 공백 폭 그대로)이
-# 없다"**뿐이다 — sandbox_dir 하드코딩 «일반»의 부재가 아니다.
-#
-# **진짜 ∀ 보장은 이 grep 이 아니라 다른 축에 산다.** `tools/adjudication/
-# check_slots.py` 의 `var_mismatch` 축(`shared/tests/test_agent_input_slots.sh`
-# 가 돌린다)이 `runtime-verifier` agent 의 `input_slots` 선언(`agents/runtime-
-# verifier.md`: tag=project_dir, var=RUNTIME_PROJECT_DIR)과 dispatch 의 실제
-# `<tag>${VAR}</tag>` 쌍을 **파싱해서** 대조한다 — 표기(공백 폭·변수명)에 무관하게
-# 선언과 다른 값이면 agent 이름과 file:line 을 대며 RED 를 낸다. 위 두 우회를 그대로
-# `test_agent_input_slots.sh` 에 걸면 둘 다
-# `PROBLEM var_mismatch quality-gates:runtime-verifier @ .../runtime-gate.md:716
-# <project_dir> 선언=RUNTIME_PROJECT_DIR 전달=<SANDBOX_DIR|QG_SANDBOX>` 로 잡힌다
-# (12/12 → 11/12, 재현 확인). **그러니 성질은 지켜지고 있고, 지키는 것이 이 grep 이
-# 아니다** — 아래 grep 쌍은 지우지 않는다(정확한 리터럴 회귀를 싸게 잡는 두 번째
-# 증인으로는 여전히 유효하다), 다만 그 한계를 위에 적었다. **검토하고 버린 대안**:
-# 음의 짝을 "올바른 값 외 모든 슬롯 값 금지"로 일반화하는 것 — `check_slots.py` 의
-# `var_mismatch` 가 이미 정확히 그것을 하므로(위 실측), 불완전한 두 번째 구현을
-# 더하는 것일 뿐이라 하지 않았다.
-#
-# m2 (기록, 미수정 — 코디네이터 판정 유지) — 두 grep 은 리터럴 전체를 **바이트
-# 그대로** 요구한다. `project_dir:` 뒤 공백이 하나에서 둘로만 바뀌어도(또는 개행이
-# 섞여도) **양의 검사**(RUNTIME_PROJECT_DIR 존재 확인)는 매치를 잃어 **거짓
-# RED**(성질은 안 깨졌는데 FAIL, 소리 남)를 낸다 — 옛 ERE(`[[:space:]]*"\$
-# runtime_project_dir`)는 공백 개수를 허용했었다. **수정 라운드 2, N2 정정 — 같은
-# 공백-폭 변화가 음의 짝에는 반대 방향으로 작동한다.** `${SANDBOX_DIR}` 하드코딩이
-# 실재해도 공백 폭이 바뀌면 음의 짝의 `grep -qF` 도 매치를 잃어 **fail-open**(위반이
-# 그대로인데 조용히 PASS, 침묵)한다 — N1 우회 (a)가 바로 이 경로다. 양의 검사는
-# 소리 나는 방향(거짓 RED)으로, 음의 짝은 침묵하는 방향(fail-open)으로 — **반대
-# 방향**으로 깨진다는 것이 이전 판(라운드 1)이 숨긴 절반이다. v6.6.2 선례
-# (test_critiquing_artifacts_skill.sh:161-166)도 같은 `grep -cF`/`grep -qF`
-# 전체-리터럴 모양이라 이 취약성은 이 리포가 이미 수용한 trade-off 와 같은
-# 종류이고, 거짓 RED 축은 소리가 나며, fail-open 축의 실제 안전망은 바로 위
-# `var_mismatch`(표기 무관)라는 것 — 이 둘을 근거로 코드는 고치지 않는다. 고칠
-# 경우의 대안: `grep -qE 'project_dir:[[:space:]]+<project_dir>\$\{RUNTIME_PROJECT_DIR\}</project_dir>'`
-# 식으로 공백 축만 느슨화하되 키·태그·변수·닫는 태그는 여전히 전부 리터럴로
-# 못박아야 한다(약화 금지, R1 규칙과 동일) — 양쪽 grep 모두에 같은 완화를 적용해야
-# 위 fail-open 비대칭도 함께 닫힌다.
-if grep -qF 'project_dir: <project_dir>${RUNTIME_PROJECT_DIR}</project_dir>' "$SKILL_MD"; then
-  echo "PASS: R3 dispatch uses runtime_project_dir"
-else
-  echo "FAIL: R3 dispatch does not use runtime_project_dir"
-  fail=$((fail + 1))
-fi
-if grep -qF 'project_dir: <project_dir>${SANDBOX_DIR}</project_dir>' "$SKILL_MD"; then
-  echo "FAIL: R3 dispatch hardcodes sandbox_dir (project_dir: <project_dir>\${SANDBOX_DIR}</project_dir>) — decoy-proof negative pair (I1)"
-  fail=$((fail + 1))
-else
-  echo "PASS: no R3 dispatch literal hardcodes sandbox_dir in the project_dir slot (I1 negative pair)"
-fi
-
-# I-C: evidence_dir threaded to R3 as a main-repo absolute path that survives R5 discard.
-assert_line "evidence_dir threaded to verifier"  "$(first_line 'evidence_dir')"
-if grep -qE 'evidence_dir.*\.claude/quality-gates/' "$SKILL_MD"; then
-  echo "PASS: evidence_dir uses .claude/quality-gates/ path"
-else
-  echo "FAIL: evidence_dir path not .claude/quality-gates/"
-  fail=$((fail + 1))
-fi
-assert_line "evidence_dir uses CLAUDE_CODE_SESSION_ID" "$(first_line 'CLAUDE_CODE_SESSION_ID')"
-
-# I-G: retry must re-capture BOTH sandbox_dir AND baseline_sha (new snapshot auto-recorded).
-retry_recap_line=$(first_line 're-capture')
-assert_line "retry re-capture phrase present" "$retry_recap_line"
-if grep -E 're-capture' "$SKILL_MD" | grep -q 'baseline_sha' && \
-   grep -E 're-capture' "$SKILL_MD" | grep -q 'sandbox_dir'; then
-  echo "PASS: retry re-captures both sandbox_dir and baseline_sha"
-else
-  echo "FAIL: retry does not re-capture both sandbox_dir + baseline_sha"
-  fail=$((fail + 1))
-fi
-
-# --- round-2 digest-seal wiring ---
-
-# R5a¹ (formerly R0) must capture snapshot_digest in the R5a¹ section (after the
-# "Step R5a¹" heading, before the runtime-verifier dispatch) — NOT the Law-2
-# header at the top. Anchored on the line-start bold heading, NOT the bare
-# label — a bare 'Step R5a¹' resolves to an earlier prose cross-reference
-# (measured: bare label = 174, actual heading = 810), which would degenerate
-# this into a whole-file-ish search that can't tell the heading moved.
-r5a1_section=$(first_line '^[*][*]Step R5a¹')
-# Guard the degenerate case explicitly: if the heading is gone, r5a1_section
-# is 0 and `first_line_after … 0` searches the WHOLE FILE from the top — this
-# is the exact bug that made the pre-migration :205 lock vacuous (it found
-# the top-of-file Law-2 header's own `snapshot_digest` mention at line 53 and
-# passed). Measured on this file: without this guard, renaming the R5a¹
-# heading away still leaves this assertion GREEN via that top-of-file match.
-if [[ "$r5a1_section" -gt 0 ]]; then
-  r5a1_digest=$(first_line_after 'snapshot_digest' "$r5a1_section")
-else
-  r5a1_digest=0
-fi
-if [[ "$r5a1_digest" -gt 0 && "$r5a1_digest" -lt "$runtime_line" ]]; then
-  echo "PASS: R5a¹ captures snapshot_digest (line 3) at $r5a1_digest"
-else
-  echo "FAIL: R5a¹ does not capture snapshot_digest in the R5a¹ section (found=$r5a1_digest, runtime=$runtime_line, section_heading=$r5a1_section)"
-  fail=$((fail + 1))
-fi
-
-# Guard call must thread the 3rd arg on the R4 call line itself ($guard_line,
-# the first `mutation-guard` AFTER the runtime dispatch) — not the header mention.
-if awk -v n="$guard_line" 'NR==n && /snapshot_digest/ {f=1} END{exit !f}' "$SKILL_MD"; then
-  echo "PASS: R4 guard call threads snapshot_digest (3-arg) at line $guard_line"
-else
-  echo "FAIL: R4 guard call (line $guard_line) does not thread snapshot_digest"
-  fail=$((fail + 1))
-fi
-
-# I-G retry must re-capture snapshot_digest (line 3) in addition to the two existing.
-if grep -E 're-capture' "$SKILL_MD" | grep -q 'snapshot_digest'; then
-  echo "PASS: retry re-captures snapshot_digest"
-else
-  echo "FAIL: retry does not re-capture snapshot_digest"
-  fail=$((fail + 1))
-fi
+# 대상 소멸 (Task 7, R-W) — R7(mutation-guard 라우팅 표) 자체가 differential-test.md
+# 에서 통째로 지워졌다. qg 파이프라인은 create-sandbox/mutation-guard 를 더 호출하지
+# 않는다(그 두 서브커맨드는 qg-worktree.sh 안에 남지만 소비자는 plugin-audit 뿐이다
+# — R-W). 이 자리에 있던 락들: R7 exit-code routing 표(guard exit 4 → FAIL · guard_error
+# · stderr verbatim · indeterminate ≠ clean) · fallback SKIP_WITH_EVIDENCE cap ·
+# runtime_project_dir 변수 · R3 dispatch 의 project_dir 슬롯(+ sandbox_dir 하드코딩
+# 금지 음의 짝) · evidence_dir threaded to verifier · I-G retry re-capture
+# (sandbox_dir/baseline_sha/snapshot_digest) · R5a¹ 의 snapshot_digest capture ·
+# guard call 3-arg 스레딩. verifier 자체가 사라져 그 무엇도 스레딩할 대상이 없다.
 
 # --- R2-AC5: Law-3 persona hardening (the bypass escaped because reviewers
 #     trusted a verifier-writable artifact; the persona now forces that check).
@@ -584,7 +376,7 @@ fi
 # --- v2.3.0 R4: Review-gate findings surfaced before the decision tool ---
 # The Surface-findings step (Step 4.5) must precede the iter-boundary
 # decision's `findings remain` question. Anchor on the surface-step TEXT,
-# NOT the `## Review gate` section heading — a heading always precedes its
+# NOT the `## Review` section heading — a heading always precedes its
 # body, so a heading anchor is a tautological PASS (the V7-class defect this
 # file was created to avoid). Existence grep alone cannot catch mis-placement.
 surface_line=$(first_line 'Surface findings|Step 4\.5')
@@ -593,113 +385,12 @@ assert_line "Surface-findings step present" "$surface_line"
 assert_line "iter-boundary decision question present" "$question_line"
 assert_order "Surface findings precedes iter-boundary decision" "$surface_line" "$question_line"
 
-# --- v2.4.0: Upfront gate-scope decision (Decision 1) ---
-
-# Decision 1 gate-scope question exists: literal `both gates` anchor in a
-# question: field, with header `Gate scope`.
-gatescope_q=$(first_line 'question:.*both gates')
-assert_line "gate-scope question present (anchor 'both gates')" "$gatescope_q"
-assert_line "Gate scope header present" "$(first_line 'header:.*Gate scope')"
-
-# Ordering: gate-scope question BEFORE the Review gate dispatch.
-assert_order "gate-scope question precedes Review gate dispatch" "$gatescope_q" "$review_line"
-
-# Ordering: gate-scope (Decision 1) question BEFORE the runtime-scope (Decision 2) question.
-runtimescope_q=$(first_line 'question:.*Runtime scope')
-assert_order "gate-scope question precedes runtime-scope question" "$gatescope_q" "$runtimescope_q"
-
-# Uniqueness: `both gates` appears in exactly one question: line (anchor convention).
-bg_count=$(grep -cE 'question:.*both gates' "$SKILL_MD" || true)
-if [[ "$bg_count" -eq 1 ]]; then
-  echo "PASS: 'both gates' anchor unique (1 question: line)"
-else
-  echo "FAIL: 'both gates' anchor not unique ($bg_count question: lines)"
-  fail=$((fail + 1))
-fi
-
-# `gate` domain documents `both`.
-assert_line "gate domain documents both" "$(first_line 'gate.*review.*runtime.*both')"
-
-# Precedence advisory: explicit gate= wins over --skip-runtime (no silent conflict).
-assert_line "gate= precedence advisory documented" "$(first_line 'gate=.*wins')"
-
-# Dispatch Loop <-> Upfront Execution Plan consistency (round-2 advisory b82e4d19):
-# Dispatch Loop step 2 must reference Decision 1 and the short-circuit so the two
-# sections cannot drift.
-dl_line=$(first_line '## Dispatch Loop')
-assert_line "Dispatch Loop section present" "$dl_line"
-assert_line "Dispatch Loop references Decision 1" "$(first_line_after 'Decision 1' "$dl_line")"
-assert_line "Dispatch Loop references short-circuit" "$(first_line_after 'short-circuit' "$dl_line")"
-
-# --- v2.4.0 review-fix F1: single-gate /qg runtime produces the manifest ---
-# /qg runtime bypasses the Dispatch Loop (and thus Decision 2), so the Runtime
-# gate itself must produce manifest/approved_surfaces/block_policy for R3
-# (now R5a³). Guard: a Step R5a⁰ (formerly R-init — the "R-init" label was
-# reused by the impact-driven rewrite for baseline resolution, an unrelated
-# step, so this lock MUST move or it silently starts checking the wrong
-# section) must run detect-runtime.sh on the single-gate runtime path, BEFORE
-# the runtime-verifier (R5a³) dispatch. Anchored on the line-start bold
-# heading, NOT the bare label, for the same reason as the R5a¹ lock above.
-rg_header=$(first_line '^## Runtime gate')
-r5a0_line=$(first_line '^[*][*]Step R5a⁰')
-r5a1_bound=$(first_line '^[*][*]Step R5a¹')
-assert_line "Runtime gate Step R5a⁰ present" "$r5a0_line"
-assert_order "R5a⁰ precedes runtime-verifier dispatch" "$r5a0_line" "$runtime_line"
-# Window-bound the detect-runtime search to [rg_header, R5a¹) — an earlier cut of
-# this lock searched with NO upper bound at all (`first_line_after` only takes a
-# lower bound) and stayed GREEN after deleting the actual detect-runtime.sh call
-# from R5a⁰'s body, because it fell through to an unrelated LATER mention
-# (`manifest: <output of detect-runtime.sh>` inside R5a³'s dispatch prompt, line
-# 879) — measured on this file. Bounding to before R5a¹ closes that.
-if [[ "$r5a0_line" -gt 0 && "$r5a1_bound" -gt 0 ]] && \
-   awk -v s="$rg_header" -v e="$r5a1_bound" 'NR>s && NR<e && /detect-runtime/ {f=1} END{exit !f}' "$SKILL_MD"; then
-  echo "PASS: R5a⁰ runs detect-runtime in the Runtime gate (window $rg_header..$r5a1_bound)"
-else
-  echo "FAIL: R5a⁰ does not run detect-runtime within its own section (window $rg_header..$r5a1_bound)"
-  fail=$((fail + 1))
-fi
-if awk -v a="$rg_header" -v b="$runtime_line" 'NR>a && NR<b && /single-gate/ {f=1} END{exit !f}' "$SKILL_MD"; then
-  echo "PASS: Runtime gate documents the single-gate runtime manifest path"
-else
-  echo "FAIL: Runtime gate does not document single-gate runtime manifest init"
-  fail=$((fail + 1))
-fi
-
-# --- v2.4.0 review-fix F2: review-only suppresses "Proceed to Runtime gate" ---
-# When gate scope = Review gate only, the iter-boundary AND max-iter decisions
-# must NOT offer "Proceed to Runtime gate"; both carry a gate-scope-conditional
-# note replacing it with a finalize option.
-gsc_count=$(grep -cE 'Gate-scope conditional' "$SKILL_MD" || true)
-if [[ "$gsc_count" -ge 2 ]]; then
-  echo "PASS: gate-scope-conditional note in iter-boundary + max-iter ($gsc_count)"
-else
-  echo "FAIL: gate-scope-conditional note missing (found $gsc_count, need >=2)"
-  fail=$((fail + 1))
-fi
-# Anchor on a paren-free substring: macOS awk -v mangles `\(` escapes, so a
-# literal-paren regex would fail to match the (present) finalize option text.
-assert_line "review-only finalize option present" "$(first_line 'accept findings, finalize')"
-
-# --- v2.4.0 review-fix C4: gate= precedence wired into the skip logic ---
-# effective_skip_runtime must be DEFINED (Arguments normalization) AND USED by
-# the runtime-skip tests (Dispatch Loop step 4 + Runtime gate "skip this
-# section") — otherwise the Decision-1 `gate=` > `--skip-runtime` precedence is
-# documented but never governs execution (e.g. `/qg runtime --skip-runtime`
-# would silently skip runtime). >=3 references = defined + both skip sites.
-esr_count=$(grep -cE 'effective_skip_runtime' "$SKILL_MD" || true)
-if [[ "$esr_count" -ge 3 ]]; then
-  echo "PASS: effective_skip_runtime wired into the skip logic ($esr_count refs)"
-else
-  echo "FAIL: effective_skip_runtime under-wired (found $esr_count, need >=3: Arguments + Dispatch step 4 + Runtime gate)"
-  fail=$((fail + 1))
-fi
-
-# --- v2.4.0 review-fix F7: Review gate clean-exit also honors review-only ---
-# The kept=0 clean branches must route via Dispatch Loop step 4 (gate-scope
-# check), NOT unconditionally "continue to the Runtime gate" — else a clean
-# Review gate under "Review gate only" would run Runtime anyway.
-# Anchor on a single-line substring (the full phrase wraps across lines).
-assert_line "Review gate clean-exit routes via gate-scope check" "$(first_line 'when gate scope = Review gate only')"
+# 대상 소멸 (Task 7, AC1) — v2.4.0 Decision 1(gate-scope question, 'both gates'
+# anchor) · Dispatch Loop 참조(Decision 1 / short-circuit) · F1(단일-게이트
+# `/qg runtime` 의 R5a⁰ manifest 초기화) · F2(review-only 의 gate-scope-conditional
+# 옵션 대체) · C4(effective_skip_runtime 배선 ≥3회) · F7(clean-exit 의 gate-scope
+# 라우팅)이 이 자리에 있었다. 한 파이프라인에는 게이트 범위가 없다 — 이 여섯 락
+# 전부가 지키던 SKILL.md 표면이 사라졌다(Pipeline 절이 후계 — 단일 ①→⑤ 흐름).
 
 # --- v2.7.0 §5.2-5.4: changes-exist floor (routing removed, integrity kept) ---
 # check-review-scope.sh still invoked in the Review gate (call+cache for the floor).
@@ -711,7 +402,7 @@ assert_line "review-scope ownership honesty norm present" "$(first_line 'You own
 # AC5: the Step 4.5 floor keys on the two deterministic inputs — the resolved scope
 # file count AND the script-emitted changes_exist (NOT the removed scope_signal).
 # Anchor BOTH conditions on a SINGLE line: 'changes_exist == yes' also appears on the
-# honesty-norm line (L283), so a lone `first_line 'changes_exist == yes'` would match
+# honesty-norm line, so a lone `first_line 'changes_exist == yes'` would match
 # there and pass even if the Step 4.5 floor IF-condition itself regressed. The combined
 # 'resolved_scope_file_count == 0 AND …changes_exist == yes' pattern is unique to the
 # floor line, so it can only pass when the real floor condition is intact (codex v2.7.0
@@ -790,26 +481,15 @@ else
   echo "PASS: quality-pipeline allowed-tools has no Skill (NG6)"
 fi
 
-# ── T48 / AC51: 스텝 락 이전 + 기존 로직 7종이 전부 새 자리를 갖는다 ──
-# 자리 없는 기존 로직은 삭제가 아니라 누락이다. 7종을 이름으로 센다.
-echo "== 락 이전 검사"
-legacy_logic=(
-  'detect-runtime.sh'                       # 매니페스트
-  'block_policy'                            # zero-click 폴백
-  'snapshot_digest'                         # create-sandbox 3줄 파싱
-  'quality-gates:test-scope-validator'      # 분류 dispatch
-  'spec_acceptance_criteria'                # spec AC 수집
-  'quality-gates:runtime-verifier'          # verifier dispatch
-  'mutation-guard'                          # Law 2 오라클
-)
-missing_logic=0
-for lg in "${legacy_logic[@]}"; do
-  if ! grep -qF "$lg" "$SKILL_MD"; then
-    echo "FAIL: 기존 로직 '$lg' 가 새 SKILL.md 에 없음 (자리 없는 로직 = 누락)"
-    missing_logic=$((missing_logic + 1))
-  fi
-done
-[[ $missing_logic -eq 0 ]] && echo "PASS: 기존 로직 7종 전부 새 자리에 존재" || fail=$((fail + 1))
+# ── T48 / AC51 (대상 소멸 — Task 7) ──
+# 이 자리는 기존 로직 7종(detect-runtime.sh · block_policy · snapshot_digest ·
+# quality-gates:test-scope-validator · spec_acceptance_criteria ·
+# quality-gates:runtime-verifier · mutation-guard)이 "새 SKILL 에서 자리를 잃지
+# 않았는가"를 잤다. Task 7 은 그중 여섯을 **의도적으로 삭제**한다(대상 소멸이지
+# 누락이 아니다) — 남는 것은 quality-gates:test-scope-validator 하나뿐이고, 그
+# 존재는 위 fan-out 루프가 이미 잰다. "옮겨갈 새 자리"를 찾는 이 락의 전제 자체가
+# 더는 성립하지 않아 대응물 없이 지운다 — 후계는 test_one_pipeline_surface.sh 의
+# 음의 락(일곱 토큰 중 여섯의 전면 부재 확인)이다.
 
 # ── /qg iter-1 (pr-test-analyzer, mutation 실측): 신규 스크립트 **배선** 락 ──────
 # 실측된 구멍: SKILL.md 에서 다섯 신규 스크립트의 호출 지점 10곳을 **전부 삭제**해도
@@ -852,11 +532,11 @@ assert_call_in_window "R1a 가 run-test-selection.sh detect 호출" \
 assert_call_in_window "R1b 가 run-test-selection.sh assign 호출" \
   'scripts/run-test-selection.sh" assign'  '^[*][*]Step R1b'    '^[*][*]Step R2'
 assert_call_in_window "R4 가 baseline-cache.sh get 호출" \
-  'scripts/baseline-cache.sh" get'         '^[*][*]Step R4'     '^[*][*]Step R5a⁰'
+  'scripts/baseline-cache.sh" get'         '^[*][*]Step R4'     '^[*][*]Step R5b'
 assert_call_in_window "R4 가 baseline-cache.sh put 호출" \
-  'scripts/baseline-cache.sh" put'         '^[*][*]Step R4'     '^[*][*]Step R5a⁰'
+  'scripts/baseline-cache.sh" put'         '^[*][*]Step R4'     '^[*][*]Step R5b'
 assert_call_in_window "R4 가 run-test-selection.sh run 호출 (기준선 측)" \
-  'scripts/run-test-selection.sh" run'     '^[*][*]Step R4'     '^[*][*]Step R5a⁰'
+  'scripts/run-test-selection.sh" run'     '^[*][*]Step R4'     '^[*][*]Step R5b'
 assert_call_in_window "R5b 가 run-test-selection.sh run 호출 (HEAD 측)" \
   'scripts/run-test-selection.sh" run'     '^[*][*]Step R5b'    '^[*][*]Step R6'
 assert_call_in_window "R5b 가 qg-worktree.sh create-head 호출 (HEAD 축 전용 트리)" \
@@ -879,14 +559,16 @@ assert_call_in_window "R5b 가 qg-worktree.sh create-head 호출 (HEAD 축 전�
 # 워킹 트리다" 라고 설명하는 자리다. 0회 락은 지금 당장 RED 이고, 그 문단을 지우면
 # GREEN 이 되는 **거꾸로 된 이빨**을 갖는다. 대신 **호출의 인자 자리**를 ∀ 로 잰다.
 echo "== R5b·R6 의 HEAD 축 트리 인자"
-r5b_s=$(first_line '^[*][*]Step R5b'); r7_s=$(first_line '^[*][*]Step R7')
+r5b_s=$(first_line '^[*][*]Step R5b'); r8_s=$(first_line '^[*][*]Step R8')
 r6_s=$(first_line '^[*][*]Step R6')
-if [[ "$r5b_s" -le 0 || "$r6_s" -le 0 || "$r7_s" -le 0 || "$r5b_s" -ge "$r6_s" || "$r6_s" -ge "$r7_s" ]]; then
-  echo "FAIL: HEAD 축 인자 락 — 창 앵커 붕괴 (R5b=$r5b_s R6=$r6_s R7=$r7_s)"
+if [[ "$r5b_s" -le 0 || "$r6_s" -le 0 || "$r8_s" -le 0 || "$r5b_s" -ge "$r6_s" || "$r6_s" -ge "$r8_s" ]]; then
+  echo "FAIL: HEAD 축 인자 락 — 창 앵커 붕괴 (R5b=$r5b_s R6=$r6_s R8=$r8_s)"
   fail=$((fail + 1))
 else
   # sites = 창 안 `run` 호출 줄 수 · good = 다음 줄이 head_tree_dir 인 것
-  read -r sites good < <(awk -v s="$r5b_s" -v e="$r7_s" '
+  # 창 상한을 R7(대상 소멸)에서 R8 로 옮긴다 — R7 이 사라지며 R6 의 flaky 재실행
+  # 구간이 이제 R8 바로 앞까지다.
+  read -r sites good < <(awk -v s="$r5b_s" -v e="$r8_s" '
     NR>s && NR<e && index($0,"scripts/run-test-selection.sh\" run") { want=NR+1; sites++ }
     want && NR==want { if (index($0,"$head_tree_dir")) good++; want=0 }
     END { print sites+0, good+0 }
@@ -894,31 +576,33 @@ else
   # ∃ 짝: 호출이 0개면 ∀ 는 공허하게 참이다. 그리고 **2개 이상**이어야 한다 — R5b 의
   # 본 실행과 R6 의 flaky 재실행. 하나만 요구하면 R6 의 재실행을 통째로 지워도 통과한다.
   if [[ "$sites" -ge 2 && "$good" -eq "$sites" ]]; then
-    echo "PASS: R5b·R6 의 run 호출 ${sites}곳 전부가 HEAD 축 트리(\$head_tree_dir)를 받음 (창 $r5b_s..$r7_s)"
+    echo "PASS: R5b·R6 의 run 호출 ${sites}곳 전부가 HEAD 축 트리(\$head_tree_dir)를 받음 (창 $r5b_s..$r8_s)"
   else
     echo "FAIL: HEAD 축 인자 (호출 ${sites}곳(≥2 필요) 중 head_tree_dir 수신 ${good}곳) — 샌드박스로 되돌아갔거나 flaky 재실행이 사라졌는가?"
     fail=$((fail + 1))
   fi
 fi
 
-# create-head 의 인자는 **봉인 커밋 B** 여야 한다. `$merge_base` 를 넘기면 HEAD 축이
+# create-head 의 인자는 **다시 뜬 봉인**($sealed) 이어야 한다 (R-X) — 옛 R5a 시절의
+# create-sandbox 커밋 B 는 $baseline_sha 였지만, 이제 R5b 는 seal-worktree.sh 로
+# 봉인하고 그 봉인 sha 를 create-head 에 넘긴다. $merge_base 를 넘기면 HEAD 축이
 # 기준선과 같은 커밋에 붙어 차등이 구조적으로 0 이 되는데, 트리는 정상 생성되고 행도
 # 정상으로 나오므로 **어떤 degrade 신호도 서지 않는다**.
 #
 # **∀ 다 (/qg iter-7, pr-test-analyzer).** 앞 버전은 ∃ 여서 — 맞는 호출 하나만 있으면
-# `f=1` — 뒤에 `$merge_base` 를 받는 **두 번째** `create-head` 를 덧붙이는 mutation 이
+# `f=1` — 뒤에 다른 값을 받는 **두 번째** `create-head` 를 덧붙이는 mutation 이
 # 통과했다(마지막 대입이 이긴다). 형제 `run` 인자 락은 처음부터 ∀ 였는데 이 락만
 # ∃ 였다: 같은 파일 안에서 관례가 갈린 것이 구멍이었다.
-read -r ch_sites ch_good < <(awk -v s="$r5b_s" -v e="$r7_s" '
+read -r ch_sites ch_good < <(awk -v s="$r5b_s" -v e="$r8_s" '
   NR>s && NR<e && index($0,"scripts/qg-worktree.sh\" create-head") { want=NR+1; sites++
-    if (index($0,"$baseline_sha")) { good++; want=0 } }
-  want && NR==want { if (index($0,"$baseline_sha")) good++; want=0 }
+    if (index($0,"$sealed")) { good++; want=0 } }
+  want && NR==want { if (index($0,"$sealed")) good++; want=0 }
   END { print sites+0, good+0 }
 ' "$SKILL_MD")
 if [[ "$ch_sites" -ge 1 && "$ch_good" -eq "$ch_sites" ]]; then
-  echo "PASS: create-head 호출 ${ch_sites}곳 전부가 봉인 커밋(\$baseline_sha)을 받음"
+  echo "PASS: create-head 호출 ${ch_sites}곳 전부가 다시 뜬 봉인(\$sealed)을 받음"
 else
-  echo "FAIL: create-head 인자 (호출 ${ch_sites}곳 중 baseline_sha 수신 ${ch_good}곳)"
+  echo "FAIL: create-head 인자 (호출 ${ch_sites}곳 중 sealed 수신 ${ch_good}곳)"
   fail=$((fail + 1))
 fi
 
@@ -926,7 +610,7 @@ fi
 # R5b 창 안에 `remove "$head_tree_dir"` 가 있으면 그 재실행이 불가능해진다(iter-7 CRITICAL).
 rm_in_r5b=$(awk -v s="$r5b_s" -v e="$r6_s" \
   'NR>s && NR<e && index($0,"remove \"$head_tree_dir\"") { c++ } END { print c+0 }' "$SKILL_MD")
-rm_in_r6=$(awk -v s="$r6_s" -v e="$r7_s" \
+rm_in_r6=$(awk -v s="$r6_s" -v e="$r8_s" \
   'NR>s && NR<e && index($0,"remove \"$head_tree_dir\"") { c++ } END { print c+0 }' "$SKILL_MD")
 if [[ "$rm_in_r5b" -eq 0 && "$rm_in_r6" -ge 1 ]]; then
   echo "PASS: HEAD 축 트리 폐기가 R6 뒤 (R5b 창 ${rm_in_r5b}회 · R6 창 ${rm_in_r6}회)"
@@ -935,7 +619,7 @@ else
   fail=$((fail + 1))
 fi
 
-# R5b 실패 라우팅 — R6/R7 과 같은 규율. `create-head`/`run` 이 죽었을 때 무엇을 할지
+# R5b 실패 라우팅 — R6 과 같은 규율(R7 대상 소멸). `create-head`/`run` 이 죽었을 때 무엇을 할지
 # 정의돼 있어야 하고, **폴백 대상 두 변수를 금지**해야 한다.
 r5b_route=1
 r5b_body=$(awk -v s="$r5b_s" -v e="$r6_s" 'NR>s && NR<e' "$SKILL_MD")
@@ -956,26 +640,9 @@ if [[ $r5b_route -eq 1 ]]; then
   fi
 fi
 
-# 재시도 경로: 새 샌드박스는 **새 B** 를 낸다. refresh 된 값으로 create-head 를 다시
-# 부르지 않으면 HEAD 축이 고쳐지기 전 코드에 붙는다.
-#
-# **방향을 잰다, 토큰이 아니라 (/qg iter-7, pr-test-analyzer).** 앞 버전은 그 문단에
-# `create-head` 라는 토큰이 있는지만 봤는데 문단이 그 토큰을 여러 번 쓰므로, 지시문을
-# *"기존 head_tree_dir 을 그대로 재사용한다"* 로 **반전**해도 통과했다 — 삭제는 잡히고
-# 반전은 안 잡히는 락이었다. 이제 재호출 지시(양)와 재사용 지시(음)를 함께 본다.
-retry_para=$(awk '/재시도의 R5b/,/^$/' "$SKILL_MD")
-if [[ -z "$retry_para" ]]; then
-  echo "FAIL: 재시도 문단 앵커 소실 (빈 코퍼스 위에서는 아래 검사가 공허하다)"
-  fail=$((fail + 1))
-elif ! grep -q 'refresh 된 `baseline_sha` 로 다시 부른다' <<<"$retry_para"; then
-  echo "FAIL: 재시도 문단에 'refresh 된 baseline_sha 로 재호출' 지시 없음"
-  fail=$((fail + 1))
-elif grep -qE '그대로 재사용|재사용한다|그대로 쓴다' <<<"$retry_para"; then
-  echo "FAIL: 재시도 문단이 옛 트리 재사용을 지시 — 고쳐지기 전 코드를 HEAD 로 잰다"
-  fail=$((fail + 1))
-else
-  echo "PASS: 재시도 문단이 refresh 재호출을 지시하고 재사용 지시가 0회"
-fi
+# 대상 소멸 (Task 7) — NEEDS_RESOLUTION 재시도 경로("재시도의 R5b" 문단, 'Yes, retry'
+# 옵션)가 통째로 사라졌다. 재시도는 이제 fix-loop 의 Retry 하나이고, R5b 는 매
+# iteration 처음부터 다시 돈다(R-AC) — "재호출 vs 재사용" 반전 축 자체가 없다.
 
 # R6 은 호출이 **둘**이다 — 어댑터별 대조 1회 + `--aggregate` 1회. "창 안에 1개 이상"
 # 으로 재면 둘 중 하나를 지워도 나머지가 만족시킨다(실측: 대조 호출만 지운 mutation 이
@@ -1003,11 +670,11 @@ assert_call_count_in_window() {   # <label> <literal-needle> <min> <start-regex>
 }
 
 assert_call_count_in_window "R6 의 diff-test-results.py 호출 2곳(대조+집계) 유지" \
-  'scripts/diff-test-results.py' 2         '^[*][*]Step R6'     '^[*][*]Step R7'
+  'scripts/diff-test-results.py' 2         '^[*][*]Step R6'     '^[*][*]Step R8'
 assert_call_in_window "R6 이 diff-test-results.py --aggregate 호출 (집계)" \
-  'scripts/diff-test-results.py" --aggregate' '^[*][*]Step R6'  '^[*][*]Step R7'
+  'scripts/diff-test-results.py" --aggregate' '^[*][*]Step R6'  '^[*][*]Step R8'
 assert_call_in_window "R8 이 check_qa_ledger.py 호출" \
-  'scripts/check_qa_ledger.py'             '^[*][*]Step R8'     '^[*][*]Step R9'
+  'scripts/check_qa_ledger.py'             '^[*][*]Step R8'     '^## Final Summary'
 
 # ── T91 · AC66 · §11 ⑱(U3) — 기계 집계값이 원장 대조까지 살아서 도달하는가 ────
 # 두 지점이 함께 있어야 대조가 성립한다. 하나만 잠그면 다른 하나를 지워 사슬을 끊을 수
@@ -1019,19 +686,20 @@ assert_call_in_window "R8 이 check_qa_ledger.py 호출" \
 # 막기 위해서다 — 산문만 남고 호출이 사라지면 아무도 그 게이트를 부르지 않는다.
 echo "== R6→R8 집계 전달 사슬"
 r6_s=$(first_line '^[*][*]Step R6'); r8_s=$(first_line '^[*][*]Step R8')
-r7_s=$(first_line '^[*][*]Step R7'); r9_s=$(first_line '^[*][*]Step R9')
-if [[ "$r6_s" -le 0 || "$r7_s" -le 0 || "$r8_s" -le 0 || "$r9_s" -le 0 ]]; then
-  echo "FAIL: 집계 사슬 락 — 창 앵커 붕괴 (R6=$r6_s R7=$r7_s R8=$r8_s R9=$r9_s)"
+fs_s=$(first_line '^## Final Summary')
+if [[ "$r6_s" -le 0 || "$r8_s" -le 0 || "$fs_s" -le 0 ]]; then
+  echo "FAIL: 집계 사슬 락 — 창 앵커 붕괴 (R6=$r6_s R8=$r8_s FinalSummary=$fs_s)"
   fail=$((fail + 1))
 else
   chain_ok=1
-  # ① R6 의 `--aggregate` 호출이 stdout 을 파일로 남긴다
-  awk -v s="$r6_s" -v e="$r7_s" '
+  # ① R6 의 `--aggregate` 호출이 stdout 을 파일로 남긴다 (창 상한: R7 대상 소멸 → R8)
+  awk -v s="$r6_s" -v e="$r8_s" '
     NR>s && NR<e && index($0,"diff-test-results.py\" --aggregate") { want=1 }
     want && index($0,"> \"$aggregate_yaml\"") { f=1 }
     END { exit !f }' "$SKILL_MD" \
     || { echo "    R6 이 집계 stdout 을 \$aggregate_yaml 로 남기지 않음"; chain_ok=0; }
   # ② R8 의 게이트 호출이 **그 파일을** --aggregate 로 넘긴다 (호출 줄 또는 이어지는 줄).
+  # 창 상한: R9 대상 소멸(R8 이 이제 참고 문서의 마지막 스텝) → '## Final Summary'.
   #
   # 두 분기 모두 리터럴 `"$aggregate_yaml"` 을 요구한다 (/qg iter-7, 리뷰어 2명).
   # 앞 버전은 같은-줄 분기가 **토큰 `--aggregate` 만** 요구해서, 호출을 한 줄로 접고
@@ -1040,7 +708,7 @@ else
   # 게이트가 **깨끗하게 파싱해** 어댑터의 `closed` 를 원장의 `closed` 와 대조하고 통과한다
   # — 전사 게이트가 막으려던 바로 그 형태다. 현재 SKILL 이 2줄이라 GREEN 이었던 것이지
   # 락의 이빨 때문이 아니었다.
-  awk -v s="$r8_s" -v e="$r9_s" '
+  awk -v s="$r8_s" -v e="$fs_s" '
     NR>s && NR<e && index($0,"scripts/check_qa_ledger.py") { want=NR+1
       if (index($0,"--aggregate \"$aggregate_yaml\"")) { f=1; want=0 } }
     want && NR==want { if (index($0,"--aggregate \"$aggregate_yaml\"")) f=1; want=0 }
@@ -1070,10 +738,11 @@ fi
 echo "== R1b→R8 unclaimed 집행 사슬"
 rinit_s=$(first_line '^[*][*]Step R-init'); r1b_s=$(first_line '^[*][*]Step R1b')
 r1a_s=$(first_line '^[*][*]Step R1a'); r2_s=$(first_line '^[*][*]Step R2')
-rt_end=$(first_line '^[*][*]Step R9')
+# 창 상한: Step R9(대상 소멸 — R8 이 이제 참고 문서의 마지막 스텝) → '## Final Summary'.
+rt_end=$(first_line '^## Final Summary')
 if [[ "$rinit_s" -le 0 || "$r1a_s" -le 0 || "$r1b_s" -le 0 || "$r2_s" -le 0 \
-      || "$r8_s" -le 0 || "$r9_s" -le 0 || "$rt_end" -le 0 ]]; then
-  echo "FAIL: unclaimed 사슬 락 — 창 앵커 붕괴 (R-init=$rinit_s R1a=$r1a_s R1b=$r1b_s R2=$r2_s R8=$r8_s R9=$r9_s)"
+      || "$r8_s" -le 0 || "$rt_end" -le 0 ]]; then
+  echo "FAIL: unclaimed 사슬 락 — 창 앵커 붕괴 (R-init=$rinit_s R1a=$r1a_s R1b=$r1b_s R2=$r2_s R8=$r8_s FinalSummary=$rt_end)"
   fail=$((fail + 1))
 else
   uc_ok=1
@@ -1162,7 +831,7 @@ else
   #      않지만 라우팅 문장이 요구하는 *"stderr 를 verbatim 으로 노출"* 을 죽인다(실측:
   #      위 세 술어만으로는 GREEN 이었다). 이 블록에서 stderr 리다이렉트는 어떤 형태든
   #      그 요구와 양립하지 않으므로 열거가 아니라 금지다.
-  awk -v s="$r8_s" -v e="$r9_s" '
+  awk -v s="$r8_s" -v e="$rt_end" '
     function count(hay, needle,   c, i, n2) {
       c = 0; n2 = length(needle)
       while ((i = index(hay, needle)) > 0) { c++; hay = substr(hay, i + n2) }
@@ -1207,15 +876,17 @@ else
   #      집행을 문서 수준에서 권고로 만드는 mutant 는 어떤 정적 검사로도 못 잡는다 —
   #      금지어를 하나도 안 쓰기 때문이다. 이 락은 *그 문장의 존재와 자기 줄의 극성*까지만
   #      지킨다. 금지어 목록을 늘리는 것은 세 번째 열거일 뿐 이 축을 닫지 못한다.
-  awk -v s="$r8_s" -v e="$r9_s" '
+  # 판정 어휘가 Task 7 에서 'PASS 로 올리지 않는다' → 'clean 불가' 로 바뀌었다(전면
+  # 치환 — scripts/verdict.py 밖에 판정 어휘를 두지 않는다). 앵커도 같이 옮긴다.
+  awk -v s="$r8_s" -v e="$rt_end" '
     NR>s && NR<e {
-      if (index($0,"non-zero 면") && index($0,"PASS 로 올리지 않는다")) {
+      if (index($0,"non-zero 면") && index($0,"clean 불가")) {
         pos=1
         if ($0 ~ /참고한다|권고|advisory/) neg++
       }
     }
     END { exit !(pos && neg == 0) }' "$SKILL_MD" \
-    || { echo "    R8 게이트의 'non-zero → PASS 불가' 라우팅 문장이 없거나 그 줄에서 권고로 약화됨"; uc_ok=0; }
+    || { echo "    R8 게이트의 'non-zero → clean 불가' 라우팅 문장이 없거나 그 줄에서 권고로 약화됨"; uc_ok=0; }
   if [[ $uc_ok -eq 1 ]]; then
     echo "PASS: R1b 가 남기고 R8 이 --assign-rows 로 집행에 넘김 (∀ · fenced · 정확히 1회)"
   else
@@ -1448,7 +1119,7 @@ else
   #      그러면 경로를 정규화해 놓고 아무것도 비교하지 않는 가드가 남는다. `cmp` 가 그
   #      축이다: fenced 코드에 `project_dir` 과 glob 접미(`/*`)가 같은 줄에 있어야 한다
   #      (`case` 든 `[[ == ]]` 든 담김 비교는 이 모양을 피할 수 없다).
-  #    ★ 정직한 한계: `PASS 불가` 는 이 창의 fenced 코드에 이미 여러 번 나오므로(mktemp
+  #    ★ 정직한 한계: `clean 불가` 는 이 창의 fenced 코드에 이미 여러 번 나오므로(mktemp
   #      실패 메시지 등) **이빨이 없다**. `r` probe 는 유지하되 집행 근거로 세지 않는다.
   #    ★ **모양이 아니라 동작을 잰다 (/qg iter-8 iteration 3, F4).** 앞 버전은 `head`·
   #      `pat`·`cmp` 세 probe 가 "실제 집행" 을 한다고 주석에 적었는데 **거짓이었다**:
@@ -1461,7 +1132,7 @@ else
   #      정직하게: `case` 가 아닌 `[[ == ]]` 모양으로 다시 쓰면 이 probe 는 RED 가
   #      된다(락 편집을 강제하는 fail-closed seam 이지 통과 경로가 아니다).
   #    ★ 기준 트리는 `$project_dir` 이 아니라 `$sealed_root` 다 (F10) — 봉인하는 쪽
-  #      (`create-sandbox`)이 `--show-toplevel` 을 쓰므로 가드도 같은 트리를 봐야 한다.
+  #      (`seal-worktree.sh`)이 `--show-toplevel` 을 쓰므로 가드도 같은 트리를 봐야 한다.
   #      `pat` 은 그 파생이 `$project_dir` 에서 출발한다는 것까지 함께 잰다.
   awk -v s="$rinit_s" -v e="$r1a_s" '
     NR>s && NR<e {
@@ -1476,7 +1147,7 @@ else
       if (inarm && index(line,";;")) inarm=0
       if (index(line,"-n \"$project_dir\"")) np=1
       if (index(line,"-n \"$sealed_root\"")) ns=1
-      if (index(line,"PASS 불가")) r=1
+      if (index(line,"clean 불가")) r=1
     }
     END { exit !(head && pat && res && cmp && act && np && ns && r) }' "$SKILL_MD" \
     || { echo "    R-init 에 봉인-트리(\$sealed_root) 담김 런타임 가드(show-toplevel 파생 + pwd -P + 담김 비교 + 그 arm 안의 exit + 두 빈-값 검사)가 없음"; loc_ok=0; }
@@ -1488,37 +1159,12 @@ else
   fi
 fi
 
-# 새 라벨 5종이 실제로 존재하고 순서가 맞다
-# 라벨은 **줄머리 볼드 헤딩**으로만 앵커한다. 맨 라벨로 찾으면 본문 cross-reference 가
-# 먼저 잡힌다 — 실측: `first_line 'Step R5a⁰'` = **174**(다른 섹션의 참조), 실제 헤딩은
-# **810**. 그러면 `r5a0 < r5a1` 순서 assert 가 "참조 < 헤딩"을 비교해 헤딩이 어디로
-# 옮겨가도 통과하는 vacuous 락이 된다. 나머지 다섯은 지금 우연히 헤딩이 먼저일 뿐이므로
-# 여섯 개 전부 같은 방식으로 못 박는다. (`\*` 금지 — 위 주석 참조.)
-r5a0=$(first_line '^[*][*]Step R5a⁰'); r5a1=$(first_line '^[*][*]Step R5a¹')
-r5a2=$(first_line '^[*][*]Step R5a²'); r5a3=$(first_line '^[*][*]Step R5a³')
-r8=$(first_line '^[*][*]Step R8')
-for pair in "R5a⁰:$r5a0" "R5a¹:$r5a1" "R5a²:$r5a2" "R5a³:$r5a3" "R8:$r8"; do
-  assert_line "새 라벨 ${pair%%:*} 존재" "${pair#*:}"
-done
-assert_order "R5a⁰ precedes R5a¹" "$r5a0" "$r5a1"
-assert_order "R5a¹ precedes R5a²" "$r5a1" "$r5a2"
-assert_order "R5a² precedes R5a³" "$r5a2" "$r5a3"
-
-# 기존 R-init 락이 검사하던 것(detect-runtime 실행)은 이제 R5a⁰ 의 책임이다.
-# 두 겹 vacuous-pass 실측(수정 전), 둘 다 이제 막는다:
-#   (a) $r5a0 이 0 이면(헤딩 실종) first_line_after 는 전체 파일을 처음부터
-#       검색해 frontmatter 의 `detect-runtime.sh` 언급(:23)에 우연히 만족한다.
-#   (b) $r5a0 이 유효해도 first_line_after 는 상한이 없어서, R5a⁰ 본문의
-#       실제 호출을 지워도 R5a³ dispatch 프롬프트 안의 무관한 언급
-#       (`manifest: <output of detect-runtime.sh>`, :879)에 만족해 버린다.
-# 그래서 하한(R5a⁰)과 상한(R5a¹) 둘 다로 창을 좁힌다.
-if [[ "$r5a0" -gt 0 && "$r5a1" -gt 0 ]] && \
-   awk -v s="$r5a0" -v e="$r5a1" 'NR>s && NR<e && /detect-runtime/ {f=1} END{exit !f}' "$SKILL_MD"; then
-  echo "PASS: R5a⁰ runs detect-runtime (window $r5a0..$r5a1)"
-else
-  echo "FAIL: R5a⁰ runs detect-runtime (heading missing or no in-window match; window $r5a0..$r5a1)"
-  fail=$((fail + 1))
-fi
+# 대상 소멸 (Task 7) — 라벨 R5a⁰/R5a¹/R5a²/R5a³ 4종과 그 순서 불변식, 그리고
+# "R5a⁰ 가 detect-runtime 을 실행한다" 락이 이 자리에 있었다. 해소 루프(Decision 2 ·
+# block_policy · runtime-verifier manifest 초기화)가 통째로 사라지며 그 스텝들 자체가
+# 없어졌다(R-AG: `evidence_dir` 정의는 R5a²→R8 로 옮겨졌다) — detect-runtime.sh 스크립트
+# 도 삭제됐다. 양의 짝으로 R8 라벨 존재만 남긴다(뒤 여러 창 락이 이미 R8 을 앵커로 쓴다).
+assert_line "새 라벨 R8 존재" "$(first_line '^[*][*]Step R8')"
 
 # ── T1 / AC1 / AC2 / M3: 앵커 이전 ──
 echo "== transparency 앵커 이전"
@@ -1550,81 +1196,24 @@ fi
 # ── T22 / AC31 / M12: 호출 주체 — run-test-selection.sh 가 verifier dispatch 블록 밖 ──
 echo "== 호출 주체 불변식"
 r5b=$(first_line '^[*][*]Step R5b')   # 헤딩 앵커 — cross-reference latch 방지
-# 형제 창(R5a⁰..R8)들과 달리 여기엔 존재 가드가 없었다. `$r5b` 가 0 이면 아래 창 조건
-# `n < $r5b` 가 산술 컨텍스트에서 0 과 비교돼 **항상 거짓** → in_block 이 0 으로 남아
-# 락 전체가 vacuous PASS 가 된다. 헤딩 리네임 한 번으로 무력화되는 구멍이라 막는다.
 assert_line "Step R5b 헤딩 존재 (창 붕괴 방지)" "$r5b"
-in_block=0
-while IFS= read -r ln; do
-  n="${ln%%:*}"
-  if [[ "$n" -gt "$r5a3" && "$n" -lt "$r5b" ]]; then in_block=$((in_block + 1)); fi
-done < <(grep -n 'run-test-selection.sh' "$SKILL_MD")
-if [[ "$in_block" -eq 0 ]]; then
-  echo "PASS: run-test-selection.sh 호출이 verifier dispatch 블록(R5a³..R5b) 안에 0회"
-else
-  echo "FAIL: verifier dispatch 블록 안에서 run-test-selection.sh 호출 ${in_block}회"
-  fail=$((fail + 1))
-fi
+# 대상 소멸 (Task 7) — "run-test-selection.sh 호출이 verifier dispatch 블록
+# (R5a³..R5b) 안에 0회" 는 그 창 자체가 사라져 대응물이 없다(verifier 가 삭제돼
+# 그 턴이 존재하지 않는다). 아래 authoritative 문장 존재 검사는 keep — Step 3(a)
+# 의 머리 인용 블록(호출 주체 불변식)이 그 문장을 그대로 남긴다.
 if grep -qF '이 호출 결과가 authoritative' "$SKILL_MD"; then
   echo "PASS: authoritative 문장 존재"
 else
   echo "FAIL: authoritative 문장 부재"; fail=$((fail + 1))
 fi
 
-# ── 폴백에서 R5b 미실행 (실제 워킹 트리 보호) ──────────────────────────────
-# 고친 결함: 폴백은 `runtime_project_dir = project_dir`(사용자의 실제 repo)로 두는데
-# R5b 만 샌드박스 가용성 조건이 없어서, `npm ci`/`uv sync --frozen`/`venv+pip` 가 사용자
-# 트리에서 돌았다. R7 폴백 신호는 `--porcelain` 기반이라 git-ignored 인 `.venv`/
-# `node_modules` 를 **구조적으로** 볼 수 없어 경고조차 못 냈다.
-#
-# 락을 창(R5b..R6)으로 좁히는 이유: `sandbox_dir` 은 파일 전체에 8회(R0·R4 등) 나오므로
-# 전체 파일 grep 은 R5b 본문에서 게이트를 통째로 지워도 통과한다. 창 안에서는 이 게이트가
-# 유일한 출처다(실측: 창 내 `sandbox_dir` 1회, `SILENT_DROP` 1회).
-echo "== 폴백 R5b 미실행"
-r6_marker=$(first_line '^[*][*]Step R6')
-assert_line "Step R6 헤딩 존재 (창 상한)" "$r6_marker"
-
-# ── /qg iter-2 G1·G5: 이 락은 **극성**과 **지시 vs 산문**을 구분하지 못했다 ──────────
-# 이전 형태는 창 안에 `sandbox_dir`·`unrun`·`SILENT_DROP` 이 **각각 어딘가에** 있는지만
-# 봤다(독립 존재 검사 3개를 AND). 실측된 두 구멍:
-#
-#   G1 (criticality 9) — `sandbox_dir 가 UNSET 이면` → `SET 이면` 한 단어 반전이 GREEN.
-#      뒤집힌 지시는 샌드박스가 **있을 때** R5b 를 건너뛰고 UNSET 일 때 실행한다 — 즉
-#      정확히 사용자의 실제 워킹 트리에서 `npm ci`/`uv sync`/`venv` 를 돌린다. 워킹 트리
-#      파괴를 막으려고 쓴 락이 술어 반전을 살아남으면 아무것도 지키지 않는다.
-#   G5 (6) — `unrun` 이 창 안에 2회 나온다: 실제 지시(`<unit>\tunrun\t-`)와 **근거 산문**
-#      ("HEAD 축 `unrun` 은 … SILENT_DROP 으로 라우팅돼"). 지시를 지우고 산문만 남기면 GREEN.
-#
-# 그래서 (a) 조건과 극성을 **같은 줄에서** 요구하고, (b) 반대 극성이 0회임을 요구하고,
-# (c) `unrun` 은 산문에 없는 **지시 고유 형태**(`unrun\t-`)로 잰다.
-polarity_ok=0; polarity_bad=0; rec_ok=0; route_ok=0; route_stale=0
-while IFS= read -r line; do
-  case "$line" in
-    *sandbox_dir*UNSET*) polarity_ok=1 ;;
-    *sandbox_dir*SET*)   polarity_bad=$((polarity_bad + 1)) ;;   # UNSET 은 위에서 이미 소비됨
-  esac
-  case "$line" in *'unrun\t-'*)   rec_ok=1 ;; esac
-  # /qg iter-6 D3: 이 락은 원래 리터럴 `SILENT_DROP` 을 요구했다. 그런데 SR4 이후
-  # 폴백에서는 **R4 도 건너뛰어 기준선 축까지 전량 `unrun`** 이므로 쌍은 항상
-  # `(U,U) → BASELINE_UNRUNNABLE` 이다 — 즉 락이 **도달 불가능한(=틀린) 사실을
-  # 방어**하고 있었고, 산문을 옳게 고치면 스위트가 red 가 되는 상태였다.
-  # 락을 지우면 G5 보호가 사라지므로, 정정된 라우팅 주장으로 **재조준**한다.
-  case "$line" in *'(U,U)'*BASELINE_UNRUNNABLE*) route_ok=1 ;; esac
-  # 옛 주장의 재도입 차단. /qg iter-6 iteration 2 (I1): 앞선 판본은 `(P,U)` **한 표기만**
-  # 핀했는데, 같은 문서 R4 절(:798)이 같은 규칙을 `(F,U)`/`(A,U)` 로도 적고 있어 그 표기로
-  # 되살리면 통과했다(mutation 실측 GREEN). 드리프트 소스가 문서 안에 있는데 락이 한 셀만
-  # 봤다 — 내 mutation 이 락의 전제를 공유한 전형. 창 안에서 `SILENT_DROP` 자체를 금지한다:
-  # 정정된 산문은 이 창에서 그 토큰을 쓰지 않는다.
-  case "$line" in *SILENT_DROP*) route_stale=1 ;; esac
-done < <(awk -v s="$r5b" -v e="$r6_marker" 'NR>s && NR<e' "$SKILL_MD")
-
-if [[ "$r5b" -gt 0 && "$r6_marker" -gt 0 && "$polarity_ok" -eq 1 && "$polarity_bad" -eq 0 \
-      && "$rec_ok" -eq 1 && "$route_ok" -eq 1 && "$route_stale" -eq 0 ]]; then
-  echo "PASS: R5b 폴백 게이트 — sandbox_dir+UNSET 동일 줄 · 반대 극성 0회 · unrun 지시형 · (U,U)→BASELINE_UNRUNNABLE · 옛 주장 0회 (창 $r5b..$r6_marker)"
-else
-  echo "FAIL: R5b 폴백 게이트 (polarity_ok=$polarity_ok polarity_bad=$polarity_bad rec=$rec_ok route=$route_ok stale=$route_stale 창 $r5b..$r6_marker)"
-  fail=$((fail + 1))
-fi
+# 대상 소멸 (Task 7) — "== 폴백 R5b 미실행" 전체(polarity_ok/bad · rec_ok · route_ok
+# · route_stale 5축)가 이 자리에 있었다. `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX`
+# 로 R4 가 건너뛰고 R5b 가 `unrun` 전량이 되던 시나리오 자체가 사라졌다 — R-V 의 새
+# kill switch(`DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST`)는 R4 한 스텝이 아니라
+# ② 전체를 건너뛴다. 후계는 이미 존재한다 — 위 "R5b 실패 라우팅" 검사(r5b_route)가
+# `$sealed`/`$head_tree_dir` 관측 실패 → `unrun` + `degraded` · '폴백하지 않는다'
+# 명문화를 같은 창(R5b..R6)에서 잰다. 새 락을 더 두지 않는다(중복).
 
 # 거짓이던 배너 문구의 재도입 방지. 이 문구는 R5b 가 실제 트리에서 설치·테스트를 돌리는
 # 동안 "read-only" 라고 주장해 사용자를 오도했다 — 되돌아오면 즉시 빨개져야 한다.

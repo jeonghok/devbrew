@@ -13,13 +13,13 @@ TAB=$'\t'
 
 # Task 31 fix round 1 (F1): case_no_reimpl_in_skill() 은 SKILL.md 에 러너 감지 표
 # (devDependencies/pytest.ini/Cargo.toml/go.mod)가 재구현되지 않았는지 잰다. 그
-# 감지 로직(R1a)이 있던 Runtime gate 절차가 references/runtime-gate.md 로 옮겨진
+# 감지 로직(R1a)이 있던 차등 테스트 절차가 references/differential-test.md 로 옮겨진
 # 뒤에도 "스킬 어디에도 재구현이 없다"는 취지는 그대로이므로, 분할 전과 동일한
 # 논리적 문서로 재구성해 그 위에서 돈다. 재구성 실패는 조용히 원본으로 폴백하지
 # 않고 FAIL 한다.
 . "$SCRIPT_DIR/lib/reconstruct-skill.sh"
 if ! SKILL="$(reconstruct_skill_md "$SKILL_REAL")"; then
-  echo "FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패 ($SKILL_REAL)"
+  echo "FAIL: SKILL.md ↔ references/differential-test.md 재구성 실패 ($SKILL_REAL)"
   exit 1
 fi
 trap 'rm -f "$SKILL"' EXIT

@@ -1,52 +1,41 @@
 ---
 name: quality-pipeline
 description: >
-  Runs the full quality-gates pipeline in a single assistant turn. Triggered by
+  Runs the quality-gates pipeline in a single assistant turn. Triggered by
   `/qg`, "run quality gates", "verify my implementation", "check code quality",
-  or "is my PR ready to merge". Dispatches up to two gates (review, then
-  optionally runtime verification) serially; progression and fix-loop decisions
-  surface to the user via AskUserQuestion. A gate argument (`/qg both|review|runtime`)
-  sets the scope. On non-aborted completion the pipeline simply ends; publishing
-  a PR-understanding comment is a separate explicit step (`/qg-publish`) — not a
-  gate, and not an automatic continuation.
+  or "is my PR ready to merge". One pipeline, one verdict — scope, a differential
+  test against the baseline (always), reviewers per angle, a framing-blind
+  re-critique, and synthesis. Fix-loop decisions surface via AskUserQuestion.
+  Publishing a PR-understanding comment is a separate explicit step
+  (`/qg-publish`) — not part of the pipeline, and not an automatic continuation.
 cost_class: variable
 allowed-tools:
-  # Group 1 — Preflight scripts (실행 순서: setup → trivia)
+  # Group 1 — Preflight scripts (실행 순서: setup → trivia → 스코프 신호)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh:*)
-  # Group 2 — Review gate scripts
+  # Group 2 — Differential test scripts (references/differential-test.md)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-baseline.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/baseline-cache.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/seal-worktree.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check_qa_ledger.py:*)
+  # 비-플러그인 명령 중 **항목을 가진 유일한 것**. R-init 이 오케스트레이터 소유 중간 파일의
+  # 집을 만든다(AC69). 레포 안에 두면 봉인(`seal-worktree.sh` 의 `git add -A`)이 그 파일들을
+  # HEAD 축에 넣으므로 반드시 트리 밖이어야 하고, 그러려면 이 한 명령이 필요하다. fenced
+  # 블록의 맨 셸 유틸리티(`pwd` · `printf` · `git` …)가 항목을 필요로 하는지는 미측정이다 —
+  # 넓은 grant 를 사지 않는다.
+  - Bash(mktemp:*)
+  # Group 3 — Review scripts (각도 · 재비판 · 합성)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/recritic_bridge.py:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py:*)
-  # Group 3 — Runtime gate scripts
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-baseline.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/baseline-cache.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check_qa_ledger.py:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py:*)
-  # 비-플러그인 명령 중 **항목을 가진 유일한 것**. R-init 이 오케스트레이터 소유 중간 파일
-  # 6종의 집을 만든다 (AC69). 레포 안에 두면 `create-sandbox` 가 커밋 `B` 로 봉인하므로
-  # (`ls-files --others --exclude-standard` 로 미추적·비-ignore 파일을 샌드박스로 복사한다)
-  # 반드시 트리 밖이어야 하고, 그러려면 이 한 명령이 필요하다.
-  #
-  # **"목록에 없는 셸 명령이 하나도 없다"는 뜻이 아니다 (정정).** 이 SKILL 의 fenced 블록은
-  # 항목 없는 맨 셸 유틸리티를 여럿 실행한다 — `pwd`(Step P0, 모든 `/qg` 실행) · `printf` ·
-  # `echo` · `exit` · `cd` · `set` · `mv` · `case` · `[[` · `git`(R-init 담김 가드). 그런데도
-  # `pwd` 는 여러 릴리스에 걸쳐 permission stop 없이 돌아왔다 — 즉 **fenced 블록의 맨 셸
-  # 유틸리티가 항목을 필요로 하는지 자체가 미측정**이다. 여기에 **개수를 적지 않는다**:
-  # 앞 판본은 넷을 세어 적었고 같은 커밋의 R-init 편집이 그 census 를 바로 어긋나게 만들었다
-  # (§11 ㉜ · F12). 항목을 늘리지 않는 이유: 실측되지 않은 위험을 대가로 `Bash(mv:*)` 같은
-  # 넓은 grant 를 사는 것은 도구 표면 양보다. 판정은 예정된 Runtime 실측이 낸다 — 그 관측은
-  # `pwd` 처럼 **대입 안의 명령 치환**인 모양과 `[[ … ]] && <script>` 처럼 **맨 빌트인이 선두**
-  # 인 모양을 함께 봐야 한다(후자는 릴리스 증거가 아예 없다).
-  - Bash(mktemp:*)
   # Group 4 — Meta (orchestration primitives)
   - Agent
   - AskUserQuestion
@@ -60,14 +49,13 @@ allowed-tools:
 
 # Quality Gates — In-Turn Orchestrator (v8.0.0)
 
-You are running the **full quality-gates pipeline** in a single assistant
-turn. You dispatch up to two gates serially in order (Runtime gate only when selected). At decision points
-(review-iter boundary, runtime needs-resolve) you call
-`AskUserQuestion` and branch on the user's response — the response arrives
-as a tool result in the same turn, so no Stop hook and no continuation
-sentinel are needed.
+You are running the **quality-gates pipeline** in a single assistant turn. There is
+**one pipeline and one verdict** — no gate scope to choose. At the fix-loop boundary
+you call `AskUserQuestion` and branch on the user's response — the response arrives
+as a tool result in the same turn, so no Stop hook and no continuation sentinel are
+needed.
 
-**Law 2 (Writer ≠ Reviewer):** you are the orchestrator (writer). `security-reviewer`, 재비판(`doc-recritic`), and `test-scope-validator` are read-only reviewers (`tools: Read, Grep, Glob` — fail-closed allowlist). The `runtime-verifier` is a **sandbox executor**: it CAN Write/Edit, but only inside a disposable git-worktree sandbox, and you enforce Law 2 *structurally* — after it runs you compute `qg-worktree.sh mutation-guard <sandbox> <baseline> <snapshot_digest>` and, if `forced_downgrade: yes`, you cap the verdict at FAIL regardless of what the verifier claimed. The `<snapshot_digest>` is the orchestrator-held seal (captured at create-sandbox) that the guard verifies before trusting its snapshot — the verifier cannot reach it (§6.1). Nothing is committed; the sandbox is discarded. You may also apply user-approved Review-gate fixes ("Retry" path) via Edit/Write — those are user-consented.
+**Law 2 (Writer ≠ Reviewer):** you are the orchestrator (writer). `security-reviewer`, 재비판(`doc-recritic`), and `test-scope-validator` are read-only reviewers (`tools: Read, Grep, Glob` — fail-closed allowlist). No agent with write access is dispatched. You run the tests yourself — both axes of the differential test, on trees you create — and you may apply user-approved fixes ("Retry" path) via Edit/Write; those are user-consented.
 
 **State file:** read `worktree_path` from `.claude/quality-gates/<sid>/pipeline.md`
 only during preflight; never write. Setup script handles creation, /cancel-qg
@@ -80,21 +68,16 @@ handles deletion.
 1. **Workflow (top-to-bottom on invocation):**
    - [Preflight](#preflight) — kill switch / setup-qg
    - [Arguments](#arguments) — `/qg` flags 파싱
-   - [Dispatch Loop](#dispatch-loop) — two gates serialized in order with per-gate iteration
-2. **Per-gate dispatch logic:**
-   - [Trivia escape](#trivia-escape) — one-sentence diff → all gates skipped
-   - [Review gate](#review-gate) — scout + Phase 1 + 재비판(doc-recritic) + synthesizer; iter loop with decision tool at every boundary
-   - [Reviewer composition (scope-driven)](#reviewer-composition-scope-driven) — 3-tier + rubric + palette
-   - [Runtime gate](#runtime-gate) — 영향 판정 + 기준선 대비 차등 실행 + test-scope-validator/runtime-verifier
+   - [Pipeline](#pipeline) — ① 스코프 → ② 차등 테스트 → ③ 각도 + 리뷰어 → ④ 재비판 → ⑤ 합성 · 판정, iteration 마다
+2. **Steps:**
+   - [Trivia escape](#trivia-escape) — one-sentence diff → pipeline skipped
+   - [Review](#review) — Step 1 스코프 · 1b 신호 · 1c 차등 테스트 · 2 scout · 3 디스패치 · Phase 1.5 재비판 · 4 합성 · 4.5 판정 표면 · 5 결정
+   - [Angles and reviewers (scope-driven)](#angles-and-reviewers-scope-driven) — 각도 셋 + 추가 리뷰어 rubric
+   - [Differential test](#differential-test) — 기준선 대비 차등 실행(절차 전문은 레퍼런스)
 3. **Decision points (AskUserQuestion templates):**
-   - [Review iter boundary decision](#review-iter-boundary-decision)
-   - [Review max-iter decision](#review-max-iter-decision)
-   - [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision)
-4. **Output templates** (verbatim, field substitution):
-   - Review / Runtime result templates
-   - Final summary template
-   - [kill switch](#kill-switch) — DEVBREW_QUALITY_GATES_DISABLE* 색인, 각 스위치가 실제로 검사되는 스텝으로 포인터만
-   - [Rules](#rules) — Law 2 invariants, state file invariants
+   - [Fix-loop decision](#fix-loop-decision)
+   - [Max-iter decision](#max-iter-decision)
+4. **Output templates** — [Final Summary](#final-summary) · [kill switch](#kill-switch) · [Rules](#rules)
 
 ## Preflight
 
@@ -148,122 +131,53 @@ Exit non-zero → surface stderr verbatim and abort.
 ## Arguments
 
 Parse from `/qg` invocation:
-- `gate` (optional): `review`, `runtime`, `both`, or absent.
-  - `review` → Review gate only. `runtime` → Runtime gate only (single-gate).
-  - `both` → run **both** gates with no gate-scope question (the zero-click "both" escape; symmetric with `review`/`runtime`). `both` answers **gate scope only**, not runtime scope — so Decision 2 still fires for `/qg both` when a `requires_decision` surface exists (same as bare `/qg`).
-  - absent → fire the Decision 1 gate-scope question (Review gate only / Run both gates).
-  - **Precedence:** an explicit `gate=` value always wins over `--skip-runtime`; on conflict `gate=` wins and a one-line advisory is printed (see Decision 1). No silent conflict.
 - `plan_path` (optional): defaults to "auto" (`scripts/discover-plan.sh`).
-  Threaded as a secondary scope hint to the Runtime gate's test-scope-validator
-  and the Review gate's security-reviewer / 재비판(doc-recritic) dispatches. The Gate-1
-  plan-verifier was removed in v2.0.0 — plan is no longer verified, only hinted.
+  A secondary scope hint for `test-scope-validator` (differential test R1b) and
+  for the `security-reviewer` / 재비판(doc-recritic) dispatches — not verified,
+  only hinted.
 - `spec_path` (optional): defaults to "auto" (`scripts/discover-spec.sh`).
-  The project spec is the Acceptance Criteria truth. Consumed by the Runtime
-  gate's test-scope-validator (used to assess per-AC coverage — emitted as the advisory `ac_coverage` output) and by
-  the Review gate codex path (spec AC injected into `<spec_context>`,
-  script-internal in `run_codex_reviewer.sh`). If
-  `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1`, pass `spec_path: none` to the
-  test-scope-validator dispatch — this forces the no-spec fallback (ac_coverage
-  omitted, plan-based scope only). All spec behavior is advisory; it never
-  blocks a gate.
+  The project spec is the Acceptance Criteria truth — `test-scope-validator`
+  classifies test files against it, and the codex path injects its AC into
+  `<spec_context>` (script-internal in `run_codex_reviewer.sh`). If
+  `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1`, pass `spec_path: none` to
+  the `test-scope-validator` dispatch. All spec behavior is advisory; it never
+  blocks the pipeline.
 - `pr_url` (optional).
-- `skip_runtime` (flag): if set, skip the Runtime gate — **subject to gate-scope precedence** (normalized below).
-- `paths` (optional, repeatable): scope override for the Review gate diff.
+- `branch [<name>]` (optional): scope override — the full branch diff (with
+  `<name>`, in an isolated worktree created by `setup-qg.sh`).
+- `paths` (optional, repeatable): scope override — `--paths <glob>...`.
 
-**Effective skip-runtime (precedence normalization).** After parsing, compute `effective_skip_runtime`: it is `true` only when `skip_runtime` is set AND no explicit `gate ∈ {runtime, both}` was given. If `--skip-runtime` is combined with an explicit `gate=runtime` / `gate=both`, `gate=` wins → `effective_skip_runtime = false` and you print `> [quality-gates] --skip-runtime ignored: explicit gate=<value> wins (precedence).` (`gate=review` + `--skip-runtime` agree — no conflict; `effective_skip_runtime = true`.) **Every runtime-skip test below uses `effective_skip_runtime`, never the raw `skip_runtime` flag** — this is what wires the Decision-1 precedence rule into actual execution.
+**제거된 인자** — `both` · `review` · `runtime` · `--skip-runtime`. 한 파이프라인이라
+고를 게이트 범위가 없다. `setup-qg.sh` 가 인자마다 한 줄
+(``> [quality-gates] `<인자>` 인자는 제거됐다 — …``)을 내고 실행은 그대로 진행한다.
+그 인자 때문에 질문을 띄우거나 어느 단계를 건너뛰지 않는다.
 
-Single-gate mode (`review`/`runtime`) runs ONLY the named gate and
-emits its verdict directly — no inter-gate progression. `/qg runtime`
-bypasses the Dispatch Loop (and Decision 2), so it produces its
-runtime-scope inputs at the Runtime gate's [Step R5a⁰](#runtime-gate)
-instead — `detect-runtime.sh` → `manifest` / `approved_surfaces` /
-`block_policy` (and the runtime-scope question if a `requires_decision`
-surface exists) — preserving main's single-gate behavior (spec §3
-Non-goal: single-gate 동작 무변경).
+## Pipeline
 
-## Upfront Execution Plan
+한 파이프라인, 한 판정(설계 §6.1):
 
-Two upfront decisions are owned here, in order, before any gate runs — after [Preflight](#preflight) and [Arguments](#arguments), as [Dispatch Loop](#dispatch-loop) step 2 (after the trivia escape, before any gate dispatch). **Decision 1 (gate scope)** fires first and always (unless an argument pre-answers it); **Decision 2 (runtime scope)** is conditional and only reachable when gate scope = both.
+1. [Trivia escape](#trivia-escape). trivia 면 나머지 전부를 건너뛴다.
+2. iteration N = 1..5 — 각 iteration 은 다섯 단계를 이 순서로 돈다:
+   - ① **스코프** — [Review](#review) Step 1 · 1b
+   - ② **차등 테스트** — Step 1c → [Differential test](#differential-test). **매 iteration 돈다** — iteration 2 이상은 Retry 가 코드를 고친 뒤라, 앞 iteration 의 결과는 다른 트리의 것이다.
+   - ③ **각도 + 리뷰어** — Step 2 · 3
+   - ④ **재비판** — Phase 1.5
+   - ⑤ **합성 · 판정** — Step 4 · 4.5 · 5
+3. [Final Summary](#final-summary).
 
-### Decision 1 — Gate scope (always, unless an argument pre-answers it)
-
-Fire this **first**, before any gate dispatch — it runs as part of [Dispatch Loop](#dispatch-loop) step 2, ahead of the Review gate.
-
-- **Skip condition (an argument is the answer):** if `gate ∈ {review, runtime, both}` or `skip_runtime` is set, that argument IS the answer — do NOT fire the question. `--skip-runtime` is an alias for "Review gate only" (= `gate=review`).
-- **Precedence (no silent conflict):** an explicit `gate=` value always wins over `--skip-runtime`. If `--skip-runtime` is combined with a conflicting `gate=runtime`/`gate=both`, `gate=` wins, `--skip-runtime` is ignored, and you print a one-line advisory: `> [quality-gates] --skip-runtime ignored: explicit gate=<value> wins (precedence).` The [Arguments](#arguments) mapping is normative on conflict.
-- **Otherwise fire a binary AskUserQuestion.** The literal phrase `both gates` MUST appear in the `question:` field — it is this decision's protocol-shape anchor and is unique across all decision-tool calls in this SKILL:
-
-```
-AskUserQuestion({
-  questions: [
-    {
-      question: "Run both gates (Review gate → Runtime gate), or only the Review gate?",
-      header: "Gate scope",
-      options: [
-        {label: "Run both gates",   description: "Review gate then Runtime gate. Runtime scope is decided next only if a requires_decision surface exists."},
-        {label: "Review gate only", description: "Run the Review gate and stop; skip the Runtime gate entirely."}
-      ],
-      multiSelect: false
-    }
-  ]
-})
-```
-
-- **Branch on answer:**
-  - `Review gate only` (also `gate=review` / `--skip-runtime`) → run the Review gate, then **short-circuit** the Runtime stage: skip Decision 2 and the entire Runtime gate, and emit the final summary.
-  - `Run both gates` (also `gate=both`) → proceed to Decision 2.
-
-### Decision 2 — Runtime scope + block policy (conditional)
-
-Reached when gate scope = both via the full-pipeline Dispatch Loop (interactive `Run both gates`, or the `gate=both` argument). **Single-gate `/qg runtime` bypasses the Dispatch Loop and runs the equivalent runtime-scope init at the Runtime gate's [Step R5a⁰](#runtime-gate) instead** — so every path that reaches the Runtime gate produces `manifest` / `approved_surfaces` / `block_policy` for R5a³. Decide runtime scope ONCE, but only when there is something risky to decide.
-
-1. Run `scripts/detect-runtime.sh` (plugin root per Step P0b) to get the manifest with `requires_decision` flags. This runs whenever gate scope = both — the manifest is also threaded to the Runtime gate's R5a³ dispatch.
-2. **Gate firing condition (mechanical):** fire an `AskUserQuestion` **only if** the manifest has ≥1 surface with `requires_decision: true` AND no argument already pre-answers the *surface selection*. `gate=both` answers **gate scope only** — it does NOT pre-answer runtime scope, so Decision 2 still fires for `/qg both` when a `requires_decision` surface exists (matching bare `/qg` runtime behavior). Otherwise (no boot surface at all / surface-arg-answered) print a one-line plan and proceed **zero-click** with `approved_surfaces` empty. **Every kind in `runnable_surfaces` now carries `requires_decision: true`** — since v3.0.0 the manifest holds boot surfaces only, and test runners are no longer surfaces at all (they are the orchestrator's, run in R4/R5b outside the verifier's turn). So "zero-click" here means *there was nothing to boot*, not *there were automatic surfaces*.
-3. When firing, confirm in ONE question: **runtime scope** (which `requires_decision` surfaces to opt into) and **block policy** (`stop` / `skip` / `ask`). Record the opted-in surfaces as `approved_surfaces` and the chosen `block_policy`.
-
-```
-AskUserQuestion({
-  questions: [
-    {
-      question: "Runtime scope: these surfaces can start processes or reach outside (requires_decision): <list>. Which should I run, and what should I do if one stays blocked after setup retries?",
-      header: "Runtime scope",
-      options: [
-        {label: "Run all + skip blocked", description: "Opt into all listed surfaces; block_policy=skip (SKIP_WITH_EVIDENCE, continue)."},
-        {label: "Run all + ask on block", description: "Opt into all; block_policy=ask (mid-run question, bounded by DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS)."},
-        {label: "Boot nothing",            description: "Skip every requires_decision surface. The Runtime floor (R4/R5b differential test run) still runs — it is the orchestrator's, not the verifier's."},
-        {label: "Stop on block",            description: "Opt into all; block_policy=stop (abort the gate at the first unrecoverable block)."}
-      ],
-      multiSelect: false
-    }
-  ]
-})
-```
-
-**Upfront approval is authoritative.** A surface opted in here is NOT re-asked mid-run. A mid-run question fires only for a *newly discovered* block when `block_policy=ask`, and the total number of such mid-run questions is itself bounded by `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS`.
-
-**Cost heads-up (AC13):** if the plan includes a web process-start surface (a heavy interactive flow on the subagent's resolved tier), print one line before dispatching: `> Runtime gate will boot a web app and drive browser flows (heavier; subagent's resolved tier).`
-
-## Dispatch Loop
-
-Full pipeline mode:
-
-1. Run [Trivia escape](#trivia-escape). If trivia detected, print "Trivia diff — all gates skipped" and return.
-2. Run [Upfront Execution Plan](#upfront-execution-plan). **Decision 1 (gate scope)** fires first (always, unless an arg pre-answers it): if the user chooses **Review gate only** (or `gate=review` / `--skip-runtime`), run the Review gate then **short-circuit** — skip Decision 2 and the Runtime gate, and go straight to the final summary (step 6). If **Run both gates** (or `gate=both`), continue. **Decision 2 (runtime scope + `block_policy`)** then fires only when a `requires_decision` surface exists and its surface selection is not arg-answered (zero-click otherwise); it records `approved_surfaces` and `block_policy`.
-3. Run [Review gate](#review-gate) (unless gate scope excludes it). Iterate up to 5 times; at each iteration end: findings empty → continue; non-empty → [Review iter boundary decision](#review-iter-boundary-decision).
-4. If `effective_skip_runtime` or gate scope excludes runtime, skip the Runtime gate and emit final summary.
-5. Otherwise run [Runtime gate](#runtime-gate) (R-init–R9).
-6. Emit final summary.
+**② 가 ③ 보다 앞인 것이 load-bearing 이다** — 테스트 결과는 실행이 내고, 그 결과가 ③ 에서
+누구를 부를지의 입력이 된다(diff 는 피검자가 쓰지만 테스트 결과는 실행이 낸다).
 
 ## Trivia escape
 
 Run `scripts/check-trivia.sh` (plugin root per Step P0b). Exit code:
-- 0 = trivia detected → skip all gates. Print:
-  > `Trivia diff — all gates skipped (one-sentence diff per CLAUDE.md trivia escape).`
-- 1 = non-trivia → proceed to the Review gate.
+- 0 = trivia detected → skip the whole pipeline. Print:
+  > `Trivia diff — pipeline skipped (one-sentence diff per CLAUDE.md trivia escape).`
+- 1 = non-trivia → proceed to iteration 1.
 - any other non-zero (script crash / environment failure) → print stderr
   verbatim and abort the pipeline. Do NOT silently treat as non-trivia.
 
-## Review gate
+## Review
 
 Iterative fix-loop, `max_review_iterations = 5` (hard-coded constant).
 
@@ -316,24 +230,28 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 > 4.5 floor enforces this structurally: this norm is the routing half (model-owned),
 > the floor is the integrity half (deterministic).
 
+**Step 1c — 차등 테스트 (②).** [Differential test](#differential-test) 절을 따른다 —
+매 iteration 돈다. 결과(`$aggregate_yaml` 경로와 R6 두 호출의 exit code ·
+`check_qa_ledger.py` 의 exit code)를 Step 4 로 들고 간다. 그 결과를 Step 3 의 추가
+리뷰어 선택에 입력으로 쓴다 — 예: `NEW_REGRESSION` 이 난 unit 의 파일을 건드린 diff 에는
+`pr-review-toolkit:silent-failure-hunter` 를 더 무겁게 본다.
+
 2. Dispatch the scout: `Bash(scripts/scout.py ...)` (plugin root per Step P0b) — compute its
    metrics from the review scope you resolved at step 1 (the git-derived changed-file set, the
    `branch` diff, or the `--paths` globs). Scope is model-owned; there is no cached scope
    variable to thread.
-3. **Compose and dispatch the reviewer set (scope-driven).** You (orchestrator)
-   select which reviewers to dispatch this iteration from three tiers. Selection is
-   **model-owned routing** (P8 lightness — not a deterministic gate): the floor is
-   fixed, codex is an availability-floor, and Tier C specialists are chosen by the
-   diff scope per [Reviewer composition (scope-driven)](#reviewer-composition-scope-driven).
-   Re-select every iteration. **No qg-own tool posture changes here (#104 lock kept).**
+3. **Compose and dispatch the reviewers — per angle (scope-driven).** 세 각도(보안 ·
+   판정 · 다른 전제 — [Angles and reviewers](#angles-and-reviewers-scope-driven))마다
+   수행자가 정해져 있고, 그 밖의 추가 리뷰어를 스코프로 고른다. 선택은 **model-owned
+   routing** 이다(P8 lightness). Re-select every iteration. **No qg-own tool posture
+   changes here (#104 lock kept).**
 
-   **Tier A — Floor (스코프 무관, 항상 디스패치; 모델이 스코프 판단으로 뺄 수 없음).**
-   `quality-gates:security-reviewer` (Phase 1) 와 **재비판**(Phase 1.5 — 아래
-   「Phase 1.5 — 재비판」, `quality-gates:doc-recritic`) 은 **every non-trivia iteration
-   regardless of scope** 에 돈다 — `tools:` posture (`Read, Grep, Glob`, #104 lock) is
-   unchanged. `security-reviewer` MUST include `project_dir: "$project_dir"`:
+   **보안 각도 — `quality-gates:security-reviewer`, 매 iteration.** 스코프 판단으로 빼지
+   않는다. 판정 각도(재비판, 아래 Phase 1.5)도 매 iteration 돈다. `tools:` posture
+   (`Read, Grep, Glob`, #104 lock) is unchanged. `security-reviewer` MUST include
+   `project_dir: "$project_dir"`:
 
-   **Kill switch — `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`.** Tier A 를
+   **Kill switch — `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`.** 보안 각도를
    *모델이* 스코프 판단으로 뺄 수는 없지만, *사용자는* 끌 수 있다. 이 둘은 다른
    것이다: 앞은 라우팅 재량이고 뒤는 사용자 소유의 opt-out 이다(CLAUDE.md
    Plugin Shape — *"모든 reviewer는 opt-out 가능"*, 그리고 *"kill switch는 보안
@@ -342,12 +260,12 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 
    IF `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`:
    1. 아래 `quality-gates:security-reviewer` Agent 리터럴을 **발행하지 않는다.**
-      Phase 1.5 재비판과 Tier B(codex)·Tier C 는 **그대로 fire 한다** — 꺼지는 것은 이
+      재비판 · codex · 추가 리뷰어는 **그대로 fire 한다** — 꺼지는 것은 이
       하나뿐이다.
    2. 재비판의 `findings` 슬롯에는 실제로 받은 것만 넣는다
-      (Tier C + codex). 없는 리뷰어 몫을 있는 것처럼 채우거나 대신 지어내지 않는다.
+      (codex + 추가 리뷰어). 없는 리뷰어 몫을 있는 것처럼 채우거나 대신 지어내지 않는다.
    3. **loud advisory** — 이 줄을 사용자에게 그대로 보인다:
-      > `> [quality-gates] security-reviewer disabled via DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1 — 이 iteration 에는 보안 리뷰가 없었다 (Tier A floor 결손).`
+      > `> [quality-gates] security-reviewer disabled via DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1 — 이 iteration 에는 보안 리뷰가 없었다 (보안 각도 부재).`
    4. 이 iteration 에 대해 `$security_review_absent = yes` 로 두고 **Step 4.5 의
       판정 표면까지 들고 간다**(아래 Security-review-absent advisory). 배너 한 줄로
       끝내면 verdict 만 읽는 사람에게는 결손이 보이지 않는다.
@@ -357,17 +275,16 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
    **왜 codex kill switch 와 달리 loud 인가.** 형제 스위치
    `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` 은 [Codex skip 안내](#codex-skip-안내)의
    silent 표에 있다(*"사용자가 직접 껐다. 자기가 한 일을 다시 알릴 필요가 없다"*).
-   여기서는 그 논리를 따르지 않는다 — codex 는 Tier B(가용성 floor, 다양성 층)이고
-   `security-reviewer` 는 **Tier A floor 두 명 중 하나**다. floor 구성원이 빠지면
-   그 iteration 의 `clean` 이 뜻하는 바 자체가 달라지므로, 사용자의 의도적 opt-out
-   이더라도 **판정을 읽는 사람**에게 결손이 보여야 한다. 두 스위치를 "일관성" 명목
-   으로 같은 취급으로 합치지 말 것.
+   codex 는 다른 전제 각도라 부재를 공시만 하고 막지 않는다. `security-reviewer` 는
+   보안 각도라 부재가 판정을 막는다 — 사용자의 의도적 opt-out 이더라도 **판정을 읽는
+   사람**에게 결손이 보여야 한다. 두 스위치를 "일관성" 명목으로 같은 취급으로 합치지
+   말 것.
 
 ```
 Agent({
   subagent_type: "quality-gates:security-reviewer",
   // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-open
-  description: "Security review (Review gate iter N)",
+  description: "Security review (qg iter N)",
   prompt: "Run code-level security review on the current diff.
     project_dir: <project_dir>${PROJECT_DIR}</project_dir>
     diff_scope: <diff_scope>${DIFF_SCOPE}</diff_scope> (session (git-derived changed files) / branch (git diff vs base) / paths (--paths globs) — the review scope you resolved at step 1)
@@ -377,7 +294,7 @@ Agent({
 })
 ```
 
-   **Tier B — codex (availability-floor: 있으면 무조건, 스코프 무관).** If the codex
+   **다른 전제 각도 — codex (사용 가능하면 부른다).** If the codex
    reviewer is available (`detect_codex.sh` returns true), it is dispatched via
    `run_codex_reviewer.sh` this iteration **regardless of scope** — model-family
    diversity is load-bearing. It re-derives scope from the inlined diff blob (build
@@ -470,32 +387,32 @@ silent 표의 두 사유도 포함 — "위 표의"로 한정하면 그 둘이 �
 **스트림 이벤트는 판정 입력이 아니다.** `--json` 의 `error` 이벤트는 **재시도로 성공한
 run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 로깅 대상이다.
 
-   **Tier C — Dynamic specialists (모델이 diff 스코프로 선택; 외부 advisory agent).**
-   Choose zero or more from the menu in [Reviewer composition (scope-driven)](#reviewer-composition-scope-driven)
+   **추가 리뷰어 — 스코프 도출(외부 advisory agent).**
+   Choose zero or more from the menu in [Angles and reviewers](#angles-and-reviewers-scope-driven)
    by matching the diff to the rubric + scope-signal palette there.
-   `pr-review-toolkit:code-reviewer` is the **강한 default** (Tier C, NOT floor):
-   include it on any non-trivial diff; drop it only on a quick-depth diff. Tier C
-   agents are advisory — you own fixes; their output is findings YAML. Do NOT thread a
+   `pr-review-toolkit:code-reviewer` is the **강한 default** (각도 수행자가 아니다):
+   include it on any non-trivial diff; drop it only on a quick-depth diff. 추가 리뷰어는
+   advisory 다 — you own fixes; their output is findings YAML. Do NOT thread a
    `model:` override into their dispatch (upstream model pinning is respected).
 
    **Transparency (loud — 매 iteration user-visible stdout 한 줄).** Emit exactly one
    line documenting the composition, so drops/degrades are never silent:
 
-   > `> [quality-gates] Review iter N — 선택: <디스패치한 리뷰어 목록>(근거: <스코프 신호>) / 제외: <이유 또는 "해당 신호 없음">`
+   > `> [quality-gates] iter N — 선택: <디스패치한 리뷰어 목록>(근거: <스코프 신호>) / 제외: <이유 또는 "해당 신호 없음">`
 
-   **Graceful degradation (loud).** If a Tier C candidate is unavailable
-   (pr-review-toolkit / feature-dev not installed), continue with floor(A) + codex(B) +
+   **Graceful degradation (loud).** If a 추가 리뷰어 candidate is unavailable
+   (pr-review-toolkit / feature-dev not installed), continue with the angle performers +
    whatever is installed, and print:
 
    > `> [quality-gates] specialist <X> unavailable (<plugin> 미설치) — degraded coverage`
 
-   Floor and codex are **not** affected by this degrade. There is **no fan-out consent
+   The angle performers are **not** affected by this degrade. There is **no fan-out consent
    gate** (lightness) — fan-out is bounded by the rubric's natural signal-binding, the
    transparency line above, and the recomputed max fan-out declared in the README.
    (A repo-wide `fan-out ≥5` hard-review gate was **removed** from CLAUDE.md and the philosophy doc by the harness-capability-suppression sweep — it is no longer a backstop and must not be cited as one.)
 
-   **Phase 1.5 — 재비판 (판정 각도).** 탐지(Tier A 의 `security-reviewer` · Tier B codex ·
-   Tier C)가 끝난 뒤 **한 번** 디스패치한다. **탐지 결과가 0건이어도 디스패치한다**(AC17 —
+   **Phase 1.5 — 재비판 (판정 각도).** 탐지(`security-reviewer` · codex ·
+   추가 리뷰어)가 끝난 뒤 **한 번** 디스패치한다. **탐지 결과가 0건이어도 디스패치한다**(AC17 —
    빈 슬롯도 재비판한다. 놓친 결함은 재비판자가 `added` 로 낸다). 재비판자는 **프레이밍을
    못 본다** — 이 리뷰가 왜 열렸는지, 어느 리뷰어가 무엇을 냈는지를 싣지 않는다.
 
@@ -530,7 +447,7 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
 Agent({
   subagent_type: "quality-gates:doc-recritic",
   // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-closed
-  description: "Framing-blind re-critique of the finding list (Review gate iter N)",
+  description: "Framing-blind re-critique of the finding list (qg iter N)",
   prompt: "<document>${DOCUMENT}</document>
     <findings>${FINDINGS}</findings>
     <profile>${PROFILE}</profile>
@@ -590,27 +507,25 @@ Agent({
    Three cases:
    - **kept > 0** (the counts line totals ≥ 1 across the three severities) →
      emit the captured stdout to the user as a deliberate assistant message,
-     prepended with the single context line `## Review gate iter N — Findings`,
+     prepended with the single context line `## qg iter N — Findings`,
      **before** invoking the decision tool. Then go to step 5.
    - **kept = 0 AND suppressed > 0** (the synthesizer emitted the empty-state
      line `No high-confidence findings. N low-confidence findings suppressed.`
      with N > 0 — read N from that line) → no high-confidence finding to act
      on → treat as **clean**: do NOT call AskUserQuestion. Surface the single
      `No high-confidence findings…` line for transparency, then apply the
-     **Honest-verdict floor** below. Then **exit the loop → [Dispatch
-     Loop](#dispatch-loop) step 4** (which skips the Runtime gate
-     when gate scope = Review gate only / `effective_skip_runtime`, else runs it) — do not iterate again.
+     **Honest-verdict floor** below. Then **exit the loop → [Final
+     Summary](#final-summary)** — do not iterate again.
    - **kept = 0 AND suppressed = 0** (the same empty-state line with N = 0) →
-     apply the SAME **Honest-verdict floor** below, then exit the loop → [Dispatch
-     Loop](#dispatch-loop) step 4 (which short-circuits the Runtime gate for the
-     review-only path, else runs it).
+     apply the SAME **Honest-verdict floor** below, then exit the loop →
+     [Final Summary](#final-summary).
 
    **Not-clean notice override (applies to BOTH clean sub-cases, before the floor).**
    The key is the marker every such notice carries, not any one notice's wording:
    if the captured stdout contains `**이 실행은 clean이 아니다**` on any line, you MUST
    surface **every** line carrying it verbatim, **in addition to** the empty-state
    line, and you MUST NOT print a bare `clean` verdict. Print instead:
-   `## Review gate iter N: not clean — <사유>.`
+   `## qg iter N: not clean — <사유>.`
    `<사유>` comes from the notice itself, and notices differ in what they carry:
    - The **Dropped-finding** notice carries a count — it reads
      `<D> finding(s) dropped as malformed`. Print
@@ -629,8 +544,8 @@ Agent({
    was produced by the script and then discarded by its only consumer: the gate
    printed `clean` over dropped CRITICAL claims (2026-08-05 `/qg` 라운드 2 적발 —
    생산자만 고치고 소비자를 안 고친 반쪽 수정). A finding that was thrown away is not
-   a finding that was cleared. This mirrors the Runtime gate's `indeterminate ≠ clean`
-   rule at [Step R4](#runtime-gate).
+   a finding that was cleared. This mirrors the differential test's `indeterminate ≠ clean`
+   rule (reference R6).
 
    Why the key is the marker and not the notice text: keying on one notice's literal
    is an enumeration, and an enumeration is fail-open over time — a second notice
@@ -641,18 +556,18 @@ Agent({
 
    **Security-review-absent advisory (applies to EVERY step-4.5 exit path — the
    `kept > 0` case and BOTH clean sub-cases).** If this iteration set
-   `$security_review_absent == yes` (the Tier A kill switch fired at dispatch), you
+   `$security_review_absent == yes` (the 보안 각도 kill switch fired at dispatch), you
    MUST print this line as part of the verdict surface, immediately after the
-   `## Review gate iter N …` line, before the decision tool:
+   `## qg iter N …` line, before the decision tool:
    `> [quality-gates] 이 라운드에는 보안 리뷰가 없었다 — security-reviewer 가 DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1 로 꺼져 있었다. 이 verdict 는 "보안 리뷰를 통과했다"를 뜻하지 않는다.`
    Repeat it every iteration in which the switch was on — it is a property of that
    iteration's verdict, not a one-time notice.
 
    Why this is a separate clause from the dispatch-time banner: the banner is
    emitted mid-iteration, far above the verdict, and a reader who scrolls to the
-   verdict (or reads only the `## History` line) never sees it. Tier A floor is
-   `security-reviewer` + 재비판(`doc-recritic`); with one of the two removed, a bare `clean`
-   over-claims. Same family as the [Not-clean notice override](#review-gate) above —
+   verdict (or reads only the `## History` line) never sees it. 보안 각도와 판정 각도는
+   부재가 판정을 막는 두 각도다; with one of them missing, a bare `clean`
+   over-claims. Same family as the [Not-clean notice override](#review) above —
    *a finding that was never produced is not a finding that was cleared.*
 
    **Honest-verdict floor (deterministic — both clean sub-cases).** The floor keys
@@ -661,22 +576,22 @@ Agent({
    any clean claim):
    - IF `$resolved_scope_file_count == 0 AND $changes_exist == yes`: do NOT print
      bare `clean`. Print
-     `## Review gate iter N: no scope reviewed (0 files; branch <M> ahead of <base>, worktree <dirty|clean>) — NOT certified clean.`
+     `## qg iter N: no scope reviewed (0 files; branch <M> ahead of <base>, worktree <dirty|clean>) — NOT certified clean.`
      (`<M>` = `$branch_ahead_count`, `<base>` = `$base`, worktree token from
      `$worktree_dirty`: `yes`→`dirty`, `no`→`clean`). A zero-scope run with real changes must never read as
      "reviewed & clean".
    - ELSE IF `$degraded == yes AND $resolved_scope_file_count == 0`: print
-     `## Review gate iter N: clean` AND the loud advisory
+     `## qg iter N: clean` AND the loud advisory
      `> [quality-gates] scope check degraded (detached HEAD / no base branch / unrelated history / shallow) — empty-scope detection skipped (fail-open; verdict not floor-protected this run).`
-   - ELSE: print `## Review gate iter N: clean` exactly as before (scope > 0, or a
+   - ELSE: print `## qg iter N: clean` exactly as before (scope > 0, or a
      genuine no-op with `$changes_exist == no` — unchanged happy path).
 
-5. **Decision tool (kept > 0 only).** Invoke [Review iter boundary
-   decision](#review-iter-boundary-decision). Fill its `<summary>` slot by
+5. **Decision tool (kept > 0 only).** Invoke [Fix-loop
+   decision](#fix-loop-decision). Fill its `<summary>` slot by
    **verbatim-copying the `**Findings:**` counts line** from step 4's stdout
    (deterministic extraction — do NOT author a fresh sentence). Append one
    `## History` line of the form
-   `Review gate iter N: <c> CRITICAL / <i> IMPORTANT / <s> SUGGESTION → user chose <choice>`
+   `qg iter N: <c> CRITICAL / <i> IMPORTANT / <s> SUGGESTION → user chose <choice>`
    (severity triplet copied from the same counts line; see
    [state-file-format](references/state-file-format.md#history)).
 
@@ -698,7 +613,7 @@ The iter-boundary anchor phrase `findings remain` is specific to this
 template and must not appear in any other decision-tool call in this
 SKILL, per spec AC6.
 
-## Review iter boundary decision
+## Fix-loop decision
 
 > **Spec anchor (AC6):** the literal phrase `findings remain` MUST appear
 > in the prompt — V2b grep checks this. This phrase is Review-iter-specific
@@ -711,12 +626,12 @@ with the synthesizer's one-line summary):
 AskUserQuestion({
   questions: [
     {
-      question: "Review gate iter N: findings remain (<summary>). What next?",
-      header: "Review iter N",
+      question: "qg iter N: findings remain (<summary>). What next?",
+      header: "qg iter N",
       options: [
-        {label: "Retry",              description: "Apply the suggested fixes (I will Edit the files in this turn), then re-run Review gate reviewers."},
-        {label: "Proceed to Runtime gate",  description: "Accept current findings as-is and continue to runtime verification."},
-        {label: "Stop",               description: "Abort the pipeline at this iteration. Address findings and re-run /qg."}
+        {label: "Retry",             description: "Apply the suggested fixes (I will Edit the files in this turn), then re-run the pipeline for the next iteration — differential test included."},
+        {label: "Accept and finish", description: "Accept current findings as-is and go to the final summary with the current verdict."},
+        {label: "Stop",              description: "Abort the pipeline at this iteration. Address findings and re-run /qg."}
       ],
       multiSelect: false
     }
@@ -724,20 +639,17 @@ AskUserQuestion({
 })
 ```
 
-**Gate-scope conditional (review-only):** when gate scope = `Review gate only` (the Decision 1 choice, or `gate=review` / `--skip-runtime`) there is no Runtime gate to proceed to — replace the `Proceed to Runtime gate` option above with `{label: "Proceed (accept findings, finalize)", description: "Accept current findings as-is and go straight to the final summary; the Runtime gate is short-circuited."}` and branch it to the final summary (NOT the Runtime gate). `Retry` and `Stop` are unchanged.
-
 Branch on answer:
 - **Retry** → apply user-consented fixes by calling Edit/Write directly
   with the synthesizer's suggested patches; increment iteration counter;
-  loop back to step 1 of the Review gate section. See
+  loop back to [Pipeline](#pipeline) step 2 (① 부터 — ② 차등 테스트 포함). See
   [Retry: file-write safety](#retry-file-write-safety) for the
   canonicalization requirement on reviewer-supplied paths, and
   [Retry: error handling](#retry-error-handling) for the AskUserQuestion
   surface that fires on Edit failures.
-- **Proceed to Runtime gate** → exit the loop, continue to the Runtime gate with current
-  findings recorded in History.
-- **Proceed (accept findings, finalize)** (review-only variant) → exit the loop, skip the Runtime gate, and emit the final summary with findings recorded.
-- **Stop** → emit final summary marked aborted at the Review gate.
+- **Accept and finish** → exit the loop and emit the final summary with the
+  findings recorded.
+- **Stop** → emit final summary marked aborted at this iteration.
 
 ### Retry: file-write safety
 
@@ -770,7 +682,7 @@ AskUserQuestion({
       question: "Retry failed at <file>: <reason>. Abort the retry iteration, or skip this file and continue with the remaining patches?",
       header: "Retry",
       options: [
-        {label: "Abort retry",     description: "Abort this Retry iteration entirely; surface as failure to the Review gate verdict."},
+        {label: "Abort retry",     description: "Abort this Retry iteration entirely; surface as failure to the qg verdict."},
         {label: "Skip this file",  description: "Skip THIS file's fix only; continue applying remaining Retry patches in this iteration."}
       ],
       multiSelect: false
@@ -783,16 +695,16 @@ No silent retry-skip — every Edit failure surfaces a user choice. Labels
 are explicit: "Abort retry" terminates the iteration; "Skip this file"
 continues with remaining patches.
 
-## Reviewer composition (scope-driven)
+## Angles and reviewers (scope-driven)
 
-The Review gate reviewer set is composed by scope (spec §5). Selection is
-**model-owned** (lightness) — there is no deterministic selector schema; scout is a
-hint, not an authority. The 3-tier model:
+The reviewer set is composed per angle (설계 §6.3.1). Selection is **model-owned**
+(lightness) — there is no deterministic selector schema; scout is a hint, not an
+authority. 각도의 의무는 결정론이 지키고(⑤ 의 각도 상태), 누가 채우는지는 여기서 정한다:
 
-- **Tier A — Floor** (`quality-gates:security-reviewer` + 재비판 `quality-gates:doc-recritic`):
-  스코프 무관 항상. `tools: Read, Grep, Glob` (#104 락, 무변경). 모델이 못 뺀다.
-- **Tier B — codex** (availability-floor): `detect_codex.sh` 참이면 무조건, 스코프 무관.
-- **Tier C — Dynamic specialists** (아래 rubric으로 diff 스코프에 맞춰 가감; 최대 6 후보):
+- **보안 각도** — `quality-gates:security-reviewer`: 매 iteration. `tools: Read, Grep, Glob` (#104 락, 무변경). 모델이 못 뺀다.
+- **판정 각도** — 재비판 `quality-gates:doc-recritic`: 매 iteration(탐지 0 이어도 — AC17).
+- **다른 전제 각도** — codex: `detect_codex.sh` 가 참이면 부른다. 모델 다양성 손실은 공시하고 막지 않는다.
+- **추가 리뷰어** (아래 rubric으로 diff 스코프에 맞춰 가감; 최대 6 후보):
 
 **rubric (review-pr §4 흡수):**
 
@@ -805,7 +717,7 @@ hint, not an authority. The 3-tier model:
 | docs/주석 추가 | `pr-review-toolkit:comment-analyzer` |
 | 대형 구조/아키텍처 변경 | `feature-dev:code-architect` |
 
-**depth→Tier C 크기 가이드라인 (scout 힌트, 재현성 게이트 아님):** `quick` →
+**depth→추가 리뷰어 크기 가이드라인 (scout 힌트, 재현성 게이트 아님):** `quick` →
 code-reviewer만(또는 없음); `standard` → + 신호-매칭 전문가 1–2; `deep` → + 신호-매칭
 전문가(구조 변경이면 code-architect). scout의 `phase1_agents`/`phase2_agents`는 힌트일 뿐
 권위가 아니다(Retry마다 재선택).
@@ -818,7 +730,7 @@ XXE · GHA-workflow-injection · SRI · deps-manifest 변경 · migration/schema
 
 **비-규범 예시 (illustrative only — 테스트 대상 아님; 모델이 최종 판단):**
 
-| diff 예 | scout depth | 예상 Tier C 선택 |
+| diff 예 | scout depth | 예상 추가 리뷰어 선택 |
 |---|---|---|
 | 1-파일 버그픽스 | quick | code-reviewer |
 | 기능 추가(에러핸들링+테스트) | standard | code-reviewer, silent-failure-hunter, pr-test-analyzer |
@@ -826,20 +738,19 @@ XXE · GHA-workflow-injection · SRI · deps-manifest 변경 · migration/schema
 | 순수 docs 개편 | standard | comment-analyzer (+ code-reviewer) |
 
 **git-history/이전-PR 렌즈**는 이미 Bash-무장된 `pr-review-toolkit:code-reviewer`가 프롬프트
-힌트로 수행한다 — qg-own 에이전트는 Bash/Web을 갖지 않는다(무변경). Tier C 외부 에이전트는
+힌트로 수행한다 — qg-own 에이전트는 Bash/Web을 갖지 않는다(무변경). 추가 리뷰어 외부 에이전트는
 write-capable(pr-review-toolkit inherit-all)이거나 read/web-only(feature-dev:code-architect)이며
 모두 advisory다(오케스트레이터가 fix 소유).
 
 ## Reviewer dispatch contract
 
-The following three reviewer subagents declare `project_dir` as a REQUIRED
+The following two reviewer subagents declare `project_dir` as a REQUIRED
 dispatch parameter and forbid `pwd`/`git rev-parse` recomputation inside
 the persona. Any dispatch of these agents MUST thread the preflight-frozen
 `$project_dir` value via the `project_dir:` field of the prompt:
 
 - `quality-gates:test-scope-validator`
 - `quality-gates:security-reviewer`
-- `quality-gates:runtime-verifier`
 
 `quality-gates:doc-recritic`(Phase 1.5)은 이 목록에 없다 — 그 입력 슬롯은 공유 정본이
 정한 넷(`document` · `findings` · `profile` · `diff`)뿐이고, `project_dir` 은 별도 슬롯이
@@ -862,7 +773,7 @@ The contract is verified by:
   left that lock's failure count unchanged. The measured enforcer is the one
   above.)*
 
-## Review max-iter decision
+## Max-iter decision
 
 After iteration 5 still has findings, do NOT silently halt. Call:
 
@@ -870,10 +781,10 @@ After iteration 5 still has findings, do NOT silently halt. Call:
 AskUserQuestion({
   questions: [
     {
-      question: "Review gate reached max 5 iterations. Last findings: <summary>. Proceed to the Runtime gate or stop?",
-      header: "Review max-iter",
+      question: "qg reached max 5 iterations. Last findings: <summary>. Finish with the current verdict or stop?",
+      header: "qg max-iter",
       options: [
-        {label: "Proceed to Runtime gate", description: "Accept residual findings and continue."},
+        {label: "Accept and finish", description: "Accept residual findings and go to the final summary."},
         {label: "Stop",              description: "Abort the pipeline. Address findings and re-run /qg."}
       ],
       multiSelect: false
@@ -882,91 +793,29 @@ AskUserQuestion({
 })
 ```
 
-**Gate-scope conditional (review-only):** when gate scope = `Review gate only`, replace the `Proceed to Runtime gate` option with `{label: "Proceed (accept findings, finalize)", description: "Accept residual findings and go straight to the final summary; the Runtime gate is short-circuited."}` branching to the final summary, not the Runtime gate.
-
 Branch on answer accordingly. (P18 unbounded-autonomy is satisfied by
 this user-consent termination.)
 
-## Runtime gate
+## Differential test
 
-**이 게이트의 절차 전문은 `references/runtime-gate.md` 에 있다.** Runtime 게이트를
-실제로 돌 때 그 파일을 Read 로 읽어 그대로 따른다. `/qg review` 처럼 Runtime 을 돌지
-않는 실행에서는 읽지 않는다 — 이 분리의 목적이 그것이다(조건부 로드).
-
-읽어야 하는 조건: Arguments 가 `runtime` 또는 `both` 이거나, Review 게이트가 끝난 뒤
-Runtime 으로 진행하기로 판정된 경우.
+**절차 전문은 `references/differential-test.md` 에 있다.** 매 iteration 의 ②(Review
+Step 1c)에서 그 파일을 Read 로 읽어 그대로 따른다. trivia escape 로 파이프라인이
+통째로 생략된 실행만 읽지 않는다.
 
 ```
-Read ${CLAUDE_PLUGIN_ROOT}/skills/quality-pipeline/references/runtime-gate.md
+Read ${CLAUDE_PLUGIN_ROOT}/skills/quality-pipeline/references/differential-test.md
 ```
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
-## Blocked-path routing
-
-A surface is *blocked* when the executor cannot complete it. Routing (per-surface — one block never aborts the others):
-
-| Block kind | Handling |
-|---|---|
-| setup-fixable (.env/deps) | executor auto-fixes in sandbox + retries (≤3/dispatch). Success → continue; exhausted → `NEEDS_RESOLUTION`. |
-| operational-safety (prod config/network needed) | NOT run. Recorded `blocked-for-safety` → SKIP_WITH_EVIDENCE or NEEDS_RESOLUTION("provide test config"). |
-| needs-decision (`requires_decision` not in `approved_surfaces`) | NOT run → SKIP_WITH_EVIDENCE. |
-| product bug (AC unmet / won't boot from product defect) | FAIL + evidence. Not a retry. |
-| hang/timeout | per-surface wall-clock kill; record blocked; continue with remaining surfaces. |
-
-On executor `NEEDS_RESOLUTION` (setup retries exhausted), apply the upfront `block_policy`:
-- `stop` → abort the gate at the block; terminal summary.
-- `skip` → record SKIP_WITH_EVIDENCE for that surface; finalize with partial results.
-- `ask` → invoke [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision) (retry / skip-with-evidence / stop). Total `ask` mid-run questions are bounded by `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS`; on exhaustion, fall through to skip-with-evidence.
-
----
-
-The NEEDS_RESOLUTION branch is the only Runtime gate outcome that surfaces a user question when `block_policy=ask`. It is bounded by `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS` so a mis-configured environment cannot loop indefinitely.
-
-Per spec AC8 and the secret-policy rule (P21), the prompt body asks the user to place secrets on disk first and respond yes/no. Never request a secret value as a literal string.
-
-## Runtime NEEDS_RESOLUTION decision
-
-> **Spec anchor (AC8):** the literal phrase `Runtime verifier needs` MUST appear in the prompt — V2b grep checks this. **P21 reaffirmation MUST also appear in the prompt body** (literal token `P21`) — the prompt never asks for secret values, only paths or yes/no.
-
-Loop up to `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS` times (default 3, env override clamped 0..10):
-
-```
-AskUserQuestion({
-  questions: [
-    {
-      question: "Runtime verifier needs: <missing resource description>. (P21: never paste secrets into this prompt — add them to .env / config on disk first, then choose Yes, retry.)",
-      header: "Runtime resolve",
-      options: [
-        {label: "Yes, retry",         description: "I've added the missing resource on disk. Re-run the Runtime gate."},
-        {label: "Skip with evidence", description: "Mark the Runtime gate SKIP_WITH_EVIDENCE with reason."},
-        {label: "Stop",               description: "Abort the pipeline at the Runtime gate."}
-      ],
-      multiSelect: false
-    }
-  ]
-})
-```
-
-Branch:
-- **Yes, retry** → increment resolution counter; if exceeds env limit, fall through to Skip with evidence. Otherwise re-create the sandbox (Step R5a¹) and re-capture the new output's `sandbox_dir` (line 1), `baseline_sha` (line 2), and `snapshot_digest` (line 3) with the same three successive `IFS= read -r` + digest-strip idiom as R5a¹ — refreshing **all three** orchestrator variables. create-sandbox emits a NEW commit `B` AND a NEW snapshot (hence a new digest) each call, so reusing the old `baseline_sha` makes the guard `guard_fail "bad baseline sha"` and reusing the old `snapshot_digest` makes it `guard_fail "snapshot integrity check failed"` — both false FAILs. The new snapshot is auto-recorded in the new gitdir; the stale sandbox + its old snapshot are force-removed by R5a¹'s idempotent cleanup. Then re-dispatch runtime-verifier with the refreshed `sandbox_dir` and re-run the remaining steps in the order given in the next paragraph — R7 is called as 3-arg with the refreshed `snapshot_digest`, NOT directly after the dispatch. (Fix the parse order: capturing the digest as line 2 swaps `baseline_sha`/`snapshot_digest` and fails-closed every run.)
-
-  **재시도는 R5b·R6 도 다시 돈다 — verifier 재-dispatch 만으로 끝나지 않는다.** 재시도가 만드는 것은 **새 트리**이고, 이전 `$qg_run_tmp/head-$runner.tsv` 는 이미 폐기된 트리에서 나온 행이다. 그것을 그대로 R6 에 넘기면 `.env` 하나 고쳐 초록이 된 트리에서 옛 red 로 `confirmed_product_defect: true` 가 서서 **고쳐진 코드에 FAIL** 이 나고, 반대 방향은 더 나쁘다 — 옛 green 행이 재시도가 새로 만든 회귀를 가린다. 재-dispatch 뒤 순서는 **R5b(HEAD 축 재실행) → R6(대조 + 집계 재호출) → R7 → R8** 이고, 이전 HEAD 행은 **버린다**(덮어쓰지 말고 새로 만든다 — 부분 덮어쓰기는 두 트리의 행을 한 파일에 섞는다). 기준선 측 R4 는 다시 돌리지 않는다: `merge_base` 가 그대로라 캐시 키가 같고, 기준선은 재시도로 바뀌지 않는다.
-
-  **재시도의 R5b 는 `create-head` 를 refresh 된 `baseline_sha` 로 다시 호출한다.** create-sandbox 는 호출마다 **새 커밋 `B`** 를 낸다 — 위에서 `baseline_sha` 를 재포착하는 이유가 그것이다. 그 재포착된 값을 `create-head` 에 넘기지 않고 옛 `baseline_sha` 를 재사용하면, HEAD 축 트리가 **재시도가 고치기 전 코드**에 붙는다. 그러면 R7 의 mutation-guard 는 새 트리를 보고 통과시키는데 R6 이 대조하는 행은 옛 코드에서 나온 것이라, 실패가 verdict 층이 아니라 **귀속 층에서 조용히** 일어난다 — 트리가 존재하고 행이 나오므로 어떤 degrade 신호도 서지 않는다. `create-head` 는 refresh 된 `baseline_sha` 로 다시 부른다 — 그리고 **틀린 값을 넘기면 이제 죽는다**: `create-head` 는 넘어온 sha 가 이 세션 샌드박스의 봉인 커밋과 같은지 대조하고 다르면 die 한다(옛 `B` 도 `merge_base` 도 거부). **다만 '이전 트리는 그 호출이 정리한다'는 보장이 아니다.** `make_detached_worktree` 는 **non-force** `git worktree remove` 만 시도하고, 거부되면 조용히 파괴하는 대신 die 한다 — 그런데 누수된 HEAD 축 트리의 내용물은 정의상 테스트 산출물이고, §11 ⑨ 가 적었듯 `make`·`npm-script` 계열은 그것을 억제할 수단이 없어 **비-ignored 로 남을 수 있다.** 그 경우가 정확히 non-force 가 거부하는 경우이므로 재사용이 아니라 loud die 가 나고, 그 세션에서는 HEAD 축을 다시 만들 수 없다(경로가 `<prefix>-<sid8>` 로 고정이므로). die 메시지가 안내하는 수동 제거 또는 새 세션이 유일한 복구다 — §11 ⑳ 에 등급과 함께 등재했다.
-- **Skip with evidence** → record SKIP_WITH_EVIDENCE and continue.
-- **Stop** → final summary aborted at the Runtime gate.
-
 ## Final Summary
 
 Build the status rows and render them (deterministic, scannable) — one
-`key<TAB>value` line per gate, verdict vocabulary unchanged (`clean iter N`,
-`no scope reviewed (branch <M> ahead)`, `proceeded-with-findings iter N`,
-`aborted iter N`, `skipped`, `clean`, `failed`, `SKIP_WITH_EVIDENCE`):
+`key<TAB>value` line per row:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-printf 'Review gate\t<clean iter N | no scope reviewed (branch <M> ahead) | proceeded-with-findings iter N | aborted iter N | skipped>\nRuntime gate\t<clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>\n' \
+printf 'Review\t<clean iter N | no scope reviewed (branch <M> ahead) | accepted-with-findings iter N | aborted iter N>\nDifferential test\t<attribution_status · 원장 게이트 rc>\n' \
   | $QG/scripts/render-terminal.py table --title "Quality Gates — Complete"
 ```
 
@@ -982,23 +831,20 @@ State file cleanup is deferred to /cancel-qg or SessionEnd cleanup hook.
 
 - `DEVBREW_QUALITY_GATES_DISABLE=1` — 전역, 파이프라인 전체를 즉시 종료한다. Preflight
   Step P1.
-- `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — Review gate의 codex co-review만 skip한다
-  (Claude 리뷰는 정상 진행). Review gate의 "Codex skip 안내".
-- `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` — Review gate Tier A floor의
-  `security-reviewer`만 skip한다. Review gate의 "Tier A — Floor" 절(dispatch 직전
+- `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — 다른 전제 각도(codex)만 skip한다
+  (Claude 리뷰는 정상 진행). Review Step 3 의 "Codex skip 안내".
+- `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` — 보안 각도의
+  `security-reviewer`만 skip한다. Review Step 3 의 "보안 각도" 절(dispatch 직전
   게이트 + loud advisory)과 Step 4.5의 "Security-review-absent advisory".
-- `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` — Runtime gate의
-  test-scope-validator dispatch에 `spec_path: none`을 강제해 spec 기반 ac_coverage를
-  끈다(plan 기반 scope만 남는다). Arguments 절.
-- `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` — Runtime gate 샌드박스를 끄고
-  실제 트리 폴백으로 간다. verdict는 SKIP_WITH_EVIDENCE로 cap — 이 스위치가 켜진
-  경로는 PASS를 낼 수 없다. Runtime gate Exit 3.
+- `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` — 차등 테스트 R1b 의
+  test-scope-validator dispatch 에 `spec_path: none` 을 강제하고 codex `<spec_context>`
+  를 비운다(plan 기반 분류만 남는다). Arguments 절.
 
 ## Rules
 
 **R1 (Law 2 — physical):** never call Edit/Write on agent persona files
 (`plugins/quality-gates/agents/*.md`) in this turn. The orchestrator may
-edit working-tree files for user-consented Review gate fixes only.
+edit working-tree files for user-consented fixes only.
 
 **R2 (state file write invariant):** never write `pipeline.md` frontmatter.
 You MAY append a single line to the `## History` section per gate verdict;
@@ -1008,10 +854,9 @@ do not modify any other content. Frontmatter is owned by setup-qg.sh.
 emission tag, and no continuation sentinel. Do NOT emit any such marker.
 
 **R4 (P21 secret policy):** the decision-tool prompts never request a
-secret value as a string. For Runtime gate missing-credential resolution, ask
-the user to place secrets on disk (`.env`, config file) and respond yes/no.
+secret value as a string.
 
 **R5 (single dispatch per turn):** the entire pipeline runs in one turn.
 Do not call setup-qg.sh more than once. Do not call check-trivia.sh more
-than once. Do not re-dispatch the same Review gate reviewer for the same
+than once. Do not re-dispatch the same reviewer for the same
 iteration.

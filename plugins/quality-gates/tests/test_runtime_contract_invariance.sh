@@ -9,14 +9,15 @@ SKILL_REAL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
-# Task 31 fix round 1 (F1): case_no_new_surfaces() 의 verdict 토큰 4종(양의 짝)과
-# PARTIAL/INCONCLUSIVE/DEGRADED_VERDICT 부재(음의 락)는 verdict 가 실제로 만들어지는
-# Runtime gate 절차를 잰다 — 그 절차가 references/runtime-gate.md 로 옮겨진 뒤에도
-# 동일 계약이므로, 분할 전과 동일한 논리적 문서로 재구성해 그 위에서 돈다.
+# Task 31 fix round 1 (F1); Task 7 이 기대값을 뒤집었다: case_no_new_surfaces() 의
+# verdict 토큰 7종 부재(PASS/FAIL/SKIP_WITH_EVIDENCE/NEEDS_RESOLUTION/PARTIAL/
+# INCONCLUSIVE/DEGRADED_VERDICT — 전부 SKILL.md 밖) 는 판정이 실제로 만들어지는
+# 차등 테스트 절차를 잰다 — 그 절차가 references/differential-test.md 로 옮겨진
+# 뒤에도 동일 계약이므로, 분할 전과 동일한 논리적 문서로 재구성해 그 위에서 돈다.
 # 재구성 실패는 조용히 원본으로 폴백하지 않고 FAIL 한다.
 . "$SCRIPT_DIR/lib/reconstruct-skill.sh"
 if ! SKILL="$(reconstruct_skill_md "$SKILL_REAL")"; then
-  echo "FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패 ($SKILL_REAL)"
+  echo "FAIL: SKILL.md ↔ references/differential-test.md 재구성 실패 ($SKILL_REAL)"
   exit 1
 fi
 trap 'rm -f "$SKILL"' EXIT
@@ -133,24 +134,9 @@ case_remove_namespace_guard() {
   cd / && rm -rf "$REPO"
 }
 
-# T16 + AC21′: detect-runtime.sh 가 **핀된 sha 와 동일**하다.
-# (바이트 *무변경* 이 아니다 — /qg iter-6 E7: C2 가 55줄 바꿨고 핀은 그에 맞춰 갱신됐다.
-#  핀은 '변경이 있었음' 이 아니라 '무단 변경이 없었음' 을 잰다.) (sha 핀)
-# 값은 최초 구현 시 `shasum -a 256` 결과로 채운다. 이 파일을 고치려면 sha도 함께
-# 고쳐야 하므로, "무심코 건드림"은 통과할 수 없다.
-DETECT_RUNTIME_SHA256="2f70d7660bd4fa30ad873c9c178e54631e8be1c936b7527a284e6f754c63e040"
-# **핀 갱신 이력 (/qg iter-5 C2).** 이 핀의 목적은 blast radius 가 **커지는** 것을
-# 막는 것이다(AC22 "no new surfaces"). 이번 갱신은 반대 방향이다 — `runnable_surfaces`
-# 에서 테스트 러너 kind(pytest·cargo-test·go-test·npm `test`·make `test`)를 **제거**해
-# 표면이 줄었다. 러너를 표면으로 넘기면 verifier 가 같은 스위트를 두 번째로 돌리고,
-# 테스트 러너 deps 를 HEAD 샌드박스에만 설치해 기준선과 비교가 불가능해진다(AC41).
-# 표면이 늘어나는 방향의 갱신은 이 주석만으로는 정당화되지 않는다.
-case_detect_runtime_frozen() {
-  local got; got=$(shasum -a 256 "$PLUGIN_ROOT/scripts/detect-runtime.sh" | awk '{print $1}')
-  [[ "$got" == "$DETECT_RUNTIME_SHA256" ]] \
-    && ok "detect-runtime.sh 가 핀된 sha 와 동일 (무단 변경 0)" \
-    || no "detect-runtime.sh 변경됨 (got $got, pinned $DETECT_RUNTIME_SHA256)"
-}
+# T16 + AC21′ (대상 소멸 — Task 7): detect-runtime.sh 가 삭제됐다. 이 스텝이 잠그던
+# "무단 변경 없음" 은 대상이 사라지며 함께 소멸한다 — case_detect_runtime_frozen 은
+# 지운다(케이스 목록에서도 제거).
 
 # T17 + AC22: create-sandbox / mutation-guard case 본문 바이트 무변경
 # case 절 본문만 잘라 해시한다 — 파일 전체를 핀하면 create-baseline 추가로 깨진다.
@@ -178,7 +164,7 @@ case_sandbox_guard_frozen() {
 # 이 락은 몰래 늘거나 주는 쪽 둘 다 잡는 알람이지, "늘기만 막는" 래칫이 아니다 —
 # 의도적 변경이면 이 숫자를 같은 커밋에서 의식적으로 고치는 게 정확히 이 락이
 # 원하는 동작이다(test_codex_backward_compat.sh 헤더의 "의식적 갱신 강제"와
-# 같은 패턴). 현재 값(hooks 3 · agents 7)의 근거는 CHANGELOG 참고.
+# 같은 패턴). 현재 값(hooks 2 · agents 6)의 근거는 CHANGELOG 참고.
 case_no_new_surfaces() {
   local hooks agents
   hooks=$(python3 -c "
@@ -190,27 +176,26 @@ print(sum(len(v) for v in d.get('hooks', {}).values()))
   agents=$(ls "$PLUGIN_ROOT/agents" | wc -l | tr -d ' ')
   # v7.0.0: PostToolUse(pr-create 자동 트리거) 제거로 3 → 2. 늘어난 방향만이 새 표면이다.
   [[ "$hooks" == "2" ]]  && ok "hooks.json 항목 2개 불변" || no "hooks 항목 수 $hooks (기대 2)"
-  [[ "$agents" == "7" ]] && ok "agents/ 파일 7개 불변"    || no "agents 파일 수 $agents (기대 7)"
-  # verdict 토큰은 4종 밖으로 늘지 않는다.
+  [[ "$agents" == "6" ]] && ok "agents/ 파일 6개 불변"    || no "agents 파일 수 $agents (기대 6)"
+  # verdict 토큰은 이제 SKILL.md 에 0종이 기대값이다 (Task 7 — invert). 판정 어휘는
+  # `scripts/verdict.py` 밖에 두지 않는다(global constraints) — PASS/FAIL/
+  # SKIP_WITH_EVIDENCE/NEEDS_RESOLUTION 은 옛 Runtime 게이트가 SKILL.md 에 직접
+  # 내던 판정값이었고, 그 게이트 자체가 대상 소멸했다. 레거시 3종
+  # (PARTIAL/INCONCLUSIVE/DEGRADED_VERDICT) 은 애초에 실재한 적이 없어 그대로 0종.
   #
-  # **부재를 통과로 읽지 않는다 (/qg iter-5 C3).** 앞 버전은 `if grep -qE … "$SKILL"`
-  # 하나였다. `$SKILL` 이 없으면 grep 은 **exit 2**(파일 오류)를 내고, `if` 는 그것을
-  # 그냥 "매치 없음"과 같은 non-zero 로 읽어 `else` 로 떨어져 *"verdict 토큰 4종 불변"*
-  # 을 PASS 로 찍었다 — 파일을 지워도, 이름을 바꿔도, 경로를 오타내도 GREEN 이다.
-  # 음의 락은 빈 코퍼스 위에서 항상 참이므로 **코퍼스를 봤다는 positive** 가 필요하다.
+  # **부재를 통과로 읽지 않는다 (/qg iter-5 C3 계승).** `$SKILL` 이 없으면 grep 은
+  # **exit 2**(파일 오류)를 내고, 그것을 "매치 없음"과 같은 non-zero 로 읽으면
+  # 파일을 지워도·이름을 바꿔도·경로를 오타내도 GREEN 이 된다 — 그래서 파일 실재를
+  # 먼저 확인한다.
   if [[ ! -f "$SKILL" ]]; then
     no "SKILL.md 부재 ($SKILL) — verdict 토큰 락이 공허하게 통과할 뻔했다"
-  elif grep -qE '\bPARTIAL\b|\bINCONCLUSIVE\b|\bDEGRADED_VERDICT\b' "$SKILL"; then
-    no "SKILL.md에 신규 verdict 토큰 등장"
   else
-    # 양의 짝 — 4종이 실제로 그 파일에 있는가. 없으면 "토큰을 전부 지운" mutation 이
-    # 음의 락만으로는 통과한다 (금지 토큰이 없는 것은 맞으므로).
-    local missing="" t
-    for t in PASS FAIL SKIP_WITH_EVIDENCE NEEDS_RESOLUTION; do
-      grep -qF "$t" "$SKILL" || missing="$missing $t"
+    local present="" t
+    for t in PASS FAIL SKIP_WITH_EVIDENCE NEEDS_RESOLUTION PARTIAL INCONCLUSIVE DEGRADED_VERDICT; do
+      grep -qE "\\b${t}\\b" "$SKILL" && present="$present $t"
     done
-    [[ -z "$missing" ]] && ok "verdict 토큰 4종 불변 (금지 토큰 0 + 4종 실재)" \
-      || no "verdict 4종 중 누락:$missing"
+    [[ -z "$present" ]] && ok "verdict 토큰 0종 (레거시 7종 전부 부재 — Task 7)" \
+      || no "verdict 토큰 잔존:$present"
   fi
 }
 
@@ -331,7 +316,7 @@ case_create_head_asserts_sealed_commit() {
 for c in case_create_baseline case_create_baseline_refuses_colliding_user_worktree \
          case_create_baseline_is_still_idempotent \
          case_head_and_baseline_coexist case_create_head_asserts_sealed_commit \
-         case_remove_namespace_guard case_detect_runtime_frozen \
+         case_remove_namespace_guard \
          case_sandbox_guard_frozen case_no_new_surfaces; do
   echo "== $c"; $c
 done

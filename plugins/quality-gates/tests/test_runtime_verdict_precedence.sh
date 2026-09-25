@@ -11,14 +11,14 @@ TAB=$'\t'
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
-# Task 31(무게 감축): Runtime gate 절차 전문이 references/runtime-gate.md 로 분리됐다.
-# 아래 section_window() 는 R-init..R9 앵커로 SKILL.md 를 창-스캔하도록 설계됐으므로,
-# 분할 전과 동일한 논리적 문서를 재구성해 그 위에서 돈다. 재구성 실패를 원본 SKILL.md
-# 로 조용히 폴백하면 앵커가 전부 소실돼 아래 창들이 비고, 음의 락들이 vacuous 하게
-# 통과한다 — 그래서 폴백하지 않고 즉시 FAIL 한다.
+# Task 31(무게 감축): 차등 테스트 절차 전문이 references/differential-test.md 로
+# 분리됐다. 아래 section_window() 는 R-init..R8 앵커로 SKILL.md 를 창-스캔하도록
+# 설계됐으므로, 분할 전과 동일한 논리적 문서를 재구성해 그 위에서 돈다. 재구성
+# 실패를 원본 SKILL.md 로 조용히 폴백하면 앵커가 전부 소실돼 아래 창들이 비고,
+# 음의 락들이 vacuous 하게 통과한다 — 그래서 폴백하지 않고 즉시 FAIL 한다.
 . "$SCRIPT_DIR/lib/reconstruct-skill.sh"
 if ! SKILL="$(reconstruct_skill_md "$SKILL_REAL")"; then
-  echo "FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패 ($SKILL_REAL)"
+  echo "FAIL: SKILL.md ↔ references/differential-test.md 재구성 실패 ($SKILL_REAL)"
   exit 1
 fi
 trap 'rm -f "$SKILL"' EXIT
@@ -73,8 +73,8 @@ case_rinit_discriminator_table() {
   local ok=1
 
   # 양① — clean 행: 차등 불가 → 스킵 + PASS 불가
-  printf '%s\n' "$w" | grep -qE '^\|[[:space:]]*yes[[:space:]]*\|[[:space:]]*clean[[:space:]]*\|.*PASS 불가' \
-    || { ok=0; echo "    (miss) yes|clean 행 + 'PASS 불가'"; }
+  printf '%s\n' "$w" | grep -qE '^\|[[:space:]]*yes[[:space:]]*\|[[:space:]]*clean[[:space:]]*\|.*clean 불가' \
+    || { ok=0; echo "    (miss) yes|clean 행 + 'clean 불가'"; }
   # 양② — dirty 행: 차등 성립 → 정상 진행
   printf '%s\n' "$w" | grep -qE '^\|[[:space:]]*yes[[:space:]]*\|[[:space:]]*dirty[[:space:]]*\|.*정상 진행' \
     || { ok=0; echo "    (miss) yes|dirty 행 + '정상 진행'"; }
@@ -83,26 +83,29 @@ case_rinit_discriminator_table() {
     ok=0; echo "    (regress) 포괄 형태가 R-init 창에 재등장"
   fi
 
-  [[ $ok -eq 1 ]] && ok "R-init 판별자 표: clean→PASS불가 · dirty→정상진행 · 포괄형태 0회" \
+  [[ $ok -eq 1 ]] && ok "R-init 판별자 표: clean→clean불가 · dirty→정상진행 · 포괄형태 0회" \
     || no "R-init 판별자 표 락"
 }
 
-# T67 — R4 가 판별자를 **자기 스텝 안에서** 구한다 (/qg iter-5, SF3).
-#
-# Step 1b(`check-review-scope.sh` 의 유일한 기존 호출)는 Review 게이트 iteration N=1
-# 전용이라 `/qg runtime` 경로에서는 돌지 않는다. R4 가 그 캐시값을 가정하면 그 경로에서
-# 판별자가 미정의가 되고, 빈 문자열은 `!= yes` 라 'clean' 으로 읽혀 진짜 FAIL 이 SKIP 으로
-# 강등된다. 그래서 R4 창 안에 호출 지시와 degraded 취급 규칙이 **함께** 있어야 한다.
+# T67 (invert — Task 7, 계획 Step 3(c)) — R4 는 이제 판별자를 **자기 스텝에서 직접
+# 구하지 않는다.** 한 파이프라인에는 `/qg runtime` 같은 Dispatch-Loop 우회 경로가
+# 없다 — 모든 iteration 이 Review Step 1b 를 R4 보다 먼저 돈다(Pipeline ①→②). 그래서
+# R4 는 Step 1b 가 iteration 1 에서 캐시한 `worktree_dirty`/`degraded` 를 그대로
+# 쓰고, iteration 2 이상은 캐시가 낡았다고 보아 dirty 로 취급한다(fail-closed: 모름
+# → 실행). `check-review-scope.sh` 를 R4 창 안에서 다시 부르는 문구가 있으면 그것이
+# 오히려 회귀다(원인이던 우회 경로가 이제 존재하지 않는다).
 case_r4_resolves_discriminator_itself() {
-  local w; w=$(section_window '**Step R4' '**Step R5a')
+  local w; w=$(section_window '**Step R4' '**Step R5b')
   local ok=1
-  count_in "$w" 'scripts/check-review-scope.sh' | grep -qE '^[1-9]' \
-    || { ok=0; echo "    (miss) R4 창 안에 check-review-scope.sh 호출"; }
+  count_in "$w" 'Review Step 1b 가 iteration 1 에서 캐시한' | grep -qE '^[1-9]' \
+    || { ok=0; echo "    (miss) R4 창 안에 Step 1b 캐시 판별자 문장"; }
+  count_in "$w" 'iteration 2 이상은 Retry 가 파일을 고친 뒤' | grep -qE '^[1-9]' \
+    || { ok=0; echo "    (miss) iteration 2 이상 캐시-낡음 → dirty 취급 문장"; }
   # degraded 를 dirty 로 접는 fail-closed 규칙 (모름 → 실행)
   printf '%s\n' "$w" | grep -qE '^\|[[:space:]]*yes[[:space:]]*\|.*degraded: yes.*\|.*R4 실행' \
     || { ok=0; echo "    (miss) degraded: yes → R4 실행 행"; }
-  [[ $ok -eq 1 ]] && ok "R4 가 판별자를 자기 스텝에서 구하고 degraded 를 dirty 로 접는다" \
-    || no "R4 판별자 자립 락"
+  [[ $ok -eq 1 ]] && ok "R4 가 판별자를 Step 1b 캐시에서 구하고 degraded 를 dirty 로 접는다 (Task 7 invert)" \
+    || no "R4 판별자 캐시-소비 락"
 }
 
 # T68 — 좁힌 규칙의 **원래 형태가 문서 어디에도 인용 가능한 채로 남지 않는다** (∀).
@@ -142,10 +145,10 @@ case_same_as_head_never_unqualified() {
 # needle 은 SKILL.md 본문의 **연속 부분문자열**이어야 한다 — 백틱 하나 어긋나면
 # grep -F 가 못 찾고 락은 조용히 통과한다(이 plan 작성 중 실제로 한 번 어긋났다).
 case_skill_unclaimed_blocks_pass() {
-  local w; w=$(section_window '**Step R8' '## Blocked-path routing')
-  if [[ $(count_in "$w" '가 하나라도 있으면 `verification: degraded` 이고 verdict 를 PASS 로 올리지 않는다') -ge 1 ]] \
+  local w; w=$(section_window '**Step R8' '## Final Summary')
+  if [[ $(count_in "$w" '가 하나라도 있으면 `verification: degraded` 이고 clean 불가') -ge 1 ]] \
      && [[ $(count_in "$w" '열거가 인증을 대신하지 않는다') -ge 1 ]]; then
-    ok "R8 절이 unclaimed → verification degraded → PASS 불가를 명시"
+    ok "R8 절이 unclaimed → verification degraded → clean 불가를 명시"
   else no "R8 절에 unclaimed 라우팅 규칙 부재"; fi
 }
 
@@ -154,34 +157,26 @@ case_skill_unclaimed_blocks_pass() {
 # 정확히 M19("영향분 러너 부재를 gap: closed 로 처리해 PASS 허용")이므로 **같은 줄**을
 # 잰다. 실측: 행만 옮기는 mutation 에 다른 12 케이스는 전부 GREEN 이었다.
 case_skill_runner_absent_blocks_pass() {
-  local w; w=$(section_window '**Step R8' '## Blocked-path routing')
+  local w; w=$(section_window '**Step R8' '## Final Summary')
   if printf '%s\n' "$w" | grep -F '러너 부재 exit 3' | grep -qF '**불가**'; then
-    ok "영향분 러너 부재(exit 3)가 PASS 불가 행에 있다"
+    ok "영향분 러너 부재(exit 3)가 clean 불가 행에 있다"
   else
-    no "러너 부재 exit 3 이 PASS 불가 행에 없음 (gap: closed 행으로 새면 M19)"
+    no "러너 부재 exit 3 이 clean 불가 행에 없음 (gap: closed 행으로 새면 M19)"
   fi
 }
 
-# T31 + M11 + AC15(빈 스코프): 영향분 0개 → SKIP_WITH_EVIDENCE (PASS도 FAIL도 아님)
-case_skill_zero_impact_is_skip() {
-  local w; w=$(section_window '**Step R8' '## Blocked-path routing')
-  [[ $(count_in "$w" '영향분 0개 → `SKIP_WITH_EVIDENCE`') -ge 1 ]] \
-    && ok "영향분 0개 → SKIP_WITH_EVIDENCE (정확 토큰)" \
-    || no "영향분 0개 규칙 부재/토큰 불일치"
-}
+# T31 + M11 + AC15(빈 스코프, 대상 소멸 — Task 7): 영향분 0개 → SKIP_WITH_EVIDENCE
+# 였던 R8 verdict 결정 표 자체가 지워졌다(판정 어휘는 scripts/verdict.py 밖에 두지
+# 않는다 — global constraints). 사유 매핑(scope-empty)은 R-Y 를 거쳐 Task 8 이
+# verdict.py 로 옮긴다 — 이 레퍼런스 문서에는 대응물이 없다.
 
-# T26 + M5 + M15 + AC35: 확증 제품결함이 terminal이고 degrade가 함께 기록된다
-case_skill_precedence_total_order() {
-  local w; w=$(section_window '**Step R8' '## Blocked-path routing')
-  if [[ $(count_in "$w" '확증 제품결함(FAIL, terminal)  >  NEEDS_RESOLUTION  >  SKIP_WITH_EVIDENCE  >  PASS') -eq 1 ]] \
-     && [[ $(count_in "$w" 'degrade 사실은 원장과 보고서에 함께 기록된다') -ge 1 ]]; then
-    ok "verdict 총 순서 1회 + degrade 동시 기록 명시"
-  else no "verdict 총 순서 / degrade 동시 기록 락 실패"; fi
-}
+# T26 + M5 + M15 + AC35 (대상 소멸 — Task 7): 확증 제품결함 총 순서 표(FAIL >
+# NEEDS_RESOLUTION > SKIP_WITH_EVIDENCE > PASS)도 같은 표와 함께 지워졌다 — 우선순위
+# 규칙은 verdict.py 의 decide()/CAUSE_TO_REASON 이 코드로 소유한다.
 
 # T21 + M6 + AC12: 재실행은 정확히 1회 (무한 재실행이 false green 경로)
 case_skill_rerun_exactly_once() {
-  local w; w=$(section_window '**Step R6' '**Step R7')
+  local w; w=$(section_window '**Step R6' '**Step R8')
   if [[ $(count_in "$w" '재실행은 정확히 1회다 — green 이 나올 때까지가 아니다') -eq 1 ]]; then
     ok "재실행 1회 잠금 문장 존재 (body-unique)"
   else no "재실행 1회 문장 부재/중복"; fi
@@ -256,7 +251,7 @@ case_skill_gap_gate_zero_click() {
 case_skill_bulk_disclosure() {
   local w2 w8
   w2=$(section_window '**Step R2' '**Step R3')
-  w8=$(section_window '**Step R8' '## Blocked-path routing')
+  w8=$(section_window '**Step R8' '## Final Summary')
   if [[ $(count_in "$w2" '커버리지 미보장(러너가 선택을 무시함)') -ge 1 ]] \
      && [[ $(count_in "$w8" '커버리지 미보장(러너가 선택을 무시함)') -ge 1 ]]; then
     ok "bulk 커버리지 미보장 공시가 계획 산문과 보고서 양쪽에"
@@ -271,76 +266,31 @@ case_skill_bulk_disclosure() {
 # 오류 행의 두 결론(`degraded` 기록 · PASS 불가)을 **같은 줄에서** 잰다 — 따로 세면
 # 표를 쪼개 한쪽만 남겨도 통과한다(값의 부재를 음성 결과로 읽는 바로 그 실패).
 case_skill_r6_error_never_passes() {
-  local w; w=$(section_window '**Step R6' '**Step R7')
+  local w; w=$(section_window '**Step R6' '**Step R8')
   [[ -n "$w" ]] || { no "R6 윈도우가 비어 있음 (앵커 미스 — 아래 락이 공허해진다)"; return; }
   local bad=0
   [[ $(count_in "$w" '**R6 exit-code routing') -ge 1 ]] \
     || { echo "    누락: R6 exit-code 라우팅 절"; bad=1; }
   [[ $(count_in "$w" '어댑터별 호출과 `--aggregate` 호출 **양쪽**') -ge 1 ]] \
     || { echo "    누락: 두 호출(어댑터별·집계) 모두 커버한다는 명시"; bad=1; }
-  printf '%s\n' "$w" | grep -F '그 외 non-zero' | grep -F '**`degraded`** 로 적은 뒤' \
-    | grep -qF 'verdict 를 PASS 로 올리지 않는다' \
-    || { echo "    누락: 오류 행이 같은 줄에서 degraded + PASS 불가로 라우팅"; bad=1; }
-  [[ $bad -eq 0 ]] && ok "R6: 실패한 대조/집계 → degraded, PASS 불가" \
+  printf '%s\n' "$w" | grep -F '그 외 non-zero' | grep -F '**`degraded`** 로 적는다' \
+    | grep -qF '캡처 실패를' \
+    || { echo "    누락: 오류 행이 같은 줄에서 degraded + 캡처-실패 문구로 라우팅"; bad=1; }
+  [[ $bad -eq 0 ]] && ok "R6: 실패한 대조/집계 → degraded (clean 불가)" \
                    || no "R6 exit-code 라우팅 락 실패"
 }
 
-# I2 회귀 락: NEEDS_RESOLUTION 재시도가 R5b·R6 를 다시 돌고 옛 HEAD 행을 버린다.
-# 순서까지 잰다 — 새 트리를 만들어 놓고 옛 head 행으로 대조하면 고쳐진 코드에 FAIL 이
-# 서거나(거짓 FAIL) 옛 green 이 재시도가 만든 회귀를 가린다.
-case_skill_retry_reruns_r5b_r6() {
-  local w; w=$(section_window '- **Yes, retry**' '- **Skip with evidence**')
-  [[ -n "$w" ]] || { no "재시도 윈도우가 비어 있음 (앵커 미스)"; return; }
-  local bad=0
-  [[ $(count_in "$w" '재시도는 R5b·R6 도 다시 돈다') -ge 1 ]] \
-    || { echo "    누락: 재시도가 R5b·R6 를 다시 돈다는 규칙"; bad=1; }
-  [[ $(count_in "$w" '이전 HEAD 행은 **버린다**') -ge 1 ]] \
-    || { echo "    누락: 옛 head_rows_file 폐기"; bad=1; }
-  # 순서: 같은 줄 안의 문자 offset 으로 잰다 (존재만 보면 R6 → R5b 로 뒤집어도 통과).
-  #
-  # 첫 항의 앵커는 `R5b(` — 여는 괄호까지가 **순서절을 고르는 최소 구조**다. 그 줄에는
-  # `R5b` 가 두 번 나오는데(앞의 "재시도는 R5b·R6 도 다시 돈다"), 맨 `R5b` 로 재면 그
-  # 앞 언급에 latch 돼 순서를 뒤집어도 통과한다. 괄호는 순서절에만 붙는다.
-  #
-  # 앞 버전은 `R5b(새` 였다 — 괄호 **안의 첫 낱말**까지 핀한 것이다. 그 낱말은 순서와
-  # 무관한 서술이라, 괄호 안 설명이 사실에 맞게 갱신되면(§11 ⑬ 이후 R5b 는 verifier
-  # 샌드박스를 쓰지 않으므로 옛 설명이 거짓이 됐다) 순서가 멀쩡한데도 RED 가 났다.
-  # 락이 구현보다 강해 **문서를 거짓으로 되돌리라고 요구하는** 형태였다.
-  printf '%s\n' "$w" | awk '
-    index($0, "재시도는 R5b·R6 도 다시 돈다") { p = $0 }
-    END {
-      if (p == "") exit 1
-      a = index(p, "R5b("); b = index(p, "→ R6("); c = index(p, "→ R7 → R8")
-      exit !(a > 0 && b > a && c > b)
-    }' || { echo "    누락/역전: R5b → R6 → R7 → R8 순서"; bad=1; }
-  [[ $bad -eq 0 ]] && ok "재시도가 R5b → R6 → R7 → R8 를 다시 돌고 옛 HEAD 행을 버린다" \
-                   || no "재시도 순서 락 실패"
-}
+# I2 회귀 락 (대상 소멸 — Task 7): NEEDS_RESOLUTION 해소 루프('Yes, retry'/'Skip
+# with evidence' UI, R5a/R7/R9 의존)가 통째로 사라졌다 — 재시도는 이제 fix-loop
+# Retry 옵션 하나이고, 대응물 없이 지운다.
 
-# I3 회귀 락: fallback working-tree guard 의 **실행 가능한** 두 명세.
-# 한 번 압축돼 사라진 적이 있다(브리프 전사). read-only fallback 에서 verifier 가
-# 사용자의 진짜 트리를 건드렸는지 알려주는 유일한 신호이므로, 레시피(무엇을 재나)와
-# 비교 술어(무엇을 변경으로 치나) 둘 다 없으면 경고가 조용히 안 뜬다.
-case_skill_fallback_treehash_guard() {
-  local w1 w7 bad=0
-  w1=$(section_window '**Step R5a¹' '**Step R5a²')
-  w7=$(section_window '**Step R7' '**Step R8')
-  [[ -n "$w1" && -n "$w7" ]] || { no "R5a¹/R7 윈도우가 비어 있음 (앵커 미스)"; return; }
-  [[ $(count_in "$w1" 'GIT_INDEX_FILE=<tmp>') -ge 1 ]] \
-    || { echo "    누락: fallback_pre tree-hash 레시피(GIT_INDEX_FILE)"; bad=1; }
-  [[ $(count_in "$w1" 'write-tree') -ge 1 ]] \
-    || { echo "    누락: write-tree"; bad=1; }
-  [[ $(count_in "$w7" 'same recipe as `fallback_pre`') -ge 1 ]] \
-    || { echo "    누락: fallback_post 가 같은 레시피라는 명시"; bad=1; }
-  [[ $(count_in "$w7" 'that is not in `fallback_pre`, **or** a differing tree-hash') -ge 1 ]] \
-    || { echo "    누락: 변경 판정 술어(porcelain 신규 항목 or tree-hash 상이)"; bad=1; }
-  [[ $bad -eq 0 ]] && ok "fallback tree-hash guard: 레시피 + 비교 술어 양쪽 생존" \
-                   || no "fallback tree-hash guard 락 실패"
-}
+# I3 회귀 락 (대상 소멸 — Task 7): fallback working-tree guard(R7 mutation-guard 의
+# 읽기전용 폴백 신호)는 R-W 로 파이프라인이 create-sandbox 를 더 안 부르므로
+# 이 폴백 시나리오 자체가 없어졌다 — 대응물 없이 지운다.
 
 # AC47: 기준선 트리에서 detect를 **재실행**한다 (HEAD 집합 재사용 금지)
 case_skill_both_side_detect() {
-  local w; w=$(section_window '**Step R4' '**Step R5a')
+  local w; w=$(section_window '**Step R4' '**Step R5b')
   [[ $(count_in "$w" 'HEAD 의 어댑터 집합을 재사용하지 않는다') -ge 1 ]] \
     && ok "기준선 트리 재감지 명시" || no "양측 재감지 문장 부재"
 }
@@ -412,35 +362,10 @@ case_baseline_detected_source_is_probe_forall() {
   fi
 }
 
-# T76 — R8 PASS 행이 `verdict_input` **3플래그 전부**를 요구한다 (/qg iter-5 SF5).
-#
-# `diff-test-results.py` 는 세 키를 낸다(confirmed_product_defect · silent_drop ·
-# baseline_unrunnable). PASS 행은 그중 **둘만** 요구했다. 세 번째를 안 읽으면
-# 기준선을 한 축도 관측 못 한 실행이 PASS 행의 결정론 조건을 충족한다 — 다른 문장이
-# 그것을 막고 있었지만, **막는 것이 표가 아니면 표를 읽는 소비자는 통과시킨다.**
-case_pass_row_reads_all_three_flags() {
-  local row; row=$(grep -F '| `PASS` |' "$SKILL")
-  if [[ -z "$row" ]]; then no "R8 PASS 행을 못 찾음 (앵커 소실)"; return; fi
-  local missing="" k
-  # /qg iter-6 E3: 앞선 판본은 **정확히 이 4토큰만** 열거하고 멈췄다. 그래서 PASS 행에서
-  # `floor 5차원 전부 closed` 절을 **통째로 지워도** 스위트 전체가 GREEN 이었다(실측:
-  # bash 스위트 baseline · harness GREEN · 이 파일 27/27 GREEN). 이 케이스 자신의 근거가
-  # *"막는 것이 표가 아니면 표를 읽는 소비자는 통과시킨다"* 인데, 같은 논증이 그것이
-  # 세는 걸 잊은 절에 그대로 적용된다. AC15·AC17·AC44·AC53 이 전부 이 표를 경유한다.
-  for k in 'floor 5차원 전부' confirmed_product_defect silent_drop baseline_unrunnable forced_downgrade; do
-    printf '%s\n' "$row" | grep -qF "$k" || missing="$missing $k"
-  done
-  # SKIP 행의 floor disjunct 도 같은 축이다 — PASS 를 막는 절만 지키고 그것이 어디로
-  # 라우팅되는지를 안 지키면, `degraded` 가 아무 verdict 로도 안 가는 표가 만들어진다.
-  local skip_row; skip_row=$(grep -F '| `SKIP_WITH_EVIDENCE` |' "$SKILL")
-  if [[ -z "$skip_row" ]]; then
-    missing="$missing SKIP행-앵커소실"
-  else
-    printf '%s\n' "$skip_row" | grep -qF '어느 floor 차원이' || missing="$missing SKIP행-floor-disjunct"
-  fi
-  [[ -z "$missing" ]] && ok "R8 PASS 행이 floor 절 + verdict_input 3플래그 + forced_downgrade 를, SKIP 행이 floor disjunct 를 요구" \
-    || no "R8 판정표 누락:$missing"
-}
+# T76 (대상 소멸 — Task 7): R8 의 verdict 결정 표(PASS/SKIP_WITH_EVIDENCE 행) 자체가
+# 지워졌다 — floor 5차원 + `verdict_input` 3플래그 + `forced_downgrade` 를 함께
+# 요구하는 로직은 이제 `verdict.py` 의 `decide()`(Task 2/3 소유, Python 테스트로 잰다)
+# 가 코드로 갖는다. 이 SKILL-문서 스캔 락은 대응물이 없어 지운다.
 
 # T77 — `FLAKY` 는 **귀속 카테고리가 아니다** (/qg iter-5 SF2).
 #
@@ -481,45 +406,23 @@ case_flaky_is_a_note_not_a_category() {
     || no "flaky 기록 위치 미지정 — 관측이 사라진다"
 }
 
-# T78 — 폴백에서 R4 를 건너뛴다 (/qg iter-5 SR4).
-#
-# `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` 이면 R5b 가 아예 안 돌아 HEAD 축이 전량
-# `unrun` 이다. 그러면 R4 의 기준선 행은 SILENT_DROP/BASELINE_UNRUNNABLE 로만
-# 짝지어지고 verdict 는 이미 SKIP_WITH_EVIDENCE 로 cap 돼 있다 — 기준선 워크트리
-# 생성 + 전체 스위트 실행을 대가로 **아무것도 얻지 못한다.**
-case_r4_skipped_in_fallback() {
-  local win; win=$(section_window '**Step R4 — 기준선 측' '① 캐시 조회')
-  if [[ -z "$win" ]]; then no "R4 섹션 윈도우가 비었다 (앵커 소실)"; return; fi
-  # needle 은 **body-unique** 여야 한다. `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX`(3회)와
-  # `unrun\t-`(3회)는 같은 창의 *다른* 스킵 규칙(same_as_head × clean)에도 있어서,
-  # 그것으로 재면 이 SR4 문단을 통째로 지워도 GREEN 이다(실측 — N6·N7 mutation).
-  # 이 문단에만 있는 문구로 세 축을 각각 잰다.
-  local bad=0
-  [[ $(count_in "$win" 'R5b 가 아예 돌지') -ge 1 ]] \
-    || { bad=1; echo "    (누락) 폴백에서 R5b 가 안 돈다는 근거"; }
-  [[ $(count_in "$win" '대가로 아무것도 얻지') -ge 1 ]] \
-    || { bad=1; echo "    (누락) 비용 대비 무소득 판단 (규칙의 존재 이유)"; }
-  # 건너뛸 때의 행 채우기 — 빈 파일을 넘기면 SILENT_DROP 으로 오라벨된다.
-  [[ $(count_in "$win" '고른 것이 사라졌다"로 잘못 보고된다') -ge 1 ]] \
-    || { bad=1; echo "    (누락) 스킵 시 unrun 행 채우기 (빈 파일 금지)"; }
-  [[ $bad -eq 0 ]] && ok "R4: 폴백 스킵 판별자 + unrun 행 채우기" \
-    || no "R4 폴백 스킵 규칙 결손"
-}
+# T78 (대상 소멸 — Task 7): `DISABLE_RUNTIME_SANDBOX` 에서도 R4 를 건너뛰던 폴백
+# 문단 자체가 differential-test.md 의 R4 에서 통째로 지워졌다(R-V 의 새 kill switch
+# `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 은 ② 전체를 건너뛰지 R4 한
+# 스텝만 조건부로 건너뛰지 않는다) — 대응물 없이 지운다. 후계는 Task 8 의
+# `test_pipeline_verdict_wiring.sh` 가 kill-switch 배선을 잰다.
 
 for c in case_unclaimed_row_is_produced case_runner_absent_is_distinguishable \
          case_skill_unclaimed_blocks_pass case_skill_runner_absent_blocks_pass \
-         case_skill_zero_impact_is_skip \
-         case_skill_precedence_total_order case_skill_rerun_exactly_once \
+         case_skill_rerun_exactly_once \
          case_skill_two_stage case_skill_plan_prose_six_fields \
          case_skill_cost_signal_categorical case_skill_gap_gate_zero_click \
          case_skill_bulk_disclosure case_skill_both_side_detect \
-         case_skill_r6_error_never_passes case_skill_retry_reruns_r5b_r6 \
-         case_skill_fallback_treehash_guard \
+         case_skill_r6_error_never_passes \
          case_rinit_discriminator_table case_r4_resolves_discriminator_itself \
          case_same_as_head_never_unqualified \
          case_r4_probe_step_is_locked case_baseline_detected_source_is_probe_forall \
-         case_pass_row_reads_all_three_flags case_flaky_is_a_note_not_a_category \
-         case_r4_skipped_in_fallback; do
+         case_flaky_is_a_note_not_a_category; do
   echo "== $c"; $c
 done
 finish

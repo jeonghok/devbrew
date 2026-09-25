@@ -29,7 +29,6 @@ pairs=(
   "plugins/quality-gates/agents/artifact-adversarial.md|plugins/quality-gates/tests/test_artifact_adversarial_frontmatter.sh"
   "plugins/quality-gates/agents/test-scope-validator.md|plugins/quality-gates/tests/test_test_scope_validator_frontmatter.sh"
   "plugins/quality-gates/agents/pr-understanding-builder.md|plugins/quality-gates/tests/test_pr_understanding_builder_frontmatter.sh"
-  "plugins/quality-gates/agents/runtime-verifier.md|plugins/quality-gates/tests/test_runtime_verifier_frontmatter.sh"
   "plugins/spec-distill/agents/blind-spot-prober.md|plugins/spec-distill/tests/test_blind_spot_prober_frontmatter.sh"
   "plugins/spec-distill/agents/coverage-mapper.md|plugins/spec-distill/tests/test_coverage_mapper_frontmatter.sh"
   "plugins/spec-distill/agents/steelman-builder.md|plugins/spec-distill/tests/test_steelman_builder_scope.sh"

@@ -72,7 +72,7 @@ miss_env=0; miss_cond=0; miss_banner=0; miss_skip=0
 decoy_verdict_in=0; decoy_index_in=0
 
 decoy_verdict_lines="$(grep -nF '보안 리뷰를 통과했다' "$SKILL" | cut -d: -f1)"
-decoy_index_lines="$(grep -nF 'Review gate Tier A floor의' "$SKILL" | cut -d: -f1)"
+decoy_index_lines="$(grep -nF '보안 각도의' "$SKILL" | cut -d: -f1)"
 
 while read -r s e d; do
   [ -n "${d:-}" ] || continue
@@ -120,7 +120,7 @@ assert_eq "$miss_skip" 0    "∀ dispatch — 창 안에 '발행하지 않는다
 # 음의 락에는 양의 짝이 필요하다: decoy 가 파일에서 사라지면 "창 밖" 은 공허해진다.
 assert_count_ge "grep -cF '보안 리뷰를 통과했다' '$SKILL'" 1 \
   "decoy① Step 4.5 verdict advisory 가 파일에 실재 (창-밖 검사의 양성 짝)"
-assert_count_ge "grep -cF 'Review gate Tier A floor의' '$SKILL'" 1 \
+assert_count_ge "grep -cF '보안 각도의' '$SKILL'" 1 \
   "decoy② Environment 색인이 파일에 실재 (창-밖 검사의 양성 짝)"
 
 assert_eq "$decoy_verdict_in" 0 "decoy① verdict advisory 는 모든 창 밖이다"

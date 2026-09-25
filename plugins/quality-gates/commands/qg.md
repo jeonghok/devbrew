@@ -1,11 +1,11 @@
 ---
-description: "Run the quality gates pipeline (review → runtime verification)"
-argument-hint: "[critique <path>|review|runtime|both] [branch [<name>]|--paths <glob>...|--reset] [--skip-runtime] [--plan <path>] [--pr-url <url>]"
+description: "Run the quality gates pipeline (scope → differential test → review → verdict)"
+argument-hint: "[critique <path>] [branch [<name>]|--paths <glob>...|--reset|--gc] [--plan <path>] [--pr-url <url>]"
 ---
 
 # Quality Gates Pipeline
 
-Run the 2-gate quality verification pipeline to ensure code quality before PR merge.
+Run the quality pipeline — one pipeline, one verdict (`clean` · `defect` · `not-certified (<사유>)`).
 
 **Arguments:** $ARGUMENTS
 
@@ -40,8 +40,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg-gc.py"
 ## Special mode: `critique` (비-코드 산출물 비평 루프)
 
 `$ARGUMENTS`가 `critique`로 시작하거나(예: `/qg critique docs/design.md`), 사용자가
-자연어로 **비-코드 산출물** 비평 의도를 밝히면(예: `이 설계문서 비평해줘`), 이는 코드
-2게이트 파이프라인이 아니라 **산출물 비평-수정 루프** 모드다. 이 경우 `setup-qg.sh`·
+자연어로 **비-코드 산출물** 비평 의도를 밝히면(예: `이 설계문서 비평해줘`), 이는
+코드 파이프라인이 아니라 **산출물 비평-수정 루프** 모드다. 이 경우 `setup-qg.sh`·
 `quality-pipeline`을 실행하지 말고 곧장 신규 skill을 호출한다:
 
 `Skill("quality-gates:critiquing-artifacts")`
@@ -52,7 +52,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg-gc.py"
 해석(별도 토큰 parser 없음 — P8 determinism-economy). 코드/산출물 의도가 **진짜 모호**할
 때만 mode-branch를 확인하고, 명확하면 안 띄운다(dominant한 코드 경로에 마찰 0).
 
-**코드 파이프라인 인자**(bare `/qg`, `both|review|runtime|branch|--paths ...`)는 아래
+**코드 파이프라인 인자**(bare `/qg`, `branch|--paths ...`)는 아래
 기존 경로 그대로 — 무변경.
 
 ## Instructions
@@ -64,11 +64,10 @@ Execute the setup script to initialize the pipeline:
 ```
 
 Now invoke `Skill("quality-gates:quality-pipeline")` with the parsed
-arguments. The skill runs the pipeline in this turn — after the
-gate-scope question it runs the Review gate (with internal fix-loop) and,
-when both gates are selected, the Runtime gate — surfacing decision points
-via AskUserQuestion. No further commands are needed unless the pipeline
-is aborted at a decision point.
+arguments. The skill runs the pipeline in this turn — differential test,
+reviewers, re-critique, synthesis — with its internal fix-loop, surfacing
+decision points via AskUserQuestion. No further commands are needed unless
+the pipeline is aborted at a decision point.
 
 ### After the pipeline
 
@@ -83,23 +82,19 @@ is aborted at a decision point.
 | Command | Effect |
 |---------|--------|
 | `/qg critique <path>` | 비-코드 산출물 비평-수정 루프(별도 skill; 라운드별 커밋; 코드 아님) |
-| `/qg` | Ask gate scope (Review only / both), then run; git-derived diff (branch + worktree) |
-| `/qg both` | Full pipeline (both gates), no gate-scope question; git-derived diff (branch + worktree) |
-| `/qg branch` | Ask gate scope, then run; full-branch diff (vs `main`) |
-| `/qg branch <name>` | Ask gate scope, then run against branch `<name>` in isolated worktree |
-| `/qg --paths <glob>...` | Ask gate scope, then run; scope to matched paths |
+| `/qg` | Run the pipeline; git-derived diff (branch + worktree) |
+| `/qg branch` | Run on the full-branch diff (vs `main`) |
+| `/qg branch <name>` | Run against branch `<name>` in isolated worktree |
+| `/qg --paths <glob>...` | Scope to matched paths |
 | `/qg --reset` | Clear current session folder + legacy v1.5.0 flat files and exit |
 | `/qg --gc` | Run TTL GC on stale session folders |
-| `/qg review` | Review gate only |
-| `/qg runtime` | Runtime gate only |
-| `/qg --skip-runtime` | Review gate only (skip runtime) |
+| `both` · `review` · `runtime` · `--skip-runtime` | 제거됨 — 한 줄 공지 후 그대로 진행 |
 | `/qg --plan <path>` | Use specific plan file |
 | `/qg --pr-url <url>` | Specify PR URL |
 | `/cancel-qg` | Cancel active pipeline |
 | `/qg-publish [--dry-run]` | Generate + publish a PR-understanding comment (separate skill; consent-gated; not a gate) |
 | `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1` | Disable `/qg branch <name>` auto-worktree mode |
 | `DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1` | Preserve branch worktree after pipeline completes or is cancelled (default: removed) |
-| `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` | Disable the Runtime gate sandbox executor (read-only smoke fallback; verdict capped at SKIP_WITH_EVIDENCE) |
 
 ### Scope (default: git 변경)
 
@@ -117,7 +112,7 @@ Override with `/qg branch` (full branch) or `/qg --paths <glob>...` (manual).
 
 빈 세션에서 커밋된 변경이 있어 resolved scope가 0인데 브랜치는 base보다 앞서 있으면 (false-clean),
 qg는 "clean"이라 하지 않는다 — read-only `check-review-scope.sh`가 `changes_exist`를 결정론으로
-emit하고, Review gate의 **정직-verdict floor**가 `resolved scope 0 AND changes_exist == yes`이면
+emit하고, 파이프라인의 **정직-verdict floor**가 `resolved scope 0 AND changes_exist == yes`이면
 verdict를 `no scope reviewed … NOT certified clean`으로 교체한다(load-bearing, kill 불가). 무엇을
 리뷰할지(routing)는 모델이 소유 — 빈 scope면 모델이 `/qg branch`(전체 브랜치 리뷰)를 제안한다.
 진짜 변경 없음(genuine no-op)은 그대로 `clean`; 신호가 degraded면 fail-open + loud advisory.
@@ -141,21 +136,21 @@ loop, the pre-redesign behavior):
 
 Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable.
 
-### Gates
+### Pipeline
 
-- **Review gate** — Iterative code review (scout → Phase 1+2 → 재비판(doc-recritic) → synthesizer); within-gate fix-loop up to 5 iterations
-- **Runtime gate** — Launches app and verifies behavior with browser automation
+- ① 스코프 → ② 차등 테스트(기준선 대비, 매 iteration) → ③ 각도 + 리뷰어 → ④ 출처-제거 재비판 → ⑤ 합성 · 판정
+- Fix-loop: findings 가 남으면 iteration 마다 `Retry` / `Accept and finish` / `Stop` 로 사용자가 진행을 정한다(최대 5회).
 
-### Pipeline Rules (v2.0.0)
+### Pipeline Rules
 
 - Pipeline runs in a single assistant turn (no Stop hook, no continuation
   sentinel, no cross-turn state machine).
-- **Forward-only**: code-change verdicts terminate. The Review gate fix-loop applies
+- **Forward-only**: code-change verdicts terminate. The fix-loop applies
   user-consented fixes inline (orchestrator-as-writer); does NOT auto-restart
-  from an earlier gate.
-- The Review gate iterates up to 5 times internally; AskUserQuestion fires at every
-  iteration boundary with `Retry` / `Proceed to Runtime gate` / `Stop`.
-- AskUserQuestion also fires on Review gate max-iter and Runtime gate
-  NEEDS_RESOLUTION.
+  from an earlier iteration.
+- The pipeline iterates up to 5 times; AskUserQuestion fires at every
+  iteration boundary with `Retry` / `Accept and finish` / `Stop`.
+- AskUserQuestion also fires on max-iter, and on the differential test's gap
+  gate (R3) when something was left out.
 - State tracked minimally in `.claude/quality-gates/<session-id>/pipeline.md`
   (managed by `scripts/setup-qg.sh`; SKILL reads worktree_path only).

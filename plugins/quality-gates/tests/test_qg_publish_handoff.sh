@@ -41,7 +41,7 @@ grep -qF 'publish-eligible' <<<"$WIN" \
 # (5) B3a/B3b — 생산자 둘이 각자 사라졌는가. 양성 증인을 각 경로마다 따로 세운다:
 #     한 테스트로 묶으면 한쪽만 지워도 통과한다.
 SKILL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
-RG="$PLUGIN_ROOT/skills/quality-pipeline/references/runtime-gate.md"
+RG="$PLUGIN_ROOT/skills/quality-pipeline/references/differential-test.md"
 
 FS="$(awk '/^## Final Summary/{f=1;print;next} f&&/^## /{exit} f{print}' "$SKILL")"
 grep -qF 'render-terminal.py table' <<<"$FS" \
@@ -51,13 +51,14 @@ grep -qF 'publish-eligible' <<<"$FS" \
   && no "B3a: Final Summary 가 여전히 sentinel 을 쓴다" \
   || ok "B3a: Final Summary 가 sentinel 을 쓰지 않음"
 
-R8="$(awk '/^\*\*Step R8/{f=1} f{print} f&&/^\*\*Step R9/{exit}' "$RG")"
-grep -qF 'Step R9' <<<"$R8" \
-  && ok "B3b 양성 증인: R8 창이 R9 경계까지 실재한다" \
+# R8 은 differential-test.md 의 마지막 스텝(R9 삭제, R-AG) — 창은 파일 끝까지다.
+R8="$(awk '/^\*\*Step R8/{f=1} f{print}' "$RG")"
+grep -qF '판정은 여기서 내지 않는다' <<<"$R8" \
+  && ok "B3b 양성 증인: R8 창이 판정-불가 꼬리 문단까지 실재한다" \
   || no "B3b 앵커 죽음 — R8 창을 못 찾았다"
 grep -qF 'publish-eligible' <<<"$R8" \
-  && no "B3b: Runtime R8 이 여전히 sentinel 을 쓴다" \
-  || ok "B3b: Runtime R8 이 sentinel 을 쓰지 않음"
+  && no "B3b: Differential test R8 이 여전히 sentinel 을 쓴다" \
+  || ok "B3b: Differential test R8 이 sentinel 을 쓰지 않음"
 
 # (6) publish-active.md 는 v7.0.0 에서 소비자(`hooks/post-tool-use.py`)와 함께 제거됐다 —
 #     생산자가 되살아나면 아무도 읽지 않는 표식을 쓰는 것이다.

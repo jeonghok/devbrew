@@ -14,18 +14,17 @@ ROOT = Path(__file__).resolve().parent.parent
 # Files where AskUserQuestion options are defined or instructed.
 #
 # Task 31 fix round 5 (F1 계열): 이 스캔은 **절대부재** 검사다 — SKILL.md 전량에
-# secret 유도 프롬프트가 없음을 잰다. `## Runtime gate` 절차가
-# skills/quality-pipeline/references/runtime-gate.md 로 분리된 뒤, 이 P21 가드가
-# 실제로 보는 범위는 2,079줄 중 906줄로 줄었다. 하필 Runtime 게이트가 실제
-# 서비스를 부팅하는 절차라 `.env` · DB_URL · API 키를 사용자에게 물어보라는
-# 지시가 새로 들어갈 **가장 그럴듯한 자리**가 검사 밖으로 나가 있었다.
+# secret 유도 프롬프트가 없음을 잰다. 절차 전문이
+# skills/quality-pipeline/references/*.md 로 분리돼 있어, P21 가드가 SKILL.md
+# 한 파일만 보면 절차 본문(차등 테스트가 실제 서비스를 부팅·설치하는 자리라
+# `.env` · DB_URL · API 키를 사용자에게 물어보라는 지시가 새로 들어갈 **가장
+# 그럴듯한 자리**)이 검사 밖으로 나간다.
 # 그래서 references/*.md 를 **열거가 아니라 도출**해 코퍼스에 넣는다 — 새 참조
 # 파일이 생겨도 자동으로 대상이 된다.
 _REFERENCE_DOCS = sorted(ROOT.glob("skills/*/references/*.md"))
 
 TARGETS = [
     ROOT / "skills/quality-pipeline/SKILL.md",
-    ROOT / "agents/runtime-verifier.md",
 ] + _REFERENCE_DOCS
 
 # Patterns that suggest secret-value extraction.
@@ -68,18 +67,6 @@ class TestNoSecretPrompts(unittest.TestCase):
         self.assertEqual(offenders, [],
                          "Found prompts that may solicit secret values:\n"
                          + "\n".join(offenders))
-
-    def test_runtime_verifier_disallows_secret_request(self):
-        """runtime-verifier.md must explicitly state it does not request secret values."""
-        path = ROOT / "agents/runtime-verifier.md"
-        text = path.read_text(encoding="utf-8")
-        # Must contain explicit guard text.
-        self.assertRegex(
-            text,
-            r"(do not request secret|never request secret|cannot request secret|"
-            r"never ask.*secret|do not ask.*secret)",
-            "runtime-verifier.md must explicitly forbid secret-value requests",
-        )
 
 if __name__ == "__main__":
     unittest.main()

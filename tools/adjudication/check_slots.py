@@ -46,7 +46,6 @@ FORBIDDEN_KINDS = ("prior_verdict", "score", "orchestrator_framing")
 #   · `plugin-auditor.axis_task`/`candidate_clues` — `audit-workflow.js` 의
 #     CONTRACT 가 *"나는 이 단서들이 참인지 거짓인지 말하지 않는다"* 로
 #     판단 배제를 명시한다 → ⓐ/ⓒ.
-#   · `runtime-verifier.spec_acceptance_criteria` — spec 에서 뽑은 {ac_id,text} → ⓑ.
 #   · brief/seed 계열 넷(`brief`/`document`/`draft`/`seed`) — 원문 인라인 → ⓑ.
 # 남은 슬롯은 전부 경로·반복자·enum 이다.
 EXEMPT_SLOTS = {
