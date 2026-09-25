@@ -78,13 +78,17 @@ grep -qF -- 'eligibility is' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+�
 grep -qF -- 'whether an open decision still touches that dimension' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
 grep -qF -- '1 plus that dimension'\''s reopen count' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
 # 웹 근거도 계약 모양이다(스펙 §B — prober 의 출력 의무는 coverage-mapper 와 같다). URL 문자열 목록이면
-# `decides` 가 없어 웹 premortem 이 결정 연결을 영영 못 댄다. 양의 짝: 계약 객체의 `url:` 키.
-grep -qE '^[[:space:]]*-[[:space:]]*"https://' <<<"$BODY" \
-  && no "웹 근거가 URL 문자열 목록이다 — 계약 객체(url·supports·claim·touches·decides)가 아니다" \
-  || ok "웹 근거가 URL 문자열 목록이 아니다"
-ev_n="$(grep -cE '^[[:space:]]*-[[:space:]]*url:[[:space:]]*"https://' <<<"$BODY")"
-dec_n="$(grep -cE '^[[:space:]]*decides:' <<<"$BODY")"
-{ [[ "$ev_n" -ge 2 ]] && [[ "$dec_n" -ge 3 ]]; } \
-  && ok "웹 근거 계약 객체: hidden_assumptions·failure_modes 두 자리 모두 url + decides (repo_claims 포함 decides ≥3)" \
-  || no "웹 근거 계약 객체 부재: url 항목 ${ev_n} · decides 키 ${dec_n}"
+# `decides` 가 없어 웹 premortem 이 결정 연결을 영영 못 댄다. 합계로 세면 한 블록의 추가가 다른 블록의
+# 소실을 갚으므로 **블록마다** 본다: 출력 펜스에서 hidden_assumptions: / failure_modes: 블록을 잘라 각각
+# 계약 객체(`- url: "https://`)와 `decides:` 를 요구하고, URL 문자열 항목은 따옴표·flow 모양까지 전부 거부한다.
+for blk in hidden_assumptions failure_modes; do
+  bt="$(awk -v b="$blk" '/^```yaml$/{y=1;next} y&&/^```$/{exit} y&&$0 ~ "^"b":"{f=1;next} y&&f&&/^[a-z_]+:/{exit} y&&f' "$AGENT")"
+  { [[ -n "$bt" ]] && grep -qE '^[[:space:]]*-[[:space:]]*url:[[:space:]]*"https://' <<<"$bt" \
+      && grep -qE '^[[:space:]]*decides:' <<<"$bt"; } \
+    && ok "웹 근거 계약 객체(${blk}): url + decides" \
+    || no "웹 근거 계약 객체(${blk}): 블록이 없거나 url·decides 가 빠졌다"
+  grep -qE '^[[:space:]]*-[[:space:]]*["'"'"']?https?://|evidence:[[:space:]]*\[' <<<"$bt" \
+    && no "웹 근거(${blk})가 URL 문자열 항목이다 — 계약 객체(url·supports·claim·touches·decides)가 아니다" \
+    || ok "웹 근거(${blk})에 URL 문자열 항목이 없다"
+done
 finish

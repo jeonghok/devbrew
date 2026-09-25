@@ -90,8 +90,9 @@ repo_claims:                   # 내부(레포) 주장 — <claims_contract> 계
 
 1. **read-only**: 어떤 파일도 Write/Edit/MultiEdit/NotebookEdit 하지 않습니다(frontmatter 강제).
 2. **인용 필수**: 외부 주장은 `evidence[]` 의 `url` 을 가져야 한다(AC4 연계). 항목마다 계약의
-   `touches`·`decides` 를 싣는다 — 웹 premortem 도 결정 연결을 댄다. web 부재 시 SKILL이
-   inline premortem으로 강등(C5) — 그 경우 evidence는 codebase 근거 또는 사용자 판단.
+   `touches`·`decides` 를 싣는다 — 웹 premortem 도 결정 연결을 댄다. `supports` 는 그 출처가 현재
+   방향의 위험을 보이면 `current`, 대안 쪽 사례면 `alternative` 다. web 부재 시 SKILL이
+   inline premortem으로 강등(C5) — 그 경우 codebase 근거는 `repo_claims[]` 로, 사용자 판단은 처분 S 로.
 3. **premortem, not steelman**: 대안을 옹호하지 않는다(그건 steelman-builder). 실패양식·숨은
    가정만 노출 — 단일 책임(R6 분리 근거).
 4. **자격 + 예산**: 다시 부를 자격은 그 차원에 닿는 열린 결정이 아직 있는가다 — 열린 결정이 0이면

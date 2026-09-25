@@ -1044,8 +1044,10 @@ def research_link_missing(text: str) -> list[str]:
     레포 id 로 읽혀 red 다 — 전부 알려진 한계. **이 술어는 형태 검사다** — 줄 끝 연결의 모양과 id 의
     출현만 보고, 그 연결이 참인지는 V1(내용 확인)과 확인 줄 ∀ 가 진다.
 
-    연결 괄호는 줄마다 정확히 하나다 — 줄 끝 연결을 떼고도 연결 모양 괄호(`LINK_ANY_RE`)가 남으면 연결
-    없음이다. 둘 이상이면 끝 괄호만 읽혀 앞 괄호의 결정이 ②③ 을 피한다(개수를 세지 않고 잔여 유무만 본다).
+    연결 괄호는 줄마다 정확히 하나다(**정확한 연결 문법에 한해**) — 줄 끝 연결을 떼고도 연결 모양
+    괄호(`LINK_ANY_RE`)가 남으면 연결 없음이다. 문법과 다른 근사 괄호(`->` · 쉼표 구분 · 전각 괄호 ·
+    불릿 아닌 이어지는 줄)는 산문으로 읽혀 어느 술어에도 보이지 않는다 — 그 힘은 거짓 `[RC<n> → 없음]`
+    과 같다. 둘 이상이면 끝 괄호만 읽혀 앞 괄호의 결정이 ②③ 을 피한다(개수를 세지 않고 잔여 유무만 본다).
     """
     e4, e5 = _research_entries_split(text)
     linked = set()
@@ -1066,7 +1068,8 @@ def research_link_missing(text: str) -> list[str]:
     return out
 
 
-LEADING_OQ_RE = re.compile(r"^[*_`]*\s*(OQ\d+)(?![0-9A-Za-z_])")
+# 뒤 경계는 `_` 를 건너뛴 뒤에 본다 — `__OQ1__:` 의 닫는 밑줄 강조가 경계를 막지 않게(`OQ1_2` 는 여전히 거부).
+LEADING_OQ_RE = re.compile(r"^[*_`]*\s*(OQ\d+)(?!_*[0-9A-Za-z])")
 DECISION_SECTIONS = (("3", "Open Questions"), ("0", "한눈에"))
 
 
@@ -1187,13 +1190,16 @@ def internal_research_dimension_failures(payload_text: str, audit_text: str) -> 
     """
     if not payload_rc_ids(payload_text):
         return []
+    # 이름이 맞는 행 **전부**를 본다 — 첫 행에서 멈추면 낡은 `closed` 행이 뒤의 `open` 행을 가린다.
+    statuses = []
     for ln in _entry_lines(_section_text(audit_text, "1", "Coverage Ledger")):
         m = LEDGER_ROW_RE.match(_strip_bullet(ln).strip())
-        if not m or m.group(1).strip() != DERIVED_INTERNAL_RESEARCH:
-            continue
-        status = m.group(2).strip()
-        if status != "closed":
-            return [f"{DERIVED_INTERNAL_RESEARCH} 행의 상태가 {status!r} != closed"]
+        if m and m.group(1).strip() == DERIVED_INTERNAL_RESEARCH:
+            statuses.append(m.group(2).strip())
+    bad = sorted({st for st in statuses if st != "closed"})
+    if bad:
+        return [f"{DERIVED_INTERNAL_RESEARCH} 행의 상태가 {st!r} != closed" for st in bad]
+    if statuses:
         return []
     return [f"레포 주장이 있는데 audit §1 에 {DERIVED_INTERNAL_RESEARCH} 행이 없다 "
             "(이름 정확 일치 — 다른 derived 행으로는 만족되지 않는다)"]

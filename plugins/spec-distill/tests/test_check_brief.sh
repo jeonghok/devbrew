@@ -1746,11 +1746,13 @@ path = sys.argv[1]
 src = open(path, encoding="utf-8").read()
 tree = ast.parse(src)
 
-# 술어 다섯 + 그 둘(②·③)이 결정 줄을 판독하는 헬퍼 둘. 헬퍼는 판정의 일부를 쥐므로(선두 OQ 규칙 —
-# 최종 리뷰 I-1) 호출 그래프를 따라가지 않는 이 락의 대상에 이름으로 넣는다.
+# 술어 다섯 + 판정의 일부를 쥔 헬퍼 다섯 — 결정 줄 판독 둘(선두 OQ 규칙 — 최종 리뷰 I-1)과 순회 정의
+# 셋(무엇을 순회하는가 · ④⑤ 의 조건). 이 락은 호출 그래프를 따라가지 않으므로 이름으로 넣는다 —
+# 순회 정의를 헬퍼로 옮긴 리팩터(qg iter 4)가 그 판정을 락 밖으로 빼냈던 것을 qg iter 5 가 잡았다.
 TARGET_FUNCS = ("research_link_missing", "research_link_targets_missing",
                 "research_backref_missing", "internal_research_dimension_failures",
-                "research_confirm_missing", "_declared_decisions", "_leading_oq")
+                "research_confirm_missing", "_declared_decisions", "_leading_oq",
+                "_research_entries_split", "research_entries", "payload_rc_ids")
 
 func_nodes = {n.name: n for n in ast.walk(tree)
               if isinstance(n, ast.FunctionDef) and n.name in TARGET_FUNCS}
@@ -1794,11 +1796,11 @@ for name, stmts in groups:
 if bad:
     print("NO\t" + " | ".join(bad))
 else:
-    print("YES\t술어 다섯 + 결정 판독 헬퍼 둘 + contract_v2 블록 전부 개수 술어(len 호출·정수 리터럴 비교) 없음")
+    print("YES\t술어 다섯 + 판정 헬퍼 다섯 + contract_v2 블록 전부 개수 술어(len 호출·정수 리터럴 비교) 없음")
 PY
 )"
 case "$c5static" in
-  YES*) ok "⟨C5⟩(정적): 다섯 술어 · 결정 판독 헬퍼 둘 · 옵트인 블록에 개수 술어가 없다" ;;
+  YES*) ok "⟨C5⟩(정적): 다섯 술어 · 판정 헬퍼 다섯 · 옵트인 블록에 개수 술어가 없다" ;;
   *)    no "⟨C5⟩(정적): $c5static" ;;
 esac
 
@@ -2092,7 +2094,7 @@ p.write_text(s,encoding='utf-8')"
     || no "V2-①(⟨C5⟩ 동적): 연결 누락 ${n}건이 통과됐다 (rc=$V2RC) — 개수 임계가 들어갔다"
   # 메시지 문면 — 모양을 열거하지 않고 도출한다(개수 낱말 denylist 는 「9 건」·「총 12줄」·괄호 안 접미를
   # 못 봤다). ① 메시지는 「<머리>): <인용 줄 목록>」 이고, 목록은 `- ` 로 시작하는 문자열의 list 여야 하며
-  # (원소로 끼운 개수를 막는다), 머리는 누락 1·5·12 건에서 **바이트로 같아야** 한다 — 개수 누출은 정의상
+  # (원소로 끼운 개수를 막는다 — 원소는 이 셀이 넣은 줄 모양과 fullmatch 해야 한다), 머리는 누락 1·5·12 건에서 **바이트로 같아야** 한다 — 개수 누출은 정의상
   # n 에 따라 변한다. 차단 메시지는 막힌 모델이 읽는 채널이라 탐지기의 면제도 싣지 않는다 — 그 검사는
   # `rc<숫자>`·「대소문자」 두 표현만 문다(면제를 가르치는가는 의미 성질이라 문면으로 도출할 수 없다 —
   # 나머지 표현은 리뷰의 몫).
@@ -2103,10 +2105,11 @@ g=re.fullmatch(r"(?s)(?P<head>.*?)\): (?P<tail>\[.*\])", m[0])
 if not g: print("DIRTY\t머리): [목록] 모양이 아니다"); sys.exit()
 try: tail=ast.literal_eval(g["tail"])
 except Exception: print("DIRTY\t목록 뒤에 무언가 붙었다"); sys.exit()
-if not (isinstance(tail,list) and tail and all(isinstance(t,str) and t.startswith("- ") for t in tail)):
-    print("DIRTY\t목록 원소가 인용 줄이 아니다"); sys.exit()
+inj=r"- 연결 없는 주장 [0-9]+ «nextjs-docs» — \[중립\] — 연결을 잊었다"
+if not (isinstance(tail,list) and tail and all(isinstance(t,str) and re.fullmatch(inj,t) for t in tail)):
+    print("DIRTY\t목록 원소가 이 셀이 넣은 줄이 아니다"); sys.exit()
 h=g["head"]
-if re.search(r"(?<![A-Za-z])rc[0-9]", h) or "대소문자" in h: print("DIRTY\t판독 면제 힌트"); sys.exit()
+if re.search(r"(?<![A-Za-z])rc[0-9]", m[0]) or "대소문자" in m[0]: print("DIRTY\t판독 면제 힌트"); sys.exit()
 print("OK\t"+h)' 2>/dev/null)"
   if [[ "$n" == 1 ]]; then V2HEAD1="${v2msg#*$'\t'}"; fi
   { [[ "${v2msg%%$'\t'*}" == OK ]] && [[ "${v2msg#*$'\t'}" == "$V2HEAD1" ]]; } \
@@ -2158,6 +2161,31 @@ assert s.count(" → 근거 RC3")==3; s=s.replace(" → 근거 RC3"," → 근거
 { [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -q 'RC3' <<<"$V2OUT"; } \
   && ok "V2-①(전역): 어느 연결에도 실리지 않은 RC3 — 다른 id 의 레포 연결로는 red" \
   || no "V2-①(전역): RC3 가 다른 id 의 연결 뒤에 숨어 역참조를 피했다 (rc=$V2RC)"
+
+# qg iter 5 — 밑줄 강조. `__OQ1__:` 의 닫는 `_` 가 선두 OQ 의 뒤 경계를 막으면 그 줄이 ③ 순회에서 빠진다.
+v2mut underbold 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3\n"
+assert s.count(o)==1; p.write_text(s.replace(o,"- __OQ1__: 인증 뷰의 캐시 전략\n"),encoding="utf-8")'
+{ [[ "$V2RC" -ne 0 ]] && grep -q '§3 의 OQ1 줄이 근거 RC3' <<<"$V2OUT"; } \
+  && ok "V2-③(밑줄 강조): 「__OQ1__」 줄도 OQ1 의 줄이다 — 역참조가 없으면 red" \
+  || no "V2-③(밑줄 강조): 「__OQ1__」 줄이 순회에서 빠졌다 (rc=$V2RC)"
+v2mut underboldok 'import sys,pathlib
+p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o="- OQ1: 인증 뷰의 캐시 전략 → 근거 RC3\n"
+assert s.count(o)==1; p.write_text(s.replace(o,"- __OQ1__: 인증 뷰의 캐시 전략 → 근거 RC3\n"),encoding="utf-8")'
+[[ "$V2RC" -eq 0 ]] \
+  && ok "V2-③(밑줄 강조·양의 짝): 「__OQ1__」 줄이 RC3 을 가리키면 green" \
+  || no "V2-③(밑줄 강조): 정직한 「__OQ1__」 줄이 red (rc=$V2RC)"
+
+# qg iter 5 — derived 행은 이름이 맞는 행 **전부**를 본다. 첫 행에서 멈추면 낡은 closed 가 뒤의 open 을 가린다.
+for order in closed_open open_closed; do
+  v2mut "d4dup_$order" "import sys,pathlib
+a=pathlib.Path(sys.argv[2]); q=a.read_text(encoding='utf-8'); o='- derived:internal_research — closed — 내부 조사 축 (@S1)\n'
+assert q.count(o)==1; op='- derived:internal_research — open — 재개방\n'
+q=q.replace(o,o+op if '$order'=='closed_open' else op+o); a.write_text(q,encoding='utf-8')"
+  { [[ "$V2RC" -ne 0 ]] && grep -q "internal_research 행의 상태가 'open'" <<<"$V2OUT"; } \
+    && ok "V2-④(행 전부·${order}): closed 와 open 행이 함께 있으면 순서와 무관하게 red" \
+    || no "V2-④(행 전부·${order}): 한 행이 다른 행을 가렸다 (rc=$V2RC)"
+done
 
 # qg iter 3 — §5 는 줄 단위. 전역으로만 보면 같은 id 의 버리는 줄(`[RC3 → 없음]`)이 실제 주장 줄의 웹
 # 연결을 세탁한다 — iter 1 이 닫은 우회가 iter 2 의 전역 규칙으로 다시 열렸던 모양.
