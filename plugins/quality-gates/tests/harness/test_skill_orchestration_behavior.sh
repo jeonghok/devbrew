@@ -399,26 +399,30 @@ assert_line "check-review-scope.sh invoked" "$(first_line 'check-review-scope.sh
 # AC12: the model-owned routing honesty norm is present.
 assert_line "review-scope ownership honesty norm present" "$(first_line 'You own review-scope resolution')"
 
-# AC5: the Step 4.5 floor keys on the two deterministic inputs — the resolved scope
-# file count AND the script-emitted changes_exist (NOT the removed scope_signal).
-# Anchor BOTH conditions on a SINGLE line: 'changes_exist == yes' also appears on the
-# honesty-norm line, so a lone `first_line 'changes_exist == yes'` would match
-# there and pass even if the Step 4.5 floor IF-condition itself regressed. The combined
-# 'resolved_scope_file_count == 0 AND …changes_exist == yes' pattern is unique to the
-# floor line, so it can only pass when the real floor condition is intact (codex v2.7.0
-# review, finding 3).
+# AC5 (Task8 R-Y/R-AA — the floor moved from a Step 4.5 IF-condition to a row in
+# Step 4's 판정 입력 table): the floor keys on the two deterministic inputs — the
+# resolved scope file count AND the script-emitted changes_exist (NOT the removed
+# scope_signal). Anchor BOTH conditions on a SINGLE line: 'changes_exist == yes'
+# also appears on the honesty-norm line, so a lone `first_line 'changes_exist ==
+# yes'` would match there and pass even if the floor row itself regressed. The
+# combined 'resolved_scope_file_count == 0 …changes_exist == yes' pattern is
+# unique to the floor row (codex v2.7.0 review, finding 3 — the underlying
+# uniqueness concern survives the row's relocation and Korean rephrasing, so the
+# glue between the two conditions is no longer pinned to the literal "AND").
 assert_line "floor keyed on resolved_scope_file_count == 0 AND changes_exist == yes" \
-  "$(first_line 'resolved_scope_file_count == 0 AND .*changes_exist == yes')"
-assert_line "honest floor label present"                    "$(first_line 'NOT certified clean')"
+  "$(first_line 'resolved_scope_file_count == 0.*changes_exist == yes')"
+assert_line "honest floor label present"                    "$(first_line 'not-certified \\(scope-empty\\)')"
 
 # AC6: degraded signal still emits a loud fail-open advisory.
 assert_line "degraded scope advisory present" "$(first_line 'scope check degraded')"
 
-# 'no scope reviewed' appears in the honesty norm + the floor sub-case + the final
-# summary variant → at least 3 occurrences.
-floor_count=$(grep -cE 'no scope reviewed' "$SKILL_MD" || true)
+# Task8 R-AA — the old English label 'no scope reviewed' is gone; the floor now
+# speaks through the closed reason token `scope-empty`, which appears in the
+# Step 1b intro + the honesty-norm quote + Step 4's floor row → at least 3
+# occurrences.
+floor_count=$(grep -cF 'scope-empty' "$SKILL_MD" || true)
 if [[ "$floor_count" -ge 3 ]]; then
-  echo "PASS: honest floor label in honesty norm + floor + final summary ($floor_count)"
+  echo "PASS: honest floor label (scope-empty) in intro + honesty norm + floor row ($floor_count)"
 else
   echo "FAIL: honest floor under-applied (found $floor_count, need >=3)"
   fail=$((fail + 1))

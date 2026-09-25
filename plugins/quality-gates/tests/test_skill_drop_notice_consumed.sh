@@ -53,7 +53,7 @@ fi
 # ── (b) 소비자 — step 4.5에 그 문구를 읽는 분기가 있고 bare clean을 금지한다 ──
 # 섹션 윈도우로 좁힌다: 파일 아무 데나 단어가 있으면 통과하는 락은 이빨이 없다
 # (헤더-satisfiable 함정 — 이 리포에서 이미 두 번 밟았다).
-window="$(awk '/Step 4.5 — Surface findings/,/^5\. \*\*Decision tool/' "$SKILL")"
+window="$(awk '/Step 4.5 — Surface the verdict/,/^5\. \*\*Decision tool/' "$SKILL")"
 wlines="$(printf '%s' "$window" | wc -l | tr -d ' ')"
 if [ "${wlines:-0}" -ge 20 ]; then
   ok "b0 — step 4.5 섹션 윈도우 ${wlines}줄 확보 (앵커 유효)"
@@ -61,24 +61,23 @@ else
   no "b0 — step 4.5 섹션을 못 찾았다(${wlines}줄) — 앵커가 깨졌다, 아래 판정 무의미"
 fi
 
-# 지시부 — d0/d3 가 아래에서 다시 쓴다. 여기서 먼저 뽑는 이유는 b1/c 도
-# «지시부에만» unique 해야 하기 때문이다(수정 라운드 1, F5). `window`
-# 전체로 찾으면 "Why the key is the marker" 근거 단락(:583-ff)의 decoy
-# 인용 — `... was not matched by a` `dropped as malformed` `key` — 가
-# b1/c 를 만족시킨다: 지시부(556-571줄)를 통째로 지워도 이 decoy 인용이
-# 살아남아 b1·c 가 **GREEN 으로 남았다** (Task 15 μ12 실측 — b1 은
-# 코디네이터가 지목, c 는 같은 원인으로 여기서 함께 닫는다).
-directive="$(awk '/\*\*Not-clean notice override/,/Why this clause exists/' "$SKILL" | sed '$d')"
+# 지시부 — R-AA (Task8 (g)) 로 「Not-clean notice override」·「Why this clause
+# exists」 두 문단은 삭제됐다 — 그 자리를 이제 새 Step 4.5 body 의 세 번째
+# bullet 항목(「본 보고서의 `판정 degrade` 줄은 **그대로 보인다** … `dropped as
+# malformed` 줄도 같다.」)이 진다: 마커는 더 이상 판정 키가 아니라 그대로
+# 노출만 하라는 지시다(판정은 `verdict:` 줄이 정한다). d0/d3 가 아래에서
+# 다시 쓴다. 여기서 먼저 뽑는 이유는 b1/c 도 «지시부에만» unique 해야 하기
+# 때문이다(수정 라운드 1, F5 의 규율 그대로 승계).
+directive="$(awk '/본 보고서의 `판정 degrade`/,/dropped as malformed`/' "$SKILL")"
 dlines="$(printf '%s' "$directive" | wc -l | tr -d ' ')"
 
-# d0 — 앵커 유효성. 수정 라운드 2 (m4) — 이 검사는 원래 d3 바로 앞(지시부
-# 계산의 «두 번째» 소비 지점)에 있었다 — b1·c(첫 소비 지점, 바로 아래)가
-# 55줄 «먼저» `$directive` 를 읽으면서도 그 유효성 보고는 뒤에 나왔다.
-# 앵커가 깨지면 b1·c 가 "생산자만 고쳤다"·"문구 불일치" 같은 «틀린 원인»을
-# 먼저 찍고 나서야 진짜 원인(앵커 부재)이 드러났다 — RED 라는 사실 자체는
-# 안 바뀌지만 진단 순서가 거꾸로였다. 계산 직후, 첫 소비보다 앞으로 옮긴다.
-if [ "${dlines:-0}" -ge 10 ]; then
-  ok "d0 — 오버라이드 지시부 ${dlines}줄 확보 (앵커 유효)"
+# d0 — 앵커 유효성(양의 짝). 새 지시부는 3줄짜리 bullet 하나다 — 옛 다문단
+# 지시부(>=10줄)와 길이가 다르므로 하한도 그에 맞춰 내린다. 앵커가 깨지면
+# (예: bullet 문구가 또 바뀌면) `$directive` 가 비거나 짧아져 여기서 먼저
+# 드러난다 — b1·c·d3 가 "생산자만 고쳤다"·"문구 불일치" 같은 «틀린 원인»을
+# 대신 찍기 전에.
+if [ "${dlines:-0}" -ge 2 ]; then
+  ok "d0 — 새 지시부 ${dlines}줄 확보 (앵커 유효)"
 else
   no "d0 — 지시부를 못 찾았다(${dlines}줄) — 앵커가 깨졌다, 아래 b1·c·d3 판정 무의미"
 fi
@@ -88,10 +87,14 @@ if printf '%s' "$directive" | grep -q 'dropped as malformed'; then
 else
   no "b1 — step 4.5가 drop 공지를 읽지 않는다 (생산자만 고친 반쪽 수정)"
 fi
-if printf '%s' "$window" | grep -q 'not clean'; then
-  ok "b2 — drop이 있으면 bare clean을 금지하는 지시가 있다"
+# R-AA — bare `clean`을 문면으로 금지하던 옛 override는 없다. 새 설계는
+# 판정 자체를 `verdict:` 줄에 맡기고, SKILL은 그 판정이 not-clean일 때
+# 뜨는 마커(`clean이 아니다`)를 그대로 보이라고만 지시한다 — 그래서
+# window에서 찾는 리터럴도 같이 바뀐다.
+if printf '%s' "$window" | grep -qF 'clean이 아니다'; then
+  ok "b2 — drop이 있으면 clean이 아니라는 마커를 그대로 보이라는 지시가 있다"
 else
-  no "b2 — drop이 있어도 clean을 찍을 수 있다"
+  no "b2 — drop이 있어도 clean이 아니라는 표시 없이 넘어갈 수 있다"
 fi
 
 # ── (c) 생산자 문구와 소비자 문구가 **같은 문자열**인가 ───────────────────────
@@ -129,34 +132,20 @@ else
   no "d2 — 두 통지가 마커를 공유하지 않는다 — 마커 키잉이 성립하지 않는다"
 fi
 
-# d3 — 소비자가 그 마커를 **판정 키로** 쓴다.
+# d3 — 소비자가 그 마커를 **그대로 노출**하라고 지시한다(R-AA — 더는 판정
+# 키가 아니다: 판정은 합성기의 `verdict:` 줄이 정하고, 이 bullet은 그 판정이
+# not-clean일 때 뜨는 마커를 감추지 말라는 표시 지시일 뿐이다).
 #
 # 코퍼스를 step 4.5 창 전체가 아니라 «지시부»로 좁히는 것은 선택이 아니라
-# 성립 조건이다. 마커는 아래 「Why this clause exists」 근거 단락에도 인용문으로
-# 등장한다 — 창 전체를 보면 판정 키를 인스턴스 리터럴로 되돌려도 그 인용문이
-# 검사를 만족시켜 GREEN 이다 〔실측: 되돌림 변이에서 11/11 통과〕. 헤더가 문구를
-# 만족시키면 body 를 삭제해도 GREEN 인 것과 같은 함정이고, 판정은 지시부에
-# unique 해야 한다. `$directive`/`$dlines` 는 위 (b) 에서 이미 계산했고 그
-# 앵커 유효성(d0)도 그 자리에서 이미 보고했다(수정 라운드 2, m4 — 진단
-# 순서를 계산 순서와 맞춘다) — 다시 도출하지도, 다시 보고하지도 않는다.
+# 성립 조건이다 — 헤더가 문구를 만족시키면 body를 삭제해도 GREEN인 것과
+# 같은 함정이고, 판정은 지시부에 unique해야 한다. `$directive`/`$dlines` 는
+# 위 (b) 에서 이미 계산했고 그 앵커 유효성(d0)도 그 자리에서 이미
+# 보고했다(수정 라운드 2, m4 — 진단 순서를 계산 순서와 맞춘다) — 다시
+# 도출하지도, 다시 보고하지도 않는다.
 if printf '%s' "$directive" | grep -qF "$MARKER"; then
-  ok "d3 — step 4.5 지시부가 공유 마커를 판정 키로 쓴다"
+  ok "d3 — step 4.5 지시부가 공유 마커를 그대로 보이라고 지시한다"
 else
-  no "d3 — 지시부가 인스턴스 리터럴에만 키잉한다 (열거 = fail-open)"
-fi
-
-# d3b — decoy 배제. 근거 단락의 인용문이 지시부 **밖**이어야 d3 가 의미를 갖는다.
-#       음의 검사에는 양의 짝이 필요하다: 인용문이 파일에서 사라지면 「밖」은
-#       공허하게 참이 되므로, 그 인용문이 실재하는지를 먼저 잰다.
-if grep -qF 'whose own text reads' "$SKILL"; then
-  ok "d3b① 근거 단락의 마커 인용문이 파일에 실재 (배제 검사의 양성 짝)"
-else
-  no "d3b① 근거 단락이 사라졌다 — 배제 검사가 공허해진다"
-fi
-if printf '%s' "$directive" | grep -qF 'whose own text reads'; then
-  no "d3b② 지시부가 근거 단락을 삼켰다 — d3 가 인용문으로 만족될 수 있다"
-else
-  ok "d3b② 근거 단락의 인용문은 지시부 밖이다"
+  no "d3 — 지시부가 마커를 노출하지 않는다"
 fi
 
 # d4 — 양성 짝. 통지가 없는 정상 clean 실행에는 마커가 **없어야** 한다.

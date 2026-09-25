@@ -13,6 +13,7 @@ EXPECTED_ORDER=(
   # Group 1 — Preflight scripts
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh:*)'
+  'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/verdict.py:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh:*)'
   # Group 2 — Differential test scripts (references/differential-test.md)
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-baseline.sh:*)'

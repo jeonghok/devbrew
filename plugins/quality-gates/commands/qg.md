@@ -93,6 +93,7 @@ the pipeline is aborted at a decision point.
 | `/qg --pr-url <url>` | Specify PR URL |
 | `/cancel-qg` | Cancel active pipeline |
 | `/qg-publish [--dry-run]` | Generate + publish a PR-understanding comment (separate skill; consent-gated; not a gate) |
+| `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | 차등 테스트를 건너뛴다 — 판정은 `not-certified (kill-switch)` |
 | `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1` | Disable `/qg branch <name>` auto-worktree mode |
 | `DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1` | Preserve branch worktree after pipeline completes or is cancelled (default: removed) |
 
@@ -113,7 +114,7 @@ Override with `/qg branch` (full branch) or `/qg --paths <glob>...` (manual).
 빈 세션에서 커밋된 변경이 있어 resolved scope가 0인데 브랜치는 base보다 앞서 있으면 (false-clean),
 qg는 "clean"이라 하지 않는다 — read-only `check-review-scope.sh`가 `changes_exist`를 결정론으로
 emit하고, 파이프라인의 **정직-verdict floor**가 `resolved scope 0 AND changes_exist == yes`이면
-verdict를 `no scope reviewed … NOT certified clean`으로 교체한다(load-bearing, kill 불가). 무엇을
+판정이 `not-certified (scope-empty)` 가 된다(load-bearing, kill 불가). 무엇을
 리뷰할지(routing)는 모델이 소유 — 빈 scope면 모델이 `/qg branch`(전체 브랜치 리뷰)를 제안한다.
 진짜 변경 없음(genuine no-op)은 그대로 `clean`; 신호가 degraded면 fail-open + loud advisory.
 

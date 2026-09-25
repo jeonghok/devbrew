@@ -59,8 +59,11 @@ grep -qF 'do NOT silently treat it as 0' <<<"$DEF" \
   && ok "A22: 판정-불가 degrade 분기 생존" \
   || no "A22: degrade 분기가 사라졌다"
 
-# 정직-verdict floor 자체는 이 작업이 건드리지 않는다 (양성 대조 — GREEN 이 정답).
-grep -qF 'NOT certified clean' "$SK" \
+# 정직-verdict floor 자체(이 unit 의 정의가 그 floor 의 입력이라는 관계)는 이
+# 작업이 건드리지 않는다 (양성 대조 — GREEN 이 정답). 표면 문구는 Task8(R-AA)
+# 가 `NOT certified clean` 에서 닫힌 사유 열거 `scope-empty` 로 바꿨다 — 대상은
+# 그 이동을 따라간다.
+grep -qF 'scope-empty' "$SK" \
   && ok "양성 대조: 정직-verdict floor 문구 생존" \
   || no "양성 대조 실패: floor 문구가 사라졌다"
 

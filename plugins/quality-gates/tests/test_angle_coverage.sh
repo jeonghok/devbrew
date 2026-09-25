@@ -10,8 +10,8 @@
 # 「그 상태가 참인가」는 못 잰다. 모델이 세 각도를 전부 `folded_into:` 로 주장하면
 # 이 락은 GREEN 이다. 형식적 완전성의 락이지 진실성의 락이 아니다.
 #
-# **오늘 배선이 안 된 것** — `--angles` 는 기본 off 다(계획 R-E). 오케스트레이터가
-# 그것을 «항상» 싣게 만드는 것은 PR4 의 빚이고, 이 락은 그 빚을 재지 못한다.
+# 오케스트레이터가 매 실행 `--angles` 를 싣는지는 `test_pipeline_verdict_wiring.sh` 가
+# 잰다. 이 락은 합성기 쪽 총 함수만 잰다.
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"

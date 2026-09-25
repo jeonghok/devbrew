@@ -37,8 +37,8 @@ case "$qg_run_tmp_p/" in
     exit 1 ;;
 esac
 echo "> [quality-gates] 중간 파일: $qg_run_tmp (실패 시 보존, 자동 삭제하지 않음)"
-assign_rows_file="$qg_run_tmp/assign-rows.tsv"   # 실행당 1개 (R1b)
-aggregate_yaml="$qg_run_tmp/aggregate.yaml"      # 실행당 1개 (R6 집계)
+assign_rows_file="$qg_run_tmp/assign-rows.tsv"   # iteration 당 1개 (R1b)
+aggregate_yaml="$qg_run_tmp/aggregate.yaml"      # iteration 당 1개 (R6 집계)
 ```
 
 **이 가드가 AC69 의 유일한 실질 집행자다.** 텍스트 락은 대입 줄만 볼 수 있어, 뿌리를 다른
@@ -882,7 +882,9 @@ R6 이 낸 `attribution_status` 를 그대로 `floor:attribution` 의 status 로
 > 목록은 `gap` 에도 열거하되, **열거가 인증을 대신하지 않는다.** `unclaimed` unit 은
 > 정의상 R1b 가 **영향분으로 판정한** 것이고, 실행 수단이 없다는 것은 위 표의
 > "영향분을 못 돌림"을 만족한다. 이 규칙이 없으면 러너 어댑터 9종 미지원 레포에서 **테스트가 한
-> 개도 안 돈 채 clean** 이 나온다.
+> 개도 안 돈 채 clean** 이 나온다. SKILL Step 4 가 이 사실을 `--reason silent-drop` 으로
+> 옮긴다 — `check_qa_ledger.py` 의 exit code 와 무관하다(그 게이트는 원장 내부 일관성만
+> 본다).
 
 구조 게이트를 돌린다:
 
@@ -934,3 +936,12 @@ false + 5차원 `closed` → **clean** 가 성립했다. 이제 게이트가 `$a
 **판정은 여기서 내지 않는다.** R6 의 `$aggregate_yaml` 과 두 호출의 exit code,
 `check_qa_ledger.py` 의 exit code 를 들고 SKILL 의 Review Step 4 로 간다 — 판정값은
 합성기(`verdict.py`)가 정한다.
+
+SKILL Step 4 가 싣는 판정 입력:
+
+| 이 스텝의 결과 | 합성기에 |
+|---|---|
+| R6 집계 exit 0 · 3키와 `attribution_status` 를 다 읽음 | `--differential "$aggregate_yaml"` — `degrade_causes` 는 `verdict.py` 가 사유로 옮긴다 |
+| R6 어느 호출이든 non-zero · 키 판독 실패 | `--reason error-axis` (`--differential` 없음) |
+| `check_qa_ledger.py` non-zero | `--reason silent-drop` |
+| `check_qa_ledger.py` exit 0 이지만 원장(`runtime-evidence.md`)의 floor 5차원 중 하나라도 `degraded` 이거나 `unclaimed` unit 이 있다(그 게이트는 원장 내부 일관성만 보고 이 경우도 exit 0 을 낼 수 있다) | `--reason silent-drop` |

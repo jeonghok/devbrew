@@ -13,6 +13,7 @@ allowed-tools:
   # Group 1 — Preflight scripts (실행 순서: setup → trivia → 스코프 신호)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/verdict.py:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh:*)
   # Group 2 — Differential test scripts (references/differential-test.md)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-baseline.sh:*)
@@ -171,8 +172,17 @@ Parse from `/qg` invocation:
 ## Trivia escape
 
 Run `scripts/check-trivia.sh` (plugin root per Step P0b). Exit code:
-- 0 = trivia detected → skip the whole pipeline. Print:
-  > `Trivia diff — pipeline skipped (one-sentence diff per CLAUDE.md trivia escape).`
+- 0 = trivia detected → skip the whole pipeline. 판정을 낸다 — trivia 실행은 `clean` 이
+  아니다(「테스트 없는 clean 은 나오지 않는다」, 설계 C4):
+
+  ```bash
+  QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+  python3 "$QG/scripts/verdict.py" --reason trivia
+  ```
+
+  Print `Trivia diff — pipeline skipped (one-sentence diff per CLAUDE.md trivia escape).`
+  and the script's stdout verbatim, then go to [Final Summary](#final-summary) with
+  Iterations `0`.
 - 1 = non-trivia → proceed to iteration 1.
 - any other non-zero (script crash / environment failure) → print stderr
   verbatim and abort the pipeline. Do NOT silently treat as non-trivia.
@@ -201,8 +211,8 @@ For each iteration N (1..5):
 
 **Step 1b — Changes-exist signal (iteration N=1 only).** Before dispatching the
 scout, run the read-only changes-exist signal **once** and cache it for the rest
-of this turn (C3 — single call; the cached values are consumed by the
-honest-verdict floor at Step 4.5):
+of this turn (C3 — single call; the cached values are consumed by Step 4's
+`--reason scope-empty` row):
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -218,8 +228,8 @@ selection (reference R4).
 
 - `$degraded == yes` → the changes-exist signal is unavailable (detached HEAD /
   no base branch / unrelated history / shallow). This run is NOT floor-protected;
-  the Step 4.5 ELSE-IF branch prints one loud advisory at the verdict (CLAUDE.md
-  loud-logging). Continue to the scout.
+  Step 4.5 prints one loud advisory at the verdict (CLAUDE.md loud-logging).
+  Continue to the scout.
 
 Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached values
 (single-call — do not re-invoke).
@@ -227,9 +237,16 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 > **Review-scope ownership (honesty norm — G3).** You own review-scope resolution.
 > If the scope you resolved at step 1 is empty (0 files) but the branch/worktree has
 > changes (`$changes_exist == yes`), you MUST NOT certify clean — offer to review the
-> full branch (`/qg branch`) or emit the honest "no scope reviewed" verdict. The Step
-> 4.5 floor enforces this structurally: this norm is the routing half (model-owned),
-> the floor is the integrity half (deterministic).
+> full branch (`/qg branch`) — Step 4 carries `--reason scope-empty` and the verdict
+> becomes `not-certified (scope-empty)`. That row enforces this structurally: this
+> norm is the routing half (model-owned), the floor is the integrity half
+> (deterministic).
+
+**Kill switch — `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1`.** 켜져 있으면 레퍼런스를
+읽지 않고 ② 를 통째로 건너뛴다. 이 줄을 그대로 보인다:
+`> [quality-gates] 차등 테스트가 DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1 로 꺼져 있다 — 이 실행은 not-certified (kill-switch) 다.`
+그리고 Step 4 에 `--reason kill-switch` 를 싣는다. 차등 테스트는 리뷰 대상 저장소의 코드를
+호스트 권한으로 돌린다 — 이 스위치는 그것을 끄는 보안 컨트롤이다.
 
 **Step 1c — 차등 테스트 (②).** [Differential test](#differential-test) 절을 따른다 —
 매 iteration 돈다. 결과(`$aggregate_yaml` 경로와 R6 두 호출의 exit code ·
@@ -267,11 +284,11 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
       (codex + 추가 리뷰어). 없는 리뷰어 몫을 있는 것처럼 채우거나 대신 지어내지 않는다.
    3. **loud advisory** — 이 줄을 사용자에게 그대로 보인다:
       > `> [quality-gates] security-reviewer disabled via DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1 — 이 iteration 에는 보안 리뷰가 없었다 (보안 각도 부재).`
-   4. 이 iteration 에 대해 `$security_review_absent = yes` 로 두고 **Step 4.5 의
-      판정 표면까지 들고 간다**(아래 Security-review-absent advisory). 배너 한 줄로
-      끝내면 verdict 만 읽는 사람에게는 결손이 보이지 않는다.
+   4. 이 iteration 의 각도 파일(Step 4)에 `security: absent` 를 쓴다. 판정은
+      `not-certified (angle-absent)` 가 된다 — 탐지가 0 이어도. 배너만으로 끝내지 않는다:
+      판정만 읽는 사람에게도 결손이 보여야 한다.
 
-   ELSE: `$security_review_absent = no` — 아래 리터럴을 평소대로 발행한다.
+   ELSE: 아래 리터럴을 평소대로 발행한다.
 
    **왜 codex kill switch 와 달리 loud 인가.** 형제 스위치
    `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` 은 [Codex skip 안내](#codex-skip-안내)의
@@ -284,7 +301,7 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 ```
 Agent({
   subagent_type: "quality-gates:security-reviewer",
-  // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-open
+  // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-closed
   description: "Security review (qg iter N)",
   prompt: "Run code-level security review on the current diff.
     project_dir: <project_dir>${PROJECT_DIR}</project_dir>
@@ -294,6 +311,10 @@ Agent({
     filtered_diff: <filtered_diff>${FILTERED_DIFF}</filtered_diff> (unified diff computed from the resolved review scope, documentation paths excluded)"
 })
 ```
+
+   **fail-closed 의 뜻** — 디스패치가 실패했거나 출력을 읽을 수 없으면 그 iteration 의
+   각도 파일에 `security: absent(source-failed)` 를 쓴다. 판정은 `not-certified
+   (angle-absent)` 다. 다른 리뷰어의 finding 이 있다고 보안 각도가 채워진 것이 아니다.
 
    **다른 전제 각도 — codex (사용 가능하면 부른다).** If the codex
    reviewer is available (`detect_codex.sh` returns true), it is dispatched via
@@ -421,7 +442,8 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
       펜스에 리터럴로 싣는다(Bash 호출마다 셸이 새로 뜬다). 탐지 결과를 `$RV/findings.yaml`
       에 YAML 목록으로 쓴다. **각 항목의 `agent:` 는 디스패치한 agent 의 frontmatter
       `name:` 이다 — 플러그인 접두 없이**(`security-reviewer` · `code-reviewer` …; codex 는
-      `codex`). 리뷰어가 적어 보낸 `agent:` 를 그대로 믿지 않는다 — 찍는 쪽이 너다.
+      `codex-reviewer` — 변환기 `codex_findings_to_yaml.py` 가 찍는 값). 리뷰어가 적어 보낸
+      `agent:` 를 그대로 믿지 않는다 — 찍는 쪽이 너다.
    2. 익명화와 diff:
 
       ```bash
@@ -433,7 +455,7 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
       ```
 
       `prepare` 가 0 이 아닌 코드로 끝나면 재비판을 디스패치하지 않는다 — 이 뒤에 도는
-      `synthesize_findings.py`(아래 「4. Run synthesize_findings.py」, 이 안쪽 번호 목록의
+      `synthesize_findings.py`(아래 「4. 각도 파일을 쓰고 합성한다」, 이 안쪽 번호 목록의
       4 가 아니다)가 응답 파일의 부재를 판정 각도의 주 입력 실패로 센다(침묵하지 않는다).
       `$RV/recritic.diff` 에는 `security-reviewer` 에게 준 것과 같은 **raw unified diff**
       (hunk 만)를 쓴다. `git show` · `git format-patch` · `git log -p` 의 출력은 쓰지 않는다 —
@@ -458,17 +480,50 @@ Agent({
 
    4. 응답 전문을 요약·전사 없이 `$RV/recritic.txt` 에 **verbatim** 저장한다. 디스패치가
       실패했거나 응답이 없으면 파일을 만들지 않는다 — 합성기가 그 부재를 판정 각도의 주 입력
-      실패로 세고, 본 보고서의 `**이 실행은 clean이 아니다**` 마커가 Step 4.5 의 Not-clean
-      override 를 켠다.
+      실패로 세고 판정은 `not-certified (angle-absent)` 가 된다.
 
-4. Run `synthesize_findings.py` to consolidate findings:
+4. **각도 파일을 쓰고 합성한다.**
+
+   **각도 파일** — `$RV/angles.txt` 에 세 줄을 쓴다. 형식은 `<각도>: <상태>` 이고 상태는
+   공백 없는 한 토큰이다(설계 §6.3.1 — 각도 ≠ 에이전트, 상태는 총 함수):
+
+   ```text
+   security: filled
+   adjudication: filled
+   different-premise: absent(not-installed)
+   ```
+
+   | 각도 | 값 | 조건 |
+   |---|---|---|
+   | `security` | `filled` | `security-reviewer` 를 디스패치했고 그 출력을 `findings.yaml` 에 넣었다(0건 포함) |
+   | | `absent` | `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` |
+   | | `absent(source-failed)` | 디스패치가 실패했거나 출력을 읽을 수 없었다 |
+   | `adjudication` | `filled` | **항상** — 재비판은 매 iteration 디스패치된다. 재비판자가 죽으면 합성기가 관측으로 `absent(source-failed)` 를 얹는다. `folded_into:doc-recritic` 으로 쓰지 않는다(승격 finding 하나로 AC10a 가 exit 4) |
+   | `different-premise` | `filled` | codex 러너가 돌았고 `meta.codex_failed: false` 를 읽었다 |
+   | | `absent(not-installed)` | `detect_codex.sh` 가 visible 표의 사유를 냈다 |
+   | | `absent` | `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` · `inside_codex_sandbox` |
+   | | `absent(not-derived)` | 사용 가능한데 부르지 않았다 |
+   | | `absent(source-failed)` | 러너가 돌았으나 결과를 쓸 수 없다(산출물 부재 · 0바이트 · `codex_failed: true` · 키 부재) · 감지기 실행 실패(`detector_not_runnable`) |
+
+   **판정 입력** — 이 iteration 에 해당하는 것만 싣는다:
+
+   | 조건 | 합성기에 싣는 것 |
+   |---|---|
+   | ② 가 돌았고 R6 집계가 exit 0 · `verdict_input` 3키와 `attribution_status` 를 다 읽었다 | `--differential "<$aggregate_yaml 절대 경로>"` |
+   | ② 의 R6 어댑터별 호출 또는 집계 호출이 non-zero, 또는 키를 못 읽었다 | `--differential` 을 싣지 않고 `--reason error-axis` |
+   | ② 의 `check_qa_ledger.py` 가 non-zero | `--reason silent-drop` |
+   | ② 가 kill switch 로 생략됐다(Step 1c) | `--reason kill-switch` |
+   | `$resolved_scope_file_count == 0` 이고 캐시한 `$changes_exist == yes` (정직-verdict floor) | `--reason scope-empty` |
+   | ② 의 `check_qa_ledger.py` 는 exit 0 인데 R8 원장(`runtime-evidence.md`)의 floor 5차원 중 하나라도 `degraded` 이거나 `unclaimed` unit 이 있다(그 게이트는 원장 내부 일관성만 보고 이 경우도 exit 0 을 낼 수 있다) | `--reason silent-drop` |
 
    ```bash
    QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
    RV="<Phase 1.5 의 절대 경로>"
    python3 "$QG/scripts/synthesize_findings.py" --findings "$RV/findings.yaml" \
      --recritic "$RV/recritic.txt" --recritic-map "$RV/recritic-map.json" \
-     --recritic-diff "$RV/recritic.diff"
+     --recritic-diff "$RV/recritic.diff" \
+     --emit-verdict --angles "$RV/angles.txt" \
+     <위 표의 판정 입력>
    ```
 
    **rc 를 소비하라.** 이 스크립트가 0 이 아닌 rc 로 끝나거나 stdout 이 비어
@@ -482,9 +537,28 @@ Agent({
    NOT reformat or re-summarize it yourself (Law 1 determinism — the script,
    not the orchestrator, owns the rendering).
 
-   **Step 4.5 — Surface findings.** Judge the boundary on the **kept
-   (displayed) finding count**, read from the `**Findings:**` counts line in
-   that stdout — NOT the raw reviewer count.
+   **Step 4.5 — Surface the verdict.** 판정은 합성기 stdout 꼬리의 `verdict:` 줄 **하나**가
+   정한다(`angles:` 블록 · `reason:` · `reasons:` 가 함께 온다). 네가 판정을 고르거나
+   고치지 않는다.
+
+   - stdout 을 **그대로** 사용자에게 보인다(요약 · 재서술 금지). 앞에 한 줄:
+     `## qg iter N — <verdict>` (`not-certified` 면 `## qg iter N — not-certified (<reason>)`).
+   - `verdict:` 줄이 정확히 한 번 나오지 않으면 이 iteration 은 clean 이 아니다 — rc 와
+     stderr 를 그대로 보고하고 멈춘다.
+   - 본 보고서의 `판정 degrade` 줄은 **그대로 보인다** — 차단이면
+     `**이 실행은 clean이 아니다**`, 아니면 `공시(판정을 막지 않음)`. 판정은 바꾸지
+     않는다(그 사실은 이미 `verdict:` 에 반영돼 있다). `dropped as malformed` 줄도 같다.
+   - 캐시한 `$degraded == yes` 이고 `$resolved_scope_file_count == 0` 이면 advisory 한 줄:
+     `> [quality-gates] scope check degraded (detached HEAD / no base branch / unrelated history / shallow) — empty-scope detection skipped (fail-open; verdict not floor-protected this run).`
+   - ② 에 `granularity: bulk` 어댑터가 있었으면 `커버리지 미보장(러너가 선택을 무시함)` 을
+     함께 보인다(레퍼런스 R8).
+
+   그다음:
+   - `verdict: clean` → 루프를 나가 [Final Summary](#final-summary).
+   - `defect` 또는 `not-certified` 이고 **kept > 0**(`**Findings:**` counts 줄의 세
+     severity 합 ≥ 1) → Step 5 의 결정 도구.
+   - `defect` 또는 `not-certified` 이고 kept = 0 → 고칠 제안이 없다. 루프를 나가
+     Final Summary(판정 그대로).
 
    **Resolved-scope file count (floor input — reuse, not a new measurement).**
    `$resolved_scope_file_count` = the size of the file set you actually resolved
@@ -500,92 +574,9 @@ Agent({
    If this count cannot be determined (e.g. the same git-sanity failure that
    makes `check-review-scope.sh` itself report `degraded: yes` — detached HEAD,
    no base branch, shallow clone), do NOT silently treat it as 0 — treat the run
-   as `$degraded == yes` for the floor (the ELSE-IF branch below + loud
-   advisory). This is an already-known value; do not re-measure (re-deriving it
-   risks landing on an answer that no longer matches the set you actually
-   reviewed).
-
-   Three cases:
-   - **kept > 0** (the counts line totals ≥ 1 across the three severities) →
-     emit the captured stdout to the user as a deliberate assistant message,
-     prepended with the single context line `## qg iter N — Findings`,
-     **before** invoking the decision tool. Then go to step 5.
-   - **kept = 0 AND suppressed > 0** (the synthesizer emitted the empty-state
-     line `No high-confidence findings. N low-confidence findings suppressed.`
-     with N > 0 — read N from that line) → no high-confidence finding to act
-     on → treat as **clean**: do NOT call AskUserQuestion. Surface the single
-     `No high-confidence findings…` line for transparency, then apply the
-     **Honest-verdict floor** below. Then **exit the loop → [Final
-     Summary](#final-summary)** — do not iterate again.
-   - **kept = 0 AND suppressed = 0** (the same empty-state line with N = 0) →
-     apply the SAME **Honest-verdict floor** below, then exit the loop →
-     [Final Summary](#final-summary).
-
-   **Not-clean notice override (applies to BOTH clean sub-cases, before the floor).**
-   The key is the marker every such notice carries, not any one notice's wording:
-   if the captured stdout contains `**이 실행은 clean이 아니다**` on any line, you MUST
-   surface **every** line carrying it verbatim, **in addition to** the empty-state
-   line, and you MUST NOT print a bare `clean` verdict. Print instead:
-   `## qg iter N: not clean — <사유>.`
-   `<사유>` comes from the notice itself, and notices differ in what they carry:
-   - The **Dropped-finding** notice carries a count — it reads
-     `<D> finding(s) dropped as malformed`. Print
-     `<D> finding(s) dropped as malformed (unjudged)`.
-   - A notice with **no count** (e.g. the `판정 degrade` line, which names which
-     input or judgment path failed rather than how many items) has no `<D>` to read.
-     Do NOT invent one and do NOT skip the override — print that notice line
-     **verbatim** as `<사유>`.
-
-   Then continue to step 5's decision tool as if findings remained.
-
-   Why this clause exists: the synthesizer emits that notice — whose own text reads
-   `**이 실행은 clean이 아니다**` — precisely because a malformed finding may have
-   carried a real CRITICAL that was never judged. Before this clause, step 4.5 keyed
-   only on the counts line and the `No high-confidence findings…` line, so the notice
-   was produced by the script and then discarded by its only consumer: the gate
-   printed `clean` over dropped CRITICAL claims (2026-08-05 `/qg` 라운드 2 적발 —
-   생산자만 고치고 소비자를 안 고친 반쪽 수정). A finding that was thrown away is not
-   a finding that was cleared. This mirrors the differential test's `indeterminate ≠ clean`
-   rule (reference R6).
-
-   Why the key is the marker and not the notice text: keying on one notice's literal
-   is an enumeration, and an enumeration is fail-open over time — a second notice
-   (`판정 degrade`) was added later and was **not** matched by a `dropped as malformed`
-   key, so the same half-fix reappeared with only the instance changed. Deriving the
-   key from the marker the notices share covers every present and future notice that
-   declares itself not-clean.
-
-   **Security-review-absent advisory (applies to EVERY step-4.5 exit path — the
-   `kept > 0` case and BOTH clean sub-cases).** If this iteration set
-   `$security_review_absent == yes` (the 보안 각도 kill switch fired at dispatch), you
-   MUST print this line as part of the verdict surface, immediately after the
-   `## qg iter N …` line, before the decision tool:
-   `> [quality-gates] 이 라운드에는 보안 리뷰가 없었다 — security-reviewer 가 DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1 로 꺼져 있었다. 이 verdict 는 "보안 리뷰를 통과했다"를 뜻하지 않는다.`
-   Repeat it every iteration in which the switch was on — it is a property of that
-   iteration's verdict, not a one-time notice.
-
-   Why this is a separate clause from the dispatch-time banner: the banner is
-   emitted mid-iteration, far above the verdict, and a reader who scrolls to the
-   verdict (or reads only the `## History` line) never sees it. 보안 각도와 판정 각도는
-   부재가 판정을 막는 두 각도다; with one of them missing, a bare `clean`
-   over-claims. Same family as the [Not-clean notice override](#review) above —
-   *a finding that was never produced is not a finding that was cleared.*
-
-   **Honest-verdict floor (deterministic — both clean sub-cases).** The floor keys
-   on two deterministic inputs — `$resolved_scope_file_count` (the step-1 count above)
-   and the cached `$changes_exist` (emitted by `check-review-scope.sh`, independent of
-   any clean claim):
-   - IF `$resolved_scope_file_count == 0 AND $changes_exist == yes`: do NOT print
-     bare `clean`. Print
-     `## qg iter N: no scope reviewed (0 files; branch <M> ahead of <base>, worktree <dirty|clean>) — NOT certified clean.`
-     (`<M>` = `$branch_ahead_count`, `<base>` = `$base`, worktree token from
-     `$worktree_dirty`: `yes`→`dirty`, `no`→`clean`). A zero-scope run with real changes must never read as
-     "reviewed & clean".
-   - ELSE IF `$degraded == yes AND $resolved_scope_file_count == 0`: print
-     `## qg iter N: clean` AND the loud advisory
-     `> [quality-gates] scope check degraded (detached HEAD / no base branch / unrelated history / shallow) — empty-scope detection skipped (fail-open; verdict not floor-protected this run).`
-   - ELSE: print `## qg iter N: clean` exactly as before (scope > 0, or a
-     genuine no-op with `$changes_exist == no` — unchanged happy path).
+   as `$degraded == yes` for the floor (Step 4.5's degraded advisory). This is
+   an already-known value; do not re-measure (re-deriving it risks landing on an
+   answer that no longer matches the set you actually reviewed).
 
 5. **Decision tool (kept > 0 only).** Invoke [Fix-loop
    decision](#fix-loop-decision). Fill its `<summary>` slot by
@@ -816,12 +807,12 @@ Build the status rows and render them (deterministic, scannable) — one
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-printf 'Review\t<clean iter N | no scope reviewed (branch <M> ahead) | accepted-with-findings iter N | aborted iter N>\nDifferential test\t<attribution_status · 원장 게이트 rc>\n' \
+printf 'Verdict\t<마지막 verdict: 값 — not-certified 면 (<reason>) 포함>\nIterations\t<N>\nOutcome\t<finished | accepted with findings iter N | aborted iter N>\n' \
   | $QG/scripts/render-terminal.py table --title "Quality Gates — Complete"
 ```
 
-Then print the appended `## History` lines from the state file as an
-indented tree beneath the table.
+Then print the last synthesizer output's `angles:` block verbatim, and the appended
+`## History` lines from the state file as an indented tree beneath.
 
 State file cleanup is deferred to /cancel-qg or SessionEnd cleanup hook.
 
@@ -834,9 +825,12 @@ State file cleanup is deferred to /cancel-qg or SessionEnd cleanup hook.
   Step P1.
 - `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — 다른 전제 각도(codex)만 skip한다
   (Claude 리뷰는 정상 진행). Review Step 3 의 "Codex skip 안내".
+- `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` — ② 차등 테스트를 통째로 건너뛴다.
+  판정은 `not-certified (kill-switch)` 다. Review Step 1c.
 - `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` — 보안 각도의
-  `security-reviewer`만 skip한다. Review Step 3 의 "보안 각도" 절(dispatch 직전
-  게이트 + loud advisory)과 Step 4.5의 "Security-review-absent advisory".
+  `security-reviewer` 만 skip 한다. 각도 파일에 `security: absent` → 판정
+  `not-certified (angle-absent)`. Review Step 3 의 "보안 각도" 절(dispatch 직전
+  게이트 + loud advisory).
 - `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` — 차등 테스트 R1b 의
   test-scope-validator dispatch 에 `spec_path: none` 을 강제하고 codex `<spec_context>`
   를 비운다(plan 기반 분류만 남는다). Arguments 절.

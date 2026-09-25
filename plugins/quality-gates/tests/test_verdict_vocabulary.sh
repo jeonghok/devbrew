@@ -96,20 +96,25 @@ case_reason_enum_is_closed_and_accounted() {
   # 경로를 잡는다. 둘은 상호 보완이다 — 파라미터 축은 헬퍼-추출처럼 **새 축**이
   # 열리는 배선을, `OVERLAP`은 **기존 축**(차등 산출물)에 얹히는 배선을 잡는다.
   #
-  # 실측 3분할(코디네이터 정정 — 최초 지시의 5값 목록은 방향이 둘 다 틀렸었다):
-  #   차등 축 산출 가능(5): scope-empty · baseline-unrunnable · silent-drop ·
-  #                        error-axis · granularity-smear (CAUSE_TO_REASON.values())
-  #   모듈 자신의 플래그로 산출 가능(2): findings-lost · angle-absent
-  #                        (decide() 소스에서 도출)
-  #   호출자-전용 부채, 이 PR 에 산출자 없음(4): trivia · kill-switch ·
-  #                        declaration-invalid · merge-conflict
-  local debt="declaration-invalid kill-switch merge-conflict trivia"
+  # 산출자 셋:
+  #   차등 축(CAUSE_TO_REASON.values()): scope-empty · baseline-unrunnable · silent-drop ·
+  #                                     error-axis · granularity-smear
+  #   decide() 자신의 플래그: findings-lost · angle-absent
+  #   오케스트레이터(SKILL · 레퍼런스의 `--reason` 리터럴): trivia · kill-switch · (차등
+  #                                     축과 겹치는) scope-empty · silent-drop · error-axis
+  #   부채 — 산출자 없음(PR4c): declaration-invalid · merge-conflict
+  local debt="declaration-invalid merge-conflict"
+  local SKILL_MD="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
+  local REF_MD="$PLUGIN_ROOT/skills/quality-pipeline/references/differential-test.md"
   local got; got=$(python3 -c "
 import re, inspect, sys
 sys.path.insert(0,'$PLUGIN_ROOT/scripts'); import verdict
 debt = set('''$debt'''.split())
 flag_produced = set(re.findall(r'add\(\"([a-z-]+)\"\)', inspect.getsource(verdict.decide)))
-produced = set(verdict.CAUSE_TO_REASON.values()) | flag_produced
+caller_produced = set()
+for p in ('$SKILL_MD', '$REF_MD'):
+    caller_produced |= set(re.findall(r'--reason ([a-z][a-z-]*)', open(p, encoding='utf-8').read()))
+produced = set(verdict.CAUSE_TO_REASON.values()) | flag_produced | caller_produced
 print('MISSING:' + ','.join(sorted(set(verdict.REASONS) - (produced | debt))))
 print('STALE:'   + ','.join(sorted((produced | debt) - set(verdict.REASONS))))
 print('OVERLAP:' + ','.join(sorted(debt & produced)))

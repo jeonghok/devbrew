@@ -18,8 +18,10 @@
 #    잡는 것은 **토큰 수준** 훼손뿐이다 — 조건 반전(`!=1`), env 이름 오타, 게이트 삭제,
 #    게이트를 dispatch 뒤로 이동.
 #  · **SKILL.md 밖**의 dispatch 는 보지 않는다(현재 리포에 실재 dispatch 는 여기 하나).
-#  · 게이트 **아래쪽** 문서(Step 4.5 verdict advisory · Environment 색인)의 정확성은
-#    재지 않는다. 그 둘은 이 락의 **decoy** 이며 창 밖임을 아래에서 못 박는다.
+#  · 게이트 **아래쪽** 문서(Environment 색인의 요약 문구 · 그 안의 dispatch 참조구)의
+#    정확성은 재지 않는다. 그 둘은 이 락의 **decoy** 이며 창 밖임을 아래에서 못 박는다
+#    (R-AA — 판정은 `verdict:` 줄이 정하므로 Step 4.5 에는 더는 보안-전용 advisory 문구가
+#    없다; decoy① 은 Environment 색인 안의 다른 조각으로 옮겨 잡는다).
 set -eu
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 SKILL="$REPO_ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
@@ -71,7 +73,7 @@ assert_eq "$awk_n" "$grep_n" "창 도출기가 dispatch 를 하나도 놓치지 
 miss_env=0; miss_cond=0; miss_banner=0; miss_skip=0
 decoy_verdict_in=0; decoy_index_in=0
 
-decoy_verdict_lines="$(grep -nF '보안 리뷰를 통과했다' "$SKILL" | cut -d: -f1)"
+decoy_verdict_lines="$(grep -nF '게이트 + loud advisory' "$SKILL" | cut -d: -f1)"
 decoy_index_lines="$(grep -nF '보안 각도의' "$SKILL" | cut -d: -f1)"
 
 while read -r s e d; do
@@ -98,7 +100,7 @@ while read -r s e d; do
   for ln in $decoy_verdict_lines; do
     if [ "$ln" -ge "$s" ] && [ "$ln" -le "$e" ]; then
       decoy_verdict_in=$((decoy_verdict_in + 1))
-      printf '      [창 과대] dispatch:%s 창[%s,%s] 이 verdict advisory(:%s)를 삼켰다\n' "$d" "$s" "$e" "$ln"
+      printf '      [창 과대] dispatch:%s 창[%s,%s] 이 색인의 dispatch 참조구(:%s)를 삼켰다\n' "$d" "$s" "$e" "$ln"
     fi
   done
   for ln in $decoy_index_lines; do
@@ -118,12 +120,12 @@ assert_eq "$miss_skip" 0    "∀ dispatch — 창 안에 '발행하지 않는다
 
 # ── (4) decoy 배제 — 창이 아래쪽 ∃-만족자를 삼키지 않는가 ────────────────────
 # 음의 락에는 양의 짝이 필요하다: decoy 가 파일에서 사라지면 "창 밖" 은 공허해진다.
-assert_count_ge "grep -cF '보안 리뷰를 통과했다' '$SKILL'" 1 \
-  "decoy① Step 4.5 verdict advisory 가 파일에 실재 (창-밖 검사의 양성 짝)"
+assert_count_ge "grep -cF '게이트 + loud advisory' '$SKILL'" 1 \
+  "decoy① Environment 색인의 dispatch 참조구가 파일에 실재 (창-밖 검사의 양성 짝)"
 assert_count_ge "grep -cF '보안 각도의' '$SKILL'" 1 \
   "decoy② Environment 색인이 파일에 실재 (창-밖 검사의 양성 짝)"
 
-assert_eq "$decoy_verdict_in" 0 "decoy① verdict advisory 는 모든 창 밖이다"
+assert_eq "$decoy_verdict_in" 0 "decoy① 색인의 dispatch 참조구는 모든 창 밖이다"
 assert_eq "$decoy_index_in" 0   "decoy② Environment 색인은 모든 창 밖이다"
 
 finish
