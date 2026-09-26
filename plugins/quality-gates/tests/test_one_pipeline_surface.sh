@@ -103,8 +103,20 @@ case_no_gate_scope_question() {
   assert_grep     "$headers" 'qg iter N'                              "fix-loop 결정 도구는 남아 있다(양의 짝)"
 }
 
+case_reference_has_no_design_section_pointers() {
+  # 레퍼런스는 모델이 읽고 행동하는 산출물이다. 설치본에 없는 설계 문서의 절 번호(§)를
+  # 싣지 않는다 — 모델이 없는 절을 찾게 된다. 설계를 가리켜야 하면 개념으로 적는다.
+  assert_eq "$(grep -c '§' "$REF")" "0" "레퍼런스에 § 절 포인터가 0개"
+  # 양의 짝 — 번호를 빼면서 잔여 결함의 공시까지 지우지 않았다
+  assert_file_grep "$REF" '이 축은 잔여 결함이며 \*\*열려 있다\*\*' "R-init 잔여 결함 공시가 남았다"
+  assert_file_grep "$REF" '^\*\*남은 것\(정직한 잔여\):\*\*' "R8 정직한 잔여 공시가 남았다"
+  assert_file_grep "$REF" '잔여 결함과 같은 축이며 열려 있다' "custody 축 공시가 남았다"
+  assert_file_grep "$REF" '빈 스코프 축' "행 0개 축 공시가 남았다"
+}
+
 for c in case_old_surface_absent case_new_skeleton_present case_reference_step_set \
-         case_pipeline_order case_no_gate_scope_question; do
+         case_pipeline_order case_no_gate_scope_question \
+         case_reference_has_no_design_section_pointers; do
   "$c"
 done
 finish
