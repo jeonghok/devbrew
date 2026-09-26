@@ -74,10 +74,11 @@ case_f2_merged_ref_alive() {
   git checkout -q -b topicA; decl_commit a.txt a1 "a1"
   git checkout -q main
   git merge -q --no-ff -m "merge topicA" topicA     # ref 는 그대로 둔다
-  # topicB 는 R(머지 전)에서 분기한다 — HEAD(머지 후 main)에서 분기하면 topicB 가
-  # a1 을 조상으로 자연 상속해 2단계(머지된 구성원 탐지)가 아예 발동하지 않는다.
-  # 그러면 이 케이스가 잠그려는 회귀(주석 참고)를 스테이지-1 만으로 우연히 통과시켜
-  # 락의 이빨이 없어진다.
+  # topicB 는 R(머지 전)에서 분기한다 — 그래야 a1 을 담은 살아 있는 ref 가 base 의
+  # 조상인 topicA 하나뿐이라 2단계 발동 조건의 두 해석(「살아 있는 ref 에 안 걸리면」 ·
+  # 「1단계 B_t 에 안 들어가면」)이 갈린다. 머지 뒤 main 에서 딴 후속 브랜치의 지형은
+  # case_stack_after_front_merged · case_unrelated_branch_after_merge_not_member 가 잰다 —
+  # 머지 커밋으로 base 에 든 a1 은 그 지형에서도 1단계 포함 근거가 아니다.
   git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
   local out; out=$(bash "$RT" resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "F2 status: ok"
@@ -180,9 +181,9 @@ case_f1_boundary() {
 }
 
 # ── F2 의 경계 (AC4+AC5) — 머지된 구성원이 경계 뒤로 숨으면 안 된다 ──────────
-#    구성원이 «하나»뿐이고 그것이 이미 머지된 지형이어야 두 규칙이 갈린다.
-#    다른 구성원이 그 머지의 후손이면 1단계가 선언 커밋을 흡수해 2단계가
-#    발화하지 않고, 형제 구성원이 있으면 merge-base 가 같은 답으로 되돌아간다.
+#    구성원이 «하나»뿐이고 그것이 이미 머지된 지형이어야 두 규칙이 갈린다 — 형제
+#    구성원이 있으면 merge-base 가 같은 답으로 되돌아간다. 머지된 구성원의 후손 브랜치가
+#    함께 있는 지형은 case_stack_after_front_merged 가 잰다.
 case_f2_boundary_merged_not_hidden() {
   new_repo
   echo r1 >> f.txt; git commit -qam r1
@@ -196,6 +197,121 @@ case_f2_boundary_merged_not_hidden() {
   assert_grep "$(field branches "$out")" 'merged:' "F2 경계: 2단계가 발화했다(전제 확인)"
   assert_eq "$(field boundary "$out")" "$FORKPT" "F2 경계 = 머지된 구성원의 진짜 분기점"
   assert_not_contains "$(field boundary "$out")" "$TIPA" "F2 경계가 머지된 tip 이 아니다"
+  cleanup
+}
+
+# ── 머지 뒤 스택: 앞 조각이 머지됐고 뒤 조각이 살아 있다 → 둘 다 T (AC4 · AC5) ──
+#    R→A→B 에서 A 가 머지 커밋으로 main 에 들어간 뒤 B 에서 푼다. B 는 A 의 선언 커밋을
+#    조상으로 담는다 — 1단계가 그것까지 B 의 포함 근거로 세면 2단계가 발화하지 않고
+#    경계가 merge-base(main, B) = A 의 tip 으로 밀려 A 의 변경이 기준선에 숨는다.
+case_stack_after_front_merged() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  local CA; CA=$(git rev-parse HEAD)
+  git checkout -q -b topicB; decl_commit b.txt b1 "b1"
+  local CB; CB=$(git rev-parse HEAD)
+  git checkout -q main; git merge -q --no-ff -m "merge topicA" topicA
+  git branch -q -D topicA
+  git checkout -q topicB
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "머지 뒤 스택: status: ok"
+  assert_grep "$(field branches "$out")" '(^|,)topicB(,|$)' "머지 뒤 스택: 살아 있는 뒤 조각 topicB 가 구성원"
+  assert_grep "$(field branches "$out")" "(^|,)merged:$CA(,|\$)" "머지 뒤 스택: 머지된 앞 조각이 merged:<그 tip> 으로 구성원"
+  assert_eq "$(field boundary "$out")" "$R" "머지 뒤 스택: 경계 = 앞 조각의 fork(A 의 tip 이 아니다)"
+  assert_eq "$(field commits "$out")" "2" "머지 뒤 스택: |T| = 2(앞 조각 a1 이 기준선에 숨지 않는다)"
+  local cs; cs=$(bash "$RT" commits "$KEY")
+  assert_grep "$cs" "^$CA\$" "머지 뒤 스택: commits 에 앞 조각 커밋"
+  assert_grep "$cs" "^$CB\$" "머지 뒤 스택: commits 에 뒤 조각 커밋"
+  cleanup
+}
+
+# ── 머지 뒤 main 에서 딴 무관한 브랜치는 구성원이 아니다 ──────────────────────
+#    머지 커밋으로 base 에 든 선언 커밋은 그 뒤 main 에서 딴 모든 브랜치(원격-추적 포함)의
+#    조상이다. 1단계가 그것을 포함 근거로 세면 선언 없는 무관 브랜치가 전부 구성원이 된다.
+case_unrelated_branch_after_merge_not_member() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  local CA; CA=$(git rev-parse HEAD)
+  git checkout -q main; git merge -q --no-ff -m "merge topicA" topicA
+  git branch -q -D topicA
+  git checkout -q -b unrel; echo u > u.txt; git add u.txt; git commit -qm "unrelated (선언 없음)"
+  local U; U=$(git rev-parse HEAD)
+  git checkout -q main; git checkout -q -b tmpremote
+  echo v > v.txt; git add v.txt; git commit -qm "remote unrelated (선언 없음)"
+  local V; V=$(git rev-parse HEAD)
+  git update-ref refs/remotes/origin/unrel2 HEAD
+  git checkout -q main; git branch -q -D tmpremote
+  git checkout -q -b follow; decl_commit b.txt b1 "b1 (같은 키 후속)"
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "머지 뒤 무관 브랜치: status: ok"
+  assert_not_grep "$(field branches "$out")" '(^|,)(unrel|origin/unrel2)(,|$)' \
+    "머지 뒤 main 에서 딴 무관 브랜치(로컬 · 원격-추적)는 구성원이 아니다"
+  assert_grep "$(field branches "$out")" '(^|,)follow(,|$)' "같은 키 후속 브랜치는 구성원(양의 짝)"
+  assert_grep "$(field branches "$out")" "(^|,)merged:$CA(,|\$)" "머지된 앞 작업은 merged: 로 구성원(양의 짝)"
+  local cs; cs=$(bash "$RT" commits "$KEY")
+  assert_grep "$cs" "^$CA\$" "머지 뒤 무관 브랜치: T 에 머지된 앞 작업 a1(양의 짝)"
+  assert_not_grep "$cs" "^($U|$V)\$" "머지 뒤 무관 브랜치: T 에 무관 브랜치의 커밋이 없다"
+  cleanup
+}
+
+# ── 주제 브랜치 안에서 main 을 머지해 최신화한 뒤 머지된 토픽 ──────────────────
+#    `c..base` 조상 경로의 가장 이른 머지는 주제 브랜치 «안»의 머지(main → 주제)다 — 그
+#    머지의 첫 부모는 c 를 담으므로, 그것으로 판별하면 머지 커밋으로 든 선언 커밋이
+#    fast-forward 로 오판돼 무관 브랜치 흡수가 되살아난다. 들여온 머지는 첫-부모 사슬 위의 것이다.
+case_inner_merge_topic_after_merge() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q main; echo r2 >> f.txt; git commit -qam r2
+  local FORK; FORK=$(git rev-parse HEAD)
+  git checkout -q topicA; git merge -q --no-edit main
+  local AT; AT=$(git rev-parse HEAD)
+  git checkout -q main; git merge -q --no-ff -m "merge topicA" topicA
+  git branch -q -D topicA
+  git checkout -q -b unrel; echo u > u.txt; git add u.txt; git commit -qm "unrelated (선언 없음)"
+  git checkout -q main; git checkout -q -b follow; decl_commit b.txt b1 "b1"
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "안쪽 머지 토픽: status: ok"
+  assert_not_grep "$(field branches "$out")" '(^|,)unrel(,|$)' "안쪽 머지 토픽: 무관 브랜치는 구성원이 아니다"
+  assert_grep "$(field branches "$out")" "(^|,)merged:$AT(,|\$)" "안쪽 머지 토픽: merged:<주제 tip> 으로 구성원"
+  assert_eq "$(field boundary "$out")" "$FORK" "안쪽 머지 토픽: 경계 = 들여온 머지의 첫 부모와의 merge-base"
+  cleanup
+}
+
+# ── fast-forward 머지로 base 에 든 선언 커밋은 옛 동작 그대로 1단계에서 센다 ──────
+#    FF 에는 머지 커밋이 없어 2단계가 주제 쪽 부모를 못 찾는다 — 1단계 포함 검사에서 빼면
+#    그 선언 커밋이 고아(declaration-invalid)가 된다. 뒤이은 무관한 머지 커밋이 있어도
+#    그 첫 부모가 이미 선언 커밋을 담으면 그 머지는 선언 커밋을 들여온 머지가 아니다.
+case_ff_merged_declaration_keeps_old_behavior() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q main; git merge -q --ff-only topicA
+  git branch -q -D topicA
+  git checkout -q -b follow; decl_commit b.txt b1 "b1"
+  local out FORK; FORK=$(git rev-parse main)
+  out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "FF 머지: status: ok(고아가 아니다)"
+  assert_eq "$(field branches "$out")" "follow" "FF 머지: branches = 후속 브랜치 하나(merged: 없음 — 옛 동작)"
+  assert_eq "$(field boundary "$out")" "$FORK" "FF 머지: 경계 = merge-base(main, 후속)(옛 동작)"
+  assert_eq "$(field commits "$out")" "1" "FF 머지: |T| = 1(옛 동작)"
+  cleanup
+}
+
+case_ff_merged_then_unrelated_merge_keeps_old_behavior() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q main; git merge -q --ff-only topicA
+  git branch -q -D topicA
+  git checkout -q -b x; echo x > x.txt; git add x.txt; git commit -qm "x (선언 없음)"
+  git checkout -q main; git merge -q --no-ff -m "merge x" x
+  git branch -q -D x
+  git checkout -q -b follow; decl_commit b.txt b1 "b1"
+  local out FORK; FORK=$(git rev-parse main)
+  out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "FF 뒤 무관 머지: status: ok"
+  assert_eq "$(field branches "$out")" "follow" "FF 뒤 무관 머지: 무관한 머지의 첫 부모를 merged: 로 받지 않는다"
+  assert_eq "$(field boundary "$out")" "$FORK" "FF 뒤 무관 머지: 경계 = merge-base(main, 후속)"
+  assert_eq "$(field commits "$out")" "1" "FF 뒤 무관 머지: |T| = 1(무관 머지의 x 가 T 에 들지 않는다)"
   cleanup
 }
 
@@ -543,8 +659,12 @@ case_for_each_ref_sort_pinned() {
 }
 
 # ── PR1 이월: base 원격 ref · origin/HEAD 는 선언을 «담아도» 구성원이 아니다 ─────────
-#    `%(refname:short)` 는 refs/remotes/origin/HEAD 를 `origin` 으로 찍는다(실측 P4) —
-#    패턴에 `origin` 을 넣지 않으면 이 락은 공허하다.
+#    `%(refname:short)` 는 refs/remotes/origin/HEAD 를 `origin` 으로 찍는다(실측 P4). 다만
+#    main · origin/main · origin/HEAD 는 같은 tip 이라 tip 중복 제거가 사전순으로 먼저 스캔된
+#    `main` 하나만 남긴다 — 첫 검사(base_ref 의 조상인 ref 를 뺀다)를 지우는 변이에서 이 락은
+#    `main` 으로 발화한다. 머지 커밋으로 base 에 든 선언 커밋은 1단계 포함 근거가 아니라서
+#    이 지형에서는 첫 검사를 지워도 base ref 가 구성원이 되지 않는다 — 첫 검사의 이빨은
+#    fast-forward 짝(case_base_remote_ref_never_member_ff)이 잰다.
 case_base_remote_ref_never_member() {
   new_repo
   local R; R=$(git rev-parse HEAD)
@@ -560,6 +680,22 @@ case_base_remote_ref_never_member() {
     "origin/HEAD(=origin) · origin/main · main 은 구성원이 아니다"
   assert_grep "$(field branches "$out")" '(^|,)topicB(,|$)' "살아 있는 구성원 topicB 는 있다(양의 짝)"
   assert_grep "$(field branches "$out")" '(^|,)merged:[0-9a-f]{40}(,|$)' "머지된 topicA 는 merged: 로 있다(양의 짝)"
+  cleanup
+}
+
+case_base_remote_ref_never_member_ff() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q main; git merge -q --ff-only topicA
+  git branch -q -D topicA
+  git update-ref refs/remotes/origin/main HEAD
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+  git checkout -q -b topicB; decl_commit b.txt b1 "b1"
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "FF: base 원격 ref 가 선언 커밋을 담아도 status: ok"
+  assert_not_grep "$(field branches "$out")" '(^|,)(origin|origin/HEAD|origin/main|main)(,|$)' \
+    "FF: origin/HEAD(=origin) · origin/main · main 은 구성원이 아니다"
+  assert_eq "$(field branches "$out")" "topicB" "FF: 구성원은 topicB 하나(양의 짝)"
   cleanup
 }
 
@@ -643,6 +779,9 @@ case_detect_usage() {
 
 for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_f2_boundary_merged_not_hidden case_f3_merged_ref_deleted \
+         case_stack_after_front_merged case_unrelated_branch_after_merge_not_member \
+         case_inner_merge_topic_after_merge case_ff_merged_declaration_keeps_old_behavior \
+         case_ff_merged_then_unrelated_merge_keeps_old_behavior \
          case_f4_undeclared_ancestor_included case_f5_fragment_discriminates \
          case_f5b_prefix_fragment_collision \
          case_f6_path_absent case_f7_mixed_keys_in_T \
@@ -658,6 +797,7 @@ for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_combine_three_clean case_combine_three_conflict_attribution \
          case_resolve_tips_feed_combine \
          case_for_each_ref_sort_pinned case_base_remote_ref_never_member \
+         case_base_remote_ref_never_member_ff \
          case_detect_statuses case_detect_ignores_base_history \
          case_detect_lowercase_trailer_ignored case_detect_usage \
          case_detect_empty_spec_value_excluded; do
