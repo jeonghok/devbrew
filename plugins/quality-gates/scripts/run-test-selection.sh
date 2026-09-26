@@ -15,6 +15,7 @@
 #
 # Exit: 0 = 정상 · 2 = 사용 오류 · 3 = 어댑터 사용 불가
 #       (`run` 은 전 unit `unrun` 동반, `probe` 는 `usable: no` + `reason:` 동반)
+#       `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 probe · run 은 언제나 3 (reason: kill_switch)
 set -u
 
 die() { echo "run-test-selection: $*" >&2; exit 2; }
@@ -526,6 +527,14 @@ runner_available() {   # runner_available <worktree> <runner> → 0 = 이 트리
 adapter_usable() {
   local w=$1 runner=$2 scmd env_dir
   USABLE_REASON=""
+
+  # 차등 테스트 kill switch — 이 관문 뒤는 전부 저장소 코드(setup_cmd · 러너 · 테스트)다.
+  # 오케스트레이터가 ② 를 건너뛰는 것이 1차 집행이고, 이것은 그 산문을 읽지 않은 호출을
+  # 막는 2차 집행이다. 거부 모양은 기존 계약 그대로(probe: usable: no + reason · run: unrun).
+  if [[ "${DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST:-}" == "1" ]]; then
+    echo "run-test-selection: 차등 테스트가 DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1 로 꺼져 있다 — 저장소 코드를 돌리지 않는다 ($runner in $w)" >&2
+    USABLE_REASON=kill_switch; return 1
+  fi
 
   # -qxF: runner 는 CLI 인자다 — -qx 로 매칭하면 PATTERN(BRE)로 해석되어 "pyt.st" 같은
   # 입력이 "pytest" 를 정규식으로 오매치한다 (Task 3 리뷰에서 같은 등급의 결함이 assign
