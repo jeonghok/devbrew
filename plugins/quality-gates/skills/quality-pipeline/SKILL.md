@@ -10,11 +10,13 @@ description: >
   (`/qg-publish`) — not part of the pipeline, and not an automatic continuation.
 cost_class: variable
 allowed-tools:
-  # Group 1 — Preflight scripts (실행 순서: setup → trivia → 스코프 신호)
+  # Group 1 — Preflight scripts (실행 순서: setup → 선언 감지 → trivia → 스코프 신호 → 토픽 해소)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-topic.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/verdict.py:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/topic-head.sh:*)
   # Group 2 — Differential test scripts (references/differential-test.md)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-baseline.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)
@@ -171,6 +173,17 @@ Parse from `/qg` invocation:
 
 ## Trivia escape
 
+**선언이 있으면 trivia escape 를 쓰지 않는다.** `branch` · `--paths` override 가 없으면 먼저 현재
+브랜치의 토픽 선언을 감지한다:
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+"$QG/scripts/resolve-topic.sh" detect
+```
+
+`status: ok` 또는 `status: declaration-invalid` 면 trivia escape 를 **쓰지 않고** 곧장 iteration 1 로 간다 — 선언된 작업은 spec 에 묶인 작업 단위라, 현재 브랜치의 diff 가 한 문장이어도 판정 대상은 토픽 전체다.
+그 밖(`no-declaration` · `base-unresolved`)이거나 override 가 있으면 아래대로 한다.
+
 Run `scripts/check-trivia.sh` (plugin root per Step P0b). Exit code:
 - 0 = trivia detected → skip the whole pipeline. 판정을 낸다 — trivia 실행은 `clean` 이
   아니다(「테스트 없는 clean 은 나오지 않는다」, 설계 C4):
@@ -193,7 +206,39 @@ Iterative fix-loop, `max_review_iterations = 5` (hard-coded constant).
 
 For each iteration N (1..5):
 
-1. **Resolve the review scope** — `paths` / `branch` / `session` (`session` = the default: no `branch` arg, no `--paths`). **There is no preflight scope**; nothing upstream hands you a file set, so you derive it here, from git, every turn:
+1. **Resolve the review scope** — `topic` / `session` / `branch` / `paths`. `branch` · `--paths` 는 override 다. override 가 없으면 **먼저 1a 로 토픽 선언을 푼다** — 풀리면 `topic`, 아니면 `session`(`session` = no `branch` arg, no `--paths`, no usable declaration). **There is no preflight scope**; nothing upstream hands you a file set, so you derive it here, from git, every turn.
+
+   **1a — 토픽 선언 (override 가 없을 때 · 매 iteration · 이 스텝에서 가장 먼저).**
+
+   ```bash
+   QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+   "$QG/scripts/topic-head.sh" "<session-id>" > ".claude/quality-gates/<session-id>/topic-scope.txt" && cat ".claude/quality-gates/<session-id>/topic-scope.txt"
+   ```
+
+   exit 0 이 아니면(사용 오류) stderr 를 그대로 보이고 멈춘다. 파일의 `status:` 로 이 iteration 의 스코프가 갈린다:
+
+   | `status:` | 스코프 | 그다음 |
+   |---|---|---|
+   | `ok` | **topic** — 경계와 합친 트리 사이의 변경 | 차등 테스트의 R-init 이 경계를 기준선으로, 합친 트리를 HEAD 축으로 쓴다 |
+   | `no-declaration` | session | 공지하지 않는다 — 선언은 새 능력이지 새 의무가 아니다 |
+   | `declaration-invalid` | session | 공지 한 줄 · Step 4 의 `--scope` 가 판정을 `not-certified (declaration-invalid)` 로 만든다 |
+   | `unbounded` | session | 공지 한 줄 · `--scope` 가 `not-certified (declaration-invalid)` 로 만든다 |
+   | `merge-conflict` | session | 공지 한 줄 · `--scope` 가 `not-certified (merge-conflict)` 로 만들고 충돌 파일을 싣는다 |
+   | `merge-failed` | session | 공지 한 줄 · `--scope` 가 `not-certified (merge-conflict)` 로 만든다 |
+   | `seal-failed` | session | 공지 한 줄 · 차등 테스트는 R5b 의 봉인 실패 라우팅을 탄다 |
+   | `base-unresolved` | session | 차등 테스트의 R-init 이 baseline 확정 불가로 처리한다 |
+
+   공지 한 줄: `> [quality-gates] 토픽 선언을 이번 iteration 에 쓰지 못했다 (<status>: <reason 값>) — session 스코프로 진행한다.`
+
+   `topic` 스코프의 파일 집합(= `$resolved_scope_file_count` 의 집합):
+
+   ```bash
+   S=".claude/quality-gates/<session-id>/topic-scope.txt"; b=$(sed -n 's/^boundary: //p' "$S"); t=$(sed -n 's/^tree: //p' "$S"); git diff --name-only "$b" "$t"
+   ```
+
+   reviewer 에게 주는 diff(`FILTERED_DIFF`)는 같은 두 값의 `git diff "$b" "$t"` 에서 문서 경로를 뺀 것이다. 스코프 파일은 Step 4 가 `--scope` 로 다시 읽는다 — 이 iteration 동안 지우거나 고치지 않는다.
+
+   **session 스코프**(1a 가 `topic` 을 내지 않았거나 override):
 
    ```bash
    QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }   # plugin root per Step P0b
@@ -207,7 +252,7 @@ For each iteration N (1..5):
 
    **Deriving from git is what makes the scope tool-agnostic** — git reports a changed file the same way whichever tool produced it, so a file written by a Bash heredoc or `sed -i` is in the default scope exactly like one written by `Write` (A20). Never source the scope from a per-session record of "files this turn edited": such a record is produced by a hook keyed on the writing tool's name, so every write outside that name list vanishes from the scope silently — the pre-5.0.0 defect this release removed.
 
-   **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> Review scope: session (<COUNT> changed files). 전체 PR/브랜치는 /qg branch.` (`<COUNT>` = `$resolved_scope_file_count` — 정의는 Step 4.5 "Resolved-scope file count" 참조, `check-review-scope.sh` 산출값이 아니다). 명시적 `/qg branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/qg branch`는 결정론적 escape hatch로 유지).
+   **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> Review scope: session (<COUNT> changed files). 전체 PR/브랜치는 /qg branch.` (`<COUNT>` = `$resolved_scope_file_count` — 정의는 Step 4.5 "Resolved-scope file count" 참조, `check-review-scope.sh` 산출값이 아니다). 스코프가 `topic` 으로 풀렸으면(N=1) 대신 `> Review scope: topic <topic_key> (<COUNT> changed files · 구성원 <branches>).` 를 낸다. 명시적 `/qg branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/qg branch`는 결정론적 escape hatch로 유지).
 
 **Step 1b — Changes-exist signal (iteration N=1 only).** Before dispatching the
 scout, run the read-only changes-exist signal **once** and cache it for the rest
@@ -246,7 +291,7 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 읽지 않고 ② 를 통째로 건너뛴다. 이 줄을 그대로 보인다:
 `> [quality-gates] 차등 테스트가 DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1 로 꺼져 있다 — 이 실행은 not-certified (kill-switch) 다.`
 그리고 Step 4 에 `--reason kill-switch` 를 싣는다. 차등 테스트는 리뷰 대상 저장소의 코드를
-호스트 권한으로 돌린다 — 이 스위치는 그것을 끄는 보안 컨트롤이다.
+호스트 권한으로 돌린다 — 이 스위치는 그것을 끄는 보안 컨트롤이다. 테스트를 돌리는 스크립트(`run-test-selection.sh` 의 `probe` · `run`)도 이 스위치가 켜져 있으면 저장소 코드를 돌리지 않는다(`usable: no` · `reason: kill_switch`). 1a 는 git 만 쓰므로 스위치와 무관하게 돈다.
 
 **Step 1c — 차등 테스트 (②).** [Differential test](#differential-test) 절을 따른다 —
 매 iteration 돈다. 결과(`$aggregate_yaml` 경로와 R6 두 호출의 exit code ·
@@ -305,7 +350,7 @@ Agent({
   description: "Security review (qg iter N)",
   prompt: "Run code-level security review on the current diff.
     project_dir: <project_dir>${PROJECT_DIR}</project_dir>
-    diff_scope: <diff_scope>${DIFF_SCOPE}</diff_scope> (session (git-derived changed files) / branch (git diff vs base) / paths (--paths globs) — the review scope you resolved at step 1)
+    diff_scope: <diff_scope>${DIFF_SCOPE}</diff_scope> (topic (경계..합친 트리) / session (git-derived changed files) / branch (git diff vs base) / paths (--paths globs) — the review scope you resolved at step 1)
     plan_path: <plan_path>${PLAN_PATH}</plan_path> (path or 'auto')
     iteration: <iteration>${ITERATION}</iteration>
     filtered_diff: <filtered_diff>${FILTERED_DIFF}</filtered_diff> (unified diff computed from the resolved review scope, documentation paths excluded)"
@@ -514,6 +559,7 @@ Agent({
    | ② 의 R6 어댑터별 호출 또는 집계 호출이 non-zero, 또는 키를 못 읽었다 | `--differential` 을 싣지 않고 `--reason error-axis` |
    | ② 의 `check_qa_ledger.py` 가 non-zero | `--reason silent-drop` |
    | ② 가 kill switch 로 생략됐다(Step 1c) | `--reason kill-switch` |
+   | 기본 모드 — ① 1a 가 `topic-head.sh` 를 불렀다(`status:` 가 무엇이든) | `--scope ".claude/quality-gates/<session-id>/topic-scope.txt"` — `declaration-invalid` · `merge-conflict` 사유와 `scope:` 블록은 합성기가 이 파일에서 낸다 |
    | `$resolved_scope_file_count == 0` 이고 캐시한 `$changes_exist == yes` (정직-verdict floor) | `--reason scope-empty` |
    | ② 의 `check_qa_ledger.py` 는 exit 0 인데 R8 원장(`runtime-evidence.md`)의 `floor:verification` 이 `degraded` 이거나 `unclaimed` unit 이 있다(그 게이트는 원장 내부 일관성만 보고 이 경우도 exit 0 을 낼 수 있다) | `--reason silent-drop` |
 
@@ -544,6 +590,7 @@ Agent({
 
    - stdout 을 **그대로** 사용자에게 보인다(요약 · 재서술 금지). 앞에 한 줄:
      `## qg iter N — <verdict>` (`not-certified` 면 `## qg iter N — not-certified (<reason>)`).
+   - 꼬리의 `scope:` 블록을 **그대로** 보인다(요약 금지) — 본 커밋 · 끝점 · 경계 · 합친 트리가 이 판정의 대상이다.
    - `verdict:` 줄이 정확히 한 번 나오지 않으면 이 iteration 은 clean 이 아니다 — rc 와
      stderr 를 그대로 보고하고 멈춘다.
    - 본 보고서의 `판정 degrade` 줄은 **그대로 보인다** — 차단이면
@@ -582,6 +629,7 @@ Agent({
    `$resolved_scope_file_count` = the size of the file set you actually resolved
    and reviewed at step 1 — the same set whose `changed_lines`/`new_files` you
    fed into `scout.py`. It is **never** copied from `check-review-scope.sh`: for
+   `topic` it is the `git diff --name-only <boundary> <tree>` set from step 1a; for
    the default (`session`) that set is the git-derived changed-file set (branch
    diff against base, unioned with the worktree's own changed files); for
    `branch` it is the branch diff against base; for `paths` it is the number of
@@ -849,7 +897,7 @@ printf 'Verdict\t<마지막 verdict: 값 — not-certified 면 (<reason>) 포함
   | $QG/scripts/render-terminal.py table --title "Quality Gates — Complete"
 ```
 
-Then print the last synthesizer output's `angles:` block verbatim if any (the
+Then print the last synthesizer output's `scope:` block and `angles:` block verbatim if any (the
 trivia escape has none — it calls `verdict.py` directly, never the synthesizer),
 and the appended `## History` lines from the state file as an indented tree
 beneath.
