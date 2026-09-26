@@ -217,6 +217,18 @@ DEVBREW_QUALITY_GATES_DISABLE=1 /qg
 2. Verify SessionEnd hook noop.
 3. Verify `qg-gc.py` exits 0 without action.
 
+### T-1 — 토픽 스코프: 형제 브랜치 둘 + 미커밋 변경
+
+**Setup:** 일회용 리포에 형제 브랜치 둘(`Spec: docs/x.md#p1`), 현재 브랜치에 미커밋 파일.
+
+**Run:** `/qg`
+
+**Expected:**
+- `Review scope: topic …` 한 줄.
+- 판정 꼬리의 `scope:` 블록에 `mode: topic` · 두 선언 커밋의 `commit:` 줄.
+- 형제 브랜치에 회귀를 심으면 `defect`.
+- 형제가 같은 파일을 달리 고치면 `not-certified (merge-conflict)` 와 그 파일.
+
 ## Out-of-Scope for This Verification
 
 - Live cost telemetry (recording actual $ per run for each depth tier) —

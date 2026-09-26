@@ -82,7 +82,7 @@ the pipeline is aborted at a decision point.
 | Command | Effect |
 |---------|--------|
 | `/qg critique <path>` | 비-코드 산출물 비평-수정 루프(별도 skill; 라운드별 커밋; 코드 아님) |
-| `/qg` | Run the pipeline; git-derived diff (branch + worktree) |
+| `/qg` | Run the pipeline; `Spec:` 트레일러로 선언된 토픽이면 토픽 전체(합친 트리), 아니면 git-derived diff (branch + worktree) |
 | `/qg branch` | Run on the full-branch diff (vs `main`) |
 | `/qg branch <name>` | Run against branch `<name>` in isolated worktree |
 | `/qg --paths <glob>...` | Scope to matched paths |
@@ -98,6 +98,8 @@ the pipeline is aborted at a decision point.
 | `DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1` | Preserve branch worktree after pipeline completes or is cancelled (default: removed) |
 
 ### Scope (default: git 변경)
+
+선언이 있으면 기본 scope 는 **토픽**이다 — README 「토픽 스코프」. 아래는 선언이 없을 때(session)다.
 
 `/qg` 는 **git 이 보고하는 변경**을 기본 scope 로 리뷰한다 — base 대비 브랜치 diff
 와 worktree 변경의 합집합이며, 오케스트레이터가 그 집합을 직접 resolve 해 리뷰

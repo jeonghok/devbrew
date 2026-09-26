@@ -261,7 +261,7 @@ merge-base 를 쓰면 그 병합이 가져온 남의 변경까지 diff 에 든�
 - **충돌** = `rc 1`(실측 §7-F). 그 실행은 `not-certified (merge-conflict)` 이고 충돌 파일 목록을
   싣는다.
 - 순차 합치기는 `commit-tree` 중간 커밋을 만들고 그것은 unreachable 로 남는다(실측 §7-G) →
-  기존 `qg-gc.py` 경로에 편입한다.
+  기존 `qg-gc.py` 경로에 편입한다. *(재결정 P23 2026-09-26 — git 의 prune 에 맡긴다, §16)*
 
 **OQ17 의 성숙형(한 구성원 실패 시 그것 없이 재테스트)은 취하지 않는다.** 충돌이 「판정 불가」로
 렌더되는 한 신뢰도 하한이 지켜지고, 그다음은 단순함이 이긴다. 순서만 결정론으로 고정한다.
@@ -834,7 +834,7 @@ brief §3 의 19개 전부. **미처분 0.**
 - `plugins/quality-gates/scripts/qg-worktree.sh` — 봉인 서브커맨드 신설, `create-head` assert 변경
 - `plugins/quality-gates/scripts/synthesize_findings.py` — 각도 상태 총 함수, 세 값 어휘
 - `plugins/quality-gates/scripts/diff-test-results.py` — 해상도 공시 줄
-- `plugins/quality-gates/scripts/qg-gc.py` — unreachable 중간 커밋 정리
+- `plugins/quality-gates/scripts/qg-gc.py` — unreachable 중간 커밋 정리 *(재결정 — §16, 바뀌지 않는다)*
 - `plugins/quality-gates/README.md` · `plugins/quality-gates/CHANGELOG.md` ·
   `plugins/quality-gates/.claude-plugin/plugin.json`
 
@@ -1004,6 +1004,22 @@ AC21 을 확인한다.
 - **남는 것** — genuine no-op 을 `clean` 으로 보고 싶은 소비자(예: docs-only PR 의 자동
   머지 게이트)는 이 사유를 `clean` 과 같게 취급하는 판단을 스스로 내려야 한다 — 판정
   어휘 자신은 그 판단을 대신하지 않는다.
+
+**재결정 (P23, 2026-09-26) — 중간 커밋 GC 를 `qg-gc.py` 가 아니라 git 의 prune 에 맡긴다.**
+- **원래** — §6.2.4: 순차 합치기의 `commit-tree` 중간 커밋은 unreachable 로 남고 「기존
+  `qg-gc.py` 경로에 편입한다」. §12: `qg-gc.py — unreachable 중간 커밋 정리`.
+- **재결정** — `qg-gc.py` 는 바뀌지 않는다. qg 가 만드는 커밋(봉인 · 재봉인 · 합치기 중간 ·
+  합친 HEAD 커밋)은 어떤 ref · reflog 도 얻지 않고, HEAD 축 워크트리가 사라지면 도달 불가다 —
+  회수는 git 자신의 `gc`(→ `prune --expire`)가 한다. 락이 「한 실행 뒤 qg 저자 커밋 전부가
+  도달 불가」를 잰다.
+- **근거** — `qg-gc.py` 는 세션 폴더를 TTL 로 지우는 모듈이고 git 객체를 다루지 않는다.
+  git 에는 선택적 회수 수단이 없다 — `git prune` 은 리포 전체의 unreachable 객체(사용자의
+  dropped stash · 되살리려던 커밋)를 지운다. 커밋 객체만 골라 지우는 것은 부피 이득이 없고
+  (트리 · blob 은 내용 주소라 사용자 객체와 공유될 수 있다) 살아 있는 워크트리를 깨뜨릴 수
+  있다. 실측: 봉인 · 중간 커밋은 이미 ref · reflog 어디서도 닿지 않고 `prune` 이 회수한다.
+  사람(사용자)이 이 재결정에 동의했다.
+- **남는 것** — 회수 시점이 git 의 `gc.pruneExpire`(기본 2주)에 달린다. 그 사이 객체가 `.git`
+  에 남는다.
 
 **각 PR 은 자기 `Spec:` 조각을 선언한다**(§6.2.1) — `…-design.md#pr1` … `#pr5`. 같은 값을 쓰면
 PR2~5 가 앞 PR 전부를 합집합으로 재리뷰해 분할이 비용을 **늘린다**.

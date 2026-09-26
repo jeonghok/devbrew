@@ -108,6 +108,8 @@ quality-gates/
 │   ├── discover_common.sh                    # 위 두 탐색기가 source 하는 공통 조각 (get_mtime · pick_newest; 실행 지점 없음)
 │   ├── compute-test-scope-candidates.sh      # 차등 테스트 R1b — 후보 test 파일 산출 (Python/JS/TS heuristic)
 │   ├── resolve-baseline.sh                   # 공유 baseline resolution (base/base_ref/merge_base/degraded/same_as_head/ahead)
+│   ├── scope_tuple.py                        # 스코프 튜플 파서 · status → 사유 · scope: 블록
+│   ├── topic-head.sh                         # ① 토픽 해소 — 선언 → 봉인 → 경계 · 끝점 → 합친 트리 튜플
 │   ├── seal-worktree.sh                      # `seal <session-id>` — HEAD 트리를 `.git` 안 임시 인덱스로 봉인, 봉인 커밋 SHA 출력
 │   ├── qg-worktree.sh                        # `create-baseline`/`create-head` — 기준선·봉인 HEAD 두 축의 워크트리 생성(`create-head`는 봉인을 다시 떠 대조). `create-sandbox`/`mutation-guard` 는 남아 있으나 qg 파이프라인은 더 호출하지 않는다 — 소비자는 `plugins/plugin-audit` 자체 테스트 격리
 │   ├── run-test-selection.sh                 # ② floor — 러너 어댑터 9종 detect/assign/probe/run (유일 소유자, 기준선·HEAD 양쪽 오케스트레이터가 직접 호출)
@@ -201,7 +203,7 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 
 | 단계 | 주체 | 무엇 |
 |---|---|---|
-| ① 스코프 | 오케스트레이터 + `check-review-scope.sh` | session(기본) · `branch` · `--paths` |
+| ① 스코프 | 오케스트레이터 + `check-review-scope.sh` · `topic-head.sh` | topic(선언이 있으면 기본) · session · `branch` · `--paths` |
 | ② 차등 테스트 | 오케스트레이터 + 결정론 스크립트 | 영향분 테스트를 기준선 축과 봉인된 HEAD 축에서 돌려 귀속(`references/differential-test.md`) |
 | ③ 각도 + 리뷰어 | `security-reviewer`(보안) · codex(다른 전제) · 추가 리뷰어(스코프) | 각도 셋과 그 수행자는 고정, 스코프는 추가 리뷰어만 정한다 |
 | ④ 재비판 | `doc-recritic`(판정 각도) | 출처를 못 보는 재비판 — 탐지 0 이어도 돈다 |
@@ -286,7 +288,7 @@ R1b, 매 iteration 디스패치) = 10; `synthesize_findings.py` 는 스크립트
 │       │ no                                                        │   │
 │       ▼                                                           │   │
 │   qg iter loop (≤5)                                                │   │
-│     ① scope (session | branch | --paths)                           │   │
+│     ① scope (topic | session | branch | --paths)                   │   │
 │     ② differential test (baseline vs sealed HEAD — every iteration)│   │
 │     ③ angles + reviewers (security · codex · specialists)          │   │
 │     ④ framing-blind re-critique (doc-recritic)                     │   │
@@ -320,6 +322,28 @@ R1b, 매 iteration 디스패치) = 10; `synthesize_findings.py` 는 스크립트
 | `untracked-newfile` | 새 파일 1개, ≤3줄, 모두 빈/주석/shebang | 빈 placeholder 추가 | 새 함수 정의 추가 |
 
 `comment`, `typo`, `untracked-newfile`은 v1.16.0 (T2-1)에서 추가.
+
+## 토픽 스코프 — `Spec:` 트레일러
+
+한 작업이 브랜치 여럿(스택 · 형제 · 이미 머지된 앞 브랜치)에 걸치면, 커밋에
+`Spec: <리포-상대 경로>[#<조각>]` 트레일러를 단다. `/qg` 는 현재 브랜치가 base 위에 얹은
+커밋에서 그 키를 찾고, 같은 키를 단 브랜치 전부(원격-추적 · 머지된 구성원 포함)를 한 판정
+단위로 본다:
+
+- **기준선** — 그 작업이 시작된 지점(구성원 분기점들의 merge-base).
+- **HEAD 축** — 워킹트리 봉인과 구성원 끝점을 `git merge-tree` 로 순차 합친 트리. 리뷰 diff ·
+  차등 테스트 · 판정이 이 한 트리를 본다.
+- **판정 꼬리의 `scope:` 블록** — 본 커밋 SHA 전부 · 끝점 · 경계 · 합친 트리 OID. `clean` 은 이
+  튜플에 대한 clean 이다.
+
+키는 조각까지 포함한 값 전체다 — `…#pr1` 과 `…#pr2` 는 다른 토픽이다. 선언이 없으면 동작이
+바뀌지 않는다(session 기본). 선언이 깨졌으면(경로 부재 · 한 브랜치에 두 키) `not-certified
+(declaration-invalid)`, 끝점 합치기가 충돌하면 `not-certified (merge-conflict)` 이고 충돌 파일을
+싣는다 — 두 경우 모두 리뷰 · 차등 테스트는 현재 브랜치(session)로 계속 돈다. 선언이 있으면
+trivia escape 를 쓰지 않는다. `branch` · `--paths` override 는 토픽을 보지 않는다.
+
+**알려진 한계** — 다른 리모트의 기본 브랜치(예: `upstream/main`)가 토픽을 이미 머지했으면
+구성원으로 잡혀 리뷰 대상이 부풀 수 있다(`scope:` 블록의 `branches:` 에 보인다).
 
 ## 사용
 
@@ -468,7 +492,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 |---|---|
 | `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1` | `/qg branch <name>` auto-worktree 기능 disable (`/qg branch` no-arg는 영향 없음). |
 | `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` | spec 발견 시에도 no-spec 경로 강제 (codex `<spec_context>` 비움; validator는 plan-기반 분류). |
-| `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | ② 차등 테스트를 통째로 건너뛴다(리뷰 대상 저장소의 코드를 호스트 권한으로 돌리지 않는다). 판정은 `not-certified (kill-switch)` 다 — `clean` 도 실패도 아니다. |
+| `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | ② 차등 테스트를 통째로 건너뛴다(리뷰 대상 저장소의 코드를 호스트 권한으로 돌리지 않는다). 판정은 `not-certified (kill-switch)` 다 — `clean` 도 실패도 아니다. `run-test-selection.sh` 도 집행한다(probe · run 이 저장소 코드를 돌리지 않는다). |
 
 **`DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX`** 는 qg 파이프라인에서 더 읽히지 않는다
 (샌드박스 executor 가 사라졌다). `scripts/qg-worktree.sh create-sandbox` 는 남아 있고 그 소비자는
