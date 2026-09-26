@@ -53,7 +53,7 @@ def parse(text):
     seen = {}
     commits = []
     # 줄 경계는 `\n` 하나다 — splitlines() 는 U+2028 등도 줄 끝으로 읽어 값을 자른다.
-    # CRLF 는 open() 의 universal newline 이 이미 접는다.
+    # CRLF 는 텍스트 모드 읽기의 universal newline 이 이미 접는다.
     for line in text.split("\n"):
         if not line.strip():
             continue
