@@ -57,6 +57,50 @@ print("MISSING:" + ",".join(missing))
 print("WRONG:" + ",".join(wrong))
 PY
 
+IFS= read -r -d '' PY_RINIT <<'PY' || true
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+fences = [b for b in re.findall(r'```bash\n(.*?)```', text, re.S) if 'topic-scope.txt' in b]
+print("FENCES:%d" % len(fences))
+lines = fences[0].splitlines() if fences else []
+def idx(pred, start):
+    for i in range(start, len(lines)):
+        if pred(lines[i]):
+            return i
+    return -1
+i_if = idx(lambda l: l.startswith('if [ "') and "s/^status: //p" in l and l.endswith('= ok ]; then'), 0)
+i_else = idx(lambda l: l == 'else', i_if + 1) if i_if >= 0 else -1
+i_fi = idx(lambda l: l == 'fi', i_else + 1) if i_else >= 0 else -1
+shaped = i_fi > i_else > i_if >= 0
+print("IF:%d" % (1 if shaped else 0))
+ok_b = "\n".join(lines[i_if + 1:i_else]) if shaped else ""
+el_b = "\n".join(lines[i_else + 1:i_fi]) if shaped else ""
+checks = [
+    ("OK_BASE", "baseline_commit=$(sed -n 's/^boundary: //p' \"$S\")" in ok_b),
+    ("OK_SEALED", "sealed=$(sed -n 's/^head_commit: //p' \"$S\")" in ok_b),
+    ("OK_TOPIC", 'create-head "$sealed" "<session-id>" --topic "$topic_key"' in ok_b),
+    ("OK_SCAN", 'scan_dir="${head_tree_dir:-$project_dir}"' in ok_b),
+    ("ELSE_BASE", 'baseline_commit="<위 6키의 merge_base>"' in el_b),
+    ("ELSE_SCAN", 'scan_dir="$project_dir"' in el_b),
+    ("ELSE_NO_TOPIC", "--topic" not in el_b),
+]
+for k, v in checks:
+    print("%s:%d" % (k, 1 if v else 0))
+PY
+
+IFS= read -r -d '' PY_R4 <<'PY' || true
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+m = re.search(r'^\*\*Step R4 — .*?(?=^\*\*Step R5b)', text, re.S | re.M)
+win = m.group(0) if m else ""
+fences = "\n".join(re.findall(r'```bash\n(.*?)```', win, re.S))
+calls = re.findall(r'(?:baseline-cache\.sh" (?:get|put)|qg-worktree\.sh" create-baseline)[^\n\\]*(?:\\\n[^\n\\]*)*', fences)
+good = [c for c in calls if '"$baseline_commit"' in c]
+print("CALLS:%d" % len(calls))
+print("GOOD:%d" % len(good))
+print("MERGE_BASE_IN_FENCES:%d" % fences.count('$merge_base'))
+PY
+
 case_trivia_escape_is_gated_by_declaration() {
   # Review Focus 2 · R-AO — 선언이 있으면 trivia escape 를 쓰지 않는다.
   local got; got=$(python3 -c "$PY_TRIVIA" "$SKILL")
@@ -126,10 +170,51 @@ case_filtered_diff_uses_boundary_and_tree() {
   assert_not_grep "$got" 'MERGE_BASE|HEAD' "그 줄에 MERGE_BASE · HEAD 가 없다(session 베이스라인으로 새지 않는다)"
 }
 
+case_rinit_topic_branch_sets_axes() {
+  # AC5 · AC6 · R-AP — 선언 경로의 기준선은 경계, HEAD 축은 create-head --topic 이 재도출 대조한
+  # 합친 커밋. 각 값은 «그 갈래 안»에서 잰다 — 반대 갈래에 옮겨 적으면 RED.
+  local got; got=$(python3 -c "$PY_RINIT" "$REF")
+  assert_grep "$got" '^FENCES:1$'        "스코프 파일을 읽는 레퍼런스 펜스가 하나(R-init)"
+  assert_grep "$got" '^IF:1$'            "그 펜스가 status == ok 로 if/else/fi 를 가른다"
+  assert_grep "$got" '^OK_BASE:1$'       "ok 갈래: baseline_commit = boundary"
+  assert_grep "$got" '^OK_SEALED:1$'     "ok 갈래: sealed = head_commit(전사 없이 파일에서)"
+  assert_grep "$got" '^OK_TOPIC:1$'      "ok 갈래: create-head 가 --topic 으로 재도출 대조한다"
+  assert_grep "$got" '^OK_SCAN:1$'       "ok 갈래: scan_dir = HEAD 축 트리"
+  assert_grep "$got" '^ELSE_BASE:1$'     "else 갈래: baseline_commit = merge_base"
+  assert_grep "$got" '^ELSE_SCAN:1$'     "else 갈래: scan_dir = project_dir"
+  assert_grep "$got" '^ELSE_NO_TOPIC:1$' "else 갈래에 --topic 이 없다"
+}
+
+case_scan_dir_feeds_detect_and_assign() {
+  # R-AP — 형제에만 있는 테스트 파일은 합친 트리에만 있다.
+  assert_eq "$(grep -cF 'run-test-selection.sh" detect "$scan_dir"' "$REF")" "1" "R1a detect 가 \$scan_dir 를 본다"
+  assert_eq "$(grep -cF 'run-test-selection.sh" assign "$scan_dir"' "$REF")" "1" "R1b assign 이 \$scan_dir 를 본다"
+  assert_eq "$(grep -cE 'run-test-selection\.sh" (detect|assign) "\$project_dir"' "$REF")" "0" "R1a · R1b 에 \$project_dir 호출이 남지 않았다"
+}
+
+case_r4_calls_use_baseline_commit() {
+  # AC5 — R4 의 세 호출(cache get · create-baseline · cache put)은 전부 $baseline_commit.
+  local got; got=$(python3 -c "$PY_R4" "$REF")
+  assert_grep "$got" '^CALLS:3$'               "R4 펜스에 호출 셋(get · create-baseline · put)"
+  assert_grep "$got" '^GOOD:3$'                "셋 전부 \"\$baseline_commit\" 을 싣는다"
+  assert_grep "$got" '^MERGE_BASE_IN_FENCES:0$' "R4 펜스에 \$merge_base 가 남지 않았다"
+}
+
+case_r5b_skips_on_topic() {
+  # R-AP — 선언 경로의 R5b 는 봉인 · 트리 생성을 건너뛰고 R-init 의 값을 쓴다. 한 줄로 잰다.
+  local got
+  got=$(grep -F '**선언 경로면 이 스텝에서 봉인하지 않는다.**' "$REF")
+  assert_eq "$(printf '%s\n' "$got" | grep -c .)" "1" "R5b 에 선언 경로 규칙 문장이 하나"
+  assert_grep "$got" 'R-init' "그 문장이 R-init 의 값을 쓴다고 적는다"
+  assert_grep "$got" '\$head_tree_dir' "그 문장이 \$head_tree_dir 를 이름 붙인다"
+}
+
 for c in case_trivia_escape_is_gated_by_declaration case_step1_writes_scope_file \
          case_status_table_is_total_over_statuses case_topic_diff_uses_boundary_and_tree \
          case_step4_row_carries_scope case_scope_block_surfaces \
-         case_filtered_diff_uses_boundary_and_tree; do
+         case_filtered_diff_uses_boundary_and_tree \
+         case_rinit_topic_branch_sets_axes case_scan_dir_feeds_detect_and_assign \
+         case_r4_calls_use_baseline_commit case_r5b_skips_on_topic; do
   echo "== $c"; $c
 done
 finish

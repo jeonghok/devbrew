@@ -111,6 +111,7 @@ fail-open 의 입력이다.
 | | `$qg_run_tmp/baseline-$runner.tsv` | R4 기록 → R6 소비. **가장 나쁘다** — 행을 `pass`→`fail` 로 뒤집으면 모든 `NEW_REGRESSION` 이 `PRE_EXISTING` 으로 접힌다 |
 | | `$qg_run_tmp/head-$runner.tsv` | R5b 기록 → R6 소비. 사이에 R6 의 flaky 재실행이 `$head_tree_dir` 에서 저장소 코드를 돌리고 같은 파일에 행을 다시 쓴다 |
 | | `$qg_run_tmp/per-adapter-$runner.yaml` | R6 어댑터별 기록 → R6 말미 `--aggregate` 소비. 사이에 같은 flaky 재실행 |
+| | `.claude/quality-gates/<sid>/topic-scope.txt` | SKILL ① 1a 기록 → R-init(R4 앞) · Step 4 `--scope` 소비. `head_commit:` 변조는 R-init 의 `create-head --topic` 재도출 대조가 잡지만, Step 4 소비는 R4 · R5b · R6 뒤라 `status:` · 튜플 변조가 사유와 `scope:` 블록을 바꿀 수 있다. 봉인하지 않는다 — 아래 잔여 결함과 같은 축 |
 | **창 없음** | `$qg_run_tmp/aggregate.yaml` | R6 말미 기록 → R8 소비. 사이에 저장소 코드가 돌지 않는다 |
 
 **그리고 배정 행 파일의 집행은 *부재*에 실려 있다.** 바로 아래 R1b 의 원자적 쓰기는
@@ -177,13 +178,43 @@ no 이고 기준선 트리도 만들어진다; 그 창을 닫는 결정론 수�
 
 > `> [quality-gates] baseline: <base> @ <merge_base 앞 12자> (<ahead>커밋 앞섬)`
 
+**기준선 커밋 · HEAD 축 · 스캔 트리 — 선언 경로면 여기서 먼저 선다.** ① 1a 가 쓴 스코프
+파일이 `status: ok` 면 기준선은 경계이고, HEAD 축은 1a 의 합친 커밋에서 **지금** 만든다 —
+`create-head --topic` 이 합친 트리를 다시 도출해 대조하므로 1a 뒤 워킹트리가 바뀌었으면
+죽는다. 형제 구성원에만 있는 테스트 파일은 합친 트리에만 있으므로 R1a · R1b 도 그 트리를
+본다:
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+S=".claude/quality-gates/<session-id>/topic-scope.txt"
+if [ "$(sed -n 's/^status: //p' "$S" 2>/dev/null)" = ok ]; then
+  baseline_commit=$(sed -n 's/^boundary: //p' "$S")
+  topic_key=$(sed -n 's/^topic_key: //p' "$S")
+  sealed=$(sed -n 's/^head_commit: //p' "$S")
+  head_tree_dir=$("$QG/scripts/qg-worktree.sh" create-head "$sealed" "<session-id>" --topic "$topic_key") || head_tree_dir=""
+  scan_dir="${head_tree_dir:-$project_dir}"
+else
+  baseline_commit="<위 6키의 merge_base>"; topic_key=""; sealed=""; head_tree_dir=""
+  scan_dir="$project_dir"
+fi
+printf 'baseline_commit=%s\ntopic_key=%s\nsealed=%s\nhead_tree_dir=%s\nscan_dir=%s\n' "$baseline_commit" "$topic_key" "$sealed" "$head_tree_dir" "$scan_dir"
+```
+
+다섯 값을 오케스트레이터 변수로 붙잡아 R6 까지 들고 간다. 선언 경로에서 `create-head` 가
+죽었으면(`$head_tree_dir` 빈 값) stderr 를 그대로 보이고 R1a 로 계속 간다 — HEAD 축은 R5b 의
+실패 라우팅 첫 행으로 처리된다. 선언 경로에서는 위 「차등 실행이 불가능한 조건」 표를 쓰지
+않는다 — 기준선이 경계이고 경계는 HEAD 가 아니다. baseline 한 줄은 대신 이것이다:
+
+> `> [quality-gates] baseline: topic <topic_key> @ <baseline_commit 앞 12자>`
+
 **Step R1a — 러너 어댑터 감지 (HEAD 트리).**
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-"$QG/scripts/run-test-selection.sh" detect "$project_dir"
+"$QG/scripts/run-test-selection.sh" detect "$scan_dir"
 ```
 
+`$scan_dir` 는 R-init 이 정한다 — 선언 경로면 HEAD 축 트리, 아니면 `$project_dir`.
 감지된 어댑터를 **집합으로** 캡처한다(0개 이상 — 폴리글랏 레포는 복수). 각 어댑터는
 `runner` / `granularity` / `setup_cmd` 3줄이다. 이 집합이 R2 산문·R4·R5b·R6 의
 `--granularity` 로 스레드된다. **감지 표를 여기서 재구현하지 않는다** — 감지 지식은
@@ -237,7 +268,7 @@ Agent({
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 set -o pipefail
 printf '%s\n' "${candidate_files[@]}" \
-  | "$QG/scripts/run-test-selection.sh" assign "$project_dir" \
+  | "$QG/scripts/run-test-selection.sh" assign "$scan_dir" \
     > "$assign_rows_file.part" \
   && mv -f "$assign_rows_file.part" "$assign_rows_file"
 assign_rc=$?
@@ -360,6 +391,10 @@ R2 의 5번이 곧 생략 목록이다. **생략 목록이 비어 있으면 `Ask
 
 **Step R4 — 기준선 측 (오케스트레이터 단독).**
 
+이 스텝의 기준선 커밋은 R-init 의 `$baseline_commit` 이다 — 선언 경로면 경계, 아니면
+merge_base. 아래 산문의 「merge_base」 는 그 값을 뜻한다. 선언 경로에서는 아래
+`same_as_head` · `worktree_dirty` 스킵 표를 쓰지 않는다 — 언제나 R4 를 돈다.
+
 R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 에서
 `BASELINE_UNRUNNABLE` 로 처리한다. **이때도 `$qg_run_tmp/baseline-$runner.tsv` 는 선택한 unit 마다
 `<unit>\tunrun\t-` 로 채우고 `baseline_detected` 는 `NONE` 이다** — 형제 skip 경로 둘과
@@ -404,7 +439,7 @@ iteration 2 이상은 Retry 가 파일을 고친 뒤라 캐시가 낡았다 — 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/baseline-cache.sh" get \
-  ".claude/quality-gates/baseline-cache" "$merge_base" "$runner" "${units[@]}"
+  ".claude/quality-gates/baseline-cache" "$baseline_commit" "$runner" "${units[@]}"
 ```
 
 적중분만 나온다. 입력 목록과 차집합해 **미적중분**을 얻는다. exit 4(손상)는 전량
@@ -429,7 +464,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 baseline_wt=$("$QG/scripts/qg-worktree.sh" create-baseline \
-  "$merge_base" "<session-id>") || baseline_wt=""
+  "$baseline_commit" "<session-id>") || baseline_wt=""
 ```
 
 **Step R4 ② 실패 라우팅 (형제 R5b 표와 같은 규율 — 관측 없음은 음성 결과가 아니다,
@@ -552,7 +587,7 @@ bulk 가 red 면 실패한 unit 에 대해서만 `per-unit` 으로 재실행한�
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 printf '%s\n' "${rows[@]}" > "$qg_run_tmp/baseline-$runner.tsv"
 printf '%s\n' "${rows[@]}" | "$QG/scripts/baseline-cache.sh" put \
-  ".claude/quality-gates/baseline-cache" "$merge_base" "$runner"
+  ".claude/quality-gates/baseline-cache" "$baseline_commit" "$runner"
 if [[ -n "${baseline_wt:-}" && -d "$baseline_wt" ]]; then
   "$QG/scripts/qg-worktree.sh" remove "$baseline_wt"
 fi
@@ -594,6 +629,8 @@ path" 에 걸려 **그 세션은 영영 clean 에 도달하지 못한다** — R
 같은 트리에서 코드를 되감았다 복원하면 두 축이 같은 환경이라는 전제가 흐려진다.
 
 **Step R5b — HEAD 측 테스트 실행 (오케스트레이터가 직접).**
+
+**선언 경로면 이 스텝에서 봉인하지 않는다.** R-init 이 `create-head --topic` 으로 만든 `$sealed` · `$head_tree_dir` 를 그대로 쓰고 아래 봉인 펜스를 건너뛴다 — R-init 의 그 호출이 실패했으면(`$head_tree_dir` 빈 값) 아래 실패 라우팅 첫 행 그대로다.
 
 먼저 워킹트리를 **봉인**하고(한 번, 어댑터 공통) 그 봉인 커밋에서 **HEAD 축 전용 트리**를
 만든다:
@@ -652,7 +689,7 @@ authoritative 로 선언하기 때문이다.
 
 | R5b 결과 | 라우팅 |
 |---|---|
-| `seal-worktree.sh` 가 non-zero(`$sealed` 빈 값) · 또는 `create-head` 가 non-zero(`$head_tree_dir` 빈 값) | **HEAD 축을 관측하지 못했다.** stderr 를 verbatim 노출하고, 선택한 unit 마다 `<unit>\tunrun\t-` 로 HEAD 행을 채운 뒤 `verification` 을 **`degraded`** 로 두고 R6 으로 간다. 실제 워킹트리(`$project_dir`)로 **폴백하지 않는다** — 두 축의 환경 대칭이 깨진다. |
+| `seal-worktree.sh` 가 non-zero(`$sealed` 빈 값) · 또는 `create-head`(선언 경로는 R-init 의 `create-head --topic`)가 non-zero(`$head_tree_dir` 빈 값) | **HEAD 축을 관측하지 못했다.** stderr 를 verbatim 노출하고, 선택한 unit 마다 `<unit>\tunrun\t-` 로 HEAD 행을 채운 뒤 `verification` 을 **`degraded`** 로 두고 R6 으로 간다. 실제 워킹트리(`$project_dir`)로 **폴백하지 않는다** — 두 축의 환경 대칭이 깨진다. |
 | `run` 이 non-zero (러너 부재 exit 3 제외 — 그것은 정상 신호다) | 같은 처리. 그 어댑터의 unit 을 `unrun` 으로 채우고 `verification: degraded`. |
 | 위 둘 다 아님 | 정상 — R6 으로 간다. |
 
