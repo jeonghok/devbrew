@@ -775,8 +775,9 @@ codex).** 그러지 않으면 *"마지막 호출의 결과가 authoritative"* �
 쓰지 않는다** — 매치 없는 glob 은 셸에 따라 이 호출 자체를 죽인다(zsh 는 기본값에서
 `no matches found: …` 로 명령을 실행하지도 않고 rc 1, bash 기본값은 리터럴 패턴 문자열을
 인자로 넘겨 스크립트가 그 이름의 파일을 못 읽어 exit 4) — 둘 다 `error-axis` 로 떨어지는데,
-실제 사실은 *"대조가 실패했다"* 가 아니라 *"어댑터가 없다"* 다(§6.7 계열과 같은 오분류
-축). `diff-test-results.py --aggregate --expected-adapters 0`(파일 인자 없음)은 이미
+실제 사실은 *"대조가 실패했다"* 가 아니라 *"어댑터가 없다"* 다 — 이 문서가 되풀이
+이름 붙인 오분류 패턴(관측 없음을 음성 결과로 읽는 것, R1b·`assign` 실패 라우팅과
+같은 부류)이다. `diff-test-results.py --aggregate --expected-adapters 0`(파일 인자 없음)은 이미
 `degrade_causes: [no-adapters]` 로 정직하게 답한다(→ `verdict.py` 의 `CAUSE_TO_REASON` 이
 `scope-empty` 로 옮긴다) — glob 을 건너뛰기만 하면 그 정직한 답이 그대로 도착한다:
 

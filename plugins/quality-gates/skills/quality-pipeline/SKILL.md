@@ -565,7 +565,7 @@ Agent({
      ② 가 이번 iteration 에 kill switch 로 건너뛰었거나 R6 집계 전에 error-axis 로 끝났으면
      (`$aggregate_yaml` 없음) 이 차등 요약 전체를 생략한다 — 낼 것이 없다.
 
-   그다음:
+   그다음(N < 5 — N=5 는 아래 「N=5 에서 도달하면」 문단이 이 라우팅을 대신한다):
    - `verdict: clean` → 루프를 나가 [Final Summary](#final-summary).
    - `defect` 또는 `not-certified` 이고 **kept > 0**(`**Findings:**` counts 줄의 세
      severity 합 ≥ 1) → Step 5 의 결정 도구.
@@ -596,8 +596,9 @@ Agent({
    an already-known value; do not re-measure (re-deriving it risks landing on an
    answer that no longer matches the set you actually reviewed).
 
-5. **Decision tool.** Invoked when kept > 0, or when `verdict: defect` with kept = 0
-   and the defect came from the differential test (Step 4.5's routing above). Invoke
+5. **Decision tool (N < 5 only — N=5 always goes to Max-iter decision instead, below).**
+   Invoked when kept > 0, or when `verdict: defect` with kept = 0 and the defect
+   came from the differential test (Step 4.5's routing above). Invoke
    [Fix-loop decision](#fix-loop-decision).
    - kept > 0: fill `<summary>` by **verbatim-copying the `**Findings:**` counts
      line** from step 4's stdout (deterministic extraction — do NOT author a fresh
@@ -611,19 +612,23 @@ Agent({
    `0 CRITICAL / 0 IMPORTANT / 0 SUGGESTION` when the trigger was the differential
    test instead; see [state-file-format](references/state-file-format.md#history)).
 
-If iteration N=5 ends with kept > 0: run step 4.5's surface first (same as
-above), then invoke [Max-iter decision](#max-iter-decision)
-instead of the normal iter-boundary decision. Fill that template's
-`Last findings: <summary>` slot with the same verbatim counts line (the
-template text itself is unchanged).
+**N=5 에서 도달하면.** iteration N=5 가 kept > 0 로 끝나거나, `verdict: defect` 이고
+kept = 0 인 차등 테스트 기원(differential-origin) defect 로 끝나면(Step 4.5 의 라우팅과
+같은 조건) — 두 경우 모두 Step 4.5 의 표면화를 먼저 돌린 뒤, 평소의 iter-boundary
+결정 도구(Step 5 [Fix-loop decision](#fix-loop-decision))가 아니라
+[Max-iter decision](#max-iter-decision) 을 부른다. **N=5 는 P18 상한이라 예외가 없다**
+— 차등 테스트 기원이라고 Fix-loop decision(Retry 로 루프를 늘리는 도구)으로 새지
+않는다. `Last findings: <summary>` 슬롯은 kept > 0 이면 같은 verbatim counts 줄로,
+차등 테스트 기원 kept = 0 이면 Step 4.5 가 뽑은 non-green 귀속 목록(회귀 목록)으로
+채운다(템플릿 문면 자체는 무변경).
 
 ---
 
-The two decision templates below are tool-call literals; they fire only
-on the non-empty-findings branch (iter-boundary) and on the iteration-5
-exhaustion branch (max-iter). Each emits a single decision-tool invocation
-with a unique header so the user can disambiguate iterations in the
-transcript.
+The two decision templates below are tool-call literals; they fire only on
+the kept > 0-or-differential-origin-defect branch (iter-boundary, N < 5) and
+on the same trigger at the iteration-5 exhaustion branch (max-iter). Each
+emits a single decision-tool invocation with a unique header so the user can
+disambiguate iterations in the transcript.
 
 The iter-boundary anchor phrase `findings remain` is specific to this
 template and must not appear in any other decision-tool call in this
@@ -655,12 +660,21 @@ AskUserQuestion({
 })
 ```
 
+**Retry 옵션 문구 — 차등 테스트 기원(kept = 0)에는 그대로 쓰지 않는다.** 위 리터럴의
+"Apply the suggested fixes" 는 합성기의 finding-기반 제안을 전제한다 — kept = 0, 차등
+테스트 기원 defect 에는 그 제안 자체가 없다(`**Findings:**` counts 줄이 안 나온다). 이
+트리거로 디스패치할 때는 `Retry` 옵션의 `description` 을 "Fix the regressed units named
+in <summary> (e.g. NEW_REGRESSION), then re-run the pipeline for the next iteration —
+differential test included." 로 바꿔 싣는다 — 없는 제안을 있다고 말하지 않는다. 다른
+두 옵션 문구는 그대로다.
+
 Branch on answer:
-- **Retry** → apply user-consented fixes by calling Edit/Write directly
-  with the synthesizer's suggested patches; increment iteration counter;
-  loop back to [Pipeline](#pipeline) step 2 (① 부터 — ② 차등 테스트 포함). See
-  [Retry: file-write safety](#retry-file-write-safety) for the
-  canonicalization requirement on reviewer-supplied paths, and
+- **Retry** → kept > 0 이면 합성기의 suggested patches 로 Edit/Write 를 호출한다(user-consented
+  fixes). kept = 0, 차등 테스트 기원 defect 면 **적용할 suggested patches 가 없다** — 대신
+  `<summary>` 에 실린 회귀 unit(예: `NEW_REGRESSION`)이 통과하도록 네가 직접 코드를 고친다.
+  어느 경우든 iteration counter 를 증가시키고 [Pipeline](#pipeline) step 2 (① 부터 — ②
+  차등 테스트 포함)로 루프백한다. See [Retry: file-write safety](#retry-file-write-safety)
+  for the canonicalization requirement on reviewer-supplied paths, and
   [Retry: error handling](#retry-error-handling) for the AskUserQuestion
   surface that fires on Edit failures.
 - **Accept and finish** → exit the loop and emit the final summary with the

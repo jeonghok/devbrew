@@ -259,11 +259,20 @@ case_degraded_ledger_row_reaches_silent_drop() {
   # `--differential` 행(위)이 이미 `degrade_causes` 로 옮기는 것과 겹치고, `silent-drop` 이
   # REASONS 에서 먼저 정렬돼 더 구체적인 사유(baseline-unrunnable · error-axis ·
   # granularity-smear)를 덮어썼다. `floor:verification` degraded 이거나 `unclaimed` unit
-  # 존재로 좁혔다 — SKILL.md 와 레퍼런스(R8 표 미러) 양쪽에서. 이제 두 파일을 함께 스캔하고
-  # 좁힌 표기(`floor:verification`)가 있는지, 「floor 5차원」으로 도로 넓어지지 않았는지도 잰다.
+  # 존재로 좁혔다 — SKILL.md 와 레퍼런스(R8 표 미러) 양쪽에서.
+  #
+  # 최종 리뷰(2차) — 「5차원」 리터럴 부재만 보는 옛 검사는 세 우회를 놓쳤다:
+  # (a) 「어느 floor 차원이든(`floor:verification` 포함)」처럼 "5차원" 없이 다시 넓히기,
+  # (b) `이거나`(OR)를 `이고`(AND)로 바꿔 두 조건이 «동시»일 때만 발화하게 좁히기(반대
+  # 방향 결함 — 실제로는 과소-발화),
+  # (c) `floor:attribution` 으로 조건 자체를 바꿔치면서 `floor:verification` 이라는
+  # 단어는 설명절에 남겨 두기.
+  # 이제 그 행 자신에서 다섯을 함께 잰다: `floor:verification` · `unclaimed` 존재,
+  # `floor:attribution` 부재, OR 접속사(`이거나`/`또는`) 존재, 「5차원」도 「어느 …
+  # 차원」도 부재.
   local got
   got=$(python3 - "$SKILL" "$REF" <<'PY'
-import sys
+import re, sys
 rows = []
 for path in sys.argv[1:3]:
     text = open(path, encoding="utf-8").read()
@@ -280,7 +289,13 @@ for l in rows:
     negated = any(neg in l for neg in ("싣지 않는다", "없음", "공시만"))
     if has_reason and not negated:
         ok += 1
-    if "floor:verification" in l and "5차원" not in l:
+    has_verification = "floor:verification" in l
+    has_unclaimed = "unclaimed" in l
+    no_attribution_leak = "floor:attribution" not in l
+    has_or_join = ("이거나" in l or "또는" in l)
+    no_any_dimension_leak = not re.search(r"5차원|어느[^\n]{0,12}차원", l)
+    if (has_verification and has_unclaimed and no_attribution_leak
+            and has_or_join and no_any_dimension_leak):
         narrow_ok += 1
 print(f"OK:{ok}")
 print(f"NARROW_OK:{narrow_ok}")
@@ -429,25 +444,111 @@ PY
 }
 
 case_differential_defect_zero_kept_routes_to_fixloop() {
-  # 최종 리뷰 I1 — 리뷰 findings 없이(kept=0) 차등 테스트가 `confirmed_product_defect: true`
-  # 를 낸 실행은 Final Summary 로 직행하지 않고 Fix-loop decision 으로 간다(회귀 목록을
-  # <summary> 로), 그리고 판정 줄 옆에 resolution_disclosure + non-green(STILL_GREEN 이
-  # 아닌) 귀속 행을 verbatim 으로 보인다. 독립 앵커 둘 — 어느 한쪽 문장을 지워도 그 앵커만
-  # RED 가 된다(라우팅 문장 삭제 → HAS_ROUTE RED, 공시 불릿 삭제 → HAS_DISCLOSURE RED).
+  # 최종 리뷰 I1(1차) → 2차 re-review 지적(section-window 는 같은-줄이 아니다) — 옛 버전은
+  # Step 4.5–Fix-loop decision 사이 거대한 창 «전체» 에서 네 토큰의 존재만 봤다. 그러면
+  # I1-C(라우팅 문장은 그대로 두고 실제 목적지만 Final Summary 로 바꿔치기 — "Fix-loop
+  # decision" 단어 자체는 남겨 언급만 함) · I1-D(resolution_disclosure 단어는 남기고
+  # verbatim/그대로 지시만 삭제) · I1-E(STILL_GREEN 선택을 "아닌"에서 "인 것만"으로 뒤집기 —
+  # 단어 STILL_GREEN 은 그대로) 셋 다 창 안 어딘가에 토큰이 남아 GREEN 으로 샜다. 이제 각
+  # 사실을 **그 사실이 실제로 적힌 좁은 구간**(정규식으로 앵커 사이만 자르고 공백을
+  # 접어 한 "논리 줄"로 만든 것)에서 잰다 — 다른 구간이 대신 만족시킬 수 없다.
   local got
   got=$(python3 - "$SKILL" <<'PY'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
-m = re.search(r'\*\*Step 4\.5 —.*?(?=\n## Fix-loop decision)', text, re.S)
-window = m.group(0) if m else ""
-print(f"WINDOW_LEN:{len(window)}")
-print(f"HAS_DISCLOSURE:{1 if ('resolution_disclosure:' in window and 'STILL_GREEN' in window) else 0}")
-print(f"HAS_ROUTE:{1 if ('차등 테스트' in window and 'confirmed_product_defect: true' in window and 'Fix-loop decision' in window and 'kept = 0' in window) else 0}")
+
+def norm(s):
+    return re.sub(r'\s+', ' ', s)
+
+def seg(pattern):
+    m = re.search(pattern, text, re.S)
+    return norm(m.group(0)) if m else None
+
+# --- I1-D: resolution_disclosure 공시 줄 — 「verbatim/그대로」 지시가 같은 좁은 구간에 있다 ---
+d = seg(r'`resolution_disclosure:`.{0,80}')
+print(f"DISCLOSURE_FOUND:{1 if d is not None else 0}")
+print(f"DISCLOSURE_VERBATIM:{1 if (d and re.search(r'verbatim|그대로', d)) else 0}")
+
+# --- I1-E: non-green 선택 — STILL_GREEN 바로 뒤에 「아닌」 부정이 있고, 예시로
+#     NEW_REGRESSION 이 있으며, "STILL_GREEN 만/인 것만"(선택 반전) 은 없다 ---
+a = seg(r'.{0,20}STILL_GREEN.{0,160}')
+print(f"ATTR_FOUND:{1 if a is not None else 0}")
+# 이 정규식은 backtick 을 담는다 — f-string 중괄호 «안» 에 직접 넣지 않는다
+# (bash 가 $(...) 의 짝을 heredoc 본문까지 통틀어 backtick 짝수로 찾다가, 홀수
+# backtick 하나로 이 스크립트 자체의 문법을 깬다 — 실측: /qg 최종 리뷰 2차 라운드).
+attr_negated = bool(a and re.search(r'STILL_GREEN`?\s*이?\s*\*{0,2}아닌', a))
+print(f"ATTR_NEGATED:{1 if attr_negated else 0}")
+print(f"ATTR_EXAMPLE:{1 if (a and 'NEW_REGRESSION' in a) else 0}")
+print(f"ATTR_FLIPPED_TO_ONLY_GREEN:{1 if (a and re.search(r'STILL_GREEN[^가-힣]{0,6}(만|인 것만)', a)) else 0}")
+
+# --- I1-C: kept=0 차등 기원 라우팅 — 조건 언급부터 실제 호출 동사(「그대로 부르되」)
+#     까지를 한 구간으로 자른다. 그 구간 안의 Final Summary 언급은 정확히 «부정문
+#     하나» 여야 한다 — 부정문을 지우고도 Final Summary 가 남으면 실제 목적지가
+#     바뀐 것이다(단어만 살려 둔 I1-C 변이).
+r = seg(r'`verdict: defect` 이고 kept = 0.*?그대로 부르되')
+print(f"ROUTE_FOUND:{1 if r is not None else 0}")
+print(f"ROUTE_HAS_DIFFERENTIAL:{1 if (r and '차등' in r) else 0}")
+print(f"ROUTE_HAS_DEFECT_FLAG:{1 if (r and 'confirmed_product_defect: true' in r) else 0}")
+print(f"ROUTE_HAS_INVOKE:{1 if (r and '그대로 부르되' in r) else 0}")
+route_no_leak = 0
+if r is not None:
+    stripped = r.replace('Final Summary 로 직행하지 않는다', '')
+    route_no_leak = 1 if 'Final Summary' not in stripped else 0
+print(f"ROUTE_NO_FINAL_SUMMARY_LEAK:{route_no_leak}")
 PY
 )
-  assert_grep "$got" '^WINDOW_LEN:[1-9]' "Step 4.5–Fix-loop decision 창을 찾았다(0 이면 앵커가 깨졌다)"
-  assert_grep "$got" '^HAS_DISCLOSURE:1$' "판정 줄 옆에 resolution_disclosure + non-green(STILL_GREEN 아님) 귀속 표시가 있다"
-  assert_grep "$got" '^HAS_ROUTE:1$' "defect · kept=0 · 차등 테스트 기원은 Final Summary 대신 Fix-loop decision 으로 간다"
+  assert_grep "$got" '^DISCLOSURE_FOUND:1$'    "resolution_disclosure 앵커를 찾았다"
+  assert_grep "$got" '^DISCLOSURE_VERBATIM:1$' "그 줄 자신이 verbatim/그대로 지시를 담는다(I1-D 가 지우면 RED)"
+  assert_grep "$got" '^ATTR_FOUND:1$'          "STILL_GREEN 앵커를 찾았다"
+  assert_grep "$got" '^ATTR_NEGATED:1$'        "STILL_GREEN 바로 뒤에 「아닌」 부정이 있다(I1-E 가 「인 것만」으로 뒤집으면 RED)"
+  assert_grep "$got" '^ATTR_EXAMPLE:1$'        "non-green 예시로 NEW_REGRESSION 이 같은 구간에 있다"
+  assert_grep "$got" '^ATTR_FLIPPED_TO_ONLY_GREEN:0$' "「STILL_GREEN 만/인 것만」(선택 반전)이 없다"
+  assert_grep "$got" '^ROUTE_FOUND:1$'                "kept=0 차등 기원 라우팅 구간을 찾았다"
+  assert_grep "$got" '^ROUTE_HAS_DIFFERENTIAL:1$'     "그 구간이 차등 테스트 기원임을 말한다"
+  assert_grep "$got" '^ROUTE_HAS_DEFECT_FLAG:1$'      "그 구간이 confirmed_product_defect: true 를 싣는다"
+  assert_grep "$got" '^ROUTE_HAS_INVOKE:1$'           "그 구간이 Fix-loop decision 을 «그대로 부르되」로 실제 호출한다"
+  assert_grep "$got" '^ROUTE_NO_FINAL_SUMMARY_LEAK:1$' "그 구간의 Final Summary 언급은 부정문 하나뿐이다(I1-C 가 실제 목적지를 바꾸면 RED)"
+}
+
+case_n5_and_retry_cover_differential_origin() {
+  # 최종 리뷰 (2차) 항목 1–2 — N=5 상한(P18)과 Retry 옵션 문구가 kept=0 차등 기원
+  # defect 를 커버하는지 잰다. 「N=5 확장을 지우는」 변이(옛 「kept > 0」 전용 문구로
+  # 되돌리기)와 Retry 문장이 빠지는 변이를 각각 잡는다.
+  local got
+  got=$(python3 - "$SKILL" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+
+def norm(s):
+    return re.sub(r'\s+', ' ', s)
+
+def seg(pattern):
+    m = re.search(pattern, text, re.S)
+    return norm(m.group(0)) if m else None
+
+n5 = seg(r'\*\*N=5 에서 도달하면\.\*\*.*?(?=\n\n---)')
+print(f"N5_FOUND:{1 if n5 is not None else 0}")
+print(f"N5_HAS_DIFFERENTIAL:{1 if (n5 and '차등' in n5 and 'kept = 0' in n5) else 0}")
+print(f"N5_HAS_MAXITER:{1 if (n5 and 'Max-iter decision' in n5) else 0}")
+
+note = seg(r'\*\*Retry 옵션 문구.*?(?=\n\nBranch on answer:)')
+print(f"RETRY_NOTE_FOUND:{1 if note is not None else 0}")
+print(f"RETRY_NOTE_HAS_DIFFERENTIAL:{1 if (note and '차등 테스트 기원' in note) else 0}")
+
+bullet = seg(r'- \*\*Retry\*\* →.*?(?=\n- \*\*Accept)')
+print(f"RETRY_BULLET_FOUND:{1 if bullet is not None else 0}")
+print(f"RETRY_BULLET_HAS_DIFFERENTIAL:{1 if (bullet and '차등 테스트 기원' in bullet) else 0}")
+print(f"RETRY_BULLET_HAS_FIX_MEANING:{1 if (bullet and ('회귀' in bullet or 'NEW_REGRESSION' in bullet)) else 0}")
+PY
+)
+  assert_grep "$got" '^N5_FOUND:1$'                    "「N=5 에서 도달하면」 문단을 찾았다"
+  assert_grep "$got" '^N5_HAS_DIFFERENTIAL:1$'         "그 문단이 kept=0 차등 기원 defect 도 포함한다고 말한다(N=5 확장 삭제 변이 → RED)"
+  assert_grep "$got" '^N5_HAS_MAXITER:1$'              "그 문단이 Max-iter decision 을 부른다고 말한다"
+  assert_grep "$got" '^RETRY_NOTE_FOUND:1$'            "Retry 옵션 문구 안내를 찾았다"
+  assert_grep "$got" '^RETRY_NOTE_HAS_DIFFERENTIAL:1$' "그 안내가 차등 테스트 기원 kept=0 을 지목한다"
+  assert_grep "$got" '^RETRY_BULLET_FOUND:1$'          "Branch on answer 의 Retry 불릿을 찾았다"
+  assert_grep "$got" '^RETRY_BULLET_HAS_DIFFERENTIAL:1$' "그 불릿이 차등 테스트 기원 경우를 갈라 말한다"
+  assert_grep "$got" '^RETRY_BULLET_HAS_FIX_MEANING:1$'  "그 불릿이 회귀 unit 을 고치는 의미로 Retry 를 재정의한다(suggested patches 없음을 인정)"
 }
 
 case_zero_adapter_aggregate_skips_glob() {
@@ -481,7 +582,8 @@ for c in case_every_synth_call_emits_verdict_and_angles case_blocking_angle_disp
          case_degraded_ledger_row_reaches_silent_drop case_pre_r6_abort_reaches_error_axis_catchall \
          case_pre_r6_abort_catchall_mirrored_in_reference case_r3_stop_choice_routes_to_error_axis \
          case_security_kill_switch_routes_to_absent case_differential_kill_switch_env_name_is_pinned \
-         case_differential_defect_zero_kept_routes_to_fixloop case_zero_adapter_aggregate_skips_glob; do
+         case_differential_defect_zero_kept_routes_to_fixloop case_zero_adapter_aggregate_skips_glob \
+         case_n5_and_retry_cover_differential_origin; do
   "$c"
 done
 finish
