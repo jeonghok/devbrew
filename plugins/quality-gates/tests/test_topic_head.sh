@@ -224,11 +224,75 @@ case_no_side_effects() {
   cleanup
 }
 
+case_create_head_topic_accepts_derived_commit() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
+  echo dirty > wip.txt
+  local out H h; out=$(bash "$TH" "$SID"); H=$(field head_commit "$out")
+  if h=$(bash "$WT" create-head "$H" "$SID" --topic "$KEY" 2>/dev/null) \
+     && [ -f "$h/a.txt" ] && [ -f "$h/b.txt" ] && [ -f "$h/wip.txt" ]; then
+    ok "합친 커밋 → create-head --topic 수락 · 트리에 형제 · 현재 · 미커밋 변경(양의 짝)"
+    bash "$WT" remove "$h" >/dev/null 2>&1
+  else
+    no "합친 커밋인데 create-head --topic 이 거부했거나 트리에 셋이 없다"
+  fi
+  cleanup
+}
+
+case_create_head_topic_rejects_wrong_commits() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
+  echo dirty > wip.txt
+  # 거부의 «이유»까지 잰다 — 옛 usage 오류가 되살아나도 exit 2 라 종료 코드만으로는 못 가른다.
+  local out S H err; out=$(bash "$TH" "$SID"); S=$(field seal "$out"); H=$(field head_commit "$out")
+  err=$(bash "$WT" create-head "$S" "$SID" --topic "$KEY" 2>&1 >/dev/null)
+  assert_grep "$err" 'head-commit mismatch' "봉인 단독 → create-head --topic 거부 · 트리 대조로(형제가 빠진 트리)"
+  err=$(bash "$WT" create-head "$R" "$SID" --topic "$KEY" 2>&1 >/dev/null)
+  assert_grep "$err" 'head-commit mismatch' "경계 → create-head --topic 거부 · 트리 대조로"
+  err=$(bash "$WT" create-head "$H" "$SID" 2>&1 >/dev/null)
+  assert_grep "$err" 'sealed-sha mismatch' "--topic 없이 합친 커밋 → 봉인 대조가 거부(그대로)"
+  echo later > later.txt
+  err=$(bash "$WT" create-head "$H" "$SID" --topic "$KEY" 2>&1 >/dev/null)
+  assert_grep "$err" 'head-commit mismatch' "① 뒤 워킹트리가 바뀌면 거부(stale) · 트리 대조로"
+  assert_eq "$(git worktree list | grep -c 'head-')" "0" "거부된 호출은 HEAD 축 워크트리를 만들지 않는다"
+  cleanup
+}
+
+case_create_head_topic_rejects_conflicted_topic() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA; decl_commit f.txt fromA "a1"
+  git checkout -q -b topicB "$R"; decl_commit f.txt fromB "b1"
+  local S; S=$(bash "$SEALER" seal "$SID")
+  local err rc; err=$(bash "$WT" create-head "$S" "$SID" --topic "$KEY" 2>&1 >/dev/null); rc=$?
+  assert_eq "$rc" "2" "충돌 토픽: create-head --topic exit 2"
+  assert_grep "$err" 'merge-conflict' "충돌 토픽: stderr 가 status 를 이름 붙인다"
+  cleanup
+}
+
+case_create_head_usage() {
+  new_repo
+  local S rc; S=$(bash "$SEALER" seal "$SID")
+  bash "$WT" create-head "$S" "$SID" --topic >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "--topic 값 없음: exit 2"
+  bash "$WT" create-head "$S" "$SID" --topic "" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "--topic 빈 값: exit 2"
+  bash "$WT" create-head "$S" "$SID" --bogus "$KEY" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "모르는 플래그: exit 2"
+  cleanup
+}
+
 for c in case_usage case_no_declaration case_single_branch_topic case_two_siblings_combined \
          case_merged_member_combined case_conflict_lists_files case_declared_path_absent \
          case_two_fragments_on_one_branch case_explicit_topic_skips_detect \
          case_unrelated_member_is_unbounded case_runs_from_subdirectory \
-         case_remote_only_sibling_is_combined case_no_side_effects; do
+         case_remote_only_sibling_is_combined case_no_side_effects \
+         case_create_head_topic_accepts_derived_commit case_create_head_topic_rejects_wrong_commits \
+         case_create_head_topic_rejects_conflicted_topic case_create_head_usage; do
   echo "== $c"; $c
 done
 finish

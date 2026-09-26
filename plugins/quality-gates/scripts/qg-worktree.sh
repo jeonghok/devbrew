@@ -10,12 +10,14 @@
 #                                -> echoes absolute worktree path; detached at merge_base,
 #                                   NO working-tree overlay (baseline must not inherit
 #                                   HEAD's uncommitted changes)
-#   create-head <sealed-sha> <session-id>
-#                                -> echoes absolute worktree path; detached at the sealed
-#                                   commit (seal-worktree.sh 가 봉인한 커밋). Re-seals the
-#                                   working tree and asserts the tree matches before
-#                                   building the worktree — the sha is not a declared free
-#                                   variable (§6.4.1). No sandbox required.
+#   create-head <sealed-sha> <session-id> [--topic <topic-key>]
+#                                -> echoes absolute worktree path; detached at the given
+#                                   commit. Without --topic: re-seals the working tree
+#                                   (seal-worktree.sh) and asserts the trees match. With
+#                                   --topic: re-derives the combined topic tree
+#                                   (topic-head.sh --topic) and asserts the trees match.
+#                                   Either way the sha is not a declared free variable
+#                                   (§6.4.1). No sandbox required.
 #   create-sandbox · mutation-guard — qg 파이프라인은 더 부르지 않는다. 소비자는
 #     plugins/plugin-audit/scripts/run-own-tests.sh(자체 테스트 격리)다.
 #   create-sandbox <session-id> -> echoes 3 lines: sandbox abs path, baseline SHA,
@@ -567,13 +569,31 @@ case "${1:-}" in
     # 으로 접힌다. 그래서 지금 봉인을 **다시 떠서** 트리를 대조한다 — 기대 OID 를
     # 오케스트레이터가 따로 옮겨 적지 않으므로 대조 양쪽이 같은 전사에서 나오지 않는다.
     # 대조는 거부만 할 수 있고 선택은 못 한다: 값의 출처는 여전히 호출자다.
-    [[ $# -eq 3 ]] || die "usage: create-head <sealed-sha> <session-id>"
+    # 선언 경로(--topic)의 HEAD 축은 봉인이 아니라 «봉인 + 구성원 끝점»을 합친 트리다.
+    # 같은 규율 — 기대 트리를 지금 다시 도출해 대조한다(topic-head.sh 가 봉인부터 다시 뜬다).
+    ch_topic=""
+    if [[ $# -eq 5 && "$4" == "--topic" && -n "$5" ]]; then
+      ch_topic="$5"
+    elif [[ $# -ne 3 ]]; then
+      die "usage: create-head <sealed-sha> <session-id> [--topic <topic-key>]"
+    fi
     git rev-parse --verify --quiet "$2^{commit}" >/dev/null \
       || die "not a commit: $2"
-    ch_expected=$(bash "$(dirname "${BASH_SOURCE[0]}")/seal-worktree.sh" seal "$3") \
-      || die "cannot re-seal the working tree to verify the HEAD axis"
-    [[ "$(git rev-parse "$2^{tree}")" == "$(git rev-parse "$ch_expected^{tree}")" ]] \
-      || die "sealed-sha mismatch: tree of '$2' is not the tree of the working tree sealed now — the HEAD axis must be built from the seal, not from merge_base or a stale seal"
+    if [[ -z "$ch_topic" ]]; then
+      ch_expected=$(bash "$(dirname "${BASH_SOURCE[0]}")/seal-worktree.sh" seal "$3") \
+        || die "cannot re-seal the working tree to verify the HEAD axis"
+      [[ "$(git rev-parse "$2^{tree}")" == "$(git rev-parse "$ch_expected^{tree}")" ]] \
+        || die "sealed-sha mismatch: tree of '$2' is not the tree of the working tree sealed now — the HEAD axis must be built from the seal, not from merge_base or a stale seal"
+    else
+      ch_out=$(bash "$(dirname "${BASH_SOURCE[0]}")/topic-head.sh" "$3" --topic "$ch_topic") \
+        || die "cannot re-derive the topic HEAD axis"
+      ch_status=$(printf '%s\n' "$ch_out" | sed -n 's/^status: //p' | head -1)
+      [[ "$ch_status" == "ok" ]] \
+        || die "topic HEAD axis is not derivable now (status: ${ch_status:-?}) — no combined tree to verify against"
+      ch_tree=$(printf '%s\n' "$ch_out" | sed -n 's/^tree: //p' | head -1)
+      [[ "$(git rev-parse "$2^{tree}")" == "$ch_tree" ]] \
+        || die "head-commit mismatch: tree of '$2' is not the combined topic tree derived now — the topic HEAD axis must be built from topic-head.sh's head_commit, not from the seal alone, the boundary, or a stale value"
+    fi
 
     make_detached_worktree "$2" "$3" head
     ;;
