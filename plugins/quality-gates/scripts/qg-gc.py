@@ -43,8 +43,8 @@ SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
 # 오판 방향도 옳다: 안 지우는 누수(빈 디렉토리 0바이트)가 살아있는 것을 지우는
 # 것보다 안전하다.
 # `pipeline.md`·`publish-eligible.md`는 SKILL.md가 실제로 쓰는 이름이다.
-# `runtime-evidence.md`는 Runtime gate의 evidence-log 이름 —
-# agents/runtime-verifier.md:98 및 scripts/detect-runtime.sh:286 이
+# `runtime-evidence.md`는 차등 테스트의 evidence-log 이름(R-AG로 존치) —
+# skills/quality-pipeline/references/differential-test.md의 Step R8이
 # `.claude/quality-gates/<sid>/runtime-evidence.md`에 직접 쓴다(실재 확인됨).
 # 목록에서 빠진 마커의 오판 방향은 "안 지움"(누수)이라 안전하다 — 반대 방향이 아니다.
 SESSION_MARKERS = ("pipeline.md", "publish-eligible.md", "runtime-evidence.md")

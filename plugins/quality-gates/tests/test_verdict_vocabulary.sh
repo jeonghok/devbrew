@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test_verdict_vocabulary.sh — AC8 · AC9 · AC23 (설계 §6.4.3).
+# test_verdict_vocabulary.sh — AC8 · AC9 (설계 §6.4.3).
 #
 # 이 락이 재는 것은 «총 함수» 다: 세 값 밖의 값이 나오지 않고, `not-certified` 는
 # 사유 없이 존재할 수 없으며, 사유는 닫힌 열거 밖으로 나갈 수 없다. 「어떤 입력에
@@ -10,7 +10,9 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 V="$PLUGIN_ROOT/scripts/verdict.py"
 D="$PLUGIN_ROOT/scripts/diff-test-results.py"
+SYNTH="$PLUGIN_ROOT/scripts/synthesize_findings.py"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+. "$SCRIPT_DIR/lib/recritic_fixture.sh"
 export PYTHONDONTWRITEBYTECODE=1
 
 # 열거를 **스크립트 자신에게 물어** 가져온다. 여기에 리터럴 목록을 복사하면
@@ -94,20 +96,25 @@ case_reason_enum_is_closed_and_accounted() {
   # 경로를 잡는다. 둘은 상호 보완이다 — 파라미터 축은 헬퍼-추출처럼 **새 축**이
   # 열리는 배선을, `OVERLAP`은 **기존 축**(차등 산출물)에 얹히는 배선을 잡는다.
   #
-  # 실측 3분할(코디네이터 정정 — 최초 지시의 5값 목록은 방향이 둘 다 틀렸었다):
-  #   차등 축 산출 가능(5): scope-empty · baseline-unrunnable · silent-drop ·
-  #                        error-axis · granularity-smear (CAUSE_TO_REASON.values())
-  #   모듈 자신의 플래그로 산출 가능(2): findings-lost · angle-absent
-  #                        (decide() 소스에서 도출)
-  #   호출자-전용 부채, 이 PR 에 산출자 없음(4): trivia · kill-switch ·
-  #                        declaration-invalid · merge-conflict
-  local debt="declaration-invalid kill-switch merge-conflict trivia"
+  # 산출자 셋:
+  #   차등 축(CAUSE_TO_REASON.values()): scope-empty · baseline-unrunnable · silent-drop ·
+  #                                     error-axis · granularity-smear
+  #   decide() 자신의 플래그: findings-lost · angle-absent
+  #   오케스트레이터(SKILL · 레퍼런스의 `--reason` 리터럴): trivia · kill-switch · (차등
+  #                                     축과 겹치는) scope-empty · silent-drop · error-axis
+  #   부채 — 산출자 없음(PR4c): declaration-invalid · merge-conflict
+  local debt="declaration-invalid merge-conflict"
+  local SKILL_MD="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
+  local REF_MD="$PLUGIN_ROOT/skills/quality-pipeline/references/differential-test.md"
   local got; got=$(python3 -c "
 import re, inspect, sys
 sys.path.insert(0,'$PLUGIN_ROOT/scripts'); import verdict
 debt = set('''$debt'''.split())
 flag_produced = set(re.findall(r'add\(\"([a-z-]+)\"\)', inspect.getsource(verdict.decide)))
-produced = set(verdict.CAUSE_TO_REASON.values()) | flag_produced
+caller_produced = set()
+for p in ('$SKILL_MD', '$REF_MD'):
+    caller_produced |= set(re.findall(r'--reason ([a-z][a-z-]*)', open(p, encoding='utf-8').read()))
+produced = set(verdict.CAUSE_TO_REASON.values()) | flag_produced | caller_produced
 print('MISSING:' + ','.join(sorted(set(verdict.REASONS) - (produced | debt))))
 print('STALE:'   + ','.join(sorted((produced | debt) - set(verdict.REASONS))))
 print('OVERLAP:' + ','.join(sorted(debt & produced)))
@@ -117,8 +124,8 @@ print('AXES:' + ','.join(sorted(inspect.signature(verdict.decide).parameters)))"
   assert_grep "$got" '^STALE:$'   "부채 목록·매핑에 열거 밖 이름이 없다"
   assert_grep "$got" '^OVERLAP:$' "부채 목록에 이미 산출자가 생긴 이름이 남아 있지 않다"
   assert_grep "$got" '^N:11$'     "사유 열거는 정확히 열한 값이다"
-  assert_grep "$got" '^AXES:angle_absent,defect,differential_text,extra_reasons,legacy_verdict,review_blocked$' \
-    "decide() 의 키워드 전용 파라미터 집합이 여섯이다 — 새 축마다 파라미터가 하나 는다(OVERLAP 이 못 잡는 헬퍼-추출 배선의 둘째 독립 증인)"
+  assert_grep "$got" '^AXES:angle_absent,defect,differential_text,extra_reasons,review_blocked$' \
+    "decide() 의 키워드 전용 파라미터 집합이 다섯이다 — 새 축마다 파라미터가 하나 는다(OVERLAP 이 못 잡는 헬퍼-추출 배선의 둘째 독립 증인)"
 }
 
 case_unknown_reason_is_fail_closed() {
@@ -127,11 +134,11 @@ case_unknown_reason_is_fail_closed() {
 }
 
 case_not_certified_always_has_reason() {
-  # AC8 후반 — 사유 없는 not-certified 는 **낼 수 없다**. 옛 SKIP_WITH_EVIDENCE 가
-  # 정확히 그 형태(사유를 싣지 않는 미판정)라 매핑만으로는 AC8 을 어긴다.
-  local rc=0; python3 "$V" --legacy-verdict SKIP_WITH_EVIDENCE >/dev/null 2>&1 || rc=$?
+  # AC8 후반 — 사유 없는 not-certified 는 **낼 수 없다**. 렌더러가 마지막 관문이다.
+  local rc=0
+  python3 -c "import sys; sys.path.insert(0,'$PLUGIN_ROOT/scripts'); import verdict; verdict.render({'verdict':'not-certified','reason':None,'reasons':[]})" >/dev/null 2>&1 || rc=$?
   assert_eq "$rc" "4" "사유 없는 not-certified 는 exit 4"
-  local out; out=$(python3 "$V" --legacy-verdict SKIP_WITH_EVIDENCE --reason kill-switch)
+  local out; out=$(python3 "$V" --reason kill-switch)
   assert_grep "$out" '^verdict: not-certified$' "사유를 주면 선다"
 }
 
@@ -213,49 +220,22 @@ case_clean_carries_no_reason() {
   assert_not_grep "$out" '^reason: '        "clean 에는 reason 이 없다"
 }
 
-case_legacy_table_is_exactly_four() {      # AC23
-  # PR4 가 **지울 블록** 이다. 넷보다 적으면 산출자 하나가 매핑 없이 남고,
-  # 많으면 이 PR 이 설계가 지운 어휘를 되살린 것이다.
-  local n; n=$(python3 -c "import sys; sys.path.insert(0, '$PLUGIN_ROOT/scripts'); import verdict; print(len(verdict.LEGACY_VERDICTS))")
-  assert_eq "$n" "4" "옛 어휘 매핑표는 정확히 네 값"
-  local out
-  out=$(python3 "$V" --legacy-verdict PASS); assert_grep "$out" '^verdict: clean$'  "PASS → clean"
-  out=$(python3 "$V" --legacy-verdict FAIL); assert_grep "$out" '^verdict: defect$' "FAIL → defect"
-  local rc=0; python3 "$V" --legacy-verdict MADE_UP >/dev/null 2>&1 || rc=$?
-  assert_eq "$rc" "4" "미지의 옛 값은 exit 4"
-}
-
-case_needs_resolution_requires_reason() {
-  # Minor 3 — 옛 네 값 중 NEEDS_RESOLUTION 만 유일하게 어떤 케이스에서도
-  # `--legacy-verdict` 로 불려 본 적이 없었다. 그 매핑을 `"clean"` 으로 바꿔도
-  # `len(LEGACY_VERDICTS)==4` 는 그대로라 `case_legacy_table_is_exactly_four` 는
-  # 못 잡고, (이 케이스 추가 전) 17케이스 전부 GREEN 으로 남았다(실측) — 옛
-  # "미해결" 이 `clean` 으로 인증되는 경로가 무방비였다는 뜻이다.
-  local rc=0; python3 "$V" --legacy-verdict NEEDS_RESOLUTION >/dev/null 2>&1 || rc=$?
-  assert_eq "$rc" "4" "사유 없는 NEEDS_RESOLUTION 은 exit 4"
-  local out; out=$(python3 "$V" --legacy-verdict NEEDS_RESOLUTION --reason kill-switch)
-  assert_grep "$out" '^verdict: not-certified$' "사유를 주면 미판정이 선다"
-}
-
-case_legacy_table_marked_for_removal() {
-  # PR4 가 찾을 수 있어야 한다. 주석 문구가 아니라 **표 자체**가 한 자리에 있는지 본다.
-  #
-  # Ruling P2 — 브리프 원안은 이 카운트를 2(정의 1 + 사용 1)로 기대했지만, 브리프
-  # 자신의 verdict.py 원문은 `LEGACY_VERDICTS` 리터럴을 **세** 자리에서 쓴다:
-  #   ① 정의        — `LEGACY_VERDICTS = {`
-  #   ② 소속 검사    — `if legacy_verdict not in LEGACY_VERDICTS:`
-  #   ③ 조회         — `mapped = LEGACY_VERDICTS[legacy_verdict]`
-  # 2로 두면 정확한 구현에서마저 이 단언이 RED 가 된다. 그래서 실측한 3을 핀
-  # 한다 — "표를 두 자리로 쪼개기" 변이(PR4 가 한쪽만 지우는 경로)는 이 세 자리
-  # 중 하나가 다른 이름으로 갈라지므로 카운트가 이 3에서 움직여 여전히 RED 다.
-  local hits; hits=$(grep -c 'LEGACY_VERDICTS' "$V")
-  assert_eq "$hits" "3" "매핑표는 ①정의 ②소속검사 ③조회, 정확히 세 자리다"
-  # Minor 4 — 'AC23' 단독 패턴은 헤더-satisfiable 이다: 모듈 docstring 1행에도
-  # "AC23" 이 나오므로, 블록 «전체» 를 지워도(정의·소속검사·조회 세 자리를 통째로
-  # 삭제해도) docstring 이 남아 있는 한 이 단언은 GREEN 이었다(실측) — 주석이
-  # 주장하는 "PR4 가 지울 블록임이 적혀 있다" 와 정반대로 몸통 없이도 통과했다.
-  # 몸통에만 있는 종결 표지로 앵커를 옮긴다.
-  assert_file_grep "$V" 'AC23 블록 끝' "PR4 가 지울 블록의 몸통(종결 표지)이 파일에 적혀 있다"
+case_legacy_table_is_gone() {
+  # AC23 — 옛 판정 어휘의 산출자(runtime-verifier)가 사라졌으므로 매핑표도 없다.
+  local hits; hits=$(grep -cE 'LEGACY_VERDICTS|legacy_verdict|AC23' "$V" || true)
+  assert_eq "$hits" "0" "verdict.py 에 옛 어휘 매핑의 흔적이 없다(정의·인자·표지)"
+  local rc=0 err
+  err=$(python3 "$V" --legacy-verdict PASS 2>&1 >/dev/null) || rc=$?
+  assert_eq "$rc" "2" "verdict.py 는 --legacy-verdict 를 모른다(exit 2)"
+  # Controller fix round 1, Minor 5 — exit 2 가 다른 usage 오류가 아니라 「모르는
+  # 인자」 그 자체인지를 사유로 확인한다.
+  assert_contains "$err" 'unrecognized arguments' "verdict.py — argparse 가 모르는 인자로 거부한다"
+  rc=0; err=$(python3 "$SYNTH" --emit-verdict --legacy-verdict PASS 2>&1 >/dev/null) || rc=$?
+  assert_eq "$rc" "2" "합성기도 --legacy-verdict 를 모른다(exit 2)"
+  assert_contains "$err" 'unrecognized arguments' "합성기 — argparse 가 모르는 인자로 거부한다"
+  # 양의 짝 — 같은 CLI 가 살아 있는 인자는 받는다(「언제나 exit 2」 변이를 막는다).
+  local out; out=$(python3 "$V" --reason kill-switch)
+  assert_grep "$out" '^verdict: not-certified$' "살아 있는 인자는 그대로 선다"
 }
 
 case_differential_causes_become_reasons() {
@@ -318,11 +298,6 @@ case_empty_differential_flag_is_usage_error() {
   # 오류(exit 2)다 — clean(exit 0)도 아니고 판정축 실패(exit 4)도 아니다.
   local rc=0; python3 "$V" --differential "" >/dev/null 2>&1 || rc=$?
   assert_eq "$rc" "2" "--differential 에 빈 문자열은 usage 오류다"
-}
-
-case_empty_legacy_verdict_flag_is_usage_error() {
-  local rc=0; python3 "$V" --legacy-verdict "" >/dev/null 2>&1 || rc=$?
-  assert_eq "$rc" "2" "--legacy-verdict 에 빈 문자열은 usage 오류다"
 }
 
 case_fail4_uses_scriptname_prefix_not_verdict_key() {
@@ -480,8 +455,6 @@ case_real_producer_aggregate_feeds_verdict() {
   rm -rf "$T"
 }
 
-SYNTH="$PLUGIN_ROOT/scripts/synthesize_findings.py"
-
 case_synth_off_is_byte_prefix_of_on() {
   # 차등 — 같은 입력으로 두 번 돌려 **off 출력이 on 출력의 접두** 인지 본다.
   # 「off 에 verdict 줄이 없다」만 재면 on 이 앞부분을 바꿔도 안 보인다.
@@ -496,11 +469,13 @@ case_synth_off_is_byte_prefix_of_on() {
   # `synth/T5row1_partial.log`가 바로 이 모양 — 트레이스백이 찍힌 뒤 곧바로 ✓).
   # rc 를 먼저 확인해 이 사각지대를 막는다.
   local T; T=$(mktemp -d)
-  printf 'verdicts: []\n' > "$T/adv.yaml"
-  printf -- '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/f.yaml"
+  printf -- '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts: []
+added: []'
   local off on off_rc on_rc
-  off=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml"); off_rc=$?
-  on=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict); on_rc=$?
+  off=$(rf_synth "$T"); off_rc=$?
+  on=$(rf_synth "$T" --emit-verdict); on_rc=$?
   assert_eq "$off_rc" "0" "off 경로가 정상 종료한다(비정상 종료를 뒤 단언이 놓치지 않게 먼저 잡는다)"
   assert_eq "$on_rc"  "0" "on 경로가 정상 종료한다"
   assert_not_grep "$off" '^verdict: '  "기본값에서는 판정 줄이 없다"
@@ -511,9 +486,11 @@ case_synth_off_is_byte_prefix_of_on() {
 
 case_synth_kept_finding_is_defect() {
   local T; T=$(mktemp -d)
-  printf 'verdicts: []\n' > "$T/adv.yaml"
-  printf -- '- {agent: r, file: a.py, line: 1, severity: SUGGESTION, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/f.yaml"
-  local out; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  printf -- '- {agent: r, file: a.py, line: 1, severity: SUGGESTION, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts: []
+added: []'
+  local out; out=$(rf_synth "$T" --emit-verdict)
   # 계획 R-B — severity 를 묻지 않는다. SUGGESTION 하나도 채택된 finding 이다.
   assert_grep "$out" '^verdict: defect$' "채택된 finding 이 있으면 defect"
   rm -rf "$T"
@@ -522,30 +499,37 @@ case_synth_kept_finding_is_defect() {
 case_synth_lost_findings_is_not_certified() {
   # 원장의 blocks() — 항목이 소실되면 막는다. 공시(degraded)가 아니라 차단이다.
   local T; T=$(mktemp -d)
-  printf 'verdicts: []\n' > "$T/adv.yaml"
-  printf -- '- not-a-mapping\n' > "$T/f.yaml"
-  local out; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  printf -- '- not-a-mapping\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts: []'
+  local out; out=$(rf_synth "$T" --emit-verdict)
   assert_grep "$out" '^verdict: not-certified$' "소실된 항목이 있으면 미판정"
   assert_grep "$out" '^reason: findings-lost$'  "사유가 findings-lost 다"
   rm -rf "$T"
 }
 
 case_synth_secondary_degrade_does_not_block() {
-  # 실측(이번 라운드) — 브리프가 제시한 `- not-a-mapping` 픽스처는 `blocks()`
-  # 와 `report["degraded"]` 를 가르지 못한다: 그 픽스처는 `ledger.hold()`(주
-  # 판정자 소실)를 태워서 **둘 다** 참이 되기 때문이다(`_degraded()` 가
-  # `blocks()` 의 상위집합이라 `blocks()` 참이면 `degraded` 도 항상 참). 두
-  # 값이 실제로 갈라지는 자리는 **보조** source_failed 뿐이다(모델 다양성
-  # 손실 — adjudication.py 의 `primary=False` 경로). `verdicts: {a: 1}` 은
-  # 리스트가 아닌 매핑이라 `_as_list()` 가 `ledger.source_failed(..., primary=
-  # False)` 만 태우고 `hold()`/`uncountable()` 은 전혀 안 건드린다 — 그래서
-  # `blocks()` 는 거짓인데 `degraded` 는 참인 유일한 조합을 만든다. 헌장(모델
-  # 다양성 손실은 공시하고 막지 않는다)이 진짜로 지켜지는지는 이 조합에서만
-  # 보인다 — `report["degraded"]` 를 쓰면(변이 C) 이 실행이 부당하게
-  # not-certified 로 떨어진다(실측, 아래에서 직접 확인).
+  # R-AD — 옛 픽스처(`verdicts: {a: 1}`, 매핑이 아닌 최상위 verdicts)는 재비판
+  # 경로에서 대응이 없다: `recritic_bridge.to_adjudication_doc` 은 verdicts/added
+  # 가 목록이 아니면 그 자체로 **판정자 사망**(주 입력 실패)을 낸다 — 옛 경로의
+  # "보조 source_failed 만으로 degrade" 모양과 다르다. 같은 «성질»(차단 없이
+  # degrade 만 공시된다)을 재비판 경로의 다른 강제 자리로 잰다 — 모르는 verdict
+  # 동사(`downgrade`)의 `ledger.coerced(gate=True)`. finding 은 SUGGESTION ·
+  # confidence 3 이라 confirm 으로 강제돼 살아도 suppress() 가 걸러 kept=0 이다.
   local T; T=$(mktemp -d)
-  printf 'verdicts: {a: 1}\n' > "$T/adv.yaml"; printf '[]\n' > "$T/f.yaml"
-  local out; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  printf -- '- {agent: r, file: a.py, line: 1, severity: SUGGESTION, confidence: 3, summary: s}\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts:
+  - f: f1
+    verdict: downgrade
+    to: SUGGESTION'
+  local out; out=$(rf_synth "$T" --emit-verdict)
+  # Controller fix round 1, Minor 2 — 전제(강제가 실제로 일어났다)를 먼저 잰다.
+  # 이게 없으면 bridge 가 언젠가 `downgrade` 를 더 이상 강제하지 않도록 바뀌어도
+  # (예: 조용히 무시) 이 케이스는 finding 이 어차피 억제돼 kept=0·clean 이라
+  # 계속 GREEN 이다 — «차단 안 됨» 을 증명하려면 먼저 «강제가 있었다» 가 참이어야
+  # 한다.
+  assert_grep "$out" "강제\(게이트 변경\): verdict 'downgrade'" "전제 — 모르는 verdict 가 실제로 강제됐다"
   assert_grep "$out" '^verdict: clean$' "보조 축(모델 다양성) 손실만으로는 차단되지 않는다"
   assert_not_grep "$out" '^reason: '   "clean 에는 사유가 없다"
   rm -rf "$T"
@@ -553,8 +537,11 @@ case_synth_secondary_degrade_does_not_block() {
 
 case_synth_clean_is_clean() {
   local T; T=$(mktemp -d)
-  printf 'verdicts: []\n' > "$T/adv.yaml"; printf '[]\n' > "$T/f.yaml"
-  local out; out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" --emit-verdict)
+  printf '[]\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts: []
+added: []'
+  local out; out=$(rf_synth "$T" --emit-verdict)
   assert_grep "$out" '^verdict: clean$' "발견 0 · 소실 0 이면 clean"
   rm -rf "$T"
 }
@@ -564,43 +551,47 @@ case_synth_empty_differential_is_usage_error() {
   # 따른다: present-but-empty `--differential` 은 usage 오류(exit 2)지 판정축
   # 실패(exit 4)도, 조용한 clean(exit 0)도 아니다.
   local T; T=$(mktemp -d)
-  printf 'verdicts: []\n' > "$T/adv.yaml"; printf '[]\n' > "$T/f.yaml"
+  printf '[]\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts: []
+added: []'
   local rc=0
-  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-    --emit-verdict --differential "" >/dev/null 2>&1 || rc=$?
+  rf_synth "$T" --emit-verdict --differential "" >/dev/null 2>&1 || rc=$?
   assert_eq "$rc" "2" "--differential 에 빈 문자열은 usage 오류다"
   rm -rf "$T"
 }
 
 case_synth_verdict_flags_without_emit_are_usage_error() {
-  # I1 (리뷰 라운드 2) — off + 판정 입력 플래그 조합 4종을 실측했더니 셋은
+  # I1 (리뷰 라운드 2) — off + 판정 입력 플래그 조합을 실측했더니 셋은
   # rc=0·verdict_lines=0·stderr 없음(조용한 소실)이었고, 오직
   # `--differential ""`(위 케이스) 만 usage 오류로 닫혀 있었다. 이것은
   # Ruling T5-a 가 이미 닫은 것과 같은 fail-open 계열이다: 나중 호출자가
   # `--differential "$agg_yaml"` 을 주고 `--emit-verdict` 를 빼먹으면 완전해
   # 보이는 보고서 + rc=0 이 나가고 차등 축 전체가 그 실행에서 조용히
-  # 사라진다. 세 플래그(`--differential`·`--reason`·`--legacy-verdict`) 모두
-  # `--emit-verdict` 없이는 의미가 없으므로 대칭으로 막는다 — exit 2(usage
-  # 오류)지 exit 4(판정축 실패)가 아니다: 잘못된 *호출*이지 실패한 *판정*이
-  # 아니다.
+  # 사라진다. 두 플래그(`--differential`·`--reason`) 모두 `--emit-verdict`
+  # 없이는 의미가 없으므로 대칭으로 막는다 — exit 2(usage 오류)지 exit
+  # 4(판정축 실패)가 아니다: 잘못된 *호출*이지 실패한 *판정*이 아니다.
+  #
+  # R-AD — 옛 픽스처는 이 세 호출의 운반체로 `--adversarial "$T/adv.yaml"` 을
+  # 곁들였다. `--adversarial` 이 사라진 지금 그 인자를 그대로 두면 argparse 가
+  # 「모르는 인자」로 먼저 exit 2 를 내 세 단언이 **공허하게** 통과한다 — 운반체를
+  # 빼고(`--findings` 만 둔다), exit 2 를 기대하는 단언마다 stderr 의 사유
+  # 문장도 함께 재 「모르는 인자」의 exit 2 와 구별한다.
   local T; T=$(mktemp -d)
-  printf 'verdicts: []\n' > "$T/adv.yaml"; printf '[]\n' > "$T/f.yaml"
+  printf '[]\n' > "$T/f.yaml"
   local valid_reason; valid_reason=$(printf '%s\n' "$REASONS" | head -1)
 
-  local rc=0
-  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-    --differential /nonexistent/does-not-matter >/dev/null 2>&1 || rc=$?
+  local rc=0 err
+  err=$(python3 "$SYNTH" --findings "$T/f.yaml" \
+    --differential /nonexistent/does-not-matter 2>&1 >/dev/null) || rc=$?
   assert_eq "$rc" "2" "--emit-verdict 없는 --differential <경로> 는 usage 오류다"
+  assert_grep "$err" '없이는 의미가 없다' "「모르는 인자」의 exit 2 가 아니라 usage 사유 문장이다"
 
   rc=0
-  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-    --reason "$valid_reason" >/dev/null 2>&1 || rc=$?
+  err=$(python3 "$SYNTH" --findings "$T/f.yaml" \
+    --reason "$valid_reason" 2>&1 >/dev/null) || rc=$?
   assert_eq "$rc" "2" "--emit-verdict 없는 --reason <열거값> 은 usage 오류다 — 값이 유효해도 마찬가지다"
-
-  rc=0
-  python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-    --legacy-verdict MADE_UP >/dev/null 2>&1 || rc=$?
-  assert_eq "$rc" "2" "--emit-verdict 없는 --legacy-verdict 는 usage 오류다"
+  assert_grep "$err" '없이는 의미가 없다' "「모르는 인자」의 exit 2 가 아니라 usage 사유 문장이다"
 
   rm -rf "$T"
 }
@@ -608,34 +599,26 @@ case_synth_verdict_flags_without_emit_are_usage_error() {
 case_synth_verdict_failure_is_atomic() {
   # Ruling T5-b — 판정 «계산» 은 본 보고서를 쓰기 «전» 에 한다. 디코드 불가한
   # `--differential` 이 `read_or_none()` 의 fail4 를 태우면, 그 시점에 stdout 은
-  # 아직 비어 있어야 한다 — 이 리포의 fail4 계약(원자적·무출력, Task 2 리뷰가
-  # diff-test-results.py 의 `_aggregate` 에서 이미 확인)을 이 소비자도 지킨다.
+  # 아직 비어 있어야 한다 — 이 리포의 fail4 계약(원자적·무출력)을 이 소비자도
+  # 지킨다.
   #
   # 단언은 **둘**이다 — exit 코드 하나만 재면 이빨이 없다. 판정 계산을 본
-  # 보고서 뒤로 옮겨도(원래 브리프가 지시했던 순서) exit 4 단언은 여전히
-  # 통과한다: 실패가 나긴 나기 때문이다. stdout-빈값 단언만이 그 순서를
-  # 구별한다 — 실측(이전 라운드): 뒤로 옮긴 순서에서 549바이트 완전한 보고서 +
-  # rc=4 조합이 나왔다.
+  # 보고서 뒤로 옮겨도 exit 4 단언은 여전히 통과한다: 실패가 나긴 나기
+  # 때문이다. stdout-빈값 단언만이 그 순서를 구별한다.
   #
-  # Minor 3 (리뷰 라운드 2 · Ruling F-3) — 픽스처가 `printf 'x\n\xff\xfe'` 였다.
-  # 이 `\x` 이스케이프는 **셸이 확장**해야 진짜 잘못된 바이트가 된다(bash 는
-  # 확장한다). 확장 안 하는 셸에서 돌면 파일은 리터럴 ASCII 문자열 `x`(유효한
-  # UTF-8) 한 줄뿐인데, 그래도 이 케이스는 `causes_of()`의 zero-hit 경로라는
-  # **다른** 이유로 우연히 같은 exit 4 를 냈다 — 형제
-  # `case_non_utf8_differential_is_fail_closed` 가 이미 진단한
-  # green-for-the-wrong-reason 모양과 같다. 그 케이스가 고친 것과 같은 치료를
-  # 여기도 적용한다: 픽스처를 **유효한 차등 산출물 본문 + 그 뒤에 곧바로 붙는
-  # 나쁜 바이트**로 바꿨다(`read_or_none()` 의 `f.read()` 는 파일 전체를 한
-  # 번에 디코드하므로 앞부분이 유효해도 뒤의 나쁜 바이트가 여전히
-  # `UnicodeDecodeError` 를 낸다). 단언 대상(stdout 빈값)은 안 바뀐다 — 이
-  # 케이스가 도는 *이유*만 진짜 디코드 실패로 고정한다.
+  # 픽스처는 **유효한 차등 산출물 본문 + 그 뒤에 곧바로 붙는 나쁜 바이트**다
+  # (`read_or_none()` 의 `f.read()` 는 파일 전체를 한 번에 디코드하므로 앞부분이
+  # 유효해도 뒤의 나쁜 바이트가 여전히 `UnicodeDecodeError` 를 낸다) — 그래야
+  # `causes_of()` 의 zero-hit 경로라는 다른 이유로 우연히 같은 exit 4 가 나는
+  # green-for-the-wrong-reason 을 피한다.
   local T; T=$(mktemp -d)
-  printf 'verdicts: []\n' > "$T/adv.yaml"
-  printf -- '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/f.yaml"
+  printf -- '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts: []
+added: []'
   printf 'attribution_status: degraded\ndegrade_causes: [silent-drop]\nverdict_input:\n  confirmed_product_defect: false\n  silent_drop: true\n  baseline_unrunnable: false\n\xff\xfe' > "$T/bad.yaml"
   local out rc=0
-  out=$(python3 "$SYNTH" --adversarial "$T/adv.yaml" --findings "$T/f.yaml" \
-    --emit-verdict --differential "$T/bad.yaml" 2>/dev/null) || rc=$?
+  out=$(rf_synth "$T" --emit-verdict --differential "$T/bad.yaml" 2>/dev/null) || rc=$?
   assert_eq "$rc" "4"  "디코드 불가 차등 산출물은 exit 4"
   assert_eq "$out" ""  "그 실행의 stdout 은 비어 있다 — 판정 실패는 원자적이다(이 단언이 이빨이다)"
   rm -rf "$T"
@@ -656,15 +639,12 @@ case_precedence_not_certified_beats_clean
 case_reason_is_first_in_enum_order
 case_reason_is_member_of_reasons
 case_clean_carries_no_reason
-case_legacy_table_is_exactly_four
-case_needs_resolution_requires_reason
-case_legacy_table_marked_for_removal
+case_legacy_table_is_gone
 case_differential_causes_become_reasons
 case_differential_defect_flag_wins
 case_unreadable_differential_is_fail_closed
 case_non_utf8_differential_is_fail_closed
 case_empty_differential_flag_is_usage_error
-case_empty_legacy_verdict_flag_is_usage_error
 case_fail4_uses_scriptname_prefix_not_verdict_key
 case_render_enforces_values_and_reasonless_guard
 case_degrade_causes_and_cause_to_reason_are_bijective

@@ -40,8 +40,11 @@
 #   - `Monitor` 가 목록에 있는 이유: 공식 스키마상 `command` 는 "the same shell environment
 #     as Bash" 에서 돌고 `ws` 는 임의 wss:// egress 다 = 이름만 다른 Bash + 네트워크.
 #   - MCP 는 **서버 단위 grant만** 금지한다(`mcp__*` / `mcp__<server>` / `mcp__<server>__*`).
-#     per-tool 정확한 이름은 허용 — runtime-verifier 가 chrome 15개를 개별 열거하도록
-#     처방됐기 때문이다(서버 grant 는 15→~29 로 표면을 넓혀 upload_file 유출 벡터를 준다).
+#     per-tool 정확한 이름은 허용 — 당시(Task 7 로 삭제된) runtime-verifier 가 chrome
+#     15개를 개별 열거하도록 처방됐던 선례 때문이다(서버 grant 는 15→~29 로 표면을
+#     넓혀 upload_file 유출 벡터를 준다). runtime-verifier 는 지금 없지만, MCP 도구를
+#     쓰는 미래 agent 에도 같은 규율이 fail-closed 로 적용된다 — 이 검사는 지금 qg
+#     agents 중 아무도 mcp__ 를 안 써 항상 vacuously 통과하지만, 규칙 자체는 남긴다.
 #
 # 사용: test_agent_frontmatter_keys.sh [scan_root]
 #   scan_root 생략 시 repo 최상위. mutation 테스트가 픽스처 root 를 넘긴다.

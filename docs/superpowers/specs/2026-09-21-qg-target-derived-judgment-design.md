@@ -525,7 +525,7 @@ C2 가 `PASS` / `FAIL` / `SKIP_WITH_EVIDENCE` / `NEEDS_RESOLUTION` 의 산출자
 | `error-axis` | 어느 축이든 `error` 상태가 닿음(수집 에러·import 실패의 대칭 경우) |
 | `granularity-smear` | bulk 도말 또는 `smeared` — 한 종료 코드가 전 unit 에 발림 |
 | `angle-absent` | 보안 또는 판정 각도가 `absent`(§6.3.1) |
-| `scope-empty` | **resolved scope 가 0 인데 `check-review-scope.sh` 가 `changes_exist: yes` 를 냄** — 오늘의 「정직-verdict floor」가 내던 false-clean 차단이 이 사유로 옮겨온다. 진짜 변경 없음(genuine no-op)은 `scope-empty` 가 아니라 `clean` 이다 |
+| `scope-empty` | **resolved scope 가 0 인데 `check-review-scope.sh` 가 `changes_exist: yes` 를 냄**, 또는 ②(차등 테스트)의 R1b 가 고르는 test unit 이 0개(`expected-empty`) — 오늘의 「정직-verdict floor」가 내던 false-clean 차단이 이 사유로 옮겨온다. **재결정 (P23, 2026-09-26, §16)**: ② 가 상시 도는 이상 진짜 변경 없음(genuine no-op)과 docs/config-only 변경도 R1b 가 고르는 unit 이 0개면 `scope-empty` 다 — `clean` 이 아니다(관측 없음은 음성 결과가 아니다) |
 | `declaration-invalid` | 트레일러가 있으나 가리키는 경로가 실재하지 않거나, **한 브랜치가 서로 다른 토픽 키를 단 커밋을 함께 담음** |
 | `trivia` | trivia escape 로 파이프라인 전체가 생략됨 — C4 가 허용한 두 탈출구 중 나머지 하나다. `clean` 으로 렌더하면 「테스트 없는 clean 은 나오지 않는다」가 거짓이 된다 |
 | `findings-lost` | 리뷰 항목이 **소실됐거나 셀 수 없다** — 헌장이 막으라고 지정한 세 조건 중 둘이다(나머지 「주 판정자 사망」은 `angle-absent` 가 받는다). §6.3.4 의 강제(coercion) 계수가 소실로 판정되면 여기로 온다 |
@@ -618,7 +618,7 @@ Decision 1 의 게이트-범위 질문이 사라지는 것은 **13번째 자리�
 한 줄을 내고 **정상 진행**한다:
 
 ```
-> [quality-gates] `review` 는 v8 에서 제거됐다 — 이제 한 파이프라인이라 게이트 범위를 고르지 않는다. 그대로 진행한다.
+> [quality-gates] `review` 인자는 제거됐다 — 이제 한 파이프라인이라 게이트 범위를 고르지 않는다. 그대로 진행한다.
 ```
 
 하드 오류로 멈추지 않는 이유: 스크립트·별칭·메모에 묻힌 호출이 어느 날 아무것도 안 하게 되는
@@ -949,8 +949,8 @@ AC21 을 확인한다.
 이 설계는 **한 구현 계획으로는 크다** — 962줄 SKILL · 1206줄 레퍼런스 · 스크립트 10 · 새 락 5 ·
 삭제 ~15 파일 · 리포 루트 2 · `shared/` 1. 한 PR 에 담으면 리뷰가 실질을 못 본다.
 
-**다섯 PR 로 나눈다. 전부 같은 사이클이다**(C7·C15 의 「같은 사이클」 요구를 만족한다 — 그 요구는
-같은 PR 이 아니라 같은 사이클이다).
+**원래 다섯 PR 로 나눴으나 4a·4b·4c 분할(아래 재결정 둘) 뒤 일곱이다. 전부 같은 사이클이다**
+(C7·C15 의 「같은 사이클」 요구를 만족한다 — 그 요구는 같은 PR 이 아니라 같은 사이클이다).
 
 | PR | 내용 | 기존 동작 영향 |
 |---|---|---|
@@ -958,11 +958,12 @@ AC21 을 확인한다.
 | **2** | 판정 어휘 세 값 + 해상도 공시 — `synthesize_findings.py` · `diff-test-results.py` + 락 둘 | 어휘가 바뀐다 (소비자 동반 이주) |
 | **3** | 각도 바닥 — 각도 총 함수 · `test_angle_coverage.sh` · 명단 락 교체 · `doc-critic`/`doc-recritic` 사본 · `shared` diff 슬롯 | 리뷰어 구성이 바뀐다 |
 | **4a** | 재비판 교체 — `adversarial` 자리를 공유 재비판자로 · §6.3.4 변환 계층 · qg `doc-recritic` 사본 · AC17 · AC22 | 판정자가 바뀐다 (두 게이트 구조는 그대로) |
-| **4b** | verifier 제거 + 파이프라인 합치기 — SKILL · runtime-gate.md · qg.md · 공개 인자 · 스코프 배선 · 판정 어휘 상시 배선 | **breaking** |
+| **4b** | verifier 제거 + 파이프라인 합치기 — SKILL · runtime-gate.md → differential-test.md · qg.md · 공개 인자 · 판정 어휘 상시 배선 | **breaking** |
+| **4c** | 토픽 스코프 배선 — resolve-topic.sh · combine-tips.sh → 선언 경로 · AC3–AC7 · AC15 · AC16 선언 쪽 · declaration-invalid · merge-conflict 발화 · PR1 이월 둘 · 중간 커밋 GC | 없음(선언이 없으면 기존 세 모드) |
 | **5** | 공개 계약 · 헌장 · 인용 락 — `marketplace.json` · `plugin.json` · `CLAUDE.md` · `test_charter_citations.sh` | 문자열·조항 |
 
-**순서 제약** — 1 → 2 → 3 → 4a → 4b → 5. PR 4b 가 PR 1 의 스크립트를 배선하고 PR 2·3 의 어휘를 쓴다.
-PR 5 는 PR 4b 가 대상을 지운 뒤라야 인용 락이 GREEN 이 된다.
+**순서 제약** — 1 → 2 → 3 → 4a → 4b → 4c → 5. PR 4b 가 봉인자를, PR 4c 가 나머지 PR 1 스크립트를
+배선하고 PR 2·3 의 어휘를 쓴다. PR 5 는 PR 4b 가 대상을 지운 뒤라야 인용 락이 GREEN 이 된다.
 
 **재결정 (P23, 2026-09-24) — PR4 를 4a · 4b 로 나눈다.**
 - **원래** — 다섯 PR 이고 넷째가 「verifier 제거 + 파이프라인 합치기」 하나다.
@@ -974,6 +975,35 @@ PR 5 는 PR 4b 가 대상을 지운 뒤라야 인용 락이 GREEN 이 된다.
   이 재결정에 동의했다.
 - **남는 것** — 선언 조각이 `#pr4a` · `#pr4b` 둘이 된다. 아래 「PR4」를 가리키는 문장(AC23 의 매핑 표
   제거 등)은 **verifier 가 사라지는 4b** 를 뜻한다 — 매핑 표의 산출자가 거기서 죽는다.
+
+**재결정 (P23, 2026-09-25) — PR4b 를 4b · 4c 로 나눈다.**
+- **원래** — 4b 가 verifier 제거 · 게이트 합치기 · 스코프 배선을 함께 진다.
+- **재결정** — 스코프 배선(토픽 선언 → 커밋 집합 → 합친 HEAD 트리)을 4c 로 뗀다. 4b 는
+  breaking 부분(verifier 제거 · 한 파이프라인 · 판정 상시 배선)만 진다.
+- **근거** — 실측한 4b 가 이 절이 분할한 이유를 다시 재현했다(1017줄 SKILL · 1218줄
+  레퍼런스 재작성 · 판정 배선 · 합성기 정리 · 스코프 배선). 스코프 배선은 선언이 없으면 기존
+  세 모드로 내려가는 **새 능력**이라(§6.2.5) 떼어 내도 breaking 경계가 깨지지 않는다.
+  사람(사용자)이 이 재결정에 동의했다.
+- **남는 것** — 선언 조각이 `#pr4c` 하나 더 는다. 4b 와 4c 사이 한 릴리스 동안 `Spec:`
+  트레일러는 효과가 없다. HEAD 축의 봉인은 4b 가 먼저 배선한다 — 샌드박스가 사라지면
+  `create-head` 가 붙을 커밋이 봉인뿐이기 때문이다.
+
+**재결정 (P23, 2026-09-26) — 「genuine no-op = clean」 을 「genuine no-op = not-certified
+(scope-empty)」 로 되돌린다.**
+- **원래** — §6.4.3 의 `scope-empty` 행: resolved scope 가 0 인데 `changes_exist: yes` 일
+  때만 발동하고, 진짜 변경 없음(genuine no-op)은 `scope-empty` 가 아니라 `clean` 이다.
+- **재결정** — ②(차등 테스트)가 AC2 대로 상시 도는 이상, R1b 가 고르는 test unit 이
+  0개(`expected-empty`)인 실행은 `scope-empty` → `not-certified (scope-empty)` 다 — 이것은
+  **진짜 무변경(genuine no-op)과 docs/config-only 변경을 포함한다.** 출하된 동작을 유지하는
+  재결정이다(PR4b 최종 리뷰 I2 ruling).
+- **근거** — 「관측 없음은 음성 결과가 아니다」(레퍼런스 규율)와 AC2(② 상시)가 함께 서면
+  무변경 diff 도 R1b 가 고르는 unit 이 0개인 한 **테스트 관측이 0** 이다 — `clean` 은
+  "검증했고 확증 결함 없음"(§6.4.3)인데 관측 0건은 검증이 아니다. 틀리면 문서 전용 · 무변경
+  실행이 `clean` 대신 `not-certified` 로 보인다(방향 안전 — 결함을 놓치는 쪽이 아니라 과소
+  인증하는 쪽으로 기운다). 사람(사용자)이 뒤집을 수 있는 자리로 PR 본문에 별도로 적었다.
+- **남는 것** — genuine no-op 을 `clean` 으로 보고 싶은 소비자(예: docs-only PR 의 자동
+  머지 게이트)는 이 사유를 `clean` 과 같게 취급하는 판단을 스스로 내려야 한다 — 판정
+  어휘 자신은 그 판단을 대신하지 않는다.
 
 **각 PR 은 자기 `Spec:` 조각을 선언한다**(§6.2.1) — `…-design.md#pr1` … `#pr5`. 같은 값을 쓰면
 PR2~5 가 앞 PR 전부를 합집합으로 재리뷰해 분할이 비용을 **늘린다**.
@@ -988,7 +1018,7 @@ PR2~5 가 앞 PR 전부를 합집합으로 재리뷰해 분할이 비용을 **�
   매핑 표도 같이 지운다 — 그 삭제를 PR4 의 체크리스트에 명시한다.
 - 매핑 표가 PR5 까지 살아남으면 그 자체가 결함이다(AC23).
 
-**계획 단위는 PR 하나에 계획 하나다.** `superpowers:writing-plans` 를 PR 수만큼(4a·4b 분할 뒤 여섯) 부른다 — 여럿을 한
+**계획 단위는 PR 하나에 계획 하나다.** `superpowers:writing-plans` 를 PR 수만큼(4a·4b·4c 분할 뒤 일곱) 부른다 — 여럿을 한
 계획으로 받으면 §16 이 분할한 이유가 계획 층에서 다시 붕괴한다. 각 계획은 그 PR 의 AC 부분집합만
 받고, 앞 PR 의 산출물을 전제로 적는다.
 

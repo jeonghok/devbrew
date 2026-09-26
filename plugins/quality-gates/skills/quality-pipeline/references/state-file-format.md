@@ -2,10 +2,9 @@
 
 > v1.32.0 breaking change: cross-turn pipeline state는 SKILL의 단일 턴
 > 시리얼 디스패치로 흡수됨. 본 state file은 **GC mtime anchor + worktree
-> tracking + Runtime gate resolution-cap reporting**만 보존한다.
+> tracking**만 보존한다.
 >
-> v1.32.1 (review-driven): review-iteration phantom 필드 제거(I11),
-> `runtime_max_resolutions:` 필드 추가(C3).
+> v1.32.1 (review-driven): review-iteration phantom 필드 제거(I11).
 
 The state file `.claude/quality-gates/<session-id>/pipeline.md` (per-session)
 is created by the setup script (`scripts/setup-qg.sh`) on `/qg` invocation
@@ -25,7 +24,6 @@ during preflight to confirm working directory; nothing else.
 ---
 session_id: "<session_id>"           # CLAUDE_CODE_SESSION_ID
 started_at: "<ISO-8601 UTC>"         # setup-qg.sh timestamp
-runtime_max_resolutions: 3           # DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS clamped 0..10
 worktree_path: "<absolute path>"     # OPTIONAL — set only when /qg branch <name> used
 target_branch: "<branch name>"       # OPTIONAL — paired with worktree_path
 ---
@@ -34,14 +32,18 @@ target_branch: "<branch name>"       # OPTIONAL — paired with worktree_path
 
 ## History
 
-(SKILL appends one line per gate verdict for in-turn observability.)
+(SKILL appends one line per iteration verdict for in-turn observability.)
 
 - [2026-05-27T10:00:00Z] Pipeline started
-- [2026-05-27T10:05:00Z] Review gate iter 1: 1 CRITICAL / 2 IMPORTANT / 1 SUGGESTION → user chose Retry
-- [2026-05-27T10:08:00Z] Review gate iter 2: PASS
-- [2026-05-27T10:12:00Z] Runtime gate: PASS
-- [2026-05-27T10:12:01Z] Pipeline complete
+- [2026-05-27T10:05:00Z] qg iter 1: 1 CRITICAL / 2 IMPORTANT / 1 SUGGESTION → user chose Retry
 ```
+
+A `clean` (or `not-certified`/`defect` with kept = 0 and no differential-test
+origin) iteration appends **no** `## History` line — SKILL Step 5 only runs (and
+appends) when kept > 0, or when a differential-test-origin `defect` with kept = 0
+routes there instead of Final Summary. Neither a `qg iter N: clean` line nor a
+`Pipeline complete` line is ever written by any script — the example above shows
+the only two lines this section actually contains after one non-clean iteration.
 
 ## Removed Fields (vs v1.x)
 
@@ -50,15 +52,13 @@ The following v1.x fields are **no longer written or read**:
 | Removed | Reason |
 |---|---|
 | `status` | No cross-turn state machine. Pipeline is single-turn. |
-| `current_gate` | SKILL dispatches Review gate → Runtime gate inline. |
 | `consecutive_no_signal` | `<qg-signal>` tag removed. |
 | `max_review_iterations` | Hard-coded constant in SKILL (5). |
-| `runtime_resolution_iter` | Hard-coded constant in SKILL (default 3, env override). |
+| `runtime_resolution_iter` | The resolution loop it counted iterations for is removed entirely — there is no successor constant or field. |
 | `last_runtime_needed_hash` | Repeat detection moves to inline AskUserQuestion. |
-| `max_runtime_resolutions` | Renamed to `runtime_max_resolutions:` (C3 restored in v1.32.1). |
 | `review_iteration` | Phantom field — counter lives in `## History` section only (I11 v1.32.1). |
-| `skip_runtime` | Passed as SKILL invocation arg. |
-| `single_gate` | Passed as SKILL invocation arg. |
+| `skip_runtime` | Argument removed — no gate scope to skip. |
+| `single_gate` | Argument removed — no gate scope to choose. |
 | `plan_file` | Passed as SKILL invocation arg. |
 | `pr_url` | Passed as SKILL invocation arg. |
 | `available_plugins` | SKILL re-derives inline (cheap). |

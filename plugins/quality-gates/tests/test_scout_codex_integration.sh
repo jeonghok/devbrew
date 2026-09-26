@@ -17,10 +17,10 @@ SKILL_MD_REAL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 # Task 31 fix round 5 — F1 계열의 5번째 인스턴스. 아래 두 **절대부재** 검사
 #   · `subagent_type="quality-gates:scout"`  (T3-1 마이그레이션 회귀 락, :52)
 #   · `#### Phase 1 (unified dispatch)`      (스테일 헤딩 가드, :67)
-# 는 SKILL.md 가 파이프라인 전문이라는 전제 위에 있었다. `## Runtime gate` 절차가
-# references/runtime-gate.md 로 옮겨진 뒤 두 검사가 실제로 지키는 범위는
-# 2,079줄 중 906줄로 줄었다 — 그런데 `Agent()` 디스패치 블록이 정밀하게 규정된
-# 곳이 바로 그 Runtime gate 절차다. 즉 재도입된 scout 디스패치가 착지할 가장
+# 는 SKILL.md 가 파이프라인 전문이라는 전제 위에 있었다. `## Differential test` 절차가
+# references/differential-test.md 로 옮겨진 뒤 두 검사가 실제로 지키는 범위는
+# 절차 전문의 일부로 줄어든다 — 그런데 `Agent()` 디스패치 블록이 정밀하게 규정된
+# 곳이 바로 그 차등 테스트 절차다. 즉 재도입된 scout 디스패치가 착지할 가장
 # 그럴듯한 자리가 검사 밖에 있고, 그래도 부재 검사는 PASS 를 찍는다(fail-open).
 # 그래서 분할 전과 동일한 논리적 문서로 재구성해 그 위에서 돈다. 재구성 실패는
 # 조용히 원본으로 폴백하지 않고 FAIL 한다 — 폴백하면 이 fail-open 이 그대로
@@ -28,7 +28,7 @@ SKILL_MD_REAL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 # 바뀌지 않는다(좁은 코퍼스에서 찾혔으면 넓은 코퍼스에서도 찾힌다).
 . "$SCRIPT_DIR/lib/reconstruct-skill.sh"
 if ! SKILL_MD="$(reconstruct_skill_md "$SKILL_MD_REAL")"; then
-  echo "FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패 ($SKILL_MD_REAL)"
+  echo "FAIL: SKILL.md ↔ references/differential-test.md 재구성 실패 ($SKILL_MD_REAL)"
   exit 1
 fi
 trap 'rm -f "$SKILL_MD"' EXIT
@@ -91,18 +91,18 @@ test_scenario_5_scope_driven() {
     pass=$((pass + 1))
   fi
 
-  # 5b: Tier A floor anchor present (scope-independent floor).
-  if grep -qF 'Tier A — Floor (스코프 무관, 항상 디스패치' "$skill"; then
-    echo "  PASS: 5b: Tier A floor anchor present"; pass=$((pass + 1))
+  # 5b: 보안 각도 anchor present (scope-independent floor).
+  if grep -qF '보안 각도 — `quality-gates:security-reviewer`, 매 iteration' "$skill"; then
+    echo "  PASS: 5b: 보안 각도 anchor present"; pass=$((pass + 1))
   else
-    echo "  FAIL 5b: Tier A floor anchor missing"; fail=$((fail + 1))
+    echo "  FAIL 5b: 보안 각도 anchor missing"; fail=$((fail + 1))
   fi
 
   # 5c: scope-driven composition section present (rubric owner).
-  if grep -qF '## Reviewer composition (scope-driven)' "$skill"; then
-    echo "  PASS: 5c: Reviewer composition section present"; pass=$((pass + 1))
+  if grep -qF '## Angles and reviewers (scope-driven)' "$skill"; then
+    echo "  PASS: 5c: Angles and reviewers section present"; pass=$((pass + 1))
   else
-    echo "  FAIL 5c: Reviewer composition section missing"; fail=$((fail + 1))
+    echo "  FAIL 5c: Angles and reviewers section missing"; fail=$((fail + 1))
   fi
 
   # 5d: scout is referenced as a HINT, not the authority (phase2 hint phrasing).

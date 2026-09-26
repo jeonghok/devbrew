@@ -37,17 +37,17 @@ fi
 SKILL_MD="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 c2_fail=0
 
-# 2a: SKILL.md documents codex as a Tier B availability-floor
-if grep -qE 'Tier B — codex \(availability-floor' "$SKILL_MD"; then
+# 2a: SKILL.md documents codex as the 다른 전제 각도 (different-premise angle)
+if grep -qE '다른 전제 각도 — codex \(사용 가능하면 부른다' "$SKILL_MD"; then
   : # sub-check pass
 else
-  echo "  FAIL: SKILL.md does not document codex as a Tier B availability-floor"
+  echo "  FAIL: SKILL.md does not document codex as the 다른 전제 각도"
   c2_fail=$((c2_fail + 1))
 fi
 
 # 2b: the availability-floor is unconditional regardless of scope/depth (NOT
 #     depth-gated — the semantics that superseded the old standard/deep-only gate)
-if grep -qE '있으면 무조건, 스코프 무관' "$SKILL_MD"; then
+if grep -qE 'regardless of scope' "$SKILL_MD"; then
   : # sub-check pass
 else
   echo "  FAIL: SKILL.md does not state codex dispatches unconditionally, scope/depth-independent"
@@ -63,7 +63,7 @@ else
 fi
 
 if [[ $c2_fail -eq 0 ]]; then
-  echo "  PASS: SKILL.md documents codex as Tier B availability-floor (all non-trivia depths) with unavailable-degrade"
+  echo "  PASS: SKILL.md documents codex as the 다른 전제 각도 (all non-trivia depths) with unavailable-degrade"
   pass=$((pass + 1))
 else
   fail=$((fail + 1))

@@ -9,15 +9,15 @@ PASS=0; FAIL=0
 
 # Task 31 fix round 1 (F1): 아래 absent() 검사(0-100/0–100//100/code-simplifier/
 # security-auditor/secret-masking) 는 quality-pipeline 스킬 전체에 대한 비목표
-# 불변식이지 Review gate 섹션에만 국한되지 않는다 — Runtime gate 절차가
-# references/runtime-gate.md 로 옮겨진 뒤에도 "스킬 어디에도 없다"는 계약을
+# 불변식이지 Review 섹션에만 국한되지 않는다 — 차등 테스트 절차가
+# references/differential-test.md 로 옮겨진 뒤에도 "스킬 어디에도 없다"는 계약을
 # 그대로 재려면 분할 전과 동일한 논리적 문서 위에서 돌아야 한다. AC6/AC14의
-# awk 윈도우 검사(Tier A→Tier B, Reviewer composition 섹션)는 전부 Runtime gate
-# (line 748)보다 앞선 섹션만 앵커하므로 재구성에 영향받지 않는다. 재구성 실패는
-# 조용히 원본으로 폴백하지 않고 FAIL 한다.
+# awk 윈도우 검사(보안 각도→다른 전제 각도, Angles and reviewers 섹션)는 전부
+# 차등 테스트 섹션보다 앞선 섹션만 앵커하므로 재구성에 영향받지 않는다. 재구성
+# 실패는 조용히 원본으로 폴백하지 않고 FAIL 한다.
 . "$ROOT/plugins/quality-gates/tests/lib/reconstruct-skill.sh"
 if ! SKILL="$(reconstruct_skill_md "$SKILL_REAL")"; then
-  echo "FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패 ($SKILL_REAL)"
+  echo "FAIL: SKILL.md ↔ references/differential-test.md 재구성 실패 ($SKILL_REAL)"
   exit 1
 fi
 trap 'rm -f "$SKILL"' EXIT
@@ -38,19 +38,19 @@ for tok in '역직렬화' '인젝션' 'XSS' 'crypto' 'TLS' 'XXE' 'GHA' 'SRI' 'de
   has "팔레트 토큰: $tok" "$tok"
 done
 
-echo "== AC6: code-reviewer는 Tier C 강한 default (floor 아님) =="
+echo "== AC6: code-reviewer는 추가 리뷰어 강한 default (각도 수행자 아님) =="
 has "강한 default 문구" '강한 default'
-# floor(Tier A) 윈도우 안에 code-reviewer가 없어야 한다. Tier A anchor → Tier B anchor.
-a_start=$(awk '/Tier A — Floor \(스코프 무관, 항상 디스패치/{print NR; exit}' "$SKILL")
-a_end=$(awk -v s="$a_start" 'NR>s && /Tier B — codex \(availability-floor/{print NR; exit}' "$SKILL")
+# 보안 각도 윈도우 안에 code-reviewer가 없어야 한다. 보안 각도 anchor → 다른 전제 각도 anchor.
+a_start=$(awk '/보안 각도 — `quality-gates:security-reviewer`, 매 iteration/{print NR; exit}' "$SKILL")
+a_end=$(awk -v s="$a_start" 'NR>s && /다른 전제 각도 — codex \(사용 가능하면 부른다/{print NR; exit}' "$SKILL")
 if [[ -n "$a_start" && -n "$a_end" ]] && ! awk -v s="$a_start" -v e="$a_end" 'NR>s && NR<e' "$SKILL" | grep -qF 'code-reviewer'; then
-  PASS=$((PASS+1)); echo "  ✓ AC6: Tier A floor 윈도우($a_start..$a_end)에 code-reviewer 부재"
+  PASS=$((PASS+1)); echo "  ✓ AC6: 보안 각도 윈도우($a_start..$a_end)에 code-reviewer 부재"
 else
-  FAIL=$((FAIL+1)); echo "  ✗ FAIL AC6: Tier A 윈도우에 code-reviewer 존재 또는 anchor 없음 (s=$a_start e=$a_end)"
+  FAIL=$((FAIL+1)); echo "  ✗ FAIL AC6: 보안 각도 윈도우에 code-reviewer 존재 또는 anchor 없음 (s=$a_start e=$a_end)"
 fi
 
 echo "== AC8: transparency 라인 (loud 정의) =="
-has "transparency prefix"  '> [quality-gates] Review iter N — 선택:'
+has "transparency prefix"  '> [quality-gates] iter N — 선택:'
 has "transparency 제외 절"  '제외:'
 
 echo "== AC11: graceful degradation loud log =="
@@ -67,8 +67,8 @@ echo "== AC14 (negative): non-goal 가드 =="
 absent "code-simplifier subagent_type 미등장" 'code-simplifier'
 absent "security-auditor graft 미포함"        'security-auditor'
 absent "secret-masking graft 미포함"          'secret-masking'
-# Tier C 외부 dispatch에 model: override 부재 — 팔레트/rubric 섹션 윈도우 안에 'model:' 없어야.
-c_start=$(awk '/## Reviewer composition \(scope-driven\)/{print NR; exit}' "$SKILL")
+# 추가 리뷰어 외부 dispatch에 model: override 부재 — 팔레트/rubric 섹션 윈도우 안에 'model:' 없어야.
+c_start=$(awk '/## Angles and reviewers \(scope-driven\)/{print NR; exit}' "$SKILL")
 c_end=$(awk -v s="$c_start" 'NR>s && /^## /{print NR; exit}' "$SKILL")
 if [[ -n "$c_start" && -n "$c_end" ]] && ! awk -v s="$c_start" -v e="$c_end" 'NR>s && NR<e' "$SKILL" | grep -qE '^[[:space:]]*model:'; then
   PASS=$((PASS+1)); echo "  ✓ AC14: composition 섹션에 model: override 부재"

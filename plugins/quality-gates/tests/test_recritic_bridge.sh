@@ -331,59 +331,19 @@ json.dump(m, open(p, 'w'))
   rm -rf "$T"
 }
 
-case_adversarial_downgrade_can_still_lower_severity() {
-  # Task 7 row 31 fix round 1, Important — raise-only-up guard 는 `raise` 에만
-  # 걸어야 한다. 옛 --adversarial 판정자의 `downgrade` 는 그 이름 자체가
-  # 「내린다」는 뜻이라 여기서 막으면 그 동사의 핵심 기능이 거부된다. 이 경로는
-  # recritic_bridge.py 를 거치지 않는다(직접 --adversarial 문서) — 그 문서는
-  # finding_id 로 직접 잇는다.
-  local T; T=$(mktemp -d)
-  one_finding "$T/findings.yaml" "scout" "a.py" "3" "CRITICAL"
-  printf 'verdicts:\n  - finding_id: scout-a.py-3\n    verdict: downgrade\n    adjusted_severity: IMPORTANT\n' > "$T/adv.yaml"
-  local out; out=$(python3 "$SYNTH" --findings "$T/findings.yaml" --adversarial "$T/adv.yaml")
-  assert_contains "$out" '0 CRITICAL / 1 IMPORTANT' "downgrade 는 여전히 CRITICAL 을 IMPORTANT 로 내린다 (raise 전용 가드가 downgrade 를 막지 않는다)"
-  rm -rf "$T"
-}
-
-case_adversarial_raise_lowercase_severity_folds_before_guard() {
-  # Task 7 row 31 fix round 1, Minor — 가드의 비교 «전에» adjusted_severity 를
-  # 접어야 한다. 접지 않으면 소문자 `critical` 이 SEV_ORDER 밖으로 떨어져
-  # SUGGESTION 랭크로 오판되고, 진짜 raise(SUGGESTION→CRITICAL)가 «이미 그
-  # 랭크」로 오판돼 저지당한다. bridge 는 이미 `_verdict_for` 에서 접어 보내므로
-  # (recritic_bridge.py:101) 이 결함은 bridge 경로로는 안 보인다 — --adversarial
-  # 직접 경로로 잰다.
-  local T; T=$(mktemp -d)
-  one_finding "$T/findings.yaml" "scout" "a.py" "3" "SUGGESTION"
-  printf 'verdicts:\n  - finding_id: scout-a.py-3\n    verdict: raise\n    adjusted_severity: critical\n' > "$T/adv.yaml"
-  local out; out=$(python3 "$SYNTH" --findings "$T/findings.yaml" --adversarial "$T/adv.yaml")
-  assert_contains "$out" '1 CRITICAL / 0 IMPORTANT' "소문자 adjusted_severity 도 비교 전에 접혀 진짜 raise 로 인식된다"
-  rm -rf "$T"
-}
-
-case_raise_only_up_guard_normalizes_current_severity() {
-  # Task 7 row 31 fix round 1, Minor — 가드는 f.get("severity") 원문이 아니라
-  # _norm_sev(f) 로 «정규화된» 현재 severity 와 비교해야 한다. 대소문자가 섞인
-  # severity("Critical")를 raw 로 비교하면 SEV_ORDER 밖으로 떨어져 SUGGESTION
-  # 랭크로 오판되고, 스테일 raise(IMPORTANT)가 «이미 그 위» 로 오판돼 CRITICAL
-  # 이 조용히 내려간다.
-  local T; T=$(mktemp -d)
-  one_finding "$T/findings.yaml" "scout" "a.py" "3" "Critical"
-  printf 'verdicts:\n  - finding_id: scout-a.py-3\n    verdict: raise\n    adjusted_severity: IMPORTANT\n' > "$T/adv.yaml"
-  local out; out=$(python3 "$SYNTH" --findings "$T/findings.yaml" --adversarial "$T/adv.yaml")
-  assert_contains "$out" '1 CRITICAL / 0 IMPORTANT' "대소문자 섞인 현재 severity 도 정규화해 비교한다 — CRITICAL 이 안 내려간다"
-  rm -rf "$T"
-}
-
 case_raise_to_same_severity_is_noop_not_degrade() {
-  # Task 7 row 31 fix round 1, Minor 2 — 같은 랭크로의 raise(변화 없음)는
-  # gate=False 강제다(bridge 의 같은 사건 recritic_bridge.py:106,
-  # `ledger.coerced("to", to_raw, cur_sev, gate=False)` 과 같은 모양) — 판정
-  # 결과를 안 바꾸므로 degrade 로 공시하면 안 된다. «내리는» raise 만
-  # gate=True(판정 결과를 바꾼다 — CRITICAL 이 내려가는 것을 막았다).
+  # 같은 랭크로의 raise(변화 없음)는 gate=False 강제다(bridge 의 같은 사건
+  # recritic_bridge.py 의 `ledger.coerced("to", to_raw, cur_sev, gate=False)` 과
+  # 같은 모양) — 판정 결과를 안 바꾸므로 degrade 로 공시하면 안 된다. «내리는»
+  # raise 만 gate=True(판정 결과를 바꾼다 — CRITICAL 이 내려가는 것을 막았다).
   local T; T=$(mktemp -d)
   one_finding "$T/findings.yaml" "scout" "a.py" "3" "CRITICAL"
-  printf 'verdicts:\n  - finding_id: scout-a.py-3\n    verdict: raise\n    adjusted_severity: CRITICAL\n' > "$T/adv.yaml"
-  local out; out=$(python3 "$SYNTH" --findings "$T/findings.yaml" --adversarial "$T/adv.yaml")
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: raise
+    to: CRITICAL'
+  local out; out=$(synth "$T")
   assert_contains     "$out" '1 CRITICAL / 0 IMPORTANT' "같은 랭크로의 raise 는 severity 를 그대로 둔다"
   assert_not_contains "$out" '판정 degrade' "같은 랭크 강제는 gate=False 다 — degrade 로 공시되지 않는다"
   rm -rf "$T"
@@ -459,9 +419,8 @@ added: []'
   local out; out=$(synth "$T" --emit-verdict)
   assert_contains "$out" '탐지 0 · 재비판 0 — 재비판자가 돌았고 더한 finding 이 없다.' "탐지 0 · 재비판 0 이 명시된다"
   assert_grep     "$out" '^verdict: clean$' "그 실행은 clean 이다"
-  # 대조 — 옛 판정자 경로에서는 이 줄이 없다(재비판자가 돈 사실이 아니다)
-  printf 'verdicts: []\n' > "$T/adv.yaml"
-  out=$(python3 "$SYNTH" --findings "$T/findings.yaml" --adversarial "$T/adv.yaml")
+  # 대조 — 판정자를 안 쓴 실행에는 이 줄이 없다(재비판자가 돈 사실이 아니다)
+  out=$(python3 "$SYNTH" --findings "$T/findings.yaml")
   assert_not_contains "$out" '탐지 0 · 재비판 0' "재비판 경로가 아니면 그 줄을 싣지 않는다"
   rm -rf "$T"
 }
@@ -565,6 +524,26 @@ added:
   rm -rf "$T"
 }
 
+case_added_with_neither_severity_nor_disposition_is_kept_as_suggestion() {
+  # Controller fix round 1, Minor 3 — 위 케이스의 형제. severity 도 disposition 도
+  # 없으면 bridge 가 `미지`로 채운다(`to_adjudication_doc`) — `promote_new_findings`
+  # 의 `NEW_FINDING_REQUIRED` 검사는 "미지"가 참 값(truthy)이라 드롭하지 않는다.
+  # 오늘의 동작은 «버림»이 아니라 «SUGGESTION 으로 보이되 검증 안 됨」이다
+  # (`_norm_sev` 가 어휘 밖 값을 전부 SUGGESTION 으로 접는다). 이 케이스가 없으면
+  # 드롭 쪽으로 바뀌어도(또는 그 반대로 CRITICAL 취급으로 바뀌어도) 어떤 락도
+  # 못 잡는다.
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/findings.yaml"; prep "$T"
+  reply "$T/reply.txt" 'verdicts: []
+added:
+  - file: nosev.py
+    summary: "no severity no disposition"'
+  local out; out=$(synth "$T" 2>/dev/null)
+  assert_contains "$out" '| SUGGESTION | nosev.py:0' "severity·disposition 둘 다 없으면 SUGGESTION 으로 보이지 버려지지 않는다"
+  assert_not_contains "$out" 'dropped as malformed' "필수 필드(file·summary)는 다 있으므로 malformed 드롭이 아니다"
+  rm -rf "$T"
+}
+
 case_dead_recritic_is_not_clean() {
   # 부채 A 의 재비판 경로판 — 응답 파일 없음 · 펜스 없음 · YAML 파손 · 매핑 파일 없음.
   local T; T=$(mktemp -d)
@@ -589,6 +568,52 @@ case_dead_recritic_is_not_clean() {
   out=$(synth "$T" 2>/dev/null)
   assert_contains "$out" '**이 실행은 clean이 아니다**' "--emit-verdict 없이도 not-clean 마커가 선다"
   rm -rf "$T"
+}
+
+case_malformed_top_level_container_kills_adjudicator_not_the_run() {
+  # Controller fix round 1, Important 1 — `to_adjudication_doc` 의 이 방어
+  # (`if not isinstance(raw_verdicts, list) or not isinstance(raw_added, list):
+  # return _dead(...)`)가 옛 --adversarial 문서의 컨테이너-스칼라·컨테이너-매핑
+  # malformed 시나리오(구 test_synthesize_promoted_findings.sh 10c·13·15)를 이제
+  # 재비판 경로에서 재는 «살아 있는» 유일한 자리다. 단위 테스트
+  # (test_synthesize_findings_adjudication.py::TestMalformedContainerAtDocLevel)
+  # 는 `extract_verdicts`/`extract_new_findings` 의 `_as_list`만 직접 불러 이
+  # 방어를 건너뛴다 — 실측(이 줄을 `if False:`로 바꾼 변이): `added: 5` 는
+  # `for a in raw_added`에서 TypeError → rc 1 + 빈 stdout(옛 10c 증상 그대로 —
+  # 계약 위반 + 진짜 CRITICAL 소실), 매핑 모양 둘은 죽지 않고 개별 항목이
+  # `hold()`(항목 파손 · 판정자 부재)로 새어 `reasons: [angle-absent]`가
+  # `reasons: [findings-lost]`로 조용히 바뀐다 — 그런데도 그 단위 테스트 셋
+  # 다 GREEN 이었다(별개 함수를 직접 불러 이 방어를 안 거치므로). 여기서 세
+  # 모양을 실제 CLI 로 재비판 경로에 먹여, 진짜 CRITICAL 이 살아남고 사유가
+  # angle-absent(판정자 «사망» — 항목 «소실»이 아니다)인지를 잰다.
+  local shape
+  for shape in scalar_added mapping_added mapping_verdicts; do
+    local T; T=$(mktemp -d)
+    one_finding "$T/findings.yaml" security-reviewer app.py 1 CRITICAL
+    prep "$T"
+    case "$shape" in
+      scalar_added)
+        reply "$T/reply.txt" 'verdicts: []
+added: 5' ;;
+      mapping_added)
+        reply "$T/reply.txt" 'verdicts: []
+added:
+  first: {file: x.py, severity: CRITICAL, summary: s1}
+  second: {file: y.py, severity: CRITICAL, summary: s2}' ;;
+      mapping_verdicts)
+        reply "$T/reply.txt" 'verdicts:
+  a: {f: f1, verdict: reject}
+added: []' ;;
+    esac
+    local out rc=0
+    out=$(synth "$T" --emit-verdict 2>/dev/null) || rc=$?
+    assert_eq "$rc" "0" "$shape — 판정자 사망은 호출 오류가 아니다(rc 0, traceback 이 아니다)"
+    assert_contains "$out" '1 CRITICAL' "$shape — 진짜 CRITICAL 이 소실되지 않는다"
+    assert_grep "$out" '^verdict: defect$' "$shape — 살아남은 finding 이 판정을 낸다"
+    assert_grep "$out" 'angle-absent' "$shape — 사유는 판정자 사망이다"
+    assert_not_grep "$out" 'findings-lost' "$shape — 항목 소실로 오분류하지 않는다(판정자 사망은 한 사건이다 — R-K)"
+    rm -rf "$T"
+  done
 }
 
 case_malformed_map_entry_is_dead_adjudicator() {
@@ -670,10 +695,7 @@ case_non_utf8_recritic_is_dead_adjudicator() {
 
 case_flag_hygiene() {
   local T; T=$(mktemp -d); printf '[]\n' > "$T/findings.yaml"; prep "$T"; reply "$T/reply.txt" 'verdicts: []'
-  printf 'verdicts: []\n' > "$T/adv.yaml"
   local rc
-  rc=0; python3 "$SYNTH" --findings "$T/findings.yaml" --adversarial "$T/adv.yaml" --recritic "$T/reply.txt" --recritic-map "$T/map.json" >/dev/null 2>&1 || rc=$?
-  assert_eq "$rc" "2" "--adversarial 과 --recritic 은 함께 줄 수 없다 (exit 2)"
   rc=0; python3 "$SYNTH" --findings "$T/findings.yaml" --recritic "$T/reply.txt" >/dev/null 2>&1 || rc=$?
   assert_eq "$rc" "2" "--recritic 에는 --recritic-map 이 필요하다"
   rc=0; python3 "$SYNTH" --findings "$T/findings.yaml" --recritic-map "$T/map.json" >/dev/null 2>&1 || rc=$?
@@ -700,6 +722,124 @@ case_adjudicator_name_matches_the_canonical_agent() {
   assert_eq "$const" "$name" "ADJUDICATOR 가 재비판자 정본의 name: 과 같다"
 }
 
+case_adversarial_flag_is_gone() {
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml"
+  printf 'verdicts: []\n' > "$T/adv.yaml"
+  local rc=0 err
+  err=$(python3 "$SYNTH" --findings "$T/findings.yaml" --adversarial "$T/adv.yaml" 2>&1 >/dev/null) || rc=$?
+  assert_eq "$rc" "2" "--adversarial 은 모르는 인자다(exit 2) — 판정자는 재비판 경로 하나다"
+  # Controller fix round 1, Minor 5 — 사유까지 잰다. exit 2 는 다른 usage 오류
+  # (예: 우연히 같은 rc 를 내는 다른 인자 문제)에서도 나올 수 있다.
+  assert_contains "$err" 'unrecognized arguments' "argparse 가 모르는 인자로 거부한다(다른 exit 2 가 아니다)"
+  # 양의 짝 — 같은 입력을 재비판 경로로 주면 선다.
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: confirm'
+  local out; out=$(synth "$T" --emit-verdict)
+  assert_grep "$out" '^verdict: defect$' "재비판 경로는 그대로 선다"
+  rm -rf "$T"
+}
+
+case_downgrade_is_not_a_verb() {
+  # 재비판자에게 하향은 없다. `downgrade` 는 모르는 verdict — confirm 으로 강제되고
+  # 그 강제는 판정을 바꾼 것으로 공시된다. severity 는 그대로다.
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml" security-reviewer app.py 10 CRITICAL
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: downgrade
+    to: SUGGESTION'
+  local out; out=$(synth "$T" --emit-verdict)
+  assert_grep "$out" '^\| CRITICAL \| app\.py:10 \|' "CRITICAL 이 내려가지 않는다"
+  assert_grep "$out" "강제\(게이트 변경\): verdict 'downgrade'" "모르는 verdict 는 게이트 강제로 공시된다"
+  rm -rf "$T"
+}
+
+case_aux_death_discloses_without_not_clean_marker() {
+  # Review Focus 4 · 헌장 — 보조 입력(diff) 사망은 공시하되 막지 않는다.
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml"
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: reject
+    evidence: "app.py:10 은 이미 파라미터 바인딩을 쓴다"'
+  local out; out=$(synth "$T" --recritic-diff "$T/gone.diff" --emit-verdict)
+  assert_grep     "$out" '공시\(판정을 막지 않음\)'            "보조 사망은 공시 머리줄로 드러난다"
+  assert_grep     "$out" '입력 실패\(보조\)'                    "무엇이 죽었는지 사유 줄이 선다"
+  assert_not_grep "$out" '이 실행은 clean이 아니다'             "not-clean 마커는 서지 않는다"
+  assert_grep     "$out" '^verdict: clean$'                     "판정은 막히지 않는다"
+  rm -rf "$T"
+}
+
+case_primary_death_keeps_not_clean_marker() {
+  # 양의 짝 — 주 판정자 사망은 여전히 차단이고 마커가 선다. 탐지 0 으로 둔다 —
+  # finding 이 남으면 defect 가 우선이라 reason 줄이 안 선다(§6.4.3 우선순위).
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/findings.yaml"
+  prep "$T"
+  local out; out=$(synth "$T" --emit-verdict)      # reply.txt 없음 = 재비판자 사망
+  assert_grep "$out" '이 실행은 clean이 아니다' "주 입력 사망은 not-clean 마커를 세운다"
+  assert_grep "$out" '^reason: angle-absent$'   "판정은 angle-absent"
+  rm -rf "$T"
+}
+
+case_container_drop_of_findings_document_blocks() {
+  # 컨트롤러 Fix round 1, item 1 — findings 문서 자체가 리스트가 아니면(예: 최상위가
+  # 매핑) `_as_list`(synthesize_findings.py)가 `hold()` 가 아니라
+  # `source_failed(primary=False)` 로 적는다 — `items_unaccounted()`·`blocks()`
+  # 어느 쪽도 안 켜진다. 버려진 CRITICAL 주장은 항목 소실이다(헌장) — 판정이
+  # `clean` 으로 새면 Task 7 이후 SKILL 이 그대로 통과시킨다.
+  local T; T=$(mktemp -d)
+  printf -- 'a:\n  file: app.py\n  line: 10\n  severity: CRITICAL\n  summary: "hardcoded AWS key"\nb:\n  file: app.py\n  line: 11\n  severity: CRITICAL\n  summary: "auth bypass"\n' > "$T/findings.yaml"
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts: []'
+  local out rc=0
+  out=$(synth "$T" --emit-verdict 2>/dev/null) || rc=$?
+  assert_eq           "$rc" "0"                        "컨테이너 소실은 호출 오류가 아니다"
+  assert_contains      "$out" '**이 실행은 clean이 아니다**' "버려진 CRITICAL 2건에 not-clean 마커가 선다"
+  assert_grep          "$out" 'findings-lost'          "사유는 findings-lost 다"
+  assert_not_grep      "$out" '^verdict: clean$'       "clean 이 아니다 — 버려진 CRITICAL 이 조용히 통과하지 않는다"
+  assert_not_contains  "$out" '공시(판정을 막지 않음)' "항목 소실은 공시가 아니라 차단이다"
+  rm -rf "$T"
+}
+
+case_hold_only_is_blocking_without_source_death() {
+  # 컨트롤러 Fix round 1, item 2 — `blocking` 을 `primary_source_failed()` 로만
+  # 좁혀도(items_unaccounted() 항 없이) 이전 스위트가 전부 green 이었다. 주
+  # 판정자는 살아 있고 finding 하나가 «보류»만 되는 경우를 직접 잰다 — 재비판자가
+  # 모르는 f9 만 판정해 f1 은 아무도 판정하지 않은 채로 남는다.
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml"
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f9
+    verdict: confirm'
+  local out; out=$(synth "$T" --emit-verdict)
+  assert_grep "$out" '이 실행은 clean이 아니다' "보류만으로도(주 판정자는 살아 있다) not-clean 마커가 선다"
+  assert_grep "$out" 'findings-lost'              "사유에 findings-lost 가 있다"
+  rm -rf "$T"
+}
+
+case_gate_coercion_is_disclosure_not_block() {
+  # 근거 없는 reject 는 confirm 으로 강제된다(게이트 변경). finding 은 남아 defect —
+  # 강제 자체는 공시이지 not-clean 마커가 아니다.
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml"
+  prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: reject'
+  local out; out=$(synth "$T" --emit-verdict)
+  assert_grep     "$out" '강제\(게이트 변경\)'          "강제는 공시된다"
+  assert_not_grep "$out" '이 실행은 clean이 아니다'     "강제만으로는 not-clean 마커가 서지 않는다"
+  assert_grep     "$out" '^verdict: defect$'            "finding 이 남아 defect"
+  rm -rf "$T"
+}
+
 case_prepare_strips_source_and_keeps_severity
 case_prepare_empty_states_the_empty_slot
 case_prepare_unreadable_findings_is_fail4_without_outputs
@@ -716,9 +856,6 @@ case_colliding_ids_with_raise_that_differs_per_severity_are_not_resolved
 case_colliding_ids_with_raise_ignored_for_one_severity_are_not_resolved
 case_colliding_ids_with_raise_to_different_targets_are_not_resolved
 case_raise_cannot_lower_when_map_is_stale
-case_adversarial_downgrade_can_still_lower_severity
-case_adversarial_raise_lowercase_severity_folds_before_guard
-case_raise_only_up_guard_normalizes_current_severity
 case_raise_to_same_severity_is_noop_not_degrade
 case_missing_verdict_is_unadjudicated
 case_same_as_keeps_both
@@ -730,11 +867,20 @@ case_recritic_zero_not_claimed_when_added_or_verdicts_are_malformed
 case_added_severity_case_folds
 case_raise_to_case_folds
 case_added_falls_back_to_disposition_when_severity_missing
+case_added_with_neither_severity_nor_disposition_is_kept_as_suggestion
 case_dead_recritic_is_not_clean
+case_malformed_top_level_container_kills_adjudicator_not_the_run
 case_malformed_map_entry_is_dead_adjudicator
 case_truncated_block_is_dead_adjudicator
 case_last_block_wins
 case_non_utf8_recritic_is_dead_adjudicator
 case_flag_hygiene
 case_adjudicator_name_matches_the_canonical_agent
+case_adversarial_flag_is_gone
+case_downgrade_is_not_a_verb
+case_aux_death_discloses_without_not_clean_marker
+case_primary_death_keeps_not_clean_marker
+case_gate_coercion_is_disclosure_not_block
+case_container_drop_of_findings_document_blocks
+case_hold_only_is_blocking_without_source_death
 finish

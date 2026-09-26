@@ -104,6 +104,11 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 
 ## Static Wiring Checks (automated)
 
+> **제거된 표면 — 역사 기록으로 남긴다.** 오늘의 파이프라인에는 대응 경로가 없다.
+> 아래 agent 목록의 `plan-verifier`는 이 스냅샷보다도 먼저 삭제된 죽은 참조다(무관한
+> 선재 staleness). `runtime-verifier`는 실재하던 agent였으나 이후 릴리스에서 사라졌다 —
+> ②차등 테스트가 그 자리를 대신한다.
+
 Run this from repo root any time:
 
 ```bash
@@ -223,6 +228,11 @@ DEVBREW_QUALITY_GATES_DISABLE=1 /qg
   via the scenarios above is the contract.
 
 ## Gate 3 Active Verification Scenarios (v1.8.0)
+
+> **제거된 표면 — 역사 기록으로 남긴다.** 오늘의 파이프라인에는 대응 경로가 없다.
+> `runtime-verifier` agent 와 그 판정 어휘(`NEEDS_RESOLUTION`/`SKIP_WITH_EVIDENCE`)는
+> 이후 릴리스에서 사라졌다 — 부팅되는 앱의 런타임 행위 검증은 대체되지 않고 주장만 거뒀다
+> (README "C4 — 차등 테스트는 항상" 참고).
 
 ### Scenario G3-A: Web app, docker-compose, .env all present
 

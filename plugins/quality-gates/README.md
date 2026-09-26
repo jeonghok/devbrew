@@ -1,6 +1,6 @@
 # Quality Gates 플러그인
 
-Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 리뷰 위임 구조.
+Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정(`clean` · `defect` · `not-certified (<사유>)`). 기준선 대비 차등 테스트는 매 실행 돈다.
 
 ## 인스턴스화한 원칙
 
@@ -8,56 +8,49 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 ([`docs/philosophy/devbrew-harness-philosophy.md`](../../docs/philosophy/devbrew-harness-philosophy.md) 참고):
 
 - **Law 3 (Compounding) — 처분 회계(adjudication `Ledger`)** (v7.1.0) — 리뷰 findings 가 버려지는 자리가 `shared/adjudication/adjudication.py` 의 처분(`accept`/`reject`/`hold`/`absorbed`/`coerced`/`source_failed`/`uncountable`/`suppressed`)을 부르고, 그 배선을 `tools/adjudication/` 의 판정기와 `shared/tests/test_adjudication_{wiring,consumed}.sh` 가 강제한다. 소비자는 `synthesize_findings.py`·`synthesize_artifact_findings.py`. **범위**: 강제되는 것은 `.py` 소비자와 `Ledger` import 가 있는 자리이고, `consumer=orchestrator`/`human` 인 dispatch 자리는 `disclosure=` 리터럴 실재까지만 검사된다(CLAUDE.md 축 C 한계).
-- **Law 2 (입력 오염 차단) — `input_slots`** (v7.1.0) — 이 플러그인의 agent 일곱(`security-reviewer`·`doc-recritic`·`artifact-critic`·`artifact-adversarial`·`test-scope-validator`·`runtime-verifier`·`pr-understanding-builder`)이 frontmatter 에 받는 입력의 `tag`/`var`/`kind` 를 선언하고, 금지 종류(`prior_verdict`·`score`·`orchestrator_framing`)는 C6 인용과 함께 면제 등재를 요구한다. 집행은 `shared/tests/test_agent_input_slots.sh`. 앞 리뷰어의 판정이 다음 리뷰어의 전제가 되는 것이 Law 2 가 도구로 못 막는 구멍이다.
+- **Law 2 (입력 오염 차단) — `input_slots`** (v7.1.0) — 이 플러그인의 agent 여섯(`security-reviewer`·`doc-recritic`·`artifact-critic`·`artifact-adversarial`·`test-scope-validator`·`pr-understanding-builder`)이 frontmatter 에 받는 입력의 `tag`/`var`/`kind` 를 선언하고, 금지 종류(`prior_verdict`·`score`·`orchestrator_framing`)는 C6 인용과 함께 면제 등재를 요구한다. 집행은 `shared/tests/test_agent_input_slots.sh`. 앞 리뷰어의 판정이 다음 리뷰어의 전제가 되는 것이 Law 2 가 도구로 못 막는 구멍이다.
 - **Law 3 (Compounding)** — Phase 1 single dispatch builder (T2-2/T3-5). Future persona edits land in one place, never drift across two dispatch sections.
-- **Law 2 (Writer ≠ Reviewer)** — 순수 read-only reviewer agent(`security-reviewer`/`doc-recritic`/`test-scope-validator`)가 `tools: Read, Grep, Glob` fail-closed allowlist 선언 (frontmatter scoping으로 물리적 격리 — write/exec/delegation 도구는 목록에 없어 물리적으로 부재; 이름 기반 denylist는 시간에 대해 fail-open이라 대체됨). `runtime-verifier`(sandbox-executor)는 예외로 Write를 갖되 git-diff mutation 가드로 Law 2 self-approval을 구조적으로 차단 — 아래 v2.2.0 bullet 참조.
+- **Law 2 (Writer ≠ Reviewer)** — 순수 read-only reviewer agent(`security-reviewer`/`doc-recritic`/`test-scope-validator`)가 `tools: Read, Grep, Glob` fail-closed allowlist 선언 (frontmatter scoping으로 물리적 격리 — write/exec/delegation 도구는 목록에 없어 물리적으로 부재; 이름 기반 denylist는 시간에 대해 fail-open이라 대체됨). qg 자체 agent 는 모두 쓰기 권한이 없다. 외부 추가 리뷰어(`pr-review-toolkit` 등)는 쓰기 가능할 수 있으나 advisory 이고 fix 는 오케스트레이터가 소유한다 — 테스트는 오케스트레이터가 자기가 만든 트리에서 직접 돌린다.
 - **Law 3 (Compounding)** — scout `rationale` 필드가 매 iteration마다 state 파일에 로깅; reviewer-persona 편집이 학습된 교훈을 인코딩하는 substrate.
-- **Law 3 (Compounding) — cross-plugin reader contract** — Runtime gate의 test-scope-validator(`scripts/discover-plan.sh`)가 sister-plugin (`superpowers:writing-plans`)의 출력 경로 `docs/superpowers/plans/`를 1순위 source로 명시 consume; convention drift가 silent breakage가 되지 않도록 README "Plan Discovery Sources" 섹션이 reader/writer 약속을 문서화.
+- **Law 3 (Compounding) — cross-plugin reader contract** — 차등 테스트의 test-scope-validator(`scripts/discover-plan.sh`)가 sister-plugin (`superpowers:writing-plans`)의 출력 경로 `docs/superpowers/plans/`를 1순위 source로 명시 consume; convention drift가 silent breakage가 되지 않도록 README "Plan Discovery Sources" 섹션이 reader/writer 약속을 문서화.
 - **P12 anti-corollary (former AP5, trivia ceremony) 회피** — `check-trivia.sh`가 단일 파일·≤3줄 whitespace/rename을 파이프라인 전체 skip. *현재 coverage는 whitespace + rename에 국한. P12 canonical 자격(typo/comment-only/formatting — 파일 수 무관)을 완전히 충족하기 위한 확장은 deferred 항목 — Tier 2 spec은 아카이브됨: `git show pre-slim-archive-2026-07-09:docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md`.*
-- **P22 anti-corollary (former AP9, over-dispatching / subagent spray) 회피** — Review gate는 fan-out consent 게이트를 fire하지 않고(documented-not-implemented였음), transparency 라인 + 선언된 max fan-out(Phase 1 병렬 ≤ 8, 총/iteration ≤ 10) + authoring-time hard-review로 subagent spray를 억제.
-- **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — Review gate 내부 fix-loop이 `max_review_iterations=5` + repeat-detection (no-progress check) + kill switch로 묶임.
+- **P22 anti-corollary (former AP9, over-dispatching / subagent spray) 회피** — 파이프라인은 fan-out consent 게이트를 fire하지 않고(documented-not-implemented였음), transparency 라인 + 선언된 max fan-out(Phase 1 병렬 ≤ 8, 총/iteration ≤ 10) + authoring-time hard-review로 subagent spray를 억제.
+- **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — 파이프라인 내부 fix-loop이 `max_review_iterations=5` + repeat-detection (no-progress check) + kill switch로 묶임.
 - **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (`*.local.md` gitignore 패턴으로 자동 제외; TTL sweep + SessionEnd hook으로 폴더 GC).
-- **Law 1 (Verification Plan)** (v1.8.0) — Runtime gate가 evidence-required SKIP을 강제. runtime-verifier가 manifest의 모든 surface를 attempt하고 evidence-log를 산출해야 하며, 증거 없는 SKIP은 skill이 거부하여 FAIL로 격상.
-- **Law 2 (Writer ≠ Reviewer, git-diff 구조적 가드)** (v2.2.0; supersedes v1.8.0 tool-deny) — `runtime-verifier`는 이제 **sandbox-executor**다. Write/Edit가 허용되지만 *일회용 git-worktree 샌드박스 안에서만* 의미를 가지며, orchestrator(SKILL)가 샌드박스 생성 시 code-under-review를 immutable baseline commit `B`로 봉인하고 gate 종료 시 `qg-worktree.sh mutation-guard`(순수 git, verifier 주장과 독립)로 product 변경을 ground-truth로 산출 — 비어있지 않으면 verdict가 구조적으로 ≤FAIL로 강제되고 아무것도 commit되지 않으며 샌드박스는 폐기된다. 즉 self-approval 방지의 *물리적 보장 형태*가 "도구 deny" → "git ground-truth 가드"로 바뀐 것이지 보장이 사라진 것이 아니다. **대비: `test-scope-validator`/`security-reviewer`/재비판(`doc-recritic`)은 순수 read-only reviewer로 `tools: Read, Grep, Glob` fail-closed allowlist 유지 — write/exec/delegation 도구가 목록에 없어 물리적으로 부재.** 운영 DB/네트워크는 git-ignored 파일(prod `.env`) 미복사로 미접근. regression: `tests/test_qg_mutation_guard.sh`(가드 독립성), `tests/test_qg_runtime_sandbox.sh`(ignored 미복사).
-- **Law 1 (Clarity / evidence-required) — 기능 단언** (v2.2.0) — Runtime gate가 spec Acceptance Criteria를 verifier에 thread해, 단순 "떴나?"가 아니라 AC별 flow를 구동하고 expected-vs-observed를 evidence(screenshot + DOM snapshot + network status)와 함께 단언. evidence 없는 "동작함"은 거부. spec 부재 시 plan_feature → smoke fallback(loud log).
-- **운영-안전 게이트 (blast-radius)** (v2.2.0) — `detect-runtime.sh`가 process-start/네트워크/파괴 신호 surface를 `requires_decision: true`로 분류하고, SKILL의 Upfront Execution Plan이 그것들을 1회 사용자 승인 뒤로 둔다(deny-by-default). 운영 DB/네트워크는 샌드박스가 git-ignored prod config를 복사하지 않아 원천 차단(OS-수준 egress 격리는 명시적 non-goal — 한계 인정).
-- **P18 — Upfront 1-회 결정 + 폐기** (v2.2.0; gate-scope 확장 v2.4.0) — **gate scope**(Review gate only / Run both gates)는 full `/qg`(gate arg 없음)마다 trivia escape 후 1회 발화하고(`/qg both|review|runtime`이면 0클릭), runtime 범위·block 정책은 `requires_decision` surface가 있을 때만 1회 확정(없으면 zero-click). executor-내부 setup retry ≤3/dispatch, SKILL re-dispatch ≤`runtime_max_resolutions`; 곱이 hard ceiling. kill switch `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1`. fallback(샌드박스 비활성)에서도 working-tree `git status` mutation 체크로 Law 2 구조적 보장 유지(verifier가 실제 트리를 바꾸면 ≤FAIL + loud warn).
-- **P8 determinism-economy (harness lightness — trust the model)** (v2.5.0) — 암묵 session scope로 Review gate가 돌 때 그 사실을 사용자-가시 한 줄로 밝히는 **scope 투명성**. 버려진 결정론적 under-coverage 경고를 결정론 가드가 아니라 *모델 행동*으로 대체(git 비교·차단 없음). 자연어 scope 의도는 별도 parser 없이 모델이 branch scope로 해석 — `/qg branch`는 결정론적 escape hatch로 유지. devbrew P8 determinism-economy refinement("Zero hooks" 일반화) instantiation.
-- **P8 determinism-economy — self-honest verdict floor** (v2.6.0; routing 제거·단순화 v2.7.0) — Review gate가 *검토받았다고 믿는 scope*와 *resolve한 scope*가 발산할 때(빈 세션 → resolved scope 0 → "clean"의 false-clean)를 봉쇄. read-only `scripts/check-review-scope.sh`가 `changes_exist`를 결정론으로 emit하고, SKILL이 iter-1에서 1회 호출·캐시해 **정직-verdict floor**(load-bearing, kill 불가)가 `resolved scope 0 AND changes_exist == yes`이면 verdict를 `no scope reviewed … NOT certified clean`으로 교체. **무엇을 리뷰할지(routing)는 모델이 소유** — v2.7.0에서 v2.6.0의 redirect 게이트·`$effective_diff_scope` 배선·redirect kill switch를 제거하고 `/qg branch` escape hatch + honesty norm 한 줄로 대체(dogfood 5버그가 전부 routing 재구성에서 나왔고 floor의 load-bearing 입력 `changes_exist`는 틀린 적 없음). 결정론은 무결성 floor 한 점에만; routing/자연어는 모델 신뢰. genuine no-op·session 기본값·`/qg branch`는 무변경. regression: `tests/test_check_review_scope.sh`, `tests/test_qg_false_clean_floor.sh`.
-- **P18 anti-corollary (former AP16, unbounded autonomy) 회피 — Runtime gate** (v1.8.0) — Runtime gate의 NEEDS_RESOLUTION mid-run 루프가 `runtime_max_resolutions` (기본 3, env override `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS=0..10`)로 묶임. `needed_hash` 기반 repeat detection이 iteration cap 도달 전에 non-converging loop을 잡음.
-- **P21 (Secret이 prompt context에 들어가지 않음)** (v1.8.0) — Runtime gate의 AskUserQuestion은 결정과 포인터(yes/no/path)만 묻고 secret 값은 절대 받지 않음. 누락된 secret은 사용자가 disk의 `.env`에 직접 추가 후 retry 선택으로 해결. regression test: `tests/test_no_secret_prompts.py`.
-- **Law 2 (Writer ≠ Reviewer, 3-way 분리)** (v1.9.0) — Runtime gate가 3-way agent 분리를 강제. writer (originating turn) ≠ `test-scope-validator` (Step 2.5 pre-execution 리뷰어) ≠ `runtime-verifier` (Step 3 executor). `test-scope-validator`는 `tools: Read, Grep, Glob` fail-closed allowlist로 물리 분리(write/exec/delegation 도구 부재). `runtime-verifier`는 v2.2.0부터 sandbox-executor로, Write를 갖되 git-diff mutation 가드(구조적)로 Law 2 self-approval을 차단 — 분리의 형태만 다르고 writer≠approver 불변식은 유지.
+- **P8 determinism-economy (harness lightness — trust the model)** (v2.5.0) — 암묵 session scope로 파이프라인이 돌 때 그 사실을 사용자-가시 한 줄로 밝히는 **scope 투명성**. 버려진 결정론적 under-coverage 경고를 결정론 가드가 아니라 *모델 행동*으로 대체(git 비교·차단 없음). 자연어 scope 의도는 별도 parser 없이 모델이 branch scope로 해석 — `/qg branch`는 결정론적 escape hatch로 유지. devbrew P8 determinism-economy refinement("Zero hooks" 일반화) instantiation.
+- **P8 determinism-economy — self-honest verdict floor** (v2.6.0; routing 제거·단순화 v2.7.0) — 파이프라인이 *검토받았다고 믿는 scope*와 *resolve한 scope*가 발산할 때(빈 세션 → resolved scope 0 → "clean"의 false-clean)를 봉쇄. read-only `scripts/check-review-scope.sh`가 `changes_exist`를 결정론으로 emit하고, SKILL이 iter-1에서 1회 호출·캐시해 **정직-verdict floor**(load-bearing, kill 불가)가 `resolved scope 0 AND changes_exist == yes`이면 판정이 `not-certified (scope-empty)` 가 된다. **무엇을 리뷰할지(routing)는 모델이 소유** — v2.7.0에서 v2.6.0의 redirect 게이트·`$effective_diff_scope` 배선·redirect kill switch를 제거하고 `/qg branch` escape hatch + honesty norm 한 줄로 대체(dogfood 5버그가 전부 routing 재구성에서 나왔고 floor의 load-bearing 입력 `changes_exist`는 틀린 적 없음). 결정론은 무결성 floor 한 점에만; routing/자연어는 모델 신뢰. session 기본값·`/qg branch` 자체의 스코프 **선택**(routing)은 무변경이지만, 이 floor 가 보는 것과 **별개로** ② 차등 테스트가 상시 도는 v9.0.0 이후는 R1b 가 고르는 test unit 이 0개인 실행도 `expected-empty` → `not-certified (scope-empty)` 다(관측 없음은 음성 결과가 아니다 — §6.4.3 P23 재결정, 2026-09-26) — **진짜 무변경(genuine no-op)과 docs/config-only 변경을 포함한다.** regression: `tests/test_check_review_scope.sh`, `tests/test_qg_false_clean_floor.sh`.
+- **P21 (Secret이 prompt context에 들어가지 않음)** — 결정 도구는 결정과 포인터만 묻고 secret 값은 받지 않는다(SKILL Rules R4). regression test: `tests/test_no_secret_prompts.py`.
+- **Law 2 (Writer ≠ Reviewer, 분리)** — writer(originating turn) ≠ `test-scope-validator`(차등 테스트 R1b 의 사전 분류 리뷰어) ≠ 테스트 실행(오케스트레이터 · 결정론 스크립트). `test-scope-validator` 는 `tools: Read, Grep, Glob` fail-closed allowlist.
 - **P2 (Categorical signal, no numeric scoring)** (v1.9.0) — `test-scope-validator`는 정확히 4-way enum 분류 (`aligned` / `outdated-suspicion` / `cherry-pick-suspicion` / `unclear`)만 emit. percentage, confidence, X/Y rating 모두 금지. summary의 counter 정수 (`1 aligned, 0 outdated…`) 는 허용. devbrew P2 "수치 스코어링 ban" instantiation.
 - **Law 2 strengthening — model-family separation.** Optional `codex-reviewer` agent (when Codex CLI is detected) runs review in a separate process with a different model family (OpenAI vs Anthropic) and an OS-level read-only sandbox, giving 3-layer reviewer-writer isolation: `disallowedTools` + narrow `Bash` allowlist + `codex -s read-only`.
 - **Law 2 (codex 격리, v1.11.0/v1.12.0 → v2.11.0 정정)** — codex 리뷰의 격리는 **`codex exec -s read-only` OS-level 샌드박스 + 별도 프로세스/모델 패밀리**가 전부다. v1.11.0~v2.10.x의 이 항목은 그 위에 *"frontmatter 키 whitelist"* layer를 얹었다고 기록했으나 **그 layer는 존재한 적이 없다**: (1) 당시 명명된 키는 공식 subagent 규격에 없는 필드라 런타임이 조용히 무시했고, (2) T3-3에서 `codex-reviewer`가 agent → 스크립트(`scripts/run_codex_reviewer.sh`)로 이관돼 frontmatter 자체가 사라졌다 (`tests/test_codex_reviewer_frontmatter.sh`가 agent 파일 **부재**를 assert). 지금 격리를 지탱하는 것은 OS 샌드박스다.
-- **Law 2 (Writer ≠ Reviewer, frontmatter scoping)** (v1.13.0) — `security-reviewer` agent가 `tools: Read, Grep, Glob` fail-closed allowlist 선언. Review gate Tier A floor 구성원이며, kill switch `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`로 사용자가 disable 가능 (Plugin Shape — 모든 reviewer는 opt-out 가능). 게이트는 `quality-pipeline` SKILL의 Tier A dispatch 지점에 있다.
+- **Law 2 (Writer ≠ Reviewer, frontmatter scoping)** (v1.13.0) — `security-reviewer` agent가 `tools: Read, Grep, Glob` fail-closed allowlist 선언. 보안 각도 구성원이며, kill switch `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`로 사용자가 disable 가능 (Plugin Shape — 모든 reviewer는 opt-out 가능). 디스패치는 `quality-pipeline` SKILL의 보안 각도 지점에 있다.
 - **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `hooks/session-start-advisor.py` frontmatter scanner (AC14): SessionStart마다 모든 agent 파일의 frontmatter key를 kebab-case drift 검사. `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — CI에서 C1 종류 (kebab-case 잘못된 키) drift를 자동 차단. 이 두 mechanism이 함께 "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation.
 - **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / hook / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
 - **Law 1 (Clarity Before Code) — `/qg branch <name>` surface** (v1.15.0) — 7개 거절 시나리오(존재하지 않는 브랜치, path traversal, kill switch, idempotent reuse 등)가 `tests/test_branch_worktree.sh` AC1–AC11에 acceptance criteria로 명시. 실패 경로마다 명확한 진단 메시지를 stderr로 출력.
 - **Law 3 (Compounding) — worktree path 컨벤션** (v1.15.0) — `.claude/<plugin>/worktrees/<name>-<sid-short>/` 경로 패턴을 플러그인 공통 컨벤션으로 확립해, 차후 다른 플러그인이 임시 worktree를 만들 때 같은 컨벤션을 재사용할 수 있게 함.
-- **Law 1 (Clarity Before Code) — single-turn dispatch contract** (v1.32.0) — pipeline progression이 `quality-pipeline` SKILL의 단일 assistant turn 내 serial dispatch로 일원화. cross-turn state machine (transition compute helpers, no-signal counter, 시간 기반 guard) 전부 삭제 — 진행 결정은 SKILL의 명시적 boundary + AskUserQuestion으로만 발생. State file은 GC mtime anchor + worktree tracking + Review gate iter counter reporting만 보존.
+- **Law 1 (Clarity Before Code) — single-turn dispatch contract** (v1.32.0) — pipeline progression이 `quality-pipeline` SKILL의 단일 assistant turn 내 serial dispatch로 일원화. cross-turn state machine (transition compute helpers, no-signal counter, 시간 기반 guard) 전부 삭제 — 진행 결정은 SKILL의 명시적 boundary + AskUserQuestion으로만 발생. State file은 GC mtime anchor + worktree tracking + 파이프라인 iter counter reporting만 보존.
 - **P22 generalization (consent gate → progression gate):** AskUserQuestion
-  is reused as a **progression primitive** at every gate boundary and Gate
-  2 fix-loop iteration. It gates inter-gate progression and fix-loop consent
-  (it does NOT gate subagent fan-out — that consent gate was never implemented;
-  fan-out is bounded by the transparency line + declared max fan-out) — no new
-  principle ID needed.
-- **C66 (Linked Artifact Flow) — spec을 truth로 instantiate** (v2.1.0) — qg가 처음으로 사용자 프로젝트 spec을 읽어(`scripts/discover-spec.sh`) test-scope-validator의 기준 축을 plan items → **spec Acceptance Criteria**로 전환하고, AC별 커버리지를 advisory `ac_coverage` 블록으로 surface하며, codex 경로(`run_codex_reviewer.sh`)가 spec AC를 `<spec_context>`에 주입. cycle 위계(spec=truth ⊃ plan=구현 방식)를 instantiate — spec→test 커버리지를 역방향 walk. plan은 구현-방식 보조 hint로 강등(제거 아님; `discover-plan.sh` byte-identical). **advisory only — Runtime gate를 block하지 않음.** spec 부재 시 loud log + v2.0.0 기능 동작 fallback. kill switch `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1`.
-- **P21 (Untrusted input — diff is data, not instructions)** (v2.8.0) — Review gate의 두 diff-reading reviewer(`security-reviewer`/재비판 `doc-recritic`)가 attacker-influenced `filtered_diff`(및 finding 텍스트)를 데이터로만 다루고 그 안의 prompt-injection·안전성 주장을 verdict 근거로 삼지 않도록 명시. 더해 언어/프레임워크 FP precedent 5건을 기능별 단일 배치(DRY)로 흡수 — suppress-at-source 3(security-reviewer anti-flag) + reject-at-verify 2(재비판 코드 프로필 관문 C, PR4a 부터 `references/recritic-code-profile.md`가 싣는다). 섹션-스코프 grep 회귀 락(`test_security_reviewer_persona.sh`)으로 persona 약화 검출(재비판은 공유 정본의 copy-of 사본이라 이 플러그인이 그 persona 를 직접 lock 하지 않는다 — `shared/tests/test_copy_of_contract.sh` 가 대신 잰다). 신규 P# 0, 결정론 가드 0 (Anthropic *"Using LLMs to Secure Source Code"* 평가 Tier-1; design-lightness).
+  is reused as a **progression primitive** at every fix-loop iteration
+  boundary. It gates fix-loop consent (it does NOT gate subagent fan-out —
+  that consent gate was never implemented; fan-out is bounded by the
+  transparency line + declared max fan-out) — no new principle ID needed.
+- **C66 (Linked Artifact Flow) — spec을 truth로 instantiate** (v2.1.0) — qg가 처음으로 사용자 프로젝트 spec을 읽어(`scripts/discover-spec.sh`) test-scope-validator의 기준 축을 plan items → **spec Acceptance Criteria**로 전환하고, codex 경로(`run_codex_reviewer.sh`)가 spec AC를 `<spec_context>`에 주입한다. cycle 위계(spec=truth ⊃ plan=구현 방식)를 instantiate — spec→test 커버리지를 역방향 walk. plan은 구현-방식 보조 hint로 강등(제거 아님; `discover-plan.sh` byte-identical). **advisory only — 판정을 block하지 않음.** spec 부재 시 loud log + plan-기반 분류로 fallback. kill switch `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1`.
+- **P21 (Untrusted input — diff is data, not instructions)** (v2.8.0) — 파이프라인의 두 diff-reading reviewer(`security-reviewer`/재비판 `doc-recritic`)가 attacker-influenced `filtered_diff`(및 finding 텍스트)를 데이터로만 다루고 그 안의 prompt-injection·안전성 주장을 verdict 근거로 삼지 않도록 명시. 더해 언어/프레임워크 FP precedent 5건을 기능별 단일 배치(DRY)로 흡수 — suppress-at-source 3(security-reviewer anti-flag) + reject-at-verify 2(재비판 코드 프로필 관문 C, PR4a 부터 `references/recritic-code-profile.md`가 싣는다). 섹션-스코프 grep 회귀 락(`test_security_reviewer_persona.sh`)으로 persona 약화 검출(재비판은 공유 정본의 copy-of 사본이라 이 플러그인이 그 persona 를 직접 lock 하지 않는다 — `shared/tests/test_copy_of_contract.sh` 가 대신 잰다). 신규 P# 0, 결정론 가드 0 (Anthropic *"Using LLMs to Secure Source Code"* 평가 Tier-1; design-lightness).
 - **P21 (Secret이 prompt context에 들어가지 않음) — 출력값 유출 차단으로 확장 (publish sink)** (v2.9.0) — `/qg-publish`가 게시 직전 `secret-scan.py`로 전체 payload(artifact + PR title + 브랜치명 + 커밋메시지; PR-create 시 히스토리까지)에서 시크릿 **값**(quoted string / vendor 패턴 / corpus-substring, keyword는 보조 신호)을 스캔해 hit 시 게시를 FAIL CLOSED로 거부한다 — 스캔 에러·타임아웃도 hit 취급. 기존 인스턴스(v1.8.0, secret 값이 prompt로 들어가지 않음)와 자매지만 방향이 반대다: 여기는 모델이 저술한 텍스트가 GitHub로 **나가기 전** 값 유출을 막는다. regression: `tests/test_secret_scan.py`, `tests/test_secret_scan_fp.py`.
-- **P21 (Untrusted input — diff is data, not instructions) 확장** (v2.9.0) — v2.8.0에서 Review gate 두 reviewer에 넣은 norm을 `pr-understanding-builder` 페르소나와 publish orchestrator에도 확장한다. PR 코멘트는 id+마커 매칭용 opaque bytes로만 다루고(스크립트가 선택 계산; 모델이 내용을 읽고 지시로 따르지 않음), artifact 내 이미지는 auto-fetch 유출 벡터라 중립화한다.
-- **P17 (Consent) — 게시는 게이트가 아니라 opt-in consent-gated 표면** (v2.9.0) — `/qg-publish`는 매 실행마다 사람이 읽는 preview 뒤 AskUserQuestion으로 명시 동의를 받아야만 GitHub에 쓴다(비가역·영구 노출 고지 포함; cross-repo "always" 없음). **`/qg`의 Review gate/Runtime gate 자체는 이 기능으로 변경되지 않는다 — publish는 그 위에 얹힌 별도 opt-in 표면이지 세 번째 게이트가 아니다.**
+- **P21 (Untrusted input — diff is data, not instructions) 확장** (v2.9.0) — v2.8.0에서 파이프라인 두 reviewer에 넣은 norm을 `pr-understanding-builder` 페르소나와 publish orchestrator에도 확장한다. PR 코멘트는 id+마커 매칭용 opaque bytes로만 다루고(스크립트가 선택 계산; 모델이 내용을 읽고 지시로 따르지 않음), artifact 내 이미지는 auto-fetch 유출 벡터라 중립화한다.
+- **P17 (Consent) — 게시는 파이프라인의 일부가 아니라 opt-in consent-gated 표면** (v2.9.0) — `/qg-publish`는 매 실행마다 사람이 읽는 preview 뒤 AskUserQuestion으로 명시 동의를 받아야만 GitHub에 쓴다(비가역·영구 노출 고지 포함; cross-repo "always" 없음). **`/qg`의 파이프라인 자체는 이 기능으로 변경되지 않는다 — publish는 그 위에 얹힌 별도 opt-in 표면이지 파이프라인에 자동으로 연결되지 않는다.**
 - **P18 (Bounded idempotency)** (v2.9.0) — `comment-upsert.py`가 인증 `user.id` 스코프 내에서 버전-패밀리 마커(`<!-- pr-understanding:v1 -->`, 첫 줄 anchored 매칭이 optional `tier=N` 접미사를 허용 — 빌더는 `tier=N`을 emit하지만 tier는 변경 파일 수에 따라 드리프트하므로 매칭은 tier를 무시해 멱등이 깨지지 않게 함)로 기존 코멘트를 조회해 0개→POST, 1개→PATCH, ≥2개(비정상)→REFUSE — 모호성 앞에서 임의로 고르지 않고 결정론적으로 멈추고 사용자 확인을 요구한다.
 - **pwn-request Law-2형 물리 분리 — 생성 ≠ 게시** (v2.9.0 → v2.12.0에서 **처음으로 사실이 됨**) — `pr-understanding-builder` 에이전트는 `tools:`에 무해한 항목 **하나만** 선언한다 (fail-closed allowlist — 쓰기·실행·네트워크·위임 도구 0개, 유일 항목 = inert `Read`(생성기가 미호출), 유일 입력 = inlined `build-pr-context.sh` blob). `gh`/네트워크는 오직 `publishing-pr-understanding` skill(오케스트레이터)만 보유한다. ⚠️ **v2.9.0~v2.10.x에서 이 주장은 거짓이었다**: 당시 격리는 존재하지 않는 필드 + 11개 이름 denylist였고, denylist에 `mcp__*`가 없어 tavily 웹검색·chrome-devtools 브라우저 제어가 **열려 있었다**. 이름 기반 denylist는 원리적으로 닫을 수 없다 — `Monitor`가 이름 없는 셸(`command`)과 이름 없는 egress(`ws`)를 준다. allowlist만이 열거되지 않은 것과 **미래에 추가될 것**을 자동 차단한다.
-- **Law 1/2/3 + P8/P18 (산출물 비평 루프, v2.11.0)** — `/qg critique`가 비-코드 산출물에 대해 tier-unpinned `artifact-critic`+`artifact-adversarial`(+조건부 codex)의 read-only 비평 → 오케스트레이터 수정 → 라운드별 커밋 루프를 돈다. Law 1=E3 upfront 동의 게이트; Law 2=read-only 리뷰어(`tools:` allowlist)+매 라운드 독립 critic 게이트; Law 3=라운드별 커밋 감사추적; P18=max-rounds+stagnation predicate+kill switch(`DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE`); P8=NL 라우팅 모델-소유, 결정론은 `critique <path>`+§10 스키마. 별도 skill `critiquing-artifacts`로 위임(코드 2게이트 파이프라인 무변경).
-- **LD3 (floor 는 실행이다) — 영향분 테스트의 실제 실행** (v3.0.0) — Runtime 게이트의 floor
+- **Law 1/2/3 + P8/P18 (산출물 비평 루프, v2.11.0)** — `/qg critique`가 비-코드 산출물에 대해 tier-unpinned `artifact-critic`+`artifact-adversarial`(+조건부 codex)의 read-only 비평 → 오케스트레이터 수정 → 라운드별 커밋 루프를 돈다. Law 1=E3 upfront 동의 게이트; Law 2=read-only 리뷰어(`tools:` allowlist)+매 라운드 독립 critic 게이트; Law 3=라운드별 커밋 감사추적; P18=max-rounds+stagnation predicate+kill switch(`DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE`); P8=NL 라우팅 모델-소유, 결정론은 `critique <path>`+§10 스키마. 별도 skill `critiquing-artifacts`로 위임(코드 파이프라인 무변경).
+- **LD3 (floor 는 실행이다) — 영향분 테스트의 실제 실행** (v3.0.0) — ② 차등 테스트의 floor
   가 "전체 앱 부팅"이 아니라 *"레포에 이미 있는 테스트 중 영향분을 실제로 돌리는 것"*이다.
   `run-test-selection.sh` 가 러너 어댑터 9종을 **집합으로** 감지해 전부 실행한다 — 폴리글랏
   레포에서 우선순위 밖 러너를 버리면 floor 가 의미를 잃는다(이 리포 실측: `.sh` 130개 /
-  `.py` 50개). 부팅·플로우는 floor 가 아니라 그 위의 상황별 층이다.
+  `.py` 50개). 부팅되는 앱의 런타임 행위 검증은 대체되지 않고 주장만 거뒀다(위 C4).
 - **LD5 (결정론은 모델 주장과 독립인 백스톱) — 호출 주체 분리 (Law 2)** (v3.0.0) — 영향 스코프
   판정은 모델이 하되, `run-test-selection.sh` 는 기준선 측·HEAD 측 **둘 다 오케스트레이터가
-  직접** 호출한다. verifier 가 테스트 결과를 self-report 하면 오케스트레이터가 받는 것이 raw
+  직접** 호출한다. agent 가 테스트 결과를 self-report 하면 오케스트레이터가 받는 것이 raw
   출력이 아니라 모델의 요약이 되어 백스톱이 백스톱이 아니게 된다. `diff-test-results.py` 의
   `--expected` 도 같은 이유로 **독립 입력**이다 — 두 생산자의 상호 대조로 계산하면 대칭
   누락을 아무도 못 잡는다. regression: `tests/harness/test_skill_orchestration_behavior.sh`
@@ -82,6 +75,8 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
   `tests/test_qa_ledger.sh`, `tests/harness/test_skill_orchestration_behavior.sh`.
 - **Law 3 (Compounding) — 문서 리뷰 엔진 기반 (v7.4.0)** — 네 문서 리뷰 자리를 통일하는 `shared/docreview/` 를 호출자 0 으로 심었다. `generic` 프로필(`references/docreview-profiles/generic.md`)이 non-code 아티팩트 자리를 데이터로 선언. `/qg critique` 의 전환(agent·reference 링크 배선, `artifact_commit.sh` 자율 커밋 루프 소멸)은 후속 major PR. 집행은 `shared/tests/test_docreview_*.sh` + 변이 매트릭스.
 - **모집단에 안 들어간 것은 검사되지 않는다 (v7.5.0)** — 심볼릭 링크로 배포되는 러너가 `extract_codex_invocations.py` 의 `is_symlink()` skip 과 `codex_observation.sh` 양쪽 모집단에서 빠져, `test_sandbox_enforced.sh` 가 «통과»하면서도 그 러너를 한 번도 안 봤다. 링크 배포본을 모집단에 넣고 관측 캡처를 basename 이 아니라 «경로»로 키잉했다(같은 basename 후보 둘이 서로를 가렸다). **락의 PASS 는 이빨의 증거가 아니다** — 무엇이 모집단에 있는지를 먼저 물어야 한다. v7.4.0 CHANGELOG 가 「PR 2 에서 다시 판단한다」로 미뤘던 항목이고, 그 판단은 이 릴리스가 했다.
+- **Law 1 · G3 — 「검증하지 못했다」는 일급 판정값** — 판정은 `clean` · `defect` · `not-certified (<사유>)` 셋이고 사유는 닫힌 열거다(`scripts/verdict.py` 한 곳). kill switch · trivia · 각도 부재 · 차등 축의 해상도 문제는 `clean` 도 실패도 아닌 `not-certified` 로 드러난다. regression: `tests/test_verdict_vocabulary.sh` · `tests/test_pipeline_verdict_wiring.sh`.
+- **C4 — 차등 테스트는 항상** — 기준선 축(`create-baseline`)과 봉인된 HEAD 축(`seal-worktree.sh` → `create-head`)에서 오케스트레이터가 직접 돌린다. 판정을 내는 경로 안에서 차등 테스트가 빠지는 길은 trivia escape 와 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 둘뿐이고 둘 다 `not-certified` 다(전역 `DEVBREW_QUALITY_GATES_DISABLE=1` 은 다르다 — Preflight P1 에서 판정 자체를 내지 않고 그대로 리턴한다). 부팅되는 앱의 런타임 행위 검증은 **대체하지 않고 주장을 거둔다**.
 
 ## 구조
 
@@ -89,11 +84,10 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 quality-gates/
 ├── .claude-plugin/         # 플러그인 메타데이터
 │   └── plugin.json
-├── agents/                 # Gate agent (leaf agent; 파이프라인이 dispatch)
-│   ├── runtime-verifier.md      # Runtime gate Step 3 (sandbox executor — tier-unpinned)
-│   ├── test-scope-validator.md  # Runtime gate Step 2.5 (pre-exec test scope check)
-│   ├── doc-recritic.md          # Review gate Phase 1.5 — 공유 재비판자의 copy-of 사본
-│   ├── security-reviewer.md     # Review gate Phase 1 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`
+├── agents/                 # 리뷰어 agent (leaf agent; 파이프라인이 dispatch — 쓰기 권한 있는 agent 는 없다)
+│   ├── test-scope-validator.md  # 차등 테스트 R1b (pre-exec test scope 분류)
+│   ├── doc-recritic.md          # ④ 재비판(Phase 1.5) — 공유 재비판자의 copy-of 사본
+│   ├── security-reviewer.md     # ③ 보안 각도(Phase 1) always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`
 │   ├── artifact-critic.md       # `/qg critique` 게이트 — tier-unpinned critic; 비-코드 산출물의 논리 갭·미기술 전제·불완전·근거 없는 주장·모호성 (read-only)
 │   ├── artifact-adversarial.md  # `/qg critique` 게이트 — tier-unpinned 판정자; critic/codex 발견을 confirm/downgrade/reject 하고 놓친 것을 추가 (read-only)
 │   └── pr-understanding-builder.md  # publish 생성기 — model 키 없음(tier-unpinned), tools: Read 1개 (inert·미호출; fail-closed; 쓰기·실행·네트워크·위임 0; 유일 입력 = inlined blob)
@@ -109,18 +103,19 @@ quality-gates/
 │   ├── setup-qg.sh                           # 파이프라인 초기화
 │   ├── check-trivia.sh                       # Trivia escape 감지기
 │   ├── filter-docs.sh                        # 코드 reviewer용 docs path 필터
-│   ├── discover-plan.sh                      # Plan 파일 우선순위 탐색 (Runtime gate test-scope-validator)
+│   ├── discover-plan.sh                      # Plan 파일 우선순위 탐색 (차등 테스트 test-scope-validator)
 │   ├── discover-spec.sh                      # Spec 파일 우선순위 탐색 (test-scope-validator + codex; AC-섹션 적격성)
 │   ├── discover_common.sh                    # 위 두 탐색기가 source 하는 공통 조각 (get_mtime · pick_newest; 실행 지점 없음)
-│   ├── detect-runtime.sh                     # Runtime gate 런타임 surface 탐지 (manifest 산출)
-│   ├── compute-test-scope-candidates.sh      # Runtime gate Step 2.5 — 후보 test 파일 산출 (Python/JS/TS heuristic)
+│   ├── compute-test-scope-candidates.sh      # 차등 테스트 R1b — 후보 test 파일 산출 (Python/JS/TS heuristic)
 │   ├── resolve-baseline.sh                   # 공유 baseline resolution (base/base_ref/merge_base/degraded/same_as_head/ahead)
-│   ├── run-test-selection.sh                 # Runtime floor — 러너 어댑터 9종 detect/assign/probe/run (유일 소유자)
+│   ├── seal-worktree.sh                      # `seal <session-id>` — HEAD 트리를 `.git` 안 임시 인덱스로 봉인, 봉인 커밋 SHA 출력
+│   ├── qg-worktree.sh                        # `create-baseline`/`create-head` — 기준선·봉인 HEAD 두 축의 워크트리 생성(`create-head`는 봉인을 다시 떠 대조). `create-sandbox`/`mutation-guard` 는 남아 있으나 qg 파이프라인은 더 호출하지 않는다 — 소비자는 `plugins/plugin-audit` 자체 테스트 격리
+│   ├── run-test-selection.sh                 # ② floor — 러너 어댑터 9종 detect/assign/probe/run (유일 소유자, 기준선·HEAD 양쪽 오케스트레이터가 직접 호출)
 │   ├── baseline-cache.sh                     # (merge_base, runner, unit) 내용주소 기준선 캐시 get/put
 │   ├── diff-test-results.py                  # 기준선×HEAD 귀속 8종 + 어댑터 간 --aggregate
 │   ├── check_qa_ledger.py                    # LD7 floor 5차원 원장 구조 게이트 (Law 1)
 │   ├── detect_codex.sh                       # symlink → ../../../shared/codex/detect_codex.sh — Codex CLI 10-case probe (killswitch-conf/version/auth/sandbox/kill-switch/timeout)
-│   ├── build_codex_prompt.py                 # Review gate Phase 1 codex-reviewer용 prompt builder
+│   ├── build_codex_prompt.py                 # ③ 다른 전제 각도(codex-reviewer)용 prompt builder
 │   ├── codex_findings_to_yaml.py             # symlink → ../../../shared/codex/codex_findings_to_yaml.py — Codex JSONL stream → 표준 finding YAML (auth/schema/stderr 처리, --emit-keys default|design)
 │   ├── codex_jsonl.py                        # copy-of shared/codex/codex_jsonl.py — extract_last_agent_message 정본 사본 (설치본에서 sibling import가 살아있게)
 │   ├── recritic_bridge.py                    # Phase 1.5 재비판 익명화 브리지 (`prepare` — findings → agent-stripped f-키 findings + 매핑 산출; raw diff 는 오케스트레이터가 별도로 쓴다)
@@ -138,9 +133,9 @@ quality-gates/
 │       └── generic.md             # `/qg critique` 게이트 — non-code 아티팩트 리뷰 프로필(§ 위 v7.4.0 bullet)
 ├── skills/
 │   ├── quality-pipeline/
-│   │   ├── SKILL.md         # 단일 게이트 실행기
+│   │   ├── SKILL.md         # 한 파이프라인 실행기 — ①–⑤ in-turn 오케스트레이션
 │   │   └── references/
-│   │       ├── runtime-gate.md       # Runtime 게이트 절차 (조건부 로드)
+│   │       ├── differential-test.md  # ② 차등 테스트 절차 전문 (매 iteration Read)
 │   │       └── state-file-format.md  # 파이프라인 state 파일 포맷
 │   └── publishing-pr-understanding/
 │       └── SKILL.md         # /qg-publish orchestrator — gh를 가진 유일 컴포넌트 (cost_class: variable)
@@ -166,22 +161,22 @@ quality-gates/
 | Trivia | ~0% (즉시 skip) |
 | Quick | ~25–35% |
 | Standard | ~30–45% |
-| Deep | ~55–75% (Tier C 전문가 다수) |
+| Deep | ~55–75% (추가 리뷰어 다수) |
 
 트리거 조건과 override flag는 [`commands/qg.md`](commands/qg.md) 참고.
 
 ### Codex reviewer cost
 
-The optional `codex-reviewer` agent has `cost_class: variable` — as a Tier B **availability-floor** it invokes the user's Codex CLI subscription/API on **every non-trivia Review gate dispatch when detected (all depths incl. `quick` — scope/depth-independent)**, separate from the depth-specific baseline in the table above (so it is not attributed to any single depth row). First-use cost consent gate prompts via `AskUserQuestion`. Disable globally with `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1`.
+The optional `codex-reviewer` agent has `cost_class: variable` — as an **availability-floor** it invokes the user's Codex CLI subscription/API on **every non-trivia pipeline dispatch when detected (all depths incl. `quick` — scope/depth-independent)**, separate from the depth-specific baseline in the table above (so it is not attributed to any single depth row). First-use cost consent gate prompts via `AskUserQuestion`. Disable globally with `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1`.
 
-### PR-understanding publish cost (`/qg-publish`, separate from the two gates)
+### PR-understanding publish cost (`/qg-publish`, separate from the pipeline)
 
-`publishing-pr-understanding` skill은 `cost_class: variable` (context 크기·tier에 따라 다름). 저술을 맡는 `pr-understanding-builder`는 frontmatter 에 `model` 키가 없다 — 사용자의 subagent 설정, 없으면 세션 티어를 받는다(하니스가 티어를 정하지 않는다). Deep tier만 실행 전 upfront cost 고지(AskUserQuestion)를 하며, 작은 diff는 비용이 자연히 bounded되고 `/qg-publish`는 명시적 실행이 곧 비용 수용이다(NG5 정합 — 명시 실행이 유일한 touchpoint). Review/Runtime 두 게이트의 비용 표(위)와는 **완전히 별도** — publish는 게이트가 아니므로 depth 기반 자동 트리거가 없다.
+`publishing-pr-understanding` skill은 `cost_class: variable` (context 크기·tier에 따라 다름). 저술을 맡는 `pr-understanding-builder`는 frontmatter 에 `model` 키가 없다 — 사용자의 subagent 설정, 없으면 세션 티어를 받는다(하니스가 티어를 정하지 않는다). Deep tier만 실행 전 upfront cost 고지(AskUserQuestion)를 하며, 작은 diff는 비용이 자연히 bounded되고 `/qg-publish`는 명시적 실행이 곧 비용 수용이다(NG5 정합 — 명시 실행이 유일한 touchpoint). 파이프라인의 비용 표(위)와는 **완전히 별도** — publish는 파이프라인의 일부가 아니므로 depth 기반 자동 트리거가 없다.
 
 ### 재비판자(doc-recritic) model
 
 `doc-recritic` agent declares no `model` key — 이 값은 이 플러그인이 아니라 공유 정본
-(`shared/docreview/agents/doc-recritic.md`)이 정한다. Review gate 안에서는 여전히 **단일
+(`shared/docreview/agents/doc-recritic.md`)이 정한다. 파이프라인 안에서는 여전히 **단일
 model-based 판정 각도**다: Phase 1/2 리뷰어가 findings 를 내고 그 뒤의 synthesizer 는
 결정론적 스크립트이므로, 사용자가 보는 모든 finding 은 재비판자의 판정을 거친다. 판정
 관문은 이제 persona 가 아니라 코드 프로필 자리다 — `references/recritic-code-profile.md`
@@ -190,7 +185,7 @@ model-based 판정 각도**다: Phase 1/2 리뷰어가 findings 를 내고 그 �
 그대로 유지되는지는 `shared/tests/test_copy_of_contract.sh`(byte-for-byte copy invariant)
 가 잰다 — 사본이 원본과 한 바이트라도 다르면 그 락이 RED 다. 하네스가 티어를 정하지 않는
 원리(no `model` key → 사용자 `CLAUDE_CODE_SUBAGENT_MODEL` 설정, 없으면 세션 티어, CLI
-2.1.261 측정)는 무변경. Runs ~once per Review gate fix-loop iteration (≤5×).
+2.1.261 측정)는 무변경. Runs ~once per pipeline fix-loop iteration (≤5×).
 
 **Choosing a cheaper tier for devbrew subagents is the user's call, not the plugin's.** Put it in your own settings — for example in `~/.claude/settings.json`:
 
@@ -200,74 +195,84 @@ model-based 판정 각도**다: Phase 1/2 리뷰어가 findings 를 내고 그 �
 
 Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` also exists. The only thing measured here (CLI 2.1.261, 2026-09-06) is that it overrides a frontmatter `inherit`; its documented effect on dispatch-time `model` arguments and on other plugins' pins was not measured. devbrew does not recommend it.) Note the trade-off you are choosing: on a session stronger than the tier you set, reviewers run one tier below the writer.
 
-## 게이트
+## 파이프라인
 
-> **비-코드 산출물 비평 모드 (v2.11.0):** `/qg critique <path>` 또는 자연어 비평 의도로 문서·스펙·계획·설정·산문을 대상으로 비평-수정-재비평 루프를 돈다(라운드별 커밋; 코드 리뷰 아님 — 코드는 위 2게이트). 상세는 skill `critiquing-artifacts`.
+> **비-코드 산출물 비평 모드 (v2.11.0):** `/qg critique <path>` 또는 자연어 비평 의도로 문서·스펙·계획·설정·산문을 대상으로 비평-수정-재비평 루프를 돈다(라운드별 커밋; 코드 리뷰 아님 — 코드는 위 코드 파이프라인). 상세는 skill `critiquing-artifacts`.
 
-| 게이트 | 주체 | 목적 | 위임 대상 |
-|------|-----|------|---------|
-| Review gate | quality-pipeline skill (inline) | scout 주도 orchestration: depth-aware dispatch + Phase 1.5 재비판(doc-recritic) + Phase 1.6 synthesizer | pr-review-toolkit, feature-dev, superpowers (review agent들) |
-| Runtime gate | quality-pipeline skill (floor) + runtime-verifier agent (상황별 층) | **영향-구동 차등 실행 (v3.0.0):** floor는 이번 변경의 영향분 테스트를 merge_base 기준선과 HEAD 양쪽에서 오케스트레이터가 직접 실행·귀속하는 것; 그 위의 상황별 층(앱 부팅, 콘솔 에러 확인, 스크린샷, spec AC 플로우)만 runtime-verifier에 위임 | 러너 어댑터: `run-test-selection.sh`(오케스트레이터 소유, 위임 없음). 상황별 층: chrome-devtools-mcp 또는 playwright |
+| 단계 | 주체 | 무엇 |
+|---|---|---|
+| ① 스코프 | 오케스트레이터 + `check-review-scope.sh` | session(기본) · `branch` · `--paths` |
+| ② 차등 테스트 | 오케스트레이터 + 결정론 스크립트 | 영향분 테스트를 기준선 축과 봉인된 HEAD 축에서 돌려 귀속(`references/differential-test.md`) |
+| ③ 각도 + 리뷰어 | `security-reviewer`(보안) · codex(다른 전제) · 추가 리뷰어(스코프) | 각도 셋과 그 수행자는 고정, 스코프는 추가 리뷰어만 정한다 |
+| ④ 재비판 | `doc-recritic`(판정 각도) | 출처를 못 보는 재비판 — 탐지 0 이어도 돈다 |
+| ⑤ 합성 · 판정 | `synthesize_findings.py` → `verdict.py` | `clean` · `defect` · `not-certified (<사유>)` |
 
-**아키텍처 메모 — 왜 Review gate는 agent가 없는가**: Claude Code는 skill만 (agent가 아닌) `Agent()`의 `subagent_type`을 사용 가능. Review gate는 여러 Phase로 review agent를 dispatch해야 하므로 orchestration 로직이 `skills/quality-pipeline/SKILL.md`에 직접 있습니다. Runtime gate는 leaf agent (sub-agent dispatch 안 함) — 단, v3.0.0부터 floor(테스트 실행) 자체는 agent 밖, 오케스트레이터가 `run-test-selection.sh`를 직접 호출해서 돈다. runtime-verifier가 자기 턴 안에서 테스트를 돌려 결과를 self-report하는 경로는 금지된다 — 그러면 결정론 백스톱이 모델 주장과 독립이라는 전제(LD5)가 무너진다.
+**아키텍처 메모 — 왜 오케스트레이션이 skill 에 있는가**: Claude Code는 skill만 `Agent()`의
+`subagent_type`을 쓸 수 있다. 파이프라인은 여러 리뷰어를 디스패치해야 하므로 orchestration
+로직이 `skills/quality-pipeline/SKILL.md`에 있다. 테스트 실행은 어떤 agent 에도 위임하지
+않는다 — 오케스트레이터가 `run-test-selection.sh` 를 직접 부른다. 결정론 백스톱이 모델
+주장과 독립이라는 전제가 거기서 선다.
 
-**`/qg-publish` (PR-understanding generate/publish)는 세 번째 게이트가 아니다.** (v2.9.0)
-`gh`는 위 두 게이트 어디에도 없다 — publish는 별도 skill(`publishing-pr-understanding`)에
-격리된 **consent-gated opt-in 표면**이지, `/qg`의 Review/Runtime gate에 자동으로 연결되지
+**`/qg-publish` (PR-understanding generate/publish)는 파이프라인의 일부가 아니다.** (v2.9.0)
+`gh`는 위 파이프라인 어디에도 없다 — publish는 별도 skill(`publishing-pr-understanding`)에
+격리된 **consent-gated opt-in 표면**이지, `/qg`의 파이프라인에 자동으로 연결되지
 않는다. 정직 문구: 이 표면은 **deterministic envelope + model-authored content** —
 gh I/O·secret-scan·marker-scoped idempotent upsert는 결정론 스크립트가 통제하고, 사람이
 읽는 실제 산출물 텍스트는 빌더가 저술한 model-authored content다. 게시는 매 실행
 사람이 preview를 읽고 AskUserQuestion으로 명시 동의한 뒤에만 일어난다. `/qg` 완료 시
 파이프라인은 그대로 끝난다 — 게시는 `/qg-publish`를 **명시적으로 실행**해야만
 시작되고, 그 명시 실행 자체가 유일한 touchpoint다(자동 이어짐 없음).
-세 번째 게이트도 아니고, gh는 여전히 게이트 어디에도 없다. 자세한 내용은
+파이프라인의 일부도 아니고, gh는 여전히 그 어디에도 없다. 자세한 내용은
 [`commands/qg-publish.md`](commands/qg-publish.md).
 
-## Review gate 리뷰 단계 (v2.13.0 스코프-구동 구성)
+## 리뷰어 구성 — 각도 셋 + 추가 리뷰어
 
-리뷰어 구성은 **오케스트레이터가 diff 스코프로 선택**한다(모델 판단 + scout 힌트 + review-pr
-§4 rubric + scope-signal 팔레트). 3-tier 모델:
+각도 셋(보안 · 판정 · 다른 전제)과 그 수행자는 고정이다 — 스코프로 빠지지 않는다. **추가
+리뷰어만 오케스트레이터가 diff 스코프로 선택**한다(모델 판단 + scout 힌트 + review-pr
+§4 rubric + scope-signal 팔레트):
 
 ```
-Tier A — Floor (비-trivia면 항상, 스코프 무관; 모델이 못 뺌)
-  ├── quality-gates:security-reviewer   (Phase 1)   tools: Read, Grep, Glob (#104 락)
-  └── quality-gates:doc-recritic         (Phase 1.5, tier-unpinned)  tools: Read, Grep, Glob (#104 락)
-Tier B — codex (availability-floor: detect_codex 참이면 무조건, 스코프 무관)
-  └── codex-reviewer (별도 프로세스/모델 패밀리, OS read-only 샌드박스)
-Tier C — Dynamic (모델이 스코프로 선택, advisory 외부 에이전트; 최대 6 후보)
+보안 각도 — 매 iteration (모델이 못 뺌)
+  └── quality-gates:security-reviewer   tools: Read, Grep, Glob (#104 락) · 처분 fail-closed
+판정 각도 — 매 iteration (탐지 0 이어도)
+  └── quality-gates:doc-recritic         tools: Read, Grep, Glob (#104 락) · 처분 fail-closed
+다른 전제 각도 — detect_codex 참이면
+  └── codex-reviewer (별도 프로세스/모델 패밀리, OS read-only 샌드박스) · 부재는 공시만
+추가 리뷰어 — 모델이 스코프로 선택, advisory 외부 에이전트; 최대 6 후보
   ├── pr-review-toolkit:code-reviewer        ← 강한 default(비-trivial diff), quick-depth만 drop
   ├── pr-review-toolkit:silent-failure-hunter → 에러핸들링 변경
   ├── pr-review-toolkit:type-design-analyzer  → 신규/변경 타입
   ├── pr-review-toolkit:pr-test-analyzer      → 테스트 변경
   ├── pr-review-toolkit:comment-analyzer      → docs/주석 변경
   └── feature-dev:code-architect             → 대형 구조/아키텍처 변경
-Phase 1.6  Synthesizer (Phase 1 실행 시 항상) — dedupe/rank (결정론 스크립트)
+합성 — synthesize_findings.py (결정론) → verdict.py
 ```
 
 선택은 **model-owned routing**(P8 lightness) — 결정론 selector 스키마 없음. 상세 rubric·
-팔레트는 SKILL `## Reviewer composition (scope-driven)` 섹션. scout(`scripts/scout.py`)는
+팔레트는 SKILL `## Angles and reviewers (scope-driven)` 섹션. scout(`scripts/scout.py`)는
 `depth` + 추천 subset을 emit하는 **힌트 provider**(권위 아님).
 
-**Prerequisites (Tier C optional dependencies):** `pr-review-toolkit`(code-reviewer +
+**Prerequisites (추가 리뷰어 optional dependencies):** `pr-review-toolkit`(code-reviewer +
 silent-failure-hunter + type-design-analyzer + pr-test-analyzer + comment-analyzer),
-`feature-dev`(code-architect). 미설치 시 해당 Tier C는 unavailable로 degrade하고 floor(A) +
-codex(B) + 설치된 것으로 계속(loud log). floor·codex는 이 degrade의 영향을 받지 않는다.
+`feature-dev`(code-architect). 미설치 시 해당 추가 리뷰어는 unavailable로 degrade하고 각도
+수행자 + 설치된 것으로 계속(loud log). 각도 수행자는 이 degrade의 영향을 받지 않는다.
 
-**Fan-out:** Review gate는 fan-out consent 게이트를 fire하지 **않는다**(과거
+**Fan-out:** 파이프라인은 fan-out consent 게이트를 fire하지 **않는다**(과거
 dispatch-수 기반 consent 게이트 주장은 documented-not-implemented였음). P22
 anti-corollary(subagent spray) instantiation은 **transparency 라인(매 iter 선택/제외 가시화)
 + 선언된 max fan-out** 기반으로 억제한다 (리포 전역 `fan-out ≥5` 하드 게이트는 억제 sweep에서 제거됐다 — 없는 백스톱을 근거로 들지 않는다).
-재계산 max fan-out: **Phase 1 병렬 ≤ 8**(security-reviewer + codex + Tier C 최대 6),
-**총/iteration ≤ 10**(+ 재비판 + synthesizer; code-simplifier Phase 3 없음).
+재계산 max fan-out: **Phase 1 병렬 ≤ 8**(security-reviewer + codex + 추가 리뷰어 최대 6),
+**총/iteration ≤ 10**(Phase 1 의 8 + 재비판(doc-recritic) + test-scope-validator(차등 테스트
+R1b, 매 iteration 디스패치) = 10; `synthesize_findings.py` 는 스크립트 호출이지 dispatch 가
+아니므로 이 집계에 안 든다; code-simplifier Phase 3 없음).
 
-## 파이프라인 흐름 (single-turn serial dispatch, v1.32.0)
+## 파이프라인 흐름 (single-turn)
 
-`v1.32.0`에서 SKILL이 전체 파이프라인을 단일 assistant turn 내에서 serial dispatch로 실행합니다. Inter-gate progression과 Review gate fix-loop iteration은 모두 AskUserQuestion으로 사용자 동의를 받아 진행합니다 — 이 도구는 progression/consent를 담당하며, subagent fan-out은 게이트하지 않습니다(fan-out은 transparency + 선언된 max fan-out으로 bound). (v1.5.0의 turn-by-turn state machine 다이어그램은 제거됨; 단일 다이어그램만 유지.)
-
+`quality-pipeline` SKILL이 전체 파이프라인을 단일 assistant turn 내에서 serial dispatch로 실행합니다. fix-loop iteration은 AskUserQuestion으로 사용자 동의를 받아 진행합니다 — 이 도구는 progression/consent를 담당하며, subagent fan-out은 게이트하지 않습니다(fan-out은 transparency + 선언된 max fan-out으로 bound).
 
 ```
 ┌─ single assistant turn ──────────────────────────────────────────────┐
-│                                                                       │
+│                                                                        │
 │   user: /qg                                                           │
 │       │                                                               │
 │       ▼                                                               │
@@ -277,42 +282,30 @@ anti-corollary(subagent spray) instantiation은 **transparency 라인(매 iter �
 │   SKILL preflight  (kill switch)                                      │
 │       │                                                               │
 │       ▼                                                               │
-│   trivia escape? ─── yes ──▶ "Trivia diff — all gates skipped"        │
-│       │ no                                                            │
-│       ▼                                                               │
-│   gate scope?  AskUserQuestion ("...both gates?")                     │
-│   (skipped if review | runtime | both | --skip-runtime arg)           │
-│       ├── "Review gate only" ──▶ Review gate, then Final summary      │
-│       │ "Run both gates"                                              │
-│       ▼                                                               │
-│   Review gate iter loop (≤5)                                          │
-│       │                                                               │
-│       ├── findings empty ──────────────────────────┐                  │
-│       │                                            │                  │
-│       └── findings remain ──▶ AskUserQuestion      │                  │
-│                              ("findings remain..."  │                  │
-│                               Retry / Proceed to    │                  │
-│                               Runtime gate / Stop)  │                  │
-│                                  │                  ▼                  │
-│                                  └────────▶ Runtime gate dispatch      │
-│                                             (runtime-verifier)         │
-│                                                  │                     │
-│                                                  ├── PASS              │
-│                                                  ├── FAIL              │
-│                                                  ├── SKIP_WITH_EVIDENCE │
-│                                                  └── NEEDS_RESOLUTION   │
-│                                                         ▶ AskUserQuestion
-│                                                         ("Runtime
-│                                                          verifier needs..."
-│                                                          P21 reaffirmed)
-│                                                  │                     │
-│       ▼                                          ▼                     │
-│   Final summary                                                       │
-│                                                                       │
-└───────────────────────────────────────────────────────────────────────┘
+│   trivia escape? ── yes ──▶ verdict: not-certified (trivia) ──────┐   │
+│       │ no                                                        │   │
+│       ▼                                                           │   │
+│   qg iter loop (≤5)                                                │   │
+│     ① scope (session | branch | --paths)                           │   │
+│     ② differential test (baseline vs sealed HEAD — every iteration)│   │
+│     ③ angles + reviewers (security · codex · specialists)          │   │
+│     ④ framing-blind re-critique (doc-recritic)                     │   │
+│     ⑤ synthesize → verdict: clean | defect | not-certified         │   │
+│       │                                                             │   │
+│       ├── clean ──────────────────────────────────────┐            │   │
+│       ├── defect/not-certified, kept = 0 (no fix       │            │   │
+│       │   to offer — stop here, verdict unchanged) ────┤            │   │
+│       │                                                │            │   │
+│       └── defect/not-certified, kept > 0 ──▶ AskUserQuestion        │   │
+│                                    ("findings remain..." │           │   │
+│                                     Retry / Accept and   │           │   │
+│                                     finish / Stop)       │           │   │
+│                                        │ Retry → next iteration     │   │
+│       ▼                                ▼                ▼           ▼   │
+│   Final summary  (Verdict · Iterations · Outcome · angles) ◀────────┘   │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
 ```
-
-**v1.32.0 변경 요약**: 파이프라인 진행은 더 이상 turn-by-turn state machine으로 진행되지 않고, `quality-pipeline` SKILL이 단일 assistant turn 내에서 serial dispatch로 끝까지 실행합니다. AskUserQuestion이 inter-gate progression gate와 fix-loop consent를 담당합니다(subagent fan-out은 게이트하지 않음).
 
 ### Trivia detector coverage
 
@@ -331,17 +324,16 @@ anti-corollary(subagent spray) instantiation은 **transparency 라인(매 iter �
 ## 사용
 
 ```
-/qg                            # gate scope 질문 후 실행; 세션 단위 diff
-/qg branch                     # gate scope 질문 후 실행; main 대비 풀 브랜치 diff
-/qg --paths <glob>...          # gate scope 질문 후 실행; 명시 path scope
-/qg --reset                    # 현재 세션 폴더 + legacy v1.5.0 파일 정리 후 종료
+/qg                            # 파이프라인 실행; 세션 단위 diff
+/qg branch                     # 파이프라인 실행; main 대비 풀 브랜치 diff
+/qg branch <name>              # 격리된 worktree 에서 <name> 브랜치 검사
+/qg --paths <glob>...          # 명시 path scope
+/qg --reset                    # 현재 세션 폴더 + legacy 파일 정리 후 종료
 /qg --gc                       # stale sibling 세션 (TTL) sweep 후 종료
-/qg both                       # 두 게이트 모두 실행 (gate scope 질문 없음)
-/qg review                     # Review gate만
-/qg runtime                    # Runtime gate만
-/qg --skip-runtime             # Review gate만 (런타임 skip)
+/qg both|review|runtime|--skip-runtime   # 제거됨 — 한 줄 공지 후 그대로 진행 (한 파이프라인이라 게이트 범위가 없다)
 /qg --plan <path>              # 특정 plan 파일 사용
 /qg --pr-url <url>             # PR URL 명시
+/qg critique <path>            # 비-코드 산출물 비평-수정 루프(별도 skill; 코드 아님)
 /cancel-qg                     # 현재 세션 활성 파이프라인 취소
 /cancel-qg --gc                # stale 세션 TTL sweep
 /cancel-qg --all               # 전 세션 wipe (확인 + 활성 sibling 리스트 먼저)
@@ -361,8 +353,8 @@ git fetch origin pull/123/head:pr-123  # PR을 로컬 브랜치로 가져오기
 내부 동작:
 
 1. `<repo>/.claude/quality-gates/worktrees/pr-123-<sid>/` 에 detached worktree 생성
-2. 그 안에서 Review gate → Runtime gate 실행, agent들이 worktree에서 diff를 읽음 (state는 main repo에 머묾, v1.14.0 worktree cwd contract 그대로 적용)
-3. 정상 종료 (complete / cancel) 시 자동 cleanup. 비정상 종료 (NEEDS_RESTART 등) 시 보존 + stderr 안내 경로
+2. 그 안에서 파이프라인 실행, agent들이 worktree에서 diff를 읽음 (state는 main repo에 머묾, v1.14.0 worktree cwd contract 그대로 적용)
+3. 정상 종료 (complete / cancel) 시 자동 cleanup. 비정상 종료 시 보존 + stderr 안내 경로
 
 ### 디버깅용 worktree 보존
 
@@ -380,9 +372,9 @@ export DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1
 
 `/qg branch` (인자 없음) 은 영향 없음.
 
-## Plan Discovery Sources (Runtime gate test-scope-validator)
+## Plan Discovery Sources (차등 테스트의 test-scope-validator)
 
-Runtime gate의 test-scope-validator가 `--plan <path>`를 받지 않으면 다음 우선순위로 plan 파일을 탐색합니다 (`scripts/discover-plan.sh`; 위→아래로 첫 자격 candidate에서 멈춤):
+차등 테스트의 test-scope-validator가 `--plan <path>`를 받지 않으면 다음 우선순위로 plan 파일을 탐색합니다 (`scripts/discover-plan.sh`; 위→아래로 첫 자격 candidate에서 멈춤):
 
 | 우선순위 | 위치 | 자격 조건 |
 |---|---|---|
@@ -390,15 +382,15 @@ Runtime gate의 test-scope-validator가 `--plan <path>`를 받지 않으면 다�
 | 2 | `./docs/superpowers/plans/*.md` (project-local) | checkbox `- [ ]` / `- [x]` 1개 이상 |
 | 3 | `~/.claude/plans/*.md` (legacy global) | project-local 비었을 때만 consult. hit 시 deprecation 경고 출력 |
 
-선택된 source 내부에서: unchecked checkbox 있는 파일 우선, 동률이면 mtime 가장 최근. 모두 all-checked면 mtime 가장 최근 ("방금 끝낸 plan, PASS 처리 정상").
+선택된 source 내부에서: unchecked checkbox 있는 파일 우선, 동률이면 mtime 가장 최근. 모두 all-checked면 mtime 가장 최근 ("방금 끝낸 plan을 정상적으로 고른 것").
 
 **Soft dependency:** project-local source는 `superpowers:writing-plans` skill이 plan을 저장하는 경로 (`docs/superpowers/plans/`) 와 동일합니다. superpowers 플러그인을 설치하지 않았더라도 동일 경로에 `.md` 파일을 직접 두면 동작합니다.
 
 알고리즘 자체는 `scripts/discover-plan.sh`(적격성 술어 + source 우선순위)와 그것이 source 하는 `scripts/discover_common.sh`(디렉토리 스캔 + mtime 선택)에 분리되어 `tests/test_discover_plan.sh` 12개 fixture로 검증됩니다.
 
-## Spec Discovery Sources (Runtime gate test-scope-validator + Review gate codex)
+## Spec Discovery Sources (test-scope-validator + codex)
 
-Runtime gate의 test-scope-validator와 Review gate codex가 명시적 spec 경로를 받지 않으면 다음 우선순위로 사용자 프로젝트의 **spec**(Acceptance Criteria의 truth)을 탐색합니다 (`scripts/discover-spec.sh`; 위→아래 첫 자격 candidate에서 멈춤):
+test-scope-validator와 codex가 명시적 spec 경로를 받지 않으면 다음 우선순위로 사용자 프로젝트의 **spec**(Acceptance Criteria의 truth)을 탐색합니다 (`scripts/discover-spec.sh`; 위→아래 첫 자격 candidate에서 멈춤):
 
 | 우선순위 | 위치 | 자격 조건 |
 |---|---|---|
@@ -407,9 +399,12 @@ Runtime gate의 test-scope-validator와 Review gate codex가 명시적 spec 경�
 
 plan과 달리 **legacy-global 소스는 없습니다** — spec은 프로젝트 artifact (글로벌 위치 관행 부재). 자격 파일 중 mtime 가장 최근이 선택됩니다.
 
-**advisory only.** spec이 발견되면 test-scope-validator가 `ac_coverage` 블록(`note: "advisory only — does not block"` + AC별 covered/uncovered + covered_by 테스트 ref)을 emit하고, codex 경로(`run_codex_reviewer.sh`)가 spec의 AC 섹션을 `<spec_context>`에 script-internal로 주입합니다. 어느 경우에도 Runtime gate verdict를 **block하지 않습니다.** spec이 없으면 loud log를 출력하고 v2.0.0 동작(plan-기반 scope)으로 fallback합니다.
+**advisory only.** spec이 발견되면 test-scope-validator가 그것을 1차 축으로 테스트 파일을
+분류하고, codex 경로(`run_codex_reviewer.sh`)가 spec의 AC 섹션을 `<spec_context>`에
+script-internal로 주입합니다. 어느 경우에도 판정을 **막지 않습니다.** spec이 없으면 loud
+log를 출력하고 plan-기반 분류로 fallback합니다.
 
-**kill switch:** `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` — spec이 있어도 no-spec 경로를 강제 (ac_coverage 생략, codex `<spec_context>` 비움; validator는 plan-기반 계속).
+**kill switch:** `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` — spec이 있어도 no-spec 경로를 강제 (codex `<spec_context>` 비움; validator는 plan-기반 분류).
 
 **Soft dependency:** project-local source는 `superpowers:brainstorming` / `spec-distill`이 spec을 저장하는 경로 (`docs/superpowers/specs/`)와 동일합니다. spec-distill / `superpowers:brainstorming` 플러그인을 설치하지 않았더라도 동일 경로에 `.md` 파일을 직접 두면 동작합니다.
 
@@ -426,19 +421,17 @@ plan과 달리 **legacy-global 소스는 없습니다** — spec은 프로젝트
 
 | 플러그인 | 필수 | 사용처 | 목적 |
 |---------|------|-------|------|
-| pr-review-toolkit | 아니오 | Review gate | Tier C 전문가(code-reviewer 강한 default 등); 미설치 시 graceful degrade |
-| feature-dev | 아니오 | Review gate | 컨벤션 리뷰, 아키텍처, 구현 추적 |
-| superpowers | 아니오 | Review gate | plan 정합성, 증거 검증 |
-| chrome-devtools-mcp / playwright | 아니오 | Runtime gate | 브라우저 자동화 |
+| pr-review-toolkit | 아니오 | 리뷰어 | 추가 리뷰어(code-reviewer 강한 default 등); 미설치 시 graceful degrade |
+| feature-dev | 아니오 | 리뷰어 | 컨벤션 리뷰, 아키텍처, 구현 추적 |
+| superpowers | 아니오 | 리뷰어 | plan 정합성, 증거 검증 |
 
 ## 설정
 
 ### Tuning knobs
 
-- `MAX_REVIEW_ITERATIONS`: 5 (Review gate 내부 review-fix 사이클 수)
+- `MAX_REVIEW_ITERATIONS`: 5 (파이프라인 fix-loop iteration 수)
 - `DEVBREW_QUALITY_GATES_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/qg` 또는 `/cancel-qg --gc`에서 GC)
 - `DEVBREW_QUALITY_GATES_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
-- `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS`: 3 (`0..10`, Runtime gate NEEDS_RESOLUTION mid-run 루프 cap)
 - `DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1`: `/qg branch` worktree cleanup 비활성화 (디버깅용 보존)
 
 **`.claude/quality-gates/baseline-cache/`** (v3.0.0) — `(merge_base, runner, unit)` 내용주소
@@ -449,26 +442,37 @@ plan과 달리 **legacy-global 소스는 없습니다** — spec은 프로젝트
 
 CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component 비활성화 경로는 환경 변수 한 번으로 cover되어야 함. 아래는 source-of-truth 인벤토리.
 
+**보안 — 기본값이 대상 저장소의 코드를 호스트 권한으로 실행한다.** ② 차등 테스트가 매
+`/qg`(`/qg branch <name>` 로 남의 브랜치를 검사할 때 포함)마다 상시 도는 v9.0.0 이후,
+기준선·HEAD 두 트리에서 어댑터의 `setup_cmd`(`npm ci` 등 install lifecycle 스크립트) ·
+테스트 스위트가 **기본으로, 별도 동의 질문 없이** 호스트 권한으로 돈다 — 이전에는 게이트
+범위 질문에서 "Run both gates" 를 골라야만 닿던 표면이다. 끄는 스위치는 아래
+`DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 하나다.
+
 **전역 (모든 hook + 모든 reviewer 비활성화):**
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_QUALITY_GATES_DISABLE=1` | 모든 quality-gates hook + `qg-gc.py` no-op. `/qg`는 여전히 invocable하지만 hook이 fire하지 않음. |
+| `DEVBREW_QUALITY_GATES_DISABLE=1` | 모든 quality-gates hook + `qg-gc.py` no-op. `/qg`는 invocable 하지만 SKILL Preflight P1 이 즉시 리턴한다 — `setup-qg.sh` 도 agent 도 부르지 않는다(판정 자체가 나지 않는다 — `not-certified` 도 아니다). |
 
-**Reviewer 단위 disable (Review gate):**
+**각도 · 리뷰어 단위 disable:**
 
 | Env var | 효과 |
 |---|---|
 | `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` | optional `codex-reviewer` 완전 skip (model-family diversity layer off). `scripts/detect_codex.sh`가 우선 검사. |
-| `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` | Review gate Tier A floor의 `security-reviewer`만 skip. Tier A의 나머지(재비판)와 Tier B(codex)·Tier C 전문가는 여전히 fire. **loud**: dispatch 지점에서 배너 한 줄, 그리고 그 iteration의 verdict 표면에 *"이 라운드에는 보안 리뷰가 없었다"* 가 함께 남는다 (floor 구성원이 빠지면 `clean`의 의미가 달라지므로 — 형제 `DISABLE_CODEX`가 silent인 것과 의도적으로 다르다). |
+| `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` | 보안 각도의 `security-reviewer`만 skip. 재비판 · codex · 추가 리뷰어는 여전히 fire. **판정이 `not-certified (angle-absent)` 가 된다** — 탐지 0 이어도. 형제 `DISABLE_CODEX`는 다른 전제 각도라 부재를 공시만 한다. |
 
-**Runtime gate 단위 disable:**
+**차등 테스트 · 스코프 단위 disable:**
 
 | Env var | 효과 |
 |---|---|
 | `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1` | `/qg branch <name>` auto-worktree 기능 disable (`/qg branch` no-arg는 영향 없음). |
-| `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` | spec 발견 시에도 no-spec 경로 강제 (ac_coverage 생략, codex `<spec_context>` 비움; validator는 plan-기반 계속). |
-| `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` | Runtime gate의 git-worktree 샌드박스 executor를 끄고 read-only smoke fallback. verdict는 SKIP_WITH_EVIDENCE로 cap(절대 PASS 아님), real-tree 변경 시 loud 경고. `qg-worktree.sh create-sandbox`가 exit 3. |
+| `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` | spec 발견 시에도 no-spec 경로 강제 (codex `<spec_context>` 비움; validator는 plan-기반 분류). |
+| `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | ② 차등 테스트를 통째로 건너뛴다(리뷰 대상 저장소의 코드를 호스트 권한으로 돌리지 않는다). 판정은 `not-certified (kill-switch)` 다 — `clean` 도 실패도 아니다. |
+
+**`DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX`** 는 qg 파이프라인에서 더 읽히지 않는다
+(샌드박스 executor 가 사라졌다). `scripts/qg-worktree.sh create-sandbox` 는 남아 있고 그 소비자는
+`plugins/plugin-audit` 의 자체 테스트 격리다 — 이 스위치는 그 소비자에게만 효력이 있다.
 
 **Publish 단위 disable (`/qg-publish`, 게이트 아님):**
 
@@ -497,7 +501,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 state는 Claude Code 세션마다 `.claude/quality-gates/<session-id>/`에 추적됩니다:
 
-- `pipeline.md` — 파이프라인 frontmatter (status, current_gate, iteration counters) + body (Gate Results, History).
+- `pipeline.md` — 파이프라인 frontmatter (session_id · started_at · 선택적 worktree_path) + body (History).
 
 Review scope 자체는 세션 state 로 추적되지 않는다 — `/qg` 매 턴 git 에서 직접
 도출된다(branch diff against base, worktree 자체 변경분과 union).

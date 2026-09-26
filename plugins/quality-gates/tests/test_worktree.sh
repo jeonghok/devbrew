@@ -169,7 +169,7 @@ SKILL_MD="$PLUGIN_DIR/skills/quality-pipeline/SKILL.md"
 T5_FAIL=0
 # PR4a: adversarial dropped — its replacement (doc-recritic, Phase 1.5) has no
 # project_dir dispatch slot by design (same reason as the T8 loop above).
-for name in test-scope-validator security-reviewer runtime-verifier; do
+for name in test-scope-validator security-reviewer; do
   if ! awk -v name="quality-gates:$name" '
     $0 ~ name { found=NR }
     found && NR <= found+15 && /project_dir:/ { ok=1; exit }

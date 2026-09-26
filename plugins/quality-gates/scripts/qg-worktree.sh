@@ -11,12 +11,13 @@
 #                                   NO working-tree overlay (baseline must not inherit
 #                                   HEAD's uncommitted changes)
 #   create-head <sealed-sha> <session-id>
-#                                -> echoes absolute worktree path; detached at commit B
-#                                   (the seal create-sandbox emitted). Pristine HEAD tree
-#                                   for the authoritative test axis — deliberately NOT the
-#                                   verifier's sandbox, so the verifier's boot setup cannot
-#                                   reach the axis (§11 ⑬) and the gate's own test output
-#                                   cannot reach mutation-guard's tree (§6.7 S4).
+#                                -> echoes absolute worktree path; detached at the sealed
+#                                   commit (seal-worktree.sh 가 봉인한 커밋). Re-seals the
+#                                   working tree and asserts the tree matches before
+#                                   building the worktree — the sha is not a declared free
+#                                   variable (§6.4.1). No sandbox required.
+#   create-sandbox · mutation-guard — qg 파이프라인은 더 부르지 않는다. 소비자는
+#     plugins/plugin-audit/scripts/run-own-tests.sh(자체 테스트 격리)다.
 #   create-sandbox <session-id> -> echoes 3 lines: sandbox abs path, baseline SHA,
 #                                  snapshot digest (disposable worktree mirroring the
 #                                  working tree, git-ignored files excluded; sealed as
@@ -33,7 +34,10 @@
 # Kill switch: DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1 — `create` exits 2
 # with a loud message.
 # Kill switch: DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1 — `create-sandbox` exits 3
-# (distinct from die's exit 2) so the orchestrator can fall back to read-only.
+# (distinct from die's exit 2). The qg pipeline no longer calls `create-sandbox` —
+# its only consumer is plugin-audit's own test isolation
+# (plugins/plugin-audit/scripts/run-own-tests.sh), and this switch has effect
+# there only.
 
 set -u
 
@@ -52,12 +56,11 @@ cmd_sanitize() {
 
 # 주어진 커밋에 detached 된 일회용 워크트리를 플러그인 네임스페이스 안에 만든다.
 # 두 소비자가 공유한다: `create-baseline`(기준선 축 = merge_base) 과
-# `create-head`(HEAD 축 = create-sandbox 가 봉인한 커밋 B).
+# `create-head`(HEAD 축 = seal-worktree.sh 가 봉인한 커밋).
 #
 # `create-sandbox` 와 달리 **working-tree 오버레이를 하지 않는다** — 두 축 모두 커밋
 # 상태 그대로여야 차등의 의미가 산다. 기준선이 HEAD 의 미커밋 변경을 물면 차등이
-# 사라지고, HEAD 축이 verifier 가 부팅용으로 만든 상태를 물면 두 축이 같은 환경이라는
-# 전제가 무너진다(§11 ⑬).
+# 사라진다.
 make_detached_worktree() {   # <sha> <session-id> <prefix> → 워크트리 절대경로 emit
   local sha="$1" sid="$2" prefix="$3"
   local sid_short main_root parent wt
@@ -558,41 +561,19 @@ case "${1:-}" in
     make_detached_worktree "$2" "$3" base
     ;;
   create-head)
-    # HEAD 축(create-sandbox 가 봉인한 커밋 B). **verifier 샌드박스와 별개 트리**다 —
-    # 권위 있는 HEAD 테스트가 verifier 의 부팅 setup 이 만든 상태 위에서 돌면 두 축이
-    # 같은 환경이라는 이 설계의 전제가 무너지고(§11 ⑬), 테스트 산출물이
-    # mutation-guard 의 검사 대상 트리에 떨어져 거짓 terminal FAIL 을 낸다(§6.7 S4).
-    # 두 결함 모두 이 분리로 닫힌다.
+    # HEAD 축(봉인 커밋). **봉인 확인 (assert-equality)** — 인자가 선언된 자유 변수가
+    # 되면 형제 `create-baseline "$merge_base" <sid>` 와 인자 모양이 같아, `$merge_base`
+    # 를 넘기는 실수 하나로 HEAD 축이 기준선의 바이트 복사본이 되고 전 unit 이 STILL_GREEN
+    # 으로 접힌다. 그래서 지금 봉인을 **다시 떠서** 트리를 대조한다 — 기대 OID 를
+    # 오케스트레이터가 따로 옮겨 적지 않으므로 대조 양쪽이 같은 전사에서 나오지 않는다.
+    # 대조는 거부만 할 수 있고 선택은 못 한다: 값의 출처는 여전히 호출자다.
     [[ $# -eq 3 ]] || die "usage: create-head <sealed-sha> <session-id>"
-
-    # **봉인 확인 (assert-equality).** 앞선 판본은 `$sha` 를 무검증으로 받았다. 그러면
-    # 이 자리가 `--baseline-detected` 형제인 *선언된 자유 변수*가 되는데, 그 잔여들과
-    # 달리 **부재가 아니라 오값**이라 fail-closed 조차 아니었다: 바로 위 형제
-    # `create-baseline "$merge_base" <sid>` 와 인자 모양이 같으므로 `$merge_base` 를
-    # 넘기는 실수 하나로 HEAD 축이 기준선의 바이트 복사본이 되고, 전 unit 이
-    # `(P,P) → STILL_GREEN → closed` 로 접혀 **degrade 신호 하나 없이 PASS** 가 난다.
-    # R7 은 자기 `baseline_sha` 로 샌드박스만 보므로 HEAD 트리가 어느 커밋에서 왔는지
-    # 알지 못한다 (/qg iter-7 리뷰, security-reviewer CRITICAL).
-    #
-    # 왜 "샌드박스 HEAD 에서 **도출**" 이 아니라 "**대조**" 인가 (adversarial 판정).
-    # 도출은 신뢰 앵커를 피검자에게 넘긴다 — verifier 는 그 샌드박스 안에서 Write·Bash 를
-    # 쥐고 있어 `B` 위에 커밋할 수 있고, 그러면 HEAD 축의 내용을 verifier 가 고르게 된다.
-    # 대조는 **거부만 할 수 있고 선택은 못 한다**: 값의 출처는 여전히 오케스트레이터가
-    # 들고 있는 `baseline_sha`(= R7 이 가드에 넘기는 바로 그 값)이고, 이 검사는 그것이
-    # 이 세션의 봉인과 다를 때 죽을 뿐이다. verifier 가 샌드박스 HEAD 를 움직이면 그것도
-    # 여기서 fail-closed 로 죽고 R7 의 reflog 플래그가 별도로 잡는다.
-    # (digest 로 봉인된 스냅샷에서 읽는 안은 불가 — 그 7필드에 baseline SHA 가 없다.)
-    ch_sid_short="${3:0:8}"
-    [[ -n "$ch_sid_short" ]] || die "empty session-id"
-    ch_root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not a git repo"
-    ch_root=$(cd "$ch_root" && pwd -P) || die "cd failed: $ch_root"
-    ch_sandbox="$ch_root/.claude/quality-gates/worktrees/rt-${ch_sid_short}"
-    [[ -d "$ch_sandbox" ]] \
-      || die "no sealed sandbox for this session: $ch_sandbox — create-head must follow create-sandbox in the same session (HEAD axis has no sealed commit to attach to)"
-    ch_sealed=$(git -C "$ch_sandbox" rev-parse HEAD 2>/dev/null) \
-      || die "cannot read sealed commit from sandbox: $ch_sandbox"
-    [[ "$2" == "$ch_sealed" ]] \
-      || die "sealed-sha mismatch: got '$2' but this session's sandbox is at '$ch_sealed' — the HEAD axis must be built from commit B, not from merge_base or a stale retry value"
+    git rev-parse --verify --quiet "$2^{commit}" >/dev/null \
+      || die "not a commit: $2"
+    ch_expected=$(bash "$(dirname "${BASH_SOURCE[0]}")/seal-worktree.sh" seal "$3") \
+      || die "cannot re-seal the working tree to verify the HEAD axis"
+    [[ "$(git rev-parse "$2^{tree}")" == "$(git rev-parse "$ch_expected^{tree}")" ]] \
+      || die "sealed-sha mismatch: tree of '$2' is not the tree of the working tree sealed now — the HEAD axis must be built from the seal, not from merge_base or a stale seal"
 
     make_detached_worktree "$2" "$3" head
     ;;

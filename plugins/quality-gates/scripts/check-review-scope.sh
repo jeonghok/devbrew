@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # check-review-scope.sh — read-only deterministic CHANGES-EXIST signal for the
-# Review gate's verdict-integrity floor (design v2.7.0 §5.2). Narrowed from v2.6.0:
+# Review pipeline's honest-verdict floor (design v2.7.0 §5.2). Narrowed from v2.6.0:
 # the single responsibility shrank from "is the resolved review scope empty while
 # changes exist?" to "does this branch/worktree have changes?". Scope resolution
 # (WHAT to review) is the MODEL's responsibility now; this script supplies only the
@@ -17,7 +17,8 @@
 # Exit code: always 0 (degraded: yes carries the fail-open state). Read-only:
 # never creates/modifies/deletes files. Takes NO arguments. Invoke from project root.
 
-set -u   # NOT -e: graceful degradation, like detect-runtime.sh.
+set -u   # NOT -e: graceful degradation — a failed probe falls through to
+         # emit_degraded() below rather than aborting the script.
 
 emit_degraded() {
   echo "changes_exist: no"

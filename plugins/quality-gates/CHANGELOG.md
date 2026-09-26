@@ -3,6 +3,60 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [9.0.0] — 2026-09-26
+
+**breaking** — 두 게이트가 한 파이프라인이 된다. 판정은 `clean` · `defect` · `not-certified (<사유>)` 셋이다.
+
+### Removed
+
+- **`runtime-verifier` agent** — 부팅되는 앱의 런타임 행위 검증을 **대체하지 않고 주장을 거둔다**(설계 §6.5.3). 이 설치본이 잃는 것: **브라우저 플로우**(chrome-devtools-mcp / playwright 구동) · **spec Acceptance Criteria 런타임 검증** · **mutation guard**(verifier 의 쓰기를 잡던 git-diff 가드 — 쓰기 권한 agent 가 사라져 가드할 대상이 없다).
+- `scripts/detect-runtime.sh` · Decision 1(게이트 범위 질문) · Decision 2(런타임 범위 + block policy) · NEEDS_RESOLUTION 해소 루프.
+- 공개 인자 `both` · `review` · `runtime` · `--skip-runtime` — 받으면 한 줄 공지 후 그대로 진행한다(하드 오류가 아니다).
+- 환경 스위치 `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS` — **대상 소멸**(해소 루프가 사라졌다). 통제를 없앤 것이 아니라 통제할 대상이 사라진 것이다.
+- `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` 의 qg 파이프라인 효력 — **대상 소멸**(샌드박스 executor). 스위치 자체는 `qg-worktree.sh create-sandbox` 의 소비자인 plugin-audit 에 남는다.
+- `test-scope-validator` 의 advisory `ac_coverage` 출력 — `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE` 는 그만큼 **축소**된다(codex `<spec_context>` 와 validator 의 spec 축은 그대로).
+- 합성기 `--adversarial` · `--legacy-verdict` · 옛↔새 판정 어휘 매핑표(AC23) · `downgrade` 판정.
+
+### Changed
+
+- `/qg` 는 ① 스코프 → ② 차등 테스트(매 iteration, 기준선 대비) → ③ 각도 + 리뷰어 → ④ 재비판 → ⑤ 합성 · 판정의 한 파이프라인이다. `references/runtime-gate.md` 는 `references/differential-test.md` 가 됐다.
+- 합성기는 매 실행 `--emit-verdict` · `--angles` 로 판정을 낸다. SKILL 은 `verdict:` 줄 하나를 판정으로 읽는다.
+- **`DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER` 의 의미** — loud advisory → 보안 각도 `absent` → 판정 `not-certified (angle-absent)`.
+- `security-reviewer` 디스패치 처분 `fail-open` → `fail-closed`(판정 각도와 같다).
+- HEAD 축은 샌드박스 대신 `seal-worktree.sh` 의 봉인에서 선다. 봉인 임시 인덱스는 `.git` 안(`qg-seal-<sid8>.<pid>.index`, 호출마다 새 파일)에 둔다 — `.claude/` 를 무시하지 않는 리포에서도 봉인된다. 봉인은 qg 자신의 네임스페이스(`.claude/quality-gates/`)를 워킹트리 쪽에서 집지 않는다 — 그 자리가 이미 `git check-ignore` 대상이면 plain `git add -A`, 아니면 그 자리를 뺀 exclude pathspec 을 쓴다(무시 규칙 모양과 실제 add 순회가 어긋나 봉인이 죽는 경우를 fail-closed 로 막는다). `create-head` 는 인자의 트리를 지금 다시 뜬 봉인과 대조한다.
+- **차단 술어가 버려진 finding 을 포함한다.** 합성기가 컨테이너 수준에서 finding 을 통째로 버리면(`dropped_malformed > 0`) 항목 소실이라 `review_blocked` 와 최종 `blocking` 양쪽에서 차단으로 잡는다 — 전에는 이 사건이 「공시(판정을 막지 않음)」로만 드러났다.
+- **차등 테스트(②)가 kill switch 없이 R6 집계까지 끝나지 못하면**(R-init 가드 · R3 갭 게이트의 `중단` 선택 · 그 밖에 R1–R5 어느 스텝에서든 중단, 원인 무관) 사유 `error-axis` 로 `not-certified` 다 — AC2(차등은 trivia · kill switch 외에 생략되지 않는다)를 판정 쪽에서 지키는 배선이다.
+- **R8 원장(`runtime-evidence.md`)의 `floor:verification` 이 `degraded` 이거나 unclaimed 단위가 있으면** 사유 `silent-drop` 으로 `not-certified` 다 — `check_qa_ledger.py` 는 이 경우도 exit 0 을 낼 수 있어(원장 내부 일관성만 본다) 이 배선이 없으면 정직하게 degraded 를 적은 실행이 `clean` 으로 샌다.
+- **R8 원장은 iteration 마다 새로 쓴다(덮어쓴다)** — 이어 쓰지 않는다. 차등 테스트가 매 iteration 도는 것의 결과이고, `check_qa_ledger.py` 는 한 iteration 의 선언만 받는다.
+- 본 보고서의 `**이 실행은 clean이 아니다**` 마커는 차단(항목 소실 · 셀 수 없음 · 주 판정자 사망)에만 선다. 보조 입력 사망 · 판정을 바꾼 강제는 `공시(판정을 막지 않음)` 로 드러난다.
+- codex finding 의 저자 토큰은 `codex-reviewer` 로 정한다.
+- **trivia escape 도 판정을 낸다.** `check-trivia.sh` 가 trivia 로 판정하면 `verdict.py --reason trivia` 를 직접 불러 `not-certified (trivia)` 를 낸다 — 「테스트 없는 clean 은 나오지 않는다」(C4). 전에는 trivia 실행이 판정 어휘 밖에서 그냥 스킵 문구만 냈다.
+- **kept > 0 인 finding 하나(SUGGESTION 포함)만으로도 판정은 `defect` 다** — severity 를 묻지 않는다(계획 R-B). Fix-loop decision 에서 "Accept and finish" 를 골라도 verdict 는 그대로 `defect` 로 끝난다 — 그 선택은 findings 를 accept 할 뿐 판정을 `clean` 으로 바꾸지 않는다.
+- **R1b 가 고르는 test unit 이 0개인 실행은 `not-certified (scope-empty)` 다** — ② 가 상시 도는 이상 관측 없음은 음성 결과가 아니다(§6.4.3 P23 재결정, 2026-09-26). **진짜 무변경(genuine no-op)과 docs/config-only 변경도 포함한다** — `clean` 이 아니라 `not-certified` 로 나온다.
+
+### Added
+
+- `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` — 차등 테스트를 건너뛴다. 판정은 `not-certified (kill-switch)`.
+- 락: `tests/test_one_pipeline_surface.sh` · `tests/test_pipeline_verdict_wiring.sh` · `tests/lib/recritic_fixture.sh`.
+
+### Fixed
+
+- `/qg --paths <glob>` 가 `setup-qg.sh` 에서 `Unknown argument` 로 죽던 것 · `--gc` 를 다른 인자와 함께 줄 때 죽던 것. `--paths` 는 이제 다음 `--` 토큰이거나 제거된 인자 이름(`review`·`runtime`·`both`·`branch`)이면 글롭 소비를 멈추고, 글롭을 하나도 못 받으면 거부한다.
+
+### Security
+
+- **모든 `/qg`(`/qg branch <name>` 로 남의 브랜치를 검사할 때 포함)가 이제 기본으로 대상
+  저장소의 코드를 호스트 권한으로 실행한다.** ② 차등 테스트가 매 iteration 상시 도는
+  이상, 기준선·HEAD 두 트리의 어댑터 `setup_cmd`(`npm ci` 등 install lifecycle 스크립트) ·
+  테스트 스위트가 별도 동의 질문 없이 돈다 — 전에는 제거된 게이트 범위 질문에서 "Run both
+  gates" 를 골라야만 닿던 표면이었다. 끄는 스위치는
+  `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 다.
+- persona 편집: `runtime-verifier.md` 제거 · `test-scope-validator.md` 의 `ac_coverage` 절 제거. 보안 각도 처분 fail-closed.
+
+### Known gaps
+
+- **`shared/adjudication/render_disposition.py` 의 회계 줄 `(차단: 예/아니오)` 가 `report["degraded"]` 에 묶여 있다.** 보조 입력 사망만 있고 주 판정자는 살아 있는 실행에서 `(차단: 예)` 가 「공시(판정을 막지 않음)」 머리줄 옆, `verdict: clean` 과 함께 선다 — 공시와 차단은 다른 술어라는 원칙과 표기가 어긋난다. `shared/` 는 spec-distill 과 공동 소비하는 동결 영역이라 이 PR 밖(부채 원장 참조) — 판정은 `verdict:` 줄이 정하므로 방향은 불변이다.
+
 ## [8.5.1] — 2026-09-25
 
 patch 인 이유 — 링크로 배송하는 `docreview_route.py` · `docreview_state.py` · `render_disposition.py` · `codex_findings_to_yaml.py` 가 바뀌었다(spec-distill 4.3.1 과 같은 변경).

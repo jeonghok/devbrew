@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 # AC34-AC39 — synthesize_findings.py deterministic post-processing.
 set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 SCRIPT="plugins/quality-gates/scripts/synthesize_findings.py"
+. "$SCRIPT_DIR/lib/recritic_fixture.sh"
 PASS=0; FAIL=0
 
+# run_case 의 두째 인자는 재비판 응답 블록이다(`verdicts: []` 가 압도적 다수 —
+# 판정자는 있고 판정 0. finding_id 로 직접 판정을 거는 자리는 findings_yaml 의
+# 유일 항목을 f1 로 적는다 — anonymize() 의 1-기반 순번).
 run_case() {
   local name="$1" adv_yaml="$2" findings_yaml="$3" expected_grep="$4" expected_neg="$5"
   local tmp; tmp="$(mktemp -d)"
-  echo "$adv_yaml" > "$tmp/adv.yaml"
   echo "$findings_yaml" > "$tmp/findings.yaml"
-  local out; out=$(python3 "$SCRIPT" --adversarial "$tmp/adv.yaml" --findings "$tmp/findings.yaml")
+  rf_prep "$tmp"
+  rf_reply "$tmp" "$adv_yaml"
+  local out; out=$(rf_synth "$tmp")
   # Collapse newlines for multi-line pattern matching
   local out_flat; out_flat=$(echo "$out" | tr '\n' ' ')
   local ok=1
@@ -35,7 +42,8 @@ run_case "AC34 dedup+merge" \
 
 # AC35 reject (unchanged behavior)
 run_case "AC35 reject" \
-  '- {finding_id: code-reviewer-a.py-10, verdict: reject, reason: x}' \
+  'verdicts:
+  - {f: f1, verdict: reject, evidence: x}' \
   '- {agent: code-reviewer, file: a.py, line: 10, severity: CRITICAL, confidence: 9, summary: bug, proposed_fix: fix}' \
   'No high-confidence' 'a.py:10'
 

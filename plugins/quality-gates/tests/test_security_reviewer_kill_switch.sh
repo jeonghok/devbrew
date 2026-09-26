@@ -18,8 +18,14 @@
 #    잡는 것은 **토큰 수준** 훼손뿐이다 — 조건 반전(`!=1`), env 이름 오타, 게이트 삭제,
 #    게이트를 dispatch 뒤로 이동.
 #  · **SKILL.md 밖**의 dispatch 는 보지 않는다(현재 리포에 실재 dispatch 는 여기 하나).
-#  · 게이트 **아래쪽** 문서(Step 4.5 verdict advisory · Environment 색인)의 정확성은
-#    재지 않는다. 그 둘은 이 락의 **decoy** 이며 창 밖임을 아래에서 못 박는다.
+#  · 게이트 **아래쪽** 문서(dispatch 바로 뒤 fail-closed 문단 · Environment 색인)의
+#    정확성은 재지 않는다. 그 둘은 이 락의 **decoy** 이며 창 밖임을 아래에서 못 박는다.
+#    Fix round 1, Important 4 — decoy① 은 dispatch 와 그다음 `## ` heading 사이(dispatch
+#    바로 뒤 「fail-closed 의 뜻」 문단, SKILL.md ~:315)로 잡는다. 옛 decoy(Environment
+#    색인 안, dispatch 로부터 500줄+)는 창-과대 실패를 같은 `##` 섹션 안 가까운 오검출과
+#    구별하지 못했다(리뷰어 실측 — 창 산출 알고리즘이 「다음 `## ` heading 까지」로 growing
+#    되는 변이에서도 여전히 못 걸렸다) — 디스패치에 «물리적으로 붙어» 있어야 그 mutation
+#    을 실제로 잡는다.
 set -eu
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 SKILL="$REPO_ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
@@ -71,8 +77,8 @@ assert_eq "$awk_n" "$grep_n" "창 도출기가 dispatch 를 하나도 놓치지 
 miss_env=0; miss_cond=0; miss_banner=0; miss_skip=0
 decoy_verdict_in=0; decoy_index_in=0
 
-decoy_verdict_lines="$(grep -nF '보안 리뷰를 통과했다' "$SKILL" | cut -d: -f1)"
-decoy_index_lines="$(grep -nF 'Review gate Tier A floor의' "$SKILL" | cut -d: -f1)"
+decoy_verdict_lines="$(grep -nF 'fail-closed 의 뜻' "$SKILL" | cut -d: -f1)"
+decoy_index_lines="$(grep -nF '보안 각도의' "$SKILL" | cut -d: -f1)"
 
 while read -r s e d; do
   [ -n "${d:-}" ] || continue
@@ -98,7 +104,7 @@ while read -r s e d; do
   for ln in $decoy_verdict_lines; do
     if [ "$ln" -ge "$s" ] && [ "$ln" -le "$e" ]; then
       decoy_verdict_in=$((decoy_verdict_in + 1))
-      printf '      [창 과대] dispatch:%s 창[%s,%s] 이 verdict advisory(:%s)를 삼켰다\n' "$d" "$s" "$e" "$ln"
+      printf '      [창 과대] dispatch:%s 창[%s,%s] 이 dispatch 뒤 fail-closed 문단(:%s)을 삼켰다\n' "$d" "$s" "$e" "$ln"
     fi
   done
   for ln in $decoy_index_lines; do
@@ -118,12 +124,12 @@ assert_eq "$miss_skip" 0    "∀ dispatch — 창 안에 '발행하지 않는다
 
 # ── (4) decoy 배제 — 창이 아래쪽 ∃-만족자를 삼키지 않는가 ────────────────────
 # 음의 락에는 양의 짝이 필요하다: decoy 가 파일에서 사라지면 "창 밖" 은 공허해진다.
-assert_count_ge "grep -cF '보안 리뷰를 통과했다' '$SKILL'" 1 \
-  "decoy① Step 4.5 verdict advisory 가 파일에 실재 (창-밖 검사의 양성 짝)"
-assert_count_ge "grep -cF 'Review gate Tier A floor의' '$SKILL'" 1 \
+assert_count_ge "grep -cF 'fail-closed 의 뜻' '$SKILL'" 1 \
+  "decoy① dispatch 뒤 fail-closed 문단이 파일에 실재 (창-밖 검사의 양성 짝)"
+assert_count_ge "grep -cF '보안 각도의' '$SKILL'" 1 \
   "decoy② Environment 색인이 파일에 실재 (창-밖 검사의 양성 짝)"
 
-assert_eq "$decoy_verdict_in" 0 "decoy① verdict advisory 는 모든 창 밖이다"
+assert_eq "$decoy_verdict_in" 0 "decoy① dispatch 뒤 fail-closed 문단은 모든 창 밖이다"
 assert_eq "$decoy_index_in" 0   "decoy② Environment 색인은 모든 창 밖이다"
 
 finish
