@@ -523,6 +523,92 @@ case_resolve_tips_feed_combine() {
   cleanup
 }
 
+# ── PR1 이월: 로컬-이름 우선 dedupe 가 정렬 순서에 기댄다 — 순서를 기본값에 맡기지 않는다 ──
+case_for_each_ref_sort_pinned() {
+  local got
+  got=$(grep -n 'for-each-ref' "$RT" | grep -vE '^[0-9]+:[[:space:]]*#')
+  assert_eq "$(printf '%s\n' "$got" | grep -c .)" "1" "for-each-ref 호출은 한 곳이다"
+  assert_grep "$got" '--sort=refname ' "그 호출이 같은 줄에 --sort=refname 을 싣는다"
+  assert_not_grep "$got" '--sort=-' "역순(--sort=-…)이 아니다"
+}
+
+# ── PR1 이월: base 원격 ref · origin/HEAD 는 선언을 «담아도» 구성원이 아니다 ─────────
+#    `%(refname:short)` 는 refs/remotes/origin/HEAD 를 `origin` 으로 찍는다(실측 P4) —
+#    패턴에 `origin` 을 넣지 않으면 이 락은 공허하다.
+case_base_remote_ref_never_member() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q main; git merge -q --no-ff topicA -m "merge topicA"
+  git update-ref refs/remotes/origin/main HEAD
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+  git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "base 원격 ref 가 선언 커밋을 담아도 status: ok"
+  assert_eq "$(field base_ref "$out")" "origin/main" "base_ref 는 origin/HEAD 가 가리키는 origin/main"
+  assert_not_grep "$(field branches "$out")" '(^|,)(origin|origin/HEAD|origin/main|main)(,|$)' \
+    "origin/HEAD(=origin) · origin/main · main 은 구성원이 아니다"
+  assert_grep "$(field branches "$out")" '(^|,)topicB(,|$)' "살아 있는 구성원 topicB 는 있다(양의 짝)"
+  assert_grep "$(field branches "$out")" '(^|,)merged:[0-9a-f]{40}(,|$)' "머지된 topicA 는 merged: 로 있다(양의 짝)"
+  cleanup
+}
+
+# ── detect: 현재 브랜치가 base 위에 얹은 커밋의 트레일러 → 토픽 키 (R-AI) ────────────
+case_detect_statuses() {
+  new_repo
+  local R out; R=$(git rev-parse HEAD)
+  git checkout -q -b plain; echo p > p.txt; git add p.txt; git commit -qm plain
+  out=$(bash "$RT" detect)
+  assert_eq "$(field status "$out")" "no-declaration" "detect: 선언 없음"
+  assert_eq "$(field topic_key "$out")" "-" "detect: 선언 없으면 topic_key: -"
+  assert_eq "$(printf '%s\n' "$out" | grep -cE '^[a-z_]+: ')" "4" "detect: 정확히 4키"
+  git checkout -q -b late "$R"; echo u > u.txt; git add u.txt; git commit -qm "undeclared first"
+  decl_commit l.txt l1 "declared later"
+  out=$(bash "$RT" detect)
+  assert_eq "$(field status "$out")" "ok" "detect: 뒤 커밋에만 트레일러 → ok"
+  assert_eq "$(field topic_key "$out")" "$KEY" "detect: topic_key 는 트레일러 값 전체(조각 포함)"
+  git checkout -q -b stacked "$R"; decl_commit s1.txt s1 "s1"
+  git commit -q --allow-empty -m "s2
+
+Spec: docs/x-design.md#pr2"
+  out=$(bash "$RT" detect)
+  assert_eq "$(field status "$out")" "declaration-invalid" "detect: 한 브랜치에 키 둘 → declaration-invalid"
+  assert_grep "$(field reason "$out")" '2 distinct' "detect: reason 이 키 수를 적는다"
+  assert_eq "$(field topic_key "$out")" "-" "detect: 키가 둘이면 topic_key: -"
+  git checkout -q --detach HEAD
+  out=$(bash "$RT" detect)
+  assert_eq "$(field status "$out")" "base-unresolved" "detect: detached HEAD → base-unresolved"
+  cleanup
+}
+
+case_detect_ignores_base_history() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q main; git merge -q --no-ff topicA -m "merge topicA"
+  git checkout -q -b next; echo n > n.txt; git add n.txt; git commit -qm "next (선언 없음)"
+  assert_eq "$(field status "$(bash "$RT" detect)")" "no-declaration" \
+    "detect: base 에 이미 든 앞 토픽의 트레일러는 세지 않는다"
+  cleanup
+}
+
+case_detect_lowercase_trailer_ignored() {
+  new_repo
+  git checkout -q -b low; echo l > l.txt; git add l.txt
+  git commit -qm "low
+
+spec: $KEY"
+  assert_eq "$(field status "$(bash "$RT" detect)")" "no-declaration" \
+    "detect: 소문자 spec: 는 선언이 아니다(nkeys 와 같은 계열)"
+  cleanup
+}
+
+case_detect_usage() {
+  new_repo
+  local rc; bash "$RT" detect extra >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "detect 는 인자를 받지 않는다(exit 2)"
+  cleanup
+}
+
 for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_f2_boundary_merged_not_hidden case_f3_merged_ref_deleted \
          case_f4_undeclared_ancestor_included case_f5_fragment_discriminates \
@@ -538,7 +624,10 @@ for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_ten_keys_always \
          case_combine_clean case_combine_conflict case_combine_edges \
          case_combine_three_clean case_combine_three_conflict_attribution \
-         case_resolve_tips_feed_combine; do
+         case_resolve_tips_feed_combine \
+         case_for_each_ref_sort_pinned case_base_remote_ref_never_member \
+         case_detect_statuses case_detect_ignores_base_history \
+         case_detect_lowercase_trailer_ignored case_detect_usage; do
   echo "== $c"; $c
 done
 finish
