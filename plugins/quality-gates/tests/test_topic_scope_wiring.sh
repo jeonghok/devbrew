@@ -31,7 +31,7 @@ print("DETECT_FIRST:%d" % (1 if det and trv and det[0] < trv[0] else 0))
 skip_needle = 'trivia escape 를 **쓰지 않고** 곧장 iteration 1 로 간다'
 skip = [l for l in lines if 'status: ok' in l and 'status: declaration-invalid' in l and skip_needle in l]
 print("SKIP_LINE:%d" % len(skip))
-nodecl_violation = [l for l in lines if 'no-declaration' in l and 'trivia escape' in l and '쓰지 않' in l]
+nodecl_violation = [l for l in lines if 'no-declaration' in l and ('iteration 1' in l or ('trivia escape' in l and '쓰지 않' in l))]
 print("NODECL_VIOLATION:%d" % len(nodecl_violation))
 PY
 
@@ -73,16 +73,35 @@ i_else = idx(lambda l: l == 'else', i_if + 1) if i_if >= 0 else -1
 i_fi = idx(lambda l: l == 'fi', i_else + 1) if i_else >= 0 else -1
 shaped = i_fi > i_else > i_if >= 0
 print("IF:%d" % (1 if shaped else 0))
-ok_b = "\n".join(lines[i_if + 1:i_else]) if shaped else ""
-el_b = "\n".join(lines[i_else + 1:i_fi]) if shaped else ""
+ok_lines = lines[i_if + 1:i_else] if shaped else []
+el_lines = lines[i_else + 1:i_fi] if shaped else []
+ok_b = "\n".join(ok_lines)
+el_b = "\n".join(el_lines)
+
+
+def last_assign(prefix, block_lines):
+    # 갈래 «안»의 마지막 대입 — 뒤에 같은 변수를 한 번 더 대입해 앞 값을 덮는
+    # 변이(부분 문자열 락은 「그 값이 어딘가에 있다」만 보고 못 잡는다)를 구조로 잡는다.
+    val = None
+    for l in block_lines:
+        if l.strip().startswith(prefix):
+            val = l.strip()
+    return val
+
+
+ok_last_baseline = last_assign('baseline_commit=', ok_lines)
+printf_idx = idx(lambda l: l.startswith('printf '), i_fi + 1) if shaped else -1
+between_fi_and_printf = lines[i_fi + 1:printf_idx] if (shaped and printf_idx >= 0) else None
 checks = [
     ("OK_BASE", "baseline_commit=$(sed -n 's/^boundary: //p' \"$S\")" in ok_b),
     ("OK_SEALED", "sealed=$(sed -n 's/^head_commit: //p' \"$S\")" in ok_b),
     ("OK_TOPIC", 'create-head "$sealed" "<session-id>" --topic "$topic_key"' in ok_b),
     ("OK_SCAN", 'scan_dir="${head_tree_dir:-$project_dir}"' in ok_b),
+    ("OK_BASE_LAST", ok_last_baseline == "baseline_commit=$(sed -n 's/^boundary: //p' \"$S\")"),
     ("ELSE_BASE", 'baseline_commit="<위 6키의 merge_base>"' in el_b),
     ("ELSE_SCAN", 'scan_dir="$project_dir"' in el_b),
     ("ELSE_NO_TOPIC", "--topic" not in el_b),
+    ("NO_REASSIGN_AFTER_FI", between_fi_and_printf == []),
 ]
 for k, v in checks:
     print("%s:%d" % (k, 1 if v else 0))
@@ -141,6 +160,11 @@ print("PARA_BRANCH:%d" % (1 if "branch" in para_text else 0))
 print("PARA_PATHS:%d" % (1 if "--paths" in para_text else 0))
 print("PARA_DELETE_POS:%d" % (1 if "지운다" in para_text else 0))
 print("PARA_DELETE_NEG:%d" % (1 if "지우지 않" in para_text else 0))
+# override 조건 자체의 극성 — 문단 전체가 「override 다」쪽으로 조건을 뒤집어도
+# 위 네 토큰 존재 검사는 전부 그대로 만족된다(토큰은 안 지웠다). 조건절의 긍정형을
+# 리터럴로 고정하고, 그 부정형 표지가 섞여 있지 않은지 별도로 잰다.
+print("PARA_OVERRIDE_POSITIVE:%d" % (1 if "override(`branch` · `--paths`)면" in para_text else 0))
+print("PARA_OVERRIDE_NEGATED:%d" % (1 if ("가 없으면" in para_text or "가 없을 때" in para_text) else 0))
 PY
 
 case_trivia_escape_is_gated_by_declaration() {
@@ -154,11 +178,15 @@ case_trivia_escape_is_gated_by_declaration() {
 
 case_step1_writes_scope_file() {
   # R-AJ — ① 1a 가 매 iteration topic-head.sh 출력을 고정 경로에 쓴다. 산문으로 옮기면
-  # 실행되지 않으므로 bash 펜스 «안»의 줄만 센다.
-  local n
-  n=$(awk '/^[[:space:]]*```bash/{f=1;next} /^[[:space:]]*```/{f=0} f' "$SKILL" \
-      | grep -cF '"$QG/scripts/topic-head.sh" "<session-id>" > ".claude/quality-gates/<session-id>/topic-scope.txt" && cat ".claude/quality-gates/<session-id>/topic-scope.txt"')
-  assert_eq "$n" "1" "① 1a 펜스가 topic-head.sh 출력을 .claude/quality-gates/<session-id>/topic-scope.txt 에 쓰고 && 로 그대로 cat 한다(한 줄, || true 로 삼키지 않는다)"
+  # 실행되지 않으므로 bash 펜스 «안»의 줄만 센다. 줄 전체를 fullmatch 로 잰다 — 부분
+  # 문자열 락은 꼬리에 `|| true` 를 붙여 실패를 삼키는 변이를 못 잡는다.
+  local line n
+  line=$(awk '/^[[:space:]]*```bash/{f=1;next} /^[[:space:]]*```/{f=0} f' "$SKILL" \
+      | grep -F '"$QG/scripts/topic-head.sh" "<session-id>"' \
+      | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  n=$(printf '%s\n' "$line" | grep -c .)
+  assert_eq "$n" "1" "① 1a 펜스에 topic-head.sh 출력을 쓰는 줄이 정확히 하나"
+  assert_eq "$line" '"$QG/scripts/topic-head.sh" "<session-id>" > ".claude/quality-gates/<session-id>/topic-scope.txt" && cat ".claude/quality-gates/<session-id>/topic-scope.txt"' "① 1a 펜스가 topic-head.sh 출력을 .claude/quality-gates/<session-id>/topic-scope.txt 에 쓰고 && 로 그대로 cat 한다(줄 전체 fullmatch, || true 로 삼키지 않는다)"
 }
 
 case_status_table_is_total_over_statuses() {
@@ -175,6 +203,7 @@ case_topic_diff_uses_boundary_and_tree() {
   got=$(grep -F "sed -n 's/^boundary: //p'" "$SKILL" | grep -F "sed -n 's/^tree: //p'" | grep -F 'git diff --name-only "$b" "$t"')
   assert_eq "$(printf '%s\n' "$got" | grep -c .)" "1" "파일 집합 질의가 boundary · tree 를 한 줄에서 읽는다"
   assert_not_grep "$got" '^[[:space:]]*git ' "그 줄은 git 으로 시작하지 않는다(A20 session 오라클 밖)"
+  assert_eq "$(printf '%s' "$got" | grep -o 'git diff' | grep -c .)" "1" "그 줄에 git diff 호출이 정확히 하나(중간에 추가 git 호출을 끼워 넣지 않는다)"
   case "$got" in
     *'git diff --name-only "$b" "$t"') ok "그 줄이 git diff --name-only \"\$b\" \"\$t\" 로 끝난다(뒤에 다른 git 호출을 덧붙이지 않는다)" ;;
     *) no "그 줄이 git diff --name-only \"\$b\" \"\$t\" 로 끝난다(뒤에 다른 git 호출을 덧붙이지 않는다)"
@@ -222,9 +251,11 @@ case_rinit_topic_branch_sets_axes() {
   assert_grep "$got" '^OK_SEALED:1$'     "ok 갈래: sealed = head_commit(전사 없이 파일에서)"
   assert_grep "$got" '^OK_TOPIC:1$'      "ok 갈래: create-head 가 --topic 으로 재도출 대조한다"
   assert_grep "$got" '^OK_SCAN:1$'       "ok 갈래: scan_dir = HEAD 축 트리"
+  assert_grep "$got" '^OK_BASE_LAST:1$'  "ok 갈래: baseline_commit 의 «마지막» 대입도 boundary 다(뒤에 덮어쓰기 없음)"
   assert_grep "$got" '^ELSE_BASE:1$'     "else 갈래: baseline_commit = merge_base"
   assert_grep "$got" '^ELSE_SCAN:1$'     "else 갈래: scan_dir = project_dir"
   assert_grep "$got" '^ELSE_NO_TOPIC:1$' "else 갈래에 --topic 이 없다"
+  assert_grep "$got" '^NO_REASSIGN_AFTER_FI:1$' "fi 뒤 printf 앞에 축 재대입이 없다(양 갈래 값을 무조건 덮지 않는다)"
 }
 
 case_scan_dir_feeds_detect_and_assign() {
@@ -263,6 +294,8 @@ case_override_clears_stale_scope_file() {
   assert_grep "$got" '^PARA_PATHS:1$'      "그 문단이 --paths 를 언급한다"
   assert_grep "$got" '^PARA_DELETE_POS:1$' "그 문단이 삭제를 긍정형(지운다)으로 적는다"
   assert_grep "$got" '^PARA_DELETE_NEG:0$' "그 문단에 삭제 부정형(지우지 않)이 섞여 있지 않다"
+  assert_grep "$got" '^PARA_OVERRIDE_POSITIVE:1$' "override 조건절이 긍정형(override(...)면)이다"
+  assert_grep "$got" '^PARA_OVERRIDE_NEGATED:0$'  "override 조건절에 부정형(가 없으면 · 가 없을 때)이 섞여 있지 않다"
 }
 
 for c in case_trivia_escape_is_gated_by_declaration case_step1_writes_scope_file \
