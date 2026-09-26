@@ -36,6 +36,14 @@ elif [ $# -ne 1 ]; then
 fi
 HERE="$(cd -- "$(dirname -- "$0")" && pwd)"
 
+# 저장소 git 훅을 끈다 — 이 프로세스와 자식(봉인 · 해석 · 합치기)의 git 이 `core.hooksPath`
+# 의 훅을 돌리지 않는다. 훅 디렉토리는 추적되는 저장소 코드일 수 있고, 선언 경로 봉인은
+# kill switch 와 무관하게 돈다. 이미 `GIT_CONFIG_COUNT` 가 있으면 덮지 않고 한 칸 뒤에 덧붙인다.
+n="${GIT_CONFIG_COUNT:-0}"
+case "$n" in ''|*[!0-9]*) n=0 ;; esac
+export "GIT_CONFIG_KEY_$n=core.hooksPath" "GIT_CONFIG_VALUE_$n=/dev/null"
+export GIT_CONFIG_COUNT=$((n + 1))
+
 BRANCHES="-"; BOUNDARY="-"; TIPS="-"; SEAL="-"; SEAL_ON_TOPIC="-"
 TREE="-"; HEAD_COMMIT="-"; CONFLICTS="-"; NCOMMITS="-"; COMMITS=""
 

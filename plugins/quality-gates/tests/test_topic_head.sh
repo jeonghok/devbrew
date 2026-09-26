@@ -243,6 +243,30 @@ case_no_side_effects() {
   cleanup
 }
 
+case_repo_hooks_not_run() {
+  new_repo
+  local M; M=$(mktemp -d)
+  mkdir -p hooks
+  local h
+  for h in post-index-change post-checkout reference-transaction pre-auto-gc; do
+    printf '#!/bin/sh\necho %s >> %s/ran\n' "$h" "$M" > "hooks/$h"; chmod +x "hooks/$h"
+  done
+  git add hooks; git commit -qm "tracked hooks"
+  git config core.hooksPath hooks
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  rm -f "$M/ran"
+  echo dirty > wip.txt
+  local out; out=$(DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1 bash "$TH" "$SID")
+  assert_eq "$(field status "$out")" "ok" "추적 hooksPath: topic-head 가 봉인까지 돌아 status: ok"
+  assert_eq "$([ -e "$M/ran" ] && cat "$M/ran" || echo none)" "none" \
+    "추적 hooksPath: topic-head(봉인 · 해석 · 합치기)가 저장소 훅을 하나도 돌리지 않는다"
+  git add wip.txt
+  assert_grep "$([ -e "$M/ran" ] && cat "$M/ran" || echo none)" '^post-index-change$' \
+    "추적 hooksPath: 같은 fixture 에서 git add 를 직접 하면 훅이 돈다(양의 짝 — fixture 가 실제로 훅을 가진다)"
+  rm -rf "$M"
+  cleanup
+}
+
 case_create_head_topic_accepts_derived_commit() {
   new_repo
   local R; R=$(git rev-parse HEAD)
@@ -310,7 +334,7 @@ for c in case_usage case_no_declaration case_single_branch_topic case_two_siblin
          case_conflict_lists_files case_declared_path_absent \
          case_two_fragments_on_one_branch case_explicit_topic_skips_detect \
          case_unrelated_member_is_unbounded case_runs_from_subdirectory \
-         case_remote_only_sibling_is_combined case_no_side_effects \
+         case_remote_only_sibling_is_combined case_no_side_effects case_repo_hooks_not_run \
          case_create_head_topic_accepts_derived_commit case_create_head_topic_rejects_wrong_commits \
          case_create_head_topic_rejects_conflicted_topic case_create_head_usage; do
   echo "== $c"; $c

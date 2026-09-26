@@ -297,7 +297,7 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 읽지 않고 ② 를 통째로 건너뛴다. 이 줄을 그대로 보인다:
 `> [quality-gates] 차등 테스트가 DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1 로 꺼져 있다 — 이 실행은 not-certified (kill-switch) 다.`
 그리고 Step 4 에 `--reason kill-switch` 를 싣는다. 차등 테스트는 리뷰 대상 저장소의 코드를
-호스트 권한으로 돌린다 — 이 스위치는 그것을 끄는 보안 컨트롤이다. 테스트를 돌리는 스크립트(`run-test-selection.sh` 의 `probe` · `run`)도 이 스위치가 켜져 있으면 저장소 코드를 돌리지 않는다(`usable: no` · `reason: kill_switch`). 1a 는 git 만 쓰므로 스위치와 무관하게 돈다.
+호스트 권한으로 돌린다 — 이 스위치는 그것을 끄는 보안 컨트롤이다. 테스트를 돌리는 스크립트(`run-test-selection.sh` 의 `probe` · `run`)도 이 스위치가 켜져 있으면 저장소 코드를 돌리지 않는다(`usable: no` · `reason: kill_switch`). 1a 는 스위치와 무관하게 돌지만 저장소 git 훅을 끈 채(`topic-head.sh` 가 자기와 자식 git 의 `core.hooksPath` 를 `/dev/null` 로 둔다) git 만 쓴다.
 
 **Step 1c — 차등 테스트 (②).** [Differential test](#differential-test) 절을 따른다 —
 매 iteration 돈다. 결과(`$aggregate_yaml` 경로와 R6 두 호출의 exit code ·
