@@ -44,6 +44,27 @@ write_undeclared() {   # <path> <status>
 
 line_of() { printf '%s\n' "$1" | grep -n -E "$2" | head -1 | cut -d: -f1; }
 
+# 파이썬 본문은 `$( )` 안 heredoc 으로 두지 않는다(bash 3.2) — 최상위 heredoc 으로 담는다.
+IFS= read -r -d '' PY_LS <<'PY' || true
+import sys
+sys.path.insert(0, sys.argv[1])
+import scope_tuple
+base = ("topic_key: docs/x-design.md#pr1\nstatus: no-declaration\nreason: {r}\nbranches: -\n"
+        "boundary: -\ntips: -\nseal: -\nseal_on_topic: -\ntree: -\nhead_commit: -\n"
+        "conflicts: -\ncommits: -\n")
+for label, r in (("TAIL", "x "), ("MID", "a b: c")):
+    d = scope_tuple.parse(base.format(r=r))
+    print("%s:%d" % (label, 1 if d["reason"] == r else 0))
+PY
+
+case_line_separator_in_value_is_kept() {
+  # 줄 경계는 `\n` 하나다 — `splitlines()` 는 U+2028 등도 줄 끝으로 읽어 값의 꼬리를 조용히
+  # 잘라 낸다(`x<U+2028>` → `x`). `open()` 의 universal newline 이 CRLF 는 이미 접는다.
+  local got; got=$(python3 -c "$PY_LS" "$PLUGIN_ROOT/scripts" 2>&1)
+  assert_grep "$got" '^TAIL:1$' "값 끝의 U+2028 이 조용히 잘리지 않는다"
+  assert_grep "$got" '^MID:1$'  "값 중간의 U+2028 뒤가 새 줄(모르는 키)로 읽히지 않는다"
+}
+
 case_ok_scope_is_clean_and_carries_tuple() {
   setup_clean_run
   write_scope "$T/scope.txt" ok - "$TR" "$HC" - 2 "$C1" "$C2"
@@ -144,7 +165,7 @@ case_scope_flag_usage_errors() {
 for c in case_ok_scope_is_clean_and_carries_tuple case_conflict_is_not_certified_with_files \
          case_declaration_statuses_map_to_reasons case_non_blocking_statuses_disclose_only \
          case_defect_beats_scope_reason case_malformed_scope_is_atomic_fail4 \
-         case_scope_flag_usage_errors; do
+         case_scope_flag_usage_errors case_line_separator_in_value_is_kept; do
   echo "== $c"; $c
 done
 finish
