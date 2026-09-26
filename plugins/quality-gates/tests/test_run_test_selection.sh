@@ -3,6 +3,8 @@
 # AC9 AC39 AC40 AC46 AC52 AC54 AC56(run) · T7 T35 T36a T43 T50 T52 T54(run)
 # · T70 T71 T72(probe — SR1) · M10 M16 M26
 set -u
+# 앰비언트 kill switch 가 켜진 셸에서도 같은 결과여야 한다 — 스위치를 재는 케이스는 자기 호출에만 켠다.
+unset DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 RTS="$PLUGIN_ROOT/scripts/run-test-selection.sh"

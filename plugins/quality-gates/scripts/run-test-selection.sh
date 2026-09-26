@@ -15,7 +15,7 @@
 #
 # Exit: 0 = 정상 · 2 = 사용 오류 · 3 = 어댑터 사용 불가
 #       (`run` 은 전 unit `unrun` 동반, `probe` 는 `usable: no` + `reason:` 동반)
-#       `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 probe · run 은 언제나 3 (reason: kill_switch)
+#       `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 probe · run 은 인자가 유효하면 3 (reason: kill_switch)
 set -u
 
 die() { echo "run-test-selection: $*" >&2; exit 2; }

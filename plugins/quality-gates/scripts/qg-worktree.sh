@@ -57,8 +57,9 @@ cmd_sanitize() {
 }
 
 # 주어진 커밋에 detached 된 일회용 워크트리를 플러그인 네임스페이스 안에 만든다.
-# 두 소비자가 공유한다: `create-baseline`(기준선 축 = merge_base) 과
-# `create-head`(HEAD 축 = seal-worktree.sh 가 봉인한 커밋).
+# 두 소비자가 공유한다: `create-baseline`(기준선 축 = merge_base, 선언 경로는 경계) 과
+# `create-head`(HEAD 축 = seal-worktree.sh 가 봉인한 커밋, 선언 경로(`--topic`)는
+# topic-head.sh 가 합친 커밋).
 #
 # `create-sandbox` 와 달리 **working-tree 오버레이를 하지 않는다** — 두 축 모두 커밋
 # 상태 그대로여야 차등의 의미가 산다. 기준선이 HEAD 의 미커밋 변경을 물면 차등이
