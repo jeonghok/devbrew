@@ -212,10 +212,11 @@ For each iteration N (1..5):
 
    ```bash
    QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-   "$QG/scripts/topic-head.sh" "<session-id>" > ".claude/quality-gates/<session-id>/topic-scope.txt" && cat ".claude/quality-gates/<session-id>/topic-scope.txt"
+   S="$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"; mkdir -p "${S%/*}"
+   "$QG/scripts/topic-head.sh" "<session-id>" > "$S" && cat "$S"
    ```
 
-   exit 0 이 아니면(사용 오류) stderr 를 그대로 보이고 멈춘다. 파일의 `status:` 로 이 iteration 의 스코프가 갈린다:
+   스코프 파일은 cwd 가 아니라 **리포 루트**의 `.claude/quality-gates/<session-id>/` 에 둔다(봉인이 빼는 자리는 리포 루트의 그 네임스페이스뿐이다) — 아래 세 자리(파일 집합 · override 정리 · Step 4 `--scope`)도 같은 경로를 쓴다. exit 0 이 아니면(사용 오류) stderr 를 그대로 보이고 멈춘다. 파일의 `status:` 로 이 iteration 의 스코프가 갈린다:
 
    | `status:` | 스코프 | 그다음 |
    |---|---|---|
@@ -233,7 +234,7 @@ For each iteration N (1..5):
    `topic` 스코프의 파일 집합(= `$resolved_scope_file_count` 의 집합):
 
    ```bash
-   S=".claude/quality-gates/<session-id>/topic-scope.txt"; b=$(sed -n 's/^boundary: //p' "$S"); t=$(sed -n 's/^tree: //p' "$S"); git diff --name-only "$b" "$t"
+   S="$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"; b=$(sed -n 's/^boundary: //p' "$S"); t=$(sed -n 's/^tree: //p' "$S"); git diff --name-only "$b" "$t"
    ```
 
    reviewer 에게 주는 diff(`FILTERED_DIFF`)는 같은 두 값의 `git diff "$b" "$t"` 에서 문서 경로를 뺀 것이다. 스코프 파일은 Step 4 가 `--scope` 로 다시 읽는다 — 이 iteration 동안 지우거나 고치지 않는다.
@@ -241,7 +242,7 @@ For each iteration N (1..5):
    **override 스코프 파일 정리 (override 일 때 · 1a 대신 · 매 iteration).** override(`branch` · `--paths`)면 이번 iteration 에 1a 를 돌리지 않으므로 위 「지우거나 고치지 않는다」의 대상이 아니다 — 이전 iteration·이전 실행이 남긴 스코프 파일이 있으면 지운다. 차등 테스트 R-init 이 파일 부재를 session 으로 읽는다:
 
    ```bash
-   rm -f ".claude/quality-gates/<session-id>/topic-scope.txt"
+   rm -f "$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"
    ```
 
    **session 스코프**(1a 가 `topic` 을 내지 않았거나 override):
@@ -306,8 +307,8 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 `pr-review-toolkit:silent-failure-hunter` 를 더 무겁게 본다.
 
 2. Dispatch the scout: `Bash(scripts/scout.py ...)` (plugin root per Step P0b) — compute its
-   metrics from the review scope you resolved at step 1 (the git-derived changed-file set, the
-   `branch` diff, or the `--paths` globs). Scope is model-owned; there is no cached scope
+   metrics from the review scope you resolved at step 1 (the `topic` boundary..tree diff, the
+   git-derived changed-file set, the `branch` diff, or the `--paths` globs). Scope is model-owned; there is no cached scope
    variable to thread.
 3. **Compose and dispatch the reviewers — per angle (scope-driven).** 세 각도(보안 ·
    판정 · 다른 전제 — [Angles and reviewers](#angles-and-reviewers-scope-driven))마다
@@ -565,7 +566,7 @@ Agent({
    | ② 의 R6 어댑터별 호출 또는 집계 호출이 non-zero, 또는 키를 못 읽었다 | `--differential` 을 싣지 않고 `--reason error-axis` |
    | ② 의 `check_qa_ledger.py` 가 non-zero | `--reason silent-drop` |
    | ② 가 kill switch 로 생략됐다(Step 1c) | `--reason kill-switch` |
-   | 기본 모드 — ① 1a 가 `topic-head.sh` 를 불렀다(`status:` 가 무엇이든) | `--scope ".claude/quality-gates/<session-id>/topic-scope.txt"` — `declaration-invalid` · `merge-conflict` 사유와 `scope:` 블록은 합성기가 이 파일에서 낸다 |
+   | 기본 모드 — ① 1a 가 `topic-head.sh` 를 불렀다(`status:` 가 무엇이든) | `--scope "$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"` — `declaration-invalid` · `merge-conflict` 사유와 `scope:` 블록은 합성기가 이 파일에서 낸다 |
    | `$resolved_scope_file_count == 0` 이고 캐시한 `$changes_exist == yes` (정직-verdict floor) | `--reason scope-empty` |
    | ② 의 `check_qa_ledger.py` 는 exit 0 인데 R8 원장(`runtime-evidence.md`)의 `floor:verification` 이 `degraded` 이거나 `unclaimed` unit 이 있다(그 게이트는 원장 내부 일관성만 보고 이 경우도 exit 0 을 낼 수 있다) | `--reason silent-drop` |
 

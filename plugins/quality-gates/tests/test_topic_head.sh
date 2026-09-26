@@ -305,6 +305,33 @@ case_create_head_topic_rejects_wrong_commits() {
   cleanup
 }
 
+case_scope_file_under_subdir_cwd() {
+  # SKILL ① 1a 의 스코프 파일 경로 — 하위 디렉토리 cwd 의 상태 디렉토리(.gitignore 가 덮지
+  # 않는 리포)에 쓰면 리다이렉트가 먼저 만든 빈 파일이 봉인에 섞이고, R-init 의
+  # create-head --topic 재봉인은 채워진 파일을 담아 트리 대조가 어긋난다. 리포 루트의
+  # .claude/quality-gates 는 봉인이 뺀다.
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  mkdir -p sub; cd sub || return
+  mkdir -p ".claude/quality-gates/$SID"; echo "state" > ".claude/quality-gates/$SID/pipeline.md"
+  local H err h S
+  bash "$TH" "$SID" > ".claude/quality-gates/$SID/topic-scope.txt"
+  H=$(field head_commit "$(cat ".claude/quality-gates/$SID/topic-scope.txt")")
+  err=$(bash "$WT" create-head "$H" "$SID" --topic "$KEY" 2>&1 >/dev/null)
+  assert_grep "$err" 'head-commit mismatch' "cwd 상대 스코프 파일(하위 디렉토리): 재도출 대조가 어긋난다(양의 짝 — fixture 가 결함을 재현한다)"
+  rm -f ".claude/quality-gates/$SID/topic-scope.txt"
+  S="$(git rev-parse --show-toplevel)/.claude/quality-gates/$SID/topic-scope.txt"; mkdir -p "${S%/*}"
+  bash "$TH" "$SID" > "$S"
+  H=$(field head_commit "$(cat "$S")")
+  if h=$(bash "$WT" create-head "$H" "$SID" --topic "$KEY" 2>/dev/null) && [ -f "$h/a.txt" ]; then
+    ok "리포 루트 스코프 파일(하위 디렉토리 cwd): create-head --topic 이 합친 커밋을 받는다"
+    bash "$WT" remove "$h" >/dev/null 2>&1
+  else
+    no "리포 루트 스코프 파일(하위 디렉토리 cwd)인데 create-head --topic 이 거부했다"
+  fi
+  cleanup
+}
+
 case_create_head_topic_rejects_conflicted_topic() {
   new_repo
   local R; R=$(git rev-parse HEAD)
@@ -336,6 +363,7 @@ for c in case_usage case_no_declaration case_single_branch_topic case_two_siblin
          case_unrelated_member_is_unbounded case_runs_from_subdirectory \
          case_remote_only_sibling_is_combined case_no_side_effects case_repo_hooks_not_run \
          case_create_head_topic_accepts_derived_commit case_create_head_topic_rejects_wrong_commits \
+         case_scope_file_under_subdir_cwd \
          case_create_head_topic_rejects_conflicted_topic case_create_head_usage; do
   echo "== $c"; $c
 done

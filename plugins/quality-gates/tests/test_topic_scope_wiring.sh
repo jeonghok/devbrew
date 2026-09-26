@@ -35,6 +35,45 @@ nodecl_violation = [l for l in lines if 'no-declaration' in l and ('iteration 1'
 print("NODECL_VIOLATION:%d" % len(nodecl_violation))
 PY
 
+IFS= read -r -d '' PY_1A <<'PY' || true
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+lines = text.splitlines()
+open_re = re.compile(r'^[ \t]*```bash\s*$')
+close_re = re.compile(r'^[ \t]*```\s*$')
+fences = []
+i = 0
+while i < len(lines):
+    if open_re.match(lines[i]):
+        j = i + 1
+        body = []
+        while j < len(lines) and not close_re.match(lines[j]):
+            body.append(lines[j].strip())
+            j += 1
+        fences.append(body)
+        i = j + 1
+    else:
+        i += 1
+needle = '"$QG/scripts/topic-head.sh" "<session-id>"'
+hits = [b for b in fences if any(needle in l for l in b)]
+print("FENCES:%d" % len(hits))
+body = hits[0] if hits else []
+th = [k for k, l in enumerate(body) if needle in l]
+print("TH_LINES:%d" % len(th))
+th_exact = '"$QG/scripts/topic-head.sh" "<session-id>" > "$S" && cat "$S"'
+print("TH_EXACT:%d" % (1 if len(th) == 1 and body[th[0]] == th_exact else 0))
+s_last = None
+for l in (body[:th[0]] if th else []):
+    for part in l.split(";"):
+        p = part.strip()
+        if p.startswith("export "):
+            p = p[len("export "):].strip()
+        if p.startswith("S="):
+            s_last = l
+s_exact = 'S="$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"; mkdir -p "${S%/*}"'
+print("S_EXACT:%d" % (1 if s_last == s_exact else 0))
+PY
+
 IFS= read -r -d '' PY_STATUS <<'PY' || true
 import re, sys
 sys.path.insert(0, sys.argv[2])
@@ -82,14 +121,22 @@ el_b = "\n".join(el_lines)
 def last_assign(prefix, block_lines):
     # 갈래 «안»의 마지막 대입 — 뒤에 같은 변수를 한 번 더 대입해 앞 값을 덮는
     # 변이(부분 문자열 락은 「그 값이 어딘가에 있다」만 보고 못 잡는다)를 구조로 잡는다.
+    # 한 줄에 `;` 로 붙은 대입 · `export ` 접두 대입도 대입이다 — 줄 머리만 보면
+    # `x=1; scan_dir=…` · `export scan_dir=…` 로 덮는 변이가 산다.
     val = None
     for l in block_lines:
-        if l.strip().startswith(prefix):
-            val = l.strip()
+        for part in l.split(";"):
+            p = part.strip()
+            if p.startswith("export "):
+                p = p[len("export "):].strip()
+            if p.startswith(prefix):
+                val = p
     return val
 
 
 ok_last_baseline = last_assign('baseline_commit=', ok_lines)
+ok_last_scan = last_assign('scan_dir=', ok_lines)
+ok_last_sealed = last_assign('sealed=', ok_lines)
 printf_idx = idx(lambda l: l.startswith('printf '), i_fi + 1) if shaped else -1
 between_fi_and_printf = lines[i_fi + 1:printf_idx] if (shaped and printf_idx >= 0) else None
 checks = [
@@ -98,6 +145,9 @@ checks = [
     ("OK_TOPIC", 'create-head "$sealed" "<session-id>" --topic "$topic_key"' in ok_b),
     ("OK_SCAN", 'scan_dir="${head_tree_dir:-$project_dir}"' in ok_b),
     ("OK_BASE_LAST", ok_last_baseline == "baseline_commit=$(sed -n 's/^boundary: //p' \"$S\")"),
+    ("OK_SCAN_LAST", ok_last_scan == 'scan_dir="${head_tree_dir:-$project_dir}"'),
+    ("OK_SEALED_LAST", ok_last_sealed == "sealed=$(sed -n 's/^head_commit: //p' \"$S\")"),
+    ("S_ROOT", shaped and last_assign('S=', lines[:i_if]) == 'S="$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"'),
     ("ELSE_BASE", 'baseline_commit="<위 6키의 merge_base>"' in el_b),
     ("ELSE_SCAN", 'scan_dir="$project_dir"' in el_b),
     ("ELSE_NO_TOPIC", "--topic" not in el_b),
@@ -140,7 +190,7 @@ while i < len(lines):
         i = j + 1
     else:
         i += 1
-rm_needle = 'rm -f ".claude/quality-gates/<session-id>/topic-scope.txt"'
+rm_needle = 'rm -f "$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"'
 hits = [f for f in fences if any(rm_needle in l for l in f[1])]
 print("RM_FENCES:%d" % len(hits))
 if hits:
@@ -180,13 +230,19 @@ case_step1_writes_scope_file() {
   # R-AJ — ① 1a 가 매 iteration topic-head.sh 출력을 고정 경로에 쓴다. 산문으로 옮기면
   # 실행되지 않으므로 bash 펜스 «안»의 줄만 센다. 줄 전체를 fullmatch 로 잰다 — 부분
   # 문자열 락은 꼬리에 `|| true` 를 붙여 실패를 삼키는 변이를 못 잡는다.
-  local line n
-  line=$(awk '/^[[:space:]]*```bash/{f=1;next} /^[[:space:]]*```/{f=0} f' "$SKILL" \
-      | grep -F '"$QG/scripts/topic-head.sh" "<session-id>"' \
-      | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-  n=$(printf '%s\n' "$line" | grep -c .)
-  assert_eq "$n" "1" "① 1a 펜스에 topic-head.sh 출력을 쓰는 줄이 정확히 하나"
-  assert_eq "$line" '"$QG/scripts/topic-head.sh" "<session-id>" > ".claude/quality-gates/<session-id>/topic-scope.txt" && cat ".claude/quality-gates/<session-id>/topic-scope.txt"' "① 1a 펜스가 topic-head.sh 출력을 .claude/quality-gates/<session-id>/topic-scope.txt 에 쓰고 && 로 그대로 cat 한다(줄 전체 fullmatch, || true 로 삼키지 않는다)"
+  # 경로는 리포 루트 기준이다 — cwd 상대면 하위 디렉토리 cwd 에서 리다이렉트가 먼저 만든
+  # 빈 파일이 봉인에 섞여 R-init 재도출 대조가 매번 어긋난다(test_topic_head.sh
+  # case_scope_file_under_subdir_cwd 가 그 동작을 잰다).
+  local got; got=$(python3 -c "$PY_1A" "$SKILL")
+  assert_grep "$got" '^FENCES:1$'   "① 1a: topic-head.sh 를 부르는 bash 펜스가 정확히 하나"
+  assert_grep "$got" '^TH_LINES:1$' "① 1a 펜스에 topic-head.sh 출력을 쓰는 줄이 정확히 하나"
+  assert_grep "$got" '^TH_EXACT:1$' "① 1a: topic-head.sh 출력을 \"\$S\" 에 쓰고 && 로 그대로 cat 한다(줄 전체 fullmatch, || true 로 삼키지 않는다)"
+  assert_grep "$got" '^S_EXACT:1$'  "① 1a: 그 줄 앞의 «마지막» S 대입이 리포 루트 경로 + mkdir -p 한 줄이다(줄 전체 fullmatch)"
+  local stale
+  stale=$(grep -hF '".claude/quality-gates/<session-id>/topic-scope.txt"' "$SKILL" "$REF")
+  assert_eq "$(printf '%s' "$stale" | grep -c .)" "0" "SKILL · 레퍼런스에 cwd 상대 스코프 파일 경로(\".claude/…/topic-scope.txt\")가 남지 않는다"
+  assert_eq "$(grep -cF '"$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"' "$SKILL")" "4" \
+    "SKILL 의 네 자리(1a · 파일 집합 · override 정리 · Step 4 --scope)가 리포 루트 경로를 쓴다(부재 락의 양의 짝)"
 }
 
 case_status_table_is_total_over_statuses() {
@@ -203,7 +259,11 @@ case_topic_diff_uses_boundary_and_tree() {
   got=$(grep -F "sed -n 's/^boundary: //p'" "$SKILL" | grep -F "sed -n 's/^tree: //p'" | grep -F 'git diff --name-only "$b" "$t"')
   assert_eq "$(printf '%s\n' "$got" | grep -c .)" "1" "파일 집합 질의가 boundary · tree 를 한 줄에서 읽는다"
   assert_not_grep "$got" '^[[:space:]]*git ' "그 줄은 git 으로 시작하지 않는다(A20 session 오라클 밖)"
-  assert_eq "$(printf '%s' "$got" | grep -o 'git diff' | grep -c .)" "1" "그 줄에 git diff 호출이 정확히 하나(중간에 추가 git 호출을 끼워 넣지 않는다)"
+  # 부분 문자열 계수(`git diff` 하나)는 `git diff` 가 아닌 git 호출(예: `git log`)을 중간에
+  # 끼워 넣는 변이를 못 잡는다 — 줄 전체를 fullmatch 로 잰다.
+  assert_eq "$(printf '%s' "$got" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" \
+    'S="$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"; b=$(sed -n '\''s/^boundary: //p'\'' "$S"); t=$(sed -n '\''s/^tree: //p'\'' "$S"); git diff --name-only "$b" "$t"' \
+    "그 줄 전체가 리포 루트 스코프 파일 · boundary · tree · git diff --name-only 하나다(줄 전체 fullmatch — 다른 git 호출을 끼워 넣지 않는다)"
   case "$got" in
     *'git diff --name-only "$b" "$t"') ok "그 줄이 git diff --name-only \"\$b\" \"\$t\" 로 끝난다(뒤에 다른 git 호출을 덧붙이지 않는다)" ;;
     *) no "그 줄이 git diff --name-only \"\$b\" \"\$t\" 로 끝난다(뒤에 다른 git 호출을 덧붙이지 않는다)"
@@ -214,7 +274,7 @@ case_topic_diff_uses_boundary_and_tree() {
 case_step4_row_carries_scope() {
   # R-AL — 두 사유와 scope: 블록은 합성기가 이 파일에서 낸다. SKILL 의 의무는 싣는 것 하나.
   local rows
-  rows=$(grep -F -- '--scope ".claude/quality-gates/<session-id>/topic-scope.txt"' "$SKILL")
+  rows=$(grep -F -- '--scope "$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"' "$SKILL")
   assert_eq "$(printf '%s\n' "$rows" | grep -c '^[[:space:]]*|')" "1" "Step 4 판정 입력 표에 --scope 행이 하나"
   assert_grep "$rows" 'topic-head\.sh' "그 행이 조건(① 이 topic-head.sh 를 불렀다)을 같은 줄에 적는다"
   assert_grep "$rows" '불렀다' "그 행의 조건이 1a 호출을 긍정형(불렀다)으로 적는다"
@@ -252,6 +312,9 @@ case_rinit_topic_branch_sets_axes() {
   assert_grep "$got" '^OK_TOPIC:1$'      "ok 갈래: create-head 가 --topic 으로 재도출 대조한다"
   assert_grep "$got" '^OK_SCAN:1$'       "ok 갈래: scan_dir = HEAD 축 트리"
   assert_grep "$got" '^OK_BASE_LAST:1$'  "ok 갈래: baseline_commit 의 «마지막» 대입도 boundary 다(뒤에 덮어쓰기 없음)"
+  assert_grep "$got" '^OK_SCAN_LAST:1$'  "ok 갈래: scan_dir 의 «마지막» 대입도 HEAD 축 트리다(; · export 대입 포함)"
+  assert_grep "$got" '^OK_SEALED_LAST:1$' "ok 갈래: sealed 의 «마지막» 대입도 head_commit 이다(; · export 대입 포함)"
+  assert_grep "$got" '^S_ROOT:1$'        "R-init 이 스코프 파일을 리포 루트 경로로 읽는다(if 앞, 줄 전체)"
   assert_grep "$got" '^ELSE_BASE:1$'     "else 갈래: baseline_commit = merge_base"
   assert_grep "$got" '^ELSE_SCAN:1$'     "else 갈래: scan_dir = project_dir"
   assert_grep "$got" '^ELSE_NO_TOPIC:1$' "else 갈래에 --topic 이 없다"
@@ -282,6 +345,27 @@ case_r5b_skips_on_topic() {
   assert_grep "$got" '\$head_tree_dir' "그 문장이 \$head_tree_dir 를 이름 붙인다"
 }
 
+case_r1b_topic_candidates_supplemented() {
+  # 최종 리뷰 I3 — 후보 스크립트는 session 범위를 본다. 선언 경로면 경계..합친 트리의
+  # 테스트 파일 · 이름-매칭 테스트를 후보에 더한다. 한 줄 · R1b 창 안 · 긍정 목적지.
+  local win got
+  win=$(awk '/^\*\*Step R1b /{f=1} /^\*\*Step R2 /{f=0} f' "$REF")
+  got=$(printf '%s\n' "$win" | grep -F 'git diff --name-only <boundary> <tree>')
+  assert_eq "$(printf '%s\n' "$got" | grep -c .)" "1" "R1b 에 선언 경로 후보 보충 문장이 한 줄"
+  assert_grep "$got" '^선언 경로면' "그 줄이 선언 경로 조건으로 시작한다"
+  assert_grep "$got" '테스트 파일을 후보에 더한다\.$' "그 줄이 후보에 더한다(긍정 목적지)로 끝난다"
+  assert_grep "$got" '\$scan_dir' "그 줄이 이름-매칭을 \$scan_dir(합친 트리) 안에서 찾는다"
+  assert_not_grep "$got" '더하지 않|빼' "그 줄에 부정형(더하지 않 · 뺀다)이 없다"
+}
+
+case_early_exit_discards_head_tree() {
+  # 최종 리뷰 M3 — R6 전에 끝나는 경로에서도 R-init 의 HEAD 축 트리를 폐기한다. 한 줄.
+  local got; got=$(grep -F 'R6 전에 끝내는 모든 경로' "$REF")
+  assert_eq "$(printf '%s\n' "$got" | grep -c .)" "1" "R6 전 종료 경로의 폐기 문장이 한 줄"
+  assert_grep "$got" 'R3 `중단`' "그 줄이 R3 중단을 이름 붙인다"
+  assert_grep "$got" '\$head_tree_dir` 가 있으면 R6 의 폐기 펜스를 먼저 돈다\.$' "그 줄이 폐기 펜스를 먼저 돈다(긍정 목적지)로 끝난다"
+}
+
 case_override_clears_stale_scope_file() {
   # I1 수정 — override 는 이번 iteration 에 1a 를 돌리지 않으므로, 남아 있을 수 있는 이전
   # 스코프 파일을 지운다. 파일 부재는 차등 테스트 R-init 의 else 갈래로 간다(sed …
@@ -304,6 +388,7 @@ for c in case_trivia_escape_is_gated_by_declaration case_step1_writes_scope_file
          case_filtered_diff_uses_boundary_and_tree \
          case_rinit_topic_branch_sets_axes case_scan_dir_feeds_detect_and_assign \
          case_r4_calls_use_baseline_commit case_r5b_skips_on_topic \
+         case_r1b_topic_candidates_supplemented case_early_exit_discards_head_tree \
          case_override_clears_stale_scope_file; do
   echo "== $c"; $c
 done

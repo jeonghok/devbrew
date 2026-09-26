@@ -111,7 +111,8 @@ fail-open 의 입력이다.
 | | `$qg_run_tmp/baseline-$runner.tsv` | R4 기록 → R6 소비. **가장 나쁘다** — 행을 `pass`→`fail` 로 뒤집으면 모든 `NEW_REGRESSION` 이 `PRE_EXISTING` 으로 접힌다 |
 | | `$qg_run_tmp/head-$runner.tsv` | R5b 기록 → R6 소비. 사이에 R6 의 flaky 재실행이 `$head_tree_dir` 에서 저장소 코드를 돌리고 같은 파일에 행을 다시 쓴다 |
 | | `$qg_run_tmp/per-adapter-$runner.yaml` | R6 어댑터별 기록 → R6 말미 `--aggregate` 소비. 사이에 같은 flaky 재실행 |
-| | `.claude/quality-gates/<sid>/topic-scope.txt` | SKILL ① 1a 기록 → R-init(R4 앞) · Step 4 `--scope` 소비. `head_commit:` 변조는 R-init 의 `create-head --topic` 재도출 대조가 잡지만, Step 4 소비는 R4 · R5b · R6 뒤라 `status:` · 튜플 변조가 사유와 `scope:` 블록을 바꿀 수 있다. 봉인하지 않는다 — 아래 잔여 결함과 같은 축 |
+| | 리포 루트의 `.claude/quality-gates/<sid>/topic-scope.txt` | SKILL ① 1a 기록 → R-init(R4 앞) · Step 4 `--scope` 소비. `head_commit:` 변조는 R-init 의 `create-head --topic` 재도출 대조가 잡지만, Step 4 소비는 R4 · R5b · R6 뒤라 `status:` · 튜플 변조가 사유와 `scope:` 블록을 바꿀 수 있다. 봉인하지 않는다 — 아래 잔여 결함과 같은 축 |
+| | `$head_tree_dir`(선언 경로) | R-init 생성 → R5b · R6 소비. 창은 R4 에서 열린다 — 선언 경로의 HEAD 축 트리는 R-init 에서 서므로 R4 가 기준선 트리에서 저장소 코드를 돌리는 동안 이미 디스크에 있다. 세션 경로는 R5b 에서 서므로 이 창이 없다 |
 | **창 없음** | `$qg_run_tmp/aggregate.yaml` | R6 말미 기록 → R8 소비. 사이에 저장소 코드가 돌지 않는다 |
 
 **그리고 배정 행 파일의 집행은 *부재*에 실려 있다.** 바로 아래 R1b 의 원자적 쓰기는
@@ -186,7 +187,7 @@ no 이고 기준선 트리도 만들어진다; 그 창을 닫는 결정론 수�
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-S=".claude/quality-gates/<session-id>/topic-scope.txt"
+S="$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"
 if [ "$(sed -n 's/^status: //p' "$S" 2>/dev/null)" = ok ]; then
   baseline_commit=$(sed -n 's/^boundary: //p' "$S")
   topic_key=$(sed -n 's/^topic_key: //p' "$S")
@@ -206,6 +207,8 @@ printf 'baseline_commit=%s\ntopic_key=%s\nsealed=%s\nhead_tree_dir=%s\nscan_dir=
 않는다 — 기준선이 경계이고 경계는 HEAD 가 아니다. baseline 한 줄은 대신 이것이다:
 
 > `> [quality-gates] baseline: topic <topic_key> @ <baseline_commit 앞 12자>`
+
+② 를 R6 전에 끝내는 모든 경로(R3 `중단` 등)에서 R-init 이 만든 `$head_tree_dir` 가 있으면 R6 의 폐기 펜스를 먼저 돈다.
 
 **Step R1a — 러너 어댑터 감지 (HEAD 트리).**
 
@@ -237,6 +240,9 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 | git diff + commit message + PR description | 무엇이 바뀌었고 무엇을 **의도**했나 | **구조적** |
 | 레포 CI 설정의 test-selection | CI 가 무엇을 고르는가 | **참고** — 대체 금지, 차이는 R2 산문에 한 줄 |
 | `test-scope-validator` 분류 | `outdated-suspicion`/`cherry-pick-suspicion` | **부정 신호** — 그렇게 찍힌 테스트는 커버리지로 세지 않음 |
+
+**선언 경로의 후보 보충.** `compute-test-scope-candidates.sh` 는 범위를 스스로 `merge_base..HEAD`(워킹트리가 더러우면 워킹트리)로 잡으므로 형제 · 머지된 구성원의 변경을 모른다.
+선언 경로면(R-init 이 `status: ok` 를 읽었으면) 스코프 파일의 `boundary:` · `tree:` 두 값으로 `git diff --name-only <boundary> <tree>` 를 떠서 그 집합의 테스트 파일과 그 집합의 소스에 이름이 맞는 `$scan_dir` 안의 테스트 파일을 후보에 더한다.
 
 `test-scope-validator` 를 여기서 dispatch 한다 (read-only reviewer; `project_dir` 는
 *preflight* 디렉토리 — 실제 diff 를 본다). Per [Reviewer dispatch contract](#reviewer-dispatch-contract):
