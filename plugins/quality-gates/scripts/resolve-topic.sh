@@ -89,7 +89,10 @@ if [ "$SUB" = "detect" ]; then
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || d_emit - base-unresolved "not a git work tree"
   BASE_REF=$(bash "$SCRIPT_DIR/resolve-baseline.sh" | awk -F': ' '/^base_ref:/{print $2}')
   [ -n "$BASE_REF" ] && [ "$BASE_REF" != "-" ] || { BASE_REF="-"; d_emit - base-unresolved "resolve-baseline.sh degraded"; }
-  keys=$(git log --format='%B' "$BASE_REF..HEAD" 2>/dev/null | grep -E '^Spec: ' | sed -E 's/^Spec: //' | sort -u)
+  # `grep .` 로 빈 값(예: `--cleanup=verbatim` 이 보존한 `Spec: `)을 세는 집합에서
+  # 먼저 뺀다 — 안 그러면 sort -u 가 빈 문자열을 진짜 키보다 앞에 두어, 아래 `$keys`
+  # 를 그대로 내는 ok 경로(:96)에서 topic_key 값에 개행이 섞여 4줄 계약이 깨진다.
+  keys=$(git log --format='%B' "$BASE_REF..HEAD" 2>/dev/null | grep -E '^Spec: ' | sed -E 's/^Spec: //' | grep . | sort -u)
   n=$(printf '%s\n' "$keys" | grep -c .)
   [ "$n" -eq 0 ] && d_emit - no-declaration "no Spec trailer on $BASE_REF..HEAD"
   [ "$n" -gt 1 ] && d_emit - declaration-invalid "current branch carries $n distinct Spec keys"

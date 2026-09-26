@@ -35,6 +35,16 @@ decl_commit() {   # <파일> <내용> <메시지> — 토픽 선언 트레일러
 Spec: $KEY"
 }
 
+# detect 출력 4줄 계약 — 총 줄 수와 «그 넷의 키가 고정 넷뿐임»을 함께 잰다.
+# 총 줄 수만 세면 떠돌이 줄(예: 빈 Spec: 값이 sort -u 로 topic_key 값에 개행째 섞여
+# 들어와 실제로는 5줄인데 우연히 4로 셀 수 있는 경우)를 놓친다 — 두 단언을 묶는다.
+assert_detect_shape() {   # <out> <label>
+  local out="$1" label="$2"
+  assert_eq "$(printf '%s\n' "$out" | grep -c .)" "4" "$label: 정확히 4줄"
+  assert_eq "$(printf '%s\n' "$out" | grep -vcE '^(topic_key|status|reason|base_ref): ')" "0" \
+    "$label: 4줄 모두 지정된 키 중 하나다(떠돌이 줄 없음)"
+}
+
 # ── F1: 형제 브랜치 둘이 같은 토픽을 선언 → 한 집합 (AC3) ──────────────────
 case_f1_two_siblings() {
   new_repo
@@ -561,12 +571,13 @@ case_detect_statuses() {
   out=$(bash "$RT" detect)
   assert_eq "$(field status "$out")" "no-declaration" "detect: 선언 없음"
   assert_eq "$(field topic_key "$out")" "-" "detect: 선언 없으면 topic_key: -"
-  assert_eq "$(printf '%s\n' "$out" | grep -cE '^[a-z_]+: ')" "4" "detect: 정확히 4키"
+  assert_detect_shape "$out" "detect(no-declaration)"
   git checkout -q -b late "$R"; echo u > u.txt; git add u.txt; git commit -qm "undeclared first"
   decl_commit l.txt l1 "declared later"
   out=$(bash "$RT" detect)
   assert_eq "$(field status "$out")" "ok" "detect: 뒤 커밋에만 트레일러 → ok"
   assert_eq "$(field topic_key "$out")" "$KEY" "detect: topic_key 는 트레일러 값 전체(조각 포함)"
+  assert_detect_shape "$out" "detect(ok)"
   git checkout -q -b stacked "$R"; decl_commit s1.txt s1 "s1"
   git commit -q --allow-empty -m "s2
 
@@ -575,9 +586,30 @@ Spec: docs/x-design.md#pr2"
   assert_eq "$(field status "$out")" "declaration-invalid" "detect: 한 브랜치에 키 둘 → declaration-invalid"
   assert_grep "$(field reason "$out")" '2 distinct' "detect: reason 이 키 수를 적는다"
   assert_eq "$(field topic_key "$out")" "-" "detect: 키가 둘이면 topic_key: -"
+  assert_detect_shape "$out" "detect(declaration-invalid)"
   git checkout -q --detach HEAD
   out=$(bash "$RT" detect)
   assert_eq "$(field status "$out")" "base-unresolved" "detect: detached HEAD → base-unresolved"
+  assert_detect_shape "$out" "detect(base-unresolved)"
+  cleanup
+}
+
+# ── detect: 값이 빈 Spec: 트레일러는 키로 세지 않는다(리뷰 I1) ──────────────
+#    `--cleanup=verbatim` 으로 트레일러 뒤 공백을 보존해 `Spec: `(값 없음) 줄을 만든다.
+#    sort -u 는 빈 문자열을 진짜 키보다 앞에 두므로, 빈 값을 거르지 않으면 그것이
+#    topic_key 자리에 개행째 섞여 들어가고 진짜 키가 5번째 줄로 떠돈다.
+case_detect_empty_spec_value_excluded() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b withblank "$R"
+  git commit -q --cleanup=verbatim --allow-empty -m "blank spec
+
+Spec: "
+  decl_commit real.txt r1 "real key"
+  local out; out=$(bash "$RT" detect)
+  assert_eq "$(field status "$out")" "ok" "detect: 빈 Spec: 값과 진짜 키 하나 → ok(빈 값은 무시)"
+  assert_eq "$(field topic_key "$out")" "$KEY" "detect: topic_key 는 진짜 키(빈 값이 앞자리를 차지하지 않는다)"
+  assert_detect_shape "$out" "detect(빈 Spec 값 배제)"
   cleanup
 }
 
@@ -627,7 +659,8 @@ for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_resolve_tips_feed_combine \
          case_for_each_ref_sort_pinned case_base_remote_ref_never_member \
          case_detect_statuses case_detect_ignores_base_history \
-         case_detect_lowercase_trailer_ignored case_detect_usage; do
+         case_detect_lowercase_trailer_ignored case_detect_usage \
+         case_detect_empty_spec_value_excluded; do
   echo "== $c"; $c
 done
 finish
