@@ -212,7 +212,10 @@ case_no_side_effects() {
   local st0 h0 idx0 wl0 refs0
   st0=$(git status --porcelain); h0=$(git rev-parse HEAD); idx0=$(git ls-files -s | git hash-object --stdin)
   wl0=$(git worktree list --porcelain); refs0=$(git for-each-ref)
-  bash "$TH" "$SID" >/dev/null
+  local out; out=$(bash "$TH" "$SID")
+  assert_eq "$(field status "$out")" "ok" "부작용 없음 케이스도 실행이 합치기까지 가 status: ok 를 낸다"
+  assert_grep "$(field seal "$out")" '^[0-9a-f]{40}$' "봉인 SHA 가 실제로 떴다"
+  assert_not_grep "$(field head_commit "$out")" "^$(field seal "$out")\$" "형제가 있으니 head_commit 은 봉인이 아니다(합치기가 실제로 돌았다)"
   assert_eq "$(git status --porcelain)" "$st0" "워킹트리 상태 불변"
   assert_eq "$(git rev-parse HEAD)" "$h0" "HEAD 불변"
   assert_eq "$(git ls-files -s | git hash-object --stdin)" "$idx0" "실제 인덱스 불변"
