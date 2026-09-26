@@ -336,19 +336,36 @@ R1b, 매 iteration 디스패치) = 10; `synthesize_findings.py` 는 스크립트
 - **판정 꼬리의 `scope:` 블록** — 본 커밋 SHA 전부 · 끝점 · 경계 · 합친 트리 OID. `clean` 은 이
   튜플에 대한 clean 이다.
 
-키는 조각까지 포함한 값 전체다 — `…#pr1` 과 `…#pr2` 는 다른 토픽이다. 선언이 없으면 동작이
-바뀌지 않는다(session 기본). 선언이 깨졌으면(경로 부재 · 한 브랜치에 두 키) `not-certified
-(declaration-invalid)`, 끝점 합치기가 충돌하면 `not-certified (merge-conflict)` 이고 충돌 파일을
-싣는다 — 두 경우 모두 리뷰 · 차등 테스트는 현재 브랜치(session)로 계속 돈다. 선언이 있으면
-trivia escape 를 쓰지 않는다. `branch` · `--paths` override 는 토픽을 보지 않는다.
+키는 조각까지 포함한 값 전체다 — `…#pr1` 과 `…#pr2` 는 다른 토픽이다. 선언이 없으면 판정은
+바뀌지 않는다 — 판정 꼬리에 `scope:` 블록(`mode: session`)이 공시로 붙는다(session 기본).
+선언이 깨졌으면(경로 부재 · 한 브랜치에 두 키 · 경계 · 끝점을 셀 수 없음) `not-certified
+(declaration-invalid)`, 끝점 합치기가 실패하면(충돌이면 충돌 파일을 싣는다) `not-certified
+(merge-conflict)` 다 — 두 경우 모두 리뷰 · 차등 테스트는 현재 브랜치(session)로 계속 돈다.
+선언이 있으면 trivia escape 를 쓰지 않는다. `branch` · `--paths` override 는 토픽을 보지 않는다.
 
-**알려진 한계** — 다른 리모트의 기본 브랜치(예: `upstream/main`)가 토픽을 이미 머지했으면
-구성원으로 잡혀 리뷰 대상이 부풀 수 있다(`scope:` 블록의 `branches:` 에 보인다).
+**알려진 한계**
+- 다른 리모트의 기본 브랜치(예: `upstream/main`)가 토픽을 이미 머지했으면 구성원으로 잡혀 리뷰
+  대상이 부풀 수 있다(`scope:` 블록의 `branches:` 에 보인다).
+- fast-forward 로 base 에 든 선언 커밋은 그 뒤 base 에서 딴 브랜치 전부의 조상이라, 그 브랜치들이
+  구성원으로 잡힌다(머지 커밋으로 든 것은 `merged:` 구성원으로만 온다).
+- 푸시 뒤 amend · rebase 하면 낡은 원격-추적 ref(`origin/<자기 브랜치>`)가 형제 구성원이 되어
+  `not-certified (merge-conflict)` 에 자기 파일이 뜬다 — force-push 뒤 다시 돌린다.
+- 구성원이 여럿인 토픽에서 리뷰어 · 재비판의 diff 는 합친 트리 기준이지만 파일 본문은 현재
+  워킹트리를 읽는다 — 형제에만 있는 파일의 문맥은 diff 로만 본다.
+- 차등 테스트 후보 스크립트(`compute-test-scope-candidates.sh`)는 session 범위를 본다 — 선언
+  경로의 후보 보충(경계..합친 트리의 테스트 · 이름-매칭)은 오케스트레이터가 레퍼런스 R1b 대로 한다.
+- 하위 디렉토리 cwd 에서 돌리고 리포의 `.gitignore` 가 그 cwd 의 `.claude/` 를 덮지 않으면, 그
+  아래 세션 상태 파일(스코프 파일 밖)이 봉인 · 리뷰 diff 에 섞일 수 있다 — 리포 루트에서 돌린다.
+- `resolve` 비용이 ref 수 × 선언 커밋 수에 비례한다(ref 105 · 선언 커밋 19 인 리포에서 2–3초,
+  iteration 마다 두 번).
+- kill switch(`DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1`)는 `run-test-selection.sh` 가 돌리는
+  setup · 러너 · 테스트를 막고, 선언 경로의 봉인 · 합치기는 저장소 훅을 끈 채 돈다 — `git worktree
+  add` 등이 부르는 git 훅 전체는 범위 밖이다.
 
 ## 사용
 
 ```
-/qg                            # 파이프라인 실행; 세션 단위 diff
+/qg                            # 파이프라인 실행; 세션 단위 diff(선언이 있으면 토픽)
 /qg branch                     # 파이프라인 실행; main 대비 풀 브랜치 diff
 /qg branch <name>              # 격리된 worktree 에서 <name> 브랜치 검사
 /qg --paths <glob>...          # 명시 path scope

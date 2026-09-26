@@ -125,7 +125,8 @@ iteration 도는 한, R1b 가 영향 unit 을 0개 고르면 차등 테스트 �
 fail-open + loud advisory.
 
 암묵 session scope로 돌 때 qg는 그 사실을 한 줄로 밝힌다 (`Review scope: session (N files)` — 전체
-PR/브랜치는 `/qg branch`). 자연어로 브랜치/전체 리뷰 의도를 말하면 모델이 `/qg branch`(branch
+PR/브랜치는 `/qg branch`). 토픽 선언(`Spec:` 트레일러)으로 풀리면 대신
+`Review scope: topic <키> (N files · 구성원 <branches>)` 를 밝힌다. 자연어로 브랜치/전체 리뷰 의도를 말하면 모델이 `/qg branch`(branch
 scope)로 해석한다 — 별도 토큰 alias 없음 (P8 determinism-economy: non-load-bearing 라우팅은
 모델 신뢰, 결정론적 보장은 literal `/qg branch`에).
 
