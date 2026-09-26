@@ -155,7 +155,7 @@ PY
 )
   assert_grep "$got" '^OUTSIDE:$' "SKILL 이 싣는 사유는 전부 닫힌 열거 안이다"
   assert_grep "$got" '^SET:error-axis kill-switch scope-empty silent-drop trivia$' \
-    "SKILL 이 싣는 사유 집합(핀) — declaration-invalid · merge-conflict 는 4c"
+    "SKILL 이 싣는 사유 집합(핀) — declaration-invalid · merge-conflict 는 합성기가 --scope 파일에서 낸다(SKILL 이 옮겨 적지 않는다)"
 }
 
 case_angle_template_is_total() {

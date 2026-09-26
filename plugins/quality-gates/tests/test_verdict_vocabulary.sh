@@ -102,8 +102,9 @@ case_reason_enum_is_closed_and_accounted() {
   #   decide() 자신의 플래그: findings-lost · angle-absent
   #   오케스트레이터(SKILL · 레퍼런스의 `--reason` 리터럴): trivia · kill-switch · (차등
   #                                     축과 겹치는) scope-empty · silent-drop · error-axis
-  #   부채 — 산출자 없음(PR4c): declaration-invalid · merge-conflict
-  local debt="declaration-invalid merge-conflict"
+  #   스코프 축(scope_tuple.STATUS_TO_REASON.values()): declaration-invalid · merge-conflict
+  #   부채 — 산출자 없음: (없다 — 새 사유를 더할 때 산출자보다 먼저 여기 적는다)
+  local debt=""
   local SKILL_MD="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
   local REF_MD="$PLUGIN_ROOT/skills/quality-pipeline/references/differential-test.md"
   local got; got=$(python3 -c "
@@ -114,7 +115,8 @@ flag_produced = set(re.findall(r'add\(\"([a-z-]+)\"\)', inspect.getsource(verdic
 caller_produced = set()
 for p in ('$SKILL_MD', '$REF_MD'):
     caller_produced |= set(re.findall(r'--reason ([a-z][a-z-]*)', open(p, encoding='utf-8').read()))
-produced = set(verdict.CAUSE_TO_REASON.values()) | flag_produced | caller_produced
+import scope_tuple
+produced = set(verdict.CAUSE_TO_REASON.values()) | set(scope_tuple.STATUS_TO_REASON.values()) | flag_produced | caller_produced
 print('MISSING:' + ','.join(sorted(set(verdict.REASONS) - (produced | debt))))
 print('STALE:'   + ','.join(sorted((produced | debt) - set(verdict.REASONS))))
 print('OVERLAP:' + ','.join(sorted(debt & produced)))

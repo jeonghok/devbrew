@@ -16,6 +16,7 @@ Inputs (CLI args):
   --differential PATH  diff-test-results.py 의 집계 YAML
   --reason R           호출자만 아는 사유(반복 가능, verdict.REASONS 안)
   --angles PATH        각도 상태 파일(`<각도>: <상태>` 세 줄)
+  --scope PATH         스코프 튜플(topic-head.sh 산출물) — 꼬리에 `scope:` 블록 · 스코프 사유
 
 Output (stdout): Markdown matching agents/synthesizer.md schema.
 """
@@ -27,6 +28,7 @@ from collections import defaultdict
 from adjudication import Ledger
 from render_disposition import disposition_lines
 import angles as _angles
+import scope_tuple as _scope_tuple  # 스코프 축 — status → 사유 · `scope:` 블록
 import verdict as _verdict          # 새 책임은 새 모듈 — 여기는 진입점일 뿐이다
 import recritic_bridge as _bridge   # 재비판 변환 계층 — 같은 프로세스·같은 원장
 
@@ -623,6 +625,9 @@ def main():
     # 사망은 `--angles` 유무와 무관하게 `--emit-verdict` 아래서 `angle-absent` 로
     # 보고된다.
     ap.add_argument("--angles", default=None)
+    # 스코프 튜플 — 기본 off. 주면 꼬리에 `scope:` 블록을 싣고, 그 status 가 사유로
+    # 옮겨지는 것(scope_tuple.STATUS_TO_REASON)을 `--reason` 들과 함께 판정에 넘긴다.
+    ap.add_argument("--scope", default=None)
     # 재비판 경로 — 판정자는 한 실행에 하나다.
     ap.add_argument("--recritic", default=None)
     ap.add_argument("--recritic-map", default=None)
@@ -635,6 +640,10 @@ def main():
         sys.exit(2)
     if args.angles is not None and args.angles == "":
         print("synthesize_findings.py: --angles 는 빈 문자열을 받지 않는다 "
+              "(플래그를 생략하거나 실제 경로를 줘라)", file=sys.stderr)
+        sys.exit(2)
+    if args.scope is not None and args.scope == "":
+        print("synthesize_findings.py: --scope 는 빈 문자열을 받지 않는다 "
               "(플래그를 생략하거나 실제 경로를 줘라)", file=sys.stderr)
         sys.exit(2)
 
@@ -668,6 +677,11 @@ def main():
         if args.angles is not None:
             print("synthesize_findings.py: --angles 는 --emit-verdict "
                   "없이는 의미가 없다 (함께 주거나 --angles 를 빼라)",
+                  file=sys.stderr)
+            sys.exit(2)
+        if args.scope is not None:
+            print("synthesize_findings.py: --scope 는 --emit-verdict "
+                  "없이는 의미가 없다 (함께 주거나 --scope 를 빼라)",
                   file=sys.stderr)
             sys.exit(2)
 
@@ -711,7 +725,11 @@ def main():
     # 한다(원자적 실패 계약).
     decision = None
     angle_states = None
+    scope = None
     if args.emit_verdict:
+        if args.scope is not None:
+            scope = _scope_tuple.parse(_scope_tuple.read_or_fail4(args.scope))
+        scope_reason = _scope_tuple.reason_of(scope) if scope is not None else None
         # `report["degraded"]`(공시)가 아니라 차단 쪽 술어다 — 헌장은 모델 다양성
         # 손실 같은 degrade 를 공시만 하고 막지 않는다. 여기서 둘을 섞으면 이
         # 합성기가 조용히 게이트를 넓힌다.
@@ -776,7 +794,7 @@ def main():
             review_blocked=review_blocked,
             angle_absent=angle_absent,
             differential_text=_verdict.read_or_none(args.differential),
-            extra_reasons=args.reason,
+            extra_reasons=args.reason + ([scope_reason] if scope_reason else []),
         )
 
     # 원장은 «회계»만 한다 — 읽어서 stdout 에 싣는 것은 이 소비자의 책임이다.
@@ -797,8 +815,10 @@ def main():
     if args.emit_verdict:
         # `render()` 가 낸 Markdown 본문 **뒤**의 평문 꼬리다 — `verdict:` 를 같은
         # 자리에 같은 모양으로 둬야 「off 출력은 on 출력의 바이트 접두」가
-        # 유지된다. 각도가 판정보다 **앞**인 것은 읽는 순서다: 무엇을 봤는지가
-        # 그 판정의 근거다.
+        # 유지된다. 스코프 · 각도가 판정보다 **앞**인 것은 읽는 순서다: 무엇을(스코프)
+        # 누가(각도) 봤는지가 그 판정의 근거다.
+        if scope is not None:
+            sys.stdout.write(_scope_tuple.render(scope))
         if angle_states is not None:
             sys.stdout.write(_angles.render(angle_states))
         sys.stdout.write(_verdict.render(decision))
