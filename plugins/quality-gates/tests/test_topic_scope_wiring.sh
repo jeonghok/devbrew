@@ -101,6 +101,48 @@ print("GOOD:%d" % len(good))
 print("MERGE_BASE_IN_FENCES:%d" % fences.count('$merge_base'))
 PY
 
+IFS= read -r -d '' PY_RM <<'PY' || true
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+lines = text.splitlines()
+open_re = re.compile(r'^[ \t]*```bash\s*$')
+close_re = re.compile(r'^[ \t]*```\s*$')
+fences = []
+i = 0
+while i < len(lines):
+    if open_re.match(lines[i]):
+        start = i
+        j = i + 1
+        body = []
+        while j < len(lines) and not close_re.match(lines[j]):
+            body.append(lines[j])
+            j += 1
+        fences.append((start, body))
+        i = j + 1
+    else:
+        i += 1
+rm_needle = 'rm -f ".claude/quality-gates/<session-id>/topic-scope.txt"'
+hits = [f for f in fences if any(rm_needle in l for l in f[1])]
+print("RM_FENCES:%d" % len(hits))
+if hits:
+    start = hits[0][0]
+    k = start - 1
+    while k >= 0 and lines[k].strip() == "":
+        k -= 1
+    para = []
+    while k >= 0 and lines[k].strip() != "":
+        para.append(lines[k])
+        k -= 1
+    para_text = "\n".join(reversed(para))
+else:
+    para_text = ""
+print("PARA_OVERRIDE:%d" % (1 if "override" in para_text else 0))
+print("PARA_BRANCH:%d" % (1 if "branch" in para_text else 0))
+print("PARA_PATHS:%d" % (1 if "--paths" in para_text else 0))
+print("PARA_DELETE_POS:%d" % (1 if "지운다" in para_text else 0))
+print("PARA_DELETE_NEG:%d" % (1 if "지우지 않" in para_text else 0))
+PY
+
 case_trivia_escape_is_gated_by_declaration() {
   # Review Focus 2 · R-AO — 선언이 있으면 trivia escape 를 쓰지 않는다.
   local got; got=$(python3 -c "$PY_TRIVIA" "$SKILL")
@@ -209,12 +251,27 @@ case_r5b_skips_on_topic() {
   assert_grep "$got" '\$head_tree_dir' "그 문장이 \$head_tree_dir 를 이름 붙인다"
 }
 
+case_override_clears_stale_scope_file() {
+  # I1 수정 — override 는 이번 iteration 에 1a 를 돌리지 않으므로, 남아 있을 수 있는 이전
+  # 스코프 파일을 지운다. 파일 부재는 차등 테스트 R-init 의 else 갈래로 간다(sed …
+  # "$S" 2>/dev/null 이 빈 값을 내 status==ok 를 만족 못한다). rm 줄이 1a(기본 모드) 쪽에
+  # 있으면(mutation) 그 펜스 바로 위 문단에 override · branch · --paths 가 함께 없다.
+  local got; got=$(python3 -c "$PY_RM" "$SKILL")
+  assert_grep "$got" '^RM_FENCES:1$'       "스코프 파일을 지우는 rm -f 줄을 담은 펜스가 정확히 하나"
+  assert_grep "$got" '^PARA_OVERRIDE:1$'   "그 펜스 바로 위 문단이 override 를 언급한다"
+  assert_grep "$got" '^PARA_BRANCH:1$'     "그 문단이 branch 를 언급한다"
+  assert_grep "$got" '^PARA_PATHS:1$'      "그 문단이 --paths 를 언급한다"
+  assert_grep "$got" '^PARA_DELETE_POS:1$' "그 문단이 삭제를 긍정형(지운다)으로 적는다"
+  assert_grep "$got" '^PARA_DELETE_NEG:0$' "그 문단에 삭제 부정형(지우지 않)이 섞여 있지 않다"
+}
+
 for c in case_trivia_escape_is_gated_by_declaration case_step1_writes_scope_file \
          case_status_table_is_total_over_statuses case_topic_diff_uses_boundary_and_tree \
          case_step4_row_carries_scope case_scope_block_surfaces \
          case_filtered_diff_uses_boundary_and_tree \
          case_rinit_topic_branch_sets_axes case_scan_dir_feeds_detect_and_assign \
-         case_r4_calls_use_baseline_commit case_r5b_skips_on_topic; do
+         case_r4_calls_use_baseline_commit case_r5b_skips_on_topic \
+         case_override_clears_stale_scope_file; do
   echo "== $c"; $c
 done
 finish

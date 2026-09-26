@@ -238,6 +238,12 @@ For each iteration N (1..5):
 
    reviewer 에게 주는 diff(`FILTERED_DIFF`)는 같은 두 값의 `git diff "$b" "$t"` 에서 문서 경로를 뺀 것이다. 스코프 파일은 Step 4 가 `--scope` 로 다시 읽는다 — 이 iteration 동안 지우거나 고치지 않는다.
 
+   **override 스코프 파일 정리 (override 일 때 · 1a 대신 · 매 iteration).** override(`branch` · `--paths`)면 이번 iteration 에 1a 를 돌리지 않으므로 위 「지우거나 고치지 않는다」의 대상이 아니다 — 이전 iteration·이전 실행이 남긴 스코프 파일이 있으면 지운다. 차등 테스트 R-init 이 파일 부재를 session 으로 읽는다:
+
+   ```bash
+   rm -f ".claude/quality-gates/<session-id>/topic-scope.txt"
+   ```
+
    **session 스코프**(1a 가 `topic` 을 내지 않았거나 override):
 
    ```bash
