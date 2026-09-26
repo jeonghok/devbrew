@@ -119,25 +119,6 @@ case_merged_member_combined() {
   cleanup
 }
 
-case_stack_after_front_merged_diff_has_front() {
-  new_repo
-  local R; R=$(git rev-parse HEAD)
-  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
-  git checkout -q -b topicB; decl_commit b.txt b1 "b1"
-  git checkout -q main; git merge -q --no-ff topicA -m "merge topicA"
-  git branch -q -D topicA
-  git checkout -q topicB
-  echo dirty > wip.txt
-  local out T; out=$(bash "$TH" "$SID"); T=$(field tree "$out")
-  assert_eq "$(field status "$out")" "ok" "머지 뒤 스택: status: ok"
-  assert_eq "$(field boundary "$out")" "$R" "머지 뒤 스택: 경계 = 앞 조각의 fork"
-  local names; names=$(git diff --name-only "$(field boundary "$out")" "$T")
-  assert_grep "$names" '^a\.txt$' "머지 뒤 스택: 경계..합친 트리 diff 에 앞 조각 파일(기준선에 숨지 않는다)"
-  assert_grep "$names" '^b\.txt$' "머지 뒤 스택: 경계..합친 트리 diff 에 뒤 조각 파일"
-  assert_grep "$names" '^wip\.txt$' "머지 뒤 스택: 경계..합친 트리 diff 에 미커밋 파일"
-  cleanup
-}
-
 case_conflict_lists_files() {
   new_repo
   local R; R=$(git rev-parse HEAD)
@@ -357,8 +338,7 @@ case_create_head_usage() {
 }
 
 for c in case_usage case_no_declaration case_single_branch_topic case_two_siblings_combined \
-         case_merged_member_combined case_stack_after_front_merged_diff_has_front \
-         case_conflict_lists_files case_declared_path_absent \
+         case_merged_member_combined case_conflict_lists_files case_declared_path_absent \
          case_two_fragments_on_one_branch case_explicit_topic_skips_detect \
          case_unrelated_member_is_unbounded case_runs_from_subdirectory \
          case_remote_only_sibling_is_combined case_no_side_effects case_repo_hooks_not_run \

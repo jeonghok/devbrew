@@ -141,29 +141,6 @@ repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || emit base-unresolved "
 # base 원격 ref · `origin/HEAD`(`origin` 으로 찍힌다) · 뒤처진 로컬 base 는 base_ref 의
 # 조상-또는-같음이라 아래 첫 검사가 빼낸다(test_topic_boundary.sh
 # case_base_remote_ref_never_member).
-#
-# 포함 검사에 쓰는 선언 커밋(C_LIVE)은 **머지 커밋으로 base_ref 에 이미 든 것(C_MERGED)을
-# 뺀** 나머지다. 그런 선언 커밋은 머지 뒤 base 에서 딴 모든 브랜치의 조상이라, 포함 근거로
-# 세면 (1) 스택 R→A→B 에서 A 가 머지된 뒤 B 가 A 의 선언을 흡수해 2단계가 발화하지 않고
-# 경계가 A 의 tip 으로 밀려 A 의 변경이 기준선에 숨고 (2) 선언 없는 무관 브랜치까지 전부
-# 구성원이 된다. C_MERGED 는 2단계(merged:)로만 온다.
-# 판별: base_ref 의 첫-부모 사슬에서 c 를 처음 담는 커밋 x(= 첫-부모 사슬 ∩ c 의 후손 중
-# 가장 이른 것)의 첫 부모가 c 를 담지 않으면 x 가 c 를 들여온 머지다 — 2단계는 이 x 를 그
-# 선언 커밋의 m 으로 쓴다. `--ancestry-path --merges | tail -1` 은 주제 브랜치 «안»의 머지
-# (main → 주제 최신화)를 먼저 집어 이 판별에 못 쓴다. fast-forward 로 든 선언 커밋은 첫-부모
-# 사슬 위에 있어 x 의 첫 부모가 c 를 담는다 — 2단계가 받을 수 없으니 C_LIVE 에 남겨 옛
-# 동작대로 센다.
-C_LIVE=""; C_MERGED=""; MERGED_AT=""
-for c in $C; do
-  if git merge-base --is-ancestor "$c" "$BASE_REF" 2>/dev/null; then
-    x=$(git rev-list --first-parent "$c..$BASE_REF" 2>/dev/null \
-        | grep -Fx -f <(git rev-list --ancestry-path "$c..$BASE_REF" 2>/dev/null) | tail -1)
-    if [ -n "$x" ] && ! git merge-base --is-ancestor "$c" "$x^1" 2>/dev/null; then
-      C_MERGED="$C_MERGED $c"; MERGED_AT="$MERGED_AT $c:$x"; continue
-    fi
-  fi
-  C_LIVE="$C_LIVE $c"
-done
 BR_NAMES=""; BR_TIPS=""
 for ref in $(git for-each-ref --sort=refname --format='%(refname:short)' refs/heads refs/remotes 2>/dev/null); do
   tip=$(git rev-parse "$ref" 2>/dev/null) || continue
@@ -171,7 +148,7 @@ for ref in $(git for-each-ref --sort=refname --format='%(refname:short)' refs/he
   git merge-base --is-ancestor "$tip" "$BASE_REF" 2>/dev/null && continue
   # 같은 커밋을 가리키는 중복 ref(로컬+원격-추적) — 이미 담았으면 건너뛴다.
   case " $BR_TIPS " in *" $tip "*) continue ;; esac
-  for c in $C_LIVE; do
+  for c in $C; do
     if git merge-base --is-ancestor "$c" "$tip" 2>/dev/null; then
       BR_NAMES="$BR_NAMES $ref"; BR_TIPS="$BR_TIPS $tip"; break
     fi
@@ -182,23 +159,14 @@ done
 # 발동 조건은 **「1단계가 낸 B_t 에 들어가지 않으면」** 이다 — 「어느 살아 있는 ref
 # 에도 안 걸리면」이 아니다. 머지됐는데 ref 는 살아 있는(가장 흔한) 경로가 그 차이로
 # 고아가 되어 AC4 가 깨진다.
-# C_MERGED 의 원소는 1단계 구성원이 담고 있어도 여기로 온다 — 1단계에서 뺀 이유와 같다.
-# 그 원소의 m 은 1단계 앞에서 판별한 첫-부모 사슬의 머지다(MERGED_AT).
 ORPHANS=""
 for c in $C; do
   in_bt=no
-  case " $C_MERGED " in
-    *" $c "*) ;;
-    *) for tip in $BR_TIPS; do
-         git merge-base --is-ancestor "$c" "$tip" 2>/dev/null && { in_bt=yes; break; }
-       done ;;
-  esac
-  [ "$in_bt" = yes ] && continue
-  m=""
-  for pair in $MERGED_AT; do
-    case "$pair" in "$c:"*) m="${pair#*:}"; break ;; esac
+  for tip in $BR_TIPS; do
+    git merge-base --is-ancestor "$c" "$tip" 2>/dev/null && { in_bt=yes; break; }
   done
-  [ -n "$m" ] || m=$(git rev-list --ancestry-path --merges "$c..$BASE_REF" 2>/dev/null | tail -1)
+  [ "$in_bt" = yes ] && continue
+  m=$(git rev-list --ancestry-path --merges "$c..$BASE_REF" 2>/dev/null | tail -1)
   [ -n "$m" ] || { ORPHANS="$ORPHANS $c"; continue; }
   # 주제 쪽 부모 — `^2` 로 단정하지 않고 c 를 포함하는 부모를 고른다.
   side=""
