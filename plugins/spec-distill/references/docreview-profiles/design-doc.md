@@ -14,6 +14,7 @@ protected_headings:
 layer_rubric:
   layer1: [goal_fit, problem_definition, scope, architecture, component_relations, data_flow, tradeoffs, feasibility, overdesign]
   layer2: [placeholder, ambiguity, scope_creep, approaches_comparison, isolation, testing, handoff_incomplete]
+must_catch: [goal_fit, problem_definition, scope, architecture]
 decision_log: {kind: doc_section, heading: "## 결정 기록"}
 defer_target: {kind: doc_section, heading: "### Deferred to plan"}
 web: false

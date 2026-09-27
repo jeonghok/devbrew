@@ -8,6 +8,7 @@ protected_headings: []
 layer_rubric:
   layer1: [unfounded_addition, example_as_requirement, premature_closure, inference_as_decision]
   layer2: []
+must_catch: [unfounded_addition, example_as_requirement, premature_closure, inference_as_decision]
 decision_log: {kind: audit_section, heading: "## 6. 리뷰 결정"}
 defer_target: {kind: none}
 web: false

@@ -338,7 +338,8 @@ if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
     || echo "- (state 기록 실패) component=critic axis=all status=unavailable reason=프로필 내용 판독 불가(cat rc $prof_rc)" >> "$DEGRADE_FALLBACK_FILE"
   exit 1
 fi
-printf '%s\n' "$PROFILE_TEXT"
+# frontmatter 의 `must_catch:` 줄(엔진 라우팅 키)은 리뷰어에게 싣지 않는다 — 막는 축을 아는 리뷰어는 category 로 차단 여부를 조종할 수 있다.
+printf '%s\n' "$PROFILE_TEXT" | sed -e '2,/^---$/{' -e '/^must_catch:/d' -e '}'
 ```
 <!-- profile-content:end -->
 

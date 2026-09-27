@@ -440,6 +440,7 @@ fi
 
 ### 프로필 내용 — 탐지 dispatch 직전마다
 
+<!-- profile-content:begin -->
 ```bash
 # 리뷰어의 `<profile>` 슬롯에는 경로가 아니라 **내용**을 싣는다 — 플러그인 캐시는 사용자 프로젝트 밖이라
 # 리뷰어의 Read 가 거부된다. rc 가 0 이 아니면 dispatch 하지 않는다 — critic 출력 파일을 비워 5단계가
@@ -450,8 +451,10 @@ if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
   if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then : > "$STATE_DIR/critic.txt" 2>/dev/null || true; fi
   exit 1
 fi
-printf '%s\n' "$PROFILE_TEXT"
+# frontmatter 의 `must_catch:` 줄(엔진 라우팅 키)은 리뷰어에게 싣지 않는다 — 막는 축을 아는 리뷰어는 category 로 차단 여부를 조종할 수 있다.
+printf '%s\n' "$PROFILE_TEXT" | sed -e '2,/^---$/{' -e '/^must_catch:/d' -e '}'
 ```
+<!-- profile-content:end -->
 
 ### codex — 4단계
 
