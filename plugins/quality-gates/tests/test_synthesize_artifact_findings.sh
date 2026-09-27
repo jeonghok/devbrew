@@ -374,7 +374,7 @@ note "── 처분 회계 (T1-C, key 단계)"
 # stdout, disposition_report())만 값으로 잰다. `main()` 의 `key` 분기(:306-322)가
 # `disposition_lines()` 로 stderr 에 내는 처분 세 줄(**처분:**/**배관 손실:**/풀이줄)은
 # 이 파일 어디서도 검사되지 않았다 — 두 렌더 분기 중 한쪽만 잠겨 있던 Critical
-# (synth 의 :482 clean 분기)과 같은 부류, `key`/`synth` 축으로 다른 자리다.
+# (synth 의 :625 clean 분기)과 같은 부류, `key`/`synth` 축으로 다른 자리다.
 # 실패 소스(findings 문서 아님 — codex_failed 뿐인 dict) 하나 + 파손 항목
 # (findings 리스트 안의 non-dict 스칼라) 하나를 넣어 :113 의 hold("항목 파손: …")
 # 와 :107 의 source_failed 를 함께 태운다. key 단계엔 "판정자 부재" hold 가
