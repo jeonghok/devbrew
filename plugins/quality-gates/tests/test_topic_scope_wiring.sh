@@ -385,6 +385,10 @@ case_override_clears_stale_scope_file() {
 case_in_base_notice() {
   # AC4 재정의 — 머지된 앞 조각이 이번 판정에서 빠졌다는 사실을 ① 1a 가 공지한다(같은 줄).
   # 1a 창(「**1a — 토픽 선언」 ~ 「**session 스코프**」) 안에서만 찾는다 — 다른 절로 옮기면 RED.
+  # 끝 마커 자체의 실재를 별도로 잰다(PR4d 닫기 #19) — 마커를 개명(예: "**session scope**")하면
+  # awk 의 종료 조건이 다시는 안 걸려 창이 파일 끝까지 넓어지고, 옮겨진 공지 줄이 그 넓은
+  # 창 안에서 «다시» 걸려 뒤집기를 못 잡는다. 마커가 정확히 한 번 리터럴로 있어야 창이 닫힌다.
+  assert_eq "$(grep -c -F '**session 스코프**' "$SKILL")" "1" "1a 창의 끝 마커가 SKILL 에 정확히 한 번 리터럴로 있다(양의 짝 — 없으면 창이 파일 끝까지 새는 것을 못 잡는다)"
   local win got
   win=$(awk '/\*\*1a — 토픽 선언/{f=1} /\*\*session 스코프\*\*/{f=0} f' "$SKILL")
   got=$(printf '%s\n' "$win" | grep -F '`in_base:`' | grep -F '기준선에 포함됐다' | grep -F '판정 대상이 아니다')
@@ -392,6 +396,9 @@ case_in_base_notice() {
   assert_grep "$got" '^[[:space:]]*`status: ok` 이고 파일의 `in_base:` 가 0 보다 크면 공지 한 줄: `> \[quality-gates\] 토픽 ' \
     "조건(status ok · in_base > 0)과 목적지(공지 한 줄: …)가 같은 줄의 긍정형이다"
   assert_not_grep "$got" '않|말 것|생략|아니고' "그 줄에 부정 · 반전 토큰이 없다(「판정 대상이 아니다」는 위에서 따로 잰다)"
+  # 줄 전체 끝 앵커(PR4d 닫기 #20) — 위 긍정형 단언은 접두만 고정해, 닫는 백틱 뒤에 꼬리를
+  # 덧붙이는 변이(부정 토큰 없이)를 못 잡는다. 문장이 그 백틱에서 «끝난다»를 별도로 잰다.
+  assert_grep "$got" '이번 판정 대상이 아니다\.`$' "그 문장이 닫는 백틱 직후에 끝난다(줄 끝 앵커 — 백틱 뒤 덧붙임을 잡는다)"
 }
 
 for c in case_trivia_escape_is_gated_by_declaration case_step1_writes_scope_file \

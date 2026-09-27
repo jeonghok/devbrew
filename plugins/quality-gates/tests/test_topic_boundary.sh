@@ -730,6 +730,18 @@ case_no_merged_member_machinery() {
     "C_LIVE 를 순회하는 루프가 둘(구성원 1단계 · 고아)"
 }
 
+# ── base-unresolved 이전 경로: in_base 는 «셀 수 없음»(-) 이지 0 이 아니다 (PR4d 닫기 #18) ──
+#    C 를 세기 전에 끝나는 경로(git 리포조차 아님)에서 IN_BASE 의 초기값이 그대로 나간다.
+#    그 초기값을 0 으로 바꾸는 변이는 「선언이 base 에 없다」는 거짓 확답을 만든다 —
+#    «셀 수 없음»과 «0»은 다른 사실이다(status 단언과 묶은 양의 짝).
+case_base_unresolved_in_base_is_dash() {
+  local nogit; nogit=$(mktemp -d) || exit 1
+  local out; out=$(cd "$nogit" && bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "base-unresolved" "git 리포가 아님: status: base-unresolved"
+  assert_eq "$(field in_base "$out")" "-" "git 리포가 아님: in_base 는 -(C 를 세기 전에 끝난다 — 0 이 아니다)"
+  rm -rf "$nogit"
+}
+
 for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_all_declared_in_base case_orphan_tag_only case_f3_merged_ref_deleted \
          case_f4_undeclared_ancestor_included case_f5_fragment_discriminates \
@@ -752,7 +764,7 @@ for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_detect_empty_spec_value_excluded \
          case_unrelated_after_merge_not_member case_n1_main_history_not_absorbed \
          case_n2_nested_merge_not_expanded case_squash_front_still_member \
-         case_no_merged_member_machinery; do
+         case_no_merged_member_machinery case_base_unresolved_in_base_is_dash; do
   echo "== $c"; $c
 done
 finish
