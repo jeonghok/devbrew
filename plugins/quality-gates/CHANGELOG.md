@@ -3,6 +3,37 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [9.3.1] — 2026-09-28
+
+**PR5 후속 수정** — e2e 가 드러낸 판정 누수 하나와 토픽 모드 선택 비율의 분모를 고친다.
+
+### Fixed
+- 합성기가 `confidence` 가 빠진 발견을 0 으로 채워 억제 바닥(≤4) 아래로 떨구던 것을 고친다. `decide(defect=bool(kept))` 라 그 발견이 유일하면 거짓 `clean` 이 날 수 있었다. 이제 누락 · 숫자 아님(`high` · `true` · `.inf`)은 5(보이되 검증 안 됨)로 확정한다. 살아남는 항목에서만 회계에 강제로 세고, CRITICAL 이 아닐 때만 「게이트 변경」 degrade 로 공시한다(막지 않음). 판정자가 새로 낸 승격 항목의 누락은 설계된 기본값이라 세지 않는다.
+- 토픽(선언) 모드에서 「영향 테스트 N개 선택 (전체 M개 중)」의 분모가 세션 브랜치 트리만 세어 `N > M` 이 나던 것을 고친다. `compute-test-scope-candidates.sh --total --tree <tree>` 가 합친 트리를 세고, 레퍼런스의 분모 규칙이 선언 경로에서 그것을 부른다.
+- `--total` 의 `ls-tree` · `ls-files` 가 도중에 실패하면 rc 0 · `0` 으로 삼켜지던 것을 exit 4 로 드러낸다. `--total` 뒤에 붙은 인자가 정확히 `--tree <tree>` 가 아니면(`--tree=<T>` · 여분 인자) exit 4 다.
+
+### Changed
+- `scope_tuple.py` docstring 의 「판정 대상에서 빠진」을 「토픽 구성원에서 빠진」으로 고친다.
+
+## [9.3.0] — 2026-09-27
+
+**공개 계약 · 헌장 정리** — qg 는 한 파이프라인이다. 두 게이트 · 런타임 검증 executor 를 전제하던 공개 문자열과 헌장 조항을 거두고, 헌장이 이름으로 박는 것이 실재하는지를 락으로 잠근다.
+
+### Added
+- `shared/tests/test_charter_citations.sh` — 헌장(`CLAUDE.md` + `docs/philosophy/*.md`)의 모양 인식 인용(경로 · 글롭 · 리포 플러그인 이름)이 실재하고, git 이력에서 사라진 agent · 스크립트 · 플러그인 이름이 헌장에 없음을 잰다(AC19). 공개 계약 설명 문자열 전체와 `runtime-verifier` · `2-gate` 부재도 잰다(AC20). 이력 도출은 `--no-renames` 로 rename 뒤 지운 이름까지 본다.
+- `test_gate_era_prose_absent.sh` — qg 산문에 「Review gate」 · 「Runtime gate」 · 「2-gate」(대소문자 · 복수형 변형 포함)가 없다.
+
+### Changed
+- `marketplace.json` · `plugin.json` 의 qg 설명을 「one pipeline, one verdict (review + mandatory differential test)」로 바꾼다 — 「2-gate … (review + runtime)」은 사라진 런타임 게이트를 주장했다.
+- `CLAUDE.md` Law 2 와 철학 문서에서 *Scoped exception (qg v2.2.0)* 을 지운다 — 그 조항이 이름으로 박던 `runtime-verifier` 는 9.0.0 에서 사라졌다. Law 2 는 예외 없는 원칙으로 돌아간다. 부팅되는 앱을 가진 설치본은 브라우저 플로우 검증 · spec AC 런타임 검증 · mutation guard 를 잃었다(9.0.0) — qg 는 그것을 대체하지 않고 주장을 거둔다.
+- `security-reviewer` · `pr-understanding-builder` · `critiquing-artifacts` · `publishing-pr-understanding` 의 「Review gate」 · 「two-gate」 라벨을 한 파이프라인 이름으로 바꾼다(persona 는 라벨만 — 규칙 · 임계 · 도구 불변).
+- ① 1a 의 `in_base` 공지가 「기준선에 포함됐다 — 이번 판정 대상이 아니다」 대신 「토픽 구성원에서 빠졌다 — 그 머지 전에 갈라져 base 를 아직 안 들인 형제 구성원이 그 조각을 품은 구성원과 함께 있으면 그 변경이 이번 diff 에 다시 보인다」를 낸다 — 옛 문구는 그 토폴로지에서 틀렸다(그 변경이 리뷰 diff 와 차등 테스트에 다시 든다). 앞 조각이 자기 PR 에서 판정됐다는 주장은 qg 가 확인하지 못하므로 싣지 않는다.
+- README — 토픽 스코프 절이 머지된 앞 조각의 변경이 리뷰 diff 에 다시 드는 조건을 토폴로지로 적는다(그 머지 전에 갈라져 base 를 아직 안 들인 형제 구성원과 그 조각을 품은 구성원이 함께 있을 때만 리뷰 diff 와 차등 테스트에 다시 든다). 알려진 한계에는 squash 로 든 앞 조각의 흡수가 사이 base 커밋이 다른 `Spec:` 키를 달았으면 `declaration-invalid` 로 막힌다는 조건을 적고, 로컬 전용 머지(push 전)와 fetch 전 원격 머지의 다른 결과를 가른다.
+- 철학 문서 P4 — runtime tier 의 집행 코드로 qg 차등 테스트를 가리키던 줄을 고친다. qg 는 mechanical tier(차등 테스트)와 semantic tier(독립 리뷰)를 집행하고 runtime tier 를 주장하지 않는다. 같은 문서 Law 2 의 분리 수단을 `tools:` allowlist 로 바로잡는다(`allowed-tools` 는 제한이 아니다 — CLAUDE.md).
+
+### Fixed
+- `create-head --topic` 이 재도출에 실패해 죽을 때 `resolve` 의 사유를 함께 낸다(전에는 `status` 만).
+
 ## [9.2.0] — 2026-09-27
 
 **토픽 구성원 규칙 재결정** — 같은 `Spec:` 키의 앞 조각이 이미 base 에 머지됐으면 그 조각은 판정 대상이 아니라 기준선이다. 그 선언 커밋 수를 `scope:` 블록의 `in_base` 로 공시한다.

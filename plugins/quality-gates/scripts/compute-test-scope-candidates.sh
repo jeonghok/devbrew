@@ -3,8 +3,9 @@
 # sorted list of test-file paths that are in-scope for the current diff.
 #
 # Usage:
-#   compute-test-scope-candidates.sh            → in-scope test-file candidates
-#   compute-test-scope-candidates.sh --total    → repo-wide test-file COUNT (분모 M, AC37)
+#   compute-test-scope-candidates.sh                       → in-scope test-file candidates
+#   compute-test-scope-candidates.sh --total               → repo-wide test-file COUNT (분모 M, AC37)
+#   compute-test-scope-candidates.sh --total --tree <tree> → <tree> 안의 테스트 파일 수 (토픽/선언 경로의 분모)
 #
 # Inputs:
 #   $PWD            — must be a git working tree
@@ -24,6 +25,10 @@
 #       4 = **the review range could not be diffed.** This is NOT "no candidates".
 #           빈 stdout 을 "이 diff 는 테스트를 건드리지 않는다" 로 읽으면 안 된다 —
 #           호출자는 이것을 `gap`/`verification: degraded` 사유로 기록해야 한다.
+#           `--total` 에서는 `ls-files` 가 실패할 때, `--total --tree <tree>` 에서는 `<tree>` 를
+#           트리로 풀 수 없거나 `ls-tree` 가 실패할 때, `--total` 뒤 인자가 정확히
+#           `--tree <tree>` 가 아닐 때도 같은 4다 — stdout 은 비우고 stderr 에 사유를
+#           loud 하게 낸다.
 #
 # **fail-open 지시 철회 (/qg iter-7 iteration 2, security-reviewer).** 앞 판본은
 # *"Skill must fail-open (treat non-zero as empty)"* 라고 적었다. 그 한 줄이 이
@@ -83,10 +88,44 @@ TESTRE='(test|spec)\.[jt]sx?$|_test\.py$|(^|/)test_[^/]*\.py$|\.test\.|\.spec\.|
 # --total: 리포 전체 테스트 파일 수를 emit (계획 산문의 분모 M — AC37).
 # 후보 산출과 **같은 TESTRE**를 전 트리에 적용한다. 분모가 모델 자기보고이면
 # 과선택이 심해질수록 분모도 같이 부풀려 비율이 정상으로 보인다.
+#
+# --total --tree <tree>: 토픽(선언) 경로에서는 R1b 가 분자를 경계..합친 트리로
+# 보충하는데, 분모는 이 브랜치의 현재 체크아웃만 세면 N > M 이 날 수 있다
+# (실측: e2e 후보 2개, 분모 1). `<tree>` 가 주어지면 그 트리 안에서 분모를 센다 —
+# 분자를 보충한 것과 **같은 트리**에서 분모도 세야 비율이 다시 정상이 된다.
 if [ "${1:-}" = "--total" ]; then
+  if [ "$#" -gt 1 ]; then
+    # 인자 모양이 정확히 `--total --tree <tree>`(3개) 가 아니면 loud 하게 거부한다.
+    # `--tree=<T>`(합쳐 쓴 값), 뒤에 남는 인자 등은 여기서 걸러 조용히 무시되지 않는다.
+    if [ "$#" -ne 3 ] || [ "${2:-}" != "--tree" ] || [ -z "${3:-}" ]; then
+      echo "compute-test-scope-candidates: --total 뒤 인자 모양이 '--total --tree <tree>' 가 아니다(받은 것: $*) — 분모를 셀 수 없다" >&2
+      exit 4
+    fi
+    if ! git rev-parse --verify --quiet "$3^{tree}" >/dev/null 2>&1; then
+      echo "compute-test-scope-candidates: --tree 값을 트리로 풀 수 없다('$3') — 분모를 셀 수 없다" >&2
+      exit 4
+    fi
+    # M8 과 같은 이유로 core.quotePath=false: 분자·분모가 같은 설정이어야 한다.
+    # --full-tree: cwd 가 서브디렉토리여도 트리 전체를 본다(경로를 cwd 로 자르지
+    # 않는다) — 없으면 같은 트리를 불러도 부르는 cwd 에 따라 분모가 달라진다.
+    # 먼저 캡처하고 그다음 센다 — 파이프로 바로 `grep -cE` 에 넘기면 파이프의 rc 는
+    # 마지막 명령(grep) 것이라 `ls-tree` 실패(손상·부재 서브트리 오브젝트 등)가 빈
+    # stdin 으로 grep 에 흘러 rc 0·"0" 을 낸다. 캡처해 `ls-tree` 자체의 rc 를 본다.
+    names=$(git -c core.quotePath=false ls-tree -r --full-tree --name-only "$3") || {
+      echo "compute-test-scope-candidates: ls-tree 실패 (--tree $3) — 분모를 셀 수 없다" >&2
+      exit 4
+    }
+    printf '%s\n' "$names" | grep -cE "$TESTRE" || true
+    exit 0
+  fi
   # M8: quotePath 기본 true 는 비-ASCII 경로를 인용·8진 이스케이프해 TESTRE 를
   # 못 만족시킨다 — 분자(위 git diff)와 **같은 설정**이어야 N>M 이 안 생긴다.
-  git -c core.quotePath=false ls-files | grep -cE "$TESTRE" || true
+  # 위와 같은 이유로 캡처 후 카운트 — `ls-files` 실패를 grep 뒤에서 삼키지 않는다.
+  files=$(git -c core.quotePath=false ls-files) || {
+    echo "compute-test-scope-candidates: ls-files 실패 — 분모를 셀 수 없다" >&2
+    exit 4
+  }
+  printf '%s\n' "$files" | grep -cE "$TESTRE" || true
   exit 0
 fi
 
