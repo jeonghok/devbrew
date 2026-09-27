@@ -697,16 +697,12 @@ def record_findings(st, findings, n) -> dict:
     return counts
 
 
-def append_under_heading(path: Path, heading: str, line: str) -> None:
-    """append-only: 그 헤딩 절의 끝에 한 줄. 헤딩이 없으면 파일 끝에 헤딩부터 만든다."""
-    text = path.read_text(encoding="utf-8") if path.is_file() else ""
-    lines = text.split("\n")
+def _section_span(lines, heading):
+    """그 헤딩 절의 (헤딩 줄 번호, 끝 줄 번호) — 끝은 절 끝의 빈 줄을 걷은 자리다. 헤딩이 없으면 None."""
     level = len(heading) - len(heading.lstrip("#"))
     idx = next((i for i, l in enumerate(lines) if l.strip() == heading.strip()), None)
     if idx is None:
-        text = text.rstrip("\n") + "\n\n" + heading.strip() + "\n\n" + line + "\n"
-        path.write_text(text, encoding="utf-8")
-        return
+        return None
     end = len(lines)
     for j in range(idx + 1, len(lines)):
         m = re.match(r"^(#{1,6})[ \t]+", lines[j])
@@ -715,6 +711,28 @@ def append_under_heading(path: Path, heading: str, line: str) -> None:
             break
     while end > idx + 1 and lines[end - 1].strip() == "":
         end -= 1
+    return idx, end
+
+
+def section_tail(path: Path, heading: str):
+    """그 헤딩 절의 마지막 비지 않은 줄(본문이 없으면 헤딩 줄 자신). 파일이나 헤딩이 없으면 None."""
+    if not path.is_file():
+        return None
+    lines = path.read_text(encoding="utf-8").split("\n")
+    span = _section_span(lines, heading)
+    return None if span is None else lines[span[1] - 1]
+
+
+def append_under_heading(path: Path, heading: str, line: str) -> None:
+    """append-only: 그 헤딩 절의 끝에 한 줄. 헤딩이 없으면 파일 끝에 헤딩부터 만든다."""
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    lines = text.split("\n")
+    span = _section_span(lines, heading)
+    if span is None:
+        text = text.rstrip("\n") + "\n\n" + heading.strip() + "\n\n" + line + "\n"
+        path.write_text(text, encoding="utf-8")
+        return
+    end = span[1]
     lines[end:end] = [line]
     if end + 1 < len(lines) and lines[end + 1].strip() != "":
         lines[end + 1:end + 1] = [""]
@@ -1433,21 +1451,15 @@ def cmd_gate(a) -> int:
     return 0
 
 
-def _advice_write_failed(a, st, sunk, reason, path, err, **extra) -> int:
-    """박제 · 계수 쓰기 실패 — 그 전에 실제로 적힌 박제 행의 `sunk` 표지만 원장에 남기고 rc 1 로 알린다."""
-    if sunk:
-        save_state(a.state_dir, st, "advice sunk=%d — %s 로 중단" % (len(sunk), reason))
-    return fail(reason, path=path, detail=str(err), sunk=len(sunk), **extra)
-
-
 def cmd_advice(a) -> int:
     """참고(advisory) 목록 — 끝에서 한 번 표시(`--render`) · 박제(`--sink`) · 라운드별 계수 줄(`--log-file`).
 
     플래그가 없으면 원장의 목록을 JSON 으로 낸다(읽기 전용). 한 호출 안의 순서는 박제 → 계수 → 표시다. 이미 보인
     항목(`shown`) · 박제한 항목(`sunk`)은 다시 내지 않고, 계수 줄의 멱등 키는 (리뷰 정체, 라운드)를 목적지 파일의
     글자로 판정한다 — 원장이 TTL 로 걷혀도 두 번 적지 않는다. 부르는 자리는 진입 skill 셋이다(절차서는 계약만).
-    쓰기가 실패하면 rc 1 과 사유(`sink_write_failed` · `log_write_failed`)를 내고, 실제로 적힌 항목만 `sunk` 로
-    원장에 남긴다 — 실패 뒤의 표시는 하지 않으므로 `shown` 도 켜지지 않는다."""
+    박제는 미박제 행 전부를 한 번의 쓰기로 적고(전부 아니면 전무), 성공하면 계수 · 표시 **앞에서** `sunk` 를 원장에
+    저장한다 — 뒤 단계가 무엇으로 죽어도 다음 호출이 같은 행을 다시 적지 않는다. 쓰기 · 읽기 실패는 rc 1 과 사유
+    (`sink_write_failed` · `log_write_failed`) · 목적지 경로로 알린다."""
     adv = _adv
     if adv is None:
         return fail("advice_module_missing", detail="docreview_advice.py 형제 사본이 이 스크립트 옆에 없다")
@@ -1465,16 +1477,17 @@ def cmd_advice(a) -> int:
     if a.log_file and not heading:
         return fail("profile_decision_log_is_state_only")
     items = list((st.get("advice") or {}).values())
-    sunk = []
-    for it in (items if a.sink else []):
-        if it.get("sunk"):
-            continue
+    sunk = [it for it in items if not it.get("sunk")] if a.sink else []
+    if sunk:
+        path = Path(a.sink)
         try:
-            append_under_heading(Path(a.sink), dt["heading"], adv.sink_row(it))
-        except OSError as e:
-            return _advice_write_failed(a, st, sunk, "sink_write_failed", a.sink, e)
-        it["sunk"] = True
-        sunk.append(it)
+            block = adv.sink_block([adv.sink_row(it) for it in sunk], section_tail(path, dt["heading"]))
+            append_under_heading(path, dt["heading"], "\n".join(block))
+        except (OSError, UnicodeError) as e:
+            return fail("sink_write_failed", path=str(path), detail=str(e))
+        for it in sunk:
+            it["sunk"] = True
+        save_state(a.state_dir, st, "advice sunk=%d" % len(sunk))
     logged = []
     if a.log_file:
         path, ident = Path(a.log_file), adv.review_identity(a.state_dir)
@@ -1485,16 +1498,16 @@ def cmd_advice(a) -> int:
                 if "advice_new" in rep and adv.count_key(ident, int(k)) not in have:
                     append_under_heading(path, heading, adv.count_line(ident, int(k), rep))
                     logged.append(int(k))
-        except OSError as e:
-            return _advice_write_failed(a, st, sunk, "log_write_failed", a.log_file, e, logged_rounds=logged)
+        except (OSError, UnicodeError) as e:
+            return fail("log_write_failed", path=str(path), detail=str(e), sunk=len(sunk), logged_rounds=logged)
     shown = [it for it in items if not it.get("shown")] if a.render else []
     if a.render:
         where = a.where or (dt["heading"] if dt.get("kind") == "doc_section" else "advice 목록(JSON)")
         print("\n".join(adv.render_lines(shown, cap, where)))
     for it in shown:
         it["shown"] = True
-    if sunk or shown:
-        save_state(a.state_dir, st, "advice shown=%d sunk=%d" % (len(shown), len(sunk)))
+    if shown:
+        save_state(a.state_dir, st, "advice shown=%d" % len(shown))
     if not a.render:
         _emit({"ok": True, "items": items, "sunk": len(sunk), "logged_rounds": logged})
     return 0

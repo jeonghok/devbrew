@@ -19,6 +19,7 @@ ROUTE_ADVICE = "advice"
 RENDER_CAP = 8          # 끝의 한 번 표시 — 머리 1 + 항목 8 + 접는 줄 1 = 10줄(⟨D9⟩)
 SUMMARY_WIDTH = 60      # 렌더 항목 줄의 요약 폭(코드포인트) — 넘치면 59 + 「…」
 COUNT_PREFIX = "docreview 계수 — "
+SINK_TABLE_HEAD = ("| # | 항목 |", "|---|---|")   # 박제처 절이 표로 끝나지 않을 때 한 번 여는 머리
 
 
 def has_must_catch(prof) -> bool:
@@ -157,6 +158,15 @@ def sink_row(it) -> str:
     if it.get("replacement"):
         text += " — 고치면: " + _one_line(it["replacement"])
     return "| %s | 참고(%s) %s — %s |" % (it.get("id"), it.get("category"), it.get("anchor"), text.replace("|", "\\|"))
+
+
+def sink_block(rows, tail) -> list:
+    """박제처 절에 한 번에 붙일 줄들. 절이 표 행으로 끝나면(`tail` 이 `|` 로 시작) 그 표에 이어 붙이고, 아니면(글머리
+    목록 · 산문 · 빈 절) 빈 줄과 표 머리를 먼저 연다 — 목록 뒤에 붙은 `|` 줄은 표가 아니라 마지막 항목의 이어진 글이
+    된다. `tail` 이 None 이면 헤딩부터 새로 생기므로 빈 줄 없이 머리를 연다."""
+    if tail is not None and tail.lstrip().startswith("|"):
+        return list(rows)
+    return ([] if tail is None else [""]) + list(SINK_TABLE_HEAD) + list(rows)
 
 
 def review_identity(state_dir) -> str:

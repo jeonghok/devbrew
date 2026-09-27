@@ -44,4 +44,6 @@ case_advice_pre_upgrade_ledger
 case_advice_odd_text_one_line
 case_advice_write_failure_loud
 case_advice_module_missing
+case_advice_sink_bullet_section
+case_advice_sink_persists_before_later_steps
 finish

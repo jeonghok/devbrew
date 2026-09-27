@@ -779,4 +779,6 @@ mut 1/1 blocking_ask_single_pass case_advice_step2_order_independent sed_advice 
   's/^    for _ in range(len(pending)):$/    for _ in range(1):/'
 # (78) cap 상수를 바꾼다 — 기본 호출이 9줄을 내고 「외 2건」이 된다.
 mut 1/1 render_cap_changed case_AC6_render_cap sed_advice 's/^RENDER_CAP = 8 /RENDER_CAP = 9 /'
+# (79) 요약 폭을 넓힌다 — 80자 요약이 다른 자리에서 잘려 렌더 항목 전문이 어긋난다.
+mut 1/1 summary_width_changed case_advice_odd_text_one_line sed_advice 's/^SUMMARY_WIDTH = 60 /SUMMARY_WIDTH = 74 /'
 finish

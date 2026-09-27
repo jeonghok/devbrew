@@ -288,6 +288,11 @@ adv_state() {   # adv_state <n> → 참고 항목 n 개를 가진 design-doc 라
   route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$c" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt"
   rm -f "$c"
 }
+adv_round2() {   # adv_round2 <dir> <n> — 같은 문서로 라운드 2 를 돈다. 참고 항목 n 개 중 앞의 라운드 1 버킷은 반복이다
+  local c; c="$(mktemp -t advcritic2-XXXXXX)"; python3 "$FX/mk_advice_critic.py" "$2" "$c"
+  mc_round "$1" "$FX/design-sample.md" "$c" "$1/fin2.json"; rm -f "$c"
+}
+adv_deferred() { awk '/^### Deferred to plan$/{f=1;next} /^#/{f=0} f' "$1"; }   # adv_deferred <doc> — 박제처 절 본문
 adv_ident() { python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_advice as a; print(a.review_identity(sys.argv[2]))' "$SCRIPTS" "$1"; }
 
 case_AC6_render_cap() {
@@ -338,17 +343,23 @@ case_advice_render_once() {
     "Review Focus: 두 번째 --render 는 이미 보인 항목을 다시 내지 않는다(shown 표지 — 멱등)"
   assert_eq "$(py docreview_state.py advice --state-dir "$d" | jgets '[it["shown"] for it in d["items"]]')" "[True, True, True]" \
     "Review Focus: 플래그 없는 호출은 읽기 전용 JSON 이고 shown 표지를 싣는다"
+  adv_round2 "$d" 4
+  assert_eq "$(py docreview_state.py advice --state-dir "$d" --render)" "참고(advisory) 1건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: ### Deferred to plan
+- [feasibility] #1-context — 참고 항목 4 — feasibility" \
+    "Review Focus: 첫 표시 뒤 라운드 2 가 새 항목 하나를 올리면 다음 --render 는 그 새 항목만 낸다(반복 셋은 안 낸다)"
   rm -rf "$d"
 }
 case_advice_pre_upgrade_ledger() {
-  local d n rc; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-empty.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  local d n rc out; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-empty.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
   python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
 st = s.load_state(sys.argv[2]); st.pop("advice", None)
 for r in st["rounds"].values():
     for k in ("advice_new", "advice_repeat", "mc_preexisting_new"):
         (r.get("route_report") or {}).pop(k, None)
 s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
-  assert_not_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "끝에서 한 목록으로" "Review Focus: 업그레이드 전 원장 — 게이트 렌더에 참고 줄이 없고 죽지 않는다"
+  out="$(py docreview_state.py gate --state-dir "$d" --render 2>&1)"; rc=$?
+  assert_eq "$rc $(printf '%s\n' "$out" | grep -c '^라운드 1 · 재리뷰 0/2$')" "0 1" "Review Focus: 업그레이드 전 원장 — 게이트 렌더가 rc 0 으로 라운드 줄까지 낸다(죽지 않는다)"
+  assert_not_contains "$out" "끝에서 한 목록으로" "Review Focus: 업그레이드 전 원장 — 게이트 렌더에 참고 줄이 없다"
   assert_eq "$(py docreview_state.py advice --state-dir "$d" --render | head -1 | grep -c '^참고(advisory) 0건')" "1" "Review Focus: 업그레이드 전 원장 — --render 는 0건"
   n="$(mktemp -t pre-XXXXXX)"; cp "$FX/design-sample.md" "$n"
   py docreview_state.py advice --state-dir "$d" --log-file "$n" >/dev/null; rc=$?
@@ -360,14 +371,18 @@ s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
   rm -rf "$d"
 }
 case_advice_odd_text_one_line() {
-  local d doc out row; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-odd.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  local d doc out row id; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-odd.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
   doc="$(mktemp -t odd-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
   out="$(py docreview_state.py advice --state-dir "$d" --sink "$doc" --render)"
-  assert_eq "$(printf '%s\n' "$out" | grep -c .) $(printf '%s\n' "$out" | grep -c '^- \[tradeoffs\] #1-context — 파이프 | 가 든 요약이고 둘째 줄로.*…$')" "2 1" \
-    "Review Focus: 개행이 든 긴 요약도 렌더 항목은 한 줄이고 60자에서 「…」로 잘린다"
-  row="$(awk '/^### Deferred to plan$/{f=1;next} /^#/{f=0} f' "$doc" | grep '참고(tradeoffs)')"
-  assert_eq "$(printf '%s\n' "$row" | grep -c .) $(printf '%s\n' "$row" | grep -o '\\|' | wc -l | tr -d ' ')" "1 2" \
-    "Review Focus: 박제 행은 한 줄이고 요약 · 대체안의 | 가 \\| 로 이스케이프된다"
+  assert_eq "$out" "참고(advisory) 1건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: ### Deferred to plan
+- [tradeoffs] #1-context — 파이프 | 가 든 요약이고 둘째 줄로 이어지며 한 줄 폭 예순 자를 넘기도록 길게 늘인 문장이다 — 끝에서…" \
+    "Review Focus: 개행이 든 80자 요약도 렌더 항목은 한 줄이고 59자 + 「…」로 잘린다(전문 대조)"
+  id="$(st_yaml "$d" 'list(st["advice"].values())[0]["id"]')"
+  row="| $id | 참고(tradeoffs) #1-context — 파이프 \\| 가 든 요약이고 둘째 줄로 이어지며 한 줄 폭 예순 자를 넘기도록 길게 늘인 문장이다 — 끝에서 잘려야 하고 그 뒤로도 계속 이어진다 — 고치면: 고치면 A \\| B 로 나눈다 |"
+  assert_eq "$(adv_deferred "$doc" | sed '/^$/d')" "| # | 항목 |
+|---|---|
+$row" \
+    "Review Focus: 박제 행은 기존 표에 이어 붙은 한 줄이고 요약 · 대체안의 | 가 \\| 로 이스케이프된다(절 전문 대조)"
   rm -rf "$d" "$doc"
 }
 case_advice_write_failure_loud() {   # 사용자 문서 쓰기 실패 — rc 1 · 사유를 내고, 적히지 않은 항목에 표지를 켜지 않는다
@@ -392,4 +407,50 @@ case_advice_module_missing() {   # 원장 스크립트만 복사한 트리 — �
   python3 "$t/docreview_state.py" advice --state-dir "$t" >/dev/null 2>"$t/err"; rc=$?
   assert_eq "$rc $(grep -c advice_module_missing "$t/err")" "1 1" "형제 부재: advice 는 advice_module_missing rc 1 로 멈춘다(traceback 아님)"
   rm -rf "$t"
+}
+
+case_advice_sink_bullet_section() {   # 글머리 목록으로 된 Deferred 절 — 목록 뒤에 표 머리를 한 번 열고 행을 잇는다
+  local d doc sec; d="$(adv_state 3)"; doc="$(mktemp -t bulletdoc-XXXXXX)"
+  sed -e '/^| # | 항목 |$/d' -e 's/^|---|---|$/- 계획에서 정할 것 하나/' "$FX/design-sample.md" > "$doc"
+  py docreview_state.py advice --state-dir "$d" --sink "$doc" >/dev/null
+  sec="$(adv_deferred "$doc")"
+  assert_eq "$(printf '%s\n' "$sec" | sed -n '1,5p')" "
+- 계획에서 정할 것 하나
+
+| # | 항목 |
+|---|---|" "박제 · 글머리 절: 목록 뒤 빈 줄 하나를 두고 표 머리 · 구분 줄을 연다(목록 항목의 이어진 글이 되지 않는다)"
+  assert_eq "$(printf '%s\n' "$sec" | sed -n '6,$p' | grep -c '^| .* | 참고(') $(printf '%s\n' "$sec" | sed -n '6,$p' | grep -vc '^| .* | 참고(')" "3 0" \
+    "박제 · 글머리 절: 구분 줄 바로 아래가 박제 행 셋뿐이다"
+  adv_round2 "$d" 4
+  py docreview_state.py advice --state-dir "$d" --sink "$doc" >/dev/null
+  sec="$(adv_deferred "$doc")"
+  assert_eq "$(printf '%s\n' "$sec" | grep -c '^| # | 항목 |$') $(printf '%s\n' "$sec" | sed -n '6,$p' | grep -c '^| .* | 참고(') $(printf '%s\n' "$sec" | sed -n '6,$p' | grep -vc '^| .* | 참고(')" "1 4 0" \
+    "박제 · 글머리 절: 두 번째 박제는 머리를 다시 열지 않고 같은 표에 새 행만 잇는다"
+  rm -rf "$d" "$doc"
+}
+case_advice_sink_persists_before_later_steps() {   # 박제 성공 뒤 계수 · 표시가 죽어도 sunk 는 남고 재실행이 행을 겹쳐 적지 않는다
+  local d doc lf rc; d="$(adv_state 3)"; doc="$(mktemp -t persist-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
+  lf="$(mktemp -t latin-XXXXXX)"; printf '## 결정 기록\n\n- caf\351\n' > "$lf"
+  py docreview_state.py advice --state-dir "$d" --sink "$doc" --log-file "$lf" --render >"$d/out" 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c log_write_failed "$d/err") $(grep -cF "$lf" "$d/err") $(grep -c . "$d/out")" "1 1 1 0" \
+    "박제 영속: UTF-8 이 아닌 계수 파일은 rc 1 · log_write_failed · 그 경로를 낸다(원장 탓 state_unreadable 이 아니다) · 표시 없음"
+  assert_eq "$(st_yaml "$d" 'sorted(v["sunk"] for v in st["advice"].values())')" "[True, True, True]" \
+    "박제 영속: 계수가 실패해도 이미 적힌 박제 행의 sunk 는 원장에 남는다"
+  py docreview_state.py advice --state-dir "$d" --sink "$doc" >/dev/null
+  assert_eq "$(adv_deferred "$doc" | grep -c '| 참고(')" "3" "박제 영속: 재실행이 같은 행을 다시 적지 않는다(3 → 3)"
+  rm -rf "$d"; d="$(adv_state 3)"; cp "$FX/design-sample.md" "$doc"
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+def boom(*_a, **_k):
+    raise KeyboardInterrupt
+s._adv.review_identity = boom
+try:
+    s.main(["advice", "--state-dir", sys.argv[2], "--sink", sys.argv[3], "--log-file", sys.argv[3], "--render"])
+except KeyboardInterrupt:
+    print("interrupted")' "$SCRIPTS" "$d" "$doc" >"$d/out" 2>&1
+  assert_eq "$(cat "$d/out") $(st_yaml "$d" 'sorted((v["sunk"], v["shown"]) for v in st["advice"].values())')" \
+    "interrupted [(True, False), (True, False), (True, False)]" \
+    "박제 영속: 박제 뒤 계수 단계에서 중단돼도 sunk 는 이미 저장돼 있고 shown 은 꺼진 채다"
+  py docreview_state.py advice --state-dir "$d" --sink "$doc" >/dev/null
+  assert_eq "$(adv_deferred "$doc" | grep -c '| 참고(')" "3" "박제 영속: 중단 뒤 재실행도 행을 겹쳐 적지 않는다(3 → 3)"
+  rm -rf "$d" "$doc" "$lf"
 }
