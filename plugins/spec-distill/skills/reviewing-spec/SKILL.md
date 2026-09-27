@@ -383,6 +383,34 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 「미검증」이 아니어도 `round_reviewed` 가 거짓이면(`unreviewed_reason: unrouted` — 이번 라운드의 finalize 보고서가 없다)
 라벨은 붙지 않지만 렌더 첫 줄이 그 사실을 공시하고 「다음:」 줄에 리뷰 완료가 아니라는 꼬리가 붙는다.
 
+**참고(advisory) 목록 — 2단계 앞에서 한 번.** 승인 게이트 2단계(진행 옵션)를 띄우기 직전에 아래 펜스를 한 번 돌리고
+출력을 그대로 보인다. 1단계가 있었으면 그것이 진행 쪽으로 닫힌 뒤다.
+「추가 라운드 1회 열기」를 고른 흐름에서는 돌리지 않는다(다음 라운드 끝으로 미뤄진다). 펜스는 세 가지를 한다:
+
+- advisory 항목을 설계문서의 `### Deferred to plan` 에 표 행으로 박제한다(`writing-plans` 가 그 절을 읽는다).
+- 라운드별 계수 줄을 `## 결정 기록` 에 적는다.
+- 목록을 낸다.
+
+셋 다 멱등이라 ③ 수정 뒤 다시 와도 두 번 적지 않는다. 문서가 바뀌므로 ①/② 의 미커밋 확인이 그 변경을
+알리고, 그때 커밋한다. 펜스 앞에 `spec_path='<「## 입력」에서 절대 경로로 바꾼 설계문서 경로>'` 한 줄을 붙여
+같은 Bash 호출로 돌린다.
+
+<!-- advice-display:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
+harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}" || true)"
+if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
+  echo "[spec-distill] 참고(advisory) 목록 없음 — 엔진 원장을 찾지 못했다(spec_path='${spec_path:-}' · STATE_DIR='${STATE_DIR:-}'). 2단계 질문 텍스트에 싣는다."
+else
+  adv_rc=0
+  python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --sink "$spec_path" --log-file "$spec_path" --render --cap 8 || adv_rc=$?
+  [ "$adv_rc" -eq 0 ] || echo "[spec-distill] 참고 목록 표시 · 박제 실패(rc $adv_rc) — 위 stderr 의 사유를 2단계 질문 텍스트에 싣는다. 진행은 막지 않는다."
+fi
+```
+<!-- advice-display:end -->
+
 승인 게이트를 띄우기 직전에 `$spec_path` 가 working-tree 에 있는지 다시 본다 — 없으면
 `### 대상 부재` 문면으로 끝낸다(게이트 없음).
 

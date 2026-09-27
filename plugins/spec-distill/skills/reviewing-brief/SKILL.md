@@ -559,6 +559,9 @@ G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **�
 돌아가기 전에 같은 셋을 audit(`$AUDIT`) §5 의 `### brief 리뷰 (reviewing-brief — 문서 리뷰 엔진)` 에 템플릿
 줄 모양대로 한 줄씩 채운다 — 기록이지 게이트가 아니다. 결정 자체는 엔진이 `## 8. 리뷰 결정` 에 이미 썼다.
 
+참고(advisory) 목록은 이 skill 이 보이지 않는다 — 엔진 `advice` 원장에 쌓인 방향 · overdesign 항목은 호출자
+Step B(`conducting-interview` `finishing.md` 의 `#### B-A`)가 끝에서 한 번 보이고 brief §3 · §5 에 박제한다.
+
 ## degrade 채널
 
 이 skill 의 degrade 채널은 이름이 다섯이다:
