@@ -372,6 +372,21 @@ case_explicit_topic_fully_merged() {
   cleanup
 }
 
+case_create_head_topic_names_resolve_reason() {
+  # R-init 의 create-head --topic 재도출이 ok 가 아니면 죽는다 — 그때 사용자에게 status 만이 아니라
+  # resolve 의 사유를 보인다(전부 머지된 키 · base 가 1a 와 R-init 사이에 움직인 경우).
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q main; git merge -q --no-ff topicA -m "merge topicA"
+  git checkout -q -b later; echo l > l.txt; git add l.txt; git commit -qm "later (선언 없음)"
+  local S; S=$(bash "$SEALER" seal "$SID")
+  local err rc; err=$(bash "$WT" create-head "$S" "$SID" --topic "$KEY" 2>&1 >/dev/null); rc=$?
+  assert_eq "$rc" "2" "전부 머지된 키를 create-head --topic: exit 2"
+  assert_grep "$err" '\(status: declaration-invalid — ' "stderr 가 status 를 이름 붙인다"
+  assert_grep "$err" 'status: declaration-invalid — [^)]*all declared commits are already in base_ref\) — no combined tree' "stderr 한 줄이 status 와 resolve 의 사유를 함께 싣는다"
+  cleanup
+}
+
 for c in case_usage case_no_declaration case_single_branch_topic case_two_siblings_combined \
          case_merged_member_is_baseline case_stack_after_front_merged case_conflict_lists_files case_declared_path_absent \
          case_two_fragments_on_one_branch case_explicit_topic_skips_detect \
@@ -380,7 +395,7 @@ for c in case_usage case_no_declaration case_single_branch_topic case_two_siblin
          case_create_head_topic_accepts_derived_commit case_create_head_topic_rejects_wrong_commits \
          case_scope_file_under_subdir_cwd \
          case_create_head_topic_rejects_conflicted_topic case_create_head_usage \
-         case_explicit_topic_fully_merged; do
+         case_explicit_topic_fully_merged case_create_head_topic_names_resolve_reason; do
   echo "== $c"; $c
 done
 finish

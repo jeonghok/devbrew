@@ -10,8 +10,7 @@
 
 **Law 1 — Clarity Before Code.** 명세가 모호한 상태에서는 구현이 진행되지 않는다. 명세 작성은 자신의 스킬·게이트·거절 동작을 가진 일급(first-class) 단계다. 코드를 shipping하는 모든 플러그인은 "아직 이건 코딩 못 한다"고 말할 수 있는 **실제 거절 메커니즘** — 최소한 필수 섹션(Context/Why·Goals·Non-goals·Constraints·Acceptance Criteria·Files to Modify·Verification Plan·Rejected Alternatives·Metadata)을 silent하게 skip할 수 없는 구조적 게이트 — 을 가져야 한다. 모델 신뢰만으로는 부족하다.
 
-**Law 2 — Writer and Reviewer Must Never Share a Pass.** 코드를 쓴 턴은 그 코드를 승인할 수 없다. 이것은 heuristic이 아니라 하드 규칙이다. 분리는 프롬프트가 아니라 물리적이어야 한다 — `allowed-tools`/`disallowed-tools` frontmatter로 리뷰어가 `Write`/`Edit`을 literally 하지 못하게 만든다. 쓰기 권한이 있는 리뷰어는 리뷰어가 아니고, 검증은 나중 생각이 아니라 load-bearing 인프라다.
-*R6 scoped exception (qg v2.2.0):* 실제 서비스를 실행해야 하는 executor(`runtime-verifier`)는 `Write`를 갖되, 분리는 도구 deny가 아니라 **orchestrator가 immutable baseline 대비 `git diff`로 product 변경을 잡아 verdict를 ≤FAIL로 강제 + 무커밋 + 샌드박스 폐기**하는 구조 가드로 보장된다 — verifier 주장과 독립적인 구조이므로 self-approval이 구조적으로 불가능하다.
+**Law 2 — Writer and Reviewer Must Never Share a Pass.** 코드를 쓴 턴은 그 코드를 승인할 수 없다. 이것은 heuristic이 아니라 하드 규칙이다. 분리는 프롬프트가 아니라 물리적이어야 한다 — agent 의 `tools:` allowlist frontmatter로 리뷰어가 `Write`/`Edit`을 literally 갖지 못하게 만든다. 쓰기 권한이 있는 리뷰어는 리뷰어가 아니고, 검증은 나중 생각이 아니라 load-bearing 인프라다.
 
 **Law 3 — Every Cycle Must Leave the System Smarter.** N+1번째 작업이 N번째보다 엄밀히 더 쉬워야 한다. 메커니즘은 low-tech다 — 리포에 있는 파일을 미래 세션이 읽는 것. Compounding은 선택적 wrap-up이 아니라 discoverability check가 붙은 이름 붙은 단계다: 사이클이 learning을 생산하면 하니스는 파일로 capture하고, 미래 agent가 그것에 실제로 도달 가능한지 확인한다 — 위험하면 인덱스(`CLAUDE.md`/`AGENTS.md`)를 자동 편집한다. 아무 미래 agent도 읽지 않는 파일에 쓰는 것은 theater다.
 
@@ -29,8 +28,8 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 문서 리뷰 자리 넷(design doc·brief·seed·generic)을 통일하는 엔진은 `shared/docreview/`.
 
 ### P4 — Verification Is Infrastructure
-**Law 2 집행.** 모든 작업은 *증거*를 생산하는 검증 pass로 끝난다: mechanical(compile/lint/test) → semantic(AC 준수, 독립 리뷰어) → runtime(실제로 돌림), 저렴한 실패에서 short-circuit. Load-bearing: "컴파일됨"은 증거가 아니다 — runtime tier가 앞 두 tier가 놓치는 버그 class를 잡는다.
-코드: `plugins/quality-gates/scripts/run-test-selection.sh` · `plugins/quality-gates/skills/quality-pipeline/references/differential-test.md` · `plugins/quality-gates/skills/quality-pipeline/SKILL.md`
+**Law 2 집행.** 모든 작업은 *증거*를 생산하는 검증 pass로 끝난다: mechanical(compile/lint/test) → semantic(AC 준수, 독립 리뷰어) → runtime(실제로 돌림), 저렴한 실패에서 short-circuit. Load-bearing: "컴파일됨"은 증거가 아니다 — runtime tier가 앞 두 tier가 놓치는 버그 class를 잡는다. 지금 devbrew 에는 runtime tier 의 집행 코드가 없다 — qg 는 mechanical tier(차등 테스트)와 semantic tier(독립 리뷰)를 집행하고 runtime tier 를 주장하지 않는다.
+코드(mechanical · semantic): `plugins/quality-gates/scripts/run-test-selection.sh` · `plugins/quality-gates/skills/quality-pipeline/references/differential-test.md` · `plugins/quality-gates/skills/quality-pipeline/SKILL.md`
 
 ### P10 — Taste Pluralism
 **Law 2 × Law 3 집행.** 단일 리뷰어가 아니라 persona *라이브러리* — 각각 작고 버저닝 가능하며 *구체적 의견*을 이름으로 쓴 마크다운. Load-bearing: 버그가 리뷰를 탈출하면 fix는 코드 패치가 아니라 그 버그를 잡았어야 할 persona 파일 편집이고, 그 커밋이 compounding 이벤트(Law 3)다.

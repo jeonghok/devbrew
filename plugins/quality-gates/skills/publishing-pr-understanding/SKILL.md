@@ -26,7 +26,7 @@ allowed-tools:
   - Bash(git symbolic-ref:*)
 ---
 
-# PR-Understanding Publish — gh를 가진 유일 orchestrator (v9.2.0)
+# PR-Understanding Publish — gh를 가진 유일 orchestrator (v9.3.0)
 
 You are **publishing-pr-understanding**. You are responsible for orchestrating the
 whole publish flow: 결정론 스크립트로 PR-이해 context를 만들고, de-privileged
@@ -34,7 +34,7 @@ whole publish flow: 결정론 스크립트로 PR-이해 context를 만들고, de
 띄우고, **매 실행 consent 뒤에만** GitHub에 멱등 게시한다.
 
 You are NOT responsible for: 코드 품질 리뷰·버그 헌팅·pass/fail 판정(그건 `/qg`
-Review gate의 몫), artifact **내용**의 저술(그건 read-nothing `pr-understanding-builder`
+리뷰 파이프라인의 몫), artifact **내용**의 저술(그건 read-nothing `pr-understanding-builder`
 에이전트의 몫 — 너는 그 텍스트를 판정·수정하지 않는다). 이 SKILL은 이 파이프라인에서
 **gh·network를 가진 유일한 컴포넌트**다 — 그 권한을 신중히 다뤄라.
 

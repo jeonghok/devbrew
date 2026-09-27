@@ -328,9 +328,12 @@ R1b, 매 iteration 디스패치) = 10; `synthesize_findings.py` 는 스크립트
 한 작업이 브랜치 여럿(스택 · 형제)에 걸치면, 커밋에
 `Spec: <리포-상대 경로>[#<조각>]` 트레일러를 단다. `/qg` 는 현재 브랜치가 base 위에 얹은
 커밋에서 그 키를 찾고, 같은 키를 단 브랜치 중 아직 base 에 머지되지 않은 것 전부(원격-추적
-포함)를 한 판정 단위로 본다. 같은 키로 이미 base 에 머지된 앞 조각은 기준선에 든다 — 그 조각은
-자기 PR 에서 판정됐다 — 그 선언 커밋 수가 `scope:` 블록의 `in_base:` 에 보인다:
-
+포함)를 한 판정 단위로 본다. 같은 키로 이미 base 에 머지된 앞 조각은 토픽 구성원에서 빠진다 — 그
+선언 커밋 수가 `scope:` 블록의 `in_base:` 에 보인다. 그 조각의 변경이 리뷰 diff 에 다시 드는지는
+토폴로지가 정한다: 그 머지 전에 갈라져 base 를 아직 안 들인 형제 구성원(그 조각을 품지 않은
+구성원)이 그 조각을 품은 구성원(그 조각 위에 쌓은 스택 · 머지 뒤 base 에서 갈라졌거나 base 를
+들인 구성원)과 함께 있으면 경계가 그 조각 앞으로 내려가 그 변경이 리뷰 diff 와 차등 테스트에
+다시 든다. 그 밖의 경우에는 들지 않는다:
 - **기준선** — 그 작업이 시작된 지점(구성원 분기점들의 merge-base).
 - **HEAD 축** — 워킹트리 봉인과 구성원 끝점을 `git merge-tree` 로 순차 합친 트리. 리뷰 diff ·
   차등 테스트 · 판정이 이 한 트리를 본다.
@@ -349,13 +352,15 @@ R1b, 매 iteration 디스패치) = 10; `synthesize_findings.py` 는 스크립트
   대상이 부풀 수 있다(`scope:` 블록의 `branches:` 에 보인다).
 - 같은 키의 앞 조각을 squash · rebase-merge · cherry-pick 으로 base 에 넣고 그 브랜치 ref(로컬 ·
   원격-추적 어느 쪽이든)를 남겨 두면 원래 커밋이 base 의 조상이 아니라서 여전히 구성원이다 — 이미
-  들어간 변경을 다시 보고, 경계가 그 조각의 옛 분기점으로 내려가 그 뒤 base 이력까지 리뷰 대상에
-  든다(`branches:` · `commits:` 에 보인다). 머지한 브랜치는 로컬과 원격 모두 지운다(`git branch -D`
-  · `git push origin --delete` · `git fetch --prune`). 조각마다 다른 키(`…#pr1` · `…#pr2`)를 쓰면
-  생기지 않는다.
-- base 는 `base_ref`(보통 `origin/main`)다 — 같은 키의 앞 조각을 로컬 `main` 에만 머지했거나(push
-  전) 원격에서 머지했지만 아직 fetch 하지 않았으면 그 조각은 아직 기준선이 아니어서, 로컬 `main` 과
-  그 뒤 딴 브랜치가 구성원으로 잡힌다. 머지는 원격에서 하고 fetch 한 뒤 돌린다.
+  들어간 변경을 다시 보고, 경계가 구성원 분기점들의 merge-base 라 그 조각의 옛 분기점까지 내려가
+  그 뒤 base 이력까지 리뷰 대상에 들 수 있다(`branches:` · `commits:` 에 보인다). 사이에 낀 base
+  커밋이 다른 `Spec:` 키를 달았으면 흡수 대신 `not-certified (declaration-invalid)`(키 둘)로 막힌다.
+  머지한 브랜치는 로컬과 원격 모두 지운다(`git branch -D` · `git push origin --delete` ·
+  `git fetch --prune`). 조각마다 다른 키(`…#pr1` · `…#pr2`)를 쓰면 생기지 않는다.
+- base 는 `base_ref`(보통 `origin/main`)다. 같은 키의 앞 조각을 로컬 `main` 에만 머지했으면(push
+  전) 로컬 `main` 과 그 뒤 딴 브랜치가 구성원으로 잡힌다. 원격에서 머지했지만 아직 fetch 하지
+  않았으면 남은 앞 조각 ref(로컬 · `origin/<b>`) 때문에 그 조각을 다시 본다. 머지는 원격에서 하고
+  fetch 한 뒤 돌린다.
 - 푸시 뒤 amend · rebase 하면 낡은 원격-추적 ref(`origin/<자기 브랜치>`)가 형제 구성원이 되어
   `not-certified (merge-conflict)` 에 자기 파일이 뜬다 — force-push 뒤 다시 돌린다.
 - 구성원이 여럿인 토픽에서 리뷰어 · 재비판의 diff 는 합친 트리 기준이지만 파일 본문은 현재

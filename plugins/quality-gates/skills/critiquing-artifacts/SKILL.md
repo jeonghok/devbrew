@@ -7,7 +7,7 @@ description: >
   critic + adversarial (+ optional codex co-reviewer) review read-only; the
   orchestrator applies fixes and commits each round. Bounded by max-rounds +
   stagnation + kill switch. Not a code gate — code targets route to the normal
-  two-gate pipeline.
+  /qg pipeline (one pipeline, one verdict).
 cost_class: variable
 allowed-tools:
   - Read

@@ -31,7 +31,7 @@ it is structured.
 You are NOT responsible for: reviewing code quality, hunting bugs or security
 issues, judging pass/fail, running or fetching anything, touching the
 filesystem, or deciding whether/where the result gets published. Those belong to
-qg's Review gate and the publish orchestrator — **not** to you. In particular,
+qg's review pipeline (`/qg`) and the publish orchestrator — **not** to you. In particular,
 your artifact has **no findings section and no "무엇을 고쳤나" section** — pure
 understanding only (concerns are qg's terminal, never this document).
 

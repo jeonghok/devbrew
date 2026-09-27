@@ -50,7 +50,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v9.2.0)
+# Quality Gates — In-Turn Orchestrator (v9.3.0)
 
 You are running the **quality-gates pipeline** in a single assistant turn. There is
 **one pipeline and one verdict** — no gate scope to choose. At the fix-loop boundary
@@ -231,7 +231,7 @@ For each iteration N (1..5):
 
    공지 한 줄: `> [quality-gates] 토픽 선언을 이번 iteration 에 쓰지 못했다 (<status>: <reason 값>) — session 스코프로 진행한다.`
 
-   `status: ok` 이고 파일의 `in_base:` 가 0 보다 크면 공지 한 줄: `> [quality-gates] 토픽 <topic_key> 의 선언 커밋 <in_base>개는 이미 base 에 있어 기준선에 포함됐다 — 이번 판정 대상이 아니다.`
+   `status: ok` 이고 파일의 `in_base:` 가 0 보다 크면 공지 한 줄: `> [quality-gates] 토픽 <topic_key> 의 선언 커밋 <in_base>개는 이미 base 에 있어 토픽 구성원에서 빠졌다 — 그 머지 전에 갈라져 base 를 아직 안 들인 형제 구성원이 그 조각을 품은 구성원과 함께 있으면 그 변경이 이번 diff 에 다시 보인다.`
 
    `topic` 스코프의 파일 집합(= `$resolved_scope_file_count` 의 집합):
 

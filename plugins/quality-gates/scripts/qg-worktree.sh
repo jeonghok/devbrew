@@ -589,8 +589,9 @@ case "${1:-}" in
       ch_out=$(bash "$(dirname "${BASH_SOURCE[0]}")/topic-head.sh" "$3" --topic "$ch_topic") \
         || die "cannot re-derive the topic HEAD axis"
       ch_status=$(printf '%s\n' "$ch_out" | sed -n 's/^status: //p' | head -1)
+      ch_reason=$(printf '%s\n' "$ch_out" | sed -n 's/^reason: //p' | head -1)
       [[ "$ch_status" == "ok" ]] \
-        || die "topic HEAD axis is not derivable now (status: ${ch_status:-?}) — no combined tree to verify against"
+        || die "topic HEAD axis is not derivable now (status: ${ch_status:-?} — ${ch_reason:--}) — no combined tree to verify against"
       ch_tree=$(printf '%s\n' "$ch_out" | sed -n 's/^tree: //p' | head -1)
       [[ "$(git rev-parse "$2^{tree}")" == "$ch_tree" ]] \
         || die "head-commit mismatch: tree of '$2' is not the combined topic tree derived now — the topic HEAD axis must be built from topic-head.sh's head_commit, not from the seal alone, the boundary, or a stale value"
