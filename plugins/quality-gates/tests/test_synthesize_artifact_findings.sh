@@ -371,7 +371,7 @@ assert_grep "$OUT" 'sources_failed: *[1-9]' "입력 실패가 원장에 실린�
 
 note "── 처분 회계 (T1-C, key 단계)"
 # R3 (adjudication-topology Task 15c) — 위 T1-B 는 `--phase synth` 의 원장(YAML
-# stdout, disposition_report())만 값으로 잰다. `main()` 의 `key` 분기(:299-317)가
+# stdout, disposition_report())만 값으로 잰다. `main()` 의 `key` 분기(:306-322)가
 # `disposition_lines()` 로 stderr 에 내는 처분 세 줄(**처분:**/**배관 손실:**/풀이줄)은
 # 이 파일 어디서도 검사되지 않았다 — 두 렌더 분기 중 한쪽만 잠겨 있던 Critical
 # (synth 의 :482 clean 분기)과 같은 부류, `key`/`synth` 축으로 다른 자리다.

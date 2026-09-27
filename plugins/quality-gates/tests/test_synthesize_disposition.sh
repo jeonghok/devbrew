@@ -142,4 +142,67 @@ assert_grep "$OUT" '배관 손실=입력이 죽었거나 항목이 깨졌거나 
 assert_grep "$OUT_CLEAN" '억제=규칙이 자른 것' \
   "AC21: clean(kept=0) 분기에서도 풀이 줄이 난다 (:482 자리 — 이 락이 한 번 통째로 놓쳤던 분기)"
 
+# ── 배관줄의 「차단」은 소비자의 blocking 을 따른다 ────────────────────────────
+# (A)(B) 는 공시만 하고 막지 않는 degrade(게이트 변경 강제 · 보조 입력 사망) —
+# 배관줄은 (차단: 아니오)여야 한다. (C)(D) 는 실제로 막는 사건(컨테이너 소실 ·
+# 판정자 부재) — 배관줄은 (차단: 예)여야 한다. 모든 「차단」 단언은 배관줄
+# 한 줄에 묶는다(same-line) — degrade 머리줄과 배관줄이 서로 다른 술어를
+# 읽으면(전자는 blocking, 후자가 degraded 였던 버그) 그 모순이 여기서 갈린다.
+
+mkdir -p "$TMPD/case_a"
+cat > "$TMPD/case_a/findings.yaml" <<'YAML'
+findings:
+  - {agent: sec, file: a.py, line: 1, severity: IMPORTANT, summary: no-conf-item}
+YAML
+rf_prep "$TMPD/case_a"
+rf_reply "$TMPD/case_a" 'verdicts:
+  - f: f1
+    verdict: confirm'
+OUT_A="$(rf_synth "$TMPD/case_a" 2>"$TMPD/case_a/err.txt")"
+note "$OUT_A"
+assert_grep "$OUT_A" '강제\(게이트 변경\): confidence' \
+  "(A) 분기 확인 — confidence 미기재 confirm 이 게이트 변경 강제로 세어진다"
+assert_grep "$OUT_A" '공시\(판정을 막지 않음\)' \
+  "(A) 분기 확인 — degrade 머리줄은 공시(막지 않음)"
+assert_not_grep "$OUT_A" 'clean이 아니다' \
+  "(A) 게이트 변경 강제만으로는 not-clean 마커가 서지 않는다"
+assert_grep "$OUT_A" '\*\*배관 손실:\*\*.*\(차단: 아니오\)' \
+  "(A) 배관줄 — 공시만 하는 degrade 는 배관줄을 차단으로 세지 않는다"
+
+mkdir -p "$TMPD/case_b"
+cat > "$TMPD/case_b/findings.yaml" <<'YAML'
+findings:
+  - {agent: sec, file: b.py, line: 2, severity: CRITICAL, summary: has-conf, confidence: 9}
+YAML
+rf_prep "$TMPD/case_b"
+rf_reply "$TMPD/case_b" 'verdicts:
+  - f: f1
+    verdict: confirm'
+OUT_B="$(rf_synth "$TMPD/case_b" --recritic-diff "$TMPD/case_b/없는.diff" 2>"$TMPD/case_b/err.txt")"
+note "$OUT_B"
+assert_grep "$OUT_B" '입력 실패\(보조\)' \
+  "(B) 분기 확인 — 없는 --recritic-diff 가 보조 입력 사망으로 세어진다"
+assert_grep "$OUT_B" '공시\(판정을 막지 않음\)' \
+  "(B) 분기 확인 — degrade 머리줄은 공시(막지 않음)"
+assert_not_grep "$OUT_B" 'clean이 아니다' \
+  "(B) 보조 입력 사망만으로는 not-clean 마커가 서지 않는다"
+assert_grep "$OUT_B" '\*\*배관 손실:\*\*.*\(차단: 아니오\)' \
+  "(B) 배관줄 — 보조 입력 사망만으로는 배관줄을 차단으로 세지 않는다"
+
+mkdir -p "$TMPD/case_c"
+cat > "$TMPD/case_c/findings.yaml" <<'YAML'
+findings: "목록이 아니다"
+YAML
+rf_prep "$TMPD/case_c"
+rf_reply "$TMPD/case_c" 'verdicts: []'
+OUT_C="$(rf_synth "$TMPD/case_c" 2>"$TMPD/case_c/err.txt")"
+note "$OUT_C"
+assert_grep "$OUT_C" 'clean이 아니다' \
+  "(C) 분기 확인 — 컨테이너 소실(findings 가 목록이 아님)이 not-clean 마커를 세운다"
+assert_grep "$OUT_C" '\*\*배관 손실:\*\*.*\(차단: 예\)' \
+  "(C) 배관줄 — 원장 blocks() 는 거짓이어도(주 소스 아님) 합성기 blocking 은 컨테이너 소실을 차단으로 센다"
+
+assert_grep "$OUT" '\*\*배관 손실:\*\*.*\(차단: 예\)' \
+  "(D) 배관줄 — 판정자 부재(f5 hold, 파일 위쪽의 \$OUT 재사용)는 차단이다"
+
 finish
