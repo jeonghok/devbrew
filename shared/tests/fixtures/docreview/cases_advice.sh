@@ -113,9 +113,9 @@ case_AC5_AC9_round2() {
     "AC9: 해시 불변 절(#1-context)의 새 계보 must-catch(R2D)만 센다 — 바뀐 절(R2E) · 계보 후속(R2F)은 세지 않는다"
   assert_eq "$(st_yaml "$d" "'$rd' in st['decides']")" "True" "AC9: 관측은 동작을 바꾸지 않는다 — R2D 는 decides 에 있다"
   assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep '^참고 ')" \
-    "참고 7건(이번 라운드 새 1 · 반복 1) — 끝에서 한 목록으로 · 선재 절의 새 must-catch 1" \
-    "AC5·AC9: 게이트 참고 줄의 값 — 총계 7(라운드 1 의 6 + 새 1) · 새 1 · 반복 1 · 선재 1"
-  assert_eq "$(gsum "$d" 'd["advice"] == {"total": 7, "new": 1, "repeat": 1, "mc_preexisting_new": 1}')" "True" \
+    "참고 6건(이번 라운드 새 1 · 반복 1) — 끝에서 한 목록으로 · 선재 절의 새 must-catch 1" \
+    "AC5·AC9: 게이트 참고 줄의 값 — 총계 6(라운드 1 의 5 + 새 1) · 새 1 · 반복 1 · 선재 1"
+  assert_eq "$(gsum "$d" 'd["advice"] == {"total": 6, "new": 1, "repeat": 1, "mc_preexisting_new": 1}')" "True" \
     "AC5·AC9: gate JSON 의 advice 객체가 보고서 계수 · 원장 크기와 같다"
   rm -rf "$d"
 }
@@ -136,19 +136,19 @@ s.save_state(sys.argv[2], st, "fixture: advice shown/sunk")' "$SCRIPTS" "$1"
 }
 case_advice_same_round_refinalize_idempotent() {
   local d; d="$(mc_r1)"
-  assert_eq "$(jget "$d/fin.json" 'd["advice_new"], d["advice_repeat"]')" "(6, 0)" "1회 규칙 전제: 라운드 1 finalize 는 새 6 · 반복 0"
+  assert_eq "$(jget "$d/fin.json" 'd["advice_new"], d["advice_repeat"]')" "(5, 0)" "1회 규칙 전제: 라운드 1 finalize 는 새 5 · 반복 0"
   adv_mark "$d"
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-mc-r1.txt")" \
     --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep-again.json"
   render_recritic "$d/prep-again.json" "$FX/recritic-mc-r1.txt.tmpl" "$d/recritic-again.txt"
   py docreview_route.py finalize --state-dir "$d" --recritic "$d/recritic-again.txt" --doc "$FX/design-sample.md" > "$d/fin-again.json"
-  assert_eq "$(jget "$d/fin-again.json" 'd["advice_new"], d["advice_repeat"]')" "(6, 0)" \
+  assert_eq "$(jget "$d/fin-again.json" 'd["advice_new"], d["advice_repeat"]')" "(5, 0)" \
     "1회 규칙: 같은 라운드를 다시 finalize 해도 그 라운드가 올린 버킷은 새로 센다(반복 0)"
-  assert_eq "$(st_yaml "$d" 'len(st["advice"]), sorted({(v["shown"], v["sunk"]) for v in st["advice"].values()})')" "(6, [(True, True)])" \
+  assert_eq "$(st_yaml "$d" 'len(st["advice"]), sorted({(v["shown"], v["sunk"]) for v in st["advice"].values()})')" "(5, [(True, True)])" \
     "1회 규칙: 같은 라운드 재기록은 원장을 늘리지 않고 shown · sunk 를 지우지 않는다"
   assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep '^참고 ')" \
-    "참고 6건(이번 라운드 새 6 · 반복 0) — 끝에서 한 목록으로 · 선재 절의 새 must-catch 0" \
-    "1회 규칙: 재finalize 뒤 게이트 참고 줄도 새 6 · 반복 0"
+    "참고 5건(이번 라운드 새 5 · 반복 0) — 끝에서 한 목록으로 · 선재 절의 새 must-catch 0" \
+    "1회 규칙: 재finalize 뒤 게이트 참고 줄도 새 5 · 반복 0"
   rm -rf "$d"
 }
 case_advice_same_round_duplicate_bucket() {   # 한 라운드 안에서 같은 버킷의 advisory 둘 — 뒤 항목은 반복이다
@@ -156,5 +156,96 @@ case_advice_same_round_duplicate_bucket() {   # 한 라운드 안에서 같은 �
   assert_eq "$(jget "$d/fin.json" 'd["advice_new"], d["advice_repeat"], len(d["advice"])')" "(1, 1, 2)" \
     "1회 규칙: 같은 라운드의 같은 버킷 둘 — 둘 다 표지를 달지만 목록에는 하나(새 1 · 반복 1)"
   assert_eq "$(st_yaml "$d" 'len(st["advice"])')" "1" "1회 규칙: 같은 버킷은 원장에 한 줄"
+  rm -rf "$d"
+}
+
+# ── AC2 — 정의가 fail-closed ─────────────────────────────────────────────────
+case_AC2_mustcatch_fail_closed() {
+  local d d2 f6 esc; d="$(mc_r1)"
+  assert_eq "$(st_yaml "$d" '[st["findings"][i]["category"] for i in st["decides"] if st["findings"][i]["category"] == "made_up_axis"]')" \
+    "['made_up_axis']" "AC2: rubric 밖 category 는 must_catch 가 있는 프로필에서도 decides 에 있다"
+  assert_eq "$(st_yaml "$d" '[st["findings"][i]["category"] for i in st["fixes"] if st["findings"][i]["category"] == "other"]')" \
+    "['other']" "AC2: other 는 fixes 에 있다"
+  assert_eq "$(adv_has "$d" "$(fsum "$d" 'AD4:' '["id"]')")" "True" "AC2 대조: advisory 축(overdesign) decide 는 advice 에 있다(여집합이 뒤집히면 RED)"
+  mc_round "$d" "$FX/design-sample-r2.md" "$FX/critic-mc-empty.txt" "$d/fin2.json"
+  assert_eq "$(st_yaml "$d" 'sorted({st["findings"][i]["category"] for i in st["decides"] if st["findings"][i]["category"] == "frozen_change"}), [v for v in (st.get("advice") or {}).values() if v["category"] == "frozen_change"]')" \
+    "(['frozen_change'], [])" "AC2: frozen_change 는 decides 에 있고 advice 에 없다"
+  rm -rf "$d"
+  d2="$(mc_r1)"; f6="$(fsum "$d2" 'AD6:' '["id"]')"
+  py docreview_state.py fix --state-dir "$d2" --id "$f6" --event escalate --reason 'anchor_protected' >/dev/null
+  mc_round "$d2" "$FX/design-sample.md" "$FX/critic-mc-empty.txt" "$d2/fin2.json"
+  esc="$(id_of "$d2/fin2.json" '상향: AD6')"
+  assert_eq "$(st_yaml "$d2" "'$esc' in st['decides'], st['findings']['$esc']['category']") $(adv_has "$d2" "$esc")" "(True, 'ambiguity') False" \
+    "AC2: advisory 축 fix 의 check-intent 거부 상향 후속(_source: escalated)은 decides 에 있고 advice 에 없다"
+  rm -rf "$d2"
+}
+
+# ── AC13 예외 · AC15 — blocks 판정은 대상의 적용 경로로 ─────────────────────────────
+case_AC13_blocking_ask_stays() {
+  local d f6 f7; d="$(mc_r1)"; f6="$(fsum "$d" 'AD6:' '["id"]')"; f7="$(fsum "$d" 'AD7:' '["id"]')"
+  assert_eq "$(st_yaml "$d" "'$f7' in st['asks'], st['asks'].get('$f7', {}).get('blocks')") $(adv_has "$d" "$f7")" "(True, ['$f6']) False" \
+    "AC13: fixes 원장 항목을 blocks 로 가리키는 advisory ask 는 asks 에 있다"
+  rm -rf "$d"
+}
+case_AC15_blocks_by_application_path() {
+  local d f6 f7 f13 f14 f15; d="$(mc_r1)"
+  f6="$(fsum "$d" 'AD6:' '["id"]')"; f7="$(fsum "$d" 'AD7:' '["id"]')"; f13="$(fsum "$d" 'AD13:' '["id"]')"
+  f14="$(fsum "$d" 'MC14:' '["id"]')"; f15="$(fsum "$d" 'MC15:' '["id"]')"
+  assert_eq "$(gsum "$d" "sorted(d['blocking_ask_open']) == sorted(['$f7', '$f13'])")" "True" \
+    "AC15: advisory ask 가 fixes 에 남는 fix 를 막으면 — must-catch fix(①)든 advisory fix(②)든 — 차단 ask 다"
+  assert_eq "$(st_yaml "$d" "st['fixes']['$f14']['state'], st['fixes']['$f6']['state']")" "('held', 'held')" \
+    "AC15: 그 fix 둘은 held 다 — 질문이 막는 fix 가 답 없이 적용되지 않는다"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"]') $(st_yaml "$d" "st['asks']['$f15']['blocks']")" "1 []" \
+    "AC15: 차단 ask 의 blocks 중 advice 로 간 ref 는 조용히 버려지지 않고 coerced 로 1 세어진다"
+  rm -rf "$d"
+}
+
+# ── AC14 — 병합 생존자 ───────────────────────────────────────────────────────
+case_AC14_merge_survivor() {
+  local d s s2; d="$(mc_r1)"; s="$(fsum "$d" 'AD3:' '["id"]')"
+  assert_eq "$(st_yaml "$d" "'$s' in st['decides']") $(adv_has "$d" "$s") $(jget "$d/fin.json" 'any("MC2:" in x["summary"] for x in d["findings"])')" "True False False" \
+    "AC14: architecture(must-catch · fix) + component_relations(advisory · decide) 병합 생존자는 처분 순위와 무관하게 must-catch 원장(decides)에 있다"
+  s2="$(jget "$d/fin.json" '[x["id"] for x in d["findings"] if x["summary"].startswith(("AD18:", "AD19:"))][0]')"
+  assert_eq "$(st_yaml "$d" "'$s2' in st['fixes']") $(adv_has "$d" "$s2")" "True False" \
+    "AC14: 구성원이 전부 advisory 인 라운드 1 fix 끼리의 병합 생존자는 fixes 에 있다"
+  assert_eq "$(adv_py "$PROF_MC/design-doc.md" 'a.member_categories({"f1": {"category": "testing"}, "f2": {"category": "architecture"}, "f3": {"category": "testing"}, "f4": {"category": "scope"}}, ["f1", "f2", "f3"])')" \
+    "['architecture', 'testing']" "AC14: 구성원 category 는 live 구성원만 · 중복 없이 · 정렬해 남긴다(live 밖 f4 는 빠진다)"
+  rm -rf "$d"
+}
+
+# ── AC18 — 라운드 2 의 새 계보 advisory fix ─────────────────────────────────────
+case_AC18_round2_new_advisory_fix() {
+  local d ra rb; d="$(mc_r1)"
+  mc_round "$d" "$FX/design-sample-r2.md" "$FX/critic-mc-r2-fix.txt" "$d/fin2.json"
+  ra="$(id_of "$d/fin2.json" 'R2A:')"; rb="$(id_of "$d/fin2.json" 'R2B:')"
+  assert_eq "$(adv_has "$d" "$ra") $(st_yaml "$d" "'$ra' in st['fixes']") $(gsum "$d" "'$ra' in d['unapplied_fix']")" "True False False" \
+    "AC18: 라운드 2 에서 새 계보의 advisory fix 는 advice 에 있고 승인을 막지 않는다"
+  assert_eq "$(st_yaml "$d" "'$rb' in st['fixes'], st['findings']['$rb']['lineage'] != '$rb'") $(gsum "$d" "'$rb' in d['unapplied_fix']")" "(True, True) True" \
+    "AC18: 라운드 1 에서 온 계보의 advisory fix(미적용)는 fixes 에 남아 막는다"
+  rm -rf "$d"
+}
+
+# ── AC8 — 단계별 등식 ─────────────────────────────────────────────────────────
+case_AC8_staged_equation() {
+  local d out; d="$(mc_r1)"
+  out="$(python3 "$FX/ac8_terms.py" "$d/prep.json" "$d/fin.json" 1)"
+  assert_eq "$(printf '%s\n' "$out" | head -1)" "[21, 1, 2, 1, 1, 13, 5]" \
+    "AC8: 입력 21 · added 1 · 흡수 2 · 기각 1 · drop 1 · 차단 원장 생존자 13 · advice 5 — 각 항이 0 이 아니다"
+  assert_eq "$(printf '%s\n' "$out" | tail -1)" "True" "AC8: 입력 + added = 흡수 + 기각 + drop + 생존자 + advice (합계 하한이 아니라 등식)"
+  assert_eq "$(jget "$d/fin.json" '[x["f"] for x in d["findings"] if x["summary"].startswith("AA1:")]')" "['a1']" "AC8 전제: 재비판 added 한 건이 finding 에 있다"
+  assert_eq "$(jget "$d/fin.json" 'len(d["advice"]), sorted(set(d["advice"]) & set(sum(d["by_disposition"].values(), [])))')" "(5, [])" \
+    "AC8: advice 항목 5 는 by_disposition 어느 칸(decide 포함)에도 없다 — 등식의 advice 항과 생존자 항이 겹치지 않는다"
+  assert_eq "$(adv_py "$PROF_MC/design-doc.md" 'a.advice_ids([{"id": "x1", "route": "advice"}, {"id": "x2"}, {"id": "x3", "route": "advice"}])')" \
+    "['x1', 'x3']" "AC8: advice_ids 는 route: advice 표지를 단 항목의 id 만 순서대로 낸다"
+  rm -rf "$d"
+}
+
+# ── Review Focus 4 — 없는 f 를 막는 ask ─────────────────────────────────────────
+case_advice_dangling_blocks() {
+  local d g1 g2; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-dangling.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  g1="$(fsum "$d" 'DG1:' '["id"]')"; g2="$(fsum "$d" 'DG2:' '["id"]')"
+  assert_eq "$(adv_has "$d" "$g1") $(st_yaml "$d" "'$g2' in st['asks'], st['asks']['$g2']['blocks']")" "True (True, [])" \
+    "Review Focus: 대상을 찾을 수 없는 advisory ask 는 advice, must-catch ask 는 asks 에 남는다(없는 ref 는 현행대로 blocks 에서 빠진다)"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"]')" "0" "Review Focus: 없는 ref 는 advice 대상이 아니라 강제 계수가 늘지 않는다"
   rm -rf "$d"
 }

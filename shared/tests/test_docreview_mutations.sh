@@ -744,10 +744,31 @@ mut 1/1 mc_subtree_dropped case_AC9_child_section_changed sed_advice \
 # (66) 1회 규칙을 «원장에 있으면 반복» 으로 되돌린다 — 같은 라운드를 다시 finalize 하면 그 라운드의 버킷이 반복으로 뒤집힌다.
 mut 1/1 advice_repeat_not_idempotent case_advice_same_round_refinalize_idempotent sed_state \
   's/^    if b in seen or (prior is not None and int(prior\["round"\]) < n):$/    if b in ledger:/'
-# (67) 게이트 참고 줄의 새 · 반복 자리를 맞바꾼다 — 값이 다른 라운드(새 6 · 반복 0)의 렌더가 RED.
+# (67) 게이트 참고 줄의 새 · 반복 자리를 맞바꾼다 — 값이 다른 라운드(새 5 · 반복 0)의 렌더가 RED.
 mut 1/1 advice_render_new_repeat_swapped case_advice_same_round_refinalize_idempotent sed_state \
   's/% (adv_g\["total"\], adv_g\["new"\], adv_g\["repeat"\], adv_g\["mc_preexisting_new"\]))/% (adv_g["total"], adv_g["repeat"], adv_g["new"], adv_g["mc_preexisting_new"]))/'
 # (68) 이번 호출의 앞 항목을 잊는다 — 한 라운드의 같은 버킷 둘이 둘 다 새로 세어진다.
 mut 1/1 advice_same_call_seen_dropped case_advice_same_round_duplicate_bucket sed_state \
   's/^    if b in seen or (prior is not None and int(prior\["round"\]) < n):$/    if prior is not None and int(prior["round"]) < n:/'
+# (69) 여집합 반전 — AC2 의 대조 단언(advisory decide 가 advice)이 RED.
+mut 1/1 advisory_axes_flipped_ac2 case_AC2_mustcatch_fail_closed sed_advice \
+  's/    return (frozenset(lr\["layer1"\]) | frozenset(lr\["layer2"\])) - frozenset(mc)/    return frozenset(mc)/'
+# (70) 엔진 자동 생성 항목을 건너뛰지 않는다 — escalated 후속이 category(ambiguity)로 advisory 가 된다.
+mut 1/1 engine_source_skip_removed case_advice_engine_items_mustcatch sed_advice \
+  's/^    if it.get("_source") in ENGINE_SOURCES:$/    if False:/'
+# (71) 병합 구성원의 축을 보지 않는다 — must-catch 가 advisory 생존자에 흡수돼 차단에서 빠진다.
+mut 1/1 member_categories_ignored case_AC14_merge_survivor sed_advice \
+  's/^    cats = it.get("_member_categories") or \[it\["category"\]\]$/    cats = [it["category"]]/'
+# (72) blocks 판정을 축으로 되돌린다 — fixes 를 막는 advisory ask 가 advice 로 빠지고 fix 가 held 가 안 된다.
+mut 1/1 blocks_by_axis case_AC15_blocks_by_application_path sed_advice \
+  's/^    if is_advisory(it, axes) and all(t.get("route") == ROUTE_ADVICE for t in live):$/    if is_advisory(it, axes):/'
+# (73) advice 로 간 ref 를 세지 않고 버린다.
+mut 1/1 blocks_ref_uncounted case_AC15_blocks_by_application_path sed_advice \
+  's/^                L.coerced("blocks", r, None)$/                pass/'
+# (74) 라운드 ≥2 새 계보 advisory fix 규칙을 지운다 — 적용 관측 때문에 라운드가 는다.
+mut 1/1 round2_new_fix_rule_removed case_AC18_round2_new_advisory_fix sed_advice \
+  's/^    if n >= 2:$/    if False:/'
+# (75) 2 걸음 호출을 지운다.
+mut 1/1 route_step2_removed case_AC15_blocks_by_application_path sed_route \
+  's/^    route_step2(final, keep_of, advisory_axes(prof), n, L)$/    pass/'
 finish

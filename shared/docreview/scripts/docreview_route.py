@@ -26,7 +26,8 @@ from docreview_state import (  # noqa: E402
     load_profile, load_state, observe_ledger, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
 from docreview_advice import (  # noqa: E402
-    ROUTE_ADVICE, advice_ids, advisory_axes, has_must_catch, mc_preexisting_new, route_step1,
+    ROUTE_ADVICE, advice_ids, advisory_axes, has_must_catch, mc_preexisting_new, member_categories, route_step1,
+    route_step2,
 )
 
 BLOCK_RE = r"```%s[ \t]*\n(.*?)\n```"
@@ -403,6 +404,9 @@ def _absorb_same_as(items, same_as, L):
         if not live:
             continue
         keep = max(live, key=lambda m: (RANK[items[m]["disposition"]], m))
+        # 병합 생존자의 축 소속 — 기각되지 않은 구성원 하나라도 must-catch 축이면 생존자가 must-catch 다
+        # (docreview_advice.is_advisory). 분류는 흡수 «뒤»에 돌므로 구성원의 축을 여기서 남긴다.
+        items[keep]["_member_categories"] = member_categories(items, live)
         # 생존자는 처분 순위와 f «문자열»로 갈리고(critic/codex 는 출처와 무관한 정렬 순의 f<k>,
         # 재비판 added 는 a<i>) 산문 칸을 적은 쪽이 흡수될 수 있다. 생존자의 빈 칸만
         # 형제에게서 채운다 — 적힌 칸은 덮지 않는다. 오름차순이라 마지막에 쓴 값(처분이 가장
@@ -816,6 +820,8 @@ def cmd_finalize(a) -> int:
     extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, diff, st, prof, sections, n, L)
     final.extend(extra)
     bucket_conflicts, lineage_mismatch, revived = _resolve_ids_and_lineage(st, final, rejected_items, n)
+    # 참고(advisory) 표지 2 걸음 — 계보를 알아야 정해지는 것(라운드 ≥2 새 계보 fix · `blocks` 의 적용 경로)
+    route_step2(final, keep_of, advisory_axes(prof), n, L)
     _remap_blocks(final, keep_of, a.doc, st)
 
     for it in final:

@@ -56,6 +56,40 @@ def route_step1(final, axes) -> None:
             it["route"] = ROUTE_ADVICE
 
 
+def route_step2(final, keep_of, axes, n, L) -> None:
+    """2 걸음 — `_resolve_ids_and_lineage` 뒤 · `_remap_blocks` 직전. 계보를 알아야 정해지는 것.
+
+    ① 라운드 n ≥ 2 에서 새 계보(`lineage == id` — 계보 연결 · 재상승 후속이 아님)로 나온 advisory `fix` → advice.
+       계보를 잇는 fix 는 fixes 에 남아 막는다(라운드 1 에서 온 미적용 의무).
+    ② `blocks` 가 있는 `ask` — 판정은 축이 아니라 대상의 적용 경로다(`_judge_blocking_ask`)."""
+    if n >= 2:
+        for it in final:
+            if it["disposition"] == "fix" and is_advisory(it, axes) and it.get("lineage") == it.get("id"):
+                it["route"] = ROUTE_ADVICE
+    by_f = {it["f"]: it for it in final if it.get("f")}
+    for it in final:
+        if it["disposition"] == "ask" and it.get("blocks"):
+            _judge_blocking_ask(it, by_f, keep_of, axes, L)
+
+
+def _judge_blocking_ask(it, by_f, keep_of, axes, L) -> None:
+    """advice 가 아닌 대상이 하나라도 있으면 asks 에 남는다(축 무관 — 답 전까지 그 fix 는 held). advisory ask 는
+    대상이 전부 advice 거나 찾을 수 없으면 advice 다. asks 에 남는 ask 의 `blocks` 중 advice 대상 ref 는 조용히
+    버리지 않고 `coerced("blocks", ref, None)` 로 센다 — 없는 ref 는 현행대로 `_remap_blocks` 가 거른다."""
+    targets = [by_f.get(keep_of.get(r, r)) for r in it["blocks"]]
+    live = [t for t in targets if t is not None]
+    if is_advisory(it, axes) and all(t.get("route") == ROUTE_ADVICE for t in live):
+        it["route"] = ROUTE_ADVICE
+    else:
+        kept = []
+        for r, t in zip(it["blocks"], targets):
+            if t is not None and t.get("route") == ROUTE_ADVICE:
+                L.coerced("blocks", r, None)
+            else:
+                kept.append(r)
+        it["blocks"] = kept
+
+
 def _subtree(snap, anchor) -> dict:
     """앵커 절과 그 하위 절(`parents` 로 도출)의 {앵커: 해시}. 스냅숏 해시는 다음 헤딩(레벨 무관)에서 끊기므로
     자기 절만 보면 상위 앵커의 finding 이 하위 절 변경에도 선재로 세어진다."""
