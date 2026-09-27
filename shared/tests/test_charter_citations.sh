@@ -148,7 +148,7 @@ else:
 out("NOTE", "건너뛴 모양 — " + " · ".join(f"{k} {v}" for k, v in skipped.items()))
 
 # ── 갈래 2: 이력에서 사라진 이름은 헌장에 없다 ──────────────────────────────
-rc, hist = git("log", "HEAD", "--format=", "--name-only", "--diff-filter=A", "--",
+rc, hist = git("log", "HEAD", "--no-renames", "--format=", "--name-only", "--diff-filter=A", "--",
                ":(glob)plugins/*/agents/*.md", ":(glob)plugins/*/scripts/*",
                ":(glob)plugins/*/.claude-plugin/plugin.json")
 if rc != 0 or not hist.strip():
