@@ -56,7 +56,7 @@ SEAL_ON_TOPIC="-"; IN_BASE="-"
 emit() {   # <status> <reason>
   # `commits` 는 fail-closed 다 — status != ok 이면 stdout 에 «아무것도» 내지 않는다.
   # 이 검사는 echo 들보다 «앞» 이어야 한다. 뒤에 두면 11줄이 이미 나간 뒤라
-  # 소비자가 `$(… commits …)` 로 받을 때 SHA 아닌 10줄을 순회한다.
+  # 소비자가 `$(… commits …)` 로 받을 때 SHA 아닌 11줄을 순회한다.
   if [ "$SUB" = "commits" ] && [ "$1" != "ok" ]; then
     echo "resolve-topic: status=$1 (${2:--}) — no commit set" >&2
     exit 3
