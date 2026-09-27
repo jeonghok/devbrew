@@ -89,17 +89,33 @@ for c in case_T35_frozen_change_auto_decide case_T10_protected_decide case_T05_T
   fi
 done
 
-# classify_result <bfail> <btb> <afail> <atb> → 판정 하나:
+# _is_uint <값> → 참/거짓 — run_case 필드 하나가 음이 아닌 정수 «모양» 인가. 빈 문자열도
+# 거짓이다(run_case 가 죽어 아무것도 못 찍으면 이 모양이 된다, 아래 classify_result 의
+# [fix round 2 — 리뷰 N1] 참조).
+_is_uint() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; }
+# classify_result <bfail> <bpass> <btb> <afail> <apass> <atb> → 판정 하나:
 #   instrument_broken | unmeasurable | caught | no_teeth
 # **판정 로직은 이 함수 하나에만 있다(R20)** — mut()(기대=caught)와 카나리아(기대=
 # unmeasurable, 아래 ⑪)가 이 함수를 똑같이 거쳐 같은 분기를 통과한다. 「실패가 규칙에
 # 귀속 가능할 것」(R19): 변이된 실행이 파이썬 traceback 을 내면(atb=1) 그 실패가
 # «규칙 위반 탓»인지 «이 파일이 조금이라도 깨지면 죽는 것 탓»인지 밖에서 구별할 수
 # 없다 — unmeasurable 로 판정하고 caught 로 세지 않는다.
+# [Task 1(review-stopping-criterion) fix round 2 — 리뷰 N1] `run_case` 가 서브셸 안에서
+# `cases.sh` 의 PROF_SD 가드(fix round 1 의 `exit 1`)를 맞으면 마지막 `echo "$fail $pass
+# $tb"` 를 못 찍는다 — `$(run_case …)` 가 빈 문자열이 되고, `_split3 ""` 는 여섯 필드
+# 중 그 run 의 세 필드를 전부 빈 문자열로 낸다. 옛 로직은 `[ "$afail" != "0" ]`(빈
+# 문자열 != "0")을 참으로 읽어 **한 번도 안 돈 셀을 caught 로 보고했다**(리뷰어 재현:
+# clean "0 5 0", mutated "" "" "" → caught). 값을 해석하기 전에 여섯 필드 «모양»부터
+# 실측한다 — 하나라도 정수가 아니면 그 자체로 instrument_broken 이다(⑯⑰⑱ 류 앵커 가드와
+# 같은 원칙: 판정보다 형태 검사가 먼저다).
 classify_result() {
-  if [ "$2" = "1" ] || [ "$1" != "0" ]; then echo "instrument_broken"; return; fi
-  if [ "$4" = "1" ]; then echo "unmeasurable"; return; fi
-  if [ "$3" != "0" ]; then echo "caught"; return; fi
+  local x
+  for x in "$1" "$2" "$3" "$4" "$5" "$6"; do
+    _is_uint "$x" || { echo "instrument_broken"; return; }
+  done
+  if [ "$3" = "1" ] || [ "$1" != "0" ]; then echo "instrument_broken"; return; fi
+  if [ "$6" = "1" ]; then echo "unmeasurable"; return; fi
+  if [ "$4" != "0" ]; then echo "caught"; return; fi
   echo "no_teeth"
 }
 # _churn <clean-dir> <mut-dir> → 변이가 실제로 만든 diff 규모를 `<삭제줄>/<추가줄>` 로.
@@ -164,10 +180,19 @@ mut_expect() {
   local bfail bpass btb afail apass atb verdict desc
   _split3 "$(run_case "$CLEAN" "$case")"; bfail="$_f"; bpass="$_p"; btb="$_tb"
   _split3 "$(run_case "$d" "$case")";     afail="$_f"; apass="$_p"; atb="$_tb"
-  verdict="$(classify_result "$bfail" "$btb" "$afail" "$atb")"
+  verdict="$(classify_result "$bfail" "$bpass" "$btb" "$afail" "$apass" "$atb")"
   case "$verdict" in
     instrument_broken)
-      if [ "$btb" = "1" ]; then desc="계측기 고장 — 양성 대조(clean 사본) 자체가 traceback"
+      # classify_result 는 판정 문자열 하나만 낸다(R20) — 사유는 여기서 같은 원값을
+      # 다시 봐서 재구성한다(unmeasurable·caught·no_teeth 도 이미 이 방식). 형태 검사가
+      # clean 쪽에서 떨어졌는지 mutated 쪽에서 떨어졌는지를 먼저 가른다 — 안 그러면
+      # mutated 쪽이 빈 출력이라 떨어진 셀에서 "clean=$bfail(=0)" 을 「양성 대조 실패」로
+      # 잘못 말하게 된다(리뷰 N1).
+      if ! _is_uint "$bfail" || ! _is_uint "$bpass" || ! _is_uint "$btb"; then
+        desc="계측기 고장 — 양성 대조(clean 사본) 결과 형식이 깨졌다(run_case 빈/비정수 출력: fail='$bfail' pass='$bpass' tb='$btb')"
+      elif ! _is_uint "$afail" || ! _is_uint "$apass" || ! _is_uint "$atb"; then
+        desc="계측기 고장 — 변이 실행 결과 형식이 깨졌다(run_case 빈/비정수 출력: fail='$afail' pass='$apass' tb='$atb')"
+      elif [ "$btb" = "1" ]; then desc="계측기 고장 — 양성 대조(clean 사본) 자체가 traceback"
       else desc="계측기 고장 — 양성 대조 실패(clean=$bfail)"; fi ;;
     unmeasurable) desc="측정 불가 — 변이 실행이 traceback 을 냈다(RED($afail) 생존($apass), 규칙 귀속인지 크래시 귀속인지 구별 불가)" ;;
     caught)       desc="RED($afail) 생존($apass) (규칙에 이빨이 있다)" ;;
