@@ -1,5 +1,40 @@
 # Changelog
 
+## [4.5.0] — 2026-09-28
+
+minor 인 이유 — 새 표면이 넷이다.
+
+- 프로필 선택 필드 `must_catch`
+- 엔진 서브커맨드 `docreview_state.py advice`
+- `advice` 원장
+- 보고서 키 넷(`advice` · `advice_new` · `advice_repeat` · `mc_preexisting_new`)
+
+호출 계약은 줄지 않는다. 설계 `docs/superpowers/specs/2026-09-27-review-stopping-criterion-design.md`.
+
+### Added
+- **리뷰가 문서 상태로 멈춘다.** 프로필이 `must_catch` 로 막는 축을 지목하면, 그 밖의 rubric 축(advisory)의 결정 ·
+  질문 · 보호 헤딩 승격분 · 라운드 2 이상의 새 fix 는 `advice` 원장으로 간다. 이것들은 게이트 질문이 아니고 승인을
+  막지 않는다. 세 프로필의 값:
+  - brief = 층 2 충실도 여섯
+  - design doc = `goal_fit · problem_definition · scope · architecture`
+  - seed = 층 1 넷
+  rubric 밖 category · `other` · 엔진 자동 생성 항목은 언제나 막는다(fail-closed).
+- **끝에서 한 번.** 참고 목록은 진입 자리가 한 번 보인다(≤10줄, 넘치면 `외 K건`). 자리마다 박제처가 다르다:
+  - design doc — `### Deferred to plan`
+  - brief — Step B 가 §3 · §5
+- **다음 사이클이 수렴을 잰다.** 라운드별 계수 줄 `docreview 계수 — <리뷰 정체> r<n>: advice_new · advice_repeat ·
+  mc_preexisting_new` 가 결정 기록 절에 남는다(Law 3).
+
+### Changed
+- 세 진입 skill 의 profile-content 펜스가 `must_catch:` 줄을 리뷰어 슬롯에서 벗긴다. framing-requests 펜스에
+  `profile-content` 마커가 생겼다.
+- `finishing.md` Step B 에 `#### B-A`(참고 목록 · §3/§5 박제)가 생겼다. B-2 의 「방향 결정은 라운드 게이트에서
+  판정했다」 문장을 고쳤다.
+
+### Fixed
+- `build_brief_bundle.py` · `build_brief_inline_blob.py` 의 rc 3(위생) 판정을 자기 `audit_file` basename 으로 좁혔다.
+  다른 인터뷰의 audit 을 근거로 인용하던 brief 가 라운드마다 degrade 를 켰다(최근 6회 중 3회).
+
 ## [4.4.0] — 2026-09-24
 
 minor 인 이유 — 새 surface 가 셋이다: 조사 주장 계약의 정본(`references/research-claims.md`)과 그

@@ -3,6 +3,13 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [9.3.2] — 2026-09-28
+
+### Changed
+- 공유 문서 리뷰 엔진(`shared/docreview/scripts/`)이 프로필 선택 필드 `must_catch` · `advice` 서브커맨드 · 형제 모듈
+  `docreview_advice.py`(이 플러그인 `scripts/` 에 심볼릭 링크)를 얻었다. qg `generic` 프로필은 필드가 없어 라우팅 ·
+  보고서 · 게이트 렌더가 바이트 단위로 같다(골든 12파일).
+
 ## [9.3.1] — 2026-09-28
 
 **PR5 후속 수정** — e2e 가 드러낸 판정 누수 하나와 토픽 모드 선택 비율의 분모를 고친다.
