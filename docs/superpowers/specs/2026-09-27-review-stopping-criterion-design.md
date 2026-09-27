@@ -24,7 +24,9 @@ next_phase: superpowers:writing-plans
 
 ## Goal
 
-공유 문서 리뷰 엔진이 재리뷰 상한 · 사용자 피로가 아니라 **문서 상태(must-catch 0건)** 로 멈춘다.
+공유 문서 리뷰 엔진이 재리뷰 상한 · 사용자 피로가 아니라 **문서 상태(must-catch 0건)** 로 멈춘다. advisory 축은
+라운드를 늘리지 않는다 — 라운드 1 의 advisory fix 는 적용을 관측하는 한 라운드만 더 들고, 그 뒤의 새 advisory 는
+참고로 간다(§B).
 사용자 개입은 하류가 다시 못 보는 판정(원문 · 확정 대조)으로 줄고, 나머지 finding 은 사라지지 않고
 하류가 읽는 자리로 간다 ⟨C1⟩ ⟨D3⟩.
 
@@ -98,27 +100,38 @@ next_phase: superpowers:writing-plans
 |---|---|---|
 | brief | 층 2 여섯 — `distortion, omission, invention, provenance_mislabel, authority_syntax, evidence_unsupported` | `direction, overdesign` |
 | design-doc | `goal_fit, problem_definition, scope, architecture` (brief §2 대조 네 축) | 층 1 나머지 다섯 + 층 2 일곱 |
-| seed | 층 1 네 축 전부 | 없음 — 동작 불변, 지목은 명시용 |
+| seed | 층 1 네 축 전부 | 없음 — 라우팅 불변. 지목했으므로 참고 줄 · 계수 키(§C · §E)는 선다(참고 0건) |
 
 ### §B 라우팅
 
-`_classify_items` 에서 처분 강제 뒤 · 앵커 분류 앞에 한 분기: category 가 advisory 축이고 처분이
-`decide` · `ask` 이면 `advice` 로 보낸다. decides · asks 원장에 들어가지 않으므로 그 항목은 게이트 질문도
-승인 차단도 아니다. 그 밖은 현행 경로 그대로다:
+분류는 `_classify_items` 에서 하되 **떼어 내지 않고 표지만 단다**(`route: advice`). 표지를 단 항목도 다른 항목과
+같이 id · bucket(`_resolve_ids_and_lineage`) · `L.accept` · `record_findings` 를 거치고, `record_findings` 가
+decides · asks · fixes 대신 `advice` 원장에 적는다 — id · 계보 · 회계가 한 경로라 advice 항목이 조용히 빠지지
+않는다(AC8). 표지는 처분 강제 · 앵커 분류(보호 헤딩 승격) **뒤**에 단다. advisory 축 항목 중 다음이 advice 다:
 
-- **advisory 축의 `fix` 는 fixes 원장에 남는다** — 사용자 질문 없이 저자가 적용하는 처분이라 ⟨D2⟩ 의 개입을
-  늘리지 않고, 남은 `TBD` · 두 가지로 읽히는 AC 같은 결함이 리뷰 중에 고쳐진다(Law 1). 보호 헤딩 승격도 현행대로
-  걸린다. 대가: 적용 관측을 위해 다음 라운드를 부른다.
+- 처분이 `decide` · `ask` 인 것.
+- 보호 헤딩 때문에 `fix` 에서 `decide` 로 승격된 것(`promoted_from: fix`) — 게이트 질문이 되지 않고 advice 로
+  간다. 원래 decide · ask 였던 것과 따로 `advice_promoted` 로 센다.
+- 라운드 n ≥ 2 에서 **새로** 나온 `fix`(계보 연결 · 재상승 후속이 아님) — 적용 관측을 위해 라운드를 더 부르지
+  않게 참고로 보낸다.
+
+그 밖은 현행 경로 그대로다:
+
+- **라운드 1 의 advisory `fix`(보호 헤딩 밖)는 fixes 원장에 남는다** — 사용자 질문 없이 저자가 적용하는 처분이라
+  ⟨D2⟩ 의 개입을 늘리지 않고, `TBD` · 두 가지로 읽히는 AC 같은 결함이 리뷰 중에 고쳐진다(Law 1). 적용 관측에
+  라운드 2 가 한 번 더 들고, 라운드 2 의 새 advisory fix 는 위 규칙으로 참고가 되므로 advisory 축이 라운드를 더
+  늘리지 않는다.
 - `defer` 는 현행 defer 경로(`### Deferred to plan`), `drop` · 재비판 `reject` 는 현행 회계로 간다.
 
-경계를 넘는 두 관계는 막는 쪽으로 닫는다(G2) — `must_catch` 를 지목한 프로필에서만:
+경계를 넘는 관계는 막는 쪽으로 닫는다(G2) — `must_catch` 를 지목한 프로필에서만:
 
 - **병합 생존자** — `same_as` 흡수(`_absorb_same_as`)는 처분 순위로 생존자를 고르고 생존자의 category 를 남긴다.
   흡수 대상 중 기각되지 않은 구성원 하나라도 must-catch 축이면 생존자를 must-catch 로 친다. 분류는 흡수 **뒤**에
   돌기 때문에(`cmd_finalize`), 흡수 단계가 구성원 축 소속을 생존자에 남겨야 한다.
-- **`blocks`** — `blocks` 로 must-catch 항목을 가리키는 advisory `ask` 는 must-catch 로 친다(질문이 막는 fix 가
-  답 없이 적용되지 않게). must-catch `ask` 의 `blocks` 가 advice 로 간 항목을 가리키면 그 ref 는 `_remap_blocks`
-  에서 조용히 버려지지 않고 `coerced("blocks", …)` 로 센다.
+- **`blocks`** — 판정은 축이 아니라 **대상의 적용 경로**로 한다. `blocks` 로 fixes 원장에 남는 항목(축 무관)을
+  가리키는 `ask` 는 자기 축과 무관하게 asks 원장에 남고, 답 전까지 그 fix 는 `held` 다 — 질문이 막는 fix 가 답 없이
+  적용되지 않는다. `ask` 의 `blocks` 가 advice 로 간 항목만 가리키면 그 ask 는 위 규칙대로 advice 이고, 차단 ask 의
+  `blocks` 중 advice 로 간 ref 는 `_remap_blocks` 에서 조용히 버려지지 않고 `coerced("blocks", …)` 로 센다.
 
 ### §C `advice` 원장 · 1회 규칙
 
@@ -204,8 +217,8 @@ design doc 의 박제처가 `Deferred to plan` 인 것은 writing-plans 가 그 
 - **AC7** `advice --sink` 는 design-doc 프로필에서 `### Deferred to plan` 아래에 미박제 항목 전부를 적고
   두 번째 호출은 아무것도 더 적지 않는다(멱등). brief 프로필에서는 `profile_has_no_defer_target` rc 1.
 - **AC8** 단계별 등식이 fixture 에서 성립한다(합계 하한이 아니다). 정규화된 리뷰어 입력(critic + codex) + 재비판
-  `added` = `same_as` 흡수 + 재비판 기각 + drop + must-catch 생존자(decides + fixes + asks + defers) + `advice`
-  (listed + repeat). 엔진 자동 생성분(얼림 · 재상승 · 상향)은 별도 유입으로 세고, 파손 입력은 정규화 단계의 보류
+  `added` = `same_as` 흡수 + 재비판 기각 + drop + 차단 원장 생존자(decides + fixes + asks + defers, 축 무관 — advisory
+  fix · defer 포함) + `advice`(listed + repeat — §B 의 advice 표지를 단 것만). 엔진 자동 생성분(얼림 · 재상승 · 상향)은 별도 유입으로 세고, 파손 입력은 정규화 단계의 보류
   회계로 센다. 각 항은 fixture 에서 0 이 아닌 값을 하나 이상 갖는다.
 - **AC9** `mc_preexisting_new` 는 해시 불변 절의 새 계보 must-catch 만 센다 — 바뀐 절의 것 · 계보 후속은
   세지 않는다.
@@ -215,31 +228,36 @@ design doc 의 박제처가 `Deferred to plan` 인 것은 writing-plans 가 그 
   박제 절차를 싣고, 그 문면이 부르는 서브커맨드 · 플래그가 실재한다.
 - **AC12** 착수 전 baseline 대비 `shared/tests/test_docreview_*.sh` · `plugins/quality-gates/tests/test_recritic_bridge.sh`
   · 이 파이프라인을 참조하는 spec-distill 테스트의 rc 와 실패 줄 수가 늘지 않는다.
-- **AC13** design-doc 프로필에서 advisory 축(`ambiguity`)의 `fix` 는 fixes 원장에 있고 `advice` 에 없다. 같은 축의
-  `decide` · `ask` 는 `advice` 에 있다.
+- **AC13** design-doc 프로필 라운드 1 에서 보호 헤딩 밖 advisory 축(`ambiguity`)의 `fix` 는 fixes 원장에 있고 `advice` 에
+  없다. 같은 축의 `decide` · `ask` 는 `advice` 에 있다 — 단 fixes 원장 항목을 `blocks` 로 가리키는 `ask` 는 asks 에 있다.
 - **AC14** `same_as` 로 `architecture`(must-catch)와 `component_relations`(advisory)를 병합하면 처분 순위와 무관하게
   생존자가 must-catch 원장에 있다. 구성원이 전부 advisory 면 `advice` 에 있다. 필드 없는 프로필의 병합 결과는 AC3
   golden 과 같다.
-- **AC15** advisory `ask` 의 `blocks` 가 must-catch `fix` 를 가리키면 그 ask 는 차단 ask(`blocking_ask_open`)이고 fix
-  는 `held` 다. must-catch `ask` 의 `blocks` 가 advice 항목을 가리키면 그 ref 가 `coerced` 로 1 세어진다.
+- **AC15** advisory `ask` 의 `blocks` 가 fixes 원장에 남는 `fix` 를 가리키면 — 그 fix 가 must-catch 든(①) advisory 든(②)
+  — 그 ask 는 차단 ask(`blocking_ask_open`)이고 fix 는 `held` 다. 차단 ask 의 `blocks` 가 advice 항목을 가리키면 그 ref
+  가 `coerced` 로 1 세어진다.
 - **AC16** 세 진입 skill 의 profile-content 펜스 출력에 `must_catch:` 줄이 없고, 그 줄을 뺀 나머지는 프로필 파일과
   바이트 동일하다. 벗기는 줄을 지우는 변이는 RED.
 - **AC17** `advice --log-file` 이 decision_log 절에 라운드별 계수 줄을 적은 뒤 엔진 상태 디렉토리를 지워도 그 줄이
   목적지 파일에 남는다. 두 번째 호출은 같은 라운드 줄을 다시 적지 않는다(멱등).
+- **AC18** design-doc 프로필 라운드 2 에서 새 계보의 advisory `fix` 는 `advice` 에 있고 `approval_ready` 를 막지 않는다.
+  라운드 1 에서 온 계보의 advisory fix(미적용)는 fixes 원장에 남아 막는다.
+- **AC19** 보호 헤딩 안의 advisory `fix` 는 `decide` 로 승격된 뒤 `advice` 에 있고 `advice_promoted` 가 1 이다 —
+  `round_gate_needed` 를 켜지 않는다. 같은 자리의 must-catch `fix` 는 현행대로 decides 로 승격된다.
 
 ## Files to Modify
 
 | 파일 | 변경 |
 |---|---|
 | `shared/docreview/scripts/docreview_state.py` | `OPTIONAL_PROFILE_FIELDS` · `must_catch` 스키마 · `advice` 원장 기본값 · `gate_summary` 의 참고 계수 · 렌더 참고 줄 · `advice` 서브커맨드(`--render` · `--cap` · `--sink` · `--log-file`) |
-| `shared/docreview/scripts/docreview_route.py` | `_classify_items` 분기(`decide` · `ask` 만) · `_absorb_same_as` 의 구성원 축 소속 · `_remap_blocks` 의 경계 `blocks` 계수 · 보고서 `advice_new` · `advice_repeat` · `mc_preexisting_new` |
+| `shared/docreview/scripts/docreview_route.py` | `_classify_items` 의 `route: advice` 표지(승격 뒤 · 라운드 ≥2 새 fix 포함) · `_absorb_same_as` 의 구성원 축 소속 · `_remap_blocks` 의 적용 경로 기준 `blocks` · 보고서 `advice_new` · `advice_repeat` · `advice_promoted` · `mc_preexisting_new` |
 | `plugins/spec-distill/references/docreview-profiles/{brief,design-doc,seed}.md` | frontmatter `must_catch` 한 줄씩 |
-| `plugins/spec-distill/references/reviewing-document.md` | 7 · 8단계의 advice 분기 · 끝의 한 번 |
+| `plugins/spec-distill/references/reviewing-document.md` | 7 · 8단계의 advice 분기와 `advice` 서브커맨드 계약만 적는다. 끝의 한 번 표시는 절차서가 하지 않는다 — 부르는 자리는 진입 자리 하나씩(design doc = `reviewing-spec` 승인 게이트, brief = 호출자 Step B, seed = 표시 없음 · 계수만)이다 |
 | `plugins/spec-distill/skills/reviewing-spec/SKILL.md` | `## 게이트` 승인 게이트 1단계 앞의 `advice --render` · `--sink` · `--log-file` 호출 |
-| `plugins/spec-distill/skills/{reviewing-brief,reviewing-spec,framing-requests}/SKILL.md` | profile-content 펜스가 `must_catch:` 줄을 벗긴다. `reviewing-brief` 는 `advice` 를 부르지 않는다 — brief 의 한 번 표시는 호출자 Step B 한 곳이다 |
+| `plugins/spec-distill/skills/{reviewing-brief,reviewing-spec,framing-requests}/SKILL.md` | profile-content 펜스가 `must_catch:` 줄을 벗긴다. `reviewing-brief` 는 `advice` 를 부르지 않는다 — brief 의 한 번 표시는 호출자 Step B 한 곳이다. `framing-requests` 는 승인 게이트 앞에서 `advice --log-file <audit>` 로 seed 의 계수 줄(audit `## 6. 리뷰 결정`)만 적는다 |
 | `plugins/spec-distill/skills/conducting-interview/references/finishing.md` | Step B 의 참고 목록 표시(`advice --render` · `--log-file`) · §3/§5 박제 규칙. B-2 의 「층 1(방향성) 결정은 라운드 게이트에서 이미 사용자가 판정했습니다」를 고친다 — brief 의 방향 · overdesign 은 이제 라운드 게이트가 아니라 참고 목록으로 온다 |
 | `plugins/spec-distill/scripts/build_brief_bundle.py` · `build_brief_inline_blob.py` | 위생 판정(`AUDIT_NAME_RE` · `AUDIT_SUFFIX_RE`)을 자기 audit basename 으로 |
-| `shared/tests/test_docreview_{route,state,profile_schema,golden}.sh` · spec-distill 번들 · 진입 skill 펜스 테스트 | AC1~AC10 · AC13~AC17 |
+| `shared/tests/test_docreview_{route,state,profile_schema,golden}.sh` · spec-distill 번들 · 진입 skill 펜스 테스트 | AC1~AC10 · AC13~AC19 |
 | `plugins/{spec-distill,quality-gates}/.claude-plugin/plugin.json` · `CHANGELOG.md` | spec-distill minor · qg patch(공유 스크립트 배포분) |
 
 ## Verification Plan
@@ -321,6 +339,11 @@ brainstorming 에서 사용자가 고른 것:
 - D1.5 · r1 · adopt · baf43eac#r1.1 · "채택 — 막는 ask 는 must-catch" — ask→fix 의 `blocks` 의존이 must-catch 와 advisory 경계를 넘으면 끊깁니다. advisory ask 가 must-catch fix 를 막고 있었다면 그 차단이 사라지고, must-catch ask 가 advisory fix 를 막고 있었다면 비차단 ask 로 강등됩니다.
 - D1.6 · r1 · adopt · fccf272b#r1.1 · "채택 — fixture 둘로 분리" — AC1 이 자기모순입니다. 「`direction` finding 만 나온 라운드 1」과 「같은 fixture 의 `distortion` finding」이 한 fixture 안에서 동시에 성립할 수 없습니다.
 - D1.7 · r1 · adopt · fccf272b#r1.2 · "채택 — 단계별 등식" — AC8의 입력 경계가 정의되지 않았고, 등식에서 기존 same_as 흡수 항목이 빠져 있다.
+- D2.8 · r2 · adopt · dddcf5cb#r2.1 · "채택 — (b) r≥2 새 fix 는 advice" — D1.1로 advisory 축의 fix가 fixes 원장에 남으면서 design doc의 승인 조건이 must-catch 0건이 아니라 must-catch 0건 + advisory fix 전부 적용이 됐다. 그런데 Goal·G1·§E는 여전히 must-catch 0건으로 멈춘다고 쓴다.
+- D2.9 · r2 · adopt · a629a7da#r2.1 · "채택 — (a) 승격분도 advice" — 라우팅 분기가 앵커 분류 앞에 있어서, 보호 헤딩 안의 advisory fix는 분기를 지난 뒤 decide로 승격돼 게이트 질문이 되고 승인도 막는다. G1의 「그 밖의 rubric 축의 결정 · 질문은 게이트 질문이 되지 않고 승인을 막지 않는다」와 어긋난다.
+- D2.10 · r2 · adopt · d5231a31#r2.1 · "채택 — 적용 경로 기준" — advisory 축의 fix에 답이 필요한 경우, 그 fix를 막는 advisory ask가 advice로 빠져 질문 없이 수정이 진행될 수 있다.
+- D2.11 · r2 · adopt · 0d052804#r2.1 · "채택 — seed 행 정정" — §A 표는 seed를 「동작 불변, 지목은 명시용」이라고 하는데, §C는 새 출력(보고서 키 셋·게이트 참고 줄)이 must_catch를 지목한 모든 프로필에서 난다고 한다. 그러면 seed의 게이트 렌더와 보고서도 바뀐다. seed 행을 「라우팅 불변, 참고 줄·계수 키는 선다」로 고친다.
+- D2.12 · r2 · adopt · e09185f8#r2.1 · "채택 — 현재 변경 유지" — finding 없이 바뀜: Goals (modified)
 
 원장 정정 공시 — 라운드 1 탐지기가 `§` 를 넣은 앵커(`#§b-라우팅` · `#§e-관측--멈춤-보장의-정직한-경계`)를 냈고 엔진
 slug 는 `§` 를 뺀다. D1.1 · D1.3 · D1.5 의 permit 이 실재하지 않는 앵커를 가리켜 적용해도 만료될 상태라, 사용자 선택
