@@ -11,7 +11,6 @@
 **Law 1 — Clarity Before Code.** 명세가 모호한 상태에서는 구현이 진행되지 않는다. 명세 작성은 자신의 스킬·게이트·거절 동작을 가진 일급(first-class) 단계다. 코드를 shipping하는 모든 플러그인은 "아직 이건 코딩 못 한다"고 말할 수 있는 **실제 거절 메커니즘** — 최소한 필수 섹션(Context/Why·Goals·Non-goals·Constraints·Acceptance Criteria·Files to Modify·Verification Plan·Rejected Alternatives·Metadata)을 silent하게 skip할 수 없는 구조적 게이트 — 을 가져야 한다. 모델 신뢰만으로는 부족하다.
 
 **Law 2 — Writer and Reviewer Must Never Share a Pass.** 코드를 쓴 턴은 그 코드를 승인할 수 없다. 이것은 heuristic이 아니라 하드 규칙이다. 분리는 프롬프트가 아니라 물리적이어야 한다 — `allowed-tools`/`disallowed-tools` frontmatter로 리뷰어가 `Write`/`Edit`을 literally 하지 못하게 만든다. 쓰기 권한이 있는 리뷰어는 리뷰어가 아니고, 검증은 나중 생각이 아니라 load-bearing 인프라다.
-*R6 scoped exception (qg v2.2.0):* 실제 서비스를 실행해야 하는 executor(`runtime-verifier`)는 `Write`를 갖되, 분리는 도구 deny가 아니라 **orchestrator가 immutable baseline 대비 `git diff`로 product 변경을 잡아 verdict를 ≤FAIL로 강제 + 무커밋 + 샌드박스 폐기**하는 구조 가드로 보장된다 — verifier 주장과 독립적인 구조이므로 self-approval이 구조적으로 불가능하다.
 
 **Law 3 — Every Cycle Must Leave the System Smarter.** N+1번째 작업이 N번째보다 엄밀히 더 쉬워야 한다. 메커니즘은 low-tech다 — 리포에 있는 파일을 미래 세션이 읽는 것. Compounding은 선택적 wrap-up이 아니라 discoverability check가 붙은 이름 붙은 단계다: 사이클이 learning을 생산하면 하니스는 파일로 capture하고, 미래 agent가 그것에 실제로 도달 가능한지 확인한다 — 위험하면 인덱스(`CLAUDE.md`/`AGENTS.md`)를 자동 편집한다. 아무 미래 agent도 읽지 않는 파일에 쓰는 것은 theater다.
 
