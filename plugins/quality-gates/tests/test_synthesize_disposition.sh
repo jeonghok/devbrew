@@ -93,14 +93,14 @@ assert_grep "$OUT" '미판정 [1-9]'    "판정자 부재가 세어진다 (hold)
 assert_grep "$OUT" '\*\*배관 손실:\*\* [1-9]' "항목 파손 + 입력 실패가 배관 칸으로 간다"
 
 # ── clean(kept=0) 렌더 분기 — 수정 라운드 2 (C1) ──────────────────────────
-# `render()` 는 disposition_lines() 를 «두» 자리에서 부른다: :482(findings 가
-# 비었을 때 — "No high-confidence findings" clean 분기)와 :532(kept>0). 도출
+# `render()` 는 disposition_lines() 를 «두» 자리에서 부른다: :625(findings 가
+# 비었을 때 — "No high-confidence findings" clean 분기)와 :680(kept>0). 도출
 # 확인: 파일 전체에 disposition_lines( 호출이 정확히 이 둘뿐이다(제3의 자리
 # 없음, main() 은 render() 를 한 번만 부른다). 위 여섯 assert_grep 은 전부
 # `$OUT` 하나에 걸려 있고, 그 findings.yaml 은 CRITICAL 등 실채택 항목을
-# 남겨 :532 분기만 태운다 — :482 분기는 이 락이 한 번도 실행한 적이 없었다
-# (코디네이터 재현: :482 에서 plumb_line 을 지워도 이 파일을 코퍼스로 갖는
-# 락 8개 전부 GREEN, 같은 제거를 :532 에서 하면 이 파일이 5/6 RED 로 잡음 —
+# 남겨 :680 분기만 태운다 — :625 분기는 이 락이 한 번도 실행한 적이 없었다
+# (코디네이터 재현: :625 에서 plumb_line 을 지워도 이 파일을 코퍼스로 갖는
+# 락 8개 전부 GREEN, 같은 제거를 :680 에서 하면 이 파일이 5/6 RED 로 잡음 —
 # 두 분기 중 하나만 잠겨 있었다는 뜻). 배관 손실이 「clean」위에서 사라지는
 # 것이 가장 위험하다 — 입력 실패·항목 파손이 몇 건이든 화면에서 통째로
 # 증발하는데 게이트는 clean 을 찍는다.
@@ -140,7 +140,7 @@ assert_grep "$OUT" '미판정=볼 사람이 없던 것'        "AC21: 풀이 줄
 assert_grep "$OUT" '배관 손실=입력이 죽었거나 항목이 깨졌거나 값을 보정한 것' \
   "AC21: 풀이 줄이 「배관 손실」을 실제 집계대로 푼다(입력 실패 + 항목 파손 + 기타 + coerced)"
 assert_grep "$OUT_CLEAN" '억제=규칙이 자른 것' \
-  "AC21: clean(kept=0) 분기에서도 풀이 줄이 난다 (:482 자리 — 이 락이 한 번 통째로 놓쳤던 분기)"
+  "AC21: clean(kept=0) 분기에서도 풀이 줄이 난다 (:625 자리 — 이 락이 한 번 통째로 놓쳤던 분기)"
 
 # ── 배관줄의 「차단」은 소비자의 blocking 을 따른다 ────────────────────────────
 # (A)(B) 는 공시만 하고 막지 않는 degrade(게이트 변경 강제 · 보조 입력 사망) —
@@ -148,6 +148,14 @@ assert_grep "$OUT_CLEAN" '억제=규칙이 자른 것' \
 # 판정자 부재) — 배관줄은 (차단: 예)여야 한다. 모든 「차단」 단언은 배관줄
 # 한 줄에 묶는다(same-line) — degrade 머리줄과 배관줄이 서로 다른 술어를
 # 읽으면(전자는 blocking, 후자가 degraded 였던 버그) 그 모순이 여기서 갈린다.
+#
+# 수정 라운드 1 (I-1) — (D) 는 자기 디렉터리(case_d)를 쓴다. 파일 위쪽 $OUT(f5
+# hold)의 findings.yaml 은 항목 파손(다섯째 「형태 불량」 스칼라)도 같이 있어
+# dropped_malformed > 0 이다 — 그 fixture 를 그대로 (D)에 쓰면 오답 후보
+# `disposition_lines(report, held_classes, dropped_malformed > 0)`(Ledger.blocks()
+# 의 hold/unknown/주 source_failed 항을 놓치는 변이, 아래 M6)도 우연히
+# (차단: 예)를 내 A~D 전부를 통과시킨다. (D) 는 hold 하나만 있고
+# dropped_malformed=0 인 fixture 로 그 오답을 갈라낸다.
 
 mkdir -p "$TMPD/case_a"
 cat > "$TMPD/case_a/findings.yaml" <<'YAML'
@@ -202,7 +210,23 @@ assert_grep "$OUT_C" 'clean이 아니다' \
 assert_grep "$OUT_C" '\*\*배관 손실:\*\*.*\(차단: 예\)' \
   "(C) 배관줄 — 원장 blocks() 는 거짓이어도(주 소스 아님) 합성기 blocking 은 컨테이너 소실을 차단으로 센다"
 
-assert_grep "$OUT" '\*\*배관 손실:\*\*.*\(차단: 예\)' \
-  "(D) 배관줄 — 판정자 부재(f5 hold, 파일 위쪽의 \$OUT 재사용)는 차단이다"
+mkdir -p "$TMPD/case_d"
+cat > "$TMPD/case_d/findings.yaml" <<'YAML'
+findings:
+  - {agent: sec, file: a.py, line: 1, severity: CRITICAL, summary: kept, confidence: 9}
+  - {agent: sec, file: d.py, line: 4, severity: IMPORTANT, summary: 판정없음, confidence: 8}
+YAML
+rf_prep "$TMPD/case_d"
+rf_reply "$TMPD/case_d" 'verdicts:
+  - f: f1
+    verdict: confirm'
+OUT_D="$(rf_synth "$TMPD/case_d" 2>"$TMPD/case_d/err.txt")"
+note "$OUT_D"
+assert_grep "$OUT_D" '미판정 [1-9]' \
+  "(D) 분기 확인 — f2(d.py) 가 판정 없이 판정자 부재로 hold 된다"
+assert_not_grep "$OUT_D" 'dropped as malformed' \
+  "(D) 항목 파손·컨테이너 소실 없음(dropped_malformed=0) — 위 미판정 단언의 양의 짝, hold 단독임을 확인"
+assert_grep "$OUT_D" '\*\*배관 손실:\*\*.*\(차단: 예\)' \
+  "(D) 배관줄 — dropped_malformed 경유가 아니라 Ledger.blocks() 의 held>0 만으로 차단이다"
 
 finish
