@@ -37,6 +37,9 @@ RANK = {"decide": 4, "ask": 3, "fix": 2, "defer": 1, "drop": 0}
 PROFILE_FIELDS = ("detectors", "ground_truth", "allowed_dispositions", "fix_anchors",
                   "immutable", "protected_headings", "layer_rubric", "decision_log",
                   "defer_target", "web")
+# 선택 필드 — 필수 목록에 넣으면 qg `generic`(이 필드 없음)이 `fields_missing` 으로 죽는다. 부재면 advisory 축이
+# 공집합이라 라우팅이 현행과 같다(docreview_advice.advisory_axes).
+OPTIONAL_PROFILE_FIELDS = ("must_catch",)
 LOG_KINDS = ("doc_section", "audit_section", "state")
 DEFER_KINDS = ("doc_section", "none")
 
@@ -127,7 +130,7 @@ def load_profile(path) -> dict:
     if not isinstance(data, dict):
         raise ProfileError("frontmatter_not_mapping")
     missing = [f for f in PROFILE_FIELDS if f not in data]
-    extra = [k for k in data if k not in PROFILE_FIELDS]
+    extra = [k for k in data if k not in PROFILE_FIELDS and k not in OPTIONAL_PROFILE_FIELDS]
     if missing:
         raise ProfileError("fields_missing:%s" % ",".join(missing))
     if extra:
@@ -152,6 +155,16 @@ def load_profile(path) -> dict:
     # `bad_regex` 로 거절하던 반대 방향 발산).
     _str_list(lr["layer1"], "layer_rubric.layer1", regex=False)
     _str_list(lr["layer2"], "layer_rubric.layer2", regex=False)
+    # must_catch — 승인을 막는 축. 그 밖의 rubric 축이 advisory 다(정의상 fail-closed: rubric 밖 category ·
+    # `other` · 엔진이 만든 것은 전부 막는다). 지목은 rubric 안이어야 하고, 빈 목록은 막는 축 0 이라 거부한다.
+    if "must_catch" in data:
+        mc = _str_list(data["must_catch"], "must_catch", regex=False)
+        if not mc:
+            raise ProfileError("must_catch_empty")
+        rubric = set(lr["layer1"]) | set(lr["layer2"])
+        unknown = [x for x in mc if x not in rubric]
+        if unknown:
+            raise ProfileError("must_catch_unknown_axis:%s" % ",".join(unknown))
     dl = data["decision_log"]
     if not isinstance(dl, dict) or dl.get("kind") not in LOG_KINDS:
         raise ProfileError("decision_log_invalid")
