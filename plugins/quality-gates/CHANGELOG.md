@@ -3,6 +3,19 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [9.2.0] — 2026-09-27
+
+**토픽 구성원 규칙 재결정** — 같은 `Spec:` 키의 앞 조각이 이미 base 에 머지됐으면 그 조각은 판정 대상이 아니라 기준선이다. 그 선언 커밋 수를 `scope:` 블록의 `in_base` 로 공시한다.
+
+### Changed
+- `resolve-topic.sh` 가 구성원 근거를 아직 `base_ref` 에 안 든 선언 커밋으로 좁힌다 — `base_ref` 에 든 앞 조각이 기준선에 숨던 결함과 그 뒤 base 에서 딴 무관한 브랜치가 구성원이 되던 결함(9.1.0 알려진 한계)이 함께 사라진다. 앞 조각이 로컬 `main` 에만 머지돼 fetch 전이면 아직 기준선이 아니다(README 알려진 한계).
+- 머지된 구성원(`merged:`) 도출과 그 분기점 보정을 지운다 — 옛 분기점이 경계가 되어 그 뒤 main 이력이 리뷰 대상에 흡수되는 경로, 중첩 머지에서 구성원이 넓어지는 경로, 이력 길이에 따라 이차로 느는 비용이 없어진다.
+- 키의 선언이 전부 base 에 있으면 `resolve` 는 `no-declaration`(`all declared commits are already in base_ref`)이고, `--topic` 으로 그 키를 주면 `topic-head.sh` 는 그 사유를 실은 `declaration-invalid` 다.
+
+### Added
+- 스코프 튜플의 `in_base` — `resolve-topic.sh resolve` 11키 · `topic-head.sh` 13키 · `scope_tuple.py` 13키 · `scope:` 블록 한 줄. SKILL ① 은 `in_base` 가 0 보다 크면 공지 한 줄을 낸다.
+- 회귀 락 — 머지 뒤 main 이력 비흡수 · 중첩 머지 비확대 · 무관 브랜치 비구성원 · 옛 머지된-구성원 코드 부재 · squash 한계 기록.
+
 ## [9.1.0] — 2026-09-27
 
 **토픽 스코프** — `Spec: <경로>[#<조각>]` 커밋 트레일러로 선언한 작업은 브랜치가 여럿이어도 한 판정 단위가 된다. 선언이 없으면 판정은 바뀌지 않는다 — 판정 꼬리에 `scope:` 블록(`mode: session`)이 공시로 붙는다.
