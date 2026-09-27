@@ -232,8 +232,10 @@ B-1 분기보다 먼저 돕니다(superpowers 가 없어도 brief 는 완결돼�
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-PAYLOAD="<Step A.5 의 PAYLOAD 절대경로>"; AUDIT="${PAYLOAD%.md}.audit.md"
-harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+PAYLOAD="<Step A.5 의 PAYLOAD 절대경로>"
+AUDIT="${PAYLOAD%.md}.audit.md"
+harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "$PAYLOAD" || true)"
 if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
   echo "[spec-distill] 참고(advisory) 목록 없음 — brief 리뷰 원장이 없다(STATE_DIR='${STATE_DIR:-}'): 리뷰가 skip 됐거나 세션 정리로 걷혔다. 게이트 텍스트에 싣는다."
