@@ -167,22 +167,22 @@ EXEMPT = {
     # 미계수 강제 마커 주석이 고친 뒤 빠지며 위쪽이 줄었고, `cmd_prepare` 가
     # `normalize()` 에 넘기는 기록 원장(`rec`)이 아래쪽을 늘렸다. 가드 텍스트·사유 무변경 —
     # `bash shared/tests/test_adjudication_wiring.sh` 의 `exempt_stale=0` 이 실측으로 답한다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 104,
+    ("plugins/quality-gates/scripts/docreview_route.py", 107,
      "return in _permit_covers @ if int(p['round']) == n and anchor in p['apply_anchors']"):
         _DR_PERMIT_SEARCH,
     # T6b — docreview_route.py 아홉 자리 나머지. 사유는 위 `_DR_*` 상수 참조.
     # PR 3 최종 리뷰 F6 — `cmd_prepare` 의 critic 디코드 실패 분기(sentinel 깨짐 = critic 사망)가 위에서 줄을 늘렸다.
     # PR 3 qg iter 1 · 2 — 공유 시점 판별(`_round_staleness`)과 `cmd_prepare` 의 critic 시점 판별이 위에서 줄을
     # 늘렸다(가드 텍스트 · 사유 무변경).
-    ("plugins/quality-gates/scripts/docreview_route.py", 401,
+    ("plugins/quality-gates/scripts/docreview_route.py", 404,
      "continue in _absorb_same_as @ if not live"): _DR_ABSORB_GROUP_DEAD,
     # `_absorb_same_as` 의 생존자 빈 칸 채움이 이 아래 여덟 자리를 밀었다(가드 텍스트·사유 무변경).
     # `_absorbed_into` 는 `_classify_items` 의 개행 접기보다 «앞»으로 옮겨졌다 — 흡수된 값의 접기를
     # 세지 않으려고(생존자가 물려받은 같은 값이 두 번 세졌다).
     # 채움은 break·continue·필터 컴프리헨션 없이 쓴다 — 버리는 분기로 잡히지 않게.
-    ("plugins/quality-gates/scripts/docreview_route.py", 431,
+    ("plugins/quality-gates/scripts/docreview_route.py", 434,
      "continue in _classify_items @ if it.get('_absorbed_into')"): _DR_ABSORBED_ALREADY,
-    ("plugins/quality-gates/scripts/docreview_route.py", 451,
+    ("plugins/quality-gates/scripts/docreview_route.py", 454,
      "continue in _classify_items @ if it.get('_rejected')"): _DR_REJECTED_ALREADY,
     # Task 2 — escalated 예약을 재상승(AC21)과 대칭으로 맞추면서 줄번호가 밀렸다.
     # F-2/F-3 재리뷰(Ruling 20·21) 가 한 번 더 바꿨다: dedup continue 는
@@ -190,21 +190,21 @@ EXEMPT = {
     # (`scan()` 이 그 호출을 disposition 으로 자동 인식해 guarded=True) — 그래서
     # 아래 목록에서 통째로 빠졌다(EXEMPT_BASELINE 주석 참조). 대신 F-3 이 새
     # discard 자리(fix 가 지금도 escalated 상태인지 검사)를 하나 늘렸다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 517,
-     "continue in _auto_decides @ if int(e['round']) >= n"): _DR_ESCALATED_NOT_DUE,
     ("plugins/quality-gates/scripts/docreview_route.py", 522,
+     "continue in _auto_decides @ if int(e['round']) >= n"): _DR_ESCALATED_NOT_DUE,
+    ("plugins/quality-gates/scripts/docreview_route.py", 527,
      "continue in _auto_decides @ if not f0"): _DR_ESCALATED_TARGET_GONE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 533,
+    ("plugins/quality-gates/scripts/docreview_route.py", 538,
      "continue in _auto_decides @ if not fx0 or fx0.get('state') != 'escalated'"):
         _DR_ESCALATED_FIX_NOT_LIVE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 563,
+    ("plugins/quality-gates/scripts/docreview_route.py", 568,
      "continue in _auto_decides @ if not f0"): _DR_RERAISE_TARGET_GONE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 574,
+    ("plugins/quality-gates/scripts/docreview_route.py", 579,
      "continue in _auto_decides @ if not d0 or d0.get('state') != 'expired'"):
         _DR_RERAISE_ALREADY_DECIDED,
     # 재상승 후속의 kind·prev_hash 승계 주석이 `_auto_decides` 재상승 갈래 위에
     # 끼어들어 이 자리를 밀었다. 가드 텍스트 자체는 그대로다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 628,
+    ("plugins/quality-gates/scripts/docreview_route.py", 633,
      "continue in _resolve_ids_and_lineage @ if it.get('_source') != 'reraise'"):
         _DR_LINEAGE_NOT_RERAISE,
 }

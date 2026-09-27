@@ -636,12 +636,35 @@ def _refresh_open_lineages(st, n) -> None:
     r["open_lineages"] = sorted({st["findings"][f]["lineage"] for f in st["findings"] if is_open(st, f)})
 
 
-def record_findings(st, findings, n) -> None:
-    """라우팅이 끝난 finding 목록을 원장에 적는다 (route.finalize 와 record-findings CLI 가 부른다)."""
+def _record_advice(st, it, n, counts) -> None:
+    """참고(advisory) 항목 — `advice` 원장에 버킷(층|축|앵커) 키로 적는다. 이전 라운드(또는 같은 라운드 앞 항목)가
+    올린 버킷은 목록에 다시 올리지 않고 `repeat` 로만 센다(1회 규칙). 원장 키는 필요할 때만 생긴다 — 표지가
+    없는 프로필의 원장 파일은 바이트 단위로 현행이다(골든)."""
+    st["findings"][it["id"]]["route"] = "advice"
+    ledger = st.setdefault("advice", {})
+    b = it.get("bucket") or it["id"]
+    if b in ledger:
+        counts["repeat"] += 1
+    else:
+        ledger[b] = {"id": it["id"], "round": n, "layer": it.get("layer"), "category": it.get("category"),
+                     "anchor": it.get("anchor"), "summary": it.get("summary"),
+                     "replacement": it.get("replacement"), "shown": False, "sunk": False}
+        counts["listed"] += 1
+
+
+def record_findings(st, findings, n) -> dict:
+    """라우팅이 끝난 finding 목록을 원장에 적는다 (route.finalize 와 record-findings CLI 가 부른다).
+
+    `route: advice` 표지를 단 항목은 decides · fixes · asks 대신 `advice` 원장에 간다(`_record_advice`). 낸 값은
+    그 계수 {"listed", "repeat"} — 표지 없는 항목만 온 라운드는 둘 다 0 이다."""
+    counts = {"listed": 0, "repeat": 0}
     for it in findings:
         fid = it["id"]
         st["findings"][fid] = {k: it.get(k) for k in PUBLIC_FIELDS}
         if it.get("state") == "rejected":
+            continue
+        if it.get("route") == "advice":
+            _record_advice(st, it, n, counts)
             continue
         d = it.get("disposition")
         if d == "decide":
@@ -660,6 +683,7 @@ def record_findings(st, findings, n) -> None:
             if fx and fx["state"] == "pending":
                 fx["state"] = "held"
     _refresh_open_lineages(st, n)
+    return counts
 
 
 def append_under_heading(path: Path, heading: str, line: str) -> None:
@@ -1103,6 +1127,10 @@ def gate_summary(st) -> dict:
     g["counts"] = {k: rep.get(k, 0) for k in ("rejected", "bucket_conflicts", "lineage_mismatch",
                                               "revived", "reraise_unconsumed", "escalated_unconsumed")}
     g["counts"]["user_rejected"] = sum(1 for v in st["rejected_lineages"].values() if v.get("by") == "user")
+    # 참고(advisory) — 이번 라운드 보고서에 계수가 있을 때만(= must_catch 를 지목한 프로필). 승인 술어와 무관하다.
+    if "advice_new" in rep:
+        g["advice"] = {"total": len(st.get("advice") or {}), "new": rep["advice_new"],
+                       "repeat": rep["advice_repeat"], "mc_preexisting_new": rep["mc_preexisting_new"]}
     return g
 
 
@@ -1355,6 +1383,10 @@ def render_gate(st, g) -> str:
     out.append("기각 %d건(재비판) · 사용자 기각 %d · drop %d · bucket 충돌 %d · 계보 지목 불일치 %d · 기각 계보 재상승 %d · 미소비 재상승 예약 %d · 미소비 상향 예약 %d"
                % (c["rejected"], c["user_rejected"], len(g["dropped"]), c["bucket_conflicts"],
                   c["lineage_mismatch"], c["revived"], c["reraise_unconsumed"], c["escalated_unconsumed"]))
+    if g.get("advice") is not None:   # 게이트 질문이 아니다 — 목록은 끝에서 한 번(`advice --render`)
+        adv_g = g["advice"]
+        out.append("참고 %d건(이번 라운드 새 %d · 반복 %d) — 끝에서 한 목록으로 · 선재 절의 새 must-catch %d"
+                   % (adv_g["total"], adv_g["new"], adv_g["repeat"], adv_g["mc_preexisting_new"]))
     if g["two_stage"] and g["next_round_mode"] == "extra_approval":
         # 상한 도달 — approval_ready 와 무관하게 두 단계이고(Park P3·D-U3), 1단계는
         # 날 모드 토큰(`extra_approval`)이 아니라 사용자 말로 이름을 낸다. 이 선택지를

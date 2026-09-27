@@ -44,3 +44,40 @@ def member_categories(items, live) -> list:
 
 def advice_ids(final) -> list:
     return [it["id"] for it in final if it.get("route") == ROUTE_ADVICE]
+
+
+def route_step1(final, axes) -> None:
+    """1 걸음 — `_classify_items` 의 처분 강제 · 보호 헤딩 승격 뒤. 축과 처분만 보면 정해지는 것:
+    advisory 축의 `decide`(보호 헤딩 승격분 포함 — 승격된 항목의 처분은 이미 `decide` 다)와 `blocks` 없는
+    `ask`. `blocks` 가 있는 `ask` 는 대상의 적용 경로를 알아야 해서 2 걸음(`route_step2`)이 정한다."""
+    for it in final:
+        d = it["disposition"]
+        if is_advisory(it, axes) and (d == "decide" or (d == "ask" and not it.get("blocks"))):
+            it["route"] = ROUTE_ADVICE
+
+
+def _subtree(snap, anchor) -> dict:
+    """앵커 절과 그 하위 절(`parents` 로 도출)의 {앵커: 해시}. 스냅숏 해시는 다음 헤딩(레벨 무관)에서 끊기므로
+    자기 절만 보면 상위 앵커의 finding 이 하위 절 변경에도 선재로 세어진다."""
+    return {s["anchor"]: s["hash"] for s in snap.get("sections") or []
+            if s["anchor"] == anchor or anchor in (s.get("parents") or [])}
+
+
+def mc_preexisting_new(final, snapshots, n, axes) -> int:
+    """라운드 n ≥ 2 에서 must-catch 로 분류된 리뷰어 finding 중 새 계보(`lineage == id`)이고 앵커 절과 그 하위 절
+    전부의 해시가 스냅숏 n−1 과 n 에서 같은 것의 수. 동작을 바꾸지 않는 관측값이다 — 전문 재대조에서 재샘플링이
+    잦아든다는 가정(RC31)을 다음 사이클이 센다. drop · 엔진 자동 생성 · advisory 는 세지 않는다."""
+    if n < 2:
+        return 0
+    prev, cur = (snapshots or {}).get(str(n - 1)), (snapshots or {}).get(str(n))
+    if not prev or not cur:
+        return 0
+    count = 0
+    for it in final:
+        if (it.get("route") != ROUTE_ADVICE and it.get("_source") not in ENGINE_SOURCES
+                and not is_advisory(it, axes) and it["disposition"] != "drop"
+                and it.get("lineage") == it.get("id")):
+            before, after = _subtree(prev, it["anchor"]), _subtree(cur, it["anchor"])
+            if after and before == after:
+                count += 1
+    return count

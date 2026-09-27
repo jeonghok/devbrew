@@ -1,0 +1,15 @@
+```docreview-layer1
+- ref: b1
+  category: direction
+  anchor: "#2-제약"
+  disposition: decide
+  summary: "BD1: 제약 C1 의 방향이 반증된다"
+```
+
+```docreview-layer2
+- ref: b2
+  category: distortion
+  anchor: "#2-제약"
+  disposition: fix
+  summary: "BD2: 제약 C1 이 원문의 뜻을 바꿨다"
+```

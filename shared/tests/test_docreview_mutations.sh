@@ -63,7 +63,7 @@ mkclone() {   # mkclone <dir>
 run_case() {   # run_case <scripts-dir> <case-fn> → "<fail> <pass> <traceback:0|1>"
   ( set +u
     REPO_ROOT="$REPO_ROOT"; SCRIPTS="$1"
-    . "$REPO_ROOT/shared/tests/assert.sh"; . "$REPO_ROOT/shared/tests/fixtures/docreview/cases.sh"
+    . "$REPO_ROOT/shared/tests/assert.sh"; . "$REPO_ROOT/shared/tests/fixtures/docreview/cases.sh"; . "$REPO_ROOT/shared/tests/fixtures/docreview/cases_advice.sh"
     _out="$(mktemp -t docreview-runcase-XXXXXX)"
     "$2" >"$_out" 2>&1
     _tb=0
@@ -208,6 +208,7 @@ mut() { mut_expect caught "$@"; }   # 기존 10셀의 계약: 변이는 항상 c
 sed_route()  { sed -i.bak "$1" "$2/docreview_route.py"  && rm -f "$2/docreview_route.py.bak"; }
 sed_anchor() { sed -i.bak "$1" "$2/docreview_anchor.py" && rm -f "$2/docreview_anchor.py.bak"; }
 sed_state()  { sed -i.bak "$1" "$2/docreview_state.py"  && rm -f "$2/docreview_state.py.bak"; }
+sed_advice() { sed -i.bak "$1" "$2/docreview_advice.py" && rm -f "$2/docreview_advice.py.bak"; }
 
 # ① 얼림 diff 비활성 — 사후 auto decide 를 안 만든다.
 # R19 이전엔 항목 자체를 안 만들어(`for c in []:`) case_T35 의 `[0]` 인덱싱 단언 3/4 이
@@ -724,4 +725,20 @@ mut 1/1 state_dir_for_relative_doc_accepted case_state_dir_for_per_doc sed_state
 # (60) `init` 이 상대 문서를 받는다 — 원장의 문서 정체가 cwd 의 함수가 된다.
 mut 1/1 init_relative_doc_accepted case_init_relative_doc_refused sed_state \
   's/if not a\.doc or not os\.path\.isabs(a\.doc):/if not a.doc:/'
+# ── 참고(advisory) 라우팅 (설계 2026-09-27-review-stopping-criterion) ─────────────────────
+# (61) advisory 여집합을 뒤집는다(advisory = must_catch) — direction 이 must-catch 가 되어 AC1 이 RED.
+mut 1/1 advisory_axes_flipped case_AC1_brief_direction_only sed_advice \
+  's/    return (frozenset(lr\["layer1"\]) | frozenset(lr\["layer2"\])) - frozenset(mc)/    return frozenset(mc)/'
+# (62) 1 걸음 호출을 지운다 — advisory decide 가 decides 에 남아 승인을 막는다.
+mut 1/1 route_step1_removed case_AC1_brief_direction_only sed_route \
+  's/^    route_step1(final, advisory_axes(prof))$/    pass/'
+# (63) 1회 규칙을 지운다 — 라운드 1 에 오른 버킷이 라운드 2 에 다시 listed 된다.
+mut 1/1 advice_repeat_rule_removed case_AC5_AC9_round2 sed_state \
+  's/^    if b in ledger:$/    if False:/'
+# (64) 해시 비교를 지운다 — 바뀐 절의 새 must-catch 까지 선재로 센다.
+mut 1/1 mc_hash_compare_removed case_AC5_AC9_round2 sed_advice \
+  's/^            if after and before == after:$/            if after:/'
+# (65) 하위 절을 빼고 자기 절만 본다 — 하위 절이 바뀐 상위 앵커의 finding 이 선재로 세어진다.
+mut 1/1 mc_subtree_dropped case_AC9_child_section_changed sed_advice \
+  's/            if s\["anchor"\] == anchor or anchor in (s.get("parents") or \[\])}/            if s["anchor"] == anchor}/'
 finish

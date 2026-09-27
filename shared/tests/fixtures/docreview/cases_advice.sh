@@ -29,3 +29,95 @@ case_advice_engine_items_mustcatch() {
     "[False, False, False, False, False, True]" \
     "§A·§B: rubric 밖 · other · frozen_change · must-catch 축 · must-catch 구성원이 낀 병합 생존자는 must-catch, 전부 advisory 인 병합은 advisory"
 }
+
+# ── 라우팅 헬퍼 ───────────────────────────────────────────────────────────
+adv_has()  { st_yaml "$1" "'$2' in [v['id'] for v in (st.get('advice') or {}).values()]"; }   # adv_has <dir> <id>
+adv_cats() { st_yaml "$1" 'sorted(v["category"] for v in (st.get("advice") or {}).values())'; }
+id_of()    { jget "$1" "[x['id'] for x in d['findings'] if '$2' in x['summary']][0]"; }       # id_of <fin.json> <요약 조각>
+mc_r1() {   # design-doc(must_catch) 라운드 1 — critic-mc-r1 · codex 부재 · recritic-mc-r1 → 상태 디렉토리($d/fin.json)
+  route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-r1.txt" "$FX/codex-failed.yaml" "$FX/recritic-mc-r1.txt.tmpl"
+}
+mc_round() {   # mc_round <dir> <doc> <critic> <out-fin> — 다음 라운드를 codex 부재 · 빈 재비판으로 finalize
+  next_round "$1" "$2" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$1" --critic "$(critic_now "$1" "$3")" \
+    --codex "$(codex_now "$1" "$FX/codex-failed.yaml")" > "$1/prep-next.json"
+  py docreview_route.py finalize --state-dir "$1" --recritic "$FX/recritic-empty.txt" --doc "$2" > "$4"
+}
+
+# ── AC1 — brief 프로필 fixture 둘 ──────────────────────────────────────────
+case_AC1_brief_direction_only() {
+  local d; d="$(route_r1 "$PROF_MC/brief.md" "$FX/brief-sample.md" "$FX/critic-brief-direction.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  assert_eq "$(gsum "$d" 'd["approval_ready"], d["round_gate_needed"]')" "(True, False)" \
+    "AC1(i): direction decide 만 나온 라운드 1 — 승인 가능 · 라운드 게이트 없음"
+  assert_eq "$(adv_cats "$d")" "['direction']" "AC1(i): direction 은 advice 원장에 있다"
+  assert_eq "$(st_yaml "$d" 'len(st["decides"]), len(st["fixes"]), len(st["asks"])')" "(0, 0, 0)" "AC1(i): 차단 원장 셋이 비었다"
+  rm -rf "$d"
+}
+case_AC1_brief_direction_distortion() {
+  local d; d="$(route_r1 "$PROF_MC/brief.md" "$FX/brief-sample.md" "$FX/critic-brief-direction-distortion.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  assert_eq "$(st_yaml "$d" 'sorted(st["findings"][i]["category"] for i in list(st["decides"]) + list(st["fixes"]))')" "['distortion']" \
+    "AC1(ii): distortion 은 차단 원장(fixes)에 있다"
+  assert_eq "$(gsum "$d" 'd["approval_ready"]')" "False" "AC1(ii): 승인이 막힌다"
+  assert_eq "$(adv_cats "$d")" "['direction']" "AC1(ii): direction 은 advice 원장에 있다"
+  rm -rf "$d"
+}
+
+# ── AC3 양의 짝 — 지목하면 참고 키 · 참고 줄이 선다(음은 골든 12파일이 잰다) ─────
+case_AC3_reference_line_positive() {
+  local d e; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"; e="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_eq "$(jget "$d/fin.json" '"advice" in d and "advice_new" in d and "mc_preexisting_new" in d')" "True" \
+    "AC3(양의 짝): must_catch 를 지목한 프로필의 보고서에 참고 키가 선다"
+  assert_grep "$(py docreview_state.py gate --state-dir "$d" --render)" \
+    '^참고 [0-9]+건\(이번 라운드 새 [0-9]+ · 반복 [0-9]+\) — 끝에서 한 목록으로' "AC3(양의 짝): 게이트 렌더에 참고 줄이 선다"
+  assert_eq "$(jget "$e/fin.json" '"advice" in d or "advice_new" in d')" "False" "AC3(음): 필드 없는 사본 프로필의 보고서에는 참고 키가 없다"
+  assert_not_contains "$(py docreview_state.py gate --state-dir "$e" --render)" "끝에서 한 목록으로" "AC3(음): 필드 없는 사본 프로필의 렌더에는 참고 줄이 없다"
+  assert_eq "$(st_yaml "$e" '"advice" in st')" "False" "AC3(음): 필드 없는 사본 프로필의 원장에는 advice 키가 없다"
+  rm -rf "$d" "$e"
+}
+
+# ── AC13(1 걸음 몫) — 라운드 1 advisory fix 는 fixes, 같은 축 decide · (blocks 없는) ask 는 advice ────
+case_AC13_advisory_decide_ask_to_advice() {
+  local d f6 f20 f21; d="$(mc_r1)"
+  f6="$(fsum "$d" 'AD6:' '["id"]')"; f20="$(fsum "$d" 'AD20:' '["id"]')"; f21="$(fsum "$d" 'AD21:' '["id"]')"
+  assert_eq "$(st_yaml "$d" "'$f6' in st['fixes']") $(adv_has "$d" "$f6")" "True False" \
+    "AC13: 보호 헤딩 밖 ambiguity fix 는 fixes 원장에 있고 advice 에 없다"
+  assert_eq "$(adv_has "$d" "$f20") $(adv_has "$d" "$f21")" "True True" "AC13: 같은 축의 decide · ask 는 advice 에 있다"
+  assert_eq "$(st_yaml "$d" "st['findings']['$f20']['route'], '$f20' in st['decides'], '$f21' in st['asks']")" "('advice', False, False)" \
+    "AC13: advice 항목은 decides · asks 에 없고 finding 에 route: advice 표지가 있다"
+  rm -rf "$d"
+}
+
+# ── AC19 — 보호 헤딩 승격분 ──────────────────────────────────────────────────
+case_AC19_promoted_advisory_fix() {
+  local d f8 f9; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-promoted.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  f8="$(fsum "$d" 'AD8:' '["id"]')"
+  assert_eq "$(fsum "$d" 'AD8:' '["promoted_from"]') $(adv_has "$d" "$f8")" "fix True" \
+    "AC19: 보호 헤딩(Goals) 안 advisory fix 는 decide 로 승격된 뒤 advice 에 있다"
+  assert_eq "$(gsum "$d" 'd["round_gate_needed"], d["approval_ready"]')" "(False, True)" "AC19: 승격분은 라운드 게이트를 켜지 않는다"
+  rm -rf "$d"; d="$(mc_r1)"; f9="$(fsum "$d" 'MC9:' '["id"]')"
+  assert_eq "$(st_yaml "$d" "'$f9' in st['decides'], st['findings']['$f9']['promoted_from']")" "(True, 'fix')" \
+    "AC19: 같은 자리의 must-catch fix 는 현행대로 decides 로 승격된다"
+  rm -rf "$d"
+}
+
+# ── AC5 · AC9 — 라운드 2 의 1회 규칙 · 선재 절의 새 must-catch ─────────────────────
+case_AC5_AC9_round2() {
+  local d rc_ rg rd; d="$(mc_r1)"
+  mc_round "$d" "$FX/design-sample-r2.md" "$FX/critic-mc-r2.txt" "$d/fin2.json"
+  rc_="$(id_of "$d/fin2.json" 'R2C:')"; rg="$(id_of "$d/fin2.json" 'R2G:')"; rd="$(id_of "$d/fin2.json" 'R2D:')"
+  assert_eq "$(jget "$d/fin2.json" 'd["advice_new"], d["advice_repeat"]')" "(1, 1)" \
+    "AC5: 라운드 2 — 새 버킷 1(listed) · 라운드 1 에 오른 버킷 1(repeat)"
+  assert_eq "$(adv_has "$d" "$rg") $(adv_has "$d" "$rc_") $(st_yaml "$d" "st['findings']['$rc_']['route']")" "True False advice" \
+    "AC5: 새 버킷(R2G)은 목록에 오르고, 반복 버킷(R2C)은 목록에 없고 advice 표지만 단다"
+  assert_eq "$(jget "$d/fin2.json" 'd["mc_preexisting_new"]')" "1" \
+    "AC9: 해시 불변 절(#1-context)의 새 계보 must-catch(R2D)만 센다 — 바뀐 절(R2E) · 계보 후속(R2F)은 세지 않는다"
+  assert_eq "$(st_yaml "$d" "'$rd' in st['decides']")" "True" "AC9: 관측은 동작을 바꾸지 않는다 — R2D 는 decides 에 있다"
+  rm -rf "$d"
+}
+case_AC9_child_section_changed() {
+  local d; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-empty.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  mc_round "$d" "$FX/design-sample-child.md" "$FX/critic-mc-child.txt" "$d/fin2.json"
+  assert_eq "$(jget "$d/fin2.json" 'd["mc_preexisting_new"]')" "1" \
+    "AC9: 하위 절(5.1)이 바뀐 상위 앵커(#5-architecture)의 새 must-catch 는 선재로 세지 않는다 — 안 바뀐 #1-context 것만 센다"
+  rm -rf "$d"
+}

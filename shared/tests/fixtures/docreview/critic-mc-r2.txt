@@ -1,0 +1,31 @@
+```docreview-layer1
+- ref: r2c
+  category: overdesign
+  anchor: "#1-context"
+  disposition: decide
+  summary: "R2C: 맥락 절이 여전히 과하다"
+- ref: r2g
+  category: tradeoffs
+  anchor: "#1-context"
+  disposition: decide
+  summary: "R2G: 맥락 절의 기각 사유가 확정과 어긋난다"
+- ref: r2d
+  category: goal_fit
+  anchor: "#1-context"
+  disposition: decide
+  summary: "R2D: 안 바뀐 맥락 절이 목표를 비껴간다"
+- ref: r2e
+  category: goal_fit
+  anchor: "#2-goals"
+  disposition: decide
+  summary: "R2E: 바뀐 목표 절이 목표를 비껴간다"
+- ref: r2f
+  category: scope
+  anchor: "#3-non-goals"
+  disposition: decide
+  summary: "R2F: Non-goals 가 여전히 범위를 뺐다"
+```
+
+```docreview-layer2
+[]
+```
