@@ -202,7 +202,8 @@ else:
         out("OK", "헌장에 이력에서 사라진 식별자 모양 이름이 없다")
 
 # ── AC20: 공개 계약 · 헌장에 옛 표면이 없다 ───────────────────────────────
-FORBID = re.compile(r"runtime-verifier|(?i:\b(?:2|two)[- ]gates?\b)")
+# 한국어형(「두 게이트」 · 「2-게이트」 · 「2게이트」)도 잡는다 — 헌장은 Korean-primary 다.
+FORBID = re.compile(r"runtime-verifier|(?i:\b(?:2|two)[- ]gates?\b)|(?:두|2)[ -]?게이트")
 for p in (".claude-plugin/marketplace.json", "plugins/quality-gates/.claude-plugin/plugin.json", "CLAUDE.md"):
     t = read(p)
     if t is None:
