@@ -59,7 +59,7 @@ aggregate_yaml="$qg_run_tmp/aggregate.yaml"      # iteration 당 1개 (R6 집계
 
 **이 블록에 `git` 이 새로 들어왔다.** `allowed-tools` 에 항목이 없는 맨 셸 명령이 하나
 늘었고(`pwd`·`printf`·`echo`·`cd`·`mv` 와 같은 부류), 그 부류가 항목을 필요로 하는지는
-여전히 **미측정**이다(§11 ㉜). 항목을 늘리지 않는 판단은 그대로다 — 예정된 차등 테스트
+여전히 **미측정**이다. 항목을 늘리지 않는 판단은 그대로다 — 예정된 차등 테스트
 실측이 이제 이 명령까지 함께 관측한다.
 
 **빈 `$sealed_root` 검사가 따로 있는 이유는 `$project_dir` 의 것과 같다.** `rev-parse` 가
@@ -111,6 +111,8 @@ fail-open 의 입력이다.
 | | `$qg_run_tmp/baseline-$runner.tsv` | R4 기록 → R6 소비. **가장 나쁘다** — 행을 `pass`→`fail` 로 뒤집으면 모든 `NEW_REGRESSION` 이 `PRE_EXISTING` 으로 접힌다 |
 | | `$qg_run_tmp/head-$runner.tsv` | R5b 기록 → R6 소비. 사이에 R6 의 flaky 재실행이 `$head_tree_dir` 에서 저장소 코드를 돌리고 같은 파일에 행을 다시 쓴다 |
 | | `$qg_run_tmp/per-adapter-$runner.yaml` | R6 어댑터별 기록 → R6 말미 `--aggregate` 소비. 사이에 같은 flaky 재실행 |
+| | 리포 루트의 `.claude/quality-gates/<sid>/topic-scope.txt` | SKILL ① 1a 기록 → R-init(R4 앞) · Step 4 `--scope` 소비. `head_commit:` 변조는 R-init 의 `create-head --topic` 재도출 대조가 잡지만, Step 4 소비는 R4 · R5b · R6 뒤라 `status:` · 튜플 변조가 사유와 `scope:` 블록을 바꿀 수 있다. 봉인하지 않는다 — 아래 잔여 결함과 같은 축 |
+| | `$head_tree_dir`(선언 경로) | R-init 생성 → R5b · R6 소비. 창은 R4 에서 열린다 — 선언 경로의 HEAD 축 트리는 R-init 에서 서므로 R4 가 기준선 트리에서 저장소 코드를 돌리는 동안 이미 디스크에 있다. 세션 경로는 R5b 에서 서므로 이 창이 없다 |
 | **창 없음** | `$qg_run_tmp/aggregate.yaml` | R6 말미 기록 → R8 소비. 사이에 저장소 코드가 돌지 않는다 |
 
 **그리고 배정 행 파일의 집행은 *부재*에 실려 있다.** 바로 아래 R1b 의 원자적 쓰기는
@@ -123,11 +125,11 @@ fail-open 의 입력이다.
 오케스트레이터 턴 값이라는 사실에 기대는데, 이 시나리오에서 `assign_rc=0` 은 **정상값**
 이고 파일도 **정상적으로 존재**한다. 즉 1차 라우팅은 arm 1("정상 진행")으로 제대로
 발화하며 아무것도 제약하지 않는다. `assign` 이 실패할 필요도, 우연이 겹칠 필요도 없다 —
-이미 있는 파일을 0바이트로 자르는 것 하나로 §11 ㉓ 집행이 발화하지 않고
+이미 있는 파일을 0바이트로 자르는 것 하나로 `unclaimed` 집행이 발화하지 않고
 `floor:verification` 이 `closed` 로 남는다.
 
-이 축은 §6.7 S1(잔여 결함)이며 **열려 있다** — 닫는 모양은 `snapshot_digest` 선례
-(오케스트레이터가 봉인을 쥔다)이거나 §11 ㉛ 의 생산자-발행 terminator 이고, **여섯 전부에
+이 축은 잔여 결함이며 **열려 있다** — 닫는 모양은 `snapshot_digest` 선례
+(오케스트레이터가 봉인을 쥔다)이거나 생산자-발행 terminator 이고, **여섯 전부에
 걸거나 하나도 안 걸어야 한다**(하나만 봉인하면 나머지에 대한 공시가 안심시키는 방향으로
 거짓이 된다). **행 수를 모델이 전사해 두 번째 인자로 넘기는 모양은 안 된다** — 오케스트레이터가
 행 수를 배울 곳이 그 파일뿐이라 대조 양쪽이 같은 의심 산출물에서 나오고, 이 라운드가 일부러
@@ -177,13 +179,45 @@ no 이고 기준선 트리도 만들어진다; 그 창을 닫는 결정론 수�
 
 > `> [quality-gates] baseline: <base> @ <merge_base 앞 12자> (<ahead>커밋 앞섬)`
 
+**기준선 커밋 · HEAD 축 · 스캔 트리 — 선언 경로면 여기서 먼저 선다.** ① 1a 가 쓴 스코프
+파일이 `status: ok` 면 기준선은 경계이고, HEAD 축은 1a 의 합친 커밋에서 **지금** 만든다 —
+`create-head --topic` 이 합친 트리를 다시 도출해 대조하므로 1a 뒤 워킹트리가 바뀌었으면
+죽는다. 형제 구성원에만 있는 테스트 파일은 합친 트리에만 있으므로 R1a · R1b 도 그 트리를
+본다:
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+S="$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"
+if [ "$(sed -n 's/^status: //p' "$S" 2>/dev/null)" = ok ]; then
+  baseline_commit=$(sed -n 's/^boundary: //p' "$S")
+  topic_key=$(sed -n 's/^topic_key: //p' "$S")
+  sealed=$(sed -n 's/^head_commit: //p' "$S")
+  head_tree_dir=$("$QG/scripts/qg-worktree.sh" create-head "$sealed" "<session-id>" --topic "$topic_key") || head_tree_dir=""
+  scan_dir="${head_tree_dir:-$project_dir}"
+else
+  baseline_commit="<위 6키의 merge_base>"; topic_key=""; sealed=""; head_tree_dir=""
+  scan_dir="$project_dir"
+fi
+printf 'baseline_commit=%s\ntopic_key=%s\nsealed=%s\nhead_tree_dir=%s\nscan_dir=%s\n' "$baseline_commit" "$topic_key" "$sealed" "$head_tree_dir" "$scan_dir"
+```
+
+다섯 값을 오케스트레이터 변수로 붙잡아 R6 까지 들고 간다. 선언 경로에서 `create-head` 가
+죽었으면(`$head_tree_dir` 빈 값) stderr 를 그대로 보이고 R1a 로 계속 간다 — HEAD 축은 R5b 의
+실패 라우팅 첫 행으로 처리된다. 선언 경로에서는 위 「차등 실행이 불가능한 조건」 표를 쓰지
+않는다 — 기준선이 경계이고 경계는 HEAD 가 아니다. baseline 한 줄은 대신 이것이다:
+
+> `> [quality-gates] baseline: topic <topic_key> @ <baseline_commit 앞 12자>`
+
+② 를 R6 전에 끝내는 모든 경로(R3 `중단` 등)에서 R-init 이 만든 `$head_tree_dir` 가 있으면 R6 의 폐기 펜스를 먼저 돈다.
+
 **Step R1a — 러너 어댑터 감지 (HEAD 트리).**
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-"$QG/scripts/run-test-selection.sh" detect "$project_dir"
+"$QG/scripts/run-test-selection.sh" detect "$scan_dir"
 ```
 
+`$scan_dir` 는 R-init 이 정한다 — 선언 경로면 HEAD 축 트리, 아니면 `$project_dir`.
 감지된 어댑터를 **집합으로** 캡처한다(0개 이상 — 폴리글랏 레포는 복수). 각 어댑터는
 `runner` / `granularity` / `setup_cmd` 3줄이다. 이 집합이 R2 산문·R4·R5b·R6 의
 `--granularity` 로 스레드된다. **감지 표를 여기서 재구현하지 않는다** — 감지 지식은
@@ -202,12 +236,13 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 > `0` = 성공(빈 출력은 *진짜로 후보가 없다*) · `1` = git 레포 아님 · **`4` = 리뷰 범위를
 > diff 하지 못했다.** `4` 를 빈 출력과 같이 다루면 안 된다 — 그 경우 stderr 를 verbatim
 > 노출하고 **`gap` 차원에 사유를 기록**하며, 그 사실이 `verification` 판정에 들어간다.
-> "범위를 확정하지 못했다" 를 "이 diff 는 테스트를 건드리지 않는다" 로 읽는 것이 §6.7 F6
-> 이 이름 붙인 결함이고, 스크립트 헤더가 예전에 *fail-open* 을 지시하고 있어 코드 수정만
-> 으로는 닫히지 않았다(같은 라운드에 헤더도 함께 고쳤다).
+> "범위를 확정하지 못했다" 를 "이 diff 는 테스트를 건드리지 않는다" 로 읽지 않는다.
 | git diff + commit message + PR description | 무엇이 바뀌었고 무엇을 **의도**했나 | **구조적** |
 | 레포 CI 설정의 test-selection | CI 가 무엇을 고르는가 | **참고** — 대체 금지, 차이는 R2 산문에 한 줄 |
 | `test-scope-validator` 분류 | `outdated-suspicion`/`cherry-pick-suspicion` | **부정 신호** — 그렇게 찍힌 테스트는 커버리지로 세지 않음 |
+
+**선언 경로의 후보 보충.** `compute-test-scope-candidates.sh` 는 범위를 스스로 `merge_base..HEAD`(워킹트리가 더러우면 워킹트리)로 잡으므로 형제 · 머지된 구성원의 변경을 모른다.
+선언 경로면(R-init 이 `status: ok` 를 읽었으면) 스코프 파일의 `boundary:` · `tree:` 두 값으로 `git diff --name-only <boundary> <tree>` 를 떠서 그 집합의 테스트 파일과 그 집합의 소스에 이름이 맞는 `$scan_dir` 안의 테스트 파일을 후보에 더한다.
 
 `test-scope-validator` 를 여기서 dispatch 한다 (read-only reviewer; `project_dir` 는
 *preflight* 디렉토리 — 실제 diff 를 본다). Per [Reviewer dispatch contract](#reviewer-dispatch-contract):
@@ -239,7 +274,7 @@ Agent({
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 set -o pipefail
 printf '%s\n' "${candidate_files[@]}" \
-  | "$QG/scripts/run-test-selection.sh" assign "$project_dir" \
+  | "$QG/scripts/run-test-selection.sh" assign "$scan_dir" \
     > "$assign_rows_file.part" \
   && mv -f "$assign_rows_file.part" "$assign_rows_file"
 assign_rc=$?
@@ -303,15 +338,15 @@ assign_rc=$?
 | non-zero, **또는 최종 경로에 파일 부재** | stderr 를 verbatim 으로 노출하고 `verification` 을 **`degraded`** 로 두며 **clean 불가.** 빈 결과를 *"배정할 것이 없었다"* 로 읽지 않는다 |
 
 **행 0개는 실패가 아니다.** `assign` 이 정상 종료하고 행이 0개인 것은 *후보가 비었다* 는
-뜻이고, 그것은 이 인자가 판정하는 축이 **아니다**(§11 ⑭, 열려 있음). 위 표가 가르는 것은
+뜻이고, 그것은 이 인자가 판정하는 축이 **아니다**(빈 스코프 축 — 열려 있다). 위 표가 가르는 것은
 *"생산자가 완주했는가"* 이지 *"결과가 비었는가"* 가 아니다 — 둘을 같은 신호로 접는 것이
-앞 버전의 결함이었고, 반대로 0행을 오류로 만드는 수정은 ⑭ 를 **부수효과로 닫아** 정당한
+앞 버전의 결함이었고, 반대로 0행을 오류로 만드는 수정은 그 축을 **부수효과로 닫아** 정당한
 빈 스코프에서 clean 을 구조적으로 불가능하게 만든다.
 
 **남는 틈 (과장하지 않는다).** `assign` 이 `exit 0` 을 내면서 stdout 이 잘린 경우(예:
 ENOSPC — 그 스크립트는 `printf` 실패를 종료코드로 올리지 않는다)는 이 배선이 잡지
 못한다. 닫는 모양은 생산자가 **행수 포함 완료 선언**을 마지막 줄로 내고 소비자가 그것을
-요구하는 것이며, 이 라운드의 범위 밖이다(§11 에 등재).
+요구하는 것이며, 열려 있다.
 
 그다음 **그 파일을 읽어** unit 목록을 얻는다 — 리다이렉트가 화면 출력을 없앴으므로
 R2 의 5번 필드와 R8 의 `verification` 차원이 쓸 목록은 파일에서 온다.
@@ -362,6 +397,10 @@ R2 의 5번이 곧 생략 목록이다. **생략 목록이 비어 있으면 `Ask
 
 **Step R4 — 기준선 측 (오케스트레이터 단독).**
 
+이 스텝의 기준선 커밋은 R-init 의 `$baseline_commit` 이다 — 선언 경로면 경계, 아니면
+merge_base. 아래 산문의 「merge_base」 는 그 값을 뜻한다. 선언 경로에서는 아래
+`same_as_head` · `worktree_dirty` 스킵 표를 쓰지 않는다 — 언제나 R4 를 돈다.
+
 R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 에서
 `BASELINE_UNRUNNABLE` 로 처리한다. **이때도 `$qg_run_tmp/baseline-$runner.tsv` 는 선택한 unit 마다
 `<unit>\tunrun\t-` 로 채우고 `baseline_detected` 는 `NONE` 이다** — 형제 skip 경로 둘과
@@ -406,7 +445,7 @@ iteration 2 이상은 Retry 가 파일을 고친 뒤라 캐시가 낡았다 — 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/baseline-cache.sh" get \
-  ".claude/quality-gates/baseline-cache" "$merge_base" "$runner" "${units[@]}"
+  ".claude/quality-gates/baseline-cache" "$baseline_commit" "$runner" "${units[@]}"
 ```
 
 적중분만 나온다. 입력 목록과 차집합해 **미적중분**을 얻는다. exit 4(손상)는 전량
@@ -431,7 +470,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 baseline_wt=$("$QG/scripts/qg-worktree.sh" create-baseline \
-  "$merge_base" "<session-id>") || baseline_wt=""
+  "$baseline_commit" "<session-id>") || baseline_wt=""
 ```
 
 **Step R4 ② 실패 라우팅 (형제 R5b 표와 같은 규율 — 관측 없음은 음성 결과가 아니다,
@@ -465,7 +504,7 @@ baseline_wt=$("$QG/scripts/qg-worktree.sh" create-baseline \
 실행하는 저장소 코드가 닿는다. 선택된 전 unit 에 `pass` 를 심으면 ①이 전량 적중이
 되고, 조건부 ②는 **기준선 트리를 아예 만들지 않는다** — merge_base 에 그 어댑터가
 없어서 원래 전량 `unrun` → `BASELINE_UNRUNNABLE` → clean 불가였던 실행이
-`STILL_GREEN` → `closed` → **clean** 가 된다. §5.4 의 비대칭 논증은 실제값이
+`STILL_GREEN` → `closed` → **clean** 가 된다. ① 의 방향 비대칭 논증은 실제값이
 `unrun` 인 이 줄을 세지 않았다 — 결함 축이 아니라 **인증 축**이라 `fail` 전용
 재검증이 닿지 않는다.
 
@@ -554,7 +593,7 @@ bulk 가 red 면 실패한 unit 에 대해서만 `per-unit` 으로 재실행한�
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 printf '%s\n' "${rows[@]}" > "$qg_run_tmp/baseline-$runner.tsv"
 printf '%s\n' "${rows[@]}" | "$QG/scripts/baseline-cache.sh" put \
-  ".claude/quality-gates/baseline-cache" "$merge_base" "$runner"
+  ".claude/quality-gates/baseline-cache" "$baseline_commit" "$runner"
 if [[ -n "${baseline_wt:-}" && -d "$baseline_wt" ]]; then
   "$QG/scripts/qg-worktree.sh" remove "$baseline_wt"
 fi
@@ -596,6 +635,8 @@ path" 에 걸려 **그 세션은 영영 clean 에 도달하지 못한다** — R
 같은 트리에서 코드를 되감았다 복원하면 두 축이 같은 환경이라는 전제가 흐려진다.
 
 **Step R5b — HEAD 측 테스트 실행 (오케스트레이터가 직접).**
+
+**선언 경로면 이 스텝에서 봉인하지 않는다.** R-init 이 `create-head --topic` 으로 만든 `$sealed` · `$head_tree_dir` 를 그대로 쓰고 아래 봉인 펜스를 건너뛴다 — R-init 의 그 호출이 실패했으면(`$head_tree_dir` 빈 값) 아래 실패 라우팅 첫 행 그대로다.
 
 먼저 워킹트리를 **봉인**하고(한 번, 어댑터 공통) 그 봉인 커밋에서 **HEAD 축 전용 트리**를
 만든다:
@@ -654,7 +695,7 @@ authoritative 로 선언하기 때문이다.
 
 | R5b 결과 | 라우팅 |
 |---|---|
-| `seal-worktree.sh` 가 non-zero(`$sealed` 빈 값) · 또는 `create-head` 가 non-zero(`$head_tree_dir` 빈 값) | **HEAD 축을 관측하지 못했다.** stderr 를 verbatim 노출하고, 선택한 unit 마다 `<unit>\tunrun\t-` 로 HEAD 행을 채운 뒤 `verification` 을 **`degraded`** 로 두고 R6 으로 간다. 실제 워킹트리(`$project_dir`)로 **폴백하지 않는다** — 두 축의 환경 대칭이 깨진다. |
+| `seal-worktree.sh` 가 non-zero(`$sealed` 빈 값) · 또는 `create-head`(선언 경로는 R-init 의 `create-head --topic`)가 non-zero(`$head_tree_dir` 빈 값) | **HEAD 축을 관측하지 못했다.** stderr 를 verbatim 노출하고, 선택한 unit 마다 `<unit>\tunrun\t-` 로 HEAD 행을 채운 뒤 `verification` 을 **`degraded`** 로 두고 R6 으로 간다. 실제 워킹트리(`$project_dir`)로 **폴백하지 않는다** — 두 축의 환경 대칭이 깨진다. |
 | `run` 이 non-zero (러너 부재 exit 3 제외 — 그것은 정상 신호다) | 같은 처리. 그 어댑터의 unit 을 `unrun` 으로 채우고 `verification: degraded`. |
 | 위 둘 다 아님 | 정상 — R6 으로 간다. |
 
@@ -717,7 +758,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 *"stale red 가 첫 실행부터 게이트를 막으면 쓸 수 없다"* 를 이유로 통과시키기로 한
 결정을 되돌렸다. 순감이라 철회했다.
 
-**남은 것(정직한 잔여 — §11 ⑰):** 이 값들의 **provenance 는 여전히 검증되지 않는다.**
+**남은 것(정직한 잔여):** 이 값들의 **provenance 는 여전히 검증되지 않는다.**
 형제 `--baseline-detected` 와 같은 등급이다. 닫으려면 `run` 이 자기 실행을 증거 파일로
 남기고 이 스크립트가 그것을 읽어야 하는데, **기준선이 캐시 적중으로 올 때는 그 실행이
 아예 없어** 계약이 성립하지 않는다. 그러니 여기서 mode 를 "고르지" 말고 **각 호출이
@@ -816,7 +857,7 @@ fi
 문자열이므로 무조건 `remove` 를 부르면 그 호출이 죽고, **이미 확정된 degrade 결과가
 R8 에 도달하기 전에 파이프라인이 끊긴다** — 정리 실패가 판정을 삼키는 형태다.
 정리는 판정 경로가 아니므로 여기서 조용히 건너뛰는 것이 옳다(트리가 없으면 지울 것도
-없다). 트리는 있는데 `remove` 가 실패하는 경우는 §11 ⑳ 의 누수이고, 그 사실은 stderr 로
+없다). 트리는 있는데 `remove` 가 실패하는 경우는 알려진 누수이고, 그 사실은 stderr 로
 드러나되 verdict 를 바꾸지 않는다.
 
 **이 폐기는 R6 의 *모든* 종료 경로에서 실행한다 — 정상 종료만이 아니다
@@ -914,7 +955,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 
 non-zero 면 stderr 를 verbatim 으로 노출하고 **clean 불가**.
 
-**`--aggregate` 는 필수이고, 이 게이트가 여기서 하는 일은 위 전사의 대조다 (§11 ⑱).**
+**`--aggregate` 는 필수이고, 이 게이트가 여기서 하는 일은 위 전사의 대조다.**
 바로 앞 문단이 *"R6 이 낸 `attribution_status` 를 그대로 옮긴다"* 고 지시하는데, 옮겨
 적은 값이 기계값과 같은지는 지금까지 아무도 보지 않았다 — `degraded` 를 `closed` 로
 옮기면 floor 5차원 전부 `closed` 가 되어 **clean 행을 그대로 만족시킨다.** 이제 게이트가
@@ -922,7 +963,7 @@ non-zero 면 stderr 를 verbatim 으로 노출하고 **clean 불가**.
 `--baseline-detected` 와 같다: 선택이면 넘기지 않은 호출자가 조용히 면제받고, 그
 면제가 이 인자가 닫으려는 fail-open 의 모양 그 자체다.
 
-**`--assign-rows` 도 필수이고, 바로 위 인용 블록의 `unclaimed` 규칙을 집행한다 (§11 ㉓).**
+**`--assign-rows` 도 필수이고, 바로 위 인용 블록의 `unclaimed` 규칙을 집행한다.**
 그 규칙은 지금까지 **읽는 기계가 없는 산문 한 문장**이었다 — `assign` 의 구조적 거부
 3곳(워크트리 밖 unit · `unittest_can_judge` 실패 · 실행 수단 없음)이 전부 이 문장에
 종착했고, `unclaimed` unit 은 어느 어댑터의 unit 목록에도 없어 `--expected` 에도 안
@@ -937,10 +978,10 @@ false + 5차원 `closed` → **clean** 가 성립했다. 이제 게이트가 `$a
 
 **닫히지 않은 이웃 (과장하지 않는다).** 이 두 대조는 *전사* 축만 닫는다. `$aggregate_yaml`
 과 `$assign_rows_file` 이 정말 그 실행의 스크립트 출력인지(custody)는 여전히 검사하지
-않는다 — §6.7 S1 과 같은 축이며 열려 있다. 또 `verdict_input` 3플래그는 원장에 실리지
+않는다 — R-init 의 잔여 결함과 같은 축이며 열려 있다. 또 `verdict_input` 3플래그는 원장에 실리지
 않으므로 이 경로로는 대조할 대상이 없다. 그리고 **배정 행이 0개인 경우(빈 스코프)는
 이 인자가 판정하지 않는다** — `unclaimed` 0건과 구분이 안 되므로 여기서 닫히는 것처럼
-쓰면 거짓이다. 그 축은 §11 ⑭ 이며 열려 있다.
+쓰면 거짓이다. 그 축(빈 스코프)은 열려 있다.
 
 `granularity: bulk` 어댑터가 실행됐으면 최종 보고서에도 **항상**
 `커버리지 미보장(러너가 선택을 무시함)` 을 남긴다 — 그 실행의 주장은 "영향분을

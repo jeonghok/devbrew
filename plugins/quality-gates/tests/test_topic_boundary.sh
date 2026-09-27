@@ -35,6 +35,16 @@ decl_commit() {   # <파일> <내용> <메시지> — 토픽 선언 트레일러
 Spec: $KEY"
 }
 
+# detect 출력 4줄 계약 — 총 줄 수와 «그 넷의 키가 고정 넷뿐임»을 함께 잰다.
+# 총 줄 수만 세면 떠돌이 줄(예: 빈 Spec: 값이 sort -u 로 topic_key 값에 개행째 섞여
+# 들어와 실제로는 5줄인데 우연히 4로 셀 수 있는 경우)를 놓친다 — 두 단언을 묶는다.
+assert_detect_shape() {   # <out> <label>
+  local out="$1" label="$2"
+  assert_eq "$(printf '%s\n' "$out" | grep -c .)" "4" "$label: 정확히 4줄"
+  assert_eq "$(printf '%s\n' "$out" | grep -vcE '^(topic_key|status|reason|base_ref): ')" "0" \
+    "$label: 4줄 모두 지정된 키 중 하나다(떠돌이 줄 없음)"
+}
+
 # ── F1: 형제 브랜치 둘이 같은 토픽을 선언 → 한 집합 (AC3) ──────────────────
 case_f1_two_siblings() {
   new_repo
@@ -523,6 +533,116 @@ case_resolve_tips_feed_combine() {
   cleanup
 }
 
+# ── PR1 이월: 로컬-이름 우선 dedupe 가 정렬 순서에 기댄다 — 순서를 기본값에 맡기지 않는다 ──
+case_for_each_ref_sort_pinned() {
+  local got
+  got=$(grep -n 'for-each-ref' "$RT" | grep -vE '^[0-9]+:[[:space:]]*#')
+  assert_eq "$(printf '%s\n' "$got" | grep -c .)" "1" "for-each-ref 호출은 한 곳이다"
+  assert_grep "$got" '--sort=refname ' "그 호출이 같은 줄에 --sort=refname 을 싣는다"
+  assert_not_grep "$got" '--sort=-' "역순(--sort=-…)이 아니다"
+}
+
+# ── PR1 이월: base 원격 ref · origin/HEAD 는 선언을 «담아도» 구성원이 아니다 ─────────
+#    `%(refname:short)` 는 refs/remotes/origin/HEAD 를 `origin` 으로 찍는다(실측 P4). 다만
+#    main · origin/main · origin/HEAD 는 같은 tip 이라 tip 중복 제거가 사전순으로 먼저 스캔된
+#    `main` 하나만 남긴다 — 첫 검사(base_ref 의 조상인 ref 를 뺀다)를 지우는 변이에서 이 락은
+#    `main` 으로 발화한다.
+case_base_remote_ref_never_member() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q main; git merge -q --no-ff topicA -m "merge topicA"
+  git update-ref refs/remotes/origin/main HEAD
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+  git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "base 원격 ref 가 선언 커밋을 담아도 status: ok"
+  assert_eq "$(field base_ref "$out")" "origin/main" "base_ref 는 origin/HEAD 가 가리키는 origin/main"
+  assert_not_grep "$(field branches "$out")" '(^|,)(origin|origin/HEAD|origin/main|main)(,|$)' \
+    "origin/HEAD(=origin) · origin/main · main 은 구성원이 아니다"
+  assert_grep "$(field branches "$out")" '(^|,)topicB(,|$)' "살아 있는 구성원 topicB 는 있다(양의 짝)"
+  assert_grep "$(field branches "$out")" '(^|,)merged:[0-9a-f]{40}(,|$)' "머지된 topicA 는 merged: 로 있다(양의 짝)"
+  cleanup
+}
+
+# ── detect: 현재 브랜치가 base 위에 얹은 커밋의 트레일러 → 토픽 키 (R-AI) ────────────
+case_detect_statuses() {
+  new_repo
+  local R out; R=$(git rev-parse HEAD)
+  git checkout -q -b plain; echo p > p.txt; git add p.txt; git commit -qm plain
+  out=$(bash "$RT" detect)
+  assert_eq "$(field status "$out")" "no-declaration" "detect: 선언 없음"
+  assert_eq "$(field topic_key "$out")" "-" "detect: 선언 없으면 topic_key: -"
+  assert_detect_shape "$out" "detect(no-declaration)"
+  git checkout -q -b late "$R"; echo u > u.txt; git add u.txt; git commit -qm "undeclared first"
+  decl_commit l.txt l1 "declared later"
+  out=$(bash "$RT" detect)
+  assert_eq "$(field status "$out")" "ok" "detect: 뒤 커밋에만 트레일러 → ok"
+  assert_eq "$(field topic_key "$out")" "$KEY" "detect: topic_key 는 트레일러 값 전체(조각 포함)"
+  assert_detect_shape "$out" "detect(ok)"
+  git checkout -q -b stacked "$R"; decl_commit s1.txt s1 "s1"
+  git commit -q --allow-empty -m "s2
+
+Spec: docs/x-design.md#pr2"
+  out=$(bash "$RT" detect)
+  assert_eq "$(field status "$out")" "declaration-invalid" "detect: 한 브랜치에 키 둘 → declaration-invalid"
+  assert_grep "$(field reason "$out")" '2 distinct' "detect: reason 이 키 수를 적는다"
+  assert_eq "$(field topic_key "$out")" "-" "detect: 키가 둘이면 topic_key: -"
+  assert_detect_shape "$out" "detect(declaration-invalid)"
+  git checkout -q --detach HEAD
+  out=$(bash "$RT" detect)
+  assert_eq "$(field status "$out")" "base-unresolved" "detect: detached HEAD → base-unresolved"
+  assert_detect_shape "$out" "detect(base-unresolved)"
+  cleanup
+}
+
+# ── detect: 값이 빈 Spec: 트레일러는 키로 세지 않는다(리뷰 I1) ──────────────
+#    `--cleanup=verbatim` 으로 트레일러 뒤 공백을 보존해 `Spec: `(값 없음) 줄을 만든다.
+#    sort -u 는 빈 문자열을 진짜 키보다 앞에 두므로, 빈 값을 거르지 않으면 그것이
+#    topic_key 자리에 개행째 섞여 들어가고 진짜 키가 5번째 줄로 떠돈다.
+case_detect_empty_spec_value_excluded() {
+  new_repo
+  local R; R=$(git rev-parse HEAD)
+  git checkout -q -b withblank "$R"
+  git commit -q --cleanup=verbatim --allow-empty -m "blank spec
+
+Spec: "
+  decl_commit real.txt r1 "real key"
+  local out; out=$(bash "$RT" detect)
+  assert_eq "$(field status "$out")" "ok" "detect: 빈 Spec: 값과 진짜 키 하나 → ok(빈 값은 무시)"
+  assert_eq "$(field topic_key "$out")" "$KEY" "detect: topic_key 는 진짜 키(빈 값이 앞자리를 차지하지 않는다)"
+  assert_detect_shape "$out" "detect(빈 Spec 값 배제)"
+  cleanup
+}
+
+case_detect_ignores_base_history() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q main; git merge -q --no-ff topicA -m "merge topicA"
+  git checkout -q -b next; echo n > n.txt; git add n.txt; git commit -qm "next (선언 없음)"
+  assert_eq "$(field status "$(bash "$RT" detect)")" "no-declaration" \
+    "detect: base 에 이미 든 앞 토픽의 트레일러는 세지 않는다"
+  cleanup
+}
+
+case_detect_lowercase_trailer_ignored() {
+  new_repo
+  git checkout -q -b low; echo l > l.txt; git add l.txt
+  git commit -qm "low
+
+spec: $KEY"
+  assert_eq "$(field status "$(bash "$RT" detect)")" "no-declaration" \
+    "detect: 소문자 spec: 는 선언이 아니다(nkeys 와 같은 계열)"
+  cleanup
+}
+
+case_detect_usage() {
+  new_repo
+  local rc; bash "$RT" detect extra >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "detect 는 인자를 받지 않는다(exit 2)"
+  cleanup
+}
+
 for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_f2_boundary_merged_not_hidden case_f3_merged_ref_deleted \
          case_f4_undeclared_ancestor_included case_f5_fragment_discriminates \
@@ -538,7 +658,11 @@ for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_ten_keys_always \
          case_combine_clean case_combine_conflict case_combine_edges \
          case_combine_three_clean case_combine_three_conflict_attribution \
-         case_resolve_tips_feed_combine; do
+         case_resolve_tips_feed_combine \
+         case_for_each_ref_sort_pinned case_base_remote_ref_never_member \
+         case_detect_statuses case_detect_ignores_base_history \
+         case_detect_lowercase_trailer_ignored case_detect_usage \
+         case_detect_empty_spec_value_excluded; do
   echo "== $c"; $c
 done
 finish

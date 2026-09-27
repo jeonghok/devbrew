@@ -3,6 +3,8 @@
 # AC9 AC39 AC40 AC46 AC52 AC54 AC56(run) · T7 T35 T36a T43 T50 T52 T54(run)
 # · T70 T71 T72(probe — SR1) · M10 M16 M26
 set -u
+# 앰비언트 kill switch 가 켜진 셸에서도 같은 결과여야 한다 — 스위치를 재는 케이스는 자기 호출에만 켠다.
+unset DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 RTS="$PLUGIN_ROOT/scripts/run-test-selection.sh"
@@ -280,6 +282,55 @@ case_run_test_failure_vs_absent_runner() {
   if [[ $rc -eq 3 && "$out" == "BULK${TAB}unrun${TAB}-" ]]; then
     ok "어댑터 사용 불가 → exit 3 + 전 unit unrun"
   else no "exit 3 (rc=$rc out='$out')"; fi
+  rmw
+}
+
+# M7 — 차등 테스트 kill switch 는 보안 컨트롤이다. 저장소 코드(setup_cmd · 테스트)를 돌리는
+# 유일한 관문(adapter_usable)에서도 선다 — 스위치를 켠 채 들어온 probe · run 은 아무것도
+# 실행하지 않는다.
+case_differential_kill_switch_refuses_repo_code() {
+  mkw; mkdir -p "$W/tests"
+  printf '#!/usr/bin/env bash\ntouch "%s/RAN"\n' "$W" > "$W/tests/t.sh"; chmod +x "$W/tests/t.sh"
+  local out rc
+  out=$(DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1 bash "$RTS" probe "$W" shell 2>/dev/null); rc=$?
+  assert_eq "$rc" "3" "스위치 on: probe exit 3"
+  assert_grep "$out" '^usable: no$' "스위치 on: usable: no"
+  assert_grep "$out" '^reason: kill_switch$' "스위치 on: reason: kill_switch"
+  out=$(DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1 bash "$RTS" run "$W" shell per-unit tests/t.sh 2>/dev/null); rc=$?
+  assert_eq "$rc" "3" "스위치 on: run exit 3"
+  assert_eq "$out" "tests/t.sh${TAB}unrun${TAB}-" "스위치 on: 전 unit unrun"
+  assert_eq "$([ -e "$W/RAN" ] && echo ran || echo not-ran)" "not-ran" "스위치 on: 테스트가 한 번도 돌지 않았다"
+  DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=0 bash "$RTS" probe "$W" shell >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "0" "값이 1 이 아니면 스위치가 아니다"
+  bash "$RTS" run "$W" shell per-unit tests/t.sh >/dev/null 2>&1
+  assert_eq "$([ -e "$W/RAN" ] && echo ran || echo not-ran)" "ran" "스위치 off: 같은 호출이 테스트를 돌린다(양의 짝)"
+  rmw
+}
+
+# I1 (Task 5 리뷰 라운드 1) — 위 케이스는 "테스트가 돌지 않았다" 축만 쟀다. shell 러너의
+# setup_cmd 는 언제나 `-` 라 그 fixture 로는 스위치가 setup_cmd **앞**에 있는지 뒤에
+# 있는지를 구분하지 못한다(실측: 스위치 블록을 `sh -c "$scmd"` 뒤로 옮겨도 63/63 GREEN).
+# README 가 이 스위치의 1순위 이유로 꼽는 표면이 setup_cmd(install lifecycle)이므로, 그
+# 표면을 실제로 가진 fixture(`uv.lock` + `pytest.ini` → python_env_of=uv →
+# setup_cmd_of(pytest)='uv sync --frozen')로 순서를 잰다. PATH 맨 앞의 가짜 `uv` 스텁은
+# 이 파일의 기존 패턴(case_package_unit_updot_symlink_escape 의 `go` 스텁)을 따른다.
+case_differential_kill_switch_precedes_setup_cmd() {
+  mkw
+  : > "$W/pytest.ini"
+  : > "$W/uv.lock"
+  local bindir; bindir=$(mktemp -d) || exit 1
+  printf '#!/usr/bin/env bash\ncase "$1" in\n  sync) touch "%s/SETUP_RAN"; exit 0 ;;\n  *) exit 1 ;;\nesac\n' "$W" \
+    > "$bindir/uv"; chmod +x "$bindir/uv"
+  local out rc
+  out=$(PATH="$bindir:$PATH" DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1 bash "$RTS" probe "$W" pytest 2>/dev/null); rc=$?
+  assert_eq "$rc" "3" "스위치 on: setup fixture 에서도 probe exit 3"
+  assert_eq "$([ -e "$W/SETUP_RAN" ] && echo ran || echo not-ran)" "not-ran" "스위치 on: probe 가 setup_cmd 를 돌리지 않았다(kill switch 가 setup_cmd 보다 앞)"
+  out=$(PATH="$bindir:$PATH" DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1 bash "$RTS" run "$W" pytest per-unit tests/test_x.py 2>/dev/null); rc=$?
+  assert_eq "$rc" "3" "스위치 on: setup fixture 에서도 run exit 3"
+  assert_eq "$([ -e "$W/SETUP_RAN" ] && echo ran || echo not-ran)" "not-ran" "스위치 on: run 경로도 setup_cmd 를 돌리지 않았다"
+  PATH="$bindir:$PATH" bash "$RTS" probe "$W" pytest >/dev/null 2>&1
+  assert_eq "$([ -e "$W/SETUP_RAN" ] && echo ran || echo not-ran)" "ran" "스위치 off: 같은 fixture 에서 setup_cmd 가 돈다(양의 짝)"
+  rm -rf "$bindir"
   rmw
 }
 
@@ -871,7 +922,8 @@ for c in case_assign_go_package case_assign_unclaimed case_assign_unittest_skips
          case_assign_residual_no_absorber case_assign_shell_scope_excludes_non_test \
          case_assign_shell_scope_includes_nested case_assign_dedup_claimed_file \
          case_assign_dedup_unclaimed case_assign_dedup_is_literal_not_regex \
-         case_assign_spec_any_extension case_run_test_failure_vs_absent_runner \
+         case_assign_spec_any_extension case_run_test_failure_vs_absent_runner case_differential_kill_switch_refuses_repo_code \
+         case_differential_kill_switch_precedes_setup_cmd \
          case_run_total_function case_run_absent case_run_bulk_green \
          case_run_shell_refuses_out_of_scope_unit case_run_unknown_runner_usage_error \
          case_run_bulk_partial_absent case_run_bulk_refused_does_not_corrupt_sibling \

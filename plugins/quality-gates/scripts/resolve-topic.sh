@@ -3,12 +3,13 @@
 #   (설계 2026-09-21 §6.2, AC3·AC4·AC5·AC15·AC16)
 #
 # Subcommands:
+#   detect                -> key: value 4줄 (topic_key · status · reason · base_ref) — 현재 브랜치의 토픽 키
 #   resolve <topic-key>   -> key: value 요약 10줄
 #   commits <topic-key>   -> T 의 커밋 SHA (topo-order), 한 줄에 하나
 #
 # **사실만 낸다 — 판정하지 않는다.** `resolve-baseline.sh` 와 같은 계약이다:
 # 고정 키 집합 · 없는 값은 `-`. `resolve` 는 정상 경로에서 언제나 exit 0(판정은 `status:`
-# 값으로 낸다) — `commits` 는 다르다, status != ok 이면 fail-closed 로 exit 3 이다(:47–53).
+# 값으로 낸다) — `commits` 는 다르다, status != ok 이면 fail-closed 로 exit 3 이다(emit() 첫머리).
 # `not-certified` 같은 판정 어휘는 이 층에 없다 — 소비자(PR4)가 `status:` 를 판정으로 옮긴다.
 #
 #   status: ok                  선언 경로로 진행
@@ -29,10 +30,12 @@ die() { echo "resolve-topic: $*" >&2; exit 2; }
 
 SUB="${1:-}"; TOPIC="${2:-}"
 case "$SUB" in
-  resolve|commits) ;;
-  *) die "usage: resolve-topic.sh {resolve|commits} <topic-key>" ;;
+  detect)
+    [ $# -eq 1 ] || die "usage: resolve-topic.sh detect" ;;
+  resolve|commits)
+    [ -n "$TOPIC" ] || die "empty topic key" ;;
+  *) die "usage: resolve-topic.sh {detect | resolve <topic-key> | commits <topic-key>}" ;;
 esac
-[ -n "$TOPIC" ] || die "empty topic key"
 
 SEAL=""
 if [ "${3:-}" = "--seal" ]; then
@@ -69,6 +72,33 @@ emit() {   # <status> <reason>
   exit 0
 }
 
+# ── detect: 현재 브랜치가 선언한 토픽 키 ─────────────────────────────────────────
+# 범위는 `base_ref..HEAD` — 현재 브랜치가 base 위에 얹은 커밋만 본다. base 에 이미 든
+# 앞 토픽의 트레일러까지 세면 머지된 모든 토픽이 현재 브랜치의 선언이 된다.
+# 추출은 아래 nkeys 와 같은 원시-메시지 계열(`%B` + `^Spec: `)이다 — 트레일러 atom 은
+# 소문자 `spec:` 까지 세고, squash-merge 본문의 `Spec:` 줄을 못 센다.
+# status: ok(키 하나) · no-declaration(0) · declaration-invalid(2+) · base-unresolved(base 미해결)
+if [ "$SUB" = "detect" ]; then
+  d_emit() {   # <topic_key> <status> <reason>
+    echo "topic_key: $1"
+    echo "status: $2"
+    echo "reason: ${3:--}"
+    echo "base_ref: $BASE_REF"
+    exit 0
+  }
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || d_emit - base-unresolved "not a git work tree"
+  BASE_REF=$(bash "$SCRIPT_DIR/resolve-baseline.sh" | awk -F': ' '/^base_ref:/{print $2}')
+  [ -n "$BASE_REF" ] && [ "$BASE_REF" != "-" ] || { BASE_REF="-"; d_emit - base-unresolved "resolve-baseline.sh degraded"; }
+  # `grep .` 로 빈 값(예: `--cleanup=verbatim` 이 보존한 `Spec: `)을 세는 집합에서
+  # 먼저 뺀다 — 안 그러면 sort -u 가 빈 문자열을 진짜 키보다 앞에 두어, 아래 `$keys`
+  # 를 그대로 내는 ok 경로에서 topic_key 값에 개행이 섞여 4줄 계약이 깨진다.
+  keys=$(git log --format='%B' "$BASE_REF..HEAD" 2>/dev/null | grep -E '^Spec: ' | sed -E 's/^Spec: //' | grep . | sort -u)
+  n=$(printf '%s\n' "$keys" | grep -c .)
+  [ "$n" -eq 0 ] && d_emit - no-declaration "no Spec trailer on $BASE_REF..HEAD"
+  [ "$n" -gt 1 ] && d_emit - declaration-invalid "current branch carries $n distinct Spec keys"
+  d_emit "$keys" ok "-"
+fi
+
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || emit base-unresolved "not a git work tree"
 
 # base_ref 는 기존 모듈이 푼다 — 후보 체인을 두 벌 두지 않는다.
@@ -98,18 +128,21 @@ repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || emit base-unresolved "
 # `git branch --contains` 를 쓰지 않는다 — 머지된 커밋에 대해 main 과 후손 전부를
 # 돌려줘 끝점을 식별할 수 없다(설계 §7-C).
 #
-# refs/heads **와** refs/remotes 를 함께 스캔한다(§6.2.2 D2 재결정, §8). 선언 발견(C, :80)은
+# refs/heads **와** refs/remotes 를 함께 스캔한다(§6.2.2 D2 재결정, §8). 선언 발견(C)은
 # 이미 `git log --all` 로 원격-추적 ref 까지 보므로, `refs/heads` 만 보면 비대칭이 생겨
 # 머지 안 된 원격-전용 구성원이 1단계를 통과하지 못하고 2단계(머지된 구성원)도 못 받아
 # 고아(declaration-invalid)로 떨어진다 — `git clone` 은 로컬에 `main` 만 만드므로 이것이
 # 신선한 clone·CI 체크아웃의 기본 상태다.
 #
-# `git for-each-ref` 의 기본 정렬은 전체 refname 사전순이라 `refs/heads/*` 가 항상
-# `refs/remotes/*` 보다 먼저 나온다(`h` < `r`) — 그래서 로컬 브랜치가 먼저 처리되고,
-# 아래 tip-SHA 중복 제거가 로컬·원격-추적이 같은 커밋을 가리킬 때 로컬 이름을 자연히
-# 남긴다(뒤에 나온 중복은 건너뛴다).
+# 정렬을 `--sort=refname`(전체 refname 사전순)으로 못 박는다 — `refs/heads/*` 가 항상
+# `refs/remotes/*` 보다 먼저 나와(`h` < `r`) 로컬 브랜치가 먼저 처리되고, 아래 tip-SHA
+# 중복 제거가 로컬·원격-추적이 같은 커밋을 가리킬 때 로컬 이름을 남긴다. 기본 정렬에
+# 맡기면 그 보장이 git 의 기본값에 달린다.
+# base 원격 ref · `origin/HEAD`(`origin` 으로 찍힌다) · 뒤처진 로컬 base 는 base_ref 의
+# 조상-또는-같음이라 아래 첫 검사가 빼낸다(test_topic_boundary.sh
+# case_base_remote_ref_never_member).
 BR_NAMES=""; BR_TIPS=""
-for ref in $(git for-each-ref --format='%(refname:short)' refs/heads refs/remotes 2>/dev/null); do
+for ref in $(git for-each-ref --sort=refname --format='%(refname:short)' refs/heads refs/remotes 2>/dev/null); do
   tip=$(git rev-parse "$ref" 2>/dev/null) || continue
   # base_ref 의 조상인 ref(= main 자신 · 이미 머지돼 tip 이 안 움직인 브랜치)는 뺀다.
   git merge-base --is-ancestor "$tip" "$BASE_REF" 2>/dev/null && continue
@@ -237,7 +270,7 @@ NCOMMITS=$(printf '%s\n' "$TSET" | grep -c .)
 # 조상 전체가 아니라 **T 위에서** 센다 — 조상을 훑으면 main 에 이미 머지된 앞
 # 토픽의 키까지 세어 거짓 양성이 난다.
 #
-# 트레일러 atom(`%(trailers:key=Spec,valueonly)`) 대신 C(:76)와 같은 --grep 계열
+# 트레일러 atom(`%(trailers:key=Spec,valueonly)`) 대신 C 와 같은 --grep 계열
 # 원시-메시지 추출을 쓴다(설계 §6.2.2 는 C 커맨드를 리터럴로 고정 — 반대쪽을 맞춘다).
 # 이 둘은 실제로 갈린다: atom 은 키를 대소문자 무시로 매치해 `spec:` 소문자 트레일러까지
 # 세어 거짓 declaration-invalid 를 내고, 거꾸로 GitHub squash-merge 가 흔히 만드는

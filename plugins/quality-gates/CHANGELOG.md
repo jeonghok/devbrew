@@ -3,6 +3,34 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [9.1.0] — 2026-09-27
+
+**토픽 스코프** — `Spec: <경로>[#<조각>]` 커밋 트레일러로 선언한 작업은 브랜치가 여럿이어도 한 판정 단위가 된다. 선언이 없으면 판정은 바뀌지 않는다 — 판정 꼬리에 `scope:` 블록(`mode: session`)이 공시로 붙는다.
+
+### Added
+- 토픽 스코프 — 현재 브랜치가 base 위에 얹은 커밋의 `Spec:` 트레일러가 토픽 키다. 같은 키를 단 브랜치 전부(원격-추적 · 이미 머지된 구성원 포함)를 모아, 기준선은 그 작업의 시작점(분기점들의 merge-base), HEAD 축은 워킹트리 봉인과 구성원 끝점을 `git merge-tree` 로 순차 합친 트리다. 리뷰 diff · 차등 테스트 · 판정이 그 한 트리를 본다.
+- `scripts/topic-head.sh` — 선언 → 봉인 → 경계 · 끝점 → 합친 트리를 한 번에 풀어 튜플을 낸다. `scripts/resolve-topic.sh detect` — 현재 브랜치의 토픽 키. `detect` 는 값이 빈 `Spec:` 줄을 키에서 뺀다.
+- `scripts/scope_tuple.py` · 합성기 `--scope` — 판정 꼬리에 `scope:` 블록(본 커밋 SHA 전부 · 끝점 · 경계 · 합친 트리 · 충돌 파일)을 싣는다.
+- 판정 사유 `declaration-invalid`(선언 경로 부재 · 한 브랜치에 두 키 · 경계를 셀 수 없음) · `merge-conflict`(끝점 합치기 실패)가 실제로 나온다.
+- `qg-worktree.sh create-head --topic <키>` — 인자 커밋의 트리를 지금 다시 도출한 합친 트리와 대조한다.
+- 락: `tests/test_topic_head.sh` · `tests/test_scope_tuple.sh` · `tests/test_topic_scope_wiring.sh` · `tests/test_qg_objects_unreachable.sh`(봉인 · 합치기 중간 커밋이 ref · reflog 를 얻지 않음 — 그 GC 를 `qg-gc.py` 가 아니라 git 의 prune 에 맡긴다, 설계 재결정).
+
+### Changed
+- 선언이 있으면 trivia escape 를 쓰지 않는다 — 현재 브랜치의 diff 가 한 문장이어도 판정 대상은 토픽 전체다.
+- 선언 경로의 차등 테스트는 어댑터 감지 · unit 배정을 합친 트리에서 한다(형제 구성원에만 있는 테스트 파일).
+- 선언 경로는 R4 의 「차등 실행이 불가능한 조건」 표를 쓰지 않고 R4(기준선 측)를 언제나 돈다 — 기준선이 경계라서 HEAD 와 같지 않다. 선언 없는 실행보다 기준선 실행 비용이 늘 수 있다.
+- 선언을 쓸 수 없으면(`declaration-invalid` · `merge-conflict` 등) 공지 한 줄을 내고 리뷰 · 차등 테스트는 session 스코프로 계속한다.
+- `resolve-topic.sh` 의 ref 스캔 정렬을 `--sort=refname` 으로 못 박는다.
+- 차등 테스트 레퍼런스에서 설치본에 없는 옛 설계 문서의 절 번호(§) 포인터를 걷어냈다(뜻은 그대로).
+- override(`branch` · `--paths`)면 낡은 토픽 스코프 파일을 지운다 — R-init 이 모드와 같은 술어로 갈려 차등 테스트가 session 기준으로 돈다.
+- 알려진 한계: 같은 키를 여러 브랜치에 걸쳐 쓰면 먼저 머지된 브랜치의 변경이 기준선에 숨고 머지 뒤 base 에서 딴 브랜치가 구성원으로 잡힌다 — 조각마다 다른 키를 쓴다(README 「알려진 한계」).
+- 토픽 스코프 파일은 cwd 가 아니라 리포 루트의 `.claude/quality-gates/<session-id>/` 에 둔다 — 하위 디렉토리 cwd 에서 매번 HEAD 축이 `head-commit mismatch` 로 degraded 되던 자리다.
+- 선언 경로의 차등 테스트 후보에 경계..합친 트리의 테스트 파일 · 이름-매칭 테스트를 더한다(레퍼런스 R1b). R6 전에 끝나는 경로에서도 R-init 이 만든 HEAD 축 트리를 폐기한다.
+
+### Security
+- `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 을 `run-test-selection.sh` 도 집행한다 — `probe` · `run` 이 저장소 코드(`setup_cmd` · 테스트)를 돌리지 않는다(`usable: no` · `reason: kill_switch`). 보안 컨트롤이 오케스트레이터 산문에만 있던 자리다. kill switch 집행이 `setup_cmd`(설치 lifecycle) 앞에 선다(락).
+- 선언 경로의 봉인 · 합치기(`topic-head.sh`)가 저장소 git 훅을 돌리지 않는다(`core.hooksPath=/dev/null`) — kill switch 가 켜져도 도는 경로라, 추적되는 훅 디렉토리의 코드가 스위치 밖에서 실행되던 자리다. `git worktree add` 가 부르는 훅은 범위 밖이다(README 알려진 한계).
+
 ## [9.0.0] — 2026-09-26
 
 **breaking** — 두 게이트가 한 파이프라인이 된다. 판정은 `clean` · `defect` · `not-certified (<사유>)` 셋이다.

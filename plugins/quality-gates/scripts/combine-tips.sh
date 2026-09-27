@@ -10,9 +10,9 @@
 # 순차는 실패한 단계가 곧 그 구성원이라 `failed_at:` 에 귀속이 실린다.
 #
 # 순차의 대가는 `commit-tree` 중간 커밋이 unreachable 로 남는 것이다 — `intermediates:`
-# 로 넘긴다. **이 출력의 소비자는 아직 없다.** GC 가 이것을 받는 것은 계획일 뿐이고
-# (`qg-gc.py`/`gc_common.py` 는 git object 를 다루지 않는다 — TTL 로 세션 디렉토리만
-# 지운다), 리포에 `git prune`/`fsck --unreachable`/`gc --prune` 호출도 0 개다.
+# 로 넘긴다(소비자: topic-head.sh 가 마지막 것을 HEAD 축 커밋으로 쓴다). 이 커밋들은
+# ref · reflog 를 얻지 않으므로 git 의 prune 이 회수한다 — qg 는 `git prune` 을 부르지
+# 않는다(리포 전체의 unreachable 객체를 지운다). 락: tests/test_qg_objects_unreachable.sh.
 #
 # **인자는 공백-구분이다.** `resolve-topic.sh` 의 `tips:` 는 콤마-구분으로 낸다 — 호출부가
 # 변환한다(`tr ',' ' '`).

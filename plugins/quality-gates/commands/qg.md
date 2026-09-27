@@ -82,7 +82,7 @@ the pipeline is aborted at a decision point.
 | Command | Effect |
 |---------|--------|
 | `/qg critique <path>` | 비-코드 산출물 비평-수정 루프(별도 skill; 라운드별 커밋; 코드 아님) |
-| `/qg` | Run the pipeline; git-derived diff (branch + worktree) |
+| `/qg` | Run the pipeline; `Spec:` 트레일러로 선언된 토픽이면 토픽 전체(합친 트리), 아니면 git-derived diff (branch + worktree) |
 | `/qg branch` | Run on the full-branch diff (vs `main`) |
 | `/qg branch <name>` | Run against branch `<name>` in isolated worktree |
 | `/qg --paths <glob>...` | Scope to matched paths |
@@ -98,6 +98,8 @@ the pipeline is aborted at a decision point.
 | `DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1` | Preserve branch worktree after pipeline completes or is cancelled (default: removed) |
 
 ### Scope (default: git 변경)
+
+선언이 있으면 기본 scope 는 **토픽**이다 — README 「토픽 스코프」. 아래는 선언이 없을 때(session)다.
 
 `/qg` 는 **git 이 보고하는 변경**을 기본 scope 로 리뷰한다 — base 대비 브랜치 diff
 와 worktree 변경의 합집합이며, 오케스트레이터가 그 집합을 직접 resolve 해 리뷰
@@ -123,7 +125,8 @@ iteration 도는 한, R1b 가 영향 unit 을 0개 고르면 차등 테스트 �
 fail-open + loud advisory.
 
 암묵 session scope로 돌 때 qg는 그 사실을 한 줄로 밝힌다 (`Review scope: session (N files)` — 전체
-PR/브랜치는 `/qg branch`). 자연어로 브랜치/전체 리뷰 의도를 말하면 모델이 `/qg branch`(branch
+PR/브랜치는 `/qg branch`). 토픽 선언(`Spec:` 트레일러)으로 풀리면 대신
+`Review scope: topic <키> (N files · 구성원 <branches>)` 를 밝힌다. 자연어로 브랜치/전체 리뷰 의도를 말하면 모델이 `/qg branch`(branch
 scope)로 해석한다 — 별도 토큰 alias 없음 (P8 determinism-economy: non-load-bearing 라우팅은
 모델 신뢰, 결정론적 보장은 literal `/qg branch`에).
 

@@ -155,7 +155,7 @@ PY
 )
   assert_grep "$got" '^OUTSIDE:$' "SKILL 이 싣는 사유는 전부 닫힌 열거 안이다"
   assert_grep "$got" '^SET:error-axis kill-switch scope-empty silent-drop trivia$' \
-    "SKILL 이 싣는 사유 집합(핀) — declaration-invalid · merge-conflict 는 4c"
+    "SKILL 이 싣는 사유 집합(핀) — declaration-invalid · merge-conflict 는 합성기가 --scope 파일에서 낸다(SKILL 이 옮겨 적지 않는다)"
 }
 
 case_angle_template_is_total() {
@@ -531,6 +531,22 @@ print(f"N5_FOUND:{1 if n5 is not None else 0}")
 print(f"N5_HAS_DIFFERENTIAL:{1 if (n5 and '차등' in n5 and 'kept = 0' in n5) else 0}")
 print(f"N5_HAS_MAXITER:{1 if (n5 and 'Max-iter decision' in n5) else 0}")
 
+# X6 — N=5 문단 안의 Fix-loop decision 언급은 전부 부정(「가 아니라」 · 「새지 않는다」)에 묶인다.
+#      토큰(차등 · kept = 0 · Max-iter decision)을 남긴 채 목적지를 Fix-loop 로 되돌리는 변이를 잡는다.
+fl_all = len(re.findall(r'Fix-loop decision', n5)) if n5 else 0
+fl_neg = len(re.findall(r'Fix-loop decision[^.]{0,60}?(?:가 아니라|새지 않는다)', n5)) if n5 else 0
+print(f"N5_FIXLOOP_ALL_NEGATED:{1 if (fl_all >= 1 and fl_all == fl_neg) else 0}")
+# 목적지 양의 단언 — Max-iter decision 링크 뒤가 「을 부른다」. 괄호 · # 를 정규식에 쓰지 않는다
+# (이 본문은 $( ) 안 heredoc 이다 — bash 3.2 가 짝 없는 괄호로 치환 경계를 잘못 잡는다).
+n5_maxiter = bool(n5 and re.search(r'\[Max-iter decision\].{1,24} 을 부른다', n5))
+print(f"N5_MAXITER_INVOKED:{1 if n5_maxiter else 0}")
+# X7 — Step 4.5 라우팅의 머리가 N < 5 로 한정된다(같은 줄)
+lead = re.search(r'^\s*그다음.N < 5 — N=5 는 [^\n]*「N=5 에서 도달하면」', text, re.M)
+print(f"LEAD_N_LT_5:{1 if lead else 0}")
+# X8 — Step 5 결정 도구의 머리가 N < 5 전용이고 N=5 는 Max-iter 로 간다(같은 줄)
+dtool = re.search(r'^\s*5\. \*\*Decision tool .N < 5 only — N=5 always goes to Max-iter decision instead', text, re.M)
+print(f"DECISION_TOOL_N_LT_5:{1 if dtool else 0}")
+
 note = seg(r'\*\*Retry 옵션 문구.*?(?=\n\nBranch on answer:)')
 print(f"RETRY_NOTE_FOUND:{1 if note is not None else 0}")
 print(f"RETRY_NOTE_HAS_DIFFERENTIAL:{1 if (note and '차등 테스트 기원' in note) else 0}")
@@ -544,6 +560,10 @@ PY
   assert_grep "$got" '^N5_FOUND:1$'                    "「N=5 에서 도달하면」 문단을 찾았다"
   assert_grep "$got" '^N5_HAS_DIFFERENTIAL:1$'         "그 문단이 kept=0 차등 기원 defect 도 포함한다고 말한다(N=5 확장 삭제 변이 → RED)"
   assert_grep "$got" '^N5_HAS_MAXITER:1$'              "그 문단이 Max-iter decision 을 부른다고 말한다"
+  assert_grep "$got" '^N5_FIXLOOP_ALL_NEGATED:1$' "N=5 문단의 Fix-loop decision 언급은 전부 부정에 묶인다(X6 — 토큰을 남긴 목적지 반전 → RED)"
+  assert_grep "$got" '^N5_MAXITER_INVOKED:1$'     "N=5 문단이 Max-iter decision 을 «부른다»(목적지 양의 단언)"
+  assert_grep "$got" '^LEAD_N_LT_5:1$'            "Step 4.5 라우팅 머리가 N < 5 로 한정된다(X7)"
+  assert_grep "$got" '^DECISION_TOOL_N_LT_5:1$'   "Step 5 결정 도구가 N < 5 전용이다(X8)"
   assert_grep "$got" '^RETRY_NOTE_FOUND:1$'            "Retry 옵션 문구 안내를 찾았다"
   assert_grep "$got" '^RETRY_NOTE_HAS_DIFFERENTIAL:1$' "그 안내가 차등 테스트 기원 kept=0 을 지목한다"
   assert_grep "$got" '^RETRY_BULLET_FOUND:1$'          "Branch on answer 의 Retry 불릿을 찾았다"
