@@ -4,7 +4,7 @@
 #
 # Subcommands:
 #   detect                -> key: value 4줄 (topic_key · status · reason · base_ref) — 현재 브랜치의 토픽 키
-#   resolve <topic-key>   -> key: value 요약 10줄
+#   resolve <topic-key>   -> key: value 요약 11줄
 #   commits <topic-key>   -> T 의 커밋 SHA (topo-order), 한 줄에 하나
 #
 # **사실만 낸다 — 판정하지 않는다.** `resolve-baseline.sh` 와 같은 계약이다:
@@ -13,9 +13,11 @@
 # `not-certified` 같은 판정 어휘는 이 층에 없다 — 소비자(PR4)가 `status:` 를 판정으로 옮긴다.
 #
 #   status: ok                  선언 경로로 진행
-#   status: no-declaration      선언 0 — 기존 세 모드로 fallback (판정 아님)
+#   status: no-declaration      선언 0 · 또는 선언이 전부 base_ref 에 있다 — 기존 세 모드로 fallback (판정 아님)
 #   status: declaration-invalid 선언이 깨졌다 (경로 부재 · 한 브랜치에 여러 키)
 #   status: base-unresolved     base_ref 미해결 — 기준선 축을 세울 수 없다
+#
+#   in_base: 선언 커밋 중 이미 base_ref 의 조상인 수 — 판정 대상이 아니라 기준선이다(AC4 · §6.2.2)
 #
 # **토픽 키는 트레일러 값 «전체»다 — 조각(`#pr1`)까지 포함한다.** 조각을 무시하는
 # 질의를 쓰면 여러 PR 이 한 토픽으로 합쳐진다(설계 §6.2.1 · §16).
@@ -49,11 +51,11 @@ fi
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 
 DECLARED="-"; BRANCHES="-"; BOUNDARY="-"; TIPS="-"; NCOMMITS="-"; BASE_REF="-"
-SEAL_ON_TOPIC="-"
+SEAL_ON_TOPIC="-"; IN_BASE="-"
 
 emit() {   # <status> <reason>
   # `commits` 는 fail-closed 다 — status != ok 이면 stdout 에 «아무것도» 내지 않는다.
-  # 이 검사는 echo 들보다 «앞» 이어야 한다. 뒤에 두면 10줄이 이미 나간 뒤라
+  # 이 검사는 echo 들보다 «앞» 이어야 한다. 뒤에 두면 11줄이 이미 나간 뒤라
   # 소비자가 `$(… commits …)` 로 받을 때 SHA 아닌 10줄을 순회한다.
   if [ "$SUB" = "commits" ] && [ "$1" != "ok" ]; then
     echo "resolve-topic: status=$1 (${2:--}) — no commit set" >&2
@@ -63,6 +65,7 @@ emit() {   # <status> <reason>
   echo "status: $1"
   echo "reason: ${2:--}"
   echo "declared: $DECLARED"
+  echo "in_base: $IN_BASE"
   echo "branches: $BRANCHES"
   echo "boundary: $BOUNDARY"
   echo "tips: $TIPS"
@@ -111,7 +114,20 @@ BASE_REF=$(bash "$SCRIPT_DIR/resolve-baseline.sh" | awk -F': ' '/^base_ref:/{pri
 esc=$(printf '%s' "$TOPIC" | sed 's/[][\.*^$\\]/\\&/g')
 C=$(git log --all --grep="^Spec: ${esc}\$" --format='%H' 2>/dev/null)
 DECLARED=$(printf '%s\n' "$C" | grep -c . )
-[ "$DECLARED" -gt 0 ] || { DECLARED=0; emit no-declaration "no commit carries this topic key"; }
+[ "$DECLARED" -gt 0 ] || { DECLARED=0; IN_BASE=0; emit no-declaration "no commit carries this topic key"; }
+
+# ── C_live = 아직 base_ref 에 안 든 선언 커밋 (§6.2.2 · 재결정 P23 2026-09-27) ──
+# base_ref 에 이미 든 선언은 판정 대상이 아니라 기준선이다(AC4). 그것을 구성원 근거로
+# 쓰면 그 뒤 base 에서 딴 모든 브랜치가 구성원이 된다. 그 수는 in_base 로 공시한다.
+# 조상 검사가 실패(rc 128)하면 «살아 있음» 쪽으로 센다 — 구성원을 넓히는 방향이다.
+C_LIVE=""; IN_BASE=0
+for c in $C; do
+  if git merge-base --is-ancestor "$c" "$BASE_REF" 2>/dev/null; then
+    IN_BASE=$((IN_BASE + 1))
+  else
+    C_LIVE="$C_LIVE $c"
+  fi
+done
 
 # ── 선언이 가리키는 경로가 실재하는가 (AC16) ────────────────────────────────
 # 토픽 키에서 조각(`#…`)을 떼면 리포-상대 경로다. working tree 기준으로 본다 —
@@ -123,6 +139,7 @@ DECLARED=$(printf '%s\n' "$C" | grep -c . )
 path="${TOPIC%%#*}"
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || emit base-unresolved "not a git repo"
 [ -e "$repo_root/$path" ] || emit declaration-invalid "declared path does not exist: $path"
+[ -n "$C_LIVE" ] || emit no-declaration "all declared commits are already in base_ref"
 
 # ── B_t 1단계: 살아 있는 ref ───────────────────────────────────────────────
 # `git branch --contains` 를 쓰지 않는다 — 머지된 커밋에 대해 main 과 후손 전부를
@@ -130,7 +147,7 @@ repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || emit base-unresolved "
 #
 # refs/heads **와** refs/remotes 를 함께 스캔한다(§6.2.2 D2 재결정, §8). 선언 발견(C)은
 # 이미 `git log --all` 로 원격-추적 ref 까지 보므로, `refs/heads` 만 보면 비대칭이 생겨
-# 머지 안 된 원격-전용 구성원이 1단계를 통과하지 못하고 2단계(머지된 구성원)도 못 받아
+# 머지 안 된 원격-전용 구성원이 1단계를 통과하지 못해
 # 고아(declaration-invalid)로 떨어진다 — `git clone` 은 로컬에 `main` 만 만드므로 이것이
 # 신선한 clone·CI 체크아웃의 기본 상태다.
 #
@@ -148,44 +165,27 @@ for ref in $(git for-each-ref --sort=refname --format='%(refname:short)' refs/he
   git merge-base --is-ancestor "$tip" "$BASE_REF" 2>/dev/null && continue
   # 같은 커밋을 가리키는 중복 ref(로컬+원격-추적) — 이미 담았으면 건너뛴다.
   case " $BR_TIPS " in *" $tip "*) continue ;; esac
-  for c in $C; do
+  for c in $C_LIVE; do
     if git merge-base --is-ancestor "$c" "$tip" 2>/dev/null; then
       BR_NAMES="$BR_NAMES $ref"; BR_TIPS="$BR_TIPS $tip"; break
     fi
   done
 done
 
-# ── B_t 2단계: 머지된 구성원 ───────────────────────────────────────────────
-# 발동 조건은 **「1단계가 낸 B_t 에 들어가지 않으면」** 이다 — 「어느 살아 있는 ref
-# 에도 안 걸리면」이 아니다. 머지됐는데 ref 는 살아 있는(가장 흔한) 경로가 그 차이로
-# 고아가 되어 AC4 가 깨진다.
+# ── 고아 — C_live 원소가 1단계의 어느 ref 에도 없다 (§6.2.2 3단계) ──────────────
+# 머지된 구성원(옛 2단계)은 없다 — base 에 든 선언은 기준선이다(재결정 P23 2026-09-27).
 ORPHANS=""
-for c in $C; do
+for c in $C_LIVE; do
   in_bt=no
   for tip in $BR_TIPS; do
     git merge-base --is-ancestor "$c" "$tip" 2>/dev/null && { in_bt=yes; break; }
   done
-  [ "$in_bt" = yes ] && continue
-  m=$(git rev-list --ancestry-path --merges "$c..$BASE_REF" 2>/dev/null | tail -1)
-  [ -n "$m" ] || { ORPHANS="$ORPHANS $c"; continue; }
-  # 주제 쪽 부모 — `^2` 로 단정하지 않고 c 를 포함하는 부모를 고른다.
-  side=""
-  for p in $(git rev-list --parents -n 1 "$m" 2>/dev/null | cut -d' ' -f2-); do
-    git merge-base --is-ancestor "$c" "$p" 2>/dev/null && { side="$p"; break; }
-  done
-  [ -n "$side" ] || { ORPHANS="$ORPHANS $c"; continue; }
-  dup=no
-  for t in $BR_TIPS; do [ "$t" = "$side" ] && { dup=yes; break; }; done
-  [ "$dup" = yes ] && continue
-  BR_NAMES="$BR_NAMES merged:$side"; BR_TIPS="$BR_TIPS $side"
-  # 경계 계산이 쓸 mainline 부모를 짝지어 기억한다.
-  MERGED_MAINLINE="${MERGED_MAINLINE:-} $side:$(git rev-parse "$m^1")"
+  [ "$in_bt" = yes ] || ORPHANS="$ORPHANS $c"
 done
 
-# 1·2 가 둘 다 답을 못 낸 선언 커밋은 고아다 (설계 §6.2.2 3단계).
 if [ -n "$ORPHANS" ]; then
   first=$(printf '%s' "$ORPHANS" | awk '{print $1}')
-  emit declaration-invalid "orphan declaration commit (no containing branch, no merge): ${first:0:8}"
+  emit declaration-invalid "orphan declaration commit (no containing branch): ${first:0:8}"
 fi
 
 BRANCHES=$(printf '%s\n' $BR_NAMES | sort -u | paste -sd, -)
@@ -206,20 +206,12 @@ if [ -n "$SEAL" ]; then
 fi
 
 # ── 경계 = fork 들의 merge-base (§6.2.3 · AC5) ─────────────────────────────
-# 머지된 구성원에는 merge-base(base_ref, tip) 을 쓸 수 없다 — 그것은 tip 자신을
-# 돌려주고, 그러면 그 브랜치 전체가 경계 뒤로 숨는다〔실측 2〕. 대신 그 브랜치를
-# 받아들인 머지 커밋의 mainline 부모와의 merge-base 가 진짜 분기점이다〔실측 3〕.
+# 구성원은 전부 base_ref 의 조상이 아닌 살아 있는 ref 다 — fork(b) = merge-base(base_ref, b).
+# 머지된 구성원의 fork 보정은 없다(재결정 P23 2026-09-27 — 옛 분기점이 경계가 되면 그 뒤
+# base 이력이 리뷰 대상에 흡수된다).
 FORKS=""
 for tip in $BR_TIPS; do
-  ml=""
-  for pair in ${MERGED_MAINLINE:-}; do
-    case "$pair" in "$tip:"*) ml="${pair#*:}"; break ;; esac
-  done
-  if [ -n "$ml" ]; then
-    f=$(git merge-base "$tip" "$ml" 2>/dev/null)
-  else
-    f=$(git merge-base "$BASE_REF" "$tip" 2>/dev/null)
-  fi
+  f=$(git merge-base "$BASE_REF" "$tip" 2>/dev/null)
   [ -n "$f" ] || emit base-unresolved "cannot compute fork for ${tip}"
   FORKS="$FORKS $f"
 done
