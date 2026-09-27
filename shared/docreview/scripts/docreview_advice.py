@@ -11,8 +11,14 @@ advisory 축 = (`layer_rubric.layer1` ∪ `layer2`) − `must_catch`. 그 밖(ru
 """
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 ENGINE_SOURCES = frozenset(("diff", "reraise", "escalated"))
 ROUTE_ADVICE = "advice"
+RENDER_CAP = 8          # 끝의 한 번 표시 — 머리 1 + 항목 8 + 접는 줄 1 = 10줄(⟨D9⟩)
+SUMMARY_WIDTH = 60      # 렌더 항목 줄의 요약 폭(코드포인트) — 넘치면 59 + 「…」
+COUNT_PREFIX = "docreview 계수 — "
 
 
 def has_must_catch(prof) -> bool:
@@ -124,3 +130,46 @@ def mc_preexisting_new(final, snapshots, n, axes) -> int:
             if after and before == after:
                 count += 1
     return count
+
+
+def _one_line(s) -> str:
+    return re.sub(r"\s+", " ", str(s or "")).strip()
+
+
+def clip(s, width=SUMMARY_WIDTH) -> str:
+    s = _one_line(s)
+    return s if len(s) <= width else s[:width - 1] + "…"
+
+
+def render_lines(items, cap, where) -> list:
+    """끝의 한 번 표시 — 머리 한 줄 + 항목 한 줄씩(최대 cap) + 넘치면 접는 줄 한 줄. 합계 ≤ cap + 2."""
+    out = ["참고(advisory) %d건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: %s" % (len(items), where)]
+    for it in items[:cap]:
+        out.append("- [%s] %s — %s" % (it.get("category"), it.get("anchor"), clip(it.get("summary"))))
+    if len(items) > cap:
+        out.append("  … 외 %d건 — %s 에 전부" % (len(items) - cap, where))
+    return out
+
+
+def sink_row(it) -> str:
+    """박제처 절(`defer_target`)의 표 행 한 줄 — 요약(+ 대체안)을 접고 `|` 를 이스케이프한다."""
+    text = _one_line(it.get("summary"))
+    if it.get("replacement"):
+        text += " — 고치면: " + _one_line(it["replacement"])
+    return "| %s | 참고(%s) %s — %s |" % (it.get("id"), it.get("category"), it.get("anchor"), text.replace("|", "\\|"))
+
+
+def review_identity(state_dir) -> str:
+    """영속 계수 줄의 리뷰 정체 — `<세션>/<문서 키>`. 문서별 상태 디렉토리가 `<root>/<세션>/docreview/<이름표>-<해시>`
+    이므로 마지막 조각(문서 키)만으로는 세션이 빠져 같은 문서의 다른 세션 리뷰가 한 키로 겹친다."""
+    p = Path(state_dir)
+    return "%s/%s" % (p.parent.parent.name, p.name)
+
+
+def count_key(identity, rnd) -> str:
+    return "%s%s r%d:" % (COUNT_PREFIX, identity, rnd)
+
+
+def count_line(identity, rnd, rep) -> str:
+    return "- %s advice_new=%d · advice_repeat=%d · mc_preexisting_new=%d" % (
+        count_key(identity, rnd), rep["advice_new"], rep["advice_repeat"], rep["mc_preexisting_new"])

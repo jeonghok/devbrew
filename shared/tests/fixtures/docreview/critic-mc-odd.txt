@@ -1,0 +1,12 @@
+```docreview-layer1
+- ref: o1
+  category: tradeoffs
+  anchor: "#1-context"
+  disposition: decide
+  summary: "파이프 | 가 든 요약이고\n둘째 줄로 이어지며 한 줄 폭 예순 자를 넘기도록 길게 늘인 문장이다 — 끝에서 잘려야 하고 그 뒤로도 계속 이어진다"
+  replacement: "고치면 A | B 로 나눈다"
+```
+
+```docreview-layer2
+[]
+```

@@ -281,3 +281,105 @@ case_advice_step2_order_independent() {
     '{"coerced": [], "items": {"p": [null, ["q"]], "q": [null, ["p"]]}}' \
     "2 걸음 순환: 서로를 막는 advisory ask 는 advice 로 증명되지 않아 차단 쪽에 남는다"
 }
+
+# ── advice 서브커맨드 ───────────────────────────────────────────────────────
+adv_state() {   # adv_state <n> → 참고 항목 n 개를 가진 design-doc 라운드 1 상태 디렉토리
+  local c; c="$(mktemp -t advcritic-XXXXXX)"; python3 "$FX/mk_advice_critic.py" "$1" "$c"
+  route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$c" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt"
+  rm -f "$c"
+}
+adv_ident() { python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_advice as a; print(a.review_identity(sys.argv[2]))' "$SCRIPTS" "$1"; }
+
+case_AC6_render_cap() {
+  local d out; d="$(adv_state 11)"
+  out="$(py docreview_state.py advice --state-dir "$d" --render --cap 8)"
+  assert_eq "$(printf '%s\n' "$out" | grep -c '^- \[') $(printf '%s\n' "$out" | grep -c '외 3건') $(printf '%s\n' "$out" | grep -c .)" "8 1 10" \
+    "AC6: 11건 → 항목 8줄 + 「외 3건」 한 줄 · 머리 포함 10줄(≤10)"
+  rm -rf "$d"; d="$(adv_state 8)"
+  out="$(py docreview_state.py advice --state-dir "$d" --render --cap 8)"
+  assert_eq "$(printf '%s\n' "$out" | grep -c '^- \[') $(printf '%s\n' "$out" | grep -c '외 ')" "8 0" "AC6: 8건이면 접는 줄이 없다"
+  rm -rf "$d"; d="$(adv_state 11)"
+  out="$(py docreview_state.py advice --state-dir "$d" --render)"
+  assert_eq "$(printf '%s\n' "$out" | grep -c '^- \[') $(printf '%s\n' "$out" | grep -c '외 3건')" "8 1" "AC6: 기본 cap 이 8 이다"
+  rm -rf "$d"
+}
+case_AC7_sink_idempotent() {
+  local d b doc before rc; d="$(adv_state 3)"; doc="$(mktemp -t sinkdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
+  py docreview_state.py advice --state-dir "$d" --sink "$doc" >/dev/null
+  assert_eq "$(awk '/^### Deferred to plan$/{f=1;next} /^#/{f=0} f' "$doc" | grep -c '^| .* | 참고(')" "3" \
+    "AC7: --sink 가 ### Deferred to plan 아래에 미박제 항목 3건을 표 행으로 적는다"
+  before="$(cksum < "$doc")"; py docreview_state.py advice --state-dir "$d" --sink "$doc" >/dev/null
+  assert_eq "$(cksum < "$doc")" "$before" "AC7: 두 번째 --sink 는 아무것도 더 적지 않는다(멱등)"
+  b="$(route_r1 "$PROF_MC/brief.md" "$FX/brief-sample.md" "$FX/critic-brief-direction.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  py docreview_state.py advice --state-dir "$b" --sink "$doc" >/dev/null 2>"$b/err"; rc=$?
+  assert_eq "$rc $(grep -c profile_has_no_defer_target "$b/err")" "1 1" "AC7: brief 프로필(defer_target none)은 profile_has_no_defer_target rc 1"
+  rm -rf "$d" "$b" "$doc"
+}
+case_AC17_count_line_carrier() {
+  local d e doc id_d; d="$(adv_state 2)"; e="$(adv_state 2)"; doc="$(mktemp -t logdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
+  id_d="$(adv_ident "$d")"
+  py docreview_state.py advice --state-dir "$d" --log-file "$doc" >/dev/null
+  py docreview_state.py advice --state-dir "$d" --log-file "$doc" >/dev/null
+  assert_eq "$(grep -cF -- "- docreview 계수 — $id_d r1: advice_new=2 · advice_repeat=0 · mc_preexisting_new=0" "$doc")" "1" \
+    "AC17: 계수 줄이 decision_log 절에 한 번 — 두 번째 호출은 같은 (리뷰 정체, 라운드) 줄을 다시 적지 않는다"
+  py docreview_state.py advice --state-dir "$e" --log-file "$doc" >/dev/null
+  assert_eq "$(grep -c '^- docreview 계수 — .* r1: ' "$doc")" "2" "AC17: 다른 리뷰 정체의 같은 라운드 줄은 적는다"
+  rm -rf "$d" "$e"
+  assert_eq "$(grep -cF "docreview 계수 — $id_d r1:" "$doc") $(grep -c '^## 결정 기록$' "$doc")" "1 1" \
+    "AC17: 엔진 상태 디렉토리를 지워도 줄이 목적지 파일의 ## 결정 기록 절에 남는다"
+  rm -f "$doc"
+}
+case_advice_render_once() {
+  local d; d="$(adv_state 3)"
+  py docreview_state.py advice --state-dir "$d" --render >/dev/null
+  assert_eq "$(py docreview_state.py advice --state-dir "$d" --render | head -1 | grep -c '^참고(advisory) 0건')" "1" \
+    "Review Focus: 두 번째 --render 는 이미 보인 항목을 다시 내지 않는다(shown 표지 — 멱등)"
+  assert_eq "$(py docreview_state.py advice --state-dir "$d" | jgets '[it["shown"] for it in d["items"]]')" "[True, True, True]" \
+    "Review Focus: 플래그 없는 호출은 읽기 전용 JSON 이고 shown 표지를 싣는다"
+  rm -rf "$d"
+}
+case_advice_pre_upgrade_ledger() {
+  local d n rc; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-empty.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2]); st.pop("advice", None)
+for r in st["rounds"].values():
+    for k in ("advice_new", "advice_repeat", "mc_preexisting_new"):
+        (r.get("route_report") or {}).pop(k, None)
+s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
+  assert_not_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "끝에서 한 목록으로" "Review Focus: 업그레이드 전 원장 — 게이트 렌더에 참고 줄이 없고 죽지 않는다"
+  assert_eq "$(py docreview_state.py advice --state-dir "$d" --render | head -1 | grep -c '^참고(advisory) 0건')" "1" "Review Focus: 업그레이드 전 원장 — --render 는 0건"
+  n="$(mktemp -t pre-XXXXXX)"; cp "$FX/design-sample.md" "$n"
+  py docreview_state.py advice --state-dir "$d" --log-file "$n" >/dev/null; rc=$?
+  assert_eq "$rc $(grep -c 'docreview 계수' "$n")" "0 0" "Review Focus: 업그레이드 전 원장 — --log-file 은 계수 줄 0 · rc 0"
+  rm -rf "$d" "$n"
+  d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_state.py advice --state-dir "$d" >/dev/null 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c profile_has_no_must_catch "$d/err")" "1 1" "Review Focus: must_catch 없는 프로필의 advice 는 profile_has_no_must_catch rc 1"
+  rm -rf "$d"
+}
+case_advice_odd_text_one_line() {
+  local d doc out row; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-odd.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  doc="$(mktemp -t odd-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
+  out="$(py docreview_state.py advice --state-dir "$d" --sink "$doc" --render)"
+  assert_eq "$(printf '%s\n' "$out" | grep -c .) $(printf '%s\n' "$out" | grep -c '^- \[tradeoffs\] #1-context — 파이프 | 가 든 요약이고 둘째 줄로.*…$')" "2 1" \
+    "Review Focus: 개행이 든 긴 요약도 렌더 항목은 한 줄이고 60자에서 「…」로 잘린다"
+  row="$(awk '/^### Deferred to plan$/{f=1;next} /^#/{f=0} f' "$doc" | grep '참고(tradeoffs)')"
+  assert_eq "$(printf '%s\n' "$row" | grep -c .) $(printf '%s\n' "$row" | grep -o '\\|' | wc -l | tr -d ' ')" "1 2" \
+    "Review Focus: 박제 행은 한 줄이고 요약 · 대체안의 | 가 \\| 로 이스케이프된다"
+  rm -rf "$d" "$doc"
+}
+case_advice_write_failure_loud() {   # 사용자 문서 쓰기 실패 — rc 1 · 사유를 내고, 적히지 않은 항목에 표지를 켜지 않는다
+  local d doc gone rc; d="$(adv_state 2)"; gone="$d/없는-디렉토리/doc.md"
+  py docreview_state.py advice --state-dir "$d" --sink "$gone" --render >"$d/out" 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c sink_write_failed "$d/err") $(grep -c . "$d/out")" "1 1 0" \
+    "쓰기 실패: 박제처에 못 쓰면 rc 1 · sink_write_failed 이고 표시로 넘어가지 않는다"
+  assert_eq "$(st_yaml "$d" 'sorted((v["sunk"], v["shown"]) for v in st["advice"].values())')" "[(False, False), (False, False)]" \
+    "쓰기 실패: 적히지 않은 항목은 sunk · shown 이 꺼진 채다"
+  doc="$(mktemp -t wfail-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
+  py docreview_state.py advice --state-dir "$d" --sink "$doc" --log-file "$gone" --render >"$d/out" 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c log_write_failed "$d/err") $(grep -c . "$d/out") $(grep -c '| 참고(' "$doc")" "1 1 0 2" \
+    "쓰기 실패: 계수 줄을 못 쓰면 rc 1 · log_write_failed — 박제는 이미 적혔고 표시는 하지 않는다"
+  assert_eq "$(st_yaml "$d" 'sorted((v["sunk"], v["shown"]) for v in st["advice"].values())')" "[(True, False), (True, False)]" \
+    "쓰기 실패: 실제로 적힌 박제 행만 sunk 로 남고 shown 은 꺼진 채다"
+  rm -rf "$d" "$doc"
+}

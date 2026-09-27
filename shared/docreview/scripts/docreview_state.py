@@ -8,7 +8,7 @@ frontmatter 의 `docreview:` 트리가 원장, 본문은 사람이 읽는 사건
 건드리지 않는다 — 그 파일은 brief 파이프라인의 줄 파서가 소유한다.
 
 서브커맨드: state-dir-for · init · begin-round · exempt-anchors · decide · fix · ask · defer ·
-observe-diff · gate
+observe-diff · gate · advice
 전이 규칙의 정본은 plan(2026-09-06-document-review-engine.md)의 D13 표다.
 
 상태 디렉토리는 **문서별**이다 — 한 디렉토리의 원장(라운드 · 재리뷰 상한 · finding · permit ·
@@ -1427,6 +1427,71 @@ def cmd_gate(a) -> int:
     return 0
 
 
+def _advice_write_failed(a, st, sunk, reason, path, err, **extra) -> int:
+    """박제 · 계수 쓰기 실패 — 그 전에 실제로 적힌 박제 행의 `sunk` 표지만 원장에 남기고 rc 1 로 알린다."""
+    if sunk:
+        save_state(a.state_dir, st, "advice sunk=%d — %s 로 중단" % (len(sunk), reason))
+    return fail(reason, path=path, detail=str(err), sunk=len(sunk), **extra)
+
+
+def cmd_advice(a) -> int:
+    """참고(advisory) 목록 — 끝에서 한 번 표시(`--render`) · 박제(`--sink`) · 라운드별 계수 줄(`--log-file`).
+
+    플래그가 없으면 원장의 목록을 JSON 으로 낸다(읽기 전용). 한 호출 안의 순서는 박제 → 계수 → 표시다. 이미 보인
+    항목(`shown`) · 박제한 항목(`sunk`)은 다시 내지 않고, 계수 줄의 멱등 키는 (리뷰 정체, 라운드)를 목적지 파일의
+    글자로 판정한다 — 원장이 TTL 로 걷혀도 두 번 적지 않는다. 부르는 자리는 진입 skill 셋이다(절차서는 계약만).
+    쓰기가 실패하면 rc 1 과 사유(`sink_write_failed` · `log_write_failed`)를 내고, 실제로 적힌 항목만 `sunk` 로
+    원장에 남긴다 — 실패 뒤의 표시는 하지 않으므로 `shown` 도 켜지지 않는다."""
+    import docreview_advice as adv   # 이 서브커맨드만 쓰는 형제 — 원장 스크립트만 복사한 설치본의 다른 서브커맨드를 막지 않는다
+    st = load_state(a.state_dir)
+    prof = load_profile(st["profile"])
+    if not adv.has_must_catch(prof):
+        return fail("profile_has_no_must_catch", profile=st["profile"])
+    cap = adv.RENDER_CAP if a.cap is None else a.cap
+    if cap < 1:
+        return fail("cap_invalid", cap=cap)
+    dt = prof["defer_target"]
+    if a.sink and dt.get("kind") != "doc_section":
+        return fail("profile_has_no_defer_target")
+    heading = prof["decision_log"].get("heading")
+    if a.log_file and not heading:
+        return fail("profile_decision_log_is_state_only")
+    items = list((st.get("advice") or {}).values())
+    sunk = []
+    for it in (items if a.sink else []):
+        if it.get("sunk"):
+            continue
+        try:
+            append_under_heading(Path(a.sink), dt["heading"], adv.sink_row(it))
+        except OSError as e:
+            return _advice_write_failed(a, st, sunk, "sink_write_failed", a.sink, e)
+        it["sunk"] = True
+        sunk.append(it)
+    logged = []
+    if a.log_file:
+        path, ident = Path(a.log_file), adv.review_identity(a.state_dir)
+        try:
+            for k in sorted(st["rounds"], key=int):
+                rep = st["rounds"][k].get("route_report") or {}
+                have = path.read_text(encoding="utf-8") if path.is_file() else ""
+                if "advice_new" in rep and adv.count_key(ident, int(k)) not in have:
+                    append_under_heading(path, heading, adv.count_line(ident, int(k), rep))
+                    logged.append(int(k))
+        except OSError as e:
+            return _advice_write_failed(a, st, sunk, "log_write_failed", a.log_file, e, logged_rounds=logged)
+    shown = [it for it in items if not it.get("shown")] if a.render else []
+    if a.render:
+        where = a.where or (dt["heading"] if dt.get("kind") == "doc_section" else "advice 목록(JSON)")
+        print("\n".join(adv.render_lines(shown, cap, where)))
+    for it in shown:
+        it["shown"] = True
+    if sunk or shown:
+        save_state(a.state_dir, st, "advice shown=%d sunk=%d" % (len(shown), len(sunk)))
+    if not a.render:
+        _emit({"ok": True, "items": items, "sunk": len(sunk), "logged_rounds": logged})
+    return 0
+
+
 def cmd_gate_rows(a) -> int:
     print(json.dumps([{"name": r.name, "ledger": r.ledger, "open": r.open,
                        "blocks": r.blocks, "render": r.render} for r in GATE_ROWS],
@@ -1467,6 +1532,10 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--log-file", required=True); x.set_defaults(fn=cmd_defer)
     x = sd(sp.add_parser("observe-diff")); x.set_defaults(fn=cmd_observe_diff)
     x = sd(sp.add_parser("gate")); x.add_argument("--render", action="store_true"); x.set_defaults(fn=cmd_gate)
+    x = sd(sp.add_parser("advice")); x.add_argument("--render", action="store_true")
+    x.add_argument("--cap", type=int, default=None); x.add_argument("--where", default=None)
+    x.add_argument("--sink", default=None); x.add_argument("--log-file", default=None)
+    x.set_defaults(fn=cmd_advice)
     x = sp.add_parser("gate-rows"); x.set_defaults(fn=cmd_gate_rows)
     return p
 

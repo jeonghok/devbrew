@@ -777,4 +777,6 @@ mut 1/1 blocks_coercion_gate_dropped case_advice_blocks_coercion_flips_gate sed_
 # (77) 고정점을 한 바퀴로 줄인다 — advisory ask 사슬의 판정이 final 순서에 달린다.
 mut 1/1 blocking_ask_single_pass case_advice_step2_order_independent sed_advice \
   's/^    for _ in range(len(pending)):$/    for _ in range(1):/'
+# (78) cap 상수를 바꾼다 — 기본 호출이 9줄을 내고 「외 2건」이 된다.
+mut 1/1 render_cap_changed case_AC6_render_cap sed_advice 's/^RENDER_CAP = 8 /RENDER_CAP = 9 /'
 finish
