@@ -13,9 +13,8 @@ SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/scripts/compute-test-scope-candidates.
 
 
 mktemp_repo() {
-  # M-4 (Task 2 리뷰): mktemp 실패가 `cd ""` 로 새면 bash 는 조용히 rc 0 · cwd 무변경으로
-  # 통과한다(에러 아님) — 이어지는 git init/config 가 **실제 리포**에서 돈다. cd·git 전에
-  # 먼저 막는다.
+  # mktemp 실패가 `cd ""` 로 새면 bash 는 조용히 rc 0 · cwd 무변경으로 통과한다(에러
+  # 아님) — 이어지는 git init/config 가 **실제 리포**에서 돈다. cd·git 전에 먼저 막는다.
   local d
   d=$(mktemp -d -t qg-cand-XXXXXX) && [ -d "$d" ] || { echo "mktemp_repo: mktemp 실패" >&2; return 1; }
   (
@@ -33,9 +32,9 @@ run_script() {
   ( cd "$repo" && bash "$SCRIPT" ) 2>/dev/null
 }
 
-# M-4 (Task 2 리뷰): mktemp_repo 가 실패하면 REPO 가 비어(또는 디렉토리가 아니어) 있다.
-# 그 값으로 `cd`·`git`·`mkdir` 를 돌리면 `cd ""` 가 조용히 현재 디렉토리에 머물러(에러
-# 아님) 그 뒤 전부가 **실제 리포**에서 돈다 — 모든 호출부에서 먼저 확인한다.
+# mktemp_repo 가 실패하면 REPO 가 비어(또는 디렉토리가 아니어) 있다. 그 값으로
+# `cd`·`git`·`mkdir` 를 돌리면 `cd ""` 가 조용히 현재 디렉토리에 머물러(에러 아님)
+# 그 뒤 전부가 **실제 리포**에서 돈다 — 모든 호출부에서 먼저 확인한다.
 
 # --- Test 1: Python src change → maps to existing tests/test_foo.py ---
 echo "== Test 1: Python mapping =="
@@ -165,39 +164,44 @@ fi
 # 값을 핀하면 픽스처가 바뀔 때마다 무의미하게 red 가 된다.
 echo "== Test 7: --total 분모 ⊇ 후보 분자 =="
 REPO=$(mktemp -d)
-(
-  cd "$REPO" && git init -q .
-  echo "def f(): return 1" > mod.py
-  echo "from mod import f
-def test_f(): assert f() == 1" > test_mod.py          # 루트의 test_*.py — 매퍼가 찾는 형태
-  mkdir -p pkg && echo "def g(): return 1" > pkg/g.py
-  echo "def test_g(): pass" > pkg/g_test.py           # 이미 덮이던 형태(대조군)
-  git add -A && git -c user.email=t@t -c user.name=t commit -qm init
-  echo "def f(): return 2" > mod.py
-  echo "def g(): return 2" > pkg/g.py
-)
-CANDS=$(run_script "$REPO")
-TOTAL_LIST=$( ( cd "$REPO" && git ls-files | grep -E '(test|spec)\.[jt]sx?$|_test\.py$|(^|/)test_[^/]*\.py$|\.test\.|\.spec\.|(^|/)tests?/' ) || true )
-TOTAL_N=$( ( cd "$REPO" && bash "$SCRIPT" --total ) 2>/dev/null )
-MISSING=""
-while IFS= read -r c; do
-  [[ -z "$c" ]] && continue
-  printf '%s\n' "$TOTAL_LIST" | grep -qxF -- "$c" || MISSING="$MISSING $c"
-done <<< "$CANDS"
-# 양의 짝: 후보가 0개면 위 ∀ 는 공허하게 참이다.
-CAND_N=$(printf '%s\n' "$CANDS" | grep -c . || true)
-if [[ "$CAND_N" -lt 1 ]]; then
-  no "T7 후보가 0개 — ∀ 가 공허하게 통과할 뻔했다"
+if [ -z "$REPO" ] || [ ! -d "$REPO" ]; then
+  no "T7: mktemp 가 사용 가능한 경로를 내지 못했다 — 이후 단언을 건너뛴다"
 else
-  assert_eq "$MISSING" "" "T7: 후보 ${CAND_N}개 전부가 --total 분모에 포함 (∀)"
-  # 분모가 분자보다 작아질 수 없다
-  if [[ "$TOTAL_N" -ge "$CAND_N" ]]; then
-    ok "T7: 분모 M=$TOTAL_N ≥ 분자 N=$CAND_N"
+  (
+    cd "$REPO" || exit 1
+    git init -q .
+    echo "def f(): return 1" > mod.py
+    echo "from mod import f
+def test_f(): assert f() == 1" > test_mod.py          # 루트의 test_*.py — 매퍼가 찾는 형태
+    mkdir -p pkg && echo "def g(): return 1" > pkg/g.py
+    echo "def test_g(): pass" > pkg/g_test.py           # 이미 덮이던 형태(대조군)
+    git add -A && git -c user.email=t@t -c user.name=t commit -qm init
+    echo "def f(): return 2" > mod.py
+    echo "def g(): return 2" > pkg/g.py
+  )
+  CANDS=$(run_script "$REPO")
+  TOTAL_LIST=$( ( cd "$REPO" && git ls-files | grep -E '(test|spec)\.[jt]sx?$|_test\.py$|(^|/)test_[^/]*\.py$|\.test\.|\.spec\.|(^|/)tests?/' ) || true )
+  TOTAL_N=$( ( cd "$REPO" && bash "$SCRIPT" --total ) 2>/dev/null )
+  MISSING=""
+  while IFS= read -r c; do
+    [[ -z "$c" ]] && continue
+    printf '%s\n' "$TOTAL_LIST" | grep -qxF -- "$c" || MISSING="$MISSING $c"
+  done <<< "$CANDS"
+  # 양의 짝: 후보가 0개면 위 ∀ 는 공허하게 참이다.
+  CAND_N=$(printf '%s\n' "$CANDS" | grep -c . || true)
+  if [[ "$CAND_N" -lt 1 ]]; then
+    no "T7 후보가 0개 — ∀ 가 공허하게 통과할 뻔했다"
   else
-    no "T7: 분모 M=$TOTAL_N < 분자 N=$CAND_N"
+    assert_eq "$MISSING" "" "T7: 후보 ${CAND_N}개 전부가 --total 분모에 포함 (∀)"
+    # 분모가 분자보다 작아질 수 없다
+    if [[ "$TOTAL_N" -ge "$CAND_N" ]]; then
+      ok "T7: 분모 M=$TOTAL_N ≥ 분자 N=$CAND_N"
+    else
+      no "T7: 분모 M=$TOTAL_N < 분자 N=$CAND_N"
+    fi
   fi
+  rm -rf "$REPO"
 fi
-rm -rf "$REPO"
 
 # --- Test 8 (/qg iter-6 E10 ≡ §6.7 F6): 소유자 부재가 조용한 빈 결과가 되지 않는다 ---
 #
@@ -209,25 +213,37 @@ rm -rf "$REPO"
 # 양의 짝: 소유자가 **있을 때는** 이 경고가 나오면 안 된다.
 echo "== Test 8: resolve-baseline.sh 부재 → loud =="
 ORPHAN=$(mktemp -d)
-cp "$SCRIPT" "$ORPHAN/compute-test-scope-candidates.sh"     # 형제 스크립트 없이 고립
-(
-  cd "$ORPHAN" && git init -q . && echo "x" > a.py
-  git add -A && git -c user.email=t@t -c user.name=t commit -qm i
-)
-ORPHAN_ERR=$( ( cd "$ORPHAN" && bash "$ORPHAN/compute-test-scope-candidates.sh" ) 2>&1 >/dev/null )
-assert_contains "$ORPHAN_ERR" "resolve-baseline.sh 실행 실패" "T8: 소유자 부재가 loud (조용한 빈 결과 아님)"
-rm -rf "$ORPHAN"
+if [ -z "$ORPHAN" ] || [ ! -d "$ORPHAN" ]; then
+  no "T8: mktemp 가 사용 가능한 경로를 내지 못했다(ORPHAN) — 이후 단언을 건너뛴다"
+else
+  cp "$SCRIPT" "$ORPHAN/compute-test-scope-candidates.sh"     # 형제 스크립트 없이 고립
+  (
+    cd "$ORPHAN" || exit 1
+    git init -q .
+    echo "x" > a.py
+    git add -A && git -c user.email=t@t -c user.name=t commit -qm i
+  )
+  ORPHAN_ERR=$( ( cd "$ORPHAN" && bash "$ORPHAN/compute-test-scope-candidates.sh" ) 2>&1 >/dev/null )
+  assert_contains "$ORPHAN_ERR" "resolve-baseline.sh 실행 실패" "T8: 소유자 부재가 loud (조용한 빈 결과 아님)"
+  rm -rf "$ORPHAN"
+fi
 
 REPO=$(mktemp -d)
-(
-  cd "$REPO" && git init -q . && echo "x" > a.py
-  git add -A && git -c user.email=t@t -c user.name=t commit -qm i
-)
-NORMAL_ERR=$( ( cd "$REPO" && bash "$SCRIPT" ) 2>&1 >/dev/null )
-assert_not_contains "$NORMAL_ERR" "resolve-baseline.sh 실행 실패" "T8: 소유자가 있으면 무경고 (양의 짝)"
-rm -rf "$REPO"
+if [ -z "$REPO" ] || [ ! -d "$REPO" ]; then
+  no "T8: mktemp 가 사용 가능한 경로를 내지 못했다(REPO) — 이후 단언을 건너뛴다"
+else
+  (
+    cd "$REPO" || exit 1
+    git init -q .
+    echo "x" > a.py
+    git add -A && git -c user.email=t@t -c user.name=t commit -qm i
+  )
+  NORMAL_ERR=$( ( cd "$REPO" && bash "$SCRIPT" ) 2>&1 >/dev/null )
+  assert_not_contains "$NORMAL_ERR" "resolve-baseline.sh 실행 실패" "T8: 소유자가 있으면 무경고 (양의 짝)"
+  rm -rf "$REPO"
+fi
 
-# --- Test 9 (Task 2 — 토픽 모드 분모 --total --tree <tree>) ---
+# --- Test 9: 토픽 모드 분모 --total --tree <tree> ---
 #
 # 토픽(선언) 경로는 분자를 경계..합친 트리로 보충하지만(differential-test.md R1b), 분모
 # (--total)는 현재 체크아웃만 셌다 — N > M 이 나올 수 있다. `--total --tree <tree>` 는
@@ -274,9 +290,8 @@ else
   assert_eq "$TOTAL_NOVAL_RC" "4" "T9: --total --tree(값 없음) → rc 4"
   assert_eq "$TOTAL_NOVAL_OUT" "" "T9: --total --tree(값 없음) → stdout 비었음"
 
-  # M-1 (Task 2 리뷰 라운드 1) — 인자 모양이 정확히 `--total --tree <tree>`(3개) 가
-  # 아니면 조용히 무시되지 않고 exit 4 여야 한다. `--tree=<T>`(합쳐 쓴 값)와 뒤에
-  # 남는 인자를 각각 잰다.
+  # 인자 모양이 정확히 `--total --tree <tree>`(3개) 가 아니면 조용히 무시되지 않고
+  # exit 4 여야 한다. `--tree=<T>`(합쳐 쓴 값)와 뒤에 남는 인자를 각각 잰다.
   TOTAL_EQFORM_OUT=$( ( cd "$REPO" && bash "$SCRIPT" --total "--tree=$TOPICA_TREE_SHA" ) 2>/dev/null )
   TOTAL_EQFORM_RC=$?
   assert_eq "$TOTAL_EQFORM_RC" "4" "T9: --total --tree=<T>(합쳐 쓴 값) → rc 4"
@@ -287,21 +302,21 @@ else
   assert_eq "$TOTAL_EXTRA_RC" "4" "T9: --total --tree <tree> extra(뒤에 남는 인자) → rc 4"
   assert_eq "$TOTAL_EXTRA_OUT" "" "T9: --total --tree <tree> extra → stdout 비었음"
 
-  # M-3 (part) — cwd 가 서브디렉토리(tests/, main·topicB 양쪽에 존재)여도(--full-tree)
-  # 루트에서 부른 것과 같은 값을 낸다.
+  # cwd 가 서브디렉토리(tests/, main·topicB 양쪽에 존재)여도(--full-tree) 루트에서
+  # 부른 것과 같은 값을 낸다.
   TOTAL_SUBCWD=$( ( cd "$REPO/tests" 2>/dev/null && bash "$SCRIPT" --total --tree "$TOPICA_TREE_SHA" ) 2>/dev/null )
   assert_eq "$TOTAL_SUBCWD" "$TOTAL_TREE_SHA" "T9: 서브디렉토리 cwd 에서도 --total --tree <tree> 가 루트와 같은 값(--full-tree)"
 
   rm -rf "$REPO"
 fi
 
-# --- Test 10 (I-2, Task 2 리뷰 라운드 1) — ls-tree 자체의 실패를 삼키지 않는다 ---
+# --- Test 10: ls-tree 자체의 실패를 삼키지 않는다 ---
 #
 # `ls-tree ... | grep -cE ... || true` 는 파이프 rc 가 마지막 명령(grep) 것이라, `ls-tree`
 # 가 실패(예: 손상·부재 서브트리 오브젝트)해 빈 stdout 을 내도 grep 은 "0 매치"로 rc 0·
 # "0" 을 낸다 — "분모를 못 셌다"가 "분모는 0" 으로 둔갑한다. 서브트리 오브젝트를 오브젝트
 # 스토어에서 직접 지워 `ls-tree -r`이 그 서브트리를 재귀하다 실패하게 만든다(실측: rc 1,
-# 부분 stdout + stderr 에러 — 리뷰어가 clone 에서 재현한 것과 같은 형태).
+# 부분 stdout + stderr 에러).
 echo "== Test 10: ls-tree 실패 → exit 4(빈 결과 0으로 둔갑하지 않는다) =="
 LTREPO=$(mktemp -d)
 if [ -z "$LTREPO" ] || [ ! -d "$LTREPO" ]; then
@@ -333,6 +348,35 @@ else
     assert_contains "$LT_ERR" "분모를 셀 수 없다" "T10: stderr 에 분모를 셀 수 없다"
   fi
   rm -rf "$LTREPO"
+fi
+
+# --- Test 11: 평범한 --total(ls-files)의 실패도 exit 4 로(부분 결과·0 이 아니다) ---
+#
+# `.git/index`를 깨뜨려 `git ls-files`자체가 실패(rc 128)하게 만든다. 캡처-후-카운트가
+# 아니면 이 실패가 파이프 마지막 명령(grep)의 rc 0·"0"으로 삼켜진다 — Test 10 이 `--tree`
+# 쪽에서 잡는 것과 같은 결함의 기본 `--total` 쪽 반쪽.
+echo "== Test 11: 손상된 .git/index → 평범한 --total 도 exit 4 =="
+IDXREPO=$(mktemp -d)
+if [ -z "$IDXREPO" ] || [ ! -d "$IDXREPO" ]; then
+  no "T11: mktemp 가 사용 가능한 경로를 내지 못했다 — 이후 단언을 건너뛴다"
+else
+  (
+    cd "$IDXREPO" || exit 1
+    git init -q .
+    git config user.email t@t.test
+    git config user.name tester
+    mkdir -p tests
+    echo "x" > tests/test_a.sh
+    git add -A && git commit -q -m init
+  )
+  printf 'garbage' > "$IDXREPO/.git/index"
+  IDX_OUT=$( ( cd "$IDXREPO" && bash "$SCRIPT" --total ) 2>/dev/null )
+  IDX_RC=$?
+  IDX_ERR=$( ( cd "$IDXREPO" && bash "$SCRIPT" --total ) 2>&1 >/dev/null )
+  assert_eq "$IDX_RC" "4" "T11: 손상된 .git/index 에서 평범한 --total → rc 4"
+  assert_eq "$IDX_OUT" "" "T11: 그 경우 stdout 이 비었음(부분 결과·0 으로 둔갑하지 않는다)"
+  assert_contains "$IDX_ERR" "분모를 셀 수 없다" "T11: stderr 에 분모를 셀 수 없다"
+  rm -rf "$IDXREPO"
 fi
 
 finish
