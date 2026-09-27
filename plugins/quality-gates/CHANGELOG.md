@@ -3,6 +3,18 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [9.3.1] — 2026-09-28
+
+**PR5 후속 수정** — e2e 가 드러낸 판정 누수 하나와 토픽 모드 선택 비율의 분모를 고친다.
+
+### Fixed
+- 합성기가 `confidence` 가 빠진 발견을 0 으로 채워 억제 바닥(≤4) 아래로 떨구던 것을 고친다. `decide(defect=bool(kept))` 라 그 발견이 유일하면 거짓 `clean` 이 날 수 있었다. 이제 누락 · 숫자 아님(`high` · `true` · `.inf`)은 5(보이되 검증 안 됨)로 확정한다. 살아남는 항목에서만 회계에 강제로 세고, CRITICAL 이 아닐 때만 「게이트 변경」 degrade 로 공시한다(막지 않음). 판정자가 새로 낸 승격 항목의 누락은 설계된 기본값이라 세지 않는다.
+- 토픽(선언) 모드에서 「영향 테스트 N개 선택 (전체 M개 중)」의 분모가 세션 브랜치 트리만 세어 `N > M` 이 나던 것을 고친다. `compute-test-scope-candidates.sh --total --tree <tree>` 가 합친 트리를 세고, 레퍼런스의 분모 규칙이 선언 경로에서 그것을 부른다.
+- `--total` 의 `ls-tree` · `ls-files` 가 도중에 실패하면 rc 0 · `0` 으로 삼켜지던 것을 exit 4 로 드러낸다. 인자 모양이 `--total` 이나 `--total --tree <tree>` 가 아니면 exit 4 다.
+
+### Changed
+- `scope_tuple.py` docstring 의 「판정 대상에서 빠진」을 「토픽 구성원에서 빠진」으로 고친다.
+
 ## [9.3.0] — 2026-09-27
 
 **공개 계약 · 헌장 정리** — qg 는 한 파이프라인이다. 두 게이트 · 런타임 검증 executor 를 전제하던 공개 문자열과 헌장 조항을 거두고, 헌장이 이름으로 박는 것이 실재하는지를 락으로 잠근다.
