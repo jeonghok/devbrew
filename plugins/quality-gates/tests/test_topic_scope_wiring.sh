@@ -382,6 +382,18 @@ case_override_clears_stale_scope_file() {
   assert_grep "$got" '^PARA_OVERRIDE_NEGATED:0$'  "override 조건절에 부정형(가 없으면 · 가 없을 때)이 섞여 있지 않다"
 }
 
+case_in_base_notice() {
+  # AC4 재정의 — 머지된 앞 조각이 이번 판정에서 빠졌다는 사실을 ① 1a 가 공지한다(같은 줄).
+  # 1a 창(「**1a — 토픽 선언」 ~ 「**session 스코프**」) 안에서만 찾는다 — 다른 절로 옮기면 RED.
+  local win got
+  win=$(awk '/\*\*1a — 토픽 선언/{f=1} /\*\*session 스코프\*\*/{f=0} f' "$SKILL")
+  got=$(printf '%s\n' "$win" | grep -F '`in_base:`' | grep -F '기준선에 포함됐다' | grep -F '판정 대상이 아니다')
+  assert_eq "$(printf '%s\n' "$got" | grep -c .)" "1" "① 1a 창에 in_base 공지가 한 줄 있다"
+  assert_grep "$got" '^[[:space:]]*`status: ok` 이고 파일의 `in_base:` 가 0 보다 크면 공지 한 줄: `> \[quality-gates\] 토픽 ' \
+    "조건(status ok · in_base > 0)과 목적지(공지 한 줄: …)가 같은 줄의 긍정형이다"
+  assert_not_grep "$got" '않|말 것|생략|아니고' "그 줄에 부정 · 반전 토큰이 없다(「판정 대상이 아니다」는 위에서 따로 잰다)"
+}
+
 for c in case_trivia_escape_is_gated_by_declaration case_step1_writes_scope_file \
          case_status_table_is_total_over_statuses case_topic_diff_uses_boundary_and_tree \
          case_step4_row_carries_scope case_scope_block_surfaces \
@@ -389,7 +401,7 @@ for c in case_trivia_escape_is_gated_by_declaration case_step1_writes_scope_file
          case_rinit_topic_branch_sets_axes case_scan_dir_feeds_detect_and_assign \
          case_r4_calls_use_baseline_commit case_r5b_skips_on_topic \
          case_r1b_topic_candidates_supplemented case_early_exit_discards_head_tree \
-         case_override_clears_stale_scope_file; do
+         case_override_clears_stale_scope_file case_in_base_notice; do
   echo "== $c"; $c
 done
 finish

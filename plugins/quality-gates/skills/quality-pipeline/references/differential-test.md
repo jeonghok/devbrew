@@ -241,7 +241,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 | 레포 CI 설정의 test-selection | CI 가 무엇을 고르는가 | **참고** — 대체 금지, 차이는 R2 산문에 한 줄 |
 | `test-scope-validator` 분류 | `outdated-suspicion`/`cherry-pick-suspicion` | **부정 신호** — 그렇게 찍힌 테스트는 커버리지로 세지 않음 |
 
-**선언 경로의 후보 보충.** `compute-test-scope-candidates.sh` 는 범위를 스스로 `merge_base..HEAD`(워킹트리가 더러우면 워킹트리)로 잡으므로 형제 · 머지된 구성원의 변경을 모른다.
+**선언 경로의 후보 보충.** `compute-test-scope-candidates.sh` 는 범위를 스스로 `merge_base..HEAD`(워킹트리가 더러우면 워킹트리)로 잡으므로 형제 구성원의 변경을 모른다.
 선언 경로면(R-init 이 `status: ok` 를 읽었으면) 스코프 파일의 `boundary:` · `tree:` 두 값으로 `git diff --name-only <boundary> <tree>` 를 떠서 그 집합의 테스트 파일과 그 집합의 소스에 이름이 맞는 `$scan_dir` 안의 테스트 파일을 후보에 더한다.
 
 `test-scope-validator` 를 여기서 dispatch 한다 (read-only reviewer; `project_dir` 는
