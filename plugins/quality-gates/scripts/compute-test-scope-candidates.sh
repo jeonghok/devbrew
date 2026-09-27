@@ -25,9 +25,10 @@
 #       4 = **the review range could not be diffed.** This is NOT "no candidates".
 #           빈 stdout 을 "이 diff 는 테스트를 건드리지 않는다" 로 읽으면 안 된다 —
 #           호출자는 이것을 `gap`/`verification: degraded` 사유로 기록해야 한다.
-#           `--total --tree <tree>` 에서는 `<tree>` 를 트리로 풀 수 없을 때, 인자 모양이
-#           `--total --tree <tree>` 가 아닐 때, `ls-tree`/`ls-files` 자체가 실패할 때도
-#           같은 4다 — stdout 은 비우고 stderr 에 사유를 loud 하게 낸다.
+#           `--total` 에서는 `ls-files` 가 실패할 때, `--total --tree <tree>` 에서는 `<tree>` 를
+#           트리로 풀 수 없거나 `ls-tree` 가 실패할 때, `--total` 뒤 인자가 정확히
+#           `--tree <tree>` 가 아닐 때도 같은 4다 — stdout 은 비우고 stderr 에 사유를
+#           loud 하게 낸다.
 #
 # **fail-open 지시 철회 (/qg iter-7 iteration 2, security-reviewer).** 앞 판본은
 # *"Skill must fail-open (treat non-zero as empty)"* 라고 적었다. 그 한 줄이 이

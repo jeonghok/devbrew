@@ -10,7 +10,7 @@
 ### Fixed
 - 합성기가 `confidence` 가 빠진 발견을 0 으로 채워 억제 바닥(≤4) 아래로 떨구던 것을 고친다. `decide(defect=bool(kept))` 라 그 발견이 유일하면 거짓 `clean` 이 날 수 있었다. 이제 누락 · 숫자 아님(`high` · `true` · `.inf`)은 5(보이되 검증 안 됨)로 확정한다. 살아남는 항목에서만 회계에 강제로 세고, CRITICAL 이 아닐 때만 「게이트 변경」 degrade 로 공시한다(막지 않음). 판정자가 새로 낸 승격 항목의 누락은 설계된 기본값이라 세지 않는다.
 - 토픽(선언) 모드에서 「영향 테스트 N개 선택 (전체 M개 중)」의 분모가 세션 브랜치 트리만 세어 `N > M` 이 나던 것을 고친다. `compute-test-scope-candidates.sh --total --tree <tree>` 가 합친 트리를 세고, 레퍼런스의 분모 규칙이 선언 경로에서 그것을 부른다.
-- `--total` 의 `ls-tree` · `ls-files` 가 도중에 실패하면 rc 0 · `0` 으로 삼켜지던 것을 exit 4 로 드러낸다. 인자 모양이 `--total` 이나 `--total --tree <tree>` 가 아니면 exit 4 다.
+- `--total` 의 `ls-tree` · `ls-files` 가 도중에 실패하면 rc 0 · `0` 으로 삼켜지던 것을 exit 4 로 드러낸다. `--total` 뒤에 붙은 인자가 정확히 `--tree <tree>` 가 아니면(`--tree=<T>` · 여분 인자) exit 4 다.
 
 ### Changed
 - `scope_tuple.py` docstring 의 「판정 대상에서 빠진」을 「토픽 구성원에서 빠진」으로 고친다.
