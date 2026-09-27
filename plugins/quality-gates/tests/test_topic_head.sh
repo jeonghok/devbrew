@@ -383,7 +383,7 @@ case_create_head_topic_names_resolve_reason() {
   local err rc; err=$(bash "$WT" create-head "$S" "$SID" --topic "$KEY" 2>&1 >/dev/null); rc=$?
   assert_eq "$rc" "2" "전부 머지된 키를 create-head --topic: exit 2"
   assert_grep "$err" '\(status: declaration-invalid — ' "stderr 가 status 를 이름 붙인다"
-  assert_grep "$err" 'all declared commits are already in base_ref' "stderr 가 resolve 의 사유를 싣는다"
+  assert_grep "$err" 'status: declaration-invalid — [^)]*all declared commits are already in base_ref\) — no combined tree' "stderr 한 줄이 status 와 resolve 의 사유를 함께 싣는다"
   cleanup
 }
 
