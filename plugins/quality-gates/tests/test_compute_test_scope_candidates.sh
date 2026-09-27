@@ -195,4 +195,54 @@ REPO=$(mktemp -d)
 NORMAL_ERR=$( ( cd "$REPO" && bash "$SCRIPT" ) 2>&1 >/dev/null )
 assert_not_contains "$NORMAL_ERR" "resolve-baseline.sh 실행 실패" "T8: 소유자가 있으면 무경고 (양의 짝)"
 rm -rf "$REPO"
+
+# --- Test 9 (Task 2 — 토픽 모드 분모 --total --tree <tree>) ---
+#
+# 토픽(선언) 경로는 분자를 경계..합친 트리로 보충하지만(differential-test.md R1b), 분모
+# (--total)는 현재 체크아웃만 셌다 — N > M 이 나올 수 있다. `--total --tree <tree>` 는
+# 그 트리 안의 테스트 파일 수를 낸다.
+#
+# `cd ""` 함정: mktemp_repo 가 실패(빈 문자열)를 내면 그 값으로 cd 하지 않는다 — 확인 후 진행.
+echo "== Test 9: --total --tree <tree> (토픽 분모) =="
+REPO=$(mktemp_repo)
+if [ -z "$REPO" ] || [ ! -d "$REPO" ]; then
+  no "T9: mktemp_repo 가 사용 가능한 경로를 내지 못했다 — 이후 단언을 건너뛴다"
+else
+  (
+    cd "$REPO" || exit 1
+    git checkout -q -b main
+    mkdir -p tests
+    echo "echo calc" > tests/test_calc.sh
+    git add . && git commit -q -m "main: test_calc"
+    git checkout -q -b topicA
+    echo "echo sub" > tests/test_sub.sh
+    git add . && git commit -q -m "topicA: test_sub"
+    git checkout -q main
+    git checkout -q -b topicB
+  )
+
+  TOTAL_MAIN=$( ( cd "$REPO" && bash "$SCRIPT" --total ) 2>/dev/null )
+  assert_eq "$TOTAL_MAIN" "1" "T9: --tree 없는 --total(topicB 체크아웃 중)은 1(형제 topicA 미포함)"
+
+  TOPICA_TREE_SHA=$( ( cd "$REPO" && git rev-parse "topicA^{tree}" ) )
+  TOTAL_TREE_SHA=$( ( cd "$REPO" && bash "$SCRIPT" --total --tree "$TOPICA_TREE_SHA" ) 2>/dev/null )
+  assert_eq "$TOTAL_TREE_SHA" "2" "T9: --total --tree <topicA 트리 SHA> = 2(합친 트리 전체를 센다)"
+
+  TOTAL_TREE_NAME=$( ( cd "$REPO" && bash "$SCRIPT" --total --tree topicA ) 2>/dev/null )
+  assert_eq "$TOTAL_TREE_NAME" "2" "T9: --total --tree topicA(커밋 이름도 트리로 풀린다) = 2"
+
+  TOTAL_BAD_OUT=$( ( cd "$REPO" && bash "$SCRIPT" --total --tree deadbeefdeadbeef ) 2>/dev/null )
+  TOTAL_BAD_RC=$?
+  TOTAL_BAD_ERR=$( ( cd "$REPO" && bash "$SCRIPT" --total --tree deadbeefdeadbeef ) 2>&1 >/dev/null )
+  assert_eq "$TOTAL_BAD_RC" "4" "T9: --total --tree deadbeefdeadbeef → rc 4(트리로 못 푼다)"
+  assert_eq "$TOTAL_BAD_OUT" "" "T9: --total --tree deadbeefdeadbeef → stdout 비었음"
+  assert_contains "$TOTAL_BAD_ERR" "분모를 셀 수 없다" "T9: --total --tree deadbeefdeadbeef → stderr 에 분모를 셀 수 없다"
+
+  TOTAL_NOVAL_OUT=$( ( cd "$REPO" && bash "$SCRIPT" --total --tree ) 2>/dev/null )
+  TOTAL_NOVAL_RC=$?
+  assert_eq "$TOTAL_NOVAL_RC" "4" "T9: --total --tree(값 없음) → rc 4"
+  assert_eq "$TOTAL_NOVAL_OUT" "" "T9: --total --tree(값 없음) → stdout 비었음"
+
+  rm -rf "$REPO"
+fi
 finish

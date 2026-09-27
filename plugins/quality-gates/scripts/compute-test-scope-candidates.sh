@@ -3,8 +3,9 @@
 # sorted list of test-file paths that are in-scope for the current diff.
 #
 # Usage:
-#   compute-test-scope-candidates.sh            → in-scope test-file candidates
-#   compute-test-scope-candidates.sh --total    → repo-wide test-file COUNT (분모 M, AC37)
+#   compute-test-scope-candidates.sh                       → in-scope test-file candidates
+#   compute-test-scope-candidates.sh --total               → repo-wide test-file COUNT (분모 M, AC37)
+#   compute-test-scope-candidates.sh --total --tree <tree> → <tree> 안의 테스트 파일 수 (토픽/선언 경로의 분모, Task 2)
 #
 # Inputs:
 #   $PWD            — must be a git working tree
@@ -24,6 +25,8 @@
 #       4 = **the review range could not be diffed.** This is NOT "no candidates".
 #           빈 stdout 을 "이 diff 는 테스트를 건드리지 않는다" 로 읽으면 안 된다 —
 #           호출자는 이것을 `gap`/`verification: degraded` 사유로 기록해야 한다.
+#           `--total --tree <tree>` 에서는 `<tree>` 를 트리로 풀 수 없을 때도 같은 4다 —
+#           stdout 은 비우고 stderr 에 사유를 loud 하게 낸다(Task 2).
 #
 # **fail-open 지시 철회 (/qg iter-7 iteration 2, security-reviewer).** 앞 판본은
 # *"Skill must fail-open (treat non-zero as empty)"* 라고 적었다. 그 한 줄이 이
@@ -83,7 +86,21 @@ TESTRE='(test|spec)\.[jt]sx?$|_test\.py$|(^|/)test_[^/]*\.py$|\.test\.|\.spec\.|
 # --total: 리포 전체 테스트 파일 수를 emit (계획 산문의 분모 M — AC37).
 # 후보 산출과 **같은 TESTRE**를 전 트리에 적용한다. 분모가 모델 자기보고이면
 # 과선택이 심해질수록 분모도 같이 부풀려 비율이 정상으로 보인다.
+#
+# --total --tree <tree> (Task 2): 토픽(선언) 경로에서는 R1b 가 분자를 경계..합친
+# 트리로 보충하는데, 분모는 이 브랜치의 현재 체크아웃만 세면 N > M 이 날 수 있다
+# (실측: e2e 후보 2개, 분모 1). `<tree>` 가 주어지면 그 트리 안에서 분모를 센다 —
+# 분자를 보충한 것과 **같은 트리**에서 분모도 세야 비율이 다시 정상이 된다.
 if [ "${1:-}" = "--total" ]; then
+  if [ "${2:-}" = "--tree" ]; then
+    if [ -z "${3:-}" ] || ! git rev-parse --verify --quiet "${3:-}^{tree}" >/dev/null 2>&1; then
+      echo "compute-test-scope-candidates: --tree 값을 트리로 풀 수 없다('${3:-}') — 분모를 셀 수 없다" >&2
+      exit 4
+    fi
+    # M8 과 같은 이유로 core.quotePath=false: 분자·분모가 같은 설정이어야 한다.
+    git -c core.quotePath=false ls-tree -r --name-only "$3" | grep -cE "$TESTRE" || true
+    exit 0
+  fi
   # M8: quotePath 기본 true 는 비-ASCII 경로를 인용·8진 이스케이프해 TESTRE 를
   # 못 만족시킨다 — 분자(위 git diff)와 **같은 설정**이어야 N>M 이 안 생긴다.
   git -c core.quotePath=false ls-files | grep -cE "$TESTRE" || true

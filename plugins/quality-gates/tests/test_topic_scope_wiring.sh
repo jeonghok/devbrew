@@ -405,6 +405,31 @@ case_in_base_notice() {
   assert_not_grep "$win" '판정 대상에서 빠졌다' "① 1a 창에 「판정 대상에서 빠졌다」가 없다 — 형제 토폴로지에서는 그 변경이 리뷰 diff 와 차등 테스트에 다시 든다(설계 §6.2.2 2)"
 }
 
+case_topic_denominator_uses_tree() {
+  # Task 2 — R1b 가 분자를 경계..합친 트리로 보충하는데 R2 산문의 분모(--total)는
+  # 현재 체크아웃만 세면 N > M 이 난다. `--total --tree <tree>` 로 분모도 합친
+  # 트리에서 세는 규칙이 R2 산문 3번 분모 규칙 줄 바로 다음 두 줄 안에, 같은
+  # 들여쓰기의 한 줄로 있어야 한다.
+  local needle='--total --tree <tree>'
+  local hits; hits=$(grep -F -- "$needle" "$REF")
+  assert_eq "$(printf '%s\n' "$hits" | grep -c .)" "1" "REF 에 --total --tree <tree> 를 담은 줄이 정확히 1줄"
+  assert_grep "$hits" '^[[:space:]]*선언 경로면' "그 줄이 선언 경로면 으로 시작한다"
+  assert_contains "$hits" '`tree:`' "같은 줄에 tree: 가 있다(스코프 파일 필드를 이름 붙인다)"
+  assert_not_grep "$hits" '않|말 것|생략|아니고' "그 줄에 부정 토큰이 없다"
+
+  local new_line_no denom_line_no
+  denom_line_no=$(grep -nF -- '부풀려 비율이 정상으로 보인다.' "$REF" | head -1 | cut -d: -f1)
+  new_line_no=$(grep -nF -- "$needle" "$REF" | head -1 | cut -d: -f1)
+  assert_grep "$denom_line_no" '^[0-9]+$' "분모 규칙 줄을 찾았다"
+  assert_grep "$new_line_no" '^[0-9]+$' "--total --tree <tree> 줄을 찾았다"
+  local delta; delta=$((new_line_no - denom_line_no))
+  if [ "$delta" -ge 1 ] && [ "$delta" -le 2 ]; then
+    ok "새 줄이 분모 규칙 줄 바로 다음 두 줄 안에 있다(delta=$delta)"
+  else
+    no "새 줄이 분모 규칙 줄 바로 다음 두 줄 안에 있다(delta=$delta)"
+  fi
+}
+
 for c in case_trivia_escape_is_gated_by_declaration case_step1_writes_scope_file \
          case_status_table_is_total_over_statuses case_topic_diff_uses_boundary_and_tree \
          case_step4_row_carries_scope case_scope_block_surfaces \
@@ -412,7 +437,8 @@ for c in case_trivia_escape_is_gated_by_declaration case_step1_writes_scope_file
          case_rinit_topic_branch_sets_axes case_scan_dir_feeds_detect_and_assign \
          case_r4_calls_use_baseline_commit case_r5b_skips_on_topic \
          case_r1b_topic_candidates_supplemented case_early_exit_discards_head_tree \
-         case_override_clears_stale_scope_file case_in_base_notice; do
+         case_override_clears_stale_scope_file case_in_base_notice \
+         case_topic_denominator_uses_tree; do
   echo "== $c"; $c
 done
 finish
