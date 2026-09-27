@@ -387,9 +387,12 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 출력을 그대로 보인다. 1단계가 있었으면 그것이 진행 쪽으로 닫힌 뒤다.
 「추가 라운드 1회 열기」를 고른 흐름에서는 돌리지 않는다(다음 라운드 끝으로 미뤄진다). 펜스는 세 가지를 한다:
 
-- advisory 항목을 설계문서의 `### Deferred to plan` 에 표 행으로 박제한다(`writing-plans` 가 그 절을 읽는다).
+- advisory 항목을 설계문서의 `### Deferred to plan` 에 표 행으로 박제한다.
 - 라운드별 계수 줄을 `## 결정 기록` 에 적는다.
 - 목록을 낸다.
+
+설계문서가 working-tree 에 없으면 셋 다 건너뛰고 그 사실을 한 줄로 낸다 — 아래 재확인이 `### 대상 부재` 로 간다.
+박제 · 계수가 실패하면 공시한 뒤 목록만 다시 낸다(표시는 문서를 쓰지 않는다).
 
 셋 다 멱등이라 ③ 수정 뒤 다시 와도 두 번 적지 않는다. 문서가 바뀌므로 ①/② 의 미커밋 확인이 그 변경을
 알리고, 그때 커밋한다. 펜스 앞에 `spec_path='<「## 입력」에서 절대 경로로 바꾼 설계문서 경로>'` 한 줄을 붙여
@@ -403,10 +406,17 @@ ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}" || true)"
 if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
   echo "[spec-distill] 참고(advisory) 목록 없음 — 엔진 원장을 찾지 못했다(spec_path='${spec_path:-}' · STATE_DIR='${STATE_DIR:-}'). 2단계 질문 텍스트에 싣는다."
+elif [ ! -f "$spec_path" ]; then
+  echo "[spec-distill] 참고(advisory) 목록 건너뜀 — 설계문서가 없다(spec_path='${spec_path}'). 박제 · 계수 · 표시를 하지 않는다 — 아래 대상 부재 재확인으로 간다."
 else
   adv_rc=0
-  python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --sink "$spec_path" --log-file "$spec_path" --render --cap 8 || adv_rc=$?
-  [ "$adv_rc" -eq 0 ] || echo "[spec-distill] 참고 목록 표시 · 박제 실패(rc $adv_rc) — 위 stderr 의 사유를 2단계 질문 텍스트에 싣는다. 진행은 막지 않는다."
+  adv_err="$STATE_DIR/advice-err.json"
+  python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --sink "$spec_path" --log-file "$spec_path" --render --cap 8 2>"$adv_err" || adv_rc=$?
+  if [ "$adv_rc" -ne 0 ]; then
+    cat "$adv_err" >&2
+    echo "[spec-distill] 참고 목록 표시 · 박제 실패(rc $adv_rc) — 위 stderr 의 사유를 2단계 질문 텍스트에 싣는다. 진행은 막지 않는다."
+    grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' "$adv_err" || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8 || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 2단계 질문 텍스트에 싣는다."
+  fi
 fi
 ```
 <!-- advice-display:end -->

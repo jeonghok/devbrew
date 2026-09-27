@@ -49,6 +49,33 @@ FIN="$(cat "$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/referenc
 assert_contains "$FIN" "사용자가 고를 것이 있는가" "finishing: §3 / §5 를 가르는 판단 문면이 있다"
 assert_contains "$FIN" 'check_brief.py" gate "$PAYLOAD"' "finishing: 박제 뒤 구조 게이트를 다시 돈다"
 assert_not_contains "$FIN" "층 1(방향성) 결정은 라운드 게이트에서 이미 사용자가 판정했습니다" "finishing: B-2 의 낡은 문장(방향이 라운드 게이트에 온다)이 없다"
+assert_contains "$FIN" "B-A 가 낸 것을 싣습니다" "finishing: B-2 가 B-A 의 산출(목록 · 박제 결과 또는 부재 · 실패 공시)을 싣는다"
+RSP="$REPO_ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+FINP="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/references/finishing.md"
+ADV_FENCE="$(awk '/<!-- advice-display:begin -->/{f=1} f; /<!-- advice-display:end -->/{f=0}' "$RSP")"
+assert_contains "$ADV_FENCE" 'elif [ ! -f "$spec_path" ]; then' "reviewing-spec: 설계문서가 없으면 advice 를 부르지 않는다(박제 · 계수가 빈 파일을 만들지 않게)"
+BA="$(awk '/^#### B-A/{f=1;print;next} /^#### /{f=0} f' "$FINP")"
+assert_contains "$BA" 'echo "advice-list: $STATE_DIR/advice-list.json"' "finishing B-A: JSON 목록 경로를 한 줄로 낸다"
+assert_contains "$BA" "advice-list:\` 줄이 가리킨" "finishing B-A: 박제는 그 줄이 가리킨 파일을 읽는다"
+first_line() {   # first_line <파일> <고정 문자열> <이 줄 뒤에서> — 없으면 0
+  awk -v n="$2" -v from="$3" 'NR>from && index($0,n){print NR; exit}' "$1" | grep . || echo 0
+}
+in_order() {   # in_order <메시지> <줄번호…> — 전부 양수이고 순증가
+  local msg="$1" prev=0 x; shift
+  for x in "$@"; do
+    if [ "$x" -le "$prev" ]; then no "$msg (줄번호 $*)"; return; fi
+    prev="$x"
+  done
+  ok "$msg"
+}
+in_order "reviewing-spec: 「미검증」 문단 → advice 펜스 → 2단계 옵션 순서다" \
+  "$(first_line "$RSP" '**「미검증」 라운드**' 0)" "$(first_line "$RSP" '<!-- advice-display:begin -->' 0)" \
+  "$(first_line "$RSP" '승인 게이트 **2단계**의 옵션 넷' 0)"
+BA_AT="$(first_line "$FINP" '#### B-A' 0)"
+in_order "finishing: B-A 가 B-1 앞이고, B-A 안에서 JSON → 표시 → 재게이트 순서다" \
+  "$BA_AT" "$(first_line "$FINP" '> "$STATE_DIR/advice-list.json"' "$BA_AT")" \
+  "$(first_line "$FINP" '--render --cap 8' "$BA_AT")" "$(first_line "$FINP" 'check_brief.py" gate "$PAYLOAD"' "$BA_AT")" \
+  "$(first_line "$FINP" '#### B-1' 0)"
 RD="$(cat "$REPO_ROOT/shared/docreview/references/reviewing-document.md")"
 assert_contains "$RD" "끝에서 한 번" "절차서: 참고 목록은 끝에서 한 번이다"
 finish
