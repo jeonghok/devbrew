@@ -52,7 +52,8 @@ next_phase: superpowers:writing-plans
 
 ## Goals
 
-- **G1** 프로필이 must-catch 축을 지목하고, 그 밖의 rubric 축 finding 은 승인을 막지 않는다 ⟨D11⟩.
+- **G1** 프로필이 must-catch 축을 지목하고, 그 밖의 rubric 축의 결정 · 질문은 게이트 질문이 되지 않고 승인을
+  막지 않는다. 그 축의 `fix` 는 사용자 질문 없이 저자가 적용한다(§B) ⟨D11⟩.
 - **G2** 지목이 없거나 모르는 category 는 막는 쪽이다 — 정의가 fail-closed ⟨D11⟩ ✎.
 - **G3** advisory 는 게이트 질문이 아니고, 끝에서 한 목록으로 한 번 보이며, 한 화면(≤10줄)을 넘지
   않고, 박제처가 전문을 갖는다 ⟨D8⟩ ⟨D9⟩.
@@ -66,7 +67,11 @@ next_phase: superpowers:writing-plans
 - 방향 · overdesign **탐지**의 제거 — 게이트에서 내릴 뿐 계속 찾고 보인다.
 - 탐지 · 재비판 입력에 diff 를 싣는 것(OQ12 → 싣지 않는다, 연기 트리거는 §E).
 - quality-gates 리뷰 동작 변경 · reviewing-brief SKILL.md 의 펜스 반복 정리.
-- 프로필 본문(리뷰어가 읽는 검토 항목)의 수정 — 라우팅은 리뷰어가 알 필요가 없다.
+- 프로필 본문(리뷰어가 읽는 검토 항목)의 수정 — 라우팅은 리뷰어가 알 필요가 없다. 그래서 `must_catch` 줄은
+  리뷰어에게도 안 보인다: 세 진입 skill(`reviewing-brief` · `reviewing-spec` · `framing-requests`)의 profile-content
+  펜스가 `<profile>` 슬롯에 싣기 전에 그 줄을 벗긴다. 막는 축을 아는 리뷰어는 category 라벨로 차단 여부를 조종할 수
+  있다. codex 러너는 frontmatter 중 자기가 읽는 필드(`ground_truth` · `layer_rubric` · `allowed_dispositions` ·
+  `web`)만 프롬프트에 싣으므로 무변경이다.
 
 ## Constraints
 
@@ -98,9 +103,22 @@ next_phase: superpowers:writing-plans
 ### §B 라우팅
 
 `_classify_items` 에서 처분 강제 뒤 · 앵커 분류 앞에 한 분기: category 가 advisory 축이고 처분이
-`drop` 이 아니면 `advice` 로 보낸다(처분 `decide` · `ask` · `fix` · `defer` 무관). decides · fixes · asks
-원장에 들어가지 않으므로 승인 술어는 그대로 must-catch 만 본다. 재비판 `reject` 는 지금처럼 기각
-회계로, `drop` 은 지금처럼 drop 회계로 간다. 보호 헤딩 승격 · immutable 승격은 must-catch 에만 걸린다.
+`decide` · `ask` 이면 `advice` 로 보낸다. decides · asks 원장에 들어가지 않으므로 그 항목은 게이트 질문도
+승인 차단도 아니다. 그 밖은 현행 경로 그대로다:
+
+- **advisory 축의 `fix` 는 fixes 원장에 남는다** — 사용자 질문 없이 저자가 적용하는 처분이라 ⟨D2⟩ 의 개입을
+  늘리지 않고, 남은 `TBD` · 두 가지로 읽히는 AC 같은 결함이 리뷰 중에 고쳐진다(Law 1). 보호 헤딩 승격도 현행대로
+  걸린다. 대가: 적용 관측을 위해 다음 라운드를 부른다.
+- `defer` 는 현행 defer 경로(`### Deferred to plan`), `drop` · 재비판 `reject` 는 현행 회계로 간다.
+
+경계를 넘는 두 관계는 막는 쪽으로 닫는다(G2) — `must_catch` 를 지목한 프로필에서만:
+
+- **병합 생존자** — `same_as` 흡수(`_absorb_same_as`)는 처분 순위로 생존자를 고르고 생존자의 category 를 남긴다.
+  흡수 대상 중 기각되지 않은 구성원 하나라도 must-catch 축이면 생존자를 must-catch 로 친다. 분류는 흡수 **뒤**에
+  돌기 때문에(`cmd_finalize`), 흡수 단계가 구성원 축 소속을 생존자에 남겨야 한다.
+- **`blocks`** — `blocks` 로 must-catch 항목을 가리키는 advisory `ask` 는 must-catch 로 친다(질문이 막는 fix 가
+  답 없이 적용되지 않게). must-catch `ask` 의 `blocks` 가 advice 로 간 항목을 가리키면 그 ref 는 `_remap_blocks`
+  에서 조용히 버려지지 않고 `coerced("blocks", …)` 로 센다.
 
 ### §C `advice` 원장 · 1회 규칙
 
@@ -142,8 +160,13 @@ design doc 의 박제처가 `Deferred to plan` 인 것은 writing-plans 가 그 
   · 재상승 후속이 아님)이고 앵커 절 해시가 스냅숏 n−1 과 n 에서 같은 것의 수. 게이트 렌더의 참고 줄에
   싣는다. 동작을 바꾸지 않는다 — RC31(「전문 재대조에서 재샘플링이 잦아든다」)이 성립하는지를 다음
   사이클들이 셀 수 있게 한다(OQ17).
+- **영속 운반체** — 계수가 finalize 보고서에만 있으면 세션 상태의 24h TTL GC(`spec-distill-gc.py`)와 함께
+  사라진다. 그래서 끝의 한 번 표시(§D)와 같은 시점에 `advice --log-file <decision_log 목적지>` 가 라운드별 계수
+  한 줄(`docreview 계수 — r<n>: advice_new=k · advice_repeat=r · mc_preexisting_new=m`)을 프로필 `decision_log`
+  절에 기존 `append_under_heading` 으로 덧붙인다 — brief 는 audit `## 8. 리뷰 결정`, design doc 은 `## 결정 기록`,
+  seed 는 audit `## 6. 리뷰 결정`. 커밋되는 문서라 다음 사이클이 grep 으로 센다.
 - **접근 B 로 올라갈 트리거** — 라운드 2 이상의 `advice_new` 가 cap(8)을 넘는 일이 반복되면 재비판자
-  diff 자격(`### 재결정` R1)을 연다. 재료는 finalize 보고서에 이미 있다.
+  diff 자격(`### 재결정` R1)을 연다. 재료는 위 운반체가 남긴 계수 줄이다.
 
 ### §F 곁가지 — 번들 위생 regex (OQ14)
 
@@ -165,8 +188,9 @@ design doc 의 박제처가 `Deferred to plan` 인 것은 writing-plans 가 그 
 
 ## Acceptance Criteria
 
-- **AC1** brief fixture 에서 `direction` finding 만 나온 라운드 1 은 `approval_ready` 가 참이고
-  `round_gate_needed` 가 거짓이다. 같은 fixture 의 `distortion` finding 은 decides(또는 fixes)에 있다.
+- **AC1** brief 프로필 fixture 둘. (i) `direction` decide 만 나온 라운드 1 은 `approval_ready` 가 참이고
+  `round_gate_needed` 가 거짓이며 그 항목은 `advice` 에 있다. (ii) `direction` decide + `distortion` finding 이면
+  `distortion` 은 decides(또는 fixes)에 있고 `approval_ready` 가 거짓이며 `direction` 은 `advice` 에 있다.
 - **AC2** rubric 밖 category · `other` · `frozen_change` 는 `must_catch` 가 있는 프로필에서도 차단 원장에
   간다. 여집합 계산을 뒤집는 변이(advisory = must_catch)는 AC1 · AC2 를 RED 로 만든다.
 - **AC3** `must_catch` 가 없는 프로필로 같은 fixture 를 돌리면 finalize 보고서와 `gate --render` 가 변경
@@ -179,8 +203,10 @@ design doc 의 박제처가 `Deferred to plan` 인 것은 writing-plans 가 그 
   머리 포함 ≤10줄.
 - **AC7** `advice --sink` 는 design-doc 프로필에서 `### Deferred to plan` 아래에 미박제 항목 전부를 적고
   두 번째 호출은 아무것도 더 적지 않는다(멱등). brief 프로필에서는 `profile_has_no_defer_target` rc 1.
-- **AC8** 라운드 입력 수 = must-catch 원장 유입 + `advice`(listed + repeat) + 재비판 기각 + drop — 자리별
-  등식이 fixture 에서 성립한다(합계 하한이 아니다).
+- **AC8** 단계별 등식이 fixture 에서 성립한다(합계 하한이 아니다). 정규화된 리뷰어 입력(critic + codex) + 재비판
+  `added` = `same_as` 흡수 + 재비판 기각 + drop + must-catch 생존자(decides + fixes + asks + defers) + `advice`
+  (listed + repeat). 엔진 자동 생성분(얼림 · 재상승 · 상향)은 별도 유입으로 세고, 파손 입력은 정규화 단계의 보류
+  회계로 센다. 각 항은 fixture 에서 0 이 아닌 값을 하나 이상 갖는다.
 - **AC9** `mc_preexisting_new` 는 해시 불변 절의 새 계보 must-catch 만 센다 — 바뀐 절의 것 · 계보 후속은
   세지 않는다.
 - **AC10** 번들 빌더 · inline 블롭 빌더는 payload 에 자기 `audit_file` basename 이 있으면 rc 3, 다른
@@ -189,19 +215,31 @@ design doc 의 박제처가 `Deferred to plan` 인 것은 writing-plans 가 그 
   박제 절차를 싣고, 그 문면이 부르는 서브커맨드 · 플래그가 실재한다.
 - **AC12** 착수 전 baseline 대비 `shared/tests/test_docreview_*.sh` · `plugins/quality-gates/tests/test_recritic_bridge.sh`
   · 이 파이프라인을 참조하는 spec-distill 테스트의 rc 와 실패 줄 수가 늘지 않는다.
+- **AC13** design-doc 프로필에서 advisory 축(`ambiguity`)의 `fix` 는 fixes 원장에 있고 `advice` 에 없다. 같은 축의
+  `decide` · `ask` 는 `advice` 에 있다.
+- **AC14** `same_as` 로 `architecture`(must-catch)와 `component_relations`(advisory)를 병합하면 처분 순위와 무관하게
+  생존자가 must-catch 원장에 있다. 구성원이 전부 advisory 면 `advice` 에 있다. 필드 없는 프로필의 병합 결과는 AC3
+  golden 과 같다.
+- **AC15** advisory `ask` 의 `blocks` 가 must-catch `fix` 를 가리키면 그 ask 는 차단 ask(`blocking_ask_open`)이고 fix
+  는 `held` 다. must-catch `ask` 의 `blocks` 가 advice 항목을 가리키면 그 ref 가 `coerced` 로 1 세어진다.
+- **AC16** 세 진입 skill 의 profile-content 펜스 출력에 `must_catch:` 줄이 없고, 그 줄을 뺀 나머지는 프로필 파일과
+  바이트 동일하다. 벗기는 줄을 지우는 변이는 RED.
+- **AC17** `advice --log-file` 이 decision_log 절에 라운드별 계수 줄을 적은 뒤 엔진 상태 디렉토리를 지워도 그 줄이
+  목적지 파일에 남는다. 두 번째 호출은 같은 라운드 줄을 다시 적지 않는다(멱등).
 
 ## Files to Modify
 
 | 파일 | 변경 |
 |---|---|
-| `shared/docreview/scripts/docreview_state.py` | `OPTIONAL_PROFILE_FIELDS` · `must_catch` 스키마 · `advice` 원장 기본값 · `gate_summary` 의 참고 계수 · 렌더 참고 줄 · `advice` 서브커맨드 |
-| `shared/docreview/scripts/docreview_route.py` | `_classify_items` 분기 · 보고서 `advice_new` · `advice_repeat` · `mc_preexisting_new` |
+| `shared/docreview/scripts/docreview_state.py` | `OPTIONAL_PROFILE_FIELDS` · `must_catch` 스키마 · `advice` 원장 기본값 · `gate_summary` 의 참고 계수 · 렌더 참고 줄 · `advice` 서브커맨드(`--render` · `--cap` · `--sink` · `--log-file`) |
+| `shared/docreview/scripts/docreview_route.py` | `_classify_items` 분기(`decide` · `ask` 만) · `_absorb_same_as` 의 구성원 축 소속 · `_remap_blocks` 의 경계 `blocks` 계수 · 보고서 `advice_new` · `advice_repeat` · `mc_preexisting_new` |
 | `plugins/spec-distill/references/docreview-profiles/{brief,design-doc,seed}.md` | frontmatter `must_catch` 한 줄씩 |
 | `plugins/spec-distill/references/reviewing-document.md` | 7 · 8단계의 advice 분기 · 끝의 한 번 |
-| `plugins/spec-distill/skills/reviewing-brief/SKILL.md` · `reviewing-spec/SKILL.md` | `## 게이트` 끝의 `advice` 호출 |
-| `plugins/spec-distill/skills/conducting-interview/references/finishing.md` | Step B 의 참고 목록 표시 · §3/§5 박제 규칙 |
+| `plugins/spec-distill/skills/reviewing-spec/SKILL.md` | `## 게이트` 승인 게이트 1단계 앞의 `advice --render` · `--sink` · `--log-file` 호출 |
+| `plugins/spec-distill/skills/{reviewing-brief,reviewing-spec,framing-requests}/SKILL.md` | profile-content 펜스가 `must_catch:` 줄을 벗긴다. `reviewing-brief` 는 `advice` 를 부르지 않는다 — brief 의 한 번 표시는 호출자 Step B 한 곳이다 |
+| `plugins/spec-distill/skills/conducting-interview/references/finishing.md` | Step B 의 참고 목록 표시(`advice --render` · `--log-file`) · §3/§5 박제 규칙. B-2 의 「층 1(방향성) 결정은 라운드 게이트에서 이미 사용자가 판정했습니다」를 고친다 — brief 의 방향 · overdesign 은 이제 라운드 게이트가 아니라 참고 목록으로 온다 |
 | `plugins/spec-distill/scripts/build_brief_bundle.py` · `build_brief_inline_blob.py` | 위생 판정(`AUDIT_NAME_RE` · `AUDIT_SUFFIX_RE`)을 자기 audit basename 으로 |
-| `shared/tests/test_docreview_{route,state,profile_schema,golden}.sh` · spec-distill 번들 테스트 | AC1~AC10 |
+| `shared/tests/test_docreview_{route,state,profile_schema,golden}.sh` · spec-distill 번들 · 진입 skill 펜스 테스트 | AC1~AC10 · AC13~AC17 |
 | `plugins/{spec-distill,quality-gates}/.claude-plugin/plugin.json` · `CHANGELOG.md` | spec-distill minor · qg patch(공유 스크립트 배포분) |
 
 ## Verification Plan
@@ -273,6 +311,21 @@ brainstorming 에서 사용자가 고른 것:
 - **B4** §1 — 라운드 게이트엔 개수 한 줄, 목록은 끝에서 1회 · brief 박제는 Step B 에서 오케스트레이터 ·
   OQ14 를 이번 범위에.
 - **B5** §3 — must-catch 재제기는 막지 않고 `revived` 공시 + `mc_preexisting_new` 관측.
+
+리뷰 결정(엔진 기록):
+
+- D1.1 · r1 · adopt · 4ae3af49#r1.1 · "채택 — (a) fix 는 fixes 유지" — 라우팅이 처분을 보지 않아서 advisory 축의 `fix` 도 advice 로 빠집니다. 그 결과 design doc 에서는 층 2 일곱 축과 feasibility 의 상세 결함이, 보호 헤딩 안에 있어도 리뷰 중에 문서에서 고쳐지지 않고 Deferred to plan 에 행으로만 쌓입니다.
+- D1.2 · r1 · adopt · 7354bec2#r1.1 · "채택 — 슬롯 전 벗기기" — `must_catch` 가 프로필 frontmatter 에 들어가면 프로필 전문이 `<profile>` 슬롯에 그대로 실리므로 탐지기와 재비판자가 어느 축이 막는지 봅니다. Non-goal 의 「라우팅은 리뷰어가 알 필요가 없다」와 어긋나고, 라우팅의 유일한 키인 category 라벨을 리뷰어가 쥐게 됩니다.
+- D1.3 · r1 · adopt · 76165d29#r1.1 · "채택 — decision_log 에 한 줄" — G6 과 §E 의 트리거가 기대는 계수(advice_new · advice_repeat · mc_preexisting_new)는 finalize 보고서에만 남습니다. 그런데 그 보고서는 24시간 TTL 로 지워지는 세션 상태 안에 있어서, 「다음 사이클이 측정한다」를 받쳐 줄 영속 운반체가 없습니다.
+- D1.4 · r1 · adopt · a629a7da#r1.1 · "채택 — 구성원 하나라도 막음" — 병합 생존자의 category만으로 분기하면 must-catch finding이 advisory에 흡수되어 차단에서 빠진다.
+- D1.5 · r1 · adopt · baf43eac#r1.1 · "채택 — 막는 ask 는 must-catch" — ask→fix 의 `blocks` 의존이 must-catch 와 advisory 경계를 넘으면 끊깁니다. advisory ask 가 must-catch fix 를 막고 있었다면 그 차단이 사라지고, must-catch ask 가 advisory fix 를 막고 있었다면 비차단 ask 로 강등됩니다.
+- D1.6 · r1 · adopt · fccf272b#r1.1 · "채택 — fixture 둘로 분리" — AC1 이 자기모순입니다. 「`direction` finding 만 나온 라운드 1」과 「같은 fixture 의 `distortion` finding」이 한 fixture 안에서 동시에 성립할 수 없습니다.
+- D1.7 · r1 · adopt · fccf272b#r1.2 · "채택 — 단계별 등식" — AC8의 입력 경계가 정의되지 않았고, 등식에서 기존 same_as 흡수 항목이 빠져 있다.
+
+원장 정정 공시 — 라운드 1 탐지기가 `§` 를 넣은 앵커(`#§b-라우팅` · `#§e-관측--멈춤-보장의-정직한-경계`)를 냈고 엔진
+slug 는 `§` 를 뺀다. D1.1 · D1.3 · D1.5 의 permit 이 실재하지 않는 앵커를 가리켜 적용해도 만료될 상태라, 사용자 선택
+(「원장 permit 앵커 정정」)으로 엔진 원장의 그 세 finding 의 `anchor` · `edit_scope` 와 permit 앵커를 `§` 만 뺀 실재 앵커로
+손으로 고쳤다(9자리, 엔진 API 밖 1회 · 백업 보존).
 
 ### 재결정
 
