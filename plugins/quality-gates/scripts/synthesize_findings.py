@@ -377,7 +377,7 @@ def promote_new_findings(raw_new, existing, *, author, ledger=None):
         # 주장에 대한 설계된 인코딩이지 이상이 아니다(_normalize_confidence 의
         # docstring). 그러나 non-numeric(malformed) 값은 판정자가 «잘못 준» 값
         # 이라 여전히 malformed 다 — had_key 가 참일 때만(즉 키 없음이 아닐 때만)
-        # 강제로 센다(/qg 리뷰 라운드 1 I-3). gate 는 apply_verdicts 와 같은 규칙:
+        # 강제로 센다. gate 는 apply_verdicts 와 같은 규칙:
         # severity 가 CRITICAL 이면 confidence 는 억제 여부를 못 바꾼다.
         conf_coerced, conf_raw, conf_had_key = _normalize_confidence(f, warn_missing=False)
         if conf_coerced and conf_had_key and ledger is not None:
@@ -411,8 +411,8 @@ def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
     - confidence 강제(`_normalize_confidence`)의 값 확정은 여기서 즉시 하지만,
       `ledger.coerced()` 호출은 항목이 **살아남는** 갈래(hold · accept)에서만
       한다 — `reject` 된 항목은 판정(kept/suppressed)에 아예 안 들어가므로 그
-      강제가 게이트를 못 바꾼다; 세면 거짓 「게이트 변경」 공시다(/qg 리뷰
-      라운드 1 I-1). gate 는 raise 적용 **후** severity 로 잰다 — CRITICAL 은
+      강제가 게이트를 못 바꾼다; 세면 거짓 「게이트 변경」 공시다. gate 는
+      raise 적용 **후** severity 로 잰다 — CRITICAL 은
       confidence 와 무관하게 늘 kept 라 그 강제가 억제 여부를 못 바꾼다.
     """
     by_id = {v.get("finding_id"): v for v in verdicts if isinstance(v, dict)}
@@ -444,7 +444,7 @@ def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
         verdict = v.get("verdict", "confirm")
         if verdict == "reject":
             # 기각된 항목은 판정에 안 들어간다 — confidence 강제가 무엇이든
-            # 게이트를 못 바꾼다. 세지 않는다(I-1).
+            # 게이트를 못 바꾼다. 세지 않는다.
             if ledger is not None:
                 ledger.reject(finding_id(f), "판정자 기각")
             continue
