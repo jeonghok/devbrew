@@ -15,8 +15,9 @@
 - `marketplace.json` · `plugin.json` 의 qg 설명을 「one pipeline, one verdict (review + mandatory differential test)」로 바꾼다 — 「2-gate … (review + runtime)」은 사라진 런타임 게이트를 주장했다.
 - `CLAUDE.md` Law 2 와 철학 문서에서 *Scoped exception (qg v2.2.0)* 을 지운다 — 그 조항이 이름으로 박던 `runtime-verifier` 는 9.0.0 에서 사라졌다. Law 2 는 예외 없는 원칙으로 돌아간다. 부팅되는 앱을 가진 설치본은 브라우저 플로우 검증 · spec AC 런타임 검증 · mutation guard 를 잃었다(9.0.0) — qg 는 그것을 대체하지 않고 주장을 거둔다.
 - `security-reviewer` · `pr-understanding-builder` · `critiquing-artifacts` · `publishing-pr-understanding` 의 「Review gate」 · 「two-gate」 라벨을 한 파이프라인 이름으로 바꾼다(persona 는 라벨만 — 규칙 · 임계 · 도구 불변).
-- ① 1a 의 `in_base` 공지가 「기준선에 포함됐다」 대신 「이번 판정 대상에서 빠졌다 — 자기 PR 에서 판정됐다」를 낸다 — 형제 구성원이 그 머지 전에 갈라졌으면 그 조각은 경계 트리에 없다.
-- README — 토픽 스코프 절이 머지된 앞 조각의 변경이 경계 트리에 드는지를 토폴로지로 적는다(스택이면 들고, 어느 구성원이 그 머지 전에 갈라졌으면 안 들어 리뷰 diff 에 다시 보인다). 알려진 한계에는 squash 로 든 앞 조각의 흡수가 사이 base 커밋이 다른 `Spec:` 키를 달았으면 `declaration-invalid` 로 막힌다는 조건을 적고, 로컬 전용 머지(push 전)와 fetch 전 원격 머지의 다른 결과를 가른다.
+- ① 1a 의 `in_base` 공지가 「기준선에 포함됐다 — 이번 판정 대상이 아니다」 대신 「토픽 구성원에서 빠졌다 — 그 머지 전에 갈라져 base 를 아직 안 들인 형제 구성원이 있으면 그 변경이 이번 diff 에 다시 보인다」를 낸다 — 옛 문구는 형제 토폴로지에서 틀렸다(그 변경이 리뷰 diff 와 차등 테스트에 다시 든다). 앞 조각이 자기 PR 에서 판정됐다는 주장은 qg 가 확인하지 못하므로 싣지 않는다.
+- README — 토픽 스코프 절이 머지된 앞 조각의 변경이 경계 트리에 드는지를 토폴로지로 적는다(경계가 그 조각을 품으면 들고, 그 머지 전에 갈라져 base 를 아직 안 들인 형제 구성원이 있으면 안 들어 리뷰 diff 와 차등 테스트에 다시 든다). 알려진 한계에는 squash 로 든 앞 조각의 흡수가 사이 base 커밋이 다른 `Spec:` 키를 달았으면 `declaration-invalid` 로 막힌다는 조건을 적고, 로컬 전용 머지(push 전)와 fetch 전 원격 머지의 다른 결과를 가른다.
+- 철학 문서 P4 — runtime tier 의 집행 코드로 qg 차등 테스트를 가리키던 줄을 고친다. qg 는 mechanical tier(차등 테스트)와 semantic tier(독립 리뷰)를 집행하고 runtime tier 를 주장하지 않는다. 같은 문서 Law 2 의 분리 수단을 `tools:` allowlist 로 바로잡는다(`allowed-tools` 는 제한이 아니다 — CLAUDE.md).
 
 ### Fixed
 - `create-head --topic` 이 재도출에 실패해 죽을 때 `resolve` 의 사유를 함께 낸다(전에는 `status` 만).

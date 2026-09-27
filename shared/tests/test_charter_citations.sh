@@ -184,10 +184,17 @@ else:
         else:
             out("NO", f"이력 도출이 알려진 제거 {known}({axis})를 못 본다 — 그 축의 도출이 무너졌거나 얕은 클론이다")
     out("NOTE", f"사라진 이름 {len(gone)}개 — 식별자 모양 {len(ident)}개 검사 · 한 단어 {len(words)}개 건너뜀({', '.join(words) or '-'})")
+    def occurrences(name, text):
+        return len(re.findall(r"(?<![A-Za-z0-9_.-])" + re.escape(name) + r"(?![A-Za-z0-9_-])", text))
+    # 매처 자체의 대조 — 정규식이 부러지면 hits==0 으로 조용히 GREEN 이 되는 것을 막는다.
+    if occurrences("runtime-verifier", "x runtime-verifier y") == 1 and occurrences("runtime-verifier", "x runtime-verifier-x y") == 0:
+        out("OK", "헌장 매처가 합성 문자열에서 이름 하나를 잡고 더 긴 식별자는 잡지 않는다(매처 대조)")
+    else:
+        out("NO", "헌장 매처가 합성 대조를 통과하지 못했다 — 정규식이 부러졌다")
     hits = 0
     for doc, text in texts.items():
         for n in ident:
-            k = len(re.findall(r"(?<![A-Za-z0-9_.-])" + re.escape(n) + r"(?![A-Za-z0-9_-])", text))
+            k = occurrences(n, text)
             if k:
                 hits += 1
                 out("NO", f"{doc}: 이력에서 사라진 이름 `{n}` 이 {k}곳에 있다 — 그 대상이 지금 트리에 없다")
