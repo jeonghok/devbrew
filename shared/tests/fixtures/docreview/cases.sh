@@ -2,7 +2,9 @@
 # 계약: 이 파일을 source 하기 전에 REPO_ROOT · SCRIPTS 가 정의돼 있어야 하고 assert.sh 가 로드돼 있어야 한다.
 #       각 case_* 는 자기 임시 디렉토리를 만들고 끝에 지운다. 관측은 assert_* 로만 낸다.
 FX="$REPO_ROOT/shared/tests/fixtures/docreview"
-PROF_SD="$REPO_ROOT/plugins/spec-distill/references/docreview-profiles"
+# 필드 없는 사본 — 이 파일의 케이스는 must_catch 를 지목하지 않은 프로필의 동작(라우팅 현행)을 잰다.
+# must_catch 를 지목한 동작은 cases_advice.sh 가 실제 프로필($PROF_MC)로 잰다.
+PROF_SD="${DOCREVIEW_PROF_SD:-$(bash "$FX/nofield_profiles.sh")}"
 PROF_QG="$REPO_ROOT/plugins/quality-gates/references/docreview-profiles"
 export PYTHONDONTWRITEBYTECODE=1
 
