@@ -30,6 +30,12 @@ try:
     import yaml
 except ImportError:  # pragma: no cover
     yaml = None
+# 형제 모듈 — `advice` 서브커맨드만 쓴다. 원장 스크립트만 복사한 트리에서도 다른 서브커맨드는 돌아야 하므로
+# 없으면 None 으로 두고 `advice` 가 `advice_module_missing` 으로 멈춘다(yaml 과 같은 자리 · 같은 모양).
+try:
+    import docreview_advice as _adv
+except ImportError:  # pragma: no cover
+    _adv = None
 
 STATE_FILE = "docreview-state.md"
 REREVIEW_CAP = 2
@@ -1442,7 +1448,9 @@ def cmd_advice(a) -> int:
     글자로 판정한다 — 원장이 TTL 로 걷혀도 두 번 적지 않는다. 부르는 자리는 진입 skill 셋이다(절차서는 계약만).
     쓰기가 실패하면 rc 1 과 사유(`sink_write_failed` · `log_write_failed`)를 내고, 실제로 적힌 항목만 `sunk` 로
     원장에 남긴다 — 실패 뒤의 표시는 하지 않으므로 `shown` 도 켜지지 않는다."""
-    import docreview_advice as adv   # 이 서브커맨드만 쓰는 형제 — 원장 스크립트만 복사한 설치본의 다른 서브커맨드를 막지 않는다
+    adv = _adv
+    if adv is None:
+        return fail("advice_module_missing", detail="docreview_advice.py 형제 사본이 이 스크립트 옆에 없다")
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
     if not adv.has_must_catch(prof):

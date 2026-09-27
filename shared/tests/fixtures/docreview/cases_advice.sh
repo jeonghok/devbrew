@@ -318,6 +318,8 @@ case_AC7_sink_idempotent() {
 case_AC17_count_line_carrier() {
   local d e doc id_d; d="$(adv_state 2)"; e="$(adv_state 2)"; doc="$(mktemp -t logdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
   id_d="$(adv_ident "$d")"
+  assert_eq "$(adv_ident /r/sess-9/docreview/design-ab12)" "sess-9/design-ab12" \
+    "AC17: 리뷰 정체는 <세션>/<문서 키> — 상태 디렉토리의 조부 이름과 자기 이름(문서 키만이면 세션이 빠진다)"
   py docreview_state.py advice --state-dir "$d" --log-file "$doc" >/dev/null
   py docreview_state.py advice --state-dir "$d" --log-file "$doc" >/dev/null
   assert_eq "$(grep -cF -- "- docreview 계수 — $id_d r1: advice_new=2 · advice_repeat=0 · mc_preexisting_new=0" "$doc")" "1" \
@@ -382,4 +384,12 @@ case_advice_write_failure_loud() {   # 사용자 문서 쓰기 실패 — rc 1 �
   assert_eq "$(st_yaml "$d" 'sorted((v["sunk"], v["shown"]) for v in st["advice"].values())')" "[(True, False), (True, False)]" \
     "쓰기 실패: 실제로 적힌 박제 행만 sunk 로 남고 shown 은 꺼진 채다"
   rm -rf "$d" "$doc"
+}
+case_advice_module_missing() {   # 원장 스크립트만 복사한 트리 — 다른 서브커맨드는 돌고 advice 만 사유를 내고 멈춘다
+  local t rc; t="$(mktemp -d -t advlone-XXXXXX)"; cp -L "$SCRIPTS/docreview_state.py" "$t/"
+  python3 "$t/docreview_state.py" state-dir-for --root "$t/root" --session s1 --doc "$FX/design-sample.md" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "0" "형제 부재: docreview_advice 가 없어도 원장 스크립트의 다른 서브커맨드는 돈다"
+  python3 "$t/docreview_state.py" advice --state-dir "$t" >/dev/null 2>"$t/err"; rc=$?
+  assert_eq "$rc $(grep -c advice_module_missing "$t/err")" "1 1" "형제 부재: advice 는 advice_module_missing rc 1 로 멈춘다(traceback 아님)"
+  rm -rf "$t"
 }
