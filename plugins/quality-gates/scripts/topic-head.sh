@@ -2,7 +2,7 @@
 # topic-head.sh — 선언 → 봉인 → 경계 · 끝점 → 합친 HEAD 트리를 한 번에 풀어 튜플 하나를 낸다.
 #   (설계 2026-09-21 §6.2.2–§6.2.6 · §6.4.1, AC3–AC7 · AC15 · AC16)
 #
-#   topic-head.sh <session-id> [--topic <topic-key>]   -> key: value 12줄 + commit: N줄
+#   topic-head.sh <session-id> [--topic <topic-key>]   -> key: value 13줄 + commit: N줄
 #
 # `--topic` 이 없으면 `resolve-topic.sh detect` 가 현재 브랜치에서 토픽 키를 찾는다.
 # `--topic` 은 `qg-worktree.sh create-head --topic` 이 HEAD 축을 다시 도출할 때 쓴다.
@@ -12,7 +12,7 @@
 #   ok                   합친 트리가 섰다 (tree · head_commit 채워짐)
 #   no-declaration       현재 브랜치에 선언이 없다 — 기존 세 모드로
 #   base-unresolved      base 를 못 풀어 선언 여부를 모른다
-#   declaration-invalid  선언이 깨졌다 (경로 부재 · 한 브랜치에 여러 키 · 고아)
+#   declaration-invalid  선언이 깨졌다 (경로 부재 · 한 브랜치에 여러 키 · 고아 · 키의 선언이 전부 base 에 있음(--topic))
 #   unbounded            선언은 있는데 경계 · 끝점을 못 셌다
 #   seal-failed          워킹트리 봉인 실패 — HEAD 축을 못 세운다
 #   merge-conflict       끝점 합치기가 충돌 (conflicts: 에 파일)
@@ -44,7 +44,7 @@ case "$n" in ''|*[!0-9]*) n=0 ;; esac
 export "GIT_CONFIG_KEY_$n=core.hooksPath" "GIT_CONFIG_VALUE_$n=/dev/null"
 export GIT_CONFIG_COUNT=$((n + 1))
 
-BRANCHES="-"; BOUNDARY="-"; TIPS="-"; SEAL="-"; SEAL_ON_TOPIC="-"
+BRANCHES="-"; IN_BASE="-"; BOUNDARY="-"; TIPS="-"; SEAL="-"; SEAL_ON_TOPIC="-"
 TREE="-"; HEAD_COMMIT="-"; CONFLICTS="-"; NCOMMITS="-"; COMMITS=""
 
 emit() {   # <status> <reason>
@@ -52,6 +52,7 @@ emit() {   # <status> <reason>
   echo "status: $1"
   echo "reason: ${2:--}"
   echo "branches: $BRANCHES"
+  echo "in_base: $IN_BASE"
   echo "boundary: $BOUNDARY"
   echo "tips: $TIPS"
   echo "seal: $SEAL"
@@ -88,10 +89,11 @@ SEAL=$(bash "$HERE/seal-worktree.sh" seal "$SID") || SEAL=""
 r=$(bash "$HERE/resolve-topic.sh" resolve "$KEY" --seal "$SEAL") || emit unbounded "resolve-topic.sh resolve failed"
 BRANCHES=$(val branches "$r"); BOUNDARY=$(val boundary "$r"); TIPS=$(val tips "$r")
 SEAL_ON_TOPIC=$(val seal_on_topic "$r")
+IN_BASE=$(val in_base "$r"); [ -n "$IN_BASE" ] || IN_BASE="-"
 case "$(val status "$r")" in
   ok) ;;
   declaration-invalid) emit declaration-invalid "$(val reason "$r")" ;;
-  no-declaration) emit declaration-invalid "no commit carries this topic key" ;;
+  no-declaration) emit declaration-invalid "$(val reason "$r")" ;;
   base-unresolved) emit unbounded "$(val reason "$r")" ;;
   *) emit unbounded "resolve-topic.sh resolve gave no status" ;;
 esac

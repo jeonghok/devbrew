@@ -55,8 +55,9 @@ case_no_declaration() {
   assert_eq "$rc" "0" "선언 없음: exit 0"
   assert_eq "$(field status "$out")" "no-declaration" "선언 없음: status: no-declaration"
   assert_eq "$(field seal "$out")" "-" "선언 없음: 봉인을 뜨지 않는다"
-  assert_eq "$(fixed_keys "$out")" "12" "선언 없음: 고정 키 12줄"
+  assert_eq "$(fixed_keys "$out")" "13" "선언 없음: 고정 키 13줄"
   assert_eq "$(commit_lines "$out" | grep -c .)" "0" "선언 없음: commit: 줄 없음"
+  assert_eq "$(field in_base "$out")" "-" "선언 없음: in_base: -(resolve 전에 끝남)"
   cleanup
 }
 
@@ -68,7 +69,7 @@ case_single_branch_topic() {
   echo dirty > wip.txt
   local out S; out=$(bash "$TH" "$SID"); S=$(field seal "$out")
   assert_eq "$(field status "$out")" "ok" "단일 구성원: status: ok"
-  assert_eq "$(fixed_keys "$out")" "12" "단일 구성원: 고정 키 12줄"
+  assert_eq "$(fixed_keys "$out")" "13" "단일 구성원: 고정 키 13줄"
   assert_eq "$(field boundary "$out")" "$R" "단일 구성원: 경계 = 분기점"
   assert_grep "$S" '^[0-9a-f]{40}$' "단일 구성원: 봉인 SHA"
   assert_eq "$(field tips "$out")" "$S" "단일 구성원: 끝점은 봉인 하나(현재 tip 은 봉인의 조상)"
@@ -77,6 +78,8 @@ case_single_branch_topic() {
   assert_grep "$(git ls-tree -r --name-only "$(field tree "$out")")" '^wip\.txt$' "미커밋 파일이 합친 트리에 있다"
   assert_eq "$(field commits "$out")" "1" "본 커밋 1"
   assert_eq "$(commit_lines "$out")" "$C1" "본 커밋 SHA 가 commit: 줄로 실린다(AC15)"
+  assert_eq "$(field in_base "$out")" "0" "단일 구성원: in_base 0"
+  assert_eq "$(printf '%s\n' "$out" | sed -n '5p')" "in_base: 0" "다섯째 줄이 in_base(13키 순서 — branches 다음)"
   cleanup
 }
 
@@ -102,7 +105,7 @@ case_two_siblings_combined() {
   cleanup
 }
 
-case_merged_member_combined() {
+case_merged_member_is_baseline() {
   new_repo
   local R; R=$(git rev-parse HEAD)
   git checkout -q -b topicA; decl_commit a.txt a1 "a1"
@@ -111,11 +114,29 @@ case_merged_member_combined() {
   git branch -q -D topicA
   git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
   local out; out=$(bash "$TH" "$SID")
-  assert_eq "$(field status "$out")" "ok" "머지된 구성원: status: ok(AC4)"
-  assert_grep "$(field branches "$out")" '(^|,)merged:[0-9a-f]{40}(,|$)' "머지된 구성원이 merged: 로 있다"
-  assert_grep "$(git ls-tree -r --name-only "$(field tree "$out")")" '^a\.txt$' "머지된 구성원의 변경이 합친 트리에 있다"
-  assert_grep "$(commit_lines "$out")" "^$CA\$" "머지된 구성원의 커밋이 본 커밋에 있다"
-  assert_eq "$(field boundary "$out")" "$R" "경계 = 작업 시작점(AC5 — 머지된 앞 브랜치가 기준선에 숨지 않는다)"
+  assert_eq "$(field status "$out")" "ok" "머지된 앞 조각: status: ok"
+  assert_eq "$(field in_base "$out")" "1" "머지된 앞 조각의 선언이 in_base 로 공시된다(AC4 재정의)"
+  assert_eq "$(field branches "$out")" "topicB" "구성원은 topicB 뿐 — 머지된 topicA 는 기준선"
+  assert_not_grep "$(commit_lines "$out")" "^$CA\$" "머지된 앞 조각의 커밋은 본 커밋이 아니다"
+  assert_grep "$(commit_lines "$out")" '^[0-9a-f]{40}$' "본 커밋은 있다(양의 짝 — topicB 의 커밋)"
+  assert_eq "$(field boundary "$out")" "$R" "경계 = topicB 의 분기점"
+  assert_eq "$(fixed_keys "$out")" "13" "고정 키 13줄"
+  cleanup
+}
+
+case_stack_after_front_merged() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  local TIPA; TIPA=$(git rev-parse HEAD)
+  git checkout -q -b topicB; decl_commit b.txt b1 "b1 — A 위에 쌓음"
+  git checkout -q main; git merge -q --no-ff topicA -m "merge topicA"
+  git checkout -q topicB
+  local out T B0; out=$(bash "$TH" "$SID"); T=$(field tree "$out"); B0=$(field boundary "$out")
+  assert_eq "$(field status "$out")" "ok" "스택 앞 조각 머지 뒤: status: ok"
+  assert_eq "$B0" "$TIPA" "경계 = topicA 의 끝(= topicB 와 main 의 merge-base)"
+  assert_eq "$(git diff --name-only "$B0" "$T")" "b.txt" "리뷰 diff 는 b.txt 뿐 — 머지된 A 는 기준선"
+  assert_grep "$(git ls-tree -r --name-only "$T")" '^a\.txt$' "합친 트리에는 A 의 파일이 있다(topicB 가 담고 있다)"
+  assert_eq "$(field in_base "$out")" "1" "in_base 1"
   cleanup
 }
 
@@ -130,7 +151,7 @@ case_conflict_lists_files() {
   assert_eq "$(field tree "$out")" "-" "충돌이면 tree: -"
   assert_eq "$(field head_commit "$out")" "-" "충돌이면 head_commit: -"
   assert_eq "$(field commits "$out")" "2" "충돌이어도 본 커밋은 싣는다"
-  assert_eq "$(fixed_keys "$out")" "12" "충돌: 고정 키 12줄"
+  assert_eq "$(fixed_keys "$out")" "13" "충돌: 고정 키 13줄"
   cleanup
 }
 
@@ -337,14 +358,29 @@ case_create_head_usage() {
   cleanup
 }
 
+case_explicit_topic_fully_merged() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q main; git merge -q --no-ff topicA -m "merge topicA"
+  git checkout -q -b later; echo l > l.txt; git add l.txt; git commit -qm "later (선언 없음)"
+  local out rc; out=$(bash "$TH" "$SID" --topic "$KEY"); rc=$?
+  assert_eq "$rc" "0" "전부 머지된 키를 --topic 으로: exit 0(사용 오류가 아니다)"
+  assert_eq "$(field status "$out")" "declaration-invalid" "전부 머지된 키를 --topic 으로: declaration-invalid"
+  assert_grep "$(field reason "$out")" 'already in base_ref' "reason 이 resolve 의 사유를 그대로 싣는다"
+  assert_eq "$(field in_base "$out")" "1" "in_base 1"
+  assert_eq "$(fixed_keys "$out")" "13" "고정 키 13줄"
+  cleanup
+}
+
 for c in case_usage case_no_declaration case_single_branch_topic case_two_siblings_combined \
-         case_merged_member_combined case_conflict_lists_files case_declared_path_absent \
+         case_merged_member_is_baseline case_stack_after_front_merged case_conflict_lists_files case_declared_path_absent \
          case_two_fragments_on_one_branch case_explicit_topic_skips_detect \
          case_unrelated_member_is_unbounded case_runs_from_subdirectory \
          case_remote_only_sibling_is_combined case_no_side_effects case_repo_hooks_not_run \
          case_create_head_topic_accepts_derived_commit case_create_head_topic_rejects_wrong_commits \
          case_scope_file_under_subdir_cwd \
-         case_create_head_topic_rejects_conflicted_topic case_create_head_usage; do
+         case_create_head_topic_rejects_conflicted_topic case_create_head_usage \
+         case_explicit_topic_fully_merged; do
   echo "== $c"; $c
 done
 finish

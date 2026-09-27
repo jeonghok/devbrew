@@ -64,29 +64,27 @@ case_f1_two_siblings() {
   cleanup
 }
 
-# ── F2: 구성원 하나가 머지됨 + ref 살아 있음 → 여전히 포함 (AC4) ────────────
-#    라운드 2 재비판이 잡은 회귀의 회귀 락이다: 1단계는 tip 이 base 의 조상이라
-#    떨어뜨리고, 2단계 발동 조건이 「살아 있는 ref 에 안 걸리면」이면 여기서
-#    발동하지 않아 고아로 떨어진다. 조건은 「1단계가 낸 B_t 에 안 들어가면」이다.
+# ── F2: 구성원 하나가 머지됨 + ref 살아 있음 → 기준선 · in_base 공시 (AC4 재정의) ──
+#    머지된 topicA 의 선언은 판정 대상이 아니라 기준선이다 — 구성원은 아직 base 에 안 든
+#    topicB 뿐이고, 머지된 선언의 수가 in_base 로 나온다(재결정 P23 2026-09-27).
 case_f2_merged_ref_alive() {
   new_repo
   local R; R=$(git rev-parse HEAD)
   git checkout -q -b topicA; decl_commit a.txt a1 "a1"
   git checkout -q main
   git merge -q --no-ff -m "merge topicA" topicA     # ref 는 그대로 둔다
-  # topicB 는 R(머지 전)에서 분기한다 — HEAD(머지 후 main)에서 분기하면 topicB 가
-  # a1 을 조상으로 자연 상속해 2단계(머지된 구성원 탐지)가 아예 발동하지 않는다.
-  # 그러면 이 케이스가 잠그려는 회귀(주석 참고)를 스테이지-1 만으로 우연히 통과시켜
-  # 락의 이빨이 없어진다.
   git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
   local out; out=$(bash "$RT" resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "F2 status: ok"
-  assert_eq "$(field declared "$out")" "2" "F2 선언 커밋 2"
-  assert_grep "$(field branches "$out")" 'merged:|topicA' "F2 머지된 구성원이 branches 에 있다"
+  assert_eq "$(field declared "$out")" "2" "F2 선언 커밋 2(C 전체)"
+  assert_eq "$(field in_base "$out")" "1" "F2 base 에 든 선언 1 이 in_base 로 공시된다"
+  assert_eq "$(field branches "$out")" "topicB" "F2 구성원은 topicB 뿐 — 머지된 topicA 는 기준선"
+  assert_eq "$(field boundary "$out")" "$R" "F2 경계 = topicB 의 분기점"
+  assert_eq "$(field commits "$out")" "1" "F2 T = topicB 의 커밋 하나"
   cleanup
 }
 
-# ── F3: 구성원 하나가 머지되고 ref 도 삭제됨 → 2단계가 받는다 (AC4) ─────────
+# ── F3: 구성원 하나가 머지되고 ref 도 삭제됨 → 같은 답 (AC4 재정의) ────────────
 case_f3_merged_ref_deleted() {
   new_repo
   local R; R=$(git rev-parse HEAD)
@@ -94,11 +92,12 @@ case_f3_merged_ref_deleted() {
   git checkout -q main
   git merge -q --no-ff -m "merge topicA" topicA
   git branch -q -D topicA
-  # topicB 는 R(머지 전)에서 분기한다 — F2 와 같은 이유(위 주석).
   git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
   local out; out=$(bash "$RT" resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "F3 status: ok"
-  assert_grep "$(field branches "$out")" 'merged:' "F3 ref 삭제된 구성원을 merged: 로 받는다"
+  assert_eq "$(field in_base "$out")" "1" "F3 in_base 1"
+  assert_eq "$(field branches "$out")" "topicB" "F3 구성원은 topicB 뿐 — merged: 구성원이 없다"
+  assert_eq "$(field boundary "$out")" "$R" "F3 경계 = topicB 의 분기점"
   cleanup
 }
 
@@ -179,23 +178,33 @@ case_f1_boundary() {
   cleanup
 }
 
-# ── F2 의 경계 (AC4+AC5) — 머지된 구성원이 경계 뒤로 숨으면 안 된다 ──────────
-#    구성원이 «하나»뿐이고 그것이 이미 머지된 지형이어야 두 규칙이 갈린다.
-#    다른 구성원이 그 머지의 후손이면 1단계가 선언 커밋을 흡수해 2단계가
-#    발화하지 않고, 형제 구성원이 있으면 merge-base 가 같은 답으로 되돌아간다.
-case_f2_boundary_merged_not_hidden() {
+# ── 키의 선언이 전부 base 에 있다 → no-declaration (§6.2.2 3단계) ──────────────
+case_all_declared_in_base() {
   new_repo
-  echo r1 >> f.txt; git commit -qam r1
-  local FORKPT; FORKPT=$(git rev-parse HEAD)
   git checkout -q -b topicA; decl_commit a.txt a1 "a1"
-  local TIPA; TIPA=$(git rev-parse HEAD)
   git checkout -q main
-  echo r2 >> f.txt; git commit -qam r2          # main 이 토픽과 무관하게 앞으로 나간다
+  echo r2 >> f.txt; git commit -qam r2
   git merge -q --no-ff -m "merge topicA" topicA
   local out; out=$(bash "$RT" resolve "$KEY")
-  assert_grep "$(field branches "$out")" 'merged:' "F2 경계: 2단계가 발화했다(전제 확인)"
-  assert_eq "$(field boundary "$out")" "$FORKPT" "F2 경계 = 머지된 구성원의 진짜 분기점"
-  assert_not_contains "$(field boundary "$out")" "$TIPA" "F2 경계가 머지된 tip 이 아니다"
+  assert_eq "$(field status "$out")" "no-declaration" "선언 전부 base: status: no-declaration"
+  assert_grep "$(field reason "$out")" 'already in base_ref' "reason 이 base 에 들었음을 적는다"
+  assert_eq "$(field declared "$out")" "1" "declared 는 C 전체(1)"
+  assert_eq "$(field in_base "$out")" "1" "in_base 1"
+  local rc; bash "$RT" commits "$KEY" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "3" "commits 는 status≠ok 이면 exit 3(그대로)"
+  cleanup
+}
+
+# ── C_live 원소가 어느 살아 있는 ref 에도 없다 → 고아 (§6.2.2 3단계) ────────────
+case_orphan_tag_only() {
+  new_repo
+  git checkout -q --detach HEAD; decl_commit t.txt t1 "t1 (태그에만)"
+  git tag only-tag
+  git checkout -q main
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "declaration-invalid" "태그에만 있는 선언: declaration-invalid"
+  assert_grep "$(field reason "$out")" '^orphan declaration commit' "reason 이 고아를 이름 붙인다"
+  assert_eq "$(field in_base "$out")" "0" "고아는 base 에 없다(in_base 0)"
   cleanup
 }
 
@@ -405,12 +414,13 @@ case_local_and_remote_same_commit_dedup() {
   cleanup
 }
 
-# ── 출력 계약: 10키가 «항상» 나온다 (seal_on_topic 이 열 번째 키) ───────────
-case_ten_keys_always() {
+# ── 출력 계약: 11키가 «항상» 나온다 (in_base 가 다섯째 키) ─────────────────────
+case_eleven_keys_always() {
   new_repo
   local out; out=$(bash "$RT" resolve "$KEY")
   local n; n=$(printf '%s\n' "$out" | grep -cE '^[a-z_]+:')
-  assert_eq "$n" "10" "선언 0 인 리포에서도 10키 전부 emit"
+  assert_eq "$n" "11" "선언 0 인 리포에서도 11키 전부 emit"
+  assert_eq "$(printf '%s\n' "$out" | sed -n '5p')" "in_base: 0" "다섯째 줄이 in_base — 선언 0 이면 0"
   assert_eq "$(field seal_on_topic "$out")" "-" "--seal 없으면 seal_on_topic: -"
   local rc; bash "$RT" resolve "$KEY" >/dev/null 2>&1; rc=$?
   assert_eq "$rc" "0" "정상 경로 exit 0"
@@ -561,7 +571,7 @@ case_base_remote_ref_never_member() {
   assert_not_grep "$(field branches "$out")" '(^|,)(origin|origin/HEAD|origin/main|main)(,|$)' \
     "origin/HEAD(=origin) · origin/main · main 은 구성원이 아니다"
   assert_grep "$(field branches "$out")" '(^|,)topicB(,|$)' "살아 있는 구성원 topicB 는 있다(양의 짝)"
-  assert_grep "$(field branches "$out")" '(^|,)merged:[0-9a-f]{40}(,|$)' "머지된 topicA 는 merged: 로 있다(양의 짝)"
+  assert_eq "$(field in_base "$out")" "1" "머지된 topicA 의 선언은 in_base 로 공시된다(양의 짝)"
   cleanup
 }
 
@@ -643,8 +653,97 @@ case_detect_usage() {
   cleanup
 }
 
+# ── 머지 뒤 base 에서 딴 무관 브랜치는 구성원이 아니다 (재결정 P23 2026-09-27) ────
+case_unrelated_after_merge_not_member() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q main; git merge -q --no-ff -m "merge topicA" topicA
+  git branch -q -D topicA
+  git checkout -q -b unrelated; echo u > u.txt; git add u.txt; git commit -qm "u (선언 없음)"
+  git update-ref refs/remotes/origin/other "$(git rev-parse HEAD)"
+  git checkout -q main; git checkout -q -b topicB2; decl_commit b2.txt b2 "b2 — 같은 키 후속"
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "같은 키 후속: status: ok"
+  assert_eq "$(field branches "$out")" "topicB2" "구성원은 topicB2 뿐 — unrelated · origin/other 는 아니다"
+  assert_eq "$(field in_base "$out")" "1" "머지된 앞 조각은 in_base 1"
+  assert_eq "$(field commits "$out")" "1" "T = topicB2 의 커밋 하나"
+  cleanup
+}
+
+# ── N1 회귀 락: 머지 뒤 쌓인 main 이력이 리뷰 대상에 흡수되지 않는다 ────────────
+case_n1_main_history_not_absorbed() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q -b topicB; decl_commit b.txt b1 "b1 — A 위에 쌓은 스택"
+  git checkout -q main; git merge -q --no-ff -m "merge topicA" topicA
+  local i; for i in 1 2 3 4 5; do echo "m$i" > "m$i.txt"; git add "m$i.txt"; git commit -qm "main m$i"; done
+  git checkout -q topicB; git merge -q --no-edit main      # 스택 뒤 조각이 main 을 merge 로 최신화
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "N1: status: ok"
+  assert_eq "$(field branches "$out")" "topicB" "N1: 구성원 topicB 뿐"
+  assert_eq "$(field boundary "$out")" "$(git rev-parse main)" "N1: 경계 = 방금 최신화한 main"
+  assert_eq "$(git diff --name-only "$(field boundary "$out")" topicB)" "b.txt" \
+    "N1: 경계..topicB 의 변경은 b.txt 뿐 — main 이력 · 머지된 A 없음"
+  cleanup
+}
+
+# ── N2 회귀 락: 중첩 머지(git-flow)에서 구성원이 넓어지지 않는다 ─────────────────
+case_n2_nested_merge_not_expanded() {
+  new_repo
+  git checkout -q -b develop
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q develop; git merge -q --no-ff -m "merge topicA into develop" topicA
+  echo x > x.txt; git add x.txt; git commit -qm "develop x (무관)"
+  git checkout -q main; git merge -q --no-ff -m "merge develop" develop
+  git branch -q -D topicA
+  git checkout -q develop; echo y > y.txt; git add y.txt; git commit -qm "develop y (무관, 머지 뒤)"
+  git checkout -q main; git checkout -q -b topicB2; decl_commit b2.txt b2 "b2 — 같은 키 후속"
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "N2: status: ok"
+  assert_eq "$(field branches "$out")" "topicB2" "N2: 구성원 topicB2 뿐 — develop 은 아니다"
+  assert_eq "$(field commits "$out")" "1" "N2: T = topicB2 의 커밋 하나(develop 의 x · y 없음)"
+  cleanup
+}
+
+# ── 알려진 한계 기록(§15-12): squash 로 든 앞 조각은 ref 가 살아 있으면 여전히 구성원 ──
+case_squash_front_still_member() {
+  new_repo
+  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+  git checkout -q main; git merge -q --squash topicA; git commit -qm "squash topicA"
+  git checkout -q -b topicB2; decl_commit b2.txt b2 "b2 — 같은 키 후속"
+  local out; out=$(bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "ok" "squash: status: ok"
+  assert_grep "$(field branches "$out")" '(^|,)topicA(,|$)' \
+    "squash: 원래 커밋이 base 의 조상이 아니라 topicA 가 여전히 구성원이다(§15-12)"
+  assert_eq "$(field in_base "$out")" "0" "squash: 원래 선언 커밋은 base 에 없다(in_base 0)"
+  cleanup
+}
+
+# ── 옛 2단계(머지된 구성원) 기계가 되살아나지 않는다 — N2 · N3 의 원인 ──────────
+case_no_merged_member_machinery() {
+  local code; code=$(grep -vE '^[[:space:]]*#' "$RT")
+  assert_eq "$(printf '%s\n' "$code" | grep -c -- '--ancestry-path')" "0" "코드에 --ancestry-path 가 없다"
+  assert_eq "$(printf '%s\n' "$code" | grep -c 'merged:')" "0" "코드가 merged: 구성원을 만들지 않는다"
+  assert_eq "$(printf '%s\n' "$code" | grep -c 'MERGED_MAINLINE')" "0" "머지된 구성원의 fork 보정이 없다"
+  # 양의 짝 — 구성원 · 고아 루프가 C_LIVE 를 순회한다
+  assert_eq "$(printf '%s\n' "$code" | grep -cE '^[[:space:]]*for c in \$C_LIVE; do$')" "2" \
+    "C_LIVE 를 순회하는 루프가 둘(구성원 1단계 · 고아)"
+}
+
+# ── base-unresolved 이전 경로: in_base 는 «셀 수 없음»(-) 이지 0 이 아니다 (PR4d 닫기 #18) ──
+#    C 를 세기 전에 끝나는 경로(git 리포조차 아님)에서 IN_BASE 의 초기값이 그대로 나간다.
+#    그 초기값을 0 으로 바꾸는 변이는 「선언이 base 에 없다」는 거짓 확답을 만든다 —
+#    «셀 수 없음»과 «0»은 다른 사실이다(status 단언과 묶은 양의 짝).
+case_base_unresolved_in_base_is_dash() {
+  local nogit; nogit=$(mktemp -d) || exit 1
+  local out; out=$(cd "$nogit" && bash "$RT" resolve "$KEY")
+  assert_eq "$(field status "$out")" "base-unresolved" "git 리포가 아님: status: base-unresolved"
+  assert_eq "$(field in_base "$out")" "-" "git 리포가 아님: in_base 는 -(C 를 세기 전에 끝난다 — 0 이 아니다)"
+  rm -rf "$nogit"
+}
+
 for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
-         case_f2_boundary_merged_not_hidden case_f3_merged_ref_deleted \
+         case_all_declared_in_base case_orphan_tag_only case_f3_merged_ref_deleted \
          case_f4_undeclared_ancestor_included case_f5_fragment_discriminates \
          case_f5b_prefix_fragment_collision \
          case_f6_path_absent case_f7_mixed_keys_in_T \
@@ -655,14 +754,17 @@ for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_tips_order_deterministic case_path_check_is_repo_root_relative \
          case_no_declaration \
          case_remote_only_unmerged_member case_local_and_remote_same_commit_dedup \
-         case_ten_keys_always \
+         case_eleven_keys_always \
          case_combine_clean case_combine_conflict case_combine_edges \
          case_combine_three_clean case_combine_three_conflict_attribution \
          case_resolve_tips_feed_combine \
          case_for_each_ref_sort_pinned case_base_remote_ref_never_member \
          case_detect_statuses case_detect_ignores_base_history \
          case_detect_lowercase_trailer_ignored case_detect_usage \
-         case_detect_empty_spec_value_excluded; do
+         case_detect_empty_spec_value_excluded \
+         case_unrelated_after_merge_not_member case_n1_main_history_not_absorbed \
+         case_n2_nested_merge_not_expanded case_squash_front_still_member \
+         case_no_merged_member_machinery case_base_unresolved_in_base_is_dash; do
   echo "== $c"; $c
 done
 finish
