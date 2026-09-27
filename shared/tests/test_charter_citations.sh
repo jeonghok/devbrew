@@ -202,8 +202,12 @@ else:
         out("OK", "헌장에 이력에서 사라진 식별자 모양 이름이 없다")
 
 # ── AC20: 공개 계약 · 헌장에 옛 표면이 없다 ───────────────────────────────
-# 한국어형(「두 게이트」 · 「2-게이트」 · 「2게이트」)도 잡는다 — 헌장은 Korean-primary 다.
-FORBID = re.compile(r"runtime-verifier|(?i:\b(?:2|two)[- ]gates?\b)|(?:두|2)[ -]?게이트")
+# 한국어형(「두게이트」 · 「두-게이트」 · 「두 게이트」 · 「2게이트」 · 「2-게이트」)도
+# 잡는다 — 헌장은 Korean-primary 다. 왼쪽 경계(`(?<![\w-])`)로 「모두 게이트」의
+# 「두」· 「Law 2 게이트」의 「2」같은 앞말 붙은 자리를 거르고, 뒤의 「웨이」로
+# 「게이트웨이」를 거른다. 공백 붙은 「2 게이트」는 뺀다 — 「Law 2 게이트」·
+# 「라운드 2 게이트」와 구별이 안 된다.
+FORBID = re.compile(r"runtime-verifier|(?i:\b(?:2|two)[- ]gates?\b)|(?<![\w-])두[ -]?게이트(?!웨이)|(?<![\w-])2-?게이트(?!웨이)")
 for p in (".claude-plugin/marketplace.json", "plugins/quality-gates/.claude-plugin/plugin.json", "CLAUDE.md"):
     t = read(p)
     if t is None:
@@ -212,7 +216,7 @@ for p in (".claude-plugin/marketplace.json", "plugins/quality-gates/.claude-plug
     if m:
         out("NO", f"{p}: 옛 표면 `{m.group(0)}` 이 남았다(AC20)")
     else:
-        out("OK", f"{p}: runtime-verifier · 2-gate 가 없다(AC20)")
+        out("OK", f"{p}: runtime-verifier · 2-gate(한국어형 포함) 가 없다(AC20)")
 mk_desc = pj_desc = None
 try:
     mk = json.loads(read(".claude-plugin/marketplace.json") or "null")

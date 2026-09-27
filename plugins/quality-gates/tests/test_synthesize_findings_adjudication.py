@@ -118,7 +118,7 @@ class TestPromoteAuthorIsRequired(unittest.TestCase):
         self.assertEqual(mod._norm_sev({"severity": ["CRITICAL"]}), "SUGGESTION")
 
     def test_promote_new_findings_drops_item_missing_file(self):
-        """Controller fix round 1, Minor 3 — R-AD 로 CLI 전환된 케이스(구 test_
+        """R-AD 로 CLI 전환된 케이스(구 test_
         synthesize_promoted_findings.sh 10)는 file 결측을 더는 재지 않는다
         (recritic_bridge 가 file 을 «미지»로 채워 넘겨서 CLI 로는 안 닿는다).
         `promote_new_findings` 의 `NEW_FINDING_REQUIRED` 자체는 여전히 file 을
@@ -149,9 +149,9 @@ class TestMalformedContainerAtDocLevel(unittest.TestCase):
     return _dead(...)`)는 CLI 로 여전히 도달 가능하다 — 진짜 재비판자 응답의
     `added: 5`/매핑 등으로. 그 자리는 여기가 아니라
     test_recritic_bridge.sh::case_malformed_top_level_container_kills_adjudicator_not_the_run
-    가 잰다(Controller fix round 1 — 그 방어를 `if False:` 로 바꿔도 이 파일의
-    단위 테스트 셋은 GREEN 이었다: `extract_new_findings`/`extract_verdicts`
-    를 직접 불러 그 방어를 건너뛰기 때문이다). 이 클래스는 그 아래 계층
+    가 잰다 — 그 방어를 `if False:` 로 바꿔도 이 파일의 단위 테스트 셋은 GREEN
+    이다: `extract_new_findings`/`extract_verdicts` 를 직접 불러 그 방어를
+    건너뛰기 때문이다. 이 클래스는 그 아래 계층
     (`_as_list` — 항목 수만큼 dropped 로 세고 크래시하지 않는다)만 잰다."""
 
     def test_new_findings_scalar_is_not_a_crash(self):
@@ -314,7 +314,8 @@ class TestMissingConfidenceNotSuppressedAsZero(unittest.TestCase):
         """CRITICAL 은 전과 같이 kept 다. confidence 강제는 여전히 값 수준에서
         일어나(coerced 1건) 세어지지만, CRITICAL은 confidence 와 무관하게 늘
         kept 이므로 그 강제는 억제 여부(게이트)를 바꾸지 않는다 — `gate=False`
-        다."""
+        다. 무조건 `gate=True` 로 세면 아무것도 안 바꾼 강제를 거짓으로
+        「게이트 변경」이라 공시한다."""
         f = {"agent": "sec", "file": "a.py", "line": 1, "severity": "CRITICAL",
              "summary": "s"}
         v = {"finding_id": mod.finding_id(f), "verdict": "confirm"}
@@ -332,7 +333,9 @@ class TestMissingConfidenceNotSuppressedAsZero(unittest.TestCase):
 
     def test_g_rejected_item_with_missing_confidence_has_no_coercion_entry(self):
         """기각된 항목은 판정(kept/suppressed)에 아예 안 들어가므로 confidence
-        강제가 게이트를 못 바꾼다 — 강제 자체를 세지 않는다."""
+        강제가 게이트를 못 바꾼다 — 강제 자체를 세지 않는다. 기각된 IMPORTANT
+        에 게이트 변경 강제를 세면 `verdict: clean` 옆에 「강제(게이트 변경)」와
+        「차단: 예」가 뜬다."""
         f = {"agent": "sec", "file": "a.py", "line": 1, "severity": "IMPORTANT",
              "summary": "s"}
         v = {"finding_id": mod.finding_id(f), "verdict": "reject", "evidence": "e"}
@@ -427,7 +430,7 @@ class TestMissingConfidenceNotSuppressedAsZero(unittest.TestCase):
             "raise 뒤 severity(CRITICAL)로 gate 를 재는데 CRITICAL 은 confidence 와 "
             "무관하게 kept 이므로 gate=False 다")
 
-    def test_l_hold_gate_depends_on_post_hold_severity(self):
+    def test_l_hold_gate_depends_on_severity(self):
         """판정자 부재(hold) 경로 — confidence 누락의 값 강제는 severity 에 따라
         gate 가 갈린다: CRITICAL 은 confidence 와 무관하게 kept 이므로
         `gate=False`, IMPORTANT 는 confidence<=4 억제 바닥에 걸릴 수 있으므로
