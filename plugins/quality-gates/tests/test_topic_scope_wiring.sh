@@ -399,10 +399,48 @@ case_in_base_notice() {
   # 줄 전체 끝 앵커(PR4d 닫기 #20) — 위 긍정형 단언은 접두만 고정해, 닫는 백틱 뒤에 꼬리를
   # 덧붙이는 변이(부정 토큰 없이)를 못 잡는다. 문장이 그 백틱에서 «끝난다»를 별도로 잰다.
   assert_grep "$got" '이번 diff 에 다시 보인다\.`$' "그 문장이 닫는 백틱 직후에 끝난다(줄 끝 앵커 — 백틱 뒤 덧붙임을 잡는다)"
-  assert_eq "$(printf '%s\n' "$got" | grep -c -F '이미 base 에 있어 토픽 구성원에서 빠졌다 — 그 머지 전에 갈라져 base 를 아직 안 들인 형제 구성원이 그 조각을 품은 구성원과 함께 있으면 그 변경이 이번 diff 에 다시 보인다.`')" "1" "공지 문장 전체가 글자 그대로다(조건절의 양보 · 한정 삭제 · 「형제」 치환을 잡는다)"
+  assert_eq "$(printf '%s\n' "$got" | grep -c -F '`> [quality-gates] 토픽 <topic_key> 의 선언 커밋 <in_base>개는 이미 base 에 있어 토픽 구성원에서 빠졌다 — 그 머지 전에 갈라져 base 를 아직 안 들인 형제 구성원이 그 조각을 품은 구성원과 함께 있으면 그 변경이 이번 diff 에 다시 보인다.`')" "1" "공지 문장 전체가 글자 그대로다(조건절의 양보 · 한정 삭제 · 「형제」 치환 · 자리표시 · 수량 표현을 잡는다)"
   assert_not_grep "$win" '기준선에 포함' "① 1a 창에 「기준선에 포함」이 없다 — 형제 토폴로지에서는 그 조각이 경계 트리에 없다(설계 §6.2.2 2)"
   assert_not_grep "$win" '자기 PR 에서 판정' "① 1a 창에 「자기 PR 에서 판정」이 없다 — qg 는 앞 조각이 /qg 로 판정됐는지 확인하지 못한다"
-  assert_not_grep "$win" '판정 대상에서 빠졌다' "① 1a 창에 「판정 대상에서 빠졌다」가 없다 — 형제 토폴로지에서는 그 변경이 리뷰 diff 와 차등 테스트에 다시 든다(설계 §6.2.2 2)"
+  assert_not_grep "$win" '판정 대상에서 빠졌다' "① 1a 창에 「판정 대상에서 빠졌다」가 없다 — 그 머지 전에 갈라진 형제와 그 조각을 품은 구성원이 함께 있으면 그 변경이 리뷰 diff 와 차등 테스트에 다시 든다(설계 §6.2.2 2)"
+}
+
+case_topic_denominator_uses_tree() {
+  # 토픽 분모 배선 — R1b 가 분자를 경계..합친 트리로 보충하는데 R2 산문의 분모
+  # (--total)는 현재 체크아웃만 세면 N > M 이 난다. `--total --tree <tree>` 로 분모도
+  # 합친 트리에서 세는 문장이 분모 규칙 문단 바로 다음 줄에, 들여쓰기까지 포함해
+  # 글자 그대로 있어야 한다.
+  #
+  # `grep -F` 는 부분 문자열 매치라 줄 anchor 가 없다 — 문장을 다른 자리로 옮기거나
+  # (예: item 4 안으로), 앞뒤에 문구를 붙이거나(접두 · 접미 · 사이 삽입), 조건절을
+  # 반전해도 원래 텍스트 조각이 파일 어딘가에 남아 있으면 계속 통과한다. 전체 줄을
+  # `grep -x`(그 줄 전체와 정확히 일치)로 고정하고, 위치도 "테일 줄 바로 다음"
+  # (정확히 +1)으로 좁힌다 — 헐거운 창은 이동·삽입을 못 잡는다.
+  local new_line_body new_line_full
+  new_line_body='선언 경로면(R-init 이 `status: ok` 를 읽었으면) 분모는 스코프 파일의 `tree:` 로 부른 `compute-test-scope-candidates.sh --total --tree <tree>` 의 출력이다 — 분자를 경계..합친 트리로 보충했으니 분모도 합친 트리에서 센다. 그 호출이 exit 4 면 분모를 `?` 로 적고 「분모를 셀 수 없다」를 함께 싣는다 — `--tree` 없는 `--total` 로 대신하지 않는다.'
+  new_line_full="   ${new_line_body}"
+
+  assert_eq "$(grep -cxF -- "$new_line_full" "$REF")" "1" \
+    "REF 에 분모 --tree 배선 문장이 들여쓰기까지 포함해 정확히 그 줄 전체로 1회 있다(grep -x 전체-줄 핀 — 부분 문자열 매치가 아니다)"
+
+  local head_line_no tail_line_no new_line_no after_line
+  head_line_no=$(grep -nxF -- '   분모는 반드시 `compute-test-scope-candidates.sh --total` 의 출력이다 —' "$REF" | head -1 | cut -d: -f1)
+  tail_line_no=$(grep -nxF -- '   부풀려 비율이 정상으로 보인다.' "$REF" | head -1 | cut -d: -f1)
+  new_line_no=$(grep -nxF -- "$new_line_full" "$REF" | head -1 | cut -d: -f1)
+  assert_grep "$head_line_no" '^[0-9]+$' "분모 규칙 헤드 줄(분모는 반드시 …)을 찾았다"
+  assert_grep "$tail_line_no" '^[0-9]+$' "분모 규칙 테일 줄(…정상으로 보인다.)을 찾았다"
+  assert_grep "$new_line_no" '^[0-9]+$' "분모 --tree 배선 줄을 찾았다"
+  if [ -n "${head_line_no:-}" ] && [ -n "${tail_line_no:-}" ] && [ -n "${new_line_no:-}" ] \
+     && [ "$head_line_no" -lt "$tail_line_no" ] 2>/dev/null \
+     && [ "$new_line_no" -eq "$((tail_line_no + 1))" ] 2>/dev/null; then
+    ok "새 줄이 테일 줄 바로 다음 줄이다(정확히 +1, head=$head_line_no tail=$tail_line_no new=$new_line_no)"
+  else
+    no "새 줄이 테일 줄 바로 다음 줄이다(정확히 +1, head=$head_line_no tail=$tail_line_no new=$new_line_no)"
+  fi
+
+  after_line=$(sed -n "$((new_line_no + 1))p" "$REF" 2>/dev/null)
+  assert_grep "$after_line" '^4\. \*\*비용 신호\*\*' \
+    "분모 --tree 배선 줄 바로 다음 줄이 4. **비용 신호** 로 시작한다(그 문장이 item 4 안으로 옮겨지지 않았다)"
 }
 
 for c in case_trivia_escape_is_gated_by_declaration case_step1_writes_scope_file \
@@ -412,7 +450,8 @@ for c in case_trivia_escape_is_gated_by_declaration case_step1_writes_scope_file
          case_rinit_topic_branch_sets_axes case_scan_dir_feeds_detect_and_assign \
          case_r4_calls_use_baseline_commit case_r5b_skips_on_topic \
          case_r1b_topic_candidates_supplemented case_early_exit_discards_head_tree \
-         case_override_clears_stale_scope_file case_in_base_notice; do
+         case_override_clears_stale_scope_file case_in_base_notice \
+         case_topic_denominator_uses_tree; do
   echo "== $c"; $c
 done
 finish
