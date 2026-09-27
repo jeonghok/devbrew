@@ -613,7 +613,7 @@ def _degrade_block(report, blocking):
 
 
 def render(kept, suppressed_count, dropped_malformed, report, held_classes,
-           recritic_zero=False, blocking=False):
+           recritic_zero=False, *, blocking):
     findings = kept
     if not findings:
         # drop 공지는 이 분기에도 반드시 나가야 한다. 예전에는 아래 표-있는

@@ -156,6 +156,16 @@ assert_grep "$OUT_CLEAN" '억제=규칙이 자른 것' \
 # 의 hold/unknown/주 source_failed 항을 놓치는 변이, 아래 M6)도 우연히
 # (차단: 예)를 내 A~D 전부를 통과시킨다. (D) 는 hold 하나만 있고
 # dropped_malformed=0 인 fixture 로 그 오답을 갈라낸다.
+#
+# 최종 fix wave (I-1·m1·m3) — (B′) 는 (B) 와 같은 보조 입력 사망이되 kept=0
+# (재비판 판정을 reject) 이라 :625(clean 분기)만 태운다 — A·B 는 kept>0 이라
+# :680 분기만 태워, :625 에만 `report["degraded"]` 를 넘기는 부분 수정(X1)이
+# 그동안 아무 락에도 안 걸렸다. (E) 는 주 findings 경로 자체가 없는 사망
+# (hold 없음·dropped_malformed=0) — `blocking = review_blocked`(items_unaccounted()
+# 만 보고 primary_source_failed() 를 빼먹는 변이, X2)가 그동안 안 걸렸다. (C)·(E)
+# 의 「clean이 아니다」 단언은 `_degrade_block` 의 머리줄 자체(`판정 degrade — **이
+# 실행은 clean이 아니다**`)로 좁힌다 — 옛 단언은 malformed-drop 공지("… dropped as
+# malformed … clean이 아니다")로도 만족돼 X4(`if blocking:` → `if False:`)를 못 잡았다.
 
 mkdir -p "$TMPD/case_a"
 cat > "$TMPD/case_a/findings.yaml" <<'YAML'
@@ -197,6 +207,31 @@ assert_not_grep "$OUT_B" 'clean이 아니다' \
 assert_grep "$OUT_B" '\*\*배관 손실:\*\*.*\(차단: 아니오\)' \
   "(B) 배관줄 — 보조 입력 사망만으로는 배관줄을 차단으로 세지 않는다"
 
+mkdir -p "$TMPD/case_bp"
+cat > "$TMPD/case_bp/findings.yaml" <<'YAML'
+findings:
+  - {agent: sec, file: b.py, line: 2, severity: CRITICAL, summary: has-conf, confidence: 9}
+YAML
+rf_prep "$TMPD/case_bp"
+rf_reply "$TMPD/case_bp" 'verdicts:
+  - f: f1
+    verdict: reject
+    evidence: "근거"'
+OUT_BP="$(rf_synth "$TMPD/case_bp" --recritic-diff "$TMPD/case_bp/없는.diff" --emit-verdict 2>"$TMPD/case_bp/err.txt")"
+note "$OUT_BP"
+assert_grep "$OUT_BP" 'No high-confidence findings' \
+  "(B′) 분기 확인 — 유일한 항목이 기각돼 kept=0, :625(clean) 분기를 태운다"
+assert_grep "$OUT_BP" '입력 실패\(보조\)' \
+  "(B′) 분기 확인 — 없는 --recritic-diff 가 보조 입력 사망으로 세어진다"
+assert_grep "$OUT_BP" '공시\(판정을 막지 않음\)' \
+  "(B′) 분기 확인 — degrade 머리줄은 공시(막지 않음) — clean 분기에서도"
+assert_not_grep "$OUT_BP" 'clean이 아니다' \
+  "(B′) 보조 입력 사망만으로는 clean 분기에서도 not-clean 마커가 서지 않는다"
+assert_grep "$OUT_BP" '\*\*배관 손실:\*\*.*\(차단: 아니오\)' \
+  "(B′) 배관줄 — clean(kept=0) 분기에서도 공시만 하는 degrade 는 차단으로 세지 않는다"
+assert_grep "$OUT_BP" 'verdict: clean' \
+  "(B′) 판정 꼬리 — review_blocked·angle_absent 모두 거짓이라 clean 이다"
+
 mkdir -p "$TMPD/case_c"
 cat > "$TMPD/case_c/findings.yaml" <<'YAML'
 findings: "목록이 아니다"
@@ -205,8 +240,8 @@ rf_prep "$TMPD/case_c"
 rf_reply "$TMPD/case_c" 'verdicts: []'
 OUT_C="$(rf_synth "$TMPD/case_c" 2>"$TMPD/case_c/err.txt")"
 note "$OUT_C"
-assert_grep "$OUT_C" 'clean이 아니다' \
-  "(C) 분기 확인 — 컨테이너 소실(findings 가 목록이 아님)이 not-clean 마커를 세운다"
+assert_grep "$OUT_C" '판정 degrade — \*\*이 실행은 clean이 아니다' \
+  "(C) 분기 확인 — 컨테이너 소실(findings 가 목록이 아님)이 _degrade_block 의 not-clean 머리줄을 세운다(m3: malformed-drop 공지만으로는 만족 안 되게 좁혔다)"
 assert_grep "$OUT_C" '\*\*배관 손실:\*\*.*\(차단: 예\)' \
   "(C) 배관줄 — 원장 blocks() 는 거짓이어도(주 소스 아님) 합성기 blocking 은 컨테이너 소실을 차단으로 센다"
 
@@ -228,5 +263,21 @@ assert_not_grep "$OUT_D" 'dropped as malformed' \
   "(D) 항목 파손·컨테이너 소실 없음(dropped_malformed=0) — 위 미판정 단언의 양의 짝, hold 단독임을 확인"
 assert_grep "$OUT_D" '\*\*배관 손실:\*\*.*\(차단: 예\)' \
   "(D) 배관줄 — dropped_malformed 경유가 아니라 Ledger.blocks() 의 held>0 만으로 차단이다"
+
+mkdir -p "$TMPD/case_e"
+cat > "$TMPD/case_e/findings.yaml" <<'YAML'
+findings: []
+YAML
+rf_prep "$TMPD/case_e"
+rf_reply "$TMPD/case_e" 'verdicts: []'
+rm "$TMPD/case_e/findings.yaml"
+OUT_E="$(rf_synth "$TMPD/case_e" 2>"$TMPD/case_e/err.txt")"
+note "$OUT_E"
+assert_grep "$OUT_E" '입력 실패\(주\)' \
+  "(E) 분기 확인 — findings.yaml 자체가 없어 주 입력이 사망한다(hold 없음, dropped_malformed=0)"
+assert_grep "$OUT_E" '판정 degrade — \*\*이 실행은 clean이 아니다' \
+  "(E) _degrade_block 의 not-clean 머리줄 — 주 입력 사망은 판정 경로 자체가 온전하지 않다"
+assert_grep "$OUT_E" '\*\*배관 손실:\*\*.*\(차단: 예\)' \
+  "(E) 배관줄 — 주 입력 사망은 Ledger.blocks() 의 주(主) source_failed 항만으로 차단이다"
 
 finish

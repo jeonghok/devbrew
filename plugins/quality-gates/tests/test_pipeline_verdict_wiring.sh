@@ -595,10 +595,10 @@ PY
 }
 
 case_recritic_findings_keep_reviewer_confidence() {
-  # Task 2 — Phase 1.5-1 은 findings.yaml 을 쓰는 자리에서 confidence 보존을 한 번도
-  # 말하지 않는다. 합성기는 누락을 5 로 평탄화하므로(synthesize_findings.py 의
-  # _normalize_confidence) 이 지시가 사라져도 그 락은 GREEN 이다 — 이 락은 지시가 SKILL 에
-  # 실제로 있는지, agent: 문단(findings.yaml 을 쓰는 자리) 바로 다음인지를 잰다.
+  # 탐지 결과를 findings.yaml 로 옮기는 자리(Phase 1.5-1)에 confidence 보존 지시가
+  # 있는지를 잰다 — 합성기는 누락을 5 로 평탄화하므로(synthesize_findings.py 의
+  # _normalize_confidence) 이 지시가 사라져도 합성기 락은 GREEN 이다. 이 락은 지시가
+  # SKILL 에 실제로 있는지, agent: 문단(findings.yaml 을 쓰는 자리) 바로 다음인지를 잰다.
   local anchor_line new_line anchor_count new_count anchor_no new_no
   anchor_line='      `agent:` 를 그대로 믿지 않는다 — 찍는 쪽이 너다.'
   new_line='      **각 항목의 `confidence:` 는 리뷰어가 낸 값을 그대로 옮긴다** — 100 점 만점 척도로 낸 값만 10 으로 나눠 내림한다(85 → 8).'

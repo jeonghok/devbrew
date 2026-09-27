@@ -412,5 +412,21 @@ assert_grep "$KEY_CLEAN" '\*\*배관 손실:\*\* 0 ' \
 assert_grep "$KEY_CLEAN" '\*\*배관 손실:\*\*.*\(차단: 아니오\)' \
   "key 단계 배관줄 — clean 입력(소실 없음)은 차단이 아니다"
 
+# 최종 fix wave (m2) — 위 KEY_ERR 는 hold(항목 파손 1건)를 함께 가져서 `L.blocks()`
+# 도 참이다 — key 단계 셋째 인자를 `report["degraded"]` 대신 `L.blocks()` 로 바꾸는
+# 오답이 그 자리만으로는 안 잡힌다. codex_failed 문서(keybad_source.yaml, 위 :383-385
+# 재사용) 하나 + 정상 critic 문서(critic.yaml, 위 :40-43 재사용) — 항목 파손 없이
+# source_failed 만 1건(전부 secondary) 세워 `L.blocks()`(False, primary 아님)와
+# `report["degraded"]`(True, sources_failed 존재) 를 갈라낸다.
+KEY_SEC="$(PYTHONDONTWRITEBYTECODE=1 python3 "$S" --phase key \
+        --findings "$tmp/critic.yaml" --findings "$tmp/keybad_source.yaml" \
+        2>&1 >/dev/null)"
+assert_grep "$KEY_SEC" '\*\*처분:\*\*.*미판정 0' \
+  "key 단계 처분줄(보조 source_failed 전용) — 미판정 0"
+assert_grep "$KEY_SEC" '\*\*배관 손실:\*\* 1 ' \
+  "key 단계 배관줄 — 값 1(source_failed 1, 항목 파손 없음)"
+assert_grep "$KEY_SEC" '\*\*배관 손실:\*\*.*\(차단: 예\)' \
+  "key 단계 배관줄 — L.blocks() 는 거짓(보조 source_failed 뿐)이어도 degraded 는 차단이다"
+
 rm -rf "$tmp"
 finish
