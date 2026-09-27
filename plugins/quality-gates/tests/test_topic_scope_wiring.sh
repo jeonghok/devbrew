@@ -406,27 +406,38 @@ case_in_base_notice() {
 }
 
 case_topic_denominator_uses_tree() {
-  # Task 2 — R1b 가 분자를 경계..합친 트리로 보충하는데 R2 산문의 분모(--total)는
-  # 현재 체크아웃만 세면 N > M 이 난다. `--total --tree <tree>` 로 분모도 합친
-  # 트리에서 세는 규칙이 R2 산문 3번 분모 규칙 줄 바로 다음 두 줄 안에, 같은
-  # 들여쓰기의 한 줄로 있어야 한다.
-  local needle='--total --tree <tree>'
-  local hits; hits=$(grep -F -- "$needle" "$REF")
-  assert_eq "$(printf '%s\n' "$hits" | grep -c .)" "1" "REF 에 --total --tree <tree> 를 담은 줄이 정확히 1줄"
-  assert_grep "$hits" '^[[:space:]]*선언 경로면' "그 줄이 선언 경로면 으로 시작한다"
-  assert_contains "$hits" '`tree:`' "같은 줄에 tree: 가 있다(스코프 파일 필드를 이름 붙인다)"
-  assert_not_grep "$hits" '않|말 것|생략|아니고' "그 줄에 부정 토큰이 없다"
+  # 토픽 분모 배선 — R1b 가 분자를 경계..합친 트리로 보충하는데 R2 산문의 분모
+  # (--total)는 현재 체크아웃만 세면 N > M 이 난다. `--total --tree <tree>` 로 분모도
+  # 합친 트리에서 세는 문장이 분모 규칙 문단 바로 다음에 글자 그대로 있어야 한다.
+  #
+  # 리뷰 라운드 1 (I-1) — 이전 판은 needle 존재 + 부정 토큰 부재만 재서 이빨이
+  # 없었다: 「…--total 의 출력이다」로 되돌려도(M1) 규칙 헤드 줄을 지워도(M3)
+  # 「세션 경로에서만」으로 조건을 바꿔도(M4) 전부 80/80 GREEN 이었다. 이제 문장
+  # 전체를 글자 그대로 핀하고, 헤드·테일 두 앵커 사이 순서까지 잰다(부분 문자열
+  # 락은 위 세 변이를 못 잡는다 — case_in_base_notice 의 전체-문장 핀 패턴을 따른다).
+  local new_line
+  new_line='선언 경로면(R-init 이 `status: ok` 를 읽었으면) 분모는 스코프 파일의 `tree:` 로 부른 `compute-test-scope-candidates.sh --total --tree <tree>` 의 출력이다 — 분자를 경계..합친 트리로 보충했으니 분모도 합친 트리에서 센다. 그 호출이 exit 4 면 분모를 `?` 로 적고 「분모를 셀 수 없다」를 함께 싣는다 — `--tree` 없는 `--total` 로 대신하지 않는다.'
 
-  local new_line_no denom_line_no
-  denom_line_no=$(grep -nF -- '부풀려 비율이 정상으로 보인다.' "$REF" | head -1 | cut -d: -f1)
-  new_line_no=$(grep -nF -- "$needle" "$REF" | head -1 | cut -d: -f1)
-  assert_grep "$denom_line_no" '^[0-9]+$' "분모 규칙 줄을 찾았다"
-  assert_grep "$new_line_no" '^[0-9]+$' "--total --tree <tree> 줄을 찾았다"
-  local delta; delta=$((new_line_no - denom_line_no))
-  if [ "$delta" -ge 1 ] && [ "$delta" -le 2 ]; then
-    ok "새 줄이 분모 규칙 줄 바로 다음 두 줄 안에 있다(delta=$delta)"
+  local raw_hit
+  raw_hit=$(grep -F -- "$new_line" "$REF")
+  assert_eq "$(printf '%s\n' "$raw_hit" | grep -c .)" "1" \
+    "REF 에 분모 --tree 배선 문장 전체가 글자 그대로 정확히 1줄(부정 토큰 「대신하지 않는다」를 포함해서 — 이 전체-문장 핀이 그 축을 흡수한다)"
+  assert_not_grep "$raw_hit" '^4\. ' "그 줄이 4. 로 시작하지 않는다(R2 항목 4 로 병합되지 않았다)"
+
+  local head_line_no tail_line_no new_line_no
+  head_line_no=$(grep -nF -- '분모는 반드시 `compute-test-scope-candidates.sh --total` 의 출력이다' "$REF" | head -1 | cut -d: -f1)
+  tail_line_no=$(grep -nF -- '부풀려 비율이 정상으로 보인다.' "$REF" | head -1 | cut -d: -f1)
+  new_line_no=$(grep -nF -- "$new_line" "$REF" | head -1 | cut -d: -f1)
+  assert_grep "$head_line_no" '^[0-9]+$' "분모 규칙 헤드 줄(분모는 반드시 …)을 찾았다"
+  assert_grep "$tail_line_no" '^[0-9]+$' "분모 규칙 테일 줄(…정상으로 보인다.)을 찾았다"
+  assert_grep "$new_line_no" '^[0-9]+$' "분모 --tree 배선 줄을 찾았다"
+  if [ -n "${head_line_no:-}" ] && [ -n "${tail_line_no:-}" ] && [ -n "${new_line_no:-}" ] \
+     && [ "$head_line_no" -lt "$tail_line_no" ] 2>/dev/null \
+     && [ "$tail_line_no" -lt "$new_line_no" ] 2>/dev/null \
+     && [ "$new_line_no" -le "$((tail_line_no + 2))" ] 2>/dev/null; then
+    ok "헤드 < 테일 < 새 줄 ≤ 테일+2 (head=$head_line_no tail=$tail_line_no new=$new_line_no)"
   else
-    no "새 줄이 분모 규칙 줄 바로 다음 두 줄 안에 있다(delta=$delta)"
+    no "헤드 < 테일 < 새 줄 ≤ 테일+2 (head=$head_line_no tail=$tail_line_no new=$new_line_no)"
   fi
 }
 
