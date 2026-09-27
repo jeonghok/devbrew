@@ -3,7 +3,8 @@
 
 `clean` 은 이 튜플에 대한 clean 이다 — 본 커밋 · 끝점 · 경계 · 합친 트리가 판정과 한
 출력에 실려야 나중에 트레일러를 고쳐도 이미 난 판정이 다른 대상으로 재사용되지 않는다
-(AC15). 끝점 합치기가 충돌하면 충돌 파일을 싣는다(AC7).
+(AC15). 끝점 합치기가 충돌하면 충돌 파일을 싣는다(AC7). 그 키의 선언 중 이미 base 에
+든 수(`in_base`)를 싣는다 — 판정 대상에서 빠진 머지된 앞 조각이다(AC4).
 
 `status:` → 판정 사유는 여기서만 정한다(`STATUS_TO_REASON`). 오케스트레이터는 사유를
 옮겨 적지 않고 이 파일을 합성기에 `--scope` 로 넘긴다. 값 자체는 `verdict.REASONS`
@@ -12,8 +13,8 @@
 import re
 import sys
 
-KEYS = ("topic_key", "status", "reason", "branches", "boundary", "tips", "seal",
-        "seal_on_topic", "tree", "head_commit", "conflicts", "commits")
+KEYS = ("topic_key", "status", "reason", "branches", "in_base", "boundary", "tips",
+        "seal", "seal_on_topic", "tree", "head_commit", "conflicts", "commits")
 STATUSES = ("ok", "no-declaration", "base-unresolved", "declaration-invalid",
             "unbounded", "seal-failed", "merge-conflict", "merge-failed")
 # 사유가 없는 status 는 스코프 축에서 막지 않는다 — `no-declaration` 은 새 의무가 아니고
@@ -28,7 +29,7 @@ STATUS_TO_REASON = {
 }
 _OID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 _COUNT = re.compile(r"[0-9]+")
-_RENDER_ORDER = ("topic_key", "reason", "branches", "boundary", "tips", "tree",
+_RENDER_ORDER = ("topic_key", "reason", "branches", "in_base", "boundary", "tips", "tree",
                  "seal_on_topic", "conflicts")
 
 
@@ -80,6 +81,8 @@ def parse(text):
             fail4("commits: - 인데 commit: 줄이 있다")
     elif not _COUNT.fullmatch(seen["commits"]) or int(seen["commits"]) != len(commits):
         fail4(f"commits: {seen['commits']} 와 commit: 줄 {len(commits)}개가 다르다")
+    if seen["in_base"] != "-" and not _COUNT.fullmatch(seen["in_base"]):
+        fail4(f"in_base 가 수 또는 - 가 아니다: {seen['in_base']!r}")
     if seen["status"] == "ok":
         for k in ("boundary", "tree", "head_commit", "seal"):
             if not _OID.fullmatch(seen[k]):
@@ -88,6 +91,8 @@ def parse(text):
             fail4(f"status: ok 인데 tips 가 id 목록이 아니다: {seen['tips']!r}")
         if seen["commits"] == "-":
             fail4("status: ok 인데 commits 가 없다")
+        if not _COUNT.fullmatch(seen["in_base"]):
+            fail4(f"status: ok 인데 in_base 가 수가 아니다: {seen['in_base']!r}")
     d = dict(seen)
     d["commit"] = commits
     return d

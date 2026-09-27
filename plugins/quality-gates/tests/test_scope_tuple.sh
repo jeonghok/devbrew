@@ -32,14 +32,14 @@ write_scope() {   # <path> <status> <reason> <tree> <head_commit> <conflicts> <c
   local p="$1" st="$2" rs="$3" tr="$4" hd="$5" cf="$6" n="$7"; shift 7
   {
     printf 'topic_key: docs/x-design.md#pr1\nstatus: %s\nreason: %s\n' "$st" "$rs"
-    printf 'branches: topicA,topicB\nboundary: %s\ntips: %s,%s\nseal: %s\nseal_on_topic: yes\n' "$B" "$C1" "$S" "$S"
+    printf 'branches: topicA,topicB\nin_base: 1\nboundary: %s\ntips: %s,%s\nseal: %s\nseal_on_topic: yes\n' "$B" "$C1" "$S" "$S"
     printf 'tree: %s\nhead_commit: %s\nconflicts: %s\ncommits: %s\n' "$tr" "$hd" "$cf" "$n"
     local c; for c in "$@"; do printf 'commit: %s\n' "$c"; done
   } > "$p"
 }
 
 write_undeclared() {   # <path> <status>
-  printf 'topic_key: -\nstatus: %s\nreason: -\nbranches: -\nboundary: -\ntips: -\nseal: -\nseal_on_topic: -\ntree: -\nhead_commit: -\nconflicts: -\ncommits: -\n' "$2" > "$1"
+  printf 'topic_key: -\nstatus: %s\nreason: -\nbranches: -\nin_base: -\nboundary: -\ntips: -\nseal: -\nseal_on_topic: -\ntree: -\nhead_commit: -\nconflicts: -\ncommits: -\n' "$2" > "$1"
 }
 
 line_of() { printf '%s\n' "$1" | grep -n -E "$2" | head -1 | cut -d: -f1; }
@@ -49,7 +49,7 @@ IFS= read -r -d '' PY_LS <<'PY' || true
 import sys
 sys.path.insert(0, sys.argv[1])
 import scope_tuple
-base = ("topic_key: docs/x-design.md#pr1\nstatus: no-declaration\nreason: {r}\nbranches: -\n"
+base = ("topic_key: docs/x-design.md#pr1\nstatus: no-declaration\nreason: {r}\nbranches: -\nin_base: -\n"
         "boundary: -\ntips: -\nseal: -\nseal_on_topic: -\ntree: -\nhead_commit: -\n"
         "conflicts: -\ncommits: -\n")
 for label, r in (("TAIL", "x "), ("MID", "a b: c")):
@@ -162,10 +162,38 @@ case_scope_flag_usage_errors() {
   rm -rf "$T"
 }
 
+case_in_base_disclosed_and_validated() {
+  # AC4 재정의 — 판정에서 빠진 머지된 앞 조각의 수가 scope: 블록에 실린다.
+  setup_clean_run
+  write_scope "$T/scope.txt" ok - "$TR" "$HC" - 2 "$C1" "$C2"
+  local out rc; out=$(rf_synth "$T" --emit-verdict --angles "$T/angles.txt" --scope "$T/scope.txt")
+  assert_grep "$out" '^  in_base: 1$' "scope: 블록에 in_base 가 실린다"
+  local lb li; lb=$(line_of "$out" '^  branches: '); li=$(line_of "$out" '^  in_base: ')
+  assert_eq "$([ -n "$lb" ] && [ -n "$li" ] && [ "$li" -eq $((lb + 1)) ] && echo next)" "next" "in_base 는 branches 바로 다음 줄"
+  sed 's/^in_base: 1$/in_base: 1x/' "$T/scope.txt" > "$T/bad.txt"
+  out=$(rf_synth "$T" --emit-verdict --angles "$T/angles.txt" --scope "$T/bad.txt" 2>/dev/null); rc=$?
+  assert_eq "$rc" "4" "in_base 가 수 · - 가 아니면 exit 4(1x — fullmatch)"
+  assert_eq "$out" "" "그때 stdout 비어 있음"
+  # status 가 ok 가 아니어도 형식 검사가 선다 — ok 블록 검사가 대신 잡지 못하는 자리
+  write_undeclared "$T/u2.txt" no-declaration
+  sed 's/^in_base: -$/in_base: 1x/' "$T/u2.txt" > "$T/bad3.txt"
+  out=$(rf_synth "$T" --emit-verdict --angles "$T/angles.txt" --scope "$T/bad3.txt" 2>/dev/null); rc=$?
+  assert_eq "$rc" "4" "status 가 ok 가 아니어도 in_base 가 수 · - 가 아니면 exit 4"
+  sed 's/^in_base: 1$/in_base: -/' "$T/scope.txt" > "$T/bad2.txt"
+  out=$(rf_synth "$T" --emit-verdict --angles "$T/angles.txt" --scope "$T/bad2.txt" 2>/dev/null); rc=$?
+  assert_eq "$rc" "4" "status: ok 인데 in_base 가 - 면 exit 4"
+  write_undeclared "$T/u.txt" no-declaration
+  out=$(rf_synth "$T" --emit-verdict --angles "$T/angles.txt" --scope "$T/u.txt"); rc=$?
+  assert_eq "$rc" "0" "선언 없음의 in_base: - 는 받는다(양의 짝)"
+  assert_grep "$out" '^  in_base: -$' "선언 없음: in_base: - 가 공시된다"
+  rm -rf "$T"
+}
+
 for c in case_ok_scope_is_clean_and_carries_tuple case_conflict_is_not_certified_with_files \
          case_declaration_statuses_map_to_reasons case_non_blocking_statuses_disclose_only \
          case_defect_beats_scope_reason case_malformed_scope_is_atomic_fail4 \
-         case_scope_flag_usage_errors case_line_separator_in_value_is_kept; do
+         case_scope_flag_usage_errors case_line_separator_in_value_is_kept \
+         case_in_base_disclosed_and_validated; do
   echo "== $c"; $c
 done
 finish
