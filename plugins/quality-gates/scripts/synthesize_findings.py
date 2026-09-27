@@ -195,6 +195,57 @@ def _normalize_identity(f, ledger=None):
     return f
 
 
+def _normalize_confidence(f, ledger=None, count=True):
+    """수집 지점에서 confidence 를 한 번 확정한다(소비 지점마다 가드 금지) — 제자리 갱신.
+
+    `_normalize_identity` 와 같은 모양이다. 키가 없거나 `_conf` 가 숫자로 못 읽으면
+    (`int()` 실패 · `bool` · None) `NEW_FINDING_DEFAULT_CONFIDENCE`(5)로 확정한다 —
+    **누락도 malformed 와 같은 값**이다. 예전에는 `_conf`의 기본값이 0이라, `suppress()`
+    (non-CRITICAL·conf<=4 억제)가 confidence 없는 finding을 유일하게 억제 바닥
+    아래로 떨어뜨렸다. 판정(`_verdict.decide(defect=bool(kept), …)`)은 severity를
+    묻지 않으므로, 그렇게 사라진 finding이 차등 테스트를 깨끗하게 두면 거짓
+    `clean`이 났다.
+
+    `ledger`가 있고 `count`(기본 True)가 참이면 강제를 `coerced("confidence", …,
+    gate=True)`로 센다 — 이 값이 억제 여부를 정하고 억제 여부가 `defect`를 정하므로,
+    강제가 게이트 판정을 바꾼다(공시하되 막지는 않는다). 승격 경로
+    (`promote_new_findings`)는 `count=False`로 불러 세지 않는다 — 승격 항목의
+    기본값 5는 판정자 자신의 주장에 대한 설계된 인코딩이지 강제가 아니다; 세면
+    승격이 있는 모든 실행이 degrade가 된다.
+
+    숫자로 읽히는 값(`"7"` 등)은 int로 확정하되 coerced로 세지 않는다 — 표기만
+    다를 뿐 값이 같기 때문이다. `bool`은 숫자가 아닌 것으로 본다(`True`가
+    1이 되는 것을 막는다).
+    """
+    had_key = "confidence" in f
+    raw = f.get("confidence")
+    if not had_key:
+        print(f"[synthesize_findings] missing confidence on "
+              f"{f.get('file')}:{f.get('line')} — treating as "
+              f"{NEW_FINDING_DEFAULT_CONFIDENCE}", file=sys.stderr)
+        f["confidence"] = NEW_FINDING_DEFAULT_CONFIDENCE
+        if ledger is not None and count:
+            ledger.coerced("confidence", None, NEW_FINDING_DEFAULT_CONFIDENCE, gate=True)
+        return f
+    numeric_ok = False
+    if not isinstance(raw, bool):
+        try:
+            int(raw)
+            numeric_ok = True
+        except (TypeError, ValueError):
+            numeric_ok = False
+    if not numeric_ok:
+        print("[synthesize_findings] non-numeric confidence "
+              f"{raw!r} on {f.get('file')}:{f.get('line')} — "
+              f"treating as {NEW_FINDING_DEFAULT_CONFIDENCE}", file=sys.stderr)
+        f["confidence"] = NEW_FINDING_DEFAULT_CONFIDENCE
+        if ledger is not None and count:
+            ledger.coerced("confidence", raw, NEW_FINDING_DEFAULT_CONFIDENCE, gate=True)
+        return f
+    f["confidence"] = int(raw)
+    return f
+
+
 def finding_id(f):
     return f"{f.get('agent', 'unknown')}-{f.get('file', '')}-{f.get('line', '')}"
 
@@ -222,8 +273,14 @@ def _conf(f):
     (sort_findings)를 놓쳐 그대로 재현됐다. 값을 버리지 않고 기본값 + loud
     stderr로 낮추는 이유: 잘못된 숫자 하나 때문에 진짜 결함을 숨기는 것보다,
     보이되 검증 안 됨으로 표시하는 것이 정직하다.
+
+    이 기본값은 `NEW_FINDING_DEFAULT_CONFIDENCE`(5)다 — 0이 아니다. 누락도
+    malformed와 같이 5로 다룬다: 숨기지 않는다. 수집 지점(`_normalize_confidence`)이
+    이미 확정해 두므로 여기 닿는 것은 그 초크포인트를 우회한 호출뿐이지만,
+    총함수 안전망은 같은 기본값을 써야 한다 — 0이면 이 함수만 따로 부르는
+    자리에서 억제 바닥 함정이 되살아난다.
     """
-    raw = f.get("confidence", 0)
+    raw = f.get("confidence", NEW_FINDING_DEFAULT_CONFIDENCE)
     try:
         return int(raw)
     except (TypeError, ValueError):
@@ -293,7 +350,9 @@ def promote_new_findings(raw_new, existing, *, author, ledger=None):
         # 승격 경로도 같은 초크포인트를 쓴다 — `file: [a.py]`가 truthy라 필수-키
         # 검사를 통과한 뒤 sort_findings의 raw 비교에서 TypeError를 냈다.
         _normalize_identity(f, ledger=ledger)
-        f.setdefault("confidence", NEW_FINDING_DEFAULT_CONFIDENCE)
+        # count=False — 승격 항목의 기본 confidence 5는 판정자 자신의 주장에 대한
+        # 설계된 인코딩이지 강제가 아니다(_normalize_confidence 의 docstring).
+        _normalize_confidence(f, ledger=ledger, count=False)
         fid = finding_id(f)
         if fid in seen:
             base = fid
@@ -334,6 +393,7 @@ def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
             continue
         # 수집 지점 정규화 — dedup 키 · sort · finding_id 가 모두 이 값을 만진다.
         f = _normalize_identity(dict(f), ledger=ledger)
+        f = _normalize_confidence(f, ledger=ledger)
         v = by_id.get(finding_id(f))
         if v is None:
             if ledger is not None and not adjudicator_dead:

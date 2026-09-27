@@ -7,6 +7,7 @@
 import contextlib
 import importlib.util
 import io
+import json
 import sys
 import tempfile
 import unittest
@@ -225,6 +226,127 @@ class TestOutputSurface(unittest.TestCase):
         self.assertIn("| CRITICAL |", out, "표 갈래를 탔는지 먼저 확인한다")
         self.assertIn(mod.DEGRADE_MARKER, out,
                       "표가 있는 갈래에서 degrade 공시가 사라졌다")
+
+
+class TestMissingConfidenceNotSuppressedAsZero(unittest.TestCase):
+    """Task 1 — 누락된 confidence 가 억제 바닥(conf<=4) 아래로 조용히 떨어지지 않는다.
+
+    `_conf`가 예전에 `f.get("confidence", 0)`로 시작해, 키가 없으면 0이 됐다.
+    `suppress()`는 non-CRITICAL·conf<=4 를 억제하고 판정(`_verdict.decide(
+    defect=bool(kept), …)`)은 severity 를 안 묻는다 — 그래서 confidence 가
+    없는 **유일한** 확인된 발견이 억제되고 차등 테스트가 깨끗하면 거짓
+    `clean`이 났다(task-1-brief.md). malformed(`"high"`·null)는 이미
+    `NEW_FINDING_DEFAULT_CONFIDENCE`(5)로 떨어졌으므로, 누락도 같은 값으로
+    맞추고 그 강제를 원장에 `gate=True`(공시, 억제 여부를 바꾸므로)로 센다.
+    """
+
+    def test_a_missing_confidence_defaults_to_five_not_suppressed(self):
+        f = {"agent": "sec", "file": "a.py", "line": 1, "severity": "IMPORTANT",
+             "summary": "s"}
+        v = {"finding_id": mod.finding_id(f), "verdict": "confirm"}
+        L = mod.Ledger(items="open")
+        out, dropped = mod.apply_verdicts([f], [v], ledger=L)
+        self.assertEqual(dropped, 0)
+        self.assertEqual(out[0]["confidence"], 5,
+                         "누락된 confidence 는 malformed 와 같은 값(5)으로 강제된다")
+        kept, suppressed = mod.suppress(out, ledger=L)
+        self.assertEqual(len(kept), 1,
+                         "0 으로 접히면 non-CRITICAL·conf<=4 바닥에 유일하게 걸려 억제된다")
+        self.assertEqual(len(suppressed), 0)
+        r = L.report()
+        self.assertEqual(r["counts"]["coerced"], 1, "누락도 강제로 정확히 1건 세어진다")
+        self.assertIn("강제(게이트 변경): confidence None→5", r["reasons"],
+                      "그 값이 억제 여부를 정하므로 게이트를 바꾼 강제(gate=True)로 공시된다")
+
+    def test_b_non_numeric_confidence_same_treatment_and_now_counted(self):
+        f = {"agent": "sec", "file": "a.py", "line": 1, "severity": "IMPORTANT",
+             "summary": "s", "confidence": "high"}
+        v = {"finding_id": mod.finding_id(f), "verdict": "confirm"}
+        L = mod.Ledger(items="open")
+        out, _dropped = mod.apply_verdicts([f], [v], ledger=L)
+        self.assertEqual(out[0]["confidence"], 5)
+        kept, suppressed = mod.suppress(out, ledger=L)
+        self.assertEqual(len(kept), 1)
+        r = L.report()
+        self.assertEqual(r["counts"]["coerced"], 1)
+        self.assertIn("강제(게이트 변경): confidence 'high'→5", r["reasons"],
+                      "원값(malformed 표기)이 사유 줄에 그대로 남는다")
+
+    def test_c_numeric_confidence_is_fixed_not_coerced(self):
+        """양의 짝 — 표기만 다를 뿐 값이 같은 confidence 는 강제로 세지 않는다."""
+        f8 = {"agent": "sec", "file": "a.py", "line": 1, "severity": "IMPORTANT",
+              "summary": "s", "confidence": 8}
+        v8 = {"finding_id": mod.finding_id(f8), "verdict": "confirm"}
+        L8 = mod.Ledger(items="open")
+        out8, _ = mod.apply_verdicts([f8], [v8], ledger=L8)
+        self.assertEqual(out8[0]["confidence"], 8)
+        self.assertEqual(L8.report()["counts"]["coerced"], 0)
+
+        f7 = {"agent": "sec", "file": "b.py", "line": 2, "severity": "IMPORTANT",
+              "summary": "s", "confidence": "7"}
+        v7 = {"finding_id": mod.finding_id(f7), "verdict": "confirm"}
+        L7 = mod.Ledger(items="open")
+        out7, _ = mod.apply_verdicts([f7], [v7], ledger=L7)
+        self.assertEqual(out7[0]["confidence"], 7, "문자열 숫자도 int 로 확정된다")
+        self.assertEqual(L7.report()["counts"]["coerced"], 0,
+                         "표기만 다를 뿐 값이 같으므로 강제로 세지 않는다")
+
+    def test_d_critical_missing_confidence_still_kept_but_now_coerced(self):
+        """CRITICAL 은 전과 같이 kept 다 — 강제 회계만 새로 생긴다."""
+        f = {"agent": "sec", "file": "a.py", "line": 1, "severity": "CRITICAL",
+             "summary": "s"}
+        v = {"finding_id": mod.finding_id(f), "verdict": "confirm"}
+        L = mod.Ledger(items="open")
+        out, _ = mod.apply_verdicts([f], [v], ledger=L)
+        kept, suppressed = mod.suppress(out, ledger=L)
+        self.assertEqual(len(kept), 1, "CRITICAL 은 confidence 와 무관하게 kept (전과 같음)")
+        self.assertEqual(len(suppressed), 0)
+        self.assertEqual(L.report()["counts"]["coerced"], 1)
+
+    def test_e_promoted_missing_confidence_defaults_to_five_but_not_coerced(self):
+        """승격 경로 — 기본값 5 는 판정자 자신의 주장에 대한 설계된 인코딩이지
+        강제가 아니다. 세면 승격이 있는 모든 실행이 degrade 가 된다."""
+        L = mod.Ledger(items="open")
+        promoted, dropped = mod.promote_new_findings(
+            [{"file": "a.py", "line": 1, "severity": "IMPORTANT", "summary": "s"}],
+            [], author="doc-recritic", ledger=L)
+        self.assertEqual(dropped, 0)
+        self.assertEqual(promoted[0]["confidence"], 5)
+        kept, suppressed = mod.suppress(promoted, ledger=L)
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(L.report()["counts"]["coerced"], 0,
+                         "승격 경로의 기본 confidence 는 강제로 세지 않는다")
+
+    def test_f_cli_seam_missing_confidence_survives_end_to_end(self):
+        """이음매(CLI) — findings YAML 에 confidence 없는 IMPORTANT 하나 + 그 항목을
+        confirm 하는 재비판 판정. 판정자 부재 hold 가 끼지 않도록 실제로 confirm 한다."""
+        with tempfile.TemporaryDirectory() as d:
+            findings_path = Path(d) / "findings.yaml"
+            findings_path.write_text(
+                "findings:\n"
+                "  - {agent: sec, file: a.py, line: 1, severity: IMPORTANT, "
+                "summary: '누락 confidence'}\n",
+                encoding="utf-8")
+            findings, _dropped, _dead = mod.load_findings(str(findings_path))
+            items, mapping = mod._bridge.anonymize(findings)
+            self.assertTrue(items, "픽스처 전제: 항목이 anonymize 를 통과해야 한다")
+            map_path = Path(d) / "map.json"
+            map_path.write_text(json.dumps(mapping, ensure_ascii=False), encoding="utf-8")
+            reply_path = Path(d) / "reply.txt"
+            reply_path.write_text(
+                "재비판을 마쳤습니다.\n\n```docreview-recritic\n"
+                "verdicts:\n  - {f: f1, verdict: confirm}\n"
+                "```\n", encoding="utf-8")
+            out = _run(["--findings", str(findings_path),
+                       "--recritic", str(reply_path),
+                       "--recritic-map", str(map_path),
+                       "--emit-verdict"])
+        self.assertIn("| IMPORTANT |", out, "confirm 된 IMPORTANT 가 표에 실린다")
+        self.assertNotIn("suppressed", out,
+                         "「suppressed」 집계에 0 이 아닌 수로 세지지 않는다")
+        self.assertIn(mod.DEGRADE_MARKER, out, "confidence 강제가 degrade 로 공시된다")
+        self.assertIn("verdict: defect", out,
+                      "kept 가 1건이므로 판정 꼬리는 defect 다 (defect=bool(kept))")
 
 
 if __name__ == "__main__":
