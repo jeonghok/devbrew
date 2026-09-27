@@ -26,7 +26,7 @@ from docreview_state import (  # noqa: E402
     load_profile, load_state, observe_ledger, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
 from docreview_advice import (  # noqa: E402
-    advice_ids, advisory_axes, has_must_catch, mc_preexisting_new, route_step1,
+    ROUTE_ADVICE, advice_ids, advisory_axes, has_must_catch, mc_preexisting_new, route_step1,
 )
 
 BLOCK_RE = r"```%s[ \t]*\n(.*?)\n```"
@@ -734,7 +734,7 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats, advice_stats=
         adv.append("critic 시점 판별 불가 (%s)" % degrade["critic_freshness_unknown"])
     out = {
         "ok": True, "round": n, "findings": [_pub(it) for it in final],
-        "by_disposition": {d: [it["id"] for it in final if it["disposition"] == d and it.get("route") != "advice"]
+        "by_disposition": {d: [it["id"] for it in final if it["disposition"] == d and it.get("route") != ROUTE_ADVICE]
                            for d in DISPOSITIONS},
         "rejected": [{"id": it["id"], "evidence": it["_rejected"]} for it in rejected_items],
         "defers": [it["id"] for it in final if it["disposition"] == "defer"],

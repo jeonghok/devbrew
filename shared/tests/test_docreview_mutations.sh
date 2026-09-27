@@ -734,11 +734,20 @@ mut 1/1 route_step1_removed case_AC1_brief_direction_only sed_route \
   's/^    route_step1(final, advisory_axes(prof))$/    pass/'
 # (63) 1회 규칙을 지운다 — 라운드 1 에 오른 버킷이 라운드 2 에 다시 listed 된다.
 mut 1/1 advice_repeat_rule_removed case_AC5_AC9_round2 sed_state \
-  's/^    if b in ledger:$/    if False:/'
+  's/^    if b in seen or (prior is not None and int(prior\["round"\]) < n):$/    if False:/'
 # (64) 해시 비교를 지운다 — 바뀐 절의 새 must-catch 까지 선재로 센다.
 mut 1/1 mc_hash_compare_removed case_AC5_AC9_round2 sed_advice \
   's/^            if after and before == after:$/            if after:/'
 # (65) 하위 절을 빼고 자기 절만 본다 — 하위 절이 바뀐 상위 앵커의 finding 이 선재로 세어진다.
 mut 1/1 mc_subtree_dropped case_AC9_child_section_changed sed_advice \
   's/            if s\["anchor"\] == anchor or anchor in (s.get("parents") or \[\])}/            if s["anchor"] == anchor}/'
+# (66) 1회 규칙을 «원장에 있으면 반복» 으로 되돌린다 — 같은 라운드를 다시 finalize 하면 그 라운드의 버킷이 반복으로 뒤집힌다.
+mut 1/1 advice_repeat_not_idempotent case_advice_same_round_refinalize_idempotent sed_state \
+  's/^    if b in seen or (prior is not None and int(prior\["round"\]) < n):$/    if b in ledger:/'
+# (67) 게이트 참고 줄의 새 · 반복 자리를 맞바꾼다 — 값이 다른 라운드(새 6 · 반복 0)의 렌더가 RED.
+mut 1/1 advice_render_new_repeat_swapped case_advice_same_round_refinalize_idempotent sed_state \
+  's/% (adv_g\["total"\], adv_g\["new"\], adv_g\["repeat"\], adv_g\["mc_preexisting_new"\]))/% (adv_g["total"], adv_g["repeat"], adv_g["new"], adv_g["mc_preexisting_new"]))/'
+# (68) 이번 호출의 앞 항목을 잊는다 — 한 라운드의 같은 버킷 둘이 둘 다 새로 세어진다.
+mut 1/1 advice_same_call_seen_dropped case_advice_same_round_duplicate_bucket sed_state \
+  's/^    if b in seen or (prior is not None and int(prior\["round"\]) < n):$/    if prior is not None and int(prior["round"]) < n:/'
 finish

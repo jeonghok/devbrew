@@ -25,4 +25,6 @@ case_AC13_advisory_decide_ask_to_advice
 case_AC19_promoted_advisory_fix
 case_AC5_AC9_round2
 case_AC9_child_section_changed
+case_advice_same_round_refinalize_idempotent
+case_advice_same_round_duplicate_bucket
 finish

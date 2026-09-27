@@ -636,20 +636,24 @@ def _refresh_open_lineages(st, n) -> None:
     r["open_lineages"] = sorted({st["findings"][f]["lineage"] for f in st["findings"] if is_open(st, f)})
 
 
-def _record_advice(st, it, n, counts) -> None:
-    """참고(advisory) 항목 — `advice` 원장에 버킷(층|축|앵커) 키로 적는다. 이전 라운드(또는 같은 라운드 앞 항목)가
-    올린 버킷은 목록에 다시 올리지 않고 `repeat` 로만 센다(1회 규칙). 원장 키는 필요할 때만 생긴다 — 표지가
-    없는 프로필의 원장 파일은 바이트 단위로 현행이다(골든)."""
+def _record_advice(st, it, n, counts, seen) -> None:
+    """참고(advisory) 항목 — `advice` 원장에 버킷(층|축|앵커) 키로 적는다. 이전 라운드(항목의 `round` < n) 또는
+    이번 호출의 앞 항목(`seen`)이 올린 버킷은 목록에 다시 올리지 않고 `repeat` 로만 센다(1회 규칙). 같은 라운드를
+    다시 finalize 하면 그 라운드가 올린 버킷은 다시 `listed` 로 세고 `shown` · `sunk` 는 그대로 둔다(멱등). 원장
+    키는 필요할 때만 생긴다 — 표지가 없는 프로필의 원장 파일은 바이트 단위로 현행이다(골든)."""
     st["findings"][it["id"]]["route"] = "advice"
     ledger = st.setdefault("advice", {})
     b = it.get("bucket") or it["id"]
-    if b in ledger:
+    prior = ledger.get(b)
+    if b in seen or (prior is not None and int(prior["round"]) < n):
         counts["repeat"] += 1
     else:
         ledger[b] = {"id": it["id"], "round": n, "layer": it.get("layer"), "category": it.get("category"),
                      "anchor": it.get("anchor"), "summary": it.get("summary"),
-                     "replacement": it.get("replacement"), "shown": False, "sunk": False}
+                     "replacement": it.get("replacement"),
+                     "shown": bool(prior and prior.get("shown")), "sunk": bool(prior and prior.get("sunk"))}
         counts["listed"] += 1
+    seen.add(b)
 
 
 def record_findings(st, findings, n) -> dict:
@@ -658,13 +662,14 @@ def record_findings(st, findings, n) -> dict:
     `route: advice` 표지를 단 항목은 decides · fixes · asks 대신 `advice` 원장에 간다(`_record_advice`). 낸 값은
     그 계수 {"listed", "repeat"} — 표지 없는 항목만 온 라운드는 둘 다 0 이다."""
     counts = {"listed": 0, "repeat": 0}
+    seen = set()
     for it in findings:
         fid = it["id"]
         st["findings"][fid] = {k: it.get(k) for k in PUBLIC_FIELDS}
         if it.get("state") == "rejected":
             continue
         if it.get("route") == "advice":
-            _record_advice(st, it, n, counts)
+            _record_advice(st, it, n, counts, seen)
             continue
         d = it.get("disposition")
         if d == "decide":

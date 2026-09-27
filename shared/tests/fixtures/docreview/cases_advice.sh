@@ -112,6 +112,11 @@ case_AC5_AC9_round2() {
   assert_eq "$(jget "$d/fin2.json" 'd["mc_preexisting_new"]')" "1" \
     "AC9: 해시 불변 절(#1-context)의 새 계보 must-catch(R2D)만 센다 — 바뀐 절(R2E) · 계보 후속(R2F)은 세지 않는다"
   assert_eq "$(st_yaml "$d" "'$rd' in st['decides']")" "True" "AC9: 관측은 동작을 바꾸지 않는다 — R2D 는 decides 에 있다"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep '^참고 ')" \
+    "참고 7건(이번 라운드 새 1 · 반복 1) — 끝에서 한 목록으로 · 선재 절의 새 must-catch 1" \
+    "AC5·AC9: 게이트 참고 줄의 값 — 총계 7(라운드 1 의 6 + 새 1) · 새 1 · 반복 1 · 선재 1"
+  assert_eq "$(gsum "$d" 'd["advice"] == {"total": 7, "new": 1, "repeat": 1, "mc_preexisting_new": 1}')" "True" \
+    "AC5·AC9: gate JSON 의 advice 객체가 보고서 계수 · 원장 크기와 같다"
   rm -rf "$d"
 }
 case_AC9_child_section_changed() {
@@ -119,5 +124,37 @@ case_AC9_child_section_changed() {
   mc_round "$d" "$FX/design-sample-child.md" "$FX/critic-mc-child.txt" "$d/fin2.json"
   assert_eq "$(jget "$d/fin2.json" 'd["mc_preexisting_new"]')" "1" \
     "AC9: 하위 절(5.1)이 바뀐 상위 앵커(#5-architecture)의 새 must-catch 는 선재로 세지 않는다 — 안 바뀐 #1-context 것만 센다"
+  rm -rf "$d"
+}
+
+# ── 1회 규칙의 멱등 — 같은 라운드를 다시 finalize 해도 그 라운드가 올린 버킷은 반복이 아니다 ──────────
+adv_mark() {   # adv_mark <dir> — advice 원장 항목 전부에 shown · sunk 를 켠다(렌더 · 박제가 할 일을 픽스처가 대신한다)
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2])
+for v in st["advice"].values(): v["shown"] = True; v["sunk"] = True
+s.save_state(sys.argv[2], st, "fixture: advice shown/sunk")' "$SCRIPTS" "$1"
+}
+case_advice_same_round_refinalize_idempotent() {
+  local d; d="$(mc_r1)"
+  assert_eq "$(jget "$d/fin.json" 'd["advice_new"], d["advice_repeat"]')" "(6, 0)" "1회 규칙 전제: 라운드 1 finalize 는 새 6 · 반복 0"
+  adv_mark "$d"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-mc-r1.txt")" \
+    --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep-again.json"
+  render_recritic "$d/prep-again.json" "$FX/recritic-mc-r1.txt.tmpl" "$d/recritic-again.txt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$d/recritic-again.txt" --doc "$FX/design-sample.md" > "$d/fin-again.json"
+  assert_eq "$(jget "$d/fin-again.json" 'd["advice_new"], d["advice_repeat"]')" "(6, 0)" \
+    "1회 규칙: 같은 라운드를 다시 finalize 해도 그 라운드가 올린 버킷은 새로 센다(반복 0)"
+  assert_eq "$(st_yaml "$d" 'len(st["advice"]), sorted({(v["shown"], v["sunk"]) for v in st["advice"].values()})')" "(6, [(True, True)])" \
+    "1회 규칙: 같은 라운드 재기록은 원장을 늘리지 않고 shown · sunk 를 지우지 않는다"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep '^참고 ')" \
+    "참고 6건(이번 라운드 새 6 · 반복 0) — 끝에서 한 목록으로 · 선재 절의 새 must-catch 0" \
+    "1회 규칙: 재finalize 뒤 게이트 참고 줄도 새 6 · 반복 0"
+  rm -rf "$d"
+}
+case_advice_same_round_duplicate_bucket() {   # 한 라운드 안에서 같은 버킷의 advisory 둘 — 뒤 항목은 반복이다
+  local d; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-dup-bucket.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  assert_eq "$(jget "$d/fin.json" 'd["advice_new"], d["advice_repeat"], len(d["advice"])')" "(1, 1, 2)" \
+    "1회 규칙: 같은 라운드의 같은 버킷 둘 — 둘 다 표지를 달지만 목록에는 하나(새 1 · 반복 1)"
+  assert_eq "$(st_yaml "$d" 'len(st["advice"])')" "1" "1회 규칙: 같은 버킷은 원장에 한 줄"
   rm -rf "$d"
 }
