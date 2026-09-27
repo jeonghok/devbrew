@@ -596,7 +596,7 @@ PY
 
 case_recritic_findings_keep_reviewer_confidence() {
   # Task 2 — Phase 1.5-1 은 findings.yaml 을 쓰는 자리에서 confidence 보존을 한 번도
-  # 말하지 않는다. 합성기(9.3.1)는 누락을 5 로 평탄화하므로(synthesize_findings.py 의
+  # 말하지 않는다. 합성기는 누락을 5 로 평탄화하므로(synthesize_findings.py 의
   # _normalize_confidence) 이 지시가 사라져도 그 락은 GREEN 이다 — 이 락은 지시가 SKILL 에
   # 실제로 있는지, agent: 문단(findings.yaml 을 쓰는 자리) 바로 다음인지를 잰다.
   local anchor_line new_line anchor_count new_count anchor_no new_no
