@@ -229,15 +229,21 @@ class TestOutputSurface(unittest.TestCase):
 
 
 class TestMissingConfidenceNotSuppressedAsZero(unittest.TestCase):
-    """Task 1 — 누락된 confidence 가 억제 바닥(conf<=4) 아래로 조용히 떨어지지 않는다.
+    """누락된 confidence 가 억제 바닥(conf<=4) 아래로 조용히 떨어지지 않는다.
 
-    `_conf`가 예전에 `f.get("confidence", 0)`로 시작해, 키가 없으면 0이 됐다.
     `suppress()`는 non-CRITICAL·conf<=4 를 억제하고 판정(`_verdict.decide(
-    defect=bool(kept), …)`)은 severity 를 안 묻는다 — 그래서 confidence 가
-    없는 **유일한** 확인된 발견이 억제되고 차등 테스트가 깨끗하면 거짓
-    `clean`이 났다(task-1-brief.md). malformed(`"high"`·null)는 이미
-    `NEW_FINDING_DEFAULT_CONFIDENCE`(5)로 떨어졌으므로, 누락도 같은 값으로
-    맞추고 그 강제를 원장에 `gate=True`(공시, 억제 여부를 바꾸므로)로 센다.
+    defect=bool(kept), …)`)은 severity 를 안 묻는다 — confidence 가 없는
+    finding 이 억제되면 그만큼 `kept`가 줄고, 차등 테스트가 깨끗하면 거짓
+    `clean`이 날 수 있다. 누락도 malformed(`"high"`·null 등)와 같은 값(5)으로
+    맞춘다.
+
+    confidence 강제가 **게이트(억제 여부)를 실제로 바꾸는지**는 항목의 운명과
+    최종 severity에 달려 있다 — `reject`된 항목은 판정에 안 들어가므로 못
+    바꾸고, CRITICAL은 confidence와 무관하게 늘 kept라 못 바꾼다. 그래서
+    `ledger.coerced()`의 `gate`는 조건부다(값 고정 자체는 항상 하되, 게이트를
+    실제로 바꾸는 갈래에서만 `gate=True`로 센다). 승격 경로의 confidence
+    누락은 판정자 자신의 주장에 대한 설계된 인코딩이라 세지 않지만, 승격
+    경로의 non-numeric(malformed) 값은 판정자가 잘못 준 값이라 여전히 세진다.
     """
 
     def test_a_missing_confidence_defaults_to_five_not_suppressed(self):
@@ -272,6 +278,19 @@ class TestMissingConfidenceNotSuppressedAsZero(unittest.TestCase):
         self.assertIn("강제(게이트 변경): confidence 'high'→5", r["reasons"],
                       "원값(malformed 표기)이 사유 줄에 그대로 남는다")
 
+    def test_b2_bool_confidence_is_non_numeric_and_counted(self):
+        """`bool`은 `int`의 하위형이라 맨 `int()`를 그냥 통과한다 — 숫자가 아닌
+        것으로 명시적으로 막지 않으면 `True`가 confidence 1이 된다."""
+        f = {"agent": "sec", "file": "a.py", "line": 1, "severity": "IMPORTANT",
+             "summary": "s", "confidence": True}
+        v = {"finding_id": mod.finding_id(f), "verdict": "confirm"}
+        L = mod.Ledger(items="open")
+        out, _dropped = mod.apply_verdicts([f], [v], ledger=L)
+        self.assertEqual(out[0]["confidence"], 5, "bool 은 숫자가 아닌 것으로 본다")
+        r = L.report()
+        self.assertEqual(r["counts"]["coerced"], 1)
+        self.assertIn("강제(게이트 변경): confidence True→5", r["reasons"])
+
     def test_c_numeric_confidence_is_fixed_not_coerced(self):
         """양의 짝 — 표기만 다를 뿐 값이 같은 confidence 는 강제로 세지 않는다."""
         f8 = {"agent": "sec", "file": "a.py", "line": 1, "severity": "IMPORTANT",
@@ -291,8 +310,12 @@ class TestMissingConfidenceNotSuppressedAsZero(unittest.TestCase):
         self.assertEqual(L7.report()["counts"]["coerced"], 0,
                          "표기만 다를 뿐 값이 같으므로 강제로 세지 않는다")
 
-    def test_d_critical_missing_confidence_still_kept_but_now_coerced(self):
-        """CRITICAL 은 전과 같이 kept 다 — 강제 회계만 새로 생긴다."""
+    def test_d_critical_missing_confidence_still_kept_and_coerced_without_gate(self):
+        """CRITICAL 은 전과 같이 kept 다. confidence 강제는 여전히 값 수준에서
+        일어나(coerced 1건) 세어지지만, CRITICAL은 confidence 와 무관하게 늘
+        kept 이므로 그 강제는 억제 여부(게이트)를 바꾸지 않는다 — `gate=False`
+        (/qg 리뷰 라운드 1 I-1: 무조건 `gate=True`는 아무것도 안 바꾼 강제를
+        거짓으로 「게이트 변경」이라 공시했다)."""
         f = {"agent": "sec", "file": "a.py", "line": 1, "severity": "CRITICAL",
              "summary": "s"}
         v = {"finding_id": mod.finding_id(f), "verdict": "confirm"}
@@ -301,25 +324,104 @@ class TestMissingConfidenceNotSuppressedAsZero(unittest.TestCase):
         kept, suppressed = mod.suppress(out, ledger=L)
         self.assertEqual(len(kept), 1, "CRITICAL 은 confidence 와 무관하게 kept (전과 같음)")
         self.assertEqual(len(suppressed), 0)
-        self.assertEqual(L.report()["counts"]["coerced"], 1)
+        r = L.report()
+        self.assertEqual(r["counts"]["coerced"], 1, "값 강제 자체는 여전히 세어진다")
+        self.assertFalse(
+            any("강제(게이트 변경)" in reason for reason in r["reasons"]),
+            "CRITICAL 은 confidence 로 kept 여부가 안 바뀌므로 게이트를 안 바꾼 "
+            "강제(gate=False)다 — 「게이트 변경」줄이 없어야 한다")
+
+    def test_g_rejected_item_with_missing_confidence_has_no_coercion_entry(self):
+        """기각된 항목은 판정(kept/suppressed)에 아예 안 들어가므로 confidence
+        강제가 게이트를 못 바꾼다 — 강제 자체를 세지 않는다(/qg 리뷰 라운드 1 I-1:
+        기각된 IMPORTANT가 「강제(게이트 변경)」+「차단: 예」를 `verdict: clean`
+        옆에 거짓으로 띄웠다)."""
+        f = {"agent": "sec", "file": "a.py", "line": 1, "severity": "IMPORTANT",
+             "summary": "s"}
+        v = {"finding_id": mod.finding_id(f), "verdict": "reject", "evidence": "e"}
+        L = mod.Ledger(items="open")
+        out, _dropped = mod.apply_verdicts([f], [v], ledger=L)
+        self.assertEqual(out, [], "기각된 항목은 out 에 없다")
+        r = L.report()
+        self.assertEqual(r["counts"]["coerced"], 0,
+                         "기각된 항목의 confidence 강제는 세지 않는다")
+        self.assertFalse(r["degraded"],
+                         "기각만 있고 다른 degrade 사유가 없으면 degrade 가 아니다")
 
     def test_e_promoted_missing_confidence_defaults_to_five_but_not_coerced(self):
         """승격 경로 — 기본값 5 는 판정자 자신의 주장에 대한 설계된 인코딩이지
-        강제가 아니다. 세면 승격이 있는 모든 실행이 degrade 가 된다."""
+        강제가 아니다. 세면 승격이 있는 모든 실행이 degrade 가 된다. 키 없음은
+        stderr 도 안 낸다(M-1) — 이상이 아니라 정상 경로이기 때문이다."""
         L = mod.Ledger(items="open")
-        promoted, dropped = mod.promote_new_findings(
-            [{"file": "a.py", "line": 1, "severity": "IMPORTANT", "summary": "s"}],
-            [], author="doc-recritic", ledger=L)
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            promoted, dropped = mod.promote_new_findings(
+                [{"file": "a.py", "line": 1, "severity": "IMPORTANT", "summary": "s"}],
+                [], author="doc-recritic", ledger=L)
         self.assertEqual(dropped, 0)
         self.assertEqual(promoted[0]["confidence"], 5)
         kept, suppressed = mod.suppress(promoted, ledger=L)
         self.assertEqual(len(kept), 1)
         self.assertEqual(L.report()["counts"]["coerced"], 0,
                          "승격 경로의 기본 confidence 는 강제로 세지 않는다")
+        self.assertNotIn("missing confidence", buf.getvalue(),
+                         "승격 경로의 키 없음은 이상이 아니므로 stderr 도 안 낸다")
+
+    def test_h_promoted_non_numeric_confidence_is_counted(self):
+        """승격 경로에서도 non-numeric(malformed) confidence 는 키 없음과 달리
+        강제로 센다 — 판정자가 «잘못 준» 값이라 여전히 malformed 다(/qg 리뷰
+        라운드 1 I-3: 예전에는 `count=False` 가 이 갈래까지 조용히 죽였다 —
+        `confidence: low`→5 가 SUGGESTION 을 kept 로 바꾸고 `defect`를 내는데도
+        아무것도 공시되지 않았다)."""
+        L = mod.Ledger(items="open")
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            promoted, dropped = mod.promote_new_findings(
+                [{"file": "b.py", "line": 2, "severity": "SUGGESTION", "summary": "s",
+                  "confidence": "low"}],
+                [], author="doc-recritic", ledger=L)
+        self.assertEqual(dropped, 0)
+        self.assertEqual(promoted[0]["confidence"], 5)
+        self.assertIn("non-numeric confidence", buf.getvalue(),
+                      "non-numeric 은 두 경로 모두에서 stderr 를 낸다")
+        kept, suppressed = mod.suppress(promoted, ledger=L)
+        self.assertEqual(len(kept), 1, "5는 억제 바닥(<=4) 위이므로 kept — 이 강제가 defect 를 만든다")
+        r = L.report()
+        self.assertEqual(r["counts"]["coerced"], 1,
+                         "non-numeric 은 승격 경로에서도 강제로 센다")
+        self.assertIn("강제(게이트 변경): confidence 'low'→5", r["reasons"])
+
+    def test_i_overflow_confidence_defaults_to_five_without_crash(self):
+        """`confidence: .inf`(YAML 이 `float('inf')`로 읽는다)는 `int()`에서
+        `OverflowError`를 던진다 — `TypeError`/`ValueError`만 잡던 자리는
+        여기서 그대로 죽었다(/qg 리뷰 라운드 1 M-2)."""
+        f = {"agent": "sec", "file": "a.py", "line": 1, "severity": "IMPORTANT",
+             "summary": "s", "confidence": float("inf")}
+        v = {"finding_id": mod.finding_id(f), "verdict": "confirm"}
+        L = mod.Ledger(items="open")
+        out, dropped = mod.apply_verdicts([f], [v], ledger=L)
+        self.assertEqual(dropped, 0)
+        self.assertEqual(out[0]["confidence"], 5)
+        self.assertEqual(L.report()["counts"]["coerced"], 1)
+
+    def test_j_conf_safety_net_handles_overflow_and_bool(self):
+        """`_conf` 총함수 안전망도 `_normalize_confidence`와 같은 가드를 갖는다
+        (M-2 · M-3) — 이 초크포인트를 우회한 호출에도 억제 바닥 함정·크래시가
+        되살아나지 않는다."""
+        self.assertEqual(mod._conf({"confidence": float("inf")}), 5)
+        self.assertEqual(mod._conf({"confidence": True}), 5)
 
     def test_f_cli_seam_missing_confidence_survives_end_to_end(self):
         """이음매(CLI) — findings YAML 에 confidence 없는 IMPORTANT 하나 + 그 항목을
-        confirm 하는 재비판 판정. 판정자 부재 hold 가 끼지 않도록 실제로 confirm 한다."""
+        confirm 하는 재비판 판정. 판정자 부재 hold 가 끼지 않도록 실제로 confirm 한다.
+
+        네 단언(표 행·suppressed 부재·DEGRADE_MARKER·verdict: defect)만으로는
+        held(판정자 부재) 변형과 구별이 안 된다 — /qg 리뷰 라운드 1 I-2: 존재
+        하지 않는 f 를 가리키도록 바꿔도(=hold 로 떨어져도) 네 단언이 전부
+        그대로 통과했다(hold 경로도 confidence 를 강제하고 표에 싣고 defect
+        를 내므로). confirm 이 실제로 적용됐다는 목적지-양의 단언(수용 1 ·
+        미판정 0 · findings-lost 부재 · clean이 아니다 부재)을 더해 hold
+        변형과 실제로 갈라지게 한다."""
         with tempfile.TemporaryDirectory() as d:
             findings_path = Path(d) / "findings.yaml"
             findings_path.write_text(
@@ -342,11 +444,20 @@ class TestMissingConfidenceNotSuppressedAsZero(unittest.TestCase):
                        "--recritic-map", str(map_path),
                        "--emit-verdict"])
         self.assertIn("| IMPORTANT |", out, "confirm 된 IMPORTANT 가 표에 실린다")
-        self.assertNotIn("suppressed", out,
+        self.assertNotIn("suppressed (conf <= 4)", out,
                          "「suppressed」 집계에 0 이 아닌 수로 세지지 않는다")
+        self.assertIn("억제 0", out, "양의 짝 — 처분 줄의 억제 칸도 0 이다")
         self.assertIn(mod.DEGRADE_MARKER, out, "confidence 강제가 degrade 로 공시된다")
         self.assertIn("verdict: defect", out,
                       "kept 가 1건이므로 판정 꼬리는 defect 다 (defect=bool(kept))")
+        # 목적지-양의 단언 — held(판정자 부재) 변형에서는 이 다섯이 전부 다르게 나온다
+        # (수용 0 · 미판정 1 · 「공시」 대신 「이 실행은 clean이 아니다」 · reasons:
+        # [findings-lost]).
+        self.assertIn("강제(게이트 변경): confidence None→5", out)
+        self.assertIn("공시(판정을 막지 않음)", out)
+        self.assertIn("미판정 0", out)
+        self.assertNotIn("findings-lost", out)
+        self.assertNotIn("clean이 아니다", out)
 
 
 if __name__ == "__main__":
