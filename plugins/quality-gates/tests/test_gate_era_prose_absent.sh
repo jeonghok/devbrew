@@ -41,9 +41,9 @@ EOF
 case_new_wording_present() {
   assert_file_grep "$QG/agents/security-reviewer.md" '^description: Phase 1 of the qg review pipeline — always-run code-level security review' \
     "security-reviewer 설명이 한 파이프라인의 Phase 1 을 이름 붙인다"
-  assert_file_grep "$QG/agents/security-reviewer.md" 'the code-level security specialist for review pipeline Phase 1\.' \
+  assert_file_grep "$QG/agents/security-reviewer.md" '^You are \*\*security-reviewer\*\*, the code-level security specialist for review pipeline Phase 1\.$' \
     "security-reviewer 역할 문장이 한 파이프라인의 Phase 1 을 이름 붙인다"
-  assert_file_grep "$QG/agents/pr-understanding-builder.md" "qg's review pipeline \(\`/qg\`\) and the publish orchestrator" \
+  assert_file_grep "$QG/agents/pr-understanding-builder.md" "^qg's review pipeline \(\`/qg\`\) and the publish orchestrator — \*\*not\*\* to you\." \
     "pr-understanding-builder 가 판정을 한 파이프라인의 몫으로 넘긴다"
   assert_file_grep "$QG/skills/publishing-pr-understanding/SKILL.md" '^리뷰 파이프라인의 몫\), artifact' \
     "publishing SKILL 이 판정을 /qg 리뷰 파이프라인의 몫으로 넘긴다"
