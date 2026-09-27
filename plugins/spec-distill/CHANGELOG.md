@@ -34,6 +34,13 @@ minor 인 이유 — 새 표면이 넷이다.
 ### Fixed
 - `build_brief_bundle.py` · `build_brief_inline_blob.py` 의 rc 3(위생) 판정을 자기 `audit_file` basename 으로 좁혔다.
   다른 인터뷰의 audit 을 근거로 인용하던 brief 가 라운드마다 degrade 를 켰다(최근 6회 중 3회).
+- 엔진이 사용자 문서(결정 기록 · 박제처)에 쓰는 한 줄 추가가 원자적이다 — 인코딩을 먼저 끝내고 같은 디렉토리의
+  임시 파일에 쓴 뒤 `os.replace` 로 바꾼다(링크 · 권한 비트 유지). 전에는 `write_text` 가 인코딩 전에 파일을 잘라,
+  짝 없는 surrogate 가 든 참고 항목 하나가 설계 문서를 0 바이트로 만들었다. `advice` 의 렌더 · JSON · 박제 행은 짝
+  없는 surrogate 를 U+FFFD 로 바꾼다(렌더가 `state_unreadable` 로 오보하던 것도 사라진다).
+- `advice --sink` 가 머리 없는 `|` 행(`defer` 가 적는 행)으로 끝나는 절을 표로 오인하지 않는다 — 끝의 `|` 줄
+  덩어리에 구분 줄이 있어야 표다. `--log-file` 의 계수 줄은 결정 기록 헤딩 자신의 본문 끝에 선다 — `### Deferred to
+  plan` 이 그 하위 절이어도 박제 표 뒤에 끼지 않는다.
 
 ## [4.4.0] — 2026-09-24
 

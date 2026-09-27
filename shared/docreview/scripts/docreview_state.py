@@ -697,8 +697,9 @@ def record_findings(st, findings, n) -> dict:
     return counts
 
 
-def _section_span(lines, heading):
-    """그 헤딩 절의 (헤딩 줄 번호, 끝 줄 번호) — 끝은 절 끝의 빈 줄을 걷은 자리다. 헤딩이 없으면 None."""
+def _section_span(lines, heading, own=False):
+    """그 헤딩 절의 (헤딩 줄 번호, 끝 줄 번호) — 끝은 절 끝의 빈 줄을 걷은 자리다. 헤딩이 없으면 None.
+    `own` 이면 절은 첫 하위 헤딩에서 끊긴다(헤딩 자신의 본문만)."""
     level = len(heading) - len(heading.lstrip("#"))
     idx = next((i for i, l in enumerate(lines) if l.strip() == heading.strip()), None)
     if idx is None:
@@ -706,7 +707,7 @@ def _section_span(lines, heading):
     end = len(lines)
     for j in range(idx + 1, len(lines)):
         m = re.match(r"^(#{1,6})[ \t]+", lines[j])
-        if m and len(m.group(1)) <= level:
+        if m and (own or len(m.group(1)) <= level):
             end = j
             break
     while end > idx + 1 and lines[end - 1].strip() == "":
@@ -714,29 +715,52 @@ def _section_span(lines, heading):
     return idx, end
 
 
-def section_tail(path: Path, heading: str):
-    """그 헤딩 절의 마지막 비지 않은 줄(본문이 없으면 헤딩 줄 자신). 파일이나 헤딩이 없으면 None."""
+def section_body(path: Path, heading: str):
+    """그 헤딩 절의 본문 줄(헤딩 다음부터 절 끝의 빈 줄 앞까지 · 하위 절 포함). 파일이나 헤딩이 없으면 None."""
     if not path.is_file():
         return None
     lines = path.read_text(encoding="utf-8").split("\n")
     span = _section_span(lines, heading)
-    return None if span is None else lines[span[1] - 1]
+    return None if span is None else lines[span[0] + 1:span[1]]
 
 
-def append_under_heading(path: Path, heading: str, line: str) -> None:
-    """append-only: 그 헤딩 절의 끝에 한 줄. 헤딩이 없으면 파일 끝에 헤딩부터 만든다."""
+def _write_atomic(path: Path, text: str) -> None:
+    """사용자 문서 쓰기 — 인코딩을 먼저 끝내고 같은 디렉토리의 임시 파일에 쓴 뒤 `os.replace` 로 바꾼다. 어느 단계가
+    실패해도 원본 바이트는 그대로다(`write_text` 는 인코딩 전에 파일을 자른다). 심볼릭 링크는 가리키는 파일을 바꾸고,
+    기존 파일의 권한 비트를 잇는다."""
+    data = text.encode("utf-8")
+    target = Path(os.path.realpath(str(path)))
+    tmp = target.with_name(".%s.%s.tmp" % (target.name, os.urandom(4).hex()))
+    try:
+        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        if target.exists():
+            os.chmod(str(tmp), target.stat().st_mode & 0o7777)
+        os.replace(str(tmp), str(target))
+    except BaseException:
+        try:
+            os.unlink(str(tmp))
+        except OSError:
+            pass
+        raise
+
+
+def append_under_heading(path: Path, heading: str, line: str, own=False) -> None:
+    """append-only: 그 헤딩 절의 끝에 한 줄(`own` 이면 첫 하위 헤딩 앞 — 헤딩 자신의 본문 끝). 헤딩이 없으면 파일
+    끝에 헤딩부터 만든다. 쓰기는 원자적이다(`_write_atomic`)."""
     text = path.read_text(encoding="utf-8") if path.is_file() else ""
     lines = text.split("\n")
-    span = _section_span(lines, heading)
+    span = _section_span(lines, heading, own)
     if span is None:
         text = text.rstrip("\n") + "\n\n" + heading.strip() + "\n\n" + line + "\n"
-        path.write_text(text, encoding="utf-8")
+        _write_atomic(path, text)
         return
     end = span[1]
     lines[end:end] = [line]
     if end + 1 < len(lines) and lines[end + 1].strip() != "":
         lines[end + 1:end + 1] = [""]
-    path.write_text("\n".join(lines), encoding="utf-8")
+    _write_atomic(path, "\n".join(lines))
 
 
 def _log_line(entry, f) -> str:
@@ -1456,7 +1480,8 @@ def cmd_advice(a) -> int:
 
     플래그가 없으면 원장의 목록을 JSON 으로 낸다(읽기 전용). 한 호출 안의 순서는 박제 → 계수 → 표시다. 이미 보인
     항목(`shown`) · 박제한 항목(`sunk`)은 다시 내지 않고, 계수 줄의 멱등 키는 (리뷰 정체, 라운드)를 목적지 파일의
-    글자로 판정한다 — 원장이 TTL 로 걷혀도 두 번 적지 않는다. 부르는 자리는 진입 skill 셋이다(절차서는 계약만).
+    글자로 판정한다 — 원장이 TTL 로 걷혀도 두 번 적지 않는다. 계수 줄은 decision_log 헤딩 자신의 본문 끝(첫 하위
+    헤딩 앞)에 선다 — 박제처가 그 하위 절이어도 박제 표에 끼지 않는다. 부르는 자리는 진입 skill 셋이다(절차서는 계약만).
     박제는 미박제 행 전부를 한 번의 쓰기로 적고(전부 아니면 전무), 성공하면 계수 · 표시 **앞에서** `sunk` 를 원장에
     저장한다 — 뒤 단계가 무엇으로 죽어도 다음 호출이 같은 행을 다시 적지 않는다. 쓰기 · 읽기 실패는 rc 1 과 사유
     (`sink_write_failed` · `log_write_failed`) · 목적지 경로로 알린다."""
@@ -1481,7 +1506,7 @@ def cmd_advice(a) -> int:
     if sunk:
         path = Path(a.sink)
         try:
-            block = adv.sink_block([adv.sink_row(it) for it in sunk], section_tail(path, dt["heading"]))
+            block = adv.sink_block([adv.sink_row(it) for it in sunk], section_body(path, dt["heading"]))
             append_under_heading(path, dt["heading"], "\n".join(block))
         except (OSError, UnicodeError) as e:
             return fail("sink_write_failed", path=str(path), detail=str(e))
@@ -1496,7 +1521,7 @@ def cmd_advice(a) -> int:
                 rep = st["rounds"][k].get("route_report") or {}
                 have = path.read_text(encoding="utf-8") if path.is_file() else ""
                 if "advice_new" in rep and adv.count_key(ident, int(k)) not in have:
-                    append_under_heading(path, heading, adv.count_line(ident, int(k), rep))
+                    append_under_heading(path, heading, adv.count_line(ident, int(k), rep), own=True)
                     logged.append(int(k))
         except (OSError, UnicodeError) as e:
             return fail("log_write_failed", path=str(path), detail=str(e), sunk=len(sunk), logged_rounds=logged)
@@ -1509,7 +1534,7 @@ def cmd_advice(a) -> int:
     if shown:
         save_state(a.state_dir, st, "advice shown=%d" % len(shown))
     if not a.render:
-        _emit({"ok": True, "items": items, "sunk": len(sunk), "logged_rounds": logged})
+        _emit({"ok": True, "items": adv.scrub(items), "sunk": len(sunk), "logged_rounds": logged})
     return 0
 
 

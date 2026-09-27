@@ -454,3 +454,93 @@ except KeyboardInterrupt:
   assert_eq "$(adv_deferred "$doc" | grep -c '| 참고(')" "3" "박제 영속: 중단 뒤 재실행도 행을 겹쳐 적지 않는다(3 → 3)"
   rm -rf "$d" "$doc" "$lf"
 }
+
+# ── 쓰기의 원자성 · 짝 없는 surrogate ────────────────────────────────────────
+adv_poison() {   # adv_poison <dir> — advice 항목 전부의 요약 · 대체안에 짝 없는 surrogate 를 심는다(원장은 yaml 이스케이프로 산다)
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2])
+for v in st["advice"].values():
+    v["summary"] = "외톨이 \udc00 끝"; v["replacement"] = "쌍 😀 · 외톨이 \ud800"
+s.save_state(sys.argv[2], st, "fixture: surrogate")' "$SCRIPTS" "$1"
+}
+case_advice_surrogate_sink_atomic() {   # 짝 없는 surrogate 가 사용자 문서를 0 바이트로 만들지 않는다
+  local d t doc before out rc; d="$(adv_state 1)"; adv_poison "$d"; t="$(mktemp -d -t surr-XXXXXX)"; doc="$t/doc.md"
+  cp "$FX/design-sample.md" "$doc"; before="$(wc -c < "$doc" | tr -d ' ')"
+  out="$(py docreview_state.py advice --state-dir "$d" --sink "$doc" --render 2>"$t/err")"; rc=$?
+  assert_eq "$rc $(printf '%s\n' "$out" | grep -c '^- \[component_relations\] #1-context — 외톨이 � 끝$')" "0 1" \
+    "surrogate: --sink --render 가 rc 0 이고 렌더 항목의 짝 없는 surrogate 는 U+FFFD 로 바뀐다"
+  assert_eq "$(head -c "$before" "$doc" | cmp -s - "$FX/design-sample.md" && echo same)" "same" \
+    "surrogate: 박제 뒤에도 문서의 원래 바이트가 표 앞에 그대로 있다(0 바이트로 잘리지 않는다)"
+  assert_eq "$(adv_deferred "$doc" | grep -c '| 참고(component_relations) #1-context — 외톨이 � 끝 — 고치면: 쌍 😀 · 외톨이 � |$')" "1" \
+    "surrogate: 박제 행은 짝 없는 것을 U+FFFD 로, 짝이 맞는 쌍은 원래 글자로 적는다"
+  assert_eq "$(py docreview_state.py advice --state-dir "$d" | jgets '[it["summary"] for it in d["items"]]')" "['외톨이 � 끝']" \
+    "surrogate: 플래그 없는 JSON 도 rc 0 으로 U+FFFD 를 싣는다(state_unreadable 로 죽지 않는다)"
+  cp "$FX/design-sample.md" "$doc"
+  out="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+from pathlib import Path
+try:
+    s.append_under_heading(Path(sys.argv[2]), "### Deferred to plan", "| x | \udc00 |")
+    print("wrote")
+except UnicodeEncodeError:
+    print("raised")' "$SCRIPTS" "$doc" 2>&1)"
+  assert_eq "$out $(cmp -s "$doc" "$FX/design-sample.md" && echo same) $(ls -A "$t" | grep -Evc '^(doc\.md|err)$')" "raised same 0" \
+    "원자 쓰기: 인코딩이 실패해도 대상 파일의 바이트는 그대로이고 임시 파일이 남지 않는다"
+  rm -rf "$d" "$t"
+}
+case_advice_atomic_write_keeps_link_and_mode() {   # 원자 교체가 심볼릭 링크를 끊거나 권한 비트를 바꾸지 않는다
+  local d t; d="$(adv_state 2)"; t="$(mktemp -d -t atomw-XXXXXX)"
+  cp "$FX/design-sample.md" "$t/real.md"; chmod 640 "$t/real.md"; ln -s real.md "$t/link.md"
+  py docreview_state.py advice --state-dir "$d" --sink "$t/link.md" >/dev/null
+  assert_eq "$([ -L "$t/link.md" ] && echo link) $(adv_deferred "$t/real.md" | grep -c '| 참고(') $(ls -l "$t/real.md" | cut -c1-10)" \
+    "link 2 -rw-r-----" "원자 쓰기: 링크로 부르면 링크는 남고 가리키는 파일에 적히며 권한 비트(640)가 이어진다"
+  rm -rf "$d" "$t"
+}
+
+# ── 박제 · 머리 없는 defer 행 뒤 ─────────────────────────────────────────────
+case_advice_sink_after_headerless_defer_row() {   # defer 가 적은 머리 없는 | 행은 표가 아니다 — 머리를 연다
+  local d doc sec; d="$(adv_state 3)"; doc="$(mktemp -t deferrow-XXXXXX)"
+  sed -e '/^| # | 항목 |$/d' -e 's/^|---|---|$/- 계획에서 정할 것 하나/' "$FX/design-sample.md" > "$doc"
+  printf '| r0 | 머리 없는 defer 행 |\n' >> "$doc"
+  py docreview_state.py advice --state-dir "$d" --sink "$doc" >/dev/null
+  sec="$(adv_deferred "$doc")"
+  assert_eq "$(printf '%s\n' "$sec" | sed -n '1,6p')" "
+- 계획에서 정할 것 하나
+| r0 | 머리 없는 defer 행 |
+
+| # | 항목 |
+|---|---|" "박제 · defer 행 뒤: 구분 줄 없는 | 행 덩어리는 표가 아니다 — 빈 줄 하나를 두고 표 머리 · 구분 줄을 연다"
+  assert_eq "$(printf '%s\n' "$sec" | sed -n '7,$p' | grep -c '^| .* | 참고(') $(printf '%s\n' "$sec" | sed -n '7,$p' | grep -vc '^| .* | 참고(')" "3 0" \
+    "박제 · defer 행 뒤: 구분 줄 바로 아래가 박제 행 셋뿐이다"
+  adv_round2 "$d" 4
+  py docreview_state.py advice --state-dir "$d" --sink "$doc" >/dev/null
+  sec="$(adv_deferred "$doc")"
+  assert_eq "$(printf '%s\n' "$sec" | grep -c '^| # | 항목 |$') $(printf '%s\n' "$sec" | sed -n '7,$p' | grep -c '^| .* | 참고(') $(printf '%s\n' "$sec" | sed -n '7,$p' | grep -vc '^| .* | 참고(')" "1 4 0" \
+    "박제 · defer 행 뒤: 두 번째 박제는 머리를 다시 열지 않고 같은 표에 새 행만 잇는다"
+  rm -rf "$d" "$doc"
+}
+
+# ── 계수 줄 · 박제처가 결정 기록의 하위 절인 문서 ──────────────────────────────
+case_advice_count_line_nested_log() {   # ## 결정 기록 아래 ### Deferred to plan — 계수 줄은 결정 기록 자신의 본문에 선다
+  local d doc id own; d="$(adv_state 2)"; doc="$(mktemp -t nested-XXXXXX)"; id="$(adv_ident "$d")"
+  sed 's/^## Handoff Context$/## 결정 기록\
+\
+- D1 — 결정 하나./' "$FX/design-sample.md" > "$doc"
+  py docreview_state.py advice --state-dir "$d" --sink "$doc" --log-file "$doc" >/dev/null
+  own="$(awk '/^## 결정 기록$/{f=1;next} /^#/{f=0} f' "$doc" | sed '/^$/d')"
+  assert_eq "$own" "- D1 — 결정 하나.
+- docreview 계수 — $id r1: advice_new=2 · advice_repeat=0 · mc_preexisting_new=0" \
+    "계수 줄 · 중첩: 계수 줄은 ## 결정 기록 자신의 본문 끝(### Deferred to plan 앞)에 선다"
+  assert_eq "$(adv_deferred "$doc" | sed '/^$/d' | sed -n '1,2p;$=')" "| # | 항목 |
+|---|---|
+4" "계수 줄 · 중첩: Deferred 절은 머리 · 구분 줄 · 박제 행 둘만인 이어진 표다(계수 줄이 표 뒤에 끼지 않는다)"
+  rm -rf "$d" "$doc"
+}
+
+# ── --where 라벨 ─────────────────────────────────────────────────────────────
+case_advice_render_where_label() {   # B-A 가 쓰는 --where — 머리 줄 · 접는 줄이 그 라벨을 가리킨다
+  local d out; d="$(adv_state 11)"
+  out="$(py docreview_state.py advice --state-dir "$d" --render --cap 8 --where "brief §3 · §5")"
+  assert_eq "$(printf '%s\n' "$out" | sed -n '1p;$p')" "참고(advisory) 11건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: brief §3 · §5
+  … 외 3건 — brief §3 · §5 에 전부" "--where: 머리 줄과 접는 줄이 박제처 헤딩 대신 라벨을 가리킨다"
+  rm -rf "$d"
+}

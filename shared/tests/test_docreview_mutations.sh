@@ -781,4 +781,16 @@ mut 1/1 blocking_ask_single_pass case_advice_step2_order_independent sed_advice 
 mut 1/1 render_cap_changed case_AC6_render_cap sed_advice 's/^RENDER_CAP = 8 /RENDER_CAP = 9 /'
 # (79) 요약 폭을 넓힌다 — 80자 요약이 다른 자리에서 잘려 렌더 항목 전문이 어긋난다.
 mut 1/1 summary_width_changed case_advice_odd_text_one_line sed_advice 's/^SUMMARY_WIDTH = 60 /SUMMARY_WIDTH = 74 /'
+# (80) 원자 쓰기를 `write_text` 로 되돌린다 — 인코딩 전에 파일을 잘라 인코딩 실패가 사용자 문서를 0 바이트로 만든다.
+mut 1/1 atomic_write_reverted case_advice_surrogate_sink_atomic sed_state \
+  's/^    data = text\.encode("utf-8")$/    path.write_text(text, encoding="utf-8"); data = text.encode("utf-8")/'
+# (81) 짝 없는 surrogate 를 걷지 않는다 — 렌더가 state_unreadable 로 죽고 박제가 sink_write_failed 로 멈춘다.
+mut 1/1 surrogate_not_scrubbed case_advice_surrogate_sink_atomic sed_advice \
+  's/^    return re\.sub(r"\\s+", " ", _safe(s or ""))\.strip()$/    return re.sub(r"\\s+", " ", str(s or "")).strip()/'
+# (82) 표 판정을 «끝 줄이 | 로 시작하면 표» 로 되돌린다 — 머리 없는 defer 행 뒤의 박제 행이 목록 항목의 이어진 글이 된다.
+mut 1/1 table_by_tail_pipe case_advice_sink_after_headerless_defer_row sed_advice \
+  's/^    return any(_TABLE_SEP\.fullmatch(l\.strip()) for l in body\[k:\])$/    return k < len(body)/'
+# (83) 계수 줄을 절 전체(하위 절 포함)의 끝에 둔다 — 결정 기록의 하위 절인 Deferred 표 뒤에 계수 줄이 낀다.
+mut 1/1 count_line_span_end case_advice_count_line_nested_log sed_state \
+  's/adv\.count_line(ident, int(k), rep), own=True)$/adv.count_line(ident, int(k), rep))/'
 finish

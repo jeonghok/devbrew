@@ -20,6 +20,7 @@ RENDER_CAP = 8          # 끝의 한 번 표시 — 머리 1 + 항목 8 + 접는
 SUMMARY_WIDTH = 60      # 렌더 항목 줄의 요약 폭(코드포인트) — 넘치면 59 + 「…」
 COUNT_PREFIX = "docreview 계수 — "
 SINK_TABLE_HEAD = ("| # | 항목 |", "|---|---|")   # 박제처 절이 표로 끝나지 않을 때 한 번 여는 머리
+_TABLE_SEP = re.compile(r"\|(\s*:?-+:?\s*\|)*\s*:?-+:?\s*\|?")   # 표 구분 줄(`|---|` · `| --- |` · `|:--|`)
 
 
 def has_must_catch(prof) -> bool:
@@ -133,8 +134,25 @@ def mc_preexisting_new(final, snapshots, n, axes) -> int:
     return count
 
 
+def _safe(s) -> str:
+    """짝 없는 surrogate 를 U+FFFD 로 바꾼다(짝이 맞는 쌍은 원래 글자로 합친다) — UTF-8 로 못 쓰는 글자가 렌더 ·
+    JSON · 박제 행에 실리지 않게."""
+    return str(s).encode("utf-16-le", "surrogatepass").decode("utf-16-le", "replace")
+
+
+def scrub(o):
+    """JSON 으로 낼 값의 문자열 전부에 `_safe` 를 건다."""
+    if isinstance(o, str):
+        return _safe(o)
+    if isinstance(o, dict):
+        return {k: scrub(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [scrub(v) for v in o]
+    return o
+
+
 def _one_line(s) -> str:
-    return re.sub(r"\s+", " ", str(s or "")).strip()
+    return re.sub(r"\s+", " ", _safe(s or "")).strip()
 
 
 def clip(s, width=SUMMARY_WIDTH) -> str:
@@ -146,7 +164,7 @@ def render_lines(items, cap, where) -> list:
     """끝의 한 번 표시 — 머리 한 줄 + 항목 한 줄씩(최대 cap) + 넘치면 접는 줄 한 줄. 합계 ≤ cap + 2."""
     out = ["참고(advisory) %d건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: %s" % (len(items), where)]
     for it in items[:cap]:
-        out.append("- [%s] %s — %s" % (it.get("category"), it.get("anchor"), clip(it.get("summary"))))
+        out.append("- [%s] %s — %s" % (_safe(it.get("category")), _safe(it.get("anchor")), clip(it.get("summary"))))
     if len(items) > cap:
         out.append("  … 외 %d건 — %s 에 전부" % (len(items) - cap, where))
     return out
@@ -157,16 +175,27 @@ def sink_row(it) -> str:
     text = _one_line(it.get("summary"))
     if it.get("replacement"):
         text += " — 고치면: " + _one_line(it["replacement"])
-    return "| %s | 참고(%s) %s — %s |" % (it.get("id"), it.get("category"), it.get("anchor"), text.replace("|", "\\|"))
+    return "| %s | 참고(%s) %s — %s |" % (_safe(it.get("id")), _safe(it.get("category")), _safe(it.get("anchor")),
+                                        text.replace("|", "\\|"))
 
 
-def sink_block(rows, tail) -> list:
-    """박제처 절에 한 번에 붙일 줄들. 절이 표 행으로 끝나면(`tail` 이 `|` 로 시작) 그 표에 이어 붙이고, 아니면(글머리
-    목록 · 산문 · 빈 절) 빈 줄과 표 머리를 먼저 연다 — 목록 뒤에 붙은 `|` 줄은 표가 아니라 마지막 항목의 이어진 글이
-    된다. `tail` 이 None 이면 헤딩부터 새로 생기므로 빈 줄 없이 머리를 연다."""
-    if tail is not None and tail.lstrip().startswith("|"):
+def ends_with_table(body) -> bool:
+    """절 본문이 표로 끝나는가 — 끝에 이어진 `|` 줄 덩어리에 구분 줄이 있어야 표다. 머리 없는 `|` 행(`defer` 가 적는
+    행)만 있으면 표가 아니라 앞 항목의 이어진 글이다."""
+    k = len(body)
+    while k > 0 and body[k - 1].lstrip().startswith("|"):
+        k -= 1
+    return any(_TABLE_SEP.fullmatch(l.strip()) for l in body[k:])
+
+
+def sink_block(rows, body) -> list:
+    """박제처 절에 한 번에 붙일 줄들. 절 본문(`body` — 절 끝의 빈 줄을 걷은 줄 목록)이 표로 끝나면(`ends_with_table`)
+    그 표에 이어 붙이고, 아니면(글머리 목록 · 산문 · 머리 없는 `|` 행 · 빈 절) 빈 줄과 표 머리를 먼저 연다 — 목록 뒤에
+    붙은 `|` 줄은 표가 아니라 마지막 항목의 이어진 글이 된다. `body` 가 None 이면 헤딩부터 새로 생기므로 빈 줄 없이
+    머리를 연다."""
+    if body is not None and ends_with_table(body):
         return list(rows)
-    return ([] if tail is None else [""]) + list(SINK_TABLE_HEAD) + list(rows)
+    return ([] if body is None else [""]) + list(SINK_TABLE_HEAD) + list(rows)
 
 
 def review_identity(state_dir) -> str:
