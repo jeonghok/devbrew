@@ -761,14 +761,20 @@ mut 1/1 member_categories_ignored case_AC14_merge_survivor sed_advice \
   's/^    cats = it.get("_member_categories") or \[it\["category"\]\]$/    cats = [it["category"]]/'
 # (72) blocks 판정을 축으로 되돌린다 — fixes 를 막는 advisory ask 가 advice 로 빠지고 fix 가 held 가 안 된다.
 mut 1/1 blocks_by_axis case_AC15_blocks_by_application_path sed_advice \
-  's/^    if is_advisory(it, axes) and all(t.get("route") == ROUTE_ADVICE for t in live):$/    if is_advisory(it, axes):/'
+  's/^            if adv and all(t.get("route") == ROUTE_ADVICE for t in ts if t is not None):$/            if adv:/'
 # (73) advice 로 간 ref 를 세지 않고 버린다.
 mut 1/1 blocks_ref_uncounted case_AC15_blocks_by_application_path sed_advice \
-  's/^                L.coerced("blocks", r, None)$/                pass/'
+  's/^        L.coerced("blocks", r, None, gate)$/        pass/'
 # (74) 라운드 ≥2 새 계보 advisory fix 규칙을 지운다 — 적용 관측 때문에 라운드가 는다.
 mut 1/1 round2_new_fix_rule_removed case_AC18_round2_new_advisory_fix sed_advice \
   's/^    if n >= 2:$/    if False:/'
 # (75) 2 걸음 호출을 지운다.
 mut 1/1 route_step2_removed case_AC15_blocks_by_application_path sed_route \
   's/^    route_step2(final, keep_of, advisory_axes(prof), n, L)$/    pass/'
+# (76) blocks 강제가 게이트를 바꿔도 gate=False 로 센다 — 차단 ask 가 조용히 차단에서 빠진다(degrade 공시 없음).
+mut 1/1 blocks_coercion_gate_dropped case_advice_blocks_coercion_flips_gate sed_advice \
+  's/^    gate = bool(dropped) and not any(t is not None and t.get("route") != ROUTE_ADVICE for t in ts)$/    gate = False/'
+# (77) 고정점을 한 바퀴로 줄인다 — advisory ask 사슬의 판정이 final 순서에 달린다.
+mut 1/1 blocking_ask_single_pass case_advice_step2_order_independent sed_advice \
+  's/^    for _ in range(len(pending)):$/    for _ in range(1):/'
 finish

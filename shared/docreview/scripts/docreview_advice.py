@@ -61,33 +61,42 @@ def route_step2(final, keep_of, axes, n, L) -> None:
 
     ① 라운드 n ≥ 2 에서 새 계보(`lineage == id` — 계보 연결 · 재상승 후속이 아님)로 나온 advisory `fix` → advice.
        계보를 잇는 fix 는 fixes 에 남아 막는다(라운드 1 에서 온 미적용 의무).
-    ② `blocks` 가 있는 `ask` — 판정은 축이 아니라 대상의 적용 경로다(`_judge_blocking_ask`)."""
+    ② `blocks` 가 있는 `ask` — 판정은 축이 아니라 대상의 적용 경로다(`_judge_blocking_asks`)."""
     if n >= 2:
         for it in final:
             if it["disposition"] == "fix" and is_advisory(it, axes) and it.get("lineage") == it.get("id"):
                 it["route"] = ROUTE_ADVICE
     by_f = {it["f"]: it for it in final if it.get("f")}
-    for it in final:
-        if it["disposition"] == "ask" and it.get("blocks"):
-            _judge_blocking_ask(it, by_f, keep_of, axes, L)
+    pending = [it for it in final if it["disposition"] == "ask" and it.get("blocks")]
+    _judge_blocking_asks(pending, [[by_f.get(keep_of.get(r, r)) for r in it["blocks"]] for it in pending], axes, L)
 
 
-def _judge_blocking_ask(it, by_f, keep_of, axes, L) -> None:
+def _judge_blocking_asks(pending, targets, axes, L) -> None:
     """advice 가 아닌 대상이 하나라도 있으면 asks 에 남는다(축 무관 — 답 전까지 그 fix 는 held). advisory ask 는
-    대상이 전부 advice 거나 찾을 수 없으면 advice 다. asks 에 남는 ask 의 `blocks` 중 advice 대상 ref 는 조용히
-    버리지 않고 `coerced("blocks", ref, None)` 로 센다 — 없는 ref 는 현행대로 `_remap_blocks` 가 거른다."""
-    targets = [by_f.get(keep_of.get(r, r)) for r in it["blocks"]]
-    live = [t for t in targets if t is not None]
-    if is_advisory(it, axes) and all(t.get("route") == ROUTE_ADVICE for t in live):
-        it["route"] = ROUTE_ADVICE
-    else:
-        kept = []
-        for r, t in zip(it["blocks"], targets):
-            if t is not None and t.get("route") == ROUTE_ADVICE:
-                L.coerced("blocks", r, None)
-            else:
-                kept.append(r)
-        it["blocks"] = kept
+    대상이 전부 advice 거나 찾을 수 없으면 advice 다. 대상이 다른 차단 ask 일 수 있어서 판정은 `final` 순서가
+    아니라 최소 고정점이다 — advice 로 «증명된» 것만 advice 이고(단조 증가), 순환은 차단 쪽에 남는다. 한 바퀴에
+    하나도 안 넘어가면 이후도 같으므로 `len(pending)` 바퀴면 닿는다.
+
+    asks 에 남는 ask 의 `blocks` 중 advice 대상 ref 는 조용히 버리지 않고 `coerced("blocks", ref, None, gate)` 로
+    센다. 그 강제로 advice 가 아닌 산 대상이 하나도 안 남으면 — 강제가 없었다면 `_remap_blocks` 가 남겼을 차단
+    ask 가 차단에서 빠지므로 — 게이트 판정을 바꾼 강제다(gate=True, degrade 공시). 없는 ref 는 현행대로
+    `_remap_blocks` 가 거른다."""
+    advisory = [is_advisory(it, axes) for it in pending]
+    for _ in range(len(pending)):
+        for it, ts, adv in zip(pending, targets, advisory):
+            if adv and all(t.get("route") == ROUTE_ADVICE for t in ts if t is not None):
+                it["route"] = ROUTE_ADVICE
+    for it, ts in zip(pending, targets):
+        if it.get("route") != ROUTE_ADVICE:
+            _coerce_advice_refs(it, ts, L)
+
+
+def _coerce_advice_refs(it, ts, L) -> None:
+    dropped = [r for r, t in zip(it["blocks"], ts) if t is not None and t.get("route") == ROUTE_ADVICE]
+    gate = bool(dropped) and not any(t is not None and t.get("route") != ROUTE_ADVICE for t in ts)
+    for r in dropped:
+        L.coerced("blocks", r, None, gate)
+    it["blocks"] = [r for r, t in zip(it["blocks"], ts) if t is None or t.get("route") != ROUTE_ADVICE]
 
 
 def _subtree(snap, anchor) -> dict:

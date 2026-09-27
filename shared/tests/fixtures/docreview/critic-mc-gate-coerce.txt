@@ -1,0 +1,17 @@
+```docreview-layer1
+- ref: k1
+  category: problem_definition
+  anchor: "#1-context"
+  disposition: ask
+  summary: "GC1: 맥락 절의 과함을 먼저 정리하나?"
+  blocks: [k2]
+- ref: k2
+  category: overdesign
+  anchor: "#1-context"
+  disposition: decide
+  summary: "GC2: 맥락 절이 goal 대비 과하다"
+```
+
+```docreview-layer2
+[]
+```

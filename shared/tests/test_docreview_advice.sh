@@ -34,4 +34,6 @@ case_AC14_merge_survivor
 case_AC18_round2_new_advisory_fix
 case_AC8_staged_equation
 case_advice_dangling_blocks
+case_advice_blocks_coercion_flips_gate
+case_advice_step2_order_independent
 finish

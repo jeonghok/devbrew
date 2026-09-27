@@ -249,3 +249,35 @@ case_advice_dangling_blocks() {
   assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"]')" "0" "Review Focus: 없는 ref 는 advice 대상이 아니라 강제 계수가 늘지 않는다"
   rm -rf "$d"
 }
+
+# ── 2 걸음 fix round 1 — blocks 강제가 게이트를 바꾸면 degrade(gate=True) · 판정은 순서와 무관 ───────────
+step2_unit() { python3 "$FX/step2_unit.py" "$SCRIPTS" "$1" "$2"; }   # step2_unit <시나리오> <forward|reverse>
+case_advice_blocks_coercion_flips_gate() {
+  local d k1; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-gate-coerce.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  k1="$(fsum "$d" 'GC1:' '["id"]')"
+  assert_eq "$(st_yaml "$d" "'$k1' in st['asks'], st['asks']['$k1']['blocks'], len(st['decides'])") $(adv_has "$d" "$(fsum "$d" 'GC2:' '["id"]')")" "(True, [], 0) True" \
+    "게이트 강제 전제: must-catch ask 의 유일한 대상이 advice 로 가 blocks 가 비고, 열린 decide 는 없다"
+  assert_eq "$(gsum "$d" 'd["round_gate_needed"], d["blocking_ask_open"]')" "(False, [])" \
+    "게이트 강제: 강제가 없었다면 차단 ask 였을 질문이 차단에서 빠져 라운드 게이트가 꺼진다 — 이 강제가 게이트 판정을 바꿨다"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"], d["adjudication_degraded"], [x for x in d["advisory"] if x.startswith("강제(게이트 변경): blocks ")] != []')" "(1, True, True)" \
+    "게이트 강제: 그 강제는 gate=True 로 세어져 degrade 로 공시된다(보고서 advisory 에 「강제(게이트 변경)」 줄)"
+  assert_eq "$(gsum "$d" '[x for x in d["advisory"] if x.startswith("강제(게이트 변경): blocks ")] != []')" "True" \
+    "게이트 강제: 게이트 JSON 의 advisory 에도 같은 공시가 실린다"
+  rm -rf "$d"
+}
+case_advice_step2_order_independent() {
+  local s f r
+  for s in chain mixed cycle; do
+    f="$(step2_unit "$s" forward)"; r="$(step2_unit "$s" reverse)"
+    assert_eq "$f" "$r" "2 걸음 순서 무관: 시나리오 $s 는 final 순서를 뒤집어도 결과가 같다"
+  done
+  assert_eq "$(step2_unit chain forward)" \
+    '{"coerced": [["blocks", "b", null, true]], "items": {"a": ["advice", ["b"]], "b": ["advice", ["c"]], "c": ["advice", null], "m": [null, []]}}' \
+    "2 걸음 사슬: advisory A → advisory B → advice 는 A · B 둘 다 advice, B 를 막던 must-catch M 의 ref 는 gate=True 강제로 센다"
+  assert_eq "$(step2_unit mixed forward)" \
+    '{"coerced": [["blocks", "c", null, false]], "items": {"c": ["advice", null], "d": [null, null], "x": [null, ["d"]]}}' \
+    "2 걸음 대조: advice 가 아닌 대상이 남으면 강제는 gate=False(차단은 그대로다)"
+  assert_eq "$(step2_unit cycle forward)" \
+    '{"coerced": [], "items": {"p": [null, ["q"]], "q": [null, ["p"]]}}' \
+    "2 걸음 순환: 서로를 막는 advisory ask 는 advice 로 증명되지 않아 차단 쪽에 남는다"
+}
