@@ -31,4 +31,11 @@ try:
 except OSError:
     shutil.rmtree(sys.argv[1], ignore_errors=True)' "$tmp" "$cache"
 fi
+# rename 이 실패한 경우 「동시 실행이 먼저 만들었다」고만 가정했다 — 그 자리가 실은 무관한
+# 선재 디렉토리(비어있지 않은 stale dir 등)였으면 사본이 없는 채로 이 경로를 낼 뻔했다.
+# 낙관적 가정을 여기서 실측으로 확인한다: 셋 다 있어야 성공이다.
+if [ ! -f "$dst/brief.md" ] || [ ! -f "$dst/design-doc.md" ] || [ ! -f "$dst/seed.md" ]; then
+  echo "사본 프로필 캐시 손상: $cache — 지우고 다시 돌려라" >&2
+  exit 1
+fi
 printf '%s\n' "$dst"

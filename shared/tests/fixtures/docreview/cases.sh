@@ -5,6 +5,13 @@ FX="$REPO_ROOT/shared/tests/fixtures/docreview"
 # 필드 없는 사본 — 이 파일의 케이스는 must_catch 를 지목하지 않은 프로필의 동작(라우팅 현행)을 잰다.
 # must_catch 를 지목한 동작은 cases_advice.sh 가 실제 프로필($PROF_MC)로 잰다.
 PROF_SD="${DOCREVIEW_PROF_SD:-$(bash "$FX/nofield_profiles.sh")}"
+# 위 서브셸의 실패(빈 PROF_SD)를 그냥 넘기면 "$PROF_SD/design-doc.md" 가 "/design-doc.md" 로
+# 풀려 아래 모든 케이스가 무관한 방식으로 조용히 깨진다 — 여기서 바로 죽는다. `exit` 를 쓰는
+# 이유: 이 파일을 source 하는 모든 자리(anchor·gate_visibility·intent·route·state·
+# capture_finalize_golden.sh)가 `set -e` 없이 최상위에서 source 하고 리턴값을 안 보므로
+# `return` 은 조용히 넘어간다 — `test_docreview_mutations.sh` 의 `run_case` 만 서브셸
+# 안에서 source 하므로 그 한 자리에서는 `exit` 가 서브셸만 끝낸다(전체 스위트는 안 죽는다).
+[ -n "$PROF_SD" ] && [ -d "$PROF_SD" ] || { echo "[cases.sh] 사본 프로필 디렉토리 없음: '${PROF_SD}'" >&2; exit 1; }
 PROF_QG="$REPO_ROOT/plugins/quality-gates/references/docreview-profiles"
 export PYTHONDONTWRITEBYTECODE=1
 
