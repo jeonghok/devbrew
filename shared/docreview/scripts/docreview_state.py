@@ -1365,6 +1365,17 @@ GATE_RENDERERS = {"decide": _rg_decide, "adopted": _rg_adopted, "expired": _rg_e
                   "held_fix": _rg_held_fix, "blocking_ask": _rg_blocking_ask, "ask_open": _rg_ask_open}
 
 
+def _has_advisory_axis(st) -> bool:
+    """원장 프로필의 advisory 축이 비어 있지 않은가 — seed 처럼 must_catch 가 층 1 ∪ 층 2 전체인 프로필은 참고 항목이
+    생길 수 없어 게이트 렌더에 참고 줄을 내지 않는다. 형제 모듈 · 프로필을 못 읽으면 참(줄을 낸다)."""
+    if _adv is None:
+        return True
+    try:
+        return bool(_adv.advisory_axes(load_profile(st["profile"])))
+    except (OSError, ValueError, ProfileError):
+        return True
+
+
 def render_gate(st, g) -> str:
     deg = g["degrade"]
     out = []
@@ -1436,7 +1447,7 @@ def render_gate(st, g) -> str:
     out.append("기각 %d건(재비판) · 사용자 기각 %d · drop %d · bucket 충돌 %d · 계보 지목 불일치 %d · 기각 계보 재상승 %d · 미소비 재상승 예약 %d · 미소비 상향 예약 %d"
                % (c["rejected"], c["user_rejected"], len(g["dropped"]), c["bucket_conflicts"],
                   c["lineage_mismatch"], c["revived"], c["reraise_unconsumed"], c["escalated_unconsumed"]))
-    if g.get("advice") is not None:   # 게이트 질문이 아니다 — 목록은 끝에서 한 번(`advice --render`)
+    if g.get("advice") is not None and _has_advisory_axis(st):   # 게이트 질문이 아니다 — 목록은 끝에서 한 번(`advice --render`)
         adv_g = g["advice"]
         out.append("참고 %d건(이번 라운드 새 %d · 반복 %d) — 끝에서 한 목록으로 · 선재 절의 새 must-catch %d"
                    % (adv_g["total"], adv_g["new"], adv_g["repeat"], adv_g["mc_preexisting_new"]))

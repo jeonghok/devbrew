@@ -57,7 +57,8 @@
 `ask` 는 축과 무관하게 asks 에 남는다. 엔진 자동 생성 항목(얼림 · 재상승 · 상향)은 언제나 must-catch 다.
 `fin.json` 은 `advice`(id 목록) · `advice_new` · `advice_repeat` · `mc_preexisting_new` 를 싣고, advice 항목은
 `findings` 에 `decision_view` 를 단 채 남을 수 있어도 게이트 질문이 아니며 `advice` 로만 보인다. 8단계 렌더는
-`참고 N건(…) — 끝에서 한 목록으로` 한 줄만 싣는다. 목록은 **끝에서 한 번** 보인다. 이 절차서가 부르지 않고
+`참고 N건(…) — 끝에서 한 목록으로` 한 줄만 싣는다 — advisory 축이 공집합인 프로필(seed)은 그 줄도 없고 gate JSON 의
+`advice` 계수만 선다. 목록은 **끝에서 한 번** 보인다. 이 절차서가 부르지 않고
 진입 자리가 부른다:
 
 - design doc — `reviewing-spec` 승인 게이트 2단계 앞

@@ -17,7 +17,7 @@ case_advice_axes_per_profile() {
     "['ambiguity', 'approaches_comparison', 'component_relations', 'data_flow', 'feasibility', 'handoff_incomplete', 'isolation', 'overdesign', 'placeholder', 'scope_creep', 'testing', 'tradeoffs']" \
     "§A: design-doc 의 advisory 축은 층 1 나머지 다섯 + 층 2 일곱"
   assert_eq "$(adv_py "$PROF_MC/seed.md" 'sorted(a.advisory_axes(p)), a.has_must_catch(p)')" "([], True)" \
-    "§A: seed 는 advisory 축이 없고 지목은 있다(참고 줄 · 계수 키는 선다)"
+    "§A: seed 는 advisory 축이 없고 지목은 있다(계수 키는 선다 · 게이트 참고 줄은 없다)"
   assert_eq "$(adv_py "$PROF_QG/generic.md" 'sorted(a.advisory_axes(p)), a.has_must_catch(p)')" "([], False)" \
     "§A: 필드 없는 프로필(qg generic)은 advisory 축이 공집합 — 라우팅 현행"
 }
@@ -515,6 +515,17 @@ s.save_state(sys.argv[2], st, "fixture: 준비에 surrogate")' "$SCRIPTS" "$d"
   assert_eq "$rc $(grep -c '"reason": "text_encoding_invalid"' "$d/err") $(grep -c '"reason": "unreadable"' "$d/err")" "1 1 0" \
     "인코딩 출구(route): 원장에서 온 surrogate 로 finalize 의 인코딩이 실패하면 rc 1 · text_encoding_invalid 다(unreadable 이 아니다)"
   rm -rf "$d"
+}
+case_advice_seed_gate_no_reference_line() {   # advisory 축이 공집합인 seed — 게이트 렌더에 참고 줄이 없고 gate JSON 의 advice 키는 선다
+  local d e; d="$(route_r1 "$PROF_MC/seed.md" "$FX/design-sample.md" "$FX/critic-mc-empty.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  e="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-empty.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep -c '끝에서 한 목록으로') $(py docreview_state.py gate --state-dir "$d" --render | grep -c '^다음: ')" "0 1" \
+    "seed 게이트: 렌더에 참고 줄이 없다(렌더는 「다음:」 줄까지 끝났다)"
+  assert_eq "$(gsum "$d" 'd.get("advice")')" "{'total': 0, 'new': 0, 'repeat': 0, 'mc_preexisting_new': 0}" \
+    "seed 게이트: gate JSON 의 advice 키는 그대로 선다(계수 펜스가 읽는다)"
+  assert_eq "$(py docreview_state.py gate --state-dir "$e" --render | grep -c '^참고 0건(이번 라운드 새 0 · 반복 0) — 끝에서 한 목록으로')" "1" \
+    "seed 게이트(양의 짝): 같은 입력의 design-doc 렌더에는 참고 줄이 선다"
+  rm -rf "$d" "$e"
 }
 case_advice_atomic_write_keeps_link_and_mode() {   # 원자 교체가 심볼릭 링크를 끊거나 권한 비트를 바꾸지 않는다
   local d t; d="$(adv_state 2)"; t="$(mktemp -d -t atomw-XXXXXX)"
