@@ -88,10 +88,10 @@ CI/CD가 tag push를 트리거로 deploy. 별도 release 브랜치 없음 — `m
 > **Note:** `release/*` 브랜치는 본 strategy의 regex(`^(feature|fix)/…`) 스코프 밖이라 project-init hook이 **advisory 경고**(허용 prefix `feature`/`fix`를 제시하는 다중 줄 메시지 — 이 전략엔 관용 없는 예외)를 냅니다. 단, project-init hook은 **non-blocking**(PostToolUse advisory)이라 브랜치 생성을 **차단하지 않습니다** — 의도된 backport 예외이므로 경고를 무시하고 진행하세요. hook 전체를 끄지 마세요(commit 검증까지 함께 꺼집니다).
 
 ```bash
-# 1. trunk에서 release 브랜치 cut (1회만; hook advisory 경고는 무시하고 진행)
-git checkout main
-git pull origin main
-git checkout -b release/v1.x
+# 1. 마지막 v1 태그에서 release 브랜치 cut (1회만; hook advisory 경고는 무시하고 진행)
+#    현재 main 은 이미 다음 major 라 v1 을 고칠 수 없다 — main 이 아니라 태그에서 자른다.
+git fetch --tags
+git checkout -b release/v1.x v1.2.4   # v1.2.4 = 마지막 v1 릴리스 태그 (git tag -l 'v1.*' 로 확인)
 git push -u origin release/v1.x
 
 # 2. fix는 항상 trunk에 먼저 commit
