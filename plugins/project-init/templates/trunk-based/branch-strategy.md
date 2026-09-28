@@ -91,7 +91,7 @@ CI/CD가 tag push를 트리거로 deploy. 별도 release 브랜치 없음 — `m
 # 1. 마지막 v1 태그에서 release 브랜치 cut (1회만; hook advisory 경고는 무시하고 진행)
 #    현재 main 은 이미 다음 major 라 v1 을 고칠 수 없다 — main 이 아니라 태그에서 자른다.
 git fetch --tags
-git checkout -b release/v1.x v1.2.4   # v1.2.4 = 마지막 v1 릴리스 태그 (git tag -l 'v1.*' 로 확인)
+git checkout -b release/v1.x v1.2.4   # v1.2.4 = 마지막 v1 릴리스 태그 (git tag -l 'v1.*' --sort=-v:refname | head -1 로 확인)
 git push -u origin release/v1.x
 
 # 2. fix는 항상 trunk에 먼저 commit
