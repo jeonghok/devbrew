@@ -801,14 +801,20 @@ mut 1/1 entry_scrub_codex_removed case_advice_surrogate_entry sed_route \
   's/^                cx = scrub(yaml\.safe_load(Path(a\.codex)\.read_text(encoding="utf-8")))$/                cx = yaml.safe_load(Path(a.codex).read_text(encoding="utf-8"))/'
 # (86) 라우터 출구의 인코딩 사유를 지운다 — 인코딩 실패가 unreadable 로 오보된다.
 mut 1/1 exit_reason_route_removed case_advice_text_encoding_exit sed_route \
-  's/^    except UnicodeError as e: .*$/    except KeyboardInterrupt as e:/'
+  's/^    except UnicodeEncodeError as e: .*$/    except KeyboardInterrupt as e:/'
 # (87) 원장 출구의 인코딩 사유를 지운다 — 인코딩 실패가 state_unreadable 로 오보된다.
 mut 1/1 exit_reason_state_removed case_advice_text_encoding_exit sed_state \
-  's/^    except UnicodeError as e: .*$/    except KeyboardInterrupt as e:/'
+  's/^    except UnicodeEncodeError as e: .*$/    except KeyboardInterrupt as e:/'
 # (88) advisory 축 판정 없이 참고 줄을 낸다 — seed 렌더에 참고 줄이 선다.
 mut 1/1 seed_reference_line_shown case_advice_seed_gate_no_reference_line sed_state \
   's/^    if g\.get("advice") is not None and _has_advisory_axis(st):/    if g.get("advice") is not None:/'
 # (89) advisory 축 판정을 뒤집는다 — design-doc 렌더에서 참고 줄이 빠진다(양의 짝).
 mut 1/1 reference_line_axis_inverted case_advice_seed_gate_no_reference_line sed_state \
   's/^    if g\.get("advice") is not None and _has_advisory_axis(st):/    if g.get("advice") is not None and not _has_advisory_axis(st):/'
+# (94) 라우터 출구를 UnicodeError 로 넓힌다 — 비 UTF-8 재비판 출력이 unreadable 대신 text_encoding_invalid 가 된다.
+mut 1/1 exit_route_widened_to_decode case_advice_text_encoding_exit sed_route \
+  's/^    except UnicodeEncodeError as e: /    except UnicodeError as e: /'
+# (95) 원장 출구를 UnicodeError 로 넓힌다 — 비 UTF-8 원장이 state_unreadable 대신 text_encoding_invalid 가 된다.
+mut 1/1 exit_state_widened_to_decode case_advice_text_encoding_exit sed_state \
+  's/^    except UnicodeEncodeError as e: /    except UnicodeError as e: /'
 finish

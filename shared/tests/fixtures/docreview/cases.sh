@@ -1408,7 +1408,7 @@ case_T46_finalize_failed_unverified() {   # critic 생존 · finalize rc≠0 —
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json"
   # 탈것: 옛 판본은 파손 diff(`{`)로 finalize 를 죽였다. finalize 는 이제 diff 파일을 받지 않으므로(얼림 diff 는
   # 엔진이 원장의 스냅숏으로 계산한다 — PR 3 qg iter 3), 비-UTF-8 재비판 출력으로 죽인다 —
-  # finalize 가 원장을 쓰기 전에 `text_encoding_invalid` rc 1 로 끝난다.
+  # finalize 가 원장을 쓰기 전에 `unreadable` rc 1 로 끝난다.
   printf '\xff\xfe\x00bad' > "$d/broken-recritic.txt"
   py docreview_route.py finalize --state-dir "$d" --recritic "$d/broken-recritic.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null; rc=$?
   assert_eq "$rc $(wc -c < "$d/fin.json" | tr -d ' ')" "1 0" "T46 전제: finalize 가 rc 1 로 죽고 fin.json 은 비었다"

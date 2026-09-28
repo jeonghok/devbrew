@@ -514,6 +514,14 @@ s.save_state(sys.argv[2], st, "fixture: 준비에 surrogate")' "$SCRIPTS" "$d"
   py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-empty.txt" --doc "$FX/design-sample.md" >/dev/null 2>"$d/err"; rc=$?
   assert_eq "$rc $(grep -c '"reason": "text_encoding_invalid"' "$d/err") $(grep -c '"reason": "unreadable"' "$d/err")" "1 1 0" \
     "인코딩 출구(route): 원장에서 온 surrogate 로 finalize 의 인코딩이 실패하면 rc 1 · text_encoding_invalid 다(unreadable 이 아니다)"
+  rm -rf "$d"; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-mc-r1.txt")" --codex "$FX/codex-failed.yaml" >/dev/null
+  printf '\xff\xfe\x00bad' > "$d/broken-recritic.txt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$d/broken-recritic.txt" --doc "$FX/design-sample.md" >/dev/null 2>"$d/err-r"
+  printf -- '---\ndocreview: {}\n---\n\xff\n' > "$d/docreview-state.md"
+  py docreview_state.py gate --state-dir "$d" >/dev/null 2>"$d/err-s"
+  assert_eq "$(grep -c '"reason": "unreadable"' "$d/err-r") $(grep -c '"reason": "state_unreadable"' "$d/err-s")" "1 1" \
+    "디코딩 실패: 비 UTF-8 재비판 출력은 unreadable, 비 UTF-8 원장은 state_unreadable 로 남는다(text_encoding_invalid 가 아니다)"
   rm -rf "$d"
 }
 case_advice_seed_gate_no_reference_line() {   # advisory 축이 공집합인 seed — 게이트 렌더에 참고 줄이 없고 gate JSON 의 advice 키는 선다

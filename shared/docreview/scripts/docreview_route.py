@@ -864,7 +864,7 @@ def main(argv=None) -> int:
         return a.fn(a)
     except FileNotFoundError as e:
         return fail("state_missing", path=str(e))
-    except UnicodeError as e:   # ValueError 의 하위라 앞에 둔다 — 입구 정화(`scrub`) 밖의 글자(비 UTF-8 CLI 인자 · 원장 · 입력 파일)
+    except UnicodeEncodeError as e:   # ValueError 의 하위라 앞에 둔다 — 입구 정화(`scrub`) 밖의 글자(비 UTF-8 CLI 인자 · 원장)
         return fail("text_encoding_invalid", detail=str(e))
     except (ValueError, RuntimeError) as e:
         return fail("unreadable", detail=str(e))
