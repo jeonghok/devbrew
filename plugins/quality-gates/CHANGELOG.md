@@ -3,6 +3,16 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [9.3.2] — 2026-09-28
+
+**처분 배관줄 차단 표기 · confidence 보존 지시** — 공시만 하는 degrade 옆에 「(차단: 예)」가 서던 것을 고치고, 탐지 결과를 옮기는 자리에 confidence 보존을 적는다.
+
+### Fixed
+- `shared/adjudication/render_disposition.py` 의 `disposition_lines()` 가 소비자의 차단 술어를 필수 셋째 인자 `blocking` 으로 받는다(기본값 없음 — 빠뜨린 호출은 `TypeError`). 리뷰 합성기(`synthesize_findings.py`, 두 호출)는 `blocking`(원장 `blocks()` 또는 `dropped_malformed > 0`)을, 아티팩트 합성기 key 단계(`synthesize_artifact_findings.py`)는 `report["degraded"]`(그 파이프라인은 `converged = not degraded` 라 degrade 가 곧 차단)를 넘긴다. 9.0.0 Known gaps 가 남긴 「보조 입력만 죽어도 공시-머리줄 옆에 (차단: 예)가 선다」결함의 해소다 — 판정(`verdict:`)은 바뀌지 않는다.
+
+### Changed
+- SKILL Phase 1.5-1 — 오케스트레이터가 탐지 결과를 findings.yaml 로 옮길 때 `confidence:` 를 리뷰어가 낸 값 그대로 옮기고 100 점 만점 척도로 낸 값만 10 으로 나눠 내림한다는 지시를 `agent:` 문단 바로 다음 줄에 더한다. 누락은 여전히 합성기가 5 로 확정한다.
+
 ## [9.3.1] — 2026-09-28
 
 **PR5 후속 수정** — e2e 가 드러낸 판정 누수 하나와 토픽 모드 선택 비율의 분모를 고친다.

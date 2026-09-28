@@ -334,8 +334,8 @@ class TestMissingConfidenceNotSuppressedAsZero(unittest.TestCase):
     def test_g_rejected_item_with_missing_confidence_has_no_coercion_entry(self):
         """기각된 항목은 판정(kept/suppressed)에 아예 안 들어가므로 confidence
         강제가 게이트를 못 바꾼다 — 강제 자체를 세지 않는다. 기각된 IMPORTANT
-        에 게이트 변경 강제를 세면 `verdict: clean` 옆에 「강제(게이트 변경)」와
-        「차단: 예」가 뜬다."""
+        에 게이트 변경 강제를 세면 `verdict: clean` 옆에 「강제(게이트 변경)」
+        공시가 뜬다."""
         f = {"agent": "sec", "file": "a.py", "line": 1, "severity": "IMPORTANT",
              "summary": "s"}
         v = {"finding_id": mod.finding_id(f), "verdict": "reject", "evidence": "e"}

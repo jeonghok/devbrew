@@ -613,7 +613,7 @@ def _degrade_block(report, blocking):
 
 
 def render(kept, suppressed_count, dropped_malformed, report, held_classes,
-           recritic_zero=False, blocking=False):
+           recritic_zero=False, *, blocking):
     findings = kept
     if not findings:
         # drop 공지는 이 분기에도 반드시 나가야 한다. 예전에는 아래 표-있는
@@ -622,7 +622,7 @@ def render(kept, suppressed_count, dropped_malformed, report, held_classes,
         # SKILL은 stdout만 읽어 counts=0을 보고 `## Review gate: clean`을
         # 찍었다 — 버려진 CRITICAL 주장이 **깨끗함으로 렌더**됐다는 뜻이다
         # (exit 0). 소실을 stdout에서 볼 수 있게 만든다.
-        disp_line, plumb_line, gloss_line, advisories = disposition_lines(report, held_classes)
+        disp_line, plumb_line, gloss_line, advisories = disposition_lines(report, held_classes, blocking)
         for a in advisories:
             print(a, file=sys.stderr)
         out = [
@@ -677,7 +677,7 @@ def render(kept, suppressed_count, dropped_malformed, report, held_classes,
     if suppressed_count > 0:
         counts_line += f" — {suppressed_count} suppressed (conf <= 4)"
 
-    disp_line, plumb_line, gloss_line, advisories = disposition_lines(report, held_classes)
+    disp_line, plumb_line, gloss_line, advisories = disposition_lines(report, held_classes, blocking)
     for a in advisories:
         print(a, file=sys.stderr)
 

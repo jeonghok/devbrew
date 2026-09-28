@@ -594,6 +594,37 @@ PY
   assert_grep "$got" '^ELSE_HAS_GLOB:1$' "1개 이상 분기는 여전히 glob 을 쓴다(정상 경로 안 밀림)"
 }
 
+case_recritic_findings_keep_reviewer_confidence() {
+  # 탐지 결과를 findings.yaml 로 옮기는 자리(Phase 1.5-1)에 confidence 보존 지시가
+  # 있는지를 잰다 — 합성기는 누락을 5 로 평탄화하므로(synthesize_findings.py 의
+  # _normalize_confidence) 이 지시가 사라져도 합성기 락은 GREEN 이다. 이 락은 지시가
+  # SKILL 에 실제로 있는지, agent: 문단(findings.yaml 을 쓰는 자리) 바로 다음인지를 잰다.
+  local anchor_line new_line anchor_count new_count anchor_no new_no
+  anchor_line='      `agent:` 를 그대로 믿지 않는다 — 찍는 쪽이 너다.'
+  new_line='      **각 항목의 `confidence:` 는 리뷰어가 낸 값을 그대로 옮긴다** — 100 점 만점 척도로 낸 값만 10 으로 나눠 내림한다(85 → 8).'
+
+  new_count=$(grep -cxF -- "$new_line" "$SKILL")
+  assert_eq "$new_count" "1" \
+    "confidence 보존 지시가 SKILL.md 에 그 줄 전체로 정확히 1회 있다(grep -x -- 부분 문자열 매치가 아니다)"
+
+  anchor_count=$(grep -cxF -- "$anchor_line" "$SKILL")
+  assert_eq "$anchor_count" "1" \
+    "기준 줄(agent: 를 그대로 믿지 않는다)이 SKILL.md 에 정확히 1회 있다"
+
+  anchor_no=$(grep -nxF -- "$anchor_line" "$SKILL" | head -1 | cut -d: -f1)
+  new_no=$(grep -nxF -- "$new_line" "$SKILL" | head -1 | cut -d: -f1)
+  assert_grep "$anchor_no" '^[0-9]+$' "기준 줄 번호를 찾았다"
+  assert_grep "$new_no" '^[0-9]+$'    "새 줄 번호를 찾았다"
+
+  if [ -n "${anchor_no:-}" ] && [ -n "${new_no:-}" ] \
+     && [ "$new_count" = "1" ] && [ "$anchor_count" = "1" ] \
+     && [ "$new_no" -eq "$((anchor_no + 1))" ] 2>/dev/null; then
+    ok "새 줄이 기준 줄 바로 다음 줄이다(정확히 +1, anchor=$anchor_no new=$new_no)"
+  else
+    no "새 줄이 기준 줄 바로 다음 줄이다(정확히 +1, anchor=$anchor_no new=$new_no)"
+  fi
+}
+
 for c in case_every_synth_call_emits_verdict_and_angles case_blocking_angle_dispatches_are_fail_closed \
          case_reason_literals_are_closed_and_pinned case_angle_template_is_total \
          case_differential_runs_inside_every_iteration \
@@ -603,7 +634,8 @@ for c in case_every_synth_call_emits_verdict_and_angles case_blocking_angle_disp
          case_pre_r6_abort_catchall_mirrored_in_reference case_r3_stop_choice_routes_to_error_axis \
          case_security_kill_switch_routes_to_absent case_differential_kill_switch_env_name_is_pinned \
          case_differential_defect_zero_kept_routes_to_fixloop case_zero_adapter_aggregate_skips_glob \
-         case_n5_and_retry_cover_differential_origin; do
+         case_n5_and_retry_cover_differential_origin \
+         case_recritic_findings_keep_reviewer_confidence; do
   "$c"
 done
 finish

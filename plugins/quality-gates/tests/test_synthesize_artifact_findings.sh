@@ -371,10 +371,10 @@ assert_grep "$OUT" 'sources_failed: *[1-9]' "입력 실패가 원장에 실린�
 
 note "── 처분 회계 (T1-C, key 단계)"
 # R3 (adjudication-topology Task 15c) — 위 T1-B 는 `--phase synth` 의 원장(YAML
-# stdout, disposition_report())만 값으로 잰다. `main()` 의 `key` 분기(:299-317)가
+# stdout, disposition_report())만 값으로 잰다. `main()` 의 `key` 분기(:306-322)가
 # `disposition_lines()` 로 stderr 에 내는 처분 세 줄(**처분:**/**배관 손실:**/풀이줄)은
 # 이 파일 어디서도 검사되지 않았다 — 두 렌더 분기 중 한쪽만 잠겨 있던 Critical
-# (synth 의 :482 clean 분기)과 같은 부류, `key`/`synth` 축으로 다른 자리다.
+# (synth 의 :625 clean 분기)과 같은 부류, `key`/`synth` 축으로 다른 자리다.
 # 실패 소스(findings 문서 아님 — codex_failed 뿐인 dict) 하나 + 파손 항목
 # (findings 리스트 안의 non-dict 스칼라) 하나를 넣어 :113 의 hold("항목 파손: …")
 # 와 :107 의 source_failed 를 함께 태운다. key 단계엔 "판정자 부재" hold 가
@@ -399,6 +399,34 @@ assert_grep "$KEY_ERR" '차단: 예' \
   "key 단계 배관줄 — held 가 비지 않았으니 degraded(차단: 예)"
 assert_grep "$KEY_ERR" '↳ 억제=규칙이 자른 것' \
   "key 단계에서도 회계어 풀이 줄이 난다 (AC21)"
+
+# 수정 라운드 1 (m1) — 위 KEY_ERR 는 (차단: 예) 방향만 잠근다. `report["degraded"]`
+# 를 무조건 True 로 뒤집는 변이(M7)는 그 자리만으로는 안 잡힌다 — 참값도 True 라
+# 우연히 통과한다. clean 입력(critic.yaml+codex.yaml, 위 :40-49 — source_failed
+# 도 malformed 항목도 없다)으로 (차단: 아니오) 방향도 같은 자리에서 잠근다.
+KEY_CLEAN="$(PYTHONDONTWRITEBYTECODE=1 python3 "$S" --phase key \
+        --findings "$tmp/critic.yaml" --findings "$tmp/codex.yaml" \
+        2>&1 >/dev/null)"
+assert_grep "$KEY_CLEAN" '\*\*배관 손실:\*\* 0 ' \
+  "key 단계 배관줄 — clean 입력이면 배관 손실 0 (분기 확인)"
+assert_grep "$KEY_CLEAN" '\*\*배관 손실:\*\*.*\(차단: 아니오\)' \
+  "key 단계 배관줄 — clean 입력(소실 없음)은 차단이 아니다"
+
+# 최종 fix wave (m2) — 위 KEY_ERR 는 hold(항목 파손 1건)를 함께 가져서 `L.blocks()`
+# 도 참이다 — key 단계 셋째 인자를 `report["degraded"]` 대신 `L.blocks()` 로 바꾸는
+# 오답이 그 자리만으로는 안 잡힌다. codex_failed 문서(keybad_source.yaml, 위 :383-385
+# 재사용) 하나 + 정상 critic 문서(critic.yaml, 위 :40-43 재사용) — 항목 파손 없이
+# source_failed 만 1건(전부 secondary) 세워 `L.blocks()`(False, primary 아님)와
+# `report["degraded"]`(True, sources_failed 존재) 를 갈라낸다.
+KEY_SEC="$(PYTHONDONTWRITEBYTECODE=1 python3 "$S" --phase key \
+        --findings "$tmp/critic.yaml" --findings "$tmp/keybad_source.yaml" \
+        2>&1 >/dev/null)"
+assert_grep "$KEY_SEC" '\*\*처분:\*\*.*미판정 0' \
+  "key 단계 처분줄(보조 source_failed 전용) — 미판정 0"
+assert_grep "$KEY_SEC" '\*\*배관 손실:\*\* 1 ' \
+  "key 단계 배관줄 — 값 1(source_failed 1, 항목 파손 없음)"
+assert_grep "$KEY_SEC" '\*\*배관 손실:\*\*.*\(차단: 예\)' \
+  "key 단계 배관줄 — L.blocks() 는 거짓(보조 source_failed 뿐)이어도 degraded 는 차단이다"
 
 rm -rf "$tmp"
 finish
