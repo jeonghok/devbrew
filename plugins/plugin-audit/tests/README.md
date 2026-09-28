@@ -18,8 +18,8 @@
 4. **pre-1** LD5-0 스냅샷 → 대상 자체 테스트 실행(`-B`) → `check-staleness.py` → evidence pack 조립
    → codex blind(`-s read-only`) → LD5-1=BEFORE + `LD5-0==LD5-1` 검사.
 5. **Workflow** `audit-workflow.js` (6축 pipeline) → findings 반환.
-6. **post-1** AFTER#1 → audit-data.json 조립(codex D/OQ/NOQ 병합 + **배정 D/OQ backfill** + cross-model +
-   **gate-E→NOQ 회수** + steelman pending 해소) → secret scan → journal 복사 →
+6. **post-1** AFTER#1 → secret scan → journal 복사 → audit-data.json 조립(codex D/OQ/NOQ 병합 +
+   **배정 D/OQ backfill** + cross-model + **gate-E→NOQ 회수** + steelman pending 해소) →
    `validate-audit-data.py --data` → `render-audit-report.py` → `validate-audit-data.py --artifacts` →
    AFTER#2 → 종료 보고(실행 디렉토리의 리포트 · 데이터 · 원장 절대경로).
 
