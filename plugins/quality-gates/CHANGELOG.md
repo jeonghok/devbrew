@@ -3,7 +3,7 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [9.3.2] — 2026-09-28
+## [9.3.3] — 2026-09-28
 
 ### Changed
 - 공유 문서 리뷰 엔진(`shared/docreview/scripts/`)이 프로필 선택 필드 `must_catch` · `advice` 서브커맨드 · 형제 모듈
@@ -11,10 +11,20 @@
   보고서 · 게이트 렌더가 바이트 단위로 같다(골든 12파일).
 
 ### Fixed
-- 공유 엔진이 사용자 문서에 쓰는 한 줄 추가(`decide` · `fix` · `defer` 의 결정 기록 · `advice` 의 박제 · 계수 줄)가
-  원자적이다 — 인코딩을 먼저 끝내고 같은 디렉토리의 임시 파일에 쓴 뒤 `os.replace` 로 바꾼다. 전에는 인코딩 실패가
-  파일을 0 바이트로 남겼다. `advice` 의 박제 표 판정 · 계수 줄 자리도 고쳤다(qg `generic` 프로필은 `advice` 를
-  쓰지 않아 출력 무변경).
+- 공유 엔진이 사용자 문서에 쓰는 한 줄 추가(`decide` · `fix` 의 결정 기록과 `defer` 의 박제처 · `advice` 의 박제 ·
+  계수 줄)가 원자적이다 — 인코딩을 먼저 끝내고 같은 디렉토리의 임시 파일에 쓴 뒤 `os.replace` 로 바꾼다. 전에는
+  인코딩 실패가 파일을 0 바이트로 남겼다. `advice` 의 박제 표 판정 · 계수 줄 자리도 고쳤다(qg `generic` 프로필은
+  `advice` 를 쓰지 않아 출력 무변경).
+
+## [9.3.2] — 2026-09-28
+
+**처분 배관줄 차단 표기 · confidence 보존 지시** — 공시만 하는 degrade 옆에 「(차단: 예)」가 서던 것을 고치고, 탐지 결과를 옮기는 자리에 confidence 보존을 적는다.
+
+### Fixed
+- `shared/adjudication/render_disposition.py` 의 `disposition_lines()` 가 소비자의 차단 술어를 필수 셋째 인자 `blocking` 으로 받는다(기본값 없음 — 빠뜨린 호출은 `TypeError`). 리뷰 합성기(`synthesize_findings.py`, 두 호출)는 `blocking`(원장 `blocks()` 또는 `dropped_malformed > 0`)을, 아티팩트 합성기 key 단계(`synthesize_artifact_findings.py`)는 `report["degraded"]`(그 파이프라인은 `converged = not degraded` 라 degrade 가 곧 차단)를 넘긴다. 9.0.0 Known gaps 가 남긴 「보조 입력만 죽어도 공시-머리줄 옆에 (차단: 예)가 선다」결함의 해소다 — 판정(`verdict:`)은 바뀌지 않는다.
+
+### Changed
+- SKILL Phase 1.5-1 — 오케스트레이터가 탐지 결과를 findings.yaml 로 옮길 때 `confidence:` 를 리뷰어가 낸 값 그대로 옮기고 100 점 만점 척도로 낸 값만 10 으로 나눠 내림한다는 지시를 `agent:` 문단 바로 다음 줄에 더한다. 누락은 여전히 합성기가 5 로 확정한다.
 
 ## [9.3.1] — 2026-09-28
 

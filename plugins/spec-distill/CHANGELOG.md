@@ -42,6 +42,10 @@ minor 인 이유 — 새 표면이 넷이다.
   덩어리에 구분 줄이 있어야 표다. `--log-file` 의 계수 줄은 결정 기록 헤딩 자신의 본문 끝에 선다 — `### Deferred to
   plan` 이 그 하위 절이어도 박제 표 뒤에 끼지 않는다.
 
+## [4.4.1] — 2026-09-28
+
+patch 인 이유 — 링크로 배송하는 `render_disposition.py` 가 바뀌었다(quality-gates 9.3.2 와 같은 변경). spec-distill 은 `disposition_lines()` 를 부르지 않으므로 동작은 바뀌지 않는다.
+
 ## [4.4.0] — 2026-09-24
 
 minor 인 이유 — 새 surface 가 셋이다: 조사 주장 계약의 정본(`references/research-claims.md`)과 그
