@@ -279,6 +279,19 @@ while IFS= read -r p; do
     "러너: 프로필 코퍼스 — $cbase 가 truncated 없이 정상 변환된다"
   assert_file_absent "$CCAP" 'disposition from:[ ]*$' \
     "러너: 프로필 코퍼스 — $cbase 의 allowed_dispositions 안내가 비지 않는다"
+  # 라우팅 키는 리뷰어 밖이다(설계 2026-09-27-review-stopping-criterion Non-goals) — 러너는 자기가 읽는 필드만 싣는다.
+  assert_file_absent "$CCAP" 'must_catch' \
+    "러너: 프로필 코퍼스 — $cbase 의 프롬프트에 must_catch 가 실리지 않는다"
+  # 양의 짝(controller C1) — 위 부재 단언이 빈 프롬프트나 안 도는 루프에서도 참이 되는 것을 막는다.
+  # 같은 $CCAP 캡처에서 이 프로필의 층 1 축 하나가 실제로 실리는지 직접 잰다(_read 도출 목록과
+  # 별개 — 이 루프 지역 변수만으로 성립해야 부재 단언 바로 옆에서 독립적으로 의미가 선다).
+  l1_axis0="$(python3 "$SCRIPTS/docreview_state.py" profile-check "$p" 2>/dev/null \
+    | python3 -c 'import json, sys; l = json.load(sys.stdin)["layer_rubric"]["layer1"]; print(l[0] if l else "")' 2>/dev/null)"
+  if [ -n "$l1_axis0" ] && grep -qF "$l1_axis0" "$CCAP" 2>/dev/null; then
+    ok "러너: 프로필 코퍼스 — $cbase 의 프롬프트에 층 1 축($l1_axis0)이 실제로 실린다(위 must_catch 부재 단언의 양의 짝)"
+  else
+    no "러너: 프로필 코퍼스 — $cbase 의 프롬프트에 층 1 축이 없다(공허 프롬프트일 수 있다) — must_catch 부재 단언이 공허하다"
+  fi
   # 층 2 목록이 러너 프롬프트에 **그대로** 실린다 — 기대값은 엔진 스키마 게이트(profile-check, 실
   # PyYAML)가 읽은 목록이다. 러너의 stdlib 파서가 목록을 자르거나 늘리거나 바꾸면 RED 다.
   want_l2="$(python3 "$SCRIPTS/docreview_state.py" profile-check "$p" 2>/dev/null \

@@ -3,6 +3,63 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [9.3.5] — 2026-09-28
+
+### Fixed
+- 공유 문서 리뷰 엔진(`shared/docreview/scripts/`, 이 플러그인 `scripts/` 에 심볼릭 링크)의 수정 넷을 받는다: 리뷰어 출력의
+  짝 없는 surrogate 를 입구에서 U+FFFD 로 걷는다 · 인코딩 실패는 rc 1 `text_encoding_invalid`(디코딩 실패는 기존 사유) ·
+  라운드 2 이상의 advisory fix 는 계보에 열린 항목이 없으면 advice(명시 `supersedes` 과차단 해소) · advisory 축이 공집합인
+  프로필은 게이트 렌더에 참고 줄을 내지 않는다. qg `generic` 프로필은 `must_catch` 가 없어 라우팅 · 보고서 · 게이트
+  렌더가 바이트 단위로 같다(골든). 전문은 `plugins/spec-distill/CHANGELOG.md` `[4.5.2]`.
+- 같은 엔진: 자유 텍스트 CLI 인자(`--reason` · `--quote` · `--scope` · `--extra-approval` · `--where`)의 비 UTF-8 바이트는 원장을
+  건드리기 전에 rc 1 `text_encoding_invalid` 로 거부한다 · 원장 프로필 YAML 이 깨져도 게이트 렌더가 죽지 않고 참고 줄을 낸다.
+
+## [9.3.4] — 2026-09-28
+
+**처분 두 줄의 차단 라벨 정정 · confidence 척도 판별 규칙** — 처분줄의 오류 라벨과 SKILL confidence 지시의 척도 판별 규칙 누락을 고친다.
+
+### Fixed
+- 처분줄의 라벨 `(차단 아님)`이 틀렸다 — 미판정(`held`, 판정자 부재)은 `Ledger.blocks()` 의 첫 항이라 **언제나** 차단한다(설계 `docs/superpowers/specs/2026-09-02-adjudication-topology-design.md` §5 표의 오류). `shared/adjudication/render_disposition.py` 의 `disposition_lines()` 가 처분줄에 고정 리터럴 `(미판정은 차단)` 을 붙인다.
+- 배관줄의 라벨 `(차단: %s)` 가 소비자가 넘기는 **실행 전체**의 차단 술어(qg 리뷰 합성기의 `blocking` · 아티팩트 합성기 key 단계의 `degraded`)임에도 그 범위가 라벨 이름에 드러나지 않아 배관 칸만의 차단으로 오인될 수 있었다. `(실행 차단: %s)` 로 이름을 실제 값에 맞추고, 모듈·함수 docstring 도 같이 고친다. 판정(`verdict:`)은 바뀌지 않는다.
+
+### Changed
+- SKILL Phase 1.5-1 의 confidence 보존 지시에 척도 판별 규칙을 더한다 — 값이 10 을 넘으면 100 점 만점으로 보고 10 으로 나눠 내림하고(85 → 8), 리뷰어가 내지 않았으면 지어내지 말고 키를 뺀다(합성기가 5 로 채운다). 옛 지시는 척도 판별이 없어 이미 1-10 스케일로 낸 값도 10 으로 나누는 오독 여지가 있었고, 누락 처리도 없었다.
+
+## [9.3.3] — 2026-09-28
+
+### Changed
+- 공유 문서 리뷰 엔진(`shared/docreview/scripts/`)이 프로필 선택 필드 `must_catch` · `advice` 서브커맨드 · 형제 모듈
+  `docreview_advice.py`(이 플러그인 `scripts/` 에 심볼릭 링크)를 얻었다. qg `generic` 프로필은 필드가 없어 라우팅 ·
+  보고서 · 게이트 렌더가 바이트 단위로 같다(골든 12파일).
+
+### Fixed
+- 공유 엔진이 사용자 문서에 쓰는 한 줄 추가(`decide` · `fix` 의 결정 기록과 `defer` 의 박제처 · `advice` 의 박제 ·
+  계수 줄)가 원자적이다 — 인코딩을 먼저 끝내고 같은 디렉토리의 임시 파일에 쓴 뒤 `os.replace` 로 바꾼다. 전에는
+  인코딩 실패가 파일을 0 바이트로 남겼다. `advice` 의 박제 표 판정 · 계수 줄 자리도 고쳤다(qg `generic` 프로필은
+  `advice` 를 쓰지 않아 출력 무변경).
+
+## [9.3.2] — 2026-09-28
+
+**처분 배관줄 차단 표기 · confidence 보존 지시** — 공시만 하는 degrade 옆에 「(차단: 예)」가 서던 것을 고치고, 탐지 결과를 옮기는 자리에 confidence 보존을 적는다.
+
+### Fixed
+- `shared/adjudication/render_disposition.py` 의 `disposition_lines()` 가 소비자의 차단 술어를 필수 셋째 인자 `blocking` 으로 받는다(기본값 없음 — 빠뜨린 호출은 `TypeError`). 리뷰 합성기(`synthesize_findings.py`, 두 호출)는 `blocking`(원장 `blocks()` 또는 `dropped_malformed > 0`)을, 아티팩트 합성기 key 단계(`synthesize_artifact_findings.py`)는 `report["degraded"]`(그 파이프라인은 `converged = not degraded` 라 degrade 가 곧 차단)를 넘긴다. 9.0.0 Known gaps 가 남긴 「보조 입력만 죽어도 공시-머리줄 옆에 (차단: 예)가 선다」결함의 해소다 — 판정(`verdict:`)은 바뀌지 않는다.
+
+### Changed
+- SKILL Phase 1.5-1 — 오케스트레이터가 탐지 결과를 findings.yaml 로 옮길 때 `confidence:` 를 리뷰어가 낸 값 그대로 옮기고 100 점 만점 척도로 낸 값만 10 으로 나눠 내림한다는 지시를 `agent:` 문단 바로 다음 줄에 더한다. 누락은 여전히 합성기가 5 로 확정한다.
+
+## [9.3.1] — 2026-09-28
+
+**PR5 후속 수정** — e2e 가 드러낸 판정 누수 하나와 토픽 모드 선택 비율의 분모를 고친다.
+
+### Fixed
+- 합성기가 `confidence` 가 빠진 발견을 0 으로 채워 억제 바닥(≤4) 아래로 떨구던 것을 고친다. `decide(defect=bool(kept))` 라 그 발견이 유일하면 거짓 `clean` 이 날 수 있었다. 이제 누락 · 숫자 아님(`high` · `true` · `.inf`)은 5(보이되 검증 안 됨)로 확정한다. 살아남는 항목에서만 회계에 강제로 세고, CRITICAL 이 아닐 때만 「게이트 변경」 degrade 로 공시한다(막지 않음). 판정자가 새로 낸 승격 항목의 누락은 설계된 기본값이라 세지 않는다.
+- 토픽(선언) 모드에서 「영향 테스트 N개 선택 (전체 M개 중)」의 분모가 세션 브랜치 트리만 세어 `N > M` 이 나던 것을 고친다. `compute-test-scope-candidates.sh --total --tree <tree>` 가 합친 트리를 세고, 레퍼런스의 분모 규칙이 선언 경로에서 그것을 부른다.
+- `--total` 의 `ls-tree` · `ls-files` 가 도중에 실패하면 rc 0 · `0` 으로 삼켜지던 것을 exit 4 로 드러낸다. `--total` 뒤에 붙은 인자가 정확히 `--tree <tree>` 가 아니면(`--tree=<T>` · 여분 인자) exit 4 다.
+
+### Changed
+- `scope_tuple.py` docstring 의 「판정 대상에서 빠진」을 「토픽 구성원에서 빠진」으로 고친다.
+
 ## [9.3.0] — 2026-09-27
 
 **공개 계약 · 헌장 정리** — qg 는 한 파이프라인이다. 두 게이트 · 런타임 검증 executor 를 전제하던 공개 문자열과 헌장 조항을 거두고, 헌장이 이름으로 박는 것이 실재하는지를 락으로 잠근다.

@@ -50,10 +50,38 @@
 요약의 `unreviewed_reason` 이 사유를 말하고(「미검증」 둘, 또는 finalize 보고서가 없는 `unrouted` — `unrouted` 에는 라벨이
 붙지 않는다) 렌더 첫 줄이 그것을 공시하며 「다음:」 줄에 리뷰 완료가 아니라는 꼬리가 붙는다.
 
+**참고(advisory) — 프로필이 `must_catch` 를 지목한 자리.** 7단계는 advisory 축 항목 일부를 `advice` 원장으로
+보낸다. advisory 축은 `layer_rubric` 의 축 중 `must_catch` 밖이다. 보내는 것은 셋이다: `decide` · `blocks` 없는
+`ask` · 보호 헤딩 승격분, `fix` 를 막지 않는 `ask`, 라운드 2 이상에서 열린 항목이 없는 계보의 `fix`(새 계보, 또는
+advice 로 간 항목이나 적용 · drop 된 fix 를 `supersedes` 로 이은 계보). 이것들은 게이트 질문이 아니고
+승인을 막지 않는다. 라운드 1 의 advisory `fix` 와 열린 항목이 있는 계보를 잇는 `fix` 는 fixes 에 남아 저자가
+적용한다. fixes 에 남는 항목을 막는 `ask` 는 축과 무관하게 asks 에 남는다. 엔진 자동 생성 항목(얼림 · 재상승 · 상향)은 언제나 must-catch 다.
+`fin.json` 은 `advice`(id 목록) · `advice_new` · `advice_repeat` · `mc_preexisting_new` 를 싣고, advice 항목은
+`findings` 에 `decision_view` 를 단 채 남을 수 있어도 게이트 질문이 아니며 `advice` 로만 보인다. 8단계 렌더는
+`참고 N건(…) — 끝에서 한 목록으로` 한 줄만 싣는다 — advisory 축이 공집합인 프로필(seed)은 그 줄도 없고 gate JSON 의
+`advice` 계수만 선다. 목록은 **끝에서 한 번** 보인다. 이 절차서가 부르지 않고
+진입 자리가 부른다:
+
+- design doc — `reviewing-spec` 승인 게이트 2단계 앞
+- brief — 호출자 Step B
+- seed — 계수만
+
+    docreview_state.py advice --state-dir D [--render [--cap 8] [--where <박제처>]] [--sink <doc>] [--log-file <decision_log 목적지>]
+
+- `--render` 는 아직 안 보인 항목을 머리 한 줄 + 항목 한 줄씩(최대 cap) + `외 K건` 한 줄로 낸다(≤10줄).
+- `--sink` 는 프로필 `defer_target` 절에 아직 박제하지 않은 항목을 표 행으로 적는다. `defer_target` 이 없으면
+  rc 1 `profile_has_no_defer_target` 이다.
+- `--log-file` 은 라운드별 계수 줄(`docreview 계수 — <리뷰 정체> r<n>: …`)을 프로필 `decision_log` 절에 한 번씩
+  적는다.
+- 플래그가 없으면 목록 JSON 을 낸다(읽기 전용).
+
+셋 다 멱등이다. 「추가 라운드 1회 열기」를 고르면 부르지 않는다 — 다음 라운드 끝으로 미뤄진다.
+
 ## 배달
 
 - `decide` → 라운드 게이트(결정 묶음). `defer` → `docreview_state.py defer --log-file <목적지>`. `fix` → 저자가 `check-intent <id> --intent <scope> --state-dir D` 통과 후 적용. `drop`·recritic `reject` → 회계에만 남고 게이트 텍스트에 개수 공시.
 - 채택된 `decide` 의 적용은 `check-intent <id> --intent <scope> --state-dir D --decision-id <D#>`(permit 계약).
+- 참고(advisory) → 라운드 게이트에 오지 않는다. 끝에서 한 번 `advice`(진입 자리)로 보이고 박제된다.
 
 ## degrade
 

@@ -4,6 +4,9 @@
 # 골든 락 — `cmd_finalize` 의 **실제 산출물**(`fin.json` + 그 결과 `docreview-state.md`)이
 # 고정값과 바이트로 같은가. 대표 케이스 셋을 `capture_finalize_golden.sh` 로 다시 떠서
 # committed `golden/` 과 `diff` 한다.
+# `gate` JSON · `gate --render` 도 고정한다 — must_catch 가 없는 프로필의 finalize 보고서와 게이트 렌더가
+# 변경 전과 바이트 동일하다(설계 2026-09-27-review-stopping-criterion AC3). 케이스는 must_catch 를 뺀 사본
+# 프로필로 돈다(`nofield_profiles.sh`) — 원장의 `profile:` 줄은 캡처가 정본 경로로 되돌린다.
 #
 # ── 왜 케이스 스위트로는 부족한가 ─────────────────────────────────────────
 # 케이스 스위트의 단언이 **읽지 않는** 출력 필드(`by_disposition`·`defers`·`advisory`·
@@ -50,17 +53,17 @@ fi
 ok "캡처 스크립트 실재"
 
 n_golden=0
-for f in "$GOLDEN"/*.fin.json "$GOLDEN"/*.state.md; do
+for f in "$GOLDEN"/*.fin.json "$GOLDEN"/*.state.md "$GOLDEN"/*.gate.json "$GOLDEN"/*.gate.txt; do
   [ -f "$f" ] && n_golden=$((n_golden+1))
 done
-if [ "$n_golden" -lt 6 ]; then
-  no "골든 파일이 ${n_golden}개 — 케이스 셋 셋이면 6개여야 한다. 하한 미달이면 이 락은 공허하다"
+if [ "$n_golden" -lt 12 ]; then
+  no "골든 파일이 ${n_golden}개 — 케이스 셋 × 산출물 넷(fin.json · state.md · gate.json · gate.txt)이면 12개여야 한다. 하한 미달이면 이 락은 공허하다"
   finish; exit
 fi
-ok "골든 코퍼스 ${n_golden}개 (하한 6 충족 — 공허하지 않다)"
+ok "골든 코퍼스 ${n_golden}개 (하한 12 충족 — 공허하지 않다)"
 
 # ── 이식성 — 이 체크아웃의 절대경로가 골든에 남으면 다른 클론에서 구조적 RED ──
-if grep -q -- "$REPO_ROOT" "$GOLDEN"/*.state.md "$GOLDEN"/*.fin.json 2>/dev/null; then
+if grep -q -- "$REPO_ROOT" "$GOLDEN"/*.state.md "$GOLDEN"/*.fin.json "$GOLDEN"/*.gate.json "$GOLDEN"/*.gate.txt 2>/dev/null; then
   no "골든에 이 체크아웃의 절대경로가 남아 있다 — 캡처의 정규화가 죽었다 (다른 클론·CI 에서 항상 RED 가 된다)"
 else
   ok "골든에 이 체크아웃의 절대경로 없음"
@@ -76,7 +79,7 @@ cap_rc=$?
 assert_eq "$cap_rc" "0" "재캡처 실행 성공 (rc=0)"
 
 for c in $CASES; do
-  for k in fin.json state.md; do
+  for k in fin.json state.md gate.json gate.txt; do
     g="$GOLDEN/$c.$k"; a="$OUT/$c.$k"
     if [ ! -f "$g" ]; then no "골든 없음: $c.$k"; continue; fi
     if [ ! -f "$a" ]; then no "재캡처 산출 없음: $c.$k (캡처가 이 케이스를 못 잡았다)"; continue; fi

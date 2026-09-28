@@ -45,15 +45,34 @@ import sys
 src, dst = sys.argv[1], sys.argv[2]
 t = open(src, encoding="utf-8").read()
 t = t.replace('  > "브리프에 리뷰를 붙이고 싶다"',
-              '  > "브리프에 리뷰를 붙이고 싶다 (2026-07-27-x-interview.audit.md 참고)"')
+              '  > "브리프에 리뷰를 붙이고 싶다 (2026-07-27-verbatim-ok-interview.audit.md 참고)"')
 open(dst, "w", encoding="utf-8").write(t)
 PY
 BLOB2="$(python3 "$SCRIPT" "$tmp")"; rc2=$?
 [[ "$rc2" == "3" ]] && ok "T24: 본문 잔존 시 exit 3 (호출자가 degrade 기록)" \
                     || no "T24: 본문 잔존이 exit $rc2 — 조용히 통과했다"
-grep -qF "2026-07-27-x-interview.audit.md" <<<"$BLOB2" \
+grep -qF "2026-07-27-verbatim-ok-interview.audit.md" <<<"$BLOB2" \
   && ok "T24: 본문 원문은 보존된다 (§6 verbatim > 위생)" || no "T24: 본문 원문을 지웠다"
 rm -f "$tmp"
+
+# AC10 (설계 2026-09-27-review-stopping-criterion §F) — 위생이 가리는 것은 이 brief 자신의 audit 이다.
+# 다른 인터뷰의 audit 을 근거로 인용하는 것은 정상이다(최근 6회 중 3회의 rc 3 이 그 오탐이었다).
+tmp_o="$(mktemp)" || exit 1
+python3 - "$PAYLOAD" "$tmp_o" <<'PY'
+import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+t = t.replace('  > "브리프에 리뷰를 붙이고 싶다"',
+              '  > "브리프에 리뷰를 붙이고 싶다 (docs/superpowers/interview/2026-01-01-other-interview.audit.md#S3 참고)"')
+open(sys.argv[2], "w", encoding="utf-8").write(t)
+PY
+grep -qF 'other-interview.audit.md' "$tmp_o" || no "T24b 전제: 치환이 적용되지 않았다"
+python3 "$SCRIPT" "$tmp_o" >/dev/null 2>&1; rc_o=$?
+[[ "$rc_o" == "0" ]] && ok "T24b: 다른 인터뷰의 audit 인용만 있으면 exit 0" || no "T24b: 다른 audit 인용이 exit $rc_o"
+# T24c — audit_file 을 모르면 넓은 판정(모든 *.audit.md)으로 닫는다(fail-closed).
+sed '/^audit_file:/d' "$tmp_o" > "$tmp_o.noaf"
+python3 "$SCRIPT" "$tmp_o.noaf" >/dev/null 2>&1; rc_n=$?
+[[ "$rc_n" == "3" ]] && ok "T24c: audit_file 이 없으면 다른 audit 인용도 exit 3 (넓은 판정)" || no "T24c: audit_file 없는 payload 가 exit $rc_n"
+rm -f "$tmp_o" "$tmp_o.noaf"
 
 # C1: 값이 빈 redact 키가 **다음 줄을 삼키지 않는다**. `\s*`는 개행을 넘으므로
 # `(.*)$`가 다음 줄을 이 줄의 값으로 잡아 그 줄 전체를 <redacted>로 갈아치웠다

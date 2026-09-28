@@ -195,15 +195,79 @@ def _normalize_identity(f, ledger=None):
     return f
 
 
+def _normalize_confidence(f, warn_missing=True):
+    """수집 지점에서 confidence 값 하나를 확정한다(제자리 갱신) — 강제 회계는 호출자의 몫.
+
+    Returns `(coerced, raw, had_key)`:
+      coerced — 값을 바꿨는지(불리언).
+      raw     — 바뀌기 전 원래 값. 키가 없었으면 `None`.
+      had_key — 키 자체가 있었는지. `raw`만으로는 «키 없음»과 «값이 명시적으로
+                `null`」이 둘 다 `None`이라 구별이 안 된다 — 승격 경로가 전자만
+                세지 않으려면(`warn_missing`과 같은 구별) 이 플래그가 필요하다.
+
+    키가 없거나 숫자로 못 읽으면(`int()` 실패 · `OverflowError`(`.inf`) · `bool` ·
+    None) `NEW_FINDING_DEFAULT_CONFIDENCE`(5)로 확정한다 — **누락도 malformed 와
+    같은 값**이다. `suppress()`(non-CRITICAL·conf<=4 억제)는 이 값으로 억제 여부를
+    정하고, 억제 여부가 `_verdict.decide(defect=bool(kept), …)`의 `defect`를
+    정한다.
+
+    `ledger.coerced()`는 **여기서 부르지 않는다** — 이 강제가 게이트(억제 여부)를
+    바꾸는지는 이 함수가 모르는 두 가지에 달려 있다: 그 항목이 판정에서
+    살아남는지(`reject`되면 애초에 안 들어간다)와, severity 가 무엇인지(raise
+    적용 후 CRITICAL 이면 confidence 와 무관하게 항상 kept 라 이 강제가 억제
+    여부를 못 바꾼다). 그래서 호출자(`apply_verdicts`·`promote_new_findings`)가
+    항목의 운명과 최종 severity 를 안 다음에 `ledger.coerced("confidence", raw,
+    NEW_FINDING_DEFAULT_CONFIDENCE, gate=(_norm_sev(f) != "CRITICAL"))`를 부른다
+    (`_apply_raise`가 gate 를 조건부로 계산하는 것과 같은 이유).
+
+    `warn_missing`(기본 True)이 거짓이면 «키 없음» 갈래의 stderr 를 내지 않는다 —
+    승격 경로(`promote_new_findings`)가 `False`로 부른다: 승격 항목의 누락은
+    판정자 자신의 주장에 대한 설계된 인코딩이지 이상이 아니다. 비수치(malformed)
+    값의 stderr 는 두 경로 모두에서 항상 낸다 — 판정자가 준 값 자체가 여전히
+    잘못됐기 때문이다.
+
+    숫자로 읽히는 값(`"7"` 등)은 int로 확정하되 `coerced=False`다 — 표기만 다를
+    뿐 값이 같기 때문이다. `bool`은 숫자가 아닌 것으로 본다(`True`가 1이 되는
+    것을 막는다).
+    """
+    had_key = "confidence" in f
+    raw = f.get("confidence")
+    if not had_key:
+        if warn_missing:
+            print(f"[synthesize_findings] missing confidence on "
+                  f"{f.get('file')}:{f.get('line')} — treating as "
+                  f"{NEW_FINDING_DEFAULT_CONFIDENCE}", file=sys.stderr)
+        f["confidence"] = NEW_FINDING_DEFAULT_CONFIDENCE
+        return True, None, False
+    numeric_ok = False
+    if not isinstance(raw, bool):
+        try:
+            int(raw)
+            numeric_ok = True
+        except (TypeError, ValueError, OverflowError):
+            numeric_ok = False
+    if not numeric_ok:
+        print("[synthesize_findings] non-numeric confidence "
+              f"{raw!r} on {f.get('file')}:{f.get('line')} — "
+              f"treating as {NEW_FINDING_DEFAULT_CONFIDENCE}", file=sys.stderr)
+        f["confidence"] = NEW_FINDING_DEFAULT_CONFIDENCE
+        return True, raw, True
+    f["confidence"] = int(raw)
+    return False, None, True
+
+
 def finding_id(f):
     return f"{f.get('agent', 'unknown')}-{f.get('file', '')}-{f.get('line', '')}"
 
 
 NEW_FINDING_REQUIRED = ("file", "severity", "summary")
-# 승격된 발견의 기본 confidence. suppress()의 바닥(<=4)보다는 위라 표에 실리고,
-# render()의 caveat 임계(<=6) 아래라 `*`가 붙는다 — 이 발견은 어떤 리뷰어의
-# 판정도 통과하지 않았다(판정자 자신의 주장이다). 보이되 검증 안 됨으로
-# 표시하는 것이 정직한 인코딩이다. 리뷰어가 명시적으로 confidence를 주면 그것을 쓴다.
+# 승격된 발견의 기본 confidence 이자, 주 경로(_normalize_confidence · _conf)에서
+# confidence 가 누락·malformed 일 때의 강제값이기도 하다. suppress()의 바닥(<=4)
+# 보다는 위라 표에 실리고, render()의 caveat 임계(<=6) 아래라 `*`가 붙는다 — 승격
+# 발견은 어떤 리뷰어의 판정도 통과하지 않았고(판정자 자신의 주장이다), 주 경로의
+# 누락·malformed 값은 어느 리뷰어도 검증하지 않은 채로 남는다. 두 경우 모두
+# 보이되 검증 안 됨으로 표시하는 것이 정직한 인코딩이다. 리뷰어가 명시적으로
+# 유효한 confidence를 주면 그것을 쓴다.
 NEW_FINDING_DEFAULT_CONFIDENCE = 5
 
 
@@ -222,11 +286,27 @@ def _conf(f):
     (sort_findings)를 놓쳐 그대로 재현됐다. 값을 버리지 않고 기본값 + loud
     stderr로 낮추는 이유: 잘못된 숫자 하나 때문에 진짜 결함을 숨기는 것보다,
     보이되 검증 안 됨으로 표시하는 것이 정직하다.
+
+    이 기본값은 `NEW_FINDING_DEFAULT_CONFIDENCE`(5)다 — 0이 아니다. 누락도
+    malformed와 같이 5로 다룬다: 숨기지 않는다. 수집 지점(`_normalize_confidence`)이
+    이미 확정해 두므로 여기 닿는 것은 그 초크포인트를 우회한 호출뿐이지만,
+    총함수 안전망은 같은 기본값을 써야 한다 — 0이면 이 함수만 따로 부르는
+    자리에서 억제 바닥 함정이 되살아난다.
+
+    `bool`은 숫자가 아닌 것으로 본다(`True`가 `int()`를 그냥 통과해 1이 되는 것을
+    막는다 — `_normalize_confidence`와 같은 가드). `OverflowError`도 잡는다 —
+    `confidence: .inf`(YAML 파서가 `float('inf')`로 읽는다)는 `int()`에서
+    `TypeError`/`ValueError`가 아니라 `OverflowError`를 던진다.
     """
-    raw = f.get("confidence", 0)
+    raw = f.get("confidence", NEW_FINDING_DEFAULT_CONFIDENCE)
+    if isinstance(raw, bool):
+        print("[synthesize_findings] non-numeric confidence "
+              f"{raw!r} on {f.get('file')}:{f.get('line')} — "
+              f"treating as {NEW_FINDING_DEFAULT_CONFIDENCE}", file=sys.stderr)
+        return NEW_FINDING_DEFAULT_CONFIDENCE
     try:
         return int(raw)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         print("[synthesize_findings] non-numeric confidence "
               f"{raw!r} on {f.get('file')}:{f.get('line')} — "
               f"treating as {NEW_FINDING_DEFAULT_CONFIDENCE}", file=sys.stderr)
@@ -293,7 +373,16 @@ def promote_new_findings(raw_new, existing, *, author, ledger=None):
         # 승격 경로도 같은 초크포인트를 쓴다 — `file: [a.py]`가 truthy라 필수-키
         # 검사를 통과한 뒤 sort_findings의 raw 비교에서 TypeError를 냈다.
         _normalize_identity(f, ledger=ledger)
-        f.setdefault("confidence", NEW_FINDING_DEFAULT_CONFIDENCE)
+        # warn_missing=False — 승격 항목의 기본 confidence 5는 판정자 자신의
+        # 주장에 대한 설계된 인코딩이지 이상이 아니다(_normalize_confidence 의
+        # docstring). 그러나 non-numeric(malformed) 값은 판정자가 «잘못 준» 값
+        # 이라 여전히 malformed 다 — had_key 가 참일 때만(즉 키 없음이 아닐 때만)
+        # 강제로 센다. gate 는 apply_verdicts 와 같은 규칙:
+        # severity 가 CRITICAL 이면 confidence 는 억제 여부를 못 바꾼다.
+        conf_coerced, conf_raw, conf_had_key = _normalize_confidence(f, warn_missing=False)
+        if conf_coerced and conf_had_key and ledger is not None:
+            ledger.coerced("confidence", conf_raw, NEW_FINDING_DEFAULT_CONFIDENCE,
+                           gate=(_norm_sev(f) != "CRITICAL"))
         fid = finding_id(f)
         if fid in seen:
             base = fid
@@ -319,6 +408,12 @@ def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
       원장에 이미 한 번 있고 `angle-absent` 로 나간다. 항목마다 세면 `findings-lost` 가
       사유 순서상 앞서 사유가 뒤바뀐다.
     - `raise` 는 severity 를 «올리기만» 한다(`_apply_raise`).
+    - confidence 강제(`_normalize_confidence`)의 값 확정은 여기서 즉시 하지만,
+      `ledger.coerced()` 호출은 항목이 **살아남는** 갈래(hold · accept)에서만
+      한다 — `reject` 된 항목은 판정(kept/suppressed)에 아예 안 들어가므로 그
+      강제가 게이트를 못 바꾼다; 세면 거짓 「게이트 변경」 공시다. gate 는
+      raise 적용 **후** severity 로 잰다 — CRITICAL 은
+      confidence 와 무관하게 늘 kept 라 그 강제가 억제 여부를 못 바꾼다.
     """
     by_id = {v.get("finding_id"): v for v in verdicts if isinstance(v, dict)}
     out = []
@@ -334,14 +429,22 @@ def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
             continue
         # 수집 지점 정규화 — dedup 키 · sort · finding_id 가 모두 이 값을 만진다.
         f = _normalize_identity(dict(f), ledger=ledger)
+        # 값은 여기서 확정한다(제자리) — 강제 회계는 아래에서 항목의 운명을
+        # 안 다음에 한다.
+        conf_coerced, conf_raw, _conf_had_key = _normalize_confidence(f)
         v = by_id.get(finding_id(f))
         if v is None:
             if ledger is not None and not adjudicator_dead:
                 ledger.hold(finding_id(f), "판정자 부재: 판정자 판정 없음")
+            if conf_coerced and ledger is not None:
+                ledger.coerced("confidence", conf_raw, NEW_FINDING_DEFAULT_CONFIDENCE,
+                               gate=(_norm_sev(f) != "CRITICAL"))
             out.append(f)
             continue
         verdict = v.get("verdict", "confirm")
         if verdict == "reject":
+            # 기각된 항목은 판정에 안 들어간다 — confidence 강제가 무엇이든
+            # 게이트를 못 바꾼다. 세지 않는다.
             if ledger is not None:
                 ledger.reject(finding_id(f), "판정자 기각")
             continue
@@ -349,6 +452,9 @@ def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
             f = _apply_raise(f, v["adjusted_severity"], ledger)
         if ledger is not None:
             ledger.accept(finding_id(f))
+            if conf_coerced:
+                ledger.coerced("confidence", conf_raw, NEW_FINDING_DEFAULT_CONFIDENCE,
+                               gate=(_norm_sev(f) != "CRITICAL"))
         out.append(f)
     return out, dropped
 
@@ -507,7 +613,7 @@ def _degrade_block(report, blocking):
 
 
 def render(kept, suppressed_count, dropped_malformed, report, held_classes,
-           recritic_zero=False, blocking=False):
+           recritic_zero=False, *, blocking):
     findings = kept
     if not findings:
         # drop 공지는 이 분기에도 반드시 나가야 한다. 예전에는 아래 표-있는
@@ -516,7 +622,7 @@ def render(kept, suppressed_count, dropped_malformed, report, held_classes,
         # SKILL은 stdout만 읽어 counts=0을 보고 `## Review gate: clean`을
         # 찍었다 — 버려진 CRITICAL 주장이 **깨끗함으로 렌더**됐다는 뜻이다
         # (exit 0). 소실을 stdout에서 볼 수 있게 만든다.
-        disp_line, plumb_line, gloss_line, advisories = disposition_lines(report, held_classes)
+        disp_line, plumb_line, gloss_line, advisories = disposition_lines(report, held_classes, blocking)
         for a in advisories:
             print(a, file=sys.stderr)
         out = [
@@ -571,7 +677,7 @@ def render(kept, suppressed_count, dropped_malformed, report, held_classes,
     if suppressed_count > 0:
         counts_line += f" — {suppressed_count} suppressed (conf <= 4)"
 
-    disp_line, plumb_line, gloss_line, advisories = disposition_lines(report, held_classes)
+    disp_line, plumb_line, gloss_line, advisories = disposition_lines(report, held_classes, blocking)
     for a in advisories:
         print(a, file=sys.stderr)
 

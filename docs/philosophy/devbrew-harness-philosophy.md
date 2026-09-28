@@ -53,7 +53,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 
 ### P18 — Stagnation Is a Failure Mode
 **Cross-cutting (L1·L2·L3) 집행.** 같은 것을 계속 재시도하는 루프는 진전이 아니라 멈춘 것 — max-iteration cap + repeat 감지 + escape hatch와 함께 shipping. Load-bearing: 정체 시 재시도 대신 *다른* 접근(fresh subagent·다른 리뷰어·human prompt)을 invoke해야 하고, 카운트가 없는 루프는 토큰을 태우며 신뢰를 깎는다.
-코드: `shared/docreview/references/reviewing-document.md` (재리뷰 상한 — 값의 정본 한 줄) · `shared/docreview/scripts/docreview_state.py` 의 `gate_summary`(stagnation 술어) · qg Review fix-loop
+코드: `shared/docreview/references/reviewing-document.md` (재리뷰 상한 — 값의 정본 한 줄) · `shared/docreview/scripts/docreview_state.py` 의 `gate_summary`(stagnation 술어) · qg fix-loop 의 반복 상한(`plugins/quality-gates/skills/quality-pipeline/SKILL.md`)
 
 ### P21 — Security & Supply Chain
 **Cross-cutting (L1·L2·L3) 집행.** 플러그인=코드, agent=prompt, 둘 다 공격 표면이다 — state secret hygiene, integrity-pin된 plugin-to-plugin trust, description prompt-injection 리뷰가 floor. Load-bearing: kill switch는 보안 컨트롤이라 어떤 훅도 inspect해서 거부할 수 없고, persona 파일을 약화(규칙 제거·임계 완화)하는 PR은 test-suite 편집과 같은 scrutiny의 보안-민감 변경이다.

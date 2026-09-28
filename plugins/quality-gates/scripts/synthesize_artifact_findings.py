@@ -310,8 +310,11 @@ def main():
         # 사람이다 — 미판정은 라벨을 달아 stderr 로 보인다(items="open").
         L = Ledger(items="open")
         phase_key(args.findings, ledger=L)
+        report = L.report()
+        # 이 파이프라인은 `converged = not degraded` 라 degrade 가 곧 수렴을 막는다 —
+        # 여기서는 공시 술어가 차단 술어다.
         disp_line, plumb_line, gloss_line, advisories = disposition_lines(
-            L.report(), L.held_by_class())
+            report, L.held_by_class(), report["degraded"])
         # stdout 이 아니라 stderr 다 — key 단계의 stdout 은 phase_synth 가 다시
         # 읽는 findings 문서라, 거기에 키를 더하면 `_is_findings_doc` 스키마
         # 판정을 건드린다.

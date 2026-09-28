@@ -9,7 +9,8 @@
 # 못 잡는다(리뷰 실측: `diff` 가 완전히 일치). AC26 이 필요한 것은 어떤 assert 도
 # 안 읽는 필드(`by_disposition`·`rejected`·`defers`·`degrade`·`advisory`·`blocks`·
 # `adjudication_*`)까지 분해가 안 건드렸다는 증거다 — 그건 `finalize` 의 실제 JSON
-# 출력과 그 결과 state 파일 자체를 고정해야만 잡힌다.
+# 출력과 그 결과 state 파일 자체를 고정해야만 잡힌다. `gate` JSON · `gate --render` 도
+# 같은 이유로 고정한다 — 렌더도 바이트 동일해야 한다(AC3).
 #
 # 왜 이 스크립트가 따로 있나 — cases.sh 의 각 케이스는 끝에 `rm -rf "$d" ...` 로
 # 자기 임시 디렉토리를 지운다(cases.sh 헤더의 계약). 케이스 «몸통» 을 고치면(다른
@@ -45,13 +46,13 @@ mkdir -p "$OUT"
 GOLDEN_PLACEHOLDER='<REPO_ROOT>'
 # 라운드 시작 표식(`started_mtime_ns`)은 실행마다 다른 파일시스템 시각이다 — 같은 이유로
 # 자리표로 바꾼다. 줄 자체는 남기므로 표식이 사라지면 골든이 여전히 RED 다.
-norm_copy() {   # norm_copy <src> <dst> — REPO_ROOT 절대경로·라운드 시작 표식을 안정 placeholder 로
+norm_copy() {   # norm_copy <src> <dst> — 사본 프로필 경로 · REPO_ROOT 절대경로 · 라운드 시작 표식을 안정 자리표로
   python3 -c 'import io, re, sys
-src, dst, root, ph = sys.argv[1:5]
-t = io.open(src, encoding="utf-8").read().replace(root + "/", ph + "/")
+src, dst, root, ph, prof, canon = sys.argv[1:7]
+t = io.open(src, encoding="utf-8").read().replace(prof + "/", canon + "/").replace(root + "/", ph + "/")
 t = re.sub(r"(?m)^(\s*started_mtime_ns: )[0-9]+$", r"\g<1><MTIME_NS>", t)
 io.open(dst, "w", encoding="utf-8").write(t)' \
-    "$1" "$2" "$REPO_ROOT" "$GOLDEN_PLACEHOLDER"
+    "$1" "$2" "$REPO_ROOT" "$GOLDEN_PLACEHOLDER" "$PROF_SD" "$REPO_ROOT/plugins/spec-distill/references/docreview-profiles"
 }
 
 # capture_and_run <case-fn> — `rm` 을 이 함수 호출 동안만 재정의해 케이스가 스스로
@@ -67,6 +68,10 @@ capture_and_run() {
       if [ -d "$arg" ] && [ -f "$arg/docreview-state.md" ]; then
         [ -f "$arg/fin.json" ] && norm_copy "$arg/fin.json" "$OUT/$casefn.fin.json"
         norm_copy "$arg/docreview-state.md" "$OUT/$casefn.state.md"
+        py docreview_state.py gate --state-dir "$arg" > "$arg/golden-gate.json" 2>/dev/null \
+          && norm_copy "$arg/golden-gate.json" "$OUT/$casefn.gate.json"
+        py docreview_state.py gate --state-dir "$arg" --render > "$arg/golden-gate.txt" 2>/dev/null \
+          && norm_copy "$arg/golden-gate.txt" "$OUT/$casefn.gate.txt"
       fi
     done
     command rm "$@"
