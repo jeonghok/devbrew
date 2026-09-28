@@ -27,7 +27,7 @@ from docreview_state import (  # noqa: E402
 )
 from docreview_advice import (  # noqa: E402
     ROUTE_ADVICE, advice_ids, advisory_axes, has_must_catch, mc_preexisting_new, member_categories, route_step1,
-    route_step2,
+    route_step2, scrub,
 )
 
 BLOCK_RE = r"```%s[ \t]*\n(.*?)\n```"
@@ -39,7 +39,7 @@ def extract_block(text: str, name: str):
     if not ms:
         return None, "missing"
     try:
-        return yaml.safe_load(ms[-1]), None
+        return scrub(yaml.safe_load(ms[-1])), None
     except Exception:  # yaml.YAMLError 계열 전부 — 파손은 종류를 가리지 않는다
         return None, "broken"
 
@@ -195,7 +195,7 @@ def cmd_prepare(a) -> int:
         stale = _round_staleness(st, Path(a.codex), "codex_predates_round")
         if stale is None:
             try:
-                cx = yaml.safe_load(Path(a.codex).read_text(encoding="utf-8"))
+                cx = scrub(yaml.safe_load(Path(a.codex).read_text(encoding="utf-8")))
             except Exception:
                 cx = None
     meta = cx.get("meta") if isinstance(cx, dict) and isinstance(cx.get("meta"), dict) else {}
@@ -864,6 +864,8 @@ def main(argv=None) -> int:
         return a.fn(a)
     except FileNotFoundError as e:
         return fail("state_missing", path=str(e))
+    except UnicodeError as e:   # ValueError 의 하위라 앞에 둔다 — 입구 정화(`scrub`) 밖의 글자(비 UTF-8 CLI 인자 · 원장 · 입력 파일)
+        return fail("text_encoding_invalid", detail=str(e))
     except (ValueError, RuntimeError) as e:
         return fail("unreadable", detail=str(e))
 

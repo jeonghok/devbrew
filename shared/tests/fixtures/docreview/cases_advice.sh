@@ -224,7 +224,6 @@ case_AC18_round2_new_advisory_fix() {
     "AC18: 라운드 1 에서 온 계보의 advisory fix(미적용)는 fixes 에 남아 막는다"
   rm -rf "$d"
 }
-
 # ── AC8 — 단계별 등식 ─────────────────────────────────────────────────────────
 case_AC8_staged_equation() {
   local d out; d="$(mc_r1)"
@@ -486,6 +485,36 @@ except UnicodeEncodeError:
   assert_eq "$out $(cmp -s "$doc" "$FX/design-sample.md" && echo same) $(ls -A "$t" | grep -Evc '^(doc\.md|err)$')" "raised same 0" \
     "원자 쓰기: 인코딩이 실패해도 대상 파일의 바이트는 그대로이고 임시 파일이 남지 않는다"
   rm -rf "$d" "$t"
+}
+case_advice_surrogate_entry() {   # 리뷰어 출력(critic · codex · 재비판 added)의 YAML 이스케이프 surrogate — 입구에서 걷는다
+  local d; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-surrogate.txt" "$FX/codex-surrogate.yaml" "$FX/recritic-surrogate.txt")"
+  assert_eq "$(cat "$d/prep.rc") $(grep -c '^ "ok": true,$' "$d/fin.json")" "0 1" \
+    "surrogate 입구: 짝 없는 surrogate 가 든 리뷰어 출력으로도 prepare-recritic · finalize 가 rc 0 이다"
+  assert_eq "$(grep -c '"summary": "SU1: 외톨이 � 끝"' "$d/fin.json") $(grep -c '"replacement": "고치면 � 뒤"' "$d/fin.json") $(grep -c '"summary": "SX1: 코덱스 외톨이 � 끝"' "$d/fin.json") $(grep -c '"summary": "SA1: 재비판 외톨이 � 끝"' "$d/fin.json")" "1 1 1 1" \
+    "surrogate 입구: critic · codex · 재비판 added 의 짝 없는 surrogate 가 출력에 U+FFFD 로 실린다"
+  assert_eq "$(st_yaml "$d" 'sorted(v["summary"] for v in st["findings"].values() if v["summary"].startswith(("SU", "SX", "SA")))')" \
+    "['SA1: 재비판 외톨이 � 끝', 'SU1: 외톨이 � 끝', 'SU2: 한글 😀 그대로', 'SU3: 쌍 😀 합침', 'SX1: 코덱스 외톨이 � 끝']" \
+    "surrogate 입구: 원장에도 U+FFFD 로 적히고, 정상 한글 · 이모지는 그대로이며 짝 맞는 이스케이프 쌍은 원래 글자로 합쳐진다"
+  assert_eq "$(grep -c '"summary": "SU2: 한글 😀 그대로"' "$d/fin.json") $(grep -c '"summary": "SU3: 쌍 😀 합침"' "$d/fin.json")" "1 1" \
+    "surrogate 입구: 정상 한글 · 이모지 요약은 출력에서 바이트 그대로다"
+  rm -rf "$d"
+}
+case_advice_text_encoding_exit() {   # 입구 정화를 안 거친 글자의 인코딩 실패 — 두 모듈 모두 text_encoding_invalid
+  local d doc rc; d="$(mc_r1)"; doc="$(mktemp -t encx-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
+  py docreview_state.py fix --state-dir "$d" --id "$(fsum "$d" 'AD6:' '["id"]')" --event drop --reason "$(printf 'bad \377 byte')" --log-file "$doc" >/dev/null 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c '"reason": "text_encoding_invalid"' "$d/err") $(grep -c state_unreadable "$d/err")" "1 1 0" \
+    "인코딩 출구(state): 비 UTF-8 바이트가 든 CLI 인자로 사용자 문서 쓰기가 실패하면 rc 1 · text_encoding_invalid 다(state_unreadable 이 아니다)"
+  assert_eq "$(cmp -s "$doc" "$FX/design-sample.md" && echo same)" "same" "인코딩 출구(state): 사용자 문서는 그대로다"
+  rm -rf "$d" "$doc"; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-mc-r1.txt")" --codex "$FX/codex-failed.yaml" >/dev/null
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2])
+st["pending_recritic"]["items"][0]["finding"]["category"] = "architecture\ud800"
+s.save_state(sys.argv[2], st, "fixture: 준비에 surrogate")' "$SCRIPTS" "$d"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-empty.txt" --doc "$FX/design-sample.md" >/dev/null 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c '"reason": "text_encoding_invalid"' "$d/err") $(grep -c '"reason": "unreadable"' "$d/err")" "1 1 0" \
+    "인코딩 출구(route): 원장에서 온 surrogate 로 finalize 의 인코딩이 실패하면 rc 1 · text_encoding_invalid 다(unreadable 이 아니다)"
+  rm -rf "$d"
 }
 case_advice_atomic_write_keeps_link_and_mode() {   # 원자 교체가 심볼릭 링크를 끊거나 권한 비트를 바꾸지 않는다
   local d t; d="$(adv_state 2)"; t="$(mktemp -d -t atomw-XXXXXX)"

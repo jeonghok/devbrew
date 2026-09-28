@@ -793,4 +793,16 @@ mut 1/1 table_by_tail_pipe case_advice_sink_after_headerless_defer_row sed_advic
 # (83) 계수 줄을 절 전체(하위 절 포함)의 끝에 둔다 — 결정 기록의 하위 절인 Deferred 표 뒤에 계수 줄이 낀다.
 mut 1/1 count_line_span_end case_advice_count_line_nested_log sed_state \
   's/adv\.count_line(ident, int(k), rep), own=True)$/adv.count_line(ident, int(k), rep))/'
+# (84) critic · 재비판 블록 입구의 surrogate 정화를 지운다 — prepare-recritic 이 요약 해시에서 죽는다.
+mut 1/1 entry_scrub_block_removed case_advice_surrogate_entry sed_route \
+  's/^        return scrub(yaml\.safe_load(ms\[-1\])), None$/        return yaml.safe_load(ms[-1]), None/'
+# (85) codex 입구의 surrogate 정화를 지운다 — codex finding 의 surrogate 로 prepare-recritic 이 죽는다.
+mut 1/1 entry_scrub_codex_removed case_advice_surrogate_entry sed_route \
+  's/^                cx = scrub(yaml\.safe_load(Path(a\.codex)\.read_text(encoding="utf-8")))$/                cx = yaml.safe_load(Path(a.codex).read_text(encoding="utf-8"))/'
+# (86) 라우터 출구의 인코딩 사유를 지운다 — 인코딩 실패가 unreadable 로 오보된다.
+mut 1/1 exit_reason_route_removed case_advice_text_encoding_exit sed_route \
+  's/^    except UnicodeError as e: .*$/    except KeyboardInterrupt as e:/'
+# (87) 원장 출구의 인코딩 사유를 지운다 — 인코딩 실패가 state_unreadable 로 오보된다.
+mut 1/1 exit_reason_state_removed case_advice_text_encoding_exit sed_state \
+  's/^    except UnicodeError as e: .*$/    except KeyboardInterrupt as e:/'
 finish

@@ -1592,6 +1592,8 @@ def main(argv=None) -> int:
         return a.fn(a)
     except FileNotFoundError as e:
         return fail("state_missing", path=str(e))
+    except UnicodeError as e:   # ValueError 의 하위라 앞에 둔다 — 글자의 인코딩 · 디코딩 실패를 원장 판독 실패와 가른다
+        return fail("text_encoding_invalid", detail=str(e))
     except (ValueError, RuntimeError) as e:
         return fail("state_unreadable", detail=str(e))
     except ProfileError as e:
