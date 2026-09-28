@@ -22,10 +22,18 @@ ROOT = Path(__file__).resolve().parent.parent
 # 그래서 references/*.md 를 **열거가 아니라 도출**해 코퍼스에 넣는다 — 새 참조
 # 파일이 생겨도 자동으로 대상이 된다.
 _REFERENCE_DOCS = sorted(ROOT.glob("skills/*/references/*.md"))
+# 설계 2026-09-28-audit-folder-removal §4-5: 플러그인 레벨 `references/`(recritic 프로필 ·
+# docreview 프로필)도 리뷰어 프롬프트로 실리는 표면이다. 하한은 glob 마다 따로 둔다 — 합계
+# 하나면 새 glob 이 0건이 돼도 기존 glob 이 채워 통과한다.
+_PLUGIN_REFERENCE_DOCS = sorted(ROOT.glob("references/**/*.md"))
+_CORPORA = (
+    ("skills/*/references/*.md", _REFERENCE_DOCS),
+    ("references/**/*.md", _PLUGIN_REFERENCE_DOCS),
+)
 
 TARGETS = [
     ROOT / "skills/quality-pipeline/SKILL.md",
-] + _REFERENCE_DOCS
+] + _REFERENCE_DOCS + _PLUGIN_REFERENCE_DOCS
 
 # Patterns that suggest secret-value extraction.
 # These are heuristics: a free-text "input X" near a secret-like keyword is
@@ -48,10 +56,11 @@ class TestNoSecretPrompts(unittest.TestCase):
     def test_no_imperative_secret_extraction(self):
         # vacuity: 글롭이 아무것도 못 맞추면 이 스캔은 분할 이전 범위로 조용히
         # 되돌아가면서도 GREEN 을 찍는다 — '0건 검사'를 '문제 없음'으로 읽지 않는다.
-        self.assertGreater(
-            len(_REFERENCE_DOCS), 0,
-            "skills/*/references/*.md 를 0건 도출했다 — secret 스캔 코퍼스가 "
-            "조용히 좁아졌다 (글롭이 깨졌거나 참조 파일이 전부 사라졌다)")
+        for glob, docs in _CORPORA:
+            self.assertGreater(
+                len(docs), 0,
+                f"{glob} 를 0건 도출했다 — secret 스캔 코퍼스가 "
+                "조용히 좁아졌다 (글롭이 깨졌거나 참조 파일이 전부 사라졌다)")
         offenders = []
         for path in TARGETS:
             if not path.exists():
