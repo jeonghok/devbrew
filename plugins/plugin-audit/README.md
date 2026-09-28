@@ -17,6 +17,11 @@
 `cost_class: high` — dispatch 전 `AskUserQuestion` 지출 동의 게이트를 통과해야 한다.
 Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 
+**산출 위치** — 감사마다 실행 디렉토리 `.claude/plugin-audit/<date>-<target>[-N]/` 이 생긴다(지출 동의
+승인 직후, `scripts/prepare-run-dir.py`). 리포트 `audit.md` · 데이터 `audit-data.json` · 원장
+`audit-journal.jsonl` 과 중간 파일이 모두 여기 쌓이고, 안의 `.gitignore`(`*`)로 스스로 git-ignore 된다.
+감사가 끝나면 세 파일의 절대경로를 보고한다. 같은 날 같은 대상을 다시 감사하면 `-2` 로 새로 만든다.
+
 `DEVBREW_PLUGIN_AUDIT_DISABLE_WEB=1` — codex 감사 co-reviewer의 웹 검색만 비활성화한다
 (AC21). 감사 preamble이 외부 prior-art 근거를 요구해 기본은 ON(`web_search="live"`)이지만,
 꺼지면 codex가 리포 근거만으로 감사하고 그 사실을 stderr에 loud하게 남긴다 — crash 없음
@@ -68,8 +73,9 @@ fallback 창을 둔다.
 - **Law 2 (Writer ≠ Reviewer, 물리 분리)** — 3 agent(`plugin-auditor`·`audit-refuter`·`smoke-probe`)의
   `tools:` allowlist(`Read, Grep, Glob, WebSearch, WebFetch`)가 쓰기·실행을 fail-closed로 차단.
   프롬프트가 아니라 frontmatter scoping. `check-law2.py` 정적 게이트 + smoke가 런타임 실증.
-- **Law 3 (Every Cycle Leaves the System Smarter)** — 감사 결과는 `docs/audits/<date>-<target>-audit.*`로
-  커밋되고 인덱스(`docs/audits/README.md`)에서 검색 가능. journal.jsonl이 named/diff-able history.
+- **Law 3 (Every Cycle Leaves the System Smarter)** — 리포트는 한 번 읽는 작업 산출물이다
+  (`.claude/plugin-audit/<실행 키>/`, 스스로 git-ignore). 이 사이클의 compounding 은 감사가 낳은 수정
+  커밋과 reviewer persona 편집이 맡는다.
 - **Law 2 (입력 오염 차단) — `input_slots`** — agent 셋이 frontmatter 에 받는 입력의 `tag`/`var`/`kind`
   를 선언한다. `audit-refuter.findings` 는 금지 종류 `prior_verdict` 이며 `tools/adjudication/check_slots.py`
   의 `EXEMPT_SLOTS` 에 C6 인용과 함께 등재돼 있다(반박이 과업이라 대응물이 없다). 집행은
