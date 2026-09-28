@@ -601,7 +601,7 @@ case_recritic_findings_keep_reviewer_confidence() {
   # SKILL 에 실제로 있는지, agent: 문단(findings.yaml 을 쓰는 자리) 바로 다음인지를 잰다.
   local anchor_line new_line anchor_count new_count anchor_no new_no
   anchor_line='      `agent:` 를 그대로 믿지 않는다 — 찍는 쪽이 너다.'
-  new_line='      **각 항목의 `confidence:` 는 리뷰어가 낸 값을 그대로 옮긴다** — 100 점 만점 척도로 낸 값만 10 으로 나눠 내림한다(85 → 8).'
+  new_line='      **각 항목의 `confidence:` 는 리뷰어가 낸 값을 그대로 옮긴다** — 값이 10 을 넘으면 100 점 만점으로 보고 10 으로 나눠 내림하고(85 → 8), 리뷰어가 내지 않았으면 지어내지 말고 키를 뺀다(합성기가 5 로 채운다).'
 
   new_count=$(grep -cxF -- "$new_line" "$SKILL")
   assert_eq "$new_count" "1" \

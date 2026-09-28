@@ -50,7 +50,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v9.3.3)
+# Quality Gates — In-Turn Orchestrator (v9.3.4)
 
 You are running the **quality-gates pipeline** in a single assistant turn. There is
 **one pipeline and one verdict** — no gate scope to choose. At the fix-loop boundary
@@ -498,7 +498,7 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
       `name:` 이다 — 플러그인 접두 없이**(`security-reviewer` · `code-reviewer` …; codex 는
       `codex-reviewer` — 변환기 `codex_findings_to_yaml.py` 가 찍는 값). 리뷰어가 적어 보낸
       `agent:` 를 그대로 믿지 않는다 — 찍는 쪽이 너다.
-      **각 항목의 `confidence:` 는 리뷰어가 낸 값을 그대로 옮긴다** — 100 점 만점 척도로 낸 값만 10 으로 나눠 내림한다(85 → 8).
+      **각 항목의 `confidence:` 는 리뷰어가 낸 값을 그대로 옮긴다** — 값이 10 을 넘으면 100 점 만점으로 보고 10 으로 나눠 내림하고(85 → 8), 리뷰어가 내지 않았으면 지어내지 말고 키를 뺀다(합성기가 5 로 채운다).
    2. 익명화와 diff:
 
       ```bash

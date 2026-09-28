@@ -7,8 +7,9 @@
 
 칸의 합계와 차단은 «같은 집합이 아니다». `coerced` 는 배관 칸에 실리지만
 blocks() 가 읽지 않고, `unknown_counts` 는 counts dict 에 없지만 blocks() 의
-세 항 중 하나다. 그래서 각 줄에 (차단)/(차단 아님) 을 리터럴로 붙이고, 배관줄의 차단 값은 소비자가
-넘긴다.
+세 항 중 하나다. 처분줄의 미판정은 `blocks()` 의 첫 항이라 언제나 차단한다 —
+그래서 처분줄에는 (미판정은 차단) 을 리터럴로 붙인다. 배관줄의 (실행 차단:
+…) 값은 소비자가 넘기는 실행 전체의 차단 술어다 — 배관 칸만의 차단이 아니다.
 """
 
 
@@ -17,7 +18,7 @@ def disposition_lines(report, held_classes, blocking):
 
     `blocking` 은 **소비자의 차단 술어**다 — 이 모듈이 정하지 않는다. `report["degraded"]`
     는 공시 술어라, 그것으로 정하면 공시만 하는 degrade(보조 입력 사망 · 게이트를 바꾼
-    강제) 옆에 「(차단: 예)」가 선다. `Ledger.blocks()` 도 그대로 쓸 수 없다 — 소비자가
+    강제) 옆에 「(실행 차단: 예)」가 선다. `Ledger.blocks()` 도 그대로 쓸 수 없다 — 소비자가
     원장 밖 사실로 차단을 넓힌다(qg 리뷰 합성기의 컨테이너 소실 `dropped_malformed`).
     기본값이 없는 것은 빠뜨린 호출이 `TypeError` 로 소리 나게 하려는 것이다.
 
@@ -36,13 +37,13 @@ def disposition_lines(report, held_classes, blocking):
     unknown = report["unknown_counts"]
 
     line1 = ("**처분:** 수용 %d · 기각 %d · 억제 %d · 흡수 %d · 미판정 %d"
-             "     (차단 아님)"
+             "     (미판정은 차단)"
              % (c["accepted"], c["rejected"], c["suppressed"], c["absorbed"],
                 held_classes["판정자 부재"]))
 
     plumbing = (c["sources_failed"] + held_classes["항목 파손"]
                 + held_classes["기타"] + c["coerced"])
-    line2 = ("**배관 손실:** %d · 셀 수 없음 %d     (차단: %s)"
+    line2 = ("**배관 손실:** %d · 셀 수 없음 %d     (실행 차단: %s)"
              % (plumbing, len(unknown), "예" if blocking else "아니오"))
 
     # 「배관 손실」의 풀이는 **바로 위 `plumbing` 의 실제 합**을 따라 적는다 —
