@@ -22,8 +22,8 @@ sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점
 from adjudication import Ledger  # noqa: E402
 from docreview_anchor import classify_anchor, refs_of  # noqa: E402
 from docreview_state import (  # noqa: E402
-    RANK, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, category_gloss, choice_label, fail,
-    load_profile, load_state, observe_ledger, pending_mismatch, record_findings, round_diff, save_state, yaml,
+    RANK, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, category_gloss, choice_label, fail, load_profile,
+    load_state, observe_ledger, open_lineages, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
 from docreview_advice import (  # noqa: E402
     ROUTE_ADVICE, advice_ids, advisory_axes, has_must_catch, mc_preexisting_new, member_categories, route_step1,
@@ -820,8 +820,8 @@ def cmd_finalize(a) -> int:
     extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, diff, st, prof, sections, n, L)
     final.extend(extra)
     bucket_conflicts, lineage_mismatch, revived = _resolve_ids_and_lineage(st, final, rejected_items, n)
-    # 참고(advisory) 표지 2 걸음 — 계보를 알아야 정해지는 것(라운드 ≥2 새 계보 fix · `blocks` 의 적용 경로)
-    route_step2(final, keep_of, advisory_axes(prof), n, L)
+    # 참고(advisory) 표지 2 걸음 — 계보를 알아야 정해지는 것(라운드 ≥2 열린 계보를 잇지 않는 fix · `blocks` 의 적용 경로)
+    route_step2(final, keep_of, advisory_axes(prof), n, L, open_lineages(st))
     _remap_blocks(final, keep_of, a.doc, st)
 
     for it in final:

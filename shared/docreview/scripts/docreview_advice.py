@@ -64,15 +64,16 @@ def route_step1(final, axes) -> None:
             it["route"] = ROUTE_ADVICE
 
 
-def route_step2(final, keep_of, axes, n, L) -> None:
+def route_step2(final, keep_of, axes, n, L, owed) -> None:
     """2 걸음 — `_resolve_ids_and_lineage` 뒤 · `_remap_blocks` 직전. 계보를 알아야 정해지는 것.
 
-    ① 라운드 n ≥ 2 에서 새 계보(`lineage == id` — 계보 연결 · 재상승 후속이 아님)로 나온 advisory `fix` → advice.
-       계보를 잇는 fix 는 fixes 에 남아 막는다(라운드 1 에서 온 미적용 의무).
+    ① 라운드 n ≥ 2 의 advisory `fix` 는 그 계보가 `owed`(이번 라운드 기록 전 원장에서 열린 항목이 있는 계보 —
+       `docreview_state.open_lineages`)에 있을 때만 fixes 에 남아 막는다. 그 밖 — 새 계보, advice 로 갔던 항목 ·
+       적용되거나 drop 된 fix 를 명시 `supersedes` 로 이은 계보 — 은 advice.
     ② `blocks` 가 있는 `ask` — 판정은 축이 아니라 대상의 적용 경로다(`_judge_blocking_asks`)."""
     if n >= 2:
         for it in final:
-            if it["disposition"] == "fix" and is_advisory(it, axes) and it.get("lineage") == it.get("id"):
+            if it["disposition"] == "fix" and is_advisory(it, axes) and it.get("lineage") not in owed:
                 it["route"] = ROUTE_ADVICE
     by_f = {it["f"]: it for it in final if it.get("f")}
     pending = [it for it in final if it["disposition"] == "ask" and it.get("blocks")]

@@ -52,9 +52,10 @@
 
 **참고(advisory) — 프로필이 `must_catch` 를 지목한 자리.** 7단계는 advisory 축 항목 일부를 `advice` 원장으로
 보낸다. advisory 축은 `layer_rubric` 의 축 중 `must_catch` 밖이다. 보내는 것은 셋이다: `decide` · `blocks` 없는
-`ask` · 보호 헤딩 승격분, `fix` 를 막지 않는 `ask`, 라운드 2 이상의 새 계보 `fix`. 이것들은 게이트 질문이 아니고
-승인을 막지 않는다. 라운드 1 의 advisory `fix` 는 fixes 에 남아 저자가 적용한다. fixes 에 남는 항목을 막는
-`ask` 는 축과 무관하게 asks 에 남는다. 엔진 자동 생성 항목(얼림 · 재상승 · 상향)은 언제나 must-catch 다.
+`ask` · 보호 헤딩 승격분, `fix` 를 막지 않는 `ask`, 라운드 2 이상에서 열린 항목이 없는 계보의 `fix`(새 계보, 또는
+advice 로 간 항목이나 적용 · drop 된 fix 를 `supersedes` 로 이은 계보). 이것들은 게이트 질문이 아니고
+승인을 막지 않는다. 라운드 1 의 advisory `fix` 와 열린 항목이 있는 계보를 잇는 `fix` 는 fixes 에 남아 저자가
+적용한다. fixes 에 남는 항목을 막는 `ask` 는 축과 무관하게 asks 에 남는다. 엔진 자동 생성 항목(얼림 · 재상승 · 상향)은 언제나 must-catch 다.
 `fin.json` 은 `advice`(id 목록) · `advice_new` · `advice_repeat` · `mc_preexisting_new` 를 싣고, advice 항목은
 `findings` 에 `decision_view` 를 단 채 남을 수 있어도 게이트 질문이 아니며 `advice` 로만 보인다. 8단계 렌더는
 `참고 N건(…) — 끝에서 한 목록으로` 한 줄만 싣는다 — advisory 축이 공집합인 프로필(seed)은 그 줄도 없고 gate JSON 의

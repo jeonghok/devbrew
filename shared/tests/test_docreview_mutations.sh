@@ -765,12 +765,12 @@ mut 1/1 blocks_by_axis case_AC15_blocks_by_application_path sed_advice \
 # (73) advice 로 간 ref 를 세지 않고 버린다.
 mut 1/1 blocks_ref_uncounted case_AC15_blocks_by_application_path sed_advice \
   's/^        L.coerced("blocks", r, None, gate)$/        pass/'
-# (74) 라운드 ≥2 새 계보 advisory fix 규칙을 지운다 — 적용 관측 때문에 라운드가 는다.
+# (74) 라운드 ≥2 advisory fix 규칙을 지운다 — 적용 관측 때문에 라운드가 는다.
 mut 1/1 round2_new_fix_rule_removed case_AC18_round2_new_advisory_fix sed_advice \
   's/^    if n >= 2:$/    if False:/'
 # (75) 2 걸음 호출을 지운다.
 mut 1/1 route_step2_removed case_AC15_blocks_by_application_path sed_route \
-  's/^    route_step2(final, keep_of, advisory_axes(prof), n, L)$/    pass/'
+  's/^    route_step2(final, keep_of, advisory_axes(prof), n, L, open_lineages(st))$/    pass/'
 # (76) blocks 강제가 게이트를 바꿔도 gate=False 로 센다 — 차단 ask 가 조용히 차단에서 빠진다(degrade 공시 없음).
 mut 1/1 blocks_coercion_gate_dropped case_advice_blocks_coercion_flips_gate sed_advice \
   's/^    gate = bool(dropped) and not any(t is not None and t.get("route") != ROUTE_ADVICE for t in ts)$/    gate = False/'
@@ -811,6 +811,18 @@ mut 1/1 seed_reference_line_shown case_advice_seed_gate_no_reference_line sed_st
 # (89) advisory 축 판정을 뒤집는다 — design-doc 렌더에서 참고 줄이 빠진다(양의 짝).
 mut 1/1 reference_line_axis_inverted case_advice_seed_gate_no_reference_line sed_state \
   's/^    if g\.get("advice") is not None and _has_advisory_axis(st):/    if g.get("advice") is not None and not _has_advisory_axis(st):/'
+# (90) 열린 계보 판정을 «새 계보만 advice» 로 되돌린다 — advice 계보 · 적용된 fix 계보를 명시로 이은 advisory fix 가 막는다.
+mut 1/1 owed_rule_reverted_to_new_lineage case_advice_supersedes_open_lineage_only sed_advice \
+  's/^            if it\["disposition"\] == "fix" and is_advisory(it, axes) and it\.get("lineage") not in owed:$/            if it["disposition"] == "fix" and is_advisory(it, axes) and it.get("lineage") == it.get("id"):/'
+# (91) 열린 계보를 빈 집합으로 넘긴다 — 미적용 의무를 잇는 advisory fix 가 advice 로 빠진다.
+mut 1/1 owed_empty case_AC18_round2_new_advisory_fix sed_route \
+  's/^    route_step2(final, keep_of, advisory_axes(prof), n, L, open_lineages(st))$/    route_step2(final, keep_of, advisory_axes(prof), n, L, frozenset())/'
+# (92) 열린 계보를 fixes 원장으로 좁힌다 — 차단 ask 계보를 이은 advisory fix(AC18 R2B)가 advice 로 빠진다.
+mut 1/1 owed_fixes_ledger_only case_AC18_round2_new_advisory_fix sed_state \
+  's/^    return {st\["findings"\]\[f\]\["lineage"\] for f in st\["findings"\] if is_open(st, f)}$/    return {st["findings"][f]["lineage"] for f in st["findings"] if f in st["fixes"] and is_open(st, f)}/'
+# (93) 열린 여부를 보지 않는다 — advice 계보를 이은 advisory fix 가 막는다.
+mut 1/1 owed_ignores_open case_advice_supersedes_open_lineage_only sed_state \
+  's/^    return {st\["findings"\]\[f\]\["lineage"\] for f in st\["findings"\] if is_open(st, f)}$/    return {st["findings"][f]["lineage"] for f in st["findings"]}/'
 # (94) 라우터 출구를 UnicodeError 로 넓힌다 — 비 UTF-8 재비판 출력이 unreadable 대신 text_encoding_invalid 가 된다.
 mut 1/1 exit_route_widened_to_decode case_advice_text_encoding_exit sed_route \
   's/^    except UnicodeEncodeError as e: /    except UnicodeError as e: /'

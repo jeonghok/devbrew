@@ -637,9 +637,14 @@ def decide_choices(st, fid) -> list:
     return _decide_choices_for(d.get("state"), _is_reraise_successor(st, fid))
 
 
+def open_lineages(st) -> set:
+    """열린 항목(`is_open`)이 하나라도 있는 계보."""
+    return {st["findings"][f]["lineage"] for f in st["findings"] if is_open(st, f)}
+
+
 def _refresh_open_lineages(st, n) -> None:
     r = st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
-    r["open_lineages"] = sorted({st["findings"][f]["lineage"] for f in st["findings"] if is_open(st, f)})
+    r["open_lineages"] = sorted(open_lineages(st))
 
 
 def _record_advice(st, it, n, counts, seen) -> None:

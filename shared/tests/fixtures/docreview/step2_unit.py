@@ -47,6 +47,6 @@ class L:
         coerced.append([field, frm, to, bool(gate)])
 
 
-a.route_step2(final, {}, AXES, 1, L)
+a.route_step2(final, {}, AXES, 1, L, frozenset())
 print(json.dumps({"items": {it["f"]: [it.get("route"), it.get("blocks")] for it in sorted(final, key=lambda x: x["f"])},
                   "coerced": sorted(coerced)}, ensure_ascii=False, sort_keys=True))

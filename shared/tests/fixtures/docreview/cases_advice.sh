@@ -224,6 +224,40 @@ case_AC18_round2_new_advisory_fix() {
     "AC18: 라운드 1 에서 온 계보의 advisory fix(미적용)는 fixes 에 남아 막는다"
   rm -rf "$d"
 }
+# ── 명시 supersedes — 계보를 잇는 advisory fix 는 그 계보에 열린 항목이 있을 때만 fixes ─────────────
+adv_sup_critic() {   # adv_sup_critic <fin.json> <tmpl> <out> — {{ID:요약머리[|요약머리…]}} 를 그 머리로 시작하는 라운드 1 id 로
+  python3 - "$1" "$2" "$3" <<'PY'
+import io, json, re, sys
+fs = json.load(io.open(sys.argv[1], encoding="utf-8"))["findings"]
+def id_of(m):
+    hits = [x["id"] for x in fs if x["summary"].startswith(tuple(m.group(1).split("|")))]
+    if len(hits) != 1:
+        sys.exit("템플릿 머리가 %d개에 맞는다: %r" % (len(hits), m.group(1)))
+    return hits[0]
+t = io.open(sys.argv[2], encoding="utf-8").read()
+io.open(sys.argv[3], "w", encoding="utf-8").write(re.sub(r"\{\{ID:([^}]+)\}\}", id_of, t))
+PY
+}
+case_advice_supersedes_open_lineage_only() {
+  local d c p1 p2 p3 p4 surv; d="$(mc_r1)"; c="$d/critic-sup.txt"
+  surv="$(jget "$d/fin.json" '[x["id"] for x in d["findings"] if x["summary"].startswith(("AD18:", "AD19:"))][0]')"
+  py docreview_state.py fix --state-dir "$d" --id "$surv" --event intent-pass --scope "#handoff-context" >/dev/null
+  adv_sup_critic "$d/fin.json" "$FX/critic-mc-r2-supersedes.txt.tmpl" "$c"
+  mc_round "$d" "$FX/design-sample-handoff.md" "$c" "$d/fin2.json"
+  assert_eq "$(st_yaml "$d" "st['fixes']['$surv']['state']")" "applied" "supersedes 전제: 라운드 1 의 advisory fix(병합 생존자)가 라운드 2 에서 적용 관측됐다"
+  p1="$(id_of "$d/fin2.json" 'SP1:')"; p2="$(id_of "$d/fin2.json" 'SP2:')"; p3="$(id_of "$d/fin2.json" 'SP3:')"; p4="$(id_of "$d/fin2.json" 'SP4:')"
+  assert_eq "$(st_yaml "$d" "[st['findings'][i]['lineage'] != i for i in ('$p1', '$p2', '$p3', '$p4')]")" "[True, True, True, True]" \
+    "supersedes 전제: 넷 다 라운드 1 계보를 잇는다"
+  assert_eq "$(st_yaml "$d" "st['findings']['$p1'].get('route'), '$p1' in st['fixes']") $(gsum "$d" "'$p1' in d['unapplied_fix']")" "('advice', False) False" \
+    "supersedes: advice 로 갔던 항목의 계보를 잇는 라운드 2 advisory fix 는 advice 이고 승인을 막지 않는다"
+  assert_eq "$(st_yaml "$d" "st['findings']['$p2'].get('route'), '$p2' in st['fixes']") $(gsum "$d" "'$p2' in d['unapplied_fix']")" "('advice', False) False" \
+    "supersedes: 적용된 fix 의 계보를 잇는 advisory fix 는 advice 다"
+  assert_eq "$(adv_has "$d" "$p3") $(st_yaml "$d" "st['fixes'].get('$p3', {}).get('state')") $(gsum "$d" "'$p3' in d['unapplied_fix']")" "False pending True" \
+    "supersedes: 미적용 advisory fix 의 계보를 잇는 advisory fix 는 fixes 에 남아 막는다"
+  assert_eq "$(adv_has "$d" "$p4") $(st_yaml "$d" "st['fixes'].get('$p4', {}).get('state')")" "False pending" \
+    "supersedes: must-catch fix 는 계보와 무관하게 fixes 다(advice 로 갔던 계보를 이어도)"
+  rm -rf "$d"
+}
 # ── AC8 — 단계별 등식 ─────────────────────────────────────────────────────────
 case_AC8_staged_equation() {
   local d out; d="$(mc_r1)"
