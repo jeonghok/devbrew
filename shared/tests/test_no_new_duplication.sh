@@ -243,8 +243,7 @@ windows="$(printf '%s\n' "$OUT" | awk '$1=="WINDOWS"{print $2}')"
 # 2026-08-21 whole-branch 리뷰가 실측으로 보인 모양이 그것이다 — 위 `CORPUS` 의 pathspec 을
 # `'plugins/*'` → `'plugins/quality-gates/*'` 로 좁히면 221파일이 남아 어떤 리터럴 하한도
 # 여유롭게 넘는데, 나머지 네 플러그인 전체가 중복 스캔에서 조용히 빠진 채 락은 계속
-# "vacuous 아님" 을 찍는다. 이 리포가 이미 문서화한 실패 클래스 그대로다 —
-# docs/audits/2026-08-21-skill-split-lock-corpus-shrink.md §3 (코퍼스가 줄어도 락은 GREEN).
+# "vacuous 아님" 을 찍는다. 코퍼스가 줄어도 락은 GREEN 인 실패 클래스 그대로다.
 # 굳혀 둔 것이 임계값(WINDOW/MIN_CHARS)뿐이었고, 조용한 축소는 임계가 아니라 **코퍼스
 # 도출**에서 일어난다.
 #

@@ -92,7 +92,7 @@ probe "plugins/p/skills/s/SKILL.md" "plugins/p/references/shared.md" >/dev/null 
              || t_no "분류: 혼합 코퍼스를 통과시킨다 — 판정이 '하나라도 소유면 OK' 로 약해졌다"
 
 # 리포 밖 경로도 소유가 아니다.
-probe "docs/audits/x.md" >/dev/null 2>&1
+probe "docs/x.md" >/dev/null 2>&1
 [ $? -ne 0 ] && t_ok "분류: plugins/ 밖 경로 거절" || t_no "분류: plugins/ 밖 경로를 소유로 통과시킨다"
 
 # ★ vacuity: **빈 코퍼스는 통과가 아니다.** 소비자의 도출이 깨져 0건이 되면 그 스위트의

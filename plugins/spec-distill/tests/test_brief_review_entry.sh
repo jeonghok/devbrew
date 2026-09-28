@@ -124,7 +124,7 @@ test -f "$CI" || { no "SKILL 부재"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 
 
 # presence 코퍼스 소유 규칙 — 공용 단언(`shared/tests/presence_corpus.sh`).
 # 이 계약을 재는 스캔은 전부 같은 규칙을 지고, 그래서 사본이 아니라 한 벌이다
-# (감사문서 「공유 참조 파일」 절 · 정본 「앵커는 각 skill 에」 절).
+# (정본 「앵커는 각 skill 에」 절).
 assert_presence_corpus_skill_owned "CI_FILES" "${CI_FILES[@]}"
 
 # --- 윈도우 전제조건 : 코드 펜스 균형 (Task 7 관용구 재사용) -----------------
