@@ -59,8 +59,14 @@ class TestSkillOrchestration(unittest.TestCase):
     def test_journal_acquired_before_assembly(self):  # H R4 (codex re-verify)
         # journal 확보가 assemble/render 뒤에 오면, journal 미획득을 degraded[]에 넣어 배너에 반영할 수
         # 없다(이미 렌더됨). 원장(journal) 확보 스텝이 assemble --out(post-1 조립)보다 **앞서야** 한다.
+        # 앵커는 body-unique 문구(헤더-satisfiable 금지) — 바로 그 저술 문장을 잡는다.
         body = SKILL.read_text(encoding="utf-8")
-        j = body.find("audit-journal.jsonl")
+        journal_anchor = "통과분만 `$RUN_DIR/audit-journal.jsonl`로 저술"
+        self.assertEqual(
+            body.count(journal_anchor), 1,
+            "journal persist 문구가 body-unique 하지 않다 — 앵커 재선정 필요",
+        )
+        j = body.find(journal_anchor)
         a = body.find('--out "$RUN_DIR/audit-data.json"')
         self.assertNotEqual(j, -1, "journal persist 스텝 부재")
         self.assertNotEqual(a, -1, "assemble --out 실행 디렉토리 경로 부재")
@@ -68,9 +74,20 @@ class TestSkillOrchestration(unittest.TestCase):
 
     def test_run_dir_made_after_consent(self):
         # 거절이면 실행 디렉토리가 생기지 않는다 — 생성 호출이 동의 게이트보다 뒤에 와야 한다.
+        # 앵커는 body-unique 문구 — bare `AskUserQuestion`/`prepare-run-dir.py`는 헤더에도
+        # 나타날 수 있어 satisfiable하다.
         body = SKILL.read_text(encoding="utf-8")
-        consent, prep = body.find("AskUserQuestion"), body.find("prepare-run-dir.py")
-        self.assertNotEqual(prep, -1)
+        consent_anchor = "AskUserQuestion`으로 명시 승인"
+        prep_anchor = 'scripts/prepare-run-dir.py" <target>'
+        self.assertEqual(
+            body.count(consent_anchor), 1,
+            "지출 동의 문구가 body-unique 하지 않다 — 앵커 재선정 필요",
+        )
+        self.assertEqual(
+            body.count(prep_anchor), 1,
+            "prepare-run-dir.py 호출 문구가 body-unique 하지 않다 — 앵커 재선정 필요",
+        )
+        consent, prep = body.find(consent_anchor), body.find(prep_anchor)
         self.assertLess(consent, prep, "prepare-run-dir.py 호출이 지출 동의 게이트보다 앞에 있다")
 
     def test_no_docs_audits_path(self):  # AC7
