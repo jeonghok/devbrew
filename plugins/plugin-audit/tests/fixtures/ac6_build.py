@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """AC-6 frozen-fixture 추출기 — 1회용.
 
-baseline `docs/audits/2026-07-15-project-init-audit-data.json`(진리원천)을 읽어
+baseline `ac6_baseline.json`(같은 디렉토리, 진리원천)을 읽어
 generalized `assemble-audit-data.py`가 소비하는 4개 입력(workflow-return · codex-side ·
 meta · assigned)으로 되쪼갠다. baseline이 codex D/OQ/NOQ의 유일 소스이므로 codex 필드는
 자기참조(passthrough는 tautological) — 이 추출기가 만드는 fixture는 test_ac6_regression.py의
@@ -12,8 +12,7 @@ Run once, commit the 4 generated JSONs (frozen — baseline이 바뀌지 않는 
 import json
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[4]  # fixtures→tests→plugin-audit→plugins→repo
-BASELINE = ROOT / "docs/audits/2026-07-15-project-init-audit-data.json"
+BASELINE = Path(__file__).resolve().parent / "ac6_baseline.json"
 OUT_DIR = Path(__file__).resolve().parent
 
 

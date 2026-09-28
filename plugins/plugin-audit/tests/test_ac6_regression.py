@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]        # repo root (tests→plugin-audit→plugins→repo)
 FIX = Path(__file__).resolve().parent / "fixtures"
 ASM = Path(__file__).resolve().parents[1] / "scripts" / "assemble-audit-data.py"
-BASELINE = ROOT / "docs/audits/2026-07-15-project-init-audit-data.json"
+BASELINE = FIX / "ac6_baseline.json"
 
 # §13 신규(비교 제외): baseline에 부재하는 필드만
 EXCLUDE_META = {"target", "seed_provided", "assigned_d", "assigned_oq"}
