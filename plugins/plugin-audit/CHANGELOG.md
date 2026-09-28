@@ -12,6 +12,7 @@ minor 인 이유 — 산출 경로와 `render-audit-report.py` 의 CLI 가 바�
 
 - 모든 산출(`audit.md` · `audit-data.json` · `audit-journal.jsonl`)과 중간 파일이 실행 디렉토리에 쌓인다. 감사 끝에 절대경로를 보고한다. 리포트는 한 번 읽는 작업 산출물이다(README Law 3).
 - phase 0 의 clean-tree 선결조건과 post-1 의 커밋 단계를 없앴다.
+- AC6 회귀 테스트의 정답지를 `tests/fixtures/ac6_baseline.json` 으로 옮겼다 — 옛 자리 `docs/audits/` 가 리포에서 사라졌다.
 
 ### Removed
 
