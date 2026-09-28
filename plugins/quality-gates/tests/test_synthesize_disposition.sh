@@ -146,8 +146,8 @@ assert_grep "$OUT_CLEAN" '억제=규칙이 자른 것' \
 
 # ── 배관줄의 「차단」은 소비자의 blocking 을 따른다 ────────────────────────────
 # (A)(B) 는 공시만 하고 막지 않는 degrade(게이트 변경 강제 · 보조 입력 사망) —
-# 배관줄은 (차단: 아니오)여야 한다. (C)(D) 는 실제로 막는 사건(컨테이너 소실 ·
-# 판정자 부재) — 배관줄은 (차단: 예)여야 한다. 모든 「차단」 단언은 배관줄
+# 배관줄은 (실행 차단: 아니오)여야 한다. (C)(D) 는 실제로 막는 사건(컨테이너 소실 ·
+# 판정자 부재) — 배관줄은 (실행 차단: 예)여야 한다. 모든 「차단」 단언은 배관줄
 # 한 줄에 묶는다(same-line) — degrade 머리줄과 배관줄이 서로 다른 술어를
 # 읽으면(전자는 blocking, 후자가 degraded 였던 버그) 그 모순이 여기서 갈린다.
 #
@@ -156,7 +156,7 @@ assert_grep "$OUT_CLEAN" '억제=규칙이 자른 것' \
 # dropped_malformed > 0 이다 — 그 fixture 를 그대로 (D)에 쓰면 오답 후보
 # `disposition_lines(report, held_classes, dropped_malformed > 0)`(Ledger.blocks()
 # 의 hold/unknown/주 source_failed 항을 놓치는 변이, 아래 M6)도 우연히
-# (차단: 예)를 내 A~D 전부를 통과시킨다. (D) 는 hold 하나만 있고
+# (실행 차단: 예)를 내 A~D 전부를 통과시킨다. (D) 는 hold 하나만 있고
 # dropped_malformed=0 인 fixture 로 그 오답을 갈라낸다.
 #
 # 최종 fix wave (I-1·m1·m3) — (B′) 는 (B) 와 같은 보조 입력 사망이되 kept=0
@@ -188,7 +188,7 @@ assert_not_grep "$OUT_A" 'clean이 아니다' \
   "(A) 게이트 변경 강제만으로는 not-clean 마커가 서지 않는다"
 assert_grep "$OUT_A" '\*\*배관 손실:\*\*.*\(실행 차단: 아니오\)' \
   "(A) 배관줄 — 공시만 하는 degrade 는 배관줄을 차단으로 세지 않는다"
-assert_grep "$OUT_A" '\*\*처분:\*\*.*\(미판정은 차단\)' \
+assert_grep "$OUT_A" '\*\*처분:\*\*.*미판정 0 .*\(미판정은 차단\)' \
   "(A) 처분줄 — 미판정 0 이어도 라벨은 값과 무관한 고정 리터럴 「미판정은 차단」이다"
 
 mkdir -p "$TMPD/case_b"
