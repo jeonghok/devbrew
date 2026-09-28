@@ -35,6 +35,8 @@ parse만 되고 `check()`엔 전달되지 않는 dead flag — cwd 민감성의 
    승인 없으면 종료 — 실행 디렉토리를 만들지 않는다.
 4. **실행 디렉토리** — 승인 직후 **한 번만** 부른다:
    `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-run-dir.py" <target> --repo-root .`
+   rc≠0 이거나 stdout 이 정확히 두 줄이 아니면 stderr 를 그대로 보이고 멈춘다(loud abort) — 디렉토리를
+   손으로 만들지 않고, 실행 키를 sandbox id 로 쓰지 않는다.
    stdout 첫 줄이 실행 디렉토리의 절대경로(`$RUN_DIR` — `.claude/plugin-audit/<date>-<target>[-N]/`,
    basename 이 실행 키), 둘째 줄이 **sandbox id**(실행 키의 SHA-256 앞 8 hex)다. 디렉토리는 안의
    `.gitignore`(`*`)로 스스로 git-ignore 된다. 같은 날 같은 대상을 다시 감사하면 `-2` 로 새로 만들고
@@ -208,8 +210,10 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    6축 전멸(exit 1) → 리포트 없음(AC-4).
 5. **무결성 AFTER**: `check-integrity.sh ld5 "$RUN_DIR/after.txt" --target <target>` +
    `check-integrity.sh harness "$RUN_DIR/after-harness.txt"` → 각각 대응하는 BEFORE와 diff. 둘 중 하나라도
-   불일치 → 비파괴 롤백(ld5=감사 중 target 변경 감지, harness=감사 중 plugin-audit 자신의
-   agents/scripts 변조 감지).
+   불일치 → **감사 무효**(ld5=감사 중 target 변경 감지, harness=감사 중 plugin-audit 자신의
+   agents/scripts 변조 감지). 실행 디렉토리와 산출을 지우지 않고, 변경된 파일 목록과 `$RUN_DIR`
+   절대경로를 abort 메시지로 보고한다. `$RUN_DIR/VOID` 파일(한 줄: 사유)을 남긴다. step 6~8로 가지
+   않는다 — `audit.md`를 정상 산출로 소개하지 않는다.
 6. **정직성 배너 (AC-3)**: `degraded[]` 비어있지 않으면 리포트 상단 배너 필수. step 1의 원장 미확보/secret
    degrade도 여기 포함.
 7. `validate-audit-data.py --artifacts "$RUN_DIR/audit-data.json" --report "$RUN_DIR/audit.md"` → 산출물(배너)
@@ -217,8 +221,10 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    렌더된 파일이 아니라 audit-data JSON을 가리켜야 한다 — 스크립트가 그 경로를 `read_text()`+
    `json.loads()`하므로 디렉토리를 넘기면 `IsADirectoryError`로 죽는다.) 원장(journal) 실재 검증은
    validate_artifacts에 아직 없다 — step 1의 persist 성공/degrade 사실이 배너로 드러나는 것으로 갈음한다
-   (journal artifact 정합 검사는 향후 하드닝, codex re-verify round-2 V2-5).
-8. **종료 보고** — 리포트(`$RUN_DIR/audit.md`) · 데이터(`$RUN_DIR/audit-data.json`) · 원장
+   (journal artifact 정합 검사는 향후 하드닝, codex re-verify round-2 V2-5). RED 면 종료 보고(step 8)
+   대신 RED 사실(검사 메시지)을 보고하고 멈춘다.
+8. **종료 보고** — step 5 가 일치하고 step 7 이 GREEN 일 때만 이 종료 보고를 한다. 리포트
+   (`$RUN_DIR/audit.md`) · 데이터(`$RUN_DIR/audit-data.json`) · 원장
    (`$RUN_DIR/audit-journal.jsonl`)의 절대경로를 사용자에게 보인다. 리포트는 한 번 읽는 작업 산출물이다 —
    실행 디렉토리는 git-ignore 되고 커밋하지 않는다. 이 감사의 compounding 은 감사가 낳은 수정 커밋과
    reviewer persona 편집이 맡는다.
