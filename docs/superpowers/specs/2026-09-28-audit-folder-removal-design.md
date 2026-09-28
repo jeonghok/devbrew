@@ -94,7 +94,9 @@ brief §0 「고칠 것」이 실측으로 확인했다(RC1~RC6 · RC19).
 산출을 git-ignored 자리로 옮기면 Law 3 근거(커밋 + 인덱스)가 사라진다(RC12). 사용자 리포에서는 `.claude/` 가
 ignore 된다는 보장도 없다 — devbrew 의 `.gitignore:214`~`:220` 에서만 참이다(RC31). `run-own-tests.sh` 는
 필수 인자 `<session-id>` 를 받는데(`:14`·`:15`), SKILL 은 그 값의 출처를 정하지 않는다(RC25). 그 값의 소비자
-`qg-worktree.sh create-sandbox` 는 그것을 sanitize(`[A-Za-z0-9._-]`, 64자 이하)해 sandbox 이름에만 쓴다(`:48`~`:56`).
+`qg-worktree.sh create-sandbox` 는 sanitize 를 부르지 않고 값의 **앞 8글자**만 sandbox 이름(`rt-<8글자>`)에 쓰며,
+같은 이름의 기존 sandbox 를 강제로 지우고 다시 만든다(`:151`~`:165`). 옛 세션 id(UUID)는 앞 8글자가 세션마다 달라
+충돌이 없었다.
 `assemble-audit-data.py` 는 출력 디렉토리를 만들지 않는다(RC17). SKILL 은 중간 파일(consent · BEFORE/AFTER
 스냅샷 · `wf.json` · `codex.json` · `meta.json`)의 자리를 정하지 않는다.
 
@@ -143,22 +145,34 @@ brief §2 의 confirmed 항목 전부다. 이 설계가 특히 기대는 것:
 
 ### §2 plugin-audit — 실행 디렉토리
 
-**새 스크립트 `plugins/plugin-audit/scripts/prepare-run-dir.py`** (B5). phase 0 의 target 검증 직후 한 번 부른다.
+**새 스크립트 `plugins/plugin-audit/scripts/prepare-run-dir.py`** (B5). phase 0 의 지출 동의 게이트가 **승인된 직후**
+한 번 부른다 — 거절이면 부르지 않으므로 실행 디렉토리가 생기지 않는다.
 
 - 입력: `<target>`, `--repo-root`(기본 `.`), `--date`(기본 오늘의 로컬 날짜 `YYYY-MM-DD` — 테스트 주입용).
 - target 형식 검사: `[A-Za-z0-9._-]+` 이고 `..` 을 포함하지 않으며 `.` 으로 시작하지 않는다. 어기면 rc 2.
 - 키: `<date>-<target>`. `<repo-root>/.claude/plugin-audit/<key>/` 를 **원자적으로** 만든다(`os.mkdir`, 이미 있으면
-  `-2`, `-3` … 을 붙여 재시도). 기존 디렉토리를 덮거나 비우지 않는다(D10). 최종 키가 64자를 넘으면 rc 2 —
-  `qg-worktree.sh` sanitize 의 상한이다.
+  `-2`, `-3` … 을 붙여 재시도). 기존 디렉토리를 덮거나 비우지 않는다(D10).
 - 만든 디렉토리 안에 `*` 한 줄짜리 `.gitignore` 를 쓴다(B3).
-- stdout 한 줄: 디렉토리의 절대경로. 이후 모든 단계는 이것을 `$RUN_DIR` 로, 그 basename 을 실행 키로 쓴다.
+- stdout 두 줄: ① 디렉토리의 절대경로(`$RUN_DIR`, basename 이 실행 키) ② **sandbox id** — 실행 키의 SHA-256 앞 8
+  hex(D1.1). `qg-worktree.sh create-sandbox` 는 받은 id 의 **앞 8글자**만 sandbox 이름에 쓰고(`:151`~`:158`) 같은
+  이름의 기존 sandbox 를 강제로 지운다(`:160`~`:165`). 날짜로 시작하는 실행 키를 그대로 넘기면 같은 달 감사가 전부
+  `rt-2026-09-` 하나로 접히므로, 앞 8글자가 실행마다 다른 값을 따로 낸다. 해시라서 실행 디렉토리 이름에서 언제든
+  다시 계산된다.
+
+**값의 운반.** Bash 도구는 호출마다 새 셸이라 셸 변수가 남지 않는다. 오케스트레이터는 ①·② 를 이후 모든 명령에
+**리터럴로** 넣는다. 펜스가 변수를 쓰면 첫 줄에 `RUN_DIR=<그 경로>` 를 두고 `[ -d "$RUN_DIR" ] || { echo …; exit 1; }`
+로 가드한다 — 빈 값이면 `--out "$RUN_DIR/audit-data.json"` 이 `/audit-data.json` 이 된다. 한 감사 안에서
+`prepare-run-dir.py` 를 다시 부르지 않는다(다시 부르면 `-2` 가 새로 생겨 산출이 두 디렉토리로 갈라진다).
+
+**중간 abort.** 실행 디렉토리가 생긴 뒤(pre-0 hard error · 무결성 불일치 등)에 멈추면 디렉토리를 지우지 않고, abort
+메시지에 그 절대경로를 적는다 — 무엇이 멈췄는지의 기록이다(D10).
 
 **SKILL(`skills/auditing-plugins/SKILL.md`) 변경**
 
 - phase 0 의 clean-tree 선결조건을 지운다 — 근거가 산출물 커밋이었다.
-- phase 0 에 `prepare-run-dir.py` 호출을 넣는다(target 검증 뒤, 지출 동의 게이트 앞). consent 아티팩트부터 모든
-  중간 파일을 `$RUN_DIR` 에 둔다.
-- `run-own-tests.sh plugins/<target> <실행 키>` — sandbox 이름의 출처가 실행 키다(B2).
+- phase 0 의 지출 동의 게이트 승인 직후에 `prepare-run-dir.py` 호출을 넣는다. consent 아티팩트부터 모든 중간
+  파일을 `$RUN_DIR` 에 둔다.
+- `run-own-tests.sh plugins/<target> <sandbox id>` — sandbox 이름의 출처가 prepare-run-dir 의 둘째 줄이다(D1.1).
 - post-1 의 산출 경로: `$RUN_DIR/audit-data.json` · `$RUN_DIR/audit.md` · `$RUN_DIR/audit-journal.jsonl`.
   디렉토리 이름이 날짜와 대상을 이미 담으므로 파일 이름에 반복하지 않는다.
 - step 1 의 P21 secret 스캔은 그대로 둔다. 근거 문장을 「커밋 디렉토리」에서 「리포트는 사람이 복사·공유하는
@@ -171,7 +185,8 @@ brief §2 의 confirmed 항목 전부다. 이 설계가 특히 기대는 것:
 
 - `render-audit-report.py` — `--readme` 인자와 인덱스 쓰기 블록(`:178`·`:186`~`:193`)을 지운다.
 - `validate-audit-data.py` — `validate_artifacts` 에서 README · CLAUDE.md 검사(`:143`~`:148`)를 지운다. 배너 검사
-  (AC-3)는 남긴다.
+  (AC-3)는 남긴다. 그 검사가 `--repo-root` 의 유일한 소비자라 옵션도 지우고, 그 옵션을 넘기는 SKILL 호출과 테스트
+  인자를 함께 고친다.
 
 **README** — Law 3 줄(`:71`·`:72`)을 「리포트는 한 번 읽는 작업 산출물이다(`.claude/plugin-audit/<실행 키>/`,
 스스로 git-ignore). 이 사이클의 compounding 은 감사가 낳은 수정 커밋과 reviewer persona 편집이 맡는다」로 바꾼다
@@ -196,23 +211,36 @@ brief §2 의 confirmed 항목 전부다. 이 설계가 특히 기대는 것:
 4. **존재 단언 뒤집기** — `test_brief_review_no_external_precondition.sh` (5)를 두 폴더 부재 단언 한 줄로 바꾼다
    (D9 · D16). 대상은 작업 트리의 존재다 — 추적 여부와 무관하게 폴더가 있으면 RED 다(D13 「폴더 존재를 잰다」).
    파일 머리 주석의 (5) 설명도 함께 바꾼다.
-5. **CLAUDE.md** `## Audits` 절을 지운다(C2).
+5. **CLAUDE.md** `## Audits` 절을 지운다(C2). 그 절을 **경로 없이 이름으로** 가리키는 활성 참조 두 곳도 고친다 —
+   plugin-audit SKILL post-1 step 1 의 「README:40 · CLAUDE.md §Audits 원장 계약 … 실체다」 문장(`:167`~`:168`)은 새
+   근거(journal 은 실행 디렉토리의 작업 산출물이고 render 의 「journal 로 확인하라」 포인터의 실체다)로 다시 쓰고,
+   `test_skill_orchestration.py:34` 주석도 같은 뜻으로 고친다.
 6. **`git rm -r docs/audits docs/archive/audits`.**
-7. **1회 점검** — 위 `git grep` 을 다시 돌려 남은 줄이 부재 락 파일 자신과 역사 기록뿐인지 확인하고 결과를 PR
-   본문에 싣는다. 영구 락이 아니다(D16).
+7. **1회 점검** — `git grep -nE 'docs/(archive/)?audits|§ ?Audits|## Audits|감사 ?문서' -- plugins shared CLAUDE.md`
+   를 돌려 남은 줄이 부재 락 파일 자신과 역사 기록뿐인지 확인하고 결과를 PR 본문에 싣는다. 세 부류를 함께 찾는다
+   — 경로 참조 · 절 이름 참조(`§Audits`) · 경로 없는 개념 인용(「감사문서 §3」 식, 2번의 부류). 경로 패턴 하나로는
+   뒤의 둘을 못 찾는다. `감사 ?문서` 는 무관한 일반어에도 걸릴 수 있으므로 걸린 줄은 사람이 읽어 판정한다. 영구
+   락이 아니다(D16).
 
 ### §4 결함 여섯
 
 1. **Pattern B** — `plugins/project-init/templates/trunk-based/branch-strategy.md` 의 step 1 을 태그 기준으로
    바꾼다: `git fetch --tags` → `git checkout -b release/v1.x <마지막 v1 태그>`(예: `v1.2.4`). 주석으로 「현재
    main 은 이미 다음 major 라 v1 을 고칠 수 없다」를 한 줄 남긴다.
-2. **S4(i)** — `plugins/project-init/commands/project-init.md` 4c 표 S4 행의 (i)을 「CLAUDE.md 가 존재하면 관리 섹션
-   (`## Git Workflow`)을 뺀 비-관리 컨텐츠를 AGENTS.md 끝에 이전한 뒤 CLAUDE.md 를 `@AGENTS.md` 한 줄로 교체」로
-   바꾼다. 원본 파일명을 지칭하는 H1(`# CLAUDE.md`)은 이전하지 않는다 — S2a (d) 와 같은 근거(이전 후 대상을
-   잘못 가리킨다)다.
+2. **S4(i)** — `plugins/project-init/commands/project-init.md` 4c 표 S4 행의 (i)을 「CLAUDE.md 가 존재하면 관리
+   섹션(`## Git Workflow` · `## Project Charter`)을 뺀 비-관리 컨텐츠를 AGENTS.md 에서 **먼저 나오는 관리 섹션 앞**에
+   이전한 뒤(관리 섹션이 하나도 없으면 끝에) CLAUDE.md 를 `@AGENTS.md` 한 줄로 교체」로 바꾼다. 관리 섹션은 둘이다 —
+   4c 가 `## Git Workflow` 를, 4e 가 `## Project Charter` 를 쓰고(`:181`) 둘 다 제자리 갱신된다(S3 action · C-S2).
+   관리 섹션 뒤에 붙이면 안 된다 — 헤딩 없는 본문은 Markdown 상 바로 앞 절의 일부가 되어 그 절의 제자리 갱신
+   (이어지는 S3 action, 다음 `/project-init` 실행)이 함께 덮는다. 관리 섹션을 이전 대상에서 빼는 것은 중복 절을
+   막기 위해서다(`:205` 「중복 `## Project Charter` 섹션 생성 안 함」). 원본 파일명을 지칭하는 H1(`# CLAUDE.md`)은
+   이전하지 않는다 — S2a (d) 와 같은 근거(이전 후 대상을 잘못 가리킨다)다.
    advisory 문구가 이전될 내용이 있다는 것을 밝힌다. CLAUDE.md 가 없으면 기존대로 포인터만 쓴다.
-3. **실행비트** — `git update-index --chmod=+x plugins/quality-gates/tests/test_cancel_all_fence.sh`. 워킹트리
-   `chmod` 는 인덱스에 실리지 않는다.
+3. **실행비트** — 두 곳을 함께 고친다: `chmod +x plugins/quality-gates/tests/test_cancel_all_fence.sh`(작업 트리)와
+   `git update-index --chmod=+x` 같은 경로(인덱스). 한쪽만으로는 안 된다 — 워킹트리 `chmod` 는 인덱스에 실리지 않고,
+   `update-index` 는 작업 트리 권한을 바꾸지 않는다. 인덱스 모드는 커밋될 값이고 인덱스 락
+   (`test_runner_adapters.sh:307`~`:319`)이 잰다. 작업 트리 권한은 지금 이 체크아웃에서 소비자가 본다 —
+   `run-test-selection.sh:670`(`-x`) · `run-own-tests.sh:102`(`find -perm -u+x`) · `qg-worktree.sh:188`(`cp -a`).
 4. **matcher 기대** — `test_no_write_matcher_hooks_repo.sh:120` 의 임계를 `-ge 1` 로 내리고, 주석에 「qg v7.0.0 이
    Bash matcher 훅을 의도적으로 지웠다 — 이 대조의 목적은 grep 이 작동한다는 양성 증인이라 1 로 충분하다」를
    적는다.
@@ -240,9 +268,11 @@ patch. CHANGELOG 가 있는 플러그인은 항목을 쓴다. 번호는 머지 �
 - **AC3** `test_runner_adapters.sh` · `test_codex_backward_compat.sh` · `test_no_write_matcher_hooks_repo.sh` 가
   GREEN 이다.
 - **AC4** `prepare-run-dir.py` 단위 테스트 — ① 첫 호출이 `<root>/.claude/plugin-audit/<date>-<target>/` 를 만들고
-  그 절대경로를 출력한다 ② 두 번째 호출이 `-2` 를 만들고 첫 디렉토리의 내용을 건드리지 않는다 ③ `.gitignore`
-  내용이 `*` 한 줄이다 ④ `../x` · `a/b` · `.x` · 65자 이상 키가 rc 2 다.
-  *변이*: `.gitignore` 쓰기를 지우면 ③ RED, 재시도 루프를 `exist_ok=True` 로 바꾸면 ② RED.
+  그 절대경로를 첫 줄에 출력한다 ② 두 번째 호출이 `-2` 를 만들고 첫 디렉토리의 내용을 건드리지 않는다 ③ `.gitignore`
+  내용이 `*` 한 줄이다 ④ `../x` · `a/b` · `.x` 가 rc 2 다 ⑤ 둘째 줄의 sandbox id 가 8 hex 이고, 같은 달의 서로 다른
+  실행 키(다른 대상 · 같은 대상의 `-2`) 사이에서 앞 8글자가 서로 다르며, 같은 실행 키에서는 같다.
+  *변이*: `.gitignore` 쓰기를 지우면 ③ RED, 재시도 루프를 `exist_ok=True` 로 바꾸면 ② RED, sandbox id 를 실행 키
+  그대로 내게 바꾸면 ⑤ RED.
 - **AC5** 결정론 끝-끝: 임시 git 리포에서 `prepare-run-dir.py` → `assemble-audit-data.py`(AC6 fixture 입력,
   `--out "$RUN_DIR/audit-data.json"`) → `validate-audit-data.py --data` → `render-audit-report.py --out
   "$RUN_DIR/audit.md"` → `validate-audit-data.py --artifacts … --report …` 가 전부 rc 0 이고, 끝난 뒤
@@ -250,7 +280,8 @@ patch. CHANGELOG 가 있는 플러그인은 항목을 쓴다. 번호는 머지 �
 - **AC6** `render-audit-report.py` 에 `--readme` 가 없고 인덱스 파일을 쓰지 않는다. `validate_artifacts` 가 README
   · CLAUDE.md 를 읽지 않고 배너 검사는 유지한다(기존 배너 테스트 GREEN).
 - **AC7** plugin-audit SKILL · README 에 `docs/audits` 문자열이 0건이다. SKILL 의 산출 경로가 `$RUN_DIR/` 로
-  시작하고, journal P21 스캔 단계가 남아 있으며, `run-own-tests.sh` 의 둘째 인자가 실행 키다.
+  시작하고, journal P21 스캔 단계가 남아 있으며, `run-own-tests.sh` 의 둘째 인자가 prepare-run-dir 둘째 줄의
+  sandbox id(실행 키의 SHA-256 앞 8 hex)다.
   `test_skill_orchestration.py` 가 새 경로로 재앵커돼 GREEN 이다. *변이*: SKILL 에서 journal 확보 단계를 assemble
   뒤로 옮기면 RED, `--artifacts "$RUN_DIR"` 처럼 디렉토리를 넘기는 형태를 넣으면 bare-directory 회귀 락 RED.
 - **AC8** AC6 기준선이 `plugins/plugin-audit/tests/fixtures/` 에 있고 `test_ac6_regression.py` 가 GREEN 이다.
@@ -258,12 +289,17 @@ patch. CHANGELOG 가 있는 플러그인은 항목을 쓴다. 번호는 머지 �
 - **AC9** 개념 인용 10곳의 출처 괄호가 사라지고 둘레 문장은 그대로다. `proceed-gate.md` 에 §8 · §9 번호 인용이
   새로 생기지 않는다. 그 파일들을 재는 기존 락(V11 스캔 포함)이 GREEN 이다.
 - **AC10** CLAUDE.md 에 `## Audits` 절이 없다. §3-7 의 1회 점검 결과가 PR 본문에 있다.
-- **AC11** Pattern B 의 코드 블록에서 `checkout -b release/` 가 태그 인자를 받고, 바로 앞에 `git checkout main`
-  이 없다.
-- **AC12** S4 (i) 문구가 비-관리 컨텐츠의 이전을 말하고, 4c 의 보존 불변식과 모순되는 문장이 없다.
-- **AC13** `git ls-files -s plugins/quality-gates/tests/test_cancel_all_fence.sh` 의 모드가 100755 다.
-- **AC14** matcher 대조가 GREEN 이다. *변이*: project-init `hooks.json` 의 `"matcher": "Bash"` 를 다른 값으로
-  바꾸면 RED.
+- **AC11** Pattern B 의 코드 블록에서 `checkout -b release/` 가 태그 인자를 받고, step 1(첫 `# 2.` 주석 앞까지)에
+  `git checkout main` 과 `git pull origin main` 이 모두 없다. step 2 의 `git checkout main`(fix 는 trunk 에 먼저)은
+  정당하므로 범위 밖이다. 이 둘째 조건은 고치기 전 본문(`:92`~`:94`)에서 거짓이다.
+- **AC12** S4 (i) 문구가 비-관리 컨텐츠의 이전과 그 자리(먼저 나오는 관리 섹션 앞 — 관리 섹션은 `## Git Workflow`
+  · `## Project Charter`)를 말하고, 4c 의 보존 불변식과 모순되는 문장이 없다.
+- **AC13** `git ls-files -s plugins/quality-gates/tests/test_cancel_all_fence.sh` 의 모드가 100755 이고, 작업 트리의
+  같은 파일이 `[ -x … ]` 를 만족한다.
+- **AC14** matcher 대조가 GREEN 이다. *변이*: project-init `hooks.json` 의 JSON 값은 그대로 두고 `"matcher": "Bash"`
+  의 공백만 없애 `"matcher":"Bash"` 로 만든다. 그러면 A1(쓰기 도구 배제 증명)은 ✓ 줄을 유지하고, `양성 대조 실패:
+  Bash matcher 훅이 0개뿐` 줄이 나와야 한다 — 판정은 rc 가 아니라 이 두 줄이다. matcher 값을 바꾸는 변이는 A1 을
+  먼저 RED 로 만들어 양성 대조의 이빨을 증명하지 못한다.
 - **AC15** P21 스캔 코퍼스에 플러그인 레벨 references 가 들어가고 glob 별 하한이 있다. *변이*: ① 새 glob 을
   오타로 깨면 RED(기존 glob 이 채워 주지 않는다) ② `references/recritic-code-profile.md` 에 누출 패턴 한 줄을
   넣으면 RED.
@@ -280,7 +316,10 @@ patch. CHANGELOG 가 있는 플러그인은 항목을 쓴다. 번호는 머지 �
 - plugin-audit: `skills/auditing-plugins/SKILL.md` · `README.md` · `CHANGELOG.md` · `.claude-plugin/plugin.json` ·
   `scripts/render-audit-report.py` · `scripts/validate-audit-data.py` · `tests/fixtures/ac6_build.py` ·
   `tests/test_ac6_regression.py` · `tests/test_render_audit_report.py` · `tests/test_validate_audit_data.py` ·
-  `tests/test_skill_orchestration.py` · `tests/fixtures/ac6_baseline.json`(이동).
+  `tests/test_skill_orchestration.py` · `tests/fixtures/ac6_baseline.json`(이동) · `tests/README.md` — 「감사 RUN
+  순서」를 §2 의 SKILL 변경과 같은 뜻으로 고친다: phase 0 의 「clean worktree 선결」(`:14`)을 지우고, post-1 의
+  「CLAUDE.md 포인터 → … → 커밋(scripts/** 포함)」(`:22`~`:23`)을 종료 보고(실행 디렉토리 경로)로 바꾸며 커밋 단계를
+  없앤다. 이 줄들에는 §3-7 점검 패턴에 걸리는 문자열이 없어 점검으로는 찾지 못한다.
 - spec-distill: `references/proceed-gate.md` · `tests/test_proceed_gate_adopters.sh` · `tests/test_brief_review_entry.sh`
   · `tests/test_conducting_interview_stage.sh` · `tests/test_review_hook_removed.py` ·
   `tests/test_brief_review_no_external_precondition.sh` · `tests/test_no_write_matcher_hooks_repo.sh` ·
@@ -308,6 +347,8 @@ patch. CHANGELOG 가 있는 플러그인은 항목을 쓴다. 번호는 머지 �
 - **실행 디렉토리를 SKILL 펜스에서 인라인으로 만든다** — `-N` 충돌 처리와 `.gitignore` 쓰기가 테스트 밖에 남는다(B5).
 - **`assemble-audit-data.py` 가 출력 디렉토리를 만든다** — 실행 키는 pre-1 의 `run-own-tests.sh` 에서 이미 필요하다.
   조립은 그보다 늦다(B5).
+- **qg `create-sandbox` 가 id 전체를 sandbox 이름에 쓰게 고친다** — 근본적이지만 qg 스크립트의 동작이 바뀌고
+  plugin-audit 이 quality-gates 최소 버전에 새로 묶인다. plugin-audit 쪽에서 해시 id 를 내면 qg 는 그대로다(D1.1).
 - **같은 날 재감사는 덮어쓴다** — 이전 리포트를 잃는다. D10(자동 삭제 없음)과 긴장한다(B2).
 - **키에 시각을 넣는다(`<date>T<HHMMSS>-<target>`)** — 충돌은 없지만 D20 의 모양을 재결정해야 한다(B2).
 - **감사 끝에 갭 목록을 커밋 위치로 넘기는 단계(OQ8 (나))** — SKILL 단계와 테스트가 늘고, 커밋 위치가 매번 달라
@@ -340,11 +381,22 @@ brief 의 confirmed 결정(C1~C15 · D7~D22)은 brief 가 정본이다. 아래�
 
 - **B1 — OQ8: (가) ephemeral 공시.** README Law 3 줄을 바꾸고 새 단계는 두지 않는다. 기각: (나) 갭 목록 인계 단계 ·
   (가)+종료 안내 한 줄.
-- **B2 — OQ9: 실행 키 `<date>-<target>[-N]`.** 충돌이면 `-N` 으로 새로 만든다. 같은 키가 sandbox 이름이고, 중간
-  파일도 그 디렉토리에 둔다. 종료 보고에 산출 경로를 적는다. 기각: 같은 날 덮어쓰기 · 시각 포함 키.
+- **B2 — OQ9: 실행 키 `<date>-<target>[-N]`.** 충돌이면 `-N` 으로 새로 만든다. 중간 파일도 그 디렉토리에 둔다.
+  종료 보고에 산출 경로를 적는다. sandbox 이름은 실행 키가 아니라 그 해시다(D1.1). 기각: 같은 날 덮어쓰기 ·
+  시각 포함 키.
 - **B3 — OQ12: 자기-ignore `.gitignore`.** 실행 디렉토리 안에 `*` 한 줄. 기각: devbrew 한정 전제 공시 · 둘 다.
 - **B4 — OQ10: 한 PR, 커밋은 덩어리별.** plugin-audit minor, 나머지 patch, 번호는 머지 직전. 기각: 두 PR · 세 PR.
 - **B5 — 실행 디렉토리는 새 스크립트 `prepare-run-dir.py` 가 만든다.** 기각: SKILL 인라인 펜스 · assemble 이 생성.
+- D1.1 · r1 · adopt · 3cef2a5b#r1.1 · "고친다 — 해시 8자 id (권장)" — 설계는 실행 키가 qg-worktree 의 sanitize(64자)를 거쳐 sandbox 이름이 된다고 단정한다. 실제로 create-sandbox 는 sanitize 를 부르지 않고 인자의 앞 8글자만 쓴다. 그래서 `<date>-<target>[-N]` 키는 한 달 동안 모든 감사(대상 무관)에서 같은 sandbox 경로 `rt-2026-09-` 로 접힌다.
+- D2.2 · r2 · adopt · 6708e345#r2.1 · "변경 유지 — 실제 동작 서술 (권장)" — finding 없이 바뀜: 3. plugin-audit 의 산출이 커밋 자리를 잃으면 (modified)
+- D2.3 · r2 · adopt · 93a5c0ad#r2.1 · "변경 유지 — AC4⑤·AC12 (권장)" — finding 없이 바뀜: Acceptance Criteria (modified)
+- D2.4 · r2 · adopt · 496041cc#r2.1 · "변경 유지 — (b) 기각 기록 (권장)" — finding 없이 바뀜: Rejected Alternatives (modified)
+- D2.5 · r2 · adopt · fccf272b#r2.2 · "고친다 — AC7 은 sandbox id (권장)" — AC7 은 run-own-tests.sh 의 둘째 인자가 「실행 키」라고 하는데, §2 와 결정 기록 B2·D1.1 은 그 인자가 실행 키의 해시(sandbox id)라고 정했다. 채택된 D1.1 이 AC 에 반영되지 않았다.
+- D2.6 · r2 · adopt · fccf272b#r2.1 · "고친다 — 1단계에 main 없음 (권장)" — AC11 의 둘째 조건 「`checkout -b release/` 바로 앞에 `git checkout main` 이 없다」는 고치기 전 본문에서도 이미 참이라 이빨이 없다.
+- **라운드 3 수정 3건은 리뷰를 다시 받지 않았다.** §4-3 실행비트(작업 트리 `chmod` 추가 · AC13), AC14 변이(공백만
+  제거 · 줄 판정), Files to Modify 의 `tests/README.md` 다. 재리뷰 상한(2/2)에서 사용자가 추가 라운드를 열지 않았다
+  (「열지 않음 (권장)」, 2026-09-28). 같은 라운드에 재비판이 기각한 「`git rm -r` 뒤 ignore 된 잔여」 지적은 이
+  워크트리 `ls -la` 로 두 폴더에 숨김 파일이 없음을 확인했고, AC1 이 작업 트리 부재를 잰다.
 
 ## Metadata
 
