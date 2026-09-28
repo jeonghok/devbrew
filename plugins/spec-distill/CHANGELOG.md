@@ -1,6 +1,6 @@
 # Changelog
 
-## [4.5.1] — 2026-09-28
+## [4.5.2] — 2026-09-28
 
 ### Fixed
 - **리뷰어 출력의 짝 없는 surrogate 가 라운드를 죽이던 결함.** PyYAML 은 큰따옴표 스칼라의 JSON 식 surrogate 이스케이프를
@@ -23,6 +23,10 @@
   출력에서 죽었다.
 - **원장 프로필 YAML 이 깨지면 게이트 렌더가 traceback 으로 죽던 결함.** 참고 줄의 advisory 축 판정이 YAML 파손도
   「판정 불가 → 줄을 낸다」로 친다.
+
+## [4.5.1] — 2026-09-28
+
+patch 인 이유 — 링크로 배송하는 `render_disposition.py` 가 바뀌었다(quality-gates 9.3.4 와 같은 변경 — 처분줄 · 배관줄 라벨 정정). spec-distill 은 `disposition_lines()` 를 부르지 않으므로 동작은 바뀌지 않는다.
 
 ## [4.5.0] — 2026-09-28
 

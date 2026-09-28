@@ -3,16 +3,27 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [9.3.4] — 2026-09-28
+## [9.3.5] — 2026-09-28
 
 ### Fixed
 - 공유 문서 리뷰 엔진(`shared/docreview/scripts/`, 이 플러그인 `scripts/` 에 심볼릭 링크)의 수정 넷을 받는다: 리뷰어 출력의
   짝 없는 surrogate 를 입구에서 U+FFFD 로 걷는다 · 인코딩 실패는 rc 1 `text_encoding_invalid`(디코딩 실패는 기존 사유) ·
   라운드 2 이상의 advisory fix 는 계보에 열린 항목이 없으면 advice(명시 `supersedes` 과차단 해소) · advisory 축이 공집합인
   프로필은 게이트 렌더에 참고 줄을 내지 않는다. qg `generic` 프로필은 `must_catch` 가 없어 라우팅 · 보고서 · 게이트
-  렌더가 바이트 단위로 같다(골든). 전문은 `plugins/spec-distill/CHANGELOG.md` `[4.5.1]`.
+  렌더가 바이트 단위로 같다(골든). 전문은 `plugins/spec-distill/CHANGELOG.md` `[4.5.2]`.
 - 같은 엔진: 자유 텍스트 CLI 인자(`--reason` · `--quote` · `--scope` · `--extra-approval` · `--where`)의 비 UTF-8 바이트는 원장을
   건드리기 전에 rc 1 `text_encoding_invalid` 로 거부한다 · 원장 프로필 YAML 이 깨져도 게이트 렌더가 죽지 않고 참고 줄을 낸다.
+
+## [9.3.4] — 2026-09-28
+
+**처분 두 줄의 차단 라벨 정정 · confidence 척도 판별 규칙** — 처분줄의 오류 라벨과 SKILL confidence 지시의 척도 판별 규칙 누락을 고친다.
+
+### Fixed
+- 처분줄의 라벨 `(차단 아님)`이 틀렸다 — 미판정(`held`, 판정자 부재)은 `Ledger.blocks()` 의 첫 항이라 **언제나** 차단한다(설계 `docs/superpowers/specs/2026-09-02-adjudication-topology-design.md` §5 표의 오류). `shared/adjudication/render_disposition.py` 의 `disposition_lines()` 가 처분줄에 고정 리터럴 `(미판정은 차단)` 을 붙인다.
+- 배관줄의 라벨 `(차단: %s)` 가 소비자가 넘기는 **실행 전체**의 차단 술어(qg 리뷰 합성기의 `blocking` · 아티팩트 합성기 key 단계의 `degraded`)임에도 그 범위가 라벨 이름에 드러나지 않아 배관 칸만의 차단으로 오인될 수 있었다. `(실행 차단: %s)` 로 이름을 실제 값에 맞추고, 모듈·함수 docstring 도 같이 고친다. 판정(`verdict:`)은 바뀌지 않는다.
+
+### Changed
+- SKILL Phase 1.5-1 의 confidence 보존 지시에 척도 판별 규칙을 더한다 — 값이 10 을 넘으면 100 점 만점으로 보고 10 으로 나눠 내림하고(85 → 8), 리뷰어가 내지 않았으면 지어내지 말고 키를 뺀다(합성기가 5 로 채운다). 옛 지시는 척도 판별이 없어 이미 1-10 스케일로 낸 값도 10 으로 나누는 오독 여지가 있었고, 누락 처리도 없었다.
 
 ## [9.3.3] — 2026-09-28
 

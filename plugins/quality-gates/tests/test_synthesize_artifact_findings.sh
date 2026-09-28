@@ -395,21 +395,21 @@ assert_grep "$KEY_ERR" '\*\*처분:\*\*.*미판정 0' \
   "key 단계 처분줄 — 미판정 0(판정자 부재 클래스는 key 단계에 없다)"
 assert_grep "$KEY_ERR" '\*\*배관 손실:\*\* 2 ' \
   "key 단계 배관줄 — 값 2(항목 파손 1 + source_failed 1)"
-assert_grep "$KEY_ERR" '차단: 예' \
-  "key 단계 배관줄 — held 가 비지 않았으니 degraded(차단: 예)"
+assert_grep "$KEY_ERR" '\*\*배관 손실:\*\*.*\(실행 차단: 예\)' \
+  "key 단계 배관줄 — held 가 비지 않았으니 degraded(실행 차단: 예)"
 assert_grep "$KEY_ERR" '↳ 억제=규칙이 자른 것' \
   "key 단계에서도 회계어 풀이 줄이 난다 (AC21)"
 
-# 수정 라운드 1 (m1) — 위 KEY_ERR 는 (차단: 예) 방향만 잠근다. `report["degraded"]`
+# 수정 라운드 1 (m1) — 위 KEY_ERR 는 (실행 차단: 예) 방향만 잠근다. `report["degraded"]`
 # 를 무조건 True 로 뒤집는 변이(M7)는 그 자리만으로는 안 잡힌다 — 참값도 True 라
 # 우연히 통과한다. clean 입력(critic.yaml+codex.yaml, 위 :40-49 — source_failed
-# 도 malformed 항목도 없다)으로 (차단: 아니오) 방향도 같은 자리에서 잠근다.
+# 도 malformed 항목도 없다)으로 (실행 차단: 아니오) 방향도 같은 자리에서 잠근다.
 KEY_CLEAN="$(PYTHONDONTWRITEBYTECODE=1 python3 "$S" --phase key \
         --findings "$tmp/critic.yaml" --findings "$tmp/codex.yaml" \
         2>&1 >/dev/null)"
 assert_grep "$KEY_CLEAN" '\*\*배관 손실:\*\* 0 ' \
   "key 단계 배관줄 — clean 입력이면 배관 손실 0 (분기 확인)"
-assert_grep "$KEY_CLEAN" '\*\*배관 손실:\*\*.*\(차단: 아니오\)' \
+assert_grep "$KEY_CLEAN" '\*\*배관 손실:\*\*.*\(실행 차단: 아니오\)' \
   "key 단계 배관줄 — clean 입력(소실 없음)은 차단이 아니다"
 
 # 최종 fix wave (m2) — 위 KEY_ERR 는 hold(항목 파손 1건)를 함께 가져서 `L.blocks()`
@@ -425,7 +425,7 @@ assert_grep "$KEY_SEC" '\*\*처분:\*\*.*미판정 0' \
   "key 단계 처분줄(보조 source_failed 전용) — 미판정 0"
 assert_grep "$KEY_SEC" '\*\*배관 손실:\*\* 1 ' \
   "key 단계 배관줄 — 값 1(source_failed 1, 항목 파손 없음)"
-assert_grep "$KEY_SEC" '\*\*배관 손실:\*\*.*\(차단: 예\)' \
+assert_grep "$KEY_SEC" '\*\*배관 손실:\*\*.*\(실행 차단: 예\)' \
   "key 단계 배관줄 — L.blocks() 는 거짓(보조 source_failed 뿐)이어도 degraded 는 차단이다"
 
 rm -rf "$tmp"

@@ -90,6 +90,8 @@ assert_grep "$OUT" '기각 [1-9]'      "기각이 세어진다 (reject)"
 assert_grep "$OUT" '억제 [1-9]'      "억제가 세어진다 (suppressed — D4)"
 assert_grep "$OUT" '흡수 [1-9]'      "흡수가 세어진다 (absorbed — dedup)"
 assert_grep "$OUT" '미판정 [1-9]'    "판정자 부재가 세어진다 (hold)"
+assert_not_grep "$OUT" '차단 아님' \
+  "라벨 정정 확인 — 처분줄에 옛 문구 「차단 아님」이 남지 않는다 (양의 짝: 바로 위 미판정 단언)"
 assert_grep "$OUT" '\*\*배관 손실:\*\* [1-9]' "항목 파손 + 입력 실패가 배관 칸으로 간다"
 
 # ── clean(kept=0) 렌더 분기 — 수정 라운드 2 (C1) ──────────────────────────
@@ -144,8 +146,8 @@ assert_grep "$OUT_CLEAN" '억제=규칙이 자른 것' \
 
 # ── 배관줄의 「차단」은 소비자의 blocking 을 따른다 ────────────────────────────
 # (A)(B) 는 공시만 하고 막지 않는 degrade(게이트 변경 강제 · 보조 입력 사망) —
-# 배관줄은 (차단: 아니오)여야 한다. (C)(D) 는 실제로 막는 사건(컨테이너 소실 ·
-# 판정자 부재) — 배관줄은 (차단: 예)여야 한다. 모든 「차단」 단언은 배관줄
+# 배관줄은 (실행 차단: 아니오)여야 한다. (C)(D) 는 실제로 막는 사건(컨테이너 소실 ·
+# 판정자 부재) — 배관줄은 (실행 차단: 예)여야 한다. 모든 「차단」 단언은 배관줄
 # 한 줄에 묶는다(same-line) — degrade 머리줄과 배관줄이 서로 다른 술어를
 # 읽으면(전자는 blocking, 후자가 degraded 였던 버그) 그 모순이 여기서 갈린다.
 #
@@ -154,7 +156,7 @@ assert_grep "$OUT_CLEAN" '억제=규칙이 자른 것' \
 # dropped_malformed > 0 이다 — 그 fixture 를 그대로 (D)에 쓰면 오답 후보
 # `disposition_lines(report, held_classes, dropped_malformed > 0)`(Ledger.blocks()
 # 의 hold/unknown/주 source_failed 항을 놓치는 변이, 아래 M6)도 우연히
-# (차단: 예)를 내 A~D 전부를 통과시킨다. (D) 는 hold 하나만 있고
+# (실행 차단: 예)를 내 A~D 전부를 통과시킨다. (D) 는 hold 하나만 있고
 # dropped_malformed=0 인 fixture 로 그 오답을 갈라낸다.
 #
 # 최종 fix wave (I-1·m1·m3) — (B′) 는 (B) 와 같은 보조 입력 사망이되 kept=0
@@ -184,8 +186,10 @@ assert_grep "$OUT_A" '공시\(판정을 막지 않음\)' \
   "(A) 분기 확인 — degrade 머리줄은 공시(막지 않음)"
 assert_not_grep "$OUT_A" 'clean이 아니다' \
   "(A) 게이트 변경 강제만으로는 not-clean 마커가 서지 않는다"
-assert_grep "$OUT_A" '\*\*배관 손실:\*\*.*\(차단: 아니오\)' \
+assert_grep "$OUT_A" '\*\*배관 손실:\*\*.*\(실행 차단: 아니오\)' \
   "(A) 배관줄 — 공시만 하는 degrade 는 배관줄을 차단으로 세지 않는다"
+assert_grep "$OUT_A" '\*\*처분:\*\*.*미판정 0 .*\(미판정은 차단\)' \
+  "(A) 처분줄 — 미판정 0 이어도 라벨은 값과 무관한 고정 리터럴 「미판정은 차단」이다"
 
 mkdir -p "$TMPD/case_b"
 cat > "$TMPD/case_b/findings.yaml" <<'YAML'
@@ -204,7 +208,7 @@ assert_grep "$OUT_B" '공시\(판정을 막지 않음\)' \
   "(B) 분기 확인 — degrade 머리줄은 공시(막지 않음)"
 assert_not_grep "$OUT_B" 'clean이 아니다' \
   "(B) 보조 입력 사망만으로는 not-clean 마커가 서지 않는다"
-assert_grep "$OUT_B" '\*\*배관 손실:\*\*.*\(차단: 아니오\)' \
+assert_grep "$OUT_B" '\*\*배관 손실:\*\*.*\(실행 차단: 아니오\)' \
   "(B) 배관줄 — 보조 입력 사망만으로는 배관줄을 차단으로 세지 않는다"
 
 mkdir -p "$TMPD/case_bp"
@@ -227,8 +231,10 @@ assert_grep "$OUT_BP" '공시\(판정을 막지 않음\)' \
   "(B′) 분기 확인 — degrade 머리줄은 공시(막지 않음) — clean 분기에서도"
 assert_not_grep "$OUT_BP" 'clean이 아니다' \
   "(B′) 보조 입력 사망만으로는 clean 분기에서도 not-clean 마커가 서지 않는다"
-assert_grep "$OUT_BP" '\*\*배관 손실:\*\*.*\(차단: 아니오\)' \
+assert_grep "$OUT_BP" '\*\*배관 손실:\*\*.*\(실행 차단: 아니오\)' \
   "(B′) 배관줄 — clean(kept=0) 분기에서도 공시만 하는 degrade 는 차단으로 세지 않는다"
+assert_not_grep "$OUT_BP" '차단 아님' \
+  "(B′) 라벨 정정 확인 — clean(:625) 분기에서도 「차단 아님」이 남지 않는다 (양의 짝: 바로 위 배관줄 단언)"
 assert_grep "$OUT_BP" 'verdict: clean' \
   "(B′) 판정 꼬리 — review_blocked·angle_absent 모두 거짓이라 clean 이다"
 
@@ -242,7 +248,7 @@ OUT_C="$(rf_synth "$TMPD/case_c" 2>"$TMPD/case_c/err.txt")"
 note "$OUT_C"
 assert_grep "$OUT_C" '판정 degrade — \*\*이 실행은 clean이 아니다' \
   "(C) 분기 확인 — 컨테이너 소실(findings 가 목록이 아님)이 _degrade_block 의 not-clean 머리줄을 세운다(m3: malformed-drop 공지만으로는 만족 안 되게 좁혔다)"
-assert_grep "$OUT_C" '\*\*배관 손실:\*\*.*\(차단: 예\)' \
+assert_grep "$OUT_C" '\*\*배관 손실:\*\*.*\(실행 차단: 예\)' \
   "(C) 배관줄 — 원장 blocks() 는 거짓이어도(주 소스 아님) 합성기 blocking 은 컨테이너 소실을 차단으로 센다"
 
 mkdir -p "$TMPD/case_d"
@@ -261,8 +267,10 @@ assert_grep "$OUT_D" '미판정 [1-9]' \
   "(D) 분기 확인 — f2(d.py) 가 판정 없이 판정자 부재로 hold 된다"
 assert_not_grep "$OUT_D" 'dropped as malformed' \
   "(D) 항목 파손·컨테이너 소실 없음(dropped_malformed=0) — 위 미판정 단언의 양의 짝, hold 단독임을 확인"
-assert_grep "$OUT_D" '\*\*배관 손실:\*\*.*\(차단: 예\)' \
+assert_grep "$OUT_D" '\*\*배관 손실:\*\*.*\(실행 차단: 예\)' \
   "(D) 배관줄 — dropped_malformed 경유가 아니라 Ledger.blocks() 의 held>0 만으로 차단이다"
+assert_grep "$OUT_D" '\*\*처분:\*\*.*미판정 1 .*\(미판정은 차단\)' \
+  "(D) 처분줄 — 미판정 1(순수 hold)에서도 라벨이 「미판정은 차단」으로 고정된다"
 
 mkdir -p "$TMPD/case_e"
 cat > "$TMPD/case_e/findings.yaml" <<'YAML'
@@ -277,7 +285,7 @@ assert_grep "$OUT_E" '입력 실패\(주\)' \
   "(E) 분기 확인 — findings.yaml 자체가 없어 주 입력이 사망한다(hold 없음, dropped_malformed=0)"
 assert_grep "$OUT_E" '판정 degrade — \*\*이 실행은 clean이 아니다' \
   "(E) _degrade_block 의 not-clean 머리줄 — 주 입력 사망은 판정 경로 자체가 온전하지 않다"
-assert_grep "$OUT_E" '\*\*배관 손실:\*\*.*\(차단: 예\)' \
+assert_grep "$OUT_E" '\*\*배관 손실:\*\*.*\(실행 차단: 예\)' \
   "(E) 배관줄 — 주 입력 사망은 Ledger.blocks() 의 주(主) source_failed 항만으로 차단이다"
 
 finish
