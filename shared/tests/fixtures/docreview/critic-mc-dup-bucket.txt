@@ -1,0 +1,16 @@
+```docreview-layer1
+- ref: d1
+  category: overdesign
+  anchor: "#1-context"
+  disposition: decide
+  summary: "DB1: 맥락 절이 goal 대비 과하다"
+- ref: d2
+  category: overdesign
+  anchor: "#1-context"
+  disposition: decide
+  summary: "DB2: 맥락 절의 배경 설명이 길다"
+```
+
+```docreview-layer2
+[]
+```

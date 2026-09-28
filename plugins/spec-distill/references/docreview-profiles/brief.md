@@ -8,6 +8,7 @@ protected_headings: ["^1\\."]
 layer_rubric:
   layer1: [direction, overdesign]
   layer2: [distortion, omission, invention, provenance_mislabel, authority_syntax, evidence_unsupported]
+must_catch: [distortion, omission, invention, provenance_mislabel, authority_syntax, evidence_unsupported]
 decision_log: {kind: audit_section, heading: "## 8. 리뷰 결정"}
 defer_target: {kind: none}
 web: true

@@ -1,0 +1,115 @@
+탐지 리뷰를 마쳤다.
+
+```docreview-layer1
+- ref: m1
+  category: scope
+  anchor: "#3-non-goals"
+  disposition: decide
+  summary: "MC1: Non-goals 가 브리프의 범위 항목을 뺐다"
+- ref: m2
+  category: architecture
+  anchor: "#12-files-to-modify"
+  disposition: fix
+  summary: "MC2: 파일 목록이 확정 제약을 어긴다"
+- ref: m3
+  category: component_relations
+  anchor: "#12-files-to-modify"
+  disposition: decide
+  summary: "AD3: 파일 사이 의존 방향이 안 닫힌다"
+- ref: m4
+  category: overdesign
+  anchor: "#1-context"
+  disposition: decide
+  summary: "AD4: 맥락 절이 goal 대비 과하다"
+- ref: m5
+  category: data_flow
+  anchor: "#1-context"
+  disposition: ask
+  summary: "AD5: 맥락 절의 데이터 흐름이 끊겼나?"
+- ref: m17
+  category: made_up_axis
+  anchor: "#1-context"
+  disposition: decide
+  summary: "MC17: 루브릭 밖 축의 결함"
+```
+
+```docreview-layer2
+- ref: m6
+  category: ambiguity
+  anchor: "#12-files-to-modify"
+  disposition: fix
+  summary: "AD6: 파일 목록이 두 가지로 읽힌다"
+- ref: m7
+  category: ambiguity
+  anchor: "#12-files-to-modify"
+  disposition: ask
+  summary: "AD7: b.py 를 남기나?"
+  blocks: [m6]
+- ref: m8
+  category: ambiguity
+  anchor: "#2-goals"
+  disposition: fix
+  summary: "AD8: 목표 B 가 두 가지로 읽힌다"
+- ref: m9
+  category: scope
+  anchor: "#2-goals"
+  disposition: fix
+  summary: "MC9: 목표 절이 범위를 좁혔다"
+- ref: m10
+  category: placeholder
+  anchor: "#handoff-context"
+  disposition: drop
+  summary: "AD10: 인계 절에 빈 칸이 있다"
+- ref: m11
+  category: testing
+  anchor: "#12-files-to-modify"
+  disposition: defer
+  summary: "AD11: 자동 검증 절차는 plan 이 정한다"
+- ref: m12
+  category: placeholder
+  anchor: "#1-context"
+  disposition: fix
+  summary: "AD12: 맥락 절의 TBD"
+- ref: m13
+  category: tradeoffs
+  anchor: "#1-context"
+  disposition: ask
+  summary: "AD13: 목표 어긋남 수정을 먼저 하나?"
+  blocks: [m14]
+- ref: m14
+  category: goal_fit
+  anchor: "#12-files-to-modify"
+  disposition: fix
+  summary: "MC14: 파일 목록이 목표를 덮지 않는다"
+- ref: m15
+  category: problem_definition
+  anchor: "#1-context"
+  disposition: ask
+  summary: "MC15: 맥락 절의 과함을 먼저 정리하나?"
+  blocks: [m4]
+- ref: m16
+  category: other
+  anchor: "#1-context"
+  disposition: fix
+  summary: "MC16: 분류 없는 결함"
+- ref: m18
+  category: testing
+  anchor: "#handoff-context"
+  disposition: fix
+  summary: "AD18: 인계 절에 검증 전략이 없다"
+- ref: m19
+  category: isolation
+  anchor: "#handoff-context"
+  disposition: fix
+  summary: "AD19: 인계 절의 부품 경계가 흐리다"
+- ref: m20
+  category: ambiguity
+  anchor: "#1-context"
+  disposition: decide
+  summary: "AD20: 맥락 절 문장이 두 가지로 읽힌다"
+- ref: m21
+  category: ambiguity
+  anchor: "#handoff-context"
+  disposition: ask
+  summary: "AD21: 인계 절을 누가 읽나?"
+```

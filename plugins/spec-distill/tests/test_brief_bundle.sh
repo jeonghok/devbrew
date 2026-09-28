@@ -67,6 +67,17 @@ printf '%s' "$out9" | grep -qF 'stray-note.audit.md' \
   && ok "T9: 그 원문은 그대로 실렸다 (지우지 않았다)" || no "T9: 원문이 사라졌다"
 rm -rf "$T9D"
 
+# T17/T18 — AC10 (설계 2026-09-27-review-stopping-criterion §F). 위생 판정은 자기 audit_file basename 만 본다.
+T17D="$(mktemp -d)" || exit 1
+cp "$FX/interview-brief-valid.md" "$FX/interview-brief-valid.audit.md" "$T17D/"
+printf '\n근거: docs/superpowers/interview/2026-01-01-other-interview.audit.md#S3\n' >> "$T17D/interview-brief-valid.md"
+python3 "$B" "$T17D/interview-brief-valid.md" "$T17D/interview-brief-valid.audit.md" >/dev/null 2>&1; rc17=$?
+[[ $rc17 -eq 0 ]] && ok "T17: payload 에 다른 *.audit.md 경로만 있으면 rc 0" || no "T17: 다른 audit 인용이 rc $rc17"
+printf '\n자기 원문은 interview-brief-valid.audit.md 에 있다\n' >> "$T17D/interview-brief-valid.md"
+python3 "$B" "$T17D/interview-brief-valid.md" "$T17D/interview-brief-valid.audit.md" >/dev/null 2>&1; rc18=$?
+[[ $rc18 -eq 3 ]] && ok "T18: payload 에 자기 audit_file basename 이 있으면 rc 3" || no "T18: 자기 audit 이름이 rc $rc18"
+rm -rf "$T17D"
+
 # T10/T11: 라벨은 헤딩이 아니다 — **모양**을 검사한다. -F 부분문자열 검사는
 # `## <<<PAYLOAD>>>`처럼 헤딩으로 승격돼도 토큰만 있으면 통과해버린다(review round 1
 # 이 실제로 이 mutation 으로 T2/T3를 속였다). 라인 전체를 정확히 매치(`grep -qx`)해

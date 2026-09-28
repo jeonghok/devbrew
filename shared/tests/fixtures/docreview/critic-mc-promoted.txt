@@ -1,0 +1,11 @@
+```docreview-layer1
+[]
+```
+
+```docreview-layer2
+- ref: m8
+  category: ambiguity
+  anchor: "#2-goals"
+  disposition: fix
+  summary: "AD8: 목표 B 가 두 가지로 읽힌다"
+```

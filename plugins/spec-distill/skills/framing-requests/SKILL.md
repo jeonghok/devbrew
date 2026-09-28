@@ -440,6 +440,7 @@ fi
 
 ### 프로필 내용 — 탐지 dispatch 직전마다
 
+<!-- profile-content:begin -->
 ```bash
 # 리뷰어의 `<profile>` 슬롯에는 경로가 아니라 **내용**을 싣는다 — 플러그인 캐시는 사용자 프로젝트 밖이라
 # 리뷰어의 Read 가 거부된다. rc 가 0 이 아니면 dispatch 하지 않는다 — critic 출력 파일을 비워 5단계가
@@ -450,8 +451,10 @@ if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
   if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then : > "$STATE_DIR/critic.txt" 2>/dev/null || true; fi
   exit 1
 fi
-printf '%s\n' "$PROFILE_TEXT"
+# frontmatter 의 `must_catch:` 줄(엔진 라우팅 키)은 리뷰어에게 싣지 않는다 — 막는 축을 아는 리뷰어는 category 로 차단 여부를 조종할 수 있다.
+printf '%s\n' "$PROFILE_TEXT" | sed -e '2,/^---$/{' -e '/^must_catch:/d' -e '}'
 ```
+<!-- profile-content:end -->
 
 ### codex — 4단계
 
@@ -938,6 +941,21 @@ git commit -q -F "$SEED_DIR/commit-msg.txt"
 
 마지막 라운드의 게이트가 닫힌 뒤, 그리고 ③ 「수정 필요」 로 돌아올 때마다 게이트를 띄우기 **직전에** 넷을
 돕니다. 하나라도 막히면 게이트를 띄우지 않습니다 — 막힌 것을 풀고 1번부터 다시 돕니다.
+
+**계수 기록 — 검사 1 앞에서, 막지 않습니다.** 엔진의 라운드별 계수 줄(`docreview 계수 — …`)을 audit `## 6. 리뷰
+결정` 에 적습니다. seed 프로필은 advisory 축이 없어 참고 목록이 늘 0건이라 보이지 않고 계수만 남깁니다. 같은
+(리뷰 정체, 라운드) 줄은 다시 적지 않으므로 ③ 뒤에 다시 돌아도 됩니다. 「## 상태」 블록을 앞에 이어 붙여 돌립니다.
+
+```bash
+cnt_rc=0
+if [ -n "${STATE_DIR:-}" ] && [ -f "$STATE_DIR/docreview-state.md" ]; then
+  python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --log-file "$AUDIT_ABS" >/dev/null || cnt_rc=$?
+else
+  cnt_rc=2
+fi
+[ "$cnt_rc" -eq 0 ] || echo "[spec-distill] 리뷰 계수 줄을 audit ## 6 에 적지 못했다(cnt_rc=$cnt_rc — 엔진 원장이 없거나 advice 가 실패했다). 게이트 텍스트에 싣는다 — 막지 않는다." >&2
+echo "cnt_rc=$cnt_rc"
+```
 
 **검사 1 — 표시** — 떼지 않고 검사만 합니다. 근거 없는 «(사용자 확인)» 이 있으면(`marks_rc` 1) 막힙니다 —
 펜스의 stdout(`invalid` 목록)이 그 문장을 그대로 대므로 그 목록을 게이트 텍스트에 옮겨 싣습니다. 떼는

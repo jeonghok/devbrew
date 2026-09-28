@@ -22,7 +22,7 @@ payload가 어느 audit을 자기 것이라 부를지 고르지 못하게 거절
 "§6을 보라"는 지시가 먼저 나오는 쪽(S1 하나)에 걸린다.
 
 exit: 0 정상 / 2 payload·audit 부재·읽기 실패·audit §6 없음(무디스패치) /
-3 번들 payload 부분에 audit 파일명 잔존(위생 미달 — 호출자가 degrade 기록 후 계속)
+3 번들 payload 부분에 자기 audit 파일명 잔존(위생 미달 — 호출자가 degrade 기록 후 계속)
 """
 from __future__ import annotations
 
@@ -41,7 +41,13 @@ import section6  # noqa: E402
 import check_brief  # noqa: E402  — audit 신원 결속(아래 `blessed_audit`)
 
 REDACT_KEYS = ("audit_file", "name", "created_at")
-AUDIT_NAME_RE = re.compile(r"\S*\.audit\.md\b")
+
+
+def own_audit_re(audit_name: str):
+    """이 brief 자신의 audit 파일명(앞에 이름 조각이 붙지 않은 것). 위생이 가리는 것은 자기 audit 이다 — 다른
+    인터뷰의 audit 을 §5 근거로 인용하는 것은 정상이고, 그것까지 막으면 인용마다 degrade 가 켜진다."""
+    return re.compile(r"(?<![\w.-])" + re.escape(audit_name) + r"\b")
+
 
 # 번들 안에서 비신뢰 verbatim이 "여기서부터 시작한다"고 알리는 두 리터럴 표지 — 이 번들을
 # 받는 리뷰어에게 두 원문 자리를 알려 주는 문면(지금은 brief 프로필
@@ -141,7 +147,7 @@ def main() -> int:
     sys.stdout.write(assemble(payload_text, verbatim))
     # 위생 스캔은 **payload 부분에만** 건다. 번들이 audit 내용을 의도적으로 싣게 됐으므로
     # 전체를 스캔하면 정상 동작이 매번 exit 3을 낸다.
-    if AUDIT_NAME_RE.search(redacted_payload):
+    if own_audit_re(blessed.name).search(redacted_payload):
         print("[spec-distill] 번들 payload 부분에 audit 파일명이 남아 있다 — "
               "원문 보존이 우선이라 지우지 않는다(호출자가 degrade 기록).", file=sys.stderr)
         return 3

@@ -1,0 +1,16 @@
+```docreview-layer1
+- ref: p1
+  category: architecture
+  anchor: "#5-architecture"
+  disposition: decide
+  summary: "MCP: 상위 절이 확정 제약을 어긴다"
+- ref: p2
+  category: goal_fit
+  anchor: "#1-context"
+  disposition: decide
+  summary: "MCC: 맥락 절이 목표를 비껴간다"
+```
+
+```docreview-layer2
+[]
+```

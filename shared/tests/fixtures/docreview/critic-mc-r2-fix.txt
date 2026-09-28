@@ -1,0 +1,16 @@
+```docreview-layer1
+[]
+```
+
+```docreview-layer2
+- ref: r2a
+  category: handoff_incomplete
+  anchor: "#1-context"
+  disposition: fix
+  summary: "R2A: 맥락 절의 인계 정보가 모자란다"
+- ref: r2b
+  category: ambiguity
+  anchor: "#12-files-to-modify"
+  disposition: fix
+  summary: "R2B: 파일 목록이 여전히 두 가지로 읽힌다"
+```
