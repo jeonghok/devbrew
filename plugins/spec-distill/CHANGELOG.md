@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.5.3] — 2026-09-28
+
+### Fixed
+
+- `tests/test_no_write_matcher_hooks_repo.sh` 의 Bash matcher 양성 대조 임계를 1 로 — qg v7.0.0 이 자기 Bash 훅을 의도적으로 지운 뒤로 RED 였다.
+
+### Changed
+
+- `tests/test_framing_review_contract.sh` 가 framing-requests `## degrade 채널` 절의 채널 이름 다섯을 잰다.
+- 삭제된 감사 문서를 가리키던 출처 괄호를 지웠다(`references/proceed-gate.md` 와 테스트 주석). `tests/test_brief_review_no_external_precondition.sh` (5)는 감사 폴더의 부재 락이 됐다.
+
 ## [4.5.2] — 2026-09-28
 
 ### Fixed

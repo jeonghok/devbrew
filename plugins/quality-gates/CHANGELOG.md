@@ -3,6 +3,14 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [9.3.6] — 2026-09-28
+
+### Fixed
+- `tests/test_cancel_all_fence.sh` 를 100755 로 — 셸 어댑터가 실행비트로 claim 하므로 `test_runner_adapters.sh` · `test_codex_backward_compat.sh` 가 RED 였다.
+
+### Changed
+- `tests/test_no_secret_prompts.py` 의 P21 스캔에 플러그인 레벨 `references/**/*.md` 를 더하고 glob 마다 하한을 따로 둔다.
+
 ## [9.3.5] — 2026-09-28
 
 ### Fixed

@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.10.0] — 2026-09-28
+
+minor 인 이유 — 산출 경로와 `render-audit-report.py` 의 CLI 가 바뀌었다.
+
+### Added
+
+- `scripts/prepare-run-dir.py` — 지출 동의 승인 직후 실행 디렉토리 `.claude/plugin-audit/<date>-<target>[-N]/` 을 원자적으로 만들고(`-N` 으로 기존 것을 덮지 않는다) 안에 `*` 한 줄짜리 `.gitignore` 를 쓴다. 둘째 줄로 sandbox id(실행 키의 SHA-256 앞 8 hex)를 낸다 — `qg-worktree.sh create-sandbox` 가 id 앞 8글자만 쓰므로 날짜 키를 그대로 넘기면 같은 달 감사가 한 sandbox 로 접힌다.
+
+### Changed
+
+- 모든 산출(`audit.md` · `audit-data.json` · `audit-journal.jsonl`)과 중간 파일이 실행 디렉토리에 쌓인다. 감사 끝에 절대경로를 보고한다. 리포트는 한 번 읽는 작업 산출물이다(README Law 3).
+- phase 0 의 clean-tree 선결조건과 post-1 의 커밋 단계를 없앴다.
+
+### Removed
+
+- `render-audit-report.py --readme`(README 인덱스 쓰기). `validate-audit-data.py --artifacts` 의 README 링크 · CLAUDE.md 포인터 검사와 `--repo-root` 옵션. 배너 검사(AC-3)는 남는다.
+
 ## [0.9.4] — 2026-09-22
 
 ### Changed
