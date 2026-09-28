@@ -227,4 +227,36 @@ else
   no "사상: 사람말 없는 category ${miss}개 — $(printf '%s\n' "$MISSING" | sed -n 's/^MISSING //p' | tr '\n' ' ')"
 fi
 
+# ⑨ must_catch (설계 2026-09-27-review-stopping-criterion AC4) — 선택 필드. 지목한 축은 layer_rubric 안에
+# 있어야 하고(rubric 밖 → must_catch_unknown_axis), 빈 목록은 「무엇으로도 멈춘다」라 거부한다(must_catch_empty).
+# 목록이 아니면 field_not_str_list. 필드 부재는 통과한다(③ 의 generic 이 양의 짝). init(라운드 진입 실경로)도 거부한다.
+mc_variant() {   # mc_variant <이름> <must_catch 줄|-> → design-doc 의 must_catch 줄을 그 줄로 바꾼(- 면 뺀) 사본 경로
+  awk -v L="$2" '/^must_catch:/ {next} {print} /^  layer2:/ && !done {if (L != "-") print L; done = 1}' "$DD" > "$TMPD/mc-$1.md"
+  echo "$TMPD/mc-$1.md"
+}
+mc_rc() {   # mc_rc <프로필> → "rc|stderr 한 줄"
+  python3 "$SCRIPTS/docreview_state.py" profile-check "$1" >/dev/null 2>"$TMPD/mc.err"; echo "$?|$(tr -d '\n' < "$TMPD/mc.err")"
+}
+r="$(mc_rc "$(mc_variant ok 'must_catch: [goal_fit, scope]')")"
+assert_eq "${r%%|*}" "0" "must_catch: rubric 안 축 둘이면 통과한다"
+assert_eq "$(python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/mc-ok.md" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("must_catch"))')" \
+  "['goal_fit', 'scope']" "must_catch: profile-check 가 지목한 축을 그대로 낸다"
+r="$(mc_rc "$(mc_variant unknown 'must_catch: [goal_fit, bogus_axis]')")"
+assert_eq "${r%%|*}" "2" "must_catch: rubric 밖 축 → rc 2"
+assert_contains "${r#*|}" "must_catch_unknown_axis:bogus_axis" "must_catch: 사유가 must_catch_unknown_axis 와 그 축 이름이다"
+r="$(mc_rc "$(mc_variant empty 'must_catch: []')")"
+assert_eq "${r%%|*}" "2" "must_catch: 빈 목록 → rc 2"
+assert_contains "${r#*|}" "must_catch_empty" "must_catch: 사유가 must_catch_empty 다"
+r="$(mc_rc "$(mc_variant scalar 'must_catch: goal_fit')")"
+assert_contains "${r#*|}" "field_not_str_list:must_catch" "must_catch: 목록이 아니면 field_not_str_list"
+r="$(mc_rc "$(mc_variant absent -)")"
+assert_eq "${r%%|*}" "0" "must_catch: 부재는 통과한다(선택 필드 — fields_missing 이 아니다)"
+for v in unknown empty; do
+  mkdir -p "$TMPD/mc-init-$v"
+  python3 "$SCRIPTS/docreview_state.py" init --state-dir "$TMPD/mc-init-$v" --doc "$DOCFAKE" --profile "$TMPD/mc-$v.md" >/dev/null 2>"$TMPD/mc-init.err"
+  rc=$?
+  assert_eq "$rc" "1" "must_catch($v): init 도 거부한다(rc 1 — 라운드 진입 실경로)"
+  assert_contains "$(cat "$TMPD/mc-init.err")" "must_catch_" "must_catch($v): init 의 사유가 must_catch_* 다"
+done
+
 finish

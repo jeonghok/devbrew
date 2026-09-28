@@ -1,0 +1,18 @@
+```docreview-layer1
+- ref: g1
+  category: data_flow
+  anchor: "#1-context"
+  disposition: ask
+  summary: "DG1: 없는 항목을 막는다는 참고 질문"
+  blocks: [zz9]
+- ref: g2
+  category: problem_definition
+  anchor: "#1-context"
+  disposition: ask
+  summary: "DG2: 없는 항목을 막는다는 must-catch 질문"
+  blocks: [zz8]
+```
+
+```docreview-layer2
+[]
+```

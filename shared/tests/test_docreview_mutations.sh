@@ -63,7 +63,7 @@ mkclone() {   # mkclone <dir>
 run_case() {   # run_case <scripts-dir> <case-fn> → "<fail> <pass> <traceback:0|1>"
   ( set +u
     REPO_ROOT="$REPO_ROOT"; SCRIPTS="$1"
-    . "$REPO_ROOT/shared/tests/assert.sh"; . "$REPO_ROOT/shared/tests/fixtures/docreview/cases.sh"
+    . "$REPO_ROOT/shared/tests/assert.sh"; . "$REPO_ROOT/shared/tests/fixtures/docreview/cases.sh"; . "$REPO_ROOT/shared/tests/fixtures/docreview/cases_advice.sh"
     _out="$(mktemp -t docreview-runcase-XXXXXX)"
     "$2" >"$_out" 2>&1
     _tb=0
@@ -89,17 +89,33 @@ for c in case_T35_frozen_change_auto_decide case_T10_protected_decide case_T05_T
   fi
 done
 
-# classify_result <bfail> <btb> <afail> <atb> → 판정 하나:
+# _is_uint <값> → 참/거짓 — run_case 필드 하나가 음이 아닌 정수 «모양» 인가. 빈 문자열도
+# 거짓이다(run_case 가 죽어 아무것도 못 찍으면 이 모양이 된다, 아래 classify_result 의
+# [fix round 2 — 리뷰 N1] 참조).
+_is_uint() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; }
+# classify_result <bfail> <bpass> <btb> <afail> <apass> <atb> → 판정 하나:
 #   instrument_broken | unmeasurable | caught | no_teeth
 # **판정 로직은 이 함수 하나에만 있다(R20)** — mut()(기대=caught)와 카나리아(기대=
 # unmeasurable, 아래 ⑪)가 이 함수를 똑같이 거쳐 같은 분기를 통과한다. 「실패가 규칙에
 # 귀속 가능할 것」(R19): 변이된 실행이 파이썬 traceback 을 내면(atb=1) 그 실패가
 # «규칙 위반 탓»인지 «이 파일이 조금이라도 깨지면 죽는 것 탓»인지 밖에서 구별할 수
 # 없다 — unmeasurable 로 판정하고 caught 로 세지 않는다.
+# [Task 1(review-stopping-criterion) fix round 2 — 리뷰 N1] `run_case` 가 서브셸 안에서
+# `cases.sh` 의 PROF_SD 가드(fix round 1 의 `exit 1`)를 맞으면 마지막 `echo "$fail $pass
+# $tb"` 를 못 찍는다 — `$(run_case …)` 가 빈 문자열이 되고, `_split3 ""` 는 여섯 필드
+# 중 그 run 의 세 필드를 전부 빈 문자열로 낸다. 옛 로직은 `[ "$afail" != "0" ]`(빈
+# 문자열 != "0")을 참으로 읽어 **한 번도 안 돈 셀을 caught 로 보고했다**(리뷰어 재현:
+# clean "0 5 0", mutated "" "" "" → caught). 값을 해석하기 전에 여섯 필드 «모양»부터
+# 실측한다 — 하나라도 정수가 아니면 그 자체로 instrument_broken 이다(⑯⑰⑱ 류 앵커 가드와
+# 같은 원칙: 판정보다 형태 검사가 먼저다).
 classify_result() {
-  if [ "$2" = "1" ] || [ "$1" != "0" ]; then echo "instrument_broken"; return; fi
-  if [ "$4" = "1" ]; then echo "unmeasurable"; return; fi
-  if [ "$3" != "0" ]; then echo "caught"; return; fi
+  local x
+  for x in "$1" "$2" "$3" "$4" "$5" "$6"; do
+    _is_uint "$x" || { echo "instrument_broken"; return; }
+  done
+  if [ "$3" = "1" ] || [ "$1" != "0" ]; then echo "instrument_broken"; return; fi
+  if [ "$6" = "1" ]; then echo "unmeasurable"; return; fi
+  if [ "$4" != "0" ]; then echo "caught"; return; fi
   echo "no_teeth"
 }
 # _churn <clean-dir> <mut-dir> → 변이가 실제로 만든 diff 규모를 `<삭제줄>/<추가줄>` 로.
@@ -164,10 +180,19 @@ mut_expect() {
   local bfail bpass btb afail apass atb verdict desc
   _split3 "$(run_case "$CLEAN" "$case")"; bfail="$_f"; bpass="$_p"; btb="$_tb"
   _split3 "$(run_case "$d" "$case")";     afail="$_f"; apass="$_p"; atb="$_tb"
-  verdict="$(classify_result "$bfail" "$btb" "$afail" "$atb")"
+  verdict="$(classify_result "$bfail" "$bpass" "$btb" "$afail" "$apass" "$atb")"
   case "$verdict" in
     instrument_broken)
-      if [ "$btb" = "1" ]; then desc="계측기 고장 — 양성 대조(clean 사본) 자체가 traceback"
+      # classify_result 는 판정 문자열 하나만 낸다(R20) — 사유는 여기서 같은 원값을
+      # 다시 봐서 재구성한다(unmeasurable·caught·no_teeth 도 이미 이 방식). 형태 검사가
+      # clean 쪽에서 떨어졌는지 mutated 쪽에서 떨어졌는지를 먼저 가른다 — 안 그러면
+      # mutated 쪽이 빈 출력이라 떨어진 셀에서 "clean=$bfail(=0)" 을 「양성 대조 실패」로
+      # 잘못 말하게 된다(리뷰 N1).
+      if ! _is_uint "$bfail" || ! _is_uint "$bpass" || ! _is_uint "$btb"; then
+        desc="계측기 고장 — 양성 대조(clean 사본) 결과 형식이 깨졌다(run_case 빈/비정수 출력: fail='$bfail' pass='$bpass' tb='$btb')"
+      elif ! _is_uint "$afail" || ! _is_uint "$apass" || ! _is_uint "$atb"; then
+        desc="계측기 고장 — 변이 실행 결과 형식이 깨졌다(run_case 빈/비정수 출력: fail='$afail' pass='$apass' tb='$atb')"
+      elif [ "$btb" = "1" ]; then desc="계측기 고장 — 양성 대조(clean 사본) 자체가 traceback"
       else desc="계측기 고장 — 양성 대조 실패(clean=$bfail)"; fi ;;
     unmeasurable) desc="측정 불가 — 변이 실행이 traceback 을 냈다(RED($afail) 생존($apass), 규칙 귀속인지 크래시 귀속인지 구별 불가)" ;;
     caught)       desc="RED($afail) 생존($apass) (규칙에 이빨이 있다)" ;;
@@ -183,6 +208,7 @@ mut() { mut_expect caught "$@"; }   # 기존 10셀의 계약: 변이는 항상 c
 sed_route()  { sed -i.bak "$1" "$2/docreview_route.py"  && rm -f "$2/docreview_route.py.bak"; }
 sed_anchor() { sed -i.bak "$1" "$2/docreview_anchor.py" && rm -f "$2/docreview_anchor.py.bak"; }
 sed_state()  { sed -i.bak "$1" "$2/docreview_state.py"  && rm -f "$2/docreview_state.py.bak"; }
+sed_advice() { sed -i.bak "$1" "$2/docreview_advice.py" && rm -f "$2/docreview_advice.py.bak"; }
 
 # ① 얼림 diff 비활성 — 사후 auto decide 를 안 만든다.
 # R19 이전엔 항목 자체를 안 만들어(`for c in []:`) case_T35 의 `[0]` 인덱싱 단언 3/4 이
@@ -699,4 +725,72 @@ mut 1/1 state_dir_for_relative_doc_accepted case_state_dir_for_per_doc sed_state
 # (60) `init` 이 상대 문서를 받는다 — 원장의 문서 정체가 cwd 의 함수가 된다.
 mut 1/1 init_relative_doc_accepted case_init_relative_doc_refused sed_state \
   's/if not a\.doc or not os\.path\.isabs(a\.doc):/if not a.doc:/'
+# ── 참고(advisory) 라우팅 (설계 2026-09-27-review-stopping-criterion) ─────────────────────
+# (61) advisory 여집합을 뒤집는다(advisory = must_catch) — direction 이 must-catch 가 되어 AC1 이 RED.
+mut 1/1 advisory_axes_flipped case_AC1_brief_direction_only sed_advice \
+  's/    return (frozenset(lr\["layer1"\]) | frozenset(lr\["layer2"\])) - frozenset(mc)/    return frozenset(mc)/'
+# (62) 1 걸음 호출을 지운다 — advisory decide 가 decides 에 남아 승인을 막는다.
+mut 1/1 route_step1_removed case_AC1_brief_direction_only sed_route \
+  's/^    route_step1(final, advisory_axes(prof))$/    pass/'
+# (63) 1회 규칙을 지운다 — 라운드 1 에 오른 버킷이 라운드 2 에 다시 listed 된다.
+mut 1/1 advice_repeat_rule_removed case_AC5_AC9_round2 sed_state \
+  's/^    if b in seen or (prior is not None and int(prior\["round"\]) < n):$/    if False:/'
+# (64) 해시 비교를 지운다 — 바뀐 절의 새 must-catch 까지 선재로 센다.
+mut 1/1 mc_hash_compare_removed case_AC5_AC9_round2 sed_advice \
+  's/^            if after and before == after:$/            if after:/'
+# (65) 하위 절을 빼고 자기 절만 본다 — 하위 절이 바뀐 상위 앵커의 finding 이 선재로 세어진다.
+mut 1/1 mc_subtree_dropped case_AC9_child_section_changed sed_advice \
+  's/            if s\["anchor"\] == anchor or anchor in (s.get("parents") or \[\])}/            if s["anchor"] == anchor}/'
+# (66) 1회 규칙을 «원장에 있으면 반복» 으로 되돌린다 — 같은 라운드를 다시 finalize 하면 그 라운드의 버킷이 반복으로 뒤집힌다.
+mut 1/1 advice_repeat_not_idempotent case_advice_same_round_refinalize_idempotent sed_state \
+  's/^    if b in seen or (prior is not None and int(prior\["round"\]) < n):$/    if b in ledger:/'
+# (67) 게이트 참고 줄의 새 · 반복 자리를 맞바꾼다 — 값이 다른 라운드(새 5 · 반복 0)의 렌더가 RED.
+mut 1/1 advice_render_new_repeat_swapped case_advice_same_round_refinalize_idempotent sed_state \
+  's/% (adv_g\["total"\], adv_g\["new"\], adv_g\["repeat"\], adv_g\["mc_preexisting_new"\]))/% (adv_g["total"], adv_g["repeat"], adv_g["new"], adv_g["mc_preexisting_new"]))/'
+# (68) 이번 호출의 앞 항목을 잊는다 — 한 라운드의 같은 버킷 둘이 둘 다 새로 세어진다.
+mut 1/1 advice_same_call_seen_dropped case_advice_same_round_duplicate_bucket sed_state \
+  's/^    if b in seen or (prior is not None and int(prior\["round"\]) < n):$/    if prior is not None and int(prior["round"]) < n:/'
+# (69) 여집합 반전 — AC2 의 대조 단언(advisory decide 가 advice)이 RED.
+mut 1/1 advisory_axes_flipped_ac2 case_AC2_mustcatch_fail_closed sed_advice \
+  's/    return (frozenset(lr\["layer1"\]) | frozenset(lr\["layer2"\])) - frozenset(mc)/    return frozenset(mc)/'
+# (70) 엔진 자동 생성 항목을 건너뛰지 않는다 — escalated 후속이 category(ambiguity)로 advisory 가 된다.
+mut 1/1 engine_source_skip_removed case_advice_engine_items_mustcatch sed_advice \
+  's/^    if it.get("_source") in ENGINE_SOURCES:$/    if False:/'
+# (71) 병합 구성원의 축을 보지 않는다 — must-catch 가 advisory 생존자에 흡수돼 차단에서 빠진다.
+mut 1/1 member_categories_ignored case_AC14_merge_survivor sed_advice \
+  's/^    cats = it.get("_member_categories") or \[it\["category"\]\]$/    cats = [it["category"]]/'
+# (72) blocks 판정을 축으로 되돌린다 — fixes 를 막는 advisory ask 가 advice 로 빠지고 fix 가 held 가 안 된다.
+mut 1/1 blocks_by_axis case_AC15_blocks_by_application_path sed_advice \
+  's/^            if adv and all(t.get("route") == ROUTE_ADVICE for t in ts if t is not None):$/            if adv:/'
+# (73) advice 로 간 ref 를 세지 않고 버린다.
+mut 1/1 blocks_ref_uncounted case_AC15_blocks_by_application_path sed_advice \
+  's/^        L.coerced("blocks", r, None, gate)$/        pass/'
+# (74) 라운드 ≥2 새 계보 advisory fix 규칙을 지운다 — 적용 관측 때문에 라운드가 는다.
+mut 1/1 round2_new_fix_rule_removed case_AC18_round2_new_advisory_fix sed_advice \
+  's/^    if n >= 2:$/    if False:/'
+# (75) 2 걸음 호출을 지운다.
+mut 1/1 route_step2_removed case_AC15_blocks_by_application_path sed_route \
+  's/^    route_step2(final, keep_of, advisory_axes(prof), n, L)$/    pass/'
+# (76) blocks 강제가 게이트를 바꿔도 gate=False 로 센다 — 차단 ask 가 조용히 차단에서 빠진다(degrade 공시 없음).
+mut 1/1 blocks_coercion_gate_dropped case_advice_blocks_coercion_flips_gate sed_advice \
+  's/^    gate = bool(dropped) and not any(t is not None and t.get("route") != ROUTE_ADVICE for t in ts)$/    gate = False/'
+# (77) 고정점을 한 바퀴로 줄인다 — advisory ask 사슬의 판정이 final 순서에 달린다.
+mut 1/1 blocking_ask_single_pass case_advice_step2_order_independent sed_advice \
+  's/^    for _ in range(len(pending)):$/    for _ in range(1):/'
+# (78) cap 상수를 바꾼다 — 기본 호출이 9줄을 내고 「외 2건」이 된다.
+mut 1/1 render_cap_changed case_AC6_render_cap sed_advice 's/^RENDER_CAP = 8 /RENDER_CAP = 9 /'
+# (79) 요약 폭을 넓힌다 — 80자 요약이 다른 자리에서 잘려 렌더 항목 전문이 어긋난다.
+mut 1/1 summary_width_changed case_advice_odd_text_one_line sed_advice 's/^SUMMARY_WIDTH = 60 /SUMMARY_WIDTH = 74 /'
+# (80) 원자 쓰기를 `write_text` 로 되돌린다 — 인코딩 전에 파일을 잘라 인코딩 실패가 사용자 문서를 0 바이트로 만든다.
+mut 1/1 atomic_write_reverted case_advice_surrogate_sink_atomic sed_state \
+  's/^    data = text\.encode("utf-8")$/    path.write_text(text, encoding="utf-8"); data = text.encode("utf-8")/'
+# (81) 짝 없는 surrogate 를 걷지 않는다 — 렌더가 state_unreadable 로 죽고 박제가 sink_write_failed 로 멈춘다.
+mut 1/1 surrogate_not_scrubbed case_advice_surrogate_sink_atomic sed_advice \
+  's/^    return re\.sub(r"\\s+", " ", _safe(s or ""))\.strip()$/    return re.sub(r"\\s+", " ", str(s or "")).strip()/'
+# (82) 표 판정을 «끝 줄이 | 로 시작하면 표» 로 되돌린다 — 머리 없는 defer 행 뒤의 박제 행이 목록 항목의 이어진 글이 된다.
+mut 1/1 table_by_tail_pipe case_advice_sink_after_headerless_defer_row sed_advice \
+  's/^    return any(_TABLE_SEP\.fullmatch(l\.strip()) for l in body\[k:\])$/    return k < len(body)/'
+# (83) 계수 줄을 절 전체(하위 절 포함)의 끝에 둔다 — 결정 기록의 하위 절인 Deferred 표 뒤에 계수 줄이 낀다.
+mut 1/1 count_line_span_end case_advice_count_line_nested_log sed_state \
+  's/adv\.count_line(ident, int(k), rep), own=True)$/adv.count_line(ident, int(k), rep))/'
 finish

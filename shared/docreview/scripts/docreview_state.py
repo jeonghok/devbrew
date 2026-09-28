@@ -8,7 +8,7 @@ frontmatter 의 `docreview:` 트리가 원장, 본문은 사람이 읽는 사건
 건드리지 않는다 — 그 파일은 brief 파이프라인의 줄 파서가 소유한다.
 
 서브커맨드: state-dir-for · init · begin-round · exempt-anchors · decide · fix · ask · defer ·
-observe-diff · gate
+observe-diff · gate · advice
 전이 규칙의 정본은 plan(2026-09-06-document-review-engine.md)의 D13 표다.
 
 상태 디렉토리는 **문서별**이다 — 한 디렉토리의 원장(라운드 · 재리뷰 상한 · finding · permit ·
@@ -30,6 +30,12 @@ try:
     import yaml
 except ImportError:  # pragma: no cover
     yaml = None
+# 형제 모듈 — `advice` 서브커맨드만 쓴다. 원장 스크립트만 복사한 트리에서도 다른 서브커맨드는 돌아야 하므로
+# 없으면 None 으로 두고 `advice` 가 `advice_module_missing` 으로 멈춘다(yaml 과 같은 자리 · 같은 모양).
+try:
+    import docreview_advice as _adv
+except ImportError:  # pragma: no cover
+    _adv = None
 
 STATE_FILE = "docreview-state.md"
 REREVIEW_CAP = 2
@@ -37,6 +43,9 @@ RANK = {"decide": 4, "ask": 3, "fix": 2, "defer": 1, "drop": 0}
 PROFILE_FIELDS = ("detectors", "ground_truth", "allowed_dispositions", "fix_anchors",
                   "immutable", "protected_headings", "layer_rubric", "decision_log",
                   "defer_target", "web")
+# 선택 필드 — 필수 목록에 넣으면 qg `generic`(이 필드 없음)이 `fields_missing` 으로 죽는다. 부재면 advisory 축이
+# 공집합이라 라우팅이 현행과 같다(docreview_advice.advisory_axes).
+OPTIONAL_PROFILE_FIELDS = ("must_catch",)
 LOG_KINDS = ("doc_section", "audit_section", "state")
 DEFER_KINDS = ("doc_section", "none")
 
@@ -127,7 +136,7 @@ def load_profile(path) -> dict:
     if not isinstance(data, dict):
         raise ProfileError("frontmatter_not_mapping")
     missing = [f for f in PROFILE_FIELDS if f not in data]
-    extra = [k for k in data if k not in PROFILE_FIELDS]
+    extra = [k for k in data if k not in PROFILE_FIELDS and k not in OPTIONAL_PROFILE_FIELDS]
     if missing:
         raise ProfileError("fields_missing:%s" % ",".join(missing))
     if extra:
@@ -152,6 +161,16 @@ def load_profile(path) -> dict:
     # `bad_regex` 로 거절하던 반대 방향 발산).
     _str_list(lr["layer1"], "layer_rubric.layer1", regex=False)
     _str_list(lr["layer2"], "layer_rubric.layer2", regex=False)
+    # must_catch — 승인을 막는 축. 그 밖의 rubric 축이 advisory 다(정의상 fail-closed: rubric 밖 category ·
+    # `other` · 엔진이 만든 것은 전부 막는다). 지목은 rubric 안이어야 하고, 빈 목록은 막는 축 0 이라 거부한다.
+    if "must_catch" in data:
+        mc = _str_list(data["must_catch"], "must_catch", regex=False)
+        if not mc:
+            raise ProfileError("must_catch_empty")
+        rubric = set(lr["layer1"]) | set(lr["layer2"])
+        unknown = [x for x in mc if x not in rubric]
+        if unknown:
+            raise ProfileError("must_catch_unknown_axis:%s" % ",".join(unknown))
     dl = data["decision_log"]
     if not isinstance(dl, dict) or dl.get("kind") not in LOG_KINDS:
         raise ProfileError("decision_log_invalid")
@@ -623,12 +642,40 @@ def _refresh_open_lineages(st, n) -> None:
     r["open_lineages"] = sorted({st["findings"][f]["lineage"] for f in st["findings"] if is_open(st, f)})
 
 
-def record_findings(st, findings, n) -> None:
-    """라우팅이 끝난 finding 목록을 원장에 적는다 (route.finalize 와 record-findings CLI 가 부른다)."""
+def _record_advice(st, it, n, counts, seen) -> None:
+    """참고(advisory) 항목 — `advice` 원장에 버킷(층|축|앵커) 키로 적는다. 이전 라운드(항목의 `round` < n) 또는
+    이번 호출의 앞 항목(`seen`)이 올린 버킷은 목록에 다시 올리지 않고 `repeat` 로만 센다(1회 규칙). 같은 라운드를
+    다시 finalize 하면 그 라운드가 올린 버킷은 다시 `listed` 로 세고 `shown` · `sunk` 는 그대로 둔다(멱등). 원장
+    키는 필요할 때만 생긴다 — 표지가 없는 프로필의 원장 파일은 바이트 단위로 현행이다(골든)."""
+    st["findings"][it["id"]]["route"] = "advice"
+    ledger = st.setdefault("advice", {})
+    b = it.get("bucket") or it["id"]
+    prior = ledger.get(b)
+    if b in seen or (prior is not None and int(prior["round"]) < n):
+        counts["repeat"] += 1
+    else:
+        ledger[b] = {"id": it["id"], "round": n, "layer": it.get("layer"), "category": it.get("category"),
+                     "anchor": it.get("anchor"), "summary": it.get("summary"),
+                     "replacement": it.get("replacement"),
+                     "shown": bool(prior and prior.get("shown")), "sunk": bool(prior and prior.get("sunk"))}
+        counts["listed"] += 1
+    seen.add(b)
+
+
+def record_findings(st, findings, n) -> dict:
+    """라우팅이 끝난 finding 목록을 원장에 적는다 (route.finalize 와 record-findings CLI 가 부른다).
+
+    `route: advice` 표지를 단 항목은 decides · fixes · asks 대신 `advice` 원장에 간다(`_record_advice`). 낸 값은
+    그 계수 {"listed", "repeat"} — 표지 없는 항목만 온 라운드는 둘 다 0 이다."""
+    counts = {"listed": 0, "repeat": 0}
+    seen = set()
     for it in findings:
         fid = it["id"]
         st["findings"][fid] = {k: it.get(k) for k in PUBLIC_FIELDS}
         if it.get("state") == "rejected":
+            continue
+        if it.get("route") == "advice":
+            _record_advice(st, it, n, counts, seen)
             continue
         d = it.get("disposition")
         if d == "decide":
@@ -647,30 +694,73 @@ def record_findings(st, findings, n) -> None:
             if fx and fx["state"] == "pending":
                 fx["state"] = "held"
     _refresh_open_lineages(st, n)
+    return counts
 
 
-def append_under_heading(path: Path, heading: str, line: str) -> None:
-    """append-only: 그 헤딩 절의 끝에 한 줄. 헤딩이 없으면 파일 끝에 헤딩부터 만든다."""
-    text = path.read_text(encoding="utf-8") if path.is_file() else ""
-    lines = text.split("\n")
+def _section_span(lines, heading, own=False):
+    """그 헤딩 절의 (헤딩 줄 번호, 끝 줄 번호) — 끝은 절 끝의 빈 줄을 걷은 자리다. 헤딩이 없으면 None.
+    `own` 이면 절은 첫 하위 헤딩에서 끊긴다(헤딩 자신의 본문만)."""
     level = len(heading) - len(heading.lstrip("#"))
     idx = next((i for i, l in enumerate(lines) if l.strip() == heading.strip()), None)
     if idx is None:
-        text = text.rstrip("\n") + "\n\n" + heading.strip() + "\n\n" + line + "\n"
-        path.write_text(text, encoding="utf-8")
-        return
+        return None
     end = len(lines)
     for j in range(idx + 1, len(lines)):
         m = re.match(r"^(#{1,6})[ \t]+", lines[j])
-        if m and len(m.group(1)) <= level:
+        if m and (own or len(m.group(1)) <= level):
             end = j
             break
     while end > idx + 1 and lines[end - 1].strip() == "":
         end -= 1
+    return idx, end
+
+
+def section_body(path: Path, heading: str):
+    """그 헤딩 절의 본문 줄(헤딩 다음부터 절 끝의 빈 줄 앞까지 · 하위 절 포함). 파일이나 헤딩이 없으면 None."""
+    if not path.is_file():
+        return None
+    lines = path.read_text(encoding="utf-8").split("\n")
+    span = _section_span(lines, heading)
+    return None if span is None else lines[span[0] + 1:span[1]]
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    """사용자 문서 쓰기 — 인코딩을 먼저 끝내고 같은 디렉토리의 임시 파일에 쓴 뒤 `os.replace` 로 바꾼다. 어느 단계가
+    실패해도 원본 바이트는 그대로다(`write_text` 는 인코딩 전에 파일을 자른다). 심볼릭 링크는 가리키는 파일을 바꾸고,
+    기존 파일의 권한 비트를 잇는다."""
+    data = text.encode("utf-8")
+    target = Path(os.path.realpath(str(path)))
+    tmp = target.with_name(".%s.%s.tmp" % (target.name, os.urandom(4).hex()))
+    try:
+        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        if target.exists():
+            os.chmod(str(tmp), target.stat().st_mode & 0o7777)
+        os.replace(str(tmp), str(target))
+    except BaseException:
+        try:
+            os.unlink(str(tmp))
+        except OSError:
+            pass
+        raise
+
+
+def append_under_heading(path: Path, heading: str, line: str, own=False) -> None:
+    """append-only: 그 헤딩 절의 끝에 한 줄(`own` 이면 첫 하위 헤딩 앞 — 헤딩 자신의 본문 끝). 헤딩이 없으면 파일
+    끝에 헤딩부터 만든다. 쓰기는 원자적이다(`_write_atomic`)."""
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    lines = text.split("\n")
+    span = _section_span(lines, heading, own)
+    if span is None:
+        text = text.rstrip("\n") + "\n\n" + heading.strip() + "\n\n" + line + "\n"
+        _write_atomic(path, text)
+        return
+    end = span[1]
     lines[end:end] = [line]
     if end + 1 < len(lines) and lines[end + 1].strip() != "":
         lines[end + 1:end + 1] = [""]
-    path.write_text("\n".join(lines), encoding="utf-8")
+    _write_atomic(path, "\n".join(lines))
 
 
 def _log_line(entry, f) -> str:
@@ -1090,6 +1180,10 @@ def gate_summary(st) -> dict:
     g["counts"] = {k: rep.get(k, 0) for k in ("rejected", "bucket_conflicts", "lineage_mismatch",
                                               "revived", "reraise_unconsumed", "escalated_unconsumed")}
     g["counts"]["user_rejected"] = sum(1 for v in st["rejected_lineages"].values() if v.get("by") == "user")
+    # 참고(advisory) — 이번 라운드 보고서에 계수가 있을 때만(= must_catch 를 지목한 프로필). 승인 술어와 무관하다.
+    if "advice_new" in rep:
+        g["advice"] = {"total": len(st.get("advice") or {}), "new": rep["advice_new"],
+                       "repeat": rep["advice_repeat"], "mc_preexisting_new": rep["mc_preexisting_new"]}
     return g
 
 
@@ -1342,6 +1436,10 @@ def render_gate(st, g) -> str:
     out.append("기각 %d건(재비판) · 사용자 기각 %d · drop %d · bucket 충돌 %d · 계보 지목 불일치 %d · 기각 계보 재상승 %d · 미소비 재상승 예약 %d · 미소비 상향 예약 %d"
                % (c["rejected"], c["user_rejected"], len(g["dropped"]), c["bucket_conflicts"],
                   c["lineage_mismatch"], c["revived"], c["reraise_unconsumed"], c["escalated_unconsumed"]))
+    if g.get("advice") is not None:   # 게이트 질문이 아니다 — 목록은 끝에서 한 번(`advice --render`)
+        adv_g = g["advice"]
+        out.append("참고 %d건(이번 라운드 새 %d · 반복 %d) — 끝에서 한 목록으로 · 선재 절의 새 must-catch %d"
+                   % (adv_g["total"], adv_g["new"], adv_g["repeat"], adv_g["mc_preexisting_new"]))
     if g["two_stage"] and g["next_round_mode"] == "extra_approval":
         # 상한 도달 — approval_ready 와 무관하게 두 단계이고(Park P3·D-U3), 1단계는
         # 날 모드 토큰(`extra_approval`)이 아니라 사용자 말로 이름을 낸다. 이 선택지를
@@ -1374,6 +1472,69 @@ def cmd_gate(a) -> int:
         print(render_gate(st, g))
     else:
         print(json.dumps(g, ensure_ascii=False))
+    return 0
+
+
+def cmd_advice(a) -> int:
+    """참고(advisory) 목록 — 끝에서 한 번 표시(`--render`) · 박제(`--sink`) · 라운드별 계수 줄(`--log-file`).
+
+    플래그가 없으면 원장의 목록을 JSON 으로 낸다(읽기 전용). 한 호출 안의 순서는 박제 → 계수 → 표시다. 이미 보인
+    항목(`shown`) · 박제한 항목(`sunk`)은 다시 내지 않고, 계수 줄의 멱등 키는 (리뷰 정체, 라운드)를 목적지 파일의
+    글자로 판정한다 — 원장이 TTL 로 걷혀도 두 번 적지 않는다. 계수 줄은 decision_log 헤딩 자신의 본문 끝(첫 하위
+    헤딩 앞)에 선다 — 박제처가 그 하위 절이어도 박제 표에 끼지 않는다. 부르는 자리는 진입 skill 셋이다(절차서는 계약만).
+    박제는 미박제 행 전부를 한 번의 쓰기로 적고(전부 아니면 전무), 성공하면 계수 · 표시 **앞에서** `sunk` 를 원장에
+    저장한다 — 뒤 단계가 무엇으로 죽어도 다음 호출이 같은 행을 다시 적지 않는다. 쓰기 · 읽기 실패는 rc 1 과 사유
+    (`sink_write_failed` · `log_write_failed`) · 목적지 경로로 알린다."""
+    adv = _adv
+    if adv is None:
+        return fail("advice_module_missing", detail="docreview_advice.py 형제 사본이 이 스크립트 옆에 없다")
+    st = load_state(a.state_dir)
+    prof = load_profile(st["profile"])
+    if not adv.has_must_catch(prof):
+        return fail("profile_has_no_must_catch", profile=st["profile"])
+    cap = adv.RENDER_CAP if a.cap is None else a.cap
+    if cap < 1:
+        return fail("cap_invalid", cap=cap)
+    dt = prof["defer_target"]
+    if a.sink and dt.get("kind") != "doc_section":
+        return fail("profile_has_no_defer_target")
+    heading = prof["decision_log"].get("heading")
+    if a.log_file and not heading:
+        return fail("profile_decision_log_is_state_only")
+    items = list((st.get("advice") or {}).values())
+    sunk = [it for it in items if not it.get("sunk")] if a.sink else []
+    if sunk:
+        path = Path(a.sink)
+        try:
+            block = adv.sink_block([adv.sink_row(it) for it in sunk], section_body(path, dt["heading"]))
+            append_under_heading(path, dt["heading"], "\n".join(block))
+        except (OSError, UnicodeError) as e:
+            return fail("sink_write_failed", path=str(path), detail=str(e))
+        for it in sunk:
+            it["sunk"] = True
+        save_state(a.state_dir, st, "advice sunk=%d" % len(sunk))
+    logged = []
+    if a.log_file:
+        path, ident = Path(a.log_file), adv.review_identity(a.state_dir)
+        try:
+            for k in sorted(st["rounds"], key=int):
+                rep = st["rounds"][k].get("route_report") or {}
+                have = path.read_text(encoding="utf-8") if path.is_file() else ""
+                if "advice_new" in rep and adv.count_key(ident, int(k)) not in have:
+                    append_under_heading(path, heading, adv.count_line(ident, int(k), rep), own=True)
+                    logged.append(int(k))
+        except (OSError, UnicodeError) as e:
+            return fail("log_write_failed", path=str(path), detail=str(e), sunk=len(sunk), logged_rounds=logged)
+    shown = [it for it in items if not it.get("shown")] if a.render else []
+    if a.render:
+        where = a.where or (dt["heading"] if dt.get("kind") == "doc_section" else "advice 목록(JSON)")
+        print("\n".join(adv.render_lines(shown, cap, where)))
+    for it in shown:
+        it["shown"] = True
+    if shown:
+        save_state(a.state_dir, st, "advice shown=%d" % len(shown))
+    if not a.render:
+        _emit({"ok": True, "items": adv.scrub(items), "sunk": len(sunk), "logged_rounds": logged})
     return 0
 
 
@@ -1417,6 +1578,10 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--log-file", required=True); x.set_defaults(fn=cmd_defer)
     x = sd(sp.add_parser("observe-diff")); x.set_defaults(fn=cmd_observe_diff)
     x = sd(sp.add_parser("gate")); x.add_argument("--render", action="store_true"); x.set_defaults(fn=cmd_gate)
+    x = sd(sp.add_parser("advice")); x.add_argument("--render", action="store_true")
+    x.add_argument("--cap", type=int, default=None); x.add_argument("--where", default=None)
+    x.add_argument("--sink", default=None); x.add_argument("--log-file", default=None)
+    x.set_defaults(fn=cmd_advice)
     x = sp.add_parser("gate-rows"); x.set_defaults(fn=cmd_gate_rows)
     return p
 

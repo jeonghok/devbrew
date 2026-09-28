@@ -25,6 +25,10 @@ from docreview_state import (  # noqa: E402
     RANK, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, category_gloss, choice_label, fail,
     load_profile, load_state, observe_ledger, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
+from docreview_advice import (  # noqa: E402
+    ROUTE_ADVICE, advice_ids, advisory_axes, has_must_catch, mc_preexisting_new, member_categories, route_step1,
+    route_step2,
+)
 
 BLOCK_RE = r"```%s[ \t]*\n(.*?)\n```"
 DISPOSITIONS = tuple(sorted(RANK, key=lambda k: -RANK[k]))  # decide, ask, fix, defer, drop
@@ -400,6 +404,9 @@ def _absorb_same_as(items, same_as, L):
         if not live:
             continue
         keep = max(live, key=lambda m: (RANK[items[m]["disposition"]], m))
+        # 병합 생존자의 축 소속 — 기각되지 않은 구성원 하나라도 must-catch 축이면 생존자가 must-catch 다
+        # (docreview_advice.is_advisory). 분류는 흡수 «뒤»에 돌므로 구성원의 축을 여기서 남긴다.
+        items[keep]["_member_categories"] = member_categories(items, live)
         # 생존자는 처분 순위와 f «문자열»로 갈리고(critic/codex 는 출처와 무관한 정렬 순의 f<k>,
         # 재비판 added 는 a<i>) 산문 칸을 적은 쪽이 흡수될 수 있다. 생존자의 빈 칸만
         # 형제에게서 채운다 — 적힌 칸은 덮지 않는다. 오름차순이라 마지막에 쓴 값(처분이 가장
@@ -474,6 +481,8 @@ def _classify_items(items, st, prof, sections, n, L):
             it["disposition"] = "decide"
             it["origin"] = "auto"
         final.append(it)
+    # 참고(advisory) 표지 1 걸음 — 축과 처분만 보면 정해지는 것(docreview_advice.route_step1)
+    route_step1(final, advisory_axes(prof))
     return final, rejected_items
 
 
@@ -707,12 +716,13 @@ def _pub(it):
     return {k: v for k, v in it.items() if not k.startswith("_")}
 
 
-def _build_report(L, st, n, final, rejected_items, degrade, stats):
+def _build_report(L, st, n, final, rejected_items, degrade, stats, advice_stats=None):
     """출력 JSON 을 조립하고 같은 요약을 `st["rounds"][n]["route_report"]` 에 남긴다.
 
     `stats` 는 앞 단계가 낸 계수 다섯(bucket_conflicts · lineage_mismatch · revived ·
     reraise_unconsumed · escalated_unconsumed)이다. 키 순서는 골든(`shared/tests/fixtures/
     docreview/golden/`)이 바이트로 고정하므로 재배열하지 않는다.
+    `advice_stats` 는 must_catch 를 지목한 프로필만 넘긴다 — 없으면 보고서가 현행과 같다.
     """
     report = L.report()
     adv = list(report["reasons"])
@@ -728,7 +738,8 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats):
         adv.append("critic 시점 판별 불가 (%s)" % degrade["critic_freshness_unknown"])
     out = {
         "ok": True, "round": n, "findings": [_pub(it) for it in final],
-        "by_disposition": {d: [it["id"] for it in final if it["disposition"] == d] for d in DISPOSITIONS},
+        "by_disposition": {d: [it["id"] for it in final if it["disposition"] == d and it.get("route") != ROUTE_ADVICE]
+                           for d in DISPOSITIONS},
         "rejected": [{"id": it["id"], "evidence": it["_rejected"]} for it in rejected_items],
         "defers": [it["id"] for it in final if it["disposition"] == "defer"],
         "bucket_conflicts": stats["bucket_conflicts"], "lineage_mismatch": stats["lineage_mismatch"],
@@ -736,6 +747,9 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats):
         "reraise_unconsumed": stats["reraise_unconsumed"],
         "escalated_unconsumed": stats["escalated_unconsumed"],
     }
+    if advice_stats is not None:
+        out["advice"] = advice_ids(final)
+        out.update(advice_stats)
     # 키를 «이름으로» 편다 — `render_disposition.disposition_report()` 의 같은
     # 결정과 같은 이유다(그 파일 :66-68): `report["counts"]` 를 `.items()` 로
     # 통째로 넘기면 카운트 이름이 이 파일에 문자열로 한 번도 안 나타나서,
@@ -754,6 +768,8 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats):
         "reraise_unconsumed": stats["reraise_unconsumed"],
         "escalated_unconsumed": stats["escalated_unconsumed"],
     }
+    if advice_stats is not None:
+        st["rounds"][str(n)]["route_report"].update(advice_stats)
     return out
 
 
@@ -804,15 +820,21 @@ def cmd_finalize(a) -> int:
     extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, diff, st, prof, sections, n, L)
     final.extend(extra)
     bucket_conflicts, lineage_mismatch, revived = _resolve_ids_and_lineage(st, final, rejected_items, n)
+    # 참고(advisory) 표지 2 걸음 — 계보를 알아야 정해지는 것(라운드 ≥2 새 계보 fix · `blocks` 의 적용 경로)
+    route_step2(final, keep_of, advisory_axes(prof), n, L)
     _remap_blocks(final, keep_of, a.doc, st)
 
     for it in final:
         L.accept(it["id"])
-    record_findings(st, final + rejected_items, n)
+    advice_counts = record_findings(st, final + rejected_items, n)
+    advice_stats = None
+    if has_must_catch(prof):   # 새 보고서 키는 must_catch 를 지목한 프로필에서만 — 필드 없는 프로필은 바이트 단위로 현행
+        advice_stats = {"advice_new": advice_counts["listed"], "advice_repeat": advice_counts["repeat"],
+                        "mc_preexisting_new": mc_preexisting_new(final, st["snapshots"], n, advisory_axes(prof))}
     out = _build_report(L, st, n, final, rejected_items, degrade,
                         {"bucket_conflicts": bucket_conflicts, "lineage_mismatch": lineage_mismatch,
                          "revived": revived, "reraise_unconsumed": reraise_unconsumed,
-                         "escalated_unconsumed": escalated_unconsumed})
+                         "escalated_unconsumed": escalated_unconsumed}, advice_stats)
     st["pending_recritic"] = None
     st["rounds"][str(n)].pop("finalize_failed", None)   # 같은 라운드의 앞선 거부 표지 — 이 성공이 대신한다
     log = "finalize (%d findings, %d rejected)" % (len(final), len(rejected_items))

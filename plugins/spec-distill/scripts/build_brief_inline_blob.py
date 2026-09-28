@@ -19,8 +19,9 @@ v0.45.0에서 충실도 축이 `build_brief_bundle.py`로 갈라졌다(payload +
 `audit_file`을 redact해도 `name` + `created_at`으로 `<date>-<topic>-interview.audit.md`를
 **재구성**할 수 있으므로 세 값을 함께 지운다(round-1 리뷰가 적발한 경로).
 
-§6 사용자 원문(payload의 `S1`)은 **절대 건드리지 않는다.** 본문이 audit 파일명을 언급하면
-원문 보존이 이기고 **exit 3**으로 알린다 — 호출자가 degradation record를 남기고 계속한다.
+§6 사용자 원문(payload의 `S1`)은 **절대 건드리지 않는다.** 본문이 **자기** audit 파일명을
+언급하면(`audit_file`을 모르면 모든 `*.audit.md`) 원문 보존이 이기고 **exit 3**으로 알린다 —
+호출자가 degradation record를 남기고 계속한다.
 
 exit: 0 깨끗한 redaction / 3 본문에 audit 파일명 잔존(위생 미달) / 2 usage·파일 부재·읽기 실패
      (비-UTF-8·권한). **1은 절대 내지 않는다** — 호출자 표가 0/2/3만 라우팅하므로
@@ -35,6 +36,19 @@ from pathlib import Path
 REDACT_KEYS = ("audit_file", "name", "created_at")
 REDACTED = "<redacted>"
 AUDIT_SUFFIX_RE = re.compile(r"\.audit\.md\b")
+AUDIT_FILE_RE = re.compile(r"(?m)^audit_file[ \t]*:[ \t]*(.*)$")
+
+
+def own_audit_name(text: str):
+    """frontmatter `audit_file` 값의 basename — 없거나 비면 None(호출자가 넓은 판정으로 닫는다)."""
+    if not text.startswith("---"):
+        return None
+    end = text.find("\n---", 3)
+    if end == -1:
+        return None
+    m = AUDIT_FILE_RE.search(text[:end])
+    name = Path(m.group(1).strip().strip("\"'")).name if m else ""
+    return name or None
 
 
 def redact_frontmatter(text: str) -> str:
@@ -86,7 +100,9 @@ def main(argv: list[str]) -> int:
         return 2
     blob = redact_frontmatter(text)
     sys.stdout.write(blob)
-    if AUDIT_SUFFIX_RE.search(blob):
+    own = own_audit_name(text)
+    leak = (re.search(r"(?<![\w.-])" + re.escape(own) + r"\b", blob) if own else AUDIT_SUFFIX_RE.search(blob))
+    if leak:
         print("[spec-distill v0.45.0] blob 본문에 audit 파일명이 남아 있다 — §6 원문 보존이 "
               "우선이므로 지우지 않았다. 이 블롭의 유일한 소비자는 readback이다(v0.45.0부터 "
               "critic은 build_brief_bundle.py의 번들을 받는다) — 냉독 gap 판정을 신뢰도 "
