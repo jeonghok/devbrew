@@ -11,6 +11,8 @@
   라운드 2 이상의 advisory fix 는 계보에 열린 항목이 없으면 advice(명시 `supersedes` 과차단 해소) · advisory 축이 공집합인
   프로필은 게이트 렌더에 참고 줄을 내지 않는다. qg `generic` 프로필은 `must_catch` 가 없어 라우팅 · 보고서 · 게이트
   렌더가 바이트 단위로 같다(골든). 전문은 `plugins/spec-distill/CHANGELOG.md` `[4.5.1]`.
+- 같은 엔진: 자유 텍스트 CLI 인자(`--reason` · `--quote` · `--scope` · `--extra-approval` · `--where`)의 비 UTF-8 바이트는 원장을
+  건드리기 전에 rc 1 `text_encoding_invalid` 로 거부한다 · 원장 프로필 YAML 이 깨져도 게이트 렌더가 죽지 않고 참고 줄을 낸다.
 
 ## [9.3.3] — 2026-09-28
 

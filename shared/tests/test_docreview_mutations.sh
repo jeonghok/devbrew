@@ -829,4 +829,10 @@ mut 1/1 exit_route_widened_to_decode case_advice_text_encoding_exit sed_route \
 # (95) 원장 출구를 UnicodeError 로 넓힌다 — 비 UTF-8 원장이 state_unreadable 대신 text_encoding_invalid 가 된다.
 mut 1/1 exit_state_widened_to_decode case_advice_text_encoding_exit sed_state \
   's/^    except UnicodeEncodeError as e: /    except UnicodeError as e: /'
+# (96) advisory 축 판정의 폴백에서 YAML 파손을 뺀다 — 원장 프로필 YAML 이 깨지면 게이트 렌더가 죽는다.
+mut 1/1 axis_fallback_yaml_error_dropped case_advice_seed_gate_profile_yaml_broken sed_state \
+  's/^    except (OSError, ValueError, ProfileError, getattr(yaml, "YAMLError", ProfileError)):$/    except (OSError, ValueError, ProfileError):/'
+# (97) 자유 텍스트 CLI 인자 검사를 끈다 — 비 UTF-8 --reason 이 원장에 저장된다.
+mut 1/1 cli_text_check_disabled case_advice_cli_text_surrogate_rejected sed_state \
+  's/^    bad = unencodable_text_arg(a)$/    bad = None/'
 finish

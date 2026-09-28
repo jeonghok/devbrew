@@ -1377,7 +1377,7 @@ def _has_advisory_axis(st) -> bool:
         return True
     try:
         return bool(_adv.advisory_axes(load_profile(st["profile"])))
-    except (OSError, ValueError, ProfileError):
+    except (OSError, ValueError, ProfileError, getattr(yaml, "YAMLError", ProfileError)):
         return True
 
 
@@ -1602,8 +1602,27 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+# 원장 · 사용자 문서에 들어가거나 출력되는 자유 텍스트 인자. 경로 인자(--doc · --log-file 등)는 파일 이름이라 뺀다.
+FREE_TEXT_ARGS = ("reason", "quote", "scope", "extra_approval", "where")
+
+
+def unencodable_text_arg(a):
+    """UTF-8 로 못 쓰는 글자(비 UTF-8 CLI 바이트의 surrogateescape)가 든 첫 자유 텍스트 인자의 이름 — 없으면 None."""
+    for name in FREE_TEXT_ARGS:
+        v = getattr(a, name, None)
+        if isinstance(v, str):
+            try:
+                v.encode("utf-8")
+            except UnicodeEncodeError:
+                return name
+    return None
+
+
 def main(argv=None) -> int:
     a = build_parser().parse_args(argv)
+    bad = unencodable_text_arg(a)
+    if bad:   # 원장을 읽거나 바꾸기 전에 멈춘다 — 저장된 글자는 뒤 라운드의 출력에서 죽는다
+        return fail("text_encoding_invalid", arg="--" + bad.replace("_", "-"))
     try:
         return a.fn(a)
     except FileNotFoundError as e:

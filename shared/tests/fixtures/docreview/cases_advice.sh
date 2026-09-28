@@ -534,10 +534,15 @@ case_advice_surrogate_entry() {   # 리뷰어 출력(critic · codex · 재비�
   rm -rf "$d"
 }
 case_advice_text_encoding_exit() {   # 입구 정화를 안 거친 글자의 인코딩 실패 — 두 모듈 모두 text_encoding_invalid
-  local d doc rc; d="$(mc_r1)"; doc="$(mktemp -t encx-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
-  py docreview_state.py fix --state-dir "$d" --id "$(fsum "$d" 'AD6:' '["id"]')" --event drop --reason "$(printf 'bad \377 byte')" --log-file "$doc" >/dev/null 2>"$d/err"; rc=$?
+  local d doc rc f11; d="$(mc_r1)"; doc="$(mktemp -t encx-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
+  f11="$(fsum "$d" 'AD11:' '["id"]')"
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2])
+st["findings"][sys.argv[3]]["summary"] = "원장 외톨이 \udcff 끝"
+s.save_state(sys.argv[2], st, "fixture: 원장에 surrogate")' "$SCRIPTS" "$d" "$f11"
+  py docreview_state.py defer --state-dir "$d" --id "$f11" --log-file "$doc" >/dev/null 2>"$d/err"; rc=$?
   assert_eq "$rc $(grep -c '"reason": "text_encoding_invalid"' "$d/err") $(grep -c state_unreadable "$d/err")" "1 1 0" \
-    "인코딩 출구(state): 비 UTF-8 바이트가 든 CLI 인자로 사용자 문서 쓰기가 실패하면 rc 1 · text_encoding_invalid 다(state_unreadable 이 아니다)"
+    "인코딩 출구(state): 원장에서 온 surrogate 로 사용자 문서 쓰기가 실패하면 rc 1 · text_encoding_invalid 다(state_unreadable 이 아니다)"
   assert_eq "$(cmp -s "$doc" "$FX/design-sample.md" && echo same)" "same" "인코딩 출구(state): 사용자 문서는 그대로다"
   rm -rf "$d" "$doc"; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-mc-r1.txt")" --codex "$FX/codex-failed.yaml" >/dev/null
@@ -568,6 +573,29 @@ case_advice_seed_gate_no_reference_line() {   # advisory 축이 공집합인 see
   assert_eq "$(py docreview_state.py gate --state-dir "$e" --render | grep -c '^참고 0건(이번 라운드 새 0 · 반복 0) — 끝에서 한 목록으로')" "1" \
     "seed 게이트(양의 짝): 같은 입력의 design-doc 렌더에는 참고 줄이 선다"
   rm -rf "$d" "$e"
+}
+case_advice_seed_gate_profile_yaml_broken() {   # 원장 프로필의 YAML 이 깨져도 게이트 렌더는 rc 0 으로 참고 줄을 낸다(판정 불가 → 줄을 낸다)
+  local d t rc; t="$(mktemp -d -t brokenprof-XXXXXX)"; cp "$PROF_MC/seed.md" "$t/seed.md"
+  d="$(route_r1 "$t/seed.md" "$FX/design-sample.md" "$FX/critic-mc-empty.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  printf -- '---\nlayer_rubric: [unclosed\n---\n' > "$t/seed.md"
+  py docreview_state.py gate --state-dir "$d" --render >"$d/out" 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c '^참고 0건(이번 라운드 새 0 · 반복 0) — 끝에서 한 목록으로' "$d/out") $(grep -c . "$d/err")" "0 1 0" \
+    "프로필 YAML 파손: 게이트 렌더가 rc 0 이고 참고 줄을 낸다(advisory 축을 판정하지 못하면 숨기지 않는다) · stderr 없음"
+  rm -rf "$d" "$t"
+}
+case_advice_cli_text_surrogate_rejected() {   # 원장에 들어가는 자유 텍스트 CLI 인자의 짝 없는 surrogate — 저장 전에 거부
+  local d f6 f14 before rc; d="$(mc_r1)"; f6="$(fsum "$d" 'AD6:' '["id"]')"; f14="$(fsum "$d" 'MC14:' '["id"]')"
+  before="$(mktemp -t ledger-XXXXXX)"; cp "$d/docreview-state.md" "$before"
+  py docreview_state.py fix --state-dir "$d" --id "$f6" --event escalate --reason "$(printf 'bad \377 byte')" >/dev/null 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c '"reason": "text_encoding_invalid", "arg": "--reason"' "$d/err") $(cmp -s "$before" "$d/docreview-state.md" && echo same)" "1 1 same" \
+    "CLI 텍스트: fix escalate 의 비 UTF-8 --reason 은 rc 1 · text_encoding_invalid(--reason) 이고 원장 바이트가 그대로다"
+  py docreview_state.py fix --state-dir "$d" --id "$f14" --event drop --reason "$(printf 'bad \377 byte')" >/dev/null 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c '"reason": "text_encoding_invalid", "arg": "--reason"' "$d/err") $(cmp -s "$before" "$d/docreview-state.md" && echo same)" "1 1 same" \
+    "CLI 텍스트: --log-file 없는 fix drop 의 비 UTF-8 --reason 도 rc 1 이고 원장 바이트가 그대로다"
+  py docreview_state.py fix --state-dir "$d" --id "$f6" --event escalate --reason "한글 사유 😀" >/dev/null 2>"$d/err"; rc=$?
+  assert_eq "$rc $(st_yaml "$d" "st['fixes']['$f6'].get('escalate_reason')")" "0 한글 사유 😀" \
+    "CLI 텍스트(양의 짝): 한글 · 이모지 --reason 은 rc 0 으로 원장에 그대로 적힌다"
+  rm -rf "$d" "$before"
 }
 case_advice_atomic_write_keeps_link_and_mode() {   # 원자 교체가 심볼릭 링크를 끊거나 권한 비트를 바꾸지 않는다
   local d t; d="$(adv_state 2)"; t="$(mktemp -d -t atomw-XXXXXX)"

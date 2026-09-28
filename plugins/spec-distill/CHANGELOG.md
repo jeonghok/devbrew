@@ -17,6 +17,12 @@
 - **seed 게이트 렌더의 참고 줄.** advisory 축이 공집합인 프로필(seed — `must_catch` 가 층 1 ∪ 층 2 전체)은 게이트 렌더에
   「참고 N건 …」 줄을 내지 않는다. gate JSON 의 `advice` 계수는 그대로 선다. 설계 문서 §A 의 seed 행(「참고 줄 · 계수 키는
   선다」)은 이 릴리스부터 계수 키만 해당한다.
+- **자유 텍스트 CLI 인자의 비 UTF-8 바이트가 원장을 오염시키던 결함.** `--reason` · `--quote` · `--scope` · `--extra-approval` ·
+  `--where` 에 UTF-8 로 못 쓰는 글자(surrogateescape)가 있으면 `docreview_state.py` 가 원장을 읽거나 바꾸기 전에 rc 1
+  `text_encoding_invalid`(`arg` 에 인자 이름)로 멈춘다. 전에는 rc 0 으로 저장된 뒤 다음 라운드 `finalize` 가 준비를 소비하고
+  출력에서 죽었다.
+- **원장 프로필 YAML 이 깨지면 게이트 렌더가 traceback 으로 죽던 결함.** 참고 줄의 advisory 축 판정이 YAML 파손도
+  「판정 불가 → 줄을 낸다」로 친다.
 
 ## [4.5.0] — 2026-09-28
 
