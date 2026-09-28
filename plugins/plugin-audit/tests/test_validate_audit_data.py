@@ -270,78 +270,40 @@ class TestData(unittest.TestCase):
 
 # --- --artifacts 모드: 실제 파일을 본다 (골든 픽스처는 실물을 안 본다) ---
 
-def run_validate_artifacts(data, readme_text=None, claude_md_text=None, report_text="# report\n"):
-    """repo_root 레이아웃(README/CLAUDE.md/report)을 tempdir에 짓고 --artifacts로 실행."""
+def run_validate_artifacts(data, report_text="# report\n", extra=()):
+    """빈 tempdir에 report 와 data 만 두고 --artifacts 로 실행 — README · CLAUDE.md 는 없다."""
     with tempfile.TemporaryDirectory() as t:
         root = Path(t)
-        if readme_text is not None:
-            audits = root / "docs" / "audits"; audits.mkdir(parents=True)
-            (audits / "README.md").write_text(readme_text, encoding="utf-8")
-        if claude_md_text is not None:
-            (root / "CLAUDE.md").write_text(claude_md_text, encoding="utf-8")
         report_path = root / "report.md"
         report_path.write_text(report_text, encoding="utf-8")
         j = root / "audit-data.json"
         j.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-        cmd = [sys.executable, str(SCRIPT), "--artifacts", str(j),
-               "--repo-root", str(root), "--report", str(report_path)]
-        r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(SCRIPTS_DIR))
+        cmd = [sys.executable, str(SCRIPT), "--artifacts", str(j), "--report", str(report_path), *extra]
+        r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(root))
         return r.returncode, r.stderr
 
 
 class TestArtifacts(unittest.TestCase):
-    def test_artifacts_valid_is_green(self):
-        rc, err = run_validate_artifacts(
-            copy.deepcopy(VALID),
-            readme_text="See [report](report.md) for the audit.\n",
-            claude_md_text="Audits live under docs/audits/.\n",
-        )
+    def test_artifacts_valid_is_green_without_readme_or_claude_md(self):
+        rc, err = run_validate_artifacts(copy.deepcopy(VALID))
         self.assertEqual(rc, 0, err)
 
-    def test_artifacts_readme_missing_link_is_red(self):
-        rc, err = run_validate_artifacts(
-            copy.deepcopy(VALID),
-            readme_text="Nothing to see here.\n",
-            claude_md_text="Audits live under docs/audits/.\n",
-        )
-        self.assertEqual(rc, 1, "README가 리포트를 링크하지 않는데 통과했다")
-
-    def test_artifacts_missing_readme_is_red(self):
-        rc, err = run_validate_artifacts(
-            copy.deepcopy(VALID),
-            readme_text=None,  # docs/audits/README.md 자체가 없음
-            claude_md_text="Audits live under docs/audits/.\n",
-        )
-        self.assertEqual(rc, 1, "docs/audits/README.md 부재가 통과했다")
-
-    def test_artifacts_claude_md_missing_pointer_is_red(self):
-        rc, err = run_validate_artifacts(
-            copy.deepcopy(VALID),
-            readme_text="See [report](report.md) for the audit.\n",
-            claude_md_text="No pointer here.\n",
-        )
-        self.assertEqual(rc, 1, "CLAUDE.md에 docs/audits/ 포인터가 없는데 통과했다")
+    def test_repo_root_option_removed(self):
+        rc, err = run_validate_artifacts(copy.deepcopy(VALID), extra=("--repo-root", "."))
+        self.assertEqual(rc, 2)
+        self.assertIn("unrecognized arguments: --repo-root", err)
 
     def test_artifacts_degraded_without_banner_is_red(self):
         bad = copy.deepcopy(VALID)
         bad["degraded"] = [{"axis": 3, "reason": "권한 부족"}]
         rc, err = run_validate_artifacts(
-            bad,
-            readme_text="See [report](report.md) for the audit.\n",
-            claude_md_text="Audits live under docs/audits/.\n",
-            report_text="# report\n\nNo mention of the issue anywhere near the top.\n",
-        )
+            bad, report_text="# report\n\nNo mention of the issue anywhere near the top.\n")
         self.assertEqual(rc, 1, "degraded 비었지 않은데 배너 없음이 통과했다 (AC-3)")
 
     def test_artifacts_degraded_with_banner_is_green(self):
         ok = copy.deepcopy(VALID)
         ok["degraded"] = [{"axis": 3, "reason": "권한 부족"}]
-        rc, err = run_validate_artifacts(
-            ok,
-            readme_text="See [report](report.md) for the audit.\n",
-            claude_md_text="Audits live under docs/audits/.\n",
-            report_text="# report\n\n⚠ degraded: axis 3 권한 부족\n",
-        )
+        rc, err = run_validate_artifacts(ok, report_text="# report\n\n⚠ degraded: axis 3 권한 부족\n")
         self.assertEqual(rc, 0, err)
 
 

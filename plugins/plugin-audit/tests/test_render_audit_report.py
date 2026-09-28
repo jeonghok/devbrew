@@ -5,14 +5,15 @@ REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "scripts" / "render-audit-report.py"
 
 
-def render(data):
+def render(data, *extra):
     with tempfile.TemporaryDirectory() as t:
-        j = Path(t) / "d.json"; out = Path(t) / "r.md"; readme = Path(t) / "README.md"
+        j = Path(t) / "d.json"; out = Path(t) / "r.md"
         j.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-        r = subprocess.run([sys.executable, str(SCRIPT), str(j), "--out", str(out), "--readme", str(readme)],
+        r = subprocess.run([sys.executable, str(SCRIPT), str(j), "--out", str(out), *extra],
                            capture_output=True, text=True, cwd=str(REPO))
         md = out.read_text(encoding="utf-8") if out.is_file() else ""
-        return r.returncode, md, r.stderr
+        leftovers = sorted(p.name for p in Path(t).iterdir() if p.name not in ("d.json", "r.md"))
+        return r.returncode, md, r.stderr, leftovers
 
 
 def f(id_, sev, cost, axis=1, **kw):
@@ -38,7 +39,7 @@ class TestRender(unittest.TestCase):
         data = {"meta": META_OK, "findings": [f("A1-2", "IMPORTANT", "L"), f("A1-1", "IMPORTANT", "S"),
                 f("A1-3", "CRITICAL", "M"), f("A1-4", "SUGGESTION", "S")],
                 "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "axis_failures": [], "degraded": []}
-        rc, md, err = render(data)
+        rc, md, err, _ = render(data)
         self.assertEqual(rc, 0, err)
         # CRITICAL 먼저, 그 다음 IMPORTANT 중 S(cost) 먼저, SUGGESTION 마지막
         order = [md.index("A1-3"), md.index("A1-1"), md.index("A1-2"), md.index("A1-4")]
@@ -54,7 +55,7 @@ class TestRender(unittest.TestCase):
         data = {"meta": META_OK, "findings": [f("A1-1", "IMPORTANT", "M — 훅 20줄"), f("A1-2", "IMPORTANT", "S"),
                 f("A1-3", "IMPORTANT", "L")],
                 "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "axis_failures": [], "degraded": []}
-        rc, md, err = render(data)
+        rc, md, err, _ = render(data)
         self.assertEqual(rc, 0, err)
         self.assertLess(md.index("A1-2"), md.index("A1-1"), "S가 M보다 먼저여야 (산문 섞여도)")
         self.assertLess(md.index("A1-1"), md.index("A1-3"),
@@ -67,7 +68,7 @@ class TestRender(unittest.TestCase):
         m = dict(META_OK); m["codex"] = {"ran": False}
         data = {"meta": m, "findings": [], "d_verdicts": [], "oq_answers": [],
                 "new_open_questions": [], "axis_failures": [], "degraded": [{"what": "기타 결손", "why": "x"}]}
-        rc, md, err = render(data)
+        rc, md, err, _ = render(data)
         self.assertEqual(rc, 0, err)
         head = "\n".join(md.splitlines()[:20])
         self.assertIn("codex 독립 감사 미실행", head)
@@ -77,13 +78,13 @@ class TestRender(unittest.TestCase):
         data = {"meta": META_OK, "findings": [], "d_verdicts": [], "oq_answers": [],
                 "new_open_questions": [], "axis_failures": [{"axis": i, "why": "죽음"} for i in range(1, 7)],
                 "degraded": []}
-        rc, md, err = render(data)
+        rc, md, err, _ = render(data)
         self.assertEqual(rc, 1, "6축 전멸인데 리포트를 만들었다 (AC-4a)")
 
     def test_partial_axes_banner(self):  # AC-4(b)
         data = {"meta": META_OK, "findings": [f("A1-1", "IMPORTANT", "S")], "d_verdicts": [], "oq_answers": [],
                 "new_open_questions": [], "axis_failures": [{"axis": 2, "why": "x"}], "degraded": [{"what": "x", "why": "y"}]}
-        rc, md, _ = render(data)
+        rc, md, _, _ = render(data)
         head = "\n".join(md.splitlines()[:20])
         self.assertIn("/6", head)  # "5/6 축 완주" 류
 
@@ -95,7 +96,7 @@ class TestRender(unittest.TestCase):
             f("A1-2", "IMPORTANT", "S", deep_verified=False),
             f("A1-3", "SUGGESTION", "S", deep_verified=None)],
             "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "axis_failures": [], "degraded": []}
-        rc, md, err = render(data)
+        rc, md, err, _ = render(data)
         self.assertEqual(rc, 0, err)
         lines = md.splitlines()
 
@@ -118,7 +119,7 @@ class TestRender(unittest.TestCase):
                 "new_open_questions": [{"id": "NOQ-1", "source": "claude", "axis": 3,
                                         "observation": "obs", "why_not_gap": "LD5 밖", "evidence": []}],
                 "axis_failures": [], "degraded": []}
-        rc, md, _ = render(data)
+        rc, md, _, _ = render(data)
         self.assertIn("NOQ-1", md)
         self.assertIn("obs", md)
         self.assertIn("⚑", md)  # cross-model 배지
@@ -132,7 +133,7 @@ class TestRender(unittest.TestCase):
             f("A3-9", "IMPORTANT", "S", reference_gap="OMC 있음"),
             f("A3-1", "IMPORTANT", "S", reference_gap="none")],
             "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "axis_failures": [], "degraded": []}
-        rc, md, err = render(data)
+        rc, md, err, _ = render(data)
         self.assertEqual(rc, 0, err)
         self.assertLess(md.index("A3-9"), md.index("A3-1"),
                          "reference_gap 있는 A3-9가 없는 A3-1보다 먼저여야 (stage 3, id 역순 배치로 우연통과 배제)")
@@ -145,7 +146,7 @@ class TestRender(unittest.TestCase):
             f("A4-9", "IMPORTANT", "S", reference_gap="none"),
             f("A4-1", "IMPORTANT", "S", reference_gap="none")],
             "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "axis_failures": [], "degraded": []}
-        rc, md, err = render(data)
+        rc, md, err, _ = render(data)
         self.assertEqual(rc, 0, err)
         self.assertLess(md.index("A4-1"), md.index("A4-9"),
                          "동률이면 id 오름차순(A4-1 먼저)이어야 (stage 4)")
@@ -165,7 +166,7 @@ class TestRender(unittest.TestCase):
                      "evidence": [{"file": "b.py", "line": 2, "quote": "q2"}]},
                 ],
                 "new_open_questions": [], "axis_failures": [], "degraded": []}
-        rc, md, err = render(data)
+        rc, md, err, _ = render(data)
         self.assertEqual(rc, 0, err)
         self.assertIn("배정된 열린 질문", md, "OQ 섹션 헤더가 있어야")
         self.assertIn("좌주장", md, "OQ1 좌측 claim이 렌더돼야")
@@ -190,7 +191,7 @@ class TestRender(unittest.TestCase):
                      "right_evidence": [{"claim": "우증거OQ2", "file": "y.py", "line": 4, "quote": "qy"}],
                      "steelman_condition": "b"}],
                 "new_open_questions": [], "axis_failures": [], "degraded": []}
-        rc, md, err = render(data)
+        rc, md, err, _ = render(data)
         self.assertEqual(rc, 0, err)
         idx = md.index("### OQ2")
         rest = md[idx + len("### OQ2"):]
@@ -214,7 +215,7 @@ class TestRender(unittest.TestCase):
                     {"id": "D4", "source": "claude", "verdict": "unverified", "reason": "불명확",
                      "why_unverifiable": "재현불가사유"},
                 ]}
-        rc, md, err = render(data)
+        rc, md, err, _ = render(data)
         self.assertEqual(rc, 0, err)
         self.assertIn("후보 단서 판정", md, "D-verdicts 섹션 헤더가 있어야")
         # 두 source의 verdict가 모두 나타나야 — 하나로 collapse되면(첫 source만 렌더)
@@ -233,7 +234,7 @@ class TestRender(unittest.TestCase):
         data = {"meta": META_OK, "findings": [], "d_verdicts": [], "oq_answers": [],
                 "new_open_questions": [], "axis_failures": [],
                 "degraded": ["⚠ plugin-dev 미설치 — 심층 구조 검사 생략"]}
-        rc, md, err = render(data)
+        rc, md, err, _ = render(data)
         self.assertEqual(rc, 0, f"평문 문자열 degraded에서 render가 크래시:\n{err}")
         self.assertIn("plugin-dev 미설치", md, "문자열 degraded 내용이 렌더돼야")
 
@@ -244,11 +245,22 @@ class TestRender(unittest.TestCase):
         m = dict(META_OK); m["target"] = "quality-gates"
         data = {"meta": m, "findings": [], "d_verdicts": [], "oq_answers": [],
                 "new_open_questions": [], "axis_failures": [], "degraded": []}
-        rc, md, err = render(data)
+        rc, md, err, _ = render(data)
         self.assertEqual(rc, 0, err)
         first_line = md.splitlines()[0]
         self.assertIn("quality-gates", first_line,
                       "meta.target이 리포트 첫 줄(title)에 반영돼야 — project-init 하드코딩 잔존 시 실패")
+
+    def test_no_index_file_and_no_readme_option(self):  # 설계 §2 · AC6
+        data = {"meta": META_OK, "findings": [f("A1-1", "IMPORTANT", "S")],
+                "d_verdicts": [], "oq_answers": [], "new_open_questions": [],
+                "axis_failures": [], "degraded": []}
+        rc, md, err, leftovers = render(data)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(leftovers, [], "렌더가 리포트 밖에 파일(인덱스)을 썼다")
+        rc, _, err, _ = render(data, "--readme", "x.md")
+        self.assertEqual(rc, 2)
+        self.assertIn("unrecognized arguments: --readme", err)
 
 
 class TestCodexThreeStateBanner(unittest.TestCase):
