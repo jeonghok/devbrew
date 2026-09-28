@@ -1,0 +1,22 @@
+```docreview-layer1
+[]
+```
+
+```docreview-layer2
+- ref: s1
+  category: architecture
+  anchor: "#1-context"
+  disposition: fix
+  summary: "SU1: 외톨이 \ud800 끝"
+  replacement: "고치면 \udc00 뒤"
+- ref: s2
+  category: goal_fit
+  anchor: "#12-files-to-modify"
+  disposition: fix
+  summary: "SU2: 한글 😀 그대로"
+- ref: s3
+  category: problem_definition
+  anchor: "#12-files-to-modify"
+  disposition: fix
+  summary: "SU3: 쌍 😀 합침"
+```

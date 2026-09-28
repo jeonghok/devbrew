@@ -637,9 +637,14 @@ def decide_choices(st, fid) -> list:
     return _decide_choices_for(d.get("state"), _is_reraise_successor(st, fid))
 
 
+def open_lineages(st) -> set:
+    """열린 항목(`is_open`)이 하나라도 있는 계보."""
+    return {st["findings"][f]["lineage"] for f in st["findings"] if is_open(st, f)}
+
+
 def _refresh_open_lineages(st, n) -> None:
     r = st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
-    r["open_lineages"] = sorted({st["findings"][f]["lineage"] for f in st["findings"] if is_open(st, f)})
+    r["open_lineages"] = sorted(open_lineages(st))
 
 
 def _record_advice(st, it, n, counts, seen) -> None:
@@ -1365,6 +1370,17 @@ GATE_RENDERERS = {"decide": _rg_decide, "adopted": _rg_adopted, "expired": _rg_e
                   "held_fix": _rg_held_fix, "blocking_ask": _rg_blocking_ask, "ask_open": _rg_ask_open}
 
 
+def _has_advisory_axis(st) -> bool:
+    """원장 프로필의 advisory 축이 비어 있지 않은가 — seed 처럼 must_catch 가 층 1 ∪ 층 2 전체인 프로필은 참고 항목이
+    생길 수 없어 게이트 렌더에 참고 줄을 내지 않는다. 형제 모듈 · 프로필을 못 읽으면 참(줄을 낸다)."""
+    if _adv is None:
+        return True
+    try:
+        return bool(_adv.advisory_axes(load_profile(st["profile"])))
+    except (OSError, ValueError, ProfileError, getattr(yaml, "YAMLError", ProfileError)):
+        return True
+
+
 def render_gate(st, g) -> str:
     deg = g["degrade"]
     out = []
@@ -1436,7 +1452,7 @@ def render_gate(st, g) -> str:
     out.append("기각 %d건(재비판) · 사용자 기각 %d · drop %d · bucket 충돌 %d · 계보 지목 불일치 %d · 기각 계보 재상승 %d · 미소비 재상승 예약 %d · 미소비 상향 예약 %d"
                % (c["rejected"], c["user_rejected"], len(g["dropped"]), c["bucket_conflicts"],
                   c["lineage_mismatch"], c["revived"], c["reraise_unconsumed"], c["escalated_unconsumed"]))
-    if g.get("advice") is not None:   # 게이트 질문이 아니다 — 목록은 끝에서 한 번(`advice --render`)
+    if g.get("advice") is not None and _has_advisory_axis(st):   # 게이트 질문이 아니다 — 목록은 끝에서 한 번(`advice --render`)
         adv_g = g["advice"]
         out.append("참고 %d건(이번 라운드 새 %d · 반복 %d) — 끝에서 한 목록으로 · 선재 절의 새 must-catch %d"
                    % (adv_g["total"], adv_g["new"], adv_g["repeat"], adv_g["mc_preexisting_new"]))
@@ -1586,12 +1602,33 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+# 원장 · 사용자 문서에 들어가거나 출력되는 자유 텍스트 인자. 경로 인자(--doc · --log-file 등)는 파일 이름이라 뺀다.
+FREE_TEXT_ARGS = ("reason", "quote", "scope", "extra_approval", "where")
+
+
+def unencodable_text_arg(a):
+    """UTF-8 로 못 쓰는 글자(비 UTF-8 CLI 바이트의 surrogateescape)가 든 첫 자유 텍스트 인자의 이름 — 없으면 None."""
+    for name in FREE_TEXT_ARGS:
+        v = getattr(a, name, None)
+        if isinstance(v, str):
+            try:
+                v.encode("utf-8")
+            except UnicodeEncodeError:
+                return name
+    return None
+
+
 def main(argv=None) -> int:
     a = build_parser().parse_args(argv)
+    bad = unencodable_text_arg(a)
+    if bad:   # 원장을 읽거나 바꾸기 전에 멈춘다 — 저장된 글자는 뒤 라운드의 출력에서 죽는다
+        return fail("text_encoding_invalid", arg="--" + bad.replace("_", "-"))
     try:
         return a.fn(a)
     except FileNotFoundError as e:
         return fail("state_missing", path=str(e))
+    except UnicodeEncodeError as e:   # ValueError 의 하위라 앞에 둔다 — 쓰거나 내보낼 글자의 인코딩 실패(디코딩 실패는 아래 판독 실패)
+        return fail("text_encoding_invalid", detail=str(e))
     except (ValueError, RuntimeError) as e:
         return fail("state_unreadable", detail=str(e))
     except ProfileError as e:

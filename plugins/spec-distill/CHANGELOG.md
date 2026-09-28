@@ -1,5 +1,29 @@
 # Changelog
 
+## [4.5.2] — 2026-09-28
+
+### Fixed
+- **리뷰어 출력의 짝 없는 surrogate 가 라운드를 죽이던 결함.** PyYAML 은 큰따옴표 스칼라의 JSON 식 surrogate 이스케이프를
+  짝 없는 surrogate 로 돌려준다. 그 글자가 `prepare-recritic` 의 요약 해시 · `finalize` 출력에서 `UnicodeEncodeError` 로
+  rc 1 을 냈다. `docreview_route.py` 가 YAML 을 읽는 두 자리(critic · 재비판 블록, codex 산출물)에서 `scrub()` 을
+  건다 — 짝 없는 surrogate 는 U+FFFD, 짝 맞는 이스케이프 쌍은 원래 글자, 정상 한글 · 이모지는 그대로다.
+- **인코딩 실패가 판독 실패로 오보되던 결함.** 입구를 거치지 않은 글자(비 UTF-8 CLI 인자 · 원장)의 `UnicodeEncodeError` 는
+  두 엔진 스크립트 모두 rc 1 `text_encoding_invalid` 다(전에는 `state_unreadable` · `unreadable`). 디코딩 실패는 기존
+  사유 그대로다.
+- **명시 `supersedes` 과차단.** 라운드 2 이상의 advisory `fix` 가 advice 로 가는 조건이 「새 계보」에서 「계보에 열린 항목이
+  없음」으로 바뀌었다. 계보를 이어도 그 계보에 열린 항목(열린 decide · 미적용 · escalated · held fix · 차단 ask 등 게이트의
+  open 행)이 없으면 advice 다. advice 로 간 항목이나 적용 · drop 된 fix 를 `supersedes` 로 이은 advisory fix 가 승인을
+  막지 않는다. 열린 항목이 있는 계보를 잇는 fix(라운드 1 의 미적용 · held fix, 차단 ask 에 자동 연결된 fix)는 여전히 막는다.
+- **seed 게이트 렌더의 참고 줄.** advisory 축이 공집합인 프로필(seed — `must_catch` 가 층 1 ∪ 층 2 전체)은 게이트 렌더에
+  「참고 N건 …」 줄을 내지 않는다. gate JSON 의 `advice` 계수는 그대로 선다. 설계 문서 §A 의 seed 행(「참고 줄 · 계수 키는
+  선다」)은 이 릴리스부터 계수 키만 해당한다.
+- **자유 텍스트 CLI 인자의 비 UTF-8 바이트가 원장을 오염시키던 결함.** `--reason` · `--quote` · `--scope` · `--extra-approval` ·
+  `--where` 에 UTF-8 로 못 쓰는 글자(surrogateescape)가 있으면 `docreview_state.py` 가 원장을 읽거나 바꾸기 전에 rc 1
+  `text_encoding_invalid`(`arg` 에 인자 이름)로 멈춘다. 전에는 rc 0 으로 저장된 뒤 다음 라운드 `finalize` 가 준비를 소비하고
+  출력에서 죽었다.
+- **원장 프로필 YAML 이 깨지면 게이트 렌더가 traceback 으로 죽던 결함.** 참고 줄의 advisory 축 판정이 YAML 파손도
+  「판정 불가 → 줄을 낸다」로 친다.
+
 ## [4.5.1] — 2026-09-28
 
 patch 인 이유 — 링크로 배송하는 `render_disposition.py` 가 바뀌었다(quality-gates 9.3.4 와 같은 변경 — 처분줄 · 배관줄 라벨 정정). spec-distill 은 `disposition_lines()` 를 부르지 않으므로 동작은 바뀌지 않는다.

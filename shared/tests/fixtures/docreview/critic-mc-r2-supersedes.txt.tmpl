@@ -1,0 +1,30 @@
+```docreview-layer1
+[]
+```
+
+```docreview-layer2
+- ref: p1
+  category: ambiguity
+  anchor: "#1-context"
+  disposition: fix
+  summary: "SP1: 참고로 갔던 계보를 잇는 advisory fix"
+  supersedes: "{{ID:AD20:}}"
+- ref: p2
+  category: testing
+  anchor: "#handoff-context"
+  disposition: fix
+  summary: "SP2: 적용된 fix 의 계보를 잇는 advisory fix"
+  supersedes: "{{ID:AD18:|AD19:}}"
+- ref: p3
+  category: isolation
+  anchor: "#12-files-to-modify"
+  disposition: fix
+  summary: "SP3: 미적용 fix 의 계보를 잇는 advisory fix"
+  supersedes: "{{ID:AA1:}}"
+- ref: p4
+  category: architecture
+  anchor: "#1-context"
+  disposition: fix
+  summary: "SP4: 참고로 갔던 계보를 잇는 must-catch fix"
+  supersedes: "{{ID:AD21:}}"
+```

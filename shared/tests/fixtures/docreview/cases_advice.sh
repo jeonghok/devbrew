@@ -17,7 +17,7 @@ case_advice_axes_per_profile() {
     "['ambiguity', 'approaches_comparison', 'component_relations', 'data_flow', 'feasibility', 'handoff_incomplete', 'isolation', 'overdesign', 'placeholder', 'scope_creep', 'testing', 'tradeoffs']" \
     "§A: design-doc 의 advisory 축은 층 1 나머지 다섯 + 층 2 일곱"
   assert_eq "$(adv_py "$PROF_MC/seed.md" 'sorted(a.advisory_axes(p)), a.has_must_catch(p)')" "([], True)" \
-    "§A: seed 는 advisory 축이 없고 지목은 있다(참고 줄 · 계수 키는 선다)"
+    "§A: seed 는 advisory 축이 없고 지목은 있다(계수 키는 선다 · 게이트 참고 줄은 없다)"
   assert_eq "$(adv_py "$PROF_QG/generic.md" 'sorted(a.advisory_axes(p)), a.has_must_catch(p)')" "([], False)" \
     "§A: 필드 없는 프로필(qg generic)은 advisory 축이 공집합 — 라우팅 현행"
 }
@@ -224,7 +224,40 @@ case_AC18_round2_new_advisory_fix() {
     "AC18: 라운드 1 에서 온 계보의 advisory fix(미적용)는 fixes 에 남아 막는다"
   rm -rf "$d"
 }
-
+# ── 명시 supersedes — 계보를 잇는 advisory fix 는 그 계보에 열린 항목이 있을 때만 fixes ─────────────
+adv_sup_critic() {   # adv_sup_critic <fin.json> <tmpl> <out> — {{ID:요약머리[|요약머리…]}} 를 그 머리로 시작하는 라운드 1 id 로
+  python3 - "$1" "$2" "$3" <<'PY'
+import io, json, re, sys
+fs = json.load(io.open(sys.argv[1], encoding="utf-8"))["findings"]
+def id_of(m):
+    hits = [x["id"] for x in fs if x["summary"].startswith(tuple(m.group(1).split("|")))]
+    if len(hits) != 1:
+        sys.exit("템플릿 머리가 %d개에 맞는다: %r" % (len(hits), m.group(1)))
+    return hits[0]
+t = io.open(sys.argv[2], encoding="utf-8").read()
+io.open(sys.argv[3], "w", encoding="utf-8").write(re.sub(r"\{\{ID:([^}]+)\}\}", id_of, t))
+PY
+}
+case_advice_supersedes_open_lineage_only() {
+  local d c p1 p2 p3 p4 surv; d="$(mc_r1)"; c="$d/critic-sup.txt"
+  surv="$(jget "$d/fin.json" '[x["id"] for x in d["findings"] if x["summary"].startswith(("AD18:", "AD19:"))][0]')"
+  py docreview_state.py fix --state-dir "$d" --id "$surv" --event intent-pass --scope "#handoff-context" >/dev/null
+  adv_sup_critic "$d/fin.json" "$FX/critic-mc-r2-supersedes.txt.tmpl" "$c"
+  mc_round "$d" "$FX/design-sample-handoff.md" "$c" "$d/fin2.json"
+  assert_eq "$(st_yaml "$d" "st['fixes']['$surv']['state']")" "applied" "supersedes 전제: 라운드 1 의 advisory fix(병합 생존자)가 라운드 2 에서 적용 관측됐다"
+  p1="$(id_of "$d/fin2.json" 'SP1:')"; p2="$(id_of "$d/fin2.json" 'SP2:')"; p3="$(id_of "$d/fin2.json" 'SP3:')"; p4="$(id_of "$d/fin2.json" 'SP4:')"
+  assert_eq "$(st_yaml "$d" "[st['findings'][i]['lineage'] != i for i in ('$p1', '$p2', '$p3', '$p4')]")" "[True, True, True, True]" \
+    "supersedes 전제: 넷 다 라운드 1 계보를 잇는다"
+  assert_eq "$(st_yaml "$d" "st['findings']['$p1'].get('route'), '$p1' in st['fixes']") $(gsum "$d" "'$p1' in d['unapplied_fix']")" "('advice', False) False" \
+    "supersedes: advice 로 갔던 항목의 계보를 잇는 라운드 2 advisory fix 는 advice 이고 승인을 막지 않는다"
+  assert_eq "$(st_yaml "$d" "st['findings']['$p2'].get('route'), '$p2' in st['fixes']") $(gsum "$d" "'$p2' in d['unapplied_fix']")" "('advice', False) False" \
+    "supersedes: 적용된 fix 의 계보를 잇는 advisory fix 는 advice 다"
+  assert_eq "$(adv_has "$d" "$p3") $(st_yaml "$d" "st['fixes'].get('$p3', {}).get('state')") $(gsum "$d" "'$p3' in d['unapplied_fix']")" "False pending True" \
+    "supersedes: 미적용 advisory fix 의 계보를 잇는 advisory fix 는 fixes 에 남아 막는다"
+  assert_eq "$(adv_has "$d" "$p4") $(st_yaml "$d" "st['fixes'].get('$p4', {}).get('state')")" "False pending" \
+    "supersedes: must-catch fix 는 계보와 무관하게 fixes 다(advice 로 갔던 계보를 이어도)"
+  rm -rf "$d"
+}
 # ── AC8 — 단계별 등식 ─────────────────────────────────────────────────────────
 case_AC8_staged_equation() {
   local d out; d="$(mc_r1)"
@@ -486,6 +519,83 @@ except UnicodeEncodeError:
   assert_eq "$out $(cmp -s "$doc" "$FX/design-sample.md" && echo same) $(ls -A "$t" | grep -Evc '^(doc\.md|err)$')" "raised same 0" \
     "원자 쓰기: 인코딩이 실패해도 대상 파일의 바이트는 그대로이고 임시 파일이 남지 않는다"
   rm -rf "$d" "$t"
+}
+case_advice_surrogate_entry() {   # 리뷰어 출력(critic · codex · 재비판 added)의 YAML 이스케이프 surrogate — 입구에서 걷는다
+  local d; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-surrogate.txt" "$FX/codex-surrogate.yaml" "$FX/recritic-surrogate.txt")"
+  assert_eq "$(cat "$d/prep.rc") $(grep -c '^ "ok": true,$' "$d/fin.json")" "0 1" \
+    "surrogate 입구: 짝 없는 surrogate 가 든 리뷰어 출력으로도 prepare-recritic · finalize 가 rc 0 이다"
+  assert_eq "$(grep -c '"summary": "SU1: 외톨이 � 끝"' "$d/fin.json") $(grep -c '"replacement": "고치면 � 뒤"' "$d/fin.json") $(grep -c '"summary": "SX1: 코덱스 외톨이 � 끝"' "$d/fin.json") $(grep -c '"summary": "SA1: 재비판 외톨이 � 끝"' "$d/fin.json")" "1 1 1 1" \
+    "surrogate 입구: critic · codex · 재비판 added 의 짝 없는 surrogate 가 출력에 U+FFFD 로 실린다"
+  assert_eq "$(st_yaml "$d" 'sorted(v["summary"] for v in st["findings"].values() if v["summary"].startswith(("SU", "SX", "SA")))')" \
+    "['SA1: 재비판 외톨이 � 끝', 'SU1: 외톨이 � 끝', 'SU2: 한글 😀 그대로', 'SU3: 쌍 😀 합침', 'SX1: 코덱스 외톨이 � 끝']" \
+    "surrogate 입구: 원장에도 U+FFFD 로 적히고, 정상 한글 · 이모지는 그대로이며 짝 맞는 이스케이프 쌍은 원래 글자로 합쳐진다"
+  assert_eq "$(grep -c '"summary": "SU2: 한글 😀 그대로"' "$d/fin.json") $(grep -c '"summary": "SU3: 쌍 😀 합침"' "$d/fin.json")" "1 1" \
+    "surrogate 입구: 정상 한글 · 이모지 요약은 출력에서 바이트 그대로다"
+  rm -rf "$d"
+}
+case_advice_text_encoding_exit() {   # 입구 정화를 안 거친 글자의 인코딩 실패 — 두 모듈 모두 text_encoding_invalid
+  local d doc rc f11; d="$(mc_r1)"; doc="$(mktemp -t encx-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
+  f11="$(fsum "$d" 'AD11:' '["id"]')"
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2])
+st["findings"][sys.argv[3]]["summary"] = "원장 외톨이 \udcff 끝"
+s.save_state(sys.argv[2], st, "fixture: 원장에 surrogate")' "$SCRIPTS" "$d" "$f11"
+  py docreview_state.py defer --state-dir "$d" --id "$f11" --log-file "$doc" >/dev/null 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c '"reason": "text_encoding_invalid"' "$d/err") $(grep -c state_unreadable "$d/err")" "1 1 0" \
+    "인코딩 출구(state): 원장에서 온 surrogate 로 사용자 문서 쓰기가 실패하면 rc 1 · text_encoding_invalid 다(state_unreadable 이 아니다)"
+  assert_eq "$(cmp -s "$doc" "$FX/design-sample.md" && echo same)" "same" "인코딩 출구(state): 사용자 문서는 그대로다"
+  rm -rf "$d" "$doc"; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-mc-r1.txt")" --codex "$FX/codex-failed.yaml" >/dev/null
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2])
+st["pending_recritic"]["items"][0]["finding"]["category"] = "architecture\ud800"
+s.save_state(sys.argv[2], st, "fixture: 준비에 surrogate")' "$SCRIPTS" "$d"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-empty.txt" --doc "$FX/design-sample.md" >/dev/null 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c '"reason": "text_encoding_invalid"' "$d/err") $(grep -c '"reason": "unreadable"' "$d/err")" "1 1 0" \
+    "인코딩 출구(route): 원장에서 온 surrogate 로 finalize 의 인코딩이 실패하면 rc 1 · text_encoding_invalid 다(unreadable 이 아니다)"
+  rm -rf "$d"; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-mc-r1.txt")" --codex "$FX/codex-failed.yaml" >/dev/null
+  printf '\xff\xfe\x00bad' > "$d/broken-recritic.txt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$d/broken-recritic.txt" --doc "$FX/design-sample.md" >/dev/null 2>"$d/err-r"
+  printf -- '---\ndocreview: {}\n---\n\xff\n' > "$d/docreview-state.md"
+  py docreview_state.py gate --state-dir "$d" >/dev/null 2>"$d/err-s"
+  assert_eq "$(grep -c '"reason": "unreadable"' "$d/err-r") $(grep -c '"reason": "state_unreadable"' "$d/err-s")" "1 1" \
+    "디코딩 실패: 비 UTF-8 재비판 출력은 unreadable, 비 UTF-8 원장은 state_unreadable 로 남는다(text_encoding_invalid 가 아니다)"
+  rm -rf "$d"
+}
+case_advice_seed_gate_no_reference_line() {   # advisory 축이 공집합인 seed — 게이트 렌더에 참고 줄이 없고 gate JSON 의 advice 키는 선다
+  local d e; d="$(route_r1 "$PROF_MC/seed.md" "$FX/design-sample.md" "$FX/critic-mc-empty.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  e="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-empty.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep -c '끝에서 한 목록으로') $(py docreview_state.py gate --state-dir "$d" --render | grep -c '^다음: ')" "0 1" \
+    "seed 게이트: 렌더에 참고 줄이 없다(렌더는 「다음:」 줄까지 끝났다)"
+  assert_eq "$(gsum "$d" 'd.get("advice")')" "{'total': 0, 'new': 0, 'repeat': 0, 'mc_preexisting_new': 0}" \
+    "seed 게이트: gate JSON 의 advice 키는 그대로 선다(계수 펜스가 읽는다)"
+  assert_eq "$(py docreview_state.py gate --state-dir "$e" --render | grep -c '^참고 0건(이번 라운드 새 0 · 반복 0) — 끝에서 한 목록으로')" "1" \
+    "seed 게이트(양의 짝): 같은 입력의 design-doc 렌더에는 참고 줄이 선다"
+  rm -rf "$d" "$e"
+}
+case_advice_seed_gate_profile_yaml_broken() {   # 원장 프로필의 YAML 이 깨져도 게이트 렌더는 rc 0 으로 참고 줄을 낸다(판정 불가 → 줄을 낸다)
+  local d t rc; t="$(mktemp -d -t brokenprof-XXXXXX)"; cp "$PROF_MC/seed.md" "$t/seed.md"
+  d="$(route_r1 "$t/seed.md" "$FX/design-sample.md" "$FX/critic-mc-empty.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  printf -- '---\nlayer_rubric: [unclosed\n---\n' > "$t/seed.md"
+  py docreview_state.py gate --state-dir "$d" --render >"$d/out" 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c '^참고 0건(이번 라운드 새 0 · 반복 0) — 끝에서 한 목록으로' "$d/out") $(grep -c . "$d/err")" "0 1 0" \
+    "프로필 YAML 파손: 게이트 렌더가 rc 0 이고 참고 줄을 낸다(advisory 축을 판정하지 못하면 숨기지 않는다) · stderr 없음"
+  rm -rf "$d" "$t"
+}
+case_advice_cli_text_surrogate_rejected() {   # 원장에 들어가는 자유 텍스트 CLI 인자의 짝 없는 surrogate — 저장 전에 거부
+  local d f6 f14 before rc; d="$(mc_r1)"; f6="$(fsum "$d" 'AD6:' '["id"]')"; f14="$(fsum "$d" 'MC14:' '["id"]')"
+  before="$(mktemp -t ledger-XXXXXX)"; cp "$d/docreview-state.md" "$before"
+  py docreview_state.py fix --state-dir "$d" --id "$f6" --event escalate --reason "$(printf 'bad \377 byte')" >/dev/null 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c '"reason": "text_encoding_invalid", "arg": "--reason"' "$d/err") $(cmp -s "$before" "$d/docreview-state.md" && echo same)" "1 1 same" \
+    "CLI 텍스트: fix escalate 의 비 UTF-8 --reason 은 rc 1 · text_encoding_invalid(--reason) 이고 원장 바이트가 그대로다"
+  py docreview_state.py fix --state-dir "$d" --id "$f14" --event drop --reason "$(printf 'bad \377 byte')" >/dev/null 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c '"reason": "text_encoding_invalid", "arg": "--reason"' "$d/err") $(cmp -s "$before" "$d/docreview-state.md" && echo same)" "1 1 same" \
+    "CLI 텍스트: --log-file 없는 fix drop 의 비 UTF-8 --reason 도 rc 1 이고 원장 바이트가 그대로다"
+  py docreview_state.py fix --state-dir "$d" --id "$f6" --event escalate --reason "한글 사유 😀" >/dev/null 2>"$d/err"; rc=$?
+  assert_eq "$rc $(st_yaml "$d" "st['fixes']['$f6'].get('escalate_reason')")" "0 한글 사유 😀" \
+    "CLI 텍스트(양의 짝): 한글 · 이모지 --reason 은 rc 0 으로 원장에 그대로 적힌다"
+  rm -rf "$d" "$before"
 }
 case_advice_atomic_write_keeps_link_and_mode() {   # 원자 교체가 심볼릭 링크를 끊거나 권한 비트를 바꾸지 않는다
   local d t; d="$(adv_state 2)"; t="$(mktemp -d -t atomw-XXXXXX)"

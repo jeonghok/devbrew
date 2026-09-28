@@ -22,12 +22,12 @@ sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점
 from adjudication import Ledger  # noqa: E402
 from docreview_anchor import classify_anchor, refs_of  # noqa: E402
 from docreview_state import (  # noqa: E402
-    RANK, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, category_gloss, choice_label, fail,
-    load_profile, load_state, observe_ledger, pending_mismatch, record_findings, round_diff, save_state, yaml,
+    RANK, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, category_gloss, choice_label, fail, load_profile,
+    load_state, observe_ledger, open_lineages, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
 from docreview_advice import (  # noqa: E402
     ROUTE_ADVICE, advice_ids, advisory_axes, has_must_catch, mc_preexisting_new, member_categories, route_step1,
-    route_step2,
+    route_step2, scrub,
 )
 
 BLOCK_RE = r"```%s[ \t]*\n(.*?)\n```"
@@ -39,7 +39,7 @@ def extract_block(text: str, name: str):
     if not ms:
         return None, "missing"
     try:
-        return yaml.safe_load(ms[-1]), None
+        return scrub(yaml.safe_load(ms[-1])), None
     except Exception:  # yaml.YAMLError 계열 전부 — 파손은 종류를 가리지 않는다
         return None, "broken"
 
@@ -195,7 +195,7 @@ def cmd_prepare(a) -> int:
         stale = _round_staleness(st, Path(a.codex), "codex_predates_round")
         if stale is None:
             try:
-                cx = yaml.safe_load(Path(a.codex).read_text(encoding="utf-8"))
+                cx = scrub(yaml.safe_load(Path(a.codex).read_text(encoding="utf-8")))
             except Exception:
                 cx = None
     meta = cx.get("meta") if isinstance(cx, dict) and isinstance(cx.get("meta"), dict) else {}
@@ -820,8 +820,8 @@ def cmd_finalize(a) -> int:
     extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, diff, st, prof, sections, n, L)
     final.extend(extra)
     bucket_conflicts, lineage_mismatch, revived = _resolve_ids_and_lineage(st, final, rejected_items, n)
-    # 참고(advisory) 표지 2 걸음 — 계보를 알아야 정해지는 것(라운드 ≥2 새 계보 fix · `blocks` 의 적용 경로)
-    route_step2(final, keep_of, advisory_axes(prof), n, L)
+    # 참고(advisory) 표지 2 걸음 — 계보를 알아야 정해지는 것(라운드 ≥2 열린 계보를 잇지 않는 fix · `blocks` 의 적용 경로)
+    route_step2(final, keep_of, advisory_axes(prof), n, L, open_lineages(st))
     _remap_blocks(final, keep_of, a.doc, st)
 
     for it in final:
@@ -864,6 +864,8 @@ def main(argv=None) -> int:
         return a.fn(a)
     except FileNotFoundError as e:
         return fail("state_missing", path=str(e))
+    except UnicodeEncodeError as e:   # ValueError 의 하위라 앞에 둔다 — 입구 정화(`scrub`) 밖의 글자(비 UTF-8 CLI 인자 · 원장)
+        return fail("text_encoding_invalid", detail=str(e))
     except (ValueError, RuntimeError) as e:
         return fail("unreadable", detail=str(e))
 

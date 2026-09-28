@@ -1,0 +1,9 @@
+```docreview-recritic
+verdicts: []
+added:
+  - category: scope
+    anchor: "#1-context"
+    layer: 2
+    disposition: fix
+    summary: "SA1: 재비판 외톨이 \ud801 끝"
+```
