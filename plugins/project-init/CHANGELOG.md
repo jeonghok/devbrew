@@ -5,6 +5,13 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [4.0.2] — 2026-09-28
+
+### Fixed
+
+- trunk-based 템플릿 Pattern B 가 legacy release 브랜치를 현재 main 이 아니라 마지막 v1 태그에서 자른다.
+- `/project-init` 4c S4 (i) 가 CLAUDE.md 의 비-관리 컨텐츠를 AGENTS.md 의 첫 관리 섹션 앞으로 이전한 뒤 포인터로 바꾼다 — 이전 없이 덮어 사용자 내용을 잃던 경로를 닫는다.
+
 ## [4.0.1] — 2026-09-24
 
 patch 인 이유 — 보안 수정이다. 절대 경로 항목만 있는 PATH 에서는 고르는 인터프리터가 전과 같다.

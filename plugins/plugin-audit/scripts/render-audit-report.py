@@ -175,7 +175,6 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("json", type=Path)
     ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--readme", type=Path, required=True)
     args = ap.parse_args()
     data = json.loads(args.json.read_text(encoding="utf-8"))
     md = render(data)
@@ -183,14 +182,6 @@ def main() -> int:
         print("[render] 6축 전멸 — 리포트를 만들지 않는다 (AC-4a). 실패 보고 후 중단.", file=sys.stderr)
         return 1
     args.out.write_text(md, encoding="utf-8")
-    # docs/audits/README.md 인덱스에 항목 추가 (Law 3 discoverability)
-    entry = f"- [{args.out.stem}]({args.out.name}) — {data.get('meta', {}).get('date', '')}\n"
-    if args.readme.is_file():
-        prev = args.readme.read_text(encoding="utf-8")
-        if args.out.name not in prev:
-            args.readme.write_text(prev + entry, encoding="utf-8")
-    else:
-        args.readme.write_text("# 감사 인덱스\n\n" + entry, encoding="utf-8")
     print(f"[render] {args.out} ({len(md.splitlines())} 줄)", file=sys.stderr)
     return 0
 

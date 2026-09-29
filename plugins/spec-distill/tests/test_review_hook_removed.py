@@ -17,8 +17,7 @@ S2·S4·S5 에서는 **살아 있는 어휘**를 뺀다: base 에서 삭제도 �
 자리에서만 가려진다.
 
 「현재형」은 기계로 가르지 않고 면제 코퍼스로 정한다(설계 AC2):
-  (a) 역사 — `*/CHANGELOG.md` · `docs/archive/**` · `docs/audits/README.md` ·
-      `docs/superpowers/{specs,plans,interview}/**` · 날짜 붙은 `docs/audits/*.md`
+  (a) 역사 — `*/CHANGELOG.md` · `docs/archive/**` · `docs/superpowers/{specs,plans,interview}/**`
   (b) 은퇴 토큰 리터럴 **만** — `scripts/review_entry.py` · `tests/test_review_entry.py` ·
       `tests/test_reviewing_spec_entry_fence.sh`(진입 펜스를 실행해 은퇴 토큰 advisory 를 재므로
       토큰을 환경변수 값으로 쥔다) · README 「은퇴한 스위치」 절(절 헤딩부터 다음 `## ` 까지).
@@ -107,8 +106,8 @@ EDITED = (
 )
 
 HISTORY = re.compile(
-    r"(^|/)CHANGELOG\.md$|^docs/archive/|^docs/audits/README\.md$"
-    r"|^docs/superpowers/(specs|plans|interview)/|^docs/audits/\d{4}-\d{2}-\d{2}-"
+    r"(^|/)CHANGELOG\.md$|^docs/archive/"
+    r"|^docs/superpowers/(specs|plans|interview)/"
 )
 #: (b) 면제 — 긴 것부터 가린다. 가린 자리는 같은 길이의 공백이라 줄 번호가 보존된다.
 RETIRED_LITERALS = (

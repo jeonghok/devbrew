@@ -525,4 +525,15 @@ assert_contains "$FIN" "템플릿 절 제목 중복 절차" "I4: 확정 검사 1
 assert_contains "$FIN" "「되돌린다」를 받으면 검사 1 부터" "검사 2 에서 되돌리면 검사 1 부터 다시 돈다"
 assert_contains "$CQ" "풀이는 한 문장으로 쓴다" "여러 문장 풀이는 문장마다 표시한다(대조는 문장 단위)"
 
+# ── degrade 채널 이름 (설계 2026-09-28-audit-folder-removal §4-6) ─────────────
+# 「degrade 채널」 라벨의 존재는 test_proceed_gate_adopters.sh 가 잰다. 여기서는 그 절이 채널
+# 다섯을 **이름으로** 대는지 잰다 — 이름이 사라지면 사람이 어디서 degrade 를 읽을지 모른다.
+# 모양은 test_reviewing_spec_disclosure.sh (2). 절 추출이 비면 RED 다.
+DGC="$(section "$SK" '^## degrade 채널$')"
+[ -n "$DGC" ] && ok "절 추출: ## degrade 채널 (vacuous 아님)" \
+              || no "절 추출: ## degrade 채널 이 비었다 — 채널 이름을 잴 수 없다"
+for ch in 'advisory[]' 'blocks' 'gate --render' 'framing_degradations' '게이트 질문 텍스트'; do
+  assert_contains "$DGC" "$ch" "degrade 채널 '$ch' 를 이름으로 댄다"
+done
+
 finish

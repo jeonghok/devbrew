@@ -50,7 +50,7 @@ ci_cat_all() { cat "${CI_ALL[@]}"; }
 
 # presence 코퍼스 소유 규칙 — 공용 단언(`shared/tests/presence_corpus.sh`).
 # 이 계약을 재는 스캔은 전부 같은 규칙을 지고, 그래서 사본이 아니라 한 벌이다
-# (감사문서 「공유 참조 파일」 절 · 정본 「앵커는 각 skill 에」 절).
+# (정본 「앵커는 각 skill 에」 절).
 assert_presence_corpus_skill_owned "CI_FILES" "${CI_FILES[@]}"
 # 플러그인 레벨 도출. 0 자체는 정당한 상태지만, 디렉터리가 **있는데** 0이면 글롭이 깨진
 # 것이다 — CI_ALL 이 CI_FILES 로 조용히 축소되고 아래 부재 검사가 그만큼 약해진다.
@@ -832,7 +832,7 @@ grep -q 'interview_round >= 2\|interview_round>=2' "${CI_ALL[@]}" \
 # `§8.2`처럼 뒤에 `.`나 숫자가 오는 것은 설계 문서 §-참조라 제외한다.
 # 〔주의〕 CI_ALL 에는 플러그인 레벨 공유 계약(proceed-gate.md)이 들어 있고, 그 파일은
 # **다른 문서의** 절 번호를 인용할 수 있다 — 이 검사는 그것을 payload 좌표와 구별하지
-# 못한다(실측: 감사문서 `§8` 인용 하나로 발화). 거짓 RED 지만 시끄러우므로 안전하다.
+# 못한다. 거짓 RED 지만 시끄러우므로 안전하다.
 # 공유 계약에서는 절을 번호가 아니라 **제목**으로 인용하는 것이 회피책이다.
 retired_secs="$(grep -nE '§[89]([^.0-9]|$)' "${CI_ALL[@]}" || true)"
 [[ -z "$retired_secs" ]] \

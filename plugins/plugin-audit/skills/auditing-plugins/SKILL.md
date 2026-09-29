@@ -30,10 +30,27 @@ parse만 되고 `check()`엔 전달되지 않는 dead flag — cwd 민감성의 
    샌드박스 경로(`run-own-tests.sh`, `check-integrity.sh --target`)에 target을 꽂아 넣기 **전에** 끝낸다
    — 검증되지 않은 target을 경로 조립에 먼저 쓰면 그 아래의 모든 격리가 무의미해진다. 실패 시
    loud abort("target 플러그인 없음" 또는 "target 형식 불허") — consent 이전.
-3. **clean-worktree precondition**: 감사는 read-only지만 산출물 커밋을 위해 clean tree 확인.
-4. **지출 동의 게이트 (cost_class: high, C2의 두 의무)** — fan-out(약 30 dispatch: 6축 + 축별 refute
+3. **지출 동의 게이트 (cost_class: high, C2의 두 의무)** — fan-out(약 30 dispatch: 6축 + 축별 refute
    + codex refute + deep-verify 최대 8×2)을 선언하고 `AskUserQuestion`으로 명시 승인을 받는다.
-   승인 없으면 종료. consent 아티팩트(`{approved, at, fanout}`)를 저술.
+   승인 없으면 종료 — 실행 디렉토리를 만들지 않는다.
+4. **실행 디렉토리** — 승인 직후 **한 번만** 부른다:
+   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-run-dir.py" <target> --repo-root .`
+   rc≠0 이거나 stdout 이 정확히 두 줄이 아니면 stderr 를 그대로 보이고 멈춘다(loud abort) — 디렉토리를
+   손으로 만들지 않고, 실행 키를 sandbox id 로 쓰지 않는다.
+   stdout 첫 줄이 실행 디렉토리의 절대경로(`$RUN_DIR` — `.claude/plugin-audit/<date>-<target>[-N]/`,
+   basename 이 실행 키), 둘째 줄이 **sandbox id**(실행 키의 SHA-256 앞 8 hex)다. 디렉토리는 안의
+   `.gitignore`(`*`)로 스스로 git-ignore 된다. 같은 날 같은 대상을 다시 감사하면 `-2` 로 새로 만들고
+   이전 결과를 덮지 않는다.
+   Bash 도구는 호출마다 새 셸이라 두 값이 다음 호출로 넘어가지 않는다 — 이후 모든 명령에 **리터럴로**
+   넣는다. `$RUN_DIR` 을 쓰는 펜스는 첫 줄에 `RUN_DIR=<그 경로>` 를 두고 바로
+   `[ -d "$RUN_DIR" ] || { echo "[plugin-audit] RUN_DIR 이 비었거나 없다 — 멈춘다" >&2; exit 1; }` 로
+   가드한다 — 빈 값이면 `"$RUN_DIR/audit-data.json"` 이 루트의 `/audit-data.json` 이 된다. 한 감사
+   안에서 다시 부르지 않는다 — 다시 부르면 `-2` 가 생겨 산출이 두 디렉토리로 갈라진다.
+   consent 아티팩트(`{approved, at, fanout}`)를 `$RUN_DIR/consent.json` 으로 저술한다. 이후의 모든
+   중간 파일(무결성 스냅샷 · 축 질문 `$AXIS_FILE` · `$CODEX_JSON` · `wf.json` · `codex.json` ·
+   `meta.json` · `assigned.json`)도 `$RUN_DIR` 에 둔다.
+   **중간 abort** — 실행 디렉토리가 생긴 뒤(pre-0 hard error · 무결성 불일치 등) 멈추면 디렉토리를
+   지우지 않고, abort 메시지에 그 절대경로를 적는다.
 
 ## pre-0 — 정적 게이트 (dispatch 전, 리포 root에서 병렬 실행)
 
@@ -62,8 +79,8 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
 
 ## pre-1 — evidence pack + codex (orchestrator)
 
-1. **무결성 BEFORE** 스냅샷: `check-integrity.sh ld5 <before.txt> --target <target> [--extra-path ...]`
-   + `check-integrity.sh harness <before-harness.txt>`. `harness` 스코프는 plugin-audit 자신의
+1. **무결성 BEFORE** 스냅샷: `check-integrity.sh ld5 "$RUN_DIR/before.txt" --target <target> [--extra-path ...]`
+   + `check-integrity.sh harness "$RUN_DIR/before-harness.txt"`. `harness` 스코프는 plugin-audit 자신의
    `agents/`+`scripts/`(Law 2의 두 번째 방어선)를 커버한다 — ld5(target-only)는 볼 수 없는, 감사 실행
    *도중* 감사 자신의 persona/스크립트가 변조되는 걸 잡기 위함.
 2. **evidence pack 조립** — 결과 evidence pack이 Workflow(`audit-workflow.js`)가 실제로 읽는 필드 이름과
@@ -83,7 +100,9 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
    - `plugin_version`/`file_count`/`total_lines`는 LD5 코퍼스 스캔(BEFORE 스냅샷과 같은 스코프)에서
      채운다.
    - `staleness_facts`는 `check-staleness.py plugins/<target>`, `own_tests`는
-     `run-own-tests.sh plugins/<target> <sid>` (quality-gates 미설치 시 skip 사실만), `structure_facts`/
+     `run-own-tests.sh plugins/<target> <sandbox id>` (quality-gates 미설치 시 skip 사실만) — `<sandbox id>` 는
+     phase 0 step 4 의 둘째 줄이다. `qg-worktree.sh create-sandbox` 는 id 의 앞 8글자만 sandbox 이름에 쓰고
+     같은 이름의 sandbox 를 지우고 다시 만들므로 실행 키를 그대로 넘기지 않는다. `structure_facts`/
      `shape_gaps`는 pre-0의 E/F 출력을 그대로 이관한다.
 
    🔴 **프레이밍 위생 (C17, AC-8b).** target의 README·`plugin.json` description·코드 주석 같은
@@ -157,21 +176,22 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
 
 ## post-1 — 조립·검증·렌더 (orchestrator, 결정론)
 
-이하 `<data.json>` = **canonical 경로** `docs/audits/<date>-<target>-audit-data.json` (step 7의 `--artifacts`가
-검증하는 바로 그 파일). tmp/scratch 경로에 쓰면 step 7이 파일을 못 찾아 산출물 검증이 깨진다 (H /qg 2026-07-20).
+이하 `<data.json>` = `$RUN_DIR/audit-data.json` (step 7의 `--artifacts`가 검증하는 바로 그 파일). 다른
+경로에 쓰면 step 7이 파일을 못 찾아 산출물 검증이 깨진다 (H /qg 2026-07-20). `<wf.json>` · `<codex.json>` ·
+`<meta.json>` · `<assigned.json>` 도 `$RUN_DIR/` 아래 같은 이름의 파일이다.
 
-1. **원장 확보 (assemble 前 — Law 3 discoverability + P21)**: Workflow 실행이 남긴 `journal.jsonl`(그 run의
-   transcript 디렉토리)을 얻어 **먼저 P21 secret 스캔**을 돌린다 — 비밀/자격증명 패턴은 placeholder 참조로
-   redact하고, 스캔이 실패하거나 redact 못 하는 secret이 남으면 **persist하지 않는다**(raw transcript journal을
-   committed dir로 그대로 커밋하면 자격증명·민감 소스가 유출된다 — codex re-verify R5). 통과분만
-   `docs/audits/<date>-<target>-audit-journal.jsonl`로 저술·커밋한다. 이 파일이 README:40("journal.jsonl이
-   named/diff-able history")·CLAUDE.md §Audits 원장 계약과 `render-audit-report.py`의 "축 완주 수와 journal로
-   확인하라" 포인터의 **실체**다 — persist 안 하면 그 포인터가 부재 아티팩트를 가리키는 dangling 참조다.
+1. **원장 확보 (assemble 前 — P21)**: Workflow 실행이 남긴 `journal.jsonl`(그 run의 transcript
+   디렉토리)을 얻어 **먼저 P21 secret 스캔**을 돌린다 — 비밀/자격증명 패턴은 placeholder 참조로 redact하고,
+   스캔이 실패하거나 redact 못 하는 secret이 남으면 **persist하지 않는다**. 리포트와 원장은 사람이 복사·공유하는
+   산출물이라, raw transcript journal을 그대로 두면 자격증명·민감 소스가 그 공유 경로로 샌다(codex re-verify
+   R5). 통과분만 `$RUN_DIR/audit-journal.jsonl`로 저술한다. 이 파일이 `render-audit-report.py`의 "축 완주 수와
+   journal로 확인하라" 포인터의 **실체**다 — journal 은 실행 디렉토리의 작업 산출물이고, persist 안 하면 그
+   포인터가 부재 아티팩트를 가리키는 dangling 참조다.
    journal을 얻지 못하거나 secret 때문에 persist를 못 하면 그 사실을 `degraded[]`(meta.pre1_degraded)에 넣는다
    — **assemble 前**이라 이후 render 배너(AC-3)에 반영된다(render 後에 확보하면 이미 렌더된 배너에 못 싣는다,
    codex re-verify R4).
 2. `assemble-audit-data.py --workflow-return <wf.json> --codex-side <codex.json> --meta <meta.json>
-   --assigned <assigned.json> --repo-root . --out docs/audits/<date>-<target>-audit-data.json` (내부에서
+   --assigned <assigned.json> --repo-root . --out "$RUN_DIR/audit-data.json"` (내부에서
    `check-grounding.py`를 동적 import해 재읽기 — A grounding: 인용 실재 검증, null-degrade/폐기/line-교정.
    별도 CLI 호출이 아니다).
    `<codex.json>`은 `codex_audit_to_json.py`의 출력을 그대로 쓴다. assemble은 그중
@@ -186,20 +206,28 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    drift가 남아 있던 이유는 검사 부재가 아니라 **사실로만 보고되고 아무도 고치지 않은 것**이다.
    조치는 `plugin.json`을 정본으로 marketplace 항목을 맞추는 것이다.
 3. `validate-audit-data.py --data <data.json>` → RED면 abort(완결성·consent·codex-merge·NOQ·gate-E).
-4. `render-audit-report.py <data.json> --out docs/audits/<date>-<target>-audit.md --readme docs/audits/README.md`.
+4. `render-audit-report.py <data.json> --out "$RUN_DIR/audit.md"`.
    6축 전멸(exit 1) → 리포트 없음(AC-4).
-5. **무결성 AFTER**: `check-integrity.sh ld5 <after.txt> --target <target>` +
-   `check-integrity.sh harness <after-harness.txt>` → 각각 대응하는 BEFORE와 diff. 둘 중 하나라도
-   불일치 → 비파괴 롤백(ld5=감사 중 target 변경 감지, harness=감사 중 plugin-audit 자신의
-   agents/scripts 변조 감지).
-6. **정직성 배너 (AC-3)**: `degraded[]` 비어있지 않으면 리포트 상단 배너 필수 + discoverability
-   (`docs/audits/README.md` 인덱스 + 필요 시 `CLAUDE.md` 포인터). step 1의 원장 미확보/secret degrade도 여기 포함.
-7. `validate-audit-data.py --artifacts docs/audits/<date>-<target>-audit-data.json --report
-   docs/audits/<date>-<target>-audit.md --repo-root .` → 산출물(README 링크·배너) 검사. (`--artifacts`는
+5. **무결성 AFTER**: `check-integrity.sh ld5 "$RUN_DIR/after.txt" --target <target>` +
+   `check-integrity.sh harness "$RUN_DIR/after-harness.txt"` → 각각 대응하는 BEFORE와 diff. 둘 중 하나라도
+   불일치 → **감사 무효**(ld5=감사 중 target 변경 감지, harness=감사 중 plugin-audit 자신의
+   agents/scripts 변조 감지). 실행 디렉토리와 산출을 지우지 않고, 변경된 파일 목록과 `$RUN_DIR`
+   절대경로를 abort 메시지로 보고한다. `$RUN_DIR/VOID` 파일(한 줄: 사유)을 남긴다. step 6~8로 가지
+   않는다 — `audit.md`를 정상 산출로 소개하지 않는다.
+6. **정직성 배너 (AC-3)**: `degraded[]` 비어있지 않으면 리포트 상단 배너 필수. step 1의 원장 미확보/secret
+   degrade도 여기 포함.
+7. `validate-audit-data.py --artifacts "$RUN_DIR/audit-data.json" --report "$RUN_DIR/audit.md"` → 산출물(배너)
+   검사. (`--artifacts`는
    렌더된 파일이 아니라 audit-data JSON을 가리켜야 한다 — 스크립트가 그 경로를 `read_text()`+
    `json.loads()`하므로 디렉토리를 넘기면 `IsADirectoryError`로 죽는다.) 원장(journal) 실재 검증은
    validate_artifacts에 아직 없다 — step 1의 persist 성공/degrade 사실이 배너로 드러나는 것으로 갈음한다
-   (journal artifact 정합 검사는 향후 하드닝, codex re-verify round-2 V2-5).
+   (journal artifact 정합 검사는 향후 하드닝, codex re-verify round-2 V2-5). RED 면 종료 보고(step 8)
+   대신 RED 사실(검사 메시지)을 보고하고 멈춘다.
+8. **종료 보고** — step 5 가 일치하고 step 7 이 GREEN 일 때만 이 종료 보고를 한다. 리포트
+   (`$RUN_DIR/audit.md`) · 데이터(`$RUN_DIR/audit-data.json`) · 원장
+   (`$RUN_DIR/audit-journal.jsonl`)의 절대경로를 사용자에게 보인다. 리포트는 한 번 읽는 작업 산출물이다 —
+   실행 디렉토리는 git-ignore 되고 커밋하지 않는다. 이 감사의 compounding 은 감사가 낳은 수정 커밋과
+   reviewer persona 편집이 맡는다.
 
 ## kill switch
 

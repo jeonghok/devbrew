@@ -2,10 +2,12 @@ import re
 import unittest
 from pathlib import Path
 
-SKILL = Path(__file__).resolve().parents[1] / "skills" / "auditing-plugins" / "SKILL.md"
-# 버그 형태: `--artifacts docs/audits/` 뒤에 공백/개행 — 디렉토리를 그대로 넘기면
-# validate-audit-data.py가 `read_text()`+`json.loads()`에서 IsADirectoryError로 죽는다 (review fix 1).
-_BUGGY_ARTIFACTS_DIR_FORM = re.compile(r"--artifacts docs/audits/\s")
+PLUGIN = Path(__file__).resolve().parents[1]
+SKILL = PLUGIN / "skills" / "auditing-plugins" / "SKILL.md"
+README = PLUGIN / "README.md"
+# 버그 형태: `--artifacts` 에 실행 디렉토리 자체를 넘긴다 — validate-audit-data.py가
+# `read_text()`+`json.loads()`에서 IsADirectoryError로 죽는다 (review fix 1).
+_BUGGY_ARTIFACTS_DIR_FORM = re.compile(r'--artifacts\s+"?\$RUN_DIR/?"?(\s|$)')
 # 각 불변식 = body-unique 문구 (헤더-satisfiable 금지)
 INVARIANTS = [
     "cost_class: high",                                    # 지출 게이트 owner
@@ -28,12 +30,18 @@ INVARIANTS = [
     "codex-gate:begin runner=run_audit_codex_reviewer.sh",
     "자기서술은 감사 material이지 verdict 프레임이 아니다",   # AC-8b redaction (C17)
     "캐시 갱신 + 세션 재시작",                               # GC8
-    # H (/qg 2026-07-20 round-2): step-1 --out은 step-6이 검증하는 canonical 경로에 pin돼야 한다
-    # (placeholder tmp 경로면 step-6 --artifacts가 파일을 못 찾아 깨진다).
-    "--out docs/audits/<date>-<target>-audit-data.json",
-    # H: Workflow journal을 canonical 원장 파일로 persist (README/CLAUDE.md §Audits + render 포인터의 실체).
+    # 실행 디렉토리는 지출 동의 승인 직후 prepare-run-dir.py 가 만든다 (설계 2026-09-28 §2).
+    "prepare-run-dir.py",
+    # 빈 RUN_DIR 가드 — Bash 도구는 셸 변수를 다음 호출로 넘기지 않는다.
+    '[ -d "$RUN_DIR" ] ||',
+    # sandbox 이름은 실행 키가 아니라 그 해시다 — qg create-sandbox 는 id 앞 8글자만 쓴다 (D1.1).
+    "run-own-tests.sh plugins/<target> <sandbox id>",
+    # H (/qg 2026-07-20 round-2): step-2 --out은 step-7이 검증하는 경로에 pin돼야 한다.
+    '--out "$RUN_DIR/audit-data.json"',
+    '--artifacts "$RUN_DIR/audit-data.json" --report "$RUN_DIR/audit.md"',
+    # H: Workflow journal을 실행 디렉토리의 원장 파일로 persist (render 의 "journal로 확인하라" 포인터의 실체).
     "audit-journal.jsonl",
-    # H R5 (codex re-verify): raw transcript journal 커밋 전 P21 secret 스캔 필수 (자격증명 유출 방지).
+    # H R5 (codex re-verify): raw transcript journal 저술 전 P21 secret 스캔 필수 (자격증명 유출 방지).
     "P21 secret 스캔",
 ]
 
@@ -51,23 +59,55 @@ class TestSkillOrchestration(unittest.TestCase):
     def test_journal_acquired_before_assembly(self):  # H R4 (codex re-verify)
         # journal 확보가 assemble/render 뒤에 오면, journal 미획득을 degraded[]에 넣어 배너에 반영할 수
         # 없다(이미 렌더됨). 원장(journal) 확보 스텝이 assemble --out(post-1 조립)보다 **앞서야** 한다.
+        # 앵커는 body-unique 문구(헤더-satisfiable 금지) — 바로 그 저술 문장을 잡는다.
         body = SKILL.read_text(encoding="utf-8")
-        j = body.find("audit-journal.jsonl")
-        a = body.find("--out docs/audits/<date>-<target>-audit-data.json")
+        journal_anchor = "통과분만 `$RUN_DIR/audit-journal.jsonl`로 저술"
+        self.assertEqual(
+            body.count(journal_anchor), 1,
+            "journal persist 문구가 body-unique 하지 않다 — 앵커 재선정 필요",
+        )
+        j = body.find(journal_anchor)
+        a = body.find('--out "$RUN_DIR/audit-data.json"')
         self.assertNotEqual(j, -1, "journal persist 스텝 부재")
-        self.assertNotEqual(a, -1, "assemble --out canonical 경로 부재")
+        self.assertNotEqual(a, -1, "assemble --out 실행 디렉토리 경로 부재")
         self.assertLess(j, a, "journal 확보가 assemble 뒤에 옴 — 미획득 degrade가 배너에 못 실린다 (R4)")
 
+    def test_run_dir_made_after_consent(self):
+        # 거절이면 실행 디렉토리가 생기지 않는다 — 생성 호출이 동의 게이트보다 뒤에 와야 한다.
+        # 앵커는 body-unique 문구 — bare `AskUserQuestion`/`prepare-run-dir.py`는 헤더에도
+        # 나타날 수 있어 satisfiable하다.
+        body = SKILL.read_text(encoding="utf-8")
+        consent_anchor = "AskUserQuestion`으로 명시 승인"
+        prep_anchor = 'scripts/prepare-run-dir.py" <target>'
+        self.assertEqual(
+            body.count(consent_anchor), 1,
+            "지출 동의 문구가 body-unique 하지 않다 — 앵커 재선정 필요",
+        )
+        self.assertEqual(
+            body.count(prep_anchor), 1,
+            "prepare-run-dir.py 호출 문구가 body-unique 하지 않다 — 앵커 재선정 필요",
+        )
+        consent, prep = body.find(consent_anchor), body.find(prep_anchor)
+        self.assertLess(consent, prep, "prepare-run-dir.py 호출이 지출 동의 게이트보다 앞에 있다")
+
+    def test_no_docs_audits_path(self):  # AC7
+        for path in (SKILL, README):
+            with self.subTest(file=path.name):
+                self.assertNotIn("docs/audits", path.read_text(encoding="utf-8"))
+        # 양의 짝 — 부재 단언은 파일이 비어도 참이다.
+        self.assertIn('"$RUN_DIR/audit.md"', SKILL.read_text(encoding="utf-8"))
+        self.assertIn(".claude/plugin-audit/", README.read_text(encoding="utf-8"))
+
     def test_validate_artifacts_invocation_is_not_bare_directory(self):
-        # review fix 1 regression lock: `--artifacts docs/audits/` (bare directory, immediately
-        # followed by whitespace/newline) crashes validate-audit-data.py with IsADirectoryError —
-        # the real contract points --artifacts at the audit-data JSON file + passes --report.
+        # review fix 1 regression lock: `--artifacts "$RUN_DIR"` (실행 디렉토리 자체) crashes
+        # validate-audit-data.py with IsADirectoryError — --artifacts must point at the audit-data
+        # JSON file + pass --report.
         body = SKILL.read_text(encoding="utf-8")
         self.assertIsNone(
             _BUGGY_ARTIFACTS_DIR_FORM.search(body),
-            "SKILL.md still tells the orchestrator to call "
-            "`validate-audit-data.py --artifacts docs/audits/` (bare directory) — this crashes "
-            "with IsADirectoryError; --artifacts must point at the audit-data JSON file.",
+            "SKILL.md tells the orchestrator to call `validate-audit-data.py --artifacts \"$RUN_DIR\"` "
+            "(bare directory) — this crashes with IsADirectoryError; --artifacts must point at the "
+            "audit-data JSON file.",
         )
         self.assertIn(
             "--report",

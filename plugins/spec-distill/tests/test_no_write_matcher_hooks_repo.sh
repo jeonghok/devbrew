@@ -116,8 +116,10 @@ fi
 # 그러면 아래 두 대조는 **실행되지 않은 채** 종료되는데 rc 는 여전히 1 이라 사람 눈에는
 # "락이 잡았다"로 보인다 — 실측으로 확인된 모양이다(Bash matcher 를 전부 rename 한
 # 변이에서 출력이 ✓ 한 줄에서 끊겼다). 개수 0 은 아래 임계값이 판정한다.
+# 임계는 1 이다 — qg v7.0.0 이 자기 Bash matcher 훅을 의도적으로 지웠다(이 락은 그보다 먼저 생겼다).
+# 이 대조의 목적은 grep 이 작동한다는 양성 증인이라 1 로 충분하다.
 N_BASH=$(grep -l '"matcher": "Bash"' plugins/*/hooks/hooks.json 2>/dev/null | wc -l | tr -d ' ') || N_BASH=0
-[[ "$N_BASH" -ge 2 ]] && ok "양성 대조: Bash matcher 훅 ${N_BASH}개 생존" \
+[[ "$N_BASH" -ge 1 ]] && ok "양성 대조: Bash matcher 훅 ${N_BASH}개 생존" \
                       || no "양성 대조 실패: Bash matcher 훅이 ${N_BASH}개뿐"
 
 # 양성 대조 2 — 기록물에 남은 이름은 위반이 아니다 (GREEN 이 정답).

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# B1 — 배포 단위 밖 파일(docs/audits/…) 없이도 brief 리뷰 격리 락이 도는가.
+# B1 — 배포 단위 밖 파일(감사 폴더) 없이도 brief 리뷰 격리 락이 도는가. (5) 는 그 폴더의 부재 락이다.
 #
 # 양성 증인을 먼저 세운다: 감사 파일이 **없는** 임시 리포 루트에서 격리 락이
 # 실제로 **실행되고 통과**하는가. 그다음에야 SKILL 본문에 그 경로 참조가 없음을
@@ -44,8 +44,9 @@ grep -qF 'docs/audits/' "$SKILL" \
   && no "reviewing-brief SKILL 이 여전히 docs/audits/ 경로를 참조한다 (N3 위반)" \
   || ok "reviewing-brief SKILL 에 배포 단위 밖 경로 참조 없음"
 
-# (5) 근거 기록 자체는 지우지 않는다.
-test -f "$REPO_ROOT/docs/audits/2026-07-27-spec-distill-zero-tool-probe.md" \
-  && ok "probe 감사 문서는 근거 기록으로 남아 있다" \
-  || no "감사 문서를 지웠다 — 지우는 것은 그것을 읽는 코드이지 기록이 아니다"
+# (5) 감사 폴더는 리포에 없다 — 작업 트리의 존재를 잰다(추적 여부와 무관). 폴더가 되살아나면
+#     (다른 브랜치 병합 · 옛 plugin-audit 캐시의 재기록) 여기서 RED 다.
+{ [ ! -e "$REPO_ROOT/docs/audits" ] && [ ! -e "$REPO_ROOT/docs/archive/audits" ]; } \
+  && ok "감사 폴더 docs/audits · docs/archive/audits 가 작업 트리에 없다" \
+  || no "감사 폴더가 되살아났다 — docs/audits 또는 docs/archive/audits 가 작업 트리에 있다"
 finish

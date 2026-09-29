@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """validate-audit-data.py — 감사 데이터·산출물 검증 (design §16).
 
-파이프라인은 자기를 회계할 수 없다 (§9.1) → 검증을 파이프라인 밖에 둔다. RED면 렌더링/커밋 금지.
+파이프라인은 자기를 회계할 수 없다 (§9.1) → 검증을 파이프라인 밖에 둔다. RED면 렌더링·산출 보고 금지.
 
 --data: 렌더링 *전*. consent 3필드 · fanout 내부 정합(fanout_declared==consent.fanout) ·
         배정 D/OQ(meta.assigned_d/assigned_oq, 런타임 값) 완결성 · pending 잔존 0 ·
         codex 병합(B7) · cross-model 증발 · NOQ 원소 스키마 · gate-E→NOQ 회수.
---artifacts: 렌더링 *후*. 실제 파일을 본다 (골든 픽스처는 실물을 안 본다).
+--artifacts: 렌더링 *후*. 실제 리포트 파일의 배너(AC-3)를 본다 (골든 픽스처는 실물을 안 본다).
 """
 from __future__ import annotations
 
@@ -138,14 +138,8 @@ def validate_data(data: dict) -> list:
     return errs
 
 
-def validate_artifacts(data: dict, repo_root: Path, report_path: Path) -> list:
+def validate_artifacts(data: dict, report_path: Path) -> list:
     errs: list[str] = []
-    readme = repo_root / "docs" / "audits" / "README.md"
-    if not readme.is_file() or report_path.name not in readme.read_text(encoding="utf-8"):
-        errs.append("docs/audits/README.md가 리포트를 링크하지 않음")
-    claude_md = repo_root / "CLAUDE.md"
-    if not claude_md.is_file() or "docs/audits/" not in claude_md.read_text(encoding="utf-8"):
-        errs.append("CLAUDE.md에 docs/audits/ 포인터 없음")
     if data.get("degraded"):
         head = "\n".join(report_path.read_text(encoding="utf-8").splitlines()[:20])
         if "⚠" not in head and "degraded" not in head.lower():
@@ -161,7 +155,6 @@ def main() -> int:
     group = ap.add_mutually_exclusive_group(required=True)
     group.add_argument("--data", type=Path)
     group.add_argument("--artifacts", type=Path)
-    ap.add_argument("--repo-root", type=Path, default=Path("."))
     ap.add_argument("--report", type=Path, default=None)
     args = ap.parse_args()
 
@@ -172,7 +165,7 @@ def main() -> int:
     else:
         mode = "--artifacts"
         data = json.loads(args.artifacts.read_text(encoding="utf-8"))
-        errs = validate_artifacts(data, args.repo_root, args.report or args.artifacts)
+        errs = validate_artifacts(data, args.report or args.artifacts)
 
     if errs:
         print(f"[validate-audit-data] RED ({mode}) — {len(errs)}건", file=sys.stderr)
