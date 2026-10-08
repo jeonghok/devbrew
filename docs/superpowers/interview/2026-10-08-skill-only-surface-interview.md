@@ -8,90 +8,89 @@ next_phase: superpowers:brainstorming
 contract: v2
 audit_file: 2026-10-08-skill-only-surface-interview.audit.md
 user_sourced_items:
-# confirmed 0건 — 사용자가 전부 잠정으로 판단
   - id: C1
     source: verbatim
-    status: provisional
+    status: confirmed
     statement: "점검 대상은 slash 명령, slash 로 부를 수 있는 skill, kill switch 환경변수, 명령 인자로 넘기는 핸드오프 문구(skill 이 다음 단계로 안내하는 명령 문구 포함) 넷 전부다"
     evidence: S1
   - id: C2
     source: verbatim
-    status: provisional
+    status: confirmed
     statement: "이번 사이클은 점검·결정에서 멈추지 않고 구현까지 이 브랜치 하나로 간다"
     evidence: S1
   - id: C3
     source: verbatim
-    status: provisional
+    status: confirmed
     statement: "quality-gates 파일은 이 작업에서 고치지 않고 점검 보고에만 올린다; qg v10 은 자기 설계대로 가고 어긋나는 qg 부분은 후속 과제로 남긴다"
     evidence: S1
   - id: C4
     source: verbatim
-    status: provisional
+    status: confirmed
     statement: "이 작업이 명령 체계 규칙을 정하고 qg v10 재건과 쉬운 말 출력 작업은 그 규칙을 따른다"
     evidence: S1
   - id: C5
     source: verbatim
-    status: provisional
+    status: confirmed
     statement: "사용자는 플러그인 접두 없는 짧은 이름으로 명령을 치고, skill 을 slash 로 직접 부르는 경로를 일부러 쓴다"
     evidence: S1
   - id: C6
     source: verbatim
-    status: provisional
+    status: confirmed
     statement: "skill 을 직접 부르는 이유는 넷 — 대응 명령이 없고, 명령보다 확실히 돌고, 명령의 사전 단계를 피하고, 이름이 더 정확하다"
     evidence: S1
   - id: C7
     source: verbatim
-    status: provisional
+    status: confirmed
     statement: "불편은 넷 — 명령 오류, 무엇을 칠지 헷갈림, 문서와 실제의 불일치, 쓸모없는 명령"
     evidence: S1
   - id: C8
     source: verbatim
-    status: provisional
+    status: confirmed
     statement: "/interview 오류는 @ 경로를 읽다 실패해 ‘읽지 못했다’ 메시지를 내고 멈춘 것이고 그 원인은 하류가 재현으로 가른다"
     evidence: S1
   - id: C9
     source: verbatim
-    status: provisional
+    status: confirmed
     statement: "이름을 바꾸거나 없애는 명령은 alias 없이 바로 제거하고 major bump 한다"
     evidence: S1
   - id: C10
     source: verbatim
-    status: provisional
+    status: confirmed
     statement: "CLAUDE.md 의 one-minor deprecation window 규칙을 즉시 제거를 허용하도록 바꾼다"
     evidence: S1
   - id: C11
     source: verbatim
-    status: provisional
+    status: confirmed
     statement: "통일한 명령 규칙은 테스트(락)로 집행한다"
     evidence: S1
   - id: D1
     source: chosen
-    status: provisional
+    status: confirmed
     statement: "진짜 문제는 부르는 모양마다 도는 것이 달라 예측할 수 없다는 것이다"
     evidence: S2
   - id: D2
     source: chosen
-    status: provisional
+    status: confirmed
     statement: "기능마다 사용자가 부르는 skill 하나로 수렴하고 사전 단계는 그 skill 안에 둔다 — 명령 파일은 없앤다"
     evidence: S4
   - id: D3
     source: chosen
-    status: provisional
+    status: confirmed
     statement: "명령·skill 이름은 alias 없이 즉시 제거하고 major bump 하되 이번 범위는 qg 밖 명령 4개이고 kill switch 이름은 바꾸지 않으며 CLAUDE.md 개정문은 제3자 설치 확인 전까지·호출 이름에 한함·스위치 은퇴는 공시 필수라는 조건을 단다"
     evidence: S5
   - id: D4
     source: chosen
-    status: provisional
+    status: confirmed
     statement: "진입의 확실성 · 짧은 이름 충돌 · @ 대화형 재현 · 전환 잔재와 qg 면제 넷은 설계가 반드시 다룬다"
     evidence: S6
   - id: D5
     source: chosen
-    status: provisional
+    status: confirmed
     statement: "사용자가 치는 이름은 짧게 하되 일반어 단독은 금지하고, 기계가 내는 핸드오프 안내는 /plugin:name 완전명으로 쓴다"
     evidence: S7
   - id: D6
     source: chosen
-    status: provisional
+    status: confirmed
     statement: "통일 규칙 락은 표면 정합을 잰다 — 안내 문구가 실재 user-invocable skill 을 가리키는가 · 인식되는 frontmatter 키만 쓰는가 · 이름이 규칙을 따르는가"
     evidence: S8
 ---
@@ -156,23 +155,23 @@ alias 없이 즉시 하고 major bump 한다. CLAUDE.md 개정문은 제3자 설
 
 ## 2. 제약
 
-- 🗣 provisional **C1** — 점검 대상은 slash 명령, slash 로 부를 수 있는 skill, kill switch 환경변수, 명령 인자로 넘기는 핸드오프 문구(skill 이 다음 단계로 안내하는 명령 문구 포함) 넷 전부다 ⟨S1⟩
-- 🗣 provisional **C2** — 이번 사이클은 점검·결정에서 멈추지 않고 구현까지 이 브랜치 하나로 간다 ⟨S1⟩
-- 🗣 provisional **C3** — quality-gates 파일은 이 작업에서 고치지 않고 점검 보고에만 올린다; qg v10 은 자기 설계대로 가고 어긋나는 qg 부분은 후속 과제로 남긴다 ⟨S1⟩
-- 🗣 provisional **C4** — 이 작업이 명령 체계 규칙을 정하고 qg v10 재건과 쉬운 말 출력 작업은 그 규칙을 따른다 ⟨S1⟩
-- 🗣 provisional **C5** — 사용자는 플러그인 접두 없는 짧은 이름으로 명령을 치고, skill 을 slash 로 직접 부르는 경로를 일부러 쓴다 ⟨S1⟩
-- 🗣 provisional **C6** — skill 을 직접 부르는 이유는 넷 — 대응 명령이 없고, 명령보다 확실히 돌고, 명령의 사전 단계를 피하고, 이름이 더 정확하다 ⟨S1⟩
-- 🗣 provisional **C7** — 불편은 넷 — 명령 오류, 무엇을 칠지 헷갈림, 문서와 실제의 불일치, 쓸모없는 명령 ⟨S1⟩
-- 🗣 provisional **C8** — /interview 오류는 @ 경로를 읽다 실패해 ‘읽지 못했다’ 메시지를 내고 멈춘 것이고 그 원인은 하류가 재현으로 가른다 ⟨S1⟩
-- 🗣 provisional **C9** — 이름을 바꾸거나 없애는 명령은 alias 없이 바로 제거하고 major bump 한다 ⟨S1⟩
-- 🗣 provisional **C10** — CLAUDE.md 의 one-minor deprecation window 규칙을 즉시 제거를 허용하도록 바꾼다 ⟨S1⟩
-- 🗣 provisional **C11** — 통일한 명령 규칙은 테스트(락)로 집행한다 ⟨S1⟩
-- ☑ provisional **D1** — 진짜 문제는 부르는 모양마다 도는 것이 달라 예측할 수 없다는 것이다 ⟨S2⟩
-- ☑ provisional **D2** — 기능마다 사용자가 부르는 skill 하나로 수렴하고 사전 단계는 그 skill 안에 둔다 — 명령 파일은 없앤다 ⟨S4⟩
-- ☑ provisional **D3** — 명령·skill 이름은 alias 없이 즉시 제거하고 major bump 하되 이번 범위는 qg 밖 명령 4개이고 kill switch 이름은 바꾸지 않으며 CLAUDE.md 개정문은 제3자 설치 확인 전까지·호출 이름에 한함·스위치 은퇴는 공시 필수라는 조건을 단다 ⟨S5⟩
-- ☑ provisional **D4** — 진입의 확실성 · 짧은 이름 충돌 · @ 대화형 재현 · 전환 잔재와 qg 면제 넷은 설계가 반드시 다룬다 ⟨S6⟩
-- ☑ provisional **D5** — 사용자가 치는 이름은 짧게 하되 일반어 단독은 금지하고, 기계가 내는 핸드오프 안내는 /plugin:name 완전명으로 쓴다 ⟨S7⟩
-- ☑ provisional **D6** — 통일 규칙 락은 표면 정합을 잰다 — 안내 문구가 실재 user-invocable skill 을 가리키는가 · 인식되는 frontmatter 키만 쓰는가 · 이름이 규칙을 따르는가 ⟨S8⟩
+- 🗣 confirmed **C1** — 점검 대상은 slash 명령, slash 로 부를 수 있는 skill, kill switch 환경변수, 명령 인자로 넘기는 핸드오프 문구(skill 이 다음 단계로 안내하는 명령 문구 포함) 넷 전부다 ⟨S1⟩
+- 🗣 confirmed **C2** — 이번 사이클은 점검·결정에서 멈추지 않고 구현까지 이 브랜치 하나로 간다 ⟨S1⟩
+- 🗣 confirmed **C3** — quality-gates 파일은 이 작업에서 고치지 않고 점검 보고에만 올린다; qg v10 은 자기 설계대로 가고 어긋나는 qg 부분은 후속 과제로 남긴다 ⟨S1⟩
+- 🗣 confirmed **C4** — 이 작업이 명령 체계 규칙을 정하고 qg v10 재건과 쉬운 말 출력 작업은 그 규칙을 따른다 ⟨S1⟩
+- 🗣 confirmed **C5** — 사용자는 플러그인 접두 없는 짧은 이름으로 명령을 치고, skill 을 slash 로 직접 부르는 경로를 일부러 쓴다 ⟨S1⟩
+- 🗣 confirmed **C6** — skill 을 직접 부르는 이유는 넷 — 대응 명령이 없고, 명령보다 확실히 돌고, 명령의 사전 단계를 피하고, 이름이 더 정확하다 ⟨S1⟩
+- 🗣 confirmed **C7** — 불편은 넷 — 명령 오류, 무엇을 칠지 헷갈림, 문서와 실제의 불일치, 쓸모없는 명령 ⟨S1⟩
+- 🗣 confirmed **C8** — /interview 오류는 @ 경로를 읽다 실패해 ‘읽지 못했다’ 메시지를 내고 멈춘 것이고 그 원인은 하류가 재현으로 가른다 ⟨S1⟩
+- 🗣 confirmed **C9** — 이름을 바꾸거나 없애는 명령은 alias 없이 바로 제거하고 major bump 한다 ⟨S1⟩
+- 🗣 confirmed **C10** — CLAUDE.md 의 one-minor deprecation window 규칙을 즉시 제거를 허용하도록 바꾼다 ⟨S1⟩
+- 🗣 confirmed **C11** — 통일한 명령 규칙은 테스트(락)로 집행한다 ⟨S1⟩
+- ☑ confirmed **D1** — 진짜 문제는 부르는 모양마다 도는 것이 달라 예측할 수 없다는 것이다 ⟨S2⟩
+- ☑ confirmed **D2** — 기능마다 사용자가 부르는 skill 하나로 수렴하고 사전 단계는 그 skill 안에 둔다 — 명령 파일은 없앤다 ⟨S4⟩
+- ☑ confirmed **D3** — 명령·skill 이름은 alias 없이 즉시 제거하고 major bump 하되 이번 범위는 qg 밖 명령 4개이고 kill switch 이름은 바꾸지 않으며 CLAUDE.md 개정문은 제3자 설치 확인 전까지·호출 이름에 한함·스위치 은퇴는 공시 필수라는 조건을 단다 ⟨S5⟩
+- ☑ confirmed **D4** — 진입의 확실성 · 짧은 이름 충돌 · @ 대화형 재현 · 전환 잔재와 qg 면제 넷은 설계가 반드시 다룬다 ⟨S6⟩
+- ☑ confirmed **D5** — 사용자가 치는 이름은 짧게 하되 일반어 단독은 금지하고, 기계가 내는 핸드오프 안내는 /plugin:name 완전명으로 쓴다 ⟨S7⟩
+- ☑ confirmed **D6** — 통일 규칙 락은 표면 정합을 잰다 — 안내 문구가 실재 user-invocable skill 을 가리키는가 · 인식되는 frontmatter 키만 쓰는가 · 이름이 규칙을 따르는가 ⟨S8⟩
 
 ✎ D2 와 C5 가 만나는 자리: S4 이후로는 사용자가 치는 이름이 곧 skill 이름이다(모델 추론 — C5 는 «명령을» 짧은 이름으로 친다고 했고, skill 직접 호출은 지금 완전명이다). 그래서 CLAUDE.md 의 «Skill 이름은 동명사, Command 이름은 짧은 명령형» 규칙은 사용자 진입 skill 에 대해 다시 써야 한다. 사용자 진입이 아닌 skill 의 명명은 열려 있다(OQ11).
 
