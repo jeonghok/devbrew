@@ -33,7 +33,7 @@ def find_root(cwd):
     try:
         proc = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
-            cwd=cwd, capture_output=True, text=True, timeout=10,
+            cwd=cwd, capture_output=True, encoding="utf-8", errors="surrogateescape", timeout=10,
         )
     except (OSError, subprocess.SubprocessError, ValueError):
         return cwd, "cwd"

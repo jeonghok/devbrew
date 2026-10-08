@@ -42,7 +42,10 @@ assert_eq "$rc" "0" ".git 안: rc 0"
 assert_contains "$out" "root_source=cwd" ".git 안: root_source=cwd"
 
 # 4. git 부재
-out="$(cd "$PLAIN" && $CLEAN PATH=/nonexistent "$PY" "$S" spec-distill s)"; rc=$?
+REPO="$(cd "$TMP/repo" && pwd -P)"
+out="$(cd "$REPO" && $CLEAN "$PY" "$S" spec-distill s)"
+assert_eq "$out" "[devbrew-entry] ok plugin=spec-distill skill=s root=$REPO" "git 있음(대조): 리포 루트"
+out="$(cd "$REPO" && $CLEAN PATH=/nonexistent "$PY" "$S" spec-distill s)"; rc=$?
 assert_eq "$rc" "0" "git 부재: rc 0"
 assert_contains "$out" "root_source=cwd" "git 부재: cwd 로"
 
@@ -73,9 +76,22 @@ assert_eq "$out" "ok" "DEVBREW_SKIP_HOOKS 는 진입에 걸리지 않는다(D1.1
 
 # 8. 비-UTF-8 로캘 + 한글 cwd — 출력 인코딩 실패가 rc≠0 으로 새지 않는다
 mkdir -p "$TMP/한글 경로"
-out="$(cd "$TMP/한글 경로" && $CLEAN -u PYTHONIOENCODING -u PYTHONUTF8 LC_ALL=C LANG=C "$PY" "$S" spec-distill s)"; rc=$?
-assert_eq "$rc" "0" "LC_ALL=C + 한글 cwd: rc 0"
-assert_contains "$out" "[devbrew-entry] ok plugin=spec-distill skill=s root=" "LC_ALL=C + 한글 cwd: ok 줄"
+NONUTF8="PYTHONCOERCECLOCALE=0 PYTHONUTF8=0 LC_ALL=C LANG=C"
+enc="$($CLEAN -u PYTHONIOENCODING $NONUTF8 "$PY" -c 'import sys; print(sys.stdout.encoding)')"
+assert_not_contains "$(printf '%s' "$enc" | tr 'A-Z' 'a-z')" "utf" "양성 대조: 이 환경의 stdout 은 UTF-8 이 아니다($enc)"
+out="$(cd "$TMP/한글 경로" && $CLEAN -u PYTHONIOENCODING $NONUTF8 "$PY" "$S" spec-distill s)"; rc=$?
+assert_eq "$rc" "0" "비-UTF-8 + 한글 cwd: rc 0"
+assert_contains "$out" "[devbrew-entry] ok plugin=spec-distill skill=s root=" "비-UTF-8 + 한글 cwd: ok 줄"
+
+# 8b. 한글 경로의 git 리포 — 비-UTF-8 로캘에서도 root 가 리포 최상위다(cwd 로 조용히 떨어지지 않는다)
+git init -q "$TMP/한글 리포"
+mkdir -p "$TMP/한글 리포/하위 폴더"
+KREPO="$(cd "$TMP/한글 리포" && pwd -P)"
+out="$(cd "$TMP/한글 리포/하위 폴더" && $CLEAN -u PYTHONIOENCODING $NONUTF8 "$PY" "$S" spec-distill s)"; rc=$?
+assert_eq "$rc" "0" "한글 리포 + 비-UTF-8: rc 0"
+assert_not_contains "$out" "root_source=cwd" "한글 리포 + 비-UTF-8: cwd 로 떨어지지 않는다"
+assert_contains "$out" "skill=s root=" "한글 리포 + 비-UTF-8: ok 줄"
+assert_eq "$(printf '%s' "$out" | LC_ALL=C sed 's/.*root=//' | LC_ALL=C tr -c '[:print:]' '?' | LC_ALL=C tr -d '\n')" "$(printf '%s' "$KREPO" | LC_ALL=C tr -c '[:print:]' '?')" "한글 리포 + 비-UTF-8: root = 리포 최상위(비ASCII 는 ? 로 접어 비교)"
 
 # 9. 3.8 문법 바닥 — macOS 시스템 python3 에서도 파싱된다
 "$PY" -c 'import ast,sys; ast.parse(open(sys.argv[1],encoding="utf-8").read(), feature_version=(3,8))' "$S"
