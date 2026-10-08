@@ -275,7 +275,16 @@ print("\n".join(out))
 MOK='{"file":"m/plugin.json","type":"plugin","errors":[],"warnings":[],"notes":[],"gatingHooks":[]}'
 MHK_EX='{"file":"h/hooks.json","type":"hooks","errors":[],"warnings":[{"path":"hooks.SessionEnd","message":"Shell command uses ${CLAUDE_PLUGIN_ROOT} without quotes: /bin/sh x"}],"notes":[]}'
 mb() { printf '%s' "$1" | manifest_bad; }
-assert_grep "$(mb '{"success":false}')" '.' "manifest_bad: {success:false} 만 있는 모양은 RED"
+o_sf="$(mb '{"success":false}')"
+assert_contains "$o_sf" "shape: manifest 가 객체가 아니다" "manifest_bad: {success:false} 만 — manifest 모양 사유"
+assert_contains "$o_sf" "shape: contents 가 배열이 아니다" "manifest_bad: {success:false} 만 — contents 모양 사유"
+assert_contains "$o_sf" "shape: strict 가 true 가 아니다" "manifest_bad: {success:false} 만 — strict 사유"
+assert_not_contains "$o_sf" "Traceback" "manifest_bad: {success:false} 만 — 판정기가 죽지 않는다"
+o_f="$(mb '{"success":false,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[{"file":"h/hooks.json","type":"hooks","errors":[],"warnings":[],"notes":[]}]}')"
+assert_eq "$o_f" "success: false 인데 그것을 설명하는 면제 경고가 없다" "manifest_bad: 모양은 온전하고 목록이 빈 success:false 는 미설명 실패로 RED"
+assert_not_contains "$o_f" "Traceback" "manifest_bad: 미설명 실패 사례 — 판정기가 죽지 않는다"
+assert_eq "$(mb '{"success":true,"strict":false,"target":"t","manifest":'"$MOK"',"contents":[]}')" "shape: strict 가 true 가 아니다" "manifest_bad: strict:false 는 RED"
+assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":["x"]}')" '^shape: 항목 1 가 객체가 아니다$' "manifest_bad: 객체가 아닌 contents 항목은 RED"
 assert_grep "$(mb '{"success":false,"strict":true,"target":"t","manifest":{"file":"m","type":"plugin","errors":[{"path":"version","message":"bad"}],"warnings":[],"notes":[],"gatingHooks":[]},"contents":[]}')" '^error ' "manifest_bad: error 항목은 RED"
 assert_grep "$(mb '{"success":false,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[{"file":"h/hooks.json","type":"hooks","errors":[],"warnings":[{"path":"hooks","message":"hooks.PostToolUse.0.hooks.0: Invalid command hook"}]}]}')" '^warning ' "manifest_bad: 면제 밖 hooks 경고는 RED"
 assert_grep "$(printf '' | manifest_bad)" '^unusable:' "manifest_bad: 빈 출력은 RED"
