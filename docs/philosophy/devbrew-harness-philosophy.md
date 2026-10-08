@@ -41,7 +41,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 
 ### P12 — Transparency of Planning
 **Law 1 집행.** Agent는 실행 전에 계획을 보이고 사용자가 redirect할 수 있어야 하며, 계획은 chat 요약이 아니라 파일에 기록된다. Load-bearing: 한 문장으로 묘사 가능한 trivia diff(typo·rename·comment-only formatting — 파일 수와 무관하게)만 게이트를 우회하고, behavior·public-API 변경은 자격이 없다 — triviality 판정은 invoking skill의 책임이다.
-코드: `plugins/spec-distill/commands/interview.md` (trivia escape) · CLAUDE.md Trivia escape
+코드: `plugins/spec-distill/skills/spec-interview/SKILL.md` 의 `## 진입 단계` 3 (trivia escape) · CLAUDE.md Trivia escape
 
 ### P13 — Hooks for Enforcement, Skills for Capability, Agents for Personas
 **Cross-cutting (L1·L2·L3) 집행.** hook=집행 레이어, skill=capability 표면, agent=scoped persona의 명확한 역할 분담 + 훅 공존 규칙(namespace·commutativity·mutation-free `SessionStart`·per-plugin kill switch). Load-bearing: 같은 event에 여러 플러그인 훅이 공존하려면 signal tag namespace(`<{plugin}-signal>`)와 순서 무관성이 구조적으로 필요하다.

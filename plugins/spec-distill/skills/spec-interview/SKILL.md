@@ -1,16 +1,69 @@
 ---
 name: spec-interview
 description: >
+  사용자가 `/spec-distill:spec-interview @<seed 경로>` 로 부른다.
   Runs the spec-distill problem-space interview stage and produces a terminal
   interview-brief at docs/superpowers/interview/. 종료는 커버리지 원장의 floor
   5차원(root-problem/landscape/skepticism/blind-spot/open-questions)이 모두
   closed일 때이며, check_brief.py의 구조적 게이트로 기계적 검증합니다(Law 1).
   Optionally hands the brief to superpowers:brainstorming.
 cost_class: variable
-user-invocable: false
+argument-hint: "[@<seed 경로> | rough request]"
+allowed-tools:
+  - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill spec-interview)
 ---
 
-# Conducting Interview — 문제공간 Stage (Phase 1)
+# spec-interview — 문제공간 Stage (Phase 1)
+
+!`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill spec-interview`
+
+## 진입 단계
+
+이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽고 아래 순서대로 간다.
+
+### 1. 감시줄 판독
+
+| 그 자리의 내용 | 동작 |
+|---|---|
+| `[devbrew-entry] ok …` | 2 로 간다. 그 줄의 `root=` 값을 2 에서 쓴다 |
+| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다(no-op). state 를 만들지 않는다 |
+| `[devbrew-entry] error …` | `[spec-distill] spec-interview 사전 검사 실패 — <reason= 값>. 인터뷰를 시작하지 않는다.` 를 내고 멈춘다 |
+| `[shell command execution disabled by policy]` | `[spec-distill] spec-interview 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 인터뷰를 시작하지 않는다.` 를 내고 멈춘다 |
+| 감시줄 없음 · 그 밖 | `[spec-distill] spec-interview 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 인터뷰를 시작하지 않는다.` 를 내고 멈춘다 |
+
+이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다.
+
+### 2. `@경로` 풀기
+
+받은 인자의 앞뒤 공백을 걷은 값이 `@` 로 시작하는 **공백 없는 한 토큰**일 때만 이 단계가 발동한다. 문장 중간에 `@` 가 섞인 입력은 건드리지 않는다. `@` 로 시작하는데 공백이 섞였으면 풀지 않고, `[spec-distill] '@…' 에 공백이 있다 — 공백 없는 경로 한 토큰으로 다시 불러라. 인터뷰를 시작하지 않는다.` 를 내고 멈춘다.
+
+발동하면 `@` 를 뗀 경로를 감시줄 `root=` 기준으로 풀어 **절대경로로** Read 도구에 넘긴다. 절대경로가 왔는데 Read 가 실패하면, 같은 문자열을 `root=` 기준 상대경로로 보고 한 번 더 시도한다. Read 출력에서 줄번호·탭 접두를 뗀 **파일 원문 전체(frontmatter 포함)** 가 「풀린 입력」이다. 대화형에서 같은 파일이 따로 첨부되더라도 「풀린 입력」의 출처는 이 Read 결과다.
+
+Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 등), 시도한 절대경로를 모두 담아 아래 문구를 내고 멈춘다.
+
+> `[spec-distill] '@<경로>' 를 읽지 못했다 — 시도: <절대경로들> (<관측한 사유>). seed 를 만든 워크트리 디렉토리에서 세션을 열었는지 확인하라. 인터뷰를 시작하지 않는다.`
+
+**seed 면 원문 기록의 경로를 한 줄로 낸다.** 「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면, 읽은 파일의 절대경로에서 audit 경로를 도출한다 — 같은 디렉토리에서 파일명 끝의 `.md` 를 `.audit.md` 로 바꾼 파일이다. seed frontmatter 의 `audit_file:` 은 따라가지 않는다. 그 파일을 Read 로 확인하고, 인터뷰에 들어가기 전에 아래 한 줄을 그대로 낸다:
+
+> `[spec-distill] seed 원문 대조: seed=<seed 절대경로> · audit=<audit 절대경로>`
+
+읽지 못하면 `audit=없음(<관측한 사유>)` 로 낸다. 이 줄은 「풀린 입력」에 넣지 않는다 — 「풀린 입력」은 seed 전문 그대로여야 brief §6 의 `S1` 이 바뀌지 않는다. `references/seed-input.md` 의 seed 입력 규약이 이 줄의 두 경로로 문장마다 출처와 확인을 가른다.
+
+발동하지 않았으면 「풀린 입력」은 이 skill 이 받은 인자 그대로다(비어 있을 수 있다).
+
+### 3. trivia 판정
+
+「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다. 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 그 다섯 패턴에 「풀린 입력」을 대조한다. 해당하면 그 파일의 안내 문면을 `<command>` = `spec-distill:spec-interview` 로 채워 내고, 인터뷰를 시작하지 않습니다.
+
+### 3.5 seed 아닌 입력에 대한 조언
+
+「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 없으면 한 줄 안내를 낸다. **막지 않는다.**
+
+> 💡 `/spec-distill:request-framing` 을 먼저 거치면 첫 턴이 정리된 상태로 시작합니다. 지금 그대로 진행해도 됩니다.
+
+### 4. 본 절차로
+
+아래 절들을 진행한다. 이 skill 과 그 references(`seed-input.md` · `finishing.md`)가 말하는 「풀린 입력」은 2 의 결과다. 「풀린 입력」이 비어 있으면 «라운드 규약»의 인자 없는 경로로 시작한다.
 
 당신은 spec-distill의 인터뷰 stage를 진행 중입니다. 이 stage는 *받아적는* 인터뷰가
 아니라 **강한 문제공간 stage**입니다(Double Diamond 1st diamond — brainstorming 해답공간
@@ -127,7 +180,7 @@ OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지> · 트레이�
   순서·라벨·추천 표기·시점)을 따르고 각각 `## R<n>` 한 라운드로 기록한다. 이 절의 질문 수·`(권장)` 표기·
   «추천: <첫 선택지>»·겹침 순서는 그 질문들에 적용하지 않으며, steelman 절차가 진행 중이면 그 질문이 겹침
   순서보다 앞선다.
-- **인자 없이 `/interview` 를 부른 경로의 R1** 은 seed 도 직전 답도 없으므로 «지금 이해»를 «아직 없음»으로
+- **인자 없이 `/spec-distill:spec-interview` 를 부른 경로의 R1** 은 seed 도 직전 답도 없으므로 «지금 이해»를 «아직 없음»으로
   두고 질문으로 무엇을 다룰지 묻는다. coverage-mapper 첫 dispatch 시점은 아래 coverage-mapper 절이 정한다.
 - 답은 `user_statements` 에 `S<m>` 하나로 append 한다(선택지 = `chosen`, «기타» 자유 입력 = `verbatim`).
   번호 공식은 «사용자 발화 기록» 절 그대로.
@@ -395,7 +448,7 @@ builder 출력은 verbatim 으로 다룬다(약화·편집 금지). 보류는 §
 
 ## seed 를 입력으로 받았을 때
 
-**이 절 전문은 `references/seed-input.md` 에 있다** — `$ARGUMENTS` 가 `type: interview-seed` frontmatter
+**이 절 전문은 `references/seed-input.md` 에 있다** — 「풀린 입력」이 `type: interview-seed` frontmatter
 를 가진 문서일 때만 읽는다(조건부 로드 — seed 없는 호출이 더 흔해 finishing.md 보다 조건성이 강하다).
 
 ```
@@ -445,6 +498,6 @@ Read references/state-migration.md
 
 ## kill switch
 
-- `DEVBREW_SPEC_DISTILL_DISABLE=1`: 즉시 abort, state.local.md 보존 (실패 분석용).
+- `DEVBREW_SPEC_DISTILL_DISABLE=1`: `## 진입 단계` 1 이 멈춘다(no-op). 진행 중이던 state.local.md 는 보존한다(실패 분석용).
 - `DEVBREW_SPEC_DISTILL_RHYTHM_GUARD_THRESHOLD=N`: rhythm guard threshold override.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`: web landscape(R2) 비활성 — loud advisory 후 codebase 근거만 사용.
