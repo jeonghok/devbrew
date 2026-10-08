@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Unit tests for qg-worktree.sh create-sandbox subcommand.
+# Unit tests for audit-sandbox.sh create-sandbox subcommand.
 # Validates: working-tree reflection, byte-faithful copy (binary/mode/symlink),
 # git-ignored exclusion (operational safety), deletion honoring, kill switch.
 set -u
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-WT="$PLUGIN_DIR/scripts/qg-worktree.sh"
+WT="$PLUGIN_DIR/scripts/audit-sandbox.sh"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # --- Build a realistic repo with committed + uncommitted + ignored state ---
@@ -101,8 +101,25 @@ rm -rf "$REPO"
 
 echo "[create-sandbox: kill switch]"
 REPO=$(mk_repo)
-( cd "$REPO" && DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1 "$WT" create-sandbox "kill01234567" 2>/dev/null )
+( cd "$REPO" && DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1 "$WT" create-sandbox "kill01234567" 2>/dev/null )
 rc=$?
 [ "$rc" -eq 3 ] && ok "kill switch → exit 3" || no "kill switch exit was $rc (want 3)"
+rm -rf "$REPO"
+
+echo "[remove: namespace guard]"
+REPO=$(mk_repo)
+OUT=$(cd "$REPO" && "$WT" create-sandbox "remove012345678" 2>/dev/null)
+SANDBOX=$(printf '%s\n' "$OUT" | sed -n '1p')
+mkdir -p "$REPO/outside-ns" && : > "$REPO/outside-ns/keep"
+(cd "$REPO" && "$WT" remove "$REPO/outside-ns" 2>/dev/null) \
+  && no "remove 가 네임스페이스 밖 대상에 rc 0" || ok "remove 는 네임스페이스 밖을 거부한다"
+(cd "$REPO" && "$WT" remove "$REPO/.claude/plugin-audit/worktrees/../../../outside-ns" 2>/dev/null) \
+  && no "remove 가 .. 우회 경로에 rc 0" || ok "remove 는 .. 로 네임스페이스를 벗어난 경로도 거부한다"
+[ -f "$REPO/outside-ns/keep" ] && ok "거부된 대상이 그대로다" || no "거부된 대상이 사라졌다"
+(cd "$REPO" && "$WT" remove "$REPO/.claude/plugin-audit/worktrees/missing-12345678") \
+  && ok "없는 대상의 remove 는 성공한다 (멱등)" || no "없는 대상에서 실패했다"
+[ -d "$SANDBOX" ] || no "remove 양의 짝의 전제 — 샌드박스가 없다: '$SANDBOX'"
+(cd "$REPO" && "$WT" remove "$SANDBOX") && [ ! -d "$SANDBOX" ] \
+  && ok "remove 는 네임스페이스 안의 샌드박스를 지운다 (양의 짝)" || no "샌드박스가 남았다"
 rm -rf "$REPO"
 finish

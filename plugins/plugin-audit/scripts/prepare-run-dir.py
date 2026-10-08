@@ -7,7 +7,7 @@
 
 stdout 두 줄:
   1. 실행 디렉토리의 절대경로 (basename = 실행 키)
-  2. sandbox id — 실행 키의 SHA-256 앞 8 hex. qg-worktree.sh create-sandbox 는 받은 id 의 앞
+  2. sandbox id — 실행 키의 SHA-256 앞 8 hex. audit-sandbox.sh create-sandbox 는 받은 id 의 앞
      8글자만 sandbox 이름에 쓰고 같은 이름의 sandbox 를 지우고 다시 만든다. 날짜로 시작하는 실행
      키를 그대로 넘기면 같은 달의 감사가 한 sandbox 로 접힌다.
 

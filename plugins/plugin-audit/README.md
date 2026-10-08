@@ -27,6 +27,10 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 꺼지면 codex가 리포 근거만으로 감사하고 그 사실을 stderr에 loud하게 남긴다 — crash 없음
 (graceful degradation).
 
+`DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1` — 대상 플러그인의 자체 테스트 실행(`scripts/run-own-tests.sh`가
+`scripts/audit-sandbox.sh create-sandbox`로 만든 일회용 샌드박스에서 돈다)을 끈다. 축③은 테스트를 *읽어*
+판정한다(배너). 샌드박스는 저장소 상태만 격리한다 — 프로세스 · 네트워크 · uid 격리는 없다.
+
 `DEVBREW_PLUGIN_AUDIT_STALENESS_REGISTRY` — staleness census가 참조하는 원장 경로 override.
 
 **환경변수 어순 rename (0.6.0, devbrew-weight-reduction Task 25).** 이 플러그인이 노출하는
@@ -59,9 +63,6 @@ fallback 창을 둔다.
 - **plugin-dev (official, optional)** — 구조 hard-check tier(E)가 `validate-agent.sh`·
   `validate-hook-schema.sh`·`hook-linter.sh`를 감싼다. 공식 캐시에 있으면 심층 구조 사실을
   얹고, **없으면 loud degrade**(core 구조 검사는 F가 self-contained로 커버). E는 bonus-degradable.
-- **quality-gates ≥ 2.12.0 (optional, versioned)** — 자체 테스트 격리가 `scripts/qg-worktree.sh`의
-  `create-sandbox`/`mutation-guard`를 재사용한다. 없으면 자체 테스트 실행을 skip하고 축③은 테스트를
-  *읽어* 판정(배너). silent coupling 아님 — 이 문단이 선언.
 
 ## Principles Instantiated
 
