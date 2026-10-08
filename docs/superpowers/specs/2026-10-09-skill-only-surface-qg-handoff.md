@@ -10,6 +10,7 @@
 
 1. 진입은 `!` 사전 검사를 가진 skill 이다. 형태 — `allowed-tools` 한 항목 + 본문 사전 검사 줄 + `## 진입 단계`(감시줄 판독 표). 정본 스크립트 `shared/entry/entry_preflight.py` 를 `plugins/quality-gates/scripts/` 에 링크로 싣는다.
 2. 새 `commands/` 는 만들지 않는다. `plugins/quality-gates/commands/` 가 사라지면 락 `shared/tests/test_invocation_surface.sh` 의 qg 보고 모드가 끝나고, 2부 행이 RED 가 된다.
+   v10 설계는 `commands/qg.md` 를 «새로, 얇게» 유지한다(L345 · L553). 이는 축 H 규칙과 CLAUDE.md 네이밍 규칙(«새 command 파일은 만들지 않는다»)에 충돌한다 — `plugins/quality-gates/commands/` 가 사라지면 보고 모드가 끝나고 축 H 는 RED 가 된다. v10 은 `commands/qg.md` 를 버리고 진입 skill 로 가거나, 이 규칙을 다시 결정해야 한다.
 3. CLAUDE.md 개정 문면(인용):
    > - **`allowed-tools` 는 제한이 아니다.** command 에서는 쓰지 않는다. skill 에서는 진입 사전 검사 한 줄의 사전 허용으로만 쓰고 다른 도구를 열거하지 않는다. 2026-08-22 헤드리스 실측 5변형(`--plugin-dir` 격리 플러그인)에서 `["Read"]`로 `Bash`를 빼놓아도 `Bash`가 실행됐고, 스코프 표기(`Bash(<pattern>:*)`)도 범위 밖 명령을 막지 못했다 — **이 계층은 제한이 아니다.** 바로 위 agent의 `tools:`와는 다르다 — 그것은 fail-closed이고 Law 2의 집행 지점이다. 막지 않는 것을 막는다고 믿게 만드는 선언은 없는 것보다 나쁘다.
    >
@@ -24,12 +25,12 @@
 
 | # | 축 | 위치 | 위반 | v10 설계 |
 |---|---|---|---|---|
-| 1 | A | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:1` | 진입 skill 이름 'critiquing-artifacts' 의 첫 단어가 동명사다 — 동명사는 내부 skill 의 몫 | 다룸(L26·L66: 범위 밖 — qg 의 critique 관련 파일은 건드리지 않음) |
+| 1 | A | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:1` | 진입 skill 이름 'critiquing-artifacts' 의 첫 단어가 동명사다 — 동명사는 내부 skill 의 몫 | 범위 밖 — v10 은 건드리지 않음 (L26/L66) |
 | 2 | A | `plugins/quality-gates/skills/publishing-pr-understanding/SKILL.md:1` | 진입 skill 이름 'publishing-pr-understanding' 의 첫 단어가 동명사다 — 동명사는 내부 skill 의 몫 | 다룸(L579: skill 디렉토리 삭제, L519 AC16) |
-| 3 | C | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:1` | `## 진입 단계` 절이 없다 | 다룸(L26·L66: 범위 밖 — qg 의 critique 관련 파일은 건드리지 않음) |
-| 4 | C | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:1` | allowed-tools 가 사전 검사 한 항목만이 아니다 — 기대: [Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" quality-gates critiquing-artifacts)] | 다룸(L26·L66: 범위 밖 — qg 의 critique 관련 파일은 건드리지 않음) |
-| 5 | C | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:1` | plugins/quality-gates/scripts/entry_preflight.py 가 없다 — 사전 검사 줄이 가리키는 스크립트 | 다룸(L26·L66: 범위 밖 — qg 의 critique 관련 파일은 건드리지 않음) |
-| 6 | C | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:31` | 사전 검사 줄이 정확히 하나가 아니다(실행형 0개 · 느낌표-백틱 0개) | 다룸(L26·L66: 범위 밖 — qg 의 critique 관련 파일은 건드리지 않음) |
+| 3 | C | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:1` | `## 진입 단계` 절이 없다 | 범위 밖 — v10 은 건드리지 않음 (L26/L66) |
+| 4 | C | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:1` | allowed-tools 가 사전 검사 한 항목만이 아니다 — 기대: [Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" quality-gates critiquing-artifacts)] | 범위 밖 — v10 은 건드리지 않음 (L26/L66) |
+| 5 | C | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:1` | plugins/quality-gates/scripts/entry_preflight.py 가 없다 — 사전 검사 줄이 가리키는 스크립트 | 범위 밖 — v10 은 건드리지 않음 (L26/L66) |
+| 6 | C | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:31` | 사전 검사 줄이 정확히 하나가 아니다(실행형 0개 · 느낌표-백틱 0개) | 범위 밖 — v10 은 건드리지 않음 (L26/L66) |
 | 7 | C | `plugins/quality-gates/skills/publishing-pr-understanding/SKILL.md:1` | `## 진입 단계` 절이 없다 | 다룸(L579: skill 디렉토리 삭제, L519 AC16) |
 | 8 | C | `plugins/quality-gates/skills/publishing-pr-understanding/SKILL.md:1` | allowed-tools 가 사전 검사 한 항목만이 아니다 — 기대: [Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" quality-gates publishing-pr-understanding)] | 다룸(L579: skill 디렉토리 삭제, L519 AC16) |
 | 9 | C | `plugins/quality-gates/skills/publishing-pr-understanding/SKILL.md:1` | plugins/quality-gates/scripts/entry_preflight.py 가 없다 — 사전 검사 줄이 가리키는 스크립트 | 다룸(L579: skill 디렉토리 삭제, L519 AC16) |
@@ -42,7 +43,7 @@
 | 16 | H | `plugins/quality-gates/commands/qg-publish.md:1` | commands/ 층은 qg 밖에 두지 않는다 — 사전 단계는 진입 skill 의 사전 검사 줄로 | 다룸(L579: 파일 삭제, L519 AC16) |
 | 17 | H | `plugins/quality-gates/commands/qg.md:1` | commands/ 층은 qg 밖에 두지 않는다 — 사전 단계는 진입 skill 의 사전 검사 줄로 | 다룸(L345: commands/qg.md 를 «새로, 얇게» 유지 — `commands/` 층을 없애지 않음, L553 수정) |
 | 18 | I | `plugins/quality-gates/scripts/run_codex_reviewer.sh:49` | 옛 이름 'reviewing-spec' | 다룸(L357·L566·L598: 유지·갱신 — 옛 이름 줄은 언급 없음) |
-| 19 | I | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:154` | 옛 이름 'reviewing-spec' | 다룸(L26·L66: 범위 밖 — qg 의 critique 관련 파일은 건드리지 않음) |
+| 19 | I | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:154` | 옛 이름 'reviewing-spec' | 범위 밖 — v10 은 건드리지 않음 (L26/L66) |
 | 20 | I | `plugins/quality-gates/skills/quality-pipeline/SKILL.md:394` | 옛 이름 'reviewing-spec' | 다룸(L342·L568: 제자리 재작성 — 사전 검사 줄·`## 진입 단계`는 언급 없음) |
 | 21 | I | `plugins/quality-gates/tests/lib/reconstruct-skill.sh:77` | 옛 이름 'conducting-interview' | 언급 없음 |
 | 22 | I | `plugins/quality-gates/tests/lib/reconstruct-skill.sh:78` | 옛 이름 'reviewing-spec' | 언급 없음 |
@@ -53,7 +54,7 @@
 | # | 출처 | 위반 | 위치 | v10 설계 |
 |---|---|---|---|---|
 | 1 | RC4 | `/qg --reset` 은 SID 가 비어 있지 않은지만 보고, 패턴 가드 · worktree 정리 · KEEP_WORKTREE 를 거치지 않는다 | `plugins/quality-gates/commands/qg.md` (Special argument `--reset`) | 다룸(L345·L373·L537: `--reset` 삭제, 제거 안내 한 줄) |
-| 2 | RC5 | `/cancel-qg` 설명의 v1.32.0, quality-pipeline 제목의 v9.3.5 가 plugin.json 과 어긋난다 | `commands/cancel-qg.md:2` | 다룸(L548: `commands/cancel-qg.md` 삭제 · L342: quality-pipeline 제자리 재작성 — 제목 버전 표기는 언급 없음) |
+| 2 | RC5 | `/cancel-qg` 설명의 v1.32.0, quality-pipeline 제목의 v9.3.5 가 plugin.json 과 어긋난다 | `commands/cancel-qg.md:2` · `plugins/quality-gates/skills/quality-pipeline/SKILL.md:53` (제목 «v9.3.5») | 다룸(L548: `commands/cancel-qg.md` 삭제 · L342: quality-pipeline 제자리 재작성 — 제목 버전 표기는 언급 없음) |
 | 3 | RC6 | `hide-from-slash-command-tool` 은 인식되지 않는 키라 오류 없이 무시된다 | `commands/cancel-qg.md:4` | 다룸(L548: 파일 삭제로 소멸) |
 | 4 | RC8 | README 사용법 절의 이름 · 위치가 플러그인마다 다르고, qg README 사용 블록에 `/qg-publish` 가 없다 | `plugins/quality-gates/README.md` | 다룸(L363: README 다시 씀 — 사용 블록 · `/qg-publish` 는 언급 없음, L519·L579: `/qg-publish` 표면 삭제) |
 | 5 | RC10 | 명령 이름을 안내하는 곳에 hook 과 스크립트도 있다(bare `/qg` · `/cancel-qg`) | `hooks/session-start-advisor.py:183,191-192` · `scripts/setup-qg.sh:98,121,142-143,185,322` · `scripts/synthesize_findings.py:699` | 다룸(L548: hooks/ 삭제 · L346: setup-qg.sh 새로 최소 · L195·L343: synthesize_findings.py 새로 — 안내 문구의 완전명은 언급 없음) |
@@ -62,9 +63,14 @@
 
 ## 부록 — 미실행 seed 판별
 
-규칙: ① `docs/superpowers/interview/*.md` 중 `.audit.md` 가 아니고 첫 줄이 `---` 인 frontmatter 에 정확히 `type: interview-seed` 가 있는 파일 ② 그 파일의 `audit_file:` 값 줄(`audit_file: <x>`)을 담은 다른 파일이 `docs/` 아래에 없음(brief §6 S1 은 seed 전문을 frontmatter 째 담는다). 결과(2026-10-09): 네 파일, 옛 호출 줄 0줄 — 갱신 0건. 규칙 ①② 를 글자 그대로 돌리면 셋(아래 첫째 · 둘째 · 넷째)이고, 셋째는 frontmatter 가 `interview-brief` 인 파일이 §6 S1 에 seed 를 frontmatter 째 담은 것이다 — 이 브랜치 설계(P10)가 센 대로 넷으로 싣는다.
+규칙: ① `docs/superpowers/interview/*.md` 중 `.audit.md` 가 아니고 첫 줄이 `---` 인 frontmatter 에 정확히 `type: interview-seed` 가 있는 파일 ② 그 파일의 `audit_file:` 값 줄(`audit_file: <x>`)을 담은 다른 파일이 `docs/` 아래에 없음.
+
+결과(2026-10-09): 규칙 결과는 세 파일이다.
 
 - `2026-09-01-adjudication-topology-interview.md`
 - `2026-09-01-seam-and-adjudication-interview.md`
-- `2026-09-02-adjudication-topology-interview.md`
 - `2026-09-05-spec-review-two-stage-redesign-interview.md`
+
+제외: `2026-09-02-adjudication-topology-interview.md` — frontmatter 가 `type: interview-brief` 이고 §6 S1 에 seed 를 담았을 뿐이라 seed 파일이 아니다. 계획(P10)은 이 파일을 넣어 넷으로 적었다(규칙 결과 아님, 상위집합).
+
+세 파일의 옛 호출 줄은 0줄이다 — 갱신 0건.
