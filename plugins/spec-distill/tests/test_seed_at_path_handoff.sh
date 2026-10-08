@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # guards: plugins/spec-distill/**
 #
-# seed `@경로` 핸드오프 — framing 게이트(`/new`·`/compact` → `/interview @<seed 경로>`) ·
+# seed `@경로` 핸드오프 — framing 게이트(`/new`·`/compact` → `/spec-distill:spec-interview @<seed 경로>`) ·
 # 공유 계약의 권장/차선 핸드오프 · spec-interview `## 진입 단계` 2 · 옛 호출 모양 부재 · 이름 가드 공백 거부.
 #
 # 정본 `references/proceed-gate.md` 에 대한 단언은 **정본 자체**를 대상으로 한다 — 채택자
@@ -13,7 +13,6 @@ SD="$ROOT/plugins/spec-distill"
 SK="$SD/skills/request-framing/SKILL.md"
 CANON="$SD/references/proceed-gate.md"
 SK_IV="$SD/skills/spec-interview/SKILL.md"
-RF="$SD/commands/request-framing.md"
 README="$SD/README.md"
 . "$ROOT/shared/tests/assert.sh"
 
@@ -96,8 +95,8 @@ nrows="$(printf '%s\n' "$rows" | grep -c .)"
 assert_eq "$nrows" "4" "AC1(양성): 호출 모양 절 옵션 표에서 행 4개를 읽었다"
 r1="$(printf '%s\n' "$rows" | grep -E '^\| ① \|')"
 r2="$(printf '%s\n' "$rows" | grep -E '^\| ② \|')"
-for n in '`/new` 후' '`/interview @<seed 경로>`' '권장' '턴 종료'; do assert_contains "$r1" "$n" "AC1: ① 행에 $n"; done
-for n in '`/compact` 후' '`/interview @<seed 경로>`' '턴 종료'; do assert_contains "$r2" "$n" "AC1: ② 행에 $n"; done
+for n in '`/new` 후' '`/spec-distill:spec-interview @<seed 경로>`' '권장' '턴 종료'; do assert_contains "$r1" "$n" "AC1: ① 행에 $n"; done
+for n in '`/compact` 후' '`/spec-distill:spec-interview @<seed 경로>`' '턴 종료'; do assert_contains "$r2" "$n" "AC1: ② 행에 $n"; done
 assert_not_contains "$r2" '권장' "AC1: 권장은 ① 하나"
 assert_not_contains "$rows" '바로' "AC1: 옵션 표에 「바로」 진행 행이 없다"
 cf="$(printf '%s\n' "$call" | flat)"
@@ -159,7 +158,7 @@ assert_contains "$ver" '「호출 모양」 절 옵션 표 ①·② 행' "§2: �
 
 # ── 옛 호출 모양 부재(코퍼스 전수) + 새 모양 실재 ──────────────────────────
 ncorp="${#CORPUS[@]}"
-for need in "$SK" "$RF" "$README" "$CANON"; do
+for need in "$SK" "$README" "$CANON"; do
   case " ${CORPUS[*]+"${CORPUS[*]}"} " in
     *" $need "*) ok "AC6(양성): 코퍼스에 ${need#"$ROOT"/} 가 들어 있다" ;;
     *) no "AC6(양성): 코퍼스에 ${need#"$ROOT"/} 가 없다 — 부재 단언이 그 파일을 안 본다" ;;
@@ -175,20 +174,19 @@ elif [ -n "$old_hits" ]; then
 else
   ok "AC6: 옛 호출 모양(<seed 전문> · <seed 파일 전문>) 0건 — 문서 ${ncorp}개"
 fi
-for f in "$SK" "$RF" "$README"; do
-  assert_file_grep "$f" '/interview @<seed 경로>' "AC6: 새 모양이 ${f#"$ROOT"/} 에 있다"
-done
+assert_file_grep "$SK" '/spec-distill:spec-interview @<seed 경로>' "AC6: 새 모양(완전명)이 ${SK#"$ROOT"/} 에 있다"
+# README 는 사람용이라 짧은 이름을 쓴다(D5) — 호출 이름이 아니라 `@<seed 경로>` 핸드오프 모양만 잰다.
+assert_file_grep "$README" 'interview @<seed 경로>' "AC6: 새 모양이 ${README#"$ROOT"/} 에 있다"
 
 # ── 풀어 쓴 옛 서술의 동기화 (§4 목록) ──────────────────────────────────
 TPL="$SD/templates/interview-seed-audit-template.md"
 SEEDIN="$SD/skills/spec-interview/references/seed-input.md"
 FIN="$SD/skills/spec-interview/references/finishing.md"
-assert_file_grep   "$TPL"    '/interview @<seed 경로>` 가 가리키는 것은 payload' "§4: audit 템플릿 인용 블록이 새 모양"
+assert_file_grep   "$TPL"    '`/spec-distill:spec-interview @<seed 경로>` 가 가리키는 것은 payload' "§4: audit 템플릿 인용 블록이 새 모양"
 assert_file_absent "$TPL"    '첫 턴에 붙여넣는' "§4: audit 템플릿에 옛 핸드오프 서술이 없다"
 assert_file_grep   "$SEEDIN" '`/spec-distill:spec-interview @<seed 경로>` 를 치게 하고' "§4: seed-input 도착 경로가 새 모양"
 assert_file_absent "$SEEDIN" '붙여넣게 하고' "§4: seed-input 에 옛 도착 경로가 없다"
 assert_file_grep   "$FIN"    '`@경로` 를 풀었든 사용자가 전문을 붙여넣었든' "§4: finishing S1 문장이 두 도착 경로를 다 적는다"
-assert_file_absent "$RF"     '붙여넣' "§4: request-framing 에 붙여넣기 핸드오프 서술이 없다"
 assert_file_absent "$README" '다음 세션 첫 턴에 붙여넣는 메시지' "§4: README 흐름도에 옛 서술이 없다"
 
 finish
