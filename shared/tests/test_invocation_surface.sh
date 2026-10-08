@@ -172,4 +172,49 @@ out="$(run_lock "$ROOT")"; rc=$?
 assert_eq "$rc" "0" "이 리포: 표면 정합 GREEN"
 [ "$rc" = "0" ] || printf '%s\n' "$out" | head -40
 
+# ── 3부: 이 리포의 사본에 실제 변이 ─────────────────────────────
+CL="$TMP/clone"
+git clone -q --no-local "$ROOT" "$CL"
+if [ "$(git -C "$CL" rev-parse --is-shallow-repository)" != "false" ]; then no "사본이 얕다 — 변이 결과를 믿을 수 없다"; fi
+expect_green "$CL" "실제 사본 양성 대조: HEAD GREEN"
+real() {   # real <name> — 실제 사본의 변이용 복제
+  rm -rf "$TMP/r-$1"; cp -R "$CL" "$TMP/r-$1"
+}
+RSR="plugins/spec-distill/skills/spec-review/SKILL.md"
+RBANG="$(python3 "$LOCK" --print-head spec-distill spec-review | sed -n '5p')"
+real c; edit "$TMP/r-c/$RSR" "$RBANG" "";                                    expect_red "$TMP/r-c" C "실제 C 삭제: spec-review 사전 검사 줄" "정확히 하나"
+real d; edit "$TMP/r-d/$RSR" "spec-distill spec-review\`" "spec-distill spec-review \$ARGUMENTS\`"; expect_red "$TMP/r-d" D "실제 D 추가: 사전 검사 줄에 \$ARGUMENTS" "사용자 인자"
+real f; edit "$TMP/r-f/plugins/project-init/skills/project-init/SKILL.md" "disable-model-invocation: true
+" "";                                                                         expect_red "$TMP/r-f" F "실제 F 반전: project-init 사용자 전용 해제" "disable-model-invocation: true 가 없다"
+real g; put "$TMP/r-g/plugins/spec-distill/skills/request-framing/SKILL.md" "다음은 /spec-interview 다"; expect_red "$TMP/r-g" G "실제 G 추가: bare 진입 이름" "bare /spec-interview"
+real h; put "$TMP/r-h/plugins/project-init/commands/project-init.md" "---";  expect_red "$TMP/r-h" H "실제 H 추가: 명령 층 부활" "commands/ 층"
+real i; put "$TMP/r-i/CLAUDE.md" "reviewing-spec";                           expect_red "$TMP/r-i" I "실제 I 추가: 옛 이름 재삽입" "옛 이름 'reviewing-spec'"
+real n; put "$TMP/r-n/plugins/spec-distill/scripts/n.py" "# docs/superpowers/interview/x.md · plugins/plugin-audit/README.md"
+expect_green "$TMP/r-n" "실제 음성 대조: 경로 조각은 GREEN"
+
+# ── 4부: manifest — claude plugin validate --strict ─────────────
+# 면제는 하나다: hooks 명령의 따옴표 없는 ${CLAUDE_PLUGIN_ROOT} 경고(선재, 2026-10-09 실측).
+# 그 면제는 qg 핸드오프 보고서 3부의 행이다.
+if command -v claude >/dev/null 2>&1; then
+  for p in spec-distill plugin-audit project-init; do
+    v="$(claude plugin validate --strict --json "$ROOT/plugins/$p" 2>/dev/null)"
+    bad="$(printf '%s' "$v" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+items = [d.get("manifest") or {}] + list(d.get("contents") or [])
+EXEMPT = "Shell command uses ${CLAUDE_PLUGIN_ROOT} without quotes"
+for c in items:
+    for e in c.get("errors") or []:
+        print("error", c.get("file", "?"), e.get("path"), e.get("message"))
+    for w in c.get("warnings") or []:
+        if str(w.get("path", "")).startswith("hooks.") and str(w.get("message", "")).startswith(EXEMPT):
+            continue
+        print("warning", c.get("file", "?"), w.get("path"), w.get("message"))
+' 2>&1)"
+    assert_eq "$bad" "" "manifest: $p 가 validate --strict 를 통과한다(hooks 따옴표 경고 면제)"
+  done
+else
+  note "  ⚠ SKIPPED manifest 단계 — claude CLI 가 PATH 에 없다. 이 단계는 재지 않았다."
+fi
+
 finish
