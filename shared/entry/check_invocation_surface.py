@@ -55,7 +55,10 @@ SENTINEL_ROWS = (
 )
 
 SKILL_PATH_RE = re.compile(r"^plugins/([^/]+)/skills/([^/]+)/SKILL\.md$")
-COMMAND_PATH_RE = re.compile(r"^plugins/([^/]+)/commands/([^/]+)\.md$")
+COMMAND_PATH_RE = re.compile(r"^plugins/([^/]+)/commands/([^/]+)\.md$")      # 최상위 명령만 G 에서 풀린다
+ANY_COMMAND_RE = re.compile(r"^plugins/([^/]+)/commands/.+\.md$")           # H 는 깊이를 가리지 않는다
+# 기계 텍스트가 정당하게 이름 붙일 수 있는 다른 마켓플레이스의 플러그인. 지금은 비어 있다.
+EXTERNAL_PLUGINS = frozenset()
 KEBAB_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)+$")
 BANG_RE = re.compile(r"(?:^|(?<=\s))!`([^`\n]+)`")       # 플랫폼 규칙: 줄 시작 또는 공백 뒤
 FENCE_BANG_RE = re.compile(r"^\s*```!\s*$")
@@ -209,8 +212,8 @@ class Scan:
         bangs = [(body_at + i, m.group(0)) for i, ln in enumerate(body) for m in BANG_RE.finditer(ln)]
         if raw != 1 or len(bangs) != 1:
             L.add("C", rel, body_at + 1, "사전 검사 줄이 정확히 하나가 아니다(실행형 %d개 · 느낌표-백틱 %d개)" % (len(bangs), raw))
-        elif bangs[0][1] != want_bang:
-            L.add("C", rel, bangs[0][0] + 1, "사전 검사 줄이 기대 모양과 다르다 — 기대: %s" % want_bang)
+        elif bangs[0][1] != want_bang or lines[bangs[0][0]] != want_bang:
+            L.add("C", rel, bangs[0][0] + 1, "사전 검사 줄이 기대 모양과 다르다(0열 · 줄 전체 일치) — 기대: %s" % want_bang)
         if list_items(fm.get("allowed-tools", [])) != [want_allow] or len(fm.get("allowed-tools", [])) != 1:
             L.add("C", rel, 1, "allowed-tools 가 사전 검사 한 항목만이 아니다 — 기대: [%s]" % want_allow)
         heading = next((body_at + i for i, ln in enumerate(body) if ln.strip() == ENTRY_HEADING), None)
@@ -219,6 +222,8 @@ class Scan:
         else:
             if bangs and bangs[0][0] > heading:
                 L.add("C", rel, bangs[0][0] + 1, "사전 검사 줄이 `## 진입 단계` 위에 있지 않다")
+            elif bangs and any(ln.strip() for ln in lines[bangs[0][0] + 1:heading]):
+                L.add("C", rel, bangs[0][0] + 1, "사전 검사 줄과 `## 진입 단계` 사이에 빈 줄 아닌 줄이 있다")
             end = next((j for j in range(heading + 1, len(lines)) if lines[j].startswith("## ")), len(lines))
             section = "\n".join(lines[heading + 1:end])
             for row in SENTINEL_ROWS:
@@ -274,7 +279,7 @@ class Scan:
             for n, ln in enumerate(text.split("\n"), 1):
                 for m in FULL_CALL_RE.finditer(ln):
                     p, x = m.group(1), m.group(2)
-                    if p in self.plugins and (p, x) not in invocable and (p, x) not in commands:
+                    if p not in EXTERNAL_PLUGINS and (p, x) not in invocable and (p, x) not in commands:
                         self.L.add("G", rel, n, "/%s:%s 는 사용자 호출 가능한 skill · 명령으로 풀리지 않는다" % (p, x))
                 for m in bare_re.finditer(ln):
                     self.L.add("G", rel, n, "기계가 내는 안내의 bare /%s — 완전명 /<plugin>:%s 로" % (m.group(1), m.group(1)))
@@ -282,13 +287,13 @@ class Scan:
     # 축 H — 명령 층
     def axis_h(self):
         for rel in self.files:
-            if COMMAND_PATH_RE.match(rel):
+            if ANY_COMMAND_RE.match(rel):
                 self.L.add("H", rel, 1, "commands/ 층은 qg 밖에 두지 않는다 — 사전 단계는 진입 skill 의 사전 검사 줄로")
 
     # 축 I — 살아 있는 표면의 옛 이름 + 양성 짝
     def axis_i(self):
         for rel in self.files:
-            if rel in SELF_FILES or rel.endswith("CHANGELOG.md") or "/tests/fixtures/" in rel:
+            if rel in SELF_FILES or os.path.basename(rel) == "CHANGELOG.md" or "/tests/fixtures/" in rel:
                 continue
             if not (rel in LIVE_TOP or rel.startswith(LIVE_PREFIX)):
                 continue
@@ -338,7 +343,7 @@ def main(argv=None):
     try:
         scan = Scan(a.root)
         L = scan.run()
-    except (OSError, subprocess.CalledProcessError) as exc:
+    except Exception as exc:  # noqa: BLE001 — 예기치 못한 예외는 RED(1)가 아니라 내부 오류(2)
         sys.stderr.write("[invocation-surface] 내부 오류: %s\n" % exc)
         return 2
     if a.emit_scanned:
