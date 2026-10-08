@@ -1337,10 +1337,10 @@ def _rg_decide(st, g, fid):
     d = st["decides"].get(fid) or {}
     alternatives = [choice_label(c, d.get("kind")) for c in decide_choices(st, fid)]
     lines = ["- %s%s (%s%s)" % (_one(f.get("summary")), _post_kind_notice(d), fid, " · 자동" if dv.get("auto") else ""),
-             "  그대로 두면: %s" % dv.get("if_unfixed", "(리뷰어가 안 적음)"),
-             "  고치면: %s" % dv.get("replacement", "(대체안 미작성)"),
-             "  근거: %s" % dv.get("basis", f.get("evidence") or "—"),
-             "  자리: %s" % dv.get("impact", f.get("anchor")),
+             "  그대로 두면: %s" % _one(dv.get("if_unfixed", "(리뷰어가 안 적음)")),
+             "  고치면: %s" % _one(dv.get("replacement", "(대체안 미작성)")),
+             "  근거: %s" % _one(dv.get("basis", f.get("evidence") or "—")),
+             "  자리: %s" % _one(dv.get("impact", f.get("anchor"))),
              "  대안: %s" % " / ".join(alternatives)]
     # 사람말이 없는 category 는 원래 이름으로 나가되 그 사실을 «말한다». 조용히
     # 빈칸으로 두면 사상이 낡았다는 것이 아무 데도 안 남는다(D13-③ 이 안 닫힌다).

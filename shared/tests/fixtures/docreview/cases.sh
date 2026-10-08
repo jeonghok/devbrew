@@ -2697,6 +2697,19 @@ case_I4_summary_newline_collapsed() {
     "I4 summary: 원장 값은 그대로다(접기는 렌더에서만)"
   rm -rf "$d"
 }
+# 같은 구멍의 근거(evidence) 칸 — 근거는 문서 인용이라 원장에 원문 그대로 남는다(계획 P11). 「  근거: 」 줄에
+# 들어갈 때 개행이 살아 있으면 다음 줄 열 0 에 가짜 항목 머리가 선다 — 렌더가 접는다.
+case_I4_evidence_newline_collapsed() {
+  local d gr; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  seed_findings "$d" '[{"id":"aaaa0001#r1.1","lineage":"aaaa0001#r1.1","bucket":"aaaa0001","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#12-files-to-modify","edit_scope":"#12-files-to-modify","disposition":"decide","summary":"파일 목록이 두 가지로 읽힌다","evidence":"12행\n- 가짜 항목 (zz#r1.6)","blocks":[],"kind":"pre"}]'
+  gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_not_grep "$gr" '^- 가짜' "I4 evidence: 근거 속 항목 머리 모양이 렌더의 열 0 에 서지 않는다"
+  assert_grep "$gr" '^  근거: .*12행 - 가짜 항목 \(zz#r1\.6\)' \
+    "I4 evidence 양의 짝: 그 조각은 「근거」 줄 안에 한 줄로 산다"
+  assert_eq "$(st_yaml "$d" 'st["findings"]["aaaa0001#r1.1"]["evidence"].count(chr(10))')" "1" \
+    "I4 evidence: 원장 값은 그대로다(접기는 렌더에서만 — 근거는 원문 인용)"
+  rm -rf "$d"
+}
 # STATE_GLOSS 의 ∀ 커버리지 — 행 이름은 `gate-rows` 에서 도출한다(CATEGORY_GLOSS 락과 같은 모양).
 case_state_gloss_covers_gate_rows() {
   local rows gl; rows="$(py docreview_state.py gate-rows | python3 -c 'import json, sys; print(" ".join(sorted(r["name"] for r in json.load(sys.stdin))))')"

@@ -713,6 +713,9 @@ mut 1/1 fix_id_moved_front case_plain_render_fix_and_decide sed_state \
 # STATE_GLOSS 짝 하나 지우기 — ∀ 커버리지 락이 잡는다.
 mut 1/1 state_gloss_row_missing case_state_gloss_covers_gate_rows sed_state \
   's/^    "ask_open": "답을 기다리는 질문",$//'
+# 근거 줄의 한 줄 접기를 떼기 — 근거 속 개행이 열 0 에 가짜 항목 머리를 세운다.
+mut 1/1 evidence_line_unfolded case_I4_evidence_newline_collapsed sed_state \
+  's/^             "  근거: %s" % _one(dv\.get("basis", f\.get("evidence") or "—")),$/             "  근거: %s" % dv.get("basis", f.get("evidence") or "—"),/'
 # (54) 상태 디렉토리의 문서 정체 — `init` 의 문서 비교를 끈다. 다른 문서의 원장을 조용히
 #    이어받던 그 동작이다. 거부 셀만 RED 가 된다.
 mut 1/1 init_doc_compare_off case_init_other_doc_refused sed_state \

@@ -87,5 +87,6 @@ case_I4_if_unfixed_newline_collapsed
 case_plain_render_nothing_left
 case_plain_render_fix_and_decide
 case_I4_summary_newline_collapsed
+case_I4_evidence_newline_collapsed
 case_category_unglossed_disclosed
 finish
