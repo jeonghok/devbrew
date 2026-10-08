@@ -37,6 +37,7 @@ Execute the setup script to initialize the pipeline:
 
 setup 이 `인자는 없어졌다 — … 실행하지 않는다.` 줄을 냈으면(exit 2) 그 줄을 그대로 보이고 끝낸다 —
 파이프라인 skill 을 부르지 않는다. 그 밖에 setup 이 비0 으로 끝났으면 그 출력을 그대로 보이고 끝낸다.
+인자가 `critique` 로 시작하면 setup 은 출력 없이 0 으로 끝난다 — 이 규칙 대신 위 critique 절을 따른다.
 
 Otherwise invoke `Skill("quality-gates:quality-pipeline")` with the parsed
 arguments. The skill runs the pipeline in this turn — differential test,

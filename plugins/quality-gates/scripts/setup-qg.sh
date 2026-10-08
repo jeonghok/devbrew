@@ -5,6 +5,12 @@
 
 set -euo pipefail
 
+# --- `critique` 는 setup 의 몫이 아니다 — /qg critique 는 critiquing-artifacts 로 간다(qg.md).
+# 출력도 상태도 남기지 않고 0 으로 끝난다. kill switch 는 그 skill 의 E0 가 본다.
+if [[ "${1:-}" == "critique" ]]; then
+  exit 0
+fi
+
 # --- kill switch (SKILL Preflight P1 도 같은 스위치를 본다 — 직접 호출도 막는다) ---
 if [[ "${DEVBREW_QUALITY_GATES_DISABLE:-}" == "1" ]]; then
   echo "[quality-gates] setup-qg disabled via DEVBREW_QUALITY_GATES_DISABLE=1" >&2
@@ -95,7 +101,7 @@ ARGUMENTS:
 OPTIONS:
   --paths <glob>...    Scope override — review only the matched paths
   --plan <path>        Specify plan file path (default: auto-detect)
-  --session-id <id>    Override session ID (defaults to CLAUDE_CODE_SESSION_ID)
+  --session-id <id>    Session ID when CLAUDE_CODE_SESSION_ID is unset (if it is set, must equal it)
   --ensure             Keep this session's folder if it already exists (skill preflight)
   -h, --help           Show this help message
 
@@ -118,8 +124,9 @@ if [[ -n "$GONE_ARGS" ]]; then
 fi
 
 # --- 세션 ID (E1) ---
+ENV_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
 if [[ -z "$SESSION_ID" ]]; then
-  SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
+  SESSION_ID="$ENV_SESSION_ID"
 fi
 if [[ -z "$SESSION_ID" ]]; then
   cat >&2 <<EOF
@@ -134,6 +141,17 @@ fi
 if [[ ! "$SESSION_ID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
   echo "❌ Quality Gates: session ID '$SESSION_ID' fails pattern guard ([A-Za-z0-9_-]{8,})." >&2
   exit 1
+fi
+
+# 이 세션의 ID 가 있으면 다른 세션의 폴더를 받지 않는다 — 살아 있는 다른 세션의 폴더를 지울 수 있다.
+# 자기 세션(OWN_SESSION)의 폴더는 마커 없이도 지우고 다시 만든다 — /qg-publish 등이 같은 폴더에 쓴다.
+OWN_SESSION="false"
+if [[ -n "$ENV_SESSION_ID" ]]; then
+  if [[ "$SESSION_ID" != "$ENV_SESSION_ID" ]]; then
+    echo "[quality-gates] --session-id '$SESSION_ID' 가 이 세션의 ID(CLAUDE_CODE_SESSION_ID)와 다르다 — 다른 세션의 폴더는 지우지 않는다. 아무것도 쓰지 않는다." >&2
+    exit 1
+  fi
+  OWN_SESSION="true"
 fi
 
 STATE_ROOT=".claude/quality-gates"
@@ -152,8 +170,9 @@ if [[ "$ENSURE_MODE" == "true" ]] && [[ -f "$STATE_FILE" ]]; then
 fi
 
 # --- 자기 세션 폴더를 지우고 다시 만든다 (E1 · E4) ---
-# `.claude` 나 state root 가 링크를 거쳐 제자리 밖으로 풀리면 지우지 않는다 — 링크 너머를
-# 지울 수 있다(qg-gc.py 의 root_escapes 와 같은 판단). 자기 폴더 자신이 링크여도 지우지 않는다.
+# `.claude` 나 state root 가 제자리의 실제 디렉토리로 풀리지 않으면(링크면 리포 안을 가리켜도) 지우지
+# 않는다 — 링크 너머를 지울 수 있다(qg-gc.py 의 root_escapes 와 같은 판단). 자기 폴더 자신이 링크여도
+# 지우지 않는다. 이 가드들은 마커 · 자기 세션 여부와 무관하게 삭제보다 먼저 돈다.
 root_escapes() {
   local here rel got
   here="$(pwd -P)"
@@ -197,14 +216,14 @@ if ! load_markers; then
   refuse "qg-gc.py 에서 세션 마커 목록을 읽지 못했다"
 fi
 if root_escapes; then
-  refuse "state root '$STATE_ROOT' 가 링크를 거쳐 제자리 밖으로 풀린다"
+  refuse "'.claude' 나 state root '$STATE_ROOT' 가 제자리의 실제 디렉토리가 아니다(심볼릭 링크 등 — 실제 디렉토리로 바꿔야 /qg 가 돈다)"
 elif [[ -L "$STATE_DIR" ]]; then
   refuse "세션 폴더 '$STATE_DIR' 자신이 링크다"
 elif [[ -e "$STATE_DIR" ]] && [[ ! -d "$STATE_DIR" ]]; then
   refuse "'$STATE_DIR' 가 폴더가 아니다"
 elif [[ -d "$STATE_DIR" ]]; then
-  # 비어 있거나 세션 마커가 있는 폴더만 이전 실행의 것으로 보고 지운다.
-  if [[ -n "$(ls -A "$STATE_DIR" 2>/dev/null)" ]] && ! has_session_marker; then
+  # 자기 세션 폴더는 그대로 지운다. 그 밖에는 비어 있거나 세션 마커가 있는 폴더만 이전 실행의 것으로 보고 지운다.
+  if [[ "$OWN_SESSION" != "true" ]] && [[ -n "$(ls -A "$STATE_DIR" 2>/dev/null)" ]] && ! has_session_marker; then
     refuse "'$STATE_DIR' 는 세션 마커가 없는 비어 있지 않은 폴더라 이전 실행의 것이 아니다"
   fi
   rm -rf -- "./.claude/quality-gates/${SESSION_ID:?}"

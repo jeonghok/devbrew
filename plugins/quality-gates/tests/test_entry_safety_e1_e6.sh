@@ -66,9 +66,11 @@ assert_eq "$rc" "0" "E1: 같은 세션의 다시 실행은 exit 0 (활성 파이
   && ok "E1: --ensure 는 있는 세션 폴더를 지우지 않는다" || no "E1: --ensure 가 세션 폴더를 지웠다"
 
 # state root 가 링크로 밖에 풀리면 지우지 않는다.
+# 링크 너머 폴더에 마커(pipeline.md)를 둔다 — 마커 가드가 먼저 거부해 링크 가드를 가리지 않게 한다.
 W2="$TMP/e1link"; OUT="$TMP/e1outside"
 mkdir -p "$W2/.claude" "$OUT/qgroot/$SID"
 : > "$OUT/qgroot/$SID/keep.md"
+: > "$OUT/qgroot/$SID/pipeline.md"
 ln -s "$OUT/qgroot" "$W2/.claude/quality-gates"
 err="$(cd "$W2" && "$SETUP" --session-id "$SID" 2>&1 >/dev/null)"
 [ -f "$OUT/qgroot/$SID/keep.md" ] \
@@ -80,11 +82,33 @@ snap() { (cd "$1" && find . | LC_ALL=C sort); }   # snap <디렉토리> — 트�
 W2b="$TMP/e1linkb"; OUTb="$TMP/e1outsideb"
 mkdir -p "$W2b/.claude" "$OUTb/qgroot/$SID"
 : > "$OUTb/qgroot/$SID/keep.md"
+: > "$OUTb/qgroot/$SID/pipeline.md"
 ln -s "$OUTb/qgroot" "$W2b/.claude/quality-gates"
 before="$(snap "$OUTb")"
 (cd "$W2b" && "$SETUP" --session-id "$SID" >/dev/null 2>&1); rc=$?
 assert_eq "$rc" "1" "E1: 링크로 밖에 풀린 state root 는 exit 1 로 거부한다"
-assert_eq "$(snap "$OUTb")" "$before" "E1: 거부된 실행이 링크 너머에 아무 파일도 쓰지 않는다 (pipeline.md 포함)"
+assert_eq "$(snap "$OUTb")" "$before" "E1: 거부된 실행이 링크 너머에 아무 파일도 지우거나 쓰지 않는다 (마커가 있어도)"
+
+# 자기 세션(CLAUDE_CODE_SESSION_ID)은 마커 가드를 건너뛴다 — 링크 가드는 그래도 삭제보다 먼저 돈다.
+W2e="$TMP/e1linke"; OUTe="$TMP/e1outsidee"
+mkdir -p "$W2e/.claude" "$OUTe/qgroot/$SID"
+: > "$OUTe/qgroot/$SID/keep.md"
+ln -s "$OUTe/qgroot" "$W2e/.claude/quality-gates"
+before="$(snap "$OUTe")"
+(cd "$W2e" && CLAUDE_CODE_SESSION_ID="$SID" "$SETUP" >/dev/null 2>&1); rc=$?
+assert_eq "$rc" "1" "E1: 자기 세션이어도 링크로 밖에 풀린 state root 는 exit 1 로 거부한다"
+assert_eq "$(snap "$OUTe")" "$before" "E1: 자기 세션이어도 링크 너머에 아무 파일도 지우거나 쓰지 않는다"
+
+# `.claude/quality-gates` 가 리포 «안»을 가리키는 링크여도 거부한다(실제 디렉토리여야 한다).
+W2f="$TMP/e1linkf"
+mkdir -p "$W2f/.claude/realroot/$SID"
+: > "$W2f/.claude/realroot/$SID/keep.md"; : > "$W2f/.claude/realroot/$SID/pipeline.md"
+ln -s realroot "$W2f/.claude/quality-gates"
+err="$(cd "$W2f" && "$SETUP" --session-id "$SID" 2>&1 >/dev/null)"; rc=$?
+assert_eq "$rc" "1" "E1: 리포 안을 가리키는 state root 링크도 exit 1 로 거부한다"
+[ -f "$W2f/.claude/realroot/$SID/keep.md" ] \
+  && ok "E1: 리포 안 링크 너머 폴더도 지우지 않는다" || no "E1: 리포 안 링크 너머 폴더를 지웠다"
+assert_contains "$err" "실제 디렉토리" "E1: 거부 줄이 해법(실제 디렉토리)을 말한다 — 링크 대상이 리포 안이어도 참이다"
 
 # 세션 폴더 자신이 링크여도 같다.
 W2c="$TMP/e1linkc"; OUTc="$TMP/e1outsidec"
@@ -192,6 +216,53 @@ e="$(cd "$WB" && "$PC/scripts/setup-qg.sh" --session-id brokengcsess1 2>&1 >/dev
 assert_eq "$rc" "1" "E1: qg-gc.py 를 읽지 못하면 setup 이 exit 1 로 거부한다"
 assert_eq "$(printf '%s\n' "$e" | grep -c .)" "1" "E1: 마커 목록을 못 읽은 거부는 stderr 한 줄이다"
 assert_eq "$(snap "$WB")" "$before" "E1: 마커 목록을 못 읽으면 아무것도 지우거나 쓰지 않는다"
+
+note "── E1(자기 세션): 이 세션의 폴더는 마커 없이도 다시 만들고, 다른 세션의 폴더는 받지 않는다"
+# /qg-publish 는 같은 세션 폴더에 마커가 아닌 파일(pr-understanding.md)을 쓴다 — 그 뒤의 /qg 가 막히면 안 된다.
+OWN="ownsession0001"
+for how in env same-arg; do
+  WO="$TMP/e1own-$how"; mkdir -p "$WO/.claude/quality-gates/$OWN"
+  : > "$WO/.claude/quality-gates/$OWN/pr-understanding.md"
+  if [ "$how" = env ]; then
+    (cd "$WO" && CLAUDE_CODE_SESSION_ID="$OWN" "$SETUP" >/dev/null 2>&1); rc=$?
+  else
+    (cd "$WO" && CLAUDE_CODE_SESSION_ID="$OWN" "$SETUP" --session-id "$OWN" >/dev/null 2>&1); rc=$?
+  fi
+  assert_eq "$rc" "0" "E1: 자기 세션($how) 폴더에 pr-understanding.md 만 있어도 exit 0"
+  [ ! -e "$WO/.claude/quality-gates/$OWN/pr-understanding.md" ] \
+    && ok "E1: 자기 세션($how) 폴더를 지우고 다시 만들었다" || no "E1: 자기 세션($how) 폴더의 이전 파일이 남았다"
+  [ -f "$WO/.claude/quality-gates/$OWN/pipeline.md" ] \
+    && ok "E1: 자기 세션($how) 폴더에 새 pipeline.md 가 있다" || no "E1: 자기 세션($how) 폴더에 pipeline.md 가 없다"
+done
+# 다른 세션 — 마커가 있는 그 폴더도(마커 가드라면 지웠을 모양) 지우지 않는다.
+WX="$TMP/e1other"; mkdir -p "$WX/.claude/quality-gates/othersession01"
+: > "$WX/.claude/quality-gates/othersession01/pipeline.md"; : > "$WX/.claude/quality-gates/othersession01/work.md"
+before="$(snap "$WX")"
+e="$(cd "$WX" && CLAUDE_CODE_SESSION_ID="$OWN" "$SETUP" --session-id othersession01 2>&1 >/dev/null)"; rc=$?
+assert_eq "$rc" "1" "E1: CLAUDE_CODE_SESSION_ID 와 다른 --session-id 는 exit 1"
+assert_eq "$(printf '%s\n' "$e" | grep -c .)" "1" "E1: 다른 세션 거부는 stderr 가 정확히 한 줄이다"
+assert_eq "$(snap "$WX")" "$before" "E1: 다른 세션 거부는 아무것도 지우거나 쓰지 않는다 (그 세션 폴더가 그대로다)"
+(cd "$WX" && CLAUDE_CODE_SESSION_ID="$OWN" "$SETUP" --ensure --session-id othersession01 >/dev/null 2>&1); rc=$?
+assert_eq "$rc" "1" "E1: --ensure 여도 다른 세션의 --session-id 는 거부한다"
+# 환경 변수 없이 --session-id 만(직접 호출 · 테스트) — 마커 가드가 그대로다(양의 짝: 위 자기 세션 통과가 마커 가드 제거가 아니다).
+WU="$TMP/e1noenv"; mkdir -p "$WU/.claude/quality-gates/$OWN"
+: > "$WU/.claude/quality-gates/$OWN/pr-understanding.md"
+refusal_check "환경 변수 없이 --session-id 만 — 마커 없는 폴더(pr-understanding.md 만)" "$WU" "$OWN"
+
+note "── E1(critique): 첫 인자 critique 는 setup 의 몫이 아니다 — 출력 · 상태 없이 exit 0"
+WC="$TMP/e1critique"; mkdir -p "$WC"
+out="$(cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 "$SETUP" critique docs/x.md 2>"$TMP/critique.err")"; rc=$?
+assert_eq "$rc" "0" "E1: setup-qg.sh critique docs/x.md 는 exit 0"
+assert_eq "$out" "" "E1: critique 는 stdout 이 비어 있다"
+assert_eq "$(cat "$TMP/critique.err")" "" "E1: critique 는 stderr 가 비어 있다"
+[ ! -e "$WC/.claude" ] && ok "E1: critique 는 세션 폴더를 만들지 않는다" || no "E1: critique 가 상태를 남겼다"
+(cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 DEVBREW_QUALITY_GATES_DISABLE=1 "$SETUP" critique docs/x.md >/dev/null 2>&1); rc=$?
+assert_eq "$rc" "0" "E1: critique 는 전역 kill switch 도 setup 이 아니라 critiquing-artifacts(E0)에 맡긴다"
+(cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 "$SETUP" docs/x.md >/dev/null 2>&1); rc=$?
+assert_eq "$rc" "1" "E1: critique 가 첫 인자가 아니면 여전히 Unknown argument 다 (양의 짝)"
+(cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 "$SETUP" >/dev/null 2>&1)
+[ -f "$WC/.claude/quality-gates/critiquesess1/pipeline.md" ] \
+  && ok "E1: 같은 환경에서 인자 없이는 세션 폴더를 만든다 (양의 짝 — 위 부재가 공허하지 않다)" || no "E1: 양의 짝 실행이 폴더를 만들지 않았다"
 
 note "── E2: 플러그인 루트를 cwd 로 대체하지 않는다"
 W="$TMP/e2"; mkdir -p "$W/scripts"
