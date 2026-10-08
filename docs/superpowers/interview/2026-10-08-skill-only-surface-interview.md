@@ -12,7 +12,7 @@ user_sourced_items:
   - id: C1
     source: verbatim
     status: provisional
-    statement: "점검 대상은 slash 명령, slash 로 부를 수 있는 skill, kill switch 환경변수, 명령 인자로 넘기는 핸드오프 문구 넷 전부다"
+    statement: "점검 대상은 slash 명령, slash 로 부를 수 있는 skill, kill switch 환경변수, 명령 인자로 넘기는 핸드오프 문구(skill 이 다음 단계로 안내하는 명령 문구 포함) 넷 전부다"
     evidence: S1
   - id: C2
     source: verbatim
@@ -32,12 +32,42 @@ user_sourced_items:
   - id: C5
     source: verbatim
     status: provisional
-    statement: "사용자는 플러그인 접두 없는 짧은 이름으로 치고, skill 을 slash 로 직접 부르는 경로를 일부러 쓴다"
+    statement: "사용자는 플러그인 접두 없는 짧은 이름으로 명령을 치고, skill 을 slash 로 직접 부르는 경로를 일부러 쓴다"
+    evidence: S1
+  - id: C6
+    source: verbatim
+    status: provisional
+    statement: "skill 을 직접 부르는 이유는 넷 — 대응 명령이 없고, 명령보다 확실히 돌고, 명령의 사전 단계를 피하고, 이름이 더 정확하다"
+    evidence: S1
+  - id: C7
+    source: verbatim
+    status: provisional
+    statement: "불편은 넷 — 명령 오류, 무엇을 칠지 헷갈림, 문서와 실제의 불일치, 쓸모없는 명령"
+    evidence: S1
+  - id: C8
+    source: verbatim
+    status: provisional
+    statement: "/interview 오류는 @ 경로를 읽다 실패해 ‘읽지 못했다’ 메시지를 내고 멈춘 것이고 그 원인은 하류가 재현으로 가른다"
+    evidence: S1
+  - id: C9
+    source: verbatim
+    status: provisional
+    statement: "이름을 바꾸거나 없애는 명령은 alias 없이 바로 제거하고 major bump 한다"
+    evidence: S1
+  - id: C10
+    source: verbatim
+    status: provisional
+    statement: "CLAUDE.md 의 one-minor deprecation window 규칙을 즉시 제거를 허용하도록 바꾼다"
+    evidence: S1
+  - id: C11
+    source: verbatim
+    status: provisional
+    statement: "통일한 명령 규칙은 테스트(락)로 집행한다"
     evidence: S1
   - id: D1
     source: chosen
     status: provisional
-    statement: "진짜 문제는 부르는 모양마다 도는 것이 달라 예측할 수 없다는 것이다 — 이름·문서 불일치는 증상이다"
+    statement: "진짜 문제는 부르는 모양마다 도는 것이 달라 예측할 수 없다는 것이다"
     evidence: S2
   - id: D2
     source: chosen
@@ -47,7 +77,7 @@ user_sourced_items:
   - id: D3
     source: chosen
     status: provisional
-    statement: "명령·skill 이름은 alias 없이 즉시 제거하고 major bump 하되 이번 범위는 qg 밖 명령 4개이고 kill switch 이름은 바꾸지 않으며 CLAUDE.md 개정문은 제3자 설치 확인 전까지·호출 이름에 한한다는 조건을 단다"
+    statement: "명령·skill 이름은 alias 없이 즉시 제거하고 major bump 하되 이번 범위는 qg 밖 명령 4개이고 kill switch 이름은 바꾸지 않으며 CLAUDE.md 개정문은 제3자 설치 확인 전까지·호출 이름에 한함·스위치 은퇴는 공시 필수라는 조건을 단다"
     evidence: S5
   - id: D4
     source: chosen
@@ -57,12 +87,12 @@ user_sourced_items:
   - id: D5
     source: chosen
     status: provisional
-    statement: "사용자가 치는 이름은 짧은 명령형이되 일반어 단독은 피하고, 기계가 내는 핸드오프 안내는 /plugin:name 완전명으로 쓴다"
+    statement: "사용자가 치는 이름은 짧게 하되 일반어 단독은 금지하고, 기계가 내는 핸드오프 안내는 /plugin:name 완전명으로 쓴다"
     evidence: S7
   - id: D6
     source: chosen
     status: provisional
-    statement: "통일 규칙 락은 표면 정합을 잰다 — 안내 문구가 실재 user-invocable skill 을 가리키는가 · 인식되는 frontmatter 키만 쓰는가 · 이름이 규칙을 따르는가; qg 면제는 v10 머지 시 만료"
+    statement: "통일 규칙 락은 표면 정합을 잰다 — 안내 문구가 실재 user-invocable skill 을 가리키는가 · 인식되는 frontmatter 키만 쓰는가 · 이름이 규칙을 따르는가"
     evidence: S8
 ---
 
@@ -78,11 +108,11 @@ user_sourced_items:
 사전 단계(kill switch · trivia escape · `@경로` 풀기 · setup)를 그 skill 안에 둔다.
 
 **왜.** 사용자는 명령을 쳤는데 모델이 skill 로 넘어가지 않거나 멈추는 일을 겪었다. 진짜 문제는
-«부르는 모양마다 도는 것이 다르다»는 데 있고, 이름 혼재와 문서 불일치는 그 증상이다. 플랫폼도 같은
+«부르는 모양마다 도는 것이 다르다»는 데 있다. 사용자가 확인한 불편은 넷이다 — 명령 오류, 무엇을 칠지 헷갈림, 문서와 실제의 불일치, 쓸모없는 명령(C7). 플랫폼도 같은
 방향으로 가고 있다(commands = older format, skills supersede).
 
-**확정 후보.** 이름은 짧은 명령형으로 하되 일반어 단독은 피한다. 안내 문구는 완전명으로 쓴다. 제거는
-alias 없이 즉시 하고 major bump 한다. 이번 범위는 qg 밖 명령 4개이고 kill switch 이름은 그대로 둔다.
+**확정 후보.** 이름은 짧게 하되 일반어 단독은 금지한다. 안내 문구는 완전명으로 쓴다. 제거는
+alias 없이 즉시 하고 major bump 한다. CLAUDE.md 개정문은 제3자 설치 확인 전까지·호출 이름에 한함·스위치 은퇴는 공시 필수라는 조건을 단다. 이번 범위는 qg 밖 명령 4개이고 kill switch 이름은 그대로 둔다.
 락은 표면 정합을 잰다. quality-gates 는 보고만 한다.
 
 **열림.** `@` 오류 원인, 사전 단계를 결정론으로 만들 수단, 내부 skill 처분, 개별 이름 매핑, trivia 의
@@ -109,6 +139,13 @@ alias 없이 즉시 하고 major bump 한다. 이번 범위는 qg 밖 명령 4�
 - OQ15 [열림] — 옛 이름 스위프 범위와 qg 면제 만료의 구현 → 근거 RC10 · RC13 · RC18 · RC25
 - OQ16 [열림] — 쉬운 말 출력 작업과의 README 편집 순서 → 근거 RC8
 - OQ17 [열림] — qg 후속 과제 보고 목록 → 근거 RC4 · RC5 · RC6
+- OQ18 [열림] — [참고 · direction] qg 면제의 만료를 「v10 머지」에 걸면 v10 이 `commands/qg.md` 진입과 맨 `/qg` 를 유지하므로 머지 순간 표면 정합 락이 RED 가 된다 — 만료를 qg 가 실제로 규칙에 수렴한 시점에 걸지 정한다
+- OQ19 [열림] — [참고 · direction] qg v10 ① 컷오버가 CLAUDE.md 메타데이터 절에 무조건 제거 문안을 넣고 kill switch 하나를 개명한다 — D3 의 조건부 문안과 같은 조항의 소유자가 둘이다. C4(이 작업이 규칙을 정함)와 C3(v10 은 자기 설계대로) 중 무엇이 우선인지 정한다
+- OQ20 [열림] — [참고 · direction] qg v10 ① 은 `commands/qg.md` 를 `!` 펜스 진입으로 새로 쓴다 — D2(명령 파일 제거)·C4 와 충돌. v10 이 진입을 skill 로 맞출지, 규칙에 결정론적 `!` 선행 명령 예외를 둘지 정한다
+- OQ21 [열림] — [참고 · overdesign] shrink: OQ17 의 qg 후속 목록 대부분은 v10 ①·③ 이 지우는 표면이다 — v10 이후에도 남는 어긋남만 남기고 나머지는 「v10 에서 삭제」 한 줄로 묶을지 정한다
+- OQ22 [열림] — [참고 · direction] plugin-audit 은 0.10.0 이다 — 이름 제거에 일괄 major bump 를 적용해 1.0.0 으로 올릴지(안정 API 선언·CHANGELOG·창 규칙 구속이 따라옴), 0.x 는 minor 로 하는 예외(0.6.0 선례)를 D3 에 적을지 정한다
+- OQ23 [열림] — [참고 · direction] `!` 블록 사전 치환이 실패하면 모델 턴 0회 · rc=0 으로 조용히 끝난 리포 실측이 있다 — OQ10 의 수단 결정이 이 실패를 소리 나게 드러내는 요건까지 포함할지 정한다
+- OQ24 [열림] — [참고 · direction] Goal 의 「그 모양으로 부르면 늘 같은 것이 돈다」는 bare 이름에는 보장되지 않는다(`--plugin-dir` 에서는 등록조차 안 됨) — 보장을 완전명에만 걸지, 설치본에서 bare 해석 실측을 설계 필수에 더할지 정한다
 
 ## 1. Goal · Non-goal
 
@@ -119,19 +156,35 @@ alias 없이 즉시 하고 major bump 한다. 이번 범위는 qg 밖 명령 4�
 
 ## 2. 제약
 
-- 🗣 provisional **C1** — 점검 대상은 slash 명령, slash 로 부를 수 있는 skill, kill switch 환경변수, 명령 인자로 넘기는 핸드오프 문구 넷 전부다 ⟨S1⟩
+- 🗣 provisional **C1** — 점검 대상은 slash 명령, slash 로 부를 수 있는 skill, kill switch 환경변수, 명령 인자로 넘기는 핸드오프 문구(skill 이 다음 단계로 안내하는 명령 문구 포함) 넷 전부다 ⟨S1⟩
 - 🗣 provisional **C2** — 이번 사이클은 점검·결정에서 멈추지 않고 구현까지 이 브랜치 하나로 간다 ⟨S1⟩
 - 🗣 provisional **C3** — quality-gates 파일은 이 작업에서 고치지 않고 점검 보고에만 올린다; qg v10 은 자기 설계대로 가고 어긋나는 qg 부분은 후속 과제로 남긴다 ⟨S1⟩
 - 🗣 provisional **C4** — 이 작업이 명령 체계 규칙을 정하고 qg v10 재건과 쉬운 말 출력 작업은 그 규칙을 따른다 ⟨S1⟩
-- 🗣 provisional **C5** — 사용자는 플러그인 접두 없는 짧은 이름으로 치고, skill 을 slash 로 직접 부르는 경로를 일부러 쓴다 ⟨S1⟩
-- ☑ provisional **D1** — 진짜 문제는 부르는 모양마다 도는 것이 달라 예측할 수 없다는 것이다 — 이름·문서 불일치는 증상이다 ⟨S2⟩
+- 🗣 provisional **C5** — 사용자는 플러그인 접두 없는 짧은 이름으로 명령을 치고, skill 을 slash 로 직접 부르는 경로를 일부러 쓴다 ⟨S1⟩
+- 🗣 provisional **C6** — skill 을 직접 부르는 이유는 넷 — 대응 명령이 없고, 명령보다 확실히 돌고, 명령의 사전 단계를 피하고, 이름이 더 정확하다 ⟨S1⟩
+- 🗣 provisional **C7** — 불편은 넷 — 명령 오류, 무엇을 칠지 헷갈림, 문서와 실제의 불일치, 쓸모없는 명령 ⟨S1⟩
+- 🗣 provisional **C8** — /interview 오류는 @ 경로를 읽다 실패해 ‘읽지 못했다’ 메시지를 내고 멈춘 것이고 그 원인은 하류가 재현으로 가른다 ⟨S1⟩
+- 🗣 provisional **C9** — 이름을 바꾸거나 없애는 명령은 alias 없이 바로 제거하고 major bump 한다 ⟨S1⟩
+- 🗣 provisional **C10** — CLAUDE.md 의 one-minor deprecation window 규칙을 즉시 제거를 허용하도록 바꾼다 ⟨S1⟩
+- 🗣 provisional **C11** — 통일한 명령 규칙은 테스트(락)로 집행한다 ⟨S1⟩
+- ☑ provisional **D1** — 진짜 문제는 부르는 모양마다 도는 것이 달라 예측할 수 없다는 것이다 ⟨S2⟩
 - ☑ provisional **D2** — 기능마다 사용자가 부르는 skill 하나로 수렴하고 사전 단계는 그 skill 안에 둔다 — 명령 파일은 없앤다 ⟨S4⟩
-- ☑ provisional **D3** — 명령·skill 이름은 alias 없이 즉시 제거하고 major bump 하되 이번 범위는 qg 밖 명령 4개이고 kill switch 이름은 바꾸지 않으며 CLAUDE.md 개정문은 제3자 설치 확인 전까지·호출 이름에 한한다는 조건을 단다 ⟨S5⟩
+- ☑ provisional **D3** — 명령·skill 이름은 alias 없이 즉시 제거하고 major bump 하되 이번 범위는 qg 밖 명령 4개이고 kill switch 이름은 바꾸지 않으며 CLAUDE.md 개정문은 제3자 설치 확인 전까지·호출 이름에 한함·스위치 은퇴는 공시 필수라는 조건을 단다 ⟨S5⟩
 - ☑ provisional **D4** — 진입의 확실성 · 짧은 이름 충돌 · @ 대화형 재현 · 전환 잔재와 qg 면제 넷은 설계가 반드시 다룬다 ⟨S6⟩
-- ☑ provisional **D5** — 사용자가 치는 이름은 짧은 명령형이되 일반어 단독은 피하고, 기계가 내는 핸드오프 안내는 /plugin:name 완전명으로 쓴다 ⟨S7⟩
-- ☑ provisional **D6** — 통일 규칙 락은 표면 정합을 잰다 — 안내 문구가 실재 user-invocable skill 을 가리키는가 · 인식되는 frontmatter 키만 쓰는가 · 이름이 규칙을 따르는가; qg 면제는 v10 머지 시 만료 ⟨S8⟩
+- ☑ provisional **D5** — 사용자가 치는 이름은 짧게 하되 일반어 단독은 금지하고, 기계가 내는 핸드오프 안내는 /plugin:name 완전명으로 쓴다 ⟨S7⟩
+- ☑ provisional **D6** — 통일 규칙 락은 표면 정합을 잰다 — 안내 문구가 실재 user-invocable skill 을 가리키는가 · 인식되는 frontmatter 키만 쓰는가 · 이름이 규칙을 따르는가 ⟨S8⟩
 
-✎ D2 와 C5 가 만나는 자리: S4 이후로는 사용자가 치는 이름이 곧 skill 이름이다. 그래서 CLAUDE.md 의 «Skill 이름은 동명사, Command 이름은 짧은 명령형» 규칙은 사용자 진입 skill 에 대해 다시 써야 한다. 사용자 진입이 아닌 skill 의 명명은 열려 있다(OQ11).
+✎ D2 와 C5 가 만나는 자리: S4 이후로는 사용자가 치는 이름이 곧 skill 이름이다(모델 추론 — C5 는 «명령을» 짧은 이름으로 친다고 했고, skill 직접 호출은 지금 완전명이다). 그래서 CLAUDE.md 의 «Skill 이름은 동명사, Command 이름은 짧은 명령형» 규칙은 사용자 진입 skill 에 대해 다시 써야 한다. 사용자 진입이 아닌 skill 의 명명은 열려 있다(OQ11).
+
+✎ 이름 혼재·문서 불일치가 D1 의 증상이라는 것은 모델 추론이다 — C7 은 넷을 독립된 불편으로 확인했다.
+
+✎ S1 은 대화형 터미널에서 bare 이름이 어디로 풀리는지도 재라고 했다(헤드리스 실측에서는 Unknown command) — OQ9 의 대화형 실측에 함께 넣는다.
+
+✎ C9·C10 은 S1 의 원안이고 D3 는 그것을 ST1 판정(S5 보완)으로 다듬은 형태다 — 범위(qg 밖 명령 4개)·kill switch 불변·CLAUDE.md 조건이 S5 에서 더해졌다.
+
+✎ C6 의 「명령의 사전 단계를 피하고」는 D2(사전 단계를 skill 안에 둔다)와 긴장한다 — 어느 사전 단계를 늘 돌리고 어느 것을 건너뛸 수 있게 할지는 OQ10 · OQ13 에서 정한다.
+
+✎ qg 면제의 만료 조건은 사용자가 정하지 않았다 — 인터뷰 질문 문구가 「v10 머지 시 만료」를 전제로 깔았을 뿐 S8 의 선택 라벨에는 없다. OQ15 에서 정한다.
 
 ✎ S3 이 진짜 문제의 근거다. 명령은 «이제 skill X 를 부르라»고 모델에게 맡기는 한 단계를 끼우는데, 그 단계가 끊긴 것이다. 다만 premortem 에 따르면 skill 본문의 사전 단계도 산문이면 같은 실패가 재발할 수 있다(§5 위험). 그래서 D2 하나만으로는 «확실히 돈다»가 보장되지 않는다 — OQ10.
 
@@ -146,6 +199,13 @@ alias 없이 즉시 하고 major bump 한다. 이번 범위는 qg 밖 명령 4�
 - OQ15: 옛 이름 스위프 범위(archive · CHANGELOG · 메모리 · 이미 만든 seed)와 qg 면제의 만료 조건을 구현하는 방법 → 근거 RC10 · RC13 · RC18 · RC25
 - OQ16: 쉬운 말 출력 작업(브랜치 `feature/plain-language-voice`)과 README 사용법 절을 편집하는 순서 → 근거 RC8
 - OQ17: qg 후속 과제 보고 목록 — 명령 3개 수렴, `--reset`↔`/cancel-qg` 의미 차, stale 버전 표기, 무시되는 frontmatter 키, README 의 `/qg-publish` 누락, 훅·스크립트 안내 → 근거 RC4 · RC5 · RC6
+- OQ18: [참고 · direction] qg 면제의 만료를 「v10 머지」에 걸면 v10 이 `commands/qg.md` 진입과 맨 `/qg` 를 유지하므로 머지 순간 표면 정합 락이 RED 가 된다 — 만료를 qg 가 실제로 규칙에 수렴한 시점에 걸지 정한다 (리뷰 abf668a4#r1.1)
+- OQ19: [참고 · direction] qg v10 ① 컷오버가 CLAUDE.md 메타데이터 절에 무조건 제거 문안을 넣고 kill switch 하나를 개명한다 — D3 의 조건부 문안과 같은 조항의 소유자가 둘이다. C4(이 작업이 규칙을 정함)와 C3(v10 은 자기 설계대로) 중 무엇이 우선인지 정한다 (리뷰 abf668a4 계보 r1·r3)
+- OQ20: [참고 · direction] qg v10 ① 은 `commands/qg.md` 를 `!` 펜스 진입으로 새로 쓴다 — D2(명령 파일 제거)·C4 와 충돌. v10 이 진입을 skill 로 맞출지, 규칙에 결정론적 `!` 선행 명령 예외를 둘지 정한다 (리뷰 abf668a4 계보 r3)
+- OQ21: [참고 · overdesign] shrink: OQ17 의 qg 후속 목록 대부분은 v10 ①·③ 이 지우는 표면이다 — v10 이후에도 남는 어긋남만 남기고 나머지는 「v10 에서 삭제」 한 줄로 묶을지 정한다 (리뷰 d5f7195e#r1.1)
+- OQ22: [참고 · direction] plugin-audit 은 0.10.0 이다 — 이름 제거에 일괄 major bump 를 적용해 1.0.0 으로 올릴지(안정 API 선언·CHANGELOG·창 규칙 구속이 따라옴), 0.x 는 minor 로 하는 예외(0.6.0 선례)를 D3 에 적을지 정한다 (리뷰 abf668a4 계보 r2)
+- OQ23: [참고 · direction] `!` 블록 사전 치환이 실패하면 모델 턴 0회 · rc=0 으로 조용히 끝난 리포 실측이 있다 — OQ10 의 수단 결정이 이 실패를 소리 나게 드러내는 요건까지 포함할지 정한다 (리뷰 abf668a4 계보 r2)
+- OQ24: [참고 · direction] Goal 의 「그 모양으로 부르면 늘 같은 것이 돈다」는 bare 이름에는 보장되지 않는다(`--plugin-dir` 에서는 등록조차 안 됨) — 보장을 완전명에만 걸지, 설치본에서 bare 해석 실측을 설계 필수에 더할지 정한다 (리뷰 abf668a4 계보 r2)
 
 ## 4. External Landscape
 

@@ -203,6 +203,13 @@ source: spec-distill conducting-interview v0.57.0
 
 ### brief 리뷰 (reviewing-brief — 문서 리뷰 엔진)
 
+- 라운드: 3 · 재리뷰 카운트 2 · 추가 라운드 0 — 승인 게이트 도달 사유: 상한 · 리뷰 완료: 예(r3 round_reviewed 참) — 단 상한 뒤 1단계에서 고른 채택 4·fix 3 의 적용은 다시 리뷰되지 않았다
+- 결정: `## 8. 리뷰 결정` 13건 · 열린 채 남은 항목 0건 — 채택 permit 3건(D3.6·D3.8·D3.9)은 라운드 4 관측 예정이라 엔진상 「채택」으로 남고, fix 1건(54d639fc#r3.1)은 permit 통과 후 적용·미관측, fix 2건(eb353eb4#r3.1·#r3.2)은 앵커 미해석으로 상향된 채 사용자 선택으로 적용
+- codex: 없음 — exit_nonzero(사용량 한도, r1~r3 + 원인 확인 1 = 호출 4회 전부 실패) · 웹: Claude doc-critic-web · codex 켜짐(실행 실패)
+- 냉독: gap 0건 — 단 OQ18~OQ24 박제 직전 판본을 읽었다. 잘 안 읽힌 곳 4(ST1·부착 표기, OQ11 문장, 「스위치 은퇴 공시」가 겨냥하는 경우, RC21·RC24 본문 부재)
+- degrade: codex:unavailable(사용량 한도) · pipeline:재비판 입력 축약(r1·r3) · pipeline:check-intent 조작 실수로 상향 4건·관측 실패 2건 · pipeline:상한 뒤 적용 미검증 · 두 번째 채널 1줄(r1 재비판 축약 — component 열거 밖 이름으로 기록 실패)
+- 참고(advisory): 엔진 목록 2건(같은 앵커 계보로 접힘) — 세 라운드의 방향·overdesign 지적 7갈래를 payload §3 OQ18~OQ24 로 박제
+
 ## 6. 사용자 원문
 
 > **출처 표기** — 🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론
@@ -241,3 +248,19 @@ source: spec-distill conducting-interview v0.57.0
 - «at-in-args» — https://claudeissues.com/issue/52618-docs-slash-commands-docs-omit-file-references-in-arguments-including-absolute-pa — slash 인자 속 @ 지원과 절대경로 자동완성 변경
 - «at-not-pulled» — https://claudeissues.com/issue/11244-bug — slash 명령 안 @ 가 파일을 끌어오지 않음
 - «github-devbrew» — https://github.com/jeonghok/devbrew — public, star·fork·watcher 0 (2026-10-08)
+
+## 8. 리뷰 결정
+
+- D2.1 · r2 · adopt · 194dffbb#r2.2 · "채택 — «명령형» 삭제 (권장)" — check-intent 거부 후 상향: D5 와 §0 은 사용자가 치는 이름을 「짧은 명령형」으로 적었는데, S7 은 「짧게」만 골랐다. 「명령형」이라는 형태 규칙은 원문에 없다(CLAUDE.md 의 기존 command 규칙 문구를 옮겨 온 것으로 보인다).
+- D2.2 · r2 · adopt · e99bfa50#r2.1 · "채택 — «증상» 문구 분리 (권장)" — check-intent 거부 후 상향: D1 의 「이름·문서 불일치는 증상이다」와 §0 의 「이름 혼재와 문서 불일치는 그 증상이다」는 근거로 든 S2(「부르는 모양마다 도는 게 다름」)에 없다. 게다가 S1 에서 사용자가 「문서와 실제의 불일치」를 독립된 불편으로 확인한 것을 부수적인 것으로 낮춘다. 이 절을 빼거나 ✎ 추론으로 분리해야 한다.
+- D2.3 · r2 · drop · 194dffbb#r1.1 · "r2 decide 194dffbb#r2.2 채택으로 대체" — D5 와 §0 은 사용자가 치는 이름을 「짧은 명령형」으로 적었는데, S7 은 「짧게」만 골랐다. 「명령형」이라는 형태 규칙은 원문에 없다(CLAUDE.md 의 기존 command 규칙 문구를 옮겨 온 것으로 보인다).
+- D2.4 · r2 · drop · e99bfa50#r1.2 · "r2 decide e99bfa50#r2.1 채택으로 대체" — D1 의 「이름·문서 불일치는 증상이다」와 §0 의 「이름 혼재와 문서 불일치는 그 증상이다」는 근거로 든 S2(「부르는 모양마다 도는 게 다름」)에 없다. 게다가 S1 에서 사용자가 「문서와 실제의 불일치」를 독립된 불편으로 확인한 것을 부수적인 것으로 낮춘다. 이 절을 빼거나 ✎ 추론으로 분리해야 한다.
+- D2.5 · r2 · drop · 194dffbb#r2.1 · "D2.1(194dffbb#r2.2) 채택 적용과 같은 내용 — 중복" — S7 은 '짧게'라고만 골랐는데, D5 와 §0 은 이것을 '짧은 명령형'으로 옮겨 문법 제약(명령형)을 확정 사항처럼 더했다. 지금 사용자가 치는 이름 interview · request-framing · plugin-audit · project-init 은 모두 명사형이라, 이 추가 제약은 사용자가 고르지 않은 rename 을 강제하게 된다.
+- D3.6 · r3 · adopt · 194dffbb#r3.1 · "채택 — «짧게» 유지 (권장)" · supersedes D2.3 — 채택 후 미적용(expired): check-intent 거부 후 상향: D5 와 §0 은 사용자가 치는 이름을 「짧은 명령형」으로 적었는데, S7 은 「짧게」만 골랐다. 「명령형」이라는 형태 규칙은 원문에 없다(CLAUDE.md 의 기존 command 규칙 문구를 옮겨 온 것으로 보인다).
+- D3.7 · r3 · adopt · 5443440e#r3.1 · "채택 — §0 변경 유지 (권장)" — finding 없이 바뀜: 0. 한눈에 (modified)
+- D3.8 · r3 · adopt · e99bfa50#r3.1 · "채택 — «증상» 분리 유지 (권장)" · supersedes D2.4 — 채택 후 미적용(expired): check-intent 거부 후 상향: D1 의 「이름·문서 불일치는 증상이다」와 §0 의 「이름 혼재와 문서 불일치는 그 증상이다」는 근거로 든 S2(「부르는 모양마다 도는 게 다름」)에 없다. 게다가 S1 에서 사용자가 「문서와 실제의 불일치」를 독립된 불편으로 확인한 것을 부수적인 것으로 낮춘다. 이 절을 빼거나 ✎ 추론으로 분리해야 한다.
+- D3.9 · r3 · adopt · f0f95e2d#r3.1 · "채택 — bare 실측 ✎ 추가 (권장)" — check-intent 거부 후 상향: S1 은 대화형 터미널에서 재야 할 것으로 'bare 이름 · @ 자동완성 · 선행 슬래시' 셋을 들었고, 헤드리스에서는 'bare 이름은 Unknown command 였다'는 관측도 함께 적었다. 그런데 brief 는 @ 와 선행 슬래시만 OQ9 와 D4 로 옮겼고, 맨 이름의 대화형 실측과 헤드리스 Unknown command 관측은 §6 밖 어디에도 없다.
+- D3.10 · r3 · drop · f0f95e2d#r2.1 · "drop — 4번이 대체 (권장): f0f95e2d#r3.1 채택" — S1 은 대화형 터미널에서 재야 할 것으로 'bare 이름 · @ 자동완성 · 선행 슬래시' 셋을 들었고, 헤드리스에서는 'bare 이름은 Unknown command 였다'는 관측도 함께 적었다. 그런데 brief 는 @ 와 선행 슬래시만 OQ9 와 D4 로 옮겼고, 맨 이름의 대화형 실측과 헤드리스 Unknown command 관측은 §6 밖 어디에도 없다.
+- docreview 계수 — 66d456cd-0cd7-4277-8466-2811dc3a60f9/2026-10-08-skill-only-surface-interview-9480e7bacc0ccb2e r1: advice_new=2 · advice_repeat=2 · mc_preexisting_new=0
+- docreview 계수 — 66d456cd-0cd7-4277-8466-2811dc3a60f9/2026-10-08-skill-only-surface-interview-9480e7bacc0ccb2e r2: advice_new=0 · advice_repeat=3 · mc_preexisting_new=0
+- docreview 계수 — 66d456cd-0cd7-4277-8466-2811dc3a60f9/2026-10-08-skill-only-surface-interview-9480e7bacc0ccb2e r3: advice_new=0 · advice_repeat=2 · mc_preexisting_new=0
