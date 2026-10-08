@@ -27,7 +27,6 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
 - **Law 2 (Writer ≠ Reviewer, frontmatter scoping)** (v1.13.0) — `security-reviewer` agent가 `tools: Read, Grep, Glob` fail-closed allowlist 선언. 보안 각도 구성원이며, kill switch `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`로 사용자가 disable 가능 (Plugin Shape — 모든 reviewer는 opt-out 가능). 디스패치는 `quality-pipeline` SKILL의 보안 각도 지점에 있다.
 - **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `hooks/session-start-advisor.py` frontmatter scanner (AC14): SessionStart마다 모든 agent 파일의 frontmatter key를 kebab-case drift 검사. `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — CI에서 C1 종류 (kebab-case 잘못된 키) drift를 자동 차단. 이 두 mechanism이 함께 "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation.
 - **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / hook / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
-- **Law 1 (Clarity Before Code) — `/qg branch <name>` surface** (v1.15.0) — 7개 거절 시나리오(존재하지 않는 브랜치, path traversal, kill switch, idempotent reuse 등)가 `tests/test_branch_worktree.sh` AC1–AC11에 acceptance criteria로 명시. 실패 경로마다 명확한 진단 메시지를 stderr로 출력.
 - **Law 3 (Compounding) — worktree path 컨벤션** (v1.15.0) — `.claude/<plugin>/worktrees/<name>-<sid-short>/` 경로 패턴을 플러그인 공통 컨벤션으로 확립해, 차후 다른 플러그인이 임시 worktree를 만들 때 같은 컨벤션을 재사용할 수 있게 함.
 - **Law 1 (Clarity Before Code) — single-turn dispatch contract** (v1.32.0) — pipeline progression이 `quality-pipeline` SKILL의 단일 assistant turn 내 serial dispatch로 일원화. cross-turn state machine (transition compute helpers, no-signal counter, 시간 기반 guard) 전부 삭제 — 진행 결정은 SKILL의 명시적 boundary + AskUserQuestion으로만 발생. State file은 GC mtime anchor + worktree tracking + 파이프라인 iter counter reporting만 보존.
 - **P22 generalization (consent gate → progression gate):** AskUserQuestion
@@ -390,36 +389,15 @@ R1b, 매 iteration 디스패치) = 10; `synthesize_findings.py` 는 스크립트
 
 ## Recipes
 
-### 다른 브랜치를 격리된 worktree에서 검사
+### 다른 브랜치 검사
 
-다른 브랜치를 검사하면서 본인 작업트리는 무손상 유지:
-
-```bash
-git fetch origin pull/123/head:pr-123  # PR을 로컬 브랜치로 가져오기
-/qg branch pr-123                       # 임시 worktree에서 파이프라인 실행
-```
-
-내부 동작:
-
-1. `<repo>/.claude/quality-gates/worktrees/pr-123-<sid>/` 에 detached worktree 생성
-2. 그 안에서 파이프라인 실행, agent들이 worktree에서 diff를 읽음 (state는 main repo에 머묾, v1.14.0 worktree cwd contract 그대로 적용)
-3. 정상 종료 (complete / cancel) 시 자동 cleanup. 비정상 종료 시 보존 + stderr 안내 경로
-
-### 디버깅용 worktree 보존
+그 브랜치를 체크아웃하거나, 본인 작업트리를 그대로 두려면 git worktree 를 만들어 그 안에서 `/qg` 를 돌린다:
 
 ```bash
-DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1 /qg branch feat-x
-# 종료 후 .claude/quality-gates/worktrees/feat-x-<sid>/ 보존
-# 수동 정리: git worktree remove <path>
+git fetch origin pull/123/head:pr-123
+git worktree add ../pr-123 pr-123
+cd ../pr-123 && claude   # 그 세션에서 /qg
 ```
-
-### `/qg branch <name>` 자체를 비활성화
-
-```bash
-export DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1
-```
-
-`/qg branch` (인자 없음) 은 영향 없음.
 
 ## Plan Discovery Sources (차등 테스트의 test-scope-validator)
 
@@ -481,7 +459,6 @@ log를 출력하고 plan-기반 분류로 fallback합니다.
 - `MAX_REVIEW_ITERATIONS`: 5 (파이프라인 fix-loop iteration 수)
 - `DEVBREW_QUALITY_GATES_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/qg` 또는 `/cancel-qg --gc`에서 GC)
 - `DEVBREW_QUALITY_GATES_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
-- `DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1`: `/qg branch` worktree cleanup 비활성화 (디버깅용 보존)
 
 **`.claude/quality-gates/baseline-cache/`** (v3.0.0) — `(merge_base, runner, unit)` 내용주소
 기준선 테스트 결과 캐시. `qg-gc.py`의 TTL sweep 대상이 **아니다**(design §11 ⑩) — merge_base
@@ -492,7 +469,7 @@ log를 출력하고 plan-기반 분류로 fallback합니다.
 CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component 비활성화 경로는 환경 변수 한 번으로 cover되어야 함. 아래는 source-of-truth 인벤토리.
 
 **보안 — 기본값이 대상 저장소의 코드를 호스트 권한으로 실행한다.** ② 차등 테스트가 매
-`/qg`(`/qg branch <name>` 로 남의 브랜치를 검사할 때 포함)마다 상시 도는 v9.0.0 이후,
+`/qg` 마다 상시 도는 v9.0.0 이후,
 기준선·HEAD 두 트리에서 어댑터의 `setup_cmd`(`npm ci` 등 install lifecycle 스크립트) ·
 테스트 스위트가 **기본으로, 별도 동의 질문 없이** 호스트 권한으로 돈다 — 이전에는 게이트
 범위 질문에서 "Run both gates" 를 골라야만 닿던 표면이다. 그 실행(setup · 러너 · 테스트)을
@@ -518,7 +495,6 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1` | `/qg branch <name>` auto-worktree 기능 disable (`/qg branch` no-arg는 영향 없음). |
 | `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` | spec 발견 시에도 no-spec 경로 강제 (codex `<spec_context>` 비움; validator는 plan-기반 분류). |
 | `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | ② 차등 테스트를 통째로 건너뛴다(리뷰 대상 저장소의 코드를 호스트 권한으로 돌리지 않는다). 판정은 `not-certified (kill-switch)` 다 — `clean` 도 실패도 아니다. `run-test-selection.sh` 도 집행한다(probe · run 이 저장소 코드를 돌리지 않는다). |
 

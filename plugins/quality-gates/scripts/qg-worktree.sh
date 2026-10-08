@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-# qg-worktree.sh — git worktree lifecycle helper for /qg branch <name>.
+# qg-worktree.sh — 차등 테스트 두 축(기준선 · HEAD)의 일회용 git worktree.
 #
 # Subcommands:
-#   sanitize <name>              -> echoes sanitized name; exit 2 on reject
-#   validate-branch <name>       -> exit 0 if git ref exists; exit 2 otherwise
-#   create <name> <session-id>   -> echoes absolute worktree path; idempotent
 #   remove <abs-path>            -> best-effort `git worktree remove --force`
 #   create-baseline <merge-base-sha> <session-id>
 #                                -> echoes absolute worktree path; detached at merge_base,
@@ -29,12 +26,6 @@
 #                                   guard_flags / forced_downgrade (pure git; §6.1-6.3).
 #                                   Verifies the snapshot digest before trusting it.
 #
-# Sanitize rules: replace '/' with '-', then reject if remainder contains
-# anything outside [A-Za-z0-9._-], or contains '..' substring, or has
-# leading '.', or exceeds 64 chars.
-#
-# Kill switch: DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1 — `create` exits 2
-# with a loud message.
 # Kill switch: DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1 — `create-sandbox` exits 3
 # (distinct from die's exit 2). The qg pipeline no longer calls `create-sandbox` —
 # its only consumer is plugin-audit's own test isolation
@@ -44,17 +35,6 @@
 set -u
 
 die() { echo "qg-worktree: $*" >&2; exit 2; }
-
-cmd_sanitize() {
-  local name="$1"
-  local sanitized="${name//\//-}"
-  [[ -z "$sanitized" ]] && die "empty after sanitize"
-  [[ "$sanitized" == .* ]] && die "leading dot: $name"
-  [[ "$sanitized" == *..* ]] && die "dotdot token: $name"
-  [[ "$sanitized" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid chars: $name"
-  (( ${#sanitized} <= 64 )) || die "exceeds 64 chars: $name"
-  printf '%s' "$sanitized"
-}
 
 # 주어진 커밋에 detached 된 일회용 워크트리를 플러그인 네임스페이스 안에 만든다.
 # 두 소비자가 공유한다: `create-baseline`(기준선 축 = merge_base, 선언 경로는 경계) 과
@@ -79,12 +59,12 @@ make_detached_worktree() {   # <sha> <session-id> <prefix> → 워크트리 절�
 
   # Idempotent: 이전 실행의 트리가 남아 있으면 갈아엎는다.
   #
-  # 경로 충돌 가드. `create` 는 `${sanitized}-${sid_short}` 를 쓰므로 같은 세션의
-  # `/qg branch base`(또는 `head`)가 **바로 이 경로**를 만든다. 무조건 `--force` 로
-  # 갈아엎으면 사용자의 미커밋 작업이 되돌릴 수 없이 사라진다.
+  # 경로 충돌 가드. 이 경로에 이미 다른 워크트리가 있을 수 있다(옛 qg 의 브랜치 워크트리
+  # 모드가 같은 이름 규칙을 썼고, 사용자가 직접 만들 수도 있다). 무조건 `--force` 로
+  # 갈아엎으면 그 안의 미커밋 작업이 되돌릴 수 없이 사라진다.
   #
-  # 판별자로 "HEAD 가 심볼릭 ref 인가"(=브랜치 워크트리)는 쓸 수 없다 — `create` 도
-  # `git worktree add --detach` 라서 둘 다 detached 다 (실측). 대신 **non-force**
+  # 판별자로 "HEAD 가 심볼릭 ref 인가"(=브랜치 워크트리)는 쓸 수 없다 — detached 워크트리도
+  # 흔하다. 대신 **non-force**
   # `git worktree remove` 를 먼저 시도한다: git 자신이 "수정된 파일이나 추적되지 않은
   # 파일이 있으면 거부" 를 정의하고 있고, 그 거부가 곧 "여기 잃을 것이 있다" 는
   # 신호다. git-ignored 파일만 있는 트리는 정상 제거된다(실측) — 우리가 만든 트리
@@ -93,7 +73,7 @@ make_detached_worktree() {   # <sha> <session-id> <prefix> → 워크트리 절�
   git worktree prune >/dev/null 2>&1 || true
   if [[ -e "$wt" ]]; then
     if ! git worktree remove "$wt" >/dev/null 2>&1; then
-      [[ -e "$wt" ]] && die "refuse to clobber existing path: $wt — git declined a non-forced removal, so it holds uncommitted or untracked content (or the path is not a registered worktree). Likely causes: \`/qg branch ${prefix}\` in this same session owns this exact path, or a prior run left non-ignored test output behind. Inspect it, then remove it yourself (\`git worktree remove --force\`) or rerun in a new session."
+      [[ -e "$wt" ]] && die "refuse to clobber existing path: $wt — git declined a non-forced removal, so it holds uncommitted or untracked content (or the path is not a registered worktree). Likely causes: another worktree is registered at this exact path, or a prior run left non-ignored test output behind. Inspect it, then remove it yourself (\`git worktree remove --force\`) or rerun in a new session."
     fi
     git worktree prune >/dev/null 2>&1 || true
   fi
@@ -103,43 +83,6 @@ make_detached_worktree() {   # <sha> <session-id> <prefix> → 워크트리 절�
 }
 
 case "${1:-}" in
-  sanitize)
-    [[ $# -eq 2 ]] || die "usage: sanitize <name>"
-    cmd_sanitize "$2"; echo  # trailing newline for shell convenience
-    ;;
-  validate-branch)
-    [[ $# -eq 2 ]] || die "usage: validate-branch <name>"
-    git rev-parse --verify --quiet "refs/heads/$2" >/dev/null \
-      || die "branch not found: $2 (try \`git branch --all\`)"
-    ;;
-  create)
-    [[ $# -eq 3 ]] || die "usage: create <branch> <session-id>"
-    if [[ "${DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE:-0}" == "1" ]]; then
-      die "Branch worktree mode disabled via DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1"
-    fi
-    branch="$2" sid="$3"
-    sanitized=$(cmd_sanitize "$branch") || exit 2
-    git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null \
-      || die "branch not found: $branch (try \`git branch --all\`)"
-    sid_short="${sid:0:8}"
-    [[ -n "$sid_short" ]] || die "empty session-id"
-    parent=".claude/quality-gates/worktrees"
-    mkdir -p "$parent" || die "cannot create $parent"
-    base_abs=$(cd "$parent" && pwd -P) || die "cd failed: $parent"
-    abs="$base_abs/${sanitized}-${sid_short}"
-    if [[ -d "$abs" ]]; then
-      # Idempotent: verify it's a registered worktree and reuse
-      if git worktree list --porcelain | grep -qxF "worktree $abs"; then
-        echo "qg-worktree: reusing existing worktree at $abs" >&2
-        printf '%s' "$abs"; echo
-        exit 0
-      fi
-      die "path exists but not a git worktree: $abs"
-    fi
-    git worktree add --detach "$abs" "$branch" >/dev/null \
-      || die "git worktree add failed for $branch"
-    printf '%s' "$abs"; echo
-    ;;
   create-sandbox)
     # Disposable git worktree reflecting the main working tree (code-under-
     # review), sealed into an immutable baseline commit B. §6.3 of the spec.

@@ -56,15 +56,14 @@ case_create_baseline() {
   cd / && rm -rf "$REPO"
 }
 
-# 최종 whole-branch 리뷰 (Task 9 이월분 승격) — create-baseline 의 idempotent 정리가
-# **사용자 워크트리를 파괴**할 수 있다. `create` 는 `${sanitized}-${sid_short}`,
-# create-baseline 은 `base-${sid_short}` 를 쓰므로 같은 세션의 `/qg branch base` 가
-# **정확히 같은 경로**를 만들고, 무조건 `--force` 면 미커밋 작업이 되돌릴 수 없이 사라진다.
+# create-baseline 의 idempotent 정리가 **다른 워크트리를 파괴**할 수 있다. 기준선 트리는
+# `base-${sid_short}` 에 서는데, 같은 경로에 이미 다른 워크트리(옛 qg 의 브랜치 워크트리 모드가
+# 같은 이름 규칙을 썼다 · 사용자가 직접 만든 것)가 있으면 무조건 `--force` 는 그 안의 미커밋
+# 작업을 되돌릴 수 없이 지운다.
 #
-# 판별자로 "HEAD 가 심볼릭 ref 인가"는 쓸 수 없다 — `create` 도 `--detach` 라 둘 다
-# detached 다 (위 case_create_baseline 이 기준선 트리의 detached 를 확인하는 것과 같은
-# 성질이며, 실측으로 확인했다). 그래서 이 케이스는 **미커밋 파일이 살아남는가**를 직접
-# 잰다. 파일 존재는 어떤 판별자 구현에도 의존하지 않는 관측이다.
+# 판별자로 "HEAD 가 심볼릭 ref 인가"는 쓸 수 없다 — detached 워크트리도 흔하다. 그래서 이
+# 케이스는 **미커밋 파일이 살아남는가**를 직접 잰다. 파일 존재는 어떤 판별자 구현에도 의존하지
+# 않는 관측이다.
 case_create_baseline_refuses_colliding_user_worktree() {
   REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
   git init -q; git config user.email t@t.test; git config user.name tester
@@ -74,14 +73,15 @@ case_create_baseline_refuses_colliding_user_worktree() {
   git branch base
   git checkout -q -b feature; echo v2 > a.txt; git commit -qam v2
 
-  # 사용자가 같은 세션에서 `/qg branch base` 를 돌린 상태를 만든다
-  local user_wt; user_wt=$(bash "$WT" create base "sess1234" 2>/dev/null)
-  if [[ -z "$user_wt" || ! -d "$user_wt" ]]; then
-    no "픽스처 무효: /qg branch base 워크트리 생성 실패"; cd / && rm -rf "$REPO"; return
+  # 기준선 트리가 설 바로 그 경로에 다른 워크트리를 먼저 세운다
+  local user_wt="$REPO/.claude/quality-gates/worktrees/base-sess1234"
+  mkdir -p "$REPO/.claude/quality-gates/worktrees"
+  if ! git worktree add -q --detach "$user_wt" base 2>/dev/null || [[ ! -d "$user_wt" ]]; then
+    no "픽스처 무효: 충돌 경로에 워크트리를 세우지 못했다"; cd / && rm -rf "$REPO"; return
   fi
   # 픽스처가 실제로 충돌하는지 먼저 증명한다 (경로가 안 겹치면 이 락은 무의미하다)
   [[ "$(basename "$user_wt")" == "base-sess1234" ]] \
-    && ok "픽스처: /qg branch base 와 create-baseline 이 같은 경로를 노린다" \
+    && ok "픽스처: 먼저 선 워크트리와 create-baseline 이 같은 경로를 노린다" \
     || no "픽스처 무효: 경로 불일치 ($user_wt)"
   echo "uncommitted work" > "$user_wt/WIP.txt"
 
