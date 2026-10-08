@@ -8,12 +8,31 @@ description: >
   re-critique → freeze-check and routing → gate) inside a single turn and closes with the shared
   proceed gate. Design-mode only — the interview brief has its own reviewers (reviewing-brief).
 cost_class: medium
+argument-hint: "<설계문서 경로>"
+allowed-tools:
+  - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill spec-review)
 ---
 
 # spec-review — 문서 리뷰 엔진의 design doc 자리
 
 이 skill 은 진입 껍데기다. 한 라운드의 절차는 공유 엔진이 갖고 있고, 여기 남는 것은 이 자리의
 것 — 진입 검사 · 입력 · 프로필 · dispatch 둘 · 게이트 · degrade 채널 — 뿐이다.
+
+!`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill spec-review`
+
+## 진입 단계
+
+이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽는다.
+
+| 그 자리의 내용 | 동작 |
+|---|---|
+| `[devbrew-entry] ok …` | 아래 `## 진입 검사`(1.5)로 간다. 그 줄의 `root=` 값을 `## 입력` 에서 쓴다 |
+| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 `[spec-distill] 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).` 를 덧붙여 멈춘다 |
+| `[devbrew-entry] error …` | `[spec-distill] spec-review 사전 검사 실패 — <reason= 값>.` 과 위 복귀 문장을 내고 멈춘다 |
+| `[shell command execution disabled by policy]` | `[spec-distill] spec-review 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다.` 와 위 복귀 문장을 내고 멈춘다 |
+| 감시줄 없음 · 그 밖 | `[spec-distill] spec-review 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다.` 와 위 복귀 문장을 내고 멈춘다 |
+
+이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. 이 skill 고유의 스위치(아래 셋)는 1.5 `## 진입 검사` 가 본다. `DEVBREW_SKIP_HOOKS` 의 플러그인 토큰은 이 표에 걸리지 않는다.
 
 ## 진입 검사
 
@@ -90,7 +109,7 @@ advisory · 복귀 지시)을 **그대로** 한 단락으로 보이고 게이트
 ## 입력
 
 `$spec_path` 는 **호출 인자**다 — `Skill spec-distill:spec-review <설계문서 경로>` 또는
-`/spec-distill:spec-review <경로>`. 상대 경로면 리포 루트 기준 절대 경로로 바꿔 쓴다.
+`/spec-distill:spec-review <경로>`. 인자가 `@` 로 시작하면 그 `@` 하나를 뗀다. 상대 경로면 진입 단계 감시줄의 `root=` 기준 절대 경로로 바꿔 쓴다.
 
 인자가 없으면 후보를 뽑아 `AskUserQuestion` 으로 고르게 한다 — 설계문서(`-design.md`)를 추가한 최근
 커밋 50개에서 나온 것 중 최신 5개와 untracked 전부:
