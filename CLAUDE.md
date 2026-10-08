@@ -33,13 +33,13 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 ### 메타데이터 & 버전 관리
 
 - **모든 PR마다 SemVer bump가 붙는 `plugin.json`.** 필수: `name`, `description`, `version`. 플러그인을 건드리는 모든 PR마다 bump (major = breaking, minor = 새 surface, patch = fix) — 안 그러면 cache key가 silent stale. 보안-critical 의존성은 optional `integrity` field로 pin.
-- **v1.0.0 이상이면 `CHANGELOG.md`.** `## [version] — YYYY-MM-DD` with Added/Changed/Deprecated/Removed/Fixed/Security. 제거 전 one-minor deprecation window.
+- **v1.0.0 이상이면 `CHANGELOG.md`.** `## [version] — YYYY-MM-DD` with Added/Changed/Deprecated/Removed/Fixed/Security. 제거 전 one-minor deprecation window. 예외 — 호출 이름(slash 명령 · skill 이름)의 변경·제거는 alias 없이 즉시 하고 major bump 한다. 이 예외는 제3자 설치가 확인되면(외부 이슈 · 설치 보고 · 마켓플레이스 공개 등록) 소멸한다. kill switch 이름은 이 예외에 들지 않는다 — 은퇴시키려면 CHANGELOG `Removed` 와 README 에 공시가 필수다.
 - **`README.md`에 "Principles Instantiated"** — 이 플러그인이 embody하는 철학 법칙/원칙을 한 줄씩. Law 3의 compounding substrate: 미래 검색이 모든 instantiation을 찾음.
 
 ### 컴포넌트 격리
 
 - **Scoped agents — default-everything 금지.** 모든 agent는 `tools:` allowlist를 선언한다 (fail-closed — 열거하지 않은 것은 전부 차단). **denylist(`disallowedTools`) 단독 금지**: 공간에 대해 fail-open(열거를 잊은 도구는 허용)이고 **denylist는 시간에 대해 fail-open**이다 — 내일 추가될 도구는 오늘 열거할 수 없다 (`Monitor`가 이름만 다른 셸+네트워크 egress로 그 실증). 역할 프롬프트는 *"You are X. You are responsible for Y. You are NOT responsible for Z."*로 시작. 쓰기 권한이 있는 리뷰어는 Law 2 위반. **agent frontmatter의 실재 필드는 `tools`(allowlist)와 `disallowedTools`(denylist) 둘뿐이다** — 이와 헷갈려 command/skill 계층의 `allowed-tools`(kebab, 실재 키)를 agent에 camelCase로 옮겨 적으면 존재하지 않는 필드가 되어 조용히 무시된다.
-- **Command frontmatter의 `allowed-tools`는 쓰지 않는다.** 2026-08-22 헤드리스 실측 5변형(`--plugin-dir` 격리 플러그인)에서 `["Read"]`로 `Bash`를 빼놓아도 `Bash`가 실행됐고, 스코프 표기(`Bash(<pattern>:*)`)도 범위 밖 명령을 막지 못했다 — **이 계층은 제한이 아니다.** 바로 위 agent의 `tools:`와는 다르다 — 그것은 fail-closed이고 Law 2의 집행 지점이다. 막지 않는 것을 막는다고 믿게 만드는 선언은 없는 것보다 나쁘다.
+- **`allowed-tools` 는 제한이 아니다.** command 에서는 쓰지 않는다. skill 에서는 진입 사전 검사 한 줄의 사전 허용으로만 쓰고 다른 도구를 열거하지 않는다. 2026-08-22 헤드리스 실측 5변형(`--plugin-dir` 격리 플러그인)에서 `["Read"]`로 `Bash`를 빼놓아도 `Bash`가 실행됐고, 스코프 표기(`Bash(<pattern>:*)`)도 범위 밖 명령을 막지 못했다 — **이 계층은 제한이 아니다.** 바로 위 agent의 `tools:`와는 다르다 — 그것은 fail-closed이고 Law 2의 집행 지점이다. 막지 않는 것을 막는다고 믿게 만드는 선언은 없는 것보다 나쁘다.
 - **최소 버전이 선언된 의존성.** `other-plugin:agent-name`을 dispatch하는 플러그인은 README prerequisites에 `other-plugin`을 리스트. Silent coupling은 버그.
 - **모든 skill에 `cost_class` 선언** (`low`|`medium`|`high`|`variable`). `high`는 지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함.
 - **subagent 발견은 처분을 밝힌다.** 모든 dispatch 자리는
@@ -67,7 +67,7 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 ### 네이밍 & 보안
 
-- **Progressive disclosure.** Skill 이름은 동명사 (`running-quality-gates`, `authoring-specs`). Command 이름은 짧은 명령형 (`qg`, `review`). 모호한 이름 (`helper`, `utils`, `"I can help you..."`) 없음.
+- **Progressive disclosure.** 사용자가 부르는 진입 skill 은 짧은 kebab 두 단어 이상(일반어 단독 금지 — `spec-review`, `plugin-audit`)이고 디렉토리 이름 = `name` 이다. 모델만 부르는 내부 skill(`user-invocable: false`)은 동명사(`reviewing-brief`). 기계가 내는 안내는 `/plugin:name` 완전명. 새 command 파일은 만들지 않는다 — 사전 단계는 진입 skill 의 `!` 로. 모호한 이름 (`helper`, `utils`, `"I can help you..."`) 없음. 집행: `shared/tests/test_invocation_surface.sh`.
 - **Persona 파일은 보안-민감 코드.** Reviewer persona를 약화(규칙 제거, 임계치 완화)하는 PR은 보안 리뷰 대상. test-suite 편집과 같은 신중함으로 persona 편집을 treat.
 
 ## Building a New Plugin
@@ -84,7 +84,7 @@ Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md
 - **Subagent spray** — 선언 없는 fan-out. 비용과 fan-out을 선언하지 않고 대규모로 퍼뜨리는 것이 anti-pattern이다 (규모 자체가 아니라 선언 없음이). **Agent(subagent) 호출 자체는 이 리포에서 상시 허용** — 매번 승인을 묻지 않는다 (Opus 5 기본 시스템 프롬프트의 `unless the user requested it` 를 사용자가 상시 요청으로 해제, 2026-08-22). 금지되는 것은 선언 없는 대규모 fan-out 뿐이다. Workflow 와 deep-research 는 범위 밖 — 여전히 명시 요청이 필요하다.
 - **Self-narrating artifact** — 모델이 읽고 행동하는 산출물(생성 템플릿, 룰 파일, 프롬프트)이 자기 출처("무엇이 이 파일을 만들었다")·배경·존재 정당화를 담는 것. 토큰 낭비이자 의미 왜곡 — 읽는 쪽의 초점이 "무엇을 해야 하나"에서 "이게 왜 있나"로 옮겨가고, 정당화 문장이 지시로 오독된다. 근거와 이력은 CHANGELOG·PR·리뷰에 남기고 산출물에는 행동에 필요한 것만 둔다.
 - **Unbounded autonomy** — max-iter count, repeat 감지, 사용자-override kill switch 없는 루프.
-- **Polite handoff** — brainstorming/spec-distill review-approved 후 다음 단계를 narrate만 하고 spec-distill 의 `AskUserQuestion` proceed 게이트를 띄우지 않음. 이 게이트는 `reviewing-spec` 의 `## 게이트` 절과 `conducting-interview` 종료 Step B **양쪽**에 있고, 둘은 같은 계약(`plugins/spec-distill/references/proceed-gate.md`)을 공유한다 — 정본은 그 파일이다. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 봉쇄 장치 — 게이트를 skip한 narrate-only 종료가 polite-stop의 한 종류 (AP2 variant). 대칭으로, 옵션 ①(/compact 후 writing-plans) 선택 시 /compact 노출 후 같은 턴에 writing-plans로 직진하는 cross-compact 조기 진행도 게이트 P17 우회의 대칭 실패로 금지 (AP2 variant, spec-distill v0.11.0 AC19).
+- **Polite handoff** — brainstorming/spec-distill review-approved 후 다음 단계를 narrate만 하고 spec-distill 의 `AskUserQuestion` proceed 게이트를 띄우지 않음. 이 게이트는 `spec-review` 의 `## 게이트` 절과 `spec-interview` 종료 Step B **양쪽**에 있고, 둘은 같은 계약(`plugins/spec-distill/references/proceed-gate.md`)을 공유한다 — 정본은 그 파일이다. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 봉쇄 장치 — 게이트를 skip한 narrate-only 종료가 polite-stop의 한 종류 (AP2 variant). 대칭으로, 옵션 ①(/compact 후 writing-plans) 선택 시 /compact 노출 후 같은 턴에 writing-plans로 직진하는 cross-compact 조기 진행도 게이트 P17 우회의 대칭 실패로 금지 (AP2 variant, spec-distill v0.11.0 AC19).
 - **Sealed decision** — 앞 단계의 확정이 하류에서 반증됐는데 피벗 경로가 없는 것 (철학 P23 의 anti-corollary). 재발견 금지는 반증 금지가 아니다 — 근거 있는 재결정은 사용자 동의를 받아 허용하고, 임의 변경만 금지한다.
 
 **버그가 리뷰를 탈출하면**, 해결책은 잡았어야 할 reviewer persona 파일을 편집하는 것 — 코드만 패치하는 게 아님. 그 commit이 compounding 이벤트 (Law 3).
