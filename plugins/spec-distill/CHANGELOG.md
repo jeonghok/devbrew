@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.6.0] — 2026-10-09
+
+### Changed
+- SKILL.md·명령 파일 맨 앞(H1 바로 다음)에 「사람에게 쓰는 글」 규칙 블록을 둔다. 정본은 리포의 `shared/style/plain-language.md` 이고 `shared/tests/test_plain_language_block.sh` 가 같음을 잰다.
+- 문서 리뷰 게이트 렌더가 쉬운 말이다: 첫 줄은 상태와 경고를 한 문장으로 말하고, 0 인 집계는 빼며, 항목은 쉬운 말로 시작하고 id 는 끝 괄호에 둔다. 경고는 전부 첫 줄에 싣는다(전에는 codex 부재만 싣고 나머지를 버렸다). 기계가 읽는 `gate` JSON 은 그대로다.
+- 문서 리뷰어(`doc-critic` · `doc-critic-web` · `doc-recritic`)가 사람이 읽는 칸을 쉬운 말로 쓴다.
+
 ## [4.5.3] — 2026-09-28
 
 ### Fixed

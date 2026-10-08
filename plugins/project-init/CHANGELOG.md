@@ -5,6 +5,11 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [4.0.3] — 2026-10-09
+
+### Changed
+- SKILL.md·명령 파일 맨 앞(H1 바로 다음)에 「사람에게 쓰는 글」 규칙 블록을 둔다. 정본은 리포의 `shared/style/plain-language.md` 이고 `shared/tests/test_plain_language_block.sh` 가 같음을 잰다.
+
 ## [4.0.2] — 2026-09-28
 
 ### Fixed

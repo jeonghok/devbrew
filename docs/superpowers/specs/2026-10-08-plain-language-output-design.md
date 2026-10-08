@@ -18,7 +18,7 @@ next_phase: superpowers:writing-plans
 2. 스크립트가 내는 글: 첫 줄을 스크립트가 계산한 쉬운 상태 문장으로 바꾸고, 0인 집계는 내지 않는다.
 3. 스킬이 시키는 질문·보고 틀: 질문 하나에 결정 하나만 담고, 경고 목록은 질문 앞으로 옮긴다.
 
-프로그램이 글자로 읽는 줄 13군데는 형태를 바꾸지 않는다. 한 브랜치에서 PR 네 개로 차례로 머지한다.
+프로그램이 글자로 읽는 줄 11군데(§3 표)는 형태를 바꾸지 않는다. 한 브랜치에서 PR 네 개로 차례로 머지한다.
 
 **Implicit context** —
 
@@ -29,7 +29,7 @@ next_phase: superpowers:writing-plans
 `/Users/jeonghokim/Downloads/devbrew/.claude/worktrees/plain-language-voice`, base `77371d41`(#186 머지).
 
 (3) brief 가 열어 둔 질문(OQ10~OQ20)은 이 설계의 brainstorming 에서 사용자가 고르거나 근거로 정했다 —
-「결정 기록」 B1~B9.
+「결정 기록」 B1~B10.
 
 (4) 이 문서 자체도 새 규칙의 대상이다 — 번호는 내용 뒤 괄호에 둔다.
 
@@ -55,7 +55,7 @@ devbrew 가 돌 때 사람에게 보이는 글을 처음 보는 사람이 한 �
 
 ### 사용자가 말한 것 밖의 원인 (brief C10 이 요구한 조사)
 
-2026-10-08 에 지난 세션 기록 776개(질문 966개)를 읽었다. 사용자가 한 답에서 직접 고른 진단 넷 — 「무엇을 결정하는지가
+2026-10-08 에 지난 세션 기록을 읽었다(조사 에이전트가 센 값으로 776개 · 질문 966개 — 참고값이다. 고정 목록 594개에서는 다시 나오지 않고, 정식 기준선은 PR 1 의 측정 도구가 냈다). 사용자가 한 답에서 직접 고른 진단 넷 — 「무엇을 결정하는지가
 안 보인다, 용어·내부 식별자가 많다, 기술 사실의 설명이 없다, 선택의 결과가 안 보인다」 — 과 맞는 새 원인이 나왔다.
 
 | 원인 | 크기 | 출처 |
@@ -591,7 +591,7 @@ brief 의 confirmed 결정(C1~C11 · D12~D22)은 brief 가 정본이다. 아래�
   seed `docs/superpowers/interview/2026-10-03-plain-language-voice-interview.md` · base `77371d41`(#186).
 - 영향 플러그인: plugin-audit · project-init · quality-gates · spec-distill. shared(docreview · 새 style). 루트 `CLAUDE.md`
   · `marketplace.json`.
-- 조사 자료: 2026-10-08 세션 기록 분석(776개 기록), 글 출처 목록, 배달 장치 조사. 이 설계의 Context 절과 §3 표가 그 요약이다.
+- 조사 자료: 2026-10-08 세션 기록 분석(참고값 776개 — 정식 기준선은 PR 1), 글 출처 목록, 배달 장치 조사. 이 설계의 Context 절과 §3 표가 그 요약이다.
 
 ### Deferred to plan
 

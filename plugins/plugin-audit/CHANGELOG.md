@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.10.1] — 2026-10-09
+
+### Changed
+- SKILL.md·명령 파일 맨 앞(H1 바로 다음)에 「사람에게 쓰는 글」 규칙 블록을 둔다. 정본은 리포의 `shared/style/plain-language.md` 이고 `shared/tests/test_plain_language_block.sh` 가 같음을 잰다.
+
 ## [0.10.0] — 2026-09-28
 
 minor 인 이유 — 산출 경로와 `render-audit-report.py` 의 CLI 가 바뀌었다.
