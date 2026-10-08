@@ -487,16 +487,42 @@ case_AC22c_reraise_preserves_pre_kind() {
 dc_choices() {   # dc_choices <state-dir> <fid> → decide_choices(st, fid) 의 python 리스트 repr
   python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from docreview_state import load_state, decide_choices; st = load_state(sys.argv[2]); print(decide_choices(st, sys.argv[3]))' "$SCRIPTS" "$1" "$2"
 }
+# 항목 머리 찾기 — 쉬운 말 렌더(쉬운 말 출력 PR 1)에서 항목 머리는 열 0 의 「- 」로 시작하고
+# 「(<fid>)」 또는 「(<fid> · 자동)」으로 끝난다. 다른 항목이 이 fid 를 참조할 때(「이 답을 기다리는
+# 수정: <fid>」 · 「이어받은 결정: <fid>」)는 괄호로 끝나지 않으므로 머리와 참조가 갈린다.
+item_block() {   # item_block <render-text> <fid> <after> → 머리 줄 + 뒤 <after> 줄
+  printf '%s\n' "$1" | python3 -c '
+import sys
+fid, after = sys.argv[1], int(sys.argv[2])
+ls = sys.stdin.read().split("\n")
+for i, l in enumerate(ls):
+    if l.startswith("- ") and (l.endswith("(%s)" % fid) or l.endswith("(%s · 자동)" % fid)):
+        print("\n".join(ls[i:i + 1 + after]))
+        break
+' "$2" "$3"
+}
+item_prev_line() {   # item_prev_line <render-text> <fid> → 그 항목 머리 바로 앞 줄
+  printf '%s\n' "$1" | python3 -c '
+import sys
+fid = sys.argv[1]
+ls = sys.stdin.read().split("\n")
+for i, l in enumerate(ls):
+    if l.startswith("- ") and (l.endswith("(%s)" % fid) or l.endswith("(%s · 자동)" % fid)):
+        if i > 0:
+            print(ls[i - 1])
+        break
+' "$2"
+}
 # render 의 그 id 블록에서 「대안:」 줄을 뽑아 decide_choices 가 내는 집합과 «라벨로
 # 바꾼 뒤» 비교한다(라벨 문자열이 아니라 집합 — 순서 무관). fid 는 hash 파생이라
-# "] <fid> —" 조합이 그 id 의 [decide…] 헤더 줄에서만 나온다.
+# item_block 이 그 id 의 항목 머리(끝 괄호)만 잡는다.
 # [Task 8 재측정] `_rg_decide` 가 여섯 줄이 되며 「대안:」 이 헤더 뒤 3번째(옛 형식:
 # 변경·근거·대안)가 아니라 5번째(그대로 두면·고치면·근거·자리·대안) 줄로 밀렸다.
 # `-A4` 는 그 줄에 안 닿아 「대안: 」 이 빈 채로 돌아 이 함수가 늘 False 를 냈다
 # (실측 — RED 로 걸렸다) — `-A5` 로 넓힌다. 대안 줄은 항상 이 오프셋에 있으므로
 # (사람말 미사상 7번째 줄은 대안 «뒤») category 사상 여부와 무관하게 정확하다.
 choices_match() {   # choices_match <render-text> <fid> <state-dir> → True/False
-  local alt; alt="$(printf '%s\n' "$1" | grep -F -A5 -- "] $2 —" | grep '대안: ' | head -1)"
+  local alt; alt="$(item_block "$1" "$2" 5 | grep '대안: ' | head -1)"
   python3 -c '
 import sys
 sys.path.insert(0, sys.argv[1])
@@ -518,7 +544,7 @@ print(bool(choices) and expected == offered)
 # 자체가 괄호를 품는다(`고친다(채택)`). 대신 실제로 찍히는 접두사·형식을 그대로
 # 재구성해 벗겨낸다(프로그램의 포맷 문자열과 같은 모양).
 choices_match_expired() {   # choices_match_expired <render-text> <fid> <state-dir> → True/False
-  local line; line="$(printf '%s\n' "$1" | grep -F -- "[만료·차단] $2 —" | head -1)"
+  local line; line="$(item_block "$1" "$2" 0)"
   python3 -c '
 import sys
 sys.path.insert(0, sys.argv[1])
@@ -530,10 +556,11 @@ kind = (st["decides"].get(fid) or {}).get("kind")
 expected = {choice_label(c, kind) for c in choices}
 line = sys.argv[4]
 summary = st["findings"][fid].get("summary") or ""
-prefix = "[만료·차단] %s — %s (" % (fid, summary)
+prefix = "- %s — 고를 수 있는 것: " % " ".join(summary.split())
+suffix = " (%s)" % fid
 offered = set()
-if line.startswith(prefix) and line.endswith(")"):
-    body = line[len(prefix):-1].split(" — ", 1)[0]   # post 만료 원복-경고 꼬리 제거
+if line.startswith(prefix) and line.endswith(suffix):
+    body = line[len(prefix):-len(suffix)].split(" — ", 1)[0]   # post 만료 원복-경고 꼬리 제거
     offered = {x.strip() for x in body.split("/")}
 print(bool(choices) and expected == offered)
 ' "$SCRIPTS" "$3" "$2" "$line"
@@ -737,7 +764,7 @@ case_precap_zero_open_not_two_stage() {
     "양의 짝 — 상한 전 + 열린 것 0: two_stage 거짓, next_round_mode 없음(동작 불변)"
   local gr; gr="$(py docreview_state.py gate --state-dir "$d" --render)"
   assert_not_contains "$gr" "추가 라운드 1회 열기" "양의 짝: 상한 전 렌더엔 「추가 라운드 1회 열기」문구가 없다"
-  assert_contains "$gr" "다음: 승인 게이트 — 진행 옵션 활성" "양의 짝: 상한 전 + 열린 것 0 은 예전처럼 즉시 진행 옵션이다"
+  assert_contains "$gr" "다음: 승인 게이트 — 진행 옵션을 고를 수 있다" "양의 짝: 상한 전 + 열린 것 0 은 예전처럼 즉시 진행 옵션이다"
   rm -rf "$d"
 }
 case_T45_decision_log_append_only() {
@@ -1324,7 +1351,11 @@ case_I1_reraise_carries_replacement_fields() {
 }
 case_T40_codex_absent_first_line() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-r1.txt" "$FX/codex-failed.yaml" "$FX/recritic-missing.txt")"
-  assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | head -1)" "codex 없음 — 모델 다양성 0 (exit_nonzero)" "T40·AC8: 게이트 텍스트 첫 줄이 codex 부재 공시"
+  local f; f="$(py docreview_state.py gate --state-dir "$d" --render | head -1)"
+  assert_contains "$f" "경고 " "T40·AC8: 첫 줄이 경고를 싣는다"
+  assert_contains "$f" "codex 없음 — 모델 다양성 0 (exit_nonzero)" "T40·AC8: 첫 줄이 codex 부재와 사유를 공시한다"
+  assert_not_contains "$f" "이상 없음" "T40: codex 없는 라운드는 이상 없음이 아니다"
+  assert_not_contains "$f" "경고 없음" "T40: codex 없는 라운드는 경고 없음이 아니다"
   assert_eq "$(jget "$d/fin.json" 'd["advisory"][0].startswith("codex 없음"), d["blocks"]')" "(True, False)" "T40: advisory 첫 항목도 codex, 차단은 아님"
   rm -rf "$d"
 }
@@ -1387,8 +1418,9 @@ case_T46_critic_dead_twice_unverified() {
   assert_eq "$(gsum "$d" "$UNV")" "('critic_dead', '미검증', False, True)" \
     "T46: critic 사망 두 번(finalize 없음) → unverified critic_dead · 라벨 「미검증」 · 완료 기록 불가 · 승인 게이트 열림"
   f="$(gfirst "$d")"
-  assert_not_contains "$f" "degrade 없음" "T46: critic 사망 두 번 라운드의 렌더 첫 줄에 「degrade 없음」이 없다"
-  assert_contains "$f" "「미검증」 주 판정자(doc-critic) 사망" "T46: 렌더 첫 줄이 주 판정자 사망 · 「미검증」을 공시한다 (부재 단언의 양의 짝)"
+  assert_not_contains "$f" "이상 없음" "T46: critic 사망 두 번 라운드의 렌더 첫 줄이 「이상 없음」·「경고 없음」을 쓰지 않는다"
+  assert_not_contains "$f" "경고 없음" "T46: critic 사망 두 번 라운드의 렌더 첫 줄이 「이상 없음」·「경고 없음」을 쓰지 않는다"
+  assert_contains "$f" "「미검증」 리뷰어(doc-critic)가 결과를 내지 못해" "T46: 렌더 첫 줄이 주 판정자 사망 · 「미검증」을 공시한다 (부재 단언의 양의 짝)"
   assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "다음: 승인 게이트(「미검증」)" \
     "T46: 렌더의 다음 줄이 승인 게이트를 「미검증」 라벨로 연다"
   rm -rf "$d"
@@ -1400,7 +1432,7 @@ case_T46_critic_dead_finalized_unverified() {   # 「미검증」 둘째 갈래 
   assert_eq "$(jget "$d/fin.json" 'd["blocks"]')" "True" "T46 전제: critic 이 죽은 채 finalize 한 라운드 — fin.json blocks 참"
   assert_eq "$(gsum "$d" "$UNV")" "('critic_dead', '미검증', False, True)" \
     "T46: critic 이 죽은 채 finalize 한 라운드도 엔진이 「미검증」으로 안다 (unverified critic_dead · 완료 기록 불가)"
-  assert_contains "$(gfirst "$d")" "「미검증」 주 판정자(doc-critic) 사망" "T46: 그 라운드의 렌더 첫 줄도 주 판정자 사망을 맨 앞에 싣는다"
+  assert_contains "$(gfirst "$d")" "「미검증」 리뷰어(doc-critic)가 결과를 내지 못해" "T46: 그 라운드의 렌더 첫 줄도 주 판정자 사망을 맨 앞에 싣는다"
   rm -rf "$d"
 }
 case_T46_finalize_failed_unverified() {   # critic 생존 · finalize rc≠0 — 준비는 남고 fin.json 은 비었다
@@ -1415,8 +1447,9 @@ case_T46_finalize_failed_unverified() {   # critic 생존 · finalize rc≠0 —
   assert_eq "$(gsum "$d" "$UNV")" "('finalize_incomplete', '미검증', False, True)" \
     "T46: finalize 실패 → 정상 게이트가 아니다 (unverified finalize_incomplete · 라벨 「미검증」 · 완료 기록 불가)"
   f="$(gfirst "$d")"
-  assert_not_contains "$f" "degrade 없음" "T46: finalize 실패 라운드의 렌더 첫 줄에 「degrade 없음」이 없다"
-  assert_contains "$f" "「미검증」 라우팅(finalize) 미완" "T46: 렌더 첫 줄이 라우팅 미완 · 「미검증」을 공시한다 (부재 단언의 양의 짝)"
+  assert_not_contains "$f" "이상 없음" "T46: finalize 실패 라운드의 렌더 첫 줄이 「이상 없음」·「경고 없음」을 쓰지 않는다"
+  assert_not_contains "$f" "경고 없음" "T46: finalize 실패 라운드의 렌더 첫 줄이 「이상 없음」·「경고 없음」을 쓰지 않는다"
+  assert_contains "$f" "「미검증」 판정 정리(finalize)를 마치지 못해" "T46: 렌더 첫 줄이 라우팅 미완 · 「미검증」을 공시한다 (부재 단언의 양의 짝)"
   rm -rf "$d"
 }
 case_T46_finalize_without_prepare_marks_round() {   # 준비 없는 finalize — 거부를 원장에 남기고, 성공이 치운다
@@ -1477,7 +1510,7 @@ case_T46_normal_and_unrouted_rounds() {   # 양의 짝 둘 — 정상 라운드�
   assert_eq "$(gsum "$d" "$UNV3")" "(None, None, True)" "T46 양의 짝: 정상 라운드(critic 생존 · finalize 성공) → 사유 없음 · 라벨 없음 · 완료 기록 가능"
   assert_not_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "미검증" "T46 양의 짝: 정상 라운드의 렌더에 「미검증」이 없다"
   local gr; gr="$(py docreview_state.py gate --state-dir "$d" --render)"
-  assert_eq "$(gsum "$d" 'd["unreviewed_reason"]')|$(printf '%s' "$gr" | grep -c '리뷰 완료')" "None|0" \
+  assert_eq "$(gsum "$d" 'd["unreviewed_reason"]')|$(printf '%s' "$gr" | grep -c '마치지 못했다')" "None|0" \
     "T46 양의 짝: 정상 라운드는 공시 사유가 없고 렌더에 리뷰 완료 아님 공시 · 꼬리가 없다"
   rm -rf "$d"
   d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
@@ -1495,11 +1528,12 @@ case_T46_skipped_routing_unrouted_disclosed() {   # 리뷰 P1 — 5~7단계를 �
   assert_eq "$(gsum "$d" 'd["unreviewed_reason"], d["unverified"], d["approval_label"], d["round_reviewed"]')" "('unrouted', None, None, False)" \
     "T46: 7단계를 건너뛴 라운드 — 공시 사유 unrouted · 「미검증」 사유와 라벨은 아니다 · 완료 기록 불가"
   f="$(gfirst "$d")"
-  assert_not_contains "$f" "degrade 없음" "T46: 라우팅 보고서 없는 라운드의 렌더 첫 줄에 「degrade 없음」이 없다"
-  assert_contains "$f" "리뷰 완료 아님 — 이번 라운드의 라우팅 보고서가 없다" "T46: 렌더 첫 줄이 라우팅 보고서 부재를 공시한다 (부재 단언의 양의 짝)"
+  assert_not_contains "$f" "이상 없음" "T46: 라우팅 보고서 없는 라운드의 렌더 첫 줄이 「이상 없음」·「경고 없음」을 쓰지 않는다"
+  assert_not_contains "$f" "경고 없음" "T46: 라우팅 보고서 없는 라운드의 렌더 첫 줄이 「이상 없음」·「경고 없음」을 쓰지 않는다"
+  assert_contains "$f" "리뷰를 마치지 못했다 — 이번 라운드의 판정 기록이 없다" "T46: 렌더 첫 줄이 라우팅 보고서 부재를 공시한다 (부재 단언의 양의 짝)"
   assert_not_contains "$f" "미검증" "T46: 그 공시는 「미검증」 라벨 문구가 아니다 (다른 사유)"
   l="$(py docreview_state.py gate --state-dir "$d" --render | tail -1)"
-  assert_contains "$l" "리뷰 완료가 아니다(round_reviewed=false · unrouted)" \
+  assert_contains "$l" "리뷰를 마치지 못했다(round_reviewed=false · unrouted)" \
     "T46: 「다음:」 줄이 진행 옵션을 무조건 말하지 않는다 — 리뷰 완료 아님 꼬리 (리뷰 P1 의 「진행 옵션 활성」)"
   # 리뷰 P1b — 7단계를 건너뛰지 않으면 거부 표지가 서서 「미검증」(finalize_incomplete)이 된다.
   py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin.json" 2>/dev/null
@@ -1528,10 +1562,11 @@ case_T46_unrouted_round2_with_open_items() {   # 가장 흔한 재리뷰 모양 
   assert_eq "$(gsum "$d" 'd["round"], d["approval_ready"], d["unreviewed_reason"], d["approval_label"]')" "(2, False, 'unrouted', None)" \
     "T46(F7) 전제: 라운드 2 · 이전 라운드의 열린 항목으로 승인 준비 아님 · 공시 사유 unrouted · 라벨 없음"
   f="$(gfirst "$d")"
-  assert_not_contains "$f" "degrade 없음" "T46(F7): 승인 준비가 아닌 라우팅 없는 라운드의 렌더 첫 줄에도 「degrade 없음」이 없다"
-  assert_contains "$f" "리뷰 완료 아님 — 이번 라운드의 라우팅 보고서가 없다" "T46(F7): 렌더 첫 줄이 라우팅 보고서 부재를 공시한다 (부재 단언의 양의 짝)"
+  assert_not_contains "$f" "이상 없음" "T46(F7): 승인 준비가 아닌 라우팅 없는 라운드의 렌더 첫 줄도 「이상 없음」·「경고 없음」을 쓰지 않는다"
+  assert_not_contains "$f" "경고 없음" "T46(F7): 승인 준비가 아닌 라우팅 없는 라운드의 렌더 첫 줄도 「이상 없음」·「경고 없음」을 쓰지 않는다"
+  assert_contains "$f" "리뷰를 마치지 못했다 — 이번 라운드의 판정 기록이 없다" "T46(F7): 렌더 첫 줄이 라우팅 보고서 부재를 공시한다 (부재 단언의 양의 짝)"
   l="$(py docreview_state.py gate --state-dir "$d" --render | tail -1)"
-  assert_contains "$l" "리뷰 완료가 아니다(round_reviewed=false · unrouted)" \
+  assert_contains "$l" "리뷰를 마치지 못했다(round_reviewed=false · unrouted)" \
     "T46(F7): 승인 준비가 아닐 때의 「다음:」 줄에도 리뷰 완료 아님 꼬리가 붙는다"
   rm -rf "$d"
 }
@@ -1542,7 +1577,7 @@ case_T46_unverified_two_stage_with_open_items() {   # 「미검증」 + 이전 �
   critic_dead_twice "$d"
   assert_eq "$(gsum "$d" 'd["unverified"], d["approval_gate_open"], d["approval_ready"], d["two_stage"], d["next_round_mode"]')" \
     "('critic_dead', True, False, True, 'budget')" "T46: 「미검증」 + 열린 항목 → 승인 게이트를 열되 두 단계 · 다음 라운드는 예산"
-  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "다음: 승인 게이트(「미검증」) 1단계 — 열린 항목을 처리한 뒤 진행 옵션 (다음 라운드 = budget)" \
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "다음: 승인 게이트(「미검증」) 1단계 — 남은 항목을 처리한 뒤 진행 옵션 (다음 라운드: 재리뷰 횟수 안에서)" \
     "T46: 렌더의 다음 줄이 「미검증」 라벨의 두 단계 승인 게이트다"
   rm -rf "$d"
 }
@@ -2032,7 +2067,7 @@ case_escalated_unconsumed_counted() {
   # — Task 3 의 새 가시성 락(test_docreview_gate_visibility.sh)이 행 기반이라 이 줄을
   # 자연스럽게 흡수하지 못한다. 대신 그 값을 이미 만들어 둔 이 케이스에 렌더 단언
   # 하나를 더해 갭을 닫는다.
-  assert_grep "$(py docreview_state.py gate --state-dir "$d" --render)" '미소비 상향 예약 1' \
+  assert_grep "$(py docreview_state.py gate --state-dir "$d" --render)" '결정으로 올릴 대상이 없는 예약 1건' \
     "escalated: 그 계수가 게이트 렌더 본문에도 보인다(Ruling 24 — Task 2 가 늘린 줄의 유일한 렌더 커버리지)"
   rm -rf "$d"
 }
@@ -2142,7 +2177,7 @@ case_GR_escalated_fix_drop_clears_block() {
   py docreview_state.py fix --state-dir "$d" --id 'bbbb0001#r1.1' --event escalate --reason 'check-intent 거부' >/dev/null
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["approval_ready"]')" "False" \
     "GR: escalate 직후엔 승인이 막혀 있다(선결조건)"
-  assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep -c 'drop 하면 이 차단이 풀린다')" "1" \
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep -c '버리면(drop) 이 차단이 풀린다')" "1" \
     "GR: 렌더가 drop 이 탈출구임을 실제로 알려준다(I2 — unapplied_fix 와 같은 모양으로)"
   py docreview_state.py fix --state-dir "$d" --id 'bbbb0001#r1.1' --event drop --reason '오탐' >/dev/null
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["escalated_fix"], d["approval_ready"]')" "([], True)" \
@@ -2160,13 +2195,13 @@ case_GR_escalated_fix_reason_persists() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   local fid; fid="$(fsum "$d" 'AC 가 하나뿐' '["id"]')"
   py docreview_state.py fix --state-dir "$d" --id "$fid" --event escalate --reason 'anchor_protected' >/dev/null
-  assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep -c '사유: anchor_protected')" "1" \
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep -c '막힌 이유: anchor_protected')" "1" \
     "GR: 라운드 1 렌더에 진짜 사유가 실린다(선결조건)"
   next_round "$d" "$FX/design-sample.md" >/dev/null
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
   py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample.md" > "$d/fin2.json"
   assert_eq "$(st_yaml "$d" 'st["escalated"]')" "[]" "GR: finalize 뒤 예약은 소비돼 빈다(원장 쪽 선결조건, M7 이 겨눈 자리)"
-  assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep -c '사유: anchor_protected')" "1" \
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep -c '막힌 이유: anchor_protected')" "1" \
     "GR: 라운드 2 렌더에도 같은 진짜 사유가 남는다(M7 — fx 레코드의 escalate_reason 이 원장 소비와 무관)"
   rm -rf "$d"
 }
@@ -2369,7 +2404,7 @@ case_labels_are_kind_dependent() {
   # 헤더+5 = 6줄이다. -A6 은 다음 블록의 헤더 한 줄까지 삼켰다(실측) — 대안 줄까지는
   # 안 닿아 오늘은 안전하지만, «자기 블록만» 잡도록 -A5 로 좁힌다(그 판이 swallow
   # 여지를 아예 없앤다).
-  local blk; blk="$(printf '%s\n' "$render" | grep -F -A5 -- "] $fid —")"
+  local blk; blk="$(item_block "$render" "$fid" 5)"
   assert_grep "$blk" '현재 변경 유지\(채택\)' "AC17: post 의 adopt 라벨은 「현재 변경 유지(채택)」"
   assert_grep "$blk" '이전 상태로 원복\(기각\)' "AC17: post 의 reject 라벨은 「이전 상태로 원복(기각)」"
   case "$blk" in
@@ -2394,7 +2429,7 @@ case_gate_render_six_lines() {
   local fid; fid="$(jget "$d/fin.json" '[x["id"] for x in d["findings"] if x["disposition"]=="decide" and "다른 것을 겨눈다" in x["summary"]][0]')"
   local render blk
   render="$(py docreview_state.py gate --state-dir "$d" --render)"
-  blk="$(printf '%s\n' "$render" | grep -F -A5 -- "] $fid —")"
+  blk="$(item_block "$render" "$fid" 5)"
   assert_grep "$blk" '^  그대로 두면: 설계 전체가' "AC16: 「그대로 두면」 줄이 if_unfixed 를 낸다"
   assert_grep "$blk" '^  고치면: §2 를 브리프'      "AC16: 「고치면」 줄이 replacement 를 낸다"
   assert_grep "$blk" '^  근거: '                     "AC16: 「근거」 줄이 있다"
@@ -2429,17 +2464,30 @@ case_gate_head_and_grouping() {
   # 한 번에 잰다: 머리 줄 전체를 뽑아 기대 리터럴과 정확히 같은지 본다(한
   # 등식이 내용과 순서를 동시에 고정한다 — 독립된 다섯 substring 단언은
   # 뒤섞인 줄에서도 전부 통과하므로 쓰지 않는다).
-  local head_line; head_line="$(printf '%s\n' "$render" | grep '^순서: ')"
-  assert_eq "$head_line" "순서: 열린 결정 먼저 · 그다음 관측 대기 · 막힌 것 · 미적용 수정 · 질문" \
-    "AC18: 머리 줄이 GATE_ROWS 순서를 다섯 구절 전부 + 그 순서 그대로 편다"
+  local order; order="$(printf '%s\n' "$render" | PYTHONPATH="$SCRIPTS" python3 -c '
+import sys
+from docreview_state import GATE_ROWS, STATE_GLOSS
+ls = sys.stdin.read().split("\n")
+pos = []
+for r in GATE_ROWS:
+    hit = [i for i, l in enumerate(ls) if l.startswith(STATE_GLOSS[r.name] + " ") and l.endswith("개") and not l.startswith("- ")]
+    if hit:
+        pos.append(hit[0])
+print(len(pos) >= 2 and pos == sorted(pos), len(pos))
+')"
+  case "$order" in
+    "True "*) ok "AC18: 묶음 제목이 GATE_ROWS 순서로 선다 ($order)" ;;
+    *) no "AC18: 묶음 제목이 GATE_ROWS 순서가 아니거나 두 묶음 미만이다 ($order)" ;;
+  esac
+  assert_not_grep "$render" '^순서: ' "AC18: 「순서:」 설명 줄은 묶음 제목으로 흡수됐다"
   # AC18' — 묶음은 «표시»다. 묶기 전후로 게이트가 세는 항목 수(= AskUserQuestion
   # 질문 수)가 같다. gate_summary 의 버킷을 세면 그 수가 나온다 — 렌더와 독립인
   # 채널이라 순환이 아니다.
-  local n_items; n_items="$(py docreview_state.py gate --state-dir "$d" | jgets 'len(d["open_decide"]) + len(d["unapplied_fix"]) + len(d["blocking_ask_open"])')"
+  local n_items; n_items="$(py docreview_state.py gate --state-dir "$d" | PYTHONPATH="$SCRIPTS" python3 -c 'import json, sys; from docreview_state import GATE_ROWS; d = json.load(sys.stdin); print(sum(len(d[r.name]) for r in GATE_ROWS))')"
   # [리뷰] 접두사만 보면 `_rg_held_decide` 의 「[decide 보류]」도 "^\[decide" 에 걸린다 —
   # held_decide 는 n_items(세 버킷)에 안 들어가므로 그 오탐이 등식을 조용히 깬다.
   # 닫는 대괄호까지 앵커해 정확히 세 렌더러의 리터럴 형태만 잡는다.
-  local n_headers; n_headers="$(printf '%s\n' "$render" | grep -cE '^\[decide( auto)?\]|^\[미적용 fix\]|^\[ask 비차단\]' || true)"
+  local n_headers; n_headers="$(printf '%s\n' "$render" | grep -cE '^- .* \([0-9a-f]+#r[0-9]+\.[0-9]+( · 자동)?\)$' || true)"
   [ "${n_items:-0}" -gt 0 ] \
     && ok "AC18' 양의 짝: 이 케이스에 열린 항목이 ${n_items}개 있다 (아래 등식이 0 == 0 으로 통과하지 않는다)" \
     || no "AC18': 열린 항목이 0개다 — 아래 등식이 공허하다. 항목을 만드는 픽스처로 바꿔라"
@@ -2512,8 +2560,8 @@ print(json.dumps({"n_same_anchor_open_pairs": len(same_pairs), "group_size": gro
   # 가 유일하게 「→」다) — 참조 문구엔 그 앞의 「]」가 없으므로 이 접두로
   # 헤더와 참조가 갈린다.
   local before_same before_diff
-  before_same="$(printf '%s\n' "$render" | awk -v f="] ${fid_same2}" '{l[NR]=$0} index($0,f) && !hit {hit=NR} END{if (hit>1) print l[hit-1]}')"
-  before_diff="$(printf '%s\n' "$render" | awk -v f="] ${fid_diff2}" '{l[NR]=$0} index($0,f) && !hit {hit=NR} END{if (hit>1) print l[hit-1]}')"
+  before_same="$(item_prev_line "$render" "$fid_same2")"
+  before_diff="$(item_prev_line "$render" "$fid_diff2")"
   assert_grep "$before_same" '^  ┆ 같은 자리\(' \
     "AC18': 같은 anchor(${anchor_val}) 인접 쌍(${fid_same1} → ${fid_same2}) 앞에 묶음 마커가 실제로 붙는다"
   case "$before_diff" in
@@ -2578,19 +2626,19 @@ case_I4_replacement_newline_collapsed() {
 
 # ── I4 쌍둥이 — if_unfixed 도 같은 한 줄 슬롯(「그대로 두면: %s」)에 들어간다 ─────────────
 # 개행 낀 값은 한 줄로 접고 센다. 공백뿐인 값은 부재로 친다 — 참으로 읽히면 AC15 의 부재
-# 리터럴 대신 빈 줄이 선다. fixture 의 첫 항목은 개행 뒤에 게이트 줄 모양(`[decide] …`)을
+# 리터럴 대신 빈 줄이 선다. fixture 의 첫 항목은 개행 뒤에 게이트 줄 모양(`- … (<id>)`)을
 # 싣는다: 접지 않으면 그 조각이 렌더의 열 0 에 떨어져 진짜 게이트 줄과 구별되지 않는다.
 case_I4_if_unfixed_newline_collapsed() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-if-unfixed-newline.txt" "$FX/codex-failed.yaml" --skip)" \
     || { no "I4 if_unfixed: route_r1 실패"; return; }
-  assert_eq "$(fsum "$d" '쓰이지 않는 훅' '["if_unfixed"]')" "훅이 죽은 채 남는다. [decide] zz#r1.9 — 가짜 항목" \
+  assert_eq "$(fsum "$d" '쓰이지 않는 훅' '["if_unfixed"]')" "훅이 죽은 채 남는다. - 가짜 항목 (zz#r1.9)" \
     "I4 if_unfixed: 개행 낀 if_unfixed 가 공백 하나로 뭉쳐 한 줄로 난다"
   assert_eq "$(fsum "$d" '두 가지로 읽힌다' '["if_unfixed"]')" "None" \
     "I4 if_unfixed: 공백뿐인 if_unfixed 는 부재(None)로 원장에 남는다"
   assert_eq "$(fsum "$d" '두 가지로 읽힌다' '["decision_view"]["if_unfixed"]')" "(리뷰어가 안 적음)" \
     "I4 if_unfixed: 공백뿐인 if_unfixed 는 AC15 부재 리터럴로 렌더된다"
   # 접기 범위는 `\s+` 다 — `\r`·탭도 접힌다(터미널에서 `\r` 은 줄 머리로 돌아가 가짜 줄을 그린다).
-  assert_eq "$(fsum "$d" '두 번째 백엔드' '["if_unfixed"]')" "결과. [decide] zz#r1.8 — 가짜" \
+  assert_eq "$(fsum "$d" '두 번째 백엔드' '["if_unfixed"]')" "결과. - 가짜 (zz#r1.8)" \
     "I4 if_unfixed: \\r·\\n·탭이 섞인 값도 공백 하나로 뭉친다"
   assert_eq "$(jget "$d/fin.json" 'any(c in x.get("if_unfixed") for x in d["findings"] if x.get("if_unfixed") for c in "\r\t\n")')" "False" \
     "I4 if_unfixed: 어느 저장값에도 \\r·탭·개행이 남지 않는다"
@@ -2599,8 +2647,72 @@ case_I4_if_unfixed_newline_collapsed() {
   assert_eq "$(jget "$d/fin.json" 'isinstance(d["advisory"], list) and not any("강제(게이트 변경)" in a for a in d["advisory"])')" "True" \
     "I4 if_unfixed: 칸 접기는 어느 칸이든 게이트 변경 강제가 아니다(advisory 에 게이트 변경 줄 없음 — 등호로 잰다)"
   local gr; gr="$(py docreview_state.py gate --state-dir "$d" --render)"
-  assert_not_grep "$gr" '^\[decide\] zz#' "I4 if_unfixed: 값 속 게이트 줄 모양이 렌더의 열 0 에 서지 않는다"
-  assert_grep "$gr" '^  그대로 두면: 훅이 죽은 채 남는다\. \[decide\] zz#r1\.9' "I4 if_unfixed 양의 짝: 그 조각은 「그대로 두면」 줄 안에 산다"
+  assert_not_grep "$gr" '^- 가짜' "I4 if_unfixed: 값 속 게이트 줄 모양이 렌더의 열 0 에 서지 않는다"
+  assert_grep "$gr" '^  그대로 두면: 훅이 죽은 채 남는다\. - 가짜 항목 \(zz#r1\.9\)' "I4 if_unfixed 양의 짝: 그 조각은 「그대로 두면」 줄 안에 산다"
+  rm -rf "$d"
+}
+
+# ── 쉬운 말 렌더 (쉬운 말 출력 설계 §3 · AC3) ───────────────────────────────
+# 대표 사례 둘 — ① 옛 렌더 「[미적용 fix] <id> — <요약> (적용 예정 / drop)」의 자리,
+# ② 모델이 쓰던 정상 나열 「(codex 정상 · 재비판 정상 · …)」의 렌더 쪽 짝(옛 렌더: 「degrade 없음」 +
+# 0 만 늘어선 집계 줄). 둘 다 golden 으로도 고정된다(capture_finalize_golden.sh).
+case_plain_render_nothing_left() {
+  local d gr; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-empty.txt" "$FX/codex-empty-ok.yaml" "$FX/recritic-empty.txt")" \
+    || { no "쉬운 렌더 ②: route_r1 실패"; return; }
+  gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_eq "$(printf '%s\n' "$gr" | head -1)" "리뷰 1라운드를 마쳤다 — 이상 없음." \
+    "AC3①: 남은 것도 경고도 없는 라운드의 첫 줄은 「이상 없음」 한 문장이다"
+  assert_not_grep "$gr" '^이번 라운드 집계' "AC3②: 전부 0 인 집계 줄이 나가지 않는다"
+  assert_eq "$(printf '%s\n' "$gr" | grep -v '^참고 ' | grep -cE ' 0(건|개)( |$|·)' || true)" "0" \
+    "AC3②: 0 인 정상 집계 항목이 어디에도 없다(참고 줄은 판단에 필요한 0 — 계획 P8)"
+  assert_not_contains "$gr" "degrade 없음" "AC3: 옛 첫 줄 「degrade 없음」이 남지 않는다"
+  rm -rf "$d"
+}
+case_plain_render_fix_and_decide() {
+  local d gr heads; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-fields.txt" "$FX/codex-empty-ok.yaml" "$FX/recritic-empty.txt")" \
+    || { no "쉬운 렌더 ①: route_r1 실패"; return; }
+  gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_eq "$(printf '%s\n' "$gr" | head -1)" "리뷰 1라운드를 마쳤다 — 정할 것 1개 · 아직 안 고친 곳 1개가 남았다. 경고 없음." \
+    "AC3①⑥: 남은 것이 있고 경고가 없으면 첫 줄은 「경고 없음」이다(「이상 없음」이 아니다)"
+  heads="$(printf '%s\n' "$gr" | grep '^- ' || true)"
+  assert_eq "$(printf '%s\n' "$heads" | grep -c . || true)" "2" "AC3③ 전제: 항목 머리가 둘(decide 1 · 미적용 fix 1)"
+  assert_eq "$(printf '%s\n' "$heads" | grep -cvE ' \([0-9a-f]{8}#r[0-9]+\.[0-9]+( · 자동)?\)$' || true)" "0" \
+    "AC3③: 모든 항목 머리가 쉬운 말로 시작하고 id 는 끝 괄호 안에 있다"
+  assert_grep "$gr" '^아직 안 고친 곳 1개$' "AC3③: 미적용 fix 묶음 제목이 쉬운 말이다"
+  assert_grep "$gr" '^- §5 에 TBD 가 남아 있다 — 고치거나 버린다\(drop\) \(9dea7cf3#r1\.1\)$' \
+    "AC3 사례 ①: 옛 「[미적용 fix] 9dea7cf3#r1.1 — …」 이 쉬운 말 + 끝 괄호 id 로 바뀌었다"
+  assert_not_grep "$gr" '^순서: ' "AC3: 「순서:」 설명 줄은 묶음 제목으로 흡수됐다"
+  rm -rf "$d"
+}
+# Review Focus 1 — 요약(summary)은 정규화에서 개행을 접지 않는다. 새 머리가 열 0 의 「- 」 로 시작하므로
+# 여러 줄 요약이 가짜 항목 줄을 만들 수 있다 — 렌더가 접는다(원장 값은 그대로).
+case_I4_summary_newline_collapsed() {
+  local d gr; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  seed_findings "$d" '[{"id":"aaaa0001#r1.1","lineage":"aaaa0001#r1.1","bucket":"aaaa0001","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#12-files-to-modify","edit_scope":"#12-files-to-modify","disposition":"decide","summary":"파일 목록이 두 가지로 읽힌다\n- 가짜 항목 (zz#r1.7)","evidence":"12행","blocks":[],"kind":"pre"}]'
+  gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_not_grep "$gr" '^- 가짜 항목' "I4 summary: 요약 속 항목 머리 모양이 렌더의 열 0 에 서지 않는다"
+  assert_grep "$gr" '^- 파일 목록이 두 가지로 읽힌다 - 가짜 항목 \(zz#r1\.7\) \(aaaa0001#r1\.1\)$' \
+    "I4 summary 양의 짝: 그 조각은 진짜 머리 줄 안에 한 줄로 산다"
+  assert_eq "$(st_yaml "$d" 'st["findings"]["aaaa0001#r1.1"]["summary"].count(chr(10))')" "1" \
+    "I4 summary: 원장 값은 그대로다(접기는 렌더에서만)"
+  rm -rf "$d"
+}
+# STATE_GLOSS 의 ∀ 커버리지 — 행 이름은 `gate-rows` 에서 도출한다(CATEGORY_GLOSS 락과 같은 모양).
+case_state_gloss_covers_gate_rows() {
+  local rows gl; rows="$(py docreview_state.py gate-rows | python3 -c 'import json, sys; print(" ".join(sorted(r["name"] for r in json.load(sys.stdin))))')"
+  gl="$(PYTHONPATH="$SCRIPTS" python3 -c 'from docreview_state import STATE_GLOSS; print(" ".join(sorted(STATE_GLOSS)))')"
+  [ -n "$rows" ] && ok "STATE_GLOSS 전제: gate-rows 가 행을 냈다" || no "STATE_GLOSS 전제: gate-rows 가 빈 목록이다 — 아래 등식이 공허하다"
+  assert_eq "$gl" "$rows" "STATE_GLOSS: GATE_ROWS 의 행 전부에 사람말 짝이 있고 남는 짝도 없다"
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  assert_eq "$(PYTHONPATH="$SCRIPTS" python3 -c '
+import sys
+import docreview_state as m
+st = m.load_state(sys.argv[1]); g = m.gate_summary(st)
+row = next(r.name for r in m.GATE_ROWS if g[r.name])
+del m.STATE_GLOSS[row]
+out = m.render_gate(st, g).split("\n")
+print(row in out[0], sum(1 for l in out if l == "  ↳ 상태 이름에 사람말이 없다: %s — 원래 이름 그대로 낸다" % row))
+' "$d")" "True 1" "STATE_GLOSS: 짝이 없는 행은 원래 이름으로 나가고 그 사실을 한 줄로 공시한다"
   rm -rf "$d"
 }
 

@@ -9,7 +9,7 @@
   summary: "delete: 쓰이지 않는 훅이 있다"
   evidence: "§5 참조"
   replacement: "훅을 뺀다"
-  if_unfixed: "훅이 죽은 채 남는다.\n[decide] zz#r1.9 — 가짜 항목"
+  if_unfixed: "훅이 죽은 채 남는다.\n- 가짜 항목 (zz#r1.9)"
 - ref: c2
   layer: 1
   category: goal_fit
@@ -27,7 +27,7 @@
   summary: "yagni: 두 번째 백엔드가 있다"
   evidence: "§5 참조"
   replacement: "백엔드 하나로 줄인다"
-  if_unfixed: "결과.\r\n\t[decide] zz#r1.8 — 가짜"
+  if_unfixed: "결과.\r\n\t- 가짜 (zz#r1.8)"
 ```
 
 층 2.
