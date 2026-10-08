@@ -13,7 +13,7 @@ next_phase: superpowers:writing-plans
 ## Handoff Context
 
 **TL;DR** — quality-gates(qg)를 지금 모델·Claude Code 위의 얇은 v10 으로 갈아끼운다. `/qg` 한 번이
-차등 테스트 → 리뷰 → (선택) e2e → PR 코멘트까지 간다. 컷오버는 다섯 번이고 각각 독립 PR·릴리스다:
+리뷰 → 차등 테스트 → (선택) e2e → PR 코멘트까지 간다. 컷오버는 다섯 번이고 각각 독립 PR·릴리스다:
 ① 정리 → ② 리뷰 다이어트 → ③ 게시 → ④ e2e(이음매 완성) → ⑤ 차등 테스트. 옛 교훈은 락이 아니라
 이 문서의 요구 목록(§요구 목록)으로 옮긴다.
 
@@ -53,8 +53,8 @@ next_phase: superpowers:writing-plans
 
 ## Goals
 
-- G1. `/qg` 한 번이 차등 테스트 → 리뷰 → (선택) e2e → PR 코멘트까지 이어서 가고, 사람이 믿고 판단할 검증
-  보고를 낸다(C1).
+- G1. `/qg` 한 번이 리뷰 → 차등 테스트 → (선택) e2e → PR 코멘트까지 이어서 가고, 사람이 믿고 판단할 검증
+  보고를 낸다(C1 의 순서 그대로).
 - G2. e2e 신설 · 게시 백지 재건 · 게시 장치 걷기 · 리뷰 다이어트를 모두 중심으로 다룬다(C9).
 - G3. 구성요소마다 가정을 다시 재어 삭제/새로/유지를 정하고, 부품 단위로 갈아끼운다(D17·D18).
 - G4. 옛 qg 가 사고를 겪으며 얻은 교훈(거짓 clean·fail-open 수정)을 잃지 않는다 — §요구 목록.
@@ -116,8 +116,8 @@ brief §2 의 확정 28건(C1~C9 · D10~D14 · C15~C16 · D17~D19 · C20~C21 · 
  ├ 진입 ── kill switch · 범위(git 기반: 브랜치 또는 Spec: 토픽)
  │         · 의도 출처 한 줄 공시 (Spec: 트레일러 → 커밋 메시지·PR 본문)
  ├ iteration (최대 5)
- │   ① 차등 테스트   오케스트레이터가 러너를 직접 호출
- │   ② 리뷰        기본 3 + 조건부 ≤4 → code-recritic → 합성 → 판정 한 줄
+ │   ① 리뷰        기본 3 + 조건부 ≤4 → code-recritic → 합성
+ │   ② 차등 테스트   오케스트레이터가 러너를 직접 호출 → 판정 한 줄(①② 의 결과를 함께)
  │   막는 지적 또는 차등 defect → Fix-loop 게이트 (Retry / Accept / Stop)
  │       Retry: 「적용」 패치만 쓰고 「제외」는 공시 → 다음 iteration
  ├ e2e 질문 (루프 끝, 한 번) → 걷기 → 걷기 직후 게이트
@@ -138,9 +138,11 @@ brief §2 의 확정 28건(C1~C9 · D10~D14 · C15~C16 · D17~D19 · C20~C21 · 
 
 Stop·중단으로 끝난 실행(Final Summary `Outcome: aborted …`)은 게시하지 않는다.
 
-**iteration 회계** — Retry 한 번이 iteration 하나를 쓴다. 걷기 직후 게이트의 「다시 걷기」는 iteration 을 쓰지
-않는다. iteration 5 를 다 쓴 뒤 e2e 가 fail 이면 Fix-loop 게이트에서 Retry 를 빼고(Accept / Stop / pass 로
-뒤집기) 지금의 Max-iter 처리와 같게 닫는다.
+**iteration 회계** — Retry 한 번이 iteration 하나를 쓴다. 걷기 직후 게이트의 「다시 걷기」는 코드 상태가
+그대로일 때(판정안 「미확인」)만 있고 iteration 을 쓰지 않는다. 판정안이 「무효(코드 변경)」면 다시 걷기만으로는
+닫을 수 없다 — 남은 iteration 하나를 써서 ①② 를 다시 돈 뒤 같은 승인 경로로 걷는다. 남은 iteration 이 없으면
+`not-certified (e2e-unconfirmed)` 로 닫는다. iteration 5 를 다 쓴 뒤 e2e 가 fail 이면 Fix-loop 게이트에서
+Retry 를 빼고(Accept / Stop / pass 로 뒤집기) 지금의 Max-iter 처리와 같게 닫는다.
 
 ### §2 리뷰와 다이어트
 
@@ -176,6 +178,11 @@ mtime 은 쓰지 않는다. PR 본문은 `discover-spec.sh` 가 읽기 전용 `g
 커밋 메시지만 쓰고 그 사실을 `intent:` 줄에 붙인다. codex 도 같은 기준 블록과 의도 출처를 받는다 — qg 소유
 러너(`run_codex_reviewer.sh`)와 프롬프트 빌더(`build_codex_prompt.py`)가 spec AC 대신 이 둘을 싣는다.
 
+**중간 릴리스의 입력 계약** — 차등 테스트의 `test-scope-validator` 는 ⑤ 까지 살아 있고 `discover-spec.sh` 의
+`spec_path` 를 입력으로 쓴다. 그래서 ②~④ 동안 새 `discover-spec.sh` 는 기존 `spec_path` 출력을 함께 낸다
+(Spec: 트레일러가 가리키는 spec 이면 그 경로, 아니면 빈 값). `DISABLE_SPEC_CONFORMANCE` 도 ⑤ 까지 남아,
+켜지면 codex 의 의도 입력과 validator 의 spec 축을 함께 끈다. 둘 다 ⑤ 에서 validator 와 같이 사라진다.
+
 **code-recritic** — qg 전용 재비판 agent 다. `tools: Read, Grep, Glob`, `model: opus`. 입력은 출처를 가린
 지적 목록 + diff + 의도 출처 + 프로필(`references/recritic-code-profile.md`)이다.
 - 관문 A~D 는 지금 문구를 옮긴다.
@@ -204,16 +211,21 @@ mtime 은 쓰지 않는다. PR 본문은 `discover-spec.sh` 가 읽기 전용 `g
 
 요구 R1~R24(§요구 목록)를 지키는 얇은 새 기계다.
 
-| 부품 | 처분 | 하는 일 |
-|---|---|---|
-| `resolve-baseline.sh` | 유지 | 베이스라인 사실 6개. 리뷰 범위 판정과 공유 |
-| `seal-worktree.sh` | 유지 | 작업트리 전체(untracked 포함)를 커밋으로 봉인 |
-| `qg-worktree.sh` | 줄임 | `create-baseline` · `create-head`(HEAD sha 재검증) · `remove` 만 |
-| `run-test-selection.sh` | 새로 | `detect` · `assign` · `run` · `granularity` · `total`. 결과는 exit code 로만. 어댑터 9종 |
-| `compute-test-scope-candidates.sh` | 새로, 얇게 | 후보 **바닥**: 이름 일치 · 바뀐 테스트 · `# guards:`. 모델은 더하기만 |
-| `diff-test-results.py` | 새로 | 짝짓기·집계 + unclaimed 검사 흡수. 출력은 판정에 직접 |
-| `baseline-cache.sh` · `probe` · `check_qa_ledger.py` · `test-scope-validator` · `discover-plan.sh` · R3 공백 게이트 | 삭제 | 지워도 조용히 통과하는 것이 없다 |
-| `references/differential-test.md` | 새로 | 1013줄 → 요구 목록 + 짧은 절차 |
+한 줄 표(D18)의 칸은 「부품(하는 일) · 깔고 있는 가정 · 1st-party 대체 · 교훈(§요구 목록 번호) · 처분」이다.
+
+| 부품(하는 일) | 가정 | 1st-party 대체 | 교훈 | 처분 |
+|---|---|---|---|---|
+| `resolve-baseline.sh` (베이스라인 사실 6개, 리뷰 범위와 공유) | merge-base 가 비교 기준이고 shallow·detached 는 degraded 다 | 없음 | R13 · V7 | 유지 |
+| `seal-worktree.sh` (작업트리 전체를 커밋으로 봉인) | HEAD 축은 미커밋 변경까지 커밋된 바이트로 본다 | 없음 | R11 | 유지 |
+| `qg-worktree.sh` 의 `create-baseline`·`create-head`·`remove` | 두 축은 별도 일회용 트리에서 돈다 | 네이티브 worktree 는 merge-base·봉인 커밋을 가리키지 못하고 세션 cwd 를 옮겨 맞지 않음 | R11 · R12 · R23 | 줄임 |
+| `run-test-selection.sh` (`detect`·`assign`·`run`·`granularity`·`total`, 어댑터 9종) | 결과는 exit code 로만 읽고 출력 파서는 두지 않는다 | 「모델이 Bash 로 직접 실행」은 백스톱의 독립성을 잃음(V10) | R2~R4 · R14 · R16 · R20 · R21 | 새로 |
+| `compute-test-scope-candidates.sh` (후보 바닥: 이름 일치 · 바뀐 테스트 · `# guards:`) | 모델은 테스트를 덜 고른다 — 옛 모델 가정이라 「바닥, 모델은 더하기만」으로 좁혀 유지 | 없음 | R17 | 새로, 얇게 |
+| `diff-test-results.py` (짝짓기·집계 + unclaimed 검사 흡수, 출력은 판정에 직접) | expected 는 결과와 독립인 입력이어야 결과가 분모를 못 정한다 | 없음 | R1 · R5~R10 · R16 · R18 · R19 · R24 | 새로 |
+| `baseline-cache.sh` · `probe` | 기준선 비용을 세션을 넘어 아껴야 한다 | 실행 안 메모(아래)로 대체 | R5 · R6 — fail-open 셋의 원천 | 삭제 ⑤ |
+| `check_qa_ledger.py` | 모델이 기계 값을 원장에 옮겨 적는다 | 원장 자체를 없앰 | R24 | 삭제 ⑤ |
+| `test-scope-validator` agent | 싼 별도 agent 가 오래된 테스트를 잡는다 | 오케스트레이터(opus)가 직접 읽음 | 판정에 영향 없음(참고용) | 삭제 ⑤ |
+| `discover-plan.sh` · R3 공백 게이트 | plan 이 테스트 범위 힌트다 / 줄어든 커버리지는 묻는다 | 없음 | 공시 + not-certified 가 이미 덮음 | 삭제 ⑤ |
+| `skills/quality-pipeline/references/differential-test.md` | 모델이 Bash 호출 사이 바인딩을 잊으니 단계마다 실패 경로 표가 필요하다 | 없음 | R1~R24 | 제자리에서 다시 씀 — 1013줄 → 요구 목록 + 짧은 절차 |
 
 **실행 안 메모** — 한 번의 `/qg` 안에서 merge-base 는 고정이다. 베이스라인 행을 R-init 이 만든 리포 밖
 임시 디렉토리에 두고 같은 실행의 다음 iteration 에서 재사용한다. 새 단위만 베이스라인을 다시 돌리고,
@@ -234,14 +246,15 @@ mtime 은 쓰지 않는다. PR 본문은 `discover-spec.sh` 가 읽기 전용 `g
 - 시나리오를 고르는 것이 그 부팅 명령을 호스트에서 실행해도 된다는 승인이다.
 
 **걷기**
-1. `e2e-state.sh` 로 코드 상태 지문을 잰다: HEAD + 추적 파일 diff 내용 해시 + untracked 목록.
+1. `e2e-state.sh` 로 코드 상태 지문을 잰다: HEAD + 추적 파일 diff 내용 해시 + 무시되지 않는 untracked 파일의
+   경로·내용 해시(차등 테스트가 봉인하는 범위와 같다).
 2. 승인된 명령으로 앱을 백그라운드로 띄우고 준비 신호(포트·로그 줄)를 기다린다.
 3. 웹은 브라우저 MCP(접근성 트리 스냅숏)로, API·CLI 는 Bash 로 걷는다.
 4. 승인된 명령이 띄운 로컬 origin 만 걷는다. 파일 업로드와 외부 origin 이동은 하지 않는다.
 5. 걷다 버그를 보면 고치지 않고 기록한다. 고침은 Retry 로만 한다.
 6. 띄운 프로세스는 모든 종료 경로에서 내린다.
-7. 지문을 다시 잰다. HEAD 나 추적 파일 diff 내용 해시가 다르면 판정안은 「무효(코드 변경)」다. 새 untracked
-   파일은 목록으로 보인다.
+7. 지문을 다시 잰다. 세 값 중 하나라도 다르면(untracked 파일의 추가·삭제·내용 변경 포함) 판정안은
+   「무효(코드 변경)」다. 무엇이 바뀌었는지 경로 목록으로 보인다.
 
 **증거표와 판정안** — 기대 상태마다 관측(도구 출력 원문 인용)과 판정(충족 / 불충족 / 미확인)을 적는다.
 판정안은 셋 중 하나다:
@@ -255,14 +268,16 @@ mtime 은 쓰지 않는다. PR 본문은 `discover-spec.sh` 가 읽기 전용 `g
 |---|---|
 | pass | 승인 / fail 로 뒤집기 / 다시 걷기 |
 | fail | Fix-loop 게이트(Retry / Accept / Stop) + pass 로 뒤집기 |
-| 미확인 · 무효 | 다시 걷기 / 그대로 둠 |
+| 미확인 | 다시 걷기(iteration 안 씀) / 그대로 둠 |
+| 무효(코드 변경) | 리뷰·테스트부터 다시(iteration 하나 씀, §1) / 그대로 둠 |
 
 뒤집기는 한 줄 사유를 받아 로컬 결과에 남기고, 판정 줄에 「사람이 뒤집음」으로 표시한다. Retry 뒤 다시
 걸을 때는 같은 승인 경로·명령을 쓰고 경로 질문은 생략하며, 걷기 직후 게이트는 매번 띄운다.
 
 **범위** — e2e 는 현재 체크아웃만 걷는다. 토픽 스코프가 다른 브랜치를 묶었으면 그 사실을 공시한다.
-kill switch 는 `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 하나다. 파일은 `references/e2e.md`,
-`scripts/e2e-state.sh`, `tests/fixtures/e2e-app/` 이다. agent 는 없다(C20).
+kill switch 는 `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 하나다. 파일은 `plugins/quality-gates/references/e2e.md`
+(재비판 프로필과 같은 플러그인 루트 `references/`), `scripts/e2e-state.sh`, `tests/fixtures/e2e-app/` 이다.
+agent 는 없다(C20).
 
 ### §5 게시
 
@@ -305,26 +320,27 @@ qg: <판정>[ (<사유>)] · 막는 지적 N · 선택 M · 차등 새 실패 K 
 
 ### §6 진입·상태·그 밖의 부품
 
-| 부품 | 처분 | 근거 |
-|---|---|---|
-| `commands/qg.md` | 새로, 얇게 | `--reset`·`--gc` 의 ```` ```! ```` 펜스 제거. `critique` 라우팅 블록은 그대로 |
-| `scripts/setup-qg.sh` | 새로, 최소 | kill switch · SID 가드(패턴 `[A-Za-z0-9_-]{8,}`) · 인자 거부 |
-| `/qg branch <name>` | 삭제 | 만든 worktree 안에서 파이프라인이 일하지 않는다(재결정 R4). 인자 표면은 아래 |
-| `qg-worktree.sh` `create`·`sanitize`·`validate` | 삭제 | branch 모드 전용 |
-| `create-sandbox`·`mutation-guard` | plugin-audit 로 이전 | qg 는 안 쓴다. plugin-audit `run-own-tests.sh` 의 하드코딩 경로·`quality-gates ≥ 2.12.0` 선언 제거 |
-| `/cancel-qg` + `cancel-qg-core.sh` · `hooks/*` · `state_path.py` · `devbrew-python.sh` 사본 · `read-frontmatter.py` | 삭제 | 단일 턴이고 남길 worktree 가 없다. 남은 상태는 TTL GC |
-| `qg-gc.py` · `gc_common.py` · `kill_switch_active.py` | 유지·갱신 | 로컬 결과 폴더 TTL 정리(setup 이 호출). `qg-gc.py` 의 세션 표지 목록에 `result.md` 를 더하고 사라지는 표지(`pipeline.md` 등)를 뺀다 — 안 그러면 새 결과 폴더가 정리되지 않는다 |
-| 로컬 결과 | 새로 | `.claude/quality-gates/<sid>/result.md`: 지적 전부 · SUGGESTION · 증거표 · 제외 패치 · 뒤집기 사유 |
-| `references/state-file-format.md` | 새로 | 위 형식 |
-| `check-trivia.sh` | 삭제 | 오케스트레이터 판단으로 대체. 사유 `trivia` 는 유지 |
-| `discover-spec.sh` · `discover_common.sh` | 새로 / 삭제 | D13 사슬(§2). codex 의 spec AC 입력도 여기서 |
-| 토픽 스코프 넷 · `check-review-scope.sh` · `angles.py` · `verdict.py` | 유지 | `verdict.py` 는 `e2e-unconfirmed` 추가 |
-| codex 사슬 | 유지·갱신 | qg 소유 `run_codex_reviewer.sh`·`build_codex_prompt.py` 가 spec AC 대신 기준 블록과 의도 출처를 싣고 confidence 필드를 뺀다(§2). 공유 파일 무변경 |
-| `security-reviewer.md` | 유지·갱신 | `model: opus`, 기준 블록 반영, 「cutoff < 7」 등 낡은 문구 정리. custody·위치 토큰 범주 유지 |
-| `doc-recritic.md` 사본 · `recritic_bridge.py` | 삭제 | code-recritic 으로 대체(R1) |
-| `render-terminal.py` | 줄임 | `table` 만 |
-| scout · filter-docs · discover-plan · check-changelog-korean-primary · check-allowed-tools-order · experiment-model-override · gate3·test-scope fixture | 삭제 | 실행자가 없거나 옛 비용 가정 |
-| README | 다시 씀 | Cost Class·파이프라인 흐름·Recipes 의 낡은 서술 정리 |
+| 부품(하는 일) | 가정 | 1st-party 대체 | 교훈 | 처분 |
+|---|---|---|---|---|
+| `commands/qg.md` (진입) | 진입 전에 setup 스크립트와 ```` ```! ```` 펜스가 돈다 | 없음 | E1 · E2 | 새로, 얇게 ① — `--reset`·`--gc` 펜스 제거, `critique` 라우팅 블록은 그대로 |
+| `scripts/setup-qg.sh` | 상태 파일과 권한 없는 bash I/O 가 필요하다 | 없음 | E1 · E5 | 새로, 최소 ① — kill switch · SID 가드(패턴 `[A-Za-z0-9_-]{8,}`) · 인자 거부 |
+| `/qg branch <name>` + `qg-worktree.sh` `create`·`sanitize`·`validate` | 다른 브랜치는 qg 가 worktree 를 만들어 본다 | 체크아웃 · 네이티브 worktree | 만든 worktree 안에서 파이프라인이 일하지 않음(재결정 R4) | 삭제 ① |
+| `qg-worktree.sh` `create-sandbox`·`mutation-guard` | (qg 는 더 안 쓴다) | 없음 | 2.2.0 5층 fail-closed 검사 | plugin-audit 로 이전 ① — `run-own-tests.sh` 의 하드코딩 경로·`quality-gates ≥ 2.12.0` 선언 제거 |
+| `/cancel-qg` + `cancel-qg-core.sh` · `hooks/*` · `state_path.py` · `devbrew-python.sh` 사본 · `read-frontmatter.py` | 상태가 턴을 넘어 살고 훅이 정리해야 한다 | 단일 턴 + TTL GC | E1 · E4 · E5 | 삭제 ① |
+| `qg-gc.py` · `gc_common.py` · `kill_switch_active.py` (결과 폴더 TTL 정리, setup 이 호출) | 세션 폴더는 쌓인다 | 없음 | E4 · E5 | 유지·갱신 — 세션 표지에 `result.md` 를 ① 에서 **더하기만** 한다. 옛 표지는 생산이 멈추는 컷오버에서 `LEGACY_SESSION_MARKERS` 로 옮긴다(`publish-eligible.md` ① · `pipeline.md` ② · `runtime-evidence.md` ⑤). 옛 버전이 남긴 폴더도 계속 회수된다 |
+| 로컬 결과 `.claude/quality-gates/<sid>/result.md` (지적 전부 · SUGGESTION · 증거표 · 제외 패치 · 뒤집기 사유) | — | — | — | 새로 ② |
+| `skills/quality-pipeline/references/state-file-format.md` | 상태 파일은 GC 표지이자 worktree 추적 | — | — | 제자리에서 다시 씀 ② — `result.md` 형식 |
+| `check-trivia.sh` | 작은 diff 는 건너뛰어 비용을 아낀다 | 오케스트레이터(opus) 판단 | 지워도 통과하는 것이 없다(결과는 늘 not-certified) | 삭제 ② — 사유 `trivia` 는 유지 |
+| `discover-spec.sh` | 최신 mtime spec 이 관련 spec 이다 | 없음 | D13 · brief RC13 | 새로 ② — D13 사슬 + 읽기 전용 `gh pr view`, ⑤ 까지 `spec_path` 도 냄(§2) |
+| `discover_common.sh` | 두 discover 스크립트가 mtime 도우미를 나눈다 | 없음 | — | 삭제 ⑤(`discover-plan.sh` 와 함께) |
+| 토픽 스코프 넷 · `check-review-scope.sh` · `angles.py` · `verdict.py` | 여러 브랜치 묶음은 한 판정 단위 · 빈 범위는 거짓 clean 을 낸다 · 판정 어휘는 하나 | 없음 | V1 · V5 · V7 | 유지 — `verdict.py` 는 `e2e-unconfirmed` 추가 |
+| codex 사슬 (러너 · 프롬프트 · 변환 · 탐지) | 모델 계열 다양성이 load-bearing 이다 | 없음(`/code-review` 는 Claude 만) | V6 | 유지·갱신 ② — qg 소유 `run_codex_reviewer.sh`·`build_codex_prompt.py` 가 기준 블록과 의도 출처를 싣고 confidence 필드를 뺀다. 공유 파일 무변경 |
+| `security-reviewer.md` | 보안 각도는 빠지면 안 된다 | `/security-review` 는 사용자 커맨드라 각도로 못 씀 | V5 · 2.2.0 custody · 7.6.0 위치 토큰 | 유지·갱신 ② — `model: opus`, 기준 블록, 「cutoff < 7」 등 낡은 문구 정리 |
+| `doc-recritic.md` 사본 · `recritic_bridge.py` | 재비판은 공유 docreview agent 를 쓴다 | 없음 | V4 | 삭제 ② — code-recritic 으로 대체(재결정 R1) |
+| `scout.py` · `feature-dev:code-architect` | 줄 수로 리뷰 깊이(비용)를 정한다 · sonnet 리뷰어로 비용을 낮춘다 | 고정 구성 + opus 리뷰어 | 지워도 통과하는 것이 없다 | 삭제 ② |
+| `render-terminal.py` | — | — | — | 줄임 ③ — `table` 만 |
+| `filter-docs.sh` · `check-changelog-korean-primary.py` · `check-allowed-tools-order.sh` · `experiment-model-override.md` · gate3 fixture | 문서 경로를 걸러야 한다 · allowed-tools 목록 순서가 파이프라인 순서를 문서화한다 · sonnet 으로 낮춰 비용을 아낀다 | 없음 | 실행자가 없거나 순서가 런타임에 영향이 없다 | 삭제 ① |
+| README | — | — | — | 다시 씀 — Cost Class·파이프라인 흐름·Recipes 의 낡은 서술 정리 |
 
 **인자 표면**
 
@@ -345,7 +361,7 @@ qg: <판정>[ (<사유>)] · 막는 지적 N · 선택 M · 차등 새 실패 K 
 | `DISABLE_E2E` | 새로 | ④ |
 | `DISABLE_BRANCH_WORKTREE` · `KEEP_WORKTREE` | 삭제(branch 모드와 함께) | ① |
 | `DISABLE_RUNTIME_SANDBOX` | plugin-audit 로 이전, `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX` 로 개명 | ① |
-| `DISABLE_SPEC_CONFORMANCE` | 삭제 — codex 입력이 spec AC 에서 의도 출처로 바뀐다 | ② |
+| `DISABLE_SPEC_CONFORMANCE` | ②~④ 동안 codex 의도 입력과 validator spec 축을 함께 끈다(§2). 마지막 소비자 `test-scope-validator` 와 함께 삭제 | ⑤ |
 | `DEVBREW_SKIP_HOOKS` 의 `quality-gates:session-start-advisor`·`session-end-cleanup` 토큰 | 삭제(훅과 함께). `quality-gates:qg-gc` 는 유지 | ① |
 
 ### §7 컷오버
@@ -354,11 +370,11 @@ qg: <판정>[ (<사유>)] · 막는 지적 N · 선택 M · 차등 새 실패 K 
 
 | # | 내용 | 컷오버 조건 |
 |---|---|---|
-| ① 정리 | **대체물이 필요 없는 삭제만**: branch 모드 · `/cancel-qg` · 훅 · `state_path.py` · `devbrew-python.sh` 사본 · `read-frontmatter.py` · `filter-docs.sh` · `check-changelog-korean-primary.py` · `check-allowed-tools-order.sh` · `experiment-model-override.md` · gate3 fixture · 인자 넷 · plugin-audit 이전 · `qg-gc.py` 표지 갱신 · CLAUDE.md deprecation 조건 | qg·shared·plugin-audit 스위트 · E1~E6 테스트 · 개념 별칭 삭제 스윕 0 |
-| ② 다이어트 | §2 전부 · discover-spec(gh 읽기 포함) · codex 입력 갱신 · trivia 판단 + 그 대체로 지워지는 `scout.py` · `feature-dev:code-architect` · `check-trivia.sh` · `doc-recritic.md` 사본 · `recritic_bridge.py` · 로컬 결과 `result.md` | V1~V12 테스트(변이로 이빨 확인) · 재생 비교 통과(AC8) · persona 편집이라 보안 리뷰 |
+| ① 정리 | **대체물이 필요 없는 삭제만**: branch 모드 · `/cancel-qg` · 훅 · `state_path.py` · `devbrew-python.sh` 사본 · `read-frontmatter.py` · `filter-docs.sh` · `check-changelog-korean-primary.py` · `check-allowed-tools-order.sh` · `experiment-model-override.md` · gate3 fixture · 인자 넷 · plugin-audit 이전 · `qg-gc.py` 표지에 `result.md` 추가(`publish-eligible.md` 는 LEGACY 로) · CLAUDE.md deprecation 조건 | qg·shared·plugin-audit 스위트 · E1~E6 테스트 · 개념 별칭 삭제 스윕 0 |
+| ② 다이어트 | §2 전부 · discover-spec(gh 읽기 포함) · codex 입력 갱신 · trivia 판단 + 그 대체로 지워지는 `scout.py` · `feature-dev:code-architect` · `check-trivia.sh` · `doc-recritic.md` 사본 · `recritic_bridge.py` · 로컬 결과 `result.md`(`pipeline.md` 는 GC 의 LEGACY 표지로) | V1~V12 테스트(변이로 이빨 확인) · 재생 비교 통과(AC8) · persona 편집이라 보안 리뷰 |
 | ③ 게시 | §5 전부 · 즉시 제거 · P21 앵커 · P17 · description · pr-process.md | P1~P7 테스트(변이로 이빨 확인) · 실제 PR 1회 게시 · sink 건너뛰기 여섯 경우 · aborted 미호출 |
 | ④ e2e | §4 전부 · P4 · 이음매 AC | X1~X4 테스트 · fixture 앱 버그 브랜치에서 fail 포착 · 실제 앱 프로젝트 1회 |
-| ⑤ 차등 | §3 전부 + 마지막 소비자와 함께 지워지는 `discover-plan.sh` · `discover_common.sh` · `test-scope-validator` · test-scope fixture · `--plan` | R1~R24 테스트(변이로 이빨 확인) · 같은 입력에서 옛판과 같은 범주 |
+| ⑤ 차등 | §3 전부 + 마지막 소비자와 함께 지워지는 `discover-plan.sh` · `discover_common.sh` · `test-scope-validator` · test-scope fixture · `--plan` · `DISABLE_SPEC_CONFORMANCE` · `discover-spec.sh` 의 `spec_path` 출력(`runtime-evidence.md` 는 GC 의 LEGACY 표지로) | R1~R24 테스트(변이로 이빨 확인) · 같은 입력에서 옛판과 같은 범주 |
 
 **삭제 규칙** — 부품은 그것의 대체물이 실리는 컷오버, 또는 그것의 마지막 소비자가 사라지는 컷오버에서 지운다.
 그래야 각 중간 릴리스가 혼자 온전하다.
@@ -444,7 +460,8 @@ P21 의 코드 앵커 `comment-upsert.py` 는 ③에서 `publish-comment.sh` 로
 
 **e2e (새로)**
 - X1 pass 는 기대 상태마다 관측 증거가 인용될 때만 성립한다(D10)
-- X2 걷기 중 추적 파일이 바뀌면 그 판정안은 무효다(OQ29)
+- X2 걷기 중 HEAD · 추적 파일 · 무시되지 않는 untracked 파일 중 하나라도 바뀌면 그 판정안은 무효이고, 무효를
+  닫으려면 리뷰·테스트부터 다시 돈다(OQ29)
 - X3 승인된 명령이 띄운 로컬 origin 만 걷고, 업로드·외부 이동은 하지 않는다 — 2.12.0 MCP 유출 교훈
 - X4 띄운 프로세스는 모든 종료 경로에서 내린다
 
@@ -479,7 +496,8 @@ P21 의 코드 앵커 `comment-upsert.py` 는 ③에서 `publish-comment.sh` 로
 - AC16 Files to Modify ③ 의 삭제 대상과 `/qg-publish` 표면이 없고, `shared/tests/test_charter_citations.sh` 가 green 이다.
 
 **e2e**
-- AC17 걷기 중 추적 파일을 바꾸거나 HEAD 를 옮기면 판정안이 「무효(코드 변경)」로 바뀐다.
+- AC17 걷기 중 추적 파일을 바꾸거나, HEAD 를 옮기거나, 이미 있던 untracked 소스를 고치면 판정안이 「무효(코드
+  변경)」로 바뀐다. 무효 뒤 「다시 걷기」만으로는 pass 를 승인할 수 없고, 리뷰·테스트를 다시 돈 뒤에만 걸을 수 있다.
 - AC18 증거 인용이 없는 기대 상태가 하나라도 있고 불충족이 없으면 판정안이 미확인이다.
 - AC19 `tests/fixtures/e2e-app` 의 버그 주입 브랜치에서 `/qg` 를 돌리면 e2e 판정안이 fail 이고, 승인하면 판정이 defect 다.
 - AC20 `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 이면 e2e 질문이 뜨지 않고 판정 줄에 그 사실이 나온다.
@@ -493,8 +511,9 @@ P21 의 코드 앵커 `comment-upsert.py` 는 ③에서 `publish-comment.sh` 로
 - AC24 §6 의 삭제 대상이 없고, 개념 별칭(이름 · 표면 · §6 kill switch 목록의 삭제·개명 환경 변수) 스윕이 0건이며, plugin-audit 스위트가 이전된 스크립트로 green 이다.
 - AC25 `/qg branch <name>` · `--reset` · `--gc` · `--pr-url` · `--plan` 은 각각 제거 안내 한 줄을 내고 끝난다. 맨 `/qg branch` 와 `--paths` 는 동작한다.
 - AC26 §8 의 세 문장이 각 자리에 있고, P4 의 옛 「runtime tier 를 주장하지 않는다」 문장은 없으며, P4 코드 앵커가 `references/e2e.md` 를 인용한다.
-- AC27 각 컷오버의 중간 릴리스에서 qg 가 참조하는 스크립트·agent 가 모두 실재한다(삭제 규칙, §7).
-- AC28 `qg-gc.py` 가 `result.md` 만 가진 만료 폴더를 지운다.
+- AC27 각 컷오버의 중간 릴리스에서 qg 가 참조하는 스크립트·agent 가 모두 실재하고, 살아 있는 소비자의 입력 계약
+  (출력 키 · 환경 변수 — 예: ②~④ 의 `spec_path` · `DISABLE_SPEC_CONFORMANCE`)이 유지된다(삭제 규칙, §7).
+- AC28 `qg-gc.py` 가 `result.md` 만 가진 만료 폴더와 옛 표지(`pipeline.md` 등)만 가진 만료 폴더를 모두 지운다.
 
 ## Files to Modify
 
@@ -505,7 +524,7 @@ P21 의 코드 앵커 `comment-upsert.py` 는 ③에서 `publish-comment.sh` 로
   - `tests/fixtures/gate3/` 와 대응 테스트
 - 수정:
   - `plugins/quality-gates/scripts/qg-worktree.sh` (branch·sandbox 하위명령 제거)
-  - `scripts/qg-gc.py` (세션 표지에 `result.md`)
+  - `scripts/qg-gc.py` (세션 표지에 `result.md` 추가, `publish-eligible.md` 를 `LEGACY_SESSION_MARKERS` 로)
   - `scripts/setup-qg.sh`, `commands/qg.md`, `skills/quality-pipeline/SKILL.md`(branch·`--reset`·`--gc`·`--pr-url` 문단), `README.md`, `CHANGELOG.md`, `.claude-plugin/plugin.json`
 - plugin-audit:
   - 추가: `plugins/plugin-audit/scripts/` 에 sandbox·mutation-guard
@@ -517,11 +536,12 @@ P21 의 코드 앵커 `comment-upsert.py` 는 ③에서 `publish-comment.sh` 로
 **② 다이어트**
 - 추가: `plugins/quality-gates/agents/code-recritic.md`
 - 수정:
-  - `references/recritic-code-profile.md`
+  - `plugins/quality-gates/references/recritic-code-profile.md`
   - `scripts/synthesize_findings.py`, `scripts/verdict.py`(defect 입력)
-  - `scripts/discover-spec.sh`(D13 사슬 + 읽기 전용 `gh pr view`), `scripts/run_codex_reviewer.sh`, `scripts/build_codex_prompt.py`
+  - `scripts/discover-spec.sh`(D13 사슬 + 읽기 전용 `gh pr view`, ⑤ 까지 `spec_path` 도 냄), `scripts/run_codex_reviewer.sh`, `scripts/build_codex_prompt.py`
   - `agents/security-reviewer.md`
-  - `skills/quality-pipeline/SKILL.md`(리뷰·Fix-loop·trivia 절), `references/state-file-format.md`(`result.md`)
+  - `skills/quality-pipeline/SKILL.md`(리뷰를 차등 테스트 앞으로 · Fix-loop · trivia 절), `skills/quality-pipeline/references/state-file-format.md`(`result.md`)
+  - `scripts/qg-gc.py`(`pipeline.md` 를 `LEGACY_SESSION_MARKERS` 로)
 - 삭제: `agents/doc-recritic.md`, `scripts/recritic_bridge.py`, `scripts/scout.py`, `scripts/check-trivia.sh` 와 대응 테스트
 - shared: `shared/tests/test_docreview_copy_set.sh` EXPECTED 한 줄
 - 헌장: `docs/philosophy/devbrew-harness-philosophy.md` P11 코드 앵커(`agents/doc-recritic.md` 인용)를
@@ -541,14 +561,16 @@ P21 의 코드 앵커 `comment-upsert.py` 는 ③에서 `publish-comment.sh` 로
   - `docs/git-workflow/pr-process.md`, `plugins/project-init/templates/shared/pr-process.md`(+ project-init `plugin.json`)
 
 **④ e2e**
-- 추가: `references/e2e.md`, `scripts/e2e-state.sh`, `tests/fixtures/e2e-app/`
+- 추가: `plugins/quality-gates/references/e2e.md`, `scripts/e2e-state.sh`, `tests/fixtures/e2e-app/`
 - 수정: `scripts/verdict.py`(`e2e-unconfirmed`), `skills/quality-pipeline/SKILL.md`, P4
 
 **⑤ 차등**
 - 수정(다시 씀):
   - `scripts/{run-test-selection.sh,diff-test-results.py,compute-test-scope-candidates.sh}`
-  - `references/differential-test.md`
+  - `skills/quality-pipeline/references/differential-test.md`(제자리)
   - 차등 테스트들
+  - `scripts/discover-spec.sh`(`spec_path` 출력 제거), `scripts/run_codex_reviewer.sh`(`DISABLE_SPEC_CONFORMANCE` 제거),
+    `scripts/qg-gc.py`(`runtime-evidence.md` 를 `LEGACY_SESSION_MARKERS` 로)
 - 삭제: `scripts/{baseline-cache.sh,check_qa_ledger.py,discover-plan.sh,discover_common.sh}`, `agents/test-scope-validator.md`,
   `tests/fixtures/test-scope/`, `--plan` 인자 문단
 
@@ -632,6 +654,19 @@ P21 의 코드 앵커 `comment-upsert.py` 는 ③에서 `publish-comment.sh` 로
 R<n>」으로 부르며, §6·Trade-offs 의 「(R1)」은 재결정 R1 이다. §3 의 「R-init」과 「R3 공백 게이트」는 현행
 `references/differential-test.md` 의 단계 이름(실행 초기화 · 계획 누락 시 묻는 질문)이다.
 - D1.1 · r1 · adopt · ce6c4dcc#r1.1 · "고친다(채택) — R5 로 기록" — K4 「부품 단위 제자리 교체」와 기각 대안 「v10 파이프라인을 옆에 두고 스위치」가 확정 D18 「v10 을 옆에 세워 … 갈아끼우며」를 뒤집었는데, 재결정(R1~R4)으로 기록되지 않았다.
+- D2.2 · r2 · adopt · 04d6078f#r2.1 · "유지(채택) — §7 삭제 순서" — finding 없이 바뀜: §7 컷오버 (modified)
+- D2.3 · r2 · adopt · 0f938623#r2.1 · "유지(채택) — §4 HEAD 무효" — finding 없이 바뀜: §4 e2e (modified)
+- D2.4 · r2 · adopt · 17cd90d6#r2.1 · "고친다(채택) — untracked 내용 포함" — e2e 지문은 기존 untracked 파일의 내용 변경을 감지하지 못한다.
+- D2.5 · r2 · adopt · 53459216#r2.1 · "고친다(채택) — C1 대로 리뷰 먼저 (권장)" — G1 과 §1 흐름이 확정 C1 의 순서(리뷰 → 테스트)를 뒤집어 「차등 테스트 → 리뷰」로 적으면서 C1 을 인용한다. 재결정 기록은 없고, 9.x 에서 그 순서를 지탱하던 근거는 v10 설계에서 사라졌다.
+- D2.6 · r2 · adopt · 81170b99#r2.1 · "유지(채택) — §2 gh·Retry 보강" — finding 없이 바뀜: §2 리뷰와 다이어트 (modified)
+- D2.7 · r2 · adopt · 83851d33#r2.1 · "유지(채택) — §6 인자·스위치 표" — finding 없이 바뀜: §6 진입·상태·그 밖의 부품 (modified)
+- D2.8 · r2 · adopt · 93a5c0ad#r2.1 · "유지(채택) — AC 보강" — finding 없이 바뀜: Acceptance Criteria (modified)
+- D2.9 · r2 · adopt · a76ed781#r2.1 · "유지(채택) — 한계 롤백 줄" — finding 없이 바뀜: 알려진 한계 (modified)
+- D2.10 · r2 · adopt · baec43c9#r2.1 · "고친다(채택) — 표에 네 칸 추가 (권장)" — 확정 D18 은 구성요소마다 한 줄 표(가정 · 1st-party 대체 · 교훈 · 처분)를 요구한다. 그런데 문서가 그 표라고 지목한 §3·§6 표에는 「가정」과 「1st-party 대체」 칸이 없어서, G3 의 「가정을 다시 재어」를 부품별로 확인할 수 없다.
+- D2.11 · r2 · adopt · e3ff3375#r2.1 · "유지(채택) — Handoff R5 반영" — finding 없이 바뀜: Handoff Context (modified)
+- D2.12 · r2 · adopt · f4c85b5f#r2.1 · "유지(채택) — §1 iteration 회계" — finding 없이 바뀜: §1 흐름 (modified)
+- D2.13 · r2 · adopt · f7835e5c#r2.1 · "유지(채택) — §8 P4 대체" — finding 없이 바뀜: §8 헌장 세 줄 (modified)
+- D2.14 · r2 · adopt · ff39eda9#r2.1 · "유지(채택) — §5 gh 쓰기 한정" — finding 없이 바뀜: §5 게시 (modified)
 
 ## Metadata
 
