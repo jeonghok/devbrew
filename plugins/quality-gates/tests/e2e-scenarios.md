@@ -93,14 +93,10 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 **Run**: edit a file on `feature/qg-cost-reduction`, then `git checkout main`, then `/qg`.
 **Expected**: scope is git-derived fresh at invocation time (branch diff against base, unioned with the worktree's own changed files), not cached from a prior turn or session file — `/qg` on `main` reviews `main`'s own diff against its base, not the leftover `feature/qg-cost-reduction` diff. No explicit reset step is needed; there is no session-scope file to go stale.
 
-### K — `/qg --reset` kill switch
-**Setup**: any active or stale state files in `.claude/`.
-**Run**: `/qg --reset`
-**Expected**: `quality-gates.local.md`, `quality-gates-session.local.md`, `quality-gates-branch.local.md`, plus `qg-diff-cache.txt` and `qg-code-paths.tmp` all removed. Message "Quality-gates state cleared."
 
 ### L — `DEVBREW_QUALITY_GATES_DISABLE=1`
 **Run**: set env var, then start a new Claude Code session AND attempt `/qg`.
-**Expected**: SessionStart advisor is silent. `/qg` should also detect the env var (this happens via the setup script and skill check; not yet covered by a test, but the existing kill-switch tests for individual hooks confirm the propagation).
+**Expected**: `/qg` returns at SKILL Preflight P1 without calling `setup-qg.sh` (which also refuses on its own — `tests/test_entry_safety_e1_e6.sh`).
 
 ## Static Wiring Checks (automated)
 

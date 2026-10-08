@@ -7,16 +7,16 @@
 > v1.32.1 (review-driven): review-iteration phantom 필드 제거(I11).
 
 The state file `.claude/quality-gates/<session-id>/pipeline.md` (per-session)
-is created by the setup script (`scripts/setup-qg.sh`) on `/qg` invocation
-and deleted by `/cancel-qg`, `/qg --reset`, or the TTL GC
-(`scripts/qg-gc.py`, default 24h).
+is created by the setup script (`scripts/setup-qg.sh`) on `/qg` invocation —
+the script removes this session's folder first, so every run starts fresh —
+and deleted by the TTL GC (`scripts/qg-gc.py`, default 24h).
 
 `<session-id>` resolves from `$CLAUDE_CODE_SESSION_ID`; siblings under
 `.claude/quality-gates/` belong to other concurrent Claude Code sessions
 and must not be touched.
 
-**SKILL.md must NOT write this file.** SKILL.md MAY read `worktree_path`
-during preflight to confirm working directory; nothing else.
+**SKILL.md must NOT write this file's frontmatter.** It may append to `## History`
+(Lifecycle 2).
 
 ## Schema
 
@@ -24,8 +24,6 @@ during preflight to confirm working directory; nothing else.
 ---
 session_id: "<session_id>"           # CLAUDE_CODE_SESSION_ID
 started_at: "<ISO-8601 UTC>"         # setup-qg.sh timestamp
-worktree_path: "<absolute path>"     # OPTIONAL — set only when /qg branch <name> used
-target_branch: "<branch name>"       # OPTIONAL — paired with worktree_path
 ---
 
 # Quality Gates Pipeline State (v1.32.1)
@@ -63,6 +61,7 @@ The following v1.x fields are **no longer written or read**:
 | `pr_url` | Passed as SKILL invocation arg. |
 | `available_plugins` | SKILL re-derives inline (cheap). |
 | `project_dir` | Derived from `pwd` at SKILL preflight (single-turn invariant). |
+| `worktree_path` · `target_branch` | `/qg branch <name>` worktree mode removed (v10). |
 
 The companion file in the same folder (`runtime-evidence.md`)
 follows the same per-session lifecycle. Review scope itself is no longer
@@ -75,5 +74,5 @@ tracked in a companion file — it is git-derived each turn (see
    per-session folder.
 2. **Updated by**: SKILL.md may *append* to the `## History` section for
    observability. Frontmatter is write-once at setup.
-3. **Deleted by**: `/cancel-qg`, `/qg --reset`, `hooks/session-end-cleanup.py`
-   on graceful session end, or `scripts/qg-gc.py` (TTL GC).
+3. **Deleted by**: the next `scripts/setup-qg.sh` run in the same session (it
+   removes the folder before recreating it), or `scripts/qg-gc.py` (TTL GC).

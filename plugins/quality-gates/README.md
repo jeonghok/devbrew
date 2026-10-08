@@ -92,7 +92,7 @@ quality-gates/
 │   ├── artifact-adversarial.md  # `/qg critique` 게이트 — tier-unpinned 판정자; critic/codex 발견을 confirm/downgrade/reject 하고 놓친 것을 추가 (read-only)
 │   └── pr-understanding-builder.md  # publish 생성기 — model 키 없음(tier-unpinned), tools: Read 1개 (inert·미호출; fail-closed; 쓰기·실행·네트워크·위임 0; 유일 입력 = inlined blob)
 ├── commands/
-│   ├── qg.md               # /qg slash command (--reset, --paths, branch flag 포함)
+│   ├── qg.md               # /qg slash command (branch · --paths · critique 라우팅)
 │   ├── qg-publish.md       # /qg-publish slash command ([--dry-run]; publish skill로 얇은 dispatch)
 │   └── cancel-qg.md        # /cancel-qg command
 ├── hooks/
@@ -379,18 +379,14 @@ R1b, 매 iteration 디스패치) = 10; `synthesize_findings.py` 는 스크립트
 ```
 /qg                            # 파이프라인 실행; 세션 단위 diff(선언이 있으면 토픽)
 /qg branch                     # 파이프라인 실행; main 대비 풀 브랜치 diff
-/qg branch <name>              # 격리된 worktree 에서 <name> 브랜치 검사
 /qg --paths <glob>...          # 명시 path scope
-/qg --reset                    # 현재 세션 폴더 + legacy 파일 정리 후 종료
-/qg --gc                       # stale sibling 세션 (TTL) sweep 후 종료
 /qg both|review|runtime|--skip-runtime   # 제거됨 — 한 줄 공지 후 그대로 진행 (한 파이프라인이라 게이트 범위가 없다)
 /qg --plan <path>              # 특정 plan 파일 사용
-/qg --pr-url <url>             # PR URL 명시
 /qg critique <path>            # 비-코드 산출물 비평-수정 루프(별도 skill; 코드 아님)
-/cancel-qg                     # 현재 세션 활성 파이프라인 취소
-/cancel-qg --gc                # stale 세션 TTL sweep
-/cancel-qg --all               # 전 세션 wipe (확인 + 활성 sibling 리스트 먼저)
 ```
+
+`branch <name>` · `--reset` · `--gc` · `--pr-url` 와 `/cancel-qg` 는 v10.0.0 에서 없어졌다 — 앞의 넷은 안내 한 줄을
+내고 실행하지 않는다. 세션 폴더는 `/qg` 시작마다 지우고 다시 만들고, 오래된 폴더는 같은 시점의 TTL GC 가 회수한다.
 
 ## Recipes
 
@@ -557,7 +553,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 state는 Claude Code 세션마다 `.claude/quality-gates/<session-id>/`에 추적됩니다:
 
-- `pipeline.md` — 파이프라인 frontmatter (session_id · started_at · 선택적 worktree_path) + body (History).
+- `pipeline.md` — 파이프라인 frontmatter (session_id · started_at) + body (History).
 
 Review scope 자체는 세션 state 로 추적되지 않는다 — `/qg` 매 턴 git 에서 직접
 도출된다(branch diff against base, worktree 자체 변경분과 union).
