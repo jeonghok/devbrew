@@ -136,6 +136,11 @@ for reserved in worktrees baseline-cache; do
   refusal_check "예약 이름 $reserved (--ensure)" "$WR" "$reserved" --ensure
   [ ! -e "$WR/.claude/quality-gates/$reserved/pipeline.md" ] \
     && ok "E1: 예약 이름 $reserved 아래에 pipeline.md 를 심지 않는다" || no "E1: 예약 폴더에 pipeline.md 가 생겼다"
+  # 마커 가드가 못 막는 모양 — 이미 마커가 심긴 예약 폴더(이름 검사만이 막는다).
+  WR2="$TMP/e1res2-$reserved"
+  mkdir -p "$WR2/.claude/quality-gates/$reserved/keepdir"
+  : > "$WR2/.claude/quality-gates/$reserved/pipeline.md"
+  refusal_check "예약 이름 $reserved (마커가 이미 있어도)" "$WR2" "$reserved"
 done
 WM="$TMP/e1nomarker"
 mkdir -p "$WM/.claude/quality-gates/unrelatedfolder1"
