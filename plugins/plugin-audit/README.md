@@ -42,6 +42,7 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 | `DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX` | `DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX` |
 | `DEVBREW_DISABLE_PLUGIN_AUDIT_WEB` | `DEVBREW_PLUGIN_AUDIT_DISABLE_WEB` |
 | `DEVBREW_STALENESS_REGISTRY` (플러그인 토큰 없던 이름) | `DEVBREW_PLUGIN_AUDIT_STALENESS_REGISTRY` |
+| `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` (0.11.0 에 더함) | `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX` |
 
 옛 이름은 **fallback 없이 즉시 제거**됐다 — 이 플러그인은 `CHANGELOG.md`가 없다(`plugin.json`
 버전이 0.6.0으로 CLAUDE.md §메타데이터의 "v1.0.0 이상이면 CHANGELOG.md" 문턱 아래라 별도
@@ -49,6 +50,10 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 것 하나이며, CLAUDE.md §메타데이터의 one-minor deprecation window 원칙과의 충돌을 그 조건
 아래 수용한 것이다. **제3자 설치가 생기면 이 근거가 바뀐다** — 그때는 다음 rename에
 fallback 창을 둔다.
+
+표의 마지막 줄은 0.11.0 에서 더했다 — 샌드박스 도우미가 quality-gates 10.0.0 에서 이 플러그인
+(`scripts/audit-sandbox.sh`)으로 옮겨 오며 이름이 바뀌었다. 옛 이름은 더 읽지 않는다(fallback 없음,
+위와 같은 근거). 이 rename 은 `CHANGELOG.md` `[0.11.0]` 에도 적었다.
 
 **severity 어휘 통일 (0.6.0, devbrew-weight-reduction Task 28).** 감사 리포트 발견 항목의
 `[severity]` 배지가 옛 4-vocab(`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`)에서 quality-gates와 동일한

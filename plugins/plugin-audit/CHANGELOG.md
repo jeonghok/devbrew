@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.11.0] — 2026-10-09
+
+minor 인 이유 — `scripts/run-own-tests.sh` 의 옵션 이름과 kill switch 이름이 바뀌었다.
+
+### Added
+
+- `scripts/audit-sandbox.sh` — 자체 테스트 격리용 일회용 샌드박스(`create-sandbox` · `mutation-guard` · `remove`). quality-gates 10.0.0 이 `qg-worktree.sh` 에서 지운 `create-sandbox` · `mutation-guard` 를 옮겨 왔고, `remove` 는 plugin-audit 의 경로 · 이름에 맞춰 다시 썼다(qg 의 `remove` 는 차등 테스트용으로 남는다 — 두 사본 머리에 서로를 가리키는 줄이 있다). 상태는 `.claude/plugin-audit/worktrees/` 에 산다. 테스트 둘(`tests/test_audit_sandbox_create.sh` · `tests/test_audit_sandbox_mutation_guard.sh`)도 quality-gates 에서 옮겼다.
+
+### Changed
+
+- `scripts/run-own-tests.sh` — 샌드박스 도우미를 스크립트 옆에서 찾는다(cwd 기준 `plugins/quality-gates/...` 경로를 버렸다). 스텁 옵션 `--qg-worktree` → `--sandbox-helper`. 도우미가 없을 때의 skip 사유가 「quality-gates 미설치」에서 「audit-sandbox.sh 부재」로 바뀌었다.
+- kill switch `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` → `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX`. 옛 이름은 더 읽지 않는다(fallback 없음) — README 「환경변수 어순 rename」 표에 적었다.
+- `scripts/audit-workflow.js` 계약 문구의 형제 구현 예시를 지워진 qg 훅에서 `plugins/spec-distill/hooks/*.py` 로.
+- `scripts/prepare-run-dir.py` docstring · SKILL 이 `qg-worktree.sh` 대신 `audit-sandbox.sh` 를 가리킨다.
+
+### Removed
+
+- quality-gates 선택 의존(≥ 2.12.0) — 더는 필요 없다. README Prerequisites 에서 그 항목을 지웠다.
+
 ## [0.10.0] — 2026-09-28
 
 minor 인 이유 — 산출 경로와 `render-audit-report.py` 의 CLI 가 바뀌었다.
