@@ -118,11 +118,6 @@ for a in ['scout','adversarial','synthesizer','plan-verifier','runtime-verifier'
 print()
 print('SKILL cost_class:', yaml.safe_load(open('plugins/quality-gates/skills/quality-pipeline/SKILL.md').read().split('---')[1])['cost_class'])
 print('plugin.json version:', json.load(open('plugins/quality-gates/.claude-plugin/plugin.json'))['version'])
-print('Hooks registered:')
-for ev, lst in json.load(open('plugins/quality-gates/hooks/hooks.json'))['hooks'].items():
-    for entry in lst:
-        for hook in entry['hooks']:
-            print(f'  {ev}: {hook[\"command\"].split(chr(47))[-1]}')
 "
 
 python3 -m unittest discover plugins/quality-gates/tests -v 2>&1 | tail -3
@@ -139,10 +134,6 @@ Agents (model + cost_class):
 
 SKILL cost_class: variable
 plugin.json version: 2.2.x
-Hooks registered:
-  SessionStart: session-start-advisor.py
-  (v1.32.0 removes the Stop hook — pipeline progression is now in-turn
-  AskUserQuestion-driven, not turn-by-turn signal-driven.)
 
 Ran 23 tests in 0.NNNs
 OK
@@ -170,13 +161,6 @@ touch -t "$(date -r $old +%Y%m%d%H%M)" .claude/quality-gates/oldsess0001
 1. Run `/qg` (any flavor). Verify `.claude/quality-gates/oldsess0001/` no longer exists.
 2. Set `DEVBREW_QUALITY_GATES_GC_VERBOSE=1` and observe stdout: `[quality-gates] GC: removed 1 stale session folder(s)`.
 
-### V3 — Graceful SessionEnd cleanup
-
-1. Start `/qg` in a session.
-2. Close Claude Code gracefully (not `kill -9`).
-3. Verify `.claude/quality-gates/$SID/` is gone.
-
-**Pass**: own folder removed; sibling folders untouched.
 
 
 ### V5 — GC lock contention silent
@@ -197,8 +181,7 @@ fcntl.flock(fd, fcntl.LOCK_EX); print("holding"); time.sleep(600)'
 DEVBREW_QUALITY_GATES_DISABLE=1 /qg
 ```
 1. Verify no `.claude/quality-gates/` folder created.
-2. Verify SessionEnd hook noop.
-3. Verify `qg-gc.py` exits 0 without action.
+2. Verify `qg-gc.py` exits 0 without action.
 
 ### T-1 — 토픽 스코프: 형제 브랜치 둘 + 미커밋 변경
 

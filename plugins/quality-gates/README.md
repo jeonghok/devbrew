@@ -16,7 +16,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
 - **P12 anti-corollary (former AP5, trivia ceremony) 회피** — `check-trivia.sh`가 단일 파일·≤3줄 whitespace/rename을 파이프라인 전체 skip. *현재 coverage는 whitespace + rename에 국한. P12 canonical 자격(typo/comment-only/formatting — 파일 수 무관)을 완전히 충족하기 위한 확장은 deferred 항목 — Tier 2 spec은 아카이브됨: `git show pre-slim-archive-2026-07-09:docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md`.*
 - **P22 anti-corollary (former AP9, over-dispatching / subagent spray) 회피** — 파이프라인은 fan-out consent 게이트를 fire하지 않고(documented-not-implemented였음), transparency 라인 + 선언된 max fan-out(Phase 1 병렬 ≤ 8, 총/iteration ≤ 10) + authoring-time hard-review로 subagent spray를 억제.
 - **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — 파이프라인 내부 fix-loop이 `max_review_iterations=5` + repeat-detection (no-progress check) + kill switch로 묶임.
-- **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (`*.local.md` gitignore 패턴으로 자동 제외; TTL sweep + SessionEnd hook으로 폴더 GC).
+- **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (`*.local.md` gitignore 패턴으로 자동 제외; `/qg` 시작마다 자기 폴더를 다시 만들고 TTL sweep 으로 폴더 GC).
 - **P8 determinism-economy (harness lightness — trust the model)** (v2.5.0) — 암묵 session scope로 파이프라인이 돌 때 그 사실을 사용자-가시 한 줄로 밝히는 **scope 투명성**. 버려진 결정론적 under-coverage 경고를 결정론 가드가 아니라 *모델 행동*으로 대체(git 비교·차단 없음). 자연어 scope 의도는 별도 parser 없이 모델이 branch scope로 해석 — `/qg branch`는 결정론적 escape hatch로 유지. devbrew P8 determinism-economy refinement("Zero hooks" 일반화) instantiation.
 - **P8 determinism-economy — self-honest verdict floor** (v2.6.0; routing 제거·단순화 v2.7.0) — 파이프라인이 *검토받았다고 믿는 scope*와 *resolve한 scope*가 발산할 때(빈 세션 → resolved scope 0 → "clean"의 false-clean)를 봉쇄. read-only `scripts/check-review-scope.sh`가 `changes_exist`를 결정론으로 emit하고, SKILL이 iter-1에서 1회 호출·캐시해 **정직-verdict floor**(load-bearing, kill 불가)가 `resolved scope 0 AND changes_exist == yes`이면 판정이 `not-certified (scope-empty)` 가 된다. **무엇을 리뷰할지(routing)는 모델이 소유** — v2.7.0에서 v2.6.0의 redirect 게이트·`$effective_diff_scope` 배선·redirect kill switch를 제거하고 `/qg branch` escape hatch + honesty norm 한 줄로 대체(dogfood 5버그가 전부 routing 재구성에서 나왔고 floor의 load-bearing 입력 `changes_exist`는 틀린 적 없음). 결정론은 무결성 floor 한 점에만; routing/자연어는 모델 신뢰. session 기본값·`/qg branch` 자체의 스코프 **선택**(routing)은 무변경이지만, 이 floor 가 보는 것과 **별개로** ② 차등 테스트가 상시 도는 v9.0.0 이후는 R1b 가 고르는 test unit 이 0개인 실행도 `expected-empty` → `not-certified (scope-empty)` 다(관측 없음은 음성 결과가 아니다 — §6.4.3 P23 재결정, 2026-09-26) — **진짜 무변경(genuine no-op)과 docs/config-only 변경을 포함한다.** regression: `tests/test_check_review_scope.sh`, `tests/test_qg_false_clean_floor.sh`.
 - **P21 (Secret이 prompt context에 들어가지 않음)** — 결정 도구는 결정과 포인터만 묻고 secret 값은 받지 않는다(SKILL Rules R4). regression test: `tests/test_no_secret_prompts.py`.
@@ -25,7 +25,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
 - **Law 2 strengthening — model-family separation.** Optional `codex-reviewer` agent (when Codex CLI is detected) runs review in a separate process with a different model family (OpenAI vs Anthropic) and an OS-level read-only sandbox, giving 3-layer reviewer-writer isolation: `disallowedTools` + narrow `Bash` allowlist + `codex -s read-only`.
 - **Law 2 (codex 격리, v1.11.0/v1.12.0 → v2.11.0 정정)** — codex 리뷰의 격리는 **`codex exec -s read-only` OS-level 샌드박스 + 별도 프로세스/모델 패밀리**가 전부다. v1.11.0~v2.10.x의 이 항목은 그 위에 *"frontmatter 키 whitelist"* layer를 얹었다고 기록했으나 **그 layer는 존재한 적이 없다**: (1) 당시 명명된 키는 공식 subagent 규격에 없는 필드라 런타임이 조용히 무시했고, (2) T3-3에서 `codex-reviewer`가 agent → 스크립트(`scripts/run_codex_reviewer.sh`)로 이관돼 frontmatter 자체가 사라졌다 (`tests/test_codex_reviewer_frontmatter.sh`가 agent 파일 **부재**를 assert). 지금 격리를 지탱하는 것은 OS 샌드박스다.
 - **Law 2 (Writer ≠ Reviewer, frontmatter scoping)** (v1.13.0) — `security-reviewer` agent가 `tools: Read, Grep, Glob` fail-closed allowlist 선언. 보안 각도 구성원이며, kill switch `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`로 사용자가 disable 가능 (Plugin Shape — 모든 reviewer는 opt-out 가능). 디스패치는 `quality-pipeline` SKILL의 보안 각도 지점에 있다.
-- **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `hooks/session-start-advisor.py` frontmatter scanner (AC14): SessionStart마다 모든 agent 파일의 frontmatter key를 kebab-case drift 검사. `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — CI에서 C1 종류 (kebab-case 잘못된 키) drift를 자동 차단. 이 두 mechanism이 함께 "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation.
+- **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — C1 종류 (kebab-case 잘못된 키) frontmatter drift를 자동 차단. "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation. (SessionStart frontmatter scanner 훅은 v10.0.0 에서 지웠다 — drift 차단은 이 테스트가 진다.)
 - **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / hook / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
 - **Law 3 (Compounding) — worktree path 컨벤션** (v1.15.0) — `.claude/<plugin>/worktrees/<name>-<sid-short>/` 경로 패턴을 플러그인 공통 컨벤션으로 확립해, 차후 다른 플러그인이 임시 worktree를 만들 때 같은 컨벤션을 재사용할 수 있게 함.
 - **Law 1 (Clarity Before Code) — single-turn dispatch contract** (v1.32.0) — pipeline progression이 `quality-pipeline` SKILL의 단일 assistant turn 내 serial dispatch로 일원화. cross-turn state machine (transition compute helpers, no-signal counter, 시간 기반 guard) 전부 삭제 — 진행 결정은 SKILL의 명시적 boundary + AskUserQuestion으로만 발생. State file은 GC mtime anchor + worktree tracking + 파이프라인 iter counter reporting만 보존.
@@ -93,10 +93,6 @@ quality-gates/
 ├── commands/
 │   ├── qg.md               # /qg slash command (branch · --paths · critique 라우팅)
 │   └── qg-publish.md       # /qg-publish slash command ([--dry-run]; publish skill로 얇은 dispatch)
-├── hooks/
-│   ├── hooks.json                            # Hook 설정
-│   ├── session-start-advisor.py              # in-flight 파이프라인 read-only advisor
-│   └── session-end-cleanup.py                # 정상 종료 시 현재 세션 폴더 제거
 ├── scripts/
 │   ├── setup-qg.sh                           # 파이프라인 초기화
 │   ├── check-trivia.sh                       # Trivia escape 감지기
@@ -143,13 +139,9 @@ quality-gates/
 
 ## 설치된 Hook
 
-| Hook | 이벤트 | 변경? | 왜 hook인가 (skill이 아닌)? |
-|---|---|---|---|
-| `session-start-advisor.py` | SessionStart | **아니오 — read-only advisor** | mutation 없이 in-flight 파이프라인 알림 (CLAUDE.md hook coexistence 룰). |
-| `session-end-cleanup.py` | SessionEnd | 예 (자기 세션 폴더 제거) | 정상 종료 시 per-session 정리; crash 시 TTL sweep으로 fallback. |
-
-모든 hook은 `DEVBREW_QUALITY_GATES_DISABLE=1` (전역) 와 hook 단위 override
-`DEVBREW_SKIP_HOOKS=quality-gates:<hook-name>`을 따릅니다.
+없음. v10.0.0 에서 두 훅(SessionStart advisor · SessionEnd cleanup)을 지웠다 — 파이프라인은 한 턴 안에서
+끝나고, 세션 폴더는 `/qg` 시작마다 `setup-qg.sh` 가 지우고 다시 만들며, 오래된 폴더는 같은 시점의 TTL GC 가
+회수한다.
 
 ## Cost Class
 
@@ -438,12 +430,8 @@ log를 출력하고 plan-기반 분류로 fallback합니다.
 
 ## 사전 요건
 
-- **Python 3.12+** — 이 플러그인의 훅이 요구하는 바닥입니다. 숫자는 도출된 값입니다 —
-  「2026-10 이후에도 패치를 받는 버전 중 최빈」, 다음 재검토는 3.12 EOL(2028-10).
-  바닥 미만이면 훅은 **막지 않고** 건너뜁니다. 그 사실을 알리는 세션 시작 안내는 이 플러그인의
-  `SessionStart` 훅 자리 하나에서만 나갑니다 — devbrew 전체에서 그 자리는 여기뿐이라,
-  이 플러그인 없이 다른 devbrew 플러그인만 설치하면 안내 없이 조용히 건너뜁니다.
-  `$DEVBREW_PYTHON`으로 인터프리터를 직접 지정할 수 있습니다.
+- **Python 3** — 스킬이 부르는 `scripts/*.py` 는 사용자의 `python3` 로 돈다. 이 플러그인에는 훅이 없어
+  devbrew 의 출하 Python 바닥(루트 README 「Python」)을 집행하는 해석기를 거치지 않는다.
 
 | 플러그인 | 필수 | 사용처 | 목적 |
 |---------|------|-------|------|
@@ -478,11 +466,11 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 밖(부채)** — 스위치도 훅 끄기도 qg 가 부르는 git 전체를 덮지 않는다: HEAD 축 · 기준선
 트리를 만드는 `git worktree add`(`qg-worktree.sh`)는 저장소의 `post-checkout` 훅을 돌릴 수 있다.
 
-**전역 (모든 hook + 모든 reviewer 비활성화):**
+**전역 (모든 reviewer + GC 비활성화):**
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_QUALITY_GATES_DISABLE=1` | 모든 quality-gates hook + `qg-gc.py` no-op. `/qg`는 invocable 하지만 SKILL Preflight P1 이 즉시 리턴한다 — `setup-qg.sh` 도 agent 도 부르지 않는다(판정 자체가 나지 않는다 — `not-certified` 도 아니다). |
+| `DEVBREW_QUALITY_GATES_DISABLE=1` | `qg-gc.py` no-op. `/qg`는 invocable 하지만 SKILL Preflight P1 이 즉시 리턴한다 — `setup-qg.sh` 도 agent 도 부르지 않는다(판정 자체가 나지 않는다 — `not-certified` 도 아니다). |
 
 **각도 · 리뷰어 단위 disable:**
 
@@ -507,20 +495,14 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 |---|---|
 | `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` | **두 최내부 sink에서 결정론 강제**(skill 진입 자체는 막지 않음): `comment-upsert.py`(코멘트 POST/PATCH)와 `pr-create.sh`(`git push` + `gh pr create`). 로컬 artifact 생성 + `--dry-run` preview는 그대로 동작하되 GitHub에 대한 실제 네트워크 쓰기만 fail-closed로 차단된다. |
 
-**Hook 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:<key>,quality-gates:<key2>...`):
+**GC 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:qg-gc`):
 
-| Hook 키 | 위치 | 기능 |
+| 키 | 위치 | 기능 |
 |---|---|---|
-| `quality-gates:session-start-advisor` | `hooks/session-start-advisor.py` | SessionStart — stale state 안내 (read-only) |
-| `quality-gates:session-start-advisor:frontmatter-scan` | 위 hook의 sub-feature | Plugin 전체 agent frontmatter drift 스캔만 disable |
-| `quality-gates:session-end-cleanup` | `hooks/session-end-cleanup.py` | SessionEnd — 현재 세션 폴더 cleanup |
-| `quality-gates:qg-gc` | `scripts/qg-gc.py` | TTL-GC 스크립트. 훅이 아니지만 지목할 이름을 갖는다 — 그전에는 전역 스위치 하나뿐이라 "이 GC만 끈다"가 불가능했다. `.claude` 를 의도적으로 링크로 쓰면 GC 는 `/qg` 마다 거부 줄을 내고 돌지 않는다 — 이 키로 끈다 |
+| `quality-gates:qg-gc` | `scripts/qg-gc.py` | TTL-GC 스크립트. 훅이 아니지만 지목할 이름을 갖는다 — 전역 스위치 없이 "이 GC만 끈다"를 위한 자리다. `.claude` 를 의도적으로 링크로 쓰면 GC 는 `/qg` 마다 거부 줄을 내고 돌지 않는다 — 이 키로 끈다 |
 
-훅 키에 더해 **이벤트명 별칭**도 받는다 — `quality-gates:SessionStart` · `quality-gates:SessionEnd`. spec-distill 훅이 쓰던 형태를
-전 플러그인으로 통일한 것이다(한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것이
-결함이고, kill switch 는 보안 컨트롤이라 그 결함의 방향이 fail-open 이다). 대조는 **전체 토큰**이라
-`quality-gates:session-start-advisor:frontmatter-scan` 같은 더 긴 키가 `quality-gates:session-start-advisor`
-를 접두 오매칭으로 함께 끄지 않는다.
+대조는 **전체 토큰**이다(앞뒤 공백은 떼고, 쉼표로 여럿을 준다) — `quality-gates:qg` 같은 부분 일치나
+`quality-gates:qg-gc:x` 같은 더 긴 토큰은 끄지 않는다(`tests/test_entry_safety_e1_e6.sh` E5).
 
 (`MAX_TOTAL_ITERATIONS`와 cross-gate restart 루프는 v1.5.0에서 제거됨.)
 
