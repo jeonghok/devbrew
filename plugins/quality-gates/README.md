@@ -28,7 +28,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
 - **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — C1 종류 (kebab-case 잘못된 키) frontmatter drift를 자동 차단. "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation. (SessionStart frontmatter scanner 훅은 v10.0.0 에서 지웠다 — drift 차단은 이 테스트가 진다.)
 - **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
 - **Law 3 (Compounding) — worktree path 컨벤션** (v1.15.0) — `.claude/<plugin>/worktrees/<name>-<sid-short>/` 경로 패턴을 플러그인 공통 컨벤션으로 확립해, 차후 다른 플러그인이 임시 worktree를 만들 때 같은 컨벤션을 재사용할 수 있게 함.
-- **Law 1 (Clarity Before Code) — single-turn dispatch contract** (v1.32.0) — pipeline progression이 `quality-pipeline` SKILL의 단일 assistant turn 내 serial dispatch로 일원화. cross-turn state machine (transition compute helpers, no-signal counter, 시간 기반 guard) 전부 삭제 — 진행 결정은 SKILL의 명시적 boundary + AskUserQuestion으로만 발생. State file은 GC mtime anchor + worktree tracking + 파이프라인 iter counter reporting만 보존.
+- **Law 1 (Clarity Before Code) — single-turn dispatch contract** (v1.32.0) — pipeline progression이 `quality-pipeline` SKILL의 단일 assistant turn 내 serial dispatch로 일원화. cross-turn state machine (transition compute helpers, no-signal counter, 시간 기반 guard) 전부 삭제 — 진행 결정은 SKILL의 명시적 boundary + AskUserQuestion으로만 발생. State file(`pipeline.md`)은 세션 폴더 마커 · GC mtime anchor 로서 session_id · started_at · History 만 담는다.
 - **P22 generalization (consent gate → progression gate):** AskUserQuestion
   is reused as a **progression primitive** at every fix-loop iteration
   boundary. It gates fix-loop consent (it does NOT gate subagent fan-out —
@@ -470,7 +470,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_QUALITY_GATES_DISABLE=1` | `qg-gc.py` no-op. `/qg`는 invocable 하지만 SKILL Preflight P1 이 즉시 리턴한다 — `setup-qg.sh` 도 agent 도 부르지 않는다(판정 자체가 나지 않는다 — `not-certified` 도 아니다). |
+| `DEVBREW_QUALITY_GATES_DISABLE=1` | `qg-gc.py` no-op. `/qg` 커맨드의 setup 펜스는 그대로 `setup-qg.sh` 를 부르고, setup 이 거부 줄 하나를 내고 exit 1 로 끝나 `/qg` 가 거기서 멈춘다 — 세션 폴더도 쓰지 않고 파이프라인 skill 도 agent 도 부르지 않는다(판정 자체가 나지 않는다 — `not-certified` 도 아니다). skill 이 직접 불려도 SKILL Preflight P1 이 즉시 리턴한다. `/qg critique` 는 setup 이 건드리지 않고 `critiquing-artifacts` 의 E0 가 같은 스위치를 본다. |
 
 **각도 · 리뷰어 단위 disable:**
 
@@ -499,7 +499,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | 키 | 위치 | 기능 |
 |---|---|---|
-| `quality-gates:qg-gc` | `scripts/qg-gc.py` | TTL-GC 스크립트. 훅이 아니지만 지목할 이름을 갖는다 — 전역 스위치 없이 "이 GC만 끈다"를 위한 자리다. `.claude` 를 의도적으로 링크로 쓰면 GC 는 `/qg` 마다 거부 줄을 내고 돌지 않는다 — 이 키로 끈다 |
+| `quality-gates:qg-gc` | `scripts/qg-gc.py` | TTL-GC 스크립트. 훅이 아니지만 지목할 이름을 갖는다 — 전역 스위치 없이 "이 GC만 끈다"를 위한 자리다. `.claude` 나 state root 가 링크인 경우의 해법이 아니다 — 그때는 setup 이 `/qg` 를 거부하므로 실제 디렉토리로 바꾼다(「파이프라인 state」 절) |
 
 대조는 **전체 토큰**이다(앞뒤 공백은 떼고, 쉼표로 여럿을 준다) — `quality-gates:qg` 같은 부분 일치나
 `quality-gates:qg-gc:x` 같은 더 긴 토큰은 끄지 않는다(`tests/test_entry_safety_e1_e6.sh` E5).
@@ -517,7 +517,13 @@ Review scope 자체는 세션 state 로 추적되지 않는다 — `/qg` 매 턴
 
 stale sibling 폴더(mtime이 `DEVBREW_QUALITY_GATES_TTL_HOURS`(기본 24h)보다 오래된)는
 `/qg` 실행 시 garbage-collect됩니다. 자기 세션 폴더는 `/qg` 시작마다 `setup-qg.sh` 가 지우고
-다시 만든다(SID 패턴을 통과한 값으로만 지운다 — E1).
+다시 만든다(SID 패턴을 통과한 값으로만 지운다 — E1). 같은 세션에서 `/qg-publish` 가 그 폴더에 쓴
+파일(`pr-understanding.md` 등)도 함께 지워진다. `CLAUDE_CODE_SESSION_ID` 가 있으면 그와 다른
+`--session-id` 는 거부한다 — 다른 세션의 폴더를 지우지 않는다.
+
+**`.claude` 나 `.claude/quality-gates` 가 심볼릭 링크면 `/qg` 는 돌지 않는다** — 링크가 리포 안을
+가리켜도 setup 이 거부 줄 하나를 내고 exit 1 로 멈춘다(링크 너머를 지울 수 있어서다). 해법은 그 자리를
+실제 디렉토리로 바꾸는 것이다. 아래 GC 키(`quality-gates:qg-gc`)로 GC 를 꺼도 이 거부는 그대로다.
 
 모든 파일은 `*.local.md` gitignore 패턴에 매칭되며, 별도의 `.gitignore` 변경은
 필요 없습니다.

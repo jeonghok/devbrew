@@ -44,9 +44,9 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 | `DEVBREW_STALENESS_REGISTRY` (플러그인 토큰 없던 이름) | `DEVBREW_PLUGIN_AUDIT_STALENESS_REGISTRY` |
 | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` (0.11.0 에 더함) | `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX` |
 
-옛 이름은 **fallback 없이 즉시 제거**됐다 — 이 플러그인은 `CHANGELOG.md`가 없다(`plugin.json`
-버전이 0.6.0으로 CLAUDE.md §메타데이터의 "v1.0.0 이상이면 CHANGELOG.md" 문턱 아래라 별도
-파일을 만들지 않았고, 대신 이 kill-switch 절에 기록한다). 근거는 현재 제3자 설치가 없다는
+옛 이름은 **fallback 없이 즉시 제거**됐다 — 이 rename 당시(0.6.0) 이 플러그인에는 `CHANGELOG.md`가
+없었다(`plugin.json` 버전이 CLAUDE.md §메타데이터의 "v1.0.0 이상이면 CHANGELOG.md" 문턱 아래라 별도
+파일을 만들지 않았고, 대신 이 kill-switch 절에 기록했다 — `CHANGELOG.md` 는 0.6.1 부터 있다). 근거는 현재 제3자 설치가 없다는
 것 하나이며, CLAUDE.md §메타데이터의 one-minor deprecation window 원칙과의 충돌을 그 조건
 아래 수용한 것이다. **제3자 설치가 생기면 이 근거가 바뀐다** — 그때는 다음 rename에
 fallback 창을 둔다.

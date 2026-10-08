@@ -19,6 +19,11 @@ minor 인 이유 — `scripts/run-own-tests.sh` 의 옵션 이름과 kill switch
 
 - quality-gates 선택 의존(≥ 2.12.0) — 더는 필요 없다. README Prerequisites 에서 그 항목을 지웠다.
 
+### Security
+
+- **cwd 상대 실행 구멍을 닫았다.** `[0.9.3]` 이 「범위 밖으로 남긴 것」으로 미룬 항목 — `scripts/run-own-tests.sh` 가 `--qg-worktree` 없이 cwd 상대 `plugins/quality-gates/scripts/qg-worktree.sh` 를 **실행**해, 감사하는 저장소의 그 경로에 있는 파일이 돌던 것 — 이 이제 없다. 샌드박스 도우미는 스크립트 옆의 `audit-sandbox.sh` 다.
+- **노출이 넓어졌다 — 감사 대상의 자체 테스트가 이제 모든 저장소에서 돈다.** 전에는 devbrew 루트 밖에서 cwd 상대 도우미가 없어 자체 테스트를 건너뛰었다. 이제 도우미를 언제나 찾으므로 감사 대상의 테스트 코드를 언제나 실행한다. 그 격리는 그대로다 — `run-own-tests.sh` 머리의 연기된 CRITICAL: 「"샌드박스"는 audit-sandbox.sh의 `git worktree add --detach HEAD` 일 뿐 프로세스/네트워크/uid 격리가 없다」 · 「그 전까지 미신뢰 대상 감사 금지.」 **신뢰하지 않는 플러그인은 감사하지 않는다** — 자체 테스트 실행을 끄려면 `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1`(위 Changed).
+
 ## [0.10.0] — 2026-09-28
 
 minor 인 이유 — 산출 경로와 `render-audit-report.py` 의 CLI 가 바뀌었다.

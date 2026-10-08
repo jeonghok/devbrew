@@ -20,9 +20,10 @@
 - setup 의 v1.5.0 평면 파일 정리와 플러그인 설치 탐지(`pr-review-toolkit` 부재 경고) 줄 — 읽는 소비자가 없었다.
 
 ### Changed
-- `scripts/setup-qg.sh` 를 최소로 다시 썼다 — kill switch · SID 가드(전체 일치) · 인자 거부만 한다. 매 실행 자기 세션 폴더를 지우고 다시 만든다. 지우는 것은 비어 있거나 세션 표지(`qg-gc.py` 의 `SESSION_MARKERS` ∪ `LEGACY_SESSION_MARKERS`, 실행 때 그 파일에서 읽는다)가 있는 폴더뿐이다. 표지 목록을 못 읽을 때 · 예약 형제 이름(`worktrees` · `baseline-cache`)이 SID 로 올 때 · `.claude` 나 state root 가 링크로 밖에 풀리거나 세션 폴더 자신이 링크일 때 · 표지 없는 비어 있지 않은 폴더일 때는 지우지 않고 한 줄로 알린 뒤 `pipeline.md` 를 쓰지 않고 exit 1 로 끝난다.
+- `scripts/setup-qg.sh` 를 최소로 다시 썼다 — kill switch · SID 가드(전체 일치) · 인자 거부만 한다. 매 실행 자기 세션 폴더를 지우고 다시 만든다. SID 가 `CLAUDE_CODE_SESSION_ID`(또는 그와 같은 `--session-id`)면 자기 세션이라 표지 없이도 지운다 — 같은 세션의 `/qg-publish` 가 쓴 `pr-understanding.md` 등도 함께 지워진다. 그 환경 변수가 있는데 `--session-id` 가 다르면 다른 세션의 폴더라 거부한다. 환경 변수가 없을 때(직접 호출 · 테스트)는 비어 있거나 세션 표지(`qg-gc.py` 의 `SESSION_MARKERS` ∪ `LEGACY_SESSION_MARKERS`, 실행 때 그 파일에서 읽는다)가 있는 폴더만 지운다. 표지 목록을 못 읽을 때 · 예약 형제 이름(`worktrees` · `baseline-cache`)이 SID 로 올 때 · `.claude` 나 state root 가 실제 디렉토리가 아닐 때(링크면 리포 안을 가리켜도 — 해법은 실제 디렉토리) · 세션 폴더 자신이 링크일 때 · 표지 없는 비어 있지 않은 다른 폴더일 때는 지우지 않고 한 줄로 알린 뒤 `pipeline.md` 를 쓰지 않고 exit 1 로 끝난다. 링크 · 탈출 · 비디렉토리 가드는 자기 세션이어도 삭제보다 먼저 돈다. 첫 인자 `critique` 는 setup 의 몫이 아니라 출력 · 상태 없이 exit 0 으로 끝난다(`/qg critique` 는 `critiquing-artifacts` 로 간다 — 전엔 `Unknown argument` 로 멈췄다).
 - `scripts/qg-gc.py` — 세션 표지에 `result.md` 를 더하고 `publish-eligible.md` 를 옛 표지로 옮겼다(회수 동작은 같다).
-- `commands/qg.md` · SKILL 인자 절 · `references/state-file-format.md` · README 가 최소 setup 과 위 삭제를 따른다.
+- `commands/qg.md` · SKILL 인자 절 · `references/state-file-format.md` · README 가 최소 setup 과 위 삭제를 따른다. qg.md 의 「setup 이 비0 이면 보이고 끝낸다」 규칙에 critique 는 그 대신 critique 절을 따른다는 한 줄을 더했다. README 는 `.claude` · state root 링크면 `/qg` 가 거부한다는 것과 그 해법(실제 디렉토리)을 적고, GC 키 행 · `DEVBREW_QUALITY_GATES_DISABLE` 행(setup 펜스는 setup 을 부르고 setup 이 exit 1 로 거부한다)을 사실에 맞췄다. `tests/e2e-scenarios.md` L 도 같다.
+- `tests/test_no_write_matcher_hooks.sh` 가 `hooks/` 부재에 더해 `plugin.json` 의 인라인 `"hooks"` 키 부재도 잰다(양의 짝: plugin.json 을 읽었다).
 - `tests/test_utf8_explicit.py` 의 로케일 회귀 운반체를 지운 훅에서 `scripts/verdict.py --differential` 로 옮겼다.
 - `scripts/run-test-selection.sh` 의 「setup 환경 폴더를 gitignore 하지 않는다」 안내가 이 플러그인에 없는 `mutation-guard` 를 말하지 않는다. 같은 파일의 낡은 R7 주석은 차등 테스트 재건 컷오버가 이 파일을 다시 쓸 때 정리한다.
 

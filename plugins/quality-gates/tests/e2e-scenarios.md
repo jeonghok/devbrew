@@ -96,7 +96,7 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 
 ### L — `DEVBREW_QUALITY_GATES_DISABLE=1`
 **Run**: set env var, then start a new Claude Code session AND attempt `/qg`.
-**Expected**: `/qg` returns at SKILL Preflight P1 without calling `setup-qg.sh` (which also refuses on its own — `tests/test_entry_safety_e1_e6.sh`).
+**Expected**: the `/qg` command's setup fence calls `setup-qg.sh`, which refuses with one line (`setup-qg disabled via DEVBREW_QUALITY_GATES_DISABLE=1`) and exit 1 before writing anything (`tests/test_entry_safety_e1_e6.sh`); `/qg` shows that line and stops — the pipeline skill is not invoked. If the skill is reached anyway, SKILL Preflight P1 returns immediately.
 
 ## Static Wiring Checks (automated)
 
