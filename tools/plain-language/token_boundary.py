@@ -5,7 +5,7 @@
   cons(보수): KH=1.0 · KO=1.0 · CA=3.0   ·  cent(중앙): KH=0.8 · KO=1.0 · CA=3.7
 오프라인 tokenizer 와 API 키가 없어(2026-10-08 실측) 실제 tokenizer 로 보정하지 않았다 — 값은 근사다.
 「새로 밀려난 절」 = 넣기 전에는 경계 안에서 시작하던 `## ` 절 중 넣은 뒤 경계 밖에서 시작하는 것.
-넣기 전 파일은 `--base <rev>`(기본 HEAD~1 이 아니라 명시) 의 git 내용이다.
+넣기 전 파일은 `--base <rev>` 의 git 내용이다.
 """
 import argparse
 import io
@@ -37,7 +37,7 @@ def boundary(lines, prof, body):
 
 
 def git(*args):
-    return subprocess.run(["git"] + list(args), capture_output=True, text=True, check=True).stdout
+    return subprocess.run(["git"] + list(args), capture_output=True, text=True, encoding="utf-8", check=True).stdout
 
 
 def heads(lines):
