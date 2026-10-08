@@ -4,7 +4,7 @@
 
 ## What it does
 
-`/interview <rough request>` 호출 시 «지금 이해 · 다음 결정 · 질문 하나» 형식의 Korean Socratic
+`/spec-interview <rough request>` 호출 시 «지금 이해 · 다음 결정 · 질문 하나» 형식의 Korean Socratic
 인터뷰가 **강한 문제공간 stage**로 동작합니다: 요청을 재구성(메타프롬프팅)하고, 외부 사례를 웹으로 조사하고(bounded), 약한 방향을
 steelman으로 깨뜨려, **interview brief**(brainstorming용 meta-prompt)를 **2파일 쌍**으로
 산출합니다 — payload `docs/superpowers/interview/YYYY-MM-DD-<topic>-interview.md`(8섹션 역피라미드,
@@ -16,10 +16,14 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 ## Quick start
 
 ```
-/interview todo 앱 만들어줘
+/spec-interview todo 앱 만들어줘
 ```
 
 `spec-interview` skill이 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 첫 round를 시작합니다.
+
+사용자가 부르는 진입 skill은 셋이다 — `/request-framing`(파이프라인 맨 앞 회의) · `/spec-interview`(인터뷰) · `/spec-review`(설계문서 리뷰). 설치 환경에 같은 이름이 있으면 `/spec-distill:spec-interview` 처럼 완전명으로 부른다. 기계가 내는 안내(핸드오프 · trivia 문면)는 처음부터 완전명을 쓴다.
+
+`/spec-interview` 는 `@` 로 시작하는 인자에 공백이 섞이면 풀지 않고 멈춘다(경로 한 토큰으로 다시 부른다). `/request-framing` 은 그런 인자를 받은 그대로 회의 재료로 쓴다.
 
 ## Flow (v0.41.0)
 
@@ -30,10 +34,10 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
                                        · 검증 — 문서 리뷰 엔진(seed 프로필: 탐지 doc-critic + codex → 재비판 doc-recritic)
                                                 · 처분은 사용자가 — 처분 전 편집 금지 · 저자 편집 diff 공시 · 문구 없는 drop 차단
                                                 · 냉독 축(seed-readback)
-                                       ▼ [확정 — proceed 게이트] ①/new 후 /interview @경로 · ②/compact 후 /interview @경로 · ③수정 필요 · ④멈춤
+                                       ▼ [확정 — proceed 게이트] ①/new 후 /spec-interview @경로 · ②/compact 후 /spec-interview @경로 · ③수정 필요 · ④멈춤
                                    interview-seed → docs/superpowers/interview/   ← 문서가 아니라 다음 세션 첫 턴이 가리키는 파일
-                                       ▼ 새 세션 첫 턴 = `/interview @<seed 경로>` (/interview 가 frontmatter 포함 전문으로 풀어 인터뷰에 넘김)
-/interview ─→ [0] Trivia escape ─→ [1] Interview (문제공간 stage)
+                                       ▼ 새 세션 첫 턴 = `/spec-interview @<seed 경로>` (진입 단계가 frontmatter 포함 전문으로 풀어 인터뷰에 넘김)
+/spec-interview ─→ [0] Trivia escape ─→ [1] Interview (문제공간 stage)
                                        · 지금 이해 · 다음 결정 · 질문 하나 + 3-path (web=path(a))
                                        · R1 Problem Reframe / R2 Landscape / R3 Steelman / R4 Tried&Discarded / R5 OQ
                                        ▼ 5 의례 통과 (check_brief.py gate, Law 1)
@@ -68,9 +72,9 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 **v0.25.0**: design 문서를 편집할 때마다 리뷰가 재발동하던 원인 자체를 없앴다 — 문서 생애 단 한 번만 리뷰를 거는 세션 원장을 도입했고, v0.14.0–v0.18.0에 쌓였던 방어층 3종(억제 집합·순서 교정·진행중 락)이 근거를 잃어 함께 삭제됐다. 그 원장은 3.0.0 에서 리뷰 훅과 함께 삭제됐다.
 
-**v0.41.0**: 파이프라인 맨 앞에 **Phase 0** `/request-framing`(skill: `request-framing`)을 신설. 사용자의 의도·steering·방향·goal을 확산(원문 보존 → 레포 읽기 → 질문 라운드) 후 압축해, 새 세션 첫 턴에 `/interview` 의 인자로 그대로 붙여넣는 메시지 `interview-seed`로 만든다 — 산출물은 문서가 아니라 메시지다. 호출 모양의 정본은 `request-framing` 의 「호출 모양」 절이다. 검증은 억제 축(`seed-critic` 격리 critic + codex, 셋째 담당)과 냉독 축(`seed-readback`)으로 나뉘고 판정은 사용자가 한다. `references/compression.md`(압축 규약)·`references/trivia-escape.md`(5패턴 정본, `/request-framing`이 가리킨다)를 채택하고, 확정 단계는 공유 계약 `references/proceed-gate.md`의 재결정 규약(P23)을 따른다.
+**v0.41.0**: 파이프라인 맨 앞에 **Phase 0** `/request-framing`(skill: `request-framing`)을 신설. 사용자의 의도·steering·방향·goal을 확산(원문 보존 → 레포 읽기 → 질문 라운드) 후 압축해, 새 세션 첫 턴에 `/spec-interview` 의 인자로 그대로 붙여넣는 메시지 `interview-seed`로 만든다 — 산출물은 문서가 아니라 메시지다. 호출 모양의 정본은 `request-framing` 의 「호출 모양」 절이다. 검증은 억제 축(`seed-critic` 격리 critic + codex, 셋째 담당)과 냉독 축(`seed-readback`)으로 나뉘고 판정은 사용자가 한다. `references/compression.md`(압축 규약)·`references/trivia-escape.md`(5패턴 정본, `/request-framing`이 가리킨다)를 채택하고, 확정 단계는 공유 계약 `references/proceed-gate.md`의 재결정 규약(P23)을 따른다.
 
-**v0.41.0**: interview의 R1을 `Reframe (메타 프롬프트)`에서 **`Problem Reframe`**으로 재정의 — 「받은 요청 재구성」은 `request-framing`이 맡고, R1은 **seed가 가리키는 작업 뒤의 진짜 문제**를 재구성한다(R&R 이동, 명칭 변경이 아니다). `spec-interview`가 `type: interview-seed` 입력을 받는 규약을 얻었다 — seed 본문은 §6 `S1`이 되고, 인터뷰 중 새 발화가 seed의 확정을 뒤집으면 새 발화가 이기며 그 재결정이 §5에 *원래/재결정/근거*로 남는다(P23). `commands/interview.md`의 trivia 5패턴 인라인 사본이 `references/trivia-escape.md` 포인터로 바뀌었고(v0.41.0 시점엔 아직 인라인이었다), seed가 아닌 입력에는 조언 한 줄만 내고 차단하지 않는다(호환 유지).
+**v0.41.0**: interview의 R1을 `Reframe (메타 프롬프트)`에서 **`Problem Reframe`**으로 재정의 — 「받은 요청 재구성」은 `request-framing`이 맡고, R1은 **seed가 가리키는 작업 뒤의 진짜 문제**를 재구성한다(R&R 이동, 명칭 변경이 아니다). `spec-interview`가 `type: interview-seed` 입력을 받는 규약을 얻었다 — seed 본문은 §6 `S1`이 되고, 인터뷰 중 새 발화가 seed의 확정을 뒤집으면 새 발화가 이기며 그 재결정이 §5에 *원래/재결정/근거*로 남는다(P23). interview 명령 파일의 trivia 5패턴 인라인 사본이 `references/trivia-escape.md` 포인터로 바뀌었고(v0.41.0 시점엔 아직 인라인이었다), seed가 아닌 입력에는 조언 한 줄만 내고 차단하지 않는다(호환 유지).
 
 **3.0.0**: 설계문서 리뷰 진입의 훅 강제를 없앴다. brainstorming 뒤·writing-plans 앞의 `spec-review` 호출은 오케스트레이터가 인터뷰 핸드오프 문구(`finishing.md` ①·②, brief 템플릿 §7)와 이 skill 의 description 을 읽고 스스로 한다. 끄기 판정은 진입 검사(`scripts/review_entry.py` + 리터럴 펜스, fail-closed)가, TTL-GC 기동은 SessionEnd 훅이 맡는다.
 
@@ -82,6 +86,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 - **Law 1 (Clarity Before Code)** — Plugin의 raison d'être. 인터뷰 → brief → design doc → reviewer → human gate. **설계문서에는 필수 섹션 구조 게이트가 없다(3.0.0)** — 그것을 검사하던 코드(spec 모드 검사)는 생산자가 없어 발동하지 않았고 리뷰 훅과 함께 삭제됐다. 설계문서의 명확성은 `doc-critic` 층 2(`placeholder`·`ambiguity`)와 승인 게이트가 판정한다 — 이 리포의 Law 1 필수 섹션 게이트 구현은 0 이다(CHANGELOG `[3.0.0]`).
 - **Law 1 (Clarity) — 문제공간 게이트 (v0.12.0)** — interview의 5 통과 의례(R1–R5)가 `check_brief.py`로 기계 검증되는 구조 게이트. 약한 방향(무인용 landscape·un-challenged 의심·빈 시행착오)은 brief 종료를 차단.
+- **Law 1 — 진입 skill 의 본문 전 사전 검사(`!`)가 kill switch 를 모델 판단 밖에서 집행한다.**
 - **Law 2 (Writer/Reviewer 분리)** — `tools:` allowlist frontmatter로 doc-critic(`Read, Grep, Glob`) + doc-critic-web(`Read, Grep, Glob, WebSearch, WebFetch`) + doc-recritic(`Read, Grep, Glob`) + coverage-mapper(`Read, Grep, Glob, WebSearch, WebFetch`) + blind-spot-prober(`Read, Grep, Glob, WebSearch, WebFetch`) agent의 *물리적* 분리. 프롬프트가 아닌 frontmatter scoping이며, **allowlist라 열거되지 않은 쓰기·실행·위임 도구가 자동 차단**된다(denylist는 시간에 대해 fail-open이라 v0.21.0에서 폐기).
 - **Law 2 — 리뷰 진입은 집행이 아니다 (3.0.0)** — 설계문서 리뷰 진입에 훅 강제가 없다. brainstorming 뒤·writing-plans 앞에 `spec-review` 을 부르는 것은 오케스트레이터이고, 근거는 인터뷰 핸드오프 문구와 이 skill 의 description 이다 — 철학 P13(hook = 집행 / skill = capability 표면) 기준으로 이 자리의 집행이 사라졌다. `/brainstorming` 직접 경로는 description 하나에 기대므로 건너뛰는 일이 흔할 것이다 — 그때는 `/spec-distill:spec-review <경로>` 로 부른다. 리뷰어의 물리 분리(`tools:` allowlist)는 그대로다.
 - **Law 3 (Compounding) — 처분 회계(adjudication `Ledger`)** (v0.52.0) — 리뷰 findings 가 버려지는 자리가 `shared/adjudication/adjudication.py` 의 처분을 부른다. 소비자는 문서 리뷰 엔진의 `scripts/docreview_route.py`(`shared/docreview/` 심볼릭 링크 — design doc · brief · seed 세 자리의 finding 이 여기서 라우팅된다) 등이고, 전수 목록은 `tools/adjudication/check_wiring.py` 가 import 로 도출한다 — 여기서 열거하지 않는다. 집행은 `shared/tests/test_adjudication_{wiring,consumed}.sh`. **범위**: `consumer=orchestrator`/`human` 인 dispatch 자리는 `disclosure=` 리터럴 실재까지만 검사된다(CLAUDE.md 축 C 한계) — 이 플러그인의 앵커 다수가 그쪽이다.
@@ -114,7 +119,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 - **P2 (Ambiguity Gate)** — numerical 거부 (philosophy P2). 설계문서의 모호성은 `doc-critic` 층 2 가 판정한다 — 필수 섹션 구조 게이트는 3.0.0 에서 삭제됐다(위 Law 1).
 - **P5 (Spec as artifact)** — 설계문서 `docs/superpowers/specs/…-design.md` 가 named, versioned(git 이력), diff-able artifact 다.
-- **P12 (Trivia escape)** — `/interview` first-step rule (typo / 주석-only / formatting / rename / <10 토큰 + 단일 action). 파일 수는 자격 기준이 아니다.
+- **P12 (Trivia escape)** — `/spec-interview` first-step rule (typo / 주석-only / formatting / rename / <10 토큰 + 단일 action). 파일 수는 자격 기준이 아니다.
 - **P14 (State preservation)** — `.claude/spec-distill/<session-id>/state.local.md` (세션 수명 동안 보존 — SessionEnd 가 지운다).
 - **P17 (User sovereignty)** — `needs_interview` user confirm gate, 문서 리뷰 엔진의 **승인 게이트**(정본 `references/proceed-gate.md` — 진행·수정·멈춤을 사용자가 고른다), all kill switches.
 - **P17 (User sovereignty) — 사용자가 시계 (v0.57.0)** — 차원은 사용자 발화 `S<N>` 을 인용해야 닫히고(`check_brief.py` 앵커 게이트), 재개방에 상한이 없다 — 라운드는 사용자 답으로만 돈다.
@@ -136,7 +141,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 - **AP3 (Self-approval)** — writer/reviewer 물리적 분리 (frontmatter scoping).
 - **AP2 (Polite stop)** — **정본은 `references/proceed-gate.md`** (v0.31.0). 두 proceed 게이트(spec-review 의 `## 게이트` 절 · spec-interview 종료 Step B)가 그 파일의 골격·두 가드·예외 경로를 공유하며, 각 skill 은 자기 어휘(옵션 라벨 · verbatim `/compact` 템플릿 · 고유 스텝)만 인라인으로 갖는다. 아래는 그 계약의 **요약**이지 별개 저술이 아니다 — 계약이 바뀌면 정본을 고치고 여기를 따라 고친다. approve tail = proceed 게이트(AskUserQuestion) → 미커밋 확인(리터럴 펜스, 기록 없음). 게이트를 skip한 narrate-only 종료 금지. cross-compact 조기 진행(옵션 ① 노출 후 같은 턴 writing-plans 직진)도 게이트 P17 우회의 대칭 실패로 금지 (v0.11.0 AC19). interview→brainstorming Step B의 **4옵션**: ①/compact 후 brainstorming / ②바로 brainstorming / ③확정 목록 수정 / ④brief만 종료 (③ 추가는 v0.23.0) — 전용 handoff 스크립트를 호출하지 않음(brief는 막 검증됨, 하류/SessionEnd가 cleanup) (v0.13.0).
-- **AP5 (Trivia ceremony)** — `/interview` first-step trivia escape (5 패턴).
+- **AP5 (Trivia ceremony)** — `/spec-interview` first-step trivia escape (5 패턴).
 - **AP9 (Subagent spray)** — `plugins/spec-distill/agents/` 8종(doc-critic·doc-critic-web·doc-recritic·steelman-builder·coverage-mapper·blind-spot-prober·brief-readback·seed-readback). 상한이 선언된 것: coverage-mapper·blind-spot-prober 는 **자격 + 예산**(자격 = 그 차원에 닿는 열린 결정이 아직 있는가 · 예산 = `1 + 재개방`, 4.4.0) · 문서 리뷰 엔진의 탐지 dispatch 는 라운드당 한 번(critic 사망이면 재dispatch 1회)이고 라운드 수는 재리뷰 상한 2 가 막는다(spec-review · reviewing-brief · request-framing).
 - **P11 (Cross-Model Adversarial)** — sub-agent reviewer adversarial review + **`steelman-builder` 의심 게이트(v0.12.0, v0.54.0 재설계)**: 의심 방향에 대해 builder 가 원안·대안 **양쪽**의 최강 케이스를 사용자 goal 기준으로 쓰고 근거가 핵심 전제에 닿는지 판정한다. 재검토를 여는 열쇠는 전제 충돌 하나 — 그 외 근거는 원안 강화·경계 다듬기에 쓴다. 판정 어휘 유지/보완/전환/보류(kept/refined/switched/deferred), 선택은 사용자.
 - **AP16 (Unbounded autonomy)** — 재리뷰 상한 2 (정본은 `shared/docreview/references/reviewing-document.md` 한 줄이고, 라운드 4 이상은 승인 게이트에서 사용자가 연다), rhythm guard 3, kill switch.
@@ -169,6 +174,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 ### 스위치 목록
 
 - `DEVBREW_SPEC_DISTILL_DISABLE=1` — plugin 전체 abort, state 보존.
+  진입 skill 셋(`request-framing` · `spec-interview` · `spec-review`)은 본문 전 사전 검사가 `DEVBREW_SPEC_DISTILL_DISABLE=1` 을 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 skill 호출을 끊는다 — 헤드리스에서는 출력 없이 끝난다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` (v0.20.0, v0.24.0 확대, 3.1.0 재배선) — codex 병렬 co-review만 skip. Claude 리뷰(탐지 · 재비판)는 정상 동작하고, codex 부재는 엔진이 `fin.json` 의 `advisory[]` 와 게이트 첫 줄로 loud 하게 공시한다. 전역 `DEVBREW_SPEC_DISTILL_DISABLE`과 독립. **적용 범위는 문서 리뷰 엔진 자리 셋 전부**: (a) design-doc 리뷰(`spec-review`), (b) brief 리뷰(`reviewing-brief`), (c) seed 리뷰(`request-framing`) — 세 자리 모두 codex 호출은 SKILL 의 리터럴 게이트 펜스(`codex-gate` 표지) 하나이고 매 라운드 4단계에서 돈다. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`(`skip_reason: kill_switch`)로 옮기고 펜스가 그 값으로 러너 호출을 가르며, 러너(`run_docreview_codex_reviewer.sh`)는 이 변수를 보지 않는다. 펜스 밖에서 러너를 부르면 opt-out이 무시된 채 지출이 나간다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` — 문서 리뷰 엔진의 **재비판 단계만** skip (`doc-recritic` dispatch 없음). 탐지·codex 는 정상 동작한다. 기각 경로가 0 이 된 사실은 `fin.json` 의 `advisory[]` 로 공시된다 — 오탐이 걸러지지 않은 라운드라는 뜻이므로 조용히 넘어가지 않는다.
 - `DEVBREW_SPEC_DISTILL_RHYTHM_GUARD_THRESHOLD=N` — Dialectic Rhythm Guard threshold (default 3).

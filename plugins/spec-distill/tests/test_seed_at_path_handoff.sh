@@ -176,7 +176,7 @@ else
 fi
 assert_file_grep "$SK" '/spec-distill:spec-interview @<seed 경로>' "AC6: 새 모양(완전명)이 ${SK#"$ROOT"/} 에 있다"
 # README 는 사람용이라 짧은 이름을 쓴다(D5) — 호출 이름이 아니라 `@<seed 경로>` 핸드오프 모양만 잰다.
-assert_file_grep "$README" 'interview @<seed 경로>' "AC6: 새 모양이 ${README#"$ROOT"/} 에 있다"
+assert_file_grep "$README" '/spec-interview @<seed 경로>' "AC6: 새 모양이 ${README#"$ROOT"/} 에 있다"
 
 # ── 풀어 쓴 옛 서술의 동기화 (§4 목록) ──────────────────────────────────
 TPL="$SD/templates/interview-seed-audit-template.md"

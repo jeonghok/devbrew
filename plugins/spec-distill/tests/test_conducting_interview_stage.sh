@@ -1257,7 +1257,7 @@ grep -qE '차단.{0,4}않는다|막지 않는다' <<<"$seed_flat" \
 grep -qE 'references/trivia-escape\.md' "$CMD" \
   && ok "v0.41.0: spec-interview 진입 단계가 trivia-escape.md 정본을 가리킨다" \
   || no "v0.41.0: spec-interview 진입 단계에 trivia-escape.md 포인터가 없다"
-# 정본과의 분기 방지 — request-framing.md 의 동형 검사(test_request_framing_command.sh)와
+# 정본과의 분기 방지 — request-framing 진입 단계의 동형 검사(test_request_framing_entry.sh)와
 # 대칭이다. 5패턴 본문이 이 파일에 다시 복제되면 정본이 바뀌어도 이 사본은 안 바뀐다.
 cmd_pattern_dup="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 식별자|<10 토큰)' "$CMD")"
 [[ "$cmd_pattern_dup" -eq 0 ]] \
