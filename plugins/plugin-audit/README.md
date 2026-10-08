@@ -97,6 +97,6 @@ fallback 창을 둔다.
 ## 컴포넌트
 
 - `commands/plugin-audit.md` — 얇은 진입점.
-- `skills/auditing-plugins/SKILL.md` — 오케스트레이션(지출게이트 → pre-0 → Workflow → post-1).
+- `skills/plugin-audit/SKILL.md` — 오케스트레이션(지출게이트 → pre-0 → Workflow → post-1).
 - `agents/{plugin-auditor,audit-refuter,smoke-probe}.md` — 읽기전용 agent 3종.
 - `scripts/*` — 결정론 게이트·조립·렌더·검증 + Workflow 스크립트.

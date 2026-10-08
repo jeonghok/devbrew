@@ -3,7 +3,7 @@
 `$ARGUMENTS` 가 `type: interview-seed` frontmatter 를 가진 문서면, 그것은 **Phase 0 에서
 사용자가 확정한 메시지**다. Phase 0 은 사용자에게 `/interview @<seed 경로>` 를 치게 하고,
 `/interview` 가 그 파일을 전문(frontmatter 포함)으로 풀어 이 skill 에 넘긴다(그 호출 모양의 정본은
-`framing-requests` 의 「호출 모양」 절이다). 그 frontmatter 줄이 seed 를 알아보는 유일한 표지다 —
+`request-framing` 의 「호출 모양」 절이다). 그 frontmatter 줄이 seed 를 알아보는 유일한 표지다 —
 본문만 오면 seed 로 인식되지 않아 아래 규약이 발동하지 않는다.
 
 - **§6 `S1` 은 `$ARGUMENTS` 원문 그대로다**(frontmatter 포함) — `finishing.md` 의 S1

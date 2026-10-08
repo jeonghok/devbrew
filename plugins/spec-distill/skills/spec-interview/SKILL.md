@@ -1,5 +1,5 @@
 ---
-name: conducting-interview
+name: spec-interview
 description: >
   Runs the spec-distill problem-space interview stage and produces a terminal
   interview-brief at docs/superpowers/interview/. 종료는 커버리지 원장의 floor
@@ -399,7 +399,7 @@ builder 출력은 verbatim 으로 다룬다(약화·편집 금지). 보류는 §
 를 가진 문서일 때만 읽는다(조건부 로드 — seed 없는 호출이 더 흔해 finishing.md 보다 조건성이 강하다).
 
 ```
-Read ${CLAUDE_PLUGIN_ROOT}/skills/conducting-interview/references/seed-input.md
+Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/seed-input.md
 ```
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
@@ -424,7 +424,7 @@ floor 다섯이 전부 `closed` 여야 종료가 열리지만, **사용자는 �
 읽어야 하는 조건: `coverage.floor` 의 다섯 차원이 모두 `status: closed`.
 
 ```
-Read ${CLAUDE_PLUGIN_ROOT}/skills/conducting-interview/references/finishing.md
+Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/finishing.md
 ```
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.

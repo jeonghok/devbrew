@@ -10,7 +10,7 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT/plugins/spec-distill"
-SK="$SD/skills/framing-requests/SKILL.md"
+SK="$SD/skills/request-framing/SKILL.md"
 CANON="$SD/references/proceed-gate.md"
 CMD="$SD/commands/interview.md"
 RF="$SD/commands/request-framing.md"
@@ -56,9 +56,9 @@ s3="$(block '^## Step 3' '^## ' "$CMD")"
 sa="$(block '^## Arguments' '^## ' "$CMD" | flat)"
 assert_contains "$s2" '「풀린 입력」을 대조' "§3: Step 2 trivia 대조 대상 = 풀린 입력"
 assert_contains "$s25" '「풀린 입력」의 frontmatter 에 `type: interview-seed`' "§3: Step 2.5 seed 판별 대상 = 풀린 입력"
-assert_contains "$s3" 'Skill conducting-interview <풀린 입력>' "§3: Step 3 인자 = 풀린 입력"
+assert_contains "$s3" 'Skill spec-interview <풀린 입력>' "§3: Step 3 인자 = 풀린 입력"
 [ -n "$s3" ] && ok "§3(양성): Step 3 블록을 읽었다" || no "§3(양성): Step 3 블록이 없다 — 아래 단언이 공허하다"
-assert_not_contains "$s3" 'Skill conducting-interview $ARGUMENTS' "§3: Step 3 가 치환된 원 인자를 넘기지 않는다"
+assert_not_contains "$s3" 'Skill spec-interview $ARGUMENTS' "§3: Step 3 가 치환된 원 인자를 넘기지 않는다"
 assert_contains "$sa" '「풀린 입력」 — Step 1.5 의 결과' "§3: Arguments 절이 풀린 입력을 가리킨다"
 
 # ── framing 게이트: 옵션 표 · 호출 모양 · 두 가드 ──────────────────────────
@@ -153,8 +153,8 @@ done
 
 # ── 풀어 쓴 옛 서술의 동기화 (§4 목록) ──────────────────────────────────
 TPL="$SD/templates/interview-seed-audit-template.md"
-SEEDIN="$SD/skills/conducting-interview/references/seed-input.md"
-FIN="$SD/skills/conducting-interview/references/finishing.md"
+SEEDIN="$SD/skills/spec-interview/references/seed-input.md"
+FIN="$SD/skills/spec-interview/references/finishing.md"
 assert_file_grep   "$TPL"    '/interview @<seed 경로>` 가 가리키는 것은 payload' "§4: audit 템플릿 인용 블록이 새 모양"
 assert_file_absent "$TPL"    '첫 턴에 붙여넣는' "§4: audit 템플릿에 옛 핸드오프 서술이 없다"
 assert_file_grep   "$SEEDIN" '`/interview @<seed 경로>` 를 치게 하고' "§4: seed-input 도착 경로가 새 모양"

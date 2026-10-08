@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Spec B AC1 지원 (V1 보완) — conducting-interview → reviewing-brief 진입 + Step B 실기.
+# Spec B AC1 지원 (V1 보완) — spec-interview → reviewing-brief 진입 + Step B 실기.
 # 기존 종료 조건·Step A 게이트·B-2 4옵션 구조가 **불변**임을 함께 잠근다(회귀 방지).
 # Fix round 2: fence-aware scoping — Task 7(test_reviewing_brief_skill.sh)의 scoped_window()/
 # fence() 관용구를 재사용한다. 느슨한(anywhere-in-window) substring 체크만으로는 "펜스 밖 프로즈
@@ -10,7 +10,7 @@
 set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-CI="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/SKILL.md"
+CI="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/SKILL.md"
 # Task 32(무게 감축): Step A.5 · Step B 전문이 references/finishing.md 로 분리됐다. 이 스위트의
 # 윈도우 앵커(`### Step A.5` · `#### B-2`)와 전-파일 검사는 **어느 파일에 그 섹션이 있는지**를
 # 알면 안 된다 — 알면 다음 분할 때 또 깨진다. 그래서 스킬 표면을 도출해 하나의 스트림으로 다룬다.
@@ -119,7 +119,7 @@ test -f "$CI" || { no "SKILL 부재"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 
 # '참조 파일 0건'을 '문제 없음'으로 읽지 않는다 — 도출이 깨지면 아래 전-파일 검사가 분할
 # 이전 범위로 조용히 되돌아간다.
 [[ "${#CI_FILES[@]}" -ge 2 ]] \
-  && ok "코퍼스: conducting-interview 표면 ${#CI_FILES[@]}개 파일 도출 (vacuous 아님)" \
+  && ok "코퍼스: spec-interview 표면 ${#CI_FILES[@]}개 파일 도출 (vacuous 아님)" \
   || no "코퍼스: references/*.md 를 0건 도출했다 — 검사 범위가 조용히 좁아졌다"
 
 # presence 코퍼스 소유 규칙 — 공용 단언(`shared/tests/presence_corpus.sh`).
@@ -194,7 +194,7 @@ done
 
 # --- 핸드오프 변수 2종 (cross-task obligation) --------------------------------
 # reviewing-brief SKILL.md `## 입력` 은 $PAYLOAD·$AUDIT 를 "호출자가 인자로 넘기는 값"이라
-# 주장한다 — conducting-interview 가 실제로 두 값을 세우지 않으면 그 주장은 overclaim 이다.
+# 주장한다 — spec-interview 가 실제로 두 값을 세우지 않으면 그 주장은 overclaim 이다.
 # 실행 라인만 본다(펜스 안 bash, 주석 제외) — 산문에 적힌 대입은 값을 세우지 않는다.
 WA5_BASH="$(fence "$WA5" "bash")"
 for var in 'PAYLOAD=' 'AUDIT='; do

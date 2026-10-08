@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """AC4 · AC5 — `scripts/review_entry.py` 의 끄기 판정과 은퇴 스위치 공시.
 
-프로세스로 실행해 stdout JSON 한 줄을 본다 — 소비자(`reviewing-spec` 의 진입 펜스)가 보는
+프로세스로 실행해 stdout JSON 한 줄을 본다 — 소비자(`spec-review` 의 진입 펜스)가 보는
 것과 같은 채널이다. 환경은 케이스마다 PATH·HOME 만 남기고 새로 짠다: 러너 셸에 켜져 있는
 스위치가 케이스를 오염시키지 않게.
 

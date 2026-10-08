@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# state-keying 불변식 락 — reviewing-spec 이 엔진 상태를 세션(harness sid) 아래 문서별 디렉토리로 연다.
+# state-keying 불변식 락 — spec-review 이 엔진 상태를 세션(harness sid) 아래 문서별 디렉토리로 연다.
 #
 # 재는 것:
 #   · `## 입력` 이 `state_path.py` 의 session-id · state-root 와 엔진의 `state-dir-for` 로 `STATE_DIR` 을
@@ -13,7 +13,7 @@
 set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SKILL="$REPO_ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+SKILL="$REPO_ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
 . "$REPO_ROOT/shared/tests/assert.sh"
 
 # 창의 끝 앵커가 실제로 범위를 닫았는지 본다 — sed 범위는 종료 주소가 없으면 EOF 까지 흐른다.

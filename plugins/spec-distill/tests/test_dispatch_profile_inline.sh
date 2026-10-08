@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/reviewing-spec/SKILL.md plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/references/docreview-profiles/design-doc.md plugins/spec-distill/scripts/brief_review_state.py plugins/spec-distill/scripts/state_path.py plugins/spec-distill/skills/framing-requests/SKILL.md plugins/spec-distill/references/docreview-profiles/seed.md
+# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/references/docreview-profiles/design-doc.md plugins/spec-distill/scripts/brief_review_state.py plugins/spec-distill/scripts/state_path.py plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/references/docreview-profiles/seed.md
 #
-# 두 엔진 자리(`reviewing-brief` · `reviewing-spec`)의 탐지 · 재비판 dispatch 가 `<profile>` 슬롯에 프로필
+# 두 엔진 자리(`reviewing-brief` · `spec-review`)의 탐지 · 재비판 dispatch 가 `<profile>` 슬롯에 프로필
 # **경로가 아니라 내용**을 싣는가. 설치본에서 프로필은 플러그인 캐시(사용자 cwd 밖)에 있어 리뷰어의 Read 가
 # 권한 거부되고, 리뷰어는 기준 없이 판정한다 — 엔진은 그 사실을 모른다(PR 3 최종 리뷰 F1, T9 p11 관측).
 #
@@ -13,8 +13,8 @@
 #      프로필이 없는 루트면 rc 1 · loud advisory · stdout 비움. 앞 블록의 `set -euo pipefail` 을 물려받아도 같다.
 #      실패 분기는 미리 채워 둔 `$STATE_DIR/critic.txt`(직전 라운드 critic 출력)를 비우고, 성공 경로는 건드리지
 #      않는다(PR 3 qg iter 1). brief 는 실패를 degrade 원장(없으면 두 번째 채널)에 남긴다.
-#   S  (설계 2026-09-27-review-stopping-criterion AC16) 세 진입 skill(reviewing-brief · reviewing-spec ·
-#      framing-requests)의 profile-content 펜스 출력에 `must_catch:` 줄이 없고, 그 줄을 뺀 나머지는 프로필 파일과
+#   S  (설계 2026-09-27-review-stopping-criterion AC16) 세 진입 skill(reviewing-brief · spec-review ·
+#      request-framing)의 profile-content 펜스 출력에 `must_catch:` 줄이 없고, 그 줄을 뺀 나머지는 프로필 파일과
 #      바이트 동일하다 — 막는 축을 아는 리뷰어는 category 라벨로 차단 여부를 조종할 수 있다.
 # 실제 agent · codex 는 부르지 않는다.
 set -u
@@ -23,12 +23,12 @@ SD="$ROOT/plugins/spec-distill"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/skills/reviewing-brief/SKILL.md"
-  echo "plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+  echo "plugins/spec-distill/skills/spec-review/SKILL.md"
   echo "plugins/spec-distill/references/docreview-profiles/brief.md"
   echo "plugins/spec-distill/references/docreview-profiles/design-doc.md"
   echo "plugins/spec-distill/scripts/brief_review_state.py"
   echo "plugins/spec-distill/scripts/state_path.py"
-  echo "plugins/spec-distill/skills/framing-requests/SKILL.md"
+  echo "plugins/spec-distill/skills/request-framing/SKILL.md"
   echo "plugins/spec-distill/references/docreview-profiles/seed.md"
   exit 0
 fi
@@ -113,7 +113,7 @@ seed_critic() {
   return 0
 }
 
-for spec in "reviewing-brief:brief.md:3" "reviewing-spec:design-doc.md:2"; do
+for spec in "reviewing-brief:brief.md:3" "spec-review:design-doc.md:2"; do
   sk="${spec%%:*}"; rest="${spec#*:}"; prof="${rest%%:*}"; want_slots="${rest#*:}"
   SKILL="$SD/skills/$sk/SKILL.md"
   PROF="$SD/references/docreview-profiles/$prof"
@@ -190,21 +190,21 @@ for spec in "reviewing-brief:brief.md:3" "reviewing-spec:design-doc.md:2"; do
   fi
 done
 
-# S — framing-requests. 이 펜스는 `$PROFILE` 을 앞 블록(「## 상태」)에서 받으므로 그 값만 env 로 준다.
-FR_FENCE="$SCRATCH/framing-requests.fence.sh"; cut_marked "$SD/skills/framing-requests/SKILL.md" > "$FR_FENCE"
+# S — request-framing. 이 펜스는 `$PROFILE` 을 앞 블록(「## 상태」)에서 받으므로 그 값만 env 로 준다.
+FR_FENCE="$SCRATCH/request-framing.fence.sh"; cut_marked "$SD/skills/request-framing/SKILL.md" > "$FR_FENCE"
 n_fr="$(grep -c . "$FR_FENCE" || true)"
 if [ "${n_fr:-0}" -ge 4 ] && bash -n "$FR_FENCE" 2>/dev/null; then
-  ok "framing-requests S: profile-content 마커 펜스 ${n_fr}줄 · bash -n 통과"
+  ok "request-framing S: profile-content 마커 펜스 ${n_fr}줄 · bash -n 통과"
 else
-  no "framing-requests S: profile-content 마커 펜스가 없거나 깨졌다 (${n_fr:-0}줄)"
+  no "request-framing S: profile-content 마커 펜스가 없거나 깨졌다 (${n_fr:-0}줄)"
 fi
 SEED_PROF="$SD/references/docreview-profiles/seed.md"
 ( cd "$SCRATCH" && env -i PATH="$BASE" HOME="$SCRATCH" PROFILE="$SEED_PROF" bash "$FR_FENCE" ) \
   > "$SCRATCH/fr.out" 2>"$SCRATCH/fr.err"; fr_rc=$?
-assert_eq "$fr_rc" "0" "framing-requests S: 펜스 rc 0"
-assert_eq "$(cat "$SCRATCH/fr.out")" "$(expect_stripped "$SEED_PROF")" "framing-requests S: stdout 이 seed 프로필에서 must_catch 줄만 뺀 것과 같다"
-assert_eq "$(grep -c '^must_catch:' "$SCRATCH/fr.out" || true)" "0" "framing-requests S: 펜스 출력에 must_catch 줄이 없다"
-assert_eq "$(grep -c '^must_catch:' "$SEED_PROF" || true)" "1" "framing-requests S 전제: seed 프로필에는 must_catch 줄이 있다"
+assert_eq "$fr_rc" "0" "request-framing S: 펜스 rc 0"
+assert_eq "$(cat "$SCRATCH/fr.out")" "$(expect_stripped "$SEED_PROF")" "request-framing S: stdout 이 seed 프로필에서 must_catch 줄만 뺀 것과 같다"
+assert_eq "$(grep -c '^must_catch:' "$SCRATCH/fr.out" || true)" "0" "request-framing S: 펜스 출력에 must_catch 줄이 없다"
+assert_eq "$(grep -c '^must_catch:' "$SEED_PROF" || true)" "1" "request-framing S 전제: seed 프로필에는 must_catch 줄이 있다"
 
 # brief 는 실패를 degrade 원장에 남긴다(Step B 로 가는 채널). 원장이 못 쓰이면 두 번째 채널.
 st_b="$SCRATCH/no-reviewing-brief-plain/.claude/spec-distill/no-reviewing-brief-plain/state.local.md"

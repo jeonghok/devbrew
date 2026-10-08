@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# AC6 회귀 가드 — conducting-interview는 내부 전용 스킬(user-invocable: false).
+# AC6 회귀 가드 — spec-interview는 내부 전용 스킬(user-invocable: false).
 # AC1: user-invocable: false 존재 / AC2: 기존 frontmatter 3키 보존 /
-# AC3: command dispatch + reviewing-spec re-entry 프로그램 호출 경로 보존.
+# AC3: command dispatch + spec-review re-entry 프로그램 호출 경로 보존.
 set -uo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SKILL="$PLUGIN_DIR/skills/conducting-interview/SKILL.md"
+SKILL="$PLUGIN_DIR/skills/spec-interview/SKILL.md"
 CMD="$PLUGIN_DIR/commands/interview.md"
-REVIEW="$PLUGIN_DIR/skills/reviewing-spec/SKILL.md"
+REVIEW="$PLUGIN_DIR/skills/spec-review/SKILL.md"
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
@@ -22,7 +22,7 @@ grep -q '^user-invocable: false$' <<<"$frontmatter" \
     || no "AC1: user-invocable: false MISSING from frontmatter"
 
 # AC2 — 기존 frontmatter 키 보존 (의미 변경 없음)
-grep -q '^name: conducting-interview$' "$SKILL" \
+grep -q '^name: spec-interview$' "$SKILL" \
     && ok "AC2: name preserved" \
     || no "AC2: name field broken"
 grep -q '^description:' "$SKILL" \
@@ -33,10 +33,10 @@ grep -q '^cost_class: variable$' "$SKILL" \
     || no "AC2: cost_class not variable"
 
 # AC3 — 프로그램 호출 경로 보존 (메뉴만 숨고 dispatch는 살아있음)
-grep -q 'Skill conducting-interview' "$CMD" \
+grep -q 'Skill spec-interview' "$CMD" \
     && ok "AC3: command dispatch line preserved" \
     || no "AC3: command dispatch line MISSING"
-grep -q 'conducting-interview' "$REVIEW" \
-    && ok "AC3: reviewing-spec re-entry reference preserved" \
-    || no "AC3: reviewing-spec re-entry reference MISSING"
+grep -q 'spec-interview' "$REVIEW" \
+    && ok "AC3: spec-review re-entry reference preserved" \
+    || no "AC3: spec-review re-entry reference MISSING"
 finish

@@ -3,7 +3,7 @@ type: interview-seed-audit
 payload: <basename>.md
 created_at: YYYY-MM-DD
 session_id: <uuid>
-source: spec-distill framing-requests
+source: spec-distill request-framing
 ---
 
 # <Topic> — Interview Seed Audit

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PN2/V8/AC10 — reviewing-spec is design-mode only; spec-mode/re-consensus/Mode B removed;
+# PN2/V8/AC10 — spec-review is design-mode only; spec-mode/re-consensus/Mode B removed;
 # drafting-spec absent from skills/hooks/commands.
 #
 # ── 앵커 (3.0.0) ─────────────────────────────────────────────────────────────
@@ -13,7 +13,7 @@ set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 PLUGIN="$REPO_ROOT/plugins/spec-distill"
-SKILL="$PLUGIN/skills/reviewing-spec/SKILL.md"
+SKILL="$PLUGIN/skills/spec-review/SKILL.md"
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
@@ -67,7 +67,7 @@ grep -qE 'mode_b_violation' "$SKILL" \
 grep -qE '^\|[[:space:]]*\**[[:space:]]*spec\b' "$SKILL" \
   && no "spec-mode routing rows still present" || ok "spec-mode routing rows removed"
 grep -q 'drafting-spec' "$SKILL" \
-  && no "drafting-spec still referenced in reviewing-spec" || ok "drafting-spec ref removed from reviewing-spec"
+  && no "drafting-spec still referenced in spec-review" || ok "drafting-spec ref removed from spec-review"
 
 # F9-D: scan agents/ + templates/ too — the exact dirs an earlier PR cleaned of
 # drafting-spec/Mode-B refs (design 자리 리뷰어 persona · 템플릿 주석).

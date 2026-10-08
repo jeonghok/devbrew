@@ -1112,7 +1112,7 @@ fi
 
 # 〔2026-08-19 fix round 2b, M4〕 참조원 앵커는 **참조 파일 수**에 기대므로, 어떤
 # 플러그인의 유일한 참조가 산문 한 줄이면 그 줄을 고쳐 쓰는 편집이 앵커를 함께 줄인다
-# (실측: plugin-audit 은 `skills/auditing-plugins/SKILL.md` 한 줄만 기여한다). 그 상태에서
+# (실측: plugin-audit 은 `skills/plugin-audit/SKILL.md` 한 줄만 기여한다). 그 상태에서
 # conf·detect 를 짝으로 untrack 하면 세 수가 **함께** 줄어 위 등식이 전부 성립한다.
 # 그래서 참조원과 무관한 두 번째 앵커를 둔다: **워킹트리 실재 수.** `git rm --cached` 는
 # 인덱스에서만 지우고 디스크에는 남기므로 두 수가 갈라진다.

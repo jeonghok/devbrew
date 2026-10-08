@@ -78,7 +78,7 @@ grep -q 'orchestrator_framing' <<<"$(awk '/tag: premises/{f=1} f&&/kind:/{print;
 grep -q 'confidence' "$AGENT" \
   && no "AC1: confidence 필드/규칙 잔존 (폐지, 설계 O3)" || ok "AC1: confidence 부재"
 # O1(옛 토큰 별칭 없음) — confidence 하나만 잡으면 옛 스키마의 나머지 세 토큰이 별칭으로
-# 되살아나도 조용하다. skills/conducting-interview/SKILL.md 가 아직 alternative_statement 를
+# 되살아나도 조용하다. skills/spec-interview/SKILL.md 가 아직 alternative_statement 를
 # 이름으로 부르고 있어 Task 4 복사-붙여넣기 한 번으로 돌아올 수 있는 실재 회귀 경로다.
 for tok in alternative_statement strongest_case weakness_of_current; do
   grep -q "$tok" "$AGENT" \

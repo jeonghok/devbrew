@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/reviewing-spec/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf shared/docreview/scripts/docreview_state.py
+# guards: plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf shared/docreview/scripts/docreview_state.py
 #
-# `reviewing-spec` 의 codex 게이트를 **잘라내 실행**해, 직전 라운드의 산출물이 이번 라운드
+# `spec-review` 의 codex 게이트를 **잘라내 실행**해, 직전 라운드의 산출물이 이번 라운드
 # 판정으로 새지 않는지 잰다.
 #
 # ── 왜 이 파일이 생겼는가 ────────────────────────────────────────────────────
 # 이 성질은 산문으로 네 번 주장됐고 **한 번도 집행되지 않았다.** 실측(재리뷰 2): 진입
 # 중화를 가용성 분기 «안»으로 되돌리는 변이를 넣으면 보안 결함이 완전히 되살아나는데
 # (skip 경로마다 직전 라운드 finding 2건 섭취) 리포의 셸 락 전수가 GREEN 그대로였다.
-# 형제 `framing-requests` 는 바로 이 락을 갖고 있다(`test_seed_gate_wiring.sh` 의
+# 형제 `request-framing` 는 바로 이 락을 갖고 있다(`test_seed_gate_wiring.sh` 의
 # `residue_case` 행렬) — 모양은 복사됐는데 그 모양을 지키는 락은 복사되지 않았다.
 #
 # ── 형제와 무엇이 다른가 (관측 대상이 다르다) ────────────────────────────────
@@ -43,10 +43,10 @@
 # 새는 경로를 그렇게 막는다. 리포의 배포 지점은 건드리지 않는다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SKILL="$ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+SKILL="$ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
-  echo "plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+  echo "plugins/spec-distill/skills/spec-review/SKILL.md"
   echo "plugins/spec-distill/scripts/detect_codex.sh"
   echo "plugins/spec-distill/scripts/codex-killswitch.conf"
   echo "shared/docreview/scripts/docreview_state.py"

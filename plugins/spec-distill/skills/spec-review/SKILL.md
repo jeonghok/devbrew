@@ -1,5 +1,5 @@
 ---
-name: reviewing-spec
+name: spec-review
 description: >
   Use right after superpowers:brainstorming writes and commits a design doc
   (docs/superpowers/specs/...-design.md), before superpowers:writing-plans — this review replaces
@@ -10,7 +10,7 @@ description: >
 cost_class: medium
 ---
 
-# reviewing-spec — 문서 리뷰 엔진의 design doc 자리
+# spec-review — 문서 리뷰 엔진의 design doc 자리
 
 이 skill 은 진입 껍데기다. 한 라운드의 절차는 공유 엔진이 갖고 있고, 여기 남는 것은 이 자리의
 것 — 진입 검사 · 입력 · 프로필 · dispatch 둘 · 게이트 · degrade 채널 — 뿐이다.
@@ -89,8 +89,8 @@ advisory · 복귀 지시)을 **그대로** 한 단락으로 보이고 게이트
 
 ## 입력
 
-`$spec_path` 는 **호출 인자**다 — `Skill spec-distill:reviewing-spec <설계문서 경로>` 또는
-`/spec-distill:reviewing-spec <경로>`. 상대 경로면 리포 루트 기준 절대 경로로 바꿔 쓴다.
+`$spec_path` 는 **호출 인자**다 — `Skill spec-distill:spec-review <설계문서 경로>` 또는
+`/spec-distill:spec-review <경로>`. 상대 경로면 리포 루트 기준 절대 경로로 바꿔 쓴다.
 
 인자가 없으면 후보를 뽑아 `AskUserQuestion` 으로 고르게 한다 — 설계문서(`-design.md`)를 추가한 최근
 커밋 50개에서 나온 것 중 최신 5개와 untracked 전부:
@@ -262,7 +262,7 @@ fi
 if [[ "$codex_avail" == "true" ]]; then
   runner_rc=0
   bash "$SD/scripts/run_docreview_codex_reviewer.sh" "$PROFILE" "$spec_path" "$(pwd)" "$CODEX_YAML" || runner_rc=$?
-  # 껍데기 정리 — 형제 `framing-requests` 와 같은 `-eq 3` 이다. `-ne 0` 은 틀리다: EXIT 트랩은
+  # 껍데기 정리 — 형제 `request-framing` 와 같은 `-eq 3` 이다. `-ne 0` 은 틀리다: EXIT 트랩은
   # «자기 rc 를 갖는 종료 지점»이 아니라 모든 종료에 얹혀 **원래 실패의 rc 를 그대로 두고**
   # 이번 라운드의 정직한 기록을 남긴다 — 실측: 트랩 무장 뒤 SIGTERM 이면 `rc 143` +
   # `reason: aborted_before_completion` 인 기록이 함께 나온다. `-ne 0` 은 바로 그 기록을 지운다.
@@ -430,7 +430,7 @@ fi
 |---|---|
 | ① | 미커밋 확인 → `/compact` 후 `superpowers:writing-plans` (권장) — verbatim `/compact` 명령을 노출하고 **턴 종료** |
 | ② | 미커밋 확인 → 바로 `Skill superpowers:writing-plans <path>` |
-| ③ | 수정 필요 — 후속 질문으로 revise per findings / `conducting-interview` 재진입 / 사용자 직접 편집 분기 |
+| ③ | 수정 필요 — 후속 질문으로 revise per findings / `spec-interview` 재진입 / 사용자 직접 편집 분기 |
 | ④ | 멈춤 — 상태 보존하고 종료 |
 
 - **① 의 정지 요건** — verbatim `/compact` 명령을 노출한 자리에서 **턴 종료(STOP)** 한다. 같은 턴

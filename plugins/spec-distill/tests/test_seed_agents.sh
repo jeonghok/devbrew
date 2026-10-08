@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/agents/seed-*.md plugins/spec-distill/skills/framing-requests/SKILL.md
+# guards: plugins/spec-distill/agents/seed-*.md plugins/spec-distill/skills/request-framing/SKILL.md
 #
 # seed 냉독 리뷰어(`seed-readback`)의 **도구 표면**을 잰다. `tools: []` 는 Law 2 의 집행
 # 지점이고, 여기서는 그보다 더 강하다 — `Read` 도 없다. (옛 격리 critic `seed-critic` 은 seed
@@ -82,11 +82,11 @@ set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
 AGENTS="$ROOT/plugins/spec-distill/agents"
-SKILL="$ROOT/plugins/spec-distill/skills/framing-requests/SKILL.md"
+SKILL="$ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/agents/seed-readback.md"
-  echo "plugins/spec-distill/skills/framing-requests/SKILL.md"
+  echo "plugins/spec-distill/skills/request-framing/SKILL.md"
   exit 0
 fi
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/conducting-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/reviewing-spec/SKILL.md
+# guards: plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-review/SKILL.md
 #
-# AC8 · AC16 — 핸드오프 네 자리가 brainstorming → `spec-distill:reviewing-spec` → writing-plans
-# 순서를 싣고, `reviewing-spec` 의 게이트 없는 두 종료 경로가 같은 복귀 지시로 끝나는가.
+# AC8 · AC16 — 핸드오프 네 자리가 brainstorming → `spec-distill:spec-review` → writing-plans
+# 순서를 싣고, `spec-review` 의 게이트 없는 두 종료 경로가 같은 복귀 지시로 끝나는가.
 #
 # **정적 락이다.** 문구의 존재와 순서만 증명한다 — 오케스트레이터가 그 문구대로 부르는지는
 # 재지 못한다(AC14 수동 e2e 몫). 게이트 없는 종료의 «실행 출력»은
@@ -12,14 +12,14 @@
 # 있어야 한다. 순서는 창 안의 문자 오프셋으로 잰다(한 줄 안의 순서까지).
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-FIN="$ROOT/plugins/spec-distill/skills/conducting-interview/references/finishing.md"
+FIN="$ROOT/plugins/spec-distill/skills/spec-interview/references/finishing.md"
 TPL="$ROOT/plugins/spec-distill/templates/interview-brief-template.md"
-SKILL="$ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+SKILL="$ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
-  echo "plugins/spec-distill/skills/conducting-interview/references/finishing.md"
+  echo "plugins/spec-distill/skills/spec-interview/references/finishing.md"
   echo "plugins/spec-distill/templates/interview-brief-template.md"
-  echo "plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+  echo "plugins/spec-distill/skills/spec-review/SKILL.md"
   exit 0
 fi
 . "$ROOT/shared/tests/assert.sh"
@@ -46,8 +46,8 @@ ONE="$(grep -F '/compact interview brief at' "$FIN" || true)"
 n1="$(printf '%s' "$ONE" | grep -c . || true)"
 if [ "$n1" = "1" ]; then
   ok "① 템플릿 줄이 정확히 하나"
-  order "① 템플릿" "$ONE" "Skill superpowers:brainstorming" "spec-distill:reviewing-spec"
-  order "① 템플릿" "$ONE" "spec-distill:reviewing-spec" "writing-plans"
+  order "① 템플릿" "$ONE" "Skill superpowers:brainstorming" "spec-distill:spec-review"
+  order "① 템플릿" "$ONE" "spec-distill:spec-review" "writing-plans"
   # 치환되지 않은 placeholder 를 잡는 fail-closed 검사가 없다(finishing.md 가 스스로 적는다) —
   # 새 꺾쇠 자리를 들이지 않는다.
   ph="$(printf '%s' "$ONE" | grep -oE '<[^>]+>' | sort -u | tr '\n' ' ')"
@@ -59,8 +59,8 @@ fi
 # ── ② 호출 프롬프트 ─────────────────────────────────────────────────────────
 TWO="$(awk '/^- \*\*② 확정하고 바로 brainstorming\*\*/{f=1} /^- \*\*③/{f=0} f' "$FIN")"
 if nonempty "②" "$TWO"; then
-  order "② 호출 프롬프트" "$TWO" "Skill superpowers:brainstorming" "spec-distill:reviewing-spec"
-  order "② 호출 프롬프트" "$TWO" "spec-distill:reviewing-spec" "writing-plans"
+  order "② 호출 프롬프트" "$TWO" "Skill superpowers:brainstorming" "spec-distill:spec-review"
+  order "② 호출 프롬프트" "$TWO" "spec-distill:spec-review" "writing-plans"
   assert_contains "$TWO" "보다 이 순서가 우선한다" "②: brainstorming 의 「다음은 writing-plans 뿐」보다 우선한다고 적는다"
   assert_contains "$TWO" "게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다" "②: 게이트 없는 종료의 복귀 분기를 싣는다 (AC16)"
 fi
@@ -68,11 +68,11 @@ fi
 # ── brief 템플릿 §7 ─────────────────────────────────────────────────────────
 SEV="$(awk '/^## 7\. Next Action/{f=1} f' "$TPL")"
 if nonempty "§7" "$SEV"; then
-  order "brief 템플릿 §7" "$SEV" "superpowers:brainstorming" "spec-distill:reviewing-spec"
-  order "brief 템플릿 §7" "$SEV" "spec-distill:reviewing-spec" "writing-plans"
+  order "brief 템플릿 §7" "$SEV" "superpowers:brainstorming" "spec-distill:spec-review"
+  order "brief 템플릿 §7" "$SEV" "spec-distill:spec-review" "writing-plans"
 fi
 
-# ── reviewing-spec description — 자기 자신을 가리키므로 이름 대신 «앞/뒤» 를 잰다 ─
+# ── spec-review description — 자기 자신을 가리키므로 이름 대신 «앞/뒤» 를 잰다 ─
 DESC="$(awk 'NR==1 && /^---$/{f=1; next} f && /^---$/{exit} f' "$SKILL" \
   | awk '/^description:/{d=1; print; next} d && /^[a-z_]+:/{d=0} d')"
 if nonempty "description" "$DESC"; then

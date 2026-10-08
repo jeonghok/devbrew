@@ -7,7 +7,7 @@
 # 치환하고, 인자가 없는 자리의 토큰은 그대로 둔다. 셸 쪽 의미로 쓴 토큰(함수 인자 · awk 필드)도
 # 가리지 않는다. 그래서 인자가 둘 이상인 호출에서만 셸 펜스의 토큰이 인자 값으로 바뀐다 — 실측:
 # `reviewing-brief`(인자 payload · audit)의 잔존물 중화 함수가 로드된 본문에서 audit 을 지우는
-# `rm -f` 가 됐다. 인자 하나로 불린 `reviewing-spec` 에서는 같은 토큰이 그대로 남았다.
+# `rm -f` 가 됐다. 인자 하나로 불린 `spec-review` 에서는 같은 토큰이 그대로 남았다.
 #
 # 코퍼스 — Skill · 커맨드 로드 때 본문으로 들어가는 파일: `plugins/*/skills/*/SKILL.md` ·
 #   `plugins/*/commands/*.md`. skill 디렉토리의 다른 파일(references 등)은 모델이 Read 로 읽으므로

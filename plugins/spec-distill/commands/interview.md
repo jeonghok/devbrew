@@ -39,7 +39,7 @@ Read 로 확인하고, 인터뷰에 들어가기 전에 아래 한 줄을 그대
 > `[spec-distill] seed 원문 대조: seed=<seed 절대경로> · audit=<audit 절대경로>`
 
 읽지 못하면 `audit=없음(<관측한 사유>)` 로 낸다. 이 줄은 「풀린 입력」에 넣지 않는다 — 「풀린 입력」은 seed 전문
-그대로여야 brief §6 의 `S1` 이 바뀌지 않는다. `conducting-interview` 의 seed 입력 규약이 이 줄의 두 경로로
+그대로여야 brief §6 의 `S1` 이 바뀌지 않는다. `spec-interview` 의 seed 입력 규약이 이 줄의 두 경로로
 문장마다 출처와 확인을 가른다.
 
 발동하지 않았으면 「풀린 입력」은 이 command 가 받은 입력 그대로다.
@@ -63,21 +63,21 @@ Phase 0 을 거친 세션은 이 command 를 `/interview @<seed 경로>` 로 부
 
 ## Step 3: 인터뷰 진입
 
-Trivia 아닌 경우, `conducting-interview` skill을 invoke하십시오. 인자는 「풀린 입력」입니다 — Step 1.5 가
+Trivia 아닌 경우, `spec-interview` skill을 invoke하십시오. 인자는 「풀린 입력」입니다 — Step 1.5 가
 발동했으면 경로 문자열이 아니라 파일 전문(frontmatter 포함)입니다:
 
 ```
-Skill conducting-interview <풀린 입력>
+Skill spec-interview <풀린 입력>
 ```
 
-`conducting-interview` skill이 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 첫 round를 진행합니다.
+`spec-interview` skill이 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 첫 round를 진행합니다.
 
 ## Arguments
 
-「풀린 입력」 — Step 1.5 의 결과. 사용자가 `/interview`에 함께 넘긴 rough request 그대로이거나, `/interview @<seed 경로>` 로 불렸으면 Phase 0 이 만든 `interview-seed` 파일 전문(frontmatter 포함)이다. 사용자가 seed 전문을 직접 붙여넣은 입력도 그대로 받는다. 비어 있으면 `conducting-interview`가 첫 질문 ("어떤 것을 만들고 싶으신가요?")으로 시작.
+「풀린 입력」 — Step 1.5 의 결과. 사용자가 `/interview`에 함께 넘긴 rough request 그대로이거나, `/interview @<seed 경로>` 로 불렸으면 Phase 0 이 만든 `interview-seed` 파일 전문(frontmatter 포함)이다. 사용자가 seed 전문을 직접 붙여넣은 입력도 그대로 받는다. 비어 있으면 `spec-interview`가 첫 질문 ("어떤 것을 만들고 싶으신가요?")으로 시작.
 
 ## 다음 단계
 
-`conducting-interview` skill로 흐름이 넘어가 5 통과 의례(R1–R5)를 거쳐 interview brief를
+`spec-interview` skill로 흐름이 넘어가 5 통과 의례(R1–R5)를 거쳐 interview brief를
 `docs/superpowers/interview/`에 생성합니다. 이 command 자체는 trivia escape + `@경로` 풀기 + skill dispatch
 책임만 집니다(NG6 — trivia escape 불변).

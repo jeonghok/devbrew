@@ -1,7 +1,7 @@
 ---
 name: reviewing-brief
 description: >
-  Use this skill to review an interview brief produced by conducting-interview with the shared
+  Use this skill to review an interview brief produced by spec-interview with the shared
   document-review engine. It runs the brief's entry gates (check_brief.py gate ·
   check_verbatim_coverage.py), assembles the payload+audit bundle, runs engine rounds with the
   brief profile (snapshot → kill switch → detection → codex → anonymize → re-critique →
@@ -18,7 +18,7 @@ user-invocable: false
 
 ## 입력
 
-호출자 `conducting-interview` 종료 Step A.5 가 두 값을 Skill 인자로 넘긴다. 훅은 이 자리에 없으므로
+호출자 `spec-interview` 종료 Step A.5 가 두 값을 Skill 인자로 넘긴다. 훅은 이 자리에 없으므로
 이 둘이 계약의 전부다.
 
 - `$PAYLOAD` — 구조 게이트를 막 통과한 payload. 엔진의 `--doc`(init · snapshot · 얼림 검사 ·
@@ -469,7 +469,7 @@ Agent({
 `begin-round --extra-approval "<사용자 자신의 문구>"` 로 돈다.
 
 **승인 게이트 2단계(진행 옵션 넷)는 이 skill 이 띄우지 않는다.** 진행 결정은 호출자
-`conducting-interview` 종료 Step B 의 몫이다 — 같은 공통 계약(`proceed-gate.md`)을 쓰는 그 게이트가
+`spec-interview` 종료 Step B 의 몫이다 — 같은 공통 계약(`proceed-gate.md`)을 쓰는 그 게이트가
 확정 후보와 함께 한 번에 묻는다. 1단계가 닫히면(두 단계가 아니면 승인 게이트에 도달한 그 시점에)
 `## 냉독` 을 돌리고 `## Step B 로 돌아간다` — 1단계의 「진행 옵션으로」가 그 전환이다.
 
@@ -547,7 +547,7 @@ G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **�
 
 ## Step B 로 돌아간다
 
-`conducting-interview` 종료 Step B 의 proceed 게이트에 셋을 싣는다:
+`spec-interview` 종료 Step B 의 proceed 게이트에 셋을 싣는다:
 
 1. **엔진 게이트 결과** — 마지막 `gate --render` 전문 · 승인 게이트에 도달한 사유(열린 것 없음 · 상한 ·
    stagnation · 「미검증」 — 「미검증」은 마지막 요약의 `approval_label` 과 사유 `unverified` 그대로) · 리뷰 완료 여부(마지막 요약의 `round_reviewed` —
@@ -560,7 +560,7 @@ G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **�
 줄 모양대로 한 줄씩 채운다 — 기록이지 게이트가 아니다. 결정 자체는 엔진이 `## 8. 리뷰 결정` 에 이미 썼다.
 
 참고(advisory) 목록은 이 skill 이 보이지 않는다 — 엔진 `advice` 원장에 쌓인 방향 · overdesign 항목은 호출자
-Step B(`conducting-interview` `finishing.md` 의 `#### B-A`)가 끝에서 한 번 보이고 brief §3 · §5 에 박제한다.
+Step B(`spec-interview` `finishing.md` 의 `#### B-A`)가 끝에서 한 번 보이고 brief §3 · §5 에 박제한다.
 
 ## degrade 채널
 

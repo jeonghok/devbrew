@@ -1,4 +1,4 @@
-"""auditing-plugins/SKILL.md — codex 게이트가 **실행 가능한 형태**인가.
+"""plugin-audit/SKILL.md — codex 게이트가 **실행 가능한 형태**인가.
 
 산문 게이트는 "껐다고 믿게만" 만든다: 모델이 게이트를 건너뛰면 kill switch가 우회되고,
 그 우회는 아무 검사에도 걸리지 않는다. kill switch는 P21 보안 컨트롤이라 그 상태를
@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "skills" / "auditing-plugins" / "SKILL.md"
+SKILL = ROOT / "skills" / "plugin-audit" / "SKILL.md"
 BEGIN = re.compile(r"<!--\s*codex-gate:begin\s+runner=([A-Za-z0-9_.-]+)\s*-->")
 
 

@@ -320,7 +320,7 @@ S="$TMPD/dup-root"
 mkdir -p "$S/shared/tests" "$S/shared/docreview/agents" "$S/plugins/x/skills/a" "$S/plugins/x/skills/b"
 cp "$ROOT/shared/tests/test_no_new_duplication.sh" "$ROOT/shared/tests/assert.sh" "$ROOT/shared/tests/variant_of.py" "$S/shared/tests/"
 cp "$ROOT/shared/docreview/agents/doc-critic.md" "$ROOT/shared/docreview/agents/doc-critic-web.md" "$S/shared/docreview/agents/"
-SRC="$ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+SRC="$ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
 cp "$SRC" "$S/plugins/x/skills/a/SKILL.md"
 # 복제본 — 마커 + name 변경 + 본문 첫 `## ` 앞 두 줄 끼움(리뷰의 probe 와 같은 모양)
 python3 - "$SRC" "$S/plugins/x/skills/b/SKILL.md" <<'PY'
@@ -329,7 +329,7 @@ src, dst = sys.argv[1:3]
 lines = open(src, encoding="utf-8").read().split("\n")
 assert lines[0] == "---"
 out = [lines[0], "# variant-of: plugins/x/skills/a/SKILL.md"]
-out += ["name: reviewing-spec-copy" if ln.startswith("name:") else ln for ln in lines[1:]]
+out += ["name: spec-review-copy" if ln.startswith("name:") else ln for ln in lines[1:]]
 body_start = out.index("---", 1) + 1
 for i in range(body_start, len(out)):
     if out[i].startswith("## "):

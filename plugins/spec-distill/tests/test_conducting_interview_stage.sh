@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# AC3/AC7/AC8/AC13 + R1-R5 + PN1/PN3 — conducting-interview problem-space stage contract.
+# AC3/AC7/AC8/AC13 + R1-R5 + PN1/PN3 — spec-interview problem-space stage contract.
 set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SKILL="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/SKILL.md"
+SKILL="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/SKILL.md"
 CMD="$REPO_ROOT/plugins/spec-distill/commands/interview.md"
 # Task 32(무게 감축): `## 종료` 절차 전문이 references/finishing.md 로 분리됐다. 이 스위트의
 # 전-파일 검사(존재·**부재** 양쪽)가 보는 범위는 614줄 중 396줄로 줄었다 — 부재 락은 코퍼스가
 # 줄어도 RED 가 되지 않고 **조용히 약해진다**(Task 31 이 정확히 이 방식으로 P21 스캔을 잃었다).
 # 그래서 스킬의 표면을 **열거가 아니라 도출**해 한 덩어리로 다룬다: 새 참조 파일이 생겨도
 # 자동으로 대상이 된다. 섹션 윈도우(B-0…B-3·종료)는 그 섹션이 실제로 사는 $FIN 에서 뜬다.
-FIN_DIR="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/references"
+FIN_DIR="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/references"
 FIN="$FIN_DIR/finishing.md"
 # Task 11b(무게 감축 재시도): 같은 이유로 `## seed 를 입력으로 받았을 때`와
 # `## In-flight state migration`도 references/로 분리됐다(둘 다 finishing.md보다 조건성이
@@ -44,7 +44,7 @@ ci_cat_all() { cat "${CI_ALL[@]}"; }
 # vacuity: 도출이 SKILL.md 하나만 남기면 이 스위트의 부재 락은 분할 이전 범위로 조용히
 # 되돌아가면서 GREEN 을 찍는다. '참조 파일 0건'을 '문제 없음'으로 읽지 않는다.
 [[ "${#CI_FILES[@]}" -ge 2 ]] \
-  && ok "코퍼스: conducting-interview 표면 ${#CI_FILES[@]}개 파일 도출 (vacuous 아님)" \
+  && ok "코퍼스: spec-interview 표면 ${#CI_FILES[@]}개 파일 도출 (vacuous 아님)" \
   || no "코퍼스: references/*.md 를 0건 도출했다 — 전-파일 검사 범위가 조용히 좁아졌다"
 [[ -f "$FIN" ]] && ok "코퍼스: references/finishing.md 실재" || no "코퍼스: references/finishing.md 부재"
 
@@ -1285,7 +1285,7 @@ grep -qF "$step2_stop_phrase" <<<"$step2_flat" \
 grep -qF "$step2_stop_phrase" <<<"$step25_flat" \
   && no "v0.41.0: Step 2.5 가 Step 2 자신의 정지 문구를 재사용한다 — 비차단 산문과 모순" \
   || ok "v0.41.0: Step 2.5 에 Step 2 의 정지 문구가 없다 (Step 3 로 흐름 지속)"
-grep -qF 'Skill conducting-interview' "$CMD" \
+grep -qF 'Skill spec-interview' "$CMD" \
   && ok "v0.41.0: Step 3 dispatch 줄이 실재한다 (흐름이 실제로 이어짐)" \
   || no "v0.41.0: Step 3 dispatch 줄이 없다 — «막지 않는다» 의 흐름-도달 절반이 무방비"
 grep -qF 'request-framing' <<<"$step25_flat" \

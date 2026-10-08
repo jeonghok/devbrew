@@ -1,5 +1,5 @@
 ---
-name: auditing-plugins
+name: plugin-audit
 description: >
   임의의 devbrew 플러그인을 읽기전용·증거기반·multi-agent로 감사한다. /plugin-audit <target>
   [--seed <path>]로 트리거. 6축 발견 → 적대적 반박 → blind codex co-audit → 우선순위 갭 리포트.

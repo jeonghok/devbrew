@@ -89,16 +89,16 @@ ORPHAN="$(grep -nE '^[0-9]+\.[0-9]*\.? ' <<<"$FLOW" || true)"
 # SKILL 에 그 러너의 게이트 펜스가 정확히 하나씩 있는가)를 SKILL 에서 도출해 함께 잰다.
 # 부재 짝: 옛 세 지점 서술과 지워진 러너 이름이 이 줄에 돌아오면 RED 다.
 KS_CODEX="$(grep -F 'DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1' <<<"$KS" | head -1)"
-{ grep -qF 'reviewing-spec' <<<"$KS_CODEX" && grep -qF 'reviewing-brief' <<<"$KS_CODEX" \
+{ grep -qF 'spec-review' <<<"$KS_CODEX" && grep -qF 'reviewing-brief' <<<"$KS_CODEX" \
     && grep -qF 'run_docreview_codex_reviewer.sh' <<<"$KS_CODEX" && grep -qF 'codex-gate' <<<"$KS_CODEX"; } \
   && ok "C4: codex kill switch 가 두 엔진 자리 · 공유 러너 · 게이트 펜스 표지를 댄다" \
-  || no "C4: codex kill switch 서술이 두 엔진 자리(reviewing-spec · reviewing-brief) · 공유 러너(run_docreview_codex_reviewer.sh) · codex-gate 펜스 중 하나를 대지 않는다"
+  || no "C4: codex kill switch 서술이 두 엔진 자리(spec-review · reviewing-brief) · 공유 러너(run_docreview_codex_reviewer.sh) · codex-gate 펜스 중 하나를 대지 않는다"
 if grep -qE '3곳|세 곳|세 지점|run_brief_codex_reviewer' <<<"$KS_CODEX"; then
   no "C4/부재: codex kill switch 서술이 은퇴한 brief 파이프라인의 세 호출 지점이나 지워진 러너를 현재형으로 댄다"
 else
   ok "C4/부재: 은퇴한 세 호출 지점 · 지워진 러너 서술 없음"
 fi
-for sk in reviewing-spec reviewing-brief; do
+for sk in spec-review reviewing-brief; do
   n_fence="$(grep -c 'codex-gate:begin runner=run_docreview_codex_reviewer.sh' "$SD/skills/$sk/SKILL.md" 2>/dev/null || true)"
   [[ "$n_fence" == "1" ]] \
     && ok "C4(사실): $sk 에 공유 러너의 codex 게이트 펜스가 정확히 하나 — README 의 「펜스 하나」가 참이다" \

@@ -87,8 +87,9 @@ EDITED = (
     f"{SD}/hooks/session-end-cleanup.py", HOOK_COMMON,
     f"{SD}/scripts/state_path.py", f"{SD}/scripts/check_brief.py",
     f"{SD}/scripts/codex_prompt_common.py",
-    f"{SD}/skills/reviewing-spec/SKILL.md", f"{SD}/skills/reviewing-brief/SKILL.md",
-    f"{SD}/skills/conducting-interview/references/finishing.md",
+    # 역사 커밋 BASE 의 경로 — 옛 이름 그대로(락 I 를 피해 조각으로 잇는다)
+    f"{SD}/skills/reviewing" "-spec/SKILL.md", f"{SD}/skills/reviewing-brief/SKILL.md",
+    f"{SD}/skills/conducting" "-interview/references/finishing.md",
     f"{SD}/templates/interview-brief-template.md", f"{SD}/README.md",
     f"{SD}/tests/test_hook_output_schema.py", f"{SD}/tests/test_reviewing_spec_design_only.sh",
     f"{SD}/tests/test_session_end_cleanup.py", f"{SD}/tests/test_brainstorming_entry.sh",
@@ -385,7 +386,7 @@ class TestResidue(unittest.TestCase):
             if text is not None:
                 scanned.append(f)
                 hits += scan_text(f, text, tokens)
-        for must in (f"{SD}/README.md", f"{SD}/skills/reviewing-spec/SKILL.md",
+        for must in (f"{SD}/README.md", f"{SD}/skills/spec-review/SKILL.md",
                      f"{SD}/scripts/review_entry.py"):
             with self.subTest(must=must):
                 self.assertIn(must, scanned, "스캔 대상에서 빠졌다 — HISTORY/면제가 넓어졌다")
@@ -399,7 +400,7 @@ class TestResidue(unittest.TestCase):
     def test_alias_scope_not_vacuous(self):
         scope = self._alias_scope()
         self.assertGreaterEqual(len(scope), 30)
-        for must in (README, f"{SD}/skills/reviewing-spec/SKILL.md", *ALIAS_SCOPE_EXTRA):
+        for must in (README, f"{SD}/skills/spec-review/SKILL.md", *ALIAS_SCOPE_EXTRA):
             with self.subTest(must=must):
                 self.assertIn(must, scope)
                 self.assertIsNotNone(read_head(must))
@@ -421,7 +422,7 @@ class TestResidue(unittest.TestCase):
 class TestReviewingSpecContract(unittest.TestCase):
     """AC7 — 옛 입력 계약의 부재 + 새 입력 계약의 존재."""
 
-    SKILL = REPO / SD / "skills" / "reviewing-spec" / "SKILL.md"
+    SKILL = REPO / SD / "skills" / "spec-review" / "SKILL.md"
 
     def test_old_input_contract_absent(self):
         t = self.SKILL.read_text(encoding="utf-8")

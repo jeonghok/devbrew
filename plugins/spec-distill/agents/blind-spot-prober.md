@@ -21,7 +21,7 @@ description: >
   on the blind_spot floor dimension's first open→in-progress transition; eligibility is
   whether an open decision still touches that dimension, and the budget on top of it is
   1 plus that dimension's reopen count.
-  Output is recorded by conducting-interview into the brief's Blind Spots & Premortem.
+  Output is recorded by spec-interview into the brief's Blind Spots & Premortem.
 
   <example>Context: The blind_spot floor dimension just opened for its first probe.
   user: "블라인드 스팟 프로브 돌려줘"
@@ -54,7 +54,7 @@ failure mode(unknown-unknown)를 웹 근거와 함께 표면화합니다. 당신
 1. 이 문제 유형의 알려진 실패 사례·안티패턴을 web 검색(WebSearch/WebFetch)으로 수집.
 2. (가능하면) codebase grep로 현재 전제와 충돌하는 기존 제약 확인.
 
-## Output 형식 (이 형식을 정확히 준수 — conducting-interview가 §Blind Spots & Premortem에 기록)
+## Output 형식 (이 형식을 정확히 준수 — spec-interview가 §Blind Spots & Premortem에 기록)
 
 ```yaml
 hidden_assumptions:
@@ -97,7 +97,7 @@ repo_claims:                   # 내부(레포) 주장 — <claims_contract> 계
    가정만 노출 — 단일 책임(R6 분리 근거).
 4. **자격 + 예산**: 다시 부를 자격은 그 차원에 닿는 열린 결정이 아직 있는가다 — 열린 결정이 0이면
    자격이 없다. 자격을 채웠으면 예산은 `1 + 그 차원의 재개방 횟수` 이고, 통제는
-   conducting-interview 가 한다.
+   spec-interview 가 한다.
 5. **confidence < 0.4** 면 "표면화된 blind-spot 약함 — framing 견고"를 명시(억지 premortem 금지).
 6. **숨은 가정의 근거를 레포에서 댈 수 있으면 `repo_claims[]` 로 낸다.** `path`·`anchor` 없이
    내지 않고, 판정 전에 구현을 읽는다 — 인덱스·목차·description 필드만 읽고 판정하지 않는다.

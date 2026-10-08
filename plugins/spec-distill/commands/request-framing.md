@@ -21,10 +21,10 @@ argument-hint: "[raw request / 생각 / 대화 / 자료]"
 
 ## Step 3: 회의 진입
 
-trivia 가 아니면 `framing-requests` skill 을 invoke 합니다.
+trivia 가 아니면 `request-framing` skill 을 invoke 합니다.
 
 ```
-Skill framing-requests $ARGUMENTS
+Skill request-framing $ARGUMENTS
 ```
 
 ## Arguments
@@ -38,5 +38,5 @@ Skill framing-requests $ARGUMENTS
 skill 이 확산 후 압축을 거쳐 `interview-seed` 를 `docs/superpowers/interview/` 에
 만듭니다. 그 seed 는 **새 세션의 첫 턴이 가리키는 파일**이고, 그 첫 턴은
 `/interview @<seed 경로>` 한 줄입니다 — `/interview` 가 그 파일을 전문으로 풀어 인터뷰에 넘깁니다.
-이 모양의 정본과 그렇게 정한 이유는 `framing-requests` skill 의
+이 모양의 정본과 그렇게 정한 이유는 `request-framing` skill 의
 `## 확정 — proceed 게이트` 안 「호출 모양」 절에 있습니다. 여기서 다시 정하지 않습니다.

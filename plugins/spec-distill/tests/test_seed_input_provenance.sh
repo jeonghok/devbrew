@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/conducting-interview/references/seed-input.md plugins/spec-distill/skills/conducting-interview/SKILL.md plugins/spec-distill/commands/interview.md plugins/spec-distill/scripts/seed_provenance.py plugins/spec-distill/scripts/seed_review_log.py
+# guards: plugins/spec-distill/skills/spec-interview/references/seed-input.md plugins/spec-distill/skills/spec-interview/SKILL.md plugins/spec-distill/commands/interview.md plugins/spec-distill/scripts/seed_provenance.py plugins/spec-distill/scripts/seed_review_log.py
 #
 # Phase 1 의 seed 출처 규약 — 출처와 확인을 두 축으로 가르고(설계 2026-09-16-framing-intent-drift
 # §5.6 · AC7), 그 가름을 audit 원문 대조로 한다. audit 경로는 seed frontmatter 의 포인터(파일
@@ -7,12 +7,12 @@
 # 끝에 규약이 가리키는 분류기를 픽스처로 돌려 두 경우(사용자 원문 · 저자 문장)를 실제로 가르는지 본다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SI="$ROOT/plugins/spec-distill/skills/conducting-interview/references/seed-input.md"
-CI="$ROOT/plugins/spec-distill/skills/conducting-interview/SKILL.md"
+SI="$ROOT/plugins/spec-distill/skills/spec-interview/references/seed-input.md"
+CI="$ROOT/plugins/spec-distill/skills/spec-interview/SKILL.md"
 IV="$ROOT/plugins/spec-distill/commands/interview.md"
 P="$ROOT/plugins/spec-distill/scripts/seed_provenance.py"
 if [ "${1:-}" = "--emit-scanned" ]; then
-  for f in plugins/spec-distill/skills/conducting-interview/references/seed-input.md plugins/spec-distill/skills/conducting-interview/SKILL.md \
+  for f in plugins/spec-distill/skills/spec-interview/references/seed-input.md plugins/spec-distill/skills/spec-interview/SKILL.md \
            plugins/spec-distill/commands/interview.md plugins/spec-distill/scripts/seed_provenance.py plugins/spec-distill/scripts/seed_review_log.py; do
     echo "$f"
   done
@@ -37,7 +37,7 @@ IVT="$(cat "$IV")"
 assert_contains "$IVT" "[spec-distill] seed 원문 대조: seed=" "/interview 가 seed · audit 경로를 한 줄로 낸다"
 assert_contains "$IVT" '`.audit.md`' "audit 경로는 seed 경로에서 도출한다"
 assert_contains "$IVT" "「풀린 입력」에 넣지 않는다" "그 줄은 풀린 입력 밖 — S1 이 바뀌지 않는다"
-assert_contains "$(cat "$CI")" 'Read ${CLAUDE_PLUGIN_ROOT}/skills/conducting-interview/references/seed-input.md' "seed-input 을 여는 줄이 절대 형태다(펜스가 루트를 쓰므로)"
+assert_contains "$(cat "$CI")" 'Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/seed-input.md' "seed-input 을 여는 줄이 절대 형태다(펜스가 루트를 쓰므로)"
 
 # ── 실행 — 규약이 가리키는 분류기가 두 경우를 가른다 ─────────────────────────
 T="$(mktemp -d -t sd-seed-input-XXXXXX)" || exit 1

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # V7 — stale-term 회귀 락. rename 완결을 **production artifacts**에서 확인한다.
 # (a) breadth-keeper → coverage-mapper 재명명이 production에 완결(잔존 0).
-# (b) interview_round는 활성 코드서 제거, 잔존은 conducting-interview의 migration 참조 파일
-#     (skills/conducting-interview/references/state-migration.md, Task 11b 로 SKILL.md 밖으로
+# (b) interview_round는 활성 코드서 제거, 잔존은 spec-interview의 migration 참조 파일
+#     (skills/spec-interview/references/state-migration.md, Task 11b 로 SKILL.md 밖으로
 #     분리)에만.
 # (c) v0.23.0 권위 문법 6개 리터럴이 production에서 제거됐다(AC13). README.md도 스코프 안 —
 #     제외했던 근거("Principles Instantiated가 무엇이 왜 사라졌는지 설명하려면 옛 용어를
@@ -27,7 +27,7 @@
 set -u -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
-SKILL="$SD/skills/conducting-interview/SKILL.md"
+SKILL="$SD/skills/spec-interview/SKILL.md"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # grep은 세 결과를 구분한다: 0=매치(금지어 발견), 1=매치 없음(정상), >=2=grep 자체 실패
@@ -101,7 +101,7 @@ fi
 # references/state-migration.md 로 옮겨갔다 — SKILL.md 자신은 이제 포인터만 갖고 조건절 산문에도
 # 리터럴 `interview_round`를 쓰지 않으므로, 확인 대상이 「SKILL 안의 한 섹션」에서 「그 전용
 # 파일 전체」로 바뀐다. SKILL.md 쪽 잔존은 0 이어야 한다 — 포인터가 조건을 산문으로만 서술한다).
-MIG_REF="$SD/skills/conducting-interview/references/state-migration.md"
+MIG_REF="$SD/skills/spec-interview/references/state-migration.md"
 skill_ir=$(grep -c interview_round "$SKILL" 2>/dev/null || true)
 mig_ir=$(grep -c interview_round "$MIG_REF" 2>/dev/null || true)
 { [[ "$skill_ir" -eq 0 ]] && [[ "$mig_ir" -ge 1 ]]; } \
@@ -181,7 +181,7 @@ removed_terms=(
 # 개념 별칭 — 식별자만 grep 하면 **같은 것을 다른 이름으로 부른 참조**가 살아남는다.
 # 근거는 실적이다: 식별자 'review_lock' 만 열거했을 때 살아남았던 생존자 두 건이
 #   scripts/state_path.py — "keys the review lock to the SAME state file" (공백 표기)
-#   skills/reviewing-spec/SKILL.md — "락이 훅에 보인다" (한국어)
+#   skills/spec-review/SKILL.md — "락이 훅에 보인다" (한국어)
 # 였고, 영어 식별자 grep 은 어느 쪽에도 닿지 못했다. 세 번째 항목 'suppressed path' 는
 # 위 두 건 같은 실적이 없는 **예방적 별칭**이다 — 같은 문단이 근거를 대는 척하면 안 되므로
 # 여기서 구분해 적는다.
@@ -196,7 +196,7 @@ removed_terms=(
 # 락이 정직한 문서 작성에 RED 를 내면 사람들은 락을 무시하게 된다.
 #
 # 커버리지는 줄지 않는다: 이 별칭들이 잡아낸 **실제 생존자 두 건**은 README 가 아니라
-# scripts/state_path.py 와 skills/reviewing-spec/SKILL.md 였다. README 만 면제하면
+# scripts/state_path.py 와 skills/spec-review/SKILL.md 였다. README 만 면제하면
 # 위양성 표면은 사라지고 실적은 그대로 남는다.
 alias_terms=(
   'review lock'

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/commands/request-framing.md plugins/spec-distill/skills/framing-requests/SKILL.md plugins/spec-distill/references/compression.md plugins/spec-distill/templates/interview-seed-template.md
+# guards: plugins/spec-distill/commands/request-framing.md plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/references/compression.md plugins/spec-distill/templates/interview-seed-template.md
 #
 # `/request-framing` command 가 자기 세 책임을 실제로 담고 있는가 — kill switch ·
 # trivia escape 포인터 · skill dispatch. 그 셋뿐이고, 셋 다 없으면 안 된다.
@@ -13,7 +13,7 @@
 # 어느 문맥에 있는지, 그 문맥이 리터럴을 **긍정하는지 부정하는지**는 보지 않는다. 실측:
 # 본문 끝에 「이 command 는 아래를 **항상 무시**한다 — 아무것도 실행하지 않는다」는 절을
 # 붙이고 그 안에서 `DEVBREW_SPEC_DISTILL_DISABLE` · `references/trivia-escape.md` ·
-# `framing-requests` 셋을 「…하지 않는다」로 인용하기만 해도 이 스위트는 **GREEN** 이다.
+# `request-framing` 셋을 「…하지 않는다」로 인용하기만 해도 이 스위트는 **GREEN** 이다.
 # 즉 「세 책임을 담고 있다」는 이 파일의 주장은 **리터럴 실재까지만** 보장한다.
 #
 # **계측기가 죽은 것은 아니다**(양성 대조, 실측): kill switch 문장을 실제로 지우면 RED 다.
@@ -30,7 +30,7 @@ CMD="$ROOT/plugins/spec-distill/commands/request-framing.md"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/commands/request-framing.md"
-  echo "plugins/spec-distill/skills/framing-requests/SKILL.md"
+  echo "plugins/spec-distill/skills/request-framing/SKILL.md"
   echo "plugins/spec-distill/references/compression.md"
   echo "plugins/spec-distill/templates/interview-seed-template.md"
   exit 0
@@ -45,8 +45,8 @@ grep -q 'DEVBREW_SPEC_DISTILL_DISABLE' "$CMD" \
 grep -qE 'references/trivia-escape\.md' "$CMD" \
   && ok "trivia escape 정본 포인터" || no "trivia escape 포인터가 없다"
 
-grep -qE 'Skill .*framing-requests|framing-requests' "$CMD" \
-  && ok "skill dispatch" || no "framing-requests skill 을 호출하지 않는다"
+grep -qE 'Skill .*request-framing|request-framing' "$CMD" \
+  && ok "skill dispatch" || no "request-framing skill 을 호출하지 않는다"
 
 # 5패턴을 여기 «복제하지» 않았는가 — 정본이 있는데 사본이 있으면 둘이 갈라진다.
 pc="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 식별자|<10 토큰)' "$CMD")"
@@ -55,7 +55,7 @@ pc="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 식별자|<10 �
   || no "5패턴 본문이 이 파일에 복제돼 있다 (${pc}줄) — 정본과 갈라진다"
 
 # --- v0.57.0 AC11: seed 산문 규약 (블록 스코프) -------------------------------------------
-SK="$ROOT/plugins/spec-distill/skills/framing-requests/SKILL.md"
+SK="$ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
 CMP="$ROOT/plugins/spec-distill/references/compression.md"
 TPL="$ROOT/plugins/spec-distill/templates/interview-seed-template.md"
 conv_block="$(awk '/^### 확정 표시와 «다시 검증할 것»/{f=1;print;next} /^##/{f=0} f' "$SK")"
@@ -72,7 +72,7 @@ grep -qF '확정 표시는 «(사용자 확인)» 하나' <<<"$conv_block" && ok
 # 오지 않으므로 이 리터럴을 만족시키지 못한다.
 grep -qF '다시 검증할 것 —»로 시작' <<<"$conv_block" && ok "AC11: 마지막 문단 «다시 검증할 것 —»로 시작 규칙" || no "AC11: 재검증 문단 규약 부재"
 grep -qE '그 밖[^.]{0,30}미확인|나머지[^.]{0,30}미확인' <<<"$conv_flat" && ok "AC11: 무표시 = 미확인" || no "AC11: 무표시=미확인 문장 부재"
-# Phase 1 이 이 문단을 어디에 쓰는가 — conducting-interview references/seed-input.md 와 같은 자리여야
+# Phase 1 이 이 문단을 어디에 쓰는가 — spec-interview references/seed-input.md 와 같은 자리여야
 # 한다(두 문서가 갈라지면 Phase 0 은 없는 블록을 겨냥해 문단을 쓴다).
 grep -qF 'Phase 1 은 이 문단을 R1 의 «지금 이해»·질문의 재료와 coverage-mapper 첫 dispatch 의 입력으로 씁니다' <<<"$conv_flat" \
   && ok "AC4: 재검증 문단의 소비 자리 = R1 «지금 이해»·질문 + coverage-mapper 첫 dispatch" \

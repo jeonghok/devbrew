@@ -74,7 +74,7 @@ AGENT_FLAT="$(tr '\n' ' ' < "$AGENT" | tr -s ' ')"
 grep -qiF -- 'bounded to two' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «bounded to two» 잔존" || ok "AC22: «bounded to two» 없음"
 grep -qiF -- 'once per' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «once per» 잔존" || ok "AC22: «once per» 없음"
 grep -qiF -- '상한 2 dispatch' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «상한 2 dispatch» 잔존" || ok "AC22: «상한 2 dispatch» 없음"
-grep -qiF -- '상한 2(conducting-interview' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «상한 2(conducting-interview» 잔존" || ok "AC22: «상한 2(conducting-interview» 없음"
+grep -qiF -- '상한 2(conducting''-interview' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «상한 2(conducting-interview» 잔존" || ok "AC22: «상한 2(conducting-interview» 없음"
 grep -qF -- 'dispatch eligibility is whether an open decision still' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
 grep -qF -- '1 plus the total reopen count' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
 finish

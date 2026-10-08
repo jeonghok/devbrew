@@ -1,5 +1,5 @@
 ---
-name: framing-requests
+name: request-framing
 description: >
   Phase 0 회의 skill. `/request-framing` 이 trivia escape 를 통과시킨 요청을 받아
   확산(원문 보존 → 레포 읽기 → 질문 라운드) 후 압축해, 새 세션 첫 턴의
@@ -228,7 +228,7 @@ premortem · coverage-mapper 넷이 거기 있는 장치이고, 이 skill 에는
 없습니다. **질문 라우팅**: 답을 사용자만 알 수 있으면 여기서 묻고, 사용자 밖에서 찾아야
 하면 다음 단계로 넘깁니다. 같은 주제도 이 기준으로 갈립니다.
 
-이 경계는 소비자 쪽(`conducting-interview` 의 R2 「탐색 경계」)에도 같은 문장으로 적혀
+이 경계는 소비자 쪽(`spec-interview` 의 R2 「탐색 경계」)에도 같은 문장으로 적혀
 있습니다. 두 곳에 있는 이유는 중복이 아니라 **제약당하는 쪽이 그 제약을 받은 적이 있어야**
 하기 때문입니다 — 한 skill 이 다른 skill 에 대해서만 적어 두면, 제약당하는 쪽을 고치는
 사람은 그것을 읽지 않습니다.
@@ -891,9 +891,9 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 어느 쪽이든 `/interview` 가 그 파일을 읽어 전문으로 풀어 넘깁니다. 넘긴 값이 비거나 경로 문자열로 남으면
 셋이 함께 조용히 실패합니다:
 
-- `conducting-interview` 의 종료 절차가 「인자 없이 호출되면 `S1` 을 만들지 않는다」이므로
+- `spec-interview` 의 종료 절차가 「인자 없이 호출되면 `S1` 을 만들지 않는다」이므로
   **사용자가 방금 확정한 요청이 brief §6 에 보존되지 않습니다.**
-- `conducting-interview` 의 seed 입력 규약(그 안의 재결정 P23 포함)이 발동할 입력을 못
+- `spec-interview` 의 seed 입력 규약(그 안의 재결정 P23 포함)이 발동할 입력을 못
   받습니다.
 - `/interview` 가 방금 Phase 0 을 거친 사용자에게 「`/request-framing` 을 먼저 거치면…」
   조언을 내고, 인터뷰가 「어떤 것을 만들고 싶으신가요?」로 시작합니다.

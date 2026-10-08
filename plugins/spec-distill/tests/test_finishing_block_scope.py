@@ -23,7 +23,7 @@ import re
 import unittest
 from pathlib import Path
 
-FIN = (Path(__file__).resolve().parent.parent / "skills" / "conducting-interview"
+FIN = (Path(__file__).resolve().parent.parent / "skills" / "spec-interview"
        / "references" / "finishing.md")
 
 # 펜스 밖에서 오는 값. `CLAUDE_PLUGIN_ROOT` 는 Bash 도구 환경에 없다 — 모델이 SKILL.md 가 보여 준 절대 경로로
