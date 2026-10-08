@@ -42,12 +42,13 @@ SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
 # 마커 기반은 반대로 시간에 fail-closed다 — 새 형제 디렉토리는 자동으로 안전하다.
 # 오판 방향도 옳다: 안 지우는 누수(빈 디렉토리 0바이트)가 살아있는 것을 지우는
 # 것보다 안전하다.
-# `pipeline.md`·`publish-eligible.md`는 SKILL.md가 실제로 쓰는 이름이다.
+# `pipeline.md`는 setup-qg.sh 가 쓰는 이름이고, `result.md`는 v10 파이프라인의 로컬 결과다 —
+# `result.md` 는 생산자보다 먼저 들인다(생산이 시작되는 릴리스에 이 GC 가 이미 그 폴더를 알아본다).
 # `runtime-evidence.md`는 차등 테스트의 evidence-log 이름(R-AG로 존치) —
 # skills/quality-pipeline/references/differential-test.md의 Step R8이
 # `.claude/quality-gates/<sid>/runtime-evidence.md`에 직접 쓴다(실재 확인됨).
 # 목록에서 빠진 마커의 오판 방향은 "안 지움"(누수)이라 안전하다 — 반대 방향이 아니다.
-SESSION_MARKERS = ("pipeline.md", "publish-eligible.md", "runtime-evidence.md")
+SESSION_MARKERS = ("pipeline.md", "result.md", "runtime-evidence.md")
 
 # 4.x 가 남긴 폴더는 유일한 파일이 `files.md` 인 경우가 있다 — 세션 tracker 가 편집
 # 파일을 적었지만 `/qg` 를 한 번도 안 돌린 세션이다. 5.0.0 이 그 생산자를 지워도
@@ -62,7 +63,10 @@ SESSION_MARKERS = ("pipeline.md", "publish-eligible.md", "runtime-evidence.md")
 # 이 이름은 소비자가 아니라 **회수 마커**다 — 파일을 열지도, 내용을 읽지도 않고
 # 폴더를 세션 폴더로 식별하는 데만 쓴다(그래서 tracker 부활의 발판이 아니다).
 # 4.x 잔여가 전부 TTL 을 지나간 뒤 지운다.
-LEGACY_SESSION_MARKERS = ("files.md",)
+#
+# `publish-eligible.md` 는 9.x 가 쓰던 표지다(지금은 쓰는 곳이 없다). 옛 버전이 남긴 폴더를 계속
+# 회수하려고 여기에 둔다 — 식별은 두 튜플의 합집합이라 회수 동작은 같다.
+LEGACY_SESSION_MARKERS = ("files.md", "publish-eligible.md")
 
 # TTL 계산 · 나이 판정 · 안전 삭제 · 루트 안전 검사(탈출 판정 · 루트 디렉토리 락)는
 # `shared/gc/gc_common.py` 정본(형제 사본 `scripts/gc_common.py`)이 갖는다. 여기 남는 것은

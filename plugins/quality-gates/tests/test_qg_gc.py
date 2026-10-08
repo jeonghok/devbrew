@@ -183,6 +183,19 @@ class TestQgGc(unittest.TestCase):
         run_gc(self.tmp)
         self.assertFalse(folder.exists(), "publish-eligible.md 만 있는 세션 폴더가 수집되지 않음")
 
+    # AC28 (qg v10) — 로컬 결과 `result.md` 하나뿐인 만료 폴더도 수집된다.
+    def test_session_identified_by_result_md(self):
+        root = Path(self.tmp)
+        folder = root / ".claude" / "quality-gates" / ("sess" + "r" * 8)
+        folder.mkdir(parents=True)
+        f = folder / "result.md"
+        f.write_text("# qg result\n", encoding="utf-8")
+        old = time.time() - 48 * 3600
+        os.utime(f, (old, old))
+        os.utime(folder, (old, old))
+        run_gc(self.tmp)
+        self.assertFalse(folder.exists(), "result.md 만 있는 세션 폴더가 수집되지 않음")
+
     # M2 — 업그레이드 누수. 4.x 가 남긴 폴더는 유일한 파일이 `files.md` 인 경우가
     # 있다(세션 tracker 가 파일을 적었지만 /qg 를 한 번도 안 돌린 세션). 5.0.0 이
     # 그 생산자를 지워도 **이미 디스크에 있는 폴더는 남는다** — 어느 마커도 안 맞아
