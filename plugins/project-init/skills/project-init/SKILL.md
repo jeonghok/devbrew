@@ -1,6 +1,29 @@
 ---
-description: "Initialize git workflow rules for the project (branch strategy, commit conventions, PR process)"
+name: project-init
+description: >
+  프로젝트의 git workflow 규칙(브랜치 전략 · 커밋 규약 · PR 절차)과 project charter 를 대화형으로
+  초기화한다. 사용자가 `/project-init:project-init` 으로 부른다 — 파일을 쓰는 셋업이라 모델은 부르지 않는다.
+cost_class: low
+disable-model-invocation: true
+allowed-tools:
+  - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" project-init project-init)
 ---
+
+!`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" project-init project-init`
+
+## 진입 단계
+
+이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽는다.
+
+| 그 자리의 내용 | 동작 |
+|---|---|
+| `[devbrew-entry] ok …` | 아래 `# project-init` 의 지시사항으로 간다. 셋업 대상 디렉토리는 그 줄의 `root=` 다 — `root_source=cwd` 면 git 이 아직 없는 현재 디렉토리다 |
+| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다(no-op). 파일을 쓰지 않는다 |
+| `[devbrew-entry] error …` | `[project-init] 사전 검사 실패 — <reason= 값>. 셋업을 시작하지 않는다.` 를 내고 멈춘다 |
+| `[shell command execution disabled by policy]` | `[project-init] 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 셋업을 시작하지 않는다.` 를 내고 멈춘다 |
+| 감시줄 없음 · 그 밖 | `[project-init] 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 셋업을 시작하지 않는다.` 를 내고 멈춘다 |
+
+이 표가 보는 kill switch 는 `DEVBREW_PROJECT_INIT_DISABLE=1` 하나다. 이 스위치는 훅과 이 셋업을 함께 끈다.
 
 # project-init
 
@@ -25,7 +48,7 @@ branching strategy 템플릿을 선택해 git workflow 룰을 초기화하고, �
 
 > "기존 CLAUDE.md 발견. AGENTS.md로 migrate할까요? (CLAUDE.md는 `@AGENTS.md` thin pointer로 교체됩니다)"
 
-사용자 거절 시: 전체 `/project-init` 실행 abort — Step 2 이후의 docs/git-workflow/ 생성도 skip. AC21에 따라 부분 진행 금지.
+사용자 거절 시: 전체 `/project-init:project-init` 실행 abort — Step 2 이후의 docs/git-workflow/ 생성도 skip. AC21에 따라 부분 진행 금지.
 
 #### Charter 상태 감지 (파일 레벨 — Phase 0보다 선행)
 
@@ -122,7 +145,7 @@ C-S2(완전 헌장 존재)면 먼저 "헌장을 업데이트할까요?"를 묻�
 
 C-S1 및 C-S3(a)에서 **vision·non-goals·conventions·tech-stack**가 채워질 때까지 진행을 막는다. 각 필수 항목에 대해 빈/무의미 응답이면 AskUserQuestion 재질문을 **최대 3회**까지 한다. 3회 후에도 비면 charter step을 *loud advisory와 함께 abort*한다:
 
-> `[project-init] charter 미완료: <항목> 비어 abort. git-workflow 산출물은 정상 생성됩니다. 미완 항목의 사후 자동 플래그는 없습니다 — 헌장을 채우려면 /project-init 을 다시 실행하세요.`
+> `[project-init] charter 미완료: <항목> 비어 abort. git-workflow 산출물은 정상 생성됩니다. 미완 항목의 사후 자동 플래그는 없습니다 — 헌장을 채우려면 /project-init:project-init 을 다시 실행하세요.`
 
 abort 후에도 Step 4의 git-workflow 파일 생성은 정상 진행한다(부분 산출물 금지 아님 — git-workflow는 charter와 독립). C-S2(완전 헌장 갱신)는 이 게이트 면제.
 
@@ -159,9 +182,9 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 | State | AGENTS.md | CLAUDE.md | Action |
 |---|---|---|---|
 | **S1 (clean slate)** | 없음 | 없음 | AGENTS.md 신규 작성 (`agents-md-section.md` content); CLAUDE.md 신규 작성 (`claude-md-pointer.md` content — `@AGENTS.md` 한 줄). |
-| **S2 (CLAUDE-only legacy)** | 없음 | 존재 | Step 1의 migration 프롬프트 (AC21) — 거절 시 전체 `/project-init` abort. 승인 시 CLAUDE.md 내용 분기 (AC16 정규화 절차 (frontmatter strip → HTML comment strip → str.strip()) 준용해 분류): **S2a** 정규화 결과가 `@AGENTS.md` 아니면 full content — (a) `## Git Workflow` 섹션 추출, (b) AGENTS.md로 이전·새 template과 merge, (c) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체, (d) 이전된 H1이 *원본 파일명을 지칭*하면 (`# CLAUDE.md`) `# AGENTS.md`로 재제목한다 — 그렇지 않은 H1(`# My Project` 등)은 프로젝트 제목이므로 비-관리 컨텐츠로 보존. 기존 CLAUDE.md의 `## LLM Coding Guidelines` 섹션은 plugin이 더 이상 *managed*로 취급하지 않으므로 자동으로 *비-관리 컨텐츠*로 분류되어, matrix 직후의 "비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존" 규칙에 따라 AGENTS.md migration 시 그대로 이전·보존됨 (사용자 4-bullet 컨텐츠 silent drop 없음). **S2b** 정규화 결과 == `@AGENTS.md`인 dangling pointer (AGENTS.md 부재) — 새 template만으로 AGENTS.md 신규 작성, CLAUDE.md unchanged. |
+| **S2 (CLAUDE-only legacy)** | 없음 | 존재 | Step 1의 migration 프롬프트 (AC21) — 거절 시 전체 `/project-init:project-init` abort. 승인 시 CLAUDE.md 내용 분기 (AC16 정규화 절차 (frontmatter strip → HTML comment strip → str.strip()) 준용해 분류): **S2a** 정규화 결과가 `@AGENTS.md` 아니면 full content — (a) `## Git Workflow` 섹션 추출, (b) AGENTS.md로 이전·새 template과 merge, (c) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체, (d) 이전된 H1이 *원본 파일명을 지칭*하면 (`# CLAUDE.md`) `# AGENTS.md`로 재제목한다 — 그렇지 않은 H1(`# My Project` 등)은 프로젝트 제목이므로 비-관리 컨텐츠로 보존. 기존 CLAUDE.md의 `## LLM Coding Guidelines` 섹션은 plugin이 더 이상 *managed*로 취급하지 않으므로 자동으로 *비-관리 컨텐츠*로 분류되어, matrix 직후의 "비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존" 규칙에 따라 AGENTS.md migration 시 그대로 이전·보존됨 (사용자 4-bullet 컨텐츠 silent drop 없음). **S2b** 정규화 결과 == `@AGENTS.md`인 dangling pointer (AGENTS.md 부재) — 새 template만으로 AGENTS.md 신규 작성, CLAUDE.md unchanged. |
 | **S3 (AGENTS canonical, CLAUDE pointer)** | 존재 | 존재 + `@AGENTS.md` (R-pointer 통과) | AGENTS.md의 `## Git Workflow` 섹션만 in-place 갱신. CLAUDE.md는 unchanged. |
-| **S4 (AGENTS exists, CLAUDE divergent or absent)** | 존재 | 없음 또는 divergent content | 사용자에게 advisory + 두 옵션 — (i) CLAUDE.md가 존재하면 관리 섹션(`## Git Workflow` · `## Project Charter`)을 뺀 비-관리 컨텐츠를 AGENTS.md에서 **먼저 나오는 관리 섹션 앞**에 이전한 뒤(관리 섹션이 하나도 없으면 AGENTS.md 끝에) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체한다. 관리 섹션 뒤에 붙이지 않는다 — 헤딩 없는 본문은 바로 앞 절의 일부가 되어 그 절의 제자리 갱신(이어지는 S3 action, 다음 `/project-init` 실행)이 함께 덮는다. 관리 섹션을 이전 대상에서 빼는 것은 중복 절을 막기 위해서다. 원본 파일명을 지칭하는 H1(`# CLAUDE.md`)은 이전하지 않는다(S2a (d)와 같은 근거). CLAUDE.md가 없으면 `@AGENTS.md` 포인터만 쓴다. advisory는 이전될 비-관리 컨텐츠가 있다는 것을 밝힌다. (ii) abort. 승인 시 (i) 수행 + S3 action. |
+| **S4 (AGENTS exists, CLAUDE divergent or absent)** | 존재 | 없음 또는 divergent content | 사용자에게 advisory + 두 옵션 — (i) CLAUDE.md가 존재하면 관리 섹션(`## Git Workflow` · `## Project Charter`)을 뺀 비-관리 컨텐츠를 AGENTS.md에서 **먼저 나오는 관리 섹션 앞**에 이전한 뒤(관리 섹션이 하나도 없으면 AGENTS.md 끝에) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체한다. 관리 섹션 뒤에 붙이지 않는다 — 헤딩 없는 본문은 바로 앞 절의 일부가 되어 그 절의 제자리 갱신(이어지는 S3 action, 다음 `/project-init:project-init` 실행)이 함께 덮는다. 관리 섹션을 이전 대상에서 빼는 것은 중복 절을 막기 위해서다. 원본 파일명을 지칭하는 H1(`# CLAUDE.md`)은 이전하지 않는다(S2a (d)와 같은 근거). CLAUDE.md가 없으면 `@AGENTS.md` 포인터만 쓴다. advisory는 이전될 비-관리 컨텐츠가 있다는 것을 밝힌다. (ii) abort. 승인 시 (i) 수행 + S3 action. |
 
 비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존. 유일한 예외는 파일명을 지칭하는 H1(`# CLAUDE.md`)이다 — 4c S2a (d)는 재제목하고 S4 (i)는 이전하지 않는다. 파일명을 지칭하는 제목은 이전 후 대상 파일을 잘못 가리키므로 보존 대상이 아니다.
 

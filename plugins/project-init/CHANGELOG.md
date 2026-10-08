@@ -5,6 +5,20 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.0.0] — 2026-10-09
+
+### Removed
+
+| 옛 호출 · 이름 | 새 완전명 |
+|---|---|
+| `/project-init` 명령 (`commands/project-init.md`) | `/project-init:project-init` (skill, 사용자 전용) |
+
+### Changed
+
+- `DEVBREW_PROJECT_INIT_DISABLE=1` 의 의미가 넓어졌다 — 훅에 더해 `/project-init` 진입도 `disabled` no-op 으로 끝난다.
+- 셋업 본문이 `skills/project-init/SKILL.md` 로 옮겨 왔다(`cost_class: low`, `disable-model-invocation: true`). 본문 전 사전 검사(`scripts/entry_preflight.py`)가 kill switch 와 셋업 루트(`root=`)를 정한다.
+- 템플릿 `project/charter.md` · `project/conventions.md` 의 안내가 완전명 `/project-init:project-init` 을 쓴다.
+
 ## [4.0.2] — 2026-09-28
 
 ### Fixed
