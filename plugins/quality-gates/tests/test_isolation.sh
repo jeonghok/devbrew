@@ -84,20 +84,20 @@ RC_WT=$?
 
 rm -rf "$(dirname "$REPO")"
 
-# --- T3: cancel (rm) in worktree does not affect origin state ---
+# --- T3: removing the worktree's session folder does not affect origin state ---
 IFS='|' read -r REPO WT BRANCH < <(make_repo_with_worktree)
 SID="isoshared03"
 
 (cd "$WT"   && HOME="$WT"   "$SETUP" --session-id "$SID" >/dev/null 2>&1)
 (cd "$REPO" && HOME="$REPO" "$SETUP" --session-id "$SID" >/dev/null 2>&1)
 
-# Simulate cancel-qg in worktree: rm -rf its own session folder
+# Remove the worktree's own session folder
 rm -rf "$WT/.claude/quality-gates/$SID"
 
 if [[ ! -d "$WT/.claude/quality-gates/$SID" && -f "$REPO/.claude/quality-gates/$SID/pipeline.md" ]]; then
-  ok "T3: worktree cancel left origin's pipeline.md intact"
+  ok "T3: removing the worktree folder left origin's pipeline.md intact"
 else
-  no "T3: cancel affected origin state OR worktree state still present"
+  no "T3: removal affected origin state OR worktree state still present"
 fi
 
 rm -rf "$(dirname "$REPO")"
@@ -138,21 +138,22 @@ else
   no "T4c: session_id mismatch in one of the state files"
 fi
 
-# --- T5: cancel SID_A leaves SID_B intact ---
+# --- T5: removing SID_A's folder leaves SID_B intact ---
 rm -rf "$ROOT/.claude/quality-gates/$SID_A"
 if [[ ! -d "$ROOT/.claude/quality-gates/$SID_A" && -f "$FILE_B" ]]; then
-  ok "T5: SID_B unaffected by SID_A cancel"
+  ok "T5: SID_B unaffected by SID_A folder removal"
 else
   no "T5: SID_B state lost OR SID_A folder still present"
 fi
 
-# --- T6: same-SID re-invocation is rejected (per-session active boundary) ---
+# --- T6: same-SID re-invocation starts fresh — no active-pipeline refusal (v10) ---
+: > "$ROOT/.claude/quality-gates/$SID_B/leftover.md"
 OUT=$(HOME="$ROOT" "$SETUP" --session-id "$SID_B" 2>&1)
 RC=$?
-if [[ "$RC" -ne 0 ]] && echo "$OUT" | grep -qi "already active"; then
-  ok "T6: re-invocation rejected with 'already active' (rc=$RC)"
+if [[ "$RC" -eq 0 && ! -e "$ROOT/.claude/quality-gates/$SID_B/leftover.md" && -f "$FILE_B" ]]; then
+  ok "T6: re-invocation succeeds and recreates its own folder (rc=$RC)"
 else
-  no "T6: re-invocation NOT rejected (rc=$RC, out=$OUT)"
+  no "T6: re-invocation did not start fresh (rc=$RC, out=$OUT)"
 fi
 
 cd / && rm -rf "$ROOT"

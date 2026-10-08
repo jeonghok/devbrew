@@ -182,19 +182,6 @@ touch -t "$(date -r $old +%Y%m%d%H%M)" .claude/quality-gates/oldsess0001
 
 **Pass**: own folder removed; sibling folders untouched.
 
-### V4 — Legacy migration on upgrade
-
-**Setup**: Pre-existing v1.5.0 flat files (5 files) in `.claude/`.
-```bash
-touch .claude/quality-gates.local.md \
-      .claude/quality-gates-session.local.md \
-      .claude/quality-gates-branch.local.md \
-      .claude/qg-diff-cache.txt \
-      .claude/qg-code-paths.tmp
-```
-1. Open Claude Code. Observe `session-start-advisor` stdout: `[quality-gates] Legacy v1.5.0 state files detected.`
-2. Run `/qg`. Observe `setup-qg.sh` stderr: `Removed 5 legacy flat state file(s) from v1.5.0.`
-3. Verify the 5 files are gone, new `.claude/quality-gates/$SID/pipeline.md` exists.
 
 ### V5 — GC lock contention silent
 
