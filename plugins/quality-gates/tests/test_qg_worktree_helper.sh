@@ -15,10 +15,10 @@ new_repo() {   # 커밋 하나짜리 일회용 리포 — 경로를 낸다
   printf '%s' "$r"
 }
 
-# --- surface: branch 모드 하위명령은 없다 (v10) ---
+# --- surface: branch 모드와 샌드박스 하위명령은 없다 (v10) ---
 echo "[surface]"
 REPO=$(new_repo)
-for sub in sanitize validate-branch create; do
+for sub in sanitize validate-branch create create-sandbox mutation-guard; do
   err=$(cd "$REPO" && "$WT" "$sub" x y 2>&1 >/dev/null); rc=$?
   if [ "$rc" -eq 2 ] && printf '%s' "$err" | grep -q "unknown subcommand: $sub"; then
     ok "'$sub' 는 unknown subcommand 로 거부된다"

@@ -138,26 +138,9 @@ case_remove_namespace_guard() {
 # "무단 변경 없음" 은 대상이 사라지며 함께 소멸한다 — case_detect_runtime_frozen 은
 # 지운다(케이스 목록에서도 제거).
 
-# T17 + AC22: create-sandbox / mutation-guard case 본문 바이트 무변경
-# case 절 본문만 잘라 해시한다 — 파일 전체를 핀하면 create-baseline 추가로 깨진다.
-extract_case() {   # extract_case <case-label> → 그 case 절 본문
-  awk -v label="  $1)" '
-    $0 == label { inblock = 1; next }
-    inblock && /^  [a-z][a-z-]*\)$/ { exit }
-    inblock { print }
-  ' "$WT"
-}
-CREATE_SANDBOX_SHA256="7585a46b39036685d47fbd08c3f748c915c30b326a65471fb97d1e422406e49e"
-MUTATION_GUARD_SHA256="000c3a26953269b237c4e272bbddfad8ea4a33b2d3f6f5787e80fecbdd1ed830"
-case_sandbox_guard_frozen() {
-  local a b
-  a=$(extract_case create-sandbox | shasum -a 256 | awk '{print $1}')
-  b=$(extract_case mutation-guard | shasum -a 256 | awk '{print $1}')
-  [[ "$a" == "$CREATE_SANDBOX_SHA256" ]] && ok "create-sandbox 본문 무변경" \
-    || no "create-sandbox 변경 (got $a)"
-  [[ "$b" == "$MUTATION_GUARD_SHA256" ]] && ok "mutation-guard 본문 무변경" \
-    || no "mutation-guard 변경 (got $b)"
-}
+# T17 (대상 이전 — qg v10 ①): create-sandbox / mutation-guard 는 plugin-audit 의
+# scripts/audit-sandbox.sh 로 옮겨 갔다. 그 동작은 plugins/plugin-audit/tests/
+# test_audit_sandbox_create.sh · test_audit_sandbox_mutation_guard.sh 가 잰다.
 
 # T18 + AC24/AC25/AC26: 훅 항목 수 · 에이전트 파일 수 · verdict 토큰 집합 불변
 #
@@ -223,13 +206,11 @@ case_head_and_baseline_coexist() {
   echo v2 > a.txt; git commit -qam v2
   local head_sha; head_sha=$(git rev-parse HEAD)
 
-  # HEAD 축은 create-sandbox 가 봉인한 커밋 B 에만 붙는다 — 샌드박스를 먼저 만들고
-  # 그 출력 2행(= B)을 쓴다. 픽스처가 이 순서를 지켜야 하는 것 자체가 계약이다.
-  local sb b h
-  if ! sb=$(bash "$WT" create-sandbox "sess1234"); then
-    no "create-sandbox 실패"; cd / && rm -rf "$REPO"; return
+  # HEAD 축은 지금 봉인한 커밋에만 붙는다(create-head 가 봉인을 다시 떠 대조한다).
+  local b h
+  if ! head_sha=$(bash "$PLUGIN_ROOT/scripts/seal-worktree.sh" seal "sess1234"); then
+    no "봉인 실패"; cd / && rm -rf "$REPO"; return
   fi
-  head_sha=$(printf '%s\n' "$sb" | sed -n 2p)
   if ! b=$(bash "$WT" create-baseline "$base_sha" "sess1234"); then
     no "create-baseline 실패"; cd / && rm -rf "$REPO"; return
   fi
@@ -317,7 +298,7 @@ for c in case_create_baseline case_create_baseline_refuses_colliding_user_worktr
          case_create_baseline_is_still_idempotent \
          case_head_and_baseline_coexist case_create_head_asserts_sealed_commit \
          case_remove_namespace_guard \
-         case_sandbox_guard_frozen case_no_new_surfaces; do
+         case_no_new_surfaces; do
   echo "== $c"; $c
 done
 finish
