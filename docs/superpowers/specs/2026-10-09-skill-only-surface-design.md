@@ -66,7 +66,7 @@ devbrew 의 사용자 호출 표면(slash 명령 · slash skill · kill switch �
 
 ## Non-goals
 
-- quality-gates 파일 수정. 예외는 B6 한 줄뿐이다.
+- quality-gates 파일 수정. 예외는 B6 이고, 그 범위는 정확히 넷이다(D2.3): ① `plugins/quality-gates/tests/test_codex_gate_observation.sh:315` 의 라벨 `case` 줄 ② 그 줄의 주석 ③ CLAUDE.md bump 규칙이 강제하는 qg `plugin.json` patch bump ④ qg `CHANGELOG.md` 의 그 한 항목. 이 문서에서 «B6 한 줄»은 이 넷을 가리킨다. ③ · ④ 는 v10 브랜치도 고치는 파일이라 머지 때 겹친다 — 번호와 항목은 나중에 머지하는 쪽이 해소한다.
 - kill switch 이름 변경.
 - deprecation alias · fallback 명령.
 - qg v10 설계 대체. 이 작업은 규칙을 정하고 v10 은 그 규칙을 따른다(C4).
@@ -77,7 +77,7 @@ devbrew 의 사용자 호출 표면(slash 명령 · slash skill · kill switch �
 
 brief §2 의 C1~C11 · D1~D6 을 그대로 따른다. 이 설계에 직접 닿는 것:
 
-- C3 qg 파일은 고치지 않고 보고만 한다. **B6 예외**: 디렉토리 개명이 직접 깨뜨리는 `plugins/quality-gates/tests/test_codex_gate_observation.sh` 의 라벨 `case` 줄과 그 주석만 고친다.
+- C3 qg 파일은 고치지 않고 보고만 한다. **B6 예외**: 디렉토리 개명이 직접 깨뜨리는 `plugins/quality-gates/tests/test_codex_gate_observation.sh` 의 라벨 `case` 줄과 그 주석, 그리고 bump 규칙이 강제하는 qg `plugin.json` · `CHANGELOG.md` 한 항목만 고친다(Non-goals 의 넷).
 - C9 · D3 바꾸거나 없애는 호출 이름은 alias 없이 즉시 제거하고 major bump 한다.
 - D5 짧은 이름 + 일반어 단독 금지 + 안내는 완전명.
 - D6 락은 표면 정합을 잰다.
@@ -304,7 +304,7 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 | B3 | OQ12: 익숙한 이름 유지 + 일반어만 교체(§1) | 사용자 선택 |
 | B4 | OQ11: 내부 skill 은 숨김 + 동명사 + 락으로 경계 | 사용자 선택 |
 | B5 | 모델 호출: 비용 · 부작용 큰 둘(project-init · plugin-audit)만 사용자 전용 | 사용자 선택(권장안은 도출 규칙이었다) |
-| B6 | **C3 재결정**: 디렉토리 개명이 직접 깨뜨리는 qg 테스트 라벨 줄 하나는 고친다 | `test_codex_gate_observation.sh:199` 가 디렉토리 이름을 라벨로 쓰고 `:315` 가 열거한다. 보고 후 사용자 동의 |
+| B6 | **C3 재결정**: 디렉토리 개명이 직접 깨뜨리는 qg 테스트 라벨 줄 하나는 고친다. 범위는 라벨 줄 · 그 주석 · bump 규칙이 강제하는 qg plugin.json patch bump · CHANGELOG 한 항목 넷이다(r2 D2.3) | `test_codex_gate_observation.sh:199` 가 디렉토리 이름을 라벨로 쓰고 `:315` 가 열거한다. 보고 후 사용자 동의, 넷 열거는 리뷰 r2 에서 동의 |
 | B7 | OQ15: 살아 있는 표면 + 미실행 seed 만 스위프 | 사용자 선택 |
 | B8 | OQ22: plugin-audit 1.0.0 | 사용자 선택 |
 | B9 | OQ13: trivia 는 spec 입구 둘의 인자 단계, `@` 푼 뒤, seed 면 건너뜀 | 사용자 선택 |
@@ -316,6 +316,8 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 
 - D1.1 · r1 · adopt · c67614cd#r1.1 · "채택 — DISABLE 만, 확장 공시 (권장)" — 1단계의 플러그인 kill switch 판정이 기존 스위치 두 개의 의미를 조용히 넓힌다. `DEVBREW_PROJECT_INIT_DISABLE` 은 지금 훅만 끄는데 앞으로 `/project-init` 명령도 막게 된다. 또 `kill_switch_active(plugin, skill)` 를 재사용하면 `DEVBREW_SKIP_HOOKS=<p>:<skill>` 이라는 문서화되지 않은 토큰이 새로 생긴다.
 - D1.2 · r1 · adopt · fe1840a5#r1.1 · "채택 — B13 재결정으로 기록 (권장)" — reviewing-spec → spec-review 개명은 D3 가 정한 범위(qg 밖 명령 4개)를 넘는 다섯째 이름 제거다. 그런데 결정 기록에 재결정으로 남아 있지 않다.
+- D2.3 · r2 · adopt · c43e2738#r2.1 · "채택 — 예외를 넷으로 열거 (권장)" — Non-goals 와 B6 는 qg 수정 예외를 「B6 한 줄」로 적었지만, AC10·§6 은 라벨 case 줄과 그 주석에 더해 qg plugin.json patch bump 와 CHANGELOG 까지 고친다. 그래서 C3 예외에 대해 사용자가 동의한 기록이 실제로 고치는 범위보다 좁다.
+- D2.4 · r2 · adopt · e3ff3375#r2.1 · "채택 — 현재 변경 유지 (권장)" — finding 없이 바뀜: Handoff Context (modified)
 
 ## Metadata
 
