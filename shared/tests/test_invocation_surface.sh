@@ -174,7 +174,13 @@ assert_eq "$rc" "0" "이 리포: 표면 정합 GREEN"
 
 # ── 3부: 이 리포의 사본에 실제 변이 ─────────────────────────────
 CL="$TMP/clone"
-git clone -q --no-local "$ROOT" "$CL"
+CLONE_OK=0
+if git clone -q --no-local "$ROOT" "$CL" 2>"$TMP/clone.err"; then
+  CLONE_OK=1
+else
+  no "clone 실패 — 3부 실제 변이와 4부 실측을 건너뛴다: $(tail -1 "$TMP/clone.err")"
+fi
+if [ "$CLONE_OK" = "1" ]; then
 if [ "$(git -C "$CL" rev-parse --is-shallow-repository)" != "false" ]; then no "사본이 얕다 — 변이 결과를 믿을 수 없다"; fi
 expect_green "$CL" "실제 사본 양성 대조: HEAD GREEN"
 real() {   # real <name> — 실제 사본의 변이용 복제
@@ -191,30 +197,110 @@ real h; put "$TMP/r-h/plugins/project-init/commands/project-init.md" "---";  exp
 real i; put "$TMP/r-i/CLAUDE.md" "reviewing-spec";                           expect_red "$TMP/r-i" I "실제 I 추가: 옛 이름 재삽입" "옛 이름 'reviewing-spec'"
 real n; put "$TMP/r-n/plugins/spec-distill/scripts/n.py" "# docs/superpowers/interview/x.md · plugins/plugin-audit/README.md"
 expect_green "$TMP/r-n" "실제 음성 대조: 경로 조각은 GREEN"
+fi
 
 # ── 4부: manifest — claude plugin validate --strict ─────────────
 # 면제는 하나다: hooks 명령의 따옴표 없는 ${CLAUDE_PLUGIN_ROOT} 경고(선재, 2026-10-09 실측).
 # 그 면제는 qg 핸드오프 보고서 3부의 행이다.
-if command -v claude >/dev/null 2>&1; then
-  for p in spec-distill plugin-audit project-init; do
-    v="$(claude plugin validate --strict --json "$ROOT/plugins/$p" 2>/dev/null)"
-    bad="$(printf '%s' "$v" | python3 -c '
+# manifest_bad [stderr-file] — stdin 의 validate JSON 을 판정한다. 출력 없음 = 통과, 한 줄이라도 있으면 RED 사유.
+# 실측 모양(CLI 2.1.294): 최상위 키는 {success, strict, target, manifest, contents} 정확히 다섯,
+# success 는 errors · warnings 가 모두 없을 때만 true.
+manifest_bad() {
+  python3 -c '
 import json, sys
-d = json.load(sys.stdin)
-items = [d.get("manifest") or {}] + list(d.get("contents") or [])
+raw = sys.stdin.read()
+errf = sys.argv[1] if len(sys.argv) > 1 else ""
+def stderr_tail():
+    if not errf:
+        return ""
+    try:
+        lines = [l for l in open(errf, encoding="utf-8", errors="replace").read().splitlines() if l.strip()]
+    except OSError:
+        return ""
+    return (" — stderr: " + lines[-1]) if lines else ""
+if not raw.strip():
+    print("unusable: validate 출력이 비었다" + stderr_tail())
+    sys.exit(0)
+try:
+    d = json.loads(raw)
+except ValueError as exc:
+    print("unusable: validate 출력이 JSON 이 아니다 (%s)%s" % (exc, stderr_tail()))
+    sys.exit(0)
+if not isinstance(d, dict):
+    print("shape: 최상위가 객체가 아니다" + stderr_tail())
+    sys.exit(0)
+out = []
+KNOWN = {"success", "strict", "target", "manifest", "contents"}
+extra = sorted(set(d) - KNOWN)
+if extra:
+    out.append("shape: 모르는 최상위 키 %s — 스키마 표류" % extra)
+m, c = d.get("manifest"), d.get("contents")
+if not isinstance(m, dict):
+    out.append("shape: manifest 가 객체가 아니다")
+if not isinstance(c, list):
+    out.append("shape: contents 가 배열이 아니다")
+if not isinstance(d.get("success"), bool):
+    out.append("shape: success 가 bool 이 아니다")
+if d.get("strict") is not True:
+    out.append("shape: strict 가 true 가 아니다")
+items = ([m] if isinstance(m, dict) else []) + (list(c) if isinstance(c, list) else [])
 EXEMPT = "Shell command uses ${CLAUDE_PLUGIN_ROOT} without quotes"
-for c in items:
-    for e in c.get("errors") or []:
-        print("error", c.get("file", "?"), e.get("path"), e.get("message"))
-    for w in c.get("warnings") or []:
+exempt = 0
+for i, it in enumerate(items):
+    if not isinstance(it, dict):
+        out.append("shape: 항목 %d 가 객체가 아니다" % i)
+        continue
+    es, ws = it.get("errors"), it.get("warnings")
+    if not isinstance(es, list) or not isinstance(ws, list):
+        out.append("shape: 항목 %d (%s) 에 배열 errors · warnings 가 없다" % (i, it.get("file", "?")))
+        continue
+    for e in es:
+        e = e if isinstance(e, dict) else {"message": repr(e)}
+        out.append("error %s %s %s" % (it.get("file", "?"), e.get("path"), e.get("message")))
+    for w in ws:
+        w = w if isinstance(w, dict) else {"message": repr(w)}
         if str(w.get("path", "")).startswith("hooks.") and str(w.get("message", "")).startswith(EXEMPT):
+            exempt += 1
             continue
-        print("warning", c.get("file", "?"), w.get("path"), w.get("message"))
-' 2>&1)"
-    assert_eq "$bad" "" "manifest: $p 가 validate --strict 를 통과한다(hooks 따옴표 경고 면제)"
+        out.append("warning %s %s %s" % (it.get("file", "?"), w.get("path"), w.get("message")))
+if d.get("success") is False and exempt == 0:
+    out.append("success: false 인데 그것을 설명하는 면제 경고가 없다")
+if out and any(o.startswith("shape:") for o in out):
+    out[0] += stderr_tail()
+print("\n".join(out))
+' "$@" 2>&1
+}
+
+# 판정기의 이빨 — CLI 없이 합성 JSON 으로
+MOK='{"file":"m/plugin.json","type":"plugin","errors":[],"warnings":[],"notes":[],"gatingHooks":[]}'
+MHK_EX='{"file":"h/hooks.json","type":"hooks","errors":[],"warnings":[{"path":"hooks.SessionEnd","message":"Shell command uses ${CLAUDE_PLUGIN_ROOT} without quotes: /bin/sh x"}],"notes":[]}'
+mb() { printf '%s' "$1" | manifest_bad; }
+assert_grep "$(mb '{"success":false}')" '.' "manifest_bad: {success:false} 만 있는 모양은 RED"
+assert_grep "$(mb '{"success":false,"strict":true,"target":"t","manifest":{"file":"m","type":"plugin","errors":[{"path":"version","message":"bad"}],"warnings":[],"notes":[],"gatingHooks":[]},"contents":[]}')" '^error ' "manifest_bad: error 항목은 RED"
+assert_grep "$(mb '{"success":false,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[{"file":"h/hooks.json","type":"hooks","errors":[],"warnings":[{"path":"hooks","message":"hooks.PostToolUse.0.hooks.0: Invalid command hook"}]}]}')" '^warning ' "manifest_bad: 면제 밖 hooks 경고는 RED"
+assert_grep "$(printf '' | manifest_bad)" '^unusable:' "manifest_bad: 빈 출력은 RED"
+assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"extra":1}')" '모르는 최상위 키' "manifest_bad: 모르는 최상위 키는 RED"
+assert_eq "$(mb '{"success":false,"strict":true,"target":"t","manifest":'"$MOK"',"contents":['"$MHK_EX"']}')" "" "manifest_bad: 면제 경고만 있는 success:false 는 통과"
+assert_eq "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[]}')" "" "manifest_bad: 깨끗한 success:true 는 통과"
+printf 'boom: validator crashed\n' > "$TMP/fake.err"
+assert_contains "$(printf 'not json' | manifest_bad "$TMP/fake.err")" "stderr: boom: validator crashed" "manifest_bad: 쓸 수 없는 JSON 이면 stderr 마지막 줄을 싣는다"
+
+MANIFEST_SKIP=""
+if ! command -v claude >/dev/null 2>&1; then
+  MANIFEST_SKIP="⚠ SKIPPED manifest 실측 — claude CLI 가 PATH 에 없다. 이 단계는 재지 않았다."
+elif [ "$CLONE_OK" != "1" ]; then
+  MANIFEST_SKIP="⚠ SKIPPED manifest 실측 — 커밋 상태의 사본이 없다(clone 실패)."
+fi
+if [ -z "$MANIFEST_SKIP" ]; then
+  for p in spec-distill plugin-audit project-init; do
+    v="$(claude plugin validate --strict --json "$CL/plugins/$p" 2>"$TMP/validate-$p.err")"
+    bad="$(printf '%s' "$v" | manifest_bad "$TMP/validate-$p.err")"
+    assert_eq "$bad" "" "manifest: $p (커밋 상태) 가 validate --strict 를 통과한다(hooks 따옴표 경고 면제)"
   done
 else
-  note "  ⚠ SKIPPED manifest 단계 — claude CLI 가 PATH 에 없다. 이 단계는 재지 않았다."
+  note "  ${MANIFEST_SKIP}"
 fi
 
-finish
+finish; rc=$?
+[ -z "$MANIFEST_SKIP" ] || printf '%s\n' "${MANIFEST_SKIP}"
+exit "$rc"
