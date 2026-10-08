@@ -102,7 +102,6 @@ quality-gates/
 ├── scripts/
 │   ├── setup-qg.sh                           # 파이프라인 초기화
 │   ├── check-trivia.sh                       # Trivia escape 감지기
-│   ├── filter-docs.sh                        # 코드 reviewer용 docs path 필터
 │   ├── discover-plan.sh                      # Plan 파일 우선순위 탐색 (차등 테스트 test-scope-validator)
 │   ├── discover-spec.sh                      # Spec 파일 우선순위 탐색 (test-scope-validator + codex; AC-섹션 적격성)
 │   ├── discover_common.sh                    # 위 두 탐색기가 source 하는 공통 조각 (get_mtime · pick_newest; 실행 지점 없음)

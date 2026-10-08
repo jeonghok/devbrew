@@ -45,7 +45,7 @@ run_case "large+test-only" \
   deep
 
 # --- AC5 (v2.13.0): docs_touched → comment-analyzer phase2 hint ---
-# 경계 = filter-docs.sh doc-path 집합(오케스트레이터가 boolean 계산); scout는 라우팅만.
+# 경계 = 문서 경로 집합(*.md · *.txt · *.rst · docs/** · CHANGELOG* · README*; 오케스트레이터가 boolean 계산); scout는 라우팅만.
 phase2_has() {  # phase2_has <json> <token> <PRESENT|ABSENT>
   local out; out=$(echo "$1" | python3 "$SCRIPT")
   local p2; p2=$(echo "$out" | grep '^phase2_agents:')
