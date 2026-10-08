@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.0] — 2026-10-09
+
+major 인 이유 — 명령 층이 사라졌고, skill 이 개명돼 사용자 전용이 됐다.
+
+### Removed
+
+| 옛 호출 · 이름 | 새 완전명 |
+|---|---|
+| `/plugin-audit` 명령 (`commands/plugin-audit.md`) | `/plugin-audit:plugin-audit` (skill) |
+| skill `auditing-plugins` | `plugin-audit` |
+
+### Changed
+
+- skill 이 `disable-model-invocation: true` 다 — 모델이 부르지 않는다.
+- 본문 전 사전 검사(`scripts/entry_preflight.py`)와 `## 진입 단계` 가 kill switch 와 인자 해석을 맡는다.
+- `check-staleness.py` 규칙 (a): `skills/<name>/SKILL.md` 가 뒷받침하는 `/name` 은 dangling 이 아니다.
+
 ## [0.10.0] — 2026-09-28
 
 minor 인 이유 — 산출 경로와 `render-audit-report.py` 의 CLI 가 바뀌었다.

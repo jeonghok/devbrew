@@ -288,6 +288,14 @@ class TestDanglingRefs(unittest.TestCase):
             facts = run_sweep(p, env=self._no_registry_env(d))
             self.assertNotIn("dangling command/plugin ref", classes(facts))
 
+    def test_existing_self_skill_not_flagged(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self._plugin(d, readme="Run `/real-cmd` to start.\n")
+            (p / "skills" / "real-cmd").mkdir(parents=True, exist_ok=True)
+            (p / "skills" / "real-cmd" / "SKILL.md").write_text("---\nname: real-cmd\n---\nbody\n", encoding="utf-8")
+            facts = run_sweep(p, env=self._no_registry_env(d))
+            self.assertNotIn("dangling command/plugin ref", classes(facts))
+
     def test_externally_attributed_command_not_flagged(self):
         # 실측 project-init README 패턴: "- **commit-commands**: `/commit`..." — 이건 다른
         # 플러그인의 커맨드를 언급하는 통합 문서지 이 플러그인이 /commit을 소유한다는 주장이 아니다.
@@ -298,7 +306,7 @@ class TestDanglingRefs(unittest.TestCase):
                              "다른 플러그인 귀속 커맨드 언급을 자기-커맨드 주장으로 오탐")
 
     def test_trailing_paren_attributed_command_not_flagged(self):
-        # 실측 project-init commands/project-init.md 패턴: bold 선행이 아니라 괄호 후행 귀속.
+        # 실측 project-init 옛 명령 문서 패턴: bold 선행이 아니라 괄호 후행 귀속.
         with tempfile.TemporaryDirectory() as d:
             p = self._plugin(d, readme="`/commit` 또는 `/commit-push-pr` (commit-commands 플러그인) 사용.\n")
             facts = run_sweep(p, env=self._no_registry_env(d))

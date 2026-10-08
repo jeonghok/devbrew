@@ -283,7 +283,7 @@ COLON_REF_RE = re.compile(r"`([a-z][a-z0-9_-]*):([a-z][a-z0-9_-]+)`")
 # 같은 줄에 다른 플러그인 귀속이 있는가 — 두 실측 문체 모두 지원:
 #   (a) 선행 bold: "- **commit-commands**: `/commit`..." (project-init README 통합 섹션)
 #   (b) 후행 괄호: "`/commit` 또는 `/commit-push-pr` (commit-commands 플러그인) 사용"
-#       (project-init commands/project-init.md)
+#       (project-init project-init 의 옛 명령 문서)
 # 어느 형태든 자기 이름이 아닌 다른 플러그인이 같은 줄에 언급되면 그 플러그인 커맨드에 대한
 # 통합 문서 언급이지 자기-주장이 아니다.
 BOLD_ATTR_RE = re.compile(r"\*\*([a-z][a-z0-9_-]*)\*\*\s*[:：]")
@@ -337,10 +337,10 @@ def _prerequisites_declares(readme_text: str, plugin_name: str) -> bool:
 
 def scan_dangling_refs(plugin_dir: Path, facts):
     """두 하위 패턴:
-    (a) 자기 `/command` 자기-주장 — `commands/<name>.md`가 없고, 같은 줄에 다른 플러그인
+    (a) 자기 `/command` 자기-주장 — `commands/<name>.md` 도 `skills/<name>/SKILL.md` 도 없고, 같은 줄에 다른 플러그인
         귀속(선행 bold 또는 후행 괄호)이 없으면 flag (있으면 그 플러그인 커맨드에 대한 통합
         문서 언급이므로 스킵 — 실측 project-init README "- **commit-commands**: `/commit`..."
-        + commands/project-init.md "`/commit` ... (commit-commands 플러그인) 사용" FP 둘 다).
+        + project-init 의 옛 명령 문서 "`/commit` ... (commit-commands 플러그인) 사용" FP 둘 다).
     (b) `other-plugin:component` cross-plugin 참조 — 레지스트리에 설치돼 있지 않고(또는
         레지스트리 자체가 부재) **동시에** README `## Prerequisites`에 미선언이면 flag.
         레지스트리 부재는 그 신호만 skip하고(설치 여부를 알 수 없으므로 prerequisites 단독
@@ -368,6 +368,8 @@ def scan_dangling_refs(plugin_dir: Path, facts):
                     continue  # 외부 플러그인에 귀속된 언급 — 자기-주장 아님
                 if (commands_dir / f"{m.group(1)}.md").is_file():
                     continue
+                if (plugin_dir / "skills" / m.group(1) / "SKILL.md").is_file():
+                    continue  # 진입 skill 이 뒷받침하는 `/name` — 명령 층이 없는 플러그인의 정상 형태
                 emit(facts, "dangling command/plugin ref", str(rel), lineno, quote, kind="command")
 
             for m in COLON_REF_RE.finditer(line):
