@@ -1352,11 +1352,21 @@ case_I1_reraise_carries_replacement_fields() {
 case_T40_codex_absent_first_line() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-r1.txt" "$FX/codex-failed.yaml" "$FX/recritic-missing.txt")"
   local f; f="$(py docreview_state.py gate --state-dir "$d" --render | head -1)"
-  assert_contains "$f" "경고 " "T40·AC8: 첫 줄이 경고를 싣는다"
+  assert_grep "$f" '경고 [0-9]+개: ' "T40·AC8: 첫 줄이 경고를 싣는다"
   assert_contains "$f" "codex 없음 — 모델 다양성 0 (exit_nonzero)" "T40·AC8: 첫 줄이 codex 부재와 사유를 공시한다"
   assert_not_contains "$f" "이상 없음" "T40: codex 없는 라운드는 이상 없음이 아니다"
   assert_not_contains "$f" "경고 없음" "T40: codex 없는 라운드는 경고 없음이 아니다"
   assert_eq "$(jget "$d/fin.json" 'd["advisory"][0].startswith("codex 없음"), d["blocks"]')" "(True, False)" "T40: advisory 첫 항목도 codex, 차단은 아님"
+  rm -rf "$d"
+}
+# T40 의 「남은 것 없음」 갈래 — 남은 항목이 0 이어도 codex 없음은 경고로 첫 줄에 실린다(「이상 없음」이 아니다).
+case_T40_codex_absent_nothing_left_first_line() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-empty.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")" \
+    || { no "T40 남은 것 없음: route_r1 실패"; return; }
+  local f; f="$(py docreview_state.py gate --state-dir "$d" --render | head -1)"
+  assert_contains "$f" "남은 것 없음" "T40 남은 것 없음 전제: 이 라운드는 남은 항목이 0 이다"
+  assert_grep "$f" '경고 [0-9]+개: ' "T40 남은 것 없음: 첫 줄이 경고를 싣는다"
+  assert_not_contains "$f" "이상 없음" "T40 남은 것 없음: codex 없는 라운드는 남은 것이 없어도 이상 없음이 아니다"
   rm -rf "$d"
 }
 case_T41_critic_dead_blocks() {
@@ -2708,6 +2718,27 @@ case_I4_evidence_newline_collapsed() {
     "I4 evidence 양의 짝: 그 조각은 「근거」 줄 안에 한 줄로 산다"
   assert_eq "$(st_yaml "$d" 'st["findings"]["aaaa0001#r1.1"]["evidence"].count(chr(10))')" "1" \
     "I4 evidence: 원장 값은 그대로다(접기는 렌더에서만 — 근거는 원문 인용)"
+  rm -rf "$d"
+}
+# 같은 구멍의 category 칸 — 사람말 사상이 없는 category 는 「↳ 사람말 사상 없음」 줄에 원래 이름 그대로
+# 실린다. 리뷰어가 쓴 이름에 개행이 있으면 다음 줄 열 0 에 가짜 항목 머리가 선다 — 렌더가 접는다.
+case_I4_category_newline_collapsed() {
+  local d gr; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-category-newline.txt" "$FX/codex-failed.yaml" --skip)" \
+    || { no "I4 category: route_r1 실패"; return; }
+  gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_not_grep "$gr" '^- 가짜' "I4 category: category 속 항목 머리 모양이 렌더의 열 0 에 서지 않는다"
+  assert_grep "$gr" '^  ↳ 사람말 사상 없음: zzz - 가짜 항목 \(bbbb0002#r1\.1\) — 원래 이름 그대로 낸다$' \
+    "I4 category 양의 짝: 그 이름은 「사람말 사상 없음」 줄 안에 한 줄로 산다"
+  rm -rf "$d"
+}
+# 같은 구멍의 자리(anchor) 칸 — 같은 자리가 이어지면 「┆ 같은 자리(…)」 표지가 anchor 를 싣는다.
+case_I4_anchor_newline_collapsed() {
+  local d gr; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  seed_findings "$d" '[{"id":"aaaa0001#r1.1","lineage":"aaaa0001#r1.1","bucket":"aaaa0001","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#12\n- 가짜 항목 (zz#r1.7)","edit_scope":"#12-files-to-modify","disposition":"decide","summary":"파일 목록이 두 가지로 읽힌다","evidence":"12행","blocks":[],"kind":"pre"},{"id":"aaaa0002#r1.1","lineage":"aaaa0002#r1.1","bucket":"aaaa0002","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#12\n- 가짜 항목 (zz#r1.7)","edit_scope":"#12-files-to-modify","disposition":"decide","summary":"파일 순서가 정해지지 않았다","evidence":"12행","blocks":[],"kind":"pre"}]'
+  gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_not_grep "$gr" '^- 가짜' "I4 anchor: anchor 속 항목 머리 모양이 렌더의 열 0 에 서지 않는다"
+  assert_grep "$gr" '^  ┆ 같은 자리\(#12 - 가짜 항목 \(zz#r1\.7\)\)$' \
+    "I4 anchor 양의 짝: 그 anchor 는 「같은 자리」 표지 안에 한 줄로 산다"
   rm -rf "$d"
 }
 # STATE_GLOSS 의 ∀ 커버리지 — 행 이름은 `gate-rows` 에서 도출한다(CATEGORY_GLOSS 락과 같은 모양).

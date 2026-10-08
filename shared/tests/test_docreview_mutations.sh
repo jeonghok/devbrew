@@ -716,6 +716,15 @@ mut 1/1 state_gloss_row_missing case_state_gloss_covers_gate_rows sed_state \
 # 근거 줄의 한 줄 접기를 떼기 — 근거 속 개행이 열 0 에 가짜 항목 머리를 세운다.
 mut 1/1 evidence_line_unfolded case_I4_evidence_newline_collapsed sed_state \
   's/^             "  근거: %s" % _one(dv\.get("basis", f\.get("evidence") or "—")),$/             "  근거: %s" % dv.get("basis", f.get("evidence") or "—"),/'
+# 사람말 사상 없음 줄의 한 줄 접기를 떼기 — category 속 개행이 열 0 에 가짜 항목 머리를 세운다.
+mut 1/1 category_line_unfolded case_I4_category_newline_collapsed sed_state \
+  's/^        lines\.append("  ↳ 사람말 사상 없음: %s — 원래 이름 그대로 낸다" % _one(dv\["category_unglossed"\]))$/        lines.append("  ↳ 사람말 사상 없음: %s — 원래 이름 그대로 낸다" % dv["category_unglossed"])/'
+# 같은 자리 표지의 한 줄 접기를 떼기 — anchor 속 개행이 열 0 에 가짜 항목 머리를 세운다.
+mut 1/1 anchor_marker_unfolded case_I4_anchor_newline_collapsed sed_state \
+  's/^                out\.append("  ┆ 같은 자리(%s)" % _one(anchor))$/                out.append("  ┆ 같은 자리(%s)" % anchor)/'
+# 경고 판정에 남은 항목을 조건으로 걸기 — 남은 것 없는 codex 없음 라운드가 「이상 없음」이 된다.
+mut 1/1 warns_need_left case_T40_codex_absent_nothing_left_first_line sed_state \
+  's/^    if warns:$/    if warns and left:/'
 # (54) 상태 디렉토리의 문서 정체 — `init` 의 문서 비교를 끈다. 다른 문서의 원장을 조용히
 #    이어받던 그 동작이다. 거부 셀만 RED 가 된다.
 mut 1/1 init_doc_compare_off case_init_other_doc_refused sed_state \

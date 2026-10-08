@@ -1345,7 +1345,7 @@ def _rg_decide(st, g, fid):
     # 사람말이 없는 category 는 원래 이름으로 나가되 그 사실을 «말한다». 조용히
     # 빈칸으로 두면 사상이 낡았다는 것이 아무 데도 안 남는다(D13-③ 이 안 닫힌다).
     if dv.get("category_unglossed"):
-        lines.append("  ↳ 사람말 사상 없음: %s — 원래 이름 그대로 낸다" % dv["category_unglossed"])
+        lines.append("  ↳ 사람말 사상 없음: %s — 원래 이름 그대로 낸다" % _one(dv["category_unglossed"]))
     return lines
 
 
@@ -1461,7 +1461,7 @@ def render_gate(st, g) -> str:
         for fid in g[row.name]:
             anchor = (st["findings"].get(fid) or {}).get("anchor")
             if anchor and anchor == prev_anchor:
-                out.append("  ┆ 같은 자리(%s)" % anchor)
+                out.append("  ┆ 같은 자리(%s)" % _one(anchor))
             prev_anchor = anchor
             out.extend(fn(st, g, fid))
     parts = [t % c[k] for k, t in COUNT_GLOSS if c[k]]

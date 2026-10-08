@@ -20,7 +20,7 @@ LIST="$(mktemp -t plb-list-XXXXXX)" || exit 1
 RES="$(mktemp -t plb-res-XXXXXX)" || { rm -f "$LIST"; exit 1; }
 trap 'rm -f "$LIST" "$RES"' EXIT
 derive_git > "$LIST"
-# 양의 짝 — git 도출과 find 도출이 같은 집합이다(git 이 조용히 0 을 내는 경우를 막는다).
+# 양의 짝 — git 도출과 find 도출이 같은 수를 낸다(집합이 아니라 수를 비교한다 — git 이 조용히 0 을 내는 경우를 막는다).
 FIND_N="$(cd "$ROOT" && find plugins -path '*/skills/*/SKILL.md' -o -path 'plugins/*/commands/*.md' | grep -c .)"
 GIT_N="$(grep -c . "$LIST" || true)"
 assert_eq "$GIT_N" "$FIND_N" "대상 도출: git 과 find 가 같은 수를 낸다"
