@@ -163,10 +163,35 @@ assert_eq "$rc" "0" "E1: 빈 폴더는 다시 만든다"
 refusal_check "링크로 풀린 state root" "$W2b" "$SID"
 refusal_check "링크인 세션 폴더" "$W2c" "$SID"
 refusal_check "링크인 .claude" "$W2d" "$SID"
-# setup 의 마커 목록은 qg-gc.py 와 같아야 한다.
-gcm="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import importlib.util as u; s=u.spec_from_file_location("qg_gc", sys.argv[1]+"/qg-gc.py"); m=u.module_from_spec(s); s.loader.exec_module(m); print(" ".join(sorted(m.SESSION_MARKERS + m.LEGACY_SESSION_MARKERS)))' "$PLUGIN_ROOT/scripts")"
-sm="$(sed -n 's/^SESSION_MARKERS=(\(.*\))$/\1/p' "$SETUP" | tr ' ' '\n' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
-assert_eq "$sm" "$gcm" "E1: setup 의 SESSION_MARKERS 가 qg-gc.py 의 마커 합집합과 같다"
+# setup 은 마커 목록을 적어 두지 않고 qg-gc.py 에서 읽는다 — 플러그인 스크립트 사본에서 행동으로 잰다.
+PC="$TMP/plugincopy"; mkdir -p "$PC/scripts"
+cp -RL "$PLUGIN_ROOT/scripts/." "$PC/scripts/"
+python3 - "$PC/scripts/qg-gc.py" <<'PY2'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+old = 'SESSION_MARKERS = ("pipeline.md",'
+assert s.count(old) == 1
+open(p, "w", encoding="utf-8").write(s.replace(old, 'SESSION_MARKERS = ("zz-new-marker.md", "pipeline.md",'))
+PY2
+WN="$TMP/e1newmarker"; mkdir -p "$WN/.claude/quality-gates/newmarkersess1"
+: > "$WN/.claude/quality-gates/newmarkersess1/zz-new-marker.md"; : > "$WN/.claude/quality-gates/newmarkersess1/old.md"
+(cd "$WN" && "$PC/scripts/setup-qg.sh" --session-id newmarkersess1 >/dev/null 2>&1); rc=$?
+assert_eq "$rc" "0" "E1: qg-gc.py 에 새로 더한 마커만 가진 폴더도 setup 이 다시 만든다 (목록을 qg-gc.py 에서 읽는다)"
+[ ! -e "$WN/.claude/quality-gates/newmarkersess1/old.md" ] && ok "E1: 새 마커 폴더의 이전 파일을 지웠다" || no "E1: 새 마커 폴더가 그대로다"
+WN2="$TMP/e1newmarker2"; mkdir -p "$WN2/.claude/quality-gates/newmarkersess1"
+: > "$WN2/.claude/quality-gates/newmarkersess1/zz-new-marker.md"
+(cd "$WN2" && "$SETUP" --session-id newmarkersess1 >/dev/null 2>&1); rc=$?
+assert_eq "$rc" "1" "E1: 같은 폴더를 원본 setup 으로 돌리면 마커가 아니라 거부한다 (양의 짝)"
+# qg-gc.py 를 못 읽으면 거부한다 — 한 줄, 아무것도 쓰지 않는다.
+printf 'this is not python (\n' > "$PC/scripts/qg-gc.py"
+WB="$TMP/e1brokengc"; mkdir -p "$WB/.claude/quality-gates/brokengcsess1"
+: > "$WB/.claude/quality-gates/brokengcsess1/pipeline.md"
+before="$(snap "$WB")"
+e="$(cd "$WB" && "$PC/scripts/setup-qg.sh" --session-id brokengcsess1 2>&1 >/dev/null)"; rc=$?
+assert_eq "$rc" "1" "E1: qg-gc.py 를 읽지 못하면 setup 이 exit 1 로 거부한다"
+assert_eq "$(printf '%s\n' "$e" | grep -c .)" "1" "E1: 마커 목록을 못 읽은 거부는 stderr 한 줄이다"
+assert_eq "$(snap "$WB")" "$before" "E1: 마커 목록을 못 읽으면 아무것도 지우거나 쓰지 않는다"
 
 note "── E2: 플러그인 루트를 cwd 로 대체하지 않는다"
 W="$TMP/e2"; mkdir -p "$W/scripts"

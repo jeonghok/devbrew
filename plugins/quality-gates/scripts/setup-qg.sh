@@ -165,8 +165,9 @@ root_escapes() {
   done
   return 1
 }
-# qg-gc.py 의 SESSION_MARKERS + LEGACY_SESSION_MARKERS 와 같은 목록(test_entry_safety_e1_e6.sh 가 대조한다).
-SESSION_MARKERS=(pipeline.md result.md runtime-evidence.md files.md publish-eligible.md)
+# 세션 마커 목록은 qg-gc.py 정본에서 읽는다 — 여기에 적지 않는다. 플러그인 루트는 BASH_SOURCE 에서 도출한다(cwd 아님).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SESSION_MARKERS=()
 has_session_marker() {
   local m
   for m in "${SESSION_MARKERS[@]}"; do
@@ -178,6 +179,23 @@ refuse() {
   echo "[quality-gates] $1 — 지우지 않는다. 아무것도 쓰지 않는다." >&2
   exit 1
 }
+load_markers() {
+  local out m
+  out="$(python3 -c 'import importlib.util as u, sys
+s = u.spec_from_file_location("qg_gc", sys.argv[1] + "/qg-gc.py")
+m = u.module_from_spec(s)
+s.loader.exec_module(m)
+print("\n".join(m.SESSION_MARKERS + m.LEGACY_SESSION_MARKERS))' "$SCRIPT_DIR" 2>/dev/null)" || return 1
+  while IFS= read -r m; do
+    [[ -n "$m" ]] && SESSION_MARKERS+=("$m")
+  done <<EOF2
+$out
+EOF2
+  [[ ${#SESSION_MARKERS[@]} -gt 0 ]]
+}
+if ! load_markers; then
+  refuse "qg-gc.py 에서 세션 마커 목록을 읽지 못했다"
+fi
 if root_escapes; then
   refuse "state root '$STATE_ROOT' 가 링크를 거쳐 제자리 밖으로 풀린다"
 elif [[ -L "$STATE_DIR" ]]; then
@@ -193,7 +211,6 @@ elif [[ -d "$STATE_DIR" ]]; then
 fi
 
 # --- TTL GC (best-effort; setup 을 막지 않는다) ---
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 "$SCRIPT_DIR/qg-gc.py" --session-id "$SESSION_ID" || true
 
 mkdir -p "$STATE_DIR"
