@@ -9,7 +9,7 @@ devbrew 의 사용자 호출 표면(slash 명령 · slash skill · kill switch �
 - 입력 brief: `docs/superpowers/interview/2026-10-08-skill-only-surface-interview.md` (확정 17항목, 커밋 67824eff)
 - brief audit: `docs/superpowers/interview/2026-10-08-skill-only-surface-interview.audit.md` (RC1~RC28 · §6 S1~S9)
 - brainstorming 결정: 이 문서 `## 결정 기록` B1~B12
-- 재결정 규약: confirmed 항목은 근거가 있으면 보고 후 재결정할 수 있고, 임의 변경은 금지다. 이 문서의 재결정은 B6(C3 예외) 하나다.
+- 재결정 규약: confirmed 항목은 근거가 있으면 보고 후 재결정할 수 있고, 임의 변경은 금지다. 이 문서의 재결정은 B6(C3 예외)과 B13(D3 범위) 둘이다.
 
 ## 목차
 
@@ -99,23 +99,31 @@ brief §2 의 C1~C11 · D1~D6 을 그대로 따른다. 이 설계에 직접 닿�
 - 사용자 전용 둘은 frontmatter 에 `disable-model-invocation: true` 를 단다(B5).
 - 내부 skill `reviewing-brief` 는 `user-invocable: false` 와 동명사 이름을 유지한다(B4). 호출은 `Skill spec-distill:reviewing-brief $PAYLOAD $AUDIT` 그대로다.
 - qg 의 `/qg` · `/qg-publish` · `/cancel-qg` 와 qg skill 셋은 그대로 둔다.
+- `reviewing-spec` → `spec-review` 는 brief D3 의 범위(qg 밖 명령 4개) 밖이다 — **B13 재결정**(D3 범위에 user-invocable skill 이름 하나를 더함, 근거 D5 · 축 A, 사용자 동의)으로 개명한다. 이 개명으로 C3 아래에서 고칠 수 없는 qg 인용(`quality-pipeline/SKILL.md:394` · `critiquing-artifacts/SKILL.md:154` · `scripts/run_codex_reviewer.sh:49`, 그리고 B6 라벨 줄 밖의 `test_codex_gate_observation.sh:70` 주석)이 옛 이름으로 남고, 락 `--report` 를 거쳐 §6 보고서에 행으로 실린다.
 
 ### §2 구성요소와 파일
 
 | 단위 | 책임 | 의존 |
 |---|---|---|
-| `shared/entry/entry_preflight.py` (정본) | 상수 인자 `<plugin> <skill>` 를 받아 플러그인 kill switch(`DEVBREW_<PLUGIN>_DISABLE`)를 판정하고, 레포 루트와 환경을 검사해 감시줄 한 줄을 출력한다. 내부 실패는 전부 잡아 rc 0 + `error` 줄로 바꾼다. | `kill_switch_active.py` (각 플러그인 `scripts/` 의 copy-of 형제 사본) |
+| `shared/entry/entry_preflight.py` (정본) | 상수 인자 `<plugin> <skill>` 를 받아 플러그인 kill switch(`DEVBREW_<PLUGIN>_DISABLE`)를 판정하고, 루트를 도출해 감시줄 한 줄을 출력한다(아래 «검사 항목»). 내부 실패는 전부 잡아 rc 0 + `error` 줄로 바꾼다. | 표준 라이브러리만 — **import 하는 형제 모듈 없음** |
 | `plugins/{spec-distill,plugin-audit,project-init}/scripts/entry_preflight.py` | 정본을 가리키는 심볼릭 링크 | 위 |
 | 진입 skill 공통 머리 | `!` 줄 하나 · `allowed-tools` 사전 허용 한 항목 · `argument-hint` · `## 진입 단계` 절 | 위 |
 | `shared/entry/check_invocation_surface.py` + `shared/tests/test_invocation_surface.sh` | §4 락. `--report` 모드는 qg 위반 표를 낸다 | `git ls-files` |
 | `plugins/project-init/skills/project-init/SKILL.md` | 명령 본문을 옮긴 진입 skill, `cost_class` 선언 | 위 머리 |
 
-`plugin-audit/scripts/` 에 `kill_switch_active.py` 형제 사본이 없으면 copy-of 사본을 추가한다. `test_copy_of_contract.sh` 축 1c 가 그 자리를 요구한다.
+**import 하지 않는 이유** — 심볼릭 링크로 실행된 스크립트의 `sys.path[0]` 는 링크를 푼 정본 디렉토리(`shared/entry/`)다. 형제 import 는 리포 트리와 `--plugin-dir` 로드에서 정본 옆을 찾으므로 `kill_switch_active` 가 풀리지 않는다(`shared/tests/test_copy_of_contract.sh:723-726` 실측). 또 플러그인 단위만 보는 함수를 정본 `kill_switch_active.py` 에 더하면 qg 의 copy-of 사본까지 바이트를 맞춰야 해서 C3 와 충돌한다. 그래서 `entry_preflight` 는 `DEVBREW_<PLUGIN>_DISABLE` 한 변수만 정본과 **같은 도출 규칙**(`-` → `_`, 대문자화, 값이 정확히 `1`)으로 직접 읽는다. 두 도출의 일치는 락 테스트가 플러그인 셋에 대해 `kill_switch_active(p, "_")` 의 DISABLE 판정과 대조해 잰다.
+
+**검사 항목** (전부 인자 없음 · 사용자 입력 없음):
+1. `DEVBREW_<PLUGIN>_DISABLE == "1"` → `disabled` 줄.
+2. 루트: cwd 에서 `git rev-parse --show-toplevel`. 실패하면(비-git 디렉토리 · git 부재) cwd 를 쓰고 감시줄에 `root_source=cwd` 를 붙인다 — `ok` 다. `/project-init` 은 git 이 아직 없는 디렉토리에서 돈다.
+3. 그 밖의 예외 → `error` 줄.
+
+검증 항목(이 절의 몫): 리포 경로 실행 `python3 plugins/<p>/scripts/entry_preflight.py <p> <s>` 가 플러그인 셋 모두에서 `ok` 를 낸다 · 비-git 임시 디렉토리에서 `ok … root_source=cwd` · `DEVBREW_<P>_DISABLE=1` 에서 `disabled`. `shared/README.md` 디렉토리 표에 `entry/` 를 추가한다.
 
 감시줄 형식(한 줄, 고정 접두):
 
 ```
-[devbrew-entry] ok plugin=<p> skill=<s> root=<절대경로>
+[devbrew-entry] ok plugin=<p> skill=<s> root=<절대경로> [root_source=cwd]
 [devbrew-entry] disabled plugin=<p> skill=<s> switch=<변수명>=1
 [devbrew-entry] error plugin=<p> skill=<s> reason=<한 줄 사유>
 ```
@@ -151,6 +159,8 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 - rc≠0 이면 플랫폼이 호출 전체를 끊고, 헤드리스에서는 그것이 0턴 rc=0 조용한 실패가 된다. 그래서 스크립트는 자기 실패를 rc 0 + `error` 줄로 바꾼다.
 - 남는 rc≠0 경로는 «스크립트 부재 · python3 부재» 둘이다. 이 경로는 fail-closed 로 끊긴다. 세 README 에 공시한다.
 - 플러그인 전체 kill switch 를 본문 산문으로 다시 확인하던 자리(`conducting-interview` · `framing-requests` 의 `DEVBREW_SPEC_DISTILL_DISABLE` 산문)는 1단계로 대체한다. skill 고유 스위치(`review_entry.py` 의 셋 · 은퇴 스위치 공시)는 1.5 에 그대로 남는다.
+- **1단계의 스위치 판정은 `DEVBREW_<PLUGIN>_DISABLE=1` 하나뿐이다**(D1.1). `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다 — `<plugin>:<skill>` 같은 새 토큰을 만들지 않는다. 이 사실을 세 README 의 kill switch 절에 적는다.
+- **의미 확장 공시** — `DEVBREW_<PLUGIN>_DISABLE` 은 CLAUDE.md 정의대로 «그 플러그인 전체»를 끈다. 그래서 지금까지 훅만 끄던 `DEVBREW_PROJECT_INIT_DISABLE` 은 앞으로 `/project-init` 진입도 `disabled` no-op 으로 만든다(plugin-audit · spec-distill 은 이미 진입을 끄던 스위치다). project-init CHANGELOG 의 `Changed` 와 README 에 이 확장을 공시한다.
 
 **2. `@경로` 풀기** — 산문 규칙과 Read 도구로 한다.
 - 인자가 `@` 로 시작하는 공백 없는 한 토큰일 때만 발동한다.
@@ -166,7 +176,7 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 
 ### §4 락 — 표면 정합
 
-대상은 `git ls-files` 에서 도출한다. qg 파일은 **보고 모드**로 돌린다 — 위반을 RED 로 막지 않고 표로 내며, 그 표가 §6 보고서의 원천이다.
+대상은 `git ls-files` 에서 도출한다. qg 파일(`plugins/quality-gates/**`)은 **보고 모드**로 돌린다 — 위반을 RED 로 막지 않고 표로 내며, 그 표가 §6 보고서의 원천이다. **보고 모드의 수명은 모든 축(A~I)에 한 조건으로 걸린다**: `plugins/quality-gates/commands/` 가 있는 동안 유지되고, 그 디렉토리가 사라지면 모든 축에서 qg 파일도 RED 판정으로 바뀐다. 보고 표와 RED 메시지가 그 수명을 함께 적는다.
 
 | 축 | 대상 (도출) | 판정 |
 |---|---|---|
@@ -174,17 +184,20 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 | B 내부 | `user-invocable: false` skill | 첫 단어가 `-ing` 형(동명사) |
 | C 머리 | 진입 skill | `!` 줄 정확히 하나, 인자 = 자기 `<plugin> <name>`, `allowed-tools` 가 그 한 항목만, `## 진입 단계` 절 존재 |
 | D 인자 경계 | 모든 SKILL.md · references 의 `!` 줄과 ```` ```! ```` 블록 | 사용자 인자 토큰(`$ARGUMENTS` · `${ARGUMENTS}` · `$0`~`$9` · `$[0-9]`) 0개 |
-| E 키 | 모든 SKILL.md frontmatter | 공식 문서의 skill frontmatter 키 목록 ∪ {`cost_class`}. 목록과 확인 날짜를 테스트 주석에 적는다 |
+| E 키 | 모든 SKILL.md frontmatter | 공식 키 집합 ∪ {`cost_class`} 안에서만 (판정 출처는 아래 «축 E 와 `validate --strict`») |
 | F 모델 호출 | `disable-model-invocation: true` 인 진입 skill | 집합이 **정확히** {plugin-audit, project-init} |
 | G 안내 | 기계 코퍼스(`plugins/*/skills/**` · `plugins/*/hooks/**` · `plugins/*/scripts/**`) | `/p:x` 는 실재하는 사용자 호출 가능 skill 로 풀린다. 진입 skill 짧은 이름의 bare `/x` 는 RED |
 | H 명령 층 | `plugins/*/commands/` | qg 밖 0개. qg 는 `plugins/quality-gates/commands/` 가 있는 동안 보고 모드 |
 | I 옛 이름 | 살아 있는 표면(아래) | 옛 이름 0개 + **양성 짝**: 새 이름 다섯이 각 자기 자리에 실재 |
 
 - 살아 있는 표면: `plugins/**` · `shared/**` · `CLAUDE.md` · `README.md` · `docs/philosophy/**` · `docs/plugin-authoring.md`. `**/CHANGELOG.md` 는 제외한다.
-- 옛 이름 집합: `/interview`(단어 경계) · `conducting-interview` · `framing-requests` · `reviewing-spec` · `auditing-plugins` · `commands/(interview|request-framing|plugin-audit|project-init).md`.
+- 옛 이름 집합: 호출 토큰 `/interview` · `conducting-interview` · `framing-requests` · `reviewing-spec` · `auditing-plugins` · `commands/(interview|request-framing|plugin-audit|project-init).md`.
+- **호출 토큰의 경계**(축 G 의 `/x` · `/p:x` 와 축 I 의 `/interview` 에 공통): 앞은 줄 시작 · 공백 · 백틱 · 따옴표 · 여는 괄호 · `「` 중 하나이고, 뒤는 공백 · 백틱 · 따옴표 · `@` · 닫는 괄호 · `」` · 줄 끝 중 하나다. 앞이 단어 문자나 `/` · `.` 이거나 뒤가 `/` 면 경로 조각이라 호출 토큰이 아니다 — `docs/superpowers/interview/` · `plugins/plugin-audit/…` · `skills/spec-review/` 는 GREEN 이다.
 - RED 메시지는 자기 범위를 밝힌다. 예: «qg 는 `plugins/quality-gates/commands/` 가 있는 동안 보고만 된다».
 
-**이빨** — 테스트가 임시 복사본(`git clone --no-local`)에 축마다 변이를 심고, RED 와 그 축의 사유 문자열을 함께 확인한다. 변이는 삭제 · 추가 · 반전 · 표기 변형 네 종류다(예: `!` 줄 삭제 · 둘로 복제 · 인자 바꿔치기 · `$ARGUMENTS`→`${ARGUMENTS}` · `disable-model-invocation` 를 spec-review 에 추가 · plugin-audit 에서 제거 · 옛 이름 재삽입 · 새 skill 디렉토리 삭제). 같은 복사본의 무변이 실행 GREEN 이 양성 대조다. `PYTHONDONTWRITEBYTECODE=1` 로 돌린다.
+**축 E 와 `validate --strict`** — brief §4 는 manifest 검증을 공식 검사기 `claude plugin validate --strict` 에 맡기는 쪽을 [취함]으로 골랐다. 그래서 plugin.json(manifest) 검증은 락이 다시 하지 않고 `validate --strict` 실행 하나를 락의 한 단계로 둔다. skill frontmatter 미지 키는 순서대로 정한다: ① 구현 첫 단계에서 미지 키(`bogus_key: 1`)를 심은 SKILL.md 로 `validate --strict` 가 그 키를 잡는지 실측한다. ② 잡으면 축 E 는 그 실행 결과로 판정하고 손 목록을 두지 않는다. ③ 못 잡으면 공식 문서의 키 목록 ∪ {`cost_class`} 를 테스트에 두고 목록 출처와 확인 날짜를 주석에 적는다 — 손 목록은 플랫폼이 키를 더하면 거짓 RED 를 내는 대가가 있다(«알려진 한계»). 실측 결과는 §7 표에 E0 로 기록한다.
+
+**이빨** — 테스트가 임시 복사본(`git clone --no-local`)에 축마다 변이를 심고, RED 와 그 축의 사유 문자열을 함께 확인한다. 변이는 삭제 · 추가 · 반전 · 표기 변형 네 종류다(예: `!` 줄 삭제 · 둘로 복제 · 인자 바꿔치기 · `$ARGUMENTS`→`${ARGUMENTS}` · `disable-model-invocation` 를 spec-review 에 추가 · plugin-audit 에서 제거 · 옛 이름 재삽입 · 새 skill 디렉토리 삭제). 같은 복사본의 무변이 실행 GREEN 이 양성 대조다. **음성 대조**도 둔다 — 경로 조각(`docs/superpowers/interview/x.md` · `plugins/plugin-audit/README.md`)을 심어도 GREEN 이어야 한다. `PYTHONDONTWRITEBYTECODE=1` 로 돌린다.
 
 ### §5 CLAUDE.md 개정문
 
@@ -195,7 +208,9 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 3. 네이밍(70행): «**사용자가 부르는 진입 skill 은 짧은 kebab 두 단어 이상(일반어 단독 금지 — `spec-review`, `plugin-audit`)이고 디렉토리 이름 = `name` 이다. 모델만 부르는 내부 skill(`user-invocable: false`)은 동명사(`reviewing-brief`). 기계가 내는 안내는 `/plugin:name` 완전명. 새 `commands/` 는 만들지 않는다 — 사전 단계는 진입 skill 의 `!` 로. 집행: `shared/tests/test_invocation_surface.sh`.**»
 4. Polite handoff(87행): `reviewing-spec` → `spec-review`, `conducting-interview` → `spec-interview`.
 
-같이 고치는 곳: `docs/plugin-authoring.md` canonical 구조에서 `commands/` 제거, `docs/philosophy/devbrew-harness-philosophy.md` 의 옛 이름 참조 1곳.
+같이 고치는 곳:
+- `docs/plugin-authoring.md` — 13행 canonical 트리의 `commands/` 줄 제거 · 14행 `skills/<gerund-name>/ … (동명사)` 를 `skills/<name>/  # 진입 skill 은 짧은 kebab(spec-review), 내부 skill(user-invocable: false)은 동명사(reviewing-brief)` 로 · 31행 project-init 설명(「`commands/` … `skills/` 없음」)을 skill 하나를 가진 모양으로.
+- `docs/philosophy/devbrew-harness-philosophy.md` — 옛 이름 참조 4곳(23 · 44 · 52 · 68행).
 
 ### §6 버전 · CHANGELOG · 보고서
 
@@ -266,7 +281,7 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 - **플러그인별 독립 사전 검사 스크립트**: kill switch 열두 벌 drift 를 재생산한다.
 - **산문만으로 사전 단계**(`!` 없음): 모델이 건너뛰어도 소리가 안 난다(B2).
 - **trivia 를 진입 다섯 모두에**: 인자가 경로이거나 없는 셋에서는 판정이 늘 «아님»인 의례다.
-- **qg RED 를 보고로 남김**: 알려진 RED 가 풍경이 되고 v10 과 충돌한다.
+- **qg 위반을 RED 로 판정하고 그 RED 를 보고로 갈음함**(디렉토리를 개명하되 qg 테스트 RED 를 main 에 남김): 알려진 RED 가 풍경이 되고 v10 과 충돌한다. 채택안은 B6 한 줄 수정 + 락의 qg 보고 모드다.
 - **레포 전체 스위프**: 지난 결정문의 당시 맥락을 고쳐 쓴다.
 - **plugin-audit 0.11.0**: 세 플러그인의 bump 규칙이 갈린다.
 - **deprecation alias**: C9 · D3 로 금지.
@@ -297,6 +312,10 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 | B11 | OQ17 · OQ21: qg 보고는 규칙 위반 전부 + v10 대조 칸 | 사용자 선택 |
 | B12 | 사전 검사는 공유 정본 + 플러그인별 심볼릭 링크 | 사용자 승인. 기존 배포 방식과 copy-of 락 재사용 |
 | — | OQ14 · OQ16 · OQ18: §5 문면 · README 순서 무강제 · 조건형 qg 면제 | 설계 절 승인 |
+| B13 | **D3 범위 재결정**: qg 밖 명령 4개에 user-invocable skill 이름 하나(`reviewing-spec` → `spec-review`)를 더한다 | 근거 D5 · 축 A(진입 skill 은 동명사 금지). 리뷰 r1 결정 D1.2 에서 사용자 동의. 대가: qg 안 옛 이름 인용 4곳이 보고서 행으로 남는다(§1) |
+
+- D1.1 · r1 · adopt · c67614cd#r1.1 · "채택 — DISABLE 만, 확장 공시 (권장)" — 1단계의 플러그인 kill switch 판정이 기존 스위치 두 개의 의미를 조용히 넓힌다. `DEVBREW_PROJECT_INIT_DISABLE` 은 지금 훅만 끄는데 앞으로 `/project-init` 명령도 막게 된다. 또 `kill_switch_active(plugin, skill)` 를 재사용하면 `DEVBREW_SKIP_HOOKS=<p>:<skill>` 이라는 문서화되지 않은 토큰이 새로 생긴다.
+- D1.2 · r1 · adopt · fe1840a5#r1.1 · "채택 — B13 재결정으로 기록 (권장)" — reviewing-spec → spec-review 개명은 D3 가 정한 범위(qg 밖 명령 4개)를 넘는 다섯째 이름 제거다. 그런데 결정 기록에 재결정으로 남아 있지 않다.
 
 ## Metadata
 
