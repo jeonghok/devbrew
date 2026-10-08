@@ -1003,7 +1003,7 @@ grep -qF '**최초 요청 원문은 `S1`이다.**' <<<"$stepa_flat" \
   && ok "R-L: S1 = 최초 요청 원문 정의 (Step A 스코프, exact literal)" \
   || no "R-L: 'S1 = 최초 요청 원문' 정의 문장이 Step A 에 없다"
 
-grep -qF '「풀린 입력」(사용자가 `/spec-distill:spec-interview` 에 함께 넘긴 rough request)를 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다' <<<"$stepa_flat" \
+grep -qF '「풀린 입력」(진입 단계 2 의 결과 — rough request 그대로이거나 `@경로` 의 파일 전문)을 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다' <<<"$stepa_flat" \
   && ok "R-L: 풀린 입력 → S1 형식 → §6 배치 지시 (한 문장 결속)" \
   || no "R-L: 풀린 입력을 §6 맨 앞에 S1 형식으로 넣으라는 지시가 한 문장으로 없다"
 

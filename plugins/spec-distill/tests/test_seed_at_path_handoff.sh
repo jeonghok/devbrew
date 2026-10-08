@@ -38,15 +38,20 @@ sub() { awk -v h="$2" 'index($0,h)==1{f=1;next} f&&/^##+ /{exit} f' "$1"; }   # 
 lent="$(grep -n '^## 진입 단계$' "$SK_IV" | head -1 | cut -d: -f1)"
 l2="$(grep -n '^### 2[.] ' "$SK_IV" | head -1 | cut -d: -f1)"
 l3="$(grep -n '^### 3[.] ' "$SK_IV" | head -1 | cut -d: -f1)"
-if [ -n "$lent" ] && [ -n "$l2" ] && [ -n "$l3" ] && [ "$lent" -lt "$l2" ] && [ "$l2" -lt "$l3" ]; then
-  ok "AC5: \`## 진입 단계\` 아래 \`### 2. \` 가 \`### 3. \` 보다 앞에 있다 (${lent} < ${l2} < ${l3})"
+# 진입 단계 절의 끝 = 그 제목 뒤 첫 `## ` 제목(없으면 파일 끝 + 1). 2 · 3 은 그 안에 있어야 한다.
+lend="$(awk -v s="${lent:-0}" 'NR>s && /^## /{print NR; exit}' "$SK_IV")"
+[ -n "$lend" ] || lend=$(( $(wc -l < "$SK_IV") + 1 ))
+if [ -n "$lent" ] && [ -n "$l2" ] && [ -n "$l3" ] && [ "$lent" -lt "$l2" ] && [ "$l2" -lt "$l3" ] && [ "$l3" -lt "$lend" ]; then
+  ok "AC5: \`## 진입 단계\` 안에서 \`### 2. \` 가 \`### 3. \` 보다 앞에 있다 (${lent} < ${l2} < ${l3} < 절 끝 ${lend})"
 else
-  no "AC5: \`## 진입 단계\` 아래 \`### 2. \` 가 \`### 3. \` 보다 앞에 있지 않다 (진입=${lent:-없음} 2=${l2:-없음} 3=${l3:-없음})"
+  no "AC5: \`### 2. \` · \`### 3. \` 가 \`## 진입 단계\` 안에 그 순서로 있지 않다 (진입=${lent:-없음} 2=${l2:-없음} 3=${l3:-없음} 절 끝=${lend})"
 fi
 s2="$(sub "$SK_IV" '### 2. ' | flat)"; s3="$(sub "$SK_IV" '### 3. ' | flat)"; s35="$(sub "$SK_IV" '### 3.5 ' | flat)"; s4="$(sub "$SK_IV" '### 4. ' | flat)"
 [ -n "$s2" ] && ok "AC5(양성): 진입 단계 2 블록을 읽었다" || no "AC5(양성): 진입 단계 2 블록이 없다 — 아래 단언이 공허하다"
 assert_contains "$s2" '`@` 로 시작하는 **공백 없는 한 토큰**일 때만' "AC5: 발동 조건 — 한 토큰 @"
 assert_contains "$s2" '**절대경로로** Read 도구에 넘긴다' "AC5: 동작 — Read"
+assert_contains "$s2" '`@` 를 뗀 경로를 감시줄 `root=` 기준으로 풀어' "§3: 상대경로의 기준은 감시줄 root= 다(세션 작업 디렉토리가 아니다)"
+assert_contains "$s2" '같은 문자열을 `root=` 기준 상대경로로 보고 한 번 더 시도한다' "§3: 절대경로 Read 실패 → root= 기준 상대경로로 한 번 더"
 assert_contains "$s2" '줄번호·탭 접두를 뗀 **파일 원문 전체(frontmatter 포함)**' "AC5: 풀린 입력 = frontmatter 포함 파일 전문"
 assert_contains "$s2" '「풀린 입력」의 출처는 이 Read 결과다' "§3: 첨부가 따로 와도 출처는 Read 결과"
 assert_contains "$s2" '(<관측한 사유>). seed 를 만든 워크트리 디렉토리에서 세션을 열었는지 확인하라. 인터뷰를 시작하지 않는다.' "AC5: 부재 문구"
@@ -55,9 +60,34 @@ assert_contains "$s2" '시도: ' "@ 실패 문구가 시도한 절대경로를 �
 assert_contains "$s2" '공백 없는 경로 한 토큰으로 다시 불러라' "@ 경로의 공백을 알리고 멈춘다"
 assert_contains "$s2" '발동하지 않았으면 「풀린 입력」은' "§3: 미발동이면 받은 입력 그대로"
 assert_contains "$s3" '「풀린 입력」을 대조' "§3: 진입 단계 3 trivia 대조 대상 = 풀린 입력"
+assert_contains "$s3" '「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다' "§3: seed 면 trivia 판정을 건너뛴다"
 assert_contains "$s35" '「풀린 입력」의 frontmatter 에 `type: interview-seed`' "§3: 진입 단계 3.5 seed 판별 대상 = 풀린 입력"
 assert_contains "$s4" '「풀린 입력」' "§3: 진입 단계 4 가 풀린 입력을 본 절차로 넘긴다"
 assert_contains "$s4" '2 의 결과' "§3: 진입 단계 4 — 풀린 입력은 2 의 결과"
+
+# 「풀린 입력」이 읽는 자리에 원 인자 토큰이 돌아오면 플랫폼이 거기에 `@경로` 문자열을 치환한다.
+# 부재 코퍼스 = spec-interview SKILL · 그 references 전부 · trivia-escape. 양성 짝 = 「풀린 입력」을
+# 반드시 말해야 하는 넷(steelman.md · state-migration.md 는 입력을 다루지 않아 양성 짝에서 뺀다).
+PI_ABSENT=("$SK_IV")
+for _f in "$SD"/skills/spec-interview/references/*.md; do [ -f "$_f" ] && PI_ABSENT+=("$_f"); done
+PI_ABSENT+=("$SD/references/trivia-escape.md")
+PI_MUST=("$SK_IV" "$SD/skills/spec-interview/references/seed-input.md" \
+         "$SD/skills/spec-interview/references/finishing.md" "$SD/references/trivia-escape.md")
+[ "${#PI_ABSENT[@]}" -ge 5 ] \
+  && ok "§3(양성): 원 인자 부재 코퍼스 ${#PI_ABSENT[@]}개" \
+  || no "§3(양성): 원 인자 부재 코퍼스가 ${#PI_ABSENT[@]}개 — references 글롭이 비었다"
+for _f in "${PI_ABSENT[@]}"; do
+  if [ ! -r "$_f" ] || [ ! -s "$_f" ]; then
+    no "§3: ${_f#"$ROOT"/} 를 읽지 못했다 — 부재 단언이 공허하다"; continue
+  fi
+  _hits="$(grep -nF '$ARGUMENTS' "$_f")"; _rc=$?
+  if [ "$_rc" -ge 2 ]; then no "§3: ${_f#"$ROOT"/} grep 실패(rc=$_rc)"
+  elif [ -n "$_hits" ]; then no "§3: ${_f#"$ROOT"/} 에 원 인자 토큰이 남았다: $_hits"
+  else ok "§3: ${_f#"$ROOT"/} 에 원 인자 토큰 없음"; fi
+done
+for _f in "${PI_MUST[@]}"; do
+  assert_file_grep "$_f" '「풀린 입력」' "§3(양성 짝): ${_f#"$ROOT"/} 가 「풀린 입력」을 말한다"
+done
 
 # ── framing 게이트: 옵션 표 · 호출 모양 · 두 가드 ──────────────────────────
 call="$(block '^### 호출 모양' '^##' "$SK")"

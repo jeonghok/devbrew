@@ -38,8 +38,8 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    으로만 발생합니다. 모델 추론은 이 리스트에 넣지 말고 본문에 ✎ 프로즈로 씁니다.
    `S1`만 payload §6에 남고, `user_statements`의 나머지 발화 전량은 **audit §6**에
    **전문 보존**(append-only)하며 각각 `S<N>` 앵커를 답니다.
-   **최초 요청 원문은 `S1`이다.** 「풀린 입력」(사용자가 `/spec-distill:spec-interview` 에 함께 넘긴 rough
-   request)를 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다.
+   **최초 요청 원문은 `S1`이다.** 「풀린 입력」(진입 단계 2 의 결과 — rough request 그대로이거나
+   `@경로` 의 파일 전문)을 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다.
    Phase 0 을 거친 세션에서는 `## 진입 단계` 2 가 `@경로` 를 풀었든 사용자가 전문을 붙여넣었든
    그 「풀린 입력」이 `interview-seed` 파일 전문이고, 그때도 같은 규칙이 그대로 적용됩니다:
    ```yaml
