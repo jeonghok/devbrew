@@ -8,7 +8,7 @@ devbrew 의 사용자 호출 표면(slash 명령 · slash skill · kill switch �
 
 - 입력 brief: `docs/superpowers/interview/2026-10-08-skill-only-surface-interview.md` (확정 17항목, 커밋 67824eff)
 - brief audit: `docs/superpowers/interview/2026-10-08-skill-only-surface-interview.audit.md` (RC1~RC28 · §6 S1~S9)
-- brainstorming 결정: 이 문서 `## 결정 기록` B1~B12
+- brainstorming 결정: 이 문서 `## 결정 기록` B1~B13
 - 재결정 규약: confirmed 항목은 근거가 있으면 보고 후 재결정할 수 있고, 임의 변경은 금지다. 이 문서의 재결정은 B6(C3 예외)과 B13(D3 범위) 둘이다.
 
 ## 목차
@@ -109,7 +109,7 @@ brief §2 의 C1~C11 · D1~D6 을 그대로 따른다. 이 설계에 직접 닿�
 | `plugins/{spec-distill,plugin-audit,project-init}/scripts/entry_preflight.py` | 정본을 가리키는 심볼릭 링크 | 위 |
 | 진입 skill 공통 머리 | `!` 줄 하나 · `allowed-tools` 사전 허용 한 항목 · `argument-hint` · `## 진입 단계` 절 | 위 |
 | `shared/entry/check_invocation_surface.py` + `shared/tests/test_invocation_surface.sh` | §4 락. `--report` 모드는 qg 위반 표를 낸다 | `git ls-files` |
-| `plugins/project-init/skills/project-init/SKILL.md` | 명령 본문을 옮긴 진입 skill, `cost_class` 선언 | 위 머리 |
+| `plugins/project-init/skills/project-init/SKILL.md` | 명령 본문을 옮긴 진입 skill, `cost_class: low`(agent · codex · 웹 없음 — 지출 게이트 없음) | 위 머리 |
 
 **import 하지 않는 이유** — 심볼릭 링크로 실행된 스크립트의 `sys.path[0]` 는 링크를 푼 정본 디렉토리(`shared/entry/`)다. 형제 import 는 리포 트리와 `--plugin-dir` 로드에서 정본 옆을 찾으므로 `kill_switch_active` 가 풀리지 않는다(`shared/tests/test_copy_of_contract.sh:723-726` 실측). 또 플러그인 단위만 보는 함수를 정본 `kill_switch_active.py` 에 더하면 qg 의 copy-of 사본까지 바이트를 맞춰야 해서 C3 와 충돌한다. 그래서 `entry_preflight` 는 `DEVBREW_<PLUGIN>_DISABLE` 한 변수만 정본과 **같은 도출 규칙**(`-` → `_`, 대문자화, 값이 정확히 `1`)으로 직접 읽는다. 두 도출의 일치는 락 테스트가 플러그인 셋에 대해 `kill_switch_active(p, "_")` 의 DISABLE 판정과 대조해 잰다.
 
@@ -154,7 +154,7 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 | `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다(no-op) |
 | `[devbrew-entry] error …` | 사유를 크게 보고하고 멈춘다 |
 | `[shell command execution disabled by policy]` | «사전 검사 불가(정책)»를 보고하고 멈춘다(fail-closed) |
-| 감시줄 없음 · 그 밖 | 위와 같은 문구로 멈춘다 |
+| 감시줄 없음 · 그 밖 | «사전 검사 결과 없음 — 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다»를 보고하고 멈춘다 |
 
 - rc≠0 이면 플랫폼이 호출 전체를 끊고, 헤드리스에서는 그것이 0턴 rc=0 조용한 실패가 된다. 그래서 스크립트는 자기 실패를 rc 0 + `error` 줄로 바꾼다.
 - 남는 rc≠0 경로는 «스크립트 부재 · python3 부재» 둘이다. 이 경로는 fail-closed 로 끊긴다. 세 README 에 공시한다.
@@ -167,6 +167,11 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 - `@` 를 뗀다. 상대경로는 감시줄 `root=` 기준으로 푼다. 절대경로인데 존재하지 않으면 `root=` 기준 상대경로로 한 번 더 시도한다.
 - 실패하면 시도한 절대경로와 관측 사유를 담아 멈춘다. 인터뷰·프레이밍을 시작하지 않는다.
 - M4 결과로 규칙을 확정한다. 이 규칙은 `/interview` Step 1.5 의 seed audit 경로 한 줄 출력을 그대로 잇는다.
+- `@` 로 시작하는데 공백이 섞였으면 풀지 않고 공백을 알리고 멈춘다.
+- 성공하면 Read 원문 전체(frontmatter 포함)가 «풀린 입력»이다. 발동하지 않으면 «풀린 입력» = skill 이 받은 인자 그대로.
+- 3단계 trivia · seed 인식 · S1 · 본 절차는 «풀린 입력»을 읽는다.
+- `/interview` Step 2.5 조언은 `spec-interview` 진입 단계 3.5 로 잇는다(완전명 `/spec-distill:request-framing`).
+- `@` 단계는 `spec-interview` · `request-framing` 에 둔다. `spec-review` 는 경로 앞의 `@` 하나만 뗀다. plugin-audit · project-init 에는 없다.
 
 **3. trivia** — `references/trivia-escape.md` 다섯 패턴. 안내의 `<command>` 는 완전명(`spec-distill:spec-interview` · `spec-distill:request-framing`)으로 채운다. `force` 탈출구는 유지한다.
 
@@ -186,16 +191,16 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 | D 인자 경계 | 모든 SKILL.md · references 의 `!` 줄과 ```` ```! ```` 블록 | 사용자 인자 토큰(`$ARGUMENTS` · `${ARGUMENTS}` · `$0`~`$9` · `$[0-9]`) 0개 |
 | E 키 | 모든 SKILL.md frontmatter | 공식 키 집합 ∪ {`cost_class`} 안에서만 (판정 출처는 아래 «축 E 와 `validate --strict`») |
 | F 모델 호출 | `disable-model-invocation: true` 인 진입 skill | 집합이 **정확히** {plugin-audit, project-init} |
-| G 안내 | 기계 코퍼스(`plugins/*/skills/**` · `plugins/*/hooks/**` · `plugins/*/scripts/**`) | `/p:x` 는 실재하는 사용자 호출 가능 skill 로 풀린다. 진입 skill 짧은 이름의 bare `/x` 는 RED |
+| G 안내 | 기계 코퍼스(`plugins/*/{skills,hooks,scripts,templates,references,agents}/**`) | `/p:x` 는 실재하는 사용자 호출 가능 skill 로 풀린다. 진입 skill 짧은 이름의 bare `/x` 는 RED |
 | H 명령 층 | `plugins/*/commands/` | qg 밖 0개. qg 는 `plugins/quality-gates/commands/` 가 있는 동안 보고 모드 |
 | I 옛 이름 | 살아 있는 표면(아래) | 옛 이름 0개 + **양성 짝**: 새 이름 다섯이 각 자기 자리에 실재 |
 
-- 살아 있는 표면: `plugins/**` · `shared/**` · `CLAUDE.md` · `README.md` · `docs/philosophy/**` · `docs/plugin-authoring.md`. `**/CHANGELOG.md` 는 제외한다.
+- 살아 있는 표면: `plugins/**` · `shared/**` · `CLAUDE.md` · `README.md` · `docs/philosophy/**` · `docs/plugin-authoring.md`. 제외는 `**/CHANGELOG.md` · `*/tests/fixtures/**`(기록된 데이터) · 락 자신의 두 파일(`shared/entry/check_invocation_surface.py` · `shared/tests/test_invocation_surface.sh`) 넷뿐이다. 그 밖에 옛 이름 리터럴을 담아야 하는 테스트는 리터럴을 조각으로 잇는다.
 - 옛 이름 집합: 호출 토큰 `/interview` · `conducting-interview` · `framing-requests` · `reviewing-spec` · `auditing-plugins` · `commands/(interview|request-framing|plugin-audit|project-init).md`.
 - **호출 토큰의 경계**(축 G 의 `/x` · `/p:x` 와 축 I 의 `/interview` 에 공통): 앞은 줄 시작 · 공백 · 백틱 · 따옴표 · 여는 괄호 · `「` 중 하나이고, 뒤는 공백 · 백틱 · 따옴표 · `@` · 닫는 괄호 · `」` · 줄 끝 중 하나다. 앞이 단어 문자나 `/` · `.` 이거나 뒤가 `/` 면 경로 조각이라 호출 토큰이 아니다 — `docs/superpowers/interview/` · `plugins/plugin-audit/…` · `skills/spec-review/` 는 GREEN 이다.
 - RED 메시지는 자기 범위를 밝힌다. 예: «qg 는 `plugins/quality-gates/commands/` 가 있는 동안 보고만 된다».
 
-**축 E 와 `validate --strict`** — brief §4 는 manifest 검증을 공식 검사기 `claude plugin validate --strict` 에 맡기는 쪽을 [취함]으로 골랐다. 그래서 plugin.json(manifest) 검증은 락이 다시 하지 않고 `validate --strict` 실행 하나를 락의 한 단계로 둔다. skill frontmatter 미지 키는 순서대로 정한다: ① 구현 첫 단계에서 미지 키(`bogus_key: 1`)를 심은 SKILL.md 로 `validate --strict` 가 그 키를 잡는지 실측한다. ② 잡으면 축 E 는 그 실행 결과로 판정하고 손 목록을 두지 않는다. ③ 못 잡으면 공식 문서의 키 목록 ∪ {`cost_class`} 를 테스트에 두고 목록 출처와 확인 날짜를 주석에 적는다 — 손 목록은 플랫폼이 키를 더하면 거짓 RED 를 내는 대가가 있다(«알려진 한계»). 실측 결과는 §7 표에 E0 로 기록한다.
+**축 E 와 `validate --strict`** — brief §4 는 manifest 검증을 공식 검사기 `claude plugin validate --strict` 에 맡기는 쪽을 [취함]으로 골랐다. 그래서 plugin.json(manifest) 검증은 락이 다시 하지 않고 `validate --strict` 실행 하나를 락의 한 단계로 둔다. skill frontmatter 미지 키는 순서대로 정한다: ① 구현 첫 단계에서 미지 키(`bogus_key: 1`)를 심은 SKILL.md 로 `validate --strict` 가 그 키를 잡는지 실측한다. ② 잡으면 축 E 는 그 실행 결과로 판정하고 손 목록을 두지 않는다. ③ 못 잡으면 공식 문서의 키 목록 ∪ {`cost_class`} 를 테스트에 두고 목록 출처와 확인 날짜를 주석에 적는다 — 손 목록은 플랫폼이 키를 더하면 거짓 RED 를 내는 대가가 있다(«알려진 한계»). 실측 결과는 §7 표에 E0 로 기록한다. E0 실측(2026-10-09, CLI 2.1.294): 잡지 않는다 → ③ 손 목록. manifest 단계는 error 를 모두 RED 로 한다. warning 은 hooks 의 `${CLAUDE_PLUGIN_ROOT}` 따옴표 경고 한 종류만 면제하고, 그 면제는 보고서 3부 행이 된다.
 
 **이빨** — 테스트가 임시 복사본(`git clone --no-local`)에 축마다 변이를 심고, RED 와 그 축의 사유 문자열을 함께 확인한다. 변이는 삭제 · 추가 · 반전 · 표기 변형 네 종류다(예: `!` 줄 삭제 · 둘로 복제 · 인자 바꿔치기 · `$ARGUMENTS`→`${ARGUMENTS}` · `disable-model-invocation` 를 spec-review 에 추가 · plugin-audit 에서 제거 · 옛 이름 재삽입 · 새 skill 디렉토리 삭제). 같은 복사본의 무변이 실행 GREEN 이 양성 대조다. **음성 대조**도 둔다 — 경로 조각(`docs/superpowers/interview/x.md` · `plugins/plugin-audit/README.md`)을 심어도 GREEN 이어야 한다. `PYTHONDONTWRITEBYTECODE=1` 로 돌린다.
 
@@ -216,9 +221,11 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 
 - 자리: spec-distill major · project-init major · plugin-audit major(1.0.0) · quality-gates patch(B6). 번호 문자열은 머지 직전에 base 를 보고 확정한다.
 - CHANGELOG 셋의 `Removed` 에 옛 이름 → 새 완전명 대응표를 싣는다. plugin-audit 은 기존 CHANGELOG 에 1.0.0 절을 추가한다.
-- 보고서 `docs/superpowers/specs/2026-10-09-skill-only-surface-qg-handoff.md` 는 두 부분으로 이루어진다.
+- 보고서 `docs/superpowers/specs/2026-10-09-skill-only-surface-qg-handoff.md` 는 세 부분으로 이루어진다.
   1. «v10 이 따를 변경»: 진입은 `!` 를 가진 skill, CLAUDE.md §5 문안 인용, B6 라벨 줄.
   2. 락 `--report` 가 낸 qg 위반 전부. 행마다 «v10 설계가 다룸(행 번호) / 언급 없음» 칸을 붙인다.
+  3. «락 밖 qg 위반»(RC4 · RC5 · RC6 · RC8 · RC10 · RC18 + manifest 면제 행).
+- 대조 기준: v10 설계 `docs/superpowers/specs/2026-10-08-qg-v10-rebuild-design.md` @ `5eccf37c82ee6f000baefb0e8e972733ba07eb38`(브랜치 `feature/qg-v10-cleanup`).
 - 다른 워크트리의 v10 설계는 고치지 않는다. 보고서 경로를 사용자에게 넘긴다.
 - README 는 호출 줄과 «Principles Instantiated» 만 고친다. 쉬운 말 작업과 순서를 강제하지 않고, 충돌은 나중에 머지하는 쪽이 해소한다(OQ16).
 
@@ -245,7 +252,7 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 - AC4 `disable-model-invocation: true` 인 진입 skill 집합이 정확히 {plugin-audit, project-init} 이다.
 - AC5 `entry_preflight.py` 는 정본 하나이고 세 플러그인에 심볼릭 링크로 실린다. `test_copy_of_contract.sh` 가 GREEN 이다.
 - AC6 `test_invocation_surface.sh` 가 레포에서 GREEN 이고, 축 A~I 의 변이가 전부 RED 와 그 축의 사유를 낸다. 양성 대조는 GREEN 이다.
-- AC7 살아 있는 표면에서 옛 이름이 0건이다(락 I). 미실행 seed 의 핸드오프 줄도 완전명으로 바뀐다.
+- AC7 qg 밖 살아 있는 표면에서 옛 이름이 0건이다(락 I). qg 안의 잔여는 락 `--report` 표를 거쳐 §6 보고서에 행으로 실린다. 미실행 seed(판별 규칙은 plan P10)의 핸드오프 줄도 완전명이다 — 2026-10-09 실측 0줄.
 - AC8 CLAUDE.md 네 자리가 §5 문면대로 개정되고 `docs/plugin-authoring.md` · 철학 문서 참조가 갱신된다.
 - AC9 세 플러그인과 qg 의 plugin.json 이 §6 자리대로 bump 되고, CHANGELOG 셋에 대응표가 있다.
 - AC10 qg 에서 바뀐 것은 `test_codex_gate_observation.sh` 의 라벨 `case` 줄과 그 주석, 그리고 plugin.json · CHANGELOG 뿐이다.
@@ -256,10 +263,10 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 
 ## Files to Modify
 
-- 새: `shared/entry/entry_preflight.py` · `shared/entry/check_invocation_surface.py` · `shared/tests/test_invocation_surface.sh` · 세 플러그인 `scripts/entry_preflight.py`(링크) · `plugins/project-init/skills/project-init/SKILL.md` · 필요 시 `plugins/plugin-audit/scripts/kill_switch_active.py`(copy-of) · 보고서.
+- 새: `shared/entry/entry_preflight.py` · `shared/entry/check_invocation_surface.py` · `shared/tests/test_invocation_surface.sh` · 세 플러그인 `scripts/entry_preflight.py`(링크) · `plugins/project-init/skills/project-init/SKILL.md` · 보고서.
 - 개명(`git mv`): spec-distill `skills/{framing-requests,conducting-interview,reviewing-spec}` · plugin-audit `skills/auditing-plugins`.
 - 삭제: `plugins/spec-distill/commands/{interview,request-framing}.md` · `plugins/plugin-audit/commands/plugin-audit.md` · `plugins/project-init/commands/project-init.md`.
-- 수정 — 진입 skill 다섯의 SKILL.md(머리 · 진입 단계 · 완전명 안내) · `conducting-interview/references/finishing.md` 등 핸드오프 문구 자리 · `plugins/spec-distill/references/trivia-escape.md`(`<command>` 설명).
+- 수정 — 진입 skill 다섯의 SKILL.md(머리 · 진입 단계 · 완전명 안내) · `conducting-interview/references/finishing.md` 등 핸드오프 문구 자리 · `plugins/spec-distill/references/trivia-escape.md`(`<command>` 설명) · `conducting-interview/references/seed-input.md` · `finishing.md` 의 «풀린 입력» 치환 · `plugins/plugin-audit/scripts/check-staleness.py` 규칙 (a) · 템플릿 셋(`interview-seed-audit-template.md` · `project/charter.md` · `project/conventions.md`).
 - 수정 — 테스트: spec-distill `test_conducting_interview_internal.sh` · `test_conducting_interview_stage.sh` · `test_request_framing_command.sh` · `test_seed_at_path_handoff.sh` · `test_seed_input_provenance.sh` 와 skill 경로를 핀한 그 밖의 spec-distill 테스트, project-init `test_command_contract.py`, plugin-audit `test_check_staleness.py` 와 fixture 셋 · `scripts/check-staleness.py`, shared `test_copy_of_contract.sh` · `test_docreview_advice_procedure.sh` · `test_docreview_procedure_paths.sh` · `test_docreview_round_gate_split.sh` · `test_variant_of_contract.sh`, qg `test_codex_gate_observation.sh`(B6).
 - 수정 — 문서 · 메타: `CLAUDE.md` · `docs/plugin-authoring.md` · `docs/philosophy/devbrew-harness-philosophy.md` · 세 플러그인 README · plugin.json(넷) · CHANGELOG(넷) · 미실행 seed 의 핸드오프 줄.
 
@@ -332,6 +339,8 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 - 다음 단계: `spec-distill:reviewing-spec`(이 문서) → 승인 게이트 «진행» → superpowers:writing-plans
 
 ### Deferred to plan
+
+10건 전부 `docs/superpowers/plans/2026-10-09-skill-only-surface.md` 의 «계획 단계 결정» 표가 흡수했다.
 
 | # | 항목 |
 |---|---|
