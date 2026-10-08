@@ -318,6 +318,10 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 - D1.2 · r1 · adopt · fe1840a5#r1.1 · "채택 — B13 재결정으로 기록 (권장)" — reviewing-spec → spec-review 개명은 D3 가 정한 범위(qg 밖 명령 4개)를 넘는 다섯째 이름 제거다. 그런데 결정 기록에 재결정으로 남아 있지 않다.
 - D2.3 · r2 · adopt · c43e2738#r2.1 · "채택 — 예외를 넷으로 열거 (권장)" — Non-goals 와 B6 는 qg 수정 예외를 「B6 한 줄」로 적었지만, AC10·§6 은 라벨 case 줄과 그 주석에 더해 qg plugin.json patch bump 와 CHANGELOG 까지 고친다. 그래서 C3 예외에 대해 사용자가 동의한 기록이 실제로 고치는 범위보다 좁다.
 - D2.4 · r2 · adopt · e3ff3375#r2.1 · "채택 — 현재 변경 유지 (권장)" — finding 없이 바뀜: Handoff Context (modified)
+- D3.5 · r3 · adopt · 8e81e781#r3.1 · "채택 — Constraints 변경 유지 (권장)" — finding 없이 바뀜: Constraints (modified)
+- docreview 계수 — 66d456cd-0cd7-4277-8466-2811dc3a60f9/2026-10-09-skill-only-surface-design-e85e086e33ade8d5 r1: advice_new=1 · advice_repeat=0 · mc_preexisting_new=0
+- docreview 계수 — 66d456cd-0cd7-4277-8466-2811dc3a60f9/2026-10-09-skill-only-surface-design-e85e086e33ade8d5 r2: advice_new=7 · advice_repeat=2 · mc_preexisting_new=1
+- docreview 계수 — 66d456cd-0cd7-4277-8466-2811dc3a60f9/2026-10-09-skill-only-surface-design-e85e086e33ade8d5 r3: advice_new=2 · advice_repeat=6 · mc_preexisting_new=0
 
 ## Metadata
 
@@ -326,3 +330,18 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 - 입력: brief 67824eff
 - 영향 플러그인: spec-distill · plugin-audit · project-init · quality-gates(B6 한 줄)
 - 다음 단계: `spec-distill:reviewing-spec`(이 문서) → 승인 게이트 «진행» → superpowers:writing-plans
+
+### Deferred to plan
+
+| # | 항목 |
+|---|---|
+| 7b7d0951#r1.1 | 참고(feasibility) #acceptance-criteria — AC7 「살아 있는 표면에서 옛 이름이 0건」은 C3 아래에서 달성할 수 없다. 살아 있는 표면인 `plugins/**` 안의 qg 파일 셋이 `reviewing-spec` 을 담고 있는데, 이것을 고칠 수 없기 때문이다. — 고치면: AC7 을 「qg 밖 살아 있는 표면에서 옛 이름 0건, qg 안의 잔여는 락 `--report` 표를 거쳐 §6 보고서에 행으로 실린다」로 고친다. |
+| ad8b5a7f#r2.1 | 참고(data_flow) #6-버전--changelog--보고서 — §6 보고서 2부의 원천은 락 `--report` 하나뿐이다. 그래서 brief OQ17 이 이름 붙인 qg 위반 가운데 락의 어느 축도 보지 않는 것들은 보고서에 들어갈 생산자가 없다. B11 이 정한 「규칙 위반 전부」가 조용히 좁아진다. — 고치면: 보고서에 3부 「락 밖 qg 위반」을 둔다. brief OQ17 과 RC4·RC5·RC6·RC8·RC10·RC18 을 손으로 옮기고, 각 행에 같은 «v10 설계가 다룸 / 언급 없음» 칸을 붙인다. 또는 축 E 의 대상에 `plugins/*/commands/*.md` frontmatter 를 보고 모드로 더해 RC6 을 락이 내게 한다. |
+| 98483a2a#r2.1 | 참고(ambiguity) #2-구성요소와-파일 — §2 는 새 `project-init` SKILL.md 에 「`cost_class` 선언」이라고만 하고 값을 정하지 않았다. B5 는 project-init 을 「비용 · 부작용 큰」 쪽으로 분류했는데, CLAUDE.md 는 `high` 이면 `AskUserQuestion` 승인 게이트를 요구한다. 값과 게이트를 둘지를 정한다. |
+| f1a3bbc8#r2.1 | 참고(ambiguity) #3-호출-흐름과-오류-처리 — `commands/interview.md` Step 2.5 는 seed 가 아닌 입력에 「💡 `/request-framing` 을 먼저 거치면…」이라는 조언을 낸다(차단은 아니다). §3 의 진입 단계 1~4 는 이 조언을 이어 가는지 버리는지 말하지 않는다. 명령 파일을 지우면 이 조언이 조용히 사라지거나, 구현자마다 다르게 옮긴다. 남길지 여부를 정하고, 남기면 완전명으로 적는다. |
+| 94e7636c#r2.1 | 참고(ambiguity) #4-락--표면-정합 — 축 G 의 기계 코퍼스는 `skills/**`·`hooks/**`·`scripts/**` 뿐이고 `plugins/*/templates/**` 와 플러그인 레벨 `references/**` 가 빠져 있다. 그런데 `plugins/spec-distill/templates/interview-seed-audit-template.md:11` 은 `/interview @<seed 경로>` 를 내고, `plugins/project-init/templates/project/charter.md:3`·`conventions.md:3` 은 사용자 프로젝트에 bare `/project-init` 을 심는다. 개명한 뒤에는 이 자리의 bare 진입 이름을 D5(안내는 완전명)대로 잡을 축이 없다. 코퍼스에 넣거나 «알려진 한계»에 제외와 그 이유를 적는다. |
+| ce0db444#r2.1 | 참고(handoff_incomplete) #6-버전--changelog--보고서 — 보고서 2부는 행마다 «v10 설계가 다룸(행 번호)» 칸을 요구한다. 그런데 문서 어디에도 대조할 v10 설계의 경로·브랜치·커밋이 없다. brief S1 에만 `feature/qg-review-e2e-publish` 가 있다. `/compact` 뒤에 이 문서만 읽고는 그 칸을 채울 수 없다. v10 설계 파일 경로와 기준 커밋을 적는다. |
+| a231cc98#r2.1 | 참고(ambiguity) #files-to-modify — Files to Modify 의 「필요 시 `plugins/plugin-audit/scripts/kill_switch_active.py`(copy-of)」는 r1 이전 설계(entry_preflight 가 kill_switch_active 를 import 하던 안)에서 남은 고아 항목이다. §2 는 「import 하는 형제 모듈 없음」이고 대조 테스트는 shared 정본을 쓴다. plugin-audit 에는 그 사본을 소비할 곳이 없다. 소비자 없는 사본은 `test_copy_of_contract.sh` 머리말 조건 ①이 말하는 fail-open 모양이다. 이 항목을 뺀다. |
+| e1b5b3be#r2.1 | 참고(handoff_incomplete) #handoff-context — Handoff Context 는 「brainstorming 결정: 이 문서 `## 결정 기록` B1~B12」라고 적지만 r1 에서 B13 이 더해졌다. 바로 아래 줄도 B13 을 재결정으로 인용한다. 범위를 B1~B13 으로 고친다. |
+| e290ddb1#r3.1 | 참고(data_flow) #3-호출-흐름과-오류-처리 — §3-2 `@경로` 풀기가 성공했을 때의 산출물(파일 전문)에 이름이 없고 넘겨받는 쪽도 정해지지 않았다. 지금 seed 인식과 S1 기록은 `$ARGUMENTS` 를 보고 정해지는데, 명령을 없애면 spec-interview 직접 호출의 `$ARGUMENTS` 는 파일 전문이 아니라 `@<경로>` 글자 그대로다. — 고치면: §3-2 에 다음을 적는다: 「성공하면 Read 원문 전체(frontmatter 포함)가 «풀린 입력»이다. 발동하지 않으면 «풀린 입력» = `$ARGUMENTS`. 3단계 trivia · seed 인식 · S1 · 본 절차는 `$ARGUMENTS` 대신 «풀린 입력»을 읽는다」. seed-input.md · finishing.md 의 `$ARGUMENTS` 를 «풀린 입력»으로 바꾸는 일을 Files to Modify 에 올린다. Step 2.5 조언은 진입 단계에 잇거나 폐기한다고 명시한다. |
+| 641c4e4c#r3.1 | 참고(placeholder) #files-to-modify — 「필요 시 `plugins/plugin-audit/scripts/kill_switch_active.py`(copy-of)」는 언제 필요한지 조건이 없다. 또 §2 의 「import 하는 형제 모듈 없음」과 모순된다. |
