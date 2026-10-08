@@ -137,6 +137,12 @@ if [[ ! "$SESSION_ID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
 fi
 
 STATE_ROOT=".claude/quality-gates"
+
+# state root 아래의 비-세션 형제 폴더(qg-worktree.sh · baseline-cache.sh 가 쓴다)는 SID 로 받지 않는다.
+if [[ "$SESSION_ID" == "worktrees" || "$SESSION_ID" == "baseline-cache" ]]; then
+  echo "[quality-gates] session ID '$SESSION_ID' 는 state root 의 예약 폴더 이름이다 — 지우지 않는다. 아무것도 쓰지 않는다." >&2
+  exit 1
+fi
 STATE_DIR="$STATE_ROOT/$SESSION_ID"
 STATE_FILE="$STATE_DIR/pipeline.md"
 
@@ -159,11 +165,30 @@ root_escapes() {
   done
   return 1
 }
-if root_escapes || [[ -L "$STATE_DIR" ]]; then
-  # 지우지 않는 데서 끝내지 않는다 — 이 길로 pipeline.md 를 쓰면 링크 너머에 쓰게 된다.
-  echo "[quality-gates] state root '$STATE_ROOT' 가 링크를 거쳐 제자리 밖으로 풀린다 — 세션 폴더를 지우지 않는다. 아무것도 쓰지 않는다." >&2
+# qg-gc.py 의 SESSION_MARKERS + LEGACY_SESSION_MARKERS 와 같은 목록(test_entry_safety_e1_e6.sh 가 대조한다).
+SESSION_MARKERS=(pipeline.md result.md runtime-evidence.md files.md publish-eligible.md)
+has_session_marker() {
+  local m
+  for m in "${SESSION_MARKERS[@]}"; do
+    [[ -f "$STATE_DIR/$m" ]] && return 0
+  done
+  return 1
+}
+refuse() {
+  echo "[quality-gates] $1 — 지우지 않는다. 아무것도 쓰지 않는다." >&2
   exit 1
+}
+if root_escapes; then
+  refuse "state root '$STATE_ROOT' 가 링크를 거쳐 제자리 밖으로 풀린다"
+elif [[ -L "$STATE_DIR" ]]; then
+  refuse "세션 폴더 '$STATE_DIR' 자신이 링크다"
+elif [[ -e "$STATE_DIR" ]] && [[ ! -d "$STATE_DIR" ]]; then
+  refuse "'$STATE_DIR' 가 폴더가 아니다"
 elif [[ -d "$STATE_DIR" ]]; then
+  # 비어 있거나 세션 마커가 있는 폴더만 이전 실행의 것으로 보고 지운다.
+  if [[ -n "$(ls -A "$STATE_DIR" 2>/dev/null)" ]] && ! has_session_marker; then
+    refuse "'$STATE_DIR' 는 세션 마커가 없는 비어 있지 않은 폴더라 이전 실행의 것이 아니다"
+  fi
   rm -rf -- "./.claude/quality-gates/${SESSION_ID:?}"
 fi
 

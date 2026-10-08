@@ -117,6 +117,52 @@ assert_eq "$([ "$rc" -ne 0 ] && echo nonzero || echo zero)" "nonzero" "E1(kill s
 (cd "$WK" && "$SETUP" --session-id "kssession0001" >/dev/null 2>&1); rc=$?
 assert_eq "$rc" "0" "E1(kill switch): 스위치가 없으면 같은 호출이 폴더를 만든다 (양의 짝)"
 
+note "── E1(비-세션 폴더): SID 패턴을 통과해도 세션 폴더가 아니면 지우지 않는다"
+refusal_check() {   # refusal_check <라벨> <작업 디렉토리> <sid> [setup 추가 인자…] — rc 1 · stderr 정확히 한 줄 · 트리 불변
+  local label="$1" w="$2" sid="$3"; shift 3
+  local before after e rc
+  before="$(snap "$w")"
+  e="$(cd "$w" && "$SETUP" "$@" --session-id "$sid" 2>&1 >/dev/null)"; rc=$?
+  after="$(snap "$w")"
+  assert_eq "$rc" "1" "E1: $label — exit 1"
+  assert_eq "$(printf '%s\n' "$e" | grep -c .)" "1" "E1: $label — stderr 가 정확히 한 줄이다"
+  assert_eq "$after" "$before" "E1: $label — 아무것도 지우거나 쓰지 않았다"
+}
+for reserved in worktrees baseline-cache; do
+  WR="$TMP/e1res-$reserved"
+  mkdir -p "$WR/.claude/quality-gates/$reserved/qg-baseline-abc"
+  : > "$WR/.claude/quality-gates/$reserved/qg-baseline-abc/file"
+  refusal_check "예약 이름 $reserved" "$WR" "$reserved"
+  refusal_check "예약 이름 $reserved (--ensure)" "$WR" "$reserved" --ensure
+  [ ! -e "$WR/.claude/quality-gates/$reserved/pipeline.md" ] \
+    && ok "E1: 예약 이름 $reserved 아래에 pipeline.md 를 심지 않는다" || no "E1: 예약 폴더에 pipeline.md 가 생겼다"
+done
+WM="$TMP/e1nomarker"
+mkdir -p "$WM/.claude/quality-gates/unrelatedfolder1"
+: > "$WM/.claude/quality-gates/unrelatedfolder1/notes.txt"
+refusal_check "마커 없는 비어 있지 않은 폴더" "$WM" "unrelatedfolder1"
+WF="$TMP/e1notdir"
+mkdir -p "$WF/.claude/quality-gates"
+: > "$WF/.claude/quality-gates/afilenotdir1"
+refusal_check "폴더가 아닌 항목" "$WF" "afilenotdir1"
+# 양의 짝 — 이전 실행의 세션 폴더(마커 있음)는 다시 만든다. 빈 폴더도 같다.
+WP="$TMP/e1prev"
+mkdir -p "$WP/.claude/quality-gates/prevsession01" "$WP/.claude/quality-gates/emptysession1"
+: > "$WP/.claude/quality-gates/prevsession01/pipeline.md"; : > "$WP/.claude/quality-gates/prevsession01/extra.md"
+(cd "$WP" && "$SETUP" --session-id prevsession01 >/dev/null 2>&1); rc=$?
+assert_eq "$rc" "0" "E1: 이전 실행(pipeline.md 있음)의 세션 폴더는 다시 만든다"
+[ ! -e "$WP/.claude/quality-gates/prevsession01/extra.md" ] && ok "E1: 이전 실행의 파일을 지웠다" || no "E1: 이전 실행의 파일이 남았다"
+(cd "$WP" && "$SETUP" --session-id emptysession1 >/dev/null 2>&1); rc=$?
+assert_eq "$rc" "0" "E1: 빈 폴더는 다시 만든다"
+# 링크 거부들도 정확히 한 줄이다.
+refusal_check "링크로 풀린 state root" "$W2b" "$SID"
+refusal_check "링크인 세션 폴더" "$W2c" "$SID"
+refusal_check "링크인 .claude" "$W2d" "$SID"
+# setup 의 마커 목록은 qg-gc.py 와 같아야 한다.
+gcm="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import importlib.util as u; s=u.spec_from_file_location("qg_gc", sys.argv[1]+"/qg-gc.py"); m=u.module_from_spec(s); s.loader.exec_module(m); print(" ".join(sorted(m.SESSION_MARKERS + m.LEGACY_SESSION_MARKERS)))' "$PLUGIN_ROOT/scripts")"
+sm="$(sed -n 's/^SESSION_MARKERS=(\(.*\))$/\1/p' "$SETUP" | tr ' ' '\n' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "$sm" "$gcm" "E1: setup 의 SESSION_MARKERS 가 qg-gc.py 의 마커 합집합과 같다"
+
 note "── E2: 플러그인 루트를 cwd 로 대체하지 않는다"
 W="$TMP/e2"; mkdir -p "$W/scripts"
 printf 'open("E2-CANARY", "w").close()\n' > "$W/scripts/qg-gc.py"
