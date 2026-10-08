@@ -188,7 +188,7 @@ fd = os.open(".claude/quality-gates", os.O_RDONLY | os.O_DIRECTORY)
 fcntl.flock(fd, fcntl.LOCK_EX); print("holding"); time.sleep(600)'
 # (keep shell open with lock held)
 ```
-2. In another terminal, run `/qg --gc`. Should silently exit (GC skipped, no error).
+2. In another terminal, run `/qg`. The GC step inside setup should silently skip (no error).
 3. Stale folders preserved.
 
 ### V6 — Kill switch globally disables

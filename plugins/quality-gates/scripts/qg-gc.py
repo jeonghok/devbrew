@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """TTL-based GC for quality-gates per-session state folders.
 
-Triggers (must be explicit, never SessionStart):
-  - setup-qg.sh start (auto, fire-and-forget)
-  - /qg --gc, /cancel-qg --gc, /cancel-qg --all (user)
+Trigger (must be explicit, never SessionStart):
+  - setup-qg.sh start — every `/qg` (auto, fire-and-forget)
 
 Race guard: 3-layer (state root 디렉토리 fd 락 + double-stat ns + rename-then-rmtree).
 락 파일은 없다 — 루트 아래 고정 이름 파일은 저장소가 링크로 커밋할 수 있어서 열지 않는다.

@@ -92,8 +92,7 @@ quality-gates/
 │   └── pr-understanding-builder.md  # publish 생성기 — model 키 없음(tier-unpinned), tools: Read 1개 (inert·미호출; fail-closed; 쓰기·실행·네트워크·위임 0; 유일 입력 = inlined blob)
 ├── commands/
 │   ├── qg.md               # /qg slash command (branch · --paths · critique 라우팅)
-│   ├── qg-publish.md       # /qg-publish slash command ([--dry-run]; publish skill로 얇은 dispatch)
-│   └── cancel-qg.md        # /cancel-qg command
+│   └── qg-publish.md       # /qg-publish slash command ([--dry-run]; publish skill로 얇은 dispatch)
 ├── hooks/
 │   ├── hooks.json                            # Hook 설정
 │   ├── session-start-advisor.py              # in-flight 파이프라인 read-only advisor
@@ -457,12 +456,13 @@ log를 출력하고 plan-기반 분류로 fallback합니다.
 ### Tuning knobs
 
 - `MAX_REVIEW_ITERATIONS`: 5 (파이프라인 fix-loop iteration 수)
-- `DEVBREW_QUALITY_GATES_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/qg` 또는 `/cancel-qg --gc`에서 GC)
+- `DEVBREW_QUALITY_GATES_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/qg` 시작마다 GC)
 - `DEVBREW_QUALITY_GATES_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
 
 **`.claude/quality-gates/baseline-cache/`** (v3.0.0) — `(merge_base, runner, unit)` 내용주소
 기준선 테스트 결과 캐시. `qg-gc.py`의 TTL sweep 대상이 **아니다**(design §11 ⑩) — merge_base
-마다 파일이 하나씩 쌓이고 자동 정리 경로가 없다. 정리는 `/cancel-qg --all`에 위임한다.
+마다 파일이 하나씩 쌓이고 자동 정리 경로가 없다. 지우려면 `.claude/quality-gates/baseline-cache/` 를
+직접 지운다(이 캐시는 차등 테스트 재건 컷오버에서 사라진다).
 
 ### Kill switches (보안 컨트롤)
 
@@ -534,9 +534,8 @@ Review scope 자체는 세션 state 로 추적되지 않는다 — `/qg` 매 턴
 도출된다(branch diff against base, worktree 자체 변경분과 union).
 
 stale sibling 폴더(mtime이 `DEVBREW_QUALITY_GATES_TTL_HOURS`(기본 24h)보다 오래된)는
-`/qg` 또는 `/cancel-qg --gc` 실행 시 garbage-collect됩니다. `SessionStart` hook은
-strictly read-only (CLAUDE.md 룰); `SessionEnd` hook은 정상 종료 시 현재 세션
-폴더를 제거. crash는 TTL sweep으로 fallback.
+`/qg` 실행 시 garbage-collect됩니다. 자기 세션 폴더는 `/qg` 시작마다 `setup-qg.sh` 가 지우고
+다시 만든다(SID 패턴을 통과한 값으로만 지운다 — E1).
 
 모든 파일은 `*.local.md` gitignore 패턴에 매칭되며, 별도의 `.gitignore` 변경은
 필요 없습니다.
