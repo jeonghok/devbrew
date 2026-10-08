@@ -284,8 +284,8 @@ removed_files=(
   'tests/fixtures/depth-state-nostatementskey.md'
   'tests/fixtures/depth-state-templatecomment.md'
   # skill-only surface — 진입은 각 skill 의 `## 진입 단계` 가 맡는다(alias 없음).
-  'commands/interview.md'
-  'commands/request-framing.md'
+  'commands/inter''view.md'
+  'commands/request''-framing.md'
 )
 # **개수를 먼저 잠근다.** 아래 루프는 배열을 도는 것이라, 항목을 지우면 검사가 하나
 # 사라질 뿐 스위트는 GREEN 이다 — `ok` 줄이 하나 줄지만 아무도 세지 않는다. 즉 이

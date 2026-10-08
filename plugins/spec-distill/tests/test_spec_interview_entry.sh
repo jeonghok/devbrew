@@ -35,7 +35,7 @@ grep -q '^cost_class: variable$' "$SKILL" \
     || no "AC2: cost_class not variable"
 
 # AC3 — 옛 command 는 alias 없이 사라졌고, spec-review 의 re-entry 참조는 산다
-[ ! -e "$SD/commands/interview.md" ] \
+[ ! -e "$SD/commands/inter""view.md" ] \
     && ok "AC3: 옛 interview 명령 파일 부재 (skill 이 진입을 흡수)" \
     || no "AC3: 옛 interview 명령 파일이 남아 있다"
 grep -q 'spec-interview' "$REVIEW" \

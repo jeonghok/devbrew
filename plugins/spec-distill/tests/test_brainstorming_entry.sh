@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# AC9 — /interview 없이 들어온 세션(brainstorming 직접 진입)의 상태 폴더도 SessionEnd 가 치운다.
+# AC9 — /spec-distill:spec-interview 없이 들어온 세션(brainstorming 직접 진입)의 상태 폴더도 SessionEnd 가 치운다.
 # 지우는 대상은 payload 의 sid 다 — env 의 sid(`CLAUDE_CODE_SESSION_ID`, 지금 도는 세션)가 아니다.
 #   (i)  env 에 다른 세션의 sid 가 있어도 payload sid 의 폴더만 지우고 env sid 의 폴더는 남긴다.
-#   (ii) env 가 비었어도(/interview 없이 들어온 세션은 하니스 payload 의 session_id 밖에 없다)
+#   (ii) env 가 비었어도(/spec-distill:spec-interview 없이 들어온 세션은 하니스 payload 의 session_id 밖에 없다)
 #        payload sid 로 지운다.
 set -euo pipefail
 

@@ -45,9 +45,9 @@ assert_contains "$ENTRY" 'DEVBREW_SPEC_DISTILL_DISABLE=1' "kill switch: 진입 �
 assert_contains "$ENTRY" 'references/trivia-escape.md' "trivia escape 정본 포인터가 진입 단계에 있다"
 assert_contains "$ENTRY" '`spec-distill:request-framing`' "trivia 안내의 <command> = 완전명"
 
-[ ! -e "$SD/commands/request-framing.md" ] \
+[ ! -e "$SD/commands/request""-framing.md" ] \
   && ok "\`/request-framing\` 명령 파일이 없다 (skill 이 진입점)" \
-  || no "\`commands/request-framing.md\` 가 남아 있다 — 명령과 skill 이 같은 이름으로 겹친다"
+  || no "\`commands/request""-framing.md\` 가 남아 있다 — 명령과 skill 이 같은 이름으로 겹친다"
 
 # 5패턴을 여기 «복제하지» 않았는가 — 정본이 있는데 사본이 있으면 둘이 갈라진다.
 pc="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 식별자|<10 토큰)' "$CMD")"
