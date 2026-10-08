@@ -494,12 +494,12 @@ fi
   사유가 전부 이 한 채널로 온다.
 - `fin.json` 의 `blocks` — 막는지를 참/거짓 하나로 말한다. critic 사망(주 판정자) · 항목 소실 · 셀 수 없음일
   때만 참이고, 무엇이 막는지는 위 `advisory[]` 에 함께 실린다.
-- `docreview_state.py gate --render` 의 **첫 줄** — 그 라운드의 degrade 한 줄이다. codex 가 없었으면
-  그 사실과 사유가, 아니면 `advisory[]` 요약이, 둘 다 비면 `degrade 없음` 이 온다. 이번 라운드가 「미검증」이면
-  (요약의 `unverified` — critic 사망 · `finalize` 실패, `fin.json` 이 없는 라운드 포함) 그 공시가, 「미검증」은 아니지만
-  리뷰 완료가 아닌 라운드(요약의 `round_reviewed` 거짓 · `unreviewed_reason: unrouted`)면 라우팅 보고서 부재 공시가 맨 앞에 오고
-  `degrade 없음` 은 나올 수 없다. 라운드 번호와
-  재리뷰 카운트는 **둘째 줄**이다(상한 도달·stagnation 도 그 줄에 붙는다).
+- `docreview_state.py gate --render` 의 **첫 줄** — 그 라운드의 상태와 경고 한 문장이다. 라운드 번호 · 남은 항목 수와
+  함께, 경고가 있으면 `경고 N개:` 뒤에 `advisory[]` 를 전부(codex 부재와 사유 포함) 싣는다. 남은 것은 있고 경고가 없으면
+  「경고 없음」, 남은 것도 경고도 없으면 「이상 없음」이 온다. 이번 라운드가 「미검증」이면(요약의 `unverified` — critic
+  사망 · `finalize` 실패, `fin.json` 이 없는 라운드 포함) 그 공시가, 「미검증」은 아니지만 리뷰 완료가 아닌 라운드(요약의
+  `round_reviewed` 거짓 · `unreviewed_reason: unrouted`)면 판정 기록 부재 공시가 맨 앞에 오고 「이상 없음」·「경고 없음」은
+  나올 수 없다. 재리뷰 횟수는 **둘째 줄**이다(상한 도달·stagnation 도 그 줄에 붙는다).
 
 게이트를 띄우기 **직전에** 이 셋을 읽어 하나도 빠뜨리지 않고 프로즈로 내고, 승인 게이트 질문
 텍스트의 `degrade:` 슬롯에도 싣는다. 셋 다 비었을 때만 `degrade 없음` 이다 — 그 문구는 **채널을
