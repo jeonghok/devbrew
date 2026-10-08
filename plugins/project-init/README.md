@@ -109,4 +109,4 @@ plugins/project-init/
 /project-init    # 인터랙티브 git workflow 셋업 시작
 ```
 
-같은 이름이 설치 환경에 있으면 `/project-init:project-init`
+같은 이름이 설치 환경에 있으면 `/project-init:project-init` 로 부른다.

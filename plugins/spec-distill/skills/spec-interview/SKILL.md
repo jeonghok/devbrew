@@ -63,7 +63,7 @@ Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 �
 
 ### 4. 본 절차로
 
-아래 절들을 진행한다. 이 skill 과 그 references(`seed-input.md` · `finishing.md`)가 말하는 「풀린 입력」은 2 의 결과다. 「풀린 입력」이 비어 있으면 «라운드 규약»의 인자 없는 경로로 시작한다.
+아래 절들을 진행한다. 이 skill 과 그 references(`seed-input.md` · `finishing.md`)가 말하는 「풀린 입력」은 2 의 결과다(3 에서 `force` 를 뗐으면 그 나머지). 「풀린 입력」이 비어 있으면 «라운드 규약»의 인자 없는 경로로 시작한다.
 
 당신은 spec-distill의 인터뷰 stage를 진행 중입니다. 이 stage는 *받아적는* 인터뷰가
 아니라 **강한 문제공간 stage**입니다(Double Diamond 1st diamond — brainstorming 해답공간

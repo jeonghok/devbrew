@@ -37,7 +37,8 @@ ENTRY = [("spec-distill", "request-framing", False), ("spec-distill", "spec-inte
 for p, s, user_only in ENTRY:
     fm = "---\nname: %s\ndescription: x\ncost_class: low\n%s" % (s, "disable-model-invocation: true\n" if user_only else "")
     rows = ("\n| `[devbrew-entry] ok …` | 간다 |\n| `[devbrew-entry] disabled …` | 멈춘다 |\n"
-            "| `[devbrew-entry] error …` | 멈춘다 |\n| `[shell command execution disabled by policy]` | 멈춘다 |\n")
+            "| `[devbrew-entry] error …` | 멈춘다 |\n| `[shell command execution disabled by policy]` | 멈춘다 |\n"
+            "| 감시줄 없음 · 그 밖 | 멈춘다 |\n")
     w("plugins/%s/skills/%s/SKILL.md" % (p, s), fm + head(p, s) + rows + "\n## 본문\n\n/%s:%s 로 부른다.\n" % (p, s))
     w("plugins/%s/scripts/entry_preflight.py" % p, "# stub\n")
 w("plugins/spec-distill/skills/reviewing-brief/SKILL.md",
@@ -106,6 +107,8 @@ variant c4; edit "$TMP/v-c4/$SR" "allowed-tools:
   - Read
 "; expect_red "$TMP/v-c4" C "C 추가: allowed-tools 에 다른 도구" "allowed-tools"
 variant c5; edit "$TMP/v-c5/$SR" "[shell command execution disabled by policy]" "정책"; expect_red "$TMP/v-c5" C "C 삭제: 정책 판독 행" "감시줄 판독 행"
+variant c12; edit "$TMP/v-c12/$SR" "| 감시줄 없음 · 그 밖 | 멈춘다 |
+" ""; expect_red "$TMP/v-c12" C "C 삭제: 감시줄 없음 판독 행(fail-closed)" "감시줄 판독 행"
 variant c6; edit "$TMP/v-c6/$SR" "## 진입 단계" "## 진입"; expect_red "$TMP/v-c6" C "C 삭제: 진입 단계 절" "절이 없다"
 variant c7; edit "$TMP/v-c7/$SR" "## 본문" "## 본문
 
@@ -131,6 +134,7 @@ variant h1; put "$TMP/v-h1/plugins/spec-distill/commands/x.md" "---"; expect_red
 variant i1; put "$TMP/v-i1/plugins/spec-distill/README.md" "conducting-interview 를 부른다"; expect_red "$TMP/v-i1" I "I 추가: 옛 skill 이름" "옛 이름"
 variant i2; put "$TMP/v-i2/plugins/spec-distill/README.md" '`/interview@x`'; expect_red "$TMP/v-i2" I "I 표기: 옛 호출 토큰" "옛 호출 토큰"
 variant i3; rm -rf "$TMP/v-i3/plugins/spec-distill/skills/spec-review"; expect_red "$TMP/v-i3" I "I 삭제: 새 skill 디렉토리(양성 짝)" "양성 짝"
+variant i4; put "$TMP/v-i4/plugins/spec-distill/tests/x.sh" "# conducting""-interview 를 부른다"; expect_red "$TMP/v-i4" I "I 경계: fixtures 밖 tests 파일의 옛 이름은 RED (fixture 면제의 양성 짝)" "옛 이름"
 
 variant h2; put "$TMP/v-h2/plugins/spec-distill/commands/sub/x.md" "---"; expect_red "$TMP/v-h2" H "H 깊이: 중첩 commands/ 경로" "commands/ 층"
 variant g4; put "$TMP/v-g4/plugins/spec-distill/skills/spec-review/references/t.md" '`/spec-distil:spec-review` 로'; expect_red "$TMP/v-g4" G "G 오타: 없는 플러그인 완전명" "풀리지 않는다"
@@ -287,6 +291,9 @@ assert_eq "$(mb '{"success":true,"strict":false,"target":"t","manifest":'"$MOK"'
 assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":["x"]}')" '^shape: 항목 1 가 객체가 아니다$' "manifest_bad: 객체가 아닌 contents 항목은 RED"
 assert_grep "$(mb '{"success":false,"strict":true,"target":"t","manifest":{"file":"m","type":"plugin","errors":[{"path":"version","message":"bad"}],"warnings":[],"notes":[],"gatingHooks":[]},"contents":[]}')" '^error ' "manifest_bad: error 항목은 RED"
 assert_grep "$(mb '{"success":false,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[{"file":"h/hooks.json","type":"hooks","errors":[],"warnings":[{"path":"hooks","message":"hooks.PostToolUse.0.hooks.0: Invalid command hook"}]}]}')" '^warning ' "manifest_bad: 면제 밖 hooks 경고는 RED"
+# 면제는 두 조건의 «둘 다» 다 — 경로 조건만 · 메시지 조건만 맞는 경고는 각각 RED 여야 한다.
+assert_grep "$(mb '{"success":false,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[{"file":"h/hooks.json","type":"hooks","errors":[],"warnings":[{"path":"hooks.SessionEnd","message":"Hook timeout is not a number"}]}]}')" '^warning h/hooks.json hooks.SessionEnd ' "manifest_bad: hooks. 경로라도 면제 문구가 아닌 경고는 RED"
+assert_grep "$(mb '{"success":false,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[{"file":"s/SKILL.md","type":"skill","errors":[],"warnings":[{"path":"skills.x","message":"Shell command uses ${CLAUDE_PLUGIN_ROOT} without quotes: /bin/sh x"}]}]}')" '^warning s/SKILL.md skills.x ' "manifest_bad: 면제 문구라도 hooks. 밖 경로의 경고는 RED"
 assert_grep "$(printf '' | manifest_bad)" '^unusable:' "manifest_bad: 빈 출력은 RED"
 assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"extra":1}')" '모르는 최상위 키' "manifest_bad: 모르는 최상위 키는 RED"
 assert_eq "$(mb '{"success":false,"strict":true,"target":"t","manifest":'"$MOK"',"contents":['"$MHK_EX"']}')" "" "manifest_bad: 면제 경고만 있는 success:false 는 통과"

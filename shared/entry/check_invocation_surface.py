@@ -52,6 +52,7 @@ SENTINEL_ROWS = (
     "[devbrew-entry] disabled",
     "[devbrew-entry] error",
     "[shell command execution disabled by policy]",
+    "감시줄 없음 · 그 밖",
 )
 
 SKILL_PATH_RE = re.compile(r"^plugins/([^/]+)/skills/([^/]+)/SKILL\.md$")

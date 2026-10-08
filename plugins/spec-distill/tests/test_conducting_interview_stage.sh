@@ -1263,6 +1263,25 @@ cmd_pattern_dup="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 �
 [[ "$cmd_pattern_dup" -eq 0 ]] \
   && ok "v0.41.0: spec-interview 에 5패턴 본문이 복제되지 않았다 (정본만)" \
   || no "v0.41.0: spec-interview 에 5패턴 본문이 복제돼 있다 (${cmd_pattern_dup}줄) — 정본과 갈라진다"
+# force 탈출구 — trivia 판정이 진입 skill 안에서 돌므로 「force」를 첫 토큰으로 다시 부르는 길이
+# 정본에 규칙으로 있어야 한다. 양성 짝: 정본을 실제로 읽었는가(5패턴 헤더) · 새 안내 문면.
+# 부재: 옛 문면(재호출하면 trivia 가 다시 막는 막다른 안내).
+TRIVIA_ESC="$REPO_ROOT/plugins/spec-distill/references/trivia-escape.md"
+grep -qF '# Trivia Escape — 5 패턴' "$TRIVIA_ESC" \
+  && ok "force(양성 짝): trivia-escape.md 정본을 읽었다" \
+  || no "force(양성 짝): trivia-escape.md 를 읽지 못했다 — 아래 단언이 공허하다"
+grep -qF '「풀린 입력」의 첫 토큰이 정확히 `force` 면 그 토큰을 떼고 이 판정을 건너뛴다 — 나머지가 「풀린 입력」이 된다' "$TRIVIA_ESC" \
+  && ok "force: trivia-escape.md 가 첫 토큰 force 를 떼고 판정을 건너뛰는 규칙을 담는다" \
+  || no "force: trivia-escape.md 에 force 규칙이 없다 — 안내대로 다시 불러도 trivia 가 다시 막는다"
+grep -qF '`/<command> force <요청>` 으로 다시 부르거나' "$TRIVIA_ESC" \
+  && ok "force: 안내 문면이 \`/<command> force <요청>\` 재호출을 가리킨다" \
+  || no "force: 안내 문면에 \`/<command> force <요청>\` 재호출 안내가 없다"
+grep -qF '"force <command>"' "$TRIVIA_ESC" \
+  && no "force: 옛 안내 문면(\"force <command>\")이 남아 있다" \
+  || ok "force: 옛 안내 문면이 없다"
+grep -qF '3 에서 `force` 를 뗐으면 그 나머지' <<<"$(awk 'index($0,"### 4. ")==1{f=1;next} f&&/^##+ /{exit} f' "$CMD")" \
+  && ok "force: spec-interview 진입 단계 4 의 「풀린 입력」이 force 를 뗀 나머지를 포함한다" \
+  || no "force: spec-interview 진입 단계 4 가 force 를 뗀 나머지를 말하지 않는다"
 sub() { awk -v h="$2" 'index($0,h)==1{f=1;next} f&&/^##+ /{exit} f' "$1"; }   # sub <file> <소절 제목 접두>
 step2_block="$(sub "$CMD" '### 3. ')"
 step2_flat="$(tr '\n' ' ' <<<"$step2_block" | tr -s ' ')"

@@ -32,11 +32,11 @@ allowed-tools:
 | `[shell command execution disabled by policy]` | `[spec-distill] spec-review 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다.` 와 위 복귀 문장을 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[spec-distill] spec-review 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다.` 와 위 복귀 문장을 내고 멈춘다 |
 
-이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. 이 skill 고유의 스위치(아래 셋)는 1.5 `## 진입 검사` 가 본다. `DEVBREW_SKIP_HOOKS` 의 플러그인 토큰은 이 표에 걸리지 않는다.
+이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. 이 skill 의 나머지 스위치(아래 `## 진입 검사` 의 셋 — 플러그인 전체 스위치는 위 표가 먼저 본다)는 1.5 `## 진입 검사` 가 본다. `DEVBREW_SKIP_HOOKS` 의 플러그인 토큰은 이 표에 걸리지 않는다.
 
 ## 진입 검사
 
-이 skill 에서 **맨 먼저** 한 번 돈다 — 인자 해석·후보 제시보다, 엔진 라운드보다 앞이다. 끄기 판정은
+`## 진입 단계` 1 바로 다음(1.5)에 한 번 돈다 — 인자 해석·후보 제시보다, 엔진 라운드보다 앞이다. 끄기 판정은
 이 펜스가 하고, 산문은 펜스 출력의 **마지막 줄**(판결)만
 읽는다 — 조건을 산문으로 적지 않는다. 산문 조건은 집행되지 않고, kill switch 는 P21 보안 컨트롤이라
 그 공백은 "껐다고 믿게만" 만든다.

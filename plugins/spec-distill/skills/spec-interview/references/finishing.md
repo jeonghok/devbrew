@@ -375,7 +375,7 @@ AskUserQuestion({
 
   > `confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.`
   >
-  > `설계문서를 쓰고 커밋한 뒤, brainstorming 의 사용자 리뷰 게이트 자리에서 그 설계문서 경로로 Skill spec-distill:spec-review 을 부른다 — brainstorming 의 「다음은 writing-plans 뿐」 지시보다 이 순서가 우선한다. superpowers:writing-plans 는 spec-review 의 승인 게이트에서 진행이 선택된 뒤에만 부른다. spec-review 이 게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다.`
+  > `설계문서를 쓰고 커밋한 뒤, brainstorming 의 사용자 리뷰 게이트 자리에서 그 설계문서 경로로 Skill spec-distill:spec-review 를 부른다 — brainstorming 의 「다음은 writing-plans 뿐」 지시보다 이 순서가 우선한다. superpowers:writing-plans 는 spec-review 의 승인 게이트에서 진행이 선택된 뒤에만 부른다. spec-review 가 게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다.`
 
   이것은 아래 cross-compact 정지 요건의 *명시적 예외*다.
 

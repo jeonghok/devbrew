@@ -18,7 +18,7 @@
 
 `cost_class: high` — dispatch 전 `AskUserQuestion` 지출 동의 게이트를 통과해야 한다.
 Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
-본문 전 사전 검사(`scripts/entry_preflight.py`)가 이 스위치를 판정한다. 그 스크립트나 `python3` 가 없으면 플랫폼이 호출을 끊는다(헤드리스에서는 출력 없이 끝난다).
+본문 전 사전 검사(`scripts/entry_preflight.py`)가 이 스위치를 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 그 스크립트나 `python3` 가 없으면 플랫폼이 호출을 끊는다(헤드리스에서는 출력 없이 끝난다).
 
 **산출 위치** — 감사마다 실행 디렉토리 `.claude/plugin-audit/<date>-<target>[-N]/` 이 생긴다(지출 동의
 승인 직후, `scripts/prepare-run-dir.py`). 리포트 `audit.md` · 데이터 `audit-data.json` · 원장

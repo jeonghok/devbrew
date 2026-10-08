@@ -24,6 +24,7 @@ major 인 이유 — 사용자 호출 이름 둘이 alias 없이 사라졌고, s
 - `DEVBREW_SPEC_DISTILL_DISABLE=1` 은 세 진입 skill 의 사전 검사가 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다.
 - `/spec-interview` 는 `@` 로 시작하는 인자에 공백이 섞이면 풀지 않고 멈춘다(경로 한 토큰으로 다시 부른다). `/request-framing` 은 그런 인자를 받은 그대로 회의 재료로 쓴다.
 - `/request-framing` 의 `@경로` 풀기는 절대경로 읽기가 실패하면 `root=` 기준 상대경로로 한 번 더 시도한다.
+- trivia 를 건너뛰려면 `force` 를 첫 토큰으로 다시 부른다(`/spec-distill:spec-interview force <요청>`) — `references/trivia-escape.md` 가 그 토큰을 떼고 판정을 건너뛴다. trivia 안내 문면도 이 재호출을 가리킨다.
 
 ## [4.5.3] — 2026-09-28
 

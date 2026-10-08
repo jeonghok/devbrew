@@ -98,7 +98,13 @@ assert_eq "$(printf '%s' "$out" | LC_ALL=C sed 's/.*root=//' | LC_ALL=C tr -c '[
 assert_eq "$?" "0" "3.8 문법으로 파싱된다"
 
 # 10. 형제 import 없음 — 링크로 실행되면 sys.path[0] 이 정본 디렉토리다
-bad="$(grep -nE '^[[:space:]]*(from|import)[[:space:]]' "$S" | grep -vE '^[0-9]+:(import (os|subprocess|sys)|from __future__ import annotations)$' || true)"
-assert_eq "$bad" "" "import 는 os · subprocess · sys(+ __future__) 뿐이다"
+bad="$(grep -nE '^[[:space:]]*(from|import)[[:space:]]' "$S" | grep -vE '^[0-9]+:import (os|subprocess|sys)$' || true)"
+assert_eq "$bad" "" "import 는 os · subprocess · sys 뿐이다"
+
+# 11. 끊긴 파이프 — 읽는 쪽이 닫힌 stdout 에 써도 rc 0 (종료 flush 의 rc 120 금지)
+bp_rc="$("$PY" -c 'import os,subprocess,sys
+r,w=os.pipe(); os.close(r)
+print(subprocess.run([sys.executable,sys.argv[1],"spec-distill","s"],stdout=w,stderr=subprocess.DEVNULL).returncode)' "$S")"
+assert_eq "$bp_rc" "0" "끊긴 파이프: rc 0"
 
 finish

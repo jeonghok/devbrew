@@ -11,8 +11,6 @@ rc 는 늘 0 이다. rc≠0 이면 플랫폼이 skill 호출 전체를 끊고, �
 `shared/killswitch/kill_switch_active.py` 와 같다(`-`→`_`, 대문자화, 값이 정확히 "1").
 `shared/tests/test_entry_preflight.sh` 가 두 도출을 대조한다.
 """
-from __future__ import annotations
-
 import os
 import subprocess
 import sys
@@ -75,7 +73,11 @@ def main():
         sys.stdout.write(line + "\n")
         sys.stdout.flush()
     except Exception:  # noqa: BLE001
-        pass
+        # 남은 버퍼를 인터프리터 종료 flush 가 다시 쓰다 깨지면 rc 120 이 된다 — stdout 을 devnull 로.
+        try:
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except Exception:  # noqa: BLE001
+            pass
     return 0
 
 

@@ -9,7 +9,7 @@
 # 쪽을 consumer로 쓴다 — assemble-audit-data.py:233의 `load(a.codex_side)`가
 # `Path(p).read_text()`로 $CODEX_JSON을 직접 read한다. audit-workflow.js는
 # 오케스트레이터가 파싱해 만든 codexFindings 인자를 받을 뿐 이 파일을 열지 않는다
-# (plugin-audit/SKILL.md:137 표: "post-1에서 --codex-side <codex.json>으로
+# (`skills/plugin-audit/SKILL.md` `## pre-1` 절의 codex 소비자 표: "post-1에서 --codex-side <codex.json>으로
 # 넘긴다"). 나머지 한 채널(findings → audit-workflow.js)은 여기 산문으로만 남긴다
 # — 지금은 지워진 옛 brief 러너가 direction/fidelity 두 축을 같은 방식으로
 # 처리한 선례를 따른다.
@@ -22,13 +22,13 @@
 # 아니라 모델 다양성 보조다.
 #
 # 이 스크립트가 있기 전까지 plugin-audit은 codex를 **산문 지시로** 불렀고
-# (`skills/plugin-audit/SKILL.md:92`), 그래서 여섯 가지가 동시에 비어 있었다:
+# (`skills/plugin-audit/SKILL.md` `## pre-1` 절의 codex 단계), 그래서 여섯 가지가 동시에 비어 있었다:
 # 가용성 확인 · codex 전용 kill switch · `-C` · `--json` · stdin 규약 · 층④ 추출기.
 # 그리고 그 형태 때문에 리포의 codex 락들이 이 호출부를 아예 보지 못했다.
 #
 # **qg의 프롬프트 빌더를 재사용하지 않는다** — `run_codex_reviewer.sh`는 최신 spec의
 # AC를 자동 주입하고, 감사에서 그것은 codex가 답을 미리 보는 것이라 blind를 깬다
-# (`plugin-audit/SKILL.md:94`). 프롬프트는 이 플러그인 자신의 preamble + 축 질문이다.
+# (`skills/plugin-audit/SKILL.md` `## pre-1` 절 3, codex blind co-audit). 프롬프트는 이 플러그인 자신의 preamble + 축 질문이다.
 #
 # **"codex를 이 감사에서 아예 부를지" 게이트는 호출자(SKILL)·`detect_codex.sh` 책임이다**
 # — 이 러너는 그 kill switch를 읽지 않는다(test_run_audit_codex_reviewer.py가 그
