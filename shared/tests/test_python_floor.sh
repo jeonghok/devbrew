@@ -171,23 +171,23 @@ R="$ROOT/$RESOLVER"
 
 note "── 축 A: 해석기 행동 ───────────────────────────────────────────────"
 
-# A1 (AC5a) 전역 스위치가 해석보다 먼저다 — 바닥 만족 인터프리터가 있어도 아무것도 안 한다
-out="$(run_resolver "$PATH_FLOOR" DEVBREW_QG_DISABLE=1 /bin/sh "$R" \
-        --event SessionStart --plugin qg --hook hook-name "$TARGET")"
-assert_eq "$out" "" "A1/AC5a: DEVBREW_QG_DISABLE=1 이면 stdout 이 비고 훅이 안 돈다"
+# A1 (AC5a) [플러그인 이름의 하이픈 → 밑줄 매핑(fix-ture → FIX_TURE)도 여기서 잰다] 전역 스위치가 해석보다 먼저다 — 바닥 만족 인터프리터가 있어도 아무것도 안 한다
+out="$(run_resolver "$PATH_FLOOR" DEVBREW_FIX_TURE_DISABLE=1 /bin/sh "$R" \
+        --event SessionStart --plugin fix-ture --hook hook-name "$TARGET")"
+assert_eq "$out" "" "A1/AC5a: DEVBREW_FIX_TURE_DISABLE=1 이면 stdout 이 비고 훅이 안 돈다"
 
 # A1b (AC5a 의 exec 갈래별 짝) A1 의 PATH_FLOOR 는 3단계(글롭)에서야 만족 후보를 만난다. 그래서
 #     kill switch 판정을 1·2단계 «아래» 로 옮겨도 A1 은 GREEN 인데 끈 훅이 그 두 갈래로 돈다
 #     〔#162 회고 리뷰 실측: 131/131〕. exec 갈래마다 만족 후보를 하나씩 두고 스위치를 켠다.
 #     양의 짝(스위치 없이 같은 갈래로 exec 한다)은 A9 · A17 · A5 다.
-out="$(run_resolver "$PATH_SUB" DEVBREW_QG_DISABLE=1 "DEVBREW_PYTHON=$TMP/floor/python3.99" \
-        /bin/sh "$R" --event SessionEnd --plugin qg --hook hook-name "$TARGET")"
+out="$(run_resolver "$PATH_SUB" DEVBREW_FIX_TURE_DISABLE=1 "DEVBREW_PYTHON=$TMP/floor/python3.99" \
+        /bin/sh "$R" --event SessionEnd --plugin fix-ture --hook hook-name "$TARGET")"
 assert_not_contains "$out" "TARGET-RAN" "A1b: 스위치가 켜지면 1단계(\$DEVBREW_PYTHON)로도 exec 하지 않는다"
-out="$(run_resolver "$PATH_PLAINFLOOR" DEVBREW_QG_DISABLE=1 \
-        /bin/sh "$R" --event SessionEnd --plugin qg --hook hook-name "$TARGET")"
+out="$(run_resolver "$PATH_PLAINFLOOR" DEVBREW_FIX_TURE_DISABLE=1 \
+        /bin/sh "$R" --event SessionEnd --plugin fix-ture --hook hook-name "$TARGET")"
 assert_not_contains "$out" "TARGET-RAN" "A1b: 스위치가 켜지면 2단계(bare python3)로도 exec 하지 않는다"
-out="$(run_resolver "$PATH_FLOOR" DEVBREW_QG_DISABLE=1 \
-        /bin/sh "$R" --event SessionEnd --plugin qg --hook hook-name "$TARGET")"
+out="$(run_resolver "$PATH_FLOOR" DEVBREW_FIX_TURE_DISABLE=1 \
+        /bin/sh "$R" --event SessionEnd --plugin fix-ture --hook hook-name "$TARGET")"
 assert_not_contains "$out" "TARGET-RAN" "A1b: 스위치가 켜지면 3단계(python3.* 글롭)로도 exec 하지 않는다"
 
 # A2 (AC5b) 전체 토큰 — 부분 일치는 끄지 않는다
@@ -751,7 +751,7 @@ if [ "$iso_ok" -eq 1 ]; then
     assert_eq "$out_ks" "" "C2/AC12: kill switch 를 켜면 $pl/$ev 는 안내도 내지 않는다"
   done
 
-  # 「본래 동작은 수행되지 않는다」 — 위 넷은 실패 경로에서 부작용이 없어 관측할 것이
+  # 「본래 동작은 수행되지 않는다」 — 위 둘은 실패 경로에서 부작용이 없어 관측할 것이
   # 없으므로, **메커니즘** 을 카나리아로 직접 잰다: exec 이 없으면 대상 코드가 한 줄도 안 돈다.
   CANARY="$TMP/canary.sh"; CANARY_MARK="$TMP/canary.ran"
   printf '#!/bin/sh\ntouch "%s"\n' "$CANARY_MARK" > "$CANARY"; chmod +x "$CANARY"
@@ -765,7 +765,7 @@ fi
 
 # 위 격리 PATH 블록의 $out_ks 단언은 두 자리 모두에서 vacuous 하다 — 바닥
 # 미만 PATH 에서는 해석기가 fail-open 으로 이미 stdout 을 비우므로, 스위치 검사를 통째로
-# 지워도 그 세 자리는 그대로 GREEN 이다(스크래치 사본으로 실측). kill switch 자신의 효과는
+# 지워도 그 두 자리는 그대로 GREEN 이다(스크래치 사본으로 실측). kill switch 자신의 효과는
 # 거기서 관측할 수 없다 — 만족 PATH($PATH_FLOOR)에서 exec 여부로 직접 재야 한다: 스위치가
 # 꺼지면 $TARGET 이 돌아 TARGET-RAN 이 나오고, 켜지면 exec 자체가 없어 사라진다. 이 satisfying
 # PATH 는 호스트의 실제 python3 와 무관하므로 `iso_ok` 게이트 밖에 둔다.

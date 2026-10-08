@@ -144,7 +144,7 @@ if [ -n "${DEVBREW_PYTHON-}" ]; then
     IGNORED_REASON="실행 불가"
     IGNORED="$DEVBREW_PYTHON (실행할 수 없거나 버전을 물을 수 없다)"
   fi
-  # stdout 에 쓰지 않는다 (C7) — 이 사실은 환경으로 넘기고 SessionStart 안내가 싣는다.
+  # stdout 에 쓰지 않는다 (C7) — 이 사실은 환경(DEVBREW_PYTHON_IGNORED)으로 내보내기만 한다 — 지금 읽는 훅은 없다.
   DEVBREW_PYTHON_IGNORED="$IGNORED"; export DEVBREW_PYTHON_IGNORED
 fi
 
