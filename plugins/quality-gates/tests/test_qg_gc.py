@@ -1,5 +1,6 @@
 """Tests for scripts/qg-gc.py — TTL-based session-folder GC."""
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -602,8 +603,11 @@ class SetupForwardsGcStderr(unittest.TestCase):
     def test_setup_gc_call_does_not_discard_stderr(self):
         # GC 의 거부 · 락 실패 줄은 `/qg` 시작마다 도는 이 자동 경로에서 보여야 한다.
         setup = GC.parent / "setup-qg.sh"
+        # GC «실행» 줄만 센다 — qg-gc.py 를 프로그램으로 돌리는 줄(`python3 <경로>/qg-gc.py`).
+        # 마커 목록을 읽는 importlib 로더나 거부 문구의 언급은 실행이 아니다.
+        run_re = re.compile(r"python3\s+\S*qg-gc\.py")
         calls = [ln for ln in setup.read_text(encoding="utf-8").splitlines()
-                 if "qg-gc.py" in ln and not ln.lstrip().startswith("#")]
+                 if run_re.search(ln) and not ln.lstrip().startswith("#")]
         self.assertEqual(len(calls), 1, f"setup-qg.sh 의 GC 호출 줄이 하나가 아니다: {calls}")
         self.assertNotIn("2>", calls[0], f"GC 호출이 stderr 를 돌린다: {calls[0]}")
         # `&>/dev/null` · `>/dev/null 2>&1` 처럼 `2>` 없이 버리는 모양도 막는다.
