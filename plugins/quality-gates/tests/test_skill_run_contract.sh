@@ -117,9 +117,51 @@ FV="$(awk '/^## Final verdict$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
 [ -n "$FV" ] && ok "Final verdict 창을 찾았다" || no "Final verdict 창이 없다"
 assert_eq "$(printf '%s\n' "$FV" | grep -cxF 'N_BLOCK=$(sed -n '"'"'s/^blocking: //p'"'"' "$SYN"); N_OPT=$(sed -n '"'"'s/^optional: //p'"'"' "$SYN")')" "1" \
   "F: 막는 지적 · 선택 수를 합성기 출력에서 셸이 뽑는다"
-assert_eq "$(printf '%s\n' "$FV" | grep -cxF '  --blocking "${N_BLOCK:-0}" --optional "${N_OPT:-0}" --new-failures "$K" --excluded "$X" \')" "1" \
+assert_eq "$(printf '%s\n' "$FV" | grep -cxF '  --blocking "$N_BLOCK" --optional "$N_OPT" --new-failures "$K" --excluded "$X" \')" "1" \
   "F: verdict.py 에 셸이 뽑은 네 수를 넘긴다"
 assert_not_grep "$FV" '--(blocking|optional|new-failures|excluded)[ =]+"?<' "F: 판정 줄 숫자 자리에 자리표시(<N>)가 없다 (R24)"
+assert_not_grep "$FV" ':-0\}' "F: 합성 출력의 결측을 0 으로 채우는 기본값이 없다 (V8 · 최종 리뷰 I3)"
+
+# ── F 행동 (최종 리뷰 I3): 합성 출력이 없거나 · 비었거나 · 키가 빠졌거나 · 겹치면 판정 줄을 만들지 않는다.
+#    Final verdict 의 첫 펜스를 임시 리포에서 실제로 돌린다.
+FVF="$(printf '%s\n' "$FV" | awk '/^```bash$/{f=1;next} f&&/^```$/{exit} f')"
+[ -n "$FVF" ] && ok "Final verdict 펜스를 뽑았다" || no "Final verdict 펜스가 없다"
+RVD="$T/rv"; mkdir -p "$RVD" "$RDIR"
+RUNF="$T/final.sh"
+FVF_SRC="$FVF" python3 - "$RUNF" "$RVD" "$SID" <<'PY'
+import sys
+out, rv, sid = sys.argv[1], sys.argv[2], sys.argv[3]
+import os
+src = os.environ["FVF_SRC"]
+src = src.replace("<마지막 iteration 의 RV>", rv).replace("<session-id>", sid).replace("<N>", "1")
+open(out, "w", encoding="utf-8").write(src + "\n")
+PY
+[ -s "$RUNF" ] && ok "Final verdict 펜스 실행 파일을 만들었다" || no "Final verdict 펜스 실행 파일이 비었다"
+
+final_case() {   # final_case <라벨> <synth.out 내용 | @missing> <기대 rc> <기대 stderr 조각 | ->
+  rm -f "$RVD/synth.out" "$RDIR/verdict.out"
+  [ "$2" = "@missing" ] || printf '%s' "$2" > "$RVD/synth.out"
+  local out err rc
+  out="$( cd "$T" && CLAUDE_PLUGIN_ROOT="$QGP" bash "$RUNF" 2>"$T/final.err" )"; rc=$?
+  err="$(cat "$T/final.err")"
+  assert_eq "$rc" "$3" "I3 $1: 펜스 rc"
+  if [ "$3" = 4 ]; then
+    assert_contains "$err" "$4" "I3 $1: 판정 줄을 만들지 않는 이유를 밝힌다"
+    [ ! -e "$RDIR/verdict.out" ] && ok "I3 $1: verdict.out 을 쓰지 않는다" || no "I3 $1: verdict.out 이 생겼다"
+    assert_not_contains "$out" 'qg: clean' "I3 $1: clean 판정 줄이 나오지 않는다"
+  else
+    assert_contains "$out" "$4" "I3 $1: 판정 줄"
+  fi
+}
+GOOD=$'blocking: 1\noptional: 2\nverdict: defect\nreason: blocking\n'
+final_case "정상(양성 짝)"   "$GOOD" 0 'qg: defect · 막는 지적 1 · 선택 2 · 차등 새 실패 0 · 제외 패치 0 · iter 1 · '
+final_case "파일 없음"       "@missing" 4 '합성 출력이 없거나 비었다'
+final_case "빈 파일"         ""         4 '합성 출력이 없거나 비었다'
+final_case "verdict 빠짐"    $'blocking: 0\noptional: 0\n'                         4 "'verdict:' 줄이 정확히 한 번이 아니다"
+final_case "blocking 빠짐"   $'optional: 0\nverdict: clean\n'                       4 "'blocking:' 줄이 정확히 한 번이 아니다"
+final_case "optional 빠짐"   $'blocking: 0\nverdict: clean\n'                       4 "'optional:' 줄이 정확히 한 번이 아니다"
+final_case "verdict 겹침"    $'blocking: 0\noptional: 0\nverdict: clean\nverdict: defect\n' 4 "'verdict:' 줄이 정확히 한 번이 아니다"
+final_case "blocking 겹침"   $'blocking: 1\nblocking: 0\noptional: 0\nverdict: defect\n'   4 "'blocking:' 줄이 정확히 한 번이 아니다"
 
 # ── E: 외부 리뷰어 프롬프트와 처분
 EXT="$(awk '/^\*\*External reviewers\*\*/{f=1} f&&/^\*\*다른 전제 각도/{exit} f' "$SKILL")"

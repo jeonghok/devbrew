@@ -728,6 +728,10 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 SYN="<마지막 iteration 의 RV>/synth.out"
+[ -s "$SYN" ] || { echo "[quality-gates] 합성 출력이 없거나 비었다: ${SYN} — 판정 줄을 만들지 않는다" >&2; exit 4; }
+for k in verdict blocking optional; do
+  [ "$(grep -c "^${k}: " "$SYN")" = 1 ] || { echo "[quality-gates] ${SYN} 의 '${k}:' 줄이 정확히 한 번이 아니다 — 판정 줄을 만들지 않는다" >&2; exit 4; }
+done
 ARGS=()
 [ "$(sed -n 's/^verdict: //p' "$SYN")" = "defect" ] && ARGS+=(--defect)
 for r in $(sed -n 's/^reasons: \[\(.*\)\]$/\1/p' "$SYN" | tr ',' ' '); do ARGS+=(--reason "$r"); done
@@ -735,7 +739,7 @@ N_BLOCK=$(sed -n 's/^blocking: //p' "$SYN"); N_OPT=$(sed -n 's/^optional: //p' "
 K=0; if [ -f "$RD/aggregate.yaml" ]; then for n in $(grep -oE '(new_regression|new_test_red): [0-9]+' "$RD/aggregate.yaml" | sed 's/.*: //'); do K=$((K + n)); done; fi
 X=0; [ -f "$RD/excluded.md" ] && X=$(grep -c '^- ' "$RD/excluded.md")
 python3 "$QG/scripts/verdict.py" ${ARGS[@]+"${ARGS[@]}"} --line \
-  --blocking "${N_BLOCK:-0}" --optional "${N_OPT:-0}" --new-failures "$K" --excluded "$X" \
+  --blocking "$N_BLOCK" --optional "$N_OPT" --new-failures "$K" --excluded "$X" \
   --iter <N> --sha "$(git rev-parse --short HEAD)" > "$RD/verdict.out"
 echo "verdict rc=$?"; cat "$RD/verdict.out"
 ```
