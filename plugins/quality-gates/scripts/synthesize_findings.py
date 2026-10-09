@@ -409,14 +409,12 @@ def _verdict_for(v, cur_sev, fid, ledger):
     elif kind == "lower":
         # 관문 E — 목적지는 SUGGESTION 하나뿐이고 근거가 있어야 한다. 근거 없는 lower 는
         # confirm 으로 강제하고 그 강제를 센다(gate=True — 막는 지적이 그대로 남는다).
-        # `to` 가 막는 severity(IMPORTANT·CRITICAL)를 가리키는 lower 는 자기모순이다 —
-        # SUGGESTION 으로 내려 읽지 않고(fail-closed) confirm 으로 강제해 센다.
+        # `to` 는 없거나 SUGGESTION 이어야 한다. 그 밖의 값(IMPORTANT·CRITICAL · 어휘 밖 ·
+        # 빈 값 · 문자열 아님)은 SUGGESTION 으로 내려 읽지 않고(fail-closed, V8) confirm 으로
+        # 강제해 센다 — 모르는 값을 낙관 방향으로 풀지 않는다.
         evidence = _evidence(v)
         to_raw = v.get("to")
-        to = _fold_sev(to_raw)
-        if to_raw is not None and to != "SUGGESTION" and to not in ("IMPORTANT", "CRITICAL"):
-            ledger.coerced("to", to_raw, "SUGGESTION", gate=False)
-        if to in ("IMPORTANT", "CRITICAL"):
+        if "to" in v and _fold_sev(to_raw) != "SUGGESTION":
             ledger.coerced("lower.to", to_raw, "confirm", gate=True)
         elif not evidence:
             ledger.coerced("verdict", "lower", "confirm", gate=True)

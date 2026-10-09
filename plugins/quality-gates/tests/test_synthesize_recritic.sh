@@ -884,6 +884,30 @@ case_ac6_lower_to_blocking_severity_is_coerced_to_confirm() {
   done
 }
 
+case_ac6_lower_with_unknown_to_is_coerced_to_confirm() {
+  # V8 · fail-closed — `to` 가 있는데 SUGGESTION 이 아니면(어휘 밖 · 빈 값 · null · 문자열 아님)
+  # 모르는 값을 낙관 방향으로 풀지 않는다: confirm 으로 강제하고 원래 값을 공시한다.
+  # 「YAML 값|공시에 실릴 repr」 쌍.
+  local T pair yv shown
+  for pair in "FOO|'FOO'" "''|''" "[SUGGESTION]|['SUGGESTION']" "5|5" "|None"; do
+    yv="${pair%%|*}"; shown="${pair#*|}"
+    T=$(mktemp -d)
+    one_finding "$T/findings.yaml" security-reviewer app.py 10 CRITICAL; prep "$T"
+    reply "$T/reply.txt" "verdicts:
+  - f: f1
+    verdict: lower
+    to: $yv
+    evidence: \"의도 출처는 캐시 무효화만 요구한다\""
+    local out; out=$(synth "$T" --emit-verdict)
+    assert_contains "$out" '1 CRITICAL / 0 IMPORTANT / 0 SUGGESTION' "모르는 to 의 lower 는 적용되지 않는다 [to=$yv]"
+    assert_not_contains "$out" 'lowered'       "내린 표시가 없다 [to=$yv]"
+    assert_grep     "$out" '^blocking: 1$'     "막는 지적이 남는다 [to=$yv]"
+    assert_grep     "$out" '^verdict: defect$' "defect 다 [to=$yv]"
+    assert_contains "$out" "강제(게이트 변경): lower.to ${shown}→'confirm'" "원래 값이 공시된다 [to=$yv]"
+    rm -rf "$T"
+  done
+}
+
 case_evidence_must_be_text() {
   # 근거는 비어 있지 않은 문자열(또는 문자열 목록)뿐이다 — `true` · `['']` · `[]` · `0` 은
   # 근거가 아니어서 reject · lower 가 적용되지 않고 게이트 변경 강제로 세어진다.
@@ -989,6 +1013,7 @@ case_container_drop_of_findings_document_blocks
 case_hold_only_is_blocking_without_source_death
 case_ac6_lower_with_evidence_goes_to_suggestion_only
 case_ac6_lower_to_blocking_severity_is_coerced_to_confirm
+case_ac6_lower_with_unknown_to_is_coerced_to_confirm
 case_evidence_must_be_text
 case_ac6_lower_without_evidence_is_coerced_and_counted
 case_ac6_lower_on_suggestion_is_noop
