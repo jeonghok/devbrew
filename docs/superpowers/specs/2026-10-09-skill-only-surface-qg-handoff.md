@@ -18,6 +18,7 @@
    >
    > - **v1.0.0 이상이면 `CHANGELOG.md`.** `## [version] — YYYY-MM-DD` with Added/Changed/Deprecated/Removed/Fixed/Security. 제거 전 one-minor deprecation window. 사용자가 명시 결정한 재건은 deprecation 창 없이 제거하고 CHANGELOG Removed 에 적는다. 또 하나의 예외 — 호출 이름(slash 명령 · skill 이름)의 변경·제거는 alias 없이 즉시 하고 major bump 한다. 이 예외는 제3자 설치가 확인되면(외부 이슈 · 설치 보고 · 마켓플레이스 공개 등록) 소멸한다. kill switch 이름은 이 예외에 들지 않는다 — 은퇴시키려면 CHANGELOG `Removed` 와 README 에 공시가 필수다.
 4. B6 라벨 줄: `test_codex_gate_observation.sh` 의 `case "$label"` 는 skill 디렉토리 이름을 열거한다 — 디렉토리를 바꾸면 그 줄도 같은 커밋에서 바꾼다.
+5. 경로 락 하한: `shared/tests/test_plugin_root_no_cwd_fallback.sh` 의 코퍼스 하한 `-ge 27` 은 #191 머지 시점의 코퍼스 수에 여유 없이 맞췄다. qg 가 그 코퍼스(`plugins/*/{skills,commands,references}/**.md`)의 파일을 지우면 같은 커밋에서 하한을 내린다 — 사라진 파일을 `--emit-scanned` 목록의 전후 대조로 이름까지 확인한 뒤에. ③ 계획(`docs/superpowers/plans/2026-10-08-qg-v10-c3-publish.md`) Task 4 Step 2 에 그 절차를 넣었다.
 
 ## 2부 — 락이 재는 축의 qg 위반
 
