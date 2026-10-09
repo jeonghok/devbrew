@@ -566,7 +566,7 @@ mut 1/1 escalated_fix_no_longer_blocks case_GR_escalated_fix_blocks_approval sed
 #    둘째 라운드부터 조용히 사라지는 회귀(M7 원 결함)를 그대로 재현한다.
 mut 1/1 escalate_reason_not_carried case_GR_escalated_fix_reason_persists sed_state \
   's/^        fx\["escalate_reason"\] = reason$/        pass/'
-# ㊷ I2 — `_rg_escalated_fix` 의 렌더 문구에서 「drop 하면 이 차단이 풀린다」 힌트를
+# ㊷ I2 — `_rg_escalated_fix` 의 렌더 문구에서 「버리면(drop) 이 차단이 풀린다」 힌트를
 #    지운다. 코드(`cmd_fix` 의 drop 분기, 상태 가드 없음)는 그대로라 탈출구 자체는
 #    여전히 동작하지만, 게이트 본문이 그 사실을 다시 감춘다 — I2 가 지적한 「승인이
 #    다시 도달 가능한가를 렌더가 알려주지 않는다」결함으로 되돌린다.
@@ -725,6 +725,28 @@ mut 1/1 anchor_marker_unfolded case_I4_anchor_newline_collapsed sed_state \
 # 경고 판정에 남은 항목을 조건으로 걸기 — 남은 것 없는 codex 없음 라운드가 「이상 없음」이 된다.
 mut 1/1 warns_need_left case_T40_codex_absent_nothing_left_first_line sed_state \
   's/^    if warns:$/    if warns and left:/'
+# ── 쉬운 말 출력 PR 2 Task 5 (PR 1 이연 항목) ─────────────────────────────────
+# 경고 원문을 쉬운 줄로 바꾸는 호출을 떼기 — 첫 줄에 엔진 원문이 그대로 선다.
+mut 1/1 warns_plain_gloss_off case_plain_warns_first_line sed_state \
+  's/^    warns = _plain_warns(warns)$//'
+# 같은 사실의 합치기를 끄기 — 원문마다 키가 따로 생겨 codex 부재가 첫 줄에 두 번 나온다.
+mut 1/1 warns_same_fact_not_merged case_plain_warns_first_line sed_state \
+  's/^            k = (row\[1\], row\[2\])$/            k = (row[1], row[2], w)/'
+# 사유 토큰 모으기를 끄기 — 괄호에 이름만 남고 왜 빠졌는지가 사라진다.
+mut 1/1 warns_reason_dropped case_plain_warns_first_line sed_state \
+  's/^        if why and why not in why_of\[k\]:$/        if False:/'
+# 표에 없는 원문을 버리기 — 모르는 경고가 첫 줄에서 조용히 사라진다(P6 위반).
+mut 1/1 warns_unknown_dropped case_plain_warns_unknown_kept sed_state \
+  's/^            k = w$/            continue/'
+# 묶음마다 새로 세기를 지우기 — 같은 자리 표지가 묶음 제목 너머의 항목을 가리킨다.
+mut 1/1 marker_crosses_group case_gate_marker_stays_in_group sed_state \
+  's/^        prev_anchor = None$//'
+# 막힌 이유의 한 줄 접기를 떼기 — 사유 속 개행이 열 0 에 가짜 항목 머리를 세운다.
+mut 1/1 escalate_reason_unfolded case_I4_escalate_reason_newline_collapsed sed_state \
+  's/ % (_one(st\["findings"\]\[fid\]\.get("summary")), _one(why), fid)\]$/ % (_one(st["findings"][fid].get("summary")), why, fid)]/'
+# 「미검증」 첫 줄에 「남은 것 없음」을 되살리기.
+mut 1/1 unverified_nothing_left case_T46_unverified_no_nothing_left sed_state \
+  's/ if left else ("\." if lead else " — 남은 것 없음\."))$/ if left else " — 남은 것 없음.")/'
 # (54) 상태 디렉토리의 문서 정체 — `init` 의 문서 비교를 끈다. 다른 문서의 원장을 조용히
 #    이어받던 그 동작이다. 거부 셀만 RED 가 된다.
 mut 1/1 init_doc_compare_off case_init_other_doc_refused sed_state \
