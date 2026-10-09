@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# test_recritic_bridge.sh — 재비판 변환 계층 (설계 §6.3.4 · §6.3.3 · AC17, PR4a 계획 R-N·R-O·R-P).
+# test_synthesize_recritic.sh — V4 · AC6: 재비판(code-recritic) 응답을 합성기가 판정으로 옮긴다.
 #
-# 재비판자는 문서 리뷰 엔진의 계약으로 말하고(f · confirm/reject/raise · added) 합성기는
+# 재비판자는 f 번호로 말하고(confirm · reject · raise · lower · same_as · added) 합성기는
 # finding_id · verdicts · new_findings 로 말한다. 이 락은 그 사이의 번역이 **판정을 바꾸는
-# 모든 자리를 원장에 남기는지**를 잰다 — 근거 없는 기각 · 매핑 못 하는 to · 모르는 f.
+# 모든 자리를 원장에 남기는지**를 잰다 — 근거 없는 기각·하향 · 매핑 못 하는 to · 모르는 f.
 #
 # 판정 값을 직접 보는 케이스는 `--emit-verdict` 를 켠다(오케스트레이터는 PR4b 부터 켠다 —
 # 이 락은 그 경로를 미리 잰다). 본 보고서만 보는 케이스는 오늘 오케스트레이터가 부르는
@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd -- "$PLUGIN_ROOT/../.." && pwd)"
 . "$REPO_ROOT/shared/tests/assert.sh"
-B="$PLUGIN_ROOT/scripts/recritic_bridge.py"
+B="$PLUGIN_ROOT/scripts/synthesize_findings.py"
 SYNTH="$PLUGIN_ROOT/scripts/synthesize_findings.py"
 export PYTHONDONTWRITEBYTECODE=1
 
@@ -25,7 +25,7 @@ one_finding() {
 
 # reply <파일> <블록 본문> — 재비판자 응답 원문 모양(앞 산문 + 펜스 하나)
 reply() {
-  { printf '재비판을 마쳤습니다.\n\n```docreview-recritic\n'; printf '%s\n' "$2"; printf '```\n'; } > "$1"
+  { printf '재비판을 마쳤습니다.\n\n```qg-recritic\n'; printf '%s\n' "$2"; printf '```\n'; } > "$1"
 }
 
 # prep <디렉토리> — findings.yaml → rf.yaml(익명 목록) + map.json
@@ -373,7 +373,7 @@ case_same_as_keeps_both() {
   rm -rf "$T"
 }
 
-case_added_becomes_promoted_by_doc_recritic() {
+case_added_becomes_promoted_by_code_recritic() {
   local T; T=$(mktemp -d)
   printf '[]\n' > "$T/findings.yaml"; prep "$T"
   reply "$T/reply.txt" 'verdicts: []
@@ -385,7 +385,7 @@ added:
     proposed_fix: "정규화 후 비교"'
   local out; out=$(synth "$T")
   assert_contains "$out" '1 CRITICAL'             "added 가 승격된다"
-  assert_contains "$out" '| doc-recritic |'       "승격 저자는 doc-recritic 이다 (하드코딩 adversarial 이 아니다)"
+  assert_contains "$out" '| code-recritic |'      "승격 저자는 code-recritic 이다 (하드코딩 adversarial 이 아니다)"
   assert_not_contains "$out" '| adversarial |'    "유령 저자가 없다"
   rm -rf "$T"
 }
@@ -436,11 +436,10 @@ added:
   - file: lib.py
     line: 4
     severity: SUGGESTION
-    confidence: 3
     summary: "약한 신규 발견"'
   local out; out=$(synth "$T")
-  assert_contains     "$out" 'No high-confidence findings. 1 low-confidence' "억제된 added 가 억제로 세어진다 (전제)"
-  assert_not_contains "$out" '탐지 0 · 재비판 0'                           "억제된 added 가 있으면 재비판 0 이 아니다"
+  assert_contains     "$out" '0 IMPORTANT / 1 SUGGESTION' "SUGGESTION added 가 선택 사항으로 세어진다 (전제)"
+  assert_not_contains "$out" '탐지 0 · 재비판 0'          "SUGGESTION added 가 있으면 재비판 0 이 아니다"
   reply "$T/reply.txt" 'verdicts: []
 added:
   - file: lib.py
@@ -539,7 +538,7 @@ added:
   - file: nosev.py
     summary: "no severity no disposition"'
   local out; out=$(synth "$T" 2>/dev/null)
-  assert_contains "$out" '| SUGGESTION | nosev.py:0' "severity·disposition 둘 다 없으면 SUGGESTION 으로 보이지 버려지지 않는다"
+  assert_contains "$out" '| IMPORTANT | nosev.py:0' "severity·disposition 둘 다 없으면 IMPORTANT 로 보인다 — 버리지도 낙관값으로 접지도 않는다 (V8)"
   assert_not_contains "$out" 'dropped as malformed' "필수 필드(file·summary)는 다 있으므로 malformed 드롭이 아니다"
   rm -rf "$T"
 }
@@ -660,7 +659,7 @@ case_truncated_block_is_dead_adjudicator() {
   # Review Focus 3 — 닫는 펜스가 없는 응답은 블록 «없음»이다.
   local T; T=$(mktemp -d)
   printf '[]\n' > "$T/findings.yaml"; prep "$T"
-  printf '재비판입니다.\n\n```docreview-recritic\nverdicts: []\n' > "$T/reply.txt"
+  printf '재비판입니다.\n\n```qg-recritic\nverdicts: []\n' > "$T/reply.txt"
   local out; out=$(synth "$T" --emit-verdict 2>/dev/null)
   assert_grep "$out" '^reason: angle-absent$' "잘린 응답은 재비판 0 이 아니라 판정자 사망이다"
   assert_not_contains "$out" '탐지 0 · 재비판 0' "잘린 응답을 재비판 0 으로 말하지 않는다"
@@ -670,8 +669,8 @@ case_truncated_block_is_dead_adjudicator() {
 case_last_block_wins() {
   # Review Focus 1 — 펜스가 둘이면 마지막이 이긴다(docreview_route.extract_block).
   local T; T=$(mktemp -d); one_finding "$T/findings.yaml"; prep "$T"
-  { printf '예시:\n```docreview-recritic\nverdicts:\n  - f: f1\n    verdict: reject\n    evidence: "예시"\n```\n\n실제 판정:\n'
-    printf '```docreview-recritic\nverdicts:\n  - f: f1\n    verdict: confirm\n```\n'; } > "$T/reply.txt"
+  { printf '예시:\n```qg-recritic\nverdicts:\n  - f: f1\n    verdict: reject\n    evidence: "예시"\n```\n\n실제 판정:\n'
+    printf '```qg-recritic\nverdicts:\n  - f: f1\n    verdict: confirm\n```\n'; } > "$T/reply.txt"
   local out; out=$(synth "$T" --emit-verdict)
   assert_grep "$out" '^verdict: defect$' "마지막 블록(confirm)이 판정이다 — 인용한 예시가 판정이 되지 않는다"
   rm -rf "$T"
@@ -681,12 +680,12 @@ case_non_utf8_recritic_is_dead_adjudicator() {
   # Review Focus 5 — traceback(exit 1)이 아니라 주 입력 실패다.
   local T; T=$(mktemp -d)
   printf '[]\n' > "$T/findings.yaml"; prep "$T"
-  printf '```docreview-recritic\nverdicts: []\n```\n# \xff\xfe\n' > "$T/reply.txt"
+  printf '```qg-recritic\nverdicts: []\n```\n# \xff\xfe\n' > "$T/reply.txt"
   local out rc=0; out=$(synth "$T" --emit-verdict 2>/dev/null) || rc=$?
   assert_eq   "$rc" "0" "비-UTF-8 응답 — rc 0 (traceback 아님)"
   assert_grep "$out" '^reason: angle-absent$' "비-UTF-8 응답은 판정자 사망이다"
   printf '{"f1": \xff}' > "$T/map.json"
-  printf '```docreview-recritic\nverdicts: []\n```\n' > "$T/reply.txt"
+  printf '```qg-recritic\nverdicts: []\n```\n' > "$T/reply.txt"
   rc=0; out=$(synth "$T" --emit-verdict 2>/dev/null) || rc=$?
   assert_eq   "$rc" "0" "비-UTF-8 매핑 — rc 0"
   assert_grep "$out" '^reason: angle-absent$' "비-UTF-8 매핑은 판정자 사망이다"
@@ -717,8 +716,8 @@ case_adjudicator_name_matches_the_canonical_agent() {
   # 같고 수행자 문법 안이어야 한다. 다르면 승격분의 저자와 오케스트레이터가 찍는 수행자
   # 토큰이 갈린다.
   local name const
-  name="$(sed -n 's/^name:[[:space:]]*//p' "$REPO_ROOT/shared/docreview/agents/doc-recritic.md" | head -1)"
-  const="$(python3 -c "import sys; sys.path.insert(0,'$PLUGIN_ROOT/scripts'); import recritic_bridge as b; print(b.ADJUDICATOR)")"
+  name="$(sed -n 's/^name:[[:space:]]*//p' "$PLUGIN_ROOT/agents/code-recritic.md" | head -1)"
+  const="$(python3 -c "import sys; sys.path.insert(0,'$PLUGIN_ROOT/scripts'); import synthesize_findings as b; print(b.ADJUDICATOR)")"
   assert_eq "$const" "$name" "ADJUDICATOR 가 재비판자 정본의 name: 과 같다"
 }
 
@@ -840,6 +839,51 @@ case_gate_coercion_is_disclosure_not_block() {
   rm -rf "$T"
 }
 
+case_ac6_lower_with_evidence_goes_to_suggestion_only() {
+  # AC6 — lower 는 SUGGESTION 으로만 간다. `to` 가 다른 값이어도 목적지는 SUGGESTION 이다.
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml" security-reviewer app.py 10 CRITICAL; prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: lower
+    to: IMPORTANT
+    evidence: "의도 출처는 캐시 무효화만 요구한다"'
+  local out; out=$(synth "$T" --emit-verdict)
+  assert_contains "$out" '0 CRITICAL / 0 IMPORTANT / 1 SUGGESTION' "근거 있는 lower 는 SUGGESTION 으로 내린다"
+  assert_contains "$out" 'SUGGESTION (lowered)' "내린 항목은 표에서 구별된다"
+  assert_grep     "$out" '^blocking: 0$'        "막는 지적이 0 이다"
+  assert_grep     "$out" '^verdict: clean$'     "SUGGESTION 만 남으면 clean 이다 (AC4)"
+  rm -rf "$T"
+}
+
+case_ac6_lower_without_evidence_is_coerced_and_counted() {
+  # AC6 — 근거 없는 lower 는 confirm 으로 강제되고 그 강제가 원장에 세어진다.
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml" security-reviewer app.py 10 IMPORTANT; prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: lower'
+  local out; out=$(synth "$T" --emit-verdict)
+  assert_contains "$out" '1 IMPORTANT'                         "근거 없는 lower 는 적용되지 않는다"
+  assert_contains "$out" "강제(게이트 변경): verdict 'lower'→'confirm'" "그 강제가 계수·공시된다"
+  assert_grep     "$out" '^verdict: defect$'                   "막는 지적이 남아 defect 다 (AC5)"
+  rm -rf "$T"
+}
+
+case_ac6_lower_on_suggestion_is_noop() {
+  local T; T=$(mktemp -d)
+  one_finding "$T/findings.yaml" code-reviewer app.py 10 SUGGESTION; prep "$T"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: lower
+    evidence: "이미 선택 사항"'
+  local out; out=$(synth "$T" --emit-verdict)
+  assert_not_contains "$out" 'lowered'  "이미 SUGGESTION 이면 표시를 바꾸지 않는다"
+  assert_not_contains "$out" '게이트 변경' "판정을 바꾸지 않은 강제는 게이트 변경으로 공시하지 않는다"
+  assert_grep "$out" '^verdict: clean$' "clean 이다"
+  rm -rf "$T"
+}
+
 case_prepare_strips_source_and_keeps_severity
 case_prepare_empty_states_the_empty_slot
 case_prepare_unreadable_findings_is_fail4_without_outputs
@@ -859,7 +903,7 @@ case_raise_cannot_lower_when_map_is_stale
 case_raise_to_same_severity_is_noop_not_degrade
 case_missing_verdict_is_unadjudicated
 case_same_as_keeps_both
-case_added_becomes_promoted_by_doc_recritic
+case_added_becomes_promoted_by_code_recritic
 case_added_file_derivation_is_single_file_only
 case_recritic_zero_is_stated
 case_recritic_zero_not_claimed_when_added_is_suppressed_or_broken
@@ -883,4 +927,7 @@ case_primary_death_keeps_not_clean_marker
 case_gate_coercion_is_disclosure_not_block
 case_container_drop_of_findings_document_blocks
 case_hold_only_is_blocking_without_source_death
+case_ac6_lower_with_evidence_goes_to_suggestion_only
+case_ac6_lower_without_evidence_is_coerced_and_counted
+case_ac6_lower_on_suggestion_is_noop
 finish

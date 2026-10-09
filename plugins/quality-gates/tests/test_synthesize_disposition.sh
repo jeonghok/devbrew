@@ -50,10 +50,10 @@ TMPD="$(mktemp -d -t qgdisp-XXXXXX)" || exit 1
 trap 'rm -rf "$TMPD"' EXIT
 
 # R-AD — 옛 픽스처의 `new_findings: "리스트가 아니다"`(스칼라 컨테이너 소실)는
-# --adversarial 문서 직접 읽기 시절의 모양이다. 재비판 경로(`recritic_bridge.
+# --adversarial 문서 직접 읽기 시절의 모양이다. 재비판 경로(`synthesize_findings.
 # to_adjudication_doc`)는 `added` 가 list 가 아니면 판정자 사망으로 돌려버려 이
 # doc 이 옛 모양 그대로 CLI 로 다시 나타날 수 없다 — 그 살아 있는 방어는
-# test_recritic_bridge.sh::case_malformed_top_level_container_kills_adjudicator_not_the_run
+# test_synthesize_recritic.sh::case_malformed_top_level_container_kills_adjudicator_not_the_run
 # 가 실제 CLI 로 재고, `extract_new_findings`/`extract_verdicts` 호출부만은
 # test_synthesize_findings_adjudication.py::TestMalformedContainerAtDocLevel 이 잰다.
 # 아래 「형태 불량」 finding(항목 파손)이 이미 배관 손실 칸을 1 이상으로 채우므로
@@ -87,7 +87,7 @@ note "$OUT"
 
 assert_grep "$OUT" '수용 [1-9]'      "수용이 세어진다 (accept — T1 표에 없던 행)"
 assert_grep "$OUT" '기각 [1-9]'      "기각이 세어진다 (reject)"
-assert_grep "$OUT" '억제 [1-9]'      "억제가 세어진다 (suppressed — D4)"
+assert_grep "$OUT" '억제 0 '         "v10 합성기는 confidence 로 억제하지 않는다 — SUGGESTION 도 표에 남는다"
 assert_grep "$OUT" '흡수 [1-9]'      "흡수가 세어진다 (absorbed — dedup)"
 assert_grep "$OUT" '미판정 [1-9]'    "판정자 부재가 세어진다 (hold)"
 assert_not_grep "$OUT" '차단 아님' \
@@ -110,22 +110,21 @@ mkdir -p "$TMPD/clean"
 cat > "$TMPD/clean/findings.yaml" <<'YAML'
 findings:
   - "CRITICAL: bare string finding — 매핑이 아니다"
-  - {agent: sec, file: low.py, line: 9, severity: SUGGESTION, summary: low-conf, confidence: 2}
-  - {agent: sec, file: rej.py, line: 3, severity: IMPORTANT, summary: rejected-one, confidence: 8}
+  - {agent: sec, file: rej.py, line: 3, severity: IMPORTANT, summary: rejected-one}
+  - {agent: sec, file: held.py, line: 5, severity: SUGGESTION, summary: held-one}
 YAML
-# 매핑 아닌 첫째 항목이 건너뛰어져 f1=low.py, f2=rej.py 다.
+# 매핑 아닌 첫째 항목이 건너뛰어져 f1=rej.py, f2=held.py 다. f2 는 판정이 없어 미판정이다.
 rf_prep "$TMPD/clean"
 rf_reply "$TMPD/clean" 'verdicts:
-  - f: f2
+  - f: f1
     verdict: reject
     evidence: "근거"'
 OUT_CLEAN="$(rf_synth "$TMPD/clean" 2>"$TMPD/err_clean.txt")"
 note "$OUT_CLEAN"
 
-assert_grep "$OUT_CLEAN" 'No high-confidence findings' \
-  "clean(kept=0) 렌더 분기를 실제로 태운다 (판정 대상 확인 — 안 태우면 아래는 공허)"
+assert_grep "$OUT_CLEAN" '^blocking: 0$' \
+  "막는 지적 0 인 렌더를 실제로 태운다 (판정 대상 확인 — 안 태우면 아래는 공허)"
 assert_grep "$OUT_CLEAN" '기각 [1-9]'   "clean 분기에서도 기각이 값으로 실린다"
-assert_grep "$OUT_CLEAN" '억제 [1-9]'   "clean 분기에서도 억제가 값으로 실린다"
 assert_grep "$OUT_CLEAN" '미판정 [1-9]' "clean 분기에서도 판정자 부재가 값으로 실린다"
 assert_grep "$OUT_CLEAN" '\*\*배관 손실:\*\* [1-9]' \
   "clean 분기에서도 배관 손실이 값으로 실린다 (가장 위험한 자리 — 여기가 비면 사용자는 clean 으로 읽는다)"
@@ -172,7 +171,7 @@ assert_grep "$OUT_CLEAN" '억제=규칙이 자른 것' \
 mkdir -p "$TMPD/case_a"
 cat > "$TMPD/case_a/findings.yaml" <<'YAML'
 findings:
-  - {agent: sec, file: a.py, line: 1, severity: IMPORTANT, summary: no-conf-item}
+  - {agent: sec, file: a.py, line: 1, summary: no-sev-item}
 YAML
 rf_prep "$TMPD/case_a"
 rf_reply "$TMPD/case_a" 'verdicts:
@@ -180,8 +179,8 @@ rf_reply "$TMPD/case_a" 'verdicts:
     verdict: confirm'
 OUT_A="$(rf_synth "$TMPD/case_a" 2>"$TMPD/case_a/err.txt")"
 note "$OUT_A"
-assert_grep "$OUT_A" '강제\(게이트 변경\): confidence' \
-  "(A) 분기 확인 — confidence 미기재 confirm 이 게이트 변경 강제로 세어진다"
+assert_grep "$OUT_A" '강제\(게이트 변경\): severity' \
+  "(A) 분기 확인 — severity 결측이 IMPORTANT 로 강제되고 게이트 변경으로 세어진다 (V8)"
 assert_grep "$OUT_A" '공시\(판정을 막지 않음\)' \
   "(A) 분기 확인 — degrade 머리줄은 공시(막지 않음)"
 assert_not_grep "$OUT_A" 'clean이 아니다' \
@@ -223,8 +222,8 @@ rf_reply "$TMPD/case_bp" 'verdicts:
     evidence: "근거"'
 OUT_BP="$(rf_synth "$TMPD/case_bp" --recritic-diff "$TMPD/case_bp/없는.diff" --emit-verdict 2>"$TMPD/case_bp/err.txt")"
 note "$OUT_BP"
-assert_grep "$OUT_BP" 'No high-confidence findings' \
-  "(B′) 분기 확인 — 유일한 항목이 기각돼 kept=0, :625(clean) 분기를 태운다"
+assert_grep "$OUT_BP" 'No findings\.' \
+  "(B′) 분기 확인 — 유일한 항목이 기각돼 빈 표 분기를 태운다"
 assert_grep "$OUT_BP" '입력 실패\(보조\)' \
   "(B′) 분기 확인 — 없는 --recritic-diff 가 보조 입력 사망으로 세어진다"
 assert_grep "$OUT_BP" '공시\(판정을 막지 않음\)' \

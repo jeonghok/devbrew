@@ -37,20 +37,20 @@ else
   echo "$out" | sed 's/^/      /'
 fi
 
-# 2. The Source column reads "doc-recritic" (NOT "?" — catches agent vs source typo).
+# 2. The Source column reads "code-recritic" (NOT "?" — catches agent vs source typo).
 row="$(echo "$out" | grep -E 'foo\.py:42' || true)"
-if echo "$row" | grep -qE '\| *doc-recritic *\|[[:space:]]*$'; then
-  ok "2 — Source column reads 'doc-recritic' (not '?')"
+if echo "$row" | grep -qE '\| *code-recritic *\|[[:space:]]*$'; then
+  ok "2 — Source column reads 'code-recritic' (not '?')"
 else
-  no "2 — Source column reads 'doc-recritic' (not '?')"
+  no "2 — Source column reads 'code-recritic' (not '?')"
   echo "    row: $row"
 fi
 
-# 3. The row carries the '*' caveat (confidence default 5 <= 6 — unverified by any reviewer).
-if echo "$row" | grep -qE '\| *5 \*'; then
-  ok "3 — promoted row carries '*' caveat at default confidence 5"
+# 3. The row has no confidence column — 표는 Sev · Path:Line · Summary · Source 넷이다.
+if echo "$row" | grep -qE '^\| IMPORTANT \| [^|]*foo\.py:42 \| [^|]+ \| *code-recritic *\|[[:space:]]*$'; then
+  ok "3 — promoted row 은 confidence 칸 없이 네 칸이다"
 else
-  no "3 — promoted row carries '*' caveat at default confidence 5"
+  no "3 — promoted row 은 confidence 칸 없이 네 칸이다"
   echo "    row: $row"
 fi
 
@@ -110,14 +110,14 @@ else
   echo "$out5" | sed 's/^/      /'
 fi
 
-# 6. 기존 리뷰어 행의 Source가 doc-recritic을 **참칭하지 않는다** (허위 귀속 금지).
+# 6. 기존 리뷰어 행의 Source가 code-recritic을 **참칭하지 않는다** (허위 귀속 금지).
 #    이 assert는 5와 독립이다 — 병합이 일어나면 5만으로도 잡히지만, 미래에
 #    "둘 다 렌더하되 sources를 합치는" 잘못된 수정이 들어오면 6만 잡는다.
 row6="$(echo "$out5" | grep 'missing null check on user lookup' || true)"
-if [ -n "$row6" ] && ! echo "$row6" | grep -q 'doc-recritic'; then
-  ok "6 — 기존 발견 행의 Source에 doc-recritic이 참칭되지 않는다 (허위 귀속 없음)"
+if [ -n "$row6" ] && ! echo "$row6" | grep -q 'code-recritic'; then
+  ok "6 — 기존 발견 행의 Source에 code-recritic이 참칭되지 않는다 (허위 귀속 없음)"
 else
-  no "6 — 기존 발견 행의 Source에 doc-recritic이 참칭되지 않는다 (허위 귀속 없음)"
+  no "6 — 기존 발견 행의 Source에 code-recritic이 참칭되지 않는다 (허위 귀속 없음)"
   echo "    row: $row6" | sed 's/^/      /'
 fi
 
@@ -158,9 +158,10 @@ fi
 # 소비자별로 막으면 새 소비자에서 다시 터진다.
 
 # 8 — 어느 리뷰어든 비수치 confidence가 합성을 죽이지 않는다.
-#     예전: dedup/suppress/sort/render의 맨 int()가 ValueError → exit 1 + stdout 공백.
-#     같이 죽는 것에 다른 리뷰어의 진짜 CRITICAL이 포함된다는 점이 이 케이스의 핵심이라
-#     픽스처에 진짜 CRITICAL을 함께 넣는다.
+#     v10 합성기는 confidence 를 읽지 않는다(오탐 거르기는 재비판의 관문 A). 이 케이스는
+#     그 필드를 다시 읽는 회귀의 회귀 락이다 — 예전에는 맨 int()가 ValueError → exit 1 +
+#     stdout 공백이었다. 같이 죽는 것에 다른 리뷰어의 진짜 CRITICAL이 포함된다는 점이
+#     핵심이라 픽스처에 진짜 CRITICAL을 함께 넣는다.
 cat > "$tmp/findings_badconf.yaml" <<'Y'
 findings:
   - file: src/auth.py
@@ -207,7 +208,7 @@ fi
 #      SKILL은 stdout만 읽어 counts=0 → `## Review gate: clean`을 찍었다.
 #      stderr에만 있는 공지는 이 경로에서 없는 것과 같다.
 #      R-AD — 옛 픽스처는 file 키 · severity 키가 «없는» 항목으로 이 malformed
-#      드롭을 쟀다. 재비판 경로(`recritic_bridge.to_adjudication_doc`)는 `added`
+#      드롭을 쟀다. 재비판 경로(`synthesize_findings.to_adjudication_doc`)는 `added`
 #      항목의 file 을 `미지`로, severity 를 미지로 «채워 넣은 뒤» promote_new_findings
 #      로 넘긴다 — 그 두 필드는 이제 채워진 채 도착해 `NEW_FINDING_REQUIRED` 를
 #      통과한다(더는 malformed 로 안 잡힌다). bridge 가 건드리지 않는 유일한 필수
@@ -228,7 +229,7 @@ else
 fi
 
 # 10b — 같은 공지가 **primary 리뷰어** 출처의 소실에도 나가야 한다.
-#       케이스 10은 판정자 승격 경로(promote_new_findings, author=doc-recritic —
+#       케이스 10은 판정자 승격 경로(promote_new_findings, author=code-recritic —
 #       재비판 경로의 유일한 판정자)만 쟀다. apply_verdicts()는 non-mapping
 #       finding을 카운터도 stderr도 없이 버렸고, 리뷰어가 발견을 문자열로 내면
 #       (LLM 출력에서 흔하다) CRITICAL 주장이 통째로 증발한 뒤 stdout은
@@ -250,12 +251,12 @@ else
 fi
 
 # 10c — R-AD: 대상 소멸. `new_findings: 5`(스칼라)는 옛 --adversarial 문서를
-# 직접 읽던 시절의 모양이다. 재비판 경로에서는 `recritic_bridge.to_adjudication_doc`
+# 직접 읽던 시절의 모양이다. 재비판 경로에서는 `synthesize_findings.to_adjudication_doc`
 # 가 `added` 가 list 가 아니면 그 자리에서 판정자 사망(`_dead`)으로 돌려버려 이
 # doc 이 옛 모양 그대로 CLI 로 다시 나타날 수 없다 — 그러나 그 방어 «자체»는
 # 재비판 경로에서 여전히 도달 가능하다(옛 malformed 값이 아니라 진짜 재비판자
 # 응답의 `added: 5` 로). 그 살아 있는 방어를 재는 CLI 락은
-# test_recritic_bridge.sh::case_malformed_top_level_container_kills_adjudicator_not_the_run 다.
+# test_synthesize_recritic.sh::case_malformed_top_level_container_kills_adjudicator_not_the_run 다.
 # `extract_new_findings` 의 비-list 방어 자체(그 함수 호출부만)는 추가로
 # test_synthesize_findings_adjudication.py::
 # TestMalformedContainerAtDocLevel.test_new_findings_scalar_is_not_a_crash 가 잰다.
@@ -289,20 +290,17 @@ added:
     sources: [security-reviewer, code-reviewer]'
 out10e="$(rf_synth "$tmp/empty" 2>/dev/null)"
 row10e="$(echo "$out10e" | grep 'evil.py' | head -1)"
-if echo "$row10e" | grep -q '| doc-recritic |' \
+if echo "$row10e" | grep -q '| code-recritic |' \
    && ! echo "$row10e" | grep -q 'security-reviewer'; then
-  ok "10e — 승격 발견의 Source가 doc-recritic으로 강제된다 (교차 보증 위조 불가)"
+  ok "10e — 승격 발견의 Source가 code-recritic으로 강제된다 (교차 보증 위조 불가)"
 else
-  no "10e — 승격 발견의 Source가 doc-recritic으로 강제된다 (교차 보증 위조 불가)"
+  no "10e — 승격 발견의 Source가 code-recritic으로 강제된다 (교차 보증 위조 불가)"
   echo "      $row10e"
 fi
 
-# 11 — 표기가 다른 CRITICAL이 **낮은 confidence에서도** 억제되지 않는다.
-#      케이스 9만으로는 부족하다: 거기 픽스처는 confidence 9라 suppress()가
-#      severity를 raw로 읽어 비-CRITICAL로 판정해도 바닥(<=4)을 넘어 어차피
-#      kept였다 — 정규화를 suppress에서 되돌려도 GREEN이었다(mutation N6).
-#      CRITICAL의 계약은 "어떤 confidence에서도 항상 kept"이므로, 그 특권이
-#      걸리는 유일한 값 영역(conf<=4)에서 재야 이 정규화에 이빨이 생긴다.
+# 11 — 표기가 다른 CRITICAL이 confidence 와 무관하게 막는 지적으로 남는다(confidence 는 읽지 않는다).
+#      v10 에는 confidence 억제가 없다 — 낮은 confidence 픽스처는 그것을 다시 읽어
+#      걸러내는 회귀를 잡는다. 행이 CRITICAL 로 렌더되는지까지 본다(표기 정규화).
 cat > "$tmp/findings_sevcase_lowconf.yaml" <<'Y'
 findings:
   - file: src/auth.py
@@ -313,10 +311,10 @@ findings:
     agent: security-reviewer
 Y
 if python3 "$SCRIPT" --findings "$tmp/findings_sevcase_lowconf.yaml" 2>/dev/null \
-     | grep -q 'low-confidence critical must survive suppression'; then
-  ok "11 — 표기가 다른 CRITICAL이 낮은 confidence에서도 억제되지 않는다"
+     | grep -qE '^\| CRITICAL \| src/auth\.py:42 \| low-confidence critical must survive suppression \|'; then
+  ok "11 — 표기가 다른 CRITICAL이 confidence 2 여도 표에 남는다"
 else
-  no "11 — 표기가 다른 CRITICAL이 낮은 confidence에서도 억제되지 않는다"
+  no "11 — 표기가 다른 CRITICAL이 confidence 2 여도 표에 남는다"
 fi
 
 # --- 12 — dedup()의 그룹핑 키가 비-해시가능 `file`에 죽지 않는다 (라운드 3) ---
@@ -350,7 +348,7 @@ fi
 # --adversarial 문서 모양이다. 재비판 경로는 `added` 가 매핑이면 판정자 사망으로
 # 돌려버려 이 doc 이 옛 모양 그대로 CLI 로 다시 나타날 수 없다 — 그 살아 있는
 # 방어를 재는 CLI 락은
-# test_recritic_bridge.sh::case_malformed_top_level_container_kills_adjudicator_not_the_run
+# test_synthesize_recritic.sh::case_malformed_top_level_container_kills_adjudicator_not_the_run
 # (mapping_added 갈래). 후속 단위 테스트(그 함수 호출부만):
 # test_synthesize_findings_adjudication.py::
 # TestMalformedContainerAtDocLevel.test_new_findings_mapping_is_counted_dropped
@@ -369,7 +367,7 @@ fi
 # --- 15 — R-AD: 대상 소멸. `verdicts:` 가 매핑인 옛 --adversarial 문서 모양이다.
 # 재비판 경로는 `verdicts` 가 매핑이면 판정자 사망으로 돌려버려 이 doc 이 옛 모양
 # 그대로 CLI 로 다시 나타날 수 없다 — 그 살아 있는 방어를 재는 CLI 락은
-# test_recritic_bridge.sh::case_malformed_top_level_container_kills_adjudicator_not_the_run
+# test_synthesize_recritic.sh::case_malformed_top_level_container_kills_adjudicator_not_the_run
 # (mapping_verdicts 갈래). 후속 단위 테스트(그 함수 호출부만):
 # test_synthesize_findings_adjudication.py::
 # TestMalformedContainerAtDocLevel.test_verdicts_mapping_is_counted_dropped

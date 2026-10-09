@@ -22,9 +22,9 @@ tmp="$(mktemp -d -t qg-dropnotice-XXXXXX)" || exit 1
 trap 'rc=$?; rm -rf "$tmp"; exit $rc' EXIT
 
 # ── (a) 생산자 — 두 출처 모두에서 공지가 stdout에 나온다 ──────────────────────
-# R-AD — 재비판 경로(recritic_bridge.to_adjudication_doc)는 added 항목의 file 이
+# R-AD — 재비판 경로(synthesize_findings.to_adjudication_doc)는 added 항목의 file 이
 # 없으면 「미지」로 채워 넘긴다(옛 --adversarial 문서처럼 file 없는 항목을 그대로
-# malformed 로 떨어뜨리지 않는다). bridge 가 채우지 않는 필수 필드는 summary 뿐이라
+# malformed 로 떨어뜨리지 않는다). 재비판 변환이 채우지 않는 필수 필드는 summary 뿐이라
 # 그것이 없는 항목으로 같은 성질(승격 경로의 malformed 드롭)을 잰다.
 mkdir -p "$tmp/a1"
 printf '[]\n' > "$tmp/a1/findings.yaml"

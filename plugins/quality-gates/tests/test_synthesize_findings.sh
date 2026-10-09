@@ -1,23 +1,24 @@
 #!/usr/bin/env bash
-# AC34-AC39 — synthesize_findings.py deterministic post-processing.
+# test_synthesize_findings.sh — 합성기의 결정론 후처리 (V2 · V3 · V8 · AC4 · AC5 · K-4).
+#
+# 표는 Sev · Path:Line · Summary · Source 넷이다. confidence 는 읽지 않는다 — 오탐 거르기는
+# 재비판의 관문 A 가 하고, 판정은 살아남은 CRITICAL·IMPORTANT 수(`blocking:`)가 정한다.
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-SCRIPT="plugins/quality-gates/scripts/synthesize_findings.py"
+SCRIPT="$PLUGIN_ROOT/scripts/synthesize_findings.py"
 . "$SCRIPT_DIR/lib/recritic_fixture.sh"
+export PYTHONDONTWRITEBYTECODE=1
 PASS=0; FAIL=0
 
-# run_case 의 두째 인자는 재비판 응답 블록이다(`verdicts: []` 가 압도적 다수 —
-# 판정자는 있고 판정 0. finding_id 로 직접 판정을 거는 자리는 findings_yaml 의
-# 유일 항목을 f1 로 적는다 — anonymize() 의 1-기반 순번).
+# run_case <이름> <재비판 블록> <findings YAML> <있어야 할 ERE> <없어야 할 ERE> [합성기 인자...]
 run_case() {
-  local name="$1" adv_yaml="$2" findings_yaml="$3" expected_grep="$4" expected_neg="$5"
+  local name="$1" reply="$2" findings_yaml="$3" expected_grep="$4" expected_neg="$5"; shift 5
   local tmp; tmp="$(mktemp -d)"
   echo "$findings_yaml" > "$tmp/findings.yaml"
   rf_prep "$tmp"
-  rf_reply "$tmp" "$adv_yaml"
-  local out; out=$(rf_synth "$tmp")
-  # Collapse newlines for multi-line pattern matching
+  rf_reply "$tmp" "$reply"
+  local out; out=$(rf_synth "$tmp" "$@" 2>/dev/null)
   local out_flat; out_flat=$(echo "$out" | tr '\n' ' ')
   local ok=1
   if [[ -n "$expected_grep" ]] && ! echo "$out_flat" | grep -qE "$expected_grep"; then ok=0; fi
@@ -33,126 +34,82 @@ run_case() {
   rm -rf "$tmp"
 }
 
-# AC34 dedup + source-merge (table row)
-run_case "AC34 dedup+merge" \
+run_case "dedup+merge — 같은 좌표·severity 는 한 행, source 를 합친다" \
   'verdicts: []' \
-  '- {agent: code-reviewer, file: a.py, line: 10, severity: IMPORTANT, confidence: 8, summary: x, proposed_fix: y}
-- {agent: silent-failure-hunter, file: a.py, line: 10, severity: IMPORTANT, confidence: 6, summary: x, proposed_fix: y}' \
-  'a\.py:10 \| 8 \| x \| code-reviewer, silent-failure-hunter' ''
+  '- {agent: code-reviewer, file: a.py, line: 10, severity: IMPORTANT, summary: x, proposed_fix: y}
+- {agent: silent-failure-hunter, file: a.py, line: 10, severity: IMPORTANT, summary: x, proposed_fix: y}' \
+  '\| IMPORTANT \| a\.py:10 \| x \| code-reviewer, silent-failure-hunter \|' ''
 
-# AC35 reject (unchanged behavior)
-run_case "AC35 reject" \
+run_case "reject — 근거 있는 기각은 표에서 빠진다" \
   'verdicts:
   - {f: f1, verdict: reject, evidence: x}' \
-  '- {agent: code-reviewer, file: a.py, line: 10, severity: CRITICAL, confidence: 9, summary: bug, proposed_fix: fix}' \
-  'No high-confidence' 'a.py:10'
+  '- {agent: code-reviewer, file: a.py, line: 10, severity: CRITICAL, summary: bug, proposed_fix: fix}' \
+  'No findings\.' 'a\.py:10'
 
-# AC36a + AC36b intentionally share one 3-finding fixture, each asserting a different facet.
-# AC36a rubric: conf5 non-CRIT shown WITH caveat; conf4 non-CRIT suppressed
-run_case "AC36a conf5 shown+caveat / conf4 suppressed" \
+run_case "표 머리 — confidence 칸이 없다" \
   'verdicts: []' \
-  '- {agent: r, file: shown5.py, line: 1, severity: IMPORTANT, confidence: 5, summary: mid, proposed_fix: x}
-- {agent: r, file: hidden4.py, line: 1, severity: IMPORTANT, confidence: 4, summary: low, proposed_fix: y}
-- {agent: r, file: crit4.py, line: 1, severity: CRITICAL, confidence: 4, summary: critlow, proposed_fix: z}' \
-  'shown5\.py:1 \| 5 \*' 'hidden4\.py:1'
+  '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, confidence: 2, summary: s, proposed_fix: f}' \
+  '\| Sev \| Path:Line \| Summary \| Source \|' '\| Conf \||suppressed|[0-9] \* \|'
 
-# AC36b rubric: CRITICAL always shown (conf4) WITH caveat
-run_case "AC36b CRITICAL conf4 shown+caveat" \
+run_case "confidence 가 낮아도 억제하지 않는다 — 막는 지적은 막는 지적이다" \
   'verdicts: []' \
-  '- {agent: r, file: shown5.py, line: 1, severity: IMPORTANT, confidence: 5, summary: mid, proposed_fix: x}
-- {agent: r, file: hidden4.py, line: 1, severity: IMPORTANT, confidence: 4, summary: low, proposed_fix: y}
-- {agent: r, file: crit4.py, line: 1, severity: CRITICAL, confidence: 4, summary: critlow, proposed_fix: z}' \
-  'crit4\.py:1 \| 4 \*' ''
+  '- {agent: r, file: low.py, line: 1, severity: IMPORTANT, confidence: 1, summary: low, proposed_fix: f}' \
+  'blocking: 1 .*\| IMPORTANT \| low\.py:1 \|' ''
 
-# AC-R4 conf6/conf7 boundary: 6 -> caveat, 7 -> no marker
-run_case "ACR4 conf6 boundary caveat" \
+run_case "K-4 — blocking · optional 줄" \
   'verdicts: []' \
-  '- {agent: r, file: z.py, line: 1, severity: IMPORTANT, confidence: 6, summary: s, proposed_fix: f}' \
-  'z\.py:1 \| 6 \*' ''
-run_case "ACR4 conf7 boundary no-marker" \
-  'verdicts: []' \
-  '- {agent: r, file: y.py, line: 1, severity: IMPORTANT, confidence: 7, summary: s, proposed_fix: f}' \
-  'y\.py:1 \| 7 \|' '7 \*'
+  '- {agent: r, file: a.py, line: 1, severity: CRITICAL, summary: c, proposed_fix: f}
+- {agent: r, file: b.py, line: 1, severity: IMPORTANT, summary: i, proposed_fix: f}
+- {agent: r, file: c.py, line: 1, severity: SUGGESTION, summary: s, proposed_fix: f}' \
+  'blocking: 2 optional: 1' ''
 
-# AC37 sort: CRITICAL row precedes SUGGESTION row (no ### headings anymore)
-run_case "AC37 sort CRIT<SUG" \
+run_case "정렬 — CRITICAL · IMPORTANT · SUGGESTION 순" \
   'verdicts: []' \
-  '- {agent: r, file: a.py, line: 1, severity: SUGGESTION, confidence: 9, summary: s, proposed_fix: f}
-- {agent: r, file: b.py, line: 1, severity: CRITICAL, confidence: 9, summary: c, proposed_fix: f}' \
-  'CRITICAL \| b\.py:1.*SUGGESTION \| a\.py:1' ''
+  '- {agent: r, file: s.py, line: 1, severity: SUGGESTION, summary: s, proposed_fix: f}
+- {agent: r, file: c.py, line: 1, severity: CRITICAL, summary: c, proposed_fix: f}
+- {agent: r, file: i.py, line: 1, severity: IMPORTANT, summary: i, proposed_fix: f}' \
+  'c\.py:1 .* i\.py:1 .* s\.py:1 \|' ''
 
-# AC38 table header schema
-run_case "AC38 table header" \
-  'verdicts: []' \
-  '- {agent: r, file: a.py, line: 1, severity: CRITICAL, confidence: 9, summary: s, proposed_fix: f}' \
-  '## Review Findings.*\| Sev \| Path:Line \| Conf \| Summary \| Source \|' ''
+run_case "AC4 — SUGGESTION 만 남으면 clean" \
+  'verdicts:
+  - {f: f1, verdict: confirm}' \
+  '- {agent: r, file: a.py, line: 1, severity: SUGGESTION, summary: s, proposed_fix: f}' \
+  'verdict: clean' 'verdict: defect' --emit-verdict
 
-# AC-R4 counts line: always-3-severity (zero counts) + no marker at conf>=7
-run_case "ACR4 counts zero-fill + no-marker" \
-  'verdicts: []' \
-  '- {agent: r, file: x.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}' \
-  '\*\*Findings:\*\* 0 CRITICAL / 1 IMPORTANT / 0 SUGGESTION' '8 \*'
+run_case "AC5 — IMPORTANT 1건이면 defect" \
+  'verdicts:
+  - {f: f1, verdict: confirm}' \
+  '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, summary: s, proposed_fix: f}' \
+  'verdict: defect' 'verdict: clean' --emit-verdict
 
-# AC-R4 suggested-fixes block below table
-run_case "ACR4 fixes block" \
-  'verdicts: []' \
-  '- {agent: r, file: x.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: parameterize}' \
-  '\*\*Suggested fixes:\*\*.*`x\.py:1` —' ''
+run_case "V8 — severity 결측은 IMPORTANT 로 막는다(낙관값 금지)" \
+  'verdicts:
+  - {f: f1, verdict: confirm}' \
+  '- {agent: r, file: a.py, line: 1, summary: s, proposed_fix: f}' \
+  'blocking: 1 .*verdict: defect' 'verdict: clean' --emit-verdict
 
-# AC-R4 caveat legend present when a caveat row exists
-run_case "ACR4 caveat legend present" \
+run_case "V3 — 매핑 아닌 finding 은 버리되 세고 막는다" \
   'verdicts: []' \
-  '- {agent: r, file: w.py, line: 1, severity: IMPORTANT, confidence: 5, summary: s, proposed_fix: f}' \
-  '`\*` = confidence <= 6 \(treat with caution\)\.' ''
+  '- "CRITICAL: bare string"' \
+  '1 finding\(s\) dropped as malformed .*verdict: not-certified .*reason: findings-lost' 'verdict: clean' --emit-verdict
 
-# AC-R4 caveat legend ABSENT when all shown findings are conf>=7
-run_case "ACR4 caveat legend absent" \
-  'verdicts: []' \
-  '- {agent: r, file: x.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}' \
-  '' 'confidence <= 6 \(treat'
+run_case "빈 결과 — No findings 와 0 개수" \
+  'verdicts: []
+added: []' \
+  '[]' \
+  'No findings\. blocking: 0 optional: 0' ''
 
-# AC-R4 suppressed notice line + counts tail (1 shown, 1 suppressed)
-run_case "ACR4 suppressed notice + counts tail" \
-  'verdicts: []' \
-  '- {agent: r, file: x.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}
-- {agent: r, file: q.py, line: 1, severity: SUGGESTION, confidence: 3, summary: low, proposed_fix: f}' \
-  'finding\(s\) suppressed \(conf <= 4\); re-run with `/qg --show-low-confidence` to see all\.' 'q\.py:1 \|'
-run_case "ACR4 counts suppressed tail" \
-  'verdicts: []' \
-  '- {agent: r, file: x.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}
-- {agent: r, file: q.py, line: 1, severity: SUGGESTION, confidence: 3, summary: low, proposed_fix: f}' \
-  '1 suppressed \(conf <= 4\)' ''
+# V2 — 읽을 수 없는 입력은 clean 이 아니다(주 입력 사망 → angle-absent)
+tmp="$(mktemp -d)"
+printf '[]\n' > "$tmp/findings.yaml"; rf_prep "$tmp"
+rf_reply "$tmp" 'verdicts: []'
+out=$(python3 "$SCRIPT" --findings "$tmp/없는.yaml" --recritic "$tmp/reply.txt" --recritic-map "$tmp/map.json" --emit-verdict 2>/dev/null) || true
+if echo "$out" | grep -q '^verdict: not-certified$' && ! echo "$out" | grep -q '^verdict: clean$'; then
+  echo "PASS: V2 — 경로가 주어졌는데 못 읽는 findings 는 clean 이 아니다"; PASS=$((PASS+1))
+else
+  echo "FAIL: V2 — 경로가 주어졌는데 못 읽는 findings 는 clean 이 아니다"; echo "$out" | sed 's/^/      /'; FAIL=$((FAIL+1))
+fi
+rm -rf "$tmp"
 
-# ACR4 all-suppressed: render([], N>0) — kept=0 but suppressed>0 (AC-R4-11 empty-state path)
-run_case "ACR4 all-suppressed empty-state" \
-  'verdicts: []' \
-  '- {agent: r, file: x.py, line: 1, severity: IMPORTANT, confidence: 3, summary: s, proposed_fix: f}' \
-  'No high-confidence findings\. 1 low-confidence findings suppressed' 'x\.py:1'
-
-# ACR4 no-suppression: suppressed notice + counts tail both absent (locks suppressed_count>0 guard)
-run_case "ACR4 no-suppression notice absent" \
-  'verdicts: []' \
-  '- {agent: r, file: x.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}' \
-  '' 'finding\(s\) suppressed|suppressed \(conf <= 4\)'
-
-# ACR4 review-found: pipe in a cell value is escaped (table integrity, codex/code-reviewer iter-1)
-run_case "ACR4 pipe in summary escaped" \
-  'verdicts: []' \
-  '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: "foo | bar", proposed_fix: f}' \
-  'foo \\\| bar' ''
-
-# ACR4 review-found: unknown severity is counted (normalized) so counts == rendered rows (codex/code-reviewer iter-1)
-run_case "ACR4 unknown severity normalized+counted" \
-  'verdicts: []' \
-  '- {agent: r, file: u.py, line: 1, severity: HIGH, confidence: 8, summary: s, proposed_fix: f}' \
-  '\*\*Findings:\*\* 0 CRITICAL / 0 IMPORTANT / 1 SUGGESTION' '0 CRITICAL / 0 IMPORTANT / 0 SUGGESTION'
-
-# AC39 empty
-run_case "AC39 empty" \
-  'verdicts: []' \
-  '' \
-  'No high-confidence findings' ''
-
-echo ""
 echo "Total: $((PASS+FAIL)), PASS=$PASS, FAIL=$FAIL"
-[[ "$FAIL" -eq 0 ]] || exit 1
+[[ "$FAIL" -eq 0 ]]
