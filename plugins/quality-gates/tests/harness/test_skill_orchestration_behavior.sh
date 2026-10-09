@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/*/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/.claude-plugin/plugin.json plugins/quality-gates/agents/security-reviewer.md plugins/quality-gates/agents/doc-recritic.md plugins/quality-gates/references/recritic-code-profile.md plugins/quality-gates/tests/lib/reconstruct-skill.sh
+# guards: plugins/quality-gates/skills/*/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/.claude-plugin/plugin.json plugins/quality-gates/agents/security-reviewer.md plugins/quality-gates/agents/code-recritic.md plugins/quality-gates/references/recritic-code-profile.md plugins/quality-gates/tests/lib/reconstruct-skill.sh
 # test_skill_orchestration_behavior.sh — protocol-shape test for SKILL.md.
 #
 # 위 `# guards:` 는 이 파일이 실제로 여는 것에서 도출했다(R2, adjudication-topology
@@ -9,7 +9,7 @@
 # reconstruct-skill.sh 가 SKILL.md 포인터 자리에 되접어 넣는 그 파일(스플라이스
 # 지점은 reconstruct-skill.sh:41 — :27 은 그 파일의 usage 주석일 뿐이다), plugin.json
 # 은 :274 의 major 판독 대상, security-reviewer.md 는 verifier-writable 페르소나 검사
-# 대상, doc-recritic.md 는 #104 tools 포스처 검사 대상, references/recritic-code-profile.md
+# 대상, code-recritic.md 는 #104 tools 포스처 검사 대상, references/recritic-code-profile.md
 # 는 관문 D(verifier-writable) 검사 대상이다(PR4a 가 adversarial.md 하나였던 이 칸을
 # 셋으로 갈랐다). **이 줄번호는 이 커밋(수정 라운드 2)
 # 시점 기준이다** — m1 정정(라운드 1): 자기 헤더가 넣은 줄을 반영 안 한 편집-전
@@ -77,7 +77,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
     "$_SOB_REL/skills/quality-pipeline/references/differential-test.md" \
     "$_SOB_REL/.claude-plugin/plugin.json" \
     "$_SOB_REL/agents/security-reviewer.md" \
-    "$_SOB_REL/agents/doc-recritic.md" \
+    "$_SOB_REL/agents/code-recritic.md" \
     "$_SOB_REL/references/recritic-code-profile.md" \
     "$_SOB_REL/tests/lib/reconstruct-skill.sh"
   find "$_SOB_QG_ROOT/skills" -maxdepth 2 -name 'SKILL.md' | sort | while IFS= read -r _sob_f; do
@@ -172,12 +172,12 @@ assert_proximity() {
 }
 
 # Gate dispatch lines.
-review_line=$(first_line 'subagent_type.*quality-gates:doc-recritic')
-assert_line "Phase 1.5 재비판 dispatch (doc-recritic)" "$review_line"
+review_line=$(first_line 'subagent_type.*quality-gates:code-recritic')
+assert_line "Step 3.5 재비판 dispatch (code-recritic)" "$review_line"
 
 # 각도 수행자 3종이 fan-out 에 있다 (보안 · 판정 · 다른 전제). runtime-verifier 는
 # 대상 소멸(Task 7) — 4종 fan-out 이 이제 3종이다.
-for agent in doc-recritic test-scope-validator security-reviewer; do
+for agent in code-recritic test-scope-validator security-reviewer; do
   if grep -qE "subagent_type[^\"]*\"quality-gates:$agent" "$SKILL_MD"; then
     echo "PASS: $agent dispatch present"
   else
@@ -187,14 +187,14 @@ for agent in doc-recritic test-scope-validator security-reviewer; do
 done
 
 # Fix-loop iter cap proximity to the fix-loop AskUserQuestion.
-# Use FIRST AskUserQuestion at or after the re-critique dispatch (the
-# description's top-of-file AskUserQuestion mention is irrelevant; we want the
-# fix-loop decision-tool call).
-askuser_review_line=$(first_line_after 'AskUserQuestion' "$review_line")
-itercap_line=$(first_line 'max_review_iterations')
-# 선재 RED 락 — 이름 불변. Task 1 베이스라인에서 이미 FAIL(distance > 160). 이 Task
-# 는 그 이름의 RED 를 고치지 않는다(범위 밖) — 160 을 올리지 않는다: 상한을 올리는
-# 것은 이 근접성 sanity 를 무디게 하는 것이지 진짜 수정이 아니다.
+# v10(K-8): 차등 테스트 절이 Review 와 Fix-loop 사이에 접히므로 「재비판 dispatch 뒤 첫
+# AskUserQuestion」 은 레퍼런스 R3 산문에 떨어진다 — 앵커를 Fix-loop decision 절의 호출
+# 리터럴로 옮기고, 상한은 그 결정 도구가 스스로 밝히는 N<5 / N=5 → Max-iter 문장으로 잰다.
+# 160 을 올리지 않는다: 상한을 올리는 것은 이 근접성 sanity 를 무디게 하는 것이다.
+fixloop_line=$(first_line '^### Fix-loop decision')
+assert_line "Fix-loop decision 절 앵커" "$fixloop_line"
+askuser_review_line=$(first_line_after 'AskUserQuestion[(][{]' "$fixloop_line")
+itercap_line=$(first_line 'N < 5 only — N=5 always goes to Max-iter decision')
 assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 160
 
 # 대상 소멸 (Task 7 — runtime-verifier · Decision 1/2 · Upfront Execution Plan ·
@@ -300,61 +300,60 @@ else
   echo "FAIL: re-critic code profile missing the verifier-writable-artifact check (moved from adversarial persona, PR4a R-Q)"
   fail=$((fail + 1))
 fi
-# doc-recritic itself is a byte-for-byte copy-of the shared persona (Law 2
-# scoping lives upstream, verified by test_copy_of_contract.sh) — this only
-# re-checks the #104 tools posture this SKILL's prose claims for it.
-if grep -qE '^tools:[[:space:]]*Read,[[:space:]]*Grep,[[:space:]]*Glob$' "$AGENTS_DIR/doc-recritic.md"; then
-  echo "PASS: doc-recritic persona keeps #104 tools posture (Read, Grep, Glob)"
+# code-recritic is qg's own re-critic persona — this re-checks the #104 tools
+# posture this SKILL's prose claims for it.
+if grep -qE '^tools:[[:space:]]*Read,[[:space:]]*Grep,[[:space:]]*Glob$' "$AGENTS_DIR/code-recritic.md"; then
+  echo "PASS: code-recritic persona keeps #104 tools posture (Read, Grep, Glob)"
 else
-  echo "FAIL: doc-recritic persona tools posture changed from Read, Grep, Glob (#104 lock)"
+  echo "FAIL: code-recritic persona tools posture changed from Read, Grep, Glob (#104 lock)"
   fail=$((fail + 1))
 fi
 
-# --- PR4a: Phase 1.5 재비판 dispatch protocol-shape ---
-# recritic-code-profile.md must appear within 30 lines BEFORE the doc-recritic
-# dispatch line (the Phase 1.5 `cat .../recritic-code-profile.md` fence sits
+# --- PR4a: Step 3.5 재비판 dispatch protocol-shape ---
+# recritic-code-profile.md must appear within 30 lines BEFORE the code-recritic
+# dispatch line (the Step 3.5 `cat .../recritic-code-profile.md` fence sits
 # ~16 lines ahead of the Agent({...}) fence) — an "after" window would be RED.
 if [[ "$review_line" -gt 0 ]]; then
   recritic_win_start=$((review_line - 30))
   [[ "$recritic_win_start" -lt 1 ]] && recritic_win_start=1
   if awk -v s="$recritic_win_start" -v e="$review_line" \
       'NR>=s && NR<e && /recritic-code-profile\.md/ {f=1} END{exit !f}' "$SKILL_MD"; then
-    echo "PASS: recritic-code-profile.md referenced within 30 lines before doc-recritic dispatch"
+    echo "PASS: recritic-code-profile.md referenced within 30 lines before code-recritic dispatch"
   else
-    echo "FAIL: recritic-code-profile.md not found within 30 lines before doc-recritic dispatch (line $review_line)"
+    echo "FAIL: recritic-code-profile.md not found within 30 lines before code-recritic dispatch (line $review_line)"
     fail=$((fail + 1))
   fi
 else
-  echo "FAIL: recritic-code-profile.md proximity check skipped — no doc-recritic dispatch line"
+  echo "FAIL: recritic-code-profile.md proximity check skipped — no code-recritic dispatch line"
   fail=$((fail + 1))
 fi
 
-# The doc-recritic dispatch fence must carry the <diff>${DIFF}</diff> slot —
+# The code-recritic dispatch fence must carry the <diff>${DIFF}</diff> slot —
 # the code path threads diff (test_agent_input_slots.sh cannot see this: the
 # shared contract declares `diff` optional).
 if [[ "$review_line" -gt 0 ]] && awk -v s="$review_line" -v e="$((review_line + 15))" \
     'NR>=s && NR<=e && index($0, "<diff>${DIFF}</diff>") {f=1} END{exit !f}' "$SKILL_MD"; then
-  echo "PASS: doc-recritic dispatch fence carries <diff>\${DIFF}</diff> slot"
+  echo "PASS: code-recritic dispatch fence carries <diff>\${DIFF}</diff> slot"
 else
-  echo "FAIL: doc-recritic dispatch fence missing <diff>\${DIFF}</diff> slot"
+  echo "FAIL: code-recritic dispatch fence missing <diff>\${DIFF}</diff> slot"
   fail=$((fail + 1))
 fi
 
-# The disposition line on the doc-recritic dispatch must be fail-closed (R-R) —
+# The disposition line on the code-recritic dispatch must be fail-closed (R-R) —
 # the only place that measures R-R is actually true.
 if [[ "$review_line" -gt 0 ]] && awk -v s="$review_line" -v e="$((review_line + 5))" \
     'NR>=s && NR<=e && /fail-closed/ {f=1} END{exit !f}' "$SKILL_MD"; then
-  echo "PASS: doc-recritic disposition line is fail-closed (R-R)"
+  echo "PASS: code-recritic disposition line is fail-closed (R-R)"
 else
-  echo "FAIL: doc-recritic disposition line missing fail-closed (R-R)"
+  echo "FAIL: code-recritic disposition line missing fail-closed (R-R)"
   fail=$((fail + 1))
 fi
 
 # AC17 — re-critic dispatches even when detection produced zero findings, and
 # that clause precedes the dispatch fence itself.
 phase15_zero_line=$(first_line '탐지 결과가 0건이어도 디스패치한다')
-assert_line "Phase 1.5 dispatches even when detection has zero findings (AC17)" "$phase15_zero_line"
-assert_order "AC17 zero-findings clause precedes doc-recritic dispatch" "$phase15_zero_line" "$review_line"
+assert_line "Step 3.5 dispatches even when detection has zero findings (AC17)" "$phase15_zero_line"
+assert_order "AC17 zero-findings clause precedes code-recritic dispatch" "$phase15_zero_line" "$review_line"
 
 # The recritic.diff instructions must forbid git show/format-patch/log -p output,
 # backed by a body-unique rationale line (not header-satisfiable). Anchor on
@@ -390,7 +389,7 @@ assert_order "Surface findings precedes iter-boundary decision" "$surface_line" 
 # `/qg runtime` 의 R5a⁰ manifest 초기화) · F2(review-only 의 gate-scope-conditional
 # 옵션 대체) · C4(effective_skip_runtime 배선 ≥3회) · F7(clean-exit 의 gate-scope
 # 라우팅)이 이 자리에 있었다. 한 파이프라인에는 게이트 범위가 없다 — 이 여섯 락
-# 전부가 지키던 SKILL.md 표면이 사라졌다(Pipeline 절이 후계 — 단일 ①→⑤ 흐름).
+# 전부가 지키던 SKILL.md 표면이 사라졌다(Flow 절이 후계 — 단일 흐름).
 
 # --- v2.7.0 §5.2-5.4: changes-exist floor (routing removed, integrity kept) ---
 # check-review-scope.sh still invoked in the Review gate (call+cache for the floor).
@@ -698,7 +697,7 @@ assert_call_count_in_window "R6 의 diff-test-results.py 호출 2곳(대조+집�
 assert_call_in_window "R6 이 diff-test-results.py --aggregate 호출 (집계)" \
   'scripts/diff-test-results.py" --aggregate' '^[*][*]Step R6'  '^[*][*]Step R8'
 assert_call_in_window "R8 이 check_qa_ledger.py 호출" \
-  'scripts/check_qa_ledger.py'             '^[*][*]Step R8'     '^## Final Summary'
+  'scripts/check_qa_ledger.py'             '^[*][*]Step R8'     '^## Fix-loop$'
 
 # ── T91 · AC66 · §11 ⑱(U3) — 기계 집계값이 원장 대조까지 살아서 도달하는가 ────
 # 두 지점이 함께 있어야 대조가 성립한다. 하나만 잠그면 다른 하나를 지워 사슬을 끊을 수
@@ -710,9 +709,9 @@ assert_call_in_window "R8 이 check_qa_ledger.py 호출" \
 # 막기 위해서다 — 산문만 남고 호출이 사라지면 아무도 그 게이트를 부르지 않는다.
 echo "== R6→R8 집계 전달 사슬"
 r6_s=$(first_line '^[*][*]Step R6'); r8_s=$(first_line '^[*][*]Step R8')
-fs_s=$(first_line '^## Final Summary')
+fs_s=$(first_line '^## Fix-loop$')
 if [[ "$r6_s" -le 0 || "$r8_s" -le 0 || "$fs_s" -le 0 ]]; then
-  echo "FAIL: 집계 사슬 락 — 창 앵커 붕괴 (R6=$r6_s R8=$r8_s FinalSummary=$fs_s)"
+  echo "FAIL: 집계 사슬 락 — 창 앵커 붕괴 (R6=$r6_s R8=$r8_s Fix-loop=$fs_s)"
   fail=$((fail + 1))
 else
   chain_ok=1
@@ -723,7 +722,7 @@ else
     END { exit !f }' "$SKILL_MD" \
     || { echo "    R6 이 집계 stdout 을 \$aggregate_yaml 로 남기지 않음"; chain_ok=0; }
   # ② R8 의 게이트 호출이 **그 파일을** --aggregate 로 넘긴다 (호출 줄 또는 이어지는 줄).
-  # 창 상한: R9 대상 소멸(R8 이 이제 참고 문서의 마지막 스텝) → '## Final Summary'.
+  # 창 상한: R9 대상 소멸(R8 이 이제 참고 문서의 마지막 스텝) → 차등 테스트 절 다음 절 '## Fix-loop'.
   #
   # 두 분기 모두 리터럴 `"$aggregate_yaml"` 을 요구한다 (/qg iter-7, 리뷰어 2명).
   # 앞 버전은 같은-줄 분기가 **토큰 `--aggregate` 만** 요구해서, 호출을 한 줄로 접고
@@ -762,11 +761,11 @@ fi
 echo "== R1b→R8 unclaimed 집행 사슬"
 rinit_s=$(first_line '^[*][*]Step R-init'); r1b_s=$(first_line '^[*][*]Step R1b')
 r1a_s=$(first_line '^[*][*]Step R1a'); r2_s=$(first_line '^[*][*]Step R2')
-# 창 상한: Step R9(대상 소멸 — R8 이 이제 참고 문서의 마지막 스텝) → '## Final Summary'.
-rt_end=$(first_line '^## Final Summary')
+# 창 상한: Step R9(대상 소멸 — R8 이 이제 참고 문서의 마지막 스텝) → 차등 테스트 절 다음 절 '## Fix-loop'.
+rt_end=$(first_line '^## Fix-loop$')
 if [[ "$rinit_s" -le 0 || "$r1a_s" -le 0 || "$r1b_s" -le 0 || "$r2_s" -le 0 \
       || "$r8_s" -le 0 || "$rt_end" -le 0 ]]; then
-  echo "FAIL: unclaimed 사슬 락 — 창 앵커 붕괴 (R-init=$rinit_s R1a=$r1a_s R1b=$r1b_s R2=$r2_s R8=$r8_s FinalSummary=$rt_end)"
+  echo "FAIL: unclaimed 사슬 락 — 창 앵커 붕괴 (R-init=$rinit_s R1a=$r1a_s R1b=$r1b_s R2=$r2_s R8=$r8_s Fix-loop=$rt_end)"
   fail=$((fail + 1))
 else
   uc_ok=1

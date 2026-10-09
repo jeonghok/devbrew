@@ -21,8 +21,6 @@ cd "$ROOT" || exit 1
 SWEEP="plugins/quality-gates/tests/test_agent_model_unpinned_sweep.sh"
 
 # agent → 그 agent 를 보는 per-agent 락. 카운트는 하드코딩된 기대값이 없다(pairs[@] 순회).
-# doc-recritic 사본은 공유 정본과의 copy-of 동일성(`shared/tests/test_copy_of_contract.sh`)이
-# 대신 잰다 — ② 가 그 사본을 지우면 그 줄도 사라진다.
 pairs=(
   "plugins/quality-gates/agents/security-reviewer.md|plugins/quality-gates/tests/test_security_reviewer_persona.sh"
   "plugins/quality-gates/agents/code-recritic.md|plugins/quality-gates/tests/test_code_recritic_frontmatter.sh"

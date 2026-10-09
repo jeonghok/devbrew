@@ -1,5 +1,5 @@
 ---
-description: "Run the quality gates pipeline (scope → differential test → review → verdict)"
+description: "Run the quality gates pipeline (scope → review → differential test → verdict)"
 argument-hint: "[critique <path>] [branch|--paths <glob>...] [--plan <path>]"
 ---
 
@@ -35,13 +35,15 @@ Execute the setup script to initialize the pipeline:
 "${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh" $ARGUMENTS
 ```
 
+사용자의 의도가 비-코드 산출물 비평이면(첫 인자 `critique` 든 자연어든) setup 의 출력과 종료 코드와 무관하게
+위 critique 절을 따른다 — 자연어 인자는 setup 이 `Unknown argument` 로 거부하지만 아무것도 쓰지 않았다.
 setup 이 `인자는 없어졌다 — … 실행하지 않는다.` 줄을 냈으면(exit 2) 그 줄을 그대로 보이고 끝낸다 —
 파이프라인 skill 을 부르지 않는다. 그 밖에 setup 이 비0 으로 끝났으면 그 출력을 그대로 보이고 끝낸다.
 인자가 `critique` 로 시작하면 setup 은 출력 없이 0 으로 끝난다 — 이 규칙 대신 위 critique 절을 따른다.
 
 Otherwise invoke `Skill("quality-gates:quality-pipeline")` with the parsed
-arguments. The skill runs the pipeline in this turn — differential test,
-reviewers, re-critique, synthesis — with its internal fix-loop, surfacing
+arguments. The skill runs the pipeline in this turn — reviewers,
+re-critique, differential test, synthesis — with its internal fix-loop, surfacing
 decision points via AskUserQuestion. No further commands are needed unless
 the pipeline is aborted at a decision point.
 
@@ -105,22 +107,15 @@ scope)로 해석한다 — 별도 토큰 alias 없음 (P8 determinism-economy: n
 
 ### Cost guidance
 
-Approximate cost per run vs default-Opus baseline (full-branch + cross-gate
-loop, the pre-redesign behavior):
-
-| Auto-detected depth | Cost | Trigger |
-|---|---|---|
-| Trivia | ~0% | ≤3 lines whitespace/rename single file |
-| Quick | ~25–35% | <50 LOC, single concern, no new files |
-| Standard | ~30–45% | 50–199 LOC or multi-file simple |
-| Deep | ~55–75% | ≥200 LOC, new files, config changes (AskUserQuestion gate fires) |
+리뷰어는 기본 셋(code-reviewer · security-reviewer · codex) + 조건부 ≤4 + 재비판(iteration 당 최대 8)이다.
+비용은 diff 크기와 iteration 수(≤5)에 따라 달라지고, trivia 로 닫힌 실행은 리뷰어를 부르지 않는다.
 
 Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable.
 
 ### Pipeline
 
-- ① 스코프 → ② 차등 테스트(기준선 대비, 매 iteration) → ③ 각도 + 리뷰어 → ④ 출처-제거 재비판 → ⑤ 합성 · 판정
-- Fix-loop: findings 가 남으면 iteration 마다 `Retry` / `Accept and finish` / `Stop` 로 사용자가 진행을 정한다(최대 5회).
+- ① 리뷰(기본 셋 + 조건부 ≤4 → 출처-제거 재비판) → ② 차등 테스트(기준선 대비, 매 iteration) → ③ 합성 · 판정
+- Fix-loop: 막는 지적이나 차등 defect 가 남으면 iteration 마다 항목별 적용/제외 분류표와 함께 `Retry` / `Accept and finish` / `Stop` 로 사용자가 진행을 정한다(최대 5회). Retry 는 「적용」 항목만 고친다.
 
 ### Pipeline Rules
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/verdict.py plugins/quality-gates/scripts/angles.py plugins/quality-gates/scripts/recritic_bridge.py plugins/quality-gates/tests/lib/recritic_fixture.sh
+# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/verdict.py plugins/quality-gates/scripts/angles.py plugins/quality-gates/tests/lib/recritic_fixture.sh
 # test_pipeline_verdict_wiring.sh — 판정 상시 배선 (설계 §6.1 ⑤ · §6.3.5 · §6.4.3, AC2 · AC8–AC12).
 #
 # 합성기 쪽 총 함수는 test_verdict_vocabulary.sh · test_angle_coverage.sh 가 잰다. 이 락은
@@ -13,7 +13,7 @@ set -u
   plugins/quality-gates/skills/quality-pipeline/SKILL.md \
   plugins/quality-gates/skills/quality-pipeline/references/differential-test.md \
   plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/verdict.py \
-  plugins/quality-gates/scripts/angles.py plugins/quality-gates/scripts/recritic_bridge.py \
+  plugins/quality-gates/scripts/angles.py \
   plugins/quality-gates/tests/lib/recritic_fixture.sh; exit 0; }
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -107,7 +107,7 @@ for path in sys.argv[1:]:
     text = open(path, encoding="utf-8").read()
     for body in re.findall(r"^[ \t]*```[a-zA-Z]*\n(.*?)^[ \t]*```[ \t]*$", text, re.M | re.S):
         for ll in logical_lines(body):
-            if "synthesize_findings.py" in ll:
+            if "synthesize_findings.py" in ll and "synthesize_findings.py\" prepare" not in ll:
                 calls += 1
                 if "--emit-verdict" not in ll or "--angles" not in ll:
                     bad += 1
@@ -129,14 +129,14 @@ case_blocking_angle_dispatches_are_fail_closed() {
   got=$(python3 - "$SKILL" <<'PY'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
-for agent in ("quality-gates:security-reviewer", "quality-gates:doc-recritic"):
+for agent in ("quality-gates:security-reviewer", "quality-gates:code-recritic"):
     m = re.search(r'subagent_type:\s*"' + re.escape(agent)
                   + r'",?\s*\n\s*//\s*\*\*처분\*\*\s*—\s*consumer=\S+\s*·\s*fail-(open|closed)', text)
     print(f"{agent}:{m.group(1) if m else 'MISSING'}")
 PY
 )
   assert_grep "$got" '^quality-gates:security-reviewer:closed$' "보안 각도 디스패치는 fail-closed"
-  assert_grep "$got" '^quality-gates:doc-recritic:closed$'      "판정 각도 디스패치는 fail-closed"
+  assert_grep "$got" '^quality-gates:code-recritic:closed$'     "판정 각도 디스패치는 fail-closed"
 }
 
 case_reason_literals_are_closed_and_pinned() {
@@ -181,13 +181,13 @@ PY
 case_differential_runs_inside_every_iteration() {
   # Review Focus 3 · R-AC — ② 는 iteration 루프 «안»이다.
   local body it d fin
-  body=$(awk '/^## Pipeline$/{f=1;next} f&&/^## /{exit} f' "$SKILL")
+  body=$(awk '/^## Flow$/{f=1;next} f&&/^## /{exit} f' "$SKILL")
   it=$(printf '%s\n' "$body" | grep -n 'iteration N = 1\.\.5' | head -1 | cut -d: -f1)
   d=$(printf '%s\n' "$body" | grep -n '②' | head -1 | cut -d: -f1)
-  fin=$(printf '%s\n' "$body" | grep -n 'Final Summary' | head -1 | cut -d: -f1)
+  fin=$(printf '%s\n' "$body" | grep -n 'Final verdict' | head -1 | cut -d: -f1)
   local inside=0
   if [ -n "$it" ] && [ -n "$d" ] && [ -n "$fin" ] && [ "$it" -lt "$d" ] && [ "$d" -lt "$fin" ]; then inside=1; fi
-  assert_eq "$inside" "1" "② 가 iteration 항목과 Final Summary 사이(루프 안)에 있다"
+  assert_eq "$inside" "1" "② 가 iteration 항목과 Final verdict 사이(루프 안)에 있다"
   assert_grep "$body" '매 iteration 돈다' "② 가 매 iteration 돈다고 적혀 있다"
 }
 
@@ -485,15 +485,15 @@ print(f"ATTR_FLIPPED_TO_ONLY_GREEN:{1 if (a and re.search(r'STILL_GREEN[^가-힣
 #     까지를 한 구간으로 자른다. 그 구간 안의 Final Summary 언급은 정확히 «부정문
 #     하나» 여야 한다 — 부정문을 지우고도 Final Summary 가 남으면 실제 목적지가
 #     바뀐 것이다(단어만 살려 둔 I1-C 변이).
-r = seg(r'`verdict: defect` 이고 kept = 0.*?그대로 부르되')
+r = seg(r'`verdict: defect` 이고 `blocking: 0`.*?그대로 부르되')
 print(f"ROUTE_FOUND:{1 if r is not None else 0}")
 print(f"ROUTE_HAS_DIFFERENTIAL:{1 if (r and '차등' in r) else 0}")
 print(f"ROUTE_HAS_DEFECT_FLAG:{1 if (r and 'confirmed_product_defect: true' in r) else 0}")
 print(f"ROUTE_HAS_INVOKE:{1 if (r and '그대로 부르되' in r) else 0}")
 route_no_leak = 0
 if r is not None:
-    stripped = r.replace('Final Summary 로 직행하지 않는다', '')
-    route_no_leak = 1 if 'Final Summary' not in stripped else 0
+    stripped = r.replace('Final verdict 로 직행하지 않는다', '')
+    route_no_leak = 1 if 'Final verdict' not in stripped else 0
 print(f"ROUTE_NO_FINAL_SUMMARY_LEAK:{route_no_leak}")
 PY
 )
@@ -503,11 +503,11 @@ PY
   assert_grep "$got" '^ATTR_NEGATED:1$'        "STILL_GREEN 바로 뒤에 「아닌」 부정이 있다(I1-E 가 「인 것만」으로 뒤집으면 RED)"
   assert_grep "$got" '^ATTR_EXAMPLE:1$'        "non-green 예시로 NEW_REGRESSION 이 같은 구간에 있다"
   assert_grep "$got" '^ATTR_FLIPPED_TO_ONLY_GREEN:0$' "「STILL_GREEN 만/인 것만」(선택 반전)이 없다"
-  assert_grep "$got" '^ROUTE_FOUND:1$'                "kept=0 차등 기원 라우팅 구간을 찾았다"
+  assert_grep "$got" '^ROUTE_FOUND:1$'                "blocking 0 차등 기원 라우팅 구간을 찾았다"
   assert_grep "$got" '^ROUTE_HAS_DIFFERENTIAL:1$'     "그 구간이 차등 테스트 기원임을 말한다"
   assert_grep "$got" '^ROUTE_HAS_DEFECT_FLAG:1$'      "그 구간이 confirmed_product_defect: true 를 싣는다"
   assert_grep "$got" '^ROUTE_HAS_INVOKE:1$'           "그 구간이 Fix-loop decision 을 «그대로 부르되」로 실제 호출한다"
-  assert_grep "$got" '^ROUTE_NO_FINAL_SUMMARY_LEAK:1$' "그 구간의 Final Summary 언급은 부정문 하나뿐이다(I1-C 가 실제 목적지를 바꾸면 RED)"
+  assert_grep "$got" '^ROUTE_NO_FINAL_SUMMARY_LEAK:1$' "그 구간의 Final verdict 언급은 부정문 하나뿐이다(I1-C 가 실제 목적지를 바꾸면 RED)"
 }
 
 case_n5_and_retry_cover_differential_origin() {
@@ -528,7 +528,7 @@ def seg(pattern):
 
 n5 = seg(r'\*\*N=5 에서 도달하면\.\*\*.*?(?=\n\n---)')
 print(f"N5_FOUND:{1 if n5 is not None else 0}")
-print(f"N5_HAS_DIFFERENTIAL:{1 if (n5 and '차등' in n5 and 'kept = 0' in n5) else 0}")
+print(f"N5_HAS_DIFFERENTIAL:{1 if (n5 and '차등' in n5 and 'blocking: 0' in n5) else 0}")
 print(f"N5_HAS_MAXITER:{1 if (n5 and 'Max-iter decision' in n5) else 0}")
 
 # X6 — N=5 문단 안의 Fix-loop decision 언급은 전부 부정(「가 아니라」 · 「새지 않는다」)에 묶인다.
@@ -544,7 +544,7 @@ print(f"N5_MAXITER_INVOKED:{1 if n5_maxiter else 0}")
 lead = re.search(r'^\s*그다음.N < 5 — N=5 는 [^\n]*「N=5 에서 도달하면」', text, re.M)
 print(f"LEAD_N_LT_5:{1 if lead else 0}")
 # X8 — Step 5 결정 도구의 머리가 N < 5 전용이고 N=5 는 Max-iter 로 간다(같은 줄)
-dtool = re.search(r'^\s*5\. \*\*Decision tool .N < 5 only — N=5 always goes to Max-iter decision instead', text, re.M)
+dtool = re.search(r'^\s*\*\*Decision tool .N < 5 only — N=5 always goes to Max-iter decision instead', text, re.M)
 print(f"DECISION_TOOL_N_LT_5:{1 if dtool else 0}")
 
 note = seg(r'\*\*Retry 옵션 문구.*?(?=\n\nBranch on answer:)')
@@ -594,35 +594,15 @@ PY
   assert_grep "$got" '^ELSE_HAS_GLOB:1$' "1개 이상 분기는 여전히 glob 을 쓴다(정상 경로 안 밀림)"
 }
 
-case_recritic_findings_keep_reviewer_confidence() {
-  # 탐지 결과를 findings.yaml 로 옮기는 자리(Phase 1.5-1)에 confidence 보존 지시가
-  # 있는지를 잰다 — 합성기는 누락을 5 로 평탄화하므로(synthesize_findings.py 의
-  # _normalize_confidence) 이 지시가 사라져도 합성기 락은 GREEN 이다. 이 락은 지시가
-  # SKILL 에 실제로 있는지, agent: 문단(findings.yaml 을 쓰는 자리) 바로 다음인지를 잰다.
-  local anchor_line new_line anchor_count new_count anchor_no new_no
-  anchor_line='      `agent:` 를 그대로 믿지 않는다 — 찍는 쪽이 너다.'
-  new_line='      **각 항목의 `confidence:` 는 리뷰어가 낸 값을 그대로 옮긴다** — 값이 10 을 넘으면 100 점 만점으로 보고 10 으로 나눠 내림하고(85 → 8), 리뷰어가 내지 않았으면 지어내지 말고 키를 뺀다(합성기가 5 로 채운다).'
-
-  new_count=$(grep -cxF -- "$new_line" "$SKILL")
-  assert_eq "$new_count" "1" \
-    "confidence 보존 지시가 SKILL.md 에 그 줄 전체로 정확히 1회 있다(grep -x -- 부분 문자열 매치가 아니다)"
-
-  anchor_count=$(grep -cxF -- "$anchor_line" "$SKILL")
-  assert_eq "$anchor_count" "1" \
-    "기준 줄(agent: 를 그대로 믿지 않는다)이 SKILL.md 에 정확히 1회 있다"
-
-  anchor_no=$(grep -nxF -- "$anchor_line" "$SKILL" | head -1 | cut -d: -f1)
-  new_no=$(grep -nxF -- "$new_line" "$SKILL" | head -1 | cut -d: -f1)
-  assert_grep "$anchor_no" '^[0-9]+$' "기준 줄 번호를 찾았다"
-  assert_grep "$new_no" '^[0-9]+$'    "새 줄 번호를 찾았다"
-
-  if [ -n "${anchor_no:-}" ] && [ -n "${new_no:-}" ] \
-     && [ "$new_count" = "1" ] && [ "$anchor_count" = "1" ] \
-     && [ "$new_no" -eq "$((anchor_no + 1))" ] 2>/dev/null; then
-    ok "새 줄이 기준 줄 바로 다음 줄이다(정확히 +1, anchor=$anchor_no new=$new_no)"
-  else
-    no "새 줄이 기준 줄 바로 다음 줄이다(정확히 +1, anchor=$anchor_no new=$new_no)"
-  fi
+case_recritic_findings_stamp_agent_and_drop_confidence() {
+  # findings.yaml 을 쓰는 자리(Step 3.5-1)가 agent 를 직접 찍고 confidence 를 옮기지 않는다고
+  # 말한다. 합성기는 confidence 를 읽지 않으므로 옮겨도 판정은 안 바뀌지만, 옮기라는 옛 지시가
+  # 남으면 모델이 리뷰어의 결론(점수)을 재비판자 쪽으로 흘린다.
+  local body
+  body="$(awk '/^### Step 3\.5 /{f=1;next} f&&/^### /{exit} f' "$SKILL")"
+  assert_grep "$body" 'never trust an `agent:` a reviewer wrote' "Step 3.5 가 agent 를 직접 찍으라고 말한다"
+  assert_grep "$body" 'Do not copy a `confidence:` field' "Step 3.5 가 confidence 를 옮기지 말라고 말한다"
+  assert_not_grep "$(cat "$SKILL")" '리뷰어가 낸 값을 그대로 옮긴다' "옛 confidence 보존 지시가 없다"
 }
 
 for c in case_every_synth_call_emits_verdict_and_angles case_blocking_angle_dispatches_are_fail_closed \
@@ -635,7 +615,7 @@ for c in case_every_synth_call_emits_verdict_and_angles case_blocking_angle_disp
          case_security_kill_switch_routes_to_absent case_differential_kill_switch_env_name_is_pinned \
          case_differential_defect_zero_kept_routes_to_fixloop case_zero_adapter_aggregate_skips_glob \
          case_n5_and_retry_cover_differential_origin \
-         case_recritic_findings_keep_reviewer_confidence; do
+         case_recritic_findings_stamp_agent_and_drop_confidence; do
   "$c"
 done
 finish

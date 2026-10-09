@@ -130,9 +130,8 @@ rm -rf "$(dirname "$REPO")"
 # T3-3: codex-reviewer.md deleted — removed from this loop (no longer applicable post-T3-3).
 # T3-2: synthesizer.md deleted — removed from this loop (no longer applicable post-T3-2).
 # T3-1: scout.md deleted — removed from this loop (no longer applicable post-T3-1).
-# PR4a: adversarial.md deleted — removed from this loop. Its replacement,
-# quality-gates:doc-recritic (Phase 1.5), declares no project_dir input_slot
-# by design (shared docreview contract; project_dir rides inside <document>).
+# PR4a: adversarial.md deleted — removed from this loop. The re-critic is
+# quality-gates:code-recritic (Step 3.5), which declares project_dir (checked below).
 for agent in test-scope-validator security-reviewer code-recritic; do
   if grep -q 'project_dir' "$PLUGIN_DIR/agents/$agent.md"; then
     ok "T8: agents/$agent.md declares project_dir input"
@@ -156,8 +155,9 @@ fi
 # anchored fallback for security-reviewer is removed (drift-prone).
 SKILL_MD="$PLUGIN_DIR/skills/quality-pipeline/SKILL.md"
 T5_FAIL=0
-# PR4a: adversarial dropped — its replacement (doc-recritic, Phase 1.5) has no
-# project_dir dispatch slot by design (same reason as the T8 loop above).
+# PR4a: adversarial dropped. code-recritic (Step 3.5) delivers project_dir as a
+# `<project_dir>` slot, not a `project_dir:` field — shared/tests/test_agent_input_slots.sh
+# measures that delivery.
 for name in test-scope-validator security-reviewer; do
   if ! awk -v name="quality-gates:$name" '
     $0 ~ name { found=NR }

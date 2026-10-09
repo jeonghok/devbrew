@@ -1,80 +1,39 @@
 #!/usr/bin/env bash
-# AC3/AC4/AC6/AC8/AC11 (positive) + AC13/AC14 (negative) — v2.13.0
-# Review gate 스코프-구동 구성 프로즈의 존재/부재 grep-lock.
-# body-unique 문구를 요구(헤더-satisfiable 함정 회피). 선택 정확성은 게이트하지 않는다(lightness).
+# test_review_scope_composition.sh — AC11 · spec §2: v10 리뷰어 구성.
+#
+# 기본 셋(code-reviewer · security-reviewer · codex) + 조건부 넷(pr-test-analyzer ·
+# silent-failure-hunter · type-design-analyzer · comment-analyzer) + 재비판(code-recritic).
+# `scout.py` · `feature-dev:code-architect` 는 qg 어디에서도 dispatch 되지 않는다(AC11).
+# body-unique 문구를 요구한다(헤더-satisfiable 함정 회피). 선택 정확성은 게이트하지 않는다.
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-SKILL_REAL="$ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
-PASS=0; FAIL=0
+SKILL="$ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
+QG="$ROOT/plugins/quality-gates"
+. "$ROOT/shared/tests/assert.sh"
 
-# Task 31 fix round 1 (F1): 아래 absent() 검사(0-100/0–100//100/code-simplifier/
-# security-auditor/secret-masking) 는 quality-pipeline 스킬 전체에 대한 비목표
-# 불변식이지 Review 섹션에만 국한되지 않는다 — 차등 테스트 절차가
-# references/differential-test.md 로 옮겨진 뒤에도 "스킬 어디에도 없다"는 계약을
-# 그대로 재려면 분할 전과 동일한 논리적 문서 위에서 돌아야 한다. AC6/AC14의
-# awk 윈도우 검사(보안 각도→다른 전제 각도, Angles and reviewers 섹션)는 전부
-# 차등 테스트 섹션보다 앞선 섹션만 앵커하므로 재구성에 영향받지 않는다. 재구성
-# 실패는 조용히 원본으로 폴백하지 않고 FAIL 한다.
-. "$ROOT/plugins/quality-gates/tests/lib/reconstruct-skill.sh"
-if ! SKILL="$(reconstruct_skill_md "$SKILL_REAL")"; then
-  echo "FAIL: SKILL.md ↔ references/differential-test.md 재구성 실패 ($SKILL_REAL)"
-  exit 1
-fi
-trap 'rm -f "$SKILL"' EXIT
-has()  { if grep -qF "$2" "$SKILL"; then PASS=$((PASS+1)); echo "  ✓ $1"; else FAIL=$((FAIL+1)); echo "  ✗ FAIL(present): $1 — '$2'"; fi; }
-hasE() { if grep -qE "$2" "$SKILL"; then PASS=$((PASS+1)); echo "  ✓ $1"; else FAIL=$((FAIL+1)); echo "  ✗ FAIL(present): $1"; fi; }
-absent(){ if grep -qF "$2" "$SKILL"; then FAIL=$((FAIL+1)); echo "  ✗ FAIL(absent): $1 — '$2' 잔존"; else PASS=$((PASS+1)); echo "  ✓ $1"; fi; }
+# Step 3 창 — 구성 표와 dispatch 가 사는 자리
+S3="$(awk '/^### Step 3 — reviewers/{f=1;next} f&&/^### /{exit} f' "$SKILL")"
+[ -n "$S3" ] && ok "Step 3 창을 찾았다" || { no "Step 3 창이 없다 — 아래가 공허하다"; finish; exit; }
 
-echo "== AC3: Tier C rubric — 6 전문가 embed =="
-has "code-reviewer 강한 default"      'pr-review-toolkit:code-reviewer'
-has "silent-failure-hunter"           'silent-failure-hunter'
-has "type-design-analyzer"            'type-design-analyzer'
-has "pr-test-analyzer"                'pr-test-analyzer'
-has "comment-analyzer"                'comment-analyzer'
-has "feature-dev:code-architect"      'feature-dev:code-architect'
-
-echo "== AC4: scope-signal 팔레트 토큰 =="
-for tok in '역직렬화' '인젝션' 'XSS' 'crypto' 'TLS' 'XXE' 'GHA' 'SRI' 'deps-manifest' 'migration' 'public-API' '삭제 파일'; do
-  has "팔레트 토큰: $tok" "$tok"
+for row in '| 정확성 | `pr-review-toolkit:code-reviewer` | 항상 |' \
+           '| 보안 | `quality-gates:security-reviewer` | 항상 |' \
+           '| 다른 모델 계열 | codex 러너 | 항상 시도 |' \
+           '| 재비판 | `quality-gates:code-recritic` | 항상(탐지 0건이어도) — Step 3.5 |'; do
+  assert_contains "$S3" "$row" "구성 표 행: $row"
 done
+for a in pr-test-analyzer silent-failure-hunter type-design-analyzer comment-analyzer; do
+  assert_grep "$S3" "^\| [^|]+ \| \`pr-review-toolkit:$a\` \| [^|]{12,} \|$" "조건부 행 — $a 가 신호 규칙을 갖는다"
+done
+assert_contains "$S3" '> [quality-gates] iter N — 선택:' "transparency 줄"
+assert_contains "$S3" 'unavailable (<plugin> 미설치) — degraded coverage' "미설치 degrade 는 loud"
+assert_not_grep "$S3" '^[[:space:]]*model:' "외부 dispatch 에 model: override 가 없다"
 
-echo "== AC6: code-reviewer는 추가 리뷰어 강한 default (각도 수행자 아님) =="
-has "강한 default 문구" '강한 default'
-# 보안 각도 윈도우 안에 code-reviewer가 없어야 한다. 보안 각도 anchor → 다른 전제 각도 anchor.
-a_start=$(awk '/보안 각도 — `quality-gates:security-reviewer`, 매 iteration/{print NR; exit}' "$SKILL")
-a_end=$(awk -v s="$a_start" 'NR>s && /다른 전제 각도 — codex \(사용 가능하면 부른다/{print NR; exit}' "$SKILL")
-if [[ -n "$a_start" && -n "$a_end" ]] && ! awk -v s="$a_start" -v e="$a_end" 'NR>s && NR<e' "$SKILL" | grep -qF 'code-reviewer'; then
-  PASS=$((PASS+1)); echo "  ✓ AC6: 보안 각도 윈도우($a_start..$a_end)에 code-reviewer 부재"
-else
-  FAIL=$((FAIL+1)); echo "  ✗ FAIL AC6: 보안 각도 윈도우에 code-reviewer 존재 또는 anchor 없음 (s=$a_start e=$a_end)"
-fi
-
-echo "== AC8: transparency 라인 (loud 정의) =="
-has "transparency prefix"  '> [quality-gates] iter N — 선택:'
-has "transparency 제외 절"  '제외:'
-
-echo "== AC11: graceful degradation loud log =="
-has "degrade: specialist"      'specialist'
-has "degrade: unavailable"     'unavailable (<plugin> 미설치)'
-has "degrade: degraded coverage" 'degraded coverage'
-
-echo "== AC13 (negative): 수치 0-100 스코어링 미도입 =="
-absent "0-100 스코어링(하이픈)" '0-100'
-absent "0–100 스코어링(엔대시)" '0–100'
-absent "/100 스코어링"          '/100'
-
-echo "== AC14 (negative): non-goal 가드 =="
-absent "code-simplifier subagent_type 미등장" 'code-simplifier'
-absent "security-auditor graft 미포함"        'security-auditor'
-absent "secret-masking graft 미포함"          'secret-masking'
-# 추가 리뷰어 외부 dispatch에 model: override 부재 — 팔레트/rubric 섹션 윈도우 안에 'model:' 없어야.
-c_start=$(awk '/## Angles and reviewers \(scope-driven\)/{print NR; exit}' "$SKILL")
-c_end=$(awk -v s="$c_start" 'NR>s && /^## /{print NR; exit}' "$SKILL")
-if [[ -n "$c_start" && -n "$c_end" ]] && ! awk -v s="$c_start" -v e="$c_end" 'NR>s && NR<e' "$SKILL" | grep -qE '^[[:space:]]*model:'; then
-  PASS=$((PASS+1)); echo "  ✓ AC14: composition 섹션에 model: override 부재"
-else
-  FAIL=$((FAIL+1)); echo "  ✗ FAIL AC14: composition 섹션에 model: override 존재 또는 섹션 없음 (s=$c_start e=$c_end)"
-fi
-
-echo; echo "review-scope-composition: $PASS passed, $FAIL failed"
-[ "$FAIL" -eq 0 ]
+# AC11 — 옛 구성의 부재(플러그인 표면 전체). 양의 짝은 위 표 행이다.
+hits="$(grep -rlE 'scout\.py|feature-dev:code-architect' "$QG/skills" "$QG/commands" "$QG/agents" "$QG/scripts" "$QG/references" 2>/dev/null)"
+assert_eq "$hits" "" "scout.py · feature-dev:code-architect 를 부르는 표면이 없다 (AC11)"
+[ -e "$QG/scripts/scout.py" ] && no "scripts/scout.py 가 남아 있다" || ok "scripts/scout.py 부재"
+assert_not_grep "$(cat "$SKILL")" 'depth|quick-depth|scout' "줄 수 depth 안내가 없다"
+for tok in '0-100' '0–100' '/100' 'code-simplifier' 'security-auditor' 'secret-masking'; do
+  assert_not_grep "$(cat "$SKILL")" "$tok" "non-goal 토큰 부재: $tok"
+done
+finish

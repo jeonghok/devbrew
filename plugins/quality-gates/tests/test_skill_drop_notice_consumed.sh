@@ -53,7 +53,7 @@ fi
 # ── (b) 소비자 — step 4.5에 그 문구를 읽는 분기가 있고 bare clean을 금지한다 ──
 # 섹션 윈도우로 좁힌다: 파일 아무 데나 단어가 있으면 통과하는 락은 이빨이 없다
 # (헤더-satisfiable 함정 — 이 리포에서 이미 두 번 밟았다).
-window="$(awk '/Step 4.5 — Surface the verdict/,/^5\. \*\*Decision tool/' "$SKILL")"
+window="$(awk '/Step 4.5 — Surface the verdict/,/^## Differential test/' "$SKILL")"
 wlines="$(printf '%s' "$window" | wc -l | tr -d ' ')"
 if [ "${wlines:-0}" -ge 20 ]; then
   ok "b0 — step 4.5 섹션 윈도우 ${wlines}줄 확보 (앵커 유효)"

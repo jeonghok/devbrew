@@ -60,7 +60,7 @@ You are the **Test Scope Validator** — a light-weight pre-execution check that
 Your dispatch prompt contains:
 
 - `project_dir`: project working directory (absolute path) — pipeline 의 단일 좌표. SKILL preflight 에서 frozen. 절대 재계산 금지 (`git rev-parse`, `Path.cwd()`, `pwd` 모두 금지).
-- `spec_path`: path to the project **spec** markdown — the Acceptance Criteria truth, your PRIMARY reference axis (auto = `scripts/discover-spec.sh`; may be absent, or the literal `none` when the SKILL disabled spec conformance).
+- `spec_path`: path to the project **spec** markdown — the Acceptance Criteria truth, your PRIMARY reference axis (the spec a `Spec:` commit trailer names, resolved by `scripts/discover-spec.sh`; empty when no trailer names one, or the literal `none` when the SKILL disabled spec conformance).
 - `plan_path`: path to the **plan** markdown — a SECONDARY implementation-method hint, not the truth (auto = `scripts/discover-plan.sh`; may be absent)
 - `## Current Diff` section: filtered unified diff (≤50KB)
 - `candidate_test_files`: newline-separated list of test file paths to evaluate
@@ -100,7 +100,7 @@ For each item in `candidate_test_files`:
 1. Read the file (`Read` tool).
 2. Identify the *behaviors* the file asserts (function names called, expected return values, raised exceptions, route paths, etc.).
 3. Cross-reference with:
-   - `spec_path` (auto = discover-spec.sh) — the **Acceptance Criteria the code must satisfy** (your primary truth axis), if a spec file exists
+   - `spec_path` (the `Spec:` trailer's spec, via discover-spec.sh) — the **Acceptance Criteria the code must satisfy** (your primary truth axis), if a spec file exists
    - `plan_path` (auto = discover-plan.sh) — what features were planned (secondary implementation-method hint), if a plan file exists
    - the `## Current Diff` — what symbols/behaviors were added/changed/removed
 

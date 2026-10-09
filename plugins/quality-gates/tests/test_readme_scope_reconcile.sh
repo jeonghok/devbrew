@@ -19,17 +19,18 @@ gone  "subagent fan-out gate 문구 제거(190/240)" 'subagent fan-out gate'
 gone  "gates subagent fan-out 문구 제거(37-40)"  'gates subagent fan-out'
 
 echo "== AC9 positive: 재계산 max fan-out 선언 =="
-present "phase-1 병렬 ≤ 8"      'Phase 1 병렬 ≤ 8'
+present "리뷰어 구성 ≤ 8"        '리뷰어 구성 ≤ 8'
 present "총/iteration ≤ 10"      '총/iteration ≤ 10'
 present "P22 transparency-기반 restate" 'transparency'
 
-echo "== AC10: 각도 + 리뷰어 구성 + prerequisites (R-AF, Tier 어휘 → 각도 어휘) =="
-present "리뷰어 구성 헤딩"              '리뷰어 구성 — 각도 셋 + 추가 리뷰어'
-present "보안 각도 always-run 표기"      '보안 각도 — 매 iteration (모델이 못 뺌)'
-present "다른 전제 각도(codex) 표기"     '다른 전제 각도 — detect_codex 참이면'
-present "prereq: 추가 리뷰어 optional decl (body-unique)" 'Prerequisites (추가 리뷰어 optional dependencies)'
+echo "== AC10: 리뷰어 구성 표 + prerequisites (v10 — spec §2 · AC11) =="
+present "리뷰어 구성 헤딩"              '## 리뷰어 구성'
+present "보안 always-run 표기"           '| 보안 | `quality-gates:security-reviewer` | 항상.'
+present "다른 모델 계열(codex) 표기"     '| 다른 모델 계열 | codex 러너 | 항상 시도.'
+present "재비판 always-run 표기"         '| 재비판 | `quality-gates:code-recritic` | 항상(탐지 0건이어도) |'
+present "prereq: optional decl (body-unique)" 'Prerequisites (optional dependency)'
 present "prereq: pr-review-toolkit named (body-unique)" 'pr-review-toolkit`(code-reviewer'
-present "prereq: feature-dev named (body-unique)"       'feature-dev`(code-architect)'
+gone    "prereq: feature-dev 없음 (AC11 — code-architect 를 부르지 않는다)" 'feature-dev'
 
 echo "== C5 regression lock: codex-depth reconcile (availability-floor vs standard/deep-only) =="
 # §166 documents codex as a Tier B *availability-floor* (runs on ALL non-trivia
@@ -40,7 +41,7 @@ echo "== C5 regression lock: codex-depth reconcile (availability-floor vs standa
 # Teeth boundary (cf. AC11): the negatives pin the known old phrasings; a fresh
 # paraphrase that re-contradicts would slip the grep — the dynamic codex review
 # is the backstop for that residue.
-presentE "codex cost = availability-floor, all depths (body-unique)" 'every non-trivia pipeline dispatch when detected'
+presentE "codex cost = availability-floor, every iteration (body-unique)" 'every non-trivia pipeline iteration when detected'
 goneE    "old 'standard/deep-only' codex-cost claim 제거"            'on each .standard./.deep. (Review gate|pipeline) dispatch'
 goneE    "Deep 비용행 codex depth-귀속 제거"                          '(Tier C 전문가|추가 리뷰어) 다수 \+ codex'
 
