@@ -25,6 +25,7 @@ SWEEP="plugins/quality-gates/tests/test_agent_model_unpinned_sweep.sh"
 # 원소 수가 13→11 로 줄었을 뿐, 별도로 낮출 기대값은 없다.
 pairs=(
   "plugins/quality-gates/agents/security-reviewer.md|plugins/quality-gates/tests/test_security_reviewer_persona.sh"
+  "plugins/quality-gates/agents/code-recritic.md|plugins/quality-gates/tests/test_code_recritic_frontmatter.sh"
   "plugins/quality-gates/agents/artifact-critic.md|plugins/quality-gates/tests/test_artifact_critic_frontmatter.sh"
   "plugins/quality-gates/agents/artifact-adversarial.md|plugins/quality-gates/tests/test_artifact_adversarial_frontmatter.sh"
   "plugins/quality-gates/agents/test-scope-validator.md|plugins/quality-gates/tests/test_test_scope_validator_frontmatter.sh"
@@ -70,6 +71,19 @@ for p in "${pairs[@]}"; do
   for v in "model: inherit" "\"model\": inherit"; do
     inject "$agent" "$v"
     bash "$lock" >/dev/null && no "${lock##*/}: «${v}» 를 넣어도 GREEN" || ok "${lock##*/}: «${v}» → RED"
+    git checkout -q -- "$agent"
+  done
+done
+
+# (g) PINNED 의 opus 줄을 지우거나 바꾸면 스윕과 per-agent 락이 RED 다(재결정 R3)
+for p in "plugins/quality-gates/agents/security-reviewer.md|plugins/quality-gates/tests/test_security_reviewer_persona.sh" \
+         "plugins/quality-gates/agents/code-recritic.md|plugins/quality-gates/tests/test_code_recritic_frontmatter.sh"; do
+  agent="${p%%|*}"; lock="${p##*|}"
+  for to in "" "model: sonnet"; do
+    awk -v T="$to" '/^model: opus$/ && !d {d=1; if (T != "") print T; next} {print}' "$agent" > "$agent.tmp" && mv "$agent.tmp" "$agent"
+    touched+=("$agent")
+    bash "$SWEEP" >/dev/null && no "스윕: ${agent##*/} 의 opus 를 «${to:-삭제}» 해도 GREEN" || ok "스윕: ${agent##*/} opus → «${to:-삭제}» → RED"
+    bash "$lock" >/dev/null && no "${lock##*/}: opus 를 «${to:-삭제}» 해도 GREEN" || ok "${lock##*/}: opus → «${to:-삭제}» → RED"
     git checkout -q -- "$agent"
   done
 done

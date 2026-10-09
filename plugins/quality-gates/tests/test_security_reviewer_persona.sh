@@ -28,7 +28,9 @@ hunt_section() {
 assert_count_ge "grep -c '^name: security-reviewer$' '$PERSONA'" 1 "frontmatter name"
 assert_count_ge "grep -c '^cost_class: medium$' '$PERSONA'" 1 "frontmatter cost_class medium"
 MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
-assert_file_absent "$PERSONA" "$MODEL_KEY" "frontmatter 에 model 키 없음 (하니스가 티어를 정하지 않는다)"
+fm="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$PERSONA")"
+assert_eq "$(printf '%s\n' "$fm" | grep -cE "$MODEL_KEY")" "1" "AC10: frontmatter 의 model 키는 정확히 한 줄"
+assert_eq "$(printf '%s\n' "$fm" | grep -E "$MODEL_KEY")" "model: opus" "AC10: 그 줄은 model: opus (qg 소유 리뷰 agent 는 opus — 재결정 R3)"
 assert_count_ge "grep -c '^tools: Read, Grep, Glob$' '$PERSONA'" 1 "frontmatter tools: allowlist (fail-closed)"
 assert_file_absent "$PERSONA" '^allowedTools:' "죽은 allowedTools 없음"
 assert_file_absent "$PERSONA" '^disallowedTools:' "disallowedTools 없음 (allowlist 가 컨트롤)"
@@ -43,10 +45,20 @@ assert_file_absent "$PERSONA" '^tools:.*(WebSearch|WebFetch)' "웹 도구 없음
 # Canonical schema keys present in persona body
 assert_count_ge "grep -c 'agent: security-reviewer' '$PERSONA'" 1 "schema key agent: security-reviewer"
 assert_count_ge "grep -c '^[[:space:]]*severity:' '$PERSONA'" 1 "schema key severity:"
-assert_count_ge "grep -c '^[[:space:]]*confidence:' '$PERSONA'" 1 "schema key confidence:"
+assert_file_absent "$PERSONA" '^[[:space:]]*confidence:' "출력 스키마에 confidence 가 없다 (severity 는 기준 블록이 정한다)"
+assert_count_ge "grep -c '^## Severity' '$PERSONA'" 1 "Severity 절이 있다"
+assert_count_ge "grep -cE '^  - tag: (intent|criteria)$' '$PERSONA'" 2 "intent · criteria 입력 슬롯을 선언한다"
 assert_count_ge "grep -c '^[[:space:]]*file:' '$PERSONA'" 1 "schema key file:"
 assert_count_ge "grep -c '^[[:space:]]*line:' '$PERSONA'" 1 "schema key line:"
 assert_count_ge "grep -cE 'CRITICAL.*IMPORTANT.*SUGGESTION' '$PERSONA'" 1 "severity enum CRITICAL/IMPORTANT/SUGGESTION"
+
+# C-1 — 본문 구조. frontmatter 가 본문에 다시 박히거나 본문이 두 번 붙으면 아래 개수가 바뀐다 —
+# 위 락은 첫 frontmatter 와 `confidence:` 키만 봐서 그 손상에 GREEN 이다. 낡은 confidence 눈금
+# 절과 그 컷오프 문구는 `## Severity` 절로 대체됐다(spec §6 「cutoff < 7」 정리).
+assert_eq "$(grep -c '^## Output format$' "$PERSONA")" "1" "C-1: ## Output format 제목은 정확히 한 번"
+assert_eq "$(grep -c '^tools:' "$PERSONA")" "1" "C-1: tools: 줄은 파일 전체에서 정확히 한 번 (frontmatter 가 본문에 복제되지 않았다)"
+assert_file_absent "$PERSONA" '^## Confidence calibration' "C-1: 옛 Confidence calibration 절이 없다"
+assert_file_absent "$PERSONA" '[Cc]utoff' "C-1: confidence 컷오프 문구(cutoff < 7)가 없다"
 
 # Forced findings prohibition (Korean or English)
 assert_count_ge "grep -cE 'forced findings|Forced findings|빈 array|empty findings|empty list' '$PERSONA'" 1 "forced findings prohibition present"
