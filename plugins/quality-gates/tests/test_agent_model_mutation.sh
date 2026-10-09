@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# 변이 락 — 반전된 모델 락(스윕 1 + per-agent 14)이 실제로 문다.
+# 변이 락 — 모델 락(스윕 1 + 아래 pairs 의 per-agent 락)이 실제로 문다.
 #
-# 통과가 정답인 부재 단언은 모양만으로 이빨을 판별할 수 없다. 여기서 agent 파일에
-# model 키를 다섯 표기로 넣고 해당 락이 RED 가 되는지, 되돌리면 GREEN 인지 잰다.
-# 다섯 표기 (spec C2): (a) `model: inherit` (b) `model: opus` (c) `model:inherit`
-# (d) `"model": inherit` (e) `model : inherit`. (f) 스윕 하한은 glob 을 빈 dir 로 돌려 잰다.
+# 두 방향이 있다. 대부분의 agent 는 model 키 «부재»가 정답이고(통과가 정답인 부재 단언은
+# 모양만으로 이빨을 판별할 수 없다), qg 소유 리뷰 agent 둘(security-reviewer · code-recritic)은
+# 정확히 `model: opus` 한 줄이 정답이다(qg v10 재결정 R3).
+#   (1) 스윕: model 키를 다섯 표기로 PINNED 밖 agent 에 넣으면 RED — (a) `model: inherit`
+#       (b) `model: opus` (c) `model:inherit` (d) `"model": inherit` (e) `model : inherit`.
+#   (2) per-agent 락: (a)·(d) 를 넣으면 RED — 부재 agent 는 키가 생겨서, PINNED 는 키가 둘이 돼서.
+#   (g) PINNED 의 opus 줄을 지우거나 `model: sonnet` 으로 바꾸면 스윕과 per-agent 락이 RED.
+#   (f) 스윕 하한 — glob 을 빈 dir 로 돌리면 RED.
+# 각 per-agent 락은 변이 전 GREEN 이어야 한다(양성 대조) — 아니면 변이 RED 는 증거가 아니다.
 #
 # 실제 파일을 건드리므로 clean tree 를 요구하고 trap 으로 복원한다. 변이 중 실패해도
 # `git checkout -- <file>` 이 되돌린다 — 그래서 이 락은 «커밋된» 파일만 변이한다.
@@ -15,14 +20,9 @@ cd "$ROOT" || exit 1
 
 SWEEP="plugins/quality-gates/tests/test_agent_model_unpinned_sweep.sh"
 
-# agent → 그 agent 를 보는 per-agent 락 (spec §설계 2 표)
-# PR4a: adversarial.md 두 쌍(test_adversarial_persona.sh · test_adversarial_model_
-# consistency.sh) 삭제 — 대상 agent·두 락 파일이 이 커밋에서 함께 사라진다. 대체
-# agent doc-recritic 은 공유 정본의 byte-for-byte copy-of 사본이라(model 키 유무를
-# 포함해) 이 플러그인이 독자 model-consistency 락을 두지 않는다 —
-# `shared/tests/test_copy_of_contract.sh` 가 대신 잰다(사본이 원본과 한 바이트라도
-# 다르면 RED). 이 파일의 카운트는 하드코딩된 기대값이 없다(pairs[@] 순회) — 배열
-# 원소 수가 13→11 로 줄었을 뿐, 별도로 낮출 기대값은 없다.
+# agent → 그 agent 를 보는 per-agent 락. 카운트는 하드코딩된 기대값이 없다(pairs[@] 순회).
+# doc-recritic 사본은 공유 정본과의 copy-of 동일성(`shared/tests/test_copy_of_contract.sh`)이
+# 대신 잰다 — ② 가 그 사본을 지우면 그 줄도 사라진다.
 pairs=(
   "plugins/quality-gates/agents/security-reviewer.md|plugins/quality-gates/tests/test_security_reviewer_persona.sh"
   "plugins/quality-gates/agents/code-recritic.md|plugins/quality-gates/tests/test_code_recritic_frontmatter.sh"
