@@ -15,7 +15,7 @@ SUT="$ROOT/plugins/plugin-audit/scripts/run-own-tests.sh"
 TMP="$(mktemp -d -t pa-own-XXXXXX)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
-# qg-worktree.sh 를 스텁으로 대체한다 — 실제 샌드박스를 만들면 이 테스트가
+# audit-sandbox.sh 를 스텁으로 대체한다 — 실제 샌드박스를 만들면 이 테스트가
 # git 상태에 의존하고 느려진다. 스텁은 계약(3줄 stdout / mutation-guard)만 흉내낸다.
 mk_stub_qg() {
   cat > "$TMP/qg-stub.sh" <<STUB
@@ -65,7 +65,7 @@ PY
   esac
 }
 
-run_sut() { bash "$SUT" plugins/tgt testsid --qg-worktree "$TMP/qg-stub.sh" 2>/dev/null; }
+run_sut() { bash "$SUT" plugins/tgt testsid --sandbox-helper "$TMP/qg-stub.sh" 2>/dev/null; }
 
 mk_stub_qg
 

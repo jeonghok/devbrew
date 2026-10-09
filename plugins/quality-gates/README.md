@@ -16,7 +16,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
 - **P12 anti-corollary (former AP5, trivia ceremony) 회피** — `check-trivia.sh`가 단일 파일·≤3줄 whitespace/rename을 파이프라인 전체 skip. *현재 coverage는 whitespace + rename에 국한. P12 canonical 자격(typo/comment-only/formatting — 파일 수 무관)을 완전히 충족하기 위한 확장은 deferred 항목 — Tier 2 spec은 아카이브됨: `git show pre-slim-archive-2026-07-09:docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md`.*
 - **P22 anti-corollary (former AP9, over-dispatching / subagent spray) 회피** — 파이프라인은 fan-out consent 게이트를 fire하지 않고(documented-not-implemented였음), transparency 라인 + 선언된 max fan-out(Phase 1 병렬 ≤ 8, 총/iteration ≤ 10) + authoring-time hard-review로 subagent spray를 억제.
 - **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — 파이프라인 내부 fix-loop이 `max_review_iterations=5` + repeat-detection (no-progress check) + kill switch로 묶임.
-- **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (`*.local.md` gitignore 패턴으로 자동 제외; TTL sweep + SessionEnd hook으로 폴더 GC).
+- **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (`*.local.md` gitignore 패턴으로 자동 제외; `/qg` 시작마다 자기 폴더를 다시 만들고 TTL sweep 으로 폴더 GC).
 - **P8 determinism-economy (harness lightness — trust the model)** (v2.5.0) — 암묵 session scope로 파이프라인이 돌 때 그 사실을 사용자-가시 한 줄로 밝히는 **scope 투명성**. 버려진 결정론적 under-coverage 경고를 결정론 가드가 아니라 *모델 행동*으로 대체(git 비교·차단 없음). 자연어 scope 의도는 별도 parser 없이 모델이 branch scope로 해석 — `/qg branch`는 결정론적 escape hatch로 유지. devbrew P8 determinism-economy refinement("Zero hooks" 일반화) instantiation.
 - **P8 determinism-economy — self-honest verdict floor** (v2.6.0; routing 제거·단순화 v2.7.0) — 파이프라인이 *검토받았다고 믿는 scope*와 *resolve한 scope*가 발산할 때(빈 세션 → resolved scope 0 → "clean"의 false-clean)를 봉쇄. read-only `scripts/check-review-scope.sh`가 `changes_exist`를 결정론으로 emit하고, SKILL이 iter-1에서 1회 호출·캐시해 **정직-verdict floor**(load-bearing, kill 불가)가 `resolved scope 0 AND changes_exist == yes`이면 판정이 `not-certified (scope-empty)` 가 된다. **무엇을 리뷰할지(routing)는 모델이 소유** — v2.7.0에서 v2.6.0의 redirect 게이트·`$effective_diff_scope` 배선·redirect kill switch를 제거하고 `/qg branch` escape hatch + honesty norm 한 줄로 대체(dogfood 5버그가 전부 routing 재구성에서 나왔고 floor의 load-bearing 입력 `changes_exist`는 틀린 적 없음). 결정론은 무결성 floor 한 점에만; routing/자연어는 모델 신뢰. session 기본값·`/qg branch` 자체의 스코프 **선택**(routing)은 무변경이지만, 이 floor 가 보는 것과 **별개로** ② 차등 테스트가 상시 도는 v9.0.0 이후는 R1b 가 고르는 test unit 이 0개인 실행도 `expected-empty` → `not-certified (scope-empty)` 다(관측 없음은 음성 결과가 아니다 — §6.4.3 P23 재결정, 2026-09-26) — **진짜 무변경(genuine no-op)과 docs/config-only 변경을 포함한다.** regression: `tests/test_check_review_scope.sh`, `tests/test_qg_false_clean_floor.sh`.
 - **P21 (Secret이 prompt context에 들어가지 않음)** — 결정 도구는 결정과 포인터만 묻고 secret 값은 받지 않는다(SKILL Rules R4). regression test: `tests/test_no_secret_prompts.py`.
@@ -25,11 +25,10 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
 - **Law 2 strengthening — model-family separation.** Optional `codex-reviewer` agent (when Codex CLI is detected) runs review in a separate process with a different model family (OpenAI vs Anthropic) and an OS-level read-only sandbox, giving 3-layer reviewer-writer isolation: `disallowedTools` + narrow `Bash` allowlist + `codex -s read-only`.
 - **Law 2 (codex 격리, v1.11.0/v1.12.0 → v2.11.0 정정)** — codex 리뷰의 격리는 **`codex exec -s read-only` OS-level 샌드박스 + 별도 프로세스/모델 패밀리**가 전부다. v1.11.0~v2.10.x의 이 항목은 그 위에 *"frontmatter 키 whitelist"* layer를 얹었다고 기록했으나 **그 layer는 존재한 적이 없다**: (1) 당시 명명된 키는 공식 subagent 규격에 없는 필드라 런타임이 조용히 무시했고, (2) T3-3에서 `codex-reviewer`가 agent → 스크립트(`scripts/run_codex_reviewer.sh`)로 이관돼 frontmatter 자체가 사라졌다 (`tests/test_codex_reviewer_frontmatter.sh`가 agent 파일 **부재**를 assert). 지금 격리를 지탱하는 것은 OS 샌드박스다.
 - **Law 2 (Writer ≠ Reviewer, frontmatter scoping)** (v1.13.0) — `security-reviewer` agent가 `tools: Read, Grep, Glob` fail-closed allowlist 선언. 보안 각도 구성원이며, kill switch `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`로 사용자가 disable 가능 (Plugin Shape — 모든 reviewer는 opt-out 가능). 디스패치는 `quality-pipeline` SKILL의 보안 각도 지점에 있다.
-- **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `hooks/session-start-advisor.py` frontmatter scanner (AC14): SessionStart마다 모든 agent 파일의 frontmatter key를 kebab-case drift 검사. `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — CI에서 C1 종류 (kebab-case 잘못된 키) drift를 자동 차단. 이 두 mechanism이 함께 "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation.
-- **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / hook / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
-- **Law 1 (Clarity Before Code) — `/qg branch <name>` surface** (v1.15.0) — 7개 거절 시나리오(존재하지 않는 브랜치, path traversal, kill switch, idempotent reuse 등)가 `tests/test_branch_worktree.sh` AC1–AC11에 acceptance criteria로 명시. 실패 경로마다 명확한 진단 메시지를 stderr로 출력.
+- **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — C1 종류 (kebab-case 잘못된 키) frontmatter drift를 자동 차단. "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation. (SessionStart frontmatter scanner 훅은 v10.0.0 에서 지웠다 — drift 차단은 이 테스트가 진다.)
+- **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
 - **Law 3 (Compounding) — worktree path 컨벤션** (v1.15.0) — `.claude/<plugin>/worktrees/<name>-<sid-short>/` 경로 패턴을 플러그인 공통 컨벤션으로 확립해, 차후 다른 플러그인이 임시 worktree를 만들 때 같은 컨벤션을 재사용할 수 있게 함.
-- **Law 1 (Clarity Before Code) — single-turn dispatch contract** (v1.32.0) — pipeline progression이 `quality-pipeline` SKILL의 단일 assistant turn 내 serial dispatch로 일원화. cross-turn state machine (transition compute helpers, no-signal counter, 시간 기반 guard) 전부 삭제 — 진행 결정은 SKILL의 명시적 boundary + AskUserQuestion으로만 발생. State file은 GC mtime anchor + worktree tracking + 파이프라인 iter counter reporting만 보존.
+- **Law 1 (Clarity Before Code) — single-turn dispatch contract** (v1.32.0) — pipeline progression이 `quality-pipeline` SKILL의 단일 assistant turn 내 serial dispatch로 일원화. cross-turn state machine (transition compute helpers, no-signal counter, 시간 기반 guard) 전부 삭제 — 진행 결정은 SKILL의 명시적 boundary + AskUserQuestion으로만 발생. State file(`pipeline.md`)은 세션 폴더 마커 · GC mtime anchor 로서 session_id · started_at · History 만 담는다.
 - **P22 generalization (consent gate → progression gate):** AskUserQuestion
   is reused as a **progression primitive** at every fix-loop iteration
   boundary. It gates fix-loop consent (it does NOT gate subagent fan-out —
@@ -92,17 +91,11 @@ quality-gates/
 │   ├── artifact-adversarial.md  # `/qg critique` 게이트 — tier-unpinned 판정자; critic/codex 발견을 confirm/downgrade/reject 하고 놓친 것을 추가 (read-only)
 │   └── pr-understanding-builder.md  # publish 생성기 — model 키 없음(tier-unpinned), tools: Read 1개 (inert·미호출; fail-closed; 쓰기·실행·네트워크·위임 0; 유일 입력 = inlined blob)
 ├── commands/
-│   ├── qg.md               # /qg slash command (--reset, --paths, branch flag 포함)
-│   ├── qg-publish.md       # /qg-publish slash command ([--dry-run]; publish skill로 얇은 dispatch)
-│   └── cancel-qg.md        # /cancel-qg command
-├── hooks/
-│   ├── hooks.json                            # Hook 설정
-│   ├── session-start-advisor.py              # in-flight 파이프라인 read-only advisor
-│   └── session-end-cleanup.py                # 정상 종료 시 현재 세션 폴더 제거
+│   ├── qg.md               # /qg slash command (branch · --paths · critique 라우팅)
+│   └── qg-publish.md       # /qg-publish slash command ([--dry-run]; publish skill로 얇은 dispatch)
 ├── scripts/
 │   ├── setup-qg.sh                           # 파이프라인 초기화
 │   ├── check-trivia.sh                       # Trivia escape 감지기
-│   ├── filter-docs.sh                        # 코드 reviewer용 docs path 필터
 │   ├── discover-plan.sh                      # Plan 파일 우선순위 탐색 (차등 테스트 test-scope-validator)
 │   ├── discover-spec.sh                      # Spec 파일 우선순위 탐색 (test-scope-validator + codex; AC-섹션 적격성)
 │   ├── discover_common.sh                    # 위 두 탐색기가 source 하는 공통 조각 (get_mtime · pick_newest; 실행 지점 없음)
@@ -111,7 +104,7 @@ quality-gates/
 │   ├── scope_tuple.py                        # 스코프 튜플 파서 · status → 사유 · scope: 블록
 │   ├── topic-head.sh                         # ① 토픽 해소 — 선언 → 봉인 → 경계 · 끝점 → 합친 트리 튜플
 │   ├── seal-worktree.sh                      # `seal <session-id>` — HEAD 트리를 `.git` 안 임시 인덱스로 봉인, 봉인 커밋 SHA 출력
-│   ├── qg-worktree.sh                        # `create-baseline`/`create-head` — 기준선·봉인 HEAD 두 축의 워크트리 생성(`create-head`는 봉인을 다시 떠 대조). `create-sandbox`/`mutation-guard` 는 남아 있으나 qg 파이프라인은 더 호출하지 않는다 — 소비자는 `plugins/plugin-audit` 자체 테스트 격리
+│   ├── qg-worktree.sh                        # `create-baseline`/`create-head`/`remove` — 기준선·봉인 HEAD 두 축의 워크트리 생성(`create-head`는 봉인을 다시 떠 대조)
 │   ├── run-test-selection.sh                 # ② floor — 러너 어댑터 9종 detect/assign/probe/run (유일 소유자, 기준선·HEAD 양쪽 오케스트레이터가 직접 호출)
 │   ├── baseline-cache.sh                     # (merge_base, runner, unit) 내용주소 기준선 캐시 get/put
 │   ├── diff-test-results.py                  # 기준선×HEAD 귀속 8종 + 어댑터 간 --aggregate
@@ -146,13 +139,9 @@ quality-gates/
 
 ## 설치된 Hook
 
-| Hook | 이벤트 | 변경? | 왜 hook인가 (skill이 아닌)? |
-|---|---|---|---|
-| `session-start-advisor.py` | SessionStart | **아니오 — read-only advisor** | mutation 없이 in-flight 파이프라인 알림 (CLAUDE.md hook coexistence 룰). |
-| `session-end-cleanup.py` | SessionEnd | 예 (자기 세션 폴더 제거) | 정상 종료 시 per-session 정리; crash 시 TTL sweep으로 fallback. |
-
-모든 hook은 `DEVBREW_QUALITY_GATES_DISABLE=1` (전역) 와 hook 단위 override
-`DEVBREW_SKIP_HOOKS=quality-gates:<hook-name>`을 따릅니다.
+없음. v10.0.0 에서 두 훅(SessionStart advisor · SessionEnd cleanup)을 지웠다 — 파이프라인은 한 턴 안에서
+끝나고, 세션 폴더는 `/qg` 시작마다 `setup-qg.sh` 가 지우고 다시 만들며, 오래된 폴더는 같은 시점의 TTL GC 가
+회수한다.
 
 ## Cost Class
 
@@ -380,51 +369,26 @@ R1b, 매 iteration 디스패치) = 10; `synthesize_findings.py` 는 스크립트
 ```
 /qg                            # 파이프라인 실행; 세션 단위 diff(선언이 있으면 토픽)
 /qg branch                     # 파이프라인 실행; main 대비 풀 브랜치 diff
-/qg branch <name>              # 격리된 worktree 에서 <name> 브랜치 검사
 /qg --paths <glob>...          # 명시 path scope
-/qg --reset                    # 현재 세션 폴더 + legacy 파일 정리 후 종료
-/qg --gc                       # stale sibling 세션 (TTL) sweep 후 종료
 /qg both|review|runtime|--skip-runtime   # 제거됨 — 한 줄 공지 후 그대로 진행 (한 파이프라인이라 게이트 범위가 없다)
 /qg --plan <path>              # 특정 plan 파일 사용
-/qg --pr-url <url>             # PR URL 명시
 /qg critique <path>            # 비-코드 산출물 비평-수정 루프(별도 skill; 코드 아님)
-/cancel-qg                     # 현재 세션 활성 파이프라인 취소
-/cancel-qg --gc                # stale 세션 TTL sweep
-/cancel-qg --all               # 전 세션 wipe (확인 + 활성 sibling 리스트 먼저)
 ```
+
+`branch <name>` · `--reset` · `--gc` · `--pr-url` 와 `/cancel-qg` 는 v10.0.0 에서 없어졌다 — 앞의 넷은 안내 한 줄을
+내고 실행하지 않는다. 세션 폴더는 `/qg` 시작마다 지우고 다시 만들고, 오래된 폴더는 같은 시점의 TTL GC 가 회수한다.
 
 ## Recipes
 
-### 다른 브랜치를 격리된 worktree에서 검사
+### 다른 브랜치 검사
 
-다른 브랜치를 검사하면서 본인 작업트리는 무손상 유지:
-
-```bash
-git fetch origin pull/123/head:pr-123  # PR을 로컬 브랜치로 가져오기
-/qg branch pr-123                       # 임시 worktree에서 파이프라인 실행
-```
-
-내부 동작:
-
-1. `<repo>/.claude/quality-gates/worktrees/pr-123-<sid>/` 에 detached worktree 생성
-2. 그 안에서 파이프라인 실행, agent들이 worktree에서 diff를 읽음 (state는 main repo에 머묾, v1.14.0 worktree cwd contract 그대로 적용)
-3. 정상 종료 (complete / cancel) 시 자동 cleanup. 비정상 종료 시 보존 + stderr 안내 경로
-
-### 디버깅용 worktree 보존
+그 브랜치를 체크아웃하거나, 본인 작업트리를 그대로 두려면 git worktree 를 만들어 그 안에서 `/qg` 를 돌린다:
 
 ```bash
-DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1 /qg branch feat-x
-# 종료 후 .claude/quality-gates/worktrees/feat-x-<sid>/ 보존
-# 수동 정리: git worktree remove <path>
+git fetch origin pull/123/head:pr-123
+git worktree add ../pr-123 pr-123
+cd ../pr-123 && claude   # 그 세션에서 /qg
 ```
-
-### `/qg branch <name>` 자체를 비활성화
-
-```bash
-export DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1
-```
-
-`/qg branch` (인자 없음) 은 영향 없음.
 
 ## Plan Discovery Sources (차등 테스트의 test-scope-validator)
 
@@ -466,12 +430,8 @@ log를 출력하고 plan-기반 분류로 fallback합니다.
 
 ## 사전 요건
 
-- **Python 3.12+** — 이 플러그인의 훅이 요구하는 바닥입니다. 숫자는 도출된 값입니다 —
-  「2026-10 이후에도 패치를 받는 버전 중 최빈」, 다음 재검토는 3.12 EOL(2028-10).
-  바닥 미만이면 훅은 **막지 않고** 건너뜁니다. 그 사실을 알리는 세션 시작 안내는 이 플러그인의
-  `SessionStart` 훅 자리 하나에서만 나갑니다 — devbrew 전체에서 그 자리는 여기뿐이라,
-  이 플러그인 없이 다른 devbrew 플러그인만 설치하면 안내 없이 조용히 건너뜁니다.
-  `$DEVBREW_PYTHON`으로 인터프리터를 직접 지정할 수 있습니다.
+- **Python 3** — 스킬이 부르는 `scripts/*.py` 는 사용자의 `python3` 로 돈다. 이 플러그인에는 훅이 없어
+  devbrew 의 출하 Python 바닥(루트 README 「Python」)을 집행하는 해석기를 거치지 않는다.
 
 | 플러그인 | 필수 | 사용처 | 목적 |
 |---------|------|-------|------|
@@ -484,20 +444,20 @@ log를 출력하고 plan-기반 분류로 fallback합니다.
 ### Tuning knobs
 
 - `MAX_REVIEW_ITERATIONS`: 5 (파이프라인 fix-loop iteration 수)
-- `DEVBREW_QUALITY_GATES_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/qg` 또는 `/cancel-qg --gc`에서 GC)
+- `DEVBREW_QUALITY_GATES_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/qg` 시작마다 GC)
 - `DEVBREW_QUALITY_GATES_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
-- `DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1`: `/qg branch` worktree cleanup 비활성화 (디버깅용 보존)
 
 **`.claude/quality-gates/baseline-cache/`** (v3.0.0) — `(merge_base, runner, unit)` 내용주소
 기준선 테스트 결과 캐시. `qg-gc.py`의 TTL sweep 대상이 **아니다**(design §11 ⑩) — merge_base
-마다 파일이 하나씩 쌓이고 자동 정리 경로가 없다. 정리는 `/cancel-qg --all`에 위임한다.
+마다 파일이 하나씩 쌓이고 자동 정리 경로가 없다. 지우려면 `.claude/quality-gates/baseline-cache/` 를
+직접 지운다(이 캐시는 차등 테스트 재건 컷오버에서 사라진다).
 
 ### Kill switches (보안 컨트롤)
 
 CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component 비활성화 경로는 환경 변수 한 번으로 cover되어야 함. 아래는 source-of-truth 인벤토리.
 
 **보안 — 기본값이 대상 저장소의 코드를 호스트 권한으로 실행한다.** ② 차등 테스트가 매
-`/qg`(`/qg branch <name>` 로 남의 브랜치를 검사할 때 포함)마다 상시 도는 v9.0.0 이후,
+`/qg` 마다 상시 도는 v9.0.0 이후,
 기준선·HEAD 두 트리에서 어댑터의 `setup_cmd`(`npm ci` 등 install lifecycle 스크립트) ·
 테스트 스위트가 **기본으로, 별도 동의 질문 없이** 호스트 권한으로 돈다 — 이전에는 게이트
 범위 질문에서 "Run both gates" 를 골라야만 닿던 표면이다. 그 실행(setup · 러너 · 테스트)을
@@ -506,11 +466,11 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 밖(부채)** — 스위치도 훅 끄기도 qg 가 부르는 git 전체를 덮지 않는다: HEAD 축 · 기준선
 트리를 만드는 `git worktree add`(`qg-worktree.sh`)는 저장소의 `post-checkout` 훅을 돌릴 수 있다.
 
-**전역 (모든 hook + 모든 reviewer 비활성화):**
+**전역 (모든 reviewer + GC 비활성화):**
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_QUALITY_GATES_DISABLE=1` | 모든 quality-gates hook + `qg-gc.py` no-op. `/qg`는 invocable 하지만 SKILL Preflight P1 이 즉시 리턴한다 — `setup-qg.sh` 도 agent 도 부르지 않는다(판정 자체가 나지 않는다 — `not-certified` 도 아니다). |
+| `DEVBREW_QUALITY_GATES_DISABLE=1` | `qg-gc.py` no-op. `/qg` 커맨드의 setup 펜스는 그대로 `setup-qg.sh` 를 부르고, setup 이 거부 줄 하나를 내고 exit 1 로 끝나 `/qg` 가 거기서 멈춘다 — 세션 폴더도 쓰지 않고 파이프라인 skill 도 agent 도 부르지 않는다(판정 자체가 나지 않는다 — `not-certified` 도 아니다). skill 이 직접 불려도 SKILL Preflight P1 이 즉시 리턴한다. `/qg critique` 는 setup 이 건드리지 않고 `critiquing-artifacts` 의 E0 가 같은 스위치를 본다. |
 
 **각도 · 리뷰어 단위 disable:**
 
@@ -523,13 +483,11 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1` | `/qg branch <name>` auto-worktree 기능 disable (`/qg branch` no-arg는 영향 없음). |
 | `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` | spec 발견 시에도 no-spec 경로 강제 (codex `<spec_context>` 비움; validator는 plan-기반 분류). |
 | `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | ② 차등 테스트를 통째로 건너뛴다(리뷰 대상 저장소의 코드를 호스트 권한으로 돌리지 않는다). 판정은 `not-certified (kill-switch)` 다 — `clean` 도 실패도 아니다. `run-test-selection.sh` 도 집행한다(probe · run 이 저장소 코드를 돌리지 않는다). |
 
-**`DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX`** 는 qg 파이프라인에서 더 읽히지 않는다
-(샌드박스 executor 가 사라졌다). `scripts/qg-worktree.sh create-sandbox` 는 남아 있고 그 소비자는
-`plugins/plugin-audit` 의 자체 테스트 격리다 — 이 스위치는 그 소비자에게만 효력이 있다.
+자체 테스트 격리용 샌드박스(`create-sandbox` · `mutation-guard`)와 그 스위치는 v10.0.0 에서
+`plugins/plugin-audit` 로 옮겨 갔다(`DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX`).
 
 **Publish 단위 disable (`/qg-publish`, 게이트 아님):**
 
@@ -537,20 +495,14 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 |---|---|
 | `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` | **두 최내부 sink에서 결정론 강제**(skill 진입 자체는 막지 않음): `comment-upsert.py`(코멘트 POST/PATCH)와 `pr-create.sh`(`git push` + `gh pr create`). 로컬 artifact 생성 + `--dry-run` preview는 그대로 동작하되 GitHub에 대한 실제 네트워크 쓰기만 fail-closed로 차단된다. |
 
-**Hook 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:<key>,quality-gates:<key2>...`):
+**GC 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:qg-gc`):
 
-| Hook 키 | 위치 | 기능 |
+| 키 | 위치 | 기능 |
 |---|---|---|
-| `quality-gates:session-start-advisor` | `hooks/session-start-advisor.py` | SessionStart — stale state 안내 (read-only) |
-| `quality-gates:session-start-advisor:frontmatter-scan` | 위 hook의 sub-feature | Plugin 전체 agent frontmatter drift 스캔만 disable |
-| `quality-gates:session-end-cleanup` | `hooks/session-end-cleanup.py` | SessionEnd — 현재 세션 폴더 cleanup |
-| `quality-gates:qg-gc` | `scripts/qg-gc.py` | TTL-GC 스크립트. 훅이 아니지만 지목할 이름을 갖는다 — 그전에는 전역 스위치 하나뿐이라 "이 GC만 끈다"가 불가능했다. `.claude` 를 의도적으로 링크로 쓰면 GC 는 `/qg` 마다 거부 줄을 내고 돌지 않는다 — 이 키로 끈다 |
+| `quality-gates:qg-gc` | `scripts/qg-gc.py` | TTL-GC 스크립트. 훅이 아니지만 지목할 이름을 갖는다 — 전역 스위치 없이 "이 GC만 끈다"를 위한 자리다. `.claude` 나 state root 가 링크인 경우의 해법이 아니다 — 그때는 setup 이 `/qg` 를 거부하므로 실제 디렉토리로 바꾼다(「파이프라인 state」 절) |
 
-훅 키에 더해 **이벤트명 별칭**도 받는다 — `quality-gates:SessionStart` · `quality-gates:SessionEnd`. spec-distill 훅이 쓰던 형태를
-전 플러그인으로 통일한 것이다(한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것이
-결함이고, kill switch 는 보안 컨트롤이라 그 결함의 방향이 fail-open 이다). 대조는 **전체 토큰**이라
-`quality-gates:session-start-advisor:frontmatter-scan` 같은 더 긴 키가 `quality-gates:session-start-advisor`
-를 접두 오매칭으로 함께 끄지 않는다.
+대조는 **전체 토큰**이다(앞뒤 공백은 떼고, 쉼표로 여럿을 준다) — `quality-gates:qg` 같은 부분 일치나
+`quality-gates:qg-gc:x` 같은 더 긴 토큰은 끄지 않는다(`tests/test_entry_safety_e1_e6.sh` E5).
 
 (`MAX_TOTAL_ITERATIONS`와 cross-gate restart 루프는 v1.5.0에서 제거됨.)
 
@@ -558,15 +510,20 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 state는 Claude Code 세션마다 `.claude/quality-gates/<session-id>/`에 추적됩니다:
 
-- `pipeline.md` — 파이프라인 frontmatter (session_id · started_at · 선택적 worktree_path) + body (History).
+- `pipeline.md` — 파이프라인 frontmatter (session_id · started_at) + body (History).
 
 Review scope 자체는 세션 state 로 추적되지 않는다 — `/qg` 매 턴 git 에서 직접
 도출된다(branch diff against base, worktree 자체 변경분과 union).
 
 stale sibling 폴더(mtime이 `DEVBREW_QUALITY_GATES_TTL_HOURS`(기본 24h)보다 오래된)는
-`/qg` 또는 `/cancel-qg --gc` 실행 시 garbage-collect됩니다. `SessionStart` hook은
-strictly read-only (CLAUDE.md 룰); `SessionEnd` hook은 정상 종료 시 현재 세션
-폴더를 제거. crash는 TTL sweep으로 fallback.
+`/qg` 실행 시 garbage-collect됩니다. 자기 세션 폴더는 `/qg` 시작마다 `setup-qg.sh` 가 지우고
+다시 만든다(SID 패턴을 통과한 값으로만 지운다 — E1). 같은 세션에서 `/qg-publish` 가 그 폴더에 쓴
+파일(`pr-understanding.md` 등)도 함께 지워진다. `CLAUDE_CODE_SESSION_ID` 가 있으면 그와 다른
+`--session-id` 는 거부한다 — 다른 세션의 폴더를 지우지 않는다.
+
+**`.claude` 나 `.claude/quality-gates` 가 심볼릭 링크면 `/qg` 는 돌지 않는다** — 링크가 리포 안을
+가리켜도 setup 이 거부 줄 하나를 내고 exit 1 로 멈춘다(링크 너머를 지울 수 있어서다). 해법은 그 자리를
+실제 디렉토리로 바꾸는 것이다. 아래 GC 키(`quality-gates:qg-gc`)로 GC 를 꺼도 이 거부는 그대로다.
 
 모든 파일은 `*.local.md` gitignore 패턴에 매칭되며, 별도의 `.gitignore` 변경은
 필요 없습니다.

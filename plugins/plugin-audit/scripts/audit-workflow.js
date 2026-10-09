@@ -179,7 +179,7 @@ const CONTRACT = [
   '3. **범위(LD5)는 *갭*의 범위이지 *읽기*의 범위가 아니다.**',
   '   갭 대상: ' + gapScope + '.',
   '   **읽기는 무제한이며 검증에 필요한 것은 반드시 읽어라** — 형제 플러그인의 *구현*',
-  '   (`plugins/quality-gates/hooks/*.py`), 설치 레지스트리(`~/.claude/plugins/installed_plugins.json`),',
+  '   (`plugins/spec-distill/hooks/*.py`), 설치 레지스트리(`~/.claude/plugins/installed_plugins.json`),',
   '   레퍼런스 캐시(`~/.claude/plugins/cache/**`), 공식 문서(web).',
   '   **이 구분은 load-bearing이다**: 한 단서의 반증 증거가 리포 *밖*·LD5 *밖*에 있을 수 있다 — 그래서 읽기는 무제한이다.',
   '4. **입증책임 (LD6).** "형제 플러그인과 다르다"는 논거는 **무효**. 구조 변경 권고는 (a) 재현 가능한',

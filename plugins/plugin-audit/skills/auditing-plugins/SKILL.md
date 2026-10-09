@@ -100,8 +100,8 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
    - `plugin_version`/`file_count`/`total_lines`는 LD5 코퍼스 스캔(BEFORE 스냅샷과 같은 스코프)에서
      채운다.
    - `staleness_facts`는 `check-staleness.py plugins/<target>`, `own_tests`는
-     `run-own-tests.sh plugins/<target> <sandbox id>` (quality-gates 미설치 시 skip 사실만) — `<sandbox id>` 는
-     phase 0 step 4 의 둘째 줄이다. `qg-worktree.sh create-sandbox` 는 id 의 앞 8글자만 sandbox 이름에 쓰고
+     `run-own-tests.sh plugins/<target> <sandbox id>` — `<sandbox id>` 는
+     phase 0 step 4 의 둘째 줄이다. `audit-sandbox.sh create-sandbox` 는 id 의 앞 8글자만 sandbox 이름에 쓰고
      같은 이름의 sandbox 를 지우고 다시 만들므로 실행 키를 그대로 넘기지 않는다. `structure_facts`/
      `shape_gaps`는 pre-0의 E/F 출력을 그대로 이관한다.
 
@@ -234,6 +234,6 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
 이 절은 kill switch와 degrade 경로를 함께 다룬다.
 
 - `DEVBREW_PLUGIN_AUDIT_DISABLE=1` → 즉시 종료.
-- plugin-dev 부재(E) → loud degrade(core는 F가 커버). quality-gates 부재(run-own-tests) → 자체 테스트
-  skip 배너.
+- plugin-dev 부재(E) → loud degrade(core는 F가 커버). `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1`
+  (run-own-tests) → 자체 테스트 skip 배너.
 - codex 미설치 → Claude-only degrade 배너(model diversity 없음).

@@ -56,15 +56,14 @@ case_create_baseline() {
   cd / && rm -rf "$REPO"
 }
 
-# 최종 whole-branch 리뷰 (Task 9 이월분 승격) — create-baseline 의 idempotent 정리가
-# **사용자 워크트리를 파괴**할 수 있다. `create` 는 `${sanitized}-${sid_short}`,
-# create-baseline 은 `base-${sid_short}` 를 쓰므로 같은 세션의 `/qg branch base` 가
-# **정확히 같은 경로**를 만들고, 무조건 `--force` 면 미커밋 작업이 되돌릴 수 없이 사라진다.
+# create-baseline 의 idempotent 정리가 **다른 워크트리를 파괴**할 수 있다. 기준선 트리는
+# `base-${sid_short}` 에 서는데, 같은 경로에 이미 다른 워크트리(옛 qg 의 브랜치 워크트리 모드가
+# 같은 이름 규칙을 썼다 · 사용자가 직접 만든 것)가 있으면 무조건 `--force` 는 그 안의 미커밋
+# 작업을 되돌릴 수 없이 지운다.
 #
-# 판별자로 "HEAD 가 심볼릭 ref 인가"는 쓸 수 없다 — `create` 도 `--detach` 라 둘 다
-# detached 다 (위 case_create_baseline 이 기준선 트리의 detached 를 확인하는 것과 같은
-# 성질이며, 실측으로 확인했다). 그래서 이 케이스는 **미커밋 파일이 살아남는가**를 직접
-# 잰다. 파일 존재는 어떤 판별자 구현에도 의존하지 않는 관측이다.
+# 판별자로 "HEAD 가 심볼릭 ref 인가"는 쓸 수 없다 — detached 워크트리도 흔하다. 그래서 이
+# 케이스는 **미커밋 파일이 살아남는가**를 직접 잰다. 파일 존재는 어떤 판별자 구현에도 의존하지
+# 않는 관측이다.
 case_create_baseline_refuses_colliding_user_worktree() {
   REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
   git init -q; git config user.email t@t.test; git config user.name tester
@@ -74,14 +73,15 @@ case_create_baseline_refuses_colliding_user_worktree() {
   git branch base
   git checkout -q -b feature; echo v2 > a.txt; git commit -qam v2
 
-  # 사용자가 같은 세션에서 `/qg branch base` 를 돌린 상태를 만든다
-  local user_wt; user_wt=$(bash "$WT" create base "sess1234" 2>/dev/null)
-  if [[ -z "$user_wt" || ! -d "$user_wt" ]]; then
-    no "픽스처 무효: /qg branch base 워크트리 생성 실패"; cd / && rm -rf "$REPO"; return
+  # 기준선 트리가 설 바로 그 경로에 다른 워크트리를 먼저 세운다
+  local user_wt="$REPO/.claude/quality-gates/worktrees/base-sess1234"
+  mkdir -p "$REPO/.claude/quality-gates/worktrees"
+  if ! git worktree add -q --detach "$user_wt" base 2>/dev/null || [[ ! -d "$user_wt" ]]; then
+    no "픽스처 무효: 충돌 경로에 워크트리를 세우지 못했다"; cd / && rm -rf "$REPO"; return
   fi
   # 픽스처가 실제로 충돌하는지 먼저 증명한다 (경로가 안 겹치면 이 락은 무의미하다)
   [[ "$(basename "$user_wt")" == "base-sess1234" ]] \
-    && ok "픽스처: /qg branch base 와 create-baseline 이 같은 경로를 노린다" \
+    && ok "픽스처: 먼저 선 워크트리와 create-baseline 이 같은 경로를 노린다" \
     || no "픽스처 무효: 경로 불일치 ($user_wt)"
   echo "uncommitted work" > "$user_wt/WIP.txt"
 
@@ -138,44 +138,23 @@ case_remove_namespace_guard() {
 # "무단 변경 없음" 은 대상이 사라지며 함께 소멸한다 — case_detect_runtime_frozen 은
 # 지운다(케이스 목록에서도 제거).
 
-# T17 + AC22: create-sandbox / mutation-guard case 본문 바이트 무변경
-# case 절 본문만 잘라 해시한다 — 파일 전체를 핀하면 create-baseline 추가로 깨진다.
-extract_case() {   # extract_case <case-label> → 그 case 절 본문
-  awk -v label="  $1)" '
-    $0 == label { inblock = 1; next }
-    inblock && /^  [a-z][a-z-]*\)$/ { exit }
-    inblock { print }
-  ' "$WT"
-}
-CREATE_SANDBOX_SHA256="7585a46b39036685d47fbd08c3f748c915c30b326a65471fb97d1e422406e49e"
-MUTATION_GUARD_SHA256="000c3a26953269b237c4e272bbddfad8ea4a33b2d3f6f5787e80fecbdd1ed830"
-case_sandbox_guard_frozen() {
-  local a b
-  a=$(extract_case create-sandbox | shasum -a 256 | awk '{print $1}')
-  b=$(extract_case mutation-guard | shasum -a 256 | awk '{print $1}')
-  [[ "$a" == "$CREATE_SANDBOX_SHA256" ]] && ok "create-sandbox 본문 무변경" \
-    || no "create-sandbox 변경 (got $a)"
-  [[ "$b" == "$MUTATION_GUARD_SHA256" ]] && ok "mutation-guard 본문 무변경" \
-    || no "mutation-guard 변경 (got $b)"
-}
+# T17 (대상 이전 — qg v10 ①): create-sandbox / mutation-guard 는 plugin-audit 의
+# scripts/audit-sandbox.sh 로 옮겨 갔다. 그 동작은 plugins/plugin-audit/tests/
+# test_audit_sandbox_create.sh · test_audit_sandbox_mutation_guard.sh 가 잰다.
 
 # T18 + AC24/AC25/AC26: 훅 항목 수 · 에이전트 파일 수 · verdict 토큰 집합 불변
 #
 # 이 락은 몰래 늘거나 주는 쪽 둘 다 잡는 알람이지, "늘기만 막는" 래칫이 아니다 —
 # 의도적 변경이면 이 숫자를 같은 커밋에서 의식적으로 고치는 게 정확히 이 락이
 # 원하는 동작이다(test_codex_backward_compat.sh 헤더의 "의식적 갱신 강제"와
-# 같은 패턴). 현재 값(hooks 2 · agents 6)의 근거는 CHANGELOG 참고.
+# 같은 패턴). 현재 값(hooks 0 · agents 6)의 근거는 CHANGELOG 참고.
 case_no_new_surfaces() {
-  local hooks agents
-  hooks=$(python3 -c "
-import json
-with open('$PLUGIN_ROOT/hooks/hooks.json', encoding='utf-8') as f:
-    d = json.load(f)
-print(sum(len(v) for v in d.get('hooks', {}).values()))
-")
+  local agents
   agents=$(ls "$PLUGIN_ROOT/agents" | wc -l | tr -d ' ')
-  # v7.0.0: PostToolUse(pr-create 자동 트리거) 제거로 3 → 2. 늘어난 방향만이 새 표면이다.
-  [[ "$hooks" == "2" ]]  && ok "hooks.json 항목 2개 불변" || no "hooks 항목 수 $hooks (기대 2)"
+  # v10.0.0: 훅 둘(SessionStart · SessionEnd)을 지워 hooks/ 자체가 없다. 생기면 새 표면이다.
+  [[ ! -e "$PLUGIN_ROOT/hooks" ]] && ok "hooks/ 없음 (v10 — 훅 0개)" || no "hooks/ 가 다시 생겼다"
+  [[ -d "$PLUGIN_ROOT/agents" ]] && ok "agents/ 는 있다 (위 부재가 경로 오타로 공허하지 않다)" \
+    || no "agents/ 도 없다 — PLUGIN_ROOT 가 틀렸다"
   [[ "$agents" == "6" ]] && ok "agents/ 파일 6개 불변"    || no "agents 파일 수 $agents (기대 6)"
   # verdict 토큰은 이제 SKILL.md 에 0종이 기대값이다 (Task 7 — invert). 판정 어휘는
   # `scripts/verdict.py` 밖에 두지 않는다(global constraints) — PASS/FAIL/
@@ -223,13 +202,11 @@ case_head_and_baseline_coexist() {
   echo v2 > a.txt; git commit -qam v2
   local head_sha; head_sha=$(git rev-parse HEAD)
 
-  # HEAD 축은 create-sandbox 가 봉인한 커밋 B 에만 붙는다 — 샌드박스를 먼저 만들고
-  # 그 출력 2행(= B)을 쓴다. 픽스처가 이 순서를 지켜야 하는 것 자체가 계약이다.
-  local sb b h
-  if ! sb=$(bash "$WT" create-sandbox "sess1234"); then
-    no "create-sandbox 실패"; cd / && rm -rf "$REPO"; return
+  # HEAD 축은 지금 봉인한 커밋에만 붙는다(create-head 가 봉인을 다시 떠 대조한다).
+  local b h
+  if ! head_sha=$(bash "$PLUGIN_ROOT/scripts/seal-worktree.sh" seal "sess1234"); then
+    no "봉인 실패"; cd / && rm -rf "$REPO"; return
   fi
-  head_sha=$(printf '%s\n' "$sb" | sed -n 2p)
   if ! b=$(bash "$WT" create-baseline "$base_sha" "sess1234"); then
     no "create-baseline 실패"; cd / && rm -rf "$REPO"; return
   fi
@@ -317,7 +294,7 @@ for c in case_create_baseline case_create_baseline_refuses_colliding_user_worktr
          case_create_baseline_is_still_idempotent \
          case_head_and_baseline_coexist case_create_head_asserts_sealed_commit \
          case_remove_namespace_guard \
-         case_sandbox_guard_frozen case_no_new_surfaces; do
+         case_no_new_surfaces; do
   echo "== $c"; $c
 done
 finish

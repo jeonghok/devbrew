@@ -563,7 +563,7 @@ adapter_usable() {
   if [[ "$scmd" != "-" ]]; then
     env_dir=$(setup_env_dir_of "$w" "$runner")
     if [[ -n "$env_dir" ]] && ! dir_is_ignored "$w" "$env_dir"; then
-      echo "run-test-selection: 어댑터 사용 불가: $runner — setup 이 만드는 '$env_dir/' 를 이 레포가 gitignore 하지 않습니다 (in $w). 설치하면 mutation-guard 가 terminal FAIL 을 내고, 설치를 건너뛰면 준비 안 된 실행이 PRE_EXISTING 으로 접혀 조용히 PASS 가 됩니다 — 미실행으로 degrade 합니다." >&2
+      echo "run-test-selection: 어댑터 사용 불가: $runner — setup 이 만드는 '$env_dir/' 를 이 레포가 gitignore 하지 않습니다 (in $w). 설치를 건너뛰면 준비 안 된 실행이 PRE_EXISTING 으로 접혀 조용히 PASS 가 됩니다 — 미실행으로 degrade 합니다." >&2
       USABLE_REASON=env_dir_not_ignored; return 1
     fi
   fi

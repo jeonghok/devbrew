@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.11.0] — 2026-10-09
+
+minor 인 이유 — `scripts/run-own-tests.sh` 의 옵션 이름과 kill switch 이름이 바뀌었다.
+
+### Added
+
+- `scripts/audit-sandbox.sh` — 자체 테스트 격리용 일회용 샌드박스(`create-sandbox` · `mutation-guard` · `remove`). quality-gates 10.0.0 이 `qg-worktree.sh` 에서 지운 `create-sandbox` · `mutation-guard` 를 옮겨 왔고, `remove` 는 plugin-audit 의 경로 · 이름에 맞춰 다시 썼다(qg 의 `remove` 는 차등 테스트용으로 남는다 — 두 사본 머리에 서로를 가리키는 줄이 있다). 상태는 `.claude/plugin-audit/worktrees/` 에 산다. 테스트 둘(`tests/test_audit_sandbox_create.sh` · `tests/test_audit_sandbox_mutation_guard.sh`)도 quality-gates 에서 옮겼다.
+
+### Changed
+
+- `scripts/run-own-tests.sh` — 샌드박스 도우미를 스크립트 옆에서 찾는다(cwd 기준 `plugins/quality-gates/...` 경로를 버렸다). 스텁 옵션 `--qg-worktree` → `--sandbox-helper`. 도우미가 없을 때의 skip 사유가 「quality-gates 미설치」에서 「audit-sandbox.sh 부재」로 바뀌었다.
+- kill switch `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` → `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX`. 옛 이름은 더 읽지 않는다(fallback 없음) — README 「환경변수 어순 rename」 표에 적었다.
+- `scripts/audit-workflow.js` 계약 문구의 형제 구현 예시를 지워진 qg 훅에서 `plugins/spec-distill/hooks/*.py` 로.
+- `scripts/prepare-run-dir.py` docstring · SKILL 이 `qg-worktree.sh` 대신 `audit-sandbox.sh` 를 가리킨다.
+
+### Removed
+
+- quality-gates 선택 의존(≥ 2.12.0) — 더는 필요 없다. README Prerequisites 에서 그 항목을 지웠다.
+
+### Security
+
+- **cwd 상대 실행 구멍을 닫았다.** `[0.9.3]` 이 「범위 밖으로 남긴 것」으로 미룬 항목 — `scripts/run-own-tests.sh` 가 `--qg-worktree` 없이 cwd 상대 `plugins/quality-gates/scripts/qg-worktree.sh` 를 **실행**해, 감사하는 저장소의 그 경로에 있는 파일이 돌던 것 — 이 이제 없다. 샌드박스 도우미는 스크립트 옆의 `audit-sandbox.sh` 다.
+- **노출이 넓어졌다 — 감사 대상의 자체 테스트가 이제 모든 저장소에서 돈다.** 전에는 devbrew 루트 밖에서 cwd 상대 도우미가 없어 자체 테스트를 건너뛰었다. 이제 도우미를 언제나 찾으므로 감사 대상의 테스트 코드를 언제나 실행한다. 그 격리는 그대로다 — `run-own-tests.sh` 머리의 연기된 CRITICAL: 「"샌드박스"는 audit-sandbox.sh의 `git worktree add --detach HEAD` 일 뿐 프로세스/네트워크/uid 격리가 없다」 · 「그 전까지 미신뢰 대상 감사 금지.」 **신뢰하지 않는 플러그인은 감사하지 않는다** — 자체 테스트 실행을 끄려면 `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1`(위 Changed).
+
 ## [0.10.0] — 2026-09-28
 
 minor 인 이유 — 산출 경로와 `render-audit-report.py` 의 CLI 가 바뀌었다.

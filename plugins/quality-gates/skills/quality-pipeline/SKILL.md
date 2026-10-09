@@ -60,9 +60,9 @@ needed.
 
 **Law 2 (Writer ≠ Reviewer):** you are the orchestrator (writer). `security-reviewer`, 재비판(`doc-recritic`), and `test-scope-validator` are read-only reviewers (`tools: Read, Grep, Glob` — fail-closed allowlist) — no qg-own agent has write access. External extra reviewers (e.g. `pr-review-toolkit`, chosen per [Angles and reviewers](#angles-and-reviewers-scope-driven)) may be write-capable upstream, but they are advisory — you own fixes; their output is findings YAML, never a commit. You run the tests yourself — both axes of the differential test, on trees you create — and you may apply user-approved fixes ("Retry" path) via Edit/Write; those are user-consented.
 
-**State file:** read `worktree_path` from `.claude/quality-gates/<sid>/pipeline.md`
-only during preflight; never write. Setup script handles creation, /cancel-qg
-handles deletion.
+**State file:** `.claude/quality-gates/<sid>/pipeline.md` belongs to `setup-qg.sh`,
+which recreates the session folder at every `/qg` start; the TTL GC removes stale
+folders. Never write its frontmatter (Rule R2).
 
 ## Contents
 
@@ -124,8 +124,9 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 ```
 
 `setup-qg.sh --ensure` creates the per-session state file
-(`.claude/quality-gates/<sid>/pipeline.md`) with minimal v1.32.0 schema.
-Exit non-zero → surface stderr verbatim and abort.
+(`.claude/quality-gates/<sid>/pipeline.md`) when it is missing.
+Exit non-zero → surface its output verbatim and stop. Exit 2 is the removed-argument
+notice (`인자는 없어졌다 — … 실행하지 않는다.`) — the run does not start.
 
 **Preflight 는 P2 에서 끝난다.** SID 존재·패턴 검증은 `setup-qg.sh` 가 P2 에서
 정규식으로 수행하고 exit 1 한다 — Preflight 자신은 별도 SID 검증 스텝을 갖지
@@ -145,10 +146,12 @@ Parse from `/qg` invocation:
   `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1`, pass `spec_path: none` to
   the `test-scope-validator` dispatch. All spec behavior is advisory; it never
   blocks the pipeline.
-- `pr_url` (optional).
-- `branch [<name>]` (optional): scope override — the full branch diff (with
-  `<name>`, in an isolated worktree created by `setup-qg.sh`).
+- `branch` (optional): scope override — the full branch diff against base.
 - `paths` (optional, repeatable): scope override — `--paths <glob>...`.
+
+**없어진 인자 (v10)** — `branch <name>` · `--reset` · `--gc` · `--pr-url`. `setup-qg.sh` 가
+인자마다 안내 한 줄(``> [quality-gates] `<인자>` 인자는 없어졌다 — … 실행하지 않는다.``)을 내고
+exit 2 로 끝난다 — 파이프라인을 시작하지 않는다.
 
 **제거된 인자** — `both` · `review` · `runtime` · `--skip-runtime`. 한 파이프라인이라
 고를 게이트 범위가 없다. `setup-qg.sh` 가 인자마다 한 줄
@@ -912,7 +915,7 @@ trivia escape has none — it calls `verdict.py` directly, never the synthesizer
 and the appended `## History` lines from the state file as an indented tree
 beneath.
 
-State file cleanup is deferred to /cancel-qg or SessionEnd cleanup hook.
+The session folder stays until the next `/qg` in this session recreates it or the TTL GC removes it.
 
 ## kill switch
 

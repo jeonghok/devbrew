@@ -181,28 +181,6 @@ for name in test-scope-validator security-reviewer; do
 done
 [[ "$T5_FAIL" -eq 0 ]] && ok "T5: SKILL.md propagates project_dir to all 4 dispatch points"
 
-# --- Test 6: hooks read payload cwd (AST-based, not grep) ---
-T6_FAIL=0
-for hook in session-start-advisor.py; do
-  if ! python3 -c "
-import ast, sys
-tree = ast.parse(open('$PLUGIN_DIR/hooks/$hook').read())
-found = False
-for node in ast.walk(tree):
-    if isinstance(node, ast.Call):
-        # Look for *.get('cwd') or *.get('cwd', ...)
-        if isinstance(node.func, ast.Attribute) and node.func.attr == 'get':
-            args = node.args
-            if args and isinstance(args[0], ast.Constant) and args[0].value == 'cwd':
-                found = True
-                break
-sys.exit(0 if found else 1)
-"; then
-    T6_FAIL=1
-    no "T6: hooks/$hook does not call .get('cwd') anywhere"
-  fi
-done
-[[ "$T6_FAIL" -eq 0 ]] && ok "T6: session-start-advisor.py reads payload cwd (AST verified)"
 
 # --- Test 9: REMOVED — v1.32.0 schema intentionally has no project_dir field ---
 # project_dir is now a per-dispatch runtime parameter threaded by the SKILL

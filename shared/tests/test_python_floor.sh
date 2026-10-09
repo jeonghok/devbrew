@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json plugins/**/*.py plugins/quality-gates/hooks/session-start-advisor.py pyproject.toml .python-version uv.lock README.md plugins/*/README.md
+# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json plugins/**/*.py pyproject.toml .python-version uv.lock README.md plugins/*/README.md
 #
 # 출하 Python 바닥의 «집행» 이 살아 있는가. 선언은 여기서 재지 않는다 — 선언만 한 바닥은
 # 훅이 읽지 않는다는 것이 이 설계의 출발점이다(설계 Context/Why 3).
@@ -27,14 +27,10 @@ RESOLVER="shared/python/devbrew-python.sh"
 # 축을 더하는 Task 가 자기 줄을 **그때** 더한다(위 `# guards:` 글롭도 함께).
 SCANNED="shared/python/devbrew-python.sh
 plugins/project-init/scripts/devbrew-python.sh
-plugins/quality-gates/scripts/devbrew-python.sh
 plugins/spec-distill/scripts/devbrew-python.sh
 plugins/project-init/hooks/hooks.json
-plugins/quality-gates/hooks/hooks.json
 plugins/spec-distill/hooks/hooks.json
 plugins/spec-distill/scripts/hook_common.py
-plugins/quality-gates/hooks/session-start-advisor.py
-plugins/quality-gates/hooks/session-end-cleanup.py
 plugins/spec-distill/hooks/session-end-cleanup.py
 plugins/project-init/hooks/post-tool-use.py
 pyproject.toml
@@ -175,40 +171,40 @@ R="$ROOT/$RESOLVER"
 
 note "── 축 A: 해석기 행동 ───────────────────────────────────────────────"
 
-# A1 (AC5a) 전역 스위치가 해석보다 먼저다 — 바닥 만족 인터프리터가 있어도 아무것도 안 한다
-out="$(run_resolver "$PATH_FLOOR" DEVBREW_QUALITY_GATES_DISABLE=1 /bin/sh "$R" \
-        --event SessionStart --plugin quality-gates --hook session-start-advisor "$TARGET")"
-assert_eq "$out" "" "A1/AC5a: DEVBREW_QUALITY_GATES_DISABLE=1 이면 stdout 이 비고 훅이 안 돈다"
+# A1 (AC5a) [플러그인 이름의 하이픈 → 밑줄 매핑(fix-ture → FIX_TURE)도 여기서 잰다] 전역 스위치가 해석보다 먼저다 — 바닥 만족 인터프리터가 있어도 아무것도 안 한다
+out="$(run_resolver "$PATH_FLOOR" DEVBREW_FIX_TURE_DISABLE=1 /bin/sh "$R" \
+        --event SessionStart --plugin fix-ture --hook hook-name "$TARGET")"
+assert_eq "$out" "" "A1/AC5a: DEVBREW_FIX_TURE_DISABLE=1 이면 stdout 이 비고 훅이 안 돈다"
 
 # A1b (AC5a 의 exec 갈래별 짝) A1 의 PATH_FLOOR 는 3단계(글롭)에서야 만족 후보를 만난다. 그래서
 #     kill switch 판정을 1·2단계 «아래» 로 옮겨도 A1 은 GREEN 인데 끈 훅이 그 두 갈래로 돈다
 #     〔#162 회고 리뷰 실측: 131/131〕. exec 갈래마다 만족 후보를 하나씩 두고 스위치를 켠다.
 #     양의 짝(스위치 없이 같은 갈래로 exec 한다)은 A9 · A17 · A5 다.
-out="$(run_resolver "$PATH_SUB" DEVBREW_QUALITY_GATES_DISABLE=1 "DEVBREW_PYTHON=$TMP/floor/python3.99" \
-        /bin/sh "$R" --event SessionEnd --plugin quality-gates --hook session-end-cleanup "$TARGET")"
+out="$(run_resolver "$PATH_SUB" DEVBREW_FIX_TURE_DISABLE=1 "DEVBREW_PYTHON=$TMP/floor/python3.99" \
+        /bin/sh "$R" --event SessionEnd --plugin fix-ture --hook hook-name "$TARGET")"
 assert_not_contains "$out" "TARGET-RAN" "A1b: 스위치가 켜지면 1단계(\$DEVBREW_PYTHON)로도 exec 하지 않는다"
-out="$(run_resolver "$PATH_PLAINFLOOR" DEVBREW_QUALITY_GATES_DISABLE=1 \
-        /bin/sh "$R" --event SessionEnd --plugin quality-gates --hook session-end-cleanup "$TARGET")"
+out="$(run_resolver "$PATH_PLAINFLOOR" DEVBREW_FIX_TURE_DISABLE=1 \
+        /bin/sh "$R" --event SessionEnd --plugin fix-ture --hook hook-name "$TARGET")"
 assert_not_contains "$out" "TARGET-RAN" "A1b: 스위치가 켜지면 2단계(bare python3)로도 exec 하지 않는다"
-out="$(run_resolver "$PATH_FLOOR" DEVBREW_QUALITY_GATES_DISABLE=1 \
-        /bin/sh "$R" --event SessionEnd --plugin quality-gates --hook session-end-cleanup "$TARGET")"
+out="$(run_resolver "$PATH_FLOOR" DEVBREW_FIX_TURE_DISABLE=1 \
+        /bin/sh "$R" --event SessionEnd --plugin fix-ture --hook hook-name "$TARGET")"
 assert_not_contains "$out" "TARGET-RAN" "A1b: 스위치가 켜지면 3단계(python3.* 글롭)로도 exec 하지 않는다"
 
 # A2 (AC5b) 전체 토큰 — 부분 일치는 끄지 않는다
-out="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS=quality-gates:session-start /bin/sh "$R" \
-        --event SessionStart --plugin quality-gates --hook session-start-advisor "$TARGET")"
-assert_contains "$out" "TARGET-RAN" "A2/AC5b: 부분 일치 'quality-gates:session-start' 는 끄지 않는다"
-out="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor /bin/sh "$R" \
-        --event SessionStart --plugin quality-gates --hook session-start-advisor "$TARGET")"
+out="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS=qg:hook /bin/sh "$R" \
+        --event SessionStart --plugin qg --hook hook-name "$TARGET")"
+assert_contains "$out" "TARGET-RAN" "A2/AC5b: 부분 일치 'qg:hook' 는 끄지 않는다"
+out="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS=qg:hook-name /bin/sh "$R" \
+        --event SessionStart --plugin qg --hook hook-name "$TARGET")"
 assert_eq "$out" "" "A2/AC5b: 전체 토큰 훅명은 끈다"
 
 # A3 (AC5c) 이벤트 별칭 + 공백 제거 + 쉼표 목록
-out="$(run_resolver "$PATH_FLOOR" "DEVBREW_SKIP_HOOKS= quality-gates:SessionStart ,other:x" /bin/sh "$R" \
-        --event SessionStart --plugin quality-gates --hook session-start-advisor "$TARGET")"
+out="$(run_resolver "$PATH_FLOOR" "DEVBREW_SKIP_HOOKS= qg:SessionStart ,other:x" /bin/sh "$R" \
+        --event SessionStart --plugin qg --hook hook-name "$TARGET")"
 assert_eq "$out" "" "A3/AC5c: 이벤트 별칭 + 앞뒤 공백 + 쉼표 목록이 정본과 같게 판정된다"
 # 하위 기능 토큰은 훅 전체를 끄지 않는다 — 정본의 의미를 «넓히지도» 않는다
-out="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor:frontmatter-scan /bin/sh "$R" \
-        --event SessionStart --plugin quality-gates --hook session-start-advisor "$TARGET")"
+out="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS=qg:hook-name:sub /bin/sh "$R" \
+        --event SessionStart --plugin qg --hook hook-name "$TARGET")"
 assert_contains "$out" "TARGET-RAN" "A3/AC5c: 하위 기능 토큰은 훅 전체를 끄지 않는다(정본과 동치)"
 
 # A4 (AC5 순서 + PATH 불신) — 해석기가 외부 명령에 기대지 않는다는 것을 **행동으로** 잰다.
@@ -216,9 +212,9 @@ assert_contains "$out" "TARGET-RAN" "A3/AC5c: 하위 기능 토큰은 훅 전체
 #    `tr: command not found` 로 판정이 **조용히 fail-open** 하고, PATH 분리를 `tr` 로 쓰면
 #    글롭 스캔이 통째로 죽는다. 둘 다 텍스트 grep 이 아니라 실행으로 잡는다 — 해석기 본문이
 #    그 명령 «이름» 을 주석에서 언급하므로 텍스트 락은 자기 주석에 걸린다.
-out="$(printf '%s' "$PAY" | env -i PATH= DEVBREW_SKIP_HOOKS=quality-gates:SessionStart \
-        /bin/sh "$R" --event SessionStart --plugin quality-gates \
-        --hook session-start-advisor "$TARGET" 2>/dev/null)"
+out="$(printf '%s' "$PAY" | env -i PATH= DEVBREW_SKIP_HOOKS=qg:SessionStart \
+        /bin/sh "$R" --event SessionStart --plugin qg \
+        --hook hook-name "$TARGET" 2>/dev/null)"
 assert_eq "$out" "" "A4a: PATH 가 비어도 kill switch 가 발동한다"
 out="$(printf '%s' "$PAY" | env -i PATH="$PATH_BARE" \
         /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET" 2>/dev/null)"
@@ -560,7 +556,7 @@ done
 # True 다〔실측〕. 여기 두면 「감사기가 커버된다」는 착시만 만든다. AC11 의 감사기 절반은
 # 배선이 생기는 아래 **축 C** 가 지고, 그 자리에서 심볼릭 링크 변이가 판정을 뒤집는다.
 
-note "── 축 C: 배선 — hooks.json 4 자리 (AC1) ──────────────────────────────"
+note "── 축 C: 배선 — hooks.json 2 자리 (AC1) ──────────────────────────────"
 
 cmds_of() {   # hooks.json 하나에서 «(이벤트 키, command)» 쌍을 전부. 한 줄 = `<이벤트> <command>`.
   # **이벤트 키를 버리지 않는다.** 버리면 `--event` 값이 자기를 담은 이벤트 키와 같은지를
@@ -660,7 +656,7 @@ for hj in $HOOKS_JSONS; do   # 축 B 머리에서 git ls-files 로 도출했다
 $hj_cmds
 EOF
 done
-assert_eq "$n_cmd" "4" "C/AC1: hooks.json $(printf '%s\n' "$HOOKS_JSONS" | grep -c .)개 파일에서 호출 자리 4건을 셌다"
+assert_eq "$n_cmd" "2" "C/AC1: hooks.json $(printf '%s\n' "$HOOKS_JSONS" | grep -c .)개 파일에서 호출 자리 2건을 셌다"
 assert_eq "$n_bare" "0" "C/AC1: bare python3 로 시작하는 자리가 0 이다"
 
 # AC9 (설계 2026-09-23) — 위는 command 의 «모양» 이다. 실제로 cwd 의 `sh` 를 안 집는지는 실행으로
@@ -696,7 +692,7 @@ for hj in $HOOKS_JSONS; do   # 축 B 머리에서 git ls-files 로 도출했다
 $hj_cmds
 EOF
 done
-assert_eq "$n_shexec" "4" "C/AC9: 실행으로 잰 command 자리가 4건이다"
+assert_eq "$n_shexec" "2" "C/AC9: 실행으로 잰 command 자리가 2건이다"
 
 # ── AC11 의 «감사기» 절반 — 이 자리에서 비로소 이빨이 생긴다 ─────────────────
 # Task 2 에서는 이 단언이 아무것도 재지 못했다: `hooks.json` 이 해석기를 가리키지 않아
@@ -739,29 +735,23 @@ else
 fi
 
 if [ "$iso_ok" -eq 1 ]; then
-  # 실제 훅 «넷» 을 그대로 쓴다 — AC12 가 말하는 것이 그것이다. 해석에 실패하면 해석기가
+  # 실제 훅 «둘» 을 그대로 쓴다 — AC12 가 말하는 것이 그것이다. 해석에 실패하면 해석기가
   # exec 하지 않으므로 훅 파이썬은 한 줄도 돌지 않는다.
-  for spec in "SessionStart:quality-gates:session-start-advisor:plugins/quality-gates/hooks/session-start-advisor.py" \
-              "SessionEnd:quality-gates:session-end-cleanup:plugins/quality-gates/hooks/session-end-cleanup.py" \
-              "SessionEnd:spec-distill:session-end-cleanup:plugins/spec-distill/hooks/session-end-cleanup.py" \
+  for spec in "SessionEnd:spec-distill:session-end-cleanup:plugins/spec-distill/hooks/session-end-cleanup.py" \
               "PostToolUse:project-init:post-tool-use:plugins/project-init/hooks/post-tool-use.py"; do
     ev="${spec%%:*}"; r1="${spec#*:}"; pl="${r1%%:*}"; r2="${r1#*:}"; hk="${r2%%:*}"; tgt="${r2#*:}"
     out="$(printf '{"session_id":"00000000-0000-0000-0000-0000000000c2","cwd":"%s","tool_name":"Bash","tool_input":{"command":"true"}}' "$TMP" \
            | env PATH=/usr/bin:/bin /bin/sh "$R" \
              --event "$ev" --plugin "$pl" --hook "$hk" "$ROOT/$tgt" 2>/dev/null)"; rc=$?
     assert_eq "$rc" "0" "C2/AC12: $pl/$hk 가 rc 0 이다 (fail-open, 막지 않는다)"
-    if [ "$ev" = "SessionStart" ]; then
-      assert_grep "$out" 'additionalContext' "C2/AC12: SessionStart 는 안내 JSON 을 낸다"
-    else
-      assert_eq "$out" "" "C2/AC12: $ev($pl) 는 stdout 이 비어 있다"
-    fi
+    assert_eq "$out" "" "C2/AC12: $ev($pl) 는 stdout 이 비어 있다"
     out_ks="$(printf '{"session_id":"x"}' \
            | env PATH=/usr/bin:/bin DEVBREW_SKIP_HOOKS="$pl:$ev" /bin/sh "$R" \
              --event "$ev" --plugin "$pl" --hook "$hk" "$ROOT/$tgt" 2>/dev/null)"
     assert_eq "$out_ks" "" "C2/AC12: kill switch 를 켜면 $pl/$ev 는 안내도 내지 않는다"
   done
 
-  # 「본래 동작은 수행되지 않는다」 — 위 넷은 실패 경로에서 부작용이 없어 관측할 것이
+  # 「본래 동작은 수행되지 않는다」 — 위 둘은 실패 경로에서 부작용이 없어 관측할 것이
   # 없으므로, **메커니즘** 을 카나리아로 직접 잰다: exec 이 없으면 대상 코드가 한 줄도 안 돈다.
   CANARY="$TMP/canary.sh"; CANARY_MARK="$TMP/canary.ran"
   printf '#!/bin/sh\ntouch "%s"\n' "$CANARY_MARK" > "$CANARY"; chmod +x "$CANARY"
@@ -773,15 +763,13 @@ if [ "$iso_ok" -eq 1 ]; then
     || ok "C2/AC12: 해석 실패 시 대상이 한 줄도 돌지 않는다 (본래 동작 미수행)"
 fi
 
-# 위 격리 PATH 블록의 $out_ks 단언은 SessionStart 를 뺀 세 자리에서 vacuous 하다 — 바닥
+# 위 격리 PATH 블록의 $out_ks 단언은 두 자리 모두에서 vacuous 하다 — 바닥
 # 미만 PATH 에서는 해석기가 fail-open 으로 이미 stdout 을 비우므로, 스위치 검사를 통째로
-# 지워도 그 세 자리는 그대로 GREEN 이다(스크래치 사본으로 실측). kill switch 자신의 효과는
+# 지워도 그 두 자리는 그대로 GREEN 이다(스크래치 사본으로 실측). kill switch 자신의 효과는
 # 거기서 관측할 수 없다 — 만족 PATH($PATH_FLOOR)에서 exec 여부로 직접 재야 한다: 스위치가
 # 꺼지면 $TARGET 이 돌아 TARGET-RAN 이 나오고, 켜지면 exec 자체가 없어 사라진다. 이 satisfying
 # PATH 는 호스트의 실제 python3 와 무관하므로 `iso_ok` 게이트 밖에 둔다.
-for spec in "SessionStart:quality-gates:session-start-advisor" \
-            "SessionEnd:quality-gates:session-end-cleanup" \
-            "SessionEnd:spec-distill:session-end-cleanup" \
+for spec in "SessionEnd:spec-distill:session-end-cleanup" \
             "PostToolUse:project-init:post-tool-use"; do
   ev="${spec%%:*}"; r1="${spec#*:}"; pl="${r1%%:*}"; hk="${r1#*:}"
 
@@ -829,45 +817,6 @@ fi
 assert_file_grep plugins/spec-distill/scripts/hook_common.py 'sys\.executable' \
   "E/AC10: hook_common.py 가 sys.executable 을 쓴다 (양의 짝 — 위는 음의 락)"
 
-note "── 축 A15: 해석 성공 경로의 IGNORED 공시 (AC8 의 나머지 절반) ─────────"
-
-ADVISOR="plugins/quality-gates/hooks/session-start-advisor.py"
-# 사유를 **한 자리에서** 정하고 입력과 기대값 양쪽에 쓴다. 부분 문자열 `"3.9"` 로 재면 사유를
-# 잘라먹거나 뭉개도 그 조각만 남으면 통과한다 — 「그대로 싣는다」는 주장과 검사가 어긋난다.
-# 바닥 절반은 여기서도 재도출한다(리터럴 핀 금지).
-ADV_REASON="/usr/bin/python3 (Python 3.9 < ${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL})"
-adv_out="$(printf '{"session_id":"","cwd":"%s"}' "$TMP" \
-  | env DEVBREW_PYTHON_IGNORED="$ADV_REASON" python3 "$ADVISOR" 2>/dev/null)"
-adv_report="$(printf '%s' "$adv_out" | ADV_REASON="$ADV_REASON" python3 -c '
-import json, os, sys
-raw = sys.stdin.buffer.read().decode("utf-8", "replace").strip()
-want = os.environ.get("ADV_REASON", "")
-print("want_nonempty: %s" % ("yes" if want else "no"))
-if not raw:
-    print("emitted: no"); raise SystemExit(0)
-try:
-    d = json.loads(raw)
-except ValueError as e:
-    print("emitted: broken (%s)" % e); raise SystemExit(0)
-print("emitted: yes")
-print("both_keys: %s" % ("yes" if d.get("systemMessage") and
-      d.get("hookSpecificOutput", {}).get("additionalContext") else "no"))
-print("carries_reason: %s" % ("yes" if want and want in json.dumps(d, ensure_ascii=False) else "no"))
-')"
-assert_eq "$(field want_nonempty "$adv_report")" "yes" \
-  "A15/AC8: 증인 — 대조할 사유('$ADV_REASON')가 비어 있지 않다"
-assert_eq "$(field emitted "$adv_report")" "yes" "A15/AC8: IGNORED 가 있으면 advisor 가 JSON 을 낸다"
-assert_eq "$(field both_keys "$adv_report")" "yes" "A15/AC8: 두 키를 함께 담는다"
-assert_eq "$(field carries_reason "$adv_report")" "yes" "A15/AC8: 사유를 «통째로» 그대로 싣는다 (조각이 아니라)"
-
-# 음의 짝 — 평소에는 stdout 이 비어야 한다 (이 훅은 원래 stdout 을 쓰지 않는다)
-adv_quiet="$(printf '{"session_id":"","cwd":"%s"}' "$TMP" | env -u DEVBREW_PYTHON_IGNORED python3 "$ADVISOR" 2>/dev/null)"
-assert_eq "$adv_quiet" "" "A15/AC8: IGNORED 가 없으면 advisor 의 stdout 은 비어 있다"
-
-# kill switch 가 이 자리도 지배한다
-adv_ks="$(printf '{"session_id":"","cwd":"%s"}' "$TMP" \
-  | env DEVBREW_PYTHON_IGNORED=x DEVBREW_SKIP_HOOKS=quality-gates:SessionStart python3 "$ADVISOR" 2>/dev/null)"
-assert_eq "$adv_ks" "" "A15/AC8: kill switch 가 켜지면 이 공시도 나가지 않는다"
 
 note "── 축 D: 두 바닥의 분리 (AC9) ────────────────────────────────────────"
 # **두 자리를 각각 읽는다.** 한 자리에서 읽어 다른 자리에 쓰면, 갈라지는 날 조용히
@@ -907,7 +856,7 @@ assert_file_grep pyproject.toml '^package = false$' \
 note "── 축 F: 도출 규칙이 산출물에 적혀 있다 (AC13) ───────────────────────"
 RULE='2026-10 이후에도 패치를 받는 버전 중 최빈'
 for f in "$RESOLVER" README.md \
-         plugins/project-init/README.md plugins/quality-gates/README.md plugins/spec-distill/README.md; do
+         plugins/project-init/README.md plugins/spec-distill/README.md; do
   assert_file_grep "$f" "$RULE" "F/AC13: $f 가 도출 규칙을 담는다"
   # 버전 숫자는 **재도출**해서 본다 — 리터럴로 핀하면 바닥이 움직일 때 stale-red 가 된다.
   assert_file_grep "$f" "${FLOOR_MAJOR_VAL}\.${FLOOR_MINOR_VAL}" \
@@ -923,12 +872,14 @@ note "── 축 G: prerequisite (AC14) ─────────────�
 # 음의 짝이 약해진다. 정규식엔 이스케이프한 것을, 사람이 읽는 메시지엔 원문을 쓴다.
 PREREQ_RE="Python ${FLOOR_MAJOR_VAL}\.${FLOOR_MINOR_VAL}\+"
 PREREQ_TXT="Python ${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL}+"
-for p in project-init quality-gates spec-distill; do
+for p in project-init spec-distill; do
   assert_file_grep "plugins/$p/README.md" "$PREREQ_RE" "G/AC14: $p README 에 '$PREREQ_TXT' prerequisite 가 있다"
 done
-# 음의 짝 — plugin-audit 에는 **쓰지 않는다**. 훅이 없고 셸 13자리는 범위 밖이라
-# 그 바닥을 집행하는 주체가 없다(D27 — R8 이 기각한 「집행 없는 선언」이 그대로 돌아온다).
-assert_file_absent plugins/plugin-audit/README.md "$PREREQ_RE" \
-  "G/AC14: plugin-audit README 에는 그 prerequisite 를 쓰지 않는다 (집행 주체가 없다)"
+# 음의 짝 — 훅이 없는 플러그인에는 **쓰지 않는다**. 그 바닥을 집행하는 주체가 없다(D27 — R8 이
+# 기각한 「집행 없는 선언」이 그대로 돌아온다). quality-gates 는 v10.0.0 에서 훅을 모두 지웠다.
+for p in plugin-audit quality-gates; do
+  assert_file_absent "plugins/$p/README.md" "$PREREQ_RE" \
+    "G/AC14: $p README 에는 그 prerequisite 를 쓰지 않는다 (집행 주체가 없다)"
+done
 
 finish

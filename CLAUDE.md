@@ -33,7 +33,7 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 ### 메타데이터 & 버전 관리
 
 - **모든 PR마다 SemVer bump가 붙는 `plugin.json`.** 필수: `name`, `description`, `version`. 플러그인을 건드리는 모든 PR마다 bump (major = breaking, minor = 새 surface, patch = fix) — 안 그러면 cache key가 silent stale. 보안-critical 의존성은 optional `integrity` field로 pin.
-- **v1.0.0 이상이면 `CHANGELOG.md`.** `## [version] — YYYY-MM-DD` with Added/Changed/Deprecated/Removed/Fixed/Security. 제거 전 one-minor deprecation window.
+- **v1.0.0 이상이면 `CHANGELOG.md`.** `## [version] — YYYY-MM-DD` with Added/Changed/Deprecated/Removed/Fixed/Security. 제거 전 one-minor deprecation window. 사용자가 명시 결정한 재건은 deprecation 창 없이 제거하고 CHANGELOG Removed 에 적는다.
 - **`README.md`에 "Principles Instantiated"** — 이 플러그인이 embody하는 철학 법칙/원칙을 한 줄씩. Law 3의 compounding substrate: 미래 검색이 모든 instantiation을 찾음.
 
 ### 컴포넌트 격리
