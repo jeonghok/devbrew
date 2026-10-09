@@ -1289,6 +1289,27 @@ COUNT_GLOSS = (
     ("escalated_unconsumed", "결정으로 올릴 대상이 없는 예약 %d건"),
 )
 NEXT_MODE_GLOSS = {"budget": "재리뷰 횟수 안에서", "extra_approval": "사용자가 연 추가 라운드"}
+# 렌더 첫 줄 경고의 사람말(쉬운 말 출력 설계 §3 · 계획 Q9). advisory 원문은 기계가 읽는 값이라(`fin.json` · 원장의
+# `route_report` · 테스트) 그대로 두고 렌더에서만 바꾼다. 행: (원문 정규식, 괄호 이름, 쉬운 문장) — 위에서부터 첫 일치.
+# 괄호 이름과 문장이 같은 행은 같은 사실을 두 출처가 말한 것이라 한 줄로 합치고, 사유(`why`)는 그 줄 괄호에 모은다.
+# 괄호 이름이 None 인 행은 원문의 나머지(`why`)를 괄호에 그대로 싣는다. 어느 행에도 안 맞는 원문은 그대로 낸다 —
+# 버리지 않는다(계획 P6).
+WARN_GLOSS = (
+    (r"codex 없음 — 모델 다양성 0 \((?P<why>.*)\)", "codex", "codex 리뷰가 없어 다른 모델의 시각이 빠졌다"),
+    (r"입력 실패\(보조\): codex — (?P<why>.*)", "codex", "codex 리뷰가 없어 다른 모델의 시각이 빠졌다"),
+    (r"기각 경로 0 — 오탐이 걸러지지 않았다 \(doc-recritic (?P<why>.*)\)", "doc-recritic",
+     "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다"),
+    (r"입력 실패\(보조\): doc-recritic — (?P<why>.*)", "doc-recritic", "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다"),
+    (r"셀 수 없음: layer2 — (?P<why>.*)", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다"),
+    (r"상세 미검증 — 층 2 블록 없음", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다"),
+    (re.escape("앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위"), "앵커 불가", "문서에 제목이 없어 지적의 자리를 가리키지 못한다 — 얼림·보호 검사가 꺼졌고 모든 수정이 문서 전체 범위다"),
+    (r"critic 시점 판별 불가 \((?P<why>.*)\)", "critic 시점", "리뷰어 결과가 이번 라운드 것인지 확인하지 못했다"),
+    (r"입력 실패\(주\): (?P<why>.*)", None, "꼭 있어야 할 리뷰어 결과를 읽지 못했다"),
+    (r"입력 실패\(보조\): (?P<why>.*)", None, "보조 리뷰어 결과를 읽지 못했다"),
+    (r"셀 수 없음: (?P<why>.*)", None, "셀 수 없는 것이 있다"),
+    (r"보류: (?P<why>.*)", None, "판정하지 못하고 보류한 지적이 있다"),
+    (r"강제\(게이트 변경\): (?P<why>.*)", None, "판정 값을 강제로 바꿨고 그 때문에 게이트 결과가 달라졌다"),
+)
 
 
 def _one(s) -> str:
@@ -1296,11 +1317,42 @@ def _one(s) -> str:
     return " ".join(str(s).split())
 
 
+def _plain_warns(warns) -> list:
+    """advisory 원문 목록 → 첫 줄에 싣는 쉬운 경고 줄 목록(WARN_GLOSS). 순서는 원문이 처음 나온 순서다."""
+    lines, why_of = [], {}
+    for w in map(str, warns):
+        m = row = None
+        for row in WARN_GLOSS:
+            m = re.fullmatch(row[0], w, re.S)
+            if m:
+                break
+        if not m:
+            k = w
+        elif row[1] is None:
+            k = "%s (%s)" % (row[2], m.group("why"))
+        else:
+            k = (row[1], row[2])
+        if k not in why_of:
+            why_of[k] = []
+            lines.append(k)
+        why = m.groupdict().get("why") if m and row[1] else None
+        if why and why not in why_of[k]:
+            why_of[k].append(why)
+    out = []
+    for k in lines:
+        if isinstance(k, tuple):
+            k = "%s (%s)" % (k[1], k[0] + (": " + ", ".join(why_of[k]) if why_of[k] else ""))
+        out.append(_one(k))
+    return out
+
+
 def _first_line(g) -> str:
     """첫 줄 = 그 라운드의 상태와 경고 공시 한 문장(쉬운 말 출력 설계 §3).
     「이상 없음」은 리뷰를 마친 라운드에 남은 행도 경고도 없을 때만, 「경고 없음」은 남은 것은 있고
     경고가 없을 때만 쓴다. 「미검증」·라운드 미완이면 그 공시가 맨 앞이고 두 문구 어느 것도 쓰지 않는다.
-    경고는 advisory 를 전부 싣는다 — codex 부재만 싣고 나머지를 버리지 않는다."""
+    경고는 advisory 를 전부 싣는다 — codex 부재만 싣고 나머지를 버리지 않는다. 원문은 `_plain_warns` 가 쉬운 줄로
+    바꾸고, 같은 사실을 두 출처가 말한 원문은 한 줄로 합친다(계획 Q9). 「미검증」·라운드 미완이면 「남은 것 없음」도
+    쓰지 않는다 — 세지 못한 라운드다(계획 Q10)."""
     lead = None
     if g.get("unverified"):
         lead = UNVERIFIED_TEXT.get(g["unverified"], "「미검증」 (%s)" % g["unverified"])
@@ -1310,11 +1362,15 @@ def _first_line(g) -> str:
     deg = g["degrade"]
     if deg.get("codex_absent"):
         cl = "codex 없음 — 모델 다양성 0 (%s)" % (deg.get("codex_reason") or "?")
+        if not deg.get("codex_reason"):
+            # 사유가 없으면 라우터의 원문은 「(None)」이다 — 그 원문을 이 줄로 바꿔 「?」 하나만 남긴다.
+            warns = [cl if w == "codex 없음 — 모델 다양성 0 (None)" else w for w in warns]
         if cl not in warns:
             warns.insert(0, cl)
+    warns = _plain_warns(warns)
     left = ["%s %d개" % (STATE_GLOSS.get(r.name, r.name), len(g[r.name])) for r in GATE_ROWS if g[r.name]]
     head = ("리뷰 %d라운드" if lead else "리뷰 %d라운드를 마쳤다") % g["round"]
-    s = head + (" — %s가 남았다." % " · ".join(left) if left else " — 남은 것 없음.")
+    s = head + (" — %s가 남았다." % " · ".join(left) if left else ("." if lead else " — 남은 것 없음."))
     if warns:
         s += " 경고 %d개: %s" % (len(warns), " · ".join(warns))
     elif lead is None:
@@ -1404,7 +1460,7 @@ def _rg_escalated_fix(st, g, fid):
     # 이 연 탈출구, 새 전이 아님) 렌더가 그 사실을 `_rg_unapplied_fix` 처럼 알려준다.
     fx = st["fixes"].get(fid) or {}
     why = fx.get("escalate_reason") or "사유 불명"
-    return ["- %s — 막힌 이유: %s. 버리면(drop) 이 차단이 풀린다 (%s)" % (_one(st["findings"][fid].get("summary")), why, fid)]
+    return ["- %s — 막힌 이유: %s. 버리면(drop) 이 차단이 풀린다 (%s)" % (_one(st["findings"][fid].get("summary")), _one(why), fid)]
 
 
 def _rg_held_fix(st, g, fid):
@@ -1450,6 +1506,7 @@ def render_gate(st, g) -> str:
     if g["stagnation"]:
         sub += " · 진전 없음(stagnation)"
     out.append(sub)
+    # 이 바깥 초기화는 쓰이지 않지만 남긴다 — 변이 셀 `marker_crosses_group` 이 묶음마다의 안쪽 초기화만 지워 그 재설정을 잰다.
     prev_anchor = None
     for row in GATE_ROWS:
         fn = GATE_RENDERERS.get(row.render) if row.render else None
@@ -1458,6 +1515,9 @@ def render_gate(st, g) -> str:
         out.append("%s %d개" % (STATE_GLOSS.get(row.name, row.name), len(g[row.name])))
         if row.name not in STATE_GLOSS:
             out.append("  ↳ 상태 이름에 사람말이 없다: %s — 원래 이름 그대로 낸다" % row.name)
+        # 묶음은 «표시»다 — 질문 수도 항목별 선택권도 안 바꾼다(D24). 같은 자리를 건드리는 항목이 한 묶음 안에서
+        # 연달아 오면 그 사실만 한 줄로 보인다. 묶음마다 새로 센다 — 표지가 묶음 제목 너머를 가리키지 않는다(계획 Q11).
+        prev_anchor = None
         for fid in g[row.name]:
             anchor = (st["findings"].get(fid) or {}).get("anchor")
             if anchor and anchor == prev_anchor:

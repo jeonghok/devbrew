@@ -27,7 +27,8 @@
 8. **게이트** — `docreview_state.py gate --state-dir D --render`. `round_gate_needed` 면 라운드
 게이트(`decide` 묶음 + 차단 `ask`, 렌더 순서)를 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠
 띄운다 — 도구가 호출당 질문을 4개로 제한하고, 한 결정을 다른 결정의 질문에 묶으면 그 결정의
-선택지가 사라지기 때문이다. 매 호출 첫 질문의 첫 줄은 렌더 첫 줄(degrade 공시)과 같다. 사용자
+선택지가 사라지기 때문이다. 렌더 첫 줄(상태와 경고)은 첫 호출 **앞 글**에 한 번 쓴다. 질문 본문에는 그 질문의 결정 하나와, 경고가 있으면
+「경고 N개 — 위에 적었다」 한 줄만 둔다. 「미검증」이거나 리뷰를 마치지 못한 라운드면 질문의 상태 줄은 렌더 첫 줄의 첫 문장(그 공시)이고, 「이상 없음」·「경고 없음」은 쓰지 않는다. 경고가 있으면 그 뒤에 「경고 N개 — 위에 적었다」를 붙인다. 한 호출에 묶는 질문은 서로의 답에 기대지 않는 결정이다 — 다른 결정의 답에 따라 달라지는 결정은 다음 호출로 미룬다. 사용자
 응답을 `decide`·`fix`·`ask` 서브커맨드로 반영. `approval_gate_open` 이면 승인 게이트. 열린 것이
 남아 있으면 두 단계다(**1단계는 라운드 게이트와 같은 형태라 같은 분할이 적용된다**, §6.4).
 **상한 도달이면 열린 것이 0 이어도 항상 두 단계다** — 그때 1단계는 열린 것의 유무로 갈린다:
@@ -79,7 +80,7 @@ advice 로 간 항목이나 적용 · drop 된 fix 를 `supersedes` 로 이은 �
 
 ## 배달
 
-- `decide` → 라운드 게이트(결정 묶음). `defer` → `docreview_state.py defer --log-file <목적지>`. `fix` → 저자가 `check-intent <id> --intent <scope> --state-dir D` 통과 후 적용. `drop`·recritic `reject` → 회계에만 남고 게이트 텍스트에 개수 공시.
+- `decide` → 라운드 게이트(결정 묶음). `defer` → `docreview_state.py defer --log-file <목적지>`. `fix` → 저자가 `check-intent <id> --intent <scope> --state-dir D` 통과 후 적용. `drop`·recritic `reject` → 회계에만 남고 게이트 앞 글에 개수 공시.
 - 채택된 `decide` 의 적용은 `check-intent <id> --intent <scope> --state-dir D --decision-id <D#>`(permit 계약).
 - 참고(advisory) → 라운드 게이트에 오지 않는다. 끝에서 한 번 `advice`(진입 자리)로 보이고 박제된다.
 

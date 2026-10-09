@@ -173,7 +173,7 @@ FIN="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/references/finishing.
 assert_grep "$(cat "$FIN")" '^### Step B — proceed 게이트' \
   "양의 짝 — finishing.md 에 Step B 절이 실재한다 (아래 창 단언이 절 삭제로 헛통과하지 않는다)"
 FIN_STEPB="$(awk '/^```/{c=!c} !c && /^### Step B/{f=1; next} f && !c && /^(#|##|###) /{f=0} f' "$FIN" | tr '\n' ' ' | tr -s ' ')"
-assert_contains "$FIN_STEPB" 'interview brief 완결:' \
+assert_contains "$FIN_STEPB" 'header: "다음 단계"' \
   "Step B 창이 B-0 bash 펜스의 # 주석 줄을 넘어 B-2 게이트 질문까지 닿는다 (fence-aware — 아래 단언이 짧은 창에서 헛돌지 않는다)"
 FIN_SRC='마지막 요약의 `approval_label` · `round_reviewed` · `unreviewed_reason` 을 그대로 싣고'
 assert_contains "$FIN_STEPB" "$FIN_SRC" \

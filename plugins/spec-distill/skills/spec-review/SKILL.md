@@ -307,7 +307,7 @@ if [[ "$codex_avail" == "true" ]]; then
   # 사는 것은 없고 잃는 것은 정직한 사유다 — `-eq 3` 이 지배한다.
   if [[ "$runner_rc" -eq 3 ]]; then rm -f "$CODEX_YAML" || true; fi
 else
-  echo "[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — Claude-only, 이 리뷰에는 모델 다양성이 없었다 (degraded)." >&2
+  echo "[spec-distill] codex 리뷰를 건너뛰었다 (reason: ${skip_reason:-unknown}) — 이번 리뷰는 Claude 만 봤다. 다른 모델의 시각이 없다 (degraded)." >&2
 fi
 ```
 <!-- codex-gate:end -->
@@ -395,8 +395,8 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 엔진 8단계의 `docreview_state.py gate --state-dir "$STATE_DIR" --render` 가 어느 게이트인지 정한다.
 `round_gate_needed` 면 라운드 게이트(결정 묶음 + 차단 `ask`, 렌더 순서)를 **`AskUserQuestion` 최대 4개씩
 연속 호출**로 나눠 띄운다 — 도구가 호출당 질문을 4개로 제한하고, 한 결정을 다른 결정의
-질문에 묶으면 그 결정의 선택지가 사라지기 때문이다. 매 호출 첫 질문의 첫 줄은 렌더 첫 줄(degrade
-공시)과 같다. 응답을 `decide`·`fix`·`ask` 서브커맨드로 반영한다. `approval_gate_open` 이면 승인
+질문에 묶으면 그 결정의 선택지가 사라지기 때문이다. 렌더 첫 줄(상태와 경고)은 첫 호출 **앞 글**에 한 번 쓴다. 질문 본문에는 그 질문의 결정 하나와, 경고가 있으면
+「경고 N개 — 위에 적었다」 한 줄만 둔다. 「미검증」이거나 리뷰를 마치지 못한 라운드면 질문의 상태 줄은 렌더 첫 줄의 첫 문장(그 공시)이고, 「이상 없음」·「경고 없음」은 쓰지 않는다. 경고가 있으면 그 뒤에 「경고 N개 — 위에 적었다」를 붙인다. 한 호출에 묶는 질문은 서로의 답에 기대지 않는 결정이다 — 다른 결정의 답에 따라 달라지는 결정은 다음 호출로 미룬다. 응답을 `decide`·`fix`·`ask` 서브커맨드로 반영한다. `approval_gate_open` 이면 승인
 게이트다. 열린 것이 남아 있으면 두 단계다(**1단계는 라운드 게이트와 같은 형태라 같은 분할이
 적용된다**). **상한 도달이면 열린 것이 0 이어도 항상 두 단계다** — 그때 1단계는 열린 것의 유무로
 갈린다: **열린 것이 0 이면 1단계 선택지는 「추가 라운드 1회 열기」와 「진행 옵션으로」 둘뿐인
@@ -438,7 +438,7 @@ harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}" || true)"
 if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
-  echo "[spec-distill] 참고(advisory) 목록 없음 — 엔진 원장을 찾지 못했다(spec_path='${spec_path:-}' · STATE_DIR='${STATE_DIR:-}'). 2단계 질문 텍스트에 싣는다."
+  echo "[spec-distill] 참고(advisory) 목록 없음 — 엔진 원장을 찾지 못했다(spec_path='${spec_path:-}' · STATE_DIR='${STATE_DIR:-}'). 2단계 게이트 앞 글에 싣는다."
 elif [ ! -f "$spec_path" ]; then
   echo "[spec-distill] 참고(advisory) 목록 건너뜀 — 설계문서가 없다(spec_path='${spec_path}'). 박제 · 계수 · 표시를 하지 않는다 — 아래 대상 부재 재확인으로 간다."
 else
@@ -447,8 +447,8 @@ else
   python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --sink "$spec_path" --log-file "$spec_path" --render --cap 8 2>"$adv_err" || adv_rc=$?
   if [ "$adv_rc" -ne 0 ]; then
     cat "$adv_err" >&2
-    echo "[spec-distill] 참고 목록 표시 · 박제 실패(rc $adv_rc) — 위 stderr 의 사유를 2단계 질문 텍스트에 싣는다. 진행은 막지 않는다."
-    grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' "$adv_err" || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8 || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 2단계 질문 텍스트에 싣는다."
+    echo "[spec-distill] 참고 목록 표시 · 박제 실패(rc $adv_rc) — 위 stderr 의 사유를 2단계 게이트 앞 글에 싣는다. 진행은 막지 않는다."
+    grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' "$adv_err" || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8 || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 2단계 게이트 앞 글에 싣는다."
   fi
 fi
 ```
@@ -465,6 +465,10 @@ fi
 | ② | 미커밋 확인 → 바로 `Skill superpowers:writing-plans <path>` |
 | ③ | 수정 필요 — 후속 질문으로 revise per findings / `spec-interview` 재진입 / 사용자 직접 편집 분기 |
 | ④ | 멈춤 — 상태 보존하고 종료 |
+
+① 에서 노출하는 명령(`<spec_path>` 를 실제 경로로 바꾼 뒤 그대로 보인다):
+
+> `/compact 설계문서 <spec_path> 보존 — 문서 경로, 결정 기록, Deferred to plan 목록을 유지하고 리뷰 라운드별 대화·지적 원문·엔진 출력은 drop. 재결정 규약: confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 사람에게 쓰는 글 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에, 첫 줄에 상태, 끝에 할 일 하나)을 유지한다. 다음 단계: Skill superpowers:writing-plans <spec_path>.`
 
 - **① 의 정지 요건** — verbatim `/compact` 명령을 노출한 자리에서 **턴 종료(STOP)** 한다. 같은 턴
   에서 `writing-plans` 를 호출하지 않는다(compact 전 진입은 옵션 ① 을 무력화한다). 진입은 사용자가
@@ -510,16 +514,19 @@ fi
 이 skill 의 degrade 채널은 엔진의 것이고 별도 원장을 만들지 않는다. 이름은 셋이다:
 
 - `fin.json` 의 `advisory[]` — codex 부재 · critic 층 2 부재 · recritic 부재 · 처분 회계의 degrade
-  사유가 전부 이 한 채널로 온다.
+  사유가 전부 이 한 채널로 온다. 사람에게는 아래 렌더 첫 줄이 이 원문을 싣는다.
 - `fin.json` 의 `blocks` — 막는지를 참/거짓 하나로 말한다. critic 사망(주 판정자) · 항목 소실 · 셀 수 없음일
   때만 참이고, 무엇이 막는지는 위 `advisory[]` 에 함께 실린다.
 - `docreview_state.py gate --render` 의 **첫 줄** — 그 라운드의 상태와 경고 한 문장이다. 라운드 번호 · 남은 항목 수와
-  함께, 경고가 있으면 `경고 N개:` 뒤에 `advisory[]` 를 전부(codex 부재와 사유 포함) 싣는다. 남은 것은 있고 경고가 없으면
+  함께, 경고가 있으면 `경고 N개:` 뒤에 `advisory[]` 의 사실을 전부(쉬운 줄로, 사유 토큰은 괄호에) 싣는다. 남은 것은 있고 경고가 없으면
   「경고 없음」, 남은 것도 경고도 없으면 「이상 없음」이 온다. 이번 라운드가 「미검증」이면(요약의 `unverified` — critic
   사망 · `finalize` 실패, `fin.json` 이 없는 라운드 포함) 그 공시가, 「미검증」은 아니지만 리뷰 완료가 아닌 라운드(요약의
   `round_reviewed` 거짓 · `unreviewed_reason: unrouted`)면 판정 기록 부재 공시가 맨 앞에 오고 「이상 없음」·「경고 없음」은
   나올 수 없다. 재리뷰 횟수는 **둘째 줄**이다(상한 도달·stagnation 도 그 줄에 붙는다).
+  `advisory[]` 원문은 하나하나가 이 첫 줄의 경고 줄 중 하나에 대응한다 — 같은 사실을 두 출처가 말한 원문은 한 줄로
+  합치므로 `경고 N개` 의 N 은 원문 수가 아니라 사실 수다. 게이트 앞 글에는 이 첫 줄을 그대로 쓰고
+  `advisory[]` 원문을 다시 늘어놓지 않으며, 질문의 「경고 N개」는 렌더 첫 줄의 N 이다.
 
-게이트를 띄우기 **직전에** 이 셋을 읽어 하나도 빠뜨리지 않고 프로즈로 내고, 승인 게이트 질문
-텍스트의 `degrade:` 슬롯에도 싣는다. 셋 다 비었을 때만 `degrade 없음` 이다 — 그 문구는 **채널을
-실제로 읽었다는 주장**이므로, 읽지 않은 채 쓰지 않는다.
+게이트를 띄우기 **직전에** 이 셋을 읽어 하나도 빠뜨리지 않고 게이트 앞 글에 쓰고, 승인 게이트 질문에는
+「경고 N개 — 위에 적었다」(또는 「경고 없음」·「이상 없음」) 한 줄만 둔다. 셋 다 비었을 때만, 남은 항목도 없으면 「이상 없음」, 있으면 「경고 없음」이다
+— 그 문구는 **채널을 실제로 읽었다는 주장**이므로, 읽지 않은 채 쓰지 않는다. 「미검증」이거나 리뷰를 마치지 못한 라운드면 질문의 상태 줄은 렌더 첫 줄의 첫 문장(그 공시)이고, 「이상 없음」·「경고 없음」은 쓰지 않는다. 경고가 있으면 그 뒤에 「경고 N개 — 위에 적었다」를 붙인다.

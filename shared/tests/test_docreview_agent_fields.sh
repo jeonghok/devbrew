@@ -89,6 +89,7 @@ for f in shared/docreview/agents/doc-critic.md shared/docreview/agents/doc-criti
          plugins/spec-distill/agents/doc-critic.md plugins/spec-distill/agents/doc-critic-web.md plugins/spec-distill/agents/doc-recritic.md; do
   assert_file_grep "$f" "$PLAIN_LINE" "쉬운 말 칸: $f 가 사람이 읽는 칸에 쉬운 말 한 줄을 싣는다"
   assert_file_grep "$f" 'evidence`? ?는 문서 인용이라 원문 그대로' "쉬운 말 칸: $f 가 근거는 원문 그대로라고 적는다"
+  assert_file_absent "$f" '그대로 읽는다 — 처음 보는 사람이 읽는다' "쉬운 말 칸: $f 가 「읽는다」를 두 번 잇지 않는다"
 done
 assert_file_grep shared/docreview/scripts/run_docreview_codex_reviewer.sh 'read by a first-time reader' \
   "쉬운 말 칸: 문서 리뷰 codex 프롬프트도 같은 한 줄을 싣는다"
