@@ -234,10 +234,13 @@ if not isinstance(d, dict):
     print("shape: 최상위가 객체가 아니다" + stderr_tail())
     sys.exit(0)
 out = []
-KNOWN = {"success", "strict", "target", "manifest", "contents"}
+# advice 는 2.1.295 에서 생긴 조언 배열 — 판정하지 않는다(형식만 본다).
+KNOWN = {"success", "strict", "target", "manifest", "contents", "advice"}
 extra = sorted(set(d) - KNOWN)
 if extra:
     out.append("shape: 모르는 최상위 키 %s — 스키마 표류" % extra)
+if "advice" in d and not isinstance(d["advice"], list):
+    out.append("shape: advice 가 배열이 아니다")
 m, c = d.get("manifest"), d.get("contents")
 if not isinstance(m, dict):
     out.append("shape: manifest 가 객체가 아니다")
@@ -298,6 +301,8 @@ assert_grep "$(printf '' | manifest_bad)" '^unusable:' "manifest_bad: 빈 출력
 assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"extra":1}')" '모르는 최상위 키' "manifest_bad: 모르는 최상위 키는 RED"
 assert_eq "$(mb '{"success":false,"strict":true,"target":"t","manifest":'"$MOK"',"contents":['"$MHK_EX"']}')" "" "manifest_bad: 면제 경고만 있는 success:false 는 통과"
 assert_eq "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[]}')" "" "manifest_bad: 깨끗한 success:true 는 통과"
+assert_eq "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"advice":[{"file":"x","message":"m","installLine":"/plugin install p"}]}')" "" "manifest_bad: advice 배열은 비게이팅 — 통과"
+assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"advice":"oops"}')" '^shape: advice 가 배열이 아니다$' "manifest_bad: advice 가 배열이 아니면 모양 사유로 RED"
 printf 'boom: validator crashed\n' > "$TMP/fake.err"
 assert_contains "$(printf 'not json' | manifest_bad "$TMP/fake.err")" "stderr: boom: validator crashed" "manifest_bad: 쓸 수 없는 JSON 이면 stderr 마지막 줄을 싣는다"
 
