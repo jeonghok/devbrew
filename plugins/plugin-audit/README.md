@@ -33,6 +33,8 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1` — 대상 플러그인의 자체 테스트 실행(`scripts/run-own-tests.sh`가
 `scripts/audit-sandbox.sh create-sandbox`로 만든 일회용 샌드박스에서 돈다)을 끈다. 축③은 테스트를 *읽어*
 판정한다(배너). 샌드박스는 저장소 상태만 격리한다 — 프로세스 · 네트워크 · uid 격리는 없다.
+이 이름이 정본이다. 옛 이름 `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` 도 별칭으로 여전히 따른다(0.11.1 부터) —
+같은 skip 이 되고, `create-sandbox` 가 stderr 한 줄로 개명을 알린다.
 
 `DEVBREW_PLUGIN_AUDIT_STALENESS_REGISTRY` — staleness census가 참조하는 원장 경로 override.
 
@@ -45,7 +47,7 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 | `DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX` | `DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX` |
 | `DEVBREW_DISABLE_PLUGIN_AUDIT_WEB` | `DEVBREW_PLUGIN_AUDIT_DISABLE_WEB` |
 | `DEVBREW_STALENESS_REGISTRY` (플러그인 토큰 없던 이름) | `DEVBREW_PLUGIN_AUDIT_STALENESS_REGISTRY` |
-| `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` (0.11.0 에 더함) | `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX` |
+| `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` (0.11.0 에 더함 · 0.11.1 부터 별칭으로 따름) | `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX` |
 
 옛 이름은 **fallback 없이 즉시 제거**됐다 — 이 rename 당시(0.6.0) 이 플러그인에는 `CHANGELOG.md`가
 없었다(`plugin.json` 버전이 CLAUDE.md §메타데이터의 "v1.0.0 이상이면 CHANGELOG.md" 문턱 아래라 별도
@@ -55,8 +57,11 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 fallback 창을 둔다.
 
 표의 마지막 줄은 0.11.0 에서 더했다 — 샌드박스 도우미가 quality-gates 10.0.0 에서 이 플러그인
-(`scripts/audit-sandbox.sh`)으로 옮겨 오며 이름이 바뀌었다. 옛 이름은 더 읽지 않는다(fallback 없음,
-위와 같은 근거). 이 rename 은 `CHANGELOG.md` `[0.11.0]` 에도 적었다.
+(`scripts/audit-sandbox.sh`)으로 옮겨 오며 이름이 바뀌었다. 위 「fallback 없이 즉시 제거」의 **예외다** —
+kill switch 는 보안 컨트롤이라, 옛 이름을 조용히 버리면 그것으로 자체 테스트 실행을 꺼 둔 사용자에게서 실행이 다시
+켜진다(fail-open). 그래서 0.11.1 부터 옛 이름도 따른다: 값이 정확히 `1` 이면 새 이름과 같이 `create-sandbox` 가
+exit 3 으로 멈추고, stderr 한 줄이 옛 이름과 새 이름으로의 개명을 함께 밝힌다. 정본은 새 이름이다.
+`CHANGELOG.md` `[0.11.0]` · `[0.11.1]` 에 적었다.
 
 **severity 어휘 통일 (0.6.0, devbrew-weight-reduction Task 28).** 감사 리포트 발견 항목의
 `[severity]` 배지가 옛 4-vocab(`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`)에서 quality-gates와 동일한

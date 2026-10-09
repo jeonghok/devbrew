@@ -15,6 +15,8 @@
 #
 # Kill switch: DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1 — `create-sandbox` exits 3
 # (distinct from die's exit 2). The caller (scripts/run-own-tests.sh) then skips the run.
+# The legacy name DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1 is honored as an alias:
+# same exit 3, and the one stderr line names it and its rename.
 #
 # 이 샌드박스는 저장소 상태만 격리한다 — 프로세스 · 네트워크 · uid 격리는 없다
 # (scripts/run-own-tests.sh 머리말의 알려진 한계).
@@ -31,6 +33,10 @@ case "${1:-}" in
     if [[ "${DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX:-0}" == "1" ]]; then
       echo "audit-sandbox: runtime sandbox disabled via DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1 — orchestrator must fall back to read-only smoke mode" >&2
       exit 3   # distinct from die's exit 2 → SKILL branches on this
+    fi
+    if [[ "${DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX:-0}" == "1" ]]; then
+      echo "audit-sandbox: runtime sandbox disabled via DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1 (legacy name, renamed to DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX — set that instead) — orchestrator must fall back to read-only smoke mode" >&2
+      exit 3
     fi
     sid="$2"
     sid_short="${sid:0:8}"

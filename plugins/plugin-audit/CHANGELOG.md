@@ -17,6 +17,12 @@ major 인 이유 — 명령 층이 사라졌고, skill 이 개명돼 사용자 �
 - 본문 전 사전 검사(`scripts/entry_preflight.py`)와 `## 진입 단계` 가 kill switch 와 인자 해석을 맡는다.
 - `check-staleness.py` 규칙 (a): `skills/<name>/SKILL.md` 가 뒷받침하는 `/name` 은 dangling 이 아니다.
 
+## [0.11.1] — 2026-10-09
+
+### Security
+
+- **옛 kill switch 이름이 조용히 무시되던 fail-open 을 닫았다.** `[0.11.0]` 이 `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` 를 `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX` 로 바꾸며 옛 이름을 더 읽지 않았다. 옛 이름으로 자체 테스트 실행을 꺼 둔 사용자에게서 감사 대상의 테스트 코드가 다시 돌았다 — 아무 알림 없이, 그리고 `run-own-tests.sh` 머리의 연기된 CRITICAL(프로세스 · 네트워크 · uid 격리 없음) 아래에서. 이제 `scripts/audit-sandbox.sh create-sandbox` 가 두 이름을 모두 따른다: 어느 쪽이든 값이 정확히 `1` 이면 아무것도 만들기 전에 exit 3 으로 멈춘다. 옛 이름이 멈춘 경우 stderr 한 줄이 옛 이름과 새 이름으로의 개명을 함께 밝힌다. `run-own-tests.sh` 의 skip 사유도 두 이름을 함께 적는다. 정본은 새 이름이다 — README 의 kill switch 절과 rename 표에 적었다.
+
 ## [0.11.0] — 2026-10-09
 
 minor 인 이유 — `scripts/run-own-tests.sh` 의 옵션 이름과 kill switch 이름이 바뀌었다.
