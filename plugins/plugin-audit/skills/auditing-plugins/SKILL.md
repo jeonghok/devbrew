@@ -235,5 +235,5 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
 
 - `DEVBREW_PLUGIN_AUDIT_DISABLE=1` → 즉시 종료.
 - plugin-dev 부재(E) → loud degrade(core는 F가 커버). `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1`
-  (run-own-tests) → 자체 테스트 skip 배너.
+  (run-own-tests) → 자체 테스트 skip 배너. 옛 이름 `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` 도 같은 skip.
 - codex 미설치 → Claude-only degrade 배너(model diversity 없음).
