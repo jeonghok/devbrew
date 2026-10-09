@@ -4,7 +4,7 @@
 
 - 규칙 정본: `docs/superpowers/specs/2026-10-09-skill-only-surface-design.md` (B1 — 이 작업이 규칙을 소유하고 v10 이 따른다)
 - 대조 기준: v10 설계 `docs/superpowers/specs/2026-10-08-qg-v10-rebuild-design.md` @ `5eccf37c82ee6f000baefb0e8e972733ba07eb38` (브랜치 `feature/qg-v10-cleanup`). v10 ① 정리(quality-gates 10.0.0)가 #189(`967c45f5`)로 main 에 머지됐고 이 브랜치가 그것을 병합했다 — 설계 파일은 그 사이 바뀌지 않아 L 번호가 그대로다. 아래 «해소(#189)» 는 병합된 트리에서 확인한 것이다.
-- 이 브랜치가 qg 에서 바꾼 것: B6 넷 — `tests/test_codex_gate_observation.sh` 라벨 `case` 줄과 그 주석, `plugin.json` 10.0.1(main 10.0.0 위 patch), `CHANGELOG.md` 한 항목
+- 이 브랜치가 qg 에서 바꾼 것: B6 넷 — `tests/test_codex_gate_observation.sh` 라벨 `case` 줄과 그 주석, `plugin.json` 10.0.2(main 10.0.1 위 patch — #188 이 10.0.1 을 먼저 썼다), `CHANGELOG.md` 한 항목
 
 ## 1부 — v10 이 따를 변경
 
@@ -21,7 +21,7 @@
 
 ## 2부 — 락이 재는 축의 qg 위반
 
-`python3 shared/entry/check_invocation_surface.py --report` 의 표(22행, #189 병합 뒤). 축 A = 진입 skill 이름, C = 진입 사전 검사 모양, H = `commands/` 층, I = 옛 이름. v10 칸은 v10 설계 원문을 파일 · 이름으로 grep 해 채웠다. «다룸» 은 설계가 다루지만 #189(① 정리)에는 들지 않았다는 뜻이다.
+`python3 shared/entry/check_invocation_surface.py --report` 의 표(22행, #189 · #188 병합 뒤 — #188 은 행을 더하거나 지우지 않았고, 규칙 블록 14줄이 행 18 · 19 의 줄 번호만 옮겼다). 축 A = 진입 skill 이름, C = 진입 사전 검사 모양, H = `commands/` 층, I = 옛 이름. v10 칸은 v10 설계 원문을 파일 · 이름으로 grep 해 채웠다. «다룸» 은 설계가 다루지만 #189(① 정리)에는 들지 않았다는 뜻이다.
 
 v10(#189)에서 해소 — 병합 전 표(23행)에 있다가 사라진 행:
 
@@ -46,8 +46,8 @@ v10(#189)에서 해소 — 병합 전 표(23행)에 있다가 사라진 행:
 | 15 | H | `plugins/quality-gates/commands/qg-publish.md:1` | commands/ 층은 qg 밖에 두지 않는다 — 사전 단계는 진입 skill 의 사전 검사 줄로 | 다룸(L579: 파일 삭제, L519 AC16) |
 | 16 | H | `plugins/quality-gates/commands/qg.md:1` | commands/ 층은 qg 밖에 두지 않는다 — 사전 단계는 진입 skill 의 사전 검사 줄로 | 다룸(L345: commands/qg.md 를 «새로, 얇게» 유지 — `commands/` 층을 없애지 않음, L553 수정) |
 | 17 | I | `plugins/quality-gates/scripts/run_codex_reviewer.sh:49` | 옛 이름 'reviewing-spec' | 다룸(L357·L566·L598: 유지·갱신 — 옛 이름 줄은 언급 없음) |
-| 18 | I | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:154` | 옛 이름 'reviewing-spec' | 범위 밖 — v10 은 건드리지 않음 (L26/L66) |
-| 19 | I | `plugins/quality-gates/skills/quality-pipeline/SKILL.md:397` | 옛 이름 'reviewing-spec' | 다룸(L342·L568: 제자리 재작성 — 사전 검사 줄·`## 진입 단계`는 언급 없음) |
+| 18 | I | `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md:168` | 옛 이름 'reviewing-spec' | 범위 밖 — v10 은 건드리지 않음 (L26/L66) |
+| 19 | I | `plugins/quality-gates/skills/quality-pipeline/SKILL.md:411` | 옛 이름 'reviewing-spec' | 다룸(L342·L568: 제자리 재작성 — 사전 검사 줄·`## 진입 단계`는 언급 없음) |
 | 20 | I | `plugins/quality-gates/tests/lib/reconstruct-skill.sh:77` | 옛 이름 'conducting-interview' | 언급 없음 |
 | 21 | I | `plugins/quality-gates/tests/lib/reconstruct-skill.sh:78` | 옛 이름 'reviewing-spec' | 언급 없음 |
 | 22 | I | `plugins/quality-gates/tests/test_codex_gate_observation.sh:70` | 옛 이름 'reviewing-spec' | 언급 없음 |
@@ -57,7 +57,7 @@ v10(#189)에서 해소 — 병합 전 표(23행)에 있다가 사라진 행:
 | # | 출처 | 위반 | 위치 | v10 설계 |
 |---|---|---|---|---|
 | 1 | RC4 | `/qg --reset` 은 SID 가 비어 있지 않은지만 보고, 패턴 가드 · worktree 정리 · KEEP_WORKTREE 를 거치지 않는다 | `plugins/quality-gates/commands/qg.md` (Special argument `--reset`) | 해소(#189) — `--reset` 삭제, `commands/qg.md:65` · `setup-qg.sh:58` 가 제거 안내 한 줄 |
-| 2 | RC5 | `/cancel-qg` 설명의 v1.32.0, quality-pipeline 제목의 v9.3.5 가 plugin.json 과 어긋난다 | `plugins/quality-gates/skills/quality-pipeline/SKILL.md:53` (제목 «v9.3.5», plugin.json 10.0.1) | `/cancel-qg` 쪽은 해소(#189, `commands/cancel-qg.md` 삭제). 제목은 남음 — 다룸(L342: 제자리 재작성 — 제목 버전 표기는 언급 없음) |
+| 2 | RC5 | `/cancel-qg` 설명의 v1.32.0, quality-pipeline 제목의 v9.3.5 가 plugin.json 과 어긋난다 | `plugins/quality-gates/skills/quality-pipeline/SKILL.md:53` (제목 «v9.3.5», plugin.json 10.0.2) | `/cancel-qg` 쪽은 해소(#189, `commands/cancel-qg.md` 삭제). 제목은 남음 — 다룸(L342: 제자리 재작성 — 제목 버전 표기는 언급 없음) |
 | 3 | RC6 | `hide-from-slash-command-tool` 은 인식되지 않는 키라 오류 없이 무시된다 | `commands/cancel-qg.md:4` | 해소(#189) — 파일 삭제 |
 | 4 | RC8 | README 사용법 절의 이름 · 위치가 플러그인마다 다르고, qg README 사용 블록에 `/qg-publish` 가 없다 | `plugins/quality-gates/README.md:367-375` (사용 블록에 `/qg-publish` 여전히 없음) | 다룸(L363: README 다시 씀 — 사용 블록 · `/qg-publish` 는 언급 없음, L519·L579: `/qg-publish` 표면 삭제) |
 | 5 | RC10 | 명령 이름을 안내하는 곳에 스크립트도 있다(bare `/qg`) — 훅 쪽은 해소(#189, `hooks/` 삭제) | `scripts/setup-qg.sh:53,58,62,95,135,219`(#189 가 새로 쓴 최소 setup 의 안내 · 거부 문면) · `scripts/synthesize_findings.py:699` | 다룸(L346: setup-qg.sh 새로 최소 — #189 로 실행됐으나 bare `/qg` 는 남음 · L195·L343: synthesize_findings.py 새로 — 안내 문구의 완전명은 언급 없음) |
