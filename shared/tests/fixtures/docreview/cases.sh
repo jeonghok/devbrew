@@ -2754,6 +2754,19 @@ case_plain_warns_first_line() {
     "경고 쉬운 말 양의 짝: 기계가 읽는 advisory 원문은 그대로다"
   rm -rf "$d"
 }
+# 제목 없는 문서의 첫 줄 — 「앵커 불가」 원문의 두 사실(얼림·보호 검사가 꺼졌다 · 모든 수정이 문서 전체 범위다)이
+# 쉬운 줄 하나에 함께 실린다. 원문은 기계가 읽는 값이라 그대로다(계획 Q9).
+case_plain_warns_headingless_first_line() {
+  local d f; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/headingless.md")" \
+    || { no "제목 없는 문서 경고: route_r1 실패"; return; }
+  f="$(gfirst "$d")"
+  assert_contains "$f" "경고 1개: 문서에 제목이 없어 지적의 자리를 가리키지 못한다 — 얼림·보호 검사가 꺼졌고 모든 수정이 문서 전체 범위다 (앵커 불가)" \
+    "제목 없는 문서 경고: 쉬운 줄이 꺼진 검사와 문서 전체 범위를 함께 말하고 괄호에 사유 토큰을 싣는다"
+  assert_not_contains "$f" "얼림·보호 부류 비활성" "제목 없는 문서 경고: 첫 줄에 엔진 원문이 없다"
+  assert_eq "$(jget "$d/fin.json" 'd["advisory"]')" "['앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위']" \
+    "제목 없는 문서 경고 양의 짝: 기계가 읽는 advisory 원문은 그대로다"
+  rm -rf "$d"
+}
 # 쉬운 말 경고 표의 두 성질 — 표에 없는 원문은 버리지 않고 그대로 싣는다(계획 P6) · 원문 속 개행은 한 줄로 접는다.
 case_plain_warns_unknown_kept() {
   local got; got="$(PYTHONPATH="$SCRIPTS" python3 -c '

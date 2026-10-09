@@ -58,4 +58,14 @@ assert_file_grep "$FR" 'disclosure=proceed 게이트 앞 글' "Q3 양의 짝: �
 
 # ⑧ 질문에 그대로 남는 예외가 명시돼 있다(Q4).
 assert_file_grep "$FR" '규칙 블록의 「따로 정한 자리」' "Q4: 저자 편집 덩어리를 질문에 그대로 싣는 것이 예외라고 적혀 있다"
+
+# ⑨ 게이트 질문의 「경고 N개」는 렌더 첫 줄의 N 이다 — 첫 줄은 같은 사실의 원문들을 한 줄로 합쳐 사실을 세므로
+#    앞 글에 `advisory[]` 원문을 다시 늘어놓으면 질문의 N 과 앞 글의 줄 수가 갈린다(계획 Q9). 줄바꿈을 접어 잰다.
+for f in "$RS" "$RB" "$FR" "$FIN"; do
+  flat="$(tr '\n' ' ' < "$f" | tr -s ' ')"
+  assert_eq "$(printf '%s' "$flat" | grep -oF '렌더 첫 줄의 N 이' | wc -l | tr -d ' ')" "1" \
+    "Q9: $(basename "$(dirname "$f")") 가 질문의 경고 수를 렌더 첫 줄의 N 으로 정한다"
+  assert_eq "$(printf '%s' "$flat" | grep -oF '`advisory[]` 원문을 다시 늘어놓지 않' | wc -l | tr -d ' ')" "1" \
+    "Q9: $(basename "$(dirname "$f")") 가 앞 글에 advisory 원문을 다시 늘어놓지 않는다고 적는다"
+done
 finish

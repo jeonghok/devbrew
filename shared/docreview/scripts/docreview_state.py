@@ -1302,7 +1302,7 @@ WARN_GLOSS = (
     (r"입력 실패\(보조\): doc-recritic — (?P<why>.*)", "doc-recritic", "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다"),
     (r"셀 수 없음: layer2 — (?P<why>.*)", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다"),
     (r"상세 미검증 — 층 2 블록 없음", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다"),
-    (r"앵커 불가 — .*", "앵커 불가", "문서에 제목이 없어 지적의 자리를 가리지 못한다 — 모든 수정이 문서 전체 범위다"),
+    (r"앵커 불가 — .*", "앵커 불가", "문서에 제목이 없어 지적의 자리를 가리키지 못한다 — 얼림·보호 검사가 꺼졌고 모든 수정이 문서 전체 범위다"),
     (r"critic 시점 판별 불가 \((?P<why>.*)\)", "critic 시점", "리뷰어 결과가 이번 라운드 것인지 확인하지 못했다"),
     (r"입력 실패\(주\): (?P<why>.*)", None, "꼭 있어야 할 리뷰어 결과를 읽지 못했다"),
     (r"입력 실패\(보조\): (?P<why>.*)", None, "보조 리뷰어 결과를 읽지 못했다"),
@@ -1503,6 +1503,7 @@ def render_gate(st, g) -> str:
     if g["stagnation"]:
         sub += " · 진전 없음(stagnation)"
     out.append(sub)
+    # 이 바깥 초기화는 쓰이지 않지만 남긴다 — 변이 셀 `marker_crosses_group` 이 묶음마다의 안쪽 초기화만 지워 그 재설정을 잰다.
     prev_anchor = None
     for row in GATE_ROWS:
         fn = GATE_RENDERERS.get(row.render) if row.render else None

@@ -747,6 +747,9 @@ mut 1/1 escalate_reason_unfolded case_I4_escalate_reason_newline_collapsed sed_s
 # 「미검증」 첫 줄에 「남은 것 없음」을 되살리기.
 mut 1/1 unverified_nothing_left case_T46_unverified_no_nothing_left sed_state \
   's/ if left else ("\." if lead else " — 남은 것 없음\."))$/ if left else " — 남은 것 없음.")/'
+# 「앵커 불가」 쉬운 줄에서 꺼진 검사를 빼기 — 얼림·보호 검사가 꺼졌다는 사실이 첫 줄에서 사라진다.
+mut 1/1 warns_anchor_checks_dropped case_plain_warns_headingless_first_line sed_state \
+  's/ — 얼림·보호 검사가 꺼졌고 모든 수정이/ — 모든 수정이/'
 # (54) 상태 디렉토리의 문서 정체 — `init` 의 문서 비교를 끈다. 다른 문서의 원장을 조용히
 #    이어받던 그 동작이다. 거부 셀만 RED 가 된다.
 mut 1/1 init_doc_compare_off case_init_other_doc_refused sed_state \

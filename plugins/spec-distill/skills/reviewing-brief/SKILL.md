@@ -583,6 +583,9 @@ Step B(`spec-interview` `finishing.md` 의 `#### B-A`)가 끝에서 한 번 보�
 - 엔진의 셋 — `fin.json` 의 `advisory[]`(codex 부재 · critic 층 2 부재 · recritic 부재 · 처분 회계의
   degrade 사유) · `fin.json` 의 `blocks`(참/거짓 하나 — critic 사망 · 항목 소실 · 셀 수 없음일 때만 참, 사유는 `advisory[]`) ·
   `docreview_state.py gate --render` 의 **첫 줄**(그 라운드의 상태와 경고(렌더 첫 줄) — 「미검증」 라운드면 그 공시가 맨 앞이다).
+  `advisory[]` 원문은 하나하나가 이 첫 줄의 경고 줄 중 하나에 대응한다(같은 사실을 두 출처가 말한 원문은 한 줄로 합친다).
+  게이트 앞 글에는 이 첫 줄을 그대로 쓰고 `advisory[]` 원문을 다시 늘어놓지 않는다. 질문의 「경고 N개」에서 엔진 몫은
+  렌더 첫 줄의 N 이고, 이 자리의 두 채널의 경고 줄은 그 위에 더한다.
 - 이 자리의 둘 — `brief_review_state.py get "$STATE"` 의 `brief_review_degradations`(진입 게이트 강등 ·
   번들 위생 미달 · 냉독 실패 · BRIEF_REVIEW skip · 원장 기록 불가처럼 엔진 밖의 사건) · 그 기록이
   실패했을 때의 `$DEGRADE_FALLBACK_FILE` 줄들(머리가 매 호출 같은 파일로 다시 도출한다).
