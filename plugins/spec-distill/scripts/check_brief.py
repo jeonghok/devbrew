@@ -942,7 +942,7 @@ CONFIRM_ROW_RE = re.compile(r"^확인\s+(RC\d+)\s+—\s+(확인|반증|미확인
 
 INTERNAL_RESEARCH_ZERO_ADVISORY = (
     "[spec-distill] 내부 조사 0건 — 이 brief 는 레포 주장(`RC<n>`)을 하나도 싣지 않았다. 이 게이트는 "
-    "brief 파일만 읽으므로 「조사를 했어야 했는가」를 알 방법이 없다 — 그 판단은 Step B 게이트에서 "
+    "brief 파일만 읽으므로 「조사를 했어야 했는가」를 알 방법이 없다 — 그 판단은 다음 단계 게이트에서 "
     "사람이 한다."
 )
 CONTRACT_V1_ADVISORY = (
@@ -1256,7 +1256,7 @@ def budget_mapper_failures(audit_text: str) -> tuple[list[str], list[str]]:
     가른다. 대상은 §2 의 **불릿 줄**이다(`MAPPER_RE` 주석) — 머리 설명 산문의 예시는
     판정에 참여하지 않는다. **이 검사가 못 잡는 것**: sentinel 은 피검자가 쓰는 문구라,
     dispatch 를 건너뛴 턴이 같은 문구를 적으면 «도구 부재»와 구분하지 못한다. 그래서
-    advisory 는 조용히 통과하지 않고 Step B 게이트 텍스트로 사람에게 간다."""
+    advisory 는 조용히 통과하지 않고 다음 단계 게이트 앞 글로 사람에게 간다."""
     sec = _section_text(audit_text, "2", "Budget")
     m = MAPPER_RE.search(sec)
     if not m:
@@ -1265,7 +1265,7 @@ def budget_mapper_failures(audit_text: str) -> tuple[list[str], list[str]]:
     if k >= 1:
         return [], []
     if reason:
-        return [], [f"coverage-mapper 0 ({reason}) — dispatch 없이 통과 (advisory, 사람이 확인)"]
+        return [], [f"coverage-mapper 0 ({reason}) — 범위 조사 에이전트를 부르지 않고 통과했다 (사람이 확인할 것)"]
     return ["§2 Budget: coverage-mapper 0 without unavailable reason"], []
 
 

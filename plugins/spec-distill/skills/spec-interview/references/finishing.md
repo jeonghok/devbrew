@@ -213,7 +213,7 @@ Step A가 끝난 시점에 `user_sourced_items`는 **전부 `provisional`**입�
 때문입니다:
 
 ```
-[spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등
+[spec-distill] 확정 목록을 두 번 다시 보여 줬는데도 정하지 못했다 — 모든 항목을 잠정(provisional)으로 둔다
 ```
 
 카운터는 프로즈 self-tracking이 아니라 state에 씁니다(PN1 Bash write contract):
@@ -238,7 +238,7 @@ harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "$PAYLOAD" || true)"
 if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
-  echo "[spec-distill] 참고(advisory) 목록 없음 — brief 리뷰 원장이 없다(STATE_DIR='${STATE_DIR:-}'): 리뷰가 skip 됐거나 세션 정리로 걷혔다. 게이트 텍스트에 싣는다."
+  echo "[spec-distill] 참고(advisory) 목록 없음 — brief 리뷰 원장이 없다(STATE_DIR='${STATE_DIR:-}'): 리뷰가 skip 됐거나 세션 정리로 걷혔다. 게이트 앞 글에 싣는다."
 else
   adv_rc=0
   adv_err="$STATE_DIR/advice-err.json"
@@ -249,8 +249,8 @@ else
   fi
   if [ "$adv_rc" -ne 0 ]; then
     cat "$adv_err" >&2
-    echo "[spec-distill] 참고 목록 판독 · 표시 실패(rc $adv_rc) — 위 stderr 사유를 게이트 텍스트에 싣는다."
-    grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' "$adv_err" || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8 --where "brief §3 · §5" || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 게이트 텍스트에 싣는다."
+    echo "[spec-distill] 참고 목록 판독 · 표시 실패(rc $adv_rc) — 위 stderr 사유를 게이트 앞 글에 싣는다."
+    grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' "$adv_err" || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8 --where "brief §3 · §5" || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 게이트 앞 글에 싣는다."
   fi
 fi
 ```
@@ -279,7 +279,7 @@ python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
 
 - **superpowers 부재 시**: 현행 graceful degradation 그대로 — brief를 완료하고 **loud advisory**를 낸 뒤 **정지(STOP)**. 게이트 없음(compact 후 넘길 대상 자체가 없음). crash·spec-mode fallback **금지**(단독 완결, graceful degrade):
 
-  > `[spec-distill] interview brief 완결: docs/superpowers/interview/<file>. superpowers 설치 시 brainstorming 해답공간 단계로 이어집니다. 미설치 시 이 brief를 직접 다음 작업의 입력으로 사용하세요.`
+  > `[spec-distill] interview brief 를 만들었다: docs/superpowers/interview/<file>. superpowers 가 없어 여기서 멈춘다. 이 brief 를 다음 작업의 입력으로 쓰세요.`
 
 - **superpowers 가용 시**: B-2 proceed 게이트 제시.
 
@@ -297,24 +297,31 @@ brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안�
 
 게이트를 띄우기 *전에* Step A.5 리뷰 산출물을 프로즈로 출력합니다(B-0 확정 후보 목록 다음):
 
-1. **리뷰 게이트 결과** — 엔진의 마지막 게이트 렌더 · 승인 게이트 도달 사유(열린 것 없음 · 상한 · stagnation · 「미검증」) · 리뷰 완료 여부 · 1단계에서의 사용자 선택. 방향 · overdesign(참고 축)은 라운드 게이트에 오지 않았습니다 — B-A 가 낸 것을 싣습니다: 참고 목록과 §3 · §5 박제 결과, 또는 B-A 의 부재 · 실패 공시(`[spec-distill]` 줄).
+1. **리뷰 게이트 결과** — 엔진의 마지막 게이트의 첫 줄을 뺀 렌더(첫 줄은 목록 4 에 쓴다) · 승인 게이트 도달 사유(열린 것 없음 · 상한 · stagnation · 「미검증」) · 리뷰 완료 여부 · 1단계에서의 사용자 선택. 방향 · overdesign(참고 축)은 라운드 게이트에 오지 않았습니다 — B-A 가 낸 것을 싣습니다: 참고 목록과 §3 · §5 박제 결과, 또는 B-A 의 부재 · 실패 공시(`[spec-distill]` 줄).
    「미검증」 라벨과 리뷰 완료 여부의 출처는 **엔진 게이트 요약**입니다 — `reviewing-brief` 가 넘기는 마지막 요약의 `approval_label` · `round_reviewed` · `unreviewed_reason` 을 그대로 싣고, critic 사망 횟수나 `finalize` 결과를 기억해 라벨을 붙이지 않습니다. `round_reviewed` 가 거짓이면 그 라운드는 리뷰 완료가 아니고, 사유(`unreviewed_reason`)는 다음 중 하나입니다:
    - 「미검증」 — critic 사망(`critic_dead`) · `finalize` 실패(`finalize_incomplete`). `approval_label` 이 「미검증」이고 승인 게이트를 그 라벨로 연 라운드입니다.
    - 라운드 미완(`unrouted`) — 이번 라운드의 라우팅 보고서가 없다(`finalize` 를 거치지 않았다). 라벨도 승인 게이트 강제도 없지만 리뷰 완료가 아니므로, 이 사유를 도달 사유와 함께 싣습니다.
 2. **readback 요약 전문** + gap 목록(*어느 클래스 / 요약의 어느 문장 / payload의 어느 절*).
 3. **열린 채 남은 항목과 미반영 findings** — 있으면 각각 이유와 함께. 저자가 임의로 기각한 것이 아니라 사용자 판정
    대상입니다.
+4. **경고** — 아래 「이 skill 의 degrade 채널」을 읽고 경고를 한 줄씩 쉬운 말로 쓴다(원문 사유 토큰은 괄호에).
+   `check_brief.py gate` 의 `advisories` 도 여기 쓴다. 채널을 다 읽었는데 경고가 없으면, 남은 항목(위 3)도
+   없을 때만 「이상 없음」, 남은 항목이 있으면 「경고 없음」 한 줄이다. 읽지 못한 채널은 「알 수 없음 — <사유>」
+   로 따로 한 줄 쓴다.
 
 **이 skill 의 degrade 채널** (정본 Step B 가 각 skill 에 이름을 대라고 요구하는 그것):
 `reviewing-brief` 의 `## degrade 채널` 다섯 — 엔진의 `fin.json` `advisory[]`·`blocks`·`gate --render` 첫 줄 +
 state 의 `brief_review_degradations` 원장(BRIEF_REVIEW skip record 포함)·두 번째 채널 파일 — 과 웹 한 줄.
-`degrade 없음`은 **그 채널들을 실제로 읽었다는 주장**이므로, 조회하지 않은 채 쓰지 않습니다.
+`advisory[]` 원문은 하나하나가 `gate --render` 첫 줄의 경고 줄 중 하나에 대응하므로, 경고(목록 4)에는 그 첫 줄의
+경고 줄을 그대로 쓰고 `advisory[]` 원문을 다시 늘어놓지 않습니다. 질문의 「경고 N개」에서 엔진 몫은 렌더 첫 줄의 N 이고,
+다른 채널의 경고 줄은 그 위에 더합니다. 렌더 첫 줄의 끝 문구(이상 없음 · 경고 없음 · 경고 K개)는 문서 리뷰 엔진 몫의 결론이다. 다른 채널에 경고가 있으면 첫 줄 아래에 「그 밖의 경고 M개:」 줄로 쓰고, 전체 결론은 질문의 상태 줄이 정한다(엔진 K + 그 밖의 M).
+「이상 없음」·「경고 없음」은 **그 채널들을 실제로 읽었다는 주장**이므로, 조회하지 않은 채 쓰지 않습니다.
 
-그리고 `question` 텍스트에 **모든 degrade record를 한 줄씩** 싣습니다 — 옵션 description이
-아니라 question 본문이어야 사용자가 옵션을 고르기 *전에* 봅니다. record가 없으면
-`degrade 없음`을 한 줄로 명시합니다(침묵과 구분).
+모든 degrade record 는 **게이트 앞 글**(위 목록 4)에 한 줄씩 씁니다 — 옵션 description 에 싣지 않습니다.
+사용자가 옵션을 고르기 *전에* 읽도록 질문 바로 앞에 둡니다. 질문 본문에는 결정 하나와 그 개수 한 줄
+(「경고 N개 — 위에 적었다」 또는 「경고 없음」·「이상 없음」)만 둡니다.
 
-`check_brief.py gate` 의 `advisories` 도 이 텍스트에 싣습니다 — `coverage-mapper 0
+`check_brief.py gate` 의 `advisories` 도 게이트 앞 글(목록 4)에 씁니다 — `coverage-mapper 0
 (unavailable: …)` 은 게이트가 관측할 수 없는 사실(실제 dispatch 여부)을 사람에게 넘기는
 유일한 자리입니다. 조사 축의 advisory 둘도 같은 자리로 옵니다:
 
@@ -326,13 +333,13 @@ state 의 `brief_review_degradations` 원장(BRIEF_REVIEW skip record 포함)·�
 ```javascript
 AskUserQuestion({
   questions: [{
-    question: "interview brief 완결: <brief-path> (구조 게이트 통과, 리뷰 <게이트 결과 한 줄 — 도달 사유 · 열린 항목 수 · 리뷰 완료가 아니면 그 사유(unreviewed_reason)>). 확정 후보·리뷰 게이트 결과·readback gap은 위 목록대로. 게이트 advisory: <check_brief 의 advisories 한 줄씩 (예: coverage-mapper 0 (unavailable: …) · 내부 조사 0건 · 신 계약 미적용 brief) | 없음>. degrade: <record 한 줄씩 | degrade 없음>. 다음 단계?",
-    header: "Proceed",
+    question: "interview brief 를 만들었다: <brief-path> (구조 검사 통과 · 리뷰 <게이트 결과 한 줄 — 왜 여기서 멈췄는지 · 남은 항목 수 · 리뷰를 마치지 못했으면 그 사유(unreviewed_reason)>). 경고 <N>개 — 위에 적었다 | 경고 없음 | 이상 없음. 다음 단계는?",
+    header: "다음 단계",
     options: [
-      {label: "확정하고 /compact 후 brainstorming (권장)", description: "확정 후보를 status: confirmed로 반영 → 재저장 → 게이트 재실행 → verbatim /compact 노출. 긴 인터뷰 context 정리 이점."},
-      {label: "확정하고 바로 brainstorming", description: "확정 반영 후 즉시 Skill superpowers:brainstorming <brief-path> 호출 (compact 없이, 전체 context 유지)."},
-      {label: "확정 목록 수정", description: "확정 후보를 고쳐 다시 제시 (상한 2회). 확정 전이 없음."},
-      {label: "brief만 종료", description: "brief는 단독 완결 terminal (NG7). 전 항목 provisional 유지, handoff 안 함."}
+      {label: "확정하고 /compact 후 brainstorming (권장)", description: "확정 후보를 확정으로 바꿔 저장하고, 붙여 넣을 /compact 명령을 보여 준다. 긴 인터뷰 기록이 정리된 뒤 brainstorming 을 시작한다."},
+      {label: "확정하고 바로 brainstorming", description: "확정 후보를 확정으로 바꿔 저장하고, 이 대화 그대로 brainstorming 을 시작한다(기록 정리 없음)."},
+      {label: "확정 목록 수정", description: "확정 후보를 고쳐 다시 보여 준다(최대 2번). 아직 아무것도 확정되지 않는다."},
+      {label: "brief만 종료", description: "brief 를 여기서 끝낸다. 모든 항목이 잠정으로 남고 다음 단계로 넘기지 않는다."}
     ],
     multiSelect: false
   }]
@@ -357,7 +364,7 @@ AskUserQuestion({
   *그대로 보이게* 노출 + "다음 턴에 직접 `Skill superpowers:brainstorming <실제 경로>` 를
   부르세요" 안내 (사람이 유일한 운반자다 — 자동으로 이어지지 않는다):
 
-  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 §0 한눈에, §2 제약, §3 Open Questions, §6 사용자 원문 중 `S1`), audit 파일 경로 참조, **그리고 아래 '재결정 규약' 문장**을 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. 재결정 규약: confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 다음 단계: Skill superpowers:brainstorming <brief-path> → 설계문서를 쓰고 커밋한 뒤, brainstorming 의 사용자 리뷰 게이트 자리에서 그 설계문서 경로로 Skill spec-distill:spec-review → 그 승인 게이트에서 진행을 고른 뒤 superpowers:writing-plans.`
+  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 §0 한눈에, §2 제약, §3 Open Questions, §6 사용자 원문 중 `S1`), audit 파일 경로 참조, **그리고 아래 '재결정 규약' 문장**과 사람에게 쓰는 글 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에, 첫 줄에 상태, 끝에 할 일 하나)을 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. 재결정 규약: confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 다음 단계: Skill superpowers:brainstorming <brief-path> → 설계문서를 쓰고 커밋한 뒤, brainstorming 의 사용자 리뷰 게이트 자리에서 그 설계문서 경로로 Skill spec-distill:spec-review → 그 승인 게이트에서 진행을 고른 뒤 superpowers:writing-plans.`
 
   **`<brief-path>` 두 자리를 Step A 가 방금 쓴 실제 경로로 치환한 뒤 노출한다.** 이 명령은
   사용자가 그대로 붙여넣는 것이므로, 치환하지 않고 내보내면 사용자가 깨진 명령을 실행한다 —

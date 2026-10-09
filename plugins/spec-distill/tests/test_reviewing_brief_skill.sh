@@ -109,7 +109,7 @@ for sw in 'DEVBREW_SPEC_DISTILL_DISABLE=1' 'DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_R
 done
 W_KS="$(section 'kill switch')"
 has "$W_KS" '캐시하지 않' && ok "kill switch: dispatch 직전 확인·캐시 금지 계약" || no "kill switch: 확인 시점 계약(캐시 금지)이 없다"
-{ has "$W_KS" 'SKIPPED' && has "$W_KS" 'Step B' && has "$W_KS" '조용히 건너뛰지 않는다'; } \
+{ has "$W_KS" '건너뛰었다' && has "$W_KS" 'Step B' && has "$W_KS" '조용히 건너뛰지 않는다'; } \
   && ok "kill switch: BRIEF_REVIEW skip 은 record + loud advisory 후 Step B (조용한 생략 아님)" \
   || no "kill switch: BRIEF_REVIEW skip 경로의 공시가 무너졌다"
 
@@ -277,7 +277,7 @@ W_DG="$(section 'degrade 채널')"
 for ch in 'advisory[]' 'blocks' 'gate --render' 'brief_review_degradations' '$DEGRADE_FALLBACK_FILE' '웹:'; do
   has "$W_DG" "$ch" && ok "degrade 채널: '$ch' 를 이름으로 댄다" || no "degrade 채널: '$ch' 가 절에서 사라졌다"
 done
-{ has "$W_DG" 'degrade 없음' && has "$W_DG" '실제로 읽었다는 주장' && has "$W_DG" '알 수 없는'; } \
+{ has "$W_DG" '「경고 없음」' && has "$W_DG" '실제로 읽었다는 주장' && has "$W_DG" '알 수 없는'; } \
   && ok "degrade 채널: 「없음」은 읽었다는 주장이고, 판독 실패는 「알 수 없음」이다" \
   || no "degrade 채널: 침묵과 「없음」·「판독 불가」의 구분이 사라졌다"
 for fld in component affected_axis verification_status reason; do

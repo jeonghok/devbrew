@@ -1,31 +1,32 @@
 # spec-distill
 
-> 강한 문제공간 인터뷰(메타프롬프팅 + 웹 리서치 + adversarial steelman)로 방향을 끌어내 superpowers brainstorming용 interview brief를 생성하고, design doc은 물리 분리된 Law 2 reviewer가 검증하는 devbrew-native 플러그인.
+> 흐릿한 요청을 인터뷰로 다듬어 brainstorming 에 넘길 brief 로 만들고, 설계문서는 문서를 고칠 수 없는 독립 리뷰어가 검토하게 하는 플러그인.
 
-## What it does
+## 이 플러그인이 하는 일
 
-`/spec-interview <rough request>` 호출 시 «지금 이해 · 다음 결정 · 질문 하나» 형식의 Korean Socratic
-인터뷰가 **강한 문제공간 stage**로 동작합니다: 요청을 재구성(메타프롬프팅)하고, 외부 사례를 웹으로 조사하고(bounded), 약한 방향을
-steelman으로 깨뜨려, **interview brief**(brainstorming용 meta-prompt)를 **2파일 쌍**으로
-산출합니다 — payload `docs/superpowers/interview/YYYY-MM-DD-<topic>-interview.md`(8섹션 역피라미드,
-`templates/interview-brief-template.md`) + audit `…-interview.audit.md`(5섹션 텔레메트리,
-`templates/interview-audit-template.md`). audit 이름은 payload 파일명에서 유도됩니다. 5 통과 의례(R1–R5)가
-Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpowers가 있으면 brainstorming
-해답공간으로(optional), design doc은 물리 분리된 reviewer가 Law 2로 검증합니다.
+흐릿한 요청을 한국어 인터뷰로 다듬어 brainstorming 에 넘길 문서(interview brief)로 만들고, 그 뒤에 나온 설계문서는 고칠 수 없는 독립 리뷰어가 검토합니다. 인터뷰는 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 진행하고, 필요하면 웹에서 비슷한 사례를 찾고(횟수 제한) 약한 방향은 반대 입장을 가장 강하게 세워 시험합니다(steelman). brief 는 **2파일 쌍**으로 나옵니다 — 본문 `docs/superpowers/interview/YYYY-MM-DD-<topic>-interview.md`(결론부터 쓰는 **8섹션**, `templates/interview-brief-template.md`)와 기록 `…-interview.audit.md`(5섹션, `templates/interview-audit-template.md`)이고, `.audit.md` 이름은 본문 파일명에서 따라 정해집니다.
 
-## Quick start
+## 쓰는 법
+
+사용자가 부르는 진입 skill 은 셋입니다.
+
+- `/request-framing` — 요청이 아직 흐릿해서 방향부터 맞추고 싶을 때. 다음 세션 첫 턴이 가리킬 요청 요약 파일(`interview-seed`)이 나옵니다.
+- `/spec-interview` — 요청을 인터뷰로 다듬고 싶을 때. 인터뷰 결과를 정리한 문서(interview brief)가 나옵니다.
+- `/spec-review` — brainstorming 이 설계문서를 쓴 뒤 검토하고 싶을 때. 문서 리뷰 결과와 다음 단계를 고르는 질문이 나옵니다.
 
 ```
 /spec-interview todo 앱 만들어줘
 ```
 
-`spec-interview` skill이 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 첫 round를 시작합니다.
+`spec-interview` skill 이 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 첫 라운드를 시작합니다.
 
-사용자가 부르는 진입 skill은 셋이다 — `/request-framing`(파이프라인 맨 앞 회의) · `/spec-interview`(인터뷰) · `/spec-review`(설계문서 리뷰). 설치 환경에 같은 이름이 있으면 `/spec-distill:spec-interview` 처럼 완전명으로 부른다. 기계가 내는 안내(핸드오프 · trivia 문면)는 처음부터 완전명을 쓴다.
+설치 환경에 같은 이름이 있으면 `/spec-distill:spec-interview` 처럼 완전명으로 부릅니다. 기계가 내는 안내(핸드오프 · trivia 문면)는 처음부터 완전명을 씁니다.
 
-`/spec-interview` 는 `@` 로 시작하는 인자에 공백이 섞이면 풀지 않고 멈춘다(경로 한 토큰으로 다시 부른다). `/request-framing` 은 그런 인자를 받은 그대로 회의 재료로 쓴다.
+`/spec-interview` 는 `@` 로 시작하는 인자에 공백이 섞이면 풀지 않고 멈춥니다(경로 한 토큰으로 다시 부르세요). `/request-framing` 은 그런 인자를 받은 그대로 회의 재료로 씁니다.
 
-## Flow (v0.41.0)
+## 흐름
+
+아래 그림이 전체 순서입니다. 사용자가 고르는 자리는 «게이트» 로 표시했고, 경고가 있으면 그 질문 바로 앞 글에 적힙니다.
 
 ```
 /request-framing ─→ [Phase 0] request-framing — 확산 후 압축
@@ -84,34 +85,34 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 ### Three Laws
 
-- **Law 1 (Clarity Before Code)** — Plugin의 raison d'être. 인터뷰 → brief → design doc → reviewer → human gate. **설계문서에는 필수 섹션 구조 게이트가 없다(3.0.0)** — 그것을 검사하던 코드(spec 모드 검사)는 생산자가 없어 발동하지 않았고 리뷰 훅과 함께 삭제됐다. 설계문서의 명확성은 `doc-critic` 층 2(`placeholder`·`ambiguity`)와 승인 게이트가 판정한다 — 이 리포의 Law 1 필수 섹션 게이트 구현은 0 이다(CHANGELOG `[3.0.0]`).
-- **Law 1 (Clarity) — 문제공간 게이트 (v0.12.0)** — interview의 5 통과 의례(R1–R5)가 `check_brief.py`로 기계 검증되는 구조 게이트. 약한 방향(무인용 landscape·un-challenged 의심·빈 시행착오)은 brief 종료를 차단.
-- **Law 1 — 진입 skill 의 본문 전 사전 검사(`!`)가 kill switch 를 모델 판단 밖에서 집행한다.**
-- **Law 2 (Writer/Reviewer 분리)** — `tools:` allowlist frontmatter로 doc-critic(`Read, Grep, Glob`) + doc-critic-web(`Read, Grep, Glob, WebSearch, WebFetch`) + doc-recritic(`Read, Grep, Glob`) + coverage-mapper(`Read, Grep, Glob, WebSearch, WebFetch`) + blind-spot-prober(`Read, Grep, Glob, WebSearch, WebFetch`) agent의 *물리적* 분리. 프롬프트가 아닌 frontmatter scoping이며, **allowlist라 열거되지 않은 쓰기·실행·위임 도구가 자동 차단**된다(denylist는 시간에 대해 fail-open이라 v0.21.0에서 폐기).
+- **Law 1 (Clarity Before Code)** — 이 플러그인이 있는 이유다: 명세가 모호하면 구현으로 가지 않는다. 인터뷰 → brief → design doc → reviewer → human gate. **설계문서에는 필수 섹션 구조 게이트가 없다(3.0.0)** — 그것을 검사하던 코드(spec 모드 검사)는 생산자가 없어 발동하지 않았고 리뷰 훅과 함께 삭제됐다. 설계문서의 명확성은 `doc-critic` 층 2(`placeholder`·`ambiguity`)와 승인 게이트가 판정한다 — 이 리포의 Law 1 필수 섹션 게이트 구현은 0 이다(CHANGELOG `[3.0.0]`).
+- **Law 1 (Clarity) — 문제공간 게이트 (v0.12.0)** — 인터뷰가 끝나려면 다섯 가지 확인(R1–R5: 문제 다시 보기 · 사례 조사 · 반대 입장 시험 · 해보고 버린 것 · 열린 질문)을 거쳐야 하고, 그것을 `check_brief.py`로 기계가 검사하는 구조 게이트다. 약한 방향(무인용 landscape·un-challenged 의심·빈 시행착오)은 brief 종료를 차단.
+- **Law 1 — 진입 skill 의 본문 전 사전 검사(`!`)가 kill switch 를 모델 판단 밖에서 집행한다.** 끄기로 해 둔 기능은 모델이 마음을 바꿔도 돌지 않는다는 뜻이다 — skill 본문을 읽기 전에 정해진 검사가 먼저 돌아 스위치를 확인한다.
+- **Law 2 (Writer/Reviewer 분리)** — `tools:` allowlist frontmatter로 doc-critic(`Read, Grep, Glob`) + doc-critic-web(`Read, Grep, Glob, WebSearch, WebFetch`) + doc-recritic(`Read, Grep, Glob`) + coverage-mapper(`Read, Grep, Glob, WebSearch, WebFetch`) + blind-spot-prober(`Read, Grep, Glob, WebSearch, WebFetch`) agent의 *물리적* 분리. 프롬프트가 아닌 frontmatter scoping이며, **허용할 도구만 적는 방식이라 적지 않은 쓰기·실행·위임 도구는 자동으로 막힌다**(막을 도구만 적는 방식(denylist)은 내일 생길 도구를 오늘 적을 수 없어 기본값이 열림이 되므로 v0.21.0에서 폐기).
 - **Law 2 — 리뷰 진입은 집행이 아니다 (3.0.0)** — 설계문서 리뷰 진입에 훅 강제가 없다. brainstorming 뒤·writing-plans 앞에 `spec-review` 를 부르는 것은 오케스트레이터이고, 근거는 인터뷰 핸드오프 문구와 이 skill 의 description 이다 — 철학 P13(hook = 집행 / skill = capability 표면) 기준으로 이 자리의 집행이 사라졌다. `/brainstorming` 직접 경로는 description 하나에 기대므로 건너뛰는 일이 흔할 것이다 — 그때는 `/spec-distill:spec-review <경로>` 로 부른다. 리뷰어의 물리 분리(`tools:` allowlist)는 그대로다.
-- **Law 3 (Compounding) — 처분 회계(adjudication `Ledger`)** (v0.52.0) — 리뷰 findings 가 버려지는 자리가 `shared/adjudication/adjudication.py` 의 처분을 부른다. 소비자는 문서 리뷰 엔진의 `scripts/docreview_route.py`(`shared/docreview/` 심볼릭 링크 — design doc · brief · seed 세 자리의 finding 이 여기서 라우팅된다) 등이고, 전수 목록은 `tools/adjudication/check_wiring.py` 가 import 로 도출한다 — 여기서 열거하지 않는다. 집행은 `shared/tests/test_adjudication_{wiring,consumed}.sh`. **범위**: `consumer=orchestrator`/`human` 인 dispatch 자리는 `disclosure=` 리터럴 실재까지만 검사된다(CLAUDE.md 축 C 한계) — 이 플러그인의 앵커 다수가 그쪽이다.
-- **Law 2 (입력 오염 차단) — `input_slots`** (v0.52.0) — 이 플러그인의 agent 열이 frontmatter 에 받는 입력의 `tag`/`var`/`kind` 를 선언한다. 금지 종류(`prior_verdict`·`score`·`orchestrator_framing`)는 C6 인용과 함께 `tools/adjudication/check_slots.py` 의 `EXEMPT_SLOTS` 등재를 요구한다 — `blind-spot-prober.framing` 이 그 하나다(과업의 대상이 오케스트레이터의 재구성 그 자체라서). 집행은 `shared/tests/test_agent_input_slots.sh`.
-- **Law 3 (Compounding)** — 설계문서 `docs/superpowers/specs/…-design.md` 자체가 named, git-versioned, diff-able artifact (P5).
-- **Law 3 (Compounding) — model diversity (v0.20.0)** — codex 병렬 co-reviewer를 design-doc 리뷰에 추가. codex가 Claude persona가 반복해 놓치는 결함류(fail-open)를 잡으면 → 그 자리의 persona 파일(오늘은 `shared/docreview/agents/doc-critic.md`, v0.20.0 당시엔 `spec-reviewer.md`) 편집이 compounding 이벤트. quality-gates codex 패턴의 실증 이력을 상속.
-- **AP2 approval-gate 구분 (v0.11.0)** — handoff 다음-단계 추천을 hook(텍스트 주입만 가능)이 아니라 spec-review 의 `## 게이트` 절이 띄우는 `AskUserQuestion` proceed 게이트로 전달. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 polite-stop 봉쇄 장치 (철학 AP2 앵커). 진행(①/②) 직전의 미커밋 확인은 `spec-review` `## 게이트` 의 리터럴 펜스가 한다 — 미커밋이거나 git 이 확인에 실패하면 advisory 만 내고 아무것도 기록하지 않는다. 세션 dir 삭제는 SessionEnd 훅(세션 폴더 + TTL-GC)이 한다.
-- **Law 1 (Clarity) — 핸드오프 게이트 (v0.23.0)** — brief 구조 게이트가 **2파일 fail-closed**로 확장. payload frontmatter `audit_file`(basename만, traversal 거부)로 audit을 해석하고, 못 열면 payload-only로 degrade하지 않고 red를 낸다. `user_sourced_items` 스키마 + 세 bijection(A: payload §5 ↔ audit §3 / B: body §2 ↔ frontmatter — statement 내용까지 / C: `evidence: S<N>` → payload §6 ∪ audit §6)이 라벨과 내용이 어긋나는 drift를 기계로 잡는다.
-- **P17 (User sovereignty) — 확정 권한 반환 (v0.23.0)** — 라운드마다 결정을 잠그던 producer를 제거하고 `status: confirmed`를 **종료 시 사용자 일괄 확인**으로만 발생시킨다. 확인은 새 의례가 아니라 기존 proceed 게이트에 흡수돼 상호작용이 1회로 유지된다(trivia ceremony 회피). 재제시에는 상한 2회가 있고 초과 시 전 항목이 `provisional`로 강등된다 — **덜 잠그는 쪽이 안전한 방향**(Unbounded-autonomy 가드).
-- **Law 2 (brief 자리, v0.24.0 → 3.1.0 엔진 전환)** — `reviewing-brief` 가 `shared/docreview/` 엔진의 두 번째 껍데기다(옛 3단계 파이프라인의 agent · 스크립트 이름은 `CHANGELOG.md` `[3.1.0]` Removed 참고). 탐지 `doc-critic-web` → 재비판 `doc-recritic` 이 층 1(방향성) · 층 2(충실도)를 한 라운드에서 보고, 둘 다 `tools:` 에 쓰기 · 실행 · 위임이 없다. 3중 분리: (a) **리뷰어 도구 분리** — `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 이면 선택 펜스가 웹 도구 없는 `doc-critic` 을 지명한다(dispatch 는 지명된 블록을 따르고 그 선택을 강제하는 훅은 없다 — 물리적인 것은 그 사본의 `tools:` 에 웹 도구가 없다는 것뿐이다), (b) **입력 격리** — 탐지 · 재비판은 번들의 내용을 받고 냉독 `brief-readback` 은 `tools: []` 로 payload 전문만 받으며, 네 페르소나 모두 원문 블록을 데이터로 읽는다(주입 경계), (c) **수정 후 재리뷰** — 저자 수정은 다음 라운드의 fresh 탐지를 거친다(재리뷰 상한 2, 라운드 4 이상은 사용자 문구로 승인) — writer 가 자기 수정을 승인하는 경로가 없다.
-- **Law 3 (brief 자리)** — brief 프로필(`references/docreview-profiles/brief.md`)의 충실도 범주 여섯(`layer_rubric.layer2`)과 냉독 gap 클래스 G1–G6 가
+- **Law 3 (Compounding) — 처분 회계(adjudication `Ledger`)** (v0.52.0) — 리뷰가 찾은 결함을 버릴 때마다 장부에 남겨 조용히 사라지지 않게 한다. 버려지는 자리가 `shared/adjudication/adjudication.py` 의 처분을 부른다. 소비자는 문서 리뷰 엔진의 `scripts/docreview_route.py`(`shared/docreview/` 심볼릭 링크 — design doc · brief · seed 세 자리의 finding 이 여기서 라우팅된다) 등이고, 전수 목록은 `tools/adjudication/check_wiring.py` 가 import 로 도출한다 — 여기서 열거하지 않는다. 집행은 `shared/tests/test_adjudication_{wiring,consumed}.sh`. **범위**: `consumer=orchestrator`/`human` 인 dispatch 자리는 `disclosure=` 리터럴 실재까지만 검사된다(CLAUDE.md 축 C 한계) — 이 플러그인의 앵커 다수가 그쪽이다.
+- **Law 2 (입력 오염 차단) — `input_slots`** (v0.52.0) — 리뷰어가 받는 입력에 앞선 판정이나 점수가 섞이지 않게, 이 플러그인의 agent 열이 frontmatter 에 받는 입력의 `tag`/`var`/`kind` 를 선언한다. 금지 종류(`prior_verdict`·`score`·`orchestrator_framing`)는 C6 인용과 함께 `tools/adjudication/check_slots.py` 의 `EXEMPT_SLOTS` 등재(면제 목록)를 요구한다 — `blind-spot-prober.framing` 이 그 하나다(맡은 일이 오케스트레이터의 재구성 그 자체를 따지는 것이라서). 집행은 `shared/tests/test_agent_input_slots.sh`.
+- **Law 3 (Compounding)** — 설계문서가 이름이 있고 git 이력이 남고 달라진 곳을 볼 수 있는 파일이라서, 다음 세션이 그것을 찾아 이어받을 수 있다. 설계문서 `docs/superpowers/specs/…-design.md` 자체가 named, git-versioned, diff-able artifact (P5).
+- **Law 3 (Compounding) — model diversity (v0.20.0)** — 서로 다른 모델이 같은 문서를 따로 읽게 하려고 codex 를 나란히 도는 공동 리뷰어로 설계문서 리뷰에 더했다. codex가 Claude persona가 반복해 놓치는 결함류(fail-open)를 잡으면 → 그 자리의 persona 파일(오늘은 `shared/docreview/agents/doc-critic.md`, v0.20.0 당시엔 `spec-reviewer.md`) 편집이 compounding 이벤트. quality-gates codex 패턴의 실증 이력을 상속.
+- **AP2 approval-gate 구분 (v0.11.0)** — 「잘 됐다」고 요약만 하고 멈추는 대신 사용자가 방향을 고를 수 있게, handoff 다음-단계 추천을 hook(텍스트 주입만 가능)이 아니라 spec-review 의 `## 게이트` 절이 띄우는 `AskUserQuestion` proceed 게이트로 전달. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 polite-stop 봉쇄 장치 (철학 AP2 앵커). 진행(①/②) 직전의 미커밋 확인은 `spec-review` `## 게이트` 의 리터럴 펜스가 한다 — 미커밋이거나 git 이 확인에 실패하면 advisory 만 내고 아무것도 기록하지 않는다. 세션 dir 삭제는 SessionEnd 훅(세션 폴더 + TTL-GC)이 한다.
+- **Law 1 (Clarity) — 핸드오프 게이트 (v0.23.0)** — brief 구조 검사가 두 파일을 모두 읽고, 하나라도 못 읽으면 통과시키지 않는 방식(**2파일 fail-closed**)으로 넓어졌다. payload frontmatter `audit_file`(basename만, traversal 거부)로 audit을 해석하고, 못 열면 payload-only로 degrade하지 않고 red를 낸다. `user_sourced_items` 스키마 + 세 bijection(A: payload §5 ↔ audit §3 / B: body §2 ↔ frontmatter — statement 내용까지 / C: `evidence: S<N>` → payload §6 ∪ audit §6)이 라벨과 내용이 어긋나는 drift를 기계로 잡는다.
+- **P17 (User sovereignty) — 확정 권한 반환 (v0.23.0)** — 무엇이 확정인지는 사용자가 인터뷰 끝에 한 번에 정한다. 라운드마다 결정을 잠그던 producer를 제거하고 `status: confirmed`를 **종료 시 사용자 일괄 확인**으로만 발생시킨다. 확인은 새 의례가 아니라 기존 proceed 게이트에 흡수돼 상호작용이 1회로 유지된다(trivia ceremony 회피). 재제시에는 상한 2회가 있고 초과 시 전 항목이 `provisional`로 강등된다 — **덜 잠그는 쪽이 안전한 방향**(Unbounded-autonomy 가드).
+- **Law 2 (brief 자리, v0.24.0 → 3.1.0 엔진 전환)** — brief 를 쓴 쪽이 자기 brief 를 승인하지 못하도록 읽기만 하는 리뷰어가 따로 검토한다. `reviewing-brief` 가 `shared/docreview/` 엔진의 두 번째 껍데기다(옛 3단계 파이프라인의 agent · 스크립트 이름은 `CHANGELOG.md` `[3.1.0]` Removed 참고). 탐지 `doc-critic-web` → 재비판 `doc-recritic` 이 층 1(방향성) · 층 2(충실도)를 한 라운드에서 보고, 둘 다 `tools:` 에 쓰기 · 실행 · 위임이 없다. 3중 분리: (a) **리뷰어 도구 분리** — `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 이면 선택 펜스가 웹 도구 없는 `doc-critic` 을 지명한다(dispatch 는 지명된 블록을 따르고 그 선택을 강제하는 훅은 없다 — 물리적인 것은 그 사본의 `tools:` 에 웹 도구가 없다는 것뿐이다), (b) **입력 격리** — 탐지 · 재비판은 번들의 내용을 받고 냉독 `brief-readback` 은 `tools: []` 로 payload 전문만 받으며, 네 페르소나 모두 원문 블록을 데이터로 읽는다(주입 경계), (c) **수정 후 재리뷰** — 저자 수정은 다음 라운드의 fresh 탐지를 거친다(재리뷰 상한 2, 라운드 4 이상은 사용자 문구로 승인) — writer 가 자기 수정을 승인하는 경로가 없다.
+- **Law 3 (brief 자리)** — 리뷰가 놓친 결함은 다음 리뷰가 잡도록 검사 기준 자체를 고쳐 쌓는다. brief 프로필(`references/docreview-profiles/brief.md`)의 충실도 범주 여섯(`layer_rubric.layer2`)과 냉독 gap 클래스 G1–G6 가
   compounding substrate다. 리뷰가 놓친 결함류가 나오면 그 프로필과 페르소나를 편집하는 것이
   compounding 이벤트다 — codex 도 같은 프로필 본문을 받으므로 한 곳을 고치면 두 판정자가 함께 바뀐다(persona = 보안-민감 코드).
-- **Law 2 (seed 자리) — 처분 주체는 사용자 (request-framing)** — Phase 0 seed 를 `shared/docreview/` 엔진의 셋째 껍데기로 리뷰한다(탐지 `doc-critic` + codex → 재비판 `doc-recritic` — 옛 격리 critic · seed 전용 codex 러너 · 빌더 · 체크리스트는 삭제). seed 는 헤딩이 없어 엔진의 얼림 · 보호가 꺼지므로 차단은 호스트가 진다: 저자는 사용자가 처분하기 전에 seed 를 편집하지 않고, 엔진이 게이트를 열지 않는 `fix` · `ask` 도 사용자 앞에 올리며, 저자 편집은 기준 사본 diff(`scripts/seed_edit_diff.py`)로 라운드 게이트와 확정 게이트 앞에서 덩어리마다 처분받고, 문구 없는 `drop` 은 진행을 막는다(`scripts/seed_review_log.py`). 형성 라운드의 풀이는 공시가 아니라 양의 선택 질문으로 확인받고 압축이 고친 문장의 확인 표시는 떨어지며(`scripts/seed_provenance.py`), Phase 1 은 audit 원문과 대조해 출처와 확인을 두 축으로 가른다. **한계**: 차단은 엔진의 기계적 거부가 아니라 호스트의 단계 순서 + 관측이다 — 어긴 편집은 다음 공시에서 반드시 보이고 보이면 멈추지만, 엔진처럼 거부하지는 않는다.
-- **「공시와 차단은 다른 술어」 — 리뷰되지 않은 라운드 (3.1.0)** — 엔진이 critic 사망 두 번 · `finalize` 실패 · 라우팅 보고서가 없는 라운드를 결정론으로 알고 게이트 요약에 싣는다(`unverified` · `approval_label` · `round_reviewed` · `unreviewed_reason`). 「미검증」(critic 사망 · `finalize` 실패)은 승인 게이트를 그 라벨로 연다. 「미검증」이 아닌 `unrouted` 는 공시만 한다: 게이트 첫 줄이 「이상 없음」·「경고 없음」일 수 없고 「다음:」 줄에 꼬리가 붙는다. brief 자리는 같은 값을 Step B 로 싣는다.
-- **Law 3 (Compounding) — 문서 리뷰 엔진 기반 (v0.56.0)** — 네 문서 리뷰 자리를 통일하는 `shared/docreview/` 를 호출자 0 으로 심었다. 처분(decide·ask·fix·defer·drop)이 finding 의 수신자를 정하고, 회귀는 편집 범위·얼림·보호 부류로 막는다. 자리별 전환은 후속 PR(design doc·brief·seed). 집행은 `shared/tests/test_docreview_*.sh` + 변이 매트릭스.
-- **「판정기가 항목을 버리면 센다」 + fail-closed — 엔진 결함 일곱 (v0.58.0)** — 호출자가 붙기 «전에» 이 일곱을 닫았다. 당시엔 **전부는 아니었다** — 재상승 후속 사슬 한 hop 뒤에서 다시 열리는 셋의 알려진 한계가 남아 있었다(설계 §6.4 「알려진 한계 셋」, PR 2 대상). 승인 차단은 역방향 스캔이 아니라 **전방 포인터**(`superseded_by`)로 판정하고(AC20), 소비되지 못한 재상승 예약·어휘 밖 재비판 verdict·`same_as` 허상 타겟은 버리지 않고 `reraise_unconsumed`/`coerced` 로 **센다**(AC21·AC27). 영구 차단에는 사용자 탈출구를 주되 「보류」는 거부한다(AC22 — 덜 잠그는 쪽이 아니라 «막힌 채로 두지 않는» 쪽이 안전한 방향). **v1.0.0 에서 셋 다 닫혔다** — (a) 재상승 후속의 「보류」 거부를 제안하는 선택지와 받아주는 선택지가 한 함수에서 나오게(전방 포인터가 원본의 차단을 후속에 넘겨도 같은 가드가 걸린다), (b) 재상승 후속이 원본의 `kind`·`prev_hash` 를 물려받아 원복 의무가 강등되지 않게, (c) `escalated` 예약도 재상승 예약과 같은 누적·dedup·계수 규칙을 따르고 상태 축의 정본 표(`is_open`·`gate_summary`·`render_gate` 를 한 표에서 도출)로 «막는 집합 ⊆ 그리는 집합»을 구조로 보장. **Law 2 계열의 자기검증**: 「동작 무변경」주장을 케이스 스위트 하나로 재지 않는다 — 실제 `fin.json`+state 골든 동치 · 단언 수까지 대조하는 전수 스위트 · 변이 매트릭스 판정의 셀별 대조, 셋을 함께 요구한다(AC26). 각각이 못 보는 것이 다르다: 스위트는 어떤 단언도 안 읽는 출력 필드를 못 보고, 골든은 세 케이스 밖을 못 보며, 매트릭스는 `sed` 가 매치 0 건이어도 성공을 내 조용히 무장해제된다. **그리고 검증 장치 자신이 락이어야 한다** — 골든은 `test_docreview_golden.sh` 로 스위트에 배선했고(사람이 기억해서 돌리는 스크립트는 락이 아니다), 매트릭스는 셀마다 diff 규모를 선언시켜 앵커 소실을 계측기 고장으로 잡는다.
-- **Law 2 (Writer/Reviewer 분리) — design doc 자리 첫 호출자 배선 (v1.0.0)** — `spec-review` 가 옛 verdict 파이프라인(`spec-reviewer` agent, `tools:` 에 `WebSearch`/`WebFetch` 포함)을 버리고 `shared/docreview/` 엔진의 껍데기가 됐다. 리뷰어는 `doc-critic`→`doc-recritic`(둘 다 `agents/*.md` 에 `# copy-of:` 마커로 바이트 동일 배포, `tools: Read, Grep, Glob` 뿐 — 심볼릭 링크 agent 는 dispatch 되지 않는다는 실측 때문에 사본이다) 이고, verdict(`approved`/`needs_revise`)는 사라져 승인은 게이트 판정(`approval_gate_open`)의 집계로 도출된다. **능력이 줄었다는 사실을 공시한다** — design-doc 리뷰의 외부 prior-art 대조가 Claude·codex 양쪽에서 동시에 0 이 됐다(`design-doc.md` 프로필 `web: false`). 이것은 설계가 의도한 결정(§5.3·OQ-C)이고 이 전환이 뒤집지 않는다. **집행 없는 kill switch 는 이름조차 남기지 않는다(P21)** — 옛 handoff 우회 스위치(이름은 `CHANGELOG.md` `[1.0.0]` Removed 참고)의 유일한 집행 지점이 삭제된 `spec-reviewer.md` 뿐이었다는 것을 리포 전체(`shared/`·엔진·모든 프로필·모든 skill) 대상 `git grep` 으로 확인한 뒤 이 README 의 문서화를 지웠고, **같은 커밋에서** `test_handoff_kill_switch.sh` 의 부재-판정 코퍼스를 이 README 까지 넓혀 그 이름이 design 자리 표면에 재등장하면 RED 가 나게 했다(그 락 자신은 `SWITCH=` 변수에 그 이름을 여전히 리터럴로 쥔다 — 부재를 재려면 무엇의 부재인지 알아야 하기 때문이다. 반대로 **이 README 는**, 자신이 그 락의 코퍼스에 들어간 이상 이 문단에서도 그 이름을 리터럴로 쓰지 않는다) — 집행이 없다는 관찰과 그것을 지키는 회귀 락이 갈라지면 다음 사람이 손으로 다시 넓혀야 하고, 그 창에서는 「이름은 있는데 아무도 안 지킨다」가 다시 조용해진다.
-- **Law 1 (Clarity) — 조사가 방향에 닿는가 (4.4.0)** — 조사 주장의 계약(`references/research-claims.md`)이
+- **Law 2 (seed 자리) — 처분 주체는 사용자 (request-framing)** — 요청 요약(seed)의 리뷰 지적을 받아들일지는 사용자가 정하고, 저자가 먼저 고치지 않는다. Phase 0 seed 를 `shared/docreview/` 엔진의 셋째 껍데기로 리뷰한다(탐지 `doc-critic` + codex → 재비판 `doc-recritic` — 옛 격리 critic · seed 전용 codex 러너 · 빌더 · 체크리스트는 삭제). seed 는 헤딩이 없어 엔진의 얼림 · 보호가 꺼지므로 차단은 호스트가 진다: 저자는 사용자가 처분하기 전에 seed 를 편집하지 않고, 엔진이 게이트를 열지 않는 `fix` · `ask` 도 사용자 앞에 올리며, 저자 편집은 기준 사본 diff(`scripts/seed_edit_diff.py`)로 라운드 게이트와 확정 게이트 앞에서 덩어리마다 처분받고, 문구 없는 `drop` 은 진행을 막는다(`scripts/seed_review_log.py`). 형성 라운드의 풀이는 공시가 아니라 양의 선택 질문으로 확인받고 압축이 고친 문장의 확인 표시는 떨어지며(`scripts/seed_provenance.py`), Phase 1 은 audit 원문과 대조해 출처와 확인을 두 축으로 가른다. **한계**: 차단은 엔진의 기계적 거부가 아니라 호스트의 단계 순서 + 관측이다 — 어긴 편집은 다음 공시에서 반드시 보이고 보이면 멈추지만, 엔진처럼 거부하지는 않는다.
+- **「공시와 차단은 다른 술어」 — 리뷰되지 않은 라운드 (3.1.0)** — 리뷰가 제대로 돌지 못한 라운드는 «통과» 처럼 보이지 않게 그 사실을 맨 앞에 알리되, 알린다고 해서 모두 진행을 막지는 않는다. 엔진이 critic 사망 두 번 · `finalize` 실패 · 라우팅 보고서가 없는 라운드를 결정론으로 알고 게이트 요약에 싣는다(`unverified` · `approval_label` · `round_reviewed` · `unreviewed_reason`). 「미검증」(critic 사망 · `finalize` 실패)은 승인 게이트를 그 라벨로 연다. 「미검증」이 아닌 `unrouted` 는 공시만 한다: 게이트 첫 줄이 「이상 없음」·「경고 없음」일 수 없고 「다음:」 줄에 꼬리가 붙는다. brief 자리는 같은 값을 Step B 로 싣는다.
+- **Law 3 (Compounding) — 문서 리뷰 엔진 기반 (v0.56.0)** — 문서 리뷰 네 자리가 같은 틀을 쓰도록 공용 엔진 `shared/docreview/` 를, 아직 쓰는 쪽 없이 먼저 심었다. 처분(decide·ask·fix·defer·drop)이 finding 의 수신자를 정하고, 회귀는 편집 범위·얼림·보호 부류로 막는다. 자리별 전환은 후속 PR(design doc·brief·seed). 집행은 `shared/tests/test_docreview_*.sh` + 변이 매트릭스.
+- **「판정기가 항목을 버리면 센다」 + fail-closed — 엔진 결함 일곱 (v0.58.0)** — 항목이 조용히 사라지거나 검사가 열린 채 통과하던 엔진 결함 일곱을, 엔진을 쓰는 쪽이 붙기 «전에» 닫았다. 당시엔 **전부는 아니었다** — 재상승 후속 사슬 한 hop 뒤에서 다시 열리는 셋의 알려진 한계가 남아 있었다(설계 §6.4 「알려진 한계 셋」, PR 2 대상). 승인 차단은 역방향 스캔이 아니라 **전방 포인터**(`superseded_by`)로 판정하고(AC20), 소비되지 못한 재상승 예약·어휘 밖 재비판 verdict·`same_as` 허상 타겟은 버리지 않고 `reraise_unconsumed`/`coerced` 로 **센다**(AC21·AC27). 영구 차단에는 사용자 탈출구를 주되 「보류」는 거부한다(AC22 — 덜 잠그는 쪽이 아니라 «막힌 채로 두지 않는» 쪽이 안전한 방향). **v1.0.0 에서 셋 다 닫혔다** — (a) 재상승 후속의 「보류」 거부를 제안하는 선택지와 받아주는 선택지가 한 함수에서 나오게(전방 포인터가 원본의 차단을 후속에 넘겨도 같은 가드가 걸린다), (b) 재상승 후속이 원본의 `kind`·`prev_hash` 를 물려받아 원복 의무가 강등되지 않게, (c) `escalated` 예약도 재상승 예약과 같은 누적·dedup·계수 규칙을 따르고 상태 축의 정본 표(`is_open`·`gate_summary`·`render_gate` 를 한 표에서 도출)로 «막는 집합 ⊆ 그리는 집합»을 구조로 보장. **Law 2 계열의 자기검증**: 「동작 무변경」주장을 케이스 스위트 하나로 재지 않는다 — 실제 `fin.json`+state 골든 동치 · 단언 수까지 대조하는 전수 스위트 · 변이 매트릭스 판정의 셀별 대조, 셋을 함께 요구한다(AC26). 각각이 못 보는 것이 다르다: 스위트는 어떤 단언도 안 읽는 출력 필드를 못 보고, 골든은 세 케이스 밖을 못 보며, 매트릭스는 `sed` 가 매치 0 건이어도 성공을 내 조용히 무장해제된다. **그리고 검증 장치 자신이 락이어야 한다** — 골든은 `test_docreview_golden.sh` 로 스위트에 배선했고(사람이 기억해서 돌리는 스크립트는 락이 아니다), 매트릭스는 셀마다 diff 규모를 선언시켜 앵커 소실을 계측기 고장으로 잡는다.
+- **Law 2 (Writer/Reviewer 분리) — design doc 자리 첫 호출자 배선 (v1.0.0)** — 설계문서 리뷰가 공용 문서 리뷰 엔진 위로 옮겨 갔고, 리뷰어는 여전히 문서를 고칠 수 없다. `spec-review` 가 옛 verdict 파이프라인(`spec-reviewer` agent, `tools:` 에 `WebSearch`/`WebFetch` 포함)을 버리고 `shared/docreview/` 엔진의 껍데기가 됐다. 리뷰어는 `doc-critic`→`doc-recritic`(둘 다 `agents/*.md` 에 `# copy-of:` 마커로 바이트 동일 배포, `tools: Read, Grep, Glob` 뿐 — 심볼릭 링크 agent 는 dispatch 되지 않는다는 실측 때문에 사본이다) 이고, verdict(`approved`/`needs_revise`)는 사라져 승인은 게이트 판정(`approval_gate_open`)의 집계로 도출된다. **능력이 줄었다는 사실을 공시한다** — design-doc 리뷰의 외부 prior-art 대조가 Claude·codex 양쪽에서 동시에 0 이 됐다(`design-doc.md` 프로필 `web: false`). 이것은 설계가 의도한 결정(§5.3·OQ-C)이고 이 전환이 뒤집지 않는다. **집행 없는 kill switch 는 이름조차 남기지 않는다(P21)** — 옛 handoff 우회 스위치(이름은 `CHANGELOG.md` `[1.0.0]` Removed 참고)의 유일한 집행 지점이 삭제된 `spec-reviewer.md` 뿐이었다는 것을 리포 전체(`shared/`·엔진·모든 프로필·모든 skill) 대상 `git grep` 으로 확인한 뒤 이 README 의 문서화를 지웠고, **같은 커밋에서** `test_handoff_kill_switch.sh` 의 부재-판정 코퍼스를 이 README 까지 넓혀 그 이름이 design 자리 표면에 재등장하면 RED 가 나게 했다(그 락 자신은 `SWITCH=` 변수에 그 이름을 여전히 리터럴로 쥔다 — 부재를 재려면 무엇의 부재인지 알아야 하기 때문이다. 반대로 **이 README 는**, 자신이 그 락의 코퍼스에 들어간 이상 이 문단에서도 그 이름을 리터럴로 쓰지 않는다) — 집행이 없다는 관찰과 그것을 지키는 회귀 락이 갈라지면 다음 사람이 손으로 다시 넓혀야 하고, 그 창에서는 「이름은 있는데 아무도 안 지킨다」가 다시 조용해진다.
+- **Law 1 (Clarity) — 조사가 방향에 닿는가 (4.4.0)** — 웹 조사에서 나온 주장이 실제로 방향 결정에 쓰였는지 확인한다. 조사 주장의 계약(`references/research-claims.md`)이
   네 자리에 걸리고 검문소 셋(라운드 안 V1 · 종료 누락 대조 V2 · 게이트 V3)이 그것을 집행한다. 게이트의
   술어 다섯은 **전부 ∀ 형태**이고 차단 판정에 개수가 없다 — 재서 **막으면** 사후 장치이고 재서
   **보이면** 공시다(2026-09-10 에 걷어낸 사후-라운드 측정 계열과 양립하는 근거가 그 구분이다). 「조사를
   했어야 했는가」는 기계가 알 수 없고(`check_brief.py` 는 brief 파일만 읽는다) 0건 advisory 가 Step B
   게이트로 사람에게 간다.
-- **P17 (User sovereignty) — dispatch 통제가 자격 + 예산 (4.4.0)** — 다시 부를 «자격» 은 「그 차원에
+- **P17 (User sovereignty) — dispatch 통제가 자격 + 예산 (4.4.0)** — 보조 에이전트를 다시 부를 수 있는지는 두 조건으로 정한다. 다시 부를 «자격» 은 「그 차원에
   닿는 열린 결정이 아직 있는가」이고, 그 위의 예산은 `1 + 재개방` 이다. 재개방은 정의상 사용자 답이
   걸린 사건이라 **사용자가 시계다** — 숫자 상한이 아니라 사용자 참여가 총량을 묶는다.
 
@@ -165,7 +166,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 **Output:** SessionEnd 훅은 stdout 을 내지 않는다 — 실패와 거부(stdin 판독 · GC 비정상 종료 · 심볼릭 링크로 풀리는 state root)는 stderr 로만 알린다 — 접두는 `[spec-distill]` 이고, 공용 삭제 가드(`gc_common.safe_rmtree`)의 거부만 `[devbrew-gc]` 다. GC 스크립트의 stderr 는 훅이 그대로 옮긴다.
 
-## Kill switches
+## 끄는 법
 
 ### 먼저 — 설계문서 리뷰를 끄는 법
 
@@ -199,7 +200,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
   audit §5 에 «워크트리 없음 —» 강등 기록이 남고, 어느 경우도 seed 작성을 막지 않는다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1` (v0.24.0) — brief 리뷰 전체 skip(엔진 라운드 · 냉독).
   `component: pipeline` degradation record + loud advisory를 남기고 Step B로 직행한다(조용한
-  생략이 아니다). 엔진 라운드(방향성 · 충실도)와 냉독이 전부 미검증이라는 사실이 게이트 질문에 표시된다.
+  생략이 아니다). 엔진 라운드(방향성 · 충실도)와 냉독이 전부 미검증이라는 사실이 다음 단계 게이트 앞 글에 표시된다.
 
 ### 은퇴한 스위치 (v0.36.0 · 3.0.0)
 

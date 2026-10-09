@@ -377,7 +377,7 @@ errexit_case() {   # errexit_case <라벨> <sid> <쌍둥이 sid> <bin> <stub_wri
     no "E($label): errexit 아래 사후상태 $got ≠ 평상시 $want — 펜스가 중간에 죽었다"
   fi
   [ "$why" = "-" ] && return 0
-  if grep -q "codex co-review SKIPPED (reason: $why)" "$SCRATCH/$sid.err"; then
+  if grep -q "codex 리뷰를 건너뛰었다 (reason: $why)" "$SCRATCH/$sid.err"; then
     ok "E($label): errexit 아래서도 SKIPPED 공시가 난다 (reason: $why)"
   else
     no "E($label): errexit 아래서 SKIPPED (reason: $why) 공시가 없다 — 펜스가 조용히 죽었다"
@@ -405,7 +405,7 @@ if [ "$got" = "$want" ]; then
 else
   no "E(중화 불가): errexit 아래 사후상태 $got ≠ 평상시 $want"
 fi
-if grep -q 'codex co-review SKIPPED (reason: residue_unclearable)' "$SCRATCH/$sid.err"; then
+if grep -q 'codex 리뷰를 건너뛰었다 (reason: residue_unclearable)' "$SCRATCH/$sid.err"; then
   ok "E(중화 불가): 지우기·절단의 실패가 펜스를 죽이지 않고 residue_unclearable 로 공시된다"
 else
   no "E(중화 불가): errexit 아래서 residue_unclearable 공시가 없다 — 지우기 또는 절단의 실패가 펜스를 죽였다"
@@ -416,7 +416,7 @@ home="$SCRATCH/nosid-e"; mkdir -p "$home"
 ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
     PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" STUB_WRITE=none STUB_RC=0 spec_path="$SKILL" \
     bash "$FENCE_E" ) >/dev/null 2>"$SCRATCH/nosid-e.err"
-if grep -q 'codex co-review SKIPPED (reason: gate_inputs_missing)' "$SCRATCH/nosid-e.err"; then
+if grep -q 'codex 리뷰를 건너뛰었다 (reason: gate_inputs_missing)' "$SCRATCH/nosid-e.err"; then
   ok "E(sid 미해석): 세션 id 도출 실패가 펜스를 죽이지 않고 gate_inputs_missing 으로 공시된다"
 else
   no "E(sid 미해석): errexit 아래서 gate_inputs_missing 공시가 없다 — 도출 실패가 펜스를 죽였다"
@@ -523,7 +523,7 @@ sweep_scope_case() {   # sweep_scope_case <라벨> <sid> <펜스>
   ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
       PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
       STUB_WRITE=none STUB_RC=0 bash "$fence" ) >/dev/null 2>"$SCRATCH/$sid.err"
-  if [ "$DA" != "$DB" ] && grep -q 'codex co-review SKIPPED (reason: gate_inputs_missing)' "$SCRATCH/$sid.err"; then
+  if [ "$DA" != "$DB" ] && grep -q 'codex 리뷰를 건너뛰었다 (reason: gate_inputs_missing)' "$SCRATCH/$sid.err"; then
     ok "S($label) 전제: 두 문서가 다른 자리이고 펜스가 문서 미상 경로(gate_inputs_missing)로 돌았다"
   else
     no "S($label) 전제 붕괴: 두 문서 자리가 같거나 펜스가 sweep 경로로 돌지 않았다 — 아래 판정은 sweep 을 재지 않는다"
@@ -560,7 +560,7 @@ sweep_lock_case() {   # sweep_lock_case <라벨> <sid> <펜스>
   tail="${yml#"$SCRATCH"/}"   # 펜스는 cwd 의 물리 경로(/private/var/…)로 적는다 — 스크래치 뒤 꼬리로 대조한다
   if [ "$left" = "absent" ] || [ "$left" = "0byte" ]; then
     no "S!($label) 전제 붕괴: 잠금이 중화를 막지 못했다 ($left) — 이 셀은 중화 불가를 재지 않는다"
-  elif grep -q 'codex co-review SKIPPED (reason: residue_unclearable)' "$SCRATCH/$sid.err" \
+  elif grep -q 'codex 리뷰를 건너뛰었다 (reason: residue_unclearable)' "$SCRATCH/$sid.err" \
        && grep -qF "$tail" "$SCRATCH/$sid.err"; then
     ok "S!($label): 문서 미상 라운드에서 치우지 못한 문서별 산출물이 residue_unclearable 와 그 경로로 공시된다 ($left 잔존)"
   else

@@ -77,7 +77,7 @@ grep -q 'user_sourced_items' <<<"$pi_block" \
 
 # v0.23.0: README 서두가 산출물을 **2파일 쌍**으로 설명해야 한다. 이 문장은 오랫동안 "7-section
 # 단일 파일"이라 적혀 있었고(옛 포맷), 어떤 assertion도 그걸 잡지 않았다 — AC14 블록만 잠겨 있어
-# 서두는 무검증이었다. 사용자가 README "What it does"를 따라 쓰면 게이트가 거부하는 포맷이 나온다.
+# 서두는 무검증이었다. 사용자가 README 「이 플러그인이 하는 일」을 따라 쓰면 게이트가 거부하는 포맷이 나온다.
 { grep -qF '2파일 쌍' "$README" && grep -qF '.audit.md' "$README" \
     && grep -qF '8섹션' "$README"; } \
   && ok "v0.23.0: README 서두가 payload+audit 2파일 쌍을 설명" \

@@ -219,7 +219,7 @@ grep -qF 'AskUserQuestion' <<<"$WB2" && ok "B-2 게이트 보존" || no "B-2 게
 n_opt="$(grep -cE '^\s*\{label:' <<<"$WB2" || true)"
 [[ "$n_opt" == "4" ]] && ok "B-2 4옵션 구조 불변 (${n_opt})" || no "B-2 옵션이 ${n_opt} 개 (구조 변경)"
 for tok in 'readback' 'gap' 'degrade'; do
-  grep -qF "$tok" <<<"$WB2" && ok "B-2 question에 '$tok' 실림 (느슨한 substring, defense-in-depth)" || no "B-2에 '$tok' 부재"
+  grep -qF "$tok" <<<"$WB2" && ok "B-2 절에 '$tok' 이 있다 (느슨한 substring, defense-in-depth)" || no "B-2에 '$tok' 부재"
 done
 # reviewing-brief 가 넘기는 첫 산출물은 「리뷰 게이트 결과」다 — 게이트 앞 프로즈 목록의 **번호 항목**
 # 으로 실재해야 한다(느슨한 substring 은 다른 문장의 우연한 단어로 만족된다). 옛 산출물 「방향성 C4
@@ -249,8 +249,8 @@ printf '%s\n' "$TPL_BR" | grep -qF "$WEB_SHAPE" \
 grep -qF '방향성 C4 항목' "${CI_FILES[@]}" \
   && no "옛 산출물 「방향성 C4 항목」이 남았다 — reviewing-brief 는 그것을 더는 내지 않는다" \
   || ok "옛 산출물 「방향성 C4 항목」 없음"
-grep -qE 'question 텍스트|question 본문' "${CI_FILES[@]}" \
-  && ok "degrade가 question 텍스트에 렌더 (프로즈 서술, defense-in-depth)" || no "렌더 위치(question 텍스트) 명시 부재"
+grep -qF '게이트 앞 글' "${CI_FILES[@]}" \
+  && ok "degrade 가 게이트 앞 글에 쓰인다 (프로즈 서술)" || no "degrade 의 자리(게이트 앞 글) 명시 부재"
 # 위 두 체크는 어휘(prose가 "degrade"·"question 텍스트"를 언급하는지)만 본다 — §5.6/AC15가
 # 요구하는 실제 property는 *배치*(옵션 description이 아니라 question: 문자열 그 자체)다.
 # fix round 1 리뷰가 mutation으로 실증: 펜스 앞에 "question: 필드는 ... degrade record를
@@ -269,10 +269,13 @@ QLINE="$(grep -E '^[[:space:]]*question:' <<<"$QFENCE" | head -1)"
 # 케이스를 놓치지 않는다. 반대로 진짜 렌더가 문자열 안에 있으면 트레일링 "//" 코멘트가
 # 나중에 붙어도(무해한 편집) false-fail 없이 계속 PASS다.
 QLINE_CODE="$(strip_trailing_linecomment "$QLINE")"
-grep -qF 'degrade' <<<"$QLINE_CODE" \
-  && ok "B-2 question: 라인이 degrade record를 직접 실음 (placement, load-bearing; 트레일링 // 코멘트 제외하고 검사)" \
-  || no "B-2 question: 라인(트레일링 // 코멘트 제외)에 degrade 부재 — 렌더가 description 등 다른 곳으로 이동했거나 죽은 // 코멘트일 수 있다"
-grep -qE 'degrade 없음' "${CI_FILES[@]}" && ok "빈 배열도 명시" || no "빈 배열 명시 부재"
+grep -qF '위에 적었다' <<<"$QLINE_CODE" \
+  && ok "B-2 question: 라인이 경고를 개수 한 줄로 가리킨다 (placement, load-bearing)" \
+  || no "B-2 question: 라인(트레일링 // 코멘트 제외)에 「위에 적었다」 부재 — 경고 개수 줄이 description 이나 죽은 // 코멘트로 옮겨 갔다"
+grep -qF 'degrade:' <<<"$QLINE_CODE" \
+  && no "B-2 question: 라인에 degrade 목록 자리가 남았다 — 목록은 게이트 앞 글로 갔다" \
+  || ok "B-2 question: 라인에 degrade 목록 자리 없음"
+grep -qE '「경고 없음」' "${CI_FILES[@]}" && grep -qE '「이상 없음」' "${CI_FILES[@]}" && ok "빈 배열도 명시(경고 없음 · 이상 없음)" || no "빈 배열 명시 부재"
 
 # --- P21 canonical 토큰 (checker와 producer가 같은 집합) --------------------
 grep -qF '<REDACTED' "${CI_FILES[@]}" && ok "P21 canonical 토큰 명시" || no "P21 canonical 토큰 부재"

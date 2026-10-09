@@ -532,7 +532,7 @@ assert_contains "$CQ" "풀이는 한 문장으로 쓴다" "여러 문장 풀이�
 DGC="$(section "$SK" '^## degrade 채널$')"
 [ -n "$DGC" ] && ok "절 추출: ## degrade 채널 (vacuous 아님)" \
               || no "절 추출: ## degrade 채널 이 비었다 — 채널 이름을 잴 수 없다"
-for ch in 'advisory[]' 'blocks' 'gate --render' 'framing_degradations' '게이트 질문 텍스트'; do
+for ch in 'advisory[]' 'blocks' 'gate --render' 'framing_degradations' '게이트 앞 글'; do
   assert_contains "$DGC" "$ch" "degrade 채널 '$ch' 를 이름으로 댄다"
 done
 

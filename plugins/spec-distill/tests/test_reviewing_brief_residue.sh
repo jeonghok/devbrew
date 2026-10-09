@@ -198,7 +198,7 @@ a_case "감지기 부재"               rb06nodt "$BIN_OK"   none 0 PAYLOAD="$DO
 mv "$SCRATCH/detector.bak" "$DETECTOR"
 # 번들 부재는 codex 를 «가용» 상태에서 건너뛴 경로다 — 중화만 보면 러너를 없는 번들로 불러도
 # 통과한다. 러너가 불리지 않았고 그 사유가 공시됐는지를 함께 본다.
-if [ ! -e "$SCRATCH/rb04nobd.argv" ] && grep -q 'codex co-review SKIPPED (reason: gate_inputs_missing)' "$SCRATCH/rb04nobd.err"; then
+if [ ! -e "$SCRATCH/rb04nobd.argv" ] && grep -q 'codex 리뷰를 건너뛰었다 (reason: gate_inputs_missing)' "$SCRATCH/rb04nobd.err"; then
   ok "A(번들 부재): 러너를 부르지 않고 gate_inputs_missing 으로 공시한다 (없는 번들로 codex 를 태우지 않는다)"
 else
   no "A(번들 부재): 번들이 없는데 러너가 불렸거나($(state_of "$SCRATCH/rb04nobd.argv") argv) SKIPPED 공시가 없다"
@@ -244,7 +244,7 @@ stale_into "$yml"; chmod 444 "$yml"; chmod 555 "$at"
 lock_left="$(state_of "$yml")"; chmod 755 "$at"; chmod 644 "$yml"
 if [ "$lock_left" = "absent" ] || [ "$lock_left" = "0byte" ]; then
   no "A! 전제 붕괴: 잠금이 중화를 막지 못했다 ($lock_left)"
-elif grep -q 'codex co-review SKIPPED (reason: residue_unclearable)' "$SCRATCH/rb09lock.err"; then
+elif grep -q 'codex 리뷰를 건너뛰었다 (reason: residue_unclearable)' "$SCRATCH/rb09lock.err"; then
   ok "A!(중화 불가): 지우지도 절단하지도 못하면 residue_unclearable 로 codex 축을 끈다 ($lock_left 잔존)"
 else
   no "A!(중화 불가): 잔존물을 못 치웠는데 그 사유가 공시되지 않는다"
@@ -350,7 +350,7 @@ e_case() {   # e_case <라벨> <sid> <쌍둥이 sid> <bin> <stub_write> <stub_rc
     && ok "E($label): errexit 아래서도 사후상태가 평상시와 같다 ($got)" \
     || no "E($label): errexit 아래 사후상태 $got ≠ 평상시 $want — fence 가 중간에 죽었다"
   [ "$why" = "-" ] && return 0
-  grep -q "codex co-review SKIPPED (reason: $why)" "$SCRATCH/$sid.err" \
+  grep -q "codex 리뷰를 건너뛰었다 (reason: $why)" "$SCRATCH/$sid.err" \
     && ok "E($label): errexit 아래서도 SKIPPED 공시가 난다 (reason: $why)" \
     || no "E($label): errexit 아래서 SKIPPED (reason: $why) 공시가 없다 — fence 가 조용히 죽었다"
 }
@@ -371,13 +371,13 @@ e_left="$(state_of "$yml")"; chmod 755 "$at"; chmod 644 "$yml"
 [ "$e_left" = "$lock_left" ] \
   && ok "E(중화 불가): errexit 아래서도 사후상태가 평상시와 같다 ($e_left)" \
   || no "E(중화 불가): errexit 아래 사후상태 $e_left ≠ 평상시 $lock_left"
-grep -q 'codex co-review SKIPPED (reason: residue_unclearable)' "$SCRATCH/rb27lock.err" \
+grep -q 'codex 리뷰를 건너뛰었다 (reason: residue_unclearable)' "$SCRATCH/rb27lock.err" \
   && ok "E(중화 불가): 지우기·절단의 실패가 fence 를 죽이지 않고 residue_unclearable 로 공시된다" \
   || no "E(중화 불가): errexit 아래서 residue_unclearable 공시가 없다"
 mkdir -p "$SCRATCH/nosid-e"
 ( cd "$SCRATCH/nosid-e" && env -i PATH="$BIN_OK:$BASE" HOME="$SCRATCH/nosid-e" CODEX_API_KEY=t PYTHONDONTWRITEBYTECODE=1 \
     CLAUDE_PLUGIN_ROOT="$PR" PAYLOAD="$DOC_B" bash "$FENCE_E" ) >/dev/null 2>"$SCRATCH/nosid-e.err"
-grep -q 'codex co-review SKIPPED (reason: gate_inputs_missing)' "$SCRATCH/nosid-e.err" \
+grep -q 'codex 리뷰를 건너뛰었다 (reason: gate_inputs_missing)' "$SCRATCH/nosid-e.err" \
   && ok "E(sid 미해석): 세션 id 도출 실패가 fence 를 죽이지 않고 gate_inputs_missing 으로 공시된다" \
   || no "E(sid 미해석): errexit 아래서 gate_inputs_missing 공시가 없다 — 도출 실패가 fence 를 죽였다"
 
@@ -453,7 +453,7 @@ sweep_case() {   # sweep_case <라벨> <sid> <fence>
   done
   ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t PYTHONDONTWRITEBYTECODE=1 \
       CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" bash "$fence" ) >/dev/null 2>"$SCRATCH/$sid.err"
-  { [ "$AB" != "$AD" ] && grep -q 'codex co-review SKIPPED (reason: gate_inputs_missing)' "$SCRATCH/$sid.err"; } \
+  { [ "$AB" != "$AD" ] && grep -q 'codex 리뷰를 건너뛰었다 (reason: gate_inputs_missing)' "$SCRATCH/$sid.err"; } \
     && ok "S($label) 전제: 두 자리가 다르고 fence 가 문서 미상 경로(gate_inputs_missing)로 돌았다" \
     || no "S($label) 전제 붕괴: 두 자리가 같거나 fence 가 sweep 경로로 돌지 않았다"
   i=0
@@ -479,7 +479,7 @@ sweep_lock() {   # sweep_lock <라벨> <sid> <fence>
   tail="${yml#"$SCRATCH"/}"   # fence 는 cwd 의 물리 경로로 적는다 — 스크래치 뒤 꼬리로 대조한다
   if [ "$left" = "absent" ] || [ "$left" = "0byte" ]; then
     no "S!($label) 전제 붕괴: 잠금이 중화를 막지 못했다 ($left)"
-  elif grep -q 'codex co-review SKIPPED (reason: residue_unclearable)' "$SCRATCH/$sid.err" && grep -qF "$tail" "$SCRATCH/$sid.err"; then
+  elif grep -q 'codex 리뷰를 건너뛰었다 (reason: residue_unclearable)' "$SCRATCH/$sid.err" && grep -qF "$tail" "$SCRATCH/$sid.err"; then
     ok "S!($label): 문서 미상 라운드에서 치우지 못한 산출물이 residue_unclearable 와 그 경로로 공시된다 ($left 잔존)"
   else
     no "S!($label): 문서 미상 라운드의 중화 불가가 공시되지 않는다 — residue_unclearable 또는 경로($tail)가 stderr 에 없다"

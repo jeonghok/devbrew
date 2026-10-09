@@ -1353,7 +1353,7 @@ case_T40_codex_absent_first_line() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-r1.txt" "$FX/codex-failed.yaml" "$FX/recritic-missing.txt")"
   local f; f="$(py docreview_state.py gate --state-dir "$d" --render | head -1)"
   assert_grep "$f" '경고 [0-9]+개: ' "T40·AC8: 첫 줄이 경고를 싣는다"
-  assert_contains "$f" "codex 없음 — 모델 다양성 0 (exit_nonzero)" "T40·AC8: 첫 줄이 codex 부재와 사유를 공시한다"
+  assert_contains "$f" "codex 리뷰가 없어 다른 모델의 시각이 빠졌다 (codex: exit_nonzero)" "T40·AC8: 첫 줄이 codex 부재와 사유를 공시한다"
   assert_not_contains "$f" "이상 없음" "T40: codex 없는 라운드는 이상 없음이 아니다"
   assert_not_contains "$f" "경고 없음" "T40: codex 없는 라운드는 경고 없음이 아니다"
   assert_eq "$(jget "$d/fin.json" 'd["advisory"][0].startswith("codex 없음"), d["blocks"]')" "(True, False)" "T40: advisory 첫 항목도 codex, 차단은 아님"
@@ -2457,7 +2457,7 @@ case_gate_render_six_lines() {
   rm -rf "$d"
 }
 
-# ── 게이트 머리의 순서 뜻 한 줄 + 같은 anchor 묶음 (AC18 · AC18') ────────────
+# ── 묶음 제목의 순서 + 같은 anchor 묶음 (AC18 · AC18') ──────────────────────
 # 순위를 새로 매기지 않는다(ⓓ · 설계 §5.7). GATE_ROWS 10행의 순서는 이미
 # 결정론이지만 «상태 범주» 순이다 — 문제는 「순위가 없다」가 아니라 「있는
 # 순서의 뜻이 안 보인다」였다. 오케스트레이터가 순위를 매기면 그 순위 자체가
@@ -2468,12 +2468,9 @@ case_gate_render_six_lines() {
 case_gate_head_and_grouping() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "게이트 머리: route_r1 실패"; return; }
   local render; render="$(py docreview_state.py gate --state-dir "$d" --render)"
-  # [리뷰 fix round 2] 원래는 첫 세 어절만(`열린 결정 먼저`) 단언했다 — 다섯
-  # 구절 중 하나만 살아 있으면 통과하고, 순서가 뒤섞여도 통과한다. AC18 이
-  # 재는 것은 「GATE_ROWS 순서의 뜻」이므로 다섯 구절 «전부» + 그 «순서» 를
-  # 한 번에 잰다: 머리 줄 전체를 뽑아 기대 리터럴과 정확히 같은지 본다(한
-  # 등식이 내용과 순서를 동시에 고정한다 — 독립된 다섯 substring 단언은
-  # 뒤섞인 줄에서도 전부 통과하므로 쓰지 않는다).
+  # 옛 렌더는 「순서:」 머리 줄 하나로 순서의 뜻을 말했다. 쉬운 말 출력 PR 1 이 그 줄을 묶음 제목으로
+  # 흡수했으므로, 이제는 묶음 제목(「<STATE_GLOSS> N개」)이 렌더에 선 자리를 뽑아 GATE_ROWS 순서인지 잰다.
+  # 묶음이 둘 이상이어야 순서 비교가 공허하지 않다.
   local order; order="$(printf '%s\n' "$render" | PYTHONPATH="$SCRIPTS" python3 -c '
 import sys
 from docreview_state import GATE_ROWS, STATE_GLOSS
@@ -2494,9 +2491,9 @@ print(len(pos) >= 2 and pos == sorted(pos), len(pos))
   # 질문 수)가 같다. gate_summary 의 버킷을 세면 그 수가 나온다 — 렌더와 독립인
   # 채널이라 순환이 아니다.
   local n_items; n_items="$(py docreview_state.py gate --state-dir "$d" | PYTHONPATH="$SCRIPTS" python3 -c 'import json, sys; from docreview_state import GATE_ROWS; d = json.load(sys.stdin); print(sum(len(d[r.name]) for r in GATE_ROWS))')"
-  # [리뷰] 접두사만 보면 `_rg_held_decide` 의 「[decide 보류]」도 "^\[decide" 에 걸린다 —
-  # held_decide 는 n_items(세 버킷)에 안 들어가므로 그 오탐이 등식을 조용히 깬다.
-  # 닫는 대괄호까지 앵커해 정확히 세 렌더러의 리터럴 형태만 잡는다.
+  # 항목 머리는 열 0 의 「- 」로 시작하고 id 괄호(「(<id>)」 · 「(<id> · 자동)」)로 끝난다 — 그 모양만 센다.
+  # 묶음 제목과 「  그대로 두면:」 같은 이어지는 줄은 열 0 의 「- 」가 아니라 안 걸린다. n_items 는 GATE_ROWS
+  # 전 행의 합이므로 두 값이 같으면 렌더가 항목을 빼거나 더하지 않았다는 뜻이다.
   local n_headers; n_headers="$(printf '%s\n' "$render" | grep -cE '^- .* \([0-9a-f]+#r[0-9]+\.[0-9]+( · 자동)?\)$' || true)"
   [ "${n_items:-0}" -gt 0 ] \
     && ok "AC18' 양의 짝: 이 케이스에 열린 항목이 ${n_items}개 있다 (아래 등식이 0 == 0 으로 통과하지 않는다)" \
@@ -2511,7 +2508,8 @@ print(len(pos) >= 2 and pos == sorted(pos), len(pos))
 # grouping 이 이미 잰다). 위 케이스는 제약만 잰다 — 묶음 표시(`out.append("  ┆
 # 같은 자리…")`) 를 통째로 지워도 안 흔들린다(리뷰 실측 — 178개 단언 전부
 # 그린으로 남았다). 그 절반을 여기서 잰다. 세 단언:
-#  ① 전제 — 이 상태에 같은 anchor 를 가진 «열린»(row.open) 항목이 N≥2 있다.
+#  ① 전제 — 이 상태의 한 묶음(GATE_ROWS 한 행) 안에 같은 anchor 를 가진 항목이 N≥2 이어진다.
+#     표지는 묶음마다 새로 센다(계획 Q11) — 묶음 제목을 사이에 둔 두 항목은 인접 쌍이 아니다.
 #     render_gate() 를 부르지 않는 채널로만 계산한다: `gate-rows` 의 행 순서
 #     (GATE_ROWS 자체가 아니라 그 순서를 낸 CLI 출력) + `gate`(--render 없이)
 #     의 버킷 + `load_state` 의 anchor. 렌더 문자열을 파싱하지 않으므로 이
@@ -2531,20 +2529,17 @@ from docreview_state import load_state
 rows = json.loads(sys.argv[3])
 g = json.loads(sys.argv[4])
 st = load_state(sys.argv[2])
-order = []
-for r in rows:
-    order.extend(g[r["name"]])
-anchors = [(fid, (st["findings"].get(fid) or {}).get("anchor")) for fid in order]
-same_pairs = [(anchors[i - 1][0], anchors[i][0], anchors[i][1])
-              for i in range(1, len(anchors))
-              if anchors[i][1] and anchors[i][1] == anchors[i - 1][1]]
-diff_pairs = [(anchors[i - 1][0], anchors[i][0])
-              for i in range(1, len(anchors))
-              if anchors[i][1] and anchors[i - 1][1] and anchors[i][1] != anchors[i - 1][1]]
+groups = [[(fid, (st["findings"].get(fid) or {}).get("anchor")) for fid in g[r["name"]]] for r in rows]
+same_pairs = [(a[i - 1][0], a[i][0], a[i][1], gi)
+              for gi, a in enumerate(groups) for i in range(1, len(a))
+              if a[i][1] and a[i][1] == a[i - 1][1]]
+diff_pairs = [(a[i - 1][0], a[i][0])
+              for a in groups for i in range(1, len(a))
+              if a[i][1] and a[i - 1][1] and a[i][1] != a[i - 1][1]]
 group_size = 0
 if same_pairs:
     target_anchor = same_pairs[0][2]
-    group_size = sum(1 for _, a in anchors if a == target_anchor)
+    group_size = sum(1 for _, x in groups[same_pairs[0][3]] if x == target_anchor)
 print(json.dumps({"n_same_anchor_open_pairs": len(same_pairs), "group_size": group_size,
                    "same_pair": same_pairs[0] if same_pairs else None,
                    "diff_pair": diff_pairs[0] if diff_pairs else None}, ensure_ascii=False))
@@ -2560,15 +2555,10 @@ print(json.dumps({"n_same_anchor_open_pairs": len(same_pairs), "group_size": gro
   anchor_val="$(printf '%s' "$calc" | jgets 'd["same_pair"][2]')"
   fid_diff1="$(printf '%s' "$calc" | jgets 'd["diff_pair"][0] if d["diff_pair"] else ""')"
   fid_diff2="$(printf '%s' "$calc" | jgets 'd["diff_pair"][1] if d["diff_pair"] else ""')"
-  # 인접 쌍의 둘째 항목이 렌더에서 «자기 헤더로» 처음 나오는 줄 바로 앞줄을
-  # 뽑는다 — [리뷰 fix round 2] bare fid 매치(예전 코드)는 그 fid 가 «다른»
-  # 항목의 헤더보다 먼저, 참조로 나오면(예: `_rg_blocking_ask` 의 「→ 전제인
-  # fix: <fid>」) 그 참조 줄을 헤더로 오인한다 — 오늘 쓰는 두 쌍(decide ·
-  # unapplied_fix)엔 안 걸리지만 일반적으로 안전하지 않다. `choices_match`
-  # (cases.sh:490)와 같은 헤더 앵커 방식으로 좁힌다: 모든 렌더러가 헤더를
-  # 「] <fid>」로 시작한다(그 뒤 구분자만 「—」/「→」로 갈린다 — `_rg_superseded`
-  # 가 유일하게 「→」다) — 참조 문구엔 그 앞의 「]」가 없으므로 이 접두로
-  # 헤더와 참조가 갈린다.
+  # 인접 쌍의 둘째 항목이 렌더에서 «자기 항목 머리로» 나오는 줄 바로 앞줄을 뽑는다(`item_prev_line`).
+  # bare fid 매치는 그 fid 가 다른 항목 안에 참조로 나오면(예: `_rg_blocking_ask` 의 「이 답을 기다리는
+  # 수정: <fid>」) 그 줄을 머리로 오인한다. `item_prev_line` 은 열 0 의 「- 」로 시작하고 「(<fid>)」·
+  # 「(<fid> · 자동)」으로 끝나는 줄만 머리로 본다 — 참조 줄은 그 끝 괄호 모양이 아니라 갈린다.
   local before_same before_diff
   before_same="$(item_prev_line "$render" "$fid_same2")"
   before_diff="$(item_prev_line "$render" "$fid_diff2")"
@@ -2739,6 +2729,106 @@ case_I4_anchor_newline_collapsed() {
   assert_not_grep "$gr" '^- 가짜' "I4 anchor: anchor 속 항목 머리 모양이 렌더의 열 0 에 서지 않는다"
   assert_grep "$gr" '^  ┆ 같은 자리\(#12 - 가짜 항목 \(zz#r1\.7\)\)$' \
     "I4 anchor 양의 짝: 그 anchor 는 「같은 자리」 표지 안에 한 줄로 산다"
+  rm -rf "$d"
+}
+# 렌더 첫 줄 경고의 쉬운 말(계획 Q9) — advisory 원문은 기계가 읽는 값이라 그대로 두고 렌더만 바꾼다. 같은 사실을
+# 두 출처가 말한 원문(「codex 없음」 + 「입력 실패(보조): codex」 등)은 한 줄로 합치고, 사유 토큰은 그 줄 괄호에 모은다.
+case_plain_warns_first_line() {
+  local d f raw; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-nolayer2.txt" "$FX/codex-failed.yaml" --skip)" \
+    || { no "경고 쉬운 말: route_r1 실패"; return; }
+  f="$(gfirst "$d")"
+  assert_eq "$(jget "$d/fin.json" 'len(d["advisory"])')" "6" "경고 쉬운 말 전제: 이 라운드의 advisory 원문은 여섯이다"
+  assert_contains "$f" "경고 3개: " "경고 쉬운 말: 원문 여섯이 가리키는 사실 셋이 한 줄씩 실린다"
+  assert_contains "$f" "codex 리뷰가 없어 다른 모델의 시각이 빠졌다 (codex: exit_nonzero)" \
+    "경고 쉬운 말: codex 부재가 쉬운 문장 한 줄이고 사유 토큰은 괄호에 있다"
+  assert_contains "$f" "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다 (doc-recritic: kill switch, skipped)" \
+    "경고 쉬운 말: 재비판 부재가 한 줄이고 두 출처의 사유를 모두 싣는다"
+  assert_contains "$f" "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다 (layer2: block missing)" \
+    "경고 쉬운 말: 층 2 부재가 한 줄이고 셀 수 없다고 말한다"
+  assert_eq "$(printf '%s' "$f" | grep -o 'codex 리뷰가 없어' | grep -c .)" "1" "경고 쉬운 말: codex 부재가 첫 줄에 한 번만 나온다"
+  for raw in '모델 다양성 0' '입력 실패(' '셀 수 없음:' '기각 경로 0' '상세 미검증'; do
+    assert_not_contains "$f" "$raw" "경고 쉬운 말: 첫 줄에 엔진 원문 「${raw}」이 없다"
+  done
+  assert_eq "$(jget "$d/fin.json" 'd["advisory"][0], d["advisory"][1]')" \
+    "('codex 없음 — 모델 다양성 0 (exit_nonzero)', '셀 수 없음: layer2 — block missing')" \
+    "경고 쉬운 말 양의 짝: 기계가 읽는 advisory 원문은 그대로다"
+  rm -rf "$d"
+}
+# 제목 없는 문서의 첫 줄 — 「앵커 불가」 원문의 두 사실(얼림·보호 검사가 꺼졌다 · 모든 수정이 문서 전체 범위다)이
+# 쉬운 줄 하나에 함께 실린다. 원문은 기계가 읽는 값이라 그대로다(계획 Q9).
+case_plain_warns_headingless_first_line() {
+  local d f; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/headingless.md")" \
+    || { no "제목 없는 문서 경고: route_r1 실패"; return; }
+  f="$(gfirst "$d")"
+  assert_contains "$f" "경고 1개: 문서에 제목이 없어 지적의 자리를 가리키지 못한다 — 얼림·보호 검사가 꺼졌고 모든 수정이 문서 전체 범위다 (앵커 불가)" \
+    "제목 없는 문서 경고: 쉬운 줄이 꺼진 검사와 문서 전체 범위를 함께 말하고 괄호에 사유 토큰을 싣는다"
+  assert_not_contains "$f" "얼림·보호 부류 비활성" "제목 없는 문서 경고: 첫 줄에 엔진 원문이 없다"
+  assert_eq "$(jget "$d/fin.json" 'd["advisory"]')" "['앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위']" \
+    "제목 없는 문서 경고 양의 짝: 기계가 읽는 advisory 원문은 그대로다"
+  rm -rf "$d"
+}
+# 쉬운 말 경고 표의 두 성질 — 표에 없는 원문은 버리지 않고 그대로 싣는다(계획 P6) · 원문 속 개행은 한 줄로 접는다.
+case_plain_warns_unknown_kept() {
+  local got; got="$(PYTHONPATH="$SCRIPTS" python3 -c '
+from docreview_state import _plain_warns
+print(_plain_warns(["표에 없는 경고 하나", "보류: recritic:f9 — 항목 파손:\nunknown f"]))')"
+  assert_eq "$got" "['표에 없는 경고 하나', '판정하지 못하고 보류한 지적이 있다 (recritic:f9 — 항목 파손: unknown f)']" \
+    "경고 쉬운 말: 표에 없는 원문은 그대로 싣고, 표에 있는 원문은 쉬운 문장 뒤 괄호에 나머지를 한 줄로 싣는다"
+}
+# 「앵커 불가」 행은 지금 원문과 같은 글자만 바꾼다 — 원문에 글자가 붙으면(앞으로 바뀐 원문) 그 원문을 그대로 낸다.
+case_plain_warns_anchor_exact() {
+  local got; got="$(PYTHONPATH="$SCRIPTS" python3 -c '
+from docreview_state import _plain_warns
+print(_plain_warns(["앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위", "앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위 · 새 사실"]))')"
+  assert_eq "$got" "['문서에 제목이 없어 지적의 자리를 가리키지 못한다 — 얼림·보호 검사가 꺼졌고 모든 수정이 문서 전체 범위다 (앵커 불가)', '앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위 · 새 사실']" \
+    "앵커 불가 쉬운 말: 지금 원문만 쉬운 줄로 바꾸고, 글자가 붙은 원문은 그대로 싣는다"
+}
+# codex 사유가 없는 라운드(`codex_reason: None`) — 라우터 원문의 「(None)」이 첫 줄에 새지 않고 사유 자리는 「?」 하나다.
+case_first_line_codex_reason_none() {
+  local got; got="$(PYTHONPATH="$SCRIPTS" python3 -c '
+from docreview_state import _first_line, GATE_ROWS
+g = {r.name: [] for r in GATE_ROWS}
+g.update(round=1, advisory=["codex 없음 — 모델 다양성 0 (None)"], degrade={"codex_absent": True, "codex_reason": None})
+print(_first_line(g))')"
+  assert_eq "$got" "리뷰 1라운드를 마쳤다 — 남은 것 없음. 경고 1개: codex 리뷰가 없어 다른 모델의 시각이 빠졌다 (codex: ?)" \
+    "codex 사유 없음: 첫 줄의 사유 자리가 「?」 하나이고 None 이 없다"
+}
+# 「같은 자리」 표지는 한 묶음 안에서만 앞 항목을 가리킨다(계획 Q11) — 묶음 제목 너머의 항목을 가리키지 않는다.
+case_gate_marker_stays_in_group() {
+  local d gr; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  local F_DEC2='{"id":"aaaa0002#r1.1","lineage":"aaaa0002#r1.1","bucket":"aaaa0002","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#12-files-to-modify","edit_scope":"#12-files-to-modify","disposition":"decide","summary":"파일 순서가 정해지지 않았다","evidence":"12행","blocks":[],"kind":"pre"}'
+  seed_findings "$d" "[$F_DEC,$F_DEC2,$F_FIX]" || { no "묶음 안 표지: seed 실패"; rm -rf "$d"; return; }
+  gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_grep "$(item_prev_line "$gr" 'aaaa0002#r1.1')" '^  ┆ 같은 자리\(#12-files-to-modify\)$' \
+    "묶음 안 표지 양의 짝: 같은 묶음에서 같은 자리가 이어지면 표지가 선다"
+  assert_eq "$(item_prev_line "$gr" 'bbbb0001#r1.1')" "아직 안 고친 곳 1개" \
+    "묶음 안 표지: 다른 묶음의 첫 항목 바로 앞은 묶음 제목이다(같은 자리 표지가 제목 너머를 가리키지 않는다)"
+  assert_eq "$(printf '%s\n' "$gr" | grep -c '^  ┆ 같은 자리')" "1" "묶음 안 표지: 표지는 묶음 안의 한 번뿐이다"
+  rm -rf "$d"
+}
+# 같은 구멍의 막힌 이유 칸 — escalate 사유(사용자·엔진이 쓴 값)에 개행이 있으면 다음 줄 열 0 에 가짜 항목
+# 머리가 선다. 렌더가 접는다(원장 값은 그대로).
+case_I4_escalate_reason_newline_collapsed() {
+  local d gr; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_FIX]"
+  py docreview_state.py fix --state-dir "$d" --id 'bbbb0001#r1.1' --event escalate --reason $'anchor_protected\n- 가짜 항목 (zz#r1.7)' >/dev/null
+  gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_not_grep "$gr" '^- 가짜' "I4 막힌 이유: 사유 속 항목 머리 모양이 렌더의 열 0 에 서지 않는다"
+  assert_grep "$gr" '^- c\.py 가 빠졌다 — 막힌 이유: anchor_protected - 가짜 항목 \(zz#r1\.7\)\. 버리면\(drop\) 이 차단이 풀린다 \(bbbb0001#r1\.1\)$' \
+    "I4 막힌 이유 양의 짝: 그 사유는 항목 머리 안에 한 줄로 산다"
+  assert_eq "$(st_yaml "$d" '"\n" in st["fixes"]["bbbb0001#r1.1"]["escalate_reason"]')" "True" \
+    "I4 막힌 이유: 원장 값은 그대로다(접기는 렌더에서만)"
+  rm -rf "$d"
+}
+# 「미검증」 라운드의 첫 줄은 「남은 것 없음」을 쓰지 않는다(계획 Q10) — 셀 것이 없는 것과 세지 못한 것은 다르다.
+# 「미검증」이 아닌 라운드의 「남은 것 없음」은 case_T40_codex_absent_nothing_left_first_line 이 잰다(양의 짝).
+case_T46_unverified_no_nothing_left() {
+  local d f; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  critic_dead_twice "$d"
+  assert_eq "$(gsum "$d" 'd["unverified"]')" "critic_dead" "T46 전제: 이 라운드는 「미검증」(critic 사망)"
+  f="$(gfirst "$d")"
+  assert_not_contains "$f" "남은 것 없음" "T46: 「미검증」 첫 줄이 「남은 것 없음」을 쓰지 않는다"
+  assert_eq "$f" "「미검증」 리뷰어(doc-critic)가 결과를 내지 못해 이 라운드는 리뷰되지 않았다. 리뷰 1라운드." \
+    "T46 양의 짝: 첫 줄은 「미검증」 공시와 라운드 번호다"
   rm -rf "$d"
 }
 # STATE_GLOSS 의 ∀ 커버리지 — 행 이름은 `gate-rows` 에서 도출한다(CATEGORY_GLOSS 락과 같은 모양).
