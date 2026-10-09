@@ -160,7 +160,9 @@ else
   INTENT_JSON="$(bash "${PLUGIN_ROOT}/scripts/discover-spec.sh" --intent-out "$SCRATCH/intent.md" 2>/dev/null || true)"
   if [[ -s "$SCRATCH/intent.md" ]]; then
     INTENT_FILE="$SCRATCH/intent.md"
-    echo "[quality-gates] codex intent: $(printf '%s' "$INTENT_JSON" | sed -n 's/.*"intent_source": "\([^"]*\)".*/\1/p')" >&2
+    INTENT_SRC="$(printf '%s' "$INTENT_JSON" | sed -n 's/.*"intent_source": "\([^"]*\)".*/\1/p')"
+    INTENT_NOTE="$(printf '%s' "$INTENT_JSON" | sed -n 's/.*"intent_note": "\([^"]*\)".*/\1/p')"
+    echo "[quality-gates] codex intent: ${INTENT_SRC}${INTENT_NOTE:+ (${INTENT_NOTE})}" >&2
   else
     echo "[quality-gates] codex intent: discover-spec.sh produced no intent (script missing or crashed? check CLAUDE_PLUGIN_ROOT) — empty <intent>." >&2
   fi

@@ -30,6 +30,12 @@ assert_eq "$rc2" "0" "의도 파일 → exit 0"
 assert_contains "$out2" '캐시 무효화만 고친다' "의도 본문이 실린다"
 assert_not_contains "$out2" '"confidence"' "출력 스키마에 confidence 가 없다"
 
+# 2b — 치환은 한 번이다: diff 안의 자리표시자 리터럴에 의도가 끼어들지 않는다
+printf 'diff --git a b\n+x {{INTENT}} y {{FILTERED_DIFF}} z {{CRITERIA}}\n' > "$T/diff-ph"
+out3="$(python3 "$BUILD" "$T/diff-ph" "$T/intent" 2>/dev/null)"
+assert_contains "$out3" '+x {{INTENT}} y {{FILTERED_DIFF}} z {{CRITERIA}}' "diff 안의 자리표시자 리터럴이 그대로 남는다"
+assert_eq "$(printf '%s' "$out3" | grep -c '캐시 무효화만')" "1" "의도 본문은 <intent> 한 곳에만 실린다"
+
 # 3 — diff 부재 → exit 2
 python3 "$BUILD" /nonexistent-qg-diff-xyz "$T/intent" >/dev/null 2>&1
 assert_eq "$?" "2" "diff 부재 → exit 2"

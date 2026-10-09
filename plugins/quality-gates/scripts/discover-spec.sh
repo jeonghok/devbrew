@@ -66,7 +66,16 @@ for h in $(git log --format='%H' $RANGE 2>/dev/null); do
       *) reject="spec 경로 거부"; break ;;
     esac
     [ -f "$real" ] || break
-    cat "$real" > "$OUT"
+    rel="${real#"$root"/}"
+    # `.git/` 는 추적 검사가 이미 막지만(HEAD 트리에 없다) 깊이 방어로 따로 거부한다.
+    case "$rel" in
+      .git|.git/*) reject="spec 경로 거부"; break ;;
+    esac
+    # 추적된 파일만, 객체 저장소에서 읽는다 — git-ignored(.env 등)·미추적 파일은 거부하고,
+    # 확인과 읽기 사이의 바꿔치기(TOCTOU)도 없다.
+    if ! git -C "$root" show "HEAD:$rel" > "$OUT" 2>/dev/null; then
+      : > "$OUT"; reject="spec 경로 거부"; break
+    fi
     emit "$top/$v" "spec-trailer" ""
     exit 0
   fi

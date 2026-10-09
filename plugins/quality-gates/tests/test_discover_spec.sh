@@ -113,7 +113,7 @@ refused() {  # refused <Spec: 값> <라벨>
     trailer_case "$1$suffix"
     assert_eq "$(printf '%s' "$out" | key spec_path)" "" "$2$suffix — spec_path 비어 있다"
     assert_eq "$(printf '%s' "$out" | key intent_note)" "spec 경로 거부" "$2$suffix — 거부를 공시한다"
-    assert_file_absent "$T/intent.md" 'OUTSIDE-SECRET-XYZ|root:' "$2$suffix — 밖의 파일 내용이 의도 파일에 없다"
+    assert_file_absent "$T/intent.md" 'OUTSIDE-SECRET-XYZ|root:|hunter2' "$2$suffix — 밖의 파일 내용이 의도 파일에 없다"
   done
 }
 refused "$T/outside.txt" "절대 경로"
@@ -122,6 +122,24 @@ refused "../outside.txt" ".. 경로"
 refused "docs/../../outside.txt" "중간 .. 경로"
 refused "docs/superpowers/../superpowers/specs/new-design.md" "리포 안으로 되돌아오는 .. 경로"
 refused "docs/superpowers/specs/escape.md" "리포 밖으로 나가는 심볼릭 링크"
+# 7d — 추적되지 않은 파일은 리포 안이어도 읽지 않는다(git-ignored · 미추적 · .git/)
+printf '.env\n' > "$R/.gitignore"; git -C "$R" add .gitignore
+git -C "$R" -c user.email=t@t -c user.name=t commit -q -m "chore: ignore"
+printf 'SECRET=hunter2\n' > "$R/.env"
+printf 'SECRET=hunter2-untracked\n' > "$R/untracked-notes.md"
+printf 'SECRET=hunter2-link\n' > "$R/untracked-target.md"
+ln -s ../../../untracked-target.md "$R/docs/superpowers/specs/link-to-untracked.md"
+git -C "$R" config remote.origin.url "https://user:hunter2-token@example.com/x.git"
+refused ".env" "git-ignored .env"
+refused "untracked-notes.md" "미추적 파일"
+refused ".git/config" ".git/config"
+refused "docs/superpowers/specs/link-to-untracked.md" "미추적 대상을 가리키는 리포 안 링크"
+for f in intent.md; do
+  assert_file_absent "$T/$f" 'hunter2' "비밀 문자열이 의도 파일에 없다"
+done
+trailer_case "docs/superpowers/specs/new-design.md"
+assert_eq "$(printf '%s' "$out" | key intent_source)" "spec-trailer" "추적된 spec 은 받아들인다(양의 짝)"
+
 for suffix in "" "#k"; do
   trailer_case "docs/superpowers/specs/inrepo-link.md$suffix"
   assert_eq "$(printf '%s' "$out" | key intent_source)" "spec-trailer" "리포 안 심볼릭 링크$suffix — 받아들인다(양의 짝)"

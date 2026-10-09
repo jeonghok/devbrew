@@ -28,6 +28,7 @@ reviewer receives; a missing or empty block is exit 2.
 from __future__ import annotations
 
 import pathlib
+import re
 import sys
 
 # stdout 인코딩 가드와 P21 프리앰블 로더는 형제 사본 `codex_prompt_common.py` 가 갖는다
@@ -120,10 +121,15 @@ def main() -> int:
         print(f"P21 프리앰블이 비어 있다: {P21_PREAMBLE_PATH}", file=sys.stderr)
         return 2
 
-    out = PROMPT_TEMPLATE.replace("{{CRITERIA}}", criteria)
-    out = out.replace("{{P21_PREAMBLE}}", p21)
-    out = out.replace("{{FILTERED_DIFF}}", diff_content)
-    out = out.replace("{{INTENT}}", intent_content)
+    # 한 번에 치환한다 — 이미 들어간 diff·의도 안의 `{{...}}` 리터럴이 다시 치환되지 않는다.
+    values = {
+        "CRITERIA": criteria,
+        "P21_PREAMBLE": p21,
+        "FILTERED_DIFF": diff_content,
+        "INTENT": intent_content,
+    }
+    out = re.sub(r"\{\{(CRITERIA|P21_PREAMBLE|FILTERED_DIFF|INTENT)\}\}",
+                 lambda m: values[m.group(1)], PROMPT_TEMPLATE)
     sys.stdout.write(out)
     return 0
 
