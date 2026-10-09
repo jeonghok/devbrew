@@ -8,7 +8,7 @@
 
 **Tech Stack:** bash(macOS 3.2 호환), Python 3.9+, git.
 
-**Spec:** `docs/superpowers/specs/2026-10-08-plain-language-output-design.md` (brief: `docs/superpowers/interview/2026-10-03-plain-language-output-interview.md`). 선행: PR 1(`2026-10-08-plain-language-pr1-common.md`)이 머지돼 있어야 한다 — 규칙 블록과 새 렌더 첫 줄(「이상 없음」·「경고 없음」)이 이 PR 의 전제다.
+**Spec:** `docs/superpowers/specs/2026-10-08-plain-language-output-design.md` (brief: `docs/superpowers/interview/2026-10-03-plain-language-output-interview.md`). 선행: PR 1(`2026-10-08-plain-language-pr1-common.md`)은 머지됐다 — 규칙 블록과 새 렌더 첫 줄(「이상 없음」·「경고 없음」)이 이 PR 의 전제다. 브랜치는 main 의 #191(호출 표면 통일 — 진입 skill 이름 변경 · 명령 파일 제거 · 진입 사전 검사)과 #192 를 받은 f58653f0 위에 있다. 이 계획의 경로·이름·줄 번호는 그 트리 기준이다.
 
 ## Global Constraints
 
@@ -18,11 +18,12 @@
 - **테스트 실행** — 셸 테스트는 리포 루트에서 `bash <경로>`, 하나씩(동시 실행 금지 — 고정 경로 `/tmp/sd_auth_stderr.txt` 가 경쟁한다). Python 은 그 `tests/` 디렉토리에서 `python3 -m unittest -v <모듈>`.
 - **변이** — 커밋한 뒤 변이하고, `git checkout HEAD -- <파일>` 로 되돌린 뒤 `git diff HEAD --stat` 가 빈 출력인지 본다.
 - **Bash 도구** — 호출마다 새 셸. 계산된 값이 든 복합 명령은 `/Users/jeonghokim/.claude/jobs/d60d9f96/tmp/` 아래 스크립트 파일로 쓰고 `bash <파일>` 로 돌린다.
-- **버전** — spec-distill minor(게이트 틀이 바뀐다). quality-gates 는 patch(Task 5 가 바꾸는 엔진 스크립트가 링크로 실린다 — Q12). 번호는 머지 직전 origin/main 기준으로 다시 정한다. `.claude-plugin/marketplace.json` 의 spec-distill 소개 문구도 같은 커밋에서 바꾼다.
+- **버전** — spec-distill minor(게이트 틀이 바뀐다 — f58653f0 의 5.0.0 이면 5.1.0). quality-gates 는 patch(Task 5 가 바꾸는 엔진 스크립트가 링크로 실린다 — Q12. f58653f0 의 10.0.2 이면 10.0.3). 번호는 머지 직전 origin/main 기준으로 다시 정한다. `.claude-plugin/marketplace.json` 의 spec-distill 소개 문구도 같은 커밋에서 바꾼다.
+- **이름** — 진입 skill 은 `spec-interview`(옛 conducting-interview) · `spec-review`(옛 reviewing-spec) · `request-framing`(옛 framing-requests)이고 명령 파일은 없다(#191). `shared/tests/test_invocation_surface.sh` 축 I 가 `plugins/**` · `shared/**` 의 살아 있는 파일(CHANGELOG · `tests/fixtures/` 제외 — 테스트 파일도 들어간다)에서 옛 skill 이름 셋과 맨 `/interview` 토큰을 RED 로 잡고, 축 G 가 `skills/` · `references/` · `scripts/` 등 기계 디렉토리의 맨 `/spec-review` · `/spec-interview` · `/request-framing` 을 잡는다(완전명 `/spec-distill:<이름>` 만 허용). 이 계획이 새로 쓰는 글(테스트 메시지 포함)은 새 이름만 쓰고, 기계 디렉토리에는 맨 짧은 호출을 쓰지 않는다. 새 command 파일은 만들지 않는다(CLAUDE.md 「Progressive disclosure」).
 - **지시문은 그대로** — 찾는 지시·판정 규칙·kill switch 문장은 한 글자도 바꾸지 않는다. 바꾸는 것은 사용자에게 보이는 문구와 그 문구의 자리다. 모델에게 쓰는 실패 안내(「플러그인 루트 미해석 — …」 · `RETURN_MSG` 꼬리의 「…하라」)는 그대로 둔다.
 - **산출 보존** — `~/.claude/sdd-mirror/plain-language-output/pr2/`.
-- **줄 번호** — 이 계획의 줄 번호는 2026-10-08(PR 1 이전) 기준이다. PR 1 이 모든 `plugins/*/skills/*/SKILL.md` · `plugins/*/commands/*.md` 의 H1 뒤에 14줄(빈 줄 + 블록 13줄)을 넣었으므로 그 파일들의 줄 번호는 +14 다. 다른 파일(references · scripts · tests)은 그대로다. 편집은 줄 번호가 아니라 「옛」 문구로 찾는다.
-- **드라이런** — 2026-10-09 abc70f66 복사본에서 이 계획을 끝까지 실행해 불일치 13건을 고쳐 반영했다(보고서: `/Users/jeonghokim/.claude/sdd-mirror/plain-language-output/research/dryrun-pr2-report.md`). Task 5 는 4d325819 복사본에서 따로 실행했다(보고서: `/Users/jeonghokim/.claude/sdd-mirror/plain-language-output/research/dryrun-pr2-task5-report.md`).
+- **줄 번호** — 이 계획의 줄 번호는 전부 f58653f0 실측이다(#191 이 진입 skill 둘 — spec-review · request-framing — 의 H1 앞뒤에 frontmatter 3줄과 사전 검사 줄 · `## 진입 단계` 절을 넣어 그 두 SKILL 의 줄이 다시 밀렸다. reviewing-brief SKILL · finishing.md 는 줄 수가 그대로다). 편집은 줄 번호가 아니라 「옛」 문구로 찾는다 — 앞 Task 의 편집이 뒤 줄 번호를 밀므로, 착수 시점에 `grep -n` 으로 다시 찾는다.
+- **드라이런** — 2026-10-09 abc70f66 복사본에서 이 계획을 끝까지 실행해 불일치 13건을 고쳐 반영했다(보고서: `/Users/jeonghokim/.claude/sdd-mirror/plain-language-output/research/dryrun-pr2-report.md`). Task 5 는 4d325819 복사본에서 따로 실행했다(보고서: `/Users/jeonghokim/.claude/sdd-mirror/plain-language-output/research/dryrun-pr2-task5-report.md`). #191 을 받은 뒤 f58653f0 복사본에서 Task 0–6 을 다시 끝까지 실행했다(보고서: `/Users/jeonghokim/.claude/sdd-mirror/plain-language-output/research/dryrun-pr2b-report.md`).
 
 ## 계획이 정한 것
 
@@ -30,9 +31,9 @@
 |---|---|---|
 | Q1 | 승인 게이트 앞 글의 마지막 줄 규칙: 경고 채널을 다 읽었고 경고가 없으며 **남은 항목도 없으면** 「이상 없음」, 남은 항목이 있으면 「경고 없음」. 읽지 못한 채널은 「알 수 없음」 줄로 따로 쓴다. | 설계 표 `7874b3bb#r2.1` · 설계 §1 의 「이상 없음」 뜻(1라운드 답). |
 | Q2 | 리뷰 라운드 게이트는 한 번에 최대 4개를 유지한다. 렌더 첫 줄은 첫 호출 **앞 글에 한 번** 쓰고, 질문에는 그 질문의 결정과 경고가 있으면 「경고 N개 — 위에 적었다」 한 줄만 둔다. 한 호출에 묶는 질문은 서로의 답에 기대지 않는 결정이다 — 다른 결정의 답에 따라 달라지는 결정은 다음 호출로 미룬다. | 설계 Deferred 6 — 2026-10-08 사용자 답 「지금처럼 4개씩」. |
-| Q3 | framing-requests 의 degrade 채널 이름 「proceed 게이트 질문 텍스트」 → 「proceed 게이트 앞 글」. 고치는 자리 넷: 처분 앵커(L810) · `## degrade 채널` 다섯째 채널(L832) · `test_framing_review_contract.sh:535` 리터럴 · `test_dispatch_disposition.sh` 축 C(앵커 리터럴이 같은 파일 본문에 있어야 한다 — L832 가 그것을 만족시키므로 둘을 같은 글자로). | 설계 표 `3b4b8396#r3.1` + 조사가 찾은 넷째 자리. |
-| Q4 | 질문 본문에 그대로 남는 것(Goal 4 의 예외 — 규칙 블록의 「따로 정한 자리」): framing-requests 의 저자 편집 덩어리 본문(분량 상한 없음), 기준 사본이 없을 때 보이는 seed 전문, steelman 질문. 냉독 출력 전문은 앞 글로 간다. | 설계 표 `3b4b8396#r3.1` ②③ · 설계 §1 D1.7. |
-| Q5 | 핸드오프 `/compact` 틀: finishing.md 는 지금 있는 한 줄(물리적으로 한 줄 — `test_review_handoff_order.sh` 가 그 한 줄과 꺾쇠 자리표 집합 `<brief-path>` 를 잰다)에 규칙 유지 문장을 끼운다. reviewing-spec 에는 지금 `/compact` 문구 틀이 없다 — 이 PR 이 ① 행 아래에 틀을 새로 쓴다. framing-requests 의 ② `/compact` 는 다음 단계가 `/interview` 의 새 세션이라 블록이 다시 실리므로 손대지 않는다. | 설계 「알려진 한계」 D1.6 · 조사(2026-10-08). |
+| Q3 | request-framing 의 degrade 채널 이름 「proceed 게이트 질문 텍스트」 → 「proceed 게이트 앞 글」. 고치는 자리 넷: 처분 앵커(L852) · `## degrade 채널` 다섯째 채널(L874) · `test_framing_review_contract.sh:535` 리터럴 · `test_dispatch_disposition.sh` 축 C(앵커 리터럴이 같은 파일 본문에 있어야 한다 — L874 가 그것을 만족시키므로 둘을 같은 글자로). | 설계 표 `3b4b8396#r3.1` + 조사가 찾은 넷째 자리. |
+| Q4 | 질문 본문에 그대로 남는 것(Goal 4 의 예외 — 규칙 블록의 「따로 정한 자리」): request-framing 의 저자 편집 덩어리 본문(분량 상한 없음), 기준 사본이 없을 때 보이는 seed 전문, steelman 질문. 냉독 출력 전문은 앞 글로 간다. | 설계 표 `3b4b8396#r3.1` ②③ · 설계 §1 D1.7. |
+| Q5 | 핸드오프 `/compact` 틀: finishing.md 는 지금 있는 한 줄(물리적으로 한 줄 — `test_review_handoff_order.sh` 가 그 한 줄과 꺾쇠 자리표 집합 `<brief-path>` 를 잰다)에 규칙 유지 문장을 끼운다. spec-review 에는 지금 `/compact` 문구 틀이 없다(f58653f0 에서도 — #191 은 ① 행의 문구를 바꾸지 않았다) — 이 PR 이 ① 행 아래에 틀을 새로 쓴다. request-framing 의 ② `/compact` 는 다음 단계가 `/spec-distill:spec-interview` 로 여는 진입 skill 이라 블록이 다시 실리므로 손대지 않는다. | 설계 「알려진 한계」 D1.6 · 조사(2026-10-08) · f58653f0 재확인. |
 | Q6 | spec-distill 에는 「(Recommended)」가 없다(이미 「(권장)」). steelman 질문의 「(권장)」 금지는 그대로다. | 조사 · `steelman.md:91` 락. |
 | Q7 | 고치는 고정 문구는 아래 Task 4 의 표에 있는 것뿐이다. 나머지 `[spec-distill]` 줄은 셋 중 하나라 그대로 둔다: 모델에게 쓰는 지시(「…하라」로 끝나는 꼬리), 프로그램이 읽는 줄(`review-entry:` · rc 줄 · `PAIRS`), 이미 쉬운 한국어인 줄. 분류 표는 PR 본문에 붙인다(원자료: `~/.claude/sdd-mirror/plain-language-output/research/research-c/`). | 설계 표 `1cdda836#r1.1`(고정 문구 전수). |
 | Q8 | `seed_review_log.py` 의 사람용 줄(「같은 기록 줄이 이미 있다 — 다시 적지 않는다」)은 이미 쉬운 말이라 고치지 않는다. | 설계 Files to Modify 가 이 파일을 적었다 — 확인 결과. |
@@ -46,7 +47,7 @@
 1. **경고가 있는데 질문만 보고 고른다** — 질문에 경고가 하나도 없으면 사용자는 앞 글을 건너뛰고 고를 수 있다. 사람은 「경고가 있으면 질문에서도 그 사실이 보이기」를 기대한다. → Task 2 의 락: 질문에 `경고 <N>개 — 위에 적었다 | 경고 없음 | 이상 없음` 자리가 있다.
 2. **경고 채널을 못 읽었는데 「이상 없음」** — 원장 `get` 이 실패한 세션. 사람은 「알 수 없음」을 기대한다. → 기존 락 `test_reviewing_brief_skill.sh` 의 「알 수 없는」 단언이 그대로 GREEN 인지 Task 3 에서 확인하고, 새 락이 `실제로 읽었다는 주장` 문장을 채택 skill 넷 전부에서 잰다.
 3. **이름을 바꾼 채널이 처분 앵커에는 옛 이름으로 남는다** — 축 C 락은 이름의 실재만 잰다(CLAUDE.md 가 그 한계를 적는다). → Task 3 Step 4 가 앵커와 본문을 같은 글자로 바꾸고, 옛 이름이 FR 어디에도 없음을 잰다.
-4. **압축 명령에 새 꺾쇠 자리표가 끼어든다** — 사용자가 그대로 붙여 넣는 명령이 `<…>` 를 품으면 그대로 실행된다. → Task 2 Step 1 의 단언은 기존 `test_review_handoff_order.sh` 가 이미 잰다(자리표 집합 = `<brief-path>`). reviewing-spec 새 틀도 자리표를 `<spec_path>` 하나로 제한하고 그것을 잰다.
+4. **압축 명령에 새 꺾쇠 자리표가 끼어든다** — 사용자가 그대로 붙여 넣는 명령이 `<…>` 를 품으면 그대로 실행된다. → Task 2 Step 1 의 단언은 기존 `test_review_handoff_order.sh` 가 이미 잰다(자리표 집합 = `<brief-path>`). spec-review 새 틀도 자리표를 `<spec_path>` 하나로 제한하고 그것을 잰다.
 5. **codex 건너뜀 줄의 사유 토큰이 사라진다** — 사람은 「왜 건너뛰었는지」를 원문 토큰으로 보기를 기대한다(`kill_switch` · `detector_not_runnable`). → Task 4 의 새 문구가 `(reason: <x>)` 를 그대로 품고, 14곳의 단언이 그 토큰까지 계속 잰다.
 6. **경고를 합치다 경고 하나가 사라진다** — 합치는 행이 서로 다른 사실을 같은 키로 묶거나, 표에 없는 원문을 버리면 첫 줄에서 경고가 조용히 빠진다. 사람은 「경고 수가 줄어도 빠진 사실은 없다」를 기대한다. → Task 5 의 락: 원문 여섯 → 줄 셋과 각 줄의 사유 토큰(`case_plain_warns_first_line`), 표에 없는 원문은 그대로(`case_plain_warns_unknown_kept`), 변이 넷(`warns_*`). 엔진 원문의 글자가 바뀌면 그 행이 안 맞아 원문이 그대로 나온다 — 쉬운 말은 잃어도 경고는 안 잃는다.
 
@@ -54,7 +55,9 @@
 
 ## Task 0: 착수 준비
 
-- [ ] **Step 1: PR 1 머지를 받는다**
+- [ ] **Step 1: 머지가 끝났는지 확인한다**
+
+PR 1 은 main 에 있고, 브랜치는 이미 origin/main(#191 · #192 포함)을 merge 했다(f58653f0). 이 Step 은 다시 merge 하지 않고 확인만 한다.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/.claude/worktrees/plain-language-voice
@@ -62,11 +65,11 @@ mkdir -p ~/.claude/sdd-mirror/plain-language-output/pr2
 git status --porcelain
 git fetch origin main
 git merge-base --is-ancestor "$(git log --format=%H -1 --grep='사람에게 쓰는 글 규칙 블록의 정본')" origin/main && echo PR1-MERGED || echo PR1-NOT-MERGED
-git merge-tree --write-tree HEAD origin/main >/dev/null && echo clean || echo CONFLICT
-git merge --no-edit origin/main
+git merge-base --is-ancestor origin/main HEAD && echo MAIN-IN-HEAD || echo "MAIN-MOVED $(git rev-list --count HEAD..origin/main)"
+git log --oneline -1 HEAD
 ```
 
-`PR1-NOT-MERGED` 나 `CONFLICT` 면 멈춰 보고한다.
+기대: 빈 status · `PR1-MERGED` · `MAIN-IN-HEAD`. `MAIN-MOVED <n>` 이면 main 이 f58653f0 뒤로 움직였다 — merge 하지 말고 멈춰 보고한다(이 계획의 경로 · 줄 번호 · 기준선이 f58653f0 기준이다. 움직인 커밋이 spec-distill · shared/docreview 를 건드렸는지 `git diff --stat HEAD...origin/main` 으로 함께 보고한다).
 
 - [ ] **Step 2: 이 계획의 옛 문구가 그대로인지 본다**
 
@@ -77,24 +80,24 @@ git merge --no-edit origin/main
 set -u
 R=/Users/jeonghokim/Downloads/devbrew/.claude/worktrees/plain-language-voice
 c() { n="$(grep -cF -- "$2" "$R/$1")"; e="${3:-1}"; [ "$n" = "$e" ] && s=ok || s=STOP; printf '%s\t%s\t%s\t%s\t%s\n' "$s" "$n" "$1" "$2" "(기대 $e)"; }
-c plugins/spec-distill/skills/conducting-interview/references/finishing.md '    header: "Proceed",'
-c plugins/spec-distill/skills/conducting-interview/references/finishing.md '그리고 `question` 텍스트에 **모든 degrade record를 한 줄씩** 싣습니다 — 옵션 description이'
-c plugins/spec-distill/skills/conducting-interview/references/finishing.md '**그리고 아래 '"'"'재결정 규약'"'"' 문장**을 유지하고,'
-c plugins/spec-distill/skills/reviewing-spec/SKILL.md '질문에 묶으면 그 결정의 선택지가 사라지기 때문이다. 매 호출 첫 질문의 첫 줄은 렌더 첫 줄(degrade'
+c plugins/spec-distill/skills/spec-interview/references/finishing.md '    header: "Proceed",'
+c plugins/spec-distill/skills/spec-interview/references/finishing.md '그리고 `question` 텍스트에 **모든 degrade record를 한 줄씩** 싣습니다 — 옵션 description이'
+c plugins/spec-distill/skills/spec-interview/references/finishing.md '**그리고 아래 '"'"'재결정 규약'"'"' 문장**을 유지하고,'
+c plugins/spec-distill/skills/spec-review/SKILL.md '질문에 묶으면 그 결정의 선택지가 사라지기 때문이다. 매 호출 첫 질문의 첫 줄은 렌더 첫 줄(degrade'
 c plugins/spec-distill/skills/reviewing-brief/SKILL.md '질문에 묶으면 그 결정의 선택지가 사라지기 때문이다. 매 호출 첫 질문의 첫 줄은 렌더 첫 줄(degrade'
-c plugins/spec-distill/skills/framing-requests/SKILL.md '냅니다. 그 묶음은 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠 띄우고, 매 호출 첫 질문의 첫 줄은 렌더'
+c plugins/spec-distill/skills/request-framing/SKILL.md '냅니다. 그 묶음은 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠 띄우고, 매 호출 첫 질문의 첫 줄은 렌더'
 c shared/docreview/references/reviewing-document.md '선택지가 사라지기 때문이다. 매 호출 첫 질문의 첫 줄은 렌더 첫 줄(degrade 공시)과 같다. 사용자'
-c plugins/spec-distill/skills/framing-requests/SKILL.md '// **처분** — consumer=human · fail-open · disclosure=proceed 게이트 질문 텍스트'
-c plugins/spec-distill/skills/reviewing-spec/SKILL.md '텍스트의 `degrade:` 슬롯에도 싣는다. 셋 다 비었을 때만 `degrade 없음` 이다 — 그 문구는 **채널을'
+c plugins/spec-distill/skills/request-framing/SKILL.md '// **처분** — consumer=human · fail-open · disclosure=proceed 게이트 질문 텍스트'
+c plugins/spec-distill/skills/spec-review/SKILL.md '텍스트의 `degrade:` 슬롯에도 싣는다. 셋 다 비었을 때만 `degrade 없음` 이다 — 그 문구는 **채널을'
 c plugins/spec-distill/skills/reviewing-brief/SKILL.md 'Step B 게이트를 띄우기 **직전에** 이 채널들을 읽어 하나도 빠뜨리지 않고 게이트 `question` 텍스트에'
 # Task 4 Step 2 표의 옛 문구(첫 줄)
-c plugins/spec-distill/skills/reviewing-spec/SKILL.md '[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — Claude-only, 이 리뷰에는 모델 다양성이 없었다 (degraded).'
+c plugins/spec-distill/skills/spec-review/SKILL.md '[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — Claude-only, 이 리뷰에는 모델 다양성이 없었다 (degraded).'
 c plugins/spec-distill/skills/reviewing-brief/SKILL.md '[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — Claude-only, 이 리뷰에는 codex 쪽의 모델 다양성과 웹 근거가 없었다 (degraded).'
-c plugins/spec-distill/skills/framing-requests/SKILL.md '[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — seed 리뷰에 codex 쪽 모델 다양성이 없었다 (degraded).'
-c plugins/spec-distill/skills/framing-requests/SKILL.md '[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자 편집을 비교할 수 없다.' 2
+c plugins/spec-distill/skills/request-framing/SKILL.md '[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — seed 리뷰에 codex 쪽 모델 다양성이 없었다 (degraded).'
+c plugins/spec-distill/skills/request-framing/SKILL.md '[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자 편집을 비교할 수 없다.' 2
 c plugins/spec-distill/skills/reviewing-brief/SKILL.md '[spec-distill] brief 리뷰 SKIPPED (DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1)'
-c plugins/spec-distill/skills/conducting-interview/references/finishing.md '[spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등'
-c plugins/spec-distill/skills/conducting-interview/references/finishing.md '[spec-distill] interview brief 완결: docs/superpowers/interview/<file>. superpowers 설치 시'
+c plugins/spec-distill/skills/spec-interview/references/finishing.md '[spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등'
+c plugins/spec-distill/skills/spec-interview/references/finishing.md '[spec-distill] interview brief 완결: docs/superpowers/interview/<file>. superpowers 설치 시'
 c plugins/spec-distill/scripts/check_brief.py '그 판단은 Step B 게이트에서 "'
 c plugins/spec-distill/scripts/check_brief.py 'coverage-mapper 0 ({reason}) — dispatch 없이 통과 (advisory, 사람이 확인)'
 # Task 5 의 옛 문구(첫 줄)
@@ -109,6 +112,8 @@ c shared/tests/fixtures/docreview/cases.sh '  # 「] <fid>」로 시작한다(�
 `STOP` 이 하나라도 나오면 그 줄의 Task(Task 4 · Task 5)로 가기 전에 멈춰 보고한다. 옛 문구가 파이썬 문자열 리터럴 둘로 나뉜 자리(check_brief.py)는 한 물리적 줄 안의 조각만 센다.
 
 - [ ] **Step 3: 기준선**
+
+f58653f0 의 기준선은 드라이런이 깨끗한 복사본에서 떠 두었다: `~/.claude/sdd-mirror/plain-language-output/pr2/baseline/`(`summary.tsv` · `failures.txt` · `logs/`). Step 1 의 `git log --oneline -1 HEAD` 가 f58653f0 이면 그것을 쓴다. 다르면 다시 뜬다(약 50분, 그동안 이 워크트리에서 테스트를 돌리지 않는다 — 고정 `/tmp` 경로가 경쟁해 거짓 RED 가 난다):
 
 ```bash
 bash ~/.claude/sdd-mirror/plain-language-output/run-suite.sh pr2/baseline
@@ -133,7 +138,7 @@ PR 1 최종(`pr1/final`)과 비교해 새 RED 가 있으면 `pr2/baseline/NOTE.m
 
 ```bash
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/*/SKILL.md plugins/spec-distill/skills/conducting-interview/references/finishing.md plugins/spec-distill/references/proceed-gate.md
+# guards: plugins/spec-distill/skills/*/SKILL.md plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/references/proceed-gate.md
 #
 # 쉬운 말 출력 설계 §4 · AC7 — 모든 게이트 질문은 결정 하나와 상태 한 줄만 담고, 경고 목록은 앞 글에 쓴다.
 # 「채널을 읽은 뒤에만 없음을 쓴다」 계약은 그대로 남는다.
@@ -141,15 +146,15 @@ set -u
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 if [ "${1:-}" = "--emit-scanned" ]; then
   git -C "$REPO_ROOT" ls-files -- 'plugins/spec-distill/skills/*/SKILL.md' \
-    plugins/spec-distill/skills/conducting-interview/references/finishing.md plugins/spec-distill/references/proceed-gate.md
+    plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/references/proceed-gate.md
   exit 0
 fi
 . "$REPO_ROOT/shared/tests/assert.sh"
 SD="$REPO_ROOT/plugins/spec-distill"
-FIN="$SD/skills/conducting-interview/references/finishing.md"
-RS="$SD/skills/reviewing-spec/SKILL.md"
+FIN="$SD/skills/spec-interview/references/finishing.md"
+RS="$SD/skills/spec-review/SKILL.md"
 RB="$SD/skills/reviewing-brief/SKILL.md"
-FR="$SD/skills/framing-requests/SKILL.md"
+FR="$SD/skills/request-framing/SKILL.md"
 PG="$SD/references/proceed-gate.md"
 
 # ① 머리글 「Proceed」가 없다(spec-distill 어디에도).
@@ -183,10 +188,10 @@ for f in "$FIN" "$RS"; do
   assert_eq "$(grep -c '/compact .*사람에게 쓰는 글 규칙' "$f" || true)" "1" "AC7: $(basename "$(dirname "$f")") 의 /compact 틀이 규칙 유지 문장을 싣는다"
 done
 RSC="$(grep '/compact 설계문서' "$RS" || true)"
-assert_eq "$(printf '%s' "$RSC" | grep -oE '<[^>]+>' | sort -u | tr '\n' ' ')" "<spec_path> " "Review Focus 4: reviewing-spec /compact 틀의 꺾쇠 자리표가 <spec_path> 하나다"
+assert_eq "$(printf '%s' "$RSC" | grep -oE '<[^>]+>' | sort -u | tr '\n' ' ')" "<spec_path> " "Review Focus 4: spec-review /compact 틀의 꺾쇠 자리표가 <spec_path> 하나다"
 
-# ⑦ framing-requests 의 옛 채널 이름이 남지 않는다(처분 앵커 포함).
-assert_eq "$(grep -c '게이트 질문 텍스트' "$FR" || true)" "0" "Q3: framing-requests 에 옛 채널 이름 「게이트 질문 텍스트」가 없다"
+# ⑦ request-framing 의 옛 채널 이름이 남지 않는다(처분 앵커 포함).
+assert_eq "$(grep -c '게이트 질문 텍스트' "$FR" || true)" "0" "Q3: request-framing 에 옛 채널 이름 「게이트 질문 텍스트」가 없다"
 assert_file_grep "$FR" 'disclosure=proceed 게이트 앞 글' "Q3 양의 짝: 처분 앵커가 새 이름을 댄다"
 
 # ⑧ 질문에 그대로 남는 예외가 명시돼 있다(Q4).
@@ -198,23 +203,23 @@ finish
 
 ```bash
   echo "plugins/spec-distill/skills/reviewing-brief/SKILL.md"
-  echo "plugins/spec-distill/skills/framing-requests/SKILL.md"
+  echo "plugins/spec-distill/skills/request-framing/SKILL.md"
 ```
 
-그리고 `finish`(108행) 앞에 넣는다(`REF` · `SKILL` 은 그 파일 45-46행이 정의한 절차서 · reviewing-spec 경로다):
+그리고 `finish`(108행 — 위 두 줄을 넣은 뒤엔 110행) 앞에 넣는다(`REF` · `SKILL` 은 그 파일 45-46행이 정의한 절차서 · spec-review 경로다 — 두 줄을 넣은 뒤엔 47-48행):
 
 ```bash
 # 쉬운 말 출력 PR 2 (계획 Q2) — 렌더 첫 줄은 첫 호출 앞 글에 한 번, 질문엔 결정 하나와 경고 개수 한 줄.
 NEWRULE='렌더 첫 줄(상태와 경고)은 첫 호출 **앞 글**에 한 번 쓴다'
 OLDRULE='매 호출 첫 질문의 첫 줄은 렌더'
-for f in "$REF" "$SKILL" "$REPO_ROOT/plugins/spec-distill/skills/reviewing-brief/SKILL.md" "$REPO_ROOT/plugins/spec-distill/skills/framing-requests/SKILL.md"; do
+for f in "$REF" "$SKILL" "$REPO_ROOT/plugins/spec-distill/skills/reviewing-brief/SKILL.md" "$REPO_ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"; do
   assert_eq "$(grep -cF -- "$NEWRULE" "$f" || true)" "1" "Q2: $f 가 렌더 첫 줄을 앞 글에 한 번 쓴다고 적는다"
   assert_eq "$(tr '\n' ' ' < "$f" | grep -cF -- "$OLDRULE" || true)" "0" "Q2: $f 에 옛 규칙(매 호출 첫 줄 = 렌더 첫 줄)이 없다"
   assert_eq "$(grep -cF -- '다른 결정의 답에 따라 달라지는 결정은 다음 호출로 미룬다' "$f" || true)" "1" "Q2: $f 가 「무관한 결정」의 뜻을 적는다"
 done
 ```
 
-같은 파일 2행의 `# guards:` 를 `# guards: shared/docreview/references/reviewing-document.md plugins/spec-distill/skills/reviewing-spec/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/framing-requests/SKILL.md` 로 바꾼다. 읽는 파일이 늘면 선언도 같이 넓힌다(`test_guards_coverage_bidirectional.sh` 가 두 방향으로 잰다).
+같은 파일 2행의 `# guards:` 를 `# guards: shared/docreview/references/reviewing-document.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/request-framing/SKILL.md` 로 바꾼다. 읽는 파일이 늘면 선언도 같이 넓힌다(`test_guards_coverage_bidirectional.sh` 가 두 방향으로 잰다).
 
 옛 규칙의 부재는 줄바꿈을 지운 본문에서 잰다 — 옛 문장은 파일마다 줄바꿈 자리가 달라 다시 쓰일 때 OLDRULE 이 줄을 넘을 수 있다.
 
@@ -224,8 +229,9 @@ Run:
 ```bash
 bash plugins/spec-distill/tests/test_plain_gate_templates.sh | tail -1
 bash shared/tests/test_docreview_round_gate_split.sh | tail -1
+bash shared/tests/test_invocation_surface.sh | tail -1
 ```
-Expected: 둘 다 `Fail:` 이 0 보다 크다.
+Expected: 앞 둘은 `Fail:` 이 0 보다 크다(f58653f0 드라이런: `Total: 23 | Pass: 4 | Fail: 19` · `Total: 28 | Pass: 16 | Fail: 12`). 셋째는 `Fail: 0` — 새 락 파일에 옛 skill 이름 · 맨 `/interview` 가 없다(축 I 는 `tests/` 도 훑는다).
 
 - [ ] **Step 3: 커밋**
 
@@ -241,8 +247,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ## Task 2: interview 승인 게이트(B-2)와 핸드오프
 
 **Files:**
-- Modify: `plugins/spec-distill/skills/conducting-interview/references/finishing.md:296-340, :360`
-- Modify: `plugins/spec-distill/tests/test_brief_review_entry.sh:221-223, :252-253, :261-275`
+- Modify: `plugins/spec-distill/skills/spec-interview/references/finishing.md:296-340, :360`
+- Modify: `plugins/spec-distill/tests/test_brief_review_entry.sh:222, :252-253, :272-275`
 
 - [ ] **Step 1: 앞 글 목록에 경고 항목을 더하고 채널 문단을 고친다**
 
@@ -285,7 +291,7 @@ state 의 `brief_review_degradations` 원장(BRIEF_REVIEW skip record 포함)·�
 
 - [ ] **Step 2: 질문 틀을 고친다**
 
-329-335(옛 질문·머리글·옵션 넷)를 이것으로 바꾼다:
+329-336(옛 질문·머리글·`options: [`·옵션 넷·닫는 `    ],` — 여덟 줄. Step 1 이 넷째 항목 네 줄을 넣었으면 333-340)을 이것으로 바꾼다(`    multiSelect: false` 부터는 그대로):
 
 ```javascript
     question: "interview brief 를 만들었다: <brief-path> (구조 검사 통과 · 리뷰 <게이트 결과 한 줄 — 왜 여기서 멈췄는지 · 남은 항목 수 · 리뷰를 마치지 못했으면 그 사유(unreviewed_reason)>). 경고 <N>개 — 위에 적었다 | 경고 없음 | 이상 없음. 다음 단계는?",
@@ -316,10 +322,25 @@ state 의 `brief_review_degradations` 원장(BRIEF_REVIEW skip record 포함)·�
 |---|---|---|---|
 | 221-223 | `for tok in 'readback' 'gap' 'degrade'; do` … `"B-2 question에 '$tok' 실림 …"` | 그대로 두고 메시지만 `"B-2 절에 '$tok' 이 있다 (느슨한 substring, defense-in-depth)"` | 산출물 셋이 B-2 에서 다뤄진다 |
 | 252-253 | `grep -qE 'question 텍스트\|question 본문' …` · `"degrade가 question 텍스트에 렌더 …"` · `"렌더 위치(question 텍스트) 명시 부재"` | `grep -qF '게이트 앞 글' "${CI_FILES[@]}"` · `"degrade 가 게이트 앞 글에 쓰인다 (프로즈 서술)"` · `"degrade 의 자리(게이트 앞 글) 명시 부재"` | 사용자가 고르기 전에 경고를 본다 |
-| 261-274 | `QLINE_CODE` 에 `degrade` 가 있어야 한다 | `QLINE_CODE` 에 `위에 적었다` 가 있어야 하고(`grep -qF '위에 적었다'`), `degrade:` 가 없어야 한다(`grep -qF 'degrade:'` 이면 `no`). 메시지: `"B-2 question: 라인이 경고를 개수 한 줄로 가리킨다 (placement, load-bearing)"` · `"B-2 question: 라인에 degrade 목록 자리가 남았다 — 목록은 게이트 앞 글로 갔다"` | 경고가 옵션 description 으로 숨지 않고, 질문은 결정 하나에 집중한다 |
+| 272-274 | `QLINE_CODE` 에 `degrade` 가 있어야 한다 | `QLINE_CODE` 에 `위에 적었다` 가 있어야 하고(`grep -qF '위에 적었다'`), `degrade:` 가 없어야 한다(`grep -qF 'degrade:'` 이면 `no`). 메시지: `"B-2 question: 라인이 경고를 개수 한 줄로 가리킨다 (placement, load-bearing)"` · `"B-2 question: 라인에 degrade 목록 자리가 남았다 — 목록은 게이트 앞 글로 갔다"` | 경고가 옵션 description 으로 숨지 않고, 질문은 결정 하나에 집중한다 |
 | 275 | `grep -qE 'degrade 없음' …` · `"빈 배열도 명시"` | `grep -qE '「경고 없음」' "${CI_FILES[@]}" && grep -qE '「이상 없음」' "${CI_FILES[@]}"` · `"빈 배열도 명시(경고 없음 · 이상 없음)"` | 침묵과 「없음」을 가른다 |
 
-261-274 의 주석(fix round 1 · Decoy 2 의 근거)은 그대로 둔다 — 「펜스 안 question: 줄만 잰다」는 근거는 바뀌지 않았다.
+새 줄(옛 줄과 같은 자리 — 252-253 의 두 줄, 272-274 의 세 줄, 275 의 한 줄을 각각 바꾼다. 222 는 메시지 글자만):
+
+```bash
+  grep -qF "$tok" <<<"$WB2" && ok "B-2 절에 '$tok' 이 있다 (느슨한 substring, defense-in-depth)" || no "B-2에 '$tok' 부재"
+grep -qF '게이트 앞 글' "${CI_FILES[@]}" \
+  && ok "degrade 가 게이트 앞 글에 쓰인다 (프로즈 서술)" || no "degrade 의 자리(게이트 앞 글) 명시 부재"
+grep -qF '위에 적었다' <<<"$QLINE_CODE" \
+  && ok "B-2 question: 라인이 경고를 개수 한 줄로 가리킨다 (placement, load-bearing)" \
+  || no "B-2 question: 라인(트레일링 // 코멘트 제외)에 「위에 적었다」 부재 — 경고 개수 줄이 description 이나 죽은 // 코멘트로 옮겨 갔다"
+grep -qF 'degrade:' <<<"$QLINE_CODE" \
+  && no "B-2 question: 라인에 degrade 목록 자리가 남았다 — 목록은 게이트 앞 글로 갔다" \
+  || ok "B-2 question: 라인에 degrade 목록 자리 없음"
+grep -qE '「경고 없음」' "${CI_FILES[@]}" && grep -qE '「이상 없음」' "${CI_FILES[@]}" && ok "빈 배열도 명시(경고 없음 · 이상 없음)" || no "빈 배열 명시 부재"
+```
+
+261-271 의 주석(fix round 1 · Decoy 2 의 근거)과 `QFENCE` · `QLINE` · `QLINE_CODE` 줄은 그대로 둔다 — 「펜스 안 question: 줄만 잰다」는 근거는 바뀌지 않았다.
 
 - [ ] **Step 5: 테스트를 돈다**
 
@@ -328,12 +349,12 @@ Run:
 for t in test_brief_review_entry test_conducting_interview_stage test_review_handoff_order test_plain_gate_templates; do printf '%s ' "$t"; bash plugins/spec-distill/tests/$t.sh 2>&1 | tail -1; done
 bash shared/tests/test_docreview_procedure_paths.sh | tail -1
 ```
-Expected: `test_plain_gate_templates` 는 아직 RS · RB · FR · PG 단언이 RED(다음 Task 들), 나머지는 `Fail: 0`. `test_docreview_procedure_paths.sh:176` 은 지금 GREEN 이다(B-1 의 282행도 `interview brief 완결:` 을 품는다). Task 4 가 282행을 바꾸면 RED 가 된다. B-2 에만 있는 리터럴로 바꾼다: `assert_contains "$FIN_STEPB" 'header: "다음 단계"'`(지키는 뜻: 창이 B-2 질문 펜스까지 닿는다).
+Expected: `test_plain_gate_templates` 는 아직 RS · RB · FR · PG 단언이 RED(다음 Task 들), 나머지는 `Fail: 0`. `test_docreview_procedure_paths.sh:176` 은 지금 GREEN 이다(B-1 의 282행도 `interview brief 완결:` 을 품는다). Task 4 가 282행을 바꾸면 RED 가 된다. 지금(이 Task 에서) B-2 에만 있는 리터럴로 바꾸고 다시 돌린다: 176행 `assert_contains "$FIN_STEPB" 'interview brief 완결:'` → `assert_contains "$FIN_STEPB" 'header: "다음 단계"'`(지키는 뜻: 창이 B-2 질문 펜스까지 닿는다. 드라이런 실측 48/48). 그래서 아래 커밋에 이 파일이 들어간다.
 
 - [ ] **Step 6: 커밋**
 
 ```bash
-git add plugins/spec-distill/skills/conducting-interview/references/finishing.md plugins/spec-distill/tests/test_brief_review_entry.sh shared/tests/test_docreview_procedure_paths.sh
+git add plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/tests/test_brief_review_entry.sh shared/tests/test_docreview_procedure_paths.sh
 git commit -m "feat(spec-distill): interview 다음 단계 게이트가 경고를 앞 글에 쓰고 질문엔 개수만 싣는다
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -341,20 +362,20 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-## Task 3: 리뷰 라운드 게이트 · 승인 게이트 · 확정 게이트 (reviewing-spec · reviewing-brief · framing-requests · 정본)
+## Task 3: 리뷰 라운드 게이트 · 승인 게이트 · 확정 게이트 (spec-review · reviewing-brief · request-framing · 정본)
 
 **Files:**
-- Modify: `plugins/spec-distill/skills/conducting-interview/references/finishing.md:241, :252, :253`(Step 4 의 경고 위치 행)
+- Modify: `plugins/spec-distill/skills/spec-interview/references/finishing.md:241, :252, :253`(Step 4 의 경고 위치 행)
 - Modify: `shared/docreview/references/reviewing-document.md:27-30`
-- Modify: `plugins/spec-distill/skills/reviewing-spec/SKILL.md:363-366, :422, :427-436, :431-432, :490-492`
-- Modify: `plugins/spec-distill/skills/reviewing-brief/SKILL.md:458-461, :580-583, :585`
-- Modify: `plugins/spec-distill/skills/framing-requests/SKILL.md`(577-579 · 593 · 722-727 · 810 · 814 · 821 · 831-833 · 850-858 · 873 · 879 · 936 · 956-968 · 1018 · 137 · 382)
+- Modify: `plugins/spec-distill/skills/spec-review/SKILL.md:396-399, :441, :460-469, :450-451, :523-525`
+- Modify: `plugins/spec-distill/skills/reviewing-brief/SKILL.md:472-475, :594-597, :585`
+- Modify: `plugins/spec-distill/skills/request-framing/SKILL.md`(620-621 · 635 · 764-769 · 852 · 856 · 863 · 872-874 · 892-900 · 915 · 921 · 978 · 998-1010 · 1060 · 179 · 424 · 895)
 - Modify: `plugins/spec-distill/references/proceed-gate.md:39-41`
-- Modify: `plugins/spec-distill/tests/test_framing_review_contract.sh:535` · `plugins/spec-distill/tests/test_reviewing_brief_skill.sh:277-282`
+- Modify: `plugins/spec-distill/tests/test_framing_review_contract.sh:535` · `plugins/spec-distill/tests/test_reviewing_brief_skill.sh:280`
 
 - [ ] **Step 1: 라운드 게이트 문장 넷(Q2)**
 
-네 파일의 옛 문장 — reviewing-document.md(30행 안), reviewing-spec(365-366), reviewing-brief(460-461):
+네 파일의 옛 문장 — reviewing-document.md(30행 안), spec-review(398-399), reviewing-brief(474-475):
 
 ```markdown
 매 호출 첫 질문의 첫 줄은 렌더 첫 줄(degrade
@@ -370,7 +391,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 락이 `렌더 첫 줄(상태와 경고)은 첫 호출 **앞 글**에 한 번 쓴다` 와 `다른 결정의 답에 따라 달라지는 결정은 다음 호출로 미룬다` 를 **한 줄 안에서** 찾으므로 이 둘은 각각 한 물리적 줄 안에 두고 그 사이에서만 줄을 나눈다.
 
-framing-requests 577-579(옛): `냅니다. 그 묶음은 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠 띄우고, 매 호출 첫 질문의 첫 줄은 렌더` / `첫 줄(degrade 공시)과 같습니다. ` → 새: `냅니다. 그 묶음은 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠 띄웁니다.` 다음 줄에 위 새 문장(두 줄)을 그대로 둔다(「~다」체 그대로 — 이 문장은 네 파일에서 글자가 같아야 락이 같은 리터럴로 잰다). 옛 593행은 `첫 줄(degrade 공시)과 같습니다. ` 뒤에 `` `approval_gate_open` 이면 승인 게이트입니다 — 1단계(열린 항목 · 「추가 `` 가 이어진다 — 그 줄의 나머지(`` `approval_gate_open` 이면 승인 게이트입니다 — … ``)는 새 둘째 줄 다음 줄로 이어 둔다.
+request-framing 620-621(옛): `냅니다. 그 묶음은 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠 띄우고, 매 호출 첫 질문의 첫 줄은 렌더` / `첫 줄(degrade 공시)과 같습니다. ` → 새: `냅니다. 그 묶음은 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠 띄웁니다.` 다음 줄에 위 새 문장(두 줄)을 그대로 둔다(「~다」체 그대로 — 이 문장은 네 파일에서 글자가 같아야 락이 같은 리터럴로 잰다). 옛 621행은 `첫 줄(degrade 공시)과 같습니다. ` 뒤에 `` `approval_gate_open` 이면 승인 게이트입니다 — 1단계(열린 항목 · 「추가 `` 가 이어진다 — 그 줄의 나머지(`` `approval_gate_open` 이면 승인 게이트입니다 — … ``)는 새 둘째 줄 다음 줄로 이어 둔다.
 
 - [ ] **Step 2: 정본의 승인 게이트 문장(Q1)**
 
@@ -392,9 +413,9 @@ proceed-gate.md 39-41(옛):
 (또는 「경고 없음」·「이상 없음」) 한 줄만 둔다. 머리글은 「다음 단계」다.
 ```
 
-- [ ] **Step 3: reviewing-spec · reviewing-brief 의 degrade 채널과 reviewing-spec 핸드오프 틀**
+- [ ] **Step 3: spec-review · reviewing-brief 의 degrade 채널과 spec-review 핸드오프 틀**
 
-reviewing-spec 490-492(옛):
+spec-review 523-525(옛):
 
 ```markdown
 게이트를 띄우기 **직전에** 이 셋을 읽어 하나도 빠뜨리지 않고 프로즈로 내고, 승인 게이트 질문
@@ -410,7 +431,7 @@ reviewing-spec 490-492(옛):
 — 그 문구는 **채널을 실제로 읽었다는 주장**이므로, 읽지 않은 채 쓰지 않는다.
 ```
 
-reviewing-brief 580-583(옛):
+reviewing-brief 594-597(옛):
 
 ```markdown
 Step B 게이트를 띄우기 **직전에** 이 채널들을 읽어 하나도 빠뜨리지 않고 게이트 `question` 텍스트에
@@ -428,9 +449,9 @@ Step B 게이트를 띄우기 **직전에** 이 채널들을 읽어 하나도 �
 것이 아니라 **알 수 없는** 것이므로 `degrade 원장 판독 불가 — <get 이 낸 reason>` 을 한 줄로 쓴다.
 ```
 
-`test_reviewing_brief_skill.sh:277-282` 의 `'degrade 없음'` 단언을 `'「경고 없음」'` 으로 바꾼다(같은 줄의 `'실제로 읽었다는 주장'` · `'알 수 없는'` 은 그대로 — 뜻: 「없음」은 읽었다는 주장이고 판독 실패는 「알 수 없음」이다).
+`test_reviewing_brief_skill.sh:280` 의 `'degrade 없음'` 단언을 `'「경고 없음」'` 으로 바꾼다(같은 줄의 `'실제로 읽었다는 주장'` · `'알 수 없는'` 은 그대로 — 뜻: 「없음」은 읽었다는 주장이고 판독 실패는 「알 수 없음」이다).
 
-reviewing-spec 436행(`- **① 의 정지 요건** — …`) 바로 앞에 틀을 넣는다(Q5):
+spec-review 469행(`- **① 의 정지 요건** — …`) 바로 앞에 틀을 넣는다(Q5):
 
 ```markdown
 ① 에서 노출하는 명령(`<spec_path>` 를 실제 경로로 바꾼 뒤 그대로 보인다):
@@ -439,65 +460,66 @@ reviewing-spec 436행(`- **① 의 정지 요건** — …`) 바로 앞에 틀�
 
 ```
 
-- [ ] **Step 4: framing-requests 의 채널 이름과 자리(Q3 · Q4)**
+- [ ] **Step 4: request-framing 의 채널 이름과 자리(Q3 · Q4)**
 
 이름 바꾸기 — 아래 줄의 옛 글자를 새 글자로(줄 번호는 착수 시점에 `grep -n` 으로 다시 찾는다):
 
 | 줄 | 옛 | 새 |
 |---|---|---|
-| 810 | `disclosure=proceed 게이트 질문 텍스트` | `disclosure=proceed 게이트 앞 글` |
-| 832 | `proceed 게이트 질문 텍스트(**항상**). 원장이 없거나 개별 기록이 실패하면 게이트 텍스트가 유일한 채널이고,` | `proceed 게이트 앞 글(**항상**). 원장이 없거나 개별 기록이 실패하면 게이트 앞 글이 유일한 채널이고,` |
-| 873 | `게이트 질문 텍스트에도 그렇게` | `게이트 앞 글에도 그렇게` |
-| 879 | `게이트를 띄우고, 게이트 질문 텍스트에 degrade 를 **하나도 빠뜨리지 않고** 싣습니다.` | `게이트를 띄우고, 게이트 앞 글에 degrade 를 **하나도 빠뜨리지 않고** 씁니다. 질문 본문에는 결정 하나와 「경고 N개 — 위에 적었다」(또는 「경고 없음」·「이상 없음」) 한 줄만 둡니다. 경고가 없을 때의 두 문구는 **채널을 실제로 읽었다는 주장**이라 읽지 않은 채 쓰지 않습니다.` |
-| 137 · 382 · 593 · 722 · 814 · 821 · 850 · 852 · 858 · 936 · 956 · 961 · 963 · 968 · 1018 | `게이트 텍스트` | `게이트 앞 글` (조사 「…에」·「…를」은 그대로 붙는다 — 예: `게이트 텍스트에` → `게이트 앞 글에`) |
+| 852 | `disclosure=proceed 게이트 질문 텍스트` | `disclosure=proceed 게이트 앞 글` |
+| 874 | `proceed 게이트 질문 텍스트(**항상**). 원장이 없거나 개별 기록이 실패하면 게이트 텍스트가 유일한 채널이고,` | `proceed 게이트 앞 글(**항상**). 원장이 없거나 개별 기록이 실패하면 게이트 앞 글이 유일한 채널이고,` |
+| 915 | `게이트 질문 텍스트에도 그렇게` | `게이트 앞 글에도 그렇게` |
+| 921 | `게이트를 띄우고, 게이트 질문 텍스트에 degrade 를 **하나도 빠뜨리지 않고** 싣습니다.` | `게이트를 띄우고, 게이트 앞 글에 degrade 를 **하나도 빠뜨리지 않고** 씁니다. 질문 본문에는 결정 하나와 「경고 N개 — 위에 적었다」(또는 「경고 없음」·「이상 없음」) 한 줄만 둡니다. 경고가 없을 때의 두 문구는 **채널을 실제로 읽었다는 주장**이라 읽지 않은 채 쓰지 않습니다.` |
+| 179 · 424 · 635 · 764 · 856 · 863 · 892 · 894 · 900 · 978 · 998 · 1003 · 1005 · 1010 · 1060 | `게이트 텍스트` | `게이트 앞 글` (조사 「…에」·「…를」은 그대로 붙는다 — 예: `게이트 텍스트에` → `게이트 앞 글에`) |
 
 위 표 아래에 행을 더한다 — 경고를 질문 텍스트에 싣으라는 옛 지시가 새 규칙(경고는 앞 글에, 경고가 없을 때의 문구는 「이상 없음」·「경고 없음」)과 어긋나는 자리다. 이 문구를 고정한 단언은 없다.
 
 | 파일 · 줄 | 옛 | 새 |
 |---|---|---|
-| reviewing-spec 422 · 431 · 432 | `2단계 질문 텍스트에 싣는다` | `2단계 게이트 앞 글에 싣는다` (432 의 `목록 본문 없음을 2단계 질문 텍스트에 싣는다` 도 같은 글자라 같이 바뀐다) |
+| spec-review 441 · 450 · 451 | `2단계 질문 텍스트에 싣는다` | `2단계 게이트 앞 글에 싣는다` (451 의 `목록 본문 없음을 2단계 질문 텍스트에 싣는다` 도 같은 글자라 같이 바뀐다) |
 | finishing.md 241 · 252 · 253 | `게이트 텍스트에` | `게이트 앞 글에` |
-| framing-requests 867 (「…없는 세션에 「degrade 없음」이라고 쓰지 않습니다」) | `「degrade 없음」이라고` | `「이상 없음」·「경고 없음」이라고` |
+| request-framing 895 (「…없는 세션에 「degrade 없음」이라고 쓰지 않습니다」) | `「degrade 없음」이라고` | `「이상 없음」·「경고 없음」이라고` |
 | reviewing-brief 585 | `(그 라운드의 degrade 한 줄 — 「미검증」` | `(그 라운드의 상태와 경고(렌더 첫 줄) — 「미검증」` |
-| framing-requests 844 | `(그 라운드의 degrade 한 줄 — 「미검증」` | `(그 라운드의 상태와 경고(렌더 첫 줄) — 「미검증」` |
+| request-framing 872 | `(그 라운드의 degrade 한 줄 — 「미검증」` | `(그 라운드의 상태와 경고(렌더 첫 줄) — 「미검증」` |
 
-마지막 두 행은 Step 1 이 「(degrade 공시)」를 지운 것과 같은 정리다 — 렌더 첫 줄을 「상태와 경고」로 부른다. 줄 번호는 abc70f66 실측이고, 착수 때 `grep -n 'degrade 한 줄'` 로 다시 찾는다. 이 두 문구를 고정한 단언은 없다. README 의 같은 꼴 한 자리(`게이트 질문에 표시된다`)는 Task 6 이 고친다.
+마지막 두 행은 Step 1 이 「(degrade 공시)」를 지운 것과 같은 정리다 — 렌더 첫 줄을 「상태와 경고」로 부른다. 줄 번호는 f58653f0 실측이고, 착수 때 `grep -n 'degrade 한 줄'` 로 다시 찾는다. 이 두 문구를 고정한 단언은 없다. README 의 같은 꼴 한 자리(`게이트 질문에 표시된다`)는 Task 6 이 고친다.
 
-`593` 은 고친 뒤 `게이트 앞 글에 \`ask_open\` 개수를 처분과 무관하게 싣는다.` 가 된다 — `test_framing_review_contract.sh:85` 가 잡는 부분 문자열 `` `ask_open` 개수를 처분과 무관하게 싣는다 `` 는 그대로다.
+`635` 는 고친 뒤 `게이트 앞 글에 \`ask_open\` 개수를 처분과 무관하게 싣는다.` 가 된다 — `test_framing_review_contract.sh:85` 가 잡는 부분 문자열 `` `ask_open` 개수를 처분과 무관하게 싣는다 `` 는 그대로다.
 
-203 행의 `**질문 텍스트**에 싣는다` 와 725 행의 `덩어리 본문(\`render\`)은 질문 텍스트에 줄임 없이 싣는다` 는 그대로 둔다 — 앞엣것은 형성 라운드의 질문 자체이고, 뒤엣것이 Q4 의 예외다. 725 행 문장 끝에 덧붙인다:
+245 행의 `**질문 텍스트**에 싣는다` 와 767 행의 `덩어리 본문(\`render\`)은 질문 텍스트에 줄임 없이 싣는다` 는 그대로 둔다 — 앞엣것은 형성 라운드의 질문 자체이고, 뒤엣것이 Q4 의 예외다. 767 행 문장 끝에 덧붙인다:
 
 ```markdown
  이 덩어리 본문은 규칙 블록의 「따로 정한 자리」다 — 질문 하나에 결정 하나라는 규칙의 예외로, 결정의 대상 자체라 질문에 그대로 싣는다.
 ```
 
-727 행 `그 사실을 게이트 텍스트에 싣고 seed 전문을 한 질문으로` → `그 사실을 게이트 앞 글에 쓰고 seed 전문을 한 질문으로`(seed 전문은 결정의 대상이라 질문에 남는다 — Q4).
+769 행 `그 사실을 게이트 텍스트에 싣고 seed 전문을 한 질문으로` → `그 사실을 게이트 앞 글에 쓰고 seed 전문을 한 질문으로`(seed 전문은 결정의 대상이라 질문에 남는다 — Q4).
 
 `test_framing_review_contract.sh:535` — `'게이트 질문 텍스트'` → `'게이트 앞 글'`(지키는 뜻: 다섯째 채널을 이름으로 댄다).
 
 바꾼 뒤 확인:
 
 ```bash
-grep -c '게이트 질문 텍스트\|게이트 텍스트' plugins/spec-distill/skills/framing-requests/SKILL.md
-grep -c 'degrade 한 줄' plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/framing-requests/SKILL.md
+grep -c '게이트 질문 텍스트\|게이트 텍스트' plugins/spec-distill/skills/request-framing/SKILL.md
+grep -c 'degrade 한 줄' plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/request-framing/SKILL.md
 bash shared/tests/test_dispatch_disposition.sh | tail -1
 ```
-Expected: `0`, 각 `:0`, `Fail: 0`(축 C — 앵커 리터럴 「proceed 게이트 앞 글」이 같은 파일 본문 832 행에 있다).
+Expected: `0`, 각 `:0`, `Fail: 0`(축 C — 앵커 리터럴 「proceed 게이트 앞 글」이 같은 파일 본문 874 행에 있다).
 
 - [ ] **Step 5: 테스트를 돈다**
 
 Run:
 ```bash
 for t in test_plain_gate_templates test_framing_review_contract test_reviewing_brief_skill test_reviewing_spec_disclosure test_proceed_gate_adopters test_review_handoff_order test_reviewing_spec_entry_fence test_seed_review_log; do printf '%s ' "$t"; bash plugins/spec-distill/tests/$t.sh 2>&1 | tail -1; done
-for t in test_docreview_round_gate_split test_dispatch_disposition test_docreview_procedure_paths; do printf '%s ' "$t"; bash shared/tests/$t.sh 2>&1 | tail -1; done
+for t in test_docreview_round_gate_split test_dispatch_disposition test_docreview_procedure_paths test_invocation_surface test_entry_preflight; do printf '%s ' "$t"; bash shared/tests/$t.sh 2>&1 | tail -1; done
+for t in test_request_framing_entry test_spec_interview_entry; do printf '%s ' "$t"; bash plugins/spec-distill/tests/$t.sh 2>&1 | tail -1; done
 bash plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh | tail -1
 ```
-Expected: 전부 `Fail: 0`.
+Expected: 전부 `Fail: 0`. 뒤쪽 넷(`test_invocation_surface` · `test_entry_preflight` · 진입 락 둘)은 #191 의 락이다 — 이 Task 가 진입 skill 둘의 본문을 고치므로 진입 머리(사전 검사 줄 · `## 진입 단계`)와 옛 이름 부재가 그대로인지 함께 본다(드라이런 69/69 · 47/47 · 44/44 · 7/7).
 
 - [ ] **Step 6: 커밋**
 
 ```bash
-git add shared/docreview/references/reviewing-document.md plugins/spec-distill/skills/conducting-interview/references/finishing.md plugins/spec-distill/skills/reviewing-spec/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/framing-requests/SKILL.md plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/tests/test_framing_review_contract.sh plugins/spec-distill/tests/test_reviewing_brief_skill.sh
+git add shared/docreview/references/reviewing-document.md plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/tests/test_framing_review_contract.sh plugins/spec-distill/tests/test_reviewing_brief_skill.sh
 git commit -m "feat(spec-distill): 모든 게이트가 경고를 앞 글에 쓰고 질문엔 결정 하나만 싣는다
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -509,19 +531,19 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 1. reviewing-brief 의 「실제로 읽었다는 주장」 문장 지우기 → ④ RED(`test_reviewing_brief_skill.sh` 도 RED).
 2. finishing.md 질문 줄에 `degrade: <record 한 줄씩>.` 되살리기 → ② RED.
-3. framing-requests 810 행을 옛 이름으로 되돌리기 → ⑦ RED, `test_dispatch_disposition.sh` 는 GREEN 일 수 있다(축 C 는 이름의 실재만 잰다 — 옛 이름이 본문에 없어 RED 가 날 수도 있다. 어느 쪽이든 기록한다).
-4. reviewing-spec `/compact` 틀에 `<doc>` 를 더하기 → ⑥ RED.
+3. request-framing 852 행을 옛 이름으로 되돌리기 → ⑦ RED, `test_dispatch_disposition.sh` 는 GREEN 일 수 있다(축 C 는 이름의 실재만 잰다 — 옛 이름이 본문에 없어 RED 가 날 수도 있다. 어느 쪽이든 기록한다).
+4. spec-review `/compact` 틀에 `<doc>` 를 더하기 → ⑥ RED.
 5. proceed-gate.md 의 「남은 항목도 없으면 「이상 없음」」 지우기 → ⑤ RED.
 
-결과를 `~/.claude/sdd-mirror/plain-language-output/pr2/mutations.txt` 에 적는다.
+결과를 `~/.claude/sdd-mirror/plain-language-output/pr2/mutations.txt` 에 적는다. f58653f0 드라이런: 다섯 모두 RED(1 은 `test_reviewing_brief_skill.sh` 도 RED, 3 은 ⑦ 두 단언 RED 이고 `test_dispatch_disposition.sh` 도 RED 18/19), 복원 뒤 `git diff HEAD --stat` 빈 출력.
 
 ---
 
 ## Task 4: 사람이 보는 고정 문구 (설계 §3 · §6 · Q7)
 
 **Files:**
-- Modify: `plugins/spec-distill/skills/reviewing-spec/SKILL.md` · `reviewing-brief/SKILL.md` · `framing-requests/SKILL.md`(codex 건너뜀 줄 · 기준 사본 줄 · brief 리뷰 건너뜀 줄)
-- Modify: `plugins/spec-distill/skills/conducting-interview/references/finishing.md`(216 · 282 행 문구)
+- Modify: `plugins/spec-distill/skills/spec-review/SKILL.md` · `reviewing-brief/SKILL.md` · `request-framing/SKILL.md`(codex 건너뜀 줄 · 기준 사본 줄 · brief 리뷰 건너뜀 줄)
+- Modify: `plugins/spec-distill/skills/spec-interview/references/finishing.md`(216 · 282 행 문구)
 - Modify: `plugins/spec-distill/scripts/check_brief.py`(advisory 두 줄의 「Step B 게이트」, coverage-mapper 줄)
 - Modify: 그 문구를 고정한 테스트(아래 표)
 
@@ -541,11 +563,11 @@ cat ~/.claude/sdd-mirror/plain-language-output/pr2/fixed-string-hits.txt | grep 
 
 | 자리 | 옛 | 새 |
 |---|---|---|
-| reviewing-spec 277 (codex-gate 펜스) | `[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — Claude-only, 이 리뷰에는 모델 다양성이 없었다 (degraded).` | `[spec-distill] codex 리뷰를 건너뛰었다 (reason: ${skip_reason:-unknown}) — 이번 리뷰는 Claude 만 봤다. 다른 모델의 시각이 없다 (degraded).` |
-| reviewing-brief 287 | `[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — Claude-only, 이 리뷰에는 codex 쪽의 모델 다양성과 웹 근거가 없었다 (degraded).` | `[spec-distill] codex 리뷰를 건너뛰었다 (reason: ${skip_reason:-unknown}) — 이번 리뷰는 Claude 만 봤다. 다른 모델의 시각과 codex 쪽 웹 근거가 없다 (degraded).` |
-| framing-requests 533 | `[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — seed 리뷰에 codex 쪽 모델 다양성이 없었다 (degraded).` | `[spec-distill] codex 리뷰를 건너뛰었다 (reason: ${skip_reason:-unknown}) — 이번 seed 리뷰는 Claude 만 봤다. 다른 모델의 시각이 없다 (degraded).` |
-| framing-requests 717 · 1011 | `[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자 편집을 비교할 수 없다.` | `[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자가 seed 를 고쳤는지 대조할 수 없다.` (뒤의 모델 지시 꼬리는 그대로) |
-| reviewing-brief 70 | `[spec-distill] brief 리뷰 SKIPPED (DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1) — 엔진 라운드·냉독 전부 미검증. Step B 게이트에서 확인하세요.` | `[spec-distill] brief 리뷰를 건너뛰었다 (DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1) — 리뷰 라운드도 냉독도 돌지 않았다. 다음 단계 게이트에서 확인하라.` |
+| spec-review 310 (codex-gate 펜스) | `[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — Claude-only, 이 리뷰에는 모델 다양성이 없었다 (degraded).` | `[spec-distill] codex 리뷰를 건너뛰었다 (reason: ${skip_reason:-unknown}) — 이번 리뷰는 Claude 만 봤다. 다른 모델의 시각이 없다 (degraded).` |
+| reviewing-brief 301 | `[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — Claude-only, 이 리뷰에는 codex 쪽의 모델 다양성과 웹 근거가 없었다 (degraded).` | `[spec-distill] codex 리뷰를 건너뛰었다 (reason: ${skip_reason:-unknown}) — 이번 리뷰는 Claude 만 봤다. 다른 모델의 시각과 codex 쪽 웹 근거가 없다 (degraded).` |
+| request-framing 561 | `[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — seed 리뷰에 codex 쪽 모델 다양성이 없었다 (degraded).` | `[spec-distill] codex 리뷰를 건너뛰었다 (reason: ${skip_reason:-unknown}) — 이번 seed 리뷰는 Claude 만 봤다. 다른 모델의 시각이 없다 (degraded).` |
+| request-framing 759 · 1053 | `[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자 편집을 비교할 수 없다.` | `[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자가 seed 를 고쳤는지 대조할 수 없다.` (뒤의 모델 지시 꼬리는 그대로) |
+| reviewing-brief 84 | `[spec-distill] brief 리뷰 SKIPPED (DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1) — 엔진 라운드·냉독 전부 미검증. Step B 게이트에서 확인하세요.` | `[spec-distill] brief 리뷰를 건너뛰었다 (DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1) — 리뷰 라운드도 냉독도 돌지 않았다. 다음 단계 게이트에서 확인해 주세요.` |
 | finishing.md 216 | `[spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등` | `[spec-distill] 확정 목록을 두 번 다시 보여 줬는데도 정하지 못했다 — 모든 항목을 잠정(provisional)으로 둔다` |
 | finishing.md 282 | `[spec-distill] interview brief 완결: docs/superpowers/interview/<file>. superpowers 설치 시 brainstorming 해답공간 단계로 이어집니다. 미설치 시 이 brief를 직접 다음 작업의 입력으로 사용하세요.` | `[spec-distill] interview brief 를 만들었다: docs/superpowers/interview/<file>. superpowers 가 있으면 brainstorming 으로 이어지고, 없으면 이 brief 를 다음 작업의 입력으로 쓴다.` |
 | `check_brief.py` 945행 `INTERNAL_RESEARCH_ZERO_ADVISORY` | `"…— 그 판단은 Step B 게이트에서 "`(946행 `"사람이 한다."` 로 이어진다) | `"…— 그 판단은 다음 단계 게이트에서 "` |
@@ -595,8 +617,11 @@ Run:
 ```bash
 bash ~/.claude/sdd-mirror/plain-language-output/run-suite.sh pr2/after-task4 plugins/spec-distill
 bash shared/tests/test_plugin_root_no_cwd_fallback.sh | tail -1
+bash shared/tests/test_invocation_surface.sh | tail -1
+grep '^plugins/spec-distill' ~/.claude/sdd-mirror/plain-language-output/pr2/baseline/failures.txt > ~/.claude/sdd-mirror/plain-language-output/pr2/baseline-sd.txt
+comm -13 ~/.claude/sdd-mirror/plain-language-output/pr2/baseline-sd.txt ~/.claude/sdd-mirror/plain-language-output/pr2/after-task4/failures.txt
 ```
-Expected: `pr2/baseline` 의 spec-distill 실패 목록과 같다(`comm -13` 이 빈 출력).
+Expected: `comm -13` 이 빈 출력(f58653f0 기준선의 spec-distill 실패는 0 건이고, 드라이런 after-task4 도 76 파일 실패 0), 나머지 둘 `Fail: 0`.
 
 - [ ] **Step 5: 커밋**
 
@@ -612,7 +637,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ## Task 5: PR 1 이 미룬 렌더 다듬기 여섯 (쉬운 말 출력 설계 §3 · §5 · Q9~Q11)
 
-PR 1 이 미룬 항목 (b)~(g) 를 닫는다(근거: `/Users/jeonghokim/.claude/sdd-mirror/plain-language-output/research/dryrun-pr2-report.md` 「PR 1 이연 항목 대조」). (a) 는 Task 3 Step 4 가 닫는다. 이 Task 가 고치는 파일은 Task 1~4 가 건드리지 않는다(2026-10-09 4d325819 대조).
+PR 1 이 미룬 항목 (b)~(g) 를 닫는다(근거: `/Users/jeonghokim/.claude/sdd-mirror/plain-language-output/research/dryrun-pr2-report.md` 「PR 1 이연 항목 대조」). (a) 는 Task 3 Step 4 가 닫는다. 이 Task 가 고치는 파일은 Task 1~4 가 건드리지 않는다(2026-10-09 4d325819 대조, f58653f0 재확인 — #191 도 이 열두 파일을 건드리지 않았다).
 
 **Files:**
 - Modify: `shared/docreview/scripts/docreview_state.py`(`WARN_GLOSS` · `_plain_warns` 새로, `_first_line` · `_rg_escalated_fix` · `render_gate` 의 묶음 루프)
@@ -761,7 +786,7 @@ Run:
 PYTHONDONTWRITEBYTECODE=1 bash shared/tests/test_docreview_route.sh | tail -1
 PYTHONDONTWRITEBYTECODE=1 bash shared/tests/test_docreview_agent_fields.sh | tail -1
 ```
-Expected: `Total: 307 | Pass: 289 | Fail: 18` · `Total: 53 | Pass: 49 | Fail: 4`. RED 는 새 케이스 다섯의 단언(T40 하나 포함 18)과 doc-critic 넷의 반복 문장이다. stderr 에 `ImportError: cannot import name '_plain_warns'` traceback 이 한 번 나온다 — 그 함수는 Step 3 이 만든다. 숫자는 4d325819 기준이다 — Task 0 의 merge 가 엔진 케이스를 더 가져왔으면 Total 은 달라도 `Fail` 은 같아야 한다(Task 1~4 는 이 두 파일을 건드리지 않는다).
+Expected: `Total: 307 | Pass: 289 | Fail: 18` · `Total: 53 | Pass: 49 | Fail: 4`. RED 는 새 케이스 다섯의 단언(T40 하나 포함 18)과 doc-critic 넷의 반복 문장이다. stderr 에 `ImportError: cannot import name '_plain_warns'` traceback 이 한 번 나온다 — 그 함수는 Step 3 이 만든다. 숫자는 4d325819 기준이고 f58653f0 드라이런(Task 1~4 를 마친 뒤)에서도 글자 그대로 같았다 — #191 · #192 는 엔진 · 케이스 파일을 건드리지 않았다. main 이 더 움직여 엔진 케이스를 더 가져왔으면 Total 은 달라도 `Fail` 은 같아야 한다(Task 1~4 는 이 두 파일을 건드리지 않는다).
 
 - [ ] **Step 3: 엔진과 리뷰어 문장을 고친다**
 
@@ -1140,7 +1165,7 @@ Run:
 PYTHONDONTWRITEBYTECODE=1 bash shared/tests/test_docreview_mutations.sh > /Users/jeonghokim/.claude/jobs/d60d9f96/tmp/pr2-t5-mut.log 2>&1; tail -1 /Users/jeonghokim/.claude/jobs/d60d9f96/tmp/pr2-t5-mut.log
 grep -E "warns_plain_gloss_off|warns_same_fact_not_merged|warns_reason_dropped|warns_unknown_dropped|marker_crosses_group|escalate_reason_unfolded|unverified_nothing_left" /Users/jeonghokim/.claude/jobs/d60d9f96/tmp/pr2-t5-mut.log
 ```
-Expected: `Fail: 0`(셀 일곱이 늘어 Total 이 7 커진다 — 4d325819 에서 111 → 118), 그리고 일곱 줄이 전부 `✓ … (규칙에 이빨이 있다) [churn 1/1]` 이다. 드라이런 실측:
+Expected: `Fail: 0`(셀 일곱이 늘어 Total 이 7 커진다 — 4d325819 · f58653f0 모두 111 → 118), 그리고 일곱 줄이 전부 `✓ … (규칙에 이빨이 있다) [churn 1/1]` 이다. 드라이런 실측:
 
 ```text
 변이 'warns_plain_gloss_off' → case_plain_warns_first_line RED(10) 생존(2)
@@ -1188,27 +1213,29 @@ Expected: 전부 `Fail: 0`, 두 unittest 는 `OK`.
 
 - [ ] **Step 1: README 를 새 규칙대로 다시 쓴다**
 
-구조(이 순서):
+f58653f0 의 README 는 #191 이 이름을 고쳐 쓴 판이다(절 구성은 그대로 — `## What it does` · `## Quick start` · `## Flow (v0.41.0)` · `## Principles Instantiated` · `## External source absorption` · `## Hooks Installed` · `## Kill switches`(하위 `### 먼저 — 설계문서 리뷰를 끄는 법` · `### 스위치 목록` · `### 은퇴한 스위치 (v0.36.0 · 3.0.0)`) · `## Prerequisites` · `## License`). 구조(이 순서):
 
-1. 첫 문단 — 이 플러그인이 무엇을 해 주는지 세 문장 안에. 「흐릿한 요청을 → 인터뷰로 brief 로 → 설계문서 리뷰까지」. 내부 번호·약어는 첫 등장에 풀어 쓴다.
-2. `## 쓰는 법` — 명령 둘(`/request-framing` · `/interview`)과 skill 하나(`reviewing-spec`)를 한 줄씩. 각 줄은 「언제 쓰나 — 무엇이 나오나」.
-3. `## 흐름` — 지금 README 의 흐름 그림(33 · 48 행의 게이트 줄 포함)을 유지하되 머리글과 설명 문장을 쉬운 말로. `test_brief_review_meta.sh` 의 `section '^## Flow'` 두 자리(43 · 62행)를 `section '^## 흐름'` 으로 같은 커밋에서 바꾼다.
-4. `## 끄는 법` — kill switch 표(지금 있는 스위치 전부, 이름은 영어 그대로). 같은 파일의 `section '^## Kill switches'`(50행)를 `section '^## 끄는 법'` 으로 같은 커밋에서 바꾼다. 하위 `### 은퇴한 스위치` 는 이 절 아래에 머리글 글자 그대로 남긴다.
+1. 첫 문단 — 이 플러그인이 무엇을 해 주는지 세 문장 안에. 「흐릿한 요청을 → 인터뷰로 brief 로 → 설계문서 리뷰까지」. 내부 번호·약어는 첫 등장에 풀어 쓴다. 옛 `## What it does` 의 고정 낱말(`2파일 쌍` · `.audit.md` · `8섹션` — 아래 락)은 이 문단이나 다음 절에 남긴다.
+2. `## 쓰는 법` — 옛 `## Quick start` 를 대신한다. 진입 skill 셋(`/request-framing` · `/spec-interview` · `/spec-review`)을 한 줄씩. 각 줄은 「언제 쓰나 — 무엇이 나오나」. #191 이 Quick start 에 쓴 두 문단의 뜻(이름이 겹치면 `/spec-distill:spec-interview` 처럼 완전명으로 부른다 · 기계가 내는 안내는 처음부터 완전명이다 · `/spec-interview` 는 공백이 섞인 `@` 인자를 풀지 않고 멈추고 `/request-framing` 은 받은 그대로 쓴다)은 이 절에 남긴다. README 는 기계 디렉토리가 아니라 짧은 이름을 써도 되지만, 옛 skill 이름과 맨 `/interview` 토큰은 쓰지 않는다(축 I).
+3. `## 흐름` — 지금 README 의 흐름 그림(37 · 52 행의 게이트 줄 포함)을 유지하되 머리글과 설명 문장을 쉬운 말로. `test_brief_review_meta.sh` 의 `section '^## Flow'` 두 자리(43 · 60행)를 `section '^## 흐름'` 으로 같은 커밋에서 바꾼다.
+4. `## 끄는 법` — 옛 `## Kill switches`. 지금 있는 스위치 전부(이름은 영어 그대로)를 하위 절 세 개 그대로 둔다 — `### 먼저 — 설계문서 리뷰를 끄는 법` · `### 스위치 목록`(머리글 글자 그대로 — `test_conducting_interview_stage.sh:1497` 이 이 머리글부터 다음 `### ` 까지를 등재부로 읽는다) · `### 은퇴한 스위치 …`(머리글 접두 그대로). 같은 파일의 `section '^## Kill switches'`(50행)를 `section '^## 끄는 법'` 으로 같은 커밋에서 바꾼다.
 5. `## Principles Instantiated` — 제목·하위 제목(`### Three Laws` · `### Principles 흡수` · `### Roadmap absorption (C-numbers)` · `### Anti-pattern 회피`)과 불릿 형식(`- **Law N (…) — … (vX)** — …`)은 그대로 둔다. 불릿 본문만 쉬운 문장으로 다듬되, 아래 낱말은 지우지 않는다.
-6. 나머지 절 — `## External source absorption` · `## Hooks Installed` · `## Prerequisites` · `## License` — 은 지우지 않고 뒤에 그대로 둔다. `### 은퇴한 스위치` 는 `## 끄는 법` 아래 하위 절로 남긴다(머리글 글자 그대로). 지우면 CLAUDE.md 의 「Hooks Installed」 · prerequisites 요구와 `test_review_hook_removed.py` 의 은퇴 절 예외가 무너진다.
+6. 나머지 절 — `## External source absorption` · `## Hooks Installed` · `## Prerequisites` · `## License` — 은 지우지 않고 뒤에 그대로 둔다. 지우면 CLAUDE.md 의 「Hooks Installed」 · prerequisites 요구와 `test_review_hook_removed.py` 의 은퇴 절 예외가 무너진다.
 
-README 끝 줄 「스위치 목록」의 `게이트 질문에 표시된다` 는 `다음 단계 게이트 앞 글에 표시된다` 로 바꾼다(Task 3 의 경고 위치 규칙과 맞춘다).
+README 「스위치 목록」 끝 불릿(202행)의 `게이트 질문에 표시된다` 는 `다음 단계 게이트 앞 글에 표시된다` 로 바꾼다(Task 3 의 경고 위치 규칙과 맞춘다).
 
-지워지면 안 되는 낱말(README 락 — 조사 2026-10-08):
+지워지면 안 되는 낱말(README 락 — 조사 2026-10-08, f58653f0 재확인):
 - `test_readme_sync.sh:62-64`: `DEVBREW_SPEC_DISTILL_DISABLE_WEB` · `spec-distill:review-entry` · `review_entry.py` · `interview-brief` · `steelman-builder` · `DEVBREW_SPEC_DISTILL_DISABLE_CODEX` · `model diversity` · `coverage-mapper` · `blind-spot-prober` · `user_sourced_items` · `audit_file` · `user_statements` · `bijection`.
 - `test_readme_sync.sh:68`(Principles 창): `라운드별 잠금|라운드마다 결정` · `일괄 확인|사용자 확인` · `payload.*audit|2파일|두 파일` · `user_sourced_items`.
 - `test_readme_sync.sh:81-82`: `2파일 쌍` · `.audit.md` · `8섹션`.
-- `test_brief_review_meta.sh`: 머리글 `## 흐름` · `## 끄는 법` 으로 절을 자른다. 지켜야 할 것 — 흐름 그림 펜스가 10줄 이상이다 · 그림에 `interview brief` → `reviewing-brief` → `Step B proceed 게이트` 가 이 순서로 나온다 · 흐름 절에 `^[0-9]+\.` 로 시작하는 번호 줄이 없다 · 끄는 법 절에 `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` 가 있다 · `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` 줄 하나가 `reviewing-spec` · `reviewing-brief` · `run_docreview_codex_reviewer.sh` · `codex-gate` 를 모두 대고 `3곳|세 곳|세 지점` 은 쓰지 않는다 · Principles 절에 `Law 2` 가 있고 Principles 절과 흐름 절에 `doc-critic` · `doc-recritic` · `brief-readback` · `reviewing-brief` 가 있다.
-- `test_seed_at_path_handoff.sh:151 · :164`: README 에 `/interview @<seed 경로>` 가 있어야 하고, `다음 세션 첫 턴에 붙여넣는 메시지` 는 없어야 한다.
-- `test_review_hook_removed.py`: 은퇴한 토큰은 `### 은퇴한 스위치` 머리글 아래에서만 허용된다.
+- `test_brief_review_meta.sh`: 머리글 `## 흐름` · `## 끄는 법` 으로 절을 자른다. 지켜야 할 것 — 흐름 그림 펜스가 10줄 이상이다 · 그림에 `interview brief` → `reviewing-brief` → `Step B proceed 게이트` 가 이 순서로 나온다 · 흐름 절에 `^[0-9]+\.` 로 시작하는 번호 줄이 없다 · 끄는 법 절에 `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` 가 있다 · `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` 줄 하나가 `spec-review` · `reviewing-brief` · `run_docreview_codex_reviewer.sh` · `codex-gate` 를 모두 대고 `3곳|세 곳|세 지점` 은 쓰지 않는다 · Principles 절에 `Law 2` 가 있고 Principles 절과 흐름 절에 `doc-critic` · `doc-recritic` · `brief-readback` · `reviewing-brief` 가 있다.
+- `test_seed_at_path_handoff.sh:179 · :190`: README 에 `/spec-interview @<seed 경로>` 가 있어야 하고(흐름 그림 39행), `다음 세션 첫 턴에 붙여넣는 메시지` 는 없어야 한다.
+- `test_conducting_interview_stage.sh:1465-1511`: `<n>-path` 표기가 하나뿐이고 표 행 수와 같다(지금 `3-path`) · 살아 있는 `5-type` 없음 · `### 스위치 목록` 등재부에 코드가 읽는 모든 `DEVBREW_SPEC_DISTILL_*DISABLE*` 이 있다.
+- `test_review_hook_removed.py`: 은퇴한 토큰은 `### 은퇴한 스위치` 머리글 아래(다음 `## ` 까지)에서만 허용된다.
 - `test_handoff_kill_switch.sh` · `test_no_wall_clock.sh` · `test_stale_terms.sh`: README 를 검사 대상에 넣는다.
 - `plugins/quality-gates/tests/test_law2_prose.sh`: `plugins/*/README.md` 를 전부 훑는다.
-- `test_reviewing_brief_skill.sh`(README 의 `G1..G<N>` 범위 = SKILL 표 끝), `test_rereview_cap_consistency.sh`, `test_conducting_interview_stage.sh:1431-1455`(`<n>-path` 개수, 살아 있는 `5-type` 없음), `shared/tests/test_python_floor.sh` 의 spec-distill README 단언.
+- `shared/tests/test_invocation_surface.sh` 축 I: README 에 옛 skill 이름 셋 · 맨 `/interview` 토큰이 없다.
+- `test_reviewing_brief_skill.sh`(README 의 `G1..G<N>` 범위 = SKILL 표 끝), `test_rereview_cap_consistency.sh`, `shared/tests/test_python_floor.sh` 의 spec-distill README 단언.
 
 쓰고 나서 위 락을 모두 돌린다:
 
@@ -1216,9 +1243,10 @@ README 끝 줄 「스위치 목록」의 `게이트 질문에 표시된다` 는 
 for t in test_readme_sync test_brief_review_meta test_seed_at_path_handoff test_handoff_kill_switch test_no_wall_clock test_stale_terms test_reviewing_brief_skill test_rereview_cap_consistency test_conducting_interview_stage; do printf '%s ' "$t"; bash plugins/spec-distill/tests/$t.sh 2>&1 | tail -1; done
 (cd plugins/spec-distill/tests && python3 -m unittest -v test_review_hook_removed 2>&1 | tail -3)
 bash shared/tests/test_python_floor.sh | tail -1
+bash shared/tests/test_invocation_surface.sh | tail -1
 bash plugins/quality-gates/tests/test_law2_prose.sh | tail -1
 ```
-Expected: 전부 `Fail: 0`.
+Expected: 전부 `Fail: 0`, unittest 는 `OK`.
 
 - [ ] **Step 2: 소개 문구를 두 파일에서 같게**
 
@@ -1238,15 +1266,15 @@ Expected: `same`, `Fail: 0`(마켓플레이스 금지 표현 「two gates」류�
 
 - [ ] **Step 3: 버전과 CHANGELOG**
 
-origin/main 의 spec-distill 버전을 다시 보고 minor 를 올린다. quality-gates 는 patch 를 올린다(Q12). spec-distill CHANGELOG 맨 위 항목 앞:
+origin/main 의 spec-distill 버전을 다시 보고 minor 를 올린다. quality-gates 는 patch 를 올린다(Q12). main 이 f58653f0 그대로면 spec-distill `5.0.0` → `5.1.0`, quality-gates `10.0.2` → `10.0.3` 이다(드라이런은 이 번호로 실행했고, 두 `plugin.json` 의 `version` 을 핀으로 잡는 락은 없었다). spec-distill CHANGELOG 맨 위 항목 앞:
 
 ```markdown
 ## [<새 버전>] — <YYYY-MM-DD>
 
 ### Changed
 - 모든 게이트(interview 다음 단계 · 설계문서 승인 · 리뷰 라운드 · request-framing 확정)가 경고 목록을 질문 앞 글에 쓰고, 질문에는 결정 하나와 「경고 N개 — 위에 적었다」 한 줄만 싣는다. 머리글 「Proceed」는 「다음 단계」다. 「이상 없음」은 남은 것도 경고도 없을 때만, 남은 것이 있으면 「경고 없음」이다.
-- framing-requests 의 degrade 채널 이름이 「proceed 게이트 앞 글」이다(처분 앵커 포함).
-- 핸드오프 `/compact` 명령이 사람에게 쓰는 글 규칙도 유지하게 한다. reviewing-spec 에 그 명령 틀이 생겼다.
+- request-framing 의 degrade 채널 이름이 「proceed 게이트 앞 글」이다(처분 앵커 포함).
+- 핸드오프 `/compact` 명령이 사람에게 쓰는 글 규칙도 유지하게 한다. spec-review 에 그 명령 틀이 생겼다.
 - codex 건너뜀 · brief 리뷰 건너뜀 · 기준 사본 부재 · 확정 재제시 상한 문구가 쉬운 말이다(사유 토큰은 그대로).
 - README 와 소개 문구를 쉬운 말로 다시 썼다.
 - 문서 리뷰 게이트 첫 줄의 경고가 쉬운 말 한 줄씩이다. 같은 사실을 두 번 말하던 원문(codex 부재 · 재비판 부재 · 층 2 부재)은 한 줄로 합치고 사유 토큰은 괄호에 남긴다. `fin.json` · `gate` JSON 의 `advisory` 원문은 그대로다.
@@ -1273,7 +1301,7 @@ quality-gates CHANGELOG 맨 위 항목 앞(엔진 링크가 같은 변경을 싣
 bash ~/.claude/sdd-mirror/plain-language-output/run-suite.sh pr2/final
 comm -13 ~/.claude/sdd-mirror/plain-language-output/pr2/baseline/failures.txt ~/.claude/sdd-mirror/plain-language-output/pr2/final/failures.txt
 ```
-Expected: 빈 출력.
+Expected: 빈 출력. 기준선(f58653f0)의 실패는 `plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh` 4건 + rc 하나뿐이다. 그중 「iter cap … (lines N, M distance …)」 줄은 줄 번호만 다르면 같은 실패로 본다. 드라이런 after(272 파일)와 기준선(271 파일)의 대조는 양쪽 모두 빈 출력이었다.
 
 - [ ] **Step 5: 커밋 · /qg · PR**
 
@@ -1286,6 +1314,6 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 `/qg branch` 를 돌리고 리뷰어에게 명시해 묻는다: 「경고를 앞 글로 옮긴 뒤에도 사용자가 고르기 전에 경고를 보는가 · 배치 락(`test_brief_review_entry.sh`)이 옮긴 뜻을 지키는가 · 처분 앵커와 본문 채널 이름이 같은 글자인가」.
 
-PR 본문(한국어): 첫 줄에 바뀐 것 한 문장 · 「계획이 정한 것」 Q1~Q12 · 문구 고정 테스트 표(Task 2 Step 4, Task 4 Step 3 — 옛 → 새 · 지키는 뜻) · 고정 문구 분류 표(Q7) · 변이 결과 · 할 일 하나: 「`/request-framing` 으로 작은 요청 하나를 넣고 `/interview` 끝의 다음 단계 질문까지 가서, 경고가 질문 앞에 있고 질문은 짧은지 봐 주세요」(Verification Plan 4). 맨 끝 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+PR 본문(한국어): 첫 줄에 바뀐 것 한 문장 · 「계획이 정한 것」 Q1~Q12 · 문구 고정 테스트 표(Task 2 Step 4, Task 4 Step 3 — 옛 → 새 · 지키는 뜻) · 고정 문구 분류 표(Q7) · 변이 결과 · 할 일 하나: 「`/request-framing` 으로 작은 요청 하나를 넣고 `/spec-interview` 끝의 다음 단계 질문까지 가서, 경고가 질문 앞에 있고 질문은 짧은지 봐 주세요」(Verification Plan 4). 맨 끝 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 
 머지는 사용자가 `! gh pr merge <n> --merge`. 머지 뒤 main 을 merge 로 받고 PR 3 계획으로 간다.
