@@ -254,7 +254,7 @@ Agent({
   description: "Classify scope-relevant test files (differential test)",
   prompt: "Validate test scope against current diff, spec acceptance criteria, and plan items.
     project_dir: <project_dir>${PROJECT_DIR}</project_dir>
-    spec_path: <spec_path>${SPEC_PATH}</spec_path> (path or 'auto'; pass 'none' if DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1)
+    spec_path: <spec_path>${SPEC_PATH}</spec_path> (P3 JSON 의 `spec_path`; 빈 값이면 'none'; pass 'none' if DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1)
     plan_path: <plan_path>${PLAN_PATH}</plan_path> (path or 'auto')
     candidate_test_files: <candidate_test_files>${CANDIDATE_TEST_FILES}</candidate_test_files> (compute-test-scope-candidates.sh 출력)
     ## Current Diff
@@ -1009,5 +1009,5 @@ SKILL Step 4 가 싣는 판정 입력:
 `resolution_disclosure:` 줄과 이번 iteration `per-adapter-*.yaml` 의 non-green
 `attributions:` 행(unit · 분류)을 판정 줄 옆에 verbatim 으로 보이는 것, 그리고
 `verdict: defect` 이면서 kept = 0(`confirmed_product_defect: true` 가 유일한 원인)일 때
-Final Summary 대신 Fix-loop decision 으로 라우팅하는 것은 SKILL Step 4.5 의 일이다 —
+Final verdict(판정 줄 · `result.md`)로 직행하지 않고 Fix-loop decision 으로 라우팅하는 것은 SKILL Step 4.5 의 일이다 —
 이 레퍼런스는 그 입력(`$aggregate_yaml` · per-adapter YAML)만 만든다.

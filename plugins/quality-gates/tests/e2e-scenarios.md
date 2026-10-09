@@ -1,5 +1,7 @@
 # Quality-Gates v1.5.0 — E2E Verification Scenarios
 
+> **제거된 표면(v11.0.0).** `scout` · depth(quick/standard/deep) · Phase 1/2 · 게이트 번호 · `max_gate2_iterations` 는 없다. 아래 B–F · I 의 scout 서술은 역사 기록이다 — 오늘의 리뷰어 구성은 기본 셋 + 조건부 넷 + `code-recritic` 이고 합성기·Fix-loop 는 `skills/quality-pipeline/SKILL.md` 가 정본이다.
+>
 > **Historical (v2.2.x snapshot).** Model lines below predate the 2026-09-06 «no `model` key» convention; scenario H's "Task 1 model-override experiment" measured dispatch-time override of `inherit`, which gate agents no longer receive.
 
 This document records the manual verification scenarios for the v1.5.0 redesign.
@@ -41,7 +43,7 @@ A static-checks summary is at the bottom.
 **Setup**: single Python file, ~30 LOC change, no new files.
 **Run**: `/qg`
 **Expected** dispatches in order:
-- scout (Sonnet) → emits `depth: quick`, `phase1_agents: [code-reviewer]`, `phase2_agents: []`
+- (역사) scout 가 `depth: quick` 을 냈다 — 지금은 오케스트레이터가 리뷰어 구성을 정한다
 - pr-review-toolkit:code-reviewer (upstream Opus) — Phase 1
 - synthesizer (Sonnet) — Phase 1.6
 Total: 3 dispatches. AskUserQuestion does NOT fire (Phase 1+2 = 1 < 4).
@@ -50,9 +52,9 @@ Total: 3 dispatches. AskUserQuestion does NOT fire (Phase 1+2 = 1 < 4).
 **Setup**: ~100 LOC across two files.
 **Run**: `/qg`
 **Expected** dispatches:
-- scout → `depth: standard`, `phase1_agents: [code-reviewer, silent-failure-hunter]`, `phase2_agents` of 0–2 specialists
+- (역사) scout 가 `depth: standard` 를 냈다
 - code-reviewer (Opus, upstream) + silent-failure-hunter (Sonnet override) — Phase 1
-- 0–2 Phase 2 agents per scout's plan (Sonnet)
+- (역사) scout 계획의 Phase 2 agent 0–2개
 - adversarial (Opus) — Phase 1.5
 - synthesizer (Sonnet) — Phase 1.6
 Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
@@ -61,7 +63,7 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 **Setup**: ≥200 LOC AND new file added AND a config file (`*.json` / `*.toml`) touched.
 **Run**: `/qg`
 **Expected**:
-- scout → `depth: deep`, `phase1_agents: [code-reviewer, silent-failure-hunter, feature-dev:code-reviewer]`, `phase2_agents` likely 2 (e.g., `type-design-analyzer` + `feature-dev:code-architect`).
+- (역사) scout 가 `depth: deep` 을 냈다.
 - Phase 1+2 = 5 ≥ 4 → **AskUserQuestion fires** with the three options.
 - Choose `phase1-only` → Phase 2 skipped; only Phase 1 (3) + adversarial + synth = 5 dispatches.
 
@@ -73,12 +75,12 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 ### F — Within-Gate-2 fix loop
 **Setup**: PR where Phase 1 finds CRITICAL issues that the skill can fix in-place.
 **Run**: `/qg`
-**Expected**: fix → re-run scout (delta diff: only changed files) → narrower dispatch → either PASS or another fix iteration. After ≤5 iterations, either PASS or `gate2_max_exceeded` user-choice fires.
+**Expected**: fix → re-run review (delta diff: only changed files) → either PASS or another fix iteration. After ≤5 iterations, either PASS or `gate2_max_exceeded` user-choice fires.
 
 ### G — `/qg --paths` override
 **Setup**: edit files outside `plugins/quality-gates/`.
 **Run**: `/qg --paths "plugins/quality-gates/**"`
-**Expected**: scout sees only the matched paths (the others are excluded from diff). Session-files content is ignored.
+**Expected**: review sees only the matched paths (the others are excluded from diff). Session-files content is ignored.
 
 ### H — Cross-plugin model respect
 **Run**: any /qg invocation that dispatches `pr-review-toolkit:code-reviewer`.
@@ -87,7 +89,7 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 ### I — Repeat detection
 **Setup**: contrive a PR where Phase 1 finds the same finding twice (e.g., the auto-fix doesn't actually fix the root cause).
 **Run**: `/qg`
-**Expected**: after iteration 2 with identical scout dispatch hash + synthesizer hash, the SKILL surfaces the Gate 2 iter-boundary decision via AskUserQuestion (Retry / Proceed to Gate 3 / Stop) with a repeat-detected note in the prompt, before reaching the hard cap `max_gate2_iterations=5`.
+**Expected**: after iteration 2 with an identical dispatch + synthesizer result, the SKILL surfaces the Gate 2 iter-boundary decision via AskUserQuestion (Retry / Proceed to Gate 3 / Stop) with a repeat-detected note in the prompt, before reaching the hard cap `max_gate2_iterations=5`.
 
 ### J — Branch switch mid-session
 **Run**: edit a file on `feature/qg-cost-reduction`, then `git checkout main`, then `/qg`.
@@ -111,7 +113,7 @@ Run this from repo root any time:
 python3 -c "
 import yaml, json, os
 print('Agents (model + cost_class):')
-for a in ['scout','adversarial','synthesizer','plan-verifier','runtime-verifier']:
+for a in ['scout','adversarial','synthesizer','plan-verifier','runtime-verifier']:  # 역사 목록 — scout 등은 v11 에서 없다
     fm = open(f'plugins/quality-gates/agents/{a}.md').read().split('---')[1]
     d = yaml.safe_load(fm)
     print(f'  {a}: model={d.get(\"model\")}, cost_class={d.get(\"cost_class\")}')
