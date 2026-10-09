@@ -277,7 +277,7 @@ W_DG="$(section 'degrade 채널')"
 for ch in 'advisory[]' 'blocks' 'gate --render' 'brief_review_degradations' '$DEGRADE_FALLBACK_FILE' '웹:'; do
   has "$W_DG" "$ch" && ok "degrade 채널: '$ch' 를 이름으로 댄다" || no "degrade 채널: '$ch' 가 절에서 사라졌다"
 done
-{ has "$W_DG" 'degrade 없음' && has "$W_DG" '실제로 읽었다는 주장' && has "$W_DG" '알 수 없는'; } \
+{ has "$W_DG" '「경고 없음」' && has "$W_DG" '실제로 읽었다는 주장' && has "$W_DG" '알 수 없는'; } \
   && ok "degrade 채널: 「없음」은 읽었다는 주장이고, 판독 실패는 「알 수 없음」이다" \
   || no "degrade 채널: 침묵과 「없음」·「판독 불가」의 구분이 사라졌다"
 for fld in component affected_axis verification_status reason; do

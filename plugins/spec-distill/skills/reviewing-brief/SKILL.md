@@ -471,8 +471,8 @@ Agent({
 엔진 8단계의 `docreview_state.py gate --state-dir "$STATE_DIR" --render` 가 어느 게이트인지 정한다.
 `round_gate_needed` 면 라운드 게이트(결정 묶음 + 차단 `ask`, 렌더 순서)를 **`AskUserQuestion` 최대 4개씩
 연속 호출**로 나눠 띄운다 — 도구가 호출당 질문을 4개로 제한하고, 한 결정을 다른 결정의
-질문에 묶으면 그 결정의 선택지가 사라지기 때문이다. 매 호출 첫 질문의 첫 줄은 렌더 첫 줄(degrade
-공시)과 같다. 응답을 `decide`·`fix`·`ask` 서브커맨드로 반영한다. `approval_gate_open` 이면 승인
+질문에 묶으면 그 결정의 선택지가 사라지기 때문이다. 렌더 첫 줄(상태와 경고)은 첫 호출 **앞 글**에 한 번 쓴다. 질문 본문에는 그 질문의 결정 하나와, 경고가 있으면
+「경고 N개 — 위에 적었다」 한 줄만 둔다. 한 호출에 묶는 질문은 서로의 답에 기대지 않는 결정이다 — 다른 결정의 답에 따라 달라지는 결정은 다음 호출로 미룬다. 응답을 `decide`·`fix`·`ask` 서브커맨드로 반영한다. `approval_gate_open` 이면 승인
 게이트다. 열린 것이 남아 있으면 두 단계다(**1단계는 라운드 게이트와 같은 형태라 같은 분할이
 적용된다**). **상한 도달이면 열린 것이 0 이어도 항상 두 단계다** — 그때 1단계는 열린 것의 유무로
 갈린다: **열린 것이 0 이면 1단계 선택지는 「추가 라운드 1회 열기」와 「진행 옵션으로」 둘뿐인
@@ -582,7 +582,7 @@ Step B(`spec-interview` `finishing.md` 의 `#### B-A`)가 끝에서 한 번 보�
 
 - 엔진의 셋 — `fin.json` 의 `advisory[]`(codex 부재 · critic 층 2 부재 · recritic 부재 · 처분 회계의
   degrade 사유) · `fin.json` 의 `blocks`(참/거짓 하나 — critic 사망 · 항목 소실 · 셀 수 없음일 때만 참, 사유는 `advisory[]`) ·
-  `docreview_state.py gate --render` 의 **첫 줄**(그 라운드의 degrade 한 줄 — 「미검증」 라운드면 그 공시가 맨 앞이다).
+  `docreview_state.py gate --render` 의 **첫 줄**(그 라운드의 상태와 경고(렌더 첫 줄) — 「미검증」 라운드면 그 공시가 맨 앞이다).
 - 이 자리의 둘 — `brief_review_state.py get "$STATE"` 의 `brief_review_degradations`(진입 게이트 강등 ·
   번들 위생 미달 · 냉독 실패 · BRIEF_REVIEW skip · 원장 기록 불가처럼 엔진 밖의 사건) · 그 기록이
   실패했을 때의 `$DEGRADE_FALLBACK_FILE` 줄들(머리가 매 호출 같은 파일로 다시 도출한다).
@@ -591,7 +591,7 @@ Step B(`spec-interview` `finishing.md` 의 `#### B-A`)가 끝에서 한 번 보�
 codex <켜짐 | 꺼짐(DISABLE_WEB) | codex 부재>`. Claude 쪽 값은 그 라운드 선택 펜스가 낸 `CRITIC_AGENT=` 와
 advisory 에서 온다.
 
-Step B 게이트를 띄우기 **직전에** 이 채널들을 읽어 하나도 빠뜨리지 않고 게이트 `question` 텍스트에
-싣는다. 전부 비었을 때만 `degrade 없음` 이다 — 그 문구는 **채널을 실제로 읽었다는 주장**이므로 읽지
-않은 채 쓰지 않는다. `get` 이 실패하면(`ok: false`) 원장은 비어 있는 것이 아니라 **알 수 없는** 것이므로
-`degrade 원장 판독 불가 — <get 이 낸 reason>` 을 한 줄로 쓴다.
+Step B 게이트를 띄우기 **직전에** 이 채널들을 읽어 하나도 빠뜨리지 않고 게이트 앞 글에 쓴다(질문 본문에는
+「경고 N개 — 위에 적었다」 한 줄). 전부 비었으면 남은 항목도 없을 때 「이상 없음」, 있을 때 「경고 없음」이다 — 그 문구는
+**채널을 실제로 읽었다는 주장**이므로 읽지 않은 채 쓰지 않는다. `get` 이 실패하면(`ok: false`) 원장은 비어 있는
+것이 아니라 **알 수 없는** 것이므로 `degrade 원장 판독 불가 — <get 이 낸 reason>` 을 한 줄로 쓴다.
