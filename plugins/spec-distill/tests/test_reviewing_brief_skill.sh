@@ -109,7 +109,7 @@ for sw in 'DEVBREW_SPEC_DISTILL_DISABLE=1' 'DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_R
 done
 W_KS="$(section 'kill switch')"
 has "$W_KS" '캐시하지 않' && ok "kill switch: dispatch 직전 확인·캐시 금지 계약" || no "kill switch: 확인 시점 계약(캐시 금지)이 없다"
-{ has "$W_KS" 'SKIPPED' && has "$W_KS" 'Step B' && has "$W_KS" '조용히 건너뛰지 않는다'; } \
+{ has "$W_KS" '건너뛰었다' && has "$W_KS" 'Step B' && has "$W_KS" '조용히 건너뛰지 않는다'; } \
   && ok "kill switch: BRIEF_REVIEW skip 은 record + loud advisory 후 Step B (조용한 생략 아님)" \
   || no "kill switch: BRIEF_REVIEW skip 경로의 공시가 무너졌다"
 

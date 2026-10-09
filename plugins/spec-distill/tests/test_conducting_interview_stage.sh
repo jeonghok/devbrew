@@ -136,7 +136,7 @@ b0_block="$(awk '/^#### B-0/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
 { [[ -n "$b0_block" ]] && grep -q 'confirm_repost_count' <<<"$b0_block"; } \
   && ok "AC2: 재제시 카운터가 state에 기록됨 (프로즈 self-tracking 아님)" \
   || no "AC2: confirm_repost_count가 B-0 블록에 없다"
-grep -qF '[spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등' <<<"$b0_block" \
+grep -qF '[spec-distill] 확정 목록을 두 번 다시 보여 줬는데도 정하지 못했다 — 모든 항목을 잠정(provisional)으로 둔다' <<<"$b0_block" \
   && ok "AC2: 상한 초과 고정 advisory 문자열 (verbatim)" \
   || no "AC2: 상한 초과 advisory 문자열이 정확히 일치하지 않는다"
 # 이 assert는 위 advisory 고정 문자열이 아니라 **강등 프로즈**를 잠근다. 원래 패턴

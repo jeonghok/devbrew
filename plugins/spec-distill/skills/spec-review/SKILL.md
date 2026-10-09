@@ -307,7 +307,7 @@ if [[ "$codex_avail" == "true" ]]; then
   # 사는 것은 없고 잃는 것은 정직한 사유다 — `-eq 3` 이 지배한다.
   if [[ "$runner_rc" -eq 3 ]]; then rm -f "$CODEX_YAML" || true; fi
 else
-  echo "[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — Claude-only, 이 리뷰에는 모델 다양성이 없었다 (degraded)." >&2
+  echo "[spec-distill] codex 리뷰를 건너뛰었다 (reason: ${skip_reason:-unknown}) — 이번 리뷰는 Claude 만 봤다. 다른 모델의 시각이 없다 (degraded)." >&2
 fi
 ```
 <!-- codex-gate:end -->

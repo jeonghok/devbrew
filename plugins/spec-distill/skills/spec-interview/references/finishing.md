@@ -213,7 +213,7 @@ Step A가 끝난 시점에 `user_sourced_items`는 **전부 `provisional`**입�
 때문입니다:
 
 ```
-[spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등
+[spec-distill] 확정 목록을 두 번 다시 보여 줬는데도 정하지 못했다 — 모든 항목을 잠정(provisional)으로 둔다
 ```
 
 카운터는 프로즈 self-tracking이 아니라 state에 씁니다(PN1 Bash write contract):
@@ -279,7 +279,7 @@ python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
 
 - **superpowers 부재 시**: 현행 graceful degradation 그대로 — brief를 완료하고 **loud advisory**를 낸 뒤 **정지(STOP)**. 게이트 없음(compact 후 넘길 대상 자체가 없음). crash·spec-mode fallback **금지**(단독 완결, graceful degrade):
 
-  > `[spec-distill] interview brief 완결: docs/superpowers/interview/<file>. superpowers 설치 시 brainstorming 해답공간 단계로 이어집니다. 미설치 시 이 brief를 직접 다음 작업의 입력으로 사용하세요.`
+  > `[spec-distill] interview brief 를 만들었다: docs/superpowers/interview/<file>. superpowers 가 있으면 brainstorming 으로 이어지고, 없으면 이 brief 를 다음 작업의 입력으로 쓴다.`
 
 - **superpowers 가용 시**: B-2 proceed 게이트 제시.
 

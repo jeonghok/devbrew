@@ -81,7 +81,7 @@ advisory(`[spec-distill] brief 리뷰 degrade 원장 기록 불가 (<reason>) �
 - `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1` → 리뷰 전체 skip. record(`pipeline` / `all` /
   `skipped`)를 남기고 loud advisory 후 Step B 로 돌아간다 — 조용히 건너뛰지 않는다:
 
-  > `[spec-distill] brief 리뷰 SKIPPED (DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1) — 엔진 라운드·냉독 전부 미검증. Step B 게이트에서 확인하세요.`
+  > `[spec-distill] brief 리뷰를 건너뛰었다 (DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1) — 리뷰 라운드도 냉독도 돌지 않았다. 다음 단계 게이트에서 확인해 주세요.`
 
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` → codex 만 끈다(아래 codex 게이트가 집행한다). 탐지·재비판은 그대로.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` → 이 자리의 웹 둘에 걸린다 — `## dispatch 블록 둘` 의 선택 펜스가 탐지
@@ -298,7 +298,7 @@ if [[ "$codex_avail" == "true" ]]; then
   # 원래 실패의 rc 를 단 채 남긴 이번 라운드의 정직한 기록을 지운다.
   if [[ "$runner_rc" -eq 3 ]]; then rm -f "$CODEX_YAML" || true; fi
 else
-  echo "[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — Claude-only, 이 리뷰에는 codex 쪽의 모델 다양성과 웹 근거가 없었다 (degraded)." >&2
+  echo "[spec-distill] codex 리뷰를 건너뛰었다 (reason: ${skip_reason:-unknown}) — 이번 리뷰는 Claude 만 봤다. 다른 모델의 시각과 codex 쪽 웹 근거가 없다 (degraded)." >&2
 fi
 ```
 <!-- codex-gate:end -->
