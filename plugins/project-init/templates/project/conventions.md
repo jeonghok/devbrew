@@ -1,6 +1,6 @@
 # Conventions
 
-> 프로젝트 코딩·구조 컨벤션. `/project-init` charter step이 생성·갱신한다.
+> 프로젝트 코딩·구조 컨벤션. `/project-init:project-init` charter step이 생성·갱신한다.
 
 ## Naming
 

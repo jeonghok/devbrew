@@ -9,15 +9,15 @@ plugins/project-init/
 ├── .claude-plugin/plugin.json       # 플러그인 메타데이터
 ├── README.md                        # 본 파일
 ├── CHANGELOG.md                     # 변경 이력
-├── commands/
-│   └── project-init.md              # /project-init — 인터랙티브 셋업
+├── skills/
+│   └── project-init/SKILL.md        # /project-init — 인터랙티브 셋업(사용자 전용)
 ├── hooks/
 │   ├── hooks.json                   # PostToolUse hook 설정 (1개 entry)
 │   └── post-tool-use.py             # 브랜치(fail-open advisory) + 커밋 검증기 (Bash matcher)
 ├── tests/                           # 플러그인 최상위, hooks/의 형제 — 3규약(hooks/tests 포함)을 1종으로 통일
 │   ├── __init__.py
 │   ├── test_post_tool_use.py        # v1.7.0 — post-tool-use fail-open/F2/main 검증
-│   ├── test_command_contract.py     # v1.7.2 — commands/ 산문 계약 회귀 락 (4c S2a H1, AC21 abort)
+│   ├── test_command_contract.py     # skills/project-init 산문 계약 회귀 락 (4c S2a H1, AC21 abort)
 │   ├── test_branch_strategy_rebase_clause.sh  # v1.7.3 — AC8e, rebase 무조건 금지 조항 부재 락
 │   └── test_no_write_matcher_hooks.sh  # v3.0.0 — PostToolUse에 쓰기-도구(Write/Edit/MultiEdit/NotebookEdit) matcher 부재 회귀 락 (A1–A3)
 └── templates/
@@ -58,7 +58,7 @@ plugins/project-init/
 
 | 컴포넌트 | 역할 |
 |---------|------|
-| **`/project-init` command** | 인터랙티브 셋업 — strategy 선택, 룰 생성 |
+| **`/project-init` skill** | 인터랙티브 셋업 — strategy 선택, 룰 생성 |
 | **PostToolUse hook** | 브랜치 이름·커밋 메시지 포맷 자동 검증 |
 | **Templates** | 3개 branching strategy의 사전 작성된 룰 |
 
@@ -90,6 +90,8 @@ plugins/project-init/
 
 - **`PostToolUse` (Bash matcher) — `post-tool-use.py`**: 브랜치 명·커밋 메시지 검증 (advisory, non-blocking). 브랜치 검증은 `docs/git-workflow/branch-strategy.md`의 선언된 전략 패턴을 런타임에 읽어 수행하며, 전략 미선언(파일/`` ```regex `` 블록 부재·malformed·빈 블록·비-UTF-8 파일)이면 GitHub Flow를 단정하지 않고 **loud advisory로 검증을 건너뛴다**(fail-open, v1.7.0). 교정 제안은 활성 패턴에서 파생된 prefix를 제시한다. **왜 hook인가?**: 검증은 모델 attention 여부와 무관하게 모든 Bash invocation에 발화해야 한다. skill은 모델이 invoke하는 단위라 action 레이어에서의 결정적 실행을 보장하지 못함.
   - Kill switch: `DEVBREW_PROJECT_INIT_DISABLE=1` (전체) 또는 `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` — 또는 이벤트명 하나로 `DEVBREW_SKIP_HOOKS=project-init:PostToolUse`. 이벤트명 별칭은 spec-distill 이 쓰던 형태를 이 플러그인으로 통일한 것이다 — 한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것이 결함이었다.
+  - 5.0.0 부터 `DEVBREW_PROJECT_INIT_DISABLE=1` 은 훅만이 아니라 `/project-init` 진입도 `disabled` no-op 으로 만든다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다.
+  - 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 호출을 끊는다(헤드리스에서는 출력 없이 끝난다).
 
 ## 인스턴스화한 원칙
 
@@ -106,3 +108,5 @@ plugins/project-init/
 ```
 /project-init    # 인터랙티브 git workflow 셋업 시작
 ```
+
+같은 이름이 설치 환경에 있으면 `/project-init:project-init` 로 부른다.

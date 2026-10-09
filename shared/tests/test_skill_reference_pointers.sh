@@ -55,7 +55,7 @@
 #
 # ── 포인터 **출처**는 SKILL.md 만이 아니다 (Task 33 fix round 4, seam) ──────
 # Task 31 이 이 락을 쓸 때 `references/*.md` 는 **잎(leaf)** 이었다 — 가리켜지기만
-# 하고 가리키지 않았다. Task 33 이 그 전제를 깼다: `conducting-interview` 는 공유
+# 하고 가리키지 않았다. Task 33 이 그 전제를 깼다: `spec-interview` 는 공유
 # 계약을 자기 SKILL.md 가 아니라 `references/finishing.md` 에서 가리킨다.
 # 그래서 이 브랜치는 **유일한 실사례를 이 락이 안 보는 쪽에** 실어 보냈다.
 #

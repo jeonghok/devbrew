@@ -7,8 +7,8 @@ AC4/AC5/AC6/AC7/AC9/AC10/AC11/AC12/AC15. 이 파일의 AC 번호는 **그 spec�
 된다(design doc Rejected Alternatives의 "AC↔T/V 편도 참조" 클래스). 이 spec에 대응 AC가
 없는 검사(§4 «출처키» 요구, `type` 규약 등)는 AC 번호를 붙이지 않는다.
 
-The Law 1 termination gate for the conducting-interview problem-space stage,
-made mechanical. conducting-interview runs `check_brief.py gate <payload>` before
+The Law 1 termination gate for the spec-interview problem-space stage,
+made mechanical. spec-interview runs `check_brief.py gate <payload>` before
 finalizing the brief / before any optional brainstorming invoke; a non-zero exit
 BLOCKS termination (one of the 5 통과 의례 unmet).
 
@@ -22,7 +22,7 @@ Law 2 분리 리뷰는 v0.24.0부터 그 위에 얹혔다 — 지금 `skills/rev
 돌린다. 즉 "brief는 분리 리뷰를 받지 않는다"는 더 이상 사실이 아니다(NG3 교정,
 Spec B AC17).
 
-**불변식: 이 스크립트는 brief 파일만 읽는다** (payload + 그것이 가리키는 audit). conducting-interview의
+**불변식: 이 스크립트는 brief 파일만 읽는다** (payload + 그것이 가리키는 audit). spec-interview의
 세션 상태 파일에 대한 의존을 여기에 절대 넣지 않는다 — 넣으면 임의의 brief 파일에 게이트를 돌릴 수
 없게 된다. state 원장 대조(§6 원문 완전성)는 별 모듈 `scripts/check_verbatim_coverage.py`의
 몫이다(Spec B AC16 · E12).

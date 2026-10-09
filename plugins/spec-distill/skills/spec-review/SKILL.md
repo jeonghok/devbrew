@@ -1,5 +1,5 @@
 ---
-name: reviewing-spec
+name: spec-review
 description: >
   Use right after superpowers:brainstorming writes and commits a design doc
   (docs/superpowers/specs/...-design.md), before superpowers:writing-plans — this review replaces
@@ -8,9 +8,12 @@ description: >
   re-critique → freeze-check and routing → gate) inside a single turn and closes with the shared
   proceed gate. Design-mode only — the interview brief has its own reviewers (reviewing-brief).
 cost_class: medium
+argument-hint: <설계문서 경로>
+allowed-tools:
+  - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill spec-review)
 ---
 
-# reviewing-spec — 문서 리뷰 엔진의 design doc 자리
+# spec-review — 문서 리뷰 엔진의 design doc 자리
 
 <!-- plain-language:begin -->
 ## 사람에게 쓰는 글
@@ -29,9 +32,25 @@ cost_class: medium
 이 skill 은 진입 껍데기다. 한 라운드의 절차는 공유 엔진이 갖고 있고, 여기 남는 것은 이 자리의
 것 — 진입 검사 · 입력 · 프로필 · dispatch 둘 · 게이트 · degrade 채널 — 뿐이다.
 
+!`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill spec-review`
+
+## 진입 단계
+
+이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽는다.
+
+| 그 자리의 내용 | 동작 |
+|---|---|
+| `[devbrew-entry] ok …` | 아래 `## 진입 검사`(1.5)로 간다. 그 줄의 `root=` 값을 `## 입력` 에서 쓴다 |
+| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 `[spec-distill] 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).` 를 덧붙여 멈춘다 |
+| `[devbrew-entry] error …` | `[spec-distill] spec-review 사전 검사 실패 — <reason= 값>.` 과 위 복귀 문장을 내고 멈춘다 |
+| `[shell command execution disabled by policy]` | `[spec-distill] spec-review 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다.` 와 위 복귀 문장을 내고 멈춘다 |
+| 감시줄 없음 · 그 밖 | `[spec-distill] spec-review 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다.` 와 위 복귀 문장을 내고 멈춘다 |
+
+이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. 이 skill 의 나머지 스위치(아래 `## 진입 검사` 의 셋 — 플러그인 전체 스위치는 위 표가 먼저 본다)는 1.5 `## 진입 검사` 가 본다. `DEVBREW_SKIP_HOOKS` 의 플러그인 토큰은 이 표에 걸리지 않는다.
+
 ## 진입 검사
 
-이 skill 에서 **맨 먼저** 한 번 돈다 — 인자 해석·후보 제시보다, 엔진 라운드보다 앞이다. 끄기 판정은
+`## 진입 단계` 1 바로 다음(1.5)에 한 번 돈다 — 인자 해석·후보 제시보다, 엔진 라운드보다 앞이다. 끄기 판정은
 이 펜스가 하고, 산문은 펜스 출력의 **마지막 줄**(판결)만
 읽는다 — 조건을 산문으로 적지 않는다. 산문 조건은 집행되지 않고, kill switch 는 P21 보안 컨트롤이라
 그 공백은 "껐다고 믿게만" 만든다.
@@ -103,8 +122,8 @@ advisory · 복귀 지시)을 **그대로** 한 단락으로 보이고 게이트
 
 ## 입력
 
-`$spec_path` 는 **호출 인자**다 — `Skill spec-distill:reviewing-spec <설계문서 경로>` 또는
-`/spec-distill:reviewing-spec <경로>`. 상대 경로면 리포 루트 기준 절대 경로로 바꿔 쓴다.
+`$spec_path` 는 **호출 인자**다 — `Skill spec-distill:spec-review <설계문서 경로>` 또는
+`/spec-distill:spec-review <경로>`. 인자가 `@` 로 시작하면 그 `@` 하나를 뗀다. 상대 경로면 진입 단계 감시줄의 `root=` 기준 절대 경로로 바꿔 쓴다.
 
 인자가 없으면 후보를 뽑아 `AskUserQuestion` 으로 고르게 한다 — 설계문서(`-design.md`)를 추가한 최근
 커밋 50개에서 나온 것 중 최신 5개와 untracked 전부:
@@ -276,7 +295,7 @@ fi
 if [[ "$codex_avail" == "true" ]]; then
   runner_rc=0
   bash "$SD/scripts/run_docreview_codex_reviewer.sh" "$PROFILE" "$spec_path" "$(pwd)" "$CODEX_YAML" || runner_rc=$?
-  # 껍데기 정리 — 형제 `framing-requests` 와 같은 `-eq 3` 이다. `-ne 0` 은 틀리다: EXIT 트랩은
+  # 껍데기 정리 — 형제 `request-framing` 와 같은 `-eq 3` 이다. `-ne 0` 은 틀리다: EXIT 트랩은
   # «자기 rc 를 갖는 종료 지점»이 아니라 모든 종료에 얹혀 **원래 실패의 rc 를 그대로 두고**
   # 이번 라운드의 정직한 기록을 남긴다 — 실측: 트랩 무장 뒤 SIGTERM 이면 `rc 143` +
   # `reason: aborted_before_completion` 인 기록이 함께 나온다. `-ne 0` 은 바로 그 기록을 지운다.
@@ -444,7 +463,7 @@ fi
 |---|---|
 | ① | 미커밋 확인 → `/compact` 후 `superpowers:writing-plans` (권장) — verbatim `/compact` 명령을 노출하고 **턴 종료** |
 | ② | 미커밋 확인 → 바로 `Skill superpowers:writing-plans <path>` |
-| ③ | 수정 필요 — 후속 질문으로 revise per findings / `conducting-interview` 재진입 / 사용자 직접 편집 분기 |
+| ③ | 수정 필요 — 후속 질문으로 revise per findings / `spec-interview` 재진입 / 사용자 직접 편집 분기 |
 | ④ | 멈춤 — 상태 보존하고 종료 |
 
 - **① 의 정지 요건** — verbatim `/compact` 명령을 노출한 자리에서 **턴 종료(STOP)** 한다. 같은 턴

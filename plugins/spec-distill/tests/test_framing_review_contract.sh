@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/framing-requests/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/seed_review_log.py shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_anchor.py
+# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/seed_review_log.py shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_anchor.py
 #
-# framing-requests SKILL 의 **계약** 락 — 설계 2026-09-16-framing-intent-drift 의 AC 중 SKILL 문면과
+# request-framing SKILL 의 **계약** 락 — 설계 2026-09-16-framing-intent-drift 의 AC 중 SKILL 문면과
 # 배선으로 재는 것(AC1 · AC3b · AC3d · AC4 · AC6 · AC12 · AC13 배선).
 #
 # 판정 방식 — 절(`## `) · 하위절(`### `) 창은 코드 펜스를 인식한다(펜스 안 `#` 줄이 창을 자르지
@@ -9,9 +9,9 @@
 # 부재 단언마다 같은 자리의 양의 짝을 둔다 — 절이 통째로 사라지면 부재는 공허하게 참이다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SK="$ROOT/plugins/spec-distill/skills/framing-requests/SKILL.md"
+SK="$ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
 if [ "${1:-}" = "--emit-scanned" ]; then
-  for f in plugins/spec-distill/skills/framing-requests/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md \
+  for f in plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md \
            plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/seed_review_log.py \
            shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_anchor.py; do
     echo "$f"

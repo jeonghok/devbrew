@@ -12,7 +12,7 @@ set -u
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
 SCRIPT="$SD/scripts/check_brief.py"
-FIN="$SD/skills/conducting-interview/references/finishing.md"
+FIN="$SD/skills/spec-interview/references/finishing.md"
 TPL="$SD/templates/interview-brief-template.md"
 fail=0
 ok()  { printf '  ok  %s\n' "$1"; }

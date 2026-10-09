@@ -38,15 +38,15 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    으로만 발생합니다. 모델 추론은 이 리스트에 넣지 말고 본문에 ✎ 프로즈로 씁니다.
    `S1`만 payload §6에 남고, `user_statements`의 나머지 발화 전량은 **audit §6**에
    **전문 보존**(append-only)하며 각각 `S<N>` 앵커를 답니다.
-   **최초 요청 원문은 `S1`이다.** `$ARGUMENTS`(사용자가 `/interview`에 함께 넘긴 rough
-   request)를 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다.
-   Phase 0 을 거친 세션에서는 `/interview` 가 `@경로` 를 풀어 넘겼든 사용자가 전문을 붙여넣었든
-   그 `$ARGUMENTS` 가 `interview-seed` 파일 전문이고, 그때도 같은 규칙이 그대로 적용됩니다:
+   **최초 요청 원문은 `S1`이다.** 「풀린 입력」(진입 단계 2 의 결과 — rough request 그대로이거나
+   `@경로` 의 파일 전문)을 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다.
+   Phase 0 을 거친 세션에서는 `## 진입 단계` 2 가 `@경로` 를 풀었든 사용자가 전문을 붙여넣었든
+   그 「풀린 입력」이 `interview-seed` 파일 전문이고, 그때도 같은 규칙이 그대로 적용됩니다:
    ```yaml
    - id: S1
      source: verbatim
      round: 0
-     text: "<$ARGUMENTS 원문 그대로>"    # P21 secret placeholder 치환 적용
+     text: "<「풀린 입력」 원문 그대로>"    # P21 secret placeholder 치환 적용
    ```
    존재하면(인자 있음) `user_statements`의 id 번호도 이 예약을 반영해 `S1`이 아니라
    `S2`부터 시작합니다 — 최초 요청 원문 있으면 1, 없으면 0 을 더해 SKILL.md `사용자 발화
@@ -176,7 +176,7 @@ Step B는 단일 책임 단위입니다: *brief가 완결되면 다음 stage(bra
 가용성.
 
 **이 게이트의 공통 계약(순서 · 두 가드 · 예외 경로)은 `${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md` 에 있습니다.**
-`reviewing-spec` 의 `/compact` proceed 게이트와 **같은 골격**이며, 두 벌을 독립 저술하던
+`spec-review` 의 `/compact` proceed 게이트와 **같은 골격**이며, 두 벌을 독립 저술하던
 것을 그 파일로 모았습니다 — 한쪽만 고치면 다른 쪽이 조용히 갈라지기 때문입니다. Step B 에
 실제로 진입할 때 읽고 그대로 따릅니다. 아래에는 이 skill 의 **어휘**(확정 후보 제시 · 옵션 라벨 ·
 verbatim `/compact` 템플릿 · superpowers 가용성 분기)만 남습니다.
@@ -357,7 +357,7 @@ AskUserQuestion({
   *그대로 보이게* 노출 + "다음 턴에 직접 `Skill superpowers:brainstorming <실제 경로>` 를
   부르세요" 안내 (사람이 유일한 운반자다 — 자동으로 이어지지 않는다):
 
-  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 §0 한눈에, §2 제약, §3 Open Questions, §6 사용자 원문 중 `S1`), audit 파일 경로 참조, **그리고 아래 '재결정 규약' 문장**을 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. 재결정 규약: confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 다음 단계: Skill superpowers:brainstorming <brief-path> → 설계문서를 쓰고 커밋한 뒤, brainstorming 의 사용자 리뷰 게이트 자리에서 그 설계문서 경로로 Skill spec-distill:reviewing-spec → 그 승인 게이트에서 진행을 고른 뒤 superpowers:writing-plans.`
+  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 §0 한눈에, §2 제약, §3 Open Questions, §6 사용자 원문 중 `S1`), audit 파일 경로 참조, **그리고 아래 '재결정 규약' 문장**을 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. 재결정 규약: confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 다음 단계: Skill superpowers:brainstorming <brief-path> → 설계문서를 쓰고 커밋한 뒤, brainstorming 의 사용자 리뷰 게이트 자리에서 그 설계문서 경로로 Skill spec-distill:spec-review → 그 승인 게이트에서 진행을 고른 뒤 superpowers:writing-plans.`
 
   **`<brief-path>` 두 자리를 Step A 가 방금 쓴 실제 경로로 치환한 뒤 노출한다.** 이 명령은
   사용자가 그대로 붙여넣는 것이므로, 치환하지 않고 내보내면 사용자가 깨진 명령을 실행한다 —
@@ -375,7 +375,7 @@ AskUserQuestion({
 
   > `confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.`
   >
-  > `설계문서를 쓰고 커밋한 뒤, brainstorming 의 사용자 리뷰 게이트 자리에서 그 설계문서 경로로 Skill spec-distill:reviewing-spec 을 부른다 — brainstorming 의 「다음은 writing-plans 뿐」 지시보다 이 순서가 우선한다. superpowers:writing-plans 는 reviewing-spec 의 승인 게이트에서 진행이 선택된 뒤에만 부른다. reviewing-spec 이 게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다.`
+  > `설계문서를 쓰고 커밋한 뒤, brainstorming 의 사용자 리뷰 게이트 자리에서 그 설계문서 경로로 Skill spec-distill:spec-review 를 부른다 — brainstorming 의 「다음은 writing-plans 뿐」 지시보다 이 순서가 우선한다. superpowers:writing-plans 는 spec-review 의 승인 게이트에서 진행이 선택된 뒤에만 부른다. spec-review 가 게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다.`
 
   이것은 아래 cross-compact 정지 요건의 *명시적 예외*다.
 

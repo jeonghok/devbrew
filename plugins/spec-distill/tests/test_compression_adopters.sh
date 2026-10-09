@@ -11,10 +11,10 @@
 # — **동적으로**, 채택자가 그 디렉터리를 가지면. 이 파일 상단의 `# guards:` 는 그 동적
 # 스캔이 아니라 `test_guards_coverage_bidirectional.sh` 가 재는 **정적 선언**이고, 그
 # 락은 각 글롭이 오늘의 `--emit-scanned` 출력을 실제로 덮는지 잰다. round 1 시점엔
-# 유일한 채택자 `framing-requests` 가 `references/` 디렉터리를 갖지 않아 `--emit-scanned`
+# 유일한 채택자 `request-framing` 가 `references/` 디렉터리를 갖지 않아 `--emit-scanned`
 # 가 `SKILL.md` 한 줄만 냈고, 그때 `references/*.md` 글롭을 선언에 남기면 아무것도 안
 # 덮는 글롭(「선언이 넓다」)으로 RED 가 났다〔실측, fix round 1〕. 둘째 채택자
-# `conducting-interview` 가 brief 를 이 계약의 게이트 집행자로 채택하면서(Task 12,
+# `spec-interview` 가 brief 를 이 계약의 게이트 집행자로 채택하면서(Task 12,
 # `references/finishing.md` 경유) `--emit-scanned` 가 그 경로를 냈고, 그 경로가 옛
 # 선언 밖이 되어 반대 방향(「선언이 좁다」)이 RED 를 냈다〔실측, fix round 2〕 — 이
 # 문단이 예고한 그 시점이 왔으므로 글롭을 되돌린다.
@@ -42,7 +42,7 @@
 # 2(개수)만으로 오늘 실측한 회귀(2→1)를 그대로 잡는다 — 이름을 안 박아도 이 acceptance
 # criterion 을 충족하는 이유가 정확히 이 실측 하나다.
 #
-# **잔여 위험을 숨기지 않는다.** 하한은 개수이지 구성원이 아니다 — `conducting-interview`
+# **잔여 위험을 숨기지 않는다.** 하한은 개수이지 구성원이 아니다 — `spec-interview`
 # 가 포인터를 잃는 동시에 무관한 셋째 skill 이 우연히 압축 어휘를 자기 표면에 갖게 되면
 # 개수는 그대로 2라 이 하한은 그 치환을 못 잡는다. 형제 락은 이 정확한 간극을 「정본
 # 본문이 이름을 대는 skill 을 합집합으로 더한다」로 닫았다(`proceed-gate.md` 는 skill

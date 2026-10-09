@@ -8,7 +8,7 @@ description: >
   `<seed>${SEED_TEXT}</seed>` block — the text itself, never a path (this agent
   owns no tools and cannot open a file).
 
-  <example>Context: framing-requests 압축이 끝나 seed 초안이 완성됐다.
+  <example>Context: request-framing 압축이 끝나 seed 초안이 완성됐다.
   user: "냉독 돌려줘"
   assistant: "I'll dispatch the seed-readback agent with only the seed
   inlined."</example>
