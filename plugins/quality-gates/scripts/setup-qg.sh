@@ -162,7 +162,7 @@ if [[ "$SESSION_ID" == "worktrees" || "$SESSION_ID" == "baseline-cache" ]]; then
   exit 1
 fi
 STATE_DIR="$STATE_ROOT/$SESSION_ID"
-STATE_FILE="$STATE_DIR/pipeline.md"
+STATE_FILE="$STATE_DIR/result.md"
 
 # --ensure: 이 세션 폴더가 이미 있으면 아무것도 하지 않는다.
 if [[ "$ENSURE_MODE" == "true" ]] && [[ -f "$STATE_FILE" ]]; then
@@ -242,16 +242,13 @@ session_id: "$SESSION_ID"
 started_at: "$TIMESTAMP"
 ---
 
-# Quality Gates Pipeline State
-
-## History
-- [$TIMESTAMP] Pipeline started
+# qg result
 EOF
 mv "$TEMP_FILE" "$STATE_FILE"
 
 echo "🔄 Quality Gates Pipeline"
 echo ""
-echo "Pipeline: scope → differential test → reviewers → re-critique → verdict"
+echo "Pipeline: scope → review → differential test → synthesis · verdict"
 for a in $REMOVED_ARGS; do
   echo "> [quality-gates] \`${a}\` 인자는 제거됐다 — 이제 한 파이프라인이라 게이트 범위를 고르지 않는다. 그대로 진행한다."
 done

@@ -60,7 +60,7 @@ needed.
 
 **Law 2 (Writer ≠ Reviewer):** you are the orchestrator (writer). `security-reviewer`, 재비판(`doc-recritic`), and `test-scope-validator` are read-only reviewers (`tools: Read, Grep, Glob` — fail-closed allowlist) — no qg-own agent has write access. External extra reviewers (e.g. `pr-review-toolkit`, chosen per [Angles and reviewers](#angles-and-reviewers-scope-driven)) may be write-capable upstream, but they are advisory — you own fixes; their output is findings YAML, never a commit. You run the tests yourself — both axes of the differential test, on trees you create — and you may apply user-approved fixes ("Retry" path) via Edit/Write; those are user-consented.
 
-**State file:** `.claude/quality-gates/<sid>/pipeline.md` belongs to `setup-qg.sh`,
+**State file:** `.claude/quality-gates/<sid>/result.md` belongs to `setup-qg.sh`,
 which recreates the session folder at every `/qg` start; the TTL GC removes stale
 folders. Never write its frontmatter (Rule R2).
 
@@ -124,7 +124,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 ```
 
 `setup-qg.sh --ensure` creates the per-session state file
-(`.claude/quality-gates/<sid>/pipeline.md`) when it is missing.
+(`.claude/quality-gates/<sid>/result.md`) when it is missing.
 Exit non-zero → surface its output verbatim and stop. Exit 2 is the removed-argument
 notice (`인자는 없어졌다 — … 실행하지 않는다.`) — the run does not start.
 
@@ -942,7 +942,7 @@ The session folder stays until the next `/qg` in this session recreates it or th
 (`plugins/quality-gates/agents/*.md`) in this turn. The orchestrator may
 edit working-tree files for user-consented fixes only.
 
-**R2 (state file write invariant):** never write `pipeline.md` frontmatter.
+**R2 (state file write invariant):** never write `result.md` frontmatter.
 You MAY append a single line to the `## History` section per iteration verdict;
 do not modify any other content. Frontmatter is owned by setup-qg.sh.
 

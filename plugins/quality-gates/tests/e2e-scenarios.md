@@ -144,11 +144,11 @@ OK
 ### V1 — Concurrent sessions do not share pipeline state
 
 **Setup**: Two terminal sessions A and B in the same project (same worktree). Both have valid `CLAUDE_CODE_SESSION_ID` env vars (`$SID_A`, `$SID_B`).
-1. In A: run `/qg`. Verify `.claude/quality-gates/$SID_A/pipeline.md` is created.
-2. In B: run `/qg`. Verify `.claude/quality-gates/$SID_B/pipeline.md` is created, independent of A's.
+1. In A: run `/qg`. Verify `.claude/quality-gates/$SID_A/result.md` is created.
+2. In B: run `/qg`. Verify `.claude/quality-gates/$SID_B/result.md` is created, independent of A's.
 3. Review scope itself is git-derived (branch diff against base, unioned with the worktree's own changed files) — since A and B share the same worktree, both sessions resolve the SAME scope from git; there is no per-session file tracker to isolate.
 
-**Pass**: `$SID_A` and `$SID_B` each have their own `pipeline.md` with independent History/iteration state; neither session's pipeline-state file is touched by the other's run.
+**Pass**: `$SID_A` and `$SID_B` each have their own `result.md`; neither session's result file is touched by the other's run.
 
 ### V2 — Dormant session GC
 

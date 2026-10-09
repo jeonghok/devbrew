@@ -133,5 +133,5 @@ Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable.
   iteration boundary with `Retry` / `Accept and finish` / `Stop`.
 - AskUserQuestion also fires on max-iter, and on the differential test's gap
   gate (R3) when something was left out.
-- State tracked minimally in `.claude/quality-gates/<session-id>/pipeline.md`
+- Local result in `.claude/quality-gates/<session-id>/result.md`
   (written by `scripts/setup-qg.sh`, which recreates the folder at every `/qg` start).

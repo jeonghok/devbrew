@@ -510,7 +510,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 state는 Claude Code 세션마다 `.claude/quality-gates/<session-id>/`에 추적됩니다:
 
-- `pipeline.md` — 파이프라인 frontmatter (session_id · started_at) + body (History).
+- `result.md` — 로컬 결과. setup 이 frontmatter(session_id · started_at)와 `# qg result` 제목을 쓰고, 파이프라인이 판정 · 지적 · 제외 패치 · 차등 테스트 절을 덧붙인다([형식](skills/quality-pipeline/references/state-file-format.md)). 옛 판이 남긴 `pipeline.md` 폴더도 GC 가 회수한다.
 
 Review scope 자체는 세션 state 로 추적되지 않는다 — `/qg` 매 턴 git 에서 직접
 도출된다(branch diff against base, worktree 자체 변경분과 union).
