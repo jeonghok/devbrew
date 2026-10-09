@@ -100,6 +100,34 @@ out="$( cd "$R" && PATH="$NOGH" bash "$D" --intent-out "$T/intent.md" --base "$B
 assert_eq "$(printf '%s' "$out" | key intent_source)" "spec-trailer" "#key 트레일러 — 조각을 떼면 spec-trailer"
 assert_eq "$(printf '%s' "$out" | key spec_path)" "$(cd "$R" && pwd -P)/docs/superpowers/specs/new-design.md" "#key 트레일러 — spec_path 는 조각 없는 실제 파일"
 
+# 7c — P7: 트레일러는 비신뢰 입력이다. 절대 경로 · `..` · 리포 밖으로 풀리는 심볼릭 링크는 읽지 않는다
+printf 'OUTSIDE-SECRET-XYZ\n' > "$T/outside.txt"
+ln -s "$T/outside.txt" "$R/docs/superpowers/specs/escape.md"
+ln -s new-design.md "$R/docs/superpowers/specs/inrepo-link.md"
+trailer_case() {  # trailer_case <Spec: 값> → out
+  git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "feat: case" -m "Spec: $1"
+  out="$( cd "$R" && PATH="$NOGH" bash "$D" --intent-out "$T/intent.md" --base "$BASE2" )"
+}
+refused() {  # refused <Spec: 값> <라벨>
+  for suffix in "" "#k"; do
+    trailer_case "$1$suffix"
+    assert_eq "$(printf '%s' "$out" | key spec_path)" "" "$2$suffix — spec_path 비어 있다"
+    assert_eq "$(printf '%s' "$out" | key intent_note)" "spec 경로 거부" "$2$suffix — 거부를 공시한다"
+    assert_file_absent "$T/intent.md" 'OUTSIDE-SECRET-XYZ|root:' "$2$suffix — 밖의 파일 내용이 의도 파일에 없다"
+  done
+}
+refused "$T/outside.txt" "절대 경로"
+refused "/etc/passwd" "절대 경로(/etc/passwd)"
+refused "../outside.txt" ".. 경로"
+refused "docs/../../outside.txt" "중간 .. 경로"
+refused "docs/superpowers/../superpowers/specs/new-design.md" "리포 안으로 되돌아오는 .. 경로"
+refused "docs/superpowers/specs/escape.md" "리포 밖으로 나가는 심볼릭 링크"
+for suffix in "" "#k"; do
+  trailer_case "docs/superpowers/specs/inrepo-link.md$suffix"
+  assert_eq "$(printf '%s' "$out" | key intent_source)" "spec-trailer" "리포 안 심볼릭 링크$suffix — 받아들인다(양의 짝)"
+  assert_file_grep "$T/intent.md" '^- new$' "리포 안 심볼릭 링크$suffix — 대상 본문을 읽는다"
+done
+
 # 8 — 잘못된 호출
 ( cd "$R" && bash "$D" >/dev/null 2>&1 ); assert_eq "$?" "2" "--intent-out 없으면 exit 2"
 ( cd "$R" && bash "$D" --intent-out "$T/없는/디렉토리/x.md" >/dev/null 2>&1 ); assert_eq "$?" "3" "의도 파일에 쓸 수 없으면 exit 3"

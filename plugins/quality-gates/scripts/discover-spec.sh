@@ -11,7 +11,7 @@
 #
 # stdout 한 줄 JSON:
 #   {"spec_path": "<abs|''>", "intent_source": "spec-trailer|commits+pr|commits",
-#    "intent_note": "''|gh 없음|열린 PR 없음|gh 오류", "intent_file": "<abs>"}
+#    "intent_note": "''|gh 없음|열린 PR 없음|gh 오류|spec 경로 거부", "intent_file": "<abs>"}
 # `spec_path` 는 `spec-trailer` 일 때만 값이 있다(차등 테스트의 test-scope-validator 입력).
 # 의도 본문은 <file> 에 쓴다.
 #
@@ -48,12 +48,25 @@ emit() {  # emit <spec_path> <intent_source> <intent_note>
 # ── 1. Spec: 트레일러 (새 커밋부터) ───────────────────────────────────
 # `%B` + `^Spec: ` 는 resolve-topic.sh 와 같은 추출 계열이다.
 top="$(git rev-parse --show-toplevel 2>/dev/null)"
+reject=""
 for h in $(git log --format='%H' $RANGE 2>/dev/null); do
   v="$(git log -1 --format='%B' "$h" | grep -E '^Spec: ' | tail -1 | sed -E 's/^Spec: //')"
   v="${v%%#*}"
   [ -n "$v" ] || continue
+  # 트레일러는 커밋 메시지에서 온 비신뢰 입력이다 — 의도 파일은 리뷰어와 외부 codex 로 나가므로
+  # 절대 경로 · `..` 성분 · 리포 밖으로 풀리는 심볼릭 링크는 읽지 않고 거부를 공시한다.
+  case "/$v/" in
+    //*|*/../*) reject="spec 경로 거부"; break ;;
+  esac
   if [ -n "$top" ] && [ -f "$top/$v" ]; then
-    cat "$top/$v" > "$OUT"
+    real="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$top/$v")"
+    root="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$top")"
+    case "$real" in
+      "$root"/*) ;;
+      *) reject="spec 경로 거부"; break ;;
+    esac
+    [ -f "$real" ] || break
+    cat "$real" > "$OUT"
     emit "$top/$v" "spec-trailer" ""
     exit 0
   fi
@@ -85,8 +98,8 @@ else
 fi
 if [ -z "$note" ]; then
   { echo; echo "## PR 본문"; printf '%s\n' "$pr"; } >> "$OUT"
-  emit "" "commits+pr" ""
+  emit "" "commits+pr" "$reject"
 else
-  emit "" "commits" "$note"
+  emit "" "commits" "${reject:-$note}"
 fi
 exit 0
