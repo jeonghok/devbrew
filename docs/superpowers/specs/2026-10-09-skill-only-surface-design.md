@@ -244,6 +244,22 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 
 게이트 실측이 틀리면 패치로 덮지 않고 이 설계로 돌아온다. 결과는 이 절에 날짜 · Claude Code 버전과 함께 기록한다.
 
+#### 결과 (2026-10-09, Claude Code 2.1.294)
+
+격리 설치본(haiku · `--permission-mode default` · `--max-turns 4`)에서 f4cb54be 이후 HEAD 의 캐시 복사본으로 쟀다.
+
+| # | 결과 | 관측 |
+|---|---|---|
+| M1 | **실패** | 브리프 그대로(Skill 도구 승인 없음)는 헤드리스에서 `permission_denied`(tool=Skill, source=config)로 거부돼 주입 본문이 없다. 참고 변형 `--allowedTools Skill`: 주입 본문에 `[devbrew-entry] ok plugin=spec-distill skill=spec-review root=…` 가 있다(`!` 는 모델 호출에서도 돈다). 그러나 이어지는 1.5 의 다줄 Bash 가 승인 없이 막혀(`Contains brace with quote character`) `review-entry: DISABLED` 로 멈추지 못하고 4턴을 소진했다. 두 번째 통과 조건이 불성립 |
+| M2 | 통과 9/10 + 재시도 | 열 칸 중 아홉이 첫 시도에 RESULT 에 `[devbrew-entry] disabled plugin=<p> skill=<s>` 를 냈다. spec-review bare(`/spec-review x`)는 첫 시도에 감시줄이 없었고(1.5 Bash 승인 요청으로 흘렀다) 같은 명령 재시도 2회는 모두 `disabled` 줄을 냈다 — 비결정적. `Unknown command` 0 |
+| M3 | 통과 | 모델 쪽: `Skill plugin-audit:plugin-audit cannot be used with Skill tool due to disable-model-invocation`. 주입 본문 `skill=plugin-audit` 없음. 사람 쪽은 M2 plugin-audit 두 행 |
+| M5 | 통과 | `disableSkillShellExecution: true`(기존 settings.json 에 병합) 하 RESULT 에 `spec-review 사전 검사 불가(정책)` 가 있고 리뷰는 시작되지 않았다 |
+| M6 | 통과 | RESULT 가 `[devbrew-entry] disabled plugin=spec-distill skill=spec-interview switch=DEVBREW_SPEC_DISTILL_DISABLE=1` 한 줄. `.claude/spec-distill/` 생성 없음 |
+| E0 | 통과 | 위 축 E 문단의 기존 실측(CLI 2.1.294)을 따른다. 이번 단계에서 재측정하지 않았다 |
+| M4 | 대기 — 사용자 대화형 | 결과가 오면 §3-2 최종 규칙을 여기에 한 줄로 확정한다 |
+
+실측 중 M5 를 브리프 문구대로 `settings.json` 을 통째로 덮어쓰자 `enabledPlugins` 가 지워져 M5·M6 첫 시도가 «플러그인 미설치»로 무효였다. 병합 방식으로 다시 쟀다.
+
 ## Acceptance Criteria
 
 - AC1 `plugins/*/commands/` 는 quality-gates 에만 있다.
