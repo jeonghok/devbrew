@@ -250,13 +250,15 @@ SKILL.md 로드 → `!` 사전 검사(본문 전달 전, 상수 인자만) → �
 
 | # | 결과 | 관측 |
 |---|---|---|
-| M1 | **실패** | 브리프 그대로(Skill 도구 승인 없음)는 헤드리스에서 `permission_denied`(tool=Skill, source=config)로 거부돼 주입 본문이 없다. 참고 변형 `--allowedTools Skill`: 주입 본문에 `[devbrew-entry] ok plugin=spec-distill skill=spec-review root=…` 가 있다(`!` 는 모델 호출에서도 돈다). 그러나 이어지는 1.5 의 다줄 Bash 가 승인 없이 막혀(`Contains brace with quote character`) `review-entry: DISABLED` 로 멈추지 못하고 4턴을 소진했다. 두 번째 통과 조건이 불성립 |
-| M2 | 통과 9/10 + 재시도 | 열 칸 중 아홉이 첫 시도에 RESULT 에 `[devbrew-entry] disabled plugin=<p> skill=<s>` 를 냈다. spec-review bare(`/spec-review x`)는 첫 시도에 감시줄이 없었고(1.5 Bash 승인 요청으로 흘렀다) 같은 명령 재시도 2회는 모두 `disabled` 줄을 냈다 — 비결정적. `Unknown command` 0 |
+| M1 | **통과(판정 R12)** | 설계 통과 조건(주입 본문의 감시줄)은 Skill 도구를 허용한 실행에서 성립했다 — `!` 는 모델의 Skill 호출에서도 돈다. 측정 방식 결함: 브리프 그대로(Skill 도구 승인 없음)는 헤드리스에서 `permission_denied`(tool=Skill, source=config)로 거부돼 주입 본문이 없다. 참고 변형 `--allowedTools Skill`: 주입 본문에 `[devbrew-entry] ok plugin=spec-distill skill=spec-review root=…` 가 있다(`!` 는 모델 호출에서도 돈다). 그러나 이어지는 1.5 의 다줄 Bash 가 승인 없이 막혀(`Contains brace with quote character`) `review-entry: DISABLED` 로 멈추지 못하고 4턴을 소진했다. 두 번째 통과 조건이 불성립 |
+| M2 | 통과(비결정 1회 — 판정 R12) | 열 칸 중 아홉이 첫 시도에 RESULT 에 `[devbrew-entry] disabled plugin=<p> skill=<s>` 를 냈다. spec-review bare(`/spec-review x`)는 첫 시도에 감시줄이 없었고(1.5 Bash 승인 요청으로 흘렀다) 같은 명령 재시도 2회는 모두 `disabled` 줄을 냈다 — 비결정적. `Unknown command` 0 |
 | M3 | 통과 | 모델 쪽: `Skill plugin-audit:plugin-audit cannot be used with Skill tool due to disable-model-invocation`. 주입 본문 `skill=plugin-audit` 없음. 사람 쪽은 M2 plugin-audit 두 행 |
 | M5 | 통과 | `disableSkillShellExecution: true`(기존 settings.json 에 병합) 하 RESULT 에 `spec-review 사전 검사 불가(정책)` 가 있고 리뷰는 시작되지 않았다 |
 | M6 | 통과 | RESULT 가 `[devbrew-entry] disabled plugin=spec-distill skill=spec-interview switch=DEVBREW_SPEC_DISTILL_DISABLE=1` 한 줄. `.claude/spec-distill/` 생성 없음 |
 | E0 | 통과 | 위 축 E 문단의 기존 실측(CLI 2.1.294)을 따른다. 이번 단계에서 재측정하지 않았다 |
 | M4 | 대기 — 사용자 대화형 | 결과가 오면 §3-2 최종 규칙을 여기에 한 줄로 확정한다 |
+
+**판정 (R12)** ① M1 의 «1.5 에서 멈춘다»는 계획이 지출 차단용으로 덧붙인 조건이고 설계 §7 의 통과 조건이 아니다. ② spec-review 의 `## 진입 검사` 펜스(1.5)는 이 변경 이전부터 다줄 Bash 라 기본 권한 모드에서 승인을 요구한다 — 펜스는 무변경, 후속 과제. ③ M2 의 `/spec-review` 첫 시도 누락은 모델(haiku)이 진입 단계 1 을 건너뛴 준수 실패다. 사전 검사 줄 자체는 재시도에서 매번 감시줄을 냈다. 진입 단계 판독은 산문이라는 설계의 알려진 한계(B2)에 속한다. ④ 측정 방법 교훈: 헤드리스 기본 모드는 Skill 도구 호출 자체를 승인 대상으로 거부한다(모델 호출 측정엔 `--allowedTools Skill`), 디렉토리 소스 마켓플레이스의 `plugin update` 는 캐시를 갱신하지 않는다(uninstall+install), 정책 설정은 `settings.json` 에 병합해야 한다(덮어쓰면 enabledPlugins 소실).
 
 실측 중 M5 를 브리프 문구대로 `settings.json` 을 통째로 덮어쓰자 `enabledPlugins` 가 지워져 M5·M6 첫 시도가 «플러그인 미설치»로 무효였다. 병합 방식으로 다시 쟀다.
 
