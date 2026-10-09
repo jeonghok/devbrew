@@ -31,4 +31,5 @@
 | `python/` | 훅의 Python 인터프리터 해석기 — 출하 바닥(`FLOOR_*`)의 정본. 세 플러그인에 **물리 사본**으로 배포된다(심볼릭 링크는 `plugin-audit` 의 containment 검사를 깬다) |
 | `gc/` | TTL-GC 공통 조각 |
 | `docreview/` | 문서 리뷰 엔진 — 탐지·재비판 agent 둘, 앵커·라우팅·상태 스크립트 넷, 절차 reference 하나 (호스트가 프로필로 특화) |
+| `style/` | 「사람에게 쓰는 글」 규칙 블록의 정본(`plain-language.md`) — 15곳의 SKILL.md·명령 파일에 바이트 그대로 복사된다. 같음은 `tests/test_plain_language_block.sh` 가 잰다 |
 | `tests/` | 판정 헬퍼 · 트리거 모듈(`abort_trigger.sh` — 러너를 SIGTERM 으로 실제 중단시켜 EXIT 트랩 degrade 계약을 잰다) + 크로스-플러그인 락 |

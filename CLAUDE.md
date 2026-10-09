@@ -13,6 +13,7 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 - Branch: `main`에서 `feature/*` 또는 `fix/*`. kebab-case, 2–4 단어.
 - Commit: Conventional Commits (`<type>(<scope>): <description>`)
+- 언어: 커밋 메시지의 설명과 PR 본문은 한국어로 쓴다. `type`·`scope` 는 영어다(예: `fix(qg): 범위 경고를 쉬운 말로`). 다른 레포는 그 레포의 규칙을 따른다.
 - PR: merge commit, `docs/git-workflow/pr-process.md` 참고
 - project-init 플러그인이 브랜치 명명·commit 포맷 자동 검증
 
@@ -92,4 +93,5 @@ Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md
 ## Doc Conventions
 
 - **Korean-primary, English-terms-only.** `CLAUDE.md`와 `docs/philosophy/*.md` 등 user-facing 문서는 한국어를 primary로 작성. 영어는 **식별자**(P#, AP#, Law N, §X.Y, plugin 이름), **고유명사**(OMC, gstack, Ouroboros, CE, Anthropic 등), **원문 인용**(verbatim, 어느 방향으로도 gloss 추가 안 함), **기술 용어 중 자연스러운 한국어 대응이 없는 것**(`frontmatter`, `PreCompact`, `subagent`, `hook`, `skill` 등)에 한정. `*.ko.md` 동반 파일 모델은 폐기 (drift 비용 > 이중 노출 가치).
+- **범위.** 위의 영어 범위와 「원문 인용에 풀이를 붙이지 않는다」는 **레포 문서**의 규칙이다. 플러그인이 실행 중 사람에게 내는 글은 `shared/style/plain-language.md` 를 따른다.
 - **`docs/**.md` 파일이 ~300줄 이상이면 상단(제목 + 에피그래프 + 한 줄 정체성 다음, 본문 진입 직전)에 `## 목차` 섹션 필수.** §X.Y depth로 anchor 링크. 섹션 추가/이름 변경/삭제 시 같은 commit에서 TOC도 동기화 (drift 시 cite-by-anchor 깨짐). 짧은 doc(<300줄, git-workflow 가이드 등)은 면제.

@@ -440,6 +440,8 @@ print('`replacement` is required for `decide` — what the document becomes if f
       'To propose deletion, write the literal `대체안 없음 — 그냥 뺀다`. Leaving the field '
       'empty is NOT a deletion proposal. `if_unfixed` states what remains if nothing changes '
       '(the consequence, not a restatement of the problem).')
+print('`summary`, `if_unfixed` and `replacement` are read by a first-time reader at the gate: write them in plain words, '
+      'without internal IDs. Keep `evidence` as a verbatim quote of the document.')
 print('```json\n{"findings":[{"ref":"x1","layer":1,"category":"...","anchor":"#slug",'
       '"disposition":"...","summary":"...","edit_scope":"#slug","blocks":[],"evidence":"...",'
       '"replacement":"...","if_unfixed":"..."}]}\n```')

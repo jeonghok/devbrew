@@ -19,6 +19,11 @@
 - 셋업 본문이 `skills/project-init/SKILL.md` 로 옮겨 왔다(`cost_class: low`, `disable-model-invocation: true`). 본문 전 사전 검사(`scripts/entry_preflight.py`)가 kill switch 와 셋업 루트(`root=`)를 정한다.
 - 템플릿 `project/charter.md` · `project/conventions.md` 의 안내가 완전명 `/project-init:project-init` 을 쓴다.
 
+## [4.0.4] — 2026-10-09
+
+### Changed
+- SKILL.md·명령 파일 맨 앞(H1 바로 다음)에 「사람에게 쓰는 글」 규칙 블록을 둔다. 정본은 리포의 `shared/style/plain-language.md` 이고 `shared/tests/test_plain_language_block.sh` 가 같음을 잰다.
+
 ## [4.0.3] — 2026-10-09
 
 ### Changed

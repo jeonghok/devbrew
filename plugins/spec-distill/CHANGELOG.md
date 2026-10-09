@@ -26,6 +26,13 @@ major 인 이유 — 사용자 호출 이름 둘이 alias 없이 사라졌고, s
 - `/request-framing` 의 `@경로` 풀기는 절대경로 읽기가 실패하면 `root=` 기준 상대경로로 한 번 더 시도한다.
 - trivia 를 건너뛰려면 `force` 를 첫 토큰으로 다시 부른다(`/spec-distill:spec-interview force <요청>`) — `references/trivia-escape.md` 가 그 토큰을 떼고 판정을 건너뛴다. trivia 안내 문면도 이 재호출을 가리킨다.
 
+## [4.6.0] — 2026-10-09
+
+### Changed
+- SKILL.md·명령 파일 맨 앞(H1 바로 다음)에 「사람에게 쓰는 글」 규칙 블록을 둔다. 정본은 리포의 `shared/style/plain-language.md` 이고 `shared/tests/test_plain_language_block.sh` 가 같음을 잰다.
+- 문서 리뷰 게이트 렌더가 쉬운 말이다: 첫 줄은 상태와 경고를 한 문장으로 말하고, 0 인 집계는 빼며, 항목은 쉬운 말로 시작하고 id 는 끝 괄호에 둔다. 경고는 전부 첫 줄에 싣는다(전에는 codex 부재만 싣고 나머지를 버렸다). 기계가 읽는 `gate` JSON 은 그대로다.
+- 문서 리뷰어(`doc-critic` · `doc-critic-web` · `doc-recritic`)가 사람이 읽는 칸을 쉬운 말로 쓴다.
+
 ## [4.5.4] — 2026-10-09
 
 ### Changed

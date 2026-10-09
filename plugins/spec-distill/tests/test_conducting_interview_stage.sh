@@ -4,6 +4,11 @@ set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SKILL="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/SKILL.md"
+# 규칙 블록(표시 줄 포함)과 그 바로 뒤 빈 줄 하나를 뺀 줄 수 — 블록은 모든 SKILL.md · 명령 파일 공통이라 이 래칫이 재는
+# 「이 skill 자신의 분량」이 아니다(쉬운 말 출력 PR 1, 계획 P5). 블록이 없으면 wc -l 과 같다.
+skill_own_lines() {
+  awk '/^<!-- plain-language:begin -->$/{s=1} s==0{n++} s==2{s=0; if ($0 != "") n++; next} /^<!-- plain-language:end -->$/{s=2} END{print n+0}' "$1"
+}
 CMD="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/SKILL.md"
 # Task 32(무게 감축): `## 종료` 절차 전문이 references/finishing.md 로 분리됐다. 이 스위트의
 # 전-파일 검사(존재·**부재** 양쪽)가 보는 범위는 614줄 중 396줄로 줄었다 — 부재 락은 코퍼스가
@@ -477,9 +482,13 @@ done
 # 지워지고 그 책임이 이 SKILL.md 의 `## 진입 단계` 로 들어왔다. 호출 경로의 로드 표면은 줄었지만
 # SKILL.md 한 파일은 그 절만큼 늘어 래칫을 **그 절의 줄 수만큼** 옮긴다(여유는 옮기기 전과 같은 0).
 SKILL_LINE_CAP=504
-[[ "$(wc -l < "$SKILL")" -lt "$SKILL_LINE_CAP" ]] \
-  && ok "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") < $SKILL_LINE_CAP (조사 특화 순증 + 진입 단계 흡수)" \
-  || no "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ $SKILL_LINE_CAP"
+[[ "$(skill_own_lines "$SKILL")" -lt "$SKILL_LINE_CAP" ]] \
+  && ok "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") < $SKILL_LINE_CAP (규칙 블록 제외 — 조사 특화 순증 + 진입 단계 흡수)" \
+  || no "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") ≥ $SKILL_LINE_CAP"
+_total="$(wc -l < "$SKILL" | tr -d ' ')"; _own="$(skill_own_lines "$SKILL")"
+[[ $(( _total - _own )) -eq 14 ]] \
+  && ok "AC3/C9 양의 짝: 블록 13줄 + 뒤 빈 줄 1 이 정확히 빠졌다 (${_total} − ${_own})" \
+  || no "AC3/C9 양의 짝: 뺀 줄 수가 14 가 아니다 (${_total} − ${_own}) — 블록이 없거나 함수가 깨졌다"
 
 # 제거 (G7·AC1·AC14) — 존재 검사가 아니라 부재 검사이므로 CI_ALL 전체
 for tok in 'teach-lite' 'teach-heavy' 'teach-beat' 'general-purpose'; do
@@ -504,7 +513,7 @@ for tok in '4-block' '막힌 결정'; do
     && ok "G7 양성 대조: «${tok}» 이 steelman.md 에 실재 (예외가 vacuous 아님)" \
     || no "G7 양성 대조: steelman.md 에 «${tok}» 이 없다 — 예외가 아무것도 면제하지 않으면서 범위만 줄인다"
 done
-[[ "$(wc -l < "$SKILL")" -lt "$SKILL_LINE_CAP" ]] && ok "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") < $SKILL_LINE_CAP (조사 특화 순증 + 진입 단계 흡수)" || no "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ $SKILL_LINE_CAP"
+[[ "$(skill_own_lines "$SKILL")" -lt "$SKILL_LINE_CAP" ]] && ok "G7: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") < $SKILL_LINE_CAP (규칙 블록 제외 — 조사 특화 순증 + 진입 단계 흡수)" || no "G7: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") ≥ $SKILL_LINE_CAP"
 
 # coverage-mapper dispatch (상한 2, AC7, scoped)
 covmap_block="$(awk '/^## coverage-mapper dispatch/{f=1;print;next} /^## /{f=0} f' "$SKILL")"

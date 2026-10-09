@@ -17,6 +17,11 @@ major 인 이유 — 명령 층이 사라졌고, skill 이 개명돼 사용자 �
 - 본문 전 사전 검사(`scripts/entry_preflight.py`)와 `## 진입 단계` 가 kill switch 와 인자 해석을 맡는다.
 - `check-staleness.py` 규칙 (a): `skills/<name>/SKILL.md` 가 뒷받침하는 `/name` 은 dangling 이 아니다.
 
+## [0.11.2] — 2026-10-09
+
+### Changed
+- SKILL.md·명령 파일 맨 앞(H1 바로 다음)에 「사람에게 쓰는 글」 규칙 블록을 둔다. 정본은 리포의 `shared/style/plain-language.md` 이고 `shared/tests/test_plain_language_block.sh` 가 같음을 잰다.
+
 ## [0.11.1] — 2026-10-09
 
 ### Security

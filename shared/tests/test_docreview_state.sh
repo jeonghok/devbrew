@@ -83,4 +83,5 @@ case_state_dir_for_per_doc
 # PR 3 qg iter 3 — 관측은 원장의 함수: 건너뛴 라운드의 permit(적용 · 원복)을 뒤 라운드가 그 라운드의 스냅숏으로 따라잡는다.
 case_E1_skipped_round_permit_caught_up
 case_E5_revert_caught_up_by_its_round_snapshot
+case_state_gloss_covers_gate_rows
 finish

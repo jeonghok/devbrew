@@ -1,0 +1,42 @@
+{
+ "ok": true,
+ "round": 1,
+ "findings": [],
+ "by_disposition": {
+  "decide": [],
+  "ask": [],
+  "fix": [],
+  "defer": [],
+  "drop": []
+ },
+ "rejected": [],
+ "defers": [],
+ "bucket_conflicts": 0,
+ "lineage_mismatch": 0,
+ "revived": [],
+ "degrade": {
+  "critic_dead": false,
+  "layer2_missing": false,
+  "codex_absent": false,
+  "codex_reason": null,
+  "recritic_dead": null
+ },
+ "advisory": [],
+ "blocks": false,
+ "reraise_unconsumed": 0,
+ "escalated_unconsumed": 0,
+ "adjudication_accepted": 0,
+ "adjudication_rejected": 0,
+ "adjudication_held": 0,
+ "adjudication_absorbed": 0,
+ "adjudication_coerced": 0,
+ "adjudication_sources_failed": 0,
+ "adjudication_suppressed": 0,
+ "adjudication_unknown_counts": [],
+ "adjudication_degraded": false,
+ "adjudication_held_by_class": {
+  "판정자 부재": 0,
+  "항목 파손": 0,
+  "기타": 0
+ }
+}
