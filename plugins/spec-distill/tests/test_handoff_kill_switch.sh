@@ -30,7 +30,7 @@ SWITCH='DEVBREW_SPEC_DISTILL_SKIP_HANDOFF_CHECK'
 CORPUS=()
 while IFS= read -r f; do
   [ -n "$f" ] && CORPUS+=("$f")
-done < <(find "$SD/skills/reviewing-spec" "$SD/references/docreview-profiles" \
+done < <(find "$SD/skills/spec-review" "$SD/references/docreview-profiles" \
               "$REPO_ROOT/shared/docreview" -type f 2>/dev/null | sort)
 CORPUS+=("$SD/README.md")
 

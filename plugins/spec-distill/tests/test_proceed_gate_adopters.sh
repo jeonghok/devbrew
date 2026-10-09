@@ -6,15 +6,15 @@
 #
 # ── 왜 새 파일인가 (Task 33 fix round 2) ────────────────────────────────────
 # 정본 `proceed-gate.md` 의 「검증」 절은 *"**각 skill 표면에** 정지 어휘가 실재하는지를
-# grep 이 잰다"* 고 주장하고, `reviewing-spec/SKILL.md` 의 AC19 불릿은 한 걸음 더 나가
+# grep 이 잰다"* 고 주장하고, `spec-review/SKILL.md` 의 AC19 불릿은 한 걸음 더 나가
 # *"기계적 검증 앵커가 거기 산다"* 고 적는다. **둘 다 거짓이었다** 〔실측〕: `턴 종료|다음 턴`
 # 을 재는 단언은 리포 전체에 둘뿐이고(`test_conducting_interview_stage.sh` 의 `ci_cat`,
-# `test_brief_review_entry.sh` 의 `CI_FILES`) 둘 다 conducting-interview 표면만 본다.
-# `reviewing-spec` 의 정지 어휘는 **아무도 재지 않았다** — 계약을 통일해 놓고 그 계약의
+# `test_brief_review_entry.sh` 의 `CI_FILES`) 둘 다 spec-interview 표면만 본다.
+# `spec-review` 의 정지 어휘는 **아무도 재지 않았다** — 계약을 통일해 놓고 그 계약의
 # 이행 검증은 한쪽에만 있었던 셈이다.
 #
-# 그 자리를 기존 `reviewing-spec` 테스트 중 하나에 끼워 넣지 **않은** 이유: 그러면 같은
-# 검사가 두 벌 독립 저술되고(interview 쪽 하나 + reviewing-spec 쪽 하나) 스코프 규칙이
+# 그 자리를 기존 `spec-review` 테스트 중 하나에 끼워 넣지 **않은** 이유: 그러면 같은
+# 검사가 두 벌 독립 저술되고(interview 쪽 하나 + spec-review 쪽 하나) 스코프 규칙이
 # 서로 다른 채로 자유롭게 갈라진다 — **이 결함을 만든 바로 그 구조**다. Task 33 의 산출물이
 # "두 게이트가 한 계약을 공유한다"이므로, 그 계약의 이행 검증도 하나여야 하고 대상은
 # **열거가 아니라 도출**이어야 한다. 아래는 채택자를 포인터에서 도출하고, 거기에 **정본이
@@ -54,8 +54,8 @@ emit_only=0
   no "정본 $CANON 부재 — 채택자 대칭을 잴 대상이 없다"; finish; exit $?; }
 
 # ── 채택자 도출 ─────────────────────────────────────────────────────────────
-# "정본을 가리키는 포인터가 그 skill 표면 어딘가에 있는가." reviewing-spec 은 SKILL.md 에서,
-# conducting-interview 는 references/finishing.md 에서 가리킨다 — 그래서 둘 다 본다.
+# "정본을 가리키는 포인터가 그 skill 표면 어딘가에 있는가." spec-review 은 SKILL.md 에서,
+# spec-interview 는 references/finishing.md 에서 가리킨다 — 그래서 둘 다 본다.
 #
 # 도출 로직 자체는 `shared/tests/adopter_derivation.sh` 정본으로 옮겼다 —
 # `test_compression_adopters.sh` 가 같은 골격을 두 번째로 쓰게 되면서 인라인 버전이 그
@@ -70,7 +70,7 @@ scanned="$SCANNED"
 
 # ── 대상 = {포인터에서 도출한 채택자} ∪ {정본이 이름을 대는 skill} ──────────
 # 포인터 하나에만 걸린 도출은 **피검자가 자기를 측정 밖으로 빼낼 수 있다**: 리뷰어가
-# `reviewing-spec/SKILL.md` 의 정본 포인터 둘을 지우고 돌리자 15/15 가 11/11 GREEN 이
+# `spec-review/SKILL.md` 의 정본 포인터 둘을 지우고 돌리자 15/15 가 11/11 GREEN 이
 # 됐다 — 그 skill 의 앵커 단언 넷이 RED 도 아니고 «그냥 사라졌다». 아래 하한 2 는 그
 # 상태를 못 잡는다: 남은 채택자가 여전히 둘이기 때문이다(하한은 개수이지 구성원이 아니다).
 #
@@ -127,7 +127,7 @@ ok "채택자 도출 ${n_adopt}개 (열거 아님 — 정본 포인터에서 도
 #
 # 1. **정본이 이름을 대지 않는 skill 은 여전히 자기 포인터에만 걸려 있다.** 합집합의
 #    두 번째 방향은 정본 본문이 정하므로, 정본이 한 번도 이름을 대지 않은 채택자는
-#    포인터를 지우는 것만으로 대상에서 빠진다. 오늘 그런 채택자는 `framing-requests`
+#    포인터를 지우는 것만으로 대상에서 빠진다. 오늘 그런 채택자는 `request-framing`
 #    였는데, 이 wave 에서 정본이 그것을 이름 대게 고쳐 셋 다 두 방향에 걸린다 — 즉
 #    **이 갭은 오늘 비어 있고, 넷째 채택자가 생기면 다시 열린다.** 넷째를 정본이 이름
 #    대게 하는 것이 그때의 수정이다.

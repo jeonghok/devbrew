@@ -180,7 +180,7 @@ class TestDegradationRecord(Base):
 
 
 class TestLedgerKeyOverride(Base):
-    """--ledger-key — 두 번째 파이프라인(PR3 framing-requests)이 같은 writer를 자기 원장에
+    """--ledger-key — 두 번째 파이프라인(PR3 request-framing)이 같은 writer를 자기 원장에
     쓰게 한다. 기본 원장(brief_review_degradations)과 새 원장(framing_degradations)이
     서로를 오염시키지 않아야 하고, 오타 키는 조용히 새 원장을 만들지 않고 거부돼야 한다."""
 
@@ -303,7 +303,7 @@ class TestDegradationLedgerValueValidation(unittest.TestCase):
 
 
 class TestInitLedgerKey(Base):
-    """`init --ledger-key` — 두 번째 파이프라인(framing-requests)이 자기 원장 줄을
+    """`init --ledger-key` — 두 번째 파이프라인(request-framing)이 자기 원장 줄을
     갖게 한다.
 
     이 옵션이 없던 판에서는 이런 상태였다: `framing_degradations`가 `LEDGER_KEYS`

@@ -22,7 +22,7 @@ OLD_EN='the brief gets no separated review'
 
 # --- /qg iter-1 IMPORTANT : 식별자가 아니라 **개념 별칭**으로 스윕 -----------
 # 결함: 위 assert들은 $GATE 와 리뷰어 파일 두 경로를 하드코딩해, 같은 주장을 **다른 문구로**
-# 하는 세 번째 인스턴스를 구조적으로 볼 수 없었다 — 실제로 reviewing-spec/SKILL.md가
+# 하는 세 번째 인스턴스를 구조적으로 볼 수 없었다 — 실제로 spec-review/SKILL.md가
 # 현재시제로 "interview는 brief까지 단독 완결, design doc만 Law 2 분리 reviewer 대상"을
 # 단언한 채 출하됐고 이 브랜치가 그것을 반증한다. 리터럴이 아니라 개념으로 쓸어야 한다.
 #

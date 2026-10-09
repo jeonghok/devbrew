@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/reviewing-spec/SKILL.md plugins/spec-distill/scripts/review_entry.py plugins/spec-distill/scripts/kill_switch_active.py
+# guards: plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/scripts/review_entry.py plugins/spec-distill/scripts/kill_switch_active.py
 #
-# AC6 · AC9 · AC16 — `reviewing-spec` 의 리터럴 펜스를 **잘라내 실행**한다.
+# AC6 · AC9 · AC16 — `spec-review` 의 리터럴 펜스를 **잘라내 실행**한다.
 #
 #   · 진입 펜스(`review-entry:begin` ~ `:end`) — `review_entry.py` 의 출력을 스키마로 검사해
 #     마지막 줄에 판결(`review-entry: PROCEED` | `review-entry: DISABLED:<사유>`)을 낸다.
@@ -24,11 +24,11 @@
 # 수 없다. 재지 못하는 것: 모델이 판결 줄대로 분기하는가(산문 지시 — AC14 수동 e2e 몫).
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SKILL="$ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+SKILL="$ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
 SD_SCRIPTS="$ROOT/plugins/spec-distill/scripts"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
-  echo "plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+  echo "plugins/spec-distill/skills/spec-review/SKILL.md"
   echo "plugins/spec-distill/scripts/review_entry.py"
   echo "plugins/spec-distill/scripts/kill_switch_active.py"
   exit 0

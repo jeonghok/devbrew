@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# guards: shared/docreview/references/reviewing-document.md plugins/spec-distill/skills/reviewing-spec/SKILL.md
+# guards: shared/docreview/references/reviewing-document.md plugins/spec-distill/skills/spec-review/SKILL.md
 #
 # 라운드 게이트 항목(`decide` 묶음 + 차단 `ask`)이 한 `AskUserQuestion` 호출에 다 안
 # 들어가면 질문 최대 4개씩 연속 호출로 나눈다는 규칙(Task 2d · Park P4 · 사용자 결정)이
 # 절차서(`shared/docreview/references/reviewing-document.md`)와 그 첫 사이트
-# (`plugins/spec-distill/skills/reviewing-spec/SKILL.md` 의 `## 게이트`)에 실제로 적혀
+# (`plugins/spec-distill/skills/spec-review/SKILL.md` 의 `## 게이트`)에 실제로 적혀
 # 있는지 잰다. 엔진 코드는 이 태스크에서 바뀌지 않는다 — 이 락은 산문만 지킨다.
 #
 # ── 네 축 ────────────────────────────────────────────────────────────────
@@ -35,7 +35,7 @@
 set -u -o pipefail
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "shared/docreview/references/reviewing-document.md"
-  echo "plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+  echo "plugins/spec-distill/skills/spec-review/SKILL.md"
   exit 0
 fi
 
@@ -43,7 +43,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 . "$REPO_ROOT/shared/tests/assert.sh"
 
 REF="$REPO_ROOT/shared/docreview/references/reviewing-document.md"
-SKILL="$REPO_ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+SKILL="$REPO_ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
 
 for f in "$REF" "$SKILL"; do
   if [ ! -r "$f" ]; then
@@ -62,30 +62,30 @@ SKILL_BODY="$(grep -vE '^#' "$SKILL")"
 assert_contains "$REF_BODY" '최대 4개씩' \
   "절차서 본문이 라운드 게이트를 AskUserQuestion 최대 4개씩 연속 호출로 나눈다고 적는다 (body-unique)"
 assert_contains "$SKILL_BODY" '최대 4개씩' \
-  "reviewing-spec ## 게이트 본문이 같은 4개씩 분할 규칙을 적는다 (body-unique)"
+  "spec-review ## 게이트 본문이 같은 4개씩 분할 규칙을 적는다 (body-unique)"
 
 # ── 2. 부재 + 양의 짝 ────────────────────────────────────────────────────
 assert_not_contains "$REF_FULL" '`AskUserQuestion` 하나로' \
   "절차서에 옛 「AskUserQuestion 하나로」 문면이 없다"
 assert_not_contains "$SKILL_FULL" '`AskUserQuestion` **하나**로' \
-  "reviewing-spec 에 옛 「AskUserQuestion 하나로」 문면이 없다"
+  "spec-review 에 옛 「AskUserQuestion 하나로」 문면이 없다"
 
 assert_grep "$REF_FULL" '^8\. \*\*게이트\*\*' \
   "양의 짝 — 절차서에 8단계 게이트 절이 실재한다 (부재 단언이 통째 삭제로 헛통과하지 않는다)"
 assert_grep "$SKILL_FULL" '^## 게이트$' \
-  "양의 짝 — reviewing-spec 에 ## 게이트 절이 실재한다"
+  "양의 짝 — spec-review 에 ## 게이트 절이 실재한다"
 
 # ── 3. 존재 — 상한 도달 + 열린 것 있음에서도 1단계에 추가 라운드 선택지 (body-unique) ──
 assert_contains "$REF_BODY" '그 열린 항목들과 함께' \
   "절차서 본문이 상한 도달 + 열린 것 있음에서도 1단계가 추가 라운드 1회 열기를 함께 낸다고 적는다"
 assert_contains "$SKILL_BODY" '그 열린 항목들과 함께' \
-  "reviewing-spec ## 게이트 본문이 같은 절을 적는다"
+  "spec-review ## 게이트 본문이 같은 절을 적는다"
 
 # ── 4. 존재 — 추가 라운드 항목이 별개 항목 · 같은 분할에 세어짐 (body-unique, R23) ──
 assert_contains "$REF_BODY" '같은 4개씩 분할에 함께 세어지며' \
   "절차서 본문이 추가 라운드 선택지를 별개 항목으로 같은 4개씩 분할에 세어 넣는다고 적는다 (결정성, R23)"
 assert_contains "$SKILL_BODY" '같은 4개씩 분할에 함께 세어지며' \
-  "reviewing-spec ## 게이트 본문이 같은 결정성 문구를 적는다 (R23)"
+  "spec-review ## 게이트 본문이 같은 결정성 문구를 적는다 (R23)"
 
 # ── 5. 존재 — AskUserQuestion 라벨의 항목별 내용 (AC17″, body-unique) ────────────
 # 이 락이 잴 수 있는 것은 규약의 실재뿐이다 — 아래 세 단언이 통과해도 오케스트레이터가
@@ -93,16 +93,16 @@ assert_contains "$SKILL_BODY" '같은 4개씩 분할에 함께 세어지며' \
 assert_contains "$REF_BODY" 'replacement 를 1–5 낱말로 압축' \
   "절차서 본문이 라벨을 상태별 라벨 + replacement 1–5 낱말 압축으로 조립한다고 적는다"
 assert_contains "$SKILL_BODY" 'replacement 를 1–5 낱말로 압축' \
-  "reviewing-spec ## 게이트 본문이 같은 라벨 압축 규약을 적는다"
+  "spec-review ## 게이트 본문이 같은 라벨 압축 규약을 적는다"
 
 assert_contains "$REF_BODY" '같은 라벨을 갖지 않는다' \
   "절차서 본문이 같은 라운드의 두 항목은 같은 라벨을 갖지 않는다고 적는다"
 assert_contains "$SKILL_BODY" '같은 라벨을 갖지 않는다' \
-  "reviewing-spec ## 게이트 본문이 같은 라벨 중복 금지를 적는다"
+  "spec-review ## 게이트 본문이 같은 라벨 중복 금지를 적는다"
 
 assert_contains "$REF_BODY" '부재 건수를 함께 공시' \
   "절차서 본문이 replacement 양쪽 부재로 라벨이 겹치는 경우 부재 건수를 공시한다고 적는다"
 assert_contains "$SKILL_BODY" '부재 건수를 함께 공시' \
-  "reviewing-spec ## 게이트 본문이 같은 부재 공시 규약을 적는다"
+  "spec-review ## 게이트 본문이 같은 부재 공시 규약을 적는다"
 
 finish

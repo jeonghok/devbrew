@@ -95,11 +95,11 @@ rc="$(rc_of "$tmpb" "$tmps" "$FX/brief-verbatim-placeholder.audit.md")"
 rm -f "$tmps" "$tmpb"
 
 # --- C2 : producer와 checker의 P21 토큰 집합이 실제로 같다 ------------------
-# conducting-interview SKILL.md(producer)가 문서로 약속한 토큰 **전부**를
+# spec-interview SKILL.md(producer)가 문서로 약속한 토큰 **전부**를
 # check_verbatim_coverage.py(checker)의 정규식에 그대로 먹여본다. 문서에서 토큰을
 # 긁어오므로 어느 쪽을 바꿔도 이 락이 발화한다(한쪽만 고치는 drift 방지). 리터럴을
 # 테스트에 박아두면 producer가 바뀌어도 조용히 통과한다.
-CI_SKILL="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/SKILL.md"
+CI_SKILL="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/SKILL.md"
 P21_LINES="$(grep -n 'REDACTED' "$CI_SKILL" | head -1 | cut -d: -f1)"
 if [[ -n "$P21_LINES" ]]; then
   # P21 문단(해당 줄부터 4줄)에서 `<TOKEN>` / `<TOKEN:라벨>` 모양을 전부 뽑는다.
@@ -122,7 +122,7 @@ PY
     && ok "C2: producer가 약속한 토큰을 checker가 전부 인식 (한국어 라벨 포함)" \
     || no "C2: checker가 인식 못 하는 producer 토큰:${unmatched} — 정당한 치환이 red로 잡힌다"
 else
-  no "C2: conducting-interview SKILL.md에서 P21 줄을 찾지 못했다"
+  no "C2: spec-interview SKILL.md에서 P21 줄을 찾지 못했다"
 fi
 # 경계는 넓히지 않았다 — 공백이 든 라벨(산문 위장)은 여전히 토큰이 아니다.
 TOK='<REDACTED:이건 라벨이 아니라 문장이다>' python3 - "$SCRIPT" <<'PY' \

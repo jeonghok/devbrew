@@ -10,12 +10,15 @@
 /plugin-audit <target> [--seed <path>]
 ```
 
+같은 이름이 설치 환경에 있으면 `/plugin-audit:plugin-audit` 로 부른다. 이 skill 은 사용자만 부른다(`disable-model-invocation: true`).
+
 - `<target>` — 감사할 플러그인 이름 (예: `quality-gates`). scope는 `plugins/<target>/**`로 도출.
 - `--seed <path>` — optional. 추가 scope · Open Questions · 후보 단서를 담은 markdown.
   없으면 6축 fresh discovery로 degrade(배너 표시).
 
 `cost_class: high` — dispatch 전 `AskUserQuestion` 지출 동의 게이트를 통과해야 한다.
 Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
+본문 전 사전 검사(`scripts/entry_preflight.py`)가 이 스위치를 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 그 스크립트나 `python3` 가 없으면 플랫폼이 호출을 끊는다(헤드리스에서는 출력 없이 끝난다).
 
 **산출 위치** — 감사마다 실행 디렉토리 `.claude/plugin-audit/<date>-<target>[-N]/` 이 생긴다(지출 동의
 승인 직후, `scripts/prepare-run-dir.py`). 리포트 `audit.md` · 데이터 `audit-data.json` · 원장
@@ -107,7 +110,6 @@ exit 3 으로 멈추고, stderr 한 줄이 옛 이름과 새 이름으로의 개
 
 ## 컴포넌트
 
-- `commands/plugin-audit.md` — 얇은 진입점.
-- `skills/auditing-plugins/SKILL.md` — 오케스트레이션(지출게이트 → pre-0 → Workflow → post-1).
+- `skills/plugin-audit/SKILL.md` — 오케스트레이션(지출게이트 → pre-0 → Workflow → post-1). 진입 단계(사전 검사 · 인자 해석) 포함.
 - `agents/{plugin-auditor,audit-refuter,smoke-probe}.md` — 읽기전용 agent 3종.
 - `scripts/*` — 결정론 게이트·조립·렌더·검증 + Workflow 스크립트.

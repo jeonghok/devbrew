@@ -1,4 +1,4 @@
-"""Regression lock on `commands/project-init.md` prose contracts.
+"""Regression lock on `skills/project-init/SKILL.md` prose contracts.
 
 `/project-init` is a model-followed markdown instruction, not executable code, so
 a test cannot exercise its behaviour. What it *can* lock is the existence of the
@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1]
-COMMAND = PLUGIN / "commands" / "project-init.md"
+COMMAND = PLUGIN / "skills" / "project-init" / "SKILL.md"
 HOOKS_JSON = PLUGIN / "hooks" / "hooks.json"
 
 #: 인용 블록 안의 코드 스팬. 보고 블록이 «무엇을 만들었는지» 와 «훅이 무엇을 검사하는지»
@@ -249,7 +249,7 @@ class TestMigrationPromptStillGated(unittest.TestCase):
         step1 = section(text, "### Step 1:", "### Step 2:")
         self.assertRegex(
             step1,
-            r"사용자 거절 시.*전체 `/project-init` 실행 abort",
+            r"사용자 거절 시.*전체 `/project-init:project-init` 실행 abort",
             "the migration refusal no longer aborts the run",
         )
         self.assertIn("부분 진행 금지", step1)

@@ -37,7 +37,7 @@ fi
 
 한 방향당 steelman 1회 — 새 근거 없으면 재steelman 금지(AP16).
 
-두 슬롯은 `conducting-interview/SKILL.md` 의 `## 조사 주장 계약` 펜스와 `orchestration.open_decisions[]`
+두 슬롯은 `spec-interview/SKILL.md` 의 `## 조사 주장 계약` 펜스와 `orchestration.open_decisions[]`
 에서 온다. 계약 펜스의 rc 가 0 이 아니면 **dispatch 하지 않는다** — `fail-closed` 가 막는 것은 «그
 dispatch» 이고 인터뷰가 아니다. 그때 공시는 loud advisory + 수동 의심 게이트 전환 이고, 아래
 「Web 부재 시 graceful degradation」 과 같은 경로로 간다(§5 항목은 사용자 판단을 근거로 기록하고
@@ -90,7 +90,7 @@ dispatch» 이고 인터뷰가 아니다. 그때 공시는 loud advisory + 수�
   마지막 줄 「근거 N 중 부착 M · 리포 주장 K 중 확인 J」.
 - **질문**: `AskUserQuestion` 선택지 **고정 순서** 유지 / 보완 / 전환 / 보류 — 추천을 첫 자리로 옮기지 않는다. 추천 표시는 출처 라벨뿐이다: builder 가 추천한 선택지 라벨 뒤에 `(builder 추천)`, orchestrator 판정 선택지 라벨 뒤에 `(orchestrator 추천)` — 두 추천이 다른 선택지면 각각 붙고, 같은 선택지면 `(builder·orchestrator 추천)` 하나만 붙인다. builder 추천이 switched 이고 Step 2.5 가 `재검토 사유 없음` 이면 전환 라벨은 `(builder 추천 · 전제 충돌 없음)` 이다. 도구·라운드 규약의 `(Recommended)`·`(권장)` 접미사는 붙이지 않는다. builder 의 kept / refined / switched 는 유지 / 보완 / 전환이다.
 
-conducting-interview 는 builder 출력을 **약화·편집하지 않는다** — verbatim 계약이다.
+spec-interview 는 builder 출력을 **약화·편집하지 않는다** — verbatim 계약이다.
 
 #### Step 4 — 기록
 

@@ -32,7 +32,7 @@ description: >
   flag neglected dimensions when probing tunnels into one area. Read-only ADVISORY
   proposer by design (Law 2 frontmatter scoping) — the orchestrator, not this
   agent, decides which derived dimensions enter the coverage ledger (G2). Output is
-  consumed by conducting-interview; dispatch eligibility is whether an open decision still
+  consumed by spec-interview; dispatch eligibility is whether an open decision still
   touches the dimension, with a budget of 1 plus the total reopen count on top.
 
   <example>Context: The interviewer is about to ask the first round question from a seed.
@@ -64,7 +64,7 @@ admit 판정은 orchestrator가 합니다(G2, Law 2).
 - `<open_decisions>` 지금 열린 결정 목록(`OQ<n>` + 한 줄). `decides` 는 이 목록에 실제로 있는 것만
   담고 목록에 없는 id 를 지어내지 않는다.
 
-## Output 형식 (이 형식을 정확히 준수 — conducting-interview가 advisory로 소비)
+## Output 형식 (이 형식을 정확히 준수 — spec-interview가 advisory로 소비)
 
 ```yaml
 derived_dimensions:
@@ -96,7 +96,7 @@ repo_claims:                   # 내부(레포) 주장 — 같은 계약
 2. **advisory only**: `derived_dimensions`는 *제안*이다 — orchestrator가 admit/기각을 결정(G2).
 3. **derived, not floor**: 고정 floor 5개를 재정의·삭제하지 않는다. floor 위 차원만 제안.
 4. **자격 + 예산**: R1 첫 질문 전 1회는 필수다. 다시 부를 자격은 그 차원에 닿는 열린 결정이 아직
-   있는가이고, 자격 위의 예산은 `1 + 모든 차원의 재개방 합` 이다(conducting-interview 가 제어).
+   있는가이고, 자격 위의 예산은 `1 + 모든 차원의 재개방 합` 이다(spec-interview 가 제어).
 5. **confidence < 0.5** 면 `neglect_flag: false` — 약한 신호로 산만하게 하지 않음.
 6. **차원 제안의 근거를 주장으로 낸다.** 제안한 차원마다 그것을 요구하는 근거를 `repo_claims[]`
    (레포) 또는 `evidence[]`(웹) 로 함께 내고, 레포 주장은 `path`·`anchor` 없이 내지 않는다.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# reviewing-spec 껍데기가 **자기 kill switch 와 degrade 채널을 공시하는가.**
+# spec-review 껍데기가 **자기 kill switch 와 degrade 채널을 공시하는가.**
 #
 # ── 왜 이 파일이 생겼는가 (T7) ───────────────────────────────────────────────
 # 옛 `test_reviewing_spec_codex_merge.sh` 는 삭제된 verdict 파이프라인의 배선을 쟀고
@@ -22,7 +22,7 @@
 set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SKILL="$REPO_ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+SKILL="$REPO_ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 

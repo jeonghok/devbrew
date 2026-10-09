@@ -227,7 +227,7 @@ COMP_BASELINE=40   # Task 1 F5 census 28 + Task 10 이 1 늘림(29) — merge_re
                    # `hold()` 로 계수한다 — 컴프리헨션이 없으면 그 항목이 조용히
                    # 사라지던 자리를 소리 나게 만든 것이다.
                    # Task 6 이 18 늘림(39→57) — **이 시점은 T6b 착수 전**이다.
-                   # `reviewing-spec/SKILL.md` 에 `consumer=docreview_route.py`
+                   # `spec-review/SKILL.md` 에 `consumer=docreview_route.py`
                    # 앵커를 더한 그 커밋이 이 파일을 처음 ㉮(by_anchor 경유)에
                    # 넣었고, 그 파일의 `ast` 실측 컴프리헨션이 18개다. 52591c9b
                    # (T6b 시작 커밋)에 이미 `comprehensions=57` · baseline 39로

@@ -11,7 +11,7 @@
 #     조사 실측(2026-09-08): 오늘 이 상수와 산문 정본은 완전히 분리돼 있고 어떤 락도
 #     둘을 대조하지 않았다. 산문만 고치면 실행은 옛 값으로 계속 돌고, 상수만 고치면
 #     사용자가 읽는 문서가 거짓말을 한다. 둘 중 어느 쪽도 소리를 내지 않는다.
-#  2. `plugins/spec-distill/skills/reviewing-spec/SKILL.md` — design doc 자리의 껍데기.
+#  2. `plugins/spec-distill/skills/spec-review/SKILL.md` — design doc 자리의 껍데기.
 #  3. `plugins/spec-distill/README.md` — 흐름도 한 줄 + AP16 불릿 **둘 다**(개수 하한 2).
 #
 # ── 음의 짝 (양의 단언만으로는 통째 삭제를 못 잡는다) ───────────────────────
@@ -23,7 +23,7 @@
 # ── 이후 PR 이 코퍼스를 넓히는 자리 ─────────────────────────────────────────
 # 문서 리뷰 엔진은 자리 넷을 흡수한다. 자리가 엔진으로 전환될 때 그 SKILL.md 가 들어갈
 # 배열은 **그 자리가 상한 숫자를 적는가**로 갈린다 — 적으면 `TARGETS`(양의 하한 + ∀),
-# 적지 않기로 한 자리면 `NEG_ONLY` + `ABSENT`(∀ + 부재). `framing-requests` 는 뒤엣것이다
+# 적지 않기로 한 자리면 `NEG_ONLY` + `ABSENT`(∀ + 부재). `request-framing` 는 뒤엣것이다
 # (설계 2026-09-16-framing-intent-drift C-E — 숫자를 다시 적지 않는다). 숫자를 적지 않는
 # 자리를 `TARGETS` 에 넣으면 「없으니 RED」가 되어 옳은 상태를 벌한다.
 set -u -o pipefail
@@ -33,12 +33,12 @@ REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 REF="$REPO_ROOT/shared/docreview/references/reviewing-document.md"
 ENGINE="$REPO_ROOT/shared/docreview/scripts/docreview_state.py"
-SKILL="$REPO_ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+SKILL="$REPO_ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
 README="$REPO_ROOT/plugins/spec-distill/README.md"
 
 # 「그 자리의 산문이 상한을 CAP 으로 적었는가」를 재는 대상 — 상한 숫자를 적는 자리만.
 # (`reviewing-brief` 는 PR 3 에서 들어왔다 — 옛 브리프 critic 의 별개 상한이 그 전환으로
-#  사라져, 파일 통째로 양의 단언과 ∀ 둘 다의 대상이 된다. `framing-requests` 는 숫자를
+#  사라져, 파일 통째로 양의 단언과 ∀ 둘 다의 대상이 된다. `request-framing` 는 숫자를
 #  적지 않는 자리라 여기가 아니라 아래 `NEG_ONLY` · `ABSENT` 다.)
 TARGETS=(
   "$SKILL"
@@ -66,9 +66,9 @@ TARGETS=(
 # RED 를 낸다. 그때의 처방은 이 항목을 빼는 것이 아니라 줄-스코프로 좁히는 것이다.
 NEG_ONLY=(
   "$REPO_ROOT/plugins/spec-distill/references/proceed-gate.md"
-  "$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/references/finishing.md"
+  "$REPO_ROOT/plugins/spec-distill/skills/spec-interview/references/finishing.md"
   "$REPO_ROOT/docs/philosophy/devbrew-harness-philosophy.md"
-  "$REPO_ROOT/plugins/spec-distill/skills/framing-requests/SKILL.md"
+  "$REPO_ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
 )
 
 # ── 부재 코퍼스 — 「이 자리에는 상한 숫자가 하나도 없다」 ─────────────────────
@@ -79,7 +79,7 @@ NEG_ONLY=(
 # 분량에도 상한이 없습니다」)을 잡아 옳은 상태를 벌한다. 네 형태 밖 표기로 다시 적으면 이
 # 검사도 침묵한다(알려진 구멍 — 그 표기가 실제로 나타났을 때 어휘를 넓힌다).
 ABSENT=(
-  "$REPO_ROOT/plugins/spec-distill/skills/framing-requests/SKILL.md"
+  "$REPO_ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
 )
 
 
@@ -168,7 +168,7 @@ fi
 # (알려진 한계, Section 4 의 `seen` floor 와 같은 처지). 이 floor 는 Section 4 의
 # `seen` 에 합치지 않는다 — 합치면 한쪽 코퍼스의 증가가 다른 쪽의 소실을 가린다.
 if [ "${#ABSENT[@]}" -lt 1 ]; then
-  no "부재: ABSENT 코퍼스가 비었다(0건) — 최소 1건(framing-requests/SKILL.md)이 있어야 한다. 배열을 비우면 부재 검사 전체가 검사 없이 조용히 통과한다"
+  no "부재: ABSENT 코퍼스가 비었다(0건) — 최소 1건(request-framing/SKILL.md)이 있어야 한다. 배열을 비우면 부재 검사 전체가 검사 없이 조용히 통과한다"
 else
   for f in "${ABSENT[@]}"; do
     rel="${f#"$REPO_ROOT"/}"

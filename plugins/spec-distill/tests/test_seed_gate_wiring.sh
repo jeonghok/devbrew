@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/framing-requests/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf plugins/spec-distill/scripts/build_seed_inline_blob.py plugins/spec-distill/scripts/seed_review_log.py shared/docreview/scripts/docreview_state.py
+# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf plugins/spec-distill/scripts/build_seed_inline_blob.py plugins/spec-distill/scripts/seed_review_log.py shared/docreview/scripts/docreview_state.py
 #
-# framing-requests 의 `## 상태` 블록 · `### 번들` 펜스 · codex 게이트 펜스를 잘라내 **차가운 셸
+# request-framing 의 `## 상태` 블록 · `### 번들` 펜스 · codex 게이트 펜스를 잘라내 **차가운 셸
 # (`env -i`)에서 실행**해 디스크 사후상태를 잰다. 읽어서 판정하지 않는다 — 옳아 보이는 펜스가
 # 미할당 변수로 죽는 결함은 실행으로만 드러난다.
 #
@@ -19,9 +19,9 @@
 # 실제 codex 로 새지 않는다. 리포의 배포 지점은 건드리지 않는다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SK="$ROOT/plugins/spec-distill/skills/framing-requests/SKILL.md"
+SK="$ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
 if [ "${1:-}" = "--emit-scanned" ]; then
-  for f in plugins/spec-distill/skills/framing-requests/SKILL.md plugins/spec-distill/scripts/detect_codex.sh \
+  for f in plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/detect_codex.sh \
            plugins/spec-distill/scripts/codex-killswitch.conf plugins/spec-distill/scripts/build_seed_inline_blob.py \
            plugins/spec-distill/scripts/seed_review_log.py shared/docreview/scripts/docreview_state.py; do
     echo "$f"

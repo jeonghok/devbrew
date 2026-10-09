@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1]
-SKILL = PLUGIN / "skills" / "auditing-plugins" / "SKILL.md"
+SKILL = PLUGIN / "skills" / "plugin-audit" / "SKILL.md"
 README = PLUGIN / "README.md"
 # 버그 형태: `--artifacts` 에 실행 디렉토리 자체를 넘긴다 — validate-audit-data.py가
 # `read_text()`+`json.loads()`에서 IsADirectoryError로 죽는다 (review fix 1).

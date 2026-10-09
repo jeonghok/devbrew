@@ -308,18 +308,18 @@ fi
 #   예전 판정은 `grep -q "spec-distill:$a"` 였다. 그러면 접두사 없이
 #   `subagent_type: "spec-reviewer"` 로 쓴 저자는 **자기 skill을 감사 대상에서
 #   스스로 빼낸다** — 검사받는 파일이 자기가 검사받을지를 결정하는 구조다.
-#   실제로 reviewing-spec이 그렇게 통째로 누락됐고, 그 사이 이 브랜치가
+#   실제로 spec-review이 그렇게 통째로 누락됐고, 그 사이 이 브랜치가
 #   spec-reviewer에 WebSearch를 부여했다. 도구 권한은 Law 2로 나눠도 **감사 범위**가
 #   피검자에게 있으면 소용없다. 그래서 접두사를 선택적으로 만든다.
 #
 # 그리고 존재 검사를 **지배 관계**로 바꾼다:
 #   예전엔 "이 파일 어딘가에 CHECK가 있다"였다. 그 명제는 dispatch가 열 개여도
-#   가드가 하나면 참이다 — conducting-interview가 정확히 그 상태였다(R2 블록 하나가
+#   가드가 하나면 참이다 — spec-interview가 정확히 그 상태였다(R2 블록 하나가
 #   coverage-mapper dispatch까지 '덮는' 것처럼 보였다). 이제 각 dispatch 지점마다
 #   그 **위쪽 WINDOW줄 안에** 스위치 확인이 있어야 한다.
 GUARD_WINDOW=40
 # Task 32(무게 감축): 스킬 절차 전문이 `skills/<skill>/references/*.md` 로 분리되기
-# 시작했다(conducting-interview/references/finishing.md). 표면을 SKILL.md 로만 잡으면
+# 시작했다(spec-interview/references/finishing.md). 표면을 SKILL.md 로만 잡으면
 # 아래 두 **부재** 검사(느슨한 참 판정 · 상한 게이트 재도입)가 분리분을 못 본다 —
 # 부재 락은 코퍼스가 줄어도 RED 가 아니라 조용히 약해진다. 그래서 표면을 도출한다.
 # 근접 가드는 파일 안 줄번호로 재므로 파일마다 독립적으로 도는 것이 맞다.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/scripts/* plugins/spec-distill/agents/* plugins/spec-distill/skills/framing-requests/SKILL.md shared/docreview/scripts/*
+# guards: plugins/spec-distill/scripts/* plugins/spec-distill/agents/* plugins/spec-distill/skills/request-framing/SKILL.md shared/docreview/scripts/*
 #
 # seed 자리의 리뷰는 문서 리뷰 엔진이 진다 — 옛 전용 파일 넷(격리 critic · codex 러너 · codex 프롬프트
 # 빌더 · 억제 체크리스트)이 없고, 그 자리를 엔진이 실제로 채운다(설계 2026-09-16-framing-intent-drift
@@ -12,7 +12,7 @@
 set -u -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD_REL="plugins/spec-distill"; SD="$REPO_ROOT/$SD_REL"
-SKILL_REL="$SD_REL/skills/framing-requests/SKILL.md"
+SKILL_REL="$SD_REL/skills/request-framing/SKILL.md"
 GONE="agents/seed-critic.md scripts/run_seed_codex_reviewer.sh scripts/build_seed_codex_prompt.py scripts/seed-codex-suppression-checklist.md"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
@@ -47,15 +47,15 @@ for spec in "run_docreview_codex_reviewer.sh:shared/docreview/scripts/run_docrev
   fi
 done
 SKILL="$REPO_ROOT/$SKILL_REL"
-if [ ! -f "$SKILL" ]; then no "framing-requests SKILL.md 부재"; finish; exit; fi
+if [ ! -f "$SKILL" ]; then no "request-framing SKILL.md 부재"; finish; exit; fi
 grep -qE '<!--[[:space:]]*codex-gate:begin[[:space:]]+runner=run_docreview_codex_reviewer\.sh' "$SKILL" \
-  && ok "framing-requests: codex 게이트 마커가 엔진 러너를 댄다" || no "framing-requests: codex 게이트 마커가 엔진 러너를 대지 않는다"
+  && ok "request-framing: codex 게이트 마커가 엔진 러너를 댄다" || no "request-framing: codex 게이트 마커가 엔진 러너를 대지 않는다"
 grep -qF 'bash "$SD/scripts/run_docreview_codex_reviewer.sh" "$PROFILE" "$BUNDLE"' "$SKILL" \
-  && ok "framing-requests: 엔진 러너를 탐지 번들로 부른다" || no "framing-requests: 엔진 러너 호출이 없다"
+  && ok "request-framing: 엔진 러너를 탐지 번들로 부른다" || no "request-framing: 엔진 러너 호출이 없다"
 grep -qF 'subagent_type: "spec-distill:doc-critic"' "$SKILL" \
-  && ok "framing-requests: 탐지는 엔진 탐지기(doc-critic)" || no "framing-requests: 엔진 탐지기 dispatch 가 없다"
+  && ok "request-framing: 탐지는 엔진 탐지기(doc-critic)" || no "request-framing: 엔진 탐지기 dispatch 가 없다"
 grep -qF 'subagent_type: "spec-distill:doc-recritic"' "$SKILL" \
-  && ok "framing-requests: 재비판은 엔진 재비판기(doc-recritic)" || no "framing-requests: 엔진 재비판기 dispatch 가 없다"
+  && ok "request-framing: 재비판은 엔진 재비판기(doc-recritic)" || no "request-framing: 엔진 재비판기 dispatch 가 없다"
 grep -qF 'consumer=plugins/spec-distill/scripts/docreview_route.py' "$SKILL" \
-  && ok "framing-requests: 발견의 처분 소비자가 엔진 라우터다" || no "framing-requests: 처분 앵커가 엔진 라우터를 대지 않는다"
+  && ok "request-framing: 발견의 처분 소비자가 엔진 라우터다" || no "request-framing: 처분 앵커가 엔진 라우터를 대지 않는다"
 finish

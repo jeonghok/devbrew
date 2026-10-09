@@ -1,10 +1,15 @@
 ---
-name: auditing-plugins
+name: plugin-audit
 description: >
-  임의의 devbrew 플러그인을 읽기전용·증거기반·multi-agent로 감사한다. /plugin-audit <target>
-  [--seed <path>]로 트리거. 6축 발견 → 적대적 반박 → blind codex co-audit → 우선순위 갭 리포트.
+  임의의 devbrew 플러그인을 읽기전용·증거기반·multi-agent로 감사한다. 사용자가
+  `/plugin-audit:plugin-audit <target> [--seed <path>]` 로 부른다(모델은 부르지 않는다).
+  6축 발견 → 적대적 반박 → blind codex co-audit → 우선순위 갭 리포트.
   지출 동의 게이트·정적 게이트·Workflow·결정론 post-1 조립을 소유한다.
 cost_class: high
+argument-hint: <target> [--seed <path>]
+disable-model-invocation: true
+allowed-tools:
+  - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" plugin-audit plugin-audit)
 ---
 
 # Auditing Plugins — 오케스트레이션
@@ -36,9 +41,27 @@ cwd에서 부르면 조용히 엉뚱한(또는 부재하는) 경로를 본다. (
 parse만 되고 `check()`엔 전달되지 않는 dead flag — cwd 민감성의 원인이 아니다.) `check-law2.py` 의
 `--agents-dir` 기본값은 스크립트 위치 기준(`<플러그인 루트>/agents`)이다.
 
+!`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" plugin-audit plugin-audit`
+
+## 진입 단계
+
+이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽는다.
+
+| 그 자리의 내용 | 동작 |
+|---|---|
+| `[devbrew-entry] ok …` | 아래 인자 해석으로 간다. 그 줄의 `root=` 값을 `--seed` 상대경로에 쓴다 |
+| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다(no-op). 실행 디렉토리를 만들지 않는다 |
+| `[devbrew-entry] error …` | `[plugin-audit] 사전 검사 실패 — <reason= 값>. 감사를 시작하지 않는다.` 를 내고 멈춘다 |
+| `[shell command execution disabled by policy]` | `[plugin-audit] 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 감사를 시작하지 않는다.` 를 내고 멈춘다 |
+| 감시줄 없음 · 그 밖 | `[plugin-audit] 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 감사를 시작하지 않는다.` 를 내고 멈춘다 |
+
+이 표가 보는 kill switch 는 `DEVBREW_PLUGIN_AUDIT_DISABLE=1` 하나다.
+
+**인자 해석** — 받은 인자의 첫 토큰이 `<target>`(플러그인 이름)이다. 그 뒤에 `--seed <path>` 가 올 수 있고, 상대경로면 `root=` 기준으로 푼다. `<target>` 이 비었으면 `감사할 플러그인 이름이 필요합니다 — /plugin-audit:plugin-audit <target> [--seed <path>]` 를 내고 멈춘다. 그 밖이면 `target` · `seedPath` 를 들고 `## phase 0` 으로 간다.
+
 ## phase 0 — consent (dispatch 전 필수)
 
-1. **kill switch**: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`이면 즉시 종료(no-op).
+1. **kill switch**: `DEVBREW_PLUGIN_AUDIT_DISABLE=1` 이면 `## 진입 단계` 가 이미 멈췄다(no-op).
 2. **target 검증** — `<target>`이 **평범한 플러그인 이름**인지 확인한다: `plugins/<target>/`이 실존하는
    디렉토리여야 하고, `../`나 경로 구분자(`/`)를 포함하면 즉시 거부한다. 이 검증은 scope 문자열이나
    샌드박스 경로(`run-own-tests.sh`, `check-integrity.sh --target`)에 target을 꽂아 넣기 **전에** 끝낸다

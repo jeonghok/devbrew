@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""reviewing-spec 진입 검사 — 끄기 판정과 은퇴 스위치 공시.
+"""spec-review 진입 검사 — 끄기 판정과 은퇴 스위치 공시.
 
 stdout 에 JSON 한 줄을 낸다: {"disabled": bool, "reason": str|null, "advisories": [str]}.
 정상 실행은 항상 rc 0 이다 — 끔 여부는 rc 가 아니라 `disabled` 가 말한다. 소비자는
-`skills/reviewing-spec/SKILL.md` 의 `review-entry` 펜스이고, 펜스가 스키마를 검사해
+`skills/spec-review/SKILL.md` 의 `review-entry` 펜스이고, 펜스가 스키마를 검사해
 어긋나거나 rc≠0 이면 끔으로 친다.
 
 끄는 스위치:

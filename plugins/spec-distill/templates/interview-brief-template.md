@@ -3,7 +3,7 @@ name: <kebab-topic>
 type: interview-brief
 created_at: YYYY-MM-DD
 session_id: <uuid>
-source: spec-distill conducting-interview v0.23.0
+source: spec-distill spec-interview v0.23.0
 next_phase: superpowers:brainstorming
 # contract: v2 — 조사 축 술어 다섯의 옵트인 스위치. 빼면 전부 미발동 + advisory
 contract: v2
@@ -109,5 +109,5 @@ user_sourced_items:
 ## 7. Next Action
 
 (superpowers 있으면: 이 brief를 context로 `superpowers:brainstorming` 호출 → `-design.md` 작성·커밋
- → 그 설계문서 경로로 `spec-distill:reviewing-spec`(brainstorming 의 사용자 리뷰 게이트 대신) → 승인
+ → 그 설계문서 경로로 `spec-distill:spec-review`(brainstorming 의 사용자 리뷰 게이트 대신) → 승인
  게이트에서 진행을 고른 뒤 `superpowers:writing-plans`. 없으면: 이 brief가 완결 산출물 — 직접 사용.)
