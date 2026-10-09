@@ -605,6 +605,16 @@ case_recritic_findings_stamp_agent_and_drop_confidence() {
   assert_not_grep "$(cat "$SKILL")" '리뷰어가 낸 값을 그대로 옮긴다' "옛 confidence 보존 지시가 없다"
 }
 
+case_reference_names_the_blocking_key_not_kept() {
+  # 최종 리뷰 M6 — 합성기 출력 키는 `blocking:` 이다. 모델이 읽는 레퍼런스가 없어진 kept 를
+  # 가리키면 거짓 인용이다. 음의 락이라 양의 짝(그 자리의 새 문구)을 함께 둔다.
+  assert_file_absent "$REF" '(^|[^A-Za-z_])kept[ ]?=[ ]?0' "레퍼런스가 없어진 kept=0 을 가리키지 않는다"
+  assert_file_grep "$REF" '^\*\*판정 옆 차등 요약과 `blocking: 0` 라우팅은 SKILL 이 진다\.\*\*' \
+    "레퍼런스가 같은 라우팅을 blocking: 0 으로 이름 붙인다 (양의 짝)"
+  assert_file_grep "$REF" '`verdict: defect` 이면서 `blocking: 0`\(`confirmed_product_defect: true` 가 유일한 원인\)일 때' \
+    "차등 기원 defect 조건도 blocking: 0 으로 적는다 (양의 짝)"
+}
+
 for c in case_every_synth_call_emits_verdict_and_angles case_blocking_angle_dispatches_are_fail_closed \
          case_reason_literals_are_closed_and_pinned case_angle_template_is_total \
          case_differential_runs_inside_every_iteration \
@@ -615,7 +625,8 @@ for c in case_every_synth_call_emits_verdict_and_angles case_blocking_angle_disp
          case_security_kill_switch_routes_to_absent case_differential_kill_switch_env_name_is_pinned \
          case_differential_defect_zero_kept_routes_to_fixloop case_zero_adapter_aggregate_skips_glob \
          case_n5_and_retry_cover_differential_origin \
-         case_recritic_findings_stamp_agent_and_drop_confidence; do
+         case_recritic_findings_stamp_agent_and_drop_confidence \
+         case_reference_names_the_blocking_key_not_kept; do
   "$c"
 done
 finish

@@ -150,7 +150,7 @@ quality-gates/
 
 ### Codex reviewer cost
 
-The optional `codex-reviewer` agent has `cost_class: variable` — as an **availability-floor** it invokes the user's Codex CLI subscription/API on **every non-trivia pipeline iteration when detected (scope-independent)**. First-use cost consent gate prompts via `AskUserQuestion`. Disable globally with `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1`.
+The optional `codex-reviewer` agent has `cost_class: variable` — as an **availability-floor** it invokes the user's Codex CLI subscription/API on **every non-trivia pipeline iteration when detected (scope-independent)**. Disable globally with `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1`.
 
 ### PR-understanding publish cost (`/qg-publish`, separate from the pipeline)
 

@@ -1005,9 +1005,9 @@ SKILL Step 4 가 싣는 판정 입력:
 | `check_qa_ledger.py` non-zero | `--reason silent-drop` |
 | `check_qa_ledger.py` exit 0 이지만 원장(`runtime-evidence.md`)의 `floor:verification` 이 `degraded` 이거나 `unclaimed` unit 이 있다(그 게이트는 원장 내부 일관성만 보고 이 경우도 exit 0 을 낼 수 있다) | `--reason silent-drop` |
 
-**판정 옆 차등 요약과 kept=0 라우팅은 SKILL 이 진다.** `$aggregate_yaml` 의
+**판정 옆 차등 요약과 `blocking: 0` 라우팅은 SKILL 이 진다.** `$aggregate_yaml` 의
 `resolution_disclosure:` 줄과 이번 iteration `per-adapter-*.yaml` 의 non-green
 `attributions:` 행(unit · 분류)을 판정 줄 옆에 verbatim 으로 보이는 것, 그리고
-`verdict: defect` 이면서 kept = 0(`confirmed_product_defect: true` 가 유일한 원인)일 때
+`verdict: defect` 이면서 `blocking: 0`(`confirmed_product_defect: true` 가 유일한 원인)일 때
 Final verdict(판정 줄 · `result.md`)로 직행하지 않고 Fix-loop decision 으로 라우팅하는 것은 SKILL Step 4.5 의 일이다 —
 이 레퍼런스는 그 입력(`$aggregate_yaml` · per-adapter YAML)만 만든다.
