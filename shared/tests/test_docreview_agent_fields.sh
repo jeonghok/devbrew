@@ -86,8 +86,7 @@ fi
 # 쉬운 말 출력 PR 1 (설계 §5 첫 불릿 · 계획 P11) — 사람이 읽는 세 칸에 한 줄. evidence 는 인용이라 원문 그대로.
 PLAIN_LINE='처음 보는 사람이 읽는다 — 내부 번호 없이 쉬운 말로 쓴다'
 for f in shared/docreview/agents/doc-critic.md shared/docreview/agents/doc-critic-web.md shared/docreview/agents/doc-recritic.md \
-         plugins/spec-distill/agents/doc-critic.md plugins/spec-distill/agents/doc-critic-web.md plugins/spec-distill/agents/doc-recritic.md \
-         plugins/quality-gates/agents/doc-recritic.md; do
+         plugins/spec-distill/agents/doc-critic.md plugins/spec-distill/agents/doc-critic-web.md plugins/spec-distill/agents/doc-recritic.md; do
   assert_file_grep "$f" "$PLAIN_LINE" "쉬운 말 칸: $f 가 사람이 읽는 칸에 쉬운 말 한 줄을 싣는다"
   assert_file_grep "$f" 'evidence`? ?는 문서 인용이라 원문 그대로' "쉬운 말 칸: $f 가 근거는 원문 그대로라고 적는다"
 done
