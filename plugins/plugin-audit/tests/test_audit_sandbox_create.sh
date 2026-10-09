@@ -99,12 +99,53 @@ BASE=$(printf '%s\n' "$OUT" | sed -n '2p')
   && ok "staged file present in baseline B" || no "staged file not in baseline B"
 rm -rf "$REPO"
 
-echo "[create-sandbox: kill switch]"
-REPO=$(mk_repo)
-( cd "$REPO" && DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1 "$WT" create-sandbox "kill01234567" 2>/dev/null )
-rc=$?
-[ "$rc" -eq 3 ] && ok "kill switch → exit 3" || no "kill switch exit was $rc (want 3)"
-rm -rf "$REPO"
+NEW_SW=DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX
+OLD_SW=DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX
+ERRF=$(mktemp)
+
+# kill_case <label> <env assignments...> — exit 3, 아무것도 만들지 않음, stderr 정확히 한 줄.
+kill_case() {
+  local label="$1"; shift
+  local r; r=$(mk_repo)
+  ( cd "$r" && env -u "$NEW_SW" -u "$OLD_SW" "$@" "$WT" create-sandbox "kill01234567" >/dev/null 2>"$ERRF" )
+  local rc=$?
+  [ "$rc" -eq 3 ] && ok "$label → exit 3" || no "$label exit was $rc (want 3)"
+  [ ! -e "$r/.claude/plugin-audit" ] && ok "$label → 샌드박스 네임스페이스를 만들지 않는다" \
+    || no "$label 인데 $r/.claude/plugin-audit 가 생겼다"
+  local wts; wts=$(cd "$r" && git worktree list | wc -l | tr -d ' ')
+  assert_eq "$wts" "1" "$label → 워크트리를 더하지 않는다"
+  local lines; lines=$(wc -l < "$ERRF" | tr -d ' ')
+  assert_eq "$lines" "1" "$label → stderr 는 정확히 한 줄"
+  rm -rf "$r"
+}
+
+echo "[create-sandbox: kill switch — 새 이름]"
+kill_case "새 이름 $NEW_SW=1" "$NEW_SW=1"
+assert_contains "$(cat "$ERRF")" "$NEW_SW=1" "새 이름 → stderr 가 새 이름을 밝힌다"
+assert_not_contains "$(cat "$ERRF")" "$OLD_SW" "새 이름 → stderr 에 옛 이름이 없다"
+
+echo "[create-sandbox: kill switch — 옛 이름 별칭 (0.11.1)]"
+kill_case "옛 이름 $OLD_SW=1" "$OLD_SW=1"
+assert_contains "$(cat "$ERRF")" "$OLD_SW=1" "옛 이름 → stderr 가 옛 이름을 밝힌다"
+assert_contains "$(cat "$ERRF")" "renamed to $NEW_SW" "옛 이름 → stderr 가 새 이름으로의 개명을 알린다"
+
+echo "[create-sandbox: kill switch — 값 전체 일치만 (양의 짝)]"
+# 스위치가 없거나 값이 정확히 1 이 아니면 샌드박스가 선다 — 위 exit 3 이 「무엇이든 막는다」가
+# 아니라는 증거.
+for assign in "" "$OLD_SW=0" "$OLD_SW=true" "$OLD_SW=11" "$NEW_SW=0"; do
+  REPO=$(mk_repo)
+  if [ -n "$assign" ]; then
+    OUT=$(cd "$REPO" && env -u "$NEW_SW" -u "$OLD_SW" "$assign" "$WT" create-sandbox "pos0123456789" 2>/dev/null); rc=$?
+  else
+    OUT=$(cd "$REPO" && env -u "$NEW_SW" -u "$OLD_SW" "$WT" create-sandbox "pos0123456789" 2>/dev/null); rc=$?
+  fi
+  SANDBOX=$(printf '%s\n' "$OUT" | sed -n '1p')
+  [ "$rc" -eq 0 ] && [ -n "$SANDBOX" ] && [ -d "$SANDBOX" ] \
+    && ok "스위치 '${assign:-없음}' → 샌드박스 생성 (rc 0)" \
+    || no "스위치 '${assign:-없음}' → rc=$rc sandbox='$SANDBOX' (샌드박스가 서야 한다)"
+  rm -rf "$REPO"
+done
+rm -f "$ERRF"
 
 echo "[remove: namespace guard]"
 REPO=$(mk_repo)
