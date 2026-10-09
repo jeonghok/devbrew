@@ -64,7 +64,7 @@ case_new_skeleton_present() {
   assert_file_grep "$SKILL" '^## Differential test$'                "SKILL 에 차등 테스트 포인터 절이 있다"
   assert_file_grep "$SKILL" 'references/differential-test\.md'      "포인터가 새 레퍼런스를 가리킨다"
   assert_eq "$(grep -E '^## ' "$SKILL" | tr '\n' '|')" \
-    "## Preflight|## Flow|## Review|## Differential test|## Fix-loop|## Final verdict|## kill switch|## Rules|## Requirement index|" \
+    "## 사람에게 쓰는 글|## Preflight|## Flow|## Review|## Differential test|## Fix-loop|## Final verdict|## kill switch|## Rules|## Requirement index|" \
     "K-8 — SKILL 의 ## 절이 이 순서다(③ 은 Publish, ④ 는 e2e 를 끼우며 이 핀을 고친다)"
   assert_file_grep "$REF"   '^## Differential test$'                "레퍼런스 머리 헤딩(스플라이스 앵커)"
   assert_file_grep "$REF"   'scripts/seal-worktree\.sh" seal'       "HEAD 축은 봉인에서 선다"
