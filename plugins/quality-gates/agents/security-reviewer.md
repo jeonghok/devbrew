@@ -79,7 +79,7 @@ Set `severity` by the `criteria` block. A finding is `CRITICAL` or `IMPORTANT` o
 
 Use `CRITICAL` when the path is traceable from the diff to a severe impact (data breach, RCE, auth bypass) — including when the input *looks* user-controlled but its validation is not shown in the diff. Do not report a finding whose attack needs conditions you have no evidence for.
 
-A credential, API key, token, or encryption key that the change commits to source is an exploitable path the change itself introduces — `CRITICAL`, with no further evidence needed. A dependency-manifest entry (see `## Hunt categories`) is reported as fact at `SUGGESTION` — this gate cannot adjudicate CVE status, so the entry alone is not a blocking condition; how the changed code uses the dependency is judged by the other categories.
+A credential, API key, token, or encryption key that the change commits to source is an exploitable path the change itself introduces — `CRITICAL`, with no further evidence needed. A dependency-manifest finding (see `## Hunt categories`) follows the same `criteria` block as every other finding: it is `CRITICAL` or `IMPORTANT` when the finding shows a concrete exploitable path the change introduces — for example, the change adds or bumps a dependency to a version with a known vulnerability (named in the diff, the `intent`, or the repository) in code the change uses. Otherwise it is reported as fact at `SUGGESTION`.
 
 ## Output format
 

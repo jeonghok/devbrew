@@ -31,6 +31,9 @@ assert_fixed() {
   if printf '%s\n' "$1" | grep -qF -- "$2"; then ok "$3"
   else no "$3"; printf '      literal:  %s\n' "$2"; fi
 }
+assert_not_fixed() {  # assert_fixed 의 짝
+  if printf '%s\n' "$1" | grep -qF -- "$2"; then no "$3 (금지 리터럴: $2)"; else ok "$3"; fi
+}
 
 # Frontmatter required keys
 assert_count_ge "grep -c '^name: security-reviewer$' '$PERSONA'" 1 "frontmatter name"
@@ -61,7 +64,9 @@ assert_fixed "$(severity_section)" 'Code this change did not touch is out of sco
 assert_fixed "$(severity_section)" 'including when the input *looks* user-controlled but its validation is not shown in the diff' "Severity — 검증이 diff 에 안 보이는 사용자 입력도 CRITICAL"
 assert_fixed "$(severity_section)" 'Do not report a finding whose attack needs conditions you have no evidence for.' "Severity — 근거 없는 조건이 필요한 공격은 내지 않는다"
 assert_fixed "$(severity_section)" 'that the change commits to source is an exploitable path the change itself introduces — `CRITICAL`' "Severity — 변경이 커밋한 비밀은 막는 CRITICAL"
-assert_fixed "$(severity_section)" 'A dependency-manifest entry (see `## Hunt categories`) is reported as fact at `SUGGESTION`' "Severity — 의존성 매니페스트 항목의 자리"
+assert_fixed "$(severity_section)" 'A dependency-manifest finding (see `## Hunt categories`) follows the same `criteria` block as every other finding: it is `CRITICAL` or `IMPORTANT` when the finding shows a concrete exploitable path the change introduces' "Severity — 의존성 매니페스트도 같은 기준: 변경이 들인 구체 경로면 막는 지적"
+assert_fixed "$(severity_section)" 'Otherwise it is reported as fact at `SUGGESTION`.' "Severity — 구체 경로가 없는 매니페스트 항목은 SUGGESTION 으로 사실 보고"
+assert_not_fixed "$(severity_section)" 'the entry alone is not a blocking condition' "Severity — 매니페스트를 일괄 비차단으로 두는 옛 문구가 없다"
 assert_count_ge "grep -cE '^  - tag: (intent|criteria)$' '$PERSONA'" 2 "intent · criteria 입력 슬롯을 선언한다"
 assert_count_ge "grep -c '^[[:space:]]*file:' '$PERSONA'" 1 "schema key file:"
 assert_count_ge "grep -c '^[[:space:]]*line:' '$PERSONA'" 1 "schema key line:"
