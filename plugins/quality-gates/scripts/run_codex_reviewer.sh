@@ -214,7 +214,7 @@ fi
 # 형제는 `run_docreview_codex_reviewer.sh` 다.)
 #
 # Direct codex invocation — no per-call timeout (hang risk accepted; backstops:
-# Bash tool timeout, DEVBREW_QUALITY_GATES_DISABLE_CODEX=1, /cancel-qg). Layer 3 sandbox
+# Bash tool timeout, DEVBREW_QUALITY_GATES_DISABLE_CODEX=1). Layer 3 sandbox
 # (-s read-only) preserved. `|| EXIT_CODE=$?` keeps capture safe under set -e.
 #
 # 웹 posture를 **명시한다.** 미지정은 codex 기본값(`web_search = "cached"`)에 맡기는

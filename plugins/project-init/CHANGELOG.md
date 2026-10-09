@@ -5,10 +5,17 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
-## [4.0.3] — 2026-10-09
+## [4.0.4] — 2026-10-09
 
 ### Changed
 - SKILL.md·명령 파일 맨 앞(H1 바로 다음)에 「사람에게 쓰는 글」 규칙 블록을 둔다. 정본은 리포의 `shared/style/plain-language.md` 이고 `shared/tests/test_plain_language_block.sh` 가 같음을 잰다.
+
+## [4.0.3] — 2026-10-09
+
+### Changed
+
+- 정본 사본(`scripts/kill_switch_active.py` · `scripts/devbrew-python.sh`)의 주석이 지워진 quality-gates 의 `session-start-advisor` 훅과 그 `SessionStart` 안내를 인용하지 않는다(정본 `shared/` 와 함께). `devbrew-python.sh` 주석은 `DEVBREW_PYTHON_IGNORED` 를 읽는 훅이 지금 없다는 사실을 적는다. 동작은 바뀌지 않았다.
+- README 「Python」 안내 — quality-gates 10.0.0 이 devbrew 의 마지막 `SessionStart` 자리를 지워 바닥 미만 안내가 나가지 않는다는 사실을 적는다.
 
 ## [4.0.2] — 2026-09-28
 

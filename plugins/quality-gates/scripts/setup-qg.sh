@@ -1,45 +1,42 @@
 #!/bin/bash
 
-# Quality Gates Pipeline Setup Script
-# Creates per-session state file for in-turn pipeline orchestration
-# (AskUserQuestion-iteration model; no Stop hook continuation).
-# All file I/O happens here (bash), not through Claude's Write tool,
-# so no permission prompts are triggered.
+# Quality Gates — 진입 setup. 세 가지만 한다: kill switch · 세션 폴더(SID 가드) · 인자 거부.
+# 파일 I/O 는 여기(bash)에서 한다 — SKILL 의 Write 도구를 거치지 않아 권한 질문이 뜨지 않는다.
 
 set -euo pipefail
 
-# --- Defense-in-depth kill switch ---
-# SKILL preflight P1 also checks this and short-circuits before calling
-# setup-qg.sh. Honoring it here too means direct callers (tests, scripts)
-# can't accidentally bypass the kill switch via a fresh invocation.
+# --- `critique` 는 setup 의 몫이 아니다 — /qg critique 는 critiquing-artifacts 로 간다(qg.md).
+# 출력도 상태도 남기지 않고 0 으로 끝난다. kill switch 는 그 skill 의 E0 가 본다.
+if [[ "${1:-}" == "critique" ]]; then
+  exit 0
+fi
+
+# --- kill switch (SKILL Preflight P1 도 같은 스위치를 본다 — 직접 호출도 막는다) ---
 if [[ "${DEVBREW_QUALITY_GATES_DISABLE:-}" == "1" ]]; then
   echo "[quality-gates] setup-qg disabled via DEVBREW_QUALITY_GATES_DISABLE=1" >&2
   exit 1
 fi
 
-# --- Argument Parsing ---
-
-REMOVED_ARGS=""
+# --- 인자 ---
+REMOVED_ARGS=""   # v9 에서 없앤 게이트 인자 — 공지 후 진행
+GONE_ARGS=""      # v10 에서 없앤 인자 — 공지 후 실행하지 않음
 PLAN_FILE="auto"
-PR_URL=""
 ENSURE_MODE="false"
 SESSION_ID=""
-BRANCH_MODE="false"
-TARGET_BRANCH=""
+
+gone() {   # gone <인자 표기> <안내>
+  GONE_ARGS="${GONE_ARGS}> [quality-gates] \`${1}\` 인자는 없어졌다 — ${2}. 실행하지 않는다."$'\n'
+}
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     review|runtime|both|--skip-runtime)
-      # 제거된 인자 — 한 파이프라인이라 고를 게이트가 없다. 조용히 무시하지 않고
-      # 아래 출력에서 한 줄씩 알린 뒤 정상 진행한다(설계 §6.5.2).
       REMOVED_ARGS="$REMOVED_ARGS $1"
       shift
       ;;
     --paths)
-      # 스코프 override 는 SKILL 이 $ARGUMENTS 에서 직접 읽는다 — 여기서는 소비만 한다.
-      # 다음 토큰이 없거나 `--` 로 시작하거나 제거/branch 키워드면 글롭 0개 —
-      # 아래 while 루프가 한 번도 안 돌 조건과 정확히 같아야 한다(그래야 0글롭이
-      # 조용히 통과하지 않는다).
+      # 범위 override 는 SKILL 이 $ARGUMENTS 에서 직접 읽는다 — 여기서는 소비만 한다.
+      # 글롭 0개 조건은 아래 while 이 한 번도 안 돌 조건과 같아야 한다.
       shift
       if [[ $# -eq 0 ]] || [[ "$1" =~ ^-- ]] || [[ "$1" =~ ^(review|runtime|both|branch)$ ]]; then
         echo "❌ Error: --paths requires at least one glob" >&2
@@ -49,22 +46,26 @@ while [[ $# -gt 0 ]]; do
         shift
       done
       ;;
-    --gc)
-      # qg.md 가 GC 를 이미 돌렸다 — setup 은 무시한다.
-      shift
-      ;;
     branch)
+      # 맨 `branch` 는 범위 override 다(SKILL 이 읽는다). 뒤에 이름이 오면 v9 의 worktree 모드다.
       shift
-      # peek next token
-      if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]] && [[ ! "$1" =~ ^(review|runtime|both)$ ]]; then
-        TARGET_BRANCH="$1"
+      if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^- ]] && [[ ! "$1" =~ ^(review|runtime|both)$ ]]; then
+        gone "branch <name>" "다른 브랜치는 체크아웃하거나 그 브랜치의 git worktree 안에서 /qg 를 돌린다"
         shift
       fi
-      BRANCH_MODE="true"
       ;;
-    --ensure)
-      ENSURE_MODE="true"
+    --reset)
+      gone "--reset" "세션 폴더는 /qg 를 시작할 때마다 지우고 다시 만든다"
       shift
+      ;;
+    --gc)
+      gone "--gc" "TTL GC 는 /qg 를 시작할 때마다 자동으로 돈다"
+      shift
+      ;;
+    --pr-url)
+      gone "--pr-url" "이 값을 읽는 곳이 없었다"
+      shift
+      if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^- ]]; then shift; fi
       ;;
     --plan)
       if [[ -z "${2:-}" ]]; then
@@ -74,13 +75,9 @@ while [[ $# -gt 0 ]]; do
       PLAN_FILE="$2"
       shift 2
       ;;
-    --pr-url)
-      if [[ -z "${2:-}" ]]; then
-        echo "❌ Error: --pr-url requires a URL argument" >&2
-        exit 1
-      fi
-      PR_URL="$2"
-      shift 2
+    --ensure)
+      ENSURE_MODE="true"
+      shift
       ;;
     --session-id)
       if [[ -z "${2:-}" ]]; then
@@ -95,30 +92,21 @@ while [[ $# -gt 0 ]]; do
 Quality Gates Pipeline Setup
 
 USAGE:
-  /qg [branch [<name>]] [OPTIONS]
+  /qg [branch] [--paths <glob>...] [--plan <path>]
 
 ARGUMENTS:
-  branch [<name>]      Review the full branch diff (with <name>: in an isolated worktree)
-  (none)               Review git-derived changes (branch + worktree)
+  (none)               Review git-derived changes (branch + worktree) or the Spec: topic
+  branch               Review the full branch diff against base
 
 OPTIONS:
   --paths <glob>...    Scope override — review only the matched paths
   --plan <path>        Specify plan file path (default: auto-detect)
-  --pr-url <url>       Specify PR URL
-  --session-id <id>    Override session ID (defaults to CLAUDE_CODE_SESSION_ID)
-  --ensure             Idempotent mode: no-op if state from this session
-                       already exists (used by skill preflight, not /qg).
+  --session-id <id>    Session ID when CLAUDE_CODE_SESSION_ID is unset (if it is set, must equal it)
+  --ensure             Keep this session's folder if it already exists (skill preflight)
   -h, --help           Show this help message
 
-REMOVED (v9): review · runtime · both · --skip-runtime — one pipeline, no gate
-  scope to choose. Passing one prints a one-line notice and the run proceeds.
-
-PIPELINE:
-  scope → differential test → reviewers → re-critique → verdict
-  (clean · defect · not-certified (<reason>))
-
-STOPPING:
-  Use /cancel-qg to cancel an active pipeline
+REMOVED (v10): branch <name> · --reset · --gc · --pr-url — one notice line each, then exit 2.
+REMOVED (v9):  review · runtime · both · --skip-runtime — one notice line each, the run proceeds.
 HELP_EOF
       exit 0
       ;;
@@ -130,178 +118,136 @@ HELP_EOF
   esac
 done
 
-# --- Resolve session ID ---
-# --session-id arg takes precedence, then env var.
+if [[ -n "$GONE_ARGS" ]]; then
+  printf '%s' "$GONE_ARGS"
+  exit 2
+fi
+
+# --- 세션 ID (E1) ---
+ENV_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
 if [[ -z "$SESSION_ID" ]]; then
-  SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
+  SESSION_ID="$ENV_SESSION_ID"
 fi
 if [[ -z "$SESSION_ID" ]]; then
   cat >&2 <<EOF
 ❌ Quality Gates: cannot create pipeline state — session ID is empty.
    Neither --session-id <id> argument nor CLAUDE_CODE_SESSION_ID env var was provided.
-   This usually means /qg was invoked outside of Claude Code or in a sub-shell
-   that did not inherit the env. Re-run /qg from Claude Code, or pass
-   --session-id explicitly.
+   Re-run /qg from Claude Code, or pass --session-id explicitly.
 EOF
   exit 1
 fi
-
-# Validate pattern (defense in depth; matches qg-gc.py SESSION_PATTERN).
+# 전체 일치 — qg-gc.py 의 SESSION_PATTERN 과 같은 문법. 아래에서 이 값으로 폴더를 지우므로
+# 패턴 밖 값(빈 값 · `..` · `/` · 개행)은 거부한다.
 if [[ ! "$SESSION_ID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
   echo "❌ Quality Gates: session ID '$SESSION_ID' fails pattern guard ([A-Za-z0-9_-]{8,})." >&2
   exit 1
 fi
 
-# --- Branch worktree mode ---
-WORKTREE_PATH=""
-if [[ "$BRANCH_MODE" == "true" ]] && [[ -n "$TARGET_BRANCH" ]]; then
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  _wt_stderr_tmp=$(mktemp)
-  if ! WORKTREE_PATH="$("$SCRIPT_DIR/qg-worktree.sh" create "$TARGET_BRANCH" "$SESSION_ID" 2>"$_wt_stderr_tmp")"; then
-    echo "❌ Quality Gates: worktree creation failed" >&2
-    cat "$_wt_stderr_tmp" >&2
-    rm -f "$_wt_stderr_tmp"
+# 이 세션의 ID 가 있으면 다른 세션의 폴더를 받지 않는다 — 살아 있는 다른 세션의 폴더를 지울 수 있다.
+# 자기 세션(OWN_SESSION)의 폴더는 마커 없이도 지우고 다시 만든다 — /qg-publish 등이 같은 폴더에 쓴다.
+OWN_SESSION="false"
+if [[ -n "$ENV_SESSION_ID" ]]; then
+  if [[ "$SESSION_ID" != "$ENV_SESSION_ID" ]]; then
+    echo "[quality-gates] --session-id '$SESSION_ID' 가 이 세션의 ID(CLAUDE_CODE_SESSION_ID)와 다르다 — 다른 세션의 폴더는 지우지 않는다. 아무것도 쓰지 않는다." >&2
     exit 1
   fi
-  # Forward any advisory stderr (e.g. "reusing existing worktree") to our own stderr.
-  [[ -s "$_wt_stderr_tmp" ]] && cat "$_wt_stderr_tmp" >&2
-  rm -f "$_wt_stderr_tmp"
-  # stdout is the absolute worktree path (single line).
-  WORKTREE_PATH="$(printf '%s\n' "$WORKTREE_PATH" | tail -n1)"
+  OWN_SESSION="true"
 fi
 
-# --- Per-session paths ---
-STATE_DIR=".claude/quality-gates/$SESSION_ID"
-STATE_FILE="$STATE_DIR/pipeline.md"
+STATE_ROOT=".claude/quality-gates"
 
-# --- Active pipeline check (self-session only) ---
-if [[ -f "$STATE_FILE" ]]; then
-  if [[ "$ENSURE_MODE" == "true" ]]; then
-    exit 0
-  fi
-  echo "❌ Error: A quality gates pipeline is already active in this session" >&2
-  echo "   State file: $STATE_FILE" >&2
-  echo "" >&2
-  echo "   To cancel: /cancel-qg" >&2
+# state root 아래의 비-세션 형제 폴더(qg-worktree.sh · baseline-cache.sh 가 쓴다)는 SID 로 받지 않는다.
+if [[ "$SESSION_ID" == "worktrees" || "$SESSION_ID" == "baseline-cache" ]]; then
+  echo "[quality-gates] session ID '$SESSION_ID' 는 state root 의 예약 폴더 이름이다 — 지우지 않는다. 아무것도 쓰지 않는다." >&2
   exit 1
 fi
+STATE_DIR="$STATE_ROOT/$SESSION_ID"
+STATE_FILE="$STATE_DIR/pipeline.md"
 
-# --- Legacy v1.5.0 cleanup (one-time, advisory) ---
-LEGACY_FILES=(
-  ".claude/quality-gates.local.md"
-  ".claude/quality-gates-session.local.md"
-  ".claude/quality-gates-branch.local.md"
-  ".claude/qg-diff-cache.txt"
-  ".claude/qg-code-paths.tmp"
-)
-LEGACY_REMOVED=0
-for f in "${LEGACY_FILES[@]}"; do
-  if [[ -f "$f" ]]; then
-    rm -f "$f"
-    LEGACY_REMOVED=$((LEGACY_REMOVED + 1))
-  fi
-done
-if [[ "$LEGACY_REMOVED" -gt 0 ]]; then
-  cat >&2 <<EOF
-[quality-gates] Removed $LEGACY_REMOVED legacy flat state file(s) from v1.5.0.
-v1.6.0 uses per-session storage at .claude/quality-gates/<session>/.
-EOF
+# --ensure: 이 세션 폴더가 이미 있으면 아무것도 하지 않는다.
+if [[ "$ENSURE_MODE" == "true" ]] && [[ -f "$STATE_FILE" ]]; then
+  exit 0
 fi
 
-# --- TTL GC (best-effort; never aborts setup) ---
+# --- 자기 세션 폴더를 지우고 다시 만든다 (E1 · E4) ---
+# `.claude` 나 state root 가 제자리의 실제 디렉토리로 풀리지 않으면(링크면 리포 안을 가리켜도) 지우지
+# 않는다 — 링크 너머를 지울 수 있다(qg-gc.py 의 root_escapes 와 같은 판단). 자기 폴더 자신이 링크여도
+# 지우지 않는다. 이 가드들은 마커 · 자기 세션 여부와 무관하게 삭제보다 먼저 돈다.
+root_escapes() {
+  local here rel got
+  here="$(pwd -P)"
+  for rel in ".claude" ".claude/quality-gates"; do
+    if [[ -L "$rel" ]] || [[ -e "$rel" ]]; then
+      got="$(cd -P "$rel" 2>/dev/null && pwd -P)" || return 0
+      [[ "$got" == "$here/$rel" ]] || return 0
+    fi
+  done
+  return 1
+}
+# 세션 마커 목록은 qg-gc.py 정본에서 읽는다 — 여기에 적지 않는다. 플러그인 루트는 BASH_SOURCE 에서 도출한다(cwd 아님).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SESSION_MARKERS=()
+has_session_marker() {
+  local m
+  for m in "${SESSION_MARKERS[@]}"; do
+    [[ -f "$STATE_DIR/$m" ]] && return 0
+  done
+  return 1
+}
+refuse() {
+  echo "[quality-gates] $1 — 지우지 않는다. 아무것도 쓰지 않는다." >&2
+  exit 1
+}
+load_markers() {
+  local out m
+  out="$(python3 -c 'import importlib.util as u, sys
+s = u.spec_from_file_location("qg_gc", sys.argv[1] + "/qg-gc.py")
+m = u.module_from_spec(s)
+s.loader.exec_module(m)
+print("\n".join(m.SESSION_MARKERS + m.LEGACY_SESSION_MARKERS))' "$SCRIPT_DIR" 2>/dev/null)" || return 1
+  while IFS= read -r m; do
+    [[ -n "$m" ]] && SESSION_MARKERS+=("$m")
+  done <<EOF2
+$out
+EOF2
+  [[ ${#SESSION_MARKERS[@]} -gt 0 ]]
+}
+if ! load_markers; then
+  refuse "qg-gc.py 에서 세션 마커 목록을 읽지 못했다"
+fi
+if root_escapes; then
+  refuse "'.claude' 나 state root '$STATE_ROOT' 가 제자리의 실제 디렉토리가 아니다(심볼릭 링크 등 — 실제 디렉토리로 바꿔야 /qg 가 돈다)"
+elif [[ -L "$STATE_DIR" ]]; then
+  refuse "세션 폴더 '$STATE_DIR' 자신이 링크다"
+elif [[ -e "$STATE_DIR" ]] && [[ ! -d "$STATE_DIR" ]]; then
+  refuse "'$STATE_DIR' 가 폴더가 아니다"
+elif [[ -d "$STATE_DIR" ]]; then
+  # 자기 세션 폴더는 그대로 지운다. 그 밖에는 비어 있거나 세션 마커가 있는 폴더만 이전 실행의 것으로 보고 지운다.
+  if [[ "$OWN_SESSION" != "true" ]] && [[ -n "$(ls -A "$STATE_DIR" 2>/dev/null)" ]] && ! has_session_marker; then
+    refuse "'$STATE_DIR' 는 세션 마커가 없는 비어 있지 않은 폴더라 이전 실행의 것이 아니다"
+  fi
+  rm -rf -- "./.claude/quality-gates/${SESSION_ID:?}"
+fi
+
+# --- TTL GC (best-effort; setup 을 막지 않는다) ---
 python3 "$SCRIPT_DIR/qg-gc.py" --session-id "$SESSION_ID" || true
 
 mkdir -p "$STATE_DIR"
 
-# --- Dependency Check ---
-
-AVAILABLE_PLUGINS=""
-
-# Helper: check if a plugin is installed
-# Searches: installed_plugins.json, plugin cache dirs, and project marketplace.json
-plugin_installed() {
-  local name="$1"
-  # Check installed_plugins.json (primary source of truth)
-  if [ -f ~/.claude/plugins/installed_plugins.json ] && \
-     grep -q "\"$name@" ~/.claude/plugins/installed_plugins.json 2>/dev/null; then
-    return 0
-  fi
-  # Check plugin cache directories (fallback)
-  if ls ~/.claude/plugins/cache/*/  2>/dev/null | grep -q "$name"; then
-    return 0
-  fi
-  # Check project marketplace.json
-  if [ -f ".claude-plugin/marketplace.json" ] && \
-     grep -q "\"$name\"" ".claude-plugin/marketplace.json" 2>/dev/null; then
-    return 0
-  fi
-  return 1
-}
-
-# Check pr-review-toolkit (optional additional reviewer for ③ angles/reviewers)
-PR_REVIEW_FOUND=false
-if plugin_installed "pr-review-toolkit"; then
-  PR_REVIEW_FOUND=true
-  AVAILABLE_PLUGINS="pr-review-toolkit"
-fi
-
-if [[ "$PR_REVIEW_FOUND" == "false" ]]; then
-  echo "⚠️  Warning: pr-review-toolkit plugin not found" >&2
-  echo "   pr-review-toolkit supplies code-reviewer as an additional reviewer in ③ (angles/reviewers)" >&2
-  echo "   Pipeline will continue with the angle performers + whatever specialists are installed" >&2
-  echo "" >&2
-fi
-
-# Check feature-dev (optional)
-if plugin_installed "feature-dev"; then
-  if [[ -n "$AVAILABLE_PLUGINS" ]]; then
-    AVAILABLE_PLUGINS="$AVAILABLE_PLUGINS,feature-dev"
-  else
-    AVAILABLE_PLUGINS="feature-dev"
-  fi
-fi
-
-# Check superpowers (optional)
-if plugin_installed "superpowers"; then
-  if [[ -n "$AVAILABLE_PLUGINS" ]]; then
-    AVAILABLE_PLUGINS="$AVAILABLE_PLUGINS,superpowers"
-  else
-    AVAILABLE_PLUGINS="superpowers"
-  fi
-fi
-
-# --- Create State File ---
-
 TEMP_FILE="${STATE_FILE}.tmp.$$"
 TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
 cat > "$TEMP_FILE" << EOF
 ---
 session_id: "$SESSION_ID"
 started_at: "$TIMESTAMP"
-EOF
-
-# worktree_path is optional — only set when /qg branch <name> created one.
-if [[ -n "$WORKTREE_PATH" ]]; then
-  cat >> "$TEMP_FILE" << EOF
-worktree_path: "$WORKTREE_PATH"
-target_branch: "$TARGET_BRANCH"
-EOF
-fi
-
-cat >> "$TEMP_FILE" << EOF
 ---
 
-# Quality Gates Pipeline State (v1.32.1)
+# Quality Gates Pipeline State
 
 ## History
 - [$TIMESTAMP] Pipeline started
 EOF
-
 mv "$TEMP_FILE" "$STATE_FILE"
-
-# --- Output Setup Message ---
 
 echo "🔄 Quality Gates Pipeline"
 echo ""
@@ -309,14 +255,8 @@ echo "Pipeline: scope → differential test → reviewers → re-critique → ve
 for a in $REMOVED_ARGS; do
   echo "> [quality-gates] \`${a}\` 인자는 제거됐다 — 이제 한 파이프라인이라 게이트 범위를 고르지 않는다. 그대로 진행한다."
 done
-
-echo ""
-echo "Available plugins: ${AVAILABLE_PLUGINS:-none}"
-if [[ -n "$PR_URL" ]]; then
-  echo "PR URL: $PR_URL"
-fi
 if [[ "$PLAN_FILE" != "auto" ]]; then
   echo "Plan file: $PLAN_FILE"
 fi
 echo ""
-echo "Pipeline runs in this turn. To cancel before run: /cancel-qg"
+echo "Pipeline runs in this turn."

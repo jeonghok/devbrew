@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Unit tests for qg-worktree.sh mutation-guard subcommand (§6.7 / AC7).
+# Unit tests for audit-sandbox.sh mutation-guard subcommand (§6.7 / AC7).
 # The guard is pure git: its verdict depends ONLY on (sandbox, baseline) —
 # never on any verifier self-claim. That is the structural Law 2 defense.
 set -u
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-WT="$PLUGIN_DIR/scripts/qg-worktree.sh"
+WT="$PLUGIN_DIR/scripts/audit-sandbox.sh"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 mk_sandbox() {
@@ -25,10 +25,10 @@ mk_sandbox() {
 cleanup_sandbox() {
   local sb="$1"
   case "$sb" in
-    */.claude/quality-gates/worktrees/?*) ;;
+    */.claude/plugin-audit/worktrees/?*) ;;
     *) echo "  ⚠ cleanup_sandbox: refusing unexpected path '$sb'" >&2; return 0 ;;
   esac
-  local repo="${sb%/.claude/quality-gates/worktrees/*}"
+  local repo="${sb%/.claude/plugin-audit/worktrees/*}"
   [[ -n "$repo" && "$repo" != "$sb" && -d "$repo" ]] \
     || { echo "  ⚠ cleanup_sandbox: bad repo root for '$sb'" >&2; return 0; }
   case "$repo" in
@@ -433,7 +433,7 @@ cleanup_sandbox "$SANDBOX"
 echo "[R2-AC2(iii): core.excludesFile-hidden new file, Layer 2 forged-off -> Layer 1b sole catch]"
 OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
 SNAP="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
-REPO="${SANDBOX%/.claude/quality-gates/worktrees/*}"
+REPO="${SANDBOX%/.claude/plugin-audit/worktrees/*}"
 EXC="$REPO/.qg_excludes"; echo 'onlyhack.js' > "$EXC"          # throwaway-internal path (N-4: no host ~/.gitconfig)
 git -C "$SANDBOX" config --local core.excludesFile "$EXC"
 printf 'export const fix=1\n' > "$SANDBOX/onlyhack.js"

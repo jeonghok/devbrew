@@ -134,7 +134,8 @@ skip_reason: none')"
   || t_no "field: 인자 순서/반환이 계약과 다르다 (got='$got')"
 
 # field_line 은 field 와 짝이지만 **줄 전체**를 낸다 — 이름을 나눈 목적(assert.sh 상단
-# 주석) 자체가 이관 전 test_qg_mutation_guard.sh:23 이 요구하던 "줄 전체" 형태를 보존하기
+# 주석) 자체가 이관 전 mutation-guard 테스트(지금 plugins/plugin-audit/tests/
+# test_audit_sandbox_mutation_guard.sh)의 forced_downgrade 판정이 요구하던 "줄 전체" 형태를 보존하기
 # 위함이었다. 이 검사가 없으면 field_line 이 field 처럼 값만 내도 아무도 못 잡는다
 # (IMPORTANT I3, 2026-08-17 리뷰 라운드 1).
 got_line="$(field_line 'codex_available' 'codex_available: not available here

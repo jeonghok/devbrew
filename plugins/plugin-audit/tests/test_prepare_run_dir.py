@@ -85,7 +85,7 @@ class TestPrepareRunDir(unittest.TestCase):
             seen.append((key, out[1]))
         # 같은 달의 서로 다른 실행 키 → 앞 8글자가 서로 다르다.
         self.assertEqual(len({sid for _, sid in seen}), 3, seen)
-        # 키 자체의 앞 8글자는 전부 같다 — qg create-sandbox 가 id 앞 8글자만 쓰므로 해시가 필요하다.
+        # 키 자체의 앞 8글자는 전부 같다 — audit-sandbox.sh create-sandbox 가 id 앞 8글자만 쓰므로 해시가 필요하다.
         self.assertEqual(len({key[:8] for key, _ in seen}), 1, seen)
 
     def test_6_bad_date_is_rc2(self):

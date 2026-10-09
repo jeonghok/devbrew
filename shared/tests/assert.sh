@@ -100,8 +100,8 @@ field() {
     }'
 }
 
-# field_line <key> <text> → 그 키의 **줄 전체**. test_qg_mutation_guard.sh:23 이
-# 쓰던 형태 — 값만 내는 field 와 이름을 나눠 두 뜻이 한 이름에 겹치지 않게 한다.
+# field_line <key> <text> → 그 키의 **줄 전체**. plugins/plugin-audit/tests/
+# test_audit_sandbox_mutation_guard.sh 의 forced_downgrade 판정이 쓰는 형태 —값만 내는 field 와 이름을 나눠 두 뜻이 한 이름에 겹치지 않게 한다.
 field_line() {
   printf '%s\n' "$2" | awk -v k="$1" '
     { i = index($0, ":") }

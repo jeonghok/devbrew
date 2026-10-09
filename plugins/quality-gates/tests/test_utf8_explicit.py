@@ -17,14 +17,12 @@ degrade 가 된다.
 
   LocaleRegressionTests — 정적 검사만으로는 부족하다(서브프로세스 안에서 도는
   코드의 실제 로케일 의존은 텍스트만 봐서는 안 보인다). 강제로 non-UTF-8 로케일을
-  만들고 한국어 내용을 담은 실제 프로덕션 훅을 돌려 살아남는지 잰다.
+  만들고 한국어 내용을 담은 입력으로 실제 프로덕션 스크립트를 돌려 살아남는지 잰다.
 
-  ★ quality-gates 안에 상태를 write 하는 훅이 현재 하나도 없다(session-end-cleanup.py·
-  session-start-advisor.py 모두 write 호출 0건) — write_text
-  쪽은 이 플러그인 안에서 측정할 vehicle 이 없다. read 쪽은 session-start-advisor.py 의
-  frontmatter-scan(hooks/session-start-advisor.py:92,
-  `agent_file.read_text(encoding="utf-8")`)으로 재확보했다 — 한국어 내용을 담은
-  agent frontmatter 파일이 non-UTF-8 로케일 아래서도 읽혀 경고를 내는지로 잰다.
+  ★ 운반체는 `scripts/verdict.py --differential` 이다(v10.0.0 에서 옛 운반체였던
+  SessionStart 훅이 지워졌다). 차등 산출물을 `open(path, encoding="utf-8")` 로 읽는다 —
+  encoding 을 빼면 한국어가 든 산출물에서 UnicodeDecodeError 가 나고 verdict.py 는 그것을
+  exit 4 로 낸다. write 쪽은 이 플러그인 안에서 측정할 운반체가 없다.
 
   ★ `LC_ALL=C`·`LANG=C` 만으로는 로케일이 안 바뀐다 — 이 macOS 파이썬은 PEP 538/540
   coercion 으로 C/POSIX 로케일을 조용히 UTF-8 로 승격시킨다(`locale.getpreferredencoding()`
@@ -45,7 +43,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 PLUGIN_ROOT = pathlib.Path(__file__).resolve().parents[1]
-ADVISOR_HOOK = PLUGIN_ROOT / "hooks" / "session-start-advisor.py"
+VERDICT = PLUGIN_ROOT / "scripts" / "verdict.py"
 
 # 이미 확인한 예외 — 실제 텍스트를 읽거나 쓰지 않아 encoding 이 의미가 없다.
 _KNOWN_EXCEPTIONS = {
@@ -194,38 +192,27 @@ class LocaleRegressionTests(unittest.TestCase):
         self.assertNotIn("UTF", pref.upper(), pref)
         self.assertIn("UTF", stdin_enc.upper(), stdin_enc)
 
-    def test_session_start_advisor_survives_non_utf8_locale_with_korean_content(self):
-        """session-start-advisor.py 의 frontmatter-scan 은 plugins/*/agents/*.md 를
-        `read_text(encoding="utf-8")` 로 읽는다(hooks/session-start-advisor.py:92).
-        그 파일이 한국어 본문을 담고 있어도 non-UTF-8 기본 인코딩 아래서 살아남아
-        경고를 내야 한다 — 조용히 `except (OSError, UnicodeDecodeError): continue`
-        로 삼켜지면 스캐너가 fail-open 한다(:109).
-
-        quality-gates 안에 상태를 write 하는 훅이 현재 하나도 없어 write_text
-        쪽은 vehicle 이 없다 — 이 테스트는 read_text 쪽만 잰다. write 쪽
-        커버리지는 새 vehicle 이 생기기 전까지 이 파일로 측정 불가능하다.
-        """
+    def test_verdict_reads_korean_differential_under_non_utf8_locale(self):
+        """verdict.py 는 차등 산출물을 `open(path, encoding="utf-8")` 로 읽는다.
+        산출물에 한국어가 있어도 non-UTF-8 기본 인코딩 아래서 판정을 내야 한다 —
+        encoding 을 빼면 UnicodeDecodeError 가 exit 4(판정 실패)로 바뀐다."""
         env = self._non_utf8_open_default_env()
-        with tempfile.TemporaryDirectory() as wt_dir:
-            agent_dir = pathlib.Path(wt_dir) / "plugins" / "설계-플러그인" / "agents"
-            agent_dir.mkdir(parents=True)
-            (agent_dir / "테스트.md").write_text(
-                "---\nname: test\nallowedTools: [Read]\n---\n본문: 한국어 내용 확인용.\n",
+        with tempfile.TemporaryDirectory() as d:
+            diff = pathlib.Path(d) / "differential.yaml"
+            diff.write_text(
+                "# 차등 테스트 요약 — 한국어 주석이 든 산출물\n"
+                "degrade_causes: []\n"
+                "verdict_input:\n"
+                "  confirmed_product_defect: false\n",
                 encoding="utf-8",
             )
-            payload = {"cwd": wt_dir, "session_id": "locale-regression-advisor-01"}
             proc = subprocess.run(
-                ["python3", str(ADVISOR_HOOK)],
-                input=json.dumps(payload, ensure_ascii=False),
+                ["python3", str(VERDICT), "--differential", str(diff)],
                 capture_output=True, text=True, encoding="utf-8",
-                cwd=wt_dir, env=env, timeout=10,
+                env=env, timeout=10,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            self.assertIn(
-                "allowedTools", proc.stderr,
-                "non-UTF-8 로케일에서 한국어 agent 파일 read_text 가 조용히 실패"
-                f"(또는 삼켜짐)했다: stderr={proc.stderr!r}",
-            )
+            self.assertIn("verdict: clean", proc.stdout)
 
 
 if __name__ == "__main__":

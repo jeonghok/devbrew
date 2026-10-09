@@ -7,6 +7,12 @@
 - 문서 리뷰 게이트 렌더가 쉬운 말이다: 첫 줄은 상태와 경고를 한 문장으로 말하고, 0 인 집계는 빼며, 항목은 쉬운 말로 시작하고 id 는 끝 괄호에 둔다. 경고는 전부 첫 줄에 싣는다(전에는 codex 부재만 싣고 나머지를 버렸다). 기계가 읽는 `gate` JSON 은 그대로다.
 - 문서 리뷰어(`doc-critic` · `doc-critic-web` · `doc-recritic`)가 사람이 읽는 칸을 쉬운 말로 쓴다.
 
+## [4.5.4] — 2026-10-09
+
+### Changed
+- 정본 사본(`scripts/kill_switch_active.py` · `scripts/gc_common.py` · `scripts/devbrew-python.sh`)의 주석이 지워진 quality-gates 의 `session-start-advisor` 훅 · 그 `SessionStart` 안내 · `state_path.py` 를 인용하지 않는다(정본 `shared/` 와 함께). `devbrew-python.sh` 주석은 `DEVBREW_PYTHON_IGNORED` 를 읽는 훅이 지금 없다는 사실을 적는다. 동작은 바뀌지 않았다.
+- README 「Python」 안내 — quality-gates 10.0.0 이 devbrew 의 마지막 `SessionStart` 자리를 지워 바닥 미만 안내가 나가지 않는다는 사실을 적는다.
+
 ## [4.5.3] — 2026-09-28
 
 ### Fixed

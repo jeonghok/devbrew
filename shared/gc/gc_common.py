@@ -11,10 +11,10 @@
 받은 state root 에 대한 두 안전 검사(`root_escapes` · `locked_root`).
 
 **담지 않는 것** — state root 해석. 그것이 quality-gates ↔ spec-distill 에서 다른
-부분이고(전자는 payload cwd 상대, 후자는 git-aware `--git-common-dir`), 부분 사본의
+부분이고(전자는 cwd 상대 고정 경로, 후자는 git-aware `--git-common-dir`), 부분 사본의
 "각자 고유 본문"이다. 플러그인 **안**의 중복은 그 플러그인의 파일 하나로 접는다
-(quality-gates 는 `plugins/quality-gates/scripts/state_path.py`, spec-distill 은
-이미 `state_path.py` 를 갖고 있다). 두 안전 검사는 해석이 아니라 **이미 해석된 루트**에
+(quality-gates 는 `scripts/qg-gc.py` 의 `ROOT`, spec-distill 은 `state_path.py`).
+두 안전 검사는 해석이 아니라 **이미 해석된 루트**에
 대한 검사라 여기 산다 — 같은 보안 컨트롤을 두 GC 가 따로 가지면 한쪽만 고쳐진다.
 
 **배포 방식** — 실행 지점(`if __name__`)이 없는 import-only 정본이다. 각 플러그인의
