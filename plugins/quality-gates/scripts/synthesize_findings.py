@@ -512,11 +512,13 @@ def to_adjudication_doc(block_text, mapping, ledger, diff_text=None):
         sev = _fold_sev(raw_sev)
         if sev not in SEVERITIES:
             disp = _fold_sev(nf.get("disposition"))
-            if disp in SEVERITIES:
+            if disp in ("IMPORTANT", "CRITICAL"):
+                # 위로만 — 기본값(IMPORTANT) 이상일 때만 disposition 을 severity 로 받는다.
                 ledger.coerced("added.severity", raw_sev, disp, gate=False)
                 sev = disp
             else:
-                # V8 — 결측·미지는 IMPORTANT. 공시에는 재비판자가 실제로 쓴 값을 싣는다.
+                # V8 · D-2 — 결측·미지는 IMPORTANT. disposition: SUGGESTION 도 낙관 방향으로
+                # 풀지 않는다. 공시에는 재비판자가 실제로 쓴 값을 싣는다.
                 ledger.coerced("added.severity", raw_sev, "IMPORTANT", gate=True)
                 sev = "IMPORTANT"
         nf["severity"] = sev

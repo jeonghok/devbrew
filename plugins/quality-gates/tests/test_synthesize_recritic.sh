@@ -516,6 +516,40 @@ added:
   rm -rf "$T"
 }
 
+case_added_disposition_never_lowers_a_missing_severity() {
+  # 최종 리뷰 I1 · D-2 · V8 — severity 가 없는 added 항목의 disposition 은 «위로만» 받는다.
+  # 익명 목록의 칸 이름이 disposition 이라 재비판자가 그 이름을 옮겨 적는 실수는 그럴듯하다.
+  # disposition: SUGGESTION 을 그대로 받으면 놓친 결함이 공시 없이 clean 이 된다.
+  local T; T=$(mktemp -d)
+  printf '[]\n' > "$T/findings.yaml"; prep "$T"
+  reply "$T/reply.txt" 'verdicts: []
+added:
+  - file: lowdisp.py
+    line: 4
+    disposition: SUGGESTION
+    summary: "severity 없이 SUGGESTION 처분으로 돌아왔다"'
+  local out; out=$(synth "$T" --emit-verdict 2>/dev/null)
+  assert_contains "$out" '| IMPORTANT | lowdisp.py:4' "severity 없음 + disposition: SUGGESTION 은 IMPORTANT 로 강제된다 (D-2)"
+  assert_contains "$out" 'blocking: 1' "그 항목은 막는 지적으로 센다"
+  assert_contains "$out" 'verdict: defect' "판정은 defect 다 — 조용한 clean 이 아니다"
+  assert_contains "$out" "강제(게이트 변경): added.severity None→'IMPORTANT'" "강제는 게이트 변경으로 공시된다"
+  rm -rf "$T"
+  # 양성 짝 — disposition 이 기본값(IMPORTANT) 이상이면 그대로 받고 게이트는 바뀌지 않는다.
+  T=$(mktemp -d)
+  printf '[]\n' > "$T/findings.yaml"; prep "$T"
+  reply "$T/reply.txt" 'verdicts: []
+added:
+  - file: highdisp.py
+    line: 4
+    disposition: CRITICAL
+    summary: "severity 없이 CRITICAL 처분으로 돌아왔다"'
+  out=$(synth "$T" --emit-verdict 2>/dev/null)
+  assert_contains "$out" '| CRITICAL | highdisp.py:4' "disposition: CRITICAL 은 위로 받는다"
+  assert_contains "$out" 'verdict: defect' "CRITICAL 이라 defect 다"
+  assert_not_contains "$out" '강제(게이트 변경): added.severity' "위로 받은 것은 게이트 변경이 아니다"
+  rm -rf "$T"
+}
+
 case_added_with_neither_severity_nor_disposition_is_kept_as_important() {
   # 위 케이스의 형제. severity 도 disposition 도 없으면 `to_adjudication_doc` 이 IMPORTANT
   # 로 강제하고(V8 — 결측을 낙관값으로 채우지 않는다) 그 강제를 게이트 변경으로 센다.
@@ -995,6 +1029,7 @@ case_recritic_zero_not_claimed_when_added_or_verdicts_are_malformed
 case_added_severity_case_folds
 case_raise_to_case_folds
 case_added_falls_back_to_disposition_when_severity_missing
+case_added_disposition_never_lowers_a_missing_severity
 case_added_with_neither_severity_nor_disposition_is_kept_as_important
 case_dead_recritic_is_not_clean
 case_malformed_top_level_container_kills_adjudicator_not_the_run
