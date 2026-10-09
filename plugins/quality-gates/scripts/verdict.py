@@ -155,6 +155,36 @@ def render(decision):
     return "\n".join(out) + "\n"
 
 
+# 판정 줄(K-3) — 게시 코멘트와 로컬 결과가 싣는 한 줄. 판정값과 같은 파일에서 만든다:
+# 모델이 옮겨 적으면 전사 오류가 판정을 바꾼다(R24 · V1).
+_SHA = re.compile(r"[0-9a-f]{7,40}")
+
+
+def render_line(decision, *, blocking, optional, new_failures, excluded, iteration, sha):
+    if decision["verdict"] not in VALUES:
+        fail4(f"열거 밖 판정값 '{decision['verdict']}' — 어휘는 닫혀 있다")
+    for name, n in (("blocking", blocking), ("optional", optional),
+                    ("new-failures", new_failures), ("excluded", excluded),
+                    ("iter", iteration)):
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            fail4(f"판정 줄의 {name} 값이 0 이상의 정수가 아니다: {n!r}")
+    if not isinstance(sha, str) or not _SHA.fullmatch(sha):
+        fail4(f"판정 줄의 sha 가 짧은 커밋 해시가 아니다: {sha!r}")
+    head = f"qg: {decision['verdict']}"
+    if decision["verdict"] == "not-certified":
+        head += f" ({decision['reason']})"
+    return (f"{head} · 막는 지적 {blocking} · 선택 {optional} · 차등 새 실패 {new_failures}"
+            f" · 제외 패치 {excluded} · iter {iteration} · {sha}\n")
+
+
+def _count(text):
+    # 비정수는 argparse 의 exit 2 가 아니라 render_line 의 exit 4 로 가게 문자열 그대로 둔다.
+    try:
+        return int(text)
+    except ValueError:
+        return text
+
+
 def main():
     ap = argparse.ArgumentParser(add_help=True)
     ap.add_argument("--differential", default=None)
@@ -162,7 +192,24 @@ def main():
     ap.add_argument("--review-blocked", action="store_true")
     ap.add_argument("--angle-absent", action="store_true")
     ap.add_argument("--reason", action="append", default=[])
+    # 판정 줄(K-3). `--line` 이 있으면 아래 여섯이 전부 필요하다.
+    ap.add_argument("--line", action="store_true")
+    ap.add_argument("--blocking", type=_count, default=None)
+    ap.add_argument("--optional", type=_count, default=None)
+    ap.add_argument("--new-failures", type=_count, default=None)
+    ap.add_argument("--excluded", type=_count, default=None)
+    ap.add_argument("--iter", type=_count, default=None)
+    ap.add_argument("--sha", default=None)
     args = ap.parse_args()
+    line_vals = (args.blocking, args.optional, args.new_failures, args.excluded,
+                 args.iter, args.sha)
+    if args.line and any(v is None for v in line_vals):
+        print("verdict.py: --line 은 --blocking --optional --new-failures --excluded "
+              "--iter --sha 를 모두 받는다", file=sys.stderr)
+        return 2
+    if not args.line and any(v is not None for v in line_vals):
+        print("verdict.py: 판정 줄 값은 --line 없이는 의미가 없다", file=sys.stderr)
+        return 2
     # 기본값을 `""` 로 두면 "플래그를 안 줬다" 와 "빈 경로를 줬다" 가 같은 값이
     # 된다 — 값을 못 구한 호출자가 `--differential "$DIFF_YAML"` 을 빈 변수로
     # 호출하면 차등 축이 조용히 사라지고 `clean` 으로 인증된다(read_or_none 의
@@ -174,13 +221,19 @@ def main():
         print("verdict.py: --differential 은 빈 문자열을 받지 않는다 "
               "(플래그를 생략하거나 실제 경로를 줘라)", file=sys.stderr)
         return 2
-    sys.stdout.write(render(decide(
+    decision = decide(
         defect=args.defect,
         review_blocked=args.review_blocked,
         angle_absent=args.angle_absent,
         differential_text=read_or_none(args.differential),
         extra_reasons=args.reason,
-    )))
+    )
+    out = render(decision)
+    if args.line:
+        out += render_line(decision, blocking=args.blocking, optional=args.optional,
+                           new_failures=args.new_failures, excluded=args.excluded,
+                           iteration=args.iter, sha=args.sha)
+    sys.stdout.write(out)
     return 0
 
 
