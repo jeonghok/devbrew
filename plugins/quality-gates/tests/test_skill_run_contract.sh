@@ -68,6 +68,50 @@ for f in excluded.md aggregate.yaml verdict.out intent.md topic-scope.txt; do
   [ -e "$RDIR/$f" ] && no "(b) $f 가 남았다" || ok "(b) $f 가 없다"
 done
 
+# (c) 하위 디렉토리에서 시작한 세션 (최종 리뷰 I2) — setup 과 RD 가 같은 최상위 폴더를 본다.
+#     최상위 result.md 에 옛 ## 판정 이 있으면 하위에서 돈 P2 도 그 파일을 다시 만든다(K-2).
+seed_prev 1
+mkdir -p "$T/sub/deeper"
+( cd "$T/sub/deeper" && CLAUDE_PLUGIN_ROOT="$QGP" CLAUDE_CODE_SESSION_ID="$SID" bash "$RUN" ) >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "0" "(c) P2 펜스가 하위 디렉토리에서 0 으로 끝난다"
+assert_eq "$(grep -c '^## 판정$' "$RDIR/result.md" 2>/dev/null)" "0" "(c) 하위에서 돈 P2 도 최상위 result.md 의 앞 실행 ## 판정 을 없앤다"
+grep -q '2000-01-01' "$RDIR/result.md" 2>/dev/null && no "(c) 최상위 result.md 가 앞 실행의 것 그대로다" || ok "(c) 최상위 result.md 가 새로 만들어졌다"
+[ ! -e "$T/sub/.claude" ] && [ ! -e "$T/sub/deeper/.claude" ] \
+  && ok "(c) 하위 디렉토리에 세션 폴더를 만들지 않는다" || no "(c) 하위 디렉토리에 .claude 가 생겼다"
+
+# (d) P3 펜스를 하위 디렉토리에서 — 의도 파일이 최상위 RD 에 써진다(I2 의 rc 3 재현 자리).
+P3W="$(awk '/^\*\*P3 — intent source\.\*\*/{f=1} /^## Flow$/{f=0} f' "$SKILL")"
+P3F="$(printf '%s\n' "$P3W" | awk '/^```bash$/{f=1;next} f&&/^```$/{exit} f')"
+[ -n "$P3F" ] && ok "P3 펜스를 뽑았다" || no "P3 펜스가 없다"
+assert_grep "$P3F" '^"\$QG/scripts/discover-spec\.sh" --intent-out "\$RD/intent\.md"$' "P3 는 의도 파일을 RD 에 쓴다"
+assert_eq "$(printf '%s\n' "$P3F" | tail -n 1)" 'echo "intent rc=$?"' "M1: P3 펜스가 discover-spec 의 rc 를 바로 다음 줄에서 낸다"
+assert_contains "$(printf '%s\n' "$P3W" | tr '\n' ' ')" 'print `intent: 없음 (discover-spec rc=<N>)` as that one line instead' \
+  "M1: rc 가 0 이 아니면 intent: 줄이 그 rc 를 밝힌다"
+RUN3="$T/p3.sh"
+{ printf '%s\n' "$P3F" | sed "s/<session-id>/$SID/g"; } > "$RUN3"
+out3="$( cd "$T/sub/deeper" && PATH=/usr/bin:/bin CLAUDE_PLUGIN_ROOT="$QGP" bash "$RUN3" 2>&1 )"
+assert_contains "$out3" 'intent rc=0' "(d) 하위 디렉토리의 P3 가 rc 0 으로 끝난다 (최상위 RD 가 이미 있다)"
+[ -f "$RDIR/intent.md" ] && ok "(d) 의도 파일이 최상위 RD 에 있다" || no "(d) 의도 파일이 최상위 RD 에 없다"
+
+# (e) git 밖 — P2 는 멈추고 아무것도 쓰지 않는다(M4: RD 가 파일시스템 루트를 가리키지 않는다).
+NG="$(mktemp -d)"
+if git -C "$NG" rev-parse --show-toplevel >/dev/null 2>&1; then
+  no "(e) mktemp 가 git 리포 안이다 — 잴 수 없다"
+else
+  ( cd "$NG" && CLAUDE_PLUGIN_ROOT="$QGP" CLAUDE_CODE_SESSION_ID="$SID" bash "$RUN" ) >/dev/null 2>"$T/e.err"; rc=$?
+  assert_eq "$rc" "1" "(e) git 밖에서 P2 펜스는 exit 1 로 멈춘다"
+  assert_contains "$(cat "$T/e.err")" "git 리포 밖이다" "(e) 멈춘 이유를 한 줄로 알린다"
+  [ ! -e "$NG/.claude" ] && ok "(e) git 밖에서는 아무 폴더도 만들지 않는다" || no "(e) git 밖에서 .claude 를 만들었다"
+fi
+rm -rf "$NG"
+
+# M4 — RD 를 쓰는 펜스는 전부 TOP 가드 바로 뒤에서 RD 를 정한다. rev-parse 실패를 삼키는 옛 꼴이 없다.
+assert_eq "$(grep -cF 'RD="$(git rev-parse --show-toplevel)' "$SKILL")" "0" "M4: rev-parse 실패를 가드하지 않는 RD 대입이 없다"
+nrd="$(grep -c '^RD="\${TOP}/\.claude/quality-gates/<session-id>"$' "$SKILL")"
+[ "$nrd" -ge 5 ] && ok "M4: RD 는 TOP 에서 정한다 (${nrd}곳)" || no "M4: TOP 에서 RD 를 정하는 펜스가 모자라다 (${nrd}곳)"
+unguarded="$(awk '/^RD="\$\{TOP\}\//{ if (prev !~ /^TOP="\$\(git rev-parse --show-toplevel\)" \|\| \{ echo .* >&2; exit 1; \}$/) print NR } {prev=$0}' "$SKILL")"
+assert_eq "$unguarded" "" "M4: 모든 RD 대입 바로 앞 줄이 rev-parse 실패에 exit 1 하는 TOP 가드다"
+
 # ── F: Final verdict 펜스의 판정 줄 숫자
 FV="$(awk '/^## Final verdict$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
 [ -n "$FV" ] && ok "Final verdict 창을 찾았다" || no "Final verdict 창이 없다"
