@@ -271,7 +271,7 @@ fi
 # --- v2.2.0 mutation-guard hardening protocol-shape ---
 # 대상 소멸 (Task 7, R-W) — R7(mutation-guard 라우팅 표) 자체가 differential-test.md
 # 에서 통째로 지워졌다. qg 파이프라인은 create-sandbox/mutation-guard 를 더 호출하지
-# 않는다(그 두 서브커맨드는 qg-worktree.sh 안에 남지만 소비자는 plugin-audit 뿐이다
+# 않는다(그 두 서브커맨드는 v10 에서 plugin-audit 의 scripts/audit-sandbox.sh 로 옮겨 갔다
 # — R-W). 이 자리에 있던 락들: R7 exit-code routing 표(guard exit 4 → FAIL · guard_error
 # · stderr verbatim · indeterminate ≠ clean) · fallback SKIP_WITH_EVIDENCE cap ·
 # runtime_project_dir 변수 · R3 dispatch 의 project_dir 슬롯(+ sandbox_dir 하드코딩
@@ -1232,7 +1232,7 @@ else
 fi
 
 # 대상 소멸 (Task 7) — "== 폴백 R5b 미실행" 전체(polarity_ok/bad · rec_ok · route_ok
-# · route_stale 5축)가 이 자리에 있었다. `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX`
+# · route_stale 5축)가 이 자리에 있었다. 옛 런타임 샌드박스 kill switch
 # 로 R4 가 건너뛰고 R5b 가 `unrun` 전량이 되던 시나리오 자체가 사라졌다 — R-V 의 새
 # kill switch(`DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST`)는 R4 한 스텝이 아니라
 # ② 전체를 건너뛴다. 후계는 이미 존재한다 — 위 "R5b 실패 라우팅" 검사(r5b_route)가

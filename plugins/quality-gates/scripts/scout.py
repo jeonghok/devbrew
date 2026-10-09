@@ -67,7 +67,7 @@ def decide(s):
 
     # docs_touched surfaces comment-analyzer as a phase2 hint regardless of
     # depth — a small pure-docs diff is quick-depth but still wants the comment
-    # specialist. Boundary = filter-docs.sh doc-path set (the orchestrator
+    # specialist. Boundary = doc paths (*.md · *.txt · *.rst · docs/** · CHANGELOG* · README*; the orchestrator
     # computes this boolean; scout only routes it). AC5.
     if docs_touched:
         phase2.append("comment-analyzer")

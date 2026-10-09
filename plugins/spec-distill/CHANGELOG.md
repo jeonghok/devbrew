@@ -26,6 +26,12 @@ major 인 이유 — 사용자 호출 이름 둘이 alias 없이 사라졌고, s
 - `/request-framing` 의 `@경로` 풀기는 절대경로 읽기가 실패하면 `root=` 기준 상대경로로 한 번 더 시도한다.
 - trivia 를 건너뛰려면 `force` 를 첫 토큰으로 다시 부른다(`/spec-distill:spec-interview force <요청>`) — `references/trivia-escape.md` 가 그 토큰을 떼고 판정을 건너뛴다. trivia 안내 문면도 이 재호출을 가리킨다.
 
+## [4.5.4] — 2026-10-09
+
+### Changed
+- 정본 사본(`scripts/kill_switch_active.py` · `scripts/gc_common.py` · `scripts/devbrew-python.sh`)의 주석이 지워진 quality-gates 의 `session-start-advisor` 훅 · 그 `SessionStart` 안내 · `state_path.py` 를 인용하지 않는다(정본 `shared/` 와 함께). `devbrew-python.sh` 주석은 `DEVBREW_PYTHON_IGNORED` 를 읽는 훅이 지금 없다는 사실을 적는다. 동작은 바뀌지 않았다.
+- README 「Python」 안내 — quality-gates 10.0.0 이 devbrew 의 마지막 `SessionStart` 자리를 지워 바닥 미만 안내가 나가지 않는다는 사실을 적는다.
+
 ## [4.5.3] — 2026-09-28
 
 ### Fixed

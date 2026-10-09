@@ -30,6 +30,10 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 꺼지면 codex가 리포 근거만으로 감사하고 그 사실을 stderr에 loud하게 남긴다 — crash 없음
 (graceful degradation).
 
+`DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1` — 대상 플러그인의 자체 테스트 실행(`scripts/run-own-tests.sh`가
+`scripts/audit-sandbox.sh create-sandbox`로 만든 일회용 샌드박스에서 돈다)을 끈다. 축③은 테스트를 *읽어*
+판정한다(배너). 샌드박스는 저장소 상태만 격리한다 — 프로세스 · 네트워크 · uid 격리는 없다.
+
 `DEVBREW_PLUGIN_AUDIT_STALENESS_REGISTRY` — staleness census가 참조하는 원장 경로 override.
 
 **환경변수 어순 rename (0.6.0, devbrew-weight-reduction Task 25).** 이 플러그인이 노출하는
@@ -41,13 +45,18 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 | `DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX` | `DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX` |
 | `DEVBREW_DISABLE_PLUGIN_AUDIT_WEB` | `DEVBREW_PLUGIN_AUDIT_DISABLE_WEB` |
 | `DEVBREW_STALENESS_REGISTRY` (플러그인 토큰 없던 이름) | `DEVBREW_PLUGIN_AUDIT_STALENESS_REGISTRY` |
+| `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` (0.11.0 에 더함) | `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX` |
 
-옛 이름은 **fallback 없이 즉시 제거**됐다 — 이 플러그인은 `CHANGELOG.md`가 없다(`plugin.json`
-버전이 0.6.0으로 CLAUDE.md §메타데이터의 "v1.0.0 이상이면 CHANGELOG.md" 문턱 아래라 별도
-파일을 만들지 않았고, 대신 이 kill-switch 절에 기록한다). 근거는 현재 제3자 설치가 없다는
+옛 이름은 **fallback 없이 즉시 제거**됐다 — 이 rename 당시(0.6.0) 이 플러그인에는 `CHANGELOG.md`가
+없었다(`plugin.json` 버전이 CLAUDE.md §메타데이터의 "v1.0.0 이상이면 CHANGELOG.md" 문턱 아래라 별도
+파일을 만들지 않았고, 대신 이 kill-switch 절에 기록했다 — `CHANGELOG.md` 는 0.6.1 부터 있다). 근거는 현재 제3자 설치가 없다는
 것 하나이며, CLAUDE.md §메타데이터의 one-minor deprecation window 원칙과의 충돌을 그 조건
 아래 수용한 것이다. **제3자 설치가 생기면 이 근거가 바뀐다** — 그때는 다음 rename에
 fallback 창을 둔다.
+
+표의 마지막 줄은 0.11.0 에서 더했다 — 샌드박스 도우미가 quality-gates 10.0.0 에서 이 플러그인
+(`scripts/audit-sandbox.sh`)으로 옮겨 오며 이름이 바뀌었다. 옛 이름은 더 읽지 않는다(fallback 없음,
+위와 같은 근거). 이 rename 은 `CHANGELOG.md` `[0.11.0]` 에도 적었다.
 
 **severity 어휘 통일 (0.6.0, devbrew-weight-reduction Task 28).** 감사 리포트 발견 항목의
 `[severity]` 배지가 옛 4-vocab(`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`)에서 quality-gates와 동일한
@@ -62,9 +71,6 @@ fallback 창을 둔다.
 - **plugin-dev (official, optional)** — 구조 hard-check tier(E)가 `validate-agent.sh`·
   `validate-hook-schema.sh`·`hook-linter.sh`를 감싼다. 공식 캐시에 있으면 심층 구조 사실을
   얹고, **없으면 loud degrade**(core 구조 검사는 F가 self-contained로 커버). E는 bonus-degradable.
-- **quality-gates ≥ 2.12.0 (optional, versioned)** — 자체 테스트 격리가 `scripts/qg-worktree.sh`의
-  `create-sandbox`/`mutation-guard`를 재사용한다. 없으면 자체 테스트 실행을 skip하고 축③은 테스트를
-  *읽어* 판정(배너). silent coupling 아님 — 이 문단이 선언.
 
 ## Principles Instantiated
 

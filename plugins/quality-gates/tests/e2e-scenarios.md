@@ -93,14 +93,10 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 **Run**: edit a file on `feature/qg-cost-reduction`, then `git checkout main`, then `/qg`.
 **Expected**: scope is git-derived fresh at invocation time (branch diff against base, unioned with the worktree's own changed files), not cached from a prior turn or session file — `/qg` on `main` reviews `main`'s own diff against its base, not the leftover `feature/qg-cost-reduction` diff. No explicit reset step is needed; there is no session-scope file to go stale.
 
-### K — `/qg --reset` kill switch
-**Setup**: any active or stale state files in `.claude/`.
-**Run**: `/qg --reset`
-**Expected**: `quality-gates.local.md`, `quality-gates-session.local.md`, `quality-gates-branch.local.md`, plus `qg-diff-cache.txt` and `qg-code-paths.tmp` all removed. Message "Quality-gates state cleared."
 
 ### L — `DEVBREW_QUALITY_GATES_DISABLE=1`
 **Run**: set env var, then start a new Claude Code session AND attempt `/qg`.
-**Expected**: SessionStart advisor is silent. `/qg` should also detect the env var (this happens via the setup script and skill check; not yet covered by a test, but the existing kill-switch tests for individual hooks confirm the propagation).
+**Expected**: the `/qg` command's setup fence calls `setup-qg.sh`, which refuses with one line (`setup-qg disabled via DEVBREW_QUALITY_GATES_DISABLE=1`) and exit 1 before writing anything (`tests/test_entry_safety_e1_e6.sh`); `/qg` shows that line and stops — the pipeline skill is not invoked. If the skill is reached anyway, SKILL Preflight P1 returns immediately.
 
 ## Static Wiring Checks (automated)
 
@@ -122,11 +118,6 @@ for a in ['scout','adversarial','synthesizer','plan-verifier','runtime-verifier'
 print()
 print('SKILL cost_class:', yaml.safe_load(open('plugins/quality-gates/skills/quality-pipeline/SKILL.md').read().split('---')[1])['cost_class'])
 print('plugin.json version:', json.load(open('plugins/quality-gates/.claude-plugin/plugin.json'))['version'])
-print('Hooks registered:')
-for ev, lst in json.load(open('plugins/quality-gates/hooks/hooks.json'))['hooks'].items():
-    for entry in lst:
-        for hook in entry['hooks']:
-            print(f'  {ev}: {hook[\"command\"].split(chr(47))[-1]}')
 "
 
 python3 -m unittest discover plugins/quality-gates/tests -v 2>&1 | tail -3
@@ -143,10 +134,6 @@ Agents (model + cost_class):
 
 SKILL cost_class: variable
 plugin.json version: 2.2.x
-Hooks registered:
-  SessionStart: session-start-advisor.py
-  (v1.32.0 removes the Stop hook — pipeline progression is now in-turn
-  AskUserQuestion-driven, not turn-by-turn signal-driven.)
 
 Ran 23 tests in 0.NNNs
 OK
@@ -174,27 +161,7 @@ touch -t "$(date -r $old +%Y%m%d%H%M)" .claude/quality-gates/oldsess0001
 1. Run `/qg` (any flavor). Verify `.claude/quality-gates/oldsess0001/` no longer exists.
 2. Set `DEVBREW_QUALITY_GATES_GC_VERBOSE=1` and observe stdout: `[quality-gates] GC: removed 1 stale session folder(s)`.
 
-### V3 — Graceful SessionEnd cleanup
 
-1. Start `/qg` in a session.
-2. Close Claude Code gracefully (not `kill -9`).
-3. Verify `.claude/quality-gates/$SID/` is gone.
-
-**Pass**: own folder removed; sibling folders untouched.
-
-### V4 — Legacy migration on upgrade
-
-**Setup**: Pre-existing v1.5.0 flat files (5 files) in `.claude/`.
-```bash
-touch .claude/quality-gates.local.md \
-      .claude/quality-gates-session.local.md \
-      .claude/quality-gates-branch.local.md \
-      .claude/qg-diff-cache.txt \
-      .claude/qg-code-paths.tmp
-```
-1. Open Claude Code. Observe `session-start-advisor` stdout: `[quality-gates] Legacy v1.5.0 state files detected.`
-2. Run `/qg`. Observe `setup-qg.sh` stderr: `Removed 5 legacy flat state file(s) from v1.5.0.`
-3. Verify the 5 files are gone, new `.claude/quality-gates/$SID/pipeline.md` exists.
 
 ### V5 — GC lock contention silent
 
@@ -205,7 +172,7 @@ fd = os.open(".claude/quality-gates", os.O_RDONLY | os.O_DIRECTORY)
 fcntl.flock(fd, fcntl.LOCK_EX); print("holding"); time.sleep(600)'
 # (keep shell open with lock held)
 ```
-2. In another terminal, run `/qg --gc`. Should silently exit (GC skipped, no error).
+2. In another terminal, run `/qg`. The GC step inside setup should silently skip (no error).
 3. Stale folders preserved.
 
 ### V6 — Kill switch globally disables
@@ -214,8 +181,7 @@ fcntl.flock(fd, fcntl.LOCK_EX); print("holding"); time.sleep(600)'
 DEVBREW_QUALITY_GATES_DISABLE=1 /qg
 ```
 1. Verify no `.claude/quality-gates/` folder created.
-2. Verify SessionEnd hook noop.
-3. Verify `qg-gc.py` exits 0 without action.
+2. Verify `qg-gc.py` exits 0 without action.
 
 ### T-1 — 토픽 스코프: 형제 브랜치 둘 + 미커밋 변경
 
@@ -239,88 +205,3 @@ DEVBREW_QUALITY_GATES_DISABLE=1 /qg
   pattern that the current toolchain does not standardize. Manual verification
   via the scenarios above is the contract.
 
-## Gate 3 Active Verification Scenarios (v1.8.0)
-
-> **제거된 표면 — 역사 기록으로 남긴다.** 오늘의 파이프라인에는 대응 경로가 없다.
-> `runtime-verifier` agent 와 그 판정 어휘(`NEEDS_RESOLUTION`/`SKIP_WITH_EVIDENCE`)는
-> 이후 릴리스에서 사라졌다 — 부팅되는 앱의 런타임 행위 검증은 대체되지 않고 주장만 거뒀다
-> (README "C4 — 차등 테스트는 항상" 참고).
-
-### Scenario G3-A: Web app, docker-compose, .env all present
-
-**Setup:** project root has `docker-compose.yml`, `package.json` with `dev`
-script, `.env`, and a plan referencing `/auth`. chrome-devtools MCP is
-configured.
-
-**Run:** `/qg --gate3`
-
-**Expected:**
-- Detector emits manifest with: docker-compose, npm:dev, npm:test,
-  pytest (if applicable), `mcp_browser: chrome-devtools`,
-  `plan_features: [/auth]`, `env_status: [{file: .env, exists: true}]`.
-- Skill asks: "Bring up docker compose? (yes/skip-this-surface)" → user yes.
-- Skill: `docker compose up -d` succeeds.
-- Agent dispatched with manifest. Attempts each surface, captures screenshots
-  + a11y snapshots, writes evidence-log.
-- Verdict: PASS.
-- SKILL prints `## Gate 3: Runtime Verification — clean` → pipeline complete.
-
-### Scenario G3-B: Web app, .env missing but .env.example present
-
-**Setup:** same as G3-A but `.env` does not exist; `.env.example` does.
-
-**Run:** `/qg --gate3`
-
-**Expected:**
-- Detector flags `env_status: [{file: .env, exists: false, has_example: true}]`.
-- Skill asks: "Copy .env.example → .env? (yes/manual-set/skip)" → user yes.
-- Skill: `cp .env.example .env`.
-- Agent proceeds; verdict depends on whether the example values are valid for
-  startup. If app boots: PASS. If app fails on bad credentials: NEEDS_RESOLUTION
-  with `needed: [{kind: missing-env-var, description: "DB_URL invalid; set
-  real value in .env and retry"}]`.
-- On NEEDS_RESOLUTION: skill asks retry/skip/abort. User edits .env, picks
-  retry → agent re-dispatched (iter=1) → PASS.
-
-### Scenario G3-C: Docker daemon down (mid-run escalation)
-
-**Setup:** `docker-compose.yml` exists, but Docker is not running.
-
-**Run:** `/qg --gate3`
-
-**Expected:**
-- Skill: `docker compose up -d` fails ("Cannot connect to Docker daemon").
-- Skill jumps to Step 5 (NEEDS_RESOLUTION handling) WITHOUT agent dispatch.
-- Skill asks: "Docker daemon down. Start it and retry? (retry/skip-surface/abort)"
-- If retry: skill re-attempts `docker compose up -d`. If now succeeds → continue
-  to Step 3 agent dispatch.
-- If skip-surface: agent dispatched with manifest, but compose surface marked
-  `pre-skipped` in applied_decisions. Agent attempts npm:dev only.
-- After 3 retries with same `needed_hash`: `gate3_repeat_detected` →
-  proceed/abort.
-
-### Scenario G3-D: Markdown-only repo (fast-path SKIP)
-
-**Setup:** repo has only `.md` files. No package.json, no docker-compose,
-no test infra.
-
-**Run:** `/qg --gate3`
-
-**Expected:**
-- Detector emits manifest with empty runnable_surfaces / test_runners /
-  plan_features.
-- Skill: fast-path SKIP_WITH_EVIDENCE. **Sub-agent NOT dispatched.**
-- Evidence log written: "no runnable surfaces detected".
-- SKILL prints `## Gate 3 — SKIP_WITH_EVIDENCE` with the evidence-log path.
-- Token cost for Gate 3: detector + minimal skill overhead. No agent tokens.
-
-### Verification
-
-To run these scenarios manually:
-1. `cd plugins/quality-gates/tests/fixtures/gate3/<scenario-dir>`
-2. `CLAUDE_CODE_SESSION_ID=test_$(date +%s) /qg --gate3`
-3. Observe expected behavior; check evidence-log under `.claude/quality-gates/<sid>/`.
-
-The fixtures cover G3-A (web-compose), G3-B (web-example-only), and G3-D
-(markdown-only) directly. G3-C requires Docker on the host machine and is
-a manual test only.

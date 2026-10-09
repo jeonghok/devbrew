@@ -108,15 +108,38 @@ assert "'--paths review'(글롭 없이 키워드부터) 도 글롭 0개로 거�
 "$SCRIPT" --paths 'src/*' review --session-id "test-pkw-$$" >out 2>err
 RC=$?
 assert "'--paths glob review' 는 review 를 글롭으로 삼키지 않고 정확히 한 번 공지한다" "test '$RC' -eq 0 && test \"\$(grep -c '인자는 제거됐다' out)\" -eq 1 && grep -qF -- '\`review\`' out"
-"$SCRIPT" --paths 'src/*' branch qg-fix1-branch-check --session-id "test-pbr-$$" >/dev/null 2>err
+"$SCRIPT" --paths 'src/*' branch qg-fix1-branch-check --session-id "test-pbr-$$" >out 2>err
 RC=$?
-assert "'--paths glob branch <name>' 는 branch 를 글롭으로 삼키지 않고 워크트리 생성을 시도한다" "test '$RC' -eq 1 && grep -q 'worktree creation failed' err"
+assert "'--paths glob branch <name>' 는 branch 를 글롭으로 삼키지 않고 branch <name> 안내로 끝난다" "test '$RC' -eq 2 && grep -qF -- '\`branch <name>\` 인자는 없어졌다' out"
 "$SCRIPT" branch review --session-id "test-br-$$" >out 2>&1
 RC=$?
 assert "'branch review' 는 review 를 브랜치 이름으로 삼키지 않고 공지한다" "test '$RC' -eq 0 && grep -qF -- '\`review\` 인자는 제거됐다' out"
-"$SCRIPT" --gc --session-id "test-gc-$$" >/dev/null 2>err
+cd / && rm -rf "$TMPDIR"
+
+# --- Case 8: v10 에서 없앤 인자 넷 — 안내 한 줄을 내고 실행하지 않는다 (AC25) ---
+TMPDIR=$(mktemp -d); cd "$TMPDIR"
+unset CLAUDE_CODE_SESSION_ID
+i=0
+for args in "branch feat-x" "--reset" "--gc" "--pr-url https://example.invalid/pull/1" "--paths src/* --gc"; do
+  i=$((i+1)); sid="test-gone-$i-$$"
+  # 인자 문자열을 일부러 단어로 쪼갠다 — "branch feat-x" 는 토큰 둘이다.
+  # shellcheck disable=SC2086
+  "$SCRIPT" $args --session-id "$sid" >out 2>err
+  RC=$?
+  assert "AC25: '$args' 는 exit 2" "test '$RC' -eq 2"
+  assert "AC25: '$args' 는 안내를 정확히 한 줄 낸다" "test \"\$(grep -c '인자는 없어졌다' out)\" -eq 1"
+  assert "AC25: '$args' 는 세션 폴더를 만들지 않는다(실행하지 않는다)" "test ! -e '.claude/quality-gates/$sid'"
+  assert "AC25: '$args' 는 Unknown argument 가 아니다" "! grep -qi 'Unknown argument' err out"
+done
+"$SCRIPT" --reset --gc --session-id "test-gone-two-$$" >out 2>err
+assert "AC25: 없앤 인자가 둘이면 안내도 두 줄" "test \"\$(grep -c '인자는 없어졌다' out)\" -eq 2"
+# 양의 짝 — 남는 표면(맨 branch · --paths)은 그대로 돈다
+"$SCRIPT" branch --session-id "test-bare-branch-$$" >out 2>err
 RC=$?
-assert "'--gc' 가 setup 에 와도 죽지 않는다(qg.md 가 GC 후 setup 을 부른다)" "test '$RC' -eq 0"
+assert "AC25: 맨 'branch' 는 exit 0 이고 안내가 없다" "test '$RC' -eq 0 && ! grep -q '인자는 없어졌다' out"
+"$SCRIPT" branch --paths 'src/*' --session-id "test-branch-paths-$$" >out 2>err
+RC=$?
+assert "AC25: 'branch --paths glob' 는 exit 0 (--paths 를 브랜치 이름으로 읽지 않는다)" "test '$RC' -eq 0 && ! grep -q '인자는 없어졌다' out"
 cd / && rm -rf "$TMPDIR"
 
 finish

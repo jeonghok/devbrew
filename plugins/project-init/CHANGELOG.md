@@ -19,6 +19,13 @@
 - 셋업 본문이 `skills/project-init/SKILL.md` 로 옮겨 왔다(`cost_class: low`, `disable-model-invocation: true`). 본문 전 사전 검사(`scripts/entry_preflight.py`)가 kill switch 와 셋업 루트(`root=`)를 정한다.
 - 템플릿 `project/charter.md` · `project/conventions.md` 의 안내가 완전명 `/project-init:project-init` 을 쓴다.
 
+## [4.0.3] — 2026-10-09
+
+### Changed
+
+- 정본 사본(`scripts/kill_switch_active.py` · `scripts/devbrew-python.sh`)의 주석이 지워진 quality-gates 의 `session-start-advisor` 훅과 그 `SessionStart` 안내를 인용하지 않는다(정본 `shared/` 와 함께). `devbrew-python.sh` 주석은 `DEVBREW_PYTHON_IGNORED` 를 읽는 훅이 지금 없다는 사실을 적는다. 동작은 바뀌지 않았다.
+- README 「Python」 안내 — quality-gates 10.0.0 이 devbrew 의 마지막 `SessionStart` 자리를 지워 바닥 미만 안내가 나가지 않는다는 사실을 적는다.
+
 ## [4.0.2] — 2026-09-28
 
 ### Fixed

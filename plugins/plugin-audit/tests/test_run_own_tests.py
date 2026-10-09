@@ -43,7 +43,7 @@ def run(target, sid, qg, extra_path=None):
     if extra_path is not None:
         env = dict(os.environ)
         env["PATH"] = f"{extra_path}:{env['PATH']}"
-    r = subprocess.run(["bash", str(SCRIPT), str(target), sid, "--qg-worktree", str(qg)],
+    r = subprocess.run(["bash", str(SCRIPT), str(target), sid, "--sandbox-helper", str(qg)],
                        capture_output=True, text=True, env=env)
     return r, (json.loads(r.stdout) if r.stdout.strip() else {})
 
@@ -75,11 +75,23 @@ class TestRunOwnTests(unittest.TestCase):
             self.assertFalse(obj["own_tests"]["ran"])
             self.assertIn("kill", (obj["own_tests"]["why"] or "").lower())
 
-    def test_missing_qg_degrades(self):
+    def test_missing_helper_degrades(self):
         with tempfile.TemporaryDirectory() as d:
             r, obj = run(Path(d), "sid12345678", Path(d) / "nope.sh")
             self.assertFalse(obj["own_tests"]["ran"])
-            self.assertIn("quality-gates", obj["own_tests"]["why"] or "")
+            self.assertIn("audit-sandbox.sh 부재", obj["own_tests"]["why"] or "")
+
+    def test_default_helper_is_the_sibling_script_not_cwd(self):
+        # 옵션 없이 부르면 이 플러그인의 audit-sandbox.sh 를 쓴다 — cwd 에 무엇이 있든.
+        # 비-git 임시 디렉토리라 create-sandbox 는 실패하지만, 그 실패 사유가 「부재」가 아니라는
+        # 것이 도우미를 찾았다는 증거다.
+        with tempfile.TemporaryDirectory() as d:
+            r = subprocess.run(["bash", str(SCRIPT), "plugins/x", "sid12345678"],
+                               capture_output=True, text=True, cwd=d, timeout=60)
+            obj = json.loads(r.stdout.strip().splitlines()[-1])
+            why = obj["own_tests"]["why"] or ""
+            self.assertNotIn("부재", why)
+            self.assertIn("sandbox 생성 실패", why)
 
     def test_target_path_resolves_in_sandbox(self):
         # $sbx/plugins/myplugin/tests 는 만들지만 $sbx/tests(샌드박스 루트)는 만들지 않는다 —
@@ -111,7 +123,7 @@ class TestRunOwnTests(unittest.TestCase):
 
     def test_mutation_guard_indeterminate_forces_downgrade(self):
         # mutation-guard 가 exit 4(indeterminate)로 죽으면 stdout 파싱과 무관하게 보수적으로
-        # forced_downgrade=true 여야 한다(qg-worktree 자체 계약: indeterminate는 절대 PASS 아님).
+        # forced_downgrade=true 여야 한다(audit-sandbox.sh 자체 계약: indeterminate는 절대 PASS 아님).
         # MUTATION: exit-4 보수적 처리를 제거하면(exit code 무시하고 stdout만 파싱) forced가
         # 빈 문자열로 파싱되어 fd=false 로 새어 RED.
         with tempfile.TemporaryDirectory() as d:

@@ -34,7 +34,7 @@ INVARIANTS = [
     "prepare-run-dir.py",
     # 빈 RUN_DIR 가드 — Bash 도구는 셸 변수를 다음 호출로 넘기지 않는다.
     '[ -d "$RUN_DIR" ] ||',
-    # sandbox 이름은 실행 키가 아니라 그 해시다 — qg create-sandbox 는 id 앞 8글자만 쓴다 (D1.1).
+    # sandbox 이름은 실행 키가 아니라 그 해시다 — audit-sandbox.sh create-sandbox 는 id 앞 8글자만 쓴다 (D1.1).
     "run-own-tests.sh plugins/<target> <sandbox id>",
     # H (/qg 2026-07-20 round-2): step-2 --out은 step-7이 검증하는 경로에 pin돼야 한다.
     '--out "$RUN_DIR/audit-data.json"',

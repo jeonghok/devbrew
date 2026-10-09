@@ -1,5 +1,6 @@
 """Tests for scripts/qg-gc.py — TTL-based session-folder GC."""
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -182,6 +183,19 @@ class TestQgGc(unittest.TestCase):
         os.utime(folder, (old, old))
         run_gc(self.tmp)
         self.assertFalse(folder.exists(), "publish-eligible.md 만 있는 세션 폴더가 수집되지 않음")
+
+    # AC28 (qg v10) — 로컬 결과 `result.md` 하나뿐인 만료 폴더도 수집된다.
+    def test_session_identified_by_result_md(self):
+        root = Path(self.tmp)
+        folder = root / ".claude" / "quality-gates" / ("sess" + "r" * 8)
+        folder.mkdir(parents=True)
+        f = folder / "result.md"
+        f.write_text("# qg result\n", encoding="utf-8")
+        old = time.time() - 48 * 3600
+        os.utime(f, (old, old))
+        os.utime(folder, (old, old))
+        run_gc(self.tmp)
+        self.assertFalse(folder.exists(), "result.md 만 있는 세션 폴더가 수집되지 않음")
 
     # M2 — 업그레이드 누수. 4.x 가 남긴 폴더는 유일한 파일이 `files.md` 인 경우가
     # 있다(세션 tracker 가 파일을 적었지만 /qg 를 한 번도 안 돌린 세션). 5.0.0 이
@@ -589,8 +603,11 @@ class SetupForwardsGcStderr(unittest.TestCase):
     def test_setup_gc_call_does_not_discard_stderr(self):
         # GC 의 거부 · 락 실패 줄은 `/qg` 시작마다 도는 이 자동 경로에서 보여야 한다.
         setup = GC.parent / "setup-qg.sh"
+        # GC «실행» 줄만 센다 — qg-gc.py 를 프로그램으로 돌리는 줄(`python3 <경로>/qg-gc.py`).
+        # 마커 목록을 읽는 importlib 로더나 거부 문구의 언급은 실행이 아니다.
+        run_re = re.compile(r"python3\s+\S*qg-gc\.py")
         calls = [ln for ln in setup.read_text(encoding="utf-8").splitlines()
-                 if "qg-gc.py" in ln and not ln.lstrip().startswith("#")]
+                 if run_re.search(ln) and not ln.lstrip().startswith("#")]
         self.assertEqual(len(calls), 1, f"setup-qg.sh 의 GC 호출 줄이 하나가 아니다: {calls}")
         self.assertNotIn("2>", calls[0], f"GC 호출이 stderr 를 돌린다: {calls[0]}")
         # `&>/dev/null` · `>/dev/null 2>&1` 처럼 `2>` 없이 버리는 모양도 막는다.

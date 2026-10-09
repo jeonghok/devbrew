@@ -1,6 +1,6 @@
 ---
 description: "Run the quality gates pipeline (scope → differential test → review → verdict)"
-argument-hint: "[critique <path>] [branch [<name>]|--paths <glob>...|--reset|--gc] [--plan <path>] [--pr-url <url>]"
+argument-hint: "[critique <path>] [branch|--paths <glob>...] [--plan <path>]"
 ---
 
 # Quality Gates Pipeline
@@ -8,34 +8,6 @@ argument-hint: "[critique <path>] [branch [<name>]|--paths <glob>...|--reset|--g
 Run the quality pipeline — one pipeline, one verdict (`clean` · `defect` · `not-certified (<사유>)`).
 
 **Arguments:** $ARGUMENTS
-
-## Special argument: `--reset`
-
-`$ARGUMENTS` 가 `--reset` 포함 시 setup 안 돌리고 자기 세션 폴더 + legacy 파일 정리:
-
-```!
-SID="${CLAUDE_CODE_SESSION_ID:-}"
-if [ -n "$SID" ]; then
-  rm -rf ".claude/quality-gates/$SID"
-fi
-rm -f .claude/quality-gates.local.md \
-      .claude/quality-gates-session.local.md \
-      .claude/quality-gates-branch.local.md \
-      .claude/qg-diff-cache.txt \
-      .claude/qg-code-paths.tmp
-```
-
-종료 후 "Quality-gates state cleared." 보고.
-
-## Special argument: `--gc`
-
-`$ARGUMENTS` 가 `--gc` 포함 시 (단독 또는 다른 인자와 함께) TTL GC를 명시 실행:
-
-```!
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg-gc.py"
-```
-
-`--gc` 단독: 종료. 다른 인자와 함께: GC 후 setup 진행.
 
 ## Special mode: `critique` (비-코드 산출물 비평 루프)
 
@@ -63,7 +35,11 @@ Execute the setup script to initialize the pipeline:
 "${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh" $ARGUMENTS
 ```
 
-Now invoke `Skill("quality-gates:quality-pipeline")` with the parsed
+setup 이 `인자는 없어졌다 — … 실행하지 않는다.` 줄을 냈으면(exit 2) 그 줄을 그대로 보이고 끝낸다 —
+파이프라인 skill 을 부르지 않는다. 그 밖에 setup 이 비0 으로 끝났으면 그 출력을 그대로 보이고 끝낸다.
+인자가 `critique` 로 시작하면 setup 은 출력 없이 0 으로 끝난다 — 이 규칙 대신 위 critique 절을 따른다.
+
+Otherwise invoke `Skill("quality-gates:quality-pipeline")` with the parsed
 arguments. The skill runs the pipeline in this turn — differential test,
 reviewers, re-critique, synthesis — with its internal fix-loop, surfacing
 decision points via AskUserQuestion. No further commands are needed unless
@@ -84,18 +60,15 @@ the pipeline is aborted at a decision point.
 | `/qg critique <path>` | 비-코드 산출물 비평-수정 루프(별도 skill; 라운드별 커밋; 코드 아님) |
 | `/qg` | Run the pipeline; `Spec:` 트레일러로 선언된 토픽이면 토픽 전체(합친 트리), 아니면 git-derived diff (branch + worktree) |
 | `/qg branch` | Run on the full-branch diff (vs `main`) |
-| `/qg branch <name>` | Run against branch `<name>` in isolated worktree |
 | `/qg --paths <glob>...` | Scope to matched paths |
-| `/qg --reset` | Clear current session folder + legacy v1.5.0 flat files and exit |
-| `/qg --gc` | Run TTL GC on stale session folders |
-| `both` · `review` · `runtime` · `--skip-runtime` | 제거됨 — 한 줄 공지 후 그대로 진행 |
 | `/qg --plan <path>` | Use specific plan file |
-| `/qg --pr-url <url>` | Specify PR URL |
-| `/cancel-qg` | Cancel active pipeline |
+| `branch <name>` · `--reset` · `--gc` · `--pr-url` | 없어졌다(v10) — 안내 한 줄을 내고 실행하지 않는다 |
+| `both` · `review` · `runtime` · `--skip-runtime` | 제거됨 — 한 줄 공지 후 그대로 진행 |
 | `/qg-publish [--dry-run]` | Generate + publish a PR-understanding comment (separate skill; consent-gated; not a gate) |
 | `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | 차등 테스트를 건너뛴다 — 판정은 `not-certified (kill-switch)` |
-| `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1` | Disable `/qg branch <name>` auto-worktree mode |
-| `DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1` | Preserve branch worktree after pipeline completes or is cancelled (default: removed) |
+
+다른 브랜치를 보려면 그 브랜치를 체크아웃하거나 그 브랜치의 git worktree 안에서 `/qg` 를 돌린다.
+세션 폴더는 `/qg` 를 시작할 때마다 지우고 다시 만들며, 오래된 폴더는 같은 시점의 TTL GC 가 회수한다.
 
 ### Scope (default: git 변경)
 
@@ -161,4 +134,4 @@ Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable.
 - AskUserQuestion also fires on max-iter, and on the differential test's gap
   gate (R3) when something was left out.
 - State tracked minimally in `.claude/quality-gates/<session-id>/pipeline.md`
-  (managed by `scripts/setup-qg.sh`; SKILL reads worktree_path only).
+  (written by `scripts/setup-qg.sh`, which recreates the folder at every `/qg` start).

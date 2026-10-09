@@ -3,11 +3,38 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [9.3.7] — 2026-10-09
+## [10.0.1] — 2026-10-09
 
 ### Fixed
 
 - `tests/test_codex_gate_observation.sh` 의 라벨 열거를 spec-distill · plugin-audit 의 skill 디렉토리 개명(`spec-review` · `request-framing` · `plugin-audit`)에 맞췄다. 동작 변화 없음.
+
+## [10.0.0] — 2026-10-09
+
+**v10 재건 ① 정리** — 대체물이 필요 없는 표면을 지운다(설계 `docs/superpowers/specs/2026-10-08-qg-v10-rebuild-design.md` §7 ①).
+
+### Removed
+
+사용자가 명시 결정한 재건이라 deprecation 창 없이 지운다 — CLAUDE.md 「메타데이터 & 버전 관리」의 「사용자가 명시 결정한 재건은 deprecation 창 없이 제거하고 CHANGELOG Removed 에 적는다」.
+
+- `/qg branch <name>`(격리 worktree 모드)와 `qg-worktree.sh` 의 `sanitize` · `validate-branch` · `create`, 스위치 `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE` · `DEVBREW_QUALITY_GATES_KEEP_WORKTREE` — 만든 worktree 안에서 파이프라인이 일하지 않았다(설계 재결정 R4). 다른 브랜치는 체크아웃하거나 그 브랜치의 git worktree 안에서 `/qg` 를 돌린다. `qg-worktree.sh` 에는 차등 테스트가 쓰는 `create-baseline` · `create-head` · `remove` 만 남는다.
+- 인자 `--reset` · `--gc` · `--pr-url` — `branch <name>` 과 함께 안내 한 줄을 내고 exit 2 로 끝난다. 세션 폴더는 `/qg` 시작마다 다시 만들고 GC 는 그때 자동으로 돈다. `--pr-url` 은 읽는 곳이 없었다.
+- `/cancel-qg` 와 `scripts/cancel-qg-core.sh` · `scripts/read-frontmatter.py` — 파이프라인은 한 턴이다. 「이미 활성 파이프라인이 있다」 거부도 함께 없어졌다. `/cancel-qg --all` 이 하던 `.claude/quality-gates/baseline-cache/` 정리는 대체가 없다 — 필요하면 그 폴더를 직접 지운다(차등 테스트 재건 컷오버가 이 캐시를 없앤다).
+- 훅 둘(`hooks/session-start-advisor.py` · `hooks/session-end-cleanup.py`)과 `hooks/hooks.json` · `scripts/state_path.py` · `scripts/devbrew-python.sh` 사본, `DEVBREW_SKIP_HOOKS` 의 `quality-gates:session-start-advisor`(`:frontmatter-scan`) · `quality-gates:session-end-cleanup` · 이벤트 별칭. devbrew 의 Python 바닥 미만 안내를 내던 유일한 `SessionStart` 자리가 함께 사라졌다 — 루트 · project-init · spec-distill README 가 그 사실을 적는다. 해석기(`shared/python/devbrew-python.sh`)는 `DEVBREW_PYTHON_IGNORED` 를 여전히 내보내지만 읽는 곳이 없어졌다 — 바닥 미만 `$DEVBREW_PYTHON` 은 이제 아무 안내 없이 무시된다. frontmatter drift 의 세션 시작 경고(`frontmatter-scan`)도 사라졌다 — `tests/test_agent_frontmatter_keys.sh` 가 리포 안에서만 잡는다.
+- `create-sandbox` · `mutation-guard` 와 `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` — plugin-audit 의 `scripts/audit-sandbox.sh` 로 옮겼다(`DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX`). 옛 스위치 이름은 어디서도 읽지 않는다.
+- `scripts/filter-docs.sh` · `scripts/check-changelog-korean-primary.py` · `scripts/check-allowed-tools-order.sh`(+ 테스트) · `scripts/experiment-model-override.md` · `tests/fixtures/gate3/` · `tests/fixtures/qg-worktree-fail-stub.sh` — 실행자가 없었다.
+- setup 의 v1.5.0 평면 파일 정리와 플러그인 설치 탐지(`pr-review-toolkit` 부재 경고) 줄 — 읽는 소비자가 없었다.
+
+### Changed
+- `scripts/setup-qg.sh` 를 최소로 다시 썼다 — kill switch · SID 가드(전체 일치) · 인자 거부만 한다. 매 실행 자기 세션 폴더를 지우고 다시 만든다. SID 가 `CLAUDE_CODE_SESSION_ID`(또는 그와 같은 `--session-id`)면 자기 세션이라 표지 없이도 지운다 — 같은 세션의 `/qg-publish` 가 쓴 `pr-understanding.md` 등도 함께 지워진다. 그 환경 변수가 있는데 `--session-id` 가 다르면 다른 세션의 폴더라 거부한다. 환경 변수가 없을 때(직접 호출 · 테스트)는 비어 있거나 세션 표지(`qg-gc.py` 의 `SESSION_MARKERS` ∪ `LEGACY_SESSION_MARKERS`, 실행 때 그 파일에서 읽는다)가 있는 폴더만 지운다. 표지 목록을 못 읽을 때 · 예약 형제 이름(`worktrees` · `baseline-cache`)이 SID 로 올 때 · `.claude` 나 state root 가 실제 디렉토리가 아닐 때(링크면 리포 안을 가리켜도 — 해법은 실제 디렉토리) · 세션 폴더 자신이 링크일 때 · 표지 없는 비어 있지 않은 다른 폴더일 때는 지우지 않고 한 줄로 알린 뒤 `pipeline.md` 를 쓰지 않고 exit 1 로 끝난다. 링크 · 탈출 · 비디렉토리 가드는 자기 세션이어도 삭제보다 먼저 돈다. 첫 인자 `critique` 는 setup 의 몫이 아니라 출력 · 상태 없이 exit 0 으로 끝난다(`/qg critique` 는 `critiquing-artifacts` 로 간다 — 전엔 `Unknown argument` 로 멈췄다).
+- `scripts/qg-gc.py` — 세션 표지에 `result.md` 를 더하고 `publish-eligible.md` 를 옛 표지로 옮겼다(회수 동작은 같다).
+- `commands/qg.md` · SKILL 인자 절 · `references/state-file-format.md` · README 가 최소 setup 과 위 삭제를 따른다. qg.md 의 「setup 이 비0 이면 보이고 끝낸다」 규칙에 critique 는 그 대신 critique 절을 따른다는 한 줄을 더했다. README 는 `.claude` · state root 링크면 `/qg` 가 거부한다는 것과 그 해법(실제 디렉토리)을 적고, GC 키 행 · `DEVBREW_QUALITY_GATES_DISABLE` 행(setup 펜스는 setup 을 부르고 setup 이 exit 1 로 거부한다)을 사실에 맞췄다. `tests/e2e-scenarios.md` L 도 같다.
+- `tests/test_no_write_matcher_hooks.sh` 가 `hooks/` 부재에 더해 `plugin.json` 의 인라인 `"hooks"` 키 부재도 잰다(양의 짝: plugin.json 을 읽었다).
+- `tests/test_utf8_explicit.py` 의 로케일 회귀 운반체를 지운 훅에서 `scripts/verdict.py --differential` 로 옮겼다.
+- `scripts/run-test-selection.sh` 의 「setup 환경 폴더를 gitignore 하지 않는다」 안내가 이 플러그인에 없는 `mutation-guard` 를 말하지 않는다. 같은 파일의 낡은 R7 주석은 차등 테스트 재건 컷오버가 이 파일을 다시 쓸 때 정리한다.
+
+### Added
+- `tests/test_entry_safety_e1_e6.sh` — 진입 · 안전 요구 E1~E6(설계 §요구 목록). 지운 `tests/test_kill_switches.py` 의 setup kill switch 단언을 이어받는다.
 
 ## [9.3.6] — 2026-09-28
 
