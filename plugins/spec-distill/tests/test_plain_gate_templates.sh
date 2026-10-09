@@ -52,7 +52,8 @@ RSC="$(grep '/compact 설계문서' "$RS" || true)"
 assert_eq "$(printf '%s' "$RSC" | grep -oE '<[^>]+>' | sort -u | tr '\n' ' ')" "<spec_path> " "Review Focus 4: spec-review /compact 틀의 꺾쇠 자리표가 <spec_path> 하나다"
 
 # ⑦ request-framing 의 옛 채널 이름이 남지 않는다(처분 앵커 포함).
-assert_eq "$(grep -c '게이트 질문 텍스트' "$FR" || true)" "0" "Q3: request-framing 에 옛 채널 이름 「게이트 질문 텍스트」가 없다"
+FR_FLAT="$(tr '\n' ' ' < "$FR" | tr -s ' ')"
+assert_eq "$(printf '%s' "$FR_FLAT" | grep -oE '게이트 질문 텍스트|게이트 텍스트' | wc -l | tr -d ' ')" "0" "Q3: request-framing 에 옛 채널 이름(「게이트 질문 텍스트」·「게이트 텍스트」)이 줄바꿈을 접어도 없다"
 assert_file_grep "$FR" 'disclosure=proceed 게이트 앞 글' "Q3 양의 짝: 처분 앵커가 새 이름을 댄다"
 
 # ⑧ 질문에 그대로 남는 예외가 명시돼 있다(Q4).
