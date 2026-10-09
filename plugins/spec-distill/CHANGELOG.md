@@ -1,5 +1,38 @@
 # Changelog
 
+## [5.0.0] — 2026-10-09
+
+major 인 이유 — 사용자 호출 이름 둘이 alias 없이 사라졌고, skill 디렉토리 셋이 개명됐다.
+
+### Removed
+
+| 옛 호출 · 이름 | 새 완전명 |
+|---|---|
+| `/interview` (`commands/interview.md`) | `/spec-distill:spec-interview` |
+| `/request-framing` 명령 (`commands/request-framing.md`) | `/spec-distill:request-framing` (skill) |
+| skill `framing-requests` | `request-framing` |
+| skill `conducting-interview` (내부) | `spec-interview` (사용자 호출 가능) |
+| skill `reviewing-spec` | `spec-review` |
+
+### Added
+
+- 진입 skill 셋에 본문 전 사전 검사(`scripts/entry_preflight.py`, `shared/entry/` 정본의 심볼릭 링크)와 `## 진입 단계` 절. `@경로` 풀기 · trivia 판정이 명령 파일에서 skill 로 옮겨 왔다.
+
+### Changed
+
+- 기계가 내는 안내(핸드오프 · trivia 문면)는 `/spec-distill:<skill>` 완전명을 쓴다.
+- `DEVBREW_SPEC_DISTILL_DISABLE=1` 은 세 진입 skill 의 사전 검사가 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다.
+- `/spec-interview` 는 `@` 로 시작하는 인자에 공백이 섞이면 풀지 않고 멈춘다(경로 한 토큰으로 다시 부른다). `/request-framing` 은 그런 인자를 받은 그대로 회의 재료로 쓴다.
+- `/request-framing` 의 `@경로` 풀기는 절대경로 읽기가 실패하면 `root=` 기준 상대경로로 한 번 더 시도한다.
+- trivia 를 건너뛰려면 `force` 를 첫 토큰으로 다시 부른다(`/spec-distill:spec-interview force <요청>`) — `references/trivia-escape.md` 가 그 토큰을 떼고 판정을 건너뛴다. trivia 안내 문면도 이 재호출을 가리킨다.
+
+## [4.6.0] — 2026-10-09
+
+### Changed
+- SKILL.md·명령 파일 맨 앞(H1 바로 다음)에 「사람에게 쓰는 글」 규칙 블록을 둔다. 정본은 리포의 `shared/style/plain-language.md` 이고 `shared/tests/test_plain_language_block.sh` 가 같음을 잰다.
+- 문서 리뷰 게이트 렌더가 쉬운 말이다: 첫 줄은 상태와 경고를 한 문장으로 말하고, 0 인 집계는 빼며, 항목은 쉬운 말로 시작하고 id 는 끝 괄호에 둔다. 경고는 전부 첫 줄에 싣는다(전에는 codex 부재만 싣고 나머지를 버렸다). 기계가 읽는 `gate` JSON 은 그대로다.
+- 문서 리뷰어(`doc-critic` · `doc-critic-web` · `doc-recritic`)가 사람이 읽는 칸을 쉬운 말로 쓴다.
+
 ## [4.5.4] — 2026-10-09
 
 ### Changed

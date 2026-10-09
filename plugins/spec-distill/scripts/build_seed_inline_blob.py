@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """build_seed_inline_blob.py — seed 리뷰 번들을 조립한다.
 
-문서 리뷰 엔진의 seed 자리(`framing-requests` 의 `## 검증`)가 탐지 리뷰어 · codex 러너 · 재비판자에게
+문서 리뷰 엔진의 seed 자리(`request-framing` 의 `## 검증`)가 탐지 리뷰어 · codex 러너 · 재비판자에게
 넘기는 문서가 이 파일의 출력이다. 엔진의 `--doc`(스냅숏 · 얼림 검사 대상)은 seed 파일 자신이고,
 리뷰어가 **읽는** 것은 이 번들이다.
 

@@ -3,7 +3,7 @@ type: interview-audit
 payload: <YYYY-MM-DD>-<kebab-topic>-interview.md
 created_at: YYYY-MM-DD
 session_id: <uuid>
-source: spec-distill conducting-interview v0.57.0
+source: spec-distill spec-interview v0.57.0
 ---
 
 # <Topic> — Interview Audit

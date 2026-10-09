@@ -571,7 +571,7 @@ mut 1/1 escalate_reason_not_carried case_GR_escalated_fix_reason_persists sed_st
 #    여전히 동작하지만, 게이트 본문이 그 사실을 다시 감춘다 — I2 가 지적한 「승인이
 #    다시 도달 가능한가를 렌더가 알려주지 않는다」결함으로 되돌린다.
 mut 1/1 escalated_fix_no_drop_hint case_GR_escalated_fix_drop_clears_block sed_state \
-  's/, drop 하면 이 차단이 풀린다)"$/)"/'
+  's/\. 버리면(drop) 이 차단이 풀린다 (%s)" % (/ (%s)" % (/'
 
 # ── 재상승 후속의 「보류」 (Task 4 of 2026-09-08-docreview-design-doc-site,
 #    설계 §6.4 알려진 한계 (a)) ───────────────────────────────────────────────
@@ -696,7 +696,35 @@ mut 1/1 reraise_kind_hardcoded_post case_AC22c_reraise_preserves_pre_kind sed_ro
 #    `case_AC22c_reraise_inherits_post_kind` 의 렌더 꼬리 단언만 RED — kind·
 #    즉시-applied 단언은 렌더 텍스트와 무관해 생존한다(실측 RED(1) 생존(2)).
 mut 1/1 rg_decide_post_tail_unwired case_AC22c_reraise_inherits_post_kind sed_state \
-  's/"\[decide%s\] %s — %s%s" % (" auto" if dv\.get("auto") else "", fid, f\.get("summary"), _post_kind_notice(d)),/"[decide%s] %s — %s" % (" auto" if dv.get("auto") else "", fid, f.get("summary")),/'
+  's/"- %s%s (%s%s)" % (_one(f\.get("summary")), _post_kind_notice(d), fid, " · 자동" if dv\.get("auto") else ""),/"- %s (%s%s)" % (_one(f.get("summary")), fid, " · 자동" if dv.get("auto") else ""),/'
+# ── 쉬운 말 렌더 (쉬운 말 출력 PR 1 · AC3) ──────────────────────────────────
+# 0 인 집계 되살리기 — 0 을 거르는 조건을 지운다.
+mut 1/1 zero_counts_revived case_plain_render_nothing_left sed_state \
+  's/^    parts = \[t % c\[k\] for k, t in COUNT_GLOSS if c\[k\]\]$/    parts = [t % c[k] for k, t in COUNT_GLOSS]/'
+# codex 없음 상태에서 「이상 없음」 — 경고 가지를 끈다.
+mut 1/1 warns_hidden_as_clean case_T40_codex_absent_first_line sed_state \
+  's/^    if warns:$/    if False:/'
+# 남은 항목이 있는데 「이상 없음」 — 「경고 없음」 갈래를 지운다.
+mut 1/1 left_reported_clean case_plain_render_fix_and_decide sed_state \
+  's/^        s = head + " — 이상 없음\." if not left else s + " 경고 없음\."$/        s = head + " — 이상 없음."/'
+# id 를 앞으로 되돌리기 — 미적용 fix 머리를 옛 모양(id 가 앞)으로.
+mut 1/1 fix_id_moved_front case_plain_render_fix_and_decide sed_state \
+  's/^    return \["- %s — 고치거나 버린다(drop) (%s)" % (_one(st\["findings"\]\[fid\]\.get("summary")), fid)\]$/    return ["[미적용 fix] %s — %s" % (fid, st["findings"][fid].get("summary"))]/'
+# STATE_GLOSS 짝 하나 지우기 — ∀ 커버리지 락이 잡는다.
+mut 1/1 state_gloss_row_missing case_state_gloss_covers_gate_rows sed_state \
+  's/^    "ask_open": "답을 기다리는 질문",$//'
+# 근거 줄의 한 줄 접기를 떼기 — 근거 속 개행이 열 0 에 가짜 항목 머리를 세운다.
+mut 1/1 evidence_line_unfolded case_I4_evidence_newline_collapsed sed_state \
+  's/^             "  근거: %s" % _one(dv\.get("basis", f\.get("evidence") or "—")),$/             "  근거: %s" % dv.get("basis", f.get("evidence") or "—"),/'
+# 사람말 사상 없음 줄의 한 줄 접기를 떼기 — category 속 개행이 열 0 에 가짜 항목 머리를 세운다.
+mut 1/1 category_line_unfolded case_I4_category_newline_collapsed sed_state \
+  's/^        lines\.append("  ↳ 사람말 사상 없음: %s — 원래 이름 그대로 낸다" % _one(dv\["category_unglossed"\]))$/        lines.append("  ↳ 사람말 사상 없음: %s — 원래 이름 그대로 낸다" % dv["category_unglossed"])/'
+# 같은 자리 표지의 한 줄 접기를 떼기 — anchor 속 개행이 열 0 에 가짜 항목 머리를 세운다.
+mut 1/1 anchor_marker_unfolded case_I4_anchor_newline_collapsed sed_state \
+  's/^                out\.append("  ┆ 같은 자리(%s)" % _one(anchor))$/                out.append("  ┆ 같은 자리(%s)" % anchor)/'
+# 경고 판정에 남은 항목을 조건으로 걸기 — 남은 것 없는 codex 없음 라운드가 「이상 없음」이 된다.
+mut 1/1 warns_need_left case_T40_codex_absent_nothing_left_first_line sed_state \
+  's/^    if warns:$/    if warns and left:/'
 # (54) 상태 디렉토리의 문서 정체 — `init` 의 문서 비교를 끈다. 다른 문서의 원장을 조용히
 #    이어받던 그 동작이다. 거부 셀만 RED 가 된다.
 mut 1/1 init_doc_compare_off case_init_other_doc_refused sed_state \

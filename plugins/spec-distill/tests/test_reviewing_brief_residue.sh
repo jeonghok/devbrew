@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/reviewing-spec/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf shared/docreview/scripts/docreview_state.py plugins/spec-distill/scripts/build_brief_bundle.py
+# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf shared/docreview/scripts/docreview_state.py plugins/spec-distill/scripts/build_brief_bundle.py
 #
 # `reviewing-brief` 의 codex 게이트 fence · `## 입력` · `## 번들` 블록을 **잘라내 차가운 셸
 # (`env -i`)에서 실행**해 디스크 사후상태를 잰다. 읽어서 판정하지 않는다 — 읽으면 옳아 보이는
@@ -16,7 +16,7 @@
 # 이 자리에만 있는 것:
 #   · 게이트 입력이 하나 더 있다(번들) — 번들 부재도 codex 를 건너뛰는 skip 경로다(A·E 번들 부재).
 #   · R 러너 인자 넷의 실측 — 넷 다 비지 않고, 둘째가 payload 가 아니라 번들인가.
-#   · P×자리 — 같은 세션에서 design doc 자리(`reviewing-spec`)와 brief 자리가 다른 자리를 받는가.
+#   · P×자리 — 같은 세션에서 design doc 자리(`spec-review`)와 brief 자리가 다른 자리를 받는가.
 #   · S×자리 — brief 쪽 sweep 이 design doc 자리의 codex 산출물까지 중화하되 번들·원장은 남기는가.
 #   · B 번들 조립이 실패한 라운드가 직전 번들을 남기지 않는가, 그 뒤 fence 가 codex 를 건너뛰는가.
 #   · H 따로 도는 블록(Bash 호출마다 새 셸) — `## 입력` 만 돌아도 payload 가 절대경로가 되는가(I1),
@@ -28,11 +28,11 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SKILL="$ROOT/plugins/spec-distill/skills/reviewing-brief/SKILL.md"
-SPEC_SKILL="$ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+SPEC_SKILL="$ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/skills/reviewing-brief/SKILL.md"
-  echo "plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+  echo "plugins/spec-distill/skills/spec-review/SKILL.md"
   echo "plugins/spec-distill/scripts/detect_codex.sh"
   echo "plugins/spec-distill/scripts/codex-killswitch.conf"
   echo "shared/docreview/scripts/docreview_state.py"
@@ -75,7 +75,7 @@ cut_block_with() {   # cut_block_with <SKILL> <절 헤딩 정규식> <줄 정규
 FENCE="$SCRATCH/fence.sh";  cut_fence "$SKILL" > "$FENCE"
 INPUT="$SCRATCH/input.sh";  cut_block "$SKILL" '^## 입력$' > "$INPUT"
 BUNDLE_BLK="$SCRATCH/bundle.sh"; cut_block "$SKILL" '^## 번들' > "$BUNDLE_BLK"
-# reviewing-spec 의 `## 입력` 절에는 후보 펜스(spec-distill 3.0.0)가 먼저 온다 — 첫 블록이 아니라 `STATE_DIR=` 대입을
+# spec-review 의 `## 입력` 절에는 후보 펜스(spec-distill 3.0.0)가 먼저 온다 — 첫 블록이 아니라 `STATE_DIR=` 대입을
 # 담은 블록을 고른다. 없으면 아래 추출 검사가 RED 다.
 S_INPUT="$SCRATCH/spec-input.sh"; cut_block_with "$SPEC_SKILL" '^## 입력$' '^STATE_DIR=' > "$S_INPUT"
 S_FENCE="$SCRATCH/spec-fence.sh"; cut_fence "$SPEC_SKILL" > "$S_FENCE"
@@ -87,7 +87,7 @@ fi
 for pair in 'fence:'"$FENCE"':run_docreview_codex_reviewer\.sh" "\$PROFILE" "\$BUNDLE"' \
             "입력:$INPUT:^STATE_DIR=" "입력:$INPUT:^BUNDLE=" \
             "번들:$BUNDLE_BLK:build_brief_bundle.py" \
-            "reviewing-spec 입력:$S_INPUT:^STATE_DIR=" "reviewing-spec fence:$S_FENCE:run_docreview_codex_reviewer.sh"; do
+            "spec-review 입력:$S_INPUT:^STATE_DIR=" "spec-review fence:$S_FENCE:run_docreview_codex_reviewer.sh"; do
   label="${pair%%:*}"; rest="${pair#*:}"; f="${rest%%:*}"; pat="${rest#*:}"
   if grep -qE -- "$pat" "$f" 2>/dev/null && bash -n "$f" 2>/dev/null; then
     ok "추출: $label 블록이 '$pat' 을 담고 bash -n 을 통과한다"

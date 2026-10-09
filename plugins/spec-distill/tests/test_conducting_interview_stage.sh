@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-# AC3/AC7/AC8/AC13 + R1-R5 + PN1/PN3 — conducting-interview problem-space stage contract.
+# AC3/AC7/AC8/AC13 + R1-R5 + PN1/PN3 — spec-interview problem-space stage contract.
 set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SKILL="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/SKILL.md"
-CMD="$REPO_ROOT/plugins/spec-distill/commands/interview.md"
+SKILL="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/SKILL.md"
+# 규칙 블록(표시 줄 포함)과 그 바로 뒤 빈 줄 하나를 뺀 줄 수 — 블록은 모든 SKILL.md · 명령 파일 공통이라 이 래칫이 재는
+# 「이 skill 자신의 분량」이 아니다(쉬운 말 출력 PR 1, 계획 P5). 블록이 없으면 wc -l 과 같다.
+skill_own_lines() {
+  awk '/^<!-- plain-language:begin -->$/{s=1} s==0{n++} s==2{s=0; if ($0 != "") n++; next} /^<!-- plain-language:end -->$/{s=2} END{print n+0}' "$1"
+}
+CMD="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/SKILL.md"
 # Task 32(무게 감축): `## 종료` 절차 전문이 references/finishing.md 로 분리됐다. 이 스위트의
 # 전-파일 검사(존재·**부재** 양쪽)가 보는 범위는 614줄 중 396줄로 줄었다 — 부재 락은 코퍼스가
 # 줄어도 RED 가 되지 않고 **조용히 약해진다**(Task 31 이 정확히 이 방식으로 P21 스캔을 잃었다).
 # 그래서 스킬의 표면을 **열거가 아니라 도출**해 한 덩어리로 다룬다: 새 참조 파일이 생겨도
 # 자동으로 대상이 된다. 섹션 윈도우(B-0…B-3·종료)는 그 섹션이 실제로 사는 $FIN 에서 뜬다.
-FIN_DIR="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/references"
+FIN_DIR="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/references"
 FIN="$FIN_DIR/finishing.md"
 # Task 11b(무게 감축 재시도): 같은 이유로 `## seed 를 입력으로 받았을 때`와
 # `## In-flight state migration`도 references/로 분리됐다(둘 다 finishing.md보다 조건성이
@@ -44,7 +49,7 @@ ci_cat_all() { cat "${CI_ALL[@]}"; }
 # vacuity: 도출이 SKILL.md 하나만 남기면 이 스위트의 부재 락은 분할 이전 범위로 조용히
 # 되돌아가면서 GREEN 을 찍는다. '참조 파일 0건'을 '문제 없음'으로 읽지 않는다.
 [[ "${#CI_FILES[@]}" -ge 2 ]] \
-  && ok "코퍼스: conducting-interview 표면 ${#CI_FILES[@]}개 파일 도출 (vacuous 아님)" \
+  && ok "코퍼스: spec-interview 표면 ${#CI_FILES[@]}개 파일 도출 (vacuous 아님)" \
   || no "코퍼스: references/*.md 를 0건 도출했다 — 전-파일 검사 범위가 조용히 좁아졌다"
 [[ -f "$FIN" ]] && ok "코퍼스: references/finishing.md 실재" || no "코퍼스: references/finishing.md 부재"
 
@@ -413,7 +418,7 @@ grep -qF '나머지는 다음 라운드의 «다음 결정»으로 넘어간다'
   && ok "AC3: 겹침에서 밀린 것은 다음 라운드의 «다음 결정»으로 이월" || no "AC3: 겹침 이월 조항 부재"
 grep -qF '`references/steelman.md` 가 사용자에게 묻는 질문은 전부 그 파일의 규약' <<<"$round_flat" \
   && ok "AC3: steelman 절차 질문의 예외 (그 파일이 묻는 질문 — 도출 규칙)" || no "AC3: steelman 예외 도출 규칙 부재"
-grep -qE '인자 없이 `/interview` 를 부른 경로의 R1\*\* 은[^.]{0,60}«아직 없음»' <<<"$round_flat" \
+grep -qE '인자 없이 `/spec-distill:spec-interview` 를 부른 경로의 R1\*\* 은[^.]{0,60}«아직 없음»' <<<"$round_flat" \
   && ok "AC3: 인자 없는 R1 — «지금 이해» 는 «아직 없음»" || no "AC3: 인자 없는 R1 모양 부재"
 # 부재 — 새 규약 절 안에 옛 형식이 남았는지를 잰다. `Q1`·`Q2` 는 `OQ1`·`OQ2` 표기와 겹칠 수 있어
 # 전-파일로 재지 않고 이 절로 좁힌다. production 전체의 제거 어휘 부재는 test_stale_terms.sh V13 이 잰다.
@@ -472,9 +477,18 @@ done
 # 느슨해 래칫이 뜻을 잃는다 — 이 브랜치가 실측으로 그것을 보였다(원래 계획의 430 은 남은 편집을
 # 과소 예측한 값이었다). 그래서 여기서는 **남은 편집을 다 받을 만큼** 열어 두고, SKILL.md 를
 # 마지막으로 편집하는 Task 11 이 그 자리에서 **실측 + 8** 로 조인다. 래칫의 뜻은 끝에서 지켜진다.
-[[ "$(wc -l < "$SKILL")" -lt 451 ]] \
-  && ok "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") < 451 (조사 특화 순증 수용 — 실측 + 8, Task 11 이 조였다)" \
-  || no "AC3/C9: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 451"
+#
+# 2026-10-09 skill-only surface: 옛 interview 명령 파일(호출마다 함께 로드되던 진입 본문)이
+# 지워지고 그 책임이 이 SKILL.md 의 `## 진입 단계` 로 들어왔다. 호출 경로의 로드 표면은 줄었지만
+# SKILL.md 한 파일은 그 절만큼 늘어 래칫을 **그 절의 줄 수만큼** 옮긴다(여유는 옮기기 전과 같은 0).
+SKILL_LINE_CAP=504
+[[ "$(skill_own_lines "$SKILL")" -lt "$SKILL_LINE_CAP" ]] \
+  && ok "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") < $SKILL_LINE_CAP (규칙 블록 제외 — 조사 특화 순증 + 진입 단계 흡수)" \
+  || no "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") ≥ $SKILL_LINE_CAP"
+_total="$(wc -l < "$SKILL" | tr -d ' ')"; _own="$(skill_own_lines "$SKILL")"
+[[ $(( _total - _own )) -eq 14 ]] \
+  && ok "AC3/C9 양의 짝: 블록 13줄 + 뒤 빈 줄 1 이 정확히 빠졌다 (${_total} − ${_own})" \
+  || no "AC3/C9 양의 짝: 뺀 줄 수가 14 가 아니다 (${_total} − ${_own}) — 블록이 없거나 함수가 깨졌다"
 
 # 제거 (G7·AC1·AC14) — 존재 검사가 아니라 부재 검사이므로 CI_ALL 전체
 for tok in 'teach-lite' 'teach-heavy' 'teach-beat' 'general-purpose'; do
@@ -499,7 +513,7 @@ for tok in '4-block' '막힌 결정'; do
     && ok "G7 양성 대조: «${tok}» 이 steelman.md 에 실재 (예외가 vacuous 아님)" \
     || no "G7 양성 대조: steelman.md 에 «${tok}» 이 없다 — 예외가 아무것도 면제하지 않으면서 범위만 줄인다"
 done
-[[ "$(wc -l < "$SKILL")" -lt 451 ]] && ok "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") < 451 (조사 특화 순증 수용 — 실측 + 8, Task 11 이 조였다)" || no "G7: SKILL.md 줄 수 $(wc -l < "$SKILL") ≥ 451"
+[[ "$(skill_own_lines "$SKILL")" -lt "$SKILL_LINE_CAP" ]] && ok "G7: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") < $SKILL_LINE_CAP (규칙 블록 제외 — 조사 특화 순증 + 진입 단계 흡수)" || no "G7: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") ≥ $SKILL_LINE_CAP"
 
 # coverage-mapper dispatch (상한 2, AC7, scoped)
 covmap_block="$(awk '/^## coverage-mapper dispatch/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
@@ -998,9 +1012,9 @@ grep -qF '**최초 요청 원문은 `S1`이다.**' <<<"$stepa_flat" \
   && ok "R-L: S1 = 최초 요청 원문 정의 (Step A 스코프, exact literal)" \
   || no "R-L: 'S1 = 최초 요청 원문' 정의 문장이 Step A 에 없다"
 
-grep -qF '`$ARGUMENTS`(사용자가 `/interview`에 함께 넘긴 rough request)를 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다' <<<"$stepa_flat" \
-  && ok "R-L: \$ARGUMENTS → S1 형식 → §6 배치 지시 (한 문장 결속)" \
-  || no "R-L: \$ARGUMENTS 를 §6 맨 앞에 S1 형식으로 넣으라는 지시가 한 문장으로 없다"
+grep -qF '「풀린 입력」(진입 단계 2 의 결과 — rough request 그대로이거나 `@경로` 의 파일 전문)을 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다' <<<"$stepa_flat" \
+  && ok "R-L: 풀린 입력 → S1 형식 → §6 배치 지시 (한 문장 결속)" \
+  || no "R-L: 풀린 입력을 §6 맨 앞에 S1 형식으로 넣으라는 지시가 한 문장으로 없다"
 
 grep -qF '비어 있으면(인자 없이 호출) `S1`을 만들지 않고 `S2`부터 시작하지 않습니다' <<<"$stepa_flat" \
   && ok "R-L: 빈 \$ARGUMENTS 시 S1 미생성 + S2 번호 유지 규칙 (한 문장 결속)" \
@@ -1197,9 +1211,9 @@ grep -qE 'request-framing[^.]{0,60}웹[^.]{0,20}보지 않' <<<"$r2_flat" \
 # Task 11b: 절 전문이 $SEED_REF 로 옮겨갔다 — 윈도우도 거기서 뜬다.
 seed_block="$(awk '/^## seed 를 입력으로 받았을 때/{f=1;print;next} /^## /{f=0} f' "$SEED_REF")"
 seed_flat="$(tr '\n' ' ' <<<"$seed_block" | tr -s ' ')"
-# 리터럴은 finishing.md 의 S1 규약("<$ARGUMENTS 원문 그대로>", frontmatter 포함)과 같은
+# 리터럴은 finishing.md 의 S1 규약("<「풀린 입력」 원문 그대로>", frontmatter 포함)과 같은
 # 값을 요구한다 — "seed 본문 전체"라는 표현은 frontmatter 제외로 읽힐 수 있어 규약과 갈린다.
-{ [[ -n "$seed_block" ]] && grep -qF '§6 `S1` 은 `$ARGUMENTS` 원문 그대로다' <<<"$seed_flat"; } \
+{ [[ -n "$seed_block" ]] && grep -qF '§6 `S1` 은 「풀린 입력」 원문 그대로다' <<<"$seed_flat"; } \
   && ok "v0.41.0: seed 본문이 §6 S1 이 된다 (finishing.md S1 규약과 같은 값)" \
   || no "v0.41.0: seed 본문 = §6 S1 규약이 없다"
 grep -qF '다시 검증할 것' <<<"$seed_flat" \
@@ -1248,19 +1262,39 @@ grep -qE '차단.{0,4}않는다|막지 않는다' <<<"$seed_flat" \
   && ok "v0.41.0: seed 아닌 입력도 받되 차단하지 않음 명시 (SKILL 쪽)" \
   || no "v0.41.0: seed 아닌 입력 비차단 명시가 없다 (SKILL 쪽)"
 
-# --- v0.41.0: commands/interview.md — trivia 포인터 전환 + Step 2.5 비차단 조언 ---
+# --- v0.41.0: spec-interview `## 진입 단계` — trivia 포인터 + 3.5 비차단 조언 ---
 grep -qE 'references/trivia-escape\.md' "$CMD" \
-  && ok "v0.41.0: /interview 가 trivia-escape.md 정본을 가리킨다" \
-  || no "v0.41.0: /interview 에 trivia-escape.md 포인터가 없다"
-# 정본과의 분기 방지 — request-framing.md 의 동형 검사(test_request_framing_command.sh)와
+  && ok "v0.41.0: spec-interview 진입 단계가 trivia-escape.md 정본을 가리킨다" \
+  || no "v0.41.0: spec-interview 진입 단계에 trivia-escape.md 포인터가 없다"
+# 정본과의 분기 방지 — request-framing 진입 단계의 동형 검사(test_request_framing_entry.sh)와
 # 대칭이다. 5패턴 본문이 이 파일에 다시 복제되면 정본이 바뀌어도 이 사본은 안 바뀐다.
 cmd_pattern_dup="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 식별자|<10 토큰)' "$CMD")"
 [[ "$cmd_pattern_dup" -eq 0 ]] \
-  && ok "v0.41.0: /interview 에 5패턴 본문이 복제되지 않았다 (정본만)" \
-  || no "v0.41.0: /interview 에 5패턴 본문이 복제돼 있다 (${cmd_pattern_dup}줄) — 정본과 갈라진다"
-step2_block="$(awk '/^## Step 2: /{f=1;print;next} /^## /{f=0} f' "$CMD")"
+  && ok "v0.41.0: spec-interview 에 5패턴 본문이 복제되지 않았다 (정본만)" \
+  || no "v0.41.0: spec-interview 에 5패턴 본문이 복제돼 있다 (${cmd_pattern_dup}줄) — 정본과 갈라진다"
+# force 탈출구 — trivia 판정이 진입 skill 안에서 돌므로 「force」를 첫 토큰으로 다시 부르는 길이
+# 정본에 규칙으로 있어야 한다. 양성 짝: 정본을 실제로 읽었는가(5패턴 헤더) · 새 안내 문면.
+# 부재: 옛 문면(재호출하면 trivia 가 다시 막는 막다른 안내).
+TRIVIA_ESC="$REPO_ROOT/plugins/spec-distill/references/trivia-escape.md"
+grep -qF '# Trivia Escape — 5 패턴' "$TRIVIA_ESC" \
+  && ok "force(양성 짝): trivia-escape.md 정본을 읽었다" \
+  || no "force(양성 짝): trivia-escape.md 를 읽지 못했다 — 아래 단언이 공허하다"
+grep -qF '「풀린 입력」의 첫 토큰이 정확히 `force` 면 그 토큰을 떼고 이 판정을 건너뛴다 — 나머지가 「풀린 입력」이 된다' "$TRIVIA_ESC" \
+  && ok "force: trivia-escape.md 가 첫 토큰 force 를 떼고 판정을 건너뛰는 규칙을 담는다" \
+  || no "force: trivia-escape.md 에 force 규칙이 없다 — 안내대로 다시 불러도 trivia 가 다시 막는다"
+grep -qF '`/<command> force <요청>` 으로 다시 부르거나' "$TRIVIA_ESC" \
+  && ok "force: 안내 문면이 \`/<command> force <요청>\` 재호출을 가리킨다" \
+  || no "force: 안내 문면에 \`/<command> force <요청>\` 재호출 안내가 없다"
+grep -qF '"force <command>"' "$TRIVIA_ESC" \
+  && no "force: 옛 안내 문면(\"force <command>\")이 남아 있다" \
+  || ok "force: 옛 안내 문면이 없다"
+grep -qF '3 에서 `force` 를 뗐으면 그 나머지' <<<"$(awk 'index($0,"### 4. ")==1{f=1;next} f&&/^##+ /{exit} f' "$CMD")" \
+  && ok "force: spec-interview 진입 단계 4 의 「풀린 입력」이 force 를 뗀 나머지를 포함한다" \
+  || no "force: spec-interview 진입 단계 4 가 force 를 뗀 나머지를 말하지 않는다"
+sub() { awk -v h="$2" 'index($0,h)==1{f=1;next} f&&/^##+ /{exit} f' "$1"; }   # sub <file> <소절 제목 접두>
+step2_block="$(sub "$CMD" '### 3. ')"
 step2_flat="$(tr '\n' ' ' <<<"$step2_block" | tr -s ' ')"
-step25_block="$(awk '/^## Step 2\.5/{f=1;print;next} /^## /{f=0} f' "$CMD")"
+step25_block="$(sub "$CMD" '### 3.5 ')"
 step25_flat="$(tr '\n' ' ' <<<"$step25_block" | tr -s ' ')"
 { [[ -n "$step25_block" ]] && grep -qF '막지 않는다' <<<"$step25_flat"; } \
   && ok "v0.41.0: Step 2.5 조언이 명시적으로 비차단 선언" \
@@ -1276,8 +1310,8 @@ step25_flat="$(tr '\n' ' ' <<<"$step25_block" | tr -s ' ')"
 # 고치고 다른 쪽을 그대로 둘 방법이 없다. 이 가드가 잡는 것은 **이 한 문구**뿐이다 —
 # 다른 표현의 차단 문장은 이 가드를 넘어간다(어휘를 열거해 일반화하지 않는다).
 #
-# 다른 절반 — 「막지 않는다」는 Step 2.5 가 조용하다는 것만으로는 성립하지 않는다. Step 3
-# dispatch 줄이 **실재해야** 흐름이 실제로 이어진다(부재 검사만으로는 이 절반을 못 잡는다).
+# 다른 절반 — 「막지 않는다」는 3.5 가 조용하다는 것만으로는 성립하지 않는다. 진입 단계 4
+# (본 절차로 넘기는 소절)가 **실재해야** 흐름이 실제로 이어진다(부재 검사만으로는 이 절반을 못 잡는다).
 step2_stop_phrase='인터뷰를 시작하지 않습니다'
 grep -qF "$step2_stop_phrase" <<<"$step2_flat" \
   && ok "v0.41.0: Step 2 의 정지 문구가 Step 2 블록에 실재한다 (아래 가드의 리터럴이 살아있음)" \
@@ -1285,10 +1319,10 @@ grep -qF "$step2_stop_phrase" <<<"$step2_flat" \
 grep -qF "$step2_stop_phrase" <<<"$step25_flat" \
   && no "v0.41.0: Step 2.5 가 Step 2 자신의 정지 문구를 재사용한다 — 비차단 산문과 모순" \
   || ok "v0.41.0: Step 2.5 에 Step 2 의 정지 문구가 없다 (Step 3 로 흐름 지속)"
-grep -qF 'Skill conducting-interview' "$CMD" \
-  && ok "v0.41.0: Step 3 dispatch 줄이 실재한다 (흐름이 실제로 이어짐)" \
-  || no "v0.41.0: Step 3 dispatch 줄이 없다 — «막지 않는다» 의 흐름-도달 절반이 무방비"
-grep -qF 'request-framing' <<<"$step25_flat" \
+grep -qF '아래 절들을 진행한다' <<<"$(sub "$CMD" '### 4. ')" \
+  && ok "v0.41.0: 진입 단계 4 가 본 절차로 넘긴다 (흐름이 실제로 이어짐)" \
+  || no "v0.41.0: 진입 단계 4 의 본 절차 진입이 없다 — «막지 않는다» 의 흐름-도달 절반이 무방비"
+grep -qF 'spec-distill:request-framing' <<<"$step25_flat" \
   && ok "v0.41.0: Step 2.5 가 /request-framing 을 안내" \
   || no "v0.41.0: Step 2.5 안내문에 /request-framing 언급이 없다"
 

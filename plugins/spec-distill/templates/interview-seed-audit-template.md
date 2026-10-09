@@ -3,12 +3,12 @@ type: interview-seed-audit
 payload: <basename>.md
 created_at: YYYY-MM-DD
 session_id: <uuid>
-source: spec-distill framing-requests
+source: spec-distill request-framing
 ---
 
 # <Topic> — Interview Seed Audit
 
-> 순수 텔레메트리 — 다음 세션의 첫 턴 `/interview @<seed 경로>` 가 가리키는 것은 payload(seed)
+> 순수 텔레메트리 — 다음 세션의 첫 턴 `/spec-distill:spec-interview @<seed 경로>` 가 가리키는 것은 payload(seed)
 > 파일이고, 여기에는 확산·압축이 어떻게 진행됐는지의 과정 기록만 남는다. payload 의 `audit_file`
 > 이 이 파일을 가리킨다.
 

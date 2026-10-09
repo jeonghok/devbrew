@@ -6,7 +6,7 @@
 
   brief_review_degradations: []        # §5.6 record, append-only
 
-두 번째 파이프라인(framing-requests)은 `--ledger-key` 로 자기 원장 줄을 같은 writer 로 쓴다.
+두 번째 파이프라인(request-framing)은 `--ledger-key` 로 자기 원장 줄을 같은 writer 로 쓴다.
 단계·재리뷰 상한은 문서 리뷰 엔진 원장(`docreview-state.md`)의 몫이다 — 이 모듈은 옛 두 키
 (`brief_review_stage` · `brief_critic_rounds`)를 심지도 읽지도 않는다. 옛 세션 state 에 남은 그
 두 줄은 건드리지 않는다.

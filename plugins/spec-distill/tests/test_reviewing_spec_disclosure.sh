@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# reviewing-spec 껍데기가 **자기 kill switch 와 degrade 채널을 공시하는가.**
+# spec-review 껍데기가 **자기 kill switch 와 degrade 채널을 공시하는가.**
 #
 # ── 왜 이 파일이 생겼는가 (T7) ───────────────────────────────────────────────
 # 옛 `test_reviewing_spec_codex_merge.sh` 는 삭제된 verdict 파이프라인의 배선을 쟀고
@@ -22,7 +22,7 @@
 set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SKILL="$REPO_ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+SKILL="$REPO_ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
@@ -67,4 +67,9 @@ else
     && ok "codex 부재가 degrade 사유로 그 채널에 실린다고 적혀 있다" \
     || no "codex 부재가 degrade 채널에 실린다는 서술이 없다 — 모델 다양성 손실이 조용해진다"
 fi
+# 쉬운 말 출력 PR 1 — 렌더 첫 줄의 내용 설명이 새 출력과 맞는다(옛 「degrade 없음」 이 오는 경우는 없다).
+DCH="$(awk '/^## degrade 채널/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
+assert_not_contains "$DCH" '둘 다 비면 `degrade 없음` 이 온다' "렌더 첫 줄 설명: 옛 첫 줄 문구를 약속하지 않는다"
+assert_contains "$DCH" '「이상 없음」' "렌더 첫 줄 설명: 남은 것도 경고도 없을 때의 첫 줄을 말한다"
+assert_contains "$DCH" '「경고 없음」' "렌더 첫 줄 설명: 남은 것은 있고 경고가 없을 때의 첫 줄을 말한다"
 finish

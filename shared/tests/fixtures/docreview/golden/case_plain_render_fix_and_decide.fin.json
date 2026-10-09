@@ -1,0 +1,100 @@
+{
+ "ok": true,
+ "round": 1,
+ "findings": [
+  {
+   "layer": 1,
+   "category": "goal_fit",
+   "anchor": "#2-goals",
+   "disposition": "decide",
+   "summary": "Goals 가 브리프의 goal 과 다른 것을 겨눈다",
+   "edit_scope": "#2-goals",
+   "blocks": [],
+   "supersedes": null,
+   "evidence": "브리프 §1 vs 문서 §2",
+   "replacement": "§2 를 브리프 §1 의 goal 한 문장으로 되돌린다",
+   "if_unfixed": "설계 전체가 다른 문제를 잘 푸는 쪽으로 굳는다",
+   "f": "f1",
+   "origin": "reviewer",
+   "immutable": false,
+   "kind": "pre",
+   "bucket": "7c1226fa",
+   "id": "7c1226fa#r1.1",
+   "lineage": "7c1226fa#r1.1",
+   "decision_view": {
+    "if_unfixed": "설계 전체가 다른 문제를 잘 푸는 쪽으로 굳는다",
+    "replacement": "§2 를 브리프 §1 의 goal 한 문장으로 되돌린다",
+    "basis": "브리프 §1 vs 문서 §2",
+    "alternatives": [
+     "고친다(채택)",
+     "그대로 둔다(기각)",
+     "나중에 정한다(보류)"
+    ],
+    "impact": "#2-goals (목표가 다른 것을 겨눔) · 인용 0 섹션",
+    "category_unglossed": null,
+    "auto": false
+   }
+  },
+  {
+   "layer": 2,
+   "category": "placeholder",
+   "anchor": "#12-files-to-modify",
+   "disposition": "fix",
+   "summary": "§5 에 TBD 가 남아 있다",
+   "edit_scope": "#12-files-to-modify",
+   "blocks": [],
+   "supersedes": null,
+   "evidence": null,
+   "replacement": "TBD 를 실제 컴포넌트 이름으로 채운다",
+   "if_unfixed": "plan 이 그 자리를 스스로 지어낸다",
+   "f": "f2",
+   "origin": "reviewer",
+   "immutable": false,
+   "kind": "pre",
+   "bucket": "9dea7cf3",
+   "id": "9dea7cf3#r1.1",
+   "lineage": "9dea7cf3#r1.1"
+  }
+ ],
+ "by_disposition": {
+  "decide": [
+   "7c1226fa#r1.1"
+  ],
+  "ask": [],
+  "fix": [
+   "9dea7cf3#r1.1"
+  ],
+  "defer": [],
+  "drop": []
+ },
+ "rejected": [],
+ "defers": [],
+ "bucket_conflicts": 0,
+ "lineage_mismatch": 0,
+ "revived": [],
+ "degrade": {
+  "critic_dead": false,
+  "layer2_missing": false,
+  "codex_absent": false,
+  "codex_reason": null,
+  "recritic_dead": null
+ },
+ "advisory": [],
+ "blocks": false,
+ "reraise_unconsumed": 0,
+ "escalated_unconsumed": 0,
+ "adjudication_accepted": 2,
+ "adjudication_rejected": 0,
+ "adjudication_held": 0,
+ "adjudication_absorbed": 0,
+ "adjudication_coerced": 0,
+ "adjudication_sources_failed": 0,
+ "adjudication_suppressed": 0,
+ "adjudication_unknown_counts": [],
+ "adjudication_degraded": false,
+ "adjudication_held_by_class": {
+  "판정자 부재": 0,
+  "항목 파손": 0,
+  "기타": 0
+ }
+}

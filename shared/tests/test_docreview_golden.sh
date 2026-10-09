@@ -39,7 +39,7 @@ REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 FX="$REPO_ROOT/shared/tests/fixtures/docreview"
 GOLDEN="$FX/golden"
 CAPTURE="$FX/capture_finalize_golden.sh"
-CASES="case_T11_permit_keeps_disposition case_T22_reraise_appears_in_next_round case_T05_T06_reject"
+CASES="case_T11_permit_keeps_disposition case_T22_reraise_appears_in_next_round case_T05_T06_reject case_plain_render_nothing_left case_plain_render_fix_and_decide"
 export PYTHONDONTWRITEBYTECODE=1
 
 OUT="$(mktemp -d -t docreview-golden-XXXXXX)" || exit 1
@@ -56,11 +56,11 @@ n_golden=0
 for f in "$GOLDEN"/*.fin.json "$GOLDEN"/*.state.md "$GOLDEN"/*.gate.json "$GOLDEN"/*.gate.txt; do
   [ -f "$f" ] && n_golden=$((n_golden+1))
 done
-if [ "$n_golden" -lt 12 ]; then
-  no "골든 파일이 ${n_golden}개 — 케이스 셋 × 산출물 넷(fin.json · state.md · gate.json · gate.txt)이면 12개여야 한다. 하한 미달이면 이 락은 공허하다"
+if [ "$n_golden" -lt 20 ]; then
+  no "골든 파일이 ${n_golden}개 — 케이스 다섯 × 산출물 넷(fin.json · state.md · gate.json · gate.txt)이면 20개여야 한다. 하한 미달이면 이 락은 공허하다"
   finish; exit
 fi
-ok "골든 코퍼스 ${n_golden}개 (하한 12 충족 — 공허하지 않다)"
+ok "골든 코퍼스 ${n_golden}개 (하한 20 충족 — 공허하지 않다)"
 
 # ── 이식성 — 이 체크아웃의 절대경로가 골든에 남으면 다른 클론에서 구조적 RED ──
 if grep -q -- "$REPO_ROOT" "$GOLDEN"/*.state.md "$GOLDEN"/*.fin.json "$GOLDEN"/*.gate.json "$GOLDEN"/*.gate.txt 2>/dev/null; then

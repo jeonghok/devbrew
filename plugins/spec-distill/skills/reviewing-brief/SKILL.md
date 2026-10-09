@@ -1,7 +1,7 @@
 ---
 name: reviewing-brief
 description: >
-  Use this skill to review an interview brief produced by conducting-interview with the shared
+  Use this skill to review an interview brief produced by spec-interview with the shared
   document-review engine. It runs the brief's entry gates (check_brief.py gate ·
   check_verbatim_coverage.py), assembles the payload+audit bundle, runs engine rounds with the
   brief profile (snapshot → kill switch → detection → codex → anonymize → re-critique →
@@ -13,12 +13,26 @@ user-invocable: false
 
 # reviewing-brief — 문서 리뷰 엔진의 brief 자리
 
+<!-- plain-language:begin -->
+## 사람에게 쓰는 글
+이 절은 사용자에게 보이는 글(답변·보고·질문·선택지·경고·PR 본문·커밋)에만 적용한다. 지시문·subagent 프롬프트·state 파일에는 적용하지 않는다. 아래 절차가 출력 형식·원문 보존·분량을 따로 정한 자리에서는 그 절차를 따른다.
+- 처음 보는 사람이 한 번에 이해하게 쓴다. 번호·해시·필드 이름·내부 용어는 가리키는 내용을 문장으로 먼저 쓰고 괄호 안에만 둔다. 지어낸 말은 쓰지 않거나 처음 쓸 때 풀어 쓴다.
+- 순서: 첫 줄에 지금 상태(무엇을 했고 어디까지 왔나) 한 문장, 가운데에 이유·근거, 맨 끝에 사용자가 할 일 하나. 할 일이 없으면 없다고 쓴다.
+- 질문 하나에 결정 하나. 선택지 이름은 짧은 쉬운 말로, 설명에는 고르면 무엇이 달라지는지만 쓴다. 본문에 없던 주제를 선택지에서 꺼내지 않는다. 추천은 「(권장)」으로 표시한다.
+- 제목과 목록으로 나누되 표의 칸은 짧게 쓴다. 굵은 글씨는 꼭 필요한 곳에만 쓴다.
+- 사용자가 알 필요 없는 글은 쓰지 않는다: 도구 호출 사이의 진행 설명, 전부 정상인 항목의 나열. 확인해서 남은 것도 경고도 없으면 「이상 없음」 한 줄로 쓴다. 확인하지 못한 것·빠진 검사·셀 수 없는 것은 따로 한 줄씩 쓴다 — 없는 것과 확인 못 한 것은 다르다.
+- 판정·개수·공시 줄은 스크립트가 낸 쉬운 첫 줄을 그대로 쓰고, 자기 말로 다시 풀거나 덧붙이지 않는다. 스크립트·subagent 가 낸 원문은 고치지 않는다. 스크립트가 풀어 두지 않은 오류에만 쉬운 설명을 앞에 붙이되 통과·실패는 말하지 않는다.
+- 사용자와 대화하는 언어로 쓴다. 코드·명령·고유명사·자연스러운 대응어가 없는 기술어는 영어 그대로 둔다. 커밋·PR은 그 레포의 규칙을 따르고, 없으면 대화 언어로 쓴다.
+예) 전: `[미적용 fix] 3720b2b7#r1.1` → 후: 리뷰가 고치라고 한 곳 하나가 아직 안 고쳐졌다(3720b2b7#r1.1).
+예) 전: (codex 정상 · 재비판 정상 · 저자 편집 없음 · ask_open 0건) → 후: 이상 없음.
+<!-- plain-language:end -->
+
 이 skill 은 진입 껍데기다. 한 라운드의 절차는 공유 엔진이 갖고 있고, 여기 남는 것은 이 자리의
 것 — 호출자 계약 · 진입 게이트 · 번들 · 프로필 · dispatch 둘 · 게이트 · 냉독 · degrade 채널 — 뿐이다.
 
 ## 입력
 
-호출자 `conducting-interview` 종료 Step A.5 가 두 값을 Skill 인자로 넘긴다. 훅은 이 자리에 없으므로
+호출자 `spec-interview` 종료 Step A.5 가 두 값을 Skill 인자로 넘긴다. 훅은 이 자리에 없으므로
 이 둘이 계약의 전부다.
 
 - `$PAYLOAD` — 구조 게이트를 막 통과한 payload. 엔진의 `--doc`(init · snapshot · 얼림 검사 ·
@@ -469,7 +483,7 @@ Agent({
 `begin-round --extra-approval "<사용자 자신의 문구>"` 로 돈다.
 
 **승인 게이트 2단계(진행 옵션 넷)는 이 skill 이 띄우지 않는다.** 진행 결정은 호출자
-`conducting-interview` 종료 Step B 의 몫이다 — 같은 공통 계약(`proceed-gate.md`)을 쓰는 그 게이트가
+`spec-interview` 종료 Step B 의 몫이다 — 같은 공통 계약(`proceed-gate.md`)을 쓰는 그 게이트가
 확정 후보와 함께 한 번에 묻는다. 1단계가 닫히면(두 단계가 아니면 승인 게이트에 도달한 그 시점에)
 `## 냉독` 을 돌리고 `## Step B 로 돌아간다` — 1단계의 「진행 옵션으로」가 그 전환이다.
 
@@ -484,7 +498,7 @@ Agent({
   그 라운드의 `fin.json` 은 비었거나 직전 라운드 것이라 판정에 쓰지 않는다.
 - **리뷰 완료 여부도 엔진 출력에서 읽는다** — 같은 요약의 `round_reviewed` 가 거짓이면(사유 `unreviewed_reason` — 「미검증」
   둘, 또는 finalize 보고서가 없는 `unrouted`) 라벨이 없어도 그 사실과 사유를 그대로 Step B 로 넘긴다 — 그 라운드는 리뷰
-  완료가 아니고, 렌더 첫 줄도 `degrade 없음` 이 아니다.
+  완료가 아니고, 렌더 첫 줄도 「이상 없음」·「경고 없음」이 아니다.
 - **polite stop 금지 (AP2)** — 이 skill 을 끝내는 모든 경로는 게이트 결과를 싣고 Step B 로 돌아가거나,
   게이트를 거치지 않는 예외 경로(kill switch · 진입 게이트 차단 · 엔진 상태 디렉토리 없음 · 엔진 init 거부 ·
   번들 실패)면 record 와 명시적 advisory 단락을 동반하고 Step B 로 돌아간다. 조용한 종료는 금지다.
@@ -547,7 +561,7 @@ G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **�
 
 ## Step B 로 돌아간다
 
-`conducting-interview` 종료 Step B 의 proceed 게이트에 셋을 싣는다:
+`spec-interview` 종료 Step B 의 proceed 게이트에 셋을 싣는다:
 
 1. **엔진 게이트 결과** — 마지막 `gate --render` 전문 · 승인 게이트에 도달한 사유(열린 것 없음 · 상한 ·
    stagnation · 「미검증」 — 「미검증」은 마지막 요약의 `approval_label` 과 사유 `unverified` 그대로) · 리뷰 완료 여부(마지막 요약의 `round_reviewed` —
@@ -560,7 +574,7 @@ G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **�
 줄 모양대로 한 줄씩 채운다 — 기록이지 게이트가 아니다. 결정 자체는 엔진이 `## 8. 리뷰 결정` 에 이미 썼다.
 
 참고(advisory) 목록은 이 skill 이 보이지 않는다 — 엔진 `advice` 원장에 쌓인 방향 · overdesign 항목은 호출자
-Step B(`conducting-interview` `finishing.md` 의 `#### B-A`)가 끝에서 한 번 보이고 brief §3 · §5 에 박제한다.
+Step B(`spec-interview` `finishing.md` 의 `#### B-A`)가 끝에서 한 번 보이고 brief §3 · §5 에 박제한다.
 
 ## degrade 채널
 

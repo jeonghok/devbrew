@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/docreview/references/reviewing-document.md plugins/spec-distill/skills/reviewing-spec/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md shared/docreview/scripts/docreview_state.py plugins/spec-distill/skills/conducting-interview/references/finishing.md
+# guards: shared/docreview/references/reviewing-document.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md shared/docreview/scripts/docreview_state.py plugins/spec-distill/skills/spec-interview/references/finishing.md
 #
 # 절차서(`shared/docreview/references/reviewing-document.md`)의 「## 한 라운드」 절이
 # 스크립트를 **배포 경로**(`<플러그인 루트>/scripts/…`)에서 부르라고 명시하는지 잰다
@@ -24,15 +24,15 @@
 #    넘기지 않는다」(아래 절 주석).
 # 5. 「미검증」 라벨 · 완료 기록 신호의 출처 — 엔진 출력(`approval_label` · `round_reviewed`). 라벨의
 #    정본 상수를 엔진에서 읽어 산문과 대조한다(그래서 이 락은 `docreview_state.py` 도 읽는다).
-# 6. 받는 쪽 — conducting-interview `finishing.md` Step B 가 그 라벨 · 리뷰 완료 여부 · 사유를 엔진 게이트
+# 6. 받는 쪽 — spec-interview `finishing.md` Step B 가 그 라벨 · 리뷰 완료 여부 · 사유를 엔진 게이트
 #    요약에서 온 것으로 말하고, 사유 값(엔진 코드에서 도출)을 전부 싣는다(아래 절 주석).
 set -u -o pipefail
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "shared/docreview/references/reviewing-document.md"
-  echo "plugins/spec-distill/skills/reviewing-spec/SKILL.md"
+  echo "plugins/spec-distill/skills/spec-review/SKILL.md"
   echo "plugins/spec-distill/skills/reviewing-brief/SKILL.md"
   echo "shared/docreview/scripts/docreview_state.py"
-  echo "plugins/spec-distill/skills/conducting-interview/references/finishing.md"
+  echo "plugins/spec-distill/skills/spec-interview/references/finishing.md"
   exit 0
 fi
 
@@ -84,7 +84,7 @@ assert_eq "$n_rule" "1" "절차서 init 규칙 문구가 본문에 정확히 한
 NEG_FLAT="$(printf '%s' "$REF_FLAT" | python3 -c 'import sys; print(sys.stdin.read().replace(sys.argv[1], ""))' "$INIT_RULE_REF")"
 assert_contains "$NEG_FLAT" '**rc 가 0 이 아니면 값과 무관하게 이 라운드를 진행하지 않는다**' \
   "음성 셀: init 규칙을 지워도 begin-round 규칙은 온전히 남는다 (판정 문구가 init 쪽만 가리킨다)"
-for s in reviewing-spec reviewing-brief; do
+for s in spec-review reviewing-brief; do
   SK_FLAT="$(flat "$REPO_ROOT/plugins/spec-distill/skills/$s/SKILL.md")"
   assert_contains "$SK_FLAT" "$INIT_RULE_SKILL" \
     "$s: 선결 init rc≠0 이면 값과 무관하게 라운드를 진행하지 않는다 (body-unique)"
@@ -114,7 +114,7 @@ assert_contains "$NEG_FIN" '**rc 가 0 이 아니면 값과 무관하게 이 라
   "음성 셀: finalize 규칙을 지워도 1단계 begin-round 규칙은 온전히 남는다"
 assert_contains "$NEG_FLAT" "$FIN_RULE" \
   "음성 셀: init 규칙을 지워도 finalize 규칙은 온전히 남는다 (두 판정 문구가 서로를 품지 않는다)"
-for s in reviewing-spec reviewing-brief; do
+for s in spec-review reviewing-brief; do
   SK_FLAT="$(flat "$REPO_ROOT/plugins/spec-distill/skills/$s/SKILL.md")"
   assert_contains "$SK_FLAT" "$FIN_RULE" \
     "$s: finalize rc≠0 이면 값과 무관하게 정상 게이트로 넘기지 않는다 (절차서와 같은 규칙)"
@@ -158,18 +158,18 @@ assert_contains "$BR_STEPB" '「미검증」은 마지막 요약의 `approval_la
   "reviewing-brief Step B 절: 「미검증」 사유의 출처가 마지막 요약이다 (body-unique)"
 assert_contains "$BR_STEPB" '리뷰 완료 여부(마지막 요약의 `round_reviewed`' \
   "reviewing-brief Step B 절: 리뷰 완료 여부의 출처가 마지막 요약이다"
-SP_FLAT="$(flat "$REPO_ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md")"
+SP_FLAT="$(flat "$REPO_ROOT/plugins/spec-distill/skills/spec-review/SKILL.md")"
 assert_contains "$SP_FLAT" "\`approval_label\` 이 「${LABEL}」이면 승인 게이트를 그 라벨로 연다" \
-  "reviewing-spec ## 게이트: 「미검증」 라벨을 엔진 요약의 approval_label 에서 읽는다"
+  "spec-review ## 게이트: 「미검증」 라벨을 엔진 요약의 approval_label 에서 읽는다"
 
-# ── 6. 받는 쪽 — conducting-interview Step B 가 싣는 「미검증」 라벨 · 리뷰 완료 여부의 출처 (Task 8b, R58) ──
+# ── 6. 받는 쪽 — spec-interview Step B 가 싣는 「미검증」 라벨 · 리뷰 완료 여부의 출처 (Task 8b, R58) ──
 # 5 절은 reviewing-brief 가 엔진 요약의 값을 «넘기는» 문면을 잰다. 받는 쪽(`finishing.md` Step B)이 그 값을
 # 엔진 출력으로 말하지 않으면 모델이 사망 횟수를 기억해 라벨을 붙이던 옛 문면이 받는 자리에서 되살아난다.
 # 창은 `### Step B` 부터 다음 `#`·`##`·`###` 헤딩까지이고 **펜스 안 줄을 헤딩으로 치지 않는다** — B-0 의
 # bash 펜스에 `# …` 주석 줄이 있어, 펜스를 모르는 창은 거기서 닫혀 B-2 의 산출물 목록을 못 본다.
 # 키 이름과 사유 값은 엔진 코드(`docreview_state.py`)의 AST 에서 도출한다 — 사유를 여기 열거하지 않으므로
 # 코드에 새 사유가 생기면 Step B 가 그것을 싣기 전까지 RED 다.
-FIN="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/references/finishing.md"
+FIN="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/references/finishing.md"
 assert_grep "$(cat "$FIN")" '^### Step B — proceed 게이트' \
   "양의 짝 — finishing.md 에 Step B 절이 실재한다 (아래 창 단언이 절 삭제로 헛통과하지 않는다)"
 FIN_STEPB="$(awk '/^```/{c=!c} !c && /^### Step B/{f=1; next} f && !c && /^(#|##|###) /{f=0} f' "$FIN" | tr '\n' ' ' | tr -s ' ')"

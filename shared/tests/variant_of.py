@@ -64,8 +64,9 @@ _CANONICAL_AGENT = re.compile(r'^shared/[^/]+/agents/[^/]+\.md$')
 _NON_LF_BREAKS = ((chr(0x0D), "U+000D"), (chr(0x85), "U+0085"), (chr(0x2028), "U+2028"), (chr(0x2029), "U+2029"))
 
 # 줄 문법(허용 목록) — 실제 agent 파일 24개(정본 3 · 배포 21)의 frontmatter 가 쓰는 모양에서 도출했다.
-_KEY_LINE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*):(?: (.*))?$')
+_KEY_LINE = re.compile(r'([A-Za-z_][A-Za-z0-9_-]*):(?: (.*))?$')
 _SEQ_ITEM = re.compile(r'  - [A-Za-z_][A-Za-z0-9_]*: (.+)$')
+_SEQ_SCALAR = re.compile(r'  - (.+)$')   # 평문 스칼라 항목(`allowed-tools` 목록) — 값은 `_plain_ok` 가 잰다
 _SEQ_CONT = re.compile(r'    [A-Za-z_][A-Za-z0-9_]*: (.+)$')
 _INDENTED_COMMENT = re.compile(r' +#')
 _BLOCK_INDICATOR = ">"      # 실제 파일이 쓰는 블록 스칼라 표지는 접힘 `>` 하나다
@@ -177,12 +178,13 @@ def _fm_blocks(lines: List[str]) -> Tuple[Optional[Dict[str, List[str]]], Option
                     pass
                 else:
                     item, cont = _SEQ_ITEM.match(ln), _SEQ_CONT.match(ln)
-                    m = item or (cont if in_item else None)
+                    scalar = None if item else _SEQ_SCALAR.match(ln)
+                    m = item or scalar or (cont if in_item else None)
                     if not m:
                         return None, "child_shape"
                     if not _plain_ok(m.group(1)):
                         return None, "child_value"
-                    in_item = in_item or bool(item)
+                    in_item = bool(item) if (item or scalar) else in_item
             else:
                 return None, "value_continuation"
             blocks[key].append(ln)

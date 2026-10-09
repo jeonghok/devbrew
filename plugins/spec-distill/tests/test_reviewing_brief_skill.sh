@@ -83,8 +83,8 @@ W_PROC="$(section '절차')"
 # ── 2. 호출자 계약 — 인자 둘, 훅 없음 ──────────────────────────────────────────
 W_IN="$(section '입력')"
 lines_ge "$W_IN" 10 && ok "입력: 절 윈도우 확보" || no "입력: 절이 비었거나 잘렸다 — 아래 단언이 공허하다"
-{ has "$W_IN" '`$PAYLOAD`' && has "$W_IN" '`$AUDIT`' && has "$W_IN" 'conducting-interview'; } \
-  && ok "입력: 호출자(conducting-interview)가 넘기는 두 슬롯 \$PAYLOAD · \$AUDIT 를 이름으로 댄다" \
+{ has "$W_IN" '`$PAYLOAD`' && has "$W_IN" '`$AUDIT`' && has "$W_IN" 'spec-interview'; } \
+  && ok "입력: 호출자(spec-interview)가 넘기는 두 슬롯 \$PAYLOAD · \$AUDIT 를 이름으로 댄다" \
   || no "입력: 호출자 계약의 두 슬롯이 \`## 입력\` 에 없다"
 for gone in CODEX_DIR_YAML CODEX_FID_YAML; do
   grep -qF "$gone" "$SKILL" \
@@ -192,7 +192,7 @@ for p in '최대 4개씩' '상한 도달이면 열린 것이 0 이어도 항상 
   has "$G_BODY" "$p" && ok "게이트 문면: '$p'" || no "게이트 문면: '$p' 가 사라졌다 (절차서와 갈렸다)"
 done
 { has "$G_BODY" '2단계' && has "$G_BODY" '이 skill 이 띄우지 않는다' && has "$G_BODY" 'Step B'; } \
-  && ok "게이트: 승인 게이트 2단계(진행 옵션)는 이 skill 이 아니라 conducting-interview Step B 가 띄운다" \
+  && ok "게이트: 승인 게이트 2단계(진행 옵션)는 이 skill 이 아니라 spec-interview Step B 가 띄운다" \
   || no "게이트: 2단계 진행 결정의 소유자가 적혀 있지 않다 — 진행 옵션이 두 번 뜨거나 한 번도 안 뜬다"
 grep -qF 'references/proceed-gate.md' "$SKILL" \
   && no "게이트: proceed-gate 계약의 채택자 포인터가 있다 — 이 skill 은 진행 게이트를 띄우지 않는다" \

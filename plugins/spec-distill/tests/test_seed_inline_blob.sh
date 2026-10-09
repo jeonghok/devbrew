@@ -2,7 +2,7 @@
 # guards: plugins/spec-distill/scripts/build_seed_inline_blob.py plugins/spec-distill/scripts/seed_review_log.py
 #
 # build_seed_inline_blob.py 를 실행으로 잰다. 이 조립기가 seed 리뷰 번들의 유일한 산출자다 —
-# 소비자는 framing-requests/SKILL.md 의 「### 번들」 블록이고, 그 블록이 만든 두 번들을 탐지
+# 소비자는 request-framing/SKILL.md 의 「### 번들」 블록이고, 그 블록이 만든 두 번들을 탐지
 # 리뷰어 · codex 러너(detect)와 재비판자(recritic)가 나눠 읽는다.
 #
 # 재는 것: 재료 다섯의 실림과 순서 · seed frontmatter 제거 · 재료별 부재 exit 2 · 절 부재의

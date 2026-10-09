@@ -68,9 +68,9 @@ case_AC3_reference_line_positive() {
   assert_eq "$(jget "$d/fin.json" '"advice" in d and "advice_new" in d and "mc_preexisting_new" in d')" "True" \
     "AC3(양의 짝): must_catch 를 지목한 프로필의 보고서에 참고 키가 선다"
   assert_grep "$(py docreview_state.py gate --state-dir "$d" --render)" \
-    '^참고 [0-9]+건\(이번 라운드 새 [0-9]+ · 반복 [0-9]+\) — 끝에서 한 목록으로' "AC3(양의 짝): 게이트 렌더에 참고 줄이 선다"
+    '^참고 [0-9]+건\(이번 라운드 새 [0-9]+ · 반복 [0-9]+\) — 끝에 한 목록으로 보인다' "AC3(양의 짝): 게이트 렌더에 참고 줄이 선다"
   assert_eq "$(jget "$e/fin.json" '"advice" in d or "advice_new" in d')" "False" "AC3(음): 필드 없는 사본 프로필의 보고서에는 참고 키가 없다"
-  assert_not_contains "$(py docreview_state.py gate --state-dir "$e" --render)" "끝에서 한 목록으로" "AC3(음): 필드 없는 사본 프로필의 렌더에는 참고 줄이 없다"
+  assert_not_contains "$(py docreview_state.py gate --state-dir "$e" --render)" "끝에 한 목록으로 보인다" "AC3(음): 필드 없는 사본 프로필의 렌더에는 참고 줄이 없다"
   assert_eq "$(st_yaml "$e" '"advice" in st')" "False" "AC3(음): 필드 없는 사본 프로필의 원장에는 advice 키가 없다"
   rm -rf "$d" "$e"
 }
@@ -113,7 +113,7 @@ case_AC5_AC9_round2() {
     "AC9: 해시 불변 절(#1-context)의 새 계보 must-catch(R2D)만 센다 — 바뀐 절(R2E) · 계보 후속(R2F)은 세지 않는다"
   assert_eq "$(st_yaml "$d" "'$rd' in st['decides']")" "True" "AC9: 관측은 동작을 바꾸지 않는다 — R2D 는 decides 에 있다"
   assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep '^참고 ')" \
-    "참고 6건(이번 라운드 새 1 · 반복 1) — 끝에서 한 목록으로 · 선재 절의 새 must-catch 1" \
+    "참고 6건(이번 라운드 새 1 · 반복 1) — 끝에 한 목록으로 보인다 · 전부터 있던 절에서 새로 나온 필수 지적 1" \
     "AC5·AC9: 게이트 참고 줄의 값 — 총계 6(라운드 1 의 5 + 새 1) · 새 1 · 반복 1 · 선재 1"
   assert_eq "$(gsum "$d" 'd["advice"] == {"total": 6, "new": 1, "repeat": 1, "mc_preexisting_new": 1}')" "True" \
     "AC5·AC9: gate JSON 의 advice 객체가 보고서 계수 · 원장 크기와 같다"
@@ -147,7 +147,7 @@ case_advice_same_round_refinalize_idempotent() {
   assert_eq "$(st_yaml "$d" 'len(st["advice"]), sorted({(v["shown"], v["sunk"]) for v in st["advice"].values()})')" "(5, [(True, True)])" \
     "1회 규칙: 같은 라운드 재기록은 원장을 늘리지 않고 shown · sunk 를 지우지 않는다"
   assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep '^참고 ')" \
-    "참고 5건(이번 라운드 새 5 · 반복 0) — 끝에서 한 목록으로 · 선재 절의 새 must-catch 0" \
+    "참고 5건(이번 라운드 새 5 · 반복 0) — 끝에 한 목록으로 보인다 · 전부터 있던 절에서 새로 나온 필수 지적 0" \
     "1회 규칙: 재finalize 뒤 게이트 참고 줄도 새 5 · 반복 0"
   rm -rf "$d"
 }
@@ -391,8 +391,8 @@ for r in st["rounds"].values():
         (r.get("route_report") or {}).pop(k, None)
 s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
   out="$(py docreview_state.py gate --state-dir "$d" --render 2>&1)"; rc=$?
-  assert_eq "$rc $(printf '%s\n' "$out" | grep -c '^라운드 1 · 재리뷰 0/2$')" "0 1" "Review Focus: 업그레이드 전 원장 — 게이트 렌더가 rc 0 으로 라운드 줄까지 낸다(죽지 않는다)"
-  assert_not_contains "$out" "끝에서 한 목록으로" "Review Focus: 업그레이드 전 원장 — 게이트 렌더에 참고 줄이 없다"
+  assert_eq "$rc $(printf '%s\n' "$out" | grep -c '^재리뷰 0/2회 썼다$')" "0 1" "Review Focus: 업그레이드 전 원장 — 게이트 렌더가 rc 0 으로 재리뷰 줄까지 낸다(죽지 않는다)"
+  assert_not_contains "$out" "끝에 한 목록으로 보인다" "Review Focus: 업그레이드 전 원장 — 게이트 렌더에 참고 줄이 없다"
   assert_eq "$(py docreview_state.py advice --state-dir "$d" --render | head -1 | grep -c '^참고(advisory) 0건')" "1" "Review Focus: 업그레이드 전 원장 — --render 는 0건"
   n="$(mktemp -t pre-XXXXXX)"; cp "$FX/design-sample.md" "$n"
   py docreview_state.py advice --state-dir "$d" --log-file "$n" >/dev/null; rc=$?
@@ -566,11 +566,11 @@ s.save_state(sys.argv[2], st, "fixture: 준비에 surrogate")' "$SCRIPTS" "$d"
 case_advice_seed_gate_no_reference_line() {   # advisory 축이 공집합인 seed — 게이트 렌더에 참고 줄이 없고 gate JSON 의 advice 키는 선다
   local d e; d="$(route_r1 "$PROF_MC/seed.md" "$FX/design-sample.md" "$FX/critic-mc-empty.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
   e="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-empty.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
-  assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep -c '끝에서 한 목록으로') $(py docreview_state.py gate --state-dir "$d" --render | grep -c '^다음: ')" "0 1" \
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep -c '끝에 한 목록으로 보인다') $(py docreview_state.py gate --state-dir "$d" --render | grep -c '^다음: ')" "0 1" \
     "seed 게이트: 렌더에 참고 줄이 없다(렌더는 「다음:」 줄까지 끝났다)"
   assert_eq "$(gsum "$d" 'd.get("advice")')" "{'total': 0, 'new': 0, 'repeat': 0, 'mc_preexisting_new': 0}" \
     "seed 게이트: gate JSON 의 advice 키는 그대로 선다(계수 펜스가 읽는다)"
-  assert_eq "$(py docreview_state.py gate --state-dir "$e" --render | grep -c '^참고 0건(이번 라운드 새 0 · 반복 0) — 끝에서 한 목록으로')" "1" \
+  assert_eq "$(py docreview_state.py gate --state-dir "$e" --render | grep -c '^참고 0건(이번 라운드 새 0 · 반복 0) — 끝에 한 목록으로 보인다')" "1" \
     "seed 게이트(양의 짝): 같은 입력의 design-doc 렌더에는 참고 줄이 선다"
   rm -rf "$d" "$e"
 }
@@ -579,7 +579,7 @@ case_advice_seed_gate_profile_yaml_broken() {   # 원장 프로필의 YAML 이 �
   d="$(route_r1 "$t/seed.md" "$FX/design-sample.md" "$FX/critic-mc-empty.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
   printf -- '---\nlayer_rubric: [unclosed\n---\n' > "$t/seed.md"
   py docreview_state.py gate --state-dir "$d" --render >"$d/out" 2>"$d/err"; rc=$?
-  assert_eq "$rc $(grep -c '^참고 0건(이번 라운드 새 0 · 반복 0) — 끝에서 한 목록으로' "$d/out") $(grep -c . "$d/err")" "0 1 0" \
+  assert_eq "$rc $(grep -c '^참고 0건(이번 라운드 새 0 · 반복 0) — 끝에 한 목록으로 보인다' "$d/out") $(grep -c . "$d/err")" "0 1 0" \
     "프로필 YAML 파손: 게이트 렌더가 rc 0 이고 참고 줄을 낸다(advisory 축을 판정하지 못하면 숨기지 않는다) · stderr 없음"
   rm -rf "$d" "$t"
 }

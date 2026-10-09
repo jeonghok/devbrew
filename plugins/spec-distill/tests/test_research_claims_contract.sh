@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/references/research-claims.md plugins/spec-distill/skills/conducting-interview/SKILL.md plugins/spec-distill/skills/conducting-interview/references/steelman.md plugins/spec-distill/agents/steelman-builder.md
+# guards: plugins/spec-distill/references/research-claims.md plugins/spec-distill/skills/spec-interview/SKILL.md plugins/spec-distill/skills/spec-interview/references/steelman.md plugins/spec-distill/agents/steelman-builder.md
 #
 # 조사 주장 계약이 **경로가 아니라 내용으로** 세 dispatch 에 배달되는가, 그리고 정본과 사본이
 # 갈라지지 않는가. 설치본에서 계약 파일은 플러그인 캐시(사용자 cwd 밖)에 있어 subagent 의 Read 가
@@ -25,15 +25,15 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT/plugins/spec-distill"
-SKILL="$SD/skills/conducting-interview/SKILL.md"
-STEEL="$SD/skills/conducting-interview/references/steelman.md"
+SKILL="$SD/skills/spec-interview/SKILL.md"
+STEEL="$SD/skills/spec-interview/references/steelman.md"
 CANON="$SD/references/research-claims.md"
 COPY="$SD/agents/steelman-builder.md"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/references/research-claims.md"
-  echo "plugins/spec-distill/skills/conducting-interview/SKILL.md"
-  echo "plugins/spec-distill/skills/conducting-interview/references/steelman.md"
+  echo "plugins/spec-distill/skills/spec-interview/SKILL.md"
+  echo "plugins/spec-distill/skills/spec-interview/references/steelman.md"
   echo "plugins/spec-distill/agents/steelman-builder.md"
   exit 0
 fi
