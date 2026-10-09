@@ -543,8 +543,8 @@ case_synth_secondary_degrade_does_not_block() {
     to: SUGGESTION'
   local out; out=$(rf_synth "$T" --emit-verdict)
   # Controller fix round 1, Minor 2 — 전제(강제가 실제로 일어났다)를 먼저 잰다.
-  # 이게 없으면 bridge 가 언젠가 `downgrade` 를 더 이상 강제하지 않도록 바뀌어도
-  # (예: 조용히 무시) 이 케이스는 finding 이 어차피 억제돼 kept=0·clean 이라
+  # 이게 없으면 재비판 변환이 언젠가 `downgrade` 를 더 이상 강제하지 않도록 바뀌어도
+  # (예: 조용히 무시) 이 케이스는 finding 이 SUGGESTION 이라 막는 지적 0·clean 이라
   # 계속 GREEN 이다 — «차단 안 됨» 을 증명하려면 먼저 «강제가 있었다» 가 참이어야
   # 한다.
   assert_grep "$out" "강제\(게이트 변경\): verdict 'downgrade'" "전제 — 모르는 verdict 가 실제로 강제됐다"

@@ -303,9 +303,9 @@ case_colliding_ids_with_raise_to_different_targets_are_not_resolved() {
 }
 
 case_raise_cannot_lower_when_map_is_stale() {
-  # Task 7 row 31 — apply_verdicts 의 raise-only-up guard. bridge 는 자신이 아는
+  # Task 7 row 31 — apply_verdicts 의 raise-only-up guard. 재비판 변환(`_verdict_for`)은 자신이 아는
   # cur_sev(map.json 값)로 이미 위인지 검사하지만, map.json 이 스테일하면(실제
-  # finding 은 CRITICAL 인데 map 은 옛 값 SUGGESTION 을 쥔 채로) bridge 눈에는
+  # finding 은 CRITICAL 인데 map 은 옛 값 SUGGESTION 을 쥔 채로) 변환 눈에는
   # 정당한 raise(SUGGESTION→IMPORTANT)인데 실제로는 CRITICAL 을 IMPORTANT 로
   # «내리는» 결과가 나온다. synthesize_findings.py 의 apply_verdicts 가 실제
   # finding 의 (정규화된) severity 와 다시 비교해 막아야 한다.
@@ -332,8 +332,8 @@ json.dump(m, open(p, 'w'))
 }
 
 case_raise_to_same_severity_is_noop_not_degrade() {
-  # 같은 랭크로의 raise(변화 없음)는 gate=False 강제다(bridge 의 같은 사건
-  # recritic_bridge.py 의 `ledger.coerced("to", to_raw, cur_sev, gate=False)` 과
+  # 같은 랭크로의 raise(변화 없음)는 gate=False 강제다(변환 쪽 같은 사건
+  # `_verdict_for` 의 `ledger.coerced("to", to_raw, cur_sev, gate=False)` 과
   # 같은 모양) — 판정 결과를 안 바꾸므로 degrade 로 공시하면 안 된다. «내리는»
   # raise 만 gate=True(판정 결과를 바꾼다 — CRITICAL 이 내려가는 것을 막았다).
   local T; T=$(mktemp -d)
@@ -453,7 +453,7 @@ added:
 case_recritic_zero_not_claimed_when_added_or_verdicts_are_malformed() {
   # Important 1 (fix round 1) — recritic_zero 는 «변환 후» 빈 목록만 봐서, 보류·파손된
   # 원본까지 0 으로 접었다(P1·P3). 재비판자가 «무언가를 냈는데» 전부 버려진 것은
-  # 재비판 0 이 아니다 — bridge 가 raw verdicts/added 길이를 doc 에 실어 합성기가 본다.
+  # 재비판 0 이 아니다 — 재비판 변환이 raw verdicts/added 길이를 doc 에 실어 합성기가 본다.
   local T; T=$(mktemp -d)
   printf '[]\n' > "$T/findings.yaml"; prep "$T"
   reply "$T/reply.txt" 'verdicts: []
@@ -482,12 +482,7 @@ added:
     severity: Critical
     summary: "대소문자 섞인 severity"'
   local out; out=$(synth "$T")
-  # fix round 2 (Minor, 이빨 없음 정리) — "미지" 는 이 stdout 에 절대 리터럴로
-  # 안 뜬다: 접지 «않아도» severity 는 bridge 에서 UNKNOWN("미지")으로 강제된
-  # 뒤 render() 의 `_norm_sev` 가 그 문자열을 다시 SUGGESTION 으로 접어버린다
-  # (`_norm_sev` 는 어휘 밖 값을 전부 SUGGESTION 으로 낸다) — "not-contains 미지"
-  # 는 접든 안 접든 항상 참이라 대소문자 접기의 증인이 못 된다. 증인은
-  # "1 CRITICAL"(접으면 CRITICAL 로 남고, 안 접으면 SUGGESTION 으로 떨어진다) 뿐이다.
+  # 증인은 "1 CRITICAL" 이다 — 접지 않으면 어휘 밖 값이 되어 IMPORTANT 로 강제된다(V8).
   assert_contains "$out" '1 CRITICAL' "대소문자 섞인 severity 도 CRITICAL 로 접힌다"
   rm -rf "$T"
 }
@@ -516,21 +511,15 @@ added:
     disposition: CRITICAL
     summary: "severity 대신 disposition 으로 돌아왔다"'
   local out; out=$(synth "$T")
-  # fix round 2 — 같은 이유로 "not-contains 미지" 를 뺐다(case_added_severity_case_folds
-  # 참조): `_norm_sev` 가 미판별 값을 전부 SUGGESTION 으로 접어 stdout 에 "미지"가
-  # 리터럴로 뜰 일이 없다. 증인은 "1 CRITICAL" 뿐이다.
+  # 증인은 "1 CRITICAL" 이다 — disposition 을 안 보면 IMPORTANT 로 강제된다(V8).
   assert_contains "$out" '1 CRITICAL' "severity 가 없으면 disposition 으로 대신 잡는다"
   rm -rf "$T"
 }
 
-case_added_with_neither_severity_nor_disposition_is_kept_as_suggestion() {
-  # Controller fix round 1, Minor 3 — 위 케이스의 형제. severity 도 disposition 도
-  # 없으면 bridge 가 `미지`로 채운다(`to_adjudication_doc`) — `promote_new_findings`
-  # 의 `NEW_FINDING_REQUIRED` 검사는 "미지"가 참 값(truthy)이라 드롭하지 않는다.
-  # 오늘의 동작은 «버림»이 아니라 «SUGGESTION 으로 보이되 검증 안 됨」이다
-  # (`_norm_sev` 가 어휘 밖 값을 전부 SUGGESTION 으로 접는다). 이 케이스가 없으면
-  # 드롭 쪽으로 바뀌어도(또는 그 반대로 CRITICAL 취급으로 바뀌어도) 어떤 락도
-  # 못 잡는다.
+case_added_with_neither_severity_nor_disposition_is_kept_as_important() {
+  # 위 케이스의 형제. severity 도 disposition 도 없으면 `to_adjudication_doc` 이 IMPORTANT
+  # 로 강제하고(V8 — 결측을 낙관값으로 채우지 않는다) 그 강제를 게이트 변경으로 센다.
+  # 버리지 않는다 — 드롭 쪽으로 바뀌거나 SUGGESTION 으로 접히면 이 케이스가 잡는다.
   local T; T=$(mktemp -d)
   printf '[]\n' > "$T/findings.yaml"; prep "$T"
   reply "$T/reply.txt" 'verdicts: []
@@ -540,6 +529,19 @@ added:
   local out; out=$(synth "$T" 2>/dev/null)
   assert_contains "$out" '| IMPORTANT | nosev.py:0' "severity·disposition 둘 다 없으면 IMPORTANT 로 보인다 — 버리지도 낙관값으로 접지도 않는다 (V8)"
   assert_not_contains "$out" 'dropped as malformed' "필수 필드(file·summary)는 다 있으므로 malformed 드롭이 아니다"
+  assert_contains "$out" "강제(게이트 변경): added.severity None→'IMPORTANT'" "공시는 재비판자가 쓴 원래 값(결측)을 싣는다"
+  assert_not_contains "$out" "'미지'" "공시에 자리표시 값 '미지' 가 실리지 않는다"
+  rm -rf "$T"
+  T=$(mktemp -d)
+  printf '[]\n' > "$T/findings.yaml"; prep "$T"
+  reply "$T/reply.txt" 'verdicts: []
+added:
+  - file: badsev.py
+    severity: BLOCKER
+    summary: "모르는 severity"'
+  out=$(synth "$T" 2>/dev/null)
+  assert_contains "$out" '| IMPORTANT | badsev.py:0' "모르는 severity 도 IMPORTANT 로 보인다 (V8)"
+  assert_contains "$out" "강제(게이트 변경): added.severity 'BLOCKER'→'IMPORTANT'" "공시는 원래 값 BLOCKER 를 싣는다"
   rm -rf "$T"
 }
 
@@ -840,19 +842,77 @@ case_gate_coercion_is_disclosure_not_block() {
 }
 
 case_ac6_lower_with_evidence_goes_to_suggestion_only() {
-  # AC6 — lower 는 SUGGESTION 으로만 간다. `to` 가 다른 값이어도 목적지는 SUGGESTION 이다.
-  local T; T=$(mktemp -d)
-  one_finding "$T/findings.yaml" security-reviewer app.py 10 CRITICAL; prep "$T"
-  reply "$T/reply.txt" 'verdicts:
+  # AC6 — lower 는 SUGGESTION 으로만 간다(양의 짝: `to` 없음 · `to: suggestion`).
+  local T to_line
+  for to_line in '' '    to: suggestion'; do
+    T=$(mktemp -d)
+    one_finding "$T/findings.yaml" security-reviewer app.py 10 CRITICAL; prep "$T"
+    reply "$T/reply.txt" "verdicts:
   - f: f1
     verdict: lower
-    to: IMPORTANT
-    evidence: "의도 출처는 캐시 무효화만 요구한다"'
+${to_line:+$to_line
+}    evidence: \"의도 출처는 캐시 무효화만 요구한다\""
+    local out; out=$(synth "$T" --emit-verdict)
+    assert_contains "$out" '0 CRITICAL / 0 IMPORTANT / 1 SUGGESTION' "근거 있는 lower 는 SUGGESTION 으로 내린다 [to='${to_line# *to: }']"
+    assert_contains "$out" 'SUGGESTION (lowered)' "내린 항목은 표에서 구별된다 [to='${to_line# *to: }']"
+    assert_grep     "$out" '^blocking: 0$'        "막는 지적이 0 이다 [to='${to_line# *to: }']"
+    assert_grep     "$out" '^verdict: clean$'     "SUGGESTION 만 남으면 clean 이다 (AC4) [to='${to_line# *to: }']"
+    assert_not_contains "$out" '게이트 변경' "정상 lower 는 강제가 아니다 [to='${to_line# *to: }']"
+    rm -rf "$T"
+  done
+}
+
+case_ac6_lower_to_blocking_severity_is_coerced_to_confirm() {
+  # AC6 · fail-closed — `to` 가 막는 severity 를 가리키는 lower 는 자기모순이다. SUGGESTION 으로
+  # 내려 읽으면 defect 가 조용히 clean 이 된다 — confirm 으로 강제하고 게이트 변경으로 센다.
+  local T to
+  for to in IMPORTANT ' critical '; do
+    T=$(mktemp -d)
+    one_finding "$T/findings.yaml" security-reviewer app.py 10 CRITICAL; prep "$T"
+    reply "$T/reply.txt" "verdicts:
+  - f: f1
+    verdict: lower
+    to: '$to'
+    evidence: \"의도 출처는 캐시 무효화만 요구한다\""
+    local out; out=$(synth "$T" --emit-verdict)
+    assert_contains "$out" '1 CRITICAL / 0 IMPORTANT / 0 SUGGESTION' "막는 to 의 lower 는 적용되지 않는다 [to=$to]"
+    assert_not_contains "$out" 'lowered'          "내린 표시가 없다 [to=$to]"
+    assert_grep     "$out" '^blocking: 1$'        "막는 지적이 남는다 [to=$to]"
+    assert_grep     "$out" '^verdict: defect$'    "defect 다 [to=$to]"
+    assert_contains "$out" "강제(게이트 변경): lower.to '$to'→'confirm'" "그 강제가 계수·공시된다 [to=$to]"
+    rm -rf "$T"
+  done
+}
+
+case_evidence_must_be_text() {
+  # 근거는 비어 있지 않은 문자열(또는 문자열 목록)뿐이다 — `true` · `['']` · `[]` · `0` 은
+  # 근거가 아니어서 reject · lower 가 적용되지 않고 게이트 변경 강제로 세어진다.
+  local T ev kind
+  for kind in reject lower; do
+    for ev in 'true' "['']" '[]' '0' '{a: b}' "['ok', 1]"; do
+      T=$(mktemp -d)
+      one_finding "$T/findings.yaml" security-reviewer app.py 10 CRITICAL; prep "$T"
+      reply "$T/reply.txt" "verdicts:
+  - f: f1
+    verdict: $kind
+    evidence: $ev"
+      local out; out=$(synth "$T" --emit-verdict)
+      assert_grep     "$out" '^blocking: 1$'     "형식만의 근거로 $kind 가 적용되지 않는다 [evidence=$ev]"
+      assert_grep     "$out" '^verdict: defect$' "defect 가 남는다 [$kind · evidence=$ev]"
+      assert_contains "$out" "강제(게이트 변경): verdict '$kind'→'confirm'" "그 강제가 공시된다 [$kind · evidence=$ev]"
+      rm -rf "$T"
+    done
+  done
+  # 양의 짝 — 문자열 목록은 근거다(빈 칸은 버린다).
+  T=$(mktemp -d)
+  one_finding "$T/findings.yaml" security-reviewer app.py 10 CRITICAL; prep "$T"
+  reply "$T/reply.txt" "verdicts:
+  - f: f1
+    verdict: reject
+    evidence: ['', '호출부가 없다']"
   local out; out=$(synth "$T" --emit-verdict)
-  assert_contains "$out" '0 CRITICAL / 0 IMPORTANT / 1 SUGGESTION' "근거 있는 lower 는 SUGGESTION 으로 내린다"
-  assert_contains "$out" 'SUGGESTION (lowered)' "내린 항목은 표에서 구별된다"
-  assert_grep     "$out" '^blocking: 0$'        "막는 지적이 0 이다"
-  assert_grep     "$out" '^verdict: clean$'     "SUGGESTION 만 남으면 clean 이다 (AC4)"
+  assert_grep "$out" '^blocking: 0$'   "문자열 목록 근거의 reject 는 적용된다"
+  assert_grep "$out" '^verdict: clean$' "clean 이다"
   rm -rf "$T"
 }
 
@@ -911,7 +971,7 @@ case_recritic_zero_not_claimed_when_added_or_verdicts_are_malformed
 case_added_severity_case_folds
 case_raise_to_case_folds
 case_added_falls_back_to_disposition_when_severity_missing
-case_added_with_neither_severity_nor_disposition_is_kept_as_suggestion
+case_added_with_neither_severity_nor_disposition_is_kept_as_important
 case_dead_recritic_is_not_clean
 case_malformed_top_level_container_kills_adjudicator_not_the_run
 case_malformed_map_entry_is_dead_adjudicator
@@ -928,6 +988,8 @@ case_gate_coercion_is_disclosure_not_block
 case_container_drop_of_findings_document_blocks
 case_hold_only_is_blocking_without_source_death
 case_ac6_lower_with_evidence_goes_to_suggestion_only
+case_ac6_lower_to_blocking_severity_is_coerced_to_confirm
+case_evidence_must_be_text
 case_ac6_lower_without_evidence_is_coerced_and_counted
 case_ac6_lower_on_suggestion_is_noop
 finish

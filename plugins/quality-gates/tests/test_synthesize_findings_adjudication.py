@@ -129,8 +129,8 @@ class TestPromoteAuthorIsRequired(unittest.TestCase):
         self.assertEqual(dropped, 1, "file 없는 항목은 여전히 malformed 로 드롭된다")
 
     def test_promote_new_findings_drops_item_missing_severity(self):
-        """같은 이유로 severity 결측 드롭 경로도 CLI 밖에서 핀한다 — bridge 는
-        severity·disposition 이 둘 다 없어야 «미지» 로 채운다(둘 중 하나만 없으면
+        """같은 이유로 severity 결측 드롭 경로도 CLI 밖에서 핀한다 — 재비판 변환은
+        severity·disposition 이 둘 다 없어야 IMPORTANT 로 채운다(V8, 둘 중 하나만 없으면
         나머지가 대신 잡는다). `promote_new_findings` 자체가 호출자와 무관하게
         severity 를 요구하는지는 이 직접 호출로만 검사된다."""
         promoted, dropped = mod.promote_new_findings(

@@ -209,9 +209,9 @@ fi
 #      stderr에만 있는 공지는 이 경로에서 없는 것과 같다.
 #      R-AD — 옛 픽스처는 file 키 · severity 키가 «없는» 항목으로 이 malformed
 #      드롭을 쟀다. 재비판 경로(`synthesize_findings.to_adjudication_doc`)는 `added`
-#      항목의 file 을 `미지`로, severity 를 미지로 «채워 넣은 뒤» promote_new_findings
+#      항목의 file 을 `미지`로, severity 를 IMPORTANT(V8)로 «채워 넣은 뒤» promote_new_findings
 #      로 넘긴다 — 그 두 필드는 이제 채워진 채 도착해 `NEW_FINDING_REQUIRED` 를
-#      통과한다(더는 malformed 로 안 잡힌다). bridge 가 건드리지 않는 유일한 필수
+#      통과한다(더는 malformed 로 안 잡힌다). 재비판 변환이 건드리지 않는 유일한 필수
 #      필드는 `summary` 다 — 그것이 없는 두 항목으로 같은 성질(2건 드롭 · not-clean)을 잰다.
 rf_reply "$tmp/empty" 'verdicts: []
 added:

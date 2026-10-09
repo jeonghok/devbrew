@@ -364,6 +364,26 @@ def _single_diff_file(diff_text):
     return paths.pop() if len(paths) == 1 else None
 
 
+def _evidence(v):
+    """판정의 근거를 문자열로. 비어 있지 않은 문자열이거나, 문자열만 담은 목록(빈 칸을 버리고
+    이은 결과가 비어 있지 않을 때)만 근거다. 그 밖의 값(`true` · `0` · `['']` · `[]` · 매핑)은
+    「근거 없음」이다 — 근거를 요구하는 판정(reject · lower)이 형식만으로 통과하지 않게.
+    """
+    raw = v.get("evidence")
+    if isinstance(raw, str):
+        return raw.strip()
+    if isinstance(raw, list):
+        parts, all_text = [], True
+        for x in raw:
+            if isinstance(x, str):
+                if x.strip():
+                    parts.append(x.strip())
+            else:
+                all_text = False
+        return "; ".join(parts) if all_text else ""
+    return ""
+
+
 def _verdict_for(v, cur_sev, fid, ledger):
     """재비판 판정 하나 → 합성기 판정 하나. 강제는 원장에 남긴다."""
     kind = v.get("verdict")
@@ -371,7 +391,7 @@ def _verdict_for(v, cur_sev, fid, ledger):
     if kind == "confirm":
         pass
     elif kind == "reject":
-        evidence = str(v.get("evidence") or "").strip()
+        evidence = _evidence(v)
         if evidence:
             out = {"finding_id": fid, "verdict": "reject", "reason": evidence}
         else:
@@ -389,11 +409,16 @@ def _verdict_for(v, cur_sev, fid, ledger):
     elif kind == "lower":
         # 관문 E — 목적지는 SUGGESTION 하나뿐이고 근거가 있어야 한다. 근거 없는 lower 는
         # confirm 으로 강제하고 그 강제를 센다(gate=True — 막는 지적이 그대로 남는다).
-        evidence = str(v.get("evidence") or "").strip()
+        # `to` 가 막는 severity(IMPORTANT·CRITICAL)를 가리키는 lower 는 자기모순이다 —
+        # SUGGESTION 으로 내려 읽지 않고(fail-closed) confirm 으로 강제해 센다.
+        evidence = _evidence(v)
         to_raw = v.get("to")
-        if to_raw is not None and _fold_sev(to_raw) != "SUGGESTION":
+        to = _fold_sev(to_raw)
+        if to_raw is not None and to != "SUGGESTION" and to not in ("IMPORTANT", "CRITICAL"):
             ledger.coerced("to", to_raw, "SUGGESTION", gate=False)
-        if not evidence:
+        if to in ("IMPORTANT", "CRITICAL"):
+            ledger.coerced("lower.to", to_raw, "confirm", gate=True)
+        elif not evidence:
             ledger.coerced("verdict", "lower", "confirm", gate=True)
         elif cur_sev == "SUGGESTION":
             ledger.coerced("verdict", "lower", "confirm", gate=False)
@@ -493,8 +518,9 @@ def to_adjudication_doc(block_text, mapping, ledger, diff_text=None):
                 ledger.coerced("added.severity", raw_sev, disp, gate=False)
                 sev = disp
             else:
-                ledger.coerced("added.severity", raw_sev, UNKNOWN, gate=False)
-                sev = UNKNOWN
+                # V8 — 결측·미지는 IMPORTANT. 공시에는 재비판자가 실제로 쓴 값을 싣는다.
+                ledger.coerced("added.severity", raw_sev, "IMPORTANT", gate=True)
+                sev = "IMPORTANT"
         nf["severity"] = sev
         nf.pop("disposition", None)
         nf.setdefault("line", 0)
