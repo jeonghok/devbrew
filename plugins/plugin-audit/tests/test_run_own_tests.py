@@ -2,6 +2,8 @@ import json, os, stat, subprocess, tempfile, unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "run-own-tests.sh"
+NEW_SWITCH = "DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX"
+LEGACY_SWITCH = "DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX"
 
 TRIVIAL_TEST = (
     "import unittest\n"
@@ -74,6 +76,50 @@ class TestRunOwnTests(unittest.TestCase):
             r, obj = run(d, "sid12345678", qg)
             self.assertFalse(obj["own_tests"]["ran"])
             self.assertIn("kill", (obj["own_tests"]["why"] or "").lower())
+
+    def _real_helper_run(self, switch_env):
+        # 실제 audit-sandbox.sh(스텁 아님)로 돈다 — kill switch 를 읽는 것은 그 스크립트다.
+        # 대상의 셸 테스트는 저장소 밖 절대경로 marker 를 만든다: marker 가 있으면 대상
+        # 테스트가 실행된 것이다.
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(subprocess.run, ["rm", "-rf", str(d)])
+        repo = d / "repo"; marker = d / "target-test-ran"
+        tdir = repo / "plugins" / "tgt" / "tests"; tdir.mkdir(parents=True)
+        _exe(tdir / "test_marker.sh", f"#!/usr/bin/env bash\ntouch '{marker}'\n")
+        for c in (["git", "init", "-q", "-b", "main"], ["git", "config", "user.email", "t@t"],
+                  ["git", "config", "user.name", "t"], ["git", "add", "-A"],
+                  ["git", "commit", "-q", "-m", "init"]):
+            subprocess.run(c, cwd=repo, check=True, capture_output=True)
+        env = {k: v for k, v in os.environ.items()
+               if k not in (NEW_SWITCH, LEGACY_SWITCH)}
+        env.update(switch_env)
+        r = subprocess.run(["bash", str(SCRIPT), "plugins/tgt", "sid12345678"],
+                           capture_output=True, text=True, cwd=repo, env=env, timeout=120)
+        obj = json.loads(r.stdout.strip().splitlines()[-1])["own_tests"]
+        return obj, marker.exists(), (repo / ".claude" / "plugin-audit").exists()
+
+    def test_real_helper_without_switch_runs_target_test(self):
+        # 아래 두 skip 케이스의 양의 짝 — marker 장치가 실제로 실행을 관측한다.
+        obj, ran_marker, _ = self._real_helper_run({})
+        self.assertTrue(obj["ran"], obj)
+        self.assertTrue(ran_marker, "스위치 없이도 대상 테스트가 안 돌았다 — marker 장치가 죽었다")
+
+    def test_new_switch_name_skips_without_running(self):
+        obj, ran_marker, ns = self._real_helper_run({NEW_SWITCH: "1"})
+        self.assertFalse(obj["ran"])
+        self.assertIn("kill-switch", obj["why"] or "")
+        self.assertIn(NEW_SWITCH, obj["why"] or "")
+        self.assertFalse(ran_marker, "kill switch 인데 대상 테스트가 실행됐다")
+        self.assertFalse(ns, "kill switch 인데 샌드박스 네임스페이스가 생겼다")
+
+    def test_legacy_switch_name_skips_without_running(self):
+        # 0.11.0 이 옛 이름을 조용히 버려 대상 테스트가 다시 돌던 fail-open 의 락.
+        obj, ran_marker, ns = self._real_helper_run({LEGACY_SWITCH: "1"})
+        self.assertFalse(obj["ran"], "옛 이름 kill switch 가 무시됐다 (fail-open)")
+        self.assertIn("kill-switch", obj["why"] or "")
+        self.assertIn(LEGACY_SWITCH, obj["why"] or "", "skip 사유가 옛 이름을 밝히지 않는다")
+        self.assertFalse(ran_marker, "옛 이름 kill switch 인데 대상 테스트가 실행됐다")
+        self.assertFalse(ns, "옛 이름 kill switch 인데 샌드박스 네임스페이스가 생겼다")
 
     def test_missing_helper_degrades(self):
         with tempfile.TemporaryDirectory() as d:
