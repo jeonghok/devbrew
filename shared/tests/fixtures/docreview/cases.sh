@@ -2775,6 +2775,24 @@ print(_plain_warns(["표에 없는 경고 하나", "보류: recritic:f9 — 항�
   assert_eq "$got" "['표에 없는 경고 하나', '판정하지 못하고 보류한 지적이 있다 (recritic:f9 — 항목 파손: unknown f)']" \
     "경고 쉬운 말: 표에 없는 원문은 그대로 싣고, 표에 있는 원문은 쉬운 문장 뒤 괄호에 나머지를 한 줄로 싣는다"
 }
+# 「앵커 불가」 행은 지금 원문과 같은 글자만 바꾼다 — 원문에 글자가 붙으면(앞으로 바뀐 원문) 그 원문을 그대로 낸다.
+case_plain_warns_anchor_exact() {
+  local got; got="$(PYTHONPATH="$SCRIPTS" python3 -c '
+from docreview_state import _plain_warns
+print(_plain_warns(["앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위", "앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위 · 새 사실"]))')"
+  assert_eq "$got" "['문서에 제목이 없어 지적의 자리를 가리키지 못한다 — 얼림·보호 검사가 꺼졌고 모든 수정이 문서 전체 범위다 (앵커 불가)', '앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위 · 새 사실']" \
+    "앵커 불가 쉬운 말: 지금 원문만 쉬운 줄로 바꾸고, 글자가 붙은 원문은 그대로 싣는다"
+}
+# codex 사유가 없는 라운드(`codex_reason: None`) — 라우터 원문의 「(None)」이 첫 줄에 새지 않고 사유 자리는 「?」 하나다.
+case_first_line_codex_reason_none() {
+  local got; got="$(PYTHONPATH="$SCRIPTS" python3 -c '
+from docreview_state import _first_line, GATE_ROWS
+g = {r.name: [] for r in GATE_ROWS}
+g.update(round=1, advisory=["codex 없음 — 모델 다양성 0 (None)"], degrade={"codex_absent": True, "codex_reason": None})
+print(_first_line(g))')"
+  assert_eq "$got" "리뷰 1라운드를 마쳤다 — 남은 것 없음. 경고 1개: codex 리뷰가 없어 다른 모델의 시각이 빠졌다 (codex: ?)" \
+    "codex 사유 없음: 첫 줄의 사유 자리가 「?」 하나이고 None 이 없다"
+}
 # 「같은 자리」 표지는 한 묶음 안에서만 앞 항목을 가리킨다(계획 Q11) — 묶음 제목 너머의 항목을 가리키지 않는다.
 case_gate_marker_stays_in_group() {
   local d gr; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"

@@ -1302,7 +1302,7 @@ WARN_GLOSS = (
     (r"입력 실패\(보조\): doc-recritic — (?P<why>.*)", "doc-recritic", "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다"),
     (r"셀 수 없음: layer2 — (?P<why>.*)", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다"),
     (r"상세 미검증 — 층 2 블록 없음", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다"),
-    (r"앵커 불가 — .*", "앵커 불가", "문서에 제목이 없어 지적의 자리를 가리키지 못한다 — 얼림·보호 검사가 꺼졌고 모든 수정이 문서 전체 범위다"),
+    (re.escape("앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위"), "앵커 불가", "문서에 제목이 없어 지적의 자리를 가리키지 못한다 — 얼림·보호 검사가 꺼졌고 모든 수정이 문서 전체 범위다"),
     (r"critic 시점 판별 불가 \((?P<why>.*)\)", "critic 시점", "리뷰어 결과가 이번 라운드 것인지 확인하지 못했다"),
     (r"입력 실패\(주\): (?P<why>.*)", None, "꼭 있어야 할 리뷰어 결과를 읽지 못했다"),
     (r"입력 실패\(보조\): (?P<why>.*)", None, "보조 리뷰어 결과를 읽지 못했다"),
@@ -1362,6 +1362,9 @@ def _first_line(g) -> str:
     deg = g["degrade"]
     if deg.get("codex_absent"):
         cl = "codex 없음 — 모델 다양성 0 (%s)" % (deg.get("codex_reason") or "?")
+        if not deg.get("codex_reason"):
+            # 사유가 없으면 라우터의 원문은 「(None)」이다 — 그 원문을 이 줄로 바꿔 「?」 하나만 남긴다.
+            warns = [cl if w == "codex 없음 — 모델 다양성 0 (None)" else w for w in warns]
         if cl not in warns:
             warns.insert(0, cl)
     warns = _plain_warns(warns)
