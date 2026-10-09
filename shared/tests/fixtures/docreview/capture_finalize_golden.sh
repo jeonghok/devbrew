@@ -80,7 +80,7 @@ capture_and_run() {
   unset -f rm
 }
 
-for c in case_T11_permit_keeps_disposition case_T22_reraise_appears_in_next_round case_T05_T06_reject; do
+for c in case_T11_permit_keeps_disposition case_T22_reraise_appears_in_next_round case_T05_T06_reject case_plain_render_nothing_left case_plain_render_fix_and_decide; do
   capture_and_run "$c"
 done
 echo "captured: $(ls "$OUT"/*.fin.json "$OUT"/*.state.md 2>/dev/null | wc -l | tr -d ' ') files -> $OUT"

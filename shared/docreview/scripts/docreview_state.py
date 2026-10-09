@@ -1087,13 +1087,13 @@ def cmd_observe_diff(a) -> int:
 # 다음 라운드는 제 자리(`rounds[n+1]`, 새 준비)를 쓰므로 그 라운드가 정상으로 끝나면 표지가 풀린다.
 UNVERIFIED_LABEL = "미검증"
 UNVERIFIED_TEXT = {
-    "critic_dead": "「미검증」 주 판정자(doc-critic) 사망 — 이 라운드는 리뷰되지 않았다",
-    "finalize_incomplete": "「미검증」 라우팅(finalize) 미완 — 이 라운드의 finding 이 원장에 없다",
+    "critic_dead": "「미검증」 리뷰어(doc-critic)가 결과를 내지 못해 이 라운드는 리뷰되지 않았다",
+    "finalize_incomplete": "「미검증」 판정 정리(finalize)를 마치지 못해 이 라운드의 지적이 기록에 없다",
 }
 # 「미검증」 사유가 없어도 이번 라운드의 finalize 보고서가 없으면 `round_reviewed` 는 거짓이다(양의 증거).
 # 그 라운드는 라벨 없이 공시만 한다 — 「미검증」(라벨 · 승인 게이트 강제)과 다른 공시 사유 `unrouted`.
 # 5단계가 rc 0·4 밖으로 끝나고 7단계를 건너뛴 라운드가 여기 온다(Task 7b fix, R54).
-UNROUTED_TEXT = "리뷰 완료 아님 — 이번 라운드의 라우팅 보고서가 없다(finalize 를 거치지 않았다)"
+UNROUTED_TEXT = "리뷰를 마치지 못했다 — 이번 라운드의 판정 기록이 없다(finalize 를 거치지 않았다)"
 
 
 def pending_mismatch(st, n):
@@ -1262,6 +1262,66 @@ def _post_kind_notice(d) -> str:
     return " — 「채택」은 원복 의무를 관측 없이 종결한다" if d.get("kind") == "post" else ""
 
 
+# 게이트 렌더의 사람말 — GATE_ROWS 행마다 묶음 제목. 짝이 없는 행은 원래 이름으로 내고 그 사실을
+# 렌더에 한 줄로 공시한다(CATEGORY_GLOSS 와 같은 방식). ∀ 커버리지는
+# `cases.sh:case_state_gloss_covers_gate_rows` 가 `gate-rows` 에서 도출해 잰다.
+STATE_GLOSS = {
+    "open_decide": "정할 것",
+    "adopted": "고치기로 했고 반영 확인을 기다리는 것",
+    "blocked_expired": "기한이 지나 막힌 결정",
+    "superseded_expired": "다른 결정으로 넘어간 것",
+    "held_decide": "미뤄 둔 결정",
+    "unapplied_fix": "아직 안 고친 곳",
+    "escalated_fix": "고치려다 막힌 곳",
+    "held_fix": "질문의 답을 기다리는 수정",
+    "blocking_ask_open": "수정의 전제가 되는 질문",
+    "ask_open": "답을 기다리는 질문",
+}
+# 집계 줄의 사람말 — 0 은 내지 않는다(쉬운 말 출력 설계 §3 원칙 3). 순서는 옛 집계 줄과 같다.
+COUNT_GLOSS = (
+    ("rejected", "재비판이 기각한 지적 %d건"),
+    ("user_rejected", "사용자가 기각한 지적 %d건"),
+    ("dropped", "버린 지적(drop) %d건"),
+    ("bucket_conflicts", "같은 자리·같은 종류로 겹친 묶음 %d개"),
+    ("lineage_mismatch", "없는 이전 지적을 가리킨 것 %d건"),
+    ("revived", "기각했던 지적이 다시 나온 것 %d건"),
+    ("reraise_unconsumed", "다시 올릴 대상이 없는 예약 %d건"),
+    ("escalated_unconsumed", "결정으로 올릴 대상이 없는 예약 %d건"),
+)
+NEXT_MODE_GLOSS = {"budget": "재리뷰 횟수 안에서", "extra_approval": "사용자가 연 추가 라운드"}
+
+
+def _one(s) -> str:
+    """렌더용 한 줄 — 열 0 의 「- 」 항목 머리는 렌더러만 만든다(요약 속 개행이 가짜 머리를 세우지 않게)."""
+    return " ".join(str(s).split())
+
+
+def _first_line(g) -> str:
+    """첫 줄 = 그 라운드의 상태와 경고 공시 한 문장(쉬운 말 출력 설계 §3).
+    「이상 없음」은 리뷰를 마친 라운드에 남은 행도 경고도 없을 때만, 「경고 없음」은 남은 것은 있고
+    경고가 없을 때만 쓴다. 「미검증」·라운드 미완이면 그 공시가 맨 앞이고 두 문구 어느 것도 쓰지 않는다.
+    경고는 advisory 를 전부 싣는다 — codex 부재만 싣고 나머지를 버리지 않는다."""
+    lead = None
+    if g.get("unverified"):
+        lead = UNVERIFIED_TEXT.get(g["unverified"], "「미검증」 (%s)" % g["unverified"])
+    elif g.get("unreviewed_reason"):
+        lead = UNROUTED_TEXT
+    warns = list(g["advisory"])
+    deg = g["degrade"]
+    if deg.get("codex_absent"):
+        cl = "codex 없음 — 모델 다양성 0 (%s)" % (deg.get("codex_reason") or "?")
+        if cl not in warns:
+            warns.insert(0, cl)
+    left = ["%s %d개" % (STATE_GLOSS.get(r.name, r.name), len(g[r.name])) for r in GATE_ROWS if g[r.name]]
+    head = ("리뷰 %d라운드" if lead else "리뷰 %d라운드를 마쳤다") % g["round"]
+    s = head + (" — %s가 남았다." % " · ".join(left) if left else " — 남은 것 없음.")
+    if warns:
+        s += " 경고 %d개: %s" % (len(warns), " · ".join(warns))
+    elif lead is None:
+        s = head + " — 이상 없음." if not left else s + " 경고 없음."
+    return lead + ". " + s if lead else s
+
+
 def _rg_decide(st, g, fid):
     # [Task 4 — §6.4 한계 (a)] 「대안:」 줄은 `dv.get("alternatives")` 가 아니라
     # `decide_choices` 로 낸다 — 그쪽은 라우팅 시점에 이 id 를 못 보므로 여기가
@@ -1276,22 +1336,21 @@ def _rg_decide(st, g, fid):
     dv = f.get("decision_view") or {}
     d = st["decides"].get(fid) or {}
     alternatives = [choice_label(c, d.get("kind")) for c in decide_choices(st, fid)]
-    lines = ["[decide%s] %s — %s%s" % (" auto" if dv.get("auto") else "", fid, f.get("summary"), _post_kind_notice(d)),
-             "  그대로 두면: %s" % dv.get("if_unfixed", "(리뷰어가 안 적음)"),
-             "  고치면: %s" % dv.get("replacement", "(대체안 미작성)"),
-             "  근거: %s" % dv.get("basis", f.get("evidence") or "—"),
-             "  자리: %s" % dv.get("impact", f.get("anchor")),
+    lines = ["- %s%s (%s%s)" % (_one(f.get("summary")), _post_kind_notice(d), fid, " · 자동" if dv.get("auto") else ""),
+             "  그대로 두면: %s" % _one(dv.get("if_unfixed", "(리뷰어가 안 적음)")),
+             "  고치면: %s" % _one(dv.get("replacement", "(대체안 미작성)")),
+             "  근거: %s" % _one(dv.get("basis", f.get("evidence") or "—")),
+             "  자리: %s" % _one(dv.get("impact", f.get("anchor"))),
              "  대안: %s" % " / ".join(alternatives)]
     # 사람말이 없는 category 는 원래 이름으로 나가되 그 사실을 «말한다». 조용히
     # 빈칸으로 두면 사상이 낡았다는 것이 아무 데도 안 남는다(D13-③ 이 안 닫힌다).
     if dv.get("category_unglossed"):
-        lines.append("  ↳ 사람말 사상 없음: %s — 원래 이름 그대로 낸다" % dv["category_unglossed"])
+        lines.append("  ↳ 사람말 사상 없음: %s — 원래 이름 그대로 낸다" % _one(dv["category_unglossed"]))
     return lines
 
 
 def _rg_adopted(st, g, fid):
-    return ["[채택·미관측] %s — %s (다음 라운드 diff 가 적용을 관측해야 닫힌다)"
-            % (fid, st["findings"][fid].get("summary"))]
+    return ["- %s — 다음 라운드에서 반영이 확인돼야 닫힌다 (%s)" % (_one(st["findings"][fid].get("summary")), fid)]
 
 
 def _rg_expired(st, g, fid):
@@ -1304,12 +1363,12 @@ def _rg_expired(st, g, fid):
     # 통일한다(M3 부산물 — `_rg_decide` 와 라벨 어휘도 이제 같다).
     d = st["decides"].get(fid) or {}
     alt = " / ".join(choice_label(c, d.get("kind")) for c in decide_choices(st, fid))
-    return ["[만료·차단] %s — %s (%s%s)" % (fid, st["findings"][fid].get("summary"), alt, _post_kind_notice(d))]
+    return ["- %s — 고를 수 있는 것: %s%s (%s)" % (_one(st["findings"][fid].get("summary")), alt, _post_kind_notice(d), fid)]
 
 
 def _rg_superseded(st, g, fid):
     d = st["decides"].get(fid) or {}
-    return ["[만료·승계됨] %s → %s" % (fid, d.get("superseded_by"))]
+    return ["- %s — 이어받은 결정: %s (%s)" % (_one(st["findings"][fid].get("summary")), d.get("superseded_by"), fid)]
 
 
 def _rg_held_decide(st, g, fid):
@@ -1323,12 +1382,11 @@ def _rg_held_decide(st, g, fid):
     # 절차는 설계에 없다. 그래서 사실만 적는다: 존재는 렌더되고 승인은 막지 않는다.
     # 새 전이를 만들지 않는다(룰링 28 — `decide --choice reject` 를 held 에 허용하는
     # 것은 spec 근거 없는 행동 변경이다).
-    return ["[decide 보류] %s — %s (사용자가 보류했다 — 승인을 막지 않고, 승인 게이트의 남은 ask 목록에 보인다, §8.2)"
-            % (fid, st["findings"][fid].get("summary"))]
+    return ["- %s — 사용자가 미뤘다. 승인을 막지 않는다 (%s)" % (_one(st["findings"][fid].get("summary")), fid)]
 
 
 def _rg_unapplied_fix(st, g, fid):
-    return ["[미적용 fix] %s — %s (적용 예정 / drop)" % (fid, st["findings"][fid].get("summary"))]
+    return ["- %s — 고치거나 버린다(drop) (%s)" % (_one(st["findings"][fid].get("summary")), fid)]
 
 
 def _rg_escalated_fix(st, g, fid):
@@ -1346,22 +1404,20 @@ def _rg_escalated_fix(st, g, fid):
     # 이 연 탈출구, 새 전이 아님) 렌더가 그 사실을 `_rg_unapplied_fix` 처럼 알려준다.
     fx = st["fixes"].get(fid) or {}
     why = fx.get("escalate_reason") or "사유 불명"
-    return ["[fix 상향 대기] %s — %s (사유: %s, drop 하면 이 차단이 풀린다)"
-            % (fid, st["findings"][fid].get("summary"), why)]
+    return ["- %s — 막힌 이유: %s. 버리면(drop) 이 차단이 풀린다 (%s)" % (_one(st["findings"][fid].get("summary")), why, fid)]
 
 
 def _rg_held_fix(st, g, fid):
-    return ["[fix 보류] %s — 전제 ask 미응답" % fid]
+    return ["- %s — 앞의 질문에 답해야 고칠 수 있다 (%s)" % (_one(st["findings"][fid].get("summary")), fid)]
 
 
 def _rg_blocking_ask(st, g, fid):
     f = st["findings"][fid]
-    return ["[ask 비차단] %s — %s → 전제인 fix: %s"
-            % (fid, f.get("summary"), ", ".join(f.get("blocks") or []))]
+    return ["- %s — 이 답을 기다리는 수정: %s (%s)" % (_one(f.get("summary")), ", ".join(f.get("blocks") or []), fid)]
 
 
 def _rg_ask_open(st, g, fid):
-    return ["[ask] %s — %s" % (fid, st["findings"][fid].get("summary"))]
+    return ["- %s (%s)" % (_one(st["findings"][fid].get("summary")), fid)]
 
 
 GATE_RENDERERS = {"decide": _rg_decide, "adopted": _rg_adopted, "expired": _rg_expired,
@@ -1382,102 +1438,54 @@ def _has_advisory_axis(st) -> bool:
 
 
 def render_gate(st, g) -> str:
-    deg = g["degrade"]
-    out = []
-    # 첫 줄 = 그 라운드의 degrade 공시. 「미검증」이면 주 판정자 사망 · 라우팅 미완을 맨 앞에 싣는다 —
-    # 그 라운드에 「degrade 없음」이 나올 수 없다.
-    first = []
-    if g.get("unverified"):
-        first.append(UNVERIFIED_TEXT.get(g["unverified"], "「미검증」 (%s)" % g["unverified"]))
-    elif g.get("unreviewed_reason"):
-        first.append(UNROUTED_TEXT)
-    if deg.get("codex_absent"):
-        first.append("codex 없음 — 모델 다양성 0 (%s)" % (deg.get("codex_reason") or "?"))
-    elif g["advisory"]:
-        first.append("degrade: " + " · ".join(g["advisory"]))
-    out.append(" ; ".join(first) if first else "degrade 없음")
-    ag = "승인 게이트" + ("(「%s」)" % g["approval_label"] if g.get("approval_label") else "")
-    out.append("라운드 %d · 재리뷰 %d/%d%s%s" % (g["round"], g["rereview_count"], REREVIEW_CAP,
-                                              " · 상한 도달" if g["cap_reached"] else "",
-                                              " · stagnation" if g["stagnation"] else ""))
-    # [Task 9 ⓓ] GATE_ROWS 10행의 순서는 이미 결정론이지만 «상태 범주» 순이라 그
-    # 뜻이 안 보였다. 순위를 새로 매기지 않는다 — 오케스트레이터가 순위를 매기면
-    # 그 순위 자체가 판단이고 사용자가 그 위험을 받아들인다고 말한 적이 없다.
-    # 있는 순서의 뜻만 낸다. 이 한 줄의 내용은 GATE_ROWS 의 순서에서 읽는다 —
-    # 구절 ↔ 행(`.name`) 대응은 다음과 같다:
-    #   열린 결정        → open_decide
-    #   그다음 관측 대기  → adopted (그 렌더러 자신이 "다음 라운드 diff 가 적용을
-    #                       관측해야 닫힌다" 고 말한다 — _rg_adopted)
-    #   막힌 것          → blocked_expired · superseded_expired
-    #   미적용 수정       → unapplied_fix · escalated_fix · held_fix
-    #   질문             → blocking_ask_open · ask_open
-    # 「미적용 수정」은 fixes 원장 세 행(6·7·8) 전체를 하위 상태와 무관하게
-    # 뜻으로 묶는다 — pending/intent_passed 든 escalated 든 held 든, 셋 다
-    # 「아직 적용되지 않은 fix」라는 사실은 같다(적용됐으면 애초에 이 원장에
-    # 안 남는다). held_fix 가 여기 들어가는 것은 held_fix 만의 특별 취급이
-    # 아니라 이 구절이 «상태 무관·원장 전체»를 가리키기 때문이다.
-    # [Task 9 정정] held_decide 가 다섯 구절 밖인 이유는 그래서 "보류
-    # 라는 개념은 어느 구절도 못 담는다"가 아니다 — held_fix 가 바로 그 반례다.
-    # 진짜 이유는 더 좁다: decides 원장 segment(열린 결정·관측 대기·막힌 것)는
-    # fixes 와 달리 «상태 무관·원장 전체»를 가리키는 구절이 없다 — 세 구절이
-    # 각각 open_decide·adopted·(blocked_expired·superseded_expired) 라는 특정
-    # 하위 상태만 가리키므로 held_decide 를 담을 자리가 애초에 없다. 표의
-    # 침묵이지 누락 버그가 아니다(§8.2 가 held_decide 를 승인 게이트의 남은
-    # ask 목록에서 따로 보여준다는 전제).
-    # [정직 고지] 이 대응은 사람이 적었다 — `cases.sh` 의 `case_gate_head_and_
-    # grouping` 은 이 줄의 «내용과 순서»가 아래 리터럴과 정확히 같은지만 기계로
-    # 잰다. 그 등식은 이 대응표가 뜻으로 맞다는 증명이 아니다. 「막힌 것」·
-    # 「미적용 수정」·「질문」이 여러 행을 한 구절로 묶는 경계도 마찬가지로
-    # 사람의 읽기다 — 그 경계에 동의하지 않는 미래 독자는 "원래 그렇게
-    # 도출됐다"고 가정하지 말고 이 줄 자체를 고쳐라. GATE_ROWS 를 재정렬하거나
-    # 새 행을 끼워 넣으면, 이 줄과 위 대응표와 `case_gate_head_and_grouping`
-    # 의 기대 리터럴을 함께 옮겨라 — 셋 중 하나만 고치면 이 줄이 조용히 낡은
-    # 설명이 된다.
-    out.append("순서: 열린 결정 먼저 · 그다음 관측 대기 · 막힌 것 · 미적용 수정 · 질문")
+    """사람이 읽는 게이트 글(쉬운 말 출력 설계 §3). 기계가 읽는 것은 `gate` JSON 이고 이 글이 아니다.
+
+    행 묶음은 GATE_ROWS 순서다 — 열린 결정 → 반영 확인 대기 → 막힌 결정 → 고칠 곳 → 질문. 순서를 바꾸려면
+    GATE_ROWS 를 옮긴다(이 함수는 순서를 따로 정하지 않는다)."""
+    c = dict(g["counts"], dropped=len(g["dropped"]))
+    out = [_first_line(g)]
+    sub = "재리뷰 %d/%d회 썼다" % (g["rereview_count"], REREVIEW_CAP)
+    if g["cap_reached"]:
+        sub += " · 상한에 닿았다"
+    if g["stagnation"]:
+        sub += " · 진전 없음(stagnation)"
+    out.append(sub)
     prev_anchor = None
     for row in GATE_ROWS:
         fn = GATE_RENDERERS.get(row.render) if row.render else None
-        if fn is None:
+        if fn is None or not g[row.name]:
             continue
+        out.append("%s %d개" % (STATE_GLOSS.get(row.name, row.name), len(g[row.name])))
+        if row.name not in STATE_GLOSS:
+            out.append("  ↳ 상태 이름에 사람말이 없다: %s — 원래 이름 그대로 낸다" % row.name)
         for fid in g[row.name]:
-            # [Task 9 ⓓ] 묶음은 «표시»다 — 질문 수도 항목별 선택권도 안 바꾼다
-            # (D24). 같은 자리를 건드리는 항목이 연달아 오면 그 사실만 한 줄로
-            # 보인다.
             anchor = (st["findings"].get(fid) or {}).get("anchor")
             if anchor and anchor == prev_anchor:
-                out.append("  ┆ 같은 자리(%s)" % anchor)
+                out.append("  ┆ 같은 자리(%s)" % _one(anchor))
             prev_anchor = anchor
             out.extend(fn(st, g, fid))
-    c = g["counts"]
-    out.append("기각 %d건(재비판) · 사용자 기각 %d · drop %d · bucket 충돌 %d · 계보 지목 불일치 %d · 기각 계보 재상승 %d · 미소비 재상승 예약 %d · 미소비 상향 예약 %d"
-               % (c["rejected"], c["user_rejected"], len(g["dropped"]), c["bucket_conflicts"],
-                  c["lineage_mismatch"], c["revived"], c["reraise_unconsumed"], c["escalated_unconsumed"]))
+    parts = [t % c[k] for k, t in COUNT_GLOSS if c[k]]
+    if parts:
+        out.append("이번 라운드 집계: " + " · ".join(parts))
     if g.get("advice") is not None and _has_advisory_axis(st):   # 게이트 질문이 아니다 — 목록은 끝에서 한 번(`advice --render`)
         adv_g = g["advice"]
-        out.append("참고 %d건(이번 라운드 새 %d · 반복 %d) — 끝에서 한 목록으로 · 선재 절의 새 must-catch %d"
+        out.append("참고 %d건(이번 라운드 새 %d · 반복 %d) — 끝에 한 목록으로 보인다 · 전부터 있던 절에서 새로 나온 필수 지적 %d"
                    % (adv_g["total"], adv_g["new"], adv_g["repeat"], adv_g["mc_preexisting_new"]))
+    ag = "승인 게이트" + ("(「%s」)" % g["approval_label"] if g.get("approval_label") else "")
+    mode = NEXT_MODE_GLOSS.get(g["next_round_mode"], g["next_round_mode"])
     if g["two_stage"] and g["next_round_mode"] == "extra_approval":
-        # 상한 도달 — approval_ready 와 무관하게 두 단계이고(Park P3·D-U3), 1단계는
-        # 날 모드 토큰(`extra_approval`)이 아니라 사용자 말로 이름을 낸다. 이 선택지를
-        # 고르면 다음 라운드 1단계가 `begin-round --extra-approval "<문구>"` 로 돌고, 그
-        # 문구는 사용자 자신이 쓰는 것이라 여기 산문에 미리 채우지 않는다.
         if g["approval_ready"]:
-            out.append("다음: " + ag + " 1단계 — 「추가 라운드 1회 열기」(다음 라운드 1단계가 "
-                       "begin-round --extra-approval \"<사용자 자신의 문구>\" 로 도는 개별 승인) "
-                       "또는 진행 옵션으로")
+            out.append("다음: " + ag + " 1단계 — 「추가 라운드 1회 열기」(사용자가 직접 쓴 말로 한 번 더 승인) 또는 「진행 옵션으로」")
         else:
-            out.append("다음: " + ag + " 1단계 — 열린 항목을 처리한 뒤 진행 옵션, 또는 "
-                       "「추가 라운드 1회 열기」(다음 라운드 1단계가 "
-                       "begin-round --extra-approval \"<사용자 자신의 문구>\" 로 도는 개별 승인)")
+            out.append("다음: " + ag + " 1단계 — 남은 항목을 처리한 뒤 진행 옵션, 또는 「추가 라운드 1회 열기」(사용자가 직접 쓴 말로 한 번 더 승인)")
     elif g["approval_ready"]:
-        out.append("다음: " + ag + " — 진행 옵션 활성")
+        out.append("다음: " + ag + " — 진행 옵션을 고를 수 있다")
     elif g["two_stage"]:
-        out.append("다음: " + ag + " 1단계 — 열린 항목을 처리한 뒤 진행 옵션 (다음 라운드 = %s)" % g["next_round_mode"])
+        out.append("다음: " + ag + " 1단계 — 남은 항목을 처리한 뒤 진행 옵션 (다음 라운드: %s)" % mode)
     else:
-        out.append("다음: 라운드 %d (%s)" % (g["round"] + 1, g["next_round_mode"]))
-    # 리뷰 완료가 아닌 라운드에서는 「다음:」 줄이 진행 옵션을 무조건 말하지 않는다 — 그 사실과 사유를 꼬리로 단다.
+        out.append("다음: 리뷰 %d라운드 (%s)" % (g["round"] + 1, mode))
     if g.get("unreviewed_reason"):
-        out[-1] += " — 단 이번 라운드는 리뷰 완료가 아니다(round_reviewed=false · %s)" % g["unreviewed_reason"]
+        out[-1] += " — 단 이번 라운드는 리뷰를 마치지 못했다(round_reviewed=false · %s)" % g["unreviewed_reason"]
     return "\n".join(out)
 
 
