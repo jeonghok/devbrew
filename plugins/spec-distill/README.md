@@ -1,31 +1,32 @@
 # spec-distill
 
-> 강한 문제공간 인터뷰(메타프롬프팅 + 웹 리서치 + adversarial steelman)로 방향을 끌어내 superpowers brainstorming용 interview brief를 생성하고, design doc은 물리 분리된 Law 2 reviewer가 검증하는 devbrew-native 플러그인.
+> 흐릿한 요청을 인터뷰로 다듬어 brainstorming 에 넘길 brief 로 만들고, 설계문서는 고칠 수 없는 독립 리뷰어가 검토하게 하는 플러그인.
 
-## What it does
+## 이 플러그인이 하는 일
 
-`/spec-interview <rough request>` 호출 시 «지금 이해 · 다음 결정 · 질문 하나» 형식의 Korean Socratic
-인터뷰가 **강한 문제공간 stage**로 동작합니다: 요청을 재구성(메타프롬프팅)하고, 외부 사례를 웹으로 조사하고(bounded), 약한 방향을
-steelman으로 깨뜨려, **interview brief**(brainstorming용 meta-prompt)를 **2파일 쌍**으로
-산출합니다 — payload `docs/superpowers/interview/YYYY-MM-DD-<topic>-interview.md`(8섹션 역피라미드,
-`templates/interview-brief-template.md`) + audit `…-interview.audit.md`(5섹션 텔레메트리,
-`templates/interview-audit-template.md`). audit 이름은 payload 파일명에서 유도됩니다. 5 통과 의례(R1–R5)가
-Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpowers가 있으면 brainstorming
-해답공간으로(optional), design doc은 물리 분리된 reviewer가 Law 2로 검증합니다.
+흐릿한 요청을 받아 «지금 이해 · 다음 결정 · 질문 하나» 형식의 한국어 인터뷰로 방향을 잡습니다. 요청을 다시 풀어 쓰고(메타프롬프팅), 비슷한 사례를 웹에서 찾고(횟수 제한), 약한 방향은 반대 입장을 가장 강하게 세워 시험합니다(steelman). 끝나면 brainstorming 에 넘길 **interview brief** 를 **2파일 쌍**으로 만듭니다 — 본문 `docs/superpowers/interview/YYYY-MM-DD-<topic>-interview.md`(8섹션 역피라미드, `templates/interview-brief-template.md`)와 기록 `…-interview.audit.md`(5섹션, `templates/interview-audit-template.md`). `.audit.md` 이름은 본문 파일명에서 따라 정해집니다. 인터뷰 끝의 5가지 통과 의례(R1–R5)가 Law 1 구조 게이트이고, brief 는 그것만으로 완결된 산출물입니다. superpowers 가 있으면 brainstorming 으로 이어 가고(선택), 그렇게 나온 설계문서는 물리적으로 분리된 리뷰어가 Law 2 로 검증합니다.
 
-## Quick start
+## 쓰는 법
+
+사용자가 부르는 진입 skill 은 셋입니다.
+
+- `/request-framing` — 요청이 아직 흐릿해서 방향부터 맞추고 싶을 때. 새 세션 첫 턴에 붙일 `interview-seed` 파일이 나옵니다.
+- `/spec-interview` — 요청을 인터뷰로 다듬고 싶을 때. 인터뷰 결과인 interview brief 가 나옵니다.
+- `/spec-review` — brainstorming 이 설계문서를 쓴 뒤 검토하고 싶을 때. 문서 리뷰 결과와 다음 단계를 고르는 질문이 나옵니다.
 
 ```
 /spec-interview todo 앱 만들어줘
 ```
 
-`spec-interview` skill이 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 첫 round를 시작합니다.
+`spec-interview` skill 이 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 첫 라운드를 시작합니다.
 
-사용자가 부르는 진입 skill은 셋이다 — `/request-framing`(파이프라인 맨 앞 회의) · `/spec-interview`(인터뷰) · `/spec-review`(설계문서 리뷰). 설치 환경에 같은 이름이 있으면 `/spec-distill:spec-interview` 처럼 완전명으로 부른다. 기계가 내는 안내(핸드오프 · trivia 문면)는 처음부터 완전명을 쓴다.
+설치 환경에 같은 이름이 있으면 `/spec-distill:spec-interview` 처럼 완전명으로 부릅니다. 기계가 내는 안내(핸드오프 · trivia 문면)는 처음부터 완전명을 씁니다.
 
-`/spec-interview` 는 `@` 로 시작하는 인자에 공백이 섞이면 풀지 않고 멈춘다(경로 한 토큰으로 다시 부른다). `/request-framing` 은 그런 인자를 받은 그대로 회의 재료로 쓴다.
+`/spec-interview` 는 `@` 로 시작하는 인자에 공백이 섞이면 풀지 않고 멈춥니다(경로 한 토큰으로 다시 부르세요). `/request-framing` 은 그런 인자를 받은 그대로 회의 재료로 씁니다.
 
-## Flow (v0.41.0)
+## 흐름
+
+아래 그림이 전체 순서입니다. 사용자가 고르는 자리는 «게이트» 로 표시했고, 경고가 있으면 그 질문 바로 앞 글에 적힙니다.
 
 ```
 /request-framing ─→ [Phase 0] request-framing — 확산 후 압축
@@ -165,7 +166,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 **Output:** SessionEnd 훅은 stdout 을 내지 않는다 — 실패와 거부(stdin 판독 · GC 비정상 종료 · 심볼릭 링크로 풀리는 state root)는 stderr 로만 알린다 — 접두는 `[spec-distill]` 이고, 공용 삭제 가드(`gc_common.safe_rmtree`)의 거부만 `[devbrew-gc]` 다. GC 스크립트의 stderr 는 훅이 그대로 옮긴다.
 
-## Kill switches
+## 끄는 법
 
 ### 먼저 — 설계문서 리뷰를 끄는 법
 
@@ -199,7 +200,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
   audit §5 에 «워크트리 없음 —» 강등 기록이 남고, 어느 경우도 seed 작성을 막지 않는다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1` (v0.24.0) — brief 리뷰 전체 skip(엔진 라운드 · 냉독).
   `component: pipeline` degradation record + loud advisory를 남기고 Step B로 직행한다(조용한
-  생략이 아니다). 엔진 라운드(방향성 · 충실도)와 냉독이 전부 미검증이라는 사실이 게이트 질문에 표시된다.
+  생략이 아니다). 엔진 라운드(방향성 · 충실도)와 냉독이 전부 미검증이라는 사실이 다음 단계 게이트 앞 글에 표시된다.
 
 ### 은퇴한 스위치 (v0.36.0 · 3.0.0)
 

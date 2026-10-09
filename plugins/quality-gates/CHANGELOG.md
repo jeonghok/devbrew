@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [10.0.3] — 2026-10-09
+
+### Changed
+- 엔진 링크 `scripts/docreview_state.py` 가 바뀌었다 — 문서 리뷰 게이트 첫 줄의 경고가 쉬운 말 한 줄씩이고(같은 사실의 원문 둘은 한 줄로, 사유 토큰은 괄호에), 「앵커 불가」 줄은 동결·보호 검사가 꺼졌다는 것도 말하고, 「┆ 같은 자리」 표지는 묶음 안에서만 앞 항목을 가리키며, 막힌 이유는 한 줄로 접힌다. `advisory` 원문은 그대로다.
+
 ## [10.0.2] — 2026-10-09
 
 ### Fixed

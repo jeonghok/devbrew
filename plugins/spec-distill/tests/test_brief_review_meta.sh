@@ -40,14 +40,14 @@ PRIN="$(section '^## Principles Instantiated' "$RM")"
 # 두 섹션 캡처를 이어붙일 때는 **구분자를 명시**한다. `"$A$(f B)"`는 A의 마지막 줄과 B의
 # 첫 줄을 한 줄로 붙여, 경계에 걸친 유령 매치를 만들 수 있다(오늘 안전한 이유는 Flow
 # 섹션의 첫 줄이 마침 빈 줄이라서일 뿐 — 그 우연이 사라지면 조용히 성립이 바뀐다).
-RM_SCAN="$(printf '%s\n%s\n' "$PRIN" "$(section '^## Flow' "$RM")")"
+RM_SCAN="$(printf '%s\n%s\n' "$PRIN" "$(section '^## 흐름' "$RM")")"
 # 이름 목록은 오늘 brief 자리의 리뷰어다. 옛 brief-critic·brief-direction-reviewer 는 문서 리뷰
 # 엔진 전환으로 지워졌다 — 그 이름을 요구하면 README 가 지워진 agent 를 계속 적어야 GREEN 이다.
 for kw in 'doc-critic' 'doc-recritic' 'brief-readback' 'reviewing-brief'; do
   grep -qF "$kw" <<<"$RM_SCAN" \
     && ok "T15: README에 brief 자리 컴포넌트 '$kw'" || no "T15: README에 '$kw' 부재"
 done
-KS="$(section '^## Kill switches' "$RM")"
+KS="$(section '^## 끄는 법' "$RM")"
 grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW' <<<"$KS" \
   && ok "T15: README Kill switches에 신규 스위치" || no "T15: 신규 kill switch 미문서화"
 grep -qF 'Law 2' <<<"$PRIN" && ok "T15: Principles Instantiated에 Law 2" || no "T15: Law 2 항목 부재"
@@ -57,7 +57,7 @@ grep -qF 'Law 2' <<<"$PRIN" && ok "T15: Principles Instantiated에 Law 2" || no 
 # 리뷰 단계를 통째로 지워도 아래 v0.24.0 산문 한 문단이 같은 이름들을 실어 계속 green이다
 # (헤더 만족과 같은 클래스). 그래서 **펜스 안의 다이어그램만** 따로 지목한다 — 이 파일이
 # `## Flow (v0.24.0)`으로 버전을 주장하는 이상, 그 버전의 경로가 그림에 있어야 한다.
-FLOW="$(section '^## Flow' "$RM")"
+FLOW="$(section '^## 흐름' "$RM")"
 DIAGRAM="$(awk '/^```/{f=!f; next} f' <<<"$FLOW")"
 minlines_ok() { [[ "$(wc -l <<<"$1" | tr -d ' ')" -ge "$2" ]]; }
 minlines_ok "$DIAGRAM" 10 \
