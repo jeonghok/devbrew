@@ -49,14 +49,14 @@ for kw in 'doc-critic' 'doc-recritic' 'brief-readback' 'reviewing-brief'; do
 done
 KS="$(section '^## 끄는 법' "$RM")"
 grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW' <<<"$KS" \
-  && ok "T15: README Kill switches에 신규 스위치" || no "T15: 신규 kill switch 미문서화"
+  && ok "T15: README 「끄는 법」에 신규 스위치" || no "T15: 신규 kill switch 미문서화"
 grep -qF 'Law 2' <<<"$PRIN" && ok "T15: Principles Instantiated에 Law 2" || no "T15: Law 2 항목 부재"
 
 # --- C4 : Flow **다이어그램**이 리뷰 단계를 통과한다 -------------------------
-# 위 T15 스윕은 `$PRIN$(section Flow)` 전체에서 컴포넌트 이름을 찾으므로, 다이어그램에서
+# 위 T15 스윕은 `$PRIN$(section 흐름)` 전체에서 컴포넌트 이름을 찾으므로, 다이어그램에서
 # 리뷰 단계를 통째로 지워도 아래 v0.24.0 산문 한 문단이 같은 이름들을 실어 계속 green이다
-# (헤더 만족과 같은 클래스). 그래서 **펜스 안의 다이어그램만** 따로 지목한다 — 이 파일이
-# `## Flow (v0.24.0)`으로 버전을 주장하는 이상, 그 버전의 경로가 그림에 있어야 한다.
+# (헤더 만족과 같은 클래스). 그래서 **펜스 안의 다이어그램만** 따로 지목한다 — 이 파일의
+# `## 흐름` 절이 리뷰 단계를 말하는 이상, 그 경로가 그림에 있어야 한다.
 FLOW="$(section '^## 흐름' "$RM")"
 DIAGRAM="$(awk '/^```/{f=!f; next} f' <<<"$FLOW")"
 minlines_ok() { [[ "$(wc -l <<<"$1" | tr -d ' ')" -ge "$2" ]]; }
