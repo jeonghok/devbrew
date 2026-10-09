@@ -1,137 +1,107 @@
 #!/usr/bin/env bash
-# Tests for scripts/discover-spec.sh — mirror of test_discover_plan.sh,
-# re-aimed at the SPEC artifact (Acceptance-Criteria-section eligibility,
-# project-local only — no legacy-global source).
-# Uses bash assertions; no external test framework.
-
+# test_discover_spec.sh — AC9 · AC15 · K-5: 의도 출처는 D13 사슬로 정한다.
+#
+#   1. HEAD 쪽 커밋의 `Spec:` 트레일러가 가리키는 spec
+#   2. 없으면 브랜치 커밋 메시지 + 열린 PR 본문(읽기 전용 `gh pr view`)
+#
+# 파일 mtime 은 읽지 않는다(옛 「최신 mtime spec」 규칙이 무관한 spec 을 의도로 골랐다).
 set -u
-
-SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/scripts/discover-spec.sh"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+D="$SCRIPT_DIR/../scripts/discover-spec.sh"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+export PYTHONDONTWRITEBYTECODE=1
 
+T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+key() { python3 -c 'import json,sys; print(json.loads(sys.stdin.read())[sys.argv[1]])' "$1"; }
 
+# 픽스처 리포 — base 커밋 하나, 그 위 브랜치 커밋 둘
+R="$T/repo"; mkdir -p "$R/docs/superpowers/specs"
+git -C "$R" init -q -b main
+git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+BASE="$(git -C "$R" rev-parse HEAD)"
+printf '# Old spec\n## Acceptance Criteria\n- old\n' > "$R/docs/superpowers/specs/old-design.md"
+printf '# New spec\n## Acceptance Criteria\n- new\n' > "$R/docs/superpowers/specs/new-design.md"
+git -C "$R" add -A
+git -C "$R" -c user.email=t@t -c user.name=t commit -q -m "feat: first" -m "Spec: docs/superpowers/specs/old-design.md"
+git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "feat: second" -m "Spec: docs/superpowers/specs/new-design.md"
 
+# gh 스텁 — 환경 변수로 응답을 고른다
+B="$T/bin"; mkdir -p "$B"
+cat > "$B/gh" <<'SH'
+#!/bin/sh
+echo "$*" >> "$GH_LOG"
+case "$1 $2" in
+  "pr view")
+    case "$*" in
+      *"--json state"*) [ -n "${GH_PR_ERR:-}" ] && { echo "$GH_PR_ERR" >&2; exit 1; }; echo "${GH_PR_STATE:-OPEN}" ;;
+      *"--json body"*) echo "${GH_PR_BODY:-}" ;;
+    esac ;;
+esac
+SH
+chmod +x "$B/gh"
+NOGH="$T/nogh"; mkdir -p "$NOGH"
+for c in git python3 sed grep cat mktemp rm dirname bash tail; do ln -s "$(command -v "$c")" "$NOGH/$c"; done
+export GH_LOG="$T/gh.log"; : > "$GH_LOG"
 
-# Run from a given dir; capture stdout + exit code.
-run_in_env() {
-  local proj="$1"; shift
-  cd "$proj"
-  bash "$SCRIPT" "$@" 2>"$proj/_stderr"
-  return $?
-}
+run() { ( cd "$R" && PATH="$1" bash "$D" --intent-out "$T/intent.md" --base "$BASE" ); }
 
-# write_spec <path> <with_ac:1|0>
-write_spec() {
-  local path="$1" with_ac="$2"
-  mkdir -p "$(dirname "$path")"
-  {
-    echo "# Some Spec Title"
-    echo
-    echo "## 1. Context"
-    echo "prose"
-    if [[ "$with_ac" == "1" ]]; then
-      echo "## 5. Acceptance Criteria"
-      echo "1. the thing works"
-    fi
-  } > "$path"
-}
+# 1 — 트레일러: HEAD 쪽(최신) 커밋의 Spec: 이 이긴다
+out="$(run "$B:$PATH")"; rc=$?
+assert_eq "$rc" "0" "트레일러 — exit 0"
+assert_eq "$(printf '%s' "$out" | key intent_source)" "spec-trailer" "의도 출처는 spec-trailer"
+assert_eq "$(printf '%s' "$out" | key spec_path)" "$(cd "$R" && pwd -P)/docs/superpowers/specs/new-design.md" \
+  "spec_path 는 최신 커밋의 트레일러가 가리키는 파일"
+assert_file_grep "$T/intent.md" '^- new$' "의도 본문은 그 spec 이다"
+assert_eq "$(printf '%s' "$out" | key intent_file)" "$T/intent.md" "intent_file 은 --intent-out 경로"
 
-# --- Test 1: project-local empty → exit 1, source=none ---
-TMPDIR=$(mktemp -d); mkdir -p "$TMPDIR/docs/superpowers/specs"
-OUT=$(run_in_env "$TMPDIR")
-RC=$?
-assert_eq "$RC" "1" "T1: exit 1 when no spec"
-assert_contains "$OUT" '"source":"none"' "T1: source=none"
-assert_contains "$OUT" "docs/superpowers/specs" "T1: reason mentions specs path"
-cd / && rm -rf "$TMPDIR"
+# 2 — 트레일러 없음 · gh 없음 → 커밋 메시지만, 그 사실을 공시
+git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "fix: third (no trailer)"
+BASE2="$(git -C "$R" rev-parse HEAD~1)"
+run2() { ( cd "$R" && PATH="$1" bash "$D" --intent-out "$T/intent.md" --base "$BASE2" ); }
+out="$(run2 "$NOGH")"
+assert_eq "$(printf '%s' "$out" | key intent_source)" "commits" "트레일러가 없으면 커밋 메시지"
+assert_eq "$(printf '%s' "$out" | key intent_note)" "gh 없음" "gh 가 없으면 그 사실을 싣는다"
+assert_eq "$(printf '%s' "$out" | key spec_path)" "" "트레일러가 없으면 spec_path 는 비어 있다"
+assert_file_grep "$T/intent.md" 'fix: third' "의도 본문에 커밋 메시지가 있다"
 
-# --- Test 2: project-local has 1 spec WITH AC section → source=project-local ---
-TMPDIR=$(mktemp -d)
-write_spec "$TMPDIR/docs/superpowers/specs/foo-design.md" 1
-OUT=$(run_in_env "$TMPDIR")
-RC=$?
-assert_eq "$RC" "0" "T2: exit 0 with eligible spec"
-assert_contains "$OUT" '"source":"project-local"' "T2: source=project-local"
-assert_contains "$OUT" "foo-design.md" "T2: spec_path mentions foo-design.md"
-cd / && rm -rf "$TMPDIR"
+# 3 — 미인증은 gh 오류로 접는다(실측 gh 2.88.1: 미인증 `gh pr view` 는 「gh auth login」 안내를 내고 rc 4)
+out="$(GH_PR_ERR="To get started with GitHub CLI, please run:  gh auth login" run2 "$B:$PATH")"
+assert_eq "$(printf '%s' "$out" | key intent_note)" "gh 오류" "미인증은 gh 오류다 — 따로 가르지 않는다"
 
-# --- Test 3: project-local file WITHOUT AC section → ineligible → exit 1 ---
-TMPDIR=$(mktemp -d)
-write_spec "$TMPDIR/docs/superpowers/specs/notes.md" 0
-OUT=$(run_in_env "$TMPDIR")
-RC=$?
-assert_eq "$RC" "1" "T3: exit 1 when only non-AC markdown exists"
-assert_contains "$OUT" '"source":"none"' "T3: source=none for non-spec file"
-cd / && rm -rf "$TMPDIR"
+# 4 — 열린 PR 본문
+out="$(GH_PR_BODY="PR 본문의 요구" run2 "$B:$PATH")"
+assert_eq "$(printf '%s' "$out" | key intent_source)" "commits+pr" "열린 PR 이 있으면 commits+pr"
+assert_file_grep "$T/intent.md" 'PR 본문의 요구' "의도 본문에 PR 본문이 있다"
 
-# --- Test 4: --spec <existing> → source=explicit ---
-TMPDIR=$(mktemp -d)
-write_spec "$TMPDIR/custom.md" 1
-OUT=$(run_in_env "$TMPDIR" --spec "$TMPDIR/custom.md")
-RC=$?
-assert_eq "$RC" "0" "T4: exit 0 with --spec to existing file"
-assert_contains "$OUT" '"source":"explicit"' "T4: source=explicit"
-assert_contains "$OUT" "custom.md" "T4: spec_path is the explicit path"
-cd / && rm -rf "$TMPDIR"
+# 5 — PR 없음 · 닫힌 PR
+out="$(GH_PR_ERR="no pull requests found for branch" run2 "$B:$PATH")"
+assert_eq "$(printf '%s' "$out" | key intent_note)" "열린 PR 없음" "PR 이 없으면 열린 PR 없음"
+out="$(GH_PR_STATE=MERGED run2 "$B:$PATH")"
+assert_eq "$(printf '%s' "$out" | key intent_note)" "열린 PR 없음" "머지된 PR 은 열린 PR 이 아니다"
+out="$(GH_PR_ERR="HTTP 502" run2 "$B:$PATH")"
+assert_eq "$(printf '%s' "$out" | key intent_note)" "gh 오류" "그 밖의 gh 실패는 gh 오류"
 
-# --- Test 5: --spec <nonexistent> → exit 2 ---
-TMPDIR=$(mktemp -d)
-OUT=$(run_in_env "$TMPDIR" --spec "/tmp/definitely-no-spec-xyz123.md")
-RC=$?
-assert_eq "$RC" "2" "T5: exit 2 with --spec to nonexistent file"
-assert_contains "$OUT" '"source":"none"' "T5: source=none"
-assert_contains "$OUT" "does not exist" "T5: reason mentions 'does not exist'"
-cd / && rm -rf "$TMPDIR"
+# 6 — AC15: gh 는 읽기만 한다
+assert_eq "$(grep -cv '^pr view ' "$GH_LOG")" "0" "gh 호출은 pr view 뿐이다 (AC15 · K-5 — auth status 도 부르지 않는다)"
+assert_grep "$(cat "$GH_LOG")" '^pr view' "양의 짝 — pr view 는 실제로 불렸다"
 
-# --- Test 6: two eligible specs → most recent mtime wins ---
-TMPDIR=$(mktemp -d)
-write_spec "$TMPDIR/docs/superpowers/specs/older.md" 1
-write_spec "$TMPDIR/docs/superpowers/specs/newer.md" 1
-touch -t 202601010000 "$TMPDIR/docs/superpowers/specs/older.md"
-touch -t 202601010001 "$TMPDIR/docs/superpowers/specs/newer.md"
-OUT=$(run_in_env "$TMPDIR")
-RC=$?
-assert_eq "$RC" "0" "T6: exit 0"
-assert_contains "$OUT" "newer.md" "T6: picks most recently modified eligible spec"
-cd / && rm -rf "$TMPDIR"
+# 7 — AC9: mtime 을 읽지 않는다. 트레일러가 가리키는 파일이 없으면 더 새 spec 이 있어도 고르지 않는다
+git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "feat: gone" -m "Spec: docs/superpowers/specs/missing-design.md"
+touch "$R/docs/superpowers/specs/new-design.md"
+out="$( cd "$R" && PATH="$NOGH" bash "$D" --intent-out "$T/intent.md" --base "$BASE2" )"
+assert_eq "$(printf '%s' "$out" | key spec_path)" "" "가리킨 파일이 없으면 다른 spec 을 mtime 으로 고르지 않는다"
+assert_eq "$(printf '%s' "$out" | key intent_source)" "commits" "커밋 메시지로 내려간다"
+assert_not_grep "$(grep -v '^[[:space:]]*#' "$D")" 'mtime|stat -|-nt |getmtime|st_mtime|pick_newest' "스크립트 코드가 mtime 을 읽지 않는다"
+assert_grep "$(grep -v '^[[:space:]]*#' "$D")" 'Spec: ' "양의 짝 — 코드 코퍼스가 비지 않았다(트레일러 추출이 보인다)"
 
-# --- Test 7: --spec with no following path → exit 2 (regression) ---
-TMPDIR=$(mktemp -d); cd "$TMPDIR"
-OUT=$(bash "$SCRIPT" --spec 2>/dev/null)
-RC=$?
-assert_eq "$RC" "2" "T7: exit 2 when --spec has no path"
-assert_contains "$OUT" '"source":"none"' "T7: source=none"
-assert_contains "$OUT" "requires a path argument" "T7: reason mentions path argument requirement"
-cd / && rm -rf "$TMPDIR"
+# 7b — C-2: 이 리포의 실제 트레일러는 `Spec: <path>#<key>` 꼴이다. 조각을 떼고 파일을 푼다
+git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "feat: keyed" -m "Spec: docs/superpowers/specs/new-design.md#pr1"
+out="$( cd "$R" && PATH="$NOGH" bash "$D" --intent-out "$T/intent.md" --base "$BASE2" )"
+assert_eq "$(printf '%s' "$out" | key intent_source)" "spec-trailer" "#key 트레일러 — 조각을 떼면 spec-trailer"
+assert_eq "$(printf '%s' "$out" | key spec_path)" "$(cd "$R" && pwd -P)/docs/superpowers/specs/new-design.md" "#key 트레일러 — spec_path 는 조각 없는 실제 파일"
 
-# --- Test 8: no-root-miss — eligible spec at proj root is missed from a subdir ---
-TMPDIR=$(mktemp -d)
-write_spec "$TMPDIR/docs/superpowers/specs/foo-design.md" 1
-mkdir -p "$TMPDIR/sub/dir"
-OUT=$(run_in_env "$TMPDIR/sub/dir")
-RC=$?
-assert_eq "$RC" "1" "T8: exit 1 when invoked from a subdir (project-local resolved against \$PWD)"
-assert_contains "$OUT" '"source":"none"' "T8: source=none from wrong cwd"
-cd / && rm -rf "$TMPDIR"
+# 8 — 잘못된 호출
+( cd "$R" && bash "$D" >/dev/null 2>&1 ); assert_eq "$?" "2" "--intent-out 없으면 exit 2"
+( cd "$R" && bash "$D" --intent-out "$T/없는/디렉토리/x.md" >/dev/null 2>&1 ); assert_eq "$?" "3" "의도 파일에 쓸 수 없으면 exit 3"
 
-# --- Test 9: sibling discover_common.sh missing (broken install) ---
-# `.` 는 POSIX special builtin 이라 파일이 없으면 셸이 즉시 죽는다 — stdout 은 비고
-# 계약(JSON)이 사라진다. 가드가 그것을 계약대로의 JSON + exit 2 로 바꾼다.
-# 짝(positive): 공유 파일이 없어도 explicit `--spec <path>` 는 여전히 성립해야 한다.
-TMPDIR=$(mktemp -d); mkdir -p "$TMPDIR/scripts"
-cp "$SCRIPT" "$TMPDIR/scripts/discover-spec.sh"
-write_spec "$TMPDIR/docs/superpowers/specs/foo-design.md" 1
-cd "$TMPDIR"
-OUT=$(bash "$TMPDIR/scripts/discover-spec.sh" 2>/dev/null)
-RC=$?
-assert_eq "$RC" "2" "T9: exit 2 when discover_common.sh is absent"
-assert_contains "$OUT" '"spec_path":""' "T9: contract JSON still emitted (stdout not empty)"
-assert_contains "$OUT" "discover_common.sh" "T9: reason names the missing sibling"
-OUT=$(bash "$TMPDIR/scripts/discover-spec.sh" --spec "$TMPDIR/docs/superpowers/specs/foo-design.md" 2>/dev/null)
-RC=$?
-assert_eq "$RC" "0" "T9-pair: explicit --spec still resolves without the shared file"
-assert_contains "$OUT" '"source":"explicit"' "T9-pair: source=explicit"
-cd / && rm -rf "$TMPDIR"
-
-# --- Summary ---
 finish
