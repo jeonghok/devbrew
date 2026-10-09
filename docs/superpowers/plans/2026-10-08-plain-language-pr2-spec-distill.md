@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** spec-distill 의 모든 게이트(승인 · 리뷰 라운드 · request-framing 확정)가 질문 본문에 결정 하나와 상태 한 줄만 담고, 경고 목록은 질문 앞 글에 쉬운 말로 쓰게 한다. 사람이 보는 고정 경고와 출력 예시 문구, README, 소개 문구를 쉬운 말로 다듬는다. 착수 전 기준선과 비교해 새 실패는 0 이어야 한다.
+**Goal:** spec-distill 의 모든 게이트(승인 · 리뷰 라운드 · request-framing 확정)가 질문 본문에 결정 하나와 상태 한 줄만 담고, 경고 목록은 질문 앞 글에 쉬운 말로 쓰게 한다. 사람이 보는 고정 경고와 출력 예시 문구, README, 소개 문구를 쉬운 말로 다듬는다. PR 1 이 미룬 문서 리뷰 엔진 렌더 다듬기 여섯(경고 문구 · 같은 자리 표지 · 낡은 주석 · 막힌 이유 접기 · 리뷰어 문장 반복 · 「미검증」 첫 줄)도 닫는다. 착수 전 기준선과 비교해 새 실패는 0 이어야 한다.
 
 **Architecture:** 지시문(모델이 읽는 글)은 그대로 두고, 그 안에서 **사용자에게 그대로 내라고 적힌 문구**와 **질문 틀**만 고친다(설계 §4 · §6). 「채널을 이름으로 밝히고 읽은 뒤에만 없음을 쓴다」는 계약은 그대로이고, 보이는 자리만 질문 본문에서 앞 글로 옮긴다. 그 자리 이름을 쓰는 처분 앵커와 락을 함께 옮긴다.
 
@@ -18,11 +18,11 @@
 - **테스트 실행** — 셸 테스트는 리포 루트에서 `bash <경로>`, 하나씩(동시 실행 금지 — 고정 경로 `/tmp/sd_auth_stderr.txt` 가 경쟁한다). Python 은 그 `tests/` 디렉토리에서 `python3 -m unittest -v <모듈>`.
 - **변이** — 커밋한 뒤 변이하고, `git checkout HEAD -- <파일>` 로 되돌린 뒤 `git diff HEAD --stat` 가 빈 출력인지 본다.
 - **Bash 도구** — 호출마다 새 셸. 계산된 값이 든 복합 명령은 `/Users/jeonghokim/.claude/jobs/d60d9f96/tmp/` 아래 스크립트 파일로 쓰고 `bash <파일>` 로 돌린다.
-- **버전** — spec-distill minor(게이트 틀이 바뀐다). 번호는 머지 직전 origin/main 기준으로 다시 정한다. `.claude-plugin/marketplace.json` 의 spec-distill 소개 문구도 같은 커밋에서 바꾼다.
+- **버전** — spec-distill minor(게이트 틀이 바뀐다). quality-gates 는 patch(Task 5 가 바꾸는 엔진 스크립트가 링크로 실린다 — Q12). 번호는 머지 직전 origin/main 기준으로 다시 정한다. `.claude-plugin/marketplace.json` 의 spec-distill 소개 문구도 같은 커밋에서 바꾼다.
 - **지시문은 그대로** — 찾는 지시·판정 규칙·kill switch 문장은 한 글자도 바꾸지 않는다. 바꾸는 것은 사용자에게 보이는 문구와 그 문구의 자리다. 모델에게 쓰는 실패 안내(「플러그인 루트 미해석 — …」 · `RETURN_MSG` 꼬리의 「…하라」)는 그대로 둔다.
 - **산출 보존** — `~/.claude/sdd-mirror/plain-language-output/pr2/`.
 - **줄 번호** — 이 계획의 줄 번호는 2026-10-08(PR 1 이전) 기준이다. PR 1 이 모든 `plugins/*/skills/*/SKILL.md` · `plugins/*/commands/*.md` 의 H1 뒤에 14줄(빈 줄 + 블록 13줄)을 넣었으므로 그 파일들의 줄 번호는 +14 다. 다른 파일(references · scripts · tests)은 그대로다. 편집은 줄 번호가 아니라 「옛」 문구로 찾는다.
-- **드라이런** — 2026-10-09 abc70f66 복사본에서 이 계획을 끝까지 실행해 불일치 13건을 고쳐 반영했다(보고서: `/Users/jeonghokim/.claude/sdd-mirror/plain-language-output/research/dryrun-pr2-report.md`).
+- **드라이런** — 2026-10-09 abc70f66 복사본에서 이 계획을 끝까지 실행해 불일치 13건을 고쳐 반영했다(보고서: `/Users/jeonghokim/.claude/sdd-mirror/plain-language-output/research/dryrun-pr2-report.md`). Task 5 는 4d325819 복사본에서 따로 실행했다(보고서: `/Users/jeonghokim/.claude/sdd-mirror/plain-language-output/research/dryrun-pr2-task5-report.md`).
 
 ## 계획이 정한 것
 
@@ -36,6 +36,10 @@
 | Q6 | spec-distill 에는 「(Recommended)」가 없다(이미 「(권장)」). steelman 질문의 「(권장)」 금지는 그대로다. | 조사 · `steelman.md:91` 락. |
 | Q7 | 고치는 고정 문구는 아래 Task 4 의 표에 있는 것뿐이다. 나머지 `[spec-distill]` 줄은 셋 중 하나라 그대로 둔다: 모델에게 쓰는 지시(「…하라」로 끝나는 꼬리), 프로그램이 읽는 줄(`review-entry:` · rc 줄 · `PAIRS`), 이미 쉬운 한국어인 줄. 분류 표는 PR 본문에 붙인다(원자료: `~/.claude/sdd-mirror/plain-language-output/research/research-c/`). | 설계 표 `1cdda836#r1.1`(고정 문구 전수). |
 | Q8 | `seed_review_log.py` 의 사람용 줄(「같은 기록 줄이 이미 있다 — 다시 적지 않는다」)은 이미 쉬운 말이라 고치지 않는다. | 설계 Files to Modify 가 이 파일을 적었다 — 확인 결과. |
+| Q9 | 렌더 첫 줄의 경고는 advisory 원문을 **렌더에서만** 쉬운 줄로 바꾼다(`docreview_state.WARN_GLOSS` · `_plain_warns`). 원문(`fin.json` · `gate` JSON · 원장 · `adjudication.reasons()`)은 그대로다. 같은 사실을 두 출처가 말한 원문(「codex 없음」+「입력 실패(보조): codex」, 「기각 경로 0」+「입력 실패(보조): doc-recritic」, 「상세 미검증」+「셀 수 없음: layer2」)은 한 줄로 합치고 두 사유 토큰을 모두 그 줄 괄호에 싣는다. 표에 없는 원문은 그대로 싣는다. 그래서 「경고 N개」의 N 은 원문 수가 아니라 사실 수다 — P6(전부 싣는다)은 「모든 원문이 어느 한 줄에 대응한다」로 읽는다(재결정 보고 — 사용자 승인 2026-10-09 「합친다」). | 설계 §3 원칙 1(사람용과 기계용을 가른다) · 규칙 블록(쉬운 문장 먼저, 내부 용어는 괄호에). 소비자 조사: 원문을 글자로 읽는 단언이 `cases.sh` 다섯 자리 · qg `test_synthesize_findings_adjudication.py:209` · golden 에 있다(Task 5 머리). |
+| Q10 | 「미검증」·라운드 미완이면 첫 줄에 「남은 것 없음」도 쓰지 않는다 — 「…. 리뷰 N라운드.」로 끝난다. 남은 항목이 있으면 「…가 남았다.」는 그대로 쓴다. | 설계 §3 「「미검증」·라운드 미완이면 그 공시가 맨 앞이고 두 문구(이상 없음 · 경고 없음) 어느 것도 쓰지 않는다」와 같은 이유 — 세지 못한 라운드에 「없음」을 쓰지 않는다. PR 1 이연 (g). |
+| Q11 | 「┆ 같은 자리」 표지는 묶음(GATE_ROWS 한 행) 안에서만 앞 항목을 가리킨다 — 묶음마다 새로 센다. | D24 「묶음은 표시일 뿐」. golden T22 실측: 「다른 결정으로 넘어간 것 1개」 제목 바로 아래 표지가 앞 묶음의 항목을 가리켰다. |
+| Q12 | quality-gates 도 patch 를 올리고 CHANGELOG 에 한 줄 쓴다. | 엔진 스크립트(`docreview_state.py`)가 `plugins/quality-gates/scripts/` 에 링크로 실린다 — 내용이 바뀌면 그 플러그인의 cache key 도 바뀌어야 한다(CLAUDE.md 「모든 PR마다 SemVer bump」). PR 1 도 네 플러그인을 올렸다. |
 
 ## Review Focus
 
@@ -44,6 +48,7 @@
 3. **이름을 바꾼 채널이 처분 앵커에는 옛 이름으로 남는다** — 축 C 락은 이름의 실재만 잰다(CLAUDE.md 가 그 한계를 적는다). → Task 3 Step 4 가 앵커와 본문을 같은 글자로 바꾸고, 옛 이름이 FR 어디에도 없음을 잰다.
 4. **압축 명령에 새 꺾쇠 자리표가 끼어든다** — 사용자가 그대로 붙여 넣는 명령이 `<…>` 를 품으면 그대로 실행된다. → Task 2 Step 1 의 단언은 기존 `test_review_handoff_order.sh` 가 이미 잰다(자리표 집합 = `<brief-path>`). reviewing-spec 새 틀도 자리표를 `<spec_path>` 하나로 제한하고 그것을 잰다.
 5. **codex 건너뜀 줄의 사유 토큰이 사라진다** — 사람은 「왜 건너뛰었는지」를 원문 토큰으로 보기를 기대한다(`kill_switch` · `detector_not_runnable`). → Task 4 의 새 문구가 `(reason: <x>)` 를 그대로 품고, 14곳의 단언이 그 토큰까지 계속 잰다.
+6. **경고를 합치다 경고 하나가 사라진다** — 합치는 행이 서로 다른 사실을 같은 키로 묶거나, 표에 없는 원문을 버리면 첫 줄에서 경고가 조용히 빠진다. 사람은 「경고 수가 줄어도 빠진 사실은 없다」를 기대한다. → Task 5 의 락: 원문 여섯 → 줄 셋과 각 줄의 사유 토큰(`case_plain_warns_first_line`), 표에 없는 원문은 그대로(`case_plain_warns_unknown_kept`), 변이 넷(`warns_*`). 엔진 원문의 글자가 바뀌면 그 행이 안 맞아 원문이 그대로 나온다 — 쉬운 말은 잃어도 경고는 안 잃는다.
 
 ---
 
@@ -92,8 +97,16 @@ c plugins/spec-distill/skills/conducting-interview/references/finishing.md '[spe
 c plugins/spec-distill/skills/conducting-interview/references/finishing.md '[spec-distill] interview brief 완결: docs/superpowers/interview/<file>. superpowers 설치 시'
 c plugins/spec-distill/scripts/check_brief.py '그 판단은 Step B 게이트에서 "'
 c plugins/spec-distill/scripts/check_brief.py 'coverage-mapper 0 ({reason}) — dispatch 없이 통과 (advisory, 사람이 확인)'
+# Task 5 의 옛 문구(첫 줄)
+c shared/docreview/scripts/docreview_state.py '            warns.insert(0, cl)'
+c shared/docreview/scripts/docreview_state.py '    s = head + (" — %s가 남았다." % " · ".join(left) if left else " — 남은 것 없음.")'
+c shared/docreview/scripts/docreview_state.py '% (_one(st["findings"][fid].get("summary")), why, fid)]'
+c shared/docreview/scripts/docreview_state.py '        for fid in g[row.name]:'
+c shared/docreview/agents/doc-critic.md '는 사용자가 게이트에서 그대로 읽는다 — 처음 보는 사람이 읽는다 —'
+c shared/tests/fixtures/docreview/cases.sh '# ── 게이트 머리의 순서 뜻 한 줄 + 같은 anchor 묶음'
+c shared/tests/fixtures/docreview/cases.sh '  # 「] <fid>」로 시작한다(그 뒤 구분자만 「—」/「→」로 갈린다 — `_rg_superseded`'
 ```
-`STOP` 이 하나라도 나오면 Task 4 로 가기 전에 멈춰 보고한다. 옛 문구가 파이썬 문자열 리터럴 둘로 나뉜 자리(check_brief.py)는 한 물리적 줄 안의 조각만 센다.
+`STOP` 이 하나라도 나오면 그 줄의 Task(Task 4 · Task 5)로 가기 전에 멈춰 보고한다. 옛 문구가 파이썬 문자열 리터럴 둘로 나뉜 자리(check_brief.py)는 한 물리적 줄 안의 조각만 센다.
 
 - [ ] **Step 3: 기준선**
 
@@ -448,7 +461,7 @@ reviewing-spec 436행(`- **① 의 정지 요건** — …`) 바로 앞에 틀�
 | reviewing-brief 585 | `(그 라운드의 degrade 한 줄 — 「미검증」` | `(그 라운드의 상태와 경고(렌더 첫 줄) — 「미검증」` |
 | framing-requests 844 | `(그 라운드의 degrade 한 줄 — 「미검증」` | `(그 라운드의 상태와 경고(렌더 첫 줄) — 「미검증」` |
 
-마지막 두 행은 Step 1 이 「(degrade 공시)」를 지운 것과 같은 정리다 — 렌더 첫 줄을 「상태와 경고」로 부른다. 줄 번호는 abc70f66 실측이고, 착수 때 `grep -n 'degrade 한 줄'` 로 다시 찾는다. 이 두 문구를 고정한 단언은 없다. README 의 같은 꼴 한 자리(`게이트 질문에 표시된다`)는 Task 5 가 고친다.
+마지막 두 행은 Step 1 이 「(degrade 공시)」를 지운 것과 같은 정리다 — 렌더 첫 줄을 「상태와 경고」로 부른다. 줄 번호는 abc70f66 실측이고, 착수 때 `grep -n 'degrade 한 줄'` 로 다시 찾는다. 이 두 문구를 고정한 단언은 없다. README 의 같은 꼴 한 자리(`게이트 질문에 표시된다`)는 Task 6 이 고친다.
 
 `593` 은 고친 뒤 `게이트 앞 글에 \`ask_open\` 개수를 처분과 무관하게 싣는다.` 가 된다 — `test_framing_review_contract.sh:85` 가 잡는 부분 문자열 `` `ask_open` 개수를 처분과 무관하게 싣는다 `` 는 그대로다.
 
@@ -597,13 +610,581 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-## Task 5: README · 소개 문구 · 버전 (설계 §8 · AC10)
+## Task 5: PR 1 이 미룬 렌더 다듬기 여섯 (쉬운 말 출력 설계 §3 · §5 · Q9~Q11)
+
+PR 1 이 미룬 항목 (b)~(g) 를 닫는다(근거: `/Users/jeonghokim/.claude/sdd-mirror/plain-language-output/research/dryrun-pr2-report.md` 「PR 1 이연 항목 대조」). (a) 는 Task 3 Step 4 가 닫는다. 이 Task 가 고치는 파일은 Task 1~4 가 건드리지 않는다(2026-10-09 4d325819 대조).
+
+**Files:**
+- Modify: `shared/docreview/scripts/docreview_state.py`(`WARN_GLOSS` · `_plain_warns` 새로, `_first_line` · `_rg_escalated_fix` · `render_gate` 의 묶음 루프)
+- Modify: `shared/docreview/agents/doc-critic.md` · `shared/docreview/agents/doc-critic-web.md` · `plugins/spec-distill/agents/doc-critic.md` · `plugins/spec-distill/agents/doc-critic-web.md`(문장 하나)
+- Modify: `shared/tests/fixtures/docreview/cases.sh`(새 케이스 다섯 · T40 단언 하나 · 낡은 주석 넷 · `case_gate_grouping_marker` 의 전제 계산)
+- Modify: `shared/tests/test_docreview_route.sh`(케이스 등록) · `shared/tests/test_docreview_mutations.sh`(셀 일곱 · ㊷ 주석) · `shared/tests/test_docreview_agent_fields.sh`(단언 하나)
+- Modify: `shared/tests/fixtures/docreview/golden/case_T11_permit_keeps_disposition.gate.txt` · `case_T22_reraise_appears_in_next_round.gate.txt`(재캡처)
+- Modify: `tools/plain-language/test_measure_output.py`(「미검증」 첫 줄 표본 한 줄)
+
+**Interfaces:**
+- Consumes: advisory 원문 — `docreview_route.py` `_build_report` 의 다섯 줄(`codex 없음 — …` · `기각 경로 0 — …` · `상세 미검증 — …` · `앵커 불가 — …` · `critic 시점 판별 불가 (…)`)과 `shared/adjudication/adjudication.py` `reasons()` 의 네 꼴(`보류:` · `셀 수 없음:` · `입력 실패(주|보조):` · `강제(게이트 변경):`).
+- Produces: `docreview_state._plain_warns(warns) -> list` — 원문 목록을 첫 줄에 싣는 쉬운 줄 목록으로. 기계가 읽는 값(`fin.json` · `gate` JSON 의 `advisory` · 원장 `route_report` · `pending_recritic.events`)은 바뀌지 않는다(Q9). golden 의 `*.gate.json` · `*.fin.json` · `*.state.md` 는 diff 0 이다.
+
+**소비자 조사(2026-10-09, 이 Task 의 근거):** advisory 원문은 기계가 읽는다 — `cases.sh` 의 `startswith("입력 실패(주): doc-critic")`(:1382) · `"기각 경로 0" in a`(:1396) · `"critic 시점 판별 불가 (…)" in d["advisory"]`(:1724 · :1732) · T40 의 `d["advisory"][0].startswith("codex 없음")`, qg 가 같이 쓰는 `adjudication.reasons()`(`plugins/quality-gates/tests/test_synthesize_findings_adjudication.py:209` 의 `"입력 실패(주)"`), 이벤트 원장(`cases.sh:933` · `:1562` 의 `'layer1 block …'`), golden `*.fin.json` · `*.state.md`. 그래서 원문은 그대로 두고 렌더만 바꾼다. `plugins/*` 의 SKILL · references 에는 이 원문을 글자로 적은 자리가 없다(`docs/` 의 옛 설계·계획만 있다).
+
+- [ ] **Step 1: 실패하는 케이스를 쓴다**
+
+새 케이스 다섯 — (b) 경고 쉬운 말 둘(첫 줄 · 표의 두 성질), (c) 묶음 안 표지, (e) 막힌 이유 접기, (g) 「미검증」의 「남은 것 없음」. 단언마다 양의 짝이 같은 케이스 안에 있다. `gfirst` · `gsum` · `critic_dead_twice` · `item_prev_line` 은 `cases.sh` 의 기존 헬퍼다.
+
+`shared/tests/fixtures/docreview/cases.sh` 의 아래 줄 바로 앞에 넣는다(`case_I4_anchor_newline_collapsed` 다음, `case_state_gloss_covers_gate_rows` 위). 기준 줄:
+
+```bash
+# STATE_GLOSS 의 ∀ 커버리지 — 행 이름은 `gate-rows` 에서 도출한다(CATEGORY_GLOSS 락과 같은 모양).
+```
+
+넣을 글:
+
+```bash
+# 렌더 첫 줄 경고의 쉬운 말(계획 Q9) — advisory 원문은 기계가 읽는 값이라 그대로 두고 렌더만 바꾼다. 같은 사실을
+# 두 출처가 말한 원문(「codex 없음」 + 「입력 실패(보조): codex」 등)은 한 줄로 합치고, 사유 토큰은 그 줄 괄호에 모은다.
+case_plain_warns_first_line() {
+  local d f raw; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-nolayer2.txt" "$FX/codex-failed.yaml" --skip)" \
+    || { no "경고 쉬운 말: route_r1 실패"; return; }
+  f="$(gfirst "$d")"
+  assert_eq "$(jget "$d/fin.json" 'len(d["advisory"])')" "6" "경고 쉬운 말 전제: 이 라운드의 advisory 원문은 여섯이다"
+  assert_contains "$f" "경고 3개: " "경고 쉬운 말: 원문 여섯이 가리키는 사실 셋이 한 줄씩 실린다"
+  assert_contains "$f" "codex 리뷰가 없어 다른 모델의 시각이 빠졌다 (codex: exit_nonzero)" \
+    "경고 쉬운 말: codex 부재가 쉬운 문장 한 줄이고 사유 토큰은 괄호에 있다"
+  assert_contains "$f" "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다 (doc-recritic: kill switch, skipped)" \
+    "경고 쉬운 말: 재비판 부재가 한 줄이고 두 출처의 사유를 모두 싣는다"
+  assert_contains "$f" "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다 (layer2: block missing)" \
+    "경고 쉬운 말: 층 2 부재가 한 줄이고 셀 수 없다고 말한다"
+  assert_eq "$(printf '%s' "$f" | grep -o 'codex 리뷰가 없어' | grep -c .)" "1" "경고 쉬운 말: codex 부재가 첫 줄에 한 번만 나온다"
+  for raw in '모델 다양성 0' '입력 실패(' '셀 수 없음:' '기각 경로 0' '상세 미검증'; do
+    assert_not_contains "$f" "$raw" "경고 쉬운 말: 첫 줄에 엔진 원문 「${raw}」이 없다"
+  done
+  assert_eq "$(jget "$d/fin.json" 'd["advisory"][0], d["advisory"][1]')" \
+    "('codex 없음 — 모델 다양성 0 (exit_nonzero)', '셀 수 없음: layer2 — block missing')" \
+    "경고 쉬운 말 양의 짝: 기계가 읽는 advisory 원문은 그대로다"
+  rm -rf "$d"
+}
+# 쉬운 말 경고 표의 두 성질 — 표에 없는 원문은 버리지 않고 그대로 싣는다(계획 P6) · 원문 속 개행은 한 줄로 접는다.
+case_plain_warns_unknown_kept() {
+  local got; got="$(PYTHONPATH="$SCRIPTS" python3 -c '
+from docreview_state import _plain_warns
+print(_plain_warns(["표에 없는 경고 하나", "보류: recritic:f9 — 항목 파손:\nunknown f"]))')"
+  assert_eq "$got" "['표에 없는 경고 하나', '판정하지 못하고 보류한 지적이 있다 (recritic:f9 — 항목 파손: unknown f)']" \
+    "경고 쉬운 말: 표에 없는 원문은 그대로 싣고, 표에 있는 원문은 쉬운 문장 뒤 괄호에 나머지를 한 줄로 싣는다"
+}
+# 「같은 자리」 표지는 한 묶음 안에서만 앞 항목을 가리킨다(계획 Q11) — 묶음 제목 너머의 항목을 가리키지 않는다.
+case_gate_marker_stays_in_group() {
+  local d gr; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  local F_DEC2='{"id":"aaaa0002#r1.1","lineage":"aaaa0002#r1.1","bucket":"aaaa0002","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#12-files-to-modify","edit_scope":"#12-files-to-modify","disposition":"decide","summary":"파일 순서가 정해지지 않았다","evidence":"12행","blocks":[],"kind":"pre"}'
+  seed_findings "$d" "[$F_DEC,$F_DEC2,$F_FIX]" || { no "묶음 안 표지: seed 실패"; rm -rf "$d"; return; }
+  gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_grep "$(item_prev_line "$gr" 'aaaa0002#r1.1')" '^  ┆ 같은 자리\(#12-files-to-modify\)$' \
+    "묶음 안 표지 양의 짝: 같은 묶음에서 같은 자리가 이어지면 표지가 선다"
+  assert_eq "$(item_prev_line "$gr" 'bbbb0001#r1.1')" "아직 안 고친 곳 1개" \
+    "묶음 안 표지: 다른 묶음의 첫 항목 바로 앞은 묶음 제목이다(같은 자리 표지가 제목 너머를 가리키지 않는다)"
+  assert_eq "$(printf '%s\n' "$gr" | grep -c '^  ┆ 같은 자리')" "1" "묶음 안 표지: 표지는 묶음 안의 한 번뿐이다"
+  rm -rf "$d"
+}
+# 같은 구멍의 막힌 이유 칸 — escalate 사유(사용자·엔진이 쓴 값)에 개행이 있으면 다음 줄 열 0 에 가짜 항목
+# 머리가 선다. 렌더가 접는다(원장 값은 그대로).
+case_I4_escalate_reason_newline_collapsed() {
+  local d gr; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_FIX]"
+  py docreview_state.py fix --state-dir "$d" --id 'bbbb0001#r1.1' --event escalate --reason $'anchor_protected\n- 가짜 항목 (zz#r1.7)' >/dev/null
+  gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_not_grep "$gr" '^- 가짜' "I4 막힌 이유: 사유 속 항목 머리 모양이 렌더의 열 0 에 서지 않는다"
+  assert_grep "$gr" '^- c\.py 가 빠졌다 — 막힌 이유: anchor_protected - 가짜 항목 \(zz#r1\.7\)\. 버리면\(drop\) 이 차단이 풀린다 \(bbbb0001#r1\.1\)$' \
+    "I4 막힌 이유 양의 짝: 그 사유는 항목 머리 안에 한 줄로 산다"
+  assert_eq "$(st_yaml "$d" '"\n" in st["fixes"]["bbbb0001#r1.1"]["escalate_reason"]')" "True" \
+    "I4 막힌 이유: 원장 값은 그대로다(접기는 렌더에서만)"
+  rm -rf "$d"
+}
+# 「미검증」 라운드의 첫 줄은 「남은 것 없음」을 쓰지 않는다(계획 Q10) — 셀 것이 없는 것과 세지 못한 것은 다르다.
+# 「미검증」이 아닌 라운드의 「남은 것 없음」은 case_T40_codex_absent_nothing_left_first_line 이 잰다(양의 짝).
+case_T46_unverified_no_nothing_left() {
+  local d f; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  critic_dead_twice "$d"
+  assert_eq "$(gsum "$d" 'd["unverified"]')" "critic_dead" "T46 전제: 이 라운드는 「미검증」(critic 사망)"
+  f="$(gfirst "$d")"
+  assert_not_contains "$f" "남은 것 없음" "T46: 「미검증」 첫 줄이 「남은 것 없음」을 쓰지 않는다"
+  assert_eq "$f" "「미검증」 리뷰어(doc-critic)가 결과를 내지 못해 이 라운드는 리뷰되지 않았다. 리뷰 1라운드." \
+    "T46 양의 짝: 첫 줄은 「미검증」 공시와 라운드 번호다"
+  rm -rf "$d"
+}
+```
+
+셋째 케이스의 `item_prev_line` 은 항목 머리 바로 앞 줄을 낸다 — 다른 묶음의 첫 항목이면 그 줄은 묶음 제목이다. 첫째 케이스의 `「${raw}」` 는 중괄호를 쓴다 — macOS bash 3.2 는 `$raw` 바로 뒤의 비ASCII 글자 바이트를 변수 이름으로 먹어 `set -u` 에서 죽는다(드라이런 실측).
+
+`case_T40_codex_absent_first_line` 의 첫 줄 단언을 새 문구로(지키는 뜻 그대로 — 첫 줄이 codex 부재와 사유 토큰을 공시한다). 옛:
+
+```bash
+  assert_contains "$f" "codex 없음 — 모델 다양성 0 (exit_nonzero)" "T40·AC8: 첫 줄이 codex 부재와 사유를 공시한다"
+```
+
+새:
+
+```bash
+  assert_contains "$f" "codex 리뷰가 없어 다른 모델의 시각이 빠졌다 (codex: exit_nonzero)" "T40·AC8: 첫 줄이 codex 부재와 사유를 공시한다"
+```
+
+`shared/tests/test_docreview_route.sh` 에 등록한다 — 아래 줄 바로 뒤에 넣는다. 기준 줄:
+
+```bash
+case_I4_anchor_newline_collapsed
+```
+
+넣을 글:
+
+```bash
+case_plain_warns_first_line
+case_plain_warns_unknown_kept
+case_gate_marker_stays_in_group
+case_I4_escalate_reason_newline_collapsed
+case_T46_unverified_no_nothing_left
+```
+
+(f) 의 락 — `shared/tests/test_docreview_agent_fields.sh` 의 `PLAIN_LINE` 루프 안, 아래 줄 바로 뒤에 넣는다. 같은 루프의 `PLAIN_LINE` 단언이 양의 짝이다(「처음 보는 사람이 읽는다 — 내부 번호 없이 쉬운 말로 쓴다」는 일곱 파일에 남는다). 기준 줄:
+
+```bash
+  assert_file_grep "$f" 'evidence`? ?는 문서 인용이라 원문 그대로' "쉬운 말 칸: $f 가 근거는 원문 그대로라고 적는다"
+```
+
+넣을 글:
+
+```bash
+  assert_file_absent "$f" '그대로 읽는다 — 처음 보는 사람이 읽는다' "쉬운 말 칸: $f 가 「읽는다」를 두 번 잇지 않는다"
+```
+
+- [ ] **Step 2: 실패하는지 확인한다**
+
+Run:
+```bash
+PYTHONDONTWRITEBYTECODE=1 bash shared/tests/test_docreview_route.sh | tail -1
+PYTHONDONTWRITEBYTECODE=1 bash shared/tests/test_docreview_agent_fields.sh | tail -1
+```
+Expected: `Total: 307 | Pass: 289 | Fail: 18` · `Total: 53 | Pass: 49 | Fail: 4`. RED 는 새 케이스 다섯의 단언(T40 하나 포함 18)과 doc-critic 넷의 반복 문장이다. stderr 에 `ImportError: cannot import name '_plain_warns'` traceback 이 한 번 나온다 — 그 함수는 Step 3 이 만든다. 숫자는 4d325819 기준이다 — Task 0 의 merge 가 엔진 케이스를 더 가져왔으면 Total 은 달라도 `Fail` 은 같아야 한다(Task 1~4 는 이 두 파일을 건드리지 않는다).
+
+- [ ] **Step 3: 엔진과 리뷰어 문장을 고친다**
+
+(b) 경고 표 — `NEXT_MODE_GLOSS` 줄 바로 뒤에 넣는다(Q9). 기준 줄:
+
+```python
+NEXT_MODE_GLOSS = {"budget": "재리뷰 횟수 안에서", "extra_approval": "사용자가 연 추가 라운드"}
+```
+
+넣을 글:
+
+```python
+# 렌더 첫 줄 경고의 사람말(쉬운 말 출력 설계 §3 · 계획 Q9). advisory 원문은 기계가 읽는 값이라(`fin.json` · 원장의
+# `route_report` · 테스트) 그대로 두고 렌더에서만 바꾼다. 행: (원문 정규식, 괄호 이름, 쉬운 문장) — 위에서부터 첫 일치.
+# 괄호 이름과 문장이 같은 행은 같은 사실을 두 출처가 말한 것이라 한 줄로 합치고, 사유(`why`)는 그 줄 괄호에 모은다.
+# 괄호 이름이 None 인 행은 원문의 나머지(`why`)를 괄호에 그대로 싣는다. 어느 행에도 안 맞는 원문은 그대로 낸다 —
+# 버리지 않는다(계획 P6).
+WARN_GLOSS = (
+    (r"codex 없음 — 모델 다양성 0 \((?P<why>.*)\)", "codex", "codex 리뷰가 없어 다른 모델의 시각이 빠졌다"),
+    (r"입력 실패\(보조\): codex — (?P<why>.*)", "codex", "codex 리뷰가 없어 다른 모델의 시각이 빠졌다"),
+    (r"기각 경로 0 — 오탐이 걸러지지 않았다 \(doc-recritic (?P<why>.*)\)", "doc-recritic",
+     "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다"),
+    (r"입력 실패\(보조\): doc-recritic — (?P<why>.*)", "doc-recritic", "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다"),
+    (r"셀 수 없음: layer2 — (?P<why>.*)", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다"),
+    (r"상세 미검증 — 층 2 블록 없음", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다"),
+    (r"앵커 불가 — .*", "앵커 불가", "문서에 제목이 없어 지적의 자리를 가리지 못한다 — 모든 수정이 문서 전체 범위다"),
+    (r"critic 시점 판별 불가 \((?P<why>.*)\)", "critic 시점", "리뷰어 결과가 이번 라운드 것인지 확인하지 못했다"),
+    (r"입력 실패\(주\): (?P<why>.*)", None, "꼭 있어야 할 리뷰어 결과를 읽지 못했다"),
+    (r"입력 실패\(보조\): (?P<why>.*)", None, "보조 리뷰어 결과를 읽지 못했다"),
+    (r"셀 수 없음: (?P<why>.*)", None, "셀 수 없는 것이 있다"),
+    (r"보류: (?P<why>.*)", None, "판정하지 못하고 보류한 지적이 있다"),
+    (r"강제\(게이트 변경\): (?P<why>.*)", None, "판정 값을 강제로 바꿨고 그 때문에 게이트 결과가 달라졌다"),
+)
+```
+
+`_one` 함수 바로 뒤에 빈 줄 둘을 두고 넣는다. 기준(`_one` 함수 전체):
+
+```python
+def _one(s) -> str:
+    """렌더용 한 줄 — 열 0 의 「- 」 항목 머리는 렌더러만 만든다(요약 속 개행이 가짜 머리를 세우지 않게)."""
+    return " ".join(str(s).split())
+```
+
+넣을 글:
+
+```python
+def _plain_warns(warns) -> list:
+    """advisory 원문 목록 → 첫 줄에 싣는 쉬운 경고 줄 목록(WARN_GLOSS). 순서는 원문이 처음 나온 순서다."""
+    lines, why_of = [], {}
+    for w in map(str, warns):
+        m = row = None
+        for row in WARN_GLOSS:
+            m = re.fullmatch(row[0], w, re.S)
+            if m:
+                break
+        if not m:
+            k = w
+        elif row[1] is None:
+            k = "%s (%s)" % (row[2], m.group("why"))
+        else:
+            k = (row[1], row[2])
+        if k not in why_of:
+            why_of[k] = []
+            lines.append(k)
+        why = m.groupdict().get("why") if m and row[1] else None
+        if why and why not in why_of[k]:
+            why_of[k].append(why)
+    out = []
+    for k in lines:
+        if isinstance(k, tuple):
+            k = "%s (%s)" % (k[1], k[0] + (": " + ", ".join(why_of[k]) if why_of[k] else ""))
+        out.append(_one(k))
+    return out
+```
+
+변이 셀(Step 6)이 겨누는 줄 넷 — `            k = w` · `            k = (row[1], row[2])` · `        if why and why not in why_of[k]:` · `    warns = _plain_warns(warns)` — 은 각각 한 물리적 줄로 둔다.
+
+`_first_line` docstring 끝 — 옛:
+
+```python
+    경고는 advisory 를 전부 싣는다 — codex 부재만 싣고 나머지를 버리지 않는다."""
+```
+
+새:
+
+```python
+    경고는 advisory 를 전부 싣는다 — codex 부재만 싣고 나머지를 버리지 않는다. 원문은 `_plain_warns` 가 쉬운 줄로
+    바꾸고, 같은 사실을 두 출처가 말한 원문은 한 줄로 합친다(계획 Q9). 「미검증」·라운드 미완이면 「남은 것 없음」도
+    쓰지 않는다 — 세지 못한 라운드다(계획 Q10)."""
+```
+
+(b) 호출 — 옛(codex 줄을 끼운 바로 뒤):
+
+```python
+            warns.insert(0, cl)
+```
+
+새:
+
+```python
+            warns.insert(0, cl)
+    warns = _plain_warns(warns)
+```
+
+`cl not in warns` 는 그대로 둔다 — 원문이 이미 있으면 끼우지 않고, 사유가 달라도 `_plain_warns` 가 같은 사실 키로 한 줄에 합친다. `    if warns:` 줄은 그대로다(기존 셀 `warns_hidden_as_clean` · `warns_need_left` 의 앵커).
+
+(g) 「미검증」·라운드 미완이면 「남은 것 없음」을 쓰지 않는다(Q10) — 옛:
+
+```python
+    s = head + (" — %s가 남았다." % " · ".join(left) if left else " — 남은 것 없음.")
+```
+
+새:
+
+```python
+    s = head + (" — %s가 남았다." % " · ".join(left) if left else ("." if lead else " — 남은 것 없음."))
+```
+
+(e) 막힌 이유를 한 줄로 접는다 — `_rg_escalated_fix` 의 return, 옛:
+
+```python
+    return ["- %s — 막힌 이유: %s. 버리면(drop) 이 차단이 풀린다 (%s)" % (_one(st["findings"][fid].get("summary")), why, fid)]
+```
+
+새:
+
+```python
+    return ["- %s — 막힌 이유: %s. 버리면(drop) 이 차단이 풀린다 (%s)" % (_one(st["findings"][fid].get("summary")), _one(why), fid)]
+```
+
+㊷ 셀의 sed(`s/\. 버리면(drop) 이 차단이 풀린다 (%s)" % (/ (%s)" % (/`)는 새 줄에도 그대로 맞는다.
+
+(c) 묶음마다 새로 센다 + D24 주석 복원(Q11) — `render_gate` 의 묶음 루프, 옛:
+
+```python
+            out.append("  ↳ 상태 이름에 사람말이 없다: %s — 원래 이름 그대로 낸다" % row.name)
+        for fid in g[row.name]:
+```
+
+새:
+
+```python
+            out.append("  ↳ 상태 이름에 사람말이 없다: %s — 원래 이름 그대로 낸다" % row.name)
+        # 묶음은 «표시»다 — 질문 수도 항목별 선택권도 안 바꾼다(D24). 같은 자리를 건드리는 항목이 한 묶음 안에서
+        # 연달아 오면 그 사실만 한 줄로 보인다. 묶음마다 새로 센다 — 표지가 묶음 제목 너머를 가리키지 않는다(계획 Q11).
+        prev_anchor = None
+        for fid in g[row.name]:
+```
+
+루프 앞의 `    prev_anchor = None`(들여쓰기 넷)은 그대로 둔다 — 변이 셀 `marker_crosses_group` 이 안쪽 줄(들여쓰기 여덟)만 지운다. 바깥 줄까지 지우면 첫 항목에서 `UnboundLocalError` 가 나 셀이 「측정 불가」가 된다. 복원한 주석의 옛 글은 `65102910^:shared/docreview/scripts/docreview_state.py` 의 `[Task 9 ⓓ] 묶음은 «표시»다 — 질문 수도 항목별 선택권도 안 바꾼다 (D24). 같은 자리를 건드리는 항목이 연달아 오면 그 사실만 한 줄로 보인다.` 이다(`git log -S 'D24' -- shared/docreview/scripts/docreview_state.py` 가 찾는다. 「묶음은 표시일 뿐」은 같은 뜻의 `cases.sh` 주석 글자다 — 엔진 쪽 옛 글자는 「묶음은 «표시»다」였다).
+
+(f) 리뷰어 문장 — 네 파일(`shared/docreview/agents/doc-critic.md` · `doc-critic-web.md` 정본과 `plugins/spec-distill/agents/` 의 같은 이름 사본 둘)에서 같은 문장을 같은 글자로 바꾼다. 재비판자(`doc-recritic.md` 셋)에는 이 반복이 없다 — 그대로 둔다. 옛:
+
+```markdown
+`summary`·`if_unfixed`·`replacement` 는 사용자가 게이트에서 그대로 읽는다 — 처음 보는 사람이 읽는다 — 내부 번호 없이 쉬운 말로 쓴다.
+```
+
+새:
+
+```markdown
+`summary`·`if_unfixed`·`replacement` 는 게이트에 그대로 실려 처음 보는 사람이 읽는다 — 내부 번호 없이 쉬운 말로 쓴다.
+```
+
+지우는 것은 반복 「사용자가 게이트에서 그대로 읽는다 — 」 뿐이다. 「게이트에 그대로 실린다」(사용자가 원문 그대로 본다)와 「처음 보는 사람이 읽는다 — 내부 번호 없이 쉬운 말로 쓴다」(락 `PLAIN_LINE`)는 남는다. 규칙·임계치는 바뀌지 않는다(CLAUDE.md — persona 편집은 보안 민감). 사본은 정본과 표지 줄만 다르다는 락(`test_docreview_agents.sh` · `test_copy_of_contract.sh`)이 있으므로 네 파일을 한 번에 바꾼다.
+
+- [ ] **Step 4: 낡은 주석과 묶음 표지 락의 전제**
+
+(d) 옛 항목 머리(`[decide] <id>` · `] <fid>` · 「순서:」 머리 줄)를 설명하는 주석을 지금 모양으로 고친다. (c) 와 맞춰 `case_gate_grouping_marker` 의 전제 계산도 묶음 안의 인접 쌍만 센다 — 지금은 GATE_ROWS 전체를 한 줄로 펴서 묶음 제목 너머의 쌍도 인접으로 센다(오늘 픽스처의 첫 쌍은 한 묶음 안이라 우연히 맞는다).
+
+`shared/tests/fixtures/docreview/cases.sh` — 옛:
+
+```bash
+# ── 게이트 머리의 순서 뜻 한 줄 + 같은 anchor 묶음 (AC18 · AC18') ────────────
+```
+
+새:
+
+```bash
+# ── 묶음 제목의 순서 + 같은 anchor 묶음 (AC18 · AC18') ──────────────────────
+```
+
+`shared/tests/fixtures/docreview/cases.sh` — 옛:
+
+```bash
+  # [리뷰 fix round 2] 원래는 첫 세 어절만(`열린 결정 먼저`) 단언했다 — 다섯
+  # 구절 중 하나만 살아 있으면 통과하고, 순서가 뒤섞여도 통과한다. AC18 이
+  # 재는 것은 「GATE_ROWS 순서의 뜻」이므로 다섯 구절 «전부» + 그 «순서» 를
+  # 한 번에 잰다: 머리 줄 전체를 뽑아 기대 리터럴과 정확히 같은지 본다(한
+  # 등식이 내용과 순서를 동시에 고정한다 — 독립된 다섯 substring 단언은
+  # 뒤섞인 줄에서도 전부 통과하므로 쓰지 않는다).
+```
+
+새:
+
+```bash
+  # 옛 렌더는 「순서:」 머리 줄 하나로 순서의 뜻을 말했다. 쉬운 말 출력 PR 1 이 그 줄을 묶음 제목으로
+  # 흡수했으므로, 이제는 묶음 제목(「<STATE_GLOSS> N개」)이 렌더에 선 자리를 뽑아 GATE_ROWS 순서인지 잰다.
+  # 묶음이 둘 이상이어야 순서 비교가 공허하지 않다.
+```
+
+`shared/tests/fixtures/docreview/cases.sh` — 옛:
+
+```bash
+  # [리뷰] 접두사만 보면 `_rg_held_decide` 의 「[decide 보류]」도 "^\[decide" 에 걸린다 —
+  # held_decide 는 n_items(세 버킷)에 안 들어가므로 그 오탐이 등식을 조용히 깬다.
+  # 닫는 대괄호까지 앵커해 정확히 세 렌더러의 리터럴 형태만 잡는다.
+```
+
+새:
+
+```bash
+  # 항목 머리는 열 0 의 「- 」로 시작하고 id 괄호(「(<id>)」 · 「(<id> · 자동)」)로 끝난다 — 그 모양만 센다.
+  # 묶음 제목과 「  그대로 두면:」 같은 이어지는 줄은 열 0 의 「- 」가 아니라 안 걸린다. n_items 는 GATE_ROWS
+  # 전 행의 합이므로 두 값이 같으면 렌더가 항목을 빼거나 더하지 않았다는 뜻이다.
+```
+
+`shared/tests/fixtures/docreview/cases.sh` — 옛:
+
+```bash
+#  ① 전제 — 이 상태에 같은 anchor 를 가진 «열린»(row.open) 항목이 N≥2 있다.
+```
+
+새:
+
+```bash
+#  ① 전제 — 이 상태의 한 묶음(GATE_ROWS 한 행) 안에 같은 anchor 를 가진 항목이 N≥2 이어진다.
+#     표지는 묶음마다 새로 센다(계획 Q11) — 묶음 제목을 사이에 둔 두 항목은 인접 쌍이 아니다.
+```
+
+`shared/tests/fixtures/docreview/cases.sh` — 옛:
+
+```bash
+order = []
+for r in rows:
+    order.extend(g[r["name"]])
+anchors = [(fid, (st["findings"].get(fid) or {}).get("anchor")) for fid in order]
+same_pairs = [(anchors[i - 1][0], anchors[i][0], anchors[i][1])
+              for i in range(1, len(anchors))
+              if anchors[i][1] and anchors[i][1] == anchors[i - 1][1]]
+diff_pairs = [(anchors[i - 1][0], anchors[i][0])
+              for i in range(1, len(anchors))
+              if anchors[i][1] and anchors[i - 1][1] and anchors[i][1] != anchors[i - 1][1]]
+group_size = 0
+if same_pairs:
+    target_anchor = same_pairs[0][2]
+    group_size = sum(1 for _, a in anchors if a == target_anchor)
+```
+
+새:
+
+```bash
+groups = [[(fid, (st["findings"].get(fid) or {}).get("anchor")) for fid in g[r["name"]]] for r in rows]
+same_pairs = [(a[i - 1][0], a[i][0], a[i][1], gi)
+              for gi, a in enumerate(groups) for i in range(1, len(a))
+              if a[i][1] and a[i][1] == a[i - 1][1]]
+diff_pairs = [(a[i - 1][0], a[i][0])
+              for a in groups for i in range(1, len(a))
+              if a[i][1] and a[i - 1][1] and a[i][1] != a[i - 1][1]]
+group_size = 0
+if same_pairs:
+    target_anchor = same_pairs[0][2]
+    group_size = sum(1 for _, x in groups[same_pairs[0][3]] if x == target_anchor)
+```
+
+`shared/tests/fixtures/docreview/cases.sh` — 옛:
+
+```bash
+  # 인접 쌍의 둘째 항목이 렌더에서 «자기 헤더로» 처음 나오는 줄 바로 앞줄을
+  # 뽑는다 — [리뷰 fix round 2] bare fid 매치(예전 코드)는 그 fid 가 «다른»
+  # 항목의 헤더보다 먼저, 참조로 나오면(예: `_rg_blocking_ask` 의 「→ 전제인
+  # fix: <fid>」) 그 참조 줄을 헤더로 오인한다 — 오늘 쓰는 두 쌍(decide ·
+  # unapplied_fix)엔 안 걸리지만 일반적으로 안전하지 않다. `choices_match`
+  # (cases.sh:490)와 같은 헤더 앵커 방식으로 좁힌다: 모든 렌더러가 헤더를
+  # 「] <fid>」로 시작한다(그 뒤 구분자만 「—」/「→」로 갈린다 — `_rg_superseded`
+  # 가 유일하게 「→」다) — 참조 문구엔 그 앞의 「]」가 없으므로 이 접두로
+  # 헤더와 참조가 갈린다.
+```
+
+새:
+
+```bash
+  # 인접 쌍의 둘째 항목이 렌더에서 «자기 항목 머리로» 나오는 줄 바로 앞줄을 뽑는다(`item_prev_line`).
+  # bare fid 매치는 그 fid 가 다른 항목 안에 참조로 나오면(예: `_rg_blocking_ask` 의 「이 답을 기다리는
+  # 수정: <fid>」) 그 줄을 머리로 오인한다. `item_prev_line` 은 열 0 의 「- 」로 시작하고 「(<fid>)」·
+  # 「(<fid> · 자동)」으로 끝나는 줄만 머리로 본다 — 참조 줄은 그 끝 괄호 모양이 아니라 갈린다.
+```
+
+`shared/tests/test_docreview_mutations.sh` — 옛:
+
+```bash
+# ㊷ I2 — `_rg_escalated_fix` 의 렌더 문구에서 「drop 하면 이 차단이 풀린다」 힌트를
+```
+
+새:
+
+```bash
+# ㊷ I2 — `_rg_escalated_fix` 의 렌더 문구에서 「버리면(drop) 이 차단이 풀린다」 힌트를
+```
+
+`tools/plain-language/test_measure_output.py` — 옛:
+
+```python
+                         "「미검증」 리뷰어(doc-critic)가 결과를 내지 못해 이 라운드는 리뷰되지 않았다. 리뷰 1라운드 — 남은 것 없음.",
+```
+
+새:
+
+```python
+                         "「미검증」 리뷰어(doc-critic)가 결과를 내지 못해 이 라운드는 리뷰되지 않았다. 리뷰 1라운드.",
+```
+
+마지막 둘: ㊷ 셀 주석은 렌더 문구가 PR 1 에서 「버리면(drop)」으로 바뀐 것을 따른다. `test_measure_output.py` 표본은 Step 3 (g) 뒤의 실제 「미검증」 첫 줄이다(그 단언 `v2_status_first_line` 은 「「미검증」」 머리로 세므로 값은 그대로다).
+
+- [ ] **Step 5: 통과하는지 보고 golden 을 다시 뜬다**
+
+Run:
+```bash
+for t in test_docreview_route test_docreview_state test_docreview_agent_fields test_docreview_golden; do printf '%s ' "$t"; PYTHONDONTWRITEBYTECODE=1 bash shared/tests/$t.sh 2>&1 | tail -1; done
+```
+Expected: 앞 셋은 `Fail: 0`. `test_docreview_golden` 은 `Fail: 2`(`case_T11_permit_keeps_disposition.gate.txt` · `case_T22_reraise_appears_in_next_round.gate.txt` 불일치 — 의도한 렌더 변경).
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 bash shared/tests/fixtures/docreview/capture_finalize_golden.sh >/dev/null 2>&1; echo "capture rc=$?"
+git status --porcelain shared/tests/fixtures/docreview/golden/
+git diff -U0 -- shared/tests/fixtures/docreview/golden/ | grep '^[+-][^+-]'
+PYTHONDONTWRITEBYTECODE=1 bash shared/tests/test_docreview_golden.sh | tail -1
+```
+Expected: `capture rc=0`. 바뀐 파일은 ` M …/case_T11_permit_keeps_disposition.gate.txt` · ` M …/case_T22_reraise_appears_in_next_round.gate.txt` 둘뿐이다(`*.gate.json` · `*.fin.json` · `*.state.md` 가 바뀌었으면 멈춘다 — 렌더 수정이 기계 경로를 건드렸다). diff 는 첫 줄 둘과 T22 의 `-  ┆ 같은 자리(#3-non-goals)` 한 줄이다 — 이 표지가 「다른 결정으로 넘어간 것 1개」 제목 바로 아래에서 앞 묶음의 항목을 가리키던 (c) 의 실례다. 새 첫 줄:
+
+```text
+리뷰 2라운드를 마쳤다 — 정할 것 4개 · 아직 안 고친 곳 4개 · 수정의 전제가 되는 질문 1개가 남았다. 경고 2개: codex 리뷰가 없어 다른 모델의 시각이 빠졌다 (codex: exit_nonzero) · 재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다 (doc-recritic: missing)
+리뷰 2라운드를 마쳤다 — 정할 것 5개 · 다른 결정으로 넘어간 것 1개 · 아직 안 고친 곳 3개 · 수정의 전제가 되는 질문 1개가 남았다. 경고 3개: codex 리뷰가 없어 다른 모델의 시각이 빠졌다 (codex: exit_nonzero) · 세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다 (layer2: block missing) · 재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다 (doc-recritic: missing)
+```
+옛 첫 줄은 원문 넷 · 여섯을 그대로 늘어놓았다(codex 부재가 두 번, 재비판 부재가 두 번, 층 2 부재가 두 번). 마지막 줄 Expected: `Fail: 0`.
+
+- [ ] **Step 6: 변이 셀**
+
+`shared/tests/test_docreview_mutations.sh` 의 PR 1 셀 묶음 끝(`warns_need_left` 셀) 바로 뒤에 넣는다. 기준 줄:
+
+```bash
+mut 1/1 warns_need_left case_T40_codex_absent_nothing_left_first_line sed_state \
+  's/^    if warns:$/    if warns and left:/'
+```
+
+넣을 글:
+
+```bash
+# ── 쉬운 말 출력 PR 2 Task 5 (PR 1 이연 항목) ─────────────────────────────────
+# 경고 원문을 쉬운 줄로 바꾸는 호출을 떼기 — 첫 줄에 엔진 원문이 그대로 선다.
+mut 1/1 warns_plain_gloss_off case_plain_warns_first_line sed_state \
+  's/^    warns = _plain_warns(warns)$//'
+# 같은 사실의 합치기를 끄기 — 원문마다 키가 따로 생겨 codex 부재가 첫 줄에 두 번 나온다.
+mut 1/1 warns_same_fact_not_merged case_plain_warns_first_line sed_state \
+  's/^            k = (row\[1\], row\[2\])$/            k = (row[1], row[2], w)/'
+# 사유 토큰 모으기를 끄기 — 괄호에 이름만 남고 왜 빠졌는지가 사라진다.
+mut 1/1 warns_reason_dropped case_plain_warns_first_line sed_state \
+  's/^        if why and why not in why_of\[k\]:$/        if False:/'
+# 표에 없는 원문을 버리기 — 모르는 경고가 첫 줄에서 조용히 사라진다(P6 위반).
+mut 1/1 warns_unknown_dropped case_plain_warns_unknown_kept sed_state \
+  's/^            k = w$/            continue/'
+# 묶음마다 새로 세기를 지우기 — 같은 자리 표지가 묶음 제목 너머의 항목을 가리킨다.
+mut 1/1 marker_crosses_group case_gate_marker_stays_in_group sed_state \
+  's/^        prev_anchor = None$//'
+# 막힌 이유의 한 줄 접기를 떼기 — 사유 속 개행이 열 0 에 가짜 항목 머리를 세운다.
+mut 1/1 escalate_reason_unfolded case_I4_escalate_reason_newline_collapsed sed_state \
+  's/ % (_one(st\["findings"\]\[fid\]\.get("summary")), _one(why), fid)\]$/ % (_one(st["findings"][fid].get("summary")), why, fid)]/'
+# 「미검증」 첫 줄에 「남은 것 없음」을 되살리기.
+mut 1/1 unverified_nothing_left case_T46_unverified_no_nothing_left sed_state \
+  's/ if left else ("\." if lead else " — 남은 것 없음\."))$/ if left else " — 남은 것 없음.")/'
+```
+
+셀마다 선언한 churn 은 sed 프로그램에서 도출했다 — 한 줄을 다른 한 줄로(또는 빈 줄로) 바꾸므로 전부 `1/1` 이다. 바깥 `    prev_anchor = None` 은 들여쓰기가 넷이라 `marker_crosses_group` 의 `^        prev_anchor = None$`(여덟)에 안 걸린다.
+
+Run:
+```bash
+PYTHONDONTWRITEBYTECODE=1 bash shared/tests/test_docreview_mutations.sh > /Users/jeonghokim/.claude/jobs/d60d9f96/tmp/pr2-t5-mut.log 2>&1; tail -1 /Users/jeonghokim/.claude/jobs/d60d9f96/tmp/pr2-t5-mut.log
+grep -E "warns_plain_gloss_off|warns_same_fact_not_merged|warns_reason_dropped|warns_unknown_dropped|marker_crosses_group|escalate_reason_unfolded|unverified_nothing_left" /Users/jeonghokim/.claude/jobs/d60d9f96/tmp/pr2-t5-mut.log
+```
+Expected: `Fail: 0`(셀 일곱이 늘어 Total 이 7 커진다 — 4d325819 에서 111 → 118), 그리고 일곱 줄이 전부 `✓ … (규칙에 이빨이 있다) [churn 1/1]` 이다. 드라이런 실측:
+
+```text
+변이 'warns_plain_gloss_off' → case_plain_warns_first_line RED(10) 생존(2)
+변이 'warns_same_fact_not_merged' → case_plain_warns_first_line RED(3) 생존(9)
+변이 'warns_reason_dropped' → case_plain_warns_first_line RED(3) 생존(9)
+변이 'warns_unknown_dropped' → case_plain_warns_unknown_kept RED(1) 생존(0)
+변이 'marker_crosses_group' → case_gate_marker_stays_in_group RED(2) 생존(1)
+변이 'escalate_reason_unfolded' → case_I4_escalate_reason_newline_collapsed RED(2) 생존(1)
+변이 'unverified_nothing_left' → case_T46_unverified_no_nothing_left RED(2) 생존(1)
+```
+
+- [ ] **Step 7: 커밋**
+
+```bash
+git add shared/docreview/scripts/docreview_state.py shared/docreview/agents/doc-critic.md shared/docreview/agents/doc-critic-web.md plugins/spec-distill/agents/doc-critic.md plugins/spec-distill/agents/doc-critic-web.md shared/tests/fixtures/docreview/cases.sh shared/tests/fixtures/docreview/golden/case_T11_permit_keeps_disposition.gate.txt shared/tests/fixtures/docreview/golden/case_T22_reraise_appears_in_next_round.gate.txt shared/tests/test_docreview_route.sh shared/tests/test_docreview_mutations.sh shared/tests/test_docreview_agent_fields.sh tools/plain-language/test_measure_output.py
+git status --porcelain
+git commit -m "fix(docreview): 렌더 첫 줄 경고를 쉬운 말 한 줄씩으로, 같은 자리 표지는 묶음 안에서만
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+`git status --porcelain` 은 커밋 전 `M ` 으로 시작하는 열두 줄(위 열두 파일)만 내야 한다 — ` M` · `??` 줄이 있으면 멈춘다(다른 파일이 바뀌었다).
+
+- [ ] **Step 8: 커밋 뒤에만 도는 락과 이웃 락**
+
+`test_agent_model_mutation.sh` 는 `agents/` 에 미커밋 변경이 있으면 RED 다 — 커밋 뒤에 돈다.
+
+Run:
+```bash
+for t in plugins/quality-gates/tests/test_agent_model_mutation.sh plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh shared/tests/test_dispatch_disposition.sh shared/tests/test_docreview_agents.sh shared/tests/test_copy_of_contract.sh shared/tests/test_variant_of_contract.sh shared/tests/test_docreview_gate_visibility.sh shared/tests/test_adjudication_behavior.sh plugins/spec-distill/tests/test_brief_agents.sh plugins/spec-distill/tests/test_reviewing_brief_skill.sh; do printf '%s ' "$t"; PYTHONDONTWRITEBYTECODE=1 bash "$t" 2>&1 | tail -1; done
+(cd tools/plain-language && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_measure_output 2>&1 | tail -1)
+(cd plugins/quality-gates/tests && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_synthesize_findings_adjudication 2>&1 | tail -1)
+```
+Expected: 전부 `Fail: 0`, 두 unittest 는 `OK`.
+
+---
+
+## Task 6: README · 소개 문구 · 버전 (설계 §8 · AC10)
 
 **Files:**
 - Modify: `plugins/spec-distill/README.md`
 - Modify: `plugins/spec-distill/tests/test_brief_review_meta.sh`(`section '^## Flow'` 두 자리 → `'^## 흐름'` · `section '^## Kill switches'` → `'^## 끄는 법'`)
 - Modify: `plugins/spec-distill/.claude-plugin/plugin.json`(description · version) · `.claude-plugin/marketplace.json`(spec-distill 항목 description)
 - Modify: `plugins/spec-distill/CHANGELOG.md`
+- Modify: `plugins/quality-gates/.claude-plugin/plugin.json`(version) · `plugins/quality-gates/CHANGELOG.md`(Q12)
 
 - [ ] **Step 1: README 를 새 규칙대로 다시 쓴다**
 
@@ -657,7 +1238,7 @@ Expected: `same`, `Fail: 0`(마켓플레이스 금지 표현 「two gates」류�
 
 - [ ] **Step 3: 버전과 CHANGELOG**
 
-origin/main 의 spec-distill 버전을 다시 보고 minor 를 올린다. CHANGELOG 맨 위 항목 앞:
+origin/main 의 spec-distill 버전을 다시 보고 minor 를 올린다. quality-gates 는 patch 를 올린다(Q12). spec-distill CHANGELOG 맨 위 항목 앞:
 
 ```markdown
 ## [<새 버전>] — <YYYY-MM-DD>
@@ -668,6 +1249,22 @@ origin/main 의 spec-distill 버전을 다시 보고 minor 를 올린다. CHANGE
 - 핸드오프 `/compact` 명령이 사람에게 쓰는 글 규칙도 유지하게 한다. reviewing-spec 에 그 명령 틀이 생겼다.
 - codex 건너뜀 · brief 리뷰 건너뜀 · 기준 사본 부재 · 확정 재제시 상한 문구가 쉬운 말이다(사유 토큰은 그대로).
 - README 와 소개 문구를 쉬운 말로 다시 썼다.
+- 문서 리뷰 게이트 첫 줄의 경고가 쉬운 말 한 줄씩이다. 같은 사실을 두 번 말하던 원문(codex 부재 · 재비판 부재 · 층 2 부재)은 한 줄로 합치고 사유 토큰은 괄호에 남긴다. `fin.json` · `gate` JSON 의 `advisory` 원문은 그대로다.
+- 「미검증」·라운드 미완 첫 줄이 「남은 것 없음」을 쓰지 않는다.
+- 탐지 리뷰어(`doc-critic` · `doc-critic-web`)의 사람이 읽는 칸 안내 문장에서 「읽는다」 반복을 뺐다(규칙은 그대로).
+
+### Fixed
+- 「┆ 같은 자리」 표지가 묶음 제목 너머의 앞 묶음 항목을 가리키던 것 — 이제 묶음마다 새로 센다.
+- 고치려다 막힌 곳의 사유에 줄바꿈이 있으면 다음 줄에 가짜 항목 머리가 서던 것 — 한 줄로 접는다.
+```
+
+quality-gates CHANGELOG 맨 위 항목 앞(엔진 링크가 같은 변경을 싣는다):
+
+```markdown
+## [<새 버전>] — <YYYY-MM-DD>
+
+### Changed
+- 엔진 링크 `scripts/docreview_state.py` 가 바뀌었다 — 문서 리뷰 게이트 첫 줄의 경고가 쉬운 말 한 줄씩이고(같은 사실의 원문 둘은 한 줄로, 사유 토큰은 괄호에), 「┆ 같은 자리」 표지는 묶음 안에서만 앞 항목을 가리키며, 막힌 이유는 한 줄로 접힌다. `advisory` 원문은 그대로다.
 ```
 
 - [ ] **Step 4: 최종 스위트와 대조**
@@ -681,14 +1278,14 @@ Expected: 빈 출력.
 - [ ] **Step 5: 커밋 · /qg · PR**
 
 ```bash
-git add plugins/spec-distill/README.md plugins/spec-distill/tests/test_brief_review_meta.sh plugins/spec-distill/.claude-plugin/plugin.json .claude-plugin/marketplace.json plugins/spec-distill/CHANGELOG.md
-git commit -m "docs(spec-distill): README 와 소개 문구를 쉬운 말로, 버전 올림
+git add plugins/spec-distill/README.md plugins/spec-distill/tests/test_brief_review_meta.sh plugins/spec-distill/.claude-plugin/plugin.json .claude-plugin/marketplace.json plugins/spec-distill/CHANGELOG.md plugins/quality-gates/.claude-plugin/plugin.json plugins/quality-gates/CHANGELOG.md
+git commit -m "docs(spec-distill): README 와 소개 문구를 쉬운 말로, 버전 올림(quality-gates patch 포함)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 `/qg branch` 를 돌리고 리뷰어에게 명시해 묻는다: 「경고를 앞 글로 옮긴 뒤에도 사용자가 고르기 전에 경고를 보는가 · 배치 락(`test_brief_review_entry.sh`)이 옮긴 뜻을 지키는가 · 처분 앵커와 본문 채널 이름이 같은 글자인가」.
 
-PR 본문(한국어): 첫 줄에 바뀐 것 한 문장 · 「계획이 정한 것」 Q1~Q8 · 문구 고정 테스트 표(Task 2 Step 4, Task 4 Step 3 — 옛 → 새 · 지키는 뜻) · 고정 문구 분류 표(Q7) · 변이 결과 · 할 일 하나: 「`/request-framing` 으로 작은 요청 하나를 넣고 `/interview` 끝의 다음 단계 질문까지 가서, 경고가 질문 앞에 있고 질문은 짧은지 봐 주세요」(Verification Plan 4). 맨 끝 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+PR 본문(한국어): 첫 줄에 바뀐 것 한 문장 · 「계획이 정한 것」 Q1~Q12 · 문구 고정 테스트 표(Task 2 Step 4, Task 4 Step 3 — 옛 → 새 · 지키는 뜻) · 고정 문구 분류 표(Q7) · 변이 결과 · 할 일 하나: 「`/request-framing` 으로 작은 요청 하나를 넣고 `/interview` 끝의 다음 단계 질문까지 가서, 경고가 질문 앞에 있고 질문은 짧은지 봐 주세요」(Verification Plan 4). 맨 끝 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 
 머지는 사용자가 `! gh pr merge <n> --merge`. 머지 뒤 main 을 merge 로 받고 PR 3 계획으로 간다.
