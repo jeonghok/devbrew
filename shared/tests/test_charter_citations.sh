@@ -29,8 +29,8 @@ import fnmatch, json, os, re, subprocess, sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 QG_DESC = ("Quality verification pipeline — one pipeline, one verdict (review + mandatory differential test) "
-           "with multi-plugin review delegation, plus a separate consent-gated PR-understanding generate/publish "
-           "surface (not a gate). Invoke manually via /qg or /qg-publish.")
+           "with multi-plugin review delegation; each run posts one new PR comment (understanding + verdict line) "
+           "when the branch has an open PR. Invoke manually via /qg.")
 os.chdir(sys.argv[1])
 
 

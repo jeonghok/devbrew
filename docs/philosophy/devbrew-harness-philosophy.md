@@ -48,8 +48,8 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 코드: `plugins/*/hooks/hooks.json`
 
 ### P17 — User Sovereignty
-**Law 1 집행.** 위험한·되돌리기 어려운·공유 state에 영향을 주는 액션은 항상 confirmation 게이트를 거친다 — agent는 권고하고 사용자가 결정한다. Load-bearing: 게이트를 skip한 narrate-only 종료는 polite-stop(AP2)이다 — approval gate는 사용자가 *redirect* 가능해야 하고 단순 *acknowledge*가 아니다.
-코드: `plugins/spec-distill/skills/spec-review/SKILL.md` 의 `## 게이트` 절 (`AskUserQuestion` proceed gate)
+**Law 1 집행.** 위험한·되돌리기 어려운·공유 state에 영향을 주는 액션은 항상 confirmation 게이트를 거친다 — agent는 권고하고 사용자가 결정한다. Load-bearing: 게이트를 skip한 narrate-only 종료는 polite-stop(AP2)이다 — approval gate는 사용자가 *redirect* 가능해야 하고 단순 *acknowledge*가 아니다. qg 의 매 실행 PR 코멘트 게시는 사용자의 상시 동의다 — 게시마다 묻지 않고, 끄는 길은 `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` 하나다.
+코드: `plugins/spec-distill/skills/spec-review/SKILL.md` 의 `## 게이트` 절 (`AskUserQuestion` proceed gate) · `plugins/quality-gates/scripts/publish-comment.sh` (상시 동의 게시 — kill switch 가 sink 안에서 끈다)
 
 ### P18 — Stagnation Is a Failure Mode
 **Cross-cutting (L1·L2·L3) 집행.** 같은 것을 계속 재시도하는 루프는 진전이 아니라 멈춘 것 — max-iteration cap + repeat 감지 + escape hatch와 함께 shipping. Load-bearing: 정체 시 재시도 대신 *다른* 접근(fresh subagent·다른 리뷰어·human prompt)을 invoke해야 하고, 카운트가 없는 루프는 토큰을 태우며 신뢰를 깎는다.
