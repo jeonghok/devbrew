@@ -57,9 +57,12 @@ run_fence() {
   OUT="$(cd "$T/proj/sub" && "$sh" "$f" 2>"$T/fence.err")"; RC=$?
   LAST="$(printf '%s\n' "$OUT" | tail -n 1)"
 }
-fresh_proj() {  # git 리포 · 하위 디렉토리 · result.md · 이해글을 새로 깐다
+gp() { git -C "$T/proj" -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@t "$@"; }
+fresh_proj() {  # 커밋 하나가 있는 깨끗한 git 리포 · 하위 디렉토리 · result.md · 이해글을 새로 깐다
   rm -rf "$T/proj"; mkdir -p "$T/proj/.claude/quality-gates/$SID" "$T/proj/sub"
   git init -q "$T/proj"
+  echo app > "$T/proj/app.txt"; echo '{}' > "$T/proj/.claude/settings.json"
+  gp add app.txt .claude/settings.json; gp commit -q -m base
   TOP="$(git -C "$T/proj" rev-parse --show-toplevel)"   # macOS 의 /var → /private/var 를 git 이 푼 그대로
   R="$T/proj/.claude/quality-gates/$SID/result.md"
   cat > "$R" <<'EOF'
@@ -82,6 +85,14 @@ qg: decoy-이 줄은 판정 절 밖이다
 EOF
   printf '## 한 줄 요약\n무엇이 바뀌나.\n' > "$T/proj/.claude/quality-gates/$SID/comment-head.md"
 }
+DIRTY="게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커밋과 다르다 — 커밋·푸시 뒤 다시 /qg)"
+STATUS_FAIL="게시 안 함 — 작업 트리 상태를 읽지 못했다(git status 실패)"
+HEAD_VLINE="게시 안 함 — 이해글에 판정 줄 모양이 있다"
+AGAIN="게시 안 함 — 이 실행은 이미 게시 단계를 돌았다"
+# git status 만 실패시키는 shim — 나머지 git 호출은 진짜 git 으로 넘긴다.
+mkdir -p "$T/gshim"
+printf '#!/usr/bin/env bash\n[ "${1:-}" = "status" ] && { echo "fatal: shim" >&2; exit 128; }\nexec "%s" "$@"\n' "$(type -P git)" > "$T/gshim/git"
+chmod +x "$T/gshim/git"
 
 SHELLS="bash"
 command -v zsh >/dev/null 2>&1 && SHELLS="bash zsh"
@@ -134,6 +145,58 @@ for sh in $SHELLS; do
   assert_eq "$LAST" "게시 안 함 — OUTCOME 이 형식 밖이다" "M5($sh): OUTCOME 형식 밖이 보인다"
   assert_eq "$RC" "0" "M5($sh): rc 0"
   assert_eq "$(tail -n 1 "$R")" "게시 안 함 — OUTCOME 이 형식 밖이다" "M5($sh): ## 게시 에 남는다"
+
+  # ── I1 — 커밋 안 된 추적 변경이 있으면 게시하지 않는다(판정이 PR 의 커밋과 다르다) ──
+  fresh_proj
+  echo dirty >> "$T/proj/app.txt"
+  SINK_LAST="posted: x" run_fence "$sh" "finished"
+  assert_eq "$LAST" "$DIRTY" "I1($sh): 추적 파일이 바뀌었으면 거절 줄"
+  assert_eq "$(cat "$SINK_LOG")" "" "I1($sh): 작업 트리가 더러우면 sink 를 부르지 않는다"
+  assert_eq "$RC" "0" "I1($sh): rc 0"
+  assert_eq "$(tail -n 1 "$R")" "$DIRTY" "I1($sh): 거절 줄이 ## 게시 에 남는다"
+  fresh_proj
+  echo new > "$T/proj/staged.txt"; gp add staged.txt
+  SINK_LAST="posted: x" run_fence "$sh" "finished"
+  assert_eq "$LAST" "$DIRTY" "I1($sh): 스테이징만 된 변경도 거절"
+  fresh_proj
+  echo more >> "$T/proj/.claude/settings.json"
+  SINK_LAST="posted: y" run_fence "$sh" "finished"
+  assert_eq "$LAST" "posted: y" "I1($sh): .claude/ 아래 추적 파일 변경은 보지 않는다(qg 상태 자리)"
+  fresh_proj
+  echo u > "$T/proj/untracked.txt"
+  SINK_LAST="posted: y" run_fence "$sh" "finished"
+  assert_eq "$LAST" "posted: y" "I1($sh): untracked 파일은 거절 사유가 아니다(--untracked-files=no)"
+  fresh_proj
+  echo dirty >> "$T/proj/app.txt"
+  SINK_LAST="posted: x" run_fence "$sh" "aborted iter 1"
+  assert_eq "$LAST" "skipped: aborted" "I1($sh): aborted 는 작업 트리와 무관하게 skipped: aborted"
+  fresh_proj
+  PATH="$T/gshim:$PATH" SINK_LAST="posted: x" run_fence "$sh" "finished"
+  assert_eq "$LAST" "$STATUS_FAIL" "I1($sh): git status 가 실패하면 거절(fail-closed)"
+  assert_eq "$(cat "$SINK_LOG")" "" "I1($sh): git status 실패면 sink 를 부르지 않는다"
+
+  # ── M1 — 이해글에 판정 줄 모양이 있으면 게시하지 않는다 ──
+  fresh_proj
+  printf '## 한 줄\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · 제외 패치 0 · iter 1 · ccccccc\n' > "$T/proj/.claude/quality-gates/$SID/comment-head.md"
+  SINK_LAST="posted: x" run_fence "$sh" "finished"
+  assert_eq "$LAST" "$HEAD_VLINE" "M1($sh): 이해글의 qg: 줄을 거절"
+  assert_eq "$(cat "$SINK_LOG")" "" "M1($sh): sink 를 부르지 않는다"
+
+  # ── M2 — 같은 실행에서 펜스를 두 번 돌려도 게시는 한 번 ──
+  fresh_proj
+  SINK_LAST="posted: x" run_fence "$sh" "finished"
+  assert_eq "$(wc -l < "$SINK_LOG" | tr -d ' ')" "1" "M2($sh): 첫 실행은 sink 를 한 번 부른다"
+  SINK_LAST="posted: x2" run_fence "$sh" "finished"
+  assert_eq "$LAST" "$AGAIN" "M2($sh): 두 번째 실행은 거절 줄"
+  assert_eq "$(cat "$SINK_LOG")" "" "M2($sh): 두 번째 실행은 sink 를 부르지 않는다"
+  assert_eq "$RC" "0" "M2($sh): 두 번째 실행 rc 0"
+  assert_eq "$(grep -cx '## 게시' "$R")" "1" "M2($sh): ## 게시 절은 여전히 하나"
+  assert_eq "$(tail -n 1 "$R")" "posted: x" "M2($sh): 첫 게시 결과가 그대로 남는다"
+  fresh_proj
+  SINK_LAST="posted: x" run_fence "$sh" "aborted iter 2"
+  SINK_LAST="posted: x" run_fence "$sh" "aborted iter 2"
+  assert_eq "$LAST" "$AGAIN" "M2($sh): aborted 두 번째 실행도 거절 줄"
+  assert_eq "$(grep -cx '## 게시' "$R")" "1" "M2($sh): aborted 두 번이어도 ## 게시 절은 하나"
 
   for bad in "<session-id>" "" "../../../x" "short"; do
     fresh_proj
