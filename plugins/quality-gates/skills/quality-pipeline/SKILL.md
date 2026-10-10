@@ -844,7 +844,7 @@ case "$OUTCOME" in
   aborted*) line="skipped: aborted" ;;
   *)
     vline="$(sed -n '/^## 판정$/,/^## /p' "$RESULT" | grep '^qg: ' | tail -n 1)"
-    if ! st="$(git status --porcelain --untracked-files=no -- . ':!.claude' 2>/dev/null)"; then
+    if ! st="$(git status --porcelain --untracked-files=no -- . ':!.claude/quality-gates' 2>/dev/null)"; then
       line="게시 안 함 — 작업 트리 상태를 읽지 못했다(git status 실패)"
     elif [ -n "$st" ]; then
       line="게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커밋과 다르다 — 커밋·푸시 뒤 다시 /qg)"

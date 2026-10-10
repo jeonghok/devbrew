@@ -62,7 +62,8 @@ fresh_proj() {  # 커밋 하나가 있는 깨끗한 git 리포 · 하위 디렉�
   rm -rf "$T/proj"; mkdir -p "$T/proj/.claude/quality-gates/$SID" "$T/proj/sub"
   git init -q "$T/proj"
   echo app > "$T/proj/app.txt"; echo '{}' > "$T/proj/.claude/settings.json"
-  gp add app.txt .claude/settings.json; gp commit -q -m base
+  echo keep > "$T/proj/.claude/quality-gates/tracked.md"
+  gp add app.txt .claude/settings.json .claude/quality-gates/tracked.md; gp commit -q -m base
   TOP="$(git -C "$T/proj" rev-parse --show-toplevel)"   # macOS 의 /var → /private/var 를 git 이 푼 그대로
   R="$T/proj/.claude/quality-gates/$SID/result.md"
   cat > "$R" <<'EOF'
@@ -161,7 +162,12 @@ for sh in $SHELLS; do
   fresh_proj
   echo more >> "$T/proj/.claude/settings.json"
   SINK_LAST="posted: y" run_fence "$sh" "finished"
-  assert_eq "$LAST" "posted: y" "I1($sh): .claude/ 아래 추적 파일 변경은 보지 않는다(qg 상태 자리)"
+  assert_eq "$LAST" "$DIRTY" "I1($sh): .claude/ 아래 추적 파일 변경(프로젝트 skill·agent·설정)도 거절"
+  assert_eq "$(cat "$SINK_LOG")" "" "I1($sh): .claude/ 추적 변경이면 sink 를 부르지 않는다"
+  fresh_proj
+  echo more >> "$T/proj/.claude/quality-gates/tracked.md"
+  SINK_LAST="posted: y" run_fence "$sh" "finished"
+  assert_eq "$LAST" "posted: y" "I1($sh): qg 세션 자리 .claude/quality-gates/ 의 변경은 보지 않는다"
   fresh_proj
   echo u > "$T/proj/untracked.txt"
   SINK_LAST="posted: y" run_fence "$sh" "finished"

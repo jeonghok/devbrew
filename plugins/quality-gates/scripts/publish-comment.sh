@@ -42,7 +42,8 @@ top="$(git rev-parse --show-toplevel 2>/dev/null)" && cd "$top" \
 # 2. gh 존재·인증 — 부작용 전(P5).
 command -v gh >/dev/null 2>&1 || { echo "publish-comment: gh 가 PATH 에 없다" >&2; skip gh-unavailable; }
 # 활성 계정만 본다 — 다른 호스트·두 번째 계정이 깨졌다고 게시를 잃지 않는다.
-gh auth status --active >/dev/null 2>&1 || { echo "publish-comment: gh 미인증" >&2; skip gh-unavailable; }
+auth_err="$(gh auth status --active 2>&1 >/dev/null)" \
+  || { echo "publish-comment: gh 미인증 —" >&2; printf '%s\n' "$auth_err" | tail -n 3 >&2; skip gh-unavailable; }
 
 # 3. 현재 브랜치의 PR.
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/qg-sink.XXXXXX")" || { echo "publish-comment: 임시 디렉토리를 만들 수 없다" >&2; skip scan-failed; }
@@ -112,7 +113,7 @@ if [ "$first" != "scan_ok: yes" ]; then
 fi
 # 이미지 · HTML 태그 — 렌더링이 본문 속 URL 을 클릭 없이 불러 값이 밖으로 샌다. 코멘트 형식에 없으니 막는다.
 img_rc=0
-LC_ALL=C grep -qiE '!\[|<(img|picture|source|svg)' -- "$body" || img_rc=$?
+LC_ALL=C grep -qiE '!\[|<(img|image|picture|source|svg|video|audio)' -- "$body" || img_rc=$?
 if [ "$img_rc" -eq 0 ]; then
   echo "publish-comment: 본문에 이미지·HTML 태그가 있다 — 게시하지 않는다" >&2
   skip scan-failed
