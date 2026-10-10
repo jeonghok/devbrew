@@ -306,7 +306,7 @@ case_X4_stop_refuses_when_start_time_unknown() {
 
 case_X4_stop_refuses_unreadable_records() {
   local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345" v rc
-  for v in "0 x" "-5 x" "01 x" "99999999999 x"; do
+  for v in "0 x" "-5 x" "01 x" "99999999999 x" "12345678 x"; do
     printf '%s\n' "$v" >"$s/e2e-app.pgid"; rc=0
     bash "$ES" stop --dir "$s" >/dev/null 2>&1 || rc=$?
     assert_eq "$rc" "5" "m7: 기록 '$v' 는 판독 불가(exit 5)"

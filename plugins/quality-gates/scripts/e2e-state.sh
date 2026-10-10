@@ -255,19 +255,18 @@ cmd_stop() {
   if [ ! -s "$pgf" ]; then echo "stopped: none"; return 0; fi
   read -r pg started <"$pgf"
   # pgid 1 · 0 · 음수 · 숫자 아닌 값으로 `kill -- -<pg>` 를 부르면 무관한 프로세스 전체가 맞는다.
-  if ! [[ "$pg" =~ ^[1-9][0-9]{0,9}$ ]] || [ "$pg" -le 1 ]; then
+  if ! [[ "$pg" =~ ^[1-9][0-9]{0,6}$ ]] || [ "$pg" -le 1 ]; then
     echo "e2e-state: stop — pgid 파일이 판독 불가다: $pgf" >&2; exit 5
   fi
-  # 우리 그룹이 아직 있으면 그 pid 는 재사용될 수 없다. 리더가 살아 있는데 시작 시각이 다르면
-  # 우리 그룹은 이미 사라졌고 그 pid 는 남의 것이다 — 그때는 아무것도 죽이지 않는다.
+  # 리더 생존의 유일한 신호는 `ps -o lstart=` 다(kill -0 은 남의 소유 프로세스에 실패한다).
+  # 기록된 시작 시각이 비면 거부 · 보이는 리더의 시작 시각이 기록과 다르면 재사용된 pid 라 죽이지 않음 ·
+  # 리더가 안 보이면 사라진 것으로 보고 남은 자식이 있는 그룹을 내린다.
   now=$(lstart_of "$pg")
-  if kill -0 "$pg" 2>/dev/null; then
-    if [ -z "$now" ] || [ -z "$started" ]; then
-      echo "stop-failed: pgid=$pg (시작 시각을 확인할 수 없어 죽이지 않는다)"; exit 5
-    fi
-    if [ "$now" != "$started" ]; then
-      rm -f "$pgf"; echo "stopped: none (pid $pg 는 다른 프로세스로 재사용됐다)"; return 0
-    fi
+  if [ -z "$started" ]; then
+    echo "stop-failed: pgid=$pg (기록에 시작 시각이 없어 죽이지 않는다)"; exit 5
+  fi
+  if [ -n "$now" ] && [ "$now" != "$started" ]; then
+    rm -f "$pgf"; echo "stopped: none (pid $pg 는 다른 프로세스로 재사용됐다)"; return 0
   fi
   kill -TERM -- "-$pg" 2>/dev/null
   local i=0
