@@ -69,14 +69,18 @@ elif [[ "${pr_base:-}" =~ ^[A-Za-z0-9._/][A-Za-z0-9._/-]*$ ]]; then
 fi
 CORPUS="$WORK/corpus"
 diff_vs_base() { git diff "$@" "$mb" --; }
+# corpus 계약: mb..HEAD 의 git 기본 텍스트 뷰(`log -p --text`, 커밋 메시지 포함) + mb 대비 작업트리 diff
+# + 변경된 추적 파일과 무시되지 않는 untracked 텍스트 파일의 현재 평문.
+# 범위 밖(설계상): 무시된 파일 · 바이너리/NUL 바이트 파일 · LFS 객체 내용 · 병합 해소에만 있는 줄 ·
+# 변경 밖에서 오케스트레이터가 읽은 것.
 build_corpus() {
   local f gr
   echo "=== QG CORPUS (deterministic) ===" || return 1
   echo "base: $mb"
   echo "=== COMMITS ==="
-  git log -p --text --no-textconv --no-ext-diff --no-color --format='%B' "$mb..HEAD" -- || return 1
+  git log -p --text --no-ext-diff --no-color --format='%B' "$mb..HEAD" -- || return 1
   echo "=== WORKTREE DIFF ==="
-  diff_vs_base --text --no-textconv --no-ext-diff --no-color || return 1
+  diff_vs_base --text --no-ext-diff --no-color || return 1
   echo "=== CHANGED FILE CONTENTS ==="
   diff_vs_base -z --name-only --diff-filter=ACMR >"$WORK/names" || return 1
   git ls-files -z --others --exclude-standard >>"$WORK/names" || return 1
@@ -85,8 +89,8 @@ build_corpus() {
     [ -f "$f" ] || continue
     echo "--- FILE: $f ---"
     # grep rc: 0 = 텍스트, 1 = 바이너리(건너뜀), 그 밖 = 읽기 실패(fail-closed)
-    LC_ALL=C grep -Iq -e . -- "$f" 2>/dev/null; gr=$?
-    if [ "$gr" -eq 0 ]; then cat -- "$f" || return 1
+    LC_ALL=C grep -Iq -e . -- "./$f"; gr=$?
+    if [ "$gr" -eq 0 ]; then cat -- "./$f" || return 1
     elif [ "$gr" -ne 1 ]; then return 1; fi
     echo
   done <"$WORK/names.sorted"

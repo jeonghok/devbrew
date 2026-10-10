@@ -299,7 +299,7 @@ case_I2_producer_failure_fails_closed() {
 case_N1_option_shaped_file_names() {
   local tok="Ps5mK9bX3vC7zL1wQ4rT8yH2dF6sJ0gN" leak="$T/leak5.md" f
   printf 'value %s\n' "$tok" > "$leak"
-  for f in -secret.env --number.env -n; do
+  for f in -secret.env --number.env -n -; do
     printf 'secret=%s\n' "$tok" > "$REPO/$f"
     GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
     assert_eq "$LAST" "skipped: scan-failed" "N1: 옵션 모양 파일 이름($f)의 untracked 값이 corpus 에 든다"
@@ -331,6 +331,33 @@ case_N2_binary_attribute_hides_nothing() {
   printf 'keep\n' > "$R3/x.lock"
   SINK_CWD="$R3" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
   assert_eq "$LAST" "skipped: scan-failed" "N2: -diff 속성 파일의 커밋 안 된 삭제(작업트리 diff)"
+}
+
+# ── textconv 가 평문을 내는 파일(git-crypt 꼴)에서 지운 값도 corpus 에 든다 ──────────
+case_T1_textconv_plaintext_in_corpus() {
+  local tok="Qc7nB3vC9xZ5qL1kR2mY6uH4jG8dS0pW" R4="$T/repo4" leak="$T/leak8.md"
+  git init -q -b main "$R4"
+  g4() { git -C "$R4" -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@t "$@"; }
+  git -C "$R4" config filter.rot.clean "tr A-Za-z N-ZA-Mn-za-m"
+  git -C "$R4" config filter.rot.smudge "tr A-Za-z N-ZA-Mn-za-m"
+  git -C "$R4" config diff.rot.textconv cat
+  printf '*.sec filter=rot diff=rot\n' > "$R4/.gitattributes"
+  printf 'keep\nkey=%s\n' "$tok" > "$R4/x.sec"
+  g4 add .gitattributes x.sec; g4 commit -q -m base
+  g4 checkout -q -b feat
+  printf 'value %s\n' "$tok" > "$leak"
+  printf 'keep\n' > "$R4/x.sec"; g4 add x.sec; g4 commit -q -m 'drop key'
+  SINK_CWD="$R4" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "T1: filter+textconv 파일에서 지운 값(평문)이 corpus 에 든다"
+  g4 reset -q --hard HEAD~1
+  printf 'added %s\n' "$tok" > "$R4/y.sec"; g4 add y.sec; g4 commit -q -m add
+  g4 rm -q -f y.sec; g4 commit -q -m revert
+  SINK_CWD="$R4" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "T1: filter+textconv 파일에 더했다 되돌린 값(커밋 패치)"
+  g4 reset -q --hard HEAD~2
+  printf 'keep\n' > "$R4/x.sec"
+  SINK_CWD="$R4" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "T1: filter+textconv 파일의 커밋 안 된 삭제(작업트리 diff)"
 }
 
 # ── 읽을 수 없는 변경 파일은 fail-closed ─────────────────────────────────────────
@@ -378,7 +405,7 @@ for c in case_AC12_posts_one_new_comment case_AC13_no_pr case_AC13_pr_closed \
          case_P5_auth_before_side_effects case_P4_P7_untrusted_bytes case_I1_removed_content_in_corpus \
          case_I2_producer_failure_fails_closed case_subdir_runs_from_repo_root \
          case_N1_option_shaped_file_names case_N2_binary_attribute_hides_nothing \
-         case_unreadable_changed_file_fails_closed case_usage_errors; do
+         case_T1_textconv_plaintext_in_corpus case_unreadable_changed_file_fails_closed case_usage_errors; do
   note "-- $c"
   "$c"
 done
