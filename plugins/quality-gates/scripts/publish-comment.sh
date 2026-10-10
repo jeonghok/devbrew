@@ -70,13 +70,13 @@ fi
 CORPUS="$WORK/corpus"
 diff_vs_base() { git diff "$@" "$mb" --; }
 build_corpus() {
-  local f
+  local f gr
   echo "=== QG CORPUS (deterministic) ===" || return 1
   echo "base: $mb"
   echo "=== COMMITS ==="
-  git log -p --no-ext-diff --no-color --format='%B' "$mb..HEAD" -- || return 1
+  git log -p --text --no-textconv --no-ext-diff --no-color --format='%B' "$mb..HEAD" -- || return 1
   echo "=== WORKTREE DIFF ==="
-  diff_vs_base --no-ext-diff --no-color || return 1
+  diff_vs_base --text --no-textconv --no-ext-diff --no-color || return 1
   echo "=== CHANGED FILE CONTENTS ==="
   diff_vs_base -z --name-only --diff-filter=ACMR >"$WORK/names" || return 1
   git ls-files -z --others --exclude-standard >>"$WORK/names" || return 1
@@ -84,7 +84,10 @@ build_corpus() {
   while IFS= read -r -d '' f; do
     [ -f "$f" ] || continue
     echo "--- FILE: $f ---"
-    if LC_ALL=C grep -Iq . "$f" 2>/dev/null; then cat "$f"; fi
+    # grep rc: 0 = 텍스트, 1 = 바이너리(건너뜀), 그 밖 = 읽기 실패(fail-closed)
+    LC_ALL=C grep -Iq -e . -- "$f" 2>/dev/null; gr=$?
+    if [ "$gr" -eq 0 ]; then cat -- "$f" || return 1
+    elif [ "$gr" -ne 1 ]; then return 1; fi
     echo
   done <"$WORK/names.sorted"
   return 0
@@ -92,6 +95,7 @@ build_corpus() {
 if [ -z "$mb" ]; then
   echo "=== QG CORPUS (degraded: no merge-base) ===" >"$CORPUS"
 elif ! build_corpus >"$CORPUS" 2>"$WORK/corpus.err"; then
+  tail -n 5 "$WORK/corpus.err" >&2
   echo "=== QG CORPUS (degraded: corpus build failed) ===" >"$CORPUS"
 fi
 python3 "$SCRIPT_DIR/secret-scan.py" --payload "$body" --corpus "$CORPUS" >"$WORK/scan.out" 2>"$WORK/scan.err" || true

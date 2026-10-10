@@ -65,7 +65,7 @@ printf '## 이 변경을 한 줄로\n무엇이 바뀌나.\n\n---\nqg: clean · �
 run_sink() {
   local p="$1"; shift
   : > "$GH_LOG"; rm -f "$GH_BODY_COPY"
-  OUT="$(cd "${SINK_CWD:-$REPO}" && PATH="$p" bash "$SINK" "$@" 2>"$T/err")"; RC=$?
+  OUT="$(cd "${SINK_CWD:-$REPO}" && PATH="$p" bash "$SINK" "$@" 2>"$T/err" </dev/null)"; RC=$?
   LAST="$(printf '%s\n' "$OUT" | tail -n 1)"
   GHCALLS="$(cat "$GH_LOG")"
 }
@@ -295,6 +295,55 @@ case_I2_producer_failure_fails_closed() {
   g checkout -q -- a.txt
 }
 
+# ── N1 — 옵션처럼 생긴 파일 이름도 데이터다 ─────────────────────────────────────
+case_N1_option_shaped_file_names() {
+  local tok="Ps5mK9bX3vC7zL1wQ4rT8yH2dF6sJ0gN" leak="$T/leak5.md" f
+  printf 'value %s\n' "$tok" > "$leak"
+  for f in -secret.env --number.env -n; do
+    printf 'secret=%s\n' "$tok" > "$REPO/$f"
+    GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+    assert_eq "$LAST" "skipped: scan-failed" "N1: 옵션 모양 파일 이름($f)의 untracked 값이 corpus 에 든다"
+    rm -f "$REPO/$f"
+  done
+}
+
+# ── N2 — -diff 속성이 지운 줄을 가리지 못한다 ────────────────────────────────────
+case_N2_binary_attribute_hides_nothing() {
+  local tok="Ts8nB4vC2xZ6qL0kR9mY3uH7jG1dS5pE" R3="$T/repo3" leak="$T/leak6.md"
+  git init -q -b main "$R3"
+  g3() { git -C "$R3" -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@t "$@"; }
+  printf '*.lock -diff\n' > "$R3/.gitattributes"
+  printf 'keep\nkey=%s\n' "$tok" > "$R3/x.lock"
+  g3 add .gitattributes x.lock; g3 commit -q -m base
+  g3 checkout -q -b feat
+  printf 'keep\n' > "$R3/x.lock"; g3 add x.lock; g3 commit -q -m 'drop key'
+  printf 'value %s\n' "$tok" > "$leak"
+  SINK_CWD="$R3" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "N2: -diff 속성 파일에서 지운 값도 corpus 에 든다"
+  # 더했다 되돌린 값 — 커밋 패치만 나른다
+  g3 reset -q --hard HEAD~1
+  printf 'added %s\n' "$tok" > "$R3/y.lock"; g3 add y.lock; g3 commit -q -m add
+  g3 rm -q -f y.lock; g3 commit -q -m revert
+  SINK_CWD="$R3" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "N2: -diff 속성 파일에 더했다 되돌린 값(커밋 패치)"
+  g3 reset -q --hard HEAD~2
+  # 커밋 안 된 삭제 — 작업트리 diff 만 나른다
+  printf 'keep\n' > "$R3/x.lock"
+  SINK_CWD="$R3" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "N2: -diff 속성 파일의 커밋 안 된 삭제(작업트리 diff)"
+}
+
+# ── 읽을 수 없는 변경 파일은 fail-closed ─────────────────────────────────────────
+case_unreadable_changed_file_fails_closed() {
+  local tok="Vk2nB6vC8xZ4qL0wR9mY3uH7jG1dS5pT" leak="$T/leak7.md"
+  if [ "$(id -u)" = "0" ]; then note "root 로 돌아 chmod 000 이 막지 못한다 — 건너뜀"; return 0; fi
+  printf 'value %s\n' "$tok" > "$leak"
+  printf 'secret=%s\n' "$tok" > "$REPO/locked.env"; chmod 000 "$REPO/locked.env"
+  GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "읽을 수 없는 untracked 파일 → corpus 를 못 만든 것으로 fail-closed"
+  chmod 600 "$REPO/locked.env"; rm -f "$REPO/locked.env"
+}
+
 # ── 하위 디렉토리에서 불려도 리포 루트 기준이다 ──────────────────────────────────
 case_subdir_runs_from_repo_root() {
   local tok="Hn6bV2mX8cQ4zL0wP7rT3yK9dF1sJ5gA" leak="$T/leak4.md"
@@ -327,7 +376,9 @@ for c in case_AC12_posts_one_new_comment case_AC13_no_pr case_AC13_pr_closed \
          case_AC13_kill_switch_AC14_zero_network case_AC13_scan_failed case_AC13_gh_unavailable \
          case_AC13_too_long case_P1_literal_scan_gate case_P2_degraded_and_corpus_content \
          case_P5_auth_before_side_effects case_P4_P7_untrusted_bytes case_I1_removed_content_in_corpus \
-         case_I2_producer_failure_fails_closed case_subdir_runs_from_repo_root case_usage_errors; do
+         case_I2_producer_failure_fails_closed case_subdir_runs_from_repo_root \
+         case_N1_option_shaped_file_names case_N2_binary_attribute_hides_nothing \
+         case_unreadable_changed_file_fails_closed case_usage_errors; do
   note "-- $c"
   "$c"
 done

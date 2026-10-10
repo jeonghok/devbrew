@@ -132,7 +132,7 @@ def main() -> int:
         # false-trigger the block.
         if re.search(r"^=== QG CORPUS \(degraded", corpus, re.MULTILINE):
             print("scan_ok: no")
-            print("finding: corpus degraded (no merge-base) — fail-closed")
+            print("finding: corpus degraded (no merge-base or corpus build failed) — fail-closed")
             return 2
         findings = scan(payload, corpus)
     except Exception as e:                             # FAIL CLOSED
