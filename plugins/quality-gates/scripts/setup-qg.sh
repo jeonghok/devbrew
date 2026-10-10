@@ -233,7 +233,9 @@ elif [[ -d "$STATE_DIR" ]]; then
     refuse "'$STATE_DIR' 는 세션 마커가 없는 비어 있지 않은 폴더라 이전 실행의 것이 아니다"
   fi
   # 앞 실행이 걷기 도중 끊겨 남긴 e2e 앱이 있으면 폴더(그 pgid 기록)를 지우기 전에 내린다(X4).
-  bash "$SCRIPT_DIR/e2e-state.sh" stop --dir "$STATE_DIR" >/dev/null 2>&1 || echo "[quality-gates] 앞 실행의 e2e 앱을 내리지 못했다 — $STATE_DIR/e2e-app.pgid 를 확인하라" >&2
+  if ! E2E_STOP_OUT=$(bash "$SCRIPT_DIR/e2e-state.sh" stop --dir "$STATE_DIR" 2>&1); then
+    echo "[quality-gates] 앞 실행의 e2e 앱을 내리지 못했다 — ${E2E_STOP_OUT}" >&2
+  fi
   rm -rf -- "./.claude/quality-gates/${SESSION_ID:?}"
 fi
 

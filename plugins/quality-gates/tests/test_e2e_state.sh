@@ -14,7 +14,7 @@ unset DEVBREW_QUALITY_GATES_DISABLE DEVBREW_QUALITY_GATES_DISABLE_E2E DEVBREW_QU
 MARK="300.$$"   # 띄우는 sleep 의 인자 — 프로세스 명령줄에 남는 고유 표지
 TMPLIST="$(mktemp)"   # new_repo 가 $( ) 안에서 돌아도 새지 않게 파일로 적는다
 cleanup() {
-  pkill -f "sleep $MARK" 2>/dev/null
+  pkill -f "$MARK" 2>/dev/null
   local d; while IFS= read -r d; do [ -n "$d" ] && rm -rf "$d"; done <"$TMPLIST"
   rm -f "$TMPLIST"
 }
@@ -273,15 +273,57 @@ case_X4_stop_refuses_unsafe_pgid() {
   assert_eq "$rc" "5" "X4: pgid 1 로는 kill 하지 않는다(exit 5)"
 }
 
+setsid_victim() {   # 자기 그룹의 리더로 $MARK 표지 sleep 을 띄운다 — 전역 VICTIM 에 pid
+  rm -f "$1.pid"
+  python3 -c 'import os, sys
+os.setsid()
+open(sys.argv[2], "w").write(str(os.getpid()))
+os.execvp("sleep", ["sleep", sys.argv[1]])' "$MARK" "$1.pid" >/dev/null 2>&1 &
+  local i=0; while [ ! -s "$1.pid" ] && [ "$i" -lt 25 ]; do sleep 0.1; i=$((i+1)); done
+  VICTIM=$(cat "$1.pid")
+}
+
 case_X4_stop_skips_reused_pid() {
   local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345"
-  sleep 300 &
-  local victim=$!
-  printf '%s %s\n' "$victim" "Thu Jan  1 00:00:00 1970" >"$s/e2e-app.pgid"
+  setsid_victim "$d/v"
+  printf '%s %s\n' "$VICTIM" "Thu Jan  1 00:00:00 1970" >"$s/e2e-app.pgid"
   local out; out=$(bash "$ES" stop --dir "$s")
   assert_grep "$out" '^stopped: none \(pid ' "X4: 시작 시각이 다르면 재사용된 pid 로 보고 죽이지 않는다"
-  kill -0 "$victim" 2>/dev/null && ok "X4: 무관한 프로세스가 살아 있다" || no "X4: 무관한 프로세스를 죽였다"
-  kill "$victim" 2>/dev/null; wait "$victim" 2>/dev/null
+  kill -0 "$VICTIM" 2>/dev/null && ok "X4: 무관한 프로세스가 살아 있다" || no "X4: 무관한 프로세스를 죽였다"
+  kill "$VICTIM" 2>/dev/null
+}
+
+case_X4_stop_refuses_when_start_time_unknown() {
+  local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345"
+  setsid_victim "$d/v"
+  printf '%s\n' "$VICTIM" >"$s/e2e-app.pgid"
+  local rc=0; bash "$ES" stop --dir "$s" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "5" "I2: 시작 시각 없는 기록은 살아 있는 리더를 죽이지 않고 exit 5"
+  kill -0 "$VICTIM" 2>/dev/null && ok "I2: 프로세스가 살아 있다" || no "I2: 시작 시각을 모르는데 죽였다"
+  [ -s "$s/e2e-app.pgid" ] && ok "I2: 기록이 남는다" || no "I2: 기록이 지워졌다"
+  kill "$VICTIM" 2>/dev/null
+}
+
+case_X4_stop_refuses_unreadable_records() {
+  local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345" v rc
+  for v in "0 x" "-5 x" "01 x" "99999999999 x"; do
+    printf '%s\n' "$v" >"$s/e2e-app.pgid"; rc=0
+    bash "$ES" stop --dir "$s" >/dev/null 2>&1 || rc=$?
+    assert_eq "$rc" "5" "m7: 기록 '$v' 는 판독 불가(exit 5)"
+  done
+}
+
+case_I1_m4_bad_timeout_and_port_refused_before_launch() {
+  local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345" rc
+  rc=0; (cd "$d" && DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT=09 bash "$ES" boot --dir "$s" --cmd "touch '$d/booted'" --ready-log x >/dev/null 2>&1) || rc=$?
+  assert_eq "$rc" "2" "I1: 환경 변수 09 는 exit 2"
+  rc=0; (cd "$d" && bash "$ES" boot --dir "$s" --cmd "touch '$d/booted'" --ready-log x --timeout 08 >/dev/null 2>&1) || rc=$?
+  assert_eq "$rc" "2" "I1: --timeout 08 은 exit 2"
+  rc=0; (cd "$d" && bash "$ES" boot --dir "$s" --cmd "touch '$d/booted'" --ready-port 70000 >/dev/null 2>&1) || rc=$?
+  assert_eq "$rc" "2" "m4: --ready-port 70000 은 exit 2"
+  rc=0; (cd "$d" && bash "$ES" boot --dir "$s" --cmd "touch '$d/booted'" --ready-port 0 >/dev/null 2>&1) || rc=$?
+  assert_eq "$rc" "2" "m4: --ready-port 0 은 exit 2"
+  [ ! -e "$d/booted" ] && [ ! -e "$s/e2e-app.pgid" ] && ok "I1: 아무것도 띄우지 않았고 기록도 없다" || no "I1: 잘못된 값인데 띄웠다"
 }
 
 case_X5_AC20_kill_switch_refuses_boot() {

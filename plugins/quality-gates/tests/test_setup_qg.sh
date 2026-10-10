@@ -160,12 +160,24 @@ open(sys.argv[2], "w").write(str(os.getpid()))
 os.execvp("sleep", ["sleep", sys.argv[1]])' "301.$$" "$TMPDIR/lp" >/dev/null 2>&1 & )
 i=0; while [ ! -s "$TMPDIR/lp" ] && [ "$i" -lt 20 ]; do sleep 0.1; i=$((i+1)); done
 lp=$(cat "$TMPDIR/lp")
-printf '%s %s\n' "$lp" "$(ps -o lstart= -p "$lp" | tr -s ' ' | sed 's/^ //; s/ $//')" > ".claude/quality-gates/$SID/e2e-app.pgid"
+printf '%s %s\n' "$lp" "$(LC_ALL=C ps -o lstart= -p "$lp" | tr -s ' ' | sed 's/^ //; s/ $//')" > ".claude/quality-gates/$SID/e2e-app.pgid"
 assert "X4: 대조 — 남은 앱이 떠 있다" "pgrep -f 'sleep 301.$$' >/dev/null"
 "$SCRIPT" --session-id "$SID" >/dev/null 2>&1
 sleep 0.5
 assert "X4: setup 이 같은 세션의 남은 e2e 앱을 내린다" "! pgrep -f 'sleep 301.$$' >/dev/null"
 pkill -f "sleep 301.$$" 2>/dev/null
+cd / && rm -rf "$TMPDIR"
+
+# --- Case X4b: 내리지 못하면 사유가 stderr 에 실린다 ---
+TMPDIR=$(mktemp -d); cd "$TMPDIR"
+SID="test-e2ebad-$$"
+mkdir -p ".claude/quality-gates/$SID"
+: > ".claude/quality-gates/$SID/result.md"
+printf '1 x\n' > ".claude/quality-gates/$SID/e2e-app.pgid"
+"$SCRIPT" --session-id "$SID" >/dev/null 2>err
+RC=$?
+assert "X4b: stop 이 실패해도 setup 은 exit 0" "test '$RC' -eq 0"
+assert "X4b: stderr 에 내리지 못한 사유가 실린다" "grep -q 'pgid 파일이 판독 불가' err"
 cd / && rm -rf "$TMPDIR"
 
 finish
