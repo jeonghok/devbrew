@@ -73,6 +73,7 @@ the pipeline is aborted at a decision point.
 | `branch <name>` · `--reset` · `--gc` · `--pr-url` | 없어졌다(v10) — 안내 한 줄을 내고 실행하지 않는다 |
 | `both` · `review` · `runtime` · `--skip-runtime` | 제거됨 — 한 줄 공지 후 그대로 진행 |
 | `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | 차등 테스트를 건너뛴다 — 판정은 `not-certified (kill-switch)` |
+| `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` | e2e 를 끈다 — 판정 줄의 e2e 칸이 `꺼짐(kill switch)` |
 
 다른 브랜치를 보려면 그 브랜치를 체크아웃하거나 그 브랜치의 git worktree 안에서 `/qg` 를 돌린다.
 세션 폴더는 `/qg` 를 시작할 때마다 지우고 다시 만들며, 오래된 폴더는 같은 시점의 TTL GC 가 회수한다.

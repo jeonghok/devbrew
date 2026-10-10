@@ -170,6 +170,56 @@ case_X3_local_origin_rule() {
   assert_file_grep "$REF" '^- 파일 업로드 · 다운로드 저장 · 외부 계정 로그인 · 결제는 하지 않는다\.$' "X3: 업로드 금지 규칙"
 }
 
+PHIL="$ROOT/docs/philosophy/devbrew-harness-philosophy.md"
+README="$PLUGIN_ROOT/README.md"
+QGMD="$PLUGIN_ROOT/commands/qg.md"
+
+case_AC26_P4_sentence_replaced() {
+  local s; s=$(section "$PHIL" "### P4 — Verification Is Infrastructure")
+  assert_grep "$s" 'qg 는 runtime tier 를 사람이 승인하는 e2e 걷기로 집행한다 — 오케스트레이터의 판정은 판정안이고 reviewer 는 감독하는 사람이다\(Law 2 해석\)\.$' \
+    "AC26: P4 의 새 문장이 문단 끝에 통째로 있다"
+  assert_not_contains "$s" 'runtime tier 를 주장하지 않는다' "AC26: P4 의 옛 문장이 없다"
+  assert_not_contains "$s" 'runtime tier 의 집행 코드가 없다' "AC26: P4 의 옛 문장 앞절도 없다"
+  assert_grep "$s" '^코드\(mechanical · semantic · runtime\): .*`plugins/quality-gates/references/e2e\.md`$' \
+    "AC26: P4 코드 앵커가 references/e2e.md 를 인용한다"
+}
+
+case_readme_documents_the_switches() {
+  assert_file_grep "$README" '^\| `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` \|' "README 표에 DISABLE_E2E 줄이 있다"
+  assert_file_grep "$README" '^\| `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` \|.*e2e 부팅' \
+    "README 의 DISABLE_DIFFERENTIAL_TEST 줄이 e2e 부팅도 막는다고 말한다"
+  assert_file_grep "$README" 'DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT' "README 에 부팅 상한 노브가 있다"
+}
+
+case_readme_describes_the_e2e_stage() {
+  local flow; flow=$(section "$README" "## 파이프라인 흐름 (single-turn)")
+  assert_grep "$flow" '^ ├ e2e ' "README 흐름도에 e2e 줄이 있다"
+  local a b
+  a=$(nline_in "$flow" ' ├ e2e '); b=$(nline_in "$flow" ' ├ Final verdict')
+  if [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ]; then ok "README 흐름도: e2e 가 Final verdict 앞이다"; else no "README 흐름도: e2e 위치 (e2e=$a final=$b)"; fi
+  assert_file_grep "$README" '^\| ④ e2e \|' "README 파이프라인 표에 e2e 행이 있다"
+  assert_file_grep "$README" '^- \*\*e2e\*\*' "README 사전 요건에 e2e 줄이 있다"
+}
+
+case_readme_states_the_e2e_limits() {
+  assert_file_grep "$README" '^- e2e `stop` 은 승인된 명령이 띄운 프로세스 그룹을 내린다\. ' "README: 데몬 · 남은 앱 한계 줄(독립 bullet)"
+  assert_file_grep "$README" '^- e2e 남은 앱: ' "README: 남은 앱 고아 한계"
+  assert_file_grep "$README" '^- e2e `stop` 의 생존 판정: ' "README: stop 의 ps 생존 판정 한계"
+  assert_file_grep "$README" '^- e2e 포트 확인: ' "README: IPv6 한계"
+  assert_file_grep "$README" '^- e2e CLI 직접 걷기: ' "README: CLI 직접 걷기 한계"
+  assert_file_grep "$README" '^- e2e 지문: ' "README: 지문 한계"
+}
+
+case_readme_security_paragraph_and_principle() {
+  assert_file_grep "$README" '^명령을 호스트 권한으로 실행한다 — 시나리오를 고르는 것이 그 실행의 승인이고' "README 보안 문단: e2e 승인 문장"
+  assert_file_grep "$README" '^- \*\*P4 — runtime tier 는 사람이 승인하는 e2e 걷기' "README 인스턴스화한 원칙에 P4 줄"
+  assert_file_absent "$README" '주장을 거둔다' "README: 옛 「주장을 거둔다」 문장이 없다"
+}
+
+case_qgmd_has_disable_e2e_row() {
+  assert_file_grep "$QGMD" '^\| `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` \| e2e 를 끈다 — 판정 줄의 e2e 칸이 `꺼짐\(kill switch\)` \|$' "qg.md 표에 DISABLE_E2E 줄이 있다"
+}
+
 for c in $(declare -F | awk '{print $3}' | grep '^case_'); do
   note "── $c"
   "$c"
