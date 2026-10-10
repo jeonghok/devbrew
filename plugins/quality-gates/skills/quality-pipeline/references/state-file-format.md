@@ -35,7 +35,8 @@ started_at: "<ISO-8601 UTC>"
 
 ## 게시
 
-<게시 sink 의 마지막 줄 원문(posted: … · skipped: …), 또는 skipped: aborted · 게시 안 함 줄>
+<게시 펜스가 낸 줄 하나 — `posted: <url>` · `skipped: <사유>` · `skipped: aborted` · `게시 안 함 — …` ·
+ `게시 결과 불명 — sink 출력 계약 위반(rc N)`>
 ```
 
 ## 생명주기

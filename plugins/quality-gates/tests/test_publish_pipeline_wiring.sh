@@ -103,6 +103,7 @@ for sh in $SHELLS; do
   assert_eq "$(tail -n 1 "$SINK_BODY_COPY")" "qg: clean · 막는 지적 0 · 선택 1 · 차등 새 실패 0 · 제외 패치 1 · iter 2 · bbbbbbb" \
     "K-3($sh): 코멘트 마지막 줄은 result.md ## 판정 의 마지막 판정 줄 원문(절 밖 decoy 아님)"
   assert_eq "$(tail -n 2 "$SINK_BODY_COPY" | head -n 1)" "---" "spec §5($sh): 판정 줄 앞에 구분선"
+  assert_eq "$(tail -n 3 "$SINK_BODY_COPY" | head -n 1)" "" "M4($sh): 구분선 앞은 빈 줄"
   assert_eq "$(head -n 1 "$SINK_BODY_COPY")" "## 한 줄 요약" "spec §5($sh): 코멘트는 이해글로 시작한다"
   assert_eq "$(tail -n 1 "$R")" "posted: https://github.com/o/r/pull/7#issuecomment-9" "K-2($sh): sink 결과가 result.md ## 게시 에 남는다"
   assert_eq "$(grep -cx '## 게시' "$R")" "1" "K-2($sh): ## 게시 절이 하나"
@@ -120,6 +121,19 @@ for sh in $SHELLS; do
   SINK_LAST="posted: x" run_fence "$sh" "finished"
   assert_eq "$(cat "$SINK_LOG")" "" "K-3($sh): 판정 줄이 없으면 sink 를 부르지 않는다"
   assert_eq "$LAST" "게시 안 함 — result.md 의 판정 줄이나 이해글이 없다" "K-3($sh): 판정 줄 없음이 보인다"
+
+  fresh_proj
+  rm -f "$T/proj/.claude/quality-gates/$SID/comment-head.md"
+  SINK_LAST="posted: x" run_fence "$sh" "finished"
+  assert_eq "$(cat "$SINK_LOG")" "" "I1($sh): 이해글이 없으면 sink 를 부르지 않는다"
+  assert_eq "$LAST" "게시 안 함 — result.md 의 판정 줄이나 이해글이 없다" "I1($sh): 이해글 없음이 보인다"
+
+  fresh_proj
+  SINK_LAST="posted: x" run_fence "$sh" "<Final verdict 표의 Outcome 값 그대로>"
+  assert_eq "$(cat "$SINK_LOG")" "" "M5($sh): OUTCOME 자리표시면 sink 를 부르지 않는다"
+  assert_eq "$LAST" "게시 안 함 — OUTCOME 이 형식 밖이다" "M5($sh): OUTCOME 형식 밖이 보인다"
+  assert_eq "$RC" "0" "M5($sh): rc 0"
+  assert_eq "$(tail -n 1 "$R")" "게시 안 함 — OUTCOME 이 형식 밖이다" "M5($sh): ## 게시 에 남는다"
 
   for bad in "<session-id>" "" "../../../x" "short"; do
     fresh_proj
