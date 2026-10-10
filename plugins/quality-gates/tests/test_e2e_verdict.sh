@@ -79,12 +79,22 @@ case_bad_calls_are_usage_errors() {
   assert_eq "$rc" "2" "--e2e-overridden 는 --e2e 없이 exit 2"
   rc=0; python3 "$V" --prior "$T/clean" --defect --e2e pass "${LINE[@]}" >/dev/null 2>&1 || rc=$?
   assert_eq "$rc" "2" "--prior 와 --defect 를 함께 주면 exit 2(앞 판정이 두 번 들어간다)"
+  rc=0; python3 "$V" --prior "" --e2e pass "${LINE[@]}" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "2" "--prior 빈 문자열은 exit 2"
+  rc=0; python3 "$V" --prior "$T/clean" --reason trivia --e2e pass "${LINE[@]}" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "2" "--prior 와 --reason 을 함께 주면 exit 2"
+  rc=0; python3 "$V" --prior "$T/clean" --review-blocked --e2e pass "${LINE[@]}" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "2" "--prior 와 --review-blocked 를 함께 주면 exit 2"
+  rc=0; python3 "$V" --prior "$T/clean" --angle-absent --e2e pass "${LINE[@]}" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "2" "--prior 와 --angle-absent 를 함께 주면 exit 2"
 }
 
 case_V8_unreadable_prior_is_fail_closed() {
   local rc f
   for f in "verdict: clean\nverdict: clean\n" "verdict: maybe\n" "verdict: not-certified\n" \
-           "verdict: clean\nreasons: [scope-empty]\n" "verdict: not-certified\nreason: made-up\nreasons: [made-up]\n" ""; do
+           "verdict: clean\nreasons: [scope-empty]\n" "verdict: not-certified\nreason: made-up\nreasons: [made-up]\n" "" \
+           "verdict: not-certified\nreason: kill-switch\nreasons: [scope-empty, kill-switch]\n" \
+           "verdict: defect\nreason: scope-empty\n"; do
     printf '%b' "$f" >"$T/bad"
     rc=0; python3 "$V" --prior "$T/bad" --e2e pass "${LINE[@]}" >/dev/null 2>&1 || rc=$?
     assert_eq "$rc" "4" "모순되거나 판독 불가한 앞 판정은 exit 4: $(printf '%b' "$f" | tr '\n' '|')"

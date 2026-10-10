@@ -95,6 +95,14 @@ case_V8_malformed_fingerprint_is_not_same() {
   assert_eq "$rc" "4" "판독할 수 없는 지문은 same 이 아니라 exit 4"
 }
 
+case_V8_missing_after_fingerprint_is_not_same() {
+  local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345"
+  fp "$d" "$s/b"
+  local out rc=0; out=$(cmp_out "$d" "$s/b" "$s/missing" 2>/dev/null) || rc=$?
+  [ "$rc" -ne 0 ] && ok "M7: 걷기 뒤 지문 파일이 없으면 비0 (rc=$rc)" || no "M7: 걷기 뒤 지문 파일이 없는데 rc 0"
+  [ "$(printf '%s\n' "$out" | tail -n 1)" != "same" ] && ok "M7: 걷기 뒤 지문 파일이 없으면 same 이 아니다" || no "M7: 없는 지문 파일을 same 으로 읽었다"
+}
+
 # ── X5 · AC20 — kill switch 둘(+전역) 중 하나라도 켜지면 측정·실행 전에 exit 3 ─────────
 case_X5_AC20_kill_switch_refuses_fingerprint_compare() {
   local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345"
@@ -264,6 +272,16 @@ case_RF2_AC21_launcher_exiting_early_leaves_nothing() {
   assert_eq "$(printf '%s\n' "$out" | tail -n 1)" "boot-failed: exit-0" "RF2: 사유가 exit-0"
   sleep 0.5
   assert_eq "$(left)" "0" "RF2: 리더가 남긴 자식도 내려간다"
+}
+
+case_X4_second_boot_with_a_record_is_refused() {
+  # 앞 부팅의 기록이 있는데 다시 띄우면 그 기록이 덮여 앞 앱을 내릴 길이 사라진다.
+  local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345"
+  printf '424242 Thu Jan  1 00:00:00 1970\n' >"$s/e2e-app.pgid"
+  local rc=0; (cd "$d" && bash "$ES" boot --dir "$s" --cmd "touch '$d/booted'" --ready-log x --timeout 5 >/dev/null 2>&1) || rc=$?
+  assert_eq "$rc" "2" "M7: 기록이 있는데 다시 boot 하면 exit 2"
+  [ ! -e "$d/booted" ] && ok "M7: 두 번째 부팅 명령을 실행하지 않았다" || no "M7: 기록이 있는데 부팅 명령을 실행했다"
+  assert_eq "$(cat "$s/e2e-app.pgid")" "424242 Thu Jan  1 00:00:00 1970" "M7: 앞 부팅의 기록이 그대로다"
 }
 
 case_X4_stop_refuses_unsafe_pgid() {

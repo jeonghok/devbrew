@@ -69,6 +69,47 @@ case_I1_cli_direct_walk_is_gated_by_the_fingerprint_rc() {
   assert_not_contains "$s" '만 돌리고 E2 로 간다' "I1: rc 를 보지 않고 E2 로 가는 옛 문장이 없다"
 }
 
+case_I1_each_walk_starts_without_the_previous_walks_files() {
+  # 같은 실행의 두 번째 걷기(다시 걷기 · 리뷰·테스트부터 다시 · Retry)가 앞 걷기의 증거표로 판정안을 내지 않는다.
+  # 지문을 재는 E1 펜스(부팅 · CLI 직접 실행) 각각에서 지우는 줄이 지문 줄보다 앞이다.
+  local s res
+  s=$(section "$SKILL" "## e2e")
+  res=$(printf '%s\n' "$s" | awk '
+    /^```bash$/ { inf = 1; rm = 0; fp = 0; n = 0; next }
+    inf && /^```$/ { inf = 0; if (fp) { total++; if (rm && rm < fp) good++ } next }
+    inf { n++
+          if ($0 == "rm -f \"$D/e2e-evidence.tsv\" \"$D/e2e-after.txt\" \"$D/e2e-before.txt\"") rm = n
+          if (index($0, "\"$QG/scripts/e2e-state.sh\" fingerprint --out \"$D/e2e-before.txt\"") == 1 && !fp) fp = n }
+    END { printf "%d/%d\n", good, total }')
+  assert_eq "$res" "2/2" "I1: E1 펜스 둘 다 지문 앞에서 앞 걷기의 증거표 · 지문 파일을 지운다"
+  assert_not_grep "$s" '^rm -f .*e2e-(app\.pgid|record\.md|flip\.md)' "I1: 걷기 펜스가 pgid · 기록 · 뒤집기 파일은 지우지 않는다"
+}
+
+case_I2_cli_direct_approval_lists_the_command_lines() {
+  assert_eq "$(grep -cxF -- '- CLI 직접 실행 시나리오의 `description` 은 부팅 명령 자리에 실행할 CLI 명령 줄을 전부 글자 그대로 담는다. 고르면 그 줄들만 실행을 승인한다.' "$REF")" "1" \
+    "I2: CLI 직접 실행 시나리오의 질문이 실행할 명령 줄을 보이고, 고르면 그 줄들만 승인한다(줄 전체)"
+  local s; s=$(section "$SKILL" "## e2e")
+  assert_contains "$s" '승인된 CLI 명령 줄만 글자 그대로 실행한다. 그 밖에 리뷰 대상 코드를 실행하는 명령은 돌리지 않는다.' \
+    "I2: SKILL 의 CLI 직접 실행 경로는 승인된 줄만 실행한다"
+}
+
+case_M3_M5_M8_e1_e4_wording() {
+  local s; s=$(section "$SKILL" "## e2e")
+  assert_contains "$s" '- 두 줄이 없고 `boot rc=5` — 부팅이 실패한 뒤 boot 자신의 정리(stop)도 실패했다.' "M3: boot rc=5 갈래가 있다"
+  assert_contains "$s" '남은 앱은 사람이 직접 내려야 한다고 알린다(기록 `e2e-app.pgid` 는 남는다).' "M3: rc=5 는 남은 앱을 사람에게 알린다"
+  assert_contains "$s" '호출의 timeout 은 부팅 상한보다 길게 준다: 기본이면 150000 ms, `DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT` 이 있으면' "M5: E1 의 Bash 호출 timeout 이 부팅 상한보다 길다"
+  assert_contains "$s" '- **다시 걷기** — iteration 을 쓰지 않는다. 시나리오가 쓴 E1 펜스(부팅 펜스, CLI 직접 실행이면 E1 (CLI 직접 실행) 펜스)부터' \
+    "M8: 다시 걷기가 CLI 직접 실행 펜스도 이름으로 가리킨다"
+}
+
+case_M9_preflight_stops_a_leftover_app_before_clearing() {
+  local p st rm
+  p=$(awk '/^\*\*P2 — setup\.\*\*/{w=1} /^\*\*P3 /{w=0} w' "$SKILL")
+  st=$(printf '%s\n' "$p" | grep -nxF -- 'bash "$QG/scripts/e2e-state.sh" stop --dir "$RD"; echo "preflight-stop rc=$?"' | head -n 1 | cut -d: -f1)
+  rm=$(nline_in "$p" 'rm -f "$RD/excluded.md"')
+  if [ -n "$st" ] && [ -n "$rm" ] && [ "$st" -lt "$rm" ]; then ok "M9: P2 가 지우기 전에 남은 앱을 내린다(rc 는 막지 않는다)"; else no "M9: P2 의 stop 줄 위치 (stop=$st rm=$rm)"; fi
+}
+
 case_e2e_fences_guard_the_repo_root() {
   # R-T5e — D 를 정하는 줄은 전부 바로 앞 줄이 rev-parse 실패에 exit 1 하는 TOP 가드다.
   local s nd unguarded
@@ -204,18 +245,25 @@ case_readme_describes_the_e2e_stage() {
 case_readme_states_the_e2e_limits() {
   assert_file_grep "$README" '^- e2e `stop` 은 승인된 명령이 띄운 프로세스 그룹을 내린다\. .*고르지 않는다\.$' "README: 데몬 · 남은 앱 한계 줄(독립 bullet)"
   assert_file_grep "$README" '^- e2e 남은 앱: .*남을 수 있다\.$' "README: 남은 앱 고아 한계"
+  assert_file_grep "$README" '^- e2e 남은 앱: .*다른 세션의 `/qg` 는 앞 세션의 폴더를 보지 않으므로' "M4: 다른 세션의 /qg 는 남은 앱을 내리지 않는다"
+  assert_file_grep "$README" '^- e2e 남은 앱: .*내리지 못하면 사유를 출력한 뒤 pgid 기록이 든 폴더를 지우므로' "M4: setup 백스톱이 stop 실패 뒤 기록을 지운다"
+  assert_file_absent "$README" '`--ensure` 경로로 들어오면' "M4: 옛 「--ensure 경로」 고아 문장이 없다(P2 가 내린다)"
+  assert_file_grep "$README" '^- e2e 증거 판독: .*`—` · `none` 같은 글자는 증거로 읽혀 `충족` 이 그대로 남는다\.$' "M4: 닫힌 증거 없음 목록"
+  assert_file_grep "$README" '^- e2e `stop` 과 다른 사용자의 프로세스: .*`stop-failed` 로 끝난다\.$' "M4: 다른 사용자 프로세스가 섞인 그룹"
+  assert_file_grep "$README" '^- e2e 부팅 정리 실패: .*exit 5 로 끝나고 앱이 남을 수 있다 — 그 앱은 사람이 직접 내려야 한다\.$' "M4: boot exit 5"
   assert_file_grep "$README" '^- e2e `stop` 의 생존 판정: .*갈 수 있다\.$' "README: stop 의 ps 생존 판정 한계"
-  assert_file_grep "$README" '^- e2e 포트 확인: .*보지 못한다\.$' "README: IPv6 한계"
+  assert_file_grep "$README" '^- e2e 포트 확인: .*`::1` 에만 묶이는 서버.*`--host 127\.0\.0\.1` 같은 인자를 쓴다\.$' "README: IPv6 한계(::1 전용 서버 포함)"
   assert_file_grep "$README" '^- e2e CLI 직접 걷기: .*아니다\.$' "README: CLI 직접 걷기 한계"
   assert_file_grep "$README" '^- e2e 지문: .*않는다\.$' "README: 지문 한계"
 }
 
 case_readme_security_paragraph_and_principle() {
   assert_file_grep "$README" '^명령을 호스트 권한으로 실행한다 — 시나리오를 고르는 것이 그 실행의 승인이고' "README 보안 문단: e2e 승인 문장"
+  assert_file_grep "$README" '^코드가 아니라 오케스트레이터가 읽는 지문 rc 다\)\. 선언 경로의$' "I2: README 보안 문단이 CLI 직접 걷기의 게이트는 지문 rc 라고 말한다"
   assert_file_grep "$README" '^- \*\*P4 — runtime tier 는 사람이 승인하는 e2e 걷기.*tests/test_e2e_docs\.sh`\.$' "README 인스턴스화한 원칙에 P4 줄"
   assert_file_absent "$README" '주장을 거둔다' "README: 옛 「주장을 거둔다」 문장이 없다"
   assert_file_absent "$README" '주장만 거뒀다' "README: 옛 「주장만 거뒀다」 문장이 없다"
-  assert_file_grep "$README" '부팅되는 앱의 런타임 행위는 e2e 걷기가 본다\(위 P4 줄\)\.$' "README: LD3 의 새 문장이 줄 끝에 있다"
+  assert_file_grep "$README" '부팅되는 앱의 런타임 행위는 e2e 걷기가 본다\(아래 P4 줄\)\.$' "README: LD3 의 새 문장이 줄 끝에 있다"
   assert_file_grep "$README" '^- \*\*e2e\*\* — `curl`\(API 시나리오를 걸을 때' "README 사전 요건: curl 은 API 시나리오용"
 }
 

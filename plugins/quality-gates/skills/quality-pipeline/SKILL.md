@@ -93,6 +93,7 @@ TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖
 RD="${TOP}/.claude/quality-gates/<session-id>"
 "$QG/scripts/setup-qg.sh" --ensure $ARGUMENTS || exit
 if grep -q '^## 판정$' "$RD/result.md" 2>/dev/null; then "$QG/scripts/setup-qg.sh" $ARGUMENTS || exit; fi
+bash "$QG/scripts/e2e-state.sh" stop --dir "$RD"; echo "preflight-stop rc=$?"
 rm -f "$RD/excluded.md" "$RD/aggregate.yaml" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt"
 ```
 
@@ -103,7 +104,7 @@ belongs to a finished earlier run in this session — setup without `--ensure` r
 Every run then starts without the previous run's `excluded.md` · `aggregate.yaml` · `verdict.out` ·
 `intent.md` · `topic-scope.txt` · `comment-head.md` · `comment.md` · `publish.out` · `publish.err` and the e2e walk files
 (`e2e-record.md` · `e2e-flip.md` · `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt`).
-`e2e-app.pgid` is kept — `## e2e` E0 uses it to bring down an app a cut-off earlier walk left running. Setup refuses an empty or malformed session id (E1). A gone
+`e2e-app.pgid` is kept. The `stop` line brings down an app a cut-off earlier walk left running; show its output, and a non-zero `preflight-stop rc` does not stop the run — `## e2e` E0 tries again with the same record. Setup refuses an empty or malformed session id (E1). A gone
 argument (`branch <name>` · `--reset` · `--gc` · `--pr-url`) prints one line on stdout and exits 2 —
 the run does not start. Non-zero exit → show its output (stdout and stderr) verbatim and stop.
 Below, `RD` is that folder under the **repo root** — setup moves to the git top level itself, so a
@@ -763,12 +764,16 @@ D="${TOP}/.claude/quality-gates/<session-id>"
   전부 `걸을 도구 없음` 이면 그 칸으로 두고 `## Final verdict` 로 간다.
 
 **E1 — 부팅.** 고른 시나리오의 부팅 명령을 글자 그대로 파일에 적고, 지문을 잰 **뒤에만** 부팅한다. `&&` 가 그
-순서를 집행한다 — kill switch 가 켜져 있으면 지문이 exit 3 이고 부팅 명령은 실행되지 않는다.
+순서를 집행한다 — kill switch 가 켜져 있으면 지문이 exit 3 이고 부팅 명령은 실행되지 않는다. 펜스는 앞 걷기의
+증거표와 지문 파일을 먼저 지운다 — 이번 걷기가 쓰지 않은 증거가 판정안이 되지 않게 한다. 이 펜스를 부르는 Bash
+호출의 timeout 은 부팅 상한보다 길게 준다: 기본이면 150000 ms, `DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT` 이 있으면
+그 초 + 60 초.
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 D="${TOP}/.claude/quality-gates/<session-id>"
+rm -f "$D/e2e-evidence.tsv" "$D/e2e-after.txt" "$D/e2e-before.txt"
 cat > "$D/e2e-cmd.txt" <<'E2E_CMD'
 <승인된 부팅 명령 — 한 줄, 글자 그대로>
 E2E_CMD
@@ -781,17 +786,23 @@ E2E_CMD
 - `boot-failed: …` 줄 (`boot rc=4`) — 걷지 않는다. 판정안은 `미확인(부팅 실패)` 이고 증거는 펜스가 보인 부팅 출력
   끝부분이다. E3 의 `stop` 과 지문 비교는 건너뛰고 E4 로 간다.
 - 두 줄이 없고 `boot rc=3` — kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다.
+- 두 줄이 없고 `boot rc=5` — 부팅이 실패한 뒤 boot 자신의 정리(stop)도 실패했다. 띄운 앱이 남았을 수 있다. 펜스 출력과
+  `stop-failed:` 줄(있으면)을 그대로 공시하고, 남은 앱은 사람이 직접 내려야 한다고 알린다(기록 `e2e-app.pgid` 는 남는다).
+  판정안은 `미확인(부팅 실패)` 이고 E3 를 건너뛰고 E4 로 간다.
 - 두 줄이 없고 `boot rc` 가 그 밖의 0 아닌 값(2 · 4) — 지문이나 부팅 호출이 앱을 띄우기 전에 실패했다. stderr 사유를
   공시한다. 고칠 수 있는 호출 오류(인자 · 남은 앱)면 고쳐 이 펜스를 한 번 더 돈다. 그 밖이거나 또 실패하면 판정안
   `미확인(지문 · 부팅 호출 실패)` 로 E3 를 건너뛰고 E4 로 간다.
 
 **E1 (CLI 직접 실행).** CLI 표면이고 부팅 명령이 `없음(CLI 직접 실행)` 이면 위 펜스 대신 이 펜스로 지문만 잰다.
-CLI 걷기는 리뷰 대상 코드를 직접 실행한다 — 이 `before rc` 가 그 실행 앞의 유일한 코드 게이트다.
+CLI 걷기는 리뷰 대상 코드를 직접 실행한다 — 이 `before rc` 가 그 실행 앞의 유일한 코드 게이트다. 걷기에서는 질문에서
+승인된 CLI 명령 줄만 글자 그대로 실행한다. 그 밖에 리뷰 대상 코드를 실행하는 명령은 돌리지 않는다. 펜스는 위 펜스처럼
+앞 걷기의 증거표와 지문 파일을 먼저 지운다.
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 D="${TOP}/.claude/quality-gates/<session-id>"
+rm -f "$D/e2e-evidence.tsv" "$D/e2e-after.txt" "$D/e2e-before.txt"
 "$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-before.txt"; echo "before rc=$?"
 ```
 
@@ -831,8 +842,9 @@ D="${TOP}/.claude/quality-gates/<session-id>"
 **E4 — 걷기 직후 게이트.** 증거표와 판정안을 보이고 레퍼런스 5 절의 게이트를 띄운다. 결과는 6 절의 표로
 e2e 칸과 「사람이 뒤집음」을 정한다. 어느 결과든 E5 로 기록한 뒤 다음으로 간다.
 
-- **다시 걷기** — iteration 을 쓰지 않는다. E1 부터 같은 명령으로 다시 돈다. 판정안이 `미확인(걷기 뒤 지문 실패)` 면
-  걷는 사이 코드가 바뀌었는지 모르므로 이 선택지를 넣지 않는다.
+- **다시 걷기** — iteration 을 쓰지 않는다. 시나리오가 쓴 E1 펜스(부팅 펜스, CLI 직접 실행이면 E1 (CLI 직접 실행) 펜스)부터
+  같은 명령으로 다시 돈다. 판정안이 `미확인(걷기 뒤 지문 실패)` 면 걷는 사이 코드가 바뀌었는지 모르므로 이 선택지를
+  넣지 않는다.
 - **Retry** (fail 행) — `## Fix-loop` 의 Retry 와 같다: iteration 하나를 쓰고, 「적용」 목록만 고친 뒤 `## Flow` 의 ① 리뷰부터
   다시 돈다. 루프가 다시 Stop 없이 끝나면 이 절로 돌아오고, 질문을 생략하고 같은 시나리오 · 같은 명령으로 E1 부터 걷는다.
 - **Accept** (fail 행) — `## Final verdict` 로 간다. Outcome 은 `accepted with findings iter <N>`, e2e 칸은 `fail` 이다.
@@ -989,7 +1001,7 @@ esac
 case "$OUTCOME" in
   aborted*) line="skipped: aborted" ;;
   *)
-    vline="$(sed -n '/^## 판정$/,/^## /p' "$RESULT" | grep '^qg: ' | tail -n 1)"
+    vline="$(awk '/^## 판정$/{if(seen)exit; seen=1; f=1; next} f&&/^## /{exit} f' "$RESULT" | grep '^qg: ' | tail -n 1)"
     if ! st="$(git status --porcelain --untracked-files=no -- . ':!.claude/quality-gates' 2>/dev/null)"; then
       line="게시 안 함 — 작업 트리 상태를 읽지 못했다(git status 실패)"
     elif [ -n "$st" ]; then
