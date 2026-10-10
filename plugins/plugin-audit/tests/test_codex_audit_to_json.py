@@ -151,6 +151,14 @@ class TestCodexAuditToJson(unittest.TestCase):
         for stdin_text in ("", "garbage", event("no fence here")):
             self.assertEqual(run(stdin_text)[0], 0)
 
+    def test_plain_passes_through(self):
+        payload = {"findings": [{"id": "CX-1", "axis": 3, "title": "t", "severity": "IMPORTANT",
+                                 "evidence": [{"file": "a.py", "line": 1}], "plain": "쉬운 한 문장"}],
+                   "d_verdicts": [], "oq_answers": [], "new_open_questions": []}
+        rc, out, _ = run(event(fenced(payload)))
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out)["findings"][0]["plain"], "쉬운 한 문장")
+
 
 if __name__ == "__main__":
     unittest.main()

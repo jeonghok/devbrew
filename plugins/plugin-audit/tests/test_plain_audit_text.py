@@ -131,5 +131,64 @@ class AssembleTextTest(unittest.TestCase):
         self.assertNotIn("axis incomplete", json.dumps(data, ensure_ascii=False))
 
 
+PREAMBLE = PLUGIN / "scripts" / "codex-prompt-preamble.md"
+CONVERTER = PLUGIN / "scripts" / "codex_audit_to_json.py"
+
+
+class PlainFieldTest(unittest.TestCase):
+    """`plain:` 칸 — 형식(codex 프롬프트) · 넘기기(변환기 · 조립) · 그리기(렌더)를 끝에서 끝까지."""
+
+    def test_preamble_offers_plain_as_optional(self):
+        text = PREAMBLE.read_text(encoding="utf-8")
+        self.assertIn("Optional `plain` (string): the same finding in one plain sentence a first-time reader "
+                      "understands, no internal IDs.", flat(text))
+        self.assertIn('"plain": "one plain sentence for a first-time reader"', text)
+
+    def test_codex_plain_reaches_the_report_heading_first(self):
+        payload = {"findings": [
+            {"id": "CX-1", "axis": 3, "title": "t1", "severity": "IMPORTANT",
+             "evidence": [{"file": "a.py", "line": 1, "quote": "q"}], "plain": "쉬운 한 문장"},
+            {"id": "CX-2", "axis": 3, "title": "t2", "severity": "SUGGESTION",
+             "evidence": [{"file": "b.py", "line": 2, "quote": "q"}]}],
+            "d_verdicts": [], "oq_answers": [], "new_open_questions": []}
+        ev = json.dumps({"type": "item.completed", "item": {"type": "agent_message",
+                         "text": "```json\n" + json.dumps(payload) + "\n```"}}) + "\n"
+        conv = subprocess.run([sys.executable, str(CONVERTER)], input=ev, capture_output=True, text=True)
+        self.assertEqual(conv.returncode, 0, conv.stderr)
+        found = json.loads(conv.stdout)["findings"]
+        wf_findings = []
+        for f in found:
+            g = dict(f)
+            g.update({"source": "codex", "status": "reported"})
+            wf_findings.append(g)
+        meta = {"date": "2026-01-01", "fanout_declared": 30,
+                "consent": {"approved": True, "at": "2026-01-01T00:00Z", "fanout": 30},
+                "codex": {"ran": True, "version": "1.0"}, "target": "myplugin", "seed_provided": False}
+        files = {
+            "workflow-return": {"findings": wf_findings, "d_verdicts": [], "oq_answers": [],
+                                "new_open_questions": [], "axis_failures": [], "degraded_events": []},
+            "codex-side": {"d_verdicts": [], "oq_answers": [], "new_open_questions": []},
+            "meta": meta, "assigned": {"assigned_d": [], "assigned_oq": []},
+        }
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            argv = [sys.executable, str(ASSEMBLE)]
+            for flag, obj in files.items():
+                p = d / (flag + ".json")
+                p.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+                argv += ["--" + flag, str(p)]
+            data_p, md_p = d / "audit-data.json", d / "audit.md"
+            argv += ["--repo-root", str(d), "--no-grounding", "--out", str(data_p)]
+            r = subprocess.run(argv, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = subprocess.run([sys.executable, str(RENDER), str(data_p), "--out", str(md_p)],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            md = md_p.read_text(encoding="utf-8")
+        self.assertIn("### [IMPORTANT] 쉬운 한 문장 (t1 · CX-1)\n", md)
+        self.assertIn("### [SUGGESTION] t2 (CX-2)\n", md, "plain 없는 codex 지적도 버려지지 않고 나온다")
+        self.assertNotIn("None", md, "codex 의 최소 필드 지적에도 None 이 찍히지 않는다")
+
+
 if __name__ == "__main__":
     unittest.main()

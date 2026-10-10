@@ -340,3 +340,17 @@ test('결함 #9 대칭 절반 양성 짝 — 축 refuter 가 판정하면 그 �
   assert.notEqual(f.unverified, true, '판정을 받은 finding 은 unverified 가 아니다')
   assert.equal(axisMissedVerdictEvents(result).length, 0)
 })
+
+test('AXIS_SCHEMA findings 에 plain 이 선택 속성으로 있다', async () => {
+  const { captured } = await runWorkflow(WF, { stubAgent: stubOneFinding() })
+  const items = captured['감사'].properties.findings.items
+  assert.equal(items.properties.plain.type, 'string')
+  assert.ok(items.properties.plain.description.includes('first-time reader'))
+  assert.ok(!items.required.includes('plain'), 'plain 은 required 가 아니다 — 칸이 없는 지적도 산다')
+})
+
+test('감사자가 쓴 plain 이 Workflow 결과의 finding 에 그대로 남는다', async () => {
+  const { result } = await runWorkflow(WF, { stubAgent: stubOneFinding('IMPORTANT', { plain: '쉬운 한 문장' }) })
+  const f = result.findings.find((x) => x.id === 'A1-1')
+  assert.equal(f.plain, '쉬운 한 문장')
+})

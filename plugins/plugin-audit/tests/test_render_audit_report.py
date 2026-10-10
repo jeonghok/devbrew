@@ -391,6 +391,26 @@ class PlainLanguageReport(unittest.TestCase):
         self.assertIn("    - `b.py:2` — 우주장: q2\n", md)
         self.assertNotIn("보고되지 않았다", md, "양쪽 다 근거가 있으면 빈 쪽 문장이 없다(Review Focus 2)")
 
+    def test_plain_first_then_title(self):
+        rc, md, err, _ = render(self._data([self._f("A1-1", "CRITICAL", plain="설치본에서 이 파일을 읽을 수 없다")]))
+        self.assertEqual(rc, 0, err)
+        self.assertIn("### [CRITICAL] 설치본에서 이 파일을 읽을 수 없다 (제목 A1-1 · A1-1)\n", md)
+
+    def test_plain_absent_uses_title(self):
+        rc, md, err, _ = render(self._data([self._f("A1-1", "CRITICAL")]))
+        self.assertEqual(rc, 0, err)
+        self.assertIn("### [CRITICAL] 제목 A1-1 (A1-1)\n", md, "plain 없는 지적은 지금처럼 나온다(버리지 않는다)")
+
+    def test_plain_blank_uses_title(self):
+        rc, md, err, _ = render(self._data([self._f("A1-1", "CRITICAL", plain="  ")]))
+        self.assertEqual(rc, 0, err)
+        self.assertIn("### [CRITICAL] 제목 A1-1 (A1-1)\n", md)
+
+    def test_plain_with_newline_stays_one_heading(self):
+        rc, md, err, _ = render(self._data([self._f("A1-1", "CRITICAL", plain="첫 줄\n둘째 줄")]))
+        self.assertEqual(rc, 0, err)
+        self.assertIn("### [CRITICAL] 첫 줄 둘째 줄 (제목 A1-1 · A1-1)\n", md)
+
 
 if __name__ == "__main__":
     unittest.main()

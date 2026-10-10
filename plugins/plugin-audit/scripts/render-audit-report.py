@@ -131,7 +131,12 @@ def render(data: dict) -> str | None:
     lines.append("## 발견")
     for f in findings:
         badge = " ⚑ 두 모델 독립 확인" if f.get("cross_model_confirmed") else ""
-        lines.append(f"### [{f.get('severity')}] {f.get('title')} ({f.get('id')}){badge}{deep_label(f)}")
+        plain = f.get("plain")
+        if isinstance(plain, str) and plain.strip():
+            head = f"{' '.join(plain.split())} ({f.get('title')} · {f.get('id')})"
+        else:
+            head = f"{f.get('title')} ({f.get('id')})"
+        lines.append(f"### [{f.get('severity')}] {head}{badge}{deep_label(f)}")
         for ev in f.get("evidence", []):
             lines.append(f"- {ev_text(ev)}")
         lines.append(f"- 피해: {val(f.get('user_harm'))}")
