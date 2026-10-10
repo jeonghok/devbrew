@@ -145,7 +145,7 @@ _DR_LINEAGE_NOT_RERAISE = (
 EXEMPT = {
     # ("plugins/.../foo.py", 146): "C6(1) 제자리 변형 루프 — 버려지는 항목이 없다",
     # 줄번호 키 — 합성기를 고치는 PR 마다 실측으로 재앵커한다(exempt_stale=0 이 답한다).
-    ("plugins/quality-gates/scripts/synthesize_findings.py", 497,
+    ("plugins/quality-gates/scripts/synthesize_findings.py", 310,
      "continue in dedup @ if f.get('promoted')"):
         "C6(1) — dedup() 의 이 continue 는 `promoted` 항목을 그룹핑에서만 "
         "제외한다. 항목 자체는 이 loop 이전에 계산된 `passthrough` 리스트에 "

@@ -110,7 +110,7 @@ gate_c_window() {
   awk '/^\*\*C — /{f=1} /^\*\*D — /{f=0} f && $0 !~ /^#/' "$PROFILE"
 }
 gate_d_window() {
-  awk '/^\*\*D — /{f=1} /^## 근거 기준/{f=0} f && $0 !~ /^#/' "$PROFILE"
+  awk '/^\*\*D — /{f=1} /^\*\*E — /{f=0} /^## 근거 기준/{f=0} f && $0 !~ /^#/' "$PROFILE"
 }
 evidence_section() {
   awk '/^## 근거 기준/{f=1; next} /^## /{f=0} f && $0 !~ /^#/' "$PROFILE"
@@ -190,5 +190,26 @@ assert_not_fixed "$(evidence_section)" '비워 둬도' "근거 기준 — '비�
 # `to` 는 이 셋 중 하나이고 `` 부터 고정한다.
 assert_fixed "$(disposition_section)" '`raise` 의 `to` 는 이 셋 중 하나이고 **지금보다 높아야** 한다' \
   "처분 어휘 — raise 의 to 는 지금보다 높아야 한다(주어부터 전체 문장, 하향 금지)"
+
+# ── v10 — 관문 D 의 경계 줄과 관문 E(처방 초과). E 는 D 뒤에 서고, lower 의 목적지와 근거
+# 요구를 문장 전체로 고정한다(부분 문자열 락은 문장 뒤 부정을 못 잡는다 — 그래서 주어부터).
+gate_e_window() {
+  awk '/^\*\*E — /{f=1} /^## 근거 기준/{f=0} f && $0 !~ /^#/' "$PROFILE"
+}
+assert_file_grep "$PROFILE" '^\*\*E — ' "관문 E 마커 존재"
+E_LN="$(grep -nE '^\*\*E — ' "$PROFILE" | head -1 | cut -d: -f1)"; E_LN="${E_LN:-0}"
+if [ "$E_LN" -gt "$D_LN" ] 2>/dev/null; then ok "관문 E 는 D 뒤다 ($D_LN < $E_LN)"; else no "관문 E 가 D 뒤에 있지 않다 (D=$D_LN E=$E_LN)"; fi
+assert_fixed "$(gate_d_window)" '변경이 스스로 더하거나 고친 통제가 뚫리는 구체 경로를 짚으면 막는 지적이다' \
+  "관문 D — 경계 줄(변경이 고친 통제의 구체 경로는 막는 지적)"
+assert_fixed "$(gate_e_window)" '이 변경에서 생기는 구체적 실패를 보이지 못하면 `lower` 한다' \
+  "관문 E — lower 의 조건(구체적 실패를 보이지 못함)"
+assert_fixed "$(gate_e_window)" '목적지는 `SUGGESTION` 이고, `evidence` 에 의도 출처의 문장이나 diff hunk 를 인용한다' \
+  "관문 E — 목적지는 SUGGESTION 하나 · 근거 인용"
+assert_fixed "$(gate_e_window)" '관문 D 의 경계 줄에 걸리는 것도 lower 하지 않는다' \
+  "관문 E — D 의 경계 줄과 겹치면 lower 하지 않는다"
+assert_fixed "$(evidence_section)" '`lower` 는 **반드시** `evidence` 에 의도 출처의 문장이나 diff hunk 를 인용한다' \
+  "근거 기준 — lower 는 근거 필수(주어부터 전체 문장)"
+assert_fixed "$(disposition_section)" '`lower` 의 목적지는 `SUGGESTION` 하나뿐이고 `evidence` 가 있어야 한다' \
+  "처분 어휘 — lower 의 목적지 · 근거"
 
 finish

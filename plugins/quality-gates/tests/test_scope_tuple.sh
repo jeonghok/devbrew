@@ -123,7 +123,7 @@ case_non_blocking_statuses_disclose_only() {
 
 case_defect_beats_scope_reason() {
   T=$(mktemp -d)
-  printf -- '- {agent: r, file: a.py, line: 1, severity: SUGGESTION, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/findings.yaml"
+  printf -- '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, summary: s, proposed_fix: f}\n' > "$T/findings.yaml"
   rf_prep "$T"
   rf_reply "$T" 'verdicts: []
 added: []'

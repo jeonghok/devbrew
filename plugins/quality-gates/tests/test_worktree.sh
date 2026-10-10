@@ -13,7 +13,6 @@ set -u
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SETUP="$PLUGIN_DIR/scripts/setup-qg.sh"
 DISCOVER="$PLUGIN_DIR/scripts/discover-plan.sh"
-TRIVIA="$PLUGIN_DIR/scripts/check-trivia.sh"
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
@@ -52,7 +51,7 @@ SID="wt1session01"
 )
 RC=$?
 
-if [[ "$RC" -eq 0 && -f "$WT/.claude/quality-gates/$SID/pipeline.md" ]]; then
+if [[ "$RC" -eq 0 && -f "$WT/.claude/quality-gates/$SID/result.md" ]]; then
   ok "T1a: state file created inside worktree"
 else
   no "T1a: state file missing in worktree (rc=$RC)"
@@ -64,7 +63,7 @@ else
   no "T1b: LEAKAGE — origin repo has state for SID=$SID"
 fi
 
-if grep -q "session_id: \"$SID\"" "$WT/.claude/quality-gates/$SID/pipeline.md" 2>/dev/null; then
+if grep -q "session_id: \"$SID\"" "$WT/.claude/quality-gates/$SID/result.md" 2>/dev/null; then
   ok "T1c: state frontmatter carries correct session_id"
 else
   no "T1c: state file missing session_id frontmatter"
@@ -107,23 +106,13 @@ else
   no "T3a: got '$WT_BRANCH', expected '$BRANCH'"
 fi
 
-# Stage a change in worktree; trivia/diff should observe it
+# Stage a change in worktree; diff should observe it
 echo "extra line" >> "$WT/README.md"
 DIFF_BYTES=$(cd "$WT" && git diff HEAD | wc -c)
 if [[ "$DIFF_BYTES" -gt 0 ]]; then
   ok "T3b: git diff HEAD sees worktree-local changes"
 else
   no "T3b: git diff HEAD empty in worktree"
-fi
-
-# trivia script runs cleanly from worktree (exit 0 or 1 are both expected
-# verdicts; we only assert it doesn't crash)
-OUT=$(cd "$WT" && HOME="$WT" "$TRIVIA" 2>&1)
-RC=$?
-if [[ "$RC" -eq 0 || "$RC" -eq 1 ]]; then
-  ok "T3c: check-trivia.sh ran from worktree (rc=$RC)"
-else
-  no "T3c: check-trivia.sh unusual rc=$RC, out=$OUT"
 fi
 
 rm -rf "$(dirname "$REPO")"
@@ -141,10 +130,9 @@ rm -rf "$(dirname "$REPO")"
 # T3-3: codex-reviewer.md deleted — removed from this loop (no longer applicable post-T3-3).
 # T3-2: synthesizer.md deleted — removed from this loop (no longer applicable post-T3-2).
 # T3-1: scout.md deleted — removed from this loop (no longer applicable post-T3-1).
-# PR4a: adversarial.md deleted — removed from this loop. Its replacement,
-# quality-gates:doc-recritic (Phase 1.5), declares no project_dir input_slot
-# by design (shared docreview contract; project_dir rides inside <document>).
-for agent in test-scope-validator security-reviewer; do
+# PR4a: adversarial.md deleted — removed from this loop. The re-critic is
+# quality-gates:code-recritic (Step 3.5), which declares project_dir (checked below).
+for agent in test-scope-validator security-reviewer code-recritic; do
   if grep -q 'project_dir' "$PLUGIN_DIR/agents/$agent.md"; then
     ok "T8: agents/$agent.md declares project_dir input"
   else
@@ -167,8 +155,9 @@ fi
 # anchored fallback for security-reviewer is removed (drift-prone).
 SKILL_MD="$PLUGIN_DIR/skills/quality-pipeline/SKILL.md"
 T5_FAIL=0
-# PR4a: adversarial dropped — its replacement (doc-recritic, Phase 1.5) has no
-# project_dir dispatch slot by design (same reason as the T8 loop above).
+# PR4a: adversarial dropped. code-recritic (Step 3.5) delivers project_dir as a
+# `<project_dir>` slot, not a `project_dir:` field — shared/tests/test_agent_input_slots.sh
+# measures that delivery.
 for name in test-scope-validator security-reviewer; do
   if ! awk -v name="quality-gates:$name" '
     $0 ~ name { found=NR }

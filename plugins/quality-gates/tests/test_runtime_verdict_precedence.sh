@@ -145,7 +145,7 @@ case_same_as_head_never_unqualified() {
 # needle 은 SKILL.md 본문의 **연속 부분문자열**이어야 한다 — 백틱 하나 어긋나면
 # grep -F 가 못 찾고 락은 조용히 통과한다(이 plan 작성 중 실제로 한 번 어긋났다).
 case_skill_unclaimed_blocks_pass() {
-  local w; w=$(section_window '**Step R8' '## Final Summary')
+  local w; w=$(section_window '**Step R8' '## Fix-loop')
   if [[ $(count_in "$w" '가 하나라도 있으면 `verification: degraded` 이고 clean 불가') -ge 1 ]] \
      && [[ $(count_in "$w" '열거가 인증을 대신하지 않는다') -ge 1 ]]; then
     ok "R8 절이 unclaimed → verification degraded → clean 불가를 명시"
@@ -157,7 +157,7 @@ case_skill_unclaimed_blocks_pass() {
 # 정확히 M19("영향분 러너 부재를 gap: closed 로 처리해 PASS 허용")이므로 **같은 줄**을
 # 잰다. 실측: 행만 옮기는 mutation 에 다른 12 케이스는 전부 GREEN 이었다.
 case_skill_runner_absent_blocks_pass() {
-  local w; w=$(section_window '**Step R8' '## Final Summary')
+  local w; w=$(section_window '**Step R8' '## Fix-loop')
   if printf '%s\n' "$w" | grep -F '러너 부재 exit 3' | grep -qF '**불가**'; then
     ok "영향분 러너 부재(exit 3)가 clean 불가 행에 있다"
   else
@@ -251,7 +251,7 @@ case_skill_gap_gate_zero_click() {
 case_skill_bulk_disclosure() {
   local w2 w8
   w2=$(section_window '**Step R2' '**Step R3')
-  w8=$(section_window '**Step R8' '## Final Summary')
+  w8=$(section_window '**Step R8' '## Fix-loop')
   if [[ $(count_in "$w2" '커버리지 미보장(러너가 선택을 무시함)') -ge 1 ]] \
      && [[ $(count_in "$w8" '커버리지 미보장(러너가 선택을 무시함)') -ge 1 ]]; then
     ok "bulk 커버리지 미보장 공시가 계획 산문과 보고서 양쪽에"
@@ -413,7 +413,7 @@ case_flaky_is_a_note_not_a_category() {
 # Retry 가 있는 실행은 영원히 clean 에 도달하지 못한다. 양+음 쌍으로 잠근다: "이어 쓴다"
 # 재도입은 금지(음), "새로 쓴다" 지시는 실재해야 한다(양).
 case_ledger_overwrites_not_appends() {
-  local w; w=$(section_window '**Step R8' '## Final Summary')
+  local w; w=$(section_window '**Step R8' '## Fix-loop')
   local bad=0
   if printf '%s\n' "$w" | grep -qF '원장을 이어 쓴다'; then
     bad=1; echo "    (regress) R8 이 원장을 '이어 쓴다'고 지시 — Retry 가 doubled ledger 로 영원히 거부된다"

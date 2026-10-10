@@ -53,15 +53,16 @@ mkdir -p "$tmp/root/scripts" "$tmp/bin"
 abort_trigger_sleeping_codex "$tmp/binabort"
 
 # 실제 러너가 필요로 하는 형제들은 진짜를 쓰고, 추출기만 실패하는 스텁으로 바꾼다.
-# `discover-spec.sh` 이 source 하는 `discover_common.sh` 도 형제다 — 빠지면 러너가
-# 조용히 빈 <spec_context> 로 degrade 해, 이 테스트가 재는 경로가 바뀌면서도 GREEN 이
-# 유지된다(실측: spec 해석이 `plugin install incomplete` 로 떨어짐).
+# `discover-spec.sh` 가 부르는 `resolve-baseline.sh` 도 형제다. 빌더가 읽는 리뷰 기준
+# (`references/review-criteria.md`)이 빠지면 빌더가 rc 2 로 죽고 그 죽음이 prompt_build_failed
+# 로 읽혀, 이 테스트가 재려던 경로(추출기 실패)와 다른 이유로 끝난다.
 # `codex_prompt_common.py` 는 빌더의 **형제 import** 다(stdout 가드 + P21 로더 정본의
 # 사본) — 빠지면 빌더가 ImportError 로 죽고, 그 죽음도 degrade 로 읽혀 이 테스트가
 # 재려던 경로(추출기 실패)와 **다른 이유**로 GREEN 이 된다.
-for f in build_codex_prompt.py codex_prompt_common.py discover-spec.sh discover_common.sh prompt-preamble.md; do
+for f in build_codex_prompt.py codex_prompt_common.py discover-spec.sh resolve-baseline.sh prompt-preamble.md; do
   [ -f "$QG/scripts/$f" ] && cp "$QG/scripts/$f" "$tmp/root/scripts/"
 done
+mkdir -p "$tmp/root/references" && cp "$QG/references/review-criteria.md" "$tmp/root/references/"
 printf '#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n' > "$tmp/root/scripts/codex_findings_to_yaml.py"
 chmod +x "$tmp/root/scripts/codex_findings_to_yaml.py"
 # codex 자체는 스텁 — 이 테스트는 네트워크·모델을 쓰지 않는다.
@@ -84,7 +85,7 @@ else
   no "2 — 실패가 codex_failed로 표시된다"; sed 's/^/      /' "$out" 2>/dev/null
 fi
 # stderr가 **비어있지 않다**로는 아무것도 재지 못한다: 이 러너는 모든 분기에서
-# `[quality-gates] codex spec context: …` 한 줄을 stderr에 쓰므로 `[ -s err.txt ]`는
+# `[quality-gates] codex intent: …` 한 줄을 stderr에 쓰므로 `[ -s err.txt ]`는
 # 반증 불가능한 assert였고, degrade echo를 통째로 지워도 GREEN이었다
 # (2026-08-05 /qg 라운드 2, mutation 확인). degrade **고유** 문구를 찾는다.
 if grep -q '추출 실패' "$tmp/err.txt" 2>/dev/null; then

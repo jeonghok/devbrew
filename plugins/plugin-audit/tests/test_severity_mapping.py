@@ -1,8 +1,9 @@
 """severity 어휘 통일의 매핑 락.
 
 무손실 rename 이 아니다. 매핑을 잘못 잡으면 **머지 차단 임계가 이동한다** —
-quality-gates/scripts/synthesize_findings.py:388 이 미지 severity 를 SUGGESTION 으로
-강등하므로, plugin-audit 이 HIGH 를 계속 내보내면 그것이 조용히 최하위로 떨어진다.
+quality-gates/scripts/synthesize_findings.py 가 미지 severity 를 IMPORTANT 로 올리고
+강제로 세지만(v11.0.0 이전에는 SUGGESTION 으로 강등했다), 옛 어휘 HIGH 를 계속 내보내면
+어휘가 둘로 갈라진다.
 
 이 락이 재는 것 셋:
   A) plugin-audit 의 어휘가 {CRITICAL, IMPORTANT, SUGGESTION} 안에 있다.

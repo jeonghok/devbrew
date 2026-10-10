@@ -51,7 +51,16 @@ case_new_wording_present() {
     "critiquing SKILL 이 코드 대상을 한 파이프라인으로 보낸다"
 }
 
-for c in case_gate_era_tokens_absent case_new_wording_present; do
+case_codex_consent_gate_not_claimed() {
+  # 최종 리뷰 M5 — codex 의 「First-use cost consent gate」 는 구현된 적이 없다. 막지 않는 것을 막는다고
+  # 믿게 하는 선언이 README 에 남지 않는다. 음의 락이라 그 단락의 남은 문장을 양의 짝으로 잰다.
+  assert_file_absent "$QG/README.md" '[Cc]onsent gate prompts via|First-use cost consent' \
+    "README 가 없는 codex 비용 동의 게이트를 주장하지 않는다"
+  assert_file_grep "$QG/README.md" 'every non-trivia pipeline iteration when detected \(scope-independent\)\*\*\. Disable globally with `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1`\.$' \
+    "Codex reviewer cost 단락은 kill switch 로 끝난다 (양의 짝)"
+}
+
+for c in case_gate_era_tokens_absent case_new_wording_present case_codex_consent_gate_not_claimed; do
   "$c"
 done
 finish

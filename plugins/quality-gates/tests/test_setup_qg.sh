@@ -24,12 +24,19 @@ TMPDIR=$(mktemp -d); cd "$TMPDIR"
 SID="test-fresh-$$"
 unset CLAUDE_CODE_SESSION_ID
 "$SCRIPT" --session-id "$SID" >/dev/null 2>&1
-STATE_FILE=".claude/quality-gates/$SID/pipeline.md"
+STATE_FILE=".claude/quality-gates/$SID/result.md"
 assert "fresh state file created" "test -f '$STATE_FILE'"
 assert "state contains session_id" "grep -q 'session_id:' '$STATE_FILE'"
 assert "state has no runtime_max_resolutions (해소 루프 제거)" "! grep -q 'runtime_max_resolutions' '$STATE_FILE'"
 assert "v1.32.0 schema: no project_dir in state" "! grep -q '^project_dir:' '$STATE_FILE'"
 assert "v1.32.0 schema: no gate2_iteration phantom" "! grep -q '^gate2_iteration:' '$STATE_FILE'"
+# K-2 — setup 은 frontmatter(session_id · started_at)와 제목만 쓴다.
+assert "K-2: session_id 가 이 SID 다" "grep -qx 'session_id: \"$SID\"' '$STATE_FILE'"
+assert "K-2: started_at 이 있다" "grep -q '^started_at: \"' '$STATE_FILE'"
+assert "K-2: 제목이 '# qg result' 다" "grep -qx '# qg result' '$STATE_FILE'"
+assert "K-2: 옛 '## History' 절이 없다" "! grep -q '^## History' '$STATE_FILE'"
+# K-1 「② 뒤」 — setup 이 옛 이름(pipeline.md)으로는 쓰지 않는다. 위 test -f 가 양의 짝이다.
+assert "K-1: setup 이 pipeline.md 를 쓰지 않는다" "! test -e '.claude/quality-gates/$SID/pipeline.md'"
 cd / && rm -rf "$TMPDIR"
 
 # --- Case 2: --ensure idempotency (second call is no-op; same mtime) ---
@@ -37,7 +44,7 @@ TMPDIR=$(mktemp -d); cd "$TMPDIR"
 SID="test-ensure-$$"
 unset CLAUDE_CODE_SESSION_ID
 CLAUDE_CODE_SESSION_ID="$SID" "$SCRIPT" --ensure >/dev/null 2>&1
-STATE_FILE=".claude/quality-gates/$SID/pipeline.md"
+STATE_FILE=".claude/quality-gates/$SID/result.md"
 mtime1=$(stat -f %m "$STATE_FILE" 2>/dev/null || stat -c %Y "$STATE_FILE")
 sleep 1
 CLAUDE_CODE_SESSION_ID="$SID" "$SCRIPT" --ensure >/dev/null 2>&1
@@ -50,7 +57,7 @@ TMPDIR=$(mktemp -d); cd "$TMPDIR"
 SID="test-maxres-$$"
 unset CLAUDE_CODE_SESSION_ID
 DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS=99 "$SCRIPT" --session-id "$SID" >/dev/null 2>err
-STATE_FILE=".claude/quality-gates/$SID/pipeline.md"
+STATE_FILE=".claude/quality-gates/$SID/result.md"
 assert "옛 해소 루프 스위치는 상태에 흔적이 없다" "! grep -q 'runtime_max_resolutions' '$STATE_FILE'"
 assert "옛 해소 루프 스위치에 경고도 없다(읽는 자리가 없다)" "! grep -q 'RUNTIME_MAX_RESOLUTIONS' err"
 cd / && rm -rf "$TMPDIR"

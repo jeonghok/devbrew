@@ -60,10 +60,12 @@ case_old_surface_absent() {
 }
 
 case_new_skeleton_present() {
-  assert_file_grep "$SKILL" '^## Pipeline$'                         "SKILL 에 파이프라인 절이 있다"
+  assert_file_grep "$SKILL" '^## Flow$'                             "SKILL 에 흐름 절이 있다"
   assert_file_grep "$SKILL" '^## Differential test$'                "SKILL 에 차등 테스트 포인터 절이 있다"
   assert_file_grep "$SKILL" 'references/differential-test\.md'      "포인터가 새 레퍼런스를 가리킨다"
-  assert_file_grep "$SKILL" '^\*\*Step 1c '                         "Review 절에 ② 의 자리(Step 1c)가 있다"
+  assert_eq "$(grep -E '^## ' "$SKILL" | tr '\n' '|')" \
+    "## 사람에게 쓰는 글|## Preflight|## Flow|## Review|## Differential test|## Fix-loop|## Final verdict|## kill switch|## Rules|## Requirement index|" \
+    "K-8 — SKILL 의 ## 절이 이 순서다(③ 은 Publish, ④ 는 e2e 를 끼우며 이 핀을 고친다)"
   assert_file_grep "$REF"   '^## Differential test$'                "레퍼런스 머리 헤딩(스플라이스 앵커)"
   assert_file_grep "$REF"   'scripts/seal-worktree\.sh" seal'       "HEAD 축은 봉인에서 선다"
   assert_file_grep "$REF"   'scripts/qg-worktree\.sh" create-head'  "HEAD 축 트리를 만든다"
@@ -84,15 +86,16 @@ case_reference_step_set() {
 }
 
 case_pipeline_order() {
-  # 설계 §6.1 — ② 가 ③ 보다 앞(load-bearing). 파이프라인 절 안에서 ①→⑤ 가 이 순서로 처음 나온다.
+  # C1 — 리뷰(①) → 차등 테스트(②) → 합성·판정(③). 흐름 절 안에서 이 순서로 처음 나온다.
   local body prev=0 n m good=1
-  body=$(awk '/^## Pipeline$/{f=1;next} f&&/^## /{exit} f' "$SKILL")
-  for m in ① ② ③ ④ ⑤; do
+  body=$(awk '/^## Flow$/{f=1;next} f&&/^## /{exit} f' "$SKILL")
+  for m in ① ② ③; do
     n=$(printf '%s\n' "$body" | grep -n "$m" | head -1 | cut -d: -f1)
     if [ -z "$n" ] || [ "$n" -le "$prev" ]; then good=0; fi
     prev=${n:-0}
   done
-  assert_eq "$good" "1" "파이프라인 절이 ①→②→③→④→⑤ 순서로 적혀 있다"
+  assert_eq "$good" "1" "흐름 절이 ① 리뷰 → ② 차등 테스트 → ③ 합성·판정 순서로 적혀 있다 (C1)"
+  assert_grep "$(printf '%s\n' "$body" | grep '①')" '리뷰' "① 은 리뷰다 (C1 — 리뷰가 차등보다 먼저)"
 }
 
 case_no_gate_scope_question() {

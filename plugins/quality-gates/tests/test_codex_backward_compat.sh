@@ -94,7 +94,7 @@ fi
 # 자기 제외는 이 열거와 **무관하게** 먼저 확인한다(재귀 방지) — "codex" 언급
 # 이라는 우연에 기대면 파일명이 바뀌거나 codex 언급이 사라질 때 198초 × 무한
 # 재귀가 부활한다. is_excluded의 SELF 검사가 반드시 첫 줄이어야 하는 이유.
-CODEX_TOUCHING_TESTS="test_detect_codex.sh test_findings_parser.sh test_sandbox_enforced.sh test_failure_injection.sh test_scout_codex_integration.sh test_cost_consent.sh"
+CODEX_TOUCHING_TESTS="test_detect_codex.sh test_findings_parser.sh test_sandbox_enforced.sh test_failure_injection.sh test_cost_consent.sh"
 
 # ── 제외 목록 크기 핀 (라운드 1 리뷰 L2, L1과 공유) ──────────────────────────
 # 아래 제외 목록 알람(당시 이름 "커버리지 래칫")은 "entry가 몰래 늘어나거나 정당성을
@@ -112,7 +112,7 @@ CODEX_TOUCHING_TESTS="test_detect_codex.sh test_findings_parser.sh test_sandbox_
 # 그대로 두고) 두 검사 모두 같이 RED가 된다 — 완전히 독립은 아니다: 목록을
 # 정말로 늘리면서 이 핀도 같은 커밋에서 의식적으로 고치면 둘 다 조용히
 # 통과한다. 그 "의식적 갱신 강제"가 정확히 래칫이 원하는 동작이다.
-EXCLUDED_TESTS_PIN=7   # CODEX_TOUCHING_TESTS 6개 + self(이 파일) 1개 — 2026-08-10 확정치
+EXCLUDED_TESTS_PIN=6   # CODEX_TOUCHING_TESTS 5개 + self(이 파일) 1개 — test_scout_codex_integration.sh 삭제(qg v10 ②)
 
 SELF="$(basename "${BASH_SOURCE[0]}")"
 is_excluded() {   # $1 = 테스트 파일 경로

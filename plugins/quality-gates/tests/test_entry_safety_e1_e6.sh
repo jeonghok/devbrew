@@ -19,6 +19,10 @@ unset CLAUDE_CODE_SESSION_ID DEVBREW_QUALITY_GATES_DISABLE DEVBREW_SKIP_HOOKS \
 TMP="$(mktemp -d)"
 [ -n "$TMP" ] && [ -d "$TMP" ] || { echo "mktemp -d 실패 — 아무것도 재지 않았다"; exit 1; }
 trap 'rm -rf "$TMP"' EXIT
+# setup 은 git 리포 안이면 최상위로 옮겨 일한다 — mktemp 가 어떤 리포 안이면 fixture 가 그 리포에 쓴다.
+if git -C "$TMP" rev-parse --show-toplevel >/dev/null 2>&1; then
+  echo "mktemp -d 가 git 리포 안이다($TMP) — 아무것도 재지 않았다"; exit 1
+fi
 
 age() {   # age <경로…> — mtime 을 48시간 전으로 (TTL 24h 를 넘긴다)
   python3 - "$@" <<'PY'
@@ -57,7 +61,7 @@ SID="e1session0001"
 assert_eq "$rc" "0" "E1: 같은 세션의 다시 실행은 exit 0 (활성 파이프라인 거부가 없다)"
 [ ! -e "$W/.claude/quality-gates/$SID/leftover.md" ] \
   && ok "E1: 다시 실행이 자기 세션 폴더를 지우고 새로 만든다" || no "E1: 이전 실행의 파일이 남았다"
-[ -f "$W/.claude/quality-gates/$SID/pipeline.md" ] && ok "E1: 새 pipeline.md 가 있다" || no "E1: pipeline.md 가 없다"
+[ -f "$W/.claude/quality-gates/$SID/result.md" ] && ok "E1: 새 result.md 가 있다" || no "E1: result.md 가 없다"
 [ -f "$W/.claude/quality-gates/siblingsess01/pipeline.md" ] \
   && ok "E1: 다시 실행 뒤에도 형제 세션 폴더가 그대로다" || no "E1: 다시 실행이 형제 폴더를 지웠다"
 : > "$W/.claude/quality-gates/$SID/kept-by-ensure.md"
@@ -158,8 +162,8 @@ for reserved in worktrees baseline-cache; do
   : > "$WR/.claude/quality-gates/$reserved/qg-baseline-abc/file"
   refusal_check "예약 이름 $reserved" "$WR" "$reserved"
   refusal_check "예약 이름 $reserved (--ensure)" "$WR" "$reserved" --ensure
-  [ ! -e "$WR/.claude/quality-gates/$reserved/pipeline.md" ] \
-    && ok "E1: 예약 이름 $reserved 아래에 pipeline.md 를 심지 않는다" || no "E1: 예약 폴더에 pipeline.md 가 생겼다"
+  [ ! -e "$WR/.claude/quality-gates/$reserved/result.md" ] \
+    && ok "E1: 예약 이름 $reserved 아래에 result.md 를 심지 않는다" || no "E1: 예약 폴더에 result.md 가 생겼다"
   # 마커 가드가 못 막는 모양 — 이미 마커가 심긴 예약 폴더(이름 검사만이 막는다).
   WR2="$TMP/e1res2-$reserved"
   mkdir -p "$WR2/.claude/quality-gates/$reserved/keepdir"
@@ -194,9 +198,9 @@ python3 - "$PC/scripts/qg-gc.py" <<'PY2'
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
-old = 'SESSION_MARKERS = ("pipeline.md",'
+old = 'SESSION_MARKERS = ("result.md",'
 assert s.count(old) == 1
-open(p, "w", encoding="utf-8").write(s.replace(old, 'SESSION_MARKERS = ("zz-new-marker.md", "pipeline.md",'))
+open(p, "w", encoding="utf-8").write(s.replace(old, 'SESSION_MARKERS = ("zz-new-marker.md", "result.md",'))
 PY2
 WN="$TMP/e1newmarker"; mkdir -p "$WN/.claude/quality-gates/newmarkersess1"
 : > "$WN/.claude/quality-gates/newmarkersess1/zz-new-marker.md"; : > "$WN/.claude/quality-gates/newmarkersess1/old.md"
@@ -231,8 +235,8 @@ for how in env same-arg; do
   assert_eq "$rc" "0" "E1: 자기 세션($how) 폴더에 pr-understanding.md 만 있어도 exit 0"
   [ ! -e "$WO/.claude/quality-gates/$OWN/pr-understanding.md" ] \
     && ok "E1: 자기 세션($how) 폴더를 지우고 다시 만들었다" || no "E1: 자기 세션($how) 폴더의 이전 파일이 남았다"
-  [ -f "$WO/.claude/quality-gates/$OWN/pipeline.md" ] \
-    && ok "E1: 자기 세션($how) 폴더에 새 pipeline.md 가 있다" || no "E1: 자기 세션($how) 폴더에 pipeline.md 가 없다"
+  [ -f "$WO/.claude/quality-gates/$OWN/result.md" ] \
+    && ok "E1: 자기 세션($how) 폴더에 새 result.md 가 있다" || no "E1: 자기 세션($how) 폴더에 result.md 가 없다"
 done
 # 다른 세션 — 마커가 있는 그 폴더도(마커 가드라면 지웠을 모양) 지우지 않는다.
 WX="$TMP/e1other"; mkdir -p "$WX/.claude/quality-gates/othersession01"
@@ -261,8 +265,24 @@ assert_eq "$rc" "0" "E1: critique 는 전역 kill switch 도 setup 이 아니라
 (cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 "$SETUP" docs/x.md >/dev/null 2>&1); rc=$?
 assert_eq "$rc" "1" "E1: critique 가 첫 인자가 아니면 여전히 Unknown argument 다 (양의 짝)"
 (cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 "$SETUP" >/dev/null 2>&1)
-[ -f "$WC/.claude/quality-gates/critiquesess1/pipeline.md" ] \
+[ -f "$WC/.claude/quality-gates/critiquesess1/result.md" ] \
   && ok "E1: 같은 환경에서 인자 없이는 세션 폴더를 만든다 (양의 짝 — 위 부재가 공허하지 않다)" || no "E1: 양의 짝 실행이 폴더를 만들지 않았다"
+
+note "── E1(하위 디렉토리): 세션 폴더는 git 최상위에 선다 — SKILL 의 RD 와 같은 자리"
+WS="$TMP/e1subdir"; mkdir -p "$WS/sub/deeper"
+(cd "$WS" && git init -q .) >/dev/null 2>&1
+SUBSID="e1subsess0001"
+(cd "$WS/sub/deeper" && "$SETUP" --session-id "$SUBSID" >/dev/null 2>&1); rc=$?
+assert_eq "$rc" "0" "E1: 하위 디렉토리에서 setup 은 exit 0"
+[ -f "$WS/.claude/quality-gates/$SUBSID/result.md" ] \
+  && ok "E1: 하위 디렉토리에서 시작해도 result.md 는 리포 최상위에 생긴다" || no "E1: 리포 최상위에 result.md 가 없다"
+[ ! -e "$WS/sub/deeper/.claude" ] && [ ! -e "$WS/sub/.claude" ] \
+  && ok "E1: 하위 디렉토리에 .claude 를 만들지 않는다" || no "E1: 하위 디렉토리에 .claude 가 생겼다"
+# P2 재실행 위생 — 최상위 result.md 에 옛 「## 판정」 이 있으면 하위에서 다시 setup 해도 그 파일이 새로 선다.
+printf '\n## 판정\nverdict: clean\n' >> "$WS/.claude/quality-gates/$SUBSID/result.md"
+(cd "$WS/sub" && "$SETUP" --session-id "$SUBSID" >/dev/null 2>&1)
+assert_file_absent "$WS/.claude/quality-gates/$SUBSID/result.md" '^## 판정' \
+  "E1: 하위에서 다시 setup 하면 최상위의 옛 판정이 지워진다 (K-2)"
 
 note "── E2: 플러그인 루트를 cwd 로 대체하지 않는다"
 W="$TMP/e2"; mkdir -p "$W/scripts"

@@ -43,13 +43,13 @@ grep -qF 'publish-eligible' <<<"$WIN" \
 SKILL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 RG="$PLUGIN_ROOT/skills/quality-pipeline/references/differential-test.md"
 
-FS="$(awk '/^## Final Summary/{f=1;print;next} f&&/^## /{exit} f{print}' "$SKILL")"
-grep -qF 'render-terminal.py table' <<<"$FS" \
-  && ok "B3a 양성 증인: Final Summary 절이 자기 고유 산출물(표 렌더)을 담는다" \
-  || no "B3a 앵커 죽음 — Final Summary 절을 못 찾았다"
+FS="$(awk '/^## Final verdict/{f=1;print;next} f&&/^## /{exit} f{print}' "$SKILL")"
+grep -qF 'render-terminal.py" table' <<<"$FS" \
+  && ok "B3a 양성 증인: Final verdict 절이 자기 고유 산출물(표 렌더)을 담는다" \
+  || no "B3a 앵커 죽음 — Final verdict 절을 못 찾았다"
 grep -qF 'publish-eligible' <<<"$FS" \
-  && no "B3a: Final Summary 가 여전히 sentinel 을 쓴다" \
-  || ok "B3a: Final Summary 가 sentinel 을 쓰지 않음"
+  && no "B3a: Final verdict 가 여전히 sentinel 을 쓴다" \
+  || ok "B3a: Final verdict 가 sentinel 을 쓰지 않음"
 
 # R8 은 differential-test.md 의 마지막 스텝(R9 삭제, R-AG) — 창은 파일 끝까지다.
 R8="$(awk '/^\*\*Step R8/{f=1} f{print}' "$RG")"
