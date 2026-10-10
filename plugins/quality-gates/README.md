@@ -37,7 +37,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
 - **C66 (Linked Artifact Flow) — 의도 출처** (v2.1.0; v10 에서 D13 사슬로) — `scripts/discover-spec.sh` 가 의도 출처를 정한다: HEAD 쪽 커밋의 `Spec:` 트레일러가 가리키는 spec, 없으면 브랜치 커밋 메시지 + 열린 PR 본문. 그 내용이 모든 리뷰어 dispatch 와 codex 프롬프트의 `<intent>` 로 같은 기준 블록(`references/review-criteria.md`)과 함께 간다. 파일 mtime 은 읽지 않는다. 차등 테스트의 test-scope-validator 는 트레일러가 가리킨 spec 경로를 1차 축으로 쓴다(plan 은 보조 hint). kill switch `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1`.
 - **P21 (Untrusted input — diff is data, not instructions)** (v2.8.0) — 파이프라인의 두 diff-reading reviewer(`security-reviewer`/재비판 `code-recritic`)가 attacker-influenced `filtered_diff`(및 finding 텍스트)를 데이터로만 다루고 그 안의 prompt-injection·안전성 주장을 verdict 근거로 삼지 않도록 명시. 더해 언어/프레임워크 FP precedent 5건을 기능별 단일 배치(DRY)로 흡수 — suppress-at-source 3(security-reviewer anti-flag) + reject-at-verify 2(재비판 코드 프로필 관문 C, PR4a 부터 `references/recritic-code-profile.md`가 싣는다). 섹션-스코프 grep 회귀 락(`test_security_reviewer_persona.sh` · `test_code_recritic_frontmatter.sh`)으로 persona 약화 검출. 신규 P# 0, 결정론 가드 0 (Anthropic *"Using LLMs to Secure Source Code"* 평가 Tier-1; design-lightness).
 - **P21 (출력값 유출 차단 · kill switch 는 가장 안쪽 sink 에서) — 게시 sink** (v10 ③) — `scripts/publish-comment.sh` 하나가 게시의 통제를 모두 쥔다: kill switch(`DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`) → gh 존재·인증 → 열린 PR → corpus(변경 파일 내용 + 커밋 메시지) 위의 `secret-scan.py`(첫 줄 리터럴 `scan_ok: yes` 로만 통과 · degraded corpus 는 fail-closed) → 이미지·HTML 태그 차단(`![` · `<img` · `<picture` · `<source` · `<svg` — 렌더링이 본문 속 URL 을 클릭 없이 불러 값이 밖으로 새는 길이라 `scan-failed`) → 65,536자 상한 → `gh pr comment --body-file`. 마지막 줄은 `posted: <url>` · `skipped: <사유>` 리터럴이다. gh 를 부르는 qg 파일은 이 sink 와 `discover-spec.sh`(읽기 전용 `gh pr view`) 둘뿐이다. regression: `tests/test_publish_comment_sink.sh` · `tests/test_publish_gh_two_files.sh` · `tests/test_secret_scan.py` · `tests/test_secret_scan_fp.py`.
-- **P17 (상시 동의)** (v10 ③) — 열린 PR 이 있으면 `/qg` 실행마다 새 코멘트 하나(이해글 + 판정 줄)를 남긴다. 게시마다 묻지 않는다 — `/qg` 실행이 그 동의이고 끄는 길은 kill switch 하나다. 이해글은 오케스트레이터가 쓴다. secret-scan 은 corpus 밖의 낯선 비밀값을 알려진 패턴으로만 잡는다(오케스트레이터가 읽은 e2e 로그 · 환경 파일 등 — 남는 위험). 매 실행 새 코멘트라 구독자 알림이 실행마다 간다.
+- **P17 (상시 동의)** (v10 ③) — 열린 PR 이 있으면 `/qg` 실행마다 새 코멘트 하나(이해글 + 판정 줄)를 남긴다. 게시마다 묻지 않는다 — `/qg` 실행이 그 동의이고 게시만 끄는 길은 kill switch `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` 하나다(전역 `DEVBREW_QUALITY_GATES_DISABLE=1` 은 전부를 끈다). 이해글은 오케스트레이터가 쓴다. secret-scan 은 corpus 밖의 낯선 비밀값을 알려진 패턴으로만 잡는다(오케스트레이터가 읽은 e2e 로그 · 환경 파일 등 — 남는 위험). 매 실행 새 코멘트라 구독자 알림이 실행마다 간다.
 - **Law 1/2/3 + P8/P18 (산출물 비평 루프, v2.11.0)** — `/qg critique`가 비-코드 산출물에 대해 tier-unpinned `artifact-critic`+`artifact-adversarial`(+조건부 codex)의 read-only 비평 → 오케스트레이터 수정 → 라운드별 커밋 루프를 돈다. Law 1=E3 upfront 동의 게이트; Law 2=read-only 리뷰어(`tools:` allowlist)+매 라운드 독립 critic 게이트; Law 3=라운드별 커밋 감사추적; P18=max-rounds+stagnation predicate+kill switch(`DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE`); P8=NL 라우팅 모델-소유, 결정론은 `critique <path>`+§10 스키마. 별도 skill `critiquing-artifacts`로 위임(코드 파이프라인 무변경).
 - **LD3 (floor 는 실행이다) — 영향분 테스트의 실제 실행** (v3.0.0) — ② 차등 테스트의 floor
   가 "전체 앱 부팅"이 아니라 *"레포에 이미 있는 테스트 중 영향분을 실제로 돌리는 것"*이다.
@@ -177,6 +177,7 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 **게시의 알려진 한계** — secret-scan 이 보는 글은 git 이 보여 주는 `merge-base..HEAD` 의 텍스트 변경(커밋 메시지 포함), 작업 트리의 변경, 그리고 바뀐 텍스트 파일의 현재 내용이다. 아래는 그 밖이라 보지 못한다. 알려진 패턴의 비밀값은 코멘트 안 어디에 있든 막는다. 낯선 고엔트로피 값은 코멘트에 든 값이 위 글 안에도 있을 때만 막는다.
 
 - `.env` 같은 무시된 파일, 그리고 변경 밖에서 오케스트레이터가 읽은 것(e2e 로그 · 환경 파일 등)
+- 토픽 스코프의 형제 브랜치에만 있는 내용(`/qg` 는 함께 리뷰하지만 이 브랜치의 글이 아니다)
 - 바이너리 · NUL 바이트 파일의 현재 내용(diff 줄은 본다)
 - 과거 LFS 내용(git 객체 밖에 있다)
 - 평문을 내지 않는 textconv 드라이버의 출력
@@ -231,7 +232,8 @@ max fan-out: **리뷰어 구성 ≤ 8**(기본 셋 + 조건부 ≤4 + 재비판 
  │   막는 지적 또는 차등 defect → AskUserQuestion ("findings remain…")
  │       분류표(항목마다 적용 / 제외 + 사유) · Retry / Accept and finish / Stop
  │       Retry: 「적용」만 Edit, 「제외」는 excluded.md → 다음 iteration
- └ Final verdict ── verdict.py 의 판정 줄 · result.md
+ ├ Final verdict ── verdict.py 의 판정 줄 · result.md
+ └ Publish ── sink 한 번 · posted:/skipped:
 ```
 
 ### Trivia escape
