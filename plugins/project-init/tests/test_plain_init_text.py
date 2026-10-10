@@ -44,5 +44,24 @@ class CompletionReportTest(unittest.TestCase):
         self.assertNotIn("/commit-push-pr", joined)
 
 
+README = PLUGIN / "README.md"
+
+
+class ReadmeTest(unittest.TestCase):
+    def setUp(self):
+        self.text = README.read_text(encoding="utf-8")
+
+    def test_lead_says_what_it_does(self):
+        lead = " ".join(self.text.split("\n## ", 1)[0].split("\n", 1)[1].split())
+        self.assertTrue(lead.startswith("프로젝트의 git 작업 규칙(브랜치 이름 · 커밋 메시지 · PR 절차)과 프로젝트 헌장을 "
+                                        "짧은 대화로 만들어 준다."), lead[:80])
+        self.assertIn("브랜치 이름과 커밋 메시지를 확인해 알려 준다(막지는 않는다).", lead)
+
+    def test_principles_heading_is_the_canonical_one(self):
+        lines = self.text.splitlines()
+        self.assertEqual(lines.count("## Principles Instantiated"), 1)
+        self.assertNotIn("## 인스턴스화한 원칙", lines)
+
+
 if __name__ == "__main__":
     unittest.main()

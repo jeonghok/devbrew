@@ -190,5 +190,23 @@ class PlainFieldTest(unittest.TestCase):
         self.assertNotIn("None", md, "codex 의 최소 필드 지적에도 None 이 찍히지 않는다")
 
 
+README = PLUGIN / "README.md"
+
+
+class ReadmeTextTest(unittest.TestCase):
+    def setUp(self):
+        self.text = README.read_text(encoding="utf-8")
+        self.lead = flat(self.text.split("\n## ", 1)[0].split("\n", 1)[1])
+
+    def test_lead_says_what_it_does(self):
+        self.assertTrue(self.lead.startswith("devbrew 플러그인 하나를 고치지 않고 읽기만 해서 감사한다."), self.lead[:80])
+        self.assertIn("결과는 증거가 붙은 빈틈 목록이고, 심각한 것부터 정렬된다.", self.lead)
+
+    def test_done_report_line_matches_the_skill(self):
+        body = flat(self.text)
+        self.assertIn("감사가 끝나면 상태 한 줄과 리포트(`audit.md`) 경로를 보고한다 — 데이터 · 원장 경로는 물으면 보인다.", body)
+        self.assertNotIn("세 파일의 절대경로", body)
+
+
 if __name__ == "__main__":
     unittest.main()

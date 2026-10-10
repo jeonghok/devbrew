@@ -1,6 +1,8 @@
 # project-init 플러그인
 
-Claude Code용 git workflow 초기화 플러그인. 어떤 프로젝트에든 branching strategy, commit conventions, PR process 룰을 생성한다.
+프로젝트의 git 작업 규칙(브랜치 이름 · 커밋 메시지 · PR 절차)과 프로젝트 헌장을 짧은 대화로 만들어 준다.
+결과는 에이전트가 읽는 `AGENTS.md`(그리고 그것을 가리키는 `CLAUDE.md`)와 `docs/` 문서다. 그 뒤로는 훅 하나가
+`Bash` 호출에서 브랜치 이름과 커밋 메시지를 확인해 알려 준다(막지는 않는다).
 
 ## 아키텍처
 
@@ -93,7 +95,7 @@ plugins/project-init/
   - 5.0.0 부터 `DEVBREW_PROJECT_INIT_DISABLE=1` 은 훅만이 아니라 `/project-init` 진입도 `disabled` no-op 으로 만든다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다.
   - 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 호출을 끊는다(헤드리스에서는 출력 없이 끝난다).
 
-## 인스턴스화한 원칙
+## Principles Instantiated
 
 이 플러그인은 다음 devbrew 법칙·원칙을 인스턴스화합니다
 ([`docs/philosophy/devbrew-harness-philosophy.md`](../../docs/philosophy/devbrew-harness-philosophy.md) 참고):
