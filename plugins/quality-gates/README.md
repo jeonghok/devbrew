@@ -16,7 +16,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
 - **P12 anti-corollary (former AP5, trivia ceremony) 회피** — 한 문장으로 설명되는 diff(typo · rename · 주석만 · 포매팅 — 파일 수와 무관)를 오케스트레이터가 판단해 trivia 로 닫는다(판정 `not-certified (trivia)`). `Spec:` 선언이 있으면 trivia escape 를 쓰지 않는다.
 - **P22 anti-corollary (former AP9, over-dispatching / subagent spray) 회피** — 파이프라인은 fan-out consent 게이트를 fire하지 않고(documented-not-implemented였음), transparency 라인 + 선언된 max fan-out(리뷰어 구성 iteration 당 ≤ 8, 총/iteration ≤ 10) + authoring-time hard-review로 subagent spray를 억제.
 - **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — 파이프라인 내부 fix-loop이 iteration 상한 5(N=5 에는 Retry 가 없고 Max-iter decision 으로 간다) + 항목마다 사용자 적용/제외 결정 + kill switch로 묶임.
-- **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (`*.local.md` gitignore 패턴으로 자동 제외; `/qg` 시작마다 자기 폴더를 다시 만들고 TTL sweep 으로 폴더 GC).
+- **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (따로 무시되지 않는다 — 「파이프라인 state」 절; `/qg` 시작마다 자기 폴더를 다시 만들고 TTL sweep 으로 폴더 GC).
 - **P8 determinism-economy (harness lightness — trust the model)** (v2.5.0) — 암묵 session scope로 파이프라인이 돌 때 그 사실을 사용자-가시 한 줄로 밝히는 **scope 투명성**. 버려진 결정론적 under-coverage 경고를 결정론 가드가 아니라 *모델 행동*으로 대체(git 비교·차단 없음). 자연어 scope 의도는 별도 parser 없이 모델이 branch scope로 해석 — `/qg branch`는 결정론적 escape hatch로 유지. devbrew P8 determinism-economy refinement("Zero hooks" 일반화) instantiation.
 - **P8 determinism-economy — self-honest verdict floor** (v2.6.0; routing 제거·단순화 v2.7.0) — 파이프라인이 *검토받았다고 믿는 scope*와 *resolve한 scope*가 발산할 때(빈 세션 → resolved scope 0 → "clean"의 false-clean)를 봉쇄. read-only `scripts/check-review-scope.sh`가 `changes_exist`를 결정론으로 emit하고, SKILL이 iter-1에서 1회 호출·캐시해 **정직-verdict floor**(load-bearing, kill 불가)가 `resolved scope 0 AND changes_exist == yes`이면 판정이 `not-certified (scope-empty)` 가 된다. **무엇을 리뷰할지(routing)는 모델이 소유** — v2.7.0에서 v2.6.0의 redirect 게이트·`$effective_diff_scope` 배선·redirect kill switch를 제거하고 `/qg branch` escape hatch + honesty norm 한 줄로 대체(dogfood 5버그가 전부 routing 재구성에서 나왔고 floor의 load-bearing 입력 `changes_exist`는 틀린 적 없음). 결정론은 무결성 floor 한 점에만; routing/자연어는 모델 신뢰. session 기본값·`/qg branch` 자체의 스코프 **선택**(routing)은 무변경이지만, 이 floor 가 보는 것과 **별개로** ② 차등 테스트가 상시 도는 v9.0.0 이후는 R1b 가 고르는 test unit 이 0개인 실행도 `expected-empty` → `not-certified (scope-empty)` 다(관측 없음은 음성 결과가 아니다 — §6.4.3 P23 재결정, 2026-09-26) — **진짜 무변경(genuine no-op)과 docs/config-only 변경을 포함한다.** regression: `tests/test_check_review_scope.sh`, `tests/test_qg_false_clean_floor.sh`.
 - **P21 (Secret이 prompt context에 들어가지 않음)** — 결정 도구는 결정과 포인터만 묻고 secret 값은 받지 않는다(SKILL Rules R4). regression test: `tests/test_no_secret_prompts.py`.
@@ -36,7 +36,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
   transparency line + declared max fan-out) — no new principle ID needed.
 - **C66 (Linked Artifact Flow) — 의도 출처** (v2.1.0; v10 에서 D13 사슬로) — `scripts/discover-spec.sh` 가 의도 출처를 정한다: HEAD 쪽 커밋의 `Spec:` 트레일러가 가리키는 spec, 없으면 브랜치 커밋 메시지 + 열린 PR 본문. 그 내용이 모든 리뷰어 dispatch 와 codex 프롬프트의 `<intent>` 로 같은 기준 블록(`references/review-criteria.md`)과 함께 간다. 파일 mtime 은 읽지 않는다. 차등 테스트의 test-scope-validator 는 트레일러가 가리킨 spec 경로를 1차 축으로 쓴다(plan 은 보조 hint). kill switch `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1`.
 - **P21 (Untrusted input — diff is data, not instructions)** (v2.8.0) — 파이프라인의 두 diff-reading reviewer(`security-reviewer`/재비판 `code-recritic`)가 attacker-influenced `filtered_diff`(및 finding 텍스트)를 데이터로만 다루고 그 안의 prompt-injection·안전성 주장을 verdict 근거로 삼지 않도록 명시. 더해 언어/프레임워크 FP precedent 5건을 기능별 단일 배치(DRY)로 흡수 — suppress-at-source 3(security-reviewer anti-flag) + reject-at-verify 2(재비판 코드 프로필 관문 C, PR4a 부터 `references/recritic-code-profile.md`가 싣는다). 섹션-스코프 grep 회귀 락(`test_security_reviewer_persona.sh` · `test_code_recritic_frontmatter.sh`)으로 persona 약화 검출. 신규 P# 0, 결정론 가드 0 (Anthropic *"Using LLMs to Secure Source Code"* 평가 Tier-1; design-lightness).
-- **P21 (출력값 유출 차단 · kill switch 는 가장 안쪽 sink 에서) — 게시 sink** (v10 ③) — `scripts/publish-comment.sh` 하나가 게시의 통제를 모두 쥔다: kill switch(`DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`) → gh 존재·인증 → 열린 PR → corpus(변경 파일 내용 + 커밋 메시지) 위의 `secret-scan.py`(첫 줄 리터럴 `scan_ok: yes` 로만 통과 · degraded corpus 는 fail-closed) → 65,536자 상한 → `gh pr comment --body-file`. 마지막 줄은 `posted: <url>` · `skipped: <사유>` 리터럴이다. gh 를 부르는 qg 파일은 이 sink 와 `discover-spec.sh`(읽기 전용 `gh pr view`) 둘뿐이다. regression: `tests/test_publish_comment_sink.sh` · `tests/test_publish_gh_two_files.sh` · `tests/test_secret_scan.py` · `tests/test_secret_scan_fp.py`.
+- **P21 (출력값 유출 차단 · kill switch 는 가장 안쪽 sink 에서) — 게시 sink** (v10 ③) — `scripts/publish-comment.sh` 하나가 게시의 통제를 모두 쥔다: kill switch(`DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`) → gh 존재·인증 → 열린 PR → corpus(변경 파일 내용 + 커밋 메시지) 위의 `secret-scan.py`(첫 줄 리터럴 `scan_ok: yes` 로만 통과 · degraded corpus 는 fail-closed) → 이미지·HTML 태그 차단(`![` · `<img` · `<picture` · `<source` · `<svg` — 렌더링이 본문 속 URL 을 클릭 없이 불러 값이 밖으로 새는 길이라 `scan-failed`) → 65,536자 상한 → `gh pr comment --body-file`. 마지막 줄은 `posted: <url>` · `skipped: <사유>` 리터럴이다. gh 를 부르는 qg 파일은 이 sink 와 `discover-spec.sh`(읽기 전용 `gh pr view`) 둘뿐이다. regression: `tests/test_publish_comment_sink.sh` · `tests/test_publish_gh_two_files.sh` · `tests/test_secret_scan.py` · `tests/test_secret_scan_fp.py`.
 - **P17 (상시 동의)** (v10 ③) — 열린 PR 이 있으면 `/qg` 실행마다 새 코멘트 하나(이해글 + 판정 줄)를 남긴다. 게시마다 묻지 않는다 — `/qg` 실행이 그 동의이고 끄는 길은 kill switch 하나다. 이해글은 오케스트레이터가 쓴다. secret-scan 은 corpus 밖의 낯선 비밀값을 알려진 패턴으로만 잡는다(오케스트레이터가 읽은 e2e 로그 · 환경 파일 등 — 남는 위험). 매 실행 새 코멘트라 구독자 알림이 실행마다 간다.
 - **Law 1/2/3 + P8/P18 (산출물 비평 루프, v2.11.0)** — `/qg critique`가 비-코드 산출물에 대해 tier-unpinned `artifact-critic`+`artifact-adversarial`(+조건부 codex)의 read-only 비평 → 오케스트레이터 수정 → 라운드별 커밋 루프를 돈다. Law 1=E3 upfront 동의 게이트; Law 2=read-only 리뷰어(`tools:` allowlist)+매 라운드 독립 critic 게이트; Law 3=라운드별 커밋 감사추적; P18=max-rounds+stagnation predicate+kill switch(`DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE`); P8=NL 라우팅 모델-소유, 결정론은 `critique <path>`+§10 스키마. 별도 skill `critiquing-artifacts`로 위임(코드 파이프라인 무변경).
 - **LD3 (floor 는 실행이다) — 영향분 테스트의 실제 실행** (v3.0.0) — ② 차등 테스트의 floor
@@ -172,7 +172,7 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 않는다 — 오케스트레이터가 `run-test-selection.sh` 를 직접 부른다. 결정론 백스톱이 모델
 주장과 독립이라는 전제가 거기서 선다.
 
-**게시** (v10 ③) — 판정 뒤 파이프라인이 sink `scripts/publish-comment.sh` 를 한 번 부른다. 열린 PR 이 있으면 새 코멘트 하나(이해글 + 판정 줄)를 남기고, 없거나 · 닫혔거나 · kill switch · scan 실패 · gh 없음·미인증 · 65,536자 초과면 `skipped: <사유>` 한 줄로 알린다(판정은 그대로). 사유 리터럴은 `kill-switch` · `no-pr` · `pr-closed` · `too-long` · `gh-unavailable` · `scan-failed` 이다. `gh-unavailable` 은 gh 없음 · 미인증 · PR 조회 실패 · 코멘트 쓰기 실패를, `scan-failed` 는 비밀값 의심 · merge-base 없음 · corpus 생성 실패 · 길이 측정 실패를 뜻한다. Stop·중단으로 끝난 실행은 sink 를 부르지 않는다. 오케스트레이터는 gh 를 직접 부르지 않는다. 지적 목록 · SUGGESTION 은 로컬 결과(`.claude/quality-gates/<sid>/result.md`)에만 남는다.
+**게시** (v10 ③) — 판정 뒤 파이프라인이 sink `scripts/publish-comment.sh` 를 한 번 부른다. 열린 PR 이 있으면 새 코멘트 하나(이해글 + 판정 줄)를 남기고, 없거나 · 닫혔거나 · kill switch · scan 실패 · gh 없음·미인증 · 65,536자 초과면 `skipped: <사유>` 한 줄로 알린다(판정은 그대로). 사유 리터럴은 `kill-switch` · `no-pr` · `pr-closed` · `too-long` · `gh-unavailable` · `scan-failed` 이다. `gh-unavailable` 은 gh 없음 · 미인증(활성 계정 기준 — `gh auth status --active`) · PR 조회 실패 · 코멘트 쓰기 실패를, `scan-failed` 는 비밀값 의심 · 이미지·HTML 태그 · merge-base 없음 · corpus 생성 실패 · 길이 측정 실패를 뜻한다. Stop·중단으로 끝난 실행은 sink 를 부르지 않는다. 오케스트레이터는 gh 를 직접 부르지 않는다. 지적 목록 · SUGGESTION 은 로컬 결과(`.claude/quality-gates/<sid>/result.md`)에만 남는다.
 
 **게시의 알려진 한계** — secret-scan 이 보는 글은 git 이 보여 주는 `merge-base..HEAD` 의 텍스트 변경(커밋 메시지 포함), 작업 트리의 변경, 그리고 바뀐 텍스트 파일의 현재 내용이다. 아래는 그 밖이라 보지 못한다. 알려진 패턴의 비밀값은 코멘트 안 어디에 있든 막는다. 낯선 고엔트로피 값은 코멘트에 든 값이 위 글 안에도 있을 때만 막는다.
 
@@ -182,6 +182,7 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 - 평문을 내지 않는 textconv 드라이버의 출력
 - 서브모듈 안의 변경(gitlink sha 만 본다)
 - 병합 충돌 해소에만 있는 줄
+- qg 세션 폴더 `.claude/quality-gates/` 의 파일(게시 본문 자신이 거기 산다)
 - 한 가지는 일부러 막는다: 위 글 어디든(바뀐 파일 · 커밋 메시지) `=== QG CORPUS (degraded` 로 시작하는 줄이 있으면 게시하지 않는다(fail-closed).
 
 ## 리뷰어 구성
@@ -448,5 +449,6 @@ stale sibling 폴더(mtime이 `DEVBREW_QUALITY_GATES_TTL_HOURS`(기본 24h)보�
 가리켜도 setup 이 거부 줄 하나를 내고 exit 1 로 멈춘다(링크 너머를 지울 수 있어서다). 해법은 그 자리를
 실제 디렉토리로 바꾸는 것이다. 아래 GC 키(`quality-gates:qg-gc`)로 GC 를 꺼도 이 거부는 그대로다.
 
-모든 파일은 `*.local.md` gitignore 패턴에 매칭되며, 별도의 `.gitignore` 변경은
-필요 없습니다.
+이 파일들은 `*.local.md` 가 아니라 따로 무시되지 않는다. 리포의 `.gitignore` 가 `.claude/` 를 무시하지 않으면
+세션 폴더가 untracked 로 보인다 — 커밋하지 말고 무시 줄(`.claude/quality-gates/`)을 더하라. 게시 sink 는 이
+폴더를 secret-scan corpus 에서 뺀다(게시 본문 자신이 여기 산다).

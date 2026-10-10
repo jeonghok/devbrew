@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # publish-comment.sh — qg 게시의 유일한 sink. gh 쓰기는 이 파일에만 있다(AC15).
 #
-# 순서(spec §5): kill switch → gh 존재·인증 → 열린 PR → corpus + secret-scan → 길이 → 코멘트.
+# 순서(spec §5): kill switch → gh 존재·인증 → 열린 PR → corpus + secret-scan → 이미지·HTML 태그 → 길이 → 코멘트.
 # 마지막 stdout 줄은 `posted: <url>` 또는 `skipped: <사유>` 리터럴 하나다(P6). 진단은 전부 stderr.
 # 사유 리터럴: no-pr · pr-closed · kill-switch · scan-failed · gh-unavailable · too-long.
 # exit: posted·skipped 는 0, 잘못된 호출은 2.
@@ -41,7 +41,8 @@ top="$(git rev-parse --show-toplevel 2>/dev/null)" && cd "$top" \
 
 # 2. gh 존재·인증 — 부작용 전(P5).
 command -v gh >/dev/null 2>&1 || { echo "publish-comment: gh 가 PATH 에 없다" >&2; skip gh-unavailable; }
-gh auth status >/dev/null 2>&1 || { echo "publish-comment: gh 미인증" >&2; skip gh-unavailable; }
+# 활성 계정만 본다 — 다른 호스트·두 번째 계정이 깨졌다고 게시를 잃지 않는다.
+gh auth status --active >/dev/null 2>&1 || { echo "publish-comment: gh 미인증" >&2; skip gh-unavailable; }
 
 # 3. 현재 브랜치의 PR.
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/qg-sink.XXXXXX")" || { echo "publish-comment: 임시 디렉토리를 만들 수 없다" >&2; skip scan-failed; }
@@ -71,8 +72,8 @@ CORPUS="$WORK/corpus"
 diff_vs_base() { git diff "$@" "$mb" --; }
 # corpus 계약: mb..HEAD 의 git 기본 텍스트 뷰(`log -p --text`, 커밋 메시지 포함) + mb 대비 작업트리 diff
 # + 변경된 추적 파일과 무시되지 않는 untracked 텍스트 파일의 현재 평문.
-# 범위 밖(설계상): 무시된 파일 · 바이너리/NUL 바이트 파일 · LFS 객체 내용 · 병합 해소에만 있는 줄 ·
-# 변경 밖에서 오케스트레이터가 읽은 것.
+# 범위 밖(설계상): 무시된 파일 · 바이너리/NUL 바이트 파일의 현재 내용 · LFS 객체의 지난 내용 · 병합 해소에만
+# 있는 줄 · 변경 밖에서 오케스트레이터가 읽은 것 · qg 세션 폴더 `.claude/quality-gates/`(게시 본문 자신이 거기 산다).
 build_corpus() {
   local f gr
   echo "=== QG CORPUS (deterministic) ===" || return 1
@@ -83,7 +84,7 @@ build_corpus() {
   diff_vs_base --text --no-ext-diff --no-color || return 1
   echo "=== CHANGED FILE CONTENTS ==="
   diff_vs_base -z --name-only --diff-filter=ACMR >"$WORK/names" || return 1
-  git ls-files -z --others --exclude-standard >>"$WORK/names" || return 1
+  git ls-files -z --others --exclude-standard -- . ':!.claude/quality-gates' >>"$WORK/names" || return 1
   sort -z -u "$WORK/names" >"$WORK/names.sorted" || return 1
   while IFS= read -r -d '' f; do
     [ -f "$f" ] || continue
@@ -107,6 +108,16 @@ python3 "$SCRIPT_DIR/secret-scan.py" --payload "$body" --corpus "$CORPUS" >"$WOR
 first="$(head -n 1 "$WORK/scan.out")"
 if [ "$first" != "scan_ok: yes" ]; then
   sed -n '2,20p' "$WORK/scan.out" >&2
+  skip scan-failed
+fi
+# 이미지 · HTML 태그 — 렌더링이 본문 속 URL 을 클릭 없이 불러 값이 밖으로 샌다. 코멘트 형식에 없으니 막는다.
+img_rc=0
+LC_ALL=C grep -qiE '!\[|<(img|picture|source|svg)' -- "$body" || img_rc=$?
+if [ "$img_rc" -eq 0 ]; then
+  echo "publish-comment: 본문에 이미지·HTML 태그가 있다 — 게시하지 않는다" >&2
+  skip scan-failed
+elif [ "$img_rc" -ne 1 ]; then
+  echo "publish-comment: 본문의 이미지·HTML 검사를 하지 못했다(grep rc ${img_rc})" >&2
   skip scan-failed
 fi
 
