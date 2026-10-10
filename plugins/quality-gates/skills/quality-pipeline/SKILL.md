@@ -93,7 +93,7 @@ TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖
 RD="${TOP}/.claude/quality-gates/<session-id>"
 "$QG/scripts/setup-qg.sh" --ensure $ARGUMENTS || exit
 if grep -q '^## 판정$' "$RD/result.md" 2>/dev/null; then "$QG/scripts/setup-qg.sh" $ARGUMENTS || exit; fi
-rm -f "$RD/excluded.md" "$RD/aggregate.yaml" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err"
+rm -f "$RD/excluded.md" "$RD/aggregate.yaml" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt"
 ```
 
 `--ensure` keeps this session's folder `.claude/quality-gates/<session-id>/` when the `/qg`
@@ -101,7 +101,9 @@ command's setup already made it; otherwise setup creates it with a `result.md` s
 ([state-file-format](references/state-file-format.md)). A `result.md` that already has `## 판정`
 belongs to a finished earlier run in this session — setup without `--ensure` recreates the folder.
 Every run then starts without the previous run's `excluded.md` · `aggregate.yaml` · `verdict.out` ·
-`intent.md` · `topic-scope.txt` · `comment-head.md` · `comment.md` · `publish.out` · `publish.err`. Setup refuses an empty or malformed session id (E1). A gone
+`intent.md` · `topic-scope.txt` · `comment-head.md` · `comment.md` · `publish.out` · `publish.err` and the e2e walk files
+(`e2e-record.md` · `e2e-flip.md` · `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt`).
+`e2e-app.pgid` is kept — `## e2e` E0 uses it to bring down an app a cut-off earlier walk left running. Setup refuses an empty or malformed session id (E1). A gone
 argument (`branch <name>` · `--reset` · `--gc` · `--pr-url`) prints one line on stdout and exits 2 —
 the run does not start. Non-zero exit → show its output (stdout and stderr) verbatim and stop.
 Below, `RD` is that folder under the **repo root** — setup moves to the git top level itself, so a
@@ -147,6 +149,8 @@ reviewers, and it never lowers or skips a finding.
  │   ③ 합성 · 판정  Review Step 4 · 4.5
  │   막는 지적 또는 차등 defect → Fix-loop (Retry / Accept and finish / Stop)
  │       Retry: 「적용」 항목만 고치고 「제외」는 기록 → 다음 iteration
+ ├ e2e 질문 (루프 끝, 한 번) → 걷기 → 걷기 직후 게이트
+ │   fail → Fix-loop 게이트 다시 (Retry 면 남은 iteration 에서 ①② 후 같은 승인 경로로 다시 걷기)
  ├ Final verdict ── verdict.py 의 판정 줄 · result.md
  └ Publish ── sink 한 번 · posted:/skipped: 한 줄 · result.md ## 게시
 ```
@@ -725,10 +729,137 @@ AskUserQuestion({
 
 A skipped file's items are appended to `$RD/excluded.md` with 사유 `Edit 실패`.
 
+## e2e
+
+리뷰·테스트 루프가 Stop 없이 끝나면 최종 판정 전에 이 절을 한 번 돈다. 루프가 Stop 으로 끝났으면(aborted) 이 절을
+건너뛰고 e2e 칸을 `안 함` 으로 둔다. trivia 로 파이프라인이 생략된 실행도 건너뛰고 e2e 칸을 `안 함` 으로 둔다.
+
+판단과 기록 규칙은 e2e 레퍼런스에 있다. 이 절에 들어오면 먼저 읽는다.
+
+```
+Read ${CLAUDE_PLUGIN_ROOT}/references/e2e.md
+```
+
+위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 레퍼런스를 cwd 에서 찾지 말고 멈춰 보고한다. 아래 펜스의
+`<session-id>` 는 이 세션의 id 로 바꿔 넣는다.
+
+**E0 — kill switch 와 남은 앱.** 질문 전에 앞 실행이 남긴 앱을 내리고 지문을 한 번 잰다.
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+D="${TOP}/.claude/quality-gates/<session-id>"
+"$QG/scripts/e2e-state.sh" stop --dir "$D"; echo "leftover-stop rc=$?"
+"$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-gate.txt"; echo "e2e-gate rc=$?"
+```
+
+- `leftover-stop rc=5` — 앞 실행의 앱이 남았거나 그 기록을 읽지 못했다. `stop-failed:` 줄이나 stderr 사유를
+  그대로 공시하고, 질문을 띄우지 않고 e2e 칸을 `미확인` 으로 두고 `## Final verdict` 로 간다.
+- `e2e-gate rc=3` — kill switch 다. 질문을 띄우지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다.
+- `e2e-gate rc=4` — 코드 상태를 잴 수 없어 걷기의 무효 판정을 할 수 없다. 질문을 띄우지 않고 stderr 사유를
+  공시한 뒤 e2e 칸을 `미확인` 으로 두고 `## Final verdict` 로 간다.
+- `e2e-gate rc=0` — 레퍼런스 1 · 2 절대로 시나리오를 만들고 질문을 띄운다. `안 한다` · `걸을 것 없음` ·
+  전부 `걸을 도구 없음` 이면 그 칸으로 두고 `## Final verdict` 로 간다.
+
+**E1 — 부팅.** 고른 시나리오의 부팅 명령을 글자 그대로 파일에 적고, 지문을 잰 **뒤에만** 부팅한다. `&&` 가 그
+순서를 집행한다 — kill switch 가 켜져 있으면 지문이 exit 3 이고 부팅 명령은 실행되지 않는다.
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+D="${TOP}/.claude/quality-gates/<session-id>"
+cat > "$D/e2e-cmd.txt" <<'E2E_CMD'
+<승인된 부팅 명령 — 한 줄, 글자 그대로>
+E2E_CMD
+"$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-before.txt" && "$QG/scripts/e2e-state.sh" boot --dir "$D" --cmd "$(cat "$D/e2e-cmd.txt")" <--ready-port <포트> 또는 --ready-log '<정규식>'>; echo "boot rc=$?"
+```
+
+분기는 rc 만이 아니라 출력 줄로 정한다.
+
+- `ready: …` 줄 (`boot rc=0`) — E2 로 간다.
+- `boot-failed: …` 줄 (`boot rc=4`) — 걷지 않는다. 판정안은 `미확인(부팅 실패)` 이고 증거는 펜스가 보인 부팅 출력
+  끝부분이다. E3 의 `stop` 과 지문 비교는 건너뛰고 E4 로 간다.
+- 두 줄이 없고 `boot rc=3` — kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다.
+- 두 줄이 없고 `boot rc` 가 그 밖의 0 아닌 값(2 · 4) — 지문이나 부팅 호출이 앱을 띄우기 전에 실패했다. stderr 사유를
+  공시한다. 고칠 수 있는 호출 오류(인자 · 남은 앱)면 고쳐 이 펜스를 한 번 더 돈다. 그 밖이거나 또 실패하면 판정안
+  `미확인(지문 실패)` 로 E3 를 건너뛰고 E4 로 간다.
+
+CLI 표면이고 부팅 명령이 `없음(CLI 직접 실행)` 이면 이 펜스 대신 `fingerprint --out "$D/e2e-before.txt"` 만 돌리고 E2 로 간다.
+
+**E2 — 걷기.** 레퍼런스 3 절의 규칙대로 걷고, 4 절의 증거표를 `$D/e2e-evidence.tsv` 에 쓴다(칸 사이는 탭).
+
+```bash
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+D="${TOP}/.claude/quality-gates/<session-id>"
+cat > "$D/e2e-evidence.tsv" <<'E2E_EVIDENCE'
+기대 상태	판정	증거
+<기대 상태>	<충족|불충족|미확인>	<증거 원문 인용 또는 ->
+E2E_EVIDENCE
+```
+
+**E3 — 내리고 다시 재기.** 걷기가 어떻게 끝났든(도중 오류 포함) 이 펜스를 돈다.
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+D="${TOP}/.claude/quality-gates/<session-id>"
+"$QG/scripts/e2e-state.sh" stop --dir "$D"; echo "stop rc=$?"
+"$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-after.txt"; echo "after rc=$?"
+"$QG/scripts/e2e-state.sh" compare "$D/e2e-before.txt" "$D/e2e-after.txt"; echo "compare rc=$?"
+"$QG/scripts/e2e-state.sh" propose "$D/e2e-evidence.tsv"; echo "propose rc=$?"
+```
+
+- `stop rc=5` — 띄운 프로세스가 남았거나 그 기록을 읽지 못했다. `stop-failed:` 줄이나 stderr 사유를 그대로 공시하고 E5 의 걷기 기록에 적는다.
+- 판정안은 이 순서로 정한다: `compare` 의 마지막 줄이 `changed: <N>` 이면 `무효(코드 변경)` · `after rc` 가 0 이 아니거나
+  `compare rc` 가 0 · 1 밖이면 `미확인(지문 실패)` · `propose rc=4` 면 증거표를 고쳐 `propose` 만 다시 돌리고, 또 4 면
+  `미확인` · 나머지는 `proposal:` 줄의 값.
+
+**E4 — 걷기 직후 게이트.** 증거표와 판정안을 보이고 레퍼런스 5 절의 게이트를 띄운다. 결과는 6 절의 표로
+e2e 칸과 「사람이 뒤집음」을 정한다. 어느 결과든 E5 로 기록한 뒤 다음으로 간다.
+
+- **다시 걷기** — iteration 을 쓰지 않는다. E1 부터 같은 명령으로 다시 돈다.
+- **Retry** (fail 행) — `## Fix-loop` 의 Retry 와 같다: iteration 하나를 쓰고, 「적용」 목록만 고친 뒤 `## Flow` 의 ① 리뷰부터
+  다시 돈다. 루프가 다시 Stop 없이 끝나면 이 절로 돌아오고, 질문을 생략하고 같은 시나리오 · 같은 명령으로 E1 부터 걷는다.
+- **Accept** (fail 행) — `## Final verdict` 로 간다. Outcome 은 `accepted with findings iter <N>`, e2e 칸은 `fail` 이다.
+- **Stop** (fail 행) — `## Fix-loop` 의 Stop 과 같다: `## Final verdict` 로 간다. Outcome 은 `aborted iter <N>`, e2e 칸은
+  `fail` 이다. 게시 펜스는 `skipped: aborted` 를 낸다.
+- **리뷰·테스트부터 다시** (무효 행) — iteration 하나를 쓰고 코드를 고치지 않은 채 ① 리뷰부터 다시 돈 뒤, Retry 와 같은
+  경로로 이 절에 돌아와 E1 부터 걷는다.
+- iteration 5 를 다 썼으면 Retry · 리뷰·테스트부터 다시 를 선택지에 넣지 않는다. 그때 fail 행은 Accept / Stop / pass 로
+  뒤집기, 무효 행은 산출물 확인 / 그대로 둠 이다.
+
+**E5 — 기록.** 레퍼런스 7 절대로 걷기마다 세션 폴더의 `e2e-record.md` 에 덧붙인다. 걷는 동안 `result.md` 에는 쓰지
+않는다 — `## Final verdict` 의 기록 펜스가 옮긴다.
+
+```bash
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+D="${TOP}/.claude/quality-gates/<session-id>"
+cat >> "$D/e2e-record.md" <<'E2E_RECORD'
+### 걷기 <n>
+
+<시나리오(표면 · 부팅 명령 · 명령 출처 · 준비 신호) · 증거표 원문 · 판정안 · 게이트 선택 · stop-failed 줄(있으면)>
+
+E2E_RECORD
+```
+
+뒤집었으면 `e2e-flip.md` 에 한 줄을 덧붙인다.
+
+```bash
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+D="${TOP}/.claude/quality-gates/<session-id>"
+cat >> "$D/e2e-flip.md" <<'E2E_FLIP'
+- e2e: <판정안> → <결과> — <사람의 한 줄 사유>
+E2E_FLIP
+```
+
+그다음 `## Final verdict` 로 간다(Retry · 리뷰·테스트부터 다시 · 다시 걷기면 위 E4 의 경로로).
+
 ## Final verdict
 
-The last iteration's `$RV/synth.out` holds the verdict. `verdict.py` renders the verdict line from
-it — you do not retype either (V1 · R24):
+The last iteration's `$RV/synth.out` holds the review · differential verdict. `verdict.py --prior` adds the e2e
+result to it and renders the verdict line — you do not retype the verdict, the counts, or the precedence (V1 · R24).
+Fill only `<session-id>`, the last iteration's `RV`, `<N>` (the iteration number) and the e2e 칸 from `## e2e`.
+Add `--e2e-overridden` before `--e2e` when the human flipped the walk's proposal.
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -739,25 +870,22 @@ SYN="<마지막 iteration 의 RV>/synth.out"
 for k in verdict blocking optional; do
   [ "$(grep -c "^${k}: " "$SYN")" = 1 ] || { echo "[quality-gates] ${SYN} 의 '${k}:' 줄이 정확히 한 번이 아니다 — 판정 줄을 만들지 않는다" >&2; exit 4; }
 done
-ARGS=()
-[ "$(sed -n 's/^verdict: //p' "$SYN")" = "defect" ] && ARGS+=(--defect)
-for r in $(sed -n 's/^reasons: \[\(.*\)\]$/\1/p' "$SYN" | tr ',' ' '); do ARGS+=(--reason "$r"); done
 N_BLOCK=$(sed -n 's/^blocking: //p' "$SYN"); N_OPT=$(sed -n 's/^optional: //p' "$SYN")
 K=0; if [ -f "$RD/aggregate.yaml" ]; then for n in $(grep -oE '(new_regression|new_test_red): [0-9]+' "$RD/aggregate.yaml" | sed 's/.*: //'); do K=$((K + n)); done; fi
 X=0; [ -f "$RD/excluded.md" ] && X=$(grep -c '^- ' "$RD/excluded.md")
-python3 "$QG/scripts/verdict.py" ${ARGS[@]+"${ARGS[@]}"} --line \
+python3 "$QG/scripts/verdict.py" --prior "$SYN" --line \
   --blocking "$N_BLOCK" --optional "$N_OPT" --new-failures "$K" --excluded "$X" \
-  --iter <N> --sha "$(git rev-parse --short HEAD)" > "$RD/verdict.out"
+  --iter <N> --sha "$(git rev-parse --short HEAD)" --e2e '<e2e 칸>' > "$RD/verdict.out"
 echo "verdict rc=$?"; cat "$RD/verdict.out"
 ```
 
-A trivia run has no `$RV` — render its verdict directly:
+A trivia run has no `$RV` and no e2e walk — render its verdict directly:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
-python3 "$QG/scripts/verdict.py" --reason trivia --line --blocking 0 --optional 0 --new-failures 0 --excluded 0 --iter 0 --sha "$(git rev-parse --short HEAD)" > "$RD/verdict.out"
+python3 "$QG/scripts/verdict.py" --reason trivia --line --blocking 0 --optional 0 --new-failures 0 --excluded 0 --iter 0 --sha "$(git rev-parse --short HEAD)" --e2e '안 함' > "$RD/verdict.out"
 echo "verdict rc=$?"; cat "$RD/verdict.out"
 ```
 
@@ -777,6 +905,8 @@ printf 'Verdict\t%s\nIterations\t<N>\nOutcome\t<finished | accepted with finding
   printf '\n## 지적\n\n'; if [ -f "$SYN" ] && grep -q '^| Sev |' "$SYN"; then sed -n '/^| Sev |/,/^$/p' "$SYN"; else echo "(없음)"; fi
   printf '\n## 제외 패치\n\n'; if [ -s "$RD/excluded.md" ]; then cat "$RD/excluded.md"; else echo "(없음)"; fi
   printf '\n## 차등 테스트\n\n'; if [ -f "$RD/aggregate.yaml" ]; then grep -E '^(attribution_status|degrade_causes|resolution_disclosure):' "$RD/aggregate.yaml"; sed -n '/^per_adapter:/,$p' "$RD/aggregate.yaml"; else echo "(이번 실행에 차등 집계 없음)"; fi
+  if [ -s "$RD/e2e-record.md" ]; then printf '\n## e2e\n\n'; cat "$RD/e2e-record.md"; fi
+  if [ -s "$RD/e2e-flip.md" ]; then printf '\n## 뒤집기\n\n'; cat "$RD/e2e-flip.md"; fi
 } >> "$RD/result.md"
 ```
 
@@ -881,9 +1011,10 @@ printf '%s\n' "$line"
 - `DEVBREW_QUALITY_GATES_DISABLE=1` — 전역. Preflight P1.
 - `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — codex 만 끈다(다른 전제 각도 `absent`). Review Step 3 「Codex skip 안내」.
 - `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` — 보안 각도의 `security-reviewer` 만 skip 한다 → `not-certified (angle-absent)`. Review Step 3.
-- `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` — ② 를 건너뛴다 → `not-certified (kill-switch)`. Differential test.
+- `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` — ② 를 건너뛴다 → `not-certified (kill-switch)`. Differential test. e2e 부팅도 막는다 — 「리뷰 대상 저장소의 코드를 호스트에서 돌리지 않는다」를 e2e 까지 넓힌다. 같은 `e2e-state.sh` 가 집행한다(`## e2e` 의 e2e 칸은 `꺼짐(kill switch)`).
 - `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` — codex 의 의도 입력과 test-scope-validator 의 spec 축을 끈다. Preflight P3 · Review Step 3.
 - `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` — 게시만 끈다. 집행은 sink `scripts/publish-comment.sh` 의 첫 검사다(gh 호출 0, `skipped: kill-switch`). 판정 · 로컬 결과는 그대로다. `## Publish`.
+- `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` — e2e 만 끈다. `## e2e` E0 의 지문이 exit 3 으로 끝나 질문이 뜨지 않고, e2e 칸이 `꺼짐(kill switch)` 이다. 집행은 `e2e-state.sh` 다.
 
 ## Rules
 
@@ -905,6 +1036,8 @@ re-dispatch the same reviewer for the same iteration.
 arguments replace them (E3). Use named variables.
 
 **gh 는 두 스크립트만:** 오케스트레이터는 gh 를 직접 부르지 않는다. PR 본문 읽기는 `scripts/discover-spec.sh`, 코멘트 게시는 `scripts/publish-comment.sh` 가 한다(AC15).
+
+**e2e 걷기 (X3):** `## e2e` 의 E1~E3 동안 리포 파일을 Edit · Write 하지 않고 git 으로 상태를 바꾸지 않는다. 걷다 본 버그는 고치지 않고 증거표에 적는다 — 고침은 Retry 로만 한다. 승인되지 않은 명령은 실행하지 않는다.
 
 ## Requirement index
 
@@ -930,3 +1063,8 @@ The lessons this file carries — test names carry the same numbers.
 | P1 · P2 · P3 · P4 · P5 · P6 · P7 게시 sink | `scripts/publish-comment.sh` · `scripts/secret-scan.py` (tests: `tests/test_publish_comment_sink.sh` · `tests/test_secret_scan.py`) |
 | K-2 `## 게시` · K-3 판정 줄 · aborted 미호출 | `## Publish` 게시 펜스 (tests: `tests/test_publish_pipeline_wiring.sh`) |
 | gh 는 두 파일(AC15) | `scripts/publish-comment.sh` · `scripts/discover-spec.sh` (tests: `tests/test_publish_gh_two_files.sh`) |
+| X1 증거 없는 충족은 미확인 | `## e2e` E3 · `scripts/e2e-state.sh` propose (tests: `tests/test_e2e_state.sh`) |
+| X2 걷기 사이 코드가 바뀌면 무효 | `## e2e` E1 · E3 의 지문 비교 · E4 의 무효 행(리뷰·테스트부터 다시) (tests: `tests/test_e2e_state.sh`) |
+| X3 걷기는 로컬 origin 만 · 고치지 않는다 | e2e 레퍼런스 3 절 · Rules 의 e2e 걷기 문단 (tests: `tests/test_e2e_docs.sh`) |
+| X4 띄운 앱은 모든 종료 경로에서 내린다 | `## e2e` E0 · E3 의 `stop` · `scripts/e2e-state.sh` boot 의 프로세스 그룹 · `scripts/setup-qg.sh` 의 남은 앱 정리 (tests: `tests/test_e2e_state.sh` · `tests/test_setup_qg.sh`) |
+| X5 kill switch 는 부팅 전에 코드로 막는다 | `## e2e` E0 의 지문 · E1 의 `&&` 사슬 · `scripts/e2e-state.sh` boot (tests: `tests/test_e2e_state.sh` · `tests/test_e2e_docs.sh`) |

@@ -133,7 +133,7 @@ import sys
 out, rv, sid = sys.argv[1], sys.argv[2], sys.argv[3]
 import os
 src = os.environ["FVF_SRC"]
-src = src.replace("<마지막 iteration 의 RV>", rv).replace("<session-id>", sid).replace("<N>", "1")
+src = src.replace("<마지막 iteration 의 RV>", rv).replace("<session-id>", sid).replace("<N>", "1").replace("<e2e 칸>", "pass")
 open(out, "w", encoding="utf-8").write(src + "\n")
 PY
 [ -s "$RUNF" ] && ok "Final verdict 펜스 실행 파일을 만들었다" || no "Final verdict 펜스 실행 파일이 비었다"
@@ -153,8 +153,8 @@ final_case() {   # final_case <라벨> <synth.out 내용 | @missing> <기대 rc>
     assert_contains "$out" "$4" "I3 $1: 판정 줄"
   fi
 }
-GOOD=$'blocking: 1\noptional: 2\nverdict: defect\nreason: blocking\n'
-final_case "정상(양성 짝)"   "$GOOD" 0 'qg: defect · 막는 지적 1 · 선택 2 · 차등 새 실패 0 · 제외 패치 0 · iter 1 · '
+GOOD=$'blocking: 1\noptional: 2\nverdict: defect\n'
+final_case "정상(양성 짝)"   "$GOOD" 0 'qg: defect · 막는 지적 1 · 선택 2 · 차등 새 실패 0 · e2e pass · 제외 패치 0 · iter 1 · '
 final_case "파일 없음"       "@missing" 4 '합성 출력이 없거나 비었다'
 final_case "빈 파일"         ""         4 '합성 출력이 없거나 비었다'
 final_case "verdict 빠짐"    $'blocking: 0\noptional: 0\n'                         4 "'verdict:' 줄이 정확히 한 번이 아니다"
