@@ -103,6 +103,7 @@ case_reason_enum_is_closed_and_accounted() {
   #   오케스트레이터(SKILL · 레퍼런스의 `--reason` 리터럴): trivia · kill-switch · (차등
   #                                     축과 겹치는) scope-empty · silent-drop · error-axis
   #   스코프 축(scope_tuple.STATUS_TO_REASON.values()): declaration-invalid · merge-conflict
+  #   e2e 축(E2E_TO_REASON.values()): e2e-unconfirmed
   #   부채 — 산출자 없음: (없다 — 새 사유를 더할 때 산출자보다 먼저 여기 적는다)
   local debt=""
   local SKILL_MD="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
@@ -116,7 +117,7 @@ caller_produced = set()
 for p in ('$SKILL_MD', '$REF_MD'):
     caller_produced |= set(re.findall(r'--reason ([a-z][a-z-]*)', open(p, encoding='utf-8').read()))
 import scope_tuple
-produced = set(verdict.CAUSE_TO_REASON.values()) | set(scope_tuple.STATUS_TO_REASON.values()) | flag_produced | caller_produced
+produced = set(verdict.CAUSE_TO_REASON.values()) | set(scope_tuple.STATUS_TO_REASON.values()) | set(verdict.E2E_TO_REASON.values()) | flag_produced | caller_produced
 print('MISSING:' + ','.join(sorted(set(verdict.REASONS) - (produced | debt))))
 print('STALE:'   + ','.join(sorted((produced | debt) - set(verdict.REASONS))))
 print('OVERLAP:' + ','.join(sorted(debt & produced)))
@@ -125,7 +126,7 @@ print('AXES:' + ','.join(sorted(inspect.signature(verdict.decide).parameters)))"
   assert_grep "$got" '^MISSING:$' "열거의 모든 사유가 산출자 또는 부채 목록에 귀속된다"
   assert_grep "$got" '^STALE:$'   "부채 목록·매핑에 열거 밖 이름이 없다"
   assert_grep "$got" '^OVERLAP:$' "부채 목록에 이미 산출자가 생긴 이름이 남아 있지 않다"
-  assert_grep "$got" '^N:11$'     "사유 열거는 정확히 열한 값이다"
+  assert_grep "$got" '^N:12$'     "사유 열거는 정확히 열두 값이다"
   assert_grep "$got" '^AXES:angle_absent,defect,differential_text,extra_reasons,review_blocked$' \
     "decide() 의 키워드 전용 파라미터 집합이 다섯이다 — 새 축마다 파라미터가 하나 는다(OVERLAP 이 못 잡는 헬퍼-추출 배선의 둘째 독립 증인)"
 }
