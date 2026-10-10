@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # reconstruct-skill.sh — quality-pipeline SKILL.md 를 references/differential-test.md
-# 포인터 자리에 그 파일 본문을 되접어, 분할 전과 논리적으로 동일한 단일 문서로
+# 포인터 자리(`## Differential test`)와 플러그인 레벨 references/e2e.md 포인터 자리(`## e2e` 의
+# `Read` 펜스)에 그 파일 본문을 되접어, 분할 전과 논리적으로 동일한 단일 문서로
 # 재구성한다. `source`해서 `reconstruct_skill_md` 함수를 쓴다.
 #
 # 왜 필요한가 (Task 31, 무게 감축): `## Differential test` 절차 전문이
@@ -35,7 +36,27 @@ reconstruct_skill_md() {   # $1 = SKILL.md 절대경로
   skill_dir="$(dirname "$skill")"
   out="$(mktemp -t reconstructed-skill-XXXXXX)" || return 1
   if awk -v skill_dir="$skill_dir" '
-    BEGIN { in_ptr = 0; spliced = 0 }
+    BEGIN { in_ptr = 0; spliced = 0; e2e_spliced = 0; fence = ""; skip_close = 0
+            e2e_read = "Read ${CLAUDE_PLUGIN_ROOT}/references/e2e.md" }
+    # `## e2e` 의 포인터는 맨 펜스(```) 안의 Read 한 줄이다 — 펜스 세 줄을 플러그인 레벨
+    # references/e2e.md 본문으로 바꾼다(펜스 안에 두면 펜스를 세는 소비자가 본문을 코드로 읽는다).
+    fence != "" {
+      if ($0 == e2e_read && !e2e_spliced) {
+        e2e_spliced = 1; fence = ""; skip_close = 1
+        ref2 = skill_dir "/../../references/e2e.md"
+        m = 0
+        while ((getline line < ref2) > 0) { print line; m++ }
+        close(ref2)
+        if (m == 0) {
+          print "reconstruct-skill.sh: references/e2e.md 부재 또는 빈 파일 (" ref2 ")" > "/dev/stderr"
+          exit 3
+        }
+        next
+      }
+      print fence; fence = ""
+    }
+    skip_close && /^```$/ { skip_close = 0; next }
+    !in_ptr && /^```$/ { fence = $0; next }
     /^## Differential test$/ && !spliced {
       spliced = 1
       ref = skill_dir "/references/differential-test.md"
@@ -54,6 +75,7 @@ reconstruct_skill_md() {   # $1 = SKILL.md 절대경로
     in_ptr { next }
     { print }
     END {
+      if (fence != "") print fence
       if (!spliced) {
         print "reconstruct-skill.sh: SKILL.md 에 \"## Differential test\" 포인터 헤딩이 없다 — 재구성 대상을 못 찾음" > "/dev/stderr"
         exit 3
@@ -80,7 +102,7 @@ reconstruct_skill_md() {   # $1 = SKILL.md 절대경로
     local leftover
     leftover="$(grep -nE '^[[:space:]]*Read[[:space:]]+[^[:space:]]*references/[A-Za-z0-9_./-]+\.md' "$out" || true)"
     if [ -n "$leftover" ]; then
-      printf 'reconstruct-skill.sh: 재구성 후에도 되접히지 않은 조건부-로드 포인터가 남아 있다 — SKILL.md 가 또 분할됐고 이 헬퍼는 한 섹션만 안다:\n%s\n' "$leftover" >&2
+      printf 'reconstruct-skill.sh: 재구성 후에도 되접히지 않은 조건부-로드 포인터가 남아 있다 — SKILL.md 가 또 분할됐고 이 헬퍼는 두 섹션(differential-test · e2e)만 안다:\n%s\n' "$leftover" >&2
       rm -f "$out"
       return 1
     fi
