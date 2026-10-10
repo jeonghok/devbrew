@@ -43,7 +43,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v11.0.0)
+# Quality Gates — In-Turn Orchestrator (v12.0.0)
 
 <!-- plain-language:begin -->
 ## 사람에게 쓰는 글

@@ -1,7 +1,7 @@
 {
   "name": "spec-distill",
   "description": "Turns a rough request into a ready-to-plan design: a short interview (with web research and a devil's-advocate check) writes a brief for brainstorming, and each design doc gets an independent reviewer that cannot edit it.",
-  "version": "5.1.0",
+  "version": "5.1.1",
   "author": {
     "name": "jeonghokim"
   }

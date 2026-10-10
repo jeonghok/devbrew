@@ -3,6 +3,36 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [12.0.0] — 2026-10-10
+
+**v10 ③ 게시** — `/qg` 가 판정 뒤 sink 하나를 거쳐 열린 PR 에 새 코멘트(이해글 + 판정 줄) 하나를 남긴다.
+
+### Added
+- `scripts/publish-comment.sh` — 게시의 유일한 sink. kill switch → gh 인증 → 열린 PR → corpus + `secret-scan.py`(첫 줄 리터럴 `scan_ok: yes`) → 이미지·HTML 태그 거절 → 65,536자 상한 → `gh pr comment --body-file`. 마지막 줄은 `posted: <url>` · `skipped: <사유>`(`no-pr` · `pr-closed` · `kill-switch` · `scan-failed` · `gh-unavailable` · `too-long`).
+- 파이프라인 SKILL `## Publish` 절 — 이해글은 오케스트레이터가 쓰고, 판정 줄은 `result.md` 에서 펜스가 붙인다. Stop·중단으로 끝난 실행은 sink 를 부르지 않는다(`skipped: aborted`). 결과는 `result.md` `## 게시` 에 남는다.
+- 게시 펜스는 sink 를 부르지 않고 거절한다 — 추적 파일에 커밋 안 된 변경이 있을 때(`.claude/quality-gates/` 밖), OUTCOME 이 세 형태 중 하나가 아닐 때, 이해글에 `qg: ` 줄이 있을 때, `## 게시` 가 이미 있을 때(이중 게시 없음).
+- sink 는 이미지·HTML 태그(`![` · `<img|image|picture|source|svg|video|audio`)를 `scan-failed` 로 거절한다.
+- corpus 는 git 이 보여 주는 텍스트(`mb..HEAD` 의 `log -p --text` 와 커밋 메시지) + mb 대비 작업 트리 diff + 바뀐 추적 파일과 무시되지 않은 untracked 텍스트 파일의 현재 평문이다(세션 폴더 제외). corpus 생산이 하나라도 실패하면 degraded 로 닫는다(fail-closed).
+- 테스트 넷 — `test_publish_comment_sink.sh`(P1~P7 · AC12~AC14) · `test_publish_pipeline_wiring.sh`(bash · zsh) · `test_publish_gh_two_files.sh`(AC15) · `test_publish_surface_removed.sh`(AC16).
+
+### Changed
+- `secret-scan.py` 의 degraded corpus 헤더가 `=== QG CORPUS (degraded` 다.
+- `render-terminal.py` 는 `table` 하나만 남는다.
+- 헌장 P21 코드 앵커가 `scripts/publish-comment.sh` 로 옮겨졌고, P17 에 「qg 의 매 실행 PR 코멘트 게시는 사용자의 상시 동의다」가 들어갔다.
+- 공개 description 이 게시를 서술한다(plugin.json · marketplace.json · 헌장 락).
+- README 에 게시 흐름과 「게시의 알려진 한계」가 들어갔다.
+
+### Removed
+사용자가 명시 결정한 재건이라 deprecation 창 없이 지운다(CLAUDE.md 메타데이터 절).
+- `/qg-publish` 명령 · `publishing-pr-understanding` skill · `pr-understanding-builder` agent.
+- `scripts/comment-upsert.py` · `gh-identity.sh` · `pr-create.sh` · `pr-detect.sh` · `build-pr-context.sh` · `diagram-facts.sh` · `render-terminal.py` 의 `diagram` · `accuracy-warnings` 하위명령. 마커 upsert · identity · tier · 다이어그램 · `--history` 는 없다.
+- 위 표면의 테스트 열여섯과 `qg.md` 의 「/qg-publish 안내」 절.
+
+### Security
+- 게시 kill switch `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` 은 sink 의 첫 검사다 — gh 를 한 번도 부르지 않는다. gh 를 부르는 qg 파일은 sink 와 `discover-spec.sh`(읽기 전용) 둘뿐이고 쓰기는 sink 에만 있다(락 `test_publish_gh_two_files.sh`).
+- 이미지·HTML 태그 거절은 지운 표면이 갖고 있던 이미지 유출 통제를 되살린다.
+- 남는 위험: 이해글은 오케스트레이터가 쓰므로 corpus 밖에서 읽은 낯선 비밀값은 알려진 패턴으로만 잡힌다. 알려진 한계는 README 「게시의 알려진 한계」에 있다.
+
 ## [11.0.0] — 2026-10-09
 
 **v10 ② 리뷰 다이어트** — 한 기준 블록 · 의도 출처 · opus 재비판으로 리뷰를 다시 짜고, 판정을 막는 지적으로 정한다.

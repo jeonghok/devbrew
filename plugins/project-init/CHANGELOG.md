@@ -5,6 +5,12 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.0.2] — 2026-10-10
+
+### Changed
+
+- `templates/shared/pr-process.md` 의 quality-gates 줄 — 「`gh pr create` 에 자동 트리거」는 사실이 아니었다. `/qg` 를 직접 실행하면 그 PR 에 코멘트 하나를 남긴다는 문장으로 바꾼다.
+
 ## [5.0.1] — 2026-10-10
 
 ### Changed

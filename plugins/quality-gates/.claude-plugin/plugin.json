@@ -1,7 +1,7 @@
 {
   "name": "quality-gates",
   "description": "Quality verification pipeline — one pipeline, one verdict (review + mandatory differential test) with multi-plugin review delegation; each run posts one new PR comment (understanding + verdict line) when the branch has an open PR. Invoke manually via /qg.",
-  "version": "11.0.0",
+  "version": "12.0.0",
   "author": {
     "name": "jeonghokim"
   }
