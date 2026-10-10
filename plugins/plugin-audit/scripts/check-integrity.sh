@@ -53,7 +53,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --target)
       if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
-        echo "[check-integrity] FATAL: --target requires a value" >&2
+        echo "[check-integrity] FATAL: --target 에 값이 없다(--target requires a value)" >&2
         exit 2
       fi
       TARGET="$2"
@@ -61,21 +61,21 @@ while [ $# -gt 0 ]; do
       ;;
     --extra-path)
       if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
-        echo "[check-integrity] FATAL: --extra-path requires a value" >&2
+        echo "[check-integrity] FATAL: --extra-path 에 값이 없다(--extra-path requires a value)" >&2
         exit 2
       fi
       EXTRA_PATHS+=("$2")
       shift 2
       ;;
     *)
-      echo "[check-integrity] FATAL: unknown argument: $1" >&2
+      echo "[check-integrity] FATAL: 알 수 없는 인자다 — ${1} (unknown argument)" >&2
       exit 2
       ;;
   esac
 done
 
 if [ "$MODE" = "ld5" ] && [ -z "$TARGET" ]; then
-  echo "[check-integrity] FATAL: mode=ld5 requires --target <name>" >&2
+  echo "[check-integrity] FATAL: ld5 모드에는 --target <name> 이 필요하다(mode=ld5 requires --target)" >&2
   exit 2
 fi
 
@@ -151,8 +151,8 @@ COUNT=$(wc -l < "$OUT" | tr -d ' ')
 # An empty manifest would compare equal to any other empty manifest — a backstop
 # that passes by being blind. Fail loudly instead.
 if [ "$COUNT" -eq 0 ]; then
-  echo "[check-integrity] FATAL: manifest is empty (mode=$MODE) — enumeration produced nothing." >&2
+  echo "[check-integrity] FATAL: 해시 목록이 비었다(mode=${MODE}, manifest is empty) — 열거한 파일이 하나도 없다." >&2
   exit 1
 fi
 
-echo "[check-integrity] mode=$MODE files=$COUNT -> $OUT" >&2
+echo "[check-integrity] 파일 ${COUNT}개의 해시를 적었다(mode=${MODE}) -> ${OUT}" >&2

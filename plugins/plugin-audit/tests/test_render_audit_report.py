@@ -64,14 +64,14 @@ class TestRender(unittest.TestCase):
     def test_codex_absent_banner(self):
         # degraded item의 "what"에 "codex" substring이 있으면 배너 분기와 무관하게
         # assertIn("codex", ...)가 통과해버려 toothless — "what"에서 codex를 빼고
-        # 배너 고유 문구("codex 독립 감사 미실행")를 직접 단언한다.
+        # 배너 고유 문구("codex 독립 감사를 돌리지 않았다")를 직접 단언한다.
         m = dict(META_OK); m["codex"] = {"ran": False}
         data = {"meta": m, "findings": [], "d_verdicts": [], "oq_answers": [],
                 "new_open_questions": [], "axis_failures": [], "degraded": [{"what": "기타 결손", "why": "x"}]}
         rc, md, err, _ = render(data)
         self.assertEqual(rc, 0, err)
         head = "\n".join(md.splitlines()[:20])
-        self.assertIn("codex 독립 감사 미실행", head)
+        self.assertIn("codex 독립 감사를 돌리지 않았다", head)
         self.assertIn("⚠", head)
 
     def test_all_axes_dead_no_report(self):  # AC-4(a)
@@ -170,7 +170,9 @@ class TestRender(unittest.TestCase):
         self.assertEqual(rc, 0, err)
         self.assertIn("배정된 열린 질문", md, "OQ 섹션 헤더가 있어야")
         self.assertIn("좌주장", md, "OQ1 좌측 claim이 렌더돼야")
-        self.assertIn("0건", md, "OQ1 우측이 비었으면 0건으로 명시돼야 (숨기면 안 됨, §9.5)")
+        self.assertIn("우: 이 쪽을 받치는 근거는 보고되지 않았다(0건)", md,
+                      "OQ1 우측이 비었으면 그 사실을 쉬운 문장으로 낸다 (숨기면 안 됨, §9.5 · AC3⑦)")
+        self.assertNotIn("좌: 이 쪽을 받치는 근거는 보고되지 않았다", md, "근거가 있는 쪽엔 그 문장이 없다 (대조)")
         # OQ2 서브섹션만 슬라이스해 답변·역참조가 "그 서브섹션 안에" 있는지 확인
         idx_oq2 = md.index("### OQ2")
         rest = md[idx_oq2 + len("### OQ2"):]
@@ -280,16 +282,16 @@ class TestCodexThreeStateBanner(unittest.TestCase):
 
     def test_not_run_says_not_run(self):
         out = self._render({"ran": False, "failed": False})
-        self.assertIn("codex 독립 감사 미실행", out)
+        self.assertIn("codex 독립 감사를 돌리지 않았다", out)
 
     def test_ran_but_failed_says_failed_not_missing(self):
         out = self._render({"ran": True, "failed": True})
         # body-unique 문구로 잰다. `"실패"` 두 글자만 보면 상시 뜨는
         # `⚠ **발견 0건** — … *감사 실패*인지 …` 배너가 assert를 만족시켜, 실행-실패
         # 배너를 통째로 지워도 GREEN이다(mutation m8로 실측).
-        self.assertIn("codex 독립 감사 실행-실패", out,
+        self.assertIn("codex 독립 감사가 돌았지만 결과를 믿을 수 없다", out,
                       "'돌았으나 실패' 배너 부재 — 미실행과 구분되지 않는다")
-        self.assertNotIn("미실행", out,
+        self.assertNotIn("돌리지 않았다", out,
                          "'돌았으나 실패'를 '미실행'으로 적으면 두 상태가 뭉개진다")
 
     def test_success_has_no_codex_banner(self):
@@ -302,9 +304,92 @@ class TestCodexThreeStateBanner(unittest.TestCase):
                                      "reason": "malformed_element"}])
         # `assertIn("2", out)`은 meta.date의 `2026-08-09`가 만족시킨다 — 배너를 지워도
         # GREEN이다. 컬렉션·개수·사유가 **한 줄에** 함께 나오는지로 잰다.
-        self.assertIn("codex d_verdicts 2건 폐기", out,
+        self.assertIn("codex d_verdicts 2건을 버렸다", out,
                       "폐기 손실 보고가 배너로 안 나온다 — 조용히 버리는 것과 같다")
         self.assertIn("malformed_element", out, "폐기 사유가 배너에 없다")
+
+
+class PlainLanguageReport(unittest.TestCase):
+    """쉬운 말 출력 PR 4 — 둘째 줄이 상태 문장이고, 배너가 뜻을 먼저 말하며, 빈 칸은 None 으로 찍히지 않는다."""
+
+    def _data(self, findings, **meta):
+        m = {"target": "zz", "date": "2026-10-10", "codex": {"ran": True, "failed": False}}
+        m.update(meta)
+        return {"meta": m, "findings": findings, "d_verdicts": [], "oq_answers": [],
+                "new_open_questions": [], "axis_failures": [], "degraded": []}
+
+    def _f(self, fid, sev, **kw):
+        x = {"id": fid, "axis": 1, "title": "제목 " + fid, "severity": sev, "status": "reported",
+             "evidence": [{"file": "a.py", "line": 1, "quote": "q"}], "user_harm": "h",
+             "recommendation": "r", "counter_argument": "c", "fix_cost": "S", "reference_gap": "none"}
+        x.update(kw)
+        return x
+
+    def test_second_line_is_status_and_drops_zero_grades(self):
+        rc, md, err, _ = render(self._data([self._f("A1-1", "CRITICAL"), self._f("A1-2", "IMPORTANT")]))
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(md.split("\n")[1], "감사를 마쳤다 — 발견 2개(심각 1 · 중요 1).")
+
+    def test_second_line_counts_every_grade(self):
+        rc, md, err, _ = render(self._data([self._f("A1-1", "SUGGESTION"), self._f("A1-2", "CRITICAL"),
+                                            self._f("A1-3", "IMPORTANT"), self._f("A1-4", "SUGGESTION")]))
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(md.split("\n")[1], "감사를 마쳤다 — 발견 4개(심각 1 · 중요 1 · 제안 2).")
+
+    def test_grades_outside_the_three_are_counted(self):
+        rc, md, err, _ = render(self._data([self._f("A1-1", "HIGH"), self._f("A1-2", "CRITICAL")]))
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(md.split("\n")[1], "감사를 마쳤다 — 발견 2개(심각 1 · 기타 1).",
+                         "옛 등급(HIGH) 지적이 상태 줄의 합에서 빠지면 개수가 맞지 않는다")
+
+    def test_no_findings_status_keeps_judgment_banner(self):
+        rc, md, err, _ = render(self._data([]))
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(md.split("\n")[1], "감사를 마쳤다 — 보고된 발견 없음.")
+        self.assertIn("⚠ **발견 0건** — 문제가 없어서인지 감사가 실패해서인지는 축 완주 수와 기록(journal)으로 확인하라", md,
+                      "판단에 필요한 0 배너는 남는다(S3)")
+
+    def test_banners_say_the_meaning_first(self):
+        data = self._data([self._f("A1-1", "IMPORTANT")], codex={"ran": False, "failed": False})
+        data["axis_failures"] = [{"axis": 2, "why": "x"}]
+        data["degraded"] = [{"what": "기타 결손", "why": "y"}]
+        rc, md, err, _ = render(data)
+        self.assertEqual(rc, 0, err)
+        head = "\n".join(md.splitlines()[:20])
+        self.assertIn("⚠ **축 5/6 완주** — 1개 축은 감사하지 못했다", head)
+        self.assertIn("⚠ **codex 독립 감사를 돌리지 않았다** — 다른 모델의 확인이 없다(LD4 모델 다양성 결손)", head)
+        self.assertIn("⚠ **빠지거나 약해진 검사 1건**(degraded) — 아래 「결손」 목록에 있다", head)
+        self.assertNotIn("축 감사 실패", md, "옛 축 배너가 남았다")
+
+    def test_empty_slots_are_not_none(self):
+        data = self._data([self._f("A1-1", "CRITICAL", evidence=[
+            {"quote": "Run /init"}, {"file": "a.py", "line": 3}, {"file": "b.py", "quote": "qb"}]),
+            {"id": "CX-1", "axis": 3, "title": "t", "severity": "IMPORTANT", "status": "reported",
+             "evidence": [{"file": "c.py", "line": 4}]}])
+        data["oq_answers"] = [
+            {"id": "OQ1", "source": "claude", "reason": "r",
+             "left_evidence": [{"file": "a.py", "line": 1, "quote": "q1"}], "right_evidence": []},
+            {"id": "OQ2", "source": "claude", "answer": None, "reason": "r2"}]
+        rc, md, err, _ = render(data)
+        self.assertEqual(rc, 0, err)
+        self.assertNotIn("None", md, "빈 칸이 None 으로 찍히지 않는다(S4 · S9)")
+        self.assertIn("- (위치 없음) — Run /init\n", md)
+        self.assertIn("- `a.py:3`\n", md)
+        self.assertIn("- `b.py` — qb\n", md)
+        self.assertIn("    - `a.py:1` — q1\n", md)
+        self.assertIn("  - 답: (없음)\n", md)
+        self.assertIn("- 피해: (없음)\n- 권고: (없음)\n- 반대근거: (없음)\n", md, "codex 최소 필드 지적")
+
+    def test_claim_is_kept_when_present(self):
+        data = self._data([])
+        data["oq_answers"] = [{"id": "OQ1", "source": "claude", "reason": "r",
+                               "left_evidence": [{"claim": "좌주장", "file": "a.py", "line": 1, "quote": "q1"}],
+                               "right_evidence": [{"claim": "우주장", "file": "b.py", "line": 2, "quote": "q2"}]}]
+        rc, md, err, _ = render(data)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("    - `a.py:1` — 좌주장: q1\n", md)
+        self.assertIn("    - `b.py:2` — 우주장: q2\n", md)
+        self.assertNotIn("보고되지 않았다", md, "양쪽 다 근거가 있으면 빈 쪽 문장이 없다(Review Focus 2)")
 
 
 if __name__ == "__main__":
