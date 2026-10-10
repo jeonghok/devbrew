@@ -411,6 +411,18 @@ class PlainLanguageReport(unittest.TestCase):
         self.assertEqual(rc, 0, err)
         self.assertIn("### [CRITICAL] 첫 줄 둘째 줄 (제목 A1-1 · A1-1)\n", md)
 
+    def test_plain_non_string_uses_title(self):
+        for bad in (123, None):
+            rc, md, err, _ = render(self._data([self._f("A1-1", "CRITICAL", plain=bad)]))
+            self.assertEqual(rc, 0, err)
+            self.assertIn("### [CRITICAL] 제목 A1-1 (A1-1)\n", md, "문자열이 아닌 plain 은 걸러져 제목 머리가 나온다")
+            head = [l for l in md.splitlines() if l.startswith("### [CRITICAL]")][0]
+            self.assertNotIn(str(bad), head, "문자열이 아닌 plain 이 머리에 찍혔다")
+
+    def test_plain_string_pair_for_non_string_lock(self):
+        rc, md, err, _ = render(self._data([self._f("A1-1", "CRITICAL", plain="쉬운 한 문장")]))
+        self.assertIn("### [CRITICAL] 쉬운 한 문장 (제목 A1-1 · A1-1)\n", md)
+
 
 if __name__ == "__main__":
     unittest.main()

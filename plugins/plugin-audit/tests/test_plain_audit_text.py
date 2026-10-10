@@ -53,6 +53,10 @@ class SkillTextTest(unittest.TestCase):
         b = self.flat.index("## kill switch")
         step = self.flat[a:b]
         self.assertIn("첫 줄은 리포트 둘째 줄의 상태 문장을 그대로 쓴다", step)
+        warn = "이어서 리포트 앞의 `⚠` 줄을 글자 그대로 한 줄씩 옮긴다(없으면 쓰지 않는다)."
+        self.assertEqual(step.count(warn), 1, "종료 보고가 리포트 앞 경고 줄을 옮기라는 문장이 없다")
+        self.assertLess(step.index("상태 문장을 그대로 쓴다"), step.index(warn))
+        self.assertLess(step.index(warn), step.index("절대경로를 보인다"), "경고 줄은 리포트 경로 앞이다")
         self.assertIn("리포트 (`$RUN_DIR/audit.md`)의 절대경로를 보인다 — 사용자가 열어 볼 것은 이것이다.", step)
         self.assertIn("원장(`$RUN_DIR/audit-journal.jsonl`) 경로는 사용자가 물을 때만 보인다.", step)
         self.assertIn("맨 끝에 사용자가 할 일 하나를 쓴다", step)
