@@ -154,6 +154,12 @@ if [[ -n "$ENV_SESSION_ID" ]]; then
   OWN_SESSION="true"
 fi
 
+# 세션 폴더는 리포 최상위에 둔다 — SKILL 의 RD(`git rev-parse --show-toplevel`)와 같은 자리다.
+# 하위 디렉토리에서 시작해도 최상위로 옮겨 일한다. git 밖이면 cwd 그대로 둔다.
+if TOP="$(git rev-parse --show-toplevel 2>/dev/null)" && [[ -n "$TOP" ]]; then
+  cd "$TOP" || { echo "[quality-gates] 리포 최상위로 갈 수 없다: ${TOP} — 아무것도 쓰지 않는다." >&2; exit 1; }
+fi
+
 STATE_ROOT=".claude/quality-gates"
 
 # state root 아래의 비-세션 형제 폴더(qg-worktree.sh · baseline-cache.sh 가 쓴다)는 SID 로 받지 않는다.
@@ -162,7 +168,7 @@ if [[ "$SESSION_ID" == "worktrees" || "$SESSION_ID" == "baseline-cache" ]]; then
   exit 1
 fi
 STATE_DIR="$STATE_ROOT/$SESSION_ID"
-STATE_FILE="$STATE_DIR/pipeline.md"
+STATE_FILE="$STATE_DIR/result.md"
 
 # --ensure: 이 세션 폴더가 이미 있으면 아무것도 하지 않는다.
 if [[ "$ENSURE_MODE" == "true" ]] && [[ -f "$STATE_FILE" ]]; then
@@ -242,16 +248,13 @@ session_id: "$SESSION_ID"
 started_at: "$TIMESTAMP"
 ---
 
-# Quality Gates Pipeline State
-
-## History
-- [$TIMESTAMP] Pipeline started
+# qg result
 EOF
 mv "$TEMP_FILE" "$STATE_FILE"
 
 echo "🔄 Quality Gates Pipeline"
 echo ""
-echo "Pipeline: scope → differential test → reviewers → re-critique → verdict"
+echo "Pipeline: scope → review → differential test → synthesis · verdict"
 for a in $REMOVED_ARGS; do
   echo "> [quality-gates] \`${a}\` 인자는 제거됐다 — 이제 한 파이프라인이라 게이트 범위를 고르지 않는다. 그대로 진행한다."
 done

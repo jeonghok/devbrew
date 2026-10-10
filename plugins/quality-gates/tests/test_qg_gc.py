@@ -197,6 +197,14 @@ class TestQgGc(unittest.TestCase):
         run_gc(self.tmp)
         self.assertFalse(folder.exists(), "result.md 만 있는 세션 폴더가 수집되지 않음")
 
+    def test_ac28_legacy_pipeline_marker_still_collected(self):
+        """AC28 — ② 뒤 setup 은 pipeline.md 를 쓰지 않지만 옛 판이 남긴 폴더는 회수된다."""
+        sid = "legacy-pipeline-only-0001"
+        folder = make_session_dir(self.tmp, sid, mtime_offset_seconds=-48 * 3600)  # 마커 pipeline.md · 늙음
+        self.assertTrue((folder / "pipeline.md").exists(), "픽스처 전제")
+        run_gc(self.tmp)
+        self.assertFalse(folder.exists(), "옛 표지 pipeline.md 만 가진 만료 폴더도 지워진다")
+
     # M2 — 업그레이드 누수. 4.x 가 남긴 폴더는 유일한 파일이 `files.md` 인 경우가
     # 있다(세션 tracker 가 파일을 적었지만 /qg 를 한 번도 안 돌린 세션). 5.0.0 이
     # 그 생산자를 지워도 **이미 디스크에 있는 폴더는 남는다** — 어느 마커도 안 맞아

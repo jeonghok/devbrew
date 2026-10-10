@@ -163,7 +163,7 @@ Field-by-field 저술 규칙:
 
 | Tier | 결정론 트리거 | 최소 렌더(floor) |
 |---|---|---|
-| 0 trivia | check-trivia.sh = trivia | 한 줄 요약만 |
+| 0 trivia | 한 줄 diff (trivia escape 와 같은 기준) | 한 줄 요약만 |
 | 1 small | 변경 1 컴포넌트 | 요약 + Before→After + "어떻게 동작" 1문단 + Testing. diagram 없음 |
 | 2 multi | ≥2 상호작용 컴포넌트 | 전체 스키마 + grounded diagram + trace 1개 |
 | 3 large | ≥3 area (tuning knob) | 전체 + area당 trace + area index (`<details>` per area) |

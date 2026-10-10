@@ -26,7 +26,7 @@ allowed-tools:
   - Bash(git symbolic-ref:*)
 ---
 
-# PR-Understanding Publish — gh를 가진 유일 orchestrator (v9.3.5)
+# PR-Understanding Publish — gh를 가진 유일 orchestrator (v11.0.0)
 
 <!-- plain-language:begin -->
 ## 사람에게 쓰는 글

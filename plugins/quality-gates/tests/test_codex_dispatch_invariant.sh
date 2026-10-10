@@ -50,9 +50,9 @@ else
 fi
 
 # 4. Floor dispatch blocks still thread project_dir (contract preserved through rewrite).
-# PR4a: adversarial dropped from this loop — it was deleted and its replacement
-# (doc-recritic, Phase 1.5) has no project_dir dispatch slot by design (the
-# coordinate rides inside <document>, not a separate field).
+# PR4a: adversarial dropped from this loop. The re-critic (code-recritic, Step 3.5)
+# carries project_dir as a `<project_dir>` slot, not a `project_dir:` field —
+# shared/tests/test_agent_input_slots.sh measures that delivery.
 c4_bad=0
 for name in security-reviewer; do
   awk -v name="quality-gates:$name" '

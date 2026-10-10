@@ -1,78 +1,48 @@
-# State File Format (v1.32.1)
+# 로컬 결과 `result.md`
 
-> v1.32.0 breaking change: cross-turn pipeline state는 SKILL의 단일 턴
-> 시리얼 디스패치로 흡수됨. 본 state file은 **GC mtime anchor + worktree
-> tracking**만 보존한다.
->
-> v1.32.1 (review-driven): review-iteration phantom 필드 제거(I11).
+`.claude/quality-gates/<session-id>/result.md` 는 한 번의 `/qg` 가 남기는 로컬 결과다. 게시
+코멘트에 실리지 않는 것 — 지적 전부(SUGGESTION 포함) · 제외 패치 · 차등 요약 — 이 여기 남는다.
 
-The state file `.claude/quality-gates/<session-id>/pipeline.md` (per-session)
-is created by the setup script (`scripts/setup-qg.sh`) on `/qg` invocation —
-the script removes this session's folder first, so every run starts fresh —
-and deleted by the TTL GC (`scripts/qg-gc.py`, default 24h).
+`<session-id>` 는 `$CLAUDE_CODE_SESSION_ID` 이고 `[A-Za-z0-9_-]{8,}` 를 통과해야 한다. 형제 폴더는
+다른 세션의 것이다 — 건드리지 않는다.
 
-`<session-id>` resolves from `$CLAUDE_CODE_SESSION_ID`; siblings under
-`.claude/quality-gates/` belong to other concurrent Claude Code sessions
-and must not be touched.
+## 형식
 
-**SKILL.md must NOT write this file's frontmatter.** It may append to `## History`
-(Lifecycle 2).
-
-## Schema
-
-```yaml
+```markdown
 ---
-session_id: "<session_id>"           # CLAUDE_CODE_SESSION_ID
-started_at: "<ISO-8601 UTC>"         # setup-qg.sh timestamp
+session_id: "<sid>"
+started_at: "<ISO-8601 UTC>"
 ---
 
-# Quality Gates Pipeline State (v1.32.1)
+# qg result
 
-## History
+## 판정
 
-(SKILL appends one line per iteration verdict for in-turn observability.)
+<verdict.py 출력 원문 — verdict: · reason: · reasons: 줄과 판정 줄>
 
-- [2026-05-27T10:00:00Z] Pipeline started
-- [2026-05-27T10:05:00Z] qg iter 1: 1 CRITICAL / 2 IMPORTANT / 1 SUGGESTION → user chose Retry
+## 지적
+
+<합성기 표 원문 — 살아남은 지적 전부, SUGGESTION 포함>
+
+## 제외 패치
+
+<- iter <N> · #<k> · <file> · <사유> 줄들, 없으면 (없음)>
+
+## 차등 테스트
+
+<집계의 attribution_status · degrade_causes · resolution_disclosure · per_adapter 원문,
+ 없으면 (이번 실행에 차등 집계 없음)>
 ```
 
-A `clean` (or `not-certified`/`defect` with kept = 0 and no differential-test
-origin) iteration appends **no** `## History` line — SKILL Step 5 only runs (and
-appends) when kept > 0, or when a differential-test-origin `defect` with kept = 0
-routes there instead of Final Summary. Neither a `qg iter N: clean` line nor a
-`Pipeline complete` line is ever written by any script — the example above shows
-the only two lines this section actually contains after one non-clean iteration.
+## 생명주기
 
-## Removed Fields (vs v1.x)
+1. **만든다** — `scripts/setup-qg.sh` 가 매 실행 세션 폴더를 새로 만들고 frontmatter 와 `# qg result`
+   제목만 쓴다.
+2. **덧붙인다** — 파이프라인이 Final verdict 에서 위 순서로 절을 `>>` 로 덧붙인다. frontmatter 는
+   고치지 않는다.
+3. **지운다** — `scripts/qg-gc.py` 가 TTL(기본 24시간)이 지난 세션 폴더를 지운다. `result.md` 가
+   세션 폴더의 표지다.
 
-The following v1.x fields are **no longer written or read**:
-
-| Removed | Reason |
-|---|---|
-| `status` | No cross-turn state machine. Pipeline is single-turn. |
-| `consecutive_no_signal` | `<qg-signal>` tag removed. |
-| `max_review_iterations` | Hard-coded constant in SKILL (5). |
-| `runtime_resolution_iter` | The resolution loop it counted iterations for is removed entirely — there is no successor constant or field. |
-| `last_runtime_needed_hash` | Repeat detection moves to inline AskUserQuestion. |
-| `review_iteration` | Phantom field — counter lives in `## History` section only (I11 v1.32.1). |
-| `skip_runtime` | Argument removed — no gate scope to skip. |
-| `single_gate` | Argument removed — no gate scope to choose. |
-| `plan_file` | Passed as SKILL invocation arg. |
-| `pr_url` | Passed as SKILL invocation arg. |
-| `available_plugins` | SKILL re-derives inline (cheap). |
-| `project_dir` | Derived from `pwd` at SKILL preflight (single-turn invariant). |
-| `worktree_path` · `target_branch` | `/qg branch <name>` worktree mode removed (v10). |
-
-The companion file in the same folder (`runtime-evidence.md`)
-follows the same per-session lifecycle. Review scope itself is no longer
-tracked in a companion file — it is git-derived each turn (see
-[`SKILL.md` Step 1](../SKILL.md)).
-
-## Lifecycle
-
-1. **Created by**: `scripts/setup-qg.sh` (on `/qg`) — also `mkdir -p`s the
-   per-session folder.
-2. **Updated by**: SKILL.md may *append* to the `## History` section for
-   observability. Frontmatter is write-once at setup.
-3. **Deleted by**: the next `scripts/setup-qg.sh` run in the same session (it
-   removes the folder before recreating it), or `scripts/qg-gc.py` (TTL GC).
+같은 폴더의 다른 파일 — `intent.md`(의도 출처 본문) · `excluded.md`(제외 패치 누적) ·
+`aggregate.yaml`(마지막 차등 집계) · `verdict.out` · `topic-scope.txt` · `runtime-evidence.md`
+(차등 테스트 원장) — 도 같은 생명주기를 따른다.

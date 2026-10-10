@@ -28,11 +28,10 @@ narrow contract, not an oversight — but it does mean "tests covering
 security-reviewer/test-scope-validator"
 should not be read as agent-drift protection. If that coverage is ever
 wanted, it needs a test that actually reads the corresponding agents/*.md.
-(PR4a: `quality-gates:adversarial` was deleted and replaced by Phase 1.5
-re-critique, `quality-gates:doc-recritic` — a byte-for-byte copy-of the
-shared persona. It is NOT covered by this stub scheme; its drift guard is
-`shared/tests/test_copy_of_contract.sh`, not a test_*_behavior.py file
-here.)
+(PR4a: `quality-gates:adversarial` was deleted; the re-critique is now
+`quality-gates:code-recritic` (qg v10). It is NOT covered by this stub scheme;
+its drift guard is `tests/test_code_recritic_frontmatter.sh`, not a
+test_*_behavior.py file here.)
 """
 from __future__ import annotations
 

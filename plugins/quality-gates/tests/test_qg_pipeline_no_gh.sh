@@ -21,10 +21,10 @@ grep -qF 'render-terminal.py' <<<"$AT" \
   && ok "render-terminal.py wired into allowed-tools" \
   || no "render-terminal.py missing from allowed-tools"
 
-# Final Summary section actually invokes render-terminal.py table.
-if awk '/^## Final Summary/{f=1} f' "$SKILL" | grep -qF 'render-terminal.py table'; then
-  ok "Final Summary uses render-terminal.py table"
+# Final verdict section actually invokes render-terminal.py table.
+if awk '/^## Final verdict/{f=1} f' "$SKILL" | grep -qF 'render-terminal.py" table'; then
+  ok "Final verdict uses render-terminal.py table"
 else
-  no "Final Summary does not call render-terminal.py table"
+  no "Final verdict does not call render-terminal.py table"
 fi
 finish

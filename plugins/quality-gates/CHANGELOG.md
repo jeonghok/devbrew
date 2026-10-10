@@ -3,6 +3,45 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [11.0.0] — 2026-10-09
+
+**v10 ② 리뷰 다이어트** — 한 기준 블록 · 의도 출처 · opus 재비판으로 리뷰를 다시 짜고, 판정을 막는 지적으로 정한다.
+
+### Added
+- `agents/code-recritic.md` — qg 전용 재비판자(opus, 관문 A~E, `lower` 는 근거와 함께 SUGGESTION 으로만).
+- `references/review-criteria.md` — 모든 리뷰어와 codex 가 받는 기준 블록.
+- `verdict.py --line` — 판정 줄 렌더.
+- `discover-spec.sh` 의 의도 출처 사슬 — `Spec:` 트레일러 → 커밋 메시지 + 열린 PR 본문(읽기 전용 `gh pr view`).
+- 로컬 결과 `.claude/quality-gates/<sid>/result.md`.
+
+### Changed
+- 판정: 살아남은 CRITICAL·IMPORTANT 가 1건 이상이면 defect. SUGGESTION 만 남으면 clean.
+- 결측·미지 severity 는 IMPORTANT 로 확정하고 강제로 센다.
+- `security-reviewer` 를 `model: opus` 로 고정, confidence 눈금 대신 기준 블록으로 severity 를 정한다.
+- 합성기 표는 Sev · Path:Line · Summary · Source 넷이고 `blocking:` · `optional:` 줄을 낸다. confidence 를 읽지 않는다.
+- 파이프라인 SKILL.md 를 v10 흐름(리뷰 → 차등 → 합성)으로 다시 썼다. Fix-loop 는 항목마다 적용/제외를 보이고 사용자가 번호로 바꾼다.
+- 리뷰어 구성: 기본 셋 + 조건부 넷 + 재비판(최대 8).
+- `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` 의 범위가 넓어졌다 — codex 의 spec AC 만이 아니라 codex 로 가는 의도 출처 전부(spec · 커밋 메시지 · PR 본문)를 비운다. test-scope-validator 의 spec 축도 끈다. 이름은 그대로다.
+- iteration 줄은 디스패치가 돌아온 뒤에 찍고 실패한 외부 리뷰어를 `실패:` 칸에 싣는다.
+
+### Removed
+- `scripts/scout.py`, `scripts/check-trivia.sh`(trivia 는 오케스트레이터가 판단 — 사유 `trivia` 유지), `scripts/recritic_bridge.py`, `agents/doc-recritic.md` 사본(qg 는 `code-recritic` 을 쓴다; [10.0.1] 의 doc-recritic 문장 추가는 이 사본과 함께 사라졌다), `feature-dev:code-architect` dispatch.
+- 세션 표지 `pipeline.md`(GC 는 옛 표지로 계속 회수한다).
+- README 의 codex 「First-use cost consent gate」 문장 — 구현된 적이 없는 게이트였다.
+
+### Fixed
+- 재비판 `added` 항목이 severity 없이 `disposition: SUGGESTION` 이면 공시 없이 SUGGESTION 이 되어 놓친 결함이 clean 으로 지나갔다. 이제 `disposition` 은 IMPORTANT · CRITICAL 일 때만 받고, 그 밖은 IMPORTANT 로 강제해 게이트 변경으로 공시한다(D-2).
+- Final verdict 펜스가 합성 출력이 없거나 비었거나 `verdict:` · `blocking:` · `optional:` 줄이 정확히 한 번씩이 아니면 판정 줄 없이 exit 4 로 멈춘다. 결측을 0 으로 채우는 기본값을 지웠다 — 전엔 경로가 틀리면 `qg: clean` 이 나왔다.
+- 리포의 하위 디렉토리에서 시작한 세션 — `setup-qg.sh` 가 git 최상위로 옮겨 세션 폴더를 만든다. 전엔 setup 은 하위에, SKILL 의 `RD` 는 최상위에 폴더를 두어 재실행 위생 · 의도 파일(P3 rc 3) · `result.md` 가 어긋났다.
+- `RD` 를 정하는 펜스가 `git rev-parse` 실패에 멈춘다(git 밖에서 `RD` 가 파일시스템 루트를 가리키지 않는다). P3 은 `discover-spec.sh` 의 rc 를 소비하고 non-zero 면 `intent:` 줄에 밝힌다.
+- 차등 테스트 레퍼런스가 없어진 `kept=0` 대신 `blocking: 0` 을 가리킨다.
+
+### Security
+- `discover-spec.sh` 는 `Spec:` 트레일러 경로를 리포 안의 추적 파일일 때만 읽는다(`git show HEAD:<rel>`). `..` · 절대 경로 · `.git` 은 거부하고 `intent_note` 에 `spec 경로 거부` 를 남긴다.
+- `security-reviewer` 가 입력이 이끄는 시간·자원 고갈(파국적 역추적 regex · 상한 없는 루프/읽기 · 깊이 제한 없는 재귀)을 찾는다. 시간 제한이 걸린 hook · gate · CLI · 요청 경로에서 그 초과는 막는 지적(IMPORTANT)이고, 통제를 fail-open 시키면 CRITICAL 이다. 규칙 추가뿐이고 지우거나 완화한 것은 없다.
+- 외부 리뷰어(`pr-review-toolkit:*`) 프롬프트도 `<intent>` · `<diff>` 를 지시가 아닌 데이터로 못 박는다.
+- persona 락(`security-reviewer` Severity · intent 단락, `code-recritic` 주입 저항 단락)을 줄·단락 전체 등호로 넓혔다 — 꼬리 덧붙이기와 한정어 삽입도 RED 다.
+
 ## [10.0.3] — 2026-10-09
 
 ### Changed

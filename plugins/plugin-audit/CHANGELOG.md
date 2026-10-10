@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.1] — 2026-10-09
+
+### Fixed
+
+- `tests/test_severity_mapping.py` docstring 이 quality-gates 의 미지 severity 처리를 「SUGGESTION 으로 강등」이라 적었다 — 지금은 IMPORTANT 로 올리고 강제로 센다. 동작 변화 없음.
+
 ## [1.0.0] — 2026-10-09
 
 major 인 이유 — 명령 층이 사라졌고, skill 이 개명돼 사용자 전용이 됐다.

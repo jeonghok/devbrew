@@ -50,8 +50,8 @@ RC_WT=$?
 (cd "$REPO" && HOME="$REPO" "$SETUP" --session-id "$SID" >/dev/null 2>&1)
 RC_REPO=$?
 
-WT_FILE="$WT/.claude/quality-gates/$SID/pipeline.md"
-REPO_FILE="$REPO/.claude/quality-gates/$SID/pipeline.md"
+WT_FILE="$WT/.claude/quality-gates/$SID/result.md"
+REPO_FILE="$REPO/.claude/quality-gates/$SID/result.md"
 
 [[ "$RC_WT" -eq 0 && -f "$WT_FILE" ]] && ok "T1a: worktree setup ok" || no "T1a: worktree setup failed (rc=$RC_WT)"
 [[ "$RC_REPO" -eq 0 && -f "$REPO_FILE" ]] \
@@ -78,7 +78,7 @@ RC_REPO=$?
 RC_WT=$?
 
 [[ "$RC_REPO" -eq 0 ]] && ok "T2a: origin setup ok" || no "T2a: origin setup failed"
-[[ "$RC_WT" -eq 0 && -f "$WT/.claude/quality-gates/$SID/pipeline.md" ]] \
+[[ "$RC_WT" -eq 0 && -f "$WT/.claude/quality-gates/$SID/result.md" ]] \
   && ok "T2b: worktree setup with same SID succeeded (worktree did not see origin state)" \
   || no "T2b: worktree setup failed (rc=$RC_WT)"
 
@@ -94,8 +94,8 @@ SID="isoshared03"
 # Remove the worktree's own session folder
 rm -rf "$WT/.claude/quality-gates/$SID"
 
-if [[ ! -d "$WT/.claude/quality-gates/$SID" && -f "$REPO/.claude/quality-gates/$SID/pipeline.md" ]]; then
-  ok "T3: removing the worktree folder left origin's pipeline.md intact"
+if [[ ! -d "$WT/.claude/quality-gates/$SID" && -f "$REPO/.claude/quality-gates/$SID/result.md" ]]; then
+  ok "T3: removing the worktree folder left origin's result.md intact"
 else
   no "T3: removal affected origin state OR worktree state still present"
 fi
@@ -125,15 +125,15 @@ RC_A=$?
 HOME="$ROOT" "$SETUP" --session-id "$SID_B" >/dev/null 2>&1
 RC_B=$?
 
-FILE_A="$ROOT/.claude/quality-gates/$SID_A/pipeline.md"
-FILE_B="$ROOT/.claude/quality-gates/$SID_B/pipeline.md"
+FILE_A="$ROOT/.claude/quality-gates/$SID_A/result.md"
+FILE_B="$ROOT/.claude/quality-gates/$SID_B/result.md"
 
 [[ "$RC_A" -eq 0 && -f "$FILE_A" ]] && ok "T4a: SID_A setup ok" || no "T4a: SID_A failed"
 [[ "$RC_B" -eq 0 && -f "$FILE_B" ]] && ok "T4b: SID_B setup ok (concurrent)" || no "T4b: SID_B failed"
 
 if grep -q "session_id: \"$SID_A\"" "$FILE_A" 2>/dev/null \
    && grep -q "session_id: \"$SID_B\"" "$FILE_B" 2>/dev/null; then
-  ok "T4c: each pipeline.md owns its session_id (no cross-contamination)"
+  ok "T4c: each result.md owns its session_id (no cross-contamination)"
 else
   no "T4c: session_id mismatch in one of the state files"
 fi

@@ -185,31 +185,29 @@ case_synth_folding_into_a_silent_reviewer_is_ok() {
   rm -rf "$T"
 }
 
-case_synth_suppressed_finding_still_counts_as_authored() {
-  # 계획 R-H — 억제된(suppressed) finding 도 「낸 것」이다. 억제분을 빼면 임계값 아래
-  # finding 만 낸 리뷰어가 자기 판정을 할 수 있다. 저자를 `kept` 에서 뽑는 변이가
-  # 이 케이스 없이 스위트 전체를 GREEN 으로 남겼다(변이 표 16행).
+case_synth_optional_finding_still_counts_as_authored() {
+  # 계획 R-H — 선택 사항(SUGGESTION) finding 도 「낸 것」이다. 막는 지적만 세면 SUGGESTION
+  # 만 낸 리뷰어가 자기 판정을 할 수 있다.
   local T; T=$(mktemp -d)
   printf -- '- {agent: scout, file: a.py, line: 1, severity: SUGGESTION, confidence: 3, summary: s, proposed_fix: f}\n' > "$T/findings.yaml"
   rf_prep "$T"
   rf_reply "$T" 'verdicts:
   - f: f1
     verdict: confirm'
-  # 전제 확인 — 이 픽스처의 유일한 finding 이 실제로 «억제» 경로를 탄다. 안 타면
-  # 아래 exit 4 는 억제와 무관한 이유로 선다.
+  # 전제 확인 — 이 픽스처의 유일한 finding 은 선택 사항이다.
   local off; off=$(rf_synth "$T" --emit-verdict)
-  assert_grep "$off" 'No high-confidence findings\. 1 low-confidence' "전제: 픽스처의 finding 은 억제된다"
+  assert_grep "$off" '^blocking: 0$' "전제: 픽스처의 finding 은 막는 지적이 아니다"
   local f="$T/angles.txt"
   write_angles "$f" "security: filled" "adjudication: folded_into:scout" \
                     "different-premise: filled"
   local out rc=0
   out=$(rf_synth "$T" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
-  assert_eq "$rc" "4" "억제된 finding 만 낸 리뷰어에게 판정 각도를 접어도 exit 4 (R-H)"
+  assert_eq "$rc" "4" "SUGGESTION 만 낸 리뷰어에게 판정 각도를 접어도 exit 4 (R-H)"
   assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다"
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다"
   # 재비판 Important 2 — 원인이 자기 판정임을 따로 핀한다(신원 계약 메시지와
   # AC10a 문구가 겹친다).
-  assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (억제된 finding)"
+  assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (SUGGESTION finding)"
   rm -rf "$T"
 }
 
@@ -272,7 +270,7 @@ case_synth_reviewer_sources_do_not_displace_agent() {
 }
 
 case_synth_promoted_finding_counts_as_authored() {
-  # 승격된 finding(재비판자의 `added:`, 저자 `doc-recritic`)도 「낸 것」이다.
+  # 승격된 finding(재비판자의 `added:`, 저자 `code-recritic`)도 「낸 것」이다.
   # 판정 적용 전 입력(`raw`)에는 없고 dedup 뒤 목록에만 있다 — 저자를 `raw` 에서만
   # 뽑는 변이가 이 케이스 없이 스위트를 GREEN 으로 남겼다.
   local T; T=$(mktemp -d)
@@ -284,7 +282,7 @@ added:
   local off; off=$(rf_synth "$T" --emit-verdict)
   assert_grep "$off" 'promoted-one' "전제: 픽스처의 added 가 승격돼 표에 실린다"
   local f="$T/angles.txt"
-  write_angles "$f" "security: filled" "adjudication: folded_into:doc-recritic" \
+  write_angles "$f" "security: filled" "adjudication: folded_into:code-recritic" \
                     "different-premise: filled"
   local out rc=0
   out=$(rf_synth "$T" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
@@ -293,19 +291,17 @@ added:
   assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다"
   # 재비판 Important 2 — 원인이 자기 판정임을 따로 핀한다.
   assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (승격분)"
-  # 억제된 승격분 — `raw` 에 없고 억제 뒤 `kept` 에도 없다. dedup 뒤 목록만 이 저자를
-  # 본다. 저자를 `kept + raw` 에서 뽑는 변이(억제분 제외)를 이것만 가른다.
+  # SUGGESTION 승격분 — `raw` 에 없고 막는 지적도 아니다. dedup 뒤 목록만 이 저자를 본다.
   rf_reply "$T" 'verdicts: []
 added:
-  - {file: b.py, line: 2, severity: SUGGESTION, confidence: 3, summary: promoted-low}'
+  - {file: b.py, line: 2, severity: SUGGESTION, summary: promoted-low}'
   off=$(rf_synth "$T" --emit-verdict)
-  assert_grep "$off" 'No high-confidence findings\. 1 low-confidence' "전제: 승격분이 억제된다"
+  assert_grep "$off" '^optional: 1$' "전제: 승격분이 선택 사항으로 실린다"
   rc=0; out=$(rf_synth "$T" --emit-verdict --angles "$f" 2>"$T/err") || rc=$?
-  assert_eq "$rc" "4" "억제된 승격분의 저자에게 접어도 exit 4 (R-H)"
-  assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다 (억제된 승격분)"
-  assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다 (억제된 승격분)"
-  # 재비판 Important 2 — 원인이 자기 판정임을 따로 핀한다.
-  assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (억제된 승격분)"
+  assert_eq "$rc" "4" "SUGGESTION 승격분의 저자에게 접어도 exit 4 (R-H)"
+  assert_eq "$out" "" "실패 경로의 stdout 이 비어 있다 (SUGGESTION 승격분)"
+  assert_contains "$(cat "$T/err")" "AC10a" "원인이 AC10a 다 (SUGGESTION 승격분)"
+  assert_contains "$(cat "$T/err")" "자기 finding 자기 판정" "원인이 자기 판정이다 (SUGGESTION 승격분)"
   rm -rf "$T"
 }
 
@@ -915,7 +911,7 @@ case_synth_blocking_absent_is_not_certified
 case_synth_different_premise_absent_stays_clean
 case_synth_self_adjudication_is_atomic_failure
 case_synth_folding_into_a_silent_reviewer_is_ok
-case_synth_suppressed_finding_still_counts_as_authored
+case_synth_optional_finding_still_counts_as_authored
 case_synth_rejected_finding_still_counts_as_authored
 case_synth_reviewer_sources_do_not_displace_agent
 case_synth_promoted_finding_counts_as_authored

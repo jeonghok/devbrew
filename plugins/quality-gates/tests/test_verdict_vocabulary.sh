@@ -486,15 +486,31 @@ added: []'
   rm -rf "$T"
 }
 
-case_synth_kept_finding_is_defect() {
+case_synth_ac4_suggestion_only_is_clean() {
+  # AC4 — 재비판 뒤 SUGGESTION 만 남고 다른 축이 clean 이면 판정은 clean 이다.
   local T; T=$(mktemp -d)
-  printf -- '- {agent: r, file: a.py, line: 1, severity: SUGGESTION, confidence: 8, summary: s, proposed_fix: f}\n' > "$T/findings.yaml"
+  printf -- '- {agent: r, file: a.py, line: 1, severity: SUGGESTION, summary: s, proposed_fix: f}\n' > "$T/findings.yaml"
   rf_prep "$T"
-  rf_reply "$T" 'verdicts: []
-added: []'
+  rf_reply "$T" 'verdicts:
+  - f: f1
+    verdict: confirm'
   local out; out=$(rf_synth "$T" --emit-verdict)
-  # 계획 R-B — severity 를 묻지 않는다. SUGGESTION 하나도 채택된 finding 이다.
-  assert_grep "$out" '^verdict: defect$' "채택된 finding 이 있으면 defect"
+  assert_grep "$out" '^optional: 1$'    "전제: SUGGESTION 이 표에 남는다"
+  assert_grep "$out" '^verdict: clean$' "SUGGESTION 만 남으면 clean"
+  rm -rf "$T"
+}
+
+case_synth_ac5_one_important_is_defect() {
+  # AC5 — 재비판 뒤 IMPORTANT 가 1건 남으면 판정은 defect 다.
+  local T; T=$(mktemp -d)
+  printf -- '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, summary: s, proposed_fix: f}\n' > "$T/findings.yaml"
+  rf_prep "$T"
+  rf_reply "$T" 'verdicts:
+  - f: f1
+    verdict: confirm'
+  local out; out=$(rf_synth "$T" --emit-verdict)
+  assert_grep "$out" '^blocking: 1$'     "전제: 막는 지적 1"
+  assert_grep "$out" '^verdict: defect$' "IMPORTANT 1건이면 defect"
   rm -rf "$T"
 }
 
@@ -512,14 +528,14 @@ case_synth_lost_findings_is_not_certified() {
 
 case_synth_secondary_degrade_does_not_block() {
   # R-AD — 옛 픽스처(`verdicts: {a: 1}`, 매핑이 아닌 최상위 verdicts)는 재비판
-  # 경로에서 대응이 없다: `recritic_bridge.to_adjudication_doc` 은 verdicts/added
+  # 경로에서 대응이 없다: `synthesize_findings.to_adjudication_doc` 은 verdicts/added
   # 가 목록이 아니면 그 자체로 **판정자 사망**(주 입력 실패)을 낸다 — 옛 경로의
   # "보조 source_failed 만으로 degrade" 모양과 다르다. 같은 «성질»(차단 없이
   # degrade 만 공시된다)을 재비판 경로의 다른 강제 자리로 잰다 — 모르는 verdict
-  # 동사(`downgrade`)의 `ledger.coerced(gate=True)`. finding 은 SUGGESTION ·
-  # confidence 3 이라 confirm 으로 강제돼 살아도 suppress() 가 걸러 kept=0 이다.
+  # 동사(`downgrade`)의 `ledger.coerced(gate=True)`. finding 은 SUGGESTION 이라
+  # confirm 으로 강제돼 살아도 막는 지적이 아니다.
   local T; T=$(mktemp -d)
-  printf -- '- {agent: r, file: a.py, line: 1, severity: SUGGESTION, confidence: 3, summary: s}\n' > "$T/findings.yaml"
+  printf -- '- {agent: r, file: a.py, line: 1, severity: SUGGESTION, summary: s}\n' > "$T/findings.yaml"
   rf_prep "$T"
   rf_reply "$T" 'verdicts:
   - f: f1
@@ -527,8 +543,8 @@ case_synth_secondary_degrade_does_not_block() {
     to: SUGGESTION'
   local out; out=$(rf_synth "$T" --emit-verdict)
   # Controller fix round 1, Minor 2 — 전제(강제가 실제로 일어났다)를 먼저 잰다.
-  # 이게 없으면 bridge 가 언젠가 `downgrade` 를 더 이상 강제하지 않도록 바뀌어도
-  # (예: 조용히 무시) 이 케이스는 finding 이 어차피 억제돼 kept=0·clean 이라
+  # 이게 없으면 재비판 변환이 언젠가 `downgrade` 를 더 이상 강제하지 않도록 바뀌어도
+  # (예: 조용히 무시) 이 케이스는 finding 이 SUGGESTION 이라 막는 지적 0·clean 이라
   # 계속 GREEN 이다 — «차단 안 됨» 을 증명하려면 먼저 «강제가 있었다» 가 참이어야
   # 한다.
   assert_grep "$out" "강제\(게이트 변경\): verdict 'downgrade'" "전제 — 모르는 verdict 가 실제로 강제됐다"
@@ -653,7 +669,8 @@ case_degrade_causes_and_cause_to_reason_are_bijective
 case_real_producer_per_adapter_feeds_verdict
 case_real_producer_aggregate_feeds_verdict
 case_synth_off_is_byte_prefix_of_on
-case_synth_kept_finding_is_defect
+case_synth_ac4_suggestion_only_is_clean
+case_synth_ac5_one_important_is_defect
 case_synth_lost_findings_is_not_certified
 case_synth_secondary_degrade_does_not_block
 case_synth_clean_is_clean
