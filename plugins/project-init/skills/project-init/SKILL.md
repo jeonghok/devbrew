@@ -249,7 +249,7 @@ placeholder 치환 매핑:
 
 생성 결과 보고:
 
-> **{strategy 이름}** 전략으로 git workflow 초기화 완료.
+> **{strategy 이름}** 전략으로 git workflow 를 초기화했다.
 >
 > 생성/업데이트된 파일:
 > - `AGENTS.md` — `## Git Workflow` 섹션 추가 (canonical content source)
@@ -263,5 +263,4 @@ placeholder 치환 매핑:
 > - (도메인 용어가 있으면) `docs/project/glossary.md`
 >
 > `project-init` 플러그인 hook이 `Bash` 호출에서 브랜치 이름과 commit 메시지를 자동 검증합니다. 그 둘이 이 hook이 검사하는 전부입니다 — 위에 생성된 문서의 내용·구조·상호 포인터를 사후에 검증하는 것은 없습니다.
-> AGENTS.md primary 패턴으로 OpenAI Codex, Cursor, Aider 등 16+ 벤더가 동일 파일을 인식합니다.
-> 간결한 git 작업을 위해 `/commit` 또는 `/commit-push-pr` (commit-commands 플러그인) 사용.
+> 다음 할 일: 새 브랜치를 하나 만들어 보라 — `git checkout -b feature/<이름>` 이면 훅이 이름을 바로 확인한다.

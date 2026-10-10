@@ -48,6 +48,53 @@ def deep_label(f: dict) -> str:
     return ""   # null → 무라벨
 
 
+_SEV_KO = (("CRITICAL", "심각"), ("IMPORTANT", "중요"), ("SUGGESTION", "제안"))
+
+
+def status_line(findings: list) -> str:
+    """제목 다음 줄 — 스크립트가 센 상태 문장. 0 인 등급은 빼고, 세 등급 밖(옛 HIGH 등)은 「기타」로 센다."""
+    if not findings:
+        return "감사를 마쳤다 — 보고된 발견 없음."
+    parts = []
+    rest = len(findings)
+    for key, ko in _SEV_KO:
+        n = 0
+        for f in findings:
+            if f.get("severity") == key:
+                n += 1
+        rest -= n
+        if n:
+            parts.append("%s %d" % (ko, n))
+    if rest:
+        parts.append("기타 %d" % rest)
+    return "감사를 마쳤다 — 발견 %d개(%s)." % (len(findings), " · ".join(parts))
+
+
+def val(x) -> str:
+    """빈 칸은 None 대신 「(없음)」으로 쓴다."""
+    return "(없음)" if x is None else str(x)
+
+
+def where(ev: dict) -> str:
+    """근거 위치 — 없는 칸을 None 으로 찍지 않는다."""
+    file, line = ev.get("file"), ev.get("line")
+    if file is None or file == "":
+        return "(위치 없음)"
+    if line is None:
+        return "`%s`" % file
+    return "`%s:%s`" % (file, line)
+
+
+def ev_text(ev: dict, with_claim: bool = False) -> str:
+    """근거 한 줄 — 위치, 그리고 있으면 주장과 인용. 없는 칸은 찍지 않는다."""
+    body = ""
+    if with_claim and ev.get("claim"):
+        body = "%s: " % ev.get("claim")
+    if ev.get("quote") is not None:
+        body += str(ev.get("quote"))
+    return where(ev) + (" — " + body if body else "")
+
+
 def render(data: dict) -> str | None:
     meta = data.get("meta", {})
     findings = [f for f in data.get("findings", []) if f.get("status") == "reported"]
@@ -59,36 +106,42 @@ def render(data: dict) -> str | None:
 
     target = meta.get("target", "plugin")
     lines = [f"# {target} 읽기전용 감사 — " + meta.get("date", "")]
+    lines.append(status_line(findings))
     banners = []
     if axis_failures:
-        banners.append(f"⚠ **{6 - len(axis_failures)}/6 축 완주** — {len(axis_failures)}개 축 감사 실패")
+        banners.append(f"⚠ **축 {6 - len(axis_failures)}/6 완주** — {len(axis_failures)}개 축은 감사하지 못했다")
     # §4.1 truth table 세 상태. 옛 코드는 `not ran`만 보아 "돌았으나 실패"를
     # "미실행"과 같은 배너로 뭉갰다 — 사용자가 조치할 대상이 다르다(설치 vs 재실행).
     _cx = meta.get("codex", {})
     if not _cx.get("ran"):
-        banners.append("⚠ **codex 독립 감사 미실행** — LD4 모델 다양성 결손")
+        banners.append("⚠ **codex 독립 감사를 돌리지 않았다** — 다른 모델의 확인이 없다(LD4 모델 다양성 결손)")
     elif _cx.get("failed"):
-        banners.append("⚠ **codex 독립 감사 실행-실패** — 돌았으나 결과를 신뢰할 수 없다 "
+        banners.append("⚠ **codex 독립 감사가 돌았지만 결과를 믿을 수 없다** — 다른 모델의 확인이 없다"
                        "(LD4 모델 다양성 결손, degraded)")
     for d in (_cx.get("dropped") or []):
-        banners.append(f"⚠ **codex {d.get('collection')} {d.get('count')}건 폐기** — "
-                       f"{d.get('reason')} (조용히 버리지 않는다)")
+        banners.append(f"⚠ **codex {d.get('collection')} {d.get('count')}건을 버렸다** — "
+                       f"형식이 맞지 않았다({d.get('reason')})")
     if degraded:
-        banners.append(f"⚠ **degraded {len(degraded)}건** — 아래 결손 목록 참조")
+        banners.append(f"⚠ **빠지거나 약해진 검사 {len(degraded)}건**(degraded) — 아래 「결손」 목록에 있다")
     if not findings:
-        banners.append("⚠ **발견 0건** — 이것이 *깨끗함*인지 *감사 실패*인지 축 완주 수와 journal로 확인하라")
+        banners.append("⚠ **발견 0건** — 문제가 없어서인지 감사가 실패해서인지는 축 완주 수와 기록(journal)으로 확인하라")
     lines += banners + [""]
 
     findings.sort(key=sort_key)
     lines.append("## 발견")
     for f in findings:
         badge = " ⚑ 두 모델 독립 확인" if f.get("cross_model_confirmed") else ""
-        lines.append(f"### [{f.get('severity')}] {f.get('title')} ({f.get('id')}){badge}{deep_label(f)}")
+        plain = f.get("plain")
+        if isinstance(plain, str) and plain.strip():
+            head = f"{' '.join(plain.split())} ({f.get('title')} · {f.get('id')})"
+        else:
+            head = f"{f.get('title')} ({f.get('id')})"
+        lines.append(f"### [{f.get('severity')}] {head}{badge}{deep_label(f)}")
         for ev in f.get("evidence", []):
-            lines.append(f"- `{ev.get('file')}:{ev.get('line')}` — {ev.get('quote')}")
-        lines.append(f"- 피해: {f.get('user_harm')}")
-        lines.append(f"- 권고: {f.get('recommendation')}")
-        lines.append(f"- 반대근거: {f.get('counter_argument')}")
+            lines.append(f"- {ev_text(ev)}")
+        lines.append(f"- 피해: {val(f.get('user_harm'))}")
+        lines.append(f"- 권고: {val(f.get('recommendation'))}")
+        lines.append(f"- 반대근거: {val(f.get('counter_argument'))}")
         if f.get("reference_gap") not in (None, "none"):
             lines.append(f"- 레퍼런스 격차: {f.get('reference_gap')}")
         lines.append("")
@@ -112,18 +165,18 @@ def render(data: dict) -> str | None:
                     for side_label, side_key in (("좌", "left_evidence"), ("우", "right_evidence")):
                         side_ev = a.get(side_key) or []
                         if not side_ev:
-                            lines.append(f"  - {side_label}: 0건")
+                            lines.append(f"  - {side_label}: 이 쪽을 받치는 근거는 보고되지 않았다(0건)")
                         else:
                             lines.append(f"  - {side_label}:")
                             for e in side_ev:
-                                lines.append(f"    - `{e.get('file')}:{e.get('line')}` — {e.get('claim')}: {e.get('quote')}")
+                                lines.append(f"    - {ev_text(e, with_claim=True)}")
                     if a.get("steelman_condition"):
                         lines.append(f"  - 스틸맨 조건: {a.get('steelman_condition')}")
                 else:
-                    lines.append(f"  - 답: {a.get('answer')}")
+                    lines.append(f"  - 답: {val(a.get('answer'))}")
                     for e in a.get("evidence") or []:
-                        lines.append(f"    - `{e.get('file')}:{e.get('line')}` — {e.get('quote')}")
-                lines.append(f"  - 근거: {a.get('reason')}")
+                        lines.append(f"    - {ev_text(e)}")
+                lines.append(f"  - 근거: {val(a.get('reason'))}")
             ref_ids = [f.get("id") for f in findings if f.get("oq_ref") == oq_id]
             if ref_ids:
                 lines.append(f"- 이 질문과 관련된 발견: {', '.join(ref_ids)}")
@@ -140,7 +193,7 @@ def render(data: dict) -> str | None:
             # §9.3: 두 판정이 엇갈려도 해소하지 않고 나란히 드러낸다 — 각 source를 독립 렌더링.
             for d in sorted(by_d[d_id], key=lambda d: d.get("source") or ""):
                 lines.append(f"- 출처: {d.get('source')} — 판정: {d.get('verdict')}")
-                lines.append(f"  - 근거: {d.get('reason')}")
+                lines.append(f"  - 근거: {val(d.get('reason'))}")
                 if d.get("impact"):
                     lines.append(f"  - 영향: {d.get('impact')}")
                 if d.get("fix"):

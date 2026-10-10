@@ -5,6 +5,15 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.0.1] — 2026-10-10
+
+### Changed
+
+- 훅의 사람용 경고(브랜치 이름 · 커밋 메시지 · 규칙 문서 부재)가 한국어다. 정규식과 모델에게 가는 안내(`Rename the branch: …`)는 그대로다.
+- 초기화 보고가 무엇을 했는지 한 문장으로 시작하고 할 일 하나로 끝난다. 다른 플러그인을 권하던 줄과 벤더 수 줄을 뺐다.
+- 마켓플레이스 소개 문구가 `plugin.json` 과 같아졌다 — 지금 없는 문서 · 헌장 검사 광고를 뺐다.
+- README 첫 문단을 쉬운 말로 바꿨고, 원칙 절 제목이 `## Principles Instantiated` 다(`plugin-audit` 의 `check-shape-completeness.py` 가 이 제목만 읽는다).
+
 ## [5.0.0] — 2026-10-09
 
 ### Removed

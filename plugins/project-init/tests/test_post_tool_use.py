@@ -87,7 +87,7 @@ class F1FailOpenTest(_ProjectDirTestCase):
         msg, _model = _hook.validate_branch("git checkout -b release/x")
         self.assertIsNotNone(msg)
         self.assertIn("fail-open", msg)
-        self.assertIn("skipping", msg)
+        self.assertIn("브랜치 이름 검사를 건너뛴다", msg)
 
     def test_regexless_file_fails_open(self):
         write_strategy(self.tmp, None)
@@ -167,7 +167,7 @@ class F1FailOpenTest(_ProjectDirTestCase):
         self.assertEqual(rc, 0)
         # The Korean file decoded → its pattern applied → Bad_Name violates it.
         # Under the bug the file fails to decode → fail-open, so neither holds.
-        self.assertIn("does not follow naming convention", out)
+        self.assertIn("이름 규칙에 맞지 않는다", json.loads(out).get("systemMessage", ""))
         self.assertNotIn("fail-open", out)
 
 
@@ -189,6 +189,10 @@ class PreservedBehaviorTest(_ProjectDirTestCase):
 
     def test_conventional_commit_passes(self):
         self.assertIsNone(_hook.validate_commit('git commit -m "feat: add thing"'))
+
+    def test_korean_description_passes(self):
+        """커밋 설명이 한국어인 레포(devbrew CLAUDE.md 규칙) — 정규식은 type 만 본다."""
+        self.assertIsNone(_hook.validate_commit('git commit -m "fix(qg): 범위 경고를 쉬운 말로"'))
 
     def test_non_conventional_commit_flagged(self):
         msg, _model = _hook.validate_commit('git commit -m "add thing"')
@@ -260,7 +264,7 @@ class F2SuggestionTest(_ProjectDirTestCase):
         self.assertIn("release", msg)
         self.assertIn("hotfix", msg)
         self.assertNotIn("feature/hotfix-login", msg)   # no hardcoded feature/ suggestion
-        self.assertIn("Allowed prefixes: feature, fix, release, hotfix", msg)  # body-unique teeth (not header-satisfiable)
+        self.assertIn("허용 접두어: feature, fix, release, hotfix", msg)  # body-unique teeth (not header-satisfiable)
         # model half must be self-contained: a runnable command (derived prefix, not a
         # placeholder) plus the full prefix list — never a dangling <prefix>/"above" pointer
         self.assertIn("git branch -m feature/hotfix-login", model)
@@ -273,7 +277,7 @@ class F2SuggestionTest(_ProjectDirTestCase):
         msg, _model = _hook.validate_branch("git checkout -b bad")
         self.assertIsNotNone(msg)
         self.assertNotIn("git branch -m", msg)  # cmd is None for exotic
-        self.assertIn("docs/git-workflow/branch-strategy.md", msg)
+        self.assertIn("허용 접두어는 docs/git-workflow/branch-strategy.md 에 있다.", msg)
 
 
 class MainDoubleValidationTest(unittest.TestCase):
@@ -310,7 +314,7 @@ class MainDoubleValidationTest(unittest.TestCase):
             out, rc = run_hook(payload, cwd=tmp)
             data = json.loads(out)
             msg = data.get("systemMessage", "")
-            self.assertNotIn("naming convention", msg)  # branch OK -> no branch warning
+            self.assertNotIn("이름 규칙에 맞지 않는다", msg)  # branch OK -> no branch warning (양성 짝: test_branch_fact_and_hint_stay_human)
             self.assertIn("Conventional Commits", msg)   # commit flagged independently
             self.assertEqual(rc, 0)  # non-blocking: hook always exits 0 for compound shape too
         finally:
@@ -367,9 +371,10 @@ class ChannelSplit(unittest.TestCase):
         try:
             data = self._branch_violation(tmp)
             sm = data.get("systemMessage", "")
-            self.assertIn("does not follow naming convention", sm)
-            self.assertIn("Expected pattern:", sm)
-            self.assertIn("Allowed prefixes: feature, fix, release, hotfix", sm)
+            self.assertIn("이름 규칙에 맞지 않는다", sm)
+            self.assertIn("기대하는 형식:", sm)
+            self.assertIn("허용 접두어: feature, fix, release, hotfix", sm)
+            self.assertNotIn("does not follow", sm, "옛 영어 경고가 사람 채널에 남았다")
             self.assertNotIn("git branch -m", sm,
                              "수정 명령이 사람 채널에 남아 있다 — 채널이 갈리지 않았다")
         finally:
@@ -387,7 +392,11 @@ class ChannelSplit(unittest.TestCase):
             data = json.loads(out)
             sm = data.get("systemMessage", "")
             self.assertIn("Conventional Commits", sm)
-            self.assertIn("Suggested: feat: add thing", sm)
+            self.assertIn("project-init: 커밋 메시지가 Conventional Commits 형식이 아니다.", sm)
+            self.assertIn("형식: <type>(<scope>): <설명>", sm)
+            self.assertIn("type: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert", sm)
+            self.assertIn("제안: feat: add thing", sm)
+            self.assertNotIn("Suggested:", sm, "옛 영어 제안 줄이 남았다")
             ac = data.get("hookSpecificOutput", {}).get("additionalContext", "")
             self.assertNotIn("Conventional Commits", ac,
                              "커밋 경고가 모델 채널로 갔다 — 재진입 비대칭이 깨졌다")
