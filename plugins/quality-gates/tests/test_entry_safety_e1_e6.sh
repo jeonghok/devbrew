@@ -222,18 +222,18 @@ assert_eq "$(printf '%s\n' "$e" | grep -c .)" "1" "E1: 마커 목록을 못 읽�
 assert_eq "$(snap "$WB")" "$before" "E1: 마커 목록을 못 읽으면 아무것도 지우거나 쓰지 않는다"
 
 note "── E1(자기 세션): 이 세션의 폴더는 마커 없이도 다시 만들고, 다른 세션의 폴더는 받지 않는다"
-# /qg-publish 는 같은 세션 폴더에 마커가 아닌 파일(pr-understanding.md)을 쓴다 — 그 뒤의 /qg 가 막히면 안 된다.
+# 게시 펜스는 같은 세션 폴더에 마커가 아닌 파일(comment.md)을 쓴다 — 그 뒤의 /qg 가 막히면 안 된다.
 OWN="ownsession0001"
 for how in env same-arg; do
   WO="$TMP/e1own-$how"; mkdir -p "$WO/.claude/quality-gates/$OWN"
-  : > "$WO/.claude/quality-gates/$OWN/pr-understanding.md"
+  : > "$WO/.claude/quality-gates/$OWN/comment.md"
   if [ "$how" = env ]; then
     (cd "$WO" && CLAUDE_CODE_SESSION_ID="$OWN" "$SETUP" >/dev/null 2>&1); rc=$?
   else
     (cd "$WO" && CLAUDE_CODE_SESSION_ID="$OWN" "$SETUP" --session-id "$OWN" >/dev/null 2>&1); rc=$?
   fi
-  assert_eq "$rc" "0" "E1: 자기 세션($how) 폴더에 pr-understanding.md 만 있어도 exit 0"
-  [ ! -e "$WO/.claude/quality-gates/$OWN/pr-understanding.md" ] \
+  assert_eq "$rc" "0" "E1: 자기 세션($how) 폴더에 comment.md 만 있어도 exit 0"
+  [ ! -e "$WO/.claude/quality-gates/$OWN/comment.md" ] \
     && ok "E1: 자기 세션($how) 폴더를 지우고 다시 만들었다" || no "E1: 자기 세션($how) 폴더의 이전 파일이 남았다"
   [ -f "$WO/.claude/quality-gates/$OWN/result.md" ] \
     && ok "E1: 자기 세션($how) 폴더에 새 result.md 가 있다" || no "E1: 자기 세션($how) 폴더에 result.md 가 없다"
@@ -250,8 +250,8 @@ assert_eq "$(snap "$WX")" "$before" "E1: 다른 세션 거부는 아무것도 �
 assert_eq "$rc" "1" "E1: --ensure 여도 다른 세션의 --session-id 는 거부한다"
 # 환경 변수 없이 --session-id 만(직접 호출 · 테스트) — 마커 가드가 그대로다(양의 짝: 위 자기 세션 통과가 마커 가드 제거가 아니다).
 WU="$TMP/e1noenv"; mkdir -p "$WU/.claude/quality-gates/$OWN"
-: > "$WU/.claude/quality-gates/$OWN/pr-understanding.md"
-refusal_check "환경 변수 없이 --session-id 만 — 마커 없는 폴더(pr-understanding.md 만)" "$WU" "$OWN"
+: > "$WU/.claude/quality-gates/$OWN/comment.md"
+refusal_check "환경 변수 없이 --session-id 만 — 마커 없는 폴더(comment.md 만)" "$WU" "$OWN"
 
 note "── E1(critique): 첫 인자 critique 는 setup 의 몫이 아니다 — 출력 · 상태 없이 exit 0"
 WC="$TMP/e1critique"; mkdir -p "$WC"

@@ -2,9 +2,9 @@
 # test_publish_gh_two_files.sh — AC15: gh 를 부르는 qg 파일은 둘뿐이다 — `scripts/publish-comment.sh`(코멘트 쓰기와
 # 그 앞의 인증 · PR 확인)와 `scripts/discover-spec.sh`(읽기 전용 `gh pr view`). gh 쓰기는 publish-comment.sh 에만 있다.
 #
-# 코퍼스는 qg 의 추적 파일 중 실행되거나 모델이 읽는 것 전부다(scripts · skills · commands · agents · references ·
-# .claude-plugin). 주석 · 산문 · 펜스 밖 줄도 본다 — 실행 지시는 펜스 밖에도 있다. tests/ · CHANGELOG · README 는
-# 실행되지도 모델에 로드되지도 않아 뺀다.
+# 코퍼스는 qg 의 추적 파일 전부에서 tests/ · CHANGELOG.md · README.md 만 뺀 것이다(허용 목록이 아니라 제외 목록 —
+# 새 디렉토리가 생겨도 자동으로 코퍼스에 든다). 주석 · 산문 · 펜스 밖 줄도 본다 — 실행 지시는 펜스 밖에도 있다.
+# 뺀 셋은 실행되지도 모델에 로드되지도 않는다.
 # (qg v10 ③ plan 이 쓴 테스트 코드다 — 리뷰는 이 파일도 검사 대상으로 본다.)
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -42,8 +42,8 @@ out("NO" if bad else "OK", f"매처 대조 {len(probe)}건 " + ("실패: " + " |
 r = subprocess.run(["git", "-C", root, "ls-files", "--", "plugins/quality-gates"], capture_output=True, text=True)
 if r.returncode != 0 or not r.stdout.strip():
     out("NO", f"git ls-files 실패(rc={r.returncode}) — 코퍼스 없이 판정하지 않는다"); sys.exit(0)
-KEEP = re.compile(r"plugins/quality-gates/(scripts|skills|commands|agents|references|\.claude-plugin)/")
-files = [p for p in r.stdout.splitlines() if KEEP.match(p)]
+SKIP = re.compile(r"plugins/quality-gates/(tests/|CHANGELOG\.md$|README\.md$)")
+files = [p for p in r.stdout.splitlines() if not SKIP.match(p)]
 out("OK" if len(files) >= 30 else "NO", f"코퍼스 {len(files)}개(하한 30)")
 
 callers, writers, subs = {}, {}, {}

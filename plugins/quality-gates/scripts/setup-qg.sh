@@ -144,7 +144,7 @@ if [[ ! "$SESSION_ID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
 fi
 
 # 이 세션의 ID 가 있으면 다른 세션의 폴더를 받지 않는다 — 살아 있는 다른 세션의 폴더를 지울 수 있다.
-# 자기 세션(OWN_SESSION)의 폴더는 마커 없이도 지우고 다시 만든다 — /qg-publish 등이 같은 폴더에 쓴다.
+# 자기 세션(OWN_SESSION)의 폴더는 마커 없이도 지우고 다시 만든다 — 게시 펜스가 마커가 아닌 파일(comment.md 등)을 같은 폴더에 쓴다.
 OWN_SESSION="false"
 if [[ -n "$ENV_SESSION_ID" ]]; then
   if [[ "$SESSION_ID" != "$ENV_SESSION_ID" ]]; then
