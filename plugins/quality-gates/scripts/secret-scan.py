@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""secret-scan.py — the sole content hard-block for the qg publish sink (publish-comment.sh).
+"""secret-scan.py — the sole content hard-block for the publish sink of qg (publish-comment.sh).
 
 Targets VALUES, not identifiers (design §7). FAIL CLOSED: any error/unreadable
 → scan_ok: no. The orchestrator gates on the literal `scan_ok: yes` line, NEVER

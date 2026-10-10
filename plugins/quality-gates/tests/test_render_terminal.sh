@@ -9,7 +9,7 @@ SCRIPT="$PLUGIN_ROOT/scripts/render-terminal.py"
 case_table_aligned() {
   local out
   out=$(printf 'target\tPR #123\nidentity\toctocat (id 583231)\n' \
-        | python3 "$SCRIPT" table --title "PR Understanding")
+        | python3 "$SCRIPT" table --title "Status")
   # every value column must start at the same offset (aligned, not prose)
   local c1 c2
   c1=$(printf '%s\n' "$out" | grep -n 'PR #123' | head -1 | sed 's/.*://' | awk '{print index($0,"PR")}')

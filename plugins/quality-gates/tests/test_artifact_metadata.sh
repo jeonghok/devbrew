@@ -13,6 +13,4 @@ grep -qF 'critiquing-artifacts' "$ROOT/CHANGELOG.md" && ok "CHANGELOG mentions n
 # README principles: the mode instantiates Law 1/2/3 for artifact critique
 grep -qF 'critique' "$ROOT/README.md" && ok "README documents critique mode" || no "README omits critique"
 grep -qiE 'artifact-critic|critiquing-artifacts' "$ROOT/README.md" && ok "README names new component" || no "README omits component"
-# version-pin regression: publish-docs test must not stale-red on 2.11.x
-grep -qE '2\.10\.\[0-9\]\+|2\.10\.x' "$ROOT/tests/test_qg_publish_docs.sh" && no "publish-docs still pins 2.10 (will stale-red)" || ok "publish-docs version pin relaxed off 2.10"
 finish

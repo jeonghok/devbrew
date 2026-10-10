@@ -18,7 +18,7 @@ section() { awk -v pat="$1" '$0 ~ pat {inw=1; next} inw && /^## / {exit} inw' "$
 # --- T15 / AC19 : 메타데이터 (minor floor, patch unpin) ---------------------
 # 정확한-minor pin(`0\.25\.[0-9]+`)은 "이 버전 이후 shipping" 의도를 표현하지 못하고
 # "정확히 이 minor"만 표현한다 — 다음 minor bump마다 stale-red가 된다(Task 14 실증,
-# qg 쪽 floor 관용구 test_qg_publish_docs.sh·test_artifact_metadata.sh와 동형화).
+# qg 쪽 floor 관용구 test_artifact_metadata.sh와 동형화).
 # floor로 전환: 0.26 이상이면 통과, 그 아래면 실패.
 # v1.0.0(문서 리뷰 엔진 첫 호출자 배선)에서 major가 0을 벗어났다 — "0.(26-99)"만
 # 매치하는 옛 정규식은 그 순간부터 항상 RED다. test_readme_sync.sh와 같은 관용구로

@@ -34,12 +34,16 @@ SWEEP_FILES="$(git -C "$ROOT" -c core.quotePath=false ls-files -- plugins shared
   | grep -vE '^plugins/[^/]+/CHANGELOG\.md$|^docs/(archive|superpowers)/' | grep -vxF "$SELF")"
 NSWEEP="$(printf '%s\n' "$SWEEP_FILES" | grep -c .)"
 [ "$NSWEEP" -ge 500 ] && ok "AC16: 스윕 코퍼스 ${NSWEEP}개(하한 500)" || no "AC16: 스윕 코퍼스가 ${NSWEEP}개뿐이다(하한 500) — 비면 0건 판정이 공허하다"
+# 표기 축: 하이픈 · 밑줄(파일 이름 test_qg_publish_docs.sh) · 공백(제목 "PR Understanding")을 함께 잡는다.
+TOKENS='qg[-_]publish|pr[-_ ]understanding|comment-upsert|gh-identity|pr-create\.sh|pr-detect|build-pr-context|diagram-facts|accuracy-warnings|=== PR CONTEXT'
 HITS="$(printf '%s\n' "$SWEEP_FILES" | tr '\n' '\0' \
-  | (cd "$ROOT" && xargs -0 grep -I -n -i -E 'qg-publish|pr-understanding|comment-upsert|gh-identity|pr-create\.sh|pr-detect|build-pr-context|diagram-facts|accuracy-warnings|=== PR CONTEXT' 2>/dev/null) || true)"
+  | (cd "$ROOT" && xargs -0 grep -I -n -i -E "$TOKENS" 2>/dev/null) || true)"
 if [ -z "$HITS" ]; then ok "AC16: 옛 게시 표면의 개념 별칭이 살아 있는 코퍼스에 0건"; else no "AC16: 개념 별칭 잔존 — $(printf '%s\n' "$HITS" | head -n 5)"; fi
-# 스윕 매처 대조 — 같은 grep 이 합성 줄을 잡는다.
-printf 'see /qg-publish and PR-Understanding\n' | grep -q -i -E 'qg-publish|pr-understanding' \
-  && ok "스윕 매처 대조" || no "스윕 매처가 합성 줄을 못 잡는다"
+# 스윕 매처 대조 — 같은 매처가 표기마다 합성 줄을 잡는다.
+for probe in 'see /qg-publish' 'tests/test_qg_publish_docs.sh' 'PR-Understanding' 'pr_understanding builder' '--title "PR Understanding"'; do
+  printf '%s\n' "$probe" | grep -q -i -E "$TOKENS" \
+    && ok "스윕 매처 대조: ${probe}" || no "스윕 매처가 합성 줄을 못 잡는다: ${probe}"
+done
 
 # ── (3) 양의 짝 ─────────────────────────────────────────────────────────────
 mode="$(git -C "$ROOT" ls-files -s -- plugins/quality-gates/scripts/publish-comment.sh | cut -d' ' -f1)"
