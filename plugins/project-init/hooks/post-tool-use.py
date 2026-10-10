@@ -128,9 +128,8 @@ def validate_branch(command):
     pattern = get_branch_pattern()
     if pattern is None:  # 유효 패턴 없음(부재/regex-less/malformed/빈-블록/비-UTF-8) → fail OPEN, loudly
         return (
-            "project-init: no valid branch-naming pattern found in "
-            "docs/git-workflow/branch-strategy.md — skipping branch-name "
-            "validation (fail-open).",
+            "project-init: docs/git-workflow/branch-strategy.md 에서 쓸 수 있는 브랜치 이름 규칙을 "
+            "찾지 못했다 — 브랜치 이름 검사를 건너뛴다(fail-open).",
             None,  # 모델이 할 일이 없다 — 수정할 대상 자체가 없는 경고다
         )
     if pattern.match(branch_name):
@@ -140,18 +139,18 @@ def validate_branch(command):
     name_part = branch_name.split("/", 1)[1] if "/" in branch_name else branch_name
     prefixes = derive_prefixes(pattern)
     if prefixes:
-        hint = f"Allowed prefixes: {', '.join(prefixes)}"
+        hint = f"허용 접두어: {', '.join(prefixes)}"
         cmd = (
             f"Rename the branch: git branch -m {prefixes[0]}/{name_part}\n"
             f"Allowed prefixes: {', '.join(prefixes)} — use whichever fits this change."
         )
     else:  # exotic regex → NO feature/ hardcode
-        hint = "See docs/git-workflow/branch-strategy.md for allowed prefixes."
+        hint = "허용 접두어는 docs/git-workflow/branch-strategy.md 에 있다."
         cmd = None
 
     lines = [
-        f'project-init: Branch "{branch_name}" does not follow naming convention.',
-        f"Expected pattern: {pattern.pattern}",
+        f'project-init: 브랜치 이름이 이름 규칙에 맞지 않는다 — "{branch_name}".',
+        f"기대하는 형식: {pattern.pattern}",
         hint,
     ]
     # 사람은 「무엇이 왜 틀렸나」를, 모델은 「무엇을 실행하나」를 받는다 (N1).
@@ -189,10 +188,10 @@ def validate_commit(command):
     # 구조적 상한이 없다. C16 이 새 강제에 폭주 방지를 요구하는데 이 설계는
     # 가드를 만들지 않기로 했으므로, 비대칭을 숨기지 않고 사람 채널에 남긴다.
     return (
-        f"project-init: Commit message does not follow Conventional Commits format.\n"
-        f"Expected: <type>(<scope>): <description>\n"
-        f"Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert\n"
-        f"Suggested: {suggested_type}: {first_line}",
+        f"project-init: 커밋 메시지가 Conventional Commits 형식이 아니다.\n"
+        f"형식: <type>(<scope>): <설명>\n"
+        f"type: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert\n"
+        f"제안: {suggested_type}: {first_line}",
         None,
     )
 
