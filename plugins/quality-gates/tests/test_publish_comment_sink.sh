@@ -65,7 +65,7 @@ printf '## 이 변경을 한 줄로\n무엇이 바뀌나.\n\n---\nqg: clean · �
 run_sink() {
   local p="$1"; shift
   : > "$GH_LOG"; rm -f "$GH_BODY_COPY"
-  OUT="$(cd "$REPO" && PATH="$p" bash "$SINK" "$@" 2>"$T/err")"; RC=$?
+  OUT="$(cd "${SINK_CWD:-$REPO}" && PATH="$p" bash "$SINK" "$@" 2>"$T/err")"; RC=$?
   LAST="$(printf '%s\n' "$OUT" | tail -n 1)"
   GHCALLS="$(cat "$GH_LOG")"
 }
@@ -76,6 +76,7 @@ p6_single_result_line() {   # <case 이름>
   local n
   n="$(printf '%s\n' "$OUT" | grep -cE '^(posted|skipped): ')"
   assert_eq "$n" "1" "P6 $1: 결과 줄이 정확히 하나"
+  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" "1" "P6 $1: stdout 이 통틀어 한 줄"
 }
 no_comment_call() {  # <case 이름>
   if printf '%s\n' "$GHCALLS" | grep -q '^pr comment'; then no "$1: gh pr comment 가 불렸다"; else ok "$1: gh pr comment 호출 0"; fi
@@ -118,6 +119,8 @@ case_AC13_kill_switch_AC14_zero_network() {
   # 전체 토큰 일치(E5) — 「1」 밖의 값은 스위치가 아니다.
   DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=10 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
   assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "E5: DISABLE_PUBLISH=10 은 스위치가 아니다"
+  DEVBREW_QUALITY_GATES_DISABLE=10 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "E5: 전역 DISABLE=10 도 스위치가 아니다"
 }
 case_AC13_scan_failed() {
   local bad="$T/bad.md"
@@ -194,10 +197,11 @@ case_P2_degraded_and_corpus_content() {
   GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
   assert_eq "$LAST" "skipped: scan-failed" "P2: 무시되지 않는 untracked 파일이 corpus 에 들어간다"
   rm -f "$REPO/untracked.env"
-  printf 'secret=%s\n' "$tok" > "$REPO/b.txt"
+  # base 이후 안 바뀐 a.txt 에 둔다 — 브랜치가 이미 커밋한 b.txt 와 달리 「커밋 안 된 변경」만이 이 값을 나른다.
+  printf 'secret=%s\n' "$tok" > "$REPO/a.txt"
   GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
   assert_eq "$LAST" "skipped: scan-failed" "P2: 커밋 안 된 추적 파일 변경이 corpus 에 들어간다"
-  g checkout -q -- b.txt
+  g checkout -q -- a.txt
 }
 
 # ── P5 — 부작용 전에 인증 ────────────────────────────────────────────────────
@@ -229,6 +233,79 @@ case_P4_P7_untrusted_bytes() {
   g reset -q --hard HEAD~1
 }
 
+# ── I1 — 지운 줄 · 지운 파일 · 되돌린 값도 corpus 에 든다 ───────────────────────
+case_I1_removed_content_in_corpus() {
+  local tok="Zq4rT8vB2nM6xK1pL9wC3yH7dF5sG0jA" R2="$T/repo2" leak="$T/leak2.md"
+  git init -q -b main "$R2"
+  g2() { git -C "$R2" -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@t "$@"; }
+  printf 'line one\nkey=%s\nline three\n' "$tok" > "$R2/tok.txt"
+  printf 'other=%s\n' "$tok" > "$R2/gone.txt"
+  printf 'plain\n' > "$R2/keep.txt"
+  g2 add tok.txt gone.txt keep.txt; g2 commit -q -m base
+  g2 checkout -q -b feat
+  printf 'value %s\n' "$tok" > "$leak"
+  # 1) 브랜치가 그 줄을 지운 커밋
+  printf 'line one\nline three\n' > "$R2/tok.txt"; g2 add tok.txt; g2 commit -q -m 'drop key'
+  SINK_CWD="$R2" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "I1: 브랜치가 지운 줄의 값이 corpus 에 든다"
+  # 2) 브랜치가 그 값을 담은 파일을 지운 커밋 (1 은 되돌려 둔다)
+  g2 reset -q --hard HEAD~1
+  g2 rm -q gone.txt; g2 commit -q -m 'drop file'
+  SINK_CWD="$R2" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "I1: 지운 파일의 값이 corpus 에 든다"
+  g2 reset -q --hard HEAD~1
+  # 3) 범위 안에서 더했다 되돌린 값 — 순 diff 에는 없고 커밋 패치에만 있다
+  printf 'added %s\n' "$tok" > "$R2/keep.txt"; g2 add keep.txt; g2 commit -q -m 'add'
+  printf 'plain\n' > "$R2/keep.txt"; g2 add keep.txt; g2 commit -q -m 'revert'
+  SINK_CWD="$R2" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "I1: 더했다 되돌린 값이 corpus 에 든다(커밋 패치)"
+  g2 reset -q --hard HEAD~2
+  # 4) 커밋 안 된 삭제 — 작업트리 diff 에만 있다
+  printf 'line one\nline three\n' > "$R2/tok.txt"
+  SINK_CWD="$R2" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "I1: 커밋 안 된 삭제의 값이 corpus 에 든다(작업트리 diff)"
+  g2 checkout -q -- tok.txt
+  # 대조군: 변경이 없으면 그 값은 corpus 밖이다
+  SINK_CWD="$R2" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "I1 대조군: 변경 없으면 base 의 값은 corpus 밖(통과)"
+  # 정상 본문(판정 줄의 짧은 sha 포함)은 이 corpus 에서도 거짓 양성이 없다
+  SINK_CWD="$R2" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "I1: 정상 본문은 여전히 게시"
+}
+
+# ── I2 — 생산자 하나가 실패하면 부분 corpus 로 통과시키지 않는다 ────────────────
+case_I2_producer_failure_fails_closed() {
+  local real tok="Wm3nB7vC1xZ5qL9kR2tY6uH4jG8dS0pE" leak="$T/leak3.md" sub
+  real="$(command -v git)"
+  for sub in log diff; do
+    mkdir -p "$T/shim-$sub"
+    printf '#!/usr/bin/env bash\n[ "${1:-}" = "%s" ] && exit 1\nexec "%s" "$@"\n' "$sub" "$real" > "$T/shim-$sub/git"
+    chmod +x "$T/shim-$sub/git"
+  done
+  printf 'value %s\n' "$tok" > "$leak"
+  # log 생산자 — 값은 커밋 메시지에만 있다
+  g commit -q --allow-empty -m "ci: rotate $tok"
+  GH_PR="$OPEN_PR" run_sink "$T/shim-log:$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "I2: git log 실패 → degraded → fail-closed"
+  g reset -q --hard HEAD~1
+  # diff 생산자 — 값은 커밋 안 된 a.txt 변경에만 있다
+  printf 'secret=%s\n' "$tok" > "$REPO/a.txt"
+  GH_PR="$OPEN_PR" run_sink "$T/shim-diff:$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "I2: git diff 실패 → degraded → fail-closed"
+  g checkout -q -- a.txt
+}
+
+# ── 하위 디렉토리에서 불려도 리포 루트 기준이다 ──────────────────────────────────
+case_subdir_runs_from_repo_root() {
+  local tok="Hn6bV2mX8cQ4zL0wP7rT3yK9dF1sJ5gA" leak="$T/leak4.md"
+  mkdir -p "$REPO/sub"
+  printf 'value %s\n' "$tok" > "$leak"
+  printf 'secret=%s\n' "$tok" > "$REPO/rootsecret.env"
+  SINK_CWD="$REPO/sub" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "하위 디렉토리 실행: 루트의 untracked 비밀값이 corpus 에 든다"
+  rm -f "$REPO/rootsecret.env"; rmdir "$REPO/sub"
+}
+
 # ── 잘못된 호출은 exit 2, 결과 줄 없음, gh 호출 0 ─────────────────────────────
 case_usage_errors() {
   run_sink "$WITH_GH"
@@ -239,12 +316,18 @@ case_usage_errors() {
   run_sink "$WITH_GH" --body-file "$T/none.md"
   assert_eq "$RC" "2" "usage: 본문 파일 없음 → rc 2"
   assert_eq "$GHCALLS" "" "usage: gh 호출 0"
+  : > "$T/empty.md"
+  run_sink "$WITH_GH" --body-file "$T/empty.md"
+  assert_eq "$RC" "2" "usage: 빈 본문 파일 → rc 2"
+  assert_eq "$OUT" "" "usage: 빈 본문 파일은 결과 줄을 내지 않는다"
+  assert_eq "$GHCALLS" "" "usage: 빈 본문 파일은 gh 호출 0"
 }
 
 for c in case_AC12_posts_one_new_comment case_AC13_no_pr case_AC13_pr_closed \
          case_AC13_kill_switch_AC14_zero_network case_AC13_scan_failed case_AC13_gh_unavailable \
          case_AC13_too_long case_P1_literal_scan_gate case_P2_degraded_and_corpus_content \
-         case_P5_auth_before_side_effects case_P4_P7_untrusted_bytes case_usage_errors; do
+         case_P5_auth_before_side_effects case_P4_P7_untrusted_bytes case_I1_removed_content_in_corpus \
+         case_I2_producer_failure_fails_closed case_subdir_runs_from_repo_root case_usage_errors; do
   note "-- $c"
   "$c"
 done

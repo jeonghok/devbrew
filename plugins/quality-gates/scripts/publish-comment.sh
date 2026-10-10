@@ -34,6 +34,11 @@ if [ ! -f "$body" ] || [ ! -r "$body" ] || [ ! -s "$body" ]; then
   exit 2
 fi
 
+# 리포 루트에서 돈다 — 하위 디렉토리에서 불려도 untracked 목록과 파일 경로가 루트 기준이다.
+case "$body" in /*) ;; *) body="$PWD/$body" ;; esac
+top="$(git rev-parse --show-toplevel 2>/dev/null)" && cd "$top" \
+  || { echo "publish-comment: git 리포 루트를 찾지 못했다" >&2; skip scan-failed; }
+
 # 2. gh 존재·인증 — 부작용 전(P5).
 command -v gh >/dev/null 2>&1 || { echo "publish-comment: gh 가 PATH 에 없다" >&2; skip gh-unavailable; }
 gh auth status >/dev/null 2>&1 || { echo "publish-comment: gh 미인증" >&2; skip gh-unavailable; }
@@ -54,7 +59,8 @@ IFS="$(printf '\t')" read -r pr_num pr_state pr_url pr_base <"$WORK/pr.tsv" || t
 [[ "${pr_num:-}" =~ ^[0-9]+$ ]] || { echo "publish-comment: PR 번호를 읽지 못했다" >&2; skip gh-unavailable; }
 [ "${pr_state:-}" = "OPEN" ] || { echo "publish-comment: PR #${pr_num} 상태 ${pr_state:-?}" >&2; skip pr-closed; }
 
-# 4. corpus — 변경 파일 내용 + 커밋 메시지. merge-base 가 없으면 degraded 헤더(secret-scan 이 fail-closed).
+# 4. corpus — 이 변경 자신의 글: 커밋 메시지·패치, 작업트리 diff, 변경 파일 내용. merge-base 가 없거나 생산자
+#    하나라도 실패하면 degraded 헤더 한 줄만 둔다(secret-scan 이 fail-closed) — 부분 corpus 로 통과시키지 않는다.
 mb=""
 if [ -n "$base" ]; then
   mb="$(git rev-parse --verify -q "${base}^{commit}" 2>/dev/null || true)"
@@ -62,23 +68,31 @@ elif [[ "${pr_base:-}" =~ ^[A-Za-z0-9._/][A-Za-z0-9._/-]*$ ]]; then
   mb="$(git merge-base "origin/${pr_base}" HEAD 2>/dev/null || git merge-base "${pr_base}" HEAD 2>/dev/null || true)"
 fi
 CORPUS="$WORK/corpus"
+diff_vs_base() { git diff "$@" "$mb" --; }
+build_corpus() {
+  local f
+  echo "=== QG CORPUS (deterministic) ===" || return 1
+  echo "base: $mb"
+  echo "=== COMMITS ==="
+  git log -p --no-ext-diff --no-color --format='%B' "$mb..HEAD" -- || return 1
+  echo "=== WORKTREE DIFF ==="
+  diff_vs_base --no-ext-diff --no-color || return 1
+  echo "=== CHANGED FILE CONTENTS ==="
+  diff_vs_base -z --name-only --diff-filter=ACMR >"$WORK/names" || return 1
+  git ls-files -z --others --exclude-standard >>"$WORK/names" || return 1
+  sort -z -u "$WORK/names" >"$WORK/names.sorted" || return 1
+  while IFS= read -r -d '' f; do
+    [ -f "$f" ] || continue
+    echo "--- FILE: $f ---"
+    if LC_ALL=C grep -Iq . "$f" 2>/dev/null; then cat "$f"; fi
+    echo
+  done <"$WORK/names.sorted"
+  return 0
+}
 if [ -z "$mb" ]; then
   echo "=== QG CORPUS (degraded: no merge-base) ===" >"$CORPUS"
-else
-  {
-    echo "=== QG CORPUS (deterministic) ==="
-    echo "base: $mb"
-    echo "=== COMMIT MESSAGES ==="
-    git log --format='%B' "$mb..HEAD"
-    echo "=== CHANGED FILE CONTENTS ==="
-    { git diff -z --name-only --diff-filter=ACMR "$mb"; git ls-files -z --others --exclude-standard; } \
-      | sort -z -u | while IFS= read -r -d '' f; do
-          [ -f "$f" ] || continue
-          echo "--- FILE: $f ---"
-          if grep -Iq . "$f" 2>/dev/null; then cat "$f"; fi
-          echo
-        done
-  } >"$CORPUS" 2>"$WORK/corpus.err" || echo "=== QG CORPUS (degraded: corpus build failed) ===" >"$CORPUS"
+elif ! build_corpus >"$CORPUS" 2>"$WORK/corpus.err"; then
+  echo "=== QG CORPUS (degraded: corpus build failed) ===" >"$CORPUS"
 fi
 python3 "$SCRIPT_DIR/secret-scan.py" --payload "$body" --corpus "$CORPUS" >"$WORK/scan.out" 2>"$WORK/scan.err" || true
 # 통과는 첫 줄 리터럴 하나로만 본다 — exit code 는 보지 않는다(P1).
