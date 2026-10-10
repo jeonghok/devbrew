@@ -32,6 +32,12 @@ started_at: "<ISO-8601 UTC>"
 
 <집계의 attribution_status · degrade_causes · resolution_disclosure · per_adapter 원문,
  없으면 (이번 실행에 차등 집계 없음)>
+
+## 게시
+
+<게시 펜스가 낸 줄 하나 — `posted: <url>` · `skipped: <사유>` · `skipped: aborted` · `게시 안 함 — …` ·
+ `게시 결과 불명 — sink 출력 계약 위반(rc N)`. `게시 안 함 — …` 에는
+ `게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커밋과 다르다 — 커밋·푸시 뒤 다시 /qg)` 가 든다>
 ```
 
 ## 생명주기
@@ -39,10 +45,11 @@ started_at: "<ISO-8601 UTC>"
 1. **만든다** — `scripts/setup-qg.sh` 가 매 실행 세션 폴더를 새로 만들고 frontmatter 와 `# qg result`
    제목만 쓴다.
 2. **덧붙인다** — 파이프라인이 Final verdict 에서 위 순서로 절을 `>>` 로 덧붙인다. frontmatter 는
-   고치지 않는다.
+   고치지 않는다. 그 뒤 `## Publish` 의 게시 펜스가 끝에 `## 게시` 를 덧붙인다. `## 게시` 는 하나뿐이다 —
+   이미 있으면 펜스는 덧붙이지 않고 `게시 안 함 — 이 실행은 이미 게시 단계를 돌았다` 만 출력한다.
 3. **지운다** — `scripts/qg-gc.py` 가 TTL(기본 24시간)이 지난 세션 폴더를 지운다. `result.md` 가
    세션 폴더의 표지다.
 
 같은 폴더의 다른 파일 — `intent.md`(의도 출처 본문) · `excluded.md`(제외 패치 누적) ·
 `aggregate.yaml`(마지막 차등 집계) · `verdict.out` · `topic-scope.txt` · `runtime-evidence.md`
-(차등 테스트 원장) — 도 같은 생명주기를 따른다.
+(차등 테스트 원장) · `comment-head.md` · `comment.md` · `publish.out` · `publish.err`(게시) — 도 같은 생명주기를 따른다.

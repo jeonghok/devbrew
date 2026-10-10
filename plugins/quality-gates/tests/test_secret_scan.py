@@ -84,7 +84,7 @@ class SecretScanTeeth(unittest.TestCase):
         # NOT present in the thin corpus would otherwise pass. The scanner must FAIL
         # CLOSED on the degraded header marker rather than certify it clean.
         secret = "Kj8xQvN2mZ4pR7wL9tB3cF6yD1sA5gH0uE"   # high-entropy, absent from corpus
-        corpus = "=== PR CONTEXT (degraded: no merge-base with main) ===\n"
+        corpus = "=== QG CORPUS (degraded: no merge-base) ===\n"
         out = run(f"key={secret}", corpus)
         self.assertTrue(blocked(out), out)
         self.assertIn("corpus degraded", out)

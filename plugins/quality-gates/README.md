@@ -8,7 +8,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
 ([`docs/philosophy/devbrew-harness-philosophy.md`](../../docs/philosophy/devbrew-harness-philosophy.md) 참고):
 
 - **Law 3 (Compounding) — 처분 회계(adjudication `Ledger`)** (v7.1.0) — 리뷰 findings 가 버려지는 자리가 `shared/adjudication/adjudication.py` 의 처분(`accept`/`reject`/`hold`/`absorbed`/`coerced`/`source_failed`/`uncountable`/`suppressed`)을 부르고, 그 배선을 `tools/adjudication/` 의 판정기와 `shared/tests/test_adjudication_{wiring,consumed}.sh` 가 강제한다. 소비자는 `synthesize_findings.py`·`synthesize_artifact_findings.py`. **범위**: 강제되는 것은 `.py` 소비자와 `Ledger` import 가 있는 자리이고, `consumer=orchestrator`/`human` 인 dispatch 자리는 `disclosure=` 리터럴 실재까지만 검사된다(CLAUDE.md 축 C 한계).
-- **Law 2 (입력 오염 차단) — `input_slots`** (v7.1.0) — 이 플러그인의 agent 여섯(`security-reviewer`·`code-recritic`·`artifact-critic`·`artifact-adversarial`·`test-scope-validator`·`pr-understanding-builder`)이 frontmatter 에 받는 입력의 `tag`/`var`/`kind` 를 선언하고, 금지 종류(`prior_verdict`·`score`·`orchestrator_framing`)는 C6 인용과 함께 면제 등재를 요구한다. 집행은 `shared/tests/test_agent_input_slots.sh`. 앞 리뷰어의 판정이 다음 리뷰어의 전제가 되는 것이 Law 2 가 도구로 못 막는 구멍이다.
+- **Law 2 (입력 오염 차단) — `input_slots`** (v7.1.0) — 이 플러그인의 agent 다섯(`security-reviewer`·`code-recritic`·`artifact-critic`·`artifact-adversarial`·`test-scope-validator`)이 frontmatter 에 받는 입력의 `tag`/`var`/`kind` 를 선언하고, 금지 종류(`prior_verdict`·`score`·`orchestrator_framing`)는 C6 인용과 함께 면제 등재를 요구한다. 집행은 `shared/tests/test_agent_input_slots.sh`. 앞 리뷰어의 판정이 다음 리뷰어의 전제가 되는 것이 Law 2 가 도구로 못 막는 구멍이다.
 - **Law 3 (Compounding)** — Phase 1 single dispatch builder (T2-2/T3-5). Future persona edits land in one place, never drift across two dispatch sections.
 - **Law 2 (Writer ≠ Reviewer)** — 순수 read-only reviewer agent(`security-reviewer`/`code-recritic`/`test-scope-validator`)가 `tools: Read, Grep, Glob` fail-closed allowlist 선언 (frontmatter scoping으로 물리적 격리 — write/exec/delegation 도구는 목록에 없어 물리적으로 부재; 이름 기반 denylist는 시간에 대해 fail-open이라 대체됨). qg 자체 agent 는 모두 쓰기 권한이 없다. 외부 추가 리뷰어(`pr-review-toolkit` 등)는 쓰기 가능할 수 있으나 advisory 이고 fix 는 오케스트레이터가 소유한다 — 테스트는 오케스트레이터가 자기가 만든 트리에서 직접 돌린다.
 - **Law 3 (Compounding)** — reviewer-persona 편집이 학습된 교훈을 인코딩하는 substrate.
@@ -16,7 +16,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
 - **P12 anti-corollary (former AP5, trivia ceremony) 회피** — 한 문장으로 설명되는 diff(typo · rename · 주석만 · 포매팅 — 파일 수와 무관)를 오케스트레이터가 판단해 trivia 로 닫는다(판정 `not-certified (trivia)`). `Spec:` 선언이 있으면 trivia escape 를 쓰지 않는다.
 - **P22 anti-corollary (former AP9, over-dispatching / subagent spray) 회피** — 파이프라인은 fan-out consent 게이트를 fire하지 않고(documented-not-implemented였음), transparency 라인 + 선언된 max fan-out(리뷰어 구성 iteration 당 ≤ 8, 총/iteration ≤ 10) + authoring-time hard-review로 subagent spray를 억제.
 - **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — 파이프라인 내부 fix-loop이 iteration 상한 5(N=5 에는 Retry 가 없고 Max-iter decision 으로 간다) + 항목마다 사용자 적용/제외 결정 + kill switch로 묶임.
-- **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (`*.local.md` gitignore 패턴으로 자동 제외; `/qg` 시작마다 자기 폴더를 다시 만들고 TTL sweep 으로 폴더 GC).
+- **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (따로 무시되지 않는다 — 「파이프라인 state」 절; `/qg` 시작마다 자기 폴더를 다시 만들고 TTL sweep 으로 폴더 GC).
 - **P8 determinism-economy (harness lightness — trust the model)** (v2.5.0) — 암묵 session scope로 파이프라인이 돌 때 그 사실을 사용자-가시 한 줄로 밝히는 **scope 투명성**. 버려진 결정론적 under-coverage 경고를 결정론 가드가 아니라 *모델 행동*으로 대체(git 비교·차단 없음). 자연어 scope 의도는 별도 parser 없이 모델이 branch scope로 해석 — `/qg branch`는 결정론적 escape hatch로 유지. devbrew P8 determinism-economy refinement("Zero hooks" 일반화) instantiation.
 - **P8 determinism-economy — self-honest verdict floor** (v2.6.0; routing 제거·단순화 v2.7.0) — 파이프라인이 *검토받았다고 믿는 scope*와 *resolve한 scope*가 발산할 때(빈 세션 → resolved scope 0 → "clean"의 false-clean)를 봉쇄. read-only `scripts/check-review-scope.sh`가 `changes_exist`를 결정론으로 emit하고, SKILL이 iter-1에서 1회 호출·캐시해 **정직-verdict floor**(load-bearing, kill 불가)가 `resolved scope 0 AND changes_exist == yes`이면 판정이 `not-certified (scope-empty)` 가 된다. **무엇을 리뷰할지(routing)는 모델이 소유** — v2.7.0에서 v2.6.0의 redirect 게이트·`$effective_diff_scope` 배선·redirect kill switch를 제거하고 `/qg branch` escape hatch + honesty norm 한 줄로 대체(dogfood 5버그가 전부 routing 재구성에서 나왔고 floor의 load-bearing 입력 `changes_exist`는 틀린 적 없음). 결정론은 무결성 floor 한 점에만; routing/자연어는 모델 신뢰. session 기본값·`/qg branch` 자체의 스코프 **선택**(routing)은 무변경이지만, 이 floor 가 보는 것과 **별개로** ② 차등 테스트가 상시 도는 v9.0.0 이후는 R1b 가 고르는 test unit 이 0개인 실행도 `expected-empty` → `not-certified (scope-empty)` 다(관측 없음은 음성 결과가 아니다 — §6.4.3 P23 재결정, 2026-09-26) — **진짜 무변경(genuine no-op)과 docs/config-only 변경을 포함한다.** regression: `tests/test_check_review_scope.sh`, `tests/test_qg_false_clean_floor.sh`.
 - **P21 (Secret이 prompt context에 들어가지 않음)** — 결정 도구는 결정과 포인터만 묻고 secret 값은 받지 않는다(SKILL Rules R4). regression test: `tests/test_no_secret_prompts.py`.
@@ -36,11 +36,8 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
   transparency line + declared max fan-out) — no new principle ID needed.
 - **C66 (Linked Artifact Flow) — 의도 출처** (v2.1.0; v10 에서 D13 사슬로) — `scripts/discover-spec.sh` 가 의도 출처를 정한다: HEAD 쪽 커밋의 `Spec:` 트레일러가 가리키는 spec, 없으면 브랜치 커밋 메시지 + 열린 PR 본문. 그 내용이 모든 리뷰어 dispatch 와 codex 프롬프트의 `<intent>` 로 같은 기준 블록(`references/review-criteria.md`)과 함께 간다. 파일 mtime 은 읽지 않는다. 차등 테스트의 test-scope-validator 는 트레일러가 가리킨 spec 경로를 1차 축으로 쓴다(plan 은 보조 hint). kill switch `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1`.
 - **P21 (Untrusted input — diff is data, not instructions)** (v2.8.0) — 파이프라인의 두 diff-reading reviewer(`security-reviewer`/재비판 `code-recritic`)가 attacker-influenced `filtered_diff`(및 finding 텍스트)를 데이터로만 다루고 그 안의 prompt-injection·안전성 주장을 verdict 근거로 삼지 않도록 명시. 더해 언어/프레임워크 FP precedent 5건을 기능별 단일 배치(DRY)로 흡수 — suppress-at-source 3(security-reviewer anti-flag) + reject-at-verify 2(재비판 코드 프로필 관문 C, PR4a 부터 `references/recritic-code-profile.md`가 싣는다). 섹션-스코프 grep 회귀 락(`test_security_reviewer_persona.sh` · `test_code_recritic_frontmatter.sh`)으로 persona 약화 검출. 신규 P# 0, 결정론 가드 0 (Anthropic *"Using LLMs to Secure Source Code"* 평가 Tier-1; design-lightness).
-- **P21 (Secret이 prompt context에 들어가지 않음) — 출력값 유출 차단으로 확장 (publish sink)** (v2.9.0) — `/qg-publish`가 게시 직전 `secret-scan.py`로 전체 payload(artifact + PR title + 브랜치명 + 커밋메시지; PR-create 시 히스토리까지)에서 시크릿 **값**(quoted string / vendor 패턴 / corpus-substring, keyword는 보조 신호)을 스캔해 hit 시 게시를 FAIL CLOSED로 거부한다 — 스캔 에러·타임아웃도 hit 취급. 기존 인스턴스(v1.8.0, secret 값이 prompt로 들어가지 않음)와 자매지만 방향이 반대다: 여기는 모델이 저술한 텍스트가 GitHub로 **나가기 전** 값 유출을 막는다. regression: `tests/test_secret_scan.py`, `tests/test_secret_scan_fp.py`.
-- **P21 (Untrusted input — diff is data, not instructions) 확장** (v2.9.0) — v2.8.0에서 파이프라인 두 reviewer에 넣은 norm을 `pr-understanding-builder` 페르소나와 publish orchestrator에도 확장한다. PR 코멘트는 id+마커 매칭용 opaque bytes로만 다루고(스크립트가 선택 계산; 모델이 내용을 읽고 지시로 따르지 않음), artifact 내 이미지는 auto-fetch 유출 벡터라 중립화한다.
-- **P17 (Consent) — 게시는 파이프라인의 일부가 아니라 opt-in consent-gated 표면** (v2.9.0) — `/qg-publish`는 매 실행마다 사람이 읽는 preview 뒤 AskUserQuestion으로 명시 동의를 받아야만 GitHub에 쓴다(비가역·영구 노출 고지 포함; cross-repo "always" 없음). **`/qg`의 파이프라인 자체는 이 기능으로 변경되지 않는다 — publish는 그 위에 얹힌 별도 opt-in 표면이지 파이프라인에 자동으로 연결되지 않는다.**
-- **P18 (Bounded idempotency)** (v2.9.0) — `comment-upsert.py`가 인증 `user.id` 스코프 내에서 버전-패밀리 마커(`<!-- pr-understanding:v1 -->`, 첫 줄 anchored 매칭이 optional `tier=N` 접미사를 허용 — 빌더는 `tier=N`을 emit하지만 tier는 변경 파일 수에 따라 드리프트하므로 매칭은 tier를 무시해 멱등이 깨지지 않게 함)로 기존 코멘트를 조회해 0개→POST, 1개→PATCH, ≥2개(비정상)→REFUSE — 모호성 앞에서 임의로 고르지 않고 결정론적으로 멈추고 사용자 확인을 요구한다.
-- **pwn-request Law-2형 물리 분리 — 생성 ≠ 게시** (v2.9.0 → v2.12.0에서 **처음으로 사실이 됨**) — `pr-understanding-builder` 에이전트는 `tools:`에 무해한 항목 **하나만** 선언한다 (fail-closed allowlist — 쓰기·실행·네트워크·위임 도구 0개, 유일 항목 = inert `Read`(생성기가 미호출), 유일 입력 = inlined `build-pr-context.sh` blob). `gh`/네트워크는 오직 `publishing-pr-understanding` skill(오케스트레이터)만 보유한다. ⚠️ **v2.9.0~v2.10.x에서 이 주장은 거짓이었다**: 당시 격리는 존재하지 않는 필드 + 11개 이름 denylist였고, denylist에 `mcp__*`가 없어 tavily 웹검색·chrome-devtools 브라우저 제어가 **열려 있었다**. 이름 기반 denylist는 원리적으로 닫을 수 없다 — `Monitor`가 이름 없는 셸(`command`)과 이름 없는 egress(`ws`)를 준다. allowlist만이 열거되지 않은 것과 **미래에 추가될 것**을 자동 차단한다.
+- **P21 (출력값 유출 차단 · kill switch 는 가장 안쪽 sink 에서) — 게시 sink** (v10 ③) — `scripts/publish-comment.sh` 하나가 게시의 통제를 모두 쥔다: kill switch(`DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`) → gh 존재·인증 → 열린 PR → corpus(변경 파일 내용 + 커밋 메시지) 위의 `secret-scan.py`(첫 줄 리터럴 `scan_ok: yes` 로만 통과 · degraded corpus 는 fail-closed) → 이미지·HTML 태그 차단(`![` · `<img` · `<image` · `<picture` · `<source` · `<svg` · `<video` · `<audio` — 렌더링이 본문 속 URL 을 클릭 없이 불러 값이 밖으로 새는 길이라 `scan-failed`) → 65,536자 상한 → `gh pr comment --body-file`. 마지막 줄은 `posted: <url>` · `skipped: <사유>` 리터럴이다. gh 를 부르는 qg 파일은 이 sink 와 `discover-spec.sh`(읽기 전용 `gh pr view`) 둘뿐이다. regression: `tests/test_publish_comment_sink.sh` · `tests/test_publish_gh_two_files.sh` · `tests/test_secret_scan.py` · `tests/test_secret_scan_fp.py`.
+- **P17 (상시 동의)** (v10 ③) — 열린 PR 이 있으면 `/qg` 실행마다 새 코멘트 하나(이해글 + 판정 줄)를 남긴다. 게시마다 묻지 않는다 — `/qg` 실행이 그 동의이고 게시만 끄는 길은 kill switch `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` 하나다(전역 `DEVBREW_QUALITY_GATES_DISABLE=1` 은 전부를 끈다). 이해글은 오케스트레이터가 쓴다. secret-scan 은 corpus 밖의 낯선 비밀값을 알려진 패턴으로만 잡는다(오케스트레이터가 읽은 e2e 로그 · 환경 파일 등 — 남는 위험). 매 실행 새 코멘트라 구독자 알림이 실행마다 간다.
 - **Law 1/2/3 + P8/P18 (산출물 비평 루프, v2.11.0)** — `/qg critique`가 비-코드 산출물에 대해 tier-unpinned `artifact-critic`+`artifact-adversarial`(+조건부 codex)의 read-only 비평 → 오케스트레이터 수정 → 라운드별 커밋 루프를 돈다. Law 1=E3 upfront 동의 게이트; Law 2=read-only 리뷰어(`tools:` allowlist)+매 라운드 독립 critic 게이트; Law 3=라운드별 커밋 감사추적; P18=max-rounds+stagnation predicate+kill switch(`DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE`); P8=NL 라우팅 모델-소유, 결정론은 `critique <path>`+§10 스키마. 별도 skill `critiquing-artifacts`로 위임(코드 파이프라인 무변경).
 - **LD3 (floor 는 실행이다) — 영향분 테스트의 실제 실행** (v3.0.0) — ② 차등 테스트의 floor
   가 "전체 앱 부팅"이 아니라 *"레포에 이미 있는 테스트 중 영향분을 실제로 돌리는 것"*이다.
@@ -89,10 +86,8 @@ quality-gates/
 │   ├── security-reviewer.md     # ① 보안 각도 always-run (model: opus) — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`
 │   ├── artifact-critic.md       # `/qg critique` 게이트 — tier-unpinned critic; 비-코드 산출물의 논리 갭·미기술 전제·불완전·근거 없는 주장·모호성 (read-only)
 │   ├── artifact-adversarial.md  # `/qg critique` 게이트 — tier-unpinned 판정자; critic/codex 발견을 confirm/downgrade/reject 하고 놓친 것을 추가 (read-only)
-│   └── pr-understanding-builder.md  # publish 생성기 — model 키 없음(tier-unpinned), tools: Read 1개 (inert·미호출; fail-closed; 쓰기·실행·네트워크·위임 0; 유일 입력 = inlined blob)
 ├── commands/
 │   ├── qg.md               # /qg slash command (branch · --paths · critique 라우팅)
-│   └── qg-publish.md       # /qg-publish slash command ([--dry-run]; publish skill로 얇은 dispatch)
 ├── scripts/
 │   ├── setup-qg.sh                           # 파이프라인 초기화
 │   ├── discover-plan.sh                      # Plan 파일 우선순위 탐색 (차등 테스트 test-scope-validator)
@@ -113,27 +108,21 @@ quality-gates/
 │   ├── codex_findings_to_yaml.py             # symlink → ../../../shared/codex/codex_findings_to_yaml.py — Codex JSONL stream → 표준 finding YAML (auth/schema/stderr 처리, --emit-keys default|design)
 │   ├── codex_jsonl.py                        # copy-of shared/codex/codex_jsonl.py — extract_last_agent_message 정본 사본 (설치본에서 sibling import가 살아있게)
 │   ├── qg-gc.py                              # TTL 기반 stale 세션 GC (fcntl-locked)
-│   ├── build-pr-context.sh                   # publish: base..HEAD 고정 context blob (diff+내용+이웃 시그니처+커밋메시지) — 빌더의 유일 입력
-│   ├── diagram-facts.sh                      # publish: nodes/edges 산출 (changed files + 이웃 import; repo-root 상대 import만)
-│   ├── secret-scan.py                        # publish: 게시 직전 값-차단 secret scan (FAIL CLOSED)
-│   ├── pr-detect.sh                          # publish: 현재 브랜치의 PR 상태 탐지 (has_pr/number/url/state/head_pushed)
-│   ├── comment-upsert.py                     # publish: marker 기반 멱등 upsert (user.id 스코프, 0/1/≥2 REFUSE) — DEVBREW_QUALITY_GATES_DISABLE_PUBLISH 최내부 sink
-│   ├── render-terminal.py                    # publish + Final verdict 공용 STATUS 표 / ASCII diagram / accuracy-warnings 렌더러
-│   └── gh-identity.sh                        # publish: 인증 user login+numeric id 조회 (`gh api user` 캡슐화; empty id는 fail-closed)
+│   ├── secret-scan.py                        # 게시 직전 값-차단 secret scan (FAIL CLOSED · 첫 줄 리터럴 scan_ok)
+│   ├── render-terminal.py                    # Final verdict STATUS 표 (`table`)
+│   └── publish-comment.sh                    # 게시 sink — kill switch · gh 인증 · 열린 PR · secret-scan · 길이 · 새 코멘트 (gh 쓰기는 여기만)
 ├── references/
 │   ├── recritic-code-profile.md   # 재비판(code-recritic) 프로필 — 판정 어휘 + 관문 A–E(verifier-writable 포함)
 │   ├── review-criteria.md         # 기준 블록 — 막는 지적과 선택 사항을 가르는 정본(모든 리뷰어 · codex 에 같은 글자로)
 │   └── docreview-profiles/
 │       └── generic.md             # `/qg critique` 게이트 — non-code 아티팩트 리뷰 프로필(§ 위 v7.4.0 bullet)
 ├── skills/
-│   ├── quality-pipeline/
-│   │   ├── SKILL.md         # 한 파이프라인 실행기 — 리뷰 → 차등 테스트 → 합성 · 판정 in-turn 오케스트레이션
-│   │   └── references/
-│   │       ├── differential-test.md  # ② 차등 테스트 절차 전문 (매 iteration Read)
-│   │       └── state-file-format.md  # 로컬 결과 result.md 형식
-│   └── publishing-pr-understanding/
-│       └── SKILL.md         # /qg-publish orchestrator — gh를 가진 유일 컴포넌트 (cost_class: variable)
-└── tests/                            # Bash/Python 단위 테스트 (test_discover_plan.sh, test_qg_publish_docs.sh 등)
+│   └── quality-pipeline/
+│       ├── SKILL.md         # 한 파이프라인 실행기 — 리뷰 → 차등 테스트 → 합성 · 판정 in-turn 오케스트레이션
+│       └── references/
+│           ├── differential-test.md  # ② 차등 테스트 절차 전문 (매 iteration Read)
+│           └── state-file-format.md  # 로컬 결과 result.md 형식
+└── tests/                            # Bash/Python 단위 테스트 (test_publish_comment_sink.sh, test_secret_scan.py 등)
 ```
 
 ## 설치된 Hook
@@ -151,10 +140,6 @@ quality-gates/
 ### Codex reviewer cost
 
 The optional `codex-reviewer` agent has `cost_class: variable` — as an **availability-floor** it invokes the user's Codex CLI subscription/API on **every non-trivia pipeline iteration when detected (scope-independent)**. Disable globally with `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1`.
-
-### PR-understanding publish cost (`/qg-publish`, separate from the pipeline)
-
-`publishing-pr-understanding` skill은 `cost_class: variable` (context 크기·tier에 따라 다름). 저술을 맡는 `pr-understanding-builder`는 frontmatter 에 `model` 키가 없다 — 사용자의 subagent 설정, 없으면 세션 티어를 받는다(하니스가 티어를 정하지 않는다). Deep tier만 실행 전 upfront cost 고지(AskUserQuestion)를 하며, 작은 diff는 비용이 자연히 bounded되고 `/qg-publish`는 명시적 실행이 곧 비용 수용이다(NG5 정합 — 명시 실행이 유일한 touchpoint). 파이프라인의 비용 표(위)와는 **완전히 별도** — publish는 파이프라인의 일부가 아니므로 자동 트리거가 없다.
 
 ### 재비판자(code-recritic) model
 
@@ -187,17 +172,23 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 않는다 — 오케스트레이터가 `run-test-selection.sh` 를 직접 부른다. 결정론 백스톱이 모델
 주장과 독립이라는 전제가 거기서 선다.
 
-**`/qg-publish` (PR-understanding generate/publish)는 파이프라인의 일부가 아니다.** (v2.9.0)
-`gh`는 위 파이프라인 어디에도 없다 — publish는 별도 skill(`publishing-pr-understanding`)에
-격리된 **consent-gated opt-in 표면**이지, `/qg`의 파이프라인에 자동으로 연결되지
-않는다. 정직 문구: 이 표면은 **deterministic envelope + model-authored content** —
-gh I/O·secret-scan·marker-scoped idempotent upsert는 결정론 스크립트가 통제하고, 사람이
-읽는 실제 산출물 텍스트는 빌더가 저술한 model-authored content다. 게시는 매 실행
-사람이 preview를 읽고 AskUserQuestion으로 명시 동의한 뒤에만 일어난다. `/qg` 완료 시
-파이프라인은 그대로 끝난다 — 게시는 `/qg-publish`를 **명시적으로 실행**해야만
-시작되고, 그 명시 실행 자체가 유일한 touchpoint다(자동 이어짐 없음).
-파이프라인의 일부도 아니고, gh는 여전히 그 어디에도 없다. 자세한 내용은
-[`commands/qg-publish.md`](commands/qg-publish.md).
+**게시** (v10 ③) — 판정 뒤 파이프라인이 sink `scripts/publish-comment.sh` 를 한 번 부른다. 열린 PR 이 있으면 새 코멘트 하나(이해글 + 판정 줄)를 남기고, 없거나 · 닫혔거나 · kill switch · scan 실패 · gh 없음·미인증 · 65,536자 초과면 `skipped: <사유>` 한 줄로 알린다(판정은 그대로). 사유 리터럴은 `kill-switch` · `no-pr` · `pr-closed` · `too-long` · `gh-unavailable` · `scan-failed` 이다. `gh-unavailable` 은 gh 없음 · 미인증(활성 계정 기준 — `gh auth status --active`) · PR 조회 실패 · 코멘트 쓰기 실패를, `scan-failed` 는 비밀값 의심 · 이미지·HTML 태그 · merge-base 없음 · corpus 생성 실패 · 길이 측정 실패를 뜻한다. Stop·중단으로 끝난 실행은 sink 를 부르지 않는다. 커밋 안 된 추적 변경이 있는 실행도 sink 를 부르지 않고 `게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커밋과 다르다 — 커밋·푸시 뒤 다시 /qg)` 를 낸다 — 판정이 본 코드가 PR 의 커밋에 없어서다(qg 세션 폴더 `.claude/quality-gates/` 와 untracked 파일은 보지 않는다). 같은 실행에서 게시 펜스를 다시 돌리면 거절한다(게시는 실행당 한 번). 오케스트레이터는 gh 를 직접 부르지 않는다. 지적 목록 · SUGGESTION 은 로컬 결과(`.claude/quality-gates/<sid>/result.md`)에만 남는다.
+
+**게시의 알려진 한계** — secret-scan 이 보는 글은 git 이 보여 주는 `merge-base..HEAD` 의 텍스트 변경(커밋 메시지 포함), 작업 트리의 변경, 그리고 바뀐 텍스트 파일의 현재 내용이다. 아래는 그 밖이라 보지 못한다. 알려진 패턴의 비밀값은 코멘트 안 어디에 있든 막는다. 낯선 고엔트로피 값은 코멘트에 든 값이 위 글 안에도 있을 때만 막는다.
+
+- `.env` 같은 무시된 파일, 그리고 변경 밖에서 오케스트레이터가 읽은 것(e2e 로그 · 환경 파일 등)
+- 토픽 스코프의 형제 브랜치에만 있는 내용(`/qg` 는 함께 리뷰하지만 이 브랜치의 글이 아니다)
+- 바이너리 · NUL 바이트 파일의 현재 내용(diff 줄은 본다)
+- 과거 LFS 내용(git 객체 밖에 있다)
+- 평문을 내지 않는 textconv 드라이버의 출력
+- 서브모듈 안의 변경(gitlink sha 만 본다)
+- 병합 충돌 해소에만 있는 줄
+- qg 세션 폴더 `.claude/quality-gates/` 의 파일(게시 본문 자신이 거기 산다)
+- 한 가지는 일부러 막는다: 위 글 어디든(바뀐 파일 · 커밋 메시지) `=== QG CORPUS (degraded` 로 시작하는 줄이 있으면 게시하지 않는다(fail-closed).
+
+판정과 PR 의 어긋남 — 커밋 안 된 추적 변경은 펜스가 막지만, 푸시하지 않은 로컬 커밋은 그대로 게시된다. Retry 가 새로 만든 untracked 파일도 게시를 막지 않는다(추적 파일 변경만 본다). 어느 쪽이든 판정 줄의 sha 가 리뷰한 커밋을 가리킨다(PR 에 아직 없을 수 있다).
+
+인증 확인은 `gh auth status --active` 다 — 그래도 gh 는 호스트마다 활성 계정을 확인하므로, 다른 호스트의 계정이 깨져 있으면 `skipped: gh-unavailable` 이 된다(stderr 에 gh 자신의 오류 꼬리가 보인다).
 
 ## 리뷰어 구성
 
@@ -243,7 +234,8 @@ max fan-out: **리뷰어 구성 ≤ 8**(기본 셋 + 조건부 ≤4 + 재비판 
  │   막는 지적 또는 차등 defect → AskUserQuestion ("findings remain…")
  │       분류표(항목마다 적용 / 제외 + 사유) · Retry / Accept and finish / Stop
  │       Retry: 「적용」만 Edit, 「제외」는 excluded.md → 다음 iteration
- └ Final verdict ── verdict.py 의 판정 줄 · result.md
+ ├ Final verdict ── verdict.py 의 판정 줄 · result.md
+ └ Publish ── sink 한 번 · posted:/skipped:
 ```
 
 ### Trivia escape
@@ -427,11 +419,11 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 자체 테스트 격리용 샌드박스(`create-sandbox` · `mutation-guard`)와 그 스위치는 v10.0.0 에서
 `plugins/plugin-audit` 로 옮겨 갔다(`DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX`).
 
-**Publish 단위 disable (`/qg-publish`, 게이트 아님):**
+**게시 disable (판정에는 영향 없음):**
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` | **두 최내부 sink에서 결정론 강제**(skill 진입 자체는 막지 않음): `comment-upsert.py`(코멘트 POST/PATCH)와 `pr-create.sh`(`git push` + `gh pr create`). 로컬 artifact 생성 + `--dry-run` preview는 그대로 동작하되 GitHub에 대한 실제 네트워크 쓰기만 fail-closed로 차단된다. |
+| `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` | 게시만 끈다. 집행은 sink `publish-comment.sh` 의 첫 검사다 — gh 를 한 번도 부르지 않고 `skipped: kill-switch` 를 낸다. 판정 · 로컬 결과는 그대로다. 플러그인 전체를 끄는 `DEVBREW_QUALITY_GATES_DISABLE=1` 도 같은 검사에서 게시를 멈춘다. |
 
 **GC 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:qg-gc`):
 
@@ -455,13 +447,14 @@ Review scope 자체는 세션 state 로 추적되지 않는다 — `/qg` 매 턴
 
 stale sibling 폴더(mtime이 `DEVBREW_QUALITY_GATES_TTL_HOURS`(기본 24h)보다 오래된)는
 `/qg` 실행 시 garbage-collect됩니다. 자기 세션 폴더는 `/qg` 시작마다 `setup-qg.sh` 가 지우고
-다시 만든다(SID 패턴을 통과한 값으로만 지운다 — E1). 같은 세션에서 `/qg-publish` 가 그 폴더에 쓴
-파일(`pr-understanding.md` 등)도 함께 지워진다. `CLAUDE_CODE_SESSION_ID` 가 있으면 그와 다른
+다시 만든다(SID 패턴을 통과한 값으로만 지운다 — E1). 같은 세션에서 게시 펜스가 그 폴더에 쓴
+파일(`comment.md` 등)도 함께 지워진다. `CLAUDE_CODE_SESSION_ID` 가 있으면 그와 다른
 `--session-id` 는 거부한다 — 다른 세션의 폴더를 지우지 않는다.
 
 **`.claude` 나 `.claude/quality-gates` 가 심볼릭 링크면 `/qg` 는 돌지 않는다** — 링크가 리포 안을
 가리켜도 setup 이 거부 줄 하나를 내고 exit 1 로 멈춘다(링크 너머를 지울 수 있어서다). 해법은 그 자리를
 실제 디렉토리로 바꾸는 것이다. 아래 GC 키(`quality-gates:qg-gc`)로 GC 를 꺼도 이 거부는 그대로다.
 
-모든 파일은 `*.local.md` gitignore 패턴에 매칭되며, 별도의 `.gitignore` 변경은
-필요 없습니다.
+이 파일들은 `*.local.md` 가 아니라 따로 무시되지 않는다. 리포의 `.gitignore` 가 `.claude/` 를 무시하지 않으면
+세션 폴더가 untracked 로 보인다 — 커밋하지 말고 무시 줄(`.claude/quality-gates/`)을 더하라. 게시 sink 는 이
+폴더를 secret-scan corpus 에서 뺀다(게시 본문 자신이 여기 산다).

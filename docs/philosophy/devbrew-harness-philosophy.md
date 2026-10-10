@@ -48,8 +48,8 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 코드: `plugins/*/hooks/hooks.json`
 
 ### P17 — User Sovereignty
-**Law 1 집행.** 위험한·되돌리기 어려운·공유 state에 영향을 주는 액션은 항상 confirmation 게이트를 거친다 — agent는 권고하고 사용자가 결정한다. Load-bearing: 게이트를 skip한 narrate-only 종료는 polite-stop(AP2)이다 — approval gate는 사용자가 *redirect* 가능해야 하고 단순 *acknowledge*가 아니다.
-코드: `plugins/spec-distill/skills/spec-review/SKILL.md` 의 `## 게이트` 절 (`AskUserQuestion` proceed gate)
+**Law 1 집행.** 위험한·되돌리기 어려운·공유 state에 영향을 주는 액션은 항상 confirmation 게이트를 거친다 — agent는 권고하고 사용자가 결정한다. Load-bearing: 게이트를 skip한 narrate-only 종료는 polite-stop(AP2)이다 — approval gate는 사용자가 *redirect* 가능해야 하고 단순 *acknowledge*가 아니다. qg 의 매 실행 PR 코멘트 게시는 사용자의 상시 동의다 — 게시마다 묻지 않고, 게시만 끄는 길은 `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` 하나다(전역 `DEVBREW_QUALITY_GATES_DISABLE=1` 은 전부를 끈다).
+코드: `plugins/spec-distill/skills/spec-review/SKILL.md` 의 `## 게이트` 절 (`AskUserQuestion` proceed gate) · `plugins/quality-gates/scripts/publish-comment.sh` (상시 동의 게시 — kill switch 가 sink 안에서 끈다)
 
 ### P18 — Stagnation Is a Failure Mode
 **Cross-cutting (L1·L2·L3) 집행.** 같은 것을 계속 재시도하는 루프는 진전이 아니라 멈춘 것 — max-iteration cap + repeat 감지 + escape hatch와 함께 shipping. Load-bearing: 정체 시 재시도 대신 *다른* 접근(fresh subagent·다른 리뷰어·human prompt)을 invoke해야 하고, 카운트가 없는 루프는 토큰을 태우며 신뢰를 깎는다.
@@ -57,7 +57,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 
 ### P21 — Security & Supply Chain
 **Cross-cutting (L1·L2·L3) 집행.** 플러그인=코드, agent=prompt, 둘 다 공격 표면이다 — state secret hygiene, integrity-pin된 plugin-to-plugin trust, description prompt-injection 리뷰가 floor. Load-bearing: kill switch는 보안 컨트롤이라 어떤 훅도 inspect해서 거부할 수 없고, persona 파일을 약화(규칙 제거·임계 완화)하는 PR은 test-suite 편집과 같은 scrutiny의 보안-민감 변경이다.
-코드: `plugins/quality-gates/scripts/comment-upsert.py` (untrusted-input) · hooks kill switch · persona=보안-민감
+코드: `plugins/quality-gates/scripts/publish-comment.sh` (게시 sink — kill switch · secret-scan · 비신뢰 입력) · hooks kill switch · persona=보안-민감
 
 ### P22 — Cost Awareness
 **Cross-cutting (L1·L2·L3) 집행.** 모든 스킬은 worst-case 기반으로 `cost_class: low|medium|high|variable`를 frontmatter에 선언하고, fan-out N을 `<Use_When>`에 명시한다. Load-bearing: `cost_class: high`는 지출 전 `AskUserQuestion` 승인 게이트가 필수이고(비용에 대한 동의), 클래스보다 비싸게 도는 스킬은 버그다.

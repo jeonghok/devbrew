@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test_render_terminal.sh — coverage for scripts/render-terminal.py (design §9, AC13).
+# test_render_terminal.sh — coverage for scripts/render-terminal.py `table` (the Final verdict STATUS table).
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -9,7 +9,7 @@ SCRIPT="$PLUGIN_ROOT/scripts/render-terminal.py"
 case_table_aligned() {
   local out
   out=$(printf 'target\tPR #123\nidentity\toctocat (id 583231)\n' \
-        | python3 "$SCRIPT" table --title "PR Understanding")
+        | python3 "$SCRIPT" table --title "Status")
   # every value column must start at the same offset (aligned, not prose)
   local c1 c2
   c1=$(printf '%s\n' "$out" | grep -n 'PR #123' | head -1 | sed 's/.*://' | awk '{print index($0,"PR")}')
@@ -17,19 +17,18 @@ case_table_aligned() {
   if [[ -n "$c1" && "$c1" == "$c2" ]]; then ok "STATUS columns aligned (offset $c1)"; else no "table not aligned ($c1 vs $c2)"; fi
 }
 
-case_diagram_parity() {
-  local facts out
-  facts=$'nodes:\nsrc/api.py\nsrc/db.py\nedges:\nsrc/api.py -> src/db.py\ndegraded: no'
-  out=$(printf '%s' "$facts" | python3 "$SCRIPT" diagram)
-  if printf '%s' "$out" | grep -qF "src/api.py" \
-     && printf '%s' "$out" | grep -qF "src/db.py" \
-     && printf '%s' "$out" | grep -qF "src/api.py -> src/db.py"; then
-    ok "ASCII diagram carries every node + edge from facts"
-  else
-    no "diagram parity (got: $out)"
-  fi
-}
-
 case_table_aligned
-case_diagram_parity
+# 소비자 배선 — quality-pipeline SKILL 이 render-terminal 을 allowed-tools 에 두고, `## Final verdict` 절(펜스 밖 헤딩만
+# 절 경계로 센다)이 `table` 을 부른다. 헤딩부터 EOF 까지 읽으면 뒤따르는 `## Publish` 가 만족시킬 수 있어 절 창으로 잰다.
+SKILL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
+AT="$(awk '/^allowed-tools:/{f=1} f{print} f&&/^---[[:space:]]*$/{exit}' "$SKILL")"
+grep -qF 'render-terminal.py' <<<"$AT" \
+  && ok "render-terminal.py wired into allowed-tools" \
+  || no "render-terminal.py missing from allowed-tools"
+FV="$(awk '/^```/{inf=!inf} !inf && /^## /{f=($0=="## Final verdict")} f' "$SKILL")"
+if grep -qF 'render-terminal.py" table' <<<"$FV"; then
+  ok "Final verdict uses render-terminal.py table"
+else
+  no "Final verdict does not call render-terminal.py table"
+fi
 finish

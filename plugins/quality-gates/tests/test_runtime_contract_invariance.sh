@@ -147,7 +147,7 @@ case_remove_namespace_guard() {
 # 이 락은 몰래 늘거나 주는 쪽 둘 다 잡는 알람이지, "늘기만 막는" 래칫이 아니다 —
 # 의도적 변경이면 이 숫자를 같은 커밋에서 의식적으로 고치는 게 정확히 이 락이
 # 원하는 동작이다(test_codex_backward_compat.sh 헤더의 "의식적 갱신 강제"와
-# 같은 패턴). 현재 값(hooks 0 · agents 6)의 근거는 CHANGELOG 참고.
+# 같은 패턴). 현재 값(hooks 0 · agents 5)의 근거는 CHANGELOG 참고.
 case_no_new_surfaces() {
   local agents
   agents=$(ls "$PLUGIN_ROOT/agents" | wc -l | tr -d ' ')
@@ -155,7 +155,8 @@ case_no_new_surfaces() {
   [[ ! -e "$PLUGIN_ROOT/hooks" ]] && ok "hooks/ 없음 (v10 — 훅 0개)" || no "hooks/ 가 다시 생겼다"
   [[ -d "$PLUGIN_ROOT/agents" ]] && ok "agents/ 는 있다 (위 부재가 경로 오타로 공허하지 않다)" \
     || no "agents/ 도 없다 — PLUGIN_ROOT 가 틀렸다"
-  [[ "$agents" == "6" ]] && ok "agents/ 파일 6개 불변"    || no "agents 파일 수 $agents (기대 6)"
+  # v10 ③: 게시 생성 agent 하나를 지워 6 → 5.
+  [[ "$agents" == "5" ]] && ok "agents/ 파일 5개 불변"    || no "agents 파일 수 $agents (기대 5)"
   # verdict 토큰은 이제 SKILL.md 에 0종이 기대값이다 (Task 7 — invert). 판정 어휘는
   # `scripts/verdict.py` 밖에 두지 않는다(global constraints) — PASS/FAIL/
   # SKIP_WITH_EVIDENCE/NEEDS_RESOLUTION 은 옛 Runtime 게이트가 SKILL.md 에 직접

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""secret-scan.py — the sole content hard-block for PR-understanding publish.
+"""secret-scan.py — the sole content hard-block for the publish sink of qg (publish-comment.sh).
 
 Targets VALUES, not identifiers (design §7). FAIL CLOSED: any error/unreadable
 → scan_ok: no. The orchestrator gates on the literal `scan_ok: yes` line, NEVER
@@ -125,13 +125,14 @@ def main() -> int:
         # Corpus-integrity precondition (FAIL CLOSED): the two corpus-gated
         # detectors (_high_entropy_in_corpus / _quoted_source_value) silently
         # no-op on a degraded/thin corpus, leaving only the 9 vendor patterns.
-        # build-pr-context.sh signals a degraded (no-merge-base) corpus with a
-        # `=== PR CONTEXT (degraded: ...` header line; treat that as un-scannable,
-        # not clean. Anchored on the exact header (^, MULTILINE) so file contents
-        # that merely mention "degraded" never false-trigger the block.
-        if re.search(r"^=== PR CONTEXT \(degraded", corpus, re.MULTILINE):
+        # publish-comment.sh signals a degraded corpus (no merge-base, or the
+        # build failed) with a `=== QG CORPUS (degraded: ...` header line; treat
+        # that as un-scannable, not clean. Anchored on the exact header (^,
+        # MULTILINE) so file contents that merely mention "degraded" never
+        # false-trigger the block.
+        if re.search(r"^=== QG CORPUS \(degraded", corpus, re.MULTILINE):
             print("scan_ok: no")
-            print("finding: corpus degraded (no merge-base) — fail-closed")
+            print("finding: corpus degraded (no merge-base or corpus build failed) — fail-closed")
             return 2
         findings = scan(payload, corpus)
     except Exception as e:                             # FAIL CLOSED

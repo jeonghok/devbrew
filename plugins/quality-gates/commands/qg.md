@@ -1,5 +1,5 @@
 ---
-description: "Run the quality gates pipeline (scope → review → differential test → verdict)"
+description: "Run the quality gates pipeline (review → differential test → verdict → PR comment)"
 argument-hint: "[critique <path>] [branch|--paths <glob>...] [--plan <path>]"
 ---
 
@@ -61,14 +61,6 @@ re-critique, differential test, synthesis — with its internal fix-loop, surfac
 decision points via AskUserQuestion. No further commands are needed unless
 the pipeline is aborted at a decision point.
 
-### After the pipeline
-
-파이프라인 스킬이 종료해 제어가 이 커맨드로 돌아오면 아래 한 줄을 출력하고
-끝낸다. **자동 offer 를 띄우지 않는다** — 이어서 게시할지는 사용자가 다음 턴에
-정한다.
-
-> 이어서 PR 이해글을 게시하려면: `/qg-publish`
-
 ### Quick Reference
 
 | Command | Effect |
@@ -80,7 +72,6 @@ the pipeline is aborted at a decision point.
 | `/qg --plan <path>` | Use specific plan file |
 | `branch <name>` · `--reset` · `--gc` · `--pr-url` | 없어졌다(v10) — 안내 한 줄을 내고 실행하지 않는다 |
 | `both` · `review` · `runtime` · `--skip-runtime` | 제거됨 — 한 줄 공지 후 그대로 진행 |
-| `/qg-publish [--dry-run]` | Generate + publish a PR-understanding comment (separate skill; consent-gated; not a gate) |
 | `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | 차등 테스트를 건너뛴다 — 판정은 `not-certified (kill-switch)` |
 
 다른 브랜치를 보려면 그 브랜치를 체크아웃하거나 그 브랜치의 git worktree 안에서 `/qg` 를 돌린다.
