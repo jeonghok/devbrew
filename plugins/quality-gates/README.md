@@ -172,9 +172,9 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 않는다 — 오케스트레이터가 `run-test-selection.sh` 를 직접 부른다. 결정론 백스톱이 모델
 주장과 독립이라는 전제가 거기서 선다.
 
-**게시** (v10 ③) — 판정 뒤 파이프라인이 sink `scripts/publish-comment.sh` 를 한 번 부른다. 열린 PR 이 있으면 새 코멘트 하나(이해글 + 판정 줄)를 남기고, 없거나 · 닫혔거나 · kill switch · scan 실패 · gh 없음·미인증 · 65,536자 초과면 `skipped: <사유>` 한 줄로 알린다(판정은 그대로). Stop·중단으로 끝난 실행은 sink 를 부르지 않는다. 오케스트레이터는 gh 를 직접 부르지 않는다. 지적 목록 · SUGGESTION 은 로컬 결과(`.claude/quality-gates/<sid>/result.md`)에만 남는다.
+**게시** (v10 ③) — 판정 뒤 파이프라인이 sink `scripts/publish-comment.sh` 를 한 번 부른다. 열린 PR 이 있으면 새 코멘트 하나(이해글 + 판정 줄)를 남기고, 없거나 · 닫혔거나 · kill switch · scan 실패 · gh 없음·미인증 · 65,536자 초과면 `skipped: <사유>` 한 줄로 알린다(판정은 그대로). 사유 리터럴은 `kill-switch` · `no-pr` · `pr-closed` · `too-long` · `gh-unavailable` · `scan-failed` 이다. `gh-unavailable` 은 gh 없음 · 미인증 · PR 조회 실패 · 코멘트 쓰기 실패를, `scan-failed` 는 비밀값 의심 · merge-base 없음 · corpus 생성 실패 · 길이 측정 실패를 뜻한다. Stop·중단으로 끝난 실행은 sink 를 부르지 않는다. 오케스트레이터는 gh 를 직접 부르지 않는다. 지적 목록 · SUGGESTION 은 로컬 결과(`.claude/quality-gates/<sid>/result.md`)에만 남는다.
 
-**게시의 알려진 한계** — secret-scan 이 보는 글은 git 이 보여 주는 `merge-base..HEAD` 의 텍스트 변경(커밋 메시지 포함), 작업 트리의 변경, 그리고 바뀐 텍스트 파일의 현재 내용이다. 아래는 그 밖이라 보지 못한다. 알려진 패턴의 비밀값은 어디에 있든 막는다. 낯선 고엔트로피 값은 위 글 안에 있을 때만 막는다.
+**게시의 알려진 한계** — secret-scan 이 보는 글은 git 이 보여 주는 `merge-base..HEAD` 의 텍스트 변경(커밋 메시지 포함), 작업 트리의 변경, 그리고 바뀐 텍스트 파일의 현재 내용이다. 아래는 그 밖이라 보지 못한다. 알려진 패턴의 비밀값은 코멘트 안 어디에 있든 막는다. 낯선 고엔트로피 값은 코멘트에 든 값이 위 글 안에도 있을 때만 막는다.
 
 - `.env` 같은 무시된 파일, 그리고 변경 밖에서 오케스트레이터가 읽은 것(e2e 로그 · 환경 파일 등)
 - 바이너리 · NUL 바이트 파일의 현재 내용(diff 줄은 본다)
@@ -182,7 +182,7 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 - 평문을 내지 않는 textconv 드라이버의 출력
 - 서브모듈 안의 변경(gitlink sha 만 본다)
 - 병합 충돌 해소에만 있는 줄
-- 한 가지는 일부러 막는다: 바뀐 파일에 `=== QG CORPUS (degraded` 로 시작하는 줄이 있으면 게시하지 않는다(fail-closed).
+- 한 가지는 일부러 막는다: 위 글 어디든(바뀐 파일 · 커밋 메시지) `=== QG CORPUS (degraded` 로 시작하는 줄이 있으면 게시하지 않는다(fail-closed).
 
 ## 리뷰어 구성
 
@@ -416,7 +416,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` | 게시만 끈다. 집행은 sink `publish-comment.sh` 의 첫 검사다 — gh 를 한 번도 부르지 않고 `skipped: kill-switch` 를 낸다. 판정 · 로컬 결과는 그대로다. |
+| `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` | 게시만 끈다. 집행은 sink `publish-comment.sh` 의 첫 검사다 — gh 를 한 번도 부르지 않고 `skipped: kill-switch` 를 낸다. 판정 · 로컬 결과는 그대로다. 플러그인 전체를 끄는 `DEVBREW_QUALITY_GATES_DISABLE=1` 도 같은 검사에서 게시를 멈춘다. |
 
 **GC 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:qg-gc`):
 
