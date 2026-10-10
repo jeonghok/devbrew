@@ -1,8 +1,8 @@
 # plugin-audit
 
-임의의 devbrew 플러그인을 **읽기전용·증거기반·multi-agent**로 감사한다. 6축 병렬 발견 →
-적대적 반박(기본 verdict=refuted) → blind codex 독립 co-audit → 우선순위 갭 리포트.
-1차 산출물은 코드가 아니라 **증거로 뒷받침된 우선순위 갭 목록**이다.
+devbrew 플러그인 하나를 고치지 않고 읽기만 해서 감사한다. 읽기 전용 리뷰어 여섯이 축마다 빈틈을 찾고,
+다른 리뷰어가 그 지적을 하나씩 반박해 보며, codex(다른 모델)가 있으면 같은 대상을 따로 감사한다. 결과는
+증거가 붙은 빈틈 목록이고, 심각한 것부터 정렬된다.
 
 ## 사용법
 
@@ -23,7 +23,8 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 **산출 위치** — 감사마다 실행 디렉토리 `.claude/plugin-audit/<date>-<target>[-N]/` 이 생긴다(지출 동의
 승인 직후, `scripts/prepare-run-dir.py`). 리포트 `audit.md` · 데이터 `audit-data.json` · 원장
 `audit-journal.jsonl` 과 중간 파일이 모두 여기 쌓이고, 안의 `.gitignore`(`*`)로 스스로 git-ignore 된다.
-감사가 끝나면 세 파일의 절대경로를 보고한다. 같은 날 같은 대상을 다시 감사하면 `-2` 로 새로 만든다.
+감사가 끝나면 상태 한 줄과 리포트(`audit.md`) 경로를 보고한다 — 데이터 · 원장 경로는 물으면 보인다.
+같은 날 같은 대상을 다시 감사하면 `-2` 로 새로 만든다.
 
 `DEVBREW_PLUGIN_AUDIT_DISABLE_WEB=1` — codex 감사 co-reviewer의 웹 검색만 비활성화한다
 (AC21). 감사 preamble이 외부 prior-art 근거를 요구해 기본은 ON(`web_search="live"`)이지만,

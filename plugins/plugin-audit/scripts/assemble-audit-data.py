@@ -110,13 +110,13 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     for did in assigned.get("assigned_d", []):
         if did not in have_d:
             d_verdicts.append({"id": did, "verdict": "unverified",
-                               "reason": "axis incomplete — backfilled", "source": "claude"})
+                               "reason": "축 감사가 끝나지 않아 빈칸을 채웠다(backfilled)", "source": "claude"})
     have_oq = {v["id"] for v in oq_answers if v.get("source") == "claude"}
     for oid in assigned.get("assigned_oq", []):
         if oid not in have_oq:
             # steelman_condition enum(a|b|c|d|none|pending)을 침범하지 않음 — reason으로만 unverified 표시
             oq_answers.append({"id": oid, "answer": None,
-                               "reason": "axis incomplete — backfilled (unverified)", "source": "claude"})
+                               "reason": "축 감사가 끝나지 않아 빈칸을 채웠다(backfilled — 검증 안 됨)", "source": "claude"})
 
     # (4) cross_model_confirmed (claude∪codex file:line 교집합)
     claude_ev, codex_ev = set(), set()

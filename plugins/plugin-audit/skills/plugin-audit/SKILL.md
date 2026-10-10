@@ -182,7 +182,7 @@ if [[ -z "$codex_avail" ]]; then skip_reason="detector_not_runnable"; fi
 if [[ "$codex_avail" == "true" ]]; then
   bash "$PA/scripts/run_audit_codex_reviewer.sh" "$AXIS_FILE" "$(pwd)" "$CODEX_JSON"
 else
-  echo "[plugin-audit] codex blind co-audit SKIPPED (reason: ${skip_reason:-unknown}) — 이 감사에는 모델 다양성이 없었다 (degraded)." >&2
+  echo "[plugin-audit] codex 독립 감사를 건너뛰었다 (reason: ${skip_reason:-unknown}) — 이 감사에는 다른 모델의 확인이 없다. 모델 다양성 없음(degraded)." >&2
 fi
 ```
 <!-- codex-gate:end -->
@@ -222,7 +222,7 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    스캔이 실패하거나 redact 못 하는 secret이 남으면 **persist하지 않는다**. 리포트와 원장은 사람이 복사·공유하는
    산출물이라, raw transcript journal을 그대로 두면 자격증명·민감 소스가 그 공유 경로로 샌다(codex re-verify
    R5). 통과분만 `$RUN_DIR/audit-journal.jsonl`로 저술한다. 이 파일이 `render-audit-report.py`의 "축 완주 수와
-   journal로 확인하라" 포인터의 **실체**다 — journal 은 실행 디렉토리의 작업 산출물이고, persist 안 하면 그
+   기록(journal)으로 확인하라" 포인터의 **실체**다 — journal 은 실행 디렉토리의 작업 산출물이고, persist 안 하면 그
    포인터가 부재 아티팩트를 가리키는 dangling 참조다.
    journal을 얻지 못하거나 secret 때문에 persist를 못 하면 그 사실을 `degraded[]`(meta.pre1_degraded)에 넣는다
    — **assemble 前**이라 이후 render 배너(AC-3)에 반영된다(render 後에 확보하면 이미 렌더된 배너에 못 싣는다,
@@ -260,11 +260,12 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    validate_artifacts에 아직 없다 — step 1의 persist 성공/degrade 사실이 배너로 드러나는 것으로 갈음한다
    (journal artifact 정합 검사는 향후 하드닝, codex re-verify round-2 V2-5). RED 면 종료 보고(step 8)
    대신 RED 사실(검사 메시지)을 보고하고 멈춘다.
-8. **종료 보고** — step 5 가 일치하고 step 7 이 GREEN 일 때만 이 종료 보고를 한다. 리포트
-   (`$RUN_DIR/audit.md`) · 데이터(`$RUN_DIR/audit-data.json`) · 원장
-   (`$RUN_DIR/audit-journal.jsonl`)의 절대경로를 사용자에게 보인다. 리포트는 한 번 읽는 작업 산출물이다 —
-   실행 디렉토리는 git-ignore 되고 커밋하지 않는다. 이 감사의 compounding 은 감사가 낳은 수정 커밋과
-   reviewer persona 편집이 맡는다.
+8. **종료 보고** — step 5 가 일치하고 step 7 이 GREEN 일 때만 이 종료 보고를 한다. 첫 줄은 리포트 둘째 줄의
+   상태 문장을 그대로 쓴다(예: 「감사를 마쳤다 — 발견 5개(심각 1 · 중요 3 · 제안 1).」). 이어서 리포트 앞의 `⚠` 줄을 글자 그대로 한 줄씩 옮긴다(없으면 쓰지 않는다). 이어서 리포트
+   (`$RUN_DIR/audit.md`)의 절대경로를 보인다 — 사용자가 열어 볼 것은 이것이다. 데이터(`$RUN_DIR/audit-data.json`) ·
+   원장(`$RUN_DIR/audit-journal.jsonl`) 경로는 사용자가 물을 때만 보인다. 맨 끝에 사용자가 할 일 하나를 쓴다
+   (예: 「리포트의 심각 발견부터 고칠지 정해 주세요」). 리포트는 한 번 읽는 작업 산출물이다 — 실행 디렉토리는
+   git-ignore 되고 커밋하지 않는다. 이 감사의 compounding 은 감사가 낳은 수정 커밋과 reviewer persona 편집이 맡는다.
 
 ## kill switch
 

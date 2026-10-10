@@ -82,6 +82,7 @@ const AXIS_SCHEMA = {
           reference_gap: { type: 'string' },
           oq_ref: { type: 'string' },
           steelman_condition: { type: 'string', enum: ['a', 'b', 'c', 'd', 'none', 'pending'] },
+          plain: { type: 'string', description: 'Optional. The same finding in one plain sentence a first-time reader understands — no internal IDs.' },
         },
       },
     },
