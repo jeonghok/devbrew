@@ -213,10 +213,10 @@ assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_li
 # skills/*/SKILL.md 에 대해.
 #
 # 앞 버전은 quality-pipeline/SKILL.md 제목 하나만 봤다(리터럴 `v2.7.0` 핀의
-# 후신). 이 플러그인엔 SKILL.md 가 셋이다 — quality-pipeline(버전 있음) ·
-# publishing-pr-understanding(버전 있음) · critiquing-artifacts(버전 없음).
-# 한 파일만 보는 락은 나머지 둘에 구조적으로 눈이 멀어, publishing-pr-understanding
-# 이 plugin.json bump 뒤에도 제목에 구버전을 그대로 달고 있는 걸 못 잡았다.
+# 후신). 이 플러그인엔 SKILL.md 가 둘이다 — quality-pipeline(버전 있음) ·
+# critiquing-artifacts(버전 없음). 한 파일만 보는 락은 나머지에 구조적으로 눈이 먼다 —
+# 버전을 단 둘째 SKILL(v10 ③ 에서 삭제)이 plugin.json bump 뒤에도 제목에 구버전을
+# 그대로 달고 있는 걸 못 잡은 적이 있다.
 #
 # 음의 락: 버전을 단 제목은 전부 major 가 shipped 와 같아야 한다. 버전이
 # 아예 없는 제목(critiquing-artifacts)은 위반이 아니다 — 무버전 제목은 애초에

@@ -155,7 +155,8 @@ case_no_new_surfaces() {
   [[ ! -e "$PLUGIN_ROOT/hooks" ]] && ok "hooks/ 없음 (v10 — 훅 0개)" || no "hooks/ 가 다시 생겼다"
   [[ -d "$PLUGIN_ROOT/agents" ]] && ok "agents/ 는 있다 (위 부재가 경로 오타로 공허하지 않다)" \
     || no "agents/ 도 없다 — PLUGIN_ROOT 가 틀렸다"
-  [[ "$agents" == "6" ]] && ok "agents/ 파일 6개 불변"    || no "agents 파일 수 $agents (기대 6)"
+  # v10 ③: pr-understanding-builder 삭제로 6 → 5. 늘어난 방향만이 새 표면이다.
+  [[ "$agents" == "5" ]] && ok "agents/ 파일 5개 불변"    || no "agents 파일 수 $agents (기대 5)"
   # verdict 토큰은 이제 SKILL.md 에 0종이 기대값이다 (Task 7 — invert). 판정 어휘는
   # `scripts/verdict.py` 밖에 두지 않는다(global constraints) — PASS/FAIL/
   # SKIP_WITH_EVIDENCE/NEEDS_RESOLUTION 은 옛 Runtime 게이트가 SKILL.md 에 직접

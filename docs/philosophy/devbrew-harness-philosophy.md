@@ -57,7 +57,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 
 ### P21 — Security & Supply Chain
 **Cross-cutting (L1·L2·L3) 집행.** 플러그인=코드, agent=prompt, 둘 다 공격 표면이다 — state secret hygiene, integrity-pin된 plugin-to-plugin trust, description prompt-injection 리뷰가 floor. Load-bearing: kill switch는 보안 컨트롤이라 어떤 훅도 inspect해서 거부할 수 없고, persona 파일을 약화(규칙 제거·임계 완화)하는 PR은 test-suite 편집과 같은 scrutiny의 보안-민감 변경이다.
-코드: `plugins/quality-gates/scripts/comment-upsert.py` (untrusted-input) · hooks kill switch · persona=보안-민감
+코드: `plugins/quality-gates/scripts/publish-comment.sh` (게시 sink — kill switch · secret-scan · 비신뢰 입력) · hooks kill switch · persona=보안-민감
 
 ### P22 — Cost Awareness
 **Cross-cutting (L1·L2·L3) 집행.** 모든 스킬은 worst-case 기반으로 `cost_class: low|medium|high|variable`를 frontmatter에 선언하고, fan-out N을 `<Use_When>`에 명시한다. Load-bearing: `cost_class: high`는 지출 전 `AskUserQuestion` 승인 게이트가 필수이고(비용에 대한 동의), 클래스보다 비싸게 도는 스킬은 버그다.
