@@ -185,10 +185,10 @@ case_AC26_P4_sentence_replaced() {
 }
 
 case_readme_documents_the_switches() {
-  assert_file_grep "$README" '^\| `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` \|' "README 표에 DISABLE_E2E 줄이 있다"
+  assert_file_grep "$README" '^\| `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` \| .*\(지문 · 비교 · 부팅이 exit 3\)\. \|$' "README 표에 DISABLE_E2E 줄이 있다"
   assert_file_grep "$README" '^\| `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` \|.*e2e 부팅' \
     "README 의 DISABLE_DIFFERENTIAL_TEST 줄이 e2e 부팅도 막는다고 말한다"
-  assert_file_grep "$README" 'DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT' "README 에 부팅 상한 노브가 있다"
+  assert_file_grep "$README" '^- `DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT`: 90 \(' "README 에 부팅 상한 노브가 기본값 90 으로 있다"
 }
 
 case_readme_describes_the_e2e_stage() {
@@ -202,18 +202,21 @@ case_readme_describes_the_e2e_stage() {
 }
 
 case_readme_states_the_e2e_limits() {
-  assert_file_grep "$README" '^- e2e `stop` 은 승인된 명령이 띄운 프로세스 그룹을 내린다\. ' "README: 데몬 · 남은 앱 한계 줄(독립 bullet)"
-  assert_file_grep "$README" '^- e2e 남은 앱: ' "README: 남은 앱 고아 한계"
-  assert_file_grep "$README" '^- e2e `stop` 의 생존 판정: ' "README: stop 의 ps 생존 판정 한계"
-  assert_file_grep "$README" '^- e2e 포트 확인: ' "README: IPv6 한계"
-  assert_file_grep "$README" '^- e2e CLI 직접 걷기: ' "README: CLI 직접 걷기 한계"
-  assert_file_grep "$README" '^- e2e 지문: ' "README: 지문 한계"
+  assert_file_grep "$README" '^- e2e `stop` 은 승인된 명령이 띄운 프로세스 그룹을 내린다\. .*고르지 않는다\.$' "README: 데몬 · 남은 앱 한계 줄(독립 bullet)"
+  assert_file_grep "$README" '^- e2e 남은 앱: .*남을 수 있다\.$' "README: 남은 앱 고아 한계"
+  assert_file_grep "$README" '^- e2e `stop` 의 생존 판정: .*갈 수 있다\.$' "README: stop 의 ps 생존 판정 한계"
+  assert_file_grep "$README" '^- e2e 포트 확인: .*보지 못한다\.$' "README: IPv6 한계"
+  assert_file_grep "$README" '^- e2e CLI 직접 걷기: .*아니다\.$' "README: CLI 직접 걷기 한계"
+  assert_file_grep "$README" '^- e2e 지문: .*않는다\.$' "README: 지문 한계"
 }
 
 case_readme_security_paragraph_and_principle() {
   assert_file_grep "$README" '^명령을 호스트 권한으로 실행한다 — 시나리오를 고르는 것이 그 실행의 승인이고' "README 보안 문단: e2e 승인 문장"
-  assert_file_grep "$README" '^- \*\*P4 — runtime tier 는 사람이 승인하는 e2e 걷기' "README 인스턴스화한 원칙에 P4 줄"
+  assert_file_grep "$README" '^- \*\*P4 — runtime tier 는 사람이 승인하는 e2e 걷기.*tests/test_e2e_docs\.sh`\.$' "README 인스턴스화한 원칙에 P4 줄"
   assert_file_absent "$README" '주장을 거둔다' "README: 옛 「주장을 거둔다」 문장이 없다"
+  assert_file_absent "$README" '주장만 거뒀다' "README: 옛 「주장만 거뒀다」 문장이 없다"
+  assert_file_grep "$README" '부팅되는 앱의 런타임 행위는 e2e 걷기가 본다\(위 P4 줄\)\.$' "README: LD3 의 새 문장이 줄 끝에 있다"
+  assert_file_grep "$README" '^- \*\*e2e\*\* — `curl`\(API 시나리오를 걸을 때' "README 사전 요건: curl 은 API 시나리오용"
 }
 
 case_qgmd_has_disable_e2e_row() {
