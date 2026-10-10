@@ -149,4 +149,23 @@ RC=$?
 assert "AC25: 'branch --paths glob' 는 exit 0 (--paths 를 브랜치 이름으로 읽지 않는다)" "test '$RC' -eq 0 && ! grep -q '인자는 없어졌다' out"
 cd / && rm -rf "$TMPDIR"
 
+# --- Case X4: setup 이 같은 세션에 남은 e2e 앱을 내린다(걷기 도중 끊긴 앞 실행) ---
+TMPDIR=$(mktemp -d); cd "$TMPDIR"
+SID="test-e2eleft-$$"
+mkdir -p ".claude/quality-gates/$SID"
+: > ".claude/quality-gates/$SID/result.md"
+( python3 -c 'import os, sys
+os.setsid()
+open(sys.argv[2], "w").write(str(os.getpid()))
+os.execvp("sleep", ["sleep", sys.argv[1]])' "301.$$" "$TMPDIR/lp" >/dev/null 2>&1 & )
+i=0; while [ ! -s "$TMPDIR/lp" ] && [ "$i" -lt 20 ]; do sleep 0.1; i=$((i+1)); done
+lp=$(cat "$TMPDIR/lp")
+printf '%s %s\n' "$lp" "$(ps -o lstart= -p "$lp" | tr -s ' ' | sed 's/^ //; s/ $//')" > ".claude/quality-gates/$SID/e2e-app.pgid"
+assert "X4: 대조 — 남은 앱이 떠 있다" "pgrep -f 'sleep 301.$$' >/dev/null"
+"$SCRIPT" --session-id "$SID" >/dev/null 2>&1
+sleep 0.5
+assert "X4: setup 이 같은 세션의 남은 e2e 앱을 내린다" "! pgrep -f 'sleep 301.$$' >/dev/null"
+pkill -f "sleep 301.$$" 2>/dev/null
+cd / && rm -rf "$TMPDIR"
+
 finish

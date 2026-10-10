@@ -3,18 +3,30 @@
 #
 #   fingerprint --out <file>        코드 상태 지문(HEAD · 추적 파일 변경 · 무시되지 않는 untracked)
 #   compare <before> <after>        두 지문의 차이 — `changed: <path>` 줄들 + 마지막 줄 `same` | `changed: <N>`
+#   boot --dir <dir> --cmd <command> (--ready-port <port> | --ready-log <ERE>) [--timeout <sec>]
+#                                   승인된 명령을 새 프로세스 그룹으로 띄우고 준비 신호를 기다린다
+#   stop --dir <dir>                boot 가 띄운 프로세스 그룹을 내린다(여러 번 불러도 같다)
 #   propose <evidence.tsv>          증거표 → 판정안(`proposal: pass|fail|미확인`)
 #
 # exit: 0 성공(compare 는 same) · 1 compare changed · 2 잘못된 호출 · 3 kill switch ·
-#       4 측정·판독 실패
+#       4 측정·판독 실패 또는 부팅 실패 · 5 정지 후에도 프로세스가 남음
 #
 # kill switch — DEVBREW_QUALITY_GATES_DISABLE · DEVBREW_QUALITY_GATES_DISABLE_E2E ·
 # DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST 중 하나라도 정확히 1 이면 fingerprint ·
-# compare 가 측정 전에 exit 3 으로 끝난다(X5). propose 는 리뷰 대상 코드를 실행하지 않으므로
-# 막지 않는다.
+# compare · boot 가 측정·실행 전에 exit 3 으로 끝난다(X5). stop · propose 는 리뷰 대상 코드를
+# 실행하지 않으므로 막지 않는다 — 꺼진 뒤에도 남은 앱은 내릴 수 있어야 한다.
 set -u
 
 die() { echo "e2e-state: $*" >&2; exit 2; }
+
+# 프로세스 시작 시각 — 공백을 하나로 접고 앞뒤를 걷는다(기록과 대조가 같은 모양이어야 한다).
+lstart_of() { ps -o lstart= -p "$1" 2>/dev/null | tr -s ' ' | sed 's/^ //; s/ $//'; }
+
+port_open() {
+  python3 -c 'import socket, sys
+s = socket.socket(); s.settimeout(0.5)
+sys.exit(0 if s.connect_ex(("127.0.0.1", int(sys.argv[1]))) == 0 else 1)' "$1"
+}
 
 killed_by_switch() {
   local v
@@ -161,6 +173,107 @@ sys.exit(1 if changed else 0)
 PY
 }
 
+cmd_boot() {
+  local dir="" cmd="" port="" logre="" timeout="${DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT:-90}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dir) [ $# -ge 2 ] || die "--dir 값이 없다"; dir="$2"; shift 2 ;;
+      --cmd) [ $# -ge 2 ] || die "--cmd 값이 없다"; cmd="$2"; shift 2 ;;
+      --ready-port) [ $# -ge 2 ] || die "--ready-port 값이 없다"; port="$2"; shift 2 ;;
+      --ready-log) [ $# -ge 2 ] || die "--ready-log 값이 없다"; logre="$2"; shift 2 ;;
+      --timeout) [ $# -ge 2 ] || die "--timeout 값이 없다"; timeout="$2"; shift 2 ;;
+      *) die "boot: 모르는 인자 '$1'" ;;
+    esac
+  done
+  [ -n "$dir" ] && [ -n "$cmd" ] || die "usage: e2e-state.sh boot --dir <dir> --cmd <command> (--ready-port <port> | --ready-log <ERE>) [--timeout <sec>]"
+  if [ -n "$port" ] && [ -n "$logre" ]; then die "준비 신호는 --ready-port 와 --ready-log 중 하나만"; fi
+  [ -n "$port" ] || [ -n "$logre" ] || die "준비 신호(--ready-port 또는 --ready-log)가 없다"
+  [ -z "$port" ] || [[ "$port" =~ ^[0-9]{1,5}$ ]] || die "--ready-port 는 숫자다: '$port'"
+  [[ "$timeout" =~ ^[0-9]{1,4}$ ]] && [ "$timeout" -ge 1 ] || die "--timeout 은 1 이상의 초다: '$timeout'"
+  [ -d "$dir" ] || die "--dir 이 없다: $dir"
+  killed_by_switch && exit 3
+  local top pgf log
+  top=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "e2e-state: boot — git 리포 밖이다" >&2; exit 4; }
+  pgf="$dir/e2e-app.pgid"; log="$dir/e2e-app.log"
+  if [ -s "$pgf" ]; then
+    echo "e2e-state: boot — 이미 띄운 앱이 있다($pgf). stop 을 먼저 부른다" >&2
+    exit 2
+  fi
+  cd "$top" || exit 4
+  # 준비 포트가 부팅 전에 이미 열려 있으면 그 포트의 주인은 승인된 명령이 아니다 — 그대로 두면
+  # 이전부터 떠 있던 다른 앱을 걷고 pass 를 낸다.
+  if [ -n "$port" ] && port_open "$port"; then
+    echo "boot-failed: port-in-use ($port 가 부팅 전에 이미 열려 있다)"
+    exit 4
+  fi
+  # 새 세션(setsid)으로 띄워 그 프로세스 그룹 전체를 stop 이 한 번에 내린다. 표준 입출력을
+  # 전부 떼어야 호출한 셸이 앱의 종료를 기다리지 않는다.
+  python3 -c 'import os, sys
+os.setsid()
+fd = os.open(os.devnull, os.O_RDONLY)
+os.dup2(fd, 0)
+os.execvp("bash", ["bash", "-c", sys.argv[1]])' "$cmd" >"$log" 2>&1 &
+  local pid=$!
+  printf '%s %s\n' "$pid" "$(lstart_of "$pid")" >"$pgf"
+  trap 'cmd_stop --dir "$dir" >/dev/null 2>&1; echo "boot-failed: interrupted"; exit 4' INT TERM
+  local waited=0 reason=""
+  while :; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      local rc=0; wait "$pid" 2>/dev/null || rc=$?
+      reason="exit-$rc"; break
+    fi
+    if [ -n "$port" ]; then
+      if port_open "$port"; then
+        echo "ready: pgid=$pid port=$port log=$log"; trap - INT TERM; return 0
+      fi
+    elif grep -Eq -- "$logre" "$log" 2>/dev/null; then
+      echo "ready: pgid=$pid log=$log"; trap - INT TERM; return 0
+    fi
+    if [ "$waited" -ge $((timeout * 2)) ]; then reason="timeout-${timeout}s"; break; fi
+    sleep 0.5; waited=$((waited + 1))
+  done
+  trap - INT TERM
+  echo "--- 부팅 출력 끝부분 ($log)"
+  tail -n 40 "$log" 2>/dev/null
+  cmd_stop --dir "$dir" >/dev/null 2>&1
+  echo "boot-failed: $reason"
+  exit 4
+}
+
+cmd_stop() {
+  local dir=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dir) [ $# -ge 2 ] || die "--dir 값이 없다"; dir="$2"; shift 2 ;;
+      *) die "stop: 모르는 인자 '$1'" ;;
+    esac
+  done
+  [ -n "$dir" ] || die "usage: e2e-state.sh stop --dir <dir>"
+  local pgf="$dir/e2e-app.pgid" pg started now
+  if [ ! -s "$pgf" ]; then echo "stopped: none"; return 0; fi
+  read -r pg started <"$pgf"
+  # pgid 1 · 0 · 음수 · 숫자 아닌 값으로 `kill -- -<pg>` 를 부르면 무관한 프로세스 전체가 맞는다.
+  if ! [[ "$pg" =~ ^[0-9]+$ ]] || [ "$pg" -le 1 ]; then
+    echo "e2e-state: stop — pgid 파일이 판독 불가다: $pgf" >&2; exit 5
+  fi
+  # 우리 그룹이 아직 있으면 그 pid 는 재사용될 수 없다. 리더가 살아 있는데 시작 시각이 다르면
+  # 우리 그룹은 이미 사라졌고 그 pid 는 남의 것이다 — 그때는 아무것도 죽이지 않는다.
+  now=$(lstart_of "$pg")
+  if [ -n "$now" ] && [ -n "$started" ] && [ "$now" != "$started" ]; then
+    rm -f "$pgf"; echo "stopped: none (pid $pg 는 다른 프로세스로 재사용됐다)"; return 0
+  fi
+  kill -TERM -- "-$pg" 2>/dev/null
+  local i=0
+  while pgrep -g "$pg" >/dev/null 2>&1 && [ "$i" -lt 10 ]; do sleep 0.5; i=$((i + 1)); done
+  if pgrep -g "$pg" >/dev/null 2>&1; then kill -KILL -- "-$pg" 2>/dev/null; sleep 0.5; fi
+  if pgrep -g "$pg" >/dev/null 2>&1; then
+    echo "stop-failed: pgid=$pg 에 프로세스가 남았다"; exit 5
+  fi
+  rm -f "$pgf"
+  echo "stopped: pgid=$pg"
+}
+
+
 cmd_propose() {
   [ $# -eq 1 ] || die "usage: e2e-state.sh propose <evidence.tsv>"
   PYTHONDONTWRITEBYTECODE=1 python3 - "$1" <<'PY'
@@ -209,11 +322,13 @@ PY
 }
 
 sub="${1:-}"
-[ -n "$sub" ] || die "usage: e2e-state.sh <fingerprint|compare|propose> ..."
+[ -n "$sub" ] || die "usage: e2e-state.sh <fingerprint|compare|boot|stop|propose> ..."
 shift
 case "$sub" in
   fingerprint) cmd_fingerprint "$@" ;;
   compare) cmd_compare "$@" ;;
+  boot) cmd_boot "$@" ;;
+  stop) cmd_stop "$@" ;;
   propose) cmd_propose "$@" ;;
   *) die "모르는 하위명령 '$sub'" ;;
 esac
