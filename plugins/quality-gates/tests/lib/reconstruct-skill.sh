@@ -45,7 +45,14 @@ reconstruct_skill_md() {   # $1 = SKILL.md 절대경로
         e2e_spliced = 1; fence = ""; skip_close = 1
         ref2 = skill_dir "/../../references/e2e.md"
         m = 0
-        while ((getline line < ref2) > 0) { print line; m++ }
+        # 레퍼런스의 `# ` 제목 줄은 버리고 `## ` 절은 `### ` 로 내린다 — 재구성본의 `## e2e` 창이
+        # 다음 `## ` 앞까지 E0~E5 를 그대로 품게 한다.
+        while ((getline line < ref2) > 0) {
+          m++
+          if (line ~ /^# /) continue
+          if (line ~ /^## /) line = "#" line
+          print line
+        }
         close(ref2)
         if (m == 0) {
           print "reconstruct-skill.sh: references/e2e.md 부재 또는 빈 파일 (" ref2 ")" > "/dev/stderr"

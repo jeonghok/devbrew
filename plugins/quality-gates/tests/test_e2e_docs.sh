@@ -56,6 +56,19 @@ case_X4_stop_runs_before_and_after_walk() {
     "X4: 걷기 앞(남은 앱) · 뒤(E3) 두 자리에서 stop 을 부른다"
 }
 
+case_I1_cli_direct_walk_is_gated_by_the_fingerprint_rc() {
+  # CLI 직접 실행은 걷기 자체가 리뷰 대상 코드의 실행이다 — 지문 rc 가 그 앞의 코드 게이트다(X5).
+  local s; s=$(section "$SKILL" "## e2e")
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '"$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-before.txt"; echo "before rc=$?"')" "1" \
+    "I1: CLI 직접 실행 경로가 지문을 재고 그 rc 를 낸다"
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc=0` — E2 로 간다.')" "1" "I1: 걷기는 before rc=0 에서만 간다"
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다.')" "1" \
+    "I1: before rc=3 이면 CLI 명령을 실행하지 않고 꺼짐(kill switch)"
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc` 가 그 밖의 0 아닌 값 — 걷지 않는다. stderr 사유를 공시하고 판정안 `미확인(지문 실패)` 로 E3 를 건너뛰고 E4 로 간다.')" "1" \
+    "I1: 그 밖의 rc 면 걷지 않고 미확인(지문 실패)"
+  assert_not_contains "$s" '만 돌리고 E2 로 간다' "I1: rc 를 보지 않고 E2 로 가는 옛 문장이 없다"
+}
+
 case_e2e_fences_guard_the_repo_root() {
   # R-T5e — D 를 정하는 줄은 전부 바로 앞 줄이 rev-parse 실패에 exit 1 하는 TOP 가드다.
   local s nd unguarded
@@ -131,14 +144,29 @@ case_preflight_clears_walk_files_but_keeps_the_pgid() {
 
 case_kill_switch_index_names_both() {
   local s; s=$(section "$SKILL" "## kill switch")
-  assert_contains "$s" 'DEVBREW_QUALITY_GATES_DISABLE_E2E=1' "kill switch 색인에 DISABLE_E2E 가 있다"
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` — e2e 만 끈다. `## e2e` E0 의 지문이 exit 3 으로 끝나 질문이 뜨지 않고, e2e 칸이 `꺼짐(kill switch)` 이다. 집행은 `e2e-state.sh` 다.')" "1" \
+    "kill switch 색인의 DISABLE_E2E 항목이 줄 전체 그대로다(뒤에 덧붙인 말이 없다)"
   assert_grep "$s" 'DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1.*e2e' "kill switch 색인의 DISABLE_DIFFERENTIAL_TEST 줄이 e2e 를 말한다"
   assert_eq "$(printf '%s\n' "$s" | grep -c '^- `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1`')" "1" \
     "kill switch 색인에 DISABLE_DIFFERENTIAL_TEST 항목은 하나다(제자리 확장)"
 }
 
+case_reconstructed_skill_keeps_the_e2e_window_whole() {
+  # 재구성 헬퍼(tests/lib/reconstruct-skill.sh)가 e2e.md 를 되접어도 `## e2e` 창은 다음 `## ` 앞까지 E0~E5 를 품는다.
+  . "$PLUGIN_ROOT/tests/lib/reconstruct-skill.sh"
+  local out w e
+  if ! out="$(reconstruct_skill_md "$SKILL")"; then no "재구성 헬퍼가 실패했다"; return; fi
+  w=$(awk '/^## e2e$/{f=1; print; next} f && /^## /{exit} f' "$out")
+  assert_eq "$(grep -cx '# e2e — 걷기 절차' "$out")" "0" "재구성본에 e2e.md 의 # 제목이 없다"
+  assert_eq "$(printf '%s\n' "$w" | grep -cx '### 1. 시나리오 만들기')" "1" "e2e.md 본문이 ## e2e 창 안에 ### 로 내려 들어갔다"
+  for e in E0 E1 E2 E3 E4 E5; do
+    printf '%s\n' "$w" | grep -q "^\*\*${e} " && ok "재구성본의 ## e2e 창에 ${e} 가 있다" || no "재구성본의 ## e2e 창에 ${e} 가 없다"
+  done
+  rm -f "$out"
+}
+
 case_X3_local_origin_rule() {
-  assert_file_grep "$REF" '^- 승인된 명령이 띄운 `127\.0\.0\.1` · `localhost` origin 만 연다\.' "X3: 로컬 origin 규칙"
+  assert_file_grep "$REF" '^- 승인된 명령이 띄운 `127\.0\.0\.1` · `localhost` origin 만 연다\.$' "X3: 로컬 origin 규칙(줄 끝까지)"
   assert_file_grep "$REF" '^- 파일 업로드 · 다운로드 저장 · 외부 계정 로그인 · 결제는 하지 않는다\.$' "X3: 업로드 금지 규칙"
 }
 

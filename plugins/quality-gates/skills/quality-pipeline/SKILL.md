@@ -753,9 +753,10 @@ D="${TOP}/.claude/quality-gates/<session-id>"
 "$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-gate.txt"; echo "e2e-gate rc=$?"
 ```
 
-- `leftover-stop rc=5` — 앞 실행의 앱이 남았거나 그 기록을 읽지 못했다. `stop-failed:` 줄이나 stderr 사유를
-  그대로 공시하고, 질문을 띄우지 않고 e2e 칸을 `미확인` 으로 두고 `## Final verdict` 로 간다.
-- `e2e-gate rc=3` — kill switch 다. 질문을 띄우지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다.
+- `e2e-gate rc=3` — kill switch 다. `leftover-stop rc` 와 무관하게 질문을 띄우지 않고 e2e 칸을 `꺼짐(kill switch)` 로
+  두고 `## Final verdict` 로 간다. `leftover-stop rc=5` 였으면 그 `stop-failed:` 줄이나 stderr 사유도 그대로 공시한다.
+- `leftover-stop rc=5` (`e2e-gate rc=3` 이 아닐 때) — 앞 실행의 앱이 남았거나 그 기록을 읽지 못했다. `stop-failed:`
+  줄이나 stderr 사유를 그대로 공시하고, 질문을 띄우지 않고 e2e 칸을 `미확인` 으로 두고 `## Final verdict` 로 간다.
 - `e2e-gate rc=4` — 코드 상태를 잴 수 없어 걷기의 무효 판정을 할 수 없다. 질문을 띄우지 않고 stderr 사유를
   공시한 뒤 e2e 칸을 `미확인` 으로 두고 `## Final verdict` 로 간다.
 - `e2e-gate rc=0` — 레퍼런스 1 · 2 절대로 시나리오를 만들고 질문을 띄운다. `안 한다` · `걸을 것 없음` ·
@@ -782,9 +783,21 @@ E2E_CMD
 - 두 줄이 없고 `boot rc=3` — kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다.
 - 두 줄이 없고 `boot rc` 가 그 밖의 0 아닌 값(2 · 4) — 지문이나 부팅 호출이 앱을 띄우기 전에 실패했다. stderr 사유를
   공시한다. 고칠 수 있는 호출 오류(인자 · 남은 앱)면 고쳐 이 펜스를 한 번 더 돈다. 그 밖이거나 또 실패하면 판정안
-  `미확인(지문 실패)` 로 E3 를 건너뛰고 E4 로 간다.
+  `미확인(지문 · 부팅 호출 실패)` 로 E3 를 건너뛰고 E4 로 간다.
 
-CLI 표면이고 부팅 명령이 `없음(CLI 직접 실행)` 이면 이 펜스 대신 `fingerprint --out "$D/e2e-before.txt"` 만 돌리고 E2 로 간다.
+**E1 (CLI 직접 실행).** CLI 표면이고 부팅 명령이 `없음(CLI 직접 실행)` 이면 위 펜스 대신 이 펜스로 지문만 잰다.
+CLI 걷기는 리뷰 대상 코드를 직접 실행한다 — 이 `before rc` 가 그 실행 앞의 유일한 코드 게이트다.
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+D="${TOP}/.claude/quality-gates/<session-id>"
+"$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-before.txt"; echo "before rc=$?"
+```
+
+- `before rc=0` — E2 로 간다.
+- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다.
+- `before rc` 가 그 밖의 0 아닌 값 — 걷지 않는다. stderr 사유를 공시하고 판정안 `미확인(지문 실패)` 로 E3 를 건너뛰고 E4 로 간다.
 
 **E2 — 걷기.** 레퍼런스 3 절의 규칙대로 걷고, 4 절의 증거표를 `$D/e2e-evidence.tsv` 에 쓴다(칸 사이는 탭).
 
@@ -810,14 +823,16 @@ D="${TOP}/.claude/quality-gates/<session-id>"
 ```
 
 - `stop rc=5` — 띄운 프로세스가 남았거나 그 기록을 읽지 못했다. `stop-failed:` 줄이나 stderr 사유를 그대로 공시하고 E5 의 걷기 기록에 적는다.
-- 판정안은 이 순서로 정한다: `compare` 의 마지막 줄이 `changed: <N>` 이면 `무효(코드 변경)` · `after rc` 가 0 이 아니거나
-  `compare rc` 가 0 · 1 밖이면 `미확인(지문 실패)` · `propose rc=4` 면 증거표를 고쳐 `propose` 만 다시 돌리고, 또 4 면
-  `미확인` · 나머지는 `proposal:` 줄의 값.
+- `after rc=3` — 걷는 사이 kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 E5 로 기록한 뒤 `## Final verdict` 로 간다.
+- 그 밖의 판정안은 이 순서로 정한다: `compare` 의 마지막 줄이 `changed: <N>` 이면 `무효(코드 변경)` · `after rc` 가 0 이
+  아니거나 `compare rc` 가 0 · 1 밖이면 `미확인(걷기 뒤 지문 실패)` · `propose rc=4` 면 증거표를 고쳐 `propose` 만 다시
+  돌리고, 또 4 면 `미확인` · 나머지는 `proposal:` 줄의 값.
 
 **E4 — 걷기 직후 게이트.** 증거표와 판정안을 보이고 레퍼런스 5 절의 게이트를 띄운다. 결과는 6 절의 표로
 e2e 칸과 「사람이 뒤집음」을 정한다. 어느 결과든 E5 로 기록한 뒤 다음으로 간다.
 
-- **다시 걷기** — iteration 을 쓰지 않는다. E1 부터 같은 명령으로 다시 돈다.
+- **다시 걷기** — iteration 을 쓰지 않는다. E1 부터 같은 명령으로 다시 돈다. 판정안이 `미확인(걷기 뒤 지문 실패)` 면
+  걷는 사이 코드가 바뀌었는지 모르므로 이 선택지를 넣지 않는다.
 - **Retry** (fail 행) — `## Fix-loop` 의 Retry 와 같다: iteration 하나를 쓰고, 「적용」 목록만 고친 뒤 `## Flow` 의 ① 리뷰부터
   다시 돈다. 루프가 다시 Stop 없이 끝나면 이 절로 돌아오고, 질문을 생략하고 같은 시나리오 · 같은 명령으로 E1 부터 걷는다.
 - **Accept** (fail 행) — `## Final verdict` 로 간다. Outcome 은 `accepted with findings iter <N>`, e2e 칸은 `fail` 이다.
@@ -859,7 +874,8 @@ E2E_FLIP
 The last iteration's `$RV/synth.out` holds the review · differential verdict. `verdict.py --prior` adds the e2e
 result to it and renders the verdict line — you do not retype the verdict, the counts, or the precedence (V1 · R24).
 Fill only `<session-id>`, the last iteration's `RV`, `<N>` (the iteration number) and the e2e 칸 from `## e2e`.
-Add `--e2e-overridden` before `--e2e` when the human flipped the walk's proposal.
+Add `--e2e-overridden` before `--e2e` only when the human flipped the **last** walk's proposal — a flip in an earlier
+walk (a line in `e2e-flip.md`) does not count.
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
