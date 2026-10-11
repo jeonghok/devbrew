@@ -549,8 +549,8 @@ The verdict is the **one** `verdict:` line at the tail of `$RV/synth.out` (with 
 `angles:` · `reason:` · `reasons:`). You do not choose or edit it (V1).
 
 - 꼬리의 `scope:` 블록을 **그대로** 보인다(요약 금지) — 본 커밋 · 끝점 · 경계 · 합친 트리가 이 판정의 대상이다.
-- Show the output **verbatim**, preceded by `## qg iter N — <verdict>` (`not-certified` →
-  `## qg iter N — not-certified (<reason>)`). If `verdict:` does not appear exactly once, the
+- Show the output **verbatim**, preceded by `## qg 반복 N — <verdict>` (`not-certified` →
+  `## qg 반복 N — not-certified (<reason>)`). If `verdict:` does not appear exactly once, the
   iteration is not clean — report and stop.
 - 본 보고서의 `판정 degrade` 줄은 **그대로 보인다** — 차단이면 `**이 실행은 clean이 아니다**`,
   아니면 `공시(판정을 막지 않음)`. 판정은 바꾸지 않는다(그 사실은 이미 `verdict:` 에

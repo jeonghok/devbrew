@@ -39,4 +39,6 @@ assert_contains "$flow" "파이프라인은 한 턴 안에서 끝까지 돈다" 
 assert_contains "$flow" "이 질문은 진행만 정하고 리뷰어 수를 막지 않는다." "§8: 흐름 첫 문단이 질문이 하는 일과 하지 않는 일을 말한다"
 assert_not_contains "$flow" "serial dispatch로 실행합니다" "§8: 옛 흐름 문단이 없다"
 assert_file_grep "$RM" '^## 인스턴스화한 원칙$' "CLAUDE.md: 원칙 절은 그대로 있다"
+assert_file_absent "$RM" 'Stop·중단' "M3: 게시 문단에 옛 라벨(Stop)이 없다"
+assert_file_grep "$RM" '멈추기 · 중단으로 끝난 실행은 sink 를 부르지 않는다' "M3(양의 짝): 게시 문단이 새 라벨(멈추기)로 말한다"
 finish

@@ -53,6 +53,7 @@ assert_grep "$out" '\| 빈 칸 \| code-reviewer \|$' "공백뿐인 plain 은 없
 assert_grep "$out" '^\*\*Findings:\*\* 1 CRITICAL / 2 IMPORTANT / 0 SUGGESTION$' "AC9: 세 지적 모두 셌다(버린 것 없음)"
 # 재비판자에게는 plain 을 넘기지 않는다 — 누가 어떻게 풀어 썼는지가 판단을 끌고 간다
 assert_not_contains "$(cat "$T/sec/rf.yaml")" "plain" "프레이밍 차단: 익명 목록에 plain 이 없다"
+assert_not_contains "$(cat "$T/sec/rf.yaml")" "입력값이 그대로 데이터베이스 명령에 들어간다" "프레이밍 차단: 익명 목록에 plain 문장 자체가 어느 키로도 실리지 않는다"
 assert_contains "$(cat "$T/sec/rf.yaml")" "SQL 문자열 결합" "익명 목록에 요약은 있다(양성 짝)"
 
 # ③ codex 코드 리뷰 경로 — codex JSONL → codex_findings_to_yaml(default) → 합성기
@@ -108,6 +109,18 @@ K2="$(python3 -c 'import sys,yaml; print([f["dedup_key"] for f in yaml.safe_load
 printf 'verdicts:\n  - {finding_key: "%s", verdict: confirm, evidence: real}\n  - {finding_key: "%s", verdict: confirm, evidence: real}\n' "$K1" "$K2" > "$T/adv2.yaml"
 python3 "$ART" --phase synth --findings "$T/bad2.yaml" --adversarial "$T/adv2.yaml" > "$T/bado2.yaml" 2>/dev/null
 assert_eq "$(python3 -c 'import sys,yaml; ks=yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["kept"]; print(len(ks), sum(1 for k in ks if "plain" in k))' "$T/bado2.yaml")" "2 0" "AC9: synth 의 kept 에 쓸 수 없는 plain(숫자 · 공백뿐)이 실리지 않고 지적 둘은 남는다"
+
+# ⑤b 비코드 adversarial 의 new_findings 도 같은 규칙이다 — 쓸 수 없는 plain 은 빠지고, 같은 키에 흡수되면 plain 을 물려받는다
+printf 'findings:\n  - {agent: artifact-critic, category: logic, target_anchor: "#a", severity: CRITICAL, summary: "gap NA", proposed_fix: "fix NA"}\n' > "$T/nf-c.yaml"
+python3 "$ART" --phase key --findings "$T/nf-c.yaml" > "$T/nf-m.yaml" 2>/dev/null
+KA="$(python3 -c 'import sys,yaml; print(yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["findings"][0]["dedup_key"])' "$T/nf-m.yaml")"
+printf 'verdicts:\n  - {finding_key: "%s", verdict: confirm, evidence: real}\nnew_findings:\n  - {category: logic, target_anchor: "#a", severity: CRITICAL, summary: "gap NA", plain: "흡수된 쪽이 쓴 쉬운 문장", proposed_fix: "x"}\n  - {category: logic, target_anchor: "#b", severity: CRITICAL, summary: "gap NB", plain: "   ", proposed_fix: "x"}\n  - {category: logic, target_anchor: "#c", severity: CRITICAL, summary: "gap NC", plain: 42, proposed_fix: "x"}\n  - {category: logic, target_anchor: "#d", severity: CRITICAL, summary: "gap ND", plain: "새 지적의 쉬운 문장", proposed_fix: "x"}\n' "$KA" > "$T/nf-adv.yaml"
+python3 "$ART" --phase synth --findings "$T/nf-m.yaml" --adversarial "$T/nf-adv.yaml" > "$T/nf-out.yaml" 2>/dev/null
+nfq() { python3 -c 'import sys,yaml; ks={k["target_anchor"]:k for k in yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["kept"]}; k=ks.get(sys.argv[2]); print("absent" if k is None else k.get("plain","none"))' "$T/nf-out.yaml" "$1"; }
+assert_eq "$(nfq '#a')" "흡수된 쪽이 쓴 쉬운 문장" "I1: 같은 키로 흡수될 때 남는 쪽에 plain 이 없으면 흡수된 쪽 것을 물려받는다"
+assert_eq "$(nfq '#b')" "none" "I1: new_findings 의 공백뿐인 plain 은 kept 에서 빠지고 지적은 남는다"
+assert_eq "$(nfq '#c')" "none" "I1: new_findings 의 숫자 plain 은 kept 에서 빠지고 지적은 남는다"
+assert_eq "$(nfq '#d')" "새 지적의 쉬운 문장" "I1(양의 짝): new_findings 의 쓸 수 있는 plain 은 kept 에 그대로 실린다"
 
 # ⑥ 표 칸을 깨는 글자 (Review Focus 2)
 mkdir -p "$T/esc"

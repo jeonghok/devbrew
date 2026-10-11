@@ -243,10 +243,15 @@ def phase_synth(findings_path, adversarial_path):
             L.hold(repr(nf)[:60], "항목 파손: not a mapping")
             continue
         g = dict(nf)
+        if "plain" in g and not _has_plain(g):
+            del g["plain"]   # 쓸 수 없는 plain 만 뺀다 — 지적은 그대로 둔다
         g["severity"] = _norm_sev(g)
         g["dedup_key"] = dedup_key(g)
         if g["dedup_key"] in kept_keys:
             L.absorbed(g["dedup_key"], g["dedup_key"])
+            for k in kept:
+                if k["dedup_key"] == g["dedup_key"] and not _has_plain(k) and _has_plain(g):
+                    k["plain"] = g["plain"]   # 남는 쪽에 plain 이 없으면 흡수된 쪽 것을 물려받는다
             continue
         kept_keys.add(g["dedup_key"])
         kept.append(g)

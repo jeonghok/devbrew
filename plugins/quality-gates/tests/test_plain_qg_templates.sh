@@ -40,6 +40,8 @@ for h in 'qg 반복 N' '수정 실패' 'qg 최대 반복' '분류'; do
   assert_file_grep "$S" "header: \"${h}\"" "AC6: 머리글 「${h}」"
 done
 assert_file_absent "$S" 'header: "(qg iter N|qg max-iter|Retry)"' "AC6: 영어 머리글이 없다"
+assert_contains "$SF" 'preceded by `## qg 반복 N — <verdict>` (`not-certified` → `## qg 반복 N — not-certified (<reason>)`)' "T1: 판정 머리글이 Fix-loop 질문과 같은 낱말(반복)이다"
+assert_file_absent "$S" '^.*`## qg iter N' "T1: 판정 머리글에 옛 영어 낱말(iter)이 없다"
 assert_file_grep "$S" 'description: "표의 적용/제외대로 고친다\."' "AC6: 분류 선택지 설명이 새 라벨 이름 없이 동작을 말한다"
 assert_file_absent "$S" '표의 적용/제외로 Retry 한다' "AC6: 분류 선택지 설명이 옛 라벨을 부르지 않는다"
 assert_contains "$SF" '{label: "멈추기", description: "이 반복에서 멈춘다 — PR 코멘트도 달지 않는다.' "규칙 블록: 멈추기 설명이 달라지는 것(게시 없음)을 말한다"
@@ -129,6 +131,7 @@ assert_grep "$MX" '^After iteration 5' "Max-iter 절을 잘랐다(양성 짝 —
 MXL="$(printf '%s\n' "$MX" | grep -E '^[[:space:]]*\{label: "' | sed -e 's/^[^"]*"//' -e 's/".*$//')"
 assert_eq "$(printf '%s\n' "$MXL" | grep -c .)" "2" "Max-iter: 선택지 라벨은 둘이다"
 assert_contains "$MXF" "Branch on answer: " "Max-iter: 분기 문장이 있다"
+assert_contains "$MXF" '{label: "멈추기", description: "파이프라인을 멈춘다 — PR 코멘트도 달지 않는다.' "M2: Max-iter 의 멈추기 설명이 PR 코멘트를 달지 않는다고 말한다(줄바꿈을 접은 본문)"
 printf '%s\n' "$MXL" > "${TMPDIR:-/tmp}/qg-plain-mxl.$$"
 while IFS= read -r l; do
   [ -n "$l" ] || continue
