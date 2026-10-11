@@ -121,6 +121,12 @@ assert_eq "$(nfq '#a')" "흡수된 쪽이 쓴 쉬운 문장" "I1: 같은 키로 
 assert_eq "$(nfq '#b')" "none" "I1: new_findings 의 공백뿐인 plain 은 kept 에서 빠지고 지적은 남는다"
 assert_eq "$(nfq '#c')" "none" "I1: new_findings 의 숫자 plain 은 kept 에서 빠지고 지적은 남는다"
 assert_eq "$(nfq '#d')" "새 지적의 쉬운 문장" "I1(양의 짝): new_findings 의 쓸 수 있는 plain 은 kept 에 그대로 실린다"
+printf 'findings:\n  - {agent: artifact-critic, category: logic, target_anchor: "#e", severity: CRITICAL, summary: "gap NE", plain: "남는 쪽의 문장", proposed_fix: "fix"}\n' > "$T/nf2-c.yaml"
+python3 "$ART" --phase key --findings "$T/nf2-c.yaml" > "$T/nf2-m.yaml" 2>/dev/null
+KE="$(python3 -c 'import sys,yaml; print(yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["findings"][0]["dedup_key"])' "$T/nf2-m.yaml")"
+printf 'verdicts:\n  - {finding_key: "%s", verdict: confirm, evidence: real}\nnew_findings:\n  - {category: logic, target_anchor: "#e", severity: CRITICAL, summary: "gap NE", plain: "흡수된 쪽의 다른 문장", proposed_fix: "x"}\n' "$KE" > "$T/nf2-adv.yaml"
+python3 "$ART" --phase synth --findings "$T/nf2-m.yaml" --adversarial "$T/nf2-adv.yaml" > "$T/nf2-out.yaml" 2>/dev/null
+assert_eq "$(python3 -c 'import sys,yaml; ks=yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["kept"]; print(len(ks), ks[0].get("plain"))' "$T/nf2-out.yaml")" "1 남는 쪽의 문장" "I1: 같은 키로 흡수돼도 남는 쪽에 이미 있는 plain 은 덮어쓰지 않는다"
 
 # ⑥ 표 칸을 깨는 글자 (Review Focus 2)
 mkdir -p "$T/esc"
