@@ -81,6 +81,24 @@ out="$(rf_synth "$T/aux" --recritic-diff "$T/aux/없는.diff" 2>/dev/null)"
 assert_eq "$(first "$out")" "리뷰를 합쳤다 — 지적 없음. 판정을 막지 않는 경고가 있다 — 아래를 본다." "R16: 막지 않는 경고도 첫 줄에 말한다"
 assert_grep "$out" '공시\(판정을 막지 않음\)' "R16: 그 경고의 본문(degrade 공시)이 아래에 있다(양성 짝)"
 
+# ④b 주 입력이 죽었다 — 아무도 확인하지 않은 것을 「지적 없음」이라고 말하지 않는다(설계 §3 원칙 3 · 합친 /qg #2)
+mkdir -p "$T/dead"; printf '[]\n' > "$T/dead/findings.yaml"; rf_prep "$T/dead"; rf_reply "$T/dead" 'verdicts: []'
+out="$(python3 "$SYNTH" --findings "$T/dead/없는.yaml" --recritic "$T/dead/reply.txt" --recritic-map "$T/dead/map.json" 2>/dev/null)"
+assert_eq "$(first "$out")" "리뷰를 합쳤다 — 읽지 못한 입력이 있어 지적 수를 확정하지 못했다. 판정을 막는 경고가 있다 — 아래를 본다." "#2: 주 입력 사망의 첫 줄은 확정하지 못했다고 말한다"
+assert_not_contains "$(first "$out")" "지적 없음" "#2: 주 입력 사망의 첫 줄에 「지적 없음」이 없다"
+assert_grep "$out" '입력 실패\(주\)' "#2(양의 짝): 그 사실의 본문(degrade 공시)이 아래에 있다"
+# 재비판자(판정 축의 주 판정자)가 죽었다 — 같은 규칙
+mkdir -p "$T/dead2"; printf -- '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, summary: a, proposed_fix: f}\n' > "$T/dead2/findings.yaml"; rf_prep "$T/dead2"
+out="$(python3 "$SYNTH" --findings "$T/dead2/findings.yaml" --recritic "$T/dead2/없는.txt" --recritic-map "$T/dead2/map.json" 2>/dev/null)"
+assert_grep "$(first "$out")" '^리뷰를 합쳤다 — (읽지 못한 입력이 있어 지적 수를 확정하지 못했다|남은 지적 [0-9]+개\(.*\)\. 읽지 못한 입력이 있어 지적이 더 있을 수 있다)\.' "#2: 재비판자가 죽은 첫 줄도 확정하지 못했다고 말한다"
+mkdir -p "$T/dead3"; printf '[]\n' > "$T/dead3/findings.yaml"; rf_prep "$T/dead3"
+out="$(python3 "$SYNTH" --findings "$T/dead3/findings.yaml" --recritic "$T/dead3/없는.txt" --recritic-map "$T/dead3/map.json" 2>/dev/null)"
+assert_not_contains "$(first "$out")" "지적 없음" "#2: 재비판자가 죽고 남은 지적이 0 이어도 첫 줄에 「지적 없음」이 없다"
+# 표가 있는 갈래 — 살아남은 지적이 있어도 「더 있을 수 있다」를 붙인다(Review Focus)
+got="$(PYTHONPATH="$PLUGIN_ROOT/scripts" python3 -c 'import synthesize_findings as s; print(s._status_line({"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 0}, 0, True, True, True))')"
+assert_eq "$got" "리뷰를 합쳤다 — 남은 지적 1개(중요 1). 읽지 못한 입력이 있어 지적이 더 있을 수 있다. 판정을 막는 경고가 있다 — 아래를 본다." "#2: 표가 있는 갈래도 확정하지 못한 사실을 붙인다"
+got="$(PYTHONPATH="$PLUGIN_ROOT/scripts" python3 -c 'import synthesize_findings as s; print(s._status_line({"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 0}, 0, False, False))')"
+assert_eq "$got" "리뷰를 합쳤다 — 남은 지적 1개(중요 1)." "#2(양의 짝): 입력을 다 읽었으면 붙이지 않는다"
 # ⑤ --emit-verdict: 판정 줄은 정확히 하나, 쉬운 줄과 섞이지 않는다. 블록 앞에 쉬운 한 줄(AC5 · R2)
 printf 'security: filled\nadjudication: filled\ndifferent-premise: filled\n' > "$T/angles.txt"
 out="$(rf_synth "$T/one" --emit-verdict --angles "$T/angles.txt")"

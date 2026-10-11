@@ -1278,15 +1278,17 @@ STATE_GLOSS = {
     "ask_open": "답을 기다리는 질문",
 }
 # 집계 줄의 사람말 — 0 은 내지 않는다(쉬운 말 출력 설계 §3 원칙 3). 순서는 옛 집계 줄과 같다.
+# 셋째 칸이 범위다: "round" 는 이번 라운드의 라우팅 보고에서 오고, "total" 은 원장 전체의 누계다
+# (`rejected_lineages` · 버린 fix 는 `init` 에서만 비워진다) — 누계를 「이번 라운드」로 내면 거짓이다.
 COUNT_GLOSS = (
-    ("rejected", "재비판이 기각한 지적 %d건"),
-    ("user_rejected", "사용자가 기각한 지적 %d건"),
-    ("dropped", "버린 지적(drop) %d건"),
-    ("bucket_conflicts", "같은 자리·같은 종류로 겹친 묶음 %d개"),
-    ("lineage_mismatch", "없는 이전 지적을 가리킨 것 %d건"),
-    ("revived", "기각했던 지적이 다시 나온 것 %d건"),
-    ("reraise_unconsumed", "다시 올릴 대상이 없는 예약 %d건"),
-    ("escalated_unconsumed", "결정으로 올릴 대상이 없는 예약 %d건"),
+    ("rejected", "재비판이 기각한 지적 %d건", "round"),
+    ("user_rejected", "사용자가 기각한 지적 %d건", "total"),
+    ("dropped", "버린 지적(drop) %d건", "total"),
+    ("bucket_conflicts", "같은 자리·같은 종류로 겹친 묶음 %d개", "round"),
+    ("lineage_mismatch", "없는 이전 지적을 가리킨 것 %d건", "round"),
+    ("revived", "기각했던 지적이 다시 나온 것 %d건", "round"),
+    ("reraise_unconsumed", "다시 올릴 대상이 없는 예약 %d건", "round"),
+    ("escalated_unconsumed", "결정으로 올릴 대상이 없는 예약 %d건", "round"),
 )
 NEXT_MODE_GLOSS = {"budget": "재리뷰 횟수 안에서", "extra_approval": "사용자가 연 추가 라운드"}
 # 렌더 첫 줄 경고의 사람말(쉬운 말 출력 설계 §3 · 계획 Q9). advisory 원문은 기계가 읽는 값이라(`fin.json` · 원장의
@@ -1318,7 +1320,9 @@ def _one(s) -> str:
 
 
 def _plain_warns(warns) -> list:
-    """advisory 원문 목록 → 첫 줄에 싣는 쉬운 경고 줄 목록(WARN_GLOSS). 순서는 원문이 처음 나온 순서다."""
+    """advisory 원문 목록 → 첫 줄에 싣는 쉬운 경고 줄 목록(WARN_GLOSS). 순서는 원문이 처음 나온 순서다.
+    한 줄로 합치는 것은 괄호 이름이 있는 행 — 같은 사실을 두 출처가 말한 것 — 뿐이다. 괄호 이름이 없는 행과
+    표에 없는 원문은 글자가 같아도 사건마다 한 줄이다(같은 모양의 깨진 항목 둘을 하나로 세면 경고 수가 준다)."""
     lines, why_of = [], {}
     for w in map(str, warns):
         m = row = None
@@ -1332,7 +1336,7 @@ def _plain_warns(warns) -> list:
             k = "%s (%s)" % (row[2], m.group("why"))
         else:
             k = (row[1], row[2])
-        if k not in why_of:
+        if k not in why_of or not isinstance(k, tuple):
             why_of[k] = []
             lines.append(k)
         why = m.groupdict().get("why") if m and row[1] else None
@@ -1524,13 +1528,23 @@ def render_gate(st, g) -> str:
                 out.append("  ┆ 같은 자리(%s)" % _one(anchor))
             prev_anchor = anchor
             out.extend(fn(st, g, fid))
-    parts = [t % c[k] for k, t in COUNT_GLOSS if c[k]]
+    parts = [t % c[k] for k, t, scope in COUNT_GLOSS if c[k] and scope == "round"]
     if parts:
         out.append("이번 라운드 집계: " + " · ".join(parts))
+    totals = [t % c[k] for k, t, scope in COUNT_GLOSS if c[k] and scope == "total"]
+    if totals:
+        out.append("지금까지 집계: " + " · ".join(totals))
     if g.get("advice") is not None and _has_advisory_axis(st):   # 게이트 질문이 아니다 — 목록은 끝에서 한 번(`advice --render`)
         adv_g = g["advice"]
-        out.append("참고 %d건(이번 라운드 새 %d · 반복 %d) — 끝에 한 목록으로 보인다 · 전부터 있던 절에서 새로 나온 필수 지적 %d"
-                   % (adv_g["total"], adv_g["new"], adv_g["repeat"], adv_g["mc_preexisting_new"]))
+        # 참고 축을 셌다는 공시는 남긴다 — 0 이면 0 을 늘어놓지 않고 쉬운 한 문장으로(설계 §3 원칙 3 · AC3②).
+        if adv_g["total"] == 0:
+            line = "참고 항목은 없다 — 이번 라운드에 세어 봤다."
+            if adv_g["mc_preexisting_new"] > 0:
+                line += " 전부터 있던 절에서 새로 나온 필수 지적 %d건." % adv_g["mc_preexisting_new"]
+            out.append(line)
+        else:
+            out.append("참고 %d건(이번 라운드 새 %d · 반복 %d) — 끝에 한 목록으로 보인다 · 전부터 있던 절에서 새로 나온 필수 지적 %d"
+                       % (adv_g["total"], adv_g["new"], adv_g["repeat"], adv_g["mc_preexisting_new"]))
     ag = "승인 게이트" + ("(「%s」)" % g["approval_label"] if g.get("approval_label") else "")
     mode = NEXT_MODE_GLOSS.get(g["next_round_mode"], g["next_round_mode"])
     if g["two_stage"] and g["next_round_mode"] == "extra_approval":

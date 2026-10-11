@@ -700,7 +700,7 @@ mut 1/1 rg_decide_post_tail_unwired case_AC22c_reraise_inherits_post_kind sed_st
 # ── 쉬운 말 렌더 (쉬운 말 출력 PR 1 · AC3) ──────────────────────────────────
 # 0 인 집계 되살리기 — 0 을 거르는 조건을 지운다.
 mut 1/1 zero_counts_revived case_plain_render_nothing_left sed_state \
-  's/^    parts = \[t % c\[k\] for k, t in COUNT_GLOSS if c\[k\]\]$/    parts = [t % c[k] for k, t in COUNT_GLOSS]/'
+  's/^    parts = \[t % c\[k\] for k, t, scope in COUNT_GLOSS if c\[k\] and scope == "round"\]$/    parts = [t % c[k] for k, t, scope in COUNT_GLOSS if scope == "round"]/'
 # codex 없음 상태에서 「이상 없음」 — 경고 가지를 끈다.
 mut 1/1 warns_hidden_as_clean case_T40_codex_absent_first_line sed_state \
   's/^    if warns:$/    if False:/'
@@ -738,6 +738,12 @@ mut 1/1 warns_reason_dropped case_plain_warns_first_line sed_state \
 # 표에 없는 원문을 버리기 — 모르는 경고가 첫 줄에서 조용히 사라진다(P6 위반).
 mut 1/1 warns_unknown_dropped case_plain_warns_unknown_kept sed_state \
   's/^            k = w$/            continue/'
+# 누계를 「이번 라운드」로 되돌리기 — 1라운드의 사용자 기각이 3라운드 화면에서 그 라운드 일로 읽힌다.
+mut 1/1 total_counts_labelled_round case_count_line_scope sed_state \
+  's/^        out\.append("지금까지 집계: " + " · "\.join(totals))$/        out.append("이번 라운드 집계: " + " · ".join(totals))/'
+# 같은 글자의 경고를 다시 접기 — 같은 모양의 사건 둘이 경고 하나로 세어진다.
+mut 1/1 same_text_warns_folded case_plain_warns_same_text_counted sed_state \
+  's/^        if k not in why_of or not isinstance(k, tuple):$/        if k not in why_of:/'
 # 묶음마다 새로 세기를 지우기 — 같은 자리 표지가 묶음 제목 너머의 항목을 가리킨다.
 mut 1/1 marker_crosses_group case_gate_marker_stays_in_group sed_state \
   's/^        prev_anchor = None$//'
@@ -888,4 +894,10 @@ mut 1/1 axis_fallback_yaml_error_dropped case_advice_seed_gate_profile_yaml_brok
 # (97) 자유 텍스트 CLI 인자 검사를 끈다 — 비 UTF-8 --reason 이 원장에 저장된다.
 mut 1/1 cli_text_check_disabled case_advice_cli_text_surrogate_rejected sed_state \
   's/^    bad = unencodable_text_arg(a)$/    bad = None/'
+# 참고 0 의 쉬운 문장을 끄기 — 「이상 없음」 밑에 0 만 늘어선 참고 줄이 되살아난다.
+mut 1/1 advice_zero_listing_revived case_advice_plain_render_nothing_left_mc sed_state \
+  's/^        if adv_g\["total"\] == 0:$/        if False:/'
+# 참고 0 의 쉬운 문장 뒤에 붙는 필수 지적 수를 끄기 — 전부터 있던 절의 새 필수 지적이 참고 줄에서 사라진다.
+mut 1/1 advice_zero_mc_append_dropped case_advice_plain_render_zero_with_mc_preexisting sed_state \
+  's/^            if adv_g\["mc_preexisting_new"\] > 0:$/            if False:/'
 finish

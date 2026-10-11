@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/synthesize_artifact_findings.py shared/codex/codex_findings_to_yaml.py plugins/quality-gates/agents/security-reviewer.md plugins/quality-gates/agents/code-recritic.md plugins/quality-gates/agents/artifact-critic.md plugins/quality-gates/agents/artifact-adversarial.md plugins/quality-gates/scripts/build_codex_prompt.py plugins/quality-gates/scripts/build_artifact_codex_prompt.py plugins/quality-gates/references/recritic-code-profile.md plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/tests/lib/recritic_fixture.sh
+# guards: plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/synthesize_artifact_findings.py shared/codex/codex_findings_to_yaml.py plugins/quality-gates/agents/security-reviewer.md plugins/quality-gates/agents/code-recritic.md plugins/quality-gates/agents/artifact-critic.md plugins/quality-gates/agents/artifact-adversarial.md plugins/quality-gates/scripts/build_codex_prompt.py plugins/quality-gates/scripts/build_artifact_codex_prompt.py plugins/quality-gates/references/recritic-code-profile.md plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/tests/lib/recritic_fixture.sh plugins/quality-gates/scripts/extract_codex_artifact_yaml.py
 #
 # 쉬운 말 출력 설계 §5 · AC9 · D2.8 — 생산자마다 리뷰어 출력 하나가 변환·합성을 지나 화면까지 가고, 거기서 plain 이
 # 먼저 나온다. plain 이 없는 지적은 버려지지 않고 지금처럼 나온다. 재비판자에게는 plain 을 넘기지 않는다(프레이밍 차단).
@@ -71,6 +71,32 @@ rf_prep "$T/cx"; rf_reply "$T/cx" 'verdicts:
   - {f: f1, verdict: confirm}'
 out="$(rf_synth "$T/cx")"
 assert_grep "$out" '\| 길이를 확인하지 않아 범위를 넘어 읽는다 \(경계 검사 누락\) \|' "AC9: codex 지적의 plain 이 화면에 먼저 나온다"
+# 쓸 수 없는 plain(목록 · 객체 · 숫자)은 변환기가 칸째 뺀다 — str() 로 옮기면 「['x', 'y']」 같은 글자가 화면에 나간다(합친 /qg #5)
+python3 - "$T/codex-bad.jsonl" <<'PY'
+import json, sys
+fs = [{"file": "y.py", "line": 1, "severity": "IMPORTANT", "summary": "목록칸", "plain": ["x", "y"], "proposed_fix": "f"},
+      {"file": "y.py", "line": 2, "severity": "IMPORTANT", "summary": "객체칸", "plain": {}, "proposed_fix": "f"},
+      {"file": "y.py", "line": 3, "severity": "IMPORTANT", "summary": "숫자칸", "plain": 5, "proposed_fix": "f"},
+      {"file": "y.py", "line": 4, "severity": "IMPORTANT", "summary": "문장칸", "plain": "쓸 수 있는 문장", "proposed_fix": "f"}]
+text = "```json\n" + json.dumps({"findings": fs}, ensure_ascii=False) + "\n```"
+open(sys.argv[1], "w", encoding="utf-8").write(json.dumps({"type": "item.completed", "item": {"type": "agent_message", "text": text}}, ensure_ascii=False) + "\n")
+PY
+python3 "$CONV" < "$T/codex-bad.jsonl" > "$T/codex-bad.yaml"
+assert_eq "$(grep -c '^ *plain: ' "$T/codex-bad.yaml")" "1" "#5: 변환기는 문자열 plain 만 넘기고 목록 · 객체 · 숫자는 칸째 뺀다"
+assert_eq "$(python3 -c 'import sys,yaml; print(len(yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["findings"]))' "$T/codex-bad.yaml")" "4" "#5(양의 짝): 지적 넷은 모두 남는다"
+mkdir -p "$T/cxb"
+python3 -c 'import sys,yaml; d=yaml.safe_load(open(sys.argv[1],encoding="utf-8")); fs=d["findings"]; [f.__setitem__("agent","codex-reviewer") for f in fs]; open(sys.argv[2],"w",encoding="utf-8").write(yaml.safe_dump(fs,allow_unicode=True))' "$T/codex-bad.yaml" "$T/cxb/findings.yaml"
+rf_prep "$T/cxb"; rf_reply "$T/cxb" 'verdicts:
+  - {f: f1, verdict: confirm}
+  - {f: f2, verdict: confirm}
+  - {f: f3, verdict: confirm}
+  - {f: f4, verdict: confirm}'
+out="$(rf_synth "$T/cxb")"
+assert_not_contains "$out" "['x', 'y']" "#5: 목록 plain 의 파이썬 표기가 화면에 없다"
+assert_grep "$out" '\| 목록칸 \| codex-reviewer \|$' "#5: 목록 plain 지적은 요약만 나온다"
+assert_grep "$out" '\| 객체칸 \| codex-reviewer \|$' "#5: 객체 plain 지적은 요약만 나온다"
+assert_grep "$out" '\| 숫자칸 \| codex-reviewer \|$' "#5: 숫자 plain 지적은 요약만 나온다(Review Focus)"
+assert_grep "$out" '\| 쓸 수 있는 문장 \(문장칸\) \| codex-reviewer \|$' "#5(양의 짝): 문자열 plain 은 그대로 먼저 나온다"
 
 # ④ 재비판자가 더한 지적(added) — qg-recritic 블록 → 합성기
 mkdir -p "$T/add"; printf '[]\n' > "$T/add/findings.yaml"; rf_prep "$T/add"
@@ -93,6 +119,20 @@ K="$(python3 -c 'import sys,yaml; print(yaml.safe_load(open(sys.argv[1],encoding
 printf 'verdicts:\n  - {finding_key: "%s", verdict: confirm, evidence: real}\n' "$K" > "$T/adv.yaml"
 out="$(python3 "$ART" --phase synth --findings "$T/merged.yaml" --adversarial "$T/adv.yaml" 2>/dev/null)"
 assert_contains "$out" "이 절은 앞 절과 반대로 말한다" "AC9: artifact synth 의 kept 에 plain 이 남는다"
+# ⑤c 비코드 codex 경로 — codex JSONL → extract_codex_artifact_yaml → key → synth. 중간 변환을 실제로 지난다(AC9 · 합친 /qg #4)
+python3 - "$T/acx.jsonl" <<'PY'
+import json, sys
+text = "```yaml\nfindings:\n  - {category: logic, target_anchor: \"#x\", severity: IMPORTANT, summary: \"x 절이 비었다\", plain: \"이 절에는 내용이 없다\", proposed_fix: \"채운다\"}\n```"
+open(sys.argv[1], "w", encoding="utf-8").write(json.dumps({"type": "item.completed", "item": {"type": "agent_message", "text": text}}, ensure_ascii=False) + "\n")
+PY
+python3 "$PLUGIN_ROOT/scripts/extract_codex_artifact_yaml.py" < "$T/acx.jsonl" > "$T/acx.yaml"
+assert_file_grep "$T/acx.yaml" '^ *plain: ' "#4: 비코드 codex 추출기가 plain 을 넘긴다"
+python3 "$ART" --phase key --findings "$T/acx.yaml" > "$T/acx-merged.yaml" 2>/dev/null
+K="$(python3 -c 'import sys,yaml; print(yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["findings"][0]["dedup_key"])' "$T/acx-merged.yaml")"
+printf 'verdicts:\n  - {finding_key: "%s", verdict: confirm, evidence: real}\n' "$K" > "$T/acx-adv.yaml"
+out="$(python3 "$ART" --phase synth --findings "$T/acx-merged.yaml" --adversarial "$T/acx-adv.yaml" 2>/dev/null)"
+assert_contains "$out" "이 절에는 내용이 없다" "#4: 비코드 codex 의 plain 이 추출 · key · synth 를 지나 kept 에 남는다"
+assert_contains "$out" "x 절이 비었다" "#4(양의 짝): 그 지적의 요약도 kept 에 있다"
 # 쓸 수 없는 plain(공백뿐 · 문자열 아님)은 kept 로 나가지 않고, 지적은 남는다
 printf 'findings:\n  - {agent: artifact-critic, category: logic, target_anchor: "#s3", severity: CRITICAL, summary: "gap C", plain: 42, proposed_fix: "fix C"}\n  - {agent: artifact-critic, category: logic, target_anchor: "#s4", severity: CRITICAL, summary: "gap D", plain: "   ", proposed_fix: "fix D"}\n' > "$T/bad.yaml"
 python3 "$ART" --phase key --findings "$T/bad.yaml" > "$T/badm.yaml" 2>/dev/null
@@ -148,6 +188,24 @@ out="$(rf_synth "$T/dup")"
 assert_eq "$(printf '%s\n' "$out" | grep -c '^| IMPORTANT | d\.py:5 |')" "1" "Review Focus 5: 같은 지적 셋이 한 행으로 합쳐졌다"
 assert_contains "$out" "같은 줄을 두 리뷰어가 짚었다 (같은 지적)" "Review Focus 5: 남는 쪽에 plain 이 없으면 합쳐진 다른 쪽 중 먼저 온 쪽의 plain 을 물려받는다"
 assert_not_contains "$out" "셋째가 쓴 다른 문장" "Review Focus 5: 물려받는 것은 하나 — 먼저 온 쪽이다"
+# 요약이 다른 지적은 같은 줄에 합쳐져도 plain 을 물려받지 않는다 — 다른 결함의 쉬운 문장이 엉뚱한 설명 옆에 붙는다(합친 /qg #1)
+mkdir -p "$T/dupx"
+printf -- '- {agent: code-reviewer, file: e.py, line: 7, severity: IMPORTANT, summary: "반복 경계가 하나 넘친다", proposed_fix: "< 로 바꾼다"}\n- {agent: security-reviewer, file: e.py, line: 7, severity: IMPORTANT, summary: "경로 탐색", plain: "사용자가 준 경로로 폴더 밖 파일을 읽을 수 있다", proposed_fix: "경로를 정규화한다"}\n' > "$T/dupx/findings.yaml"
+rf_prep "$T/dupx"; rf_reply "$T/dupx" 'verdicts:
+  - {f: f1, verdict: confirm}
+  - {f: f2, verdict: confirm}'
+out="$(rf_synth "$T/dupx")"
+assert_eq "$(printf '%s\n' "$out" | grep -c '^| IMPORTANT | e\.py:7 |')" "1" "#1 전제: 같은 좌표의 두 지적이 한 행으로 합쳐졌다"
+assert_not_contains "$out" "사용자가 준 경로로 폴더 밖 파일을 읽을 수 있다" "#1: 요약이 다른 지적의 plain 을 물려받지 않는다"
+assert_grep "$out" '^\| IMPORTANT \| e\.py:7 \| 반복 경계가 하나 넘친다 \|' "#1(양의 짝): 남는 쪽은 자기 요약만 낸다"
+# 요약이 공백 · 대소문자만 다르면 같은 지적이다 — plain 을 물려받는다(Review Focus)
+mkdir -p "$T/dupw"
+printf -- '- {agent: code-reviewer, file: f.py, line: 3, severity: IMPORTANT, summary: "Missing  Check", proposed_fix: p}\n- {agent: security-reviewer, file: f.py, line: 3, severity: IMPORTANT, summary: " missing check ", plain: "입력 검사가 빠졌다", proposed_fix: p}\n' > "$T/dupw/findings.yaml"
+rf_prep "$T/dupw"; rf_reply "$T/dupw" 'verdicts:
+  - {f: f1, verdict: confirm}
+  - {f: f2, verdict: confirm}'
+out="$(rf_synth "$T/dupw")"
+assert_contains "$out" "입력 검사가 빠졌다 (Missing  Check)" "#1: 요약이 공백 · 대소문자만 다르면 같은 지적으로 보고 plain 을 물려받는다"
 mkdir -p "$T/dup3"
 printf -- '- {agent: security-reviewer, file: g.py, line: 8, severity: IMPORTANT, summary: "같은 지적", plain: "   ", proposed_fix: p}\n- {agent: code-reviewer, file: g.py, line: 8, severity: IMPORTANT, summary: "같은 지적", plain: "공백 뒤에 온 문장", proposed_fix: p}\n' > "$T/dup3/findings.yaml"
 rf_prep "$T/dup3"; rf_reply "$T/dup3" 'verdicts:

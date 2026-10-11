@@ -2663,8 +2663,9 @@ case_plain_render_nothing_left() {
   assert_eq "$(printf '%s\n' "$gr" | head -1)" "리뷰 1라운드를 마쳤다 — 이상 없음." \
     "AC3①: 남은 것도 경고도 없는 라운드의 첫 줄은 「이상 없음」 한 문장이다"
   assert_not_grep "$gr" '^이번 라운드 집계' "AC3②: 전부 0 인 집계 줄이 나가지 않는다"
-  assert_eq "$(printf '%s\n' "$gr" | grep -v '^참고 ' | grep -cE ' 0(건|개)( |$|·)' || true)" "0" \
-    "AC3②: 0 인 정상 집계 항목이 어디에도 없다(참고 줄은 판단에 필요한 0 — 계획 P8)"
+  assert_eq "$(printf '%s\n' "$gr" | grep -cE ' 0(건|개)( |$|·|\(|\))' || true)" "0" \
+    "AC3②: 0 인 정상 집계 항목이 어디에도 없다"
+  assert_not_grep "$gr" '^지금까지 집계' "AC3②: 전부 0 인 누계 줄이 나가지 않는다"
   assert_not_contains "$gr" "degrade 없음" "AC3: 옛 첫 줄 「degrade 없음」이 남지 않는다"
   rm -rf "$d"
 }
@@ -2792,6 +2793,37 @@ g.update(round=1, advisory=["codex 없음 — 모델 다양성 0 (None)"], degra
 print(_first_line(g))')"
   assert_eq "$got" "리뷰 1라운드를 마쳤다 — 남은 것 없음. 경고 1개: codex 리뷰가 없어 다른 모델의 시각이 빠졌다 (codex: ?)" \
     "codex 사유 없음: 첫 줄의 사유 자리가 「?」 하나이고 None 이 없다"
+}
+# 집계 줄 — 사용자 기각 · 버린 지적은 원장 전체의 누계다. 「이번 라운드」로 세지 않고 「지금까지」로 낸다(합친 /qg #6).
+case_count_line_scope() {
+  local d gr; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]" \
+    || { no "집계 줄 범위: seed 실패"; rm -rf "$d"; return; }
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice reject --quote '기각한다' >/dev/null
+  gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_grep "$gr" '^지금까지 집계: 사용자가 기각한 지적 1건$' "집계 줄 범위: 사용자 기각은 「지금까지 집계」 줄에 선다"
+  assert_not_grep "$gr" '^이번 라운드 집계: .*사용자가 기각' "집계 줄 범위: 사용자 기각을 「이번 라운드」로 세지 않는다"
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_grep "$gr" '^지금까지 집계: 사용자가 기각한 지적 1건$' "집계 줄 범위: 2라운드에도 1라운드의 사용자 기각은 「지금까지」에 남는다"
+  assert_not_grep "$gr" '^이번 라운드 집계: .*사용자가 기각' "집계 줄 범위: 2라운드 화면이 1라운드의 기각을 「이번 라운드」로 세지 않는다(Review Focus)"
+  rm -rf "$d"
+}
+# 같은 글자의 경고 둘은 둘로 센다 — 같은 사실을 두 출처가 말한 행(괄호 이름이 있는 행)만 한 줄로 합친다(합친 /qg #7).
+case_plain_warns_same_text_counted() {
+  local got; got="$(PYTHONPATH="$SCRIPTS" python3 -c '
+from docreview_state import _plain_warns
+print(len(_plain_warns(["보류: recritic-verdict — 항목 파손: not a mapping", "보류: recritic-verdict — 항목 파손: not a mapping", "표에 없는 경고", "표에 없는 경고"])))')"
+  assert_eq "$got" "4" "같은 글자 경고: 같은 모양의 사건 둘은 각각 한 줄이다(괄호 이름 없는 행 · 표에 없는 원문)"
+  got="$(PYTHONPATH="$SCRIPTS" python3 -c '
+from docreview_state import _first_line, GATE_ROWS
+g = {r.name: [] for r in GATE_ROWS}
+g.update(round=1, advisory=["보류: recritic-verdict — 항목 파손: not a mapping", "보류: recritic-verdict — 항목 파손: not a mapping"], degrade={})
+print(_first_line(g))')"
+  assert_grep "$got" ' 경고 2개: ' "같은 글자 경고: 첫 줄의 경고 개수가 사건 수와 같다"
+  got="$(PYTHONPATH="$SCRIPTS" python3 -c '
+from docreview_state import _plain_warns
+print(len(_plain_warns(["codex 없음 — 모델 다양성 0 (not_installed)", "입력 실패(보조): codex — not_installed"])))')"
+  assert_eq "$got" "1" "같은 글자 경고(양의 짝): 같은 사실을 두 출처가 말한 codex 행은 한 줄로 합친다"
 }
 # 「같은 자리」 표지는 한 묶음 안에서만 앞 항목을 가리킨다(계획 Q11) — 묶음 제목 너머의 항목을 가리키지 않는다.
 case_gate_marker_stays_in_group() {
