@@ -1,0 +1,368 @@
+---
+name: roadmap-walking-skeleton
+type: design
+created_at: 2026-10-11
+source_interview: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.md
+next_phase: superpowers:writing-plans
+---
+
+# R0 — 로드맵 · 조각 묶음 · 상태 계산의 걷는 뼈대 · Design
+
+> 조각을 한 곳에서 보고, 조각마다 받은 번호를 하나도 흘리지 않게 하는 가장 얇은 끝에서 끝까지.
+
+승인된 분해안(brief §7, S47)의 첫 조각 R0 이다. 이번 일의 로드맵과 조각 묶음을 손으로 만들어
+걷는 뼈대로 쓰고, 공통 형식 다섯을 정하고, 그 형식을 실제로 한 번씩 지나가는 작은 스크립트 둘을
+둔다. 뒤 조각(R1~R9 · R2a)은 이 뼈대 위에서 각자의 장치를 제대로 만든다.
+
+## 목차
+
+- [Handoff Context](#handoff-context)
+- [Context / Why](#context--why)
+- [Goals](#goals) · [Non-goals](#non-goals) · [Constraints](#constraints)
+- [설계](#설계)
+  - [§1 산출물](#1-산출물)
+  - [§2 번호 체계 하나](#2-번호-체계-하나)
+  - [§3 공통 형식 다섯](#3-공통-형식-다섯)
+  - [§4 상태 계산](#4-상태-계산)
+  - [§5 지휘 절차와 진행 방식](#5-지휘-절차와-진행-방식로드맵에-싣는-내용)
+  - [§6 실측 넷](#6-실측-넷)
+  - [§7 락 지도 · 충돌표 · R1 걷기](#7-락-지도--충돌표--r1-걷기)
+- [Acceptance Criteria](#acceptance-criteria) · [Files to Modify](#files-to-modify) · [Verification Plan](#verification-plan)
+- [Rejected Alternatives](#rejected-alternatives) · [결정 기록](#결정-기록) · [번호 대조](#번호-대조) · [Metadata](#metadata)
+
+## Handoff Context
+
+- 입력: interview brief `docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.md`
+  (audit `….audit.md`). 확정 47 · 잠정 1(D29) · 열린 질문 OQ28~OQ38.
+- brainstorming 결정: `## 결정 기록` B1~B5.
+- 재결정 규약: confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다.
+- 재결정 보고 1건: D28 의 「로드맵(… 상태)」 중 **상태**는 로드맵 파일의 칸이 아니라 계산된 값으로
+  보인다(B2 · OQ37). 로드맵을 보는 자리에 상태가 함께 보인다는 D28 의 뜻은 유지된다.
+
+## Context / Why
+
+brief 는 모든 조각에 「원본 brief + 로드맵 + 조각 묶음」을 넘기고(D39), 조각 spec 이 번호마다 반영
+또는 기각+이유를 적고(D24), 전체 조각·순서·의존·단계를 한 곳에서 보게 하라고 한다(C8 · D22).
+그 장치들은 R3 · R4 · R6 에서야 제대로 생긴다(OQ38). 그 전에 만드는 조각들이 지금의 brief 넘김으로
+가면 이 일이 고치려는 이음매 손실(C2)이 그 조각들에서 그대로 일어난다.
+
+그래서 R0 은 형식을 정의만 하지 않고, 이번 일의 실제 로드맵과 묶음을 손으로 만들어 그 형식 위에서
+다음 조각을 걸린다(B1). 걸어 보며 형식을 고친다.
+
+레포에서 확인한 사실(조사 2026-10-11, 출처는 각 줄):
+
+- 상태줄 · 패널 · 작업 목록 통합은 `plugins/` · `shared/` 에 0건이다.
+- `TaskCreated` 훅 출력에는 `additionalContext` 가 없다(`docs/superpowers/specs/2026-08-05-agent-transparency-design.md`
+  이벤트 표). 상태줄이 받는 `tasks[]` 는 메타데이터뿐이라는 것은 문서 근거이고 실측이 아니다.
+- spec 리뷰 프로필의 정답은 「인터뷰 브리프 §2 확정 항목 — frontmatter `source_interview` 가 가리키는 파일」
+  이다(`plugins/spec-distill/references/docreview-profiles/design-doc.md:3`). spec-review 는 그 파일을
+  슬롯으로 넘기지 않고, 리뷰어가 `source_interview` 를 보고 스스로 Read 한다.
+- qg 는 `BASE..HEAD` 커밋의 `Spec:` 트레일러 중 가장 최신 하나를 의도 출처로 읽는다
+  (`plugins/quality-gates/scripts/discover-spec.sh:52-55`).
+- superpowers SDD 는 `<repo-root>/.superpowers/sdd/<plan-basename>/progress.md` 에 완료 줄
+  `Task <N>: complete (…)` 과 `Ruling:` 줄을 남긴다(superpowers 6.4.1 subagent-driven-development).
+  계획 문서 머리에는 `**Spec:**` 줄이 있다(superpowers 6.4.1 writing-plans).
+- `check_brief.py` 는 `type: interview-brief` 만 받는다. 로드맵 · 묶음 타입은 없다.
+- §6 경계는 `plugins/spec-distill/scripts/section6.py` 한 곳이 정한다.
+
+## Goals
+
+- G1. 이번 일의 로드맵 한 장과 조각 묶음(R1~R9 · R2a)이 레포에 git 추적 파일로 있다.
+- G2. brief 의 모든 번호 항목이 적어도 한 조각에 배정되고, 모든 사용자 발화가 적어도 한 조각에
+  받들어진다 — 기계로 확인한다.
+- G3. 조각별 단계가 손으로 쓴 칸 없이 git 과 실행 기록에서 계산되고, 혼자 내린 판정 줄과 경고가
+  함께 보인다.
+- G4. 조각 spec 의 「번호 대조」 표와 묶음의 번호 집합을 맞춰 빠진 번호를 낸다.
+- G5. R5 · R6 모양을 정할 실측 셋(M1~M3)이 기록되고, M4 를 R1 걷기에서 기록할 자리가 있다.
+- G6. 조각들이 바꿀 동작을 잠근 테스트 목록과 진행 중 브랜치와의 충돌표가 있고, 그 결과가 로드맵
+  의존에 들어가 있다.
+
+## Non-goals
+
+- 묶음 자동 생성 · 인터뷰 안의 분해 판단 — R4.
+- 묶음 깊이 검사(D40 의 「답이 구체적인가」) · 축소 · 재분해 감지 · 넘김 글 정리 · spec 리뷰에 묶음을
+  정해진 입력으로 넘기기 — R3.
+- 상태줄 등 제대로 된 컨트롤 플레인 — R6.
+- 지휘자 skill — R5. R0 의 지휘자는 이 세션이 로드맵 「지휘 절차」 절을 따라 하는 것이고, 장치가 아니라
+  절차라는 사실을 로드맵에 밝힌다.
+- 외부 플러그인(superpowers) 파일 · 동작 변경(C25 · D26).
+- @ 브랜치가 건드리는 파일 변경 — `finishing.md` · `proceed-gate.md` · `spec-review/SKILL.md` ·
+  `request-framing/SKILL.md`.
+
+## Constraints
+
+- N1. 사용자 원문은 다시 치지 않는다. 묶음 §7 은 `section6.py` 로 brief §6 과 audit §6 에서 바이트 그대로 옮긴다.
+- N2. 두 스크립트는 읽기만 한다. 파일을 쓰지 않고 네트워크에 나가지 않는다.
+- N3. 검사 불가를 이상 없음으로 내지 않는다(종료 코드 3).
+- N4. git 만 필수다. `gh` 가 없으면 PR 상태를 「알 수 없음」으로 크게 알리고 나머지는 계속한다.
+- N5. 로드맵은 사용자 승인 뒤에만 커밋으로 고친다. 이력은 git 과 로드맵 「재분해 이력」 절이다.
+- N6. 버전은 머지 직전에 정한다(spec-distill minor).
+
+## 설계
+
+### §1 산출물
+
+`docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/` 아래:
+
+| 파일 | 내용 |
+|---|---|
+| `roadmap.md` | 조각 블록(P1~P4 · R0~R9 · R2a) · 지휘 절차 · 결정 기록 · 재분해 이력 · 위험 번호표 |
+| `R1.md` … `R9.md` · `R2a.md` | 조각 묶음 |
+| `measurements.md` | 실측 M1~M4 |
+| `locks.md` | 락 지도 · 충돌표 |
+
+`plugins/spec-distill/scripts/` 아래:
+
+- `roadmap_status.py` — 로드맵과 git 을 읽어 조각별 단계 · 판정 줄 · 경고를 낸다.
+- `check_bundle_coverage.py` — 묶음의 번호 집합과 spec 의 「번호 대조」 표를 맞춘다.
+
+brief 와 audit 은 R0 PR 에 함께 커밋한다 — 로드맵과 묶음이 그 둘을 가리키고, 다른 조각의 worktree 가
+main 에서 읽어야 한다.
+
+### §2 번호 체계 하나
+
+brief 에 이미 있는 번호를 그대로 쓴다: 확정 항목 `C<n>` · `D<n>` · 열린 질문 `OQ<n>` · 레포 근거 `RC<n>` ·
+steelman `ST<n>` · 사용자 발화 `S<n>` · 웹 조사 항목은 그 «key».
+
+번호가 없는 위험 줄 15개에만 `K<n>` 을 붙인다. 규칙은 brief §5 의 줄 순서다:
+`위험 — 숨은 가정` 7줄이 K1~K7, `위험 — 실패 양식` 7줄이 K8~K14, `위험 — 리뷰 참고` 1줄이 K15.
+로드맵 「위험 번호표」가 각 K 옆에 그 줄을 원문 그대로 인용한다. brief 는 고치지 않는다.
+
+번호 없는 기각 줄 넷은 각자를 받드는 확정 항목으로 대조한다 — S1 뒤 절 → C48, S10 외부 부분 → D26,
+S19 → C27, 재구성 기각 → C14(brief §2 ✎ 주석의 매핑).
+
+생략 경고(D24 · D42) · 고아 발화 경고(D41) · 미배정 번호 경고는 모두 「집합의 차」 하나로 잰다.
+따로 남는 것은 깊이 검사(D40, R3)뿐이다. brief 리뷰 조언(41df26ba#r1.1)을 이렇게 받는다.
+
+### §3 공통 형식 다섯
+
+**① 조각 묶음** `R<n>.md`
+
+- frontmatter: `type: slice-bundle` · `slice: R<n>` · `roadmap: <경로>` · `source_brief: <경로>` ·
+  `ids: [<번호>, …]`.
+- 본문 절은 brief 와 번호를 맞춘다 — §0 역참조 · 공통 목표(brief §1 원문) · §1 이 조각의 몫(로드맵 블록) ·
+  §2 제약(배정된 C · D, 번호와 brief 문장) · §3 열린 질문(OQ) · §4 레포 근거(RC)와 웹 근거(«key») ·
+  §5 위험(K · ST) · §6 이웃 조각과의 인터페이스(받는 것 · 넘기는 것) · §7 사용자 원문 전부.
+- `ids:` 는 §1~§5 에 실린 번호와 그 조각의 받드는 발화(S)의 합집합이다. 이 번호는 전부 조각 spec 의
+  「번호 대조」 표에 나와야 한다.
+
+**② 로드맵** `roadmap.md`
+
+- frontmatter: `type: roadmap` · `source_brief: <경로>`.
+- 조각 블록 — 줄 머리말로 기계가 읽는다:
+
+  ```
+  ### R1 — 인터뷰 탐색 개편
+  - 의도: …
+  - 범위: 한다 … / 안 한다 …
+  - 의존: R0
+  - 브랜치: feature/…
+  - 묶음: R1.md
+  - 발화: S1, S2, …
+  - 항목: C3, C4, D15, …
+  - 경로 예약: plugins/spec-distill/skills/spec-interview/SKILL.md, …
+  ```
+
+  확인 · 결정 항목(P3 · P4)은 `브랜치:` 대신 `완료: 결정 기록` 을 둔다.
+- 다른 절: 「지휘 절차」(R5 전까지 이 세션이 따라 할 순서 — §5) · 「결정 기록」(P3 · P4 처럼 브랜치 없는
+  항목의 결정과 그 발화 번호) · 「재분해 이력」(바꾼 것과 승인 발화 — D20 · D28) · 「위험 번호표」.
+- 상태 칸은 없다(B2).
+
+**③ 컨트롤 플레인 데이터** — `roadmap_status.py` 출력
+
+- 조각마다: 번호 · 단계 · 단계 근거 · 판정 줄 목록 · 경고 목록.
+- 전체: 미배정 번호 · 고아 발화 · 경로 예약 겹침 · `origin/main` 마지막 수신 시각.
+- 출력은 JSON(`--json`)과 사람용 글(기본) 둘이다.
+- 지휘자는 조각 하나에 작업 하나를 둔다 — 제목 「R1 인터뷰 탐색 — 계획」 식, 대기 · 준비는 시작 전,
+  머지됨은 완료, 나머지는 진행 중.
+
+**④ spec 리뷰에 넘길 정답**
+
+- 조각 설계문서 frontmatter: `source_interview: <그 조각 묶음 경로>` · `roadmap: <로드맵 경로>`.
+- 본문 `## 번호 대조` 표 — 칸 셋: 번호 · 반영/기각 · 반영한 자리 또는 기각 이유.
+- 한계(공시): 리뷰어가 `source_interview` 를 보고 스스로 열어야 묶음을 본다. 지시문에 기댄 연결이다.
+  정해진 입력으로 넘기기는 R3(D45).
+
+**⑤ 커밋 `Spec:` 표시**
+
+- 조각 구현 커밋에 `Spec: docs/superpowers/specs/<…>-design.md`(레포 상대경로)를 붙인다. qg 가 이미 읽는다.
+- 계획 문서의 `**Spec:**` 줄은 상태 계산이 계획과 spec 을 잇는 데 쓴다.
+- qg ⑤ 이후 의도 출처 형식과의 정렬은 R2a · R5(OQ31).
+
+**devbrew 밖 레포**(OQ33 의 R0 몫): 경로는 superpowers 관례 `docs/superpowers/` 아래다. 스크립트는 git 만
+필요하다(N4). 새 타입 `roadmap` · `slice-bundle` 은 brief 구조 게이트가 아니라 두 스크립트가 검사한다.
+
+### §4 상태 계산
+
+입력은 로드맵 블록의 `브랜치:` 와 `의존:` 이다. 위에서부터 처음 맞는 것이 단계다.
+
+1. **머지됨** — 브랜치가 `origin/main` 의 조상이거나, `origin/main` 의 머지 커밋 메시지에 그 브랜치 이름이
+   있다(머지 뒤 지운 브랜치).
+2. 브랜치가 없으면 의존 조각 중 하나라도 머지됨이 아닐 때 **대기**, 다 머지됐으면 **준비**다.
+3. 브랜치가 있으면 `origin/main...<브랜치>` 에서 새로 생긴 파일로 판정한다:
+   - **PR** — 열린 PR 이 있다(`gh` 가 있을 때만).
+   - **구현 끝** — 그 브랜치 worktree 의 실행 기록에 계획의 Task 수만큼 완료 줄이 있다.
+   - **구현 중** — 실행 기록에 완료 줄이 일부 있다.
+   - **계획** — `docs/superpowers/plans/` 에 새 계획이 있고 그 `**Spec:**` 가 이 브랜치의 새 spec 을 가리킨다.
+   - **설계 중** — 그 밖. spec 이 있으면 「spec 있음」을 근거로 적는다. 승인 여부는 git 으로 알 수 없다.
+   의존 조각이 머지되지 않았는데 브랜치가 있으면 단계는 그대로 계산하고 「의존 미머지 상태에서 진행 중」
+   경고를 낸다 — 대기로 덮으면 순서를 어긴 진행이 가려진다.
+4. 확인 · 결정 항목은 로드맵 「결정 기록」에 그 번호와 발화 번호가 있으면 **머지됨**과 같은 끝 단계다.
+5. 근거를 못 얻으면 **알 수 없음(이유)** 이다 — worktree 없음 · `gh` 없음 · 계획의 Task 수를 셀 수 없음 등.
+
+worktree 경로는 `git worktree list --porcelain` 의 브랜치 대응으로 찾는다. 스크립트는 fetch 하지 않는다 —
+지휘 절차가 계산 전에 fetch 한다.
+
+함께 내는 경고:
+
+- **판정** — 실행 기록의 `Ruling:` 줄 전부. 보이기만 하고 멈추지 않는다(C27).
+- **생략** — spec 이 있으면 `check_bundle_coverage.py` 결과의 빠진 번호.
+- **경로 예약 위반** — `origin/main...<브랜치>` 의 바뀐 파일 중 다른 조각만 예약한 것.
+- **의존 미머지 진행** — 위 3 의 경우.
+- **미배정 번호 · 고아 발화** — 번호 전체 집합(brief frontmatter `user_sourced_items` · §0 결정 목록 OQ ·
+  §5 RC · §5 ST · §4 «key» · 위험 번호표 K · §6 과 audit §6 의 S)에서 모든 블록 `항목:` · `발화:` 의 합집합을 뺀 것.
+
+종료 코드: 0 이상 없음 · 1 경고 있음 · 2 사용법 오류 · 3 검사 불가(로드맵 없음 · 형식 깨짐).
+
+### §5 지휘 절차와 진행 방식(로드맵에 싣는 내용)
+
+R5 전까지 이 세션이 따른다.
+
+1. `git fetch` → `roadmap_status.py` → 작업 목록을 결과에 맞춘다.
+2. 준비 단계 조각을 고른다. 설계 단계(brainstorming → 설계문서 → spec-review 승인)는 이 세션에서 한 조각씩 돈다 —
+   spec 승인은 사용자가 조각마다 직접 한다(C48).
+3. superpowers 가 묻는 자리(plan 검토 · 실행 방식 · 머지 메뉴)는 그대로 사용자에게 간다(D37).
+4. 구현은 조각마다 worktree 에서 돌리고, 그동안 다음 조각의 설계를 진행하는 것이 목표다. 백그라운드
+   실행이 되는지는 M1 이 정한다 — 안 되면 구현도 순차로 하고 그 사실을 공시한다.
+5. 조각이 머지될 때마다 남은 조각을 재평가하고, 바뀔 때만 사용자 승인 뒤 로드맵을 커밋한다(D28).
+6. 구현 커밋에는 `Spec:` 트레일러를 단다.
+
+### §6 실측 넷
+
+설계문서에는 결과를 적지 않는다. `measurements.md` 에 날짜 · Claude Code 버전 · superpowers 버전 · 방법 ·
+원 출력을 남긴다.
+
+| # | 묻는 것 | 재는 방법 | 결과가 바꾸는 것 |
+|---|---|---|---|
+| M1 | 백그라운드 subagent(worktree 격리)에서 brainstorming 이 사용자에게 물을 수 있는가. 같은 자리에서 SDD 가 자기 subagent 를 부르며 끝까지 가는가, 어디서 멈추는가 | 버릴 git 레포에 장난감 계획을 두고 돌린다. 실제 레포에서 하지 않는다 | R5(OQ30) |
+| M2 | 지휘 세션의 작업 목록이 `/compact` · `/new` 뒤와 백그라운드 작업 중에 남고 보이는가 | 작업을 만들고 압축 · 새 세션 뒤 확인 | R6(OQ34) |
+| M3 | 플러그인이 상태줄을 제공할 수 있는가, 사용자 설정뿐인가 | 공식 문서 + 격리 설치(`CLAUDE_CONFIG_DIR`) | R6(OQ34) |
+| M4 | 조각 하나를 거치며 superpowers 가 사용자를 기다린 자리 | R1 걷기 중 전부 기록 | D37 확인 · R5 |
+
+M1 가설: subagent 는 사용자에게 묻지 못한다(brief §4 «cc-subagents»). 맞으면 설계 단계는 지휘 세션에서
+하나씩, 병렬은 구현에서만이다. 깨지면 R5 설계가 달라진다.
+
+### §7 락 지도 · 충돌표 · R1 걷기
+
+- **락 지도**(`locks.md`) — 칸: 테스트 파일:줄 · 잠근 동작 · 바꿀 조각 · 처리(기본: 그 조각이 같은 PR 에서 고친다).
+  brief RC 근거와 장치 이름으로 `git grep` 한다. 찾은 수는 하한이라고 밝히고, 조각마다 착수할 때 다시 찾는다.
+- **충돌표** — 진행 중 브랜치(@ 브랜치 · qg ⑤ · 쉬운 말 수정 · 옛 훅)가 건드리는 파일 × 조각 경로 예약.
+  겹치면 그 브랜치 머지 뒤로 로드맵 `의존:` 을 건다. 예: R3 → P1, R2a · R5 의 qg 연결 → P2 · P3.
+- **R1 걷기** — R0 머지 직후 지휘 절차의 첫 일이다. R0 PR 안에서는 할 수 없다(R1 worktree 는 main 에서
+  갈라진다). R1 을 spec 승인까지 걸리고 M4 를 기록한다. 드러난 형식 수정은 재평가(D28)로 받아 사용자
+  승인 뒤 맡을 조각을 정한다. 브랜치를 쌓지 않는다.
+
+## Acceptance Criteria
+
+- AC1. `roadmap.md` 에 P1~P4 · R0~R9 · R2a 블록이 있고, 브랜치 블록은 머리말 8줄을, 확인 · 결정 블록은
+  `완료: 결정 기록` 을 갖는다. `roadmap_status.py` 가 그 로드맵에 3 을 내지 않는다.
+- AC2. 묶음 10개가 ①의 frontmatter 와 §0~§7 을 갖고, 각 §7 이 `section6.py` 로 뽑은 brief §6 + audit §6 과
+  바이트 동일하다.
+- AC3. 실제 로드맵에서 미배정 번호 0 · 고아 발화 0 이다.
+- AC4. 로드맵(번호 배정 포함)을 사용자에게 보이고 승인받은 뒤 PR 을 연다.
+- AC5. `roadmap_status.py` 가 §4 의 단계 여덟과 알 수 없음을 fixture 표대로 낸다 — 머지 뒤 지운 브랜치 ·
+  worktree 없음 · `gh` 없음 · 경로 예약 위반 · 의존 미머지 진행 · `Ruling:` 추출 · 확인 · 결정 항목을 포함한다.
+- AC6. `check_bundle_coverage.py` 가 빠진 번호를 나열하고 1, 이상 없으면 0, `ids:` 없음 · 표 깨짐이면 3 을 낸다.
+  묶음에 없는 번호가 표에 있으면 정보 줄로 낸다.
+- AC7. 두 스크립트가 파일을 쓰지 않고 네트워크 명령을 부르지 않는다.
+- AC8. `measurements.md` 에 M1~M3 기록이 있고 M4 자리가 「R1 걷기에서」로 있다.
+- AC9. `locks.md` 에 락 지도와 충돌표가 있고, 충돌표 결과가 로드맵 `의존:` 에 반영돼 있다.
+- AC10. diff 에 외부 플러그인 파일과 @ 브랜치의 네 파일이 없다.
+- AC11. spec-distill 버전 · CHANGELOG · README 가 갱신되고, 스위트 실패 이름 집합이 baseline 보다 늘지 않는다.
+- AC12. brief 와 audit 이 R0 PR 에 커밋돼 있다.
+
+## Files to Modify
+
+- 새 파일: `docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/{roadmap.md, R1.md…R9.md, R2a.md, measurements.md, locks.md}`
+- 새 파일: `plugins/spec-distill/scripts/roadmap_status.py` · `plugins/spec-distill/scripts/check_bundle_coverage.py`
+- 새 파일: `plugins/spec-distill/tests/test_roadmap_status.sh` · `plugins/spec-distill/tests/test_bundle_coverage.sh`
+- 커밋: `docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.md` · `….audit.md`
+- 수정: `plugins/spec-distill/.claude-plugin/plugin.json` · `plugins/spec-distill/CHANGELOG.md` · `plugins/spec-distill/README.md`
+
+## Verification Plan
+
+- 착수 전 spec-distill 스위트 실패 이름 집합을 기록한다.
+- 상태 계산: 임시 디렉토리의 버릴 git 레포에 단계마다 브랜치를 세운다. 코드 분기 × fixture 표를 먼저 그려
+  분기마다 fixture 가 있는지 맞춘다.
+- 번호 대조: 빠진 번호 · 묶음에 없는 번호 · 깨진 표 · `ids:` 없음. 통과가 정답인 단언에는 변이 테스트,
+  부재 락에는 양성 짝을 붙인다.
+- 묶음 §7 바이트 동일성 · 실데이터 미배정 0 · 고아 0 을 테스트로 잰다.
+- 셸 테스트는 리포 루트에서 돌린다. Python 은 명시적 UTF-8 · 신원 문법엔 `fullmatch`.
+- diff 로 AC10 을 확인한다.
+
+## Rejected Alternatives
+
+- **문서만 있는 뼈대**(형식 정의 + 손 로드맵, 코드 없음) — 형식이 실제 장치에서 도는지 R3 · R4 · R6 까지
+  모른다. 걷는 뼈대가 아니다(B3).
+- **로드맵에 상태 칸** — 상태가 바뀔 때마다 커밋, 빠뜨리면 실제와 어긋난다(B2).
+- **git 밖 지휘자 전용 상태 파일** — TTL 정리가 기록을 지운 전례(D46)가 되풀이된다(B2).
+- **앞 조각은 지금의 brief 넘김, 새 장치는 R3 · R4 · R6 뒤부터** — 앞 조각에서 이음매 손실(C2)이 그대로
+  일어난다(B1).
+- **R1 을 R0 브랜치 위에 쌓아 걷기** — 밑 브랜치를 지우면 쌓은 PR 이 닫힌다.
+- **위험 번호를 brief 에 직접 쓰기** — 정본 brief 를 고치게 된다. 로드맵 위험 번호표가 원문 인용으로 단다.
+
+## 결정 기록
+
+brainstorming 중 사용자 답(원문 그대로):
+
+- B1 — OQ38(로드맵 · 묶음을 지금 손으로 만들어 걷는 뼈대로 쓸지): 「1, 고민하고 발전시켜나가 」 —
+  선택지 1 = 지금 손으로 만듦.
+- B2 — OQ37 · D29(살아 있는 상태의 자리): 「git 에서 계산 (권장)」.
+- B3 — 접근(문서만 / 얇게 끝까지): 「②로 가자」.
+- B4 — 절 승인: 「맞아, 2절로 가자」 · 「맞아, 3절로 가자」 · 「맞아, 4절로 가자」 ·
+  「맞아, 설계문서 써서 커밋하자, 이작업이 끝은 아니지?」.
+- B5 — 진행 방식 질문: 「이후 해야할 일들은 어떻게 진행할거야 지금 처럼 시컨셜하게?」 — §5 로 답했다
+  (설계는 순차, 구현은 병렬이 목표, M1 이 확정).
+
+## 번호 대조
+
+이 문서는 R0 의 묶음이 아직 없어 brief 를 정답으로 쓴다. R0 이 맡는 번호만 싣는다 — 나머지 번호의 배정은
+로드맵이 하고 AC3 이 잰다.
+
+| 번호 | 처리 | 자리 · 이유 |
+|---|---|---|
+| C8 | 반영 | §3 ③ · §4 — 조각 · 순서 · 의존 · 단계를 한 출력과 작업 목록에 |
+| C19 | 반영 | §4 — 손으로 쓴 상태 없음, 경로 예약 위반 · 생략 경고 |
+| D22 | 반영(R0 몫) | §3 ③ 데이터 형식 · 작업 목록. 상태줄 · 패널은 M3 뒤 R6 |
+| D24 | 반영(R0 몫) | §2 · §3 ① ④ · `check_bundle_coverage.py`. 컨트롤 플레인 생략 경고 표시는 R6 |
+| D28 | 반영 · 재결정 보고 | §3 ② · §5 5 · §7 걷기. 상태는 파일 칸이 아니라 계산값(Handoff Context) |
+| D29 | 반영 | §1 · §3 ② — git 추적 파일, 정의만 |
+| D33 | 반영 | §3 ③ 작업 목록 · §4 SDD 실행 기록 · ⑤ qg `Spec:` · §5 worktree |
+| D39 | 반영 | §1 · §3 ① ② |
+| D40 | 반영(R0 몫) | §3 ① 번호 항목. 깊이 검사는 R3 |
+| D41 | 반영(R0 몫) | §3 ① `ids:` 에 S · §4 고아 발화. 승인 때 전체 속 위치 표시는 R5 · R6 |
+| D42 | 반영(R0 몫) | §3 ① 묶음으로 목적 · 제약을 미리 줌 · 번호 대조. 덮어쓰기 문장 제거는 R3 |
+| D45 | 반영(R0 몫) | §3 ④ `source_interview` 가 묶음을 가리킴. 정해진 입력으로 넘기기는 R3 |
+| D47 | 반영 | §1 로드맵 블록 = 승인된 분해안 |
+| OQ30 | 반영 | §6 M1 |
+| OQ33 | 반영(R0 몫) | §3 끝 「devbrew 밖 레포」 |
+| OQ34 | 반영 | §6 M2 · M3 |
+| OQ37 | 반영 | B2 · §3 ② · §4 |
+| OQ38 | 반영 | B1 · §1 |
+| RC74 · RC75 | 반영(R0 몫) | §3 ④ — `source_interview` 를 묶음으로 채움 |
+| RC76 | 반영 | §3 ⑤ |
+| RC78 | 반영 | §3 끝 — 새 타입은 R0 스크립트가 검사 |
+| RC80 | 반영 | Context 의 훅 배달지 사실 · §6 M2 · M3 |
+| RC38 | 반영 | N6 |
+| K5 · K9 | 반영 | §1 git 추적 로드맵 · §4 계산 상태 — 압축 · 덮어쓰기로 지도를 잃지 않음 |
+| K8 | 반영(R0 몫) | §3 ② 경로 예약 · §7 충돌표. 암묵 결정 충돌의 의미 검사는 R5 |
+| K10 | 반영 | §3 ① — 묶음이 그 조각 몫으로 좁힘 |
+| K14 | 반영 | §3 ② 재분해 이력 · §5 5 |
+| K15 | 반영 | §2 |
+
+## Metadata
+
+- 조각: R0 (로드맵 `docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md`, R0 PR 에서 생김)
+- 브랜치: `feature/interview-explore-decompose`
+- 선행: P1(@ 브랜치)과 파일이 겹치지 않는다(버전 파일 제외).
+- 다음: spec-distill:spec-review → superpowers:writing-plans
