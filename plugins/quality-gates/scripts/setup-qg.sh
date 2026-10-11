@@ -201,7 +201,7 @@ refuse() {
 }
 load_markers() {
   local out m
-  out="$(python3 -c 'import importlib.util as u, sys
+  out="$(python3 -I -c 'import importlib.util as u, sys
 s = u.spec_from_file_location("qg_gc", sys.argv[1] + "/qg-gc.py")
 m = u.module_from_spec(s)
 s.loader.exec_module(m)

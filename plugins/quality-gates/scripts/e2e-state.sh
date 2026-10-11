@@ -23,7 +23,7 @@ die() { echo "e2e-state: $*" >&2; exit 2; }
 lstart_of() { LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null | tr -s ' ' | sed 's/^ //; s/ $//'; }
 
 port_open() {
-  python3 -c 'import socket, sys
+  python3 -I -c 'import socket, sys
 s = socket.socket(); s.settimeout(0.5)
 sys.exit(0 if s.connect_ex(("127.0.0.1", int(sys.argv[1]))) == 0 else 1)' "$1"
 }
@@ -49,7 +49,7 @@ cmd_fingerprint() {
   done
   [ -n "$out" ] || die "usage: e2e-state.sh fingerprint --out <file>"
   killed_by_switch && exit 3
-  GIT_OPTIONAL_LOCKS=0 PYTHONDONTWRITEBYTECODE=1 python3 - "$out" <<'PY'
+  GIT_OPTIONAL_LOCKS=0 PYTHONDONTWRITEBYTECODE=1 python3 -I - "$out" <<'PY'
 import hashlib, json, os, stat, subprocess, sys
 
 out = sys.argv[1]
@@ -121,7 +121,7 @@ PY
 cmd_compare() {
   [ $# -eq 2 ] || die "usage: e2e-state.sh compare <before> <after>"
   killed_by_switch && exit 3
-  PYTHONDONTWRITEBYTECODE=1 python3 - "$1" "$2" <<'PY'
+  PYTHONDONTWRITEBYTECODE=1 python3 -I - "$1" "$2" <<'PY'
 import json, sys
 
 
@@ -211,7 +211,7 @@ cmd_boot() {
   # 전부 떼어야 호출한 셸이 앱의 종료를 기다리지 않는다.
   : >"$log"
   trap 'cmd_stop --dir "$dir" >/dev/null 2>&1; echo "boot-failed: interrupted"; exit 4' INT TERM HUP
-  python3 -c 'import os, sys
+  python3 -I -c 'import os, sys
 os.setsid()
 fd = os.open(os.devnull, os.O_RDONLY)
 os.dup2(fd, 0)
@@ -281,7 +281,7 @@ cmd_stop() {
 
 cmd_propose() {
   [ $# -eq 1 ] || die "usage: e2e-state.sh propose <evidence.tsv>"
-  PYTHONDONTWRITEBYTECODE=1 python3 - "$1" <<'PY'
+  PYTHONDONTWRITEBYTECODE=1 python3 -I - "$1" <<'PY'
 import sys
 
 JUDGED = ("충족", "불충족", "미확인")

@@ -70,7 +70,7 @@ else
   if [ "$entry_rc" -ne 0 ]; then
     block="$(printf '%s\n' "[spec-distill] 진입 검사 실패(끔으로 친다) — $ENTRY rc=$entry_rc: $entry_err_last" "review-entry: DISABLED:entry_check_failed")"
   else
-    block="$(printf '%s' "$entry_out" | python3 -c '
+    block="$(printf '%s' "$entry_out" | python3 -I -c '
 import json, sys
 sys.stdout.reconfigure(encoding="utf-8")
 raw = sys.stdin.buffer.read().decode("utf-8", "replace")
