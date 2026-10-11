@@ -22,6 +22,8 @@ pr=$(run_setup --pr-url https://example.invalid/pr/1)
 assert_eq "${plan%%|*}" "${pr%%|*}" "AC25: --plan 의 종료 코드가 제거된 --pr-url 과 같다"
 assert_contains "${plan#*|}" "--plan" "AC25: 안내가 --plan 을 이름으로 말한다"
 assert_not_contains "${plan#*|}" "Plan file:" "AC25: --plan 값을 쓰지 않는다"
+assert_not_contains "${plan#*|}" "계획 파일" "AC25: --plan 값을 쓰지 않는다(한국어 배너 줄도 없다)"
+assert_not_contains "${plan#*|}" "docs/x.md" "AC25: --plan 의 값이 출력 어디에도 없다"
 assert_eq "$(printf '%s\n' "${plan#*|}" | grep -c -- '--plan')" "1" "AC25: 안내는 한 줄이다"
 hint=$(sed -n 's/^argument-hint: //p' "$PLUGIN_ROOT/commands/qg.md")
 [ -n "$hint" ] && ok "qg.md 에 argument-hint 줄이 있다" || no "qg.md argument-hint 줄을 찾지 못했다"
