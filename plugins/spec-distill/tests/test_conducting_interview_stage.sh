@@ -202,6 +202,21 @@ cc=$(ci_cat | grep -cE "턴 종료|다음 턴"); [[ "$cc" -ge 1 ]] \
   && ok "AC21(i): cross-compact stop wording present (lines=$cc)" \
   || no "AC21(i): cross-compact stop wording absent"
 
+# B-4 — 옛 「② 즉시 진행 예외」 문장이 가드 문단에 돌아오지 않는다(B-3 창만 재면 B-4 되돌리기가 통과한다).
+b4_block="$(awk '/^#### B-4/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
+if [[ -z "$b4_block" ]]; then
+  no "AC4(next-session): B-4 블록이 비었다 — 아래 단언이 공허하다"
+else
+  grep -qF '예외는 없습니다' <<<"$b4_block" \
+    && ok "AC4(next-session): B-4 가 정지 요건에 예외가 없다고 적는다" \
+    || no "AC4(next-session): B-4 에 「예외는 없습니다」가 없다"
+  for n in '명시적 예외' '즉시 brainstorming' '바로'; do
+    grep -qF "$n" <<<"$b4_block" \
+      && no "AC4(next-session): B-4 에 「${n}」 이 남았다" \
+      || ok "AC4(next-session): B-4 에 「${n}」 이 없다"
+  done
+fi
+
 has 'polite[- ]?stop|narrate.*금지|silent 종료 금지' "AC22: AP2 polite-stop ban codified"
 
 has 'state_path\.py state-root|Bash.*state|state.*Bash' "PN1: state-write-via-Bash contract"
