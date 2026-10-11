@@ -181,7 +181,7 @@ grep -qE '임의 변경.*금지' <<<"$nsl_b3" \
 for w in 1 2; do
   wv="b3_opt${w}"; win="${!wv}"
   if [[ -z "$win" ]]; then no "AC4(next-session): B-3 옵션 ${w} 창이 비었다 — 아래 단언이 공허하다"; continue; fi
-  for n in '다음 세션 줄' '턴 종료(STOP)' '다음 턴' '사용자 트리거'; do
+  for n in '다음 세션 줄' '턴 종료(STOP)' '같은 턴에서 `brainstorming`을 호출하지 말 것' '다음 턴' '사용자 트리거'; do
     grep -qF "$n" <<<"$win" && ok "AC4(next-session): B-3 옵션 ${w} 창에 ${n}" || no "AC4(next-session): B-3 옵션 ${w} 창에 ${n} 이 없다"
   done
   grep -qF '바로' <<<"$win" && no "AC4(next-session): B-3 옵션 ${w} 창에 「바로」 진행이 남았다" || ok "AC4(next-session): B-3 옵션 ${w} 창에 「바로」 진행이 없다"
