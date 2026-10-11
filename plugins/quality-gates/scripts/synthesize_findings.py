@@ -312,12 +312,13 @@ def dedup(findings, ledger=None):
     deduped = []
     for group in by_key.values():
         merged = dict(group[0])
-        # 남는 쪽(먼저 온 쪽)에 plain 이 없으면 합쳐진 다른 쪽 중 가장 먼저 온 쪽의 plain 을 물려받는다.
+        # 남는 쪽(먼저 온 쪽)에 plain 이 없으면 합쳐진 다른 쪽 중 요약이 같은 것의 plain 을 물려받는다 —
+        # 좌표만 같은 다른 결함의 쉬운 문장이 이 행의 요약 옆에 붙으면 사람이 엉뚱한 문제를 고친다.
         # 뒤에서부터 덮어쓰므로 break 가 없다 — 이 파일은 처분 회계 소비자라 컴프리헨션 ·
         # 버리는 분기(break/continue)가 `shared/tests/test_adjudication_wiring.sh` 에 묶여 있다.
         if not _has_plain(merged):
             for g in reversed(group[1:]):
-                if _has_plain(g):
+                if _has_plain(g) and _same_claim(g, merged):
                     merged["plain"] = g["plain"]
         # `agent: null` 은 None 그대로 둔다 — 문자열 'None' 으로 바꾸면 신원 계약이 그것을
         # 문법 밖 저자로 잘못 센다. 정렬 키는 None 과 문자열이 섞여도 죽지 않게 고른다.
@@ -333,6 +334,12 @@ def dedup(findings, ledger=None):
 def _has_plain(f):
     """리뷰어가 쓴 쉬운 한 문장(`plain`)이 있는가 — 문자열이고 공백뿐이 아니어야 있다."""
     return isinstance(f.get("plain"), str) and bool(f["plain"].strip())
+
+
+def _same_claim(a, b):
+    """두 지적의 요약이 공백 · 대소문자만 다른가 — 그래야 한쪽의 plain 이 다른 쪽을 말한다."""
+    return (" ".join(str(a.get("summary", "")).split()).casefold()
+            == " ".join(str(b.get("summary", "")).split()).casefold())
 
 
 def sort_findings(findings):
@@ -632,12 +639,16 @@ def count_split(findings):
 _SEV_KO = (("CRITICAL", "심각"), ("IMPORTANT", "중요"), ("SUGGESTION", "제안"))
 
 
-def _status_line(counts, dropped_malformed, degraded, blocking):
+def _status_line(counts, dropped_malformed, degraded, blocking, unconfirmed=False):
     """사람이 보는 첫 줄 — 스크립트가 계산한 상태 문장. 판정(verdict)과 무관하다:
     판정 없는 출력이 판정 있는 출력의 바이트 접두여야 한다(`--emit-verdict` 꼬리).
-    버린 지적과 경고(degrade)는 여기에도 붙인다 — 첫 줄만 읽고 「지적 없음」으로 끝내지 않게."""
+    버린 지적과 경고(degrade)는 여기에도 붙인다 — 첫 줄만 읽고 「지적 없음」으로 끝내지 않게.
+    `unconfirmed` 는 주 입력이 죽었거나 셀 수 없는 것이 있다는 뜻이다 — 그때 센 수는 하한이라
+    「지적 없음」이라고 쓰지 않는다(설계 §3 원칙 3: 확인하지 못한 것은 0 과 섞지 않는다)."""
     total = sum(counts.values())
-    if total == 0:
+    if total == 0 and unconfirmed:
+        s = "리뷰를 합쳤다 — 읽지 못한 입력이 있어 지적 수를 확정하지 못했다."
+    elif total == 0:
         s = "리뷰를 합쳤다 — 지적 없음."
     else:
         # for 문으로 쓴다 — 이 파일은 처분 회계 소비자라 컴프리헨션 수가 baseline 으로 묶여 있다
@@ -647,6 +658,8 @@ def _status_line(counts, dropped_malformed, degraded, blocking):
             if counts[k]:
                 parts.append("%s %d" % (ko, counts[k]))
         s = "리뷰를 합쳤다 — 남은 지적 %d개(%s)." % (total, " · ".join(parts))
+        if unconfirmed:
+            s += " 읽지 못한 입력이 있어 지적이 더 있을 수 있다."
     if dropped_malformed > 0:
         s += " 형식이 깨져 버린 지적 %d개." % dropped_malformed
     if degraded:
@@ -657,7 +670,7 @@ def _status_line(counts, dropped_malformed, degraded, blocking):
     return s
 
 
-def render(findings, dropped_malformed, report, held_classes, recritic_zero=False, *, blocking):
+def render(findings, dropped_malformed, report, held_classes, recritic_zero=False, *, blocking, unconfirmed=False):
     counts = count_split(findings)
     n_block = counts["CRITICAL"] + counts["IMPORTANT"]
     disp_line, plumb_line, gloss_line, advisories = disposition_lines(report, held_classes, blocking)
@@ -665,7 +678,7 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
         print(a, file=sys.stderr)
     counts_line = (f"**Findings:** {counts['CRITICAL']} CRITICAL / "
                    f"{counts['IMPORTANT']} IMPORTANT / {counts['SUGGESTION']} SUGGESTION")
-    out = [_status_line(counts, dropped_malformed, report["degraded"], blocking),
+    out = [_status_line(counts, dropped_malformed, report["degraded"], blocking, unconfirmed),
            "## 리뷰 지적 (합친 결과)", "", counts_line,
            f"blocking: {n_block}", f"optional: {counts['SUGGESTION']}",
            disp_line, plumb_line, gloss_line]
@@ -831,7 +844,8 @@ def main(argv=None):
                      and not verdicts and not new_raw
                      and raw_verdict_count == 0 and raw_added_count == 0)
     sys.stdout.write(render(findings, dropped_malformed, report, ledger.held_by_class(),
-                            recritic_zero=recritic_zero, blocking=blocking))
+                            recritic_zero=recritic_zero, blocking=blocking,
+                            unconfirmed=ledger.primary_source_failed() or bool(report["unknown_counts"])))
     if args.emit_verdict:
         if scope is not None and angle_states is not None:
             sys.stdout.write("아래는 이 판정이 본 범위(scope)와 리뷰 각도(angles)의 원문이다.\n")

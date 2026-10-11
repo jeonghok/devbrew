@@ -148,6 +148,24 @@ out="$(rf_synth "$T/dup")"
 assert_eq "$(printf '%s\n' "$out" | grep -c '^| IMPORTANT | d\.py:5 |')" "1" "Review Focus 5: 같은 지적 셋이 한 행으로 합쳐졌다"
 assert_contains "$out" "같은 줄을 두 리뷰어가 짚었다 (같은 지적)" "Review Focus 5: 남는 쪽에 plain 이 없으면 합쳐진 다른 쪽 중 먼저 온 쪽의 plain 을 물려받는다"
 assert_not_contains "$out" "셋째가 쓴 다른 문장" "Review Focus 5: 물려받는 것은 하나 — 먼저 온 쪽이다"
+# 요약이 다른 지적은 같은 줄에 합쳐져도 plain 을 물려받지 않는다 — 다른 결함의 쉬운 문장이 엉뚱한 설명 옆에 붙는다(합친 /qg #1)
+mkdir -p "$T/dupx"
+printf -- '- {agent: code-reviewer, file: e.py, line: 7, severity: IMPORTANT, summary: "반복 경계가 하나 넘친다", proposed_fix: "< 로 바꾼다"}\n- {agent: security-reviewer, file: e.py, line: 7, severity: IMPORTANT, summary: "경로 탐색", plain: "사용자가 준 경로로 폴더 밖 파일을 읽을 수 있다", proposed_fix: "경로를 정규화한다"}\n' > "$T/dupx/findings.yaml"
+rf_prep "$T/dupx"; rf_reply "$T/dupx" 'verdicts:
+  - {f: f1, verdict: confirm}
+  - {f: f2, verdict: confirm}'
+out="$(rf_synth "$T/dupx")"
+assert_eq "$(printf '%s\n' "$out" | grep -c '^| IMPORTANT | e\.py:7 |')" "1" "#1 전제: 같은 좌표의 두 지적이 한 행으로 합쳐졌다"
+assert_not_contains "$out" "사용자가 준 경로로 폴더 밖 파일을 읽을 수 있다" "#1: 요약이 다른 지적의 plain 을 물려받지 않는다"
+assert_grep "$out" '^\| IMPORTANT \| e\.py:7 \| 반복 경계가 하나 넘친다 \|' "#1(양의 짝): 남는 쪽은 자기 요약만 낸다"
+# 요약이 공백 · 대소문자만 다르면 같은 지적이다 — plain 을 물려받는다(Review Focus)
+mkdir -p "$T/dupw"
+printf -- '- {agent: code-reviewer, file: f.py, line: 3, severity: IMPORTANT, summary: "Missing  Check", proposed_fix: p}\n- {agent: security-reviewer, file: f.py, line: 3, severity: IMPORTANT, summary: " missing check ", plain: "입력 검사가 빠졌다", proposed_fix: p}\n' > "$T/dupw/findings.yaml"
+rf_prep "$T/dupw"; rf_reply "$T/dupw" 'verdicts:
+  - {f: f1, verdict: confirm}
+  - {f: f2, verdict: confirm}'
+out="$(rf_synth "$T/dupw")"
+assert_contains "$out" "입력 검사가 빠졌다 (Missing  Check)" "#1: 요약이 공백 · 대소문자만 다르면 같은 지적으로 보고 plain 을 물려받는다"
 mkdir -p "$T/dup3"
 printf -- '- {agent: security-reviewer, file: g.py, line: 8, severity: IMPORTANT, summary: "같은 지적", plain: "   ", proposed_fix: p}\n- {agent: code-reviewer, file: g.py, line: 8, severity: IMPORTANT, summary: "같은 지적", plain: "공백 뒤에 온 문장", proposed_fix: p}\n' > "$T/dup3/findings.yaml"
 rf_prep "$T/dup3"; rf_reply "$T/dup3" 'verdicts:
