@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.2.0] — 2026-10-11
+
+### Changed
+- 세 proceed 게이트(request-framing 확정 · interview 다음 단계 · 설계문서 승인)의 ①·② 가 같은 모양이다 — ① `/new` · ② `/compact` 뒤에 ①·② 공통의 「다음 세션 줄」을 따로 입력한다. 규칙의 정본은 `references/proceed-gate.md` 의 새 절 `## 다음 세션 명령` 이다.
+- interview 와 설계문서 승인의 다음 세션 줄은 `@<절대경로>` 로 시작하는 평문 프롬프트다. 새 세션의 첫 턴이 brief · 설계문서를 붙여 읽고 brainstorming · writing-plans 를 시작한다. 재결정 규약 · 순서 문장 · 사람에게 쓰는 글 규칙을 그 줄이 나른다. 평문 `@` 의 상대경로는 세션 작업 디렉토리 기준으로 풀려(헤드리스 실측) 절대경로를 쓴다 — 경로에 공백이 있으면 줄을 내지 않고 알린다.
+- 읽힐 파일은 경로 목록이다 — 원소마다 `@` 토큰 하나. slash 줄은 받는 쪽 한도(spec-interview 1)를 정본 표가 쥔다.
+- `tests/test_next_session_command.sh` 가 채택자마다 다음 세션 줄의 개수 · 모양 · 한도를 잰다. 기존 락의 「자리표 하나뿐」 단언은 「자리표는 줄 앞 `@` 토큰에만」으로 바뀌었다.
+- 게이트 옵션은 호출 이름(slash 명령 · skill 이름)이 아니므로 minor 로 올린다 — 같은 세션에서 바로 이어 가던 흐름은 Removed 에 적었다.
+
+### Removed
+- 「확정하고 바로 brainstorming」 · 「바로 writing-plans」 옵션과 긴 `/compact … 보존` 명령 틀. 사용자가 결정한 재건(2026-10-11)이라 deprecation 창을 두지 않는다.
+
 ## [5.1.2] — 2026-10-11
 
 ### Changed
