@@ -57,11 +57,11 @@ allowed-tools:
 - `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1` — 이 모드만 종료(E0).
 - `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — codex co-review만 skip(`detect_codex.sh` 존중), tier-unpinned 단독으로 degrade.
 
+## 진입 게이트 (파일 손대기 전)
+
 모든 스크립트는 `${CLAUDE_PLUGIN_ROOT}/scripts/` 하위다 — 아래에 이름만 적힌 스크립트는 이 경로의 것을
 실행한다. 이 경로가 절대 경로로 보이지 않으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고한다. 아래 단계를
 **순서대로** 실행한다.
-
-## 진입 게이트 (파일 손대기 전)
 
 ### E0 — Preflight (kill switch)
 
