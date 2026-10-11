@@ -2,6 +2,8 @@
 # qg-worktree.sh — 차등 테스트 두 축(기준선 · HEAD)의 일회용 git worktree.
 #
 # Subcommands:
+#   memo-init <project-dir>      -> 리포 밖 실행 안 메모 디렉토리의 절대 경로 (표지 .qg-memo). 리포 안이면 exit 2
+#   memo-drop <memo-dir>         -> 표지가 있는 메모만 지운다. 없는 경로는 exit 0, 표지 없으면 exit 2
 #   remove <abs-path>            -> best-effort `git worktree remove --force`
 #   create-baseline <merge-base-sha> <session-id>
 #                                -> echoes absolute worktree path; detached at merge_base,
@@ -40,29 +42,33 @@ make_detached_worktree() {   # <sha> <session-id> <prefix> → 워크트리 절�
   main_root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not a git repo"
   main_root=$(cd "$main_root" && pwd -P) || die "cd failed: $main_root"
   parent="$main_root/.claude/quality-gates/worktrees"
+  # 리뷰 대상 리포가 커밋한 `.claude` 심볼릭 링크가 리포 밖을 가리키면 아래 강제 삭제가 리포 밖에서 일어난다.
+  # 만들기 전에 가장 깊은 기존 조상을, 만든 뒤에 parent 를 정규화해 main_root 아래인지 본다.
+  p_anc="$parent"
+  while [[ -n "$p_anc" && "$p_anc" != "/" && ! -d "$p_anc" ]]; do p_anc=$(dirname "$p_anc"); done
+  p_anc=$(cd "$p_anc" && pwd -P) || die "cd failed: $p_anc"
+  case "$p_anc/" in
+    "$main_root"/*) ;;
+    *) die "일회용 트리 자리가 리포 밖을 가리킨다 — 만들지 않는다: $parent -> $p_anc" ;;
+  esac
   mkdir -p "$parent" || die "cannot create $parent"
+  parent=$(cd "$parent" && pwd -P) || die "cd failed: $parent"
+  case "$parent/" in
+    "$main_root"/*) ;;
+    *) die "일회용 트리 자리가 리포 밖을 가리킨다 — 만들지 않는다: $parent" ;;
+  esac
   wt="$parent/${prefix}-${sid_short}"
 
-  # Idempotent: 이전 실행의 트리가 남아 있으면 갈아엎는다.
-  #
-  # 경로 충돌 가드. 이 경로에 이미 다른 워크트리가 있을 수 있다(옛 qg 의 브랜치 워크트리
-  # 모드가 같은 이름 규칙을 썼고, 사용자가 직접 만들 수도 있다). 무조건 `--force` 로
-  # 갈아엎으면 그 안의 미커밋 작업이 되돌릴 수 없이 사라진다.
-  #
-  # 판별자로 "HEAD 가 심볼릭 ref 인가"(=브랜치 워크트리)는 쓸 수 없다 — detached 워크트리도
-  # 흔하다. 대신 **non-force**
-  # `git worktree remove` 를 먼저 시도한다: git 자신이 "수정된 파일이나 추적되지 않은
-  # 파일이 있으면 거부" 를 정의하고 있고, 그 거부가 곧 "여기 잃을 것이 있다" 는
-  # 신호다. git-ignored 파일만 있는 트리는 정상 제거된다(실측) — 우리가 만든 트리
-  # (빌드 산출물은 전부 ignored, C1 참조)는 언제나 이 경로로 지워지므로 정상 동작에는
-  # 영향이 없다. 거부되면 조용히 파괴하지 않고 죽는다.
+  # 이 이름공간의 base-·head- 트리는 일회용이다. 앞 실행이 남긴 것은 지우고 다시 만든다 —
+  # 남겨 두면 그 세션은 다음 차등에서 트리를 못 만든다(R23).
   git worktree prune >/dev/null 2>&1 || true
-  if [[ -e "$wt" ]]; then
-    if ! git worktree remove "$wt" >/dev/null 2>&1; then
-      [[ -e "$wt" ]] && die "refuse to clobber existing path: $wt — git declined a non-forced removal, so it holds uncommitted or untracked content (or the path is not a registered worktree). Likely causes: another worktree is registered at this exact path, or a prior run left non-ignored test output behind. Inspect it, then remove it yourself (\`git worktree remove --force\`) or rerun in a new session."
-    fi
-    git worktree prune >/dev/null 2>&1 || true
+  if [[ -L "$wt" ]]; then
+    rm -f -- "$wt" || die "앞 실행이 남긴 링크를 지우지 못했다: $wt"
+  elif [[ -e "$wt" ]]; then
+    git worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf -- "$wt" \
+      || die "앞 실행이 남긴 트리를 지우지 못했다: $wt"
   fi
+  git worktree prune >/dev/null 2>&1 || true
   git worktree add --detach "$wt" "$sha" >/dev/null 2>&1 \
     || die "git worktree add failed (${prefix}: $wt)"
   printf '%s\n' "$wt"
@@ -139,6 +145,26 @@ case "${1:-}" in
     git worktree remove --force "$target" 2>/dev/null \
       || rm -rf "$target" \
       || die "rm -rf fallback also failed: $target"  # fallback when git lost track
+    ;;
+  memo-init)
+    # 실행 안 메모 — 한 번의 /qg 동안 기준선 행 · 배정 · 대조 산출을 담는다. 검사 대상 트리
+    # 밖이어야 봉인(HEAD 축)에 섞이지 않는다(R6).
+    [[ $# -eq 2 ]] || die "usage: memo-init <project-dir>"
+    root=$(git -C "$2" rev-parse --show-toplevel 2>/dev/null) || die "git 리포가 아니다: $2"
+    root=$(cd "$root" && pwd -P) || die "cd failed: $root"
+    memo=$(mktemp -d "${TMPDIR:-/tmp}/qg-memo.XXXXXX") || die "메모 디렉토리를 만들지 못했다"
+    memo_p=$(cd "$memo" && pwd -P) || { rmdir "$memo"; die "메모 디렉토리를 해소하지 못했다: $memo"; }
+    case "$memo_p/" in
+      "$root"/*) rmdir "$memo"; die "메모가 검사 대상 트리 안에 생긴다($memo_p) — TMPDIR 을 $root 밖으로 두고 다시 실행하라" ;;
+    esac
+    : > "$memo_p/.qg-memo" || { rmdir "$memo"; die "메모 표지를 쓰지 못했다: $memo_p"; }
+    printf '%s\n' "$memo_p"
+    ;;
+  memo-drop)
+    [[ $# -eq 2 ]] || die "usage: memo-drop <memo-dir>"
+    [[ -e "$2" ]] || exit 0
+    [[ -d "$2" && ! -L "$2" && -f "$2/.qg-memo" ]] || die "qg 메모가 아니다 — 지우지 않는다: $2"
+    rm -rf -- "$2" || die "메모를 지우지 못했다: $2"
     ;;
   *)
     die "unknown subcommand: ${1:-}"

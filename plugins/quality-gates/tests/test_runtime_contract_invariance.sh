@@ -56,47 +56,9 @@ case_create_baseline() {
   cd / && rm -rf "$REPO"
 }
 
-# create-baseline 의 idempotent 정리가 **다른 워크트리를 파괴**할 수 있다. 기준선 트리는
-# `base-${sid_short}` 에 서는데, 같은 경로에 이미 다른 워크트리(옛 qg 의 브랜치 워크트리 모드가
-# 같은 이름 규칙을 썼다 · 사용자가 직접 만든 것)가 있으면 무조건 `--force` 는 그 안의 미커밋
-# 작업을 되돌릴 수 없이 지운다.
-#
-# 판별자로 "HEAD 가 심볼릭 ref 인가"는 쓸 수 없다 — detached 워크트리도 흔하다. 그래서 이
-# 케이스는 **미커밋 파일이 살아남는가**를 직접 잰다. 파일 존재는 어떤 판별자 구현에도 의존하지
-# 않는 관측이다.
-case_create_baseline_refuses_colliding_user_worktree() {
-  REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
-  git init -q; git config user.email t@t.test; git config user.name tester
-  git checkout -q -b main
-  echo v1 > a.txt; git add a.txt; git commit -qm v1
-  local base_sha; base_sha=$(git rev-parse HEAD)
-  git branch base
-  git checkout -q -b feature; echo v2 > a.txt; git commit -qam v2
 
-  # 기준선 트리가 설 바로 그 경로에 다른 워크트리를 먼저 세운다
-  local user_wt="$REPO/.claude/quality-gates/worktrees/base-sess1234"
-  mkdir -p "$REPO/.claude/quality-gates/worktrees"
-  if ! git worktree add -q --detach "$user_wt" base 2>/dev/null || [[ ! -d "$user_wt" ]]; then
-    no "픽스처 무효: 충돌 경로에 워크트리를 세우지 못했다"; cd / && rm -rf "$REPO"; return
-  fi
-  # 픽스처가 실제로 충돌하는지 먼저 증명한다 (경로가 안 겹치면 이 락은 무의미하다)
-  [[ "$(basename "$user_wt")" == "base-sess1234" ]] \
-    && ok "픽스처: 먼저 선 워크트리와 create-baseline 이 같은 경로를 노린다" \
-    || no "픽스처 무효: 경로 불일치 ($user_wt)"
-  echo "uncommitted work" > "$user_wt/WIP.txt"
-
-  local out rc; out=$(bash "$WT" create-baseline "$base_sha" "sess1234" 2>/dev/null); rc=$?
-  [[ -f "$user_wt/WIP.txt" ]] \
-    && ok "충돌 경로의 미커밋 작업이 살아남음" \
-    || no "create-baseline 이 사용자 워크트리의 미커밋 작업을 파괴함"
-  [[ $rc -ne 0 ]] \
-    && ok "충돌 시 조용히 진행하지 않고 non-zero 로 죽는다" \
-    || no "충돌인데 exit 0 (rc=$rc out='$out')"
-  cd / && rm -rf "$REPO"
-}
-
-# 위 가드가 정상 경로(우리가 만든 clean 한 기준선 트리 재사용)를 막지 않는가.
-# 가드만 넣고 이것을 안 재면 게이트가 두 번째 실행부터 영구히 죽는 회귀를 못 잡는다.
+# 같은 세션으로 create-baseline 을 두 번 불러도 두 번째가 같은 자리에 트리를 다시 만드는가.
+# 이것을 안 재면 게이트가 두 번째 실행부터 영구히 죽는 회귀를 못 잡는다.
 case_create_baseline_is_still_idempotent() {
   REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
   git init -q; git config user.email t@t.test; git config user.name tester
@@ -291,7 +253,7 @@ case_create_head_asserts_sealed_commit() {
   cd / && rm -rf "$REPO"
 }
 
-for c in case_create_baseline case_create_baseline_refuses_colliding_user_worktree \
+for c in case_create_baseline \
          case_create_baseline_is_still_idempotent \
          case_head_and_baseline_coexist case_create_head_asserts_sealed_commit \
          case_remove_namespace_guard \
