@@ -1,252 +1,108 @@
 #!/usr/bin/env bash
-# compute-test-scope-candidates.sh — emit a newline-separated, de-duplicated,
-# sorted list of test-file paths that are in-scope for the current diff.
+# compute-test-scope-candidates.sh — 차등 테스트 후보의 바닥(R17). 오케스트레이터는 여기에 더하기만 한다.
 #
-# Usage:
-#   compute-test-scope-candidates.sh                       → in-scope test-file candidates
-#   compute-test-scope-candidates.sh --total               → repo-wide test-file COUNT (분모 M, AC37)
-#   compute-test-scope-candidates.sh --total --tree <tree> → <tree> 안의 테스트 파일 수 (토픽/선언 경로의 분모)
+#   compute-test-scope-candidates.sh                          변경 = 기준선(merge_base) 대비 작업트리 + 무시되지 않는 untracked
+#   compute-test-scope-candidates.sh --topic <boundary> <tree>  변경 = <boundary>..<tree> (토픽 스코프)
+#   compute-test-scope-candidates.sh --emit-guards            `# guards:` 선언이 변경에 걸린 테스트만
+#   compute-test-scope-candidates.sh --total [--tree <tree>]  테스트 파일 수 (계획 줄의 분모)
 #
-# Inputs:
-#   $PWD            — must be a git working tree
-#   (no env vars)   — the review range is derived here, from git alone. The SKILL's
-#                     own scope resolution ("Review" section Step 1) is model-owned
-#                     and may differ; this script does not read it.
-#
-# Output (stdout):
-#   Default: zero or more lines, one path per line. Paths are repo-relative.
-#            Empty stdout means "no candidates" — this does NOT mean skip R1b.
-#            differential-test.md's empty-scope fail-safe still dispatches
-#            test-scope-validator and records the gap.
-#   --total: a single integer line.
-#
-# Exit: 0 = success (including a genuinely empty result — no candidates)
-#       1 = not a git repository
-#       4 = **the review range could not be diffed.** This is NOT "no candidates".
-#           빈 stdout 을 "이 diff 는 테스트를 건드리지 않는다" 로 읽으면 안 된다 —
-#           호출자는 이것을 `gap`/`verification: degraded` 사유로 기록해야 한다.
-#           `--total` 에서는 `ls-files` 가 실패할 때, `--total --tree <tree>` 에서는 `<tree>` 를
-#           트리로 풀 수 없거나 `ls-tree` 가 실패할 때, `--total` 뒤 인자가 정확히
-#           `--tree <tree>` 가 아닐 때도 같은 4다 — stdout 은 비우고 stderr 에 사유를
-#           loud 하게 낸다.
-#
-# **fail-open 지시 철회 (/qg iter-7 iteration 2, security-reviewer).** 앞 판본은
-# *"Skill must fail-open (treat non-zero as empty)"* 라고 적었다. 그 한 줄이 이
-# 스크립트의 **유일한 reader-facing 계약**이었으므로, 같은 라운드에 `|| true` 를 걷어내고
-# exit 4 를 도입한 수정을 **문서가 그대로 무력화**하고 있었다 — 시끄러운 실패를 조용한
-# "후보 없음" 으로 되읽으라는 지시였고, 그것이 정확히 그 수정이 닫으려던 F11 이다.
-# 코드를 고치고 계약을 안 고치면 고친 것이 아니다.
-#
-# Read-only. Never creates/modifies/deletes files.
-
+# 후보 = 바뀐 테스트 파일 ∪ 바뀐 소스와 이름이 맞는 테스트(test_<b>.py · <b>_test.py · <b>.test|spec.[jt]sx?)
+#        ∪ 머리 30줄의 `# guards: <글롭>...` 이 바뀐 파일에 걸리는 tests/ 아래 .sh.
+# 출력: 리포 상대 경로 한 줄에 하나, 정렬·중복 제거. 빈 출력은 「후보가 없다」이다.
+# Exit: 0 = 성공 · 1 = git 리포 아님 · 4 = 범위나 분모를 확정하지 못했다(빈 결과가 아니다 — R17).
 set -u
 
-# Confirm git context.
-if ! git rev-parse --git-dir >/dev/null 2>&1; then
-  echo "compute-test-scope-candidates: not a git repository" >&2
-  exit 1
-fi
+die4() { echo "compute-test-scope-candidates: $*" >&2; exit 4; }
 
-# Review range — baseline은 resolve-baseline.sh가 소유 (C2 수정: `main` 하드코딩 +
-# merge-base 부재를 제거). 워킹트리가 깨끗할 때만 브랜치 범위를 본다 (기존 동작 유지).
+git rev-parse --git-dir >/dev/null 2>&1 || { echo "compute-test-scope-candidates: not a git repository" >&2; exit 1; }
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REVIEW_RANGE=""
-if [ -z "$(git diff --name-only 2>/dev/null)" ]; then
-  # /qg iter-6 E10 (§6.7 F6): `|| true` 는 소유자 부재·실패를 **빈 출력**으로 바꾼다.
-  # 그러면 `RB_DEGRADED` 도 비어 아래 조건이 거짓이 되고, `REVIEW_RANGE=""` 로 조용히
-  # 빈 후보 목록이 나온다 — 형제 `check-review-scope.sh` 는 같은 자리에서
-  # `|| emit_degraded` 로 fail-closed 다. 여기서도 **원인을 loud 하게** 알린다:
-  # 후보 목록은 구조적 힌트라 verdict 를 직접 막지 않지만, "영향 테스트 0개" 가
-  # "영향이 없다" 로 읽히면 R2 의 선택 근거가 통째로 거짓이 된다.
-  if ! RB_OUT=$("$SCRIPT_DIR/resolve-baseline.sh" 2>/dev/null); then
-    echo "compute-test-scope-candidates: resolve-baseline.sh 실행 실패 — 브랜치 범위를 확정하지 못해 워킹트리 diff 만 봅니다 (후보가 과소집계될 수 있음)" >&2
-    RB_OUT=""
-  fi
-  RB_DEGRADED=$(printf '%s\n' "$RB_OUT" | awk '$1 == "degraded:" { print $2 }')
-  RB_MERGE_BASE=$(printf '%s\n' "$RB_OUT" | awk '$1 == "merge_base:" { print $2 }')
-  if [ "$RB_DEGRADED" = "no" ] && [ -n "$RB_MERGE_BASE" ] && [ "$RB_MERGE_BASE" != "-" ]; then
-    REVIEW_RANGE="$RB_MERGE_BASE..HEAD"
-  else
-    # /qg iter-7 (H4): 위 `if !` 분기는 **스크립트 부재에만** 발화한다 —
-    # `resolve-baseline.sh` 는 자기 :37 에 적힌 대로 **언제나 exit 0** 이고 실패를
-    # `degraded: yes` 로 표현하기 때문이다. 그래서 훨씬 흔한 경우(정상 실행 +
-    # degraded)가 else 없이 조용히 통과해, 이 블록의 전제(워킹트리가 깨끗함) 아래
-    # `REVIEW_RANGE=""` 가 되어 **브랜치 전체가 후보 0건**이 됐다. 두 원인이 바이트
-    # 동일한 출력을 내는데 하나만 loud 였다. 이제 둘 다 loud 다.
-    echo "compute-test-scope-candidates: baseline 미확정 (degraded='${RB_DEGRADED:-?}' merge_base='${RB_MERGE_BASE:-?}') — 브랜치 범위를 쓰지 못해 워킹트리 diff 만 봅니다. 워킹트리가 깨끗하면 후보는 0건이 되며, 그것은 '영향이 없다'가 아니라 '범위를 확정하지 못했다'입니다" >&2
-  fi
-fi
-
-# /qg iter-6 D1: `test_*.py` 가 빠져 있었다. 아래 매퍼는 명시적으로
-# `find -name "test_${base}.py"` 를 하므로 **분자에는 들어가는데 분모에는 안 들어가는**
-# 파일이 생겼다 — 실측(레포에 `mod.py` + 루트 `test_mod.py`): 후보 N=1, `--total` M=0.
-# SKILL 은 `영향 테스트 N개 선택 (전체 M개 중)` 의 분모를 **비율을 부풀릴 수 없게 하려고**
-# 이 스크립트에서 강제로 가져온다. 분모가 분자보다 작아지면 그 보증이 통째로 무너진다.
-# 조용한 형태(부분 과소집계로 비율이 좋아 보이는 것)가 `전체 0개 중` 보다 나쁘다.
 TESTRE='(test|spec)\.[jt]sx?$|_test\.py$|(^|/)test_[^/]*\.py$|\.test\.|\.spec\.|(^|/)tests?/'
+GIT=(git -c core.quotePath=false)
 
-# --total: 리포 전체 테스트 파일 수를 emit (계획 산문의 분모 M — AC37).
-# 후보 산출과 **같은 TESTRE**를 전 트리에 적용한다. 분모가 모델 자기보고이면
-# 과선택이 심해질수록 분모도 같이 부풀려 비율이 정상으로 보인다.
-#
-# --total --tree <tree>: 토픽(선언) 경로에서는 R1b 가 분자를 경계..합친 트리로
-# 보충하는데, 분모는 이 브랜치의 현재 체크아웃만 세면 N > M 이 날 수 있다
-# (실측: e2e 후보 2개, 분모 1). `<tree>` 가 주어지면 그 트리 안에서 분모를 센다 —
-# 분자를 보충한 것과 **같은 트리**에서 분모도 세야 비율이 다시 정상이 된다.
 if [ "${1:-}" = "--total" ]; then
-  if [ "$#" -gt 1 ]; then
-    # 인자 모양이 정확히 `--total --tree <tree>`(3개) 가 아니면 loud 하게 거부한다.
-    # `--tree=<T>`(합쳐 쓴 값), 뒤에 남는 인자 등은 여기서 걸러 조용히 무시되지 않는다.
-    if [ "$#" -ne 3 ] || [ "${2:-}" != "--tree" ] || [ -z "${3:-}" ]; then
-      echo "compute-test-scope-candidates: --total 뒤 인자 모양이 '--total --tree <tree>' 가 아니다(받은 것: $*) — 분모를 셀 수 없다" >&2
-      exit 4
-    fi
-    if ! git rev-parse --verify --quiet "$3^{tree}" >/dev/null 2>&1; then
-      echo "compute-test-scope-candidates: --tree 값을 트리로 풀 수 없다('$3') — 분모를 셀 수 없다" >&2
-      exit 4
-    fi
-    # M8 과 같은 이유로 core.quotePath=false: 분자·분모가 같은 설정이어야 한다.
-    # --full-tree: cwd 가 서브디렉토리여도 트리 전체를 본다(경로를 cwd 로 자르지
-    # 않는다) — 없으면 같은 트리를 불러도 부르는 cwd 에 따라 분모가 달라진다.
-    # 먼저 캡처하고 그다음 센다 — 파이프로 바로 `grep -cE` 에 넘기면 파이프의 rc 는
-    # 마지막 명령(grep) 것이라 `ls-tree` 실패(손상·부재 서브트리 오브젝트 등)가 빈
-    # stdin 으로 grep 에 흘러 rc 0·"0" 을 낸다. 캡처해 `ls-tree` 자체의 rc 를 본다.
-    names=$(git -c core.quotePath=false ls-tree -r --full-tree --name-only "$3") || {
-      echo "compute-test-scope-candidates: ls-tree 실패 (--tree $3) — 분모를 셀 수 없다" >&2
-      exit 4
-    }
-    printf '%s\n' "$names" | grep -cE "$TESTRE" || true
-    exit 0
+  if [ "$#" -eq 1 ]; then
+    # 분자(후보)가 untracked 를 포함하므로 분모도 포함한다 — 후보 ⊂ 분모.
+    names=$("${GIT[@]}" ls-files) || die4 "ls-files 실패 — 분모를 셀 수 없다"
+    others=$("${GIT[@]}" ls-files --others --exclude-standard) || die4 "ls-files --others 실패 — 분모를 셀 수 없다"
+    names=$(printf '%s\n%s\n' "$names" "$others" | sed '/^$/d' | sort -u)
+  elif [ "$#" -eq 3 ] && [ "$2" = "--tree" ] && [ -n "$3" ]; then
+    "${GIT[@]}" rev-parse --verify --quiet "$3^{tree}" >/dev/null 2>&1 || die4 "--tree 값을 트리로 풀 수 없다('$3')"
+    names=$("${GIT[@]}" ls-tree -r --full-tree --name-only "$3") || die4 "ls-tree 실패 (--tree $3) — 분모를 셀 수 없다"
+  else
+    die4 "인자 모양이 '--total' 또는 '--total --tree <tree>' 가 아니다(받은 것: $*)"
   fi
-  # M8: quotePath 기본 true 는 비-ASCII 경로를 인용·8진 이스케이프해 TESTRE 를
-  # 못 만족시킨다 — 분자(위 git diff)와 **같은 설정**이어야 N>M 이 안 생긴다.
-  # 위와 같은 이유로 캡처 후 카운트 — `ls-files` 실패를 grep 뒤에서 삼키지 않는다.
-  files=$(git -c core.quotePath=false ls-files) || {
-    echo "compute-test-scope-candidates: ls-files 실패 — 분모를 셀 수 없다" >&2
-    exit 4
-  }
-  printf '%s\n' "$files" | grep -cE "$TESTRE" || true
+  printf '%s\n' "$names" | grep -cE "$TESTRE" || true
   exit 0
 fi
 
-# 1차 데이터 취득. **`|| true` 를 쓰지 않는다 (/qg iter-7, F11).** 앞 버전은 위 :38-43
-# 주석이 그 패턴을 iter-6 E10 (§6.7 F6) 으로 닫았다고 적어 놓고 **형제 호출에서만**
-# 고쳤고, 정작 후보 전량이 나오는 이 줄에는 그대로 남아 있었다. loose object 손상·부분
-# 클론·중단된 fetch 로 git 이 exit 128 을 내면 stdout 은 비고 exit 0 이 되어,
-# `resolve-baseline.sh` 가 `degraded: no` 를 낸 그대로 **"건강한 baseline + 영향 테스트
-# 0건" = "이 diff 는 테스트를 건드리지 않는다"** 가 된다.
-# `core.quotePath=false` 는 M8 — 기본값 true 는 비-ASCII 경로를 8진 이스케이프해서
-# 분자·분모 양쪽에서 동시에 탈락시킨다(Korean-primary 레포에 현실적인 입력이다).
-# shellcheck disable=SC2086  # REVIEW_RANGE intentionally word-splits
-# stderr 를 stdout 으로 접지 **않는다** — 접으면 성공 실행에서 git 이 내는 advice·warning
-# 이 파일명 스트림에 섞여 존재하지 않는 "변경된 소스" 가 후보로 들어간다. 진단은 stderr
-# 로 흘려보내고(사용자가 그대로 본다) 여기서는 **종료 상태만** 본다.
-CTS_ERR=$(mktemp) || { echo "compute-test-scope-candidates: mktemp 실패" >&2; exit 4; }
-if ! CHANGED_ALL=$(git -c core.quotePath=false diff $REVIEW_RANGE --name-only 2>"$CTS_ERR"); then
-  echo "compute-test-scope-candidates: git diff 실패 (range='${REVIEW_RANGE:-워킹트리}') — 후보를 산출할 수 없습니다. 아래는 git 의 stderr 입니다:" >&2
-  cat "$CTS_ERR" >&2
-  rm -f "$CTS_ERR"
-  exit 4
+mode=worktree; emit_guards=0
+case "${1:-}" in
+  "") ;;
+  --emit-guards) [ "$#" -eq 1 ] || die4 "--emit-guards 는 인자를 받지 않는다"; emit_guards=1 ;;
+  --topic)
+    [ "$#" -eq 3 ] || die4 "usage: --topic <boundary> <tree>"
+    mode=topic; boundary=$2; tree=$3
+    "${GIT[@]}" rev-parse --verify --quiet "$boundary^{commit}" >/dev/null 2>&1 || die4 "경계를 커밋으로 풀 수 없다('$boundary')"
+    "${GIT[@]}" rev-parse --verify --quiet "$tree^{tree}" >/dev/null 2>&1 || die4 "트리로 풀 수 없다('$tree')"
+    ;;
+  *) die4 "알 수 없는 인자: $1" ;;
+esac
+
+if [ "$mode" = worktree ]; then
+  rb=$("$SCRIPT_DIR/resolve-baseline.sh" 2>/dev/null) || die4 "resolve-baseline.sh 를 실행하지 못했다"
+  degraded=$(printf '%s\n' "$rb" | awk '$1 == "degraded:" { print $2 }')
+  mb=$(printf '%s\n' "$rb" | awk '$1 == "merge_base:" { print $2 }')
+  [ "$degraded" = no ] && [ -n "$mb" ] && [ "$mb" != "-" ] \
+    || die4 "기준선 미확정(degraded='${degraded:-?}' merge_base='${mb:-?}') — 범위를 확정하지 못했다"
+  changed=$("${GIT[@]}" diff --name-only "$mb") || die4 "git diff 실패 ($mb..작업트리)"
+  untracked=$("${GIT[@]}" ls-files --others --exclude-standard) || die4 "ls-files --others 실패"
+  tracked=$("${GIT[@]}" ls-files) || die4 "ls-files 실패"
+  changed=$(printf '%s\n%s\n' "$changed" "$untracked")
+  universe=$(printf '%s\n%s\n' "$tracked" "$untracked")
+  read_head() { head -30 -- "$1" 2>/dev/null; }
+else
+  changed=$("${GIT[@]}" diff --name-only "$boundary" "$tree") || die4 "git diff 실패 ($boundary..$tree)"
+  universe=$("${GIT[@]}" ls-tree -r --full-tree --name-only "$tree") || die4 "ls-tree 실패 ($tree)"
+  read_head() { "${GIT[@]}" show "$tree:$1" 2>/dev/null | head -30; }
 fi
-if [ -s "$CTS_ERR" ]; then
-  echo "compute-test-scope-candidates: git 경고 (후보 목록에는 포함되지 않음):" >&2
-  cat "$CTS_ERR" >&2
+changed=$(printf '%s\n' "$changed" | sed '/^$/d' | sort -u)
+universe=$(printf '%s\n' "$universe" | sed '/^$/d' | sort -u)
+
+# 이름 일치 — 바뀐 소스의 이름으로 찾을 테스트 파일 이름 목록을 만들고 universe 를 한 번 훑는다.
+wanted=$(printf '%s\n' "$changed" | grep -vE "$TESTRE" | awk '
+  { n = split($0, p, "/"); f = p[n] }
+  f ~ /\.py$/ { b = f; sub(/\.py$/, "", b); print "test_" b ".py"; print b "_test.py"; next }
+  f ~ /\.(ts|tsx|js|jsx)$/ { b = f; sub(/\.[^.]*$/, "", b)
+    split("test spec", k, " "); split("ts tsx js jsx", e, " ")
+    for (i = 1; i <= 2; i++) for (j = 1; j <= 4; j++) print b "." k[i] "." e[j] }')
+mapped=""
+if [ -n "$wanted" ]; then
+  mapped=$(printf '%s\n' "$universe" | awk 'NR == FNR { w[$0] = 1; next } { n = split($0, p, "/"); if (p[n] in w) print }' \
+    <(printf '%s\n' "$wanted") -)
 fi
-rm -f "$CTS_ERR"
+changed_tests=$(printf '%s\n' "$changed" | grep -E "$TESTRE" || true)
 
-# Split changed files into src vs test.
-CHANGED_SRC=$(echo "$CHANGED_ALL" | grep -vE "$TESTRE" || true)
-CHANGED_TESTS=$(echo "$CHANGED_ALL" | grep -E "$TESTRE" || true)
-
-# Heuristic src→test mapping (Python, JS, TS only).
-MAPPED=""
-while IFS= read -r src; do
-  [ -z "$src" ] && continue
-  case "$src" in
-    *.py)
-      base=$(basename -- "$src" .py)
-      while IFS= read -r found; do
-        [ -n "$found" ] && MAPPED="${MAPPED}${found}"$'\n'
-      done < <(find . -path ./.claude/quality-gates/worktrees -prune -o -type f \( -name "test_${base}.py" -o -name "${base}_test.py" \) -print 2>/dev/null | sed 's|^\./||')
-      ;;
-    *.ts|*.tsx|*.js|*.jsx)
-      base=$(basename -- "$src")
-      base="${base%.*}"
-      while IFS= read -r found; do
-        [ -n "$found" ] && MAPPED="${MAPPED}${found}"$'\n'
-      done < <(find . -path ./.claude/quality-gates/worktrees -prune -o -type f \( \
-          -name "${base}.test.ts"   -o -name "${base}.test.tsx" \
-       -o -name "${base}.test.js"   -o -name "${base}.test.jsx" \
-       -o -name "${base}.spec.ts"   -o -name "${base}.spec.tsx" \
-       -o -name "${base}.spec.js"   -o -name "${base}.spec.jsx" \
-        \) -print 2>/dev/null | sed 's|^\./||')
-      ;;
-    # Other languages: no heuristic; only CHANGED_TESTS counts (handled below).
-  esac
-done <<< "$CHANGED_SRC"
-
-# ── `# guards:` 선언 축 (2026-08 무게 감축 설계 §5.2) ──────────────────────────
-# 위 heuristic은 **이름**으로 매핑한다(`test_<base>.py`). `.sh`·`.md`에는 그 관례가
-# 없다 — `test_law2_prose.sh`는 `law2_prose.md`를 검사하지 않는다. 그래서 락이
-# 자기가 지키는 경로 글롭을 **스스로 선언**하고, 여기서 그 선언을 변경 파일 전량과
-# 대조한다.
-#
-# **확장자를 보지 않는다.** 확장자별 arm으로 구현하면 `.py` 사본(codex_findings_to_yaml.py
-# 등)이 편집돼도 그것을 지키는 copy-of 락이 후보에 안 든다 — 락이 지키는 대상이
-# 바뀔 때 그 락이 돌지 않는, 이 축이 닫으려던 바로 그 결함이 절반만 닫힌다.
-#
-# 글롭 의미: bash `case` 패턴이므로 `*`가 `/`를 **넘는다**. 즉 `plugins/**` 와
-# `plugins/*` 가 같은 뜻이고, 오차 방향은 "더 많이 고른다"(fail-safe)다.
-#
-# 선언이 없는 테스트는 현행 동작 그대로 — CHANGED_TESTS(자기 편집)로만 들어온다.
-# 이 축은 순수 추가이며 기존 후보를 줄이지 않는다.
-GUARDED=""
+# `# guards:` — 확장자와 무관하게 선언 글롭이 바뀐 파일에 걸리면 그 락을 후보에 넣는다.
+guarded=""
 while IFS= read -r tf; do
   [ -z "$tf" ] && continue
-  [ -f "$tf" ] || continue
-  # 선언은 파일 머리 30줄 안에 있어야 한다 — 본문 어디서나 허용하면 테스트가
-  # 자기 assertion 문자열 안에 적어 둔 `# guards:` 도 선언으로 읽힌다.
-  # F2 (리뷰): 두 번째 sed 로 trailing whitespace(CRLF 파일의 `\r` 포함 — BSD
-  # sed 에서 `[[:space:]]` 는 `\r` 를 포함한다)를 제거한다. 제거 안 하면 `\r` 가
-  # 마지막 글롭에 눌어붙어 아무것도 매칭하지 않는데, 이것도 rc=0·빈 출력이라
-  # "영향 없음"과 구별이 안 된다.
-  decl=$(head -30 -- "$tf" 2>/dev/null | sed -n 's/^[[:space:]]*#[[:space:]]*guards:[[:space:]]*//p' | sed 's/[[:space:]]*$//' | head -1)
+  decl=$(read_head "$tf" | sed -n 's/^[[:space:]]*#[[:space:]]*guards:[[:space:]]*//p' | sed 's/[[:space:]]*$//' | head -1)
   [ -z "$decl" ] && continue
+  read -r -a globs <<< "$decl"
   hit=0
-  # /qg PR1 T5 실측: `for g in $decl`(따옴표 없음)는 word-split **뒤에** pathname
-  # expansion(globbing)까지 적용한다 — bash에서도. `plugins/**`가 실제 cwd의
-  # `plugins/` 하위 디렉터리명으로 조용히 치환돼(예: `plugins/quality-gates`)
-  # 의도한 리터럴 글롭 패턴이 아예 case 에 못 들어갔다(실측: 4/4 미스매치).
-  # `read -a`는 word-split만 하고 globbing은 하지 않으므로, 배열에 담아
-  # 따옴표를 씌워 순회한다 — case 패턴 자리는 원래 globbing 대상이 아니다.
-  # F1 (리뷰): `IFS=' '` 로 좁히면 **공백만** 자른다 — 탭으로 구분된 선언
-  # (`# guards:<TAB>plugins/**<TAB>shared/**`)이 한 필드로 뭉쳐 아무 글롭에도
-  # 안 걸린다(역시 rc=0·빈 출력). 기본 IFS($' \t\n')를 그대로 쓰면 공백·탭·개행
-  # 전부 자른다 — 감싸는 `while IFS= read -r tf` 의 `IFS=` 는 그 read 명령 한 줄에만
-  # 임시로 적용되는 접두 대입이라 여기까지 새지 않는다.
-  read -r -a decl_globs <<< "$decl"
-  for g in "${decl_globs[@]}"; do
+  for g in "${globs[@]}"; do
     while IFS= read -r ch; do
       [ -z "$ch" ] && continue
-      # shellcheck disable=SC2254  # $g is intentionally a glob pattern
+      # shellcheck disable=SC2254
       case "$ch" in $g) hit=1; break 2 ;; esac
-    done <<< "$CHANGED_ALL"
+    done <<< "$changed"
   done
-  [ "$hit" -eq 1 ] && GUARDED="${GUARDED}${tf}"$'\n'
-done < <(git -c core.quotePath=false ls-files -- '*.sh' | grep -E '(^|/)tests?/' || true)
+  [ "$hit" -eq 1 ] && guarded="$guarded$tf"$'\n'
+done < <(printf '%s\n' "$universe" | grep -E '\.sh$' | grep -E '(^|/)tests?/' || true)
 
-# --emit-guards: Task 6 의 양방향 커버리지 검사가 쓰는 진단 출력. 후보 목록을
-# 오염시키지 않도록 별도 플래그로만 낸다.
-if [ "${1:-}" = "--emit-guards" ]; then
-  printf '%s' "$GUARDED" | grep -v '^[[:space:]]*$' | sort -u
+if [ "$emit_guards" -eq 1 ]; then
+  printf '%s' "$guarded" | sed '/^[[:space:]]*$/d' | sort -u
   exit 0
 fi
-
-# Union, strip leading ./, sort -u, drop empty lines.
-{
-  echo "$MAPPED"
-  echo "$CHANGED_TESTS"
-  echo "$GUARDED"
-} | sed 's|^\./||' | sort -u | grep -v '^[[:space:]]*$' || true
-
+printf '%s\n%s\n%s\n' "$mapped" "$changed_tests" "$guarded" | sed '/^[[:space:]]*$/d' | sort -u
 exit 0
