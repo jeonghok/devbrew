@@ -77,7 +77,7 @@ Expected: `✗ #1: 요약이 다른 지적의 plain 을 물려받지 않는다` 
 
 - [ ] **Step 3: 같은 지적일 때만 물려받는다**
 
-`plugins/quality-gates/scripts/synthesize_findings.py` 의 `dedup` 안에서 다음 다섯 줄을
+`plugins/quality-gates/scripts/synthesize_findings.py` 의 `dedup` 안에서 다음 일곱 줄을
 
 ```python
         # 남는 쪽(먼저 온 쪽)에 plain 이 없으면 합쳐진 다른 쪽 중 가장 먼저 온 쪽의 plain 을 물려받는다.
@@ -126,7 +126,9 @@ assert_grep "$out" '입력 실패\(주\)' "#2(양의 짝): 그 사실의 본문(
 mkdir -p "$T/dead2"; printf -- '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, summary: a, proposed_fix: f}\n' > "$T/dead2/findings.yaml"; rf_prep "$T/dead2"
 out="$(python3 "$SYNTH" --findings "$T/dead2/findings.yaml" --recritic "$T/dead2/없는.txt" --recritic-map "$T/dead2/map.json" 2>/dev/null)"
 assert_grep "$(first "$out")" '^리뷰를 합쳤다 — (읽지 못한 입력이 있어 지적 수를 확정하지 못했다|남은 지적 [0-9]+개\(.*\)\. 읽지 못한 입력이 있어 지적이 더 있을 수 있다)\.' "#2: 재비판자가 죽은 첫 줄도 확정하지 못했다고 말한다"
-assert_not_contains "$(first "$out")" "지적 없음" "#2: 재비판자가 죽은 첫 줄에 「지적 없음」이 없다"
+mkdir -p "$T/dead3"; printf '[]\n' > "$T/dead3/findings.yaml"; rf_prep "$T/dead3"
+out="$(python3 "$SYNTH" --findings "$T/dead3/findings.yaml" --recritic "$T/dead3/없는.txt" --recritic-map "$T/dead3/map.json" 2>/dev/null)"
+assert_not_contains "$(first "$out")" "지적 없음" "#2: 재비판자가 죽고 남은 지적이 0 이어도 첫 줄에 「지적 없음」이 없다"
 # 표가 있는 갈래 — 살아남은 지적이 있어도 「더 있을 수 있다」를 붙인다(Review Focus)
 got="$(PYTHONPATH="$PLUGIN_ROOT/scripts" python3 -c 'import synthesize_findings as s; print(s._status_line({"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 0}, 0, True, True, True))')"
 assert_eq "$got" "리뷰를 합쳤다 — 남은 지적 1개(중요 1). 읽지 못한 입력이 있어 지적이 더 있을 수 있다. 판정을 막는 경고가 있다 — 아래를 본다." "#2: 표가 있는 갈래도 확정하지 못한 사실을 붙인다"
@@ -137,7 +139,7 @@ assert_eq "$got" "리뷰를 합쳤다 — 남은 지적 1개(중요 1)." "#2(양
 - [ ] **Step 5: 시험이 실패하는지 본다**
 
 Run: `bash plugins/quality-gates/tests/test_plain_synth_output.sh 2>&1 | grep -E '✗'`
-Expected: 「#2: 주 입력 사망의 첫 줄은 …」 · 「#2: 주 입력 사망의 첫 줄에 「지적 없음」이 없다」 · 「#2: 재비판자가 죽은 첫 줄도 …」 · 「#2: 표가 있는 갈래도 …」(이 줄은 `TypeError` 로 빈 값) 가 ✗ 다. 양성 짝 둘은 ✓ 다.
+Expected: 「#2: 주 입력 사망의 첫 줄은 …」 · 「#2: 주 입력 사망의 첫 줄에 「지적 없음」이 없다」 · 「#2: 재비판자가 죽은 첫 줄도 …」 · 「#2: 재비판자가 죽고 남은 지적이 0 이어도 …」 · 「#2: 표가 있는 갈래도 …」(이 줄은 `TypeError` 로 빈 값) 가 ✗ 다. 양성 짝 둘은 ✓ 다.
 
 - [ ] **Step 6: 첫 줄이 확정하지 못한 사실을 말하게 한다**
 
@@ -317,8 +319,8 @@ assert_contains "$out" "x 절이 비었다" "#4(양의 짝): 그 지적의 요�
 
 - [ ] **Step 5: 시험이 통과하는지 본다**
 
-Run: `bash plugins/quality-gates/tests/test_plain_field_path.sh 2>&1 | tail -2; bash plugins/quality-gates/tests/test_codex_backward_compat.sh 2>&1 | tail -1; for t in $(git ls-files 'plugins/spec-distill/tests/test_codex*'); do bash "$t" >/dev/null 2>&1 || echo "FAIL $t"; done`
-Expected: 실패 0. `test_codex_backward_compat.sh` 가 시간 때문에 흔들리면 그 파일만 한 번 더 돌린다. spec-distill codex 테스트는 `FAIL` 줄이 없다(design · docreview 칸 묶음에는 `plain` 이 없어 바이트가 그대로다).
+Run: `bash plugins/quality-gates/tests/test_plain_field_path.sh 2>&1 | tail -2; bash plugins/quality-gates/tests/test_codex_backward_compat.sh 2>&1 | tail -1; PYTHONDONTWRITEBYTECODE=1 python3 plugins/spec-distill/tests/test_codex_findings_to_yaml.py 2>&1 | tail -1; bash shared/tests/test_docreview_codex.sh 2>&1 | tail -1; bash plugins/quality-gates/tests/test_codex_copies_agree.sh 2>&1 | tail -1`
+Expected: 실패 0(모의 실행: 21 tests OK · 280/280 · 77/77). `test_codex_backward_compat.sh` 가 시간 때문에 흔들리면 그 파일만 한 번 더 돌린다. spec-distill 이 쓰는 design · docreview 칸 묶음에는 `plain` 이 없어 바이트가 그대로다.
 
 - [ ] **Step 6: 커밋한다**
 
@@ -334,7 +336,19 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 각 변이 뒤 `git checkout HEAD -- <파일>` 과 `git diff HEAD --stat` 빈 것 확인.
 
 1. `sed -i '' 's/if k in f and (k != "plain" or _usable_plain(f\[k\])):/if k in f:/' shared/codex/codex_findings_to_yaml.py` → 「#5: 변환기는 문자열 plain 만 넘기고 …」 ✗.
-2. 추출기가 plain 을 버리게 한다: `python3 - <<'PY'` 로 `plugins/quality-gates/scripts/extract_codex_artifact_yaml.py` 의 `findings` 검증을 통과한 직후 각 항목에서 `plain` 을 지우는 한 줄을 넣는다. 넣을 자리는 그 파일에서 `findings` 목록을 출력 dict 에 싣는 줄 바로 앞이다(실행자가 `grep -n 'findings' plugins/quality-gates/scripts/extract_codex_artifact_yaml.py` 로 찾는다). 넣는 줄: `    for _f in findings: _f.pop("plain", None) if isinstance(_f, dict) else None` (들여쓰기는 그 자리에 맞춘다). → 「#4: 비코드 codex 추출기가 plain 을 넘긴다」 ✗. 이 변이는 이 파일이 심볼릭 링크가 아닌 실제 파일인지 먼저 `ls -l` 로 확인한다.
+2. 추출기가 plain 을 버리게 한다(이 파일은 심볼릭 링크가 아닌 실제 파일이다). 줄을 하나 넣는 변이라 `git diff HEAD --stat` 은 `1 insertion(+)` 이다:
+
+   ```bash
+   python3 - plugins/quality-gates/scripts/extract_codex_artifact_yaml.py <<'PY'
+   import sys
+   p = sys.argv[1]; s = open(p, encoding="utf-8").read()
+   old = '            f["agent"] = "codex-reviewer"\n'
+   assert s.count(old) == 1, s.count(old)
+   open(p, "w", encoding="utf-8").write(s.replace(old, old + '            f.pop("plain", None)\n'))
+   PY
+   ```
+
+   → 「#4: 비코드 codex 추출기가 plain 을 넘긴다」 · 「#4: 비코드 codex 의 plain 이 추출 · key · synth 를 지나 kept 에 남는다」 ✗, 양성 짝(요약) ✓.
 
 ---
 
@@ -410,7 +424,7 @@ case_advice_plain_render_nothing_left_mc() {
   gr="$(py docreview_state.py gate --state-dir "$d" --render)"
   assert_eq "$(printf '%s\n' "$gr" | grep -c '^참고 항목은 없다 — 이번 라운드에도 세어 봤다\.$')" "1" \
     "AC3②(배포 프로필): 참고 항목이 0 이면 참고 줄은 쉬운 한 문장이다"
-  assert_eq "$(printf '%s\n' "$gr" | grep -cE ' 0(건|개)( |$|·|\))' || true)" "0" \
+  assert_eq "$(printf '%s\n' "$gr" | grep -cE ' 0(건|개)( |$|·|\(|\))' || true)" "0" \
     "AC3②(배포 프로필): 0 인 집계 항목이 어디에도 없다 — 참고 줄도 예외가 아니다"
   rm -rf "$d"
 }
@@ -438,7 +452,7 @@ case_advice_plain_render_nothing_left_mc() {
 를 이렇게 바꾼다(필드 없는 사본 프로필이라 참고 줄은 원래 없다 — 예외가 필요 없다):
 
 ```bash
-  assert_eq "$(printf '%s\n' "$gr" | grep -cE ' 0(건|개)( |$|·|\))' || true)" "0" \
+  assert_eq "$(printf '%s\n' "$gr" | grep -cE ' 0(건|개)( |$|·|\(|\))' || true)" "0" \
     "AC3②: 0 인 정상 집계 항목이 어디에도 없다"
   assert_not_grep "$gr" '^지금까지 집계' "AC3②: 전부 0 인 누계 줄이 나가지 않는다"
 ```
@@ -446,7 +460,7 @@ case_advice_plain_render_nothing_left_mc() {
 - [ ] **Step 3: 시험이 실패하는지 본다**
 
 Run: `bash shared/tests/test_docreview_route.sh 2>&1 | grep '✗'; bash shared/tests/test_docreview_advice.sh 2>&1 | grep '✗'`
-Expected: route 쪽 「집계 줄 범위: 사용자 기각은 「지금까지 집계」 줄에 선다」(+ 2라운드 짝) · 「같은 글자 경고: 같은 모양의 사건 둘은 …」 · 「같은 글자 경고: 첫 줄의 경고 개수가 …」 ✗. advice 쪽 「AC3②(배포 프로필): 참고 항목이 0 이면 …」 · 「AC3②(배포 프로필): 0 인 집계 항목이 …」 · 573 · 582 자리 ✗. 양성 짝(codex 두 출처 합치기)은 ✓.
+Expected: route 쪽 ✗ 여섯 — `case_count_line_scope` 의 단언 넷 전부(지금 출력이 `이번 라운드 집계: 사용자가 기각한 지적 1건` 이라 부재 단언 둘도 ✗) · 「같은 글자 경고: 같은 모양의 사건 둘은 …」 · 「같은 글자 경고: 첫 줄의 경고 개수가 …」. advice 쪽 「AC3②(배포 프로필): 참고 항목이 0 이면 …」 · 「AC3②(배포 프로필): 0 인 집계 항목이 …」(옛 줄 `참고 0건(…` 의 `0건(` 이 걸린다) · 573 · 582 자리 ✗. 양성 짝(codex 두 출처 합치기)은 ✓.
 
 - [ ] **Step 4: 렌더를 고친다**
 
@@ -540,7 +554,7 @@ mut 1/1 zero_counts_revived case_plain_render_nothing_left sed_state \
   's/^    parts = \[t % c\[k\] for k, t, scope in COUNT_GLOSS if c\[k\] and scope == "round"\]$/    parts = [t % c[k] for k, t, scope in COUNT_GLOSS if scope == "round"]/'
 ```
 
-`warns_unknown_dropped` 셀(739–740행) 바로 뒤에 셋을 더한다:
+`warns_unknown_dropped` 셀(739–740행) 바로 뒤에 둘을 더한다:
 
 ```bash
 # 누계를 「이번 라운드」로 되돌리기 — 1라운드의 사용자 기각이 3라운드 화면에서 그 라운드 일로 읽힌다.
@@ -551,7 +565,7 @@ mut 1/1 same_text_warns_folded case_plain_warns_same_text_counted sed_state \
   's/^        if k not in why_of or not isinstance(k, tuple):$/        if k not in why_of:/'
 ```
 
-같은 파일의 advice 변이 묶음(`sed_advice` · `cases_advice` 셀들이 있는 곳)의 끝에 더한다:
+같은 파일 맨 끝의 `finish` 줄 바로 앞(마지막 셀 뒤)에 더한다:
 
 ```bash
 # 참고 0 의 쉬운 문장을 끄기 — 「이상 없음」 밑에 0 만 늘어선 참고 줄이 되살아난다.
@@ -562,7 +576,7 @@ mut 1/1 advice_zero_listing_revived case_advice_plain_render_nothing_left_mc sed
 - [ ] **Step 6: 시험이 통과하는지 본다**
 
 Run: `bash shared/tests/test_docreview_route.sh 2>&1 | tail -2; bash shared/tests/test_docreview_advice.sh 2>&1 | tail -2; bash shared/tests/test_docreview_state.sh 2>&1 | tail -1; bash shared/tests/test_docreview_golden.sh 2>&1 | tail -1; bash shared/tests/test_docreview_round_gate_split.sh 2>&1 | tail -1; bash shared/tests/test_docreview_procedure_paths.sh 2>&1 | tail -1; bash shared/tests/test_docreview_mutations.sh 2>&1 | tail -3`
-Expected: 모두 실패 0. 변이 스위트에서 새 셀 셋과 고친 셀 하나가 「규칙에 이빨이 있다」이고, 기존 `warns_same_fact_not_merged` · `warns_reason_dropped` · `warns_unknown_dropped` 셀도 그대로 caught 다(그 sed 가 맞추는 줄 `            k = (row[1], row[2])` · `        if why and why not in why_of[k]:` · `            k = w` 은 바뀌지 않았다). 골든 다섯 파일은 바뀌지 않는다(사용자 기각 · 버린 지적 · 참고 줄이 그 케이스들에 없다 — `git diff --stat shared/tests/fixtures/docreview/golden` 가 빈다).
+Expected: 모두 실패 0. 변이 스위트에서 새 셀 셋과 고친 셀 하나가 「규칙에 이빨이 있다」이다 — 모의 실행 값: `zero_counts_revived` RED(2) · `total_counts_labelled_round` RED(4) · `same_text_warns_folded` RED(2) · `advice_zero_listing_revived` RED(2) 생존(0). 그리고 기존 `warns_same_fact_not_merged` · `warns_reason_dropped` · `warns_unknown_dropped` 셀도 그대로 caught 다(그 sed 가 맞추는 줄 `            k = (row[1], row[2])` · `        if why and why not in why_of[k]:` · `            k = w` 은 바뀌지 않았다). 골든 다섯 파일은 바뀌지 않는다(사용자 기각 · 버린 지적 · 참고 줄이 그 케이스들에 없다 — `git diff --stat shared/tests/fixtures/docreview/golden` 가 빈다).
 
 - [ ] **Step 7: 커밋한다**
 
@@ -609,7 +623,14 @@ fi
 assert_contains "$(sed -n "${ks_lines:-1},\$p" "$S" | sed -n '1,/^## [^k]/p')" 'DEVBREW_QUALITY_GATES_DISABLE_CODEX=1' "AC2(양의 짝): 옮긴 절에 codex 스위치 줄이 그대로 있다"
 ```
 
-같은 파일 20–26행 주석의 「the bottom kill-switch inventory」 · 「the "kill switch (보안 컨트롤)" inventory at the SKILL foot」 를 「the kill-switch inventory section」 · 「the "kill switch (보안 컨트롤)" inventory section」 으로 바꾼다(절이 더는 맨 끝에 있지 않다). 단언 두 줄(27–28행)은 그대로다.
+같은 파일 20–23행 주석이 절을 「맨 끝」이라고 부르는 두 자리를 고친다(절이 더는 맨 끝에 있지 않다). 둘째 자리는 22–23행에 걸쳐 있어 글자 하나로 찾을 수 없으므로 줄 번호로 고친다:
+
+```bash
+sed -i '' -e '20s/the bottom kill-switch inventory/the kill-switch inventory section/' -e '23s/ inventory at the SKILL foot,/ inventory section,/' plugins/quality-gates/tests/test_critiquing_artifacts_skill.sh
+git diff --stat plugins/quality-gates/tests/test_critiquing_artifacts_skill.sh
+```
+
+단언 두 줄(27–28행)은 그대로다.
 
 - [ ] **Step 2: 시험이 실패하는지 본다**
 
@@ -618,7 +639,7 @@ Expected: 「AC2: kill switch 목록 절이 진입 게이트보다 앞이 아니
 
 - [ ] **Step 3: 절을 옮긴다**
 
-`plugins/quality-gates/skills/critiquing-artifacts/SKILL.md` 끝의 이 일곱 줄(앞의 빈 줄 하나 포함)을 지운다:
+`plugins/quality-gates/skills/critiquing-artifacts/SKILL.md` 끝의 이 여덟 줄(앞의 빈 줄 하나 포함)을 지운다:
 
 ```markdown
 
@@ -631,7 +652,7 @@ Expected: 「AC2: kill switch 목록 절이 진입 게이트보다 앞이 아니
 - `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — codex co-review만 skip(`detect_codex.sh` 존중), tier-unpinned 단독으로 degrade.
 ```
 
-그리고 `## 진입 게이트 (파일 손대기 전)` 줄 바로 앞에 같은 내용을 넣는다(뒤에 빈 줄 하나):
+그리고 `모든 스크립트는 \`${CLAUDE_PLUGIN_ROOT}/scripts/\` 하위다` 로 시작하는 문단 바로 앞에 같은 내용을 넣는다(뒤에 빈 줄 하나). 그 문단은 「아래 단계를 **순서대로** 실행한다.」로 끝나고 바로 다음이 첫 단계(`## 진입 게이트`)여야 하므로, 절을 `## 진입 게이트` 바로 앞이 아니라 그 문단 앞에 둔다:
 
 ```markdown
 ## kill switch
@@ -672,7 +693,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 - [ ] **Step 7: 변이를 걸어 RED 를 본다**
 
-`git show HEAD~1:plugins/quality-gates/skills/critiquing-artifacts/SKILL.md > plugins/quality-gates/skills/critiquing-artifacts/SKILL.md` (절이 맨 끝인 옛 판) → 「AC2: kill switch 목록 절이 진입 게이트보다 앞이다」 · 「… 앞 5,000토큰 안에서 시작한다」 가 ✗. `git checkout HEAD -- plugins/quality-gates/skills/critiquing-artifacts/SKILL.md` 로 되돌리고 `git diff HEAD --stat` 이 빈 것을 확인한다.
+`git show HEAD~1:plugins/quality-gates/skills/critiquing-artifacts/SKILL.md > plugins/quality-gates/skills/critiquing-artifacts/SKILL.md` (절이 맨 끝인 옛 판) → ✗ 줄 「AC2: kill switch 목록 절(L299)이 진입 게이트(L56)보다 앞이 아니다」 · 「AC2: kill switch 목록 절(L299)이 앞 5,000토큰 경계(L227) 밖이다」. `git checkout HEAD -- plugins/quality-gates/skills/critiquing-artifacts/SKILL.md` 로 되돌리고 `git diff HEAD --stat` 이 빈 것을 확인한다.
 
 ---
 
@@ -768,6 +789,8 @@ Expected: `plugin.json` 둘과 quality-pipeline SKILL 제목 `(v12.2.0)` 이 나
 `plugin.json` 두 곳과 quality-pipeline SKILL 제목의 `12.2.0` → `12.2.1`, spec-distill `5.1.2` → `5.1.3`.
 
 - [ ] **Step 3: CHANGELOG 를 쓴다**
+
+두 블록 모두 끝에 빈 줄 하나를 두고 넣는다 — 다음 `## [` 머리가 새 항목 마지막 줄에 붙지 않게.
 
 `plugins/quality-gates/CHANGELOG.md` 의 `## [12.2.0] — 2026-10-11` 바로 앞에:
 
