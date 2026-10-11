@@ -104,6 +104,12 @@ def parse_raw_json(text: str) -> dict | None:
         return None
 
 
+def _usable_plain(v) -> bool:
+    """쉬운 한 문장(`plain`)으로 쓸 수 있는 값인가 — 문자열이고 공백뿐이 아니어야 한다.
+    목록 · 객체를 `_yaml_scalar(str(v))` 로 옮기면 「['x', 'y']」 같은 글자가 화면에 나간다 — 그런 값은 칸째 뺀다."""
+    return isinstance(v, str) and bool(v.strip())
+
+
 def yaml_emit(findings: list[dict], meta: dict, keys: tuple[str, ...] = DEFAULT_KEYS) -> str:
     out: list[str] = []
     if not findings:
@@ -113,7 +119,7 @@ def yaml_emit(findings: list[dict], meta: dict, keys: tuple[str, ...] = DEFAULT_
         for f in findings:
             out.append("  - agent: codex-reviewer")
             for k in keys:
-                if k in f:
+                if k in f and (k != "plain" or _usable_plain(f[k])):
                     v = f[k]
                     if k in _LIST_VALUED_KEYS and isinstance(v, list):
                         out.append(f"    {k}: [{', '.join(_yaml_scalar(x) for x in v)}]")
