@@ -2,7 +2,11 @@
 # e2e-state.sh — e2e 걷기의 결정론 부품.
 #
 #   fingerprint --out <file>        코드 상태 지문(HEAD · 추적 파일 변경 · 무시되지 않는 untracked)
-#   compare <before> <after>        두 지문의 차이 — `changed: <path>` 줄들 + 마지막 줄 `same` | `changed: <N>`
+#   fingerprint 는 마지막 줄에 `sha256: <지문 파일의 해시>` 를 낸다 — 부른 쪽이 그 값을 리포 밖(대화)에 들고 있다가
+#   compare 에 넘기면, 걷는 사이 리포 안의 before 지문을 고쳐 쓴 것이 드러난다.
+#   compare [--before-sha256 <hex>] <before> <after>
+#                                   두 지문의 차이 — `changed: <path>` 줄들 + 마지막 줄 `same` | `changed: <N>`.
+#                                   before 의 해시가 주어진 값과 다르면 그것도 바뀐 것 하나로 센다
 #   boot --dir <dir> --cmd <command> (--ready-port <port> | --ready-log <ERE>) [--timeout <sec>]
 #                                   승인된 명령을 새 프로세스 그룹으로 띄우고 준비 신호를 기다린다
 #   stop --dir <dir>                boot 가 띄운 프로세스 그룹을 내린다(여러 번 불러도 같다)
@@ -115,14 +119,22 @@ try:
 except OSError as exc:
     fail(f"지문을 쓰지 못했다: {out} ({exc})")
 print(f"fingerprint: {out} (head {head[:7]} · tracked {len(tracked)} · untracked {len(untracked)})")
+with open(out, "rb") as fh:
+    print(f"sha256: {hashlib.sha256(fh.read()).hexdigest()}")
 PY
 }
 
 cmd_compare() {
-  [ $# -eq 2 ] || die "usage: e2e-state.sh compare <before> <after>"
+  local want=""
+  if [ "${1:-}" = "--before-sha256" ]; then
+    [ $# -ge 2 ] || die "--before-sha256 값이 없다"
+    want="$2"; shift 2
+    printf '%s' "$want" | grep -Eq '^[0-9a-f]{64}$' || die "--before-sha256 은 소문자 16진 64자다: '$want'"
+  fi
+  [ $# -eq 2 ] || die "usage: e2e-state.sh compare [--before-sha256 <hex>] <before> <after>"
   killed_by_switch && exit 3
-  PYTHONDONTWRITEBYTECODE=1 python3 -I - "$1" "$2" <<'PY'
-import json, sys
+  PYTHONDONTWRITEBYTECODE=1 python3 -I - "$1" "$2" "$want" <<'PY'
+import hashlib, json, sys
 
 
 def fail(msg):
@@ -161,6 +173,10 @@ def load(path):
 bh, be = load(sys.argv[1])
 ah, ae = load(sys.argv[2])
 changed = []
+if sys.argv[3]:
+    with open(sys.argv[1], "rb") as fh:
+        if hashlib.sha256(fh.read()).hexdigest() != sys.argv[3]:
+            changed.append("before 지문 파일(fingerprint 가 낸 sha256 과 다르다 — 걷는 사이 고쳐 쓰였다)")
 if bh != ah:
     changed.append(f"HEAD ({bh[:7]} -> {ah[:7]})")
 for key in sorted(set(be) | set(ae)):

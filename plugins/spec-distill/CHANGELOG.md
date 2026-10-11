@@ -1,5 +1,10 @@
 # Changelog
 
+## [5.2.2] — 2026-10-11
+
+### Security
+- skill 펜스의 인라인 python(`python3 -c`)을 `-I` 로 격리한다 — `request-framing`(라운드 · 편집 범위 · drop 대조) · `reviewing-brief`(웹 허용 읽기) · `spec-review`(진입 검사 출력 검사), 그리고 이 플러그인에 링크로 실리는 공유 docreview codex 러너. 전에는 사용자 리포에 `json.py` 가 있으면 표준 모듈 대신 실행됐다.
+
 ## [5.2.1] — 2026-10-11
 
 ### Fixed

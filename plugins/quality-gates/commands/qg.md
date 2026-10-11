@@ -130,9 +130,9 @@ Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable.
 - **Forward-only**: code-change verdicts terminate. The fix-loop applies
   user-consented fixes inline (orchestrator-as-writer); does NOT auto-restart
   from an earlier iteration.
-- The pipeline iterates up to 5 times; AskUserQuestion fires at every
-  iteration boundary with `고치고 다시 돌기` / `지금 판정으로 끝내기` / `멈추기`.
-- AskUserQuestion also fires on max-iter, and on the differential test's gap
-  gate (R3) when something was left out.
+- The pipeline iterates up to 5 times. AskUserQuestion fires when blocking
+  findings or a differential defect remain (`고치고 다시 돌기` / `지금 판정으로 끝내기` /
+  `멈추기`), at max-iter, for the e2e question and the post-walk gate, and when a
+  Retry edit fails. The differential test asks nothing.
 - Local result in `.claude/quality-gates/<session-id>/result.md`
   (written by `scripts/setup-qg.sh`, which recreates the folder at every `/qg` start).

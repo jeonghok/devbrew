@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1] — 2026-10-11
+
+### Security
+
+- `check-plugin-structure.sh` · `run-own-tests.sh` 가 결과 JSON 을 만드는 인라인 python(`python3 -c`)을 `-I` 로 격리한다. 전에는 감사를 부른 디렉토리에 `json.py` 가 있으면 표준 모듈 대신 실행됐다. 감사 대상의 자체 테스트를 돌리는 `python3 -m unittest` 는 일부러 대상 코드를 돌리는 자리라 그대로다(README 의 알려진 한계).
+
 ## [1.1.0] — 2026-10-10
 
 ### Added

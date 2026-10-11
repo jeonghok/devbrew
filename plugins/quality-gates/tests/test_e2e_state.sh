@@ -32,7 +32,7 @@ new_repo() {   # stdout = 일회용 리포 경로(커밋 하나 · 추적 파일
 }
 
 fp() { (cd "$1" && bash "$ES" fingerprint --out "$2" >/dev/null); }
-cmp_out() { (cd "$1" && bash "$ES" compare "$2" "$3"); }
+cmp_out() { local d="$1"; shift; (cd "$d" && bash "$ES" compare "$@"); }
 
 # ── X2 · AC17 — 지문은 HEAD · 추적 파일 · 무시되지 않는 untracked 를 본다 ─────────────
 case_X2_AC17_unchanged_is_same() {
@@ -355,6 +355,27 @@ case_X5_AC20_kill_switch_refuses_boot() {
   done
 }
 
+# ── X2 — 걷는 사이 리포 안의 before 지문을 고쳐 써도 드러난다 ─────────────────────────
+case_X2_before_fingerprint_rewrite_is_caught() {
+  local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345"
+  local out want rc
+  out=$(cd "$d" && bash "$ES" fingerprint --out "$s/b")
+  want=$(printf '%s\n' "$out" | sed -n 's/^sha256: //p')
+  assert_eq "$(printf '%s\n' "$out" | tail -n 1)" "sha256: $(shasum -a 256 "$s/b" | cut -d' ' -f1)" "X2: fingerprint 의 마지막 줄이 지문 파일의 sha256"
+  # 양성 짝 — 손대지 않은 before 는 같은 값이라 same
+  printf 'changed\n' >>"$d/a.txt"; fp "$d" "$s/a"; git -C "$d" checkout -q -- a.txt; fp "$d" "$s/a"
+  rc=0; out=$(cmp_out "$d" --before-sha256 "$want" "$s/b" "$s/a") || rc=$?
+  assert_eq "$rc/$(printf '%s\n' "$out" | tail -n 1)" "0/same" "X2: before 가 그대로면 해시를 넘겨도 same"
+  # 걷는 사이 추적 파일을 고치고, before 를 그 상태로 다시 써서 감춘다
+  printf 'changed\n' >>"$d/a.txt"; fp "$d" "$s/b"; fp "$d" "$s/a"
+  rc=0; out=$(cmp_out "$d" "$s/b" "$s/a") || rc=$?
+  assert_eq "$rc" "0" "X2 전제: 해시 없이는 고쳐 쓴 before 가 same 으로 통과한다"
+  rc=0; out=$(cmp_out "$d" --before-sha256 "$want" "$s/b" "$s/a") || rc=$?
+  assert_eq "$rc/$(printf '%s\n' "$out" | tail -n 1)" "1/changed: 1" "X2: 해시를 넘기면 고쳐 쓴 before 가 changed 로 드러난다"
+  assert_contains "$out" "changed: before 지문 파일" "X2: 무엇이 바뀌었는지 밝힌다"
+  rc=0; (cd "$d" && bash "$ES" compare --before-sha256 NOTHEX "$s/b" "$s/a" >/dev/null 2>&1) || rc=$?
+  assert_eq "$rc" "2" "X2: 형식 밖 해시는 exit 2"
+}
 
 for c in $(declare -F | awk '{print $3}' | grep '^case_'); do
   note "── $c"
