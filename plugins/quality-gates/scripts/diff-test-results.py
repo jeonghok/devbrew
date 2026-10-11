@@ -98,15 +98,21 @@ def read_assign(path: Path) -> tuple[list[tuple[str, str, str]], list[str]]:
     return rows, adapters
 
 
-def read_rows(path: Path, runner: str, commit: str) -> dict[str, tuple[str, str, str]]:
+def read_rows(path: Path, runner: str, commit: str, axis: str = "head") -> dict[str, tuple[str, str, str]]:
     """행 파일 → {unit: (status, exit, mode)}. 다른 러너 · 다른 트리의 행 파일은 계약 위반이다(R5)."""
-    if not path.is_file():
+    try:
+        is_file = path.is_file()
+    except OSError as exc:
+        fail4(f"행 파일을 확인할 수 없다: {path} ({exc})")
+    if not is_file:
         fail4(f"행 파일이 없다: {path} — 그 축을 돌리지 않았으면 run-test-selection.sh unrun 으로 채워야 한다")
     body, kv = split_trailer(read_text(path, "행 파일"), "#qg-rows", path)
     if kv.get("flaky") not in ("0", "1"):
         fail4(f"{path}: 꼬리 flaky= 가 0·1 이 아니다: {kv.get('flaky')!r}")
     if not SHA.fullmatch(kv.get("commit", "")):
         fail4(f"{path}: 꼬리 commit= 가 sha 도 '-' 도 아니다: {kv.get('commit')!r}")
+    if axis == "baseline" and kv.get("flaky") != "0":
+        fail4(f"{path}: 기준선 행 파일에 flaky 재실행 표지가 있다 — flaky 는 HEAD 축 전용이다(R15)")
     if kv.get("runner") != runner:
         fail4(f"{path}: 러너 {kv.get('runner')!r} ≠ {runner!r}")
     if kv.get("commit") != commit:
@@ -121,6 +127,8 @@ def read_rows(path: Path, runner: str, commit: str) -> dict[str, tuple[str, str,
             fail4(f"{path}:{n} 알 수 없는 상태값 '{status}'")
         if mode not in MODES:
             fail4(f"{path}:{n} 알 수 없는 실행 방식 '{mode}'")
+        if axis == "baseline" and mode == "flaky":
+            fail4(f"{path}:{n} 기준선 행의 실행 방식이 flaky 다 — flaky 는 HEAD 축 전용이다(R15)")
         if unit in rows:
             fail4(f"{path}:{n} 중복 unit 행 '{unit}'")
         rows[unit] = (status, code, mode)
@@ -147,8 +155,11 @@ def same_tree(base: str, head: str) -> bool:
         return False
     trees = []
     for sha in (base, head):
-        proc = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{sha}^{{tree}}"],
-                              capture_output=True, text=True)
+        try:
+            proc = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{sha}^{{tree}}"],
+                                  capture_output=True, text=True)
+        except OSError as exc:
+            fail4(f"git 을 부를 수 없다: {exc}")
         if proc.returncode != 0:
             fail4(f"커밋 {sha} 의 트리를 읽지 못했다 — 리포 루트에서 불러라")
         trees.append(proc.stdout.strip())
@@ -238,7 +249,7 @@ def main() -> int:
         units = [u for u, g in by_runner[runner]]
         if any(g != gran for _, g in by_runner[runner]):
             fail4(f"배정 파일의 입도가 러너 {runner} 의 입도 {gran} 와 다르다")
-        base = read_rows(memo / f"baseline-{runner}.tsv", runner, args.baseline_commit)
+        base = read_rows(memo / f"baseline-{runner}.tsv", runner, args.baseline_commit, "baseline")
         head = read_rows(memo / f"head-{runner}-i{args.iter}.tsv", runner, args.head_commit)
         attributions, counts, adapter_causes = attribute(runner, gran, units, base, head, axes_equal)
         for k, v in counts.items():

@@ -120,6 +120,74 @@ class Attribution(DiffBase):
         self.assertIn("baseline-unrunnable", self.field(p.stdout, "degrade_causes"))
         self.assertIn("confirmed_product_defect: false", p.stdout)
 
+    def test_R2_NEW_TEST_RED_is_defect(self):
+        # 기준선에 없던 테스트가 HEAD 에서 빨강 — 결함이고 차등 새 실패 칸에 센다(P12 · K-3).
+        self.pair("shell", [("n.sh", "absent", "-", "per-unit")], [("n.sh", "fail", "1", "per-unit")])
+        p = self.run_diff()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.verdict_of(p.stdout, "n.sh"), "NEW_TEST_RED")
+        self.assertIn("confirmed_product_defect: true", p.stdout)
+        self.assertEqual(self.field(p.stdout, "new_failures"), "1")
+        (self.memo / "diff.yaml").write_text(p.stdout, encoding="utf-8")
+        v = subprocess.run([sys.executable, str(VERDICT), "--differential", str(self.memo / "diff.yaml")],
+                           capture_output=True, text=True)
+        self.assertEqual(v.stdout.splitlines()[0], "verdict: defect")
+
+    def test_R2_error_on_head_only_blocks_certification(self):
+        self.pair("shell", [("t.sh", "fail", "1", "per-unit")], [("t.sh", "error", "2", "per-unit")])
+        p = self.run_diff()
+        self.assertEqual(self.field(p.stdout, "attribution_status"), "degraded")
+        self.assertIn("error-axis", self.field(p.stdout, "degrade_causes"))
+
+    def test_R2_error_on_baseline_only_blocks_certification(self):
+        self.pair("shell", [("t.sh", "error", "2", "per-unit")], [("t.sh", "pass", "0", "per-unit")])
+        p = self.run_diff()
+        self.assertEqual(self.field(p.stdout, "attribution_status"), "degraded")
+        self.assertIn("error-axis", self.field(p.stdout, "degrade_causes"))
+
+    def test_R9_mixed_mode_baseline_bulk_head_per_unit_is_smeared(self):
+        self.pair("shell", [("a.sh", "fail", "1", "bulk")], [("a.sh", "fail", "1", "per-unit")])
+        self.assertIn("smeared", self.field(self.run_diff().stdout, "degrade_causes"))
+
+    def test_R9_mixed_mode_baseline_per_unit_head_bulk_is_smeared(self):
+        self.pair("shell", [("a.sh", "fail", "1", "per-unit")], [("a.sh", "fail", "1", "bulk")])
+        self.assertIn("smeared", self.field(self.run_diff().stdout, "degrade_causes"))
+
+    def test_R9_positive_control_both_per_unit_is_not_smeared(self):
+        self.pair("shell", [("a.sh", "fail", "1", "per-unit")], [("a.sh", "fail", "1", "per-unit")])
+        self.assertNotIn("smeared", self.field(self.run_diff().stdout, "degrade_causes"))
+
+    def test_R15_baseline_rows_file_with_flaky_trailer_is_exit_4(self):
+        self.pair("shell", [("a.sh", "pass", "0", "per-unit")], [("a.sh", "pass", "0", "per-unit")])
+        base = self.memo / "baseline-shell.tsv"
+        base.write_text(base.read_text(encoding="utf-8").replace("flaky=0", "flaky=1"), encoding="utf-8")
+        p = self.run_diff()
+        self.assertEqual(p.returncode, 4)
+        self.assertIn("flaky", p.stderr)
+
+    def test_R7_duplicate_unit_in_assign_is_exit_4(self):
+        write_assign(self.memo, [("a.sh", "shell", "file"), ("a.sh", "shell", "file")])
+        write_rows(self.memo / "baseline-shell.tsv", "shell", self.repo.B, [("a.sh", "pass", "0", "per-unit")])
+        write_rows(self.memo / "head-shell-i1.tsv", "shell", self.repo.H, [("a.sh", "pass", "0", "per-unit")])
+        self.assertEqual(self.run_diff().returncode, 4)
+
+    def test_rows_path_check_oserror_and_missing_git_are_exit_4_not_1(self):
+        self.pair("shell", [("a.sh", "pass", "0", "per-unit")], [("a.sh", "pass", "0", "per-unit")])
+        # git 을 못 부르는 환경(PATH 비움) — 예외가 새지 않고 계약 위반 exit 4 다.
+        argv = [sys.executable, str(DIFF), "--assign", str(self.memo / "assign-i1.tsv"),
+                "--rows", str(self.memo), "--iter", "1",
+                "--baseline-commit", self.repo.B, "--head-commit", self.repo.H]
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PATH="/nonexistent")
+        p = subprocess.run(argv, cwd=self.repo.root, capture_output=True, text=True, env=env)
+        self.assertEqual(p.returncode, 4, p.stderr)
+        self.assertNotIn("Traceback", p.stderr)
+        # 행 파일 경로가 OSError 를 내는 경우 — 너무 긴 이름(ENAMETOOLONG).
+        argv[argv.index("--rows") + 1] = str(self.memo / ("x" * 5000))
+        p = subprocess.run(argv, cwd=self.repo.root, capture_output=True, text=True,
+                           env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+        self.assertEqual(p.returncode, 4, p.stderr)
+        self.assertNotIn("Traceback", p.stderr)
+
     def test_R7_missing_row_is_silent_drop(self):
         write_assign(self.memo, [("t.sh", "shell", "file"), ("u.sh", "shell", "file")])
         write_rows(self.memo / "baseline-shell.tsv", "shell", self.repo.B,
