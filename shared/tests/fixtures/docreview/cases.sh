@@ -2794,7 +2794,6 @@ print(_first_line(g))')"
   assert_eq "$got" "리뷰 1라운드를 마쳤다 — 남은 것 없음. 경고 1개: codex 리뷰가 없어 다른 모델의 시각이 빠졌다 (codex: ?)" \
     "codex 사유 없음: 첫 줄의 사유 자리가 「?」 하나이고 None 이 없다"
 }
-# 「같은 자리」 표지는 한 묶음 안에서만 앞 항목을 가리킨다(계획 Q11) — 묶음 제목 너머의 항목을 가리키지 않는다.
 # 집계 줄 — 사용자 기각 · 버린 지적은 원장 전체의 누계다. 「이번 라운드」로 세지 않고 「지금까지」로 낸다(합친 /qg #6).
 case_count_line_scope() {
   local d gr; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]" \
@@ -2826,6 +2825,7 @@ from docreview_state import _plain_warns
 print(len(_plain_warns(["codex 없음 — 모델 다양성 0 (not_installed)", "입력 실패(보조): codex — not_installed"])))')"
   assert_eq "$got" "1" "같은 글자 경고(양의 짝): 같은 사실을 두 출처가 말한 codex 행은 한 줄로 합친다"
 }
+# 「같은 자리」 표지는 한 묶음 안에서만 앞 항목을 가리킨다(계획 Q11) — 묶음 제목 너머의 항목을 가리키지 않는다.
 case_gate_marker_stays_in_group() {
   local d gr; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   local F_DEC2='{"id":"aaaa0002#r1.1","lineage":"aaaa0002#r1.1","bucket":"aaaa0002","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#12-files-to-modify","edit_scope":"#12-files-to-modify","disposition":"decide","summary":"파일 순서가 정해지지 않았다","evidence":"12행","blocks":[],"kind":"pre"}'
