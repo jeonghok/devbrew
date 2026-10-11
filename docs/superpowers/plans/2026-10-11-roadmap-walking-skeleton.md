@@ -1,5 +1,7 @@
 # R0 — 로드맵 · 조각 묶음 · 상태 계산의 걷는 뼈대 Implementation Plan
 
+> 이후 이름 변경(설계문서 결정 기록 B12 · B13): 조각 → 에픽, `slice-bundle` → `epic-bundle`, `slice:` → `epic:`, `## 조각` → `## 에픽`, R5 브랜치 `feature/epic-conductor`. 이 계획의 코드 · 픽스처를 다시 쓸 때는 새 이름을 쓴다.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 이번 일의 로드맵 한 장과 조각 묶음 열 개를 레포에 두고, 그 형식을 실제로 지나가는 읽기 전용 스크립트 둘(상태 계산 · 번호 대조)과 실측 · 락 지도 · 충돌표를 R0 PR 하나로 낸다.

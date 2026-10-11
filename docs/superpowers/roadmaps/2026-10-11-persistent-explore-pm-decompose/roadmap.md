@@ -5,7 +5,7 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 
 # 집요한 탐색 · PM 분해 · 에픽별 지휘 · 의도 왜곡 장치 제거 — 로드맵
 
-승인된 분해안(S47)의 에픽 지도다. 에픽마다 「원본 brief + 이 로드맵 + 조각 묶음」을 넘긴다(D39). 상태 칸은 없다 — 단계는 `plugins/spec-distill/scripts/roadmap_status.py` 가 git 에서 계산한다. 단위는 로드맵 > 에픽(spec 하나) > plan(PR 하나) > task 이고 에픽 하나가 plan · PR 여럿을 낼 수 있다 — 다만 지금의 상태 계산은 에픽 하나를 브랜치 하나로 센다(에픽 하나의 PR 여러 개 추적은 R5).
+승인된 분해안(S47)의 에픽 지도다. 에픽마다 원본 brief · 이 로드맵 · 에픽 묶음을 넘긴다(D39). 상태 칸은 없다 — 단계는 `plugins/spec-distill/scripts/roadmap_status.py` 가 git 에서 계산한다. 단위는 로드맵 > 에픽(spec 하나) > plan(PR 하나) > task 이고 에픽 하나가 plan · PR 여럿을 낼 수 있다 — 다만 지금의 상태 계산은 에픽 하나를 브랜치 하나로 센다(에픽 하나의 PR 여러 개 추적은 R5).
 
 ## 에픽
 
