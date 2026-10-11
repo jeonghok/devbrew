@@ -29,8 +29,12 @@ case_R22_orchestrator_honors_kill_switch() {
 }
 # R24 — 판정은 D5 산출 파일을 그대로 읽는다. 원장 전사 경로가 없다.
 case_R24_verdict_reads_the_machine_output() {
-  has_line "$REF" '| `diff_rc=0` 이고 `<memo>/diff-i<N>.yaml` 이 있다 | `--differential "<memo>/diff-i<N>.yaml"` |' \
-    && ok "R24: 판정 입력은 D5 파일 경로다" || no "R24: 판정 입력 행이 없다"
+  has_line "$REF" '| `diff_rc=0` 이고 `$RD/differential.yaml` 이 있다 | `--differential "$RD/differential.yaml"` |' \
+    && ok "R24: 판정 입력은 D5 가 남긴 세션 폴더 사본이다" || no "R24: 판정 입력 행이 없다"
+  assert_eq "$(grep -c '<memo>' "$SKILL")" "0" "R24 · K-3: SKILL 어디에도 메모 경로 자리표시가 없다(합성기도 사본을 읽는다)"
+  local s4; s4=$(awk '/^### Step 4 /{f=1} /^### Step 4\.5/{f=0} f' "$SKILL")
+  assert_contains "$s4" '| `--differential "$RD/differential.yaml"` |' "Step 4: 합성기의 차등 입력은 세션 폴더 사본이다"
+  assert_contains "$s4" 'RD="${TOP}/.claude/quality-gates/<session-id>"' "Step 4: 합성 펜스가 RD 를 정한다"
   local f n=0
   for f in "$REF" "$SKILL"; do
     grep -qE 'runtime-evidence|check_qa_ledger|floor:verification' "$f" && { n=$((n + 1)); echo "    전사 원장 흔적: $f"; }
@@ -92,17 +96,68 @@ case_reference_steps_are_d0_to_d8() {
   assert_contains "$(cat "$REF")" '이 호출 결과가 authoritative 다' "호출 주체 불변식: 스크립트 호출 결과가 판정 입력의 유일한 출처다"
 }
 # 토픽 스코프 경로: 기준선은 경계, HEAD 축은 합친 커밋, 후보와 분모는 그 트리에서 센다.
+# 토픽 값(head_commit · tree)은 매 iteration 의 topic-scope.txt 에서 읽는다 — Retry 뒤 Step 1a 가 새로 쓴 값이다.
 case_topic_path_wiring() {
-  assert_contains "$(cat "$REF")" '`boundary:` 이고, HEAD 축은 그 파일의 `head_commit:` 이다' "토픽: 기준선 = 경계 · HEAD = 합친 커밋"
-  assert_contains "$(cat "$REF")" '`create-head <head_commit> <session-id> --topic <topic 키>`' "토픽: HEAD 축 트리는 --topic 으로 다시 도출해 대조한다"
+  local d0 d1
+  d0=$(section "$REF" '## D0 실행 시작 — 첫 iteration 에서 한 번'); d1=$(section "$REF" '## D1 HEAD 축 트리 — 매 iteration')
+  assert_contains "$d1" 'S="$RD/topic-scope.txt"' "토픽: D1 이 이 iteration 의 스코프 파일을 읽는다"
+  assert_contains "$d1" "hc=\$(sed -n 's/^head_commit: //p' \"\$S\")" "토픽: HEAD 축 커밋은 이 iteration 파일의 head_commit: 이다"
+  assert_contains "$d1" 'create-head "$hc" "<session-id>" --topic "$key"' "토픽: HEAD 축 트리는 --topic 으로 다시 도출해 대조한다"
+  assert_not_grep "$d0" 'create-head|head_commit' "토픽: D0(한 번)은 HEAD 축 값을 정하지 않는다"
+  assert_contains "$d0" '기준선 커밋은 실행마다 하나로 고정된다' "기준선 고정과 그 공시가 D0 에 있다"
   assert_contains "$(cat "$REF")" '토픽 스코프면 `--topic <boundary> <tree>` 를 붙인다' "토픽: 후보는 경계..트리"
   assert_contains "$(cat "$REF")" '(토픽 스코프면 `--total --tree <tree>`)' "토픽: 분모도 그 트리에서"
+}
+
+# D1 펜스를 실제로 돌린다 — 플러그인 루트는 호출을 기록하는 대역이다.
+d1_fence() { awk '$0 == "## D1 HEAD 축 트리 — 매 iteration" {on=1; next} on && /^## /{exit} on && /^```bash$/{f=1; next} f && /^```$/{exit} f' "$REF"; }
+case_topic_axis_is_read_every_iteration() {
+  local T; T=$(mktemp -d) && [ -d "$T" ] || { no "mktemp 실패"; return; }
+  git init -q "$T/r" && git -C "$T/r" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  local SID=sidd1run01 RDX="$T/r/.claude/quality-gates/sidd1run01"; mkdir -p "$RDX" "$T/stub/scripts"
+  printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "$STUB_LOG"\n[ -n "${STUB_FAIL:-}" ] && exit 2\necho /stub/head-tree\n' > "$T/stub/scripts/qg-worktree.sh"
+  printf '#!/bin/sh\necho SEALED\n' > "$T/stub/scripts/seal-worktree.sh"
+  chmod +x "$T/stub/scripts/qg-worktree.sh" "$T/stub/scripts/seal-worktree.sh"
+  local F; F=$(d1_fence)
+  [ -n "$F" ] && ok "D1 펜스를 뽑았다" || { no "D1 펜스가 없다"; rm -rf "$T"; return; }
+  run_d1() {   # run_d1 <scope0> <base0> [STUB_FAIL]
+    printf '%s\n' "$F" | sed "s/<session-id>/$SID/g; s/<D0 의 스코프: topic | session>/$1/g; s/<D0 의 기준선 커밋>/$2/g" > "$T/d1.sh"
+    ( cd "$T/r" && CLAUDE_PLUGIN_ROOT="$T/stub" STUB_LOG="$T/log" STUB_FAIL="${3:-}" bash "$T/d1.sh" 2>/dev/null )
+  }
+  ts() { printf 'topic_key: k1\nstatus: ok\nboundary: %s\ntree: %s\nhead_commit: %s\n' "$1" "$3" "$2" > "$RDX/topic-scope.txt"; }
+  local out n
+  : > "$T/log"
+  ts B1 H1 T1; out=$(run_d1 topic B1)
+  assert_grep "$out" '^head_commit=H1$' "iteration 1: HEAD 축은 그 iteration 파일의 head_commit"
+  assert_eq "$(tail -1 "$T/log")" "create-head H1 $SID --topic k1" "iteration 1: create-head --topic 에 그 값"
+  ts B1 H2 T2; out=$(run_d1 topic B1)
+  assert_grep "$out" '^head_commit=H2$' "R11: Retry 뒤 iteration 2 는 새로 쓴 head_commit 을 쓴다(첫 iteration 값이 아니다)"
+  assert_grep "$out" '^tree=T2$' "Retry 뒤 iteration 2 의 후보 · 분모 트리도 새 값이다"
+  assert_eq "$(tail -1 "$T/log")" "create-head H2 $SID --topic k1" "iteration 2: create-head 가 새 head_commit 을 받는다"
+  out=$(run_d1 topic B1 1)
+  assert_grep "$out" '^head_commit=-$' "트리를 못 만들면 HEAD 커밋은 - 다(찍어 둔 sha 를 넘기지 않는다)"
+  assert_grep "$out" '^head_tree=$' "트리를 못 만들면 head_tree 는 비었다"
+  n=$(wc -l < "$T/log")
+  ts B2 H3 T3; out=$(run_d1 topic B1)
+  assert_grep "$out" '^axis=mismatch$' "경계가 실행 시작과 다르면 이 iteration 은 축 불일치(error-axis)"
+  rm -f "$RDX/topic-scope.txt"; out=$(run_d1 topic B1)
+  assert_grep "$out" '^axis=mismatch$' "topic → session 으로 바뀌면 축 불일치"
+  assert_eq "$(wc -l < "$T/log")" "$n" "축 불일치면 트리를 만들지 않는다"
+  out=$(run_d1 session M1)
+  assert_grep "$out" '^head_commit=SEALED$' "session: 봉인한 커밋이 HEAD 축이다"
+  assert_eq "$(tail -1 "$T/log")" "create-head SEALED $SID" "session: create-head 는 --topic 없이 봉인 커밋을 받는다"
+  ts M1 H4 T4; out=$(run_d1 session M1)
+  assert_grep "$out" '^axis=mismatch$' "session → topic 으로 바뀌면 축 불일치"
+  echo stale > "$RDX/differential.yaml"; echo stale > "$RDX/differential-not-counted.md"; run_d1 session M1 >/dev/null
+  [ ! -e "$RDX/differential.yaml" ] && [ ! -e "$RDX/differential-not-counted.md" ] \
+    && ok "D1 은 축 불일치여도 앞 iteration 사본을 먼저 지운다" || no "D1 이 앞 iteration 사본을 남겼다"
+  rm -rf "$T"
 }
 
 for c in case_R18_failed_pairing_routes_to_error_axis case_R22_orchestrator_honors_kill_switch \
          case_R24_verdict_reads_the_machine_output case_R24_final_verdict_reads_the_session_copy \
          case_R6_memo_drop_after_record_before_publish case_skill_section_wires_the_reference \
-         case_reference_steps_are_d0_to_d8 case_topic_path_wiring; do
+         case_reference_steps_are_d0_to_d8 case_topic_path_wiring case_topic_axis_is_read_every_iteration; do
   echo "== $c"; $c
 done
 finish

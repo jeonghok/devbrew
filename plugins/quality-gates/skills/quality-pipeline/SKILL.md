@@ -125,7 +125,7 @@ echo "intent rc=$?"
 Print exactly one line for the whole run (AC9):
 `intent: <intent_source>[ (<intent_note>)] — <spec 첫 제목 | 커밋 N개 [+ PR 본문]>`
 using the JSON keys `intent_source` · `intent_note` (for `spec-trailer`, the first `# ` heading of
-`$RD/intent.md`). **Consume the rc.** A non-zero
+`$RD/intent.md`, or `(제목 없는 spec)` when it has none). **Consume the rc.** A non-zero
 `intent rc` (2 bad call · 3 cannot write the intent file) leaves no JSON: print
 `intent: 없음 (discover-spec rc=<N>)` as that one line instead, and
 continue — `INTENT` is then that line alone (the intent file may be missing; do not fill it in).
@@ -193,7 +193,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 
    | `status:` | 스코프 | 그다음 |
    |---|---|---|
-   | `ok` | **topic** — 경계와 합친 트리 사이의 변경 | 차등 테스트(`references/differential-test.md` 의 D0)가 경계를 기준선으로, 합친 트리를 HEAD 축으로 쓴다 |
+   | `ok` | **topic** — 경계와 합친 트리 사이의 변경 | 차등 테스트가 경계를 기준선으로(`references/differential-test.md` 의 D0, 실행에 한 번), 이 iteration 의 합친 트리를 HEAD 축으로(D1, 매 iteration) 쓴다 |
    | `no-declaration` | session | 공지하지 않는다 — 선언은 새 능력이지 새 의무가 아니다 |
    | `declaration-invalid` | session | 공지 한 줄 · Step 4 의 `--scope` 가 판정을 `not-certified (declaration-invalid)` 로 만든다 |
    | `unbounded` | session | 공지 한 줄 · `--scope` 가 `not-certified (declaration-invalid)` 로 만든다 |
@@ -214,7 +214,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 
    reviewer 에게 주는 diff(`FILTERED_DIFF`)는 같은 두 값의 `git diff "$b" "$t"` 에서 문서 경로를 뺀 것이다. 스코프 파일은 Step 4 가 `--scope` 로 다시 읽는다 — 이 iteration 동안 지우거나 고치지 않는다.
 
-   **override 스코프 파일 정리 (override 일 때 · 1a 대신 · 매 iteration).** override(`branch` · `--paths`)면 이번 iteration 에 1a 를 돌리지 않으므로 위 「지우거나 고치지 않는다」의 대상이 아니다 — 이전 iteration·이전 실행이 남긴 스코프 파일이 있으면 지운다. 차등 테스트 D0 이 파일 부재를 session 으로 읽는다:
+   **override 스코프 파일 정리 (override 일 때 · 1a 대신 · 매 iteration).** override(`branch` · `--paths`)면 이번 iteration 에 1a 를 돌리지 않으므로 위 「지우거나 고치지 않는다」의 대상이 아니다 — 이전 iteration·이전 실행이 남긴 스코프 파일이 있으면 지운다. 차등 테스트 D0 · D1 이 파일 부재를 session 으로 읽는다:
 
    ```bash
    rm -f "$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"
@@ -513,7 +513,7 @@ different-premise: absent(not-installed)
 
 | 조건 | 합성기에 싣는 것 |
 |---|---|
-| ② 의 D5 가 `diff_rc=0` 으로 끝났고 `<memo>/diff-i<N>.yaml` 이 있다(`references/differential-test.md` 의 D7) | `--differential "<memo>/diff-i<N>.yaml"` |
+| ② 의 D5 가 `diff_rc=0` 으로 끝났고 그 사본 `$RD/differential.yaml` 이 있다(`references/differential-test.md` 의 D7) | `--differential "$RD/differential.yaml"` |
 | ② 가 kill switch 없이 그 파일을 남기지 못했다 — `diff_rc` 가 0 이 아니다 · 파일이 없다 · D5 전에 절차가 끝났다(D0 메모 실패 · D2 exit 4 포함) | `--differential` 을 싣지 않고 `--reason error-axis` |
 | ② 가 kill switch 로 생략됐다([Differential test](#differential-test)) | `--reason kill-switch` |
 | 기본 모드 — Step 1a 가 `topic-head.sh` 를 불렀다(`status:` 가 무엇이든) | `--scope "$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"` — `declaration-invalid` · `merge-conflict` 사유와 `scope:` 블록은 합성기가 이 파일에서 낸다 |
@@ -521,6 +521,8 @@ different-premise: absent(not-installed)
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+RD="${TOP}/.claude/quality-gates/<session-id>"
 RV="<Step 3.5 의 절대 경로>"
 python3 "$QG/scripts/synthesize_findings.py" --findings "$RV/findings.yaml" \
   --recritic "$RV/recritic.txt" --recritic-map "$RV/recritic-map.json" \
@@ -549,7 +551,7 @@ The verdict is the **one** `verdict:` line at the tail of `$RV/synth.out` (with 
 - `$degraded == yes` and `$resolved_scope_file_count == 0` → one advisory:
   `> [quality-gates] scope check degraded (detached HEAD / no base branch / unrelated history / shallow) — empty-scope detection skipped (fail-open; this run's scope-empty floor input is unavailable — the other reasons in Step 4's table still apply normally).`
 - A `granularity: bulk` adapter ran → also show `커버리지 미보장(러너가 선택을 무시함)`.
-- **차등 요약 (판정 줄 옆).** ② 가 이번 iteration 에 D5 의 파일(`<memo>/diff-i<N>.yaml`)을 남겼으면 판정 줄 바로 옆에 보인다 —
+- **차등 요약 (판정 줄 옆).** ② 가 이번 iteration 에 D5 의 사본(`$RD/differential.yaml`)을 남겼으면 판정 줄 바로 옆에 보인다 —
   요약·재서술 없이:
   - 그 파일에 `resolution_disclosure:` 줄이 있으면 그 줄을 **verbatim** 인용한다.
   - 그 파일의 `per_adapter[].attributions` 항목 중 `verdict:` 가 `STILL_GREEN` 이 **아닌** 것을 `<unit> · <verdict>` 한 줄씩 나열한다(예: `tests/test_foo.py::test_x · NEW_REGRESSION`). 0개면 이 항목을 생략한다.
@@ -557,7 +559,7 @@ The verdict is the **one** `verdict:` line at the tail of `$RV/synth.out` (with 
 그다음(N < 5 — N=5 는 아래 「N=5 에서 도달하면」 문단이 이 라우팅을 대신한다):
 - `verdict: clean` → 루프를 나가 [Final verdict](#final-verdict).
 - `blocking:` ≥ 1 → [Fix-loop decision](#fix-loop-decision).
-- `verdict: defect` 이고 `blocking: 0` — 이 결함은 리뷰 지적이 아니라 **차등 테스트**에서 왔다(D5 파일의 `confirmed_product_defect: true`). 고칠 패치가 없다고 Final verdict 로 직행하지 않는다 — [Fix-loop decision](#fix-loop-decision) 를 그대로 부르되, 분류표에 회귀 unit 마다 네가 쓴 고칠 계획을 싣는다.
+- `verdict: defect` 이고 `blocking: 0` — 이 결함은 리뷰 지적이 아니라 **차등 테스트**에서 왔다(D5 사본의 `confirmed_product_defect: true`). 고칠 패치가 없다고 Final verdict 로 직행하지 않는다 — [Fix-loop decision](#fix-loop-decision) 를 그대로 부르되, 분류표에 회귀 unit 마다 네가 쓴 고칠 계획을 싣는다.
 - `not-certified` 이고 `blocking: 0` 이며 차등 defect 가 없다 → 고칠 것이 없다. 루프를 나가 Final verdict(판정 그대로).
 
 **N=5 에서 도달하면.** iteration N=5 가 `blocking:` ≥ 1 로 끝나거나 `blocking: 0` 인 차등 테스트 기원 defect 로 끝나면 — 두 경우 모두 Step 4.5 의 표면화를 먼저 돌린 뒤, 평소의 결정 도구([Fix-loop decision](#fix-loop-decision))가 아니라 [Max-iter decision](#max-iter-decision) 을 부른다. **N=5 는 P18 상한이라 예외가 없다** — 차등 테스트 기원이라고 Fix-loop decision(Retry 로 루프를 늘리는 도구)으로 새지 않는다.
@@ -575,9 +577,9 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/quality-pipeline/references/differential-test.
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
-- 판정 입력은 그 파일의 D7 표가 정한다 — 합성기(Step 4)에 `--differential "<memo>/diff-i<N>.yaml"`
+- 판정 입력은 그 파일의 D7 표가 정한다 — 합성기(Step 4)에 D5 가 세션 폴더에 남긴 사본 `--differential "$RD/differential.yaml"`
   또는 `--reason kill-switch` · `--reason error-axis` 중 하나를 싣는다.
-- 판정 줄의 「차등 새 실패」 칸은 D5 가 세션 폴더에 남긴 사본 `$RD/differential.yaml` 의 `new_failures:` 값이다 —
+- 판정 줄의 「차등 새 실패」 칸은 마지막 iteration 의 그 사본의 `new_failures:` 값이다 —
   [Final verdict](#final-verdict) 의 펜스가 읽는다.
 - 차등 회귀(`confirmed_product_defect: true`)는 고칠 패치가 없는 defect 다 — Step 4.5 가 차등 테스트 기원(`blocking: 0`)으로
   [Fix-loop decision](#fix-loop-decision) 에 보낸다.
