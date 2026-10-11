@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""check_bundle_coverage.py — 조각 묶음의 번호 집합과 조각 spec 의 `## 번호 대조` 표를 맞춘다.
+"""check_bundle_coverage.py — 에픽 묶음의 번호 집합과 에픽 spec 의 `## 번호 대조` 표를 맞춘다.
 
 명령줄: check_bundle_coverage.py <묶음.md> <spec.md> [--json]
 종료 코드: 0 빠진 번호 없음 · 1 빠진 번호 있음 · 2 사용법 오류 ·
@@ -30,7 +30,7 @@ class FormatError(ValueError):
 
 
 def parse_ids(cell: str) -> list:
-    """번호 칸 하나를 토큰 목록으로. 문법에 맞지 않는 조각이 하나라도 있으면 FormatError."""
+    """번호 칸 하나를 토큰 목록으로. 문법에 맞지 않는 토큰이 하나라도 있으면 FormatError."""
     cell = cell.strip()
     if not cell:
         raise FormatError("빈 번호 칸")
@@ -188,7 +188,7 @@ def render(result: dict) -> str:
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(prog="check_bundle_coverage.py",
-                                 description="조각 묶음의 번호와 spec 의 번호 대조 표를 맞춘다.")
+                                 description="에픽 묶음의 번호와 spec 의 번호 대조 표를 맞춘다.")
     ap.add_argument("bundle")
     ap.add_argument("spec")
     ap.add_argument("--json", action="store_true")

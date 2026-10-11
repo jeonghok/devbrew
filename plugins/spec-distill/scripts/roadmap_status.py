@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""roadmap_status.py — 로드맵과 git 을 읽어 조각별 단계 · 경고를 낸다.
+"""roadmap_status.py — 로드맵과 git 을 읽어 에픽별 단계 · 경고 · 정보를 낸다.
 
 명령줄:
   roadmap_status.py <로드맵 경로>           origin/main 의 로드맵을 읽는다(레포 상대경로)
@@ -9,6 +9,7 @@
 
 종료 코드: 0 이상 없음 · 1 경고 있음 · 2 사용법 오류 · 3 검사 불가(로드맵 없음 · 형식 깨짐 ·
 블록 하나라도 알 수 없음 · 번호 대조 검사 불가 · 번호 전체 집합을 못 셈). 3 > 1 > 0.
+정보(경로 예약 겹침 · 다른 에픽이 예약한 파일의 편집)는 종료 코드를 바꾸지 않는다 — 충돌은 머지 때 푼다.
 
 읽기만 한다 — 파일을 쓰지 않고 네트워크에 나가지 않는다. git 은 `GIT_ALLOWED` 의 하위 명령만
 부르고 fetch 하지 않는다(지휘 절차가 계산 전에 fetch 한다). 단계는 git 으로 알 수 있는 것까지다 —
@@ -34,7 +35,9 @@ MAIN_REF = "refs/remotes/origin/main"
 GIT_ALLOWED = frozenset({"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"})
 NOTICE = ("머지됨 자동 판정은 merge commit 방식에서만 된다 — 브랜치가 지워졌으면 GitHub 의 머지 메시지 "
           "`Merge pull request #<n> from <owner>/<브랜치>` 로만 알아본다. squash · rebase 로 머지했거나 "
-          "로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적는다.")
+          "로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적는다. 경로 예약 겹침과 다른 에픽이 "
+          "예약한 파일의 편집은 경고가 아니라 정보다 — 에픽은 병렬로 가고 충돌은 머지 때 푼다(나중 PR 이 main 을 "
+          "merge 하고 스위트를 다시 돌린다).")
 FIELDS = ("의도", "범위", "의존", "브랜치", "묶음", "경로 예약", "spec", "발화", "항목", "완료")
 REQUIRED = {
     "bundle": ("의도", "범위", "의존", "브랜치", "묶음", "경로 예약"),
@@ -201,13 +204,13 @@ def parse_roadmap(text: str):
     if not meta.get("source_brief"):
         errors.append("frontmatter source_brief 가 없다")
     try:
-        body = section_body(text, "## 조각")
+        body = section_body(text, "## 에픽")
         rec_body = section_body(text, "## 결정 기록") or ""
         risk_body = section_body(text, "## 위험 번호표") or ""
     except FormatError as exc:
         return meta, [], [], [], errors + [str(exc)]
     if body is None:
-        return meta, [], [], [], errors + ["`## 조각` 절이 없다"]
+        return meta, [], [], [], errors + ["`## 에픽` 절이 없다"]
 
     blocks, cur = [], None
     for line in body.splitlines():
@@ -418,7 +421,7 @@ def merged_by(git: Git, merges: list, main: str, branch: str, tip):
 
 
 def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_dir: str):
-    """블록마다 stage · reason · warnings · specs 를 채운다. 반환: 번호 대조 검사 불가 사유 목록."""
+    """블록마다 stage · reason · warnings · notes · specs 를 채운다. 반환: 번호 대조 검사 불가 사유 목록."""
     merges = git.first_parent_merges() if main else []
     by_id = {b["id"]: b for b in blocks}
     rec = {(r["block"], r["kind"]): r for r in records}
@@ -438,7 +441,7 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
 
     for bid in order:
         b = by_id[bid]
-        b.update(stage=None, reason="", warnings=[], specs=[], tip=None)
+        b.update(stage=None, reason="", warnings=[], notes=[], specs=[], tip=None)
         undone = [d for d in b["deps"] if by_id[d]["stage"] not in DONE]
         if main is None:
             b["stage"], b["reason"] = "알 수 없음", "origin/main 을 못 읽었다"
@@ -504,8 +507,8 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                     continue
                 owners = [o["id"] for o in blocks
                           if any(_reserves(e, path) for e in o["reserved"])]
-                if owners and b["id"] not in owners:
-                    b["warnings"].append("경로 예약 위반: %s 은 %s 만 예약했다"
+                if owners and b["id"] not in owners:  # 정보 — 종료 코드를 바꾸지 않는다
+                    b["notes"].append("경로 예약 위반: %s 은 %s 만 예약했다"
                                          % (path, " · ".join(owners)))
     return cov_unknown
 
@@ -557,7 +560,8 @@ def build(git: Git, args) -> dict:
         report["blocks"] = [{"id": b["id"], "title": b["title"], "kind": b.get("kind"),
                              "stage": "알 수 없음", "reason": "로드맵 형식 깨짐",
                              "task_status": None, "branch": b["fields"].get("브랜치"),
-                             "deps": [], "specs": [], "ids": [], "warnings": []} for b in blocks]
+                             "deps": [], "specs": [], "ids": [], "warnings": [], "notes": []}
+                            for b in blocks]
         return report
 
     roadmap_dir = rel.rsplit("/", 1)[0] if "/" in rel else "."
@@ -574,7 +578,7 @@ def build(git: Git, args) -> dict:
                 report["format_errors"].append("%s 묶음을 읽지 못했다: %s" % (b["id"], bpath))
             continue
         fm = frontmatter(btext)
-        bad = [k for k, want in (("type", "slice-bundle"), ("slice", b["id"]),
+        bad = [k for k, want in (("type", "epic-bundle"), ("epic", b["id"]),
                                  ("roadmap", rel), ("source_brief", meta.get("source_brief")))
                if unquote(fm.get(k, "")) != want]
         try:
@@ -616,24 +620,26 @@ def build(git: Git, args) -> dict:
             "id": b["id"], "title": b["title"], "kind": b["kind"], "stage": b["stage"],
             "reason": b["reason"], "task_status": TASK_STATUS.get(b["stage"]),
             "branch": b["fields"].get("브랜치"), "deps": b["deps"], "specs": b["specs"],
-            "ids": sorted(ids, key=id_sort_key), "warnings": b["warnings"]})
+            "ids": sorted(ids, key=id_sort_key), "warnings": b["warnings"], "notes": b["notes"]})
     return report
 
 
 def exit_code(report: dict) -> int:
+    """notes · overlaps 는 정보라 세지 않는다."""
     if (report["format_errors"] or report["unknown_reasons"]
             or any(b["stage"] == "알 수 없음" for b in report["blocks"])):
         return 3
     if (any(b["warnings"] for b in report["blocks"]) or report["unassigned"]
-            or report["orphans"] or report["unknown_ids"] or report["overlaps"]):
+            or report["orphans"] or report["unknown_ids"]):
         return 1
     return 0
 
 
 def render(report: dict) -> str:
     nwarn = sum(len(b["warnings"]) for b in report["blocks"])
-    lines = ["로드맵 상태 — 블록 %d개 · 경고 %d개 · 검사 불가 %d개 (사본: %s · origin/main 받은 시각: %s)"
-             % (len(report["blocks"]), nwarn,
+    ninfo = sum(len(b.get("notes", [])) for b in report["blocks"]) + len(report["overlaps"])
+    lines = ["로드맵 상태 — 블록 %d개 · 경고 %d개 · 정보 %d개 · 검사 불가 %d개 (사본: %s · origin/main 받은 시각: %s)"
+             % (len(report["blocks"]), nwarn, ninfo,
                 len(report["format_errors"]) + len(report["unknown_reasons"]),
                 report["source"] or "알 수 없음", report["fetched_at"] or "알 수 없음"),
              report["notice"], ""]
@@ -642,13 +648,14 @@ def render(report: dict) -> str:
         if b.get("ids"):
             lines.append("    번호: %s" % " · ".join(b["ids"]))
         lines += ["    경고: %s" % w for w in b["warnings"]]
+        lines += ["    정보: %s" % n for n in b.get("notes", [])]
     for label, key in (("미배정 번호", "unassigned"), ("고아 발화", "orphans")):
         vals = report[key]
         lines.append("%s: %s" % (label, "셀 수 없음" if vals is None
                                  else "%d개%s" % (len(vals), " — " + " · ".join(vals) if vals else "")))
     if report["unknown_ids"]:
         lines.append("brief 에 없는 번호: %s" % " · ".join(report["unknown_ids"]))
-    lines.append("경로 예약 겹침: %d개" % len(report["overlaps"]))
+    lines.append("경로 예약 겹침(정보): %d개" % len(report["overlaps"]))
     lines += ["    %s ↔ %s: %s" % (o["blocks"][0], o["blocks"][1], " · ".join(o["paths"]))
               for o in report["overlaps"]]
     lines += ["형식 깨짐: %s" % e for e in report["format_errors"]]
@@ -659,7 +666,7 @@ def render(report: dict) -> str:
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(prog="roadmap_status.py",
-                                 description="로드맵과 git 을 읽어 조각별 단계 · 경고를 낸다.")
+                                 description="로드맵과 git 을 읽어 에픽별 단계 · 경고 · 정보를 낸다.")
     where = ap.add_mutually_exclusive_group(required=True)
     where.add_argument("roadmap", nargs="?", help="origin/main 기준 로드맵 레포 상대경로")
     where.add_argument("--roadmap-file", help="작업 트리의 로드맵 파일")

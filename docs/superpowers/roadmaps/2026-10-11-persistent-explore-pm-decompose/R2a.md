@@ -1,22 +1,22 @@
 ---
-type: slice-bundle
-slice: R2a
+type: epic-bundle
+epic: R2a
 roadmap: docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md
 source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.md
 ids: [C5, C11, C12, C13, C25, C32, C35, D15, D18, D21, D26, OQ2, OQ29, OQ31, RC6, RC51, RC52, RC53, RC54, RC56, RC57, RC58, RC65, RC85, K7, S1, S3, S4, S5, S7, S10, S13, S17, S18, S30, S33, S34, S49, S51, «chesterton-fence», «chroma-context-rot», «claude4-best-practices», «context-engineering», «mast», «sycophancy»]
 ---
 
-# R2a — 공유 리뷰 엔진 · qg 파급 · persona 보안 리뷰 · 조각 묶음
+# R2a — 공유 리뷰 엔진 · qg 파급 · persona 보안 리뷰 · 에픽 묶음
 
 ## 0. 역참조
 
 - 원본 brief: `docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.md` (audit `docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.audit.md`)
 - 로드맵: `docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md` 의 `### R2a` 블록
-- 이 조각의 설계문서는 frontmatter `source_interview:` 에 이 묶음 경로를, `roadmap:` 에 로드맵 경로를 적고, 본문 `## 번호 대조` 표(칸: 번호 · 반영/기각 · 자리 또는 이유)에 위 `ids` 전부를 싣는다.
+- 이 에픽의 설계문서는 frontmatter `source_interview:` 에 이 묶음 경로를, `roadmap:` 에 로드맵 경로를 적고, 본문 `## 번호 대조` 표(칸: 번호 · 반영/기각 · 자리 또는 이유)에 위 `ids` 전부를 싣는다.
 
 ## 1. Goal · Non-goal
 
-### 이 조각의 Goal · Non-goal
+### 이 에픽의 Goal · Non-goal
 
 - 의도: 공유 리뷰 엔진과 qg · 다른 플러그인의 의도 왜곡 장치를 제거하거나 고치고 persona 편집은 보안 리뷰를 거친다
 - 범위: 한다 공유 리뷰 엔진 상한 · 조언 접기 · qg 리뷰어 · 루프 상한 · 다른 플러그인의 장치 / 안 한다 spec-distill 안쪽 장치(R2)

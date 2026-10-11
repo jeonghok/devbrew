@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_bundle_coverage.py — 조각 묶음 ids 와 조각 spec 의 `## 번호 대조` 표를 맞추는 검사(R0 AC6).
+# check_bundle_coverage.py — 에픽 묶음 ids 와 에픽 spec 의 `## 번호 대조` 표를 맞추는 검사(R0 AC6).
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_bundle_coverage.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -13,8 +13,8 @@ trap 'rm -rf "$T"' EXIT
 
 cat > "$T/bundle.md" <<'MD'
 ---
-type: slice-bundle
-slice: R9
+type: epic-bundle
+epic: R9
 roadmap: docs/x/roadmap.md
 source_brief: docs/x/brief.md
 ids: [C1, D2, OQ3, RC4, K5, ST1, S7, «web-key»]

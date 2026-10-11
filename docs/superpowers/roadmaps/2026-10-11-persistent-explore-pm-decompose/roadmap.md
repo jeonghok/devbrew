@@ -3,15 +3,15 @@ type: roadmap
 source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.md
 ---
 
-# 집요한 탐색 · PM 분해 · 조각별 지휘 · 의도 왜곡 장치 제거 — 로드맵
+# 집요한 탐색 · PM 분해 · 에픽별 지휘 · 의도 왜곡 장치 제거 — 로드맵
 
-승인된 분해안(S47)의 조각 지도다. 조각마다 「원본 brief + 이 로드맵 + 조각 묶음」을 넘긴다(D39). 상태 칸은 없다 — 단계는 `plugins/spec-distill/scripts/roadmap_status.py` 가 git 에서 계산한다.
+승인된 분해안(S47)의 에픽 지도다. 에픽마다 「원본 brief + 이 로드맵 + 조각 묶음」을 넘긴다(D39). 상태 칸은 없다 — 단계는 `plugins/spec-distill/scripts/roadmap_status.py` 가 git 에서 계산한다. 단위는 로드맵 > 에픽(spec 하나) > plan(PR 하나) > task 이고 에픽 하나가 plan · PR 여럿을 낼 수 있다 — 다만 지금의 상태 계산은 에픽 하나를 브랜치 하나로 센다(에픽 하나의 PR 여러 개 추적은 R5).
 
-## 조각
+## 에픽
 
 ### P1 — 다음 세션 @ 명령 브랜치 머지
 - 의도: 인터뷰 종료가 다음 세션 @ 명령으로 넘기게 하는 브랜치를 먼저 머지한다
-- 범위: 한다 그 브랜치의 계획 실행 · 머지 / 안 한다 이번 로드맵의 조각 작업
+- 범위: 한다 그 브랜치의 계획 실행 · 머지 / 안 한다 이번 로드맵의 에픽 작업
 - 의존: 없음
 - 브랜치: feature/next-session-at-handoff
 - 묶음: 없음
@@ -21,7 +21,7 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 - 항목: D38 · OQ19 · RC17 · RC71
 
 ### P2 — qg v10 ⑤ 차등 테스트 머지
-- 의도: qg 를 건드리는 조각 앞에 qg v10 ⑤ 차등 테스트를 머지한다
+- 의도: qg 를 건드리는 에픽 앞에 qg v10 ⑤ 차등 테스트를 머지한다
 - 범위: 한다 그 브랜치 머지 / 안 한다 이번 로드맵의 qg 변경
 - 의존: 없음
 - 브랜치: feature/qg-v10-differential
@@ -32,7 +32,7 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 - 항목: RC73 · RC77
 
 ### P3 — qg 진입 이름 결정
-- 의도: qg 를 건드리는 조각 앞에 qg 진입 이름을 정한다
+- 의도: qg 를 건드리는 에픽 앞에 qg 진입 이름을 정한다
 - 범위: 한다 진입 이름 결정 기록 / 안 한다 qg 코드 변경
 - 의존: 없음
 - 완료: 결정 기록
@@ -51,8 +51,8 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 - 발화: S47
 - 항목: RC81
 
-### R0 — 로드맵 · 조각 묶음 · 상태 계산의 걷는 뼈대
-- 의도: 조각을 한 곳에서 보고 조각마다 받은 번호를 흘리지 않게 하는 가장 얇은 끝에서 끝까지를 만든다
+### R0 — 로드맵 · 에픽 묶음 · 상태 계산의 걷는 뼈대
+- 의도: 에픽을 한 곳에서 보고 에픽마다 받은 번호를 흘리지 않게 하는 가장 얇은 끝에서 끝까지를 만든다
 - 범위: 한다 손으로 만든 로드맵 · 묶음 · 공통 형식 다섯 · 상태 계산 · 번호 대조 · 실측 M1~M3 · 락 지도 · 충돌표 / 안 한다 묶음 자동 생성 · 깊이 검사 · 컨트롤 플레인 · 지휘자 skill
 - 의존: P1
 - 브랜치: feature/interview-explore-decompose
@@ -89,13 +89,13 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 ### R3 — 번호 인계 · 대조 · 깊이
 - 의도: brief 의 모든 번호가 spec 까지 가고 빠지거나 얕으면 경고되게 한다
 - 범위: 한다 넘김 글의 덮어쓰기 문장 제거 · /compact 보존에 조사 · 위험 · spec 리뷰에 묶음을 정해진 입력으로 넘기기 · 번호마다 깊이 검사 / 안 한다 묶음 생성(R4) · 표시(R6)
-- 의존: R0, P1, R2
+- 의존: R0, P1
 - 브랜치: feature/numbered-handoff-coverage
 - 묶음: R3.md
 - 경로 예약: plugins/spec-distill/skills/spec-interview/references/finishing.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/references/proceed-gate.md, plugins/spec-distill/references/docreview-profiles/design-doc.md
 
-### R4 — PM 분해 · 로드맵 · 조각 묶음 · 재분해 경로
-- 의도: 인터뷰가 일을 조각으로 나눠 로드맵과 묶음을 내고 하류의 재분해 · 축소 신호를 같은 지도로 되돌리게 한다
+### R4 — PM 분해 · 로드맵 · 에픽 묶음 · 재분해 경로
+- 의도: 인터뷰가 일을 에픽으로 나눠 로드맵과 묶음을 내고 하류의 재분해 · 축소 신호를 같은 지도로 되돌리게 한다
 - 범위: 한다 분해 판단 · 로드맵 · 묶음 자동 생성(R0 형식) · 재분해 경로 / 안 한다 지휘(R5) · 표시(R6)
 - 의존: R0
 - 브랜치: feature/interview-pm-decompose
@@ -103,7 +103,7 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 - 경로 예약: 없음
 
 ### R6 — 컨트롤 플레인
-- 의도: 조각 지도 · 단계 · 빠진 것 · 드리프트 알림을 Claude Code 안에서 보이게 한다
+- 의도: 에픽 지도 · 단계 · 빠진 것 · 드리프트 알림을 Claude Code 안에서 보이게 한다
 - 범위: 한다 상태줄 · 패널 · 작업 목록 표시(M2 · M3 결과에 맞춤) / 안 한다 상태 계산 자체(R0 · R5)
 - 의존: R0
 - 브랜치: feature/roadmap-control-plane
@@ -119,10 +119,10 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 - 경로 예약: shared/docreview/, plugins/spec-distill/references/reviewing-document.md, plugins/quality-gates/, plugins/project-init/, plugins/plugin-audit/
 
 ### R5 — 지휘자
-- 의도: 한 세션이 로드맵을 따라 조각을 끝까지 지휘하되 사용자의 결정권과 내용 검토가 남게 한다
-- 범위: 한다 외부 정지는 사용자에게 · 실행 기록 회수 · 재개 · 부분 계속 · 머지 원칙 · qg 의도 회귀 · 조각 사이 이음매 · base 이동 · 구현 이후 단계 / 안 한다 상태줄 · 패널(R6)
+- 의도: 한 세션이 로드맵을 따라 에픽을 끝까지 지휘하되 사용자의 결정권과 내용 검토가 남게 한다
+- 범위: 한다 외부 정지는 사용자에게 · 실행 기록 회수 · 재개 · 부분 계속 · 머지 원칙 · qg 의도 회귀 · 에픽 사이 이음매 · base 이동 · 구현 이후 단계 / 안 한다 상태줄 · 패널(R6)
 - 의존: R1, R2, R7, R3, R4, R6, P2, P3
-- 브랜치: feature/slice-conductor
+- 브랜치: feature/epic-conductor
 - 묶음: R5.md
 - 경로 예약: 없음
 
@@ -146,23 +146,24 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 
 R5 전까지 지휘 세션이 따르는 절차다. 장치가 아니라 절차다 — 지휘자 skill 은 R5 가 만든다. 지휘 세션은 `/new` 뒤 첫 줄에 `@docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md` 를 붙여 연다.
 
-1. `git fetch origin` → `python3 plugins/spec-distill/scripts/roadmap_status.py docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md` → 작업 목록을 결과에 맞춘다. 조각 하나에 작업 하나, 제목은 「<번호> <이름> — <단계>」. 대기 · 준비는 시작 전, 설계 중 · 계획은 진행 중, 머지됨 · 끝남은 완료다. 알 수 없음은 작업 상태를 바꾸지 않고 제목 끝에 「알 수 없음(이유)」을 붙인다. 종료 코드가 3 이면 작업 목록을 바꾸지 않고 「검사 불가」 사유를 사용자에게 그대로 보인다 — 일부 단계가 계산돼 보여도 믿지 않는다.
-2. 준비 단계 조각을 고른다. 블록의 `브랜치:` 이름으로 `origin/main` 에서 브랜치와 worktree 를 먼저 만들고, 그 조각의 설계문서 · 계획은 모두 그 브랜치에 커밋한다. 설계 단계(brainstorming → 설계문서 → spec-review 승인)는 이 세션에서 한 조각씩 돈다 — spec 승인은 사용자가 조각마다 한다.
+1. `git fetch origin` → `python3 plugins/spec-distill/scripts/roadmap_status.py docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md` → 작업 목록을 결과에 맞춘다. 에픽 하나에 작업 하나, 제목은 「<번호> <이름> — <단계>」. 대기 · 준비는 시작 전, 설계 중 · 계획은 진행 중, 머지됨 · 끝남은 완료다. 알 수 없음은 작업 상태를 바꾸지 않고 제목 끝에 「알 수 없음(이유)」을 붙인다. 종료 코드가 3 이면 작업 목록을 바꾸지 않고 「검사 불가」 사유를 사용자에게 그대로 보인다 — 일부 단계가 계산돼 보여도 믿지 않는다.
+2. 준비 단계 에픽을 고른다. 블록의 `브랜치:` 이름으로 `origin/main` 에서 브랜치와 worktree 를 먼저 만들고, 그 에픽의 설계문서 · 계획은 모두 그 브랜치에 커밋한다. 설계 단계(brainstorming → 설계문서 → spec-review 승인)는 이 세션에서 한 에픽씩 돈다 — spec 승인은 사용자가 에픽마다 한다. 상태를 git 에서 계산하므로 에픽마다 세션을 따로 열어 설계(brainstorming)도 병렬로 할 수 있다 — 한 세션 안에서는 한 에픽씩이다(실측 M1).
 3. 설계문서를 커밋한 뒤 spec-review 를 부르기 전에 `python3 plugins/spec-distill/scripts/check_bundle_coverage.py <묶음> <설계문서>` 를 돌려 결과를 사용자에게 보인다. 빠진 번호가 있으면 spec-review 전에 고친다. 종료 코드가 3 이면(표가 없거나 깨짐) 표를 고쳐 다시 돌리고, 0 이 나오기 전에는 spec-review 로 가지 않는다.
 4. superpowers 가 묻는 자리(plan 검토 · 실행 방식 · 머지 메뉴)는 그대로 사용자에게 간다.
-5. 구현은 조각마다 worktree 에서 돌리고 그동안 다음 조각의 설계를 진행하는 것이 목표다. 백그라운드 실행이 되는지는 실측 M1 이 정한다 — 안 되면 구현도 순차로 하고 그 사실을 알린다. SDD 가 마지막 메시지로 내는 판정 목록(「Rulings I made」)은 그대로 사용자에게 보이고 멈추지 않는다.
-6. 조각이 머지될 때마다 남은 조각을 재평가하고, 바뀔 때만 사용자 승인 뒤 로드맵 수정을 전용 작은 브랜치(`feature/roadmap-<요지>`)와 PR 로 올린다. 머지는 사용자가 한다.
-7. 구현 커밋에는 `Spec: <조각 설계문서 레포 상대경로>` 트레일러를 단다.
+5. 구현은 에픽마다 worktree 에서 돌리고 그동안 다음 에픽의 설계를 진행하는 것이 목표다. 백그라운드 실행이 되는지는 실측 M1 이 정한다 — 안 되면 구현도 순차로 하고 그 사실을 알린다. SDD 가 마지막 메시지로 내는 판정 목록(「Rulings I made」)은 그대로 사용자에게 보이고 멈추지 않는다.
+6. 에픽이 머지될 때마다 남은 에픽을 재평가하고, 바뀔 때만 사용자 승인 뒤 로드맵 수정을 전용 작은 브랜치(`feature/roadmap-<요지>`)와 PR 로 올린다. 머지는 사용자가 한다.
+7. 구현 커밋에는 `Spec: <에픽 설계문서 레포 상대경로>` 트레일러를 단다.
 
 ## 결정 기록
 
-줄 형식은 `- <블록> · <결정|머지> · <YYYY-MM-DD> · 「원문」` 이다. 인터뷰 뒤의 사용자 말은 새 S 번호 없이 원문 그대로 인용한다. squash · rebase 로 머지해 머지 커밋이 없는 조각은 「머지」 줄로 적는다.
+줄 형식은 `- <블록> · <결정|머지> · <YYYY-MM-DD> · 「원문」` 이다. 인터뷰 뒤의 사용자 말은 새 S 번호 없이 원문 그대로 인용한다. squash · rebase 로 머지해 머지 커밋이 없는 에픽은 「머지」 줄로 적는다.
 
 쉬운 말 PR 3(`feature/plain-language-voice`)은 이미 머지됐다(#198) — 선행 둘째의 그 부분은 블록을 두지 않는다.
 
 ## 재분해 이력
 
 - 2026-10-11 · 처음 로드맵 · 승인 원문 S47 「이대로 승인 (권장) — 고친 분해안(선행 3: @ 브랜치 머지 · qg ⑤·PR3·진입 이름 · hook 브랜치 고아 확인 + R0~R9, 순서 @ 브랜치 → R0 → R1‖R2‖R7‖R3‖R4‖R6 → R2a·R5 → R8 → R9) 승인」 · 선행 3 을 P1~P4 블록으로 나눴다(R0 설계 §1).
+- 2026-10-11 · 승인 뒤 수정(R0 설계 B11~B13) · R6 묶음에 D24 · D40 을 더했다 「더한다 (권장)」 · 경로 예약 겹침은 병렬을 막지 않는 정보로 낮추고 겹침 때문에만 있던 R3 → R2 의존을 뺐다 「병렬 유지, 정보로만 (권장)」 · 단위 이름을 「에픽」으로 정했다 「에픽 (권장)」.
 
 ## 위험 번호표
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# roadmap_status.py — 로드맵 · git 에서 조각 단계 · 경고를 계산한다(R0 AC1 · AC3 · AC5 · AC7).
+# roadmap_status.py — 로드맵 · git 에서 에픽 단계 · 경고 · 정보를 계산한다(R0 AC1 · AC3 · AC5 · AC7).
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_roadmap_status.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -28,6 +28,7 @@ js() {           # js <json 파일> <파이썬 식 — r 이 보고서>. 식은 
 }
 stage() { js "$1" "next(b['stage'] for b in r['blocks'] if b['id']=='$2')"; }
 warns() { js "$1" "' | '.join(next(b['warnings'] for b in r['blocks'] if b['id']=='$2'))"; }
+notes() { js "$1" "' | '.join(next(b['notes'] for b in r['blocks'] if b['id']=='$2'))"; }
 
 # ── 픽스처: brief · audit · 묶음 · 로드맵 ─────────────────────────────────────
 write_brief() {  # write_brief <디렉토리>
@@ -99,17 +100,17 @@ MD
 }
 
 bundle() {  # bundle <로드맵 디렉토리> <블록> <ids>
-  printf -- '---\ntype: slice-bundle\nslice: %s\nroadmap: %s/roadmap.md\nsource_brief: docs/br/b.md\nids: [%s]\n---\n\n# %s\n' \
+  printf -- '---\ntype: epic-bundle\nepic: %s\nroadmap: %s/roadmap.md\nsource_brief: docs/br/b.md\nids: [%s]\n---\n\n# %s\n' \
     "$2" "$1" "$3" "$2" > "$W/$1/$2.md"
 }
 
 block() {   # block <id> <브랜치> <의존> <경로 예약> [묶음 값]
-  printf '### %s — 조각 %s\n- 의도: %s 의 의도\n- 범위: 한다 %s / 안 한다 없음\n- 의존: %s\n- 브랜치: %s\n- 묶음: %s\n- 경로 예약: %s\n\n' \
+  printf '### %s — 에픽 %s\n- 의도: %s 의 의도\n- 범위: 한다 %s / 안 한다 없음\n- 의존: %s\n- 브랜치: %s\n- 묶음: %s\n- 경로 예약: %s\n\n' \
     "$1" "$1" "$1" "$1" "$3" "$2" "${5:-$1.md}" "$4"
 }
 
 roadmap_head() {
-  printf -- '---\ntype: roadmap\nsource_brief: docs/br/b.md\n---\n\n# 로드맵\n\n## 조각\n\n'
+  printf -- '---\ntype: roadmap\nsource_brief: docs/br/b.md\n---\n\n# 로드맵\n\n## 에픽\n\n'
 }
 roadmap_tail() {  # roadmap_tail <결정 기록 줄들>
   printf '## 지휘 절차\n\n1. fetch\n\n## 결정 기록\n\n쉬운 말 PR 은 이미 머지됐다 — 블록 없음.\n%s\n\n## 재분해 이력\n\n- 없음\n\n## 위험 번호표\n\n- K1 — 위험 — 숨은 가정: 가정 하나 — 근거 없음\n- K2 — 위험 — 실패 양식: 실패 하나 — 근거 없음\n' "$1"
@@ -193,7 +194,7 @@ mkdir -p "$W/docs/superpowers/specs" "$W/docs/superpowers/plans"
 spec_doc docs/rm/H1.md "C1, S1" > "$W/docs/superpowers/specs/h1-design.md"
 printf '# 계획\n\n**Spec:** `docs/superpowers/specs/h1-design.md` (§1 · §2) — 참고 `docs/other.md`\n' > "$W/docs/superpowers/plans/h1.md"
 g add -- docs && g commit -qm "h1" && g push -q origin feature/h1 && g checkout -q main && g branch -q -D feature/h1
-# I1 — J1 만 예약한 src/j.txt 를 바꿈 → 경로 예약 위반
+# I1 — J1 만 예약한 src/j.txt 를 바꿈 → 경로 예약 위반(정보)
 g checkout -q -b feature/i1 main; commit_file src/j.txt i "i1 touches j"; commit_file "src/한 글.txt" i "i1 touches 한글 경로"
 # J1 — 의존 W1(준비) 인데 브랜치가 있다 → 설계 중 + 의존 미머지 경고
 g checkout -q -b feature/j1 main; commit_file src/j.txt j "j1"
@@ -242,9 +243,10 @@ assert_eq "$(stage "$OUT" Z1)" "대기" "Z1: 브랜치 없음 · 의존 미완�
 assert_eq "$(stage "$OUT" P3)" "준비" "P3: 결정 블록 · 결정 기록 없음 · 의존 없음 → 준비"
 assert_eq "$(stage "$OUT" J1)" "설계 중" "J1: 의존 미머지여도 단계는 그대로 계산"
 assert_contains "$(warns "$OUT" J1)" "의존 미머지 상태에서 진행 중: W1" "J1: 의존 미머지 진행 경고"
-assert_contains "$(warns "$OUT" I1)" "경로 예약 위반: src/j.txt 은 J1 만 예약했다" "I1: 경로 예약 위반"
-assert_not_contains "$(warns "$OUT" J1)" "경로 예약 위반" "J1: 자기가 예약한 파일은 위반이 아니다"
-assert_contains "$(warns "$OUT" I1)" "경로 예약 위반: src/한 글.txt 은 J1 만 예약했다" "I1: 한글 · 공백 경로도 이스케이프 없이 대조한다"
+assert_contains "$(notes "$OUT" I1)" "경로 예약 위반: src/j.txt 은 J1 만 예약했다" "I1: 경로 예약 위반은 정보(notes)로 낸다"
+assert_eq "$(warns "$OUT" I1)" "" "I1: 경로 예약 위반은 경고가 아니다(경고 0)"
+assert_not_contains "$(notes "$OUT" J1)" "경로 예약 위반" "J1: 자기가 예약한 파일은 위반이 아니다"
+assert_contains "$(notes "$OUT" I1)" "경로 예약 위반: src/한 글.txt 은 J1 만 예약했다" "I1: 한글 · 공백 경로도 이스케이프 없이 대조한다"
 assert_grep "$(js "$OUT" "r['fetched_at']")" "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}$" "origin/main 받은 시각을 낸다(FETCH_HEAD)"
 lc="$(cd "$W" && LC_ALL=C LANG=C PYTHONIOENCODING= python3 "$RS" docs/rm/roadmap.md 2>&1)"; rc=$?
 assert_eq "$rc" "1" "비UTF-8 로캘(LC_ALL=C)에서도 같은 rc"
@@ -255,11 +257,40 @@ assert_contains "$(warns "$OUT" M1)" "spec 여럿" "M1: spec 여럿(따옴표 �
 assert_contains "$(warns "$OUT" V1)" "생략: docs/superpowers/specs/v1-design.md 이 번호 1개를 빠뜨렸다 — D2" "V1: 생략 경고"
 assert_eq "$(js "$OUT" "r['unassigned']")" "[]" "미배정 번호 0"
 assert_eq "$(js "$OUT" "r['orphans']")" "[]" "고아 발화 0"
-assert_eq "$(js "$OUT" "[o['blocks'] for o in r['overlaps']]")" "[['E1', 'W1']]" "겹침: E1 ↔ W1 만(README 는 빼고, J1→W1 은 의존이 있어 뺀다)"
+assert_eq "$(js "$OUT" "[o['blocks'] for o in r['overlaps']]")" "[['E1', 'W1']]" "겹침(정보): E1 ↔ W1 만(README 는 빼고, J1→W1 은 의존이 있어 뺀다)"
 assert_eq "$(js "$OUT" "next(b['task_status'] for b in r['blocks'] if b['id']=='H1')")" "in_progress" "작업 목록 대응: 계획 → in_progress"
 txt="$(cd "$W" && python3 "$RS" docs/rm/roadmap.md)"
 assert_grep "$txt" "^로드맵 상태 — 블록 22개 · " "사람용 글 첫 줄이 상태"
 assert_contains "$txt" "머지됨 자동 판정은 merge commit 방식에서만 된다" "한계 공시 줄"
+assert_contains "$txt" "경로 예약 겹침과 다른 에픽이 예약한 파일의 편집은 경고가 아니라 정보다" "공시: 겹침 · 위반은 정보"
+assert_contains "$txt" "경로 예약 겹침(정보): 1개" "사람용 글: 겹침은 정보 머리 아래"
+assert_contains "$txt" "    정보: 경로 예약 위반: src/j.txt 은 J1 만 예약했다" "사람용 글: 위반은 「정보:」 줄"
+
+# ── 1b. 정보만 있는 로드맵은 rc 0 — 같은 로드맵에 진짜 경고 하나를 더하면 rc 1(양성 짝) ──
+mkdir -p "$W/docs/rm5" "$W/docs/rm6"
+for d in docs/rm5 docs/rm6; do
+  bundle "$d" I1 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"
+  bundle "$d" J5 "C1, S1"
+  bundle "$d" W5 "C1, S1"
+done
+{ roadmap_head
+  block I1 feature/i1 없음 "src/i.txt"
+  block J5 feature/j5 없음 "src/j.txt, src/한 글.txt, docs/shared/"
+  block W5 feature/w5 없음 "docs/shared/x.md"
+  roadmap_tail ""
+} > "$W/docs/rm5/roadmap.md"
+{ sed '/^## 지휘 절차$/,$d' "$W/docs/rm5/roadmap.md"
+  block L5 feature/l5 없음 없음
+  sed -n '/^## 지휘 절차$/,$p' "$W/docs/rm5/roadmap.md"
+} > "$W/docs/rm6/roadmap.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm5/roadmap.md > "$T/info.json"); rc=$?
+assert_eq "$rc" "0" "정보(겹침 · 위반)만 있는 로드맵 → rc 0 — 정보는 종료 코드를 바꾸지 않는다"
+assert_eq "$(js "$T/info.json" "[o['blocks'] for o in r['overlaps']]")" "[['J5', 'W5']]" "정보 로드맵: 겹침 J5 ↔ W5 가 있다"
+assert_contains "$(notes "$T/info.json" I1)" "경로 예약 위반: src/j.txt 은 J5 만 예약했다" "정보 로드맵: I1 의 위반 정보가 있다"
+assert_eq "$(js "$T/info.json" "sum(len(b['warnings']) for b in r['blocks'])")" "0" "정보 로드맵: 경고 0개"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm6/roadmap.md > "$T/info-warn.json"); rc=$?
+assert_eq "$rc" "1" "양성 짝: 같은 로드맵에 묶음 없음 경고 하나를 더하면 rc 1"
+assert_contains "$(warns "$T/info-warn.json" L5)" "묶음 없음: docs/rm6/L5.md" "양성 짝: 더한 경고는 L5 의 묶음 없음"
 
 # ── 2. --roadmap-file(작업 트리) 사본 · 번호 대조 검사 불가 · 미배정 · 고아 ─────────
 mkdir -p "$W/docs/rm2"
@@ -480,8 +511,8 @@ for b in blocks:
         continue
     bt = (root / rm / b["fields"]["묶음"]).read_text(encoding="utf-8")
     fm = cbc.frontmatter(bt)
-    if (fm.get("type"), fm.get("slice"), fm.get("roadmap"), fm.get("source_brief")) != (
-            "slice-bundle", b["id"], rm + "/roadmap.md", meta["source_brief"]):
+    if (fm.get("type"), fm.get("epic"), fm.get("roadmap"), fm.get("source_brief")) != (
+            "epic-bundle", b["id"], rm + "/roadmap.md", meta["source_brief"]):
         bad.append(b["id"] + ":frontmatter")
     union |= set(cbc.bundle_ids(bt))
     if [l for l in bt.splitlines() if l.startswith("## ")] != [
@@ -492,7 +523,7 @@ for b in blocks:
         bad.append(b["id"] + ":§6")
     if bt.split("### 공통 목표\n", 1)[1].split("\n## 2. ", 1)[0] + "\n" != s1:
         bad.append(b["id"] + ":공통 목표")
-    mine = bt.split("### 이 조각의 Goal · Non-goal\n\n", 1)[1].split("\n\n### 공통 목표", 1)[0]
+    mine = bt.split("### 이 에픽의 Goal · Non-goal\n\n", 1)[1].split("\n\n### 공통 목표", 1)[0]
     if mine.splitlines() != ["- 의도: " + b["fields"]["의도"], "- 범위: " + b["fields"]["범위"]]:
         bad.append(b["id"] + ":의도 · 범위")
 print("BAD\t%s" % bad)
@@ -506,7 +537,7 @@ print("R0TABLE\t%s" % (set(r0["assigned"]) == cbc.table_ids(spec)))
 
 
 def lock_rows(text, blocks):
-    """락 지도 표의 (파일, 조각) 중 파일을 다른 조각이 예약한 줄 — (검사한 줄 수, 위반 목록)."""
+    """락 지도 표의 (파일, 에픽) 중 파일을 다른 에픽이 예약한 줄 — (검사한 줄 수, 위반 목록)."""
     checked, bad_rows = 0, []
     for line in text.splitlines():
         cells = [c.strip() for c in re.split(r"(?<!\\)\|", line)[1:-1]]
@@ -538,11 +569,11 @@ assert_eq "$(field_of BAD)" "[]" "실데이터 AC2: 묶음 10개의 frontmatter 
 assert_eq "$(field_of UNASSIGNED)" "[]" "실데이터 AC3: 미배정 번호 0"
 assert_eq "$(field_of ORPHANS)" "[]" "실데이터 AC3: 고아 발화 0"
 assert_eq "$(field_of UNKNOWN)" "[]" "실데이터: brief 에 없는 번호 0"
-assert_eq "$(field_of OVERLAPS)" "[]" "실데이터: 의존 없이 겹치는 경로 예약 0"
+assert_eq "$(field_of OVERLAPS)" "[{'blocks': ['R2', 'R3'], 'paths': ['plugins/spec-distill/references/docreview-profiles/design-doc.md']}]" "실데이터: 의존 없이 겹치는 경로 예약은 정보 하나 — R2 ↔ R3 의 design-doc.md(병렬 유지, 충돌은 머지 때 푼다)"
 assert_eq "$(field_of R0TABLE)" "True" "실데이터: R0 블록의 항목 · 발화 = R0 설계문서 번호 대조 표의 첫 칸"
-assert_eq "$(field_of LOCKBAD)" "[]" "실데이터: 락 지도의 모든 줄이 다른 조각이 예약한 파일을 자기 것으로 적지 않았다"
+assert_eq "$(field_of LOCKBAD)" "[]" "실데이터: 락 지도의 모든 줄이 다른 에픽이 예약한 파일을 자기 것으로 적지 않았다"
 [ "$(field_of LOCKROWS)" -ge 10 ] && ok "실데이터: 락 지도 줄 $(field_of LOCKROWS)개를 읽었다(양성 대조 — 표를 못 읽으면 0)" || no "실데이터: 락 지도 줄을 10개 미만으로 읽었다($(field_of LOCKROWS))"
-assert_contains "$(field_of LOCKCTL)" "R2 plugins/spec-distill/tests/test_conducting_interview_stage.sh 는 R1 가 예약했다" "양성 대조: 다른 조각이 예약한 파일의 줄을 잡는다"
+assert_contains "$(field_of LOCKCTL)" "R2 plugins/spec-distill/tests/test_conducting_interview_stage.sh 는 R1 가 예약했다" "양성 대조: 다른 에픽이 예약한 파일의 줄을 잡는다"
 # 양성 대조 — 사본에서 묶음 하나의 번호를 빼고 다른 묶음의 §6 을 한 글자 바꾸면 위 검사가 잡는다
 RMD=docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose
 mkdir -p "$T/ctl/docs/superpowers/roadmaps" "$T/ctl/docs/superpowers/interview" "$T/ctl/docs/superpowers/specs"
