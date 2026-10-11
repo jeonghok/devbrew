@@ -72,14 +72,27 @@ class Git:
         self.cwd = cwd
         self.env = dict(os.environ, GIT_NO_LAZY_FETCH="1", GIT_OPTIONAL_LOCKS="0",
                         GIT_TERMINAL_PROMPT="0", LC_ALL="C")
+        self.failures = []
 
     def run(self, *args):
+        rc, out, _err = self.run_err(*args)
+        return rc, out
+
+    def run_err(self, *args):
         if not args or args[0] not in GIT_ALLOWED:
             raise RuntimeError("허용하지 않은 git 하위 명령: %r" % (args[:1],))
-        proc = subprocess.run(["git", "-c", "core.quotePath=false", *args], cwd=self.cwd,
-                              env=self.env, stdin=subprocess.DEVNULL,
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return proc.returncode, proc.stdout.decode("utf-8", "replace")
+        try:
+            proc = subprocess.run(["git", "-c", "core.quotePath=false", *args], cwd=self.cwd,
+                                  env=self.env, stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except OSError as exc:
+            raise RuntimeError("git 을 실행하지 못했다: %s" % exc)
+        return (proc.returncode, proc.stdout.decode("utf-8", "replace"),
+                proc.stderr.decode("utf-8", "replace"))
+
+    def fail(self, sub: str, rc: int, err: str):
+        first = next((line.strip() for line in err.splitlines() if line.strip()), "(표준 오류 없음)")
+        self.failures.append("git %s 실패(rc %d): %s" % (sub, rc, first))
 
     def commit(self, ref: str):
         rc, out = self.run("rev-parse", "--verify", "--quiet", ref + "^{commit}")
@@ -100,24 +113,35 @@ class Git:
         return self.run("merge-base", "--is-ancestor", a, b)[0] == 0
 
     def first_parent_merges(self):
-        rc, out = self.run("log", "--first-parent", "--merges", "--format=%H%x09%P%x09%s",
-                           MAIN_REF)
+        rc, out, err = self.run_err("log", "--first-parent", "--merges",
+                                    "--format=%H%x09%P%x09%s", MAIN_REF)
+        if rc != 0:
+            self.fail("log", rc, err)
+            return []
         merges = []
-        for line in out.splitlines() if rc == 0 else []:
+        for line in out.splitlines():
             parts = line.split("\t", 2)
             if len(parts) == 3:
                 merges.append((parts[0], parts[1].split(), parts[2]))
         return merges
 
     def changed(self, base: str, tip: str):
-        rc, out = self.run("diff", "--name-only", "-z", "%s...%s" % (base, tip))
-        return [p for p in out.split("\0") if p] if rc == 0 else []
+        rc, out, err = self.run_err("diff", "--name-only", "-z", "%s...%s" % (base, tip))
+        if rc != 0:
+            self.fail("diff", rc, err)
+            return []
+        return [p for p in out.split("\0") if p]
 
     def grep_files(self, tree: str, fixed: str, pathspec: str):
-        rc, out = self.run("grep", "-l", "-z", "-F", "-e", fixed, tree, "--", pathspec)
+        rc, out, err = self.run_err("grep", "-l", "-z", "-F", "-e", fixed, tree, "--", pathspec)
+        if rc == 1 and not err.strip():  # 일치 없음 — git grep 은 이때 rc 1 과 빈 표준 오류다
+            return []
+        if rc != 0:
+            self.fail("grep", rc, err)
+            return []
         prefix = tree + ":"
         return [p[len(prefix):] if p.startswith(prefix) else p
-                for p in out.split("\0") if p] if rc == 0 else []
+                for p in out.split("\0") if p]
 
     def fetched_at(self):
         rc, out = self.run("rev-parse", "--git-common-dir")
@@ -496,6 +520,8 @@ def build(git: Git, args) -> dict:
             return report
         rel = os.path.relpath(os.path.realpath(args.roadmap_file), os.path.realpath(top))
         src = Source(git, root=top)
+        if main is None:
+            report["unknown_reasons"].append("origin/main 을 못 읽었다")
     else:
         rel = args.roadmap.strip("/")
         if main is None:
@@ -511,8 +537,10 @@ def build(git: Git, args) -> dict:
     meta, blocks, records, risk_rows, errors = parse_roadmap(text)
     report["format_errors"] = errors
     if errors:
-        report["blocks"] = [{"id": b["id"], "title": b["title"], "stage": "알 수 없음",
-                             "reason": "로드맵 형식 깨짐", "warnings": []} for b in blocks]
+        report["blocks"] = [{"id": b["id"], "title": b["title"], "kind": b.get("kind"),
+                             "stage": "알 수 없음", "reason": "로드맵 형식 깨짐",
+                             "task_status": None, "branch": b["fields"].get("브랜치"),
+                             "deps": [], "specs": [], "ids": [], "warnings": []} for b in blocks]
         return report
 
     roadmap_dir = rel.rsplit("/", 1)[0] if "/" in rel else "."
@@ -560,6 +588,7 @@ def build(git: Git, args) -> dict:
 
     cov_unknown = compute(git, main, blocks, records, bundles, roadmap_dir)
     report["unknown_reasons"] += ["번호 대조 검사 불가 — %s" % c for c in cov_unknown]
+    report["unknown_reasons"] += ["git 읽기 실패 — %s" % f for f in git.failures]
     report["overlaps"] = overlaps(blocks)
     for b in blocks:
         ids = b["assigned"]
@@ -616,8 +645,14 @@ def main(argv=None) -> int:
     where.add_argument("--roadmap-file", help="작업 트리의 로드맵 파일")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
-    report = build(Git(os.getcwd()), args)
-    report["exit"] = exit_code(report)
+    try:
+        report = build(Git(os.getcwd()), args)
+        report["exit"] = exit_code(report)
+    except Exception as exc:  # 계산이 죽어도 이상 없음(0)·경고(1)로 내지 않는다
+        report = {"roadmap": None, "source": None, "fetched_at": None, "notice": NOTICE,
+                  "blocks": [], "unassigned": None, "orphans": None, "unknown_ids": [],
+                  "overlaps": [], "format_errors": [],
+                  "unknown_reasons": ["내부 오류 — %s: %s" % (type(exc).__name__, exc)], "exit": 3}
     print(json.dumps(report, ensure_ascii=False, indent=2) if args.json else render(report))
     return report["exit"]
 

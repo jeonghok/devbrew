@@ -203,7 +203,11 @@ def main(argv=None) -> int:
                       "table_count": None, "reason": "파일을 못 읽었다: %s (%s)" % (path, exc)}
             print(json.dumps(result, ensure_ascii=False) if args.json else render(result))
             return 3
-    result = check(texts[0], texts[1])
+    try:
+        result = check(texts[0], texts[1])
+    except Exception as exc:  # 검사 자체가 죽어도 이상 없음(0)으로 내지 않는다
+        result = {"status": 3, "missing": [], "extra": [], "bundle_count": None,
+                  "table_count": None, "reason": "내부 오류 — %s: %s" % (type(exc).__name__, exc)}
     print(json.dumps(result, ensure_ascii=False) if args.json else render(result))
     return result["status"]
 
