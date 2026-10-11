@@ -101,10 +101,12 @@ def read_assign(path: Path) -> tuple[list[tuple[str, str, str]], list[str]]:
 def read_rows(path: Path, runner: str, commit: str, axis: str = "head") -> dict[str, tuple[str, str, str]]:
     """행 파일 → {unit: (status, exit, mode)}. 다른 러너 · 다른 트리의 행 파일은 계약 위반이다(R5)."""
     try:
-        is_file = path.is_file()
+        path.stat()
+    except FileNotFoundError:
+        pass   # 없는 파일은 아래에서 같은 계약 위반으로 낸다
     except OSError as exc:
         fail4(f"행 파일을 확인할 수 없다: {path} ({exc})")
-    if not is_file:
+    if not path.is_file():
         fail4(f"행 파일이 없다: {path} — 그 축을 돌리지 않았으면 run-test-selection.sh unrun 으로 채워야 한다")
     body, kv = split_trailer(read_text(path, "행 파일"), "#qg-rows", path)
     if kv.get("flaky") not in ("0", "1"):
