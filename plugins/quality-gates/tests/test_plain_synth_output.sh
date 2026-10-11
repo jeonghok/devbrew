@@ -62,7 +62,7 @@ assert_not_contains "$out" "(none)" "AC6: 영어 「(none)」이 없다"
 mkdir -p "$T/bad"; printf -- '- "매핑이 아닌 항목"\n' > "$T/bad/findings.yaml"; rf_prep "$T/bad"; rf_reply "$T/bad" 'verdicts: []'
 out="$(rf_synth "$T/bad" 2>/dev/null)"
 assert_eq "$(first "$out")" "리뷰를 합쳤다 — 지적 없음. 형식이 깨져 버린 지적 1개. 판정을 막는 경고가 있다 — 아래를 본다." "R12 · R16: 버린 수와 막는 경고를 첫 줄에 붙인다"
-assert_grep "$out" '^1개 지적을 버렸다 — 형식이 깨졌다\(dropped as malformed: ' "AC6: 버린 지적 줄이 쉬운 말로 시작하고 소비자가 읽는 토큰을 남긴다"
+assert_grep "$out" '^1개 지적을 버렸다 — 형식이 깨졌다\(dropped as malformed — ' "AC6: 버린 지적 줄이 쉬운 말로 시작하고 소비자가 읽는 토큰을 남긴다"
 assert_not_contains "$out" "finding(s) dropped" "AC6: 옛 영어 버린 지적 줄이 없다"
 # 표가 있는 갈래 — 살아남은 지적과 버린 지적이 함께
 mkdir -p "$T/bad2"; printf -- '- {agent: r, file: a.py, line: 1, severity: CRITICAL, summary: s, proposed_fix: f}\n- "매핑이 아닌 항목"\n' > "$T/bad2/findings.yaml"
@@ -70,7 +70,7 @@ rf_prep "$T/bad2"; rf_reply "$T/bad2" 'verdicts:
   - {f: f1, verdict: confirm}'
 out="$(rf_synth "$T/bad2" 2>/dev/null)"
 assert_eq "$(first "$out")" "리뷰를 합쳤다 — 남은 지적 1개(심각 1). 형식이 깨져 버린 지적 1개. 판정을 막는 경고가 있다 — 아래를 본다." "R12 · R16: 표가 있는 갈래도 버린 수와 경고를 첫 줄에 붙인다"
-assert_grep "$out" '^1개 지적을 버렸다 — 형식이 깨졌다\(dropped as malformed: ' "AC6: 표가 있는 갈래의 버린 지적 줄도 토큰을 남긴다"
+assert_grep "$out" '^1개 지적을 버렸다 — 형식이 깨졌다\(dropped as malformed — ' "AC6: 표가 있는 갈래의 버린 지적 줄도 토큰을 남긴다"
 
 # ④ 막지 않는 경고 — 보조 입력(--recritic-diff)이 죽었다(R16)
 mkdir -p "$T/aux"

@@ -126,11 +126,14 @@ def phase_key(paths, ledger=None):
                 # never discarded by first-wins (fail-closed severity merge).
                 if _sev_rank(g["severity"]) > _sev_rank(by_key[k]["severity"]):
                     by_key[k]["severity"] = g["severity"]
+                # 남는 쪽(먼저 온 쪽)에 plain 이 없고 새로 온 쪽에 있으면 물려받는다(칸이 합치기에서 사라지지 않게).
+                if not by_key[k].get("plain") and g.get("plain"):
+                    by_key[k]["plain"] = g["plain"]
             else:
                 g["sources"] = [g.get("agent", "?")]
                 by_key[k] = g
     fields = ("agent", "sources", "category", "target_anchor", "target_lines",
-              "severity", "summary", "proposed_fix", "dedup_key", "stagnation_key")
+              "severity", "summary", "plain", "proposed_fix", "dedup_key", "stagnation_key")
     out = {
         "findings": [{k: f.get(k) for k in fields if f.get(k) is not None} for f in by_key.values()],
         "sources_failed": sources_failed,
@@ -289,7 +292,7 @@ def phase_synth(findings_path, adversarial_path):
         "adjudication": disposition_report(L.report(), L.held_by_class()),
         "kept": [
             {k: f.get(k) for k in ("category", "target_anchor", "target_lines",
-                                   "severity", "summary", "proposed_fix", "dedup_key")
+                                   "severity", "summary", "plain", "proposed_fix", "dedup_key")
              if f.get(k) is not None}
             for f in kept
         ],

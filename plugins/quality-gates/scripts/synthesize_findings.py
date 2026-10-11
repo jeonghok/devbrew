@@ -312,6 +312,13 @@ def dedup(findings, ledger=None):
     deduped = []
     for group in by_key.values():
         merged = dict(group[0])
+        # 남는 쪽(먼저 온 쪽)에 plain 이 없으면 합쳐진 다른 쪽 중 가장 먼저 온 쪽의 plain 을 물려받는다.
+        # 뒤에서부터 덮어쓰므로 break 가 없다 — 이 파일은 처분 회계 소비자라 컴프리헨션 ·
+        # 버리는 분기(break/continue)가 `shared/tests/test_adjudication_wiring.sh` 에 묶여 있다.
+        if not _has_plain(merged):
+            for g in reversed(group[1:]):
+                if _has_plain(g):
+                    merged["plain"] = g["plain"]
         # `agent: null` 은 None 그대로 둔다 — 문자열 'None' 으로 바꾸면 신원 계약이 그것을
         # 문법 밖 저자로 잘못 센다. 정렬 키는 None 과 문자열이 섞여도 죽지 않게 고른다.
         merged["sources"] = sorted({g.get("agent", "?") for g in group},
@@ -321,6 +328,11 @@ def dedup(findings, ledger=None):
                 ledger.absorbed(finding_id(g), finding_id(merged))
         deduped.append(merged)
     return deduped + passthrough
+
+
+def _has_plain(f):
+    """리뷰어가 쓴 쉬운 한 문장(`plain`)이 있는가 — 문자열이고 공백뿐이 아니어야 있다."""
+    return isinstance(f.get("plain"), str) and bool(f["plain"].strip())
 
 
 def sort_findings(findings):
@@ -662,8 +674,8 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
             out.append(RECRITIC_ZERO_LINE)
         if dropped_malformed > 0:
             out.append(
-                f"{dropped_malformed}개 지적을 버렸다 — 형식이 깨졌다(dropped as malformed: 매핑이 아니거나, "
-                "담는 형이 틀리거나, file/severity/summary 가 없다) — stderr 참고. "
+                f"{dropped_malformed}개 지적을 버렸다 — 형식이 깨졌다(dropped as malformed — 매핑이 아니거나, "
+                "칸의 형식이 틀렸거나, file · severity · summary 가 없다. 자세한 내용은 stderr). "
                 "**이 실행은 clean이 아니다**: 버려진 주장은 심사되지 않았다.")
         out.extend(_degrade_block(report, blocking))
         return "\n".join(out) + "\n"
@@ -691,8 +703,8 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
     out.append("")
     if dropped_malformed > 0:
         out.append(
-            f"{dropped_malformed}개 지적을 버렸다 — 형식이 깨졌다(dropped as malformed: 매핑이 아니거나, "
-            "담는 형이 틀리거나, file/severity/summary 가 없다) — stderr 참고.")
+            f"{dropped_malformed}개 지적을 버렸다 — 형식이 깨졌다(dropped as malformed — 매핑이 아니거나, "
+            "칸의 형식이 틀렸거나, file · severity · summary 가 없다. 자세한 내용은 stderr).")
     out.append("")
     out.append("**고칠 방법:**")
     for i, f in enumerate(findings, 1):

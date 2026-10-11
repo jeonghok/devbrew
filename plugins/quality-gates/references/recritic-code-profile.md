@@ -7,7 +7,7 @@
 - 각 항목의 `disposition` 은 **severity** 다: `SUGGESTION` < `IMPORTANT` < `CRITICAL`.
 - `raise` 의 `to` 는 이 셋 중 하나이고 **지금보다 높아야** 한다.
 - `lower` 의 목적지는 `SUGGESTION` 하나뿐이고 `evidence` 가 있어야 한다(관문 E).
-- `added` 항목은 `file` · `line` · `severity` · `summary` · `proposed_fix` 를 싣는다. `file` 은 리포 상대 경로다.
+- `added` 항목은 `file` · `line` · `severity` · `summary` · `proposed_fix` 를 싣는다. `file` 은 리포 상대 경로다. `plain`(선택)에는 같은 지적을 처음 보는 사람이 읽을 쉬운 한 문장으로 — 내부 번호 없이 — 쓴다.
 
 ## 판정 관문 (항목마다 독립적으로 — 앞 판정이 뒤 판정을 누그러뜨리지 않는다)
 

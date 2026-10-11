@@ -53,7 +53,7 @@ case_v3_malformed_finding_blocks() {
   local out; out=$(rf_synth "$T/v3" --emit-verdict 2>/dev/null)
   assert_grep "$out" '^reason: findings-lost$' "V3 — 파손 finding 은 findings-lost"
   # 원장의 hold 가 사유를 따로 내므로, «센다»(dropped_malformed)는 이 공시 줄과 차단 문구로만 보인다.
-  assert_grep "$out" '^1개 지적을 버렸다 — 형식이 깨졌다\(dropped as malformed: .*이 실행은 clean이 아니다' \
+  assert_grep "$out" '^1개 지적을 버렸다 — 형식이 깨졌다\(dropped as malformed — .*이 실행은 clean이 아니다' \
     "V3 — 버려진 파손 finding 은 세어 공시한다(dropped as malformed)"
 }
 

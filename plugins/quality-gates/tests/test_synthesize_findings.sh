@@ -91,7 +91,7 @@ run_case "V8 — severity 결측은 IMPORTANT 로 막는다(낙관값 금지)" \
 run_case "V3 — 매핑 아닌 finding 은 버리되 세고 막는다" \
   'verdicts: []' \
   '- "CRITICAL: bare string"' \
-  '1개 지적을 버렸다 — 형식이 깨졌다\(dropped as malformed: .*verdict: not-certified .*reason: findings-lost' 'verdict: clean' --emit-verdict
+  '1개 지적을 버렸다 — 형식이 깨졌다\(dropped as malformed — .*verdict: not-certified .*reason: findings-lost' 'verdict: clean' --emit-verdict
 
 run_case "빈 결과 — 「지적 없음」 첫 줄과 0 개수" \
   'verdicts: []
