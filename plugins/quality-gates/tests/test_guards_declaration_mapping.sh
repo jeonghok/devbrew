@@ -28,7 +28,7 @@ trap 'rm -rf "$TMP"' EXIT
 # 동일하게 만든다.
 mk_repo() {
   R="$TMP/repo"; rm -rf "$R"; mkdir -p "$R"
-  ( cd "$R" && git init -q && git config user.email t@t && git config user.name t )
+  ( cd "$R" && git init -q -b main && git config user.email t@t && git config user.name t )
   mkdir -p "$R/plugins/qg/scripts" "$R/plugins/qg/agents" "$R/shared/tests" "$R/plugins/qg/skills/s"
   cp "$SUT" "$R/sut.sh"
   cp "$ROOT/plugins/quality-gates/scripts/resolve-baseline.sh" "$R/" 2>/dev/null || true
@@ -51,7 +51,7 @@ mk_repo() {
 # 시작하지 않도록 printf 인자로 분리한다(F4와 동일 이유).
 mk_repo_tab() {
   R="$TMP/repo"; rm -rf "$R"; mkdir -p "$R"
-  ( cd "$R" && git init -q && git config user.email t@t && git config user.name t )
+  ( cd "$R" && git init -q -b main && git config user.email t@t && git config user.name t )
   mkdir -p "$R/plugins/qg/scripts" "$R/shared/tests"
   cp "$SUT" "$R/sut.sh"
   cp "$ROOT/plugins/quality-gates/scripts/resolve-baseline.sh" "$R/" 2>/dev/null || true

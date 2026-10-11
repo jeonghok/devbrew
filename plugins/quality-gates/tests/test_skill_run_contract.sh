@@ -22,7 +22,7 @@ FENCE="$(printf '%s\n' "$P2" | awk '/^```bash$/{f=1;next} f&&/^```$/{exit} f')"
 assert_grep "$FENCE" '^"\$QG/scripts/setup-qg\.sh" --ensure \$ARGUMENTS' "P2 는 setup 을 --ensure 로 부른다 (D-6)"
 assert_grep "$FENCE" "grep -q '\^## 판정\\$' \"\\\$RD/result\.md\".*then \"\\\$QG/scripts/setup-qg\.sh\" \\\$ARGUMENTS" \
   "끝난 앞 실행(## 판정)이면 setup 을 --ensure 없이 다시 부른다"
-for f in excluded.md aggregate.yaml verdict.out intent.md topic-scope.txt; do
+for f in excluded.md differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do
   assert_grep "$FENCE" "^rm -f .*\"\\\$RD/$f\"" "P2 가 실행 단위 파일 $f 를 지운다"
 done
 
@@ -46,7 +46,7 @@ seed_prev() {   # <with_verdict: 1|0>
   mkdir -p "$RDIR"
   printf -- '---\nsession_id: "%s"\nstarted_at: "2000-01-01T00:00:00Z"\n---\n\n# qg result\n' "$SID" > "$RDIR/result.md"
   [ "$1" = 1 ] && printf '\n## 판정\n\nqg: clean\n\n## 지적\n\n(없음)\n' >> "$RDIR/result.md"
-  for f in excluded.md aggregate.yaml verdict.out intent.md topic-scope.txt; do echo old > "$RDIR/$f"; done
+  for f in excluded.md differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do echo old > "$RDIR/$f"; done
 }
 
 # (a) 끝난 앞 실행 — 폴더를 다시 만든다
@@ -55,7 +55,7 @@ seed_prev 1
 assert_eq "$rc" "0" "(a) P2 펜스가 끝난 앞 실행 위에서 0 으로 끝난다"
 assert_eq "$(grep -c '^## 판정$' "$RDIR/result.md" 2>/dev/null)" "0" "(a) 새 result.md 에 앞 실행의 ## 판정 이 없다"
 grep -q '2000-01-01' "$RDIR/result.md" 2>/dev/null && no "(a) result.md 가 앞 실행의 것 그대로다" || ok "(a) result.md 가 새로 만들어졌다"
-for f in excluded.md aggregate.yaml verdict.out intent.md topic-scope.txt; do
+for f in excluded.md differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do
   [ -e "$RDIR/$f" ] && no "(a) 앞 실행의 $f 가 남았다" || ok "(a) 앞 실행의 $f 가 없다"
 done
 
@@ -64,7 +64,7 @@ seed_prev 0
 ( cd "$T" && CLAUDE_PLUGIN_ROOT="$QGP" CLAUDE_CODE_SESSION_ID="$SID" bash "$RUN" ) >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "0" "(b) P2 펜스가 새 폴더 위에서 0 으로 끝난다"
 grep -q '2000-01-01' "$RDIR/result.md" 2>/dev/null && ok "(b) 판정 없는 result.md 는 --ensure 가 그대로 둔다" || no "(b) 판정 없는 result.md 가 다시 만들어졌다(setup 이중 실행)"
-for f in excluded.md aggregate.yaml verdict.out intent.md topic-scope.txt; do
+for f in excluded.md differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do
   [ -e "$RDIR/$f" ] && no "(b) $f 가 남았다" || ok "(b) $f 가 없다"
 done
 
@@ -162,6 +162,20 @@ final_case "blocking 빠짐"   $'optional: 0\nverdict: clean\n'                 
 final_case "optional 빠짐"   $'blocking: 0\nverdict: clean\n'                       4 "'optional:' 줄이 정확히 한 번이 아니다"
 final_case "verdict 겹침"    $'blocking: 0\noptional: 0\nverdict: clean\nverdict: defect\n' 4 "'verdict:' 줄이 정확히 한 번이 아니다"
 final_case "blocking 겹침"   $'blocking: 1\nblocking: 0\noptional: 0\nverdict: defect\n'   4 "'blocking:' 줄이 정확히 한 번이 아니다"
+
+# V4 — 차등 사본($RD/differential.yaml)이 있으면 그 new_failures: 가 판정 줄의 「차등 새 실패」 다.
+#      blocking: 처럼 정확히 한 번이어야 하고, 빠지거나 겹치거나 정수가 아니면 판정 줄을 만들지 않는다.
+diff_case() {   # diff_case <라벨> <differential.yaml 내용 | @missing> <기대 rc> <기대 조각>
+  rm -f "$RDIR/differential.yaml"
+  [ "$2" = "@missing" ] || printf '%s' "$2" > "$RDIR/differential.yaml"
+  final_case "$1" "$GOOD" "$3" "$4"
+  rm -f "$RDIR/differential.yaml"
+}
+diff_case "V4 차등 사본 없음(kill switch · error-axis)" "@missing" 0 '· 차등 새 실패 0 ·'
+diff_case "V4 new_failures 값(양성 짝)" $'degrade_causes: []\nnew_failures: 3\n' 0 'qg: defect · 막는 지적 1 · 선택 2 · 차등 새 실패 3 · '
+diff_case "V4 new_failures 빠짐"   $'degrade_causes: []\n'                    4 "'new_failures:' 줄이 정확히 한 번이 아니다"
+diff_case "V4 new_failures 겹침"   $'new_failures: 0\nnew_failures: 2\n'     4 "'new_failures:' 줄이 정확히 한 번이 아니다"
+diff_case "V4 new_failures 정수 아님" $'new_failures: two\n'                   4 "'new_failures:' 값이 정수가 아니다"
 
 # ── E: 외부 리뷰어 프롬프트와 처분
 EXT="$(awk '/^\*\*External reviewers\*\*/{f=1} f&&/^\*\*다른 전제 각도/{exit} f' "$SKILL")"

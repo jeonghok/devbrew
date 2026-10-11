@@ -154,8 +154,8 @@ print("SET:" + " ".join(sorted(found)))
 PY
 )
   assert_grep "$got" '^OUTSIDE:$' "SKILL 이 싣는 사유는 전부 닫힌 열거 안이다"
-  assert_grep "$got" '^SET:error-axis kill-switch scope-empty silent-drop trivia$' \
-    "SKILL 이 싣는 사유 집합(핀) — declaration-invalid · merge-conflict 는 합성기가 --scope 파일에서 낸다(SKILL 이 옮겨 적지 않는다)"
+  assert_grep "$got" '^SET:error-axis kill-switch scope-empty trivia$' \
+    "SKILL 이 싣는 사유 집합(핀) — declaration-invalid · merge-conflict 는 합성기가 --scope 파일에서, silent-drop 은 차등 파일의 degrade_causes 에서 낸다(SKILL 이 옮겨 적지 않는다)"
 }
 
 case_angle_template_is_total() {
@@ -241,144 +241,9 @@ added: []'
   rm -rf "$T"
 }
 
-case_degraded_ledger_row_reaches_silent_drop() {
-  # 컨트롤러 ruling(carry-notes Task 8, R-Y ADDITION) — R8 원장(runtime-evidence.md)의
-  # floor 5차원 중 하나라도 `degraded` 이거나 unclaimed unit 이 있으면 `check_qa_ledger.py`
-  # 는 원장 내부 일관성만 보고 그래도 exit 0 을 낼 수 있다(구조 게이트가 이 축을 못 잡는다).
-  # SKILL Step 4 의 판정 입력 표가 이 경우를 별도 행으로 `--reason silent-drop` 에 연결하지
-  # 않으면 그 실행이 clean 으로 샌다.
-  #
-  # Fix round 1, Important 1 — 옛 버전은 표 «창 전체» 에서 `--reason silent-drop` 을 찾았다.
-  # 그런데 `check_qa_ledger.py non-zero` 행(SKILL.md:514)도 같은 리터럴을 싣고 있어, L1(이
-  # 행의 오른쪽 칸을 「싣지 않는다 — 공시만 한다」로 바꿔치기)· L2(「없음 — --reason
-  # silent-drop 은 위 non-zero 행에만」으로 바꿔치기) 둘 다 창 안 다른 행이 리터럴을
-  # 대신 만족시켜 GREEN 으로 남았다. 이제 *이 행 자신*(degraded· unclaimed 를 동시에 담은
-  # «그 줄»)에서만 잰다 — 다른 행이 대신 만족시킬 수 없다.
-  #
-  # 최종 리뷰 M2 — 이 행은 `floor:attribution` degraded 에도 발화했는데, 그 값은
-  # `--differential` 행(위)이 이미 `degrade_causes` 로 옮기는 것과 겹치고, `silent-drop` 이
-  # REASONS 에서 먼저 정렬돼 더 구체적인 사유(baseline-unrunnable · error-axis ·
-  # granularity-smear)를 덮어썼다. `floor:verification` degraded 이거나 `unclaimed` unit
-  # 존재로 좁혔다 — SKILL.md 와 레퍼런스(R8 표 미러) 양쪽에서.
-  #
-  # 최종 리뷰(2차) — 「5차원」 리터럴 부재만 보는 옛 검사는 세 우회를 놓쳤다:
-  # (a) 「어느 floor 차원이든(`floor:verification` 포함)」처럼 "5차원" 없이 다시 넓히기,
-  # (b) `이거나`(OR)를 `이고`(AND)로 바꿔 두 조건이 «동시»일 때만 발화하게 좁히기(반대
-  # 방향 결함 — 실제로는 과소-발화),
-  # (c) `floor:attribution` 으로 조건 자체를 바꿔치면서 `floor:verification` 이라는
-  # 단어는 설명절에 남겨 두기.
-  # 이제 그 행 자신에서 다섯을 함께 잰다: `floor:verification` · `unclaimed` 존재,
-  # `floor:attribution` 부재, OR 접속사(`이거나`/`또는`) 존재, 「5차원」도 「어느 …
-  # 차원」도 부재.
-  local got
-  got=$(python3 - "$SKILL" "$REF" <<'PY'
-import re, sys
-rows = []
-for path in sys.argv[1:3]:
-    text = open(path, encoding="utf-8").read()
-    # "exit 0" 도 요구한다 — REF 에는 이 목표 행과 무관하게 degraded·unclaimed 를
-    # 둘 다 언급하는 다른 산문(R8 표의 일반 설명 행 · unclaimed 단독 규칙 문단)이
-    # 있어, 그 둘만으로는 목표 행(판정 입력 라우팅 행)을 못 가른다.
-    rows += [l for l in text.splitlines()
-             if "degraded" in l and "unclaimed" in l and "exit 0" in l]
-print(f"ROWS:{len(rows)}")
-ok = 0
-narrow_ok = 0
-for l in rows:
-    has_reason = "--reason silent-drop" in l
-    negated = any(neg in l for neg in ("싣지 않는다", "없음", "공시만"))
-    if has_reason and not negated:
-        ok += 1
-    has_verification = "floor:verification" in l
-    has_unclaimed = "unclaimed" in l
-    no_attribution_leak = "floor:attribution" not in l
-    has_or_join = ("이거나" in l or "또는" in l)
-    no_any_dimension_leak = not re.search(r"5차원|어느[^\n]{0,12}차원", l)
-    if (has_verification and has_unclaimed and no_attribution_leak
-            and has_or_join and no_any_dimension_leak):
-        narrow_ok += 1
-print(f"OK:{ok}")
-print(f"NARROW_OK:{narrow_ok}")
-PY
-)
-  assert_grep "$got" '^ROWS:2$' "degraded 이면서 unclaimed 인 조건을 담은 행이 SKILL·레퍼런스 각각 하나씩(합쳐 둘) 있다"
-  assert_grep "$got" '^OK:2$'   "그 행들 자신이 --reason silent-drop 을 싣고 부정형(싣지 않는다·없음·공시만)을 담지 않는다"
-  assert_grep "$got" '^NARROW_OK:2$' "그 행들이 floor:verification 으로 좁혀졌고 「floor 5차원」으로 도로 넓어지지 않았다"
-  # 양의 짝 — 새 행이 정상 경로(check_qa_ledger.py 가 돌아 원장이 전부 filled 인 실행)의
-  # --differential 행을 밀어내지 않았다.
-  assert_grep "$(cat "$SKILL")" -- '--differential "<\$aggregate_yaml' \
-    "정상 --differential 행이 SKILL 표에 여전히 남아 있다(새 행이 대체하지 않았다)"
-  assert_grep "$(cat "$REF")" -- '--differential "\$aggregate_yaml"' \
-    "정상 --differential 행이 레퍼런스 R8 표에도 여전히 남아 있다(새 행이 대체하지 않았다)"
-}
 
-case_pre_r6_abort_reaches_error_axis_catchall() {
-  # Fix round 1, Important 2 → Fix round 2, finding A(open) — 컨트롤러 ruling 은
-  # «R-init 가드»만이 아니라 진짜 포괄이다: ② 가 kill switch 없이 R6 집계까지
-  # «어느 스텝에서든» 끝나지 못하면(R-init 가드 · R3 갭 게이트의 `중단` 선택 ·
-  # 그 밖의 R1–R5 중단) 전부 이 행이다. Fix round 1 판은 R-init 만 이름 붙여 실제
-  # 포괄이 아니었다 — R3 의 `중단` 은 여전히 어떤 행에도 안 걸렸다. 이제 같은 줄에
-  # `R6` · `중단` · `--reason error-axis` 뿐 아니라 `R-init` 과 `R3` 이 «함께» 있는지
-  # 잰다 — 후자 둘이 없으면 R-init 전용으로 좁혀진 것이다(narrow-back 변이가 이걸
-  # 잡는다). R2·R4·R5b 가 degrade 로 R6 까지 이어지는 정상 경로는 이 행의 대상이
-  # «아니다» — 그건 R6-non-zero 행이 잡는다(그 행은 `중단` 을 안 써서 이 검색에
-  # 안 걸린다, 겹쳐도 무방하지만 오늘은 안 겹친다).
-  local got
-  got=$(python3 - "$SKILL" <<'PY'
-import sys
-text = open(sys.argv[1], encoding="utf-8").read()
-rows = [l for l in text.splitlines()
-        if "R6" in l and "중단" in l and "error-axis" in l]
-print(f"ROWS:{len(rows)}")
-ok = sum(1 for l in rows
-         if "--reason error-axis" in l and "R-init" in l and "R3" in l)
-print(f"OK:{ok}")
-PY
-)
-  assert_grep "$got" '^ROWS:1$' "R6 집계 전 어느 스텝에서든 중단을 담은 행이 정확히 하나 있다"
-  assert_grep "$got" '^OK:1$'   "그 행이 --reason error-axis 를 싣고 R-init·R3 를 «함께» 언급한다(R-init 전용으로 좁히면 RED)"
-}
 
-case_pre_r6_abort_catchall_mirrored_in_reference() {
-  # Fix round 2, finding A — 레퍼런스 R8 의 판정 입력 표도 SKILL Step 4 와 같은
-  # 포괄 행을 거울처럼 갖고 있어야 한다. 미러 행 삭제(F1 계열)를 독립적으로 잡는다.
-  local got
-  got=$(python3 - "$REF" <<'PY'
-import sys
-text = open(sys.argv[1], encoding="utf-8").read()
-rows = [l for l in text.splitlines()
-        if "R6" in l and "중단" in l and "error-axis" in l]
-print(f"ROWS:{len(rows)}")
-ok = sum(1 for l in rows
-         if "--reason error-axis" in l and "R-init" in l and "R3" in l)
-print(f"OK:{ok}")
-PY
-)
-  assert_grep "$got" '^ROWS:1$' "레퍼런스 R8 표에도 같은 포괄 행이 정확히 하나 있다"
-  assert_grep "$got" '^OK:1$'   "그 행이 --reason error-axis 를 싣고 R-init·R3 를 함께 언급한다"
-}
 
-case_r3_stop_choice_routes_to_error_axis() {
-  # Fix round 2, finding A — R3 갭 게이트의 `중단` 선택지는 (fix round 1까지) 어디로도
-  # 가지 않았다: 사용자가 고르면 파이프라인이 조용히 죽었다. 레퍼런스 R3 절 자신이
-  # 「② 를 끝내고 SKILL Step 4 로 간다 — --reason error-axis」 를 명시하는지 R3
-  # 섹션 창(다음 **Step R4 전까지)으로 좁혀 잰다 — 창 밖(예: 포괄 행 자신의 `중단`
-  # 언급)이 대신 만족시키지 못하게.
-  local got
-  got=$(python3 - "$REF" <<'PY'
-import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
-m = re.search(r'\*\*Step R3 —.*?(?=\*\*Step R4 )', text, re.S)
-window = m.group(0) if m else ""
-print(f"WINDOW_LEN:{len(window)}")
-print(f"HAS_STOP:{1 if '중단' in window else 0}")
-print(f"HAS_ROUTE:{1 if '--reason error-axis' in window else 0}")
-PY
-)
-  assert_grep "$got" '^WINDOW_LEN:[1-9]' "R3 섹션 창을 찾았다(0 이면 앵커가 깨졌다)"
-  assert_grep "$got" '^HAS_STOP:1$'  "R3 창에 「중단」 선택지가 있다"
-  assert_grep "$got" '^HAS_ROUTE:1$' "R3 창 자신이 --reason error-axis 라우트를 적는다(창 밖 포괄 행이 대신 못 채운다)"
-}
 
 case_security_kill_switch_routes_to_absent() {
   # Fix round 1, Important 3(a)(plan-mandated) — Review Focus 5 의 A2 변이(각도
@@ -571,28 +436,6 @@ PY
   assert_grep "$got" '^RETRY_BULLET_HAS_FIX_MEANING:1$'  "그 불릿이 회귀 unit 을 고치는 의미로 Retry 를 재정의한다(suggested patches 없음을 인정)"
 }
 
-case_zero_adapter_aggregate_skips_glob() {
-  # 최종 리뷰 M3 — `$adapter_count == 0` 이면 R6 집계 호출이 `per-adapter-*.yaml` glob 을
-  # 아예 안 쓴다(매치 없는 glob 이 쉘에 따라 명령을 통째로 죽이거나(zsh) 리터럴 파일명을
-  # 넘겨 exit 4 를 내(bash) error-axis 로 오분류됐다 — 실제 사실은 no-adapters 다). then
-  # 분기는 glob 없이 `--expected-adapters 0`, else 분기만 glob 을 쓴다.
-  local got
-  got=$(python3 - "$REF" <<'PY'
-import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
-m = re.search(r'if \[ "\$adapter_count" -eq 0 \]; then\n(.*?)\nelse\n(.*?)\nfi', text, re.S)
-print(f"FOUND:{1 if m else 0}")
-then_body, else_body = (m.group(1), m.group(2)) if m else ("", "")
-print(f"THEN_HAS_AGG:{1 if ('diff-test-results.py' in then_body and '--aggregate' in then_body) else 0}")
-print(f"THEN_NO_GLOB:{1 if 'per-adapter-*.yaml' not in then_body else 0}")
-print(f"ELSE_HAS_GLOB:{1 if 'per-adapter-*.yaml' in else_body else 0}")
-PY
-)
-  assert_grep "$got" '^FOUND:1$'         "adapter_count==0 분기(if/else/fi)를 찾았다"
-  assert_grep "$got" '^THEN_HAS_AGG:1$'  "0 분기도 diff-test-results.py --aggregate 를 부른다(무응답이 아니다)"
-  assert_grep "$got" '^THEN_NO_GLOB:1$'  "0 분기는 per-adapter-*.yaml glob 을 쓰지 않는다(매치 없는 glob 회피)"
-  assert_grep "$got" '^ELSE_HAS_GLOB:1$' "1개 이상 분기는 여전히 glob 을 쓴다(정상 경로 안 밀림)"
-}
 
 case_recritic_findings_stamp_agent_and_drop_confidence() {
   # findings.yaml 을 쓰는 자리(Step 3.5-1)가 agent 를 직접 찍고 confidence 를 옮기지 않는다고
@@ -605,28 +448,17 @@ case_recritic_findings_stamp_agent_and_drop_confidence() {
   assert_not_grep "$(cat "$SKILL")" '리뷰어가 낸 값을 그대로 옮긴다' "옛 confidence 보존 지시가 없다"
 }
 
-case_reference_names_the_blocking_key_not_kept() {
-  # 최종 리뷰 M6 — 합성기 출력 키는 `blocking:` 이다. 모델이 읽는 레퍼런스가 없어진 kept 를
-  # 가리키면 거짓 인용이다. 음의 락이라 양의 짝(그 자리의 새 문구)을 함께 둔다.
-  assert_file_absent "$REF" '(^|[^A-Za-z_])kept[ ]?=[ ]?0' "레퍼런스가 없어진 kept=0 을 가리키지 않는다"
-  assert_file_grep "$REF" '^\*\*판정 옆 차등 요약과 `blocking: 0` 라우팅은 SKILL 이 진다\.\*\*' \
-    "레퍼런스가 같은 라우팅을 blocking: 0 으로 이름 붙인다 (양의 짝)"
-  assert_file_grep "$REF" '`verdict: defect` 이면서 `blocking: 0`\(`confirmed_product_defect: true` 가 유일한 원인\)일 때' \
-    "차등 기원 defect 조건도 blocking: 0 으로 적는다 (양의 짝)"
-}
 
 for c in case_every_synth_call_emits_verdict_and_angles case_blocking_angle_dispatches_are_fail_closed \
          case_reason_literals_are_closed_and_pinned case_angle_template_is_total \
          case_differential_runs_inside_every_iteration \
          case_security_switch_is_not_certified_even_with_zero_findings \
          case_different_premise_absent_is_disclosed_not_blocked case_caller_reasons_reach_the_verdict \
-         case_degraded_ledger_row_reaches_silent_drop case_pre_r6_abort_reaches_error_axis_catchall \
-         case_pre_r6_abort_catchall_mirrored_in_reference case_r3_stop_choice_routes_to_error_axis \
          case_security_kill_switch_routes_to_absent case_differential_kill_switch_env_name_is_pinned \
-         case_differential_defect_zero_kept_routes_to_fixloop case_zero_adapter_aggregate_skips_glob \
+         case_differential_defect_zero_kept_routes_to_fixloop \
          case_n5_and_retry_cover_differential_origin \
          case_recritic_findings_stamp_agent_and_drop_confidence \
-         case_reference_names_the_blocking_key_not_kept; do
+; do
   "$c"
 done
 finish

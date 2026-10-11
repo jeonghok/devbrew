@@ -6,12 +6,12 @@
 #
 # 왜 필요한가 (Task 31, 무게 감축): `## Differential test` 절차 전문이
 # skills/quality-pipeline/references/differential-test.md 로 옮겨지고 SKILL.md 에는
-# 포인터 산문만 남았다. 이 리포의 여러 테스트(2026-08-21 기준 **7개**가 이 헬퍼를
+# 포인터 산문만 남았다. 이 리포의 여러 테스트가 이 헬퍼를
 # source 한다 — 예: tests/harness/test_skill_orchestration_behavior.sh ·
-# tests/test_runtime_verdict_precedence.sh. **이 둘은 예시이지 목록이 아니다** —
+# tests/test_codex_dispatch_invariant.sh. **이 둘은 예시이지 목록이 아니다** —
 # 실제 소비자는 `grep -rl reconstruct_skill_md plugins/` 로 도출할 것. 열거한 목록은
 # 낡고, 낡은 목록은 "여기 없으니 무관하다"로 읽힌다)는 SKILL.md 를 줄 번호·섹션 윈도우로
-# 분석해 차등 테스트 절차(Step R-init..R8)의 순서·근접성·본문을 검증한다 —
+# 분석해 차등 테스트 절차(D0~D8)의 순서·근접성·본문을 검증한다 —
 # 원래 단일 파일이라는 전제 위에서 설계됐다. 파일을 둘로 쪼개면서 그 검사 로직
 # 수십 곳을 전부 다시 쓰는 대신, 검사가 읽을 **논리적으로 재구성된 문서**를
 # 여기서 한 번 만든다: 포인터 블록 자리에 참조 파일을 그대로 삽입하면 분할
@@ -93,7 +93,7 @@ reconstruct_skill_md() {   # $1 = SKILL.md 절대경로
     #
     # 위 awk 는 **하드코딩된 한 섹션**(`## Differential test`)만 되접고, 그 헤딩이 없을 때만
     # 시끄럽게 죽는다. quality-pipeline/SKILL.md 가 **또** 쪼개지면(아직 906줄이다)
-    # 재구성은 여전히 성공하고, 일곱 소비자에게 **새 섹션이 조용히 빠진 문서**를 넘긴다 —
+    # 재구성은 여전히 성공하고, 소비자들에게 **새 섹션이 조용히 빠진 문서**를 넘긴다 —
     # 모든 소비자의 `if ! reconstruct_skill_md` 가드는 "성공"을 보고한다. 이 브랜치의
     # 헤드라인 실패 클래스가, 그것을 막으려고 만든 수리 뒤에 숨는 것이다.
     #

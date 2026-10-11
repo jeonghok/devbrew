@@ -30,8 +30,8 @@ started_at: "<ISO-8601 UTC>"
 
 ## 차등 테스트
 
-<집계의 attribution_status · degrade_causes · resolution_disclosure · per_adapter 원문,
- 없으면 (이번 실행에 차등 집계 없음)>
+<`differential.yaml` 의 attribution_status · degrade_causes · resolution_disclosure · per_adapter 원문과
+ `differential-not-counted.md`(커버리지로 세지 않은 테스트), 없으면 (이번 실행에 차등 출력 없음)>
 
 ## e2e
 
@@ -60,7 +60,7 @@ started_at: "<ISO-8601 UTC>"
    세션 폴더의 표지다.
 
 같은 폴더의 다른 파일 — `intent.md`(의도 출처 본문) · `excluded.md`(제외 패치 누적) ·
-`aggregate.yaml`(마지막 차등 집계) · `verdict.out` · `topic-scope.txt` · `runtime-evidence.md`
-(차등 테스트 원장) · `comment-head.md` · `comment.md` · `publish.out` · `publish.err`(게시) · `e2e-record.md` · `e2e-flip.md` ·
+`differential.yaml`(마지막 iteration 의 차등 출력 사본) · `differential-not-counted.md`(커버리지로 세지 않은 테스트) ·
+`verdict.out` · `topic-scope.txt` · `comment-head.md` · `comment.md` · `publish.out` · `publish.err`(게시) · `e2e-record.md` · `e2e-flip.md` ·
 `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt` · `e2e-app.pgid` · `e2e-app.log`(e2e) —
 도 같은 생명주기를 따른다.

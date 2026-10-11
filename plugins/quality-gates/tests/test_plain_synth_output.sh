@@ -114,18 +114,16 @@ assert_grep "$out" "^$(printf '%s' "$fixes" | sed 's/\*/\\*/g')\$" "합성기가
 
 # ⑦ 시작 배너 — 첫 줄이 상태 문장이고 과정 나열이 없다
 mkdir -p "$T/w"
-out="$(cd "$T/w" && bash "$SETUP" --session-id "plaintest-$$" --plan docs/p.md 2>/dev/null)"
+out="$(cd "$T/w" && bash "$SETUP" --session-id "plaintest-$$" 2>/dev/null)"
 assert_eq "$(first "$out")" "🔄 Quality Gates 를 시작한다 — 이 턴 안에서 끝까지 돈다." "Goal 2: 시작 배너 첫 줄이 상태 문장이다"
 assert_not_contains "$out" "Pipeline:" "Goal 2: 시작 배너에 과정 나열이 없다"
 assert_not_contains "$out" "Pipeline runs in this turn" "AC6: 옛 영어 배너 끝줄이 없다"
-assert_grep "$out" '^계획 파일: docs/p\.md$' "AC6: 계획 파일 줄이 한국어다"
+assert_not_contains "$out" "계획 파일" "--plan 이 없어져 배너에 계획 파일 줄이 없다"
 assert_not_contains "$out" "Plan file" "AC6: 옛 영어 계획 파일 줄이 없다"
 
 # ⑧ setup 오류 줄(R10) — 쉬운 말이 앞, 원래 영어 토큰은 괄호에(기존 락이 그 토큰을 잰다)
 err="$(cd "$T/w" && bash "$SETUP" --paths 2>&1 >/dev/null)"
 assert_contains "$err" "❌ --paths 뒤에 glob 이 하나도 없다(--paths requires at least one glob)." "R10: --paths 오류"
-err="$(cd "$T/w" && bash "$SETUP" --plan 2>&1 >/dev/null)"
-assert_contains "$err" "❌ --plan 뒤에 파일 경로가 없다(--plan requires a file path argument)." "R10: --plan 오류"
 err="$(cd "$T/w" && bash "$SETUP" --session-id 2>&1 >/dev/null)"
 assert_contains "$err" "❌ --session-id 뒤에 값이 없다(--session-id requires an argument)." "R10: --session-id 오류"
 err="$(cd "$T/w" && bash "$SETUP" --no-such-flag 2>&1 >/dev/null)"
