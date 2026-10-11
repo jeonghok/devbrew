@@ -116,20 +116,33 @@ b2_block="$(awk '/^#### B-2/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
 { [[ -n "$b2_block" ]] && grep -qF 'AskUserQuestion(' <<<"$b2_block"; } \
   && ok "AC20: Step B proceed 게이트가 AskUserQuestion 호출 (B-2 스코프)" \
   || no "AC20: B-2 블록에 AskUserQuestion( 호출이 없다"
-grep -qF '확정하고 /compact 후 brainstorming' <<<"$b2_block" \
-  && ok "AC2: 옵션 ① 라벨 (확정 + /compact, B-2 스코프)" \
+grep -qF '{label: "확정하고 /new 후 brainstorming (권장)"' <<<"$b2_block" \
+  && ok "AC2: 옵션 ① 라벨 (확정 + /new, 권장, B-2 스코프)" \
   || no "AC2: 옵션 ① 라벨이 B-2 게이트에 없다"
-grep -qF '확정하고 바로 brainstorming' <<<"$b2_block" \
-  && ok "AC2: 옵션 ② 라벨 (확정 + 즉시, B-2 스코프)" \
+grep -qF '{label: "확정하고 /compact 후 brainstorming"' <<<"$b2_block" \
+  && ok "AC2: 옵션 ② 라벨 (확정 + /compact, B-2 스코프)" \
   || no "AC2: 옵션 ② 라벨이 B-2 게이트에 없다"
+grep -F '{label:' <<<"$b2_block" | grep -qF '바로' \
+  && no "AC4(next-session): B-2 옵션 라벨에 「바로」 진행이 남았다" \
+  || ok "AC4(next-session): B-2 옵션 라벨에 「바로」 진행이 없다 (양성 짝: 위 라벨 둘)"
+grep -qF '두 줄 명령을 노출하지 *않고*' <<<"$b2_block" \
+  && ok "Review Focus 4: brief 부재면 두 줄 명령을 노출하지 않는다 (B-2 스코프)" \
+  || no "Review Focus 4: B-2 의 brief 부재 경로가 두 줄 명령 비노출을 말하지 않는다"
 grep -qF '확정 목록 수정' <<<"$b2_block" \
   && ok "AC2: 옵션 ③ 라벨 (재제시, B-2 스코프)" \
   || no "AC2: 옵션 ③ 라벨이 B-2 게이트에 없다"
 grep -qF 'brief만 종료' <<<"$b2_block" \
   && ok "AC20: 옵션 ④ 라벨 (terminal, B-2 스코프)" \
   || no "AC20: 옵션 ④ 라벨이 B-2 게이트에 없다"
-# 이건 전-파일로 둔다 — SKILL 전체에서 1회뿐이라 이미 이빨이 있다.
-has '/compact interview brief at' "AC20: verbatim /compact 명령 노출"
+# 다음 세션 줄 — B-3 표지 블록의 한 줄. 줄의 개수 · 모양은 test_next_session_command.sh 가 잰다.
+nsl_iv="$(awk -v m='**다음 세션 줄 — ①/② 공통**' '$0==m{f=1;next} f&&NF{print;exit}' "$FIN")"
+[[ -n "$nsl_iv" ]] && ok "AC20: B-3 의 다음 세션 줄을 읽었다" || no "AC20: B-3 의 다음 세션 줄 표지 블록이 없다"
+grep -qF '이 interview brief 로 Skill superpowers:brainstorming 을 시작하라' <<<"$nsl_iv" \
+  && ok "AC20: 다음 세션 줄이 brainstorming 을 부른다" \
+  || no "AC20: 다음 세션 줄이 brainstorming 을 부르지 않는다"
+grep -qF '/compact interview brief at' "${CI_ALL[@]}" \
+  && no "AC4(next-session): 옛 /compact 보존 템플릿이 남았다" \
+  || ok "AC4(next-session): 옛 /compact 보존 템플릿이 없다 (양성 짝: 위 다음 세션 줄)"
 
 # AC2: 재제시 상한 + 초과 시 강등 + 고정 advisory 문자열 (Unbounded-autonomy 가드)
 b0_block="$(awk '/^#### B-0/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
@@ -156,26 +169,53 @@ grep -qE '제외한 것도|제외 항목' <<<"$b0_block" \
 b3_block="$(awk '/^#### B-3/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
 # B-3 전체에서 count>=2를 세면 "①에 두 문장, ②에 0"도 통과한다 — AC3의 계약은 개수가 아니라
 # **경로별 존재**다. 각 옵션 bullet을 자기 윈도우로 잘라 양쪽에 각각 >=1을 요구한다.
+# ①·② 는 한 줄을 공유한다 — C4 는 그 줄에 실리고, ①·② 창은 그 줄을 가리키며 정지 요건 셋을 갖는다.
 b3_opt1="$(awk '/^- \*\*① /{f=1} /^- \*\*② /{f=0} f' <<<"$b3_block")"
 b3_opt2="$(awk '/^- \*\*② /{f=1} /^- \*\*③ /{f=0} f' <<<"$b3_block")"
-c4_1=$(grep -cF '보고 후 재결정' <<<"$b3_opt1")
-c4_2=$(grep -cF '보고 후 재결정' <<<"$b3_opt2")
-{ [[ "$c4_1" -ge 1 ]] && [[ "$c4_2" -ge 1 ]]; } \
-  && ok "AC3: C4 프로토콜이 ①/② 각 경로에 실림 (①=$c4_1 ②=$c4_2)" \
-  || no "AC3: C4 프로토콜이 양쪽 경로에 있지 않다 (①=$c4_1 ②=$c4_2)"
-grep -qE '임의 변경.*금지' <<<"$b3_block" \
-  && ok "AC3: 임의 변경 금지 절반이 명시됨" || no "AC3: 임의 변경 금지가 없다"
+nsl_b3="$(awk -v m='**다음 세션 줄 — ①/② 공통**' '$0==m{f=1;next} f&&NF{print;exit}' <<<"$b3_block")"
+grep -qF '보고 후 재결정' <<<"$nsl_b3" \
+  && ok "AC3: C4 프로토콜이 ①·② 공통 다음 세션 줄에 실림" \
+  || no "AC3: B-3 의 다음 세션 줄에 C4 프로토콜이 없다"
+grep -qE '임의 변경.*금지' <<<"$nsl_b3" \
+  && ok "AC3: 임의 변경 금지 절반이 다음 세션 줄에 있다" || no "AC3: 다음 세션 줄에 임의 변경 금지가 없다"
+for w in 1 2; do
+  wv="b3_opt${w}"; win="${!wv}"
+  if [[ -z "$win" ]]; then no "AC4(next-session): B-3 옵션 ${w} 창이 비었다 — 아래 단언이 공허하다"; continue; fi
+  for n in '다음 세션 줄' '턴 종료(STOP)' '같은 턴에서 `brainstorming`을 호출하지 말 것' '다음 턴' '사용자 트리거'; do
+    grep -qF "$n" <<<"$win" && ok "AC4(next-session): B-3 옵션 ${w} 창에 ${n}" || no "AC4(next-session): B-3 옵션 ${w} 창에 ${n} 이 없다"
+  done
+  grep -qF '바로' <<<"$win" && no "AC4(next-session): B-3 옵션 ${w} 창에 「바로」 진행이 남았다" || ok "AC4(next-session): B-3 옵션 ${w} 창에 「바로」 진행이 없다"
+done
 
-# C5: 규약은 brief가 아니라 호출 프롬프트에 산다
-grep -qE '호출 프롬프트|invocation prompt' <<<"$b3_block" \
+# C5: 규약은 brief가 아니라 호출 프롬프트(= 다음 세션 줄)에 산다
+c5_par="$(awk '/^\*\*규약의 거처 \(C5\)\.\*\*/{f=1} f&&/^$/{exit} f' <<<"$b3_block")"
+grep -qE '호출 프롬프트|invocation prompt' <<<"$c5_par" \
   && ok "C5: 규약의 거처가 호출 프롬프트로 명시됨" \
   || no "C5: 규약이 brief에 실리지 않는다는 명시가 없다"
+grep -qF '다음 세션 줄' <<<"$c5_par" \
+  && ok "C5(next-session): 규약의 거처 = 다음 세션 줄" \
+  || no "C5(next-session): 규약의 거처 문단이 다음 세션 줄을 말하지 않는다"
 
 # AC21(i) mechanical only — review layer (ii) 공존 판단은 design 자리 리뷰어(doc-critic
 # + design-doc 프로필)의 몫이고 이 기계적 축의 대상이 아니다
 cc=$(ci_cat | grep -cE "턴 종료|다음 턴"); [[ "$cc" -ge 1 ]] \
   && ok "AC21(i): cross-compact stop wording present (lines=$cc)" \
   || no "AC21(i): cross-compact stop wording absent"
+
+# B-4 — 옛 「② 즉시 진행 예외」 문장이 가드 문단에 돌아오지 않는다(B-3 창만 재면 B-4 되돌리기가 통과한다).
+b4_block="$(awk '/^#### B-4/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
+if [[ -z "$b4_block" ]]; then
+  no "AC4(next-session): B-4 블록이 비었다 — 아래 단언이 공허하다"
+else
+  grep -qF '예외는 없습니다' <<<"$b4_block" \
+    && ok "AC4(next-session): B-4 가 정지 요건에 예외가 없다고 적는다" \
+    || no "AC4(next-session): B-4 에 「예외는 없습니다」가 없다"
+  for n in '명시적 예외' '즉시 brainstorming' '바로'; do
+    grep -qF "$n" <<<"$b4_block" \
+      && no "AC4(next-session): B-4 에 「${n}」 이 남았다" \
+      || ok "AC4(next-session): B-4 에 「${n}」 이 없다"
+  done
+fi
 
 has 'polite[- ]?stop|narrate.*금지|silent 종료 금지' "AC22: AP2 polite-stop ban codified"
 

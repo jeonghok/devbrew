@@ -176,10 +176,10 @@ Step B는 단일 책임 단위입니다: *brief가 완결되면 다음 stage(bra
 가용성.
 
 **이 게이트의 공통 계약(순서 · 두 가드 · 예외 경로)은 `${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md` 에 있습니다.**
-`spec-review` 의 `/compact` proceed 게이트와 **같은 골격**이며, 두 벌을 독립 저술하던
+`spec-review` 의 proceed 게이트와 **같은 골격**이며, 두 벌을 독립 저술하던
 것을 그 파일로 모았습니다 — 한쪽만 고치면 다른 쪽이 조용히 갈라지기 때문입니다. Step B 에
 실제로 진입할 때 읽고 그대로 따릅니다. 아래에는 이 skill 의 **어휘**(확정 후보 제시 · 옵션 라벨 ·
-verbatim `/compact` 템플릿 · superpowers 가용성 분기)만 남습니다.
+다음 세션 줄 · superpowers 가용성 분기)만 남습니다.
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
@@ -277,7 +277,7 @@ python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
 
 #### B-1 — superpowers 가용성 분기
 
-- **superpowers 부재 시**: 현행 graceful degradation 그대로 — brief를 완료하고 **loud advisory**를 낸 뒤 **정지(STOP)**. 게이트 없음(compact 후 넘길 대상 자체가 없음). crash·spec-mode fallback **금지**(단독 완결, graceful degrade):
+- **superpowers 부재 시**: 현행 graceful degradation 그대로 — brief를 완료하고 **loud advisory**를 낸 뒤 **정지(STOP)**. 게이트 없음(다음 세션에 넘길 대상 자체가 없음). crash·spec-mode fallback **금지**(단독 완결, graceful degrade):
 
   > `[spec-distill] interview brief 를 만들었다: docs/superpowers/interview/<file>. superpowers 가 없어 여기서 멈춘다. 이 brief 를 다음 작업의 입력으로 쓰세요.`
 
@@ -287,7 +287,7 @@ python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
 
 게이트 *이전*에 brief 경로 존재를 확인합니다(`[[ -f <brief-path> ]]` — race 방어 경량 가드,
 `AskUserQuestion` 게이트 자체는 아님). 부재 시 정본(`proceed-gate.md`)의 `## Step A` 대로
-`/compact`를 노출하지 *않고* loud advisory 후 STOP(brief 는 막 검증됐고 하류·SessionEnd 가 cleanup 을 맡는다 — 설계 §5.3):
+두 줄 명령을 노출하지 *않고* loud advisory 후 STOP(brief 는 막 검증됐고 하류·SessionEnd 가 cleanup 을 맡는다 — 설계 §5.3):
 
 > `[spec-distill] brief '<brief-path>' 부재 — 재작성/세션 리셋 필요`
 
@@ -336,8 +336,8 @@ AskUserQuestion({
     question: "interview brief 를 만들었다: <brief-path> (구조 검사 통과 · 리뷰 <게이트 결과 한 줄 — 왜 여기서 멈췄는지 · 남은 항목 수 · 리뷰를 마치지 못했으면 그 사유(unreviewed_reason)>). 경고 <N>개 — 위에 적었다 | 경고 없음 | 이상 없음. 다음 단계는?",
     header: "다음 단계",
     options: [
-      {label: "확정하고 /compact 후 brainstorming (권장)", description: "확정 후보를 확정으로 바꿔 저장하고, 붙여 넣을 /compact 명령을 보여 준다. 긴 인터뷰 기록이 정리된 뒤 brainstorming 을 시작한다."},
-      {label: "확정하고 바로 brainstorming", description: "확정 후보를 확정으로 바꿔 저장하고, 이 대화 그대로 brainstorming 을 시작한다(기록 정리 없음)."},
+      {label: "확정하고 /new 후 brainstorming (권장)", description: "확정 후보를 확정으로 바꿔 저장하고, 붙여 넣을 두 줄(/new 와 다음 세션 줄)을 보여 준다. 새 세션이 brief 를 붙여 읽고 brainstorming 을 시작한다."},
+      {label: "확정하고 /compact 후 brainstorming", description: "확정 후보를 확정으로 바꿔 저장하고, 같은 두 줄을 첫 줄만 /compact 로 보여 준다. 인터뷰 기록을 요약해 둔 채 brainstorming 을 시작한다."},
       {label: "확정 목록 수정", description: "확정 후보를 고쳐 다시 보여 준다(최대 2번). 아직 아무것도 확정되지 않는다."},
       {label: "brief만 종료", description: "brief 를 여기서 끝낸다. 모든 항목이 잠정으로 남고 다음 단계로 넘기지 않는다."}
     ],
@@ -350,8 +350,8 @@ AskUserQuestion({
 
 **규약의 거처 (C5).** `superpowers:brainstorming`은 spec-distill을 모르고 brief frontmatter를
 읽지 않습니다 — 전달은 순수 프로즈 경로입니다. 그래서 C4 재결정 프로토콜은 brief 파일이
-아니라 **orchestrator의 호출 프롬프트**에 싣습니다. brief는 순수 데이터(`source`/`status`/
-`evidence`)만 나릅니다. 아래 ①과 ② **양쪽 모두** 같은 문장을 싣습니다.
+아니라 **다음 세션 줄**(brainstorming 을 부르는 호출 프롬프트)에 싣습니다. brief는 순수 데이터(`source`/`status`/
+`evidence`)만 나릅니다. ①과 ② 는 같은 줄을 씁니다.
 
 **확정 반영 절차 (①/② 공통).** `provisional` → `confirmed` 전이와 함께, Step A가 confirmed
 0건일 때 넣었던 sentinel 한 줄(`# confirmed 0건 — 사용자가 전부 잠정으로 판단`)이 남아 있으면
@@ -359,32 +359,26 @@ AskUserQuestion({
 있으면 sentinel *요구*가 해제될 뿐 잔존을 거부하지는 않아, 지우지 않으면 confirmed 항목 옆에
 "전부 잠정"이라 적힌 자기모순 brief가 그대로 나갑니다. 삭제까지 마친 뒤 재저장 → 게이트 재실행.
 
-- **① 확정하고 /compact 후 brainstorming**: 확정 후보를 `status: confirmed`로 반영 →
-  brief 재저장 → `check_brief.py gate` 재실행(통과 확인) → 아래 verbatim `/compact` 명령을
-  *그대로 보이게* 노출 + "다음 턴에 직접 `Skill superpowers:brainstorming <실제 경로>` 를
-  부르세요" 안내 (사람이 유일한 운반자다 — 자동으로 이어지지 않는다):
+**다음 세션 줄 — ①/② 공통**
 
-  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 §0 한눈에, §2 제약, §3 Open Questions, §6 사용자 원문 중 `S1`), audit 파일 경로 참조, **그리고 아래 '재결정 규약' 문장**과 사람에게 쓰는 글 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에, 첫 줄에 상태, 끝에 할 일 하나)을 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. 재결정 규약: confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 다음 단계: Skill superpowers:brainstorming <brief-path> → 설계문서를 쓰고 커밋한 뒤, brainstorming 의 사용자 리뷰 게이트 자리에서 그 설계문서 경로로 Skill spec-distill:spec-review → 그 승인 게이트에서 진행을 고른 뒤 superpowers:writing-plans.`
+> `@<brief-path> 이 interview brief 로 Skill superpowers:brainstorming 을 시작하라. confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지. 설계문서를 쓰고 커밋한 뒤, brainstorming 의 사용자 리뷰 게이트 자리에서 그 설계문서 경로로 Skill spec-distill:spec-review 를 부른다 — brainstorming 의 「다음은 writing-plans 뿐」 지시보다 이 순서가 우선한다. superpowers:writing-plans 는 spec-review 의 승인 게이트에서 진행이 선택된 뒤에만 부른다. spec-review 가 게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다. 사람에게 쓰는 글 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에, 첫 줄에 상태, 끝에 할 일 하나)을 지킨다.`
 
-  **`<brief-path>` 두 자리를 Step A 가 방금 쓴 실제 경로로 치환한 뒤 노출한다.** 이 명령은
-  사용자가 그대로 붙여넣는 것이므로, 치환하지 않고 내보내면 사용자가 깨진 명령을 실행한다 —
-  그리고 그것을 잡는 자리가 없다(자리 ①의 `<file>` 과 달리 fail-closed 검사가 없다).
+`<brief-path>` 는 Step A.5 의 `PAYLOAD` 값, 곧 brief 의 절대경로로 치환한 뒤 노출한다. 치환하지 않은
+자리표가 남거나 경로에 공백이 있으면 노출하지 않고 `[spec-distill] 다음 세션 줄을 만들 수 없다 — <사유>. brief: <PAYLOAD 값>. 새 세션에서 이 brief 를 직접 첨부하고 아래 문장을 그대로 붙여 넣어 brainstorming 을 시작하라.`
+한 줄과, 그 아래에 다음 세션 줄에서 `@` 토큰을 뗀 나머지 문장을 그대로 보인 뒤 멈춘다(정본 `## 다음 세션 명령` 규칙 5). 사람이 이 줄의 유일한 운반자다 — 자동으로 이어지지 않는다.
 
-  → **여기서 턴 종료(STOP). 같은 턴에서 `brainstorming`을 호출하지 말 것**(compact 전
-  brainstorming 진입 = 옵션 ① 무력화). `Skill superpowers:brainstorming <brief-path>` 진입은
-  사용자가 `/compact`를 *실제 실행한 다음 턴*에 **사용자 트리거**(예: `/compact write design`처럼
-  compact 뒤에 붙인 진행 인자, 또는 명시적 진행 요청)로만 일어난다 — 모델은 다음 턴에 자동
-  진입하지 *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17).
+- **① 확정하고 /new 후 brainstorming**: 확정 후보를 `status: confirmed`로 반영 → brief 재저장 →
+  `check_brief.py gate` 재실행(통과 확인) → 두 줄을 *그대로 보이게* 노출한다. 첫 줄은 `/new`, 둘째 줄은
+  위 다음 세션 줄이다. 두 줄을 따로 입력하라는 안내와 git 작업 트리 루트의 절대경로를 함께 낸다(정본
+  `## 다음 세션 명령` 규칙 1 · 7).
+  → **여기서 턴 종료(STOP). 같은 턴에서 `brainstorming`을 호출하지 말 것.** brainstorming 진입은
+  사용자가 두 줄을 실제로 입력한 **다음 턴**에 **사용자 트리거**로만 일어난다 — 모델은 자동 진입하지
+  *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17).
 
-- **② 확정하고 바로 brainstorming**: 확정 반영 → 재저장 → 게이트 재실행 → 즉시
-  `Skill superpowers:brainstorming <brief-path>` 호출하되, **호출 프롬프트에 C4 문장과 순서
-  문장을 함께 싣는다**:
-
-  > `confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.`
-  >
-  > `설계문서를 쓰고 커밋한 뒤, brainstorming 의 사용자 리뷰 게이트 자리에서 그 설계문서 경로로 Skill spec-distill:spec-review 를 부른다 — brainstorming 의 「다음은 writing-plans 뿐」 지시보다 이 순서가 우선한다. superpowers:writing-plans 는 spec-review 의 승인 게이트에서 진행이 선택된 뒤에만 부른다. spec-review 가 게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다.`
-
-  이것은 아래 cross-compact 정지 요건의 *명시적 예외*다.
+- **② 확정하고 /compact 후 brainstorming**: ① 과 같은 절차로 두 줄을 노출하되 첫 줄이 맨 `/compact` 다
+  (뒤에 아무것도 붙이지 않는다 — 붙인 텍스트는 요약 지시로만 쓰인다). 둘째 줄은 위 다음 세션 줄이다.
+  → **여기서 턴 종료(STOP). 같은 턴에서 `brainstorming`을 호출하지 말 것.** 진입은 사용자가 두 줄을
+  실제로 입력한 **다음 턴**에 **사용자 트리거**로만 일어난다(NG4·P17).
 
 - **③ 확정 목록 수정**: 확정 전이 없음. `confirm_repost_count` +1 후 B-0으로 돌아가 수정된
   목록을 재제시(상한 2회 — 초과 시 B-0의 강등 경로).
@@ -397,13 +391,12 @@ AskUserQuestion({
 두 가드의 **전문은 `proceed-gate.md` 의 `## Step C`** 입니다(Step B 머리의 포인터).
 여기 남는 것은 이 skill 의 어휘로만 성립하는 두 문장입니다:
 
-- **AP2 polite-stop 금지**: ①/② 선택 후 "brief 완결!"만 narrate 하고 게이트 제시/`Skill
-  superpowers:brainstorming` 호출을 skip 하는 것은 **polite stop** — 금지. Step B 를 *종료*하는
+- **AP2 polite-stop 금지**: ①/② 선택 후 "brief 완결!"만 narrate 하고 두 줄 명령을 노출하지 않고
+  끝내는 것은 **polite stop** — 금지(①/② 의 완료는 B-3 대로 두 줄과 위치를 노출하고 턴을 끝내는 것이다). Step B 를 *종료*하는
   모든 경로는 (a) 위 proceed 게이트를 거치거나(①/②/③/④), (b) 게이트를 거치지 않는 예외
   (superpowers 부재 — B-1)면 명시적 advisory 단락을 동반해야 한다 — 게이트-less **silent 종료
   금지**.
-- **cross-compact 조기진행 금지**: 옵션 ① 의 정지 요건과 다음 턴 진입 조건은 B-3 ① 에 인라인으로
-  있습니다(그것이 이 skill 의 실행형이자 기계적 검증 앵커입니다). 옵션 ② 는 그 정지 요건의
-  *명시적 예외*(compact 없이 즉시 brainstorming)이며, B-3 ② 가 그렇게 적고 있습니다.
+- **cross-compact 조기진행 금지**: ①·② 의 정지 요건과 다음 턴 진입 조건은 B-3 ①·② 에 인라인으로
+  있습니다(그것이 이 skill 의 실행형이자 기계적 검증 앵커입니다). 예외는 없습니다.
 
 이 stage는 brief까지로 종료됩니다. handoff를 *강제하지 않습니다*(NG7).
