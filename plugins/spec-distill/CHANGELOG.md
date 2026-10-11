@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.3.0] — 2026-10-11
+
+### Added
+- `scripts/roadmap_status.py` — 로드맵과 git 을 읽어 조각마다 단계(대기 · 준비 · 설계 중 · 계획 · 머지됨 · 끝남 · 알 수 없음)와 경고(생략 · 경로 예약 위반 · 의존 미머지 진행 · 묶음 없음 · spec 여럿 · 미배정 번호 · 고아 발화 · 경로 예약 겹침)를 낸다. 읽기만 하고 fetch 하지 않는다. 기본은 `origin/main` 의 로드맵, 아직 main 에 없으면 `--roadmap-file`. 머지됨 자동 판정은 merge commit 방식에서만 되고, squash · rebase 는 로드맵 결정 기록의 머지 줄로 대신한다.
+- `scripts/check_bundle_coverage.py` — 조각 묶음 `ids:` 가 설계문서 `## 번호 대조` 표에 다 있는지 본다. 빠지면 1, 표 깨짐 · 절 없음이면 3.
+- `tests/test_roadmap_status.sh` · `tests/test_bundle_coverage.sh` — 버릴 git 레포 픽스처의 단계 · 경고, 읽기 전용 검사, 이번 일의 로드맵 · 묶음 실데이터 검사.
+
 ## [5.2.0] — 2026-10-11
 
 ### Changed
