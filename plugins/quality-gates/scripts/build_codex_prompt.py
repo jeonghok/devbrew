@@ -76,6 +76,7 @@ Output your findings in a fenced JSON code block:
       "line": <integer>,
       "severity": "CRITICAL | IMPORTANT | SUGGESTION",
       "summary": "<one sentence>",
+      "plain": "<optional: the same finding in one plain sentence a first-time reader understands, no internal IDs>",
       "proposed_fix": "<description>"
     }
   ]

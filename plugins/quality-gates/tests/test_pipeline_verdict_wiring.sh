@@ -547,11 +547,11 @@ print(f"LEAD_N_LT_5:{1 if lead else 0}")
 dtool = re.search(r'^\s*\*\*Decision tool .N < 5 only — N=5 always goes to Max-iter decision instead', text, re.M)
 print(f"DECISION_TOOL_N_LT_5:{1 if dtool else 0}")
 
-note = seg(r'\*\*Retry 옵션 문구.*?(?=\n\nBranch on answer:)')
+note = seg(r'\*\*「고치고 다시 돌기」 옵션 문구.*?(?=\n\nBranch on answer:)')
 print(f"RETRY_NOTE_FOUND:{1 if note is not None else 0}")
 print(f"RETRY_NOTE_HAS_DIFFERENTIAL:{1 if (note and '차등 테스트 기원' in note) else 0}")
 
-bullet = seg(r'- \*\*Retry\*\* →.*?(?=\n- \*\*Accept)')
+bullet = seg(r'- \*\*고치고 다시 돌기\*\* →.*?(?=\n- \*\*지금 판정으로 끝내기)')
 print(f"RETRY_BULLET_FOUND:{1 if bullet is not None else 0}")
 print(f"RETRY_BULLET_HAS_DIFFERENTIAL:{1 if (bullet and '차등 테스트 기원' in bullet) else 0}")
 print(f"RETRY_BULLET_HAS_FIX_MEANING:{1 if (bullet and ('회귀' in bullet or 'NEW_REGRESSION' in bullet)) else 0}")

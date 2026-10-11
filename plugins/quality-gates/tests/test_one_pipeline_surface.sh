@@ -103,7 +103,7 @@ case_no_gate_scope_question() {
   local headers
   headers=$(grep -oE 'header: "[^"]*"' "$SKILL" "$REF" | sed 's/.*header: //' | LC_ALL=C sort -u | tr '\n' ' ')
   assert_not_grep "$headers" 'Gate scope|Runtime scope|Runtime resolve' "게이트 · 런타임 범위 질문이 없다"
-  assert_grep     "$headers" 'qg iter N'                              "fix-loop 결정 도구는 남아 있다(양의 짝)"
+  assert_grep     "$headers" 'qg 반복 N'                              "fix-loop 결정 도구는 남아 있다(양의 짝)"
 }
 
 case_reference_has_no_design_section_pointers() {

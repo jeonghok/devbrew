@@ -94,6 +94,7 @@ Emit exactly one YAML list, no surrounding prose, no Markdown headings:
   line: <number>
   severity: CRITICAL | IMPORTANT | SUGGESTION
   summary: <one-sentence describing the vulnerability and its path>
+  plain: <optional — the same finding in one plain sentence a first-time reader understands, no internal IDs>
   proposed_fix: <description or minimal code snippet showing the secure pattern>
 ```
 

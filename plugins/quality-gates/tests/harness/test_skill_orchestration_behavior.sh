@@ -374,12 +374,12 @@ fi
 
 # --- v2.3.0 R4: Review-gate findings surfaced before the decision tool ---
 # The Surface-findings step (Step 4.5) must precede the iter-boundary
-# decision's `findings remain` question. Anchor on the surface-step TEXT,
+# decision's `남은 지적이 있다` question. Anchor on the surface-step TEXT,
 # NOT the `## Review` section heading — a heading always precedes its
 # body, so a heading anchor is a tautological PASS (the V7-class defect this
 # file was created to avoid). Existence grep alone cannot catch mis-placement.
 surface_line=$(first_line 'Surface findings|Step 4\.5')
-question_line=$(first_line 'question:.*findings remain')
+question_line=$(first_line 'question:.*남은 지적이 있다')
 assert_line "Surface-findings step present" "$surface_line"
 assert_line "iter-boundary decision question present" "$question_line"
 assert_order "Surface findings precedes iter-boundary decision" "$surface_line" "$question_line"

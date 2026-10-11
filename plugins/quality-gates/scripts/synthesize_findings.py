@@ -312,6 +312,13 @@ def dedup(findings, ledger=None):
     deduped = []
     for group in by_key.values():
         merged = dict(group[0])
+        # 남는 쪽(먼저 온 쪽)에 plain 이 없으면 합쳐진 다른 쪽 중 가장 먼저 온 쪽의 plain 을 물려받는다.
+        # 뒤에서부터 덮어쓰므로 break 가 없다 — 이 파일은 처분 회계 소비자라 컴프리헨션 ·
+        # 버리는 분기(break/continue)가 `shared/tests/test_adjudication_wiring.sh` 에 묶여 있다.
+        if not _has_plain(merged):
+            for g in reversed(group[1:]):
+                if _has_plain(g):
+                    merged["plain"] = g["plain"]
         # `agent: null` 은 None 그대로 둔다 — 문자열 'None' 으로 바꾸면 신원 계약이 그것을
         # 문법 밖 저자로 잘못 센다. 정렬 키는 None 과 문자열이 섞여도 죽지 않게 고른다.
         merged["sources"] = sorted({g.get("agent", "?") for g in group},
@@ -321,6 +328,11 @@ def dedup(findings, ledger=None):
                 ledger.absorbed(finding_id(g), finding_id(merged))
         deduped.append(merged)
     return deduped + passthrough
+
+
+def _has_plain(f):
+    """리뷰어가 쓴 쉬운 한 문장(`plain`)이 있는가 — 문자열이고 공백뿐이 아니어야 있다."""
+    return isinstance(f.get("plain"), str) and bool(f["plain"].strip())
 
 
 def sort_findings(findings):
@@ -617,6 +629,34 @@ def count_split(findings):
     return counts
 
 
+_SEV_KO = (("CRITICAL", "심각"), ("IMPORTANT", "중요"), ("SUGGESTION", "제안"))
+
+
+def _status_line(counts, dropped_malformed, degraded, blocking):
+    """사람이 보는 첫 줄 — 스크립트가 계산한 상태 문장. 판정(verdict)과 무관하다:
+    판정 없는 출력이 판정 있는 출력의 바이트 접두여야 한다(`--emit-verdict` 꼬리).
+    버린 지적과 경고(degrade)는 여기에도 붙인다 — 첫 줄만 읽고 「지적 없음」으로 끝내지 않게."""
+    total = sum(counts.values())
+    if total == 0:
+        s = "리뷰를 합쳤다 — 지적 없음."
+    else:
+        # for 문으로 쓴다 — 이 파일은 처분 회계 소비자라 컴프리헨션 수가 baseline 으로 묶여 있다
+        # (`shared/tests/test_adjudication_wiring.sh`). 0 인 등급은 뺀다(설계 §3 원칙 3).
+        parts = []
+        for k, ko in _SEV_KO:
+            if counts[k]:
+                parts.append("%s %d" % (ko, counts[k]))
+        s = "리뷰를 합쳤다 — 남은 지적 %d개(%s)." % (total, " · ".join(parts))
+    if dropped_malformed > 0:
+        s += " 형식이 깨져 버린 지적 %d개." % dropped_malformed
+    if degraded:
+        if blocking:
+            s += " 판정을 막는 경고가 있다 — 아래를 본다."
+        else:
+            s += " 판정을 막지 않는 경고가 있다 — 아래를 본다."
+    return s
+
+
 def render(findings, dropped_malformed, report, held_classes, recritic_zero=False, *, blocking):
     counts = count_split(findings)
     n_block = counts["CRITICAL"] + counts["IMPORTANT"]
@@ -625,18 +665,17 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
         print(a, file=sys.stderr)
     counts_line = (f"**Findings:** {counts['CRITICAL']} CRITICAL / "
                    f"{counts['IMPORTANT']} IMPORTANT / {counts['SUGGESTION']} SUGGESTION")
-    out = ["## Review Findings (Synthesized)", "", counts_line,
+    out = [_status_line(counts, dropped_malformed, report["degraded"], blocking),
+           "## 리뷰 지적 (합친 결과)", "", counts_line,
            f"blocking: {n_block}", f"optional: {counts['SUGGESTION']}",
            disp_line, plumb_line, gloss_line]
     if not findings:
-        out.insert(3, "No findings.")
         if recritic_zero:
             out.append(RECRITIC_ZERO_LINE)
         if dropped_malformed > 0:
             out.append(
-                f"{dropped_malformed} finding(s) dropped as "
-                "malformed (not a mapping, wrong container type, or missing "
-                "file/severity/summary) — see stderr. "
+                f"{dropped_malformed}개 지적을 버렸다 — 형식이 깨졌다(dropped as malformed — 매핑이 아니거나, "
+                "목록이어야 할 자리가 목록이 아니거나, file · severity · summary 가 없다. 자세한 내용은 stderr). "
                 "**이 실행은 clean이 아니다**: 버려진 주장은 심사되지 않았다.")
         out.extend(_degrade_block(report, blocking))
         return "\n".join(out) + "\n"
@@ -646,7 +685,7 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
     if degrade_lines:
         out.extend(degrade_lines)
         out.append("")
-    out.append("| Sev | Path:Line | Summary | Source |")
+    out.append("| 심각도 | 위치 | 내용 | 낸 곳 |")
     out.append("|---|---|---|---|")
     for f in findings:
         srcs = f.get("sources") or [f.get("agent", "?")]
@@ -655,17 +694,20 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
         sev = _norm_sev(f) + (" (lowered)" if f.get("lowered") else "")
         path_line = _cell("%s:%s" % (f.get("file"), f.get("line")))
         source = _cell(", ".join(str(s) for s in srcs))
-        out.append(f"| {sev} | {path_line} | {_cell(f.get('summary', ''))} | {source} |")
+        if _has_plain(f):
+            summary = _cell(f"{f['plain']} ({f.get('summary', '')})")
+        else:
+            summary = _cell(f.get("summary", ""))
+        out.append(f"| {sev} | {path_line} | {summary} | {source} |")
     out.append("")
     if dropped_malformed > 0:
         out.append(
-            f"{dropped_malformed} finding(s) dropped as malformed "
-            "(not a mapping, wrong container type, or missing "
-            "file/severity/summary) — see stderr.")
+            f"{dropped_malformed}개 지적을 버렸다 — 형식이 깨졌다(dropped as malformed — 매핑이 아니거나, "
+            "목록이어야 할 자리가 목록이 아니거나, file · severity · summary 가 없다. 자세한 내용은 stderr).")
     out.append("")
-    out.append("**Suggested fixes:**")
+    out.append("**고칠 방법:**")
     for i, f in enumerate(findings, 1):
-        fix = str(f.get("proposed_fix", "(none)")).replace("\r", " ").replace("\n", " ")
+        fix = str(f.get("proposed_fix", "(없음)")).replace("\r", " ").replace("\n", " ")
         out.append(f"- #{i} `{f.get('file')}:{f.get('line')}` — {fix}")
     return "\n".join(out) + "\n"
 
@@ -791,6 +833,12 @@ def main(argv=None):
     sys.stdout.write(render(findings, dropped_malformed, report, ledger.held_by_class(),
                             recritic_zero=recritic_zero, blocking=blocking))
     if args.emit_verdict:
+        if scope is not None and angle_states is not None:
+            sys.stdout.write("아래는 이 판정이 본 범위(scope)와 리뷰 각도(angles)의 원문이다.\n")
+        elif scope is not None:
+            sys.stdout.write("아래는 이 판정이 본 범위(scope)의 원문이다.\n")
+        elif angle_states is not None:
+            sys.stdout.write("아래는 이 판정의 리뷰 각도(angles) 원문이다.\n")
         if scope is not None:
             sys.stdout.write(_scope_tuple.render(scope))
         if angle_states is not None:
