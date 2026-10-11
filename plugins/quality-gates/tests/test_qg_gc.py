@@ -622,5 +622,33 @@ class SetupForwardsGcStderr(unittest.TestCase):
         self.assertNotIn("/dev/null", calls[0], f"GC 호출이 출력을 버린다: {calls[0]}")
 
 
+class LegacyRuntimeEvidenceMarker(unittest.TestCase):
+    """K-1 ⑤ — runtime-evidence.md 는 생산자가 없는 회수 표지다. 그 표지만 남은 옛 폴더도 TTL 뒤 회수된다."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def test_runtime_evidence_is_a_legacy_marker(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("qg_gc_mod", GC)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.assertIn("runtime-evidence.md", mod.LEGACY_SESSION_MARKERS)
+        self.assertNotIn("runtime-evidence.md", mod.SESSION_MARKERS)
+
+    def test_runtime_evidence_only_folder_collected(self):
+        folder = self.tmp / ".claude" / "quality-gates" / ("sess" + "e" * 8)
+        folder.mkdir(parents=True)
+        f = folder / "runtime-evidence.md"
+        f.write_text("- x\n", encoding="utf-8")
+        old = time.time() - 48 * 3600
+        os.utime(f, (old, old))
+        os.utime(folder, (old, old))
+        proc = run_gc(self.tmp)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertFalse(folder.exists(), "runtime-evidence.md 만 남은 옛 폴더가 회수되지 않는다 — 업그레이드 누수")
+
+
 if __name__ == "__main__":
     unittest.main()

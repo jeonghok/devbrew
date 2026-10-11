@@ -12,7 +12,6 @@ set -u
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SETUP="$PLUGIN_DIR/scripts/setup-qg.sh"
-DISCOVER="$PLUGIN_DIR/scripts/discover-plan.sh"
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
@@ -71,31 +70,6 @@ fi
 
 rm -rf "$(dirname "$REPO")"
 
-# --- Test 2: discover-plan.sh resolves project-local against worktree PWD ---
-IFS='|' read -r REPO WT BRANCH < <(make_repo_with_worktree)
-
-mkdir -p "$WT/docs/superpowers/plans"
-cat > "$WT/docs/superpowers/plans/plan.md" <<'EOF'
-- [ ] one
-- [ ] two
-EOF
-
-OUT=$(cd "$WT" && HOME="$WT" "$DISCOVER" 2>&1)
-RC=$?
-if [[ "$RC" -eq 0 ]] && echo "$OUT" | grep -q '"source":"project-local"'; then
-  ok "T2a: discover-plan resolved project-local in worktree (rc=$RC)"
-else
-  no "T2a: discover-plan did not pick worktree-local plan (rc=$RC, out=$OUT)"
-fi
-
-if echo "$OUT" | grep -q "$WT/docs/superpowers/plans"; then
-  ok "T2b: discover-plan emitted worktree-rooted path"
-else
-  no "T2b: emitted path not worktree-rooted: $OUT"
-fi
-
-rm -rf "$(dirname "$REPO")"
-
 # --- Test 3: git operations read worktree context ---
 IFS='|' read -r REPO WT BRANCH < <(make_repo_with_worktree)
 
@@ -132,7 +106,7 @@ rm -rf "$(dirname "$REPO")"
 # T3-1: scout.md deleted — removed from this loop (no longer applicable post-T3-1).
 # PR4a: adversarial.md deleted — removed from this loop. The re-critic is
 # quality-gates:code-recritic (Step 3.5), which declares project_dir (checked below).
-for agent in test-scope-validator security-reviewer code-recritic; do
+for agent in security-reviewer code-recritic; do
   if grep -q 'project_dir' "$PLUGIN_DIR/agents/$agent.md"; then
     ok "T8: agents/$agent.md declares project_dir input"
   else
@@ -158,7 +132,7 @@ T5_FAIL=0
 # PR4a: adversarial dropped. code-recritic (Step 3.5) delivers project_dir as a
 # `<project_dir>` slot, not a `project_dir:` field — shared/tests/test_agent_input_slots.sh
 # measures that delivery.
-for name in test-scope-validator security-reviewer; do
+for name in security-reviewer; do
   if ! awk -v name="quality-gates:$name" '
     $0 ~ name { found=NR }
     found && NR <= found+15 && /project_dir:/ { ok=1; exit }
