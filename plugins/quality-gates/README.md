@@ -233,9 +233,9 @@ max fan-out: **리뷰어 구성 ≤ 8**(기본 셋 + 조건부 ≤4 + 재비판 
  │   ① review — 기본 셋 + 조건부 ≤4 → code-recritic
  │   ② differential test — 기준선 vs 봉인된 HEAD (매 iteration)
  │   ③ synthesize → verdict: clean | defect | not-certified
- │   막는 지적 또는 차등 defect → AskUserQuestion ("findings remain…")
- │       분류표(항목마다 적용 / 제외 + 사유) · Retry / Accept and finish / Stop
- │       Retry: 「적용」만 Edit, 「제외」는 excluded.md → 다음 iteration
+ │   막는 지적 또는 차등 defect → AskUserQuestion ("남은 지적이 있다…")
+ │       분류표(항목마다 적용 / 제외 + 사유) · 고치고 다시 돌기 / 지금 판정으로 끝내기 / 멈추기
+ │       고치고 다시 돌기: 「적용」만 Edit, 「제외」는 excluded.md → 다음 iteration
  ├ e2e ── 시나리오 질문 → 앱 부팅 · 걷기 → 판정안 · 걷기 직후 게이트 (끔 · 안 함도 판정 줄에 남는다)
  ├ Final verdict ── verdict.py 의 판정 줄 · result.md
  └ Publish ── sink 한 번 · posted:/skipped:

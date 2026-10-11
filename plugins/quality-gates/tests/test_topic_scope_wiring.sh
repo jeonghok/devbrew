@@ -25,7 +25,7 @@ text = open(sys.argv[1], encoding="utf-8").read()
 m = re.search(r'^### Trivia escape\n(.*?)(?=^## )', text, re.S | re.M)
 lines = (m.group(1) if m else "").splitlines()
 det = [i for i, l in enumerate(lines) if 'resolve-topic.sh" detect' in l]
-trv = [i for i, l in enumerate(lines) if 'Trivia diff — pipeline skipped' in l]
+trv = [i for i, l in enumerate(lines) if '작은 수정이라 파이프라인을 건너뛰었다' in l]
 print("DETECT:%d" % len(det))
 print("DETECT_FIRST:%d" % (1 if det and trv and det[0] < trv[0] else 0))
 skip_needle = 'trivia escape 를 **쓰지 않고** 곧장 iteration 1 로 간다'
@@ -221,7 +221,7 @@ case_trivia_escape_is_gated_by_declaration() {
   # Review Focus 2 · R-AO — 선언이 있으면 trivia escape 를 쓰지 않는다.
   local got; got=$(python3 -c "$PY_TRIVIA" "$SKILL")
   assert_grep "$got" '^DETECT:1$'         "Trivia escape 절에 detect 호출 펜스가 하나"
-  assert_grep "$got" '^DETECT_FIRST:1$'   "detect 가 trivia 판단(「Trivia diff — pipeline skipped」)보다 먼저 나온다"
+  assert_grep "$got" '^DETECT_FIRST:1$'   "detect 가 trivia 판단(「작은 수정이라 파이프라인을 건너뛰었다」)보다 먼저 나온다"
   assert_grep "$got" '^SKIP_LINE:1$'      "ok · declaration-invalid 면 trivia escape 를 쓰지 않고 곧장 iteration 1 로 간다(같은 줄, 긍정 목적지 단언)"
   assert_grep "$got" '^NODECL_VIOLATION:0$' "Trivia 절 전체에서 no-declaration 과 trivia escape 를 쓰지 않음이 한 줄에 함께 나오지 않는다"
 }

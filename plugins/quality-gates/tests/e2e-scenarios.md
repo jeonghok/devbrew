@@ -192,7 +192,7 @@ DEVBREW_QUALITY_GATES_DISABLE=1 /qg
 **Run:** `/qg`
 
 **Expected:**
-- `Review scope: topic …` 한 줄.
+- `리뷰 범위: 토픽 …` 한 줄.
 - 판정 꼬리의 `scope:` 블록에 `mode: topic` · 두 선언 커밋의 `commit:` 줄.
 - 형제 브랜치에 회귀를 심으면 `defect`.
 - 형제가 같은 파일을 달리 고치면 `not-certified (merge-conflict)` 와 그 파일.
