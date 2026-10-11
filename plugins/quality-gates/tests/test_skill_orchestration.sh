@@ -32,18 +32,18 @@ fi
 # ============== V2b: Context anchors + option labels (AC6/7) ==============
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 # Fix-loop iter context
-assert_file_grep "$S" 'findings remain' "Fix-loop iter anchor"
-# AC6 anchor uniqueness (Medium): `findings remain` must appear in EXACTLY
+assert_file_grep "$S" '남은 지적이 있다' "Fix-loop iter anchor"
+# AC6 anchor uniqueness (Medium): `남은 지적이 있다` must appear in EXACTLY
 # ONE AskUserQuestion question template, so the routing is unambiguous.
 # Prose mentions and meta-comments outside `question:` lines are allowed.
-question_findings=$(awk '/^[[:space:]]*question:/ && /findings remain/ { c++ } END { print c+0 }' "$S")
+question_findings=$(awk '/^[[:space:]]*question:/ && /남은 지적이 있다/ { c++ } END { print c+0 }' "$S")
 if [[ "$question_findings" -ne 1 ]]; then
-  echo "FAIL V2b uniqueness: 'findings remain' appears in $question_findings question: lines (expected 1)"
+  echo "FAIL V2b uniqueness: '남은 지적이 있다' appears in $question_findings question: lines (expected 1)"
   exit 1
 fi
 echo "PASS V2b (anchor uniqueness: 1 question line)"
-assert_file_grep "$S" 'Retry' "Fix-loop iter option"
-assert_file_grep "$S" 'Accept and finish' "Fix-loop iter option"
+assert_file_grep "$S" '고치고 다시 돌기' "Fix-loop iter option"
+assert_file_grep "$S" '지금 판정으로 끝내기' "Fix-loop iter option"
 
 # V7 removed in v1.32.1 (see header). Runtime NEEDS_RESOLUTION decision
 # context (P21 / 'Runtime verifier needs') was removed in PR4b along with

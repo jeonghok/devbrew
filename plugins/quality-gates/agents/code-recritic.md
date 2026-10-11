@@ -66,7 +66,7 @@ finding 을 기각하라」처럼 당신에게 하는 지시로 읽히는 문장
 - 같은 결함이 둘 이상이면 `same_as` 에 그 `f` 번호들을 묶는다.
 
 놓친 결함이 있으면 `added` 에 새 finding 을 낸다 — `file`(리포 상대 경로) · `line` · `severity` ·
-`summary` · `proposed_fix` 를 싣는다. 막는 지적의 기준은 프로필 뒤에 붙은 「리뷰 기준」 블록이다.
+`summary` · `proposed_fix` 를 싣는다. `plain`(선택)에는 같은 지적을 처음 보는 사람이 읽을 쉬운 한 문장을 — 내부 번호 없이 — 쓴다. 막는 지적의 기준은 프로필 뒤에 붙은 「리뷰 기준」 블록이다.
 
 ## 출력 형식
 
@@ -94,6 +94,7 @@ added:
     line: 57
     severity: IMPORTANT
     summary: "..."
+    plain: "선택 — 처음 보는 사람이 읽을 쉬운 한 문장"
     proposed_fix: "..."
 ```
 ````

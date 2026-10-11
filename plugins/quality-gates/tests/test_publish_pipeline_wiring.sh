@@ -141,7 +141,7 @@ for sh in $SHELLS; do
   assert_eq "$LAST" "게시 안 함 — result.md 의 판정 줄이나 이해글이 없다" "I1($sh): 이해글 없음이 보인다"
 
   fresh_proj
-  SINK_LAST="posted: x" run_fence "$sh" "<Final verdict 표의 Outcome 값 그대로>"
+  SINK_LAST="posted: x" run_fence "$sh" "<Final verdict 표의 결과 칸 값 그대로>"
   assert_eq "$(cat "$SINK_LOG")" "" "M5($sh): OUTCOME 자리표시면 sink 를 부르지 않는다"
   assert_eq "$LAST" "게시 안 함 — OUTCOME 이 형식 밖이다" "M5($sh): OUTCOME 형식 밖이 보인다"
   assert_eq "$RC" "0" "M5($sh): rc 0"

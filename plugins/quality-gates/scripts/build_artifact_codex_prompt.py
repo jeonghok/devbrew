@@ -60,6 +60,7 @@ findings:
     target_lines: "12-18"
     severity: IMPORTANT
     summary: "one sentence"
+    plain: "optional — the same finding in one plain sentence for a first-time reader, no internal IDs"
     proposed_fix: "optional suggested revision"
 ```
 

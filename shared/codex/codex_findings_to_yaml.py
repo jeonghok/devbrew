@@ -63,7 +63,7 @@ FENCED_JSON_RE = re.compile(r"```json\s*\n(.*?)\n?```", re.DOTALL)
 # emit keyset 은 호출자가 정한다. 이 스크립트는 호출자만 실행하므로 인자 방식이 맞다
 # (형제 설정 파일이 필요한 detect_codex.sh 와 다른 이유는 설계 §6.1① 표 참조 —
 # 그쪽은 기존 락이 **인자 없이** 태우며 kill switch 반응을 검사한다).
-DEFAULT_KEYS = ("file", "line", "severity", "confidence", "summary", "proposed_fix")
+DEFAULT_KEYS = ("file", "line", "severity", "confidence", "summary", "proposed_fix", "plain")
 DESIGN_KEYS = ("file", "line", "category", "target_section",
                "severity", "confidence", "summary", "proposed_fix")
 # docreview 엔진(설계 §6.2)의 리뷰어 출력 필드 전부. `blocks`만 리스트값이다

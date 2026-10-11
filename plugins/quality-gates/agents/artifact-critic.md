@@ -52,6 +52,7 @@ findings:
     target_lines: "120-134"                          # optional, display only
     severity: IMPORTANT                              # CRITICAL | IMPORTANT | SUGGESTION
     summary: "one sentence"
+    plain: "optional — the same finding in one plain sentence for a first-time reader, no internal IDs"
     proposed_fix: "optional suggested revision"
 ```
 
