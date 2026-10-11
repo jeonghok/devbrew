@@ -343,6 +343,78 @@ case "${1:-}" in
     granularity_of "$2"
     exit 0
     ;;
+  assign)
+    [[ $# -eq 3 ]] || die "usage: assign <tree> <assign-file>   # stdin: 후보 파일 경로"
+    w=$2; out=$3
+    [[ -d "$w" ]] || die "not a directory: $w"
+    [[ -d "$(dirname -- "$out")" ]] || die "배정 파일의 디렉토리가 없다: $out"
+    adapters=$(detect_set "$w")
+    has_adapter() { printf '%s\n' "$adapters" | grep -qxF -- "$1"; }
+    # bulk 러너는 어느 파일 어댑터도 claim 하지 않은 잔여를 흡수한다. 둘 이상이면 첫째만 흡수자다.
+    absorber=""; unused_bulk=""
+    for r in cargo make npm-script; do
+      if has_adapter "$r"; then
+        if [[ -z "$absorber" ]]; then absorber="$r"; else unused_bulk="$unused_bulk $r"; fi
+      fi
+    done
+    py=""; has_adapter pytest && py=pytest; has_adapter unittest && py=unittest
+    js=""; has_adapter jest   && js=jest;   has_adapter vitest   && js=vitest
+    tmp=$(mktemp "$(dirname -- "$out")/.qg-assign.XXXXXX") || die "임시 파일을 만들 수 없다: $out"
+    residual=0; seen=""; n=0
+    emit() {   # emit <unit> <runner> <granularity> — 같은 unit 은 한 번만
+      printf '%s\n' "$seen" | grep -qxF -- "$1" && return 0
+      printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$tmp" || { rm -f "$tmp"; die "배정 파일을 쓰지 못했다: $out"; }
+      seen="$seen
+$1"
+      n=$((n + 1))
+    }
+    while IFS= read -r f || [[ -n "$f" ]]; do
+      [[ -z "$f" ]] && continue
+      if ! unit_within_worktree "$w" "$f"; then
+        emit "$f" unclaimed file; continue
+      fi
+      claimed=""
+      case "$f" in
+        *_test.go) has_adapter go && claimed=go ;;
+      esac
+      if [[ -z "$claimed" && -n "$py" ]]; then
+        case "$f" in test_*.py|*/test_*.py|*_test.py) claimed="$py" ;; esac
+        if [[ "$claimed" == "unittest" ]] && ! unittest_can_judge "$w" "$f"; then
+          claimed=""
+        fi
+      fi
+      if [[ -z "$claimed" ]] && has_adapter shell; then
+        case "$f" in
+          tests/*.sh|*/tests/*.sh) [[ -x "$w/$f" ]] && claimed=shell ;;
+        esac
+      fi
+      if [[ -z "$claimed" && -n "$js" ]]; then
+        case "$f" in
+          *.test.ts|*.test.tsx|*.test.js|*.test.jsx|*.spec.*) claimed="$js" ;;
+        esac
+      fi
+      if [[ -n "$claimed" ]]; then
+        if [[ "$(granularity_of "$claimed")" == "package" ]]; then
+          emit "$(dirname -- "$f")" "$claimed" package
+        else
+          emit "$f" "$claimed" file
+        fi
+      elif [[ -n "$absorber" ]]; then
+        residual=1
+      else
+        emit "$f" unclaimed file
+      fi
+    done
+    [[ $residual -eq 1 ]] && emit BULK "$absorber" bulk
+    for r in $unused_bulk; do
+      echo "run-test-selection: 미실행 러너: $r (bulk 잔여는 $absorber 가 흡수)" >&2
+    done
+    adapter_list=$(printf '%s\n' "$adapters" | sed '/^$/d' | paste -sd, -)
+    printf '#qg-assign\tadapters=%s\trows=%s\n' "${adapter_list:--}" "$n" >> "$tmp" \
+      || { rm -f "$tmp"; die "배정 파일을 쓰지 못했다: $out"; }
+    mv -f "$tmp" "$out" || { rm -f "$tmp"; die "배정 파일을 옮기지 못했다: $out"; }
+    exit 0
+    ;;
   *)
     die "unknown subcommand: ${1:-} (expected detect|granularity|assign|run|unrun|pending)"
     ;;
