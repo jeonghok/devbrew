@@ -34,11 +34,14 @@ die() { echo "qg-worktree: $*" >&2; exit 2; }
 # 사라진다.
 make_detached_worktree() {   # <sha> <session-id> <prefix> → 워크트리 절대경로 emit
   local sha="$1" sid="$2" prefix="$3"
-  local sid_short main_root parent wt
+  local sid_short main_root parent wt p_anc
   git rev-parse --verify --quiet "$sha^{commit}" >/dev/null 2>&1 \
     || die "not a commit: $sha"
   sid_short="${sid:0:8}"
   [[ -n "$sid_short" ]] || die "empty session-id"
+  case "$sid_short" in
+    *[!A-Za-z0-9_-]*) die "bad session-id (A-Z a-z 0-9 _ - 만 허용): $sid" ;;
+  esac
   main_root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not a git repo"
   main_root=$(cd "$main_root" && pwd -P) || die "cd failed: $main_root"
   parent="$main_root/.claude/quality-gates/worktrees"
@@ -53,10 +56,8 @@ make_detached_worktree() {   # <sha> <session-id> <prefix> → 워크트리 절�
   esac
   mkdir -p "$parent" || die "cannot create $parent"
   parent=$(cd "$parent" && pwd -P) || die "cd failed: $parent"
-  case "$parent/" in
-    "$main_root"/*) ;;
-    *) die "일회용 트리 자리가 리포 밖을 가리킨다 — 만들지 않는다: $parent" ;;
-  esac
+  [[ "$parent" == "$main_root/.claude/quality-gates/worktrees" ]] \
+    || die "일회용 트리 이름공간이 기대한 자리가 아니다(링크?) — 만들지 않는다: $parent"
   wt="$parent/${prefix}-${sid_short}"
 
   # 이 이름공간의 base-·head- 트리는 일회용이다. 앞 실행이 남긴 것은 지우고 다시 만든다 —
@@ -65,7 +66,7 @@ make_detached_worktree() {   # <sha> <session-id> <prefix> → 워크트리 절�
   if [[ -L "$wt" ]]; then
     rm -f -- "$wt" || die "앞 실행이 남긴 링크를 지우지 못했다: $wt"
   elif [[ -e "$wt" ]]; then
-    git worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf -- "$wt" \
+    git worktree remove --force --force "$wt" >/dev/null 2>&1 || rm -rf -- "$wt" \
       || die "앞 실행이 남긴 트리를 지우지 못했다: $wt"
   fi
   git worktree prune >/dev/null 2>&1 || true
@@ -163,7 +164,17 @@ case "${1:-}" in
   memo-drop)
     [[ $# -eq 2 ]] || die "usage: memo-drop <memo-dir>"
     [[ -e "$2" ]] || exit 0
-    [[ -d "$2" && ! -L "$2" && -f "$2/.qg-memo" ]] || die "qg 메모가 아니다 — 지우지 않는다: $2"
+    # 표지는 리뷰 대상 리포도 심을 수 있다. memo-init 이 만든 모양(자리·이름·일반 파일 표지)만 지운다.
+    md="${2%/}"
+    case "$md" in
+      */qg-memo.??????) ;;
+      *) die "qg 메모 이름이 아니다 — 지우지 않는다: $2" ;;
+    esac
+    [[ -d "$md" && ! -L "$md" ]] || die "qg 메모가 아니다 — 지우지 않는다: $2"
+    [[ -f "$md/.qg-memo" && ! -L "$md/.qg-memo" ]] || die "qg 메모가 아니다(표지 없음 또는 링크) — 지우지 않는다: $2"
+    md_parent=$(cd "$(dirname "$md")" && pwd -P) || die "cd failed: $md"
+    md_tmp=$(cd "${TMPDIR:-/tmp}" && pwd -P) || die "TMPDIR 을 해소하지 못했다: ${TMPDIR:-/tmp}"
+    [[ "$md_parent" == "$md_tmp" ]] || die "qg 메모가 만들어지는 자리가 아니다 — 지우지 않는다: $2"
     rm -rf -- "$2" || die "메모를 지우지 못했다: $2"
     ;;
   *)

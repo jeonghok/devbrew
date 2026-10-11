@@ -56,7 +56,6 @@ case_create_baseline() {
   cd / && rm -rf "$REPO"
 }
 
-
 # 같은 세션으로 create-baseline 을 두 번 불러도 두 번째가 같은 자리에 트리를 다시 만드는가.
 # 이것을 안 재면 게이트가 두 번째 실행부터 영구히 죽는 회귀를 못 잡는다.
 case_create_baseline_is_still_idempotent() {

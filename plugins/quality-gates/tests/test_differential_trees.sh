@@ -58,6 +58,7 @@ case_R12_head_axis_refuses_the_baseline_sha() {
 case_R23_stale_tree_is_replaced() {
   mkrepo; local base; base=$(git -C "$R/repo" rev-parse HEAD)
   local wt; wt=$( cd "$R/repo" && bash "$WT" create-baseline "$base" "sess12345678" 2>/dev/null )
+  [ -n "$wt" ] && [ -d "$wt" ] || { no "R23: 첫 create-baseline 이 트리를 만들지 못했다"; rmrepo; return; }
   echo junk > "$wt/untracked-output"; echo changed > "$wt/a"
   local wt2 rc; wt2=$( cd "$R/repo" && bash "$WT" create-baseline "$base" "sess12345678" 2>/dev/null ); rc=$?
   assert_eq "$rc" "0" "R23: 남은 트리가 있어도 다시 만든다"
@@ -86,10 +87,72 @@ case_R23_symlinked_namespace_is_refused() {
   rmrepo
 }
 
+# 표지는 리뷰 대상 리포가 심을 수 있다 — memo-init 이 만든 자리·이름·표지 모양이 아니면 지우지 않는다.
+case_R6_memo_drop_refuses_forged_marker() {
+  mkrepo; : > "$R/repo/.qg-memo"
+  bash "$WT" memo-drop "$R/repo" 2>/dev/null; assert_eq "$?" "2" "R6: 표지만 심은 프로젝트 디렉토리는 거부"
+  [ -d "$R/repo/.git" ] && ok "R6: 프로젝트가 살아 있다" || no "R6: 심어진 표지로 프로젝트를 지웠다"
+  mkdir -p "$R/elsewhere/qg-memo.abcdef"; : > "$R/elsewhere/qg-memo.abcdef/.qg-memo"
+  bash "$WT" memo-drop "$R/elsewhere/qg-memo.abcdef" 2>/dev/null; assert_eq "$?" "2" "R6: TMPDIR 밖의 같은 이름은 거부"
+  [ -d "$R/elsewhere/qg-memo.abcdef" ] && ok "R6: TMPDIR 밖 디렉토리가 살아 있다" || no "R6: TMPDIR 밖을 지웠다"
+  rmrepo
+}
+case_R6_memo_drop_refuses_linked_marker_and_dir() {
+  mkrepo; mkdir -p "$R/tmp/qg-memo.abcdef" "$R/real"; : > "$R/somefile"
+  ln -s "$R/somefile" "$R/tmp/qg-memo.abcdef/.qg-memo"
+  TMPDIR="$R/tmp" bash "$WT" memo-drop "$R/tmp/qg-memo.abcdef" 2>/dev/null; assert_eq "$?" "2" "R6: 링크 표지는 거부"
+  [ -d "$R/tmp/qg-memo.abcdef" ] && ok "R6: 링크 표지 디렉토리가 살아 있다" || no "R6: 링크 표지 디렉토리를 지웠다"
+  : > "$R/real/.qg-memo"; ln -s "$R/real" "$R/tmp/qg-memo.fedcba"
+  TMPDIR="$R/tmp" bash "$WT" memo-drop "$R/tmp/qg-memo.fedcba" 2>/dev/null; assert_eq "$?" "2" "R6: 링크 디렉토리는 거부"
+  [ -f "$R/real/.qg-memo" ] && ok "R6: 링크 대상이 살아 있다" || no "R6: 링크 대상을 지웠다"
+  rmrepo
+}
+case_R6_memo_drop_positive_under_custom_tmpdir() {
+  mkrepo; mkdir -p "$R/tmp"; ln -s "$R/tmp" "$R/tlink"
+  local m; m=$(TMPDIR="$R/tlink" bash "$WT" memo-init "$R/repo" 2>/dev/null)
+  [ -n "$m" ] && [ -f "$m/.qg-memo" ] || { no "R6: 사용자 TMPDIR 에 메모를 못 만들었다"; rmrepo; return; }
+  TMPDIR="$R/tlink" bash "$WT" memo-drop "$m"; assert_eq "$?" "0" "R6 양성 대조: memo-init 이 만든 메모는 지운다"
+  [ ! -e "$m" ] && ok "R6: 지워졌다" || no "R6: 남았다"
+  rmrepo
+}
+# M1 — 잠긴 채 남은 일회용 트리도 다시 만든다. M2 — 이름공간이 리포 안의 다른 곳을 가리키면 거부. M3 — 세션 id 검증.
+case_R23_locked_stale_tree_is_replaced() {
+  mkrepo; local base; base=$(git -C "$R/repo" rev-parse HEAD)
+  local wt; wt=$( cd "$R/repo" && bash "$WT" create-baseline "$base" "sess12345678" 2>/dev/null )
+  [ -n "$wt" ] && [ -d "$wt" ] || { no "R23: 첫 create-baseline 실패"; rmrepo; return; }
+  git -C "$R/repo" worktree lock --reason initializing "$wt"
+  local wt2 rc; wt2=$( cd "$R/repo" && bash "$WT" create-baseline "$base" "sess12345678" 2>/dev/null ); rc=$?
+  assert_eq "$rc" "0" "R23: 잠긴 트리도 다시 만든다"
+  ( cd "$R/repo" && bash "$WT" remove "$wt2" ) >/dev/null 2>&1
+  rmrepo
+}
+case_R23_in_repo_symlinked_namespace_is_refused() {
+  mkrepo; local base; base=$(git -C "$R/repo" rev-parse HEAD)
+  mkdir -p "$R/repo/src/base-sess1234" "$R/repo/.claude/quality-gates"
+  echo precious > "$R/repo/src/base-sess1234/user.txt"
+  ln -s ../../src "$R/repo/.claude/quality-gates/worktrees"
+  ( cd "$R/repo" && bash "$WT" create-baseline "$base" "sess12345678" ) >/dev/null 2>&1; assert_eq "$?" "2" "M2: 이름공간이 리포 안 다른 곳이면 거부"
+  [ -f "$R/repo/src/base-sess1234/user.txt" ] && ok "M2: 사용자 파일이 살아 있다" || no "M2: 사용자 파일을 지웠다"
+  rmrepo
+}
+case_R23_bad_session_id_is_refused() {
+  mkrepo; local base; base=$(git -C "$R/repo" rev-parse HEAD)
+  mkdir -p "$R/repo/.claude/quality-gates/a"; echo keep > "$R/repo/.claude/quality-gates/a/f"
+  local sid
+  for sid in "/" "/../../a" "" "a b"; do
+    ( cd "$R/repo" && bash "$WT" create-baseline "$base" "$sid" ) >/dev/null 2>&1; assert_eq "$?" "2" "M3: 세션 id '$sid' 는 거부"
+  done
+  [ -f "$R/repo/.claude/quality-gates/a/f" ] && ok "M3: 이름공간 밖이 살아 있다" || no "M3: 이름공간 밖을 지웠다"
+  rmrepo
+}
+
 for c in case_R6_memo_lives_outside_the_tree case_R6_memo_inside_the_tree_is_refused \
          case_R6_memo_drop_refuses_unmarked_dir case_R12_head_axis_refuses_the_baseline_sha \
          case_R23_stale_tree_is_replaced case_R23_remove_refuses_outside_namespace \
-         case_R23_symlinked_namespace_is_refused; do
+         case_R23_symlinked_namespace_is_refused \
+         case_R6_memo_drop_refuses_forged_marker case_R6_memo_drop_refuses_linked_marker_and_dir \
+         case_R6_memo_drop_positive_under_custom_tmpdir case_R23_locked_stale_tree_is_replaced \
+         case_R23_in_repo_symlinked_namespace_is_refused case_R23_bad_session_id_is_refused; do
   echo "== $c"; $c
 done
 finish
