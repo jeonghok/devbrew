@@ -80,8 +80,23 @@ case_total_contains_every_candidate() {
   mkrepo; ( cd "$R" && echo 'x=2' > src/foo.py && echo n > tests/test_new.py )
   local n m; n=$(cands | grep -c .); m=$(cands --total)
   [ "$m" -ge "$n" ] && [ "$n" -ge 1 ] && ok "분모 $m ≥ 후보 $n" || no "분모 $m < 후보 $n"
+  assert_eq "$m" "4" "분모는 추적 테스트 3 + untracked 새 테스트 1 (untracked 를 빼면 3)"
   local tree; tree=$(git -C "$R" rev-parse 'HEAD^{tree}')
   assert_eq "$(cands --total --tree "$tree")" "3" "--total --tree 는 그 트리(커밋된 것)의 테스트 수"
+  rmrepo
+}
+case_subdirectory_run_matches_root_run() {
+  mkrepo; ( cd "$R" && echo 'x=2' > src/foo.py && echo n > tests/test_new.py )
+  local a b ta tb
+  a=$(cands); b=$( cd "$R/src" && bash "$SUT" 2>/dev/null )
+  assert_eq "$b" "$a" "하위 디렉토리에서 돌려도 후보가 루트와 같다"
+  ta=$(cands --total); tb=$( cd "$R/src" && bash "$SUT" --total 2>/dev/null )
+  assert_eq "$tb" "$ta" "하위 디렉토리에서 돌려도 분모가 루트와 같다"
+  rmrepo
+}
+case_deleted_test_is_a_candidate() {
+  mkrepo; ( cd "$R" && rm tests/test_foo.py )
+  assert_contains "$(cands | tr '\n' ' ')" "tests/test_foo.py" "지운 테스트 파일도 후보다"
   rmrepo
 }
 case_emit_guards_only_lists_guards() {
@@ -92,7 +107,8 @@ case_emit_guards_only_lists_guards() {
 
 for c in case_name_mapping_and_changed_tests case_no_change_is_empty case_unsupported_language_has_no_mapping \
          case_R17_unresolved_baseline_is_exit_4 case_R17_git_failure_is_exit_4 case_R17_bad_topic_args_are_exit_4 \
-         case_topic_mode_reads_the_tree case_total_contains_every_candidate case_emit_guards_only_lists_guards; do
+         case_topic_mode_reads_the_tree case_total_contains_every_candidate case_emit_guards_only_lists_guards \
+         case_subdirectory_run_matches_root_run case_deleted_test_is_a_candidate; do
   echo "== $c"; $c
 done
 finish

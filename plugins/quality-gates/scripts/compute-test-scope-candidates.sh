@@ -16,6 +16,8 @@ die4() { echo "compute-test-scope-candidates: $*" >&2; exit 4; }
 
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "compute-test-scope-candidates: not a git repository" >&2; exit 1; }
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# 하위 디렉토리에서 불려도 같은 답이 나오게 한다 — git diff 는 루트 상대, ls-files 는 cwd 상대다.
+top=$(git rev-parse --show-toplevel 2>/dev/null) && [ -n "$top" ] && cd -- "$top" || die4 "작업트리 루트를 알 수 없다"
 TESTRE='(test|spec)\.[jt]sx?$|_test\.py$|(^|/)test_[^/]*\.py$|\.test\.|\.spec\.|(^|/)tests?/'
 GIT=(git -c core.quotePath=false)
 
