@@ -170,10 +170,11 @@ grep 단독은 두 문구의 같은-블록 공존을 보장하지 못한다(두 
 > (`skills/<s>/SKILL.md` + `skills/<s>/references/*.md`)으로 한정한다. 이 공유 파일은
 > 어느 skill 의 소유도 아니므로 거기 들지 않는다.
 >
-> 오늘 그런 스캔은 넷이다 — `test_proceed_gate_adopters.sh`(채택자 대칭, 정본이 이름을
+> 오늘 그런 스캔은 다섯이다 — `test_proceed_gate_adopters.sh`(채택자 대칭, 정본이 이름을
 > 대는 그것) · `test_conducting_interview_stage.sh` · `test_brief_review_entry.sh` ·
-> `test_compression_adopters.sh`(다른 정본의 채택자 대칭이되 같은 코퍼스 규칙을 쓴다).
-> **이 목록은 예시이고 규칙은 위 한 문장이다** — 다섯째가 생겨도 규칙은 그대로다.
+> `test_compression_adopters.sh`(다른 정본의 채택자 대칭이되 같은 코퍼스 규칙을 쓴다) ·
+> `test_next_session_command.sh`(다음 세션 줄 표지 블록, 같은 코퍼스 규칙).
+> **이 목록은 예시이고 규칙은 위 한 문장이다** — 여섯째가 생겨도 규칙은 그대로다.
 
 **이 경계가 이 파일의 안전을 지탱하는 유일한 것이다.** 그래서 그 스캔들은 **각자 자기
 코퍼스 정의 지점에** presence 코퍼스에 skill 소유 밖 파일이 들어오면 즉시 FAIL 하는

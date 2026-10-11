@@ -6,12 +6,16 @@
 # 채택자는 정본 포인터에서 도출한다(`shared/tests/adopter_derivation.sh`, 바닥 3). 채택자마다 자기 표면
 # (SKILL.md + references/*.md)에서 잰다:
 #   - 단독 줄 `**다음 세션 줄 — ①/② 공통**` 이 정확히 하나이고, 그 아래 첫 비지 않은 줄이 `> `…`` 인용 줄이다.
-#   - 다음 세션 줄 모양의 인용 줄(`> `@<` · `> `/<plugin>:<skill> @`, 들여쓰기 포함)이 표면 전체에 정확히 하나다.
-#     ①·② 가 줄을 따로 정의하거나 표지 밖에 줄을 두면 2 가 된다.
+#   - 다음 세션 줄 모양의 인용 줄이 표면 전체에 정확히 하나다. 세는 것은 인용 줄뿐이다 —
+#     `> `@<` · `> `/<plugin>:<skill> @` 로 시작하는 줄(들여쓰기 허용). 코드 펜스나 인라인 코드 안의 사본은 세지 않는다.
+#     ①·② 가 줄을 따로 정의하거나 표지 밖에 인용 줄을 두면 2 가 된다.
 #   - slash 줄: skill 이름 바로 뒤 `@<…>` 토큰 수 ≤ 정본 한도 표의 그 받는 쪽 수. 락은 숫자를 들지 않는다.
-#   - 평문 줄: `@<…>` 토큰으로 시작하고 토큰 뒤에 `Skill ` 호출이 온다. 절대경로 치환 · 거부 advisory 문구가 표면에 있다.
+#   - 평문 줄: `@<…>` 토큰으로 시작하고 토큰 뒤에 `Skill ` 호출이 온다. 절대경로 치환 · 거부 advisory 문구 ·
+#     「git 작업 트리 루트의 절대경로를 함께 낸다」 · 「경로에 공백이 있으면」 가 표면에 있다.
 #   - 꺾쇠 자리표는 줄 앞 `@<…>` 토큰에만 있다. 원소(토큰)가 늘어도 통과한다.
 #   - 표면에 `따로 입력` 이 있다.
+# 표면 파일 목록은 bash 가 도출해 `채택자디렉토리::파일1::파일2…` 인자로 파서에 넘긴다(파서는 glob 하지 않는다).
+# 그 목록은 presence 코퍼스 가드(`assert_presence_corpus_skill_owned`)를 지난다 — 정본은 코퍼스 밖이다.
 # 정본 절 단언에는 그 절을 실제로 읽었다는 양성 짝이 붙는다.
 set -u
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -20,6 +24,7 @@ CANON="$SD/references/proceed-gate.md"
 CANON_REF='references/proceed-gate\.md'
 . "$REPO_ROOT/shared/tests/assert.sh"
 . "$REPO_ROOT/shared/tests/adopter_derivation.sh"
+. "$REPO_ROOT/shared/tests/presence_corpus.sh"
 
 derive_reference_adopters "$SD" "$CANON_REF" "$REPO_ROOT" 0
 if [ "${1:-}" = "--emit-scanned" ]; then
@@ -44,9 +49,32 @@ if [ ! -f "$CANON" ]; then
   finish; exit $?
 fi
 
+# 채택자별 표면(SKILL.md + references/*.md)을 bash 가 도출한다 — 파서는 이 목록만 읽는다.
+SURFACE_ARR=()
+SURFACE_ARGS=()
+for a in "${ADOPTER_ARGS[@]+"${ADOPTER_ARGS[@]}"}"; do
+  arg="$a"
+  for f in "$a/SKILL.md" "$a"/references/*.md; do
+    [ -f "$f" ] || continue
+    SURFACE_ARR+=("$f")
+    arg="${arg}::${f}"
+  done
+  SURFACE_ARGS+=("$arg")
+done
+assert_presence_corpus_skill_owned "다음 세션 줄 채택자 표면" "${SURFACE_ARR[@]+"${SURFACE_ARR[@]}"}"
+canon_in=0
+for f in "${SURFACE_ARR[@]+"${SURFACE_ARR[@]}"}"; do
+  [ "$f" = "$CANON" ] && canon_in=1
+done
+if [ "$canon_in" -eq 1 ]; then
+  no "코퍼스: 정본($CANON)이 스캔 대상에 들어 있다 — 앵커 리터럴을 담은 파일이라 단언이 그것으로 만족된다"
+else
+  ok "코퍼스: 정본이 스캔 대상에 없다 (자기 만족 불가)"
+fi
+
 tmp="$(mktemp)" || { no "mktemp 실패 — 측정하지 못했다"; finish; exit $?; }
 trap 'rm -f "$tmp"' EXIT
-PYTHONDONTWRITEBYTECODE=1 python3 - "$CANON" "${ADOPTER_ARGS[@]+"${ADOPTER_ARGS[@]}"}" >"$tmp" <<'PY'
+PYTHONDONTWRITEBYTECODE=1 python3 - "$CANON" "${SURFACE_ARGS[@]+"${SURFACE_ARGS[@]}"}" >"$tmp" <<'PY'
 import pathlib
 import re
 import sys
@@ -104,10 +132,10 @@ else:
     no("정본 한도 표: 외부 skill(평문 줄) 행이 없다")
 
 for d in sys.argv[2:]:
-    d = pathlib.Path(d)
+    parts = d.split("::")
+    d = pathlib.Path(parts[0])
     name = d.name
-    files = [d / "SKILL.md"] + sorted((d / "references").glob("*.md"))
-    files = [f for f in files if f.is_file()]
+    files = [pathlib.Path(x) for x in parts[1:]]
     texts = {f: f.read_text(encoding="utf-8").splitlines() for f in files}
     body = flat("\n".join("\n".join(t) for t in texts.values()))
     (ok if "따로 입력" in body else no)(f"{name}: 표면에 「따로 입력」 안내가 있다")
@@ -152,7 +180,8 @@ for d in sys.argv[2:]:
         tail = line[p.end():]
         ok(f"{name}: 평문 줄이 @ 토큰 {n}개로 시작한다")
         (ok if "Skill " in tail else no)(f"{name}: 평문 줄이 토큰 뒤에 부를 skill(`Skill …`)을 잇는다")
-        for needle in ("절대경로로 치환한 뒤 노출한다", "[spec-distill] 다음 세션 줄을 만들 수 없다"):
+        for needle in ("절대경로로 치환한 뒤 노출한다", "[spec-distill] 다음 세션 줄을 만들 수 없다",
+                       "git 작업 트리 루트의 절대경로를 함께 낸다", "경로에 공백이 있으면"):
             (ok if needle in body else no)(f"{name}: 평문 줄 규칙 문구 — {needle}")
     left = re.findall(r"<[^<>]+>", tail)
     if left:
