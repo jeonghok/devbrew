@@ -222,7 +222,7 @@ rf_reply "$TMPD/case_bp" 'verdicts:
     evidence: "근거"'
 OUT_BP="$(rf_synth "$TMPD/case_bp" --recritic-diff "$TMPD/case_bp/없는.diff" --emit-verdict 2>"$TMPD/case_bp/err.txt")"
 note "$OUT_BP"
-assert_grep "$OUT_BP" 'No findings\.' \
+assert_grep "$OUT_BP" '리뷰를 합쳤다 — 지적 없음\.' \
   "(B′) 분기 확인 — 유일한 항목이 기각돼 빈 표 분기를 태운다"
 assert_grep "$OUT_BP" '입력 실패\(보조\)' \
   "(B′) 분기 확인 — 없는 --recritic-diff 가 보조 입력 사망으로 세어진다"

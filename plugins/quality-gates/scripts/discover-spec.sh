@@ -10,9 +10,8 @@
 #   discover-spec.sh --intent-out <file> [--base <sha>]
 #
 # stdout 한 줄 JSON:
-#   {"spec_path": "<abs|''>", "intent_source": "spec-trailer|commits+pr|commits",
+#   {"intent_source": "spec-trailer|commits+pr|commits",
 #    "intent_note": "''|gh 없음|열린 PR 없음|gh 오류|spec 경로 거부", "intent_file": "<abs>"}
-# `spec_path` 는 `spec-trailer` 일 때만 값이 있다(차등 테스트의 test-scope-validator 입력).
 # 의도 본문은 <file> 에 쓴다.
 #
 # exit: 0 정상 · 2 잘못된 호출 · 3 <file> 에 쓸 수 없음.
@@ -40,9 +39,9 @@ if [ -z "$BASE" ]; then
 fi
 if [ -n "$BASE" ]; then RANGE="$BASE..HEAD"; else RANGE="-1"; fi
 
-emit() {  # emit <spec_path> <intent_source> <intent_note>
-  python3 -c 'import json, sys; print(json.dumps({"spec_path": sys.argv[1], "intent_source": sys.argv[2], "intent_note": sys.argv[3], "intent_file": sys.argv[4]}, ensure_ascii=False))' \
-    "$1" "$2" "$3" "$OUT"
+emit() {  # emit <intent_source> <intent_note>
+  python3 -c 'import json, sys; print(json.dumps({"intent_source": sys.argv[1], "intent_note": sys.argv[2], "intent_file": sys.argv[3]}, ensure_ascii=False))' \
+    "$1" "$2" "$OUT"
 }
 
 # ── 1. Spec: 트레일러 (새 커밋부터) ───────────────────────────────────
@@ -76,7 +75,7 @@ for h in $(git log --format='%H' $RANGE 2>/dev/null); do
     if ! git -C "$root" show "HEAD:$rel" > "$OUT" 2>/dev/null; then
       : > "$OUT"; reject="spec 경로 거부"; break
     fi
-    emit "$top/$v" "spec-trailer" ""
+    emit "spec-trailer" ""
     exit 0
   fi
   break
@@ -107,8 +106,8 @@ else
 fi
 if [ -z "$note" ]; then
   { echo; echo "## PR 본문"; printf '%s\n' "$pr"; } >> "$OUT"
-  emit "" "commits+pr" "$reject"
+  emit "commits+pr" "$reject"
 else
-  emit "" "commits" "${reject:-$note}"
+  emit "commits" "${reject:-$note}"
 fi
 exit 0

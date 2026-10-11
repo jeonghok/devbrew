@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # test_build_codex_prompt.sh — AC9: codex 프롬프트가 다른 리뷰어와 같은 의도 출처와 기준 블록을 싣는다.
 #
-# 의도 파일이 일반 파일이 아니면(/dev/null — 의도 없음 · DISABLE_SPEC_CONFORMANCE) 빈 <intent> 로
+# 의도 파일이 일반 파일이 아니면(/dev/null — discover-spec.sh 가 의도를 내지 못함) 빈 <intent> 로
 # 가야 하고 오류가 아니어야 한다 — 오류면 codex 리뷰가 prompt_build_failed 로 조용히 빠진다.
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

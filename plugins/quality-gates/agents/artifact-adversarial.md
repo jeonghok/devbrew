@@ -59,6 +59,7 @@ new_findings:                       # findings the critic missed (Finding schema
     target_anchor: "#some-section"
     severity: IMPORTANT
     summary: "..."
+    plain: "optional — one plain sentence for a first-time reader, no internal IDs"
     proposed_fix: "..."
 ```
 

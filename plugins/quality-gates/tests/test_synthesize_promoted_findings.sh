@@ -46,7 +46,7 @@ else
   echo "    row: $row"
 fi
 
-# 3. The row has no confidence column — 표는 Sev · Path:Line · Summary · Source 넷이다.
+# 3. The row has no confidence column — 표는 심각도 · 위치 · 내용 · 낸 곳 넷이다.
 if echo "$row" | grep -qE '^\| IMPORTANT \| [^|]*foo\.py:42 \| [^|]+ \| *code-recritic *\|[[:space:]]*$'; then
   ok "3 — promoted row 은 confidence 칸 없이 네 칸이다"
 else
@@ -141,7 +141,7 @@ Y
 rf_prep "$tmp/agree"
 rf_reply "$tmp/agree" 'verdicts: []'
 out7="$(rf_synth "$tmp/agree")"
-# 표 행만 센다 — 'Suggested fixes' 절도 같은 경로를 담으므로 스코프 없이 세면
+# 표 행만 센다 — '고칠 방법' 절도 같은 경로를 담으므로 스코프 없이 세면
 # 병합이 정상이어도 2가 나온다 (이 락을 쓰다 실제로 밟은 계측기 결함).
 rows7="$(echo "$out7" | grep -cE '^\| (CRITICAL|IMPORTANT|SUGGESTION) .*db\.py:99' || true)"
 row7="$(echo "$out7" | grep -E '^\| (CRITICAL|IMPORTANT|SUGGESTION) .*db\.py:99' || true)"
@@ -220,7 +220,7 @@ added:
   - file: a2.py
     severity: CRITICAL'
 out10="$(rf_synth "$tmp/empty" 2>/dev/null)"
-if echo "$out10" | grep -qE '^2 finding\(s\) dropped as malformed' \
+if echo "$out10" | grep -qE '^2개 지적을 버렸다 — 형식이 깨졌다\(dropped as malformed' \
    && echo "$out10" | grep -q '이 실행은 clean이 아니다'; then
   ok "10 — 전부 malformed일 때 소실이 stdout에 드러난다 (clean으로 읽히지 않는다)"
 else
@@ -242,7 +242,7 @@ findings:
   - "CRITICAL: auth bypass in src/auth.py:44"
 Y
 out10b="$(python3 "$SCRIPT" --findings "$tmp/findings_str.yaml" 2>/dev/null)"
-if echo "$out10b" | grep -qE '^2 finding\(s\) dropped as malformed' \
+if echo "$out10b" | grep -qE '^2개 지적을 버렸다 — 형식이 깨졌다\(dropped as malformed' \
    && echo "$out10b" | grep -q '이 실행은 clean이 아니다'; then
   ok "10b — primary 리뷰어 출처의 소실도 같은 채널로 stdout에 드러난다"
 else
@@ -358,7 +358,7 @@ fi
 # 보고됐다(39건). 주장 하나는 1건이다.
 printf 'findings: "CRITICAL: hardcoded key in config.py:11"\n' > "$tmp/f_scalar.yaml"
 out14="$(python3 "$SCRIPT" --findings "$tmp/f_scalar.yaml" 2>/dev/null)"
-if printf '%s' "$out14" | grep -qE '^1 finding\(s\) dropped as malformed'; then
+if printf '%s' "$out14" | grep -qE '^1개 지적을 버렸다 — 형식이 깨졌다\(dropped as malformed'; then
   ok "14 — 스칼라 findings는 1건 소실로 집계된다(글자 수 아님)"
 else
   no "14 — 스칼라 findings는 1건 소실로 집계된다(글자 수 아님)"

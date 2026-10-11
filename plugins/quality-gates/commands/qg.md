@@ -1,6 +1,6 @@
 ---
 description: "Run the quality gates pipeline (review → differential test → verdict → PR comment)"
-argument-hint: "[critique <path>] [branch|--paths <glob>...] [--plan <path>]"
+argument-hint: "[critique <path>] [branch|--paths <glob>...]"
 ---
 
 # Quality Gates Pipeline
@@ -69,8 +69,7 @@ the pipeline is aborted at a decision point.
 | `/qg` | Run the pipeline; `Spec:` 트레일러로 선언된 토픽이면 토픽 전체(합친 트리), 아니면 git-derived diff (branch + worktree) |
 | `/qg branch` | Run on the full-branch diff (vs `main`) |
 | `/qg --paths <glob>...` | Scope to matched paths |
-| `/qg --plan <path>` | Use specific plan file |
-| `branch <name>` · `--reset` · `--gc` · `--pr-url` | 없어졌다(v10) — 안내 한 줄을 내고 실행하지 않는다 |
+| `branch <name>` · `--reset` · `--gc` · `--pr-url` · `--plan` | 없어졌다(13.0.0) — 안내 한 줄을 내고 실행하지 않는다 |
 | `both` · `review` · `runtime` · `--skip-runtime` | 제거됨 — 한 줄 공지 후 그대로 진행 |
 | `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | 차등 테스트를 건너뛴다 — 판정은 `not-certified (kill-switch)` |
 | `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` | e2e 를 끈다 — 판정 줄의 e2e 칸이 `꺼짐(kill switch)` |
@@ -100,14 +99,14 @@ emit하고, 파이프라인의 **정직-verdict floor**가 `resolved scope 0 AND
 판정이 `not-certified (scope-empty)` 가 된다(load-bearing, kill 불가). 무엇을
 리뷰할지(routing)는 모델이 소유 — 빈 scope면 모델이 `/qg branch`(전체 브랜치 리뷰)를 제안한다.
 진짜 변경 없음(genuine no-op)도 더는 무조건 `clean` 이 아니다 — ②(차등 테스트)가 매
-iteration 도는 한, R1b 가 영향 unit 을 0개 고르면 차등 테스트 자신이 `expected-empty`
+iteration 도는 한, 차등 절차 D2 가 영향 unit 을 0개 고르면 차등 테스트 자신이 `expected-empty`
 를 내고 그것이 `not-certified (scope-empty)` 로 판정된다(정직-verdict floor 와는 별도
 경로 — resolved scope 0 문제가 아니라 test unit 0 문제다). 신호가 degraded면
 fail-open + loud advisory.
 
-암묵 session scope로 돌 때 qg는 그 사실을 한 줄로 밝힌다 (`Review scope: session (N files)` — 전체
+암묵 session scope로 돌 때 qg는 그 사실을 한 줄로 밝힌다 (`리뷰 범위: 이번 세션에서 바뀐 파일 N개.` — 전체
 PR/브랜치는 `/qg branch`). 토픽 선언(`Spec:` 트레일러)으로 풀리면 대신
-`Review scope: topic <키> (N files · 구성원 <branches>)` 를 밝힌다. 자연어로 브랜치/전체 리뷰 의도를 말하면 모델이 `/qg branch`(branch
+`리뷰 범위: 토픽 <키> — 바뀐 파일 N개 · 구성원 <branches>.` 를 밝힌다. 자연어로 브랜치/전체 리뷰 의도를 말하면 모델이 `/qg branch`(branch
 scope)로 해석한다 — 별도 토큰 alias 없음 (P8 determinism-economy: non-load-bearing 라우팅은
 모델 신뢰, 결정론적 보장은 literal `/qg branch`에).
 
@@ -122,7 +121,7 @@ Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable.
 
 - ① 리뷰(기본 셋 + 조건부 ≤4 → 출처-제거 재비판) → ② 차등 테스트(기준선 대비, 매 iteration) → ③ 합성 · 판정
 - 루프 뒤, 최종 판정 앞에 e2e 를 한 번 묻는다(선택). 사람이 시나리오를 고르면 승인된 명령으로 걷고, 걷기 직후 게이트에서 사람이 판정안을 확인한다. 걷지 않은 실행은 판정 줄의 e2e 칸이 그 사실을 보인다.
-- Fix-loop: 막는 지적이나 차등 defect 가 남으면 iteration 마다 항목별 적용/제외 분류표와 함께 `Retry` / `Accept and finish` / `Stop` 로 사용자가 진행을 정한다(최대 5회). Retry 는 「적용」 항목만 고친다.
+- Fix-loop: 막는 지적이나 차등 defect 가 남으면 iteration 마다 항목별 적용/제외 분류표와 함께 `고치고 다시 돌기` / `지금 판정으로 끝내기` / `멈추기` 로 사용자가 진행을 정한다(최대 5회). 「고치고 다시 돌기」는 「적용」 항목만 고친다.
 
 ### Pipeline Rules
 
@@ -132,7 +131,7 @@ Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable.
   user-consented fixes inline (orchestrator-as-writer); does NOT auto-restart
   from an earlier iteration.
 - The pipeline iterates up to 5 times; AskUserQuestion fires at every
-  iteration boundary with `Retry` / `Accept and finish` / `Stop`.
+  iteration boundary with `고치고 다시 돌기` / `지금 판정으로 끝내기` / `멈추기`.
 - AskUserQuestion also fires on max-iter, and on the differential test's gap
   gate (R3) when something was left out.
 - Local result in `.claude/quality-gates/<session-id>/result.md`

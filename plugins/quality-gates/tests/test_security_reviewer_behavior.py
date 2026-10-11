@@ -23,6 +23,8 @@ PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 PERSONA = PLUGIN_ROOT / "agents" / "security-reviewer.md"
 FIXTURE = PLUGIN_ROOT / "tests" / "fixtures" / "security-reviewer" / "expected" / "sql-concat.schema.yaml"
 FINDING_KEYS = {"agent", "file", "line", "severity", "summary", "proposed_fix"}
+# 쉬운 말 출력 §5 — 사람에게 보일 한 문장(선택 칸). 형식에는 있고, 출력에는 있어도 없어도 된다.
+OPTIONAL_KEYS = {"plain"}
 
 SEC_REVIEWER_FROZEN = """
 agent: security-reviewer
@@ -59,13 +61,13 @@ class SecurityReviewerBehaviorTests(unittest.TestCase):
         block = re.search(r"```yaml\n(.*?)```", section, re.S)
         self.assertIsNotNone(block, "## Output format has no ```yaml block")
         keys = set(re.findall(r"^\s*-?\s*([a-z_]+):", block.group(1), re.M))
-        self.assertEqual(keys, FINDING_KEYS)
+        self.assertEqual(keys, FINDING_KEYS | OPTIONAL_KEYS)
 
     def test_v10_fixture_schema_has_no_confidence(self):
         entries = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
         self.assertTrue(entries)
         for e in entries:
-            self.assertEqual(set(e), FINDING_KEYS)
+            self.assertEqual(set(e) - OPTIONAL_KEYS, FINDING_KEYS)
 
     def test_AC46_security_reviewer_missing_key_raises(self):
         bad = "agent: security-reviewer\n"

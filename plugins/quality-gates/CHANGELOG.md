@@ -3,6 +3,52 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [13.0.0] — 2026-10-11
+
+### Changed
+- 차등 테스트를 요구 R1~R24 를 지키는 얇은 기계로 다시 지었다. `run-test-selection.sh` 는 행을 꼬리 줄(`#qg-rows runner= commit= rows= flaky=`) 달린 행 파일에 병합하고(`run` · `unrun` · `pending`), `diff-test-results.py` 는 배정 파일과 두 축의 행 파일을 직접 읽어 판정 입력 한 파일을 낸다(`--assign` · `--rows` · `--iter` · `--baseline-commit` · `--head-commit`). `verdict.py` 가 그 파일을 그대로 읽는다. 꼬리 줄이 없거나 행 수 · 커밋 · 러너가 어긋난 파일은 빈 결과가 아니라 exit 4 다.
+- 도말 판정을 행마다 한다 — unit 별로 다시 확인한 양측 red 는 막지 않고 공시한다(R10). 이전 판은 기준선 축이 늘 bulk 로 시작한다는 이유로 이것까지 `granularity-smear` 로 막았다. 실행 방식은 행마다 기록되고, 입도는 러너에서 도출한다.
+- 두 축의 트리가 같으면(`baseline^{tree} == head^{tree}`) 기준선 축을 관측 없음으로 내린다 → `baseline-unrunnable`.
+- 후보 바닥(`compute-test-scope-candidates.sh`)은 merge_base 대비 작업트리 + 무시되지 않는 untracked 다(이전 판은 커밋 안 된 변경이 있으면 커밋된 브랜치 변경을 빠뜨렸다). 기준선을 못 풀면 exit 4 다. 토픽 스코프는 `--topic <boundary> <tree>` 로 스크립트가 직접 센다.
+- `references/differential-test.md` 를 요구 목록 + D0~D8 절차로 제자리에서 다시 썼다. 토픽 스코프의 HEAD 축 커밋은 매 iteration 의 스코프 파일에서 다시 읽는다 — 실행 중 기준선(스코프 · 경계)이 바뀐 iteration 은 판정 입력이 `error-axis` 다(SKILL Step 1a 표 아래 한 문장).
+- 마지막 iteration 의 차등 출력은 세션 폴더의 `differential.yaml` 로, 커버리지로 세지 않은 테스트 목록은 `differential-not-counted.md` 로 복사된다. 최종 판정 · `result.md` 의 `## 차등 테스트` 절이 이 둘을 읽는다(옛 `aggregate.yaml` 자리).
+- 일회용 기준선 · HEAD 트리는 같은 자리에 남은 것을 지우고 다시 만든다 — 앞 실행이 중간에 죽어도 다음 실행이 막히지 않는다.
+- `qg-gc.py` 는 옛 판의 `runtime-evidence.md` 만 남은 세션 폴더도 TTL 뒤 회수한다(회수 표지).
+
+### Added
+- `qg-worktree.sh memo-init` · `memo-drop` — 한 번의 `/qg` 동안만 사는 리포 밖 실행 안 메모. 기준선 행을 같은 실행의 다음 iteration 에서 재사용한다. 리포 안 경로는 거부하고, 표지 없는 디렉토리 · 심볼릭 링크는 지우지 않는다.
+
+### Removed
+- README 의 사전 요건에서 `superpowers` 행 — 계획 탐색이 없어져 읽는 곳이 없다.
+- `/qg --plan <path>` — 안내 한 줄을 내고 실행하지 않는다(exit 2). 차등 테스트는 계획 파일을 읽지 않는다.
+- kill switch `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE` — 의도 입력은 이제 언제나 codex 프롬프트에 실린다. codex 로 아무것도 보내지 않으려면 `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` 을 쓴다. 옛 변수를 `1` 로 두면 codex 러너가 stderr 한 줄로 알리고 그대로 진행한다. README kill switch 표에 「제거됨」 행으로 남겼다.
+- `discover-spec.sh` 출력 JSON 의 `spec_path` 키 — 읽는 곳(test-scope-validator)이 없어졌다. `intent_source` · `intent_note` · `intent_file` 은 그대로다.
+- `baseline-cache.sh` 와 세션을 넘는 기준선 캐시, `run-test-selection.sh` 의 `probe` · `cargo-target-dir`. 옛 판이 남긴 `.claude/quality-gates/baseline-cache/` 는 쓰지도 지우지도 않는다 — 직접 지워도 된다.
+- `check_qa_ledger.py` 와 `runtime-evidence.md` 원장(QA 원장) — 판정은 기계 출력을 직접 읽는다.
+- `test-scope-validator` agent 와 그 fixture — 낡았거나 골라 담은 테스트의 판단은 오케스트레이터가 하고 `differential-not-counted.md` 로 공시한다(돌리되 커버리지로 세지 않는다).
+- 계획 탐색 `discover-plan.sh` · `discover_common.sh` 와 README 「Plan Discovery Sources」 절.
+- `diff-test-results.py` 의 옛 인자(`--expected` · `--baseline` · `--head` · `--granularity` · `--runner` · `--baseline-mode` · `--head-mode` · `--baseline-detected` · `--aggregate`) — 행 파일과 배정 파일이 그 값을 싣는다.
+- 차등 테스트의 갭 게이트(생략이 있을 때의 질문) — 생략은 공시와 `not-certified` 가 덮는다.
+
+### Security
+- `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 은 오케스트레이터(절차 D0)와 러너(`run-test-selection.sh run` — setup · 러너 · 테스트 전부) 양쪽에서 저장소 코드 실행을 막는다(R22). `detect` 의 package.json 파싱은 `python3 -I` 로 돌아 리뷰 대상 저장소의 모듈을 import 하지 않는다.
+- 배정 · 실행 단계가 워크트리 밖으로 나가는 unit 경로를 거부한다(R20). 테스트는 사용자의 라이브 작업트리에서 돌지 않는다 — 하위 디렉토리에서 불러도 정규화한 git 디렉토리로 대조한다(R11).
+- `memo-drop` 은 이름 틀 · 정규화한 TMPDIR 부모 · 심볼릭 링크 아닌 디렉토리와 일반 파일 표지를 모두 확인한 뒤에만 지운다. 일회용 트리 강제 제거는 정규화한 부모가 qg 이름공간 경로와 같을 때만 한다.
+- `DISABLE_SPEC_CONFORMANCE` 를 켜 두고 커밋 메시지 · PR 본문을 codex 에 보내지 않던 사용자는 13.0.0 부터 그 글이 codex 로 간다 — 위 Removed 의 stderr 공지가 그 사실을 알린다.
+
+## [12.2.0] — 2026-10-11
+
+### Changed
+- /qg 의 질문 셋(반복 · 수정 실패 · 최대 반복)과 선택지, 완료 표의 칸 이름이 한국어 쉬운 말이다. 반복 경계 앵커는 「남은 지적이 있다」다. 완료 표의 결과 칸(게시 게이트가 이 이름으로 부른다)은 게시 펜스가 읽는 토큰(`finished` · `accepted with findings iter N` · `aborted iter N`) 그대로다. 완료 보고는 끝난 방식과 판정값 한 문장으로 시작해 할 일 하나로 끝난다. 비평 모드의 최종 보고도 같다.
+- e2e 걷기 직후 게이트(`## e2e` · `references/e2e.md`)가 부르는 Fix-loop 선택지 이름도 같은 낱말(「고치고 다시 돌기」 · 「지금 판정으로 끝내기」 · 「멈추기」)이다. e2e 칸 값(`pass` · `fail` · `미확인` 등)은 `verdict.py --e2e` 가 읽는 토큰이라 그대로다.
+- 합성기 출력의 첫 줄이 스크립트가 계산한 상태 문장이다(예: 「리뷰를 합쳤다 — 남은 지적 2개(심각 1 · 중요 1).」 — 0 인 등급은 빼고, 형식이 깨져 버린 지적과 경고가 있으면 그것도 붙인다). 「No findings.」 줄은 그 첫 줄이 대신한다. 표 머리(`| 심각도 | 위치 | 내용 | 낸 곳 |`) · 「고칠 방법」 · 버린 지적 줄도 한국어다 — 표를 읽는 SKILL 자리(`result.md` 의 「지적」 절 · 분류표 번호)도 같은 글자로 바꿨다. `verdict:` · `**Findings:**` · `blocking:` · `optional:` 줄과 `dropped as malformed` 토큰은 형태 그대로다. 판정 꼬리의 `scope:` · `angles:` 블록 앞에 그것을 가리키는 쉬운 한 줄이 선다.
+- 시작 배너가 과정 나열 없이 한 줄로 시작한다. setup 의 오류 줄이 쉬운 말로 시작하고 원래 영어 토큰은 괄호에 남는다.
+- 범위 줄(「리뷰 범위: …」) · trivia 줄 · 범위 경고가 쉬운 말이다(`scope check degraded` 토큰은 괄호에 남는다).
+- 공개 소개 문구(`plugin.json` · 마켓플레이스)가 무엇을 해 주는지로 시작한다(사람이 승인하는 e2e 걷기 포함). README 의 첫 문단 · 「쓰는 법」 표 · 흐름 첫 문단이 쉬운 말이다.
+
+### Added
+- 리뷰어 지적의 `plain:` 칸 — 처음 보는 사람이 읽을 쉬운 한 문장. 보안 리뷰어 · code-recritic 의 added · artifact-critic · artifact-adversarial · codex 리뷰어 둘 · 외부 리뷰어 dispatch 프롬프트에 형식이 있고, 합성기 표가 그것을 요약 앞에 쓴다. 칸이 없으면 지금처럼 나오고, 같은 지적을 합칠 때 칸은 사라지지 않는다. 재비판자에게 주는 익명 목록에는 싣지 않는다.
+
 ## [12.1.0] — 2026-10-11
 
 **v10 ④ e2e 걷기 — runtime tier 를 사람이 승인하면 확인한다** — `/qg` 의 리뷰·테스트 루프 뒤에 e2e 질문 하나를 붙인다. 시나리오를 고르는 것이 그 부팅 명령의 실행 승인이고, 오케스트레이터가 앱을 띄워 걷고, 사람이 걷기 직후 게이트에서 판정안을 승인하거나 뒤집는다.

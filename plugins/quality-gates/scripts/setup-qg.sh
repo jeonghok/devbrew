@@ -13,14 +13,13 @@ fi
 
 # --- kill switch (SKILL Preflight P1 도 같은 스위치를 본다 — 직접 호출도 막는다) ---
 if [[ "${DEVBREW_QUALITY_GATES_DISABLE:-}" == "1" ]]; then
-  echo "[quality-gates] setup-qg disabled via DEVBREW_QUALITY_GATES_DISABLE=1" >&2
+  echo "[quality-gates] DEVBREW_QUALITY_GATES_DISABLE=1 이 켜져 있어 /qg 를 시작하지 않는다(setup-qg disabled)." >&2
   exit 1
 fi
 
 # --- 인자 ---
 REMOVED_ARGS=""   # v9 에서 없앤 게이트 인자 — 공지 후 진행
 GONE_ARGS=""      # v10 에서 없앤 인자 — 공지 후 실행하지 않음
-PLAN_FILE="auto"
 ENSURE_MODE="false"
 SESSION_ID=""
 
@@ -39,7 +38,7 @@ while [[ $# -gt 0 ]]; do
       # 글롭 0개 조건은 아래 while 이 한 번도 안 돌 조건과 같아야 한다.
       shift
       if [[ $# -eq 0 ]] || [[ "$1" =~ ^-- ]] || [[ "$1" =~ ^(review|runtime|both|branch)$ ]]; then
-        echo "❌ Error: --paths requires at least one glob" >&2
+        echo "❌ --paths 뒤에 glob 이 하나도 없다(--paths requires at least one glob)." >&2
         exit 1
       fi
       while [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]] && [[ ! "$1" =~ ^(review|runtime|both|branch)$ ]]; do
@@ -68,12 +67,9 @@ while [[ $# -gt 0 ]]; do
       if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^- ]]; then shift; fi
       ;;
     --plan)
-      if [[ -z "${2:-}" ]]; then
-        echo "❌ Error: --plan requires a file path argument" >&2
-        exit 1
-      fi
-      PLAN_FILE="$2"
-      shift 2
+      gone "--plan" "리뷰 기준은 Spec: 트레일러 · 커밋 메시지 · PR 본문에서 읽는다"
+      shift
+      if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^- ]]; then shift; fi
       ;;
     --ensure)
       ENSURE_MODE="true"
@@ -81,7 +77,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --session-id)
       if [[ -z "${2:-}" ]]; then
-        echo "❌ Error: --session-id requires an argument" >&2
+        echo "❌ --session-id 뒤에 값이 없다(--session-id requires an argument)." >&2
         exit 1
       fi
       SESSION_ID="$2"
@@ -92,7 +88,7 @@ while [[ $# -gt 0 ]]; do
 Quality Gates Pipeline Setup
 
 USAGE:
-  /qg [branch] [--paths <glob>...] [--plan <path>]
+  /qg [branch] [--paths <glob>...]
 
 ARGUMENTS:
   (none)               Review git-derived changes (branch + worktree) or the Spec: topic
@@ -100,19 +96,18 @@ ARGUMENTS:
 
 OPTIONS:
   --paths <glob>...    Scope override — review only the matched paths
-  --plan <path>        Specify plan file path (default: auto-detect)
   --session-id <id>    Session ID when CLAUDE_CODE_SESSION_ID is unset (if it is set, must equal it)
   --ensure             Keep this session's folder if it already exists (skill preflight)
   -h, --help           Show this help message
 
-REMOVED (v10): branch <name> · --reset · --gc · --pr-url — one notice line each, then exit 2.
+REMOVED (v10): branch <name> · --reset · --gc · --pr-url · --plan — one notice line each, then exit 2.
 REMOVED (v9):  review · runtime · both · --skip-runtime — one notice line each, the run proceeds.
 HELP_EOF
       exit 0
       ;;
     *)
-      echo "❌ Error: Unknown argument: $1" >&2
-      echo "   Use --help for usage information" >&2
+      echo "❌ 모르는 인자다(Unknown argument): $1" >&2
+      echo "   쓰는 법은 --help 로 본다." >&2
       exit 1
       ;;
   esac
@@ -130,16 +125,16 @@ if [[ -z "$SESSION_ID" ]]; then
 fi
 if [[ -z "$SESSION_ID" ]]; then
   cat >&2 <<EOF
-❌ Quality Gates: cannot create pipeline state — session ID is empty.
-   Neither --session-id <id> argument nor CLAUDE_CODE_SESSION_ID env var was provided.
-   Re-run /qg from Claude Code, or pass --session-id explicitly.
+❌ Quality Gates: 세션 ID(session ID)가 비어 있어 상태 폴더를 만들 수 없다.
+   --session-id <id> 인자도 CLAUDE_CODE_SESSION_ID 환경 변수도 없다.
+   Claude Code 안에서 /qg 를 다시 돌리거나 --session-id 를 직접 준다.
 EOF
   exit 1
 fi
 # 전체 일치 — qg-gc.py 의 SESSION_PATTERN 과 같은 문법. 아래에서 이 값으로 폴더를 지우므로
 # 패턴 밖 값(빈 값 · `..` · `/` · 개행)은 거부한다.
 if [[ ! "$SESSION_ID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
-  echo "❌ Quality Gates: session ID '$SESSION_ID' fails pattern guard ([A-Za-z0-9_-]{8,})." >&2
+  echo "❌ Quality Gates: 세션 ID '${SESSION_ID}' 가 허용 모양([A-Za-z0-9_-]{8,})이 아니다(fails pattern guard)." >&2
   exit 1
 fi
 
@@ -162,7 +157,7 @@ fi
 
 STATE_ROOT=".claude/quality-gates"
 
-# state root 아래의 비-세션 형제 폴더(qg-worktree.sh · baseline-cache.sh 가 쓴다)는 SID 로 받지 않는다.
+# state root 아래의 비-세션 형제 폴더(qg-worktree.sh 가 쓰는 worktrees · 옛 버전이 남긴 baseline-cache)는 SID 로 받지 않는다.
 if [[ "$SESSION_ID" == "worktrees" || "$SESSION_ID" == "baseline-cache" ]]; then
   echo "[quality-gates] session ID '$SESSION_ID' 는 state root 의 예약 폴더 이름이다 — 지우지 않는다. 아무것도 쓰지 않는다." >&2
   exit 1
@@ -256,14 +251,7 @@ started_at: "$TIMESTAMP"
 EOF
 mv "$TEMP_FILE" "$STATE_FILE"
 
-echo "🔄 Quality Gates Pipeline"
-echo ""
-echo "Pipeline: scope → review → differential test → synthesis · verdict"
+echo "🔄 Quality Gates 를 시작한다 — 이 턴 안에서 끝까지 돈다."
 for a in $REMOVED_ARGS; do
   echo "> [quality-gates] \`${a}\` 인자는 제거됐다 — 이제 한 파이프라인이라 게이트 범위를 고르지 않는다. 그대로 진행한다."
 done
-if [[ "$PLAN_FILE" != "auto" ]]; then
-  echo "Plan file: $PLAN_FILE"
-fi
-echo ""
-echo "Pipeline runs in this turn."

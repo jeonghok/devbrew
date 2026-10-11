@@ -96,6 +96,11 @@ def _is_findings_doc(doc):
     return isinstance(doc, dict) and isinstance(doc.get("findings"), list)
 
 
+def _has_plain(f):
+    """리뷰어가 쓴 쉬운 한 문장(`plain`)이 있는가 — 문자열이고 공백뿐이 아니어야 있다(코드 합성기와 같은 술어)."""
+    return isinstance(f.get("plain"), str) and bool(f["plain"].strip())
+
+
 def phase_key(paths, ledger=None):
     by_key = {}
     sources_failed = 0
@@ -113,6 +118,8 @@ def phase_key(paths, ledger=None):
                     ledger.hold(repr(f)[:60], "항목 파손: not a mapping")
                 continue
             g = dict(f)
+            if "plain" in g and not _has_plain(g):
+                del g["plain"]   # 쓸 수 없는 plain 은 칸만 뺀다 — 지적은 그대로 둔다
             g["severity"] = _norm_sev(g)
             k = dedup_key(g)
             g["dedup_key"] = k
@@ -126,11 +133,14 @@ def phase_key(paths, ledger=None):
                 # never discarded by first-wins (fail-closed severity merge).
                 if _sev_rank(g["severity"]) > _sev_rank(by_key[k]["severity"]):
                     by_key[k]["severity"] = g["severity"]
+                # 남는 쪽(먼저 온 쪽)에 plain 이 없고 새로 온 쪽에 있으면 물려받는다(칸이 합치기에서 사라지지 않게).
+                if not _has_plain(by_key[k]) and _has_plain(g):
+                    by_key[k]["plain"] = g["plain"]
             else:
                 g["sources"] = [g.get("agent", "?")]
                 by_key[k] = g
     fields = ("agent", "sources", "category", "target_anchor", "target_lines",
-              "severity", "summary", "proposed_fix", "dedup_key", "stagnation_key")
+              "severity", "summary", "plain", "proposed_fix", "dedup_key", "stagnation_key")
     out = {
         "findings": [{k: f.get(k) for k in fields if f.get(k) is not None} for f in by_key.values()],
         "sources_failed": sources_failed,
@@ -150,6 +160,8 @@ def phase_synth(findings_path, adversarial_path):
     findings = [dict(f) for f in _findings_of(merged_doc) if isinstance(f, dict)]
     for f in findings:
         f.setdefault("dedup_key", dedup_key(f))
+        if "plain" in f and not _has_plain(f):
+            del f["plain"]   # kept 로 나가기 전에 쓸 수 없는 plain 만 뺀다
         f["severity"] = _norm_sev(f)
 
     sources_failed = merged_doc.get("sources_failed", 0) if isinstance(merged_doc, dict) else 0
@@ -231,10 +243,15 @@ def phase_synth(findings_path, adversarial_path):
             L.hold(repr(nf)[:60], "항목 파손: not a mapping")
             continue
         g = dict(nf)
+        if "plain" in g and not _has_plain(g):
+            del g["plain"]   # 쓸 수 없는 plain 만 뺀다 — 지적은 그대로 둔다
         g["severity"] = _norm_sev(g)
         g["dedup_key"] = dedup_key(g)
         if g["dedup_key"] in kept_keys:
             L.absorbed(g["dedup_key"], g["dedup_key"])
+            for k in kept:
+                if k["dedup_key"] == g["dedup_key"] and not _has_plain(k) and _has_plain(g):
+                    k["plain"] = g["plain"]   # 남는 쪽에 plain 이 없으면 흡수된 쪽 것을 물려받는다
             continue
         kept_keys.add(g["dedup_key"])
         kept.append(g)
@@ -289,7 +306,7 @@ def phase_synth(findings_path, adversarial_path):
         "adjudication": disposition_report(L.report(), L.held_by_class()),
         "kept": [
             {k: f.get(k) for k in ("category", "target_anchor", "target_lines",
-                                   "severity", "summary", "proposed_fix", "dedup_key")
+                                   "severity", "summary", "plain", "proposed_fix", "dedup_key")
              if f.get(k) is not None}
             for f in kept
         ],

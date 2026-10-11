@@ -25,7 +25,7 @@ its docstring below), never a file path. These tests assert that the
 drifting away from either one (wording changes, a renamed severity level,
 a dropped required field in the real prompt). That is a deliberate,
 narrow contract, not an oversight — but it does mean "tests covering
-security-reviewer/test-scope-validator"
+security-reviewer"
 should not be read as agent-drift protection. If that coverage is ever
 wanted, it needs a test that actually reads the corresponding agents/*.md.
 (PR4a: `quality-gates:adversarial` was deleted; the re-critique is now
