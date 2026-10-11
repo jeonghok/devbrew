@@ -92,6 +92,22 @@ K="$(python3 -c 'import sys,yaml; print(yaml.safe_load(open(sys.argv[1],encoding
 printf 'verdicts:\n  - {finding_key: "%s", verdict: confirm, evidence: real}\n' "$K" > "$T/adv.yaml"
 out="$(python3 "$ART" --phase synth --findings "$T/merged.yaml" --adversarial "$T/adv.yaml" 2>/dev/null)"
 assert_contains "$out" "이 절은 앞 절과 반대로 말한다" "AC9: artifact synth 의 kept 에 plain 이 남는다"
+# 쓸 수 없는 plain(공백뿐 · 문자열 아님)은 kept 로 나가지 않고, 지적은 남는다
+printf 'findings:\n  - {agent: artifact-critic, category: logic, target_anchor: "#s3", severity: CRITICAL, summary: "gap C", plain: 42, proposed_fix: "fix C"}\n  - {agent: artifact-critic, category: logic, target_anchor: "#s4", severity: CRITICAL, summary: "gap D", plain: "   ", proposed_fix: "fix D"}\n' > "$T/bad.yaml"
+python3 "$ART" --phase key --findings "$T/bad.yaml" > "$T/badm.yaml" 2>/dev/null
+assert_eq "$(python3 -c 'import sys,yaml; fs=yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["findings"]; print(len(fs), sum(1 for f in fs if "plain" in f))' "$T/badm.yaml")" "2 0" "AC9: key 단계가 쓸 수 없는 plain 만 빼고 지적 둘은 남긴다"
+python3 - "$T/badm.yaml" "$T/bad2.yaml" <<'PY'
+import sys, yaml
+m = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
+for f in m["findings"]:
+    f["plain"] = 42 if f["summary"] == "gap C" else "   "
+open(sys.argv[2], "w", encoding="utf-8").write(yaml.safe_dump(m, allow_unicode=True))
+PY
+K1="$(python3 -c 'import sys,yaml; print([f["dedup_key"] for f in yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["findings"]][0])' "$T/badm.yaml")"
+K2="$(python3 -c 'import sys,yaml; print([f["dedup_key"] for f in yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["findings"]][1])' "$T/badm.yaml")"
+printf 'verdicts:\n  - {finding_key: "%s", verdict: confirm, evidence: real}\n  - {finding_key: "%s", verdict: confirm, evidence: real}\n' "$K1" "$K2" > "$T/adv2.yaml"
+python3 "$ART" --phase synth --findings "$T/bad2.yaml" --adversarial "$T/adv2.yaml" > "$T/bado2.yaml" 2>/dev/null
+assert_eq "$(python3 -c 'import sys,yaml; ks=yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["kept"]; print(len(ks), sum(1 for k in ks if "plain" in k))' "$T/bado2.yaml")" "2 0" "AC9: synth 의 kept 에 쓸 수 없는 plain(숫자 · 공백뿐)이 실리지 않고 지적 둘은 남는다"
 
 # ⑥ 표 칸을 깨는 글자 (Review Focus 2)
 mkdir -p "$T/esc"
@@ -113,6 +129,13 @@ out="$(rf_synth "$T/dup")"
 assert_eq "$(printf '%s\n' "$out" | grep -c '^| IMPORTANT | d\.py:5 |')" "1" "Review Focus 5: 같은 지적 셋이 한 행으로 합쳐졌다"
 assert_contains "$out" "같은 줄을 두 리뷰어가 짚었다 (같은 지적)" "Review Focus 5: 남는 쪽에 plain 이 없으면 합쳐진 다른 쪽 중 먼저 온 쪽의 plain 을 물려받는다"
 assert_not_contains "$out" "셋째가 쓴 다른 문장" "Review Focus 5: 물려받는 것은 하나 — 먼저 온 쪽이다"
+mkdir -p "$T/dup3"
+printf -- '- {agent: security-reviewer, file: g.py, line: 8, severity: IMPORTANT, summary: "같은 지적", plain: "   ", proposed_fix: p}\n- {agent: code-reviewer, file: g.py, line: 8, severity: IMPORTANT, summary: "같은 지적", plain: "공백 뒤에 온 문장", proposed_fix: p}\n' > "$T/dup3/findings.yaml"
+rf_prep "$T/dup3"; rf_reply "$T/dup3" 'verdicts:
+  - {f: f1, verdict: confirm}
+  - {f: f2, verdict: confirm}'
+out="$(rf_synth "$T/dup3")"
+assert_contains "$out" "공백 뒤에 온 문장 (같은 지적)" "Review Focus 5: 남는 쪽 plain 이 공백뿐이면 없는 것으로 치고 물려받는다"
 mkdir -p "$T/dup2"
 printf -- '- {agent: security-reviewer, file: e.py, line: 6, severity: IMPORTANT, summary: "같은 지적", plain: "먼저 온 쪽의 문장", proposed_fix: p}\n- {agent: code-reviewer, file: e.py, line: 6, severity: IMPORTANT, summary: "같은 지적", plain: "나중 쪽의 문장", proposed_fix: p}\n' > "$T/dup2/findings.yaml"
 rf_prep "$T/dup2"; rf_reply "$T/dup2" 'verdicts:
@@ -124,7 +147,15 @@ assert_not_contains "$out" "나중 쪽의 문장" "Review Focus 5: 남는 쪽의
 printf 'findings:\n  - {agent: artifact-critic, category: logic, target_anchor: "#s2", severity: IMPORTANT, summary: "gap B", proposed_fix: "fix B"}\n' > "$T/c1.yaml"
 printf 'findings:\n  - {agent: codex, category: logic, target_anchor: "#s2", severity: IMPORTANT, summary: "gap B", plain: "둘째 절이 빠졌다", proposed_fix: "fix B"}\n' > "$T/c2.yaml"
 python3 "$ART" --phase key --findings "$T/c1.yaml" --findings "$T/c2.yaml" > "$T/m2.yaml" 2>/dev/null
-assert_eq "$(grep -c '^ *plain: ' "$T/m2.yaml")" "1" "Review Focus 5: 비코드 합치기도 다른 쪽의 plain 을 물려받는다"
+assert_eq "$(python3 -c 'import sys,yaml; fs=yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["findings"]; print(len(fs), fs[0].get("plain"))' "$T/m2.yaml")" "1 둘째 절이 빠졌다" "Review Focus 5: 비코드 합치기는 한 지적으로 합치고 다른 쪽의 plain 을 물려받는다"
+printf 'findings:\n  - {agent: artifact-critic, category: logic, target_anchor: "#s5", severity: IMPORTANT, summary: "gap E", plain: "   ", proposed_fix: "fix E"}\n' > "$T/c3.yaml"
+printf 'findings:\n  - {agent: codex, category: logic, target_anchor: "#s5", severity: IMPORTANT, summary: "gap E", plain: "다섯째 절이 모호하다", proposed_fix: "fix E"}\n' > "$T/c4.yaml"
+python3 "$ART" --phase key --findings "$T/c3.yaml" --findings "$T/c4.yaml" > "$T/m3.yaml" 2>/dev/null
+assert_eq "$(python3 -c 'import sys,yaml; fs=yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["findings"]; print(len(fs), fs[0].get("plain"))' "$T/m3.yaml")" "1 다섯째 절이 모호하다" "Review Focus 5: 먼저 온 쪽의 plain 이 공백뿐이면 없는 것으로 치고 다른 쪽 것을 물려받는다"
+printf 'findings:\n  - {agent: artifact-critic, category: logic, target_anchor: "#s6", severity: IMPORTANT, summary: "gap F", plain: 42, proposed_fix: "fix F"}\n' > "$T/c5.yaml"
+printf 'findings:\n  - {agent: codex, category: logic, target_anchor: "#s6", severity: IMPORTANT, summary: "gap F", plain: "여섯째 절이 비었다", proposed_fix: "fix F"}\n' > "$T/c6.yaml"
+python3 "$ART" --phase key --findings "$T/c5.yaml" --findings "$T/c6.yaml" > "$T/m4.yaml" 2>/dev/null
+assert_eq "$(python3 -c 'import sys,yaml; fs=yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["findings"]; print(len(fs), fs[0].get("plain"))' "$T/m4.yaml")" "1 여섯째 절이 비었다" "Review Focus 5: 먼저 온 쪽의 plain 이 문자열이 아니면 없는 것으로 치고 다른 쪽 것을 물려받는다"
 
 # ⑧ 표 렌더의 plain 가지 — 문자열이 아니거나 비면 요약만 나온다(Task 2 의 렌더 분기를 잠근다)
 mkdir -p "$T/ns"

@@ -675,7 +675,7 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
         if dropped_malformed > 0:
             out.append(
                 f"{dropped_malformed}개 지적을 버렸다 — 형식이 깨졌다(dropped as malformed — 매핑이 아니거나, "
-                "칸의 형식이 틀렸거나, file · severity · summary 가 없다. 자세한 내용은 stderr). "
+                "목록이어야 할 자리가 목록이 아니거나, file · severity · summary 가 없다. 자세한 내용은 stderr). "
                 "**이 실행은 clean이 아니다**: 버려진 주장은 심사되지 않았다.")
         out.extend(_degrade_block(report, blocking))
         return "\n".join(out) + "\n"
@@ -694,9 +694,8 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
         sev = _norm_sev(f) + (" (lowered)" if f.get("lowered") else "")
         path_line = _cell("%s:%s" % (f.get("file"), f.get("line")))
         source = _cell(", ".join(str(s) for s in srcs))
-        plain = f.get("plain")
-        if isinstance(plain, str) and plain.strip():
-            summary = _cell(f"{plain} ({f.get('summary', '')})")
+        if _has_plain(f):
+            summary = _cell(f"{f['plain']} ({f.get('summary', '')})")
         else:
             summary = _cell(f.get("summary", ""))
         out.append(f"| {sev} | {path_line} | {summary} | {source} |")
@@ -704,7 +703,7 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
     if dropped_malformed > 0:
         out.append(
             f"{dropped_malformed}개 지적을 버렸다 — 형식이 깨졌다(dropped as malformed — 매핑이 아니거나, "
-            "칸의 형식이 틀렸거나, file · severity · summary 가 없다. 자세한 내용은 stderr).")
+            "목록이어야 할 자리가 목록이 아니거나, file · severity · summary 가 없다. 자세한 내용은 stderr).")
     out.append("")
     out.append("**고칠 방법:**")
     for i, f in enumerate(findings, 1):
