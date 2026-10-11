@@ -114,4 +114,33 @@ FENCE="$(awk 'index($0,"<!-- review-entry:begin -->"){f=1;next} index($0,"<!-- r
 if nonempty "진입 펜스" "$FENCE"; then
   assert_contains "$FENCE" "$RETURN_TAIL" "진입 펜스가 복귀 지시 문장을 갖는다"
 fi
+
+# ── spec-review 승인 게이트 2단계 — 표 · 다음 세션 줄 · ①/② 정지 요건 ─────
+GATE="$(awk '/^## 게이트$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
+if nonempty "spec-review 게이트 절" "$GATE"; then
+  rows="$(printf '%s\n' "$GATE" | grep -E '^\| [①②③④] \|' || true)"
+  assert_eq "$(printf '%s\n' "$rows" | grep -c . || true)" "4" "spec-review 2단계 표(양성): 행 4개를 읽었다"
+  r1="$(printf '%s\n' "$rows" | grep -E '^\| ① \|' || true)"
+  r2="$(printf '%s\n' "$rows" | grep -E '^\| ② \|' || true)"
+  for n in '`/new` 후 다음 세션 줄' '(권장)' '턴 종료'; do assert_contains "$r1" "$n" "spec-review ① 행에 $n"; done
+  for n in '`/compact` 후 같은 다음 세션 줄' '턴 종료'; do assert_contains "$r2" "$n" "spec-review ② 행에 $n"; done
+  assert_not_contains "$r2" '권장' "spec-review: 권장은 ① 하나"
+  assert_not_contains "$rows" '바로' "spec-review 2단계 표에 「바로」 진행 행이 없다"
+  RSL="$(nsl "$SKILL")"
+  if nonempty "spec-review 다음 세션 줄" "$RSL"; then
+    assert_eq "$(split_line "$RSL" first)" "@<spec_path>" "spec-review 다음 세션 줄의 첫 토큰은 @<spec_path> (주 산출물)"
+    case "$(split_line "$RSL" rest)" in
+      "이 설계문서로 Skill superpowers:writing-plans 를 시작하라."*) ok "spec-review 다음 세션 줄이 토큰 뒤에 writing-plans 를 부른다" ;;
+      *) no "spec-review 다음 세션 줄의 토큰 뒤 머리가 다르다: $RSL" ;;
+    esac
+    assert_contains "$RSL" "보고 후 재결정" "spec-review 다음 세션 줄이 C4 문장을 싣는다"
+  fi
+  STOP="$(printf '%s\n' "$GATE" | awk '/^- \*\*①\/② 의 정지 요건\*\*/{f=1;print;next} f&&/^- /{f=0} f' | tr '\n' ' ' | tr -s ' ')"
+  [ -n "$STOP" ] && ok "spec-review(양성): ①/② 의 정지 요건 불릿을 읽었다" || no "spec-review: ①/② 의 정지 요건 불릿이 없다 — 아래 단언이 공허하다"
+  for n in '턴 종료(STOP)' '같은 턴에서 `writing-plans` 를' '**다음 턴**' '사용자 트리거로만'; do
+    assert_contains "$STOP" "$n" "spec-review ①/② 정지 요건 불릿 안에 $n"
+  done
+fi
+assert_file_absent "$SKILL" '/compact 설계문서' "spec-review: 옛 /compact 보존 틀이 없다"
+assert_file_absent "$SKILL" '① 의 정지 요건' "spec-review: 옛 「① 의 정지 요건」 불릿 이름이 없다"
 finish

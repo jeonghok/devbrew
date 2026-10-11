@@ -47,15 +47,19 @@ assert_file_grep "$PG" '「경고 없음」' "Q1: 정본이 「경고 없음」�
 
 # ⑥ 다음 세션 줄이 규칙 유지 문장을 싣는다 — 표지 블록의 한 줄에서 재고, 그 구절은 파일에 한 곳뿐이다.
 nsl() { awk -v m='**다음 세션 줄 — ①/② 공통**' '$0==m{f=1;next} f&&NF{print;exit}' "$1"; }
-for f in "$FIN"; do
+for f in "$FIN" "$RS"; do
   l="$(nsl "$f")"; who="${f#"$REPO_ROOT"/}"
   [ -n "$l" ] && ok "AC7(양성): ${who} 의 다음 세션 줄을 읽었다" || no "AC7(양성): ${who} 에 다음 세션 줄 표지 블록이 없다 — 아래 단언이 공허하다"
   assert_eq "$(printf '%s' "$l" | grep -oF '사람에게 쓰는 글 규칙' | wc -l | tr -d ' ')" "1" "AC7: ${who} 의 다음 세션 줄이 규칙 유지 문장을 싣는다"
   assert_eq "$(grep -c '사람에게 쓰는 글 규칙(번호·해시는' "$f" || true)" "1" "AC7: ${who} 에서 그 구절은 다음 세션 줄 한 곳뿐이다"
 done
-assert_eq "$(grep -c '/compact .*사람에게 쓰는 글 규칙' "$RS" || true)" "1" "AC7: spec-review 의 /compact 틀이 규칙 유지 문장을 싣는다"
-RSC="$(grep '/compact 설계문서' "$RS" || true)"
-assert_eq "$(printf '%s' "$RSC" | grep -oE '<[^>]+>' | sort -u | tr '\n' ' ')" "<spec_path> " "Review Focus 4: spec-review /compact 틀의 꺾쇠 자리표가 <spec_path> 하나다"
+# 꺾쇠 자리표는 줄 앞 `@<…>` 토큰에만 있다 — 목록 원소가 늘어도 통과한다(설계 G3).
+RSC="$(nsl "$RS" | sed -e 's/^> `//' -e 's/`$//')"
+assert_eq "$(LINE="$RSC" python3 -c '
+import os, re
+l = os.environ["LINE"]
+m = re.match(r"((?:@<[^<>]+> )+)", l)
+print("ok" if m and not re.search(r"<[^<>]+>", l[m.end():]) else "no")')" "ok" "Review Focus 4: spec-review 다음 세션 줄의 꺾쇠 자리표는 줄 앞 @<…> 토큰에만 있다"
 
 # ⑦ request-framing 의 옛 채널 이름이 남지 않는다(처분 앵커 포함).
 FR_FLAT="$(tr '\n' ' ' < "$FR" | tr -s ' ')"
