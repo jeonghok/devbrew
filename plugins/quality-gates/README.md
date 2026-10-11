@@ -73,7 +73,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
 - **모집단에 안 들어간 것은 검사되지 않는다 (v7.5.0)** — 심볼릭 링크로 배포되는 러너가 `extract_codex_invocations.py` 의 `is_symlink()` skip 과 `codex_observation.sh` 양쪽 모집단에서 빠져, `test_sandbox_enforced.sh` 가 «통과»하면서도 그 러너를 한 번도 안 봤다. 링크 배포본을 모집단에 넣고 관측 캡처를 basename 이 아니라 «경로»로 키잉했다(같은 basename 후보 둘이 서로를 가렸다). **락의 PASS 는 이빨의 증거가 아니다** — 무엇이 모집단에 있는지를 먼저 물어야 한다. v7.4.0 CHANGELOG 가 「PR 2 에서 다시 판단한다」로 미뤘던 항목이고, 그 판단은 이 릴리스가 했다.
 - **Law 1 · G3 — 「검증하지 못했다」는 일급 판정값** — 판정은 `clean` · `defect` · `not-certified (<사유>)` 셋이고 사유는 닫힌 열거다(`scripts/verdict.py` 한 곳). kill switch · trivia · 각도 부재 · 차등 축의 해상도 문제는 `clean` 도 실패도 아닌 `not-certified` 로 드러난다. regression: `tests/test_verdict_vocabulary.sh` · `tests/test_pipeline_verdict_wiring.sh`.
 - **C4 — 차등 테스트는 항상** — 기준선 축(`create-baseline`)과 봉인된 HEAD 축(`seal-worktree.sh` → `create-head`)에서 오케스트레이터가 직접 돌린다. 판정을 내는 경로 안에서 차등 테스트가 빠지는 길은 trivia escape 와 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 둘뿐이고 둘 다 `not-certified` 다(전역 `DEVBREW_QUALITY_GATES_DISABLE=1` 은 다르다 — Preflight P1 에서 판정 자체를 내지 않고 그대로 리턴한다). 부팅되는 앱의 런타임 행위는 차등 테스트가 아니라 e2e 걷기가 본다(아래 P4 줄).
-- **P4 — runtime tier 는 사람이 승인하는 e2e 걷기 (v10 ④)** — 오케스트레이터가 승인된 명령으로 앱을 띄워 걷고, 증거표에서 코드가 판정안을 낸다(`scripts/e2e-state.sh propose`). reviewer 는 걷기 직후 게이트의 사람이다. 걷는 동안 코드 상태가 바뀌면 판정안은 무효다(지문 비교). regression: `tests/test_e2e_state.sh` · `tests/test_e2e_verdict.sh` · `tests/test_e2e_docs.sh`.
+- **P4 — runtime tier 는 사람이 승인하는 e2e 걷기 (v10 ④)** — 오케스트레이터가 승인된 명령으로 앱을 띄워 걷고, 증거표에서 코드가 판정안을 낸다(`scripts/e2e-state.sh propose`). reviewer 는 걷기 직후 게이트의 사람이다. runtime tier 는 사람이 승인하면 e2e 걷기로 확인한다 — 걷지 않은 실행은 판정 줄의 e2e 칸이 그 사실을 보인다. 걷는 동안 코드 상태가 바뀌면 판정안은 무효다(지문 비교). regression: `tests/test_e2e_state.sh` · `tests/test_e2e_verdict.sh` · `tests/test_e2e_docs.sh`.
 
 ## 구조
 
@@ -409,6 +409,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 - e2e 남은 앱: 걷다 끊긴 실행이 남긴 앱은 같은 세션의 다음 `/qg` 만 내린다. 다른 세션의 `/qg` 는 앞 세션의 폴더를 보지 않으므로, 세션이 끝날 때 걷다 끊긴 앱이나 TTL GC 로 폴더가 먼저 지워진 앱은 그대로 남는다. setup 이 폴더를 다시 만들 때 그 앱을 내리지 못하면 사유를 출력한 뒤 pgid 기록이 든 폴더를 지우므로, 그 앱도 그대로 남을 수 있다.
 - e2e `stop` 의 생존 판정: `ps` 에 보이지 않는 리더는 끝난 것으로 본다. `ps` 가 잠깐 실패한 순간 pid 가 다른 프로세스에 재사용됐으면 그 그룹에 신호가 갈 수 있다.
 - e2e 포트 확인: 부팅 전 포트 사용 확인과 `--ready-port` 준비 확인은 `127.0.0.1` 만 본다. IPv6 `::1` 에 다른 앱이 떠 있는 것은 보지 못하고, `::1` 에만 묶이는 서버(macOS 의 최근 Node · Vite 가 `localhost` 로 뜰 때 등)는 준비 신호가 오지 않아 「미확인(부팅 실패)」로 끝난다 — 승인할 명령에 `--host 127.0.0.1` 같은 인자를 쓴다.
+- e2e 부팅 상한: `DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT` 을 약 540초보다 크게 두면 Bash 도구의 호출 상한 600초를 넘는다.
 - e2e CLI 직접 걷기: 지문 rc 를 오케스트레이터가 지켜야 막힌다. 명령마다 코드가 막는 것은 아니다.
 - e2e 지문: 추적 안 된 중첩 리포와 서브모듈 안의 변경은 지문을 바꾸지 않는다.
 - e2e 증거 판독: 「증거 없음」으로 읽는 글자는 빈 칸 · `-` · `없음` · `n/a` · `N/A` 뿐이다. `—` · `none` 같은 글자는 증거로 읽혀 `충족` 이 그대로 남는다.

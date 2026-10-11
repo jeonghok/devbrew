@@ -121,6 +121,7 @@ Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable.
 ### Pipeline
 
 - ① 리뷰(기본 셋 + 조건부 ≤4 → 출처-제거 재비판) → ② 차등 테스트(기준선 대비, 매 iteration) → ③ 합성 · 판정
+- 루프 뒤, 최종 판정 앞에 e2e 를 한 번 묻는다(선택). 사람이 시나리오를 고르면 승인된 명령으로 걷고, 걷기 직후 게이트에서 사람이 판정안을 확인한다. 걷지 않은 실행은 판정 줄의 e2e 칸이 그 사실을 보인다.
 - Fix-loop: 막는 지적이나 차등 defect 가 남으면 iteration 마다 항목별 적용/제외 분류표와 함께 `Retry` / `Accept and finish` / `Stop` 로 사용자가 진행을 정한다(최대 5회). Retry 는 「적용」 항목만 고친다.
 
 ### Pipeline Rules

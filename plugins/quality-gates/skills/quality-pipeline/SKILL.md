@@ -5,7 +5,7 @@ description: >
   `/qg`, "run quality gates", "verify my implementation", "check code quality",
   or "is my PR ready to merge". One pipeline, one verdict — scope, reviewers
   against one criteria block and the intent source, a framing-blind re-critique,
-  a differential test against the baseline (always), and synthesis. Fix-loop
+  a differential test against the baseline (always), an optional human-approved e2e walk, and synthesis. Fix-loop
   decisions surface via AskUserQuestion. When the branch has an open PR, the run
   ends by posting one new PR comment (understanding text + verdict line) through
   the publish sink.
@@ -846,12 +846,12 @@ e2e 칸과 「사람이 뒤집음」을 정한다. 어느 결과든 E5 로 기�
   같은 명령으로 다시 돈다. 판정안이 `미확인(걷기 뒤 지문 실패)` 면 걷는 사이 코드가 바뀌었는지 모르므로 이 선택지를
   넣지 않는다.
 - **Retry** (fail 행) — `## Fix-loop` 의 Retry 와 같다: iteration 하나를 쓰고, 「적용」 목록만 고친 뒤 `## Flow` 의 ① 리뷰부터
-  다시 돈다. 루프가 다시 Stop 없이 끝나면 이 절로 돌아오고, 질문을 생략하고 같은 시나리오 · 같은 명령으로 E1 부터 걷는다.
+  다시 돈다. 루프가 다시 Stop 없이 끝나면 이 절로 돌아오고, 질문을 생략하고 같은 시나리오 · 같은 명령으로 E1 펜스(부팅 펜스, CLI 직접 실행이면 E1 (CLI 직접 실행) 펜스)부터 걷는다.
 - **Accept** (fail 행) — `## Final verdict` 로 간다. Outcome 은 `accepted with findings iter <N>`, e2e 칸은 `fail` 이다.
 - **Stop** (fail 행) — `## Fix-loop` 의 Stop 과 같다: `## Final verdict` 로 간다. Outcome 은 `aborted iter <N>`, e2e 칸은
   `fail` 이다. 게시 펜스는 `skipped: aborted` 를 낸다.
 - **리뷰·테스트부터 다시** (무효 행) — iteration 하나를 쓰고 코드를 고치지 않은 채 ① 리뷰부터 다시 돈 뒤, Retry 와 같은
-  경로로 이 절에 돌아와 E1 부터 걷는다.
+  경로로 이 절에 돌아와 E1 펜스(부팅 펜스, CLI 직접 실행이면 E1 (CLI 직접 실행) 펜스)부터 걷는다.
 - iteration 5 를 다 썼으면 Retry · 리뷰·테스트부터 다시 를 선택지에 넣지 않는다. 그때 fail 행은 Accept / Stop / pass 로
   뒤집기, 무효 행은 산출물 확인 / 그대로 둠 이다.
 

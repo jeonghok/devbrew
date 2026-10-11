@@ -217,8 +217,9 @@ QGMD="$PLUGIN_ROOT/commands/qg.md"
 
 case_AC26_P4_sentence_replaced() {
   local s; s=$(section "$PHIL" "### P4 — Verification Is Infrastructure")
-  assert_grep "$s" 'qg 는 runtime tier 를 사람이 승인하는 e2e 걷기로 집행한다 — 오케스트레이터의 판정은 판정안이고 reviewer 는 감독하는 사람이다\(Law 2 해석\)\.$' \
+  assert_grep "$s" 'qg 는 runtime tier 를 사람이 승인하면 e2e 걷기로 확인한다 — 걷지 않은 실행은 판정 줄의 e2e 칸이 그 사실을 보인다\(오케스트레이터의 판정은 판정안이고 reviewer 는 감독하는 사람이다 — Law 2 해석\)\.$' \
     "AC26: P4 의 새 문장이 문단 끝에 통째로 있다"
+  assert_not_contains "$s" 'e2e 걷기로 집행한다' "AC26: P4 의 「집행한다」 문장이 없다"
   assert_not_contains "$s" 'runtime tier 를 주장하지 않는다' "AC26: P4 의 옛 문장이 없다"
   assert_not_contains "$s" 'runtime tier 의 집행 코드가 없다' "AC26: P4 의 옛 문장 앞절도 없다"
   assert_grep "$s" '^코드\(mechanical · semantic · runtime\): .*`plugins/quality-gates/references/e2e\.md`$' \
@@ -261,6 +262,8 @@ case_readme_security_paragraph_and_principle() {
   assert_file_grep "$README" '^명령을 호스트 권한으로 실행한다 — 시나리오를 고르는 것이 그 실행의 승인이고' "README 보안 문단: e2e 승인 문장"
   assert_file_grep "$README" '^코드가 아니라 오케스트레이터가 읽는 지문 rc 다\)\. 선언 경로의$' "I2: README 보안 문단이 CLI 직접 걷기의 게이트는 지문 rc 라고 말한다"
   assert_file_grep "$README" '^- \*\*P4 — runtime tier 는 사람이 승인하는 e2e 걷기.*tests/test_e2e_docs\.sh`\.$' "README 인스턴스화한 원칙에 P4 줄"
+  assert_file_grep "$README" '^- \*\*P4 — .*runtime tier 는 사람이 승인하면 e2e 걷기로 확인한다 — 걷지 않은 실행은 판정 줄의 e2e 칸이 그 사실을 보인다\. 걷는 동안 .*tests/test_e2e_docs\.sh`\.$' "README P4 줄: 확인한다 문장이 줄 안에 통째로 있다"
+  assert_file_absent "$README" 'e2e 걷기로 집행한다' "README: 옛 「집행한다」 문장이 없다"
   assert_file_absent "$README" '주장을 거둔다' "README: 옛 「주장을 거둔다」 문장이 없다"
   assert_file_absent "$README" '주장만 거뒀다' "README: 옛 「주장만 거뒀다」 문장이 없다"
   assert_file_grep "$README" '부팅되는 앱의 런타임 행위는 e2e 걷기가 본다\(아래 P4 줄\)\.$' "README: LD3 의 새 문장이 줄 끝에 있다"
