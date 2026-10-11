@@ -282,6 +282,8 @@ artifact_stagnation.py --this "<이번 stagnation_keys>" --prev "<직전 stagnat
 
 ## 종료 & 최종 요약 (AC11)
 
+보고의 첫 줄은 끝났는지와 결과 한 문장이다(예: 「비평을 3라운드 돌고 수렴했다 — 남은 지적 없음.」 · 「상한 5라운드에 닿았다 — 남은 지적 2개.」). 잔여 `kept` 항목에 `plain:` 이 있으면 그것을 먼저 쓰고 원래 `summary` 는 뒤 괄호에 둔다. 맨 끝에 사용자가 할 일 하나를 쓴다.
+
 종료(수렴 / max-rounds / stagnation / NEEDS_RESOLUTION-중단 / kill switch) 시 반드시 출력:
 - **라운드 히스토리**: 라운드별 kept 요약 + 각 커밋 SHA.
 - **종료 사유**: converged / max_rounds(N) / stagnant(reason) / needs_resolution / killed.

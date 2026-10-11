@@ -1,6 +1,6 @@
 # Quality Gates 플러그인
 
-Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정(`clean` · `defect` · `not-certified (<사유>)`). 기준선 대비 차등 테스트는 매 실행 돈다.
+바뀐 코드를 내보내기 전에 확인한다. `/qg` 한 번이 diff 를 여러 독립 각도에서 리뷰하고, 동작이 바뀐 테스트를 기준선과 지금 트리 양쪽에서 돌려, 판정 하나(`clean` · `defect` · `not-certified (<사유>)`)를 낸다. 원하면 판정 전에 사람이 승인한 명령으로 앱을 띄워 직접 걸어 본다(e2e 걷기). 브랜치에 열린 PR 이 있으면 판정 뒤 쉬운 설명과 판정 줄을 코멘트 하나로 단다(`DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` 로 끈다).
 
 ## 인스턴스화한 원칙
 
@@ -174,7 +174,7 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 않는다 — 오케스트레이터가 `run-test-selection.sh` 를 직접 부른다. 결정론 백스톱이 모델
 주장과 독립이라는 전제가 거기서 선다.
 
-**게시** (v10 ③) — 판정 뒤 파이프라인이 sink `scripts/publish-comment.sh` 를 한 번 부른다. 열린 PR 이 있으면 새 코멘트 하나(이해글 + 판정 줄)를 남기고, 없거나 · 닫혔거나 · kill switch · scan 실패 · gh 없음·미인증 · 65,536자 초과면 `skipped: <사유>` 한 줄로 알린다(판정은 그대로). 사유 리터럴은 `kill-switch` · `no-pr` · `pr-closed` · `too-long` · `gh-unavailable` · `scan-failed` 이다. `gh-unavailable` 은 gh 없음 · 미인증(활성 계정 기준 — `gh auth status --active`) · PR 조회 실패 · 코멘트 쓰기 실패를, `scan-failed` 는 비밀값 의심 · 이미지·HTML 태그 · merge-base 없음 · corpus 생성 실패 · 길이 측정 실패를 뜻한다. Stop·중단으로 끝난 실행은 sink 를 부르지 않는다. 커밋 안 된 추적 변경이 있는 실행도 sink 를 부르지 않고 `게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커밋과 다르다 — 커밋·푸시 뒤 다시 /qg)` 를 낸다 — 판정이 본 코드가 PR 의 커밋에 없어서다(qg 세션 폴더 `.claude/quality-gates/` 와 untracked 파일은 보지 않는다). 같은 실행에서 게시 펜스를 다시 돌리면 거절한다(게시는 실행당 한 번). 오케스트레이터는 gh 를 직접 부르지 않는다. 지적 목록 · SUGGESTION 은 로컬 결과(`.claude/quality-gates/<sid>/result.md`)에만 남는다.
+**게시** (v10 ③) — 판정 뒤 파이프라인이 sink `scripts/publish-comment.sh` 를 한 번 부른다. 열린 PR 이 있으면 새 코멘트 하나(이해글 + 판정 줄)를 남기고, 없거나 · 닫혔거나 · kill switch · scan 실패 · gh 없음·미인증 · 65,536자 초과면 `skipped: <사유>` 한 줄로 알린다(판정은 그대로). 사유 리터럴은 `kill-switch` · `no-pr` · `pr-closed` · `too-long` · `gh-unavailable` · `scan-failed` 이다. `gh-unavailable` 은 gh 없음 · 미인증(활성 계정 기준 — `gh auth status --active`) · PR 조회 실패 · 코멘트 쓰기 실패를, `scan-failed` 는 비밀값 의심 · 이미지·HTML 태그 · merge-base 없음 · corpus 생성 실패 · 길이 측정 실패를 뜻한다. 멈추기 · 중단으로 끝난 실행은 sink 를 부르지 않는다. 커밋 안 된 추적 변경이 있는 실행도 sink 를 부르지 않고 `게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커밋과 다르다 — 커밋·푸시 뒤 다시 /qg)` 를 낸다 — 판정이 본 코드가 PR 의 커밋에 없어서다(qg 세션 폴더 `.claude/quality-gates/` 와 untracked 파일은 보지 않는다). 같은 실행에서 게시 펜스를 다시 돌리면 거절한다(게시는 실행당 한 번). 오케스트레이터는 gh 를 직접 부르지 않는다. 지적 목록 · SUGGESTION 은 로컬 결과(`.claude/quality-gates/<sid>/result.md`)에만 남는다.
 
 **게시의 알려진 한계** — secret-scan 이 보는 글은 git 이 보여 주는 `merge-base..HEAD` 의 텍스트 변경(커밋 메시지 포함), 작업 트리의 변경, 그리고 바뀐 텍스트 파일의 현재 내용이다. 아래는 그 밖이라 보지 못한다. 알려진 패턴의 비밀값은 코멘트 안 어디에 있든 막는다. 낯선 고엔트로피 값은 코멘트에 든 값이 위 글 안에도 있을 때만 막는다.
 
@@ -222,7 +222,7 @@ max fan-out: **리뷰어 구성 ≤ 8**(기본 셋 + 조건부 ≤4 + 재비판 
 
 ## 파이프라인 흐름 (single-turn)
 
-`quality-pipeline` SKILL이 전체 파이프라인을 단일 assistant turn 내에서 serial dispatch로 실행합니다. fix-loop iteration은 AskUserQuestion으로 사용자 동의를 받아 진행합니다 — 이 도구는 progression/consent를 담당하며, subagent fan-out은 게이트하지 않습니다(fan-out은 transparency + 선언된 max fan-out으로 bound).
+파이프라인은 한 턴 안에서 끝까지 돈다(`quality-pipeline` SKILL 이 리뷰어를 차례로 부른다). 지적이 남으면 반복마다 `AskUserQuestion` 으로 고칠지 묻는다 — 이 질문은 진행만 정하고 리뷰어 수를 막지 않는다. 리뷰어 수는 위 「Fan-out」 의 선언된 상한이 묶는다.
 
 ```
 /qg  (single assistant turn)
@@ -233,9 +233,9 @@ max fan-out: **리뷰어 구성 ≤ 8**(기본 셋 + 조건부 ≤4 + 재비판 
  │   ① review — 기본 셋 + 조건부 ≤4 → code-recritic
  │   ② differential test — 기준선 vs 봉인된 HEAD (매 iteration)
  │   ③ synthesize → verdict: clean | defect | not-certified
- │   막는 지적 또는 차등 defect → AskUserQuestion ("findings remain…")
- │       분류표(항목마다 적용 / 제외 + 사유) · Retry / Accept and finish / Stop
- │       Retry: 「적용」만 Edit, 「제외」는 excluded.md → 다음 iteration
+ │   막는 지적 또는 차등 defect → AskUserQuestion ("남은 지적이 있다…")
+ │       분류표(항목마다 적용 / 제외 + 사유) · 고치고 다시 돌기 / 지금 판정으로 끝내기 / 멈추기
+ │       고치고 다시 돌기: 「적용」만 Edit, 「제외」는 excluded.md → 다음 iteration
  ├ e2e ── 시나리오 질문 → 앱 부팅 · 걷기 → 판정안 · 걷기 직후 게이트 (끔 · 안 함도 판정 줄에 남는다)
  ├ Final verdict ── verdict.py 의 판정 줄 · result.md
  └ Publish ── sink 한 번 · posted:/skipped:
@@ -299,16 +299,17 @@ trivia escape 를 쓰지 않는다. 애매하면 trivia 가 아니다.
   setup · 러너 · 테스트를 막고, 선언 경로의 봉인 · 합치기는 저장소 훅을 끈 채 돈다 — `git worktree
   add` 등이 부르는 git 훅 전체는 범위 밖이다.
 
-## 사용
+## 쓰는 법
 
-```
-/qg                            # 파이프라인 실행; 세션 단위 diff(선언이 있으면 토픽)
-/qg branch                     # 파이프라인 실행; main 대비 풀 브랜치 diff
-/qg --paths <glob>...          # 명시 path scope
-/qg both|review|runtime|--skip-runtime   # 제거됨 — 한 줄 공지 후 그대로 진행 (한 파이프라인이라 게이트 범위가 없다)
-/qg --plan <path>              # 특정 plan 파일 사용
-/qg critique <path>            # 비-코드 산출물 비평-수정 루프(별도 skill; 코드 아님)
-```
+| 이럴 때 | 친다 | 나오는 것 |
+|---|---|---|
+| 지금 바꾼 것을 내보내기 전에 | `/qg` | 판정 하나와 남은 지적 표. 지적이 남으면 고칠지 묻고(최대 5번), 판정 전에 앱을 띄워 걸어 볼지 묻는다. 열린 PR 이 있으면 코멘트 하나를 단다 |
+| 브랜치 전체를 보고 싶을 때 | `/qg branch` | main 대비 브랜치 전체 diff 의 판정 |
+| 일부 경로만 볼 때 | `/qg --paths <glob>...` | 그 경로만 리뷰한 판정 |
+| 특정 계획 파일로 테스트를 고르게 할 때 | `/qg --plan <path>` | 그 계획을 차등 테스트 분류 기준으로 쓴 판정 |
+| 문서 · 설계 · 설정을 비평받을 때 | `/qg critique <path>` | 비평 · 수정 라운드(라운드마다 커밋). 코드는 `/qg` 로 본다 |
+
+`both` · `review` · `runtime` · `--skip-runtime` 은 제거됐다 — 한 줄 공지 후 그대로 진행한다(한 파이프라인이라 게이트 범위가 없다).
 
 `branch <name>` · `--reset` · `--gc` · `--pr-url` 와 `/cancel-qg` 는 v10.0.0 에서 없어졌다 — 앞의 넷은 안내 한 줄을
 내고 실행하지 않는다. 세션 폴더는 `/qg` 시작마다 지우고 다시 만들고, 오래된 폴더는 같은 시점의 TTL GC 가 회수한다.

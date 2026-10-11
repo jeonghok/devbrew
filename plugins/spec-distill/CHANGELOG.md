@@ -1,5 +1,10 @@
 # Changelog
 
+## [5.1.2] — 2026-10-11
+
+### Changed
+- 공유 codex 출력 변환기(`codex_findings_to_yaml.py` — 이 플러그인에 링크로 실린다)가 기본 칸 묶음 끝에 `plain` 을 더했다(quality-gates 리뷰어의 쉬운 한 문장 칸). spec-distill 이 쓰는 칸 묶음(design · docreview)의 출력은 그대로다.
+
 ## [5.1.1] — 2026-10-10
 
 ### Changed

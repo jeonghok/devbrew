@@ -53,7 +53,7 @@ case_v3_malformed_finding_blocks() {
   local out; out=$(rf_synth "$T/v3" --emit-verdict 2>/dev/null)
   assert_grep "$out" '^reason: findings-lost$' "V3 — 파손 finding 은 findings-lost"
   # 원장의 hold 가 사유를 따로 내므로, «센다»(dropped_malformed)는 이 공시 줄과 차단 문구로만 보인다.
-  assert_grep "$out" '^1 finding\(s\) dropped as malformed .*이 실행은 clean이 아니다' \
+  assert_grep "$out" '^1개 지적을 버렸다 — 형식이 깨졌다\(dropped as malformed — .*이 실행은 clean이 아니다' \
     "V3 — 버려진 파손 finding 은 세어 공시한다(dropped as malformed)"
 }
 
@@ -107,7 +107,7 @@ case_v8_missing_severity_is_not_optimistic() {
 case_v9_retry_paths_are_confined() {
   local b; b="$(sec '### Retry: file-write safety')"
   assert_contains "$b" 'os.path.commonpath([root, candidate]) != root' "V9 — Retry 경로를 project_dir 안에 가둔다"
-  assert_contains "$(sec '### Retry: error handling')" 'Retry failed at <file>' "V9 — Edit 실패는 묻는다"
+  assert_contains "$(sec '### Retry: error handling')" '<file> 수정에 실패했다' "V9 — Edit 실패는 묻는다"
 }
 
 case_v10_backstop_called_directly() {
@@ -154,7 +154,7 @@ case_ac7_fix_loop_override_and_excluded_log() {
 }
 
 case_max_iter_cap_is_five() {
-  assert_grep "$(flat '### Max-iter decision')" 'question: "qg reached max 5 iterations\.' \
+  assert_grep "$(flat '### Max-iter decision')" 'question: "qg 가 최대 5번 반복했다\.' \
     "P18 — Max-iter 질문이 상한 5 를 말한다"
 }
 

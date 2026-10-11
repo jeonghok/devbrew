@@ -98,7 +98,7 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 
 ### L — `DEVBREW_QUALITY_GATES_DISABLE=1`
 **Run**: set env var, then start a new Claude Code session AND attempt `/qg`.
-**Expected**: the `/qg` command's setup fence calls `setup-qg.sh`, which refuses with one line (`setup-qg disabled via DEVBREW_QUALITY_GATES_DISABLE=1`) and exit 1 before writing anything (`tests/test_entry_safety_e1_e6.sh`); `/qg` shows that line and stops — the pipeline skill is not invoked. If the skill is reached anyway, SKILL Preflight P1 returns immediately.
+**Expected**: the `/qg` command's setup fence calls `setup-qg.sh`, which refuses with one line (`[quality-gates] DEVBREW_QUALITY_GATES_DISABLE=1 이 켜져 있어 /qg 를 시작하지 않는다(setup-qg disabled).`) and exit 1 before writing anything (`tests/test_entry_safety_e1_e6.sh`); `/qg` shows that line and stops — the pipeline skill is not invoked. If the skill is reached anyway, SKILL Preflight P1 returns immediately.
 
 ## Static Wiring Checks (automated)
 
@@ -192,7 +192,7 @@ DEVBREW_QUALITY_GATES_DISABLE=1 /qg
 **Run:** `/qg`
 
 **Expected:**
-- `Review scope: topic …` 한 줄.
+- `리뷰 범위: 토픽 …` 한 줄.
 - 판정 꼬리의 `scope:` 블록에 `mode: topic` · 두 선언 커밋의 `commit:` 줄.
 - 형제 브랜치에 회귀를 심으면 `defect`.
 - 형제가 같은 파일을 달리 고치면 `not-certified (merge-conflict)` 와 그 파일.

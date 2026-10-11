@@ -87,12 +87,13 @@ case_synth_angles_off_equals_on_minus_block() {
   # `angles:` 줄과 그 다음 각도-수만큼의 줄만 잘라낸다.
   local angle_lines; angle_lines=$(printf '%s\n' "$ANGLES" | wc -l | tr -d ' ')
   local on_tail; on_tail=$(printf '%s\n' "$on" | awk -v n="$angle_lines" '
+    /^아래는 이 판정의 리뷰 각도\(angles\) 원문이다\.$/ { next }
     /^angles:$/ { skip = n; next }
     skip > 0 { skip--; next }
     { print }
   ')
   assert_eq "$on_tail" "$off" \
-    "off 는 on 에서 angles: 블록(헤더 1줄 + 각도 ${angle_lines}줄)을 뺀 것과 바이트 동일하다"
+    "off 는 on 에서 angles: 블록(헤더 1줄 + 각도 ${angle_lines}줄)과 그 앞의 쉬운 한 줄을 뺀 것과 바이트 동일하다"
   # 위 동치는 블록을 «어디서든» 잘라내므로 위치를 재지 않는다 — 블록이 `verdict:`
   # 뒤로 가도(또는 맨 앞으로 가도) 그대로 GREEN 이다(변이로 실측). 위치(R-J: 본문
   # 뒤 · `verdict:` 바로 앞)를 따로 핀한다: 블록 다음 줄이 `verdict: ` 여야 한다.
