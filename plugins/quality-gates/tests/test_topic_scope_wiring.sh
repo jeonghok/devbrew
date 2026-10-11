@@ -96,80 +96,6 @@ print("MISSING:" + ",".join(missing))
 print("WRONG:" + ",".join(wrong))
 PY
 
-IFS= read -r -d '' PY_RINIT <<'PY' || true
-import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
-fences = [b for b in re.findall(r'```bash\n(.*?)```', text, re.S) if 'topic-scope.txt' in b]
-print("FENCES:%d" % len(fences))
-lines = fences[0].splitlines() if fences else []
-def idx(pred, start):
-    for i in range(start, len(lines)):
-        if pred(lines[i]):
-            return i
-    return -1
-i_if = idx(lambda l: l.startswith('if [ "') and "s/^status: //p" in l and l.endswith('= ok ]; then'), 0)
-i_else = idx(lambda l: l == 'else', i_if + 1) if i_if >= 0 else -1
-i_fi = idx(lambda l: l == 'fi', i_else + 1) if i_else >= 0 else -1
-shaped = i_fi > i_else > i_if >= 0
-print("IF:%d" % (1 if shaped else 0))
-ok_lines = lines[i_if + 1:i_else] if shaped else []
-el_lines = lines[i_else + 1:i_fi] if shaped else []
-ok_b = "\n".join(ok_lines)
-el_b = "\n".join(el_lines)
-
-
-def last_assign(prefix, block_lines):
-    # 갈래 «안»의 마지막 대입 — 뒤에 같은 변수를 한 번 더 대입해 앞 값을 덮는
-    # 변이(부분 문자열 락은 「그 값이 어딘가에 있다」만 보고 못 잡는다)를 구조로 잡는다.
-    # 한 줄에 `;` 로 붙은 대입 · `export ` 접두 대입도 대입이다 — 줄 머리만 보면
-    # `x=1; scan_dir=…` · `export scan_dir=…` 로 덮는 변이가 산다.
-    val = None
-    for l in block_lines:
-        for part in l.split(";"):
-            p = part.strip()
-            if p.startswith("export "):
-                p = p[len("export "):].strip()
-            if p.startswith(prefix):
-                val = p
-    return val
-
-
-ok_last_baseline = last_assign('baseline_commit=', ok_lines)
-ok_last_scan = last_assign('scan_dir=', ok_lines)
-ok_last_sealed = last_assign('sealed=', ok_lines)
-printf_idx = idx(lambda l: l.startswith('printf '), i_fi + 1) if shaped else -1
-between_fi_and_printf = lines[i_fi + 1:printf_idx] if (shaped and printf_idx >= 0) else None
-checks = [
-    ("OK_BASE", "baseline_commit=$(sed -n 's/^boundary: //p' \"$S\")" in ok_b),
-    ("OK_SEALED", "sealed=$(sed -n 's/^head_commit: //p' \"$S\")" in ok_b),
-    ("OK_TOPIC", 'create-head "$sealed" "<session-id>" --topic "$topic_key"' in ok_b),
-    ("OK_SCAN", 'scan_dir="${head_tree_dir:-$project_dir}"' in ok_b),
-    ("OK_BASE_LAST", ok_last_baseline == "baseline_commit=$(sed -n 's/^boundary: //p' \"$S\")"),
-    ("OK_SCAN_LAST", ok_last_scan == 'scan_dir="${head_tree_dir:-$project_dir}"'),
-    ("OK_SEALED_LAST", ok_last_sealed == "sealed=$(sed -n 's/^head_commit: //p' \"$S\")"),
-    ("S_ROOT", shaped and last_assign('S=', lines[:i_if]) == 'S="$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"'),
-    ("ELSE_BASE", 'baseline_commit="<위 6키의 merge_base>"' in el_b),
-    ("ELSE_SCAN", 'scan_dir="$project_dir"' in el_b),
-    ("ELSE_NO_TOPIC", "--topic" not in el_b),
-    ("NO_REASSIGN_AFTER_FI", between_fi_and_printf == []),
-]
-for k, v in checks:
-    print("%s:%d" % (k, 1 if v else 0))
-PY
-
-IFS= read -r -d '' PY_R4 <<'PY' || true
-import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
-m = re.search(r'^\*\*Step R4 — .*?(?=^\*\*Step R5b)', text, re.S | re.M)
-win = m.group(0) if m else ""
-fences = "\n".join(re.findall(r'```bash\n(.*?)```', win, re.S))
-calls = re.findall(r'(?:baseline-cache\.sh" (?:get|put)|qg-worktree\.sh" create-baseline)[^\n\\]*(?:\\\n[^\n\\]*)*', fences)
-good = [c for c in calls if '"$baseline_commit"' in c]
-print("CALLS:%d" % len(calls))
-print("GOOD:%d" % len(good))
-print("MERGE_BASE_IN_FENCES:%d" % fences.count('$merge_base'))
-PY
-
 IFS= read -r -d '' PY_RM <<'PY' || true
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
@@ -231,7 +157,7 @@ case_step1_writes_scope_file() {
   # 실행되지 않으므로 bash 펜스 «안»의 줄만 센다. 줄 전체를 fullmatch 로 잰다 — 부분
   # 문자열 락은 꼬리에 `|| true` 를 붙여 실패를 삼키는 변이를 못 잡는다.
   # 경로는 리포 루트 기준이다 — cwd 상대면 하위 디렉토리 cwd 에서 리다이렉트가 먼저 만든
-  # 빈 파일이 봉인에 섞여 R-init 재도출 대조가 매번 어긋난다(test_topic_head.sh
+  # 빈 파일이 봉인에 섞여 차등 절차 D1 의 재도출 대조가 매번 어긋난다(test_topic_head.sh
   # case_scope_file_under_subdir_cwd 가 그 동작을 잰다).
   local got; got=$(python3 -c "$PY_1A" "$SKILL")
   assert_grep "$got" '^FENCES:1$'   "① 1a: topic-head.sh 를 부르는 bash 펜스가 정확히 하나"
@@ -301,75 +227,10 @@ case_filtered_diff_uses_boundary_and_tree() {
   assert_not_grep "$got" 'MERGE_BASE|HEAD' "그 줄에 MERGE_BASE · HEAD 가 없다(session 베이스라인으로 새지 않는다)"
 }
 
-case_rinit_topic_branch_sets_axes() {
-  # AC5 · AC6 · R-AP — 선언 경로의 기준선은 경계, HEAD 축은 create-head --topic 이 재도출 대조한
-  # 합친 커밋. 각 값은 «그 갈래 안»에서 잰다 — 반대 갈래에 옮겨 적으면 RED.
-  local got; got=$(python3 -c "$PY_RINIT" "$REF")
-  assert_grep "$got" '^FENCES:1$'        "스코프 파일을 읽는 레퍼런스 펜스가 하나(R-init)"
-  assert_grep "$got" '^IF:1$'            "그 펜스가 status == ok 로 if/else/fi 를 가른다"
-  assert_grep "$got" '^OK_BASE:1$'       "ok 갈래: baseline_commit = boundary"
-  assert_grep "$got" '^OK_SEALED:1$'     "ok 갈래: sealed = head_commit(전사 없이 파일에서)"
-  assert_grep "$got" '^OK_TOPIC:1$'      "ok 갈래: create-head 가 --topic 으로 재도출 대조한다"
-  assert_grep "$got" '^OK_SCAN:1$'       "ok 갈래: scan_dir = HEAD 축 트리"
-  assert_grep "$got" '^OK_BASE_LAST:1$'  "ok 갈래: baseline_commit 의 «마지막» 대입도 boundary 다(뒤에 덮어쓰기 없음)"
-  assert_grep "$got" '^OK_SCAN_LAST:1$'  "ok 갈래: scan_dir 의 «마지막» 대입도 HEAD 축 트리다(; · export 대입 포함)"
-  assert_grep "$got" '^OK_SEALED_LAST:1$' "ok 갈래: sealed 의 «마지막» 대입도 head_commit 이다(; · export 대입 포함)"
-  assert_grep "$got" '^S_ROOT:1$'        "R-init 이 스코프 파일을 리포 루트 경로로 읽는다(if 앞, 줄 전체)"
-  assert_grep "$got" '^ELSE_BASE:1$'     "else 갈래: baseline_commit = merge_base"
-  assert_grep "$got" '^ELSE_SCAN:1$'     "else 갈래: scan_dir = project_dir"
-  assert_grep "$got" '^ELSE_NO_TOPIC:1$' "else 갈래에 --topic 이 없다"
-  assert_grep "$got" '^NO_REASSIGN_AFTER_FI:1$' "fi 뒤 printf 앞에 축 재대입이 없다(양 갈래 값을 무조건 덮지 않는다)"
-}
-
-case_scan_dir_feeds_detect_and_assign() {
-  # R-AP — 형제에만 있는 테스트 파일은 합친 트리에만 있다.
-  assert_eq "$(grep -cF 'run-test-selection.sh" detect "$scan_dir"' "$REF")" "1" "R1a detect 가 \$scan_dir 를 본다"
-  assert_eq "$(grep -cF 'run-test-selection.sh" assign "$scan_dir"' "$REF")" "1" "R1b assign 이 \$scan_dir 를 본다"
-  assert_eq "$(grep -cE 'run-test-selection\.sh" (detect|assign) "\$project_dir"' "$REF")" "0" "R1a · R1b 에 \$project_dir 호출이 남지 않았다"
-}
-
-case_r4_calls_use_baseline_commit() {
-  # AC5 — R4 의 세 호출(cache get · create-baseline · cache put)은 전부 $baseline_commit.
-  local got; got=$(python3 -c "$PY_R4" "$REF")
-  assert_grep "$got" '^CALLS:3$'               "R4 펜스에 호출 셋(get · create-baseline · put)"
-  assert_grep "$got" '^GOOD:3$'                "셋 전부 \"\$baseline_commit\" 을 싣는다"
-  assert_grep "$got" '^MERGE_BASE_IN_FENCES:0$' "R4 펜스에 \$merge_base 가 남지 않았다"
-}
-
-case_r5b_skips_on_topic() {
-  # R-AP — 선언 경로의 R5b 는 봉인 · 트리 생성을 건너뛰고 R-init 의 값을 쓴다. 한 줄로 잰다.
-  local got
-  got=$(grep -F '**선언 경로면 이 스텝에서 봉인하지 않는다.**' "$REF")
-  assert_eq "$(printf '%s\n' "$got" | grep -c .)" "1" "R5b 에 선언 경로 규칙 문장이 하나"
-  assert_grep "$got" 'R-init' "그 문장이 R-init 의 값을 쓴다고 적는다"
-  assert_grep "$got" '\$head_tree_dir' "그 문장이 \$head_tree_dir 를 이름 붙인다"
-}
-
-case_r1b_topic_candidates_supplemented() {
-  # 최종 리뷰 I3 — 후보 스크립트는 session 범위를 본다. 선언 경로면 경계..합친 트리의
-  # 테스트 파일 · 이름-매칭 테스트를 후보에 더한다. 한 줄 · R1b 창 안 · 긍정 목적지.
-  local win got
-  win=$(awk '/^\*\*Step R1b /{f=1} /^\*\*Step R2 /{f=0} f' "$REF")
-  got=$(printf '%s\n' "$win" | grep -F 'git diff --name-only <boundary> <tree>')
-  assert_eq "$(printf '%s\n' "$got" | grep -c .)" "1" "R1b 에 선언 경로 후보 보충 문장이 한 줄"
-  assert_grep "$got" '^선언 경로면' "그 줄이 선언 경로 조건으로 시작한다"
-  assert_grep "$got" '테스트 파일을 후보에 더한다\.$' "그 줄이 후보에 더한다(긍정 목적지)로 끝난다"
-  assert_grep "$got" '\$scan_dir' "그 줄이 이름-매칭을 \$scan_dir(합친 트리) 안에서 찾는다"
-  assert_not_grep "$got" '더하지 않|빼' "그 줄에 부정형(더하지 않 · 뺀다)이 없다"
-}
-
-case_early_exit_discards_head_tree() {
-  # 최종 리뷰 M3 — R6 전에 끝나는 경로에서도 R-init 의 HEAD 축 트리를 폐기한다. 한 줄.
-  local got; got=$(grep -F 'R6 전에 끝내는 모든 경로' "$REF")
-  assert_eq "$(printf '%s\n' "$got" | grep -c .)" "1" "R6 전 종료 경로의 폐기 문장이 한 줄"
-  assert_grep "$got" 'R3 `중단`' "그 줄이 R3 중단을 이름 붙인다"
-  assert_grep "$got" '\$head_tree_dir` 가 있으면 R6 의 폐기 펜스를 먼저 돈다\.$' "그 줄이 폐기 펜스를 먼저 돈다(긍정 목적지)로 끝난다"
-}
-
 case_override_clears_stale_scope_file() {
   # I1 수정 — override 는 이번 iteration 에 1a 를 돌리지 않으므로, 남아 있을 수 있는 이전
-  # 스코프 파일을 지운다. 파일 부재는 차등 테스트 R-init 의 else 갈래로 간다(sed …
-  # "$S" 2>/dev/null 이 빈 값을 내 status==ok 를 만족 못한다). rm 줄이 1a(기본 모드) 쪽에
+  # 스코프 파일을 지운다. 파일 부재는 차등 절차 D0 · D1 에서 session 스코프로 간다([ -f "$S" ]
+  # 가 거짓이라 status==ok 를 만족 못한다). rm 줄이 1a(기본 모드) 쪽에
   # 있으면(mutation) 그 펜스 바로 위 문단에 override · branch · --paths 가 함께 없다.
   local got; got=$(python3 -c "$PY_RM" "$SKILL")
   assert_grep "$got" '^RM_FENCES:1$'       "스코프 파일을 지우는 rm -f 줄을 담은 펜스가 정확히 하나"
@@ -405,53 +266,12 @@ case_in_base_notice() {
   assert_not_grep "$win" '판정 대상에서 빠졌다' "① 1a 창에 「판정 대상에서 빠졌다」가 없다 — 그 머지 전에 갈라진 형제와 그 조각을 품은 구성원이 함께 있으면 그 변경이 리뷰 diff 와 차등 테스트에 다시 든다(설계 §6.2.2 2)"
 }
 
-case_topic_denominator_uses_tree() {
-  # 토픽 분모 배선 — R1b 가 분자를 경계..합친 트리로 보충하는데 R2 산문의 분모
-  # (--total)는 현재 체크아웃만 세면 N > M 이 난다. `--total --tree <tree>` 로 분모도
-  # 합친 트리에서 세는 문장이 분모 규칙 문단 바로 다음 줄에, 들여쓰기까지 포함해
-  # 글자 그대로 있어야 한다.
-  #
-  # `grep -F` 는 부분 문자열 매치라 줄 anchor 가 없다 — 문장을 다른 자리로 옮기거나
-  # (예: item 4 안으로), 앞뒤에 문구를 붙이거나(접두 · 접미 · 사이 삽입), 조건절을
-  # 반전해도 원래 텍스트 조각이 파일 어딘가에 남아 있으면 계속 통과한다. 전체 줄을
-  # `grep -x`(그 줄 전체와 정확히 일치)로 고정하고, 위치도 "테일 줄 바로 다음"
-  # (정확히 +1)으로 좁힌다 — 헐거운 창은 이동·삽입을 못 잡는다.
-  local new_line_body new_line_full
-  new_line_body='선언 경로면(R-init 이 `status: ok` 를 읽었으면) 분모는 스코프 파일의 `tree:` 로 부른 `compute-test-scope-candidates.sh --total --tree <tree>` 의 출력이다 — 분자를 경계..합친 트리로 보충했으니 분모도 합친 트리에서 센다. 그 호출이 exit 4 면 분모를 `?` 로 적고 「분모를 셀 수 없다」를 함께 싣는다 — `--tree` 없는 `--total` 로 대신하지 않는다.'
-  new_line_full="   ${new_line_body}"
-
-  assert_eq "$(grep -cxF -- "$new_line_full" "$REF")" "1" \
-    "REF 에 분모 --tree 배선 문장이 들여쓰기까지 포함해 정확히 그 줄 전체로 1회 있다(grep -x 전체-줄 핀 — 부분 문자열 매치가 아니다)"
-
-  local head_line_no tail_line_no new_line_no after_line
-  head_line_no=$(grep -nxF -- '   분모는 반드시 `compute-test-scope-candidates.sh --total` 의 출력이다 —' "$REF" | head -1 | cut -d: -f1)
-  tail_line_no=$(grep -nxF -- '   부풀려 비율이 정상으로 보인다.' "$REF" | head -1 | cut -d: -f1)
-  new_line_no=$(grep -nxF -- "$new_line_full" "$REF" | head -1 | cut -d: -f1)
-  assert_grep "$head_line_no" '^[0-9]+$' "분모 규칙 헤드 줄(분모는 반드시 …)을 찾았다"
-  assert_grep "$tail_line_no" '^[0-9]+$' "분모 규칙 테일 줄(…정상으로 보인다.)을 찾았다"
-  assert_grep "$new_line_no" '^[0-9]+$' "분모 --tree 배선 줄을 찾았다"
-  if [ -n "${head_line_no:-}" ] && [ -n "${tail_line_no:-}" ] && [ -n "${new_line_no:-}" ] \
-     && [ "$head_line_no" -lt "$tail_line_no" ] 2>/dev/null \
-     && [ "$new_line_no" -eq "$((tail_line_no + 1))" ] 2>/dev/null; then
-    ok "새 줄이 테일 줄 바로 다음 줄이다(정확히 +1, head=$head_line_no tail=$tail_line_no new=$new_line_no)"
-  else
-    no "새 줄이 테일 줄 바로 다음 줄이다(정확히 +1, head=$head_line_no tail=$tail_line_no new=$new_line_no)"
-  fi
-
-  after_line=$(sed -n "$((new_line_no + 1))p" "$REF" 2>/dev/null)
-  assert_grep "$after_line" '^4\. \*\*비용 신호\*\*' \
-    "분모 --tree 배선 줄 바로 다음 줄이 4. **비용 신호** 로 시작한다(그 문장이 item 4 안으로 옮겨지지 않았다)"
-}
-
 for c in case_trivia_escape_is_gated_by_declaration case_step1_writes_scope_file \
          case_status_table_is_total_over_statuses case_topic_diff_uses_boundary_and_tree \
          case_step4_row_carries_scope case_scope_block_surfaces \
          case_filtered_diff_uses_boundary_and_tree \
-         case_rinit_topic_branch_sets_axes case_scan_dir_feeds_detect_and_assign \
-         case_r4_calls_use_baseline_commit case_r5b_skips_on_topic \
-         case_r1b_topic_candidates_supplemented case_early_exit_discards_head_tree \
          case_override_clears_stale_scope_file case_in_base_notice \
-         case_topic_denominator_uses_tree; do
+; do
   echo "== $c"; $c
 done
 finish

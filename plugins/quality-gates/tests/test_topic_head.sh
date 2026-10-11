@@ -309,7 +309,7 @@ case_create_head_topic_rejects_wrong_commits() {
 
 case_scope_file_under_subdir_cwd() {
   # SKILL ① 1a 의 스코프 파일 경로 — 하위 디렉토리 cwd 의 상태 디렉토리(.gitignore 가 덮지
-  # 않는 리포)에 쓰면 리다이렉트가 먼저 만든 빈 파일이 봉인에 섞이고, R-init 의
+  # 않는 리포)에 쓰면 리다이렉트가 먼저 만든 빈 파일이 봉인에 섞이고, 차등 절차 D1 의
   # create-head --topic 재봉인은 채워진 파일을 담아 트리 대조가 어긋난다. 리포 루트의
   # .claude/quality-gates 는 봉인이 뺀다.
   new_repo
@@ -373,8 +373,8 @@ case_explicit_topic_fully_merged() {
 }
 
 case_create_head_topic_names_resolve_reason() {
-  # R-init 의 create-head --topic 재도출이 ok 가 아니면 죽는다 — 그때 사용자에게 status 만이 아니라
-  # resolve 의 사유를 보인다(전부 머지된 키 · base 가 1a 와 R-init 사이에 움직인 경우).
+  # 차등 절차 D1 의 create-head --topic 재도출이 ok 가 아니면 죽는다 — 그때 사용자에게 status 만이 아니라
+  # resolve 의 사유를 보인다(전부 머지된 키 · base 가 1a 와 D1 사이에 움직인 경우).
   new_repo
   git checkout -q -b topicA; decl_commit a.txt a1 "a1"
   git checkout -q main; git merge -q --no-ff topicA -m "merge topicA"

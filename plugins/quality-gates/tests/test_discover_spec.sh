@@ -49,9 +49,8 @@ run() { ( cd "$R" && PATH="$1" bash "$D" --intent-out "$T/intent.md" --base "$BA
 out="$(run "$B:$PATH")"; rc=$?
 assert_eq "$rc" "0" "트레일러 — exit 0"
 assert_eq "$(printf '%s' "$out" | key intent_source)" "spec-trailer" "의도 출처는 spec-trailer"
-assert_eq "$(printf '%s' "$out" | key spec_path)" "$(cd "$R" && pwd -P)/docs/superpowers/specs/new-design.md" \
-  "spec_path 는 최신 커밋의 트레일러가 가리키는 파일"
-assert_file_grep "$T/intent.md" '^- new$' "의도 본문은 그 spec 이다"
+assert_file_grep "$T/intent.md" '^- new$' "의도 본문은 최신 커밋의 트레일러가 가리키는 spec 이다"
+assert_file_absent "$T/intent.md" '^- old$' "앞 커밋의 트레일러가 가리킨 spec 은 의도 본문이 아니다"
 assert_eq "$(printf '%s' "$out" | key intent_file)" "$T/intent.md" "intent_file 은 --intent-out 경로"
 
 # 2 — 트레일러 없음 · gh 없음 → 커밋 메시지만, 그 사실을 공시
@@ -61,7 +60,6 @@ run2() { ( cd "$R" && PATH="$1" bash "$D" --intent-out "$T/intent.md" --base "$B
 out="$(run2 "$NOGH")"
 assert_eq "$(printf '%s' "$out" | key intent_source)" "commits" "트레일러가 없으면 커밋 메시지"
 assert_eq "$(printf '%s' "$out" | key intent_note)" "gh 없음" "gh 가 없으면 그 사실을 싣는다"
-assert_eq "$(printf '%s' "$out" | key spec_path)" "" "트레일러가 없으면 spec_path 는 비어 있다"
 assert_file_grep "$T/intent.md" 'fix: third' "의도 본문에 커밋 메시지가 있다"
 
 # 3 — 미인증은 gh 오류로 접는다(실측 gh 2.88.1: 미인증 `gh pr view` 는 「gh auth login」 안내를 내고 rc 4)
@@ -89,7 +87,7 @@ assert_grep "$(cat "$GH_LOG")" '^pr view' "양의 짝 — pr view 는 실제로 
 git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "feat: gone" -m "Spec: docs/superpowers/specs/missing-design.md"
 touch "$R/docs/superpowers/specs/new-design.md"
 out="$( cd "$R" && PATH="$NOGH" bash "$D" --intent-out "$T/intent.md" --base "$BASE2" )"
-assert_eq "$(printf '%s' "$out" | key spec_path)" "" "가리킨 파일이 없으면 다른 spec 을 mtime 으로 고르지 않는다"
+assert_file_absent "$T/intent.md" '^- new$' "가리킨 파일이 없으면 다른 spec 을 mtime 으로 고르지 않는다"
 assert_eq "$(printf '%s' "$out" | key intent_source)" "commits" "커밋 메시지로 내려간다"
 assert_not_grep "$(grep -v '^[[:space:]]*#' "$D")" 'mtime|stat -|-nt |getmtime|st_mtime|pick_newest' "스크립트 코드가 mtime 을 읽지 않는다"
 assert_grep "$(grep -v '^[[:space:]]*#' "$D")" 'Spec: ' "양의 짝 — 코드 코퍼스가 비지 않았다(트레일러 추출이 보인다)"
@@ -98,7 +96,7 @@ assert_grep "$(grep -v '^[[:space:]]*#' "$D")" 'Spec: ' "양의 짝 — 코드 �
 git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "feat: keyed" -m "Spec: docs/superpowers/specs/new-design.md#pr1"
 out="$( cd "$R" && PATH="$NOGH" bash "$D" --intent-out "$T/intent.md" --base "$BASE2" )"
 assert_eq "$(printf '%s' "$out" | key intent_source)" "spec-trailer" "#key 트레일러 — 조각을 떼면 spec-trailer"
-assert_eq "$(printf '%s' "$out" | key spec_path)" "$(cd "$R" && pwd -P)/docs/superpowers/specs/new-design.md" "#key 트레일러 — spec_path 는 조각 없는 실제 파일"
+assert_file_grep "$T/intent.md" '^- new$' "#key 트레일러 — 의도 본문은 조각 없는 실제 파일이다"
 
 # 7c — P7: 트레일러는 비신뢰 입력이다. 절대 경로 · `..` · 리포 밖으로 풀리는 심볼릭 링크는 읽지 않는다
 printf 'OUTSIDE-SECRET-XYZ\n' > "$T/outside.txt"
@@ -111,7 +109,6 @@ trailer_case() {  # trailer_case <Spec: 값> → out
 refused() {  # refused <Spec: 값> <라벨>
   for suffix in "" "#k"; do
     trailer_case "$1$suffix"
-    assert_eq "$(printf '%s' "$out" | key spec_path)" "" "$2$suffix — spec_path 비어 있다"
     assert_eq "$(printf '%s' "$out" | key intent_note)" "spec 경로 거부" "$2$suffix — 거부를 공시한다"
     assert_file_absent "$T/intent.md" 'OUTSIDE-SECRET-XYZ|root:|hunter2' "$2$suffix — 밖의 파일 내용이 의도 파일에 없다"
   done

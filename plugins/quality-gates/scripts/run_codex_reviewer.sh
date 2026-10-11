@@ -21,9 +21,6 @@
 #   run_codex_reviewer.sh <diff_path> <project_dir> <output_yaml_path>
 #
 # 의도 출처는 스크립트 안에서 `discover-spec.sh` 로 정한다(다른 리뷰어와 같은 D13 사슬).
-# Optional env:
-#   DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1 — 의도 출처를 싣지 않는다(빈 <intent>,
-#                  loud log). 리뷰 기준 블록은 그대로 싣는다.
 #
 # Emits: YAML to <output_yaml_path>. Schema (최상위 `agent:` 키는 **없다** — 산출자
 # codex_findings_to_yaml.py 의 yaml_emit 은 `agent:` 를 finding 마다 달 뿐 최상위에는
@@ -154,18 +151,18 @@ STDERR_FILE="$SCRATCH/codex.stderr"
 # 리뷰어 dispatch 와 같은 사슬(Spec: 트레일러 → 커밋 메시지 + 열린 PR 본문)이다. 모든 분기가
 # loud 하다 — 의도 없이 도는 실행을 의도를 본 실행처럼 보이게 하지 않는다.
 INTENT_FILE="/dev/null"
+# 없어진 스위치다 — 켜 둔 사용자에게 의도가 여전히 실린다는 것을 알린다(막지 않는다).
 if [[ "${DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE:-}" == "1" ]]; then
-  echo "[quality-gates] codex intent: DISABLED via DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1 — empty <intent>." >&2
+  echo "[quality-gates] DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE 는 없어졌다 — 의도 입력은 언제나 codex 에 실린다. codex 를 끄려면 DEVBREW_QUALITY_GATES_DISABLE_CODEX=1 을 쓴다." >&2
+fi
+INTENT_JSON="$(bash "${PLUGIN_ROOT}/scripts/discover-spec.sh" --intent-out "$SCRATCH/intent.md" 2>/dev/null || true)"
+if [[ -s "$SCRATCH/intent.md" ]]; then
+  INTENT_FILE="$SCRATCH/intent.md"
+  INTENT_SRC="$(printf '%s' "$INTENT_JSON" | sed -n 's/.*"intent_source": "\([^"]*\)".*/\1/p')"
+  INTENT_NOTE="$(printf '%s' "$INTENT_JSON" | sed -n 's/.*"intent_note": "\([^"]*\)".*/\1/p')"
+  echo "[quality-gates] codex intent: ${INTENT_SRC}${INTENT_NOTE:+ (${INTENT_NOTE})}" >&2
 else
-  INTENT_JSON="$(bash "${PLUGIN_ROOT}/scripts/discover-spec.sh" --intent-out "$SCRATCH/intent.md" 2>/dev/null || true)"
-  if [[ -s "$SCRATCH/intent.md" ]]; then
-    INTENT_FILE="$SCRATCH/intent.md"
-    INTENT_SRC="$(printf '%s' "$INTENT_JSON" | sed -n 's/.*"intent_source": "\([^"]*\)".*/\1/p')"
-    INTENT_NOTE="$(printf '%s' "$INTENT_JSON" | sed -n 's/.*"intent_note": "\([^"]*\)".*/\1/p')"
-    echo "[quality-gates] codex intent: ${INTENT_SRC}${INTENT_NOTE:+ (${INTENT_NOTE})}" >&2
-  else
-    echo "[quality-gates] codex intent: discover-spec.sh produced no intent (script missing or crashed? check CLAUDE_PLUGIN_ROOT) — empty <intent>." >&2
-  fi
+  echo "[quality-gates] codex intent: discover-spec.sh produced no intent (script missing or crashed? check CLAUDE_PLUGIN_ROOT) — empty <intent>." >&2
 fi
 
 # Build prompt (intent from resolution above, or empty when /dev/null).

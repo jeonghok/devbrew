@@ -18,8 +18,8 @@ KEYS = ("topic_key", "status", "reason", "branches", "in_base", "boundary", "tip
 STATUSES = ("ok", "no-declaration", "base-unresolved", "declaration-invalid",
             "unbounded", "seal-failed", "merge-conflict", "merge-failed")
 # 사유가 없는 status 는 스코프 축에서 막지 않는다 — `no-declaration` 은 새 의무가 아니고
-# (§6.2.5), `base-unresolved` 는 차등 테스트 R-init 의 「baseline 확정 불가」가,
-# `seal-failed` 는 R5b 의 HEAD 축 미관측이 이미 막는다. `unbounded` · `merge-failed` 는
+# (§6.2.5), `base-unresolved` 는 차등 테스트 D0 의 기준선 미확정(기준선 커밋 `-`)이,
+# `seal-failed` 는 D1 의 HEAD 축 미관측(HEAD 커밋 `-`)이 이미 막는다. `unbounded` · `merge-failed` 는
 # 가장 가까운 이름으로 보낸다 — 토픽이 한 판정 단위를 못 이룸 · 끝점을 합치지 못함.
 STATUS_TO_REASON = {
     "declaration-invalid": "declaration-invalid",

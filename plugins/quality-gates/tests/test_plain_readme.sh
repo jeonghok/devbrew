@@ -22,17 +22,17 @@ assert_contains "$lead" "원하면 판정 전에 사람이 승인한 명령으�
 assert_not_contains "$lead" "Claude Code용 품질 검증 파이프라인" "§8: 옛 첫 문단이 없다"
 use="$(awk '/^## 쓰는 법$/{f=1;next} f&&/^## /{exit} f' "$RM")"
 assert_grep "$use" '^\| 이럴 때 \| 친다 \| 나오는 것 \|$' "§8: 쓰는 법이 「이럴 때 · 친다 · 나오는 것」 표다"
-for c in '`/qg`' '`/qg branch`' '`/qg --paths <glob>...`' '`/qg --plan <path>`' '`/qg critique <path>`'; do
+for c in '`/qg`' '`/qg branch`' '`/qg --paths <glob>...`' '`/qg critique <path>`'; do
   assert_contains "$use" "| ${c} |" "§8: 쓰는 법 표에 ${c} 행이 있다"
 done
-assert_eq "$(printf '%s\n' "$use" | grep -c '^| [^-|]')" "6" "§8: 표는 머리 하나와 행 다섯이다(없는 명령 행이 없다)"
+assert_eq "$(printf '%s\n' "$use" | grep -c '^| [^-|]')" "5" "§8: 표는 머리 하나와 행 넷이다(없는 명령 행이 없다 — --plan 은 13.0.0 에서 없어졌다)"
 assert_contains "$use" "열린 PR 이 있으면 코멘트 하나를 단다" "R17: 게시는 /qg 행이 말한다(별도 명령이 없다)"
 assert_contains "$use" "판정 전에 앱을 띄워 걸어 볼지 묻는다." "R21: /qg 행이 e2e 질문을 말한다"
-# 「친다」 칸은 위 다섯 가운데 하나여야 한다 — 없어진 명령의 이름을 여기 적지 않는다(그 이름은
+# 「친다」 칸은 위 넷 가운데 하나여야 한다 — 없어진 명령의 이름을 여기 적지 않는다(그 이름은
 # tests/test_publish_surface_removed.sh 의 개념 별칭 스윕이 이 파일에서도 잡는다).
 cmds="$(printf '%s\n' "$use" | awk -F'|' '/^\| / && !/^\| 이럴 때 /{gsub(/^ +| +$/, "", $3); print $3}')"
-bad="$(printf '%s\n' "$cmds" | grep -vxF -e '`/qg`' -e '`/qg branch`' -e '`/qg --paths <glob>...`' -e '`/qg --plan <path>`' -e '`/qg critique <path>`')"
-assert_eq "${bad}" "" "R17: 표의 「친다」 칸은 진입 명령 다섯뿐이다(없어진 명령 행이 없다)"
+bad="$(printf '%s\n' "$cmds" | grep -vxF -e '`/qg`' -e '`/qg branch`' -e '`/qg --paths <glob>...`' -e '`/qg critique <path>`')"
+assert_eq "${bad}" "" "R17: 표의 「친다」 칸은 진입 명령 넷뿐이다(없어진 명령 행이 없다)"
 assert_file_absent "$RM" '^## 사용$' "§8: 옛 「사용」 절이 없다(쓰는 법이 대신한다)"
 flow="$(awk '/^## 파이프라인 흐름/{f=1;next} f&&/^```/{exit} f' "$RM" | tr '\n' ' ' | tr -s ' ')"
 assert_contains "$flow" "파이프라인은 한 턴 안에서 끝까지 돈다" "§8: 흐름 첫 문단이 쉬운 말이다"

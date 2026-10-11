@@ -1,6 +1,6 @@
 ---
 description: "Run the quality gates pipeline (review → differential test → verdict → PR comment)"
-argument-hint: "[critique <path>] [branch|--paths <glob>...] [--plan <path>]"
+argument-hint: "[critique <path>] [branch|--paths <glob>...]"
 ---
 
 # Quality Gates Pipeline
@@ -69,8 +69,7 @@ the pipeline is aborted at a decision point.
 | `/qg` | Run the pipeline; `Spec:` 트레일러로 선언된 토픽이면 토픽 전체(합친 트리), 아니면 git-derived diff (branch + worktree) |
 | `/qg branch` | Run on the full-branch diff (vs `main`) |
 | `/qg --paths <glob>...` | Scope to matched paths |
-| `/qg --plan <path>` | Use specific plan file |
-| `branch <name>` · `--reset` · `--gc` · `--pr-url` | 없어졌다(v10) — 안내 한 줄을 내고 실행하지 않는다 |
+| `branch <name>` · `--reset` · `--gc` · `--pr-url` · `--plan` | 없어졌다(13.0.0) — 안내 한 줄을 내고 실행하지 않는다 |
 | `both` · `review` · `runtime` · `--skip-runtime` | 제거됨 — 한 줄 공지 후 그대로 진행 |
 | `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | 차등 테스트를 건너뛴다 — 판정은 `not-certified (kill-switch)` |
 | `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` | e2e 를 끈다 — 판정 줄의 e2e 칸이 `꺼짐(kill switch)` |
@@ -100,7 +99,7 @@ emit하고, 파이프라인의 **정직-verdict floor**가 `resolved scope 0 AND
 판정이 `not-certified (scope-empty)` 가 된다(load-bearing, kill 불가). 무엇을
 리뷰할지(routing)는 모델이 소유 — 빈 scope면 모델이 `/qg branch`(전체 브랜치 리뷰)를 제안한다.
 진짜 변경 없음(genuine no-op)도 더는 무조건 `clean` 이 아니다 — ②(차등 테스트)가 매
-iteration 도는 한, R1b 가 영향 unit 을 0개 고르면 차등 테스트 자신이 `expected-empty`
+iteration 도는 한, 차등 절차 D2 가 영향 unit 을 0개 고르면 차등 테스트 자신이 `expected-empty`
 를 내고 그것이 `not-certified (scope-empty)` 로 판정된다(정직-verdict floor 와는 별도
 경로 — resolved scope 0 문제가 아니라 test unit 0 문제다). 신호가 degraded면
 fail-open + loud advisory.
