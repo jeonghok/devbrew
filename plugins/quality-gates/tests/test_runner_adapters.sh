@@ -64,6 +64,11 @@ case_granularity_table() {
   assert_eq "$out" "pytest=file unittest=file shell=file jest=file vitest=file go=package cargo=bulk make=bulk npm-script=bulk " "입도 표"
   bash "$RTS" granularity rspec >/dev/null 2>&1; assert_eq "$?" "2" "미지 러너는 exit 2"
 }
+case_R22_detect_imports_no_repo_module() { mkw; printf '{"scripts":{"test":"node t.js"}}' > "$W/package.json"
+  printf 'open("%s/PWNED","w").write("x")\n' "$W" > "$W/json.py"
+  local rc; ( cd "$W" && DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1 bash "$RTS" detect "$W" >/dev/null 2>&1 ); rc=$?
+  assert_eq "$rc" "0" "detect 는 exit 0"
+  [ ! -e "$W/PWNED" ] && ok "감지가 저장소의 json.py 를 import 하지 않는다" || no "저장소 모듈이 detect 중 실행됐다"; rmw; }
 # 어댑터 개수를 적은 문서 주장은 닫힌 집합과 같아야 한다.
 case_adapter_count_claims_match() {
   local n found=0 bad=0 hit claimed
@@ -80,7 +85,7 @@ case_adapter_count_claims_match() {
 for c in case_detect_pytest case_detect_unittest case_detect_pytest_declared case_detect_shell \
          case_detect_jest case_detect_vitest case_detect_go case_detect_cargo case_detect_make \
          case_detect_npm_script case_detect_zero case_detect_polyglot case_detect_js_ambiguous_is_loud \
-         case_detect_malformed_package_json_is_loud case_granularity_table case_adapter_count_claims_match; do
+         case_detect_malformed_package_json_is_loud case_R22_detect_imports_no_repo_module case_granularity_table case_adapter_count_claims_match; do
   echo "== $c"; $c
 done
 finish

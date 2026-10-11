@@ -135,7 +135,7 @@ granularity_of() {
 }
 
 pkg_field() {
-  python3 - "$1/package.json" "$2" <<'PY' 2>/dev/null
+  python3 -I - "$1/package.json" "$2" <<'PY' 2>/dev/null
 import json, sys
 try:
     with open(sys.argv[1], encoding="utf-8") as fh:
@@ -155,7 +155,7 @@ pkg_json_malformed() {
   if ! command -v python3 >/dev/null 2>&1; then
     PKG_JSON_REASON=no_parser; return 1
   fi
-  python3 -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' \
+  python3 -I -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' \
     "$1/package.json" >/dev/null 2>&1 && return 1
   PKG_JSON_REASON=parse_error
   return 0
