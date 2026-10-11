@@ -112,15 +112,15 @@ lines = ["e2e-fingerprint v1", f"head {head}"]
 lines += [f"tracked {digest(p)} {name(p)}" for p in sorted(tracked)]
 lines += [f"untracked {digest(p)} {name(p)}" for p in sorted(untracked)]
 tmp = out + ".tmp"
+data = ("\n".join(lines) + "\n").encode("utf-8")
 try:
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines) + "\n")
+    with open(tmp, "wb") as fh:
+        fh.write(data)
     os.replace(tmp, out)
 except OSError as exc:
     fail(f"지문을 쓰지 못했다: {out} ({exc})")
 print(f"fingerprint: {out} (head {head[:7]} · tracked {len(tracked)} · untracked {len(untracked)})")
-with open(out, "rb") as fh:
-    print(f"sha256: {hashlib.sha256(fh.read()).hexdigest()}")
+print(f"sha256: {hashlib.sha256(data).hexdigest()}")   # 쓴 바이트의 해시 — 다시 열어 재면 그 사이 바뀐 것을 잰다
 PY
 }
 
@@ -143,9 +143,11 @@ def fail(msg):
 
 
 def load(path):
+    """지문 한 번 읽기 — 해시와 파싱이 같은 바이트를 본다(두 번 열면 그 사이에 바뀔 수 있다)."""
     try:
-        with open(path, encoding="utf-8") as fh:
-            rows = fh.read().splitlines()
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        rows = raw.decode("utf-8").splitlines()
     except (OSError, UnicodeDecodeError) as exc:
         fail(f"지문을 읽지 못했다: {path} ({exc})")
     if not rows or rows[0] != "e2e-fingerprint v1":
@@ -167,16 +169,15 @@ def load(path):
         entries[key] = (parts[0], parts[1])
     if not head:
         fail(f"head 줄이 없다: {path}")
-    return head, entries
+    return head, entries, hashlib.sha256(raw).hexdigest()
 
 
-bh, be = load(sys.argv[1])
-ah, ae = load(sys.argv[2])
+bh, be, bsum = load(sys.argv[1])
+ah, ae, _ = load(sys.argv[2])
 changed = []
 if sys.argv[3]:
-    with open(sys.argv[1], "rb") as fh:
-        if hashlib.sha256(fh.read()).hexdigest() != sys.argv[3]:
-            changed.append("before 지문 파일(fingerprint 가 낸 sha256 과 다르다 — 걷는 사이 고쳐 쓰였다)")
+    if bsum != sys.argv[3]:
+        changed.append("before 지문 파일(fingerprint 가 낸 sha256 과 다르다 — 걷는 사이 고쳐 쓰였다)")
 if bh != ah:
     changed.append(f"HEAD ({bh[:7]} -> {ah[:7]})")
 for key in sorted(set(be) | set(ae)):
