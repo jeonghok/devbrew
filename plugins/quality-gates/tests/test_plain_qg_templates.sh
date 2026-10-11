@@ -121,4 +121,25 @@ CAF="$(flat "$CA")"
 assert_contains "$CAF" '보고의 첫 줄은 끝났는지와 결과 한 문장이다' "§4: 비평 최종 보고 첫 줄"
 assert_contains "$CAF" '잔여 `kept` 항목에 `plain:` 이 있으면 그것을 먼저 쓰고 원래 `summary` 는 뒤 괄호에 둔다' "R7: 비평 보고가 plain 을 먼저 쓴다"
 assert_contains "$CAF" '맨 끝에 사용자가 할 일 하나를 쓴다' "§4: 비평 최종 보고 끝 할 일 하나"
+
+# ⑩ Max-iter 결정 — AskUserQuestion 의 라벨이 같은 절의 굵은 분기 글자와 같다(라벨만 바꾸면 분기가 없는 선택지를 부른다)
+MX="$(awk '/^### Max-iter decision$/{f=1;next} f&&/^### /{exit} f' "$S")"
+MXF="$(printf '%s\n' "$MX" | tr '\n' ' ' | tr -s ' ')"
+assert_grep "$MX" '^After iteration 5' "Max-iter 절을 잘랐다(양성 짝 — 창이 비면 아래 단언이 공허하다)"
+MXL="$(printf '%s\n' "$MX" | grep -E '^[[:space:]]*\{label: "' | sed -e 's/^[^"]*"//' -e 's/".*$//')"
+assert_eq "$(printf '%s\n' "$MXL" | grep -c .)" "2" "Max-iter: 선택지 라벨은 둘이다"
+assert_contains "$MXF" "Branch on answer: " "Max-iter: 분기 문장이 있다"
+printf '%s\n' "$MXL" > "${TMPDIR:-/tmp}/qg-plain-mxl.$$"
+while IFS= read -r l; do
+  [ -n "$l" ] || continue
+  assert_contains "$MXF" "**${l}** → Final verdict" "Max-iter: 라벨 「${l}」가 같은 절의 굵은 분기 글자와 같다"
+done < "${TMPDIR:-/tmp}/qg-plain-mxl.$$"
+rm -f "${TMPDIR:-/tmp}/qg-plain-mxl.$$"
+
+# ⑪ 게시 게이트가 완료 표의 바뀐 칸 이름을 부른다(OUTCOME 변수 이름과 값은 그대로)
+PB="$(awk '/^## Publish$/{f=1;next} f&&/^## /{exit} f' "$S")"
+assert_grep "$PB" '^OUTCOME="' "Publish 절을 잘랐다(양성 짝)"
+assert_contains "$(printf '%s\n' "$PB" | tr '\n' ' ' | tr -s ' ')" '`OUTCOME` 에 `## Final verdict` 표의 결과 칸 값(Outcome)을' "AC6: 게시 게이트 OUTCOME 출처가 결과 칸을 부른다"
+assert_grep "$PB" '^OUTCOME="<Final verdict 표의 결과 칸 값 그대로>"$' "AC6: 게시 펜스 OUTCOME 자리표시가 결과 칸을 부른다"
+assert_not_grep "$PB" 'Outcome 값' "AC6: 게시 게이트에 옛 칸 이름(Outcome 값)이 없다"
 finish

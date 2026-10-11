@@ -973,13 +973,13 @@ cat > "$TOP/.claude/quality-gates/$SID/comment-head.md" <<'QG_COMMENT_HEAD'
 QG_COMMENT_HEAD
 ```
 
-**2. 게시** — `OUTCOME` 에 `## Final verdict` 표의 Outcome 값을, `<session-id>` 에 이 세션의 id 를 그대로 넣고 돌린다. sink 는 리포 루트에서 돈다(펜스가 `cd` 한다). 마지막 줄을 그대로 보인다.
+**2. 게시** — `OUTCOME` 에 `## Final verdict` 표의 결과 칸 값(Outcome)을, `<session-id>` 에 이 세션의 id 를 그대로 넣고 돌린다. sink 는 리포 루트에서 돈다(펜스가 `cd` 한다). 마지막 줄을 그대로 보인다.
 펜스가 `result.md` 의 `## 게시` 절에 같은 줄을 남긴다(K-2).
 
 <!-- publish-fence:begin -->
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-OUTCOME="<Final verdict 표의 Outcome 값 그대로>"
+OUTCOME="<Final verdict 표의 결과 칸 값 그대로>"
 SID="<session-id>"
 [[ "$SID" =~ ^[A-Za-z0-9_-]{8,}$ ]] || { echo "[quality-gates] 세션 id 가 패턴 밖이다 — 게시하지 않는다" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] 리포 루트를 못 찾았다 — 게시하지 않는다" >&2; exit 1; }
