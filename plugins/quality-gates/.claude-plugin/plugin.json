@@ -1,7 +1,7 @@
 {
   "name": "quality-gates",
-  "description": "Quality verification pipeline — one pipeline, one verdict (review + mandatory differential test + optional human-approved e2e walk) with multi-plugin review delegation; each run posts one new PR comment (understanding + verdict line) when the branch has an open PR. Invoke manually via /qg.",
-  "version": "12.1.0",
+  "description": "Checks a change before you ship it: one /qg run reviews the diff from several independent angles, runs the tests whose behavior changed, can walk the running app with your approval, and gives one verdict. When the branch has an open PR, it posts that verdict with a plain-language summary as one new comment.",
+  "version": "12.2.0",
   "author": {
     "name": "jeonghokim"
   }
