@@ -46,6 +46,24 @@ case_R17_failed_assign_leaves_no_file() {
   [ ! -e "$REPO/assign.tsv" ] && ok "R17: 배정 파일이 생기지 않았다" || no "R17: 실패한 assign 이 파일을 남겼다"
   rmrepo
 }
+# R17 — 실패한 assign 은 같은 경로에 있던 이전 배정 파일도 남기지 않는다(옛 파일이 이번 결과로 읽히지 않게).
+case_R17_failed_assign_removes_stale_file() {
+  mkrepo; mktree || { rmrepo; return; }
+  printf 'stale\n' > "$REPO/assign.tsv"
+  printf 'x\n' | bash "$RTS" assign "$REPO/no-such-tree" "$REPO/assign.tsv" 2>/dev/null; local rc=$?
+  [ "$rc" != "0" ] && ok "R17: 실패 exit 0 아님" || no "R17: 실패했는데 exit 0"
+  [ ! -e "$REPO/assign.tsv" ] && ok "R17: 이전 배정 파일이 지워졌다" || no "R17: 이전 배정 파일이 남았다"
+  rmrepo
+}
+# R17 — 출력 경로가 디렉토리면 exit 0 으로 파일 없이 끝나지 않고 실패한다.
+case_R17_output_path_is_directory_fails() {
+  mkrepo; shtest tests/a.sh 0; mktree || { rmrepo; return; }
+  mkdir "$REPO/assign.tsv"
+  local err; err=$(printf 'tests/a.sh\n' | bash "$RTS" assign "$TREE" "$REPO/assign.tsv" 2>&1 >/dev/null); local rc=$?
+  [ "$rc" != "0" ] && ok "R17: 디렉토리 출력 경로 → 실패" || no "R17: 디렉토리 출력 경로인데 exit 0"
+  assert_contains "$err" "디렉토리" "R17: 사유를 알린다"
+  rmrepo
+}
 # R20 — 트리 밖으로 나가는 후보(절대경로 · `..` · 밖을 가리키는 링크)는 claim 되지 않고 unclaimed 다.
 case_R20_assign_refuses_units_outside_tree() {
   mkrepo; shtest tests/a.sh 0; mkdir -p "$REPO/outside/tests"; printf '#!/bin/bash\n' > "$REPO/outside/tests/x.sh"
@@ -112,6 +130,7 @@ case_bulk_absorbs_residual() {
 }
 
 for c in case_R17_assign_writes_trailer case_R17_failed_assign_leaves_no_file \
+         case_R17_failed_assign_removes_stale_file case_R17_output_path_is_directory_fails \
          case_R20_assign_refuses_units_outside_tree case_R20_shell_scope \
          case_R21_unittest_refuses_unjudgeable_files case_R21_go_unit_is_package \
          case_R16_unhandled_candidate_is_unclaimed case_bulk_absorbs_residual; do

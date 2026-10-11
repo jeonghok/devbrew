@@ -346,6 +346,8 @@ case "${1:-}" in
   assign)
     [[ $# -eq 3 ]] || die "usage: assign <tree> <assign-file>   # stdin: 후보 파일 경로"
     w=$2; out=$3
+    [[ -d "$out" ]] && die "배정 파일 경로가 디렉토리다: $out"
+    rm -f -- "$out" || die "이전 배정 파일을 지우지 못했다: $out"
     [[ -d "$w" ]] || die "not a directory: $w"
     [[ -d "$(dirname -- "$out")" ]] || die "배정 파일의 디렉토리가 없다: $out"
     adapters=$(detect_set "$w")
