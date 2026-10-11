@@ -348,4 +348,18 @@ grep -qF '"${CLAUDE_PLUGIN_ROOT}/scripts/' "$QG/scripts/run_codex_reviewer.sh" \
   && no "FALLBACK: fallback 을 우회하는 bare 참조가 남아 있다" \
   || ok "FALLBACK: bare 참조 잔여 없음"
 
+# ── 없어진 스위치: DISABLE_SPEC_CONFORMANCE=1 은 한 줄로 알리고, 의도는 그대로 싣는다 ──
+# 켜 둔 사용자가 「의도가 codex 로 안 간다」고 믿은 채 조용히 보내지 않게 한다(공시 — 막지 않는다).
+mkdir -p "$tmp/sscbin"
+printf '#!/bin/sh\ncat > "$SSC_PROMPT"\nprintf "%%s\\n" "{\\"type\\":\\"agent_message\\",\\"text\\":\\"none\\"}"\nexit 0\n' > "$tmp/sscbin/codex"
+printf '#!/bin/sh\nexit 1\n' > "$tmp/sscbin/gh"
+chmod +x "$tmp/sscbin/codex" "$tmp/sscbin/gh"
+( unset CLAUDE_PLUGIN_ROOT; SSC_PROMPT="$tmp/ssc-prompt.md" DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1 PATH="$tmp/sscbin:$PATH" \
+    bash "$QG/scripts/run_codex_reviewer.sh" "$tmp/tiny.diff" "$ROOT" "$tmp/ssc-out.yaml" ) >/dev/null 2>"$tmp/ssc-err.txt"
+assert_eq "$(grep -c 'DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE 는 없어졌다 — 의도 입력은 언제나 codex 에 실린다' "$tmp/ssc-err.txt")" "1" \
+  "없어진 DISABLE_SPEC_CONFORMANCE=1 은 stderr 한 줄로 공시된다"
+ssc_intent="$(python3 -c 'import re,sys; m=re.search(r"<intent>\n(.*?)</intent>", open(sys.argv[1], encoding="utf-8").read(), re.S); print((m.group(1) if m else "").strip()[:40])' "$tmp/ssc-prompt.md" 2>/dev/null)"
+[ -n "$ssc_intent" ] && ok "양성 짝: 그 스위치가 켜져 있어도 codex 프롬프트의 <intent> 가 비지 않는다" \
+  || no "양성 짝: 그 스위치가 켜져 있어도 codex 프롬프트의 <intent> 가 비지 않는다 (prompt=$(wc -c < "$tmp/ssc-prompt.md" 2>/dev/null || echo MISSING) bytes)"
+
 finish

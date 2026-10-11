@@ -142,7 +142,7 @@ for name in security-reviewer; do
     no "T5: SKILL.md dispatch for $name lacks project_dir"
   fi
 done
-[[ "$T5_FAIL" -eq 0 ]] && ok "T5: SKILL.md propagates project_dir to all 4 dispatch points"
+[[ "$T5_FAIL" -eq 0 ]] && ok "T5: SKILL.md propagates project_dir to the security-reviewer dispatch"
 
 
 # --- Test 9: REMOVED — v1.32.0 schema intentionally has no project_dir field ---

@@ -103,7 +103,7 @@ Every run then starts without the previous run's `excluded.md` · `differential.
 `intent.md` · `topic-scope.txt` · `comment-head.md` · `comment.md` · `publish.out` · `publish.err` and the e2e walk files
 (`e2e-record.md` · `e2e-flip.md` · `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt`).
 `e2e-app.pgid` is kept. The `stop` line brings down an app a cut-off earlier walk left running; show its output, and a non-zero `preflight-stop rc` does not stop the run — `## e2e` E0 tries again with the same record. Setup refuses an empty or malformed session id (E1). A gone
-argument (`branch <name>` · `--reset` · `--gc` · `--pr-url`) prints one line on stdout and exits 2 —
+argument (`branch <name>` · `--reset` · `--gc` · `--pr-url` · `--plan`) prints one line on stdout and exits 2 —
 the run does not start. Non-zero exit → show its output (stdout and stderr) verbatim and stop.
 Below, `RD` is that folder under the **repo root** — setup moves to the git top level itself, so a
 session started in a subdirectory uses the same folder. Every fence that needs it assigns it the
@@ -197,9 +197,9 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
    | `no-declaration` | session | 공지하지 않는다 — 선언은 새 능력이지 새 의무가 아니다 |
    | `declaration-invalid` | session | 공지 한 줄 · Step 4 의 `--scope` 가 판정을 `not-certified (declaration-invalid)` 로 만든다 |
    | `unbounded` | session | 공지 한 줄 · `--scope` 가 `not-certified (declaration-invalid)` 로 만든다 |
-   | `merge-conflict` | session | 공지 한 줄 · `--scope` 가 `not-certified (merge-conflict)` 로 만들고 충돌 파일을 싣는다 |
-   | `merge-failed` | session | 공지 한 줄 · `--scope` 가 `not-certified (merge-conflict)` 로 만든다 |
-   | `seal-failed` | session | 공지 한 줄 · 차등 테스트는 `references/differential-test.md` 의 D3 봉인 실패 경로(관측 없음)를 탄다 |
+   | `merge-conflict` | session | 공지 한 줄 · `--scope` 가 `not-certified (merge-conflict)` 로 만들고 충돌 파일을 싣는다 · 앞 iteration 이 topic 이었으면 이 iteration 의 차등 판정 입력은 error-axis 다(D1 기준선 불일치) |
+   | `merge-failed` | session | 공지 한 줄 · `--scope` 가 `not-certified (merge-conflict)` 로 만든다 · 앞 iteration 이 topic 이었으면 이 iteration 의 차등 판정 입력은 error-axis 다(D1 기준선 불일치) |
+   | `seal-failed` | session | 공지 한 줄 · 차등 테스트는 `references/differential-test.md` 의 D3 봉인 실패 경로(관측 없음)를 탄다 · 앞 iteration 이 topic 이었으면 이 iteration 의 차등 판정 입력은 error-axis 다(D1 기준선 불일치) |
    | `base-unresolved` | session | 차등 테스트의 D0 가 baseline 확정 불가로 처리한다 |
 
    공지 한 줄: `> [quality-gates] 토픽 선언을 이번 iteration 에 쓰지 못했다 (<status>: <reason 값>) — session 스코프로 진행한다.`

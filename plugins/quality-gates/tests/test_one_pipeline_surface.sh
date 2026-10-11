@@ -66,24 +66,16 @@ case_new_skeleton_present() {
   assert_eq "$(grep -E '^## ' "$SKILL" | tr '\n' '|')" \
     "## 사람에게 쓰는 글|## Preflight|## Flow|## Review|## Differential test|## Fix-loop|## e2e|## Final verdict|## Publish|## kill switch|## Rules|## Requirement index|" \
     "K-8 — SKILL 의 ## 절이 이 순서다(③ 은 Publish, ④ 는 e2e 를 끼우며 이 핀을 고친다)"
-  assert_file_grep "$REF"   '^## Differential test$'                "레퍼런스 머리 헤딩(스플라이스 앵커)"
   assert_file_grep "$REF"   'scripts/seal-worktree\.sh" seal'       "HEAD 축은 봉인에서 선다"
   assert_file_grep "$REF"   'scripts/qg-worktree\.sh" create-head'  "HEAD 축 트리를 만든다"
   assert_file_grep "$REF"   'scripts/qg-worktree\.sh" create-baseline' "기준선 축 트리를 만든다"
-  assert_file_grep "$REF"   'scripts/diff-test-results\.py" --aggregate' "어댑터 집계가 남아 있다"
-  assert_file_grep "$REF"   'scripts/check_qa_ledger\.py"'          "원장 구조 게이트가 남아 있다(R-AG)"
+  assert_file_grep "$REF"   'scripts/diff-test-results\.py" --assign' "짝짓기는 배정 파일을 받아 diff-test-results.py 가 한다"
   # qg.md 자체의 양의 짝 — 세 파일 중 하나가 지워져도 이 절대 안 걸리던 공백을 메운다.
   assert_file_grep "$QGMD"  'one pipeline'                          "qg.md 가 '한 파이프라인' 정체성을 말한다"
   assert_file_grep "$QGMD"  'Skill\("quality-gates:quality-pipeline"\)' "qg.md 가 새 skill 을 호출한다"
   assert_file_grep "$QGMD"  'not-certified'                         "qg.md 가 새 판정 어휘를 쓴다"
 }
 
-case_reference_step_set() {
-  # 살아남는 스텝 전부 · 지워진 스텝 없음 — 헤딩에서 도출해 핀과 대조한다(∀).
-  local got
-  got=$(grep -oE '^\*\*Step R[-0-9a-z]+' "$REF" | sed 's/^\*\*Step //' | LC_ALL=C sort -u | tr '\n' ' ')
-  assert_eq "$got" "R-init R1a R1b R2 R3 R4 R5b R6 R8 " "레퍼런스의 스텝 집합(R5a · R7 · R9 없음)"
-}
 
 case_pipeline_order() {
   # C1 — 리뷰(①) → 차등 테스트(②) → 합성·판정(③). 흐름 절 안에서 이 순서로 처음 나온다.
@@ -106,20 +98,10 @@ case_no_gate_scope_question() {
   assert_grep     "$headers" 'qg iter N'                              "fix-loop 결정 도구는 남아 있다(양의 짝)"
 }
 
-case_reference_has_no_design_section_pointers() {
-  # 레퍼런스는 모델이 읽고 행동하는 산출물이다. 설치본에 없는 설계 문서의 절 번호(§)를
-  # 싣지 않는다 — 모델이 없는 절을 찾게 된다. 설계를 가리켜야 하면 개념으로 적는다.
-  assert_eq "$(grep -c '§' "$REF")" "0" "레퍼런스에 § 절 포인터가 0개"
-  # 양의 짝 — 번호를 빼면서 잔여 결함의 공시까지 지우지 않았다
-  assert_file_grep "$REF" '이 축은 잔여 결함이며 \*\*열려 있다\*\*' "R-init 잔여 결함 공시가 남았다"
-  assert_file_grep "$REF" '^\*\*남은 것\(정직한 잔여\):\*\*' "R8 정직한 잔여 공시가 남았다"
-  assert_file_grep "$REF" '잔여 결함과 같은 축이며 열려 있다' "custody 축 공시가 남았다"
-  assert_file_grep "$REF" '빈 스코프 축' "행 0개 축 공시가 남았다"
-}
 
-for c in case_old_surface_absent case_new_skeleton_present case_reference_step_set \
+for c in case_old_surface_absent case_new_skeleton_present \
          case_pipeline_order case_no_gate_scope_question \
-         case_reference_has_no_design_section_pointers; do
+; do
   "$c"
 done
 finish

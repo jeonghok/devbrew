@@ -20,7 +20,6 @@ fi
 # --- 인자 ---
 REMOVED_ARGS=""   # v9 에서 없앤 게이트 인자 — 공지 후 진행
 GONE_ARGS=""      # v10 에서 없앤 인자 — 공지 후 실행하지 않음
-PLAN_FILE="auto"
 ENSURE_MODE="false"
 SESSION_ID=""
 
@@ -68,12 +67,9 @@ while [[ $# -gt 0 ]]; do
       if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^- ]]; then shift; fi
       ;;
     --plan)
-      if [[ -z "${2:-}" ]]; then
-        echo "❌ Error: --plan requires a file path argument" >&2
-        exit 1
-      fi
-      PLAN_FILE="$2"
-      shift 2
+      gone "--plan" "리뷰 기준은 Spec: 트레일러 · 커밋 메시지 · PR 본문에서 읽는다"
+      shift
+      if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^- ]]; then shift; fi
       ;;
     --ensure)
       ENSURE_MODE="true"
@@ -92,7 +88,7 @@ while [[ $# -gt 0 ]]; do
 Quality Gates Pipeline Setup
 
 USAGE:
-  /qg [branch] [--paths <glob>...] [--plan <path>]
+  /qg [branch] [--paths <glob>...]
 
 ARGUMENTS:
   (none)               Review git-derived changes (branch + worktree) or the Spec: topic
@@ -100,12 +96,11 @@ ARGUMENTS:
 
 OPTIONS:
   --paths <glob>...    Scope override — review only the matched paths
-  --plan <path>        Specify plan file path (default: auto-detect)
   --session-id <id>    Session ID when CLAUDE_CODE_SESSION_ID is unset (if it is set, must equal it)
   --ensure             Keep this session's folder if it already exists (skill preflight)
   -h, --help           Show this help message
 
-REMOVED (v10): branch <name> · --reset · --gc · --pr-url — one notice line each, then exit 2.
+REMOVED (v10): branch <name> · --reset · --gc · --pr-url · --plan — one notice line each, then exit 2.
 REMOVED (v9):  review · runtime · both · --skip-runtime — one notice line each, the run proceeds.
 HELP_EOF
       exit 0
@@ -262,8 +257,5 @@ echo "Pipeline: scope → review → differential test → synthesis · verdict"
 for a in $REMOVED_ARGS; do
   echo "> [quality-gates] \`${a}\` 인자는 제거됐다 — 이제 한 파이프라인이라 게이트 범위를 고르지 않는다. 그대로 진행한다."
 done
-if [[ "$PLAN_FILE" != "auto" ]]; then
-  echo "Plan file: $PLAN_FILE"
-fi
 echo ""
 echo "Pipeline runs in this turn."

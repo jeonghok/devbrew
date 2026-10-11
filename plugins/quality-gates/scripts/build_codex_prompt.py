@@ -19,8 +19,8 @@ which treats inputs as opaque bytes — no parsing, no escaping, no
 evaluation. Output goes to stdout; caller redirects to a scratch file.
 
 The <intent_file> is what discover-spec.sh wrote (a spec, or commit messages
-and the open PR body). The caller passes /dev/null when the intent input is
-off; any non-regular-file is empty intent, not an error. The criteria block
+and the open PR body). The caller passes /dev/null when discover-spec.sh
+produced no intent; any non-regular-file is empty intent, not an error. The criteria block
 comes from the plugin's references/review-criteria.md — the same text every
 reviewer receives; a missing or empty block is exit 2.
 """

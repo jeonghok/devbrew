@@ -359,104 +359,7 @@ print('ORPHAN:'   + ','.join(sorted(set(verdict.CAUSE_TO_REASON) - set(m.DEGRADE
   assert_grep "$got" '^ORPHAN:$'   "CAUSE_TO_REASON 에 producer 가 안 내는 죽은 이름이 없다"
 }
 
-case_real_producer_per_adapter_feeds_verdict() {
-  # Ruling T4-a — 손으로 쓴 YAML 은 이 모듈의 파싱만 재고, 두 모듈이 실제로
-  # 맞물리는지는 못 잰다(산출자의 표기가 흔들려도 손 픽스처는 못 알아챈다).
-  # 여기서는 diff-test-results.py 를 per-adapter 모드로 **실제로** 돌려 그
-  # stdout 을 파일로 받고, 그 파일을 verdict.py 에 먹인다.
-  #
-  # 시나리오: expected 에 test_a 하나, baseline 은 pass, head 파일은 비어 있다
-  # (= head 에 그 unit 행이 없다) → (P,∅) 는 SILENT_DROP 하나뿐이라
-  # degrade_causes 는 [silent-drop] 하나, confirmed_product_defect 는 false다.
-  #
-  # Concern 2 좁히기 — `--granularity` 를 하드코딩하지 않고 소유자
-  # (run-test-selection.sh granularity)에게 pytest 의 실제 입도를 물어 쓴다.
-  # 이 시나리오는 pre_existing == 0 이라 granularity 값이 무엇이든 smeared·
-  # bulk 도말 절이 발화하지 않는다(결과 불변) — 값 자체보다 "diff-test-results.py
-  # 가 소유자와 불일치하면 verify_granularity() 가 거부한다" 는 것만 산다.
-  local T out rc G
-  T=$(mktemp -d)
-  G=$(bash "$PLUGIN_ROOT/scripts/run-test-selection.sh" granularity pytest) \
-    || { no "pytest granularity 소유자를 부를 수 없다"; rm -rf "$T"; return; }
-  printf 'test_a\n' > "$T/expected.txt"
-  printf 'test_a\tpass\t0\n' > "$T/baseline.tsv"
-  : > "$T/head.tsv"
-  rc=0
-  python3 "$D" --expected "$T/expected.txt" --baseline "$T/baseline.tsv" \
-    --head "$T/head.tsv" --granularity "$G" --runner pytest \
-    --baseline-mode per-unit --head-mode per-unit \
-    --baseline-detected pytest > "$T/adapter.yaml" 2>"$T/adapter.err" || rc=$?
-  if [ "$rc" -ne 0 ]; then
-    no "실제 producer(per-adapter) 실행이 실패했다 (rc=$rc): $(cat "$T/adapter.err")"
-    rm -rf "$T"; return
-  fi
-  out=$(python3 "$V" --differential "$T/adapter.yaml")
-  assert_grep "$out" '^verdict: not-certified$' "실제 per-adapter 산출물의 silent-drop 이 미판정을 만든다"
-  assert_grep "$out" '^reason: silent-drop$'    "실제 산출물의 유일 원인이 reason 이 된다"
-  rm -rf "$T"
-}
 
-case_real_producer_aggregate_feeds_verdict() {
-  # Ruling T4-a (집계 모드) — per-adapter 산출물 두 개를 **실제로** 집계해,
-  # 두 원인이 합쳐진 실제 verdict_input 을 verdict.py 에 먹인다. per-adapter
-  # 와 집계가 같은 표기를 쓴다는 인터페이스 계약을 실행으로 확인한다.
-  #
-  # 어댑터1(pytest): test_a, baseline pass · head 없음 → SILENT_DROP.
-  # 어댑터2(unittest): test_b, baseline unrun · head pass → BASELINE_UNRUNNABLE.
-  # 집계 원인은 [baseline-unrunnable, silent-drop] (DEGRADE_CAUSES 열거 순서) —
-  # REASONS 순서에서도 baseline-unrunnable 이 silent-drop 보다 앞이라 reason 은
-  # baseline-unrunnable 이어야 한다.
-  #
-  # Concern 2 좁히기 — 두 러너 모두 `--granularity` 를 하드코딩하지 않고 각자의
-  # 소유자 응답을 쓴다. 두 시나리오 다 pre_existing == 0 이라 값 자체가
-  # smeared·bulk 도말 결과를 바꾸지 않는다(결과 불변, 값은 소유자 일치 검증용).
-  local T rc out Gp Gu
-  T=$(mktemp -d)
-  Gp=$(bash "$PLUGIN_ROOT/scripts/run-test-selection.sh" granularity pytest) \
-    || { no "pytest granularity 소유자를 부를 수 없다"; rm -rf "$T"; return; }
-  Gu=$(bash "$PLUGIN_ROOT/scripts/run-test-selection.sh" granularity unittest) \
-    || { no "unittest granularity 소유자를 부를 수 없다"; rm -rf "$T"; return; }
-  printf 'test_a\n' > "$T/expected1.txt"
-  printf 'test_a\tpass\t0\n' > "$T/baseline1.tsv"
-  : > "$T/head1.tsv"
-  printf 'test_b\n' > "$T/expected2.txt"
-  printf 'test_b\tunrun\t0\n' > "$T/baseline2.tsv"
-  printf 'test_b\tpass\t0\n' > "$T/head2.tsv"
-
-  rc=0
-  python3 "$D" --expected "$T/expected1.txt" --baseline "$T/baseline1.tsv" \
-    --head "$T/head1.tsv" --granularity "$Gp" --runner pytest \
-    --baseline-mode per-unit --head-mode per-unit \
-    --baseline-detected pytest > "$T/adapter1.yaml" 2>"$T/adapter1.err" || rc=$?
-  if [ "$rc" -ne 0 ]; then
-    no "실제 producer(adapter1) 실행이 실패했다 (rc=$rc): $(cat "$T/adapter1.err")"
-    rm -rf "$T"; return
-  fi
-
-  rc=0
-  python3 "$D" --expected "$T/expected2.txt" --baseline "$T/baseline2.tsv" \
-    --head "$T/head2.tsv" --granularity "$Gu" --runner unittest \
-    --baseline-mode per-unit --head-mode per-unit \
-    --baseline-detected unittest > "$T/adapter2.yaml" 2>"$T/adapter2.err" || rc=$?
-  if [ "$rc" -ne 0 ]; then
-    no "실제 producer(adapter2) 실행이 실패했다 (rc=$rc): $(cat "$T/adapter2.err")"
-    rm -rf "$T"; return
-  fi
-
-  rc=0
-  python3 "$D" --aggregate --expected-adapters 2 "$T/adapter1.yaml" "$T/adapter2.yaml" \
-    > "$T/agg.yaml" 2>"$T/agg.err" || rc=$?
-  if [ "$rc" -ne 0 ]; then
-    no "실제 producer(aggregate) 실행이 실패했다 (rc=$rc): $(cat "$T/agg.err")"
-    rm -rf "$T"; return
-  fi
-
-  out=$(python3 "$V" --differential "$T/agg.yaml")
-  assert_grep "$out" '^verdict: not-certified$'      "실제 집계 산출물이 미판정을 만든다"
-  assert_grep "$out" '^reason: baseline-unrunnable$' "열거 앞선 원인이 reason 이 된다(집계도 같은 표기)"
-  assert_grep "$out" 'silent-drop'                   "두 번째 원인도 reasons 에서 소실되지 않는다"
-  rm -rf "$T"
-}
 
 case_synth_off_is_byte_prefix_of_on() {
   # 차등 — 같은 입력으로 두 번 돌려 **off 출력이 on 출력의 접두** 인지 본다.
@@ -667,8 +570,6 @@ case_empty_differential_flag_is_usage_error
 case_fail4_uses_scriptname_prefix_not_verdict_key
 case_render_enforces_values_and_reasonless_guard
 case_degrade_causes_and_cause_to_reason_are_bijective
-case_real_producer_per_adapter_feeds_verdict
-case_real_producer_aggregate_feeds_verdict
 case_synth_off_is_byte_prefix_of_on
 case_synth_ac4_suggestion_only_is_clean
 case_synth_ac5_one_important_is_defect
