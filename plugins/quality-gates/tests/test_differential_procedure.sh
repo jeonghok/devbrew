@@ -44,7 +44,8 @@ case_R24_verdict_reads_the_machine_output() {
 case_R24_final_verdict_reads_the_session_copy() {
   local d5; d5=$(section "$REF" '## D5 짝짓기 — 매 iteration')
   assert_contains "$d5" 'cp "<memo>/diff-i<N>.yaml" "$RD/differential.yaml"' "D5 가 이 iteration 의 출력을 세션 폴더 사본으로 덮어쓴다"
-  assert_contains "$d5" 'rm -f "$RD/differential.yaml"' "D5: 출력이 없거나 실패면 사본을 지운다(앞 iteration 값이 남지 않는다)"
+  assert_contains "$d5" $'else\n  rm -f "$RD/differential.yaml"\nfi' "D5: 출력이 없거나 실패면 사본을 지운다(앞 iteration 값이 남지 않는다)"
+  assert_contains "$d5" '|| { diff_rc=4; rm -f "$RD/differential.yaml"; }' "D5: 사본 복사가 실패하면 error-axis 로 가고 반쪽 사본을 지운다"
   assert_contains "$d5" 'cp "<memo>/not-counted-i<N>.md" "$RD/differential-not-counted.md"' "D5 가 커버리지 제외 목록도 사본으로 둔다"
   assert_contains "$(section "$REF" '## D1 HEAD 축 트리 — 매 iteration')" \
     'rm -f "$RD/differential.yaml" "$RD/differential-not-counted.md"' "D1: iteration 시작에 앞 iteration 사본을 지운다"
