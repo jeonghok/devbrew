@@ -180,8 +180,10 @@ for d in sys.argv[2:]:
         tail = line[p.end():]
         ok(f"{name}: 평문 줄이 @ 토큰 {n}개로 시작한다")
         (ok if "Skill " in tail else no)(f"{name}: 평문 줄이 토큰 뒤에 부를 skill(`Skill …`)을 잇는다")
-        for needle in ("절대경로로 치환한 뒤 노출한다", "[spec-distill] 다음 세션 줄을 만들 수 없다",
-                       "git 작업 트리 루트의 절대경로를 함께 낸다", "경로에 공백이 있으면",
+        for needle in ("절대경로로 치환한 뒤 노출한다",
+                       "경로에 공백이 있으면 노출하지 않고 `[spec-distill] 다음 세션 줄을 만들 수 없다",
+                       "직접 첨부하고 아래 문장을 그대로 붙여 넣어",
+                       "git 작업 트리 루트의 절대경로를 함께 낸다",
                        "`@` 토큰을 뗀 나머지 문장을 그대로 보인 뒤 멈춘다"):
             (ok if needle in body else no)(f"{name}: 평문 줄 규칙 문구 — {needle}")
     left = re.findall(r"<[^<>]+>", tail)
