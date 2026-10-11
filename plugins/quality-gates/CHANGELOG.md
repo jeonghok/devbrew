@@ -6,7 +6,7 @@
 ## [13.0.2] — 2026-10-11
 
 ### Security
-- 리뷰 대상 리포를 현재 디렉토리로 두고 부르는 인라인 python(`python3 -c` · `python3 -`)을 전부 `-I` 로 격리한다 — `setup-qg.sh`(세션 마커 읽기) · `discover-spec.sh`(의도 찾기) · `e2e-state.sh`(지문 · 비교 · 판정안 · 포트 확인 · 부팅) · `publish-comment.sh`(길이 재기). 전에는 그 리포에 `json.py` · `uuid.py` · `hashlib.py` 같은 파일이 있으면 `/qg` 를 시작하는 것만으로 표준 모듈 대신 실행됐고, 차등 테스트 kill switch 로도 막히지 않았다(13.0.0 실사용 리뷰가 찾았다).
+- 리뷰 대상 리포를 현재 디렉토리로 두고 부르는 인라인 python(`python3 -c` · `python3 -`)을 전부 `-I` 로 격리한다 — `setup-qg.sh`(세션 마커 읽기) · `discover-spec.sh`(의도 찾기) · `e2e-state.sh`(지문 · 비교 · 판정안 · 포트 확인 · 부팅) · `publish-comment.sh`(길이 재기) · 링크로 실리는 공유 docreview codex 러너. 전에는 그 리포에 `json.py` · `uuid.py` · `hashlib.py` 같은 파일이 있으면 `/qg` 를 시작하는 것만으로 표준 모듈 대신 실행됐고, 차등 테스트 kill switch 로도 막히지 않았다(13.0.0 실사용 리뷰가 찾았다).
 - e2e 걷기 앞 지문이 마지막 줄에 `sha256: <값>` 을 내고, 걷기 뒤 `compare --before-sha256 <값>` 이 그 값과 before 지문 파일을 대조한다. 띄운 앱이 걷는 사이 리포 안의 before 지문을 고쳐 써서 코드 변경을 감추면 `changed: before 지문 파일(…)` 로 드러나 판정안이 `무효(코드 변경)` 가 된다. SKILL 의 E1 · E3 펜스가 그 값을 넘긴다.
 
 ### Fixed

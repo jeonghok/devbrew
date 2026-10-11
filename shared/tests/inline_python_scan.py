@@ -24,8 +24,9 @@ STOP = re.compile(r"^(\||&&|\|\||;|\)|<|>|\d>|&>|`|$)")
 
 
 def classify(line):
-    """한 줄 → (kind, isolated). kind: inline · script · none."""
+    """한 줄 → (kind, isolated). kind: inline · script · none. 인라인 호출이 여럿이면 하나라도 격리되지 않았으면 bare."""
     best = ("none", False)
+    inline_seen, all_isolated = False, True
     for m in TOKEN.finditer(line):
         if PROBE.search(line[: m.start()]):
             continue
@@ -61,14 +62,22 @@ def classify(line):
         if kind is None:
             kind = "inline"   # 줄 끝까지 위치 인자가 없다 — 다음 줄(heredoc)이나 stdin 에서 받는다
         if kind == "inline":
-            return ("inline", isolated)
-        best = ("script", False)
+            inline_seen = True
+            all_isolated = all_isolated and isolated
+            continue
+        if best[0] == "none":
+            best = ("script", False)
+    if inline_seen:
+        return ("inline", all_isolated)
     return best
 
 
-def is_comment(line):
+def is_comment(line, markdown=False):
+    """건너뛸 줄. 마크다운은 `#` 줄도 본다 — skill 펜스 안 주석은 모델이 지시로 읽는다."""
     s = line.lstrip()
-    return s.startswith("#") or s.startswith("```")   # 셸 주석 · 마크다운 펜스 머리줄(```python)
+    if s.startswith("```"):   # 마크다운 펜스 머리줄(```python)
+        return True
+    return s.startswith("#") and not markdown
 
 
 def strip_trailing_comment(line):
@@ -85,17 +94,35 @@ def strip_trailing_comment(line):
     return line
 
 
+def joined(rows):
+    """`\` 로 끝나는 줄을 다음 줄과 이어 붙인다 — (시작 줄 번호, 이은 줄)."""
+    out, buf, start = [], "", None
+    for n, row in enumerate(rows, start=1):
+        if start is None:
+            start = n
+        if row.endswith("\\"):
+            buf += row[:-1] + " "
+            continue
+        out.append((start, buf + row))
+        buf, start = "", None
+    if start is not None:
+        out.append((start, buf))
+    return out
+
+
 def scan(paths):
     for path in paths:
         try:
             with open(path, encoding="utf-8") as fh:
                 rows = fh.read().split("\n")
-        except (OSError, UnicodeDecodeError):
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"{path}:0\tunreadable\t{exc}")   # 읽지 못한 파일은 건너뛰지 않고 알린다
             continue
-        for n, row in enumerate(rows, start=1):
-            if is_comment(row):
+        markdown = path.endswith(".md")
+        for n, row in joined(rows):
+            if is_comment(row, markdown):
                 continue
-            kind, isolated = classify(strip_trailing_comment(row))
+            kind, isolated = classify(row if markdown else strip_trailing_comment(row))
             if kind == "inline":
                 state = "isolated" if isolated else "bare"
                 print(f"{path}:{n}\t{state}\t{row.strip()}")

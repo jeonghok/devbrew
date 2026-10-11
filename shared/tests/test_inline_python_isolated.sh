@@ -56,9 +56,25 @@ check "command -v python3 >/dev/null" none
 check "echo \"python3 가 없어 건너뛴다\"" script
 check "export PYTHONPATH=x" none
 check "run_python3 -c x" none
+check "a=\$(python3 -I -c 'x') b=\$(python3 -c 'y')" inline-bare
+check "python3 \"\$X/a.py\" | python3 -c 'y'" inline-bare
+check "python3 -I -c 'x' | python3 -I - <<'PY'" inline-isolated
 check "set +B  # nested \"\$(python3 -c \"...\")\"" none
 check "\`\`\`python" none
 check "echo 'a # b' | python3 -c 'pass'" inline-bare
+
+note "[스캐너 — 파일 단위: 마크다운 주석 · 줄 이음 · 못 읽는 파일]"
+SC="$(mktemp -d)"; SC="$(cd "$SC" && pwd -P)"
+printf '```bash\n# state 는 python3 -c 로 고친다\n```\n' > "$SC/a.md"
+printf '# python3 -c 는 설명일 뿐\nset +B  # nested python3 -c\n' > "$SC/b.sh"
+printf 'x=$(python3 \\\n  -c "import json")\n' > "$SC/c.sh"
+printf 'python3 -c x \xff\xfe\n' > "$SC/d.sh"
+sc="$(python3 -I "$SCAN" scan "$SC/a.md" "$SC/b.sh" "$SC/c.sh" "$SC/d.sh")"
+assert_contains "$sc" "$SC/a.md:2	bare" "마크다운 펜스 안 # 줄은 지시라서 본다"
+assert_not_contains "$sc" "$SC/b.sh" "셸 스크립트의 # 주석은 보지 않는다"
+assert_contains "$sc" "$SC/c.sh:1	bare" "\\ 로 이어진 다음 줄의 -c 를 본다"
+assert_contains "$sc" "$SC/d.sh:0	unreadable" "UTF-8 이 아닌 파일은 건너뛰지 않고 알린다"
+rm -rf "$SC"
 
 note "[정적 — 추적되는 파일의 인라인 호출]"
 corpus=()
@@ -71,12 +87,14 @@ done < <(git -C "$ROOT" ls-files -z -- plugins shared tools)
 assert_eq "$([ "${#corpus[@]}" -ge 200 ] && echo ok || echo "${#corpus[@]}")" ok "코퍼스가 비지 않았다(파일 ${#corpus[@]}개)"
 
 report="$(python3 -I "$SCAN" scan "${corpus[@]}")"
+unread="$(printf '%s\n' "$report" | awk -F'\t' '$2 == "unreadable"')"
+assert_eq "$unread" "" "코퍼스에 읽지 못한 파일이 없다"
 bare="$(printf '%s\n' "$report" | awk -F'\t' '$2 == "bare"')"
 left="$bare"
 for i in "${!EXEMPT_PATHS[@]}"; do
   hit="$(printf '%s\n' "$bare" | grep -F "$ROOT/${EXEMPT_PATHS[$i]}:" | grep -F -- "${EXEMPT_NEEDLES[$i]}")"
   assert_eq "$(printf '%s' "$hit" | grep -c .)" 1 "예외가 아직 한 줄을 가리킨다: ${EXEMPT_PATHS[$i]} — ${EXEMPT_REASONS[$i]}"
-  left="$(printf '%s\n' "$left" | grep -vF -- "$hit")"
+  [ -n "$hit" ] && left="$(printf '%s\n' "$left" | grep -vF -- "$hit")"
 done
 left="$(printf '%s\n' "$left" | grep .)"
 if [ -z "$left" ]; then
@@ -98,6 +116,8 @@ for f in \
   plugins/spec-distill/skills/request-framing/SKILL.md \
   plugins/spec-distill/skills/reviewing-brief/SKILL.md \
   plugins/spec-distill/skills/spec-review/SKILL.md \
+  plugins/spec-distill/skills/spec-interview/SKILL.md \
+  plugins/spec-distill/skills/spec-interview/references/finishing.md \
   shared/docreview/scripts/run_docreview_codex_reviewer.sh; do
   n="$(printf '%s\n' "$report" | awk -F'\t' -v p="$ROOT/$f:" 'index($1, p) == 1 && $2 == "isolated"' | grep -c .)"
   assert_eq "$([ "$n" -ge 1 ] && echo ok || echo 0)" ok "$f — 격리된 인라인 호출 ${n}개"
@@ -145,7 +165,8 @@ assert_eq "$out" "same" "e2e-state.sh compare 가 같은 지문을 same 으로 �
 printf '기대 상태\t판정\t증거\n화면이 뜬다\t충족\t"ok"\n' > "$TMP/ev.tsv"
 out="$(cd "$REPO" && bash "$QG/e2e-state.sh" propose "$TMP/ev.tsv" 2>&1)"
 assert_contains "$out" "proposal: " "e2e-state.sh propose 가 판정안을 냈다"
-assert_eq "$(planted)" "(없음)" "e2e-state.sh — 심은 모듈이 실행되지 않았다"
+# propose 는 내장 sys 만 import 해서 이 겹으로는 못 잰다 — 아래 단언은 fingerprint · compare 의 것이다.
+assert_eq "$(planted)" "(없음)" "e2e-state.sh fingerprint · compare — 심은 모듈이 실행되지 않았다"
 rm -f "$MARK"
 
 PA="$ROOT/plugins/plugin-audit/scripts"

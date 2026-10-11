@@ -829,7 +829,7 @@ TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖
 D="${TOP}/.claude/quality-gates/<session-id>"
 "$QG/scripts/e2e-state.sh" stop --dir "$D"; echo "stop rc=$?"
 "$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-after.txt"; echo "after rc=$?"
-"$QG/scripts/e2e-state.sh" compare --before-sha256 '<E1 의 sha256 값>' "$D/e2e-before.txt" "$D/e2e-after.txt"; echo "compare rc=$?"
+"$QG/scripts/e2e-state.sh" compare --before-sha256 '<가장 최근 E1 의 sha256 값>' "$D/e2e-before.txt" "$D/e2e-after.txt"; echo "compare rc=$?"
 "$QG/scripts/e2e-state.sh" propose "$D/e2e-evidence.tsv"; echo "propose rc=$?"
 ```
 
