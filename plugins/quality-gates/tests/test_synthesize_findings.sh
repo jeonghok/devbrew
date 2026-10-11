@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # test_synthesize_findings.sh — 합성기의 결정론 후처리 (V2 · V3 · V8 · AC4 · AC5 · K-4).
 #
-# 표는 Sev · Path:Line · Summary · Source 넷이다. confidence 는 읽지 않는다 — 오탐 거르기는
+# 표는 심각도 · 위치 · 내용 · 낸 곳 넷이다. confidence 는 읽지 않는다 — 오탐 거르기는
 # 재비판의 관문 A 가 하고, 판정은 살아남은 CRITICAL·IMPORTANT 수(`blocking:`)가 정한다.
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -44,12 +44,12 @@ run_case "reject — 근거 있는 기각은 표에서 빠진다" \
   'verdicts:
   - {f: f1, verdict: reject, evidence: x}' \
   '- {agent: code-reviewer, file: a.py, line: 10, severity: CRITICAL, summary: bug, proposed_fix: fix}' \
-  'No findings\.' 'a\.py:10'
+  '리뷰를 합쳤다 — 지적 없음\.' 'a\.py:10'
 
 run_case "표 머리 — confidence 칸이 없다" \
   'verdicts: []' \
   '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, confidence: 2, summary: s, proposed_fix: f}' \
-  '\| Sev \| Path:Line \| Summary \| Source \|' '\| Conf \||suppressed|[0-9] \* \|'
+  '\| 심각도 \| 위치 \| 내용 \| 낸 곳 \|' '\| Conf \||\| Sev \||suppressed|[0-9] \* \|'
 
 run_case "confidence 가 낮아도 억제하지 않는다 — 막는 지적은 막는 지적이다" \
   'verdicts: []' \
@@ -91,13 +91,13 @@ run_case "V8 — severity 결측은 IMPORTANT 로 막는다(낙관값 금지)" \
 run_case "V3 — 매핑 아닌 finding 은 버리되 세고 막는다" \
   'verdicts: []' \
   '- "CRITICAL: bare string"' \
-  '1 finding\(s\) dropped as malformed .*verdict: not-certified .*reason: findings-lost' 'verdict: clean' --emit-verdict
+  '1개 지적을 버렸다 — 형식이 깨졌다\(dropped as malformed: .*verdict: not-certified .*reason: findings-lost' 'verdict: clean' --emit-verdict
 
-run_case "빈 결과 — No findings 와 0 개수" \
+run_case "빈 결과 — 「지적 없음」 첫 줄과 0 개수" \
   'verdicts: []
 added: []' \
   '[]' \
-  'No findings\. blocking: 0 optional: 0' ''
+  '^리뷰를 합쳤다 — 지적 없음\. ## 리뷰 지적 \(합친 결과\) .*blocking: 0 optional: 0' 'No findings'
 
 # V2 — 읽을 수 없는 입력은 clean 이 아니다(주 입력 사망 → angle-absent)
 tmp="$(mktemp -d)"

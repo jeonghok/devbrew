@@ -603,7 +603,7 @@ remove `$RD/aggregate.yaml`. Final verdict reads it.
 Before the gate, number every item and decide **적용 / 제외** for each, comparing the proposed
 patch with the intent source (`$RD/intent.md`):
 
-- every finding in `$RV/synth.out` (blocking and SUGGESTION alike, numbered in the table's row order — the `**Suggested fixes:**` list carries the same `#k`);
+- every finding in `$RV/synth.out` (blocking and SUGGESTION alike, numbered in the table's row order — the `**고칠 방법:**` list carries the same `#k`);
 - for a differential-origin defect (no patch exists), one item per regressed unit — **you** write
   the fix plan, limited to that unit, in one line.
 
@@ -929,7 +929,7 @@ printf '판정\t%s\n반복\t<N>번\n결과\t<finished | accepted with findings i
   | "$QG/scripts/render-terminal.py" table --title "Quality Gates — 끝"
 {
   printf '\n## 판정\n\n'; cat "$RD/verdict.out"
-  printf '\n## 지적\n\n'; if [ -f "$SYN" ] && grep -q '^| Sev |' "$SYN"; then sed -n '/^| Sev |/,/^$/p' "$SYN"; else echo "(없음)"; fi
+  printf '\n## 지적\n\n'; if [ -f "$SYN" ] && grep -q '^| 심각도 |' "$SYN"; then sed -n '/^| 심각도 |/,/^$/p' "$SYN"; else echo "(없음)"; fi
   printf '\n## 제외 패치\n\n'; if [ -s "$RD/excluded.md" ]; then cat "$RD/excluded.md"; else echo "(없음)"; fi
   printf '\n## 차등 테스트\n\n'; if [ -f "$RD/aggregate.yaml" ]; then grep -E '^(attribution_status|degrade_causes|resolution_disclosure):' "$RD/aggregate.yaml"; sed -n '/^per_adapter:/,$p' "$RD/aggregate.yaml"; else echo "(이번 실행에 차등 집계 없음)"; fi
   if [ -s "$RD/e2e-record.md" ]; then printf '\n## e2e\n\n'; cat "$RD/e2e-record.md"; fi

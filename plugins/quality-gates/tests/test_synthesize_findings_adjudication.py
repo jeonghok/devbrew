@@ -212,7 +212,7 @@ class TestOutputSurface(unittest.TestCase):
         """양성 짝 — 아무 때나 켜지는 공시는 공시가 아니다."""
         clean = _run([])
         self.assertNotIn(mod.DEGRADE_MARKER, clean)
-        self.assertIn("No findings.", clean)
+        self.assertIn("리뷰를 합쳤다 — 지적 없음.", clean)
 
     def test_degrade_shows_on_the_table_branch_too(self):
         """두 갈래 모두 — 살아남은 발견이 있어도 공시는 나가야 한다."""
