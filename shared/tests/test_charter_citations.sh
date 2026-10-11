@@ -28,7 +28,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 - "$ROOT" > "$OUT" <<'PY'
 import fnmatch, json, os, re, subprocess, sys
 
 sys.stdout.reconfigure(encoding="utf-8")
-QG_DESC = ("Quality verification pipeline — one pipeline, one verdict (review + mandatory differential test) "
+QG_DESC = ("Quality verification pipeline — one pipeline, one verdict (review + mandatory differential test + optional human-approved e2e walk) "
            "with multi-plugin review delegation; each run posts one new PR comment (understanding + verdict line) "
            "when the branch has an open PR. Invoke manually via /qg.")
 os.chdir(sys.argv[1])

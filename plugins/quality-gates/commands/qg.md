@@ -73,6 +73,7 @@ the pipeline is aborted at a decision point.
 | `branch <name>` · `--reset` · `--gc` · `--pr-url` | 없어졌다(v10) — 안내 한 줄을 내고 실행하지 않는다 |
 | `both` · `review` · `runtime` · `--skip-runtime` | 제거됨 — 한 줄 공지 후 그대로 진행 |
 | `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | 차등 테스트를 건너뛴다 — 판정은 `not-certified (kill-switch)` |
+| `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` | e2e 를 끈다 — 판정 줄의 e2e 칸이 `꺼짐(kill switch)` |
 
 다른 브랜치를 보려면 그 브랜치를 체크아웃하거나 그 브랜치의 git worktree 안에서 `/qg` 를 돌린다.
 세션 폴더는 `/qg` 를 시작할 때마다 지우고 다시 만들며, 오래된 폴더는 같은 시점의 TTL GC 가 회수한다.
@@ -120,6 +121,7 @@ Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable.
 ### Pipeline
 
 - ① 리뷰(기본 셋 + 조건부 ≤4 → 출처-제거 재비판) → ② 차등 테스트(기준선 대비, 매 iteration) → ③ 합성 · 판정
+- 루프 뒤, 최종 판정 앞에 e2e 를 한 번 묻는다(선택). 사람이 시나리오를 고르면 승인된 명령으로 걷고, 걷기 직후 게이트에서 사람이 판정안을 확인한다. 걷지 않은 실행은 판정 줄의 e2e 칸이 그 사실을 보인다.
 - Fix-loop: 막는 지적이나 차등 defect 가 남으면 iteration 마다 항목별 적용/제외 분류표와 함께 `Retry` / `Accept and finish` / `Stop` 로 사용자가 진행을 정한다(최대 5회). Retry 는 「적용」 항목만 고친다.
 
 ### Pipeline Rules
