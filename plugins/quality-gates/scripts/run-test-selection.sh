@@ -320,6 +320,65 @@ adapter_usable() {
   return 0
 }
 
+COMMIT_RE='^([0-9a-f]{40}|[0-9a-f]{64}|-)$'
+
+# 행 파일을 읽어 ROWS_UNIT/ROWS_LINE 배열과 꼬리 값(T_RUNNER/T_COMMIT/T_FLAKY)을 채운다.
+# 없는 파일은 빈 행 집합이다. 꼬리 줄이 정확히 하나, 마지막 줄이 아니거나 행 수가 다르면 die.
+ROWS_UNIT=(); ROWS_LINE=(); T_RUNNER=""; T_COMMIT=""; T_FLAKY=0; T_ROWS=""
+load_rows() {
+  local f=$1 line n=0 tails=0 last=""
+  ROWS_UNIT=(); ROWS_LINE=(); T_RUNNER=""; T_COMMIT=""; T_FLAKY=0; T_ROWS=""
+  [[ -e "$f" ]] || return 0
+  [[ -f "$f" ]] || die "행 파일이 일반 파일이 아니다: $f"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" ]] && continue
+    last=$line
+    if [[ "$line" == '#qg-rows'$'\t'* ]]; then
+      tails=$((tails + 1))
+      T_RUNNER=$(printf '%s\n' "$line" | tr '\t' '\n' | sed -n 's/^runner=//p')
+      T_COMMIT=$(printf '%s\n' "$line" | tr '\t' '\n' | sed -n 's/^commit=//p')
+      T_FLAKY=$(printf '%s\n' "$line" | tr '\t' '\n' | sed -n 's/^flaky=//p')
+      T_ROWS=$(printf '%s\n' "$line" | tr '\t' '\n' | sed -n 's/^rows=//p')
+      continue
+    fi
+    ROWS_UNIT+=("${line%%$'\t'*}")
+    ROWS_LINE+=("$line")
+    n=$((n + 1))
+  done < "$f"
+  [[ $tails -eq 1 && "$last" == '#qg-rows'$'\t'* ]] || die "행 파일 꼬리 줄이 정확히 하나의 마지막 줄이 아니다: $f"
+  [[ "${T_ROWS:-}" == "$n" ]] || die "행 파일 행 수 불일치(꼬리 ${T_ROWS:-?} · 실제 $n): $f"
+}
+
+# 새 행(NEW_UNIT/NEW_LINE)을 기존 행에 병합해 원자적으로 쓴다. 같은 unit 은 교체한다(R7).
+write_rows() {
+  local f=$1 runner=$2 commit=$3 flaky=$4 tmp i j keep n=0
+  tmp=$(mktemp "$(dirname "$f")/.qg-rows.XXXXXX") || die "임시 파일을 만들 수 없다: $(dirname "$f")"
+  {
+    for ((i = 0; i < ${#ROWS_UNIT[@]}; i++)); do
+      keep=1
+      for ((j = 0; j < ${#NEW_UNIT[@]}; j++)); do
+        [[ "${ROWS_UNIT[$i]}" == "${NEW_UNIT[$j]}" ]] && { keep=0; break; }
+      done
+      [[ $keep -eq 1 ]] && { printf '%s\n' "${ROWS_LINE[$i]}"; n=$((n + 1)); }
+    done
+    for ((j = 0; j < ${#NEW_UNIT[@]}; j++)); do
+      printf '%s\n' "${NEW_LINE[$j]}"; n=$((n + 1))
+    done
+    printf '#qg-rows\trunner=%s\tcommit=%s\trows=%s\tflaky=%s\n' "$runner" "$commit" "$n" "$flaky"
+  } > "$tmp" || { rm -f "$tmp"; die "행 파일을 쓰지 못했다: $f"; }
+  mv -f "$tmp" "$f" || { rm -f "$tmp"; die "행 파일을 옮기지 못했다: $f"; }
+}
+
+# 같은 unit 이 인자에 두 번 오면 거부한다 — 병합이 입력 순서에 의존하게 된다.
+reject_duplicate_units() {
+  local seen="" u
+  for u in "$@"; do
+    printf '%s\n' "$seen" | grep -qxF -- "$u" && die "unit 이 두 번 왔다: $u"
+    seen="$seen
+$u"
+  done
+}
+
 case "${1:-}" in
   detect)
     [[ $# -eq 2 ]] || die "usage: detect <tree>"
@@ -415,6 +474,190 @@ $1"
     printf '#qg-assign\tadapters=%s\trows=%s\n' "${adapter_list:--}" "$n" >> "$tmp" \
       || { rm -f "$tmp"; die "배정 파일을 쓰지 못했다: $out"; }
     mv -f "$tmp" "$out" || { rm -f "$tmp"; die "배정 파일을 옮기지 못했다: $out"; }
+    exit 0
+    ;;
+  run)
+    [[ $# -ge 6 ]] || die "usage: run <tree> <runner> <bulk|per-unit|flaky> <rows-file> <unit>..."
+    w=$2; runner=$3; mode=$4; rows=$5; shift 5
+    [[ -d "$w" ]] || die "not a directory: $w"
+    case "$mode" in bulk|per-unit|flaky) ;; *) die "unknown mode: $mode (expected bulk|per-unit|flaky)" ;; esac
+    gran=$(granularity_of "$runner") || die "unknown runner: $runner"
+    [[ -d "$(dirname -- "$rows")" ]] || die "행 파일의 디렉토리가 없다: $rows"
+    reject_duplicate_units "$@"
+    # HEAD 축과 기준선 축은 둘 다 일회용 트리다 — 브랜치에 붙은 작업 트리에서는 돌리지 않는다(R11).
+    git -C "$w" rev-parse --git-dir >/dev/null 2>&1 || die "git 트리가 아니다: $w"
+    if git -C "$w" symbolic-ref -q HEAD >/dev/null 2>&1; then
+      die "브랜치에 붙은 트리에서는 돌리지 않는다 — create-baseline/create-head 가 만든 detached 트리를 넘겨라: $w"
+    fi
+    [[ "$(git -C "$w" rev-parse --git-dir)" != "$(git -C "$w" rev-parse --git-common-dir)" ]] \
+      || die "주 작업 트리에서는 돌리지 않는다 — 일회용 트리를 넘겨라: $w"
+    commit=$(git -C "$w" rev-parse HEAD 2>/dev/null) || die "트리의 커밋을 읽지 못했다: $w"
+    load_rows "$rows"
+    if [[ ${#ROWS_UNIT[@]} -gt 0 || -n "$T_RUNNER" ]]; then
+      [[ "$T_RUNNER" == "$runner" ]] || die "행 파일의 러너가 다르다(${T_RUNNER} ≠ $runner): $rows"
+      [[ "$T_COMMIT" == "$commit" ]] || die "행 파일이 다른 트리의 것이다(${T_COMMIT} ≠ $commit): $rows"
+    fi
+    flaky_out=$T_FLAKY
+    if [[ "$mode" == "flaky" ]]; then
+      [[ "$T_FLAKY" == "0" ]] || die "flaky 재실행은 행 파일당 한 번이다(R15): $rows"
+      flaky_out=1
+    fi
+
+    NEW_UNIT=(); NEW_LINE=()
+    if ! adapter_usable "$w" "$runner"; then
+      if [[ "$mode" != "flaky" ]]; then
+        for u in "$@"; do NEW_UNIT+=("$u"); NEW_LINE+=("$u"$'\t'"unrun"$'\t'"-"$'\t'"$mode"); done
+      fi
+      write_rows "$rows" "$runner" "$commit" "$flaky_out"
+      exit 3
+    fi
+    PY_ARGV=(python3)
+    py_argv "$w"
+
+    has_go_tests() {
+      local d=$1 g
+      for g in "$d"/*_test.go; do [[ -f "$g" ]] && return 0; done
+      return 1
+    }
+    # file unit 은 트리 안의 일반 파일, package unit 은 *_test.go 가 있는 디렉토리여야 존재한다(R20 · R21).
+    exists_unit() {
+      case "$gran" in
+        file)    unit_within_worktree "$w" "$1" && [[ -f "$w/$1" ]] ;;
+        package) unit_within_worktree "$w" "$1" && [[ -d "$w/$1" ]] && has_go_tests "$w/$1" ;;
+        bulk)    [[ "$1" == "BULK" ]] ;;
+      esac
+    }
+    shell_unit_in_scope() {
+      unit_within_worktree "$w" "$1" || return 1
+      case "$1" in
+        tests/*.sh|*/tests/*.sh) [[ -x "$w/$1" ]] ;;
+        *) return 1 ;;
+      esac
+    }
+    refused=""
+    is_refused() { printf '%s\n' "$refused" | grep -qxF -- "$1"; }
+    status_of_exit() {
+      case "$1" in 0) echo pass ;; 1) echo fail ;; 127) echo unrun ;; *) echo error ;; esac
+    }
+    run_units() {
+      local rc=0 u d b dotted
+      local -a go_args
+      case "$runner" in
+        pytest)
+          ( cd "$w" && PYTHONDONTWRITEBYTECODE=1 "${PY_ARGV[@]}" -m pytest -p no:cacheprovider -q "$@" ) >&2 || rc=$? ;;
+        unittest)
+          for u in "$@"; do
+            d=$(dirname -- "$u"); b=$(basename -- "$u")
+            if [[ "$d" == "." || -f "$w/$d/__init__.py" ]]; then
+              dotted="${u%.py}"; dotted=$(printf '%s' "$dotted" | tr '/' '.')
+              ( cd "$w" && PYTHONDONTWRITEBYTECODE=1 "${PY_ARGV[@]}" -m unittest "$dotted" ) >&2 || rc=$?
+            else
+              ( cd "$w" && PYTHONDONTWRITEBYTECODE=1 "${PY_ARGV[@]}" -m unittest discover -s "$d" -p "$b" ) >&2 || rc=$?
+            fi
+          done ;;
+        shell)
+          for u in "$@"; do
+            if ! shell_unit_in_scope "$u"; then
+              echo "run-test-selection: 실행 거부: $u — shell 어댑터의 범위(tests/*.sh, 실행 비트) 밖" >&2
+              refused="$refused
+$u"
+              continue
+            fi
+            ( cd "$w" && bash "$u" ) >&2 || rc=$?
+          done ;;
+        jest)
+          ( cd "$w" && npx --no-install jest --cache=false --ci "$@" ) >&2 || rc=$? ;;
+        vitest)
+          ( cd "$w" && npx --no-install vitest run "$@" ) >&2 || rc=$? ;;
+        go)
+          # 모듈 모드에서 `./` 없는 패턴은 import 경로로 풀린다 — 디렉토리 패턴으로 넘긴다.
+          go_args=()
+          for u in "$@"; do
+            case "$u" in
+              .|./*) go_args+=("$u") ;;
+              *)     go_args+=("./$u") ;;
+            esac
+          done
+          ( cd "$w" && go test "${go_args[@]}" ) >&2 || rc=$? ;;
+        cargo)
+          # 빌드 산출물은 트리마다 따로 둔다 — 두 축이 같은 target 을 나누면 한쪽 빌드가 다른 쪽을 덮는다.
+          ( cd "$w" && CARGO_TARGET_DIR="$(cargo_target_dir_for "$w")" cargo test ) >&2 || rc=$? ;;
+        make)
+          ( cd "$w" && make test ) >&2 || rc=$? ;;
+        npm-script)
+          ( cd "$w" && npm test ) >&2 || rc=$? ;;
+      esac
+      return $rc
+    }
+    row_mode=$mode
+    [[ "$mode" == "flaky" ]] && row_mode=flaky
+    add_row() {   # add_row <unit> <status> <exit>
+      if [[ "$mode" == "flaky" ]]; then
+        # flaky 재실행이 관측하지 못한 unit 은 원래 행을 지킨다(R15).
+        case "$2" in pass|fail|error) ;; *) return 0 ;; esac
+      fi
+      NEW_UNIT+=("$1"); NEW_LINE+=("$1"$'\t'"$2"$'\t'"$3"$'\t'"$row_mode")
+    }
+    exec_mode=$mode
+    [[ "$mode" == "flaky" ]] && exec_mode=per-unit
+    if [[ "$exec_mode" == "bulk" ]]; then
+      present=()
+      for u in "$@"; do exists_unit "$u" && present+=("$u"); done
+      if [[ ${#present[@]} -gt 0 ]]; then
+        run_units "${present[@]}"; brc=$?
+        bst=$(status_of_exit "$brc")
+      fi
+      for u in "$@"; do
+        if is_refused "$u"; then add_row "$u" unrun -
+        elif exists_unit "$u"; then add_row "$u" "$bst" "$brc"
+        else add_row "$u" absent -; fi
+      done
+    else
+      for u in "$@"; do
+        if exists_unit "$u"; then
+          run_units "$u"; urc=$?
+          if is_refused "$u"; then add_row "$u" unrun -
+          else add_row "$u" "$(status_of_exit "$urc")" "$urc"; fi
+        else
+          add_row "$u" absent -
+        fi
+      done
+    fi
+    write_rows "$rows" "$runner" "$commit" "$flaky_out"
+    exit 0
+    ;;
+  unrun)
+    [[ $# -ge 5 ]] || die "usage: unrun <rows-file> <runner> <commit|-> <unit>..."
+    rows=$2; runner=$3; commit=$4; shift 4
+    granularity_of "$runner" >/dev/null
+    [[ "$commit" =~ $COMMIT_RE ]] || die "commit 은 전체 sha 또는 '-' 여야 한다: $commit"
+    [[ -d "$(dirname -- "$rows")" ]] || die "행 파일의 디렉토리가 없다: $rows"
+    reject_duplicate_units "$@"
+    load_rows "$rows"
+    if [[ ${#ROWS_UNIT[@]} -gt 0 || -n "$T_RUNNER" ]]; then
+      [[ "$T_RUNNER" == "$runner" ]] || die "행 파일의 러너가 다르다(${T_RUNNER} ≠ $runner): $rows"
+      [[ "$T_COMMIT" == "$commit" ]] || die "행 파일이 다른 커밋의 것이다(${T_COMMIT} ≠ $commit): $rows"
+    fi
+    NEW_UNIT=(); NEW_LINE=()
+    for u in "$@"; do NEW_UNIT+=("$u"); NEW_LINE+=("$u"$'\t'"unrun"$'\t'"-"$'\t'"skip"); done
+    write_rows "$rows" "$runner" "$commit" "$T_FLAKY"
+    exit 0
+    ;;
+  pending)
+    [[ $# -ge 3 ]] || die "usage: pending <rows-file> <unit>..."
+    rows=$2; shift 2
+    load_rows "$rows"
+    for u in "$@"; do
+      observed=0
+      for ((i = 0; i < ${#ROWS_UNIT[@]}; i++)); do
+        if [[ "${ROWS_UNIT[$i]}" == "$u" ]]; then
+          st=$(printf '%s\n' "${ROWS_LINE[$i]}" | cut -f2)
+          [[ "$st" != "unrun" ]] && observed=1
+          break
+        fi
+      done
+      [[ $observed -eq 1 ]] || printf '%s\n' "$u"
+    done
     exit 0
     ;;
   *)

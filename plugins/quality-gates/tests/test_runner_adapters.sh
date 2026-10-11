@@ -82,10 +82,95 @@ case_adapter_count_claims_match() {
   [ "$found" -gt 0 ] && [ "$bad" -eq 0 ] && ok "어댑터 개수 주장 ${found}곳 일치" || no "어댑터 개수 주장 불일치 또는 0건(found=$found)"
 }
 
+# ── 실행 관문 ───────────────────────────────────────────────────────────────────
+# R14 — 기준선 트리는 어댑터를 스스로 다시 탐지한다: 그 트리에 없는 어댑터는 unrun 이다.
+case_R14_tree_without_adapter_is_unrun() {
+  mkrepo; mkdir -p "$REPO/main/tests"; printf 'x\n' > "$REPO/main/README"
+  mktree || { rmrepo; return; }
+  bash "$RTS" run "$TREE" shell bulk "$REPO/rows.tsv" tests/a.sh 2>/dev/null; local rc=$?
+  assert_eq "$rc" "3" "R14: 트리에 shell 어댑터가 없으면 exit 3"
+  assert_eq "$(row_of "$REPO/rows.tsv" tests/a.sh)" "unrun	-" "R14: 그 unit 은 unrun"
+  rmrepo
+}
+# R3 — 러너가 이 머신에 없으면 unrun 이다(PRE_EXISTING 위장 방지).
+case_R3_missing_toolchain_is_unrun() {
+  mkrepo; mkdir -p "$REPO/main/pkg"; printf 'module x\n' > "$REPO/main/go.mod"; printf 'package pkg\n' > "$REPO/main/pkg/a_test.go"
+  mktree || { rmrepo; return; }
+  PATH=/usr/bin:/bin bash "$RTS" run "$TREE" go per-unit "$REPO/rows.tsv" pkg 2>/dev/null; local rc=$?
+  assert_eq "$rc" "3" "R3: go 가 PATH 에 없으면 exit 3"
+  assert_eq "$(row_of "$REPO/rows.tsv" pkg)" "unrun	-" "R3: unrun 행"
+  rmrepo
+}
+# R3 — setup 실패도 unrun 이다. 러너(venv 의 python)는 있는데 의존성 설치만 실패하는 픽스처라
+# setup 관문만이 이 unit 을 막는다(네트워크 없이 pip 가 바로 거부하는 요구 줄).
+case_R3_setup_failure_is_unrun() {
+  mkrepo; mkdir -p "$REPO/main/tests"
+  printf '!!!not-a-requirement\n' > "$REPO/main/requirements.txt"; printf '.venv/\n' > "$REPO/main/.gitignore"
+  printf 'import unittest\nclass T(unittest.TestCase):\n    def test_a(self):\n        pass\n' > "$REPO/main/tests/test_a.py"
+  mktree || { rmrepo; return; }
+  bash "$RTS" run "$TREE" unittest per-unit "$REPO/rows.tsv" tests/test_a.py 2>/dev/null; local rc=$?
+  assert_eq "$rc" "3" "R3: setup(pip install) 실패면 exit 3"
+  assert_eq "$(row_of "$REPO/rows.tsv" tests/test_a.py)" "unrun	-" "R3: unrun 행"
+  rmrepo
+}
+# R3 — 실행 도중의 exit 127 도 unrun 이다.
+case_R3_exit_127_is_unrun() {
+  mkrepo; mkdir -p "$REPO/main/tests"
+  printf '#!/bin/bash\nqg-no-such-command-xyz\n' > "$REPO/main/tests/a.sh"; chmod +x "$REPO/main/tests/a.sh"
+  mktree || { rmrepo; return; }
+  bash "$RTS" run "$TREE" shell per-unit "$REPO/rows.tsv" tests/a.sh 2>/dev/null
+  assert_eq "$(row_of "$REPO/rows.tsv" tests/a.sh)" "unrun	127" "R3: exit 127 → unrun"
+  rmrepo
+}
+# R4 — 0/1/127 밖의 종료 코드는 unrun 으로 접지 않는다(error).
+case_R4_other_exit_is_error_not_unrun() {
+  mkrepo; mkdir -p "$REPO/main/tests"
+  printf '#!/bin/bash\nexit 2\n' > "$REPO/main/tests/a.sh"; chmod +x "$REPO/main/tests/a.sh"
+  mktree || { rmrepo; return; }
+  bash "$RTS" run "$TREE" shell per-unit "$REPO/rows.tsv" tests/a.sh 2>/dev/null
+  assert_eq "$(row_of "$REPO/rows.tsv" tests/a.sh)" "error	2" "R4: exit 2 → error"
+  rmrepo
+}
+# R21 — go unit 은 *_test.go 가 있는 패키지여야 존재한다. 없으면 absent(아무것도 판정하지 않은 pass 방지).
+case_R21_go_package_without_tests_is_absent() {
+  mkrepo; mkdir -p "$REPO/main/pkg"; printf 'module x\n' > "$REPO/main/go.mod"; printf 'package pkg\n' > "$REPO/main/pkg/a.go"
+  mktree || { rmrepo; return; }
+  local bin; bin=$(mktemp -d); printf '#!/bin/bash\nexit 0\n' > "$bin/go"; chmod +x "$bin/go"
+  PATH="$bin:/usr/bin:/bin" bash "$RTS" run "$TREE" go per-unit "$REPO/rows.tsv" pkg 2>/dev/null
+  assert_eq "$(row_of "$REPO/rows.tsv" pkg)" "absent	-" "R21: *_test.go 없는 패키지 → absent"
+  rm -rf "$bin"; rmrepo
+}
+# R22 — kill switch 가 켜져 있으면 run 은 저장소 코드를 하나도 실행하지 않는다.
+case_R22_kill_switch_runs_no_repo_code() {
+  mkrepo; mkdir -p "$REPO/main/tests"; local mark="$REPO/RAN"
+  printf '#!/bin/bash\ntouch %q\n' "$mark" > "$REPO/main/tests/a.sh"; chmod +x "$REPO/main/tests/a.sh"
+  mktree || { rmrepo; return; }
+  DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1 bash "$RTS" run "$TREE" shell bulk "$REPO/rows.tsv" tests/a.sh 2>/dev/null; local rc=$?
+  assert_eq "$rc" "3" "R22: kill switch → exit 3"
+  [ ! -e "$mark" ] && ok "R22: 저장소 코드가 돌지 않았다" || no "R22: kill switch 아래에서 저장소 코드가 돌았다"
+  # 양성 대조 — 스위치 없이는 같은 픽스처가 실제로 돈다.
+  bash "$RTS" run "$TREE" shell bulk "$REPO/rows2.tsv" tests/a.sh 2>/dev/null
+  [ -e "$mark" ] && ok "R22 양성 대조: 스위치 없이 돈다" || no "R22 양성 대조 실패 — 픽스처가 원래 안 돈다"
+  rmrepo
+}
+# 카고 빌드 산출물은 트리마다 따로 둔다(R11 의 두 축 분리).
+case_cargo_target_dir_is_per_tree() {
+  mkrepo; printf '[package]\nname="x"\n' > "$REPO/main/Cargo.toml"
+  mktree || { rmrepo; return; }
+  local bin obs; bin=$(mktemp -d); obs="$bin/obs"
+  printf '#!/bin/bash\nprintf "%%s\\n" "$CARGO_TARGET_DIR" > %q\nexit 0\n' "$obs" > "$bin/cargo"; chmod +x "$bin/cargo"
+  PATH="$bin:/usr/bin:/bin" bash "$RTS" run "$TREE" cargo bulk "$REPO/rows.tsv" BULK 2>/dev/null
+  assert_eq "$(cat "$obs" 2>/dev/null)" "$TREE/target" "cargo 는 그 트리의 target 에 빌드한다"
+  rm -rf "$bin"; rmrepo
+}
 for c in case_detect_pytest case_detect_unittest case_detect_pytest_declared case_detect_shell \
          case_detect_jest case_detect_vitest case_detect_go case_detect_cargo case_detect_make \
          case_detect_npm_script case_detect_zero case_detect_polyglot case_detect_js_ambiguous_is_loud \
-         case_detect_malformed_package_json_is_loud case_R22_detect_imports_no_repo_module case_granularity_table case_adapter_count_claims_match; do
+         case_detect_malformed_package_json_is_loud case_R22_detect_imports_no_repo_module case_granularity_table case_adapter_count_claims_match \
+         case_R14_tree_without_adapter_is_unrun case_R3_missing_toolchain_is_unrun \
+         case_R3_setup_failure_is_unrun case_R3_exit_127_is_unrun case_R4_other_exit_is_error_not_unrun \
+         case_R21_go_package_without_tests_is_absent case_R22_kill_switch_runs_no_repo_code \
+         case_cargo_target_dir_is_per_tree; do
   echo "== $c"; $c
 done
 finish
