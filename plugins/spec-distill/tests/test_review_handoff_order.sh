@@ -134,10 +134,11 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
       *) no "spec-review 다음 세션 줄의 토큰 뒤 머리가 다르다: $RSL" ;;
     esac
     assert_contains "$RSL" "보고 후 재결정" "spec-review 다음 세션 줄이 C4 문장을 싣는다"
+    assert_grep "$RSL" '임의 변경.*금지' "spec-review 다음 세션 줄이 임의 변경 금지를 싣는다"
   fi
   STOP="$(printf '%s\n' "$GATE" | awk '/^- \*\*①\/② 의 정지 요건\*\*/{f=1;print;next} f&&/^- /{f=0} f' | tr '\n' ' ' | tr -s ' ')"
   [ -n "$STOP" ] && ok "spec-review(양성): ①/② 의 정지 요건 불릿을 읽었다" || no "spec-review: ①/② 의 정지 요건 불릿이 없다 — 아래 단언이 공허하다"
-  for n in '턴 종료(STOP)' '같은 턴에서 `writing-plans` 를' '**다음 턴**' '사용자 트리거로만'; do
+  for n in '턴 종료(STOP)' '같은 턴에서 `writing-plans` 를 호출하지 않는다' '**다음 턴**' '사용자 트리거로만'; do
     assert_contains "$STOP" "$n" "spec-review ①/② 정지 요건 불릿 안에 $n"
   done
 fi
