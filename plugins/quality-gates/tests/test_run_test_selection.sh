@@ -135,12 +135,23 @@ case_R11_run_refuses_live_tree() {
   bash "$RTS" run "$REPO/main" shell bulk "$REPO/rows.tsv" tests/a.sh 2>/dev/null; local rc=$?
   assert_eq "$rc" "2" "R11: 브랜치에 붙은 주 작업 트리 → exit 2"
   [ ! -e "$REPO/rows.tsv" ] && ok "R11: 행 파일을 쓰지 않았다" || no "R11: 거부했는데 행 파일이 생겼다"
+  mkdir -p "$REPO/main/pkg/tests"
+  printf '#!/bin/bash\ntouch %q\n' "$REPO/RAN11" > "$REPO/main/pkg/tests/m.sh"; chmod +x "$REPO/main/pkg/tests/m.sh"
   git -C "$REPO/main" checkout -q --detach
   bash "$RTS" run "$REPO/main" shell bulk "$REPO/rows.tsv" tests/a.sh 2>/dev/null; rc=$?
   assert_eq "$rc" "2" "R11: detached 라도 주 작업 트리면 exit 2"
+  # 하위 디렉토리로 넘겨도 같다 — git-dir 이 절대·상대로 갈려 문자열 비교를 빠져나가던 입력.
+  ( cd "$REPO/main" && git add -A && git commit -qm m ) >/dev/null 2>&1
+  git -C "$REPO/main" checkout -q --detach
+  bash "$RTS" run "$REPO/main/pkg" shell bulk "$REPO/rows.tsv" tests/m.sh 2>/dev/null; rc=$?
+  assert_eq "$rc" "2" "R11: detached 주 작업 트리의 하위 디렉토리 → exit 2"
+  [ ! -e "$REPO/RAN11" ] && ok "R11: 하위 디렉토리로도 저장소 코드가 돌지 않았다" || no "R11: 하위 디렉토리 우회로 주 작업 트리에서 코드가 돌았다"
+  [ ! -e "$REPO/rows.tsv" ] || no "R11: 거부했는데 행 파일이 생겼다"
   git -C "$REPO/main" worktree add -q -b side "$REPO/attached" >/dev/null 2>&1
   bash "$RTS" run "$REPO/attached" shell bulk "$REPO/rows.tsv" tests/a.sh 2>/dev/null; rc=$?
   assert_eq "$rc" "2" "R11: 브랜치에 붙은 연결 트리 → exit 2"
+  bash "$RTS" run "$TREE/tests" shell bulk "$REPO/rows.tsv" tests/a.sh 2>/dev/null; rc=$?
+  assert_eq "$rc" "2" "R11: 일회용 트리의 하위 디렉토리도 최상위가 아니면 exit 2"
   bash "$RTS" run "$TREE" shell bulk "$REPO/rows.tsv" tests/a.sh 2>/dev/null; rc=$?
   assert_eq "$rc" "0" "R11 양성 대조: 일회용 detached 트리는 돈다"
   rmrepo
@@ -231,6 +242,33 @@ case_truncated_rows_file_is_refused() {
   assert_eq "$rc" "2" "꼬리 줄이 잘린 행 파일에 병합하지 않는다"
   rmrepo
 }
+# 꼬리 줄의 rows= 가 실제 행 수와 다르면 거부한다.
+case_rows_count_mismatch_is_refused() {
+  mkrepo; shtest tests/a.sh 0; shtest tests/b.sh 0; mktree || { rmrepo; return; }
+  bash "$RTS" run "$TREE" shell per-unit "$REPO/rows.tsv" tests/a.sh tests/b.sh 2>/dev/null
+  sed -i.bak '1d' "$REPO/rows.tsv"
+  bash "$RTS" run "$TREE" shell per-unit "$REPO/rows.tsv" tests/a.sh 2>/dev/null; local rc=$?
+  assert_eq "$rc" "2" "꼬리 줄 rows= 가 실제 행 수와 다르면 병합하지 않는다"
+  rmrepo
+}
+# 꼬리 값이 비었거나 범위 밖이면 거부한다 — rows=0 + 빈 runner 로 러너·커밋 대조를 건너뛰지 못한다.
+case_trailer_values_are_validated() {
+  mkrepo; shtest tests/a.sh 0; mktree || { rmrepo; return; }
+  local c rc; c=$(git -C "$TREE" rev-parse HEAD)
+  printf '#qg-rows\trunner=\tcommit=\trows=0\tflaky=0\n' > "$REPO/e1.tsv"
+  bash "$RTS" run "$TREE" shell per-unit "$REPO/e1.tsv" tests/a.sh 2>/dev/null; rc=$?
+  assert_eq "$rc" "2" "빈 runner= 는 거부"
+  printf '#qg-rows\trunner=shell\tcommit=\trows=0\tflaky=0\n' > "$REPO/e2.tsv"
+  bash "$RTS" run "$TREE" shell per-unit "$REPO/e2.tsv" tests/a.sh 2>/dev/null; rc=$?
+  assert_eq "$rc" "2" "빈 commit= 는 거부"
+  printf '#qg-rows\trunner=shell\tcommit=%s\trows=0\tflaky=2\n' "$c" > "$REPO/e3.tsv"
+  bash "$RTS" run "$TREE" shell per-unit "$REPO/e3.tsv" tests/a.sh 2>/dev/null; rc=$?
+  assert_eq "$rc" "2" "flaky= 가 0·1 이 아니면 거부"
+  printf '#qg-rows\trunner=shell\tcommit=%s\trows=0\tflaky=\n' "$c" > "$REPO/e4.tsv"
+  bash "$RTS" run "$TREE" shell per-unit "$REPO/e4.tsv" tests/a.sh 2>/dev/null; rc=$?
+  assert_eq "$rc" "2" "빈 flaky= 는 거부"
+  rmrepo
+}
 for c in case_R17_assign_writes_trailer case_R17_failed_assign_leaves_no_file \
          case_R17_failed_assign_removes_stale_file case_R17_output_path_is_directory_fails \
          case_R20_assign_refuses_units_outside_tree case_R20_shell_scope \
@@ -239,7 +277,8 @@ for c in case_R17_assign_writes_trailer case_R17_failed_assign_leaves_no_file \
          case_R11_run_refuses_live_tree case_R5_rows_carry_their_tree_commit case_R7_rerun_replaces_rows \
          case_R15_flaky_rerun_once_and_keeps_unobserved case_R15_flaky_rerun_unobserved_exit_keeps_row \
          case_R15_flaky_rerun_replaces_observed_row \
-         case_R20_run_rechecks_scope case_unrun_and_pending case_truncated_rows_file_is_refused; do
+         case_R20_run_rechecks_scope case_unrun_and_pending case_truncated_rows_file_is_refused \
+         case_rows_count_mismatch_is_refused case_trailer_values_are_validated; do
   echo "== $c"; $c
 done
 finish

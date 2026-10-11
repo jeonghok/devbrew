@@ -347,6 +347,9 @@ load_rows() {
   done < "$f"
   [[ $tails -eq 1 && "$last" == '#qg-rows'$'\t'* ]] || die "행 파일 꼬리 줄이 정확히 하나의 마지막 줄이 아니다: $f"
   [[ "${T_ROWS:-}" == "$n" ]] || die "행 파일 행 수 불일치(꼬리 ${T_ROWS:-?} · 실제 $n): $f"
+  [[ -n "$T_RUNNER" ]] || die "행 파일 꼬리의 runner= 가 비었다: $f"
+  [[ "$T_COMMIT" =~ $COMMIT_RE ]] || die "행 파일 꼬리의 commit= 가 sha 도 '-' 도 아니다: $f"
+  [[ "$T_FLAKY" == "0" || "$T_FLAKY" == "1" ]] || die "행 파일 꼬리의 flaky= 가 0·1 이 아니다: $f"
 }
 
 # 새 행(NEW_UNIT/NEW_LINE)을 기존 행에 병합해 원자적으로 쓴다. 같은 unit 은 교체한다(R7).
@@ -489,8 +492,12 @@ $1"
     if git -C "$w" symbolic-ref -q HEAD >/dev/null 2>&1; then
       die "브랜치에 붙은 트리에서는 돌리지 않는다 — create-baseline/create-head 가 만든 detached 트리를 넘겨라: $w"
     fi
-    [[ "$(git -C "$w" rev-parse --git-dir)" != "$(git -C "$w" rev-parse --git-common-dir)" ]] \
-      || die "주 작업 트리에서는 돌리지 않는다 — 일회용 트리를 넘겨라: $w"
+    # 인자는 그 worktree 의 최상위여야 한다 — 하위 디렉토리에서는 git-dir 이 절대, common-dir 이 상대로 나온다.
+    top=$(git -C "$w" rev-parse --show-toplevel 2>/dev/null) || die "트리의 최상위를 읽지 못했다: $w"
+    [[ "$(cd "$w" && pwd -P)" == "$(cd "$top" && pwd -P)" ]] || die "트리의 최상위 디렉토리를 넘겨라: $w"
+    gd=$(cd "$w" && cd "$(git rev-parse --git-dir)" && pwd -P) || die "git-dir 을 정규화하지 못했다: $w"
+    gcd=$(cd "$w" && cd "$(git rev-parse --git-common-dir)" && pwd -P) || die "git-common-dir 을 정규화하지 못했다: $w"
+    [[ "$gd" != "$gcd" ]] || die "주 작업 트리에서는 돌리지 않는다 — 일회용 트리를 넘겨라: $w"
     commit=$(git -C "$w" rev-parse HEAD 2>/dev/null) || die "트리의 커밋을 읽지 못했다: $w"
     load_rows "$rows"
     if [[ ${#ROWS_UNIT[@]} -gt 0 || -n "$T_RUNNER" ]]; then

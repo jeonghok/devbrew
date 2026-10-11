@@ -153,6 +153,20 @@ case_R22_kill_switch_runs_no_repo_code() {
   [ -e "$mark" ] && ok "R22 양성 대조: 스위치 없이 돈다" || no "R22 양성 대조 실패 — 픽스처가 원래 안 돈다"
   rmrepo
 }
+# R22 — setup 단계도 저장소 코드의 경로다: 추적되는 venv/__main__.py 를 `python3 -m venv` 가 실행한다.
+case_R22_kill_switch_blocks_setup_step() {
+  mkrepo; mkdir -p "$REPO/main/tests" "$REPO/main/venv"; local mark="$REPO/SETUP_RAN"
+  printf 'x\n' > "$REPO/main/requirements.txt"; printf '.venv/\n' > "$REPO/main/.gitignore"
+  printf 'import unittest\nclass T(unittest.TestCase):\n    def test_a(self):\n        pass\n' > "$REPO/main/tests/test_a.py"
+  : > "$REPO/main/venv/__init__.py"; printf 'open(%s, "w").close()\n' "\"$mark\"" > "$REPO/main/venv/__main__.py"
+  mktree || { rmrepo; return; }
+  DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1 bash "$RTS" run "$TREE" unittest per-unit "$REPO/rows.tsv" tests/test_a.py 2>/dev/null; local rc=$?
+  assert_eq "$rc" "3" "R22: setup 이 있는 어댑터도 kill switch → exit 3"
+  [ ! -e "$mark" ] && ok "R22: kill switch 아래에서 setup 이 저장소 코드를 실행하지 않았다" || no "R22: setup 단계에서 저장소 코드가 돌았다"
+  bash "$RTS" run "$TREE" unittest per-unit "$REPO/rows2.tsv" tests/test_a.py >/dev/null 2>&1
+  [ -e "$mark" ] && ok "R22 양성 대조: 스위치 없이는 setup 이 이 픽스처의 코드를 실행한다" || no "R22 양성 대조 실패 — 픽스처가 setup 에 닿지 않는다"
+  rmrepo
+}
 # 카고 빌드 산출물은 트리마다 따로 둔다(R11 의 두 축 분리).
 case_cargo_target_dir_is_per_tree() {
   mkrepo; printf '[package]\nname="x"\n' > "$REPO/main/Cargo.toml"
@@ -170,7 +184,7 @@ for c in case_detect_pytest case_detect_unittest case_detect_pytest_declared cas
          case_R14_tree_without_adapter_is_unrun case_R3_missing_toolchain_is_unrun \
          case_R3_setup_failure_is_unrun case_R3_exit_127_is_unrun case_R4_other_exit_is_error_not_unrun \
          case_R21_go_package_without_tests_is_absent case_R22_kill_switch_runs_no_repo_code \
-         case_cargo_target_dir_is_per_tree; do
+         case_cargo_target_dir_is_per_tree case_R22_kill_switch_blocks_setup_step; do
   echo "== $c"; $c
 done
 finish
