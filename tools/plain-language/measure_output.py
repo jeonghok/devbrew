@@ -55,7 +55,8 @@ MACHINE_PREFIXES = (
 )
 
 # 엔진·스킬 틀이 내는 상태 줄의 머리. 출처: docreview_state.py render_gate 첫 줄·둘째 줄,
-# 항목 렌더러의 [..] 머리표, quality-pipeline SKILL 의 fix-loop 질문 틀.
+# 항목 렌더러의 [..] 머리표, quality-pipeline SKILL 의 fix-loop · 최대 반복 질문 틀(바뀌기 전 영어 틀과
+# 바뀐 뒤 한국어 틀 둘 다 — 전후 비교가 문구 바뀜을 개선으로 읽지 않게).
 STATUS_RE = re.compile(
     r"^(?:"
     r"degrade\b"
@@ -67,6 +68,8 @@ STATUS_RE = re.compile(
     r"|- .+ \([0-9a-f]{7,}#r\d+\.\d+(?: · 자동)?\)$"
     r"|라운드 \d+ · 재리뷰"
     r"|(?:qg|Review gate) (?:iter|reached)\b"
+    r"|qg 반복 \d+: "
+    r"|qg 가 최대 \d+번 반복했다"
     r"|\[(?:decide|ask|fix|미적용|채택|만료|결정)\b"
     r"|\[[0-9a-f]{7,}#r"
     r"|\[\d+/\d+ · "

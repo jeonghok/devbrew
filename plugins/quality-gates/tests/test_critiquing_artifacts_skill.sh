@@ -17,10 +17,10 @@ assert_contains "$(cat "$S")" 'artifact_max_rounds.sh' "wires max-rounds"
 assert_contains "$(cat "$S")" 'run_artifact_codex_reviewer.sh' "wires codex wrapper"
 assert_contains "$(cat "$S")" 'detect_codex.sh' "reuses codex detection"
 
-# E0 both kill switches (ENFORCEMENT body, not the bottom kill-switch inventory).
+# E0 both kill switches (ENFORCEMENT body, not the kill-switch inventory section).
 # NOTE: the old `agf 'DEVBREW_QUALITY_GATES_DISABLE'` / `agf 'DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE'`
 # were inventory-satisfiable — both var names ALSO appear in the "kill switch (보안
-# 컨트롤)" inventory at the SKILL foot, so gutting the E0 enforcement body stayed
+# 컨트롤)" inventory section, so gutting the E0 enforcement body stayed
 # GREEN (verified by mutation: deleting E0's exit lines while leaving the inventory
 # passed). These exact user-facing exit messages appear ONLY in the E0 enforcement
 # lines and nowhere in the inventory.
@@ -172,5 +172,23 @@ assert_contains "$(cat "$S")" 'canonical mismatch' "step-6 rejects on canonical 
 
 # final summary contract
 assert_file_grep "$S" '라운드.*히스토리|round.*history|커밋 SHA|commit SHA' "final summary: rounds + commit SHAs"
+
+# AC2(쉬운 말 출력 설계 §2) — 규칙 블록을 넣은 뒤에도 kill switch 목록 절이 압축 뒤 다시 붙는 앞 5,000토큰 안에서 시작한다.
+# 근사는 보수(cons) 쪽으로 잰다 — tools/plain-language/token_boundary.py 의 같은 함수다.
+ks_lines="$(grep -n '^## kill switch$' "$S" | cut -d: -f1)"
+gate_line="$(grep -n '^## 진입 게이트' "$S" | head -1 | cut -d: -f1)"
+assert_eq "$(printf '%s\n' "$ks_lines" | grep -c .)" "1" "AC2: kill switch 목록 절은 하나다"
+bound="$(PYTHONDONTWRITEBYTECODE=1 python3 -c 'import io,sys; sys.path.insert(0,"tools/plain-language"); import token_boundary as tb; L=io.open(sys.argv[1],encoding="utf-8").read().split("\n"); b=tb.boundary(L,"cons",True); print(len(L)+1 if b is None else b+1)' "$S")"
+if [ -n "$ks_lines" ] && [ -n "$gate_line" ] && [ "$ks_lines" -lt "$gate_line" ]; then
+  ok "AC2: kill switch 목록 절이 진입 게이트보다 앞이다"
+else
+  no "AC2: kill switch 목록 절(L${ks_lines:-?})이 진입 게이트(L${gate_line:-?})보다 앞이 아니다"
+fi
+if [ -n "$ks_lines" ] && [ -n "$bound" ] && [ "$ks_lines" -lt "$bound" ]; then
+  ok "AC2: kill switch 목록 절이 앞 5,000토큰 안에서 시작한다(경계 L${bound})"
+else
+  no "AC2: kill switch 목록 절(L${ks_lines:-?})이 앞 5,000토큰 경계(L${bound:-?}) 밖이다"
+fi
+assert_contains "$(sed -n "${ks_lines:-1},\$p" "$S" | sed -n '1,/^## [^k]/p')" 'DEVBREW_QUALITY_GATES_DISABLE_CODEX=1' "AC2(양의 짝): 옮긴 절에 codex 스위치 줄이 그대로 있다"
 
 finish

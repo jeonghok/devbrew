@@ -49,11 +49,19 @@ allowed-tools:
 산문이 아니라 결정론 헬퍼(§10 스키마 위 순수 함수)가 내리고, 리뷰어는 read-only이며
 수정·커밋은 이 오케스트레이터(writer)만 한다 (Law 2). 라운드마다 git 커밋으로 버저닝.
 
+## kill switch
+
+**보안 컨트롤** — 아래 스위치는 취향 설정이 아니다; 약화하는 PR은 보안 리뷰 대상이다.
+
+- `DEVBREW_QUALITY_GATES_DISABLE=1` — 전역 즉시 종료(E0).
+- `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1` — 이 모드만 종료(E0).
+- `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — codex co-review만 skip(`detect_codex.sh` 존중), tier-unpinned 단독으로 degrade.
+
+## 진입 게이트 (파일 손대기 전)
+
 모든 스크립트는 `${CLAUDE_PLUGIN_ROOT}/scripts/` 하위다 — 아래에 이름만 적힌 스크립트는 이 경로의 것을
 실행한다. 이 경로가 절대 경로로 보이지 않으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고한다. 아래 단계를
 **순서대로** 실행한다.
-
-## 진입 게이트 (파일 손대기 전)
 
 ### E0 — Preflight (kill switch)
 
@@ -295,11 +303,3 @@ critic·adversarial·codex는 read-only(`tools:` allowlist / codex `-s read-only
 이 오케스트레이터만. **매 라운드 독립 critic이 게이트**: 라운드 N의 수정을 라운드 N+1의
 *독립* critic이 재검토하며, 최종 "수렴"은 마지막 독립 critic 패스의 kept 집합이 결정 —
 자기 편집을 자기 판단으로 승인하는 경로가 구조적으로 없다.
-
-## kill switch
-
-**보안 컨트롤** — 아래 스위치는 취향 설정이 아니다; 약화하는 PR은 보안 리뷰 대상이다.
-
-- `DEVBREW_QUALITY_GATES_DISABLE=1` — 전역 즉시 종료(E0).
-- `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1` — 이 모드만 종료(E0).
-- `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — codex co-review만 skip(`detect_codex.sh` 존중), tier-unpinned 단독으로 degrade.

@@ -150,6 +150,20 @@ class QuestionValues(unittest.TestCase):
             all_, _, _ = c.measure()
         self.assertEqual(all_["v2_status_first_line"][:2], [3, 4])
 
+    def test_qg_question_templates_count_as_status_in_both_forms(self):
+        # 바뀌기 전 영어 틀과 바뀐 뒤 한국어 틀을 똑같이 센다 — 한쪽만 세면 전후 비교가 문구 바뀜을 개선으로 읽는다.
+        with tempfile.TemporaryDirectory() as tmp:
+            c = Corpus(tmp)
+            c.file("a.jsonl", [
+                human("q"),
+                asst(auq("qg iter 2: findings remain (x). How should we proceed?",
+                         "qg 반복 2: 남은 지적이 있다(x). 어떻게 할까?",
+                         "qg 가 최대 5번 반복했다. 마지막 지적: x. 지금 판정으로 끝낼까, 멈출까?",
+                         "이 절을 고칠까?")),
+            ])
+            all_, _, _ = c.measure()
+        self.assertEqual(all_["v2_status_first_line"][:2], [3, 4])
+
     def test_status_multi_tokens_and_unparsed(self):
         raw = json.dumps({"questions": [{"question": "평범한 질문"}, {"question": "또 하나"}]})
         with tempfile.TemporaryDirectory() as tmp:
