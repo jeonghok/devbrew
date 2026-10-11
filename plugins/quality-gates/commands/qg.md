@@ -69,7 +69,7 @@ the pipeline is aborted at a decision point.
 | `/qg` | Run the pipeline; `Spec:` 트레일러로 선언된 토픽이면 토픽 전체(합친 트리), 아니면 git-derived diff (branch + worktree) |
 | `/qg branch` | Run on the full-branch diff (vs `main`) |
 | `/qg --paths <glob>...` | Scope to matched paths |
-| `branch <name>` · `--reset` · `--gc` · `--pr-url` · `--plan` | 없어졌다(v10) — 안내 한 줄을 내고 실행하지 않는다 |
+| `branch <name>` · `--reset` · `--gc` · `--pr-url` · `--plan` | 없어졌다(13.0.0) — 안내 한 줄을 내고 실행하지 않는다 |
 | `both` · `review` · `runtime` · `--skip-runtime` | 제거됨 — 한 줄 공지 후 그대로 진행 |
 | `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | 차등 테스트를 건너뛴다 — 판정은 `not-certified (kill-switch)` |
 | `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` | e2e 를 끈다 — 판정 줄의 e2e 칸이 `꺼짐(kill switch)` |

@@ -366,7 +366,7 @@ regardless of scope, 부른다 — 모델 계열 다양성이 load-bearing 이�
 Step 1 scope and run
 `run_codex_reviewer.sh <diff 경로> <project_dir> <산출물 경로>`. The runner resolves the intent
 source itself (`discover-spec.sh`, same chain) and loads the criteria block.
-If codex is unavailable, continue without it.
+If codex is unavailable, continue without it. 러너 stderr 에 `DISABLE_SPEC_CONFORMANCE 는 없어졌다` 줄이 있으면 그 줄을 그대로 사용자에게 보인다 — 옛 끔 설정이 더는 듣지 않는다는 알림이다.
 
 **Capture the runner's exit code.** `run_codex_reviewer.sh` normally exits 0 and always writes YAML
 to the output path — except when it cannot write that path at all: then it exits **3**. On

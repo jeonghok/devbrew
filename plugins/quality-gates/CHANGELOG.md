@@ -14,12 +14,12 @@
 - 마지막 iteration 의 차등 출력은 세션 폴더의 `differential.yaml` 로, 커버리지로 세지 않은 테스트 목록은 `differential-not-counted.md` 로 복사된다. 최종 판정 · `result.md` 의 `## 차등 테스트` 절이 이 둘을 읽는다(옛 `aggregate.yaml` 자리).
 - 일회용 기준선 · HEAD 트리는 같은 자리에 남은 것을 지우고 다시 만든다 — 앞 실행이 중간에 죽어도 다음 실행이 막히지 않는다.
 - `qg-gc.py` 는 옛 판의 `runtime-evidence.md` 만 남은 세션 폴더도 TTL 뒤 회수한다(회수 표지).
-- README 의 사전 요건에서 `superpowers` 행을 뺐다 — 계획 탐색이 없어져 읽는 곳이 없다.
 
 ### Added
 - `qg-worktree.sh memo-init` · `memo-drop` — 한 번의 `/qg` 동안만 사는 리포 밖 실행 안 메모. 기준선 행을 같은 실행의 다음 iteration 에서 재사용한다. 리포 안 경로는 거부하고, 표지 없는 디렉토리 · 심볼릭 링크는 지우지 않는다.
 
 ### Removed
+- README 의 사전 요건에서 `superpowers` 행 — 계획 탐색이 없어져 읽는 곳이 없다.
 - `/qg --plan <path>` — 안내 한 줄을 내고 실행하지 않는다(exit 2). 차등 테스트는 계획 파일을 읽지 않는다.
 - kill switch `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE` — 의도 입력은 이제 언제나 codex 프롬프트에 실린다. codex 로 아무것도 보내지 않으려면 `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` 을 쓴다. 옛 변수를 `1` 로 두면 codex 러너가 stderr 한 줄로 알리고 그대로 진행한다. README kill switch 표에 「제거됨」 행으로 남겼다.
 - `discover-spec.sh` 출력 JSON 의 `spec_path` 키 — 읽는 곳(test-scope-validator)이 없어졌다. `intent_source` · `intent_note` · `intent_file` 은 그대로다.

@@ -31,7 +31,7 @@ started_at: "<ISO-8601 UTC>"
 ## 차등 테스트
 
 <`differential.yaml` 의 attribution_status · degrade_causes · resolution_disclosure · per_adapter 원문과
- `differential-not-counted.md`(커버리지로 세지 않은 테스트), 없으면 (이번 실행에 차등 집계 없음)>
+ `differential-not-counted.md`(커버리지로 세지 않은 테스트), 없으면 (이번 실행에 차등 출력 없음)>
 
 ## e2e
 

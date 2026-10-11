@@ -66,7 +66,7 @@ if [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then printf 'scope
 
 - `scope0=topic` 이면 기준선 커밋은 `boundary=` 값이다.
 - `scope0=session` 이면 기준선 커밋은 `merge_base:` 다. `degraded: yes` 면 기준선 커밋은 `-` 이다 — 기준선 축을
-  돌리지 못하고, 결과는 baseline-unrunnable 로 남는다.
+  돌리지 못한다. session 스코프에서는 D2 가 같은 기준선을 풀다가 exit 4 로 멈추므로 판정 입력은 error-axis 가 된다.
 
 `scope0` 와 기준선 커밋을 기억해 둔다 — D1 이 매 iteration 대조한다. 뒤 iteration 에서 스코프가 session ↔ topic 으로
 바뀌거나 경계가 달라지면 그 iteration 은 기준선이 어긋나 판정하지 않는다(error-axis, D1). 한 줄로 알린다:
@@ -92,7 +92,7 @@ if [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then
   hc=$(sed -n 's/^head_commit: //p' "$S"); tree=$(sed -n 's/^tree: //p' "$S")
 fi
 if [ "$scope" != "$SCOPE0" ] || [ "$base" != "$BASE0" ]; then
-  echo "[quality-gates] 이 iteration 의 기준선(${scope} @ ${base:--})이 실행 시작의 기준선(${SCOPE0} @ ${BASE0})과 다르다 — 이 iteration 의 차등 판정 입력은 error-axis 다" >&2
+  echo "[quality-gates] 이번 반복의 비교 기준(${scope} @ ${base:--})이 처음 반복의 기준(${SCOPE0} @ ${BASE0})과 달라서, 이번 반복의 테스트 비교는 판정에 쓰지 않는다(error-axis). 기준을 바꾸려면 /qg 를 처음부터 다시 돌린다." >&2
   echo "axis=mismatch"; exit 0
 fi
 head_tree=""; cand=""
@@ -127,7 +127,7 @@ exit 4 는 「후보 없음」이 아니다(R17). stderr 를 그대로 보이고
 후보는 바닥이다. 오케스트레이터는 diff 와 의도 출처를 보고 영향 테스트를 **더할** 수만 있고 뺄 수는 없다. 낡았거나
 (이번 변경과 무관한 옛 동작을 검사) 골라 담은(변경을 피해 가는) 테스트로 판단한 것은 그대로 돌리되 커버리지로 세지
 않는다. 그 목록을 테스트마다 한 줄 이유와 함께 메모에 적는다 — 없으면 `(없음)` 한 줄이다. 영향 테스트가 하나도
-없다고 판단되면 그 사실도 여기에 적고 러너 전체를 돌릴지(bulk) 정한다. 실행 끝의 `result.md` `## 차등 테스트` 가
+없다고 판단되면 그 사실도 여기에 적는다 — 0 단위면 D5 가 scope-empty 를 낸다. D3/D4 밖에서 스위트를 돌리지 않는다. 실행 끝의 `result.md` `## 차등 테스트` 가
 이 목록을 싣는다:
 
 ```bash
