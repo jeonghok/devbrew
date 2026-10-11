@@ -32,8 +32,9 @@ from check_bundle_coverage import (  # noqa: E402
 
 MAIN_REF = "refs/remotes/origin/main"
 GIT_ALLOWED = frozenset({"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"})
-NOTICE = ("머지됨 자동 판정은 merge commit 방식에서만 된다 — squash · rebase 로 머지했으면 "
-          "로드맵 결정 기록에 머지 기록을 적는다.")
+NOTICE = ("머지됨 자동 판정은 merge commit 방식에서만 된다 — 브랜치가 지워졌으면 GitHub 의 머지 메시지 "
+          "`Merge pull request #<n> from <owner>/<브랜치>` 로만 알아본다. squash · rebase 로 머지했거나 "
+          "로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적는다.")
 FIELDS = ("의도", "범위", "의존", "브랜치", "묶음", "경로 예약", "spec", "발화", "항목", "완료")
 REQUIRED = {
     "bundle": ("의도", "범위", "의존", "브랜치", "묶음", "경로 예약"),
@@ -144,15 +145,20 @@ class Git:
                 for p in out.split("\0") if p]
 
     def fetched_at(self):
-        rc, out = self.run("rev-parse", "--git-common-dir")
-        if rc != 0:
+        # git 은 FETCH_HEAD 를 워크트리마다 쓴다 — 이 워크트리 것과 공용 디렉토리 것 중 새것을 쓴다.
+        stamps = []
+        for args, tail in ((("rev-parse", "--git-path", "FETCH_HEAD"), ""),
+                           (("rev-parse", "--git-common-dir"), "FETCH_HEAD")):
+            rc, out = self.run(*args)
+            if rc != 0 or not out.strip():
+                continue
+            try:
+                stamps.append(Path(self.cwd, out.strip(), tail).stat().st_mtime)
+            except OSError:
+                continue
+        if not stamps:
             return None
-        head = Path(self.cwd, out.strip(), "FETCH_HEAD")
-        try:
-            stamp = head.stat().st_mtime
-        except OSError:
-            return None
-        return datetime.datetime.fromtimestamp(stamp).strftime("%Y-%m-%d %H:%M")
+        return datetime.datetime.fromtimestamp(max(stamps)).strftime("%Y-%m-%d %H:%M")
 
 
 # ── 로드맵 · 묶음 · brief 읽기 ───────────────────────────────────────────────
@@ -171,6 +177,12 @@ class Source:
             return Path(self.root, path).read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             return None
+
+    def exists(self, path: str) -> bool:
+        """사본에 그 경로가 있는가 — 읽을 수 있는지와는 따로 묻는다."""
+        if self.rev:
+            return self.git.exists(self.rev, path)
+        return Path(self.root, path).exists()
 
 
 def split_list(value: str) -> list:
@@ -472,7 +484,12 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
         if b["kind"] == "bundle" and bundles.get(bid) is not None:
             tree = main if b["stage"] == "머지됨" else tip
             for spec in b["specs"]:
-                result = check(bundles[bid], git.blob(tree, spec) or "")
+                spec_text = git.blob(tree, spec)
+                if spec_text is None:
+                    b["warnings"].append("번호 대조 검사 불가(spec 을 읽지 못했다): %s" % spec)
+                    cov_unknown.append("%s spec 을 읽지 못했다" % bid)
+                    continue
+                result = check(bundles[bid], spec_text)
                 if result["status"] == 1:
                     b["warnings"].append("생략: %s 이 번호 %d개를 빠뜨렸다 — %s" % (
                         spec, len(result["missing"]), " · ".join(result["missing"])))
@@ -549,9 +566,12 @@ def build(git: Git, args) -> dict:
         if b["kind"] != "bundle":
             union.update(b["assigned"])
             continue
-        btext = src.read(roadmap_dir + "/" + b["fields"]["묶음"])
+        bpath = roadmap_dir + "/" + b["fields"]["묶음"]
+        btext = src.read(bpath)
         bundles[b["id"]] = btext
         if btext is None:
+            if src.exists(bpath):
+                report["format_errors"].append("%s 묶음을 읽지 못했다: %s" % (b["id"], bpath))
             continue
         fm = frontmatter(btext)
         bad = [k for k, want in (("type", "slice-bundle"), ("slice", b["id"]),

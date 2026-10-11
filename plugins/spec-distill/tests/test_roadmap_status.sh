@@ -140,13 +140,18 @@ g checkout -q -b feature/y1 main; commit_file src/y.txt y1 "y1a"; pr_merge 5 fea
 g checkout -q feature/y1; commit_file src/y.txt y2 "y1b"
 # Q1 — 머지 뒤 로컬 브랜치를 main 으로 앞당김(브랜치 끝 = 머지 커밋 자신) → 머지 메시지로 머지됨
 g checkout -q -b feature/q1 main; commit_file src/q.txt q "q1"; pr_merge 6 feature/q1; g branch -q -f feature/q1 main
+# G9 — main 이력의 머지 커밋인데 둘째 부모가 이미 첫째 부모 안에 있다(루트 커밋). 조상 아님 조건이 없으면 머지됨으로 읽힌다.
+G9_ANC="$(g rev-list --max-parents=0 main)"
+G9_SHA="$(g commit-tree 'main^{tree}' -p main -p "$G9_ANC" -m "Merge branch 'feature/g9'")"
+g update-ref refs/heads/main "$G9_SHA"
+g branch -q feature/g9 "$G9_ANC"
 g checkout -q main
 g push -q origin main
 
 # 문서(brief · 묶음 · 로드맵)는 main 의 마지막 커밋으로 둔다
 write_brief "$W/docs/br"
 mkdir -p "$W/docs/rm"
-for b in A1 B1 E1 F1 G1 H1 I1 J1 W1 M1 T1 U1 Y1 Q1 Z1; do bundle docs/rm "$b" "C1, S1"; done
+for b in A1 B1 E1 F1 G1 G9 H1 I1 J1 W1 M1 T1 U1 Y1 Q1 Z1; do bundle docs/rm "$b" "C1, S1"; done
 bundle docs/rm A1 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"
 bundle docs/rm V1 "C1, D2, S1"
 { roadmap_head
@@ -155,6 +160,7 @@ bundle docs/rm V1 "C1, D2, S1"
   block E1 feature/e1 없음 "docs/shared/"
   block F1 feature/f1 없음 없음
   block G1 feature/g1 없음 없음
+  block G9 feature/g9 없음 없음
   block H1 feature/h1 없음 없음
   block I1 feature/i1 없음 "src/i.txt"
   block J1 feature/j1 W1 "src/j.txt, src/jw.txt, src/한 글.txt"
@@ -223,6 +229,7 @@ assert_eq "$(stage "$OUT" T1)" "설계 중" "T1: 커밋 없는 새 브랜치는 
 assert_eq "$(stage "$OUT" U1)" "설계 중" "U1: 동기화 머지의 둘째 부모에서 만든 빈 브랜치는 머지됨이 아니다(D4.24)"
 assert_eq "$(stage "$OUT" Y1)" "설계 중" "Y1: 머지 뒤 커밋이 더 붙은 브랜치는 머지됨이 아니다"
 assert_eq "$(stage "$OUT" Q1)" "머지됨" "Q1: 머지 뒤 main 으로 앞당긴 로컬 브랜치 → 머지 메시지로 머지됨"
+assert_eq "$(stage "$OUT" G9)" "설계 중" "G9: 둘째 부모가 이미 첫째 부모 안에 있는 머지 커밋은 머지됨이 아니다(조상 아님 조건)"
 assert_eq "$(stage "$OUT" G1)" "설계 중" "G1: 로컬에만 있는 브랜치 · spec 있음 → 설계 중"
 assert_eq "$(js "$OUT" "next(b['reason'] for b in r['blocks'] if b['id']=='G1')")" "spec 있음" "G1 근거 「spec 있음」"
 assert_eq "$(stage "$OUT" H1)" "계획" "H1: 원격에만 있는 브랜치 · **Spec:** 뒤에 설명과 둘째 백틱 → 계획"
@@ -251,7 +258,7 @@ assert_eq "$(js "$OUT" "r['orphans']")" "[]" "고아 발화 0"
 assert_eq "$(js "$OUT" "[o['blocks'] for o in r['overlaps']]")" "[['E1', 'W1']]" "겹침: E1 ↔ W1 만(README 는 빼고, J1→W1 은 의존이 있어 뺀다)"
 assert_eq "$(js "$OUT" "next(b['task_status'] for b in r['blocks'] if b['id']=='H1')")" "in_progress" "작업 목록 대응: 계획 → in_progress"
 txt="$(cd "$W" && python3 "$RS" docs/rm/roadmap.md)"
-assert_grep "$txt" "^로드맵 상태 — 블록 21개 · " "사람용 글 첫 줄이 상태"
+assert_grep "$txt" "^로드맵 상태 — 블록 22개 · " "사람용 글 첫 줄이 상태"
 assert_contains "$txt" "머지됨 자동 판정은 merge commit 방식에서만 된다" "한계 공시 줄"
 
 # ── 2. --roadmap-file(작업 트리) 사본 · 번호 대조 검사 불가 · 미배정 · 고아 ─────────
@@ -283,6 +290,12 @@ sed 's/^- K2 — .*/- K2 — 다른 문장/' "$W/docs/rm2/roadmap.md" > "$W/docs
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm3/roadmap.md > "$T/k.json"); rc=$?
 assert_eq "$rc" "3" "위험 번호표가 brief 와 다르면 rc 3"
 assert_contains "$(js "$T/k.json" "r['format_errors']")" "위험 번호표가 brief §5 위험 줄과 다르다: K2" "위험 번호표 대조"
+mkdir -p "$W/docs/rm4"
+{ roadmap_head; block A1 feature/a1 없음 없음; roadmap_tail ""; } > "$W/docs/rm4/roadmap.md"
+printf '\377\376\n' > "$W/docs/rm4/A1.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm4/roadmap.md > "$T/unread.json"); rc=$?
+assert_eq "$rc" "3" "읽을 수 없는 묶음(비UTF-8) → rc 3"
+assert_contains "$(js "$T/unread.json" "r['format_errors']")" "A1 묶음을 읽지 못했다: docs/rm4/A1.md" "읽기 실패는 「묶음 없음」이 아니라 읽지 못했다고 보고한다"
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm2/없음.md > "$T/none.json"); rc=$?
 assert_eq "$rc" "3" "로드맵 없음 → rc 3"
 (cd "$W" && python3 "$RS" >/dev/null 2>&1); rc=$?
@@ -436,12 +449,16 @@ sed 's/if len(parents) >= 2 and parents\[1\] == tip and not git.is_ancestor(tip,
 cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(머지 커밋 둘째 부모 규칙)" || ok "변이 적용됨(머지 커밋 둘째 부모 규칙)"
 (cd "$W" && python3 "$M/roadmap_status.py" --json docs/rm/roadmap.md > "$T/mA1.json")
 [ "$(stage "$T/mA1.json" A1)" != "머지됨" ] && ok "변이: 둘째 부모 규칙을 끄면 A1 은 머지됨이 아니다 — A1 단언에 이빨이 있다" || no "변이: 둘째 부모 규칙을 꺼도 A1 이 머지됨이다"
+sed 's/ and not git.is_ancestor(tip, parents\[0\])//' "$RS" > "$M/roadmap_status.py"
+cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(조상 아님 조건)" || ok "변이 적용됨(조상 아님 조건)"
+(cd "$W" && python3 "$M/roadmap_status.py" --json docs/rm/roadmap.md > "$T/mg9.json")
+assert_eq "$(stage "$T/mg9.json" G9)" "머지됨" "변이: 조상 아님 조건을 지우면 G9 가 머지됨 — G9 단언에 이빨이 있다"
 
 # ── 7. 실데이터 — 이번 일의 로드맵 · 묶음(R0 AC1 · AC2 · AC3) ─────────────────
 # git 없이 함수로 잰다 — origin 이 없는 클론에서도 같은 판정이 나야 한다.
 real_check() {  # real_check <리포 루트> — 키<TAB>값 줄들
   (cd "$S" && python3 - "$1" <<'PY'
-import sys
+import re, sys
 from pathlib import Path
 import check_bundle_coverage as cbc, roadmap_status as rs, section6
 root = Path(sys.argv[1])
@@ -486,6 +503,29 @@ print("OVERLAPS\t%s" % rs.overlaps(blocks))
 r0 = next(b for b in blocks if b["id"] == "R0")
 spec = (root / r0["fields"]["spec"]).read_text(encoding="utf-8")
 print("R0TABLE\t%s" % (set(r0["assigned"]) == cbc.table_ids(spec)))
+
+
+def lock_rows(text, blocks):
+    """락 지도 표의 (파일, 조각) 중 파일을 다른 조각이 예약한 줄 — (검사한 줄 수, 위반 목록)."""
+    checked, bad_rows = 0, []
+    for line in text.splitlines():
+        cells = [c.strip() for c in re.split(r"(?<!\\)\|", line)[1:-1]]
+        m = re.fullmatch(r"(\S+):(\d+)", cells[0]) if len(cells) >= 4 else None
+        if not m:
+            continue
+        checked += 1
+        others = [b["id"] for b in blocks if b["id"] != cells[2]
+                  and any(rs._reserves(e, m.group(1)) for e in b["reserved"])]
+        if others:
+            bad_rows.append("%s %s 는 %s 가 예약했다" % (cells[2], m.group(1), "·".join(others)))
+    return checked, bad_rows
+
+
+n, bad_rows = lock_rows((root / rm / "locks.md").read_text(encoding="utf-8"), blocks)
+print("LOCKROWS\t%d" % n)
+print("LOCKBAD\t%s" % bad_rows)
+synthetic = "| plugins/spec-distill/tests/test_conducting_interview_stage.sh:149 | x | R2 | y |"
+print("LOCKCTL\t%s" % lock_rows(synthetic, blocks)[1])
 PY
   )
 }
@@ -500,6 +540,9 @@ assert_eq "$(field_of ORPHANS)" "[]" "실데이터 AC3: 고아 발화 0"
 assert_eq "$(field_of UNKNOWN)" "[]" "실데이터: brief 에 없는 번호 0"
 assert_eq "$(field_of OVERLAPS)" "[]" "실데이터: 의존 없이 겹치는 경로 예약 0"
 assert_eq "$(field_of R0TABLE)" "True" "실데이터: R0 블록의 항목 · 발화 = R0 설계문서 번호 대조 표의 첫 칸"
+assert_eq "$(field_of LOCKBAD)" "[]" "실데이터: 락 지도의 모든 줄이 다른 조각이 예약한 파일을 자기 것으로 적지 않았다"
+[ "$(field_of LOCKROWS)" -ge 10 ] && ok "실데이터: 락 지도 줄 $(field_of LOCKROWS)개를 읽었다(양성 대조 — 표를 못 읽으면 0)" || no "실데이터: 락 지도 줄을 10개 미만으로 읽었다($(field_of LOCKROWS))"
+assert_contains "$(field_of LOCKCTL)" "R2 plugins/spec-distill/tests/test_conducting_interview_stage.sh 는 R1 가 예약했다" "양성 대조: 다른 조각이 예약한 파일의 줄을 잡는다"
 # 양성 대조 — 사본에서 묶음 하나의 번호를 빼고 다른 묶음의 §6 을 한 글자 바꾸면 위 검사가 잡는다
 RMD=docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose
 mkdir -p "$T/ctl/docs/superpowers/roadmaps" "$T/ctl/docs/superpowers/interview" "$T/ctl/docs/superpowers/specs"

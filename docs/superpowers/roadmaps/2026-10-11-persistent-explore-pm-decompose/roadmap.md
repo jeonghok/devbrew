@@ -146,9 +146,9 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 
 R5 전까지 지휘 세션이 따르는 절차다. 장치가 아니라 절차다 — 지휘자 skill 은 R5 가 만든다. 지휘 세션은 `/new` 뒤 첫 줄에 `@docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md` 를 붙여 연다.
 
-1. `git fetch origin` → `python3 plugins/spec-distill/scripts/roadmap_status.py docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md` → 작업 목록을 결과에 맞춘다. 조각 하나에 작업 하나, 제목은 「<번호> <이름> — <단계>」. 대기 · 준비는 시작 전, 설계 중 · 계획은 진행 중, 머지됨 · 끝남은 완료다. 알 수 없음은 작업 상태를 바꾸지 않고 제목 끝에 「알 수 없음(이유)」을 붙인다.
+1. `git fetch origin` → `python3 plugins/spec-distill/scripts/roadmap_status.py docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md` → 작업 목록을 결과에 맞춘다. 조각 하나에 작업 하나, 제목은 「<번호> <이름> — <단계>」. 대기 · 준비는 시작 전, 설계 중 · 계획은 진행 중, 머지됨 · 끝남은 완료다. 알 수 없음은 작업 상태를 바꾸지 않고 제목 끝에 「알 수 없음(이유)」을 붙인다. 종료 코드가 3 이면 작업 목록을 바꾸지 않고 「검사 불가」 사유를 사용자에게 그대로 보인다 — 일부 단계가 계산돼 보여도 믿지 않는다.
 2. 준비 단계 조각을 고른다. 블록의 `브랜치:` 이름으로 `origin/main` 에서 브랜치와 worktree 를 먼저 만들고, 그 조각의 설계문서 · 계획은 모두 그 브랜치에 커밋한다. 설계 단계(brainstorming → 설계문서 → spec-review 승인)는 이 세션에서 한 조각씩 돈다 — spec 승인은 사용자가 조각마다 한다.
-3. 설계문서를 커밋한 뒤 spec-review 를 부르기 전에 `python3 plugins/spec-distill/scripts/check_bundle_coverage.py <묶음> <설계문서>` 를 돌려 결과를 사용자에게 보인다. 빠진 번호가 있으면 spec-review 전에 고친다.
+3. 설계문서를 커밋한 뒤 spec-review 를 부르기 전에 `python3 plugins/spec-distill/scripts/check_bundle_coverage.py <묶음> <설계문서>` 를 돌려 결과를 사용자에게 보인다. 빠진 번호가 있으면 spec-review 전에 고친다. 종료 코드가 3 이면(표가 없거나 깨짐) 표를 고쳐 다시 돌리고, 0 이 나오기 전에는 spec-review 로 가지 않는다.
 4. superpowers 가 묻는 자리(plan 검토 · 실행 방식 · 머지 메뉴)는 그대로 사용자에게 간다.
 5. 구현은 조각마다 worktree 에서 돌리고 그동안 다음 조각의 설계를 진행하는 것이 목표다. 백그라운드 실행이 되는지는 실측 M1 이 정한다 — 안 되면 구현도 순차로 하고 그 사실을 알린다. SDD 가 마지막 메시지로 내는 판정 목록(「Rulings I made」)은 그대로 사용자에게 보이고 멈추지 않는다.
 6. 조각이 머지될 때마다 남은 조각을 재평가하고, 바뀔 때만 사용자 승인 뒤 로드맵 수정을 전용 작은 브랜치(`feature/roadmap-<요지>`)와 PR 로 올린다. 머지는 사용자가 한다.
