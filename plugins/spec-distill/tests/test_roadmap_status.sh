@@ -436,4 +436,82 @@ sed 's/if len(parents) >= 2 and parents\[1\] == tip and not git.is_ancestor(tip,
 cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(머지 커밋 둘째 부모 규칙)" || ok "변이 적용됨(머지 커밋 둘째 부모 규칙)"
 (cd "$W" && python3 "$M/roadmap_status.py" --json docs/rm/roadmap.md > "$T/mA1.json")
 [ "$(stage "$T/mA1.json" A1)" != "머지됨" ] && ok "변이: 둘째 부모 규칙을 끄면 A1 은 머지됨이 아니다 — A1 단언에 이빨이 있다" || no "변이: 둘째 부모 규칙을 꺼도 A1 이 머지됨이다"
+
+# ── 7. 실데이터 — 이번 일의 로드맵 · 묶음(R0 AC1 · AC2 · AC3) ─────────────────
+# git 없이 함수로 잰다 — origin 이 없는 클론에서도 같은 판정이 나야 한다.
+real_check() {  # real_check <리포 루트> — 키<TAB>값 줄들
+  (cd "$S" && python3 - "$1" <<'PY'
+import sys
+from pathlib import Path
+import check_bundle_coverage as cbc, roadmap_status as rs, section6
+root = Path(sys.argv[1])
+rm = "docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose"
+text = (root / rm / "roadmap.md").read_text(encoding="utf-8")
+meta, blocks, records, risk, errors = rs.parse_roadmap(text)
+print("ERRORS\t%s" % errors)
+print("BLOCKS\t%s" % " ".join("%s:%s" % (b["id"], b["kind"]) for b in blocks))
+brief = (root / meta["source_brief"]).read_text(encoding="utf-8")
+audit = (root / meta["source_brief"].replace(".md", ".audit.md")).read_text(encoding="utf-8")
+non_s, s_ids, k_expected = rs.brief_universe(brief, audit)
+print("RISK\t%s" % (risk == k_expected and len(risk) == 15))
+union, bad = set(), []
+want6 = section6.body(brief).rstrip("\n") + "\n\n" + section6.body(audit)
+s1 = cbc.section_body(brief, "## 1.")
+for b in blocks:
+    if b["kind"] != "bundle":
+        union |= set(b["assigned"])
+        continue
+    bt = (root / rm / b["fields"]["묶음"]).read_text(encoding="utf-8")
+    fm = cbc.frontmatter(bt)
+    if (fm.get("type"), fm.get("slice"), fm.get("roadmap"), fm.get("source_brief")) != (
+            "slice-bundle", b["id"], rm + "/roadmap.md", meta["source_brief"]):
+        bad.append(b["id"] + ":frontmatter")
+    union |= set(cbc.bundle_ids(bt))
+    if [l for l in bt.splitlines() if l.startswith("## ")] != [
+            "## 0. 역참조", "## 1. Goal · Non-goal", "## 2. 제약", "## 3. 열린 질문",
+            "## 4. 웹 근거", "## 5. 기각 · 위험", "## 6. 사용자 원문", "## 7. 인터페이스"]:
+        bad.append(b["id"] + ":절")
+    if section6.body(bt) != want6:
+        bad.append(b["id"] + ":§6")
+    if bt.split("### 공통 목표\n", 1)[1].split("\n## 2. ", 1)[0] + "\n" != s1:
+        bad.append(b["id"] + ":공통 목표")
+    mine = bt.split("### 이 조각의 Goal · Non-goal\n\n", 1)[1].split("\n\n### 공통 목표", 1)[0]
+    if mine.splitlines() != ["- 의도: " + b["fields"]["의도"], "- 범위: " + b["fields"]["범위"]]:
+        bad.append(b["id"] + ":의도 · 범위")
+print("BAD\t%s" % bad)
+print("UNASSIGNED\t%s" % sorted(non_s - union, key=cbc.id_sort_key))
+print("ORPHANS\t%s" % sorted(s_ids - union, key=cbc.id_sort_key))
+print("UNKNOWN\t%s" % sorted(union - non_s - s_ids, key=cbc.id_sort_key))
+print("OVERLAPS\t%s" % rs.overlaps(blocks))
+r0 = next(b for b in blocks if b["id"] == "R0")
+spec = (root / r0["fields"]["spec"]).read_text(encoding="utf-8")
+print("R0TABLE\t%s" % (set(r0["assigned"]) == cbc.table_ids(spec)))
+PY
+  )
+}
+REAL="$(real_check "$ROOT")"
+field_of() { printf '%s\n' "$REAL" | awk -F'\t' -v k="$1" '$1==k {print $2}'; }
+assert_eq "$(field_of ERRORS)" "[]" "실데이터 AC1: 로드맵 형식 깨짐 없음"
+assert_eq "$(field_of BLOCKS)" "P1:branch P2:branch P3:decision P4:decision R0:branch R1:bundle R2:bundle R7:bundle R3:bundle R4:bundle R6:bundle R2a:bundle R5:bundle R8:bundle R9:bundle" "실데이터 AC1: 블록 15개와 종류"
+assert_eq "$(field_of RISK)" "True" "실데이터: 위험 번호표 K1~K15 가 brief §5 원문과 같다"
+assert_eq "$(field_of BAD)" "[]" "실데이터 AC2: 묶음 10개의 frontmatter · 절 · §6 · 공통 목표 · 의도 · 범위가 바이트 그대로"
+assert_eq "$(field_of UNASSIGNED)" "[]" "실데이터 AC3: 미배정 번호 0"
+assert_eq "$(field_of ORPHANS)" "[]" "실데이터 AC3: 고아 발화 0"
+assert_eq "$(field_of UNKNOWN)" "[]" "실데이터: brief 에 없는 번호 0"
+assert_eq "$(field_of OVERLAPS)" "[]" "실데이터: 의존 없이 겹치는 경로 예약 0"
+assert_eq "$(field_of R0TABLE)" "True" "실데이터: R0 블록의 항목 · 발화 = R0 설계문서 번호 대조 표의 첫 칸"
+# 양성 대조 — 사본에서 묶음 하나의 번호를 빼고 다른 묶음의 §6 을 한 글자 바꾸면 위 검사가 잡는다
+RMD=docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose
+mkdir -p "$T/ctl/docs/superpowers/roadmaps" "$T/ctl/docs/superpowers/interview" "$T/ctl/docs/superpowers/specs"
+cp -R "$ROOT/$RMD" "$T/ctl/docs/superpowers/roadmaps/"
+cp "$ROOT"/docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview*.md "$T/ctl/docs/superpowers/interview/"
+cp "$ROOT/docs/superpowers/specs/2026-10-11-roadmap-walking-skeleton-design.md" "$T/ctl/docs/superpowers/specs/"
+sed -i.bak 's/^ids: \[\(.*\), D46, /ids: [\1, /' "$T/ctl/$RMD/R7.md"
+sed -i.bak 's/^  > 내 의도를 왜곡하는 장치들 다 제거야$/  > 내 의도를 왜곡하는 장치들 다 제거다/' "$T/ctl/$RMD/R2.md"
+rm -f "$T/ctl/$RMD"/*.bak
+CTL="$(real_check "$T/ctl")"
+ctl_of() { printf '%s\n' "$CTL" | awk -F'\t' -v k="$1" '$1==k {print $2}'; }
+assert_eq "$(ctl_of UNASSIGNED)" "['D46']" "양성 대조: 묶음에서 D46 을 빼면 미배정으로 잡힌다"
+assert_contains "$(ctl_of BAD)" "R2:§6" "양성 대조: 묶음 §6 의 한 글자 변경을 잡는다"
+
 finish
