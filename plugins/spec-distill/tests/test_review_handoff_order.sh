@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # guards: plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-review/SKILL.md
 #
-# AC8 · AC16 — 핸드오프 네 자리가 brainstorming → `spec-distill:spec-review` → writing-plans
-# 순서를 싣고, `spec-review` 의 게이트 없는 두 종료 경로가 같은 복귀 지시로 끝나는가.
+# AC8 · AC16 — 핸드오프 자리(interview 의 다음 세션 줄 · brief 템플릿 §7 · spec-review description)가
+# brainstorming → `spec-distill:spec-review` → writing-plans 순서를 싣고, `spec-review` 의 게이트 없는
+# 두 종료 경로가 같은 복귀 지시로 끝나는가. spec-review 승인 게이트의 표 · 다음 세션 줄 · 정지 요건도 잰다.
 #
 # **정적 락이다.** 문구의 존재와 순서만 증명한다 — 오케스트레이터가 그 문구대로 부르는지는
 # 재지 못한다(AC14 수동 e2e 몫). 게이트 없는 종료의 «실행 출력»은
@@ -41,29 +42,45 @@ print("앞 없음" if i < 0 else "뒤 없음" if j < 0 else "ok" if i < j else "
   if [ "$r" = "ok" ]; then ok "$1: '$3' → '$4'"; else no "$1: 순서 판정 $r ('$3' → '$4')"; fi
 }
 
-# ── ① /compact 템플릿 — 사용자가 그대로 붙여넣는 한 줄 ──────────────────────
-ONE="$(grep -F '/compact interview brief at' "$FIN" || true)"
-n1="$(printf '%s' "$ONE" | grep -c . || true)"
-if [ "$n1" = "1" ]; then
-  ok "① 템플릿 줄이 정확히 하나"
-  order "① 템플릿" "$ONE" "Skill superpowers:brainstorming" "spec-distill:spec-review"
-  order "① 템플릿" "$ONE" "spec-distill:spec-review" "writing-plans"
-  # 치환되지 않은 placeholder 를 잡는 fail-closed 검사가 없다(finishing.md 가 스스로 적는다) —
-  # 새 꺾쇠 자리를 들이지 않는다.
-  ph="$(printf '%s' "$ONE" | grep -oE '<[^>]+>' | sort -u | tr '\n' ' ')"
-  assert_eq "$ph" "<brief-path> " "① 템플릿의 꺾쇠 placeholder 는 <brief-path> 하나뿐"
-else
-  no "① 템플릿 줄이 ${n1}개 — 정확히 하나여야 한다"
+# ── 다음 세션 줄 — 표지 블록의 한 줄 (①·② 공통) ────────────────────────────
+NSL_MARK='**다음 세션 줄 — ①/② 공통**'
+nsl() { awk -v m="$NSL_MARK" '$0==m{f=1;next} f&&NF{print;exit}' "$1" | sed -e 's/^> `//' -e 's/`$//'; }
+# 줄 앞 `@<…>` 토큰들을 다루는 셋 — 목록 원소(토큰)가 늘어도 같은 판정이 나온다(설계 G3).
+#   lead_only <줄>        꺾쇠 자리표가 줄 앞 토큰에만 있으면 ok
+#   split_line <줄> first 첫 토큰(주 산출물)
+#   split_line <줄> rest  토큰들을 뗀 나머지
+lead_only() { LINE="$1" python3 -c '
+import os, re
+l = os.environ["LINE"]
+m = re.match(r"((?:@<[^<>]+> )+)", l)
+print("ok" if m and not re.search(r"<[^<>]+>", l[m.end():]) else "no")'; }
+split_line() { LINE="$1" WHAT="$2" python3 -c '
+import os, re
+l = os.environ["LINE"]
+m = re.match(r"((?:@<[^<>]+> )+)", l)
+if not m:
+    print("")
+elif os.environ["WHAT"] == "first":
+    print(re.findall(r"@<[^<>]+>", m.group(1))[0])
+else:
+    print(l[m.end():])'; }
+ONE="$(nsl "$FIN")"
+n1="$(grep -cE '^[[:space:]]*> `(@<[^<>]+> )+이 interview brief 로' "$FIN" || true)"
+if nonempty "다음 세션 줄" "$ONE"; then
+  assert_eq "$n1" "1" "다음 세션 줄 모양의 인용 줄이 finishing.md 에 정확히 하나 (①·② 가 따로 정의하지 않는다)"
+  assert_eq "$(split_line "$ONE" first)" "@<brief-path>" "다음 세션 줄의 첫 토큰은 @<brief-path> (주 산출물)"
+  case "$(split_line "$ONE" rest)" in
+    "이 interview brief 로 Skill superpowers:brainstorming 을 시작하라."*) ok "다음 세션 줄이 토큰 뒤에 brainstorming 을 부른다" ;;
+    *) no "다음 세션 줄의 토큰 뒤 머리가 다르다: $ONE" ;;
+  esac
+  order "다음 세션 줄" "$ONE" "Skill superpowers:brainstorming" "spec-distill:spec-review"
+  order "다음 세션 줄" "$ONE" "spec-distill:spec-review" "writing-plans"
+  assert_contains "$ONE" "보다 이 순서가 우선한다" "다음 세션 줄: brainstorming 의 「다음은 writing-plans 뿐」보다 우선한다고 적는다"
+  assert_contains "$ONE" "게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다" "다음 세션 줄: 게이트 없는 종료의 복귀 분기를 싣는다 (AC16)"
+  assert_eq "$(lead_only "$ONE")" "ok" "다음 세션 줄의 꺾쇠 자리표는 줄 앞 @<…> 토큰에만 있다"
 fi
-
-# ── ② 호출 프롬프트 ─────────────────────────────────────────────────────────
-TWO="$(awk '/^- \*\*② 확정하고 바로 brainstorming\*\*/{f=1} /^- \*\*③/{f=0} f' "$FIN")"
-if nonempty "②" "$TWO"; then
-  order "② 호출 프롬프트" "$TWO" "Skill superpowers:brainstorming" "spec-distill:spec-review"
-  order "② 호출 프롬프트" "$TWO" "spec-distill:spec-review" "writing-plans"
-  assert_contains "$TWO" "보다 이 순서가 우선한다" "②: brainstorming 의 「다음은 writing-plans 뿐」보다 우선한다고 적는다"
-  assert_contains "$TWO" "게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다" "②: 게이트 없는 종료의 복귀 분기를 싣는다 (AC16)"
-fi
+assert_file_absent "$FIN" '/compact interview brief at' "옛 /compact 보존 템플릿이 없다"
+assert_file_absent "$FIN" '확정하고 바로 brainstorming' "옛 「바로 brainstorming」 옵션이 없다"
 
 # ── brief 템플릿 §7 ─────────────────────────────────────────────────────────
 SEV="$(awk '/^## 7\. Next Action/{f=1} f' "$TPL")"
