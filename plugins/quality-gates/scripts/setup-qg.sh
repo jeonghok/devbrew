@@ -157,7 +157,7 @@ fi
 
 STATE_ROOT=".claude/quality-gates"
 
-# state root 아래의 비-세션 형제 폴더(qg-worktree.sh · baseline-cache.sh 가 쓴다)는 SID 로 받지 않는다.
+# state root 아래의 비-세션 형제 폴더(qg-worktree.sh 가 쓰는 worktrees · 옛 버전이 남긴 baseline-cache)는 SID 로 받지 않는다.
 if [[ "$SESSION_ID" == "worktrees" || "$SESSION_ID" == "baseline-cache" ]]; then
   echo "[quality-gates] session ID '$SESSION_ID' 는 state root 의 예약 폴더 이름이다 — 지우지 않는다. 아무것도 쓰지 않는다." >&2
   exit 1

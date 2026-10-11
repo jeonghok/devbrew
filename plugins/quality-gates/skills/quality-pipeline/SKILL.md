@@ -41,7 +41,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v12.2.0)
+# Quality Gates — In-Turn Orchestrator (v13.0.0)
 
 <!-- plain-language:begin -->
 ## 사람에게 쓰는 글
@@ -197,12 +197,14 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
    | `no-declaration` | session | 공지하지 않는다 — 선언은 새 능력이지 새 의무가 아니다 |
    | `declaration-invalid` | session | 공지 한 줄 · Step 4 의 `--scope` 가 판정을 `not-certified (declaration-invalid)` 로 만든다 |
    | `unbounded` | session | 공지 한 줄 · `--scope` 가 `not-certified (declaration-invalid)` 로 만든다 |
-   | `merge-conflict` | session | 공지 한 줄 · `--scope` 가 `not-certified (merge-conflict)` 로 만들고 충돌 파일을 싣는다 · 앞 iteration 이 topic 이었으면 이 iteration 의 차등 판정 입력은 error-axis 다(D1 기준선 불일치) |
-   | `merge-failed` | session | 공지 한 줄 · `--scope` 가 `not-certified (merge-conflict)` 로 만든다 · 앞 iteration 이 topic 이었으면 이 iteration 의 차등 판정 입력은 error-axis 다(D1 기준선 불일치) |
-   | `seal-failed` | session | 공지 한 줄 · 차등 테스트는 `references/differential-test.md` 의 D3 봉인 실패 경로(관측 없음)를 탄다 · 앞 iteration 이 topic 이었으면 이 iteration 의 차등 판정 입력은 error-axis 다(D1 기준선 불일치) |
+   | `merge-conflict` | session | 공지 한 줄 · `--scope` 가 `not-certified (merge-conflict)` 로 만들고 충돌 파일을 싣는다 |
+   | `merge-failed` | session | 공지 한 줄 · `--scope` 가 `not-certified (merge-conflict)` 로 만든다 |
+   | `seal-failed` | session | 공지 한 줄 · 차등 테스트는 `references/differential-test.md` 의 D3 봉인 실패 경로(관측 없음)를 탄다 |
    | `base-unresolved` | session | 차등 테스트의 D0 가 baseline 확정 불가로 처리한다 |
 
    공지 한 줄: `> [quality-gates] 토픽 선언을 이번 iteration 에 쓰지 못했다 (<status>: <reason 값>) — session 스코프로 진행한다.`
+
+   차등 테스트의 기준선은 실행의 첫 iteration 이 정한다(D0). 첫 iteration 이 `ok`(topic)였는데 뒤 iteration 에서 `ok` 가 아닌 상태가 나오면(위 표의 어느 행이든 — 스코프가 session 으로 바뀐다), 반대로 session 으로 시작한 실행에서 `ok` 가 나오거나 경계가 달라지면, 그 iteration 의 차등 판정 입력은 error-axis 다(D1 기준선 불일치).
 
    `status: ok` 이고 파일의 `in_base:` 가 0 보다 크면 공지 한 줄: `> [quality-gates] 토픽 <topic_key> 의 선언 커밋 <in_base>개는 이미 base 에 있어 토픽 구성원에서 빠졌다 — 그 머지 전에 갈라져 base 를 아직 안 들인 형제 구성원이 그 조각을 품은 구성원과 함께 있으면 그 변경이 이번 diff 에 다시 보인다.`
 

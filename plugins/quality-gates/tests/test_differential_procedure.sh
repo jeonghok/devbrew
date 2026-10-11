@@ -92,6 +92,7 @@ case_skill_section_wires_the_reference() {
 case_reference_steps_are_d0_to_d8() {
   local got; got=$(grep -oE '^## D[0-9]+ ' "$REF" | tr -d '# ' | tr '\n' ' ')
   assert_eq "$got" "D0 D1 D2 D3 D4 D5 D6 D7 D8 " "절차 단계 D0~D8 이 순서대로 하나씩"
+  assert_eq "$(grep -c '§' "$REF")" "0" "모델이 매 iteration 읽는 절차는 설계 문서의 절(§)을 가리키지 않는다 — 지킬 규칙은 절차 안에 있다"
   assert_not_grep "$(cat "$REF")" '^\*\*Step R|갭 게이트|baseline-cache|test-scope-validator' "옛 단계 · 지운 장치가 절차에 없다"
   assert_contains "$(cat "$REF")" '이 호출 결과가 authoritative 다' "호출 주체 불변식: 스크립트 호출 결과가 판정 입력의 유일한 출처다"
 }
