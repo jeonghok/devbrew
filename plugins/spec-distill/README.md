@@ -50,7 +50,7 @@
                                        │                라운드 게이트 → 저자 수정 → 다음 라운드 (재리뷰 상한 2)
                                        └─ 냉독    brief-readback  (엔진 밖 advisory, G1–G6 gap)
                                        ▼ 산출물 셋 (엔진 게이트 결과 / 냉독 요약+gap / degrade 채널)
-                                       ▼ [Step B proceed 게이트] ①/compact 후 brainstorming · ②바로 brainstorming · ③확정 목록 수정 · ④brief만 종료  (superpowers 있을 때만)
+                                       ▼ [Step B proceed 게이트] ①/new 후 다음 세션 줄 · ②/compact 후 다음 세션 줄 · ③확정 목록 수정 · ④brief만 종료  (superpowers 있을 때만)
                                    superpowers:brainstorming → -design.md
                                        ▼ brainstorming 이 설계문서를 쓰고 커밋 — 사용자 리뷰 게이트 자리
                                        ▼ 오케스트레이터가 그 경로로 spec-review 호출 (핸드오프 지시 · description — 훅 강제 없음)
@@ -77,7 +77,7 @@
 
 **v0.41.0**: interview의 R1을 `Reframe (메타 프롬프트)`에서 **`Problem Reframe`**으로 재정의 — 「받은 요청 재구성」은 `request-framing`이 맡고, R1은 **seed가 가리키는 작업 뒤의 진짜 문제**를 재구성한다(R&R 이동, 명칭 변경이 아니다). `spec-interview`가 `type: interview-seed` 입력을 받는 규약을 얻었다 — seed 본문은 §6 `S1`이 되고, 인터뷰 중 새 발화가 seed의 확정을 뒤집으면 새 발화가 이기며 그 재결정이 §5에 *원래/재결정/근거*로 남는다(P23). interview 명령 파일의 trivia 5패턴 인라인 사본이 `references/trivia-escape.md` 포인터로 바뀌었고(v0.41.0 시점엔 아직 인라인이었다), seed가 아닌 입력에는 조언 한 줄만 내고 차단하지 않는다(호환 유지).
 
-**3.0.0**: 설계문서 리뷰 진입의 훅 강제를 없앴다. brainstorming 뒤·writing-plans 앞의 `spec-review` 호출은 오케스트레이터가 인터뷰 핸드오프 문구(`finishing.md` ①·②, brief 템플릿 §7)와 이 skill 의 description 을 읽고 스스로 한다. 끄기 판정은 진입 검사(`scripts/review_entry.py` + 리터럴 펜스, fail-closed)가, TTL-GC 기동은 SessionEnd 훅이 맡는다.
+**3.0.0**: 설계문서 리뷰 진입의 훅 강제를 없앴다. brainstorming 뒤·writing-plans 앞의 `spec-review` 호출은 오케스트레이터가 인터뷰 핸드오프 문구(`finishing.md` 의 다음 세션 줄, brief 템플릿 §7)와 이 skill 의 description 을 읽고 스스로 한다. 끄기 판정은 진입 검사(`scripts/review_entry.py` + 리터럴 펜스, fail-closed)가, TTL-GC 기동은 SessionEnd 훅이 맡는다.
 
 ## Principles Instantiated
 
@@ -141,7 +141,7 @@
 ### Anti-pattern 회피
 
 - **AP3 (Self-approval)** — writer/reviewer 물리적 분리 (frontmatter scoping).
-- **AP2 (Polite stop)** — **정본은 `references/proceed-gate.md`** (v0.31.0). 두 proceed 게이트(spec-review 의 `## 게이트` 절 · spec-interview 종료 Step B)가 그 파일의 골격·두 가드·예외 경로를 공유하며, 각 skill 은 자기 어휘(옵션 라벨 · verbatim `/compact` 템플릿 · 고유 스텝)만 인라인으로 갖는다. 아래는 그 계약의 **요약**이지 별개 저술이 아니다 — 계약이 바뀌면 정본을 고치고 여기를 따라 고친다. approve tail = proceed 게이트(AskUserQuestion) → 미커밋 확인(리터럴 펜스, 기록 없음). 게이트를 skip한 narrate-only 종료 금지. cross-compact 조기 진행(옵션 ① 노출 후 같은 턴 writing-plans 직진)도 게이트 P17 우회의 대칭 실패로 금지 (v0.11.0 AC19). interview→brainstorming Step B의 **4옵션**: ①/compact 후 brainstorming / ②바로 brainstorming / ③확정 목록 수정 / ④brief만 종료 (③ 추가는 v0.23.0) — 전용 handoff 스크립트를 호출하지 않음(brief는 막 검증됨, 하류/SessionEnd가 cleanup) (v0.13.0).
+- **AP2 (Polite stop)** — **정본은 `references/proceed-gate.md`** (v0.31.0). 두 proceed 게이트(spec-review 의 `## 게이트` 절 · spec-interview 종료 Step B)가 그 파일의 골격·두 가드·예외 경로를 공유하며, 각 skill 은 자기 어휘(옵션 라벨 · 다음 세션 줄 · 고유 스텝)만 인라인으로 갖는다. 아래는 그 계약의 **요약**이지 별개 저술이 아니다 — 계약이 바뀌면 정본을 고치고 여기를 따라 고친다. approve tail = proceed 게이트(AskUserQuestion) → 미커밋 확인(리터럴 펜스, 기록 없음). 게이트를 skip한 narrate-only 종료 금지. cross-compact 조기 진행(①/② 의 두 줄 명령 노출 후 같은 턴에 다음 단계로 직진)도 게이트 P17 우회의 대칭 실패로 금지 (v0.11.0 AC19). interview→brainstorming Step B의 **4옵션**: ①/new 후 다음 세션 줄 / ②/compact 후 다음 세션 줄 / ③확정 목록 수정 / ④brief만 종료 (③ 추가는 v0.23.0). ①·② 의 다음 세션 줄은 `@<brief 절대경로>` 로 시작해 새 세션이 brief 를 붙여 읽는다(정본 `## 다음 세션 명령`) — 전용 handoff 스크립트를 호출하지 않음(brief는 막 검증됨, 하류/SessionEnd가 cleanup) (v0.13.0).
 - **AP5 (Trivia ceremony)** — `/spec-interview` first-step trivia escape (5 패턴).
 - **AP9 (Subagent spray)** — `plugins/spec-distill/agents/` 8종(doc-critic·doc-critic-web·doc-recritic·steelman-builder·coverage-mapper·blind-spot-prober·brief-readback·seed-readback). 상한이 선언된 것: coverage-mapper·blind-spot-prober 는 **자격 + 예산**(자격 = 그 차원에 닿는 열린 결정이 아직 있는가 · 예산 = `1 + 재개방`, 4.4.0) · 문서 리뷰 엔진의 탐지 dispatch 는 라운드당 한 번(critic 사망이면 재dispatch 1회)이고 라운드 수는 재리뷰 상한 2 가 막는다(spec-review · reviewing-brief · request-framing).
 - **P11 (Cross-Model Adversarial)** — sub-agent reviewer adversarial review + **`steelman-builder` 의심 게이트(v0.12.0, v0.54.0 재설계)**: 의심 방향에 대해 builder 가 원안·대안 **양쪽**의 최강 케이스를 사용자 goal 기준으로 쓰고 근거가 핵심 전제에 닿는지 판정한다. 재검토를 여는 열쇠는 전제 충돌 하나 — 그 외 근거는 원안 강화·경계 다듬기에 쓴다. 판정 어휘 유지/보완/전환/보류(kept/refined/switched/deferred), 선택은 사용자.
