@@ -40,8 +40,8 @@
 
 | 진행 중 브랜치 | 겹치는 예약 경로 | 에픽 | 처리 |
 |---|---|---|---|
-| `fix/plain-language-qg-findings` | plugins/quality-gates/scripts/synthesize_findings.py · plugins/quality-gates/skills/critiquing-artifacts/SKILL.md · plugins/quality-gates/skills/quality-pipeline/SKILL.md · plugins/quality-gates/tests/test_critiquing_artifacts_skill.sh · plugins/quality-gates/tests/test_plain_field_path.sh · plugins/quality-gates/tests/test_plain_synth_output.sh · shared/docreview/references/reviewing-document.md · shared/docreview/scripts/docreview_state.py | R2a | R2a 착수 전에 그 브랜치의 머지 또는 폐기를 확인한다(지휘 절차 2). 로드맵 블록은 두지 않고 이 충돌표에만 둔다(AC4 승인 때 사용자 결정 — R0 설계 B11) |
-| `qg-review/python-floor-uv` | plugins/project-init/hooks/hooks.json · plugins/project-init/scripts/devbrew-python.sh · plugins/quality-gates/hooks/hooks.json · plugins/quality-gates/hooks/session-start-advisor.py · plugins/quality-gates/scripts/devbrew-python.sh | R2a | 위와 같다 |
+| `fix/plain-language-qg-findings` | plugins/quality-gates/scripts/synthesize_findings.py · plugins/quality-gates/skills/critiquing-artifacts/SKILL.md · plugins/quality-gates/skills/quality-pipeline/SKILL.md · plugins/quality-gates/tests/test_critiquing_artifacts_skill.sh · plugins/quality-gates/tests/test_plain_field_path.sh · plugins/quality-gates/tests/test_plain_synth_output.sh · shared/docreview/references/reviewing-document.md · shared/docreview/scripts/docreview_state.py | R2a | 머지됨(PR #201, 2026-10-11) — 그 변경은 main 에 들어왔고 R2a 는 main 위에서 시작한다 |
+| `qg-review/python-floor-uv` | plugins/project-init/hooks/hooks.json · plugins/project-init/scripts/devbrew-python.sh · plugins/quality-gates/hooks/hooks.json · plugins/quality-gates/hooks/session-start-advisor.py · plugins/quality-gates/scripts/devbrew-python.sh | R2a | R2a 착수 전에 그 브랜치의 머지 또는 폐기를 확인한다(지휘 절차 2). 로드맵 블록은 두지 않고 이 충돌표에만 둔다(AC4 승인 때 사용자 결정 — R0 설계 B11) |
 
 `feature/subagent-adjudication-contract` · `fix/hook-write-path-bypass` · `fix/retire-suppression-sweep-handoff` 도 머지 표시는 안 됐지만 origin/main 과 비교한 변경 파일이 0개라 겹침이 없다.
 
