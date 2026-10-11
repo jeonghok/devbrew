@@ -1537,8 +1537,11 @@ def render_gate(st, g) -> str:
     if g.get("advice") is not None and _has_advisory_axis(st):   # 게이트 질문이 아니다 — 목록은 끝에서 한 번(`advice --render`)
         adv_g = g["advice"]
         # 참고 축을 셌다는 공시는 남긴다 — 0 이면 0 을 늘어놓지 않고 쉬운 한 문장으로(설계 §3 원칙 3 · AC3②).
-        if adv_g["total"] == 0 and adv_g["mc_preexisting_new"] == 0:
-            out.append("참고 항목은 없다 — 이번 라운드에도 세어 봤다.")
+        if adv_g["total"] == 0:
+            line = "참고 항목은 없다 — 이번 라운드에 세어 봤다."
+            if adv_g["mc_preexisting_new"] > 0:
+                line += " 전부터 있던 절에서 새로 나온 필수 지적 %d건." % adv_g["mc_preexisting_new"]
+            out.append(line)
         else:
             out.append("참고 %d건(이번 라운드 새 %d · 반복 %d) — 끝에 한 목록으로 보인다 · 전부터 있던 절에서 새로 나온 필수 지적 %d"
                        % (adv_g["total"], adv_g["new"], adv_g["repeat"], adv_g["mc_preexisting_new"]))

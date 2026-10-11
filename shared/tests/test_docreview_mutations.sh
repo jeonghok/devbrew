@@ -896,5 +896,8 @@ mut 1/1 cli_text_check_disabled case_advice_cli_text_surrogate_rejected sed_stat
   's/^    bad = unencodable_text_arg(a)$/    bad = None/'
 # 참고 0 의 쉬운 문장을 끄기 — 「이상 없음」 밑에 0 만 늘어선 참고 줄이 되살아난다.
 mut 1/1 advice_zero_listing_revived case_advice_plain_render_nothing_left_mc sed_state \
-  's/^        if adv_g\["total"\] == 0 and adv_g\["mc_preexisting_new"\] == 0:$/        if False:/'
+  's/^        if adv_g\["total"\] == 0:$/        if False:/'
+# 참고 0 의 쉬운 문장 뒤에 붙는 필수 지적 수를 끄기 — 전부터 있던 절의 새 필수 지적이 참고 줄에서 사라진다.
+mut 1/1 advice_zero_mc_append_dropped case_advice_plain_render_zero_with_mc_preexisting sed_state \
+  's/^            if adv_g\["mc_preexisting_new"\] > 0:$/            if False:/'
 finish
