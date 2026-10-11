@@ -43,7 +43,7 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
   가 "전체 앱 부팅"이 아니라 *"레포에 이미 있는 테스트 중 영향분을 실제로 돌리는 것"*이다.
   `run-test-selection.sh` 가 러너 어댑터 9종을 **집합으로** 감지해 전부 실행한다 — 폴리글랏
   레포에서 우선순위 밖 러너를 버리면 floor 가 의미를 잃는다(이 리포 실측: `.sh` 130개 /
-  `.py` 50개). 부팅되는 앱의 런타임 행위 검증은 대체되지 않고 주장만 거뒀다(위 C4).
+  `.py` 50개). 부팅되는 앱의 런타임 행위는 e2e 걷기가 본다(아래 P4 줄).
 - **LD5 (결정론은 모델 주장과 독립인 백스톱) — 호출 주체 분리 (Law 2)** (v3.0.0) — 영향 스코프
   판정은 모델이 하되, `run-test-selection.sh` 는 기준선 측·HEAD 측 **둘 다 오케스트레이터가
   직접** 호출한다. agent 가 테스트 결과를 self-report 하면 오케스트레이터가 받는 것이 raw
@@ -72,7 +72,8 @@ Claude Code용 품질 검증 파이프라인 — 한 파이프라인, 한 판정
 - **Law 3 (Compounding) — 문서 리뷰 엔진 기반 (v7.4.0)** — 네 문서 리뷰 자리를 통일하는 `shared/docreview/` 를 호출자 0 으로 심었다. `generic` 프로필(`references/docreview-profiles/generic.md`)이 non-code 아티팩트 자리를 데이터로 선언. `/qg critique` 의 전환(agent·reference 링크 배선, `artifact_commit.sh` 자율 커밋 루프 소멸)은 후속 major PR. 집행은 `shared/tests/test_docreview_*.sh` + 변이 매트릭스.
 - **모집단에 안 들어간 것은 검사되지 않는다 (v7.5.0)** — 심볼릭 링크로 배포되는 러너가 `extract_codex_invocations.py` 의 `is_symlink()` skip 과 `codex_observation.sh` 양쪽 모집단에서 빠져, `test_sandbox_enforced.sh` 가 «통과»하면서도 그 러너를 한 번도 안 봤다. 링크 배포본을 모집단에 넣고 관측 캡처를 basename 이 아니라 «경로»로 키잉했다(같은 basename 후보 둘이 서로를 가렸다). **락의 PASS 는 이빨의 증거가 아니다** — 무엇이 모집단에 있는지를 먼저 물어야 한다. v7.4.0 CHANGELOG 가 「PR 2 에서 다시 판단한다」로 미뤘던 항목이고, 그 판단은 이 릴리스가 했다.
 - **Law 1 · G3 — 「검증하지 못했다」는 일급 판정값** — 판정은 `clean` · `defect` · `not-certified (<사유>)` 셋이고 사유는 닫힌 열거다(`scripts/verdict.py` 한 곳). kill switch · trivia · 각도 부재 · 차등 축의 해상도 문제는 `clean` 도 실패도 아닌 `not-certified` 로 드러난다. regression: `tests/test_verdict_vocabulary.sh` · `tests/test_pipeline_verdict_wiring.sh`.
-- **C4 — 차등 테스트는 항상** — 기준선 축(`create-baseline`)과 봉인된 HEAD 축(`seal-worktree.sh` → `create-head`)에서 오케스트레이터가 직접 돌린다. 판정을 내는 경로 안에서 차등 테스트가 빠지는 길은 trivia escape 와 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 둘뿐이고 둘 다 `not-certified` 다(전역 `DEVBREW_QUALITY_GATES_DISABLE=1` 은 다르다 — Preflight P1 에서 판정 자체를 내지 않고 그대로 리턴한다). 부팅되는 앱의 런타임 행위 검증은 **대체하지 않고 주장을 거둔다**.
+- **C4 — 차등 테스트는 항상** — 기준선 축(`create-baseline`)과 봉인된 HEAD 축(`seal-worktree.sh` → `create-head`)에서 오케스트레이터가 직접 돌린다. 판정을 내는 경로 안에서 차등 테스트가 빠지는 길은 trivia escape 와 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 둘뿐이고 둘 다 `not-certified` 다(전역 `DEVBREW_QUALITY_GATES_DISABLE=1` 은 다르다 — Preflight P1 에서 판정 자체를 내지 않고 그대로 리턴한다). 부팅되는 앱의 런타임 행위는 차등 테스트가 아니라 e2e 걷기가 본다(아래 P4 줄).
+- **P4 — runtime tier 는 사람이 승인하는 e2e 걷기 (v10 ④)** — 오케스트레이터가 승인된 명령으로 앱을 띄워 걷고, 증거표에서 코드가 판정안을 낸다(`scripts/e2e-state.sh propose`). reviewer 는 걷기 직후 게이트의 사람이다. runtime tier 는 사람이 승인하면 e2e 걷기로 확인한다 — 걷지 않은 실행은 판정 줄의 e2e 칸이 그 사실을 보인다. 걷는 동안 코드 상태가 바뀌면 판정안은 무효다(지문 비교). regression: `tests/test_e2e_state.sh` · `tests/test_e2e_verdict.sh` · `tests/test_e2e_docs.sh`.
 
 ## 구조
 
@@ -165,6 +166,7 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 | ① 리뷰 | 기본 셋(`pr-review-toolkit:code-reviewer` · `security-reviewer` · codex) + 조건부 ≤4 → `code-recritic` | 범위(topic · session · `branch` · `--paths`)의 diff 를 한 기준 블록과 의도 출처로 리뷰하고, 출처를 못 보는 재비판이 지적을 다시 판정한다(탐지 0 이어도 돈다) |
 | ② 차등 테스트 | 오케스트레이터 + 결정론 스크립트 | 영향분 테스트를 기준선 축과 봉인된 HEAD 축에서 돌려 귀속(`references/differential-test.md`) |
 | ③ 합성 · 판정 | `synthesize_findings.py` → `verdict.py` | `clean` · `defect` · `not-certified (<사유>)` — 막는 지적(CRITICAL · IMPORTANT)이 1건 이상이면 `defect` |
+| ④ e2e | 오케스트레이터 + `e2e-state.sh` | 사람이 고른 시나리오를 승인된 명령으로 띄운 앱에서 걷고, 증거표에서 코드가 판정안을 낸다 — 걷기 직후 게이트에서 사람이 확정한다(`references/e2e.md`) |
 
 **아키텍처 메모 — 왜 오케스트레이션이 skill 에 있는가**: Claude Code는 skill만 `Agent()`의
 `subagent_type`을 쓸 수 있다. 파이프라인은 여러 리뷰어를 디스패치해야 하므로 orchestration
@@ -234,6 +236,7 @@ max fan-out: **리뷰어 구성 ≤ 8**(기본 셋 + 조건부 ≤4 + 재비판 
  │   막는 지적 또는 차등 defect → AskUserQuestion ("findings remain…")
  │       분류표(항목마다 적용 / 제외 + 사유) · Retry / Accept and finish / Stop
  │       Retry: 「적용」만 Edit, 「제외」는 excluded.md → 다음 iteration
+ ├ e2e ── 시나리오 질문 → 앱 부팅 · 걷기 → 판정안 · 걷기 직후 게이트 (끔 · 안 함도 판정 줄에 남는다)
  ├ Final verdict ── verdict.py 의 판정 줄 · result.md
  └ Publish ── sink 한 번 · posted:/skipped:
 ```
@@ -363,6 +366,7 @@ test-scope-validator 의 spec 축을 끈다(validator 는 plan-기반 분류).
 
 - **Python 3** — 스킬이 부르는 `scripts/*.py` 는 사용자의 `python3` 로 돈다. 이 플러그인에는 훅이 없어
   devbrew 의 출하 Python 바닥(루트 README 「Python」)을 집행하는 해석기를 거치지 않는다.
+- **e2e** — `curl`(API 시나리오를 걸을 때 오케스트레이터가 쓴다) · `pgrep` / `ps`(남은 앱 정리)가 필요하다. 웹 화면을 걸으려면 브라우저 자동화 MCP 가 있으면 좋고, 없으면 그 시나리오는 걸을 도구가 없다고 판정 줄에 남는다.
 
 | 플러그인 | 필수 | 사용처 | 목적 |
 |---------|------|-------|------|
@@ -374,6 +378,7 @@ test-scope-validator 의 spec 축을 끈다(validator 는 plan-기반 분류).
 ### Tuning knobs
 
 - `MAX_REVIEW_ITERATIONS`: 5 (파이프라인 fix-loop iteration 수)
+- `DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT`: 90 (e2e 부팅의 준비 신호를 기다리는 초 — 넘으면 판정안이 「미확인(부팅 실패)」)
 - `DEVBREW_QUALITY_GATES_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/qg` 시작마다 GC)
 - `DEVBREW_QUALITY_GATES_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
 
@@ -391,10 +396,25 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 기준선·HEAD 두 트리에서 어댑터의 `setup_cmd`(`npm ci` 등 install lifecycle 스크립트) ·
 테스트 스위트가 **기본으로, 별도 동의 질문 없이** 호스트 권한으로 돈다 — 이전에는 게이트
 범위 질문에서 "Run both gates" 를 골라야만 닿던 표면이다. 그 실행(setup · 러너 · 테스트)을
-끄는 스위치는 아래 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이다. 선언 경로의
+끄는 스위치는 아래 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이다. e2e 는 사람이 고른 시나리오의 부팅
+명령을 호스트 권한으로 실행한다 — 시나리오를 고르는 것이 그 실행의 승인이고, 같은 스위치와
+`DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 이 그 실행을 막는다(`e2e-state.sh` — CLI 직접 걷기에서는 그 게이트가 명령마다의
+코드가 아니라 오케스트레이터가 읽는 지문 rc 다). 선언 경로의
 봉인 · 합치기(`topic-head.sh`)는 스위치와 무관하게 돌되 저장소 git 훅을 끈 채 돈다. **범위
 밖(부채)** — 스위치도 훅 끄기도 qg 가 부르는 git 전체를 덮지 않는다: HEAD 축 · 기준선
 트리를 만드는 `git worktree add`(`qg-worktree.sh`)는 저장소의 `post-checkout` 훅을 돌릴 수 있다.
+
+**e2e 의 알려진 한계**
+- e2e `stop` 은 승인된 명령이 띄운 프로세스 그룹을 내린다. 그 안에서 스스로 새 세션을 여는 데몬(`setsid` · `docker compose up -d` 류)은 그룹 밖이라 내리지 못한다 — 그런 명령은 시나리오의 부팅 명령으로 고르지 않는다.
+- e2e 남은 앱: 걷다 끊긴 실행이 남긴 앱은 같은 세션의 다음 `/qg` 만 내린다. 다른 세션의 `/qg` 는 앞 세션의 폴더를 보지 않으므로, 세션이 끝날 때 걷다 끊긴 앱이나 TTL GC 로 폴더가 먼저 지워진 앱은 그대로 남는다. setup 이 폴더를 다시 만들 때 그 앱을 내리지 못하면 사유를 출력한 뒤 pgid 기록이 든 폴더를 지우므로, 그 앱도 그대로 남을 수 있다.
+- e2e `stop` 의 생존 판정: `ps` 에 보이지 않는 리더는 끝난 것으로 본다. `ps` 가 잠깐 실패한 순간 pid 가 다른 프로세스에 재사용됐으면 그 그룹에 신호가 갈 수 있다.
+- e2e 포트 확인: 부팅 전 포트 사용 확인과 `--ready-port` 준비 확인은 `127.0.0.1` 만 본다. IPv6 `::1` 에 다른 앱이 떠 있는 것은 보지 못하고, `::1` 에만 묶이는 서버(macOS 의 최근 Node · Vite 가 `localhost` 로 뜰 때 등)는 준비 신호가 오지 않아 「미확인(부팅 실패)」로 끝난다 — 승인할 명령에 `--host 127.0.0.1` 같은 인자를 쓴다.
+- e2e 부팅 상한: `DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT` 을 약 540초보다 크게 두면 Bash 도구의 호출 상한 600초를 넘는다.
+- e2e CLI 직접 걷기: 지문 rc 를 오케스트레이터가 지켜야 막힌다. 명령마다 코드가 막는 것은 아니다.
+- e2e 지문: 추적 안 된 중첩 리포와 서브모듈 안의 변경은 지문을 바꾸지 않는다.
+- e2e 증거 판독: 「증거 없음」으로 읽는 글자는 빈 칸 · `-` · `없음` · `n/a` · `N/A` 뿐이다. `—` · `none` 같은 글자는 증거로 읽혀 `충족` 이 그대로 남는다.
+- e2e `stop` 과 다른 사용자의 프로세스: 승인된 명령이 다른 사용자 권한의 프로세스(`sudo` 류)를 그룹에 띄우면 그 프로세스는 내리지 못하고 `stop` 이 `stop-failed` 로 끝난다.
+- e2e 부팅 정리 실패: 부팅이 실패한 뒤 boot 자신의 정리(stop)까지 실패하면 boot 는 `boot-failed:` 줄 없이 exit 5 로 끝나고 앱이 남을 수 있다 — 그 앱은 사람이 직접 내려야 한다.
 
 **전역 (모든 reviewer + GC 비활성화):**
 
@@ -414,7 +434,8 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 | Env var | 효과 |
 |---|---|
 | `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` | codex 의 의도 입력(`<intent>`)을 비우고 test-scope-validator 의 spec 축을 끈다(validator 는 plan-기반 분류). |
-| `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | ② 차등 테스트를 통째로 건너뛴다(리뷰 대상 저장소의 코드를 호스트 권한으로 돌리지 않는다). 판정은 `not-certified (kill-switch)` 다 — `clean` 도 실패도 아니다. `run-test-selection.sh` 도 집행한다(probe · run 이 저장소 코드를 돌리지 않는다). |
+| `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | ② 차등 테스트를 통째로 건너뛴다(리뷰 대상 저장소의 코드를 호스트 권한으로 돌리지 않는다). 판정은 `not-certified (kill-switch)` 다 — `clean` 도 실패도 아니다. `run-test-selection.sh` 도 집행한다(probe · run 이 저장소 코드를 돌리지 않는다). 같은 약속으로 e2e 부팅도 막는다 — `e2e-state.sh` 가 지문 · 부팅을 거부하고 판정 줄의 e2e 칸이 `꺼짐(kill switch)` 이다. |
+| `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` | e2e 만 끈다. 질문이 뜨지 않고 판정 줄의 e2e 칸이 `꺼짐(kill switch)` 이다 — 판정은 다른 축이 정한 그대로다. 집행은 `e2e-state.sh` 다(지문 · 비교 · 부팅이 exit 3). |
 
 자체 테스트 격리용 샌드박스(`create-sandbox` · `mutation-guard`)와 그 스위치는 v10.0.0 에서
 `plugins/plugin-audit` 로 옮겨 갔다(`DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX`).

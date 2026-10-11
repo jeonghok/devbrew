@@ -285,7 +285,7 @@ mtime 은 쓰지 않는다. PR 본문은 `discover-spec.sh` 가 읽기 전용 `g
 
 집행은 산문이 아니라 코드다(R22). 걷기의 첫 단계인 `e2e-state.sh` 가 두 스위치 중 하나라도 켜져 있으면 지문
 측정을 거부하고 비0 으로 끝난다. 지문이 없으면 걷기를 시작할 수 없다. 이때 파이프라인은 e2e 질문을 띄우지 않고
-판정 줄에 「e2e 꺼짐(kill switch)」을 공시한다.
+판정 줄에 「e2e 꺼짐(kill switch)」을 공시한다. CLI 직접 걷기의 게이트는 명령마다의 코드가 아니라 오케스트레이터가 읽는 지문 rc 다.
 
 **부팅 실패** — 승인된 명령이 비0 으로 끝나거나 준비 신호가 상한 시간 안에 오지 않으면 판정안은 「미확인(부팅
 실패)」이고, 부팅 출력 끝부분을 증거로 보인다. 상한 시간의 기본값은 plan 이 정한다. 사람은 게이트에서 그것을
@@ -410,7 +410,7 @@ qg: <판정>[ (<사유>)] · 막는 지적 N · 선택 M · 차등 새 실패 K 
 
 | 자리 | 문장 | 컷오버 |
 |---|---|---|
-| `docs/philosophy/devbrew-harness-philosophy.md` P4 | 기존 문장 「지금 devbrew 에는 runtime tier 의 집행 코드가 없다 — qg 는 … runtime tier 를 주장하지 않는다」를 **대체**: 「qg 는 runtime tier 를 사람이 승인하는 e2e 걷기로 집행한다 — 오케스트레이터의 판정은 판정안이고 reviewer 는 감독하는 사람이다(Law 2 해석)」. P4 코드 앵커에 `plugins/quality-gates/references/e2e.md` 를 더한다 | ④ |
+| `docs/philosophy/devbrew-harness-philosophy.md` P4 | 기존 문장 「지금 devbrew 에는 runtime tier 의 집행 코드가 없다 — qg 는 … runtime tier 를 주장하지 않는다」를 **대체**: 「qg 는 runtime tier 를 사람이 승인하면 e2e 걷기로 확인한다 — 걷지 않은 실행은 판정 줄의 e2e 칸이 그 사실을 보인다(오케스트레이터의 판정은 판정안이고 reviewer 는 감독하는 사람이다 — Law 2 해석).」. P4 코드 앵커에 `plugins/quality-gates/references/e2e.md` 를 더한다 | ④ |
 | 같은 문서 P17 | 「qg 의 매 실행 PR 코멘트 게시는 사용자의 상시 동의다」 | ③ |
 | `CLAUDE.md` 메타데이터 절 | 「사용자가 명시 결정한 재건은 deprecation 창 없이 제거하고 CHANGELOG Removed 에 적는다」 | ① |
 
@@ -524,7 +524,7 @@ P21 의 코드 앵커 `comment-upsert.py` 는 ③에서 `publish-comment.sh` 로
 - AC18 증거 인용이 없는 기대 상태가 하나라도 있고 불충족이 없으면 판정안이 미확인이다.
 - AC19 `tests/fixtures/e2e-app` 의 버그 주입 브랜치에서 `/qg` 를 돌리면 e2e 판정안이 fail 이고, 승인하면 판정이 defect 다.
 - AC20 `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 이나 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 중 하나만 켜도
-  e2e 질문이 뜨지 않고 판정 줄에 그 사실이 나온다. 같은 조건에서 `e2e-state.sh` 를 직접 불러도 비0 으로 끝난다.
+  e2e 질문이 뜨지 않고 판정 줄에 그 사실이 나온다. 같은 조건에서 `e2e-state.sh` 의 `fingerprint` · `compare` · `boot` 를 직접 불러도 비0 으로 끝난다. `stop` 은 막지 않고(남은 앱을 내려야 한다 — X4), `propose` 는 리뷰 대상 코드를 실행하지 않아 막지 않는다.
 - AC20a 승인된 부팅 명령이 실패하거나 준비 신호가 상한 안에 오지 않으면 판정안이 「미확인(부팅 실패)」이다.
 - AC21 걷기가 어느 경로로 끝나든 승인된 명령이 띄운 프로세스가 남지 않는다.
 

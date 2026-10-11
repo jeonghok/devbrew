@@ -7,6 +7,7 @@
 입력은 셋이다 — 리뷰 축(합성기의 원장), 차등 축(`diff-test-results.py` 의
 `degrade_causes` · `verdict_input`), 그리고 호출자만 아는 사유(kill switch ·
 trivia · 합치기 충돌 · 선언 무효 · 스코프 0 · 각도 부재).
+e2e 걷기의 결과는 `--e2e` 로 들어오고, 최종 판정은 `--prior` 로 마지막 iteration 의 합성기 출력(`$RV/synth.out`)을 잇는다.
 """
 import argparse
 import re
@@ -32,7 +33,14 @@ REASONS = (
     "silent-drop",          # 영향분으로 고른 unit 이 HEAD 에서 미확인
     "error-axis",           # 어느 축이든 error 상태가 닿음
     "granularity-smear",    # bulk 도말 또는 smeared
+    "e2e-unconfirmed",      # e2e 가 미확인 · 무효인 채 닫혔다 — 맨 뒤: 다른 사유가 있으면 그것이 설명한다
 )
+
+# 판정 줄의 e2e 칸 — 닫힌 열거(색인 K-3).
+E2E_STATES = ("pass", "fail", "미확인", "안 함", "걸을 것 없음", "걸을 도구 없음", "꺼짐(kill switch)")
+# e2e 가 판정에 더하는 것은 이 둘뿐이다. 나머지 상태는 다른 축이 정한 판정을 바꾸지 않는다(AC3).
+E2E_TO_REASON = {"미확인": "e2e-unconfirmed"}
+E2E_DEFECT = ("fail",)
 
 # `diff-test-results.py` 의 `degrade_causes` → 이 어휘.
 # `expected-empty`(영향분 0개)와 `no-adapters`(어댑터 0개)에는 설계가 이름을 주지
@@ -92,6 +100,36 @@ def defect_flag_of(differential_text):
     if len(hits) != 1:
         fail4(f"confirmed_product_defect 줄이 {len(hits)}회 (정확히 1회여야 함)")
     return hits[0] == "true"
+
+
+def prior_of(text):
+    """앞 판정(`verdict:` · `reason:` · `reasons:` 줄)을 (defect 여부, 사유 목록)으로 되읽는다.
+
+    e2e 를 최종 판정에 더할 때 리뷰·차등 축의 입력을 다시 모으지 않고 마지막 iteration 의
+    판정 출력을 그대로 잇는다. 읽은 것이 스스로 모순이면 낙관값으로 채우지 않고 exit 4 다(V8).
+    """
+    verdicts = re.findall(r"^verdict: (\S+)$", text, re.M)
+    if len(verdicts) != 1:
+        fail4(f"앞 판정의 verdict 줄이 {len(verdicts)}회 (정확히 1회여야 함)")
+    value = verdicts[0]
+    if value not in VALUES:
+        fail4(f"앞 판정값 '{value}' 가 어휘 밖이다")
+    lists = re.findall(r"^reasons: \[(.*)\]$", text, re.M)
+    if len(lists) > 1:
+        fail4(f"앞 판정의 reasons 줄이 {len(lists)}회")
+    reasons = [r.strip() for r in lists[0].split(",") if r.strip()] if lists else []
+    for r in reasons:
+        if r not in REASONS:
+            fail4(f"앞 판정의 사유 '{r}' 가 열거 밖이다")
+    heads = re.findall(r"^reason: (\S+)$", text, re.M)
+    if value == "not-certified":
+        if not reasons or heads != [reasons[0]]:
+            fail4("앞 판정이 not-certified 인데 reason 과 reasons 가 맞지 않는다")
+    elif heads:
+        fail4(f"앞 판정이 {value} 인데 reason 줄이 있다")
+    if value == "clean" and reasons:
+        fail4("앞 판정이 clean 인데 사유가 있다")
+    return value == "defect", reasons
 
 
 def decide(*, defect=False, review_blocked=False, angle_absent=False,
@@ -160,7 +198,8 @@ def render(decision):
 _SHA = re.compile(r"[0-9a-f]{7,40}")
 
 
-def render_line(decision, *, blocking, optional, new_failures, excluded, iteration, sha):
+def render_line(decision, *, blocking, optional, new_failures, excluded, iteration, sha,
+                e2e=None, e2e_overridden=False):
     if decision["verdict"] not in VALUES:
         fail4(f"열거 밖 판정값 '{decision['verdict']}' — 어휘는 닫혀 있다")
     for name, n in (("blocking", blocking), ("optional", optional),
@@ -173,7 +212,12 @@ def render_line(decision, *, blocking, optional, new_failures, excluded, iterati
     head = f"qg: {decision['verdict']}"
     if decision["verdict"] == "not-certified":
         head += f" ({decision['reason']})"
-    return (f"{head} · 막는 지적 {blocking} · 선택 {optional} · 차등 새 실패 {new_failures}"
+    e2e_part = ""
+    if e2e is not None:
+        if e2e not in E2E_STATES:
+            fail4(f"열거 밖 e2e 상태 '{e2e}'")
+        e2e_part = f" · e2e {e2e}" + (" (사람이 뒤집음)" if e2e_overridden else "")
+    return (f"{head} · 막는 지적 {blocking} · 선택 {optional} · 차등 새 실패 {new_failures}{e2e_part}"
             f" · 제외 패치 {excluded} · iter {iteration} · {sha}\n")
 
 
@@ -200,6 +244,9 @@ def main():
     ap.add_argument("--excluded", type=_count, default=None)
     ap.add_argument("--iter", type=_count, default=None)
     ap.add_argument("--sha", default=None)
+    ap.add_argument("--prior", default=None)
+    ap.add_argument("--e2e", default=None, choices=E2E_STATES)
+    ap.add_argument("--e2e-overridden", action="store_true")
     args = ap.parse_args()
     line_vals = (args.blocking, args.optional, args.new_failures, args.excluded,
                  args.iter, args.sha)
@@ -209,6 +256,20 @@ def main():
         return 2
     if not args.line and any(v is not None for v in line_vals):
         print("verdict.py: 판정 줄 값은 --line 없이는 의미가 없다", file=sys.stderr)
+        return 2
+    # `--prior` 는 마지막 iteration 의 판정 출력을 잇는다 — 리뷰·차등 축 입력이나 그 판정의 결과
+    # (`--defect` · `--reason`)를 함께 주면 같은 축이 두 번 들어간다. 잘못된 호출(2)이다.
+    if args.prior is not None and (args.prior == "" or args.differential is not None
+                                   or args.review_blocked or args.angle_absent
+                                   or args.defect or args.reason):
+        print("verdict.py: --prior 는 빈 문자열을 받지 않고 --differential · --review-blocked · "
+              "--angle-absent · --defect · --reason 과 함께 쓰지 않는다", file=sys.stderr)
+        return 2
+    if (args.e2e is not None or args.e2e_overridden) and not args.line:
+        print("verdict.py: --e2e · --e2e-overridden 는 --line 과 함께 쓴다", file=sys.stderr)
+        return 2
+    if args.e2e_overridden and args.e2e is None:
+        print("verdict.py: --e2e-overridden 는 --e2e 와 함께 쓴다", file=sys.stderr)
         return 2
     # 기본값을 `""` 로 두면 "플래그를 안 줬다" 와 "빈 경로를 줬다" 가 같은 값이
     # 된다 — 값을 못 구한 호출자가 `--differential "$DIFF_YAML"` 을 빈 변수로
@@ -221,18 +282,26 @@ def main():
         print("verdict.py: --differential 은 빈 문자열을 받지 않는다 "
               "(플래그를 생략하거나 실제 경로를 줘라)", file=sys.stderr)
         return 2
+    defect, extra = args.defect, list(args.reason)
+    if args.prior is not None:
+        defect, extra = prior_of(read_or_none(args.prior))
+    if args.e2e is not None:
+        defect = defect or args.e2e in E2E_DEFECT
+        if args.e2e in E2E_TO_REASON:
+            extra.append(E2E_TO_REASON[args.e2e])
     decision = decide(
-        defect=args.defect,
+        defect=defect,
         review_blocked=args.review_blocked,
         angle_absent=args.angle_absent,
         differential_text=read_or_none(args.differential),
-        extra_reasons=args.reason,
+        extra_reasons=extra,
     )
     out = render(decision)
     if args.line:
         out += render_line(decision, blocking=args.blocking, optional=args.optional,
                            new_failures=args.new_failures, excluded=args.excluded,
-                           iteration=args.iter, sha=args.sha)
+                           iteration=args.iter, sha=args.sha,
+                           e2e=args.e2e, e2e_overridden=args.e2e_overridden)
     sys.stdout.write(out)
     return 0
 

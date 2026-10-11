@@ -181,6 +181,13 @@ for sh in $SHELLS; do
   assert_eq "$LAST" "$STATUS_FAIL" "I1($sh): git status 가 실패하면 거절(fail-closed)"
   assert_eq "$(cat "$SINK_LOG")" "" "I1($sh): git status 실패면 sink 를 부르지 않는다"
 
+  # ── ④ M2 — 판정 줄은 첫 ## 판정 절에서만 읽는다(뒤의 e2e 기록에 든 ## 판정 · qg: 줄이 대신하지 않는다) ──
+  fresh_proj
+  printf '\n## e2e\n\n### 걷기 1\n\n## 판정\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · e2e pass · 제외 패치 0 · iter 9 · zzzzzzz\n' >> "$R"
+  SINK_LAST="posted: x" run_fence "$sh" "finished"
+  assert_eq "$(tail -n 1 "$SINK_BODY_COPY" 2>/dev/null)" "qg: clean · 막는 지적 0 · 선택 1 · 차등 새 실패 0 · 제외 패치 1 · iter 2 · bbbbbbb" \
+    "M2($sh): e2e 기록 안의 ## 판정 · qg: 줄이 게시 판정 줄을 대신하지 않는다"
+
   # ── M1 — 이해글에 판정 줄 모양이 있으면 게시하지 않는다 ──
   fresh_proj
   printf '## 한 줄\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · 제외 패치 0 · iter 1 · ccccccc\n' > "$T/proj/.claude/quality-gates/$SID/comment-head.md"

@@ -3,6 +3,29 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [12.1.0] — 2026-10-11
+
+**v10 ④ e2e 걷기 — runtime tier 를 사람이 승인하면 확인한다** — `/qg` 의 리뷰·테스트 루프 뒤에 e2e 질문 하나를 붙인다. 시나리오를 고르는 것이 그 부팅 명령의 실행 승인이고, 오케스트레이터가 앱을 띄워 걷고, 사람이 걷기 직후 게이트에서 판정안을 승인하거나 뒤집는다.
+
+### Added
+- `references/e2e.md` — 시나리오 · 질문 · 걷기 규칙 · 증거표 · 걷기 직후 게이트 · 기록.
+- 파이프라인 SKILL `## e2e` 절(`## Final verdict` 바로 앞) — E0 kill switch · 남은 앱 → 질문 → E1 지문 `&&` 부팅(또는 CLI 직접 걷기) → 걷기 → E3 정지 · 지문 비교 · 판정안 → 걷기 직후 게이트 → 기록.
+- `scripts/e2e-state.sh` — `fingerprint` · `compare`(걷기 전후 코드 상태 지문) · `boot` · `stop`(승인된 명령을 프로세스 그룹으로 띄우고 모든 종료 경로에서 내림, 남의 프로세스는 죽이지 않음) · `propose`(증거표 → 판정안, 증거 없는 충족은 미확인).
+- 판정 사유 `e2e-unconfirmed`(열거 맨 뒤) · 판정 줄의 `e2e <상태>` 칸 · `verdict.py --e2e` · `--e2e-overridden` · `--prior`.
+- `result.md` 의 `## e2e` · `## 뒤집기` 절(`## 차등 테스트` 와 `## 게시` 사이).
+- kill switch `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` · 노브 `DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT`(기본 90초, 1~9999).
+- `tests/fixtures/e2e-app/` — 정상 · 결함 브랜치를 임시 리포에 심는 fixture 앱.
+
+### Changed
+- `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이 e2e 부팅도 막는다 — 세 스위치(전역 포함) 모두 `e2e-state.sh` 가 코드로 집행한다(리뷰 대상 코드에 닿는 `fingerprint` · `compare` · `boot`).
+- 최종 판정은 `verdict.py --prior "$SYN"` 으로 마지막 iteration 의 판정을 잇고 e2e 결과를 더한다.
+- `setup-qg.sh` 와 Preflight 가 앞 실행이 남긴 e2e 앱을 내린다.
+- 철학 문서 P4 — 「runtime tier 를 주장하지 않는다」를 「사람이 승인하면 e2e 걷기로 확인한다 — 걷지 않은 실행은 판정 줄의 e2e 칸이 그 사실을 보인다」로 바꾸고 코드 앵커에 `references/e2e.md` 를 더한다.
+- 설명(plugin.json · marketplace · SKILL)에 선택적 e2e 걷기를 더한다.
+
+### Fixed
+- 게시 펜스가 `result.md` 의 첫 `## 판정` 절에서만 판정 줄을 읽는다 — 뒤 절에 같은 모양의 줄이 있어도 게시되는 판정 줄이 바뀌지 않는다.
+
 ## [12.0.0] — 2026-10-10
 
 **v10 ③ 게시** — `/qg` 가 판정 뒤 sink 하나를 거쳐 열린 PR 에 새 코멘트(이해글 + 판정 줄) 하나를 남긴다.
