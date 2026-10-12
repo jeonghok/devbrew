@@ -7,7 +7,7 @@
 종료 driver는 **커버리지 원장의 floor 5차원이 전부 `closed`** 이고 마지막 포화 판정이 «포화» 이거나 사용자가 종료를 고른 것이다(고정 라운드 수 아님, G1 · 이중 종료).
 다음을 모두 만족하면 brief를 작성합니다:
 
-- floor `root_problem` closed — 진짜 problem이 한 문장으로 재구성(R1 계열).
+- floor `root_problem` closed — root_problem 이 사용자 원문 인용으로 닫힘(R1 계열).
 - floor `landscape` closed — landscape가 인용과 함께 수집(R2 계열, web sweep 메커니즘 유지).
 - floor `skepticism` closed — 의심 방향이 모두 steelman 통과(R3 계열, steelman-builder 게이트 유지).
 - floor `blind_spot` closed — blind-spot-prober가 unknown-unknown을 표면화하고 payload §5의 `위험` 항목에 기록.
@@ -72,7 +72,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    그 `ST<N>`을 참조합니다 — 양방향 일치가 게이트 대상입니다.
 
    **닫힌 행의 evidence 는 그 차원을 닫은 사용자 발화 `S<N>` 을 인용합니다**(게이트가 검사합니다 —
-   `floor:<dim> evidence cites no S<N> anchor`). 어느 S 인지의 규약: root_problem = 재구성 동의 S ·
+   `floor:<dim> evidence cites no S<N> anchor`). 어느 S 인지의 규약: root_problem = 사용자 원문 인용 S ·
    landscape = 외부 근거 처분 S · skepticism = steelman 판정 S · blind_spot = 숨은 가정·
    실패 양식 처분 S · open_questions = OQ 목록 확인 S. 사용자-승인 박제 행은 앵커가 접두 **뒤**에
    옵니다: `사용자-승인 박제(@S12) — §Open Questions 참조`. 재개방된 차원은 행 끝에

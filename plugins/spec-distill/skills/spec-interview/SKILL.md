@@ -165,7 +165,7 @@ STATE="$ROOT/<session-id>/state.local.md"
 ## R<n>
 
 ### 지금 이해
-<문제의 현재 재구성 — 바뀐 부분만 한두 문장. 코드·문서에서 확인한 사실(경로 a)과
+<확인한 사실과 그 라운드에 바뀐 것 — 한두 문장(사용자 문제 서술은 다시 쓰지 않는다). 코드·문서에서 확인한 사실(경로 a)과
  외부 근거(landscape·premortem)가 있으면 여기 싣는다. 재개방이면 «→ <차원> 재개방: <사유>». 끝줄 «조사 호출 <n>/<limit> · 이 라운드 본체 직접 <e>»>
 
 ### 다음 결정
@@ -378,7 +378,7 @@ sweep·steelman·prober 의 **횟수**는 닫힘 근거가 아니다 — landsca
 steelman 출력은 자기 게이트 제시 형식(`references/steelman.md` Step 3)으로 사용자 처분 S 를 받은 뒤 닫힌다.
 원장 행의 evidence 는 그 S 를 인용하고, `check_brief.py`가 앵커 실재를 검사한다(«어느 S 가 닫힘을
 정당화하는가»는 보지 않는다 — 그 한계는 spec OQ6).
-다섯 floor 의 닫힘 발화: root_problem = 재구성 동의 S · landscape = 외부 근거 처분 S ·
+다섯 floor 의 닫힘 발화: root_problem = 사용자 원문 인용 S(S1 과 문제를 서술한 발화) · landscape = 외부 근거 처분 S ·
 skepticism = steelman 판정 S · blind_spot = 숨은 가정·실패 양식 처분 S · open_questions = OQ 목록
 확인 S.
 
@@ -398,7 +398,7 @@ codebase 근거·사용자 판단으로 기록).
 
 ```
 Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind-spot-prober",
-        prompt: "지금까지의 framing(재구성된 문제정의 + 사용자 제약 요지): <framing>${FRAMING}</framing>. 조사 주장 계약(내용 전문): <claims_contract>${CLAIMS_CONTRACT}</claims_contract>. 지금 열린 결정: <open_decisions>${OPEN_DECISIONS}</open_decisions>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
+        prompt: "지금까지의 framing(사용자 원문 — S1 과 문제를 서술한 발화 — 과 확인한 사실 · 사용자 제약 요지): <framing>${FRAMING}</framing>. 조사 주장 계약(내용 전문): <claims_contract>${CLAIMS_CONTRACT}</claims_contract>. 지금 열린 결정: <open_decisions>${OPEN_DECISIONS}</open_decisions>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
 // **처분** — consumer=orchestrator · fail-closed · disclosure=loud advisory + inline premortem 강등
 ```
 
@@ -422,7 +422,7 @@ brief 작성(+ optional brainstorming invoke)은 다음 5 의례를 **모두 통
 
 | # | 의례 | 통과 기준 | 메커니즘 |
 |---|---|---|---|
-| R1 | **Problem Reframe** | seed 가 가리키는 **작업 뒤의 진짜 문제**를 재구성한 한 문장 문제정의 + 진짜 goal. seed 의 문장을 되풀이하는 것은 통과가 아니다. | (d) ontological → payload §0 · §1 |
+| R1 | **사용자 말 그대로** | root_problem 은 S1 과 문제를 서술한 이후 사용자 발화를 **원문 그대로 인용**해 닫는다. 다시 쓴 문장 · 확인 질문 없음. | (d) ontological → payload §0 · §1 |
 | R2 | **Landscape 수집** | web sweep ≥1회, prior-art/대안이 **인용과 함께** 표면화. | path(a) 확장 → payload §4 External Landscape |
 | R3 | **Skepticism 통과** | 의심 triggered 방향이 모두 steelman 후 *유지 / 보완 / 전환 / 보류* 중 하나로 판정. un-challenged 의심 방향은 확정 후보가 될 수 없다. trigger 0건이면 `- 검토 — steelman 0건: …` 한 줄 명시(빈 섹션 금지). | steelman-builder dispatch → payload §5의 **`verdict:` 항목** |
 | R4 | **시행착오 기록** | steelman switch된 방향 **또는** 사용자가 명시적으로 폐기한 방향이 *이유와 함께* 기록. 0건이면 `- 기각 — N/A — 전부 first-time defend+lock` 한 줄 명시(빈 섹션 금지). | payload §5의 **`기각` 항목** |

@@ -72,7 +72,7 @@ ci_cat() { cat "${CI_FILES[@]}"; }
 
 grep -q '^cost_class: variable$' "$SKILL" && ok "cost_class: variable" || no "cost_class not variable"
 
-has 'R1.*Reframe' "R1 Reframe ritual"
+has 'R1.*사용자 말 그대로' "R1 사용자 말 그대로 ritual"
 has 'R2.*Landscape' "R2 Landscape ritual"
 has 'R3.*Skepticism' "R3 Skepticism ritual"
 has 'R4.*시행착오|R4.*Tried' "R4 Tried-&-Discarded ritual"
@@ -1187,12 +1187,20 @@ rites_block="$(awk '/^## 5 통과 의례/{f=1;print;next} /^## /{f=0} f' "$SKILL
 # 곳에 있어도(심지어 없어도) 만족된다. 그래서 세 사실을 **R1 표 행 하나**(물리적으로 한
 # 줄)에서 함께 요구한다 — 관계는 "같은 행".
 r1_row="$(grep -E '^\|[[:space:]]*R1[[:space:]]*\|' "$SKILL")"
-{ [[ -n "$r1_row" ]] \
-    && grep -qF 'Problem Reframe' <<<"$r1_row" \
-    && grep -qF '작업 뒤의 진짜 문제' <<<"$r1_row" \
-    && grep -qF '되풀이하는 것은 통과가 아니다' <<<"$r1_row"; } \
-  && ok "R1(v0.41.0): 라벨 + R&R 이동 실체(작업 뒤의 진짜 문제 / seed 반복 불허)가 R1 행 하나에 결속" \
-  || no "R1(v0.41.0): R1 행에 라벨과 R&R 이동 실체가 함께 있지 않다"
+{ [[ -n "$r1_row" ]] && grep -qF '사용자 말 그대로' <<<"$r1_row" && grep -qF '원문 그대로 인용' <<<"$r1_row"; } \
+  && ok "R1/I: R1 행 = 사용자 말 그대로 · root_problem 원문 인용" \
+  || no "R1/I: R1 행에 「사용자 말 그대로」와 원문 인용이 함께 있지 않다"
+reframe_corpus=("${CI_ALL[@]}" "$REPO_ROOT/plugins/spec-distill/agents/"*.md)
+for tok in 'Problem Reframe' 'Reframed Problem' '되풀이하는 것은 통과가 아니다' '재구성 동의 S' '문제의 현재 재구성' '재구성된 문제정의' 'R1 문제정의' '한 문장으로 재구성'; do
+  grep -qF -- "$tok" "${reframe_corpus[@]}" && no "R1/I: 옛 재구성 문구 «${tok}» 잔존" || ok "R1/I: «${tok}» 없음"
+done
+# README 는 live 줄만 — `**vX.Y.Z**` 로 시작하는 연혁 줄은 그 시점의 사실이다.
+grep -vE '^\*\*v[0-9]' "$REPO_ROOT/plugins/spec-distill/README.md" | grep -qF 'Problem Reframe' \
+  && no "R1/I: README live 줄에 Problem Reframe 잔존" || ok "R1/I: README live 줄에 Problem Reframe 없음"
+grep -qF 'root_problem = 사용자 원문 인용 S' <<<"$close_flat" \
+  && ok "R1/I(양의 짝): 닫힘 발화 root_problem = 사용자 원문 인용 S" || no "R1/I(양의 짝): root_problem 닫힘 발화 문구 부재"
+grep -qF '사용자 문제 서술은 다시 쓰지 않는다' <<<"$round_block" \
+  && ok "R1/I(양의 짝): «지금 이해» 정의가 재구성을 요구하지 않는다" || no "R1/I(양의 짝): «지금 이해» 새 정의 부재"
 
 # --- v0.41.0: 탐색 경계 (### R2 절 스코프 — rites_block 보다 좁다: R1/R3 텍스트로부터
 # 오는 우연한 co-occurrence 를 배제) ---

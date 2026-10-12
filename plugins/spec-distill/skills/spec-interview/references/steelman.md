@@ -10,7 +10,7 @@
 
 #### Step 1 — dispatch 재료 도출 (orchestrator)
 
-- **핵심 전제 P1..Pn** — R1 문제정의·goal 과 그때까지의 `user_statements` 에서 도출한다. 각 전제 뒤에
+- **핵심 전제 P1..Pn** — 사용자 원문·goal 과 그때까지의 `user_statements` 에서 도출한다. 각 전제 뒤에
   근거 S<N> 을 적고, 적을 수 없으면 「orchestrator 도출」로 표기한다. 개수 상한은 없다.
 - **goal** — goal 내용을 담은 사용자 발화 중 **가장 최근 것**의 원문(S<N> 인용). seed S1 의 goal 문장은
   후보 중 하나이고 더 늦은 발화가 goal 을 고쳤으면 그쪽이 이긴다. 후보가 없거나(확인 발화가 「맞아」류

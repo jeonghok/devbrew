@@ -43,7 +43,7 @@ failure mode(unknown-unknown)를 웹 근거와 함께 표면화합니다. 당신
 
 ## Input
 
-- 현재 재구성된 문제정의(Reframed Problem) + 지금까지 사용자가 말한 제약의 요지.
+- 사용자 원문(S1 과 문제를 서술한 발화) + 확인한 사실 + 지금까지 사용자가 말한 제약의 요지.
 - (있으면) External Landscape 발췌.
 - `<claims_contract>` 조사 주장 계약의 **내용 전문**. 아래 출력의 주장이 이 계약을 따른다.
 - `<open_decisions>` 지금 열린 결정 목록(`OQ<n>` + 한 줄). `decides` 는 이 목록에 실제로 있는 것만
