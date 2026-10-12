@@ -208,7 +208,7 @@ EXEMPT_REASONS=(
 note "[분류기 — 꼴마다 하나]"
 check() {  # check <줄> <기대>
   local got
-  got="$(printf '%s\n' "$1" | python3 -I "$SCAN" classify)"
+  got="$(printf '%s\n' "$1" | python3 -I -X utf8 "$SCAN" classify)"
   assert_eq "$got" "$2" "분류: $1"
 }
 check "x=\$(python3 -c 'import json')" inline-bare
@@ -273,7 +273,7 @@ printf '```bash\n# state 는 python3 -c 로 고친다\n```\n' > "$SC/a.md"
 printf '# python3 -c 는 설명일 뿐\nset +B  # nested python3 -c\n' > "$SC/b.sh"
 printf 'x=$(python3 \\\n  -c "import json")\n' > "$SC/c.sh"
 printf 'python3 -c x \xff\xfe\n' > "$SC/d.sh"
-sc="$(python3 -I "$SCAN" scan "$SC/a.md" "$SC/b.sh" "$SC/c.sh" "$SC/d.sh")"
+sc="$(python3 -I -X utf8 "$SCAN" scan "$SC/a.md" "$SC/b.sh" "$SC/c.sh" "$SC/d.sh")"
 assert_contains "$sc" "$SC/a.md:2	bare" "마크다운 펜스 안 # 줄은 지시라서 본다"
 assert_not_contains "$sc" "$SC/b.sh" "셸 스크립트의 # 주석은 보지 않는다"
 assert_contains "$sc" "$SC/c.sh:1	bare" "\\ 로 이어진 다음 줄의 -c 를 본다"
@@ -290,7 +290,9 @@ while IFS= read -r -d '' p; do
 done < <(git -C "$ROOT" ls-files -z -- plugins shared tools)
 assert_eq "$([ "${#corpus[@]}" -ge 200 ] && echo ok || echo "${#corpus[@]}")" ok "코퍼스가 비지 않았다(파일 ${#corpus[@]}개)"
 
-report="$(python3 -I "$SCAN" scan "${corpus[@]}")"
+# 스캐너도 -X utf8 이다 — 한국어 줄을 찍다 죽으면 보고가 잘린 채 「없음」이 통과한다. rc 를 따로 잰다.
+scan_rc=0; report="$(python3 -I -X utf8 "$SCAN" scan "${corpus[@]}")" || scan_rc=$?
+assert_eq "$scan_rc" 0 "스캐너가 코퍼스 끝까지 돌았다"
 unread="$(printf '%s\n' "$report" | awk -F'\t' '$2 == "unreadable"')"
 assert_eq "$unread" "" "코퍼스에 읽지 못한 파일이 없다"
 bare="$(printf '%s\n' "$report" | awk -F'\t' '$2 == "bare"')"
