@@ -224,7 +224,7 @@ OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지> · 트레이�
 
 `${CLAIMS_CONTRACT}` 에는 경로가 아니라 **계약 파일의 내용**을 싣는다 — 플러그인 캐시는 사용자
 프로젝트 밖이라 subagent 의 Read 가 거부된다. dispatch 직전(재dispatch 포함)에 아래 펜스를 돌려
-그 stdout 전문을 세 dispatch 의 `<claims_contract>` 슬롯에 싣는다. rc 가 0 이 아니면 **그 장치를
+그 stdout 전문을 네 dispatch 의 `<claims_contract>` 슬롯에 싣는다. rc 가 0 이 아니면 **그 장치를
 dispatch 하지 않는다** — 인터뷰는 계속하되 그 차원을 자동으로 닫지 않고, 공시는 loud advisory +
 audit §2 unavailable 사유 다.
 
@@ -236,7 +236,7 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 CLAIMS="${CLAUDE_PLUGIN_ROOT}/references/research-claims.md"
 claims_rc=0; CLAIMS_CONTRACT="$(cat "$CLAIMS")" || claims_rc=$?
 if [ "$claims_rc" -ne 0 ] || [ -z "$CLAIMS_CONTRACT" ]; then
-  echo "[spec-distill] 조사 주장 계약을 읽지 못했다(cat rc $claims_rc): $CLAIMS — 이 장치를 dispatch 하지 않는다. 인터뷰는 계속하고, 그 차원을 자동으로 닫지 않는다. coverage-mapper 자리면 audit §2 Budget 에 coverage-mapper 0 (unavailable: 계약 배달 실패) 를 적고, blind-spot-prober 자리면 inline premortem 으로 강등한다." >&2
+  echo "[spec-distill] 조사 주장 계약을 읽지 못했다(cat rc $claims_rc): $CLAIMS — 이 장치를 dispatch 하지 않는다. 인터뷰는 계속하고, 그 차원을 자동으로 닫지 않는다. coverage-mapper 자리면 audit §2 Budget 에 coverage-mapper 0 (unavailable: 계약 배달 실패) 를 적고, blind-spot-prober 자리면 inline premortem 으로 강등하고, repo-researcher 자리면 본체가 직접 조사한다." >&2
   exit 1
 fi
 printf '%s\n' "$CLAIMS_CONTRACT"
@@ -249,14 +249,22 @@ printf '%s\n' "$CLAIMS_CONTRACT"
 
 | Path | When | Action |
 |---|---|---|
-| (a) **factual / landscape** | 답이 codebase/git history *또는 외부 prior-art*에 있는 경우 | codebase 는 **orchestrator 가 자기 `Read`/`Grep` 으로 직접 확인하고 subagent 를 부르지 않는다** — 산출은 계약(`## 조사 주장 계약`)의 `repo_claims[]` 이고 라운드 규약의 V1 을 탄다. 웹 스위치와 무관해서 **내부 축의 주 생산자**다. 외부는 web sweep(아래 R2), 표기 `[from-web]`. |
+| (a) **factual / landscape** | 답이 codebase/git history *또는 외부 prior-art*에 있는 경우 | codebase 는 **orchestrator 가 자기 `Read`/`Grep` 으로 직접 확인하거나 `repo-researcher` 를 dispatch 한다**(아래) — 산출은 둘 다 계약(`## 조사 주장 계약`)의 `repo_claims[]` 이고 라운드 규약의 V1 을 탄다. 웹 스위치와 무관해서 **내부 축의 주 생산자**다. 외부는 web sweep(아래 R2), 표기 `[from-web]`. |
 | (b) **judgment** | 사용자 선호/우선순위/제약 | 사용자에게 묻기 (default path). |
 | (d) **ontological** | "이게 무엇인가" 종류 (essence/root cause 등) | essence/root cause 류 — 라벨 강제 없음. 사용자에게 묻기. |
 
 매 라운드의 «지금 이해»·«질문» 에 어떤 path 인지 명시하십시오 — 경로 (a) 로 찾을 수 있는 것은 묻기 전에
 먼저 찾아 «지금 이해»에 싣습니다.
 
-**어느 자리든(경로 (a) · coverage-mapper · blind-spot-prober · steelman) `repo_claims[]` 가 처음 산출되면
+**`repo-researcher` dispatch** — 레포 질문이 여러 파일을 훑어야 하거나 본체의 맥락을 아껴야 할 때 부른다. 질문 칸에는 찾을 것만 쓰고 기대 결론은 싣지 않는다. 출력은 «지금 이해»에 싣기 전에 V1 을 타고, 첫 산출이면 C43 절의 internal_research admit 이 여기서도 돈다. 계약 배달 실패면 dispatch 하지 않고 본체가 직접 조사한다 — 공시는 loud advisory + 본체 직접 조사로 강등 이다.
+
+```
+Agent({ description: "Research the repo", subagent_type: "spec-distill:repo-researcher",
+        prompt: "조사 질문(찾을 것 한 줄 — 기대 결론 없이): <question>${RESEARCH_QUESTION}</question>. 조사 주장 계약(내용 전문): <claims_contract>${CLAIMS_CONTRACT}</claims_contract>. 지금 열린 결정: <open_decisions>${OPEN_DECISIONS}</open_decisions>. 구현을 읽고 계약 모양의 repo_claims 로." })
+// **처분** — consumer=orchestrator · fail-closed · disclosure=loud advisory + 본체 직접 조사로 강등
+```
+
+**어느 자리든(경로 (a) · repo-researcher · coverage-mapper · blind-spot-prober · steelman) `repo_claims[]` 가 처음 산출되면
 그 자리에서 derived 차원 internal_research 를 원장에 admit 한다**(coverage-mapper 제안과 무관 — 조사 행위가 그 차원을 함의한다). 이름은 그 글자대로 쓴다:
 게이트가 **정확 일치**로 재고 `internal_research_apparatus` 같은 유사 이름으로는 만족되지 않는다.
 그 차원은 **레포 주장의 처분 S** 로 닫고 evidence 에 그 S 를 인용한다 — 종료 시점엔 늦다(닫힘 규칙).

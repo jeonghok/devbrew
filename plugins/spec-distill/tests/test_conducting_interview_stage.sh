@@ -1411,14 +1411,15 @@ grep -qF 'derived 차원 internal_research 를 원장에 admit 한다' <<<"$c43_
 # steelman). 「경로 (a) 가 … 산출하면」 으로 좁혀 있으면 mapper 첫 dispatch(D6 의무)가 repo_claims
 # 를 낸 인터뷰에 admit 지시가 없고 게이트 ④ 가 red 이며 유일한 탈출이 RC 삭제다. 조건과 동사를 한
 # 리터럴로 문다 — 좁히면(산출자를 빼면) 리터럴이 사라진다.
-grep -qF '어느 자리든(경로 (a) · coverage-mapper · blind-spot-prober · steelman) `repo_claims[]` 가 처음 산출되면 그 자리에서 derived 차원 internal_research 를 원장에 admit 한다' <<<"$c43_flat" \
+grep -qF '어느 자리든(경로 (a) · repo-researcher · coverage-mapper · blind-spot-prober · steelman) `repo_claims[]` 가 처음 산출되면 그 자리에서 derived 차원 internal_research 를 원장에 admit 한다' <<<"$c43_flat" \
   && ok "AC10(산출자·조건): 어느 산출자든 repo_claims 첫 산출이면 internal_research 를 admit 한다" \
   || no "AC10(산출자·조건): admit 조건이 산출자 넷을 다 덮지 않는다(또는 극성 반전) — mapper·prober·steelman 경로가 ④ 에 막힌다"
 # 그 문장을 나머지 산출자 절이 가리킨다 — 각 절을 읽는 턴이 C43 절을 안 읽고 지나가도 admit 이 돈다.
 i2_prober="$(awk '/^## blind-spot-prober dispatch/{f=1;next} /^## /{f=0} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
 i2_r3="$(awk '/^### R3 — Steelman/{f=1;next} /^##+ /{f=0} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
+i2_repo="$(awk '/^\*\*`repo-researcher` dispatch\*\*/{f=1} f&&/^$/{exit} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
 i2_d6="$(awk '/^\*\*첫 dispatch 의 검증 의무\(D6\)\*\*/{f=1} f&&/^$/{exit} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
-for pair in "D6:$i2_d6" "prober:$i2_prober" "steelman(R3):$i2_r3"; do
+for pair in "D6:$i2_d6" "prober:$i2_prober" "steelman(R3):$i2_r3" "repo:$i2_repo"; do
   lbl="${pair%%:*}"; body="${pair#*:}"
   { [[ -n "$body" ]] && grep -qF 'C43 절의 internal_research admit' <<<"$body"; } \
     && ok "AC10(산출자·포인터): ${lbl} 절이 C43 절의 admit 을 가리킨다" \
@@ -1447,8 +1448,11 @@ grep -qF 'repo_claims' <<<"$c43_block" \
   && ok "AC15(양의 짝): C43 표가 계약 산출(repo_claims)을 요구한다" \
   || no "AC15(양의 짝): C43 표에 계약 산출 요구가 없다 — 마커만 사라지고 대체물이 없다"
 grep -qF 'subagent 를 부르지 않는다' <<<"$c43_block" \
-  && ok "AC24: 경로 (a) 는 orchestrator 가 직접 수행한다 (네 번째 dispatch 자리 없음)" \
-  || no "AC24: 경로 (a) 의 직접 수행 문구 부재 — 네 번째 dispatch 자리로 읽힐 수 있다"
+  && no "R1/F: 경로 (a) 의 subagent 금지 문구 잔존" || ok "R1/F: 경로 (a) subagent 금지 문구 없음"
+grep -qF 'subagent_type: "spec-distill:repo-researcher"' <<<"$c43_block" \
+  && ok "R1/F(양의 짝): C43 절에 repo-researcher dispatch" || no "R1/F(양의 짝): C43 절에 repo-researcher dispatch 부재"
+grep -qF '본체가 직접 조사한다' <<<"$c43_block" \
+  && ok "R1/F: 계약 배달 실패 → 본체 직접 조사로 강등" || no "R1/F: repo-researcher 강등 경로 부재"
 
 c43_rows="$(grep -cE '^\| \([a-z]\) \*\*' <<<"$c43_block" || true)"
 c43_head_n="$(sed -n 's/^## C43 \([0-9][0-9]*\)-path.*/\1/p' <<<"$c43_block" | head -1)"

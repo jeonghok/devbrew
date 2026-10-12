@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # guards: plugins/spec-distill/references/research-claims.md plugins/spec-distill/skills/spec-interview/SKILL.md plugins/spec-distill/skills/spec-interview/references/steelman.md plugins/spec-distill/agents/steelman-builder.md
 #
-# 조사 주장 계약이 **경로가 아니라 내용으로** 세 dispatch 에 배달되는가, 그리고 정본과 사본이
+# 조사 주장 계약이 **경로가 아니라 내용으로** 네 dispatch 에 배달되는가, 그리고 정본과 사본이
 # 갈라지지 않는가. 설치본에서 계약 파일은 플러그인 캐시(사용자 cwd 밖)에 있어 subagent 의 Read 가
 # 권한 거부되고, 그러면 agent 는 계약 없이 판정하면서 orchestrator 는 그것을 모른다.
 # 구조는 형제 `test_dispatch_profile_inline.sh` 를 상속한다(같은 문제를 이미 네 축으로 잰다).
@@ -92,14 +92,14 @@ assert_contains "$(prose_of "$SEC")" "$PHRASE" \
 assert_contains "$(prose_of "$SEC" | tr '\n' ' ' | tr -s ' ')" '`${OPEN_DECISIONS}` 에는 `open_decisions[]` 중 `status: open` 인 것만 한 줄에 하나씩 `OQ<n>: <한 줄>` 로 싣는다' \
   "A2: 절 산문이 \`\${OPEN_DECISIONS}\` 의 렌더 형식(열린 것만 · OQ<n>: <한 줄>)을 정의한다"
 
-# B — 양의 짝: 슬롯 개수. SKILL.md 2(coverage-mapper · blind-spot-prober) + steelman.md 1.
+# B — 양의 짝: 슬롯 개수. SKILL.md 3(coverage-mapper · blind-spot-prober · repo-researcher) + steelman.md 1.
 n_sk="$(grep -oF "$SLOT" "$SKILL" | wc -l | tr -d ' ')"
 n_st="$(grep -oF "$SLOT" "$STEEL" | wc -l | tr -d ' ')"
-assert_eq "$n_sk" "2" "B: SKILL.md 의 \`claims_contract\` 슬롯이 2개 (coverage-mapper · blind-spot-prober)"
+assert_eq "$n_sk" "3" "B: SKILL.md 의 \`claims_contract\` 슬롯이 3개 (coverage-mapper · blind-spot-prober · repo-researcher)"
 assert_eq "$n_st" "1" "B: steelman.md 의 \`claims_contract\` 슬롯이 1개"
 m_sk="$(grep -oF "$SLOT2" "$SKILL" | wc -l | tr -d ' ')"
 m_st="$(grep -oF "$SLOT2" "$STEEL" | wc -l | tr -d ' ')"
-assert_eq "$m_sk" "2" "B: SKILL.md 의 \`open_decisions\` 슬롯이 2개 (계약만 있고 결정 목록이 없으면 decides 를 채울 수 없다)"
+assert_eq "$m_sk" "3" "B: SKILL.md 의 \`open_decisions\` 슬롯이 3개 (coverage-mapper · blind-spot-prober · repo-researcher; 계약만 있고 결정 목록이 없으면 decides 를 채울 수 없다)"
 assert_eq "$m_st" "1" "B: steelman.md 의 \`open_decisions\` 슬롯이 1개"
 
 # F — 결정 연결 형식 넷과 레포 주장의 RC 상시 탑재(최종 리뷰 I-4). 정본이 말하지 않으면 계약을
