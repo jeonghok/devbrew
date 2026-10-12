@@ -48,6 +48,8 @@
   ```
   작업 목록은 세션을 넘지 않는다 — /new 뒤 새 세션에는 이전 작업이 하나도 없다.
 
+판정: 작업 목록은 한 세션 안에서만 산다 — 백그라운드 작업 중에도, /compact 뒤에도 남지만 /new 뒤 새 세션에는 없다. R6 은 작업 목록을 세션을 넘는 진행 상태의 저장소로 쓰지 않는다. 세션을 넘는 진행 상태는 git 에서 계산한 `roadmap_status.py` 출력에서 읽고, 작업 목록은 한 세션 안의 표시로만 쓴다. 남은 것 둘: 이 세션 기록에 남은 명령은 `/clear` 였다 — /new 와 같은 명령으로 보았고 따로 확인하지 않았다. 압축 전 작업 #1~#6 이 목록에서 사라진 까닭은 모른다(압축이 지운 것은 아니다). /compact 측정은 한 번이다.
+
 ## M3
 
 방법: 공식 문서 확인(claude-code-guide). 출처는 Claude Code 공식 문서의 statusline · plugins components · plugin manifest reference · hooks · settings reference 페이지다.
