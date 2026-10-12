@@ -75,6 +75,12 @@ grep -qiF -- 'bounded to two' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «
 grep -qiF -- 'once per' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «once per» 잔존" || ok "AC22: «once per» 없음"
 grep -qiF -- '상한 2 dispatch' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «상한 2 dispatch» 잔존" || ok "AC22: «상한 2 dispatch» 없음"
 grep -qiF -- '상한 2(conducting''-interview' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «상한 2(conducting""-interview» 잔존" || ok "AC22: «상한 2(conducting""-interview» 없음"
-grep -qF -- 'dispatch eligibility is whether an open decision still' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
-grep -qF -- '1 plus the total reopen count' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
+# R1(2026-10-12): 자격 · 예산을 걷었다. 부재(영어 · 한국어 · 비사용 항목) + 양의 짝(새 부르기 서술).
+for tok in 'eligibility' 'reopen count' '자격 + 예산' '재개방 합' '예산 고갈'; do
+  grep -qiF -- "$tok" <<<"$AGENT_FLAT" && no "R1/A: 옛 자격·예산 «${tok}» 잔존" || ok "R1/A: «${tok}» 없음"
+done
+grep -qF -- 'whenever it could change an open decision or open a new one' <<<"$AGENT_FLAT" \
+  && ok "R1/A(양의 짝): description 이 새 부르기 기준을 말한다" || no "R1/A(양의 짝): 새 부르기 서술 부재 — 부재 락이 공허해진다"
+grep -qF -- 'R1 첫 질문 전 1회는 필수다' <<<"$AGENT_FLAT" \
+  && ok "R1/A(양의 짝): 첫 호출 필수(하한) 문구" || no "R1/A(양의 짝): 첫 호출 필수 문구 부재"
 finish

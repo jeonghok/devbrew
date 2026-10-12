@@ -110,29 +110,29 @@ coverage:                            # G1 커버리지 원장 (floor 5 + derived
   derived: []                        # 주제-도출 차원 ({name, rationale, status, evidence, reopened, reopen_log})
 orchestration:                       # orchestrator 소유, agent read-only
   focused_dimension: null            # 현재 probe 대상 차원 이름 또는 null
-  blind_spot_dispatches: 0           # 예산 = 1 + 그 차원의 reopened (자격은 아래 절)
-  coverage_mapper_dispatches: 0      # 예산 = 1 + 모든 차원의 reopened 합 (자격은 아래 절)
+  research_dispatches: {coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0}  # 조사 subagent 호출 수
+  research_limit: <int>              # 조사 호출 상한 — 시작값 DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT(기본 20), 연장마다 더한다
+  saturation_limit: <int>            # 포화 판정 상한 — 시작값 DEVBREW_SPEC_DISTILL_SATURATION_LIMIT(기본 5), 연장마다 더한다
+  research_log: []                   # 조사마다 {n, device, round, changed: [OQ…], opened: [OQ…], summary}
+  saturation_log: []                 # 판정마다 {k, round, verdict, gaps: […], user_choice: S<n> | null}
   open_decisions: []                 # 결정의 유일한 거처 — OQ<n> 의 산출자. 시작은 빈 목록이고 항목 형식은:
   #   - id: OQ<n>                    # 발급 시 순증 (라운드 규약 «다음 결정»)
   #     text: "<한 줄>"
-  #     dimension: <차원 이름>        # 어느 커버리지 차원에 속하는가 (호출 자격의 입력)
+  #     dimension: <차원 이름>        # 어느 커버리지 차원에 속하는가
   #     status: open                 # open | resolved
   #     resolved_by: null            # resolved 면 그 사용자 발화 S<N>
-  #     touched: false               # 조사가 닿았는가 (C44 면제의 입력)
-non_user_streak: <int>
 trivia_escape_armed: false
 user_statements: []                  # 매 round 끝 append. 판정 없음 — 확정은 종료 게이트가 결정.
 confirm_repost_count: 0              # 종료 확정 확인 재제시 횟수 (상한 2, Unbounded-autonomy 가드)
 ---
 ```
 
-State body: 각 라운드의 `## R<n>` 기록(«라운드 규약» 형식) + coverage-mapper 출력 transcript.
+State body: 각 라운드의 `## R<n>` 기록(«라운드 규약» 형식) + 조사 산출 원문(`### 조사 <n> — <장치> · R<round>` 아래 verbatim — 포화 판정자의 입력이라 요약으로 바꾸지 않는다).
 
 **`open_decisions[]` 의 생명주기.** 발급은 orchestrator 가 «다음 결정» 블록을 쓸 때 그 문장에
 `OQ<n>` 을 붙이는 것이다(새 결정이면 새 번호 — 순증, 인터뷰 안에서만 유일 — 이어가는 결정이면 기존 번호).
 `status: open → resolved` 는 사용자 발화로만 바뀌고 **해결돼도 목록에서 지우지 않는다** — 조사가 결정을 해결하는 데 기여했으면 그것이
-성공 사례인데 목록에서 빠지면 게이트의 실재 검사가 그 조사를 red 로 만든다. `touched` 는
-`false → true` 단방향이고 재개방으로도 되돌리지 않는다(되돌리면 면제가 무한해진다). 종료 시
+성공 사례인데 목록에서 빠지면 게이트의 실재 검사가 그 조사를 red 로 만든다. 종료 시
 `status: open` 인 것이 payload §3 Open Questions 로, **전량**이 §0 결정 목록으로 직렬화된다 — §0 이
 상위집합이고 §3 이 그 중 열린 것이다. `RC<n>` 은 별 state 키를 두지 않는다: V1 이 붙이고 audit §5 의
 확인 줄이 곧 레지스터이며, 확인 줄 없는 `RC<n>` 은 게이트가 red 로 잡는다.
@@ -249,7 +249,7 @@ printf '%s\n' "$CLAIMS_CONTRACT"
 
 | Path | When | Action |
 |---|---|---|
-| (a) **factual / landscape** | 답이 codebase/git history *또는 외부 prior-art*에 있는 경우 | codebase 는 **orchestrator 가 자기 `Read`/`Grep` 으로 직접 확인하고 subagent 를 부르지 않는다** — 산출은 계약(`## 조사 주장 계약`)의 `repo_claims[]` 이고 라운드 규약의 V1 을 탄다. 웹 스위치와 무관해서 **내부 축의 주 생산자**다. 외부는 web sweep(아래 R2), 표기 `[from-web]`. streak 은 C44 의 면제 규칙이 정한다. |
+| (a) **factual / landscape** | 답이 codebase/git history *또는 외부 prior-art*에 있는 경우 | codebase 는 **orchestrator 가 자기 `Read`/`Grep` 으로 직접 확인하고 subagent 를 부르지 않는다** — 산출은 계약(`## 조사 주장 계약`)의 `repo_claims[]` 이고 라운드 규약의 V1 을 탄다. 웹 스위치와 무관해서 **내부 축의 주 생산자**다. 외부는 web sweep(아래 R2), 표기 `[from-web]`. |
 | (b) **judgment** | 사용자 선호/우선순위/제약 | 사용자에게 묻기 (default path). |
 | (d) **ontological** | "이게 무엇인가" 종류 (essence/root cause 등) | essence/root cause 류 — 라벨 강제 없음. 사용자에게 묻기. |
 
@@ -287,53 +287,18 @@ printf '%s\n' "$CLAIMS_CONTRACT"
 거절도 수락과 똑같이 **발화 그대로** 기록합니다. 반대 명제로 뒤집어 "잠긴 방향"으로
 승격시키지 않습니다 — 그 승격이 라운드마다 결정을 박제하던 경로였습니다.
 
-## C44 Dialectic Rhythm Guard
-
-`non_user_streak` 카운터 — 직전 N probe 동안 *사용자 답변이 없었던* 횟수.
-
-- (a) factual auto-confirm: streak +1
-- (b) 사용자 답변 받음: streak = 0
-- (d) ontological 사용자 답변 받음: streak = 0
-- (a) web auto-research: streak +1 (과도하면 강제 (b)로 사용자를 loop에 유지 — AP16).
-
-`non_user_streak >= DEVBREW_SPEC_DISTILL_RHYTHM_GUARD_THRESHOLD` (default 3) 도달 시:
-
-→ 다음 probe의 질문은 **반드시 (b) judgment path** (사용자에게 직접 질문)로 라우팅. 강제.
-
-**조사 산출의 면제.** 조사가 결정에 닿았으면 그 probe 는 streak 을 올리지 않는다 — 압착의 대가를
-가드의 계수 방식에서 지불하되, 면제 예산이 유한하도록 집합 원소에 묶는다. 산출자는 orchestrator
-이고 거처는 `orchestration.open_decisions[]` 의 `touched` 필드다(별 키를 두지 않는다).
-
-> 산출 항목의 `decides` 가 status: open 이고 touched: false 인 결정을 하나라도 담으면
-> `non_user_streak` **+0**. 그렇지 않으면 **+1**. 그 계수 **뒤에** 그 원소들의 `touched` 를 `true` 로
-> 올린다. **열린 결정이 0이면 면제도 0이다.**
-
-**순서가 계약이다 — 「계수 먼저, 표시 나중」.** 표시가 계수보다 앞서면 계수 시점에 「아직 안 닿은
-것」이 항상 공집합이라 **첫 연결부터 +1** 이 되고 면제가 영구히 발화하지 않는다.
-
-`touched` 는 단방향이고 재개방으로도 되돌리지 않는다 — 되돌리면 면제가 무한해진다. 그래서 면제
-예산은 `|{status: open, touched: false}|` 로 유한하고, **그 집합이 줄어드는 데 의존하지 않는다**:
-줄지 않아도 같은 결정의 두 번째 연결이 면제되지 않으므로 예산이 고갈된다.
-
-## coverage-mapper dispatch (자격 + 예산)
+## coverage-mapper dispatch
 
 `coverage-mapper` 는 고정 floor 위 **주제-도출 차원**을 *제안*하는 advisory 에이전트다(admit 은
-orchestrator, G2). 첫 dispatch 는 필수이고 그 뒤는 자격과 예산이 정한다:
+orchestrator, G2). 첫 dispatch 는 필수이고(하한) 그 뒤는 조사 호출 상한 하나가 총량을 묶는다:
 
 1. **R1 첫 질문 전 필수 1회.** 입력: seed 전문(S1)과 그 «다시 검증할 것» 문단, 원장 초기 상태.
    출력의 derived 차원을 admit 한 뒤에야 R1 질문이 나간다. 인자 없이 부른 경로에서는 R1 답을
    받은 뒤 R2 전에.
-2. **재개방마다 한 번의 예산이 열린다.** 재개방이 새 파생 차원을 함의할 수 있어서다 — 그래서
-   예산이 `1 + 재개방 합` 이다. 자격이 없으면 예산이 남아도 부르지 않는다.
+2. **그 뒤는 결정에 닿을 수 있을 때마다.** 재개방 · 새 결정 · 포화 판정자의 빈 곳이 새 파생 차원을
+   함의하면 다시 부른다.
 
-**호출 자격이 예산보다 앞선다.** 다시 부를 자격은 「그 장치가 채우는 차원에 **닿는 열린 결정이
-아직 있는가**」다 — `orchestration.open_decisions[]` 에서 `dimension` 이 그 차원이고 `status: open`
-인 항목이 하나라도 있는가. **열린 결정이 0이면 자격이 없다 — 예산이 남아도 부르지 않는다.**
-자격을 채웠으면 예산을 본다: `coverage_mapper_dispatches < 1 + Σ(모든 차원의 reopened)`.
-재개방이 연료다 — 재개방은 정의상 「새 답·외부 근거·코드 사실이 그 차원의 닫힘 근거 S 와 충돌」해야
-일어나고 라운드는 사용자 답으로만 도므로 사용자가 시계다.
-
-카운터 `orchestration.coverage_mapper_dispatches`. 종료 시 audit §2 에 `coverage-mapper <k>`
+카운터 `orchestration.research_dispatches.coverage_mapper`. 종료 시 audit §2 에 `coverage-mapper <k>`
 를 쓰고 게이트가 k≥1 을 검사한다. dispatch 가 불가능한 환경(Agent 도구 부재)은
 `coverage-mapper 0 (unavailable: <이유>)` 로 적는다 — 게이트는 advisory 로 통과시키고 Step B 가
 사람에게 보인다(침묵과 0 은 다르다).
@@ -391,17 +356,14 @@ skepticism = steelman 판정 S · blind_spot = 숨은 가정·실패 양식 처�
 **재개방 — `closed → open` 을 허용한다.** 조건: 새 답·외부 근거·코드 사실이 그 차원의 닫힘 근거 S 와
 충돌할 때(판단은 orchestrator). 기록: 그 차원의 `reopened` +1, `reopen_log` 에
 `{round, reason, conflicts_with: S<N>}` append, 그 라운드의 «지금 이해»에 «→ <차원> 재개방: <사유>».
-상한 없음 — 라운드는 사용자 답으로만 돌아 사용자가 시계다. 재개방된 차원이 다시 닫힐 때는 **새 S** 를
+상한 없음 — 재개방은 새 답 · 근거 · 사실이 닫힘 근거 S 와 충돌해야 일어나고, 조사 총량은 조사 호출 상한이 묶는다. 재개방된 차원이 다시 닫힐 때는 **새 S** 를
 인용한다(게이트는 최신 닫힘의 evidence 를 본다).
 
 ## blind-spot-prober dispatch (C8 — blind_spot floor 차원)
 
-`blind_spot` floor 차원의 **첫 open→in-progress 전이** 시 `blind-spot-prober`를 1회 필수로 dispatch 한다 —
-**첫 dispatch 는 자격을 보지 않는다**(그 차원의 결정은 prober 출력 뒤에야 생긴다). 재호출부터는
-**자격이 예산보다 앞선다** — `orchestration.open_decisions[]` 에 `dimension: blind_spot` 이고
-`status: open` 인 항목, 즉 그 차원에 **닿는 열린 결정이 아직 있는가**를 먼저 본다. 열린 결정이
-0이면 자격이 없다 — 예산이 남아도 부르지 않는다. 자격을 채웠으면 예산:
-`blind_spot_dispatches < 1 + coverage.floor.blind_spot.reopened`. dispatch 마다 카운터를 +1 한다.
+`blind_spot` floor 차원의 **첫 open→in-progress 전이** 시 `blind-spot-prober`를 1회 필수로 dispatch 한다(하한).
+그 뒤는 새 framing · 재개방 · 포화 판정자의 빈 곳이 그 차원에 닿으면 다시 부른다 — 총량은 조사 호출 상한 하나가
+묶는다. dispatch 마다 `research_dispatches.blind_spot_prober` 를 +1 한다.
 kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구 부재면 dispatch 대신 loud advisory 후 **inline premortem**으로 전환한다(C5, §5 위험 항목을
 codebase 근거·사용자 판단으로 기록).
 
@@ -503,7 +465,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/finishing.md
 **이 절 전문은 `references/state-migration.md` 에 있다** — state.local.md 로드 시 §2.4 스키마의
 **어떤 키든 부재**를 감지했을 때 읽는다(조건부 로드). `coverage`/`orchestration` 이 통째로 없을
 때로 좁히면 **직전 릴리스 세션이 어느 조건에도 안 걸린다** — 그 세션은 두 구조를 이미 갖고
-`reopened`·`reopen_log`·`coverage_mapper_dispatches` 만 없기 때문이다. 실제 업그레이드 경로가
+`reopened`·`reopen_log` 같은 새 키만 없기 때문이다. 실제 업그레이드 경로가
 바로 그것이므로, 조건은 「구조가 없는가」가 아니라 「**부재 키가 있는가**」다(spec §2.4).
 
 ```
@@ -513,5 +475,5 @@ Read references/state-migration.md
 ## kill switch
 
 - `DEVBREW_SPEC_DISTILL_DISABLE=1`: `## 진입 단계` 1 이 멈춘다(no-op). 진행 중이던 state.local.md 는 보존한다(실패 분석용).
-- `DEVBREW_SPEC_DISTILL_RHYTHM_GUARD_THRESHOLD=N`: rhythm guard threshold override.
+- `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT=<n>` · `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT=<n>`: 조사 호출 · 포화 판정 상한의 시작값(기본 20 · 5). 상한은 끄는 스위치가 아니라 닿으면 사용자에게 묻는 자리다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`: web landscape(R2) 비활성 — loud advisory 후 codebase 근거만 사용.

@@ -2,9 +2,9 @@
 
 판정은 **키 단위**다 — 「구조가 통째로 없는가」가 아니라 「§2.4 스키마의 **부재 키가 있는가**」.
 구조 부재로 좁히면 정작 **가장 흔한 업그레이드 경로가 빠진다**: 직전 릴리스 세션은
-`coverage`·`orchestration` 을 이미 갖고 있고 이 릴리스가 더한 세 키
-(`coverage.floor.*.reopened` · `.reopen_log` · `orchestration.coverage_mapper_dispatches`)만
-없어서, 어느 조건에도 안 걸린 채 그 키를 읽는 코드로 들어간다.
+`coverage`·`orchestration` 을 이미 갖고 있고 이 릴리스가 바꾼 키(`orchestration.research_dispatches` ·
+`research_limit` · `saturation_limit` · `research_log` · `saturation_log`)만 없어서, 어느 조건에도 안 걸린 채
+그 키를 읽는 코드로 들어간다.
 
 state.local.md 로드 시 아래 중 **하나라도** 부재면 *non-mutating read* 로 승격한다
 (부재 키만 기본값으로 채우고, 이미 있는 값은 손대지 않는다):
@@ -14,23 +14,25 @@ state.local.md 로드 시 아래 중 **하나라도** 부재면 *non-mutating re
   **차원은 있는데 `reopened`/`reopen_log` 만 없으면 그 둘만 `0`/`[]` 로 추가**하고
   `status`·`evidence` 는 그대로 둔다 — 진행 중인 인터뷰의 닫힘 판정을 되돌리지 않는다.
 - `coverage.derived` — 없으면 `[]`. 있으면 각 항목에 `reopened`/`reopen_log` 를 같은 규칙으로 보충.
-- `orchestration`: `{focused_dimension: null, blind_spot_dispatches: 0, coverage_mapper_dispatches: 0, open_decisions: []}`
-  — 절이 없으면 이 값 그대로 seed. **있으면 부재 키만** 그 기본값으로 추가한다.
+- `orchestration`: `{focused_dimension: null, research_dispatches: {coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0}, research_limit: <시작값>, saturation_limit: <시작값>, research_log: [], saturation_log: [], open_decisions: []}`
+  — 절이 없으면 이 값 그대로 seed. **있으면 부재 키만** 그 기본값으로 추가한다. `<시작값>` 은
+  `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT`(기본 20) · `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT`(기본 5)다.
 
-**개명은 「부재 키만 채운다」로 안 된다.** `blind_spot_dispatched: bool` 이
-`blind_spot_dispatches: int` 로 개명됐다. 부재 키 규칙만 쓰면 **이미 dispatch 한 세션이 새 키의
-기본값 `0` 을 받아 AP16 가드가 재무장된다** — 같은 인터뷰가 prober 를 두 번 부른다. 값을 이월한다:
+**옛 카운터는 「부재 키만 채운다」로 안 된다.** 이미 조사를 부른 세션이 새 키의 기본값 `0` 을 받으면
+조사 호출 상한이 그만큼 늘어난다. 값을 이월한다:
 
-- `blind_spot_dispatched: true` 가 있으면 `blind_spot_dispatches: 1` 로 이월한다. `false` 면 `0`.
-- 이월 뒤 옛 키 `blind_spot_dispatched` 를 **지운다** — 두 키가 공존하면 소비자가 어느 쪽을 읽는지
+- `coverage_mapper_dispatches: <k>` 는 `research_dispatches.coverage_mapper: <k>` 로 이월한다.
+- `blind_spot_dispatches: <k>` 는 `research_dispatches.blind_spot_prober: <k>` 로 이월한다.
+- 더 옛 세션의 `blind_spot_dispatched: true` 가 있으면 `research_dispatches.blind_spot_prober: 1`, `false` 면 `0`.
+- 이월 뒤 옛 키 `coverage_mapper_dispatches` · `blind_spot_dispatches` · `blind_spot_dispatched` 와 걷은 장치의 키 `non_user_streak` · `open_decisions[]` 항목의 `touched` 를 **지운다** — 두 이름이 공존하면 소비자가 어느 쪽을 읽는지
   갈리고, 이 파일은 `rereview_count`·`issue_history` 에서 이미 「승계하지 않고 지운다」 선례를 갖는다.
-- `open_decisions` 는 부재 시 `[]` — 부재 키 채우기의 정상 경로다. 진행 중인 인터뷰에는 결정 목록이
-  없으므로 빈 목록이 맞고, 그 세션의 면제는 「열린 결정이 0이면 면제도 0」으로 떨어진다.
+- `open_decisions` 는 부재 시 `[]` — 부재 키 채우기의 정상 경로다.
+- 이월한 세션의 state 본문에는 조사 산출 원문 블록이 없다 — 포화 판정 때 판정 불가 경로로 간다.
 
 구세션(`interview_round` 존재 / `coverage` 통째 부재)은 위 규칙의 한 경우일 뿐이다 — 그때는
 모든 키가 부재라 전부 seed 된다.
 
-기존 필드(`non_user_streak`·`web_*`·`trivia_escape_armed` 등)는 유지.
+기존 필드(`web_*`·`trivia_escape_armed` 등)는 유지.
 **단 `rereview_count`·`issue_history` 두 키는 승계하지 않고 지운다** — 옛 design doc 리뷰
 파이프라인이 쓰던 것이고, 그 자리가 공유 문서 리뷰 엔진으로 넘어가면서 산출자도 소비자도
 없어졌다(재리뷰 카운터의 정본은 이제 엔진의 `docreview-state.md` 다). 남겨두면 아무도
@@ -42,14 +44,14 @@ state.local.md 로드 시 아래 중 **하나라도** 부재면 *non-mutating re
 버리는 것은 마이그레이션이 아니라 손실입니다.
 
 **영속화 시점**: 승격된 스키마는 재개된 세션의 첫 액션으로, 첫 probe보다 먼저 Bash 전체-frontmatter
-write로 즉시 디스크에 반영합니다(PN1) — coverage-mapper 상한 카운터(`coverage_mapper_dispatches`)와
-재개방 원장(`reopen_log`)이 그 디스크 값을 직접 읽기 때문입니다. 신규 필드(coverage/orchestration)만
+write로 즉시 디스크에 반영합니다(PN1) — 조사 호출 카운터(`research_dispatches`)와
+재개방 원장(`reopen_log`)이 그 디스크 값을 직접 읽기 때문입니다. 신규 필드만
 추가하는 forward promotion이지 backward-rewrite가 아닙니다(`interview_round`는 자연 소멸, 다른
 기존 필드는 불변) — "다음 명시적 write"를 기다리는 연기가 아니라 resume 직후 1회입니다.
 
 사용자에게 advisory 한 줄 출력:
 ```
-[spec-distill 4.4.0] state schema migration: blind_spot_dispatched -> blind_spot_dispatches (value carried), open_decisions added.
+[spec-distill] state schema migration: coverage_mapper_dispatches/blind_spot_dispatches -> research_dispatches (value carried), research_limit · saturation_limit · research_log · saturation_log added, non_user_streak · touched removed.
 ```
 
 자동 promote 실패 시(파일 corruption 등) → "구세션 in-flight state 호환 실패 — 세션 재시작 권장"

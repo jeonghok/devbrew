@@ -78,7 +78,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    옵니다: `사용자-승인 박제(@S12) — §Open Questions 참조`. 재개방된 차원은 행 끝에
    `(재개방 <n>회 — <마지막 사유>)` 접미를 붙입니다(state `reopen_log` 의 마지막 항목).
    같은 시점에 **audit §2 Budget** 의 **불릿(데이터) 줄**에 `coverage-mapper <k>` 를 씁니다
-   (state `orchestration.coverage_mapper_dispatches`) — 게이트는 `- ` 로 시작하는 줄만 읽으므로
+   (state `orchestration.research_dispatches.coverage_mapper`) — 게이트는 `- ` 로 시작하는 줄만 읽으므로
    설명 산문에 적은 숫자는 세어지지 않습니다. dispatch 가 불가능했던 환경이면
    `coverage-mapper 0 (unavailable: <이유>)` — 게이트는 이를 advisory 로 통과시키고 Step B 가
    사람에게 보입니다.
