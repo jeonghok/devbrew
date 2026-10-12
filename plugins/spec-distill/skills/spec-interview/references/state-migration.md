@@ -16,7 +16,8 @@ state.local.md 로드 시 아래 중 **하나라도** 부재면 *non-mutating re
 - `coverage.derived` — 없으면 `[]`. 있으면 각 항목에 `reopened`/`reopen_log` 를 같은 규칙으로 보충.
 - `orchestration`: `{focused_dimension: null, research_dispatches: {coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0}, research_limit: <시작값>, saturation_limit: <시작값>, research_log: [], saturation_log: [], open_decisions: []}`
   — 절이 없으면 이 값 그대로 seed. **있으면 부재 키만** 그 기본값으로 추가한다. `<시작값>` 은
-  `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT`(기본 20) · `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT`(기본 5)다.
+  `${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/saturation.md` 의 `### 상한 값` 펜스가 정한다 — 같은 검사로
+  `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT`(기본 20) · `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT`(기본 5)를 읽는다.
 
 **옛 카운터는 「부재 키만 채운다」로 안 된다.** 이미 조사를 부른 세션이 새 키의 기본값 `0` 을 받으면
 조사 호출 상한이 그만큼 늘어난다. 값을 이월한다:
@@ -27,7 +28,9 @@ state.local.md 로드 시 아래 중 **하나라도** 부재면 *non-mutating re
 - 이월 뒤 옛 키 `coverage_mapper_dispatches` · `blind_spot_dispatches` · `blind_spot_dispatched` 와 걷은 장치의 키 `non_user_streak` · `open_decisions[]` 항목의 `touched` 를 **지운다** — 두 이름이 공존하면 소비자가 어느 쪽을 읽는지
   갈리고, 이 파일은 `rereview_count`·`issue_history` 에서 이미 「승계하지 않고 지운다」 선례를 갖는다.
 - `open_decisions` 는 부재 시 `[]` — 부재 키 채우기의 정상 경로다.
-- 이월한 세션의 state 본문에는 조사 산출 원문 블록이 없다 — 포화 판정 때 `${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/saturation.md` 의 `### 판정 불가` 경로로 간다.
+- 이월 전에 한 조사는 번호가 없다 — `research_log` 항목도 원문 블록도 없이 시작한다. 이월 뒤 조사는 평소대로 블록을 쌓고,
+  판정자는 그 블록만 받는다(두 항목 미만이면 판정자 규칙대로 «아직»). 원문 블록 누락으로 판정 불가가 되는 것은 번호가 있는
+  `research_log` 항목의 블록이 빠졌을 때뿐이다.
 
 구세션(`interview_round` 존재 / `coverage` 통째 부재)은 위 규칙의 한 경우일 뿐이다 — 그때는
 모든 키가 부재라 전부 seed 된다.

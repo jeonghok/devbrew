@@ -5,7 +5,8 @@ description: >
   Runs the spec-distill problem-space interview stage and produces a terminal
   interview-brief at docs/superpowers/interview/. 종료는 커버리지 원장의 floor
   5차원(root-problem/landscape/skepticism/blind-spot/open-questions)이 모두
-  closed일 때이며, check_brief.py의 구조적 게이트로 기계적 검증합니다(Law 1).
+  closed이고 포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때이며,
+  check_brief.py의 구조적 게이트로 기계적 검증합니다(Law 1).
   Optionally hands the brief to superpowers:brainstorming.
 cost_class: variable
 argument-hint: "[@<seed 경로> | rough request]"
@@ -82,9 +83,9 @@ Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 �
 당신은 spec-distill의 인터뷰 stage를 진행 중입니다. 이 stage는 *받아적는* 인터뷰가
 아니라 **강한 문제공간 stage**입니다(Double Diamond 1st diamond — brainstorming 해답공간
 앞단, 상보적·비중복). 매 라운드를 «지금 이해 · 다음 결정 · 질문 하나»로 묻되, 종료는
-**커버리지 원장의 floor 5차원**(root-problem/landscape/skepticism/blind-spot/open-questions)이
-**모두 `closed`**일 때만 허용됩니다 — landscape·skepticism 등 통과 의례 메커니즘이 각 차원을
-채우는 수단이며, `check_brief.py`가 이를 기계적으로 검증합니다(Law 1 구조 게이트).
+**커버리지 원장의 floor 5차원**(root-problem/landscape/skepticism/blind-spot/open-questions)이 **모두 `closed`**이고
+포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때만 허용됩니다(`## 조사 상한 · 포화 판정`) — landscape·skepticism 등
+통과 의례 메커니즘이 각 차원을 채우는 수단이며, `check_brief.py`가 이를 기계적으로 검증합니다(Law 1 구조 게이트).
 
 산출물은 `spec.md`가 아니라 **interview brief**(brainstorming용 meta-prompt)이며, 이
 brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으면 brainstorming으로
@@ -114,7 +115,7 @@ orchestration:                       # orchestrator 소유, agent read-only
   research_limit: <int>              # 조사 호출 상한 — 시작값 DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT(기본 20), 연장마다 더한다
   saturation_limit: <int>            # 포화 판정 상한 — 시작값 DEVBREW_SPEC_DISTILL_SATURATION_LIMIT(기본 5), 연장마다 더한다
   research_log: []                   # 조사마다 {n, device, round, changed: [OQ…], opened: [OQ…], summary}
-  saturation_log: []                 # 판정마다 {k, round, verdict, gaps: […], user_choice: S<n> | null}
+  saturation_log: []                 # 판정마다 {k, round, verdict, basis, gaps: […], user_choice: S<n> | null} · 판정 불가 {k, round, verdict: unavailable, reason, user_choice}
   open_decisions: []                 # 결정의 유일한 거처 — OQ<n> 의 산출자. 시작은 빈 목록이고 항목 형식은:
   #   - id: OQ<n>                    # 발급 시 순증 (라운드 규약 «다음 결정»)
   #     text: "<한 줄>"
@@ -127,7 +128,7 @@ confirm_repost_count: 0              # 종료 확정 확인 재제시 횟수 (�
 ---
 ```
 
-State body: 각 라운드의 `## R<n>` 기록(«라운드 규약» 형식) + 조사 산출 원문(`### 조사 <n> — <장치> · R<round>` 아래 verbatim — 포화 판정자의 입력이라 요약으로 바꾸지 않는다).
+State body: 각 라운드의 `## R<n>` 기록(«라운드 규약» 형식) + 조사 산출 원문(`### 조사 <n> — <장치> · R<round>` 아래 verbatim — 포화 판정자의 입력이라 요약으로 바꾸지 않는다) + `## audit §2 대기 줄`(게이트가 읽는 사건 줄 — `references/saturation.md` 가 정한다).
 
 **`open_decisions[]` 의 생명주기.** 발급은 orchestrator 가 «다음 결정» 블록을 쓸 때 그 문장에
 `OQ<n>` 을 붙이는 것이다(새 결정이면 새 번호 — 순증, 인터뷰 안에서만 유일 — 이어가는 결정이면 기존 번호).
@@ -306,8 +307,8 @@ state 를 처음 만들 때(아래 한 줄보다 앞) 아래 `Read` 줄의 파�
 
 dispatch 마다 `research_dispatches` 의 그 장치 칸을 +1 하고, 산출 원문을 state 본문 `### 조사 <n> — <장치> · R<round>`
 아래 verbatim 으로 남기고, «지금 이해»에 실은 뒤(V1 확인 뒤) `research_log` 에 한 항목을 더한다. 본체의 직접 조사(경로 (a)
-확인 · web sweep)도 «지금 이해»에 실을 때 같은 두 자리에 `device: orchestrator` 로 남기되 상한에는 세지 않는다 — 판정자 호출도
-세지 않는다. 본체 직접 조사는 라운드 규약(라운드마다 질문 하나 · 답 하나)이 묶는다. 합이 `research_limit` 에 닿을 때와
+확인 · web sweep)도 «지금 이해»에 실을 때 같은 두 자리에 `device: orchestrator` 로 남기되(`device: orchestrator` 의 원문 블록은 V1 확인 줄(`- 확인 RC<n> — …`)과
+웹 항목 줄 그대로다 — 산문 요약을 넣지 않는다) 상한에는 세지 않는다 — 판정자 호출도 세지 않는다. 본체 직접 조사는 라운드 규약(라운드마다 질문 하나 · 답 하나)이 묶는다. 합이 `research_limit` 에 닿을 때와
 floor 다섯이 모두 `closed` 가 될 때 아래 파일을 Read 로 읽어 그대로 따른다.
 
 ```
@@ -477,7 +478,8 @@ floor 다섯이 전부 `closed` 여야 종료가 열리지만, **사용자는 �
 
 발동 조건이 카운터가 아니라 **사용자 발화**라는 점만 예전 escalation 과 다르다. 상한을
 없애는 것과 탈출구를 없애는 것은 다르다 — 없애는 것은 사용자 질문의 상한이지 나가는 문이
-아니다. 포화 판정 전에 끝내면 audit §2 에 `- 사용자 종료(@S<n>) — 포화 판정 전` 을, 마지막 판정이 «아직» 일 때 끝내면 `- 사용자 종료(@S<n>) — 마지막 판정 아직` 을 남긴다.
+아니다. 포화 판정 전에 끝내면 `- 사용자 종료(@S<n>) — 포화 판정 전` 을, 마지막 판정이 «아직» 일 때 끝내면 `- 사용자 종료(@S<n>) — 마지막 판정 아직` 을
+state 본문 `## audit §2 대기 줄` 에 덧붙인다(종료 때 audit §2 로 옮긴다).
 
 읽어야 하는 조건: `coverage.floor` 의 다섯 차원이 모두 `status: closed` 이고, 마지막 포화 판정이 «포화» 이거나 사용자가 종료를 골랐다.
 

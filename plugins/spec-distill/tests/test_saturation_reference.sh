@@ -65,6 +65,54 @@ for ln in '- 조사 호출 <n>/<limit> (장치별: 커버리지 <a> · 맹점 <b
 done
 # 이중 종료 — finishing.md 의 종료 driver
 grep -qF '마지막 포화 판정이 «포화»' "$FIN" && ok "B5: finishing 종료 driver 가 포화 판정을 요구" || no "B5: finishing 종료 driver 에 포화 판정 부재"
+# I1(최종 리뷰) — 인터뷰 중에는 audit 파일이 없다. 게이트를 정하는 줄은 사건 순간 state 본문 블록에 글자 그대로
+# 쌓고, finishing Step A ④ 가 그 블록을 옮긴다. 압축 · 재개 뒤 기억으로 다시 짓는 길을 막는다.
+SKILL_FLAT="$(tr '\n' ' ' < "$SKILL" | tr -s ' ')"
+EXIT_FLAT="$(awk '/^### 나가는 문은 floor 뒤에만 있지 않다/{f=1;print;next} /^##/{f=0} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
+[[ -n "$EXIT_FLAT" ]] && ok "I1: SKILL 나가는 문 절을 떴다" || no "I1: SKILL 나가는 문 절 부재 — 아래 락이 공허하다"
+PEND='`## audit §2 대기 줄` 에 덧붙인다(종료 때 audit §2 로 옮긴다)'
+grep -qF "$PEND" <<<"$SAT_FLAT" && ok "I1: saturation.md 가 사건 줄을 state 대기 줄 블록에 덧붙인다" || no "I1: saturation.md 에 대기 줄 블록 문구 부재"
+grep -qF "$PEND" <<<"$EXIT_FLAT" && ok "I1: SKILL 나가는 문의 사용자 종료 줄도 대기 줄 블록으로" || no "I1: SKILL 나가는 문에 대기 줄 블록 문구 부재"
+grep -qF '## audit §2 대기 줄' <<<"$(awk '/^State body:/' "$SKILL")" && ok "I1: SKILL state 본문 정의에 대기 줄 블록" || no "I1: SKILL state 본문 정의에 대기 줄 블록 부재"
+# 부재(위 셋이 양의 짝) — 인터뷰 중 «audit §2 에 `- …` 를 남긴다» 지시가 사라졌다.
+grep -qF 'audit §2 에 `-' <<<"$SAT_FLAT" && no "I1: saturation.md 가 아직 인터뷰 중 audit §2 에 직접 쓰라고 한다" || ok "I1: saturation.md 에 인터뷰 중 audit §2 직접 쓰기 없음"
+grep -qF 'audit §2 에 `-' <<<"$SKILL_FLAT" && no "I1: SKILL 이 아직 인터뷰 중 audit §2 에 직접 쓰라고 한다" || ok "I1: SKILL 에 인터뷰 중 audit §2 직접 쓰기 없음"
+FIN4="$(awk '/^4\. \*\*Coverage Ledger 직렬화/{f=1;print;next} /^5\. /{f=0} f' "$FIN" | tr '\n' ' ' | tr -s ' ')"
+[[ -n "$FIN4" ]] && ok "I1: finishing Step A ④ 를 떴다" || no "I1: finishing Step A ④ 부재 — 아래 락이 공허하다"
+grep -qF '`## audit §2 대기 줄` 블록을 글자 그대로 순서대로 옮겨 씁니다' <<<"$FIN4" \
+  && ok "I1: finishing ④ 가 대기 줄 블록을 글자 그대로 옮긴다" || no "I1: finishing ④ 에 대기 줄 블록 이송 부재"
+grep -qF 'user_choice: S<m>' <<<"$SAT_FLAT" && ok "I1: 사용자 선택이 saturation_log.user_choice 에 적힌다" || no "I1: user_choice 설정 문구 부재"
+grep -qF '{k, round, verdict: unavailable, reason, user_choice}' <<<"$SAT_FLAT" && ok "I1: 판정 불가도 saturation_log 한 항목" || no "I1: 판정 불가 항목 형식 부재"
+grep -qF '판정자 호출 수는 `saturation_log` 항목 수다' <<<"$SAT_FLAT" && ok "I1: 판정 불가도 판정 상한에 센다" || no "I1: 판정자 호출 수 정의 부재"
+grep -qE '^ +saturation_log: \[\] +#.*basis.*user_choice' <<<"$(awk '/^State frontmatter schema:/{f=1;next} f&&/^---$/{n++} f&&n<2' "$SKILL")" \
+  && ok "I1: SKILL 스키마의 saturation_log 에 basis" || no "I1: SKILL 스키마의 saturation_log 에 basis 부재"
+# I2 — 판정마다 사용자에게 한 줄(판정 · 빈 곳 수 · 다음에 볼 것 · 호출 수).
+grep -qF '[spec-distill] 포화 판정 <k>/<saturation_limit>: <포화 | 아직 — 빈 곳 <g>개, 다음: <첫 look_at>> · 조사 호출 <n>/<limit>' <<<"$NOTYET_FLAT" \
+  && ok "I2: 포화 판정 절이 판정마다 보이는 한 줄을 낸다" || no "I2: 판정 결과 보이는 한 줄 부재"
+grep -qF '같은 줄을 그 라운드의 «지금 이해»에도 싣는다' <<<"$NOTYET_FLAT" && ok "I2: 라운드가 이어지면 «지금 이해»에도" || no "I2: «지금 이해» 싣기 부재"
+# I3 — 본체 직접 조사의 원문 블록 = V1 확인 줄 · 웹 항목 줄 그대로(산문 요약 아님).
+ORCH='`device: orchestrator` 의 원문 블록은 V1 확인 줄(`- 확인 RC<n> — …`)과 웹 항목 줄 그대로다'
+grep -qF "$ORCH" <<<"$CAP_FLAT" && ok "I3: SKILL 이 본체 직접 조사 블록 내용을 정한다" || no "I3: SKILL 에 본체 직접 조사 블록 내용 부재"
+grep -qF "$ORCH" <<<"$SAT_FLAT" && ok "I3: saturation.md 입력 레시피가 같은 규칙" || no "I3: saturation.md 에 본체 직접 조사 블록 내용 부재"
+# M2 — 상한 값 펜스를 실제로 돌린다: 0 · 00 · 음수 · 문자는 기본값, 앞자리 0 은 10진 정규화.
+LIM_FENCE="$(awk '/^### 상한 값/{f=1;next} /^### /{f=0} f&&/^```bash$/{b=1;next} f&&b&&/^```$/{exit} f&&b' "$SAT")"
+{ [[ -n "$LIM_FENCE" ]] && bash -n <<<"$LIM_FENCE"; } && ok "M2(양성대조): 상한 값 펜스를 떴고 bash -n 통과" || no "M2: 상한 값 펜스 부재 또는 구문 오류"
+for pair in '00|20|5' '0|20|5' '-3|20|5' 'abc|20|5' '007|7|7' '3|3|3' '|20|5'; do
+  v="${pair%%|*}"; rest="${pair#*|}"; er="${rest%%|*}"; es="${rest#*|}"
+  got="$(DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT="${v}" DEVBREW_SPEC_DISTILL_SATURATION_LIMIT="${v}" bash -c "$LIM_FENCE" 2>/dev/null)"
+  [[ "$got" == "research_limit=${er} saturation_limit=${es}" ]] && ok "M2: 값 '${v}' → ${er} · ${es}" || no "M2: 값 '${v}' → «${got}» (기대 ${er} · ${es})"
+done
+# M3 — 이월 전 조사는 번호가 없다: 판정 불가는 번호 있는 research_log 항목의 블록이 빠졌을 때만.
+MIG="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/references/state-migration.md"
+MIG_FLAT="$(tr '\n' ' ' < "$MIG" | tr -s ' ')"
+grep -qF '번호가 있는 `research_log` 항목' <<<"$SAT_FLAT" && ok "M3: saturation.md 의 블록 누락 = 번호 있는 항목만" || no "M3: saturation.md 블록 누락 범위 부재"
+grep -qF '이월 전에 한 조사는 번호가 없다' <<<"$MIG_FLAT" && ok "M3: 이월 전 조사는 번호 없음" || no "M3: state-migration 에 이월 전 조사 규칙 부재"
+grep -qF '`### 판정 불가` 경로로 간다' <<<"$MIG_FLAT" && no "M3: 이월 세션이 아직 판정 불가로 고정된다" || ok "M3: 이월 세션의 판정 불가 고정 없음"
+grep -qF '`### 상한 값` 펜스가 정한다' <<<"$MIG_FLAT" && ok "M3: <시작값> 은 상한 값 펜스" || no "M3: <시작값> 출처 부재"
+# M4 — description · 도입부가 이중 종료(floor 5 closed + 포화 또는 사용자 종료)를 말한다.
+DUAL='포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때'
+grep -qF "$DUAL" <<<"$(awk 'NR>1&&/^---$/{exit} NR>1' "$SKILL" | tr '\n' ' ' | tr -s ' ')" && ok "M4: description 이 이중 종료" || no "M4: description 이 floor 단독 종료"
+grep -qF "$DUAL" <<<"$(awk '/^당신은 spec-distill의/{f=1} /^## State location/{f=0} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')" && ok "M4: 도입부가 이중 종료" || no "M4: 도입부가 floor 단독 종료"
 # 부재 — 금지 토큰이 새 표면에 없다
 for tok in '판정자 조건' '판정자 투입' '다시 묻지 않는다' 'probe''_count' 'web''_budget' 'interview''_round'; do  # 잔재 락(test_probe_sweep_residue.sh)이 이 파일을 스캔하므로 토큰을 둘로 쪼갠다
   grep -qF -- "$tok" "$SAT" && no "부재: saturation.md 에 «${tok}»" || ok "부재: saturation.md 에 «${tok}» 없음"

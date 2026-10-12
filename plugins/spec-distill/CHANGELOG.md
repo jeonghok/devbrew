@@ -8,6 +8,7 @@
 - 조사 호출 상한 `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT`(기본 20) · 포화 판정 상한 `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT`(기본 5). 닿으면 사용자에게 연장 · 판정 · 종료를 묻는다. 첫 조사 전에 규모를 한 줄로 알린다(승인은 묻지 않는다).
 - `check_brief.py gate` 의 `saturation_failures` — audit §2 의 마지막 포화 판정 줄이 판정자 「포화」 · 사용자 종료 · 사용자 판단 포화(advisory)일 때만 통과한다.
 - `skills/spec-interview/references/saturation.md` — 상한 도달 · 포화 판정 · 반복 감지 · 판정 불가 · 판정 상한 · audit §2 줄.
+- 포화 판정마다 사용자에게 한 줄(`[spec-distill] 포화 판정 <k>/<saturation_limit>: …`)로 판정 · 빈 곳 수 · 다음에 볼 것 · 조사 호출 수를 보이고 «지금 이해»에도 싣는다. 게이트가 읽는 사건 줄(상한 도달 · 판정 상한 도달 · 포화 판정 · 사용자 종료)은 사건 순간 state 본문 `## audit §2 대기 줄` 에 쌓였다가 종료 때 audit §2 로 그대로 옮겨진다.
 
 ### Changed
 - 조사 subagent 넷은 자격 · 예산 없이 결정에 닿을 수 있을 때마다 부른다. 첫 호출 필수 자리(coverage-mapper R1 전 · blind-spot-prober 첫 전이)는 하한으로 남는다.
