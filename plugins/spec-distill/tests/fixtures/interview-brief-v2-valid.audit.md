@@ -20,6 +20,7 @@ source: spec-distill conducting-interview 4.4.0
 ## 2. Budget
 
 - 질문 라운드: 2 · agent dispatch: 1 · coverage-mapper 1 · codex 실호출: 0 (성공 0)
+- 포화 판정 1: 포화 — 최근 두 조사 모두 결정을 바꾸지도 열지도 않았다
 
 ## 3. Steelman 원문
 

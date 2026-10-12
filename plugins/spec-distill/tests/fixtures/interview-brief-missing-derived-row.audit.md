@@ -19,6 +19,7 @@ source: spec-distill conducting-interview v0.23.0
 ## 2. Budget
 
 - agent dispatch: coverage-mapper 1
+- 포화 판정 1: 포화 — 최근 두 조사 모두 결정을 바꾸지도 열지도 않았다
 
 - probe_count: 7 / cap 12
 - web_sweep_count: 3 / 4

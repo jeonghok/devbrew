@@ -103,6 +103,26 @@ class AuditTemplateGateShape(unittest.TestCase):
             "데이터 불릿을 지웠는데 게이트가 통과했다 — §2 머리 설명 산문이 판정을 지고 "
             "있다(R18 이 막던 것이 다시 열렸다). advisories=%r" % (advisories,))
 
+    def test_saturation_placeholder_is_red(self):
+        """출하 템플릿의 포화 줄은 자리표다 — 채우지 않으면 red (침묵보다 red)."""
+        self.assertIn("포화 판정 <k>:", self.text, "§2 에 포화 판정 자리표 줄이 없다")
+        fails, _ = check_brief.saturation_failures(self.text, set())
+        self.assertTrue(fails, "자리표를 안 채운 템플릿이 포화 검사를 통과했다")
+
+    def test_saturation_filled_copy_passes(self):
+        filled = self.text.replace(
+            next(ln for ln in self.text.splitlines() if ln.startswith("- 포화 판정 <k>:")),
+            "- 포화 판정 1: 포화 — 최근 두 조사 새로움 없음")
+        fails, adv = check_brief.saturation_failures(filled, set())
+        self.assertEqual((fails, adv), ([], []))
+
+    def test_saturation_prose_alone_does_not_satisfy(self):
+        """설명 산문은 판정에 참여하지 않는다 — 데이터 불릿을 지운 사본은 red."""
+        stripped = "\n".join(ln for ln in self.text.splitlines()
+                             if not ln.startswith("- 포화 판정"))
+        fails, _ = check_brief.saturation_failures(stripped, set())
+        self.assertTrue(fails, "데이터 줄 없이 산문만으로 포화 검사가 통과했다")
+
 
 if __name__ == "__main__":
     unittest.main()

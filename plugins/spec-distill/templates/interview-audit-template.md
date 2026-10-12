@@ -43,7 +43,14 @@ source: spec-distill spec-interview v0.57.0
  dispatch 를 한 번도 안 한 턴이 그대로 옮겨 적어 게이트가 조용히 통과한다. 채우지 않은
  `<k>` 는 게이트 red 다(«coverage-mapper <k> line missing»): 침묵보다 red 가 낫다.)
 
+(포화 판정 줄 — 게이트는 아래 불릿 중 `포화 판정 <k>:` 또는 `사용자 종료(@S<n>)` 로 시작하는 **마지막** 줄을 본다.
+판정자 `포화` · 사용자 종료 · 사용자 판단 포화(advisory)면 통과, 줄이 없거나 마지막이 `아직` · `판정 불가 — 조사 계속` 이면
+red 다. 판정마다 한 줄, 사용자 선택마다 한 줄을 시간 순으로 덧붙인다 — 형식의 정본은 spec-interview 의 포화 판정 reference 다.
+`<k>` 는 실제 차례로 치환한다 — 채우지 않은 자리표는 게이트 red 다.)
+
 - 질문 라운드: <n> · agent dispatch: <n> · coverage-mapper <k> · codex 실호출: <n> (성공 <n>)
+- 조사 호출 <n>/<limit> (장치별: 커버리지 <a> · 맹점 <b> · 반론 <c> · 레포 조사 <d> · 본체 직접 <e>)
+- 포화 판정 <k>: <포화 — <basis 요지> | 아직 — 빈 곳 <g>개 | …>
 
 ## 3. Steelman 원문
 

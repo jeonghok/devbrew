@@ -1269,6 +1269,49 @@ def budget_mapper_failures(audit_text: str) -> tuple[list[str], list[str]]:
     return ["§2 Budget: coverage-mapper 0 without unavailable reason"], []
 
 
+# 설계 2026-10-12-interview-persistent-explore §4·§5 — audit §2 의 포화 판정 줄. 판정은 «마지막» 줄로
+# 한다: 판정과 사용자 선택이 시간 순으로 쌓이고, 그 끝이 인터뷰가 어떻게 끝났는지다. 불릿 어휘는
+# 형제(`MAPPER_RE` · `ENTRY_BULLET_RE`)와 같은 `[-*]` 다 — `_entry_lines` 가 이미 그 어휘로 거른다.
+SAT_LINE_RE = re.compile(r"^(?:포화 판정 \d+:|사용자 종료\(@S\d+\))")
+SAT_PASS_RE = re.compile(r"^포화 판정 \d+: 포화 — \S")
+SAT_USER_RE = re.compile(r"^포화 판정 \d+: 사용자 판단 포화\(@(S\d+)\) — \S")
+SAT_STOP_RE = re.compile(r"^사용자 종료\(@(S\d+)\) — (?:포화 판정 전|마지막 판정 아직)$")
+SAT_NOT_YET_RE = re.compile(r"^포화 판정 \d+: 아직 — \S")
+SAT_CONTINUE_RE = re.compile(r"^포화 판정 \d+: 판정 불가\([^)]*\) — 조사 계속\(@S\d+\)$")
+
+
+def saturation_failures(audit_text: str, anchors: set) -> tuple[list[str], list[str]]:
+    """audit §2 의 마지막 포화 판정 줄 (설계 §5).
+
+    통과: 판정자 `포화` · 사용자 종료(S 앵커 실재) · 사용자 판단 포화(S 앵커 실재, advisory).
+    실패: 줄 없음 · 마지막이 `아직`(반복 빈 곳 재조사 포함) · 마지막이 `판정 불가 — 조사 계속` ·
+    형식 밖. **이 검사가 못 잡는 것**: 줄은 본체가 쓴다 — 판정자를 부르지 않은 턴이 `포화` 줄을
+    지어 적으면 구별하지 못한다. 그 축은 판정자 dispatch 의 처분 줄과 Step B 의 사람 확인이 진다."""
+    sec = _section_text(audit_text, "2", "Budget")
+    hits = [b for b in (_strip_bullet(ln).strip() for ln in _entry_lines(sec))
+            if SAT_LINE_RE.match(b)]
+    if not hits:
+        return ["§2 Budget: 포화 판정 줄 없음 — floor 다섯이 닫힌 뒤 포화 판정자를 부르지 않았거나 "
+                "사용자 종료를 적지 않았다"], []
+    last = hits[-1]
+    if SAT_PASS_RE.match(last):
+        return [], []
+    for rx, kind in ((SAT_USER_RE, "user"), (SAT_STOP_RE, "stop")):
+        m = rx.match(last)
+        if m:
+            s = m.group(1)
+            if s not in anchors:
+                return [f"§2 Budget: 마지막 포화 판정 줄의 앵커 {s} 가 §6 에 없다"], []
+            if kind == "user":
+                return [], [f"사용자 판단 포화(@{s}) — 판정자의 «포화» 없이 사용자가 끝냈다 (사람이 확인할 것)"]
+            return [], []
+    if SAT_NOT_YET_RE.match(last):
+        return ["§2 Budget: 마지막 포화 판정이 «아직» — 빈 곳을 조사한 뒤 다시 판정하거나 사용자가 끝내야 한다"], []
+    if SAT_CONTINUE_RE.match(last):
+        return ["§2 Budget: 판정 불가 뒤 사용자가 조사 계속을 골랐는데 그 뒤 포화 판정이나 사용자 종료 줄이 없다"], []
+    return [f"§2 Budget: 포화 판정 줄이 형식 밖이다: {last[:80]}"], []
+
+
 def frontmatter_errors(text: str) -> list[str]:
     m = FRONTMATTER_RE.match(text)
     if not m:
@@ -1386,6 +1429,10 @@ def gate(path: Path) -> int:
                 bf, ba = budget_mapper_failures(audit_text)
                 failures += [f"coverage-mapper budget: {x}" for x in bf]
                 advisories += ba
+                sf, sa = saturation_failures(
+                    audit_text, payload_verbatim_anchors(text) | verbatim_anchors(audit_text))
+                failures += [f"saturation: {x}" for x in sf]
+                advisories += sa
 
     sec4_absent = any(m.startswith("4.") for m in miss)
     if not sec4_absent and not landscape_present(text):
