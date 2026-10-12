@@ -35,9 +35,9 @@
                                        · 검증 — 문서 리뷰 엔진(seed 프로필: 탐지 doc-critic + codex → 재비판 doc-recritic)
                                                 · 처분은 사용자가 — 처분 전 편집 금지 · 저자 편집 diff 공시 · 문구 없는 drop 차단
                                                 · 냉독 축(seed-readback)
-                                       ▼ [확정 — proceed 게이트] ①/new 후 /spec-interview @경로 · ②/compact 후 /spec-interview @경로 · ③수정 필요 · ④멈춤
+                                       ▼ [확정 — proceed 게이트] ①/compact 후 /spec-interview @경로 · ②/new 후 /spec-interview @경로 · ③수정 필요 · ④멈춤
                                    interview-seed → docs/superpowers/interview/   ← 문서가 아니라 다음 세션 첫 턴이 가리키는 파일
-                                       ▼ 새 세션 첫 턴 = `/spec-interview @<seed 경로>` (진입 단계가 frontmatter 포함 전문으로 풀어 인터뷰에 넘김)
+                                       ▼ 다음 세션 첫 턴 = `/spec-interview @<seed 경로>` (진입 단계가 frontmatter 포함 전문으로 풀어 인터뷰에 넘김)
 /spec-interview ─→ [0] Trivia escape ─→ [1] Interview (문제공간 stage)
                                        · 지금 이해 · 다음 결정 · 질문 하나 + 3-path (web=path(a))
                                        · R1 Problem Reframe / R2 Landscape / R3 Steelman / R4 Tried&Discarded / R5 OQ
@@ -50,7 +50,7 @@
                                        │                라운드 게이트 → 저자 수정 → 다음 라운드 (재리뷰 상한 2)
                                        └─ 냉독    brief-readback  (엔진 밖 advisory, G1–G6 gap)
                                        ▼ 산출물 셋 (엔진 게이트 결과 / 냉독 요약+gap / degrade 채널)
-                                       ▼ [Step B proceed 게이트] ①/new 후 다음 세션 줄 · ②/compact 후 다음 세션 줄 · ③확정 목록 수정 · ④brief만 종료  (superpowers 있을 때만)
+                                       ▼ [Step B proceed 게이트] ①/compact 후 다음 세션 줄 · ②/new 후 다음 세션 줄 · ③확정 목록 수정 · ④brief만 종료  (superpowers 있을 때만)
                                    superpowers:brainstorming → -design.md
                                        ▼ brainstorming 이 설계문서를 쓰고 커밋 — 사용자 리뷰 게이트 자리
                                        ▼ 오케스트레이터가 그 경로로 spec-review 호출 (핸드오프 지시 · description — 훅 강제 없음)
@@ -141,7 +141,7 @@
 ### Anti-pattern 회피
 
 - **AP3 (Self-approval)** — writer/reviewer 물리적 분리 (frontmatter scoping).
-- **AP2 (Polite stop)** — **정본은 `references/proceed-gate.md`** (v0.31.0). 두 proceed 게이트(spec-review 의 `## 게이트` 절 · spec-interview 종료 Step B)가 그 파일의 골격·두 가드·예외 경로를 공유하며, 각 skill 은 자기 어휘(옵션 라벨 · 다음 세션 줄 · 고유 스텝)만 인라인으로 갖는다. 아래는 그 계약의 **요약**이지 별개 저술이 아니다 — 계약이 바뀌면 정본을 고치고 여기를 따라 고친다. approve tail = proceed 게이트(AskUserQuestion) → 미커밋 확인(리터럴 펜스, 기록 없음). 게이트를 skip한 narrate-only 종료 금지. cross-compact 조기 진행(①/② 의 두 줄 명령 노출 후 같은 턴에 다음 단계로 직진)도 게이트 P17 우회의 대칭 실패로 금지 (v0.11.0 AC19). interview→brainstorming Step B의 **4옵션**: ①/new 후 다음 세션 줄 / ②/compact 후 다음 세션 줄 / ③확정 목록 수정 / ④brief만 종료 (③ 추가는 v0.23.0). ①·② 의 다음 세션 줄은 `@<brief 절대경로>` 로 시작해 새 세션이 brief 를 붙여 읽는다(정본 `## 다음 세션 명령`) — 전용 handoff 스크립트를 호출하지 않음(brief는 막 검증됨, 하류/SessionEnd가 cleanup) (v0.13.0).
+- **AP2 (Polite stop)** — **정본은 `references/proceed-gate.md`** (v0.31.0). 두 proceed 게이트(spec-review 의 `## 게이트` 절 · spec-interview 종료 Step B)가 그 파일의 골격·두 가드·예외 경로를 공유하며, 각 skill 은 자기 어휘(옵션 라벨 · 다음 세션 줄 · 고유 스텝)만 인라인으로 갖는다. 아래는 그 계약의 **요약**이지 별개 저술이 아니다 — 계약이 바뀌면 정본을 고치고 여기를 따라 고친다. approve tail = proceed 게이트(AskUserQuestion) → 미커밋 확인(리터럴 펜스, 기록 없음). 게이트를 skip한 narrate-only 종료 금지. cross-compact 조기 진행(①/② 의 두 줄 명령 노출 후 같은 턴에 다음 단계로 직진)도 게이트 P17 우회의 대칭 실패로 금지 (v0.11.0 AC19). interview→brainstorming Step B의 **4옵션**: ①/compact 후 다음 세션 줄 / ②/new 후 다음 세션 줄 / ③확정 목록 수정 / ④brief만 종료 (③ 추가는 v0.23.0). ①·② 의 다음 세션 줄은 `@<brief 절대경로>` 로 시작해 새 세션이 brief 를 붙여 읽는다(정본 `## 다음 세션 명령`) — 전용 handoff 스크립트를 호출하지 않음(brief는 막 검증됨, 하류/SessionEnd가 cleanup) (v0.13.0).
 - **AP5 (Trivia ceremony)** — `/spec-interview` first-step trivia escape (5 패턴).
 - **AP9 (Subagent spray)** — `plugins/spec-distill/agents/` 8종(doc-critic·doc-critic-web·doc-recritic·steelman-builder·coverage-mapper·blind-spot-prober·brief-readback·seed-readback). 상한이 선언된 것: coverage-mapper·blind-spot-prober 는 **자격 + 예산**(자격 = 그 차원에 닿는 열린 결정이 아직 있는가 · 예산 = `1 + 재개방`, 4.4.0) · 문서 리뷰 엔진의 탐지 dispatch 는 라운드당 한 번(critic 사망이면 재dispatch 1회)이고 라운드 수는 재리뷰 상한 2 가 막는다(spec-review · reviewing-brief · request-framing).
 - **P11 (Cross-Model Adversarial)** — sub-agent reviewer adversarial review + **`steelman-builder` 의심 게이트(v0.12.0, v0.54.0 재설계)**: 의심 방향에 대해 builder 가 원안·대안 **양쪽**의 최강 케이스를 사용자 goal 기준으로 쓰고 근거가 핵심 전제에 닿는지 판정한다. 재검토를 여는 열쇠는 전제 충돌 하나 — 그 외 근거는 원안 강화·경계 다듬기에 쓴다. 판정 어휘 유지/보완/전환/보류(kept/refined/switched/deferred), 선택은 사용자.
@@ -157,6 +157,19 @@
 - **OMC** — env-var configurable threshold (steelman antithesis는 plan-reviewer PR로 defer, v0.2.0+ 회귀 도입).
 - **superpowers** — 산출물 위치(`docs/superpowers/specs/`) + plan-document-reviewer 출력 형식 (Status / Issues / Recommendations) + brainstorming drop-in 대체.
 - **Ouroboros** — inner/outer loop spirit (graph back-edges), spec lifecycle as named/versioned. (단 numerical ambiguity gate 거부, philosophy P2 비추천.)
+
+## 로드맵 · 에픽 묶음
+
+큰 일을 에픽으로 나눠 진행할 때 쓰는 읽기 전용 스크립트 둘이 있습니다. 둘 다 파일을 쓰지 않고 네트워크에 나가지 않습니다. 단위는 로드맵 > 에픽(spec 하나) > plan(PR 하나) > task 이고 에픽 하나가 PR 여럿을 낼 수 있지만, 지금의 상태 계산은 에픽 하나를 브랜치 하나로 셉니다.
+
+- `scripts/roadmap_status.py <로드맵 경로>` — `origin/main` 의 로드맵과 git 을 읽어 에픽마다 단계와 경고를 냅니다. 아직 main 에 없는 로드맵은 `--roadmap-file <파일>` 로 줍니다. 머지됨 자동 판정은 merge commit 방식에서만 됩니다. 브랜치가 지워졌으면 GitHub 의 머지 메시지 `Merge pull request #<n> from <owner>/<브랜치>` 로만 알아봅니다. squash · rebase 로 머지했거나 로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적어야 합니다.
+- `scripts/check_bundle_coverage.py <묶음> <설계문서>` — 에픽 묶음의 번호가 설계문서 `## 번호 대조` 표에 다 있는지 봅니다.
+
+경로 예약 겹침과 다른 에픽이 예약한 파일의 편집은 경고가 아니라 정보입니다 — 종료 코드를 바꾸지 않고, 에픽은 병렬로 갑니다. 충돌은 머지 때 풉니다(나중에 머지하는 PR 이 main 을 merge 하고 스위트를 다시 돌립니다).
+
+머지 메시지로 머지됨을 판정할 때는 브랜치 이름만 봅니다 — 머지된 PR 과 같은 이름으로 다시 만든 브랜치나 다른 owner 의 같은 이름 브랜치도 머지됨으로 보일 수 있습니다.
+
+종료 코드는 둘 다 0 이상 없음 · 1 경고 · 2 사용법 오류 · 3 검사 불가입니다. 형식은 `docs/superpowers/specs/2026-10-11-roadmap-walking-skeleton-design.md` §3 에 있습니다.
 
 ## Hooks Installed
 

@@ -1,11 +1,24 @@
 # Changelog
 
-## [5.2.2] — 2026-10-11
+## [5.4.1] — 2026-10-12
 
 ### Security
 - 격리한 인라인 python 은 `-X utf8` 도 함께 붙인다 — `-I` 가 PYTHONIOENCODING 을 무시하기 때문이다.
 - skill 펜스의 인라인 python(`python3 -c`)을 `-I` 로 격리한다 — `request-framing`(라운드 · 편집 범위 · drop 대조) · `reviewing-brief`(웹 허용 읽기) · `spec-review`(진입 검사 출력 검사), 그리고 이 플러그인에 링크로 실리는 공유 docreview codex 러너. 전에는 사용자 리포에 `json.py` 가 있으면 표준 모듈 대신 실행됐다.
-- `spec-interview` 가 state 를 고칠 때 쓰라고 시키는 펜스 안 주석(본문 · `references/finishing.md`)도 `python3 -I -c` / `python3 -I -` heredoc 으로 바꿨다.
+- `spec-interview` 가 state 를 고칠 때 쓰라고 시키는 펜스 안 주석(본문 · `references/finishing.md`)도 `python3 -I -X utf8 -c` / `python3 -I -X utf8 -` heredoc 으로 바꿨다.
+
+## [5.4.0] — 2026-10-12
+
+### Changed
+- 세 proceed 게이트(request-framing 확정 · interview 다음 단계 · 설계문서 승인)의 기본 핸드오프가 `/compact` 다 — ① 맨 `/compact`(권장) · ② `/new` 로 순서를 맞바꿨다. 다음 세션 줄 · 두 줄 따로 입력 · 두 가드는 그대로다. 정본 `references/proceed-gate.md` Step B 표와 `## 다음 세션 명령` 규칙 1 을 함께 고쳤다.
+  - 재결정(P23) — 원래: ① `/new`(권장). seed 가 framing 대화를 대신하려고 있고 `/compact` 는 그 대화의 요약을 남긴다는 근거였다(seed `@경로` 핸드오프 계획). 재결정: ① `/compact`(권장), 세 게이트 전부(사용자 결정, 2026-10-12). 근거: 작업 목록은 `/compact` 뒤에는 남지만 `/new` 뒤 새 세션에는 없다(로드맵 `persistent-explore-pm-decompose` 의 M2 실측). 같은 세션이라 작업 디렉토리(워크트리)도 그대로다.
+
+## [5.3.0] — 2026-10-11
+
+### Added
+- `scripts/roadmap_status.py` — 로드맵과 git 을 읽어 에픽마다 단계(대기 · 준비 · 설계 중 · 계획 · 머지됨 · 끝남 · 알 수 없음)와 경고(생략 · 의존 미머지 진행 · 묶음 없음 · spec 여럿 · 미배정 번호 · 고아 발화)를 낸다. 경로 예약 겹침과 다른 에픽이 예약한 파일의 편집(경로 예약 위반)은 경고가 아니라 정보라 종료 코드를 바꾸지 않는다 — 에픽은 병렬로 가고 충돌은 머지 때 푼다(나중 PR 이 main 을 merge 하고 스위트를 다시 돌린다). 단위는 로드맵 > 에픽(spec 하나) > plan(PR 하나) > task 이고, 지금의 상태 계산은 에픽 하나를 브랜치 하나로 센다(PR 여럿 추적은 R5). 읽기만 하고 fetch 하지 않는다. 기본은 `origin/main` 의 로드맵, 아직 main 에 없으면 `--roadmap-file`. 머지됨 자동 판정은 merge commit 방식에서만 되고, squash · rebase 는 로드맵 결정 기록의 머지 줄로 대신한다.
+- `scripts/check_bundle_coverage.py` — 에픽 묶음 `ids:` 가 설계문서 `## 번호 대조` 표에 다 있는지 본다. 빠지면 1, 표 깨짐 · 절 없음이면 3.
+- `tests/test_roadmap_status.sh` · `tests/test_bundle_coverage.sh` — 버릴 git 레포 픽스처의 단계 · 경고, 읽기 전용 검사, 이번 일의 로드맵 · 묶음 실데이터 검사.
 
 ## [5.2.1] — 2026-10-11
 

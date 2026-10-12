@@ -336,8 +336,8 @@ AskUserQuestion({
     question: "interview brief 를 만들었다: <brief-path> (구조 검사 통과 · 리뷰 <게이트 결과 한 줄 — 왜 여기서 멈췄는지 · 남은 항목 수 · 리뷰를 마치지 못했으면 그 사유(unreviewed_reason)>). 경고 <N>개 — 위에 적었다 | 경고 없음 | 이상 없음. 다음 단계는?",
     header: "다음 단계",
     options: [
-      {label: "확정하고 /new 후 brainstorming (권장)", description: "확정 후보를 확정으로 바꿔 저장하고, 붙여 넣을 두 줄(/new 와 다음 세션 줄)을 보여 준다. 새 세션이 brief 를 붙여 읽고 brainstorming 을 시작한다."},
-      {label: "확정하고 /compact 후 brainstorming", description: "확정 후보를 확정으로 바꿔 저장하고, 같은 두 줄을 첫 줄만 /compact 로 보여 준다. 인터뷰 기록을 요약해 둔 채 brainstorming 을 시작한다."},
+      {label: "확정하고 /compact 후 brainstorming (권장)", description: "확정 후보를 확정으로 바꿔 저장하고, 붙여 넣을 두 줄(/compact 와 다음 세션 줄)을 보여 준다. 인터뷰 기록을 요약해 둔 채 brief 를 붙여 읽고 brainstorming 을 시작한다."},
+      {label: "확정하고 /new 후 brainstorming", description: "확정 후보를 확정으로 바꿔 저장하고, 같은 두 줄을 첫 줄만 /new 로 보여 준다. 새 세션이 brief 만 붙여 읽고 brainstorming 을 시작한다."},
       {label: "확정 목록 수정", description: "확정 후보를 고쳐 다시 보여 준다(최대 2번). 아직 아무것도 확정되지 않는다."},
       {label: "brief만 종료", description: "brief 를 여기서 끝낸다. 모든 항목이 잠정으로 남고 다음 단계로 넘기지 않는다."}
     ],
@@ -367,16 +367,17 @@ AskUserQuestion({
 자리표가 남거나 경로에 공백이 있으면 노출하지 않고 `[spec-distill] 다음 세션 줄을 만들 수 없다 — <사유>. brief: <PAYLOAD 값>. 새 세션에서 이 brief 를 직접 첨부하고 아래 문장을 그대로 붙여 넣어 brainstorming 을 시작하라.`
 한 줄과, 그 아래에 다음 세션 줄에서 `@` 토큰을 뗀 나머지 문장을 그대로 보인 뒤 멈춘다(정본 `## 다음 세션 명령` 규칙 5). 사람이 이 줄의 유일한 운반자다 — 자동으로 이어지지 않는다.
 
-- **① 확정하고 /new 후 brainstorming**: 확정 후보를 `status: confirmed`로 반영 → brief 재저장 →
-  `check_brief.py gate` 재실행(통과 확인) → 두 줄을 *그대로 보이게* 노출한다. 첫 줄은 `/new`, 둘째 줄은
-  위 다음 세션 줄이다. 두 줄을 따로 입력하라는 안내와 git 작업 트리 루트의 절대경로를 함께 낸다(정본
+- **① 확정하고 /compact 후 brainstorming**: 확정 후보를 `status: confirmed`로 반영 → brief 재저장 →
+  `check_brief.py gate` 재실행(통과 확인) → 두 줄을 *그대로 보이게* 노출한다. 첫 줄은 맨 `/compact`
+  (뒤에 아무것도 붙이지 않는다 — 붙인 텍스트는 요약 지시로만 쓰인다), 둘째 줄은 위 다음 세션 줄이다.
+  두 줄을 따로 입력하라는 안내와 git 작업 트리 루트의 절대경로를 함께 낸다(정본
   `## 다음 세션 명령` 규칙 1 · 7).
   → **여기서 턴 종료(STOP). 같은 턴에서 `brainstorming`을 호출하지 말 것.** brainstorming 진입은
   사용자가 두 줄을 실제로 입력한 **다음 턴**에 **사용자 트리거**로만 일어난다 — 모델은 자동 진입하지
   *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17).
 
-- **② 확정하고 /compact 후 brainstorming**: ① 과 같은 절차로 두 줄을 노출하되 첫 줄이 맨 `/compact` 다
-  (뒤에 아무것도 붙이지 않는다 — 붙인 텍스트는 요약 지시로만 쓰인다). 둘째 줄은 위 다음 세션 줄이다.
+- **② 확정하고 /new 후 brainstorming**: ① 과 같은 절차로 두 줄을 노출하되 첫 줄이 `/new` 다
+  (뒤에 아무것도 붙이지 않는다 — 붙인 텍스트는 세션 이름이 된다). 둘째 줄은 위 다음 세션 줄이다.
   → **여기서 턴 종료(STOP). 같은 턴에서 `brainstorming`을 호출하지 말 것.** 진입은 사용자가 두 줄을
   실제로 입력한 **다음 턴**에 **사용자 트리거**로만 일어난다(NG4·P17).
 

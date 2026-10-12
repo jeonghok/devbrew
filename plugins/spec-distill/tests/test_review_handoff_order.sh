@@ -122,8 +122,8 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
   assert_eq "$(printf '%s\n' "$rows" | grep -c . || true)" "4" "spec-review 2단계 표(양성): 행 4개를 읽었다"
   r1="$(printf '%s\n' "$rows" | grep -E '^\| ① \|' || true)"
   r2="$(printf '%s\n' "$rows" | grep -E '^\| ② \|' || true)"
-  for n in '`/new` 후 다음 세션 줄' '(권장)' '턴 종료'; do assert_contains "$r1" "$n" "spec-review ① 행에 $n"; done
-  for n in '`/compact` 후 같은 다음 세션 줄' '턴 종료'; do assert_contains "$r2" "$n" "spec-review ② 행에 $n"; done
+  for n in '`/compact` 후 다음 세션 줄' '(권장)' '턴 종료'; do assert_contains "$r1" "$n" "spec-review ① 행에 $n"; done
+  for n in '`/new` 후 같은 다음 세션 줄' '턴 종료'; do assert_contains "$r2" "$n" "spec-review ② 행에 $n"; done
   assert_not_contains "$r2" '권장' "spec-review: 권장은 ① 하나"
   assert_not_contains "$rows" '바로' "spec-review 2단계 표에 「바로」 진행 행이 없다"
   RSL="$(nsl "$SKILL")"
