@@ -10,7 +10,183 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=assert.sh
 . "$ROOT/shared/tests/assert.sh"
-SCAN="$ROOT/shared/tests/inline_python_scan.py"
+# 스캐너는 이 테스트 안에 산다 — tests/ 아래에 테스트 아닌 파일을 두면 qg 차등 테스트가 그것을 맡을
+# 러너가 없는 후보로 세어 판정을 막는다(silent-drop).
+SCAN_DIR="$(mktemp -d)"; SCAN="$SCAN_DIR/inline_python_scan.py"
+trap 'rm -rf "$SCAN_DIR"' EXIT
+cat > "$SCAN" <<'QG_SCAN_PY'
+#!/usr/bin/env python3
+"""인라인 python 호출 스캐너 — test_inline_python_isolated.sh 가 쓴다.
+
+python 을 `-c` · `-m` · `-`(stdin) 로 부르거나 스크립트 인자 없이(heredoc · 파이프) 부르면
+현재 디렉토리가 sys.path 맨 앞에 온다. 플러그인 스크립트와 skill 펜스는 리뷰 · 감사 대상 리포를
+현재 디렉토리로 두고 도는 일이 많아서, 그 리포의 json.py · uuid.py 가 표준 모듈 대신 실행된다.
+`-I` 가 그것을 막는다. 스크립트 파일 경로로 부르는 호출은 그 파일의 디렉토리가 맨 앞이라 대상이 아니다.
+
+  scan <path>...      줄마다 `<path>:<line>\t<isolated|bare>\t<줄>` — 인라인 호출만 낸다
+  classify            stdin 의 줄마다 `inline-isolated` · `inline-bare` · `script` · `none` 하나
+"""
+import re
+import sys
+
+# 명령 자리의 python 토큰. 경로 접두(/usr/bin/python3 · .venv/bin/python)도 잡는다.
+# 앞 글자가 단어 · `$` · `-` 면 다른 단어의 일부다(PYTHONPATH · run_python3 · $python3).
+# 뒤에는 공백만이 아니라 셸 연산자 · 따옴표가 붙어 올 수 있다(`python3<<'PY'` · `| python3)` · `"… | python3"`).
+# 앞 글자가 `/` 면 변수로 시작하는 경로의 끝이다(`"$_dir/python3"`) — 그 꼴은 스캐너가 보지 못한다.
+TOKEN = re.compile(r"(?<![\w$/-])((?:[\w.~-]*/)*python3?(?:\.\d+)?)(?=[\s<>|;&)`\"']|$)")
+# 앞에 이것이 오면 호출이 아니라 존재 확인 · 값이다: `command -v python3` · 배열 대입 `X=(… python)` ·
+# 글자 바로 뒤 괄호 `name(python)`(문장 속 글자). `$(python3` · ` (python3` 는 호출이다 — 배열 안이어도
+# `$(` · 백틱 뒤면 명령 치환이라 호출로 본다(`arr=( $(python3 -c …) )`).
+PROBE = re.compile(r"(command\s+-v|which|type|hash)\s+$|=\([^)$`]*$|\w\($")
+# 셸 연산자 · 리다이렉트로 시작하는 토큰 — 여기까지 위치 인자가 없었으면 스크립트를 stdin 으로 받는다.
+STOP = re.compile(r"^(\||&&|\|\||;|\)|<|>|\d>|&>|`|$)")
+
+
+def read_flags(tok):
+    """`-` 로 시작하는 옵션 묶음을 python 처럼 한 글자씩 읽는다 → (isolated, inline, eats_next).
+
+    `I` 는 격리. `c` · `m` 을 만나면 인라인이고 남은 글자는 그 인자다(`-c'…'` · `-mjson.tool` · `-cI`).
+    `W` · `X` 는 남은 글자가 인자이고, 남은 글자가 없으면 다음 토큰이 인자다."""
+    isolated = False
+    for k, ch in enumerate(tok[1:], start=1):
+        if ch == "I":
+            isolated = True
+        elif ch in "cm":
+            return isolated, True, False
+        elif ch in "WXQ":
+            return isolated, False, k == len(tok) - 1
+    return isolated, False, False
+
+
+def classify_one(line, m):
+    """TOKEN 일치 하나 → (kind, isolated). kind: inline · script."""
+    before = line[m.start() - 1] if m.start() > 0 else ""
+    after = line[m.end()] if m.end() < len(line) else ""
+    rest_start = m.end()
+    if after in "\"'":
+        if before == after:
+            rest_start += 1   # `"python3" -c …` — 따옴표로 감싼 인터프리터 이름. 닫는 따옴표 뒤를 읽는다
+        else:
+            return ("inline", False)   # `bash -c "… | python3"` — 인용된 명령 문자열이 여기서 끝난다
+    rest = line[rest_start:].split()
+    isolated = False
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if STOP.match(tok) or tok == "-":
+            return ("inline", isolated)
+        if tok.startswith("--"):
+            i += 1
+            continue
+        if tok.startswith("-") and len(tok) > 1:
+            iso, inline, eats_next = read_flags(tok)
+            isolated = isolated or iso
+            if inline:
+                return ("inline", isolated)
+            i += 2 if eats_next else 1
+            continue
+        return ("script", False)
+    return ("inline", isolated)   # 줄 끝까지 위치 인자가 없다 — 다음 줄(heredoc)이나 stdin 에서 받는다
+
+
+def classify(line):
+    """한 줄 → (kind, isolated). kind: inline · script · none. 인라인 호출이 여럿이면 하나라도 격리되지 않았으면 bare."""
+    best = ("none", False)
+    inline_seen, all_isolated = False, True
+    for m in TOKEN.finditer(line):
+        if PROBE.search(line[: m.start()]):
+            continue
+        kind, isolated = classify_one(line, m)
+        if kind == "inline":
+            inline_seen = True
+            all_isolated = all_isolated and isolated
+        elif best[0] == "none":
+            best = ("script", False)
+    if inline_seen:
+        return ("inline", all_isolated)
+    return best
+
+
+def is_comment(line, markdown=False):
+    """건너뛸 줄. 마크다운은 `#` 줄도 본다 — skill 펜스 안 주석은 모델이 지시로 읽는다."""
+    s = line.lstrip()
+    if s.startswith("```"):   # 마크다운 펜스 머리줄(```python)
+        return True
+    return s.startswith("#") and not markdown
+
+
+def strip_trailing_comment(line):
+    """따옴표 밖에서 공백 뒤에 오는 `#` 부터 줄 끝까지를 뗀다(`set +B  # … python3 -c …`)."""
+    quote = None
+    for i, ch in enumerate(line):
+        if quote:
+            if ch == quote:
+                quote = None
+        elif ch in "'\"":
+            quote = ch
+        elif ch == "#" and i > 0 and line[i - 1] in " \t":
+            return line[:i]
+    return line
+
+
+def joined(rows):
+    """`\` 로 끝나는 줄을 다음 줄과 이어 붙인다 — (시작 줄 번호, 이은 줄)."""
+    out, buf, start = [], "", None
+    for n, row in enumerate(rows, start=1):
+        if start is None:
+            start = n
+        if row.endswith("\\"):
+            buf += row[:-1] + " "
+            continue
+        out.append((start, buf + row))
+        buf, start = "", None
+    if start is not None:
+        out.append((start, buf))
+    return out
+
+
+def scan(paths):
+    for path in paths:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                rows = fh.read().split("\n")
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"{path}:0\tunreadable\t{exc}")   # 읽지 못한 파일은 건너뛰지 않고 알린다
+            continue
+        markdown = path.endswith(".md")
+        for n, row in joined(rows):
+            if is_comment(row, markdown):
+                continue
+            kind, isolated = classify(row if markdown else strip_trailing_comment(row))
+            if kind == "inline":
+                state = "isolated" if isolated else "bare"
+                print(f"{path}:{n}\t{state}\t{row.strip()}")
+
+
+def main():
+    if len(sys.argv) >= 2 and sys.argv[1] == "scan":
+        scan(sys.argv[2:])
+        return 0
+    if len(sys.argv) == 2 and sys.argv[1] == "classify":
+        for row in sys.stdin.read().split("\n"):
+            if not row:
+                continue
+            if is_comment(row):
+                print("none")
+                continue
+            kind, isolated = classify(strip_trailing_comment(row))
+            if kind == "inline":
+                print("inline-isolated" if isolated else "inline-bare")
+            else:
+                print(kind)
+        return 0
+    print("usage: inline_python_scan.py scan <path>... | classify", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+QG_SCAN_PY
 
 # 일부러 리포 코드를 돌리는 자리 — 경로 · 줄에 들어 있는 글자 · 사유. 줄이 사라지면 그 예외도 지운다.
 EXEMPT_PATHS=(
@@ -148,7 +324,7 @@ done
 
 note "[행동 — 표준 모듈 이름을 심은 리포]"
 TMP="$(mktemp -d)"; TMP="$(cd "$TMP" && pwd -P)"
-trap 'rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP" "$SCAN_DIR"' EXIT
 REPO="$TMP/repo"; MARK="$TMP/planted-ran"
 mkdir -p "$REPO/docs" "$REPO/plug/.claude-plugin"
 git -C "$REPO" init -q
