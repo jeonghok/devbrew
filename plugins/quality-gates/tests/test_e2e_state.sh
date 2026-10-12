@@ -386,8 +386,17 @@ case_X2_before_fingerprint_rewrite_is_caught() {
 
 # compare 본문에서 예상 못 한 예외가 나도 rc 1(=changed)로 새지 않는다 — 4 다
 case_X2_compare_unexpected_error_is_4_not_1() {
+  local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345" rc out
+  # 경로 칸이 JSON 이지만 해시할 수 없는 값(목록) — load() 가 잡지 않는 TypeError 로 excepthook 까지 간다
+  fp "$d" "$s/a"; printf 'e2e-fingerprint v1\nhead abc\ntracked d1 [1]\n' > "$s/b"
+  rc=0; out=$(cd "$d" && bash "$ES" compare "$s/b" "$s/a" 2>/dev/null) || rc=$?
+  assert_eq "$rc" "4" "X2: compare 의 예상 못 한 예외는 exit 4 — 1(changed)로 새지 않는다"
+  assert_not_contains "$out" "changed:" "X2: 죽은 compare 는 changed 줄을 내지 않는다"
+}
+
+case_X2_compare_read_failure_is_4() {
   local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345" rc
-  fp "$d" "$s/b"; mkdir -p "$s/a"   # after 자리가 디렉토리 — 읽기에서 IsADirectoryError
+  fp "$d" "$s/b"; mkdir -p "$s/a"   # after 자리가 디렉토리 — 읽기에서 IsADirectoryError(load 가 잡는다)
   rc=0; (cd "$d" && bash "$ES" compare "$s/b" "$s/a" >/dev/null 2>&1) || rc=$?
   assert_eq "$rc" "4" "X2: 판독 실패는 exit 4"
 }
