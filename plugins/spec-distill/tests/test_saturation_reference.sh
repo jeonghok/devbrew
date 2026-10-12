@@ -30,6 +30,13 @@ CAPHIT_FLAT="$(awk '/^### 상한 도달/{f=1;print;next} /^### /{f=0} f' "$SAT" 
 grep -qF 'state 를 처음 만들 때' <<<"$CAP_FLAT" && ok "RF2: SKILL 이 state 생성 때 상한 시작값을 정한다" || no "RF2: state 생성 때 시작값 문구 부재"
 head -6 "$SAT" | tr '\n' ' ' | grep -qF 'state 를 처음 만들 때' && ok "RF2: saturation.md 첫 문단이 state 생성 때를 읽는 때로 든다" || no "RF2: saturation.md 첫 문단에 state 생성 때 부재"
 grep -qF '재개방되지 않았으면 바로' <<<"$SAT_FLAT" && ok "D23: 빈 곳 조사 뒤 판정자 재호출 시점" || no "D23: 판정자 재호출 시점 부재"
+# 같은 문구가 «아직» 절과 «판정 불가» 절 둘에 있다 — 통째 grep 은 한쪽을 지워도 통과한다. 절마다 따로 잰다.
+UNK_FLAT="$(awk '/^### 판정 불가/{f=1;print;next} /^### /{f=0} f' "$SAT" | tr '\n' ' ' | tr -s ' ')"
+[[ -n "$UNK_FLAT" ]] && ok "D23: 판정 불가 절을 떴다" || no "D23: 판정 불가 절 부재 — 아래 락이 공허하다"
+grep -qF '재개방되지 않았으면 바로' <<<"$UNK_FLAT" && ok "D23: 판정 불가 절의 판정자 재호출 시점" || no "D23: 판정 불가 절에 판정자 재호출 시점 부재"
+NOTYET_FLAT="$(awk '/^### 포화 판정/{f=1;print;next} /^### /{f=0} f' "$SAT" | tr '\n' ' ' | tr -s ' ')"
+[[ -n "$NOTYET_FLAT" ]] && ok "D23: 포화 판정 절을 떴다" || no "D23: 포화 판정 절 부재 — 아래 락이 공허하다"
+grep -qF '재개방되지 않았으면 바로' <<<"$NOTYET_FLAT" && ok "D23: 포화 판정(아직) 절의 판정자 재호출 시점" || no "D23: 포화 판정 절에 판정자 재호출 시점 부재"
 for o in '같은 크기만큼 연장' '지금 포화 판정으로' '인터뷰 종료'; do
   grep -qF "「${o}」" <<<"$CAPHIT_FLAT" && ok "G4: 선택지 «${o}»" || no "G4: 선택지 «${o}» 부재"
 done
