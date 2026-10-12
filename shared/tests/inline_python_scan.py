@@ -18,8 +18,9 @@ import sys
 # 앞 글자가 `/` 면 변수로 시작하는 경로의 끝이다(`"$_dir/python3"`) — 그 꼴은 스캐너가 보지 못한다.
 TOKEN = re.compile(r"(?<![\w$/-])((?:[\w.~-]*/)*python3?(?:\.\d+)?)(?=[\s<>|;&)`\"']|$)")
 # 앞에 이것이 오면 호출이 아니라 존재 확인 · 값이다: `command -v python3` · 배열 대입 `X=(… python)` ·
-# 글자 바로 뒤 괄호 `name(python)`(문장 속 글자). `$(python3` · ` (python3` 는 호출이다.
-PROBE = re.compile(r"(command\s+-v|which|type|hash)\s+$|=\([^)]*$|\w\($")
+# 글자 바로 뒤 괄호 `name(python)`(문장 속 글자). `$(python3` · ` (python3` 는 호출이다 — 배열 안이어도
+# `$(` · 백틱 뒤면 명령 치환이라 호출로 본다(`arr=( $(python3 -c …) )`).
+PROBE = re.compile(r"(command\s+-v|which|type|hash)\s+$|=\([^)$`]*$|\w\($")
 # 셸 연산자 · 리다이렉트로 시작하는 토큰 — 여기까지 위치 인자가 없었으면 스크립트를 stdin 으로 받는다.
 STOP = re.compile(r"^(\||&&|\|\||;|\)|<|>|\d>|&>|`|$)")
 

@@ -123,7 +123,7 @@ elif [ "$img_rc" -ne 1 ]; then
 fi
 
 # 5. 길이 — 자르지 않고 건너뛴다.
-chars="$(python3 -I -c 'import sys; print(len(open(sys.argv[1], encoding="utf-8", errors="replace").read()))' "$body" 2>/dev/null || echo x)"
+chars="$(python3 -I -X utf8 -c 'import sys; print(len(open(sys.argv[1], encoding="utf-8", errors="replace").read()))' "$body" 2>/dev/null || echo x)"
 [[ "$chars" =~ ^[0-9]+$ ]] || { echo "publish-comment: 본문 길이를 재지 못했다" >&2; skip scan-failed; }
 [ "$chars" -le "$MAX_CHARS" ] || { echo "publish-comment: 본문 ${chars}자 > ${MAX_CHARS}" >&2; skip too-long; }
 

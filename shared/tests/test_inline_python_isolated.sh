@@ -75,6 +75,10 @@ check "\"python3\" -c x" inline-bare
 check "\"python3\" \"\$X/a.py\"" script
 check "cmd = ['python3', 'x.py']" script
 check "PY_ARGV=(uv run python)" none
+check "arr=( \$(python3 -c 'x') )" inline-bare
+check "x=(\"\$(python3 -c 'y')\")" inline-bare
+check "local -a out=( \"\$(python3 -c 'print(1)')\" )" inline-bare
+check "a=( \`python3 -c 'x'\` )" inline-bare
 check "[ -x \"\$_dir/python3\" ]" none
 check "echo \"\$cand(python): 실패\"" none
 check "( python3 -c 'x' )" inline-bare
@@ -195,5 +199,19 @@ assert_contains "$out" '"degraded"' "check-plugin-structure.sh 가 결과 JSON �
 out="$(cd "$REPO" && bash "$PA/run-own-tests.sh" plug canary-0001 --sandbox-helper "$TMP/absent.sh" 2>&1)"
 assert_contains "$out" '"own_tests"' "run-own-tests.sh 가 결과 JSON 을 냈다"
 assert_eq "$(planted)" "(없음)" "plugin-audit 두 스크립트 — 심은 모듈이 실행되지 않았다"
+
+note "[행동 — UTF-8 아닌 로케일: -I 가 PYTHONIOENCODING 을 무시하므로 -X utf8 이 있어야 한국어를 찍는다]"
+NONUTF8=""
+for l in en_US.ISO8859-15 en_US.ISO8859-1 en_US.iso885915 en_US.iso88591 de_DE.ISO8859-15; do
+  locale -a 2>/dev/null | grep -qx "$l" && { NONUTF8="$l"; break; }
+done
+if [ -n "$NONUTF8" ]; then
+  out="$(cd "$REPO" && LC_ALL="$NONUTF8" LANG="$NONUTF8" PYTHONIOENCODING=utf-8 bash "$PA/check-plugin-structure.sh" plug --plugin-dev-root "$TMP/no-plugin-dev" 2>/dev/null)"
+  assert_contains "$out" '"degraded"' "$NONUTF8 — check-plugin-structure.sh 가 한국어 결과 JSON 을 낸다"
+  out="$(cd "$REPO" && LC_ALL="$NONUTF8" LANG="$NONUTF8" PYTHONIOENCODING=utf-8 bash "$QG/discover-spec.sh" --intent-out "$TMP/intent2.md" 2>/dev/null)"
+  assert_contains "$out" '"intent_source": "spec-trailer"' "$NONUTF8 — discover-spec.sh 가 JSON 을 낸다"
+else
+  no "UTF-8 아닌 로케일이 하나도 없어 이 겹을 재지 못했다(셀 수 없음)"
+fi
 
 finish

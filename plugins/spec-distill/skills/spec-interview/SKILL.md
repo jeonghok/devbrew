@@ -152,7 +152,7 @@ tool이 차단됩니다 — state 갱신은 **반드시 Bash**로 하십시오:
 ```bash
 ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/state_path.py" state-root)"
 STATE="$ROOT/<session-id>/state.local.md"
-# read-modify-write via python3 -I -c / python3 -I - heredoc (Edit tool 사용 금지 — main-repo 경로 · -I 없이 부르면 사용자 리포의 json.py 등이 표준 모듈 대신 실행된다)
+# read-modify-write via python3 -I -X utf8 -c / python3 -I -X utf8 - heredoc (Edit tool 사용 금지 — main-repo 경로 · -I 없이 부르면 사용자 리포의 json.py 등이 표준 모듈 대신 실행된다)
 ```
 
 **brief는 예외**: `docs/superpowers/interview/`는 워크트리 *안*이라 `Write` tool로 정상 작성.

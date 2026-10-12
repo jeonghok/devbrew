@@ -173,10 +173,10 @@ assert_contains "$out" "ADV_MARK_d1" "정상 true + advisory: advisory 를 그�
 expect_named "정상 true + advisory" "X_SWITCH=1" "$out"
 
 # ── AC6: 검사기 자체 실패 — `python3 [옵션…] -c` 만 죽는 shim(모듈 실행은 진짜 python 으로 넘긴다) ──
-# 펜스는 `python3 -I -c` 로 부른다 — 첫 인자만 보면 -c 를 놓쳐 검사기가 정상으로 돈다.
+# 펜스는 `python3 -I -X utf8 -c` 로 부른다 — 첫 인자만 보거나 `-X` 의 인자에서 멈추면 -c 를 놓쳐 검사기가 정상으로 돈다.
 SHIM="$SCRATCH/shim"
 mkdir -p "$SHIM"
-printf '#!/bin/sh\nfor a in "$@"; do case "$a" in -c|-[A-Za-z]*c) exit 1 ;; -*) ;; *) break ;; esac; done\nexec "%s" "$@"\n' "$(command -v python3)" > "$SHIM/python3"
+printf '#!/bin/sh\nskip=0\nfor a in "$@"; do if [ "$skip" = 1 ]; then skip=0; continue; fi; case "$a" in -c|-[A-Za-z]*c) exit 1 ;; -X|-W) skip=1 ;; -*) ;; *) break ;; esac; done\nexec "%s" "$@"\n' "$(command -v python3)" > "$SHIM/python3"
 chmod +x "$SHIM/python3"
 stub '{"disabled": false, "reason": null, "advisories": []}' 0
 out="$( cd "$SCRATCH" && env -i PATH="$SHIM:/usr/bin:/bin:$PY_DIR" HOME="$SCRATCH" \

@@ -222,7 +222,7 @@ Step A가 끝난 시점에 `user_sourced_items`는 **전부 `provisional`**입�
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
 STATE="$ROOT/<session-id>/state.local.md"
-# confirm_repost_count read-modify-write via python3 -I -c / python3 -I - heredoc (-I 없이 부르면 사용자 리포의 json.py 등이 표준 모듈 대신 실행된다)
+# confirm_repost_count read-modify-write via python3 -I -X utf8 -c / python3 -I -X utf8 - heredoc (-I 없이 부르면 사용자 리포의 json.py 등이 표준 모듈 대신 실행된다)
 ```
 
 #### B-A — 참고(advisory) 목록 — 한 번 보이고 §3 · §5 에 박제

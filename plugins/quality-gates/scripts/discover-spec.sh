@@ -40,7 +40,7 @@ fi
 if [ -n "$BASE" ]; then RANGE="$BASE..HEAD"; else RANGE="-1"; fi
 
 emit() {  # emit <intent_source> <intent_note>
-  python3 -I -c 'import json, sys; print(json.dumps({"intent_source": sys.argv[1], "intent_note": sys.argv[2], "intent_file": sys.argv[3]}, ensure_ascii=False))' \
+  python3 -I -X utf8 -c 'import json, sys; print(json.dumps({"intent_source": sys.argv[1], "intent_note": sys.argv[2], "intent_file": sys.argv[3]}, ensure_ascii=False))' \
     "$1" "$2" "$OUT"
 }
 
@@ -58,8 +58,8 @@ for h in $(git log --format='%H' $RANGE 2>/dev/null); do
     //*|*/../*) reject="spec 경로 거부"; break ;;
   esac
   if [ -n "$top" ] && [ -f "$top/$v" ]; then
-    real="$(python3 -I -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$top/$v")"
-    root="$(python3 -I -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$top")"
+    real="$(python3 -I -X utf8 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$top/$v")"
+    root="$(python3 -I -X utf8 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$top")"
     case "$real" in
       "$root"/*) ;;
       *) reject="spec 경로 거부"; break ;;

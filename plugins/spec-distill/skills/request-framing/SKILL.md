@@ -602,7 +602,7 @@ Agent({
 ```bash
 # 엔진 산출물 셋을 판정 없이 audit `## 4. 비평과 냉독` 에 옮긴다 — 엔진 자리는 세션 정리로 사라지고,
 # 사람이 나중에 되짚을 자리는 audit 이다. 없는 산출물은 그 사실을 적는다(침묵과 0 은 다르다).
-rnd="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["round"])')" || rnd="?"
+rnd="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" | python3 -I -X utf8 -c 'import json,sys; print(json.load(sys.stdin)["round"])')" || rnd="?"
 for pair in "탐지 (doc-critic)|critic.txt" "codex|docreview-codex.yaml" "재비판 (doc-recritic)|recritic.txt"; do
   title="${pair%%|*}"; src="$STATE_DIR/${pair#*|}"
   if [ ! -s "$src" ]; then
@@ -703,7 +703,7 @@ gate_json="$STATE_DIR/gate-summary.json"
 if ! python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$gate_json"; then
   echo "[spec-distill] 엔진 게이트 요약을 읽지 못했다(STATE_DIR='${STATE_DIR:-}') — 게이트를 띄우지 않는다. 「## 상태」 블록을 앞에 이어 붙였는지 확인하라." >&2
 else
-  python3 -I -c '
+  python3 -I -X utf8 -c '
 import json, sys
 g = json.load(open(sys.argv[1], encoding="utf-8"))
 for k in ("open_decide", "blocking_ask_open", "unapplied_fix", "ask_open"):
@@ -748,7 +748,7 @@ find "$STATE_DIR" -maxdepth 1 -name 'said-hunk-*.txt' -exec rm -f {} + 2>/dev/nu
 hunks_rc=0
 python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" > "$STATE_DIR/hunks.json" || hunks_rc=$?
 case "$hunks_rc" in
-  0) python3 -I -c '
+  0) python3 -I -X utf8 -c '
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
 if not d["hunks"]:
@@ -1049,7 +1049,7 @@ else
   python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" > "$STATE_DIR/hunks-final.json" || final_hunks_rc=$?
 fi
 case "$final_hunks_rc" in
-  0) python3 -I -c '
+  0) python3 -I -X utf8 -c '
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
 if not d["hunks"]:
@@ -1075,7 +1075,7 @@ elif [ -f "$STATE_DIR/docreview-state.md" ]; then
   python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$STATE_DIR/gate-final.json" || final_drops_rc=2
 else
   # 엔진 원장이 없다 — dropped 를 audit ## 6 의 엔진 drop 줄에서 만든다. 기록된 drop 마다 문구가 있는지는 그대로 잰다.
-  python3 -I -c '
+  python3 -I -X utf8 -c '
 import json, sys
 sys.path.insert(0, sys.argv[1])
 from seed_review_log import parse_lines
