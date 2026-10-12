@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.4.0] — 2026-10-12
+
+### Changed
+- 세 proceed 게이트(request-framing 확정 · interview 다음 단계 · 설계문서 승인)의 기본 핸드오프가 `/compact` 다 — ① 맨 `/compact`(권장) · ② `/new` 로 순서를 맞바꿨다. 다음 세션 줄 · 두 줄 따로 입력 · 두 가드는 그대로다. 정본 `references/proceed-gate.md` Step B 표와 `## 다음 세션 명령` 규칙 1 을 함께 고쳤다.
+  - 재결정(P23) — 원래: ① `/new`(권장). seed 가 framing 대화를 대신하려고 있고 `/compact` 는 그 대화의 요약을 남긴다는 근거였다(seed `@경로` 핸드오프 계획). 재결정: ① `/compact`(권장), 세 게이트 전부(사용자 결정, 2026-10-12). 근거: 작업 목록은 `/compact` 뒤에는 남지만 `/new` 뒤 새 세션에는 없다(로드맵 `persistent-explore-pm-decompose` 의 M2 실측). 같은 세션이라 작업 디렉토리(워크트리)도 그대로다.
+
 ## [5.3.0] — 2026-10-11
 
 ### Added
