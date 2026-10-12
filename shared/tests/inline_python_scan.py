@@ -14,13 +14,61 @@ import sys
 
 # 명령 자리의 python 토큰. 경로 접두(/usr/bin/python3 · .venv/bin/python)도 잡는다.
 # 앞 글자가 단어 · `$` · `-` 면 다른 단어의 일부다(PYTHONPATH · run_python3 · $python3).
-TOKEN = re.compile(r"(?<![\w$-])((?:[\w.~-]*/)*python3?(?:\.\d+)?)(?=\s|$)")
-# 앞에 이것이 오면 호출이 아니라 존재 확인이다.
-PROBE = re.compile(r"(command\s+-v|which|type|hash)\s+$")
-# 인자 하나를 먹는 python 옵션.
-TAKES_ARG = {"-W", "-X", "-Q"}
+# 뒤에는 공백만이 아니라 셸 연산자 · 따옴표가 붙어 올 수 있다(`python3<<'PY'` · `| python3)` · `"… | python3"`).
+# 앞 글자가 `/` 면 변수로 시작하는 경로의 끝이다(`"$_dir/python3"`) — 그 꼴은 스캐너가 보지 못한다.
+TOKEN = re.compile(r"(?<![\w$/-])((?:[\w.~-]*/)*python3?(?:\.\d+)?)(?=[\s<>|;&)`\"']|$)")
+# 앞에 이것이 오면 호출이 아니라 존재 확인 · 값이다: `command -v python3` · 배열 대입 `X=(… python)` ·
+# 글자 바로 뒤 괄호 `name(python)`(문장 속 글자). `$(python3` · ` (python3` 는 호출이다.
+PROBE = re.compile(r"(command\s+-v|which|type|hash)\s+$|=\([^)]*$|\w\($")
 # 셸 연산자 · 리다이렉트로 시작하는 토큰 — 여기까지 위치 인자가 없었으면 스크립트를 stdin 으로 받는다.
 STOP = re.compile(r"^(\||&&|\|\||;|\)|<|>|\d>|&>|`|$)")
+
+
+def read_flags(tok):
+    """`-` 로 시작하는 옵션 묶음을 python 처럼 한 글자씩 읽는다 → (isolated, inline, eats_next).
+
+    `I` 는 격리. `c` · `m` 을 만나면 인라인이고 남은 글자는 그 인자다(`-c'…'` · `-mjson.tool` · `-cI`).
+    `W` · `X` 는 남은 글자가 인자이고, 남은 글자가 없으면 다음 토큰이 인자다."""
+    isolated = False
+    for k, ch in enumerate(tok[1:], start=1):
+        if ch == "I":
+            isolated = True
+        elif ch in "cm":
+            return isolated, True, False
+        elif ch in "WXQ":
+            return isolated, False, k == len(tok) - 1
+    return isolated, False, False
+
+
+def classify_one(line, m):
+    """TOKEN 일치 하나 → (kind, isolated). kind: inline · script."""
+    before = line[m.start() - 1] if m.start() > 0 else ""
+    after = line[m.end()] if m.end() < len(line) else ""
+    rest_start = m.end()
+    if after in "\"'":
+        if before == after:
+            rest_start += 1   # `"python3" -c …` — 따옴표로 감싼 인터프리터 이름. 닫는 따옴표 뒤를 읽는다
+        else:
+            return ("inline", False)   # `bash -c "… | python3"` — 인용된 명령 문자열이 여기서 끝난다
+    rest = line[rest_start:].split()
+    isolated = False
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if STOP.match(tok) or tok == "-":
+            return ("inline", isolated)
+        if tok.startswith("--"):
+            i += 1
+            continue
+        if tok.startswith("-") and len(tok) > 1:
+            iso, inline, eats_next = read_flags(tok)
+            isolated = isolated or iso
+            if inline:
+                return ("inline", isolated)
+            i += 2 if eats_next else 1
+            continue
+        return ("script", False)
+    return ("inline", isolated)   # 줄 끝까지 위치 인자가 없다 — 다음 줄(heredoc)이나 stdin 에서 받는다
 
 
 def classify(line):
@@ -30,42 +78,11 @@ def classify(line):
     for m in TOKEN.finditer(line):
         if PROBE.search(line[: m.start()]):
             continue
-        rest = line[m.end():].split()
-        isolated = False
-        kind = None
-        i = 0
-        while i < len(rest):
-            tok = rest[i]
-            if STOP.match(tok):
-                kind = "inline"
-                break
-            if tok == "-":
-                kind = "inline"
-                break
-            if tok in TAKES_ARG:
-                i += 2
-                continue
-            if re.fullmatch(r"-[A-Za-z]+", tok):
-                flags = tok[1:]
-                if "I" in flags:
-                    isolated = True
-                if "c" in flags or "m" in flags:
-                    kind = "inline"
-                    break
-                i += 1
-                continue
-            if tok.startswith("--"):
-                i += 1
-                continue
-            kind = "script"
-            break
-        if kind is None:
-            kind = "inline"   # 줄 끝까지 위치 인자가 없다 — 다음 줄(heredoc)이나 stdin 에서 받는다
+        kind, isolated = classify_one(line, m)
         if kind == "inline":
             inline_seen = True
             all_isolated = all_isolated and isolated
-            continue
-        if best[0] == "none":
+        elif best[0] == "none":
             best = ("script", False)
     if inline_seen:
         return ("inline", all_isolated)

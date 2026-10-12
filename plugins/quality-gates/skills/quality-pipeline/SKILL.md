@@ -837,7 +837,7 @@ D="${TOP}/.claude/quality-gates/<session-id>"
 - `after rc=3` — 걷는 사이 kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 E5 로 기록한 뒤 `## Final verdict` 로 간다.
 - E1 의 `sha256:` 값이 없으면 `compare` 줄을 빼고 돌리고 판정안은 `미확인(걷기 뒤 지문 실패)` 이다.
 - 그 밖의 판정안은 이 순서로 정한다: `compare` 의 마지막 줄이 `changed: <N>` 이면 `무효(코드 변경)` · `after rc` 가 0 이
-  아니거나 `compare rc` 가 0 · 1 밖이면 `미확인(걷기 뒤 지문 실패)` · `propose rc=4` 면 증거표를 고쳐 `propose` 만 다시
+  아니거나 `compare rc` 가 0 · 1 밖이거나 `compare rc=1` 인데 마지막 줄이 `changed: <N>` 가 아니면 `미확인(걷기 뒤 지문 실패)` · `propose rc=4` 면 증거표를 고쳐 `propose` 만 다시
   돌리고, 또 4 면 `미확인` · 나머지는 `proposal:` 줄의 값.
 
 **E4 — 걷기 직후 게이트.** 증거표와 판정안을 보이고 레퍼런스 5 절의 게이트를 띄운다. 결과는 6 절의 표로

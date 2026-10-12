@@ -375,6 +375,21 @@ case_X2_before_fingerprint_rewrite_is_caught() {
   assert_contains "$out" "changed: before 지문 파일" "X2: 무엇이 바뀌었는지 밝힌다"
   rc=0; (cd "$d" && bash "$ES" compare --before-sha256 NOTHEX "$s/b" "$s/a" >/dev/null 2>&1) || rc=$?
   assert_eq "$rc" "2" "X2: 형식 밖 해시는 exit 2"
+  # UTF-8 이 아닌 로케일 — 한국어 줄을 못 찍고 죽어 rc 1(=changed)인데 마지막 줄이 없으면 E3 가 판정안으로 흘린다
+  if locale -a 2>/dev/null | grep -qx 'en_US.ISO8859-15'; then
+    rc=0; out=$(cd "$d" && LC_ALL=en_US.ISO8859-15 LANG=en_US.ISO8859-15 bash "$ES" compare --before-sha256 "$want" "$s/b" "$s/a" 2>/dev/null) || rc=$?
+    assert_eq "$rc/$(printf '%s\n' "$out" | tail -n 1)" "1/changed: 1" "X2: UTF-8 아닌 로케일에서도 고쳐 쓴 before 가 changed 로 드러난다"
+  else
+    note "  (en_US.ISO8859-15 로케일이 없어 UTF-8 아닌 로케일 케이스를 건너뛴다)"
+  fi
+}
+
+# compare 본문에서 예상 못 한 예외가 나도 rc 1(=changed)로 새지 않는다 — 4 다
+case_X2_compare_unexpected_error_is_4_not_1() {
+  local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345" rc
+  fp "$d" "$s/b"; mkdir -p "$s/a"   # after 자리가 디렉토리 — 읽기에서 IsADirectoryError
+  rc=0; (cd "$d" && bash "$ES" compare "$s/b" "$s/a" >/dev/null 2>&1) || rc=$?
+  assert_eq "$rc" "4" "X2: 판독 실패는 exit 4"
 }
 
 for c in $(declare -F | awk '{print $3}' | grep '^case_'); do

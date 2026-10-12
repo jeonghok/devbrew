@@ -12,6 +12,7 @@
 #   stop --dir <dir>                boot 가 띄운 프로세스 그룹을 내린다(여러 번 불러도 같다)
 #   propose <evidence.tsv>          증거표 → 판정안(`proposal: pass|fail|미확인`)
 #
+# 한국어를 찍는 python 은 `-X utf8` 로 부른다 — `-I` 가 PYTHONIOENCODING 을 무시해 UTF-8 아닌 로케일에서 죽는다.
 # exit: 0 성공(compare 는 same) · 1 compare changed · 2 잘못된 호출 · 3 kill switch ·
 #       4 측정·판독 실패 또는 부팅 실패 · 5 정지 후에도 프로세스가 남음
 #
@@ -53,7 +54,7 @@ cmd_fingerprint() {
   done
   [ -n "$out" ] || die "usage: e2e-state.sh fingerprint --out <file>"
   killed_by_switch && exit 3
-  GIT_OPTIONAL_LOCKS=0 python3 -I - "$out" <<'PY'
+  GIT_OPTIONAL_LOCKS=0 python3 -I -X utf8 - "$out" <<'PY'
 import hashlib, json, os, stat, subprocess, sys
 
 out = sys.argv[1]
@@ -133,8 +134,11 @@ cmd_compare() {
   fi
   [ $# -eq 2 ] || die "usage: e2e-state.sh compare [--before-sha256 <hex>] <before> <after>"
   killed_by_switch && exit 3
-  python3 -I - "$1" "$2" "$want" <<'PY'
-import hashlib, json, sys
+  python3 -I -X utf8 - "$1" "$2" "$want" <<'PY'
+import hashlib, json, os, sys, traceback
+
+# 잡히지 않은 예외는 4 다 — 1 은 changed 라서, 죽은 비교가 「바뀌었다」나 판정안으로 새면 안 된다.
+sys.excepthook = lambda t, v, tb: (traceback.print_exception(t, v, tb), os._exit(4))
 
 
 def fail(msg):
@@ -298,7 +302,7 @@ cmd_stop() {
 
 cmd_propose() {
   [ $# -eq 1 ] || die "usage: e2e-state.sh propose <evidence.tsv>"
-  python3 -I - "$1" <<'PY'
+  python3 -I -X utf8 - "$1" <<'PY'
 import sys
 
 JUDGED = ("충족", "불충족", "미확인")

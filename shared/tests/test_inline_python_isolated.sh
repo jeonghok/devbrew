@@ -59,6 +59,25 @@ check "run_python3 -c x" none
 check "a=\$(python3 -I -c 'x') b=\$(python3 -c 'y')" inline-bare
 check "python3 \"\$X/a.py\" | python3 -c 'y'" inline-bare
 check "python3 -I -c 'x' | python3 -I - <<'PY'" inline-isolated
+# 붙여 쓴 꼴 — 연산자 · 따옴표가 토큰 바로 뒤에 오거나 옵션에 인자가 붙는다
+check "python3<<'PY'" inline-bare
+check "x=\$(cat f | python3)" inline-bare
+check "cat f | python3; echo" inline-bare
+check "bash -c \"cat f | python3\"" inline-bare
+check "\$(python3<f)" inline-bare
+check "python3 -c'import json'" inline-bare
+check "python3 -c\"import json\"" inline-bare
+check "python3 -mjson.tool f" inline-bare
+check "python3 -Xutf8 -c x" inline-bare
+check "python3 -Ic'x'" inline-isolated
+check "python3 -cI 'x'" inline-bare
+check "\"python3\" -c x" inline-bare
+check "\"python3\" \"\$X/a.py\"" script
+check "cmd = ['python3', 'x.py']" script
+check "PY_ARGV=(uv run python)" none
+check "[ -x \"\$_dir/python3\" ]" none
+check "echo \"\$cand(python): 실패\"" none
+check "( python3 -c 'x' )" inline-bare
 check "set +B  # nested \"\$(python3 -c \"...\")\"" none
 check "\`\`\`python" none
 check "echo 'a # b' | python3 -c 'pass'" inline-bare
