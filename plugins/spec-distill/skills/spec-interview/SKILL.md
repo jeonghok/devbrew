@@ -299,6 +299,7 @@ Agent({ description: "Research the repo", subagent_type: "spec-distill:repo-rese
 
 조사 subagent 넷(`coverage-mapper` · `blind-spot-prober` · `steelman-builder` · `repo-researcher`)은 자격 · 예산 없이,
 그 호출이 열린 결정을 바꾸거나 새 결정을 열 수 있다고 볼 때마다 부른다. 첫 호출 필수 자리 둘은 하한으로 남는다.
+state 를 처음 만들 때(아래 한 줄보다 앞) 아래 `Read` 줄의 파일에서 `### 상한 값` 만 한 번 읽어 그 fence 로 `research_limit` · `saturation_limit` 를 정한다(양의 정수가 아니면 20 · 5 와 한 줄 알림).
 인터뷰의 첫 조사 subagent dispatch 직전에 아래 한 줄을 그대로 내고, 승인은 묻지 않는다:
 
 > `[spec-distill] 이 인터뷰는 조사 subagent 를 최대 <limit>회까지 부른다(웹 포함 · 승인 없이 진행 · 연장은 닿을 때 묻는다).`

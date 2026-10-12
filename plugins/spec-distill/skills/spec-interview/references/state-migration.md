@@ -27,7 +27,7 @@ state.local.md 로드 시 아래 중 **하나라도** 부재면 *non-mutating re
 - 이월 뒤 옛 키 `coverage_mapper_dispatches` · `blind_spot_dispatches` · `blind_spot_dispatched` 와 걷은 장치의 키 `non_user_streak` · `open_decisions[]` 항목의 `touched` 를 **지운다** — 두 이름이 공존하면 소비자가 어느 쪽을 읽는지
   갈리고, 이 파일은 `rereview_count`·`issue_history` 에서 이미 「승계하지 않고 지운다」 선례를 갖는다.
 - `open_decisions` 는 부재 시 `[]` — 부재 키 채우기의 정상 경로다.
-- 이월한 세션의 state 본문에는 조사 산출 원문 블록이 없다 — 포화 판정 때 `plugins/spec-distill/skills/spec-interview/references/saturation.md` 의 `### 판정 불가` 경로로 간다.
+- 이월한 세션의 state 본문에는 조사 산출 원문 블록이 없다 — 포화 판정 때 `${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/saturation.md` 의 `### 판정 불가` 경로로 간다.
 
 구세션(`interview_round` 존재 / `coverage` 통째 부재)은 위 규칙의 한 경우일 뿐이다 — 그때는
 모든 키가 부재라 전부 seed 된다.

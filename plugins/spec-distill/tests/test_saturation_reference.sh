@@ -25,8 +25,13 @@ grep -qF 'Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/saturation
   && ok "SKILL → saturation.md 포인터" || no "SKILL → saturation.md 포인터 부재"
 # 상한 도달 — 세 선택지 · 도달 줄 · 하한도 멈춘다
 grep -qF '[spec-distill] 조사 호출 상한 도달 — <n>/<limit>. 연장 · 판정 · 종료 중 고르세요.' <<<"$SAT_FLAT" && ok "G4: 상한 도달 한 줄" || no "G4: 상한 도달 한 줄 부재"
+CAPHIT_FLAT="$(awk '/^### 상한 도달/{f=1;print;next} /^### /{f=0} f' "$SAT" | tr '\n' ' ' | tr -s ' ')"
+[[ -n "$CAPHIT_FLAT" ]] && ok "G4: 상한 도달 절을 떴다" || no "G4: 상한 도달 절 부재 — 아래 선택지 락이 공허하다"
+grep -qF 'state 를 처음 만들 때' <<<"$CAP_FLAT" && ok "RF2: SKILL 이 state 생성 때 상한 시작값을 정한다" || no "RF2: state 생성 때 시작값 문구 부재"
+head -6 "$SAT" | tr '\n' ' ' | grep -qF 'state 를 처음 만들 때' && ok "RF2: saturation.md 첫 문단이 state 생성 때를 읽는 때로 든다" || no "RF2: saturation.md 첫 문단에 state 생성 때 부재"
+grep -qF '재개방되지 않았으면 바로' <<<"$SAT_FLAT" && ok "D23: 빈 곳 조사 뒤 판정자 재호출 시점" || no "D23: 판정자 재호출 시점 부재"
 for o in '같은 크기만큼 연장' '지금 포화 판정으로' '인터뷰 종료'; do
-  grep -qF "「${o}」" <<<"$SAT_FLAT" && ok "G4: 선택지 «${o}»" || no "G4: 선택지 «${o}» 부재"
+  grep -qF "「${o}」" <<<"$CAPHIT_FLAT" && ok "G4: 선택지 «${o}»" || no "G4: 선택지 «${o}» 부재"
 done
 grep -qF '하한 자리도 상한 앞에서 멈춘다' <<<"$SAT_FLAT" && ok "RF4: 하한 자리도 상한 앞에서 멈춘다" || no "RF4: 하한 vs 상한 규칙 부재"
 grep -qF '양의 정수가 아니면 20 으로 두고' <<<"$SAT_FLAT" && grep -qF '양의 정수가 아니면 5 로 두고' <<<"$SAT_FLAT" \

@@ -82,7 +82,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    설명 산문에 적은 숫자는 세어지지 않습니다. dispatch 가 불가능했던 환경이면
    `coverage-mapper 0 (unavailable: <이유>)` — 게이트는 이를 advisory 로 통과시키고 Step B 가
    사람에게 보입니다.
-   그 아래에 `plugins/spec-distill/skills/spec-interview/references/saturation.md` 의 `## audit §2 줄` 형식으로 조사 호출 줄 한 줄과,
+   그 아래에 `${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/saturation.md` 의 `### audit §2 줄` 형식으로 조사 호출 줄 한 줄과,
    상한 도달 · 판정 상한 도달 · 포화 판정 · 사용자 종료 줄을 시간 순으로 옮겨 씁니다(state `research_dispatches` ·
    `research_limit` · `saturation_log`). 게이트는 `포화 판정 <k>:` · `사용자 종료(@S<n>)` 줄의 **마지막**을 봅니다.
 5. **조사 주장의 인계 — 세 방향을 같은 id 로 맞물린다.** 하류는 brief 파일 경로를 받으므로
@@ -139,7 +139,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    ```
    exit ≠ 0 이면 **brief를 finalize하지 말고** 보고된 미충족 항목을 보완(누락 섹션·무인용
    landscape·형식 미달 verdict 항목·`기각` 0건·floor open·bijection 불일치·**`confirmed`
-   0건 sentinel 누락**·포화 판정 줄 없음 · 마지막 판정 «아직»). 통과(exit 0)할 때까지 반복합니다. 마지막 항목은 이 단계에서
+   0건 sentinel 누락**·포화 판정 줄 없음 · 마지막 판정 «아직» · 판정 불가 뒤 조사 계속이 마지막 · 형식 밖). 통과(exit 0)할 때까지 반복합니다. 마지막 항목은 이 단계에서
    **매번** 발화할 수 있는 유일한 실패입니다 — Step A는 정의상 전부 `provisional`이므로,
    위 3의 sentinel을 빠뜨리면 첫 게이트 실행이 항상 red입니다.
 
