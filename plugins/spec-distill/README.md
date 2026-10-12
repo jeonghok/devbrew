@@ -112,6 +112,7 @@
   **보이면** 공시다(2026-09-10 에 걷어낸 사후-라운드 측정 계열과 양립하는 근거가 그 구분이다). 「조사를
   했어야 했는가」는 기계가 알 수 없고(`check_brief.py` 는 brief 파일만 읽는다) 0건 advisory 가 Step B
   게이트로 사람에게 간다.
+- **Law 1 · Law 2 — 멈춤의 주인은 독립 판정자 (5.5.0)** — 인터뷰가 한 번에 닫지 않고 결정에 닿는 새 사실이 없을 때까지 조사한다. 그 «없음» 을 조사하는 모델이 아니라 쓰기 권한 없는 `saturation-judge` 가 조사 원문에서 직접 판정하고, 「충분해 보인다」는 근거가 아니다. 구조 게이트(`check_brief.py` `saturation_failures`)가 판정 없는 종료를 거절한다.
 
 ### Principles 흡수
 
@@ -120,7 +121,7 @@
 - **P12 (Trivia escape)** — `/spec-interview` first-step rule (typo / 주석-only / formatting / rename / <10 토큰 + 단일 action). 파일 수는 자격 기준이 아니다.
 - **P14 (State preservation)** — `.claude/spec-distill/<session-id>/state.local.md` (세션 수명 동안 보존 — SessionEnd 가 지운다).
 - **P17 (User sovereignty)** — `needs_interview` user confirm gate, 문서 리뷰 엔진의 **승인 게이트**(정본 `references/proceed-gate.md` — 진행·수정·멈춤을 사용자가 고른다), all kill switches.
-- **P17 (User sovereignty) — 사용자가 시계 (v0.57.0)** — 차원은 사용자 발화 `S<N>` 을 인용해야 닫히고(`check_brief.py` 앵커 게이트), 재개방에 상한이 없다 — 라운드는 사용자 답으로만 돈다.
+- **P17 (User sovereignty) — 사용자가 시계 (v0.57.0)** — 차원은 사용자 발화 `S<N>` 을 인용해야 닫히고(`check_brief.py` 앵커 게이트), 재개방에 상한이 없다 — 재개방은 사용자 답 · 근거와의 충돌로만 일어나고, 조사 총량은 조사 호출 상한(사용자 연장)이 묶는다.
 - **P18 (Stagnation detection)** — 라운드 n 의 **열린 계보**(`open_lineages`) 집합이 n−1 과 같고 그 사이 진행이 0 건이면 stagnation 이고, 승인 게이트가 즉시 열린다(`shared/docreview/scripts/docreview_state.py` 의 `gate_summary`). 「진행」은 `check-intent` 를 통과한 fix 적용과 채택 결정의 permit 적용 둘을 센다 — 채택대로 고친 라운드는 계보가 같아도 stagnation 이 아니다.
 - **P18 보강 — must-catch 멈춤 기준** (v4.5.0) — 프로필이 `must_catch` 로 막는 축을 지목하면 그 밖의 rubric 축 finding 은 참고(advisory)로 라우팅돼 승인을 막지 않고 끝에서 한 번 보인다(`shared/docreview/scripts/docreview_advice.py`). 라운드별 계수 줄이 결정 기록 절에 남아 다음 사이클이 must-catch 축의 수렴 가정을 잰다(Law 3).
 - **P21 (Secret 기록 금지 / untrusted input)** — state.local.md token/key/credential placeholder 치환. **v0.23.0**: `audit_file`은 frontmatter에서 오는 신뢰 경계 밖 입력이므로 basename으로 제한한다(`../`·절대경로·서브경로 전부 거부).
@@ -141,7 +142,7 @@
 - **AP5 (Trivia ceremony)** — `/spec-interview` first-step trivia escape (5 패턴).
 - **AP9 (Subagent spray)** — `plugins/spec-distill/agents/` 10종(doc-critic·doc-critic-web·doc-recritic·steelman-builder·coverage-mapper·blind-spot-prober·repo-researcher·saturation-judge·brief-readback·seed-readback). 상한이 선언된 것: 조사 subagent 는 조사 호출 상한 하나(기본 20, 사용자 연장) · 문서 리뷰 엔진의 탐지 dispatch 는 라운드당 한 번(critic 사망이면 재dispatch 1회)이고 라운드 수는 재리뷰 상한 2 가 막는다(spec-review · reviewing-brief · request-framing).
 - **P11 (Cross-Model Adversarial)** — sub-agent reviewer adversarial review + **`steelman-builder` 의심 게이트(v0.12.0, v0.54.0 재설계)**: 의심 방향에 대해 builder 가 원안·대안 **양쪽**의 최강 케이스를 사용자 goal 기준으로 쓰고 근거가 핵심 전제에 닿는지 판정한다. 재검토를 여는 열쇠는 전제 충돌 하나 — 그 외 근거는 원안 강화·경계 다듬기에 쓴다. 판정 어휘 유지/보완/전환/보류(kept/refined/switched/deferred), 선택은 사용자.
-- **AP16 (Unbounded autonomy)** — 재리뷰 상한 2 (정본은 `shared/docreview/references/reviewing-document.md` 한 줄이고, 라운드 4 이상은 승인 게이트에서 사용자가 연다), kill switch.
+- **AP16 (Unbounded autonomy)** — 재리뷰 상한 2 (정본은 `shared/docreview/references/reviewing-document.md` 한 줄이고, 라운드 4 이상은 승인 게이트에서 사용자가 연다), 조사 호출 상한(기본 20) · 포화 판정 상한(기본 5) · 본체의 반복 감지(같은 빈 곳이면 사용자에게), kill switch.
 - **P14 (State Survives Compaction)** — state.local.md frontmatter 보존.
 - **P3 — graceful degradation with loud logging**: `resolve_session_id` 검증 실패 시 None 반환 + stderr advisory. SessionEnd 의 세션 정리(②)에서 정말 조용한 것은 셋뿐이다 — payload 가 JSON 이 아닐 때 · sid 가 없거나 형식에 맞지 않을 때(정리를 건너뛴다) · `ignore_errors` 아래의 rmtree 오류. 그 밖의 실패와 거부는 stderr 로 낸다. TTL-GC(③)는 stat · 개명에 실패한 폴더를 줄 없이 건너뛰고 다음 실행에서 다시 시도한다. 미커밋 확인·진입 검사 실패는 advisory — 사용자 attention 가용성에 따라 loud 정도 조정. 진입 검사 자신의 실패는 끔으로 친다(fail-closed).
 - **P14 — 세션 수명 동안 보존 · 종료 시 정리**: 세션 폴더는 세션 동안 남고 SessionEnd 훅이 지운다. TTL-GC 는 self-session 보호 + grace window 로 in-flight data 를 지킨다. TTL-GC 와 SessionEnd 정리는 링크를 거쳐 풀리는 state root 를 **모두** 거부한다 — `.claude` 나 `.claude/spec-distill` 이 링크면 그 링크가 저장소 **안**을 가리켜도 거부다. GC 의 락은 루트 디렉토리 자신(`O_NOFOLLOW` 로 연 디렉토리 fd 의 `flock`)이고 락 파일은 없다 — 루트 아래 고정 이름 파일은 저장소가 링크로 커밋할 수 있다(3.0.0). 그래서 그런 저장소에서는 세션 정리와 GC 가 멈추고 상태 폴더가 쌓인다. 신호는 SessionEnd stderr 의 거부 줄(세션 정리 · GC 각각)뿐이다.
@@ -187,6 +188,8 @@
   진입 skill 셋(`request-framing` · `spec-interview` · `spec-review`)은 본문 전 사전 검사가 `DEVBREW_SPEC_DISTILL_DISABLE=1` 을 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 skill 호출을 끊는다 — 헤드리스에서는 출력 없이 끝난다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` (v0.20.0, v0.24.0 확대, 3.1.0 재배선) — codex 병렬 co-review만 skip. Claude 리뷰(탐지 · 재비판)는 정상 동작하고, codex 부재는 엔진이 `fin.json` 의 `advisory[]` 와 게이트 첫 줄로 loud 하게 공시한다. 전역 `DEVBREW_SPEC_DISTILL_DISABLE`과 독립. **적용 범위는 문서 리뷰 엔진 자리 셋 전부**: (a) design-doc 리뷰(`spec-review`), (b) brief 리뷰(`reviewing-brief`), (c) seed 리뷰(`request-framing`) — 세 자리 모두 codex 호출은 SKILL 의 리터럴 게이트 펜스(`codex-gate` 표지) 하나이고 매 라운드 4단계에서 돈다. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`(`skip_reason: kill_switch`)로 옮기고 펜스가 그 값으로 러너 호출을 가르며, 러너(`run_docreview_codex_reviewer.sh`)는 이 변수를 보지 않는다. 펜스 밖에서 러너를 부르면 opt-out이 무시된 채 지출이 나간다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` — 문서 리뷰 엔진의 **재비판 단계만** skip (`doc-recritic` dispatch 없음). 탐지·codex 는 정상 동작한다. 기각 경로가 0 이 된 사실은 `fin.json` 의 `advisory[]` 로 공시된다 — 오탐이 걸러지지 않은 라운드라는 뜻이므로 조용히 넘어가지 않는다.
+- `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT=<n>` (5.5.0) — interview 조사 subagent 호출 상한의 시작값(기본 20, 양의 정수가 아니면 20 과 한 줄 공시). 닿으면 연장 · 판정 · 종료를 묻는다. 끄는 스위치가 아니다. 이 상한이 사슬 전체의 바깥 조사 중 subagent 몫을 묶고(Phase 0 은 웹을 보지 않는다), 본체 직접 웹 검색은 라운드 규약(질문 하나 · 답 하나)이 묶는다.
+- `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT=<n>` (5.5.0) — 포화 판정자 호출 상한의 시작값(기본 5). floor 가 닫힌 뒤 판정 고리가 사용자 턴 없이 도는 것을 묶는다.
 - `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` (v0.3.0, 3.0.0 재정의) — `spec-review` 진입 검사가 설계문서 리뷰를 끈다 — **수동 호출 포함** skill 전체다(2.x 까지는 자동 리뷰와 구조 검사만 끄고 수동 호출은 살아 있었다). 파일 분류(content-aware 판별)는 없다 — 이 skill 은 받은 경로를 `design-doc.md` 프로필로 리뷰한다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` (3.0.0) — 같은 효과의 이름 붙은 스위치. 수신처는 `scripts/review_entry.py` 의 진입 검사다(`spec-distill:review-entry`) — 훅이 아니지만 지목할 이름을 갖는다(`spec-distill-gc` 와 같은 관례).
 - `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` (alias: `spec-distill:session-end-cleanup`) — SessionEnd 훅 전체를 끈다: 끝나는 세션의 폴더 정리 **와** TTL-GC 기동 둘 다. GC 만 끄려면 아래 `spec-distill:spec-distill-gc`.

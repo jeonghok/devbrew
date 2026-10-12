@@ -539,7 +539,8 @@ done
 # 지워지고 그 책임이 이 SKILL.md 의 `## 진입 단계` 로 들어왔다. 호출 경로의 로드 표면은 줄었지만
 # SKILL.md 한 파일은 그 절만큼 늘어 래칫을 **그 절의 줄 수만큼** 옮긴다(여유는 옮기기 전과 같은 0).
 # 2026-10-12 R1: C44 · 자격/예산 문단을 걷고 조사 상한 절 · repo-researcher dispatch 를 더한다. 순감이라 값을 올리지 않는다.
-SKILL_LINE_CAP=504
+# 2026-10-12 R1: 실측 494 + 8 로 조였다.
+SKILL_LINE_CAP=502
 [[ "$(skill_own_lines "$SKILL")" -lt "$SKILL_LINE_CAP" ]] \
   && ok "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") < $SKILL_LINE_CAP (규칙 블록 제외 — 조사 특화 순증 + 진입 단계 흡수)" \
   || no "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") ≥ $SKILL_LINE_CAP"
@@ -1227,7 +1228,7 @@ r2_flat="$(tr '\n' ' ' <<<"$r2_block" | tr -s ' ')"
 grep -qE 'request-framing[^.]{0,60}웹[^.]{0,20}보지 않' <<<"$r2_flat" \
   && ok "R2(v0.41.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)" \
   || no "R2(v0.41.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)"
-grep -qF 'round 1–2' <<<"$r2_block" && no "R1/D: landscape 시점 강제 «round 1–2» 잔존" || ok "R1/D: landscape 시점 강제 없음"
+grep -qF 'round 1–2' "$SKILL" && no "R1/D: landscape 시점 강제 «round 1–2» 잔존" || ok "R1/D: landscape 시점 강제 없음"
 grep -qF '토픽이 잡히면, 그리고 결정에 닿을 때마다' <<<"$r2_flat" \
   && ok "R1/D(양의 짝): landscape 는 결정에 닿을 때마다" || no "R1/D(양의 짝): landscape 새 시점 문구 부재"
 grep -qF 'web sweep ≥1회' "$SKILL" && ok "R1/D: «≥1회» 하한은 남는다" || no "R1/D: landscape 하한 «≥1회» 가 사라졌다"
