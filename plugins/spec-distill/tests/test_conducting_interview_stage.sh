@@ -122,6 +122,17 @@ grep -qF '{label: "확정하고 /compact 후 brainstorming (권장)"' <<<"$b2_bl
 grep -qF '{label: "확정하고 /new 후 brainstorming"' <<<"$b2_block" \
   && ok "AC2: 옵션 ② 라벨 (확정 + /new, B-2 스코프)" \
   || no "AC2: 옵션 ② 라벨이 B-2 게이트에 없다"
+# 순서: 첫 선택지가 추천이다 — 두 라벨 객체의 순서만 바꿔도 위 두 grep 은 통과한다.
+lab_c="$(grep -nF '{label: "확정하고 /compact 후' <<<"$b2_block" | head -1 | cut -d: -f1)"
+lab_n="$(grep -nF '{label: "확정하고 /new 후' <<<"$b2_block" | head -1 | cut -d: -f1)"
+{ [[ -n "$lab_c" && -n "$lab_n" ]] && (( lab_c < lab_n )); } \
+  && ok "AC2: /compact 라벨이 /new 라벨보다 앞이다 (B-2 스코프)" \
+  || no "AC2: /compact 라벨이 /new 라벨보다 앞이 아니다 (compact=${lab_c:-없음} new=${lab_n:-없음})"
+b3_block="$(awk '/^#### B-3/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
+grep -qF -- '- **① 확정하고 /compact 후 brainstorming**: ' <<<"$b3_block" \
+  && ok "AC2: B-3 ① 불릿 = /compact" || no "AC2: B-3 ① 불릿이 /compact 가 아니다"
+grep -qF -- '- **② 확정하고 /new 후 brainstorming**: ① 과 같은 절차로' <<<"$b3_block" \
+  && ok "AC2: B-3 ② 불릿 = /new, ① 절차 참조" || no "AC2: B-3 ② 불릿이 /new 가 아니다"
 grep -F '{label:' <<<"$b2_block" | grep -qF '바로' \
   && no "AC4(next-session): B-2 옵션 라벨에 「바로」 진행이 남았다" \
   || ok "AC4(next-session): B-2 옵션 라벨에 「바로」 진행이 없다 (양성 짝: 위 라벨 둘)"

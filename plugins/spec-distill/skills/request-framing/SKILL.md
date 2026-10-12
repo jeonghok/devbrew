@@ -2,7 +2,7 @@
 name: request-framing
 description: >
   Phase 0 회의 skill. 사용자가 `/spec-distill:request-framing` 으로 부른다. 확산(원문 보존 → 레포
-  읽기 → 질문 라운드) 후 압축해, 새 세션 첫 턴의 `/spec-distill:spec-interview @<seed 경로>` 가
+  읽기 → 질문 라운드) 후 압축해, 다음 세션 첫 턴의 `/spec-distill:spec-interview @<seed 경로>` 가
   가리키는 `interview-seed` 파일을 만든다. 산출물은 문서가 아니라 다음 세션의 첫 턴이다.
 cost_class: variable
 argument-hint: "[raw request / 생각 / 대화 / 자료]"

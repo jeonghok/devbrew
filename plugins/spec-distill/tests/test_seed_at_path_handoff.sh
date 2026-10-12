@@ -141,6 +141,7 @@ assert_not_contains "$c1" '/new' "AC4: Step B ① 행이 /new 를 못박지 않�
 assert_not_contains "$c2" '권장' "AC4: 정본의 권장은 ① 하나"
 assert_contains "$c1" '권장 핸드오프 — 맨 `/compact` 와 다음 세션 줄을 노출하고 **턴 종료**' "AC1(next-session): ① = /compact + 다음 세션 줄"
 assert_contains "$c2" '차선 핸드오프 — `/new` 와 같은 다음 세션 줄을 노출하고 **턴 종료**' "AC1(next-session): ② = /new + 같은 다음 세션 줄"
+assert_contains "$(block '^## 다음 세션 명령' '^## ' "$CANON" | flat)" '첫 줄은 맨 `/compact`(①) 또는 `/new`(②)다.' "AC1(next-session): 규칙 1 — ① 맨 /compact · ② /new"
 assert_not_contains "$stepb" '바로 진행' "AC1(next-session): Step B 에 「바로 진행」이 없다 (양성 짝: 위 ①·② 행)"
 fill="$(awk '/^\*\*각 skill 이 채우는 것\*\*/{f=1} f && /^$/{exit} f' "$CANON" | flat)"
 [ -n "$fill" ] && ok "AC1(next-session)(양성): 「각 skill 이 채우는 것」 문단을 읽었다" || no "AC1(next-session)(양성): 「각 skill 이 채우는 것」 문단이 없다 — 아래 단언이 공허하다"

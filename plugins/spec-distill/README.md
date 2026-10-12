@@ -37,7 +37,7 @@
                                                 · 냉독 축(seed-readback)
                                        ▼ [확정 — proceed 게이트] ①/compact 후 /spec-interview @경로 · ②/new 후 /spec-interview @경로 · ③수정 필요 · ④멈춤
                                    interview-seed → docs/superpowers/interview/   ← 문서가 아니라 다음 세션 첫 턴이 가리키는 파일
-                                       ▼ 새 세션 첫 턴 = `/spec-interview @<seed 경로>` (진입 단계가 frontmatter 포함 전문으로 풀어 인터뷰에 넘김)
+                                       ▼ 다음 세션 첫 턴 = `/spec-interview @<seed 경로>` (진입 단계가 frontmatter 포함 전문으로 풀어 인터뷰에 넘김)
 /spec-interview ─→ [0] Trivia escape ─→ [1] Interview (문제공간 stage)
                                        · 지금 이해 · 다음 결정 · 질문 하나 + 3-path (web=path(a))
                                        · R1 Problem Reframe / R2 Landscape / R3 Steelman / R4 Tried&Discarded / R5 OQ
