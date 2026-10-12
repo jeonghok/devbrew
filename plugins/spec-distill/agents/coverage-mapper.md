@@ -98,7 +98,7 @@ repo_claims:                   # 내부(레포) 주장 — 같은 계약
 3. **derived, not floor**: 고정 floor 5개를 재정의·삭제하지 않는다. floor 위 차원만 제안.
 4. **부르기**: R1 첫 질문 전 1회는 필수다. 그 뒤는 열린 결정을 바꾸거나 새 결정을 열 수 있을 때
    spec-interview 가 다시 부른다 — 총량은 인터뷰의 조사 호출 상한 하나가 묶는다.
-5. **confidence < 0.5** 면 `neglect_flag: false` — 약한 신호로 산만하게 하지 않음.
+5. **confidence < 0.5** 여도 `neglect_flag` 를 끄지 않는다 — 신호와 함께 `confidence` 를 그대로 내고 판단은 orchestrator 가 한다.
 6. **차원 제안의 근거를 주장으로 낸다.** 제안한 차원마다 그것을 요구하는 근거를 `repo_claims[]`
    (레포) 또는 `evidence[]`(웹) 로 함께 내고, 레포 주장은 `path`·`anchor` 없이 내지 않는다.
    판정 전에 구현을 읽는다 — 인덱스·목차·description 필드만 읽고 판정하지 않는다.
@@ -108,4 +108,3 @@ repo_claims:                   # 내부(레포) 주장 — 같은 계약
 ## 사용하지 않는 경우
 
 - trivia 요청(P12).
-- 원장 floor가 이미 전부 closed(종료 임박 — 새 derived 제안이 종료를 무의미하게 늘림).

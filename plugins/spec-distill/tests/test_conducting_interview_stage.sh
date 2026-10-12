@@ -464,8 +464,9 @@ grep -qF '직전 답이 보류(«모르겠다/둘 다/아무거나»)·한 단�
   || no "C1: 되묻기 발동 조건 부재 또는 조건이 빠졌다"
 grep -qF '이유·사례·실패 조건 중 하나를 되묻고 인터뷰어의 추측을 첫 선택지로' <<<"$round_flat" \
   && ok "C1: 되묻기 세 축(이유·사례·실패 조건) + 추측이 첫 선택지" || no "C1: 되묻기 규칙 부재"
-grep -qF '같은 주제의 연속 되묻기는 최대 2회' <<<"$round_flat" \
-  && ok "AC3: 되묻기 상한 — 같은 주제 최대 2회" || no "AC3: 되묻기 상한 부재 또는 값이 2회가 아니다"
+grep -qF '최대 2회' <<<"$round_flat" && no "R1/G: 되묻기 «최대 2회» 상한 잔존" || ok "R1/G: 되묻기 상한 문구 없음"
+grep -qF '다음 질문의 선택지에 「이 주제를 더 파기」를 둔다' <<<"$round_flat" \
+  && ok "R1/G(양의 짝): 두 번 되물은 뒤 「이 주제를 더 파기」 선택지 — 사용자가 연다" || no "R1/G(양의 짝): 「이 주제를 더 파기」 선택지 부재"
 grep -qF '그 차원을 자동으로 닫지 않는다' <<<"$round_flat" \
   && ok "AC3: 상한 뒤에도 차원을 자동으로 닫지 않는다" || no "AC3: 상한 뒤 자동 닫힘 금지 문장 부재"
 grep -qE '되묻기 → 외부 근거 처분[^→]{0,60}→ 새 결정' <<<"$round_flat" \
@@ -1226,6 +1227,18 @@ r2_flat="$(tr '\n' ' ' <<<"$r2_block" | tr -s ' ')"
 grep -qE 'request-framing[^.]{0,60}웹[^.]{0,20}보지 않' <<<"$r2_flat" \
   && ok "R2(v0.41.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)" \
   || no "R2(v0.41.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)"
+grep -qF 'round 1–2' <<<"$r2_block" && no "R1/D: landscape 시점 강제 «round 1–2» 잔존" || ok "R1/D: landscape 시점 강제 없음"
+grep -qF '토픽이 잡히면, 그리고 결정에 닿을 때마다' <<<"$r2_flat" \
+  && ok "R1/D(양의 짝): landscape 는 결정에 닿을 때마다" || no "R1/D(양의 짝): landscape 새 시점 문구 부재"
+grep -qF 'web sweep ≥1회' "$SKILL" && ok "R1/D: «≥1회» 하한은 남는다" || no "R1/D: landscape 하한 «≥1회» 가 사라졌다"
+STEEL_ALL="$(cat "$FIN_DIR/steelman.md" "$REPO_ROOT/plugins/spec-distill/agents/steelman-builder.md" | tr '\n' ' ' | tr -s ' ')"
+for tok in '한 방향당' '같은 ST 안에서 재dispatch 는 하지 않는다' '재steelman 금지'; do
+  grep -qF -- "$tok" <<<"$STEEL_ALL" && no "R1/E: steelman 횟수 문구 «${tok}» 잔존" || ok "R1/E: «${tok}» 없음"
+done
+grep -qF '새 근거 또는 바뀐 전제가 있으면 같은 방향도 다시 부르고, 입력이 같으면 부르지 않는다' "$FIN_DIR/steelman.md" \
+  && ok "R1/E(양의 짝): steelman 반복 감지 문구(steelman.md)" || no "R1/E(양의 짝): steelman.md 반복 감지 문구 부재"
+grep -qF '새 근거 또는 바뀐 전제가 있으면 같은 방향도 다시 부르고, 입력이 같으면 부르지 않는다' "$REPO_ROOT/plugins/spec-distill/agents/steelman-builder.md" \
+  && ok "R1/E(양의 짝): steelman 반복 감지 문구(builder)" || no "R1/E(양의 짝): steelman-builder 반복 감지 문구 부재"
 
 # --- v0.41.0: seed 입력 규약 (scoped — 헤더-satisfiable 회피 + rewrap 관용) ---
 # Task 11b: 절 전문이 $SEED_REF 로 옮겨갔다 — 윈도우도 거기서 뜬다.

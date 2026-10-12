@@ -83,4 +83,9 @@ grep -qF -- 'whenever it could change an open decision or open a new one' <<<"$A
   && ok "R1/A(양의 짝): description 이 새 부르기 기준을 말한다" || no "R1/A(양의 짝): 새 부르기 서술 부재 — 부재 락이 공허해진다"
 grep -qF -- 'R1 첫 질문 전 1회는 필수다' <<<"$AGENT_FLAT" \
   && ok "R1/A(양의 짝): 첫 호출 필수(하한) 문구" || no "R1/A(양의 짝): 첫 호출 필수 문구 부재"
+# R1(2026-10-12) S2 · C10: floor 가 닫혀도 부를 수 있고(판정자의 빈 곳), 낮은 confidence 가 신호를 끄지 않는다.
+grep -qF '원장 floor가 이미 전부 closed' <<<"$AGENT_FLAT" && no "R1/S2: 「floor 전부 closed」 비사용 항목 잔존" || ok "R1/S2: floor-closed 비사용 항목 없음"
+grep -qF -- '면 `neglect_flag: false`' <<<"$AGENT_FLAT" && no "R1/C10: 낮은 confidence 가 neglect 신호를 끈다" || ok "R1/C10: confidence 가 신호를 끄지 않는다"
+grep -qF -- '`neglect_flag` 를 끄지 않는다' <<<"$AGENT_FLAT" && ok "R1/C10(양의 짝): confidence 를 붙여 보인다" || no "R1/C10(양의 짝): 새 confidence 규칙 부재"
+
 finish

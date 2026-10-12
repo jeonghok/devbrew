@@ -35,7 +35,7 @@ else
 fi
 ```
 
-한 방향당 steelman 1회 — 새 근거 없으면 재steelman 금지(AP16).
+새 근거 또는 바뀐 전제가 있으면 같은 방향도 다시 부르고, 입력이 같으면 부르지 않는다 — 사용자가 받아들인 `premise_list_challenge` 도 바뀐 전제다. 횟수가 아니라 입력의 반복으로 멈춘다(AP16).
 
 두 슬롯은 `spec-interview/SKILL.md` 의 `## 조사 주장 계약` 펜스와 `orchestration.open_decisions[]`
 에서 온다. 계약 펜스의 rc 가 0 이 아니면 **dispatch 하지 않는다** — `fail-closed` 가 막는 것은 «그
@@ -77,7 +77,7 @@ dispatch» 이고 인터뷰가 아니다. 그때 공시는 loud advisory + 수�
   같은 문구를 남긴다. 봉쇄는 추천·라벨 층에 있고 선택지를 제한하지 않는다.
 - `premise_list_challenge` 가 빠진 전제나 틀린 전제를 지목하면 「막힌 결정」에 그대로 보이고, 사용자가 받아들이면
   전제 목록을 고쳐 audit §3 에 적는다. 목록 수정 자체는 재검토를 열지 않는다 — 고친 전제에 닿는 확인된 충돌이
-  있어야 연다. 같은 ST 안에서 재dispatch 는 하지 않는다.
+  있어야 연다. 고친 전제로 다시 부르는 것은 새 ST 다.
 
 #### Step 3 — 4-block 제시
 
