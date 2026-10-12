@@ -1233,6 +1233,22 @@ def research_confirm_missing(payload_text: str, audit_text: str) -> list[str]:
             for rc in payload_rc_ids(payload_text) if rc not in have]
 
 
+# 설계 2026-10-12-interview-persistent-explore §4·§5 — audit §2 의 포화 판정 줄. 판정은 «마지막» 줄로
+# 한다: 판정과 사용자 선택이 시간 순으로 쌓이고, 그 끝이 인터뷰가 어떻게 끝났는지다. 불릿 어휘는
+# 형제(`MAPPER_RE` · `ENTRY_BULLET_RE`)와 같은 `[-*]` 다 — `_entry_lines` 가 이미 그 어휘로 거른다.
+SAT_LINE_RE = re.compile(r"^(?:포화 판정 \d+:|사용자 종료\(@S\d+\))")
+SAT_PASS_RE = re.compile(r"^포화 판정 \d+: 포화 — \S")
+SAT_USER_RE = re.compile(r"^포화 판정 \d+: 사용자 판단 포화\(@(S\d+)\) — \S")
+SAT_STOP_RE = re.compile(r"^사용자 종료\(@(S\d+)\) — (?:포화 판정 전|마지막 판정 아직)$")
+SAT_NOT_YET_RE = re.compile(r"^포화 판정 \d+: 아직 — \S")
+SAT_CONTINUE_RE = re.compile(r"^포화 판정 \d+: 판정 불가\([^)]*\) — 조사 계속\(@S\d+\)$")
+
+# mapper 첫 매치에서 건너뛰는 §2 의 R1 사건 줄 — 포화 판정 · 사용자 종료(`SAT_LINE_RE`)와 아래 접두.
+# 그 줄의 자유 글(판정 근거 · 사용자 선택 사유)에 `coverage-mapper <k>` 가 섞이면 mapper 줄이 빠져도
+# 그 줄이 하한 검사를 대신 진다(최종 리뷰 M1).
+SAT_EVENT_PREFIXES = ("상한 도달 ", "판정 상한 도달 ", "조사 호출 ")
+
+
 # **불릿(데이터) 줄에 앵커한다.** 앵커가 없으면 §2 머리 «설명 산문»의 예시
 # (`coverage-mapper 0 (unavailable: <사유>)`)가 데이터 줄보다 먼저 매치돼 판정을 대신
 # 진다 — 실측: 출하 템플릿의 T-TPL green 을 그 설명 문장 하나가 전부 지고 있었고,
@@ -1249,6 +1265,14 @@ MAPPER_RE = re.compile(
     re.MULTILINE)
 
 
+def _is_sat_event(sec: str, pos: int) -> bool:
+    """`pos` 가 든 줄이 R1 사건 줄(포화 판정 · 사용자 종료 · 상한 도달 · 판정 상한 도달 · 조사 호출)인가."""
+    start = sec.rfind("\n", 0, pos) + 1
+    end = sec.find("\n", pos)
+    body = _strip_bullet(sec[start:end if end != -1 else len(sec)].strip()).strip()
+    return bool(SAT_LINE_RE.match(body)) or body.startswith(SAT_EVENT_PREFIXES)
+
+
 def budget_mapper_failures(audit_text: str) -> tuple[list[str], list[str]]:
     """audit §2 Budget 의 `coverage-mapper <k>` (v0.57.0, spec §2.3·C4).
 
@@ -1258,7 +1282,7 @@ def budget_mapper_failures(audit_text: str) -> tuple[list[str], list[str]]:
     dispatch 를 건너뛴 턴이 같은 문구를 적으면 «도구 부재»와 구분하지 못한다. 그래서
     advisory 는 조용히 통과하지 않고 다음 단계 게이트 앞 글로 사람에게 간다."""
     sec = _section_text(audit_text, "2", "Budget")
-    m = MAPPER_RE.search(sec)
+    m = next((c for c in MAPPER_RE.finditer(sec) if not _is_sat_event(sec, c.start(1))), None)
     if not m:
         return ["§2 Budget: coverage-mapper <k> line missing"], []
     k, reason = int(m.group(1)), m.group(2)
@@ -1267,17 +1291,6 @@ def budget_mapper_failures(audit_text: str) -> tuple[list[str], list[str]]:
     if reason:
         return [], [f"coverage-mapper 0 ({reason}) — 범위 조사 에이전트를 부르지 않고 통과했다 (사람이 확인할 것)"]
     return ["§2 Budget: coverage-mapper 0 without unavailable reason"], []
-
-
-# 설계 2026-10-12-interview-persistent-explore §4·§5 — audit §2 의 포화 판정 줄. 판정은 «마지막» 줄로
-# 한다: 판정과 사용자 선택이 시간 순으로 쌓이고, 그 끝이 인터뷰가 어떻게 끝났는지다. 불릿 어휘는
-# 형제(`MAPPER_RE` · `ENTRY_BULLET_RE`)와 같은 `[-*]` 다 — `_entry_lines` 가 이미 그 어휘로 거른다.
-SAT_LINE_RE = re.compile(r"^(?:포화 판정 \d+:|사용자 종료\(@S\d+\))")
-SAT_PASS_RE = re.compile(r"^포화 판정 \d+: 포화 — \S")
-SAT_USER_RE = re.compile(r"^포화 판정 \d+: 사용자 판단 포화\(@(S\d+)\) — \S")
-SAT_STOP_RE = re.compile(r"^사용자 종료\(@(S\d+)\) — (?:포화 판정 전|마지막 판정 아직)$")
-SAT_NOT_YET_RE = re.compile(r"^포화 판정 \d+: 아직 — \S")
-SAT_CONTINUE_RE = re.compile(r"^포화 판정 \d+: 판정 불가\([^)]*\) — 조사 계속\(@S\d+\)$")
 
 
 def saturation_failures(audit_text: str, anchors: set) -> tuple[list[str], list[str]]:

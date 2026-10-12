@@ -2398,4 +2398,58 @@ sat_case s_noise ''
 out="$(ac3_gate s_noise)"
 grep -q 'coverage-mapper' <<<"$out" \
   && no "R1/§5: 포화 실패 문구에 coverage-mapper 가 섞였다" || ok "R1/§5: 포화 실패 문구에 coverage-mapper 없음"
+# --- R1 최종 리뷰 M1: §2 의 포화 · 상한 · 조사 호출 줄은 mapper 줄을 대신하지 못한다 ---
+# 정상 쌍에서 포화 줄을 지우고 mapper 데이터 줄을 둘째 인자의 줄(들)로 바꾼다 — mapper 줄은 사라진다.
+mapper_swap() {  # $1 = stem, $2 = mapper 줄 자리에 넣을 줄(개행으로 여럿)
+  ac3_pair "$1"
+  python3 -I - "$TMPD/$1.audit.md" "$2" <<'PY'
+import re, sys
+p, ins = sys.argv[1], sys.argv[2]
+t = open(p, encoding="utf-8").read()
+t = re.sub(r"^[-*] (포화 판정 \d+:|사용자 종료\(@S\d+\)).*\n", "", t, flags=re.M)
+t, n = re.subn(r"^[-*] agent dispatch: coverage-mapper .*\n", lambda m: ins + "\n", t, count=1, flags=re.M)
+if n != 1:
+    sys.exit("mapper_swap: mapper 데이터 줄을 못 찾았다")
+open(p, "w", encoding="utf-8").write(t)
+PY
+}
+SATOK='- 포화 판정 1: 포화 — 최근 두 조사 새로움 없음'
+for spec in "m1_sat|- 포화 판정 1: 포화 — coverage-mapper 2 출력이 결정을 바꾸지 않았다|포화 판정 근거" \
+            "m1_cap|- 상한 도달 20/20 — 사용자 선택 S2: 연장 (coverage-mapper 3 포함)"$'\n'"${SATOK}|상한 도달" \
+            "m1_jcap|- 판정 상한 도달 5/5 — 사용자 선택 S2: 연장 (coverage-mapper 3 포함)"$'\n'"${SATOK}|판정 상한 도달" \
+            "m1_calls|- 조사 호출 12/20 (장치별: coverage-mapper 2 · 맹점 1)"$'\n'"${SATOK}|조사 호출"; do
+  stem="${spec%%|*}"; rest="${spec#*|}"; lines="${rest%|*}"; label="${rest##*|}"
+  mapper_swap "$stem" "$lines"
+  # 양성 대조 — coverage-mapper 글자는 바꿔 넣은 줄에만 있고 mapper 데이터 줄은 없다.
+  { [[ "$(grep -c 'coverage-mapper [0-9]' "$TMPD/$stem.audit.md")" == "1" ]] \
+    && ! grep -q '^[-*] agent dispatch: coverage-mapper' "$TMPD/$stem.audit.md"; } \
+    && ok "M1(양성대조): ${label} 줄만 coverage-mapper 를 담는다" || no "M1(양성대조): ${label} 변형이 적용되지 않았다 — 아래 단언이 공허하다"
+  out="$(ac3_gate "$stem")"; rc=$?
+  { [[ $rc -ne 0 ]] && grep -qF 'coverage-mapper <k> line missing' <<<"$out"; } \
+    && ok "M1: mapper 줄 부재 + ${label} 줄의 coverage-mapper → red «line missing»" \
+    || { no "M1: ${label} 줄이 mapper 줄을 대신했다"; printf '    %s\n' "$out"; }
+done
+# --- R1 최종 리뷰 M5(설계 §4): 조사 호출 줄의 위치가 판정을 바꾸지 않는다 ---
+# 조사 호출 줄을 mapper 줄 «앞»에, 상한 도달 줄을 그 사이에 둔다. 두 검사 모두 통과해야 한다.
+ac3_pair m5_order
+python3 -I - "$TMPD/m5_order.audit.md" <<'PY'
+import re, sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+pre = ("- 조사 호출 12/20 (장치별: 커버리지 2 · 맹점 1 · 반론 1 · 레포 조사 8 · 본체 직접 3)\n"
+       "- 상한 도달 20/20 — 사용자 선택 S2: 연장\n")
+t, n = re.subn(r"^(- agent dispatch: coverage-mapper .*\n)", lambda m: pre + m.group(1), t, count=1, flags=re.M)
+if n != 1:
+    sys.exit("m5_order: mapper 데이터 줄을 못 찾았다")
+open(p, "w", encoding="utf-8").write(t)
+PY
+m5_sec="$(awk '/^## 2\./{f=1;next} /^## /{f=0} f&&/^- /' "$TMPD/m5_order.audit.md")"
+{ [[ "$(sed -n 1p <<<"$m5_sec")" == "- 조사 호출 "* ]] && [[ "$(sed -n 2p <<<"$m5_sec")" == "- 상한 도달 "* ]] \
+  && [[ "$(sed -n 3p <<<"$m5_sec")" == "- agent dispatch: coverage-mapper "* ]] && grep -q '^- 포화 판정 1: 포화 — ' <<<"$m5_sec"; } \
+  && ok "M5(양성대조): §2 첫 줄이 조사 호출 · 둘째가 상한 도달 · 셋째가 mapper 줄" \
+  || { no "M5(양성대조): 줄 순서 변형이 적용되지 않았다 — 아래 단언이 공허하다"; printf '    %s\n' "$m5_sec"; }
+out="$(ac3_gate m5_order)"; rc=$?
+{ [[ $rc -eq 0 ]] && ! grep -q 'coverage-mapper' <<<"$out" && ! grep -q '포화 판정' <<<"$out"; } \
+  && ok "M5: 조사 호출 줄이 mapper 줄 앞 · 상한 도달 줄이 사이 → mapper · 포화 검사 둘 다 통과" \
+  || { no "M5: 줄 위치가 판정을 바꿨다"; printf '    %s\n' "$out"; }
 finish
