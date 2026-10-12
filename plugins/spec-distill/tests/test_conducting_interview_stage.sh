@@ -116,11 +116,11 @@ b2_block="$(awk '/^#### B-2/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
 { [[ -n "$b2_block" ]] && grep -qF 'AskUserQuestion(' <<<"$b2_block"; } \
   && ok "AC20: Step B proceed 게이트가 AskUserQuestion 호출 (B-2 스코프)" \
   || no "AC20: B-2 블록에 AskUserQuestion( 호출이 없다"
-grep -qF '{label: "확정하고 /new 후 brainstorming (권장)"' <<<"$b2_block" \
-  && ok "AC2: 옵션 ① 라벨 (확정 + /new, 권장, B-2 스코프)" \
+grep -qF '{label: "확정하고 /compact 후 brainstorming (권장)"' <<<"$b2_block" \
+  && ok "AC2: 옵션 ① 라벨 (확정 + /compact, 권장, B-2 스코프)" \
   || no "AC2: 옵션 ① 라벨이 B-2 게이트에 없다"
-grep -qF '{label: "확정하고 /compact 후 brainstorming"' <<<"$b2_block" \
-  && ok "AC2: 옵션 ② 라벨 (확정 + /compact, B-2 스코프)" \
+grep -qF '{label: "확정하고 /new 후 brainstorming"' <<<"$b2_block" \
+  && ok "AC2: 옵션 ② 라벨 (확정 + /new, B-2 스코프)" \
   || no "AC2: 옵션 ② 라벨이 B-2 게이트에 없다"
 grep -F '{label:' <<<"$b2_block" | grep -qF '바로' \
   && no "AC4(next-session): B-2 옵션 라벨에 「바로」 진행이 남았다" \

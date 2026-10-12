@@ -957,19 +957,19 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 
 | # | 이 skill 의 옵션 |
 |---|---|
-| ① | `/new` 후 `/spec-distill:spec-interview @<seed 경로>` (권장, 커밋 후) — 두 줄 명령을 노출하고 **턴 종료** |
-| ② | `/compact` 후 `/spec-distill:spec-interview @<seed 경로>` (커밋 후) — 두 줄 명령을 노출하고 **턴 종료** |
+| ① | `/compact` 후 `/spec-distill:spec-interview @<seed 경로>` (권장, 커밋 후) — 두 줄 명령을 노출하고 **턴 종료** |
+| ② | `/new` 후 `/spec-distill:spec-interview @<seed 경로>` (커밋 후) — 두 줄 명령을 노출하고 **턴 종료** |
 | ③ | 수정 필요 — 압축을 다시 깎고 이 게이트로 돌아옵니다 |
 | ④ | 멈춤 — seed 와 audit 을 남기고 종료 |
 
-노출 모양(① 의 예 — ② 는 첫 줄이 `/compact` 입니다):
+노출 모양(① 의 예 — ② 는 첫 줄이 `/new` 입니다):
 
 ```
-/new
+/compact
 /spec-distill:spec-interview @docs/superpowers/interview/<날짜>-<topic>-interview.md
 ```
 
-`/new` 뒤 같은 줄에 붙인 텍스트는 세션 이름이 되므로, 두 줄을 따로 입력하라는 안내를 명령과 함께 냅니다.
+`/compact` 뒤 같은 줄에 붙인 텍스트는 요약 지시로, `/new` 뒤 같은 줄에 붙인 텍스트는 세션 이름이 되므로, 두 줄을 따로 입력하라는 안내를 명령과 함께 냅니다.
 두 줄 명령의 공통 규칙(따로 입력 · 치환 · 위치 공시)은 `${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md` 의 `## 다음 세션 명령` 이 정본입니다.
 
 **handoff 직전 커밋(①/② 에서만).** 워크트리 안이면 ①/② 를 고른 직후 handoff 직전
