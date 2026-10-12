@@ -35,9 +35,9 @@ import sys
 # 앞 글자가 `/` 면 변수로 시작하는 경로의 끝이다(`"$_dir/python3"`) — 그 꼴은 스캐너가 보지 못한다.
 TOKEN = re.compile(r"(?<![\w$/-])((?:[\w.~-]*/)*python3?(?:\.\d+)?)(?=[\s<>|;&)`\"']|$)")
 # 앞에 이것이 오면 호출이 아니라 존재 확인 · 값이다: `command -v python3` · 배열 대입 `X=(… python)` ·
-# 글자 바로 뒤 괄호 `name(python)`(문장 속 글자). `$(python3` · ` (python3` 는 호출이다 — 배열 안이어도
-# `$(` · 백틱 뒤면 명령 치환이라 호출로 본다(`arr=( $(python3 -c …) )`).
-PROBE = re.compile(r"(command\s+-v|which|type|hash)\s+$|=\([^)$`]*$|\w\($")
+# `$(python3` · ` (python3` · `then(python3` 는 호출이다 — 배열 안이어도 `$(` · 백틱 뒤면 명령 치환이라
+# 호출로 본다(`arr=( $(python3 -c …) )`). 문장 속 글자(`name(python)`)는 예외 목록이 사유와 함께 다룬다.
+PROBE = re.compile(r"(command\s+-v|which|type|hash)\s+$|=\([^)$`]*$")
 # 셸 연산자 · 리다이렉트로 시작하는 토큰 — 여기까지 위치 인자가 없었으면 스크립트를 stdin 으로 받는다.
 STOP = re.compile(r"^(\||&&|\|\||;|\)|<|>|\d>|&>|`|$)")
 
@@ -192,14 +192,17 @@ QG_SCAN_PY
 EXEMPT_PATHS=(
   "plugins/quality-gates/scripts/run-test-selection.sh"
   "plugins/plugin-audit/scripts/run-own-tests.sh"
+  "plugins/plugin-audit/scripts/run-own-tests.sh"
 )
 EXEMPT_NEEDLES=(
   "python3 -m venv .venv"
   "python3 -m unittest discover"
+  'add_why "$cand(python): 러너 비정상 종료'
 )
 EXEMPT_REASONS=(
   "차등 테스트의 venv setup 명령 — 리뷰 대상 리포의 setup 을 일부러 돌린다(R22 kill switch 가 막는다)"
   "감사 대상 플러그인의 자체 테스트를 샌드박스에서 일부러 돌린다(README 의 알려진 한계)"
+  "호출이 아니라 실패 사유 문자열 안의 글자다"
 )
 
 note "[분류기 — 꼴마다 하나]"
@@ -256,7 +259,9 @@ check "x=(\"\$(python3 -c 'y')\")" inline-bare
 check "local -a out=( \"\$(python3 -c 'print(1)')\" )" inline-bare
 check "a=( \`python3 -c 'x'\` )" inline-bare
 check "[ -x \"\$_dir/python3\" ]" none
-check "echo \"\$cand(python): 실패\"" none
+check "echo \"\$cand(python): 실패\"" inline-bare
+check "if true; then(python3 -c 'import json'); fi" inline-bare
+check "for f in a; do(python3 -c 'x'); done" inline-bare
 check "( python3 -c 'x' )" inline-bare
 check "set +B  # nested \"\$(python3 -c \"...\")\"" none
 check "\`\`\`python" none
