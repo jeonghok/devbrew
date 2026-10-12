@@ -384,8 +384,14 @@ done
 if [ -n "$NONUTF8" ]; then
   out="$(cd "$REPO" && LC_ALL="$NONUTF8" LANG="$NONUTF8" PYTHONIOENCODING=utf-8 bash "$PA/check-plugin-structure.sh" plug --plugin-dev-root "$TMP/no-plugin-dev" 2>/dev/null)"
   assert_contains "$out" '"degraded"' "$NONUTF8 — check-plugin-structure.sh 가 한국어 결과 JSON 을 낸다"
-  out="$(cd "$REPO" && LC_ALL="$NONUTF8" LANG="$NONUTF8" PYTHONIOENCODING=utf-8 bash "$QG/discover-spec.sh" --intent-out "$TMP/intent2.md" 2>/dev/null)"
-  assert_contains "$out" '"intent_source": "spec-trailer"' "$NONUTF8 — discover-spec.sh 가 JSON 을 낸다"
+  # discover-spec 이 한국어를 찍는 길은 거부 사유다 — 리포 밖을 가리키는 Spec 트레일러로 그 길을 탄다
+  REJ="$TMP/reject-repo"; mkdir -p "$REJ"; git -C "$REJ" init -q
+  git -C "$REJ" config user.email t@example.com; git -C "$REJ" config user.name t
+  git -C "$REJ" commit -q --allow-empty -m "chore: base"; git -C "$REJ" branch -M main
+  git -C "$REJ" checkout -q -b feature/reject
+  git -C "$REJ" commit -q --allow-empty -m "feat: reject" -m "Spec: ../outside.md"
+  out="$(cd "$REJ" && LC_ALL="$NONUTF8" LANG="$NONUTF8" PYTHONIOENCODING=utf-8 bash "$QG/discover-spec.sh" --intent-out "$TMP/intent2.md" 2>/dev/null)"
+  assert_contains "$out" '"intent_note": "spec 경로 거부"' "$NONUTF8 — discover-spec.sh 가 한국어 거부 사유를 담은 JSON 을 낸다"
 else
   no "UTF-8 아닌 로케일이 하나도 없어 이 겹을 재지 못했다(셀 수 없음)"
 fi
