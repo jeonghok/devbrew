@@ -166,7 +166,7 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 ### 지금 이해
 <문제의 현재 재구성 — 바뀐 부분만 한두 문장. 코드·문서에서 확인한 사실(경로 a)과
- 외부 근거(landscape·premortem)가 있으면 여기 싣는다. 재개방이면 «→ <차원> 재개방: <사유>»>
+ 외부 근거(landscape·premortem)가 있으면 여기 싣는다. 재개방이면 «→ <차원> 재개방: <사유>». 끝줄 «조사 호출 <n>/<limit> · 이 라운드 본체 직접 <e>»>
 
 ### 다음 결정
 OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지> · 트레이드오프: <선택지별 한 줄>
@@ -294,6 +294,26 @@ Agent({ description: "Research the repo", subagent_type: "spec-distill:repo-rese
 
 거절도 수락과 똑같이 **발화 그대로** 기록합니다. 반대 명제로 뒤집어 "잠긴 방향"으로
 승격시키지 않습니다 — 그 승격이 라운드마다 결정을 박제하던 경로였습니다.
+
+## 조사 상한 · 포화 판정
+
+조사 subagent 넷(`coverage-mapper` · `blind-spot-prober` · `steelman-builder` · `repo-researcher`)은 자격 · 예산 없이,
+그 호출이 열린 결정을 바꾸거나 새 결정을 열 수 있다고 볼 때마다 부른다. 첫 호출 필수 자리 둘은 하한으로 남는다.
+인터뷰의 첫 조사 subagent dispatch 직전에 아래 한 줄을 그대로 내고, 승인은 묻지 않는다:
+
+> `[spec-distill] 이 인터뷰는 조사 subagent 를 최대 <limit>회까지 부른다(웹 포함 · 승인 없이 진행 · 연장은 닿을 때 묻는다).`
+
+dispatch 마다 `research_dispatches` 의 그 장치 칸을 +1 하고, 산출 원문을 state 본문 `### 조사 <n> — <장치> · R<round>`
+아래 verbatim 으로 남기고, «지금 이해»에 실은 뒤(V1 확인 뒤) `research_log` 에 한 항목을 더한다. 본체의 직접 조사(경로 (a)
+확인 · web sweep)도 «지금 이해»에 실을 때 같은 두 자리에 `device: orchestrator` 로 남기되 상한에는 세지 않는다 — 판정자 호출도
+세지 않는다. 본체 직접 조사는 라운드 규약(라운드마다 질문 하나 · 답 하나)이 묶는다. 합이 `research_limit` 에 닿을 때와
+floor 다섯이 모두 `closed` 가 될 때 아래 파일을 Read 로 읽어 그대로 따른다.
+
+```
+Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/saturation.md
+```
+
+그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
 ## coverage-mapper dispatch
 
@@ -443,8 +463,8 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/seed-input.md
 
 ## 종료 — brief 작성 + optional handoff
 
-**종료 절차 전문은 `references/finishing.md` 에 있다.** floor 5차원이 전부 `closed` 가 되어
-brief 작성으로 넘어갈 때 그 파일을 Read 로 읽어 그대로 따른다. 인터뷰가 아직 진행 중일 때는
+**종료 절차 전문은 `references/finishing.md` 에 있다.** floor 5차원이 전부 `closed` 가 되고 포화 판정이
+끝나(`## 조사 상한 · 포화 판정`) brief 작성으로 넘어갈 때 그 파일을 Read 로 읽어 그대로 따른다. 인터뷰가 아직 진행 중일 때는
 읽지 않는다 — 이 분리의 목적이 그것이다(조건부 로드).
 
 ### 나가는 문은 floor 뒤에만 있지 않다
@@ -456,9 +476,9 @@ floor 다섯이 전부 `closed` 여야 종료가 열리지만, **사용자는 �
 
 발동 조건이 카운터가 아니라 **사용자 발화**라는 점만 예전 escalation 과 다르다. 상한을
 없애는 것과 탈출구를 없애는 것은 다르다 — 없애는 것은 사용자 질문의 상한이지 나가는 문이
-아니다.
+아니다. 포화 판정 전에 끝내면 audit §2 에 `- 사용자 종료(@S<n>) — 포화 판정 전` 을, 마지막 판정이 «아직» 일 때 끝내면 `- 사용자 종료(@S<n>) — 마지막 판정 아직` 을 남긴다.
 
-읽어야 하는 조건: `coverage.floor` 의 다섯 차원이 모두 `status: closed`.
+읽어야 하는 조건: `coverage.floor` 의 다섯 차원이 모두 `status: closed` 이고, 마지막 포화 판정이 «포화» 이거나 사용자가 종료를 골랐다.
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/finishing.md

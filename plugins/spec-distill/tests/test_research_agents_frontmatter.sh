@@ -47,4 +47,12 @@ grep -qF '인덱스·목차·description 필드만 읽고 판정하지 않는다
   && ok "repo-researcher: 판정 전에 구현을 읽는다" || no "repo-researcher: 구현 읽기 의무 부재"
 grep -qF '목록에 없는 id 를 지어내지 않는다' <<<"$RR_FLAT" \
   && ok "repo-researcher: decides 는 받은 목록 안에서만" || no "repo-researcher: decides 지어내기 금지 부재"
+check_agent saturation-judge \
+  "decisions:DECISIONS:task research_outputs:RESEARCH_OUTPUTS:artifact ledger_state:LEDGER_STATE:task" \
+  "verdict novelty basis gaps changed opened look_at may_change opens device"
+SJ_FLAT="$(tr '\n' ' ' < "$AG/saturation-judge.md" | tr -s ' ')"
+grep -qF '최근 두 항목이 둘 다' <<<"$SJ_FLAT" && ok "saturation-judge: 최근 두 조사 기준" || no "saturation-judge: 최근 두 조사 기준 부재"
+grep -qF '「충분해 보인다」를 근거로 쓰지 않는다' <<<"$SJ_FLAT" && ok "saturation-judge: 「충분해 보인다」 금지" || no "saturation-judge: 「충분해 보인다」 금지 부재"
+grep -qF '두 항목 미만이면' <<<"$SJ_FLAT" && ok "saturation-judge: 조사 두 번 미만 → confirm 빈 곳" || no "saturation-judge: 두 항목 미만 규칙 부재"
+grep -qE 'confidence|score|prior_verdict' <<<"$SJ_FLAT" && no "saturation-judge: 점수 · 앞 판정 칸이 있다" || ok "saturation-judge: 점수 · 앞 판정 칸 없음"
 finish
