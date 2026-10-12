@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.3.0] — 2026-10-11
+
+### Added
+- `scripts/roadmap_status.py` — 로드맵과 git 을 읽어 에픽마다 단계(대기 · 준비 · 설계 중 · 계획 · 머지됨 · 끝남 · 알 수 없음)와 경고(생략 · 의존 미머지 진행 · 묶음 없음 · spec 여럿 · 미배정 번호 · 고아 발화)를 낸다. 경로 예약 겹침과 다른 에픽이 예약한 파일의 편집(경로 예약 위반)은 경고가 아니라 정보라 종료 코드를 바꾸지 않는다 — 에픽은 병렬로 가고 충돌은 머지 때 푼다(나중 PR 이 main 을 merge 하고 스위트를 다시 돌린다). 단위는 로드맵 > 에픽(spec 하나) > plan(PR 하나) > task 이고, 지금의 상태 계산은 에픽 하나를 브랜치 하나로 센다(PR 여럿 추적은 R5). 읽기만 하고 fetch 하지 않는다. 기본은 `origin/main` 의 로드맵, 아직 main 에 없으면 `--roadmap-file`. 머지됨 자동 판정은 merge commit 방식에서만 되고, squash · rebase 는 로드맵 결정 기록의 머지 줄로 대신한다.
+- `scripts/check_bundle_coverage.py` — 에픽 묶음 `ids:` 가 설계문서 `## 번호 대조` 표에 다 있는지 본다. 빠지면 1, 표 깨짐 · 절 없음이면 3.
+- `tests/test_roadmap_status.sh` · `tests/test_bundle_coverage.sh` — 버릴 git 레포 픽스처의 단계 · 경고, 읽기 전용 검사, 이번 일의 로드맵 · 묶음 실데이터 검사.
+
 ## [5.2.1] — 2026-10-11
 
 ### Fixed
