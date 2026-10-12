@@ -487,8 +487,6 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/finishing.md
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
-아래 migration 포인터는 이 SKILL.md 파일 기준 상대경로다 — 레포·설치본 두 레이아웃 모두 이 SKILL.md와 같은 위치에 `references/`가 있어 그대로 resolve 된다.
-
 ## In-flight state migration
 
 **이 절 전문은 `references/state-migration.md` 에 있다** — state.local.md 로드 시 §2.4 스키마의
@@ -498,8 +496,10 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/finishing.md
 바로 그것이므로, 조건은 「구조가 없는가」가 아니라 「**부재 키가 있는가**」다(spec §2.4).
 
 ```
-Read references/state-migration.md
+Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/state-migration.md
 ```
+
+그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
 ## kill switch
 

@@ -59,7 +59,7 @@ done
 # 이중 종료 — finishing.md 의 종료 driver
 grep -qF '마지막 포화 판정이 «포화»' "$FIN" && ok "B5: finishing 종료 driver 가 포화 판정을 요구" || no "B5: finishing 종료 driver 에 포화 판정 부재"
 # 부재 — 금지 토큰이 새 표면에 없다
-for tok in '판정자 조건' '판정자 투입' '다시 묻지 않는다' 'probe_count' 'web_budget' 'interview_round'; do
+for tok in '판정자 조건' '판정자 투입' '다시 묻지 않는다' 'probe''_count' 'web''_budget' 'interview''_round'; do  # 잔재 락(test_probe_sweep_residue.sh)이 이 파일을 스캔하므로 토큰을 둘로 쪼갠다
   grep -qF -- "$tok" "$SAT" && no "부재: saturation.md 에 «${tok}»" || ok "부재: saturation.md 에 «${tok}» 없음"
 done
 grep -qE '최대 [0-9]+회|[0-9]+회까지' "$SAT" && no "부재: saturation.md 에 숫자 횟수 상한 표현" || ok "부재: 숫자 횟수 상한 표현 없음"
