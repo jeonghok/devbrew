@@ -19,8 +19,8 @@ SB=""
 while [ $# -gt 0 ]; do case "$1" in --sandbox-helper) SB="$2"; shift 2;; *) shift;; esac; done
 [ -z "$SB" ] && SB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/audit-sandbox.sh"
 
-emit() { python3 -c "import json,sys; print(json.dumps({'own_tests': json.loads(sys.argv[1])}, ensure_ascii=False))" "$1"; }
-fact() { python3 -c "import json,sys; print(json.dumps({'ran':json.loads(sys.argv[1]),'passed':json.loads(sys.argv[2]),'total':json.loads(sys.argv[3]),'forced_downgrade':json.loads(sys.argv[4]),'why':(sys.argv[5] or None)}))" "$@"; }
+emit() { python3 -I -X utf8 -c "import json,sys; print(json.dumps({'own_tests': json.loads(sys.argv[1])}, ensure_ascii=False))" "$1"; }
+fact() { python3 -I -X utf8 -c "import json,sys; print(json.dumps({'ran':json.loads(sys.argv[1]),'passed':json.loads(sys.argv[2]),'total':json.loads(sys.argv[3]),'forced_downgrade':json.loads(sys.argv[4]),'why':(sys.argv[5] or None)}))" "$@"; }
 
 if [ ! -f "$SB" ]; then
   emit "$(fact false null null false 'audit-sandbox.sh 부재 — 자체 테스트 실행 skip (축③은 테스트 읽어 판정)')"; exit 0

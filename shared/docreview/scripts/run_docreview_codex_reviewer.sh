@@ -108,7 +108,7 @@ STDERR_FILE="$SCRATCH/codex.stderr"
 # `DOCREVIEW_CODEX_PARSED_OUT=<경로>` 가 있으면 빌더가 읽은 frontmatter 값(`_read` 경로 → 값)을
 # 그 경로에 JSON 으로 남긴다 — 게이트와의 등식 대조(test_docreview_codex.sh)가 쓰는 관측 채널.
 BUILD_RC=0
-python3 - "$PROFILE" "$DOC" "$PLUGIN_ROOT/scripts/prompt-preamble.md" "$WEB_META_FILE" \
+python3 -I -X utf8 - "$PROFILE" "$DOC" "$PLUGIN_ROOT/scripts/prompt-preamble.md" "$WEB_META_FILE" \
        > "$PROMPT_FILE" <<'PY' || BUILD_RC=$?
 import json, os, pathlib, re, sys
 

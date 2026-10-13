@@ -3,6 +3,16 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [13.0.2] — 2026-10-11
+
+### Security
+- 격리한 인라인 python 은 `-X utf8` 도 함께 붙인다 — `-I` 는 PYTHONIOENCODING 을 무시해, UTF-8 이 아닌 로케일에서 한국어를 찍다 죽는다(e2e compare 는 그 죽음이 rc 1=changed 로 새어 조작된 걷기가 pass 로 갈 수 있었다 — 예상 못 한 예외는 이제 4).
+- 리뷰 대상 리포를 현재 디렉토리로 두고 부르는 인라인 python(`python3 -c` · `python3 -`)을 전부 `-I` 로 격리한다 — `setup-qg.sh`(세션 마커 읽기) · `discover-spec.sh`(의도 찾기) · `e2e-state.sh`(지문 · 비교 · 판정안 · 포트 확인 · 부팅) · `publish-comment.sh`(길이 재기) · 링크로 실리는 공유 docreview codex 러너. 전에는 그 리포에 `json.py` · `uuid.py` · `hashlib.py` 같은 파일이 있으면 `/qg` 를 시작하는 것만으로 표준 모듈 대신 실행됐고, 차등 테스트 kill switch 로도 막히지 않았다(13.0.0 실사용 리뷰가 찾았다).
+- e2e 걷기 앞 지문이 마지막 줄에 `sha256: <값>` 을 내고, 걷기 뒤 `compare --before-sha256 <값>` 이 그 값과 before 지문 파일을 대조한다. 띄운 앱이 걷는 사이 리포 안의 before 지문을 고쳐 써서 코드 변경을 감추면 `changed: before 지문 파일(…)` 로 드러나 판정안이 `무효(코드 변경)` 가 된다. SKILL 의 E1 · E3 펜스가 그 값을 넘긴다.
+
+### Fixed
+- `/qg` 명령 문서의 질문 자리 목록에서 지워진 차등 「갭 게이트」를 빼고, 실제로 묻는 자리(막는 지적 · 차등 결함이 남았을 때 · 최대 반복 · e2e 질문과 걷기 직후 게이트 · Retry 수정 실패)를 적는다.
+
 ## [13.0.1] — 2026-10-11
 
 ### Fixed

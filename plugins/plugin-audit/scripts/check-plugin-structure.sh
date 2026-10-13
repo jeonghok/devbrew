@@ -9,8 +9,8 @@ PDEV_ROOT=""
 while [ $# -gt 0 ]; do case "$1" in --plugin-dev-root) PDEV_ROOT="$2"; shift 2;; *) shift;; esac; done
 
 facts='[]'; degraded='[]'
-add_fact() { facts=$(python3 -c "import json,sys; a=json.loads(sys.argv[1]); a.append(json.loads(sys.argv[2])); print(json.dumps(a))" "$facts" "$1"); }
-add_degr() { degraded=$(python3 -c "import json,sys; a=json.loads(sys.argv[1]); a.append(sys.argv[2]); print(json.dumps(a))" "$degraded" "$1"); }
+add_fact() { facts=$(python3 -I -X utf8 -c "import json,sys; a=json.loads(sys.argv[1]); a.append(json.loads(sys.argv[2])); print(json.dumps(a))" "$facts" "$1"); }
+add_degr() { degraded=$(python3 -I -X utf8 -c "import json,sys; a=json.loads(sys.argv[1]); a.append(sys.argv[2]); print(json.dumps(a))" "$degraded" "$1"); }
 
 # 검증기 경로 해석: --plugin-dev-root 우선, 없으면 캐시 glob (unversioned → 파일 존재로 탐지)
 resolve() {  # $1 = script basename
@@ -24,7 +24,7 @@ resolve() {  # $1 = script basename
 VA=$(resolve validate-agent.sh); VH=$(resolve validate-hook-schema.sh); HL=$(resolve hook-linter.sh)
 if [ -z "$VA$VH$HL" ]; then
   add_degr "⚠ plugin-dev 미설치 — 심층 구조 검사 생략 (core는 F가 커버)"
-  python3 -c "import json,sys; print(json.dumps({'structure_facts': json.loads(sys.argv[1]), 'degraded': json.loads(sys.argv[2])}, ensure_ascii=False))" "$facts" "$degraded"
+  python3 -I -X utf8 -c "import json,sys; print(json.dumps({'structure_facts': json.loads(sys.argv[1]), 'degraded': json.loads(sys.argv[2])}, ensure_ascii=False))" "$facts" "$degraded"
   exit 0
 fi
 
@@ -34,7 +34,7 @@ fi
 if [ -n "$HL" ] && compgen -G "$TARGET/hooks/*.sh" >/dev/null 2>&1; then
   out=$(bash "$HL" "$TARGET"/hooks/*.sh 2>&1); rc=$?
   if [ $rc -le 1 ]; then
-    add_fact "$(python3 -c "import json,sys; print(json.dumps({'validator':'hook-linter.sh','target':sys.argv[1],'fact':sys.argv[2][:400],'verifier_ok':True}))" "$TARGET" "$out")"
+    add_fact "$(python3 -I -X utf8 -c "import json,sys; print(json.dumps({'validator':'hook-linter.sh','target':sys.argv[1],'fact':sys.argv[2][:400],'verifier_ok':True}))" "$TARGET" "$out")"
   else
     add_degr "hook-linter.sh 스퓨리어스 exit $rc — 사실 생략 (C14)"
   fi
@@ -46,7 +46,7 @@ if [ -n "$VH" ] && [ -f "$TARGET/hooks/hooks.json" ]; then
   if [ $rc -eq 5 ] || echo "$out" | grep -q "Cannot index object with number"; then
     add_degr "validate-hook-schema.sh: devbrew {description,hooks} wrapper 비호환(exit 5) — 검증기 결함, 감사 발견 아님"
   elif [ $rc -le 1 ]; then
-    add_fact "$(python3 -c "import json,sys; print(json.dumps({'validator':'validate-hook-schema.sh','target':sys.argv[1],'fact':sys.argv[2][:400],'verifier_ok':True}))" "$TARGET/hooks/hooks.json" "$out")"
+    add_fact "$(python3 -I -X utf8 -c "import json,sys; print(json.dumps({'validator':'validate-hook-schema.sh','target':sys.argv[1],'fact':sys.argv[2][:400],'verifier_ok':True}))" "$TARGET/hooks/hooks.json" "$out")"
   else
     add_degr "validate-hook-schema.sh 스퓨리어스 exit $rc — 사실 생략 (C14)"
   fi
@@ -83,7 +83,7 @@ if [ -n "$VA" ]; then
       fi
       # model 누락 단독: 규약 준수 — 아무것도 남기지 않는다
     elif [ -n "$real" ]; then
-      add_fact "$(python3 -c "import json,sys; print(json.dumps({'validator':'validate-agent.sh','target':sys.argv[1],'fact':sys.argv[2][:400],'verifier_ok':True}))" "$a" "$real")"
+      add_fact "$(python3 -I -X utf8 -c "import json,sys; print(json.dumps({'validator':'validate-agent.sh','target':sys.argv[1],'fact':sys.argv[2][:400],'verifier_ok':True}))" "$a" "$real")"
     fi
   done
   if [ "$modelless_crash" -gt 0 ]; then
@@ -96,5 +96,5 @@ if [ -z "$(resolve quick_validate.py)" ]; then
   add_degr "quick_validate.py 부재 — skill frontmatter 심층 검증 생략 (F가 cost_class 커버)"
 fi
 
-python3 -c "import json,sys; print(json.dumps({'structure_facts': json.loads(sys.argv[1]), 'degraded': json.loads(sys.argv[2])}, ensure_ascii=False))" "$facts" "$degraded"
+python3 -I -X utf8 -c "import json,sys; print(json.dumps({'structure_facts': json.loads(sys.argv[1]), 'degraded': json.loads(sys.argv[2])}, ensure_ascii=False))" "$facts" "$degraded"
 exit 0

@@ -32,7 +32,7 @@ new_repo() {   # stdout = 일회용 리포 경로(커밋 하나 · 추적 파일
 }
 
 fp() { (cd "$1" && bash "$ES" fingerprint --out "$2" >/dev/null); }
-cmp_out() { (cd "$1" && bash "$ES" compare "$2" "$3"); }
+cmp_out() { local d="$1"; shift; (cd "$d" && bash "$ES" compare "$@"); }
 
 # ── X2 · AC17 — 지문은 HEAD · 추적 파일 · 무시되지 않는 untracked 를 본다 ─────────────
 case_X2_AC17_unchanged_is_same() {
@@ -355,6 +355,51 @@ case_X5_AC20_kill_switch_refuses_boot() {
   done
 }
 
+# ── X2 — 걷는 사이 리포 안의 before 지문을 고쳐 써도 드러난다 ─────────────────────────
+case_X2_before_fingerprint_rewrite_is_caught() {
+  local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345"
+  local out want rc
+  out=$(cd "$d" && bash "$ES" fingerprint --out "$s/b")
+  want=$(printf '%s\n' "$out" | sed -n 's/^sha256: //p')
+  assert_eq "$(printf '%s\n' "$out" | tail -n 1)" "sha256: $(shasum -a 256 "$s/b" | cut -d' ' -f1)" "X2: fingerprint 의 마지막 줄이 지문 파일의 sha256"
+  # 양성 짝 — 손대지 않은 before 는 같은 값이라 same
+  printf 'changed\n' >>"$d/a.txt"; fp "$d" "$s/a"; git -C "$d" checkout -q -- a.txt; fp "$d" "$s/a"
+  rc=0; out=$(cmp_out "$d" --before-sha256 "$want" "$s/b" "$s/a") || rc=$?
+  assert_eq "$rc/$(printf '%s\n' "$out" | tail -n 1)" "0/same" "X2: before 가 그대로면 해시를 넘겨도 same"
+  # 걷는 사이 추적 파일을 고치고, before 를 그 상태로 다시 써서 감춘다
+  printf 'changed\n' >>"$d/a.txt"; fp "$d" "$s/b"; fp "$d" "$s/a"
+  rc=0; out=$(cmp_out "$d" "$s/b" "$s/a") || rc=$?
+  assert_eq "$rc" "0" "X2 전제: 해시 없이는 고쳐 쓴 before 가 same 으로 통과한다"
+  rc=0; out=$(cmp_out "$d" --before-sha256 "$want" "$s/b" "$s/a") || rc=$?
+  assert_eq "$rc/$(printf '%s\n' "$out" | tail -n 1)" "1/changed: 1" "X2: 해시를 넘기면 고쳐 쓴 before 가 changed 로 드러난다"
+  assert_contains "$out" "changed: before 지문 파일" "X2: 무엇이 바뀌었는지 밝힌다"
+  rc=0; (cd "$d" && bash "$ES" compare --before-sha256 NOTHEX "$s/b" "$s/a" >/dev/null 2>&1) || rc=$?
+  assert_eq "$rc" "2" "X2: 형식 밖 해시는 exit 2"
+  # UTF-8 이 아닌 로케일 — 한국어 줄을 못 찍고 죽어 rc 1(=changed)인데 마지막 줄이 없으면 E3 가 판정안으로 흘린다
+  if locale -a 2>/dev/null | grep -qx 'en_US.ISO8859-15'; then
+    rc=0; out=$(cd "$d" && LC_ALL=en_US.ISO8859-15 LANG=en_US.ISO8859-15 bash "$ES" compare --before-sha256 "$want" "$s/b" "$s/a" 2>/dev/null) || rc=$?
+    assert_eq "$rc/$(printf '%s\n' "$out" | tail -n 1)" "1/changed: 1" "X2: UTF-8 아닌 로케일에서도 고쳐 쓴 before 가 changed 로 드러난다"
+  else
+    note "  (en_US.ISO8859-15 로케일이 없어 UTF-8 아닌 로케일 케이스를 건너뛴다)"
+  fi
+}
+
+# compare 본문에서 예상 못 한 예외가 나도 rc 1(=changed)로 새지 않는다 — 4 다
+case_X2_compare_unexpected_error_is_4_not_1() {
+  local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345" rc out
+  # 경로 칸이 JSON 이지만 해시할 수 없는 값(목록) — load() 가 잡지 않는 TypeError 로 excepthook 까지 간다
+  fp "$d" "$s/a"; printf 'e2e-fingerprint v1\nhead abc\ntracked d1 [1]\n' > "$s/b"
+  rc=0; out=$(cd "$d" && bash "$ES" compare "$s/b" "$s/a" 2>/dev/null) || rc=$?
+  assert_eq "$rc" "4" "X2: compare 의 예상 못 한 예외는 exit 4 — 1(changed)로 새지 않는다"
+  assert_not_contains "$out" "changed:" "X2: 죽은 compare 는 changed 줄을 내지 않는다"
+}
+
+case_X2_compare_read_failure_is_4() {
+  local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345" rc
+  fp "$d" "$s/b"; mkdir -p "$s/a"   # after 자리가 디렉토리 — 읽기에서 IsADirectoryError(load 가 잡는다)
+  rc=0; (cd "$d" && bash "$ES" compare "$s/b" "$s/a" >/dev/null 2>&1) || rc=$?
+  assert_eq "$rc" "4" "X2: 판독 실패는 exit 4"
+}
 
 for c in $(declare -F | awk '{print $3}' | grep '^case_'); do
   note "── $c"

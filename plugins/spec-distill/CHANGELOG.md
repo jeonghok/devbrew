@@ -20,6 +20,13 @@
 ### Removed
 - C44 Dialectic Rhythm Guard · `non_user_streak` · `open_decisions[].touched` · `DEVBREW_SPEC_DISTILL_RHYTHM_GUARD_THRESHOLD`(kill switch 가 아니라 임계 조정이다). coverage-mapper · blind-spot-prober 의 재호출 자격 · 예산과 그 카운터 `coverage_mapper_dispatches` · `blind_spot_dispatches`. 의례 R1 「Problem Reframe」과 닫힘 발화 「재구성 동의 S」. 사용자가 결정한 재건(2026-10-12)이라 deprecation 창을 두지 않는다.
 
+## [5.4.1] — 2026-10-12
+
+### Security
+- 격리한 인라인 python 은 `-X utf8` 도 함께 붙인다 — `-I` 가 PYTHONIOENCODING 을 무시하기 때문이다.
+- skill 펜스의 인라인 python(`python3 -c`)을 `-I` 로 격리한다 — `request-framing`(라운드 · 편집 범위 · drop 대조) · `reviewing-brief`(웹 허용 읽기) · `spec-review`(진입 검사 출력 검사), 그리고 이 플러그인에 링크로 실리는 공유 docreview codex 러너. 전에는 사용자 리포에 `json.py` 가 있으면 표준 모듈 대신 실행됐다.
+- `spec-interview` 가 state 를 고칠 때 쓰라고 시키는 펜스 안 주석(본문 · `references/finishing.md`)도 `python3 -I -X utf8 -c` / `python3 -I -X utf8 -` heredoc 으로 바꿨다.
+
 ## [5.4.0] — 2026-10-12
 
 ### Changed

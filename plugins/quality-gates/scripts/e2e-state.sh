@@ -2,12 +2,17 @@
 # e2e-state.sh — e2e 걷기의 결정론 부품.
 #
 #   fingerprint --out <file>        코드 상태 지문(HEAD · 추적 파일 변경 · 무시되지 않는 untracked)
-#   compare <before> <after>        두 지문의 차이 — `changed: <path>` 줄들 + 마지막 줄 `same` | `changed: <N>`
+#   fingerprint 는 마지막 줄에 `sha256: <지문 파일의 해시>` 를 낸다 — 부른 쪽이 그 값을 리포 밖(대화)에 들고 있다가
+#   compare 에 넘기면, 걷는 사이 리포 안의 before 지문을 고쳐 쓴 것이 드러난다.
+#   compare [--before-sha256 <hex>] <before> <after>
+#                                   두 지문의 차이 — `changed: <path>` 줄들 + 마지막 줄 `same` | `changed: <N>`.
+#                                   before 의 해시가 주어진 값과 다르면 그것도 바뀐 것 하나로 센다
 #   boot --dir <dir> --cmd <command> (--ready-port <port> | --ready-log <ERE>) [--timeout <sec>]
 #                                   승인된 명령을 새 프로세스 그룹으로 띄우고 준비 신호를 기다린다
 #   stop --dir <dir>                boot 가 띄운 프로세스 그룹을 내린다(여러 번 불러도 같다)
 #   propose <evidence.tsv>          증거표 → 판정안(`proposal: pass|fail|미확인`)
 #
+# 한국어를 찍는 python 은 `-X utf8` 로 부른다 — `-I` 가 PYTHONIOENCODING 을 무시해 UTF-8 아닌 로케일에서 죽는다.
 # exit: 0 성공(compare 는 same) · 1 compare changed · 2 잘못된 호출 · 3 kill switch ·
 #       4 측정·판독 실패 또는 부팅 실패 · 5 정지 후에도 프로세스가 남음
 #
@@ -23,7 +28,7 @@ die() { echo "e2e-state: $*" >&2; exit 2; }
 lstart_of() { LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null | tr -s ' ' | sed 's/^ //; s/ $//'; }
 
 port_open() {
-  python3 -c 'import socket, sys
+  python3 -I -X utf8 -c 'import socket, sys
 s = socket.socket(); s.settimeout(0.5)
 sys.exit(0 if s.connect_ex(("127.0.0.1", int(sys.argv[1]))) == 0 else 1)' "$1"
 }
@@ -49,7 +54,7 @@ cmd_fingerprint() {
   done
   [ -n "$out" ] || die "usage: e2e-state.sh fingerprint --out <file>"
   killed_by_switch && exit 3
-  GIT_OPTIONAL_LOCKS=0 PYTHONDONTWRITEBYTECODE=1 python3 - "$out" <<'PY'
+  GIT_OPTIONAL_LOCKS=0 python3 -I -X utf8 - "$out" <<'PY'
 import hashlib, json, os, stat, subprocess, sys
 
 out = sys.argv[1]
@@ -108,21 +113,32 @@ lines = ["e2e-fingerprint v1", f"head {head}"]
 lines += [f"tracked {digest(p)} {name(p)}" for p in sorted(tracked)]
 lines += [f"untracked {digest(p)} {name(p)}" for p in sorted(untracked)]
 tmp = out + ".tmp"
+data = ("\n".join(lines) + "\n").encode("utf-8")
 try:
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines) + "\n")
+    with open(tmp, "wb") as fh:
+        fh.write(data)
     os.replace(tmp, out)
 except OSError as exc:
     fail(f"지문을 쓰지 못했다: {out} ({exc})")
 print(f"fingerprint: {out} (head {head[:7]} · tracked {len(tracked)} · untracked {len(untracked)})")
+print(f"sha256: {hashlib.sha256(data).hexdigest()}")   # 쓴 바이트의 해시 — 다시 열어 재면 그 사이 바뀐 것을 잰다
 PY
 }
 
 cmd_compare() {
-  [ $# -eq 2 ] || die "usage: e2e-state.sh compare <before> <after>"
+  local want=""
+  if [ "${1:-}" = "--before-sha256" ]; then
+    [ $# -ge 2 ] || die "--before-sha256 값이 없다"
+    want="$2"; shift 2
+    printf '%s' "$want" | grep -Eq '^[0-9a-f]{64}$' || die "--before-sha256 은 소문자 16진 64자다: '$want'"
+  fi
+  [ $# -eq 2 ] || die "usage: e2e-state.sh compare [--before-sha256 <hex>] <before> <after>"
   killed_by_switch && exit 3
-  PYTHONDONTWRITEBYTECODE=1 python3 - "$1" "$2" <<'PY'
-import json, sys
+  python3 -I -X utf8 - "$1" "$2" "$want" <<'PY'
+import hashlib, json, os, sys, traceback
+
+# 잡히지 않은 예외는 4 다 — 1 은 changed 라서, 죽은 비교가 「바뀌었다」나 판정안으로 새면 안 된다.
+sys.excepthook = lambda t, v, tb: (traceback.print_exception(t, v, tb), os._exit(4))
 
 
 def fail(msg):
@@ -131,9 +147,11 @@ def fail(msg):
 
 
 def load(path):
+    """지문 한 번 읽기 — 해시와 파싱이 같은 바이트를 본다(두 번 열면 그 사이에 바뀔 수 있다)."""
     try:
-        with open(path, encoding="utf-8") as fh:
-            rows = fh.read().splitlines()
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        rows = raw.decode("utf-8").splitlines()
     except (OSError, UnicodeDecodeError) as exc:
         fail(f"지문을 읽지 못했다: {path} ({exc})")
     if not rows or rows[0] != "e2e-fingerprint v1":
@@ -155,12 +173,15 @@ def load(path):
         entries[key] = (parts[0], parts[1])
     if not head:
         fail(f"head 줄이 없다: {path}")
-    return head, entries
+    return head, entries, hashlib.sha256(raw).hexdigest()
 
 
-bh, be = load(sys.argv[1])
-ah, ae = load(sys.argv[2])
+bh, be, bsum = load(sys.argv[1])
+ah, ae, _ = load(sys.argv[2])
 changed = []
+if sys.argv[3]:
+    if bsum != sys.argv[3]:
+        changed.append("before 지문 파일(fingerprint 가 낸 sha256 과 다르다 — 걷는 사이 고쳐 쓰였다)")
 if bh != ah:
     changed.append(f"HEAD ({bh[:7]} -> {ah[:7]})")
 for key in sorted(set(be) | set(ae)):
@@ -211,7 +232,7 @@ cmd_boot() {
   # 전부 떼어야 호출한 셸이 앱의 종료를 기다리지 않는다.
   : >"$log"
   trap 'cmd_stop --dir "$dir" >/dev/null 2>&1; echo "boot-failed: interrupted"; exit 4' INT TERM HUP
-  python3 -c 'import os, sys
+  python3 -I -X utf8 -c 'import os, sys
 os.setsid()
 fd = os.open(os.devnull, os.O_RDONLY)
 os.dup2(fd, 0)
@@ -281,7 +302,7 @@ cmd_stop() {
 
 cmd_propose() {
   [ $# -eq 1 ] || die "usage: e2e-state.sh propose <evidence.tsv>"
-  PYTHONDONTWRITEBYTECODE=1 python3 - "$1" <<'PY'
+  python3 -I -X utf8 - "$1" <<'PY'
 import sys
 
 JUDGED = ("충족", "불충족", "미확인")
