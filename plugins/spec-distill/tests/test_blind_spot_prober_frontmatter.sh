@@ -74,9 +74,14 @@ grep -qiF -- 'once per' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «once p
 grep -qiF -- 'fan-out 1' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «fan-out 1» 잔존" || ok "AC22: «fan-out 1» 없음"
 grep -qiF -- '인터뷰당 1회' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «인터뷰당 1회» 잔존" || ok "AC22: «인터뷰당 1회» 없음"
 grep -qiF -- '재dispatch 금지' <<<"$AGENT_FLAT" && no "AC22: 옛 상한 문구 «재dispatch 금지» 잔존" || ok "AC22: «재dispatch 금지» 없음"
-grep -qF -- 'eligibility is' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
-grep -qF -- 'whether an open decision still touches that dimension' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
-grep -qF -- '1 plus that dimension'\''s reopen count' <<<"$AGENT_FLAT" && ok "AC22(양의 짝): 자격+예산 서술 실재" || no "AC22: 자격+예산 서술 부재 — 부재 락이 공허해진다"
+# R1(2026-10-12): 자격 · 예산을 걷었다. 부재(영어 · 한국어 · 비사용 항목) + 양의 짝(새 부르기 서술).
+for tok in 'eligibility' 'reopen count' '자격 + 예산' '자격 없음' '예산 고갈'; do
+  grep -qiF -- "$tok" <<<"$AGENT_FLAT" && no "R1/B: 옛 자격·예산 «${tok}» 잔존" || ok "R1/B: «${tok}» 없음"
+done
+grep -qF -- 'whenever new framing, a reopen or a saturation gap could change an open decision' <<<"$AGENT_FLAT" \
+  && ok "R1/B(양의 짝): description 이 새 부르기 기준을 말한다" || no "R1/B(양의 짝): 새 부르기 서술 부재"
+grep -qF -- 'blind_spot 첫 전이 때 1회는 필수다' <<<"$AGENT_FLAT" \
+  && ok "R1/B(양의 짝): 첫 전이 필수(하한) 문구" || no "R1/B(양의 짝): 첫 전이 필수 문구 부재"
 # 웹 근거도 계약 모양이다(스펙 §B — prober 의 출력 의무는 coverage-mapper 와 같다). URL 문자열 목록이면
 # `decides` 가 없어 웹 premortem 이 결정 연결을 영영 못 댄다. 합계로 세면 한 블록의 추가가 다른 블록의
 # 소실을 갚으므로 **블록마다** 본다: 출력 펜스에서 hidden_assumptions: / failure_modes: 블록을 잘라 각각

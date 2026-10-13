@@ -496,6 +496,7 @@ sed -i.bak 's|^payload:.*|payload: tpl.md|' "$TMPD/tpl.audit.md"
 # 「출하 쌍이 자기 게이트를 통과한다」는 이 락의 본래 축은 **채운 합성 사본**에 대해 잰다.
 # (`audit_file`·`payload` 를 이미 같은 이유로 여기서 치환하고 있다 — 새 관례가 아니다.)
 sed -i.bak 's|coverage-mapper <k>|coverage-mapper 2|' "$TMPD/tpl.audit.md"
+sed -i.bak 's|^- 포화 판정 <k>: .*$|- 포화 판정 1: 포화 — 최근 두 조사 새로움 없음|' "$TMPD/tpl.audit.md"
 rm -f "$TMPD/tpl.md.bak" "$TMPD/tpl.audit.md.bak"
 # 양성 대조 — 치환이 조용히 안 먹으면 아래 rc 단언은 「미기입 템플릿」을 재는 것이 되어
 # 뒤집힌 사실을 말한다. 데이터 불릿에 숫자가 실제로 들어갔는지 «먼저» 확인한다.
@@ -2338,4 +2339,117 @@ print("YES" if ok else "NO")' 2>/dev/null)"
 { [[ "$V2RC" -eq 0 ]] && [[ "$v2opt_check" == "YES" ]]; } \
   && ok "V2-옵트인 격리: contract 없는 brief 는 다섯 술어가 전부 깨져도 green (v1 공시만)" \
   || no "V2-옵트인 격리: rc=$V2RC · 검사=$v2opt_check — 계약 없는 payload 에서 새 술어가 발동했다 (failures 비었는지·v1 advisory 있는지 확인)"
+# --- R1(2026-10-12) 설계 §5: audit §2 의 «마지막» 포화 판정 줄 (saturation_failures) ---
+# 정상 쌍에서 포화 줄을 전부 지우고, 둘째 인자의 줄(들)을 mapper 데이터 줄 바로 뒤에 넣는다.
+sat_case() {  # $1 = stem, $2 = 넣을 줄(개행으로 여럿 · 빈 값이면 넣지 않는다)
+  ac3_pair "$1"
+  python3 -I - "$TMPD/$1.audit.md" "$2" <<'PY'
+import re, sys
+p, ins = sys.argv[1], sys.argv[2]
+t = open(p, encoding="utf-8").read()
+t = re.sub(r"^[-*] (포화 판정 \d+:|사용자 종료\(@S\d+\)).*\n", "", t, flags=re.M)
+if ins:
+    t = re.sub(r"^([-*] agent dispatch: coverage-mapper .*\n)",
+               lambda m: m.group(1) + ins + "\n", t, count=1, flags=re.M)
+open(p, "w", encoding="utf-8").write(t)
+PY
+}
+sat_pass_case() {  # $1 stem, $2 줄, $3 라벨
+  sat_case "$1" "$2"; out="$(ac3_gate "$1")"; rc=$?
+  { [[ $rc -eq 0 ]] && ! grep -q 'saturation:' <<<"$out"; } \
+    && ok "R1/§5: $3 → 통과" || { no "R1/§5: $3 가 red"; printf '    %s\n' "$out"; }
+}
+sat_fail_case() {  # $1 stem, $2 줄, $3 기대 사유 리터럴, $4 라벨
+  sat_case "$1" "$2"; out="$(ac3_gate "$1")"; rc=$?
+  { [[ $rc -ne 0 ]] && grep -qF "$3" <<<"$out"; } \
+    && ok "R1/§5: $4 → red «$3»" || { no "R1/§5: $4 가 통과했거나 사유가 다르다"; printf '    %s\n' "$out"; }
+}
+# 양성 대조 — 스윕이 정상 쌍에 통과 줄을 넣었고, sat_case 가 그것을 지운다.
+grep -qE '^- 포화 판정 1: 포화 — ' "$FX/interview-brief-valid.audit.md" \
+  && ok "R1/§5(양성대조): 정상 fixture 에 포화 통과 줄이 있다" || no "R1/§5(양성대조): 정상 fixture 에 포화 줄이 없다 — 스윕 누락"
+sat_case s_ctl ""
+grep -qE '포화 판정|사용자 종료\(@S' "$TMPD/s_ctl.audit.md" \
+  && no "R1/§5(양성대조): sat_case 가 포화 줄을 못 지웠다 — 아래 «줄 없음» 단언이 공허하다" \
+  || ok "R1/§5(양성대조): sat_case 가 포화 줄을 지운다"
+# 통과 셋
+sat_pass_case s_pass '- 포화 판정 2: 포화 — 최근 두 조사 모두 결정을 바꾸지도 열지도 않았다' '판정자 포화'
+sat_case s_user '- 포화 판정 2: 사용자 판단 포화(@S2) — 반복 빈 곳'
+out="$(ac3_gate s_user)"; rc=$?
+{ [[ $rc -eq 0 ]] && grep -q '"advisories": \[.*사용자 판단 포화' <<<"$out"; } \
+  && ok "R1/§5: 사용자 판단 포화(@S2) → advisory 통과, advisories 채널에 실림" \
+  || { no "R1/§5: 사용자 판단 포화가 red 이거나 advisory 가 비었다"; printf '    %s\n' "$out"; }
+sat_pass_case s_stop '- 사용자 종료(@S2) — 포화 판정 전' '사용자 종료 — 포화 판정 전'
+sat_pass_case s_stop2 $'- 포화 판정 1: 아직 — 빈 곳 2개\n- 사용자 종료(@S2) — 마지막 판정 아직' '아직 뒤 사용자 종료'
+# 실패 넷
+sat_fail_case s_none '' '포화 판정 줄 없음' '포화 판정 줄 없음'
+sat_fail_case s_notyet '- 포화 판정 1: 아직 — 빈 곳 2개' '마지막 포화 판정이 «아직»' '마지막이 아직'
+sat_fail_case s_cont '- 포화 판정 1: 판정 불가(Agent 도구 부재) — 조사 계속(@S2)' '조사 계속' '판정 불가 뒤 조사 계속'
+sat_fail_case s_bad '- 포화 판정 1: 대충 끝났다' '형식 밖' '형식 밖'
+# 순서 · 앵커 · 반복 재조사 · 불릿 어휘
+sat_fail_case s_order $'- 포화 판정 1: 포화 — 최근 두 조사 새로움 없음\n- 포화 판정 2: 아직 — 빈 곳 1개' '마지막 포화 판정이 «아직»' '포화 뒤 아직(마지막이 이긴다)'
+sat_pass_case s_order2 $'- 포화 판정 1: 아직 — 빈 곳 1개\n- 포화 판정 2: 포화 — 최근 두 조사 새로움 없음' '아직 뒤 포화'
+sat_pass_case s_contok $'- 포화 판정 1: 판정 불가(출력 깨짐) — 조사 계속(@S2)\n- 포화 판정 2: 포화 — 최근 두 조사 새로움 없음' '조사 계속 뒤 포화'
+sat_fail_case s_redo '- 포화 판정 3: 아직 — 반복 빈 곳 재조사(@S2)' '마지막 포화 판정이 «아직»' '반복 빈 곳 재조사가 마지막'
+sat_fail_case s_anchor '- 사용자 종료(@S99) — 포화 판정 전' 'S99' '사용자 종료의 S 앵커 부재'
+sat_fail_case s_uanchor '- 포화 판정 2: 사용자 판단 포화(@S98) — 판정 불가(출력 깨짐)' 'S98' '사용자 판단 포화의 S 앵커 부재'
+sat_pass_case s_star '* 포화 판정 2: 포화 — 최근 두 조사 새로움 없음' '«*» 불릿 포화 줄'
+# 실패 문구가 mapper 단언(m_star 의 «출력에 coverage-mapper 없음»)을 오염하지 않는다.
+sat_case s_noise ''
+out="$(ac3_gate s_noise)"
+grep -q 'coverage-mapper' <<<"$out" \
+  && no "R1/§5: 포화 실패 문구에 coverage-mapper 가 섞였다" || ok "R1/§5: 포화 실패 문구에 coverage-mapper 없음"
+# --- R1 최종 리뷰 M1: §2 의 포화 · 상한 · 조사 호출 줄은 mapper 줄을 대신하지 못한다 ---
+# 정상 쌍에서 포화 줄을 지우고 mapper 데이터 줄을 둘째 인자의 줄(들)로 바꾼다 — mapper 줄은 사라진다.
+mapper_swap() {  # $1 = stem, $2 = mapper 줄 자리에 넣을 줄(개행으로 여럿)
+  ac3_pair "$1"
+  python3 -I - "$TMPD/$1.audit.md" "$2" <<'PY'
+import re, sys
+p, ins = sys.argv[1], sys.argv[2]
+t = open(p, encoding="utf-8").read()
+t = re.sub(r"^[-*] (포화 판정 \d+:|사용자 종료\(@S\d+\)).*\n", "", t, flags=re.M)
+t, n = re.subn(r"^[-*] agent dispatch: coverage-mapper .*\n", lambda m: ins + "\n", t, count=1, flags=re.M)
+if n != 1:
+    sys.exit("mapper_swap: mapper 데이터 줄을 못 찾았다")
+open(p, "w", encoding="utf-8").write(t)
+PY
+}
+SATOK='- 포화 판정 1: 포화 — 최근 두 조사 새로움 없음'
+for spec in "m1_sat|- 포화 판정 1: 포화 — coverage-mapper 2 출력이 결정을 바꾸지 않았다|포화 판정 근거" \
+            "m1_cap|- 상한 도달 20/20 — 사용자 선택 S2: 연장 (coverage-mapper 3 포함)"$'\n'"${SATOK}|상한 도달" \
+            "m1_jcap|- 판정 상한 도달 5/5 — 사용자 선택 S2: 연장 (coverage-mapper 3 포함)"$'\n'"${SATOK}|판정 상한 도달" \
+            "m1_calls|- 조사 호출 12/20 (장치별: coverage-mapper 2 · 맹점 1)"$'\n'"${SATOK}|조사 호출"; do
+  stem="${spec%%|*}"; rest="${spec#*|}"; lines="${rest%|*}"; label="${rest##*|}"
+  mapper_swap "$stem" "$lines"
+  # 양성 대조 — coverage-mapper 글자는 바꿔 넣은 줄에만 있고 mapper 데이터 줄은 없다.
+  { [[ "$(grep -c 'coverage-mapper [0-9]' "$TMPD/$stem.audit.md")" == "1" ]] \
+    && ! grep -q '^[-*] agent dispatch: coverage-mapper' "$TMPD/$stem.audit.md"; } \
+    && ok "M1(양성대조): ${label} 줄만 coverage-mapper 를 담는다" || no "M1(양성대조): ${label} 변형이 적용되지 않았다 — 아래 단언이 공허하다"
+  out="$(ac3_gate "$stem")"; rc=$?
+  { [[ $rc -ne 0 ]] && grep -qF 'coverage-mapper <k> line missing' <<<"$out"; } \
+    && ok "M1: mapper 줄 부재 + ${label} 줄의 coverage-mapper → red «line missing»" \
+    || { no "M1: ${label} 줄이 mapper 줄을 대신했다"; printf '    %s\n' "$out"; }
+done
+# --- R1 최종 리뷰 M5(설계 §4): 조사 호출 줄의 위치가 판정을 바꾸지 않는다 ---
+# 조사 호출 줄을 mapper 줄 «앞»에, 상한 도달 줄을 그 사이에 둔다. 두 검사 모두 통과해야 한다.
+ac3_pair m5_order
+python3 -I - "$TMPD/m5_order.audit.md" <<'PY'
+import re, sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+pre = ("- 조사 호출 12/20 (장치별: 커버리지 2 · 맹점 1 · 반론 1 · 레포 조사 8 · 본체 직접 3)\n"
+       "- 상한 도달 20/20 — 사용자 선택 S2: 연장\n")
+t, n = re.subn(r"^(- agent dispatch: coverage-mapper .*\n)", lambda m: pre + m.group(1), t, count=1, flags=re.M)
+if n != 1:
+    sys.exit("m5_order: mapper 데이터 줄을 못 찾았다")
+open(p, "w", encoding="utf-8").write(t)
+PY
+m5_sec="$(awk '/^## 2\./{f=1;next} /^## /{f=0} f&&/^- /' "$TMPD/m5_order.audit.md")"
+{ [[ "$(sed -n 1p <<<"$m5_sec")" == "- 조사 호출 "* ]] && [[ "$(sed -n 2p <<<"$m5_sec")" == "- 상한 도달 "* ]] \
+  && [[ "$(sed -n 3p <<<"$m5_sec")" == "- agent dispatch: coverage-mapper "* ]] && grep -q '^- 포화 판정 1: 포화 — ' <<<"$m5_sec"; } \
+  && ok "M5(양성대조): §2 첫 줄이 조사 호출 · 둘째가 상한 도달 · 셋째가 mapper 줄" \
+  || { no "M5(양성대조): 줄 순서 변형이 적용되지 않았다 — 아래 단언이 공허하다"; printf '    %s\n' "$m5_sec"; }
+out="$(ac3_gate m5_order)"; rc=$?
+{ [[ $rc -eq 0 ]] && ! grep -q 'coverage-mapper' <<<"$out" && ! grep -q '포화 판정' <<<"$out"; } \
+  && ok "M5: 조사 호출 줄이 mapper 줄 앞 · 상한 도달 줄이 사이 → mapper · 포화 검사 둘 다 통과" \
+  || { no "M5: 줄 위치가 판정을 바꿨다"; printf '    %s\n' "$out"; }
 finish

@@ -18,9 +18,9 @@ description: >
   the current problem framing — surfacing hidden assumptions and failure modes the
   interview turn is blind to (unknown-unknowns), grounded in web evidence.
   Independent adversary, read-only by design (Law 2 frontmatter scoping). Dispatched
-  on the blind_spot floor dimension's first open→in-progress transition; eligibility is
-  whether an open decision still touches that dimension, and the budget on top of it is
-  1 plus that dimension's reopen count.
+  on the blind_spot floor dimension's first open→in-progress transition (mandatory), and
+  again whenever new framing, a reopen or a saturation gap could change an open decision —
+  one shared research-call limit bounds the total.
   Output is recorded by spec-interview into the brief's Blind Spots & Premortem.
 
   <example>Context: The blind_spot floor dimension just opened for its first probe.
@@ -43,7 +43,7 @@ failure mode(unknown-unknown)를 웹 근거와 함께 표면화합니다. 당신
 
 ## Input
 
-- 현재 재구성된 문제정의(Reframed Problem) + 지금까지 사용자가 말한 제약의 요지.
+- 사용자 원문(S1 과 문제를 서술한 발화) + 확인한 사실 + 지금까지 사용자가 말한 제약의 요지.
 - (있으면) External Landscape 발췌.
 - `<claims_contract>` 조사 주장 계약의 **내용 전문**. 아래 출력의 주장이 이 계약을 따른다.
 - `<open_decisions>` 지금 열린 결정 목록(`OQ<n>` + 한 줄). `decides` 는 이 목록에 실제로 있는 것만
@@ -95,9 +95,8 @@ repo_claims:                   # 내부(레포) 주장 — <claims_contract> 계
    inline premortem으로 강등(C5) — 그 경우 codebase 근거는 `repo_claims[]` 로, 사용자 판단은 처분 S 로.
 3. **premortem, not steelman**: 대안을 옹호하지 않는다(그건 steelman-builder). 실패양식·숨은
    가정만 노출 — 단일 책임(R6 분리 근거).
-4. **자격 + 예산**: 다시 부를 자격은 그 차원에 닿는 열린 결정이 아직 있는가다 — 열린 결정이 0이면
-   자격이 없다. 자격을 채웠으면 예산은 `1 + 그 차원의 재개방 횟수` 이고, 통제는
-   spec-interview 가 한다.
+4. **부르기**: blind_spot 첫 전이 때 1회는 필수다. 그 뒤는 그 차원에 닿는 새 framing · 재개방 ·
+   포화 판정의 빈 곳이 있을 때 spec-interview 가 다시 부른다 — 총량은 조사 호출 상한 하나가 묶는다.
 5. **confidence < 0.4** 면 "표면화된 blind-spot 약함 — framing 견고"를 명시(억지 premortem 금지).
 6. **숨은 가정의 근거를 레포에서 댈 수 있으면 `repo_claims[]` 로 낸다.** `path`·`anchor` 없이
    내지 않고, 판정 전에 구현을 읽는다 — 인덱스·목차·description 필드만 읽고 판정하지 않는다.
@@ -106,4 +105,3 @@ repo_claims:                   # 내부(레포) 주장 — <claims_contract> 계
 ## 사용하지 않는 경우
 
 - trivia 요청(P12).
-- blind_spot floor 차원에 닿는 열린 결정이 0(자격 없음) 또는 예산 고갈.

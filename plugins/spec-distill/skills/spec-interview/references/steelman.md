@@ -10,7 +10,7 @@
 
 #### Step 1 — dispatch 재료 도출 (orchestrator)
 
-- **핵심 전제 P1..Pn** — R1 문제정의·goal 과 그때까지의 `user_statements` 에서 도출한다. 각 전제 뒤에
+- **핵심 전제 P1..Pn** — 사용자 원문·goal 과 그때까지의 `user_statements` 에서 도출한다. 각 전제 뒤에
   근거 S<N> 을 적고, 적을 수 없으면 「orchestrator 도출」로 표기한다. 개수 상한은 없다.
 - **goal** — goal 내용을 담은 사용자 발화 중 **가장 최근 것**의 원문(S<N> 인용). seed S1 의 goal 문장은
   후보 중 하나이고 더 늦은 발화가 goal 을 고쳤으면 그쪽이 이긴다. 후보가 없거나(확인 발화가 「맞아」류
@@ -35,7 +35,7 @@ else
 fi
 ```
 
-한 방향당 steelman 1회 — 새 근거 없으면 재steelman 금지(AP16).
+새 근거 또는 바뀐 전제가 있으면 같은 방향도 다시 부르고, 입력이 같으면 부르지 않는다 — 사용자가 받아들인 `premise_list_challenge` 도 바뀐 전제다. 횟수가 아니라 입력의 반복으로 멈춘다(AP16).
 
 두 슬롯은 `spec-interview/SKILL.md` 의 `## 조사 주장 계약` 펜스와 `orchestration.open_decisions[]`
 에서 온다. 계약 펜스의 rc 가 0 이 아니면 **dispatch 하지 않는다** — `fail-closed` 가 막는 것은 «그
@@ -77,7 +77,7 @@ dispatch» 이고 인터뷰가 아니다. 그때 공시는 loud advisory + 수�
   같은 문구를 남긴다. 봉쇄는 추천·라벨 층에 있고 선택지를 제한하지 않는다.
 - `premise_list_challenge` 가 빠진 전제나 틀린 전제를 지목하면 「막힌 결정」에 그대로 보이고, 사용자가 받아들이면
   전제 목록을 고쳐 audit §3 에 적는다. 목록 수정 자체는 재검토를 열지 않는다 — 고친 전제에 닿는 확인된 충돌이
-  있어야 연다. 같은 ST 안에서 재dispatch 는 하지 않는다.
+  있어야 연다. 고친 전제로 다시 부르는 것은 새 ST 다.
 
 #### Step 3 — 4-block 제시
 

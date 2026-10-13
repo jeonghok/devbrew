@@ -126,7 +126,7 @@ repo_claims:
    **다른 것을 가리키는 다른 필드**이고 서로 갈음하지 않습니다.
 6. `repo_claims[]` 는 `path` 와 `anchor` 없이 내지 않습니다. 줄번호는 보조입니다. `id: RC<n>` 는
    레포 주장에만 붙습니다.
-7. **한 방향당 1회**: 같은 방향에 대한 재호출은 새 근거가 있을 때만.
+7. **반복 감지**: 새 근거 또는 바뀐 전제가 있으면 같은 방향도 다시 부르고, 입력이 같으면 부르지 않는다 — 같은 입력을 받았다고 느끼면 `premise_list_challenge` 에 그 사실을 적는다.
 8. `recommendation: refined` 면 `refined_takes` 와 `refined_drops` 를 둘 다 채웁니다.
 9. `<constraints>` 가 이미 닫은 경로는 대안으로 내지 않습니다. 그 경로가 최선이라 판단하면
    `premise_list_challenge` 에 그 이유를 적습니다.

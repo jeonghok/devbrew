@@ -1,5 +1,25 @@
 # Changelog
 
+## [5.5.0] — 2026-10-12
+
+### Added
+- `agents/saturation-judge.md` — floor 다섯이 닫힌 뒤 조사 원문에서 새로움을 직접 매겨 포화를 판정하는 읽기 전용 판정자(`tools: Read, Grep, Glob`). 최근 조사 두 번이 결정을 바꾸지도 열지도 않았을 때만 「포화」다.
+- `agents/repo-researcher.md` — 레포 질문 하나를 조사 주장 계약 모양으로 답하는 읽기 전용 조사자. C43 경로 (a) 에서 본체 직접 확인 대신 부를 수 있다.
+- 조사 호출 상한 `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT`(기본 20) · 포화 판정 상한 `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT`(기본 5). 닿으면 사용자에게 연장 · 판정 · 종료를 묻는다. 첫 조사 전에 규모를 한 줄로 알린다(승인은 묻지 않는다).
+- `check_brief.py gate` 의 `saturation_failures` — audit §2 의 마지막 포화 판정 줄이 판정자 「포화」 · 사용자 종료 · 사용자 판단 포화(advisory)일 때만 통과한다.
+- `skills/spec-interview/references/saturation.md` — 상한 도달 · 포화 판정 · 반복 감지 · 판정 불가 · 판정 상한 · audit §2 줄.
+- 포화 판정마다 사용자에게 한 줄(`[spec-distill] 포화 판정 <k>/<saturation_limit>: …`)로 판정 · 빈 곳 수 · 다음에 볼 것 · 조사 호출 수를 보이고 «지금 이해»에도 싣는다. 게이트가 읽는 사건 줄(상한 도달 · 판정 상한 도달 · 포화 판정 · 사용자 종료)은 사건 순간 state 본문 `## audit §2 대기 줄` 에 쌓였다가 종료 때 audit §2 로 그대로 옮겨진다.
+
+### Changed
+- 조사 subagent 넷은 자격 · 예산 없이 결정에 닿을 수 있을 때마다 부른다. 첫 호출 필수 자리(coverage-mapper R1 전 · blind-spot-prober 첫 전이)는 하한으로 남는다.
+- 인터뷰 종료는 이중이다 — floor 다섯이 닫히고 포화 판정이 「포화」이거나 사용자가 끝낸다.
+- 의례 R1 은 「사용자 말 그대로」다 — root_problem 을 사용자 원문 인용으로 닫는다.
+- steelman 재호출은 횟수가 아니라 입력의 반복으로 멈춘다. 되묻기 상한 대신 「이 주제를 더 파기」 선택지를 둔다. landscape 시점 강제를 뺐다(≥1회 하한 유지). coverage-mapper 는 floor 가 닫혀도 부를 수 있고 낮은 confidence 가 neglect 신호를 끄지 않는다.
+- state `orchestration` — `research_dispatches` · `research_limit` · `saturation_limit` · `research_log` · `saturation_log`. 옛 카운터 값은 이월한다.
+
+### Removed
+- C44 Dialectic Rhythm Guard · `non_user_streak` · `open_decisions[].touched` · `DEVBREW_SPEC_DISTILL_RHYTHM_GUARD_THRESHOLD`(kill switch 가 아니라 임계 조정이다). coverage-mapper · blind-spot-prober 의 재호출 자격 · 예산과 그 카운터 `coverage_mapper_dispatches` · `blind_spot_dispatches`. 의례 R1 「Problem Reframe」과 닫힘 발화 「재구성 동의 S」. 사용자가 결정한 재건(2026-10-12)이라 deprecation 창을 두지 않는다.
+
 ## [5.4.1] — 2026-10-12
 
 ### Security
