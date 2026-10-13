@@ -112,7 +112,7 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 
 ### R2a — 공유 리뷰 엔진 · qg 파급 · persona 보안 리뷰
 - 의도: 공유 리뷰 엔진과 qg · 다른 플러그인의 의도 왜곡 장치를 제거하거나 고치고 persona 편집은 보안 리뷰를 거친다
-- 범위: 한다 공유 리뷰 엔진 상한 · 조언 접기 · qg 리뷰어 · 루프 상한 · 다른 플러그인의 장치 / 안 한다 spec-distill 안쪽 장치(R2)
+- 범위: 한다 공유 리뷰 엔진 상한 · 조언 접기 · qg 리뷰어 · 루프 상한 · 다른 플러그인의 장치 · qg 진입 이름 적용(P3 결정 — `commands/qg.md` 삭제 · `artifact-critique` 개명 · 호출 표면 락의 qg 위반 해소) / 안 한다 spec-distill 안쪽 장치(R2)
 - 의존: R1, R2, R7, R3, R4, R6, P2, P3
 - 브랜치: feature/shared-review-engine-devices
 - 묶음: R2a.md
@@ -160,10 +160,14 @@ R5 전까지 지휘 세션이 따르는 절차다. 장치가 아니라 절차다
 
 쉬운 말 PR 3(`feature/plain-language-voice`)은 이미 머지됐다(#198) — 선행 둘째의 그 부분은 블록을 두지 않는다.
 
+- P3 · 결정 · 2026-10-13 · 「quality-pipeline 을 진입으로 (권장)」 · 「따로 진입 artifact-critique」
+  - 앞 답은 코드 검사(`/qg`)의 진입이다 — `commands/qg.md` 를 지우고 `quality-pipeline` skill 을 진입으로 세운다(완전명 `/quality-gates:quality-pipeline`). 뒤 답은 문서 비평(`/qg critique`)의 진입이다 — `critiquing-artifacts` 를 따로 진입 skill `artifact-critique` 로 바꾼다(완전명 `/quality-gates:artifact-critique`). 적용은 R2a 가 한다.
+
 ## 재분해 이력
 
 - 2026-10-11 · 처음 로드맵 · 승인 원문 S47 「이대로 승인 (권장) — 고친 분해안(선행 3: @ 브랜치 머지 · qg ⑤·PR3·진입 이름 · hook 브랜치 고아 확인 + R0~R9, 순서 @ 브랜치 → R0 → R1‖R2‖R7‖R3‖R4‖R6 → R2a·R5 → R8 → R9) 승인」 · 선행 3 을 P1~P4 블록으로 나눴다(R0 설계 §1).
 - 2026-10-11 · 승인 뒤 수정(R0 설계 B11~B13) · R6 묶음에 D24 · D40 을 더했다 「더한다 (권장)」 · 경로 예약 겹침은 병렬을 막지 않는 정보로 낮추고 겹침 때문에만 있던 R3 → R2 의존을 뺐다 「병렬 유지, 정보로만 (권장)」 · 단위 이름을 「에픽」으로 정했다 「에픽 (권장)」.
+- 2026-10-13 · P3 결정 뒤 수정 · qg 진입 이름 적용을 R2a 범위에 더했다 「R2a 범위에 더함 (권장)」.
 
 ## 위험 번호표
 
