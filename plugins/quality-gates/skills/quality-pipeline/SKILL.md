@@ -779,7 +779,8 @@ E2E_CMD
 "$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-before.txt" && "$QG/scripts/e2e-state.sh" boot --dir "$D" --cmd "$(cat "$D/e2e-cmd.txt")" <--ready-port <포트> 또는 --ready-log '<정규식>'>; echo "boot rc=$?"
 ```
 
-분기는 rc 만이 아니라 출력 줄로 정한다.
+분기는 rc 만이 아니라 출력 줄로 정한다. 지문이 낸 `sha256: <값>` 줄의 값은 이 대화 안에 들고 있다가 E3 의 `compare` 에
+그대로 넘긴다 — before 지문 파일은 리포 안에 있어 띄운 앱이 고쳐 쓸 수 있고, 리포 밖에 남는 것은 이 값뿐이다.
 
 - `ready: …` 줄 (`boot rc=0`) — E2 로 간다.
 - `boot-failed: …` 줄 (`boot rc=4`) — 걷지 않는다. 판정안은 `미확인(부팅 실패)` 이고 증거는 펜스가 보인 부팅 출력
@@ -795,7 +796,7 @@ E2E_CMD
 **E1 (CLI 직접 실행).** CLI 표면이고 부팅 명령이 `없음(CLI 직접 실행)` 이면 위 펜스 대신 이 펜스로 지문만 잰다.
 CLI 걷기는 리뷰 대상 코드를 직접 실행한다 — 이 `before rc` 가 그 실행 앞의 유일한 코드 게이트다. 걷기에서는 질문에서
 승인된 CLI 명령 줄만 글자 그대로 실행한다. 그 밖에 리뷰 대상 코드를 실행하는 명령은 돌리지 않는다. 펜스는 위 펜스처럼
-앞 걷기의 증거표와 지문 파일을 먼저 지운다.
+앞 걷기의 증거표와 지문 파일을 먼저 지우고, 지문이 낸 `sha256: <값>` 도 위 펜스처럼 들고 있다가 E3 의 `compare` 에 넘긴다.
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -828,14 +829,15 @@ TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖
 D="${TOP}/.claude/quality-gates/<session-id>"
 "$QG/scripts/e2e-state.sh" stop --dir "$D"; echo "stop rc=$?"
 "$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-after.txt"; echo "after rc=$?"
-"$QG/scripts/e2e-state.sh" compare "$D/e2e-before.txt" "$D/e2e-after.txt"; echo "compare rc=$?"
+"$QG/scripts/e2e-state.sh" compare --before-sha256 '<가장 최근 E1 의 sha256 값>' "$D/e2e-before.txt" "$D/e2e-after.txt"; echo "compare rc=$?"
 "$QG/scripts/e2e-state.sh" propose "$D/e2e-evidence.tsv"; echo "propose rc=$?"
 ```
 
 - `stop rc=5` — 띄운 프로세스가 남았거나 그 기록을 읽지 못했다. `stop-failed:` 줄이나 stderr 사유를 그대로 공시하고 E5 의 걷기 기록에 적는다.
 - `after rc=3` — 걷는 사이 kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 E5 로 기록한 뒤 `## Final verdict` 로 간다.
+- E1 의 `sha256:` 값이 없으면 `compare` 줄을 빼고 돌리고 판정안은 `미확인(걷기 뒤 지문 실패)` 이다.
 - 그 밖의 판정안은 이 순서로 정한다: `compare` 의 마지막 줄이 `changed: <N>` 이면 `무효(코드 변경)` · `after rc` 가 0 이
-  아니거나 `compare rc` 가 0 · 1 밖이면 `미확인(걷기 뒤 지문 실패)` · `propose rc=4` 면 증거표를 고쳐 `propose` 만 다시
+  아니거나 `compare rc` 가 0 · 1 밖이거나 `compare rc=1` 인데 마지막 줄이 `changed: <N>` 가 아니면 `미확인(걷기 뒤 지문 실패)` · `propose rc=4` 면 증거표를 고쳐 `propose` 만 다시
   돌리고, 또 4 면 `미확인` · 나머지는 `proposal:` 줄의 값.
 
 **E4 — 걷기 직후 게이트.** 증거표와 판정안을 보이고 레퍼런스 5 절의 게이트를 띄운다. 결과는 6 절의 표로

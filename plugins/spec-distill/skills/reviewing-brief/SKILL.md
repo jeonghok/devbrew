@@ -381,7 +381,7 @@ PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
 pc_rc=0; PJ="$(python3 "$PR/scripts/docreview_state.py" profile-check "$PROFILE")" || pc_rc=$?
 PROFILE_WEB=""
 if [ "$pc_rc" -eq 0 ]; then
-  PROFILE_WEB="$(python3 -c 'import json, sys; w = json.loads(sys.argv[1]).get("web"); print({True: "on", False: "off"}.get(w, ""))' "$PJ" 2>/dev/null || true)"
+  PROFILE_WEB="$(python3 -I -X utf8 -c 'import json, sys; w = json.loads(sys.argv[1]).get("web"); print({True: "on", False: "off"}.get(w, ""))' "$PJ" 2>/dev/null || true)"
 fi
 record_web() {   # 웹 없는 사본으로 내려간 라운드(사유 `$WEB_REASON`) — degrade 원장, 못 쓰면 두 번째 채널
   python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component critic --axis direction --status degraded --reason "$WEB_REASON" \
