@@ -95,7 +95,9 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
    `<작업 트리 루트>/docs/superpowers/interview/<날짜>-<topic>-interview.state.md` 를 낸다. 작업 트리 루트는
    `git rev-parse --show-toplevel` 이다(메인 레포가 아니라 인터뷰가 도는 worktree). topic 이 kebab 이 아니면 exit 2.
 3. **형식.** 지금 `state.local.md` 의 frontmatter 키 · 본문(`## R<n>` 라운드 기록 · 조사 원문 · `## audit §2 대기 줄`)을 그대로 쓰고,
-   frontmatter 맨 앞에 `type: interview-state` 와 `seed: <seed 경로 | 없음>` 을 더한다. 작업 트리 안이라 `Write` · `Edit` 로 고친다
+   frontmatter 맨 앞에 `type: interview-state` 와 `seed: <seed 경로 | 없음>` 을 더한다. `seed:` 값은 작업 트리 루트 기준 상대경로
+   (`docs/superpowers/interview/…`)로 적는다 — 파일이 커밋되어 다른 worktree · 기기에서 읽히므로 절대경로를 쓰지 않는다. §1-4 의
+   「같은 seed 를 가리키는가」 비교는 호출된 seed 경로를 realpath 로 푼 뒤 작업 트리 루트 기준 상대경로로 바꿔 글자 그대로 비교한다. 작업 트리 안이라 `Write` · `Edit` 로 고친다
    (지금의 「Bash 로만 갱신」 지시 PN1 은 작업 트리 밖 경로 때문이었으므로 걷는다).
 4. **이어 가기.** 진입 단계가 인자를 본다.
    - `@<…>.state.md` 이고 frontmatter 가 `type: interview-state` 이면 그 파일을 읽어 마지막 라운드 다음부터 이어 간다.
@@ -110,7 +112,8 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
 5. **끝내기와 커밋.** `finishing.md` Step A 가 brief · audit 를 쓴 뒤 세 파일을 경로 지정 커밋으로 묶는다
    (`git add -- <brief> <audit> <state>` 다음 `git commit --only -- <brief> <audit> <state>` 꼴 — 새 파일은 git 이 아직 모르므로
    경로 지정 `add` 가 먼저다. 다른 staged 작업을 쓸어 담지 않는다).
-   - 기본 브랜치는 `git symbolic-ref --short refs/remotes/origin/HEAD` 로 판정한다. 현재 브랜치가 그것이면 커밋하지 않고 세 경로와
+   - 기본 브랜치는 `git symbolic-ref --short refs/remotes/origin/HEAD` 의 출력(`origin/main` 꼴)에서 `origin/` 접두를 뗀 이름이고,
+     현재 브랜치는 `git branch --show-current` 다. 둘이 같으면 커밋하지 않고 세 경로와
      「브랜치에서 커밋하라」 한 줄을 보인다. `origin/HEAD` 가 없어 판정하지 못하면 커밋하지 않고 세 경로와 그 사유를 보인다.
    - git 저장소가 아니거나 커밋이 실패하면 사유를 그대로 보이고 진행한다(파일은 이미 docs 에 있다).
 6. **상태 파일을 읽던 곳.** `check_verbatim_coverage.py` · `finishing.md` · audit 템플릿 · reviewing-brief 의 degrade 원장(STATE) 이
@@ -132,8 +135,9 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
    보고 지울 수 있다. `.docreview` 는 점 때문에 정규식 밖이라 옛 버전도 건드리지 않는다.
    엔진의 다른 동작은 바꾸지 않는다. 호출하는 곳(spec-review · reviewing-brief · request-framing · `finishing.md` · 엔진 정본
    `reviewing-document.md` 의 펜스 · 픽스처)을 같은 커밋에서 맞춘다.
-2. **이어 받기.** 같은 문서를 새 세션에서 리뷰하면 라운드 · 재리뷰 상한을 이어 받는다. 진입 블록이 원장의 라운드가 1 이상이면
-   「이전 리뷰 라운드 <n> 에서 이어 간다 — <원장 경로>」 한 줄을 보인다. 상한에 닿았으면 지금처럼 승인 게이트에서 사용자가 연다.
+2. **이어 받기.** 같은 문서를 새 세션에서 리뷰하면 라운드 · 재리뷰 상한을 이어 받는다. 진입 블록이 원장의 라운드가 1 이상이고
+   원장 폴더의 `last-session`(§2-4)이 없거나 현재 세션 id 와 다를 때만 「이전 리뷰 라운드 <n> 에서 이어 간다 — <원장 경로>」 한 줄을
+   보인다 — 같은 세션 안의 다음 라운드에서는 나오지 않는다. 상한에 닿았으면 지금처럼 승인 게이트에서 사용자가 연다.
 3. **worktree.** 해시는 문서의 realpath 라서 worktree 마다 다르다 — 다른 worktree 의 같은 문서는 원장이 따로다. state-root 는 지금처럼
    `git rev-parse --git-common-dir` 로 메인 레포의 `.claude/spec-distill` 이다.
 4. **동시 리뷰 표지.** 표지는 원장 폴더의 `reviewing-by` 파일(세션 id 한 줄)이고, 새 모듈
@@ -147,6 +151,10 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
      고른 뒤에만 `ledger_marker.py takeover --dir <원장 폴더> --session <sid>` 가 같은 폴더의 임시 파일에 새 세션 id 를 쓰고
      `os.replace` 로 표지를 원자적으로 바꾼다. 세션이 죽어 표지가 남은 경우도 같은 질문으로 풀린다.
    - 표지를 넘겨준 세션은 release 에서 남의 표지를 지우지 않고, 다음 라운드의 acquire 에서 rc 3 을 받아 멈춘다.
+   - 세션 id 를 얻지 못하면(`state_path.py session-id` 가 빈 값이나 실패) 표지를 잡을 수 없으므로 리뷰를 시작하지 않는다 — 진입이
+     사유를 보이고 멈춘다(지금 펜스의 「세션 상태 디렉토리를 특정할 수 없다 — 리뷰 없이 끝났다」 출구와 같은 꼴). 표지 없이 진행하지 않는다.
+   - `release` 는 표지를 지울 때 같은 폴더의 `last-session` 파일에 자기 세션 id 를 원자적으로(임시 파일 + `os.replace`) 남긴다.
+     §2-2 의 이어 감 줄은 이 값으로 노출 조건을 가린다.
 5. **request-framing 의 이름 파일.** `interview-basename` 을 없앤다. request-framing 은 audit 첫 쓰기 때 audit frontmatter 에
    `session_id: <sid>` 를 적고, 이후 라운드는 `docs/superpowers/interview/*-interview.audit.md` 중 frontmatter 가
    `type: interview-seed-audit` 이고 `session_id` 가 현재 세션인 파일 하나로 이름을 되찾는다(인터뷰 audit 템플릿도 `session_id` 를
@@ -169,7 +177,12 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
    - ③ `state.local.md` 가 있는 옛 세션 폴더는 시간과 무관하게 **지우지 않는다** — 아직 docs 로 옮기지 않은 인터뷰 기록이다
      (§1-7 은 현재 세션의 것만 옮기므로 다른 세션 id 의 기록은 남는다). 그런 폴더가 있으면 「옮기지 않은 옛 인터뷰 기록 <n>개 —
      <경로들>」 한 줄을 낸다. 옮기거나 지우는 일은 사용자의 몫이다.
-   - 삭제는 `gc_common.py` 의 `gc_one`(grace · double-stat · rename 후 rmtree)과 루트 탈출 거부를 그대로 쓴다.
+   - 삭제는 `gc_common.py` 의 `gc_one`(grace · double-stat · rename 후 rmtree)과 루트 탈출 거부를 그대로 쓴다. `gc_one` 이
+     전제하던 호출자 쪽 안전 단계는 지워지는 `spec-distill-gc.py` 에만 있었으므로 `ledger_sweep.py` 가 이어 받는다:
+     (a) 정리 전체를 `gc_common.py` 의 루트 디렉토리 잠금(`locked_root`) 안에서 돌려 두 세션이 동시에 정리하지 않게 한다.
+     (b) `.docreview` 자신이 심볼릭 링크이거나 루트 밖으로 풀리면 ① 을 건너뛰고 「원장 정리 — 셀 수 없음(<사유>)」 을 낸다.
+     (c) 삭제 도중 끊겨 남은 중간 폴더 `.gc-pending-*` 를 `gc_one` 이 만드는 두 자리 — `<state-root>/` 와 `<state-root>/.docreview/`
+     — 모두에서 줍는다.
    - 결과를 한 줄로 낸다: 「원장 정리 — 문서 없는 원장 <a>개 · 옛 세션 폴더 <b>개 지움」(둘 다 0 이면 내지 않는다). ③ 의 줄은
      따로 낸다. 셀 수 없으면 「원장 정리 — 셀 수 없음(<사유>)」.
 3. **끄기 스위치.** `ledger_sweep.py` 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 과 옛 `DEVBREW_SKIP_HOOKS` 토큰 셋
@@ -236,7 +249,7 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
 - 작업 전 기준선: spec-distill · shared 스위트의 FAIL «이름» 집합을 잰다(선재 RED `test_hook_output_schema.py test_python_and_bash_resolvers_agree` 포함).
 - Task 마다 닿은 소비자 전부의 스위트를 레포 루트에서 돈다. 삭제 Task 는 guards 커버리지 락을 돈다.
 - 픽스처 git 저장소(버릴 디렉토리, `mktemp` 경로를 `cd` 전에 비지 않았는지 확인)로 §1-5 커밋 두 분기 · §2-4 표지(동시 `acquire` 두 프로세스 · 남의 표지 `release` · `takeover`) · §3-2 정리(옛 GC 로도 `.docreview` 가 남음 · `state.local.md` 가 있는 옛 폴더 보존 · 옛 토큰 셋)를 확인한다.
-- 새 락 넷(AC15)은 변이로 RED 를 확인하고 양성 대조를 둔다.
+- 새 락 다섯(AC15 — AC2 · AC6 · AC8 · AC9 · AC10)은 변이로 RED 를 확인하고 양성 대조를 둔다.
 - 끝에서 끝: 픽스처에서 인터뷰 상태 파일 생성 → 세션 id 바꿔 이어 가기 → 끝내기 커밋 → 같은 문서 리뷰 두 세션 → 정리.
 
 ## Rejected Alternatives
