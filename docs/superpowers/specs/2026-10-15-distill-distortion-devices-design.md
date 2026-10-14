@@ -83,6 +83,9 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
    대안 · 인수 조건 · 기각 헤딩, 하류가 정할 것)도 1 · 2 를 거친다(N8 · N9). URL 금지와 「(사용자 확인)」 글자 보존은 그대로.
    `check_seed.py` 는 금지 목록을 유지하고, 대신 audit 에 1 의 표가 있는지를 본다(덜어 낸 것이 0 이면 「없음」 한 줄).
 5. 라운드당 확인 질문 하나는 유지하되, seed 게이트 앞에 `확인받지 못한 풀이 <N>개 — <seed 문장 위치>` 를 보인다(N4).
+   「확인받지 못한 풀이」는 seed 에 남은 풀이 문장 중 «(사용자 확인)» 이 붙지 않은 것 전부다 — 확인 질문에서 사용자가 고르지
+   않은 풀이(«기타» 로 다른 말을 적은 것 · 답하지 않은 질문의 풀이 포함)와, 골랐지만 압축으로 글자가 바뀌어 표시가 떨어진 풀이.
+   줄마다 둘 중 어느 쪽인지를 이유로 적는다.
 6. 압축 규약의 세 물음 중 「어차피 맞게 할 거면 뺀다」 · 「CLAUDE.md 에 있으면 뺀다」를 「빼면 1 의 표에 남긴다」로 고친다. 「상한을
    두지 않는다」 · 「확정 표시는 저자가 다시 쓸 수 없는 고정점」 · URL 비권위화는 그대로.
 7. compression 채택자(request-framing 과 compression 을 쓰는 다른 skill)는 같은 규약을 대칭으로 따른다(`test_compression_adopters.sh`).
@@ -97,16 +100,30 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
 3. 판정자당 라운드 3건 상한을 없앤다. 게이트 질문은 네 개씩 여러 번 나눠 묻는다.
 4. seed 프로필(`seed.md`) layer1 에 `omission` 을 더한다(RC32). brief 프로필의 `fix_anchors` 를 `^0\.` · `^2\.` · `^3\.` · `^4\.` ·
    `^5\.` 로 넓힌다 — `^1\.` protected · `^6\.` immutable 유지(RC33).
+   frontmatter 만 바꾸면 리뷰어가 읽는 본문 지시와 어긋나므로 두 프로필의 본문도 함께 고친다:
+   - `seed.md` 본문의 층 1 머리 문장(「뺄셈 검사다 … 원문에 없는 것을 더했거나, 원문에 있는 열림을 닫았는가만 본다」)과 판정 관계
+     문장(「정합이 아니라 뺄셈이다」)에 「원문에 있는 요구가 seed 에도, audit 의 덜어 낸 것 표(§1-1)에도 없는가」를 더하고,
+     `omission` 범주 정의 줄을 새로 둔다.
+   - `brief.md` 본문 처분 안내의 「`fix` 는 §0·§2 에만 낼 수 있다」를 넓힌 `fix_anchors` 와 같은 범위(§0 · §2~§5)로 고친다.
+     「§6 원문은 어떤 처분도 바꾸지 못한다」는 그대로.
 5. brief 프로필 `must_catch` 에 `direction` 을 더한다 — 사용자 방향에 대한 반증은 승인 게이트에서 묻는다(N1). 나머지 축은 참고로 둔다.
 6. 접힌 참고 항목(「외 K건」)에 게이트 선택 「참고 전부 보기」를 더해 박제된 목록을 펼친다(N2). 엔진 쪽 상수는 §5 로 넘긴다.
+   다는 자리는 참고 목록을 `--cap 8` 로 접어 보이는 두 곳이다: 설계문서 리뷰(`skills/spec-review/SKILL.md` 승인 게이트 2단계 앞
+   목록)와 brief 리뷰(`skills/spec-interview/references/finishing.md` Step B 의 B-A 참고 목록 — §3-8 의 R2 문단에 든다).
 7. brief 냉독(`skills/reviewing-brief/SKILL.md`)의 오독 분류에 「그 밖」을 더한다(N10).
 8. R3 와의 경계: `design-doc.md` 에서 R2 는 overdesign 절과 3건 상한 줄만, R3 는 `ground_truth` 줄과 깊이 판정 항목만 고친다.
 
 ### §3 인터뷰 끝내기와 brief 형식
 
 1. B-0 확정 목록에 `확정으로 올리지 않은 발화 <N>개 — S<n> · <한 줄 이유>` 를 함께 보인다. 「확정 목록 수정」에서 더할 수 있다(RC28).
-2. payload §6 에 S1~Sn 원문 전부를 둔다. audit §6 은 지금처럼 전량 보존. 압축 규약 N1b 를 고치고 `scripts/check_verbatim_coverage.py`
-   가 payload §6 의 전량도 본다(N7).
+2. payload §6 에 S1~Sn 원문 전부를 둔다(N7). 지금 규약은 원문을 나눠 둔다 — S1 은 payload, S2 이상은 audit
+   (`scripts/check_verbatim_coverage.py` 머리글 「`S1`은 payload에, `S2` 이상은 audit에」). audit §6 은 지금 가진 S2 이상을 그대로 두고,
+   payload 에 같은 원문이 겹쳐 있는 것을 허용한다. 이 변경이 부딪히는 검사 셋을 함께 고친다:
+   - `scripts/check_brief.py` 의 N1b — 지금 payload §6 앵커가 정확히 `{"S1"}` 이어야 통과한다. 「S1~Sn 전부」로 바꾼다.
+   - `scripts/check_verbatim_coverage.py` 의 `parse_section6_union` — 지금 같은 앵커가 payload · audit 양쪽에 있으면 append-only 위반으로
+     거절한다. 양쪽 글자가 같으면 받아들이고, 다르면 거절한다. payload 쪽 누락(S1~Sn 중 빠진 번호)도 잡는다.
+   - `references/docreview-profiles/brief.md` 의 `ground_truth` 와 omission 안내 — 원문 자리가 둘(S1 / AUDIT-VERBATIM 뒤 S2 이상)로
+     나뉜다는 전제를 「payload §6 이 전량」으로 고친다.
 3. 리뷰 참고 항목을 §5 `위험 — 리뷰 참고` 로 보낸 것은 B-0 에 `위험으로 보낸 참고 <N>개 — <id> · <이유>` 로 보이고 열린 질문으로
    올릴 수 있다(N3).
 4. 확정 목록 수정 상한(`confirm_repost_count` 2회)에 닿으면 강등 · 종료 대신 `AskUserQuestion` 으로 「계속 고친다(2번 더)」 ·
@@ -116,7 +133,7 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
    금지(`ENTRY_BULLET_RE` 계산)를 「첫 줄이 항목, 들여쓴 줄은 그 항목의 본문」으로 바꾼다(RC39).
 7. 인터뷰 라운드 요약에 `사실로 보고 직접 답한 질문 <N>개` 를 보인다(N5). 라운드당 질문 하나는 유지하고, 밀린 질문 목록을
    「지금 이해」에 보인다(N6).
-8. `finishing.md` 겹침: R3(다음 세션 줄) · R7(커밋 단계). R2 는 Step A.3 · B-0 · 재제시 상한 문단 · 비용 근거 문장만 고친다.
+8. `finishing.md` 겹침: R3(다음 세션 줄) · R7(커밋 단계). R2 는 Step A.3 · B-0 · B-A(참고 전부 보기, §2-6) · 재제시 상한 문단 · 비용 근거 문장만 고친다.
 
 ### §4 장치별 처분 표
 
@@ -160,7 +177,9 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
 | R7 | N12 세션 끝 삭제 |
 | R9 | N13 공유 문체 「이상 없음」(근거만) · §4 처분 결과의 README · 철학 문서 반영 |
 
-넘길 목록은 R3 의 `## 미룸` 표와 같은 꼴로도 남겨, 받는 곳이 생길 때까지 경고된다.
+넘긴 항목을 자동으로 경고하는 장치는 지금 리포에 없다(R3 의 `## 미룸` 형식은 아직 없고, `roadmap_status.py` ·
+`check_bundle_coverage.py` 도 넘김을 다루지 않는다). 그래서 이 표가 넘김의 유일한 기록이고, 받는 에픽(R2a · R7 · R9)의 설계가 이
+표를 입력으로 읽는다. R3 가 미룸 형식과 경고를 만들면 그 꼴로 옮긴다.
 
 ### §6 위험에 대한 답
 
@@ -194,9 +213,9 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
 
 ## Files to Modify
 
-- `plugins/spec-distill/references/compression.md`, `skills/request-framing/SKILL.md`, `templates/interview-seed-template.md`, `scripts/check_seed.py`, `templates/interview-audit-template.md`
+- `plugins/spec-distill/references/compression.md`, `skills/request-framing/SKILL.md`, `templates/interview-seed-template.md`, `scripts/check_seed.py`, `templates/interview-seed-audit-template.md`(seed audit — §1-1 의 새 표), `scripts/build_seed_inline_blob.py`(seed 리뷰 번들에 덜어 낸 것 표를 싣는다)
 - `plugins/spec-distill/references/docreview-profiles/seed.md` · `brief.md` · `design-doc.md`(overdesign 절 · 3건 상한 줄만)
-- `plugins/spec-distill/skills/spec-interview/references/finishing.md`(Step A.3 · B-0 · 재제시 상한 · 비용 문장), `skills/spec-interview/SKILL.md`(라운드 요약 줄), `skills/spec-review/SKILL.md`(참고 전부 보기), `skills/reviewing-brief/SKILL.md`(냉독 분류)
+- `plugins/spec-distill/skills/spec-interview/references/finishing.md`(Step A.3 · B-0 · B-A · 재제시 상한 · 비용 문장), `skills/spec-interview/SKILL.md`(라운드 요약 줄), `skills/spec-review/SKILL.md`(참고 전부 보기), `skills/reviewing-brief/SKILL.md`(냉독 분류)
 - `plugins/spec-distill/templates/interview-brief-template.md`, `scripts/check_brief.py`, `scripts/check_verbatim_coverage.py`
 - 테스트: `test_overdesign_rubric.sh` · `test_compression_adopters.sh` · `test_check_brief.sh` · `test_seed_one_sentence.sh` · `test_framing_review_contract.sh` · `test_brief_no_length_cap.sh` · `test_brief_no_statement_cap.sh` · `test_conducting_interview_stage.sh` · 프로필 구조 · check_seed · check_verbatim_coverage · reviewing-brief 테스트
 - `plugins/spec-distill/README.md` · `CHANGELOG.md` · `.claude-plugin/plugin.json`
@@ -272,7 +291,7 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
 | RC39 | 반영 | §3-6 |
 | RC49 | 반영 | §2-1 · §2-3 |
 | RC50 | 반영 | §3-5 · §5 — 문장은 R2, 상한 값은 R2a |
-| RC55 | 기각 | §5 — 공유 엔진 문서라 R2a 로 넘김 |
+| RC55 | 반영 | §4 · §5 — 처분은 넘김. 공유 엔진 문서라 R2a 가 고친다 |
 | RC66 | 반영 | §2-2 |
 | K7 | 반영 | §6 — 추가 탐색과 「지키던 것」 칸 |
 | ST3 | 반영 | §6 · §4 — S10 기준 고정, 유지에 근거 요구 |
@@ -308,3 +327,4 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
 - `check_brief.py` 의 §4 여러 줄 판독 규칙과 기존 fixture 영향 범위.
 - B-0 화면 순서(확정 후보 · 안 올린 발화 · 위험으로 보낸 참고)와 줄 수가 많을 때의 접기 — 접으면 「전부 보기」를 함께.
 - 프로필 구조 락의 정확한 단언 목록(변이 대상).
+| fb7c66c8#r1.1 | 처분 표의 '바뀌는 락' 칸 일부가 파일이 아닌 이름('finishing 락', 'spec-interview 락', 'request-framing 락', '템플릿 락')으로만 적혀 있다. 예를 들어 finishing.md 를 검사 범위에 넣은 test_rereview_cap_consistency.sh 같은 실제 락 파일 목록은 계획 단계에서 찾아 적어야 한다. |
