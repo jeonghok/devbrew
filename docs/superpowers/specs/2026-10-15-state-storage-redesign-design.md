@@ -87,8 +87,9 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
 
 ### §1 인터뷰 상태 파일
 
-1. **이름은 시작할 때 정한다.** 상태 파일은 인터뷰 첫 라운드 전에 만든다. seed 로 시작하면 seed 의 주제를, 거친 요청으로 시작하면
-   첫 라운드에서 정한 주제를 쓴다. 끝날 때 쓰는 brief · audit 도 같은 이름 줄기를 써서 세 파일이 나란히 놓인다:
+1. **이름은 시작할 때 정한다.** seed 로 시작하면 seed 의 주제를 이름으로 쓰고 상태 파일을 첫 라운드 전에 만든다. 거친 요청으로
+   시작하면 주제가 첫 라운드에서야 정해지므로, 상태 파일은 첫 라운드에서 주제를 정한 직후 만들고 그 라운드의 기록을 첫 내용으로
+   쓴다(그 전까지 라운드 1 기록은 대화 안에만 있다). 끝날 때 쓰는 brief · audit 도 같은 이름 줄기를 써서 세 파일이 나란히 놓인다:
    `docs/superpowers/interview/<YYYY-MM-DD>-<kebab-topic>-interview.md` · `.audit.md` · `.state.md`.
 2. **경로는 스크립트가 낸다.** `state_path.py interview-state --topic <kebab> [--date <YYYY-MM-DD>] [--cwd <dir>]` 가
    `<작업 트리 루트>/docs/superpowers/interview/<날짜>-<topic>-interview.state.md` 를 낸다. 작업 트리 루트는
@@ -100,14 +101,25 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
    - `@<…>.state.md` 이고 frontmatter 가 `type: interview-state` 이면 그 파일을 읽어 마지막 라운드 다음부터 이어 간다.
      읽은 뒤 `state-migration.md` 의 스키마 이월을 적용한다(이월 대상이 이 파일로 바뀔 뿐 규칙은 그대로).
    - seed 경로로 불렀는데 같은 디렉토리에 `seed:` 가 그 seed 를 가리키는 상태 파일이 있고 그 짝 brief 가 아직 없으면,
-     `AskUserQuestion` 하나로 「이어 감 (권장)」/「새로 시작」을 묻는다. 새로 시작하면 기존 상태 파일 이름 뒤에 `-<HHMM>` 을 붙여
-     새 이름을 만든다(기존 파일은 지우지 않는다).
+     `AskUserQuestion` 하나로 「이어 감 (권장)」/「새로 시작」을 묻는다. 새로 시작하면 topic 을 `<topic>-<HHMM>` 으로 바꿔 같은
+     `state_path.py interview-state --topic <topic>-<HHMM>` 으로 새 경로를 낸다(`<HHMM>` 은 숫자라 kebab 규칙을 지킨다). 그 인터뷰의
+     brief · audit 도 이 줄기를 따른다. 기존 파일은 지우지 않는다.
+   - 경로 계산(`interview-state`)은 **새로 만들 때만** 쓴다. 이어 갈 때는 고른 상태 파일의 절대경로가 그 인터뷰의 정체이고,
+     §1-6 의 소비자 전부가 그 경로를 받는다. brief · audit 경로는 그 파일 이름에서 `.state.md` 를 떼어 도출한다 — 날짜 · 주제로
+     다시 계산하지 않는다(다른 날 이어 가거나 `-<HHMM>` 이 붙은 파일을 놓치지 않기 위해서다).
 5. **끝내기와 커밋.** `finishing.md` Step A 가 brief · audit 를 쓴 뒤 세 파일을 경로 지정 커밋으로 묶는다
-   (`git commit --only -- <brief> <audit> <state>` 꼴 — 다른 staged 작업을 쓸어 담지 않는다).
-   - 현재 브랜치가 origin 의 기본 브랜치이면 커밋하지 않고 세 경로와 「브랜치에서 커밋하라」 한 줄을 보인다.
+   (`git add -- <brief> <audit> <state>` 다음 `git commit --only -- <brief> <audit> <state>` 꼴 — 새 파일은 git 이 아직 모르므로
+   경로 지정 `add` 가 먼저다. 다른 staged 작업을 쓸어 담지 않는다).
+   - 기본 브랜치는 `git symbolic-ref --short refs/remotes/origin/HEAD` 로 판정한다. 현재 브랜치가 그것이면 커밋하지 않고 세 경로와
+     「브랜치에서 커밋하라」 한 줄을 보인다. `origin/HEAD` 가 없어 판정하지 못하면 커밋하지 않고 세 경로와 그 사유를 보인다.
    - git 저장소가 아니거나 커밋이 실패하면 사유를 그대로 보이고 진행한다(파일은 이미 docs 에 있다).
 6. **상태 파일을 읽던 곳.** `check_verbatim_coverage.py` · `finishing.md` · audit 템플릿 · reviewing-brief 의 degrade 원장(STATE) 이
-   `state.local.md` 를 가리킨다. 모두 §1-2 의 경로로 바꾼다.
+   `state.local.md` 를 가리킨다. 모두 그 인터뷰의 상태 파일 경로(§1-4 — 새로 만들 때는 §1-2 의 경로)로 바꾼다.
+   - reviewing-brief 는 주제 · 날짜를 모르므로 payload(brief) 경로에서 도출한다: `<줄기>-interview.md` → `<줄기>-interview.state.md`.
+   - reviewing-brief 의 `brief-degrade-fallback.txt` 는 세션 폴더(`$ROOT/$harness_sid/`)가 아니라 그 brief 의 원장 폴더
+     (§2-1 의 `state-dir-for` 결과) 안으로 옮긴다.
+   - request-framing 의 `STATE="$ROOT/$sid/state.local.md"` 줄은 걷는다. 그 degrade 원장은 기존 파일이 있을 때만 쓰였으므로,
+     파일이 없을 때의 기존 경로(`no-state-in-phase-0`)가 늘 쓰인다. request-framing 은 세션 폴더를 만들지 않는다(§2-5).
 7. **옛 진행 중 인터뷰.** 인터뷰 진입 때 현재 세션의 옛 `<state-root>/<sid>/state.local.md` 가 있으면 §1-2 경로로 한 번 옮기고
    (주제는 그 파일의 기록에서, 없으면 사용자에게 한 번 묻는다) 「옛 위치의 진행 기록을 docs 로 옮겼다 — <경로>」 를 보인다.
 
@@ -126,8 +138,9 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
    「그만둠 (권장)」/「이어 씀 — 표지를 내 것으로 바꾼다」 를 묻는다. 세션이 죽어 표지가 남은 경우도 같은 질문으로 풀린다.
    엔진은 표지를 모른다.
 5. **request-framing 의 이름 파일.** `interview-basename` 을 없앤다. request-framing 은 audit 첫 쓰기 때 audit frontmatter 에
-   `session_id: <sid>` 를 적고, 이후 라운드는 `docs/superpowers/interview/*-interview.audit.md` 중 frontmatter `session_id` 가
-   현재 세션인 파일 하나로 이름을 되찾는다(둘 이상이면 멈추고 경로들을 보인다). 이로써 `.claude/spec-distill/` 아래에는
+   `session_id: <sid>` 를 적고, 이후 라운드는 `docs/superpowers/interview/*-interview.audit.md` 중 frontmatter 가
+   `type: interview-seed-audit` 이고 `session_id` 가 현재 세션인 파일 하나로 이름을 되찾는다(인터뷰 audit 템플릿도 `session_id` 를
+   가지므로 `type` 조건이 없으면 같은 세션의 인터뷰 audit 이 함께 걸린다. 둘 이상이면 멈추고 경로들을 보인다). 이로써 `.claude/spec-distill/` 아래에는
    `docreview/` 만 남는다.
 
 ### §3 훅 · 정리 · 끄기 스위치 · 옛 폴더 · 레포 규칙
@@ -136,7 +149,10 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
    spec-distill 에는 설치되는 훅이 남지 않는다. `hook_common.py` 는 다른 소비자(`brief_review_state.py`)가 쓰는 부분만 남긴다.
 2. **새 정리 모듈 `scripts/ledger_sweep.py`.** 리뷰를 시작하는 진입 블록 셋(spec-review · reviewing-brief · request-framing 의 리뷰)이
    원장 경로를 연 직후 한 번 부른다.
-   - ① `<state-root>/docreview/*/docreview-state.md` 에 기록된 문서 경로가 더는 없는 원장 폴더를 지운다.
+   - ① `<state-root>/docreview/*/docreview-state.md` 에 기록된 문서 경로가 더는 없는 원장 폴더를 지운다. `gc_one` 의 TTL 검사를
+     그대로 받으므로 「문서 없음 + 원장 폴더에 TTL 동안 쓰기 없음」 일 때만 지운다. 다른 브랜치로 체크아웃해 문서가 잠시 없는 경우는
+     TTL 안이면 남는다. TTL 을 넘겨 다른 브랜치에 있다가 돌아오면 원장은 사라지고 리뷰는 라운드 1 부터 다시 센다(알려진 한계 —
+     사용자 결정은 문서의 결정 절에 남는다).
    - ② 옛 세션 폴더 `<state-root>/<sid>/` 중 mtime 이 TTL(`DEVBREW_SPEC_DISTILL_TTL_HOURS`, 기본 24)을 넘은 것을 지운다.
      `docreview` 는 세션 이름 정규식(`^[A-Za-z0-9_-]{8,}$`)에 맞으므로 **이름으로 명시 제외**한다. 지금 도는 옛 버전 세션의 폴더는
      TTL 안이라 건드리지 않는다.
@@ -270,7 +286,8 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
 ## Metadata
 
 - 에픽: R7 · 브랜치 `feature/state-storage-redesign` · 의존 R0(머지됨 `6e55f593`)
-- 플러그인: spec-distill major bump(번호는 머지 직전)
+- 플러그인: spec-distill major bump(번호는 머지 직전). quality-gates 도 bump — `plugins/quality-gates/scripts/docreview_state.py` 가
+  `shared/docreview/scripts/docreview_state.py` 의 심볼릭 링크라 그 파일의 배포 바이트가 바뀐다(patch, 번호는 머지 직전)
 - 경로 예약 밖 편집(정보): `shared/docreview/` (R2a 예약 — 경로 함수 하나), `CLAUDE.md` (R9 예약 — state 줄 하나), `finishing.md` (R3 예약), `spec-interview/SKILL.md` (R1 예약)
 
 ### Deferred to plan
