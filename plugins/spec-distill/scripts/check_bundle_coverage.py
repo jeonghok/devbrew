@@ -2,7 +2,10 @@
 # -*- coding: utf-8 -*-
 """check_bundle_coverage.py — 정답 출처(에픽 묶음 · brief)의 번호와 설계문서 `## 번호 대조` 표를 맞춘다.
 
-명령줄: check_bundle_coverage.py <묶음|brief> <설계문서> [--json]
+명령줄:
+  check_bundle_coverage.py <묶음|brief> <설계문서> [--json]        번호 대조(설계문서 단계)
+  check_bundle_coverage.py --plan <설계문서> <계획> [--json]        계획 `### Task` 절에 없는 AC — 0 · 1 · 3
+  check_bundle_coverage.py --impl <설계문서> <보고 파일> [--json]   구현 보고의 미룸 · 빠짐 — 0 · 1(경고) · 3
 종료 코드 — 리뷰 전에 막을 것만 말한다: 0 빠진 번호 없음 · 1 빠진 번호 있음 · 2 사용법 오류 ·
 3 검사 불가(`ids:` 없음 · 표 깨짐 · `## 번호 대조` 절 없음 · 파일이나 brief · audit 을 못 읽음 · 내부 오류).
 얕은 답 · 받드는 에픽 없는 발화 · 셀 수 없음(로드맵을 못 읽음)은 종료 코드를 바꾸지 않는다 — 첫 줄의 개수와
@@ -335,6 +338,178 @@ def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None) -> di
             "bundle_count": len(seen), "table_count": len(have), "reason": None}
 
 
+DEFER_HEADING = "## 미룸"
+RECEIVER_EPIC_RE = re.compile(r"R\d+[a-z]?|P\d+")
+RECEIVER_PR_RE = re.compile(r"#\d+")
+REPORT_HEAD_RE = re.compile(r"AC\d+:")
+REPORT_LINE_RE = re.compile(r"AC(\d+): (구현됨|미룸|빠짐) — (\S.*)")
+VERDICTS = ("구현됨", "미룸", "빠짐")
+
+
+def deferred_rows(spec_text: str) -> list:
+    """`## 미룸` 표의 (항목, 이유, 받는 곳) 행들. 절이 없거나 「없음」뿐이면 []. 표가 깨졌으면 FormatError."""
+    body = section_body(spec_text, DEFER_HEADING)
+    if body is None:
+        return []
+    rows = [l.strip() for l in body.splitlines() if l.strip().startswith("|")]
+    if not rows:
+        rest = [l.strip().lstrip("-*").strip() for l in body.splitlines() if l.strip()]
+        if all(r == "없음" for r in rest):
+            return []
+        raise FormatError("`## 미룸` 절에 표가 없다")
+    if len(rows) < 2 or len(_cells(rows[0])) != 3:
+        raise FormatError("`## 미룸` 표 머리 행이 칸 셋이 아니다")
+    sep = _cells(rows[1])
+    if len(sep) != 3 or not all(SEP_CELL_RE.fullmatch(c) for c in sep):
+        raise FormatError("`## 미룸` 표 구분 행이 칸 셋이 아니다")
+    out = []
+    for row in rows[2:]:
+        cells = _cells(row)
+        if len(cells) != 3 or not all(cells):
+            raise FormatError("`## 미룸` 표 행이 빈칸 없는 칸 셋이 아니다: %r" % row)
+        out.append((cells[0], cells[1], cells[2].strip("`").strip()))
+    return out
+
+
+def receiver_ok(receiver: str, epic_ids: set) -> bool:
+    """받는 곳이 `#<숫자>` 이거나 로드맵에 있는 에픽 번호인가. `없음` · 그 밖 글은 받는 곳이 아니다."""
+    if RECEIVER_PR_RE.fullmatch(receiver):
+        return True
+    return bool(RECEIVER_EPIC_RE.fullmatch(receiver)) and receiver in epic_ids
+
+
+def plan_task_text(plan_text: str) -> str:
+    """`### Task` 절들(머리 줄 포함)을 이어 붙인 글. 펜스 안 줄은 절 경계가 아니지만 본문에는 든다."""
+    out, on, in_fence = [], False, False
+    for line in plan_text.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and (line.startswith("## ") or line.startswith("### ")):
+            on = line.startswith("### Task")
+        if on:
+            out.append(line)
+    return "\n".join(out)
+
+
+def _acs_or_error(spec_text: str) -> list:
+    acs = acceptance_ids(spec_text)
+    if acs is None:
+        raise FormatError("설계문서에 `## Acceptance Criteria` 절이 없다")
+    if not acs:
+        raise FormatError("`## Acceptance Criteria` 절에 AC 항목이 없다")
+    return acs
+
+
+def _plan_unchecked(reason: str) -> dict:
+    return {"status": 3, "missing": [], "ac_count": None, "reason": reason}
+
+
+def check_plan(spec_text: str, plan_text: str) -> dict:
+    try:
+        acs = _acs_or_error(spec_text)
+    except FormatError as exc:
+        return _plan_unchecked(str(exc))
+    have = {"AC" + m.group(1) for m in AC_TOKEN_RE.finditer(plan_task_text(plan_text))}
+    missing = [a for a in acs if a not in have]
+    return {"status": 1 if missing else 0, "missing": missing, "ac_count": len(acs), "reason": None}
+
+
+def render_plan(r: dict) -> str:
+    if r["status"] == 3:
+        return "계획 대조 검사 불가 — %s" % r["reason"]
+    if r["missing"]:
+        return "계획 대조: 계획에 없는 AC %d개 — %s" % (len(r["missing"]), " · ".join(r["missing"]))
+    return "계획 대조: 계획에 없는 AC 없음 (AC %d개)" % r["ac_count"]
+
+
+def parse_report(text: str) -> dict:
+    """{AC: (판정, 한 줄)}. `AC<n>:` 로 시작하는데 형식이 다르거나 같은 AC 가 두 번이면 FormatError."""
+    out = {}
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith("- ") or s.startswith("* "):
+            s = s[2:].strip()
+        if not REPORT_HEAD_RE.match(s):
+            continue
+        m = REPORT_LINE_RE.fullmatch(s)
+        if not m:
+            raise FormatError("보고 줄이 `AC<n>: 구현됨|미룸|빠짐 — <한 줄>` 이 아니다: %r" % s)
+        ac = "AC" + m.group(1)
+        if ac in out:
+            raise FormatError("보고에 %s 가 두 번 있다" % ac)
+        out[ac] = (m.group(2), m.group(3))
+    return out
+
+
+def _impl_unchecked(reason: str) -> dict:
+    return {"status": 3, "unreported": [], "unlisted": [], "no_receiver": [], "dropped": [],
+            "unknown_acs": [], "counts": None, "ac_count": None, "reason": reason}
+
+
+def check_impl(spec_text: str, report_text: str) -> dict:
+    try:
+        acs = _acs_or_error(spec_text)
+        report = parse_report(report_text)
+        if not report:
+            raise FormatError("보고에 AC 판정 줄이 없다")
+        deferred = deferred_rows(spec_text)
+    except FormatError as exc:
+        return _impl_unchecked(str(exc))
+    listed = {"AC" + m.group(1) for item, _why, _recv in deferred for m in AC_TOKEN_RE.finditer(item)}
+    judged = [a for a in acs if a in report]
+    return {
+        "status": 0, "reason": None, "ac_count": len(acs),
+        "unreported": [a for a in acs if a not in report],
+        "unlisted": ["%s(%s)" % (a, report[a][0]) for a in judged
+                     if report[a][0] != "구현됨" and a not in listed],
+        "no_receiver": [item for item, _why, recv in deferred if recv == "없음"],
+        "dropped": ["%s: %s" % (a, report[a][1]) for a in judged if report[a][0] == "빠짐"],
+        "unknown_acs": sorted((a for a in report if a not in acs), key=lambda a: int(a[2:])),
+        "counts": {v: sum(1 for a in judged if report[a][0] == v) for v in VERDICTS},
+    }
+
+
+IMPL_GROUPS = (("보고에 없는 AC", "unreported"), ("미룸 표에 없는 미룸/빠짐", "unlisted"),
+               ("받는 곳 없는 미룸", "no_receiver"), ("빠짐", "dropped"))
+
+
+def _impl_status(r: dict) -> dict:
+    if r["status"] != 3:
+        r["status"] = 1 if any(r[k] for _label, k in IMPL_GROUPS) else 0
+    return r
+
+
+def render_impl(r: dict) -> str:
+    if r["status"] == 3:
+        return "구현 대조 검사 불가 — %s" % r["reason"]
+    n = sum(len(r[k]) for _label, k in IMPL_GROUPS)
+    if n:
+        lines = ["구현 대조: 경고 %d개 — %s"
+                 % (n, " · ".join("%s %d개" % (label, len(r[k])) for label, k in IMPL_GROUPS))]
+        lines += ["%s — %s" % (label, " · ".join(r[k])) for label, k in IMPL_GROUPS if r[k]]
+        if r["dropped"]:
+            lines.append("빠짐은 머지 전에 고치거나 사용자가 미룸으로 옮긴다(설계문서 `## 미룸` 표).")
+    else:
+        c = r["counts"]
+        lines = ["구현 대조: 경고 없음 (AC %d개 · 구현됨 %d개 · 미룸 %d개)" % (r["ac_count"], c["구현됨"], c["미룸"])]
+    if r["unknown_acs"]:
+        lines.append("정보: 설계문서에 없는 AC 가 보고에 있다 — %s" % " · ".join(r["unknown_acs"]))
+    return "\n".join(lines)
+
+
+def _two_files(first: str, second: str, fn, unchecked) -> dict:
+    texts = []
+    for path in (first, second):
+        text, exc = _read(path)
+        if text is None:
+            return unchecked("파일을 못 읽었다: %s (%s)" % (path, exc))
+        texts.append(text)
+    try:
+        return fn(texts[0], texts[1])
+    except Exception as exc:  # 검사 자체가 죽어도 이상 없음(0)으로 내지 않는다
+        return unchecked("내부 오류 — %s: %s" % (type(exc).__name__, exc))
+
+
 def warning_count(result: dict) -> int:
     """spec-review 게이트의 「경고 N개」에 더할 수 — 검사 불가는 1."""
     if result.get("status") == 3:
@@ -396,13 +571,24 @@ def coverage(first_path: str, spec_path: str) -> dict:
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(prog="check_bundle_coverage.py",
-                                 description="정답 출처(에픽 묶음 · brief)의 번호와 설계문서 번호 대조 표를 맞춘다.")
-    ap.add_argument("first", help="에픽 묶음 또는 interview brief")
-    ap.add_argument("second", help="설계문서")
+                                 description="정답 출처의 번호와 설계문서 AC 를 설계문서 · 계획 · 구현 보고와 맞춘다.")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--plan", action="store_true", help="<설계문서> <계획>: 계획 Task 절에 없는 AC")
+    mode.add_argument("--impl", action="store_true", help="<설계문서> <보고 파일>: 구현 보고의 미룸 · 빠짐")
+    ap.add_argument("first", help="묶음 · brief(기본) 또는 설계문서(--plan · --impl)")
+    ap.add_argument("second", help="설계문서(기본) · 계획(--plan) · 보고 파일(--impl)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
-    result = coverage(args.first, args.second)
-    print(json.dumps(result, ensure_ascii=False) if args.json else render(result))
+    if args.plan:
+        result = _two_files(args.first, args.second, check_plan, _plan_unchecked)
+        text = render_plan(result)
+    elif args.impl:
+        result = _impl_status(_two_files(args.first, args.second, check_impl, _impl_unchecked))
+        text = render_impl(result)
+    else:
+        result = coverage(args.first, args.second)
+        text = render(result)
+    print(json.dumps(result, ensure_ascii=False) if args.json else text)
     return result["status"]
 
 

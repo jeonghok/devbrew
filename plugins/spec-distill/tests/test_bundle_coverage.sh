@@ -283,4 +283,68 @@ import sys, check_bundle_coverage as c
 print(c.warning_count(c.coverage(sys.argv[1], sys.argv[2])), c.warning_count({"status": 3}))' "$R/docs/x/R9.md" "$R/rej.md")"
 assert_eq "$out" "3 1" "warning_count: 얕음 1 + 받드는 에픽 없음 2 = 3, 검사 불가는 1"
 
+# 17. --plan(AC8) — 계획 Task 절에 없는 AC, 낱말 경계, 펜스 안 토큰, AC 절 없음
+P="$T/plan"; mkdir -p "$P"
+printf -- '# 설계\n\n## Acceptance Criteria\n\n- AC1 하나\n- **AC2** 둘\n- AC10. 열\n  - 하위 항목 AC77 은 AC 가 아니다\n\n## Files to Modify\n\n- x\n' > "$P/d.md"
+printf -- '# 계획\n\n## Global\n\nAC2 는 여기에만 있다.\n\n### Task 1: 하나\n\n- AC10 을 만든다\n\n```bash\n# AC1 도 펜스 안에서 센다\n```\n\n### Task 2: 둘\n\n- 끝\n' > "$P/p-miss.md"
+txt="$(python3 "$C" --plan "$P/d.md" "$P/p-miss.md")"; rc=$?
+assert_eq "$rc" "1" "AC8: 계획에 없는 AC 가 있으면 rc 1"
+assert_eq "$txt" "계획 대조: 계획에 없는 AC 1개 — AC2" "AC8: Task 절 밖의 AC2 는 계획에 없는 것이다(펜스 안 AC1 · AC10 은 있다)"
+printf -- '# 계획\n\n### Task 1: 하나\n\n- AC10 만 있다\n' > "$P/p-ten.md"
+txt="$(python3 "$C" --plan "$P/d.md" "$P/p-ten.md")"
+assert_eq "$txt" "계획 대조: 계획에 없는 AC 2개 — AC1 · AC2" "AC8: AC10 이 AC1 을 덮지 않는다(낱말 경계)"
+printf -- '# 계획\n\n### Task 1: 전부\n\n- AC1 · AC2 · AC10\n' > "$P/p-ok.md"
+txt="$(python3 "$C" --plan "$P/d.md" "$P/p-ok.md")"; rc=$?
+assert_eq "$rc" "0" "AC8 양성 짝: 다 있으면 rc 0"
+assert_eq "$txt" "계획 대조: 계획에 없는 AC 없음 (AC 3개)" "AC8: 하위 항목의 AC77 은 AC 로 세지 않는다"
+printf -- '# 설계\n\n## Goals\n\n- x\n' > "$P/d-noac.md"
+txt="$(python3 "$C" --plan "$P/d-noac.md" "$P/p-ok.md")"; rc=$?
+assert_eq "$rc" "3" "AC8: AC 절이 없으면 rc 3"
+assert_contains "$txt" "계획 대조 검사 불가 — 설계문서에 \`## Acceptance Criteria\` 절이 없다" "rc 3 사유"
+out="$(python3 "$C" --plan --json "$P/d.md" "$P/p-miss.md")"
+assert_eq "$(jget "$out" "r['missing']")" "['AC2']" "--plan --json missing"
+
+# 18. --impl(AC10) — 보고의 미룸 · 빠짐과 ## 미룸 표
+printf -- '# 설계\n\n## Acceptance Criteria\n\n- AC1 하나\n- AC2 둘\n- AC3 셋\n- AC10 열\n\n## 미룸\n\n| 항목 | 이유 | 받는 곳 |\n|---|---|---|\n| AC2 | 다음 에픽에서 | 없음 |\n| r1.2 | 리뷰 후속 | `#12` |\n' > "$P/di.md"
+printf 'AC1: 구현됨 — 됐다\n- AC2: 미룸 — 다음에\nAC3: 빠짐 — 못 했다\nAC10: 구현됨 — 됐다\nAC99: 구현됨 — 설계문서에 없는 AC\n' > "$P/rep.md"
+txt="$(python3 "$C" --impl "$P/di.md" "$P/rep.md")"; rc=$?
+assert_eq "$rc" "1" "AC10: 경고가 있으면 rc 1"
+assert_eq "$(printf '%s\n' "$txt" | head -n 1)" "구현 대조: 경고 3개 — 보고에 없는 AC 0개 · 미룸 표에 없는 미룸/빠짐 1개 · 받는 곳 없는 미룸 1개 · 빠짐 1개" "AC10: 첫 줄"
+assert_contains "$txt" "미룸 표에 없는 미룸/빠짐 — AC3(빠짐)" "AC10: 빠짐인데 ## 미룸 에 없는 AC"
+assert_contains "$txt" "받는 곳 없는 미룸 — AC2" "AC10: 받는 곳이 없음인 행"
+assert_contains "$txt" "정보: 설계문서에 없는 AC 가 보고에 있다 — AC99" "설계문서에 없는 AC 는 정보"
+printf 'AC1: 구현됨 — a\nAC2: 구현됨 — b\nAC3: 구현됨 — c\n' > "$P/rep-short.md"
+txt="$(python3 "$C" --impl "$P/di.md" "$P/rep-short.md")"
+assert_contains "$txt" "보고에 없는 AC — AC10" "AC10: 보고에 없는 AC 를 경고한다"
+printf -- '# 설계\n\n## Acceptance Criteria\n\n- AC1 하나\n\n## 미룸\n\n없음\n' > "$P/di-none.md"
+printf 'AC1: 구현됨 — 됐다\n' > "$P/rep-one.md"
+txt="$(python3 "$C" --impl "$P/di-none.md" "$P/rep-one.md")"; rc=$?
+assert_eq "$rc" "0" "AC10 양성 짝: 전부 구현됨 · ## 미룸 「없음」 → rc 0"
+assert_eq "$txt" "구현 대조: 경고 없음 (AC 1개 · 구현됨 1개 · 미룸 0개)" "경고 없음 줄"
+printf 'AC1: 됐음 — 형식 밖\n' > "$P/rep-bad.md"
+python3 "$C" --impl "$P/di-none.md" "$P/rep-bad.md" >/dev/null; rc=$?
+assert_eq "$rc" "3" "보고 줄이 형식 밖이면 rc 3"
+printf 'AC1: 구현됨 — a\nAC1: 빠짐 — b\n' > "$P/rep-dup.md"
+python3 "$C" --impl "$P/di-none.md" "$P/rep-dup.md" >/dev/null; rc=$?
+assert_eq "$rc" "3" "같은 AC 가 두 번이면 rc 3"
+printf -- '# 설계\n\n## Acceptance Criteria\n\n- AC1 하나\n\n## 미룸\n\n| 항목 | 받는 곳 |\n|---|---|\n| AC1 | 없음 |\n' > "$P/di-broken.md"
+txt="$(python3 "$C" --impl "$P/di-broken.md" "$P/rep-one.md")"; rc=$?
+assert_eq "$rc" "3" "## 미룸 표가 깨지면 rc 3"
+assert_contains "$txt" "구현 대조 검사 불가 — " "rc 3 첫 줄"
+python3 "$C" --impl "$P/di.md" "$P/없음.md" >/dev/null; rc=$?
+assert_eq "$rc" "3" "보고 파일이 없으면 rc 3"
+python3 "$C" --plan --impl "$P/di.md" "$P/rep.md" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "--plan 과 --impl 은 함께 쓸 수 없다(rc 2)"
+lc="$(LC_ALL=C LANG=C PYTHONIOENCODING= python3 "$C" --impl "$P/di.md" "$P/rep.md" 2>&1)"
+assert_contains "$lc" "구현 대조: 경고 3개" "비UTF-8 로캘에서도 한국어 출력이 깨지지 않는다"
+
+# 19. deferred_rows · receiver_ok(Task 4 가 쓴다)
+out="$(cd "$S" && python3 -c '
+import sys, check_bundle_coverage as c
+rows = c.deferred_rows(open(sys.argv[1], encoding="utf-8").read())
+print(rows)
+print([c.receiver_ok(r, {"R5"}) for r in ("없음", "#12", "R5", "R99", "다음에")])' "$P/di.md")"
+assert_contains "$out" "[('AC2', '다음 에픽에서', '없음'), ('r1.2', '리뷰 후속', '#12')]" "deferred_rows: 받는 곳의 백틱을 벗긴다"
+assert_contains "$out" "[False, True, True, False, False]" "receiver_ok: 없음 · 로드맵에 없는 에픽 · 그 밖 글은 받는 곳이 아니다"
+
 finish
