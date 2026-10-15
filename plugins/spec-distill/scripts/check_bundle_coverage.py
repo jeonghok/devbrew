@@ -346,6 +346,17 @@ REPORT_LINE_RE = re.compile(r"AC(\d+): (구현됨|미룸|빠짐) — (\S.*)")
 VERDICTS = ("구현됨", "미룸", "빠짐")
 
 
+def _says_none(line: str) -> bool:
+    """표 없는 미룸 절의 한 줄이 「미룬 것 없음」만 말하나. 번호 토큰이나 「미룸」이 든 줄은 아니다."""
+    if "미룸" in line or any(ch.isdigit() and i > 0 and (line[i - 1] in "#PR" or line[i - 2:i] == "AC")
+                            for i, ch in enumerate(line)):
+        return False
+    for head in ("없음", "미룬 것 없음"):
+        if line == head or line.startswith(head + " — "):
+            return True
+    return False
+
+
 def deferred_rows(spec_text: str) -> list:
     """`## 미룸` 표의 (항목, 이유, 받는 곳) 행들. 절이 없거나 「없음」뿐이면 []. 표가 깨졌으면 FormatError."""
     body = section_body(spec_text, DEFER_HEADING)
@@ -354,7 +365,7 @@ def deferred_rows(spec_text: str) -> list:
     rows = [l.strip() for l in body.splitlines() if l.strip().startswith("|")]
     if not rows:
         rest = [l.strip().lstrip("-*").strip().rstrip(".。!").strip() for l in body.splitlines() if l.strip()]
-        if all(r.startswith("없음") or r.endswith("없음") for r in rest):
+        if all(_says_none(r) for r in rest):
             return []
         raise FormatError("`## 미룸` 절에 표가 없다")
     if len(rows) < 2 or len(_cells(rows[0])) != 3:

@@ -360,6 +360,10 @@ for v in '없음.' '미룬 것 없음' '없음 — 미룬 것이 없다' '- 없�
 done
 mkdefer '미룬 것: AC2'
 assert_contains "$(defer_out)" "FormatError" "deferred_rows 양성 대조: 표 없는 다른 글은 FormatError"
+for v in 'AC3 — 받는 곳 없음' '없음 — 다만 AC3 은 다음 에픽으로 미룸' 'AC3 은 R5 로 미룸, 이유 없음'; do
+  mkdefer "$v"
+  assert_contains "$(defer_out)" "FormatError" "deferred_rows 양성 대조: 「${v}」는 미룬 것이 있다는 글이다"
+done
 mkdefer '| 항목 | 받는 곳 | 이유 |
 |---|---|---|
 | AC2 | R5 | 나중 |'
