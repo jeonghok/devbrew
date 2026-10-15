@@ -39,6 +39,7 @@ cat > "$S/roadmap_status.py" <<'PY'
 import json
 import os
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -50,6 +51,8 @@ def render(report):
 if __name__ == "__main__":
     with open(os.path.join(HERE, "calls.log"), "a", encoding="utf-8") as fh:
         fh.write(" ".join(sys.argv[1:]) + "\n")
+    if os.path.exists(os.path.join(HERE, "hang.flag")):
+        time.sleep(30)
     if os.path.exists(os.path.join(HERE, "garbage.flag")):
         print("상태 계산이 깨졌다")
         sys.exit(2)
@@ -136,6 +139,7 @@ left="$(find "$W/.git/devbrew" -name '.control-plane.*' | wc -l | tr -d ' ')"
 assert_eq "$left" "0" "임시 파일이 남지 않는다"
 
 echo "=== 끄기 스위치(AC6) ==="
+rm -f "$CACHE"
 before="$(calls)"
 out="$(cd "$W" && DEVBREW_SPEC_DISTILL_DISABLE=1 python3 "$S/control_plane.py" statusline </dev/null)"; rc=$?
 assert_eq "$out|$rc" "|0" "DISABLE=1 — 상태줄 빈 줄 · rc 0"
@@ -177,7 +181,9 @@ echo "=== 상태 계산이 깨짐 ==="
 : > "$S/garbage.flag"
 assert_eq "$(sl)" "rm · 설계 0 · 구현 0 · 준비 0 · 경고 없음 · 받은 지 0분 · 검사 불가" "JSON 이 아닌 출력은 검사 불가"
 assert_contains "$(show)" "검사 불가: 상태 계산 출력을 읽지 못했다(rc 2)" "지도에 사유"
-rm -f "$S/garbage.flag" "$CACHE"
+rm -f "$S/garbage.flag"
+assert_eq "$(sl)" "$LINE" "깨진 출력은 캐시에 남지 않는다 — 고쳐지면 바로 정상 줄"
+rm -f "$CACHE"
 
 echo "=== 로드맵 여럿 · 고르기 ==="
 printf '{"roadmap":"d","source":"origin/main","fetched_at":null,"notice":"","overlaps":[],"unassigned":[],"orphans":[],"unknown_ids":[],"format_errors":[],"unknown_reasons":[],"exit":0,"blocks":[{"id":"A1","title":"끝","kind":"bundle","stage":"머지됨","reason":"r","task_status":"completed","deps":[],"warnings":[],"notes":[]}]}\n' > "$S/stub-done.json"
@@ -237,16 +243,16 @@ rm -f "$CACHE"; msl hit >/dev/null; c1="$(mcalls hit)"; msl hit >/dev/null; c2="
 [ "$c2" -gt "$c1" ] && ok "변이 잡힘: 캐시를 안 쓰면 호출 수 단언이 RED" || no "변이 생존: 캐시 끄기($c1 → $c2)"
 mutant refs 'main or "-", refs_hash,' 'main or "-", "refs",'
 rm -f "$CACHE"; msl refs >/dev/null; c1="$(mcalls refs)"; g branch -q topic2; msl refs >/dev/null; c2="$(mcalls refs)"
-[ "$c2" = "$c1" ] && ok "변이 잡힘: 브랜치 요소를 빼면 브랜치 단언이 RED" || no "변이 생존: 브랜치 요소($c1 → $c2)"
+[ "$c1" -gt 0 ] && [ "$c2" = "$c1" ] && ok "변이 잡힘: 브랜치 요소를 빼면 브랜치 단언이 RED" || no "변이 생존: 브랜치 요소($c1 → $c2)"
 mutant main 'mode, main or "-",' 'mode, "-",'
 rm -f "$CACHE"; msl main >/dev/null; c1="$(mcalls main)"; push_file other2.txt "또"; msl main >/dev/null; c2="$(mcalls main)"
-[ "$c2" = "$c1" ] && ok "변이 잡힘: origin/main 요소를 빼면 커밋 단언이 RED" || no "변이 생존: origin/main 요소($c1 → $c2)"
+[ "$c1" -gt 0 ] && [ "$c2" = "$c1" ] && ok "변이 잡힘: origin/main 요소를 빼면 커밋 단언이 RED" || no "변이 생존: origin/main 요소($c1 → $c2)"
 mutant stamps '"\n".join(stamps)]' '""]'
 printf 'interview-state\n' > "$T/m-stamps/state_path.py"
 rm -f "$CACHE"; msl stamps >/dev/null; c1="$(mcalls stamps)"
 age "$STATE_DIR/2026-10-15-t-interview.state.md" 9000; rm -f "$STATE_DIR/2026-10-15-t-interview.md"
 msl stamps >/dev/null; c2="$(mcalls stamps)"
-[ "$c2" = "$c1" ] && ok "변이 잡힘: 인터뷰 요소를 빼면 인터뷰 단언이 RED" || no "변이 생존: 인터뷰 요소($c1 → $c2)"
+[ "$c1" -gt 0 ] && [ "$c2" = "$c1" ] && ok "변이 잡힘: 인터뷰 요소를 빼면 인터뷰 단언이 RED" || no "변이 생존: 인터뷰 요소($c1 → $c2)"
 rm -rf "$W/docs/superpowers/interview"
 mutant switch "        if switch_name():" "        if False:"
 out="$(cd "$W" && DEVBREW_SPEC_DISTILL_DISABLE=1 python3 "$T/m-switch/control_plane.py" statusline </dev/null)"
@@ -255,5 +261,96 @@ mutant place 'Path(repo.cwd, common) / "devbrew"' 'Path(repo.cwd) / "devbrew"'
 s0="$(g status --porcelain --untracked-files=all)"; msl place >/dev/null
 [ "$(g status --porcelain --untracked-files=all)" != "$s0" ] && ok "변이 잡힘: 캐시를 작업 트리에 쓰면 읽기 전용 단언이 RED" || no "변이 생존: 캐시 자리"
 rm -rf "$W/devbrew"
+
+echo "=== 표시 명령이 멈추지 않는다(멈춘 하위 프로세스 · 닫히지 않는 입력 · 큰 파일) ==="
+timed() {  # timed <초> <명령…> — 출력 끝에 「@<걸린 초>」. 상한을 넘기면 묶음째 죽이고 TIMEOUT. 표준 입력은 물려받는다
+  python3 -I -c 'import os, signal, subprocess, sys, time
+lim = float(sys.argv[1]); t = time.monotonic()
+p = subprocess.Popen(sys.argv[2:], stdout=subprocess.PIPE, start_new_session=True)
+try:
+    out, _ = p.communicate(timeout=lim)
+    sys.stdout.write(out.decode("utf-8", "replace").rstrip("\n") + "@%.1f" % (time.monotonic() - t))
+except subprocess.TimeoutExpired:
+    os.killpg(p.pid, signal.SIGKILL)
+    p.communicate()
+    sys.stdout.write("TIMEOUT")' "$@"
+}
+within() {  # within <timed 출력> <초> — 시간 안에 끝났는가
+  [ "$1" != "TIMEOUT" ] && awk -v e="${1##*@}" -v l="$2" 'BEGIN { exit !(e + 0 < l + 0) }'
+}
+body() { printf '%s' "${1%@*}"; }
+alive() {  # alive <pid 파일> — 아직 살아 있는 pid 수
+  n=0; for pid in $(cat "$1" 2>/dev/null); do kill -0 "$pid" 2>/dev/null && n=$((n + 1)); done; echo "$n"
+}
+HANG="$T/hang"; mkdir -p "$HANG"
+printf '#!/bin/sh\nsleep 30 &\necho $! >> "%s/orphans"\nwait\n' "$HANG" > "$HANG/git"; chmod +x "$HANG/git"
+LINE2="rm 외 1 · 설계 2 · 구현 2 · 준비 2 · 경고 4 · 받은 지 0분"
+
+rm -f "$CACHE"
+out="$(cd "$W" && timed 15 env PATH="$HANG:$PATH" python3 "$S/control_plane.py" statusline </dev/null)"
+within "$out" 6 && ok "멈춘 git — 상태줄이 시간 안에 끝난다(${out##*@}초)" || no "멈춘 git 에 상태줄이 막혔다: $out"
+assert_eq "$(body "$out")" "상태줄 — 시간 초과" "기억한 줄이 없으면 시간 초과 한 줄"
+[ -s "$HANG/orphans" ] && ok "양성 짝: 멈춘 git 대역이 실제로 불렸다" || no "멈춘 git 대역이 불리지 않았다 — 위 단언이 공허하다"
+assert_eq "$(alive "$HANG/orphans")" "0" "시간 초과 뒤 하위 프로세스(손자까지)가 남지 않는다"
+out="$(cd "$W" && timed 15 python3 "$S/control_plane.py" statusline </dev/null)"
+assert_eq "$(body "$out")" "$LINE2" "양성 대조: 진짜 git 이면 정상 줄(그리고 이 줄을 기억한다)"
+
+: > "$S/hang.flag"; g branch -q t-hang
+out="$(cd "$W" && timed 15 python3 "$S/control_plane.py" statusline </dev/null)"
+within "$out" 6 && ok "멈춘 상태 계산 — 상태줄이 시간 안에 끝난다(${out##*@}초)" || no "멈춘 상태 계산에 막혔다: $out"
+assert_eq "$(body "$out")" "$LINE2 · 시간 초과" "기억한 마지막 줄 + 시간 초과"
+rm -f "$S/hang.flag"
+
+out="$( (printf '{"cwd": "'; sleep 4) | (cd "$W" && timed 15 python3 "$S/control_plane.py" statusline) )"
+within "$out" 3 && ok "닫히지 않는 표준 입력 — 기다리지 않는다(${out##*@}초)" || no "닫히지 않는 표준 입력에 막혔다: $out"
+assert_eq "$(body "$out")" "$LINE2" "읽다 만 입력은 버리고 프로세스 cwd 를 쓴다"
+
+printf 'interview-state\n' > "$S/state_path.py"; mkdir -p "$STATE_DIR"
+python3 -I -c 'import sys
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    fh.write("---\ntype: interview-state\n  research_limit: " + "9" * 30000000 + "\n---\n")' "$STATE_DIR/2026-10-17-big-interview.state.md"
+python3 -I -c 'import sys
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    fh.write("---\ntype: interview-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 900000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-interview.state.md"
+out="$(cd "$W" && timed 15 python3 "$S/control_plane.py" statusline </dev/null)"
+within "$out" 2.5 && ok "큰 상태 파일 · 긴 숫자 — 시간 안에 끝난다(${out##*@}초)" || no "큰 상태 파일에 막혔다: $out"
+assert_eq "$(body "$out")" "$LINE2 · 인터뷰 셀 수 없음" "큰 상태 파일은 셀 수 없음 — 로드맵 부분은 그대로"
+out="$(show)"
+assert_contains "$out" "2026-10-17-big-interview.state.md — 셀 수 없음(파일이 1048576바이트를 넘는다)" "사유: 크기 상한"
+assert_contains "$out" "2026-10-18-digits-interview.state.md — 셀 수 없음(research_limit 가 수가 아니다" "사유: 수의 자릿수 상한"
+rm -f "$STATE_DIR"/*
+i=0; while [ "$i" -le 200 ]; do : > "$STATE_DIR/2026-10-19-n$i-interview.state.md"; i=$((i + 1)); done
+assert_contains "$(show)" "인터뷰 상태 파일이 200개를 넘는다(201개)" "상태 파일 수 상한"
+rm -rf "$STATE_DIR"
+
+# 변이 — 위 단언들이 이빨을 갖는가
+mutant group 'os.killpg(proc.pid, signal.SIGKILL)' 'proc.kill()'
+rm -f "$CACHE" "$HANG/orphans"
+(cd "$W" && timed 15 env PATH="$HANG:$PATH" python3 "$T/m-group/control_plane.py" statusline </dev/null) >/dev/null
+[ "$(alive "$HANG/orphans")" -gt 0 ] && ok "변이 잡힘: 묶음째 죽이지 않으면 남은 하위 프로세스 단언이 RED" || no "변이 생존: 프로세스 묶음"
+for pid in $(cat "$HANG/orphans" 2>/dev/null); do kill "$pid" 2>/dev/null; done
+mutant budget 'STATUSLINE_BUDGET = 3.0' 'STATUSLINE_BUDGET = 60.0'
+out="$(cd "$W" && timed 10 env PATH="$HANG:$PATH" python3 "$T/m-budget/control_plane.py" statusline </dev/null)"
+within "$out" 6 && no "변이 생존: 상태줄 시간 예산" || ok "변이 잡힘: 예산을 늘리면 시간 단언이 RED"
+for pid in $(cat "$HANG/orphans" 2>/dev/null); do kill "$pid" 2>/dev/null; done
+mutant stdin 'end = time.monotonic() + STDIN_WAIT' 'end = time.monotonic() + 30'
+out="$( (printf '{"cwd": "'; sleep 4) | (cd "$W" && timed 15 python3 "$T/m-stdin/control_plane.py" statusline) )"
+within "$out" 3 && no "변이 생존: 표준 입력 대기 상한" || ok "변이 잡힘: 입력을 끝까지 기다리면 시간 단언이 RED"
+mutant digits 'value.isdigit() and len(value) <= 9' 'value.isdigit()'
+printf 'interview-state\n' > "$T/m-digits/state_path.py"; mkdir -p "$STATE_DIR"
+python3 -I -c 'import sys
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    fh.write("---\ntype: interview-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 900000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-interview.state.md"
+out="$(cd "$W" && timed 15 python3 "$T/m-digits/control_plane.py" statusline </dev/null)"
+within "$out" 2.5 && no "변이 생존: 자릿수 상한" || ok "변이 잡힘: 자릿수 상한이 없으면 시간 단언이 RED"
+rm -rf "$STATE_DIR"
+mutant cap 'STATE_MAX_BYTES = 1 << 20' 'STATE_MAX_BYTES = 1 << 40'
+printf 'interview-state\n' > "$T/m-cap/state_path.py"; mkdir -p "$STATE_DIR"
+python3 -I -c 'import sys
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    fh.write("---\ntype: interview-state\n  research_limit: " + "9" * 30000000 + "\n---\n")' "$STATE_DIR/2026-10-17-big-interview.state.md"
+out="$(cd "$W" && python3 "$T/m-cap/control_plane.py" show </dev/null)"
+case "$out" in *"바이트를 넘는다"*) no "변이 생존: 크기 상한" ;; *) ok "변이 잡힘: 크기 상한이 없으면 사유 단언이 RED" ;; esac
+rm -rf "$STATE_DIR"
 
 finish

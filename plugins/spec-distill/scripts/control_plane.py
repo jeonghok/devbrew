@@ -22,6 +22,7 @@ import json
 import os
 import re
 import select
+import signal
 import subprocess
 import sys
 import tempfile
@@ -40,8 +41,6 @@ TASK_STATES = ("pending", "in_progress", "completed")
 TOP_WARNINGS = (("받드는 에픽 없는 발화", "orphans"), ("미배정 번호", "unassigned"),
                 ("brief 에 없는 번호", "unknown_ids"))
 CTRL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
-DISPATCH_RE = re.compile(r"\s+research_dispatches:\s*\{([^{}]*)\}\s*(?:#.*)?")
-LIMIT_RE = re.compile(r"\s+research_limit:\s*(\d+)\s*(?:#.*)?")
 QUEUE_HEADING = "## audit §2 대기 줄"
 NO_ROADMAP = "로드맵 없음 — origin/main 에 끝나지 않은 블록이 있는 로드맵이 없다"
 
@@ -82,7 +81,7 @@ def failed_report(path: str, reason: str) -> dict:
     """상태 계산을 못 읽었을 때의 보고서 — 상태 계산의 키를 모두 갖고 exit 3 이다."""
     return {"roadmap": path, "source": None, "fetched_at": None, "notice": "", "blocks": [],
             "unassigned": None, "orphans": None, "unknown_ids": [], "overlaps": [],
-            "format_errors": [], "unknown_reasons": [reason], "exit": 3}
+            "format_errors": [], "unknown_reasons": [reason], "exit": 3, "bridge_error": True}
 
 
 def first_line(report: dict) -> str:
@@ -95,6 +94,21 @@ def first_line(report: dict) -> str:
 
 
 # ── 인터뷰 상태 파일 ──────────────────────────────────────────────────────────
+
+def _field(line: str, key: str):
+    """들여쓴 `key: 값` 줄이면 주석을 뗀 값, 아니면 None."""
+    if not line[:1].isspace():
+        return None
+    name, sep, value = line.strip().partition(":")
+    if not sep or name != key:
+        return None
+    return value.split("#", 1)[0].strip()
+
+
+def _count(value: str) -> bool:
+    value = value.strip()
+    return value.isascii() and value.isdigit() and len(value) <= 9
+
 
 def parse_interview_state(text: str) -> dict:
     """{"n": 조사 호출 합, "limit": 상한, "last": 대기 줄의 마지막 사건 | None}. 셀 수 없으면 ValueError."""
@@ -109,17 +123,21 @@ def parse_interview_state(text: str) -> dict:
         raise ValueError("첫 키가 type: interview-state 가 아니다")
     n = limit = None
     for line in head:
-        m = DISPATCH_RE.fullmatch(line)
-        if m:
+        value = _field(line, "research_dispatches")
+        if value is not None:
+            if not (value.startswith("{") and value.endswith("}")):
+                raise ValueError("research_dispatches 가 {…} 모양이 아니다")
             n = 0
-            for part in (p for p in m.group(1).split(",") if p.strip()):
+            for part in (p for p in value[1:-1].split(",") if p.strip()):
                 _key, sep, val = part.partition(":")
-                if not sep or not val.strip().isdigit():
+                if not sep or not _count(val):
                     raise ValueError("research_dispatches 칸을 셀 수 없다: %s" % part.strip())
                 n += int(val.strip())
-        m = LIMIT_RE.fullmatch(line)
-        if m:
-            limit = int(m.group(1))
+        value = _field(line, "research_limit")
+        if value is not None:
+            if not _count(value):
+                raise ValueError("research_limit 가 수가 아니다: %s" % value)
+            limit = int(value)
     if n is None or limit is None:
         raise ValueError("research_dispatches · research_limit 를 찾지 못했다")
     last, in_queue = None, False
@@ -253,33 +271,85 @@ ROADMAP_RE = re.compile(r"docs/superpowers/roadmaps/[^/]+/roadmap\.md")
 GIT_OK = frozenset({"rev-parse", "ls-tree", "for-each-ref"})
 CACHE_VERSION = 1
 STATE_SUFFIX = "-interview.state.md"
+STATUSLINE_BUDGET = 3.0
+SHOW_BUDGET = 30.0
+STDIN_WAIT = 0.5
+STDIN_MAX_BYTES = 1 << 16
+STATE_MAX_BYTES = 1 << 20
+STATE_FILES_MAX = 200
+CACHE_MAX_BYTES = 8 << 20
+LAST_LINES_MAX = 20
+TIMED_OUT_LINE = "상태줄 — 시간 초과"
+
+
+class TimedOut(Exception):
+    pass
+
+
+class Deadline:
+    def __init__(self, seconds: float):
+        self.end = time.monotonic() + seconds
+
+    def left(self, what: str) -> float:
+        left = self.end - time.monotonic()
+        if left <= 0:
+            raise TimedOut(what)
+        return left
+
+
+def run_bounded(argv, cwd, env, deadline: Deadline, what: str):
+    """(rc, 표준 출력 바이트). 남은 시간을 넘기면 프로세스 묶음째 죽이고 TimedOut."""
+    wait = deadline.left(what)
+    try:
+        proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        return 127, b""
+    try:
+        out, _err = proc.communicate(timeout=wait)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        try:
+            proc.communicate(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
+        raise TimedOut(what)
+    return proc.returncode, out
+
+
+def read_capped(path, limit: int) -> str:
+    """limit 바이트까지 UTF-8 로 읽는다. 넘으면 ValueError."""
+    with open(str(path), "rb") as fh:
+        data = fh.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError("파일이 %d바이트를 넘는다" % limit)
+    return data.decode("utf-8")
 
 
 class Repo:
-    def __init__(self, cwd: str):
-        self.cwd = cwd
+    def __init__(self, cwd: str, deadline: Deadline):
+        self.cwd, self.deadline = cwd, deadline
         self.env = dict(os.environ, GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0",
                         GIT_NO_LAZY_FETCH="1", LC_ALL="C")
 
     def git(self, *args):
         if not args or args[0] not in GIT_OK:
             raise RuntimeError("허용하지 않은 git 하위 명령: %r" % (args[:1],))
-        try:
-            proc = subprocess.run(["git", "-c", "core.quotePath=false"] + list(args), cwd=self.cwd,
-                                  env=self.env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE, timeout=30)
-        except (OSError, subprocess.SubprocessError):
-            return 1, ""
-        return proc.returncode, proc.stdout.decode("utf-8", "replace")
+        rc, out = run_bounded(["git", "-c", "core.quotePath=false"] + list(args), self.cwd, self.env,
+                              self.deadline, "git " + args[0])
+        return rc, out.decode("utf-8", "replace")
 
     def line(self, *args):
         rc, out = self.git(*args)
         return out.strip() if rc == 0 and out.strip() else None
 
 
-def open_repo(cwd: str):
-    top = Repo(cwd).line("rev-parse", "--show-toplevel")
-    return Repo(top) if top else None
+def open_repo(cwd: str, deadline: Deadline):
+    top = Repo(cwd, deadline).line("rev-parse", "--show-toplevel")
+    return Repo(top, deadline) if top else None
 
 
 def fetch_stamp(repo: Repo):
@@ -326,10 +396,11 @@ def interview_files(root: str):
         return True, [], None
     except OSError as exc:
         return True, [], "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__
+    names = [n for n in names if n.endswith(STATE_SUFFIX)]
+    if len(names) > STATE_FILES_MAX:
+        return True, [], "인터뷰 상태 파일이 %d개를 넘는다(%d개)" % (STATE_FILES_MAX, len(names))
     files = []
     for name in names:
-        if not name.endswith(STATE_SUFFIX):
-            continue
         if (folder / (name[: -len(".state.md")] + ".md")).exists():
             continue
         try:
@@ -345,9 +416,12 @@ def read_interviews(supported, files, folder_error) -> dict:
         summary["errors"].append({"path": "docs/superpowers/interview", "reason": folder_error})
     for rel, path, mtime_ns in files:
         try:
-            item = parse_interview_state(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError) as exc:
+            item = parse_interview_state(read_capped(path, STATE_MAX_BYTES))
+        except OSError as exc:
             summary["errors"].append({"path": rel, "reason": "읽지 못했다(%s)" % type(exc).__name__})
+            continue
+        except UnicodeDecodeError:
+            summary["errors"].append({"path": rel, "reason": "UTF-8 이 아니다"})
             continue
         except ValueError as exc:
             summary["errors"].append({"path": rel, "reason": str(exc)})
@@ -382,30 +456,33 @@ def cache_file(repo: Repo):
 
 
 def load_cache(path):
-    """(entries, 사유 | None). 없는 캐시는 사유가 아니다."""
+    """(entries, last, 사유 | None). last 는 레포 최상위 → 마지막 상태줄. 없는 캐시는 사유가 아니다."""
     try:
-        text = path.read_text(encoding="utf-8")
+        text = read_capped(path, CACHE_MAX_BYTES)
     except FileNotFoundError:
-        return {}, None
-    except (OSError, UnicodeDecodeError) as exc:
-        return {}, "캐시 파일을 읽지 못했다(%s)" % type(exc).__name__
+        return {}, {}, None
+    except OSError as exc:
+        return {}, {}, "캐시 파일을 읽지 못했다(%s)" % type(exc).__name__
+    except ValueError:
+        return {}, {}, "캐시 파일이 깨져 있었다"
     try:
         data = json.loads(text)
         if data.get("version") != CACHE_VERSION or not isinstance(data.get("entries"), dict):
             raise ValueError("모양이 다르다")
     except (ValueError, AttributeError):
-        return {}, "캐시 파일이 깨져 있었다"
-    return data["entries"], None
+        return {}, {}, "캐시 파일이 깨져 있었다"
+    last = data.get("last")
+    return data["entries"], (last if isinstance(last, dict) else {}), None
 
 
-def save_cache(path, entries):
-    """임시 파일 + os.replace 로 원자적으로 쓴다. 실패하면 사유를 낸다."""
+def save_cache(path, entries, last):
+    """임시 파일 + os.replace 로 원자적으로 쓴다 — 잠금이 없어 동시 실행이 서로 기다리지 않는다. 실패하면 사유."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(prefix=".control-plane.", suffix=".tmp", dir=str(path.parent))
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                json.dump({"version": CACHE_VERSION, "entries": entries}, fh, ensure_ascii=False)
+                json.dump({"version": CACHE_VERSION, "entries": entries, "last": last}, fh, ensure_ascii=False)
             os.replace(tmp, str(path))
         except BaseException:
             try:
@@ -434,19 +511,15 @@ def cached_view(entry, key):
 
 def run_status(repo: Repo, path: str) -> dict:
     """roadmap_status.py <경로> --json 을 부른다. 못 읽으면 검사 불가(3) 보고서."""
+    rc, out = run_bounded([sys.executable, str(SCRIPTS / "roadmap_status.py"), path, "--json"], repo.cwd,
+                          None, repo.deadline, "상태 계산 " + path)
     try:
-        proc = subprocess.run([sys.executable, str(SCRIPTS / "roadmap_status.py"), path, "--json"],
-                              cwd=repo.cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE, timeout=120)
-    except (OSError, subprocess.SubprocessError) as exc:
-        return failed_report(path, "상태 계산을 부르지 못했다(%s)" % type(exc).__name__)
-    try:
-        report = json.loads(proc.stdout.decode("utf-8"))
+        report = json.loads(out.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
         report = None
     if (not isinstance(report, dict) or not isinstance(report.get("blocks"), list)
             or report.get("exit") not in (0, 1, 3)):
-        return failed_report(path, "상태 계산 출력을 읽지 못했다(rc %d)" % proc.returncode)
+        return failed_report(path, "상태 계산 출력을 읽지 못했다(rc %d)" % rc)
     return report
 
 
@@ -454,10 +527,10 @@ def unfinished(report: dict) -> bool:
     return report.get("exit") == 3 or any(b.get("stage") not in DONE for b in report.get("blocks") or [])
 
 
-def gather(cwd: str, arg):
-    """화면에 필요한 것 전부. 받은 시각은 캐시 밖에서 매번 읽는다."""
+def gather(cwd: str, arg, deadline: Deadline, ctx: dict):
+    """화면에 필요한 것 전부. 받은 시각은 캐시 밖에서 매번 읽는다. ctx 에 레포 최상위 · 캐시 상태를 남긴다."""
     view = {"items": [], "interview": None, "notes": [], "minutes": None, "select_error": None}
-    repo = open_repo(cwd)
+    repo = open_repo(cwd, deadline)
     supported, files, folder_error = interview_files(repo.cwd if repo else cwd)
     if repo is None:
         view["interview"] = read_interviews(supported, files, folder_error)
@@ -484,7 +557,8 @@ def gather(cwd: str, arg):
         stamps.append("folder=" + folder_error)
     key = cache_key(repo, main, mode, targets, stamps)
     path = cache_file(repo)
-    entries, note = load_cache(path) if path else ({}, "git 공용 디렉토리를 찾지 못했다")
+    entries, last, note = load_cache(path) if path else ({}, {}, "git 공용 디렉토리를 찾지 못했다")
+    ctx.update(top=repo.cwd, cache=path, entries=entries, last=last)
     if note:
         view["notes"].append(note)
     hit = cached_view(entries.get(mode), key)
@@ -496,11 +570,12 @@ def gather(cwd: str, arg):
         interview = read_interviews(supported, files, folder_error)
         if key is None:
             view["notes"].append("캐시 키를 만들지 못했다(git 읽기 실패)")
-        elif path is not None:
+        elif path is not None and not select_error and not any(r.get("bridge_error") for _p, r in reports):
             kept = dict((k, v) for k, v in entries.items() if k == "*" and k != mode)
             kept[mode] = {"key": key, "items": [[p, r] for p, r in items], "interview": interview,
                           "select_error": select_error}
-            err = save_cache(path, kept)
+            ctx["entries"] = kept
+            err = save_cache(path, kept, last)
             if err:
                 view["notes"].append(err)
     for _p, r in items:
@@ -520,14 +595,27 @@ def switch_name():
 
 
 def stdin_dir():
-    """상태줄 표준 입력 JSON 의 workspace.current_dir → cwd. 없거나 읽을 수 없으면 None."""
+    """상태줄 표준 입력 JSON 의 workspace.current_dir → cwd. 없거나 읽을 수 없으면 None.
+    STDIN_WAIT 초 · STDIN_MAX_BYTES 까지만 받는다 — 닫히지 않는 입력에도 기다리지 않는다."""
     try:
         if sys.stdin is None or sys.stdin.isatty():
             return None
-        ready, _w, _x = select.select([sys.stdin], [], [], 0.2)
-        if not ready:
-            return None
-        data = json.loads(sys.stdin.read() or "{}")
+        fd = sys.stdin.fileno()
+        end = time.monotonic() + STDIN_WAIT
+        chunks, size = [], 0
+        while size <= STDIN_MAX_BYTES:
+            wait = end - time.monotonic()
+            if wait <= 0:
+                break
+            ready, _w, _x = select.select([fd], [], [], wait)
+            if not ready:
+                break
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+        data = json.loads(b"".join(chunks).decode("utf-8") or "{}")
         for cand in ((data.get("workspace") or {}).get("current_dir"), data.get("cwd")):
             if isinstance(cand, str) and os.path.isdir(cand):
                 return cand
@@ -536,13 +624,38 @@ def stdin_dir():
     return None
 
 
+def remember_line(ctx: dict, line: str):
+    """레포마다 마지막 상태줄을 캐시에 둔다 — 시간 초과 때 낸다. 바뀌었을 때만 쓴다."""
+    path, top, last = ctx.get("cache"), ctx.get("top"), ctx.get("last")
+    if path is None or top is None or not isinstance(last, dict) or last.get(top) == line:
+        return
+    kept = dict(list((k, v) for k, v in last.items() if k != top)[-(LAST_LINES_MAX - 1):])
+    kept[top] = line
+    save_cache(path, ctx.get("entries") or {}, kept)
+
+
+def timed_out_line(ctx: dict) -> str:
+    path, top = ctx.get("cache"), ctx.get("top")
+    if path is not None and top is not None:
+        _entries, last, _note = load_cache(path)
+        if isinstance(last.get(top), str) and last[top]:
+            return clean(last[top] + " · 시간 초과")
+    return TIMED_OUT_LINE
+
+
 def cmd_statusline() -> int:
+    ctx = {}
     try:
         if switch_name():
             print("")
             return 0
-        v = gather(stdin_dir() or os.getcwd(), None)
-        print(statusline_text(v["items"], v["interview"], v["minutes"], v["select_error"]))
+        deadline = Deadline(STATUSLINE_BUDGET)
+        v = gather(stdin_dir() or os.getcwd(), None, deadline, ctx)
+        line = statusline_text(v["items"], v["interview"], v["minutes"], v["select_error"])
+        remember_line(ctx, line)
+        print(line)
+    except TimedOut:
+        print(timed_out_line(ctx))
     except Exception as exc:  # noqa: BLE001 — 상태줄은 늘 한 줄을 낸다
         print(clean("검사 불가 — 상태줄 내부 오류(%s)" % type(exc).__name__))
     return 0
@@ -557,7 +670,14 @@ def cmd_show(tasks: bool, arg) -> int:
         print("꺼져 있다 — %s" % sw)
         return 0
     try:
-        v = gather(os.getcwd(), arg)
+        v = gather(os.getcwd(), arg, Deadline(SHOW_BUDGET), {})
+    except TimedOut as exc:
+        msg = clean("검사 불가 — 시간 초과(%s, %d초)" % (exc, SHOW_BUDGET))
+        if tasks:
+            sys.stderr.write(msg + "\n")
+            return 3
+        print(msg)
+        return 0
     except Exception as exc:  # noqa: BLE001 — 계산이 죽어도 0 · 1 로 보이지 않는다
         msg = clean("검사 불가 — 내부 오류(%s: %s)" % (type(exc).__name__, exc))
         if tasks:
