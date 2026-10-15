@@ -47,6 +47,11 @@ for lit in 'brief 를 마지막으로 쓴 직후' '언제나 한 번' '항목이
            '커밋 전에 도는 단계' 'brief · audit · 상태 파일 · 로드맵 폴더를 함께 커밋하라'; do
   has "$REGEN" "$lit" "B-R: $lit"
 done
+# 리뷰 보강(I1) — B-A 가 더한 번호로 rc 1: 생성만 다시 돌고 A.5 · 게이트는 다시 없다
+for lit in 'Step A 8 의 명령**만** 다시 돌린 뒤' 'Step A.5 리뷰를 다시 돌리지 않고 Step B 게이트도 다시 띄우지 않는다' \
+           '`## 생성 기록` 에 적힌 파일' '`분해됨 — <로드맵 경로>` 줄을 뺀 뒤' '표로 고칠 수 없는 사유'; do
+  has "$REGEN" "$lit" "B-R(I1): $lit"
+done
 assert_file_absent "$FIN" '항목이 바뀌면 확정 직후' "옛 「항목이 바뀌면」 재생성 조건이 없다"
 
 # ── AC7 — 분해된 일의 다음 세션 줄 ──────────────────────────────────────────
@@ -72,9 +77,18 @@ for lit in '빠짐 · 축소 · 여러 spec' '게이트 ③' '「인터뷰 다�
            'roadmap_write.py" extract' '`## 분해안`' \
            '| 에픽 | 바뀌는 것 | 옮겨 가는 번호 | 새 의존 | 진행 중인 브랜치 · 설계문서 |' \
            '"이대로 다시 나눈다"' '"고치기"' '"그만둔다"' \
-           'R<max+1>' '사라지는 번호는 재사용하지 않는다' '머지된 에픽은 건드리지 않는다' '## 미룸' \
+           'R<max+1>' '사라지는 번호는 재사용하지 않는다' '머지되거나 끝난 에픽은 건드리지 않는다' '## 미룸' \
            'roadmap_write.py" update' '재분해 이력' 'feature/roadmap-<요지>' '원래 바이트'; do
   has "$RTXT" "$lit" "redecompose: $lit"
+done
+
+# 리뷰 보강(I2 · I3 · I4) — 재분해 끝내기 · 전용 브랜치 · 상태 파일 표 갱신
+for lit in '새로 fetch 한 `origin/main` 에서 `feature/roadmap-<요지>` 브랜치를 전용 worktree' \
+           '에픽의 feature 브랜치(진행 중인 설계문서가 있는 브랜치)는 고치지 않는다' \
+           '## 7. 끝내기' '`check_bundle_coverage.py <묶음> <설계문서>` 를 먼저 돌려' 'spec-review 를 다시 돌린다' \
+           'spec-review 게이트 ③ 의 후속 질문' '`## 분해안` 표를 `roadmap_write.py extract` 출력으로 바꿔 둔다' \
+           '머지되거나 끝난 에픽'; do
+  has "$RTXT" "$lit" "redecompose(리뷰): $lit"
 done
 
 # ── AC11 — 재결정 규약 한 줄 ────────────────────────────────────────────────

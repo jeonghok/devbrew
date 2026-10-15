@@ -115,6 +115,7 @@
   했어야 했는가」는 기계가 알 수 없고(`check_brief.py` 는 brief 파일만 읽는다) 0건 advisory 가 Step B
   게이트로 사람에게 간다.
 - **Law 1 · Law 2 — 멈춤의 주인은 독립 판정자 (5.5.0)** — 인터뷰가 한 번에 닫지 않고 결정에 닿는 새 사실이 없을 때까지 조사한다. 그 «없음» 을 조사하는 모델이 아니라 쓰기 권한 없는 `saturation-judge` 가 조사 원문에서 직접 판정하고, 「충분해 보인다」는 근거가 아니다. 구조 게이트(`check_brief.py` `saturation_failures`)가 판정 없는 종료를 거절한다.
+- **Law 1 · Law 3 — 나누는 결정이 spec 앞에 있다 (5.6.0)** — 일을 spec 하나로 할지 나눌지를 brief 를 쓰기 전에 신호를 보이고 사용자가 승인 게이트로 정하며(숫자 컷오프 없음), 로드맵 쓰기는 «쓰고 검증하거나 원래대로 되돌린다» 로 fail-closed 다. 재분해는 승인 뒤에만 같은 로드맵 위에서 일어나 다음 사이클이 같은 지도를 이어 받는다.
 
 ### Principles 흡수
 
@@ -163,7 +164,7 @@
 
 - `scripts/roadmap_status.py <로드맵 경로>` — `origin/main` 의 로드맵과 git 을 읽어 에픽마다 단계와 경고를 냅니다. 아직 main 에 없는 로드맵은 `--roadmap-file <파일>` 로 줍니다. 머지됨 자동 판정은 merge commit 방식에서만 됩니다. 브랜치가 지워졌으면 GitHub 의 머지 메시지 `Merge pull request #<n> from <owner>/<브랜치>` 로만 알아봅니다. squash · rebase 로 머지했거나 로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적어야 합니다.
 - `scripts/check_bundle_coverage.py <묶음> <설계문서>` — 에픽 묶음의 번호가 설계문서 `## 번호 대조` 표에 다 있는지 봅니다.
-- `scripts/roadmap_write.py create · update · extract` — 인터뷰가 승인받은 분해안 표(`## 분해안`, 칸 열하나)로 로드맵과 에픽 묶음을 쓰고(create), 재분해 때 바뀐 블록과 그 묶음만 다시 쓰고(update), 로드맵에서 표를 거꾸로 뽑습니다(extract). update 는 새 에픽 번호가 문자마다 최댓값 다음부터 빈틈없이 이어져야 하고, 「…」 인용은 재분해 이력의 번호 판정에서 뺍니다. 자기 것이 아닌 `<id>.md` 를 덮어쓰게 되면 쓰기 전에 거부합니다. 쓴 직후 `roadmap_status.py --json` 의 `format_errors` · `unassigned` · `orphans` · `unknown_ids` 가 모두 빈 목록이 아니면 쓴 것을 원래 바이트(파일 모드 포함)로 되돌리고 1 로 끝납니다. 머지된 에픽은 바꾸지 않고 사라진 번호는 다시 쓰지 않습니다. 재분해 절차는 `references/redecompose.md` 에 있습니다.
+- `scripts/roadmap_write.py create · update · extract` — 인터뷰가 승인받은 분해안 표(`## 분해안`, 칸 열하나)로 로드맵과 에픽 묶음을 쓰고(create), 재분해 때 바뀐 블록과 그 묶음만 다시 쓰고(update), 로드맵에서 표를 거꾸로 뽑습니다(extract). update 는 새 에픽 번호가 문자마다 최댓값 다음부터 빈틈없이 이어져야 하고, 「…」 인용은 재분해 이력의 번호 판정에서 뺍니다. create 는 상태 파일 `## 생성 기록` 에 적힌 파일만 덮어쓰고, 자기 것이 아닌 `<id>.md` 를 덮어쓰게 되면 쓰기 전에 거부합니다. 검증이 실패하면 새로 만든 파일은 지웁니다. `--audit` 은 `--brief` 경로의 `.md` 를 `.audit.md` 로 바꾼 파일이어야 하고(아니면 사용법 오류 2), update 는 묶음 번호 순서만 다른 표를 바뀜으로 세지 않습니다. 쓴 직후 `roadmap_status.py --json` 의 `format_errors` · `unassigned` · `orphans` · `unknown_ids` 중 하나라도 비지 않으면 쓴 것을 원래 바이트(파일 모드 포함)로 되돌리고 1 로 끝납니다. 머지된 에픽은 바꾸지 않고 사라진 번호는 다시 쓰지 않습니다. 재분해 절차는 `references/redecompose.md` 에 있습니다.
 
 경로 예약 겹침과 다른 에픽이 예약한 파일의 편집은 경고가 아니라 정보입니다 — 종료 코드를 바꾸지 않고, 에픽은 병렬로 갑니다. 충돌은 머지 때 풉니다(나중에 머지하는 PR 이 main 을 merge 하고 스위트를 다시 돌립니다).
 

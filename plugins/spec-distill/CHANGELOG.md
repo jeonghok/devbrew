@@ -8,6 +8,8 @@
 - `references/redecompose.md` — 하류의 재분해 신호(번호 대조 경고 · spec-review 게이트 ③ · 지휘 세션)를 같은 로드맵으로 받아 영향 표 · 승인 뒤에만 다시 나눈다. 새 번호만 쓰고 사라진 번호는 재사용하지 않으며 머지된 에픽은 건드리지 않는다.
 
 ### Changed
+- `roadmap_write.py update` 는 묶음 행의 번호를 정렬 순서로, 그 밖의 행은 발화(S) 먼저로 맞춰 견준다 — 순서만 다른 표를 바뀜으로 세거나 머지된 에픽을 바꾼 것으로 거부하지 않는다. `create` · `update` 는 `--audit` 이 `--brief` 경로의 `.md` 를 `.audit.md` 로 바꾼 파일이 아니면 사용법 오류(2)다.
+- 인터뷰 종료 Step B 의 로드맵 다시 생성이 rc 1 로 새 번호(미배정 · 고아)를 알리면 Step A.5 · 게이트를 다시 돌리지 않고 표에 배정한 뒤 생성만 다시 돈다. 재분해 절차는 전용 브랜치(새로 fetch 한 `origin/main`)에서 돌고 `references/redecompose.md` 에 끝내기 절이 있다.
 - 분해된 일의 다음 세션 줄은 brief 하나 대신 `@<로드맵>` 지휘 줄이다(finishing.md 의 「다음 세션 줄 — 분해된 일 ①/② 공통」 아래 인라인 코드 문단). Step B 의 마지막 brief 쓰기 직후 언제나 로드맵 · 묶음을 한 번 더 생성하고, 함께 커밋하라는 안내 한 줄을 보인다. 나누지 않은 일은 그대로다.
 - `spec-review` 게이트 ③ — 설계문서 frontmatter 에 `roadmap:` 줄이 있으면 「인터뷰 다시 열기」 갈래가 재분해 절차로 간다. 다른 갈래와 로드맵 밖 문서는 그대로다.
 - `references/proceed-gate.md` 재결정 규약에 「분해 단위의 변경은 `${CLAUDE_PLUGIN_ROOT}/references/redecompose.md` 로」 한 줄. brief 템플릿 §7 에 분해 줄.
