@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """spec-distill — payload/audit §6 원문 완전성 검사 (Spec B AC10/AC11/AC12/AC14).
 
-payload(§6 `S1`)와 audit(§6 `S2` 이상)의 합집합을 state.local.md(`user_statements`
+payload(§6 `S1`)와 audit(§6 `S2` 이상)의 합집합을 <상태 파일>(`user_statements`
 원장)와 대조한다. v0.43.0부터 §6 원문 자체가 payload·audit 두 파일에 나뉘어 산다 —
 `S1`은 payload에, `S2` 이상은 audit에(설계 §2 「payload/audit 분리」). 그래서 이
 스크립트는 **세 파일**을 읽는다 — 우회에 세 곳 모두의 조작이 필요하므로 이빨이
@@ -386,7 +386,7 @@ def main(argv: list[str]) -> int:
         except (AttributeError, ValueError):
             pass
     if len(argv) != 4:
-        print("usage: check_verbatim_coverage.py <payload> <state.local.md> <audit>",
+        print("usage: check_verbatim_coverage.py <payload> <상태 파일> <audit>",
               file=sys.stderr)
         return EXIT_USAGE
     try:

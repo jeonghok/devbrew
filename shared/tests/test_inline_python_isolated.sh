@@ -311,6 +311,8 @@ else
 fi
 
 note "[정적 — 양성 증인: 고친 자리를 스캐너가 인라인 · 격리로 본다]"
+# spec-interview SKILL.md · finishing.md 는 증인에서 뺐다(R7 Task 9) — 그 자리(state 를 Bash 로만 고치던 계약의 인라인 python 줄)가
+# 상태 파일 이월로 지워져 인라인 python 이 남지 않는다. 격리 없는 호출이 새로 생기면 위 부재 검사가 잡는다.
 for f in \
   plugins/quality-gates/scripts/setup-qg.sh \
   plugins/quality-gates/scripts/discover-spec.sh \
@@ -322,8 +324,6 @@ for f in \
   plugins/spec-distill/skills/request-framing/SKILL.md \
   plugins/spec-distill/skills/reviewing-brief/SKILL.md \
   plugins/spec-distill/skills/spec-review/SKILL.md \
-  plugins/spec-distill/skills/spec-interview/SKILL.md \
-  plugins/spec-distill/skills/spec-interview/references/finishing.md \
   shared/docreview/scripts/run_docreview_codex_reviewer.sh; do
   n="$(printf '%s\n' "$report" | awk -F'\t' -v p="$ROOT/$f:" 'index($1, p) == 1 && $2 == "isolated"' | grep -c .)"
   assert_eq "$([ "$n" -ge 1 ] && echo ok || echo 0)" ok "$f — 격리된 인라인 호출 ${n}개"

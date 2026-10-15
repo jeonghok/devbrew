@@ -14,7 +14,7 @@
 - floor `open_questions` closed — 미해결 명시(박제, "유추 금지").
 
 각 차원의 status 전이(open→in-progress→closed)와 evidence 기록은 **orchestrator만** 수행하며
-(coverage-mapper·blind-spot-prober는 read-only 제안자, Law 2), state.local.md에 쓰는 동시에
+(coverage-mapper·blind-spot-prober는 read-only 제안자, Law 2), 상태 파일에 쓰는 동시에
 audit §1 `## Coverage Ledger`에 직렬화합니다.
 
 **사용자-승인 박제로 닫힌 floor** — `evidence` 가 `사용자-승인 박제` 로 시작하는 차원은
@@ -26,9 +26,10 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 1. `${CLAUDE_PLUGIN_ROOT}/templates/interview-brief-template.md`로 payload **8-section**
    구조(§0 한눈에 – §7 Next Action)를, `${CLAUDE_PLUGIN_ROOT}/templates/interview-audit-template.md`로
    audit **5-section** 구조를 확보합니다.
-2. 경로 (둘 다 워크트리 안 → `Write` tool 사용):
-   - payload: `docs/superpowers/interview/<YYYY-MM-DD>-<kebab-topic>-interview.md`
-   - audit:   `docs/superpowers/interview/<YYYY-MM-DD>-<kebab-topic>-interview.audit.md`
+2. 경로 (둘 다 워크트리 안 → `Write` tool 사용): payload · audit 경로는 상태 파일 이름에서 `.state.md` 를 뗀
+   `<줄기>` 에 `.md` · `.audit.md` 를 붙인 것이다(`state-file.md`). 날짜 · 주제로 다시 계산하지 않는다.
+   - payload: `<줄기>.md` (`docs/superpowers/interview/<YYYY-MM-DD>-<kebab-topic>-interview.md`)
+   - audit:   `<줄기>.audit.md`
    - payload frontmatter: `type: interview-brief`, `next_phase: superpowers:brainstorming`,
      `session_id`(기존 spec-distill 세션 재사용), `audit_file`(audit의 **basename만** —
      경로 구분자가 들어가면 게이트가 거부합니다), `user_sourced_items[]`.
@@ -221,13 +222,10 @@ Step A가 끝난 시점에 `user_sourced_items`는 **전부 `provisional`**입�
 [spec-distill] 확정 목록을 두 번 다시 보여 줬는데도 정하지 못했다 — 모든 항목을 잠정(provisional)으로 둔다
 ```
 
-카운터는 프로즈 self-tracking이 아니라 state에 씁니다(PN1 Bash write contract):
+카운터는 프로즈 self-tracking이 아니라 상태 파일에 씁니다:
 
 ```bash
-SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
-STATE="$ROOT/<session-id>/state.local.md"
-# confirm_repost_count read-modify-write via python3 -I -X utf8 -c / python3 -I -X utf8 - heredoc (-I 없이 부르면 사용자 리포의 json.py 등이 표준 모듈 대신 실행된다)
+# confirm_repost_count 는 상태 파일(<줄기>-interview.state.md)의 frontmatter 에 Edit 로 쓴다
 ```
 
 #### B-A — 참고(advisory) 목록 — 한 번 보이고 §3 · §5 에 박제
@@ -304,7 +302,7 @@ python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
 
 게이트 *이전*에 brief 경로 존재를 확인합니다(`[[ -f <brief-path> ]]` — race 방어 경량 가드,
 `AskUserQuestion` 게이트 자체는 아님). 부재 시 정본(`proceed-gate.md`)의 `## Step A` 대로
-두 줄 명령을 노출하지 *않고* loud advisory 후 STOP(brief 는 막 검증됐고 하류·SessionEnd 가 cleanup 을 맡는다 — 설계 §5.3):
+두 줄 명령을 노출하지 *않고* loud advisory 후 STOP(brief 는 막 검증됐다 — 설계 §5.3):
 
 > `[spec-distill] brief '<brief-path>' 부재 — 재작성/세션 리셋 필요`
 
@@ -385,7 +383,7 @@ AskUserQuestion({
 한 줄과, 그 아래에 다음 세션 줄에서 `@` 토큰을 뗀 나머지 문장을 그대로 보인 뒤 멈춘다(정본 `## 다음 세션 명령` 규칙 5). 사람이 이 줄의 유일한 운반자다 — 자동으로 이어지지 않는다.
 
 - **① 확정하고 /compact 후 brainstorming**: 확정 후보를 `status: confirmed`로 반영 → brief 재저장 →
-  `check_brief.py gate` 재실행(통과 확인) → 두 줄을 *그대로 보이게* 노출한다. 첫 줄은 맨 `/compact`
+  `check_brief.py gate` 재실행(통과 확인) → 아래 세 파일 커밋 펜스(`interview-commit`) → 두 줄을 *그대로 보이게* 노출한다. 첫 줄은 맨 `/compact`
   (뒤에 아무것도 붙이지 않는다 — 붙인 텍스트는 요약 지시로만 쓰인다), 둘째 줄은 위 다음 세션 줄이다.
   두 줄을 따로 입력하라는 안내와 git 작업 트리 루트의 절대경로를 함께 낸다(정본
   `## 다음 세션 명령` 규칙 1 · 7).
@@ -401,8 +399,51 @@ AskUserQuestion({
 - **③ 확정 목록 수정**: 확정 전이 없음. `confirm_repost_count` +1 후 B-0으로 돌아가 수정된
   목록을 재제시(상한 2회 — 초과 시 B-0의 강등 경로).
 
-- **④ brief만 종료**: 전 항목 `provisional` 유지. brief terminal advisory(B-1 부재 advisory와
-  같은 톤) 출력 후 종료. handoff 안 함. state는 SessionEnd hook이 cleanup.
+- **④ brief만 종료**: 전 항목 `provisional` 유지. 아래 세 파일 커밋 펜스(`interview-commit`)를 돌린 뒤 brief terminal
+  advisory(B-1 부재 advisory와 같은 톤)를 내고 종료. handoff 안 함.
+
+**세 파일 커밋 — ①/② 는 게이트 재실행 통과 뒤 두 줄 노출 전, ④ 는 종료 안내 직전, 한 번.** ③ 은 커밋하지 않는다.
+게이트 재실행이 통과하지 않으면 커밋하지 않는다. 펜스의 `BRIEF` 자리표를 Step A.5 의 PAYLOAD 절대경로로 바꿔 돌리고,
+나온 `[spec-distill]` 줄을 그대로 보인다. 진행은 막지 않는다.
+
+<!-- interview-commit:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
+case "$BRIEF" in
+  ""|*"<"*) echo "[spec-distill] 커밋 입력 부재 — BRIEF 가 비었거나 자리표 그대로다(Step A.5 의 PAYLOAD 절대경로로 바꿔 다시 돌려라)." ;;
+  *)
+  bdir="$(cd "$(dirname -- "$BRIEF")" 2>/dev/null && pwd -P)" || bdir=""
+  [ -z "$bdir" ] || BRIEF="${bdir}/$(basename -- "$BRIEF")"
+  stem="${BRIEF%.md}"
+  AUDIT_F="${stem}.audit.md"
+  STATE_F="${stem}.state.md"
+  top=""; [ -z "$bdir" ] || top="$(git -C "$bdir" rev-parse --show-toplevel 2>/dev/null)" || top=""
+  def="$(git -C "${top:-.}" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)" || def=""
+  def="${def#origin/}"
+  cur="$(git -C "${top:-.}" branch --show-current 2>/dev/null)" || cur=""
+  if [ -z "$top" ]; then
+    echo "[spec-distill] 커밋하지 않았다 — git 저장소가 아니다. 파일은 docs 에 있다: $BRIEF · $AUDIT_F · $STATE_F"
+  elif ! python3 "$SD/scripts/state_path.py" path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F"; then
+    echo "[spec-distill] 커밋하지 않았다 — 세 파일 중 작업 트리 밖이거나 링크를 거치는 경로가 있다(위 사유). 확인한 뒤 직접 커밋하라: $BRIEF · $AUDIT_F · $STATE_F"
+  elif [ -z "$def" ]; then
+    echo "[spec-distill] 커밋하지 않았다 — 기본 브랜치를 판정하지 못했다(origin/HEAD 없음). 직접 커밋하라: $BRIEF · $AUDIT_F · $STATE_F"
+  elif [ "$cur" = "$def" ]; then
+    echo "[spec-distill] 커밋하지 않았다 — 지금 기본 브랜치(${def})에 있다. 브랜치에서 커밋하라: $BRIEF · $AUDIT_F · $STATE_F"
+  else
+    c_rc=0
+    git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" || c_rc=$?
+    [ "$c_rc" -ne 0 ] || git -C "$top" commit -q --only -m "docs(interview): $(basename -- "$stem") brief · audit · 상태 기록" -- "$BRIEF" "$AUDIT_F" "$STATE_F" || c_rc=$?
+    if [ "$c_rc" -eq 0 ]; then
+      echo "[spec-distill] brief · audit · 상태 파일을 커밋했다 — $(git -C "$top" rev-parse --short HEAD) (${cur})"
+    else
+      echo "[spec-distill] 커밋이 실패했다(rc ${c_rc}) — 파일은 docs 에 있다: $BRIEF · $AUDIT_F · $STATE_F"
+    fi
+  fi
+  ;;
+esac
+```
+<!-- interview-commit:end -->
 
 #### B-4 — 두 가드 (load-bearing)
 

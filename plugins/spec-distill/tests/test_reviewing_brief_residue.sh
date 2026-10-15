@@ -435,9 +435,8 @@ fi
 [ -n "$r1_dir" ] && [ "$r1_dir" = "$r2_dir" ] \
   && ok "P5: 상대경로 payload 가 절대경로와 같은 자리를 받는다 (엔진은 상대 --doc 을 거부한다 — 자리가 cwd 의 함수가 되지 않는다)" \
   || no "P5: 상대경로 payload 의 자리($r1_dir)가 절대경로의 자리($r2_dir)와 다르다"
-sess="${b_state%/state.local.md}"
-[ -n "$b_state" ] && [ "$sess" != "$b_state" ] && [ "${b_dir%/*}" = "${sess%/*}/.docreview" ] && [ "${s_dir%/*}" = "${sess%/*}/.docreview" ] \
-  && ok "P6: degrade 원장(\$STATE)은 세션의 한 파일이고 두 자리의 문서별 디렉토리는 같은 상태 루트 아래 .docreview/ 에 앉는다 (세션 칸 없음)" \
+[ -n "$b_state" ] && [ "$b_state" = "${DOC_B%-interview.md}-interview.state.md" ] && [ -n "$b_dir" ] && [ "${b_dir%/*}" = "${s_dir%/*}" ] && [ "${b_dir%/*/*}/.docreview" = "${b_dir%/*}" ] \
+  && ok "P6: degrade 원장(\$STATE)은 payload 이름에서 도출한 그 인터뷰의 상태 파일이고 두 자리의 문서별 디렉토리는 같은 상태 루트 아래 .docreview/ 에 앉는다 (세션 칸 없음)" \
   || no "P6: degrade 원장 또는 문서별 디렉토리의 자리가 어긋났다 (STATE $b_state · $b_dir · $s_dir)"
 
 # ── S) payload 미상 — 다른 자리의 산출물을 건드리지 않는다 ────────────────────────
@@ -619,24 +618,28 @@ rc=0; ( cd "$SCRATCH/rb59nosd" && env -i PATH="$BASE" HOME="$SCRATCH/rb59nosd" P
 
 # M3 — 따로 돈 degrade-append 블록의 record 가 닿는다. 원장이 쓰기 불가면 두 번째 채널 파일에 닿는다.
 # 슬롯(<a>·<b>·<c>·<r>)은 모델이 채우는 자리라 여기서도 채워 돌린다.
-home="$SCRATCH/rb58apnd"; S="$home/.claude/spec-distill/rb58apnd"; mkdir -p "$S"
-printf -- '---\nsession_id: rb58apnd\n---\n\nbody\n' > "$S/state.local.md"
-alone rb58apnd "$INPUT" "$RPR" PAYLOAD="$DOC_B" AUDIT="$AUD_B"
+# 원장 = payload 옆 그 인터뷰의 상태 파일, 두 번째 채널 = 그 payload 의 원장 자리 안.
+home="$SCRATCH/rb58apnd"; mkdir -p "$home/docs"
+DOC_M3="$home/docs/brief-sample-interview.md"; AUD_M3="$home/docs/brief-sample-interview.audit.md"; SF_M3="$home/docs/brief-sample-interview.state.md"
+cp "$DOC_B" "$DOC_M3"; cp "$AUD_B" "$AUD_M3"
+printf -- '---\ntype: interview-state\nseed: 없음\nsession_id: rb58apnd\n---\n\nbody\n' > "$SF_M3"
+alone rb58apnd "$INPUT" "$RPR" PAYLOAD="$DOC_M3" AUDIT="$AUD_M3"
+FB_M3="$(where rb58apnd "$DOC_M3")/brief-degrade-fallback.txt"
 fill() { sed -e 's/<a>/pipeline/g' -e 's/<b>/all/g' -e 's/<c>/skipped/g' -e "s/<r>/$1/g" "$APPEND_BLK" > "$2"; }
 fill probe-land-q1 "$SCRATCH/append-1.sh"; fill probe-fallback-q2 "$SCRATCH/append-2.sh"
-if grep -q '^brief_review_degradations:' "$S/state.local.md"; then
+if grep -q '^brief_review_degradations:' "$SF_M3"; then
   ok "M3 전제: \`## 입력\` 머리의 init 이 degrade 원장 키를 심었다"
 else
   no "M3 전제 붕괴: degrade 원장 키가 없다 — 아래 셀은 append 를 재지 않는다 ($(head -c 200 "$SCRATCH/rb58apnd.alone.err" 2>/dev/null))"
 fi
-alone rb58apnd "$SCRATCH/append-1.sh" "$RPR" PAYLOAD="$DOC_B" AUDIT="$AUD_B"
-grep -q 'probe-land-q1' "$S/state.local.md" \
+alone rb58apnd "$SCRATCH/append-1.sh" "$RPR" PAYLOAD="$DOC_M3" AUDIT="$AUD_M3"
+grep -q 'probe-land-q1' "$SF_M3" \
   && ok "M3: 앞 블록 없이 따로 돈 degrade-append 의 record 가 원장에 닿는다" \
   || no "M3: 따로 돈 degrade-append 의 record 가 원장에 없다 — 그 record 는 「degrade 없음」으로 사라진다 ($(head -c 200 "$SCRATCH/rb58apnd.alone.err" 2>/dev/null))"
-chmod 444 "$S/state.local.md"
-alone rb58apnd "$SCRATCH/append-2.sh" "$RPR" PAYLOAD="$DOC_B" AUDIT="$AUD_B"
-chmod 644 "$S/state.local.md"
-{ grep -q 'probe-fallback-q2' "$S/brief-degrade-fallback.txt" 2>/dev/null && ! grep -q 'probe-fallback-q2' "$S/state.local.md"; } \
+chmod 444 "$SF_M3"
+alone rb58apnd "$SCRATCH/append-2.sh" "$RPR" PAYLOAD="$DOC_M3" AUDIT="$AUD_M3"
+chmod 644 "$SF_M3"
+{ [ "$FB_M3" != /brief-degrade-fallback.txt ] && grep -q 'probe-fallback-q2' "$FB_M3" 2>/dev/null && ! grep -q 'probe-fallback-q2' "$SF_M3"; } \
   && ok "M3: 원장이 쓰기 불가면 따로 돈 블록의 record 가 머리가 다시 도출한 두 번째 채널 파일에 닿는다" \
-  || no "M3: 원장 쓰기 실패의 record 가 두 번째 채널 파일($S/brief-degrade-fallback.txt)에 없다 — \`>> \"\"\` 로 사라졌다"
+  || no "M3: 원장 쓰기 실패의 record 가 두 번째 채널 파일($FB_M3)에 없다 — \`>> \"\"\` 로 사라졌다"
 finish

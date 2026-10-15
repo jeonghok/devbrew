@@ -110,11 +110,13 @@ DOC="$DOCS/brief-sample.md"; AUD="$DOCS/brief-sample.audit.md"
 # ── 실행 ────────────────────────────────────────────────────────────────────
 run_select() {   # run_select <셀> <플러그인 루트> [NAME=VALUE…]
   local cell="$1" pr="$2"; shift 2
-  local home="$SCRATCH/$cell"; mkdir -p "$home/.claude/spec-distill/$cell"
-  # degrade 원장은 인터뷰가 먼저 만든 세션 state 다(`init` 은 있는 파일에 키만 심는다) — 그 모양을 심는다.
-  printf -- '---\nsession_id: %s\n---\n\nbody\n' "$cell" > "$home/.claude/spec-distill/$cell/state.local.md"
-  ( cd "$home" && env -i PATH="$BASE" HOME="$home" PYTHONPATH="$YAML_SITE" PYTHONDONTWRITEBYTECODE=1 \
-      CLAUDE_PLUGIN_ROOT="$pr" DEVBREW_SPEC_DISTILL_SESSION_ID="$cell" PAYLOAD="$DOC" AUDIT="$AUD" \
+  local home="$SCRATCH/$cell"; mkdir -p "$home/.claude/spec-distill" "$home/docs" "$home/tmp"
+  # degrade 원장은 인터뷰가 먼저 만든 그 인터뷰의 상태 파일이다(`init` 은 있는 파일에 키만 심는다) — payload 옆에 그 모양을 심는다.
+  local doc="$home/docs/brief-sample-interview.md"
+  cp "$DOC" "$doc"; cp "$AUD" "${doc%.md}.audit.md"
+  printf -- '---\ntype: interview-state\nseed: 없음\nsession_id: %s\n---\n\nbody\n' "$cell" > "${doc%.md}.state.md"
+  ( cd "$home" && env -i PATH="$BASE" HOME="$home" TMPDIR="$home/tmp" PYTHONPATH="$YAML_SITE" PYTHONDONTWRITEBYTECODE=1 \
+      CLAUDE_PLUGIN_ROOT="$pr" DEVBREW_SPEC_DISTILL_SESSION_ID="$cell" PAYLOAD="$doc" AUDIT="${doc%.md}.audit.md" \
       "$@" bash "${WITH:-$COMBINED}" ) >"$SCRATCH/$cell.out" 2>"$SCRATCH/$cell.err"
   echo $? > "$SCRATCH/$cell.rc"
 }
