@@ -10,6 +10,9 @@ CLI:
   python3 state_path.py session-id            → prints env-resolved session id (exit 1 if unresolved)
   python3 state_path.py interview-state --topic <kebab> [--date YYYY-MM-DD] [--cwd <dir>]
                                               → prints interview state file path (exit 2 on refusal)
+  python3 state_path.py path-inside --root <R> <PATH>...
+                                              → exit 0 if every PATH is inside R without links, else 2
+                                                (a logical cwd prefix of R and PATH is read as the physical cwd)
 """
 from __future__ import annotations
 
@@ -121,6 +124,19 @@ def inside_root(path, root) -> str | None:
     return None
 
 
+def physical_cwd_prefix(path: str, cwd: str) -> str:
+    """cwd(또는 그 논리 표기 $PWD) 접두만 물리 경로로 바꾼다 — 그 아래 성분의 링크는 inside_root 가 본다."""
+    real_cwd = os.path.realpath(cwd)
+    prefixes = [os.path.abspath(cwd)]
+    pwd = os.environ.get("PWD", "")
+    if pwd and os.path.isabs(pwd) and os.path.realpath(pwd) == real_cwd:
+        prefixes.append(os.path.abspath(pwd))
+    for lc in prefixes:
+        if path == lc or path.startswith(lc + os.sep):
+            return real_cwd + path[len(lc):]
+    return path
+
+
 def frontmatter_scalars(path) -> dict | None:
     """맨 앞 `---` 블록의 최상위 `key: value` 줄. 읽지 못하면 None, frontmatter 가 없으면 {}."""
     try:
@@ -217,14 +233,15 @@ def main(argv: list[str]) -> int:
             print("usage: state_path.py path-inside --root <R> <PATH>...", file=sys.stderr)
             return 2
         i = argv.index("--root")
-        root = argv[i + 1]
+        cwd = os.getcwd()
+        root = physical_cwd_prefix(argv[i + 1], cwd)
         paths = argv[2:i] + argv[i + 2:]
         if not paths:
             print("usage: state_path.py path-inside --root <R> <PATH>...", file=sys.stderr)
             return 2
         bad = 0
         for q in paths:
-            why = inside_root(q, root)
+            why = inside_root(physical_cwd_prefix(q, cwd), root)
             if why:
                 print("[spec-distill] 경로가 작업 트리 밖이거나 링크를 거친다 — {0}: {1}".format(q, why),
                       file=sys.stderr)

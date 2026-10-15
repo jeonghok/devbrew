@@ -1006,11 +1006,12 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 **handoff 직전 커밋(①/② 에서만).** 워크트리 안이면 ①/② 를 고른 직후 handoff 직전
 커밋을 한 번 합니다 — 명령 노출(①/②) 바로 앞입니다.
 ③(수정)·④(멈춤)에서는 커밋하지 않습니다 — 수정마다 커밋이 늘고 멈춤에도 커밋이 남는
-것을 막기 위해서입니다. 단순 명령 둘(`<topic>` 은 공백 없는 kebab-case 주제):
+것을 막기 위해서입니다. 단순 명령 둘(`<topic>` 은 공백 없는 kebab-case 주제) — 경로 지정 커밋이라
+이미 stage 된 다른 작업을 쓸어 담지 않습니다:
 
 ```bash
-git add "$AUDIT" "$SEED"
-git commit -q -m 'docs(interview): <topic> interview seed + audit'
+git add -- "$AUDIT" "$SEED"
+git commit -q --only -m 'docs(interview): <topic> interview seed + audit' -- "$AUDIT" "$SEED"
 ```
 
 워크트리가 아니면(거절·부재·스위치) 커밋하지 않고 «미커밋 — 현재 디렉토리» 를 게이트 앞 글에

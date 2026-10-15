@@ -101,6 +101,21 @@ python3 "$HELPER" path-inside --root "$PI" "$PI/docs/lnk/../../x" >/dev/null 2>&
 assert_eq "$rc" "2" "path-inside: 링크 뒤 .. (두 단계)는 rc 2"
 python3 "$HELPER" path-inside --root "$PI" >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "path-inside: 경로 인자가 없으면 rc 2"
+# 논리 cwd(링크로 들어온 자리 · $PWD)의 접두만 물리 경로로 읽는다 — git 이 내는 물리 루트와 맞춰 잰다.
+# cwd 가 아닌 링크 접두는 풀지 않는다(그 링크가 레포 안에 심긴 것일 수 있다). 그 아래 링크는 그대로 거부.
+LC="$WORK/pi-logical"; ln -s "$PI" "$LC"
+rc=0; ( cd "$LC" && PWD="$LC" python3 "$HELPER" path-inside --root "$PI" "$LC/docs/real/f.md" >/dev/null 2>&1 ) || rc=$?
+assert_eq "$rc" "0" "path-inside: 논리 cwd 접두의 경로는 물리 루트 안으로 읽힌다(양성 대조)"
+rc=0; ( cd "$LC" && PWD="$LC" python3 "$HELPER" path-inside --root "$LC" "$PI/docs/real/f.md" >/dev/null 2>&1 ) || rc=$?
+assert_eq "$rc" "0" "path-inside: 논리 cwd 표기의 루트도 물리로 읽힌다(양성 대조)"
+rc=0; ( cd "$LC" && PWD="$LC" python3 "$HELPER" path-inside --root "$PI" "$LC/docs/lnk/f.md" >/dev/null 2>&1 ) || rc=$?
+assert_eq "$rc" "2" "path-inside: 논리 cwd 접두라도 그 아래 링크 성분은 rc 2"
+rc=0; python3 "$HELPER" path-inside --root "$PI" "$LC/docs/real/f.md" >/dev/null 2>&1 || rc=$?
+assert_eq "$rc" "2" "path-inside: cwd 가 아닌 링크 접두는 물리로 읽지 않는다(rc 2)"
+# 다른 저장소의 루트를 가리키는 링크 — 그 링크로 도출한 루트에 대어도 안으로 읽지 않는다
+OR="$WORK/other-root"; mkdir -p "$OR"; mkdir -p "$PI/docs/sp"; ln -s "$OR" "$PI/docs/sp/iv"
+rc=0; python3 "$HELPER" path-inside --root "$OR" "$PI/docs/sp/iv/x.md" >/dev/null 2>&1 || rc=$?
+assert_eq "$rc" "2" "path-inside: 다른 루트를 가리키는 레포 안 링크를 거친 경로는 그 루트 기준으로도 rc 2"
 LV="$WORK/iv-link"; mkdir -p "$LV/docs/superpowers" && git -C "$LV" init -q
 ln -s "$OUTD" "$LV/docs/superpowers/interview"
 python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$LV" >/dev/null 2>&1; rc=$?

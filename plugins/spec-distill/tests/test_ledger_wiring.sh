@@ -264,6 +264,44 @@ ba="$(fence "$FIN" advice-ba | python3 -I -c 'import sys; t = sys.stdin.buffer.r
 [ -e "$S7/reviewing-by" ] && no "fix1(3): finishing B-A 뒤에도 표지가 남았다" || ok "fix1(3): finishing B-A 뒤 표지가 사라졌다"
 assert_eq "$(cat "$S7/last-session" 2>/dev/null)" "sess-iiii9999" "fix1(3): finishing B-A 가 last-session 에 자기 세션을 남겼다"
 
+# 보안 — B-A 는 payload 짝 audit 가 링크면 audit 에 쓰지 않는다(엔진 advice --log-file 이 링크를 따라간다)
+d9="$repo/docs/g-brief.md"; printf '# G\n' > "$d9"
+o="$(open_at "$repo" "$d9" sess-iiii9999 "$RB")"
+S9="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$repo/.claude/spec-distill" --doc "$d9")"
+ledger "$S9/docreview-state.md" "$d9" 1
+printf 'victim\n' > "$T/ba-victim"; ln -s "$T/ba-victim" "$repo/docs/g-brief.audit.md"
+before9="$(cksum < "$S9/docreview-state.md")"
+ba9="$(fence "$FIN" advice-ba | python3 -I -c 'import sys; t = sys.stdin.buffer.read().decode("utf-8"); k = "<Step A.5 의 PAYLOAD 절대경로>"; sys.stdout.buffer.write(t.replace(k, sys.argv[1]).encode("utf-8"))' "$d9")"
+o="$(cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-iiii9999 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-iiii9999 bash -c "$ba9" 2>&1)"
+assert_contains "$o" "참고(advisory) 목록 건너뜀 — brief · audit · 상태 파일 중 링크를 거치거나" "보안: B-A — 짝 audit 가 링크면 참고 목록을 건너뛰고 사유를 보인다"
+assert_eq "$(cat "$T/ba-victim")" "victim" "보안: B-A — 링크 너머 파일은 그대로다"
+assert_eq "$(cksum < "$S9/docreview-state.md")" "$before9" "보안: B-A — 링크 칸에서 원장도 그대로다"
+rm -f "$repo/docs/g-brief.audit.md"
+
+# M3 — 표지를 확인하지 못한 것(rc 2)은 남의 표지(rc 3)와 다른 말로 알린다. 표지 자리에 심은 링크가 rc 2 를 낸다.
+printf 'marker-victim\n' > "$T/mk-victim"
+d11="$repo/docs/k-design.md"; printf '# K\n' > "$d11"
+o="$(open_at "$repo" "$d11" sess-mmmm3333 "$SR")"
+S11="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$repo/.claude/spec-distill" --doc "$d11")"
+ledger "$S11/docreview-state.md" "$d11" 1
+rm -f "$S11/reviewing-by"; ln -s "$T/mk-victim" "$S11/reviewing-by"
+o="$(cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-mmmm3333 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-mmmm3333 \
+    bash -c "spec_path='$d11'
+$(fence "$SR" advice-display)" 2>&1)"
+assert_contains "$o" "표지를 확인하지 못했다(rc 2) — 원장 쓰기를 하지 않는다" "M3: spec-review 끝맺음 — rc 2 는 「표지를 확인하지 못했다」"
+assert_not_contains "$o" "표지가 다른 세션 것이다" "M3: spec-review 끝맺음 — rc 2 를 남의 표지로 말하지 않는다"
+d12="$repo/docs/l-brief.md"; printf '# L\n' > "$d12"
+o="$(open_at "$repo" "$d12" sess-mmmm3333 "$RB")"
+S12="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$repo/.claude/spec-distill" --doc "$d12")"
+ledger "$S12/docreview-state.md" "$d12" 1
+rm -f "$S12/reviewing-by"; ln -s "$T/mk-victim" "$S12/reviewing-by"
+ba12="$(fence "$FIN" advice-ba | python3 -I -c 'import sys; t = sys.stdin.buffer.read().decode("utf-8"); k = "<Step A.5 의 PAYLOAD 절대경로>"; sys.stdout.buffer.write(t.replace(k, sys.argv[1]).encode("utf-8"))' "$d12")"
+o="$(cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-mmmm3333 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-mmmm3333 bash -c "$ba12" 2>&1)"
+assert_contains "$o" "표지를 확인하지 못했다(rc 2) — 원장 쓰기를 하지 않는다" "M3: finishing B-A — rc 2 는 「표지를 확인하지 못했다」"
+assert_not_contains "$o" "표지가 다른 세션 것이다" "M3: finishing B-A — rc 2 를 남의 표지로 말하지 않는다"
+[ -e "$S12/advice-list.json" ] && no "M3: finishing B-A — rc 2 인데 원장 자리에 참고 목록을 썼다" || ok "M3: finishing B-A — rc 2 면 원장 자리에 쓰지 않는다"
+assert_eq "$(cat "$T/mk-victim")" "marker-victim" "M3: 심은 표지 링크 너머는 그대로다"
+
 d8="$repo/docs/h-design.md"; printf '# H\n' > "$d8"
 o="$(open_at "$repo" "$d8" sess-jjjj0000 "$SR")"
 S8="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$repo/.claude/spec-distill" --doc "$d8")"

@@ -17,7 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from state_path import (  # noqa: E402
-    INTERVIEW_DIR, SESSION_PATTERN, frontmatter_scalars, inside_root, interview_state_path, state_root, worktree_root,
+    INTERVIEW_DIR, SESSION_PATTERN, frontmatter_scalars, inside_root, interview_state_path, physical_cwd_prefix,
+    state_root, worktree_root,
 )
 from gc_common import root_escapes  # noqa: E402
 
@@ -38,13 +39,40 @@ def legacy_state(sid: str, cwd: str | None) -> Path | None:
     return p if p.is_file() else None
 
 
-def resume_candidates(seed: str) -> list[Path]:
-    want = seed_rel(seed)
+def sibling_reason(state, root) -> str | None:
+    """상태 파일 짝 brief(`<줄기>.md`) · audit(`<줄기>.audit.md`) 중 링크(끊긴 것 포함)이거나 작업 트리 밖인 것의 사유."""
+    stem = str(state)[:-len(".state.md")]
+    for q in (stem + ".md", stem + ".audit.md"):
+        why = inside_root(q, root)
+        if why:
+            return "{0}: {1}".format(os.path.basename(q), why)
+    return None
+
+
+def seed_value(seed: str, cwd: str | None) -> str:
+    """상태 파일 `seed:` 값 — seed 가 링크이거나 그 작업 트리 밖이면 `없음`(사유 한 줄은 stderr)."""
+    cwd = cwd or os.getcwd()
+    abs_seed = physical_cwd_prefix(os.path.abspath(os.path.join(cwd, seed)), cwd)
+    root, _ = worktree_root(os.path.dirname(abs_seed))
+    why = inside_root(abs_seed, root)
+    rel = None if why else seed_rel(abs_seed)
+    if rel is None or rel == ".." or rel.startswith(".." + os.sep) or os.path.isabs(rel):
+        print("[spec-distill] seed 가 링크이거나 작업 트리 밖이다 — seed 를 없음으로 적는다: {0} ({1})".format(
+            seed, why or "작업 트리 밖이다"), file=sys.stderr)
+        return "없음"
+    return rel
+
+
+def resume_candidates(seed: str, want: str) -> list[Path]:
     real_dir = os.path.dirname(os.path.realpath(seed))
     root, _ = worktree_root(real_dir)
     out = []
     for p in sorted(Path(real_dir).glob("*-interview.state.md")):
         if inside_root(p, root):   # 링크이거나 작업 트리 밖이면 후보로 내지 않는다
+            continue
+        why = sibling_reason(p, root)
+        if why:   # 짝 brief · audit 가 링크면 끝낼 때의 쓰기가 그 링크를 따라간다
+            print("[spec-distill] 이어 갈 후보에서 뺐다 — {0} ({1})".format(p, why), file=sys.stderr)
             continue
         fm = frontmatter_scalars(p) or {}
         if fm.get("type") != "interview-state" or fm.get("seed") != want:
@@ -53,19 +81,6 @@ def resume_candidates(seed: str) -> list[Path]:
             continue
         out.append(p)
     return out
-
-
-def physical_cwd_prefix(path: str, cwd: str) -> str:
-    """cwd(또는 그 논리 표기 $PWD) 접두만 물리 경로로 바꾼다 — 그 아래 성분의 링크는 inside_root 가 본다."""
-    real_cwd = os.path.realpath(cwd)
-    prefixes = [os.path.abspath(cwd)]
-    pwd = os.environ.get("PWD", "")
-    if pwd and os.path.isabs(pwd) and os.path.realpath(pwd) == real_cwd:
-        prefixes.append(os.path.abspath(pwd))
-    for lc in prefixes:
-        if path == lc or path.startswith(lc + os.sep):
-            return real_cwd + path[len(lc):]
-    return path
 
 
 def cmd_entry(a) -> int:
@@ -78,10 +93,17 @@ def cmd_entry(a) -> int:
         if why:
             print("interview-state: REJECT {0} ({1})".format(arg, why))
             return 2
+        why = sibling_reason(abs_arg, root)
+        if why:
+            print("interview-state: REJECT {0} ({1})".format(arg, why))
+            return 2
         fm = frontmatter_scalars(abs_arg)
         have = None if fm is None else fm.get("type")
         if have != "interview-state":
             print("interview-state: REJECT {0} (type: {1})".format(arg, have or "없음"))
+            return 2
+        if os.path.exists(abs_arg[:-len(".state.md")] + ".md"):
+            print("interview-state: REJECT {0} (이미 끝난 인터뷰다 — brief 가 있다)".format(arg))
             return 2
         print("interview-state: RESUME {0}".format(abs_arg))
         return 0
@@ -90,7 +112,8 @@ def cmd_entry(a) -> int:
         print("interview-state: LEGACY {0}".format(leg))
         return 0
     if arg and (frontmatter_scalars(arg) or {}).get("type") == "interview-seed":
-        cands = resume_candidates(arg)
+        sv = seed_value(arg, a.cwd)
+        cands = [] if sv == "없음" else resume_candidates(arg, sv)
         if cands:
             for c in cands:
                 print("candidate: {0}".format(c))
@@ -98,7 +121,7 @@ def cmd_entry(a) -> int:
             return 0
         m = _SEED_NAME.fullmatch(os.path.basename(arg))
         if m:
-            print("interview-state: NEW-SEED {0}-brief seed={1}".format(m.group(1), seed_rel(arg)))
+            print("interview-state: NEW-SEED {0}-brief seed={1}".format(m.group(1), sv))
             return 0
         print("[spec-distill] seed 이름에서 주제를 떼지 못했다 — 첫 라운드에서 정한다: {0}".format(arg),
               file=sys.stderr)
@@ -128,7 +151,7 @@ def cmd_migrate(a) -> int:
     tmp = path.with_name("." + path.name + ".tmp")
     try:
         text = leg.read_text(encoding="utf-8")
-        head = "type: interview-state\nseed: {0}\n".format(seed_rel(a.seed) if a.seed else "없음")
+        head = "type: interview-state\nseed: {0}\n".format(seed_value(a.seed, a.cwd) if a.seed else "없음")
         new = "---\n" + head + text[4:] if text.startswith("---\n") else "---\n" + head + "---\n" + text
         path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)

@@ -558,8 +558,10 @@ if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ] && [ -n "${harness_sid:-}" ]; 
 fi
 if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
   echo "[spec-distill] 참고(advisory) 목록 없음 — 엔진 원장을 찾지 못했다(spec_path='${spec_path:-}' · STATE_DIR='${STATE_DIR:-}'). 2단계 게이트 앞 글에 싣는다."
-elif [ "$lm_rc" -ne 0 ]; then
+elif [ "$lm_rc" -eq 3 ]; then
   echo "[spec-distill] 참고(advisory) 목록 건너뜀 — 이 원장의 표지가 다른 세션 것이다(rc ${lm_rc}). 박제 · 계수 · 표시를 하지 않는다."
+elif [ "$lm_rc" -ne 0 ]; then
+  echo "[spec-distill] 참고(advisory) 목록 건너뜀 — 표지를 확인하지 못했다(rc ${lm_rc}) — 원장 쓰기를 하지 않는다. 박제 · 계수 · 표시를 하지 않는다."
 elif [ ! -f "$spec_path" ]; then
   echo "[spec-distill] 참고(advisory) 목록 건너뜀 — 설계문서가 없다(spec_path='${spec_path}'). 박제 · 계수 · 표시를 하지 않는다 — 아래 대상 부재 재확인으로 간다."
 else

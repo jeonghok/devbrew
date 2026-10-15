@@ -30,6 +30,7 @@
 - `DEVBREW_SPEC_DISTILL_GC_VERBOSE` — TTL-GC 의 진단 출력 변수였다(끄는 스위치가 아니다). 읽던 스크립트가 지워져 읽는 곳이 없다. README 「은퇴한 스위치」 절에 적었다.
 
 ### Fixed
+- request-framing 의 handoff 직전 커밋이 경로 지정 커밋이다(`add -- "$AUDIT" "$SEED"` 뒤 `commit --only … -- "$AUDIT" "$SEED"`) — 이미 stage 된 다른 작업을 seed 커밋에 쓸어 담지 않는다.
 - 다른 세션의 SessionEnd · TTL-GC 가 아직 쓰는 리뷰 원장을 지워 모든 `decide` 가 `state_missing` 으로 끝나던 일(2026-09-18) — 원장이 문서 단위가 되고, 기록된 문서가 사라졌을 때만 지운다. 세션 종료 · 압축 · 다른 세션의 정리 뒤에도 인터뷰 진행 기록이 남는다.
 
 ### Security
@@ -39,7 +40,8 @@
   - `ledger_marker.py` — `--dir` 이나 그 부모가 링크거나 부모 밖으로 풀리면 rc 2. 표지 · 임시 파일을 `O_CREAT|O_EXCL|O_NOFOLLOW` 로 만들고 `os.replace` 로 바꾸며, 읽기도 `O_NOFOLLOW` 다.
   - `ledger_sweep.py` — 링크를 거쳐 풀리는 state root 와 링크인 `.docreview` 를 「셀 수 없음」 으로 거부한다. 링크를 거치는 옛 원장은 옮기지도 지우지도 않고 「읽지 못한 원장」 으로 세며, 옮길 대상 이름이 링크면 따라가지 않는다.
   - 인터뷰 끝 커밋 펜스 — brief · audit · 상태 파일 중 하나라도 작업 트리 밖이거나 링크를 거치면 `git add` · `commit` 을 하지 않고 세 경로와 사유를 보인다.
-  - `interview_state.py` — `RESUME` 은 받은 경로가 작업 트리 안이고 링크를 거치지 않을 때만 낸다(아니면 `REJECT`). `ASK` 후보에서 링크 · 작업 트리 밖 후보를 뺀다. 옛 자리 이월은 링크인 옛 파일 · 대상 자리를 거부하고 임시 파일을 `O_NOFOLLOW` 로 만든다.
+  - `interview_state.py` — `RESUME` 은 받은 경로와 그 짝 brief(`<줄기>.md`) · audit(`<줄기>.audit.md`)가 작업 트리 안이고 링크(끊긴 링크 포함)를 거치지 않을 때만 낸다(아니면 `REJECT`) — 끝낼 때의 brief 쓰기 · 엔진 `--log-file` · degrade 원장 쓰기가 그 짝 경로를 쓰기 때문이다. 짝 brief 가 이미 있으면(끝난 인터뷰) `REJECT`. `ASK` 후보에서 링크 · 작업 트리 밖 후보와 짝 brief · audit 가 링크인 후보를 뺀다. seed 가 링크이거나 작업 트리 밖이면 상태 파일의 `seed:` 를 `없음` 으로 적고 사유 한 줄을 낸다(경로를 드러내지 않는다). 옛 자리 이월은 링크인 옛 파일 · 대상 자리를 거부하고 임시 파일을 `O_NOFOLLOW` 로 만든다.
+  - reviewing-brief 의 머리 · `finishing.md` B-A — payload · audit · 상태 파일을 쓰기 전에 `path-inside --root <payload 의 작업 트리 최상위>` 로 잰다(git 이 아니면 payload 의 폴더 기준). 거부되면 머리는 사유를 보이고 멈추고(degrade 원장도 쓰지 않는다), B-A 는 참고 목록을 audit 에 쓰지 않는다. `path-inside` 는 논리 cwd(`$PWD`) 접두만 물리 경로로 읽는다 — cwd 가 아닌 링크 접두는 풀지 않는다.
 - 상태 파일(커밋되는 파일)의 `## 풀린 입력` 블록은 P21 secret placeholder 치환을 거친 글만 적는다.
 
 ## [5.6.0] — 2026-10-15

@@ -13,6 +13,7 @@ fence() {   # fence <파일> <마커 이름> → 그 마커 사이 첫 bash 펜�
   awk -v b="<!-- $2:begin -->" -v e="<!-- $2:end -->" '
     index($0,b){f=1;next} index($0,e){f=0} f&&/^```bash$/{c=1;next} f&&c&&/^```$/{c=0;next} f&&c' "$1"
 }
+nob() { no "$1"; printf '      출력: %s\n' "$2"; }   # 실패 이름은 고정 — 출력은 따로 보인다
 SK="$SD/skills/spec-interview/SKILL.md"; SF="$SD/skills/spec-interview/references/state-file.md"
 FIN="$SD/skills/spec-interview/references/finishing.md"; RB="$SD/skills/reviewing-brief/SKILL.md"
 
@@ -49,6 +50,27 @@ for v in 'interview-state: ASK`' 'interview-state: LEGACY <경로>`' 'interview-
 done
 grep -qF 'interview-state: REJECT …' "$SK" && ok "AC3: SKILL 이 REJECT 에서 멈춘다" || no "AC3: SKILL 에 REJECT 판결이 없다"
 grep -qF '마지막 줄의 판결마다 동작은 아래 `Read` 줄의 state-file.md 에 있다' "$SK" && ok "AC3: SKILL 이 판결 표를 state-file.md 로 가리킨다" || no "AC3: SKILL 에 판결 표 가리킴이 없다"
+# 진입 스크립트가 죽으면(마지막 줄이 판결이 아니다) 판결 표의 어느 행에도 들지 않는다 — 3.6 본문이 멈춤을 정한다.
+S36="$(python3 -I -c '
+import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+i = t.find("### 3.6")
+print(t[i:t.find("\n### ", i + 1)] if i >= 0 else "")' "$SK")"
+printf '%s\n' "$S36" | grep -qF '마지막 줄이 `interview-state:` 판결이 아니면 그 출력을 보이고 멈춘다' \
+  && ok "AC3: 3.6 — 판결 줄이 아니면 출력을 보이고 멈춘다" || no "AC3: 3.6 에 판결 아닌 마지막 줄의 행이 없다"
+# 끝난 인터뷰(짝 brief 가 있다)와 짝 brief · audit 의 링크는 진입 펜스에서 REJECT 다
+D2="$iv/docs/superpowers/interview"; OUTSIDE="$T/outside"; mkdir -p "$OUTSIDE"; printf '원본\n' > "$OUTSIDE/keys"
+printf -- '---\ntype: interview-state\nseed: 없음\n---\n## R1\n' > "$D2/2026-10-15-f-interview.state.md"
+printf -- '---\ntype: interview-brief\n---\n' > "$D2/2026-10-15-f-interview.md"
+assert_eq "$(ent "$D2/2026-10-15-f-interview.state.md")" "interview-state: REJECT $D2/2026-10-15-f-interview.state.md (이미 끝난 인터뷰다 — brief 가 있다)" "AC3: 끝난 인터뷰의 상태 파일은 REJECT"
+printf -- '---\ntype: interview-state\nseed: 없음\n---\n## R1\n' > "$D2/2026-10-15-l-interview.state.md"
+ln -s "$OUTSIDE/keys" "$D2/2026-10-15-l-interview.audit.md"
+case "$(ent "$D2/2026-10-15-l-interview.state.md")" in
+  "interview-state: REJECT $D2/2026-10-15-l-interview.state.md (2026-10-15-l-interview.audit.md: 링크를 거친다"*) ok "AC3: 짝 audit 가 링크면 REJECT" ;;
+  *) no "AC3: 짝 audit 링크를 이어 가기가 받아들였다" ;;
+esac
+assert_eq "$(cat "$OUTSIDE/keys")" "원본" "AC3: 링크 너머 파일은 그대로"
+rm -f "$D2/2026-10-15-l-interview.audit.md" "$D2/2026-10-15-l-interview.state.md" "$D2/2026-10-15-f-interview.state.md" "$D2/2026-10-15-f-interview.md"
 printf -- '---\ntype: interview-seed\n---\n' > "$D/2026-10-15-s-interview.md"
 printf -- '---\ntype: interview-seed-audit\n---\n' > "$D/2026-10-15-s-interview.audit.md"
 v="$(ent "$D/2026-10-15-s-interview.md")"
@@ -256,5 +278,40 @@ fb="$(printf '%s\n' "$o" | sed -n 's/^__FB=//p')"
 assert_eq "$fb" "$T/tmpd/brief-degrade-fallback.sess-rb000001.txt" "보안: 원장 자리가 링크면 두 번째 채널은 임시 폴더"
 assert_eq "$(ls -A "$LKEY")" "" "보안: 링크 너머 그 문서의 자리에 아무것도 만들지 않는다"
 [ -e "$lrb/.claude/spec-distill/sess-rb000001" ] && no "§2-5: 링크 칸 — 세션 폴더를 만들었다" || ok "§2-5: 링크 칸 — 세션 폴더를 만들지 않는다"
+
+# 보안 — payload 짝 audit · 상태 파일이 링크(끊긴 것 포함)면 머리가 쓰기 전에 멈춘다(degrade 원장 init · append 가 링크를 따라가지 않는다)
+RB_IN="$(python3 -I -c '
+import re, sys
+t = open(sys.argv[1], encoding="utf-8").read()
+print(next(x for x in re.findall(r"```bash\n(.*?)\n```", t, re.S) if "init_rc=0; python3" in x))' "$RB")"
+srb="$T/srb"; SRD="$srb/docs/superpowers/interview"; mkdir -p "$SRD" "$T/svict" && git -C "$srb" init -q
+printf -- '---\ntype: interview-brief\n---\n' > "$SRD/2026-10-15-t-interview.md"
+runin() {   # runin → `## 입력` 머리를 돈 출력(rc 는 호출의 rc)
+  ( cd "$srb" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rb000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rb000001 TMPDIR="$T/tmpd" \
+      bash -c "PAYLOAD='$SRD/2026-10-15-t-interview.md'; AUDIT='$SRD/2026-10-15-t-interview.audit.md'
+$RB_IN
+echo __HEAD_DONE" 2>&1 )
+}
+printf -- '---\ntype: interview-state\nseed: 없음\n---\n' > "$SRD/2026-10-15-t-interview.state.md"
+o="$(runin)"; rc=$?
+{ [ "$rc" -eq 0 ] && grep -q '^brief_review_degradations:' "$SRD/2026-10-15-t-interview.state.md"; } \
+  && ok "보안 양성 대조: 보통 파일이면 머리가 degrade 원장을 연다" || nob "보안 양성 대조: 보통 파일인데 머리가 멈췄다(rc $rc)" "$o"
+rm -f "$SRD/2026-10-15-t-interview.state.md"
+printf 'victim\n' > "$T/svict/keys"
+ln -s "$T/svict/keys" "$SRD/2026-10-15-t-interview.state.md"
+o="$(runin)"; rc=$?
+assert_eq "$(cat "$T/svict/keys")" "victim" "보안: 상태 파일이 링크면 머리가 링크 너머를 쓰지 않는다"
+{ [ "$rc" -ne 0 ] && printf '%s\n' "$o" | grep -qF '그 경로들에 쓰지 않고 멈춘다' && ! printf '%s\n' "$o" | grep -qF '__HEAD_DONE'; } \
+  && ok "보안: 상태 파일 링크 — 머리가 사유를 보이고 멈춘다" || nob "보안: 상태 파일 링크인데 머리가 멈추지 않았다(rc $rc)" "$o"
+rm -f "$SRD/2026-10-15-t-interview.state.md"
+printf -- '---\ntype: interview-state\nseed: 없음\n---\n' > "$SRD/2026-10-15-t-interview.state.md"
+ln -s "$T/svict/not-yet.md" "$SRD/2026-10-15-t-interview.audit.md"
+o="$(runin)"; rc=$?
+{ [ "$rc" -ne 0 ] && printf '%s\n' "$o" | grep -qF '그 경로들에 쓰지 않고 멈춘다'; } \
+  && ok "보안: audit 가 끊긴 링크여도 머리가 멈춘다" || nob "보안: audit 끊긴 링크인데 머리가 멈추지 않았다(rc $rc)" "$o"
+[ -e "$T/svict/not-yet.md" ] && no "보안: 끊긴 링크 너머에 파일이 생겼다" || ok "보안: 끊긴 링크 너머에 파일이 생기지 않았다"
+grep -q '^brief_review_degradations:' "$SRD/2026-10-15-t-interview.state.md" \
+  && no "보안: audit 링크인데 머리가 degrade 원장을 열었다" || ok "보안: audit 링크면 degrade 원장도 쓰지 않는다"
+rm -f "$SRD/2026-10-15-t-interview.audit.md"
 
 finish

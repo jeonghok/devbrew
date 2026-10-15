@@ -94,6 +94,89 @@ class EntryTest(Base):
         self.assertEqual(rc, 0, out_)
         self.assertEqual(last(out_), "interview-state: RESUME %s" % p)
 
+    # ── 짝 brief · audit 의 링크 — 끝낼 때 Write · 엔진 --log-file · degrade 원장 쓰기가 그 링크를 따라간다 ──
+    def _sibling_fixture(self):
+        st = self.put("2026-10-15-t-brief-interview.state.md", "interview-state", "seed: 없음\n")
+        out = self._outside()
+        victim = out / "authorized_keys"
+        victim.write_text("원본\n", encoding="utf-8")
+        return st, out, victim
+
+    def test_resume_with_regular_audit_is_allowed(self):
+        """양성 대조 — 짝 audit 가 보통 파일이고 brief 가 아직 없으면 이어 간다."""
+        st = self.put("2026-10-15-t-brief-interview.state.md", "interview-state", "seed: 없음\n")
+        self.put("2026-10-15-t-brief-interview.audit.md", "interview-audit")
+        rc, out, _ = run("entry", "--arg", str(st), "--session", SID, cwd=self.tmp)
+        self.assertEqual((rc, last(out)), (0, "interview-state: RESUME %s" % st))
+
+    def test_resume_refuses_linked_audit(self):
+        st, _, victim = self._sibling_fixture()
+        os.symlink(str(victim), str(self.iv / "2026-10-15-t-brief-interview.audit.md"))
+        rc, out, _ = run("entry", "--arg", str(st), "--session", SID, cwd=self.tmp)
+        self.assertEqual(rc, 2)
+        self.assertTrue(last(out).startswith("interview-state: REJECT %s (2026-10-15-t-brief-interview.audit.md: 링크를 거친다" % st),
+                        last(out))
+        self.assertEqual(victim.read_text(encoding="utf-8"), "원본\n")
+
+    def test_resume_refuses_linked_brief(self):
+        st, _, victim = self._sibling_fixture()
+        os.symlink(str(victim), str(self.iv / "2026-10-15-t-brief-interview.md"))
+        rc, out, _ = run("entry", "--arg", str(st), "--session", SID, cwd=self.tmp)
+        self.assertEqual(rc, 2)
+        self.assertTrue(last(out).startswith("interview-state: REJECT %s (2026-10-15-t-brief-interview.md: 링크를 거친다" % st),
+                        last(out))
+
+    def test_resume_refuses_dangling_brief_link(self):
+        st, out_dir, _ = self._sibling_fixture()
+        os.symlink(str(out_dir / "not-yet.md"), str(self.iv / "2026-10-15-t-brief-interview.md"))
+        rc, out, _ = run("entry", "--arg", str(st), "--session", SID, cwd=self.tmp)
+        self.assertEqual(rc, 2)
+        self.assertTrue(last(out).startswith("interview-state: REJECT %s (2026-10-15-t-brief-interview.md: 링크를 거친다" % st),
+                        last(out))
+        self.assertFalse((out_dir / "not-yet.md").exists())
+
+    def test_resume_refuses_finished_interview(self):
+        st = self.put("2026-10-15-t-brief-interview.state.md", "interview-state", "seed: 없음\n")
+        self.put("2026-10-15-t-brief-interview.md", "interview-brief")
+        rc, out, _ = run("entry", "--arg", str(st), "--session", SID, cwd=self.tmp)
+        self.assertEqual((rc, last(out)), (2, "interview-state: REJECT %s (이미 끝난 인터뷰다 — brief 가 있다)" % st))
+
+    def _candidate_with_sibling_link(self, name, target):
+        seed = self.put("2026-10-15-t-interview.md", "interview-seed")
+        st = self.put("2026-10-15-t-brief-interview.state.md", "interview-state",
+                      "seed: docs/superpowers/interview/2026-10-15-t-interview.md\n")
+        os.symlink(str(target), str(self.iv / name))
+        rc, out, err = run("entry", "--arg", str(seed), "--session", SID, cwd=self.tmp)
+        self.assertEqual(rc, 0)
+        self.assertNotIn("candidate: %s" % st, out)
+        self.assertTrue(last(out).startswith("interview-state: NEW-SEED t-brief "), out)
+        self.assertIn("이어 갈 후보에서 뺐다", err)
+
+    def test_candidate_with_linked_audit_is_not_offered(self):
+        victim = self._outside() / "authorized_keys"
+        victim.write_text("원본\n", encoding="utf-8")
+        self._candidate_with_sibling_link("2026-10-15-t-brief-interview.audit.md", victim)
+        self.assertEqual(victim.read_text(encoding="utf-8"), "원본\n")
+
+    def test_candidate_with_dangling_brief_link_is_not_offered(self):
+        self._candidate_with_sibling_link("2026-10-15-t-brief-interview.md", self._outside() / "not-yet.md")
+
+    def test_candidate_with_linked_brief_is_not_offered(self):
+        victim = self._outside() / "b.md"
+        victim.write_text("---\ntype: interview-brief\n---\n", encoding="utf-8")
+        self._candidate_with_sibling_link("2026-10-15-t-brief-interview.md", victim)
+
+    # ── seed: 값 — 링크 seed 는 `없음`(경로를 드러내지 않는다) ──
+    def test_linked_seed_records_none(self):
+        real = self._outside() / "2026-10-15-t-interview.md"
+        real.write_text("---\ntype: interview-seed\n---\n밖\n", encoding="utf-8")
+        seed = self.iv / "2026-10-15-t-interview.md"
+        os.symlink(str(real), str(seed))
+        rc, out, err = run("entry", "--arg", str(seed), "--session", SID, cwd=self.tmp)
+        self.assertEqual((rc, last(out)), (0, "interview-state: NEW-SEED t-brief seed=없음"))
+        self.assertIn("seed 가 링크이거나 작업 트리 밖이다", err)
+        self.assertNotIn("..", last(out))
+
     def test_reject_state_named_other_kind(self):
         p = self.put("2026-10-15-t-interview.state.md", "interview-seed")
         rc, out, _ = run("entry", "--arg", str(p), "--session", SID, cwd=self.tmp)
@@ -185,6 +268,32 @@ class MigrateTest(Base):
         text = new.read_text(encoding="utf-8")
         self.assertTrue(text.startswith("---\ntype: interview-state\nseed: 없음\nsession_id: x\n"))
         self.assertIn("## R1\n기록\n", text)
+
+    def test_migrate_records_regular_seed(self):
+        """양성 대조 — 작업 트리 안 보통 seed 는 상대경로로 적힌다."""
+        self.legacy()
+        seed = self.put("2026-10-15-t-interview.md", "interview-seed")
+        rc, _, _ = run("migrate-legacy", "--session", SID, "--topic", "t-brief", "--date", "2026-10-15",
+                       "--seed", str(seed), cwd=self.tmp)
+        self.assertEqual(rc, 0)
+        text = (self.iv / "2026-10-15-t-brief-interview.state.md").read_text(encoding="utf-8")
+        self.assertTrue(text.startswith("---\ntype: interview-state\nseed: docs/superpowers/interview/2026-10-15-t-interview.md\n"), text)
+
+    def test_migrate_linked_seed_records_none(self):
+        import shutil
+        self.legacy()
+        out = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, str(out), True)
+        real = out / "s.md"
+        real.write_text("---\ntype: interview-seed\n---\n밖\n", encoding="utf-8")
+        seed = self.iv / "2026-10-15-t-interview.md"
+        os.symlink(str(real), str(seed))
+        rc, _, err = run("migrate-legacy", "--session", SID, "--topic", "t-brief", "--date", "2026-10-15",
+                         "--seed", str(seed), cwd=self.tmp)
+        self.assertEqual(rc, 0)
+        text = (self.iv / "2026-10-15-t-brief-interview.state.md").read_text(encoding="utf-8")
+        self.assertTrue(text.startswith("---\ntype: interview-state\nseed: 없음\n"), text)
+        self.assertIn("seed 가 링크이거나 작업 트리 밖이다", err)
 
     def test_migrate_refuses_existing_target(self):
         old = self.legacy()

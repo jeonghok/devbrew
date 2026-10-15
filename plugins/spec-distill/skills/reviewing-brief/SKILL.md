@@ -45,7 +45,8 @@ user-invocable: false
 
 아래 블록이 이 skill 의 **머리**다. 이 파일의 bash 블록은 전부 이 머리의 줄들로 시작하고, `## 절차` 의
 엔진 호출도 이 머리를 앞에 붙인 같은 Bash 호출에서 돈다. 머리가 상대경로를 `$(pwd)/` 로 절대화한다 —
-엔진은 상대 `--doc` 을 `doc_not_absolute` 로 거부하고, 번들 자리도 그 절대경로의 함수다. 마지막 줄은
+엔진은 상대 `--doc` 을 `doc_not_absolute` 로 거부하고, 번들 자리도 그 절대경로의 함수다. payload · audit · 상태 파일
+중 하나라도 링크를 거치거나 작업 트리(git 이 아니면 payload 의 폴더) 밖이면 머리가 사유를 보이고 멈춘다 — 그 경로들에 쓰지 않는다. 마지막 줄은
 degrade 원장을 연다(부재 키만 추가하므로 몇 번 돌아도 같다):
 
 ```bash
@@ -56,6 +57,7 @@ harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$
 STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"   # degrade 원장 — 그 인터뷰의 상태 파일
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+[ -z "${PAYLOAD:-}" ] || { rb_top="$(git -C "$(dirname -- "$PAYLOAD")" rev-parse --show-toplevel 2>/dev/null || dirname -- "$PAYLOAD")"; python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리(git 이 아니면 payload 의 폴더) 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
 DEGRADE_FALLBACK_FILE="${STATE_DIR:+$STATE_DIR/brief-degrade-fallback.txt}"   # 원장 자리를 만들지 않는다 — 원장 열기 전이면 아래 줄이 임시 폴더로 보낸다
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
@@ -105,6 +107,7 @@ harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$
 STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"   # degrade 원장 — 그 인터뷰의 상태 파일
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+[ -z "${PAYLOAD:-}" ] || { rb_top="$(git -C "$(dirname -- "$PAYLOAD")" rev-parse --show-toplevel 2>/dev/null || dirname -- "$PAYLOAD")"; python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리(git 이 아니면 payload 의 폴더) 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
 DEGRADE_FALLBACK_FILE="${STATE_DIR:+$STATE_DIR/brief-degrade-fallback.txt}"   # 원장 자리를 만들지 않는다 — 원장 열기 전이면 아래 줄이 임시 폴더로 보낸다
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
@@ -198,6 +201,7 @@ harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$
 STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"   # degrade 원장 — 그 인터뷰의 상태 파일
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+[ -z "${PAYLOAD:-}" ] || { rb_top="$(git -C "$(dirname -- "$PAYLOAD")" rev-parse --show-toplevel 2>/dev/null || dirname -- "$PAYLOAD")"; python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리(git 이 아니면 payload 의 폴더) 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
 DEGRADE_FALLBACK_FILE="${STATE_DIR:+$STATE_DIR/brief-degrade-fallback.txt}"   # 원장 자리를 만들지 않는다 — 원장 열기 전이면 아래 줄이 임시 폴더로 보낸다
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
@@ -256,6 +260,7 @@ harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$
 STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"   # degrade 원장 — 그 인터뷰의 상태 파일
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+[ -z "${PAYLOAD:-}" ] || { rb_top="$(git -C "$(dirname -- "$PAYLOAD")" rev-parse --show-toplevel 2>/dev/null || dirname -- "$PAYLOAD")"; python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리(git 이 아니면 payload 의 폴더) 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
 DEGRADE_FALLBACK_FILE="${STATE_DIR:+$STATE_DIR/brief-degrade-fallback.txt}"   # 원장 자리를 만들지 않는다 — 원장 열기 전이면 아래 줄이 임시 폴더로 보낸다
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
@@ -416,6 +421,7 @@ harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$
 STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"   # degrade 원장 — 그 인터뷰의 상태 파일
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+[ -z "${PAYLOAD:-}" ] || { rb_top="$(git -C "$(dirname -- "$PAYLOAD")" rev-parse --show-toplevel 2>/dev/null || dirname -- "$PAYLOAD")"; python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리(git 이 아니면 payload 의 폴더) 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
 DEGRADE_FALLBACK_FILE="${STATE_DIR:+$STATE_DIR/brief-degrade-fallback.txt}"   # 원장 자리를 만들지 않는다 — 원장 열기 전이면 아래 줄이 임시 폴더로 보낸다
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
@@ -459,6 +465,7 @@ harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$
 STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"   # degrade 원장 — 그 인터뷰의 상태 파일
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+[ -z "${PAYLOAD:-}" ] || { rb_top="$(git -C "$(dirname -- "$PAYLOAD")" rev-parse --show-toplevel 2>/dev/null || dirname -- "$PAYLOAD")"; python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리(git 이 아니면 payload 의 폴더) 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
 DEGRADE_FALLBACK_FILE="${STATE_DIR:+$STATE_DIR/brief-degrade-fallback.txt}"   # 원장 자리를 만들지 않는다 — 원장 열기 전이면 아래 줄이 임시 폴더로 보낸다
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
@@ -602,6 +609,7 @@ harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$
 STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"   # degrade 원장 — 그 인터뷰의 상태 파일
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+[ -z "${PAYLOAD:-}" ] || { rb_top="$(git -C "$(dirname -- "$PAYLOAD")" rev-parse --show-toplevel 2>/dev/null || dirname -- "$PAYLOAD")"; python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리(git 이 아니면 payload 의 폴더) 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
 DEGRADE_FALLBACK_FILE="${STATE_DIR:+$STATE_DIR/brief-degrade-fallback.txt}"   # 원장 자리를 만들지 않는다 — 원장 열기 전이면 아래 줄이 임시 폴더로 보낸다
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
