@@ -132,6 +132,10 @@ git -C "$R" rm -q -- "$BRIEF"; git -C "$R" commit -q -m "docs: brief 제거"
 [ -e "$BRIEF" ] && no "6: brief 가 남았다" || ok "6: brief 를 지우고 커밋했다"
 o="$(cd "$R" && python3 "$SD/scripts/ledger_sweep.py" --root "$R/.claude/spec-distill" 2>&1)"
 [ -d "$SDIR" ] && ok "6: TTL 안의 문서 없는 원장은 아직 걷지 않는다(늙히기가 아래 칸의 원인이다)" || no "6: 갓 쓴 원장이 TTL 전에 걷혔다: $o"
+# 레포가 심을 수 있는 입력 — 걷힐 원장 폴더 안의 링크가 밖의 폴더 · 파일을 가리킨다
+EVIL="$T/sweep-outside"; mkdir -p "$EVIL"; printf 'keep\n' > "$EVIL/keep.txt"; printf 'keep2\n' > "$T/sweep-outside.txt"
+ln -s "$EVIL" "$SDIR/evil"; ln -s "$T/sweep-outside.txt" "$SDIR/evil-file"
+{ [ -L "$SDIR/evil" ] && [ -L "$SDIR/evil-file" ]; } && ok "6 전제: 원장 폴더 안에 밖을 가리키는 링크 둘을 심었다" || no "6 전제: 링크를 심지 못했다 — 아래 칸이 공허하다"
 python3 -I - "$SDIR" <<'PY'
 import os, sys, time
 when = time.time() - 30 * 3600
@@ -143,6 +147,7 @@ PY
 o="$(cd "$R" && python3 "$SD/scripts/ledger_sweep.py" --root "$R/.claude/spec-distill" 2>&1)"
 assert_contains "$o" "문서 없는 원장 1개" "6: 정리가 문서 없는 원장 1개를 보고한다"
 [ -e "$SDIR" ] && no "6: 원장 폴더가 남았다: $o" || ok "6: 원장 폴더가 걷혔다"
+assert_eq "$(cat "$EVIL/keep.txt" 2>/dev/null)|$(cat "$T/sweep-outside.txt" 2>/dev/null)" "keep|keep2" "6: 정리가 원장 안의 링크를 따라 밖의 폴더 · 파일을 지우지 않았다"
 
 # ── 7. 링크 축 — 레포가 심을 수 있는 링크를 따라 쓰지 않는다 ─────────────────────
 L="$(mk linked)"; LD="$L/docs/superpowers/interview"; LSEED="$LD/2026-10-15-e2e-interview.md"
