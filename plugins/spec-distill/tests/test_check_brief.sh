@@ -2095,10 +2095,11 @@ assert s.count(o)==1; p.write_text(s.replace(o,"- OQ1: 인증 뷰의 캐시 전�
 
 # qg iter 1 — 레포 주장(`RC<n>` 을 실은 줄)이 웹 형식 연결을 달면 ③ 의 요구가 통째로 빠진다(최종 리뷰 I-4
 # 의 미집행). 연결을 `[→ …]` 로 바꾸고 역참조를 전부 지운다 — ① 이 그 줄을 연결 없음으로 세야 한다.
+# 역참조 줄은 넷이다(§0 · §3 의 OQ1 · OQ4) — R2(N22) 부터 해결한 OQ4 도 §3 에 남는다. 아래 셀들도 같은 수를 센다.
 v2mut repoweblink 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
 o="[RC3 → OQ1 · OQ4]"; assert s.count(o)==1; s=s.replace(o,"[→ OQ1 · OQ4]")
-assert s.count(" → 근거 RC3")==3; s=s.replace(" → 근거 RC3",""); p.write_text(s,encoding="utf-8")'
+assert s.count(" → 근거 RC3")==4; s=s.replace(" → 근거 RC3",""); p.write_text(s,encoding="utf-8")'
 { [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -q 'RC3' <<<"$V2OUT"; } \
   && ok "V2-①(레포 형식): RC 를 실은 줄의 웹 형식 연결은 연결이 아니다 — red" \
   || no "V2-①(레포 형식): 레포 주장이 웹 형식 연결로 역참조 ∀ 를 피했다 (rc=$V2RC)"
@@ -2188,7 +2189,7 @@ assert s.count(o)==1; p.write_text(s.replace(o,"- OQ1은 인증 뷰의 캐시 �
 v2mut otherrclink 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
 o="[RC3 → OQ1 · OQ4]"; assert s.count(o)==1; s=s.replace(o,"[RC5 → OQ1 · OQ4]")
-assert s.count(" → 근거 RC3")==3; s=s.replace(" → 근거 RC3"," → 근거 RC5"); p.write_text(s,encoding="utf-8")'
+assert s.count(" → 근거 RC3")==4; s=s.replace(" → 근거 RC3"," → 근거 RC5"); p.write_text(s,encoding="utf-8")'
 { [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -q 'RC3' <<<"$V2OUT"; } \
   && ok "V2-①(전역): 어느 연결에도 실리지 않은 RC3 — 다른 id 의 레포 연결로는 red" \
   || no "V2-①(전역): RC3 가 다른 id 의 연결 뒤에 숨어 역참조를 피했다 (rc=$V2RC)"
@@ -2226,7 +2227,7 @@ p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding='utf-8')
 o='[RC3 → OQ1 · OQ4]\n'; assert s.count(o)==1
 extra={'line':'- 위험 — 메모 | 같은 캐시 주장 — RC3 [RC3 → 없음]\n','subbullet':'  - [RC3 → 없음]\n'}['$shape']
 s=s.replace(o,'[→ OQ1 · OQ4]\n'+extra)
-assert s.count(' → 근거 RC3')==3; s=s.replace(' → 근거 RC3',''); p.write_text(s,encoding='utf-8')"
+assert s.count(' → 근거 RC3')==4; s=s.replace(' → 근거 RC3',''); p.write_text(s,encoding='utf-8')"
   { [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -qF 'RC3 [→ OQ1 · OQ4]' <<<"$V2OUT"; } \
     && ok "V2-①(§5 줄 단위·${shape}): 버리는 [RC3 → 없음] 이 실제 주장 줄의 웹 연결을 세탁하지 못한다" \
     || no "V2-①(§5 줄 단위·${shape}): 레포 주장 줄의 웹 연결이 세탁됐다 (rc=$V2RC)"
@@ -2236,7 +2237,7 @@ done
 v2mut doublelink5 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
 o="[RC3 → OQ1 · OQ4]\n"; assert s.count(o)==1; s=s.replace(o,"[→ OQ1 · OQ4] [RC3 → 없음]\n")
-assert s.count(" → 근거 RC3")==3; s=s.replace(" → 근거 RC3",""); p.write_text(s,encoding="utf-8")'
+assert s.count(" → 근거 RC3")==4; s=s.replace(" → 근거 RC3",""); p.write_text(s,encoding="utf-8")'
 { [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -qF '[→ OQ1 · OQ4] [RC3 → 없음]' <<<"$V2OUT"; } \
   && ok "V2-①(연결 하나·§5): 한 줄의 연결 괄호 둘은 세탁이다 — red" \
   || no "V2-①(연결 하나·§5): 앞 괄호의 결정이 끝 괄호 뒤에 숨었다 (rc=$V2RC)"
@@ -2328,6 +2329,7 @@ s=s.replace(o6,o6+"\n"+line,1); a.write_text(s,encoding="utf-8")'
   || no "V2-⑤(§5 범위): §5 밖의 확인 줄을 인정했다 (rc=$V2RC)"
 
 # qg iter 1 — AC9 「하위 불릿은 red」. 연결을 들여쓴 하위 불릿으로 내리면 항목 줄 끝에 연결이 없다.
+# R2(RC39) 부터 들여쓴 줄은 §4 항목의 본문이다 — 첫 줄 끝 연결 부재(①)와 본문 줄의 연결(`section4_body_failures`)이 둘 다 red.
 v2mut subbullet 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o=" — 데이터 형태와 부합 [→ OQ1]\n"
 assert s.count(o)==1; p.write_text(s.replace(o," — 데이터 형태와 부합\n  - [→ OQ1]\n"),encoding="utf-8")'

@@ -223,6 +223,54 @@ def _entry_lines(section: str) -> list[str]:
 # 되풀이하지 않는다.
 
 
+SECTION4 = ("4", "External Landscape")
+
+
+def section4_items(text: str) -> list[tuple[str, list[str]]]:
+    """§4 항목 — (첫 줄, 본문 줄들). R2(RC39): §4 항목은 여러 줄을 허용한다. 열 0 의 불릿 줄이 항목이고, 그 뒤
+    들여쓴 줄(불릿이든 아니든)은 그 항목의 본문이다. 빈 줄은 항목을 닫지 않는다. 열 0 의 불릿이 아닌 줄은
+    항목을 닫는다. 항목이 열리기 전에 나온 들여쓴 불릿은 그 자체로 항목이다(fail-closed — 본문으로 삼켜
+    순회에서 빠지지 않게). **§4 에만 쓴다** — §0 · §3 · §5 의 항목 판독은 `_entry_lines` 그대로다."""
+    out: list[tuple[str, list[str]]] = []
+    cur = None
+    for ln in _section_text(text, *SECTION4).splitlines():
+        if not ln.strip():
+            continue
+        if re.match(r"^[-*]\s", ln) and ln.strip() not in ("-", "*"):
+            cur = (ln.strip(), [])
+            out.append(cur)
+        elif ln[:1] in (" ", "\t"):
+            if cur is None:
+                if ENTRY_BULLET_RE.match(ln) and ln.strip() not in ("-", "*"):
+                    cur = (ln.strip(), [])
+                    out.append(cur)
+            else:
+                cur[1].append(ln.strip())
+        else:
+            cur = None
+    return out
+
+
+def _section4_heads(text: str) -> list[str]:
+    return [h for h, _ in section4_items(text)]
+
+
+def section4_body_failures(text: str) -> list[str]:
+    """§4 여러 줄 항목의 본문 줄 규칙(R2 · RC39 · AC14) — 결정 연결은 항목 **첫 줄 끝**에만 선다. 본문 줄에
+    연결 괄호가 있거나, 첫 줄에 없는 `RC<n>` 이 본문 줄에 있으면 red. 본문으로 내린 연결이나 레포 주장이
+    조사 술어(①~⑤)의 순회 밖으로 빠지는 길을 막는다."""
+    fails = []
+    for head, body in section4_items(text):
+        head_rcs = set(RC_RE.findall(head))
+        for b in body:
+            if LINK_ANY_RE.search(b):
+                fails.append(f"§4 항목의 결정 연결이 첫 줄 끝이 아니라 본문 줄에 있다: {head[:60]}")
+            extra = sorted(set(RC_RE.findall(b)) - head_rcs)
+            if extra:
+                fails.append(f"§4 항목 본문 줄의 {', '.join(extra)} 가 첫 줄에 없다: {head[:60]}")
+    return sorted(set(fails))
+
+
 def _frontmatter(text: str) -> str:
     m = FRONTMATTER_RE.match(text)
     return m.group(1) if m else ""
@@ -713,8 +761,7 @@ def landscape_unkeyed(text: str) -> list[str]:
     web-off brief는 §4에 순회할 항목이 없어 공허하게 통과하는 것이 옳다 —
     조사하지 않았으면 인용할 것도 없다.
     """
-    sec = _section_text(text, "4", "External Landscape")
-    return [ln for ln in _entry_lines(sec) if not SOURCE_KEY_RE.search(ln)]
+    return [ln for ln in _section4_heads(text) if not SOURCE_KEY_RE.search(ln)]
 
 
 def landscape_keys_declared(payload_text: str, audit_text: str) -> list[str]:
@@ -733,7 +780,7 @@ def landscape_keys_declared(payload_text: str, audit_text: str) -> list[str]:
     (설계 §10). 그 해석까지 묶는 것은 §3.4 ①의 교차 bijection이고 기각됐다.
     """
     want = {m.group(1).strip()
-            for ln in _entry_lines(_section_text(payload_text, "4", "External Landscape"))
+            for h, body in section4_items(payload_text) for ln in [h, *body]
             for m in SOURCE_KEY_RE.finditer(ln)}
     have = {m.group(1).strip()
             for m in SOURCE_KEY_RE.finditer(_section_text(audit_text, "7", "확산 원자료"))}
@@ -760,7 +807,7 @@ def landscape_present(text: str) -> bool:
         return False
     if _web_disabled() and re.search(r"\bN/?A\b|비활성|생략|web[ -]?disabled", sec, re.IGNORECASE):
         return True
-    return bool(_entry_lines(sec))
+    return bool(_section4_heads(text))
 
 
 def section5_entries(text: str) -> list[str]:
@@ -916,8 +963,8 @@ def coverage_anchor_failures(audit_text: str, anchors: set) -> list[str]:
 #   · **§3 은 순회 범위에 없다.** §3 항목은 그 자체가 «열린 결정» 이라 연결의 *대상*이고
 #     출처가 아니다 — 거기에 연결을 걸면 자기지시가 되어 술어가 공허해진다.
 #
-# 연결의 위치는 **줄 끝**이고 하위 불릿은 금지다: `ENTRY_BULLET_RE`(`^\s*[-*]\s`)가 들여쓴
-# 불릿도 §4 항목으로 세므로 하위 불릿 형태는 즉시 `unkeyed landscape entries` red 가 된다.
+# 연결의 위치는 §4 항목 **첫 줄 끝**이다. §4 항목은 여러 줄을 허용하고(R2 · RC39), 본문 줄의 연결 · 첫 줄에
+# 없는 `RC<n>` 은 `section4_body_failures` 가 red 로 낸다. §5 는 지금처럼 한 줄 항목이다.
 #
 # **개수 술어를 두지 않는다**(설계 ⟨C5⟩·X7·AC8). 아래 술어는 전부 ∀ 이고 순회할 항목이 0건이면
 # 공허하게 통과한다 — `landscape_unkeyed` 가 §4 에 대해 이미 하는 것과 같은 형태다. 개수가
@@ -998,7 +1045,7 @@ def contract_unreadable(text: str):
 def _research_entries_split(text: str) -> tuple[list[str], list[str]]:
     """순회 정의의 두 절 — (§4 의 모든 항목 줄, §5 에서 `RC<n>` 을 가진 줄). 정의는 여기 하나다:
     ① 은 두 절을 다르게 판정하므로 나눠 받고, 나머지 술어는 `research_entries` 로 합쳐 받는다."""
-    e4 = _entry_lines(_section_text(text, "4", "External Landscape"))
+    e4 = _section4_heads(text)
     e5 = [ln for ln in section5_entries(text) if RC_RE.search(ln)]
     return e4, e5
 
@@ -1099,8 +1146,8 @@ def _leading_oq(line: str):
 def _declared_decisions(text: str) -> set:
     """payload §3 Open Questions ∪ §0 한눈에 의 결정 목록에 실재하는 `OQ<n>` 집합.
 
-    §0 이 상위집합이고 §3 이 그 중 열린 것이다(설계 §H ②). **상태 토큰은 보지 않는다** —
-    §0 은 해결된 결정도 `[해결 ⟨S<N>⟩]` 를 달고 남으므로, 「열려 있는가」를 보면 그 결정을
+    §0 과 §3 은 같은 결정 전량이다 — §3 은 해결한 결정도 해결 표시와 함께 지닌다(R2 · N22).
+    **상태 토큰은 보지 않는다** — §0 은 해결된 결정도 `[해결 ⟨S<N>⟩]` 를 달고 남으므로, 「열려 있는가」를 보면 그 결정을
     해결하는 데 기여한 조사가 red 가 된다(설계 L3 · R11).
 
     **선언은 항목 줄의 선두 `OQ<n>` 뿐이다**(`_leading_oq`) — ③ 이 「그 `OQ<n>` 줄」을 읽는 규칙과
@@ -1170,6 +1217,53 @@ def research_backref_missing(text: str) -> list[str]:
             for rc in line_rcs - sourced:
                 fails.add(f"§{num} 의 {oq or '항목'} 줄이 가리키는 근거 {rc} 가 조사 항목(§4·§5)에 없다")
     return sorted(fails)
+
+
+PROVENANCE_MARK_RE = re.compile(r"(?:⟨S\d+⟩(?:\s*·?\s*⟨S\d+⟩)*|⟨모델 추론⟩)\s*$")
+
+
+def section1_provenance_failures(text: str, anchors: set) -> list[str]:
+    """§1 Goal · Non-goal 줄마다 끝에 출처 표시(R2 · N21) — `⟨S<n>⟩`(여럿이면 `⟨S1⟩ · ⟨S4⟩`) 또는
+    `⟨모델 추론⟩`. 사용자가 말하지 않은 Non-goal 이나 좁힌 Goal 이 보이지 않은 채 하류의 범위가 되는 것을
+    B-0 이 출처와 함께 보이게 하는 표지다. `S<n>` 은 payload §6 에 실재해야 한다."""
+    fails = []
+    for ln in _entry_lines(_section_text(text, "1", "Goal · Non-goal")):
+        if not PROVENANCE_MARK_RE.search(ln):
+            fails.append(f"§1 줄에 출처 표시(⟨S<n>⟩ 또는 ⟨모델 추론⟩)가 없다: {ln[:60]}")
+            continue
+        for sid in re.findall(r"⟨(S\d+)⟩", ln):
+            if sid not in anchors:
+                fails.append(f"§1 줄의 출처 {sid} 가 payload §6 에 없다: {ln[:60]}")
+    return fails
+
+
+RESOLVED_RE = re.compile(r"\[해결 ⟨(S\d+)⟩\]")
+
+
+def resolved_decision_failures(text: str, anchors: set) -> list[str]:
+    """해결한 결정도 §3 에 남는다(R2 · N22). §0 에서 `[해결 ⟨S<n>⟩]` 로 닫은 결정은 §3 에 선두 OQ 로 있어야
+    하고, 그 §3 줄에도 `[해결 ⟨S` 표시가 있어야 한다. §0 · §3 의 해결 토큰이 가리키는 `S<n>` 은 payload §6 에
+    실재해야 한다 — 모델이 결정을 닫으면서 근거를 지어내는 길을 막는다."""
+    fails = []
+    s3 = {}
+    for ln in _entry_lines(_section_text(text, "3", "Open Questions")):
+        oq = _leading_oq(ln)
+        if oq:
+            s3[oq] = ln
+    for num, title in DECISION_SECTIONS:
+        for ln in _entry_lines(_section_text(text, num, title)):
+            for sid in RESOLVED_RE.findall(ln):
+                if sid not in anchors:
+                    fails.append(f"§{num} 의 해결 토큰 {sid} 가 payload §6 에 없다: {ln[:60]}")
+    for ln in _entry_lines(_section_text(text, "0", "한눈에")):
+        oq = _leading_oq(ln)
+        if oq and RESOLVED_RE.search(ln):
+            if oq not in s3:
+                fails.append(f"§0 에서 해결로 닫은 {oq} 가 §3 에 없다 — "
+                             "해결한 결정도 해결 내용과 함께 §3 에 남는다")
+            elif "[해결 ⟨S" not in s3[oq]:
+                fails.append(f"§3 의 {oq} 줄에 해결 표시([해결 ⟨S<n>⟩])가 없다")
+    return sorted(set(fails))
 
 
 def internal_research_dimension_failures(payload_text: str, audit_text: str) -> list[str]:
@@ -1457,6 +1551,12 @@ def gate(path: Path) -> int:
         for msg in payload_verbatim_n1b_failures(text, n1b_audit):
             failures.append(
                 f"N1b — {msg} (payload §6 앵커: {sorted(payload_verbatim_anchors(text))})")
+        # §1 출처 표시(N21) · 해결한 결정(N22) — 둘 다 `S<n>` 을 payload §6 앵커에 대조하므로 N1b 와
+        # 같은 조건에서만 돈다. §6 이 없거나 비유일하면 앵커가 공집합이라 원인과 어긋난 red 가 된다
+        # (그 상태는 위에서 이미 red 다).
+        pa = payload_verbatim_anchors(text)
+        failures += section1_provenance_failures(text, pa)
+        failures += resolved_decision_failures(text, pa)
 
     sec4_absent = any(m.startswith("4.") for m in miss)
     if not sec4_absent and not landscape_present(text):
@@ -1467,6 +1567,8 @@ def gate(path: Path) -> int:
     unk = landscape_unkeyed(text)
     if unk:
         failures.append(f"unkeyed landscape entries: {len(unk)}")
+    # §4 형식 규칙(R2 · RC39) — 계약 v2 와 무관하다. 본문 줄의 연결 · 첫 줄에 없는 `RC<n>` 은 red.
+    failures += section4_body_failures(text)
     entries5 = section5_entries(text) if not sec5_absent else []
     mal = _skepticism_malformed(entries5)
     if mal:
