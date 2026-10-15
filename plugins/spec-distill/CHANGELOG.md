@@ -1,6 +1,6 @@
 # Changelog
 
-## [5.6.0] — 2026-10-15
+## [5.8.0] — 2026-10-15
 
 ### Added
 - 인터뷰 종료의 「분해 판단」 단계 — brief 를 쓰기 전에 신호 셋(따로 승인할 수 있는 덩어리 · 파일 영역 · 사용자 원문 갈래, 근거 번호 포함)과 권고 한 줄을 보이고 사용자가 「spec 하나로 / 나눈다」를 고른다. 숫자 컷오프는 없다. 나누면 에픽 표(칸 열하나)를 제안받아 고치거나 승인하고, 승인된 표는 state `## 분해안` 에 남는다.
@@ -13,6 +13,21 @@
 - 분해된 일의 다음 세션 줄은 brief 하나 대신 `@<로드맵>` 지휘 줄이다(finishing.md 의 「다음 세션 줄 — 분해된 일 ①/② 공통」 아래 인라인 코드 문단). Step B 의 마지막 brief 쓰기 직후 언제나 로드맵 · 묶음을 한 번 더 생성하고, 함께 커밋하라는 안내 한 줄을 보인다. 나누지 않은 일은 그대로다.
 - `spec-review` 게이트 ③ — 설계문서 frontmatter 에 `roadmap:` 줄이 있으면 「인터뷰 다시 열기」 갈래가 재분해 절차로 간다. 다른 갈래와 로드맵 밖 문서는 그대로다.
 - `references/proceed-gate.md` 재결정 규약에 「분해 단위의 변경은 `${CLAUDE_PLUGIN_ROOT}/references/redecompose.md` 로」 한 줄. brief 템플릿 §7 에 분해 줄.
+
+## [5.6.0] — 2026-10-15
+
+### Added
+- `check_bundle_coverage.py` 번호 대조가 반영 칸의 자리(`§<n>` · `§<n>-<m>` · `AC<n>` · 설계문서 제목)를 확인해 「얕은 답」을, 기각 칸의 에픽 번호가 로드맵에 있는지를, 기각한 발화를 다른 에픽이 받드는지를 센다. 셋은 종료 코드를 바꾸지 않는 경고 줄이고 첫 줄 · `--json`(`shallow` · `unserved` · `unknown`)이 말한다. 받듦은 배정만으로 세지 않는다 — 그 에픽의 설계문서가 기각했으면 받들지 않는다.
+- 첫 인자가 interview brief 면 brief 의 모든 번호(`roadmap_status.py` 와 같은 집합)로 대조한다.
+- `check_bundle_coverage.py --plan <설계문서> <계획>` — 계획 `### Task` 절에 없는 AC. `--impl <설계문서> <보고 파일>` — 구현 보고(`AC<n>: 구현됨|미룸|빠짐 — <한 줄>`)의 미룸 · 빠짐이 설계문서 `## 미룸` 표(항목 · 이유 · 받는 곳)에 없거나 받는 곳이 없음인 것.
+- `roadmap_status.py` 가 에픽 설계문서 `## 미룸` 의 받는 곳 없는 행을 그 에픽의 경고로 낸다(머지 뒤에도). 표가 깨지면 검사 불가.
+- `spec-review <설계문서> --bundle <에픽 묶음|brief>` — 값이 설계문서 `source_interview` 와 같은 파일인지 확인하고(아니면 리뷰하지 않는다), 진입에서 번호 대조를 보여 그 경고 수를 게이트의 「경고 N개」에 더하며, 에픽 묶음이면 승인 게이트 앞에 로드맵 속 위치와 이웃 에픽의 사용자 결정 줄을 보인다(`scripts/spec_review_bundle.py`).
+- `references/epic-handoff.md` — 로드맵 에픽의 설계를 여는 넘김 줄(묶음 첨부 · 로드맵 경로 · 에픽 번호 · `--bundle`).
+- 공유 모듈 `scripts/roadmap_model.py` — 번호 문법 · 로드맵 해석 · brief 번호 계산을 두 스크립트가 함께 쓴다.
+
+### Changed
+- interview 의 다음 세션 줄이 brainstorming 의 「다음은 writing-plans 뿐」 지시를 덮어쓰는 문장을 뺐다. 대신 brief 의 §3 열린 질문 · §4 조사 · §5 위험까지 번호째 읽게 하고, 설계문서에 번호 대조 표와 `source_interview` 를 두게 하며, spec-review 를 `--bundle <brief>` 로 부르고, 계획 뒤 `--plan` · PR 전 `--impl` 대조를 시킨다. spec-review 의 writing-plans 다음 세션 줄도 `--plan` · `--impl` 지시를 싣는다.
+- 설계문서 리뷰 프로필(`design-doc.md`)의 정답 출처가 설계문서 `source_interview` 파일의 종류로 정해진다 — 에픽 묶음이면 묶음, brief 면 §2~§5, 없으면 지금처럼 brief §2. 번호 대조 표의 반영 칸이 실제로 답하는지를 scope 축이 본다.
 
 ## [5.5.0] — 2026-10-12
 

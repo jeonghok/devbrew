@@ -12,7 +12,7 @@
 #   - slash 줄: skill 이름 바로 뒤 `@<…>` 토큰 수 ≤ 정본 한도 표의 그 받는 쪽 수. 락은 숫자를 들지 않는다.
 #   - 평문 줄: `@<…>` 토큰으로 시작하고 토큰 뒤에 `Skill ` 호출이 온다. 절대경로 치환 · 거부 advisory 문구 ·
 #     「git 작업 트리 루트의 절대경로를 함께 낸다」 · 「경로에 공백이 있으면」 가 표면에 있다.
-#   - 꺾쇠 자리표는 줄 앞 `@<…>` 토큰에만 있다. 원소(토큰)가 늘어도 통과한다.
+#   - 줄 안의 꺾쇠 자리표는 줄 앞 `@<…>` 토큰의 이름뿐이다(같은 자리표를 다시 쓰는 것은 함께 치환된다). 원소(토큰)가 늘어도 통과한다.
 #   - 표면에 `따로 입력` 이 있다.
 # 표면 파일 목록은 bash 가 도출해 `채택자디렉토리::파일1::파일2…` 인자로 파서에 넘긴다(파서는 glob 하지 않는다).
 # 그 목록은 presence 코퍼스 가드(`assert_presence_corpus_skill_owned`)를 지난다 — 정본은 코퍼스 밖이다.
@@ -165,6 +165,7 @@ for d in sys.argv[2:]:
         recv = s.group(1)
         n = len(re.findall(TOKEN, s.group(2)))
         tail = line[s.end():]
+        lead = s.group(2)
         if recv not in limits:
             no(f"{name}: slash 줄의 받는 쪽 {recv} 이 정본 한도 표에 없다")
         elif n <= limits[recv]:
@@ -178,6 +179,7 @@ for d in sys.argv[2:]:
             continue
         n = len(re.findall(TOKEN, p.group(1)))
         tail = line[p.end():]
+        lead = p.group(1)
         ok(f"{name}: 평문 줄이 @ 토큰 {n}개로 시작한다")
         (ok if "Skill " in tail else no)(f"{name}: 평문 줄이 토큰 뒤에 부를 skill(`Skill …`)을 잇는다")
         for needle in ("절대경로로 치환한 뒤 노출한다",
@@ -186,11 +188,12 @@ for d in sys.argv[2:]:
                        "git 작업 트리 루트의 절대경로를 함께 낸다",
                        "`@` 토큰을 뗀 나머지 문장을 그대로 보인 뒤 멈춘다"):
             (ok if needle in body else no)(f"{name}: 평문 줄 규칙 문구 — {needle}")
-    left = re.findall(r"<[^<>]+>", tail)
+    names = set(re.findall(r"@<([^<>]+)>", lead))
+    left = [x for x in re.findall(r"<([^<>]+)>", tail) if x not in names]
     if left:
-        no(f"{name}: 꺾쇠 자리표가 줄 앞 @ 토큰 밖에 있다: {left}")
+        no(f"{name}: 줄 안의 꺾쇠 자리표가 줄 앞 @ 토큰의 이름 밖이다: {left}")
     else:
-        ok(f"{name}: 꺾쇠 자리표는 줄 앞 @ 토큰에만 있다")
+        ok(f"{name}: 줄 안의 꺾쇠 자리표는 줄 앞 @ 토큰의 이름뿐이다")
 
 print("\n".join(out))
 print("END")

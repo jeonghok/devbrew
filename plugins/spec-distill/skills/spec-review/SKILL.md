@@ -3,12 +3,12 @@ name: spec-review
 description: >
   Use right after superpowers:brainstorming writes and commits a design doc
   (docs/superpowers/specs/...-design.md), before superpowers:writing-plans — this review replaces
-  brainstorming's user-review gate. Pass the design doc path as the argument. Runs the shared
+  brainstorming's user-review gate. Pass the design doc path as the argument. Optionally pass `--bundle <epic bundle or interview brief>` — it must be the file the design doc's `source_interview` names. Runs the shared
   document-review engine with the design-doc profile (snapshot → detection → codex → anonymize →
   re-critique → freeze-check and routing → gate) inside a single turn and closes with the shared
   proceed gate. Design-mode only — the interview brief has its own reviewers (reviewing-brief).
 cost_class: medium
-argument-hint: <설계문서 경로>
+argument-hint: <설계문서 경로> [--bundle <에픽 묶음|interview brief>]
 allowed-tools:
   - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill spec-review)
 ---
@@ -124,6 +124,32 @@ advisory · 복귀 지시)을 **그대로** 한 단락으로 보이고 게이트
 
 `$spec_path` 는 **호출 인자**다 — `Skill spec-distill:spec-review <설계문서 경로>` 또는
 `/spec-distill:spec-review <경로>`. 인자가 `@` 로 시작하면 그 `@` 하나를 뗀다. 상대 경로면 진입 단계 감시줄의 `root=` 기준 절대 경로로 바꿔 쓴다.
+
+인자에 `--bundle <에픽 묶음|interview brief>` 가 붙으면 그 값을 `bundle_arg` 로 뗀다 — 설계문서 경로는 첫 인자다. 상태 디렉토리 블록 다음, 엔진 라운드 전에 아래 펜스를 한 번 돌린다. 펜스 앞에 `spec_path='<절대 경로로 바꾼 설계문서 경로>' bundle_arg='<--bundle 값, 없으면 빈 값>' repo_root='<감시줄 root= 값>'` 한 줄을 붙여 같은 Bash 호출로 돌린다. `--bundle` 은 리뷰어에게 가지 않는다 — 리뷰어는 설계문서 frontmatter `source_interview` 로 정답 출처에 닿고, 이 펜스는 그 값이 `source_interview` 와 같은 파일인지 확인해 진입 대조와 승인 때 로드맵 위치의 입력으로 쓴다.
+
+<!-- bundle-entry:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
+RETURN_MSG="[spec-distill] 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
+be_rc=0
+be_out="$(python3 "$SD/scripts/spec_review_bundle.py" entry --spec "${spec_path:-}" --bundle "${bundle_arg:-}" --root "${repo_root:-}" 2>&1)" || be_rc=$?
+be_last="$(printf '%s\n' "$be_out" | tail -n 1)"
+case "$be_last" in
+  "bundle-entry: REFUSE")
+    printf '%s\n' "$be_out" | sed '$d'
+    printf '%s\n' "$RETURN_MSG" "$be_last" ;;
+  "bundle-entry: PROCEED "*)
+    printf '%s\n' "$be_out" ;;
+  *)
+    [ -n "$be_out" ] && printf '%s\n' "$be_out"
+    echo "[spec-distill] 번호 대조 진입 검사가 실패했다(rc $be_rc) — --bundle 확인과 번호 대조 없이 리뷰한다."
+    echo "번호 대조 경고 1개"
+    echo "bundle-entry: PROCEED -" ;;
+esac
+```
+<!-- bundle-entry:end -->
+
+마지막 줄이 `bundle-entry: REFUSE` 면 펜스가 낸 `[spec-distill]` 두 줄(쓸 수 없는 사유 · 복귀 문장)을 그대로 보이고 게이트 없이 끝낸다 — `### 대상 부재` 와 같은 예외 경로다. `bundle-entry: PROCEED` 면 그 앞 줄들(번호 대조 출력)을 사용자에게 그대로 보이고 리뷰를 시작한다. `번호 대조 경고 <N>개` 의 N 과 `PROCEED` 뒤의 경로(`-` 면 없음)는 `## 게이트` 가 쓴다. 번호 대조가 「검사 불가」여도 리뷰는 계속한다 — 사람이 보는 경고이지 리뷰의 정답이 아니다.
 
 인자가 없으면 후보를 뽑아 `AskUserQuestion` 으로 고르게 한다 — 설계문서(`-design.md`)를 추가한 최근
 커밋 50개에서 나온 것 중 최신 5개와 untracked 전부:
@@ -454,6 +480,20 @@ fi
 ```
 <!-- advice-display:end -->
 
+**번호 대조 경고 — 라운드 · 승인 게이트 모두.** `## 입력` 의 진입 펜스가 낸 번호 대조 줄은 게이트 앞 글에 엔진 렌더 첫 줄 다음으로 그대로 다시 싣고, `번호 대조 경고 <N>개` 의 N 을 질문의 「경고 N개 — 위에 적었다」의 N 에 더한다. 그 N 이 0 이 아니면 「이상 없음」·「경고 없음」을 쓰지 않는다. 번호 대조 경고는 degrade 가 아니라 정답 출처 대조의 경고다 — 채널은 진입 펜스의 출력이다.
+
+**로드맵 속 위치와 이웃 결정 — 2단계 질문 바로 앞.** 진입 펜스의 `PROCEED` 뒤 경로가 `-` 가 아니면 아래 펜스를 돌려 출력을 게이트 앞 글의 맨 끝(질문 바로 앞)에 그대로 싣는다. 출력이 없으면(brief · 로드맵 밖) 아무것도 싣지 않는다. 펜스 앞에 `bundle_path='<PROCEED 뒤 경로>' repo_root='<감시줄 root= 값>'` 한 줄을 붙인다.
+
+<!-- roadmap-position:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
+if [ -n "${bundle_path:-}" ] && [ "${bundle_path}" != "-" ]; then
+  python3 "$SD/scripts/spec_review_bundle.py" neighbors --bundle "${bundle_path}" --root "${repo_root:-}" \
+    || echo "[spec-distill] 로드맵 속 위치를 보일 수 없다 — 스크립트가 실패했다."
+fi
+```
+<!-- roadmap-position:end -->
+
 승인 게이트를 띄우기 직전에 `$spec_path` 가 working-tree 에 있는지 다시 본다 — 없으면
 `### 대상 부재` 문면으로 끝낸다(게이트 없음).
 
@@ -478,9 +518,9 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/redecompose.md
 
 **다음 세션 줄 — ①/② 공통**
 
-> `@<spec_path> 이 설계문서로 Skill superpowers:writing-plans 를 시작하라. confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 사람에게 쓰는 글 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에, 첫 줄에 상태, 끝에 할 일 하나)을 지킨다.`
+> `@<spec_path> 이 설계문서로 Skill superpowers:writing-plans 를 시작하라. confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 계획을 쓴 뒤 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_bundle_coverage.py --plan <spec_path> 뒤에 계획 경로를 붙여 돌리고, 계획에 없는 AC 는 계획에 더한다. SDD 의 마지막 전체 리뷰에 이 설계문서 ## Acceptance Criteria 의 AC 목록을 싣고, 리뷰가 AC 마다 한 줄씩 AC1: 구현됨 — 근거 꼴(판정은 구현됨 · 미룸 · 빠짐 중 하나)로 보고하게 해 그 보고를 git 이 추적하지 않는 파일에 적는다. 미룸 · 빠짐과 리뷰 후속으로 미룬 것은 설계문서 ## 미룸 표(항목 · 이유 · 받는 곳)에 올리고, PR 을 만들기 전에 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_bundle_coverage.py --impl <spec_path> 뒤에 보고 파일 경로를 붙여 돌려 경고를 사용자에게 보인다. 사람에게 쓰는 글 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에, 첫 줄에 상태, 끝에 할 일 하나)을 지킨다.`
 
-`<spec_path>` 는 `## 입력` 에서 바꾼 설계문서의 절대경로로 치환한 뒤 노출한다. 치환하지 않은 자리표가
+`<spec_path>` 는 세 자리 모두 `## 입력` 에서 바꾼 설계문서의 절대경로로 치환한 뒤 노출한다. 치환하지 않은 자리표가
 남거나 경로에 공백이 있으면 노출하지 않고 `[spec-distill] 다음 세션 줄을 만들 수 없다 — <사유>. 설계문서: <spec_path 값>. 새 세션에서 이 설계문서를 직접 첨부하고 아래 문장을 그대로 붙여 넣어 writing-plans 를 시작하라.`
 한 줄과, 그 아래에 다음 세션 줄에서 `@` 토큰을 뗀 나머지 문장을 그대로 보인 뒤 멈춘다(정본 `## 다음 세션 명령` 규칙 5). ①/② 는 첫 줄(① 맨 `/compact` · ② `/new`)과 이 줄을
 노출하고, 두 줄을 따로 입력하라는 안내와 git 작업 트리 루트의 절대경로를 함께 낸다(규칙 1 · 7).
@@ -540,8 +580,8 @@ fi
   나올 수 없다. 재리뷰 횟수는 **둘째 줄**이다(상한 도달·stagnation 도 그 줄에 붙는다).
   `advisory[]` 원문은 하나하나가 이 첫 줄의 경고 줄 중 하나에 대응한다 — 같은 사실을 두 출처가 말한 원문은 한 줄로
   합치므로 `경고 N개` 의 N 은 원문 수가 아니라 사실 수다. 게이트 앞 글에는 이 첫 줄을 그대로 쓰고
-  `advisory[]` 원문을 다시 늘어놓지 않으며, 질문의 「경고 N개」는 렌더 첫 줄의 N 이다.
+  `advisory[]` 원문을 다시 늘어놓지 않으며, 질문의 「경고 N개」는 렌더 첫 줄의 N 이다. `--bundle` 로 불렀으면 진입 펜스의 `번호 대조 경고 <N>개` 의 N 을 여기에 더한다(`## 게이트` 의 번호 대조 경고 문단).
 
 게이트를 띄우기 **직전에** 이 셋을 읽어 하나도 빠뜨리지 않고 게이트 앞 글에 쓰고, 승인 게이트 질문에는
 「경고 N개 — 위에 적었다」(또는 「경고 없음」·「이상 없음」) 한 줄만 둔다. 셋 다 비었을 때만, 남은 항목도 없으면 「이상 없음」, 있으면 「경고 없음」이다
-— 그 문구는 **채널을 실제로 읽었다는 주장**이므로, 읽지 않은 채 쓰지 않는다. 「미검증」이거나 리뷰를 마치지 못한 라운드면 질문의 상태 줄은 렌더 첫 줄의 첫 문장(그 공시)이고, 「이상 없음」·「경고 없음」은 쓰지 않는다. 경고가 있으면 그 뒤에 「경고 N개 — 위에 적었다」를 붙인다.
+— 그 문구는 **채널을 실제로 읽었다는 주장**이므로, 읽지 않은 채 쓰지 않는다. 「미검증」이거나 리뷰를 마치지 못한 라운드면 질문의 상태 줄은 렌더 첫 줄의 첫 문장(그 공시)이고, 「이상 없음」·「경고 없음」은 쓰지 않는다. 경고가 있으면 그 뒤에 「경고 N개 — 위에 적었다」를 붙인다. 번호 대조 경고 N 이 0 이 아니면 셋이 비었어도 「이상 없음」·「경고 없음」은 쓰지 않는다.
