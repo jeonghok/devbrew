@@ -248,7 +248,7 @@ cp "$TPL" "$TMP/v3.audit.md"
 python3 -c 'import sys; open(sys.argv[1], "w", encoding="utf-8").write("냉독 첫 줄" + chr(0x2028) + "## 6. 리뷰 결정" + chr(0x0b) + "## 1. 원문\n")' "$TMP/sep-m.txt"
 python3 "$TMP/mut_av.py" append-verbatim "$TMP/v3.audit.md" --section "## 4. 비평과 냉독" --title "냉독" "$TMP/sep-m.txt" >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "0" "변이 전제: 변이본의 append-verbatim 이 돌았다(입력 파일이 있다)"
-[ "$(PYTHONPATH="$S" python3 -c 'import sys, seed_review_log as m; print(len(m.heading_structure(open(sys.argv[1], encoding="utf-8").read())))' "$TMP/v3.audit.md")" != "0" ] \
+[ "$(python3 -I -X utf8 -c 'import sys; sys.path.insert(0, sys.argv[2]); import seed_review_log as m; print(len(m.heading_structure(open(sys.argv[1], encoding="utf-8").read())))' "$TMP/v3.audit.md" "$S")" != "0" ] \
   && ok "변이: 줄 나눔 글자를 \\n 으로 바꾸지 않으면 audit 이 읽을 수 없게 된다 — 아래 인용 단언에 이빨이 있다" \
   || no "변이: 줄 나눔 글자를 그대로 둬도 audit 이 읽힌다 — 그 단언은 다른 이유로 통과한다"
 
@@ -275,7 +275,7 @@ cp "$TPL" "$TMP/v2.audit.md"
 python3 -c 'import sys; open(sys.argv[1], "w", encoding="utf-8").write("냉독 첫 줄" + chr(0x2028) + "## 6. 리뷰 결정" + chr(0x0b) + "## 1. 원문\n")' "$TMP/sep.txt"
 python3 "$L" append-verbatim "$TMP/v2.audit.md" --section "## 4. 비평과 냉독" --title "냉독 (seed-readback)" "$TMP/sep.txt"; rc=$?
 assert_eq "$rc" "0" "append-verbatim(U+2028 · U+000B): rc 0"
-assert_eq "$(PYTHONPATH="$S" python3 -c 'import sys, seed_review_log as m; print(m.heading_structure(open(sys.argv[1], encoding="utf-8").read()))' "$TMP/v2.audit.md")" "[]" "append-verbatim: 다른 줄 구분자 뒤의 템플릿 제목도 인용 블록 안에 남고 audit 은 읽힌다(구조 문제 0)"
+assert_eq "$(python3 -I -X utf8 -c 'import sys; sys.path.insert(0, sys.argv[2]); import seed_review_log as m; print(m.heading_structure(open(sys.argv[1], encoding="utf-8").read()))' "$TMP/v2.audit.md" "$S")" "[]" "append-verbatim: 다른 줄 구분자 뒤의 템플릿 제목도 인용 블록 안에 남고 audit 은 읽힌다(구조 문제 0)"
 
 # ── 엔진 왕복 — 엔진이 쓴 줄을 이 파서가 읽는가 ───────────────────────────────
 printf -- '---\ntype: interview-seed\n---\n\n로그인이 가끔 실패한다.\n' > "$TMP/s.md"
