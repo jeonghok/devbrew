@@ -8,9 +8,12 @@ with loud stderr log.
 CLI:
   python3 state_path.py state-root [<cwd>]    → prints absolute path to stdout
   python3 state_path.py session-id            → prints env-resolved session id (exit 1 if unresolved)
+  python3 state_path.py interview-state --topic <kebab> [--date YYYY-MM-DD] [--cwd <dir>]
+                                              → prints interview state file path (exit 2 on refusal)
 """
 from __future__ import annotations
 
+import datetime
 import os
 import re
 import subprocess
@@ -74,9 +77,81 @@ def state_root(cwd: str | None = None) -> Path:
     return fallback
 
 
+KEBAB = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+INTERVIEW_DIR = ("docs", "superpowers", "interview")
+# 한 인터뷰의 세 자리와 각 자리가 받아들이는 frontmatter `type:`.
+_SLOTS = ((".state.md", "interview-state"), (".md", "interview-brief"), (".audit.md", "interview-audit"))
+
+
+def worktree_root(cwd: str | None = None) -> tuple[Path, bool]:
+    """(작업 트리 루트, git 인가). 메인 레포가 아니라 이 cwd 가 속한 worktree 의 루트다."""
+    cwd = cwd or os.getcwd()
+    try:
+        cp = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=cwd, capture_output=True, text=True, timeout=5, check=False,
+        )
+        if cp.returncode == 0 and cp.stdout.strip():
+            return Path(cp.stdout.strip()), True
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    return Path(cwd).resolve(), False
+
+
+def frontmatter_scalars(path) -> dict | None:
+    """맨 앞 `---` 블록의 최상위 `key: value` 줄. 읽지 못하면 None, frontmatter 가 없으면 {}."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    if not text.startswith("---\n"):
+        return {}
+    out = {}
+    for line in text[4:].splitlines():
+        if line.strip() == "---":
+            break
+        if not line or line[0] in " \t#-" or ":" not in line:
+            continue
+        key, val = line.split(":", 1)
+        out[key.strip()] = val.strip().strip('"').strip("'")
+    return out
+
+
+def interview_state_path(topic: str, date: str | None = None,
+                         cwd: str | None = None) -> tuple[Path | None, list[str]]:
+    """`<작업 트리 루트>/docs/superpowers/interview/<날짜>-<topic>-interview.state.md`.
+
+    계산한 세 자리(상태 · brief · audit) 중 이미 있는 파일의 `type:` 이 그 자리의 종류와 다르면
+    경로를 내지 않는다 — seed(`interview-seed`) · seed audit(`interview-seed-audit`) 위에 인터뷰를 시작하지 않는다.
+    """
+    msgs: list[str] = []
+    if not topic or not KEBAB.fullmatch(topic):
+        return None, ["[spec-distill] topic 이 kebab-case 가 아니다: {0!r}".format(topic)]
+    date = date or datetime.date.today().isoformat()
+    if not _DATE.fullmatch(date):
+        return None, ["[spec-distill] 날짜가 YYYY-MM-DD 가 아니다: {0!r}".format(date)]
+    root, is_git = worktree_root(cwd)
+    if not is_git:
+        msgs.append("[spec-distill] git 저장소가 아니다 — {0} 기준으로 경로를 냈다".format(root))
+    d = root.joinpath(*INTERVIEW_DIR)
+    stem = "{0}-{1}-interview".format(date, topic)
+    for suffix, kind in _SLOTS:
+        p = d / (stem + suffix)
+        if not (p.exists() or p.is_symlink()):
+            continue
+        fm = frontmatter_scalars(p)
+        have = None if fm is None else fm.get("type")
+        if have != kind:
+            msgs.append("[spec-distill] 계산한 자리에 다른 종류의 파일이 있다 — {0} (type: {1}). "
+                        "남의 파일 위에 인터뷰를 시작하지 않는다.".format(p, have or "없음"))
+            return None, msgs
+    return d / (stem + ".state.md"), msgs
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
-        print("usage: state_path.py {state-root|session-id} [<cwd>]", file=sys.stderr)
+        print("usage: state_path.py {state-root|session-id|interview-state} …", file=sys.stderr)
         return 2
     sub = argv[1]
     if sub == "state-root":
@@ -96,6 +171,20 @@ def main(argv: list[str]) -> int:
         if sid is None:
             return 1
         print(sid)
+        return 0
+    if sub == "interview-state":
+        def opt(name):
+            if name in argv:
+                i = argv.index(name)
+                if i + 1 < len(argv):
+                    return argv[i + 1]
+            return None
+        path, msgs = interview_state_path(opt("--topic") or "", opt("--date"), opt("--cwd"))
+        for m in msgs:
+            print(m, file=sys.stderr)
+        if path is None:
+            return 2
+        print(str(path))
         return 0
     print(f"unknown subcommand: {sub}", file=sys.stderr)
     return 2
