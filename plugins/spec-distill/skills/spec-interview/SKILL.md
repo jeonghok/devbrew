@@ -78,7 +78,7 @@ Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 �
 
 ### 3.6 상태 파일
 
-펜스 앞에 `ARG_PATH='<2 에서 Read 한 절대경로 — @ 가 발동하지 않았으면 빈 값>'` 한 줄을 붙여 같은 Bash 호출로 돌린다. 마지막 줄이 판결이다 — `interview-state: REJECT …` 면 그 줄을 보이고 멈추고, 나머지 행의 절차는 아래 `Read` 줄의 파일에 있다.
+펜스 앞에 `ARG_PATH='<2 에서 Read 한 절대경로 — @ 가 발동하지 않았으면 빈 값>'` 한 줄을 붙여 같은 Bash 호출로 돌린다. 마지막 줄이 판결이다 — `interview-state: REJECT …` 면 그 줄을 보이고 멈춘다. 마지막 줄의 판결마다 동작은 아래 `Read` 줄의 state-file.md 에 있다.
 
 <!-- interview-state-entry:begin -->
 ```bash
@@ -86,13 +86,6 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 python3 "$SD/scripts/interview_state.py" entry --arg "${ARG_PATH:-}" --session "$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ```
 <!-- interview-state-entry:end -->
-
-| 판결 | 동작 |
-|---|---|
-| `interview-state: RESUME <경로>` | 그 상태 파일로 이어 간다 |
-| `interview-state: ASK` | 이어 감/새로 시작을 묻는다 |
-| `interview-state: LEGACY <경로>` | 옛 진행 기록을 docs 로 옮긴 뒤 이어 간다 |
-| `interview-state: NEW-SEED <주제> seed=<경로>` · `interview-state: NEW` | 상태 파일을 만든다 — NEW-SEED 는 첫 라운드 전, NEW 는 첫 라운드에서 주제를 정한 직후 |
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/state-file.md

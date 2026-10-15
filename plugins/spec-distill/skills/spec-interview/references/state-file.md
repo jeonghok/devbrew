@@ -4,6 +4,17 @@
 `docs/superpowers/interview/<날짜>-<주제>-interview.state.md` 한 파일에 산다. brief · audit 는 같은 줄기로 옆에 놓인다
 (`<줄기>.md` · `<줄기>.audit.md`). 작업 트리 안이라 `Write` · `Edit` 로 고친다.
 
+### 진입 판결
+
+SKILL 진입 단계 3.6 펜스의 마지막 줄이 판결이다(`REJECT` 는 SKILL 이 멈춘다). 각 행의 절차는 아래 절들에 있다.
+
+| 판결 | 동작 |
+|---|---|
+| `interview-state: RESUME <경로>` | 그 상태 파일로 이어 간다 |
+| `interview-state: ASK` | 이어 감/새로 시작을 묻는다 |
+| `interview-state: LEGACY <경로>` | 옛 진행 기록을 docs 로 옮긴 뒤 이어 간다 |
+| `interview-state: NEW-SEED <주제> seed=<경로>` · `interview-state: NEW` | 상태 파일을 만든다 — NEW-SEED 는 첫 라운드 전, NEW 는 첫 라운드에서 주제를 정한 직후 |
+
 ### 처음 만들 때
 
 frontmatter 첫 두 키:

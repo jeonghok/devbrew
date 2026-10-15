@@ -36,10 +36,19 @@ ent() { ( cd "$iv" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-iv000
 $(fence "$SK" interview-state-entry)" 2>/dev/null | tail -n 1 ); }
 [ -n "$(fence "$SK" interview-state-entry)" ] && ok "AC3: SKILL 에 진입 펜스(interview-state-entry)가 있다" || no "AC3: 진입 펜스가 없다"
 assert_eq "$(ent "$D/2026-10-15-t-interview.state.md")" "interview-state: RESUME $D/2026-10-15-t-interview.state.md" "AC3: @<…>.state.md 는 이어 가는 분기"
-grep -qF '`interview-state: RESUME <경로>`' "$SK" && ok "AC3: SKILL 판결 표에 RESUME 행" || no "AC3: SKILL 판결 표에 RESUME 행이 없다"
-for v in 'interview-state: ASK' 'interview-state: LEGACY <경로>' 'interview-state: NEW-SEED <주제> seed=<경로>' 'interview-state: NEW`' 'interview-state: REJECT …'; do
-  grep -qF -- "$v" "$SK" && ok "AC3: SKILL 판결 표에 「${v}」" || no "AC3: SKILL 판결 표에 「${v}」 이 없다"
+# 판결 표는 SKILL 줄 상한(test_conducting_interview_stage.sh SKILL_LINE_CAP) 때문에 state-file.md 「### 진입 판결」 에 산다.
+# REJECT 는 SKILL 이 멈추는 판결이라 SKILL 에 남는다. SKILL 은 판결마다의 동작이 state-file.md 에 있다는 줄을 갖는다.
+SF_VERDICT="$(python3 -I -c '
+import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+i = t.find("### 진입 판결")
+print(t[i:t.find("\n### ", i + 1)] if i >= 0 else "")' "$SF")"
+printf '%s\n' "$SF_VERDICT" | grep -qF '`interview-state: RESUME <경로>`' && ok "AC3: state-file.md 판결 표에 RESUME 행" || no "AC3: state-file.md 판결 표에 RESUME 행이 없다"
+for v in 'interview-state: ASK`' 'interview-state: LEGACY <경로>`' 'interview-state: NEW-SEED <주제> seed=<경로>`' 'interview-state: NEW`'; do
+  printf '%s\n' "$SF_VERDICT" | grep -qF -- "$v" && ok "AC3: state-file.md 판결 표에 「${v}」" || no "AC3: state-file.md 판결 표에 「${v}」 이 없다"
 done
+grep -qF 'interview-state: REJECT …' "$SK" && ok "AC3: SKILL 이 REJECT 에서 멈춘다" || no "AC3: SKILL 에 REJECT 판결이 없다"
+grep -qF '마지막 줄의 판결마다 동작은 아래 `Read` 줄의 state-file.md 에 있다' "$SK" && ok "AC3: SKILL 이 판결 표를 state-file.md 로 가리킨다" || no "AC3: SKILL 에 판결 표 가리킴이 없다"
 printf -- '---\ntype: interview-seed\n---\n' > "$D/2026-10-15-s-interview.md"
 printf -- '---\ntype: interview-seed-audit\n---\n' > "$D/2026-10-15-s-interview.audit.md"
 v="$(ent "$D/2026-10-15-s-interview.md")"
