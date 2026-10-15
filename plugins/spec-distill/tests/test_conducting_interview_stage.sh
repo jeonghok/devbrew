@@ -563,7 +563,8 @@ done
 # 2026-10-12 R1: C44 · 자격/예산 문단을 걷고 조사 상한 절 · repo-researcher dispatch 를 더한다. 순감이라 값을 올리지 않는다.
 # 2026-10-12 R1: 실측 494 + 8 로 조였다.
 # 2026-10-15 R2: 라운드 공시 셋(사실 직접 답 · 밀린 질문 · 줄인 사실) 불릿 둘 + 문장 하나 — 실측 498 + 8.
-SKILL_LINE_CAP=506
+# 2026-10-16 R2: origin/main(R3 의 epic-handoff Read 줄 · 그 안내 줄)을 합쳤다 — 실측 500 + 8.
+SKILL_LINE_CAP=508
 [[ "$(skill_own_lines "$SKILL")" -lt "$SKILL_LINE_CAP" ]] \
   && ok "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") < $SKILL_LINE_CAP (규칙 블록 제외 — 조사 특화 순증 + 진입 단계 흡수)" \
   || no "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") ≥ $SKILL_LINE_CAP"

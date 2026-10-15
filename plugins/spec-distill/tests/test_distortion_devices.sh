@@ -80,6 +80,9 @@ has   "$BP" '§2~§5 가 §6 원문을 어떻게 옮겼는지' "§2-4: brief 층
 hasnt "$BP" '§2 요약이 §6 원문을 어떻게 옮겼는지만 본다' "§2-4(부재): 층 2 가 §2 만 보는 문장이 없다"
 has   "$DP" '사용자가 요청한 동작을 자르는 지적은 범주를 `scope` 로' "AC16b: 설계문서 프로필이 사용자 요청 자르기를 scope 로 낸다"
 assert_eq "$(fm_line "$DP" 'must_catch:')" 'must_catch: [goal_fit, problem_definition, scope, architecture]' "AC16b: 설계문서 must_catch 는 바뀌지 않는다"
+# 통합(R3 묶음 모드): 원문 대조의 자리는 brief 만이 아니라 source_interview 가 가리키는 파일 — 에픽 묶음이면 묶음의 사용자 원문 절
+has   "$DP" '사용자 원문(frontmatter `source_interview` 가 가리키는 파일(brief · 에픽 묶음)의 §6)에 있는지 인용으로 대조한다' "AC5 통합: 설계문서 원문 대조가 brief · 에픽 묶음 둘 다의 §6 을 가리킨다"
+hasnt "$DP" '`source_interview` 가 가리키는 brief 의 §6' "AC5 통합(부재): 원문 대조가 brief 의 §6 만 가리키는 옛 문면이 없다"
 
 # ── Task 5 — payload §6 전량 · 추가만 (AC11) ──
 RB="$SD/skills/reviewing-brief/SKILL.md"; BT="$SD/templates/interview-brief-template.md"; FN="$SD/skills/spec-interview/references/finishing.md"
