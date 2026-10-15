@@ -23,6 +23,7 @@ import os
 import re
 import select
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -277,6 +278,7 @@ STDIN_WAIT = 0.5
 STDIN_MAX_BYTES = 1 << 16
 STATE_MAX_BYTES = 1 << 20
 STATE_FILES_MAX = 200
+FOLDER_ENTRIES_MAX = 10000
 CACHE_MAX_BYTES = 8 << 20
 LAST_LINES_MAX = 20
 TIMED_OUT_LINE = "상태줄 — 시간 초과"
@@ -303,7 +305,7 @@ def run_bounded(argv, cwd, env, deadline: Deadline, what: str):
     try:
         proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                 stderr=subprocess.DEVNULL, start_new_session=True)
-    except OSError:
+    except (OSError, subprocess.SubprocessError):
         return 127, b""
     try:
         out, _err = proc.communicate(timeout=wait)
@@ -321,9 +323,18 @@ def run_bounded(argv, cwd, env, deadline: Deadline, what: str):
 
 
 def read_capped(path, limit: int) -> str:
-    """limit 바이트까지 UTF-8 로 읽는다. 넘으면 ValueError."""
-    with open(str(path), "rb") as fh:
-        data = fh.read(limit + 1)
+    """일반 파일만 limit 바이트까지 UTF-8 로 읽는다 — 링크를 따라가지 않고 장치 · 파이프에서 기다리지 않는다.
+    일반 파일이 아니거나 넘으면 ValueError, 링크면 OSError."""
+    fd = os.open(str(path), os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError("일반 파일이 아니다")
+        with os.fdopen(fd, "rb") as fh:
+            fd = None
+            data = fh.read(limit + 1)
+    finally:
+        if fd is not None:
+            os.close(fd)
     if len(data) > limit:
         raise ValueError("파일이 %d바이트를 넘는다" % limit)
     return data.decode("utf-8")
@@ -390,23 +401,34 @@ def interview_files(root: str):
     if not supported:
         return False, [], None
     folder = Path(root, "docs", "superpowers", "interview")
+    for part in ("docs", "docs/superpowers", "docs/superpowers/interview"):
+        try:
+            if stat.S_ISLNK(os.lstat(os.path.join(root, part)).st_mode):
+                return True, [], "인터뷰 폴더 경로에 링크가 있다: %s" % part
+        except FileNotFoundError:
+            return True, [], None
+        except OSError as exc:
+            return True, [], "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__
+    names = set()
     try:
-        names = sorted(os.listdir(str(folder)))
-    except FileNotFoundError:
-        return True, [], None
+        with os.scandir(str(folder)) as entries:
+            for entry in entries:
+                if len(names) >= FOLDER_ENTRIES_MAX:
+                    return True, [], "인터뷰 폴더 항목이 %d개를 넘는다" % FOLDER_ENTRIES_MAX
+                names.add(entry.name)
     except OSError as exc:
         return True, [], "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__
-    names = [n for n in names if n.endswith(STATE_SUFFIX)]
-    if len(names) > STATE_FILES_MAX:
-        return True, [], "인터뷰 상태 파일이 %d개를 넘는다(%d개)" % (STATE_FILES_MAX, len(names))
+    progress = sorted(n for n in names
+                      if n.endswith(STATE_SUFFIX) and n[: -len(".state.md")] + ".md" not in names)
+    if len(progress) > STATE_FILES_MAX:
+        return True, [], "진행 중 인터뷰 상태 파일이 %d개를 넘는다(%d개)" % (STATE_FILES_MAX, len(progress))
     files = []
-    for name in names:
-        if (folder / (name[: -len(".state.md")] + ".md")).exists():
-            continue
+    for name in progress:
         try:
-            files.append(("docs/superpowers/interview/" + name, folder / name, (folder / name).stat().st_mtime_ns))
+            mtime_ns = os.lstat(str(folder / name)).st_mtime_ns
         except OSError:
-            files.append(("docs/superpowers/interview/" + name, folder / name, -1))
+            mtime_ns = -1
+        files.append(("docs/superpowers/interview/" + name, folder / name, mtime_ns))
     return True, files, None
 
 
@@ -490,8 +512,8 @@ def save_cache(path, entries, last):
             except OSError:
                 pass
             raise
-    except OSError as exc:
-        return "캐시 파일을 쓰지 못했다(%s)" % (exc.strerror or type(exc).__name__)
+    except (OSError, ValueError) as exc:
+        return "캐시 파일을 쓰지 못했다(%s)" % (getattr(exc, "strerror", None) or type(exc).__name__)
     return None
 
 

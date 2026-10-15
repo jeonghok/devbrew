@@ -320,8 +320,23 @@ assert_contains "$out" "2026-10-17-big-interview.state.md — 셀 수 없음(파
 assert_contains "$out" "2026-10-18-digits-interview.state.md — 셀 수 없음(research_limit 가 수가 아니다" "사유: 수의 자릿수 상한"
 rm -f "$STATE_DIR"/*
 i=0; while [ "$i" -le 200 ]; do : > "$STATE_DIR/2026-10-19-n$i-interview.state.md"; i=$((i + 1)); done
-assert_contains "$(show)" "인터뷰 상태 파일이 200개를 넘는다(201개)" "상태 파일 수 상한"
-rm -rf "$STATE_DIR"
+assert_contains "$(show)" "진행 중 인터뷰 상태 파일이 200개를 넘는다(201개)" "진행 중 상태 파일 수 상한"
+i=0; while [ "$i" -le 200 ]; do : > "$STATE_DIR/2026-10-19-n$i-interview.md"; i=$((i + 1)); done
+out="$(show)"
+assert_contains "$out" "인터뷰: 진행 중 없음" "짝 brief 가 있는 상태 파일은 상한에 세지 않는다"
+assert_not_contains "$out" "개를 넘는다" "끝난 인터뷰가 많아도 셀 수 없음이 아니다"
+rm -f "$STATE_DIR"/*
+mkfifo "$STATE_DIR/2026-10-20-pipe-interview.state.md"
+mkfifo "$T/fifo"; ln -s "$T/fifo" "$STATE_DIR/2026-10-20-link-interview.state.md"
+out="$(cd "$W" && timed 15 python3 "$S/control_plane.py" statusline </dev/null)"
+within "$out" 6 && ok "파이프 · 파이프로 가는 링크 — 기다리지 않는다(${out##*@}초)" || no "파이프에 상태줄이 막혔다: $out"
+assert_eq "$(body "$out")" "$LINE2 · 인터뷰 셀 수 없음" "파이프 · 링크 상태 파일은 셀 수 없음"
+out="$(show)"
+assert_contains "$out" "2026-10-20-pipe-interview.state.md — 셀 수 없음(일반 파일이 아니다)" "사유: 일반 파일이 아니다"
+assert_contains "$out" "2026-10-20-link-interview.state.md — 셀 수 없음(읽지 못했다(" "링크는 따라가지 않는다"
+rm -rf "$STATE_DIR"; mkdir -p "$T/real-interview"; ln -s "$T/real-interview" "$STATE_DIR"
+assert_contains "$(show)" "인터뷰 폴더 경로에 링크가 있다: docs/superpowers/interview" "링크된 인터뷰 폴더는 읽지 않는다"
+rm -f "$STATE_DIR"
 
 # 변이 — 위 단언들이 이빨을 갖는가
 mutant group 'os.killpg(proc.pid, signal.SIGKILL)' 'proc.kill()'
@@ -341,8 +356,9 @@ printf 'interview-state\n' > "$T/m-digits/state_path.py"; mkdir -p "$STATE_DIR"
 python3 -I -c 'import sys
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
     fh.write("---\ntype: interview-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 900000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-interview.state.md"
-out="$(cd "$W" && timed 15 python3 "$T/m-digits/control_plane.py" statusline </dev/null)"
-within "$out" 2.5 && no "변이 생존: 자릿수 상한" || ok "변이 잡힘: 자릿수 상한이 없으면 시간 단언이 RED"
+out="$(cd "$W" && timed 30 python3 "$T/m-digits/control_plane.py" show </dev/null)"
+assert_contains "$out" "2026-10-18-digits-interview.state.md" "양성 짝: 자릿수 변이 실행이 그 상태 파일을 봤다"
+case "$out" in *"research_limit 가 수가 아니다"*) no "변이 생존: 자릿수 상한" ;; *) ok "변이 잡힘: 자릿수 상한이 없으면 사유 단언이 RED" ;; esac
 rm -rf "$STATE_DIR"
 mutant cap 'STATE_MAX_BYTES = 1 << 20' 'STATE_MAX_BYTES = 1 << 40'
 printf 'interview-state\n' > "$T/m-cap/state_path.py"; mkdir -p "$STATE_DIR"
@@ -350,7 +366,14 @@ python3 -I -c 'import sys
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
     fh.write("---\ntype: interview-state\n  research_limit: " + "9" * 30000000 + "\n---\n")' "$STATE_DIR/2026-10-17-big-interview.state.md"
 out="$(cd "$W" && python3 "$T/m-cap/control_plane.py" show </dev/null)"
+assert_contains "$out" "2026-10-17-big-interview.state.md — 셀 수 없음(" "양성 짝: 크기 변이 실행이 그 상태 파일을 봤다"
 case "$out" in *"바이트를 넘는다"*) no "변이 생존: 크기 상한" ;; *) ok "변이 잡힘: 크기 상한이 없으면 사유 단언이 RED" ;; esac
+rm -rf "$STATE_DIR"
+mutant nonblock 'os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0)' 'os.O_RDONLY'
+printf 'interview-state\n' > "$T/m-nonblock/state_path.py"; mkdir -p "$STATE_DIR"
+mkfifo "$STATE_DIR/2026-10-20-pipe-interview.state.md"
+out="$(cd "$W" && timed 10 python3 "$T/m-nonblock/control_plane.py" statusline </dev/null)"
+assert_eq "$out" "TIMEOUT" "변이 잡힘: 파이프를 막힘 없이 열지 않으면 상태줄이 멈춘다(시간 단언이 RED)"
 rm -rf "$STATE_DIR"
 
 finish
