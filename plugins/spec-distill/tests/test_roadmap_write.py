@@ -27,6 +27,14 @@ class Judge(unittest.TestCase):
     def test_pass(self):
         self.assertEqual(W.judge(report(), 3), [])  # rc 는 보지 않는다(origin/main 없음 3 · 경고 1)
 
+    def test_block_warnings_do_not_fail(self):
+        # 5.7.0 이 블록 경고(얕은 답 · 받드는 에픽 없는 발화 · 번호 대조 셀 수 없음)를 더해 rc 1 이 날 수 있다 — 되돌리지 않는다.
+        warns = ["얕은 답 1개: d.md — S1(자리 없음)", "번호 대조 셀 수 없음 1개: d.md — 로드맵을 못 읽었다",
+                 "받드는 에픽 없는 발화 1개: d.md — S2"]
+        out = report(blocks=[{"id": "E1", "warnings": warns, "notes": []}], unknown_reasons=["E1 spec 을 읽지 못했다"],
+                     exit=1)
+        self.assertEqual(W.judge(out, 1), [])
+
     def test_each_list(self):
         self.assertEqual(set(W.LISTS), {"format_errors", "unassigned", "orphans", "unknown_ids"})
         for key in ("format_errors", "unassigned", "orphans", "unknown_ids"):
