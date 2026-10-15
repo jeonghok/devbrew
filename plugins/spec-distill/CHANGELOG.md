@@ -3,17 +3,13 @@
 ## [5.7.0] — 2026-10-15
 
 ### Added
-- `scripts/control_plane.py` — 로드맵 상태(`roadmap_status.py --json`)와 진행 중 인터뷰를 상태줄 한 줄(`statusline`) · 지도(`show`) · 작업 목록 줄(`show --tasks`)로 보인다. 결과는 `<git 공용 디렉토리>/devbrew/control-plane.json` 에 캐시하고(origin/main 커밋 · 브랜치 머리 · 로드맵 사본 · 인터뷰 상태 파일이 같으면 다시 계산하지 않는다), 받은 지 N분은 매번 `FETCH_HEAD` 에서 읽는다. 읽기만 한다.
-- 진입 skill `roadmap-status`(`/spec-distill:roadmap-status [<로드맵 경로>]`) — 에픽 지도를 보인다. 블록 줄에 끝나지 않은 의존(`← 기다림: …`), 받드는 에픽 없는 발화 · 미배정 번호를 경고로 보인다.
+- `scripts/control_plane.py` — 로드맵 상태(`roadmap_status.py --json`)와 진행 중 인터뷰를 상태줄 한 줄(`statusline`) · 지도(`show`) · 작업 목록 줄(`show --tasks`)로 보인다. 결과는 `<git 공용 디렉토리>/devbrew/control-plane.json` 에 캐시하고(origin/main 커밋 · 브랜치 머리 · 로드맵 사본 · 상태 계산 스크립트의 크기와 수정 시각이 같으면 다시 계산하지 않는다 — 스크립트는 `roadmap_status.py` · `roadmap_model.py` · `section6.py` · `check_bundle_coverage.py` · `control_plane.py`), 받은 지 N분과 진행 중 인터뷰는 캐시 밖에서 매번 읽는다(병렬 worktree 가 한 캐시를 나눠 써도 서로의 칸을 밀지 않는다). 읽기만 한다.
+- 진입 skill `roadmap-status`(`/spec-distill:roadmap-status [<로드맵 경로>]`) — 에픽 지도를 보인다. 블록 줄에 끝나지 않은 의존(`← 기다림: …`), 고아 발화 · 미배정 번호를 경고로 보인다.
 - README 「상태줄」 — 버전 없는 상태줄 실행 스크립트와 설치 · 이어 붙이기 안내. 플러그인은 상태줄을 대신 켤 수 없다.
 - 끄기 스위치 `DEVBREW_SKIP_HOOKS=spec-distill:statusline`.
 - 상태줄은 3초, 지도는 30초 안에 끝난다 — git · 상태 계산 하위 프로세스는 시간을 넘기면 묶음째 끝내고, 상태줄은 마지막으로 낸 줄 + ` · 시간 초과` 또는 `상태줄 — 시간 초과` 를 낸다. 끝내라는 신호(SIGTERM · SIGHUP)를 받아도 하위 프로세스 묶음을 끝낸다. 인터뷰 상태 파일은 일반 파일만 64 KiB 까지 읽고, 사유는 80자로 줄인다.
-
-### Changed
-- 컨트롤 플레인 캐시 열쇠(`code_stamp`)가 `roadmap_model.py` · `check_bundle_coverage.py` 도 해시한다 — 로드맵 논리가 거기에도 있어, 고쳐도 캐시가 낡은 채 남지 않는다.
-
-### Fixed
-- README 「상태줄」의 「Claude Code 가 상태줄을 도중에 끝내도 하위 프로세스는 함께 끝난다」 단언을 조건문으로 고쳤다 — 스크립트가 하위 프로세스에 시간 제한을 두는 것까지만 말하고, Claude Code 가 상태줄 실행을 버릴 때 자식을 끝내는지는 재지 않았다고 적는다.
+- `roadmap_status.py` 가 R3 의 얕은 답 · 받드는 에픽 없는 발화를 그 블록의 경고 줄로 싣는다(종료 코드는 그대로). 컨트롤 플레인이 읽는 경고 채널이다.
+- README 「상태줄」은 하위 프로세스를 스크립트가 시간 제한으로 묶는다는 것까지만 말한다 — Claude Code 가 상태줄 실행을 버릴 때 자식을 끝내는지는 재지 않았다.
 
 ## [5.6.0] — 2026-10-15
 

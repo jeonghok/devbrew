@@ -144,18 +144,18 @@ class Show(unittest.TestCase):
     def test_top_level_warning_lines(self):
         r = report(BASE, 1, orphans=["S3", "S9"], unassigned=["C4"], unknown_ids=["X1"])
         lines = self.show([(RM, r)])
-        self.assertIn("받드는 에픽 없는 발화: 2개 — S3 · S9", lines)
+        self.assertIn("고아 발화: 2개 — S3 · S9", lines)
         self.assertIn("미배정 번호: 1개 — C4", lines)
         self.assertIn("brief 에 없는 번호: 1개 — X1", lines)
 
     def test_top_level_uncountable(self):
         lines = self.show([(RM, report(BASE, 3, orphans=None, unassigned=None))])
-        self.assertIn("받드는 에픽 없는 발화: 셀 수 없음", lines)
+        self.assertIn("고아 발화: 셀 수 없음", lines)
         self.assertIn("미배정 번호: 셀 수 없음", lines)
 
     def test_empty_top_level_lines_absent(self):
         text = "\n".join(self.show([(RM, report(BASE, 0))]))
-        self.assertNotIn("받드는 에픽 없는 발화", text)
+        self.assertNotIn("고아 발화", text)
 
     def test_unknown_reasons_lines(self):
         r = report(BASE, 3, format_errors=["형식 하나"], unknown_reasons=["로드맵을 못 읽었다: x (origin/main)"])
@@ -277,7 +277,7 @@ class CodeStamp(unittest.TestCase):
             old = cp.SCRIPTS
             cp.SCRIPTS = Path(d)
             try:
-                for edited in ("roadmap_model.py", "check_bundle_coverage.py"):
+                for edited in ("roadmap_model.py", "section6.py", "check_bundle_coverage.py"):
                     self.assertIn(edited, cp.CODE_STAMP_FILES)
                     before = cp.code_stamp()
                     Path(d, edited).write_text("changed-longer", encoding="utf-8")

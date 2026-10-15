@@ -94,12 +94,24 @@ sl >/dev/null; assert_eq "$(calls)" "3" "키 요소 — origin/main 커밋만 �
 push_file "$RM" "로드맵 바뀜"
 sl >/dev/null; assert_eq "$(calls)" "4" "키 요소 — 대상 로드맵 사본이 바뀌면 다시 계산"
 printf 'interview-state\n' > "$S/state_path.py"
-sl >/dev/null; assert_eq "$(calls)" "5" "인터뷰 상태 파일 지원이 켜지면 다시 계산"
+sl >/dev/null; assert_eq "$(calls)" "4" "인터뷰 상태 파일 지원이 켜져도 키가 아니므로 다시 계산하지 않는다"
 write_state "$STATE_DIR" 2026-10-15-t-interview.state.md 1
 assert_eq "$(sl)" "$LINE · 인터뷰 조사 3/20" "진행 중 인터뷰 조각"
-assert_eq "$(calls)" "6" "키 요소 — 진행 중 인터뷰 상태 파일이 생기면 다시 계산"
+assert_eq "$(calls)" "4" "진행 중 인터뷰 상태 파일이 생겨도 상태 계산은 다시 부르지 않는다(인터뷰는 캐시 밖)"
 age "$STATE_DIR/2026-10-15-t-interview.state.md" 3000
-sl >/dev/null; assert_eq "$(calls)" "7" "키 요소 — 인터뷰 상태 파일 수정 시각이 바뀌면 다시 계산"
+assert_eq "$(sl)" "$LINE · 인터뷰 조사 3/20" "인터뷰 상태 파일 수정 시각이 바뀌어도 줄은 맞고"
+assert_eq "$(calls)" "4" "상태 계산은 다시 부르지 않는다"
+git -C "$W" worktree add -q --detach "$T/wt2" HEAD
+sl2() { (cd "$T/wt2" && python3 "$S/control_plane.py" statusline </dev/null); }
+sl >/dev/null; sl2 >/dev/null; base="$(calls)"
+sl >/dev/null; sl2 >/dev/null; sl >/dev/null; sl2 >/dev/null
+assert_eq "$(calls)" "$base" "worktree 둘이 번갈아 불러도 둘 다 캐시가 맞는다(서로의 칸을 밀지 않는다)"
+write_state "$T/wt2/docs/superpowers/interview" 2026-10-15-w-interview.state.md 5
+sl >/dev/null; sl2 >/dev/null; sl >/dev/null; sl2 >/dev/null
+assert_eq "$(calls)" "$base" "한쪽 worktree 에 인터뷰가 생겨도 다른 쪽 캐시를 밀지 않는다"
+assert_contains "$(sl2)" "인터뷰 조사 7/20" "그 인터뷰는 그 worktree 에서만 보인다"
+assert_not_contains "$(sl)" "7/20" "다른 worktree 의 인터뷰는 이쪽에 안 보인다"
+git -C "$W" worktree remove --force "$T/wt2"
 printf 'brief\n' > "$STATE_DIR/2026-10-15-t-interview.md"
 assert_eq "$(sl)" "$LINE" "짝 brief 가 생기면 진행 중이 아니다"
 printf -- '---\ntype: interview-state\n' > "$STATE_DIR/2026-10-16-u-interview.state.md"
@@ -247,12 +259,14 @@ rm -f "$CACHE"; msl refs >/dev/null; c1="$(mcalls refs)"; g branch -q topic2; ms
 mutant main 'mode, main or "-",' 'mode, "-",'
 rm -f "$CACHE"; msl main >/dev/null; c1="$(mcalls main)"; push_file other2.txt "또"; msl main >/dev/null; c2="$(mcalls main)"
 [ "$c1" -gt 0 ] && [ "$c2" = "$c1" ] && ok "변이 잡힘: origin/main 요소를 빼면 커밋 단언이 RED" || no "변이 생존: origin/main 요소($c1 → $c2)"
-mutant stamps '"\n".join(stamps)]' '""]'
+mutant stamps 'interview = read_interviews(supported, files, folder_error, deadline)  # 캐시 밖' 'interview = {"supported": False, "items": [], "errors": []}  # 캐시 밖'
 printf 'interview-state\n' > "$T/m-stamps/state_path.py"
-rm -f "$CACHE"; msl stamps >/dev/null; c1="$(mcalls stamps)"
-age "$STATE_DIR/2026-10-15-t-interview.state.md" 9000; rm -f "$STATE_DIR/2026-10-15-t-interview.md"
-msl stamps >/dev/null; c2="$(mcalls stamps)"
-[ "$c1" -gt 0 ] && [ "$c2" = "$c1" ] && ok "변이 잡힘: 인터뷰 요소를 빼면 인터뷰 단언이 RED" || no "변이 생존: 인터뷰 요소($c1 → $c2)"
+write_state "$STATE_DIR" 2026-10-15-t-interview.state.md 1; rm -f "$STATE_DIR/2026-10-15-t-interview.md"
+rm -f "$CACHE"; msl stamps >/dev/null
+mutant stampsctl 'interview = read_interviews(supported, files, folder_error, deadline)  # 캐시 밖' 'interview = read_interviews(supported, files, folder_error, deadline)  # 캐시 밖'
+printf 'interview-state\n' > "$T/m-stampsctl/state_path.py"
+[[ "$(msl stampsctl)" == *"인터뷰 조사 3/20" ]] && ok "양성 대조: 변이 없는 사본은 인터뷰 조각을 낸다" || no "양성 대조 실패 — 아래 단언이 공허하다"
+[[ "$(msl stamps)" != *"인터뷰 조사"* ]] && ok "변이 잡힘: 인터뷰를 안 읽으면 인터뷰 조각 단언이 RED" || no "변이 생존: 인터뷰 읽기"
 rm -rf "$W/docs/superpowers/interview"
 mutant switch "        if switch_name():" "        if False:"
 out="$(cd "$W" && DEVBREW_SPEC_DISTILL_DISABLE=1 python3 "$T/m-switch/control_plane.py" statusline </dev/null)"

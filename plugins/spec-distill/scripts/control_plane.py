@@ -39,7 +39,7 @@ DONE = ("머지됨", "끝남")
 BUCKETS = (("설계", ("설계 중",)), ("구현", ("계획", "구현 중", "구현 끝", "PR")), ("준비", ("준비",)))
 UNCOUNTED = ("대기", "머지됨", "끝남", "알 수 없음")
 TASK_STATES = ("pending", "in_progress", "completed")
-TOP_WARNINGS = (("받드는 에픽 없는 발화", "orphans"), ("미배정 번호", "unassigned"),
+TOP_WARNINGS = (("고아 발화", "orphans"), ("미배정 번호", "unassigned"),
                 ("brief 에 없는 번호", "unknown_ids"))
 CTRL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 QUEUE_HEADING = "## audit §2 대기 줄"
@@ -465,9 +465,9 @@ def read_interviews(supported, files, folder_error, deadline: Deadline) -> dict:
     return summary
 
 
-def cache_key(repo: Repo, main, mode, targets, stamps):
-    """origin/main 커밋 · 브랜치 머리 목록(origin/main · symref 줄 뺌) · 대상 로드맵의 origin/main 사본 · 진행 중 인터뷰
-    상태 파일. git 을 못 읽으면 None — 캐시를 쓰지 않는다."""
+def cache_key(repo: Repo, main, mode, targets):
+    """origin/main 커밋 · 브랜치 머리 목록(origin/main · symref 줄 뺌) · 대상 로드맵의 origin/main 사본. 인터뷰 상태는
+    키에 없다(매번 읽는다). git 을 못 읽으면 None — 캐시를 쓰지 않는다."""
     rc, out = repo.git("for-each-ref", "--format=%(refname) %(objectname) %(symref)", "refs/heads", "refs/remotes")
     if rc != 0:
         return None
@@ -478,11 +478,11 @@ def cache_key(repo: Repo, main, mode, targets, stamps):
             kept.append(row)
     refs = "\n".join(kept)
     refs_hash = hashlib.sha256(refs.encode("utf-8")).hexdigest()
-    parts = [code_stamp(), mode, main or "-", refs_hash, "\n".join("%s=%s" % t for t in targets), "\n".join(stamps)]
+    parts = [code_stamp(), mode, main or "-", refs_hash, "\n".join("%s=%s" % t for t in targets)]
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
 
-CODE_STAMP_FILES = ("roadmap_status.py", "roadmap_model.py", "check_bundle_coverage.py", "control_plane.py")
+CODE_STAMP_FILES = ("roadmap_status.py", "roadmap_model.py", "section6.py", "check_bundle_coverage.py", "control_plane.py")
 
 
 def code_stamp() -> str:
@@ -562,15 +562,14 @@ def save_cache(path, entries, last):
 
 
 def cached_view(entry, key):
-    """캐시 항목이 이 키에 맞고 모양이 온전하면 (items, interview, select_error), 아니면 None."""
+    """캐시 항목이 이 키에 맞고 모양이 온전하면 (items, select_error), 아니면 None."""
     if key is None or not isinstance(entry, dict) or entry.get("key") != key:
         return None
     try:
         items = [(str(p), r) for p, r in entry["items"] if isinstance(r, dict)]
-        interview = entry["interview"]
-        if not isinstance(interview, dict) or len(items) != len(entry["items"]):
+        if len(items) != len(entry["items"]):
             return None
-        return items, interview, entry.get("select_error")
+        return items, entry.get("select_error")
     except (KeyError, TypeError, ValueError):
         return None
 
@@ -618,27 +617,24 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict):
     else:
         targets, select_error = candidates(repo, main)
     mode = arg or "*"
-    stamps = ["supported=%d" % supported] + ["%s=%d" % (rel, m) for rel, _p, m in files]
-    if folder_error:
-        stamps.append("folder=" + folder_error)
-    key = cache_key(repo, main, mode, targets, stamps)
+    key = cache_key(repo, main, mode, targets)
     path = cache_file(repo)
     entries, last, note = load_cache(path) if path else ({}, {}, "git 공용 디렉토리를 찾지 못했다")
     ctx.update(top=repo.cwd, cache=path, entries=entries, last=last)
     if note:
         view["notes"].append(note)
+    interview = read_interviews(supported, files, folder_error, deadline)  # 캐시 밖: 병렬 worktree 가 서로의 칸을 밀지 않는다
     hit = cached_view(entries.get(mode), key)
     if hit is not None:
-        items, interview, select_error = hit
+        items, select_error = hit
     else:
         reports = [(p, run_status(repo, p)) for p, _blob in targets]
         items = reports if arg else [(p, r) for p, r in reports if unfinished(r)]
-        interview = read_interviews(supported, files, folder_error, deadline)
         if key is None:
             view["notes"].append("캐시 키를 만들지 못했다(git 읽기 실패)")
         elif path is not None and not select_error and not any(r.get("bridge_error") for _p, r in reports):
             kept = dict((k, v) for k, v in entries.items() if k == "*" and k != mode)
-            kept[mode] = {"key": key, "items": [[p, r] for p, r in items], "interview": interview,
+            kept[mode] = {"key": key, "items": [[p, r] for p, r in items],
                           "select_error": select_error}
             ctx["entries"] = kept
             err = save_cache(path, kept, last)
