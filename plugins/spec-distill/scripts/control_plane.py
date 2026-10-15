@@ -15,7 +15,22 @@
 """
 from __future__ import annotations
 
+import argparse
+import datetime
+import hashlib
+import json
+import os
 import re
+import select
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+SCRIPTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPTS))
+from kill_switch_active import kill_switch_active  # noqa: E402
 
 DONE = ("머지됨", "끝남")
 # 상태줄 묶음 — 상태 계산의 단계 이름 + R5 가 더할 이름. 대기 · 끝난 단계 · 알 수 없음은 세지 않는다.
@@ -229,3 +244,362 @@ def tasks_output(items, select_error=None):
             reason = b.get("reason") or "작업 상태가 없다"
             out.append(clean("%s · 알 수 없음(%s)" % (title, reason)) + "\tkeep")
     return out, "", 0
+
+
+# ── git · 인터뷰 파일 · 캐시 (읽기 전용 — 쓰는 것은 캐시 파일 하나) ──────────────────
+
+MAIN_REF = "refs/remotes/origin/main"
+ROADMAP_RE = re.compile(r"docs/superpowers/roadmaps/[^/]+/roadmap\.md")
+GIT_OK = frozenset({"rev-parse", "ls-tree", "for-each-ref"})
+CACHE_VERSION = 1
+STATE_SUFFIX = "-interview.state.md"
+
+
+class Repo:
+    def __init__(self, cwd: str):
+        self.cwd = cwd
+        self.env = dict(os.environ, GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0",
+                        GIT_NO_LAZY_FETCH="1", LC_ALL="C")
+
+    def git(self, *args):
+        if not args or args[0] not in GIT_OK:
+            raise RuntimeError("허용하지 않은 git 하위 명령: %r" % (args[:1],))
+        try:
+            proc = subprocess.run(["git", "-c", "core.quotePath=false"] + list(args), cwd=self.cwd,
+                                  env=self.env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return 1, ""
+        return proc.returncode, proc.stdout.decode("utf-8", "replace")
+
+    def line(self, *args):
+        rc, out = self.git(*args)
+        return out.strip() if rc == 0 and out.strip() else None
+
+
+def open_repo(cwd: str):
+    top = Repo(cwd).line("rev-parse", "--show-toplevel")
+    return Repo(top) if top else None
+
+
+def fetch_stamp(repo: Repo):
+    """이 워크트리와 공용 git 디렉토리의 FETCH_HEAD 수정 시각 중 새것 — 상태 계산의 fetched_at 과 같은 출처."""
+    stamps = []
+    for args, tail in ((("rev-parse", "--git-path", "FETCH_HEAD"), ""),
+                       (("rev-parse", "--git-common-dir"), "FETCH_HEAD")):
+        out = repo.line(*args)
+        if out:
+            try:
+                stamps.append(Path(repo.cwd, out, tail).stat().st_mtime)
+            except OSError:
+                continue
+    return max(stamps) if stamps else None
+
+
+def candidates(repo: Repo, main):
+    """([(경로, blob)], 사유). origin/main 이 없으면 고를 것이 없다(로드맵 없음과 같다)."""
+    if not main:
+        return [], None
+    rc, out = repo.git("ls-tree", "-r", "-z", MAIN_REF, "--", "docs/superpowers/roadmaps/")
+    if rc != 0:
+        return [], "origin/main 의 로드맵 목록을 읽지 못했다(git ls-tree rc %d)" % rc
+    found = []
+    for entry in (e for e in out.split("\0") if e):
+        meta, _tab, path = entry.partition("\t")
+        if ROADMAP_RE.fullmatch(path):
+            found.append((path, meta.split()[-1]))
+    return sorted(found), None
+
+
+def interview_files(root: str):
+    """(지원 여부, [(레포 상대 경로, Path, mtime_ns)] 짝 brief 없는 것, 폴더 사유 | None)."""
+    try:
+        supported = "interview-state" in (SCRIPTS / "state_path.py").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        supported = False
+    if not supported:
+        return False, [], None
+    folder = Path(root, "docs", "superpowers", "interview")
+    try:
+        names = sorted(os.listdir(str(folder)))
+    except FileNotFoundError:
+        return True, [], None
+    except OSError as exc:
+        return True, [], "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__
+    files = []
+    for name in names:
+        if not name.endswith(STATE_SUFFIX):
+            continue
+        if (folder / (name[: -len(".state.md")] + ".md")).exists():
+            continue
+        try:
+            files.append(("docs/superpowers/interview/" + name, folder / name, (folder / name).stat().st_mtime_ns))
+        except OSError:
+            files.append(("docs/superpowers/interview/" + name, folder / name, -1))
+    return True, files, None
+
+
+def read_interviews(supported, files, folder_error) -> dict:
+    summary = {"supported": supported, "items": [], "errors": []}
+    if folder_error:
+        summary["errors"].append({"path": "docs/superpowers/interview", "reason": folder_error})
+    for rel, path, mtime_ns in files:
+        try:
+            item = parse_interview_state(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError) as exc:
+            summary["errors"].append({"path": rel, "reason": "읽지 못했다(%s)" % type(exc).__name__})
+            continue
+        except ValueError as exc:
+            summary["errors"].append({"path": rel, "reason": str(exc)})
+            continue
+        item.update(path=rel, mtime=mtime_ns / 1e9)
+        summary["items"].append(item)
+    return summary
+
+
+def cache_key(repo: Repo, main, mode, targets, stamps):
+    """origin/main 커밋 · 브랜치 머리 목록(origin/main · symref 줄 뺌) · 대상 로드맵의 origin/main 사본 · 진행 중 인터뷰
+    상태 파일. git 을 못 읽으면 None — 캐시를 쓰지 않는다."""
+    rc, out = repo.git("for-each-ref", "--format=%(refname) %(objectname) %(symref)", "refs/heads", "refs/remotes")
+    if rc != 0:
+        return None
+    kept = []
+    for row in out.splitlines():
+        name, _oid, symref = (row.split(" ") + ["", ""])[:3]
+        if name != MAIN_REF and not symref:  # origin/main 은 첫 요소가, 가리키는 참조(origin/HEAD)는 그 대상이 맡는다
+            kept.append(row)
+    refs = "\n".join(kept)
+    refs_hash = hashlib.sha256(refs.encode("utf-8")).hexdigest()
+    parts = [mode, main or "-", refs_hash, "\n".join("%s=%s" % t for t in targets), "\n".join(stamps)]
+    return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
+
+
+def cache_file(repo: Repo):
+    common = repo.line("rev-parse", "--git-common-dir")
+    if not common:
+        return None
+    return Path(repo.cwd, common) / "devbrew" / "control-plane.json"
+
+
+def load_cache(path):
+    """(entries, 사유 | None). 없는 캐시는 사유가 아니다."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}, None
+    except (OSError, UnicodeDecodeError) as exc:
+        return {}, "캐시 파일을 읽지 못했다(%s)" % type(exc).__name__
+    try:
+        data = json.loads(text)
+        if data.get("version") != CACHE_VERSION or not isinstance(data.get("entries"), dict):
+            raise ValueError("모양이 다르다")
+    except (ValueError, AttributeError):
+        return {}, "캐시 파일이 깨져 있었다"
+    return data["entries"], None
+
+
+def save_cache(path, entries):
+    """임시 파일 + os.replace 로 원자적으로 쓴다. 실패하면 사유를 낸다."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=".control-plane.", suffix=".tmp", dir=str(path.parent))
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump({"version": CACHE_VERSION, "entries": entries}, fh, ensure_ascii=False)
+            os.replace(tmp, str(path))
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+    except OSError as exc:
+        return "캐시 파일을 쓰지 못했다(%s)" % (exc.strerror or type(exc).__name__)
+    return None
+
+
+def cached_view(entry, key):
+    """캐시 항목이 이 키에 맞고 모양이 온전하면 (items, interview, select_error), 아니면 None."""
+    if key is None or not isinstance(entry, dict) or entry.get("key") != key:
+        return None
+    try:
+        items = [(str(p), r) for p, r in entry["items"] if isinstance(r, dict)]
+        interview = entry["interview"]
+        if not isinstance(interview, dict) or len(items) != len(entry["items"]):
+            return None
+        return items, interview, entry.get("select_error")
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def run_status(repo: Repo, path: str) -> dict:
+    """roadmap_status.py <경로> --json 을 부른다. 못 읽으면 검사 불가(3) 보고서."""
+    try:
+        proc = subprocess.run([sys.executable, str(SCRIPTS / "roadmap_status.py"), path, "--json"],
+                              cwd=repo.cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=120)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return failed_report(path, "상태 계산을 부르지 못했다(%s)" % type(exc).__name__)
+    try:
+        report = json.loads(proc.stdout.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        report = None
+    if (not isinstance(report, dict) or not isinstance(report.get("blocks"), list)
+            or report.get("exit") not in (0, 1, 3)):
+        return failed_report(path, "상태 계산 출력을 읽지 못했다(rc %d)" % proc.returncode)
+    return report
+
+
+def unfinished(report: dict) -> bool:
+    return report.get("exit") == 3 or any(b.get("stage") not in DONE for b in report.get("blocks") or [])
+
+
+def gather(cwd: str, arg):
+    """화면에 필요한 것 전부. 받은 시각은 캐시 밖에서 매번 읽는다."""
+    view = {"items": [], "interview": None, "notes": [], "minutes": None, "select_error": None}
+    repo = open_repo(cwd)
+    supported, files, folder_error = interview_files(repo.cwd if repo else cwd)
+    if repo is None:
+        view["interview"] = read_interviews(supported, files, folder_error)
+        if arg:
+            view["items"] = [(arg, failed_report(arg, "git 레포 안이 아니다"))]
+        return view
+    stamp = fetch_stamp(repo)
+    fetched = None
+    if stamp is not None:
+        view["minutes"] = max(0, int((time.time() - stamp) // 60))
+        fetched = datetime.datetime.fromtimestamp(stamp).strftime("%Y-%m-%d %H:%M")
+    main = repo.line("rev-parse", "--verify", "--quiet", MAIN_REF + "^{commit}")
+    if arg:
+        if os.path.isabs(arg):
+            arg = os.path.relpath(os.path.realpath(arg), os.path.realpath(repo.cwd))
+        arg = arg[2:] if arg.startswith("./") else arg
+        blob = repo.line("rev-parse", "--verify", "--quiet", "%s:%s" % (MAIN_REF, arg)) if main else None
+        targets, select_error = [(arg, blob or "-")], None
+    else:
+        targets, select_error = candidates(repo, main)
+    mode = arg or "*"
+    stamps = ["supported=%d" % supported] + ["%s=%d" % (rel, m) for rel, _p, m in files]
+    if folder_error:
+        stamps.append("folder=" + folder_error)
+    key = cache_key(repo, main, mode, targets, stamps)
+    path = cache_file(repo)
+    entries, note = load_cache(path) if path else ({}, "git 공용 디렉토리를 찾지 못했다")
+    if note:
+        view["notes"].append(note)
+    hit = cached_view(entries.get(mode), key)
+    if hit is not None:
+        items, interview, select_error = hit
+    else:
+        reports = [(p, run_status(repo, p)) for p, _blob in targets]
+        items = reports if arg else [(p, r) for p, r in reports if unfinished(r)]
+        interview = read_interviews(supported, files, folder_error)
+        if key is None:
+            view["notes"].append("캐시 키를 만들지 못했다(git 읽기 실패)")
+        elif path is not None:
+            kept = dict((k, v) for k, v in entries.items() if k == "*" and k != mode)
+            kept[mode] = {"key": key, "items": [[p, r] for p, r in items], "interview": interview,
+                          "select_error": select_error}
+            err = save_cache(path, kept)
+            if err:
+                view["notes"].append(err)
+    for _p, r in items:
+        r["fetched_at"] = fetched  # 첫 줄의 받은 시각도 캐시 밖에서
+    view.update(items=items, interview=interview, select_error=select_error)
+    return view
+
+
+# ── 명령줄 ───────────────────────────────────────────────────────────────────
+
+def switch_name():
+    if os.environ.get("DEVBREW_SPEC_DISTILL_DISABLE") == "1":
+        return "DEVBREW_SPEC_DISTILL_DISABLE=1"
+    if kill_switch_active("spec-distill", "statusline"):
+        return "DEVBREW_SKIP_HOOKS 의 spec-distill:statusline"
+    return None
+
+
+def stdin_dir():
+    """상태줄 표준 입력 JSON 의 workspace.current_dir → cwd. 없거나 읽을 수 없으면 None."""
+    try:
+        if sys.stdin is None or sys.stdin.isatty():
+            return None
+        ready, _w, _x = select.select([sys.stdin], [], [], 0.2)
+        if not ready:
+            return None
+        data = json.loads(sys.stdin.read() or "{}")
+        for cand in ((data.get("workspace") or {}).get("current_dir"), data.get("cwd")):
+            if isinstance(cand, str) and os.path.isdir(cand):
+                return cand
+    except Exception:  # noqa: BLE001 — 표준 입력이 이상하면 프로세스 cwd 를 쓴다
+        return None
+    return None
+
+
+def cmd_statusline() -> int:
+    try:
+        if switch_name():
+            print("")
+            return 0
+        v = gather(stdin_dir() or os.getcwd(), None)
+        print(statusline_text(v["items"], v["interview"], v["minutes"], v["select_error"]))
+    except Exception as exc:  # noqa: BLE001 — 상태줄은 늘 한 줄을 낸다
+        print(clean("검사 불가 — 상태줄 내부 오류(%s)" % type(exc).__name__))
+    return 0
+
+
+def cmd_show(tasks: bool, arg) -> int:
+    sw = switch_name()
+    if sw:
+        if tasks:
+            sys.stderr.write("꺼져 있다 — %s\n" % sw)
+            return 3
+        print("꺼져 있다 — %s" % sw)
+        return 0
+    try:
+        v = gather(os.getcwd(), arg)
+    except Exception as exc:  # noqa: BLE001 — 계산이 죽어도 0 · 1 로 보이지 않는다
+        msg = clean("검사 불가 — 내부 오류(%s: %s)" % (type(exc).__name__, exc))
+        if tasks:
+            sys.stderr.write(msg + "\n")
+            return 3
+        print(msg)
+        return 0
+    if tasks:
+        out, err, rc = tasks_output(v["items"], v["select_error"])
+        if out:
+            print("\n".join(out))
+        if err:
+            sys.stderr.write(err + "\n")
+        return rc
+    print(show_text(v["items"], v["interview"], v["notes"], first_line, v["select_error"]))
+    return 0
+
+
+def main(argv=None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+    ap = argparse.ArgumentParser(prog="control_plane.py",
+                                 description="로드맵 상태를 상태줄 · 지도 · 작업 목록 줄로 보인다.")
+    sub = ap.add_subparsers(dest="cmd")
+    sub.add_parser("statusline")
+    sp = sub.add_parser("show")
+    sp.add_argument("--tasks", action="store_true")
+    sp.add_argument("roadmap", nargs="?")
+    args = ap.parse_args(argv)
+    if args.cmd == "statusline":
+        return cmd_statusline()
+    if args.cmd == "show":
+        if args.roadmap is not None and (not args.roadmap.strip() or args.roadmap.startswith("-")):
+            sys.stderr.write("사용법: 로드맵 경로는 비지 않고 - 로 시작하지 않는다\n")
+            return 2
+        return cmd_show(args.tasks, args.roadmap)
+    ap.print_usage(sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
