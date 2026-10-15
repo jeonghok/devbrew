@@ -27,6 +27,7 @@ ENTRY_SKILLS = (
     ("spec-distill", "request-framing"),
     ("spec-distill", "spec-interview"),
     ("spec-distill", "spec-review"),
+    ("spec-distill", "roadmap-status"),
     ("plugin-audit", "plugin-audit"),
     ("project-init", "project-init"),
 )

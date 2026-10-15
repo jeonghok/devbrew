@@ -1,0 +1,61 @@
+---
+name: roadmap-status
+description: >
+  사용자가 `/spec-distill:roadmap-status [<로드맵 경로>]` 로 부른다. origin/main 의 로드맵마다 에픽 단계 ·
+  기다리는 에픽 · 경고 · 진행 중 인터뷰의 조사 수 · 판정 줄을 한 화면에 보인다. 읽기만 한다.
+cost_class: low
+argument-hint: "[<로드맵 경로>]"
+allowed-tools:
+  - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill roadmap-status)
+---
+
+# roadmap-status — 에픽 지도
+
+<!-- plain-language:begin -->
+## 사람에게 쓰는 글
+이 절은 사용자에게 보이는 글(답변·보고·질문·선택지·경고·PR 본문·커밋)에만 적용한다. 지시문·subagent 프롬프트·state 파일에는 적용하지 않는다. 아래 절차가 출력 형식·원문 보존·분량을 따로 정한 자리에서는 그 절차를 따른다.
+- 처음 보는 사람이 한 번에 이해하게 쓴다. 번호·해시·필드 이름·내부 용어는 가리키는 내용을 문장으로 먼저 쓰고 괄호 안에만 둔다. 지어낸 말은 쓰지 않거나 처음 쓸 때 풀어 쓴다.
+- 순서: 첫 줄에 지금 상태(무엇을 했고 어디까지 왔나) 한 문장, 가운데에 이유·근거, 맨 끝에 사용자가 할 일 하나. 할 일이 없으면 없다고 쓴다.
+- 질문 하나에 결정 하나. 선택지 이름은 짧은 쉬운 말로, 설명에는 고르면 무엇이 달라지는지만 쓴다. 본문에 없던 주제를 선택지에서 꺼내지 않는다. 추천은 「(권장)」으로 표시한다.
+- 제목과 목록으로 나누되 표의 칸은 짧게 쓴다. 굵은 글씨는 꼭 필요한 곳에만 쓴다.
+- 사용자가 알 필요 없는 글은 쓰지 않는다: 도구 호출 사이의 진행 설명, 전부 정상인 항목의 나열. 확인해서 남은 것도 경고도 없으면 「이상 없음」 한 줄로 쓴다. 확인하지 못한 것·빠진 검사·셀 수 없는 것은 따로 한 줄씩 쓴다 — 없는 것과 확인 못 한 것은 다르다.
+- 판정·개수·공시 줄은 스크립트가 낸 쉬운 첫 줄을 그대로 쓰고, 자기 말로 다시 풀거나 덧붙이지 않는다. 스크립트·subagent 가 낸 원문은 고치지 않는다. 스크립트가 풀어 두지 않은 오류에만 쉬운 설명을 앞에 붙이되 통과·실패는 말하지 않는다.
+- 사용자와 대화하는 언어로 쓴다. 코드·명령·고유명사·자연스러운 대응어가 없는 기술어는 영어 그대로 둔다. 커밋·PR은 그 레포의 규칙을 따르고, 없으면 대화 언어로 쓴다.
+예) 전: `[미적용 fix] 3720b2b7#r1.1` → 후: 리뷰가 고치라고 한 곳 하나가 아직 안 고쳐졌다(3720b2b7#r1.1).
+예) 전: (codex 정상 · 재비판 정상 · 저자 편집 없음 · ask_open 0건) → 후: 이상 없음.
+<!-- plain-language:end -->
+
+지도는 `scripts/control_plane.py show` 가 만든다. 이 skill 은 그것을 한 번 돌려 그대로 보인다.
+
+!`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill roadmap-status`
+
+## 진입 단계
+
+이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽고 아래 순서대로 간다.
+
+### 1. 감시줄 판독
+
+| 그 자리의 내용 | 동작 |
+|---|---|
+| `[devbrew-entry] ok …` | 2 로 간다. 그 줄의 `root=` 값을 2 에서 쓴다 |
+| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다(no-op) |
+| `[devbrew-entry] error …` | `[spec-distill] roadmap-status 사전 검사 실패 — <reason= 값>. 지도를 내지 않는다.` 를 내고 멈춘다 |
+| `[shell command execution disabled by policy]` | `[spec-distill] roadmap-status 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 지도를 내지 않는다.` 를 내고 멈춘다 |
+| 감시줄 없음 · 그 밖 | `[spec-distill] roadmap-status 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 지도를 내지 않는다.` 를 내고 멈춘다 |
+
+이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. 지도 스크립트는 `DEVBREW_SKIP_HOOKS` 의 `spec-distill:statusline` 도 본다.
+
+### 2. 지도 내기
+
+받은 인자(`$ARGUMENTS`)를 본다. 비었으면 경로 없이 부른다. 공백 없는 한 토큰이면 그 토큰을 로드맵 경로로 넘긴다. 공백이 섞였거나 `-` 로 시작하면 `[spec-distill] roadmap-status 인자는 로드맵 경로 하나다 — 받은 것: <인자>.` 를 내고 멈춘다.
+
+아래 펜스의 `<root>` 를 감시줄의 `root=` 값으로 바꾸고, 경로가 있으면 `<경로>` 를 그 토큰으로, 없으면 `"<경로>"` 를 지워 Bash 로 한 번 돌린다.
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+cd "<root>" && python3 "$SD/scripts/control_plane.py" show "<경로>"
+```
+
+## 보이기
+
+출력을 고치지 않고 그대로 보인다 — 첫 줄이 지금 상태다. 맨 끝에 할 일 한 줄만 더한다: 「검사 불가」 줄이 있으면 그 첫 사유를 고치는 것, 없고 경고가 있으면 첫 경고를 다루는 것, 둘 다 없으면 「할 일 없음」.
