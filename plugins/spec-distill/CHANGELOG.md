@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.6.0] — 2026-10-15
+
+### Added
+- 인터뷰 종료의 「분해 판단」 단계 — brief 를 쓰기 전에 신호 셋(따로 승인할 수 있는 덩어리 · 파일 영역 · 사용자 원문 갈래, 근거 번호 포함)과 권고 한 줄을 보이고 사용자가 「spec 하나로 / 나눈다」를 고른다. 숫자 컷오프는 없다. 나누면 에픽 표(칸 열하나)를 제안받아 고치거나 승인하고, 승인된 표는 state `## 분해안` 에 남는다.
+- `scripts/roadmap_write.py`(create · update · extract)와 `scripts/roadmap_render.py` · `templates/roadmap-template.md` — 승인된 표로 R0 형식의 로드맵 · 에픽 묶음을 쓰고 `roadmap_status.py --json` 의 네 목록(`format_errors` · `unassigned` · `orphans` · `unknown_ids`)이 모두 비었는지 바로 검증한다. 실패하면 만든 파일을 지우고 덮어쓴 파일을 원래 바이트(파일 모드 포함)로 되돌린다. create 는 `## 생성 기록` 에 적은 파일만 다시 덮어쓴다. update 는 새 에픽 번호가 문자마다 최댓값 다음부터 빈틈없이 이어져야 하고, 재분해 이력의 「…」 인용은 번호 판정에서 뺀다. 자기 것이 아닌 `<id>.md` 를 덮어쓰게 되면 쓰기 전에 거부한다.
+- `references/redecompose.md` — 하류의 재분해 신호(번호 대조 경고 · spec-review 게이트 ③ · 지휘 세션)를 같은 로드맵으로 받아 영향 표 · 승인 뒤에만 다시 나눈다. 새 번호만 쓰고 사라진 번호는 재사용하지 않으며 머지된 에픽은 건드리지 않는다.
+
+### Changed
+- 분해된 일의 다음 세션 줄은 brief 하나 대신 `@<로드맵>` 지휘 줄이다(finishing.md 의 「다음 세션 줄 — 분해된 일 ①/② 공통」 아래 인라인 코드 문단). Step B 의 마지막 brief 쓰기 직후 언제나 로드맵 · 묶음을 한 번 더 생성하고, 함께 커밋하라는 안내 한 줄을 보인다. 나누지 않은 일은 그대로다.
+- `spec-review` 게이트 ③ — 설계문서 frontmatter 에 `roadmap:` 줄이 있으면 「인터뷰 다시 열기」 갈래가 재분해 절차로 간다. 다른 갈래와 로드맵 밖 문서는 그대로다.
+- `references/proceed-gate.md` 재결정 규약에 「분해 단위의 변경은 `${CLAUDE_PLUGIN_ROOT}/references/redecompose.md` 로」 한 줄. brief 템플릿 §7 에 분해 줄.
+
 ## [5.5.0] — 2026-10-12
 
 ### Added

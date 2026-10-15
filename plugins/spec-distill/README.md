@@ -59,6 +59,8 @@
                                        └─ round_gate_needed(decide 묶음 + 차단 ask) → brainstorming author 수정 → fresh 재리뷰
 ```
 
+인터뷰가 끝나면 brief 를 쓰기 전에 일을 spec 하나로 할지 나눌지 사용자가 정합니다(분해 판단). 나누면 로드맵과 에픽 묶음이 함께 만들어지고, 다음 세션은 그 로드맵의 지휘 절차로 시작합니다.
+
 **v0.12.0**: drafting-spec 제거 + spec-review design-mode 전용. interview는 brief까지 단독 완결.
 
 **v0.13.0**: interview→brainstorming Step B를 `/compact` proceed 게이트(spec-review Phase 5 대칭)로 재작성. — **v0.31.0에서 그 "대칭"(독립 저술 두 벌)이 하나의 공유 계약 `references/proceed-gate.md`로 합쳐졌다.**
@@ -157,16 +159,17 @@
 
 ## 로드맵 · 에픽 묶음
 
-큰 일을 에픽으로 나눠 진행할 때 쓰는 읽기 전용 스크립트 둘이 있습니다. 둘 다 파일을 쓰지 않고 네트워크에 나가지 않습니다. 단위는 로드맵 > 에픽(spec 하나) > plan(PR 하나) > task 이고 에픽 하나가 PR 여럿을 낼 수 있지만, 지금의 상태 계산은 에픽 하나를 브랜치 하나로 셉니다.
+큰 일을 에픽으로 나눠 진행할 때 쓰는 스크립트 셋이 있습니다. 앞의 둘은 읽기 전용이고, 셋째가 로드맵과 묶음을 씁니다. 셋 다 네트워크에 나가지 않습니다. 단위는 로드맵 > 에픽(spec 하나) > plan(PR 하나) > task 이고 에픽 하나가 PR 여럿을 낼 수 있지만, 지금의 상태 계산은 에픽 하나를 브랜치 하나로 셉니다.
 
 - `scripts/roadmap_status.py <로드맵 경로>` — `origin/main` 의 로드맵과 git 을 읽어 에픽마다 단계와 경고를 냅니다. 아직 main 에 없는 로드맵은 `--roadmap-file <파일>` 로 줍니다. 머지됨 자동 판정은 merge commit 방식에서만 됩니다. 브랜치가 지워졌으면 GitHub 의 머지 메시지 `Merge pull request #<n> from <owner>/<브랜치>` 로만 알아봅니다. squash · rebase 로 머지했거나 로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적어야 합니다.
 - `scripts/check_bundle_coverage.py <묶음> <설계문서>` — 에픽 묶음의 번호가 설계문서 `## 번호 대조` 표에 다 있는지 봅니다.
+- `scripts/roadmap_write.py create · update · extract` — 인터뷰가 승인받은 분해안 표(`## 분해안`, 칸 열하나)로 로드맵과 에픽 묶음을 쓰고(create), 재분해 때 바뀐 블록과 그 묶음만 다시 쓰고(update), 로드맵에서 표를 거꾸로 뽑습니다(extract). update 는 새 에픽 번호가 문자마다 최댓값 다음부터 빈틈없이 이어져야 하고, 「…」 인용은 재분해 이력의 번호 판정에서 뺍니다. 자기 것이 아닌 `<id>.md` 를 덮어쓰게 되면 쓰기 전에 거부합니다. 쓴 직후 `roadmap_status.py --json` 의 `format_errors` · `unassigned` · `orphans` · `unknown_ids` 가 모두 빈 목록이 아니면 쓴 것을 원래 바이트(파일 모드 포함)로 되돌리고 1 로 끝납니다. 머지된 에픽은 바꾸지 않고 사라진 번호는 다시 쓰지 않습니다. 재분해 절차는 `references/redecompose.md` 에 있습니다.
 
 경로 예약 겹침과 다른 에픽이 예약한 파일의 편집은 경고가 아니라 정보입니다 — 종료 코드를 바꾸지 않고, 에픽은 병렬로 갑니다. 충돌은 머지 때 풉니다(나중에 머지하는 PR 이 main 을 merge 하고 스위트를 다시 돌립니다).
 
 머지 메시지로 머지됨을 판정할 때는 브랜치 이름만 봅니다 — 머지된 PR 과 같은 이름으로 다시 만든 브랜치나 다른 owner 의 같은 이름 브랜치도 머지됨으로 보일 수 있습니다.
 
-종료 코드는 둘 다 0 이상 없음 · 1 경고 · 2 사용법 오류 · 3 검사 불가입니다. 형식은 `docs/superpowers/specs/2026-10-11-roadmap-walking-skeleton-design.md` §3 에 있습니다.
+종료 코드는 둘 다 0 이상 없음 · 1 경고 · 2 사용법 오류 · 3 검사 불가입니다. `roadmap_write.py` 는 0 성공 · 1 쓰지 않음 · 2 사용법 오류입니다. 형식은 `docs/superpowers/specs/2026-10-11-roadmap-walking-skeleton-design.md` §3 에 있습니다.
 
 ## Hooks Installed
 
