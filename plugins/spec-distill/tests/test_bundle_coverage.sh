@@ -106,7 +106,15 @@ assert_grep "$out" "^[0-9]+ True True True$" "R0 설계문서 표가 한 칸 여
 # 9. 변이 — 빠진 번호 판정을 지우면 2번 단언이 무너지는지(통과가 정답인 1번의 짝)
 sed 's/return {"status": 1 if missing else 0,/return {"status": 0,/' "$C" > "$T/mut.py"
 cmp -s "$C" "$T/mut.py" && no "변이가 적용되지 않았다" || ok "변이 적용됨"
-cp "$S/section6.py" "$T/" 2>/dev/null
+cp "$S/section6.py" "$S/roadmap_model.py" "$T/" 2>/dev/null
 python3 "$T/mut.py" "$T/bundle.md" "$T/miss.md" >/dev/null; rc=$?
 assert_eq "$rc" "0" "변이: status 를 0 으로 고정하면 빠진 번호가 rc 0 — 2번 단언에 이빨이 있다"
+# 10. 공유 모듈(R3 §2-5) — 두 스크립트가 같은 함수를 쓰고 순환 import 가 없다
+out="$(cd "$S" && python3 -c '
+import roadmap_model as m, check_bundle_coverage as c, roadmap_status as r
+print(c.section_body is m.section_body, c.frontmatter is m.frontmatter,
+      r.parse_roadmap is m.parse_roadmap, r.brief_universe is m.brief_universe)' 2>&1)"
+assert_eq "$out" "True True True True" "공유 모듈: 두 스크립트가 roadmap_model 의 같은 함수를 쓴다"
+assert_file_absent "$C" '^(import|from) roadmap_status' "check_bundle_coverage 는 roadmap_status 를 import 하지 않는다"
+assert_file_absent "$S/roadmap_model.py" '^(import|from) (check_bundle_coverage|roadmap_status)' "roadmap_model 은 두 스크립트 어느 쪽도 import 하지 않는다(순환 없음)"
 finish

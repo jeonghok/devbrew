@@ -15,107 +15,14 @@ import argparse
 import json
 import re
 import sys
+from pathlib import Path
 
-# 번호 한 개 — 확정 C/D · 열린 질문 OQ · 레포 근거 RC · 위험 K · steelman ST · 발화 S, 또는 «key».
-TOKEN_RE = re.compile(r"(?:C|D|OQ|RC|K|ST|S)\d+|«[^«»,·\s]+»")
-# 번호 여럿의 구분 — 쉼표 또는 ` · `. 범위 표기(`K1~K7`)는 토큰 문법에 맞지 않아 깨짐으로 친다.
-SEP_RE = re.compile(r"\s*,\s*|\s+·\s+")
-SEP_CELL_RE = re.compile(r":?-{3,}:?")
-PREFIX_ORDER = ("C", "D", "OQ", "RC", "K", "ST", "S")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from roadmap_model import (  # noqa: E402,F401 — 이 이름들은 이 모듈의 공개 표면이기도 하다
+    FormatError, PREFIX_ORDER, SEP_CELL_RE, SEP_RE, TOKEN_RE, bundle_ids, frontmatter,
+    id_sort_key, parse_ids, section_body, unquote)
+
 TABLE_HEADING = "## 번호 대조"
-
-
-class FormatError(ValueError):
-    """검사할 수 없는 입력 — 종료 코드 3."""
-
-
-def parse_ids(cell: str) -> list:
-    """번호 칸 하나를 토큰 목록으로. 문법에 맞지 않는 토큰이 하나라도 있으면 FormatError."""
-    cell = cell.strip()
-    if not cell:
-        raise FormatError("빈 번호 칸")
-    out = []
-    for piece in SEP_RE.split(cell):
-        if not TOKEN_RE.fullmatch(piece):
-            raise FormatError("번호 문법에 맞지 않는 토큰: %r" % piece)
-        out.append(piece)
-    return out
-
-
-def id_sort_key(token: str):
-    if token.startswith("«"):
-        return (len(PREFIX_ORDER), 0, token)
-    for i, p in enumerate(PREFIX_ORDER):
-        rest = token[len(p):]
-        if token.startswith(p) and rest.isdigit():
-            return (i, int(rest), token)
-    return (len(PREFIX_ORDER) + 1, 0, token)
-
-
-def frontmatter(text: str) -> dict:
-    """맨 앞 `---` 블록의 최상위 `키: 값` 줄. 들여쓴 줄 · 목록 줄은 건너뛴다. 없거나 안 닫혔으면 {}."""
-    lines = text.split("\n")
-    if not lines or lines[0].rstrip("\r") != "---":
-        return {}
-    out = {}
-    for line in lines[1:]:
-        line = line.rstrip("\r")
-        if line == "---":
-            return out
-        if not line or line[0] in " \t-#" or ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        out.setdefault(key.strip(), value.strip())
-    return {}
-
-
-def unquote(value: str) -> str:
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-        return value[1:-1]
-    return value
-
-
-def _heading_indexes(lines):
-    """펜스 밖의 `## ` 줄 번호들. `### ` 는 `## ` 로 시작하지 않으므로 들지 않는다."""
-    in_fence = False
-    for i, line in enumerate(lines):
-        if line.lstrip().startswith("```"):
-            in_fence = not in_fence
-            continue
-        if not in_fence and line.startswith("## "):
-            yield i
-
-
-def section_body(text: str, heading: str):
-    """`heading` 과 같거나 `heading + " "` 로 시작하는 `## ` 줄 다음부터 다음 `## ` 줄 앞까지.
-
-    없으면 None, 둘 이상이면 FormatError. §6 은 이 함수로 읽지 않는다 — `section6.body` 한 곳이다.
-    """
-    if heading.startswith("## 6."):
-        raise ValueError("§6 은 section6.body 로만 읽는다")
-    lines = text.splitlines(keepends=True)
-    heads = list(_heading_indexes(lines))
-    hits = [i for i in heads
-            if lines[i].rstrip("\r\n") == heading or lines[i].startswith(heading + " ")]
-    if not hits:
-        return None
-    if len(hits) > 1:
-        raise FormatError("%s 절이 %d개다" % (heading, len(hits)))
-    start = hits[0]
-    later = [j for j in heads if j > start]
-    end = later[0] if later else len(lines)
-    return "".join(lines[start + 1:end])
-
-
-def bundle_ids(text: str) -> list:
-    raw = frontmatter(text).get("ids")
-    if raw is None:
-        raise FormatError("묶음 frontmatter 에 ids 가 없다")
-    if not (raw.startswith("[") and raw.endswith("]")):
-        raise FormatError("ids 는 한 줄 목록([…])이어야 한다")
-    if not raw[1:-1].strip():
-        raise FormatError("ids 가 비었다")
-    return parse_ids(raw[1:-1])
 
 
 def _cells(row: str) -> list:
