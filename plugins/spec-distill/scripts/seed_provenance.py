@@ -15,10 +15,12 @@
 남으면 사용자 원문이다. «(사용자 확인)» 은 문장 경계다 — 종결부호 없는 풀이 뒤에 붙어도 그 뒤
 글자는 다음 문장이다. 압축이 그 문장을 한 글자라도 고치면 확인 · 원문 어느 쪽도 아니다 — 확인은
 저자가 다시 쓸 수 없는 고정점이다.
+확인 표시는 문장을 따라간다 — 근거 있는 «(사용자 확인)» 이 붙은 문장은 «다시 검증할 것 —» 문단 안에서도
+사용자 확인이다. 그 문단의 표시 없는 문장은 저자 · 미확인이다.
 audit 을 못 읽으면 확인된 풀이와 원문 문장은 0 이다: marks 는 판단을 거부하고(rc 2), classify 는
 전부 저자 · 미확인으로 떨어지며 그 사실을 밝힌다. audit 에 템플릿 제목이 중복되거나(예: `## 2`
 줄이 `## 1` 본문 안에도 심겨 있음) `## 1`/`## 2` 절이 없으면 같은 «못 믿는» 상태로 다룬다.
-표시가 있는데 `## 2` 에 풀이 줄(`- 내가 읽은 것: 「…」 — 고름|고르지 않음`)이 하나도 없거나, `- 내가 읽은
+표시가 있는데 `## 2` 에 풀이 줄(`- 내가 읽은 것: 「…」 — 고름|고르지 않음`, 끝에 ` — 사용자가 적은 말: 「…」` 가 붙을 수 있다)이 하나도 없거나, `- 내가 읽은
 것:` 으로 시작하는데 그 모양이 아닌 줄이 하나라도 있으면 marks 는 판단을 거부한다(rc 2) — 줄 모양이
 어긋난 것과 확인이 없었던 것을 이 코드가 가를 수 없고, 그 판정은 줄마다 성립한다.
 rc: 0 정상 · 1 marks 위반 · 2 입력 오류(seed 못 읽음 · seed 를 못 씀 · audit 을 못 믿음 · 풀이 줄 0 ·
@@ -37,15 +39,20 @@ from seed_review_log import duplicate_headings, section_body
 MARK = "(사용자 확인)"
 REVERIFY_PREFIX = "다시 검증할 것 —"
 FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.S)
-READING_RE = re.compile(r"^\s*- 내가 읽은 것: 「(?P<t>.*)」 — 고름\s*$")
-READING_LINE_RE = re.compile(r"^\s*- 내가 읽은 것: 「.*」 — (?:고름|고르지 않음)\s*$")
+# 풀이 줄 끝의 선택 꼬리 — 사용자가 «기타» 로 적은 말 · 「아니다」 뒤에 덧붙인 말(N19). 꼬리 안의 글자는
+# 비신뢰 요청문이라 판정에 쓰지 않는다 — 줄 모양만 받는다.
+SAID_TAIL = r"(?: — 사용자가 적은 말: 「.*」)?"
+READING_RE = re.compile(r"^\s*- 내가 읽은 것: 「(?P<t>.*)」 — 고름" + SAID_TAIL + r"\s*$")
+READING_LINE_RE = re.compile(r"^\s*- 내가 읽은 것: 「.*」 — (?:고름|고르지 않음)" + SAID_TAIL + r"\s*$")
 READING_PREFIX_RE = re.compile(r"^\s*- 내가 읽은 것:")
 # 템플릿이 예시로 담은 자리표 줄 — 아무것도 채우지 않은 것, 즉 **두 자리가 모두** 꺾쇠이고 줄
 # 전체가 그 모양이다. 이것은 모양이 어긋난 풀이가 아니라 저자가 아직 손대지 않은 예시다(템플릿을
 # 그대로 복사한 audit 이 막히지 않는다). **반쯤 채운 줄은 자리표가 아니다** — 따옴표만 채우고 처분
 # 자리표를 남긴 줄은 흔한 저자 실수이고, 그 줄을 건너뛰면 `--fix` 가 진짜 «(사용자 확인)» 을 뗀다
 # (이 가드가 막으려던 바로 그 손실이다). 넓은 술어가 사는 것은 없고 잃는 것은 진짜 확인이다.
-PLACEHOLDER_READING_RE = re.compile(r"^\s*- 내가 읽은 것:\s*「\s*<[^<>」]*>\s*」\s*—\s*<[^<>]*>\s*$")
+PLACEHOLDER_READING_RE = re.compile(
+    r"^\s*- 내가 읽은 것:\s*「\s*<[^<>」]*>\s*」\s*—\s*<[^<>]*>"
+    r"(?:\s*\[\s*—\s*사용자가 적은 말:\s*「\s*<[^<>」]*>\s*」\s*\])?\s*$")
 SENT_SPLIT_RE = re.compile(r"(?<=[.!?。])\s+|(?<=" + re.escape(MARK) + r")\s+")
 MARK_OCC_RE = re.compile(r"[ \t]*" + re.escape(MARK))
 
@@ -190,10 +197,10 @@ def classify(segs: list[dict], audit_text: str | None) -> list[dict]:
     verb_units = verbatim_units(audit_text)
     out = []
     for s in segs:
-        if s["reverify"]:
-            r = ("author", False, "reverify_paragraph")
-        elif s["marked"] and s.get("mark_valid"):
+        if s["marked"] and s.get("mark_valid"):
             r = ("user", True, "confirmed_reading")
+        elif s["reverify"]:
+            r = ("author", False, "reverify_paragraph")
         elif s["text"] and s["text"] in verb_units:
             r = ("user", False, "verbatim")
         elif s["marked"]:
@@ -234,13 +241,13 @@ def main(argv=None) -> int:
         bad = malformed_reading_lines(audit_text) if n_marked else []
         if bad:
             print("[spec-distill] audit `## 2. 질문 전체` 의 풀이 줄 %d개가 모양(`- 내가 읽은 것: 「…」 — 고름|고르지 "
-                  "않음`)과 다르다 — 그 줄의 확인을 읽을 수 없어 판단하지 않는다(malformed_reading_lines, 위반이 "
+                  "않음`, 끝에 ` — 사용자가 적은 말: 「…」` 가 붙을 수 있다)과 다르다 — 그 줄의 확인을 읽을 수 없어 판단하지 않는다(malformed_reading_lines, 위반이 "
                   "아니다). 그 절 안에서 %s 번째 줄이다(줄 내용은 싣지 않는다 — 요청문에서 온 글자다)."
                   % (len(bad), " · ".join(str(n) for n in bad)), file=sys.stderr)
             return 2
         if n_marked and not n_lines:
             print("[spec-distill] 표시가 %d개인데 audit `## 2. 질문 전체` 에 풀이 줄(`- 내가 읽은 것: "
-                  "「…」 — 고름|고르지 않음`)이 하나도 없다 — 표시를 매길 근거가 없어 판단하지 않는다"
+                  "「…」 — 고름|고르지 않음`, 끝에 ` — 사용자가 적은 말: 「…」` 가 붙을 수 있다)이 하나도 없다 — 표시를 매길 근거가 없어 판단하지 않는다"
                   "(no_reading_lines, 위반이 아니다)" % n_marked, file=sys.stderr)
             return 2
         invalid = [s["text"] for s in segs if s["marked"] and not s["mark_valid"]]

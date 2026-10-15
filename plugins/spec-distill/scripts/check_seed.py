@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""interview-seed 게이트 — 다섯.
+"""interview-seed 게이트 — 여섯.
 
 **seed 본문에 대한 슬롯 존재 검사는 없다.** 답-슬롯 헤딩·태그·URL 셋은 부재 검사다 — 슬롯
 존재 검사를 추가하지 않는다: 그것이 payload 를 양식으로 만들고, 양식이 내용을 미리 판 구멍
@@ -13,8 +13,8 @@
 헤딩·특정 필드·최소 길이·최소 절 개수·특정 리터럴 등)는 여전히 금지 위반이고
 `test_seed_one_sentence.sh` 가 그런 추가에는 RED 를 낸다.
 
-audit 쪽 존재 검사는 **원문 보존 하나뿐**이다. 그것은 payload 가 아니라 확산물의 보관소라
-같은 논리가 적용되지 않는다.
+audit 쪽 존재 검사는 **원문 보존**과 **덜어 낸 것 표** 둘이다. 그것은 payload 가 아니라 확산물의
+보관소라 같은 논리가 적용되지 않는다.
 """
 from __future__ import annotations
 
@@ -65,6 +65,27 @@ def body_of(text: str) -> str:
     return FRONTMATTER_RE.sub("", text, count=1)
 
 
+CUT_HEADING = "## seed 에서 덜어 낸 것"
+CUT_HEADER_ROW = "| 항목 | 기준 | 원문 위치 | 되살림 |"
+_CUT_SEP_RE = re.compile(r"^\|[\s:|-]+\|?\s*$")
+
+
+def cut_table_problems(atext: str) -> list:
+    """audit `## seed 에서 덜어 낸 것` — 표(머리 행 + 데이터 행 하나 이상) 또는 `없음` 한 줄(설계 §1-1 · §1-4).
+    seed 본문이 아니라 audit 쪽 존재 검사다 — seed 를 양식으로 만들지 않는다(`test_seed_one_sentence.sh`)."""
+    m = re.search(r'^##\s*seed 에서 덜어 낸 것\s*$(.*?)(?=^##\s|\Z)', atext, re.M | re.S)
+    if m is None:
+        return ["audit 에 `## seed 에서 덜어 낸 것` 절이 없다 — 덜어 낸 것이 없으면 `없음` 한 줄을 적는다"]
+    lines = [ln.strip() for ln in m.group(1).splitlines() if ln.strip()]
+    if any(ln == "없음" for ln in lines):
+        return []
+    rows = [ln for ln in lines if ln.startswith("|") and ln.replace(" ", "") != CUT_HEADER_ROW.replace(" ", "")
+            and not _CUT_SEP_RE.match(ln)]
+    if not rows:
+        return ["audit 의 `## seed 에서 덜어 낸 것` 절에 표 행도 `없음` 줄도 없다 — 덜어 낸 항목을 한 줄씩 적거나 `없음` 을 적는다"]
+    return []
+
+
 def gate(seed_path: pathlib.Path, audit_path: pathlib.Path | None) -> list:
     problems = []
     try:
@@ -111,6 +132,8 @@ def gate(seed_path: pathlib.Path, audit_path: pathlib.Path | None) -> list:
                 problems.append("audit 에 `## 1. 원문` 절이 없다")
             elif not m.group(1).strip():
                 problems.append("audit 의 `## 1. 원문` 절이 비어 있다")
+            # 5. 덜어 낸 것 표 (audit 쪽 존재 검사)
+            problems.extend(cut_table_problems(atext))
     return problems
 
 

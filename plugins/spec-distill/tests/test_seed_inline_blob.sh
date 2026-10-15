@@ -52,6 +52,10 @@ RAW_TEXT_MARKER 사용자가 실제로 한 말.
 
 DRAFT_MARKER 긴 초안.
 
+## seed 에서 덜어 낸 것
+
+없음
+
 ## 6. 리뷰 결정
 
 - D1.1 · r1 · adopt · abcd1234#r1.1 · "USER_QUOTE_MARKER 채택" — HISTORY_SUMMARY_MARKER 요약
@@ -72,7 +76,7 @@ for m in SEED_BODY_MARKER RAW_TEXT_MARKER QUESTION_MARKER HISTORY_SUMMARY_MARKER
 done
 [ "$order_ok" = 1 ] && ok "detect: 초안 → 원문 → 질문 전체 → 리뷰 결정 → CLAUDE.md 순서" || no "detect: 재료 순서가 어긋났다"
 assert_contains "$out" "ANSWER_MARKER" "detect: ## 2 의 «당신이 답한 것» 줄이 실린다"
-assert_not_contains "$out" "DRAFT_MARKER" "detect: ## 3 긴 초안은 싣지 않는다(재료 다섯 밖)"
+assert_not_contains "$out" "DRAFT_MARKER" "detect: ## 3 긴 초안은 싣지 않는다(재료 여섯 밖)"
 assert_not_contains "$out" "next_phase: spec-distill:interview" "detect: seed frontmatter 는 벗겨진다"
 
 # ── recritic — 판정 이력 0건, 사용자 문구는 남는다(AC11) ───────────────────────
@@ -261,8 +265,10 @@ refs="$(python3 -c '
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
 for m in re.finditer(r"\(audit `([^`]*)`", text):
-    print(m.group(1))
+    if m.group(1) != "## seed 에서 덜어 낸 것":  # 저자가 쓴 표 — 비신뢰 verbatim 튜플 밖(별도 단언)
+        print(m.group(1))
 ' "$TMP/detect_out.txt")"
+assert_contains "$detect_out" '(audit `## seed 에서 덜어 낸 것` — 저자가 쓴 표)' "번들이 덜어 낸 것 절을 비신뢰 튜플 밖의 «저자가 쓴 표» 로 싣는다"
 tuple_vals="$(python3 -c '
 import ast, sys
 tree = ast.parse(open(sys.argv[1], encoding="utf-8").read())

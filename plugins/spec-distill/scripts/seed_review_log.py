@@ -49,7 +49,7 @@ ENGINE_LINE_RE = re.compile(
 HOST_LINE_RE = re.compile(
     r'^- (?P<kind>편집|답|거부) · r(?P<round>\d+) · (?P<target>[^"]*?) · "(?P<quote>.*?)" —')
 
-# `interview-seed-audit-template.md` 의 여섯 절 제목 — 절 경계의 유일한 근거다. 이 밖의 `## ` 로
+# `interview-seed-audit-template.md` 의 일곱 절 제목 — 절 경계의 유일한 근거다. 이 밖의 `## ` 로
 # 시작하는 줄(사용자가 붙여 넣은 마크다운 안의 `## 배경` 같은 줄)은 절을 끊지 않는다 —
 # `section_body` 가 임의의 `## ` 줄에서 멈추면 비신뢰 본문 안의 heading-모양 줄 하나가 진짜 절 뒤
 # 내용을 조용히 잘라낸다.
@@ -57,6 +57,7 @@ AUDIT_HEADINGS = (
     "## 1. 원문",
     "## 2. 질문 전체",
     "## 3. 긴 초안",
+    "## seed 에서 덜어 낸 것",
     "## 4. 비평과 냉독",
     "## 5. degrade",
     "## 6. 리뷰 결정",
@@ -64,7 +65,7 @@ AUDIT_HEADINGS = (
 
 
 def section_body(text: str, heading: str) -> str | None:
-    """`heading` 과 같은 줄 다음부터, `AUDIT_HEADINGS` 여섯 제목 중 하나와 줄 전체가 같은 다음
+    """`heading` 과 같은 줄 다음부터, `AUDIT_HEADINGS` 일곱 제목 중 하나와 줄 전체가 같은 다음
     줄 전까지(임의의 `## ` 줄이 아니다 — 비신뢰 본문 안에 `## ` 로 시작하는 줄이 있어도 그 줄에서
     절이 끊기지 않는다). 절이 없으면 None."""
     lines = text.splitlines()

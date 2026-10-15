@@ -5,11 +5,11 @@
 넘기는 문서가 이 파일의 출력이다. 엔진의 `--doc`(스냅숏 · 얼림 검사 대상)은 seed 파일 자신이고,
 리뷰어가 **읽는** 것은 이 번들이다.
 
-재료 다섯 — seed 본문 · audit `## 1. 원문` · audit `## 2. 질문 전체` · audit `## 6. 리뷰 결정` ·
-레포 CLAUDE.md. `## 2` 가 없으면 「1번」 같은 짧은 답이 무엇을 확인한 것인지 복원할 수 없다.
+재료 여섯 — seed 본문 · audit `## 1. 원문` · audit `## 2. 질문 전체` · audit `## seed 에서 덜어 낸 것`
+(저자가 쓴 표) · audit `## 6. 리뷰 결정` · 레포 CLAUDE.md. `## 2` 가 없으면 「1번」 같은 짧은 답이 무엇을 확인한 것인지 복원할 수 없다.
 
 소비자별로 갈린다(`--for`):
-  detect   (기본) 탐지 리뷰어 · codex — 다섯 재료 전부.
+  detect   (기본) 탐지 리뷰어 · codex — 여섯 재료 전부.
   recritic 재비판자 — `## 6` 대신 그 절의 사용자 문구만 뽑은 목록. 판정 이력(결정 id · 라운드 ·
            채택/기각 · finding id · 요약)이 가면 엔진이 5단계 익명화로 지운 프레이밍이 재비판자에게
            되돌아간다(엔진 절차서 6단계 — 입력은 문서 · items · 프로필, 그 밖에는 아무것도).
@@ -50,6 +50,9 @@ from seed_review_log import duplicate_headings, section_body, user_quotes  # noq
 # 이 튜플을 **읽어서** 헤딩 문구와 `section_body` 조회 키를 만든다 — 같은 문자열을 따로 다시
 # 타이핑하면 넷째 자리가 생기거나 헤딩이 바뀌어도 락이 조용히 통과한다.
 UNTRUSTED_VERBATIM_SECTIONS = ("## 1. 원문", "## 2. 질문 전체", "## 6. 리뷰 결정")
+
+# 저자가 쓴 표라 위 튜플(비신뢰 verbatim)에는 넣지 않는다 — 두 소비자 모두에게 싣는다.
+CUT_TABLE_SECTION = "## seed 에서 덜어 낸 것"
 
 FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.S)
 
@@ -108,6 +111,8 @@ def assemble(seed_text: str, audit_text: str, claude_md_text: str, consumer: str
         f"## 사용자 원문 (audit `{sec_raw}`)\n\n" + _or_none(section_body(audit_text, sec_raw)),
         f"## 질문 전체 (audit `{sec_questions}`)\n\n" + _or_none(section_body(audit_text, sec_questions)),
     ]
+    parts.append(f"## 덜어 낸 것 (audit `{CUT_TABLE_SECTION}` — 저자가 쓴 표)\n\n"
+                 + _or_none(section_body(audit_text, CUT_TABLE_SECTION)))
     if consumer == "recritic":
         qs = user_quotes(audit_text)
         parts.append(f"## 사용자 결정 문구 (audit `{sec_decisions}` 에서 사용자 문구만)\n\n"
@@ -170,6 +175,10 @@ def main() -> int:
             print(f"[spec-distill] 경고: {paths['audit_file']} 의 `{heading}` 절 안에 heading-모양 "
                   f"줄이 있다(줄 {', '.join(str(n) for n in lns)}) — 리뷰어가 번들에서 이 줄을 "
                   "헤딩으로 볼 수 있다(비신뢰 본문이라 지우지 않는다).", file=sys.stderr)
+
+    if section_body(audit_text, CUT_TABLE_SECTION) is None:
+        print(f"[spec-distill] 경고: {paths['audit_file']} 에 `{CUT_TABLE_SECTION}` 절이 없다 — 「(없음)」으로 조립한다",
+              file=sys.stderr)
 
     sys.stdout.write(assemble(seed_text, audit_text, claude_md_text, args.consumer))
     return 0

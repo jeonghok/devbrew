@@ -91,9 +91,14 @@ tpl_ex="$(awk '/^```markdown/{f=1;next} f&&/^```/{exit} f' "$TPL")"
 grep -qF '(사용자 확인)' <<<"$tpl_ex" && ok "AC11: seed 템플릿 예시에 확정 표시" || no "AC11: 템플릿 예시 확정 표시 부재"
 [[ "$(printf '%s\n' "$tpl_ex" | grep -v '^\s*$' | tail -1 | head -c 400)" == *"다시 검증할 것"* || "$(awk -v RS='' 'END{print}' <<<"$tpl_ex")" == "다시 검증할 것 —"* ]] \
   && ok "AC11: 템플릿 예시의 마지막 문단이 «다시 검증할 것 —»로 시작" || no "AC11: 템플릿 마지막 문단 규약 위반"
-# check_seed.py 는 손대지 않는다 — Task 착수 커밋(main merge) 대비 diff 0
-[[ -z "$(git -C "$ROOT" diff --name-only main -- plugins/spec-distill/scripts/check_seed.py)" ]] \
-  && ok "AC11: check_seed.py 무변경 (diff 0 vs main)" || no "AC11: check_seed.py 가 변경됐다"
+# check_seed.py 는 seed 본문에 슬롯 존재 검사를 더하지 않는다 — v0.57.0 에서는 파일 diff 0 으로 쟀으나 R2 가
+# audit 쪽 존재 검사(덜어 낸 것 표)를 의도로 더했다. 지키던 성질(seed 본문 쪽 무변경)은 새 검사가 audit 텍스트만
+# 받는지로 잰다. 행동 쪽 락은 test_seed_one_sentence.sh.
+CS="$ROOT/plugins/spec-distill/scripts/check_seed.py"
+{ grep -qF 'def cut_table_problems(atext: str)' "$CS" && grep -qF 'problems.extend(cut_table_problems(atext))' "$CS" \
+  && ! grep -qE 'cut_table_problems\((body|text)\)' "$CS"; } \
+  && ok "AC11: check_seed.py 의 새 존재 검사는 audit 텍스트만 본다 (seed 본문 슬롯 검사 추가 없음)" \
+  || no "AC11: check_seed.py 의 새 검사가 audit 텍스트 밖(seed 본문)을 보거나 사라졌다"
 
 # --- v0.57.0 AC12: 워크트리 (블록 스코프) -------------------------------------------------
 wt_block="$(awk '/^## 워크트리 — 진입 직후/{f=1;print;next} /^## /{f=0} f' "$SK")"
