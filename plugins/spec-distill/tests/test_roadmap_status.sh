@@ -487,6 +487,42 @@ cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(조상 아님 �
 (cd "$W" && python3 "$M/roadmap_status.py" --json docs/rm/roadmap.md > "$T/mg9.json")
 assert_eq "$(stage "$T/mg9.json" G9)" "머지됨" "변이: 조상 아님 조건을 지우면 G9 가 머지됨 — G9 단언에 이빨이 있다"
 
+# ── 6b. 미룸 경고(R3 AC9) — 받는 곳 없는 행 · 머지 뒤에도 · 깨진 표는 셀 수 없음 · 변이 ─────
+mkdir -p "$W/docs/rm8" "$W/docs/rm9"
+bundle docs/rm8 D8 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"
+bundle docs/rm8 E8 "C1"
+bundle docs/rm9 F9 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"
+{ roadmap_head; block D8 feature/d8 없음 없음; block E8 feature/e8 없음 없음; roadmap_tail ""; } > "$W/docs/rm8/roadmap.md"
+{ roadmap_head; block F9 feature/f9 없음 없음; roadmap_tail ""; } > "$W/docs/rm9/roadmap.md"
+g checkout -q main
+g add -- docs/rm8 docs/rm9 && g commit -qm "rm8 · rm9" && g push -q origin main
+defer_spec() {  # defer_spec <source_interview> <미룸 절 본문>
+  printf -- '---\nsource_interview: %s\n---\n\n# 설계\n\n### §1 절\n\n1. 하나\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| C1 · D2 · OQ1 · RC1 · ST1 · «k1» · K1 · K2 · S1 · S2 | 반영 | §1 |\n\n## 미룸\n\n%b\n' "$1" "$2"
+}
+g checkout -q -b feature/d8 main; mkdir -p "$W/docs/superpowers/specs"
+defer_spec docs/rm8/D8.md '| 항목 | 이유 | 받는 곳 |\n|---|---|---|\n| AC2 | 시간 | 없음 |\n| AC3 | 넘김 | R99 |\n| AC4 | 후속 | #12 |\n| r1.2 | 리뷰 후속 | `E8` |' > "$W/docs/superpowers/specs/d8-design.md"
+g add -- docs/superpowers/specs/d8-design.md && g commit -qm "d8 spec"
+pr_merge 81 feature/d8; g push -q origin main
+g checkout -q -b feature/f9 main
+defer_spec docs/rm9/F9.md '| 항목 | 받는 곳 |\n|---|---|\n| AC2 | 없음 |' > "$W/docs/superpowers/specs/f9-design.md"
+g add -- docs/superpowers/specs/f9-design.md && g commit -qm "f9 spec"; g checkout -q main
+g fetch -q origin
+(cd "$W" && python3 "$RS" --json docs/rm8/roadmap.md > "$T/d8.json"); rc=$?
+assert_eq "$(stage "$T/d8.json" D8)" "머지됨" "D8 은 머지됐다"
+assert_contains "$(warns "$T/d8.json" D8)" "받는 곳 없는 미룸 2개: docs/superpowers/specs/d8-design.md — AC2 · AC3" "AC9: 받는 곳이 없음 · 로드맵에 없는 에픽인 행을 경고한다(머지 뒤에도)"
+assert_not_contains "$(warns "$T/d8.json" D8)" "AC4" "AC9 양성 짝: #12 · 로드맵에 있는 에픽(백틱 친 E8)은 경고하지 않는다"
+assert_eq "$rc" "1" "AC9: 미룸 경고는 경고(rc 1)다"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm9/roadmap.md > "$T/f9.json"); rc=$?
+assert_eq "$rc" "3" "AC9: ## 미룸 표가 깨지면 검사 불가(rc 3)"
+assert_contains "$(warns "$T/f9.json" F9)" "미룸 셀 수 없음(" "AC9: 깨진 표는 「셀 수 없음」"
+assert_contains "$(js "$T/f9.json" "r['unknown_reasons']")" "F9 미룸 표" "AC9: 셀 수 없음이 검사 불가 사유로 올라온다"
+# 변이(AC15) — 받는 곳 판정을 끄면 경고가 사라진다
+M3="$T/mut3"; mkdir -p "$M3"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$M3/"
+sed 's/^            bad = \[item for item, _why, recv in rows if not receiver_ok(recv, known_ids)\]$/            bad = []/' "$RS" > "$M3/roadmap_status.py"
+cmp -s "$RS" "$M3/roadmap_status.py" && no "변이 적용 안 됨(받는 곳 판정)" || ok "변이 적용됨(받는 곳 판정)"
+(cd "$W" && python3 "$M3/roadmap_status.py" --json docs/rm8/roadmap.md > "$T/md8.json")
+assert_not_contains "$(warns "$T/md8.json" D8)" "받는 곳 없는 미룸" "변이: 받는 곳 판정을 끄면 경고가 사라진다 — AC9 단언에 이빨이 있다"
+
 # ── 7. 실데이터 — 이번 일의 로드맵 · 묶음(R0 AC1 · AC2 · AC3) ─────────────────
 # git 없이 함수로 잰다 — origin 이 없는 클론에서도 같은 판정이 나야 한다.
 real_check() {  # real_check <리포 루트> — 키<TAB>값 줄들

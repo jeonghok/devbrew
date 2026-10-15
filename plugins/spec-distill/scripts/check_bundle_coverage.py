@@ -339,7 +339,7 @@ def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None) -> di
 
 
 DEFER_HEADING = "## 미룸"
-RECEIVER_EPIC_RE = re.compile(r"R\d+[a-z]?|P\d+")
+RECEIVER_EPIC_RE = re.compile(r"[A-Z]\d+[a-z]?")
 RECEIVER_PR_RE = re.compile(r"#\d+")
 REPORT_HEAD_RE = re.compile(r"AC\d+:")
 REPORT_LINE_RE = re.compile(r"AC(\d+): (구현됨|미룸|빠짐) — (\S.*)")

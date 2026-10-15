@@ -8,7 +8,7 @@
   --json 이면 JSON 하나를 낸다.
 
 종료 코드: 0 이상 없음 · 1 경고 있음 · 2 사용법 오류 · 3 검사 불가(로드맵 없음 · 형식 깨짐 ·
-블록 하나라도 알 수 없음 · 번호 대조 검사 불가 · 번호 전체 집합을 못 셈). 3 > 1 > 0.
+블록 하나라도 알 수 없음 · 번호 대조 검사 불가 · 미룸 표 깨짐 · 번호 전체 집합을 못 셈). 3 > 1 > 0.
 정보(경로 예약 겹침 · 다른 에픽이 예약한 파일의 편집)는 종료 코드를 바꾸지 않는다 — 충돌은 머지 때 푼다.
 
 읽기만 한다 — 파일을 쓰지 않고 네트워크에 나가지 않는다. git 은 `GIT_ALLOWED` 의 하위 명령만
@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from check_bundle_coverage import check  # noqa: E402
+from check_bundle_coverage import check, deferred_rows, receiver_ok  # noqa: E402
 from roadmap_model import (  # noqa: E402,F401 — 테스트가 rs.parse_roadmap · rs.brief_universe 로 부른다
     FormatError, brief_universe, collect_assigned, frontmatter, id_sort_key, parse_ids,
     parse_roadmap, section_body, split_list, unquote)
@@ -297,14 +297,15 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
             b["warnings"].append("묶음 없음: %s" % bundle_path)
         if len(b["specs"]) > 1:
             b["warnings"].append("spec 여럿: %s" % " · ".join(b["specs"]))
-        if b["kind"] == "bundle" and bundles.get(bid) is not None:
-            tree = main if b["stage"] == "머지됨" else tip
-            for spec in b["specs"]:
-                spec_text = git.blob(tree, spec)
-                if spec_text is None:
-                    b["warnings"].append("번호 대조 검사 불가(spec 을 읽지 못했다): %s" % spec)
-                    cov_unknown.append("%s spec 을 읽지 못했다" % bid)
-                    continue
+        tree = main if b["stage"] == "머지됨" else tip
+        known_ids = set(by_id)
+        for spec in b["specs"]:
+            spec_text = git.blob(tree, spec)
+            if spec_text is None:
+                b["warnings"].append("번호 대조 검사 불가(spec 을 읽지 못했다): %s" % spec)
+                cov_unknown.append("%s spec 을 읽지 못했다" % bid)
+                continue
+            if b["kind"] == "bundle" and bundles.get(bid) is not None:
                 result = check(bundles[bid], spec_text)
                 if result["status"] == 1:
                     b["warnings"].append("생략: %s 이 번호 %d개를 빠뜨렸다 — %s" % (
@@ -312,6 +313,16 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 elif result["status"] == 3:
                     b["warnings"].append("번호 대조 검사 불가(%s): %s" % (result["reason"], spec))
                     cov_unknown.append("%s %s" % (bid, result["reason"]))
+            # 미룸(R3 §3-3) — 받는 곳이 `#<숫자>` 나 로드맵의 에픽이 아닌 행. 머지 뒤에도 남는다.
+            try:
+                rows = deferred_rows(spec_text)
+            except FormatError as exc:
+                b["warnings"].append("미룸 셀 수 없음(%s): %s" % (exc, spec))
+                cov_unknown.append("%s 미룸 표 — %s" % (bid, exc))
+                continue
+            bad = [item for item, _why, recv in rows if not receiver_ok(recv, known_ids)]
+            if bad:
+                b["warnings"].append("받는 곳 없는 미룸 %d개: %s — %s" % (len(bad), spec, " · ".join(bad)))
 
     for b in blocks:
         if b["tip"] and b["stage"] in ("설계 중", "계획"):
