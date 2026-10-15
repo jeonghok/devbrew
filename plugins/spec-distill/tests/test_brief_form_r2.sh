@@ -176,6 +176,24 @@ printf -- "- OQ9 [열림] — 렌더링 전략\n" > "$TMP/s0"; printf -- "- OQ9 
 base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
 { [ "$rc" -ne 0 ] && grep -q '§3 결정 줄의 상태 표시가' "$TMP/out"; } \
   && ok "slot_s3_bracket: §3 의 정본 아닌 괄호 상태(「[열림]:」)는 red" || no "slot_s3_bracket: rc=$rc"
+# 해결 표시가 상태 자리를 비켜 서면 red — 줄 끝 · 선두 OQ 가 없는 줄.
+printf -- "- OQ9 [열림] — 렌더링 전략 [해결 ⟨S1⟩]\n" > "$TMP/s0"; printf -- "- OQ9: 렌더링 전략\n" > "$TMP/s3"
+base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q '§0 의 해결 표시가 상태 자리 밖에' "$TMP/out"; } \
+  && ok "slot_outside_s0: §0 줄 끝의 해결 표시는 red" || no "slot_outside_s0: rc=$rc"
+printf -- "- OQ9 [해결 ⟨S1⟩] — 렌더링 전략\n" > "$TMP/s0"
+printf -- "- OQ9 [해결 ⟨S1⟩]: 렌더링 전략 [해결 ⟨S1⟩] — 해결: 서버 렌더링\n" > "$TMP/s3"
+base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q '§3 의 해결 표시가 상태 자리 밖에' "$TMP/out"; } \
+  && ok "slot_outside_s3res: §3 해결 줄의 둘째 해결 표시는 red" || no "slot_outside_s3res: rc=$rc"
+printf -- "- OQ9 [열림] — 렌더링 전략\n" > "$TMP/s0"; printf -- "- OQ9: 렌더링 전략 [해결 ⟨S1⟩]\n" > "$TMP/s3"
+base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q '§3 결정 줄의 상태 표시가' "$TMP/out"; } \
+  && ok "slot_outside_s3open: §3 열린 줄 끝의 해결 표시는 red" || no "slot_outside_s3open: rc=$rc"
+printf -- "- OQ9 [열림] — 렌더링 전략\n- 메모: OQ9 [해결 ⟨S1⟩] 로 닫을 수도\n" > "$TMP/s0"; printf -- "- OQ9: 렌더링 전략\n" > "$TMP/s3"
+base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q '결정 줄(선두 OQ<n>)에 있지 않다' "$TMP/out"; } \
+  && ok "slot_not_decision: 선두 OQ 가 없는 줄의 해결 표시는 red" || no "slot_not_decision: rc=$rc"
 # 양의 짝 — 강조된 정본 열린 결정.
 printf -- "- **OQ9** [열림] — 렌더링 전략\n" > "$TMP/s0"; printf -- "- **OQ9**: 렌더링 전략\n" > "$TMP/s3"
 base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; assert_eq "$?" "0" "slot_bold_open: 강조된 정본 열린 결정은 통과한다 (양성 짝)"
