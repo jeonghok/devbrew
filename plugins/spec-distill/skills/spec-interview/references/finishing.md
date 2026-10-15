@@ -245,14 +245,14 @@ harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "$PAYLOAD" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
-wt_top="$(git -C "$(dirname -- "$PAYLOAD")" rev-parse --show-toplevel 2>/dev/null || dirname -- "$PAYLOAD")"
-paths_ok=0; python3 "$SD/scripts/state_path.py" path-inside --root "$wt_top" "$PAYLOAD" "$AUDIT" "$STATE" && paths_ok=1
+wt_top="$(python3 "$SD/scripts/state_path.py" payload-root "$PAYLOAD")" || wt_top=""
+paths_ok=0; [ -n "$wt_top" ] && python3 "$SD/scripts/state_path.py" path-inside --root "$wt_top" "$PAYLOAD" "$AUDIT" "$STATE" && paths_ok=1
 lm_rc=0
 if [ "$paths_ok" -eq 1 ] && [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ] && [ -n "${harness_sid:-}" ]; then
   python3 "$SD/scripts/ledger_marker.py" acquire --dir "$STATE_DIR" --session "$harness_sid" >/dev/null || lm_rc=$?
 fi
 if [ "$paths_ok" -ne 1 ]; then
-  echo "[spec-distill] 참고(advisory) 목록 건너뜀 — brief · audit · 상태 파일 중 링크를 거치거나 작업 트리(git 이 아니면 payload 의 폴더) 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}'). audit 에 쓰지 않는다. 게이트 앞 글에 싣는다."
+  echo "[spec-distill] 참고(advisory) 목록 건너뜀 — brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}'). audit 에 쓰지 않는다. 게이트 앞 글에 싣는다."
 elif [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
   echo "[spec-distill] 참고(advisory) 목록 없음 — brief 리뷰 원장이 없다(STATE_DIR='${STATE_DIR:-}'): 리뷰가 skip 됐거나 원장이 정리됐다. 게이트 앞 글에 싣는다."
 elif [ "$lm_rc" -eq 3 ]; then

@@ -116,6 +116,22 @@ assert_eq "$rc" "2" "path-inside: cwd 가 아닌 링크 접두는 물리로 읽�
 OR="$WORK/other-root"; mkdir -p "$OR"; mkdir -p "$PI/docs/sp"; ln -s "$OR" "$PI/docs/sp/iv"
 rc=0; python3 "$HELPER" path-inside --root "$OR" "$PI/docs/sp/iv/x.md" >/dev/null 2>&1 || rc=$?
 assert_eq "$rc" "2" "path-inside: 다른 루트를 가리키는 레포 안 링크를 거친 경로는 그 루트 기준으로도 rc 2"
+# ── payload-root · 쓰기 관문의 루트 ─────────────────────────────────────────
+PRR="$WORK/pr-repo"; mkdir -p "$PRR/docs/real" "$WORK/pr-out" && git -C "$PRR" init -q
+got=$(python3 "$HELPER" payload-root "$PRR/docs/real/x-interview.md" 2>/dev/null); rc=$?
+assert_eq "$rc:$got" "0:$PRR" "payload-root: 저장소 안이면 git 최상위(양성 대조)"
+ln -s "$WORK/pr-out" "$PRR/docs/iv"
+out=$(python3 "$HELPER" payload-root "$PRR/docs/iv/x-interview.md" 2>&1 >/dev/null); rc=$?
+assert_eq "$rc" "2" "payload-root: 인터뷰 폴더가 저장소 밖(git 아님) 폴더로 가는 링크면 rc 2"
+assert_contains "$out" "링크를 거친다" "payload-root: 그 사유를 stderr 로 낸다"
+ln -s "$WORK/pr-nowhere" "$PRR/docs/dg"
+python3 "$HELPER" payload-root "$PRR/docs/dg/x-interview.md" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "payload-root: 인터뷰 폴더가 끊긴 링크면 rc 2"
+PNG="$WORK/pr-nongit/sub"; mkdir -p "$PNG"
+got=$(python3 "$HELPER" payload-root "$PNG/x-interview.md" 2>/dev/null); rc=$?
+assert_eq "$rc:$got" "0:$PNG" "payload-root: 저장소가 아니면 payload 의 폴더(양성 대조)"
+python3 "$HELPER" payload-root >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "payload-root: 인자가 없으면 rc 2"
 LV="$WORK/iv-link"; mkdir -p "$LV/docs/superpowers" && git -C "$LV" init -q
 ln -s "$OUTD" "$LV/docs/superpowers/interview"
 python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$LV" >/dev/null 2>&1; rc=$?

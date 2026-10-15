@@ -277,6 +277,16 @@ assert_contains "$o" "참고(advisory) 목록 건너뜀 — brief · audit · �
 assert_eq "$(cat "$T/ba-victim")" "victim" "보안: B-A — 링크 너머 파일은 그대로다"
 assert_eq "$(cksum < "$S9/docreview-state.md")" "$before9" "보안: B-A — 링크 칸에서 원장도 그대로다"
 rm -f "$repo/docs/g-brief.audit.md"
+# 보안 — payload 의 폴더가 저장소 밖(git 아님) 폴더로 가는 링크면 B-A 가 audit 에 쓰지 않는다
+mkdir -p "$T/ba-out"; printf '# GL\n' > "$T/ba-out/gl-brief.md"; printf 'audit-victim\n' > "$T/ba-out/gl-brief.audit.md"
+ln -s "$T/ba-out" "$repo/docs/balink"
+dl="$repo/docs/balink/gl-brief.md"
+bal="$(fence "$FIN" advice-ba | python3 -I -c 'import sys; t = sys.stdin.buffer.read().decode("utf-8"); k = "<Step A.5 의 PAYLOAD 절대경로>"; sys.stdout.buffer.write(t.replace(k, sys.argv[1]).encode("utf-8"))' "$dl")"
+o="$(cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-iiii9999 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-iiii9999 bash -c "$bal" 2>&1)"
+assert_contains "$o" "참고(advisory) 목록 건너뜀 — brief · audit · 상태 파일 중 링크를 거치거나" "보안: B-A — payload 폴더가 git 아닌 밖으로 가는 링크면 건너뛴다"
+assert_contains "$o" "링크를 거친다" "보안: B-A — payload-root 의 사유를 보인다"
+assert_eq "$(cat "$T/ba-out/gl-brief.audit.md")" "audit-victim" "보안: B-A — 폴더 링크 너머 audit 는 그대로다"
+rm -f "$repo/docs/balink"
 
 # M3 — 표지를 확인하지 못한 것(rc 2)은 남의 표지(rc 3)와 다른 말로 알린다. 표지 자리에 심은 링크가 rc 2 를 낸다.
 printf 'marker-victim\n' > "$T/mk-victim"

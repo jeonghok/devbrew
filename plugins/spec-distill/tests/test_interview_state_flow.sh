@@ -313,5 +313,33 @@ o="$(runin)"; rc=$?
 grep -q '^brief_review_degradations:' "$SRD/2026-10-15-t-interview.state.md" \
   && no "보안: audit 링크인데 머리가 degrade 원장을 열었다" || ok "보안: audit 링크면 degrade 원장도 쓰지 않는다"
 rm -f "$SRD/2026-10-15-t-interview.audit.md"
+# 보안 — 인터뷰 폴더 자체가 저장소 밖(git 아님) 폴더 · 끊긴 자리로 가는 링크면 머리가 멈춘다(payload-root 가 루트를 내지 않는다)
+runin_at() {   # runin_at <저장소> <인터뷰 폴더> → `## 입력` 머리를 돈 출력(rc 는 호출의 rc)
+  ( cd "$1" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rb000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rb000001 TMPDIR="$T/tmpd" \
+      bash -c "PAYLOAD='$2/2026-10-15-t-interview.md'; AUDIT='$2/2026-10-15-t-interview.audit.md'
+$RB_IN
+echo __HEAD_DONE" 2>&1 )
+}
+drb="$T/drb"; mkdir -p "$drb/docs/superpowers" "$T/dout" && git -C "$drb" init -q
+printf -- '---\ntype: interview-brief\n---\n' > "$T/dout/2026-10-15-t-interview.md"
+printf -- '---\ntype: interview-state\nseed: 없음\n---\n' > "$T/dout/2026-10-15-t-interview.state.md"
+dbefore="$(cksum < "$T/dout/2026-10-15-t-interview.state.md")"
+ln -s "$T/dout" "$drb/docs/superpowers/interview"
+o="$(runin_at "$drb" "$drb/docs/superpowers/interview")"; rc=$?
+{ [ "$rc" -ne 0 ] && printf '%s\n' "$o" | grep -qF '그 경로들에 쓰지 않고 멈춘다' && ! printf '%s\n' "$o" | grep -qF '__HEAD_DONE'; } \
+  && ok "보안: 인터뷰 폴더가 git 아닌 밖 폴더로 가는 링크면 머리가 멈춘다" || nob "보안: 폴더 링크인데 머리가 멈추지 않았다(rc $rc)" "$o"
+assert_eq "$(cksum < "$T/dout/2026-10-15-t-interview.state.md")" "$dbefore" "보안: 폴더 링크 — 링크 너머 상태 파일이 그대로다"
+rm -f "$drb/docs/superpowers/interview"; ln -s "$T/dnowhere" "$drb/docs/superpowers/interview"
+o="$(runin_at "$drb" "$drb/docs/superpowers/interview")"; rc=$?
+{ [ "$rc" -ne 0 ] && printf '%s\n' "$o" | grep -qF '그 경로들에 쓰지 않고 멈춘다'; } \
+  && ok "보안: 인터뷰 폴더가 끊긴 링크면 머리가 멈춘다" || nob "보안: 끊긴 폴더 링크인데 머리가 멈추지 않았다(rc $rc)" "$o"
+[ -e "$T/dnowhere" ] && no "보안: 끊긴 폴더 링크 너머에 무언가 생겼다" || ok "보안: 끊긴 폴더 링크 너머에 아무것도 생기지 않았다"
+# 양성 대조 — 저장소가 아닌 곳(git 없음)의 보통 파일은 머리가 연다
+ngr="$T/ngr/docs"; mkdir -p "$ngr"
+printf -- '---\ntype: interview-brief\n---\n' > "$ngr/2026-10-15-t-interview.md"
+printf -- '---\ntype: interview-state\nseed: 없음\n---\n' > "$ngr/2026-10-15-t-interview.state.md"
+o="$(runin_at "$T/ngr" "$ngr")"; rc=$?
+{ [ "$rc" -eq 0 ] && grep -q '^brief_review_degradations:' "$ngr/2026-10-15-t-interview.state.md"; } \
+  && ok "보안 양성 대조: 저장소가 아닌 곳의 보통 파일이면 머리가 degrade 원장을 연다" || nob "보안 양성 대조: 저장소 밖 보통 파일인데 머리가 멈췄다(rc $rc)" "$o"
 
 finish

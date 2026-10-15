@@ -41,7 +41,7 @@
   - `ledger_sweep.py` — 링크를 거쳐 풀리는 state root 와 링크인 `.docreview` 를 「셀 수 없음」 으로 거부한다. 링크를 거치는 옛 원장은 옮기지도 지우지도 않고 「읽지 못한 원장」 으로 세며, 옮길 대상 이름이 링크면 따라가지 않는다.
   - 인터뷰 끝 커밋 펜스 — brief · audit · 상태 파일 중 하나라도 작업 트리 밖이거나 링크를 거치면 `git add` · `commit` 을 하지 않고 세 경로와 사유를 보인다.
   - `interview_state.py` — `RESUME` 은 받은 경로와 그 짝 brief(`<줄기>.md`) · audit(`<줄기>.audit.md`)가 작업 트리 안이고 링크(끊긴 링크 포함)를 거치지 않을 때만 낸다(아니면 `REJECT`) — 끝낼 때의 brief 쓰기 · 엔진 `--log-file` · degrade 원장 쓰기가 그 짝 경로를 쓰기 때문이다. 짝 brief 가 이미 있으면(끝난 인터뷰) `REJECT`. `ASK` 후보에서 링크 · 작업 트리 밖 후보와 짝 brief · audit 가 링크인 후보를 뺀다. seed 가 링크이거나 작업 트리 밖이면 상태 파일의 `seed:` 를 `없음` 으로 적고 사유 한 줄을 낸다(경로를 드러내지 않는다). 옛 자리 이월은 링크인 옛 파일 · 대상 자리를 거부하고 임시 파일을 `O_NOFOLLOW` 로 만든다.
-  - reviewing-brief 의 머리 · `finishing.md` B-A — payload · audit · 상태 파일을 쓰기 전에 `path-inside --root <payload 의 작업 트리 최상위>` 로 잰다(git 이 아니면 payload 의 폴더 기준). 거부되면 머리는 사유를 보이고 멈추고(degrade 원장도 쓰지 않는다), B-A 는 참고 목록을 audit 에 쓰지 않는다. `path-inside` 는 논리 cwd(`$PWD`) 접두만 물리 경로로 읽는다 — cwd 가 아닌 링크 접두는 풀지 않는다.
+  - reviewing-brief 의 머리 · `finishing.md` B-A — payload · audit · 상태 파일을 쓰기 전에 `state_path.py payload-root` 가 낸 루트로 `path-inside` 를 잰다. 루트는 payload 폴더의 git 최상위다. git 이 그 폴더를 저장소 밖으로 보는데 위쪽 폴더에 `.git` 이 있으면(인터뷰 폴더가 저장소 밖 · 끊긴 자리로 가는 링크) 루트를 내지 않고 거부한다. 저장소가 아닌 곳에서만 payload 의 폴더를 루트로 쓰므로, 거기서는 세 파일 자체의 링크만 잡고 그 폴더 위쪽의 링크는 재지 않는다. 거부되면 머리는 사유를 보이고 멈추고(degrade 원장도 쓰지 않는다), B-A 는 참고 목록을 audit 에 쓰지 않는다. `path-inside` 는 논리 cwd(`$PWD`) 접두만 물리 경로로 읽는다 — 세션의 cwd 는 믿고, cwd 가 아닌 링크 접두는 풀지 않는다.
 - 상태 파일(커밋되는 파일)의 `## 풀린 입력` 블록은 P21 secret placeholder 치환을 거친 글만 적는다.
 
 ## [5.6.0] — 2026-10-15

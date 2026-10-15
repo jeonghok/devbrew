@@ -12,7 +12,14 @@ CLI:
                                               → prints interview state file path (exit 2 on refusal)
   python3 state_path.py path-inside --root <R> <PATH>...
                                               → exit 0 if every PATH is inside R without links, else 2
-                                                (a logical cwd prefix of R and PATH is read as the physical cwd)
+                                                (a logical cwd prefix of R and PATH is read as the physical cwd —
+                                                the session's cwd is trusted; a cwd inside a planted link is
+                                                outside the threat model)
+  python3 state_path.py payload-root <PAYLOAD>
+                                              → prints the root PAYLOAD's writes are measured against: the git
+                                                toplevel of its folder; if git sees no tree there but a lexical
+                                                ancestor has `.git`, exit 2 (the folder goes through a link);
+                                                else (not a repository) the lexical folder
 """
 from __future__ import annotations
 
@@ -227,6 +234,32 @@ def main(argv: list[str]) -> int:
         if path is None:
             return 2
         print(str(path))
+        return 0
+    if sub == "payload-root":
+        if len(argv) != 3 or not argv[2]:
+            print("usage: state_path.py payload-root <PAYLOAD>", file=sys.stderr)
+            return 2
+        d = os.path.dirname(os.path.abspath(argv[2]))
+        try:
+            cp = subprocess.run(["git", "-C", d, "rev-parse", "--show-toplevel"],
+                                capture_output=True, text=True, timeout=5, check=False)
+            top = cp.stdout.strip() if cp.returncode == 0 else ""
+        except (subprocess.TimeoutExpired, OSError):
+            top = ""
+        if top:
+            print(top)
+            return 0
+        cur = d
+        while True:
+            if os.path.lexists(os.path.join(cur, ".git")):
+                print("[spec-distill] payload 폴더가 저장소({0}) 안인데 git 은 그 밖으로 본다 — 링크를 거친다: {1}".format(
+                    cur, d), file=sys.stderr)
+                return 2
+            parent = os.path.dirname(cur)
+            if parent == cur:
+                break
+            cur = parent
+        print(d)
         return 0
     if sub == "path-inside":
         if "--root" not in argv or argv.index("--root") + 1 >= len(argv):
