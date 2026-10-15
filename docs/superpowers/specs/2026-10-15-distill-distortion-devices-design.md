@@ -53,7 +53,7 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
 ## Goals
 
 - G1 모델이 덜어 낸 것(압축 · 안 올린 발화 · 위험으로 보낸 참고 · 접힌 참고 · 확인 안 된 풀이 · 사실 자동 답)을 사용자가 보는 자리에 보이고 되살릴 길을 준다.
-- G2 사용자 결정을 덮는 장치(자동 강등 · 방향 반증의 참고 격하 · 비기면 자르기)를 걷는다.
+- G2 사용자 결정을 덮는 장치(자동 강등 · 방향 반증의 참고 격하 · 비기면 자르기 · 옮긴 확인 풀이의 내림 · 해결한 결정의 §3 제외)를 걷는다.
 - G3 리뷰가 빠짐을 찾고 고칠 수 있게 한다(seed omission · brief §3~§5).
 - G4 그대로 남는 장치가 없다(S10 「그대로 남는 것 0」) — 모든 장치가 §4 표에 제거 · 수정 · 넘김 중 하나로 남고, 「유지」 처분은 없다.
 
@@ -100,8 +100,9 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
    원문으로 seed 리뷰의 기준(`당신이 답한 것` 과 같은 자리)에 넣는다. 5 의 `확인받지 못한 풀이` 줄은 이 경우 이유에 사용자가 적은 말을
    함께 보인다.
 10. «(사용자 확인)» 이 붙은 풀이를 저자가 «다시 검증할 것 —» 문단으로 옮기면 출처 분류기(`scripts/seed_provenance.py` 의 `classify`)가
-   문단을 표시보다 먼저 보아 저자 · 미확인으로 내린다(N20). 이 경우를 따로 가려 seed 게이트 앞에 `다시 검증 문단으로 옮긴 확인 풀이 <N>개 —
-   <문장 위치>` 를 보이고, 「되살리기」(2)와 같은 선택으로 사용자가 확인 풀이로 되돌릴 수 있게 한다.
+   문단을 표시보다 먼저 보아 저자 · 미확인으로 내린다(N20). 이 내림을 **제거**한다 — 확인 표시는 문장이 어디로 옮겨지든 따라간다.
+   `classify` 는 문단보다 «(사용자 확인)» 표시를 먼저 보아, 표시가 붙은 문장은 «다시 검증할 것 —» 문단 안에서도 사용자 확인으로 낸다.
+   표시가 없는 문장은 그 문단에서 지금처럼 저자 · 미확인이다. 내림이 없으므로 따로 공시하거나 되돌릴 선택은 두지 않는다.
 
 ### §2 리뷰 프로필
 
@@ -168,7 +169,7 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
    금지(`ENTRY_BULLET_RE` 계산)를 「첫 줄이 항목, 들여쓴 줄은 그 항목의 본문」으로 바꾼다(RC39).
 7. 인터뷰 라운드 요약에 `사실로 보고 직접 답한 질문 <N>개` 를 보인다(N5). 라운드당 질문 하나의 리듬은 두되, 우선순위에 밀린
    질문을 `밀린 질문 <N>개 — <한 줄씩>` 으로 「지금 이해」에 보인다(N6 수정 — 숨던 후순위를 공시).
-8. `finishing.md` 겹침: R3(다음 세션 줄) · R7(커밋 단계). R2 는 Step A.3 · B-0(§3-1 · §3-3 · §3-9 · §3-11 · §3-12 의 공시 줄) · B-A(참고 전부 보기, §2-6) · 재제시 상한 문단 · 비용 근거 문장, 그리고 §3-2 가 고치라는 옛 규칙 문장(머리 문단 · Step A 의 N1b 문장 · Step A.5 의 §0·§2 문장 · B-2 의 참고 축 문장)만 고친다.
+8. `finishing.md` 겹침: R3(다음 세션 줄) · R7(커밋 단계). R2 는 Step A.3 · Step A 의 §0 상태 토큰 규약(§3-12) · B-0(§3-1 · §3-3 · §3-9 · §3-11 의 공시 줄) · B-A(참고 전부 보기, §2-6) · 재제시 상한 문단 · 비용 근거 문장, 그리고 §3-2 가 고치라는 옛 규칙 문장(머리 문단 · Step A 의 N1b 문장 · Step A.5 의 §0·§2 문장 · B-2 의 참고 축 문장)만 고친다.
 9. seed 를 경로 없이 붙여 넣으면 출처 분류기를 돌리지 못해 seed 의 문장이 전부 저자 · 미확인이 되고, 사용자 발화를 옮긴 문장도
    brief §2 `user_sourced_items` 에 들지 못한다(`skills/spec-interview/references/seed-input.md`, N15). 지금 공시는 분류기 실패 경로에만
    있다. 붙여넣기 경로에도 R1 「지금 이해」에 `출처를 가르지 못한 seed 문장 <N>개 — 붙여넣기라 분류기를 못 돌림` 을 보이고, B-0
@@ -182,8 +183,10 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
    수정」에서 사용자가 §1 줄을 고치거나 뺄 수 있게 한다. 템플릿 §1 줄 끝에 출처 표시를 두고 `check_brief.py` 가 그 표시의 존재를 본다.
 12. 열린 결정에 `[해결 ⟨S<n>⟩]` 를 달면 그 결정은 §3 에서 빠지고 §0 에만 남는데, 그 토큰을 다는 것은 모델이고 `check_brief.py` 는
    토큰이 가리키는 `S<n>` 이 실재하는지도 보지 않으며 Step B 는 해결된 결정을 보이지 않는다(`finishing.md` Step A 의 §0 상태 토큰
-   규약, N22). B-0 에 `해결로 닫은 결정 <N>개 — OQ<n> ⟨S<n>⟩ · <한 줄>` 을 보이고, 사용자가 고르면 그 결정을 `[열림]` 으로 되돌려 §3 에
-   싣는다. `check_brief.py` 는 `[해결 ⟨S<n>⟩]` 의 `S<n>` 이 payload §6 에 있는지 본다.
+   규약, N22). §3 에서 빼는 이 동작을 **제거**한다 — 해결로 닫은 결정도 §3 에 그대로 남고, 그 항목에 해결 표시와 해결 내용
+   (`[해결 ⟨S<n>⟩]` 과 한 줄)을 붙인다. §0 의 상태 토큰도 그대로 단다. `finishing.md` Step A 의 §0 상태 토큰 규약과 brief 템플릿
+   §3 안내를 이 모양으로 고친다. `check_brief.py` 는 `[해결 ⟨S<n>⟩]` 의 `S<n>` 이 payload §6 에 있는지 보고, §0 에서 해결로 닫은
+   결정이 §3 에 없으면 실패한다. 결정이 §3 에서 사라지지 않으므로 B-0 에 따로 공시하거나 되돌릴 선택은 두지 않는다.
 
 ### §4 장치별 처분 표
 
@@ -222,9 +225,9 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
 | N17 `roadmap_status.py` 가 spec 0개인 묶음과 묶음이 아닌 블록의 번호를 대조 없이 배정됨으로 셈 | 로드맵 상태 계산 | 넘김 | §5 R3 (spec 없음을 경고 · 「셀 수 없음」으로) | — |
 | N18 `check_bundle_coverage.py` 가 「기각」 행을 덮은 것으로 셈 | 번호 대조 표의 형식 검사 | 넘김 | §5 R3 (기각한 번호 수를 게이트에 공시 · 사용자가 되돌림) | — |
 | N19 풀이 확인 «기타» 로 적은 말을 기록하지 않음 | 확인 기록을 고름/안 고름 하나로 | 수정 | §1-9 (적은 말 칸 · 원문으로 리뷰 기준) | `check_seed` · seed audit 템플릿 락 |
-| N20 확인 풀이를 «다시 검증할 것» 문단으로 옮기면 미확인으로 내림 | 다시 볼 것을 한 문단에 | 수정 | §1-10 (옮긴 수 공시 · 되돌림) | `seed_provenance` 테스트 |
+| N20 확인 풀이를 «다시 검증할 것» 문단으로 옮기면 미확인으로 내림 | 다시 볼 것을 한 문단에 | 제거 | §1-10 (확인 표시가 문장을 따라감 — 문단이 확인을 지우지 않음) | `seed_provenance` 테스트 |
 | N21 brief §1 Goal · Non-goal 을 출처 없이 모델이 씀 | brief 를 짧은 목표 문장으로 | 수정 | §3-11 (B-0 에 출처와 함께 보임 · 사용자가 고침) | `test_check_brief.sh` · finishing 락 |
-| N22 `[해결 ⟨S⟩]` 로 닫은 결정이 §3 에서 빠짐 | §3 을 미해결 목록으로 | 수정 | §3-12 (닫은 결정 공시 · 되돌림 · 앵커 실재 검사) | `test_check_brief.sh` · finishing 락 |
+| N22 `[해결 ⟨S⟩]` 로 닫은 결정이 §3 에서 빠짐 | §3 을 미해결 목록으로 | 제거 | §3-12 (해결한 결정도 해결 내용과 함께 §3 에 남김 · 앵커 실재 검사) | `test_check_brief.sh` · finishing 락 · brief 템플릿 락 |
 
 설계 · 구현 중 새 장치가 나오면 이 표에 행을 더한다(D15 · OQ29).
 
@@ -271,7 +274,7 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
 - AC16a trivia 판정이 패턴에 맞으면 우회 전에 「그대로 / 전체 과정으로」 질문이 있고, 그 질문에 맞은 패턴 이름이 보이며, 첫 토큰 `force` 경로가 그대로 있다(N11).
 - AC16b `design-doc.md` 본문에 「사용자가 요청한 동작을 자르는 지적은 범주를 `scope` 로」 문면이 있고, frontmatter `must_catch` 는 바뀌지 않는다(N14).
 - AC16c 붙여넣은 seed 로 시작하면 R1 「지금 이해」에 `출처를 가르지 못한 seed 문장 <N>개` 줄이 있다(N15). 「지금 이해」 규약에 `줄인 사실 <N>개` 와 「전부 보기」가 있다(N16).
-- AC16d seed audit 템플릿 확인 질문 줄에 `사용자가 적은 말` 칸이 있고 seed 리뷰 기준에 실린다(N19). 확인 풀이를 «다시 검증할 것 —» 문단으로 옮기면 `seed_provenance.py` 가 그 경우를 따로 내고 seed 게이트 앞에 `다시 검증 문단으로 옮긴 확인 풀이 <N>개` 가 있다(N20). brief 템플릿 §1 줄마다 출처 표시가 있고 `check_brief.py gate` 가 없으면 실패하며, B-0 에 §1 이 출처와 함께 보인다(N21). B-0 에 `해결로 닫은 결정 <N>개` 줄과 되돌림 선택이 있고, `[해결 ⟨S<n>⟩]` 의 `S<n>` 이 payload §6 에 없으면 `check_brief.py gate` 가 실패한다(N22).
+- AC16d seed audit 템플릿 확인 질문 줄에 `사용자가 적은 말` 칸이 있고 seed 리뷰 기준에 실린다(N19). «(사용자 확인)» 이 붙은 풀이를 «다시 검증할 것 —» 문단으로 옮겨도 `seed_provenance.py` 의 `classify` 가 그 문장을 사용자 확인으로 내고, 표시가 없는 문장은 그 문단에서 저자 · 미확인이다(양성 짝)(N20). brief 템플릿 §1 줄마다 출처 표시가 있고 `check_brief.py gate` 가 없으면 실패하며, B-0 에 §1 이 출처와 함께 보인다(N21). `[해결 ⟨S<n>⟩]` 로 닫은 결정이 해결 내용과 함께 brief §3 에 남고 — §0 에서 해결로 닫은 결정이 §3 에 없거나 `[해결 ⟨S<n>⟩]` 의 `S<n>` 이 payload §6 에 없으면 `check_brief.py gate` 가 실패한다(양성 짝: §3 에 남은 해결 결정은 통과)(N22).
 - AC17 통과가 정답인 새 단언(AC2 · AC5 · AC6 · AC11 · AC12 · AC13 · AC16a · AC16b)은 변이로 이빨을 확인하고 양성 대조를 둔다.
 - AC18 spec-distill minor bump.
 
@@ -279,7 +282,7 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
 
 - `plugins/spec-distill/references/compression.md`, `skills/request-framing/SKILL.md`, `templates/interview-seed-template.md`, `scripts/check_seed.py`, `templates/interview-seed-audit-template.md`(seed audit — §1-1 의 새 표 · §1-9 의 적은 말 칸), `scripts/seed_provenance.py`(§1-10), `scripts/build_seed_inline_blob.py`(seed 리뷰 번들에 덜어 낸 것 표를 싣는다)
 - `plugins/spec-distill/references/docreview-profiles/seed.md` · `brief.md` · `design-doc.md`(overdesign 절 · 3건 상한 줄 · §2-9 의 「사용자 요청을 자르는 지적은 `scope` 로」 범주 안내만)
-- `plugins/spec-distill/skills/spec-interview/references/finishing.md`(Step A.3 · B-0 · B-A · 재제시 상한 · 비용 문장 · §3-2 의 옛 규칙 문장), `skills/spec-interview/SKILL.md`(라운드 요약 줄 · 「지금 이해」 규약 · trivia 판정 단계), `skills/spec-interview/references/seed-input.md`(붙여넣기 공시), `skills/spec-review/SKILL.md`(참고 전부 보기), `skills/reviewing-brief/SKILL.md`(냉독 분류 · `## 수정 권한` 표와 결정 발화 추가 문단 · 지출 통제 문장 · §3-2 의 옛 규칙 문장)
+- `plugins/spec-distill/skills/spec-interview/references/finishing.md`(Step A.3 · Step A 의 §0 상태 토큰 규약 · B-0 · B-A · 재제시 상한 · 비용 문장 · §3-2 의 옛 규칙 문장), `skills/spec-interview/SKILL.md`(라운드 요약 줄 · 「지금 이해」 규약 · trivia 판정 단계), `skills/spec-interview/references/seed-input.md`(붙여넣기 공시), `skills/spec-review/SKILL.md`(참고 전부 보기), `skills/reviewing-brief/SKILL.md`(냉독 분류 · `## 수정 권한` 표와 결정 발화 추가 문단 · 지출 통제 문장 · §3-2 의 옛 규칙 문장)
 - `plugins/spec-distill/references/trivia-escape.md` · `skills/request-framing/SKILL.md` 의 trivia 판정 단계(N11)
 - `plugins/spec-distill/templates/interview-brief-template.md`, `scripts/check_brief.py`, `scripts/check_verbatim_coverage.py`
 - 테스트: `test_reviewing_brief_skill.sh`(지출 통제 단언) · `test_request_framing_entry.sh`(trivia) · `test_overdesign_rubric.sh` · `test_compression_adopters.sh` · `test_check_brief.sh` · `test_seed_one_sentence.sh` · `test_framing_review_contract.sh` · `test_brief_no_length_cap.sh` · `test_brief_no_statement_cap.sh` · `test_conducting_interview_stage.sh` · 프로필 구조 · check_seed · check_verbatim_coverage · reviewing-brief 테스트
@@ -332,6 +335,9 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
 - D2.1 · r2 · adopt · f52e5caa#r1.1 · "셋 다 권장대로 (권장)" — S10 「그대로 남는 것 0」을 글자대로 읽는다. 「근거 없이 남는 것 0」 바꿔 읽기를 걷고 N6 → 수정(밀린 질문 공시) · N11 → 수정(우회 전 「그대로 / 전체 과정으로」 질문, 사유 공시 · `force` 둠) · N13 → 넘김(R9). 「유지」 행 없음.
 - D2.2 · r2 · adopt · 7f4faa61#r1.1 · "셋 다 권장대로 (권장)" — 설계문서 프로필 `must_catch` 접기 행(N14)을 수정으로 더한다(사용자 요청 자르기는 게이트 질문, 나머지는 「참고 전부 보기」). 새 장치가 0개 나올 때까지 읽기 전용 탐색을 반복하고 그 기록을 §6 K7 에 적는다.
 - D2.3 · r2 · adopt · df7beb1b#r2.1 · "셋 다 권장대로 (권장)" — payload §6 을 추가만 허용으로: 리뷰 중 결정 발화를 payload §6 · audit §6 · state 에 같은 write 로 더하고 기존 원문 글자는 불변(§3-2 · AC11).
+- 결정 · 2026-10-15 · N20 처분(f52e5caa#r1.1) — 「N20·N22 는 제거, 나머지는 문서대로 (권장)」 · 리뷰 뒤 반영(이 변경은 리뷰 라운드를 거치지 않았다) — 수정 → 제거: 확인 표시는 문장이 어디로 옮겨지든 따라가고, «다시 검증할 것 —» 문단이 확인을 지우지 않는다(§1-10 · §4 · AC16d).
+- 결정 · 2026-10-15 · N22 처분(f52e5caa#r1.1) — 「N20·N22 는 제거, 나머지는 문서대로 (권장)」 · 리뷰 뒤 반영(이 변경은 리뷰 라운드를 거치지 않았다) — 수정 → 제거: 해결로 닫은 결정도 해결 내용과 함께 brief §3 에 남는다(§3-12 · §3-8 · §4 · AC16d).
+- 결정 · 2026-10-15 · N15 · N16 · N17 · N18 · N19 · N21 처분(f52e5caa#r1.1) — 「N20·N22 는 제거, 나머지는 문서대로 (권장)」 · 리뷰 뒤 반영(이 변경은 리뷰 라운드를 거치지 않았다) — 이 여섯은 §4 표의 처분(N15 · N16 · N19 · N21 수정, N17 · N18 R3 로 넘김) 그대로다.
 
 ## 번호 대조
 
