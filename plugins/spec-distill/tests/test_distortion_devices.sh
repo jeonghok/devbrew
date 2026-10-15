@@ -51,4 +51,34 @@ for f in "$RF" "$SI"; do
   has "$f" '「전체 과정으로」' "N11: $(basename "$(dirname "$f")") 의 trivia 단계가 「전체 과정으로」 분기를 말한다"
 done
 
+# ── Task 4 — 리뷰 프로필 (AC5 · AC6 · AC7 · AC16b) ──
+BP="$SD/references/docreview-profiles/brief.md"; DP="$SD/references/docreview-profiles/design-doc.md"
+for P in "$BP" "$DP"; do
+  N="$(basename "$P")"
+  hasnt "$P" '번호가 작은 쪽' "AC5($N): 「번호가 작은 쪽」 사다리가 없다"
+  hasnt "$P" '한 판정자가 한 라운드에' "AC5($N): 판정자당 라운드 상한이 없다"
+  hasnt "$P" '2N+α' "AC5($N): 상한 총량 문구가 없다"
+  hasnt "$P" '### 상한' "AC5($N): 「상한」 절이 없다"
+  has   "$P" '자르지 않는 쪽' "AC5($N): 비기면 자르지 않는 쪽이다"
+  has   "$P" '두 해석을 함께 `decide` 로' "AC5($N): 해석이 갈리면 두 해석을 함께 decide 로"
+  has   "$P" '이 문서는 이미 최소다' "AC5($N)(양성 짝): 0건 출구 문구는 남는다"
+  has   "$P" '근거를 한두 줄 붙일 수 있다' "AC5($N): 0건 출구에 근거를 허용한다"
+  hasnt "$P" '**정당화**도 「찾아봤으나 없음」 서술도 붙이지 않는다' "AC5($N)(부재): 0건 근거 금지 문장이 없다"
+  has   "$P" '인용으로 대조한다' "AC5($N): 자르라는 판정은 사용자 원문과 인용으로 대조한다"
+  has   "$P" '네 개씩 여러 번 나눠 묻는다' "§2-3($N): 게이트 질문은 넷씩 여러 번"
+  has   "$P" '대체안은 같은 항목 안에 필수다' "보안($N): 대체안 필수 규약이 남는다"
+  has   "$P" '└ 천장' "보안($N): 천장 규약이 남는다"
+  has   "$P" 'Law 1·2·3 과 kill switch 는 어떤 모드에서도 안 자른다' "보안($N): 자르지 않는 것 — Law 와 kill switch 줄이 남는다"
+done
+assert_eq "$(fm_line "$BP" 'fix_anchors:')" 'fix_anchors: ["^0\\.", "^2\\.", "^3\\.", "^4\\.", "^5\\."]' "AC6: brief fix_anchors 가 §0 · §2~§5 다"
+assert_eq "$(fm_line "$BP" 'immutable:')" 'immutable: ["^6\\."]' "AC6: brief §6 immutable 은 그대로다"
+assert_eq "$(fm_line "$BP" 'protected_headings:')" 'protected_headings: ["^1\\."]' "AC6: brief §1 protected 는 그대로다"
+assert_eq "$(fm_line "$BP" 'must_catch:')" 'must_catch: [direction, distortion, omission, invention, provenance_mislabel, authority_syntax, evidence_unsupported]' "AC7: brief must_catch 에 direction 이 있다"
+has   "$BP" '`fix` 는 §0 · §2~§5 에 낼 수 있다' "§2-4: brief 처분 안내의 fix 자리가 frontmatter 와 같다"
+hasnt "$BP" '`fix` 는 §0·§2 에만 낼 수 있다' "§2-4(부재): 옛 fix 자리 문장이 없다"
+has   "$BP" '§2~§5 가 §6 원문을 어떻게 옮겼는지' "§2-4: brief 층 2 가 §2~§5 를 본다"
+hasnt "$BP" '§2 요약이 §6 원문을 어떻게 옮겼는지만 본다' "§2-4(부재): 층 2 가 §2 만 보는 문장이 없다"
+has   "$DP" '사용자가 요청한 동작을 자르는 지적은 범주를 `scope` 로' "AC16b: 설계문서 프로필이 사용자 요청 자르기를 scope 로 낸다"
+assert_eq "$(fm_line "$DP" 'must_catch:')" 'must_catch: [goal_fit, problem_definition, scope, architecture]' "AC16b: 설계문서 must_catch 는 바뀌지 않는다"
+
 finish

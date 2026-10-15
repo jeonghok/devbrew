@@ -1,9 +1,9 @@
 ```docreview-layer1
 - ref: b1
-  category: direction
+  category: overdesign
   anchor: "#2-제약"
   disposition: decide
-  summary: "BD1: 제약 C1 의 방향이 반증된다"
+  summary: "BD1: 제약 C1 이 사용자 원문의 goal 에 비해 과하다"
 ```
 
 ```docreview-layer2

@@ -785,7 +785,7 @@ mut 1/1 state_dir_for_relative_doc_accepted case_state_dir_for_per_doc sed_state
 mut 1/1 init_relative_doc_accepted case_init_relative_doc_refused sed_state \
   's/if not a\.doc or not os\.path\.isabs(a\.doc):/if not a.doc:/'
 # ── 참고(advisory) 라우팅 (설계 2026-09-27-review-stopping-criterion) ─────────────────────
-# (61) advisory 여집합을 뒤집는다(advisory = must_catch) — direction 이 must-catch 가 되어 AC1 이 RED.
+# (61) advisory 여집합을 뒤집는다(advisory = must_catch) — overdesign 이 must-catch 가 되어 AC1 이 RED.
 mut 1/1 advisory_axes_flipped case_AC1_brief_direction_only sed_advice \
   's/    return (frozenset(lr\["layer1"\]) | frozenset(lr\["layer2"\])) - frozenset(mc)/    return frozenset(mc)/'
 # (62) 1 걸음 호출을 지운다 — advisory decide 가 decides 에 남아 승인을 막는다.

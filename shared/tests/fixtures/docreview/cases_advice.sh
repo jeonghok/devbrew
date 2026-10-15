@@ -11,8 +11,8 @@ p = s.load_profile(sys.argv[2]); print(eval(sys.argv[3]))' "$SCRIPTS" "$1" "$2"
 
 # ── §A advisory 축 = (layer1 ∪ layer2) − must_catch ────────────────────────
 case_advice_axes_per_profile() {
-  assert_eq "$(adv_py "$PROF_MC/brief.md" 'sorted(a.advisory_axes(p))')" "['direction', 'overdesign']" \
-    "§A: brief 의 advisory 축은 direction · overdesign"
+  assert_eq "$(adv_py "$PROF_MC/brief.md" 'sorted(a.advisory_axes(p))')" "['overdesign']" \
+    "§A: brief 의 advisory 축은 overdesign 뿐 (direction 은 must_catch)"
   assert_eq "$(adv_py "$PROF_MC/design-doc.md" 'sorted(a.advisory_axes(p))')" \
     "['ambiguity', 'approaches_comparison', 'component_relations', 'data_flow', 'feasibility', 'handoff_incomplete', 'isolation', 'overdesign', 'placeholder', 'scope_creep', 'testing', 'tradeoffs']" \
     "§A: design-doc 의 advisory 축은 층 1 나머지 다섯 + 층 2 일곱"
@@ -46,19 +46,19 @@ mc_round() {   # mc_round <dir> <doc> <critic> <out-fin> — 다음 라운드를
 
 # ── AC1 — brief 프로필 fixture 둘 ──────────────────────────────────────────
 case_AC1_brief_direction_only() {
-  local d; d="$(route_r1 "$PROF_MC/brief.md" "$FX/brief-sample.md" "$FX/critic-brief-direction.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  local d; d="$(route_r1 "$PROF_MC/brief.md" "$FX/brief-sample.md" "$FX/critic-brief-overdesign.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
   assert_eq "$(gsum "$d" 'd["approval_ready"], d["round_gate_needed"]')" "(True, False)" \
-    "AC1(i): direction decide 만 나온 라운드 1 — 승인 가능 · 라운드 게이트 없음"
-  assert_eq "$(adv_cats "$d")" "['direction']" "AC1(i): direction 은 advice 원장에 있다"
+    "AC1(i): overdesign decide 만 나온 라운드 1 — 승인 가능 · 라운드 게이트 없음"
+  assert_eq "$(adv_cats "$d")" "['overdesign']" "AC1(i): overdesign 은 advice 원장에 있다"
   assert_eq "$(st_yaml "$d" 'len(st["decides"]), len(st["fixes"]), len(st["asks"])')" "(0, 0, 0)" "AC1(i): 차단 원장 셋이 비었다"
   rm -rf "$d"
 }
 case_AC1_brief_direction_distortion() {
-  local d; d="$(route_r1 "$PROF_MC/brief.md" "$FX/brief-sample.md" "$FX/critic-brief-direction-distortion.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  local d; d="$(route_r1 "$PROF_MC/brief.md" "$FX/brief-sample.md" "$FX/critic-brief-overdesign-distortion.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
   assert_eq "$(st_yaml "$d" 'sorted(st["findings"][i]["category"] for i in list(st["decides"]) + list(st["fixes"]))')" "['distortion']" \
     "AC1(ii): distortion 은 차단 원장(fixes)에 있다"
   assert_eq "$(gsum "$d" 'd["approval_ready"]')" "False" "AC1(ii): 승인이 막힌다"
-  assert_eq "$(adv_cats "$d")" "['direction']" "AC1(ii): direction 은 advice 원장에 있다"
+  assert_eq "$(adv_cats "$d")" "['overdesign']" "AC1(ii): overdesign 은 advice 원장에 있다"
   rm -rf "$d"
 }
 
@@ -348,7 +348,7 @@ case_AC7_sink_idempotent() {
     "AC7: --sink 가 ### Deferred to plan 아래에 미박제 항목 3건을 표 행으로 적는다"
   before="$(cksum < "$doc")"; py docreview_state.py advice --state-dir "$d" --sink "$doc" >/dev/null
   assert_eq "$(cksum < "$doc")" "$before" "AC7: 두 번째 --sink 는 아무것도 더 적지 않는다(멱등)"
-  b="$(route_r1 "$PROF_MC/brief.md" "$FX/brief-sample.md" "$FX/critic-brief-direction.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  b="$(route_r1 "$PROF_MC/brief.md" "$FX/brief-sample.md" "$FX/critic-brief-overdesign.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
   py docreview_state.py advice --state-dir "$b" --sink "$doc" >/dev/null 2>"$b/err"; rc=$?
   assert_eq "$rc $(grep -c profile_has_no_defer_target "$b/err")" "1 1" "AC7: brief 프로필(defer_target none)은 profile_has_no_defer_target rc 1"
   rm -rf "$d" "$b" "$doc"
