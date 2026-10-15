@@ -1371,12 +1371,18 @@ grep -qF 'user_statements' "$FIN" \
 # 독립적으로 "audit §6"를 담고 있어서, 이 지시 문장만 지워도 그 다른 문장이 이 grep을
 # 계속 만족시킨다(실측: 이 지시 문장을 통째로 지우고 돌려봤더니 이 단언이 조용히 계속
 # green이었다). 그래서 이 문장에서만 나는 복합 리터럴로 좁힌다.
-grep -qF '전량은 **audit §6**에' "$FIN" \
-  && ok "U2-T6: 원문의 거처가 audit §6 으로 지시된다" \
-  || no "U2-T6: finishing.md 가 원문을 audit §6 에 두라고 지시하지 않는다"
-grep -qE '발화 전부를 payload §6|전부를 payload §6 에' "$FIN" \
-  && no "U2-T6: 「전부를 payload §6 에」 옛 지시 잔존" \
-  || ok "U2-T6: 옛 거처 지시 제거됨"
+# R2(설계 §3-2 · N7): 거처가 「S1 은 payload, 나머지는 audit」에서 「payload §6 이 S1~Sn 전량,
+# audit §6 은 S2 이상의 같은 글자 사본」으로 바뀌었다. 두 자리 지시를 각각 이 문장에서만 나는
+# 리터럴로 잰다.
+grep -qF '`user_statements` 발화 전량(S1~Sn)을 두고' "$FIN" \
+  && ok "U2-T6: 원문 전량의 거처가 payload §6 으로 지시된다 (R2)" \
+  || no "U2-T6: finishing.md 가 발화 전량을 payload §6 에 두라고 지시하지 않는다"
+grep -qF '**audit §6** 에도 같은 글자로' "$FIN" \
+  && ok "U2-T6: audit §6 이 S2 이상의 같은 글자 사본으로 지시된다" \
+  || no "U2-T6: finishing.md 가 audit §6 사본을 지시하지 않는다"
+grep -qF '`S1`만 payload §6에 남고' "$FIN" \
+  && no "U2-T6: 「S1 만 payload §6 에」 옛 지시 잔존" \
+  || ok "U2-T6: 옛 거처 지시(S1 만 payload) 제거됨"
 
 # B-2 게이트 텍스트의 advisories 슬롯
 b2_block="$(awk '/^#### B-2/{f=1;print;next} /^#### /{f=0} f' "$FIN")"

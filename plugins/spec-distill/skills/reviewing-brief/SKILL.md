@@ -150,8 +150,8 @@ fi
 | `vc_rc` | 뜻 | 동작 |
 |---|---|---|
 | `0` | 위반 없음 | 번들로. **단 `advisories` 가 비어 있지 않으면** 그 줄들을 record(`verbatim_coverage` / `completeness` / `degraded`)로 남긴다 — 「이 발화는 대조하지 못했다」가 사람에게 닿지 않으면 강등이 통과로 보인다 |
-| `1` | 위반(`missing_ids`/`not_contained`) | **차단.** audit §6 에 **추가만** 해서 보완하고 이 절을 다시 탄다 |
-| `1` + `not_contained: ["§6"]` | 구조 위반(§6 `S<N>` 앵커 중복) | **차단.** append 로는 못 고친다 — 잘못 추가된 중복 항목을 **제거**한다 |
+| `1` | 위반(`missing_ids`/`not_contained`) | **차단.** payload §6 · audit §6 에 **추가만** 해서(같은 글자로) 보완하고 이 절을 다시 탄다 |
+| `1` + `not_contained: ["§6"]` | 구조 위반(한 §6 안 `S<N>` 앵커 중복, 또는 같은 앵커의 글자가 payload §6 과 audit §6 에서 다름) | **차단.** append 로는 못 고친다 — 잘못 추가된 중복 항목을 **제거**하거나, 고쳐진 사본을 원래 글자로 **되돌린다** |
 | `3` | 검사 불가(파일 부재·파싱 실패) | record(`verbatim_coverage` / `completeness` / `skipped`) 후 계속 |
 | `4` | 내부 오류 | `3` 과 같다 + 오류 전문을 `--reason` 에 |
 | 그 외 non-zero | 예측 못 한 실패 | `3` 과 같다 — indeterminate ≠ clean |
@@ -167,9 +167,9 @@ PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
 
 ## 번들 — 라운드마다 한 번
 
-충실도의 정답은 payload §6(`S1`)과 audit §6(`S2` 이상) 둘이라, 탐지·재비판의 `<document>` 와 codex
-러너의 `<doc>` 에는 payload 가 아니라 **번들**(`build_brief_bundle.py` 가 payload + audit 원문을 조립한
-한 문서)을 넘긴다. 진입 게이트 뒤에서 라운드마다 한 번 조립해 `$BUNDLE` 파일로 둔다 — 한 라운드의
+충실도의 정답은 payload §6 의 원문 전량이고 audit §6 은 그 S2 이상의 같은 글자 사본이다. 탐지·재비판의
+`<document>` 와 codex 러너의 `<doc>` 에는 payload 가 아니라 **번들**(`build_brief_bundle.py` 가 payload +
+audit 원문을 조립한 한 문서)을 넘긴다 — 사본이 어긋난 곳도 리뷰어에게 보인다. 진입 게이트 뒤에서 라운드마다 한 번 조립해 `$BUNDLE` 파일로 둔다 — 한 라운드의
 소비자 셋이 같은 바이트를 보고, 저자 수정 뒤 다음 라운드는 새 번들을 본다.
 
 ```bash
@@ -457,14 +457,14 @@ Agent({
 | 자리 | 규칙 |
 |---|---|
 | payload §2 제약 | frontmatter `user_sourced_items` 와 **같은 write** 에서 고친다 — 게이트의 bijection 이 statement 까지 대조해 한쪽만 고치면 다음 라운드 진입 게이트가 red 다 |
-| payload §6 (`S1`) | **불변** — 어떤 처분도 닿지 못한다 |
-| audit §6 (`S2` 이상) | **append-only** — `S<N>` 추가만. 기존 본문을 고칠 수 있으면 「지적에 맞게 원문을 고쳐 통과」 라는 laundering 이 열린다 |
+| payload §6 (`S1`~`Sn`) | **추가만** — 이미 있는 원문 글자는 어떤 처분도 고치지 못한다. 결정 발화만 새 `S<N>` 으로 끝에 더한다 |
+| audit §6 (`S2` 이상) | **append-only** — `S<N>` 추가만, payload §6 과 같은 글자. 기존 본문을 고칠 수 있으면 「지적에 맞게 원문을 고쳐 통과」 라는 laundering 이 열린다 |
 
 채택된 `decide` 가 사용자의 확정 방향을 뒤집으면(층 1) 적용은 절차서 `## 배달` 의 permit 계약대로
-하고, 그 결정 발화를 audit §6 에 새 `S<N>` 으로 **추가**한다(state `user_statements` 에도) — 다음
+하고, 그 결정 발화를 새 `S<N>` 으로 payload §6 끝 · audit §6 · state `user_statements` 에 **같은 write** 로 **추가**한다 — 다음
 라운드의 완전성 검사가 그것을 대조한다. 재결정은 근거와 사용자의 게이트 선택으로만 일어난다 — 반증은
 보고의 근거이지 임의 변경의 근거가 아니다. 저자는 어느 finding 도 임의로 기각하지 못한다 —
-`drop`·재비판 `reject` 는 엔진 회계에 남아 개수가 공시되고, 미반영 findings 는 이유와 함께 Step B 로 넘긴다.
+`drop`·재비판 `reject` 는 엔진 회계에 남아 개수가 공시되고, 미반영 findings 는 이유와 함께 Step B 로 넘긴다. 엔진의 얼림 검사는 payload §6 끝의 추가도 `frozen_change` 로 보인다 — 그 항목이 결정 발화 추가 한 건이면 게이트에서 그렇게 밝히고 그대로 둔다(이미 있는 원문 글자가 바뀐 것이면 되돌린다). 엔진 쪽의 「추가만 허용」 구분은 R2a 의 일이다.
 
 ## 게이트
 

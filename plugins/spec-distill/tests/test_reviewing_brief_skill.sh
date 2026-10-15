@@ -238,8 +238,9 @@ done
 
 # ── 10. 수정 권한 ─────────────────────────────────────────────────────────────
 W_ED="$(section '수정 권한')"
-{ has "$W_ED" 'user_sourced_items' && has "$W_ED" '**불변**' && has "$W_ED" '**append-only**'; } \
-  && ok "수정 권한: §2 는 frontmatter 와 같은 write · payload §6 불변 · audit §6 append-only" \
+# R2(설계 §3-2): payload §6 은 「불변」에서 「추가만」으로 — 이미 있는 원문 글자는 여전히 못 고친다.
+{ has "$W_ED" 'user_sourced_items' && has "$W_ED" '**추가만** — 이미 있는 원문 글자는 어떤 처분도 고치지 못한다' && has "$W_ED" '**append-only**'; } \
+  && ok "수정 권한: §2 는 frontmatter 와 같은 write · payload §6 추가만(기존 글자 불변) · audit §6 append-only" \
   || no "수정 권한: 저자 규칙 셋 중 하나가 빠졌다 (laundering 이 열린다)"
 { has "$W_ED" '임의로 기각하지 못한다' && has "$W_ED" '미반영 findings' && has "$W_ED" 'Step B'; } \
   && ok "수정 권한: finding 임의 기각 금지 + 미반영은 이유와 함께 Step B" \

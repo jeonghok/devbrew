@@ -45,7 +45,7 @@ seed 로 가지 않은 항목은 버리지 않는다 — audit 의 `## seed 에�
 
 ## seed 와 brief 둘 다 이 계약을 게이트로 집행한다
 
-brief 도 이 계약을 게이트로 집행한다 — payload 외부 URL 금지(N1a) · §6 은 `S1` 만(N1b) ·
+brief 도 이 계약을 게이트로 집행한다 — payload 외부 URL 금지(N1a) · §6 은 사용자 원문 S1~Sn 전부(N1b) ·
 landscape 원자료는 audit 결속(N2). **집행 지점이 다르다는 것만 남긴다**: seed 는
 `check_seed.py`, brief 는 `check_brief.py`.
 

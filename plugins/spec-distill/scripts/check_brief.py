@@ -521,7 +521,7 @@ def payload_verbatim_anchors(payload_text: str) -> set:
     충실도 리뷰어에게 **원문으로** 보인다. 게이트만 그것을 못 보는 상태가 정확히
     N1b가 막으려던 것이다.
 
-    경계가 유일하지 않거나 §6이 없으면 공집합 — N1b의 등식(`!= {"S1"}`)이 그 자리에서
+    경계가 유일하지 않거나 §6이 없으면 공집합 — N1b 의 S1 부재가 그 자리에서
     red를 내므로 침묵하지 않는다.
     """
     span = payload_section6_span(payload_text)
@@ -530,30 +530,35 @@ def payload_verbatim_anchors(payload_text: str) -> set:
     return set(S_ANCHOR_RE.findall(payload_text[span[0]:span[1]]))
 
 
-def payload_verbatim_is_s1_only(payload_text: str) -> bool:
-    """N1b — payload §6의 앵커 집합이 **정확히** {"S1"}인가 (v0.43.0).
+S_NUM_RE = re.compile(r"^S(\d+)$")
 
-    `⊆ {"S1"}`이 아니라 `== {"S1"}`이다. ⊆로 쓰면 빈 §6이 통과하고, 그때
-    이를 잡아 줄 것으로 기대할 bijection C는 **항목이 0건인 payload에서 공허하다**
-    (`evidence`는 필수 필드라 항목이 있으면 순회가 비지 않지만, 항목 0건이면
-    루프가 아예 돌지 않는다). 등식이 그 구멍을 닫는다.
 
-    등식 술어라 **스스로 양성이다** — §6을 통째로 지워도 이 검사가 직접 red를 낸다.
-    이 자리를 bijection C에 귀속시키면 틀린 귀속이 되고, 잘못 귀속된 RED는
-    통과보다 나쁘다.
-
-    v0.46.0: 코퍼스가 `_body()`에서 **payload 원문 §6 span**으로 바뀌었다. `_body()`는
-    펜스를 벗기므로 §6 안 펜스에 `- **S5**`를 적으면 앵커 집합이 `{"S1"}`으로 계산돼
-    등식이 만족되는데, 그 줄은 payload에 그대로 남아 하류로 나갔다.
-    """
-    return payload_verbatim_anchors(payload_text) != {"S1"}
+def payload_verbatim_n1b_failures(payload_text: str, audit_anchors: set) -> list[str]:
+    """N1b — payload §6 은 사용자 원문 **S1~Sn 전부**다(R2 · 설계 §3-2). 코퍼스는 payload 원문 §6 span
+    (`payload_verbatim_anchors` — 펜스를 벗기지 않는다, v0.46.0). 셋을 본다: S1 이 있다 · 번호가 S1 부터 가장
+    큰 번호까지 빠짐없다 · audit §6 의 앵커가 전부 payload §6 에도 있다(audit 은 S2 이상을 같은 글자로 겹쳐
+    가진다 — 글자 대조는 `check_verbatim_coverage.py`). state 의 발화 전량과의 대조도 그 스크립트가 한다 —
+    이 게이트는 brief 파일만 읽는다. §6 이 없거나 경계가 유일하지 않으면 앵커가 공집합이라 S1 부재로 red 다."""
+    anchors = payload_verbatim_anchors(payload_text)
+    nums = sorted(int(m.group(1)) for a in anchors for m in [S_NUM_RE.match(a)] if m)
+    out = []
+    if 1 not in nums:
+        out.append("payload §6 에 S1(최초 요청 원문)이 없다")
+    if nums:
+        gaps = [f"S{n}" for n in range(1, nums[-1] + 1) if n not in nums]
+        if gaps:
+            out.append("payload §6 의 원문 번호가 빠졌다: " + ", ".join(gaps))
+    missing = sorted(a for a in audit_anchors if a not in anchors)
+    if missing:
+        out.append("audit §6 의 " + ", ".join(missing) + " 가 payload §6 에 없다 — payload §6 은 원문 전량이다")
+    return out
 
 
 def bijection_c_errors(payload_text: str, audit_text: str) -> list[str]:
     """bijection C — 모든 evidence: S<N>이 §6에서 해석된다 (AC6).
 
-    v0.43.0: 앵커 집합이 payload §6 **∪** audit §6이다. `S1`은 payload에,
-    `S2` 이상은 audit에 살므로 한쪽만 보면 반대쪽 전량이 "없는 앵커"가 된다.
+    v0.43.0: 앵커 집합이 payload §6 **∪** audit §6이다. payload §6 이 전량이고 audit §6 은
+    S2 이상의 사본이다 — 합집합은 사본이 어긋났을 때도 dangling 을 잘못 내지 않게 한다.
 
     **단방향이다.** 인용된 S<N>의 *존재*만 본다 — 모든 앵커가 인용될 것은
     요구하지 않는다. 그 역방향을 넣으면 audit §6 전량이 인용 의무로 끌려온다.
@@ -1374,13 +1379,6 @@ def gate(path: Path) -> int:
             "payload §6 경계가 유일하게 해석되지 않는다 — " + " · ".join(sec6_dup)
             + " (「payload에서 §6을 뺀 나머지」(N1a)도 「payload §6」(N1b)도 정의되지 않는다)")
     sec6_absent = any(m.startswith("6.") for m in miss)
-    # 경계가 비유일하면 N1b·bijection C를 묻지 않는다 — 그 상태의 앵커 집합은 공집합이라
-    # "앵커가 없다"는 **원인과 어긋난 red**가 되고, 저자는 §6에 앵커를 더 넣으려 든다.
-    if not sec6_absent and not sec6_dup and payload_verbatim_is_s1_only(text):
-        failures.append(
-            f"payload §6 앵커가 {{'S1'}}이 아니다: "
-            f"{sorted(payload_verbatim_anchors(text))} "
-            "(S1만 payload에, 나머지 전량은 audit §6에)")
 
     sec2_absent = any(m.startswith("2.") for m in miss)
     if not sec2_absent:
@@ -1398,6 +1396,7 @@ def gate(path: Path) -> int:
     # --- audit 해석 (fail-closed): 못 열면 audit 측 검증 전체를 skip하지 않고 red ---
     audit_path, audit_err = resolve_audit(path, fm)
     audit_text = ""
+    audit_sec6_dup: list = []
     if audit_err:
         failures.append(f"audit: {audit_err}")
     else:
@@ -1446,6 +1445,17 @@ def gate(path: Path) -> int:
                     audit_text, payload_verbatim_anchors(text) | verbatim_anchors(audit_text))
                 failures += [f"saturation: {x}" for x in sf]
                 advisories += sa
+
+    # N1b — payload §6 이 원문 전량인가. audit §6 앵커와 대조하므로 audit 을 읽은 뒤에 돈다.
+    # 경계가 비유일하면 N1b·bijection C를 묻지 않는다 — 그 상태의 앵커 집합은 공집합이라
+    # "앵커가 없다"는 **원인과 어긋난 red**가 되고, 저자는 §6에 앵커를 더 넣으려 든다.
+    # audit 을 못 읽었거나 audit §6 경계가 비유일하면 audit 앵커는 공집합으로 넘긴다(그 사실은
+    # 위에서 이미 red 다).
+    if not sec6_absent and not sec6_dup:
+        n1b_audit = verbatim_anchors(audit_text) if audit_text and not audit_sec6_dup else set()
+        for msg in payload_verbatim_n1b_failures(text, n1b_audit):
+            failures.append(
+                f"N1b — {msg} (payload §6 앵커: {sorted(payload_verbatim_anchors(text))})")
 
     sec4_absent = any(m.startswith("4.") for m in miss)
     if not sec4_absent and not landscape_present(text):

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Spec B T1·T2·T3·T4·T19·T20·T31(행위) — check_verbatim_coverage.py.
 # AC10(L1) · AC11(L2 + P21 강등 + N1–N5 순서 + NFC) · AC12(exit 1/3/4 분리 + 예외 계약) · AC14(부분)
-# v0.43.0(U2-T4) — payload §6엔 S1만, audit §6엔 S2 이상. 스크립트는 3인자
-# (payload state audit)를 받고 합집합 위에서 판정한다. rc_of/json_of도 3인자다.
+# R2 — payload §6 이 S1~Sn 원문 전량이고 audit §6 은 S2 이상의 같은 글자 사본이다. 스크립트는
+# 3인자(payload state audit)를 받는다 — L1 은 payload 앵커를, 같은 앵커의 글자 대조는 합집합을
+# 본다. rc_of/json_of도 3인자다.
 # Run: bash plugins/spec-distill/tests/test_check_verbatim_coverage.sh
 set -u -o pipefail
 
@@ -38,26 +39,30 @@ out="$(json_of "$FX/brief-verbatim-summarized.md" "$FX/state-verbatim-ok.md" "$F
 grep -q '"not_contained": \["S2"\]' <<<"$out" \
   && ok "T2: not_contained에 S2" || no "T2: not_contained가 S2를 담지 않음"
 
-# --- T2 mutation: 맨앞·중간·맨끝 3곳 절단이 모두 red (v0.43.0: S2 본문은 audit 쪽) ---
-# S2 본문이 §6 합집합에서 payload가 아니라 audit으로 옮겨갔다. payload(S1만)는 그대로 두고
-# audit 사본만 절단한다 — 그래도 절단이 union 위에서 여전히 red를 내는지가 이 락의 이빨이다.
+# --- T2 mutation: 맨앞·중간·맨끝 3곳 절단이 모두 red (L2) ----------------------
+# S2 본문은 payload §6 과 audit §6 에 같은 글자로 있다(R2). 한쪽만 자르면 「같은 앵커 · 다른 글자」
+# 구조 위반으로 red 가 나 L2 가 재지지 않는다 — 그래서 **양쪽 사본을 같이** 자르고, 원인이
+# L2(not_contained S2)인지까지 본다.
 for cut in head mid tail; do
-  tmpa="$(mktemp)" || exit 1
-  python3 - "$FX/brief-verbatim-ok.audit.md" "$tmpa" "$cut" <<'PY'
-import sys
-src, dst, where = sys.argv[1], sys.argv[2], sys.argv[3]
-t = open(src, encoding="utf-8").read()
+  tmpd_cut="$(mktemp -d)" || exit 1
+  python3 - "$FX/brief-verbatim-ok.md" "$FX/brief-verbatim-ok.audit.md" "$tmpd_cut" "$cut" <<'PY'
+import sys, pathlib
+pay, aud, dst, where = sys.argv[1], sys.argv[2], pathlib.Path(sys.argv[3]), sys.argv[4]
 old = '"3 에이전트 + codex, 계약별 분리"'
 new = {"head": '"에이전트 + codex, 계약별 분리"',
        "mid":  '"3 에이전트 + 계약별 분리"',
        "tail": '"3 에이전트 + codex, 계약별"'}[where]
-assert old in t, "fixture drift: 대상 문장을 찾지 못함"
-open(dst, "w", encoding="utf-8").write(t.replace(old, new))
+for src, name in ((pay, "p.md"), (aud, "p.audit.md")):
+    t = open(src, encoding="utf-8").read()
+    assert old in t, "fixture drift: 대상 문장을 찾지 못함 — " + src
+    (dst / name).write_text(t.replace(old, new), encoding="utf-8")
 PY
-  rc="$(rc_of "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" "$tmpa")"
-  [[ "$rc" == "1" ]] && ok "T2 mutation($cut): 부분 절단(audit 쪽 S2) → exit 1" \
-                     || no "T2 mutation($cut): 절단이 통과했다 (rc=$rc)"
-  rm -f "$tmpa"
+  rc="$(rc_of "$tmpd_cut/p.md" "$FX/state-verbatim-ok.md" "$tmpd_cut/p.audit.md")"
+  out="$(json_of "$tmpd_cut/p.md" "$FX/state-verbatim-ok.md" "$tmpd_cut/p.audit.md")"
+  { [[ "$rc" == "1" ]] && grep -q '"not_contained": \["S2"\]' <<<"$out"; } \
+    && ok "T2 mutation($cut): 부분 절단(양쪽 사본의 S2) → exit 1 · not_contained S2" \
+    || no "T2 mutation($cut): 절단이 L2 로 잡히지 않았다 (rc=$rc $out)"
+  rm -rf "$tmpd_cut"
 done
 
 # --- T31(행위) N1↔N3 순서: 멀티라인 인용이 통과해야 한다 --------------------
@@ -156,7 +161,8 @@ rm -f "$tmpe"
 # 않았는데 호출자는 0을 "위반 없음"으로 매핑했다. 각 케이스는 payload 쪽에 실제 왜곡
 # (S1 본문이 state의 text와 완전히 다름)을 함께 심어, 검사가 *돌기만 했다면* exit 1이
 # 났어야 하는 입력이다 — 그래야 "0이 아니다"가 아니라 "검사가 눈감았다"를 잡는다.
-# audit 인자는 mal_payload가 S1만 선언하므로(S2+ 없음) 무관한 ok.audit.md로 채운다.
+# audit 인자는 §6 항목이 없는 placeholder.audit.md(`(없음)`)로 채운다 — R2 부터 audit 에만 있는
+# 앵커는 payload 쪽 누락(missing_ids)이라, S2 를 가진 audit 을 물리면 그 위반이 이 케이스들의 exit 3 을 가린다.
 mal_payload="$(mktemp)" || exit 1
 cat > "$mal_payload" <<'MALP'
 ---
@@ -180,7 +186,7 @@ for case in missing-text no-id empty-text normalized-empty; do
     empty-text)       printf -- '---\nuser_statements:\n  - id: S1\n    text: ""\n---\n' > "$tmpm" ;;
     normalized-empty) printf -- '---\nuser_statements:\n  - id: S1\n    text: "**"\n---\n' > "$tmpm" ;;
   esac
-  rc="$(rc_of "$mal_payload" "$tmpm" "$FX/brief-verbatim-ok.audit.md")"
+  rc="$(rc_of "$mal_payload" "$tmpm" "$FX/brief-verbatim-placeholder.audit.md")"
   [[ "$rc" == "3" ]] && ok "A2($case): 판독 불가 원장 → exit 3 (검사불가)" \
                      || no "A2($case): exit 3이 아님 (rc=$rc) — 대조되지 않은 statement가 clean으로 집계된다"
   rm -f "$tmpm"
@@ -189,7 +195,7 @@ done
 # 이게 없으면 위 셋은 "무엇을 넣어도 3"이라는 이빨 없는 assert와 구별되지 않는다.
 tmpok="$(mktemp)" || exit 1
 printf -- '---\nuser_statements:\n  - id: S1\n    text: "원문 그대로의 문장"\n---\n' > "$tmpok"
-rc="$(rc_of "$mal_payload" "$tmpok" "$FX/brief-verbatim-ok.audit.md")"
+rc="$(rc_of "$mal_payload" "$tmpok" "$FX/brief-verbatim-placeholder.audit.md")"
 [[ "$rc" == "1" ]] && ok "A2(통제): 정상 원장 + 같은 왜곡 payload → exit 1 (위반)" \
                    || no "A2(통제): 정상 원장이 exit 1을 내지 않는다 (rc=$rc) — 위 exit 3들이 무조건 3인 것과 구별 불가"
 rm -f "$tmpok" "$mal_payload"
@@ -336,7 +342,7 @@ rc="$(rc_of "$FX/brief-verbatim-dup-anchor.md" "$tmpb" "$FX/brief-verbatim-dup-a
 rm -f "$tmpb"
 
 # --- U2-T4: 코퍼스 합집합 --------------------------------------------------
-# S1 은 payload, S2+ 는 audit. 한쪽만 보면 반대쪽 전량이 missing 이 된다.
+# payload §6 이 원문 전량, audit §6 은 S2 이상의 같은 글자 사본(R2).
 python3 "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" \
       "$FX/brief-verbatim-ok.audit.md" >/dev/null 2>&1; rc=$?
 [[ "$rc" == "0" ]] && ok "U2-T4: 합집합 정상 경로 exit 0" || no "U2-T4: 합집합 정상 경로가 exit $rc"
@@ -346,11 +352,32 @@ python3 "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" >/dev/nu
 [[ "$rc" == "64" ]] && ok "U2-T4: audit 인자 없으면 usage(64) — stem 유추 없음" \
   || no "U2-T4: 2인자 호출이 exit $rc — 유추로 audit 을 찾고 있는가"
 
-# 같은 앵커가 양쪽에 있으면 append-only 위반 (구조 위반 exit 1)
-python3 "$SCRIPT" "$FX/brief-verbatim-dup-across.md" "$FX/state-verbatim-ok.md" \
-      "$FX/brief-verbatim-dup-across.audit.md" >/dev/null 2>&1; rc=$?
-[[ "$rc" == "1" ]] && ok "U2-T4: S5 가 payload·audit 양쪽 → exit 1 (합집합 위 append-only)" \
-  || no "U2-T4: 교차 중복 앵커가 exit $rc — 집행이 합집합 위에서 안 돈다"
+# 같은 앵커 · 다른 글자 → 구조 위반 exit 1 (이미 있는 원문 글자를 한쪽에서 고친 모양)
+out="$(python3 "$SCRIPT" "$FX/brief-verbatim-dup-across.md" "$FX/state-verbatim-ok.md" \
+      "$FX/brief-verbatim-dup-across.audit.md" 2>&1)"; rc=$?
+{ [[ "$rc" == "1" ]] && grep -q 'S5 앵커의 글자가' <<<"$out"; } \
+  && ok "U2-T4: S5 가 payload·audit 에 다른 글자 → exit 1 (같은 앵커 글자 대조)" \
+  || no "U2-T4: 같은 앵커 · 다른 글자가 exit $rc — 집행이 합집합 위에서 안 돈다: $out"
+# 같은 앵커 · 같은 글자 → 통과 (payload §6 이 전량이고 audit 은 사본이다)
+grep -q '^- \*\*S2\*\*' "$FX/brief-verbatim-ok.md" && grep -q '^- \*\*S2\*\*' "$FX/brief-verbatim-ok.audit.md" \
+  && ok "U2-T4(전제): 정상 쌍의 S2 가 payload · audit 양쪽에 있다" \
+  || no "U2-T4(전제): 정상 쌍의 S2 가 한쪽에만 있다 — 아래 통과 단언이 공허하다"
+rc="$(rc_of "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-ok.audit.md")"
+[[ "$rc" == "0" ]] && ok "U2-T4: S2 가 payload·audit 에 같은 글자 → exit 0 (겹침 허용)" \
+  || no "U2-T4: 같은 앵커 · 같은 글자가 exit $rc — 사본 겹침을 위반으로 거절한다"
+# payload 쪽 누락 — audit · state 에 있는 앵커가 payload §6 에 없으면 위반
+out="$(json_of "$FX/brief-verbatim-missing-anchor.md" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-ok.audit.md")"
+grep -q '"missing_ids": \["S2"\]' <<<"$out" \
+  && ok "U2-T4: audit §6 에 있는 S2 가 payload §6 에 없으면 missing_ids S2 (payload 쪽 누락)" \
+  || no "U2-T4: payload 쪽 누락이 안 잡힌다: $out"
+# audit 에만 있고 state 는 모르는 앵커도 payload 쪽 누락이다
+tmpst="$(mktemp)" || exit 1
+printf -- '---\nuser_statements:\n- id: S1\n  text: "브리프에 리뷰를 붙이고 싶다"\n---\n' > "$tmpst"
+out="$(json_of "$FX/brief-verbatim-missing-anchor.md" "$tmpst" "$FX/brief-verbatim-ok.audit.md")"
+grep -q '"missing_ids": \["S2"\]' <<<"$out" \
+  && ok "U2-T4: state 가 모르는 audit-only S2 도 missing_ids (L1 의 audit 쪽)" \
+  || no "U2-T4: audit 에만 있는 앵커가 안 잡힌다: $out"
+rm -f "$tmpst"
 
 # 한쪽 절 부재는 조용한 코퍼스 축소가 아니다
 python3 "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" \

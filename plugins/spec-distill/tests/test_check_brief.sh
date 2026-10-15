@@ -715,18 +715,46 @@ for sec in 6; do
     || no "U2-T2: audit §${sec} 제거가 안 잡힌다 — AUDIT_SECTIONS 확장에 이빨이 없다"
 done
 
-# --- U2-T3: N1b 등식 + bijection C 합집합 -----------------------------------
-# N1b 위쪽: payload §6 에 S2 가 있으면 red
-out="$(python3 "$SCRIPT" gate "$FX/interview-brief-payload-s2.md" 2>&1)"; rc=$?
-{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'payload §6'; } \
-  && ok "U2-T3: payload §6 에 S2 → red (N1b 위쪽)" \
-  || no "U2-T3: payload §6 의 S2 가 안 잡힌다"
+# --- U2-T3: N1b 원문 전량(R2) + bijection C 합집합 ----------------------------
+# payload §6 은 S1~Sn 전량이다(R2 · 설계 §3-2). S2 가 payload 에 있어도 전량이면 green.
+python3 "$SCRIPT" gate "$FX/interview-brief-payload-s2.md" >/dev/null 2>&1; rc=$?
+[[ $rc -eq 0 ]] \
+  && ok "U2-T3: payload §6 에 S1·S2 전량 + audit §6 S2 사본 → green (N1b 는 S1 만을 요구하지 않는다)" \
+  || no "U2-T3: payload §6 전량이 rc=$rc — 옛 「S1 만」 등식이 남았는가"
 
-# N1b 아래쪽: payload §6 을 비우면 red — 등식 술어는 스스로 양성이다
+# audit §6 의 앵커가 payload §6 에 없으면 red · 번호가 빠지면 red
+n1b_case() {  # n1b_case <drop_s2|add_s4> <기대 grep> — valid 쌍의 payload §6 을 바꿔 gate 를 돈다
+  cp "$FX/interview-brief-valid.md" "$TMPD/n1b-$1.md"
+  cp "$FX/interview-brief-valid.audit.md" "$TMPD/n1b-$1.audit.md"
+  python3 - "$TMPD/n1b-$1.md" "$1" <<'PY'
+import pathlib, sys
+p, mode = pathlib.Path(sys.argv[1]), sys.argv[2]
+t = p.read_text(encoding="utf-8")
+t = t.replace("audit_file: interview-brief-valid.audit.md", "audit_file: " + p.stem + ".audit.md")
+s2 = '- **S2** ☑ 선택 (캐시 범위):\n  > "인증 뷰는 일단 빼고 갑시다"\n'
+assert t.count(s2) == 1, "픽스처의 payload §6 S2 항목이 하나가 아니다 — 스윕을 확인하라"
+if mode == "drop_s2":
+    t = t.replace(s2, "")
+else:  # add_s4 — S3 를 건너뛴다
+    t = t.replace(s2, s2 + '- **S4** 🗣 R3 답:\n  > "번호를 건너뛴 원문"\n')
+p.write_text(t, encoding="utf-8")
+PY
+  sed -i.bak "s|^payload:.*|payload: n1b-$1.md|" "$TMPD/n1b-$1.audit.md"; rm -f "$TMPD/n1b-$1.audit.md.bak"
+  out="$(python3 "$SCRIPT" gate "$TMPD/n1b-$1.md" 2>&1)"; rc=$?
+  [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q "$2"
+}
+n1b_case drop_s2 'N1b — audit §6 의 S2 가 payload §6 에 없다' \
+  && ok "U2-T3: audit §6 의 S2 가 payload §6 에 없으면 red (N1b — payload 는 원문 전량)" \
+  || no "U2-T3: audit 에만 있는 S2 가 안 잡힌다: $(printf '%s' "$out" | tail -c 300)"
+n1b_case add_s4 'N1b — payload §6 의 원문 번호가 빠졌다: S3' \
+  && ok "U2-T3: payload §6 번호가 S2 → S4 로 건너뛰면 red (N1b — 빠진 S3)" \
+  || no "U2-T3: payload §6 번호 빠짐이 안 잡힌다: $(printf '%s' "$out" | tail -c 300)"
+
+# 빈 §6 은 red — S1 부재가 스스로 양성이다
 out="$(python3 "$SCRIPT" gate "$FX/interview-brief-payload-empty-sec6.md" 2>&1)"; rc=$?
 { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'payload §6'; } \
-  && ok "U2-T3: payload §6 을 비우면 red (N1b 아래쪽)" \
-  || no "U2-T3: 빈 payload §6 이 통과한다 — ⊆ 로 썼는가"
+  && ok "U2-T3: payload §6 을 비우면 red (N1b — S1 부재)" \
+  || no "U2-T3: 빈 payload §6 이 통과한다 — S1 부재 검사가 사라졌는가"
 
 # 항목 0건: #5 가 공허한 유일한 상태. N1b 만이 막는다.
 out="$(python3 "$SCRIPT" gate "$FX/interview-brief-zero-items.md" 2>&1)"; rc=$?
@@ -1106,9 +1134,11 @@ done <<< "$n1c_fallback"
 
 # ── N1b 의 코퍼스는 **출하되는 바이트**다 (v0.46.0) ─────────────────────────
 # 결함: N1b 가 `_body()` 를 경유해 §6 을 찾았다. `_body()` 는 펜스를 벗기므로 payload §6
-# **안**의 펜스에 `- **S5**` 를 적으면 앵커 집합이 `{S1}` 으로 계산돼 등식이 만족되는데,
+# **안**의 펜스에 `- **S5**` 를 적으면 앵커 집합에서 빠져 검사가 만족되는데,
 # 그 줄은 payload 에 그대로 남아 번들에 실려 충실도 리뷰어에게 원문으로 나갔다(실측 rc 0).
 # 축은 「앵커가 어떤 표기 안에 있는가」다 — 펜스 안 / 펜스 밖 둘 다 같은 판정이어야 한다.
+# R2: payload §6 은 원문 전량이라 S5 자체는 합법일 수 있다. 여기 S5 는 audit 에 없고 S3·S4 를
+# 건너뛰므로 번호 빠짐으로 red 다 — 펜스 안 S5 가 코퍼스에 안 보이면 그 red 가 사라진다.
 for variant in fenced plain; do
   cp "$FX/interview-brief-valid.md" "$TMPD/n1b-$variant.md"
   cp "$FX/interview-brief-valid.audit.md" "$TMPD/n1b-$variant.audit.md"
@@ -1131,7 +1161,7 @@ PY
     || no "N1b: payload §6 의 $variant 앵커 S5 가 안 잡힌다 — 코퍼스가 하류보다 적게 본다: $out"
 done
 # 양성 짝 — 같은 펜스에서 **앵커 줄만** 빼면 green. red 의 원인이 「펜스가 있다」가 아니라
-# 「§6 이 S1 아닌 앵커를 준다」임을 가른다.
+# 「§6 이 번호를 건너뛴 앵커 S5 를 준다」임을 가른다.
 cp "$FX/interview-brief-valid.md" "$TMPD/n1b-noanchor.md"
 cp "$FX/interview-brief-valid.audit.md" "$TMPD/n1b-noanchor.audit.md"
 python3 - "$TMPD/n1b-noanchor.md" <<'PY'
@@ -1185,7 +1215,7 @@ def reach(root):
 
 
 FORBIDDEN = ("_body", "_section_text")
-for root in ("payload_url_free", "payload_verbatim_is_s1_only"):
+for root in ("payload_url_free", "payload_verbatim_n1b_failures"):
     if root not in funcs:
         print("MISSING\t" + root)
         continue

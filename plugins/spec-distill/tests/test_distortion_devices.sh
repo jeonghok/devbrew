@@ -81,4 +81,15 @@ hasnt "$BP" '§2 요약이 §6 원문을 어떻게 옮겼는지만 본다' "§2-
 has   "$DP" '사용자가 요청한 동작을 자르는 지적은 범주를 `scope` 로' "AC16b: 설계문서 프로필이 사용자 요청 자르기를 scope 로 낸다"
 assert_eq "$(fm_line "$DP" 'must_catch:')" 'must_catch: [goal_fit, problem_definition, scope, architecture]' "AC16b: 설계문서 must_catch 는 바뀌지 않는다"
 
+# ── Task 5 — payload §6 전량 · 추가만 (AC11) ──
+RB="$SD/skills/reviewing-brief/SKILL.md"; BT="$SD/templates/interview-brief-template.md"; FN="$SD/skills/spec-interview/references/finishing.md"
+hasnt "$RB" '**불변** — 어떤 처분도 닿지 못한다' "AC11(부재): 수정 권한 표에 payload §6 「불변」이 없다"
+has   "$RB" '**추가만** — 이미 있는 원문 글자는 어떤 처분도 고치지 못한다' "AC11: 수정 권한 표에 payload §6 「추가만」이 있다"
+has   "$RB" '같은 write' "AC11: 결정 발화를 payload §6 · audit §6 · state 에 같은 write 로 더한다"
+has   "$BT" '추가만 허용' "AC11: brief 템플릿 §6 이 추가만 허용을 말한다"
+hasnt "$BT" '최초 요청 원문 하나만' "N7(부재): brief 템플릿 §6 의 「S1 하나만」이 없다"
+hasnt "$FN" '§6 은 `S1` 만(N1b)' "N7(부재): finishing 머리 문단의 「§6 은 S1 만」이 없다"
+hasnt "$C"  '§6 은 `S1` 만(N1b)' "N7(부재): 압축 규약의 「§6 은 S1 만」이 없다"
+has   "$C"  'S1~Sn 전부(N1b)' "N7: 압축 규약이 §6 은 S1~Sn 전부라고 말한다"
+
 finish
