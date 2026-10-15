@@ -153,7 +153,7 @@ stale_into() {   # stale_into <path> — 직전 라운드가 정상으로 끝낸
 SIDS="rb01kill rb02noin rb03nopl rb04nobd rb05rc3x rb06nodt rb07keep rb08trap rb09lock
       rb10down rb11ctlx rb12trnc rb13pred rb21kill rb22noin rb23nopl rb24nobd rb25rc3x
       rb26nodt rb27lock rb30plce rb31swep rb32swpe rb40bndl rb41bndf rb42bnde rb43bndk
-      rb50relx rb51relb rb52gtrm rb53gttr rb54gtst rb55gtre rb56bdst rb57nopl rb58apnd"
+      rb50relx rb51relb rb52gtrm rb53gttr rb54gtst rb55gtre rb56bdst rb57nopl rb58apnd rb59nosd"
 bad=""
 for s in $SIDS; do
   DEVBREW_SPEC_DISTILL_SESSION_ID="$s" python3 "$PR/scripts/state_path.py" session-id >/dev/null 2>&1 || bad="$bad $s"
@@ -456,14 +456,17 @@ unknown_payload_case() {   # unknown_payload_case <라벨> <sid> <fence>
   printf 'critic verbatim\n' > "$AB/critic.txt"
   printf 'bundle bytes\n<<<AUDIT-VERBATIM>>>\n' > "$AB/brief-bundle.md"
   printf -- '---\ndocreview: {doc: design}\n---\n' > "$AD/docreview-state.md"
-  stale_into "$AB/docreview-codex.yaml"; stale_into "$AD/docreview-codex.yaml"; chmod 444 "$AD/docreview-codex.yaml"
+  stale_into "$AB/docreview-codex.yaml"; stale_into "$AD/docreview-codex.yaml"
   g="$SCRATCH/$sid.golden"; mkdir -p "$g"; i=0
   for f in "$S/state.local.md" "$S/notes-unrelated.txt" "$AB/docreview-state.md" "$AB/critic.txt" "$AB/brief-bundle.md" "$AB/docreview-codex.yaml" "$AD/docreview-state.md" "$AD/docreview-codex.yaml"; do
     i=$((i+1)); cp "$f" "$g/$i"
   done
+  # design doc 자리를 잠근다(파일 444 · 디렉토리 555) — 지우지도 절단하지도 못하는 자리라, 쓸기 분기가 되살아나면
+  # residue_unclearable 를 내야 한다. 복원은 cleanup 트랩의 `chmod -R u+w` 도 진다.
+  chmod 444 "$AD/docreview-codex.yaml"; chmod 555 "$AD"
   ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t PYTHONDONTWRITEBYTECODE=1 \
       CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" bash "$fence" ) >/dev/null 2>"$SCRATCH/$sid.err"
-  chmod 644 "$AD/docreview-codex.yaml"
+  chmod 755 "$AD"; chmod 644 "$AD/docreview-codex.yaml"
   { [ "$AB" != "$AD" ] && grep -q 'codex 리뷰를 건너뛰었다 (reason: gate_inputs_missing)' "$SCRATCH/$sid.err"; } \
     && ok "S($label) 전제: 두 자리가 다르고 fence 가 문서 미상 경로(gate_inputs_missing)로 돌았다" \
     || no "S($label) 전제 붕괴: 두 자리가 같거나 fence 가 문서 미상 경로로 돌지 않았다"
@@ -605,6 +608,14 @@ rc=0; alone rb57nopl "$BUNDLE_BLK" "$PR" AUDIT="$AUD_B" || rc=$?
 { [ "$rc" != "0" ] && grep -q 'PAYLOAD 가 비었다' "$SCRATCH/rb57nopl.alone.err" && ! grep -q '세션 id 미해석' "$SCRATCH/rb57nopl.alone.err"; } \
   && ok "M5: 빈 payload 로 들어온 번들 블록이 그 사유(Skill 인자 1)를 대고 멈춘다" \
   || no "M5: 빈 payload 의 공시가 사유를 잘못 대거나 멈추지 않는다 (rc=$rc · $(head -c 200 "$SCRATCH/rb57nopl.alone.err" 2>/dev/null))"
+# M5b — payload 는 있고 세션 id 가 없다. 엔진 자리는 세션 없이 도출되므로(`.docreview/`) 진입 게이트의
+# 세션 검사만이 이 라운드를 막는다 — 세션 id 를 대고 멈추고, 번들을 만들지 않는다.
+nosd_at="$(where rb59nosd "$DOC_B")"; mkdir -p "$SCRATCH/rb59nosd"
+rc=0; ( cd "$SCRATCH/rb59nosd" && env -i PATH="$BASE" HOME="$SCRATCH/rb59nosd" PYTHONDONTWRITEBYTECODE=1 \
+    CLAUDE_PLUGIN_ROOT="$PR" PAYLOAD="$DOC_B" AUDIT="$AUD_B" bash "$BUNDLE_BLK" ) >/dev/null 2>"$SCRATCH/rb59nosd.alone.err" || rc=$?
+{ [ -n "$nosd_at" ] && [ "$rc" != "0" ] && grep -q '세션 id 미해석' "$SCRATCH/rb59nosd.alone.err" && [ ! -e "$nosd_at/brief-bundle.md" ]; } \
+  && ok "M5b: payload 가 있어도 세션 id 가 없으면 번들 블록이 세션 id 를 대고 멈추고 번들을 만들지 않는다" \
+  || no "M5b: 세션 id 없이 번들 블록이 진행했거나 사유를 대지 않았다 (rc=$rc · 번들 $(state_of "${nosd_at:-/nonexistent}/brief-bundle.md") · $(head -c 200 "$SCRATCH/rb59nosd.alone.err" 2>/dev/null))"
 
 # M3 — 따로 돈 degrade-append 블록의 record 가 닿는다. 원장이 쓰기 불가면 두 번째 채널 파일에 닿는다.
 # 슬롯(<a>·<b>·<c>·<r>)은 모델이 채우는 자리라 여기서도 채워 돌린다.

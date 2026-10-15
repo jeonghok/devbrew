@@ -525,15 +525,18 @@ unknown_doc_case() {   # unknown_doc_case <라벨> <sid> <펜스>
   mk_state "$DA"
   printf 'critic verbatim\n' > "$DA/critic.txt"
   printf -- '---\ndocreview: {doc: other}\n---\n' > "$DB/docreview-state.md"
-  plant_stale "$DA/docreview-codex.yaml"; plant_stale "$DB/docreview-codex.yaml"; chmod 444 "$DB/docreview-codex.yaml"
+  plant_stale "$DA/docreview-codex.yaml"; plant_stale "$DB/docreview-codex.yaml"
   g="$SCRATCH/$sid.golden"; mkdir -p "$g"; i=0
   for f in "$DA/docreview-state.md" "$DA/critic.txt" "$DA/docreview-codex.yaml" "$DB/docreview-state.md" "$DB/docreview-codex.yaml"; do
     i=$((i+1)); cp "$f" "$g/$i"
   done
+  # 다른 문서의 자리를 잠근다(파일 444 · 디렉토리 555) — 지우지도 절단하지도 못하는 자리라, 쓸기 분기가
+  # 되살아나면 residue_unclearable 를 내야 한다. 복원은 cleanup 트랩의 `chmod -R u+w` 도 진다.
+  chmod 444 "$DB/docreview-codex.yaml"; chmod 555 "$DB"
   ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
       PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
       STUB_WRITE=none STUB_RC=0 bash "$fence" ) >/dev/null 2>"$SCRATCH/$sid.err"
-  chmod 644 "$DB/docreview-codex.yaml"
+  chmod 755 "$DB"; chmod 644 "$DB/docreview-codex.yaml"
   if [ "$DA" != "$DB" ] && grep -q 'codex 리뷰를 건너뛰었다 (reason: gate_inputs_missing)' "$SCRATCH/$sid.err"; then
     ok "S($label) 전제: 두 문서가 다른 자리이고 펜스가 문서 미상 경로(gate_inputs_missing)로 돌았다"
   else

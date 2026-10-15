@@ -211,4 +211,19 @@ grep -q 'FRESH_SEED_RUN' "$y" 2>/dev/null && ok "E: set -euo pipefail 을 물려
 y="$(fire fg25ekil "$W/full-e.sh" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1)"
 case "$(state_of "$y")" in absent|0byte) ok "E: 엄격 모드의 kill switch 경로도 직전 산출물을 중화한다" ;; *) no "E: 엄격 모드 kill switch 경로가 잔존물을 남겼다" ;; esac
 grep -q 'unbound variable' "$W"/fg2*.err && no "E: 어느 실행이 미할당 변수로 죽었다" || ok "E: 미할당 변수로 죽은 실행 없음"
+
+# ── U — seed 이름 미상 — 다른 문서의 산출물을 건드리지 않는다 ─────────────────────
+# `## 상태` 가 sid 와 루트는 풀었는데 seed 이름을 못 세운 라운드(CODEX_YAML 빈 값)를 흉내 낸다 — 펜스에
+# sid · ROOT 만 넘긴다. 원장은 문서 단위라 세션을 넘어 공유되고(`.docreview/`), 다른 seed 의 codex 산출물은
+# 다른 리뷰의 것이다 — 지우지 않는다. 그 자리는 잠근다(파일 444 · 디렉토리 555): 쓸기 분기가 되살아나면
+# 지우지 못해 「지우지도 비우지도 못했다」 공시를 낸다.
+home fg30unkn; pl="$(place fg30unkn probe-other-interview)"; mkdir -p "$pl"; stale "$pl/docreview-codex.yaml"
+cp "$pl/docreview-codex.yaml" "$W/fg30unkn.golden"; chmod 444 "$pl/docreview-codex.yaml"; chmod 555 "$pl"
+run_in fg30unkn "$W/gate.sh" sid=fg30unkn ROOT="$W/fg30unkn/.claude/spec-distill" ARGV_LOG="$W/fg30unkn.argv" WRITE=fresh RC=0
+chmod 755 "$pl"; chmod 644 "$pl/docreview-codex.yaml"
+{ cmp -s "$W/fg30unkn.golden" "$pl/docreview-codex.yaml" && [ ! -e "$W/fg30unkn.argv" ] \
+  && grep -q 'codex 리뷰를 건너뛰었다 (reason: gate_inputs_missing)' "$W/fg30unkn.err" \
+  && ! grep -q '지우지도 비우지도 못했다' "$W/fg30unkn.err"; } \
+  && ok "U: seed 이름을 모르면 다른 seed 의 codex 산출물이 바이트 동일로 남고 codex 축을 건너뛴다 (gate_inputs_missing)" \
+  || no "U: seed 이름 미상 라운드가 다른 seed 의 산출물을 건드렸거나($(state_of "$pl/docreview-codex.yaml")) 러너를 불렀거나 공시가 다르다"
 finish

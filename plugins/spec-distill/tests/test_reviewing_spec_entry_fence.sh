@@ -312,6 +312,13 @@ else
   no "상태 디렉토리: 두 문서가 같은 자리를 나눠 쓰거나 기대값과 다르다 (${got_sa} / ${got_sb})"
 fi
 got_sa2="$(run_sdir DEVBREW_SPEC_DISTILL_SESSION_ID=sdirtest02 spec_path="$DOC_SA" | tail -n 1)"
+# 문서는 알고 session id 를 못 풀었다 — 엔진 자리는 세션 없이 도출되므로(`.docreview/`) 펜스의 세션 분기만이
+# STATE_DIR 을 비운다. 소리를 내고 비워야 한다(문서 미상 셀은 doc_empty 가 먼저 비우므로 이 분기를 재지 못한다).
+out_nosid="$(run_sdir spec_path="$DOC_SA")"
+assert_contains "$out_nosid" "[spec-distill] 세션 상태 디렉토리를 특정할 수 없다" \
+  "상태 디렉토리: 문서는 있고 session id 미해석 — 소리를 낸다"
+assert_eq "$(printf '%s\n' "$out_nosid" | tail -n 1)" "STATE_DIR=[]" \
+  "상태 디렉토리: 문서는 있고 session id 미해석 — STATE_DIR 을 비운다 (세션 없이 원장을 열지 않는다)"
 if [ -n "$want_sa" ] && [ "$got_sa2" = "$got_sa" ] && [ "$got_sa2" = "STATE_DIR=[$want_sa]" ]; then
   ok "상태 디렉토리: 같은 문서는 세션이 달라도 같은 STATE_DIR 을 받는다 (원장은 문서 단위)"
 else
