@@ -87,8 +87,8 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 - 경로 예약: plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/hooks/session-end-cleanup.py, plugins/spec-distill/scripts/spec-distill-gc.py
 
 ### R3 — 번호 인계 · 대조 · 깊이
-- 의도: brief 의 모든 번호가 spec 까지 가고 빠지거나 얕으면 경고되게 한다
-- 범위: 한다 넘김 글의 덮어쓰기 문장 제거 · /compact 보존에 조사 · 위험 · spec 리뷰에 묶음을 정해진 입력으로 넘기기 · 번호마다 깊이 검사 / 안 한다 묶음 생성(R4) · 표시(R6)
+- 의도: brief 의 모든 번호가 spec · 계획 · 구현까지 가고 빠지거나 얕거나 미뤄지면 경고되게 한다
+- 범위: 한다 넘김 글의 덮어쓰기 문장 제거 · /compact 보존에 조사 · 위험 · spec 리뷰에 묶음을 정해진 입력으로 넘기기 · 번호마다 깊이 검사 · 설계문서 항목의 계획 · 구현 대조(미룬 항목은 받는 곳이 생길 때까지 경고) / 안 한다 묶음 생성(R4) · 표시(R6)
 - 의존: R0, P1
 - 브랜치: feature/numbered-handoff-coverage
 - 묶음: R3.md
@@ -100,7 +100,7 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 - 의존: R0
 - 브랜치: feature/interview-pm-decompose
 - 묶음: R4.md
-- 경로 예약: 없음
+- 경로 예약: plugins/spec-distill/scripts/roadmap_write.py, plugins/spec-distill/scripts/roadmap_render.py, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/templates/roadmap-template.md
 
 ### R6 — 컨트롤 플레인
 - 의도: 에픽 지도 · 단계 · 빠진 것 · 드리프트 알림을 Claude Code 안에서 보이게 한다
@@ -120,7 +120,7 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 
 ### R5 — 지휘자
 - 의도: 한 세션이 로드맵을 따라 에픽을 끝까지 지휘하되 사용자의 결정권과 내용 검토가 남게 한다
-- 범위: 한다 외부 정지는 사용자에게 · 실행 기록 회수 · 재개 · 부분 계속 · 머지 원칙 · qg 의도 회귀 · 에픽 사이 이음매 · base 이동 · 구현 이후 단계 / 안 한다 상태줄 · 패널(R6)
+- 범위: 한다 사람 몫은 지금 답할 수 있는지 판단해 배경 설명과 함께 몰아 받고 나머지는 멈추지 않고 병렬로 끝까지 · 외부 정지는 사용자에게(미리 받은 답이 있으면 그 답으로) · 머지 전 에픽 사이 통합 리뷰 · 모든 에픽 머지 뒤 끝에서 끝 확인 · 실행 기록 회수 · 재개 · 부분 계속 · 머지 원칙 · qg 의도 회귀 · 에픽 사이 이음매 · base 이동 · 구현 이후 단계 / 안 한다 상태줄 · 패널(R6)
 - 의존: R1, R2, R7, R3, R4, R6, P2, P3
 - 브랜치: feature/epic-conductor
 - 묶음: R5.md
@@ -163,13 +163,16 @@ R5 전까지 지휘 세션이 따르는 절차다. 장치가 아니라 절차다
 - P3 · 결정 · 2026-10-13 · 「quality-pipeline 을 진입으로 (권장)」 · 「따로 진입 artifact-critique」
   - 앞 답은 코드 검사(`/qg`)의 진입이다 — `commands/qg.md` 를 지우고 `quality-pipeline` skill 을 진입으로 세운다(완전명 `/quality-gates:quality-pipeline`). 뒤 답은 문서 비평(`/qg critique`)의 진입이다 — `critiquing-artifacts` 를 따로 진입 skill `artifact-critique` 로 바꾼다(완전명 `/quality-gates:artifact-critique`). 적용은 R2a 가 한다.
 - P4 · 결정 · 2026-10-13 · 「끝난 기록으로 둠 (권장)」
-  - 옛 훅 쓰기 경로 계획(`docs/superpowers/plans/2026-08-23-hook-write-path-bypass.md`)은 고아가 아니다 — 구현 브랜치가 #134 로 머지됐고 main 밖 커밋은 0이다. 전제 파일이 없는 것은 계획 자신이 지웠거나(쓰기 감시 훅 셋 · qg 사전 검사 · docs-lint) 뒤 개편이 대체했기 때문이다(검사를 넘겨받은 Stop 훅 `review-dispatch.py` 는 e7c6bbb9 가 지웠다). 계획 파일과 브랜치는 기록으로 둔다.
+  - 옛 훅 쓰기 경로 계획(`docs/superpowers/plans/2026-08-23-hook-write-path-bypass.md`)은 고아가 아니다 — 구현 브랜치가 #134 로 머지됐고 main 밖 커밋은 0이다. 전제 파일이 없는 것은 계획 자신이 지웠거나(쓰기 감시 훅 셋 · qg 사전 검사 · docs-lint) 뒤 개편이 대체했기 때문이다(검사를 넘겨받은 Stop 훅은 e7c6bbb9 가 지웠다). 계획 파일과 브랜치는 기록으로 둔다.
 
 ## 재분해 이력
 
 - 2026-10-11 · 처음 로드맵 · 승인 원문 S47 「이대로 승인 (권장) — 고친 분해안(선행 3: @ 브랜치 머지 · qg ⑤·PR3·진입 이름 · hook 브랜치 고아 확인 + R0~R9, 순서 @ 브랜치 → R0 → R1‖R2‖R7‖R3‖R4‖R6 → R2a·R5 → R8 → R9) 승인」 · 선행 3 을 P1~P4 블록으로 나눴다(R0 설계 §1).
 - 2026-10-11 · 승인 뒤 수정(R0 설계 B11~B13) · R6 묶음에 D24 · D40 을 더했다 「더한다 (권장)」 · 경로 예약 겹침은 병렬을 막지 않는 정보로 낮추고 겹침 때문에만 있던 R3 → R2 의존을 뺐다 「병렬 유지, 정보로만 (권장)」 · 단위 이름을 「에픽」으로 정했다 「에픽 (권장)」.
 - 2026-10-13 · P3 결정 뒤 수정 · qg 진입 이름 적용을 R2a 범위에 더했다 「R2a 범위에 더함 (권장)」.
+- 2026-10-15 · R7 착수 중 수정 · 사람 몫을 판단해 몰아 받고 나머지는 쭉 병렬로 가는 지휘를 R5 범위에 더했다 「사람이 있을때 사람이 진행해야 하는걸 몰아 하는거지」 · 「그게 되게끔 구현도 해야한단 말이야」 · 「근데 이 몰아서 물어보는거는 억지로 하는게 아니라 되는거까지 하는거야 판단하는 과정이 있어야겠지」 · 「그래 이런 느낌은 맞는데 설명과 배경 이해는 더 기켜줘야 겠어」 · 「너무 질문만 몰아치는 느낌이네」 · 「기존 brainstorming방식을 해치진 말아줘」 · 「R5 지휘자 범위에 더함 (권장)」 · superpowers 가 묻는 세 자리(계획 검토 · 실행 방식 · 머지 메뉴)는 미리 답해 둔다(S36 재결정) 「미리 답해 둠 (권장)」.
+- 2026-10-15 · R3 설계 중 수정 · 번호 인계를 설계문서에서 계획 · 구현까지 넓혔다 「구현을 다 안하는거도 문제이고」 · 「R3 를 넓힘 (권장)」.
+- 2026-10-15 · 병렬 구현 중 수정 · 머지 전 에픽 사이 통합 리뷰와 모든 에픽 머지 뒤 끝에서 끝 확인을 R5 범위에 더했다 「궁금한거 하나 지휘자가 각각 구현도 다 보고 조율 하는거 맞지?」 · 「더함 + 끝에 끝에서 끝 확인 (권장)」 · R4 경로 예약에 구현이 만든 새 파일 넷을 적었다(R0 계획: 예약 없던 에픽은 설계가 정하면 작은 로드맵 PR 로 더함).
 
 ## 위험 번호표
 

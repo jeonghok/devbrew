@@ -1,6 +1,6 @@
 ---
 detectors: 1
-ground_truth: "인터뷰 브리프 §2 확정 항목 — frontmatter `source_interview` 가 가리키는 파일"
+ground_truth: "설계문서 frontmatter `source_interview` 가 가리키는 파일 — `type` 이 `epic-bundle` 이면 묶음 모드(번호 항목 · 이 에픽의 몫 · 사용자 원문), `interview-brief` 면 brief 모드(§2 확정 항목과 §3 열린 질문 · §4 조사 · §5 위험), `source_interview` 가 없거나 그 밖의 종류면 brief §2 확정 항목"
 allowed_dispositions: [decide, ask, fix, defer, drop]
 fix_anchors: ["*"]
 immutable: []
@@ -24,13 +24,13 @@ web: false
 
 ## 층 1 — 큰 그림 정합 (먼저 검토하고 `docreview-layer1` 블록으로 낸다)
 
-정답의 출처는 인터뷰 브리프 §2 의 확정 항목이다. 문서가 그 확정과 **하나의 그림**으로 정합한지 본다.
+정답의 출처는 설계문서 frontmatter `source_interview` 가 가리키는 파일이고, 그 파일의 `type` 이 모드를 정한다 — `epic-bundle` 이면 묶음(번호 항목 · 이 에픽의 몫 · 사용자 원문), `interview-brief` 면 brief 의 §2 확정 항목과 §3 열린 질문 · §4 조사 · §5 위험, 없거나 그 밖의 종류면 brief §2 확정 항목이다. 문서가 그 정답 출처와 **하나의 그림**으로 정합한지 본다.
 
-**층 1 판정 관계** — 문서가 `ground_truth`(브리프 §2 확정 항목)와 **하나의 그림으로 정합한가**. 어긋남은 문서 쪽의 결함이다. 단 `overdesign` 은 정합이 아니라 **과함**을 잰다 — 기준이 `ground_truth`(§2 확정 항목)가 아니라 **같은 브리프의 §1 Goal** 이라, 이 축만 §2 자체를 의심할 수 있다.
+**층 1 판정 관계** — 문서가 `ground_truth`(위 모드가 정한 정답 출처)와 **하나의 그림으로 정합한가**. 어긋남은 문서 쪽의 결함이다. 단 `overdesign` 은 정합이 아니라 **과함**을 잰다 — 기준이 정답 출처의 확정이 아니라 **같은 정답 출처 파일의 §1 Goal**(묶음 모드면 묶음 `## 1. Goal · Non-goal` — 이 에픽의 Goal · 공통 목표)이라, 이 축만 정답 출처의 확정 자체를 의심할 수 있다.
 
 - `goal_fit` — 문서의 Goals 가 브리프의 goal 과 같은 것을 겨누는가. 다른 문제를 잘 풀고 있지 않은가.
 - `problem_definition` — Context 의 근본 원인 서술이 브리프의 문제 정의와 맞는가.
-- `scope` — Goals·Non-goals 가 브리프의 범위와 같은가. 조용히 넓어지거나 좁아진 곳.
+- `scope` — Goals·Non-goals 가 브리프의 범위와 같은가. 조용히 넓어지거나 좁아진 곳. 번호 대조 표의 반영 칸이 가리킨 자리가 그 번호에 실제로 답하는가도 본다 — 얕으면 고칠 자리를 적어 낸다.
 - `architecture` — 핵심 구조가 확정 제약(C·D 항목)을 어기지 않는가.
 - `component_relations` — 컴포넌트 사이 의존 방향이 한 그림으로 닫히는가(순환·고아).
 - `data_flow` — 한 사이클의 데이터가 끊김 없이 흐르는가(생산자 없는 소비자, 소비자 없는 산출물).

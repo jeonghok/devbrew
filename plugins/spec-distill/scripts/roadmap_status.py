@@ -8,7 +8,7 @@
   --json 이면 JSON 하나를 낸다.
 
 종료 코드: 0 이상 없음 · 1 경고 있음 · 2 사용법 오류 · 3 검사 불가(로드맵 없음 · 형식 깨짐 ·
-블록 하나라도 알 수 없음 · 번호 대조 검사 불가 · 번호 전체 집합을 못 셈). 3 > 1 > 0.
+블록 하나라도 알 수 없음 · 번호 대조 검사 불가 · 미룸 표 깨짐 · 번호 전체 집합을 못 셈). 3 > 1 > 0.
 정보(경로 예약 겹침 · 다른 에픽이 예약한 파일의 편집)는 종료 코드를 바꾸지 않는다 — 충돌은 머지 때 푼다.
 
 읽기만 한다 — 파일을 쓰지 않고 네트워크에 나가지 않는다. git 은 `GIT_ALLOWED` 의 하위 명령만
@@ -27,9 +27,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import section6  # noqa: E402
-from check_bundle_coverage import (  # noqa: E402
-    FormatError, bundle_ids, check, frontmatter, id_sort_key, parse_ids, section_body, unquote)
+from check_bundle_coverage import check, deferred_rows, receiver_ok  # noqa: E402
+from roadmap_model import (  # noqa: E402,F401 — 테스트가 rs.parse_roadmap · rs.brief_universe 로 부른다
+    FormatError, brief_universe, collect_assigned, frontmatter, id_sort_key, parse_ids,
+    parse_roadmap, section_body, split_list, unquote)
 
 MAIN_REF = "refs/remotes/origin/main"
 GIT_ALLOWED = frozenset({"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"})
@@ -38,35 +39,14 @@ NOTICE = ("머지됨 자동 판정은 merge commit 방식에서만 된다 — �
           "로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적는다. 경로 예약 겹침과 다른 에픽이 "
           "예약한 파일의 편집은 경고가 아니라 정보다 — 에픽은 병렬로 가고 충돌은 머지 때 푼다(나중 PR 이 main 을 "
           "merge 하고 스위트를 다시 돌린다).")
-FIELDS = ("의도", "범위", "의존", "브랜치", "묶음", "경로 예약", "spec", "발화", "항목", "완료")
-REQUIRED = {
-    "bundle": ("의도", "범위", "의존", "브랜치", "묶음", "경로 예약"),
-    "branch": ("의도", "범위", "의존", "브랜치", "묶음", "경로 예약", "spec", "발화", "항목"),
-    "decision": ("의도", "범위", "의존", "완료", "묶음", "경로 예약", "발화", "항목"),
-}
-FORBIDDEN = {"bundle": ("spec", "발화", "항목", "완료"), "branch": ("완료",),
-             "decision": ("브랜치", "spec")}
-RISK_PREFIXES = ("- 위험 — 숨은 가정", "- 위험 — 실패 양식", "- 위험 — 리뷰 참고")
 # 경로 예약 겹침 · 위반에서 빼는 공유 파일 — 버전은 머지 직전에 정한다(N6).
 SHARED_BASENAMES = ("plugin.json", "CHANGELOG.md", "README.md")
 TASK_STATUS = {"대기": "pending", "준비": "pending", "설계 중": "in_progress",
                "계획": "in_progress", "머지됨": "completed", "끝남": "completed"}
 DONE = ("머지됨", "끝남")
 
-BLOCK_HEAD_RE = re.compile(r"### ([A-Z][0-9]+[a-z]?) — (\S.*)")
-BLOCK_ID_RE = re.compile(r"[A-Z][0-9]+[a-z]?")
-BUNDLE_NAME_RE = re.compile(r"[A-Za-z0-9_-]+\.md")
-RISK_ROW_RE = re.compile(r"- (K\d+) — (\S.*)")
 MERGE_MSG_RE = re.compile(r"Merge pull request #\d+ from [^/\s]+/(\S+)")
-DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
-ID_ITEM_RE = re.compile(r"\s+- id: ([CD]\d+)\s*")
-OQ_LINE_RE = re.compile(r"- (OQ\d+) ")
-RC_RE = re.compile(r"\bRC\d+\b")
-ST_RE = re.compile(r"\bST\d+\b")
-KEY_RE = re.compile(r"«[^«»]+»")
-S_ANCHOR_RE = re.compile(r"\*\*(S\d+)\*\*")
 BACKTICK_RE = re.compile(r"`([^`]+)`")
-LIST_SEP_RE = re.compile(r"\s*,\s*|\s+·\s+")
 
 
 # ── git (읽기 전용) ──────────────────────────────────────────────────────────
@@ -186,172 +166,6 @@ class Source:
         if self.rev:
             return self.git.exists(self.rev, path)
         return Path(self.root, path).exists()
-
-
-def split_list(value: str) -> list:
-    value = value.strip()
-    if value == "없음":
-        return []
-    return [p.strip().strip("`") for p in LIST_SEP_RE.split(value) if p.strip()]
-
-
-def parse_roadmap(text: str):
-    """(meta, blocks, records, risk_rows, errors). blocks 는 등장 순서의 dict 목록."""
-    errors = []
-    meta = frontmatter(text)
-    if meta.get("type") != "roadmap":
-        errors.append("frontmatter type 이 roadmap 이 아니다")
-    if not meta.get("source_brief"):
-        errors.append("frontmatter source_brief 가 없다")
-    try:
-        body = section_body(text, "## 에픽")
-        rec_body = section_body(text, "## 결정 기록") or ""
-        risk_body = section_body(text, "## 위험 번호표") or ""
-    except FormatError as exc:
-        return meta, [], [], [], errors + [str(exc)]
-    if body is None:
-        return meta, [], [], [], errors + ["`## 에픽` 절이 없다"]
-
-    blocks, cur = [], None
-    for line in body.splitlines():
-        if line.startswith("### "):
-            m = BLOCK_HEAD_RE.fullmatch(line.rstrip())
-            if not m:
-                errors.append("블록 머리가 `### <번호> — <이름>` 이 아니다: %r" % line)
-                cur = None
-                continue
-            cur = {"id": m.group(1), "title": m.group(2), "fields": {}}
-            blocks.append(cur)
-        elif cur is not None and line.startswith("- "):
-            key, sep, value = line[2:].partition(": ")
-            if not sep or key not in FIELDS:
-                errors.append("%s: 모르는 머리말 줄 %r" % (cur["id"], line))
-            elif key in cur["fields"]:
-                errors.append("%s: 머리말 %s 가 두 번 있다" % (cur["id"], key))
-            else:
-                cur["fields"][key] = value.strip()
-
-    ids = [b["id"] for b in blocks]
-    for bid in sorted({i for i in ids if ids.count(i) > 1}):
-        errors.append("블록 번호 %s 가 두 번 있다" % bid)
-    known = set(ids)
-    for b in blocks:
-        errors.extend(_validate_block(b, known))
-    errors.extend(_cycles(blocks))
-
-    records = []
-    for line in rec_body.splitlines():
-        if not line.startswith("- "):
-            continue
-        parts = line[2:].split(" · ", 3)
-        if (len(parts) != 4 or parts[0] not in known or parts[1] not in ("결정", "머지")
-                or not DATE_RE.fullmatch(parts[2])
-                or not (parts[3].startswith("「") and parts[3].rstrip().endswith("」"))):
-            errors.append("결정 기록 줄이 `- <블록> · <결정|머지> · <날짜> · 「원문」` 이 아니다: %r"
-                          % line)
-            continue
-        records.append({"block": parts[0], "kind": parts[1], "date": parts[2],
-                        "quote": parts[3].rstrip()})
-    kinds = {b["id"]: b.get("kind") for b in blocks}
-    for r in records:
-        if (r["kind"] == "결정") != (kinds.get(r["block"]) == "decision"):
-            errors.append("결정 기록: %s 는 %s 블록이라 「%s」 기록을 받지 않는다"
-                          % (r["block"], kinds.get(r["block"]), r["kind"]))
-
-    risk_rows = []
-    for line in risk_body.splitlines():
-        if line.startswith("- K"):
-            m = RISK_ROW_RE.fullmatch(line.rstrip())
-            if not m:
-                errors.append("위험 번호표 줄이 `- K<n> — <원문>` 이 아니다: %r" % line)
-            else:
-                risk_rows.append((m.group(1), m.group(2)))
-    return meta, blocks, records, risk_rows, errors
-
-
-def _validate_block(b: dict, known: set) -> list:
-    f, bid, errs = b["fields"], b["id"], []
-    kind = "decision" if "완료" in f else ("branch" if f.get("묶음") == "없음" else "bundle")
-    b["kind"] = kind
-    for key in REQUIRED[kind]:
-        if key not in f:
-            errs.append("%s: 머리말 %s 가 없다" % (bid, key))
-    for key in FORBIDDEN[kind]:
-        if key in f:
-            errs.append("%s: %s 블록에는 머리말 %s 를 두지 않는다" % (bid, kind, key))
-    if kind == "decision":
-        if f.get("완료") != "결정 기록":
-            errs.append("%s: 완료 값은 「결정 기록」이어야 한다" % bid)
-        if f.get("묶음") != "없음":
-            errs.append("%s: 확인 · 결정 블록의 묶음은 「없음」이어야 한다" % bid)
-    if kind == "bundle" and "묶음" in f and not BUNDLE_NAME_RE.fullmatch(f["묶음"]):
-        errs.append("%s: 묶음 값은 로드맵 옆 파일 이름(R<n>.md)이어야 한다" % bid)
-    deps = split_list(f.get("의존", "없음"))
-    b["deps"] = deps
-    for d in deps:
-        if not BLOCK_ID_RE.fullmatch(d) or d not in known or d == bid:
-            errs.append("%s: 의존 %r 가 로드맵의 다른 블록이 아니다" % (bid, d))
-    b["reserved"] = split_list(f.get("경로 예약", "없음"))
-    b["assigned"] = []
-    for key, want_s in (("발화", True), ("항목", False)):
-        if key in f:
-            try:
-                toks = parse_ids(f[key])
-            except FormatError as exc:
-                errs.append("%s: %s — %s" % (bid, key, exc))
-                continue
-            wrong = [t for t in toks if (t.startswith("S") and t[1:].isdigit()) != want_s]
-            if wrong:
-                errs.append("%s: %s 줄에 맞지 않는 번호 %s" % (bid, key, " · ".join(wrong)))
-            b["assigned"].extend(toks)
-    return errs
-
-
-def _cycles(blocks: list) -> list:
-    deps = {b["id"]: b.get("deps", []) for b in blocks}
-    state, errs = {}, []
-
-    def visit(n, stack):
-        if state.get(n) == 1:
-            errs.append("의존이 돈다: %s" % " → ".join(stack + [n]))
-            return
-        if state.get(n) == 2 or n not in deps:
-            return
-        state[n] = 1
-        for d in deps[n]:
-            visit(d, stack + [n])
-        state[n] = 2
-
-    for n in deps:
-        visit(n, [])
-    return errs
-
-
-def brief_universe(brief: str, audit: str):
-    """(non_s, s_ids, k_expected). 셀 수 없으면 FormatError."""
-    fm_lines = brief.split("\n---", 1)[0].splitlines()
-    non_s = {m.group(1) for line in fm_lines for m in [ID_ITEM_RE.fullmatch(line)] if m}
-    s0 = section_body(brief, "## 0.")
-    s4 = section_body(brief, "## 4.")
-    s5 = section_body(brief, "## 5.")
-    if s0 is None or s4 is None or s5 is None:
-        raise FormatError("brief 에 §0 · §4 · §5 중 없는 절이 있다")
-    non_s |= {m.group(1) for line in s0.splitlines() for m in [OQ_LINE_RE.match(line)] if m}
-    non_s |= set(RC_RE.findall(s5)) | set(ST_RE.findall(s5)) | set(KEY_RE.findall(s4))
-    k_expected = []
-    for prefix in RISK_PREFIXES:
-        k_expected += [line[2:] for line in s5.splitlines() if line.startswith(prefix)]
-    k_expected = [("K%d" % (i + 1), text) for i, text in enumerate(k_expected)]
-    non_s |= {k for k, _ in k_expected}
-    s_ids = set()
-    for label, doc in (("brief", brief), ("audit", audit)):
-        b6 = section6.body(doc)
-        if b6 is None:
-            raise FormatError("%s §6 을 하나로 읽을 수 없다" % label)
-        s_ids |= set(S_ANCHOR_RE.findall(b6))
-    if not non_s or not s_ids:
-        raise FormatError("brief 번호 집합이 비었다")
-    return non_s, s_ids, k_expected
 
 
 # ── 단계 · 경고 ──────────────────────────────────────────────────────────────
@@ -484,14 +298,15 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
             b["warnings"].append("묶음 없음: %s" % bundle_path)
         if len(b["specs"]) > 1:
             b["warnings"].append("spec 여럿: %s" % " · ".join(b["specs"]))
-        if b["kind"] == "bundle" and bundles.get(bid) is not None:
-            tree = main if b["stage"] == "머지됨" else tip
-            for spec in b["specs"]:
-                spec_text = git.blob(tree, spec)
-                if spec_text is None:
-                    b["warnings"].append("번호 대조 검사 불가(spec 을 읽지 못했다): %s" % spec)
-                    cov_unknown.append("%s spec 을 읽지 못했다" % bid)
-                    continue
+        tree = main if b["stage"] == "머지됨" else tip
+        known_ids = set(by_id)
+        for spec in b["specs"]:
+            spec_text = git.blob(tree, spec)
+            if spec_text is None:
+                b["warnings"].append("번호 대조 검사 불가(spec 을 읽지 못했다): %s" % spec)
+                cov_unknown.append("%s spec 을 읽지 못했다" % bid)
+                continue
+            if b["kind"] == "bundle" and bundles.get(bid) is not None:
                 result = check(bundles[bid], spec_text)
                 if result["status"] == 1:
                     b["warnings"].append("생략: %s 이 번호 %d개를 빠뜨렸다 — %s" % (
@@ -499,6 +314,16 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 elif result["status"] == 3:
                     b["warnings"].append("번호 대조 검사 불가(%s): %s" % (result["reason"], spec))
                     cov_unknown.append("%s %s" % (bid, result["reason"]))
+            # 미룸(R3 §3-3) — 받는 곳이 `#<숫자>` 나 로드맵의 에픽이 아닌 행. 머지 뒤에도 남는다.
+            try:
+                rows = deferred_rows(spec_text)
+            except FormatError as exc:
+                b["warnings"].append("미룸 셀 수 없음(%s): %s" % (exc, spec))
+                cov_unknown.append("%s 미룸 표 — %s" % (bid, exc))
+                continue
+            bad = [item for item, _why, recv in rows if not receiver_ok(recv, known_ids)]
+            if bad:
+                b["warnings"].append("받는 곳 없는 미룸 %d개: %s — %s" % (len(bad), spec, " · ".join(bad)))
 
     for b in blocks:
         if b["tip"] and b["stage"] in ("설계 중", "계획"):
@@ -565,30 +390,8 @@ def build(git: Git, args) -> dict:
         return report
 
     roadmap_dir = rel.rsplit("/", 1)[0] if "/" in rel else "."
-    bundles, union = {}, set()
-    for b in blocks:
-        if b["kind"] != "bundle":
-            union.update(b["assigned"])
-            continue
-        bpath = roadmap_dir + "/" + b["fields"]["묶음"]
-        btext = src.read(bpath)
-        bundles[b["id"]] = btext
-        if btext is None:
-            if src.exists(bpath):
-                report["format_errors"].append("%s 묶음을 읽지 못했다: %s" % (b["id"], bpath))
-            continue
-        fm = frontmatter(btext)
-        bad = [k for k, want in (("type", "epic-bundle"), ("epic", b["id"]),
-                                 ("roadmap", rel), ("source_brief", meta.get("source_brief")))
-               if unquote(fm.get(k, "")) != want]
-        try:
-            if bad:
-                raise FormatError("frontmatter 가 맞지 않는다: %s" % " · ".join(bad))
-            b["assigned"] = bundle_ids(btext)
-        except FormatError as exc:
-            report["format_errors"].append("%s 묶음 — %s" % (b["id"], exc))
-            continue
-        union.update(b["assigned"])
+    bundles, union, errs = collect_assigned(blocks, meta, rel, src.read, src.exists)
+    report["format_errors"].extend(errs)
     if report["format_errors"]:
         return report
 

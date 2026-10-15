@@ -25,6 +25,10 @@ if [ "${1:-}" = "--emit-scanned" ]; then
 fi
 . "$ROOT/shared/tests/assert.sh"
 
+TMP="$(mktemp -d)" || exit 1
+[ -n "$TMP" ] && [ -d "$TMP" ] || exit 1
+trap 'rm -rf "$TMP"' EXIT
+
 RETURN_TAIL='리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).'
 
 nonempty() {   # nonempty <라벨> <창> — 빈 창은 통과가 아니라 앵커 파손
@@ -46,14 +50,16 @@ print("앞 없음" if i < 0 else "뒤 없음" if j < 0 else "ok" if i < j else "
 NSL_MARK='**다음 세션 줄 — ①/② 공통**'
 nsl() { awk -v m="$NSL_MARK" '$0==m{f=1;next} f&&NF{print;exit}' "$1" | sed -e 's/^> `//' -e 's/`$//'; }
 # 줄 앞 `@<…>` 토큰들을 다루는 셋 — 목록 원소(토큰)가 늘어도 같은 판정이 나온다(설계 G3).
-#   lead_only <줄>        꺾쇠 자리표가 줄 앞 토큰에만 있으면 ok
+#   lead_only <줄>        줄 안의 꺾쇠 자리표가 줄 앞 토큰의 이름뿐이면 ok
 #   split_line <줄> first 첫 토큰(주 산출물)
 #   split_line <줄> rest  토큰들을 뗀 나머지
-lead_only() { LINE="$1" python3 -c '
+lead_only() { LINE="$1" python3 -I -c '
 import os, re
 l = os.environ["LINE"]
 m = re.match(r"((?:@<[^<>]+> )+)", l)
-print("ok" if m and not re.search(r"<[^<>]+>", l[m.end():]) else "no")'; }
+names = set(re.findall(r"@<([^<>]+)>", m.group(1))) if m else set()
+rest = re.findall(r"<([^<>]+)>", l[m.end():]) if m else ["(앞 토큰 없음)"]
+print("ok" if m and all(x in names for x in rest) else "no")'; }
 split_line() { LINE="$1" WHAT="$2" python3 -c '
 import os, re
 l = os.environ["LINE"]
@@ -75,9 +81,23 @@ if nonempty "다음 세션 줄" "$ONE"; then
   esac
   order "다음 세션 줄" "$ONE" "Skill superpowers:brainstorming" "spec-distill:spec-review"
   order "다음 세션 줄" "$ONE" "spec-distill:spec-review" "writing-plans"
-  assert_contains "$ONE" "보다 이 순서가 우선한다" "다음 세션 줄: brainstorming 의 「다음은 writing-plans 뿐」보다 우선한다고 적는다"
+  assert_not_contains "$ONE" "보다 이 순서가 우선한다" "AC1: 다음 세션 줄에 brainstorming 지시를 덮어쓰는 문장이 없다(D42)"
+  for n in '§3 열린 질문 · §4 조사 · §5 위험' '번호째' '## 번호 대조 표' 'source_interview' '--bundle 과 source_interview 에 적은 것과 같은 상대경로를 붙여' \
+           'brief frontmatter audit_file(같은 폴더) §6 의 S 번호를 싣고' 'AC1 · AC2 … 처럼 번호를 단다' \
+           'check_bundle_coverage.py --plan' '## Acceptance Criteria 의 AC 목록' '구현됨 · 미룸 · 빠짐' \
+           'git 이 추적하지 않는 파일' '## 미룸 표' 'check_bundle_coverage.py --impl' '/compact 요약에 기대지 말고'; do
+    assert_contains "$ONE" "$n" "AC1 · AC10: brief 다음 세션 줄에 「${n}」"
+  done
+  order "다음 세션 줄" "$ONE" "--plan" "--impl"
   assert_contains "$ONE" "게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다" "다음 세션 줄: 게이트 없는 종료의 복귀 분기를 싣는다 (AC16)"
-  assert_eq "$(lead_only "$ONE")" "ok" "다음 세션 줄의 꺾쇠 자리표는 줄 앞 @<…> 토큰에만 있다"
+  assert_eq "$(lead_only "$ONE")" "ok" "다음 세션 줄 안의 꺾쇠 자리표는 줄 앞 @<…> 토큰의 이름뿐이다"
+  assert_eq "$(lead_only '@<a> x <a> y')" "ok" "꺾쇠 규칙: 줄 앞 토큰의 이름은 줄 안에 다시 쓸 수 있다"
+  assert_eq "$(lead_only '@<a> x <b> y')" "no" "꺾쇠 규칙 양성 대조: 줄 앞 토큰에 없는 이름은 거부한다"
+  sed 's/Skill superpowers:brainstorming 을 시작하라\./Skill superpowers:brainstorming 을 시작하라. brainstorming 의 「다음은 writing-plans 뿐」 지시보다 이 순서가 우선한다./' "$FIN" > "$TMP/fin_mut.md"
+  case "$(nsl "$TMP/fin_mut.md")" in
+    *"보다 이 순서가 우선한다"*) ok "변이(AC15): 덮어쓰기 문장을 되넣으면 같은 추출이 그것을 본다 — AC1 부재 단언에 이빨이 있다" ;;
+    *) no "변이(AC15): 되넣은 덮어쓰기 문장을 추출이 못 본다 — 부재 단언이 공허하다" ;;
+  esac
 fi
 assert_file_absent "$FIN" '/compact interview brief at' "옛 /compact 보존 템플릿이 없다"
 assert_file_absent "$FIN" '확정하고 바로 brainstorming' "옛 「바로 brainstorming」 옵션이 없다"
@@ -135,6 +155,12 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
     esac
     assert_contains "$RSL" "보고 후 재결정" "spec-review 다음 세션 줄이 C4 문장을 싣는다"
     assert_grep "$RSL" '임의 변경.*금지' "spec-review 다음 세션 줄이 임의 변경 금지를 싣는다"
+    for n in 'check_bundle_coverage.py --plan <spec_path>' '계획에 없는 AC 는 계획에 더한다' \
+             '## Acceptance Criteria 의 AC 목록' '구현됨 · 미룸 · 빠짐' 'git 이 추적하지 않는 파일' \
+             '## 미룸 표' 'check_bundle_coverage.py --impl <spec_path>'; do
+      assert_contains "$RSL" "$n" "AC1 · AC10: spec-review 다음 세션 줄(writing-plans 진행 안내)에 「${n}」"
+    done
+    assert_eq "$(lead_only "$RSL")" "ok" "spec-review 다음 세션 줄의 꺾쇠 자리표는 <spec_path> 뿐이다"
   fi
   STOP="$(printf '%s\n' "$GATE" | awk '/^- \*\*①\/② 의 정지 요건\*\*/{f=1;print;next} f&&/^- /{f=0} f' | tr '\n' ' ' | tr -s ' ')"
   [ -n "$STOP" ] && ok "spec-review(양성): ①/② 의 정지 요건 불릿을 읽었다" || no "spec-review: ①/② 의 정지 요건 불릿이 없다 — 아래 단언이 공허하다"
@@ -144,4 +170,5 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
 fi
 assert_file_absent "$SKILL" '/compact 설계문서' "spec-review: 옛 /compact 보존 틀이 없다"
 assert_file_absent "$SKILL" '① 의 정지 요건' "spec-review: 옛 「① 의 정지 요건」 불릿 이름이 없다"
+assert_file_grep "$FIN" '\$\{CLAUDE_PLUGIN_ROOT\}/references/epic-handoff\.md' "finishing.md 가 에픽 넘김 줄 reference 를 가리킨다(AC2 · 고아 reference 방지)"
 finish
