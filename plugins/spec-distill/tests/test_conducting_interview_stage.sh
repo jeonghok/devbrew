@@ -945,7 +945,7 @@ grep -qF '*원래 / 재결정 / 근거*' <<<"$fin_stepA_flat" \
   && ok "AC7: 반증의 세 칸 기록" || no "AC7: 반증 세 칸 부재"
 grep -qF '재결정 자체는 사용자 동의로만' <<<"$fin_stepA_flat" \
   && ok "AC7/P23: 재결정은 사용자 동의로만" || no "AC7/P23: 재결정 권한 문구 부재 — 기록 형식이 판정 권한으로 읽힌다"
-for form in '[RC3 → OQ1]' '[RC3 → 없음]' '[→ OQ1]' '[→ 없음]' '→ 근거 RC3' '[해결 ⟨S10⟩]'; do
+for form in '[RC3 → OQ1]' '[RC3 → 없음]' '[→ OQ1]' '[→ 없음]' '→ 근거 RC3' '[해결 ⟨S2⟩]'; do
   grep -qF -- "$form" <<<"$fin_stepA" \
     && ok "AC19: 직렬화 형식 «${form}»" || no "AC19: 직렬화 형식 «${form}» 부재"
 done

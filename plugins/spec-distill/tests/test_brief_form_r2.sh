@@ -106,4 +106,75 @@ printf -- "%s\n  본문에 RC77 을 숨긴다.\n" "$H" > "$TMP/s4"
 rep4 "$TMP/s4"; gate; rc=$?
 [ "$rc" -ne 0 ] && ok "s4_rc_on_body: 첫 줄에 없는 RC<n> 을 본문에 두면 red" || no "s4_rc_on_body: 통과했다"
 
+# ── §4 유니코드 공백 들여쓰기 (fix round 1) — NBSP(U+00A0) · 전각 공백(U+3000) 으로 들여쓴 줄도 들여쓴 줄이다.
+# 항목 뒤면 본문(첫 줄에 없는 RC 는 red), 항목 앞이면 그 자체로 항목(fail-closed — «출처키» 없으면 red).
+# 공백 글자는 보이지 않으므로 코드 포인트로 만든다.
+ws_block() {  # ws_block <코드 포인트 16진> <after|top> <줄> → 첫 §4 항목과 엮은 블록을 $TMP/s4 에
+  python3 -I -X utf8 -c 'import sys
+cp, where, head, line = int(sys.argv[1], 16), sys.argv[2], sys.argv[3], sys.argv[4]
+ind = chr(cp) * 2
+blk = head + "\n" + ind + line if where == "after" else ind + line + "\n" + head
+open(sys.argv[5], "w", encoding="utf-8").write(blk + "\n")' "$1" "$2" "$H" "$3" "$TMP/s4"
+}
+for cp in 00A0 3000; do
+  base; H="$(first4)"; ws_block "$cp" after "- 레포는 캐시가 없다 RC9"
+  rep4 "$TMP/s4"; gate; rc=$?
+  { [ "$rc" -ne 0 ] && grep -q 'RC9' "$TMP/out"; } \
+    && ok "s4_ws_after_${cp}: U+${cp} 로 들여쓴 불릿은 앞 항목의 본문이다 — 첫 줄에 없는 RC9 는 red" \
+    || no "s4_ws_after_${cp}: U+${cp} 들여쓴 줄이 순회에서 빠졌다 (rc=$rc)"
+  base; H="$(first4)"; ws_block "$cp" top "- 레포 주장 RC9 — 경로#앵커"
+  rep4 "$TMP/s4"; gate; rc=$?
+  { [ "$rc" -ne 0 ] && grep -q 'unkeyed landscape entries' "$TMP/out"; } \
+    && ok "s4_ws_top_${cp}: 항목 앞의 U+${cp} 들여쓴 불릿은 그 자체로 항목이다 — «출처키» 없으면 red" \
+    || no "s4_ws_top_${cp}: 항목 앞의 U+${cp} 들여쓴 불릿이 순회에서 빠졌다 (rc=$rc)"
+done
+# 양의 짝 — NBSP 로 들여쓴 산문 본문 줄은 정직하다.
+base; H="$(first4)"; ws_block 00A0 after "이유를 둘째 줄에서 이어 쓴다."
+rep4 "$TMP/s4"; gate; assert_eq "$?" "0" "s4_ws_prose: NBSP 로 들여쓴 산문 본문 줄은 통과한다 (양성 짝)"
+
+# ── 해결 표시는 한 모양뿐 (fix round 1 — 허용 목록). `[해결` 을 담은 줄은 `[해결 ⟨S<n>⟩]` 를 정확히 한 번.
+# §0 · §3 둘 다에 같은 줄을 둬 집합 등식은 만족시킨다 — 모양 규칙만 red 를 낸다.
+for tok in '[해결 ⟨S99⟩ · ⟨S1⟩]' '[해결]' '[해결 S1]' '[해결⟨S99⟩]' '[해결 ⟨S1⟩] [해결 ⟨S1⟩]'; do
+  printf -- "- OQ9 %s — 렌더링 전략\n" "$tok" > "$TMP/s0"
+  printf -- "- OQ9 %s: 렌더링 전략 — 해결: 서버 렌더링\n" "$tok" > "$TMP/s3"
+  base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
+  { [ "$rc" -ne 0 ] && grep -q '해결 표시 모양이 아니다' "$TMP/out"; } \
+    && ok "resolved_shape «${tok}»: 정본 모양이 아닌 해결 표시는 red" \
+    || no "resolved_shape «${tok}»: 통과했거나 다른 이유로 red (rc=$rc)"
+done
+
+# ── §0 과 §3 은 같은 결정 전량 (fix round 1) — 집합 등식 양방향.
+printf -- "- OQ9 [열림] — 캐시 무효화 시점\n" > "$TMP/s0"
+base; app 0 "$TMP/s0"; gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q '§0 의 OQ9 가 §3 에 없다' "$TMP/out"; } \
+  && ok "decisions_s0_only: §0 의 열린 결정이 §3 에 없으면 red" || no "decisions_s0_only: rc=$rc"
+printf -- "- OQ9: 캐시 무효화 시점\n" > "$TMP/s3"
+base; app 3 "$TMP/s3"; gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q '§3 의 OQ9 가 §0 결정 목록에 없다' "$TMP/out"; } \
+  && ok "decisions_s3_only: §3 의 결정이 §0 에 없으면 red" || no "decisions_s3_only: rc=$rc"
+printf -- "- OQ9 [열림] — 캐시 무효화 시점\n" > "$TMP/s0"
+printf -- "- OQ9: 캐시 무효화 시점\n" > "$TMP/s3"
+base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; assert_eq "$?" "0" "decisions_both: 두 절에 같이 있으면 통과한다 (양성 짝)"
+
+# ── 해결 결정의 §0 · §3 일치와 해결 내용 (fix round 1).
+printf -- '- **S2** 🗣 R1 답:\n  > "서버에서 그리자"\n' > "$TMP/s6"
+printf -- "- OQ9 [해결 ⟨S1⟩] — 렌더링 전략\n" > "$TMP/s0"
+printf -- "- OQ9 [해결 ⟨S2⟩]: 렌더링 전략 — 해결: 서버 렌더링\n" > "$TMP/s3"
+base; app 6 "$TMP/s6"; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q '§0(S1) 과 §3(S2)' "$TMP/out"; } \
+  && ok "resolved_sid_mismatch: §0 과 §3 의 해결 토큰이 다른 발화를 가리키면 red" || no "resolved_sid_mismatch: rc=$rc"
+printf -- "- OQ9 [해결 ⟨S2⟩] — 렌더링 전략\n" > "$TMP/s0"
+base; app 6 "$TMP/s6"; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate
+assert_eq "$?" "0" "resolved_sid_same: 같은 S2 를 가리키면 통과한다 (양성 짝 — S2 추가 자체는 무해)"
+printf -- "- OQ9 [해결 ⟨S1⟩] — 렌더링 전략\n" > "$TMP/s0"
+printf -- "- OQ9 [해결 ⟨S1⟩]: 렌더링 전략\n" > "$TMP/s3"
+base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q '해결 내용' "$TMP/out"; } \
+  && ok "resolved_no_body: §3 해결 줄에 「— 해결: <한 줄>」 이 없으면 red" || no "resolved_no_body: rc=$rc"
+printf -- "- OQ9 [열림] — 렌더링 전략\n" > "$TMP/s0"
+printf -- "- OQ9 [해결 ⟨S1⟩]: 렌더링 전략 — 해결: 서버 렌더링\n" > "$TMP/s3"
+base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q '해결이 아니다' "$TMP/out"; } \
+  && ok "resolved_status_mismatch: §0 은 열림인데 §3 이 해결이면 red" || no "resolved_status_mismatch: rc=$rc"
+
 finish

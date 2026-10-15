@@ -1783,7 +1783,11 @@ tree = ast.parse(src)
 TARGET_FUNCS = ("research_link_missing", "research_link_targets_missing",
                 "research_backref_missing", "internal_research_dimension_failures",
                 "research_confirm_missing", "_declared_decisions", "_leading_oq",
-                "_research_entries_split", "research_entries", "payload_rc_ids")
+                "_research_entries_split", "research_entries", "payload_rc_ids",
+                # R2 — §4 순회는 `section4_items` 로 옮겨 갔고(`_research_entries_split` 가 위임한다),
+                # §1 · 해결 결정 술어도 항목을 순회한다. 이름으로 넣지 않으면 개수 술어가 락 밖에 숨는다.
+                "section4_items", "_section4_heads", "section4_body_failures",
+                "section1_provenance_failures", "resolved_decision_failures", "_resolved_token")
 
 func_nodes = {n.name: n for n in ast.walk(tree)
               if isinstance(n, ast.FunctionDef) and n.name in TARGET_FUNCS}
@@ -1827,11 +1831,11 @@ for name, stmts in groups:
 if bad:
     print("NO\t" + " | ".join(bad))
 else:
-    print("YES\t술어 다섯 + 판정 헬퍼 다섯 + contract_v2 블록 전부 개수 술어(len 호출·정수 리터럴 비교) 없음")
+    print("YES\t술어 다섯 + 판정 헬퍼 + R2 순회 함수 + contract_v2 블록 전부 개수 술어(len 호출·정수 리터럴 비교) 없음")
 PY
 )"
 case "$c5static" in
-  YES*) ok "⟨C5⟩(정적): 다섯 술어 · 판정 헬퍼 다섯 · 옵트인 블록에 개수 술어가 없다" ;;
+  YES*) ok "⟨C5⟩(정적): 다섯 술어 · 판정 헬퍼 · R2 순회 함수(§4 항목 · §1 · 해결) · 옵트인 블록에 개수 술어가 없다" ;;
   *)    no "⟨C5⟩(정적): $c5static" ;;
 esac
 

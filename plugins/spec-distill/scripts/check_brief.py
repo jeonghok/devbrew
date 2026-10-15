@@ -228,7 +228,8 @@ SECTION4 = ("4", "External Landscape")
 
 def section4_items(text: str) -> list[tuple[str, list[str]]]:
     """§4 항목 — (첫 줄, 본문 줄들). R2(RC39): §4 항목은 여러 줄을 허용한다. 열 0 의 불릿 줄이 항목이고, 그 뒤
-    들여쓴 줄(불릿이든 아니든)은 그 항목의 본문이다. 빈 줄은 항목을 닫지 않는다. 열 0 의 불릿이 아닌 줄은
+    들여쓴 줄(불릿이든 아니든 — 첫 글자가 공백류(`str.isspace()`: 공백 · 탭 · NBSP · 전각 공백)인 줄)은 그 항목의
+    본문이다. 빈 줄은 항목을 닫지 않는다. 열 0 의 불릿이 아닌 줄은
     항목을 닫는다. 항목이 열리기 전에 나온 들여쓴 불릿은 그 자체로 항목이다(fail-closed — 본문으로 삼켜
     순회에서 빠지지 않게). **§4 에만 쓴다** — §0 · §3 · §5 의 항목 판독은 `_entry_lines` 그대로다."""
     out: list[tuple[str, list[str]]] = []
@@ -239,7 +240,7 @@ def section4_items(text: str) -> list[tuple[str, list[str]]]:
         if re.match(r"^[-*]\s", ln) and ln.strip() not in ("-", "*"):
             cur = (ln.strip(), [])
             out.append(cur)
-        elif ln[:1] in (" ", "\t"):
+        elif ln[:1].isspace():
             if cur is None:
                 if ENTRY_BULLET_RE.match(ln) and ln.strip() not in ("-", "*"):
                     cur = (ln.strip(), [])
@@ -960,7 +961,7 @@ def coverage_anchor_failures(audit_text: str, anchors: set) -> list[str]:
 #   · payload §4 의 모든 항목 줄(프로필상 전부 landscape 다)
 #   · payload §5 의 항목 줄 중 **`RC<n>` 리터럴을 가진 줄** — 네 모양(기각·보류·검토·위험) 중
 #     어느 것인지는 묻지 않는다. `RC<n>` 이 있으면 레포 주장을 실은 줄이고 없으면 아니다.
-#   · **§3 은 순회 범위에 없다.** §3 항목은 그 자체가 «열린 결정» 이라 연결의 *대상*이고
+#   · **§3 은 순회 범위에 없다.** §3 항목은 결정(열린 것과 해결한 것)이라 연결의 *대상*이고
 #     출처가 아니다 — 거기에 연결을 걸면 자기지시가 되어 술어가 공허해진다.
 #
 # 연결의 위치는 §4 항목 **첫 줄 끝**이다. §4 항목은 여러 줄을 허용하고(R2 · RC39), 본문 줄의 연결 · 첫 줄에
@@ -1238,31 +1239,63 @@ def section1_provenance_failures(text: str, anchors: set) -> list[str]:
 
 
 RESOLVED_RE = re.compile(r"\[해결 ⟨(S\d+)⟩\]")
+RESOLVED_MARK = "[해결"
+RESOLVED_BODY_RE = re.compile(r"— 해결:\s*\S")
+
+
+def _resolved_token(line: str):
+    """(해결 결정 줄인가, 가리키는 `S<n>` 또는 None). 줄에 `[해결` 이 있으면 해결 결정 줄이다(허용 목록 —
+    철자 변형을 열거하지 않는다). 모양은 `[해결 ⟨S<n>⟩]` 하나뿐이고 줄에 정확히 한 번이다 — 아니면
+    `S<n>` 이 None 이고 호출부가 「해결 표시 모양이 아니다」로 red 를 낸다."""
+    if RESOLVED_MARK not in line:
+        return False, None
+    m = RESOLVED_RE.search(line)
+    if not m or RESOLVED_MARK in line[:m.start()] + line[m.end():]:
+        return True, None
+    return True, m.group(1)
 
 
 def resolved_decision_failures(text: str, anchors: set) -> list[str]:
-    """해결한 결정도 §3 에 남는다(R2 · N22). §0 에서 `[해결 ⟨S<n>⟩]` 로 닫은 결정은 §3 에 선두 OQ 로 있어야
-    하고, 그 §3 줄에도 `[해결 ⟨S` 표시가 있어야 한다. §0 · §3 의 해결 토큰이 가리키는 `S<n>` 은 payload §6 에
-    실재해야 한다 — 모델이 결정을 닫으면서 근거를 지어내는 길을 막는다."""
+    """해결한 결정도 §3 에 남는다(R2 · N22). §0 과 §3 은 같은 결정 전량이다 — 두 절의 선두 OQ 집합이 같아야
+    한다(두 절이 다 있을 때). `[해결` 을 담은 줄은 `[해결 ⟨S<n>⟩]` 한 모양을 정확히 한 번 달고, 그 `S<n>` 은
+    payload §6 에 실재해야 한다 — 모델이 결정을 닫으면서 근거를 지어내는 길을 막는다. 해결 결정은 §0 과
+    §3 에서 같은 `S<n>` 을 가리키고, §3 줄은 `— 해결: <한 줄>` 로 해결 내용을 싣는다."""
     fails = []
-    s3 = {}
-    for ln in _entry_lines(_section_text(text, "3", "Open Questions")):
-        oq = _leading_oq(ln)
-        if oq:
-            s3[oq] = ln
+    decisions = {}
     for num, title in DECISION_SECTIONS:
+        d = decisions[num] = {}
         for ln in _entry_lines(_section_text(text, num, title)):
-            for sid in RESOLVED_RE.findall(ln):
-                if sid not in anchors:
-                    fails.append(f"§{num} 의 해결 토큰 {sid} 가 payload §6 에 없다: {ln[:60]}")
-    for ln in _entry_lines(_section_text(text, "0", "한눈에")):
-        oq = _leading_oq(ln)
-        if oq and RESOLVED_RE.search(ln):
-            if oq not in s3:
+            resolved, sid = _resolved_token(ln)
+            if resolved and sid is None:
+                fails.append(f"§{num} 의 해결 표시 모양이 아니다 — "
+                             f"`[해결 ⟨S<n>⟩]` 하나만 쓴다: {ln[:60]}")
+            elif sid and sid not in anchors:
+                fails.append(f"§{num} 의 해결 토큰 {sid} 가 payload §6 에 없다: {ln[:60]}")
+            oq = _leading_oq(ln)
+            if oq:
+                d.setdefault(oq, (ln, resolved, sid))
+    both = not any(m.startswith(("0.", "3.")) for m in find_missing_sections(text))
+    s0, s3 = decisions["0"], decisions["3"]
+    for oq, (_, resolved, sid) in s0.items():
+        if oq not in s3:
+            if resolved:
                 fails.append(f"§0 에서 해결로 닫은 {oq} 가 §3 에 없다 — "
                              "해결한 결정도 해결 내용과 함께 §3 에 남는다")
-            elif "[해결 ⟨S" not in s3[oq]:
-                fails.append(f"§3 의 {oq} 줄에 해결 표시([해결 ⟨S<n>⟩])가 없다")
+            elif both:
+                fails.append(f"§0 의 {oq} 가 §3 에 없다 — §0 과 §3 은 같은 결정 전량이다")
+            continue
+        _, r3, sid3 = s3[oq]
+        if resolved and not r3:
+            fails.append(f"§3 의 {oq} 줄에 해결 표시([해결 ⟨S<n>⟩])가 없다")
+        elif r3 and not resolved:
+            fails.append(f"§3 의 {oq} 는 해결 표시를 달았는데 §0 의 {oq} 는 해결이 아니다")
+        elif sid and sid3 and sid != sid3:
+            fails.append(f"{oq} 의 해결 토큰이 §0({sid}) 과 §3({sid3}) 에서 다르다")
+    for oq, (ln3, r3, _) in s3.items():
+        if both and oq not in s0:
+            fails.append(f"§3 의 {oq} 가 §0 결정 목록에 없다 — §0 과 §3 은 같은 결정 전량이다")
+        if r3 and not RESOLVED_BODY_RE.search(ln3):
+            fails.append(f"§3 의 해결 결정 {oq} 줄에 해결 내용(`— 해결: <한 줄>`)이 없다")
     return sorted(set(fails))
 
 
