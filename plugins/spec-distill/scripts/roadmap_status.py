@@ -239,6 +239,7 @@ class _GitTreeRepo:
 
     def __init__(self, git: Git, tree: str):
         self.git, self.tree = git, tree
+        self._memo = {}
 
     def read(self, rel: str):
         return self.git.blob(self.tree, rel)
@@ -247,12 +248,15 @@ class _GitTreeRepo:
         return self.git.exists(self.tree, rel)
 
     def specs_for(self, source: str) -> list:
+        if source in self._memo:
+            return self._memo[source]
         out = []
         for path in self.git.grep_files(self.tree, source, "docs/superpowers/specs/"):
             text = self.git.blob(self.tree, path)
             if text and unquote(frontmatter(text).get("source_interview", "")) == source:
                 out.append((path, text))
-        return sorted(out)
+        self._memo[source] = sorted(out)
+        return self._memo[source]
 
 
 def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_dir: str):
@@ -329,7 +333,7 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 continue
             if b["kind"] == "bundle" and bundles.get(bid) is not None:
                 result = check(bundles[bid], spec_text, repo=_GitTreeRepo(git, main) if main else None)
-                for w in coverage_warnings(result, spec):  # 종료 코드는 그대로 — 경고 줄만
+                for w in coverage_warnings(result, spec):  # 경고 줄이라 종료 코드가 1 이 될 수 있다(막는 소비자 없음)
                     b["warnings"].append(w)
                 if result["status"] == 1:
                     b["warnings"].append("생략: %s 이 번호 %d개를 빠뜨렸다 — %s" % (
@@ -367,6 +371,9 @@ def coverage_warnings(result: dict, spec: str) -> list:
     if shallow:
         out.append("얕은 답 %d개: %s — %s" % (len(shallow), spec, " · ".join(
             "%s(%s)" % (x["id"], x["reason"]) for x in shallow)))
+    unknown = result.get("unknown") or []
+    if unknown:
+        out.append("번호 대조 셀 수 없음 %d개: %s — %s" % (len(unknown), spec, " · ".join(unknown)))
     unserved = result.get("unserved") or []
     if unserved:
         out.append("받드는 에픽 없는 발화 %d개: %s — %s" % (len(unserved), spec, " · ".join(unserved)))
