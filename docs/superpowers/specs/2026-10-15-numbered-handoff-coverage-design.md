@@ -99,11 +99,20 @@ brief 에는 확정 항목(§2) 말고도 열린 질문(§3) · 조사(§4) · �
    <설계문서> <계획>` 을 돌리고, 계획에 없는 AC 는 계획에 더한다」(§3-1). 구현 — 「SDD 의 마지막 전체 리뷰에 설계문서
    `## Acceptance Criteria` 의 AC 목록을 싣고, 리뷰가 AC 마다 `AC<n>: 구현됨|미룸|빠짐 — <한 줄>` 을 보고 파일에 적게 한다. PR 을
    만들기 전에 `check_bundle_coverage.py --impl <설계문서> <보고 파일>` 을 돌리고 경고를 사용자에게 보인다」(§3-4). 로드맵 없는
-   brief 흐름에서도 구현 단계의 빠짐 · 미룸이 경고되는 자리가 이것이다(G4).
+   brief 흐름에서도 구현 단계의 빠짐 · 미룸이 경고되는 자리가 이것이다(G4). 같은 두 지시가 writing-plans 에 닿는 자리는 6 이다.
 5. **에픽 넘김 줄.** 새 참조 `references/epic-handoff.md` 에 로드맵 에픽용 줄을 둔다. brief 줄과 같은 모양이되 `@<에픽 묶음>` 을
    첨부하고, 「승인된 로드맵 <로드맵 경로> 의 에픽 <번호> 다」를 밝히며, 설계문서 `source_interview` 에 묶음 경로를 적고 spec-review 를
    `--bundle <묶음>` 으로 부르게 한다. 계획 · 구현 대조 지시(4)도 같다. 지휘 세션
    (나중에는 R5)이 `<…>` 를 치환해 쓴다. 치환되지 않은 자리표가 남으면 쓰지 않는다(다음 세션 줄의 규칙 5 와 같다).
+6. **writing-plans 로 가는 진행 안내.** 4 의 지시는 brainstorming 세션에 가는 줄에만 실리면 writing-plans 에 닿지 않는다 —
+   spec-review 승인 게이트의 ①/② 뒤 `/compact` · `/new` 로 넘어간 세션은 spec-review 의 다음 세션 줄만 받는다. 그래서
+   `skills/spec-review/SKILL.md` 의 `**다음 세션 줄 — ①/② 공통**`(writing-plans 를 시작하게 하는 줄)에 4 와 같은 두 지시를 더한다:
+   「writing-plans 가 계획을 쓴 뒤 `check_bundle_coverage.py --plan <설계문서> <계획>` 을 돌리고, 계획에 없는 AC 는 계획에 더한다」 ·
+   「PR 을 만들기 전에 SDD 의 마지막 전체 리뷰가 설계문서 AC 마다 `AC<n>: 구현됨|미룸|빠짐 — <한 줄>` 을 보고 파일에 적게 하고,
+   `check_bundle_coverage.py --impl <설계문서> <보고 파일>` 을 돌려 경고를 사용자에게 보인다」. `<설계문서>` 는 그 줄이 이미 치환하는
+   `<spec_path>` 이고, 스크립트는 SKILL 본문에서 치환되는 플러그인 루트 기준 경로로 적는다. 치환되지 않은 자리표가 남으면 그 줄의
+   규칙 5 대로 노출하지 않는다. 줄은 spec-review 표면에 한 번만 정의하고(`proceed-gate.md` 의 `## 다음 세션 명령` 규칙),
+   `proceed-gate.md` 의 계약 문면은 바꾸지 않는다 — 규칙이 이 지시를 막거나 요구하는 자리가 드러나면 그때만 고친다.
 
 ### §2 대조 스크립트 — 설계문서 단계
 
@@ -146,7 +155,7 @@ brief 에는 확정 항목(§2) 말고도 열린 질문(§3) · 조사(§4) · �
    받는 곳이 `없음` 이거나 로드맵에 없는 에픽 번호이거나 `#<숫자>` 꼴이 아니면 그 에픽에 `받는 곳 없는 미룸 <n>개` 경고를 붙인다.
    에픽이 머지된 뒤에도 남는다. 표가 깨졌으면 「셀 수 없음」.
 4. **구현 대조(리뷰어 + 기계).** SDD 의 마지막 전체 리뷰를 부를 때 devbrew 쪽이 보내는 글 — brief 다음 세션 줄(§1-4) · 에픽 넘김
-   줄(§1-5) · 지휘 절차 — 에 설계문서 AC 목록을 싣고, 리뷰가 AC 마다 「구현됨 · 미룸 · 빠짐」을 보고 파일에 적게 한다. 「미룸」 ·
+   줄(§1-5) · spec-review 의 writing-plans 다음 세션 줄(§1-6) · 지휘 절차 — 에 설계문서 AC 목록을 싣고, 리뷰가 AC 마다 「구현됨 · 미룸 · 빠짐」을 보고 파일에 적게 한다. 「미룸」 ·
    「빠짐」은 2 의 표에 올라야 하고, 「빠짐」은 머지 전에 고치거나 사용자가 미룸으로 옮긴다. 기계는 PR 을 만들기 전에
    `--impl <설계문서> <리뷰 보고 파일>` 로 보고의 AC 판정을 읽어, 「미룸」 · 「빠짐」인데 `## 미룸` 에 없는 AC 를 경고하고, `## 미룸` 의
    받는 곳이 `없음` 인 행도 경고한다 — 로드맵 없는 brief 흐름에서는 이것이 미룸 경고의 자리다(로드맵 에픽은 3 이 머지 뒤에도 낸다).
@@ -186,6 +195,8 @@ brief 에는 확정 항목(§2) 말고도 열린 질문(§3) · 조사(§4) · �
 5. **계약.** R5 는 `spec-review <설계문서> --bundle <묶음>` 으로 부르고 §2 · §3 스크립트를 지휘 단계에서 부른다. §2 에서 R5 가
    spec-review 전에 멈추는 것은 rc 1(빠진 번호) · rc 3(검사 불가)뿐이고, rc 0 의 경고 줄은 사용자에게 보이고 넘어간다. R6 은 종료
    코드가 아니라 §2 의 `--json`(`missing` · `shallow` · `unserved` · `unknown`)과 `roadmap_status.py --json` 의 경고를 읽는다.
+6. **진행 안내.** 승인 게이트에서 진행(①/②)을 고르면 노출되는 다음 세션 줄이 §1-6 의 `--plan` · SDD AC별 보고 · `--impl` 지시를
+   싣는다 — 계획 · 구현 대조가 writing-plans 와 SDD 에 닿는 자리가 이 줄이다. ③ · ④ 에는 싣지 않는다.
 
 ### §5 위험에 대한 답
 
@@ -201,7 +212,7 @@ brief 에는 확정 항목(§2) 말고도 열린 질문(§3) · 조사(§4) · �
 
 ## Acceptance Criteria
 
-- AC1 다음 세션 줄에 「보다 이 순서가 우선한다」가 없고, 순서 · 복귀 분기 문구는 남는다. 줄에 §3 · §4 · §5 번호째 읽기 · `## 번호 대조` · `source_interview` · `--bundle <brief-path>` · `--plan` 지시와, SDD 마지막 전체 리뷰에 AC 목록을 실어 AC 마다 「구현됨|미룸|빠짐」을 보고 파일에 적게 하고 PR 전에 `--impl` 을 돌리라는 지시가 있다.
+- AC1 다음 세션 줄에 「보다 이 순서가 우선한다」가 없고, 순서 · 복귀 분기 문구는 남는다. 줄에 §3 · §4 · §5 번호째 읽기 · `## 번호 대조` · `source_interview` · `--bundle <brief-path>` · `--plan` 지시와, SDD 마지막 전체 리뷰에 AC 목록을 실어 AC 마다 「구현됨|미룸|빠짐」을 보고 파일에 적게 하고 PR 전에 `--impl` 을 돌리라는 지시가 있다. spec-review 의 `**다음 세션 줄 — ①/② 공통**`(writing-plans 진행 안내)에도 writing-plans 뒤 `check_bundle_coverage.py --plan <설계문서> <계획>`(계획에 없는 AC 는 계획에 더함)과, PR 전 SDD 마지막 전체 리뷰의 AC별 `AC<n>: 구현됨|미룸|빠짐` 보고 · `--impl` 지시가 있다(§1-6 — 부재 단언 + 양성 짝).
 - AC2 `references/epic-handoff.md` 가 에픽 넘김 줄(`@<에픽 묶음>` · 로드맵 경로 · 에픽 번호 · `--bundle`)과 자리표 규칙을 갖는다.
 - AC3 `check_bundle_coverage.py` 가 반영 칸에 자리 표기가 없거나 가리킨 `§n` · `AC n` · 제목이 없으면 얕음으로 센다 — 있으면 세지 않는다(양성 짝).
 - AC4 기각 칸의 에픽 번호가 로드맵에 없으면 얕음으로 센다.
@@ -210,7 +221,7 @@ brief 에는 확정 항목(§2) 말고도 열린 질문(§3) · 조사(§4) · �
 - AC7 첫 줄 형식 · `--json` 키 · 종료 코드(0 · 1 · 3)가 §2 대로다 — 얕은 답 · 받드는 에픽 없는 발화 · 셀 수 없음(로드맵)만 있는 입력은 rc 0 이고 첫 줄이 그 개수를 말한다. 양성 짝: 빠진 번호가 하나 있으면 rc 1, 표가 깨지면 rc 3.
 - AC8 `--plan` 이 계획 Task 절에 없는 AC 를 경고하고, AC 절 없음은 3.
 - AC9 `roadmap_status.py` 가 `## 미룸` 의 받는 곳 없는 행을 그 에픽의 경고로 내고, 표가 깨지면 「셀 수 없음」.
-- AC10 `--impl` 이 보고의 「미룸 · 빠짐」 중 `## 미룸` 에 없는 AC 와, `## 미룸` 의 받는 곳이 `없음` 인 행을 경고한다.
+- AC10 `--impl` 이 보고의 「미룸 · 빠짐」 중 `## 미룸` 에 없는 AC 와, `## 미룸` 의 받는 곳이 `없음` 인 행을 경고한다. `--impl` 을 돌리라는 지시와 보고 형식은 brief 다음 세션 줄 · 에픽 넘김 줄 · spec-review 의 writing-plans 다음 세션 줄 셋 모두에 있다(셋 각각 단언).
 - AC11 spec-review 가 `--bundle` 을 해석하고, 없는 파일 · 틀린 `type` · 설계문서 `source_interview` 와 다른 파일이면 리뷰를 시작하지 않고 사유를 보인다(같은 파일을 다른 표기로 준 경우는 통과 — 양성 짝). `--bundle` 없는 호출은 이 검사를 건너뛴다.
 - AC12 spec-review 진입이 §2 출력을 보이고 경고 수를 게이트에 더한다.
 - AC13 `design-doc.md` 의 `ground_truth` · 층 1 첫 문장 · 층 1 판정 관계 줄이 §4-3 의 모드 문장(`source_interview` 파일의 `type` 으로 묶음 · brief · 기존 §2)이고 깊이 판정 항목이 있다. dispatch 슬롯 · `references/reviewing-document.md` · codex 러너는 바뀌지 않는다(그 파일들의 diff 0).
@@ -222,7 +233,7 @@ brief 에는 확정 항목(§2) 말고도 열린 질문(§3) · 조사(§4) · �
 
 - `plugins/spec-distill/scripts/check_bundle_coverage.py` (§2 · `--plan` · `--impl`), `plugins/spec-distill/scripts/roadmap_status.py` (`## 미룸` 경고 · brief 번호 계산 공유)
 - `plugins/spec-distill/skills/spec-interview/references/finishing.md` (다음 세션 줄 — `source_interview` · `--bundle` · `--plan` · 구현 판정 요청 · `--impl`), 새 `plugins/spec-distill/references/epic-handoff.md`
-- `plugins/spec-distill/skills/spec-review/SKILL.md` (`## 입력` · `--bundle` 과 `source_interview` 일치 확인 · 진입 대조 · 게이트 앞 두 덩어리 — dispatch 블록은 그대로), `plugins/spec-distill/references/docreview-profiles/design-doc.md` (`ground_truth` · 층 1 첫 문장 · 층 1 판정 관계 줄의 모드 문장 · 판정 항목), `plugins/spec-distill/references/proceed-gate.md` (게이트 앞 경고 · 위치 문구가 계약에 닿으면)
+- `plugins/spec-distill/skills/spec-review/SKILL.md` (`## 입력` · `--bundle` 과 `source_interview` 일치 확인 · 진입 대조 · 게이트 앞 두 덩어리 · 승인 게이트 진행 안내의 다음 세션 줄에 `--plan` · SDD AC별 보고 · `--impl` 지시 — dispatch 블록은 그대로), `plugins/spec-distill/references/docreview-profiles/design-doc.md` (`ground_truth` · 층 1 첫 문장 · 층 1 판정 관계 줄의 모드 문장 · 판정 항목), `plugins/spec-distill/references/proceed-gate.md` (게이트 앞 경고 · 위치 문구나 진행 안내의 `--plan` · `--impl` 지시가 계약에 닿으면 — §1-6)
 - 바꾸지 않는 것(정보): `references/reviewing-document.md` · `shared/docreview/` 의 codex 러너 — R2a 예약
 - 테스트: `test_bundle_coverage.sh` · `test_roadmap_status.sh` · `test_review_handoff_order.sh` · spec-review 입력/게이트 테스트(새 파일), 경로 문자열을 단언하는 기존 테스트
 - `plugins/spec-distill/README.md` · `CHANGELOG.md` · `.claude-plugin/plugin.json`
@@ -267,6 +278,10 @@ brief 에는 확정 항목(§2) 말고도 열린 질문(§3) · 조사(§4) · �
 - D2.1 · r2 · adopt · 29b12113#r1.1 · "셋 다 권장대로 (권장)" — 리뷰어에게 묶음 경로를 따로 넘기는 설계는 이 에픽이 손대지 않기로 한 파일을 고쳐야만 됩니다. 그런데 그 파일은 수정 목록에 없습니다. → 적용: dispatch 슬롯 · 공유 절차 · codex 러너는 그대로, 정답 출처는 `source_interview` 파일 종류로, 진입이 `--bundle` 과 `source_interview` 일치 확인(§4-1 · §4-3 · AC11 · AC13 · Files to Modify).
 - D2.2 · r2 · adopt · ce6c4dcc#r2.1 · "셋 다 권장대로 (권장)" — 번호 대조 스크립트의 종료 코드 1 이 이제 '얕은 답'과 '받드는 에픽 없는 발화'까지 뜻하는데, 지휘 절차의 '0 이 나오기 전에는 spec-review 로 가지 않는다' 규칙은 그대로 둔다. 그러면 사용자가 승인 때 봐야 할 경고가 리뷰 전에 막는 조건이 되고, 그 막힘을 모델이 혼자 풀게 된다. → 적용: 리뷰 전에 막는 것은 빠진 번호(rc 1)와 표 형식 오류 · 검사 불가(rc 3)뿐, 얕은 답 · 받드는 에픽 없는 발화 · 셀 수 없음은 rc 0 의 경고 줄로 spec-review 게이트 「경고 N개」에(§2 · Constraints · §4-2 · §4-5 · AC7).
 - D2.3 · r2 · adopt · 19f7dd62#r2.1 · "셋 다 권장대로 (권장)" — G4(설계문서의 AC 가 계획·구현에서 빠지면 경고)가 로드맵 없이 brief 하나로 진행하는 흐름에서는 절반만 지켜진다. 그런데 Goals 는 이 범위를 따로 밝히지 않는다. → 적용: brief 다음 세션 줄에도 SDD 마지막 전체 리뷰의 AC별 「구현됨|미룸|빠짐」 보고 파일과 PR 전 `--impl` 지시를 넣고, brief 흐름의 미룸 경고는 `--impl` 이 낸다(§1-4 · §3-4 · AC1 · AC10 · G4).
+- 결정 · 2026-10-15 · 「finding 없이 바뀜」 다섯 항목 유지(a0e254ec · 05bebe2c · 6136d22a · 93a5c0ad · 6c8b9494#r3.1) — 「변경 유지 · 라운드 안 열음 · 빈틈 고침 (권장)」 · 리뷰 뒤 반영(이 변경은 리뷰 라운드를 거치지 않았다)
+- 결정 · 2026-10-15 · 추가 리뷰 라운드 — 「변경 유지 · 라운드 안 열음 · 빈틈 고침 (권장)」 · 리뷰 뒤 반영(이 변경은 리뷰 라운드를 거치지 않았다) — 추가 라운드를 열지 않는다.
+- 결정 · 2026-10-15 · 계획 · 구현 대조 지시가 writing-plans 에 닿는 자리(6f59ead8) — 「변경 유지 · 라운드 안 열음 · 빈틈 고침 (권장)」 · 리뷰 뒤 반영(이 변경은 리뷰 라운드를 거치지 않았다) — spec-review 승인 게이트의 진행 안내(다음 세션 줄)가 `--plan` 과 SDD AC별 보고 · `--impl` 지시를 싣는다(§1-6 · §3-4 · §4-6 · AC1 · AC10 · Files to Modify).
+- 결정 · 2026-10-15 · R2 넘김 두 항목(N17 · N18) — 「변경 유지 · 라운드 안 열음 · 빈틈 고침 (권장)」 · 리뷰 뒤 반영(이 변경은 리뷰 라운드를 거치지 않았다) — R3 스크립트의 계수 규칙으로 `### Deferred to plan` 에 올린다.
 
 ## 번호 대조
 
@@ -345,3 +360,5 @@ brief 에는 확정 항목(§2) 말고도 열린 질문(§3) · 조사(§4) · �
 - brief 번호 계산 함수를 어디로 옮길지(순환 import 없는 모듈 위치).
 - `--impl` 보고 파일을 누가 어디에 쓰는지(SDD 워크스페이스 · 지휘 절차) — 형식은 §3-4.
 - spec-review SKILL 의 줄 예산과 게이트 앞 출력 순서.
+- R2 에서 넘겨받은 N17 「roadmap_status 가 대조 없이 '배정됨'을 받든 것으로 센다」 — §2-3 의 받듦 계산(`roadmap_status.py` 의 `assigned` 와 같은 규칙)이 번호 대조 없이 배정만으로 받듦을 세지 않도록 R3 스크립트의 계수 규칙을 정한다.
+- R2 에서 넘겨받은 N18 「번호 대조의 '기각' 행을 덮은 것으로 센다」 — 번호 대조 표의 「기각」 행을 그 번호를 덮은(답한) 것으로 셀지, 받드는 에픽이 따로 있어야 덮은 것으로 셀지 R3 스크립트의 계수 규칙을 정한다(§2-2 · §2-3).
