@@ -120,9 +120,12 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
    - 경로 계산(`interview-state`)은 **새로 만들 때만** 쓴다. 이어 갈 때는 고른 상태 파일의 절대경로가 그 인터뷰의 정체이고,
      §1-6 의 소비자 전부가 그 경로를 받는다. brief · audit 경로는 그 파일 이름에서 `.state.md` 를 떼어 도출한다 — 날짜 · 주제로
      다시 계산하지 않는다(다른 날 이어 가거나 `-<HHMM>` 이 붙은 파일을 놓치지 않기 위해서다).
-5. **끝내기와 커밋.** `finishing.md` Step A 가 brief · audit 를 쓴 뒤 세 파일을 경로 지정 커밋으로 묶는다
-   (`git add -- <brief> <audit> <state>` 다음 `git commit --only -- <brief> <audit> <state>` 꼴 — 새 파일은 git 이 아직 모르므로
-   경로 지정 `add` 가 먼저다. 다른 staged 작업을 쓸어 담지 않는다).
+5. **끝내기와 커밋.** 세 파일의 경로 지정 커밋은 Step A 가 brief · audit 를 처음 쓴 직후가 아니라 **마지막 확정 뒤** 한 번
+   한다 — `finishing.md` Step B-3 의 ①/② 에서 확정 전이(`provisional` → `confirmed`)를 반영하고 `check_brief.py gate` 재실행이
+   통과한 뒤(두 줄을 노출하기 전), ④ 「brief 만 종료」에서는 종료 advisory 를 내기 직전이다. ③ 은 B-0 으로 돌아가므로 커밋하지
+   않는다. Step A.5 리뷰와 B-3 이 brief 를 고쳐도 커밋이 그 뒤라 마지막 내용이 들어간다. 게이트 재실행이 통과하지 않으면
+   커밋하지 않는다. 커밋 꼴은 `git add -- <brief> <audit> <state>` 다음 `git commit --only -- <brief> <audit> <state>` 다
+   (새 파일은 git 이 아직 모르므로 경로 지정 `add` 가 먼저다. 다른 staged 작업을 쓸어 담지 않는다).
    - 기본 브랜치는 `git symbolic-ref --short refs/remotes/origin/HEAD` 의 출력(`origin/main` 꼴)에서 `origin/` 접두를 뗀 이름이고,
      현재 브랜치는 `git branch --show-current` 다. 둘이 같으면 커밋하지 않고 세 경로와
      「브랜치에서 커밋하라」 한 줄을 보인다. `origin/HEAD` 가 없어 판정하지 못하면 커밋하지 않고 세 경로와 그 사유를 보인다.
@@ -157,11 +160,19 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
      생성)으로 표지를 잡는다. 잡았거나 이미 자기 세션 id 의 표지면 rc 0, 다른 세션 id 의 표지가 있으면 rc 3 과 그 세션 id 를 낸다.
      확인과 생성이 한 시스템 호출이라 두 세션이 동시에 빈 원장에 들어와도 하나만 잡는다. rc 0 을 받은 세션만 라운드를 시작한다.
    - `ledger_marker.py release --dir <원장 폴더> --session <sid>` — 표지의 세션 id 가 부른 세션과 같을 때만 지운다. 다르거나
-     없으면 지우지 않고 rc 0 으로 그 사실을 한 줄 낸다. 진입 블록이 그 라운드의 finalize 뒤 부른다.
+     없으면 지우지 않고 rc 0 으로 그 사실을 한 줄 낸다. 진입 블록은 finalize 직후가 아니라 **승인 게이트의 응답을 원장에 다
+     적은 뒤**(`decide` · `fix` · `ask` · `defer` 등 게이트 답의 기록이 끝난 뒤) 부른다 — finalize 와 게이트 응답 사이에도 원장 쓰기가
+     있으므로 그동안 표지가 남아 있어야 한다. 게이트가 다음 라운드로 이어지면 그 라운드는 다시 `acquire` 로 시작한다.
+   - `ledger_marker.py check --dir <원장 폴더> --session <sid>` — 표지의 세션 id 가 부른 세션과 같을 때만 rc 0, 표지가 없거나
+     다른 세션 id 면 rc 3 과 사유(「표지 없음」 또는 그 세션 id)를 낸다. 원장에 쓰는 명령(엔진 `docreview_state.py` 의 `init` ·
+     `begin-round` · `record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` 등과 라우팅의 finalize)은 모두 진입 블록이
+     **먼저** 같은 Bash 호출 안에서 `check` 를 부르고, rc 0 이 아니면 그 명령을 부르지 않고 사유를 보이고 멈춘다. 엔진은 표지를
+     모른 채로 두고(Non-goals — 엔진 동작 변경은 R2a), 확인은 호출하는 쪽 펜스가 맡는다.
    - rc 3 이면 진입이 멈추고 `AskUserQuestion` 으로 「그만둠 (권장)」/「이어 씀 — 표지를 내 것으로 바꾼다」 를 묻는다. 「이어 씀」을
      고른 뒤에만 `ledger_marker.py takeover --dir <원장 폴더> --session <sid>` 가 같은 폴더의 임시 파일에 새 세션 id 를 쓰고
      `os.replace` 로 표지를 원자적으로 바꾼다. 세션이 죽어 표지가 남은 경우도 같은 질문으로 풀린다.
-   - 표지를 넘겨준 세션은 release 에서 남의 표지를 지우지 않고, 다음 라운드의 acquire 에서 rc 3 을 받아 멈춘다.
+   - 표지를 넘겨준 세션은 다음 원장 쓰기 앞의 `check` 에서 rc 3 을 받아 멈추고(라운드 중간이어도 더 쓰지 않는다), release 에서도
+     남의 표지를 지우지 않으며, 다음 라운드의 acquire 에서도 rc 3 을 받는다.
    - 세션 id 를 얻지 못하면(`state_path.py session-id` 가 빈 값이나 실패) 표지를 잡을 수 없으므로 리뷰를 시작하지 않는다 — 진입이
      사유를 보이고 멈춘다(지금 펜스의 「세션 상태 디렉토리를 특정할 수 없다 — 리뷰 없이 끝났다」 출구와 같은 꼴). 표지 없이 진행하지 않는다.
    - `release` 는 표지를 지울 때 같은 폴더의 `last-session` 파일에 자기 세션 id 를 원자적으로(임시 파일 + `os.replace`) 남긴다.
@@ -194,7 +205,9 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
      그 원장을 이어 받는다. 대상 폴더가 이미 있으면 두 원장의 `docreview-state.md` mtime 을 비교해 더 새 쪽을 `.docreview/<새 키>/`
      에 남기고 「옛 원장 충돌 — <새 키>: <옛|새> 쪽을 남겼다」 한 줄을 낸다. 옛 원장이 더 새면 기존 대상을 같은 `.docreview/`
      안의 `.gc-pending-<새 키>-<시각>` 으로 rename 해 비켜 놓고 옮긴다 — 비켜 놓은 폴더는 (c) 의 줍기가 지운다. 단 기존 대상에
-     동시 리뷰 표지 `reviewing-by`(§2-4)가 있으면 mtime 과 무관하게 대상을 남긴다(다른 세션이 리뷰 중이다).
+     동시 리뷰 표지 `reviewing-by`(§2-4)가 있으면 mtime 과 무관하게 대상을 남긴다(다른 세션이 리뷰 중이다). 기존 대상의
+     `docreview-state.md` 가 없거나 읽히지 않아도 비교하지 않고 대상을 남긴다 — 읽지 못한 원장은 남기고 알린다(그 옛 원장도
+     옮기지 않고 옛 폴더를 지우지 않으며 「읽지 못한 원장」 줄에 센다).
      기록된 문서 경로를 읽었고 그 문서가 없는 원장만 옮기지 않고 폴더와 함께 지운다. `docreview-state.md` 가 없거나 읽히지
      않거나 문서 경로를 얻지 못하는 원장이 하나라도 있으면 그 옛 폴더는 지우지 않고(옮길 수 있는 원장은 옮긴다) ① 의
      「읽지 못한 원장」 줄에 함께 센다. 옮긴 뒤에 폴더를 지운다.
@@ -230,7 +243,7 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
   이미 맡는다(D29 · OQ12). 리뷰 원장은 문서 단위가 되어(§2) 다른 세션의 SessionEnd · TTL 로 지워지지 않는다(RC37).
 - RC15(규칙) — §3-5 에서 규칙을 실제와 맞춘다. RC60(선례) — 오래 남을 정보는 docs 로, 세션 state 에는 아무것도 두지 않는다.
 - OQ37(로드맵 정의와 살아 있는 단계의 자리) — 정의는 추적 파일, 단계는 git 에서 계산(R0 `roadmap_status.py`). 이 에픽은 바꾸지 않는다.
-- 새 위험: 문서 단위 원장의 동시 쓰기 — §2-4 표지(배타 생성 · 소유자만 해제). 옛 버전 정리 코드의 원장 삭제 — §2-1 `.docreview`.
+- 새 위험: 문서 단위 원장의 동시 쓰기 — §2-4 표지(배타 생성 · 원장 쓰기마다 소유자 확인 · 게이트 응답 기록 뒤 소유자만 해제). 옛 버전 정리 코드의 원장 삭제 — §2-1 `.docreview`.
   옛 세션 폴더의 미이월 인터뷰 기록 — §3-2 ③ 보존. 옛 세션 폴더 안의 리뷰 원장 — §3-2 ② 가 지우기 전에 새 자리로 옮긴다.
   seed 와 같은 날 인터뷰의 경로 겹침 — §1-1 `-brief` 꼬리와 §1-2 의 종류 다른 파일 거부. 상태 파일의 작업 트리 노출(커밋 전 untracked) — §1-5 커밋 규칙과 기본 브랜치 거부.
 
@@ -247,11 +260,11 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
 - AC2 `plugins/spec-distill` 의 production 표면(SKILL · references · scripts · templates)에서 `state.local.md` 는 §1-7 이월 문면과 `ledger_sweep.py` 의 옛 폴더 정리에만 남는다.
 - AC3 상태 파일 frontmatter 첫 키는 `type: interview-state`, 다음 `seed:`. 진입 단계가 `@<…>.state.md` 를 받으면 이어 가는 분기로 간다(SKILL 문면 + 펜스 출력 단언). seed `<날짜>-<주제>-interview.md` 로 시작한 인터뷰는 `--topic <주제>-brief` 로 경로를 내므로 그 brief · audit · 상태 파일 경로가 seed · seed audit 경로와 겹치지 않는다(SKILL 문면 + 같은 날 픽스처).
 - AC4 같은 seed 의 끝나지 않은 상태 파일이 있으면 「이어 감 (권장)」/「새로 시작」 질문이 뜨고, 새로 시작은 기존 파일을 지우지 않는다.
-- AC5 `finishing.md` Step A 는 brief · audit · state 세 경로만 `--only` 로 커밋하고, 기본 브랜치에서는 커밋하지 않고 세 경로를 보인다(픽스처 git 저장소로 두 분기 다 확인).
-- AC6 `docreview_state.py state-dir-for` 는 `--session` 을 받지 않고(주면 exit 2) `<root>/.docreview/<stem40>-<hash16>` 을 낸다. 호출하는 펜스 전부가 `--session` 없이 부른다. 옛 버전 `spec-distill-gc.py` 의 세션 이름 정규식은 `.docreview` 에 맞지 않는다 — 옛 GC 를 TTL 0 으로 돌려도 새 원장이 남는다(픽스처).
+- AC5 `finishing.md` 는 brief · audit · state 세 경로만 `--only` 로 커밋하고, 그 커밋은 Step A 직후가 아니라 Step B-3 ①/② 의 확정 반영과 `check_brief.py gate` 재실행 통과 뒤(④ 는 종료 advisory 직전) 한 번이다 — Step A 와 Step A.5 에는 커밋 문면이 없고, ③ 은 커밋하지 않는다(문면 순서 단언). 기본 브랜치에서는 커밋하지 않고 세 경로를 보인다(픽스처 git 저장소로 두 분기 다 확인).
+- AC6 `docreview_state.py state-dir-for` 는 `--session` 을 받지 않고(주면 exit 2) `<root>/.docreview/<stem40>-<hash16>` 을 낸다. 호출하는 펜스 전부가 `--session` 없이 부른다. 옛 버전 `spec-distill-gc.py` 의 세션 이름 정규식은 `.docreview` 에 맞지 않는다. TTL 0 은 `ttl_ns` 가 0 이하를 기본 24시간으로 바꾸므로 검증에 쓰지 않는다. 픽스처: 옛 GC 를 `DEVBREW_SPEC_DISTILL_TTL_HOURS=1` 로 두고 `.docreview/` 와 그 아래 모든 항목의 mtime 을 2시간 전으로 돌린 뒤(옛 GC 는 폴더 아래 최신 mtime 을 나이로 잰다) 돌려도 새 원장이 남는다. 같은 실행의 양성 짝 둘: mtime 이 같은 2시간 전인 정규식에 맞는 이름 폴더(옛 `docreview` 이름 포함)는 지워지고 — 이 설정이 실제로 지운다는 증거 — mtime 이 지금인 정규식에 맞는 폴더는 남는다 — 지움이 TTL 1시간으로 갈린다는 증거.
 - AC7 원장 라운드가 1 이상이고 원장 폴더의 `last-session` 이 없거나 현재 세션 id 와 다를 때만 진입 블록이 「이전 리뷰 라운드 <n> 에서 이어 간다」 를 낸다 — 같은 세션의 다음 라운드(`last-session` 이 현재 세션 id)에서는 내지 않는다(두 분기 픽스처).
-- AC8 `ledger_marker.py`: 빈 원장에 두 세션이 동시에 `acquire` 하면 하나만 rc 0 이다(배타 생성) · 다른 세션 id 의 표지가 있으면 rc 3 이고 진입이 멈춰 질문한다 · `release` 는 남의 표지를 지우지 않는다 · 자기 표지는 finalize 뒤 사라진다 · `takeover` 는 「이어 씀」 선택 뒤에만 불리고 표지를 임시 파일 + `os.replace` 로 바꾼다.
-- AC9 `ledger_sweep.py`: 문서 없는 원장만 지운다 · 문서 있는 원장은 남긴다 · `.docreview` 는 옛 폴더로 보지 않는다 · TTL 넘은 옛 세션 폴더 중 `state.local.md` 가 없는 것만 지운다 · 그 폴더를 지우기 전에 기록된 문서가 있는 `docreview/<x>/` 원장을 `.docreview/<새 키>/` 로 옮기고, 옮긴 경로는 `state-dir-for` 가 같은 문서에 내는 경로와 같다 · 대상이 이미 있으면 `docreview-state.md` mtime 이 더 새 쪽을 남기고(대상에 `reviewing-by` 가 있으면 대상을 남긴다) 충돌 줄을 낸다 · 기록된 문서가 없는 옛 원장만 폴더와 함께 지운다 · `docreview-state.md` 가 없거나 읽히지 않는 원장(새 자리 · 옛 폴더 모두)은 지우지 않고 「읽지 못한 원장」 줄을 낸다 · `state.local.md` 가 있는 옛 폴더는 TTL 을 넘어도 남기고 「옮기지 않은 옛 인터뷰 기록 <n>개 — <경로들>」 을 낸다 · 루트 탈출 링크를 거부한다 · `DEVBREW_SPEC_DISTILL_DISABLE=1` 과 `DEVBREW_SKIP_HOOKS` 의 `spec-distill:SessionEnd` · `spec-distill:session-end-cleanup` · `spec-distill:spec-distill-gc` 각각에서 아무것도 지우지 않는다.
+- AC8 `ledger_marker.py`: 빈 원장에 두 세션이 동시에 `acquire` 하면 하나만 rc 0 이다(배타 생성) · 다른 세션 id 의 표지가 있으면 rc 3 이고 진입이 멈춰 질문한다 · `release` 는 남의 표지를 지우지 않는다 · 자기 표지는 finalize 직후에는 남아 있고 승인 게이트 응답을 원장에 적은 뒤에 사라진다(문면 순서 + 픽스처) · `check` 는 표지가 부른 세션의 것일 때만 rc 0 이고 표지가 없거나 다른 세션이면 rc 3 이다 — 원장에 쓰는 진입 펜스의 명령마다 그 앞에 `check` 가 있고 rc 0 이 아니면 그 명령이 돌지 않는다(남의 표지 · 표지 없음 두 분기 픽스처, 원장 파일이 바뀌지 않음을 단언) · `takeover` 는 「이어 씀」 선택 뒤에만 불리고 표지를 임시 파일 + `os.replace` 로 바꾼다.
+- AC9 `ledger_sweep.py`: 문서 없는 원장만 지운다 · 문서 있는 원장은 남긴다 · `.docreview` 는 옛 폴더로 보지 않는다 · TTL 넘은 옛 세션 폴더 중 `state.local.md` 가 없는 것만 지운다 · 그 폴더를 지우기 전에 기록된 문서가 있는 `docreview/<x>/` 원장을 `.docreview/<새 키>/` 로 옮기고, 옮긴 경로는 `state-dir-for` 가 같은 문서에 내는 경로와 같다 · 대상이 이미 있으면 `docreview-state.md` mtime 이 더 새 쪽을 남기고(대상에 `reviewing-by` 가 있으면 대상을 남긴다) 충돌 줄을 낸다 · 기록된 문서가 없는 옛 원장만 폴더와 함께 지운다 · `docreview-state.md` 가 없거나 읽히지 않는 원장(새 자리 · 옛 폴더 · 충돌한 기존 대상 모두)은 지우지 않고 「읽지 못한 원장」 줄을 낸다 — 읽지 못한 원장을 지우는 분기는 없다 · `state.local.md` 가 있는 옛 폴더는 TTL 을 넘어도 남기고 「옮기지 않은 옛 인터뷰 기록 <n>개 — <경로들>」 을 낸다 · 루트 탈출 링크를 거부한다 · `DEVBREW_SPEC_DISTILL_DISABLE=1` 과 `DEVBREW_SKIP_HOOKS` 의 `spec-distill:SessionEnd` · `spec-distill:session-end-cleanup` · `spec-distill:spec-distill-gc` 각각에서 아무것도 지우지 않는다.
 - AC10 `hooks/hooks.json` 에 훅 항목이 없고 `session-end-cleanup.py` · `spec-distill-gc.py` 가 없다. 양의 짝: 리뷰 진입 셋이 `ledger_sweep.py` 를 부른다.
 - AC11 request-framing 에 `interview-basename` 이 없고, audit frontmatter `session_id` 로 이름을 되찾는다(둘 이상이면 멈춤).
 - AC12 옛 `<sid>/state.local.md` 가 있으면 인터뷰 진입이 docs 로 옮기고 그 사실을 보인다.
@@ -275,7 +288,7 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
 
 - 작업 전 기준선: spec-distill · shared 스위트의 FAIL «이름» 집합을 잰다(선재 RED `test_hook_output_schema.py test_python_and_bash_resolvers_agree` 포함).
 - Task 마다 닿은 소비자 전부의 스위트를 레포 루트에서 돈다. 삭제 Task 는 guards 커버리지 락을 돈다.
-- 픽스처 git 저장소(버릴 디렉토리, `mktemp` 경로를 `cd` 전에 비지 않았는지 확인)로 §1-5 커밋 두 분기 · §2-4 표지(동시 `acquire` 두 프로세스 · 남의 표지 `release` · `takeover`) · §3-2 정리(옛 GC 로도 `.docreview` 가 남음 · `state.local.md` 가 있는 옛 폴더 보존 · 옛 원장 이월과 대상 충돌 · 옛 토큰 셋) · §1-2 seed 와 같은 날 경로 거부를 확인한다.
+- 픽스처 git 저장소(버릴 디렉토리, `mktemp` 경로를 `cd` 전에 비지 않았는지 확인)로 §1-5 커밋 두 분기 · §2-4 표지(동시 `acquire` 두 프로세스 · 남의 표지 `release` · `takeover` · 넘겨준 세션의 다음 쓰기가 `check` 에서 멈춤 · 게이트 응답 기록 전에는 표지가 남음) · §3-2 정리(옛 GC 로도 `.docreview` 가 남음 · `state.local.md` 가 있는 옛 폴더 보존 · 옛 원장 이월과 대상 충돌 · 옛 토큰 셋) · §1-2 seed 와 같은 날 경로 거부를 확인한다.
 - 새 락 다섯(AC15 — AC2 · AC6 · AC8 · AC9 · AC10)은 변이로 RED 를 확인하고 양성 대조를 둔다.
 - 끝에서 끝: 픽스처에서 인터뷰 상태 파일 생성 → 세션 id 바꿔 이어 가기 → 끝내기 커밋 → 같은 문서 리뷰 두 세션 → 정리.
 
@@ -322,6 +335,10 @@ request-framing 의 선례(오래 남을 정보를 세션 state 에 두지 않�
 - D2.6 · r2 · adopt · 7ec95fa7#r1.1 · "넷 모두 고친다 (권장)" — 실행 중인 옛 버전의 정리 코드는 새 `docreview` 폴더를 세션 폴더로 인식한다. 현재 코드의 이름 검사와 시간 기준을 대조하면, 새 버전에서만 이름을 제외해도 옛 버전의 삭제는 막을 수 없다.
 - D3.1 · r3 · adopt · 3d2c93fa#r1.1 · "둘 다 고친다 (권장)" — seed 로 시작한 인터뷰가 seed 의 주제를 이름으로 쓰면 같은 날의 brief · audit 경로가 seed · seed audit 와 같아져 덮어쓴다. seed 에서 온 인터뷰 주제에 `-brief` 꼬리를 붙이고, 경로 스크립트는 계산한 경로에 종류 다른 파일이 있으면 exit 2 로 거부한다(§1-1 · §1-2 · AC1 · AC3).
 - D3.2 · r3 · adopt · acc785c7#r1.1 · "둘 다 고친다 (권장)" — 옛 세션 폴더 안의 리뷰 원장이 새 자리로 옮겨지지 않고 TTL 뒤 폴더째 지워져 G4 와 어긋난다. 정리 모듈이 옛 폴더를 지우기 전에 기록된 문서가 있는 원장을 `.docreview/<새 키>/` 로 한 번 옮기고(충돌 시 더 새 쪽을 남기고 알림) 문서 없는 원장만 지운다(§3-2 ② · AC9).
+- 결정 · 2026-10-15 · 표지 해제 시점과 쓰기 전 소유자 확인(3d76d97e#r1.1) — 「넷 다 고치고 승인으로 (권장)」 · 리뷰 뒤 반영(이 변경은 리뷰 라운드를 거치지 않았다) — `reviewing-by` 는 finalize 직후가 아니라 승인 게이트 응답을 원장에 적은 뒤 해제하고, 원장에 쓰는 명령마다 먼저 `ledger_marker.py check` 로 표지 주인이 자기 세션인지 확인해 아니면 사유를 보이고 멈춘다(§2-4 · AC8).
+- 결정 · 2026-10-15 · 읽지 못한 옛 원장의 처리 확인(44e246a3#r1.1) — 「넷 다 고치고 승인으로 (권장)」 · 리뷰 뒤 반영(이 변경은 리뷰 라운드를 거치지 않았다) — 「읽지 못한 옛 원장은 남기고 알린다」를 유지하고, 옛 원장 충돌에서 기존 대상이 읽히지 않는 경우도 남기도록 맞췄다(§3-2 ② · AC9).
+- 결정 · 2026-10-15 · 세 파일 커밋 시점(866b69d6#r1.1) — 「넷 다 고치고 승인으로 (권장)」 · 리뷰 뒤 반영(이 변경은 리뷰 라운드를 거치지 않았다) — 커밋은 Step A 의 첫 쓰기 직후가 아니라 Step B-3 의 확정 반영과 마지막 게이트 재실행 통과 뒤 한 번이다(§1-5 · AC5).
+- 결정 · 2026-10-15 · 옛 GC 검증의 TTL(7b7d0951) — 「넷 다 고치고 승인으로 (권장)」 · 리뷰 뒤 반영(이 변경은 리뷰 라운드를 거치지 않았다) — `ttl_ns` 가 0 이하를 24시간으로 바꿔 「TTL 0」 검증이 공허하므로, TTL 1시간과 2시간 전 mtime 으로 돌리고 양성 짝(늙은 정규식 폴더는 지워짐 · 새 폴더는 남음)을 둔다(AC6).
 
 ## 번호 대조
 
