@@ -94,6 +94,8 @@ grep -qF '(사용자 확인)' <<<"$tpl_ex" && ok "AC11: seed 템플릿 예시에
 # check_seed.py 는 seed 본문에 슬롯 존재 검사를 더하지 않는다 — v0.57.0 에서는 파일 diff 0 으로 쟀으나 R2 가
 # audit 쪽 존재 검사(덜어 낸 것 표)를 의도로 더했다. 지키던 성질은 `gate()` 안에서 seed 본문 변수(`body` · `text`)를
 # 읽는 자리를 기존 다섯으로 못 박아 잰다(ast) — 본문을 읽는 새 검사가 어디에 붙든 이 집합이 달라진다.
+# R2 보안 검토(Task S)가 부재 검사 셋(답-슬롯 헤딩 · 태그 · URL)을 본문을 접어(정규화) 판정하는 함수로
+# 옮겼다 — 자리 수는 다섯 그대로이고, 바뀐 것은 부재 검사의 정규화이지 슬롯 «존재» 검사가 아니다.
 # 행동 쪽 락은 test_seed_one_sentence.sh.
 CS="$ROOT/plugins/spec-distill/scripts/check_seed.py"
 cs_body_reads() {
@@ -109,14 +111,14 @@ for par in ast.walk(g):
         print("CUT:" + ast.unparse(par))
 PYAST
 }
-cs_want='ANSWER_SLOT_RE.finditer(body)
+cs_want='answer_slot_headings(body)
 CUT:cut_table_problems(atext)
-TAG_RE.finditer(body)
-URL_RE.finditer(body)
+tag_hits(body)
+url_hits(body)
 body_of(text)
 visible_content(body)'
 cs_want="$(printf '%s\n' "$cs_want" | LC_ALL=C sort)"  # 로케일 무관 — 양쪽 모두 C 정렬
-assert_eq "$(cs_body_reads "$CS" | LC_ALL=C sort)" "$cs_want" "AC11: check_seed.py gate() 가 seed 본문을 읽는 자리는 기존 다섯뿐이고 새 검사는 audit 텍스트만 받는다"
+assert_eq "$(cs_body_reads "$CS" | LC_ALL=C sort)" "$cs_want" "AC11: check_seed.py gate() 가 seed 본문을 읽는 자리는 기존 다섯뿐이고(부재 검사 셋은 본문을 접어 판정할 뿐 슬롯 존재 검사가 아니다) 새 검사는 audit 텍스트만 받는다"
 # 양성 짝(이빨) — 본문을 읽는 새 검사를 얹은 사본은 집합이 달라진다
 CSX="$(mktemp -d -t sd-csx-XXXXXX)" && [ -d "$CSX" ] && {
   awk '/^    return problems$/{print "    if not re.search(r\"x\", body):"; print "        problems.append(\"x\")"} {print}' "$CS" > "$CSX/check_seed.py"

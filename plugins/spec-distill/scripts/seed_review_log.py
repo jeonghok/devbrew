@@ -40,6 +40,12 @@ import json
 import pathlib
 import re
 import sys
+import unicodedata
+
+_SCRIPTS_DIR = str(pathlib.Path(__file__).resolve().parent)
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+import section6  # noqa: E402 — 펜스 · 제목 모양 판정은 이 리포에서 한 곳이다(§6-단일화 락)
 
 DECISION_HEADING = "## 6. 리뷰 결정"
 HOST_KINDS = ("편집", "답", "거부")
@@ -64,20 +70,57 @@ AUDIT_HEADINGS = (
 )
 
 
+def fold_for_match(s: str) -> str:
+    """판정용 접기 — 서식 문자(Cf: 제로폭 · BOM · 소프트 하이픈 등)를 지우고 NFKC 로 호환 글자(전각 ·
+    작은 괄호 등)를 정본으로 바꾼 뒤, 앞 글자에 붙는 결합 기호(Mn · Me: 이형 선택자 등)를 지운다.
+    사람과 모델은 이 차이를 같은 글자로 읽는다. 판정에만 쓴다 — 원문 바이트는 바꾸지 않는다."""
+    s = unicodedata.normalize("NFKC", "".join(ch for ch in s if unicodedata.category(ch) != "Cf"))
+    return "".join(ch for ch in s if unicodedata.category(ch) not in ("Cf", "Mn", "Me"))
+
+
+_LINE_ENDINGS = ("\n", "\r\n")
+
+
+def heading_lines(text: str, heading: str) -> list[tuple[int, bool]]:
+    """줄 전체(앞뒤 공백 제외)가 `heading` 인 줄마다 `(splitlines 줄 번호 0-based, 절 시작으로 인정되는가)`.
+
+    인정 조건 셋 — 셋 다 «이 줄을 사람 · 모델 · 마크다운 렌더러가 제목으로 읽는가» 를 묻는다:
+    (1) 제목 모양이다(`section6.HEADING_SHAPED_RE` — 들여쓰기 0–3칸. 4칸이면 코드 블록이다),
+    (2) 펜스 밖이다(`section6.fence_spans`),
+    (3) `\\n` 줄이다 — 앞 줄이 `\\n` 으로 끝나고 이 줄도 `\\n` · 파일 끝으로 끝난다. `str.splitlines` 는
+        U+2028 · 폼 피드 같은 구분자에서도 끊지만 마크다운은 거기서 줄을 나누지 않는다 — 한 줄 안에
+        숨은 제목이 절을 열면 안 된다."""
+    spans = section6.fence_spans(text)
+    out: list[tuple[int, bool]] = []
+    pos, prev_ok = 0, True
+    for i, raw in enumerate(text.splitlines(keepends=True)):
+        content = raw.splitlines()[0]
+        ending = raw[len(content):]
+        if content.strip() == heading:
+            ok = (prev_ok and (ending in _LINE_ENDINGS or ending == "")
+                  and section6.HEADING_SHAPED_RE.match(content) is not None
+                  and not any(s <= pos < e for s, e in spans))
+            out.append((i, ok))
+        prev_ok = ending in _LINE_ENDINGS
+        pos += len(raw)
+    return out
+
+
 def section_body(text: str, heading: str) -> str | None:
-    """`heading` 과 같은 줄 다음부터, `AUDIT_HEADINGS` 일곱 제목 중 하나와 줄 전체가 같은 다음
-    줄 전까지(임의의 `## ` 줄이 아니다 — 비신뢰 본문 안에 `## ` 로 시작하는 줄이 있어도 그 줄에서
-    절이 끊기지 않는다). 절이 없으면 None."""
+    """`heading` 절 시작으로 인정되는 첫 줄(`heading_lines`) 다음부터, `AUDIT_HEADINGS` 일곱 제목 중
+    하나와 줄 전체가 같은 다음 줄 전까지(임의의 `## ` 줄이 아니다 — 비신뢰 본문 안에 `## ` 로 시작하는
+    줄이 있어도 그 줄에서 절이 끊기지 않는다). 끝은 펜스 안 · 들여 쓴 제목 줄에서도 끊는다 — 끊는 쪽으로
+    틀리면 덜 읽을 뿐이다. 인정되는 시작 줄이 없으면 None."""
+    starts = [i for i, ok in heading_lines(text, heading) if ok]
+    if not starts:
+        return None
     lines = text.splitlines()
-    for i, line in enumerate(lines):
-        if line.strip() == heading:
-            body = []
-            for nxt in lines[i + 1:]:
-                if nxt.strip() in AUDIT_HEADINGS:
-                    break
-                body.append(nxt)
-            return "\n".join(body)
-    return None
+    body = []
+    for nxt in lines[starts[0] + 1:]:
+        if nxt.strip() in AUDIT_HEADINGS:
+            break
+        body.append(nxt)
+    return "\n".join(body)
 
 
 def duplicate_headings(text: str) -> list[tuple[str, list[int]]]:
