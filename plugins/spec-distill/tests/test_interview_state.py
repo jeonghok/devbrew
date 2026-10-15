@@ -150,6 +150,58 @@ class MigrateTest(Base):
         self.assertEqual(rc, 1)
 
 
+class LinkTest(Base):
+    def setUp(self):
+        super().setUp()
+        self.out = Path(tempfile.mkdtemp()).resolve()
+        (self.out / "keep.txt").write_text("원본", encoding="utf-8")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.out, ignore_errors=True)
+        super().tearDown()
+
+    def legacy(self):
+        p = self.tmp / ".claude" / "spec-distill" / SID / "state.local.md"
+        p.parent.mkdir(parents=True)
+        p.write_text("---\nsession_id: x\n---\n기록\n", encoding="utf-8")
+        return p
+
+    def snapshot(self):
+        return sorted(f.name for f in self.out.iterdir())
+
+    def test_linked_interview_dir_refused(self):
+        import shutil
+        shutil.rmtree(self.iv)
+        os.symlink(str(self.out), str(self.iv))
+        before = self.snapshot()
+        sp = Path(SCRIPT).with_name("state_path.py")
+        cp = subprocess.run([sys.executable, str(sp), "interview-state", "--topic", "t",
+                             "--date", "2026-10-15", "--cwd", str(self.tmp)],
+                            capture_output=True, text=True, timeout=20)
+        self.assertEqual(cp.returncode, 2)
+        self.legacy()
+        rc, _, _ = run("migrate-legacy", "--session", SID, "--topic", "t", "--date", "2026-10-15", cwd=self.tmp)
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_planted_tmp_link_not_followed(self):
+        old = self.legacy()
+        os.symlink(str(self.out / "keep.txt"), str(self.iv / ".2026-10-15-t-interview.state.md.tmp"))
+        rc, _, err = run("migrate-legacy", "--session", SID, "--topic", "t", "--date", "2026-10-15", cwd=self.tmp)
+        self.assertEqual(rc, 3)
+        self.assertEqual((self.out / "keep.txt").read_text(encoding="utf-8"), "원본")
+        self.assertTrue(old.exists())
+
+    def test_linked_legacy_refused(self):
+        old = self.legacy()
+        old.unlink()
+        os.symlink(str(self.out / "keep.txt"), str(old))
+        rc, _, _ = run("migrate-legacy", "--session", SID, "--topic", "t", "--date", "2026-10-15", cwd=self.tmp)
+        self.assertEqual(rc, 2)
+        self.assertFalse((self.iv / "2026-10-15-t-interview.state.md").exists())
+
+
 class SeedAuditTest(Base):
     def test_one_match(self):
         self.put("2026-10-15-t-interview.audit.md", "interview-seed-audit", "session_id: %s\n" % SID)

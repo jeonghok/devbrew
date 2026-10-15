@@ -4,7 +4,7 @@
 CLI (판결은 stdout 마지막 줄):
   interview_state.py entry --arg <경로|""> --session <sid> [--cwd <dir>]
   interview_state.py migrate-legacy --session <sid> --topic <kebab> [--seed <경로>] [--date D] [--cwd <dir>]
-    rc: 0 옮김 · 1 옮길 옛 파일 없음 · 2 자리 거부/대상 이미 있음 · 3 읽기/쓰기 실패(옛 파일 그대로) 또는 옛 파일 삭제 실패
+    rc: 0 옮김 · 1 옮길 옛 파일 없음 · 2 자리 거부(링크 포함)/대상 이미 있음 · 3 읽기/쓰기 실패(옛 파일 그대로) 또는 옛 파일 삭제 실패
   interview_state.py seed-audit-for-session --session <sid> [--cwd <dir>]
 """
 from __future__ import annotations
@@ -17,8 +17,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from state_path import (  # noqa: E402
-    INTERVIEW_DIR, SESSION_PATTERN, frontmatter_scalars, interview_state_path, state_root, worktree_root,
+    INTERVIEW_DIR, SESSION_PATTERN, frontmatter_scalars, inside_root, interview_state_path, state_root, worktree_root,
 )
+from gc_common import root_escapes  # noqa: E402
 
 LEGACY_NAME = "state.local.md"
 _SEED_NAME = re.compile(r"\d{4}-\d{2}-\d{2}-([a-z0-9]+(?:-[a-z0-9]+)*)-interview\.md")
@@ -86,6 +87,11 @@ def cmd_migrate(a) -> int:
     if leg is None:
         print("[spec-distill] 옮길 옛 진행 기록이 없다", file=sys.stderr)
         return 1
+    root = state_root(a.cwd)
+    if leg.is_symlink() or root_escapes(root, "spec-distill"):
+        print("[spec-distill] 옛 진행 기록이 링크이거나 상태 루트가 링크를 거친다 — 옮기지 않는다: {0}".format(leg),
+              file=sys.stderr)
+        return 2
     path, msgs = interview_state_path(a.topic, a.date, a.cwd)
     for m in msgs:
         print(m, file=sys.stderr)
@@ -100,13 +106,16 @@ def cmd_migrate(a) -> int:
         head = "type: interview-state\nseed: {0}\n".format(seed_rel(a.seed) if a.seed else "없음")
         new = "---\n" + head + text[4:] if text.startswith("---\n") else "---\n" + head + "---\n" + text
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_text(new, encoding="utf-8")
+        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(new.encode("utf-8"))
         os.replace(str(tmp), str(path))
     except (OSError, UnicodeDecodeError) as e:
-        try:
-            tmp.unlink()
-        except OSError:
-            pass
+        if not isinstance(e, FileExistsError):  # 남이 놓은 tmp 는 지우지 않는다
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
         print("[spec-distill] 옛 진행 기록을 옮기지 못했다 — {0}".format(e), file=sys.stderr)
         return 3
     try:

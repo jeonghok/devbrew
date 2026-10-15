@@ -84,4 +84,19 @@ out=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$NG" 
 got=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$NG" 2>/dev/null)
 assert_eq "$got" "$NG/docs/superpowers/interview/2026-10-15-t-interview.state.md" "§1-2: git 이 아니면 --cwd 기준 경로"
 assert_contains "$out" "git 저장소가 아니다" "§1-2: git 이 아니면 그 사실을 stderr 로 낸다"
+# ── path-inside · 링크 거부 ───────────────────────────────────────────────
+OUTD="$WORK/outside"; mkdir -p "$OUTD"
+PI="$WORK/pi-repo"; mkdir -p "$PI/docs/real" && echo x > "$PI/docs/real/f.md"
+python3 "$HELPER" path-inside --root "$PI" "$PI/docs/real/f.md" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "0" "path-inside 양성 대조: 안쪽 일반 파일 rc 0"
+ln -s "$OUTD" "$PI/docs/lnk"
+out=$(python3 "$HELPER" path-inside --root "$PI" "$PI/docs/lnk/f.md" 2>&1 >/dev/null); rc=$?
+assert_eq "$rc" "2" "path-inside: 링크 성분은 rc 2"
+assert_contains "$out" "링크를 거친다" "path-inside: 사유가 stderr 에 나온다"
+python3 "$HELPER" path-inside --root "$PI" "$PI/docs/../../x" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "path-inside: .. 탈출은 rc 2"
+LV="$WORK/iv-link"; mkdir -p "$LV/docs/superpowers" && git -C "$LV" init -q
+ln -s "$OUTD" "$LV/docs/superpowers/interview"
+python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$LV" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "interview-state: 링크된 interview 디렉토리는 rc 2"
 finish

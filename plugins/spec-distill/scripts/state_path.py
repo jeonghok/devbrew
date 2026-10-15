@@ -99,6 +99,26 @@ def worktree_root(cwd: str | None = None) -> tuple[Path, bool]:
     return Path(cwd).resolve(), False
 
 
+def inside_root(path, root) -> str | None:
+    """path 가 root 안에 있고 root 아래 성분 중 링크가 없으면 None, 아니면 짧은 사유."""
+    rel = os.path.relpath(os.path.abspath(str(path)), os.path.abspath(str(root)))
+    if rel == ".." or rel.startswith(".." + os.sep) or os.path.isabs(rel):
+        return "작업 트리 밖이다"
+    cur = os.path.abspath(str(root))
+    for part in [] if rel == "." else rel.split(os.sep):
+        cur = os.path.join(cur, part)
+        if os.path.islink(cur):
+            return "링크를 거친다 ({0})".format(cur)
+    probe = cur
+    while not os.path.lexists(probe) and probe != os.path.dirname(probe):
+        probe = os.path.dirname(probe)
+    real_root = os.path.realpath(str(root))
+    real = os.path.realpath(probe)
+    if real != real_root and not real.startswith(real_root + os.sep):
+        return "실제 위치가 작업 트리 밖이다"
+    return None
+
+
 def frontmatter_scalars(path) -> dict | None:
     """맨 앞 `---` 블록의 최상위 `key: value` 줄. 읽지 못하면 None, frontmatter 가 없으면 {}."""
     try:
@@ -136,6 +156,11 @@ def interview_state_path(topic: str, date: str | None = None,
         msgs.append("[spec-distill] git 저장소가 아니다 — {0} 기준으로 경로를 냈다".format(root))
     d = root.joinpath(*INTERVIEW_DIR)
     stem = "{0}-{1}-interview".format(date, topic)
+    for q in [d] + [d / (stem + sfx) for sfx, _ in _SLOTS]:
+        why = inside_root(q, root)
+        if why:
+            msgs.append("[spec-distill] 경로가 작업 트리 밖이거나 링크를 거친다 — {0}: {1}".format(q, why))
+            return None, msgs
     for suffix, kind in _SLOTS:
         p = d / (stem + suffix)
         if not (p.exists() or p.is_symlink()):
@@ -186,6 +211,21 @@ def main(argv: list[str]) -> int:
             return 2
         print(str(path))
         return 0
+    if sub == "path-inside":
+        if "--root" not in argv or argv.index("--root") + 1 >= len(argv):
+            print("usage: state_path.py path-inside --root <R> <PATH>...", file=sys.stderr)
+            return 2
+        i = argv.index("--root")
+        root = argv[i + 1]
+        paths = argv[2:i] + argv[i + 2:]
+        bad = 0
+        for q in paths:
+            why = inside_root(q, root)
+            if why:
+                print("[spec-distill] 경로가 작업 트리 밖이거나 링크를 거친다 — {0}: {1}".format(q, why),
+                      file=sys.stderr)
+                bad = 1
+        return 2 if bad else 0
     print(f"unknown subcommand: {sub}", file=sys.stderr)
     return 2
 
