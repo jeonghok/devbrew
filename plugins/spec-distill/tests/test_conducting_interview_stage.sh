@@ -155,23 +155,23 @@ grep -qF '/compact interview brief at' "${CI_ALL[@]}" \
   && no "AC4(next-session): 옛 /compact 보존 템플릿이 남았다" \
   || ok "AC4(next-session): 옛 /compact 보존 템플릿이 없다 (양성 짝: 위 다음 세션 줄)"
 
-# AC2: 재제시 상한 + 초과 시 강등 + 고정 advisory 문자열 (Unbounded-autonomy 가드)
+# AC2: 재제시 상한 + 초과 시 질문 (Unbounded-autonomy 가드)
 b0_block="$(awk '/^#### B-0/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
 { [[ -n "$b0_block" ]] && grep -q 'confirm_repost_count' <<<"$b0_block"; } \
   && ok "AC2: 재제시 카운터가 state에 기록됨 (프로즈 self-tracking 아님)" \
   || no "AC2: confirm_repost_count가 B-0 블록에 없다"
-grep -qF '[spec-distill] 확정 목록을 두 번 다시 보여 줬는데도 정하지 못했다 — 모든 항목을 잠정(provisional)으로 둔다' <<<"$b0_block" \
-  && ok "AC2: 상한 초과 고정 advisory 문자열 (verbatim)" \
-  || no "AC2: 상한 초과 advisory 문자열이 정확히 일치하지 않는다"
-# 이 assert는 위 advisory 고정 문자열이 아니라 **강등 프로즈**를 잠근다. 원래 패턴
-# ('전부 provisional|전 항목 .*provisional')은 프로즈(백틱·조사 때문에 불일치)가 아니라
-# advisory 문자열에만 매치돼 바로 위 grep -qF에 포섭됐다 — 프로즈만 지워도 GREEN인 가짜 이빨.
-# 아래 두 구절은 advisory 문자열에 등장하지 않는 body-unique 문구다: 강등 *동작*과 *방향 근거*.
-# teeth: 프로즈만 삭제 → 이 assert만 RED / advisory만 삭제 → 위 assert만 RED (서로 독립).
-{ grep -qF '전 항목을 `provisional`로 강등' <<<"$b0_block" \
-  && grep -qF '확정이 덜 되는 쪽이 안전한 방향' <<<"$b0_block"; } \
-  && ok "AC2: 상한 초과 시 덜-잠그는 쪽으로 강등 (프로즈 — advisory와 독립)" \
-  || no "AC2: 강등 프로즈(전 항목 provisional 강등 + 덜 되는 쪽이 안전)가 없다"
+# 재제시 상한은 자동 강등이 아니라 사용자에게 묻는다 — 세 라벨이 B-0 블록에 있고 강등 문면은 없다.
+# teeth: 세 라벨 중 하나만 지워도 RED / 강등 문면을 되살리면 RED.
+{ grep -qF '「계속 고친다(2번 더)」' <<<"$b0_block" \
+  && grep -qF '「지금 목록으로 확정」' <<<"$b0_block" \
+  && grep -qF '「brief 만 종료」' <<<"$b0_block"; } \
+  && ok "AC12: 재제시 상한이 세 선택(계속 고친다 · 지금 목록으로 확정 · brief 만 종료)을 묻는다" \
+  || no "AC12: 재제시 상한 질문의 세 라벨이 B-0 블록에 없다"
+{ grep -qF '자동 강등은 없다' <<<"$b0_block" \
+  && ! grep -qF '전 항목을 `provisional`로 강등' <<<"$b0_block" \
+  && ! grep -qF '모든 항목을 잠정(provisional)으로 둔다' <<<"$b0_block"; } \
+  && ok "AC12: 재제시 상한에 자동 강등이 없다 (양성 짝: 자동 강등은 없다)" \
+  || no "AC12: 자동 강등 문면이 남았거나 부재 선언이 없다"
 grep -qE '제외한 것도|제외 항목' <<<"$b0_block" \
   && ok "AC2: 확정 후보에서 제외한 항목도 함께 제시 (누락 검출 가능)" \
   || no "AC2: 제외 항목 제시 요구가 없다"

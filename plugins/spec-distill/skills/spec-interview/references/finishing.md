@@ -169,7 +169,7 @@ Skill spec-distill:reviewing-brief $PAYLOAD $AUDIT
   추가 라운드는 사용자가 그 skill 의 승인 게이트에서 자기 문구로 열어야만 돕니다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1`이면 파이프라인이 전체 skip되고 skip record가
   Step B 게이트 질문에 표시됩니다 — 조용한 생략이 아닙니다.
-- 리뷰가 payload를 수정할 수 있습니다(§0·§2 — 프로필의 수정 자리). 수정이 일어나면 Step B는 **리뷰 후
+- 리뷰가 payload 를 수정할 수 있습니다(§0 · §2~§5 — 프로필의 수정 자리. §1 은 사용자 결정이고 §6 은 추가만 허용이다). 수정이 일어나면 Step B는 **리뷰 후
   최종 문서**를 봅니다.
 - 산출물 셋(엔진 게이트 결과 / 냉독 요약 + gap / degrade 채널)이 Step B 게이트로 넘어옵니다. 엔진
   승인 게이트의 2단계(진행 옵션)는 그 skill 이 띄우지 않고 아래 Step B 가 묻습니다.
@@ -210,16 +210,39 @@ Step A가 끝난 시점에 `user_sourced_items`는 **전부 `provisional`**입�
   사용자가 누락을 잡을 수 없습니다.
 - 모델의 후보 판정은 **제안일 뿐**입니다. 어떤 항목도 이 출력만으로 `confirmed`가 되지 않습니다.
 
-**재제시 상한** (금지 패턴 *Unbounded autonomy* 가드): 최초 제시는 0회째입니다. 사용자가
-옵션 ③(확정 목록 수정)을 고를 때마다 state의 `confirm_repost_count`를 +1 하고 **2회까지**
-허용합니다. 3번째 ③ 요구 시 전 항목을 `provisional`로 강등하고 아래 **고정 문자열**을 출력한
-뒤 게이트를 재제시하지 않고 **④와 동일한 terminal 경로로 종료합니다**(handoff 안 함 —
-사용자가 ③을 골랐지 ①/②를 고른 적이 없으므로, 게이트 없이 brainstorming으로 자동 진행하는
-것은 B-4의 P17/AP2 금지 대상이다). 종료 방향인 이유는 확정이 덜 되는 쪽이 안전한 방향이기
-때문입니다:
+**함께 보이는 공시** — B-A 가 끝난 뒤, 확정 후보와 같은 프로즈 출력에 이 순서로 보입니다. 접지 않습니다
+(B-0 은 프로즈라 길이 제한이 없고, 줄이 많아도 전부 보입니다):
 
-```
-[spec-distill] 확정 목록을 두 번 다시 보여 줬는데도 정하지 못했다 — 모든 항목을 잠정(provisional)으로 둔다
+1. brief §1 의 줄마다 출처 — `§1 <Goal | Non-goal>: <줄> — 출처 ⟨S<n>⟩ | 모델 추론`(줄 끝 표시 그대로).
+   「모델 추론」 줄은 사용자가 말하지 않은 목표 · 비목표다.
+2. 확정 후보와 제외 항목(위).
+3. `확정으로 올리지 않은 발화 <N>개 — S<n> · <한 줄 이유>` — state `user_statements` 중 어느 `user_sourced_items`
+   의 `evidence` 에도 쓰이지 않은 발화, 하나에 한 줄. 0개면 `확정으로 올리지 않은 발화 0개`.
+4. `위험으로 보낸 참고 <N>개 — <id> · <이유>` — B-A 가 §5 `위험 — 리뷰 참고` 로 보낸 항목, 하나에 한 줄.
+5. (붙여넣은 seed 로 시작한 세션만) `출처를 가르지 못한 seed 문장 <N>개 — 붙여넣기라 분류기를 못 돌림` —
+   `seed-input.md` 가 R1 에서 보인 그 줄을 다시 보입니다.
+
+「확정 목록 수정」(③)에서 사용자는 이 다섯을 고칠 수 있습니다 — §1 줄을 고치거나 빼고(출처 표시도 함께, 줄 끝
+`⟨S<n>⟩` | `⟨모델 추론⟩` 모양을 지킨다), 안 올린 발화를 확정 후보에 더하고, 위험으로 보낸 참고를 §3 열린 질문으로
+올리고(§0 에도 `[열림]` 으로 — §0 · §3 이 같은 OQ 집합을 갖는다), 붙여넣은 seed 의 문장 중 자기 말을 사용자 출처로
+표시해 확정 후보에 더합니다(`source: verbatim` · `evidence: S1`). 고친 뒤 `check_brief.py gate` 를 다시 돕니다.
+
+**재제시 상한** (금지 패턴 *Unbounded autonomy* 가드): 최초 제시는 0회째입니다. 사용자가 옵션 ③(확정 목록
+수정)을 고를 때마다 state 의 `confirm_repost_count` 를 +1 합니다. 2회에 닿은 뒤 다시 ③ 을 고르면 강등하지 않고
+`AskUserQuestion` 으로 「계속 고친다(2번 더)」 · 「지금 목록으로 확정」 · 「brief 만 종료」를 묻습니다 — 자동 강등은 없다.
+무엇을 할지는 사용자가 매번 고릅니다:
+
+```javascript
+AskUserQuestion({ questions: [{
+  header: "확정 목록",
+  question: "확정 목록을 두 번 고쳤습니다. 어떻게 할까요?",
+  multiSelect: false,
+  options: [
+    {label: "계속 고친다(2번 더)", description: "카운터를 0 으로 되돌리고 B-0 으로 돌아가 다시 고친다."},
+    {label: "지금 목록으로 확정", description: "지금 목록의 확정 후보를 확정으로 바꾸고(B-3 확정 반영 절차) B-2 게이트를 다시 띄운다 — 다음 단계는 그 게이트에서 고른다."},
+    {label: "brief 만 종료", description: "④ 와 같다 — 모든 항목이 잠정으로 남고 다음 단계로 넘기지 않는다."}
+  ]
+}]})
 ```
 
 카운터는 프로즈 self-tracking이 아니라 state에 씁니다(PN1 Bash write contract):
@@ -233,8 +256,8 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 #### B-A — 참고(advisory) 목록 — 한 번 보이고 §3 · §5 에 박제
 
-B-1 분기와 무관하게 B-1 보다 먼저 돕니다. 엔진 `advice` 원장의 방향 · overdesign
-항목은 라운드 게이트에 오지 않았습니다 — 여기서 한 번 보이고 brief 에 박제합니다. `PAYLOAD` 는 Step A.5 의 그 절대경로입니다.
+B-1 분기와 무관하게 B-1 보다 먼저 돕니다. 엔진 `advice` 원장의 참고 항목(`must_catch` 밖 축 — 오늘은 overdesign)은
+라운드 게이트에 오지 않았습니다 — 여기서 한 번 보이고 brief 에 박제합니다. `PAYLOAD` 는 Step A.5 의 그 절대경로입니다.
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -265,6 +288,21 @@ fi
 파일을 Read 하고, 그 `items` 중 `shown` 이 거짓이던 항목을 payload 에 박제합니다 — 표시가 돌았으면 방금 보인
 항목들이고, 「표시도 실패했다」 줄이 나왔으면 사용자가 보지 못한 항목이라 그 사실을 B-2 에 싣습니다.
 `advice-list:` 줄이 없으면(원장 없음 · 판독 실패) 박제할 것이 없고 그 `[spec-distill]` 줄을 B-2 에 싣습니다.
+
+펜스 출력에 접는 줄(`… 외 K건`)이 있으면 박제로 가기 전에 `AskUserQuestion` 한 번 — 「참고 전부 보기」 ·
+「접은 채로 둔다」. 「참고 전부 보기」면 아래 펜스로 `advice-list:` 줄이 가리킨 파일의 항목 전부를 요약 전문으로
+보입니다(엔진의 접기 폭 · 요약 폭 상수는 R2a 의 일이다):
+
+```bash
+python3 -I -X utf8 -c '
+import json, sys
+items = json.load(open(sys.argv[1], encoding="utf-8")).get("items") or []
+print("참고 전부 %d건" % len(items))
+for it in items:
+    print("- [%s] %s — %s" % (it.get("category"), it.get("anchor"), " ".join(str(it.get("summary") or "").split())))
+' "<advice-list: 줄이 가리킨 파일>"
+```
+
 가르는 판단은 한 줄입니다:
 
 **이 brief 를 넘기기 전에 사용자가 고를 것이 있는가.**
@@ -303,7 +341,7 @@ brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안�
 
 게이트를 띄우기 *전에* Step A.5 리뷰 산출물을 프로즈로 출력합니다(B-0 확정 후보 목록 다음):
 
-1. **리뷰 게이트 결과** — 엔진의 마지막 게이트의 첫 줄을 뺀 렌더(첫 줄은 목록 4 에 쓴다) · 승인 게이트 도달 사유(열린 것 없음 · 상한 · stagnation · 「미검증」) · 리뷰 완료 여부 · 1단계에서의 사용자 선택. 방향 · overdesign(참고 축)은 라운드 게이트에 오지 않았습니다 — B-A 가 낸 것을 싣습니다: 참고 목록과 §3 · §5 박제 결과, 또는 B-A 의 부재 · 실패 공시(`[spec-distill]` 줄).
+1. **리뷰 게이트 결과** — 엔진의 마지막 게이트의 첫 줄을 뺀 렌더(첫 줄은 목록 4 에 쓴다) · 승인 게이트 도달 사유(열린 것 없음 · 상한 · stagnation · 「미검증」) · 리뷰 완료 여부 · 1단계에서의 사용자 선택. 방향(direction)은 라운드 게이트에서 물었고, overdesign(참고 축)은 라운드 게이트에 오지 않았습니다 — B-A 가 낸 것을 싣습니다: 참고 목록과 §3 · §5 박제 결과, 또는 B-A 의 부재 · 실패 공시(`[spec-distill]` 줄).
    「미검증」 라벨과 리뷰 완료 여부의 출처는 **엔진 게이트 요약**입니다 — `reviewing-brief` 가 넘기는 마지막 요약의 `approval_label` · `round_reviewed` · `unreviewed_reason` 을 그대로 싣고, critic 사망 횟수나 `finalize` 결과를 기억해 라벨을 붙이지 않습니다. `round_reviewed` 가 거짓이면 그 라운드는 리뷰 완료가 아니고, 사유(`unreviewed_reason`)는 다음 중 하나입니다:
    - 「미검증」 — critic 사망(`critic_dead`) · `finalize` 실패(`finalize_incomplete`). `approval_label` 이 「미검증」이고 승인 게이트를 그 라벨로 연 라운드입니다.
    - 라운드 미완(`unrouted`) — 이번 라운드의 라우팅 보고서가 없다(`finalize` 를 거치지 않았다). 라벨도 승인 게이트 강제도 없지만 리뷰 완료가 아니므로, 이 사유를 도달 사유와 함께 싣습니다.
@@ -344,7 +382,7 @@ AskUserQuestion({
     options: [
       {label: "확정하고 /compact 후 brainstorming (권장)", description: "확정 후보를 확정으로 바꿔 저장하고, 붙여 넣을 두 줄(/compact 와 다음 세션 줄)을 보여 준다. 인터뷰 기록을 요약해 둔 채 brief 를 붙여 읽고 brainstorming 을 시작한다."},
       {label: "확정하고 /new 후 brainstorming", description: "확정 후보를 확정으로 바꿔 저장하고, 같은 두 줄을 첫 줄만 /new 로 보여 준다. 새 세션이 brief 만 붙여 읽고 brainstorming 을 시작한다."},
-      {label: "확정 목록 수정", description: "확정 후보를 고쳐 다시 보여 준다(최대 2번). 아직 아무것도 확정되지 않는다."},
+      {label: "확정 목록 수정", description: "확정 후보와 함께 보인 공시를 고쳐 다시 보여 준다(두 번 고친 뒤에는 계속할지 묻는다). 아직 아무것도 확정되지 않는다."},
       {label: "brief만 종료", description: "brief 를 여기서 끝낸다. 모든 항목이 잠정으로 남고 다음 단계로 넘기지 않는다."}
     ],
     multiSelect: false
@@ -387,8 +425,8 @@ AskUserQuestion({
   → **여기서 턴 종료(STOP). 같은 턴에서 `brainstorming`을 호출하지 말 것.** 진입은 사용자가 두 줄을
   실제로 입력한 **다음 턴**에 **사용자 트리거**로만 일어난다(NG4·P17).
 
-- **③ 확정 목록 수정**: 확정 전이 없음. `confirm_repost_count` +1 후 B-0으로 돌아가 수정된
-  목록을 재제시(상한 2회 — 초과 시 B-0의 강등 경로).
+- **③ 확정 목록 수정**: 확정 전이 없음. `confirm_repost_count` +1 후 B-0 으로 돌아가 수정된
+  목록을 재제시(2회에 닿으면 B-0 의 재제시 상한 질문).
 
 - **④ brief만 종료**: 전 항목 `provisional` 유지. brief terminal advisory(B-1 부재 advisory와
   같은 톤) 출력 후 종료. handoff 안 함. state는 SessionEnd hook이 cleanup.
