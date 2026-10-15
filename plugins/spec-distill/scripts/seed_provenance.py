@@ -23,8 +23,19 @@ audit 을 못 읽으면 확인된 풀이와 원문 문장은 0 이다: marks 는
 표시가 있는데 `## 2` 에 풀이 줄(`- 내가 읽은 것: 「…」 — 고름|고르지 않음`, 끝에 ` — 사용자가 적은 말: 「…」` 가 붙을 수 있다)이 하나도 없거나, `- 내가 읽은
 것:` 으로 시작하는데 그 모양이 아닌 줄이 하나라도 있으면 marks 는 판단을 거부한다(rc 2) — 줄 모양이
 어긋난 것과 확인이 없었던 것을 이 코드가 가를 수 없고, 그 판정은 줄마다 성립한다.
+풀이 줄은 `parse_reading_line` 하나가 읽는다 — 판정은 줄에서 **왼쪽에서 처음 나오는** 판정 구분자
+(`」 — 고름` · `」 — 고르지 않음`) 하나로 정하고, 그 뒤 나머지는 비었거나 정확히 ` — 사용자가 적은 말: 「…」`
+여야 한다. 꼬리(사용자 자유 입력)는 판정 뒤에만 오므로 그 안에 `」 — 고름` 을 심어도 판정이 바뀌지 않는다 —
+사람과 모델도 왼쪽 첫 판정으로 읽는다. 그 밖의 나머지는 모양 어긋남이다.
+«(사용자 확인)» 의 근거는 `— 고름` 풀이 줄의 풀이 글자뿐이다 — 적은 말 꼬리 · `## seed 에서 덜어 낸 것`
+표(되살림 칸 포함)는 근거가 아니다. 되살린 문장은 `## 1` 원문과 글자가 같을 때만 사용자 원문(미확인)이다.
+확인 표시는 정본 글자 «(사용자 확인)» 하나뿐이다. 접어서(`seed_review_log.fold_for_match` + 공백 제거)
+같은 낱말이 되는 변형 — 전각 · 작은 괄호, 괄호 안 공백, 붙여 쓴 낱말, 제로폭 문자가 낀 것 — 은 사람과
+모델이 확인 표시로 읽으므로 표시로 세되 **근거 없는 표시**다(marks 위반 · `--fix` 가 뗀다 · classify 는
+mark_invalid). 글자 하나씩 접은 자리와 문자열 전체를 접은 수가 다르면(예: 풀어 쓴 한글 자모) 표시의
+자리를 정할 수 없어 marks 는 판단을 거부한다(rc 2).
 rc: 0 정상 · 1 marks 위반 · 2 입력 오류(seed 못 읽음 · seed 를 못 씀 · audit 을 못 믿음 · 풀이 줄 0 ·
-그 밖의 예외). rc 1 은 위반에만 쓴다.
+표시 자리를 정할 수 없음 · 그 밖의 예외). rc 1 은 위반에만 쓴다.
 """
 from __future__ import annotations
 
@@ -34,16 +45,16 @@ import pathlib
 import re
 import sys
 
-from seed_review_log import duplicate_headings, section_body
+from seed_review_log import duplicate_headings, fold_for_match, section_body
 
 MARK = "(사용자 확인)"
 REVERIFY_PREFIX = "다시 검증할 것 —"
 FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.S)
-# 풀이 줄 끝의 선택 꼬리 — 사용자가 «기타» 로 적은 말 · 「아니다」 뒤에 덧붙인 말(N19). 꼬리 안의 글자는
-# 비신뢰 요청문이라 판정에 쓰지 않는다 — 줄 모양만 받는다.
-SAID_TAIL = r"(?: — 사용자가 적은 말: 「.*」)?"
-READING_RE = re.compile(r"^\s*- 내가 읽은 것: 「(?P<t>.*)」 — 고름" + SAID_TAIL + r"\s*$")
-READING_LINE_RE = re.compile(r"^\s*- 내가 읽은 것: 「.*」 — (?:고름|고르지 않음)" + SAID_TAIL + r"\s*$")
+# 풀이 줄 — `parse_reading_line` 이 읽는다. 끝의 선택 꼬리는 사용자가 «기타» 로 적은 말 · 「아니다」 뒤에
+# 덧붙인 말(N19)이다. 꼬리 안의 글자는 비신뢰 요청문이라 판정에 쓰지 않는다 — 줄 모양만 받는다.
+READING_HEAD = "- 내가 읽은 것: 「"
+VERDICT_SEPS = ("」 — 고름", "」 — 고르지 않음")
+SAID_HEAD = " — 사용자가 적은 말: 「"
 READING_PREFIX_RE = re.compile(r"^\s*- 내가 읽은 것:")
 # 템플릿이 예시로 담은 자리표 줄 — 아무것도 채우지 않은 것, 즉 **두 자리가 모두** 꺾쇠이고 줄
 # 전체가 그 모양이다. 이것은 모양이 어긋난 풀이가 아니라 저자가 아직 손대지 않은 예시다(템플릿을
@@ -54,7 +65,56 @@ PLACEHOLDER_READING_RE = re.compile(
     r"^\s*- 내가 읽은 것:\s*「\s*<[^<>」]*>\s*」\s*—\s*<[^<>]*>"
     r"(?:\s*\[\s*—\s*사용자가 적은 말:\s*「\s*<[^<>」]*>\s*」\s*\])?\s*$")
 SENT_SPLIT_RE = re.compile(r"(?<=[.!?。])\s+|(?<=" + re.escape(MARK) + r")\s+")
-MARK_OCC_RE = re.compile(r"[ \t]*" + re.escape(MARK))
+MARK_FOLDED = "".join(ch for ch in fold_for_match(MARK) if not ch.isspace())
+
+
+def parse_reading_line(line: str) -> tuple[str, str, str | None] | None:
+    """풀이 줄 하나 → `(풀이 글자, 고름|고르지 않음, 적은 말 또는 None)`. 모양이 아니면 None.
+    판정은 왼쪽에서 처음 나오는 판정 구분자 하나다(풀이 글자는 그 앞까지 — 비탐욕)."""
+    s = line.strip()
+    if not s.startswith(READING_HEAD):
+        return None
+    rest = s[len(READING_HEAD):]
+    hits = [(rest.find(v), v) for v in VERDICT_SEPS if v in rest]
+    if not hits:
+        return None
+    at, sep = min(hits)
+    after = rest[at + len(sep):]
+    if after == "":
+        said = None
+    elif after.startswith(SAID_HEAD) and after.endswith("」") and len(after) > len(SAID_HEAD):
+        said = after[len(SAID_HEAD):-1]
+    else:
+        return None
+    return rest[:at], sep[len("」 — "):], said
+
+
+def _fold_flat(s: str) -> str:
+    return "".join(ch for ch in fold_for_match(s) if not ch.isspace())
+
+
+def mark_spans(s: str) -> list[tuple[int, int]]:
+    """s 안의 확인 표시 자리(정본 · 변형 모두) — 글자마다 접고 공백을 뺀 열에서 접은 표시를 찾아 원래
+    자리 `[시작, 끝)` 로 되돌린다."""
+    flat, where = [], []
+    for i, ch in enumerate(s):
+        for f in fold_for_match(ch):
+            if not f.isspace():
+                flat.append(f)
+                where.append(i)
+    joined, out = "".join(flat), []
+    k = joined.find(MARK_FOLDED)
+    while k >= 0:
+        out.append((where[k], where[k + len(MARK_FOLDED) - 1] + 1))
+        k = joined.find(MARK_FOLDED, k + len(MARK_FOLDED))
+    return out
+
+
+def mark_positions_ok(body: str, segs: list[dict]) -> bool:
+    """표시 자리를 하나로 정할 수 있는가 — 본문 전체에서 글자마다 접어 찾은 수 · 문자열 전체를 접어 센 수 ·
+    문장마다 센 수의 합이 모두 같아야 한다."""
+    n = len(mark_spans(body))
+    return n == _fold_flat(body).count(MARK_FOLDED) == sum(s["n_marks"] for s in segs)
 
 
 def norm(s: str) -> str:
@@ -69,13 +129,26 @@ def split_front(text: str) -> tuple[str, str]:
 
 
 def segments(body: str) -> list[dict]:
-    """문단 → 문장. 문장 뒤에 붙은 표시는 그 문장에 속한다."""
+    """문단 → 문장. 문장 뒤에 붙은 표시는 그 문장에 속한다. 표시 변형도 정본과 같은 자리에서 문장을
+    끊고 붙는다 — 변형 자리를 정본 글자로 바꾼 사본으로 쪼개고, 문장마다 그 안의 표시가 변형이었는지를
+    순서대로 되찾는다."""
     out = []
     for para in re.split(r"\n\s*\n", body.strip()):
         flat = norm(para)
         if not flat:
             continue
         reverify = flat.startswith(REVERIFY_PREFIX)
+        spans = mark_spans(flat)
+        variants = [flat[a:b] != MARK for a, b in spans]
+        canon, last = [], 0
+        for a, b in spans:
+            canon += [flat[last:a], MARK]
+            last = b
+        canon.append(flat[last:])
+        flat = "".join(canon)
+        if flat.count(MARK) != len(spans):
+            raise ValueError("mark_count_mismatch: 표시 자리 %d개 · 정본으로 바꾼 뒤 %d개"
+                             % (len(spans), flat.count(MARK)))
         sents: list[str] = []
         for piece in SENT_SPLIT_RE.split(flat):
             if piece.startswith(MARK) and sents:
@@ -86,7 +159,10 @@ def segments(body: str) -> list[dict]:
             else:
                 sents.append(piece)
         for s in sents:
-            out.append({"text": norm(s.replace(MARK, "")), "marked": MARK in s, "reverify": reverify})
+            n = s.count(MARK)
+            flags, variants = variants[:n], variants[n:]
+            out.append({"text": norm(s.replace(MARK, "")), "marked": n > 0, "n_marks": n,
+                        "variant": any(flags), "reverify": reverify})
     return out
 
 
@@ -100,7 +176,8 @@ def confirmed_reading_sentences(audit_text: str | None) -> set[str]:
     **정확히 같아야**(부분 문자열이 아니다) 확인이다 — 풀이 문장 하나가 통째로 살아남으면
     확인, 압축이 그 문장 경계를 넘나들며 고치면 확인이 아니다."""
     body = section_body(audit_text, "## 2. 질문 전체") if audit_text else None
-    readings = [norm(m["t"]) for m in map(READING_RE.match, (body or "").splitlines()) if m]
+    readings = [norm(r[0]) for r in map(parse_reading_line, (body or "").splitlines())
+                if r is not None and r[1] == "고름"]
     out: set[str] = set()
     for r in readings:
         out.update(_sentence_units(r))
@@ -135,7 +212,7 @@ def verbatim_units(audit_text: str | None) -> set[str]:
 def reading_line_count(audit_text: str | None) -> int:
     """`## 2` 의 풀이 줄(고름 · 고르지 않음 어느 쪽이든) 수 — 0 이면 표시를 매길 근거 자체가 없다."""
     body = section_body(audit_text, "## 2. 질문 전체") if audit_text else None
-    return sum(1 for line in (body or "").splitlines() if READING_LINE_RE.match(line))
+    return sum(1 for line in (body or "").splitlines() if parse_reading_line(line) is not None)
 
 
 def malformed_reading_lines(audit_text: str | None) -> list[int]:
@@ -147,27 +224,35 @@ def malformed_reading_lines(audit_text: str | None) -> list[int]:
     거기 실린 `$( )` 는 셸이 실행한다. 자리는 번호로 가리킨다."""
     body = section_body(audit_text, "## 2. 질문 전체") if audit_text else None
     return [n for n, line in enumerate((body or "").splitlines(), 1)
-            if READING_PREFIX_RE.match(line) and not READING_LINE_RE.match(line)
+            if READING_PREFIX_RE.match(line) and parse_reading_line(line) is None
             and not PLACEHOLDER_READING_RE.match(line)]
 
 
 def with_mark_status(segs: list[dict], reading_sentences: set[str]) -> list[dict]:
     for s in segs:
         if s["marked"]:
-            s["mark_valid"] = bool(s["text"]) and s["text"] in reading_sentences
+            s["mark_valid"] = not s["variant"] and bool(s["text"]) and s["text"] in reading_sentences
     return segs
 
 
 def strip_invalid(text: str, segs: list[dict]) -> str:
     head, body = split_front(text)
-    marked = [s for s in segs if s["marked"]]
-    occ = list(MARK_OCC_RE.finditer(body))
-    if len(occ) != len(marked):
-        raise ValueError("mark_count_mismatch: 표시 %d개 · 표시 붙은 문장 %d개" % (len(occ), len(marked)))
-    out, last = [], 0
-    for m, s in zip(occ, marked):
-        out.append(body[last:m.end()] if s["mark_valid"] else body[last:m.start()])
-        last = m.end()
+    occ = mark_spans(body)
+    if not mark_positions_ok(body, segs):
+        raise ValueError("mark_count_mismatch: 표시 자리 %d개 · 문장마다 센 표시 %d개"
+                         % (len(occ), sum(s["n_marks"] for s in segs)))
+    out, last, k = [], 0, 0
+    for s in segs:
+        for _ in range(s["n_marks"]):
+            a, b = occ[k]
+            k += 1
+            if s["mark_valid"]:
+                out.append(body[last:b])
+            else:
+                while a > last and body[a - 1] in " \t":  # 표시 앞 공백까지 뗀다
+                    a -= 1
+                out.append(body[last:a])
+            last = b
     out.append(body[last:])
     return head + "".join(out)
 
@@ -232,6 +317,11 @@ def main(argv=None) -> int:
     audit_text, audit_state = _read_audit(a.audit)
     segs = with_mark_status(segments(split_front(text)[1]), confirmed_reading_sentences(audit_text))
     if a.cmd == "marks":
+        if not mark_positions_ok(split_front(text)[1], segs):
+            print("[spec-distill] seed 의 확인 표시 자리를 하나로 정할 수 없다(접은 글자가 문장 경계를 넘거나 "
+                  "글자마다 접은 것과 전체를 접은 것이 다르다) — 판단하지 않는다(mark_ambiguous, 위반이 아니다)",
+                  file=sys.stderr)
+            return 2
         if audit_state != "ok":
             print("[spec-distill] audit 을 판단할 수 없어 marks 를 매길 수 없다(위반이 아니다): %s"
                   % audit_state, file=sys.stderr)
