@@ -95,6 +95,12 @@ assert_eq "$rc" "2" "path-inside: 링크 성분은 rc 2"
 assert_contains "$out" "링크를 거친다" "path-inside: 사유가 stderr 에 나온다"
 python3 "$HELPER" path-inside --root "$PI" "$PI/docs/../../x" >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "path-inside: .. 탈출은 rc 2"
+python3 "$HELPER" path-inside --root "$PI" "$PI/docs/lnk/../x" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "path-inside: 링크 뒤 .. (한 단계)는 rc 2"
+python3 "$HELPER" path-inside --root "$PI" "$PI/docs/lnk/../../x" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "path-inside: 링크 뒤 .. (두 단계)는 rc 2"
+python3 "$HELPER" path-inside --root "$PI" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "path-inside: 경로 인자가 없으면 rc 2"
 LV="$WORK/iv-link"; mkdir -p "$LV/docs/superpowers" && git -C "$LV" init -q
 ln -s "$OUTD" "$LV/docs/superpowers/interview"
 python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$LV" >/dev/null 2>&1; rc=$?

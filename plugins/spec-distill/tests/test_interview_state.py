@@ -193,6 +193,16 @@ class LinkTest(Base):
         self.assertEqual((self.out / "keep.txt").read_text(encoding="utf-8"), "원본")
         self.assertTrue(old.exists())
 
+    def test_linked_sid_dir_refused(self):
+        sd = self.tmp / ".claude" / "spec-distill"
+        sd.mkdir(parents=True)
+        (self.out / "state.local.md").write_text("---\nk: v\n---\n밖\n", encoding="utf-8")
+        os.symlink(str(self.out), str(sd / SID))
+        rc, _, _ = run("migrate-legacy", "--session", SID, "--topic", "t", "--date", "2026-10-15", cwd=self.tmp)
+        self.assertEqual(rc, 2)
+        self.assertTrue((self.out / "state.local.md").exists())
+        self.assertFalse((self.iv / "2026-10-15-t-interview.state.md").exists())
+
     def test_linked_legacy_refused(self):
         old = self.legacy()
         old.unlink()

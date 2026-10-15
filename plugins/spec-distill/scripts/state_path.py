@@ -101,6 +101,8 @@ def worktree_root(cwd: str | None = None) -> tuple[Path, bool]:
 
 def inside_root(path, root) -> str | None:
     """path 가 root 안에 있고 root 아래 성분 중 링크가 없으면 None, 아니면 짧은 사유."""
+    if ".." in str(path).split(os.sep):
+        return "'..' 성분이 있다"  # 링크 뒤의 '..' 는 문자열 정규화로 알 수 없다
     rel = os.path.relpath(os.path.abspath(str(path)), os.path.abspath(str(root)))
     if rel == ".." or rel.startswith(".." + os.sep) or os.path.isabs(rel):
         return "작업 트리 밖이다"
@@ -218,6 +220,9 @@ def main(argv: list[str]) -> int:
         i = argv.index("--root")
         root = argv[i + 1]
         paths = argv[2:i] + argv[i + 2:]
+        if not paths:
+            print("usage: state_path.py path-inside --root <R> <PATH>...", file=sys.stderr)
+            return 2
         bad = 0
         for q in paths:
             why = inside_root(q, root)

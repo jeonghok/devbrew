@@ -88,7 +88,8 @@ def cmd_migrate(a) -> int:
         print("[spec-distill] 옮길 옛 진행 기록이 없다", file=sys.stderr)
         return 1
     root = state_root(a.cwd)
-    if leg.is_symlink() or root_escapes(root, "spec-distill"):
+    if (leg.is_symlink() or root_escapes(root, "spec-distill")
+            or inside_root(leg, root.parent.parent)):
         print("[spec-distill] 옛 진행 기록이 링크이거나 상태 루트가 링크를 거친다 — 옮기지 않는다: {0}".format(leg),
               file=sys.stderr)
         return 2
@@ -110,7 +111,7 @@ def cmd_migrate(a) -> int:
         with os.fdopen(fd, "wb") as fh:
             fh.write(new.encode("utf-8"))
         os.replace(str(tmp), str(path))
-    except (OSError, UnicodeDecodeError) as e:
+    except (OSError, UnicodeError) as e:
         if not isinstance(e, FileExistsError):  # 남이 놓은 tmp 는 지우지 않는다
             try:
                 tmp.unlink()
