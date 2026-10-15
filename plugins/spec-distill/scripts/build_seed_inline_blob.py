@@ -45,7 +45,8 @@ if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 import section6  # noqa: E402
 from seed_review_log import (AuditAmbiguous, duplicate_headings, heading_structure,  # noqa: E402
-                             require_unambiguous, section_body, user_quotes)
+                             require_unambiguous, section_body, separator_lines, separator_message,
+                             user_quotes)
 
 # 리뷰어에게 비신뢰 verbatim 으로 알릴 audit 자리 — seed 프로필 `## 처분 안내` 가 이 셋을 이름으로
 # 가리킨다(shared/tests/test_docreview_profiles.sh 가 이 튜플에서 도출해 대조한다). assemble() 은
@@ -83,7 +84,7 @@ def _or_none(s: str | None) -> str:
 
 def _heading_line_no(text: str, heading: str) -> int | None:
     """`heading` 과 줄 전체가 같은 첫 줄의 1-based 줄 번호(`section_body` 와 같은 매치 규칙)."""
-    for i, line in enumerate(text.splitlines()):
+    for i, line in enumerate(text.split("\n")):
         if line.strip() == heading:
             return i + 1
     return None
@@ -97,7 +98,7 @@ def heading_shaped_warnings(audit_text: str, heading: str, body: str) -> list[in
         return []
     exempt_round_scaffold = heading == "## 2. 질문 전체"
     out = []
-    for i, line in enumerate(body.splitlines()):
+    for i, line in enumerate(body.split("\n")):
         if not section6.HEADING_SHAPED_RE.match(line):
             continue
         if exempt_round_scaffold and ROUND_SCAFFOLD_RE.match(line.strip()):
@@ -148,6 +149,13 @@ def main() -> int:
     audit_text = paths["audit_file"].read_text(encoding="utf-8", errors="replace")
     claude_md_text = paths["claude_md_file"].read_text(encoding="utf-8", errors="replace")
 
+    sep = separator_lines(audit_text)
+    if sep:
+        for ln in separator_message(sep).split("\n"):
+            print("[build_seed_inline_blob] " + ln, file=sys.stderr)
+        print(f"[spec-distill] {paths['audit_file']} 의 줄 구분을 하나로 정할 수 없다. 번들을 조립하지 않는다.",
+              file=sys.stderr)
+        return 2
     dups = duplicate_headings(audit_text)
     if dups:
         for heading, nums in dups:

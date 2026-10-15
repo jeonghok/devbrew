@@ -28,8 +28,8 @@ audit `## 6. 리뷰 결정` 의 줄은 두 곳에서 온다. 엔진(`docreview_s
       받는 자리에 `"$(… one-line <file>)"` 로 넘긴다(명령 치환의 출력은 다시 전개되지 않는다).
       비었거나 못 읽으면 rc 2.
   append-verbatim <audit> --section H --title T <file>
-      <file> 내용을 인용 블록으로 H 절 끝에 붙인다. 줄 나눔은 읽는 쪽(`section_body`)과 같은
-      `str.splitlines` 다 — `\n` 만으로 나누면 다른 줄 구분자 뒤 글자가 인용 표시 없는 줄로 읽힌다.
+      <file> 내용을 인용 블록으로 H 절 끝에 붙인다. 내용 안의 다른 줄 나눔 글자(`LINE_BREAK_CHARS`)는
+      `\n` 으로 바꾼 뒤 줄마다 인용 표시를 단다 — audit 에 그 글자가 남으면 읽는 쪽이 판단을 거부한다.
       제목 T 도 한 줄로 잇는다. `## 6` 에는 붙이지 않는다(rc 2) — 그 절에는 기록 줄만 산다.
 
 audit 의 절 구조는 `heading_structure` 하나가 판정한다 — 일곱 템플릿 제목은 각각 많아야 한 번,
@@ -45,6 +45,11 @@ audit 의 절 구조는 `heading_structure` 하나가 판정한다 — 일곱 �
 절 머리의 템플릿 안내 괄호(템플릿 파일 그대로) · `없음` 한 줄 중 하나여야 한다. 모르는 줄이 하나라도 있으면 «모르는 것은
 통과» 가 아니라 판단 · 쓰기 거부다(rc 2 · `AuditUnknownLine`). 거부 사유의 첫 줄은
 `[seed_review_log] ## 6 에 기록 모양이 아닌 줄이 있다 — <n>째 줄` 이고 줄 글자는 싣지 않는다.
+
+**줄은 `\n` 으로만 나눈다.** U+2028 · U+2029 · NEL · FF · VT · FS/GS/RS 같은 다른 줄 나눔 글자(`str.splitlines`
+가 끊는 나머지)가 audit 에 하나라도 있으면 모든 읽는 길이 판단을 거부한다(rc 2) — 마크다운은 거기서 줄을
+나누지 않는데 `splitlines` 는 나눠, 한 줄 안의 «사용자가 적은 말» 이 새 풀이 줄이나 기록 줄로 읽혔다.
+거부 사유의 첫 줄은 `[seed_review_log] audit 에 줄을 나누는 다른 글자가 있다 — <n>째 줄` 이다.
 
 엔진 원장(`docreview-state.md`)의 내부 형식은 읽지 않는다 — 엔진이 CLI 로 내는 `gate` 요약과
 엔진이 audit 에 쓴 줄만 읽는다. 엔진 줄 모양이 바뀌면 tests/test_seed_review_log.sh 의 엔진
@@ -121,29 +126,31 @@ def fold_for_match(s: str) -> str:
     return "".join(ch for ch in s if unicodedata.category(ch) not in ("Cf", "Mn", "Me"))
 
 
-_LINE_ENDINGS = ("\n", "\r\n")
+# `\n` 밖에서 `str.splitlines` 가 줄을 끊는 글자 전부(`\r` 은 파일을 읽을 때 `\n` 으로 바뀐다).
+LINE_BREAK_CHARS = "\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029"
+_TO_NEWLINE = {ord(c): "\n" for c in LINE_BREAK_CHARS}
+
+
+def to_newlines(s: str) -> str:
+    """다른 줄 나눔 글자를 `\n` 으로 — 쓰는 쪽(`one_line` · `append-verbatim`)만 쓴다."""
+    return s.translate(_TO_NEWLINE)
+
+
+def separator_lines(text: str) -> list[int]:
+    """다른 줄 나눔 글자가 든 줄의 번호(`\n` 기준 1-based). 비어 있으면 줄 구분이 하나로 정해진다."""
+    return [n for n, line in enumerate(text.split("\n"), 1) if any(c in LINE_BREAK_CHARS for c in line)]
+
+
+def separator_message(lines: list[int]) -> str:
+    return "\n".join("audit 에 줄을 나누는 다른 글자가 있다 — %d째 줄" % n for n in lines)
 
 
 def heading_lines(text: str, heading: str) -> list[tuple[int, bool]]:
-    """줄 전체(앞뒤 공백 제외)가 `heading` 인 줄마다 `(splitlines 줄 번호 0-based, 절 시작으로 인정되는가)`.
-
-    인정 조건 둘 — «이 줄을 사람 · 모델 · 마크다운 렌더러가 제목으로 읽는가» 를 묻는다:
-    (1) 제목 모양이다(`section6.HEADING_SHAPED_RE` — 들여쓰기 0–3칸. 4칸이면 코드 블록이다),
-    (2) `\\n` 줄이다 — 앞 줄이 `\\n` 으로 끝나고 이 줄도 `\\n` · 파일 끝으로 끝난다. `str.splitlines` 는
-        U+2028 · 폼 피드 같은 구분자에서도 끊지만 마크다운은 거기서 줄을 나누지 않는다 — 한 줄 안에
-        숨은 제목이 절을 열면 안 된다.
-    펜스는 보지 않는다(모듈 docstring — 심긴 제목은 `heading_structure` 가 잡는다)."""
-    out: list[tuple[int, bool]] = []
-    prev_ok = True
-    for i, raw in enumerate(text.splitlines(keepends=True)):
-        content = raw.splitlines()[0]
-        ending = raw[len(content):]
-        if content.strip() == heading:
-            ok = (prev_ok and (ending in _LINE_ENDINGS or ending == "")
-                  and section6.HEADING_SHAPED_RE.match(content) is not None)
-            out.append((i, ok))
-        prev_ok = ending in _LINE_ENDINGS
-    return out
+    """줄 전체(앞뒤 공백 제외)가 `heading` 인 줄마다 `(줄 번호 0-based, 절 시작으로 인정되는가)`. 줄은 `\n`
+    으로만 나눈다. 인정 조건은 제목 모양(`section6.HEADING_SHAPED_RE` — 들여쓰기 0–3칸. 4칸이면 코드
+    블록이다) 하나다. 펜스는 보지 않는다(모듈 docstring — 심긴 제목은 `heading_structure` 가 잡는다)."""
+    return [(i, section6.HEADING_SHAPED_RE.match(line) is not None)
+            for i, line in enumerate(text.split("\n")) if line.strip() == heading]
 
 
 def section_body(text: str, heading: str) -> str | None:
@@ -154,7 +161,7 @@ def section_body(text: str, heading: str) -> str | None:
     starts = [i for i, ok in heading_lines(text, heading) if ok]
     if not starts:
         return None
-    lines = text.splitlines()
+    lines = text.split("\n")
     body = []
     for nxt in lines[starts[0] + 1:]:
         if nxt.strip() in AUDIT_HEADINGS:
@@ -168,7 +175,7 @@ def duplicate_headings(text: str) -> list[tuple[str, list[int]]]:
     그 1-based 줄 번호들. `section_body` 는 첫 occurrence 를 고르므로, 비신뢰 본문 안에 같은
     제목 줄이 심겨 있으면 그 occurrence 가 진짜 절 시작을 가릴 수 있다. 비어 있으면 모호함이
     없다는 뜻이다."""
-    lines = text.splitlines()
+    lines = text.split("\n")
     out: list[tuple[str, list[int]]] = []
     for heading in AUDIT_HEADINGS:
         nums = [i + 1 for i, line in enumerate(lines) if line.strip() == heading]
@@ -180,12 +187,16 @@ def duplicate_headings(text: str) -> list[tuple[str, list[int]]]:
 def heading_structure(text: str) -> list[str]:
     """일곱 템플릿 제목(`AUDIT_HEADINGS`)이 각각 많아야 한 번, 템플릿 순서대로 나오는가 — 어긋난 사유들
     (제목과 1-based 줄 번호). 비어 있으면 구조가 하나로 정해진다. 줄은 `duplicate_headings` 와 같이 센다
-    (줄 전체 일치 · 펜스 · 들여쓰기를 가리지 않는다). 없는 제목은 사유가 아니다 — «절 없음» 은 소비자가 판단한다."""
+    (줄 전체 일치 · 펜스 · 들여쓰기를 가리지 않는다). 없는 제목은 사유가 아니다 — «절 없음» 은 소비자가 판단한다.
+    다른 줄 나눔 글자가 있으면 그것이 먼저다(줄 구분부터 정해지지 않는다)."""
+    sep = separator_lines(text)
+    if sep:
+        return ["line_separator 줄 %s" % "·".join(map(str, sep))]
     out = ["duplicate_heading `%s` 줄 %s" % (h, "·".join(map(str, nums)))
            for h, nums in duplicate_headings(text)]
     if out:
         return out
-    lines = text.splitlines()
+    lines = text.split("\n")
     at = {}
     for h in AUDIT_HEADINGS:
         nums = [i + 1 for i, line in enumerate(lines) if line.strip() == h]
@@ -202,7 +213,7 @@ def _template_guidance() -> list[str]:
         tpl = TEMPLATE_PATH.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return []
-    return [ln.strip() for ln in (section_body(tpl, DECISION_HEADING) or "").splitlines() if ln.strip()]
+    return [ln.strip() for ln in (section_body(tpl, DECISION_HEADING) or "").split("\n") if ln.strip()]
 
 
 def decision_line_problems(audit_text: str) -> list[int]:
@@ -210,7 +221,7 @@ def decision_line_problems(audit_text: str) -> list[int]:
     found = [i for i, ok in heading_lines(audit_text, DECISION_HEADING) if ok]
     if not found:
         return []
-    lines = audit_text.splitlines()
+    lines = audit_text.split("\n")
     rows = []
     for j in range(found[0] + 1, len(lines)):
         if lines[j].strip() in AUDIT_HEADINGS:
@@ -228,6 +239,9 @@ def decision_line_problems(audit_text: str) -> list[int]:
 def require_unambiguous(audit_text: str, heading: str) -> None:
     """`heading` 절을 읽거나 쓰기 전에 — 템플릿 제목 구조가 어긋나거나(`heading_structure`), `heading`
     줄이 있는데 절 시작으로 인정되지 않으면(코드 블록 · 한 줄 안에 숨음) `AuditAmbiguous`."""
+    sep = separator_lines(audit_text)
+    if sep:
+        raise AuditUnknownLine("\n".join("[seed_review_log] " + ln for ln in separator_message(sep).split("\n")))
     problems = heading_structure(audit_text)
     if problems:
         raise AuditAmbiguous("; ".join(problems))
@@ -244,7 +258,7 @@ def require_unambiguous(audit_text: str, heading: str) -> None:
 def parse_lines(audit_text: str) -> list[dict]:
     require_unambiguous(audit_text, DECISION_HEADING)
     out = []
-    for line in (section_body(audit_text, DECISION_HEADING) or "").splitlines():
+    for line in (section_body(audit_text, DECISION_HEADING) or "").split("\n"):
         m = ENGINE_LINE_RE.match(line)
         if m:
             out.append({"source": "engine", "choice": m["choice"], "round": int(m["round"]),
@@ -291,9 +305,7 @@ def append_under(path: pathlib.Path, heading: str, block: str) -> None:
     found = [i for i, ok in heading_lines(text, heading) if ok]
     start = None
     if found:
-        # 인정된 시작 줄은 `\n` 줄이라 그 앞의 `\n` 수가 곧 `\n` 나눔의 줄 번호다.
-        offset = sum(len(r) for r in text.splitlines(keepends=True)[:found[0]])
-        start = text.count("\n", 0, offset)
+        start = found[0]
     if start is None:
         text = "\n".join(lines).rstrip("\n") + "\n\n" + heading + "\n\n" + "\n".join(block_lines) + "\n"
         path.write_text(text, encoding="utf-8")
@@ -312,8 +324,8 @@ def append_under(path: pathlib.Path, heading: str, block: str) -> None:
 
 
 def one_line(s: str) -> str:
-    """줄 구분자(`str.splitlines` 가 끊는 전부)를 한 칸으로 — 줄마다 앞뒤 공백을 걷고 빈 줄은 뺀다."""
-    return " ".join(part.strip() for part in s.splitlines() if part.strip())
+    """줄 나눔 글자(`\\n` 과 `LINE_BREAK_CHARS`)를 한 칸으로 — 줄마다 앞뒤 공백을 걷고 빈 줄은 뺀다."""
+    return " ".join(part.strip() for part in to_newlines(s).split("\n") if part.strip())
 
 
 def format_host_line(kind: str, rnd: int, target: str, quote: str, note: str) -> str:
@@ -388,7 +400,7 @@ def main(argv=None) -> int:
                       "적은 말을 넘겨라)" % (a.target, a.quote_file), file=sys.stderr)
                 return 2
             line = format_host_line(a.kind, a.round, a.target, quote, note)
-            if not HOST_LINE_RE.match(line) or len(line.splitlines()) != 1:
+            if not HOST_LINE_RE.match(line) or "\n" in line or separator_lines(line):
                 print("만든 줄이 파서 모양과 맞지 않는다: %s" % line, file=sys.stderr)
                 return 2
             # 같은 줄 건너뛰기는 `답` · `거부` 에만 쓴다 — 그 둘의 대상은 finding id 라 줄이 처분을
@@ -397,7 +409,7 @@ def main(argv=None) -> int:
             # 읽으면 그 처분 기록이 조용히 사라진다(AC6). 되돌리기의 멱등은 `<base>.reverted` 표지가
             # 따로 맡으므로, 여기서는 다시 돌린 만큼 줄이 겹칠 뿐 기록이 빠지지는 않는다.
             if a.kind != "편집":
-                existing = (section_body(_read(a.audit), DECISION_HEADING) or "").splitlines()
+                existing = (section_body(_read(a.audit), DECISION_HEADING) or "").split("\n")
                 if line in existing:
                     print("[spec-distill] 같은 기록 줄이 이미 있다 — 다시 적지 않는다: %s" % line, file=sys.stderr)
                     return 0
@@ -415,13 +427,13 @@ def main(argv=None) -> int:
                 print("[seed_review_log] ## 6 에는 기록 줄만 적는다 — append-verbatim 은 다른 절에 붙인다",
                       file=sys.stderr)
                 return 2
-            content = _read(a.file).splitlines() or [""]
+            content = to_newlines(_read(a.file)).rstrip("\n").split("\n")
             quoted = "\n".join(("> " + l) if l.strip() else ">" for l in content)
             append_under(pathlib.Path(a.audit), a.section, "### %s\n\n%s" % (one_line(a.title), quoted))
             return 0
     except AuditUnknownLine as e:
         print(str(e), file=sys.stderr)
-        print("[spec-distill] 위 줄 때문에 `## 6` 을 판단하지 않는다(쓰지도 않는다).", file=sys.stderr)
+        print("[spec-distill] 위 줄 때문에 audit 을 판단하지 않는다(쓰지도 않는다).", file=sys.stderr)
         return 2
     except AuditAmbiguous as e:
         print("[spec-distill] audit 의 절 경계를 하나로 정할 수 없어 판단하지 않는다(쓰지도 않는다): %s" % e,

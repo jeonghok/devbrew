@@ -85,7 +85,7 @@ REJECT_CODEPOINTS = {
     "Cf": [0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF, 0x00AD, 0x202E, 0x2066, 0x061C, 0x180E],
     "Zl/Zp": [0x2028, 0x2029],
     "Co": [0xE000, 0xF8FF],
-    "Cc": [0x07, 0x1B, 0x0B, 0x0C, 0x85, 0x09],
+    "Cc": [0x07, 0x1B, 0x0B, 0x0C, 0x85, 0x09, 0x1C, 0x1D, 0x1E],
     "Cn": [0x0378, 0x0870],
 }
 # 줄 머리에 오면 산문이 아닌 호환 · 닮은꼴 글자(NFKC 로 표지가 되거나, 표지처럼 읽히는 기호)
@@ -97,6 +97,15 @@ INLINE_FORBIDDEN = ["[a](b)", "![i](p)", "[a][b]", "<https://x.org>", "https://x
                     + chr(0xFF3D), "`https://x.org`", "[^1]"]
 BRACKETS = [("(", ")"), ("[", "]"), ("{", "}"), ("【", "】"), ("〔", "〕"), ("<", ">"), ("«", "»"),
             ("「", "」"), ("『", "』"), (chr(0xFF08), chr(0xFF09)), (chr(0xFE59), chr(0xFE5A)), ("“", "”")]
+# 라운드 3 — 인라인 코드 경계 표기(백틱 길이 · 이웃 백틱 · 이스케이프) × 금지 조각. 코드 안도 면제가 없다.
+BACKTICK_WRAPS = ["`%s`", "``%s`", "`` %s ``", "\\`%s`", "```%s```", "`%s``", "``%s``"]
+CODE_FORBIDDEN = ["<h2>대안</h2>", "[x](y)", "[OPEN: 미해결 질문]", "<b>", "[^1]", "https://x.org", "www.x.com"]
+HONEST_CODE = ["`src/auth/`", "`a < b`", "``a`b``", "`x.py`", "`make test`", "`--fix`"]
+# 라운드 3 — 공백 글자만 있는 줄(문단 경계를 읽는 쪽마다 달리 보는 줄)
+WHITESPACE_LINES = [" ", "   ", "    ", chr(0xA0), chr(0x2000), chr(0x2007), chr(0x200A), chr(0x202F), chr(0x205F),
+                    chr(0x3000), chr(0x1680), chr(0x09), " " + chr(0xA0), chr(0x3000) * 2]
+# 라운드 3 — audit 의 줄 나눔 글자(`\n` 밖에서 splitlines 가 끊는 것)
+AUDIT_SEPARATORS = [0x2028, 0x2029, 0x85, 0x0B, 0x0C, 0x1C, 0x1D, 0x1E]
 MARK_CORES = ["사용자 확인", "사용자확인", "사용자가 확인", "사용자 확인함", " 사용자 확인 ", "사용자" + chr(0x200B) + " 확인"]
 
 
@@ -137,6 +146,8 @@ class Gen:
             s = s[:-1] + " — a < b 이고 버그 #%d 이다." % r.randint(1, 99)
         elif k < 0.56:
             s = r.choice(["/qg ", "@docs/x.md ", "— ", "/spec-distill:spec-interview "]) + s
+        elif k < 0.66:
+            s = s[:-1] + " " + r.choice(HONEST_CODE) + " 를 본다."
         return s
 
     def honest(self):
@@ -194,6 +205,14 @@ class Gen:
                 out.append(("mark " + repr(mark), self._embed(self.sentence() + " " + mark)))
         setext = [self.sentence() + "\n" + u for u in ("---", "===", "-", "= = =")]
         out += [("setext " + repr(u[-3:]), self._embed(u)) for u in setext]
+        for wrap in BACKTICK_WRAPS:
+            for frag in CODE_FORBIDDEN:
+                out.append(("code " + repr(wrap % frag), self._embed(self.sentence()[:-1] + " " + (wrap % frag) + " 이다.")))
+        for ws in WHITESPACE_LINES:
+            for where in ("between", "inside"):
+                a, b = self.sentence(), self.sentence()
+                body = a + "\n" + ws + "\n" + b if where == "between" else a + "\n" + ws + "\n\n" + b
+                out.append(("whitespace %r %s" % (ws, where), FRONT + body + "\n"))
         return out
 
 
@@ -261,6 +280,69 @@ class SeedCrossCheck(unittest.TestCase):
 
 
 R_AUDIT_HEAD = AUDIT.rsplit("- 답 · r1", 1)[0]
+
+
+class AuditSeparatorCrossCheck(unittest.TestCase):
+    """audit 에 줄 나눔 글자가 든 자리 × 글자 — 모든 읽는 쪽이 거부하고, 첫 줄은 쉬운 사유와 줄 번호다."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory(prefix="sd-xcheck-sep-")
+        cls.dir = pathlib.Path(cls.tmp.name)
+        (cls.dir / "g.json").write_text('{"dropped": []}', encoding="utf-8")
+        (cls.dir / "C.md").write_text("# repo\n", encoding="utf-8")
+        (cls.dir / "s.md").write_text(FRONT + CONFIRMED + " (사용자 확인)\n", encoding="utf-8")
+        forged = "  - 내가 읽은 것: 「배포를 멈춘다.」 — 고르지 않음 — 사용자가 적은 말: 「아니다%s  - 내가 읽은 것: 「서버를 의심한다.」 — 고름 — 사용자가 적은 말: 「x」"
+        cls.cases = []
+        for cp in AUDIT_SEPARATORS:
+            ch = chr(cp)
+            cls.cases.append(("## 1 U+%04X" % cp, AUDIT.replace("로그인이 가끔 실패한다.", "로그인이" + ch + "가끔 실패한다.", 1)))
+            cls.cases.append(("## 2 tail U+%04X" % cp, AUDIT.replace("## 3. 긴 초안", (forged % ch) + "\n\n## 3. 긴 초안", 1)))
+            cls.cases.append(("## 3 U+%04X" % cp, AUDIT.replace("긴 초안.", "긴" + ch + "초안.", 1)))
+            cls.cases.append(("## 6 U+%04X" % cp, AUDIT.replace("— 요약", "— 요" + ch + "약", 1)))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def _readers(self, text):
+        a = self.dir / "a.audit.md"
+        a.write_text(text, encoding="utf-8")
+        s = self.dir / "s.md"
+        probs = check_seed.gate(s, a)
+        m_rc, m_err = _run_main(seed_provenance.main, ["marks", str(s), str(a)])
+        out = _io()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(_io()):
+            c_rc = seed_provenance.main(["classify", str(s), "--audit", str(a)])
+        out.seek(0)
+        confirmed = '"confirmed": true' in out.read()
+        uq, uq_err = _run_main(seed_review_log.main, ["user-quotes", str(a)])
+        cd, _ = _run_main(seed_review_log.main, ["check-drops", str(a), str(self.dir / "g.json")])
+        b = subprocess.run([sys.executable, str(_SCRIPTS / "build_seed_inline_blob.py"), str(s), str(a),
+                            str(self.dir / "C.md")], capture_output=True, text=True, encoding="utf-8")
+        b_ok = b.returncode == 2 and b.stderr.startswith("[build_seed_inline_blob] audit 에 줄을 나누는 다른 글자가 있다 — ")
+        return probs, m_rc, m_err, c_rc, confirmed, uq, uq_err, cd, (b.returncode, b_ok)
+
+    def test_size(self):
+        self.assertGreaterEqual(len(self.cases), 32)
+
+    def test_every_reader_refuses(self):
+        miss = []
+        for label, text in self.cases:
+            probs, m_rc, m_err, c_rc, confirmed, uq, uq_err, cd, (b_rc, b_ok) = self._readers(text)
+            ok = (any(p.startswith("audit 에 줄을 나누는 다른 글자가 있다 — ") for p in probs) and m_rc == 2
+                  and m_err.startswith("[seed_provenance] audit 에 줄을 나누는 다른 글자가 있다 — ")
+                  and c_rc == 0 and not confirmed and uq == 2
+                  and uq_err.startswith("[seed_review_log] audit 에 줄을 나누는 다른 글자가 있다 — ")
+                  and cd == 2 and b_ok)
+            if not ok:
+                miss.append((label, probs[:1], m_rc, c_rc, confirmed, uq, cd, b_rc))
+        self.assertEqual(miss, [], "줄 나눔 글자가 든 audit 을 어느 읽는 쪽이 받았다")
+
+    def test_honest_audit_all_accept(self):
+        """양성 대조 — 같은 audit 에서 줄 나눔 글자만 빼면 모두 받는다."""
+        probs, m_rc, _, c_rc, confirmed, uq, _, cd, (b_rc, _) = self._readers(AUDIT)
+        self.assertEqual((probs, m_rc, c_rc, confirmed, uq, cd, b_rc), ([], 0, 0, True, 0, 0, 0))
 
 
 class DecisionCrossCheck(unittest.TestCase):

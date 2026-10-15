@@ -8,7 +8,11 @@ seed 는 다음 세션에 보내는 메시지이지 문서가 아니다: frontma
 
 - 글자: 서식 문자(Cf — 제로폭 · BOM · 방향 제어 · 소프트 하이픈) · 사용자 정의(Co) · 서로게이트(Cs) ·
   미할당(Cn) · 줄 · 문단 구분자(Zl · Zp) · `\\n` 밖의 제어 문자(Cc — 탭 포함)가 하나도 없다. 지우지 않고
-  거부한다 — 보이지 않는 글자는 읽는 쪽마다 다르게 읽힌다.
+  거부한다 — 보이지 않는 글자는 읽는 쪽마다 다르게 읽힌다. 줄 구분은 `\n` 하나다 — U+2028 · U+2029 ·
+  NEL · FF · VT 같은 다른 줄 나눔 글자는 위 범주(Zl · Zp · Cc)로 거부된다.
+- 빈 줄: 글자가 하나도 없는 줄만 빈 줄(문단 경계)이다. 공백 글자(스페이스 · NBSP · 전각 공백 등)만 있는
+  줄은 거부한다 — 그 줄을 문단 경계로 볼지 문단의 한 줄로 볼지가 읽는 쪽마다 달라 확인 문장의 경계가
+  흔들린다. 문단은 `parse_seed` 가 나눈 것을 모든 소비자가 그대로 쓴다(두 번째 문단 나누기가 없다).
 - 줄 머리: NFKC 로 접은 뒤 들여쓰기 0–3칸, 첫 글자가 문자(L) · 숫자(N) · 여는 괄호류(Ps, `[` 제외) · 여는
   인용 부호(Pi) · `"` · `'` · `` ` `` · `*` · `_` · `/`(skill 이름) · `@`(경로) · `—`(앞 문장에 잇는 말) 다 —
   끝의 셋은 레포의 실제 seed 가 산문 줄 머리로 쓴 글자다(마크다운 구조가 아니다). 그 밖(`#` · `>` · `-` · `+` · `=` · `|` · `<` ·
@@ -16,9 +20,11 @@ seed 는 다음 세션에 보내는 메시지이지 문서가 아니다: frontma
   HTML · 링크 문법이 모두 여기서 걸린다. 숫자 머리라도 `1.` · `1)` 다음 공백이면 번호 목록이고, `*` · `_`
   머리라도 다음이 공백이거나 줄 전체가 그 글자뿐이면 목록 · 가로줄이며, `` ``` `` 는 펜스다.
   **목록을 받지 않는 이유**: seed 템플릿 예시에 목록이 없고, 목록은 문단을 항목 양식으로 바꾼다.
-- 줄 안: URL 스킴(`<영문자>…://`)과 `www.` 이 없다(인라인 코드 안도 — URL 비권위화는 고정점이다).
-  인라인 코드 밖에 `[` · `]`(링크 · 참조 · 태그 · 체크박스 문법)와 `<` 바로 뒤 공백 아닌 글자(HTML ·
-  자동 링크)가 없다. 확인 표시는 정본 «(사용자 확인)» 글자 그대로만 — 괄호류로 감싼 `사용자확인` 의 다른
+- 줄 안: URL 스킴(`<영문자>…://`)과 `www.` · `[` · `]`(링크 · 참조 · 태그 · 체크박스 문법) · `<` 바로 뒤
+  공백 아닌 글자(HTML · 자동 링크)가 없다. **인라인 코드도 면제하지 않는다** — 코드 구간의 경계(백틱 길이 ·
+  이웃 백틱 · 백슬래시 이스케이프)를 이 파일이 따로 계산하면 렌더러와 어긋나는 흉내 파서가 된다(``` ``<h2>`
+  ``` 가 날 HTML 로, `` \`[x](y)` `` 가 진짜 링크로 렌더된다). 백틱 자체는 받는다 — 경로 · 명령을 적는 데
+  쓰이고(템플릿 예시의 `` `src/auth/` ``), 금지 글자가 없는 한 어떻게 갈라 읽어도 구조가 생기지 않는다. 확인 표시는 정본 «(사용자 확인)» 글자 그대로만 — 괄호류로 감싼 `사용자확인` 의 다른
   모양은 산문이 아니다.
 
 이 검사는 seed 본문의 **모양** 검사(부재 검사)다 — 무엇이 «있어야» 한다고 요구하지 않는다(슬롯 존재
@@ -37,7 +43,7 @@ FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.S)
 # 접은 열에서 표시의 낱말 — 앞뒤 한 글자가 괄호류여야 표시다(`marks_in_flat`).
 MARK_CORE_RE = re.compile(r"사용자가?확인(?:함|됨)?")
 URL_RE = re.compile(r"[a-z][a-z0-9+.-]*://|www\.\S")
-CODE_SPAN_RE = re.compile(r"(`+)(?:(?!\1).)+?\1")
+ANGLE_RE = re.compile(r"<\S")
 ORDERED_ITEM_RE = re.compile(r"\d{1,9}[.)](?:\s|$)")
 REJECT_CATEGORIES = frozenset({"Cf", "Co", "Cs", "Cn", "Zl", "Zp"})
 PROSE_START_EXTRA = frozenset('"\'`*_/@' + chr(0x2014))
@@ -105,6 +111,8 @@ def line_problem(line: str) -> str | None:
         cat = unicodedata.category(ch)
         if cat in REJECT_CATEGORIES or (cat == "Cc" and ch != "\n"):
             return "보이지 않거나 제어하는 글자"
+    if line.strip() == "":
+        return "공백 글자만 있는 줄"
     f = fold_for_match(line).casefold()
     g = f.lstrip(" ")
     if len(f) - len(g) >= 4:
@@ -115,8 +123,7 @@ def line_problem(line: str) -> str | None:
         return "줄 머리가 산문이 아니다"
     if URL_RE.search(f):
         return "URL"
-    outside = CODE_SPAN_RE.sub("", f)
-    if "[" in outside or "]" in outside or re.search(r"<\S", outside):
+    if "[" in f or "]" in f or ANGLE_RE.search(f):
         return "링크 · 태그 · HTML 문법"
     spans = mark_spans(line)
     if len(spans) != len(marks_in_flat(fold_flat(line))):
@@ -135,14 +142,14 @@ class SeedParse:
 
 
 def parse_seed(text: str) -> SeedParse:
-    """seed 파일 글 전체 → frontmatter · 본문 · 문단 · 거부된 줄. 줄은 `str.splitlines` 로 나눈다 —
-    `\\n` 밖의 줄 구분자는 위 글자 규칙이 이미 거부한다."""
+    """seed 파일 글 전체 → frontmatter · 본문 · 문단 · 거부된 줄. 줄은 `\\n` 으로만 나눈다 — 다른 줄 나눔
+    글자는 위 글자 규칙이 거부한다. 문단 경계는 글자가 하나도 없는 줄뿐이다."""
     head, body = split_front(text)
     offset = head.count("\n")
     out = SeedParse(head=head, body=body)
     para: list[str] = []
     for i, line in enumerate(body.split("\n")):
-        if line.strip(" ") == "" and not any(unicodedata.category(c) in REJECT_CATEGORIES for c in line):
+        if line == "":
             if para:
                 out.paragraphs.append("\n".join(para))
                 para = []

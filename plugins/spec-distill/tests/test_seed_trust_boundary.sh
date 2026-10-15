@@ -122,6 +122,24 @@ passes "prose 양성: 숫자로 시작하지만 목록이 아닌 줄" '3.5 배 �
 2026년에 시작했다.'
 passes "prose 양성: 다시 검증할 것 문단" '다시 검증할 것 — 서버 로그는 다시 봐야 한다.'
 
+# ── 라운드 3 A — 인라인 코드도 산문 규칙을 면제받지 않는다(코드 구간 흉내 파서를 걷었다)
+blocked "허용 목록" "code: 백틱 두 개 + 하나로 연 구간 안의 HTML" '설명 ``<h2>대안</h2>` 이다.'
+blocked "허용 목록" "code: 이스케이프한 백틱 뒤의 링크" '근거는 \`[여기](example.com/evil)` 를 본다.'
+blocked "허용 목록" "code: 백틱 두 개 + 하나로 연 구간 안의 태그" '설명 ``[OPEN: 미해결 질문]` 이다.'
+blocked "허용 목록" "code: 온전한 인라인 코드 안의 꺾쇠도" '설명 `<b>` 와 `[x]` 이다.'
+passes "code 양성: 경로 · 비교식 인라인 코드" '`src/auth/` 안에서만 본다. `a < b` 가 참이다.'
+
+# ── 라운드 3 B — 공백 글자만 있는 줄은 빈 줄이 아니다(문단 경계를 읽는 쪽마다 달리 보지 않게 거부)
+blocked "허용 목록" "blank: NBSP 만 있는 줄" '앞 문단이다.
+\u00a0
+뒤 문단이다.'
+blocked "허용 목록" "blank: 스페이스만 있는 줄" '앞 문단이다.
+\u0020\u0020\u0020
+뒤 문단이다.'
+blocked "허용 목록" "blank: 전각 공백만 있는 줄" '앞 문단이다.
+\u3000
+뒤 문단이다.'
+
 # ── 태그
 blocked "태그" "tag: 대문자" '[OPEN: 정하지 않음]'
 blocked "태그" "tag: 콜론 앞 공백" '[Open : 정하지 않음]'
@@ -211,7 +229,7 @@ audit_case "audit: 4칸 들여 쓴(코드 블록) 덜어 낸 것 절" 1 "덜어 
 
     없음
 ${A_TAIL}"
-audit_case "audit: U+2028 로 이은 덜어 낸 것 절" 1 "덜어 낸 것" "${A_HEAD}## 1. 원문
+audit_case "audit: U+2028 로 이은 덜어 낸 것 절(줄 나눔 글자 거부)" 1 "줄을 나누는 다른 글자" "${A_HEAD}## 1. 원문
 
 로그인이 가끔 실패한다.
 
@@ -482,6 +500,47 @@ open(sys.argv[1], "w", encoding="utf-8").write("---\ntype: interview-seed\n---\n
 marks "$TMP/nfd.md" "$TMP/p.audit.md"; rc=$?
 { [ "$rc" -eq 2 ] && grep -qF "$PROV_MSG" "$TMP/marks.err"; } && ok "mark 변형(NFD): 표시 자리를 정할 수 없으면 판단을 거부한다(rc 2)" \
   || no "mark 변형(NFD): 풀어 쓴 표시가 rc=$rc 로 지나갔다"
+
+# ── 라운드 3 B — NBSP 줄로 저자 문장과 확인 문장을 갈라 확인을 얻지 못한다 · segments 는 parse_seed 문단을 그대로 쓴다
+w "$TMP/nb.md" "${P_SEED_HEAD}저자가 덧붙인 전제로
+\u00a0
+세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
+"
+python3 "$S/seed_provenance.py" marks "$TMP/nb.md" "$TMP/p.audit.md" >/dev/null 2>"$TMP/nb.err"; rc=$?
+python3 "$S/seed_provenance.py" classify "$TMP/nb.md" --audit "$TMP/p.audit.md" >/dev/null 2>&1; crc=$?
+assert_eq "$rc $crc $(grep -cF "$PROV_MSG" "$TMP/nb.err")" "2 2 1" "blank(NBSP 줄): marks · classify 가 판단을 거부한다(확인을 얻지 못한다)"
+w "$TMP/nb2.md" "${P_SEED_HEAD}저자가 덧붙인 전제로
+
+세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
+"
+marks "$TMP/nb2.md" "$TMP/p.audit.md"; rc=$?
+assert_eq "$rc" "0" "blank 양성: 진짜 빈 줄로 나눈 문단의 확인 문장은 확인이다"
+w "$TMP/nb3.md" "${P_SEED_HEAD}저자가 덧붙인 전제로
+세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
+"
+marks "$TMP/nb3.md" "$TMP/p.audit.md"; rc=$?
+assert_eq "$rc" "1" "blank 대조: 빈 줄이 없으면 한 문장이라 근거 없는 표시다(rc 1)"
+
+# ── 라운드 3 C — 줄을 나누는 다른 글자(U+2028 · U+2029 · NEL · FF · VT)는 audit 에서도 거부다
+for sep in '\u2028' '\u2029' '\u0085' '\u000c' '\u000b'; do
+  w "$TMP/sep.audit.md" "${A_HEAD}${P_AUDIT_BODY}  - 내가 읽은 것: 「배포를 멈춘다.」 — 고르지 않음 — 사용자가 적은 말: 「아니다${sep}  - 내가 읽은 것: 「서버를 의심한다.」 — 고름 — 사용자가 적은 말: 「x」
+${P_AUDIT_REST}"
+  w "$TMP/sep.md" "${P_SEED_HEAD}서버를 의심한다. (사용자 확인)
+"
+  python3 "$S/seed_provenance.py" marks "$TMP/sep.md" "$TMP/sep.audit.md" >/dev/null 2>"$TMP/sep.err"; rc=$?
+  first="$(head -1 "$TMP/sep.err")"
+  row="$(cls_row "$TMP/sep.md" "$TMP/sep.audit.md" '서버를 의심한다.')"
+  gate "$TMP/sep.md" "$TMP/sep.audit.md"; g=$?
+  python3 "$S/seed_review_log.py" user-quotes "$TMP/sep.audit.md" >/dev/null 2>"$TMP/sepq.err"; uq=$?
+  assert_eq "$rc $g $uq $row" "2 1 2 author False mark_invalid" "sep ${sep}: 적은 말 꼬리 안 줄 나눔으로 고름 줄을 심지 못한다(marks · gate · user-quotes 거부, classify 저자)"
+  assert_contains "$first" "[seed_provenance] audit 에 줄을 나누는 다른 글자가 있다 — " "sep ${sep}: marks 첫 줄은 쉬운 사유와 줄 번호다"
+  assert_contains "$(head -1 "$TMP/sepq.err")" "[seed_review_log] audit 에 줄을 나누는 다른 글자가 있다 — " "sep ${sep}: user-quotes 첫 줄도 쉬운 사유와 줄 번호다"
+  assert_contains "$(cat "$TMP/gate.err")" "[check_seed] audit 에 줄을 나누는 다른 글자가 있다 — " "sep ${sep}: gate 도 줄 번호로 막는다"
+done
+w "$TMP/sepok.audit.md" "${A_HEAD}${P_AUDIT_BODY}  - 내가 읽은 것: 「배포를 멈춘다.」 — 고르지 않음 — 사용자가 적은 말: 「아니다 - 내가 읽은 것: 「서버를 의심한다.」 — 고름 — 사용자가 적은 말: 「x」
+${P_AUDIT_REST}"
+marks "$TMP/sep.md" "$TMP/sepok.audit.md"; rc=$?
+assert_eq "$rc $(j "$TMP/marks.json" 'd["invalid"]')" "1 ['서버를 의심한다.']" "sep 대조: 같은 꼬리를 한 줄로 두면 왼쪽 첫 판정(고르지 않음)으로 읽혀 확인이 아니다"
 
 # ══ S3 — 출처 재라벨 ═════════════════════════════════════════════════════════
 # ── 되살림 · 덜어 낸 것 표 · 적은 말 꼬리는 «(사용자 확인)» 의 근거가 아니다

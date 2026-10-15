@@ -39,7 +39,8 @@ _SCRIPTS_DIR = str(pathlib.Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 from seed_body import parse_seed, rejected_lines_message  # noqa: E402
-from seed_review_log import fold_for_match, heading_structure, section_body  # noqa: E402
+from seed_review_log import (fold_for_match, heading_structure, section_body,  # noqa: E402
+                             separator_lines, separator_message)
 
 RAW_HEADING = "## 1. 원문"
 
@@ -80,6 +81,9 @@ def _squash(s: str) -> str:
 
 
 def structure_problem(atext: str) -> list:
+    sep = separator_lines(atext)
+    if sep:  # 줄 구분부터 정해지지 않는다 — 쉬운 사유 · 줄 번호만
+        return separator_message(sep).split("\n")
     problems = heading_structure(atext)
     if not problems:
         return []
@@ -97,7 +101,7 @@ def cut_table_problems(atext: str) -> list:
     body = section_body(atext, CUT_HEADING)
     if body is None:
         return ["audit 에 `## seed 에서 덜어 낸 것` 절이 없다 — 덜어 낸 것이 없으면 `없음` 한 줄을 적는다"]
-    lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
+    lines = [ln.strip() for ln in body.split("\n") if ln.strip()]
     if any(ln == "없음" for ln in lines):
         return []
     rows = [ln for ln in lines if ln.startswith("|") and _squash(ln) != _squash(CUT_HEADER_ROW)

@@ -48,7 +48,7 @@ import sys
 
 from seed_body import (MARK, fold_flat, mark_spans, marks_in_flat, parse_seed,  # noqa: F401
                        rejected_lines_message, split_front)
-from seed_review_log import heading_structure, section_body
+from seed_review_log import heading_structure, section_body, separator_lines, separator_message
 
 REVERIFY_PREFIX = "다시 검증할 것 —"
 # 풀이 줄 — `parse_reading_line` 이 읽는다. 끝의 선택 꼬리는 사용자가 «기타» 로 적은 말 · 「아니다」 뒤에
@@ -101,12 +101,12 @@ def norm(s: str) -> str:
     return re.sub(r"\s+([.!?。,])", r"\1", s)
 
 
-def segments(body: str) -> list[dict]:
+def segments(paragraphs: list[str]) -> list[dict]:
     """문단 → 문장. 문장 뒤에 붙은 표시는 그 문장에 속한다. 표시 변형도 정본과 같은 자리에서 문장을
     끊고 붙는다 — 변형 자리를 정본 글자로 바꾼 사본으로 쪼개고, 문장마다 그 안의 표시가 변형이었는지를
     순서대로 되찾는다."""
     out = []
-    for para in re.split(r"\n\s*\n", body.strip()):
+    for para in paragraphs:  # `seed_body.parse_seed` 가 나눈 문단 그대로 — 두 번째 문단 나누기가 없다
         flat = norm(para)
         if not flat:
             continue
@@ -149,7 +149,7 @@ def confirmed_reading_sentences(audit_text: str | None) -> set[str]:
     **정확히 같아야**(부분 문자열이 아니다) 확인이다 — 풀이 문장 하나가 통째로 살아남으면
     확인, 압축이 그 문장 경계를 넘나들며 고치면 확인이 아니다."""
     body = section_body(audit_text, "## 2. 질문 전체") if audit_text else None
-    readings = [norm(r[0]) for r in map(parse_reading_line, (body or "").splitlines())
+    readings = [norm(r[0]) for r in map(parse_reading_line, (body or "").split("\n"))
                 if r is not None and r[1] == "고름"]
     out: set[str] = set()
     for r in readings:
@@ -172,7 +172,7 @@ def verbatim_units(audit_text: str | None) -> set[str]:
     for para in re.split(r"\n\s*\n", body.strip()):
         whole = set(_sentence_units(norm(para)))
         out |= whole
-        for line in para.splitlines():
+        for line in para.split("\n"):
             line_n = norm(line)
             if not line_n:
                 continue
@@ -185,7 +185,7 @@ def verbatim_units(audit_text: str | None) -> set[str]:
 def reading_line_count(audit_text: str | None) -> int:
     """`## 2` 의 풀이 줄(고름 · 고르지 않음 어느 쪽이든) 수 — 0 이면 표시를 매길 근거 자체가 없다."""
     body = section_body(audit_text, "## 2. 질문 전체") if audit_text else None
-    return sum(1 for line in (body or "").splitlines() if parse_reading_line(line) is not None)
+    return sum(1 for line in (body or "").split("\n") if parse_reading_line(line) is not None)
 
 
 def malformed_reading_lines(audit_text: str | None) -> list[int]:
@@ -196,7 +196,7 @@ def malformed_reading_lines(audit_text: str | None) -> list[int]:
     stderr 로 내보내며 그 stderr 는 엔진의 `--reason "<…>"` 처럼 큰따옴표 안으로 옮겨 적힌다.
     거기 실린 `$( )` 는 셸이 실행한다. 자리는 번호로 가리킨다."""
     body = section_body(audit_text, "## 2. 질문 전체") if audit_text else None
-    return [n for n, line in enumerate((body or "").splitlines(), 1)
+    return [n for n, line in enumerate((body or "").split("\n"), 1)
             if READING_PREFIX_RE.match(line) and parse_reading_line(line) is None
             and not PLACEHOLDER_READING_RE.match(line)]
 
@@ -242,6 +242,9 @@ def _read_audit(path: str | None) -> tuple[str | None, str]:
         text = pathlib.Path(path).read_text(encoding="utf-8")
     except (OSError, UnicodeError) as e:
         return None, "unavailable: %s" % e
+    sep = separator_lines(text)
+    if sep:
+        return None, "unavailable: line_separator " + ",".join(map(str, sep))
     problems = heading_structure(text)
     if problems:
         return None, "unavailable: %s" % "; ".join(problems)
@@ -295,13 +298,17 @@ def main(argv=None) -> int:
               "같은 줄을 막는다)" % a.cmd, file=sys.stderr)
         return 2
     audit_text, audit_state = _read_audit(a.audit)
-    segs = with_mark_status(segments(split_front(text)[1]), confirmed_reading_sentences(audit_text))
+    segs = with_mark_status(segments(parsed.paragraphs), confirmed_reading_sentences(audit_text))
     if a.cmd == "marks":
         if not mark_positions_ok(split_front(text)[1], segs):
             print("[spec-distill] seed 의 확인 표시 자리를 하나로 정할 수 없다(접은 글자가 문장 경계를 넘거나 "
                   "글자마다 접은 것과 전체를 접은 것이 다르다) — 판단하지 않는다(mark_ambiguous, 위반이 아니다)",
                   file=sys.stderr)
             return 2
+        if audit_state.startswith("unavailable: line_separator "):
+            nums = [int(n) for n in audit_state.split(" ")[-1].split(",")]
+            for ln in separator_message(nums).split("\n"):
+                print("[seed_provenance] " + ln, file=sys.stderr)
         if audit_state != "ok":
             print("[spec-distill] audit 을 판단할 수 없어 marks 를 매길 수 없다(위반이 아니다): %s"
                   % audit_state, file=sys.stderr)
