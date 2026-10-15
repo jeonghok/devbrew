@@ -91,6 +91,23 @@ for lit in '새로 fetch 한 `origin/main` 에서 `feature/roadmap-<요지>` 브
   has "$RTXT" "$lit" "redecompose(리뷰): $lit"
 done
 
+# ── R3 넘김 — 분해된 일의 설계는 에픽 넘김 줄 · --bundle 로 ──────────────────
+RTPL="$SD/templates/roadmap-template.md"
+CONDUCT="$(win "$RTPL" '## 지휘 절차' '## ')"
+for lit in '`references/epic-handoff.md` 에 있는 에픽 넘김 줄' '`--bundle <묶음>`'; do
+  has "$CONDUCT" "$lit" "로드맵 템플릿 지휘 절차: $lit"
+done
+for lit in '${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md 의 에픽 넘김 줄' '--bundle 과 그 묶음의 레포 루트 기준 상대경로'; do
+  has "$DLINE" "$lit" "분해된 일 다음 세션 줄: $lit"
+done
+for lit in '`--bundle <묶음의 레포 상대경로>` 를 붙여 spec-review 를 다시 돌린다' \
+           '`${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md` 의 에픽 넘김 줄로 연다' \
+           '`## 미룸` 표(칸: 항목 · 이유 · 받는 곳'; do
+  has "$RTXT" "$lit" "redecompose(R3 넘김): $lit"
+done
+EH_LINE="$(grep -m1 '^> `@<bundle-abs>' "$SD/references/epic-handoff.md")"
+has "$EH_LINE" 'roadmap 에 <roadmap-rel> 을 적는다' "에픽 넘김 줄: 설계문서 frontmatter roadmap(게이트 ③ 의 열쇠)"
+
 # ── AC11 — 재결정 규약 한 줄 ────────────────────────────────────────────────
 PG="$SD/references/proceed-gate.md"
 P23="$(win "$PG" '## 재결정 규약 (P23)' '## ')"

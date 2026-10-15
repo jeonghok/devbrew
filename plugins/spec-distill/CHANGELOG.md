@@ -16,6 +16,7 @@
 
 ### Fixed
 - `roadmap_render.py` · `roadmap_write.py` 가 번호 문법 · 로드맵 해석(`BLOCK_ID_RE` · `KEY_RE` · `OQ_LINE_RE` · `DATE_RE` 등)을 5.6.0 의 공유 모듈 `roadmap_model.py` 에서 가져온다 — `roadmap_status.py` 가 더는 그 정규식을 내보내지 않아 두 스크립트가 import 에서 죽었다.
+- 분해된 일의 설계가 5.6.0 의 넘김을 탄다 — 로드맵 템플릿 지휘 절차 · 분해된 일의 다음 세션 줄 · `references/redecompose.md` 끝내기가 에픽 설계를 `references/epic-handoff.md` 의 에픽 넘김 줄로 열고 spec-review 를 `--bundle <묶음>` 으로 부르게 한다. 에픽 넘김 줄은 설계문서 frontmatter 에 `source_interview` 와 함께 `roadmap:` 을 적게 해 spec-review 게이트 ③ 이 로드맵 에픽을 알아본다. 재분해로 옮겨 가는 범위는 설계문서 `## 미룸` 표(항목 · 이유 · 받는 곳)에 받는 에픽 번호로 남긴다.
 
 ## [5.6.0] — 2026-10-15
 
