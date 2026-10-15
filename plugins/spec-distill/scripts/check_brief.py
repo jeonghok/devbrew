@@ -581,13 +581,16 @@ def payload_verbatim_anchors(payload_text: str) -> set:
 
 
 S_NUM_RE = re.compile(r"^S(\d+)$")
+# §6 항목은 줄 첫 칸에서 시작한다(템플릿). 들여 쓴 앵커는 남의 항목 본문 안에 있다.
+S_ANCHOR_NESTED_RE = re.compile(r"^[ \t]+[-*]\s+\*\*(S\d+)\*\*", re.MULTILINE)
 
 
 def payload_verbatim_n1b_failures(payload_text: str, audit_anchors: set) -> list[str]:
     """N1b — payload §6 은 사용자 원문 **S1~Sn 전부**다(R2 · 설계 §3-2). 코퍼스는 payload 원문 §6 span
-    (`payload_verbatim_anchors` — 펜스를 벗기지 않는다, v0.46.0). 셋을 본다: S1 이 있다 · 번호가 S1 부터 가장
+    (`payload_verbatim_anchors` — 펜스를 벗기지 않는다, v0.46.0). 넷을 본다: S1 이 있다 · 번호가 S1 부터 가장
     큰 번호까지 빠짐없다 · audit §6 의 앵커가 전부 payload §6 에도 있다(audit 은 S2 이상을 같은 글자로 겹쳐
-    가진다 — 글자 대조는 `check_verbatim_coverage.py`). state 의 발화 전량과의 대조도 그 스크립트가 한다 —
+    가진다 — 글자 대조는 `check_verbatim_coverage.py`) · 앵커가 줄 첫 칸에서 시작한다(들여 쓴 앵커는 남의 항목
+    본문 안이다). state 의 발화 전량과의 대조도 그 스크립트가 한다 —
     이 게이트는 brief 파일만 읽는다. §6 이 없거나 경계가 유일하지 않으면 앵커가 공집합이라 S1 부재로 red 다."""
     anchors = payload_verbatim_anchors(payload_text)
     nums = sorted(int(m.group(1)) for a in anchors for m in [S_NUM_RE.match(a)] if m)
@@ -601,6 +604,12 @@ def payload_verbatim_n1b_failures(payload_text: str, audit_anchors: set) -> list
     missing = sorted(a for a in audit_anchors if a not in anchors)
     if missing:
         out.append("audit §6 의 " + ", ".join(missing) + " 가 payload §6 에 없다 — payload §6 은 원문 전량이다")
+    span = payload_section6_span(payload_text)
+    nested = sorted(set(S_ANCHOR_NESTED_RE.findall(payload_text[span[0]:span[1]])) if span else (),
+                    key=lambda s: int(s[1:]))
+    if nested:
+        out.append("payload §6 의 " + ", ".join(nested) + " 앵커가 줄 첫 칸이 아니라 들여 쓰여 있다 — "
+                   "다른 항목 본문 안의 `- **S<N>**` 줄은 사용자 발화가 아니다")
     return out
 
 

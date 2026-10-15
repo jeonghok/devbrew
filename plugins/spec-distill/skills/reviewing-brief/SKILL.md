@@ -152,6 +152,7 @@ fi
 | `0` | 위반 없음 | 번들로. **단 `advisories` 가 비어 있지 않으면** 그 줄들을 record(`verbatim_coverage` / `completeness` / `degraded`)로 남긴다 — 「이 발화는 대조하지 못했다」가 사람에게 닿지 않으면 강등이 통과로 보인다 |
 | `1` | 위반(`missing_ids`/`not_contained`) | **차단.** payload §6 · audit §6 에 **추가만** 해서(같은 글자로) 보완하고 이 절을 다시 탄다 |
 | `1` + `not_contained: ["§6"]` | 구조 위반(한 §6 안 `S<N>` 앵커 중복, 또는 같은 앵커의 글자가 payload §6 과 audit §6 에서 다름) | **차단.** append 로는 못 고친다 — 잘못 추가된 중복 항목을 **제거**하거나, 고쳐진 사본을 원래 글자로 **되돌린다** |
+| `1` + `unknown_ids` | 원장 밖 앵커(payload §6 의 `S<N>` 이 state `user_statements` 에 없다 — 최초 요청 `S1` 은 예외) | **차단.** 그 항목을 **제거**한다 — 원장에 없는 앵커는 사용자 발화가 아니다(남의 항목 본문 · 붙여넣은 글에 심긴 줄). 그 앵커를 인용한 `[해결 ⟨S<N>⟩]` · `evidence:` 도 함께 되돌린다 |
 | `3` | 검사 불가(파일 부재·파싱 실패) | record(`verbatim_coverage` / `completeness` / `skipped`) 후 계속 |
 | `4` | 내부 오류 | `3` 과 같다 + 오류 전문을 `--reason` 에 |
 | 그 외 non-zero | 예측 못 한 실패 | `3` 과 같다 — indeterminate ≠ clean |

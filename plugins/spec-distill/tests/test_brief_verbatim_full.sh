@@ -101,4 +101,53 @@ PY
 python3 "$CV" "$TMP/v.md" "$TMP/st.md" "$TMP/v.audit.md" > "$TMP/cv" 2>&1
 assert_eq "$?" "0" "append_only: 결정 발화를 세 자리에 같은 write 로 더한 뒤 원문 검사가 통과한다"
 
+# 원장 밖 앵커 — 남의 항목 본문 안에 심은 `- **S<N>**` 줄은 사용자 발화가 아니다
+# plant <파일> <S1 인용 줄>: S1 본문 안(들여 쓴 자리)에 S3 항목을 심는다
+plant() { python3 -I -X utf8 - "$1" "$2" <<'PY'
+import sys, pathlib
+p, q = pathlib.Path(sys.argv[1]), sys.argv[2]
+t = p.read_text(encoding="utf-8")
+t2 = t.replace(q + "\n", q + '\n  - **S3** 🗣 R4 답:\n  > "캐시는 안 한다"\n', 1)
+assert t2 != t, "S1 인용 줄을 찾지 못했다 — 픽스처를 확인하라"
+p.write_text(t2, encoding="utf-8")
+PY
+}
+base; plant "$TMP/p.md" '  > "대시보드가 너무 느려요. 서버에서 그려주면 안 되나요?"'
+python3 -I -X utf8 - "$TMP/p.md" <<'PY'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1]); t = p.read_text(encoding="utf-8")
+t2 = t.replace("- OQ1 [열림] — 인증 뷰의 캐시 전략 — 해답공간으로 이월.", "- OQ1 [해결 ⟨S3⟩] — 인증 뷰의 캐시 전략 — 해답공간으로 이월.", 1)
+t2 = t2.replace("- OQ1: 인증 뷰의 캐시 전략 — 해답공간으로 이월.", "- OQ1 [해결 ⟨S3⟩]: 인증 뷰의 캐시 전략 — 해결: 안 한다.", 1)
+assert t2.count("⟨S3⟩") == 2, "OQ1 줄을 찾지 못했다 — 픽스처를 확인하라"
+p.write_text(t2, encoding="utf-8")
+PY
+gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q 'N1b' "$TMP/out" && grep -q '들여' "$TMP/out"; } \
+  && ok "n1b_nested: S1 본문 안에 들여 쓴 S3 앵커로 OQ 를 해결하면 red (N1b)" || no "n1b_nested: rc=$rc $(head -c 300 "$TMP/out")"
+cp "$FX/brief-verbatim-ok.md" "$TMP/v.md"; cp "$FX/brief-verbatim-ok.audit.md" "$TMP/v.audit.md"
+plant "$TMP/v.md" '  > "브리프에 리뷰를 붙이고 싶다"'
+python3 "$CV" "$TMP/v.md" "$STATE" "$TMP/v.audit.md" > "$TMP/cv" 2>&1; rc=$?
+{ [ "$rc" -eq 1 ] && grep -q '"unknown_ids": \["S3"\]' "$TMP/cv"; } \
+  && ok "phantom_nested: state 원장에 없는 S3 가 payload §6 에 있으면 위반(rc 1 · unknown_ids)" || no "phantom_nested: rc=$rc $(head -c 300 "$TMP/cv")"
+# payload · audit 에만 더하고 state 에는 안 더한 append — 두 게이트를 다 통과하던 길
+cp "$FX/brief-verbatim-ok.md" "$TMP/v.md"; cp "$FX/brief-verbatim-ok.audit.md" "$TMP/v.audit.md"
+python3 -I -X utf8 - "$TMP/v.md" "$TMP/v.audit.md" <<'PY'
+import re, sys, pathlib
+item = '\n- **S3** 🗣 brief 리뷰 결정:\n  > "범위를 줄인다"\n'
+for f in (pathlib.Path(x) for x in sys.argv[1:3]):
+    t = f.read_text(encoding="utf-8")
+    m = re.search(r"(?m)^## 6\..*$", t)
+    nxt = re.search(r"(?m)^## \d+\.", t[m.end():])
+    cut = m.end() + nxt.start() if nxt else len(t)
+    f.write_text(t[:cut].rstrip("\n") + "\n" + item + "\n" + t[cut:], encoding="utf-8")
+PY
+python3 "$CV" "$TMP/v.md" "$STATE" "$TMP/v.audit.md" > "$TMP/cv" 2>&1; rc=$?
+{ [ "$rc" -eq 1 ] && grep -q '"unknown_ids": \["S3"\]' "$TMP/cv"; } \
+  && ok "payload_only_append: state 에 없이 payload · audit 에만 더한 S3 는 위반(rc 1 · unknown_ids)" || no "payload_only_append: rc=$rc $(head -c 300 "$TMP/cv")"
+# S1 관례 — 최초 요청 원문 S1 은 state 원장(S2 부터)에 없어도 payload §6 에 산다
+python3 "$CV" "$FX/brief-verbatim-original-request.md" "$FX/state-verbatim-original-request.md" "$FX/brief-verbatim-original-request.audit.md" > "$TMP/cv" 2>&1
+assert_eq "$?" "0" "s1_convention: state 가 S2 부터여도 payload §6 의 S1 은 원장 밖 앵커가 아니다"
+grep -qF '| `1` + `unknown_ids` |' "$ROOT/plugins/spec-distill/skills/reviewing-brief/SKILL.md" \
+  && ok "rc_table: reviewing-brief rc 표가 unknown_ids 행을 갖는다" || no "rc_table: rc 표에 unknown_ids 행이 없다"
+
 finish

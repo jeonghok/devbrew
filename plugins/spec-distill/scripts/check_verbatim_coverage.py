@@ -14,6 +14,11 @@ frontmatter에서 유도하지 않는다. `check_brief.py`의 `resolve_audit()`�
 재료로 검증을 태우는 것이 아예 안 하는 것보다 나쁘다(아래 `main()` 참조).
 
   L1: state `user_statements[].id` ∪ audit §6 앵커 ⊆ **payload** §6 앵커 집합. 위반 → red
+  L1': payload §6 앵커 ⊆ state `user_statements[].id` ∪ {`S1`}. 위반 → red(`unknown_ids`)
+      원장 밖 앵커는 사용자 발화가 아니다 — 남의 항목 본문(붙여넣은 글 · seed frontmatter)에
+      `- **S<N>**` 줄을 심으면 그것이 `[해결 ⟨S<N>⟩]` · `evidence:` 의 근거로 쓰인다. `S1` 은
+      원장에 없어도 된다 — 최초 요청 원문 `S1` 은 원장이 `S2` 부터일 때 payload 에만 산다
+      (`finishing.md` Step A.3).
   L2: 정규화 후 payload §6 항목 본문이 state `text`를 **포함**하는가.   위반 → red
       P21 placeholder 토큰이 **어느 한쪽**(state `text` 또는 payload §6 항목 본문)에
       관여하면 그 statement는 **판정하지 않는다 → exit 3(검사 불가)**. clean도 violation도
@@ -37,7 +42,7 @@ frontmatter에서 유도하지 않는다. `check_brief.py`의 `resolve_audit()`�
 
 exit 계약:
   0  위반 없음
-  1  **위반 발견** (missing_ids 또는 not_contained 비어 있지 않음) — 호출자는 차단
+  1  **위반 발견** (missing_ids · not_contained · unknown_ids 중 하나라도 비어 있지 않음) — 호출자는 차단
   3  검사 불가 (파일 부재·파싱 실패 — 의도적으로 매핑된 경로) — degrade 후 계속
   4  내부 오류 (미처리 예외) — Python 기본 종료 코드 1을 절대 쓰지 않는다.
      `main()`이 top-level `try/except`로 감싸여 있고, "exit 1은 오직 명시적 위반
@@ -277,7 +282,7 @@ def parse_section6_union(payload_text: str, audit_text: str) -> dict[str, str]:
 
 
 def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, dict]:
-    result: dict = {"missing_ids": [], "not_contained": [], "advisories": []}
+    result: dict = {"missing_ids": [], "not_contained": [], "unknown_ids": [], "advisories": []}
     try:
         payload_text = payload_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
@@ -367,7 +372,11 @@ def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, di
         if sid not in result["missing_ids"]:
             result["missing_ids"].append(sid)
 
-    if result["missing_ids"] or result["not_contained"]:
+    # L1' — 원장 밖 앵커. payload 에만(또는 payload · audit 에만) 더한 항목도 여기서 걸린다.
+    known = {st["id"] for st in statements} | {"S1"}
+    result["unknown_ids"] = sorted(pay_ids - known, key=lambda s: int(s[1:]))
+
+    if result["missing_ids"] or result["not_contained"] or result["unknown_ids"]:
         return EXIT_VIOLATION, result
     if saw_indeterminate:
         return EXIT_INDETERMINATE, result
@@ -390,7 +399,7 @@ def main(argv: list[str]) -> int:
     try:
         code, result = run(Path(argv[1]), Path(argv[2]), Path(argv[3]))
     except Exception as exc:  # noqa: BLE001 — 계약: 어떤 예외도 exit 4 (1로 새지 않는다)
-        print(json.dumps({"missing_ids": [], "not_contained": [],
+        print(json.dumps({"missing_ids": [], "not_contained": [], "unknown_ids": [],
                           "advisories": [f"내부 오류: {type(exc).__name__}: {exc}"]},
                          ensure_ascii=False))
         return EXIT_INTERNAL
