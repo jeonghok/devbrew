@@ -232,7 +232,7 @@ update() {  # update <표 파일> — rc 를 echo 한다
   local rc=0
   (cd "$W" && python3 "$RW" update --roadmap docs/rm/roadmap.md --brief docs/iv/brief.md \
      --audit docs/iv/brief.audit.md --plan-table "$1" --date 2026-10-16 --change "경계 조정" \
-     --approval "이대로 다시 나눈다") > "$T/out.txt" 2>&1 || rc=$?
+     --approval "${APPROVAL:-이대로 다시 나눈다}") > "$T/out.txt" 2>&1 || rc=$?
   echo "$rc"
 }
 (cd "$W" && python3 "$RW" extract --roadmap docs/rm/roadmap.md) > "$T/now.md"
@@ -260,6 +260,7 @@ snap
 table "$T/u2.md" "$P1_NOW" "${E1_NOW/첫 의도/첫 의도 고침}" "$(grep '^| E2 |' "$T/u1.md")"
 assert_eq "$(update "$T/u2.md")" "1" "머지된 에픽 변경: rc 1"
 assert_file_has "$T/out.txt" "E1" "머지된 에픽 변경: 사유에 번호"
+assert_file_has "$T/out.txt" "머지" "머지된 에픽 변경: 사유에 머지"
 assert_eq "$(same_as_snap)" "same" "머지된 에픽 변경: 바이트 그대로"
 
 # 새 에픽 E3 — 다음 번호 · 묶음 생성, 그다음 E3 를 지우고, 같은 번호 재사용은 거부
@@ -277,6 +278,7 @@ assert_eq "$(update "$T/u3.md")" "1" "번호 재사용: rc 1"
 assert_eq "$(same_as_snap)" "same" "번호 재사용: 바이트 그대로"
 table "$T/u5.md" "$P1_NOW" "$E1_NOW" "$E2_U1" "${E3_ROW/| E3 |/| E4a |}"
 assert_eq "$(update "$T/u5.md")" "1" "꼬리 붙은 새 번호: rc 1"
+assert_file_has "$T/out.txt" "다음 번호" "꼬리 붙은 새 번호: 번호 규칙에서 막혔다"
 
 # 검증 실패 — 덮어쓴 파일은 원래 바이트, 새 묶음은 남지 않는다 (AC10)
 snap
@@ -294,5 +296,100 @@ assert_eq "$(update "$T/u3.md")" "1" "origin/main 없음: rc 1"
 assert_file_has "$T/out.txt" "머지 여부를 알 수 없다" "origin/main 없음: 사유"
 assert_eq "$(same_as_snap)" "same" "origin/main 없음: 바이트 그대로"
 g update-ref refs/remotes/origin/main "$MAIN_SHA"
+
+# ── 번호는 빈틈없이 이어 붙인다 · 내 것이 아닌 파일은 건드리지 않는다 ────────
+cur_row() { (cd "$W" && python3 "$RW" extract --roadmap docs/rm/roadmap.md) | grep "^| $1 |"; }
+block_of() { awk -v id="$1" '/^### /{f=($2==id)} f' "$W/docs/rm/roadmap.md"; }
+E5_ROW='| E5 | 다섯째 에픽 | 묶음 | 다섯째 의도 | 한다 차 / 안 한다 카 | E4 | feature/e5 | 없음 | C1 · S1 | 없음 | 없음 |'
+P1_CUR="$(cur_row P1)"; E1_CUR="$(cur_row E1)"; E2_CUR="$(cur_row E2)"
+
+snap
+table "$T/v1.md" "$P1_CUR" "$E1_CUR" "$E2_CUR" "$E5_ROW"
+assert_eq "$(update "$T/v1.md")" "1" "번호 빈틈: rc 1"
+assert_file_has "$T/out.txt" "다음 번호 E4" "번호 빈틈: 기대 번호를 알린다"
+assert_eq "$(same_as_snap)" "same" "번호 빈틈: 바이트 그대로"
+
+printf 'foreign\n' > "$W/docs/rm/E4.md"
+snap
+table "$T/v2.md" "$P1_CUR" "$E1_CUR" "$E2_CUR" "$E4_ROW"
+assert_eq "$(update "$T/v2.md")" "1" "남의 파일 덮어쓰기(새 에픽): rc 1"
+assert_file_has "$T/out.txt" "만들지 않은 파일" "남의 파일 덮어쓰기(새 에픽): 사유"
+assert_eq "$(cat "$W/docs/rm/E4.md")" "foreign" "남의 파일 덮어쓰기(새 에픽): 남의 파일 그대로"
+assert_eq "$(same_as_snap)" "same" "남의 파일 덮어쓰기(새 에픽): 폴더 그대로"
+rm -f "$W/docs/rm/E4.md"
+printf 'foreign\n' > "$W/docs/rm/P1.md"
+snap
+P1_BUNDLE='| P1 | 결정 하나 | 묶음 | 무엇을 정한다 | 한다 결정 / 안 한다 코드 | 없음 | feature/p1 | 없음 | S3 · OQ2 | 없음 | 없음 |'
+table "$T/v3.md" "$P1_BUNDLE" "$E1_CUR" "$E2_CUR"
+assert_eq "$(update "$T/v3.md")" "1" "남의 파일 덮어쓰기(종류 바꿈): rc 1"
+assert_file_has "$T/out.txt" "P1.md" "남의 파일 덮어쓰기(종류 바꿈): 사유에 파일"
+assert_eq "$(same_as_snap)" "same" "남의 파일 덮어쓰기(종류 바꿈): 폴더 그대로"
+rm -f "$W/docs/rm/P1.md"
+
+# 같은 글자의 새 에픽 둘은 한 번에 — E4 · E5 (빈틈 없이)
+table "$T/v4.md" "$P1_CUR" "$E1_CUR" "$E2_CUR" "$E4_ROW" "$E5_ROW"
+assert_eq "$(update "$T/v4.md")" "0" "연속 새 번호 둘: rc 0"
+[ -f "$W/docs/rm/E4.md" ] && [ -f "$W/docs/rm/E5.md" ] && ok "연속 새 번호 둘: 묶음 둘" || no "연속 새 번호 둘: 묶음이 없다"
+
+# 승인 원문 속 번호는 올림 바닥을 올리지 않는다 — E5 를 지우며 「E9 까지 보자」, 그다음 새 에픽은 E6
+E6_ROW='| E6 | 여섯째 에픽 | 묶음 | 여섯째 의도 | 한다 타 / 안 한다 파 | E2 | feature/e6 | 없음 | C1 · S1 | 없음 | 없음 |'
+table "$T/v5.md" "$P1_CUR" "$E1_CUR" "$E2_CUR" "$E4_ROW"
+assert_eq "$(APPROVAL='E9 까지 보자' update "$T/v5.md")" "0" "승인 원문에 번호: 지우기 rc 0"
+assert_file_has "$W/docs/rm/roadmap.md" "사라짐 E5 「E9 까지 보자」" "승인 원문에 번호: 이력에 원문"
+table "$T/v6.md" "$P1_CUR" "$E1_CUR" "$E2_CUR" "$E4_ROW" "$E6_ROW"
+assert_eq "$(update "$T/v6.md")" "0" "승인 원문에 번호: 다음 번호는 E6 (E9 가 아님)"
+
+# 종류 바꿈: 묶음 → 결정 → 묶음
+E4_DEC='| E4 | 넷째 에픽 | 결정 | 넷째 의도 | 한다 아 / 안 한다 자 | E2 | 없음 | 없음 | C1 · S1 | 없음 | 없음 |'
+table "$T/v7.md" "$P1_CUR" "$E1_CUR" "$E2_CUR" "$E4_DEC" "$E6_ROW"
+assert_eq "$(update "$T/v7.md")" "0" "묶음 → 결정: rc 0"
+[ -e "$W/docs/rm/E4.md" ] && no "묶음 → 결정: E4.md 가 남았다" || ok "묶음 → 결정: 묶음 파일을 지운다"
+block_of E4 | grep -qF -- "- 완료: 결정 기록" && ok "묶음 → 결정: 블록에 완료 결정 기록" || no "묶음 → 결정: 블록이 결정 모양이 아니다"
+assert_eq "$(four_empty docs/rm/roadmap.md)" "ok" "묶음 → 결정: 검사기 네 목록이 빈 목록"
+table "$T/v8.md" "$P1_CUR" "$E1_CUR" "$E2_CUR" "$E4_ROW" "$E6_ROW"
+assert_eq "$(update "$T/v8.md")" "0" "결정 → 묶음: rc 0"
+[ -f "$W/docs/rm/E4.md" ] && ok "결정 → 묶음: 묶음 파일을 다시 만든다" || no "결정 → 묶음: E4.md 없음"
+assert_eq "$(four_empty docs/rm/roadmap.md)" "ok" "결정 → 묶음: 검사기 네 목록이 빈 목록"
+
+# 머지된 E1 을 지우는 표는 거부
+snap
+table "$T/v9.md" "$P1_CUR" "$E2_CUR" "$E4_ROW" "$E6_ROW"
+assert_eq "$(update "$T/v9.md")" "1" "머지된 에픽 지우기: rc 1"
+assert_file_has "$T/out.txt" "머지" "머지된 에픽 지우기: 사유에 머지"
+assert_eq "$(same_as_snap)" "same" "머지된 에픽 지우기: 폴더 그대로"
+
+# 되돌리기: 지운 묶음(E6)이 원래 바이트로 돌아온다 — P1 에 모르는 번호를 끼워 검증을 실패시킨다
+snap
+cp "$W/docs/rm/E6.md" "$T/E6.keep"
+table "$T/v10.md" "${P1_CUR/S3 · OQ2/S3 · OQ2 · C99}" "$E1_CUR" "$E2_CUR" "$E4_ROW"
+assert_eq "$(update "$T/v10.md")" "1" "update 되돌리기: rc 1"
+assert_file_has "$T/out.txt" "C99" "update 되돌리기: 사유에 번호"
+cmp -s "$T/E6.keep" "$W/docs/rm/E6.md" && ok "update 되돌리기: 지운 묶음이 같은 바이트로" || no "update 되돌리기: E6.md 가 없거나 바뀌었다"
+assert_eq "$(same_as_snap)" "same" "update 되돌리기: 폴더 그대로"
+
+# 순서만 바뀐 표 — 묶음 파일은 그대로, 이력 줄엔 바뀜 · 새 · 사라짐이 없다
+for f in E2 E4 E6; do cp "$W/docs/rm/$f.md" "$T/$f.keep"; done
+table "$T/v11.md" "$P1_CUR" "$E1_CUR" "$E2_CUR" "$E6_ROW" "$E4_ROW"
+assert_eq "$(update "$T/v11.md")" "0" "순서만: rc 0"
+assert_eq "$(grep '^### ' "$W/docs/rm/roadmap.md" | sed 's/^### \([A-Z0-9a-z]*\) .*/\1/' | tr '\n' ' ')" "P1 E1 E2 E6 E4 " "순서만: 블록 순서가 바뀌었다"
+for f in E2 E4 E6; do cmp -s "$T/$f.keep" "$W/docs/rm/$f.md" && ok "순서만: $f 묶음 바이트 그대로" || no "순서만: $f 묶음이 바뀌었다"; done
+grep -qxF -- "- 2026-10-16 · 재분해 · 경계 조정 「이대로 다시 나눈다」" "$W/docs/rm/roadmap.md" && ok "순서만: 이력 줄에 바뀜 · 새 · 사라짐이 없다" || no "순서만: 이력 줄이 다르다"
+
+# 끝남 에픽은 거부 — P1 의 결정 기록을 main 에 올린다
+python3 - "$W/docs/rm/roadmap.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+i = t.index("## 결정 기록")
+j = t.index("\n## ", i + 1)
+t = t[:j].rstrip("\n") + "\n\n- P1 · 결정 · 2026-10-15 · 「정했다」\n" + t[j:]
+open(p, "w", encoding="utf-8").write(t)
+PY
+g add -- docs/rm/roadmap.md && g commit -qm "P1 결정" && g push -q origin main && g fetch -q origin
+snap
+table "$T/v12.md" "${P1_CUR/무엇을 정한다/무엇을 정한다 고침}" "$E1_CUR" "$E2_CUR" "$(cur_row E6)" "$(cur_row E4)"
+assert_eq "$(update "$T/v12.md")" "1" "끝남 에픽 변경: rc 1"
+assert_file_has "$T/out.txt" "P1" "끝남 에픽 변경: 사유에 번호"
+assert_eq "$(same_as_snap)" "same" "끝남 에픽 변경: 폴더 그대로"
 
 finish

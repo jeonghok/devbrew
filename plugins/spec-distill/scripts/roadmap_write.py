@@ -279,6 +279,7 @@ def cmd_extract(a) -> int:
 DONE = ("머지됨", "끝남")
 NEW_ID_RE = re.compile(r"[A-Z][0-9]+")
 ID_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])([A-Z])([0-9]+)")
+QUOTE_RE = re.compile(r"「[^」]*」")
 
 
 def stages(top: Path, roadmap: Path) -> dict:
@@ -298,8 +299,9 @@ def stages(top: Path, roadmap: Path) -> dict:
 
 
 def used_numbers(roadmap_text: str) -> dict:
-    """글자마다 로드맵 블록 번호 · 재분해 이력에 나온 가장 큰 숫자."""
-    corpus = " ".join(R.epic_block_texts(roadmap_text)) + "\n" + (section_body(roadmap_text, "## 재분해 이력") or "")
+    """글자마다 로드맵 블록 번호 · 재분해 이력에 나온 가장 큰 숫자. 이력의 「…」 는 사용자 말이라 세지 않는다."""
+    history = QUOTE_RE.sub(" ", section_body(roadmap_text, "## 재분해 이력") or "")
+    corpus = " ".join(R.epic_block_texts(roadmap_text)) + "\n" + history
     best = {}
     for letter, num in ID_TOKEN_RE.findall(corpus):
         best[letter] = max(best.get(letter, -1), int(num))
@@ -331,9 +333,23 @@ def cmd_update(a) -> int:
     if frozen:
         raise Refused("머지되거나 끝난 에픽은 바꾸거나 지우지 않는다 — %s" % " · ".join(frozen))
     used = used_numbers(old_text)
-    bad = [i for i in added if not NEW_ID_RE.fullmatch(i) or int(i[1:]) <= used.get(i[0], -1)]
-    if bad:
-        raise Refused("새 에픽은 쓴 적 없는 다음 번호(`<글자><가장 큰 수+1>` 이상)여야 한다 — %s" % " · ".join(bad))
+    bad = [i for i in added if not NEW_ID_RE.fullmatch(i) or i != i[0] + str(int(i[1:]))]
+    want = []
+    for letter in sorted({i[0] for i in added if i not in bad}):
+        got = sorted(int(i[1:]) for i in added if i[0] == letter and i not in bad)
+        first = used[letter] + 1 if letter in used else 1
+        expect = list(range(first, first + len(got)))
+        if got != expect:
+            want.append(" · ".join("%s%d" % (letter, n) for n in expect))
+    if bad or want:
+        raise Refused("새 에픽은 쓴 적 없는 다음 번호로 빈틈없이 이어 붙인다(`<대문자><숫자>`, 가장 큰 수 + 1 부터) — %s%s" % (
+            "맞지 않는 번호 %s" % " · ".join(bad) if bad else "",
+            "%s다음 번호 %s" % (" / " if bad else "", " / ".join(want)) if want else ""))
+    foreign = [rel(top, rdir / (i + ".md")) for i in added + changed
+               if new[i].kind == R.KIND_BUNDLE and (i not in old or old[i].kind != R.KIND_BUNDLE)
+               and (rdir / (i + ".md")).exists()]
+    if foreign:
+        raise Refused("이 생성기가 만들지 않은 파일은 덮어쓰지 않는다 — %s" % " · ".join(foreign))
     texts = R.epic_block_texts(old_text)
     blocks = [texts[r.id] if r.id in old and r.id not in changed else R.render_block(r) for r in new_rows]
     parts = [a.change] + ["%s %s" % (label, " · ".join(ids))
