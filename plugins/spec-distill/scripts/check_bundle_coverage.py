@@ -18,7 +18,8 @@
   받들지 않는다. 설계문서가 아직 없거나 표를 못 읽으면 배정이 받듦이다.
 - brief 입력에는 로드맵이 없어 기각 에픽 · 받듦 검사를 하지 않는다.
 
-`roadmap_status.py` 는 `check(bundle_text, spec_text)` 를 import 해 `git show` 로 읽은 글을 넘기고 status 만 본다.
+`roadmap_status.py` 는 `check(bundle_text, spec_text, repo=…)` 를 import 해 `git show` 로 읽은 글과 main 트리를 읽는 repo 를
+넘기고, status 와 함께 shallow · unserved · unknown 을 블록의 경고 줄로 싣는다(경고가 있으면 그 종료 코드는 1 이다).
 읽기만 한다 — 파일을 쓰지 않고 git · 네트워크를 부르지 않는다.
 """
 from __future__ import annotations
