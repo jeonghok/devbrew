@@ -245,6 +245,29 @@ snap
 assert_eq "$(update "$T/now.md")" "0" "update 변화 없음: rc 0"
 assert_eq "$(same_as_snap)" "same" "update 변화 없음: 아무것도 쓰지 않는다"
 
+# 처음 표(E1 행의 번호가 정렬 순서가 아니다; E2 는 다시 생성에서 고친 대로)를 그대로 다시 내도 순서만 다른 것은 바뀜이 아니다
+E2_REGEN="${E2_ROW/둘째 의도/둘째 의도 고침}"
+table "$T/o0.md" "$P1_ROW" "$E1_ROW" "$E2_REGEN"
+snap
+assert_eq "$(update "$T/o0.md")" "0" "처음 표 그대로 update(E1 머지 뒤): rc 0"
+assert_file_has "$T/out.txt" "바뀐 에픽이 없다" "처음 표 그대로 update: 바뀐 에픽이 없다"
+assert_eq "$(same_as_snap)" "same" "처음 표 그대로 update: 아무것도 쓰지 않는다"
+# 처음 표 순서에서 E2 만 고치면 바뀜은 E2 하나다
+table "$T/o1.md" "$P1_ROW" "$E1_ROW" "${E2_REGEN/둘째 의도 고침/둘째 의도 다시}"
+assert_eq "$(update "$T/o1.md")" "0" "처음 표 순서에서 E2 만 고침: rc 0"
+assert_file_has "$W/docs/rm/roadmap.md" "· 바뀜 E2 「이대로 다시 나눈다」" "처음 표 순서에서 E2 만 고침: 바뀜은 E2 하나"
+g checkout -q -- docs/rm
+# --audit 이 brief 의 `.md` → `.audit.md` 가 아니면 사용법 오류
+cp "$W/docs/iv/brief.audit.md" "$W/docs/iv/other.md"
+rc=0; (cd "$W" && python3 "$RW" update --roadmap docs/rm/roadmap.md --brief docs/iv/brief.md --audit docs/iv/other.md \
+  --plan-table "$T/state.md" --date 2026-10-16 --change x --approval y) > "$T/out.txt" 2>&1 || rc=$?
+assert_eq "$rc" "2" "update: --audit 이름이 어긋나면 rc 2"
+rc=0; (cd "$W" && python3 "$RW" create --brief docs/iv/brief.md --audit docs/iv/other.md --plan-table "$T/state.md" \
+  --out docs/rmx --title t --date 2026-10-15 --approval y) > "$T/out.txt" 2>&1 || rc=$?
+assert_eq "$rc" "2" "create: --audit 이름이 어긋나면 rc 2"
+assert_eq "$([ -e "$W/docs/rmx" ] && echo exists || echo none)" "none" "create: --audit 어긋남은 아무것도 만들지 않는다"
+rm -f "$W/docs/iv/other.md"
+
 # 머지된 E1 은 그대로, 진행 전 E2 만 바뀐다 (AC10)
 table "$T/u1.md" "$P1_NOW" "$E1_NOW" "${E2_NOW/한다 다 /한다 다 · 마 }"
 cp "$W/docs/rm/E1.md" "$T/E1.keep"

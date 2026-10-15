@@ -19,6 +19,7 @@ create 는 표 파일의 `## 생성 기록` 절에 자기가 만든 파일을 �
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
 import re
@@ -29,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import roadmap_render as R  # noqa: E402
-from check_bundle_coverage import FormatError, frontmatter, section_body, unquote  # noqa: E402
+from check_bundle_coverage import FormatError, frontmatter, id_sort_key, section_body, unquote  # noqa: E402
 from roadmap_status import DATE_RE  # noqa: E402
 
 RS = Path(__file__).resolve().parent / "roadmap_status.py"
@@ -231,6 +232,7 @@ def cmd_create(a) -> int:
     top = git_top(out_dir)
     roadmap = out_dir / "roadmap.md"
     brief_rel, audit_rel, roadmap_rel = rel(top, a.brief), rel(top, a.audit), rel(top, roadmap)
+    _audit_path_check(a.brief, a.audit)
     date = _date(a.date)
     table_path = Path(a.plan_table)
     table_text = read(table_path)
@@ -308,11 +310,28 @@ def used_numbers(roadmap_text: str) -> dict:
     return best
 
 
+def _canonical(row):
+    """표 행을 로드맵이 되읽히는 번호 순서로 맞춘 사본 — 묶음은 id 정렬, 그 밖은 발화(S) 먼저. 순서만 다른 표를 바뀜으로 세지 않는다."""
+    if row.kind == R.KIND_BUNDLE:
+        ids = sorted(set(row.ids), key=id_sort_key)
+    else:
+        ids = [t for t in row.ids if R._is_s(t)] + [t for t in row.ids if not R._is_s(t)]
+    return dataclasses.replace(row, ids=ids)
+
+
+def _audit_path_check(brief, audit):
+    """--audit 은 brief 경로의 `.md` 를 `.audit.md` 로 바꾼 파일이어야 한다(roadmap_status 가 그렇게 찾는다)."""
+    b = os.path.realpath(str(brief))
+    if not b.endswith(".md") or os.path.realpath(str(audit)) != b[:-3] + ".audit.md":
+        raise Usage("--audit 은 --brief 경로의 `.md` 를 `.audit.md` 로 바꾼 파일이어야 한다")
+
+
 def cmd_update(a) -> int:
     roadmap = Path(os.path.realpath(a.roadmap))
     top = git_top(roadmap)
     rdir = roadmap.parent
     roadmap_rel, brief_rel, audit_rel = rel(top, roadmap), rel(top, a.brief), rel(top, a.audit)
+    _audit_path_check(a.brief, a.audit)
     date = _date(a.date)
     old_text = read(roadmap)
     if unquote(frontmatter(old_text).get("source_brief", "")) != brief_rel:
@@ -322,7 +341,7 @@ def cmd_update(a) -> int:
     idx = R.index_brief(read(a.brief), read(a.audit))
     old = {r.id: r for r in old_rows}
     new = {r.id: r for r in new_rows}
-    changed = [i for i in new if i in old and new[i] != old[i]]
+    changed = [i for i in new if i in old and _canonical(new[i]) != _canonical(old[i])]
     added = [i for i in new if i not in old]
     removed = [i for i in old if i not in new]
     if not (changed or added or removed) and list(new) == list(old):
