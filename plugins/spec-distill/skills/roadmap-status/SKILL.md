@@ -43,7 +43,7 @@ allowed-tools:
 | `[shell command execution disabled by policy]` | `[spec-distill] roadmap-status 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 지도를 내지 않는다.` 를 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[spec-distill] roadmap-status 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 지도를 내지 않는다.` 를 내고 멈춘다 |
 
-이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. 지도 스크립트는 `DEVBREW_SKIP_HOOKS` 의 `spec-distill:statusline` 도 본다.
+이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. 지도 스크립트는 `DEVBREW_SKIP_HOOKS=spec-distill:statusline` 도 본다.
 
 ### 2. 지도 내기
 

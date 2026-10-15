@@ -311,13 +311,15 @@ with open(sys.argv[1], "w", encoding="utf-8") as fh:
     fh.write("---\ntype: interview-state\n  research_limit: " + "9" * 30000000 + "\n---\n")' "$STATE_DIR/2026-10-17-big-interview.state.md"
 python3 -I -c 'import sys
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
-    fh.write("---\ntype: interview-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 900000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-interview.state.md"
+    fh.write("---\ntype: interview-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 60000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-interview.state.md"
 out="$(cd "$W" && timed 15 python3 "$S/control_plane.py" statusline </dev/null)"
 within "$out" 2.5 && ok "큰 상태 파일 · 긴 숫자 — 시간 안에 끝난다(${out##*@}초)" || no "큰 상태 파일에 막혔다: $out"
 assert_eq "$(body "$out")" "$LINE2 · 인터뷰 셀 수 없음" "큰 상태 파일은 셀 수 없음 — 로드맵 부분은 그대로"
 out="$(show)"
-assert_contains "$out" "2026-10-17-big-interview.state.md — 셀 수 없음(파일이 1048576바이트를 넘는다)" "사유: 크기 상한"
+assert_contains "$out" "2026-10-17-big-interview.state.md — 셀 수 없음(파일이 65536바이트를 넘는다)" "사유: 크기 상한"
 assert_contains "$out" "2026-10-18-digits-interview.state.md — 셀 수 없음(research_limit 가 수가 아니다" "사유: 수의 자릿수 상한"
+long="$(printf '%s\n' "$out" | awk 'length($0) > 400' | wc -l | tr -d ' ')"
+assert_eq "$long" "0" "사유는 줄여 낸다 — 400바이트 넘는 줄이 없다"
 rm -f "$STATE_DIR"/*
 i=0; while [ "$i" -le 200 ]; do : > "$STATE_DIR/2026-10-19-n$i-interview.state.md"; i=$((i + 1)); done
 assert_contains "$(show)" "진행 중 인터뷰 상태 파일이 200개를 넘는다(201개)" "진행 중 상태 파일 수 상한"
@@ -355,12 +357,12 @@ mutant digits 'value.isdigit() and len(value) <= 9' 'value.isdigit()'
 printf 'interview-state\n' > "$T/m-digits/state_path.py"; mkdir -p "$STATE_DIR"
 python3 -I -c 'import sys
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
-    fh.write("---\ntype: interview-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 900000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-interview.state.md"
+    fh.write("---\ntype: interview-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 60000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-interview.state.md"
 out="$(cd "$W" && timed 30 python3 "$T/m-digits/control_plane.py" show </dev/null)"
 assert_contains "$out" "2026-10-18-digits-interview.state.md" "양성 짝: 자릿수 변이 실행이 그 상태 파일을 봤다"
 case "$out" in *"research_limit 가 수가 아니다"*) no "변이 생존: 자릿수 상한" ;; *) ok "변이 잡힘: 자릿수 상한이 없으면 사유 단언이 RED" ;; esac
 rm -rf "$STATE_DIR"
-mutant cap 'STATE_MAX_BYTES = 1 << 20' 'STATE_MAX_BYTES = 1 << 40'
+mutant cap 'STATE_MAX_BYTES = 1 << 16' 'STATE_MAX_BYTES = 1 << 26'
 printf 'interview-state\n' > "$T/m-cap/state_path.py"; mkdir -p "$STATE_DIR"
 python3 -I -c 'import sys
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
@@ -395,5 +397,44 @@ assert_eq "$out" "상태줄 꺼짐 — 플러그인을 못 찾음" "installPath 
 for want in '"statusLine"' '이어 붙' 'spec-distill:statusline' '플러그인이 대신 켜 줄 수 없' '상태줄 — 시간 초과'; do
   assert_contains "$(cat "$README")" "$want" "README 에 '$want'"
 done
+
+echo "=== 취소 신호 · 남은 임시 파일 · 코드가 바뀐 캐시 ==="
+cancel_run() {  # cancel_run <control_plane.py> <출력 파일> — 멈춘 git 아래 상태줄을 띄우고, 대역이 뜨면 SIGTERM
+  rm -f "$CACHE" "$HANG/orphans"
+  (cd "$W" && exec env PATH="$HANG:$PATH" python3 "$1" statusline </dev/null >"$2") &
+  bg=$!
+  i=0; while [ ! -s "$HANG/orphans" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+  kill -TERM "$bg" 2>/dev/null; wait "$bg" 2>/dev/null; sleep 0.3
+}
+cancel_run "$S/control_plane.py" "$T/cancel.out"
+[ -s "$HANG/orphans" ] && ok "양성 짝: 취소 전에 멈춘 git 대역이 떠 있었다" || no "멈춘 git 대역이 뜨지 않았다 — 아래 단언이 공허하다"
+assert_eq "$(alive "$HANG/orphans")" "0" "취소 신호를 받으면 하위 프로세스 묶음도 끝난다"
+assert_eq "$(cat "$T/cancel.out")" "상태줄 — 시간 초과" "취소돼도 한 줄을 낸다"
+mutant cancel 'signal.signal(sig, _cancel)' 'None'
+cancel_run "$T/m-cancel/control_plane.py" "$T/cancel-m.out"
+[ "$(alive "$HANG/orphans")" -gt 0 ] && ok "변이 잡힘: 신호를 받지 않으면 남은 하위 프로세스 단언이 RED" || no "변이 생존: 취소 신호"
+for pid in $(cat "$HANG/orphans" 2>/dev/null); do kill "$pid" 2>/dev/null; done
+
+mkdir -p "$W/.git/devbrew"
+: > "$W/.git/devbrew/.control-plane.old.tmp"; : > "$W/.git/devbrew/.control-plane.new.tmp"
+age "$W/.git/devbrew/.control-plane.old.tmp" 3600
+rm -f "$CACHE"; sl >/dev/null
+[ ! -e "$W/.git/devbrew/.control-plane.old.tmp" ] && ok "끊긴 쓰기가 남긴 오래된 임시 파일을 지운다" || no "오래된 임시 파일이 남았다"
+[ -e "$W/.git/devbrew/.control-plane.new.tmp" ] && ok "양성 짝: 방금 만든 임시 파일은 지우지 않는다" || no "방금 만든 임시 파일까지 지웠다"
+rm -f "$W/.git/devbrew/.control-plane.new.tmp"
+
+sl >/dev/null; c1="$(calls)"; sl >/dev/null
+assert_eq "$(calls)" "$c1" "양성 대조: 코드가 그대로면 캐시를 쓴다"
+age "$S/roadmap_status.py" 120; sl >/dev/null
+[ "$(calls)" -gt "$c1" ] && ok "상태 계산 코드가 바뀌면 캐시를 쓰지 않는다" || no "코드가 바뀌어도 옛 캐시를 썼다"
+mutant short 'return value if len(value) <= 80 else value[:80] + "…"' 'return value'
+printf 'interview-state\n' > "$T/m-short/state_path.py"; mkdir -p "$STATE_DIR"
+python3 -I -c 'import sys
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    fh.write("---\ntype: interview-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 60000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-interview.state.md"
+out="$(cd "$W" && python3 "$T/m-short/control_plane.py" show </dev/null)"
+assert_contains "$out" "2026-10-18-digits-interview.state.md — 셀 수 없음(" "양성 짝: 줄이기 변이 실행이 그 상태 파일을 봤다"
+[ "$(printf '%s\n' "$out" | awk 'length($0) > 400' | wc -l | tr -d ' ')" -gt 0 ] && ok "변이 잡힘: 사유를 줄이지 않으면 줄 길이 단언이 RED" || no "변이 생존: 사유 줄이기"
+rm -rf "$STATE_DIR"
 
 finish

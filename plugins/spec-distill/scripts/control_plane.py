@@ -106,6 +106,11 @@ def _field(line: str, key: str):
     return value.split("#", 1)[0].strip()
 
 
+def _short(value: str) -> str:
+    value = str(value)
+    return value if len(value) <= 80 else value[:80] + "…"
+
+
 def _count(value: str) -> bool:
     value = value.strip()
     return value.isascii() and value.isdigit() and len(value) <= 9
@@ -132,12 +137,12 @@ def parse_interview_state(text: str) -> dict:
             for part in (p for p in value[1:-1].split(",") if p.strip()):
                 _key, sep, val = part.partition(":")
                 if not sep or not _count(val):
-                    raise ValueError("research_dispatches 칸을 셀 수 없다: %s" % part.strip())
+                    raise ValueError("research_dispatches 칸을 셀 수 없다: %s" % _short(part.strip()))
                 n += int(val.strip())
         value = _field(line, "research_limit")
         if value is not None:
             if not _count(value):
-                raise ValueError("research_limit 가 수가 아니다: %s" % value)
+                raise ValueError("research_limit 가 수가 아니다: %s" % _short(value))
             limit = int(value)
     if n is None or limit is None:
         raise ValueError("research_dispatches · research_limit 를 찾지 못했다")
@@ -276,7 +281,7 @@ STATUSLINE_BUDGET = 3.0
 SHOW_BUDGET = 30.0
 STDIN_WAIT = 0.5
 STDIN_MAX_BYTES = 1 << 16
-STATE_MAX_BYTES = 1 << 20
+STATE_MAX_BYTES = 1 << 16
 STATE_FILES_MAX = 200
 FOLDER_ENTRIES_MAX = 10000
 CACHE_MAX_BYTES = 8 << 20
@@ -309,16 +314,18 @@ def run_bounded(argv, cwd, env, deadline: Deadline, what: str):
         return 127, b""
     try:
         out, _err = proc.communicate(timeout=wait)
-    except subprocess.TimeoutExpired:
+    except BaseException as exc:
         try:
             os.killpg(proc.pid, signal.SIGKILL)
         except OSError:
             pass
         try:
             proc.communicate(timeout=1)
-        except subprocess.TimeoutExpired:
+        except BaseException:
             pass
-        raise TimedOut(what)
+        if isinstance(exc, subprocess.TimeoutExpired):
+            raise TimedOut(what)
+        raise
     return proc.returncode, out
 
 
@@ -415,6 +422,10 @@ def interview_files(root: str):
             for entry in entries:
                 if len(names) >= FOLDER_ENTRIES_MAX:
                     return True, [], "인터뷰 폴더 항목이 %d개를 넘는다" % FOLDER_ENTRIES_MAX
+                try:
+                    entry.name.encode("utf-8")
+                except UnicodeEncodeError:
+                    continue
                 names.add(entry.name)
     except OSError as exc:
         return True, [], "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__
@@ -432,11 +443,12 @@ def interview_files(root: str):
     return True, files, None
 
 
-def read_interviews(supported, files, folder_error) -> dict:
+def read_interviews(supported, files, folder_error, deadline: Deadline) -> dict:
     summary = {"supported": supported, "items": [], "errors": []}
     if folder_error:
         summary["errors"].append({"path": "docs/superpowers/interview", "reason": folder_error})
     for rel, path, mtime_ns in files:
+        deadline.left("인터뷰 상태 파일")
         try:
             item = parse_interview_state(read_capped(path, STATE_MAX_BYTES))
         except OSError as exc:
@@ -446,7 +458,7 @@ def read_interviews(supported, files, folder_error) -> dict:
             summary["errors"].append({"path": rel, "reason": "UTF-8 이 아니다"})
             continue
         except ValueError as exc:
-            summary["errors"].append({"path": rel, "reason": str(exc)})
+            summary["errors"].append({"path": rel, "reason": _short(str(exc))})
             continue
         item.update(path=rel, mtime=mtime_ns / 1e9)
         summary["items"].append(item)
@@ -466,8 +478,20 @@ def cache_key(repo: Repo, main, mode, targets, stamps):
             kept.append(row)
     refs = "\n".join(kept)
     refs_hash = hashlib.sha256(refs.encode("utf-8")).hexdigest()
-    parts = [mode, main or "-", refs_hash, "\n".join("%s=%s" % t for t in targets), "\n".join(stamps)]
+    parts = [code_stamp(), mode, main or "-", refs_hash, "\n".join("%s=%s" % t for t in targets), "\n".join(stamps)]
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
+
+
+def code_stamp() -> str:
+    """상태 계산 · 표시 스크립트의 크기와 수정 시각 — 플러그인이 바뀌면 옛 결과를 쓰지 않는다."""
+    out = []
+    for name in ("roadmap_status.py", "control_plane.py"):
+        try:
+            st = os.stat(str(SCRIPTS / name))
+            out.append("%s:%d:%d" % (name, st.st_size, st.st_mtime_ns))
+        except OSError:
+            out.append(name + ":-")
+    return ";".join(out)
 
 
 def cache_file(repo: Repo):
@@ -497,10 +521,27 @@ def load_cache(path):
     return data["entries"], (last if isinstance(last, dict) else {}), None
 
 
+def sweep_stale_tmp(folder):
+    """끊긴 쓰기가 남긴 10분 넘은 임시 파일을 지운다."""
+    limit = time.time() - 600
+    try:
+        with os.scandir(str(folder)) as entries:
+            for entry in entries:
+                if entry.name.startswith(".control-plane.") and entry.name.endswith(".tmp"):
+                    try:
+                        if entry.stat(follow_symlinks=False).st_mtime < limit:
+                            os.unlink(entry.path)
+                    except OSError:
+                        pass
+    except OSError:
+        pass
+
+
 def save_cache(path, entries, last):
     """임시 파일 + os.replace 로 원자적으로 쓴다 — 잠금이 없어 동시 실행이 서로 기다리지 않는다. 실패하면 사유."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
+        sweep_stale_tmp(path.parent)
         fd, tmp = tempfile.mkstemp(prefix=".control-plane.", suffix=".tmp", dir=str(path.parent))
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -555,7 +596,7 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict):
     repo = open_repo(cwd, deadline)
     supported, files, folder_error = interview_files(repo.cwd if repo else cwd)
     if repo is None:
-        view["interview"] = read_interviews(supported, files, folder_error)
+        view["interview"] = read_interviews(supported, files, folder_error, deadline)
         if arg:
             view["items"] = [(arg, failed_report(arg, "git 레포 안이 아니다"))]
         return view
@@ -589,7 +630,7 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict):
     else:
         reports = [(p, run_status(repo, p)) for p, _blob in targets]
         items = reports if arg else [(p, r) for p, r in reports if unfinished(r)]
-        interview = read_interviews(supported, files, folder_error)
+        interview = read_interviews(supported, files, folder_error, deadline)
         if key is None:
             view["notes"].append("캐시 키를 만들지 못했다(git 읽기 실패)")
         elif path is not None and not select_error and not any(r.get("bridge_error") for _p, r in reports):
@@ -718,7 +759,13 @@ def cmd_show(tasks: bool, arg) -> int:
     return 0
 
 
+def _cancel(signum, _frame):
+    raise TimedOut("취소 신호 %d" % signum)
+
+
 def main(argv=None) -> int:
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, _cancel)
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(encoding="utf-8", errors="replace")
