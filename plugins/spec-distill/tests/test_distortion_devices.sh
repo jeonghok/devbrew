@@ -16,6 +16,7 @@ C="$SD/references/compression.md"; RF="$SD/skills/request-framing/SKILL.md"
 ST="$SD/templates/interview-seed-template.md"; SP="$SD/references/docreview-profiles/seed.md"
 # AC2 — 세 물음은 「빼면 표에 남긴다」, 고정점 문면은 그대로
 has   "$C" '빼면 표에 남긴다' "AC2: 압축 규약의 세 물음이 「빼면 표에 남긴다」를 말한다"
+assert_eq "$(flat "$C" | grep -o '빼면 표에 남긴다' | wc -l | tr -d ' ')" "3" "AC2: 세 물음 각각이 「빼면 표에 남긴다」를 말한다(셋 중 하나만 지워도 red)"
 hasnt "$C" '어차피 맞게 할 거면 뺀다.' "AC2(부재): 「어차피 맞게 할 거면 뺀다.」 단독 문장이 없다"
 hasnt "$C" '있으면 뺀다.' "AC2(부재): 「있으면 뺀다.」 단독 문장이 없다"
 has   "$C" '## 상한을 두지 않는다' "AC2(고정점): 「상한을 두지 않는다」 절이 그대로다"

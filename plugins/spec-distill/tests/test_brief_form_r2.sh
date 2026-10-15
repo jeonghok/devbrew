@@ -77,6 +77,8 @@ printf -- "- OQ9 [해결 ⟨%s⟩]: 렌더링 전략 — 해결: 서버 렌더�
 base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; assert_eq "$?" "0" "resolved_kept: 해결 결정이 해결 내용과 함께 §3 에 남으면 통과한다 (양성 짝)"
 base; app 0 "$TMP/s0"; gate; rc=$?
 { [ "$rc" -ne 0 ] && grep -q 'OQ9' "$TMP/out"; } && ok "resolved_dropped: §0 의 해결 결정이 §3 에 없으면 red" || no "resolved_dropped: rc=$rc"
+# 닫힌 결정 전용 문장 — 열린 결정의 「§0 과 §3 은 같은 결정 전량이다」 문장과 구별한다(해결 분기가 지워져도 위 단언은 통과한다)
+{ [ "$rc" -ne 0 ] && grep -qF '해결로 닫은 OQ9' "$TMP/out"; } && ok "resolved_dropped_msg: 닫힌 결정이 §3 에서 빠지면 닫힌 결정 전용 문장으로 알린다" || no "resolved_dropped_msg: rc=$rc"
 printf -- "- OQ9 [해결 ⟨S99⟩] — 렌더링 전략\n" > "$TMP/s0d"
 printf -- "- OQ9 [해결 ⟨S99⟩]: 렌더링 전략 — 해결: 서버 렌더링\n" > "$TMP/s3d"
 base; app 0 "$TMP/s0d"; app 3 "$TMP/s3d"; gate; rc=$?
