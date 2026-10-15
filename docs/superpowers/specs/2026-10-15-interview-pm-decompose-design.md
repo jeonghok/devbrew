@@ -99,7 +99,10 @@ R7 과 병렬로 간다(의존 R0). R5 가 이 에픽의 재분해 절차를 부
 6. **하류 넘김.** 분해된 일의 다음 세션 줄은 brief 하나 대신 `@<로드맵>` 으로 지휘 세션을 연다(「지휘 절차대로 진행하라」). 에픽마다
    brainstorming 에 넘기는 줄은 R3 의 `references/epic-handoff.md`.
 7. **정답 견본.** 이번 로드맵 블록에서 분해안 표를 거꾸로 뽑아 이번 brief 로 생성하면 손으로 만든 R1~R9 · R2a 묶음과 바이트가 같아야 한다.
-   차이가 나면 구현 중에 「생성기를 고친다 / 견본을 고친다」를 판정해 이 문서의 결정 기록에 남긴다. 견본은 로드맵 PR #209 머지 뒤의 것.
+   차이가 나면 구현 중에 「생성기를 고친다 / 견본을 고친다」를 판정해 이 문서의 결정 기록에 남긴다. 견본은 로드맵 PR #209
+   (`feature/roadmap-batch-conductor` — 묶음 `R3.md` · `R5.md` 의 §1 의도 · 범위 줄, 로드맵 `### R3` · `### R5` 블록의 같은 줄,
+   `## 재분해 이력` 2026-10-15 두 줄을 바꾼다) 머지 뒤의 것이다. 머지 여부는 그 PR 의 머지 커밋이 `origin/main` 의 조상인지
+   (`git merge-base --is-ancestor <머지 커밋> origin/main`)로 확인한다.
 
 ### §3 재분해 경로
 
@@ -252,7 +255,7 @@ R7 과 병렬로 간다(의존 R0). R5 가 이 에픽의 재분해 절차를 부
 
 - 에픽: R4 · 브랜치 `feature/interview-pm-decompose` · 의존 R0(머지됨 `6e55f593`)
 - 플러그인: spec-distill minor bump(번호는 머지 직전)
-- 겹침(정보): `finishing.md`(R1 · R2 · R3 · R7) · `spec-interview/SKILL.md`(R1 · R2 · R7) · `spec-review/SKILL.md` · `proceed-gate.md`(R3) · 상태 파일 위치(R7 — 먼저 머지되지 않으면 지금 상태 파일에 `## 분해안` 절을 두고 R7 머지 뒤 따른다)
+- 겹침(정보): `finishing.md`(R1 · R2 · R3 · R7) · `spec-interview/SKILL.md`(R1 · R2 · R7) · `spec-review/SKILL.md` · `proceed-gate.md`(R3) · `templates/interview-brief-template.md`(R2) · 상태 파일 위치(R7 — 먼저 머지되지 않으면 지금 상태 파일에 `## 분해안` 절을 두고 R7 머지 뒤 따른다)
 
 ### Deferred to plan
 
