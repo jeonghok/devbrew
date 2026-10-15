@@ -1,0 +1,262 @@
+---
+name: interview-pm-decompose
+type: design
+created_at: 2026-10-15
+source_interview: docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/R4.md
+roadmap: docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md
+next_phase: superpowers:writing-plans
+---
+
+# R4 — PM 분해 · 로드맵 · 에픽 묶음 · 재분해 경로 · Design
+
+> 인터뷰가 끝날 때 일을 나눌지 사용자와 정하고, 나누면 같은 형식의 로드맵과 에픽 묶음을 기계가 만든다. 하류에서 경계가 틀리면 같은 지도로 돌아와 승인 뒤에만 다시 나눈다.
+
+승인된 로드맵(S47)의 에픽 R4 이다. 로드맵 전체에서의 자리는 `roadmap.md` 의 `### R4` 블록이고, 이웃 에픽 R1 · R2 · R3 · R6 ·
+R7 과 병렬로 간다(의존 R0). R5 가 이 에픽의 재분해 절차를 부른다.
+
+## 목차
+
+- [Handoff Context](#handoff-context)
+- [Context / Why](#context--why)
+- [Goals](#goals) · [Non-goals](#non-goals) · [Constraints](#constraints)
+- [설계](#설계)
+  - [§1 분해 판단 단계](#1-분해-판단-단계)
+  - [§2 로드맵 · 묶음 생성](#2-로드맵--묶음-생성)
+  - [§3 재분해 경로](#3-재분해-경로)
+  - [§4 위험 · 바깥 사례](#4-위험--바깥-사례)
+- [Acceptance Criteria](#acceptance-criteria) · [Files to Modify](#files-to-modify) · [Verification Plan](#verification-plan)
+- [Rejected Alternatives](#rejected-alternatives) · [결정 기록](#결정-기록) · [번호 대조](#번호-대조) · [Metadata](#metadata)
+
+## Handoff Context
+
+- 입력: 에픽 묶음 `docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/R4.md` (원본 brief
+  `docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.md` 와 로드맵을 거꾸로 가리킴).
+- 형식의 정본: R0 설계 `docs/superpowers/specs/2026-10-11-roadmap-walking-skeleton-design.md` §2~§4 와 그 구현
+  (`plugins/spec-distill/scripts/roadmap_status.py` · `check_bundle_coverage.py` · `section6.py`). 정답 견본은 이번 로드맵과 손으로 만든 묶음 10개.
+- brainstorming 결정: `## 결정 기록` B1~B10.
+- 브랜치 `feature/interview-pm-decompose` · worktree `.claude/worktrees/interview-pm-decompose`.
+- 이 문서만 읽고 계획을 쓸 수 있게 줄번호 대신 파일과 리터럴을 적는다(줄번호는 계획 시점에 다시 잰다).
+
+## Context / Why
+
+사용자가 꼽은 품질 저하 셋 중 하나가 「spec 하나에 일이 우겨 넣어지는 것」이다(C1). 지금 인터뷰에는 일을 나눌지 판단하는 자리가
+없고(RC70), 끝날 때 brief 하나를 brainstorming 하나로만 넘긴다(RC68). 우겨 넣기를 잡는 자리는 설계 뒤 spec 리뷰의 `scope_creep`
+하나라 늦다(RC11). 하류에서 경계가 틀린 것이 드러나도 되돌릴 길이 없다 — 재결정 규약(`references/proceed-gate.md`)은 확정 항목
+단위이고(RC61), spec 리뷰 게이트 ③ 의 인터뷰 재진입(RC20)은 지도 밖에서 다시 나눈다(K4 · K14).
+
+이번 로드맵은 R0 에서 손으로 만들었다. 손으로 할 때 어긋나기 쉬운 곳은 셋이었다 — §1 · §6 바이트 복사, 모든 번호의 배정, 로드맵과
+묶음의 범위 줄 동기(2026-10-13 · 10-15 의 로드맵 수정에서 묶음을 빠뜨려 실데이터 테스트가 실패했다).
+
+## Goals
+
+- G1 인터뷰가 끝날 때 신호를 보이고 사용자가 「하나로 / 나눈다」를 판정한다(OQ36).
+- G2 나누면 인터뷰가 분해안을 제안하고, 사용자가 고치거나 승인한 뒤에만 로드맵과 묶음이 생긴다(C6).
+- G3 로드맵 · 묶음은 R0 형식과 바이트까지 맞게 기계가 만든다(D39 · D28).
+- G4 하류의 재분해 · 축소 신호가 같은 지도로 돌아오고, 사용자 승인 뒤에만 다시 나눈다(D20 · ST1).
+
+## Non-goals
+
+- 지휘(검사를 언제 부를지 · 에픽을 언제 시작할지) — R5. 화면 표시 — R6. 번호 인계 · 대조 · 신호 감지 — R3.
+- 인터뷰 상태 파일의 위치 · 수명 — R7(이 설계는 그 파일에 절 하나를 더한다).
+
+## Constraints
+
+- 외부 플러그인은 건드리지 않는다(C25 · C35 · D26).
+- 있는 것을 다시 만들지 않는다(C32) — 형식 해석 · 검증은 `roadmap_status.py`, §6 복사는 `section6.py`, 번호 문법은 `check_bundle_coverage.py`.
+- 분해 판단에 숫자 컷오프를 두지 않는다 — 신호를 보이고 사용자가 판정한다.
+- 나누지 않는 일은 지금 흐름 그대로(brief 하나 → brainstorming 하나), 로드맵을 만들지 않는다.
+
+## 설계
+
+### §1 분해 판단 단계
+
+1. **자리.** 포화 판정 또는 사용자 종료로 인터뷰가 끝난 뒤, `finishing.md` Step A(brief 쓰기) 직전에 새 단계 「분해 판단」을 둔다.
+2. **신호.** 인터뷰가 모은 것에서 셋을 한 줄씩 보인다 — 각 숫자에 근거 번호를 붙이고 컷오프는 두지 않는다.
+   - 따로 승인할 수 있는 덩어리 수: 확정 항목 · 열린 질문을 닿는 대상으로 묶은 결정 묶음.
+   - 파일 영역 수: 조사에서 나온 고칠 자리의 플러그인 · 디렉토리 수.
+   - 사용자 원문 갈래 수: 최초 요청(S1)과 이후 발화가 말하는 일의 갈래.
+   이어서 인터뷰의 권고 한 줄(「하나로 충분해 보인다」 또는 「나누는 게 좋아 보인다」 + 이유).
+3. **판정.** `AskUserQuestion`: 「spec 하나로」 · 「나눈다 — 분해안 보기」. 하나로면 Step A 로 간다.
+4. **분해안 표.** 나누면 인터뷰가 에픽 표를 제안한다 — 칸: 번호 · 이름 · 의도 · 범위(한다/안 한다) · 의존 · 브랜치 · 경로 예약 ·
+   배정 번호. 가능하면 첫 에픽은 걷는 뼈대(D28). brief 의 모든 번호를 배정하고(공통 제약은 여러 에픽에), 표 아래에
+   `roadmap_status.py` 규칙으로 계산한 「미배정 번호 <n> · 고아 발화 <m>」을 보인다.
+5. **고치기 · 승인.** `AskUserQuestion`: 「승인」 · 「고치기」 · 「spec 하나로」. 고치기는 말로 받아 표를 고쳐 다시 보인다. 상한은 R2 의
+   결정을 따른다(닿으면 「계속 고칠까요」를 묻고 자동으로 끝내지 않는다).
+6. **기록.** 승인된 표는 인터뷰 상태 파일의 `## 분해안` 절에 남고, brief §7 에 「분해됨 — <로드맵 경로>」를 적는다.
+
+### §2 로드맵 · 묶음 생성
+
+1. **스크립트.** 새 `plugins/spec-distill/scripts/roadmap_write.py`:
+   `roadmap_write.py create --brief <brief> --audit <audit> --plan-table <상태 파일> --out <docs/superpowers/roadmaps/<날짜-주제>/>`.
+2. **로드맵.** R0 형식: frontmatter `type: roadmap` · `source_brief`, `## 에픽` 블록(의도 · 범위 · 의존 · 브랜치 · 묶음 · 경로 예약 ·
+   묶음 없는 블록은 R0 규칙의 머리말), `## 지휘 절차`(템플릿 문면 — R5 가 대체), `## 결정 기록`(형식 줄만), `## 재분해 이력`(「처음 로드맵 ·
+   승인 원문」 한 줄), `## 위험 번호표`(brief §5 줄 순서). 상태 칸은 두지 않는다.
+3. **묶음.** R0 의 §0~§7: §1 의도 · 범위는 로드맵 블록에서, 공통 목표는 brief §1 에서 바이트 그대로; §2~§5 는 배정 번호의 줄만 brief
+   에서 원래 순서로; §6 은 `section6.py` 로 brief §6 · audit §6 전량; §7 인터페이스는 표의 의존에서 받는 것 · 넘기는 것.
+4. **검증.** 쓴 직후 같은 실행에서 `roadmap_status.py --roadmap-file <새 로드맵>` 를 돌려 형식 오류 · 미배정 · 고아가 하나라도 있으면
+   만든 파일을 지우고(쓰기 전 존재하던 파일은 건드리지 않는다) 사유를 그대로 내고 rc 1. 분해안 표 화면으로 돌아간다.
+5. **커밋.** brief · audit · 상태 파일과 함께 R7 의 커밋 규칙(경로 지정 커밋 · 기본 브랜치면 커밋하지 않고 경로를 보임)으로.
+6. **하류 넘김.** 분해된 일의 다음 세션 줄은 brief 하나 대신 `@<로드맵>` 으로 지휘 세션을 연다(「지휘 절차대로 진행하라」). 에픽마다
+   brainstorming 에 넘기는 줄은 R3 의 `references/epic-handoff.md`.
+7. **정답 견본.** 이번 로드맵 블록에서 분해안 표를 거꾸로 뽑아 이번 brief 로 생성하면 손으로 만든 R1~R9 · R2a 묶음과 바이트가 같아야 한다.
+   차이가 나면 구현 중에 「생성기를 고친다 / 견본을 고친다」를 판정해 이 문서의 결정 기록에 남긴다. 견본은 로드맵 PR #209 머지 뒤의 것.
+
+### §3 재분해 경로
+
+새 참조 `plugins/spec-distill/references/redecompose.md`.
+
+1. **신호 받기.** R3 의 번호 대조 경고(빠짐 · 축소 · 여러 spec) · spec-review 게이트 ③ · 지휘자(R5). 로드맵 에픽의 spec-review 에서
+   게이트 ③ 을 고르면 인터뷰 재진입 대신 이 절차로 온다(로드맵 밖은 지금처럼 인터뷰로). 신호를 잡는 일은 R3 · R5 의 몫이다.
+2. **영향 보이기.** 바뀌는 에픽 · 옮겨 가는 번호 · 새 의존 · 진행 중인 브랜치 · 설계문서를 표로 보이고 `AskUserQuestion`:
+   「이대로 다시 나눈다」 · 「고치기」 · 「그만둔다」.
+3. **적용.** 새 에픽은 다음 번호(`R<max+1>`), 사라지는 번호는 재사용하지 않는다. 머지된 에픽은 건드리지 않는다. 진행 중 에픽의 범위가
+   바뀌면 그 에픽의 설계문서에 R3 의 `## 미룸` 이나 결정 줄로 남기라고 알린다.
+4. **같은 생성기.** `roadmap_write.py update --roadmap <로드맵> --brief <brief> --audit <audit> --plan-table <새 표>` 가 바뀐 블록과 그
+   묶음만 다시 쓴다(로드맵 블록 · 묶음 범위 줄의 동기를 기계가 맡는다). 같은 검증(§2-4).
+5. **기록 · 올리기.** 재분해 이력 한 줄(날짜 · 바뀐 것 · 승인 원문), 로드맵 수정은 지휘 절차 6 대로 작은 `feature/roadmap-<요지>` PR.
+6. **재결정 규약과의 관계.** `proceed-gate.md` 에 「분해 단위의 변경은 `references/redecompose.md` 로」 한 줄. 확정 항목 단위 규약은 그대로.
+
+### §4 위험 · 바깥 사례
+
+- K4(인터뷰가 나눈 경계가 맞고 하류가 따른다는 가정) · K14(승인된 분해의 봉인) — §3. ST1(분해를 한 번에 끝나는 최종 판정으로 두는
+  성질 기각) — §3 과 지휘 절차 6 의 재평가.
+- «lost-in-middle» — 묶음이 그 에픽 몫만(§2-3).
+- 바깥 사례(D16 · S8): 취함 — «spec-kit-spec-of-specs»(로드맵 한 장 · 고정 번호 · 역참조), «bmad»(묶음이 원문 인용과 자기 맥락),
+  «superpowers-issue-1173»(걷는 뼈대 · 조각마다 재평가), «kiro-spec-batch»(의존 순 병렬 · 한 조각 실패에도 나머지 계속),
+  «ralph-specum»(진입점 분해 · 상태 따로 추적), «recursive-sdd»(청사진 뒤 분해 · 크기 신호), «taskmaster»(의존 그래프로 다음 할 일).
+  중립 — «eugenelim-pr11»(숫자 기준은 숨은 상한이라 신호로만), «shapeup»(일하며 드러나는 일 → §3), «decomposing-requirements-fork»
+  (원문 410 · 참고만). 피함 — «adapt»(막힐 때만 나누기는 C6 과 충돌, 재평가 아이디어만).
+
+## Acceptance Criteria
+
+- AC1 `finishing.md` 에 Step A 앞 「분해 판단」 단계가 있고, 신호 셋(근거 번호 포함) · 권고 한 줄 · 「spec 하나로 / 나눈다」 질문이 있으며, 숫자 컷오프 문면이 없다(부재 · 존재 짝).
+- AC2 분해안 표 칸 여덟과 「미배정 · 고아」 계산 줄, 「승인 / 고치기 / spec 하나로」 질문, 상한에서의 「계속 고칠까요」가 있다.
+- AC3 승인된 표가 상태 파일 `## 분해안` 절에 남고 brief §7 에 로드맵 경로가 적힌다.
+- AC4 `roadmap_write.py create` 가 R0 형식 로드맵과 묶음을 만들고 `roadmap_status.py --roadmap-file` 이 rc 0 이다.
+- AC5 미배정 · 고아 · 형식 오류가 있으면 만든 파일을 지우고 rc 1, 미리 있던 파일은 그대로다.
+- AC6 정답 견본: 이번 로드맵에서 뽑은 표로 만든 묶음이 손으로 만든 묶음과 바이트가 같다(차이는 결정 기록에 판정과 함께).
+- AC7 분해된 일의 다음 세션 줄이 `@<로드맵>` 지휘 줄이고, 나누지 않은 일의 줄은 지금과 같다.
+- AC8 `references/redecompose.md` 가 신호 셋 · 영향 표 · 질문 셋 · 번호 규칙(새 번호 · 재사용 없음 · 머지된 에픽 불변) · 이력 줄 · 로드맵 PR 을 갖는다.
+- AC9 로드맵 에픽의 spec-review 게이트 ③ 이 재분해 절차로 가고, 로드맵 밖은 인터뷰 재진입 그대로다.
+- AC10 `roadmap_write.py update` 가 바뀐 블록의 묶음만 다시 쓰고 머지된 에픽 묶음은 바이트 그대로다.
+- AC11 `proceed-gate.md` 에 분해 단위 변경 한 줄이 있다.
+- AC12 통과가 정답인 새 단언(AC1 부재 · AC5 · AC10)은 변이로 이빨을 확인하고 양성 대조를 둔다.
+- AC13 spec-distill minor bump.
+
+## Files to Modify
+
+- 새 `plugins/spec-distill/scripts/roadmap_write.py`, 새 `plugins/spec-distill/references/redecompose.md`
+- `plugins/spec-distill/skills/spec-interview/references/finishing.md`(분해 판단 단계 · 다음 세션 줄 분기), `skills/spec-interview/SKILL.md`(종료 뒤 단계 가리킴 한 줄)
+- `plugins/spec-distill/skills/spec-review/SKILL.md`(게이트 ③ 로드맵 분기), `plugins/spec-distill/references/proceed-gate.md`(한 줄)
+- `plugins/spec-distill/templates/interview-brief-template.md`(§7 분해 줄)
+- 테스트: 새 `test_roadmap_write.sh`(픽스처 git 저장소 · 정답 견본), 분해 판단 · 재분해 문면 락, 기존 `test_review_handoff_order.sh` 의 분기 단언
+- `plugins/spec-distill/README.md` · `CHANGELOG.md` · `.claude-plugin/plugin.json`
+- 로드맵 R4 블록 `경로 예약:` 갱신 — 로드맵 수정 PR(지휘 절차 6)
+
+## Verification Plan
+
+- 작업 전 기준선: spec-distill · shared 스위트의 FAIL «이름» 집합(선재 RED `test_hook_output_schema.py test_python_and_bash_resolvers_agree`).
+- 생성기는 버릴 git 저장소 픽스처로(`test_roadmap_status.sh` 와 같은 방식). 정답 견본 대조는 실데이터(이번 로드맵 · brief)로.
+- 닿은 소비자 전부의 스위트를 레포 루트에서. 새 셸 테스트는 실행 비트(100755).
+- 끝에서 끝: 픽스처 brief → 분해 판단 → 표 승인 → `create` → `roadmap_status` rc 0 → 게이트 ③ 신호 → `update` → 이력 줄.
+
+## Rejected Alternatives
+
+- 모델이 로드맵 · 묶음을 직접 쓰고 검사기로 확인 — 바이트 복사 · 범위 줄 동기가 모델 손에 남는다(B6).
+- 로드맵만 만들고 묶음은 에픽 시작 때 — 묶음이 인터뷰 시점에 확정되지 않아 brief 와 어긋날 수 있다(B6).
+- 수치 기준으로 자동 분해 — 숫자가 판단을 대신하는 숨은 상한(B1 · «eugenelim-pr11»).
+- 항상 사용자에게 먼저 묻기 — 신호 없이 작은 일에도 질문이 뜬다(B1).
+- brief 확정 뒤 · 인터뷰 중 수시로 분해 — 승인된 brief 를 다시 쓰거나 포화 전 분해가 틀린다(B2).
+- 로드맵만 따로 PR — 단계가 는다(B3).
+- 작은 일에도 에픽 하나짜리 로드맵 — 작은 일에 문서가 는다(B4).
+- R4 가 재분해 신호 감지까지 — R3 · R5 와 범위가 겹친다(판정).
+
+## 결정 기록
+
+줄 형식은 로드맵과 같다. 인터뷰 뒤의 사용자 말은 새 S 번호 없이 원문 그대로 인용한다.
+
+- B1 · 결정 · 2026-10-15 · 「spec 하나로 되는가」 판단 기준(OQ36) — 「신호를 보이고 사용자가 판정 (권장)」
+- B2 · 결정 · 2026-10-15 · 분해 제안 시점 — 「종료 뒤 brief 작성 직전 (권장)」
+- B3 · 결정 · 2026-10-15 · 로드맵 · 묶음 쓰기와 커밋 — 「brief 와 같이 쓰고 함께 커밋 (권장)」
+- B4 · 결정 · 2026-10-15 · 나누지 않는 일 — 「만들지 않음 (권장)」
+- B5 · 결정 · 2026-10-15 · R4 이해 확인 — 「맞다 (권장)」
+- B6 · 결정 · 2026-10-15 · 로드맵 · 묶음 만드는 방식 — 「A. 분해안 표 + 생성 스크립트 (권장)」
+- B7 · 결정 · 2026-10-15 · 설계 1절 분해 판단 단계 — 「맞다, 다음 절로 (권장)」
+- B8 · 결정 · 2026-10-15 · 설계 2절 로드맵 · 묶음 생성 — 「맞다, 다음 절로 (권장)」
+- B9 · 결정 · 2026-10-15 · 설계 3절 재분해 경로 — 「맞다, 다음 절로 (권장)」
+- B10 · 결정 · 2026-10-15 · 설계 4절 위험 · 바깥 사례 · 검증 — 「맞다, 설계문서 작성 (권장)」
+- 판정 · 2026-10-15 · R4 는 재분해 절차의 형식만 정하고 신호 감지는 R3 · R5 — 로드맵 R4 범위 「안 한다 지휘(R5)」와 R3 범위에서.
+- 판정 · 2026-10-15 · 머지된 에픽은 그대로, 번호 재사용 없음 — D28 의 고정 번호에서.
+
+## 번호 대조
+
+| 번호 | 처리 | 자리 · 이유 |
+|---|---|---|
+| C1 | 반영 | Context · §1 — 우겨 넣기를 설계 전에 잡음 |
+| C6 | 반영 | §1-4 · §1-5 — 인터뷰가 제안, 사용자가 고치거나 승인한 뒤에만 |
+| C9 | 반영 | §1 — 인터뷰가 PM 처럼 나눔 |
+| C25 | 반영 | Constraints |
+| C32 | 반영 | Constraints · §2 — R0 도구 재사용 |
+| C35 | 반영 | Constraints |
+| D16 | 반영 | §4 — 바깥 사례 처분(취함 7 · 중립 3 · 피함 1) |
+| D20 | 반영 | §3 — 하류 신호가 같은 지도로, 승인 뒤에만 재분해 |
+| D21 | 반영 | §4 — 위험에 답함 |
+| D26 | 반영 | Constraints |
+| D28 | 반영 | §1-4 · §2-2 — 로드맵 형식 · 걷는 뼈대 · 재평가 |
+| D39 | 반영 | §2 — 원본 brief 정본 · 로드맵 · 역참조 묶음 |
+| D47 | 반영 | §2-7 — 승인된 이번 분해가 정답 견본 |
+| OQ3 | 반영 | §4 |
+| OQ5 | 반영 | §4 |
+| OQ11 | 반영 | §1 · §2 — 분해 방식(로드맵 + 걷는 뼈대)의 구현 |
+| OQ12 | 반영 | §2-1 · §2-5 — 로드맵은 레포 추적 파일, brief 와 함께 커밋 |
+| OQ17 | 반영 | §2-7 — 승인된 분해안을 견본으로 |
+| OQ21 | 반영 | §2-6 — 지휘 줄과 에픽 넘김 줄 |
+| OQ36 | 반영 | §1-2 · §1-3 — 신호와 사용자 판정 |
+| RC11 | 반영 | §1 — 설계 전 분해 판단 |
+| RC20 | 반영 | §3-1 — 게이트 ③ 의 로드맵 분기 |
+| RC61 | 반영 | §3-6 — 분해 단위 변경 한 줄 |
+| RC68 | 반영 | §2-6 — 분해된 일은 지휘 줄로 |
+| RC70 | 반영 | §1-1 — 분해 판단 자리 |
+| K4 | 반영 | §3 · §4 |
+| K14 | 반영 | §3 · §4 |
+| ST1 | 반영 | §3 · §4 — 한 번에 끝나는 최종 판정이 아님 |
+| S1 | 반영 | Context — spec 하나에 우겨 넣기 |
+| S8 | 반영 | §4 — 바깥 사례 전부 재료 |
+| S12 | 반영 | §3 — 재분해는 같은 지도로, 승인 뒤에만 |
+| S13 | 반영 | §4 |
+| S17 | 반영 | Constraints |
+| S18 | 반영 | Constraints |
+| S25 | 반영 | §2 — 로드맵 + 걷는 뼈대 |
+| S30 | 반영 | Constraints |
+| S34 | 반영 | Constraints |
+| S38 | 반영 | §1-2 — 원문 갈래 수 신호(요청 전부를 세어 보임) |
+| S39 | 반영 | §2 — 원본 + 로드맵 + 묶음 |
+| S47 | 반영 | §2-7 — 승인된 분해안이 견본 |
+| S48 | 반영 | §2-3 — 열린 질문을 묶음으로 넘기는 생성 규칙 |
+| S49 | 반영 | Goals — 범위를 줄이지 않음 |
+| S50 | 반영 | §1 — OQ36 기준을 정함 |
+| «adapt» | 반영 | §4 — 피함(재평가 아이디어만) |
+| «bmad» | 반영 | §4 · §2-3 |
+| «decomposing-requirements-fork» | 반영 | §4 — 중립, 참고만 |
+| «eugenelim-pr11» | 반영 | §4 · §1-2 — 숫자 기준 대신 신호 |
+| «kiro-spec-batch» | 반영 | §4 |
+| «lost-in-middle» | 반영 | §4 · §2-3 |
+| «ralph-specum» | 반영 | §4 |
+| «recursive-sdd» | 반영 | §4 · §1-2 |
+| «shapeup» | 반영 | §4 · §3 |
+| «spec-kit-spec-of-specs» | 반영 | §4 · §2 |
+| «superpowers-issue-1173» | 반영 | §4 · §1-4 |
+| «taskmaster» | 반영 | §4 |
+
+## Metadata
+
+- 에픽: R4 · 브랜치 `feature/interview-pm-decompose` · 의존 R0(머지됨 `6e55f593`)
+- 플러그인: spec-distill minor bump(번호는 머지 직전)
+- 겹침(정보): `finishing.md`(R1 · R2 · R3 · R7) · `spec-interview/SKILL.md`(R1 · R2 · R7) · `spec-review/SKILL.md` · `proceed-gate.md`(R3) · 상태 파일 위치(R7 — 먼저 머지되지 않으면 지금 상태 파일에 `## 분해안` 절을 두고 R7 머지 뒤 따른다)
+
+### Deferred to plan
+
+- 신호 셋을 세는 정확한 규칙(덩어리 묶기 · 파일 영역 단위)과 근거 번호 표기.
+- 정답 견본 대조에서 나올 차이의 목록과 각 판정.
+- `## 분해안` 표의 직렬화 꼴(상태 파일 안 마크다운 표)과 `roadmap_write.py` 의 파서.
+- `## 지휘 절차` 템플릿 문면의 출처(이번 로드맵의 절을 정본으로 복사할지).
