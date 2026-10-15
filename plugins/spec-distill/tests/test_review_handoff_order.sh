@@ -154,6 +154,12 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
     esac
     assert_contains "$RSL" "보고 후 재결정" "spec-review 다음 세션 줄이 C4 문장을 싣는다"
     assert_grep "$RSL" '임의 변경.*금지' "spec-review 다음 세션 줄이 임의 변경 금지를 싣는다"
+    for n in 'check_bundle_coverage.py --plan <spec_path>' '계획에 없는 AC 는 계획에 더한다' \
+             '## Acceptance Criteria 의 AC 목록' '구현됨 · 미룸 · 빠짐' 'git 이 추적하지 않는 파일' \
+             '## 미룸 표' 'check_bundle_coverage.py --impl <spec_path>'; do
+      assert_contains "$RSL" "$n" "AC1 · AC10: spec-review 다음 세션 줄(writing-plans 진행 안내)에 「${n}」"
+    done
+    assert_eq "$(lead_only "$RSL")" "ok" "spec-review 다음 세션 줄의 꺾쇠 자리표는 <spec_path> 뿐이다"
   fi
   STOP="$(printf '%s\n' "$GATE" | awk '/^- \*\*①\/② 의 정지 요건\*\*/{f=1;print;next} f&&/^- /{f=0} f' | tr '\n' ' ' | tr -s ' ')"
   [ -n "$STOP" ] && ok "spec-review(양성): ①/② 의 정지 요건 불릿을 읽었다" || no "spec-review: ①/② 의 정지 요건 불릿이 없다 — 아래 단언이 공허하다"

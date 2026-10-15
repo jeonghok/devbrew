@@ -71,10 +71,13 @@ assert_eq "$(last "$out")" "bundle-entry: REFUSE" "AC11: 없는 파일 → 거�
 assert_contains "$out" "[spec-distill] --bundle 'docs/rm/없음.md' 을 정답 출처로 쓸 수 없다 — 파일이 없다." "AC11: 거부 사유 문면"
 out="$(entry "$SPEC" docs/rm/roadmap.md)"
 assert_contains "$out" "frontmatter type 이 epic-bundle · interview-brief 가 아니다(roadmap)" "AC11: 틀린 type → 거부"
+assert_eq "$(last "$out")" "bundle-entry: REFUSE" "AC11: 틀린 type → 거부 종료 줄"
 out="$(entry "$SPEC" docs/rm/R4.md)"
 assert_contains "$out" "설계문서 source_interview(docs/rm/R3.md) 와 다른 파일이다" "AC11: 다른 묶음 → 거부"
+assert_eq "$(last "$out")" "bundle-entry: REFUSE" "AC11: 다른 묶음 → 거부 종료 줄"
 out="$(entry "$W/docs/superpowers/specs/none-design.md" docs/rm/R3.md)"
 assert_contains "$out" "설계문서 frontmatter 에 source_interview 가 없다" "AC11: source_interview 없는 설계문서 → 거부"
+assert_eq "$(last "$out")" "bundle-entry: REFUSE" "AC11: source_interview 없음 → 거부 종료 줄"
 # 3. AC11 — --bundle 없는 호출은 검사를 건너뛴다
 out="$(entry "$SPEC")"
 assert_eq "$(last "$out")" "bundle-entry: PROCEED -" "AC11: --bundle 없으면 건너뛴다"
@@ -107,4 +110,37 @@ nbr="$(cd "$T" && python3 "$SRB" neighbors --bundle docs/rm/R9.md --root "$W")"
 assert_eq "$nbr" "" "AC14: 로드맵 밖 에픽이면 내지 않는다"
 (cd "$T" && python3 "$SRB" >/dev/null 2>&1); rc=$?
 assert_eq "$rc" "2" "하위 명령 없음 → rc 2"
+# ── 6. SKILL 배선(Task 7) — 펜스를 실제로 돌린다 ───────────────────────────────
+SKILL="$ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
+fence() {  # fence <표지 이름> — 표지 사이 bash 펜스 본문
+  awk -v b="<!-- $1:begin -->" -v e="<!-- $1:end -->" 'index($0,b){f=1;next} index($0,e){f=0} f' "$SKILL" | sed -e '/^```/d'
+}
+EF="$(fence bundle-entry)"; NF_="$(fence roadmap-position)"
+[ -n "$EF" ] && ok "진입 펜스(bundle-entry)가 있다" || no "진입 펜스(bundle-entry)가 없다"
+[ -n "$NF_" ] && ok "위치 펜스(roadmap-position)가 있다" || no "위치 펜스(roadmap-position)가 없다"
+run_fence() {  # run_fence <펜스 본문> <플러그인 루트> <앞에 붙일 대입들>
+  printf '%s\n%s\n' "$3" "$1" > "$T/fence.sh"
+  (cd "$W" && CLAUDE_PLUGIN_ROOT="$2" bash "$T/fence.sh" 2>&1)
+}
+SDROOT="$ROOT/plugins/spec-distill"
+out="$(run_fence "$EF" "$SDROOT" "spec_path='$SPEC' bundle_arg='docs/rm/R4.md' repo_root='$W'")"
+assert_contains "$out" "bundle-entry: REFUSE" "AC11: 펜스가 다른 묶음을 거부한다"
+assert_contains "$out" "[spec-distill] 리뷰 없이 끝났다 — writing-plans 로 가기 전에" "AC11: 거부에 복귀 문장이 붙는다"
+out="$(run_fence "$EF" "$SDROOT" "spec_path='$SPEC' bundle_arg='docs/rm/R3.md' repo_root='$W'")"
+assert_contains "$(last "$out")" "bundle-entry: PROCEED " "AC12: 펜스가 통과 줄로 끝난다"
+assert_contains "$out" "번호 대조 경고 1개" "AC12: 펜스가 경고 수를 보인다"
+mkdir -p "$T/emptyroot"
+out="$(run_fence "$EF" "$T/emptyroot" "spec_path='$SPEC' bundle_arg='docs/rm/R3.md' repo_root='$W'")"
+assert_eq "$(last "$out")" "bundle-entry: PROCEED -" "스크립트가 없으면 대조 없이 리뷰한다고 말하고 통과한다(경고 1)"
+assert_contains "$out" "번호 대조 진입 검사가 실패했다" "실패를 말한다"
+out="$(run_fence "$NF_" "$SDROOT" "bundle_path='$W/docs/rm/R3.md' repo_root='$W'")"
+assert_contains "$out" "로드맵 속 위치 — docs/rm/roadmap.md" "AC14: 위치 펜스가 위치를 낸다"
+out="$(run_fence "$NF_" "$SDROOT" "bundle_path='-' repo_root='$W'")"
+assert_eq "$out" "" "위치 펜스: 경로가 - 면 아무것도 내지 않는다"
+INPUT_SEC="$(awk '/^## 입력$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
+assert_contains "$INPUT_SEC" "--bundle" "AC11: ## 입력 이 --bundle 을 받는다"
+assert_contains "$INPUT_SEC" "source_interview" "AC11: ## 입력 이 source_interview 대조를 말한다"
+GATE_SEC="$(awk '/^## 게이트$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
+assert_contains "$GATE_SEC" "번호 대조 경고" "AC12: 게이트가 번호 대조 경고 수를 「경고 N개」에 더한다"
+assert_file_grep "$SKILL" '^argument-hint: .*--bundle' "argument-hint 에 --bundle"
 finish
