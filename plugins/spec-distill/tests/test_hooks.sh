@@ -37,6 +37,6 @@ fi
 # 지운 이름은 조각으로 잇는다 — test_review_hook_removed.py 가 hook_common 에서 빠진 이름의 리터럴을 리포 전체에서 금지한다.
 grep -qE '^def fire_and_forget_g[c]' "$PLUGIN_ROOT/scripts/hook_common.py" \
   && no "AC10: hook_common 에 GC 기동이 남았다" || ok "AC10: hook_common 에 GC 기동이 없다"
-grep -qE '^def _yaml_scalar' "$PLUGIN_ROOT/scripts/hook_common.py" \
+grep -qE '^def _yaml_scalar\(' "$PLUGIN_ROOT/scripts/hook_common.py" \
   && ok "AC10 양의 짝: hook_common 이 남은 소비자의 _yaml_scalar 를 갖는다" || no "AC10 양의 짝: _yaml_scalar 가 사라졌다"
 finish
