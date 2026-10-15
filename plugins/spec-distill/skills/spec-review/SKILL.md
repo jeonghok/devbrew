@@ -176,6 +176,83 @@ fi
 
 > `[spec-distill] current_spec '<path>' 부재 (working-tree 에 없거나 후보를 고르지 않았다) — handoff 진행 안 함. 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).`
 
+원장 열기가 표지를 잡은 뒤 이 경로로 끝나면 `## 표지와 원장 열기` 의 해제 펜스(`ledger-release`)로 푼다(남의 표지는
+풀지 않는다).
+
+## 표지와 원장 열기 — 라운드마다 선결 앞
+
+절차서의 선결(`mkdir -p` · `init`) 앞에 매 라운드 이 펜스를 같은 Bash 호출 앞에 이어 붙여 돈다. 펜스 앞에
+`spec_path='<「## 입력」에서 절대 경로로 바꾼 설계문서 경로>'` 한 줄을 붙인다. 마지막 줄이 판결이다.
+원장 자리가 레포 밖이거나 레포 꼭대기 아래에서 링크(`.claude` · `spec-distill` · `.docreview` 포함)를
+지나면 만들지 않는다. 원장 정리는 이 세션이 이미 표지를 쥔 다음 라운드가 아니면 원장 자리를 만들기
+전에 한 번 돈다.
+
+<!-- ledger-open:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
+harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
+if [ -z "$harness_sid" ]; then
+  echo "[spec-distill] 세션 id 를 얻지 못해 동시 리뷰 표지를 잡을 수 없다 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
+  echo "ledger-open: NO_SESSION"
+elif [ -z "$STATE_DIR" ] || ! python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR"; then
+  echo "[spec-distill] 원장 자리를 열지 못했다(STATE_DIR='${STATE_DIR:-}' — 비었거나 레포 밖이거나 링크를 지난다, 위 사유) — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
+  echo "ledger-open: NO_DIR"
+else
+  own=""; [ -f "$STATE_DIR/reviewing-by" ] && [ ! -L "$STATE_DIR/reviewing-by" ] && own="$(head -n 1 "$STATE_DIR/reviewing-by" 2>/dev/null)"
+  [ "$own" = "$harness_sid" ] || python3 "$SD/scripts/ledger_sweep.py" --root "$ROOT" || echo "[spec-distill] 원장 정리가 실패했다 — 리뷰는 계속한다."
+  if ! mkdir -p "$STATE_DIR" 2>/dev/null; then
+    echo "[spec-distill] 원장 자리를 만들지 못했다(STATE_DIR='${STATE_DIR}') — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
+    echo "ledger-open: NO_DIR"
+  else
+    python3 "$SD/scripts/ledger_marker.py" resume-note --dir "$STATE_DIR" --session "$harness_sid"
+    m_rc=0; m_out="$(python3 "$SD/scripts/ledger_marker.py" acquire --dir "$STATE_DIR" --session "$harness_sid")" || m_rc=$?
+    if [ "$m_rc" -eq 0 ]; then
+      echo "ledger-open: HELD"
+    elif [ "$m_rc" -eq 3 ]; then
+      echo "[spec-distill] 다른 세션(${m_out})이 이 문서를 리뷰하고 있다 — ${STATE_DIR}"
+      echo "ledger-open: OTHER:${m_out}"
+    else
+      echo "[spec-distill] 동시 리뷰 표지를 잡지 못했다(rc ${m_rc}) — 리뷰 없이 끝났다."
+      echo "ledger-open: ERROR"
+    fi
+  fi
+fi
+```
+<!-- ledger-open:end -->
+
+| 마지막 줄 | 동작 |
+|---|---|
+| `ledger-open: HELD` | 선결로 간다 |
+| `ledger-open: OTHER:<sid>` | 멈추고 `AskUserQuestion` 하나 — 「그만둠 (권장)」/「이어 씀 — 표지를 내 것으로 바꾼다」. 이어 씀이면 아래 넘겨받기 펜스를 돈 뒤 이 펜스를 다시 돈다. 그만둠이면 `### 대상 부재` 처럼 게이트 없이 끝난다(남의 표지라 풀지 않는다) |
+| `ledger-open: NO_SESSION` · `NO_DIR` · `ERROR` | 그 `[spec-distill]` 줄을 보이고 게이트 없이 끝난다(`### 대상 부재` 의 하위 경우) |
+
+<!-- ledger-takeover:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
+harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
+[ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && python3 "$SD/scripts/ledger_marker.py" takeover --dir "$STATE_DIR" --session "$harness_sid"
+```
+<!-- ledger-takeover:end -->
+
+이 펜스는 사용자가 「이어 씀」을 고른 뒤에만 돈다.
+
+해제 펜스 — 원장 열기가 `HELD` 를 낸 뒤 게이트 없이 끝나는 출구(`### 대상 부재`)에서 돈다. 펜스 앞에
+`spec_path='<「## 입력」에서 절대 경로로 바꾼 설계문서 경로>'` 한 줄을 붙인다.
+
+<!-- ledger-release:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
+harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
+[ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && [ -d "$STATE_DIR" ] && python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$harness_sid"
+```
+<!-- ledger-release:end -->
+
 ## 프로필
 
 ```bash
@@ -194,6 +271,18 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 그 파일의 여덟 단계를 **한 턴 안에서** 돈다. 절차를 여기 복사하지 않는다 — 네 자리가 같은 절차를
 쓰기 때문에 공유 정본에 두는 것이다. `--state-dir` 는 위 `$STATE_DIR` 이고, 상한은 그 문서가 정하는
 **재리뷰 상한 2** 다(라운드 4 이상은 사용자가 승인 게이트에서 열어야만 돈다).
+
+**원장 쓰기 전 확인.** 절차서의 원장 쓰기 명령 — `docreview_state.py` 의 `init` · `begin-round` ·
+`record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice`, `docreview_route.py` 의
+`prepare-recritic` · `finalize`, `docreview_anchor.py check-intent` — 은 전부 같은 Bash 호출 안에서 아래 한 줄
+**다음에만** 부른다. rc 가 0 이 아니면 그 명령을 부르지 않고 사유를 보이고 멈춘다 — 다른 세션이 표지를 넘겨받았거나
+표지가 없다.
+
+<!-- ledger-guard:begin -->
+```bash
+python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" || { echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다."; exit 3; }
+```
+<!-- ledger-guard:end -->
 
 4단계 codex 는 이 자리의 리터럴 게이트다. 조건을 산문으로 적지 않는다 — 산문 조건은 집행되지 않고,
 kill switch 는 P21 보안 컨트롤이라 그 공백은 "껐다고 믿게만" 만든다.
@@ -417,7 +506,8 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 
 셋 다 멱등이라 ③ 수정 뒤 다시 와도 두 번 적지 않는다. 문서가 바뀌므로 ①/② 의 미커밋 확인이 그 변경을
 알리고, 그때 커밋한다. 펜스 앞에 `spec_path='<「## 입력」에서 절대 경로로 바꾼 설계문서 경로>'` 한 줄을 붙여
-같은 Bash 호출로 돌린다.
+같은 Bash 호출로 돌린다. 이 펜스가 이 리뷰의 마지막 원장 쓰기다 — 표지를 잡아(이미 잡았으면 그대로) 쓰고
+끝에서 푼다. ③ 으로 다음 라운드를 돌면 원장 열기가 다시 잡는다.
 
 <!-- advice-display:begin -->
 ```bash
@@ -425,11 +515,18 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
+lm_rc=0
+if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ] && [ -n "${harness_sid:-}" ]; then
+  python3 "$SD/scripts/ledger_marker.py" acquire --dir "$STATE_DIR" --session "$harness_sid" >/dev/null || lm_rc=$?
+fi
 if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
   echo "[spec-distill] 참고(advisory) 목록 없음 — 엔진 원장을 찾지 못했다(spec_path='${spec_path:-}' · STATE_DIR='${STATE_DIR:-}'). 2단계 게이트 앞 글에 싣는다."
+elif [ "$lm_rc" -ne 0 ]; then
+  echo "[spec-distill] 참고(advisory) 목록 건너뜀 — 이 원장의 표지가 다른 세션 것이다(rc ${lm_rc}). 박제 · 계수 · 표시를 하지 않는다."
 elif [ ! -f "$spec_path" ]; then
   echo "[spec-distill] 참고(advisory) 목록 건너뜀 — 설계문서가 없다(spec_path='${spec_path}'). 박제 · 계수 · 표시를 하지 않는다 — 아래 대상 부재 재확인으로 간다."
 else
+  python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" || { echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다."; exit 3; }
   adv_rc=0
   adv_err="$STATE_DIR/advice-err.json"
   python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --sink "$spec_path" --log-file "$spec_path" --render --cap 8 2>"$adv_err" || adv_rc=$?
@@ -439,6 +536,7 @@ else
     grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' "$adv_err" || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8 || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 2단계 게이트 앞 글에 싣는다."
   fi
 fi
+[ -z "${STATE_DIR:-}" ] || [ ! -d "$STATE_DIR" ] || [ -z "${harness_sid:-}" ] || python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$harness_sid"
 ```
 <!-- advice-display:end -->
 
