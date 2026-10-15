@@ -126,7 +126,7 @@ run_in() {   # run_in <sid> <스크립트> [env…]
 }
 place() {   # place <sid> [이름] → 그 seed 의 엔진 자리(엔진 state-dir-for 가 낸 것)
   local sid="$1" name="${2:-probe-$1-interview}"
-  python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$W/$sid/.claude/spec-distill" --session "$sid" \
+  python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$W/$sid/.claude/spec-distill" \
       --doc "$W/$sid/docs/superpowers/interview/$name.md" 2>/dev/null
 }
 real() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }

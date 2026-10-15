@@ -292,7 +292,7 @@ premortem · coverage-mapper 넷이 거기 있는 장치이고, 이 skill 에는
 | interview-seed (`$SEED`) | 〃 | 압축 직후 — **게이트 직전 구조 검사보다 먼저** |
 | 두 문서의 이름을 붙드는 `interview-basename` | 아래 `$SEED_DIR` | 아래 블록에서 `TOPIC` 자리표가 실값으로 치환된 실행 — 자리표가 그대로면 만들지 않는다 |
 | 세션 디렉토리 `$SEED_DIR` 자체 | `.claude/spec-distill/<session-id>/` | `sid` 가 실값이고 `mkdir` 이 성공했을 때만 — 실패하면 이름 파일을 아예 만들지 않는다 |
-| 리뷰 엔진 자리 `$STATE_DIR` — 엔진 원장 · 번들 둘(`$BUNDLE` · `$BUNDLE_RC`) · 리뷰어 산출물(`critic.txt` · `recritic.txt` · `$CODEX_YAML`) · 저자 편집 기준 사본(`$SEED_BASE`) | `$SEED_DIR/docreview/<seed 이름>-<해시>/` | 리뷰 라운드마다 — 경로는 seed 의 절대경로와 세션의 순수 함수다 |
+| 리뷰 엔진 자리 `$STATE_DIR` — 엔진 원장 · 번들 둘(`$BUNDLE` · `$BUNDLE_RC`) · 리뷰어 산출물(`critic.txt` · `recritic.txt` · `$CODEX_YAML`) · 저자 편집 기준 사본(`$SEED_BASE`) | `<state-root>/.docreview/<seed 이름>-<해시>/` | 리뷰 라운드마다 — 경로는 seed 의 절대경로의 순수 함수다 |
 
 **audit 과 seed 는 시점이 다르지만, 둘 다 승인 «전»에 디스크에 있어야 합니다.** audit 은
 확산 첫 항목부터, seed 는 압축 직후입니다 — 게이트 직전의 `check_seed.py` 가 둘 다
@@ -354,13 +354,13 @@ case "$IV_NAME" in
     AUDIT="docs/superpowers/interview/$IV_NAME.audit.md"
     SEED="docs/superpowers/interview/$IV_NAME.md" ;;
 esac
-# 리뷰 엔진 자리 — 전부 seed 의 **절대경로**와 세션의 순수 함수다(`state-dir-for`). 엔진은 상대
+# 리뷰 엔진 자리 — 전부 seed 의 **절대경로**의 순수 함수다(`state-dir-for`). 엔진은 상대
 # `--doc` 을 거부한다(`doc_not_absolute`). seed 이름이 서기 전이면 전부 빈 값이고, 아래 펜스들이
 # 그 사실을 이름으로 대고 멈춘다.
 SEED_ABS=""; AUDIT_ABS=""; STATE_DIR=""
 if [ -n "$SEED" ]; then
   SEED_ABS="$(pwd)/$SEED"; AUDIT_ABS="$(pwd)/$AUDIT"
-  [ -z "$sid" ] || STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$sid" --doc "$SEED_ABS" || true)"
+  STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "$SEED_ABS" || true)"
 fi
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/seed.md"
 BUNDLE="${STATE_DIR:+$STATE_DIR/seed-bundle.md}"                 # 탐지 · codex 가 읽는 번들
@@ -524,15 +524,10 @@ wipe_or_truncate() {   # wipe_target 을 지운다 — 못 지우면 절단 — 
   if [ -s "$wipe_target" ]; then return 1; fi
   return 0
 }
+# seed 이름을 모르면 지울 것이 없다 — 원장은 문서 단위라 세션을 넘어 공유되고(`.docreview/`), 다른 문서의
+# codex 산출물은 다른 리뷰의 것이다. 그 라운드는 아래 (3) 에서 codex 축을 건너뛴다.
 if [ -n "${CODEX_YAML:-}" ]; then
   wipe_target="$CODEX_YAML"; wipe_or_truncate || seed_codex_residue="$CODEX_YAML"
-elif [ -n "${sid:-}" ] && [ -n "${ROOT:-}" ]; then
-  # seed 이름을 모르면 이 세션의 문서별 codex 산출물이 전부 후보다. 전제: 한 세션은 리뷰 라운드를
-  # 동시에 둘 돌리지 않는다. 지우는 것은 codex 산출물 하나뿐 — 원장 · 번들은 그대로다.
-  for y in "$ROOT/$sid"/docreview/*/docreview-codex.yaml; do
-    [ -e "$y" ] || continue
-    wipe_target="$y"; wipe_or_truncate || seed_codex_residue="${seed_codex_residue:+$seed_codex_residue }$y"
-  done
 fi
 # (2) 가용성 — 감지기가 안 돈 것과 codex 가 없는 것을 가른다.
 DETECT_OUT="$(bash "$SD/scripts/detect_codex.sh")" || true

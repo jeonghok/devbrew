@@ -241,7 +241,7 @@ PAYLOAD="<Step A.5 의 PAYLOAD 절대경로>"
 AUDIT="${PAYLOAD%.md}.audit.md"
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
-STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "$PAYLOAD" || true)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "$PAYLOAD" || true)"
 if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
   echo "[spec-distill] 참고(advisory) 목록 없음 — brief 리뷰 원장이 없다(STATE_DIR='${STATE_DIR:-}'): 리뷰가 skip 됐거나 세션 정리로 걷혔다. 게이트 앞 글에 싣는다."
 else

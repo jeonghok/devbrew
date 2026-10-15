@@ -56,15 +56,16 @@ harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$
 STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 — 세션의 한 파일
 DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
-STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 init_rc=0; python3 "$PR/scripts/brief_review_state.py" init "$STATE" || init_rc=$?
 ```
 
-엔진 상태(`$STATE_DIR`, 원장은 그 안의 `docreview-state.md`)는 **문서별**이다 — 세션과 payload 경로의
-순수 함수라 같은 payload 는 다시 불려도 같은 자리로 돌아와 라운드·재리뷰 상한이 이어지고, 같은
-세션의 다른 문서(design doc 자리의 것 포함)는 다른 자리로 간다. 세션 id 를 못 풀었거나 `$PAYLOAD` 가
-비면 `$STATE_DIR` 이 비고 선결 `init` 이 `state_dir_missing` 으로 멈춘다. **선결의 `init` 이 rc 0 이
+엔진 상태(`$STATE_DIR`, 원장은 그 안의 `docreview-state.md`)는 **문서별**이다 — payload 경로의
+순수 함수(`<state-root>/.docreview/<stem>-<해시>`)라 같은 payload 는 세션을 넘어 다시 불려도 같은 자리로
+돌아와 라운드·재리뷰 상한이 이어지고, 다른 문서(design doc 자리의 것 포함)는 다른 자리로 간다. `$PAYLOAD` 가
+비면 `$STATE_DIR` 이 비고 선결 `init` 이 `state_dir_missing` 으로 멈춘다. 세션 id 를 못 풀면 `## 번들` 이
+라운드를 시작하지 않는다. **선결의 `init` 이 rc 0 이
 아니면 값과 무관하게 이 라운드를 진행하지 않는다** — `begin-round` 는 문서를 보지 않으므로,
 `state_doc_mismatch` 같은 거부를 넘어 진행하면 다른 문서의 원장 위에서 라운드가 돈다. 그때는
 record(`pipeline` / `all` / `unavailable`, reason = `init` 이 낸 사유)를 남기고 Step B 로 돌아간다.
@@ -101,7 +102,7 @@ harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$
 STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 — 세션의 한 파일
 DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
-STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component <a> --axis <b> --status <c> --reason "<r>" \
   || echo "- (state 기록 실패) component=<a> axis=<b> status=<c> reason=<r>" >> "$DEGRADE_FALLBACK_FILE"
@@ -123,7 +124,7 @@ harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$
 STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 — 세션의 한 파일
 DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
-STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 drop_bundle() {   # 직전 라운드 번들 — 지운다, 못 지우면 0바이트로 절단, 둘 다 못 하면 공시하고 rc 1
   [ -n "${BUNDLE:-}" ] && [ -e "$BUNDLE" ] || return 0
@@ -180,7 +181,7 @@ harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$
 STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 — 세션의 한 파일
 DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
-STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 drop_bundle() {   # 직전 라운드 번들 — 지운다, 못 지우면 0바이트로 절단, 둘 다 못 하면 공시하고 rc 1
   [ -n "${BUNDLE:-}" ] && [ -e "$BUNDLE" ] || return 0
@@ -190,7 +191,7 @@ drop_bundle() {   # 직전 라운드 번들 — 지운다, 못 지우면 0바이
   echo "[spec-distill] 직전 라운드 번들을 지우지도 비우지도 못했다: $BUNDLE — 남아 있는 한 codex 게이트가 그것을 이번 번들로 넘긴다. 이 라운드는 멈춘다. 해소: 그 파일을 직접 지우거나 상태 디렉토리의 쓰기 권한을 복구하라." >&2
   return 1
 }
-if [ -z "${STATE_DIR:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
+if [ -z "${STATE_DIR:-}" ] || [ -z "${harness_sid:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
   if [ -z "${PAYLOAD:-}" ]; then why="PAYLOAD 가 비었다 — Skill 인자 1(payload 경로)을 이 블록 앞에서 대입하라"
   elif [ -z "${harness_sid:-}" ]; then why="세션 id 미해석 — DEVBREW_SPEC_DISTILL_SESSION_ID 로 명시하라"
   else why="state-dir-for 가 거부했거나('${STATE_DIR:-}') 디렉토리를 만들 수 없다 — 위 stderr 의 사유를 보라"; fi
@@ -237,14 +238,14 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 # `## 프로필` 과 같은 한 줄 — Bash 도구는 호출마다 새 셸이라 앞 펜스의 대입이 여기로 오지 않는다.
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
 # 러너 인자 넷(프로필 · 번들 · 프로젝트 · 산출물)이 이 호출 안에서 선다. `$CODEX_YAML`·`$BUNDLE` 은
-# `$STATE_DIR`(세션과 payload 의 순수 함수) 안의 파일이라 `## 입력` 과 같은 도출로 어느 셸에서나
+# `$STATE_DIR`(payload 의 순수 함수) 안의 파일이라 `## 입력` 과 같은 도출로 어느 셸에서나
 # 같은 파일이다. `## 입력` 을 앞에 이어 붙여 한 호출로 도는 것이 정상 경로다.
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 if [ -z "${CODEX_YAML:-}" ]; then
   harness_sid="${harness_sid:-$(python3 "$SD/scripts/state_path.py" session-id || true)}"
   ROOT="${ROOT:-$(python3 "$SD/scripts/state_path.py" state-root || true)}"
-  STATE_DIR="${STATE_DIR:-$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)}"
-  if [ -n "$STATE_DIR" ] && mkdir -p "$STATE_DIR" 2>/dev/null; then
+  STATE_DIR="${STATE_DIR:-$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)}"
+  if [ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && mkdir -p "$STATE_DIR" 2>/dev/null; then
     CODEX_YAML="$STATE_DIR/docreview-codex.yaml"
   fi
 fi
@@ -263,17 +264,10 @@ neutralise() {   # `$NEUTRALISE_TARGET` 을 지운다 — 못 지우면 0바이�
   fi
   return 0
 }
+# 문서를 모르면(`$PAYLOAD` 가 비어 경로를 도출하지 못했다) 지울 것이 없다 — 원장은 문서 단위라 세션을 넘어
+# 공유되고(`.docreview/`), 다른 문서의 codex 산출물은 다른 리뷰의 것이다. 그 라운드는 아래에서 codex 축을 건너뛴다.
 if [ -n "${CODEX_YAML:-}" ]; then
   NEUTRALISE_TARGET="$CODEX_YAML"; neutralise || { residue_unclear=1; residue_left="$CODEX_YAML"; }
-elif [ -n "${harness_sid:-}" ] && [ -n "${ROOT:-}" ]; then
-  # 문서를 모르면 이 세션의 문서별 codex 산출물 전부가 후보다 — design doc 자리의 것도 같은
-  # `docreview/` 아래라 함께 중화되고, 그 자리의 같은 분기도 이 자리의 것을 중화한다. **전제: 한
-  # 세션은 리뷰 라운드를 동시에 둘 돌리지 않는다** — 동시에 도는 라운드가 방금 쓴 판정을 지우기
-  # 때문이다. 지우는 것은 `docreview-codex.yaml` 뿐이고 엔진 원장·번들·degrade 원장은 건드리지 않는다.
-  for y in "$ROOT/$harness_sid"/docreview/*/docreview-codex.yaml; do
-    [ -e "$y" ] || continue
-    NEUTRALISE_TARGET="$y"; neutralise || { residue_unclear=1; residue_left="${residue_left:+$residue_left }$y"; }
-  done
 fi
 DETECT_OUT="$(bash "$SD/scripts/detect_codex.sh")" || true
 codex_avail="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^codex_available: //p')"
@@ -333,7 +327,7 @@ harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$
 STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 — 세션의 한 파일
 DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
-STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
 prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
@@ -375,7 +369,7 @@ harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$
 STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 — 세션의 한 파일
 DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
-STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
 pc_rc=0; PJ="$(python3 "$PR/scripts/docreview_state.py" profile-check "$PROFILE")" || pc_rc=$?
@@ -517,7 +511,7 @@ harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$
 STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 — 세션의 한 파일
 DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
-STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 blob_rc=0; BLOB="$(python3 "$PR/scripts/build_brief_inline_blob.py" "$PAYLOAD")" || blob_rc=$?
 ```

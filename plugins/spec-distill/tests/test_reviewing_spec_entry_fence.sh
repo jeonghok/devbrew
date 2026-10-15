@@ -9,7 +9,8 @@
 #     실패 사유 줄이 붙는다. PROCEED 가 아닌 판결의 바로 앞 줄은 복귀 지시다(AC16). 끔이면
 #     끈 스위치를 이름으로 대는 줄이 판결 밖 단락에 나온다.
 #   · `## 입력` 의 상태 디렉토리 펜스 — session id 를 못 풀면 소리를 내고 `STATE_DIR` 을 비운다. 문서 경로가
-#     없으면 빈 값과 사유(`doc_empty`), 있으면 `state-dir-for` 의 문서별 값이고 한 세션의 두 문서가 다른 값을 받는다.
+#     없으면 빈 값과 사유(`doc_empty`), 있으면 `state-dir-for` 의 문서별 값이고 두 문서가 다른 값을, 같은 문서는
+#     세션이 달라도 같은 값을 받는다(원장은 문서 단위다).
 #   · 설치본 흉내 — 플러그인이 cwd 밖 · `CLAUDE_PLUGIN_ROOT` 없음 · bare `${CLAUDE_PLUGIN_ROOT}` 만
 #     치환: 진입 · `## 입력` 상태 · `## 프로필` · codex 게이트 앞머리의 루트가 그 플러그인으로 풀린다.
 #     무치환이면 진입 · `## 입력` 이 가드에서 멈추고 cwd 의 미끼(`./plugins/spec-distill/scripts/`)를 돌리지 않는다.
@@ -254,7 +255,7 @@ text = open(sys.argv[1], encoding="utf-8").read()
 m = re.search(r"^## 입력\n(.*?)^## ", text, re.M | re.S)
 sec = m.group(1) if m else ""
 blocks = [b for b in re.findall(r"^```bash\n(.*?)^```$", sec, re.M | re.S)
-          if 'STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}"' in b]
+          if 'STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}"' in b]
 with open(sys.argv[2], "w", encoding="utf-8") as f:
     f.write(blocks[0] if len(blocks) == 1 else "")
 PY
@@ -279,8 +280,9 @@ assert_eq "$(printf '%s\n' "$out" | tail -n 1)" "STATE_DIR=[]" \
   "상태 디렉토리: 문서 경로가 없으면 STATE_DIR 은 빈 값이다 (세션 디렉토리로 떨어지지 않는다)"
 assert_contains "$(cat "$SDIR_ERR" 2>/dev/null)" '"reason": "doc_empty"' \
   "상태 디렉토리: 문서 경로가 없으면 그 사유(doc_empty)가 남는다"
-# 문서별 값 — 펜스의 값이 엔진 `state-dir-for` 의 출력 그대로이고 `<state root>/<sid>/docreview/` 바로 아래 한
-# 칸이며, 한 세션의 두 문서(이름이 같다)가 다른 값을 받는다(R78 조건 1).
+# 문서별 값 — 펜스의 값이 엔진 `state-dir-for` 의 출력 그대로이고 `<state root>/.docreview/` 바로 아래 한
+# 칸이며, 두 문서(이름이 같다)가 다른 값을 받고(R78 조건 1), 같은 문서는 세션이 달라도 같은 값을 받는다
+# (원장은 문서 단위라 세션을 넘어 이어진다).
 SDOCS="$SCRATCH/sdir-docs"
 mkdir -p "$SDOCS/a" "$SDOCS/b"
 DOC_SA="$SDOCS/a/2026-01-01-same-design.md"; DOC_SB="$SDOCS/b/2026-01-01-same-design.md"
@@ -288,8 +290,8 @@ echo a > "$DOC_SA"; echo b > "$DOC_SB"
 SROOT="$( cd "$SCRATCH" && env -i PATH="/usr/bin:/bin:$PY_DIR" HOME="$SCRATCH" PYTHONDONTWRITEBYTECODE=1 \
     CLAUDE_PLUGIN_ROOT="$ROOT/plugins/spec-distill" DEVBREW_SPEC_DISTILL_SESSION_ID=sdirtest01 \
     python3 "$SD_SCRIPTS/state_path.py" state-root 2>/dev/null )"
-want_sa="$(python3 "$SD_SCRIPTS/docreview_state.py" state-dir-for --root "$SROOT" --session sdirtest01 --doc "$DOC_SA" 2>/dev/null)"
-want_sb="$(python3 "$SD_SCRIPTS/docreview_state.py" state-dir-for --root "$SROOT" --session sdirtest01 --doc "$DOC_SB" 2>/dev/null)"
+want_sa="$(python3 "$SD_SCRIPTS/docreview_state.py" state-dir-for --root "$SROOT" --doc "$DOC_SA" 2>/dev/null)"
+want_sb="$(python3 "$SD_SCRIPTS/docreview_state.py" state-dir-for --root "$SROOT" --doc "$DOC_SB" 2>/dev/null)"
 if [ -n "$SROOT" ] && [ -n "$want_sa" ] && [ -n "$want_sb" ]; then
   ok "상태 디렉토리 전제: state root 와 두 문서의 기대값을 엔진으로 도출했다 (빈 값끼리의 비교가 아니다)"
 else
@@ -298,16 +300,22 @@ fi
 got_sa="$(run_sdir DEVBREW_SPEC_DISTILL_SESSION_ID=sdirtest01 spec_path="$DOC_SA" | tail -n 1)"
 got_sb="$(run_sdir DEVBREW_SPEC_DISTILL_SESSION_ID=sdirtest01 spec_path="$DOC_SB" | tail -n 1)"
 assert_eq "$got_sa" "STATE_DIR=[$want_sa]" "상태 디렉토리(양성 대조): STATE_DIR = state-dir-for 가 낸 그 문서의 값"
-under_sa="${want_sa#"$SROOT/sdirtest01/docreview/"}"
+under_sa="${want_sa#"$SROOT/.docreview/"}"
 if [ -n "$want_sa" ] && [ "$under_sa" != "$want_sa" ] && [ -n "$under_sa" ] && [ "${under_sa%/*}" = "$under_sa" ]; then
-  ok "상태 디렉토리: 그 값은 <state root>/<sid>/docreview/ 바로 아래 한 칸이다"
+  ok "상태 디렉토리: 그 값은 <state root>/.docreview/ 바로 아래 한 칸이다"
 else
-  no "상태 디렉토리: 그 값($want_sa)이 $SROOT/sdirtest01/docreview/ 바로 아래가 아니다"
+  no "상태 디렉토리: 그 값(${want_sa})이 ${SROOT}/.docreview/ 바로 아래가 아니다"
 fi
 if [ -n "$got_sa" ] && [ "$got_sa" != "$got_sb" ] && [ "$got_sb" = "STATE_DIR=[$want_sb]" ]; then
-  ok "상태 디렉토리: 한 세션의 두 문서(이름이 같다)가 다른 STATE_DIR 을 받는다"
+  ok "상태 디렉토리: 두 문서(이름이 같다)가 다른 STATE_DIR 을 받는다"
 else
-  no "상태 디렉토리: 한 세션의 두 문서가 같은 자리를 나눠 쓰거나 기대값과 다르다 ($got_sa / $got_sb)"
+  no "상태 디렉토리: 두 문서가 같은 자리를 나눠 쓰거나 기대값과 다르다 (${got_sa} / ${got_sb})"
+fi
+got_sa2="$(run_sdir DEVBREW_SPEC_DISTILL_SESSION_ID=sdirtest02 spec_path="$DOC_SA" | tail -n 1)"
+if [ -n "$want_sa" ] && [ "$got_sa2" = "$got_sa" ] && [ "$got_sa2" = "STATE_DIR=[$want_sa]" ]; then
+  ok "상태 디렉토리: 같은 문서는 세션이 달라도 같은 STATE_DIR 을 받는다 (원장은 문서 단위)"
+else
+  no "상태 디렉토리: 같은 문서가 세션마다 다른 자리를 받는다 (${got_sa} / ${got_sa2})"
 fi
 
 # ── 설치본 흉내 — 플러그인이 cwd 밖에 있고, CLAUDE_PLUGIN_ROOT 가 없고, bare `${CLAUDE_PLUGIN_ROOT}`
@@ -357,14 +365,14 @@ INST_DOC="$UTOP/docs/superpowers/specs/2026-01-01-inst-design.md"
 mkdir -p "$(dirname "$INST_DOC")"; echo x > "$INST_DOC"
 INST_SDIR_DOC="$SCRATCH/inst_state_dir_doc.sh"
 { printf "spec_path='%s'\n" "$INST_DOC"; cat "$INST_SDIR"; } > "$INST_SDIR_DOC"
-want_inst="$(python3 "$INST/scripts/docreview_state.py" state-dir-for --root "$UTOP/.claude/spec-distill" --session instsim-0001 --doc "$INST_DOC" 2>/dev/null)"
+want_inst="$(python3 "$INST/scripts/docreview_state.py" state-dir-for --root "$UTOP/.claude/spec-distill" --doc "$INST_DOC" 2>/dev/null)"
 case "$want_inst" in
-  "$UTOP/.claude/spec-distill/instsim-0001/docreview/"?*) ok "설치본 전제: 기대값이 <사용자 저장소 state root>/<sid>/docreview/ 아래다" ;;
-  *) no "설치본 전제 붕괴: 기대값 '$want_inst' 이 <사용자 저장소 state root>/<sid>/docreview/ 아래가 아니다" ;;
+  "$UTOP/.claude/spec-distill/.docreview/"?*) ok "설치본 전제: 기대값이 <사용자 저장소 state root>/.docreview/ 아래다" ;;
+  *) no "설치본 전제 붕괴: 기대값 '$want_inst' 이 <사용자 저장소 state root>/.docreview/ 아래가 아니다" ;;
 esac
 out="$(run_inst "$INST_SDIR_DOC" 'printf "STATE_DIR=[%s]\n" "$STATE_DIR"')"
 assert_eq "$(printf '%s\n' "$out" | tail -n 1)" "STATE_DIR=[$want_inst]" \
-  "설치본: 「## 입력」 — STATE_DIR = <사용자 저장소 state root>/<sid>/docreview/<문서별> (state-dir-for)"
+  "설치본: 「## 입력」 — STATE_DIR = <사용자 저장소 state root>/.docreview/<문서별> (state-dir-for)"
 assert_not_contains "$out" "[spec-distill]" "설치본: 「## 입력」 — [spec-distill] 줄이 없다(리뷰가 여기서 끝나지 않는다)"
 
 PROF_FENCE="$SCRATCH/profile.sh"

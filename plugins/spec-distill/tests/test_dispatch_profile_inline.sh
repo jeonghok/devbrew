@@ -108,7 +108,7 @@ seed_critic() {
       CLAUDE_PLUGIN_ROOT="$SD" DEVBREW_SPEC_DISTILL_SESSION_ID="$cell" python3 "$SD/scripts/state_path.py" state-root 2>/dev/null)"
   [ -n "$root" ] || return 0
   sdir="$(env -i PATH="$BASE" PYTHONPATH="$YAML_SITE" PYTHONDONTWRITEBYTECODE=1 \
-      python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$root" --session "$cell" --doc "$doc" 2>/dev/null)"
+      python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$root" --doc "$doc" 2>/dev/null)"
   [ -n "$sdir" ] && mkdir -p "$sdir" && printf '%s\n' "$CRITIC_SEED" > "$sdir/critic.txt" && echo "$sdir/critic.txt"
   return 0
 }

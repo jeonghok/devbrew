@@ -817,7 +817,7 @@ open(sys.argv[3], "w", encoding="utf-8").write(re.sub(r"\{\{F:([^}]+)\}\}", lamb
 PY
 }
 # ── codex 산출물의 시점 판별 (prepare-recritic) ────────────────────────────
-# 산출물 경로는 세션과 문서의 순수 함수라 같은 문서의 라운드마다 같은 파일이고, 직전 라운드의 산출물과 이번
+# 산출물 경로는 문서의 순수 함수라 같은 문서의 라운드마다 같은 파일이고, 직전 라운드의 산출물과 이번
 # 라운드의 것은 내용으로 못 가른다. `prepare-recritic` 은 `begin-round` 가 기록한 라운드
 # 시작보다 먼저 쓰인 codex 파일을 부재로 읽는다. 그래서 픽스처는 러너가 4단계에서 쓰듯
 # 라운드 시작 «뒤» 에 상태 디렉토리로 복사해 넘긴다 — 커밋된 픽스처의 mtime 은 체크아웃
@@ -2292,38 +2292,34 @@ case_state_dir_for_per_doc() {
   local w a1 a2 a3 b rc; w="$(mktemp -d -t docreview-XXXXXX)"
   mkdir -p "$w/other"; cp "$FX/design-sample.md" "$w/other/design-sample.md"
   ln -s "$FX/design-sample.md" "$w/link.md"
-  a1="$(py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "$FX/design-sample.md")"
-  a2="$(py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "$FX/design-sample.md")"
-  a3="$(py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "$w/link.md")"
-  b="$(py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "$w/other/design-sample.md")"
-  assert_eq "${a1%/*}" "$w/root/sess0001/docreview" "문서별 자리: <root>/<session>/docreview/ 아래다"
+  a1="$(py docreview_state.py state-dir-for --root "$w/root" --doc "$FX/design-sample.md")"
+  a2="$(py docreview_state.py state-dir-for --root "$w/root" --doc "$FX/design-sample.md")"
+  a3="$(py docreview_state.py state-dir-for --root "$w/root" --doc "$w/link.md")"
+  b="$(py docreview_state.py state-dir-for --root "$w/root" --doc "$w/other/design-sample.md")"
+  assert_eq "${a1%/*}" "$w/root/.docreview" "문서별 자리: <root>/.docreview/ 아래다 (세션 칸이 없다)"
+  # 경로 꼴 — <root>/.docreview/<label>-<hash16>, 세션 칸이 없다
+  case "$a1" in "$w/root/.docreview/design-sample-"????????????????) ok "문서별 자리: 꼴이 <root>/.docreview/<label>-<hash16> 이다" ;; *) no "state-dir-for 의 꼴이 <root>/.docreview/<label>-<hash16> 이 아니다: $a1" ;; esac
   assert_grep "${a1##*/}" '^design-sample-[0-9a-f]{16}$' "문서별 자리: 키는 <stem>-<해시 16자>"
   assert_eq "$a2" "$a1" "문서별 자리: 같은 문서를 두 번 도출하면 같은 자리"
   assert_eq "$a3" "$a1" "문서별 자리: 같은 문서를 가리키는 심볼릭 링크도 같은 자리 (init 의 정규화와 같다)"
-  if [ -n "$b" ] && [ "$b" != "$a1" ] && [ "${b%/*}" = "$w/root/sess0001/docreview" ]; then
+  if [ -n "$b" ] && [ "$b" != "$a1" ] && [ "${b%/*}" = "$w/root/.docreview" ]; then
     ok "문서별 자리: 이름이 같은 다른 문서는 다른 자리"
   else
     no "문서별 자리: 다른 문서가 같은 자리로 간다 ($b = $a1)"
   fi
-  py docreview_state.py state-dir-for --root "root" --session sess0001 --doc "$FX/design-sample.md" >"$w/o1" 2>"$w/e1"; rc=$?
+  py docreview_state.py state-dir-for --root "root" --doc "$FX/design-sample.md" >"$w/o1" 2>"$w/e1"; rc=$?
   assert_eq "$rc:$(cat "$w/o1")" "1:" "문서별 자리: 상대 루트는 rc 1 · 출력 없음"
   assert_file_grep "$w/e1" '"reason": "root_not_absolute"' "문서별 자리: 상대 루트의 사유는 root_not_absolute"
-  py docreview_state.py state-dir-for --root "$w/root" --session "" --doc "$FX/design-sample.md" >"$w/o2" 2>"$w/e2"; rc=$?
-  assert_eq "$rc:$(cat "$w/o2")" "1:" "문서별 자리: 빈 세션은 rc 1 · 출력 없음 (루트 바로 아래를 여러 세션이 나눠 쓰지 않는다)"
-  assert_file_grep "$w/e2" '"reason": "session_invalid"' "문서별 자리: 빈 세션의 사유는 session_invalid"
-  py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "" >"$w/o3" 2>"$w/e3"; rc=$?
+  # --session 은 더는 받지 않는다 — argparse 가 거부한다(exit 2)
+  py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "$FX/design-sample.md" >"$w/o2" 2>"$w/e2"; rc=$?
+  if [ "$rc" -eq 2 ] && [ ! -s "$w/o2" ]; then ok "문서별 자리: --session 을 주면 rc 2 · 출력 없음 (세션은 더는 경로의 성분이 아니다)"
+  else no "state-dir-for 가 --session 을 받았다(rc=$rc)"; fi
+  py docreview_state.py state-dir-for --root "$w/root" --doc "" >"$w/o3" 2>"$w/e3"; rc=$?
   assert_eq "$rc:$(cat "$w/o3")" "1:" "문서별 자리: 빈 문서는 rc 1 · 출력 없음"
   assert_file_grep "$w/e3" '"reason": "doc_empty"' "문서별 자리: 빈 문서의 사유는 doc_empty"
-  ( cd "$FX" && py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc design-sample.md ) >"$w/o4" 2>"$w/e4"; rc=$?
+  ( cd "$FX" && py docreview_state.py state-dir-for --root "$w/root" --doc design-sample.md ) >"$w/o4" 2>"$w/e4"; rc=$?
   assert_eq "$rc:$(cat "$w/o4")" "1:" "문서별 자리: 상대 문서 경로는 rc 1 · 출력 없음 (키가 cwd 의 함수가 되지 않는다)"
   assert_file_grep "$w/e4" '"reason": "doc_not_absolute"' "문서별 자리: 상대 문서의 사유는 doc_not_absolute"
-  py docreview_state.py state-dir-for --root "$w/root" --session "$(printf 'ab\ncd')" --doc "$FX/design-sample.md" >"$w/o5" 2>"$w/e5"; rc=$?
-  assert_eq "$rc:$(cat "$w/o5")" "1:" "문서별 자리: 개행이 든 세션은 rc 1 · 출력 없음 (두 줄 경로를 내지 않는다)"
-  assert_file_grep "$w/e5" '"reason": "session_invalid"' "문서별 자리: 제어 문자 세션의 사유는 session_invalid"
-  py docreview_state.py state-dir-for --root "$w/root" --session ".." --doc "$FX/design-sample.md" >"$w/o6" 2>"$w/e6"; rc=$?
-  assert_eq "$rc:$(cat "$w/o6")" "1:" "문서별 자리: '..' 세션은 rc 1 · 출력 없음"
-  a1="$(py docreview_state.py state-dir-for --root "$w/root" --session "a_B-9" --doc "$FX/design-sample.md")"
-  assert_eq "${a1%/docreview/*}" "$w/root/a_B-9" "문서별 자리: [A-Za-z0-9_-] 세션은 받는다 (세션 검사 좁힘의 양의 짝)"
   rm -rf "$w"
 }
 case_init_relative_doc_refused() {
