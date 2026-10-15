@@ -31,6 +31,7 @@ done
 case "$COMMIT$BA" in *"$PH"*) ok "전제: 커밋 · B-A 펜스에 PAYLOAD 자리표가 있다" ;; *) no "전제: PAYLOAD 자리표가 없다 — 자리표 치환이 공허하다" ;; esac
 
 A=sess-e2eaaaa1; B=sess-e2ebbbb2
+nob() { no "$1"; printf '      출력: %s\n' "$2"; }   # 실패 이름은 고정 — 출력은 따로 보인다
 in_sess() {   # in_sess <저장소> <sid> <스크립트> → 그 세션으로 저장소에서 돈 출력(rc 는 호출의 rc)
   ( cd "$1" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID="$2" DEVBREW_SPEC_DISTILL_SESSION_ID="$2" bash -c "$3" 2>&1 )
 }
@@ -101,7 +102,7 @@ o="$(rb "$A" "$RB_HEAD
 $RB_PROF
 $RB_GUARD
 python3 \"\$PR/scripts/docreview_state.py\" init --state-dir \"\$STATE_DIR\" --doc \"\$PAYLOAD\" --profile \"\$PROFILE\"")"; rc=$?
-{ [ "$rc" -eq 0 ] && [ -f "$SDIR/docreview-state.md" ]; } && ok "5: 표지 주인 A — 확인을 지나 원장을 연다(init)" || no "5: A 의 init 이 원장을 만들지 못했다(rc $rc): $o"
+{ [ "$rc" -eq 0 ] && [ -f "$SDIR/docreview-state.md" ]; } && ok "5: 표지 주인 A — 확인을 지나 원장을 연다(init)" || nob "5: A 의 init 이 원장을 만들지 못했다" "rc $rc: $o"
 o="$(rb "$B" "$RB_OPEN")"; rc=$?
 assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: OTHER:$A" "5: 세션 B — 남의 표지면 OTHER:<A>"
 assert_eq "$rc" "3" "5: OTHER 판결은 펜스를 rc 3 으로 끝낸다"
@@ -124,14 +125,14 @@ assert_eq "$rc" "0" "5: 표지 주인 B — 확인을 지나 begin-round 가 돈
 [ "$(cksum < "$SDIR/docreview-state.md")" != "$before" ] && ok "5 양성 대조: 같은 쓰기가 표지 주인에게서는 원장을 바꾼다(바이트 단언의 이빨)" \
   || no "5 양성 대조: B 의 begin-round 가 원장을 바꾸지 않았다 — 위 「그대로다」 단언이 공허하다"
 o="$(in_sess "$R" "$B" "${BA//"$PH"/$BRIEF}")"
-[ -e "$SDIR/reviewing-by" ] && no "5: B 의 끝맺음(B-A) 뒤에도 표지가 남았다: $o" || ok "5: B 의 끝맺음(B-A) 펜스가 표지를 푼다"
+[ -e "$SDIR/reviewing-by" ] && nob "5: B 의 끝맺음(B-A) 뒤에도 표지가 남았다" "$o" || ok "5: B 의 끝맺음(B-A) 펜스가 표지를 푼다"
 assert_eq "$(cat "$SDIR/last-session" 2>/dev/null)" "$B" "5: last-session 에 B 가 남는다"
 
 # ── 6. 정리 — brief 를 지운 뒤 늙은 원장은 문서 없는 원장으로 걷힌다 ──────────────
 git -C "$R" rm -q -- "$BRIEF"; git -C "$R" commit -q -m "docs: brief 제거"
 [ -e "$BRIEF" ] && no "6: brief 가 남았다" || ok "6: brief 를 지우고 커밋했다"
 o="$(cd "$R" && python3 "$SD/scripts/ledger_sweep.py" --root "$R/.claude/spec-distill" 2>&1)"
-[ -d "$SDIR" ] && ok "6: TTL 안의 문서 없는 원장은 아직 걷지 않는다(늙히기가 아래 칸의 원인이다)" || no "6: 갓 쓴 원장이 TTL 전에 걷혔다: $o"
+[ -d "$SDIR" ] && ok "6: TTL 안의 문서 없는 원장은 아직 걷지 않는다(늙히기가 아래 칸의 원인이다)" || nob "6: 갓 쓴 원장이 TTL 전에 걷혔다" "$o"
 # 레포가 심을 수 있는 입력 — 걷힐 원장 폴더 안의 링크가 밖의 폴더 · 파일을 가리킨다
 EVIL="$T/sweep-outside"; mkdir -p "$EVIL"; printf 'keep\n' > "$EVIL/keep.txt"; printf 'keep2\n' > "$T/sweep-outside.txt"
 ln -s "$EVIL" "$SDIR/evil"; ln -s "$T/sweep-outside.txt" "$SDIR/evil-file"
@@ -146,7 +147,7 @@ os.utime(sys.argv[1], (when, when))
 PY
 o="$(cd "$R" && python3 "$SD/scripts/ledger_sweep.py" --root "$R/.claude/spec-distill" 2>&1)"
 assert_contains "$o" "문서 없는 원장 1개" "6: 정리가 문서 없는 원장 1개를 보고한다"
-[ -e "$SDIR" ] && no "6: 원장 폴더가 남았다: $o" || ok "6: 원장 폴더가 걷혔다"
+[ -e "$SDIR" ] && nob "6: 원장 폴더가 남았다" "$o" || ok "6: 원장 폴더가 걷혔다"
 assert_eq "$(cat "$EVIL/keep.txt" 2>/dev/null)|$(cat "$T/sweep-outside.txt" 2>/dev/null)" "keep|keep2" "6: 정리가 원장 안의 링크를 따라 밖의 폴더 · 파일을 지우지 않았다"
 
 # ── 7. 링크 축 — 레포가 심을 수 있는 링크를 따라 쓰지 않는다 ─────────────────────
@@ -162,7 +163,7 @@ printf -- '---\ntype: interview-brief\n---\n# l\n' > "$LB"; printf -- '---\ntype
 lsum="$(cksum < "$LFILE")"
 o="$(in_sess "$L" "$A" "ARG_PATH='$LD/2026-10-15-e2e-brief-interview.state.md'
 $ENTRY")"
-case "$(printf '%s\n' "$o" | tail -n 1)" in "interview-state: REJECT "*) ok "7: 링크인 상태 파일로는 이어 가지 않는다(REJECT)" ;; *) no "7: 링크인 상태 파일 진입: $o" ;; esac
+case "$(printf '%s\n' "$o" | tail -n 1)" in "interview-state: REJECT "*) ok "7: 링크인 상태 파일로는 이어 가지 않는다(REJECT)" ;; *) nob "7: 링크인 상태 파일로 이어 갔다(REJECT 아님)" "$o" ;; esac
 rm -f "$LB"   # 끝나지 않은 인터뷰로 보이게 — 링크인 후보도 ASK 에 오르지 않는다
 o="$(in_sess "$L" "$A" "ARG_PATH='$LSEED'
 $ENTRY")"
