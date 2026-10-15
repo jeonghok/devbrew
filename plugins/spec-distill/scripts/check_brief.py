@@ -54,6 +54,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 # §6 경계는 이 리포에서 한 곳에서만 계산된다 — `scripts/section6.py`. 세 소비자(이 게이트 ·
@@ -1240,40 +1241,76 @@ def section1_provenance_failures(text: str, anchors: set) -> list[str]:
 
 RESOLVED_RE = re.compile(r"\[해결 ⟨(S\d+)⟩\]")
 RESOLVED_MARK = "[해결"
-RESOLVED_BODY_RE = re.compile(r"— 해결:\s*\S")
+# 결정 줄의 선두 OQ 와 그 뒤 닫는 강조 — 나머지(`rest`)가 상태 자리다. 선두 판정은 `LEADING_OQ_RE` 와 같은 규칙.
+DECISION_HEAD_RE = re.compile(r"^[*_`]*\s*(OQ\d+)(?!_*[0-9A-Za-z])[*_`]*")
+# §0 상태 자리 허용 목록 — `[열림]` 또는 `[해결 ⟨S<n>⟩]` 다음 ` — <내용>`. 다른 모양은 전부 red.
+S0_SLOT_RE = re.compile(r"^\s+(\[열림\]|\[해결 ⟨(S\d+)⟩\])\s+—\s+\S")
+# §3 해결 결정 — `OQ<n> [해결 ⟨S<n>⟩]: <내용>`. 열린 결정은 `OQ<n>: <내용>`(자리 비움).
+S3_RESOLVED_RE = re.compile(r"^\s+\[해결 ⟨(S\d+)⟩\]:\s*\S")
+# 해결 내용 — `— 해결:` 뒤 `→`(역참조) 앞에 글자가 하나 이상.
+RESOLVED_BODY_RE = re.compile(r"— 해결:\s*[^\s→]")
 
 
-def _resolved_token(line: str):
-    """(해결 결정 줄인가, 가리키는 `S<n>` 또는 None). 줄에 `[해결` 이 있으면 해결 결정 줄이다(허용 목록 —
-    철자 변형을 열거하지 않는다). 모양은 `[해결 ⟨S<n>⟩]` 하나뿐이고 줄에 정확히 한 번이다 — 아니면
-    `S<n>` 이 None 이고 호출부가 「해결 표시 모양이 아니다」로 red 를 낸다."""
-    if RESOLVED_MARK not in line:
-        return False, None
-    m = RESOLVED_RE.search(line)
-    if not m or RESOLVED_MARK in line[:m.start()] + line[m.end():]:
-        return True, None
-    return True, m.group(1)
+def _decision_line(num: str, line: str):
+    """§0 · §3 결정 줄 하나 → (선두 OQ 또는 None, 해결인가, `S<n>` 또는 None, 실패 문장 목록).
+
+    상태 자리는 **허용 목록**이다(철자 변형을 열거하지 않는다). 서식 글자(Cf — 영폭 공백 등)가 있으면
+    줄째 red 이고, 판독은 NFKC 로 정규화한 줄 위에서 한다(전각 괄호 · 전각 OQ 가 정본으로 읽혀 같은
+    검사를 받는다).
+    - §0: 선두 OQ 바로 뒤가 `[열림]` 또는 `[해결 ⟨S<n>⟩]`, 그 뒤 ` — <내용>`.
+    - §3: `OQ<n>: <내용>`(열림) 또는 `OQ<n> [해결 ⟨S<n>⟩]: <내용>`(해결). OQ 와 첫 `:` 사이(또는 `:` 가 없으면
+      OQ 바로 뒤)의 여는 · 닫는 괄호(유니코드 Ps · Pe)는 정본 해결 표시가 아니면 red.
+    - 상태 자리 밖의 `[해결` 은 red(자리를 비켜 선 해결 표시). 선두 OQ 가 없는 줄의 `[해결` 도 red."""
+    if any(unicodedata.category(c) == "Cf" for c in line):
+        return None, False, None, [f"§{num} 결정 줄에 보이지 않는 서식 글자(Cf)가 있다: {line[:60]}"]
+    ln = unicodedata.normalize("NFKC", line)
+    body = _strip_bullet(ln).strip()
+    h = DECISION_HEAD_RE.match(body)
+    if not h:
+        if RESOLVED_MARK in ln:
+            return None, False, None, [f"§{num} 의 해결 표시가 결정 줄(선두 OQ<n>)에 있지 않다: {line[:60]}"]
+        return None, False, None, []
+    oq, rest = h.group(1), body[h.end():]
+    if num == "0":
+        s = S0_SLOT_RE.match(rest)
+        if not s:
+            return oq, False, None, [f"§0 결정 줄의 상태 표시가 [열림] · [해결 ⟨S<n>⟩] 가 아니다: {line[:60]}"]
+        if RESOLVED_MARK in rest[s.end(1):]:
+            return oq, False, None, [f"§0 의 해결 표시가 상태 자리 밖에 또 있다: {line[:60]}"]
+        return oq, s.group(2) is not None, s.group(2), []
+    r = S3_RESOLVED_RE.match(rest)
+    if r:
+        if RESOLVED_MARK in rest[r.end(1):]:
+            return oq, True, None, [f"§3 의 해결 표시가 상태 자리 밖에 또 있다: {line[:60]}"]
+        return oq, True, r.group(1), []
+    pre = rest.partition(":")[0] if ":" in rest else rest.lstrip()[:1]
+    if any(unicodedata.category(c) in ("Ps", "Pe") for c in pre) or RESOLVED_MARK in rest:
+        return oq, False, None, [f"§3 결정 줄의 상태 표시가 비거나 [해결 ⟨S<n>⟩]: 가 아니다: {line[:60]}"]
+    return oq, False, None, []
 
 
 def resolved_decision_failures(text: str, anchors: set) -> list[str]:
     """해결한 결정도 §3 에 남는다(R2 · N22). §0 과 §3 은 같은 결정 전량이다 — 두 절의 선두 OQ 집합이 같아야
-    한다(두 절이 다 있을 때). `[해결` 을 담은 줄은 `[해결 ⟨S<n>⟩]` 한 모양을 정확히 한 번 달고, 그 `S<n>` 은
-    payload §6 에 실재해야 한다 — 모델이 결정을 닫으면서 근거를 지어내는 길을 막는다. 해결 결정은 §0 과
-    §3 에서 같은 `S<n>` 을 가리키고, §3 줄은 `— 해결: <한 줄>` 로 해결 내용을 싣는다."""
+    한다(두 절이 다 있을 때). 같은 절 안의 같은 OQ 는 한 번뿐이다(먼저 온 줄이 이기는 순서 의존을 막는다).
+    상태 자리는 `_decision_line` 의 허용 목록이고, 해결 표시의 `S<n>` 은 payload §6 에 실재해야 한다 —
+    모델이 결정을 닫으면서 근거를 지어내는 길을 막는다. 해결 결정은 §0 과 §3 에서 같은 `S<n>` 을
+    가리키고, §3 줄은 `— 해결: <한 줄>` 로 해결 내용을 싣는다(역참조 `→` 만으로는 내용이 아니다).
+
+    §0 의 상태 자리 검사는 선두 OQ 로 시작하는 §0 줄에만 걸린다. §0 에 결정 목록이 없는 옛(v1) brief 는
+    그 검사에서는 조용하지만 집합 등식에서 §3 의 결정이 §0 에 없다고 red 다."""
     fails = []
     decisions = {}
     for num, title in DECISION_SECTIONS:
         d = decisions[num] = {}
         for ln in _entry_lines(_section_text(text, num, title)):
-            resolved, sid = _resolved_token(ln)
-            if resolved and sid is None:
-                fails.append(f"§{num} 의 해결 표시 모양이 아니다 — "
-                             f"`[해결 ⟨S<n>⟩]` 하나만 쓴다: {ln[:60]}")
-            elif sid and sid not in anchors:
+            oq, resolved, sid, errs = _decision_line(num, ln)
+            fails += errs
+            if sid and sid not in anchors:
                 fails.append(f"§{num} 의 해결 토큰 {sid} 가 payload §6 에 없다: {ln[:60]}")
-            oq = _leading_oq(ln)
-            if oq:
-                d.setdefault(oq, (ln, resolved, sid))
+            if oq in d:
+                fails.append(f"§{num} 에 {oq} 가 두 번 있다 — 결정마다 한 줄이다")
+            elif oq:
+                d[oq] = (ln, resolved, sid)
     both = not any(m.startswith(("0.", "3.")) for m in find_missing_sections(text))
     s0, s3 = decisions["0"], decisions["3"]
     for oq, (_, resolved, sid) in s0.items():
@@ -1294,7 +1331,7 @@ def resolved_decision_failures(text: str, anchors: set) -> list[str]:
     for oq, (ln3, r3, _) in s3.items():
         if both and oq not in s0:
             fails.append(f"§3 의 {oq} 가 §0 결정 목록에 없다 — §0 과 §3 은 같은 결정 전량이다")
-        if r3 and not RESOLVED_BODY_RE.search(ln3):
+        if r3 and not RESOLVED_BODY_RE.search(unicodedata.normalize("NFKC", ln3)):
             fails.append(f"§3 의 해결 결정 {oq} 줄에 해결 내용(`— 해결: <한 줄>`)이 없다")
     return sorted(set(fails))
 

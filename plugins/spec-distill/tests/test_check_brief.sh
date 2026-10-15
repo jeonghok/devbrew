@@ -1787,7 +1787,7 @@ TARGET_FUNCS = ("research_link_missing", "research_link_targets_missing",
                 # R2 — §4 순회는 `section4_items` 로 옮겨 갔고(`_research_entries_split` 가 위임한다),
                 # §1 · 해결 결정 술어도 항목을 순회한다. 이름으로 넣지 않으면 개수 술어가 락 밖에 숨는다.
                 "section4_items", "_section4_heads", "section4_body_failures",
-                "section1_provenance_failures", "resolved_decision_failures", "_resolved_token")
+                "section1_provenance_failures", "resolved_decision_failures", "_decision_line")
 
 func_nodes = {n.name: n for n in ast.walk(tree)
               if isinstance(n, ast.FunctionDef) and n.name in TARGET_FUNCS}

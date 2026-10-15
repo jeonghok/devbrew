@@ -132,16 +132,80 @@ done
 base; H="$(first4)"; ws_block 00A0 after "이유를 둘째 줄에서 이어 쓴다."
 rep4 "$TMP/s4"; gate; assert_eq "$?" "0" "s4_ws_prose: NBSP 로 들여쓴 산문 본문 줄은 통과한다 (양성 짝)"
 
-# ── 해결 표시는 한 모양뿐 (fix round 1 — 허용 목록). `[해결` 을 담은 줄은 `[해결 ⟨S<n>⟩]` 를 정확히 한 번.
-# §0 · §3 둘 다에 같은 줄을 둬 집합 등식은 만족시킨다 — 모양 규칙만 red 를 낸다.
-for tok in '[해결 ⟨S99⟩ · ⟨S1⟩]' '[해결]' '[해결 S1]' '[해결⟨S99⟩]' '[해결 ⟨S1⟩] [해결 ⟨S1⟩]'; do
+# ── 상태 자리는 허용 목록 (fix round 1 · 2). §0 결정 줄의 OQ 바로 뒤는 `[열림]` 또는 `[해결 ⟨S<n>⟩]` 다음 ` — `,
+# §3 은 `OQ<n>: …`(열림) 또는 `OQ<n> [해결 ⟨S<n>⟩]: …`(해결)뿐이다. 서식 글자(Cf)는 줄째 red, 판독은 NFKC 위에서.
+# 두 배치를 다 잰다 — (both) §0 · §3 에 같은 표시, (s0) §0 에만 표시 · §3 은 열린 줄. 집합 등식은 둘 다 만족한다.
+# 보이지 않는 글자는 코드 포인트로 만든다. 칸: 이름 \t 표시 \t 기대 사유(grep)
+python3 -I -X utf8 -c 'import sys
+Z = chr(0x200B)
+rows = [
+  ("multi", "[해결 ⟨S99⟩ · ⟨S1⟩]", "상태 표시가"),
+  ("bare", "[해결]", "상태 표시가"),
+  ("noangle", "[해결 S1]", "상태 표시가"),
+  ("nospace", "[해결⟨S99⟩]", "상태 표시가"),
+  ("twice", "[해결 ⟨S1⟩] [해결 ⟨S1⟩]", "상태 표시가"),
+  ("fullwidth", chr(0xFF3B) + "해결 ⟨S99⟩" + chr(0xFF3D), "S99"),
+  ("innerspace", "[ 해결 ⟨S99⟩ ]", "상태 표시가"),
+  ("zwsp_open", "[" + Z + "해결 ⟨S99⟩]", "서식 글자"),
+  ("zwsp_word", "[해" + Z + "결 ⟨S99⟩]", "서식 글자"),
+  ("kanji", "[解決 ⟨S99⟩]", "상태 표시가"),
+  ("english", "[resolved ⟨S99⟩]", "상태 표시가"),
+]
+open(sys.argv[1], "w", encoding="utf-8").write("".join("\t".join(r) + "\n" for r in rows))' "$TMP/slots"
+TAB="$(printf '\t')"
+while IFS="$TAB" read -r name tok want; do
   printf -- "- OQ9 %s — 렌더링 전략\n" "$tok" > "$TMP/s0"
   printf -- "- OQ9 %s: 렌더링 전략 — 해결: 서버 렌더링\n" "$tok" > "$TMP/s3"
   base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
-  { [ "$rc" -ne 0 ] && grep -q '해결 표시 모양이 아니다' "$TMP/out"; } \
-    && ok "resolved_shape «${tok}»: 정본 모양이 아닌 해결 표시는 red" \
-    || no "resolved_shape «${tok}»: 통과했거나 다른 이유로 red (rc=$rc)"
+  { [ "$rc" -ne 0 ] && grep -q -- "$want" "$TMP/out"; } \
+    && ok "slot_both_${name}: §0 · §3 의 «${tok}» 는 red («${want}»)" \
+    || no "slot_both_${name}: 통과했거나 다른 이유로 red (rc=$rc)"
+  printf -- "- OQ9: 렌더링 전략\n" > "$TMP/s3"
+  base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
+  { [ "$rc" -ne 0 ] && grep -q -- "$want" "$TMP/out"; } \
+    && ok "slot_s0_${name}: §0 의 «${tok}» · §3 열린 줄은 red («${want}»)" \
+    || no "slot_s0_${name}: 통과했거나 다른 이유로 red (rc=$rc)"
+done < "$TMP/slots"
+[ -s "$TMP/slots" ] && ok "slot 표 양성 대조: 칸 목록을 만들었다" || no "slot 표가 비었다 — 위 칸이 공허하다"
+# 상태 자리가 빈 §0 결정 줄 · §3 의 `[열림]` 괄호도 허용 목록 밖이다.
+printf -- "- OQ9 — 렌더링 전략\n" > "$TMP/s0"; printf -- "- OQ9: 렌더링 전략\n" > "$TMP/s3"
+base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q '§0 결정 줄의 상태 표시가' "$TMP/out"; } \
+  && ok "slot_missing_s0: §0 결정 줄에 상태 표시가 없으면 red" || no "slot_missing_s0: rc=$rc"
+printf -- "- OQ9 [열림] — 렌더링 전략\n" > "$TMP/s0"; printf -- "- OQ9 [열림]: 렌더링 전략\n" > "$TMP/s3"
+base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q '§3 결정 줄의 상태 표시가' "$TMP/out"; } \
+  && ok "slot_s3_bracket: §3 의 정본 아닌 괄호 상태(「[열림]:」)는 red" || no "slot_s3_bracket: rc=$rc"
+# 양의 짝 — 강조된 정본 열린 결정.
+printf -- "- **OQ9** [열림] — 렌더링 전략\n" > "$TMP/s0"; printf -- "- **OQ9**: 렌더링 전략\n" > "$TMP/s3"
+base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; assert_eq "$?" "0" "slot_bold_open: 강조된 정본 열린 결정은 통과한다 (양성 짝)"
+
+# ── 같은 절 안의 같은 OQ 는 한 번 (fix round 2) — 먼저 온 줄이 이기면 순서가 판정을 바꾼다.
+for order in open_first resolved_first; do
+  if [ "$order" = open_first ]; then
+    printf -- "- OQ9 [열림] — 렌더링 전략\n- OQ9 [해결 ⟨S1⟩] — 렌더링 전략\n" > "$TMP/s0"
+  else
+    printf -- "- OQ9 [해결 ⟨S1⟩] — 렌더링 전략\n- OQ9 [열림] — 렌더링 전략\n" > "$TMP/s0"
+  fi
+  printf -- "- OQ9: 렌더링 전략\n" > "$TMP/s3"
+  base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
+  { [ "$rc" -ne 0 ] && grep -q '§0 에 OQ9 가 두 번 있다' "$TMP/out"; } \
+    && ok "dup_s0_${order}: §0 의 같은 OQ 두 줄은 순서와 무관하게 red" || no "dup_s0_${order}: rc=$rc"
 done
+printf -- "- OQ9 [열림] — 렌더링 전략\n" > "$TMP/s0"; printf -- "- OQ9: 렌더링 전략\n- OQ9: 다시 쓴 줄\n" > "$TMP/s3"
+base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q '§3 에 OQ9 가 두 번 있다' "$TMP/out"; } \
+  && ok "dup_s3: §3 의 같은 OQ 두 줄은 red" || no "dup_s3: rc=$rc"
+
+# ── 해결 내용은 역참조만이 아니다 (fix round 2).
+printf -- "- OQ9 [해결 ⟨S1⟩] — 렌더링 전략\n" > "$TMP/s0"
+printf -- "- OQ9 [해결 ⟨S1⟩]: 렌더링 전략 — 해결: → 근거 RC3\n" > "$TMP/s3"
+base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q '해결 내용' "$TMP/out"; } \
+  && ok "resolved_backref_only: 「— 해결: → 근거 RC3」 는 해결 내용이 아니다 — red" || no "resolved_backref_only: rc=$rc"
+printf -- "- OQ9 [해결 ⟨S1⟩]: 렌더링 전략 — 해결: 서버 렌더링 → 근거 RC3\n" > "$TMP/s3"
+base; app 0 "$TMP/s0"; app 3 "$TMP/s3"; gate
+assert_eq "$?" "0" "resolved_body_backref: 해결 내용 뒤 역참조는 통과한다 (양성 짝)"
 
 # ── §0 과 §3 은 같은 결정 전량 (fix round 1) — 집합 등식 양방향.
 printf -- "- OQ9 [열림] — 캐시 무효화 시점\n" > "$TMP/s0"
