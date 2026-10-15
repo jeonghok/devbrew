@@ -1,5 +1,14 @@
 # Changelog
 
+## [5.6.0] — 2026-10-15
+
+### Added
+- `scripts/control_plane.py` — 로드맵 상태(`roadmap_status.py --json`)와 진행 중 인터뷰를 상태줄 한 줄(`statusline`) · 지도(`show`) · 작업 목록 줄(`show --tasks`)로 보인다. 결과는 `<git 공용 디렉토리>/devbrew/control-plane.json` 에 캐시하고(origin/main 커밋 · 브랜치 머리 · 로드맵 사본 · 인터뷰 상태 파일이 같으면 다시 계산하지 않는다), 받은 지 N분은 매번 `FETCH_HEAD` 에서 읽는다. 읽기만 한다.
+- 진입 skill `roadmap-status`(`/spec-distill:roadmap-status [<로드맵 경로>]`) — 에픽 지도를 보인다. 블록 줄에 끝나지 않은 의존(`← 기다림: …`), 받드는 에픽 없는 발화 · 미배정 번호를 경고로 보인다.
+- README 「상태줄」 — 버전 없는 상태줄 실행 스크립트와 설치 · 이어 붙이기 안내. 플러그인은 상태줄을 대신 켤 수 없다.
+- 끄기 스위치 `DEVBREW_SKIP_HOOKS=spec-distill:statusline`.
+- 상태줄은 3초, 지도는 30초 안에 끝난다 — git · 상태 계산 하위 프로세스는 시간을 넘기면 묶음째 끝내고, 상태줄은 마지막으로 낸 줄 + ` · 시간 초과` 또는 `상태줄 — 시간 초과` 를 낸다. 인터뷰 상태 파일은 일반 파일만 1 MiB 까지 읽는다.
+
 ## [5.5.0] — 2026-10-12
 
 ### Added

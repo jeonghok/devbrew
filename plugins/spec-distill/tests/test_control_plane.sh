@@ -376,4 +376,24 @@ out="$(cd "$W" && timed 10 python3 "$T/m-nonblock/control_plane.py" statusline <
 assert_eq "$out" "TIMEOUT" "변이 잡힘: 파이프를 막힘 없이 열지 않으면 상태줄이 멈춘다(시간 단언이 RED)"
 rm -rf "$STATE_DIR"
 
+echo "=== README 상태줄 스크립트(AC9) ==="
+README="$ROOT/plugins/spec-distill/README.md"
+awk '/<!-- control-plane-statusline:begin -->/{f=1;next} /<!-- control-plane-statusline:end -->/{f=0} f&&/^```sh$/{b=1;next} f&&b&&/^```$/{exit} f&&b' "$README" > "$T/sl.sh"
+[ -s "$T/sl.sh" ] && ok "README 에서 스크립트를 뽑았다" || no "README 표시 줄 사이에 sh 펜스가 없다"
+assert_not_grep "$(cat "$T/sl.sh")" '[0-9]+\.[0-9]+\.[0-9]+' "스크립트에 버전 붙은 폴더가 박혀 있지 않다"
+mkdir -p "$T/cfg-none"
+out="$(cd "$W" && CLAUDE_CONFIG_DIR="$T/cfg-none" sh "$T/sl.sh" </dev/null)"; rc=$?
+assert_eq "$out|$rc" "상태줄 꺼짐 — 플러그인을 못 찾음|0" "설치본이 없으면 꺼짐 문구(빈 줄 아님)"
+mkdir -p "$T/cache/devbrew/spec-distill/9.9.9/scripts" "$T/cfg/plugins"
+cp "$S/"*.py "$S/"*.json "$T/cache/devbrew/spec-distill/9.9.9/scripts/"
+printf '{\n  "version": 2,\n  "plugins": {\n    "spec-distill@devbrew": [\n      {\n        "scope": "user",\n        "installPath": "%s/cache/devbrew/spec-distill/9.9.9",\n        "version": "9.9.9"\n      }\n    ]\n  }\n}\n' "$T" > "$T/cfg/plugins/installed_plugins.json"
+out="$(cd "$W" && CLAUDE_CONFIG_DIR="$T/cfg" sh "$T/sl.sh" </dev/null)"
+assert_contains "$out" "rm 외 1 · 설계 2" "installPath 의 control_plane.py 를 실행 때 찾아 부른다"
+rm -f "$T/cache/devbrew/spec-distill/9.9.9/scripts/control_plane.py"
+out="$(cd "$W" && CLAUDE_CONFIG_DIR="$T/cfg" sh "$T/sl.sh" </dev/null)"
+assert_eq "$out" "상태줄 꺼짐 — 플러그인을 못 찾음" "installPath 에 control_plane.py 가 없으면(옛 버전) 꺼짐 문구"
+for want in '"statusLine"' '이어 붙' 'spec-distill:statusline' '플러그인이 대신 켜 줄 수 없' '상태줄 — 시간 초과'; do
+  assert_contains "$(cat "$README")" "$want" "README 에 '$want'"
+done
+
 finish
