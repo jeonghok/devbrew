@@ -146,7 +146,7 @@
 - **P14 (State Survives Compaction)** — state.local.md frontmatter 보존.
 - **P3 — graceful degradation with loud logging**: `resolve_session_id` 검증 실패 시 None 반환 + stderr advisory. SessionEnd 의 세션 정리(②)에서 정말 조용한 것은 셋뿐이다 — payload 가 JSON 이 아닐 때 · sid 가 없거나 형식에 맞지 않을 때(정리를 건너뛴다) · `ignore_errors` 아래의 rmtree 오류. 그 밖의 실패와 거부는 stderr 로 낸다. TTL-GC(③)는 stat · 개명에 실패한 폴더를 줄 없이 건너뛰고 다음 실행에서 다시 시도한다. 미커밋 확인·진입 검사 실패는 advisory — 사용자 attention 가용성에 따라 loud 정도 조정. 진입 검사 자신의 실패는 끔으로 친다(fail-closed).
 - **P14 — 세션 수명 동안 보존 · 종료 시 정리**: 세션 폴더는 세션 동안 남고 SessionEnd 훅이 지운다. TTL-GC 는 self-session 보호 + grace window 로 in-flight data 를 지킨다. TTL-GC 와 SessionEnd 정리는 링크를 거쳐 풀리는 state root 를 **모두** 거부한다 — `.claude` 나 `.claude/spec-distill` 이 링크면 그 링크가 저장소 **안**을 가리켜도 거부다. GC 의 락은 루트 디렉토리 자신(`O_NOFOLLOW` 로 연 디렉토리 fd 의 `flock`)이고 락 파일은 없다 — 루트 아래 고정 이름 파일은 저장소가 링크로 커밋할 수 있다(3.0.0). 그래서 그런 저장소에서는 세션 정리와 GC 가 멈추고 상태 폴더가 쌓인다. 신호는 SessionEnd stderr 의 거부 줄(세션 정리 · GC 각각)뿐이다.
-- **Law 1 · Law 3 — 번호 인계 (5.6.0)** — brief · 에픽 묶음의 번호가 설계문서 · 계획 · 구현으로 넘어가는 이음매마다 기계 대조가 있다: 번호 대조(빠짐은 리뷰 전에 막고, 얕음 · 받드는 에픽 없음은 승인 때의 경고) · `--plan` · `--impl` · `roadmap_status.py` 의 받는 곳 없는 미룸 경고. 외부 skill(brainstorming · writing-plans · SDD)은 고치지 않는다 — 넘길 때 보내는 글과 돌아온 결과 검사만 devbrew 쪽에 있다. 내용이 실제로 답하는지는 리뷰어(design-doc 프로필의 scope 축)가 판정한다.
+- **Law 1 · Law 3 — 번호 인계 (5.6.0)** — brief · 에픽 묶음의 번호가 설계문서 · 계획 · 구현으로 넘어가는 이음매마다 기계 대조가 있다: 번호 대조(빠진 번호는 spec-review 진입 때 보이고 게이트 경고 수에 들며 지휘 절차는 그 때문에 spec-review 앞에서 멈춘다, 얕음 · 받드는 에픽 없음은 승인 때의 경고) · `--plan` · `--impl` · `roadmap_status.py` 의 받는 곳 없는 미룸 경고. 외부 skill(brainstorming · writing-plans · SDD)은 고치지 않는다 — 넘길 때 보내는 글과 돌아온 결과 검사만 devbrew 쪽에 있다. 내용이 실제로 답하는지는 리뷰어(design-doc 프로필의 scope 축)가 판정한다.
 
 ## External source absorption
 

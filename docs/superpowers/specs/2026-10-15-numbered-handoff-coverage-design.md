@@ -26,7 +26,7 @@ next_phase: superpowers:writing-plans
   - [§4 spec-review 연결 · 깊이 판정 · 승인 때 보일 것](#4-spec-review-연결--깊이-판정--승인-때-보일-것)
   - [§5 위험에 대한 답](#5-위험에-대한-답)
 - [Acceptance Criteria](#acceptance-criteria) · [Files to Modify](#files-to-modify) · [Verification Plan](#verification-plan)
-- [Rejected Alternatives](#rejected-alternatives) · [결정 기록](#결정-기록) · [번호 대조](#번호-대조) · [Metadata](#metadata)
+- [Rejected Alternatives](#rejected-alternatives) · [결정 기록](#결정-기록) · [번호 대조](#번호-대조) · [미룸](#미룸) · [Metadata](#metadata)
 
 ## Handoff Context
 
@@ -346,6 +346,13 @@ brief 에는 확정 항목(§2) 말고도 열린 질문(§3) · 조사(§4) · �
 | «lightrun» | 반영 | §1-2 — 요약이 버린 사실을 다시 읽기로 |
 | «lost-in-middle» | 반영 | §4-3 · §5 — 에픽 몫의 묶음과 번호별 표 |
 | «superpowers-brainstorming-main» | 반영 | §5 — 피함 사례: 첫 조각만 다루는 습관을 묶음 하나 = 에픽 하나로 |
+
+## 미룸
+
+| 항목 | 이유 | 받는 곳 |
+|---|---|---|
+| 지휘 절차 갱신(spec-review --bundle 호출 · --plan · --impl · 지휘 절차 3 의 「경고 줄은 보이고 넘어간다」) | Files to Modify 마지막 줄 — 이 PR 밖(로드맵 PR · 지휘자 skill) | R5 |
+| epic-handoff.md Read 를 지휘자 skill 로 옮김 | 지휘자 skill 이 아직 없어 spec-interview SKILL 이 조건부로 읽는다(고아 reference 락) | R5 |
 
 ## Metadata
 

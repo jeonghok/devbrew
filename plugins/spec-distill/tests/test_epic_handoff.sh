@@ -27,7 +27,7 @@ case "$ONE" in
 esac
 for n in '승인된 로드맵 <roadmap-rel> 의 에픽 <epic-id> 다' '번호째' '## 번호 대조 표' 'source_interview 에 <bundle-rel>' \
          '--bundle <bundle-rel>' 'check_bundle_coverage.py --plan' '## Acceptance Criteria 의 AC 목록' \
-         '구현됨 · 미룸 · 빠짐' 'git 이 추적하지 않는 파일' '## 미룸 표' 'check_bundle_coverage.py --impl' \
+         'AC1 · AC2 … 처럼 번호를 단다' '구현됨 · 미룸 · 빠짐' 'git 이 추적하지 않는 파일' '## 미룸 표' 'check_bundle_coverage.py --impl' \
          '게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다'; do
   assert_contains "$ONE" "$n" "AC2 · AC10: 에픽 넘김 줄에 「${n}」"
 done

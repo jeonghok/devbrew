@@ -82,7 +82,8 @@ if nonempty "다음 세션 줄" "$ONE"; then
   order "다음 세션 줄" "$ONE" "Skill superpowers:brainstorming" "spec-distill:spec-review"
   order "다음 세션 줄" "$ONE" "spec-distill:spec-review" "writing-plans"
   assert_not_contains "$ONE" "보다 이 순서가 우선한다" "AC1: 다음 세션 줄에 brainstorming 지시를 덮어쓰는 문장이 없다(D42)"
-  for n in '§3 열린 질문 · §4 조사 · §5 위험' '번호째' '## 번호 대조 표' 'source_interview' '--bundle <brief-path>' \
+  for n in '§3 열린 질문 · §4 조사 · §5 위험' '번호째' '## 번호 대조 표' 'source_interview' '--bundle 과 source_interview 에 적은 것과 같은 상대경로를 붙여' \
+           'brief frontmatter audit_file(같은 폴더) §6 의 S 번호를 싣고' 'AC1 · AC2 … 처럼 번호를 단다' \
            'check_bundle_coverage.py --plan' '## Acceptance Criteria 의 AC 목록' '구현됨 · 미룸 · 빠짐' \
            'git 이 추적하지 않는 파일' '## 미룸 표' 'check_bundle_coverage.py --impl' '/compact 요약에 기대지 말고'; do
     assert_contains "$ONE" "$n" "AC1 · AC10: brief 다음 세션 줄에 「${n}」"
