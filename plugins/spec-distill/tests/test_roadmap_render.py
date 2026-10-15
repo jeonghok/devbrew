@@ -14,7 +14,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "plugins" / "spec-distill" / "scripts"))
 import roadmap_render as R  # noqa: E402
-from check_bundle_coverage import frontmatter, section_body, unquote  # noqa: E402
+from roadmap_model import frontmatter, section_body, unquote  # noqa: E402
 
 RM_REL = "docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose"
 RM_DIR = REPO / RM_REL

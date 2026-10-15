@@ -3,7 +3,7 @@
 """roadmap_render.py — 분해안 표 · 로드맵 블록 · 에픽 묶음 · 로드맵의 글을 만든다. 파일을 쓰지 않는다.
 
 `roadmap_write.py` 가 부른다. 형식의 정본은 R0 설계 §3(`docs/superpowers/specs/2026-10-11-roadmap-walking-skeleton-design.md`)
-이고, 로드맵 해석 · 번호 문법 · 절 읽기 · §6 경계는 `roadmap_status.py` · `check_bundle_coverage.py` · `section6.py` 의 것을 쓴다.
+이고, 로드맵 해석 · 번호 문법 · 절 읽기는 `roadmap_model.py`, §6 경계는 `section6.py` 의 것을 쓴다.
 """
 from __future__ import annotations
 
@@ -14,10 +14,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import section6  # noqa: E402
-from check_bundle_coverage import (  # noqa: E402
-    FormatError, bundle_ids, id_sort_key, parse_ids, section_body)
-from roadmap_status import (  # noqa: E402
-    BLOCK_ID_RE, KEY_RE, OQ_LINE_RE, brief_universe, parse_roadmap)
+from roadmap_model import (  # noqa: E402
+    BLOCK_ID_RE, KEY_RE, OQ_LINE_RE, FormatError, brief_universe, bundle_ids, id_sort_key, parse_ids,
+    parse_roadmap, section_body)
 
 TABLE_HEADING = "## 분해안"
 COLUMNS = ("번호", "이름", "종류", "의도", "범위", "의존", "브랜치", "경로 예약", "배정 번호", "받는 것", "넘기는 것")

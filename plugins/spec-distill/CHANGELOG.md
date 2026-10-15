@@ -14,6 +14,9 @@
 - `spec-review` 게이트 ③ — 설계문서 frontmatter 에 `roadmap:` 줄이 있으면 「인터뷰 다시 열기」 갈래가 재분해 절차로 간다. 다른 갈래와 로드맵 밖 문서는 그대로다.
 - `references/proceed-gate.md` 재결정 규약에 「분해 단위의 변경은 `${CLAUDE_PLUGIN_ROOT}/references/redecompose.md` 로」 한 줄. brief 템플릿 §7 에 분해 줄.
 
+### Fixed
+- `roadmap_render.py` · `roadmap_write.py` 가 번호 문법 · 로드맵 해석(`BLOCK_ID_RE` · `KEY_RE` · `OQ_LINE_RE` · `DATE_RE` 등)을 5.6.0 의 공유 모듈 `roadmap_model.py` 에서 가져온다 — `roadmap_status.py` 가 더는 그 정규식을 내보내지 않아 두 스크립트가 import 에서 죽었다.
+
 ## [5.6.0] — 2026-10-15
 
 ### Added

@@ -30,8 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import roadmap_render as R  # noqa: E402
-from check_bundle_coverage import FormatError, frontmatter, id_sort_key, section_body, unquote  # noqa: E402
-from roadmap_status import DATE_RE  # noqa: E402
+from roadmap_model import DATE_RE, FormatError, frontmatter, id_sort_key, section_body, unquote  # noqa: E402
 
 RS = Path(__file__).resolve().parent / "roadmap_status.py"
 RECORD_HEADING = "## 생성 기록"
