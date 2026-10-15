@@ -485,9 +485,11 @@ state 본문 `## audit §2 대기 줄` 에 덧붙인다(종료 때 audit §2 로
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/finishing.md
+Read ${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md
 ```
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
+둘째 줄(`epic-handoff.md`)은 로드맵 에픽의 설계를 여는 줄을 써야 할 때만 읽는다.
 
 ## In-flight state migration
 
