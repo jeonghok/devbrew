@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AC10 — 파일을 지우는 장치(리뷰 진입 때의 원장 정리 `scripts/ledger_sweep.py`)의 kill switch 행렬.
+# R7 AC9 (§3-3) — 파일을 지우는 장치(리뷰 진입 때의 원장 정리 `scripts/ledger_sweep.py`)의 kill switch 행렬.
 # 스위치 넷(전역 하나 + 옛 토큰 셋)이 각각 아무것도 지우지 않고, 스위치 없이 돌리면 지운다(양성 대조).
 set -uo pipefail
 

@@ -186,14 +186,13 @@ def main(argv: list[str]) -> int:
         print(str(state_root(cwd)))
         return 0
     if sub == "session-id":
-        # env-only resolve (no hook payload on the CLI path). Skills key their
-        # per-session state directory with this sid.
+        # env-only resolve (no hook payload on the CLI path). Skills use this sid as the
+        # owner of a ledger's review marker (`ledger_marker.py --session`) and as the interview
+        # session (`interview_state.py --session` — it also finds the previous version's
+        # per-session interview record to migrate).
         # 계약: 풀리지 않으면 exit 1, stdout 은 비어 있다.
-        # 규칙: 호출자는 빈 sid 로 `$ROOT/$sid/<leaf>` 를 만들지 않는다 — 빈 값이면 소리를
-        # 내고 거부한다. 본보기는 `skills/request-framing/SKILL.md` 의 sid 가드다(sid 가
-        # 실값이고 mkdir 이 성공할 때만 경로가 생긴다). 호출자는 여기 적지 않고
+        # 규칙: 호출자는 빈 sid 로 표지를 잡거나 확인하지 않는다. 호출자는 여기 적지 않고
         # `git grep -n 'state_path.py" session-id'` 로 센다.
-        # 알려진 위반(연기): reviewing-brief ## 상태 · spec-interview/references/finishing.md — 빈 sid 가드 없음.
         sid = resolve_session_id(None)
         if sid is None:
             return 1

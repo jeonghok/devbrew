@@ -856,8 +856,9 @@ assert_file_grep pyproject.toml '^package = false$' \
 
 note "── 축 F: 도출 규칙이 산출물에 적혀 있다 (AC13) ───────────────────────"
 RULE='2026-10 이후에도 패치를 받는 버전 중 최빈'
+# spec-distill 은 6.0.0 에서 훅과 해석기를 지워 이 목록에서 빠졌다(아래 축 G 의 음의 짝).
 for f in "$RESOLVER" README.md \
-         plugins/project-init/README.md plugins/spec-distill/README.md; do
+         plugins/project-init/README.md; do
   assert_file_grep "$f" "$RULE" "F/AC13: $f 가 도출 규칙을 담는다"
   # 버전 숫자는 **재도출**해서 본다 — 리터럴로 핀하면 바닥이 움직일 때 stale-red 가 된다.
   assert_file_grep "$f" "${FLOOR_MAJOR_VAL}\.${FLOOR_MINOR_VAL}" \
@@ -873,12 +874,13 @@ note "── 축 G: prerequisite (AC14) ─────────────�
 # 음의 짝이 약해진다. 정규식엔 이스케이프한 것을, 사람이 읽는 메시지엔 원문을 쓴다.
 PREREQ_RE="Python ${FLOOR_MAJOR_VAL}\.${FLOOR_MINOR_VAL}\+"
 PREREQ_TXT="Python ${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL}+"
-for p in project-init spec-distill; do
+for p in project-init; do
   assert_file_grep "plugins/$p/README.md" "$PREREQ_RE" "G/AC14: $p README 에 '$PREREQ_TXT' prerequisite 가 있다"
 done
 # 음의 짝 — 훅이 없는 플러그인에는 **쓰지 않는다**. 그 바닥을 집행하는 주체가 없다(D27 — R8 이
-# 기각한 「집행 없는 선언」이 그대로 돌아온다). quality-gates 는 v10.0.0 에서 훅을 모두 지웠다.
-for p in plugin-audit quality-gates; do
+# 기각한 「집행 없는 선언」이 그대로 돌아온다). quality-gates 는 v10.0.0 에서, spec-distill 은
+# 6.0.0 에서 훅을 모두 지웠다(spec-distill 은 훅 전용 해석기 사본도 함께).
+for p in plugin-audit quality-gates spec-distill; do
   assert_file_absent "plugins/$p/README.md" "$PREREQ_RE" \
     "G/AC14: $p README 에는 그 prerequisite 를 쓰지 않는다 (집행 주체가 없다)"
 done
