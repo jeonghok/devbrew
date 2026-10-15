@@ -41,6 +41,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    **전문 보존**(append-only)하며 각각 `S<N>` 앵커를 답니다.
    **최초 요청 원문은 `S1`이다.** 「풀린 입력」(진입 단계 2 의 결과 — rough request 그대로이거나
    `@경로` 의 파일 전문)을 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다.
+   상태 파일로 이어 간 인터뷰면 「풀린 입력」은 그 파일의 `## 풀린 입력` 블록이다(`state-file.md`).
    Phase 0 을 거친 세션에서는 `## 진입 단계` 2 가 `@경로` 를 풀었든 사용자가 전문을 붙여넣었든
    그 「풀린 입력」이 `interview-seed` 파일 전문이고, 그때도 같은 규칙이 그대로 적용됩니다:
    ```yaml
@@ -294,7 +295,7 @@ python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
 
 - **superpowers 부재 시**: 현행 graceful degradation 그대로 — brief를 완료하고 **loud advisory**를 낸 뒤 **정지(STOP)**. 게이트 없음(다음 세션에 넘길 대상 자체가 없음). crash·spec-mode fallback **금지**(단독 완결, graceful degrade):
 
-  > `[spec-distill] interview brief 를 만들었다: docs/superpowers/interview/<file>. superpowers 가 없어 여기서 멈춘다. 이 brief 를 다음 작업의 입력으로 쓰세요.`
+  > `[spec-distill] interview brief 를 만들었다: docs/superpowers/interview/<file>. superpowers 가 없어 여기서 멈춘다. 이 brief 를 다음 작업의 입력으로 쓰세요. brief · audit · 상태 파일은 커밋하지 않았다 — 브랜치에서 직접 커밋하라.`
 
 - **superpowers 가용 시**: B-2 proceed 게이트 제시.
 
@@ -413,12 +414,13 @@ BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
 case "$BRIEF" in
   ""|*"<"*) echo "[spec-distill] 커밋 입력 부재 — BRIEF 가 비었거나 자리표 그대로다(Step A.5 의 PAYLOAD 절대경로로 바꿔 다시 돌려라)." ;;
   *)
-  bdir="$(cd "$(dirname -- "$BRIEF")" 2>/dev/null && pwd -P)" || bdir=""
-  [ -z "$bdir" ] || BRIEF="${bdir}/$(basename -- "$BRIEF")"
+  # cwd 접두만 물리 경로로 바꾼다 — 그 아래 성분(링크 포함)은 path-inside 가 잰다.
+  cwd_l="$(pwd -L)"
+  case "$BRIEF" in "$cwd_l"/*) BRIEF="$(pwd -P)/${BRIEF#"$cwd_l"/}" ;; esac
   stem="${BRIEF%.md}"
   AUDIT_F="${stem}.audit.md"
   STATE_F="${stem}.state.md"
-  top=""; [ -z "$bdir" ] || top="$(git -C "$bdir" rev-parse --show-toplevel 2>/dev/null)" || top=""
+  top="$(git -C "$(dirname -- "$BRIEF")" rev-parse --show-toplevel 2>/dev/null)" || top=""
   def="$(git -C "${top:-.}" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)" || def=""
   def="${def#origin/}"
   cur="$(git -C "${top:-.}" branch --show-current 2>/dev/null)" || cur=""
@@ -428,6 +430,8 @@ case "$BRIEF" in
     echo "[spec-distill] 커밋하지 않았다 — 세 파일 중 작업 트리 밖이거나 링크를 거치는 경로가 있다(위 사유). 확인한 뒤 직접 커밋하라: $BRIEF · $AUDIT_F · $STATE_F"
   elif [ -z "$def" ]; then
     echo "[spec-distill] 커밋하지 않았다 — 기본 브랜치를 판정하지 못했다(origin/HEAD 없음). 직접 커밋하라: $BRIEF · $AUDIT_F · $STATE_F"
+  elif [ -z "$cur" ]; then
+    echo "[spec-distill] 커밋하지 않았다 — 지금 브랜치 위가 아니다(detached HEAD). 브랜치에서 커밋하라: $BRIEF · $AUDIT_F · $STATE_F"
   elif [ "$cur" = "$def" ]; then
     echo "[spec-distill] 커밋하지 않았다 — 지금 기본 브랜치(${def})에 있다. 브랜치에서 커밋하라: $BRIEF · $AUDIT_F · $STATE_F"
   else

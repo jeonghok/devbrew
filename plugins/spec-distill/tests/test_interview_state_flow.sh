@@ -119,6 +119,37 @@ assert_eq "$(cat "$T/outside.txt")" "outside" "보안: 링크 너머 파일은 �
 printf '%s\n' "$o" | grep -qF '링크' && printf '%s\n' "$o" | grep -qF '2026-10-15-t-interview.audit.md' \
   && ok "보안: 거부 사유와 세 경로를 보인다" || no "보안: 링크 거부 출력: $o"
 grep -qF 'path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F"' <<<"$cf" && ok "보안: 커밋 펜스가 세 경로를 path-inside 로 잰다" || no "보안: path-inside 관문이 없다"
+# 양성 대조 — cwd 를 링크로 들어왔어도(논리 경로 BRIEF) 커밋한다. 이 칸의 경로는 pwd -P 로 풀지 않는다.
+c5="$(mk via-link)"; git -C "$c5" switch -q -c feature/l
+ln -s "$c5" "$T/lk-c5"
+o="$(runc "$T/lk-c5")"
+assert_eq "$(git -C "$c5" rev-list --count HEAD)" "2" "보안 양성 대조: 링크 cwd 로 들어와도 세 파일을 커밋한다 ($o)"
+# 인터뷰 폴더가 다른 git 저장소로 가는 링크 — 어느 쪽에도 커밋하지 않는다
+c6="$(mk host)"; git -C "$c6" switch -q -c feature/h
+c7="$(mk sibling)"; git -C "$c7" switch -q -c feature/s
+rm -rf "$c6/docs/superpowers/interview"; ln -s "$c7/docs/superpowers/interview" "$c6/docs/superpowers/interview"
+o="$(runc "$c6")"
+assert_eq "$(git -C "$c6" rev-list --count HEAD) $(git -C "$c7" rev-list --count HEAD)" "1 1" "보안: 인터뷰 폴더가 다른 저장소로 가는 링크면 어느 쪽에도 커밋하지 않는다"
+assert_eq "$(git -C "$c6" diff --cached --name-only)$(git -C "$c7" diff --cached --name-only)" "" "보안: 그때 어느 쪽에도 stage 하지 않는다"
+printf '%s\n' "$o" | grep -qF '커밋하지 않았다' && ok "보안: 그 사유를 보인다" || no "보안: 다른 저장소 링크 출력: $o"
+# detached HEAD — 브랜치 위가 아니면 커밋하지 않는다
+c8="$(mk detached)"; git -C "$c8" switch -q --detach
+o="$(runc "$c8")"
+assert_eq "$(git -C "$c8" rev-list --count HEAD)" "1" "AC5: detached HEAD 면 커밋하지 않는다"
+printf '%s\n' "$o" | grep -qF 'detached HEAD' && ok "AC5: detached HEAD 사유를 보인다" || no "AC5: detached 출력: $o"
+grep -qF 'brief · audit · 상태 파일은 커밋하지 않았다' "$FIN" && ok "B-1: superpowers 부재 안내가 세 파일을 커밋하지 않았다고 말한다" || no "B-1: 미커밋 안내가 없다"
+# 이어 갈 때의 「풀린 입력」 — 상태 파일 전문이 아니라 그 안의 블록
+python3 -I - "$SK" <<'PY' && ok "fix1: SKILL 3 · 3.5 가 interview-state 도 건너뛴다" || no "fix1: SKILL 3 · 3.5 가 interview-state 를 모른다"
+import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+s3 = t[t.index("### 3. trivia"):t.index("### 3.5")]
+s35 = t[t.index("### 3.5"):t.index("### 3.6")]
+sys.exit(0 if "type: interview-state" in s3 and "type: interview-state" in s35 else 1)
+PY
+grep -qF '본문 맨 앞에는 `## 풀린 입력` 블록을 두고' "$SF" && grep -qF 'NEW 면 받은 요청' "$SF" \
+  && ok "fix1: 만들 때 「풀린 입력」을 블록에 남긴다(문면)" || no "fix1: 풀린 입력 블록 문면 없음"
+grep -qF '상태 파일 전문이 아니다' "$SF" && grep -qF '`S1` 없음' "$SF" && grep -qF '사용자에게 한 번 알린다' "$SF" \
+  && ok "fix1: 이어 갈 때 「풀린 입력」은 블록 · 없으면 알린다(문면)" || no "fix1: 이어 갈 때 풀린 입력 문면 없음"
 
 # AC12 — 옛 state.local.md 이월(펜스 + 스크립트)
 mkdir -p "$iv/.claude/spec-distill/sess-iv000001"
@@ -161,23 +192,50 @@ $(cat "$2")
 echo \"__STATE=\$STATE\"; echo \"__DIR=\$STATE_DIR\"; echo \"__FB=\$DEGRADE_FALLBACK_FILE\"" 2>/dev/null )
 }
 mkdir -p "$T/tmpd"
+RBKEY="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$rbr/.claude/spec-distill" --doc "$RBD/2026-10-15-t-interview.md")"
+# 원장 열기 전 — 머리는 원장 자리를 만들지 않고 두 번째 채널을 임시 폴더로 보낸다
 for h in "$T"/rbh/h*.sh; do
   [ -f "$h" ] || continue
   o="$(runh "$rbr" "$h")"
   st="$(printf '%s\n' "$o" | sed -n 's/^__STATE=//p')"; dir="$(printf '%s\n' "$o" | sed -n 's/^__DIR=//p')"; fb="$(printf '%s\n' "$o" | sed -n 's/^__FB=//p')"
   assert_eq "$st" "$RBD/2026-10-15-t-interview.state.md" "§1-6: $(basename "$h") — STATE 는 그 인터뷰의 상태 파일"
-  case "$dir" in "$rbr/.claude/spec-distill/.docreview/"?*) ok "§1-6: $(basename "$h") — 원장 자리가 .docreview 아래";; *) no "§1-6: $(basename "$h") — 원장 자리: $dir";; esac
-  assert_eq "$fb" "$dir/brief-degrade-fallback.txt" "§1-6: $(basename "$h") — 두 번째 채널은 원장 자리 안"
+  assert_eq "$dir" "$RBKEY" "§1-6: $(basename "$h") — 원장 자리는 .docreview 아래 그 문서의 자리"
+  assert_eq "$fb" "$T/tmpd/brief-degrade-fallback.sess-rb000001.txt" "§1-6: $(basename "$h") — 원장 열기 전이면 두 번째 채널은 임시 폴더"
+  [ -e "$RBKEY" ] && no "A1: $(basename "$h") — 원장 열기 전에 원장 자리를 만들었다" || ok "A1: $(basename "$h") — 원장 열기 전에 원장 자리를 만들지 않는다"
   [ -e "$rbr/.claude/spec-distill/sess-rb000001" ] && no "§2-5: $(basename "$h") — 세션 폴더를 만들었다" || ok "§2-5: $(basename "$h") — 세션 폴더를 만들지 않는다"
 done
-# 링크인 .docreview — 두 번째 채널은 임시 폴더로, 링크 너머는 비어 있다
+# 원장 열기 전의 record(BRIEF_REVIEW skip 꼴) — 원장 자리를 만들지 않는다
+python3 -I - "$RB" "$T/rec.sh" >/dev/null <<'PY'
+import re, sys
+t = open(sys.argv[1], encoding="utf-8").read()
+b = next(x for x in re.findall(r"```bash\n(.*?)\n```", t, re.S) if 'degrade-append "$STATE" --component <a>' in x)
+b = b.replace("<a>", "pipeline").replace("<b>", "all").replace("<c>", "skipped").replace("<r>", "rec-probe-1")
+open(sys.argv[2], "w", encoding="utf-8").write(b + "\n")
+PY
+runh "$rbr" "$T/rec.sh" >/dev/null
+[ -e "$RBKEY" ] && no "A1: 원장 열기 전 record 가 원장 자리를 만들었다" || ok "A1: 원장 열기 전 record 는 원장 자리를 만들지 않는다"
+grep -qF 'rec-probe-1' "$RBD/2026-10-15-t-interview.state.md" "$T/tmpd/brief-degrade-fallback.sess-rb000001.txt" 2>/dev/null \
+  && ok "A1: 그 record 는 상태 파일이나 임시 두 번째 채널에 닿는다" || no "A1: 원장 열기 전 record 가 사라졌다"
+# 원장 열기 뒤 — 두 번째 채널은 원장 자리 안
+o="$(cd "$rbr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rb000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rb000001 \
+      bash -c "PAYLOAD='docs/superpowers/interview/2026-10-15-t-interview.md'
+$(fence "$RB" ledger-open)" 2>&1 | tail -n 1)"
+assert_eq "$o" "ledger-open: HELD" "A1: 원장 열기가 표지를 잡는다(전제)"
+for h in "$T"/rbh/h*.sh; do
+  [ -f "$h" ] || continue
+  fb="$(runh "$rbr" "$h" | sed -n 's/^__FB=//p')"
+  assert_eq "$fb" "$RBKEY/brief-degrade-fallback.txt" "§1-6: $(basename "$h") — 원장 열기 뒤 두 번째 채널은 원장 자리 안"
+done
+# 링크인 .docreview(링크 너머에 그 문서의 자리까지 있다) — 두 번째 채널은 임시 폴더로, 링크 너머는 비어 있다
 lrb="$T/lrb"; mkdir -p "$lrb/docs/superpowers/interview" "$lrb/.claude/spec-distill" "$T/outdir" && git -C "$lrb" init -q
 cp "$RBD"/2026-10-15-t-interview.md "$RBD"/2026-10-15-t-interview.state.md "$lrb/docs/superpowers/interview/"
 ln -s "$T/outdir" "$lrb/.claude/spec-distill/.docreview"
+LKEY="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$lrb/.claude/spec-distill" --doc "$lrb/docs/superpowers/interview/2026-10-15-t-interview.md")"
+mkdir -p "$LKEY"
 o="$(runh "$lrb" "$T/rbh/h0.sh")"
 fb="$(printf '%s\n' "$o" | sed -n 's/^__FB=//p')"
 assert_eq "$fb" "$T/tmpd/brief-degrade-fallback.sess-rb000001.txt" "보안: 원장 자리가 링크면 두 번째 채널은 임시 폴더"
-assert_eq "$(ls -A "$T/outdir")" "" "보안: 링크 너머 폴더에 아무것도 만들지 않는다"
+assert_eq "$(ls -A "$LKEY")" "" "보안: 링크 너머 그 문서의 자리에 아무것도 만들지 않는다"
 [ -e "$lrb/.claude/spec-distill/sess-rb000001" ] && no "§2-5: 링크 칸 — 세션 폴더를 만들었다" || ok "§2-5: 링크 칸 — 세션 폴더를 만들지 않는다"
 
 finish

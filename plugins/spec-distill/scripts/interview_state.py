@@ -51,15 +51,35 @@ def resume_candidates(seed: str) -> list[Path]:
     return out
 
 
+def physical_cwd_prefix(path: str, cwd: str) -> str:
+    """cwd(또는 그 논리 표기 $PWD) 접두만 물리 경로로 바꾼다 — 그 아래 성분의 링크는 inside_root 가 본다."""
+    real_cwd = os.path.realpath(cwd)
+    prefixes = [os.path.abspath(cwd)]
+    pwd = os.environ.get("PWD", "")
+    if pwd and os.path.isabs(pwd) and os.path.realpath(pwd) == real_cwd:
+        prefixes.append(os.path.abspath(pwd))
+    for lc in prefixes:
+        if path == lc or path.startswith(lc + os.sep):
+            return real_cwd + path[len(lc):]
+    return path
+
+
 def cmd_entry(a) -> int:
     arg = a.arg or ""
     if arg.endswith(".state.md"):
-        fm = frontmatter_scalars(arg)
+        cwd = a.cwd or os.getcwd()
+        abs_arg = physical_cwd_prefix(os.path.abspath(os.path.join(cwd, arg)), cwd)
+        root, _ = worktree_root(cwd)
+        why = inside_root(abs_arg, root)
+        if why:
+            print("interview-state: REJECT {0} ({1})".format(arg, why))
+            return 2
+        fm = frontmatter_scalars(abs_arg)
         have = None if fm is None else fm.get("type")
         if have != "interview-state":
             print("interview-state: REJECT {0} (type: {1})".format(arg, have or "없음"))
             return 2
-        print("interview-state: RESUME {0}".format(os.path.realpath(arg)))
+        print("interview-state: RESUME {0}".format(abs_arg))
         return 0
     leg = legacy_state(a.session, a.cwd)
     if leg is not None:

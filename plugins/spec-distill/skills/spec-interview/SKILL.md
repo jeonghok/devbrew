@@ -68,11 +68,11 @@ Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 �
 
 ### 3. trivia 판정
 
-「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다. 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 그 다섯 패턴에 「풀린 입력」을 대조한다. 해당하면 그 파일의 안내 문면을 `<command>` = `spec-distill:spec-interview` 로 채워 내고, 인터뷰를 시작하지 않습니다.
+「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다(`type: interview-state` 도 같다). 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 그 다섯 패턴에 「풀린 입력」을 대조한다. 해당하면 그 파일의 안내 문면을 `<command>` = `spec-distill:spec-interview` 로 채워 내고, 인터뷰를 시작하지 않습니다.
 
 ### 3.5 seed 아닌 입력에 대한 조언
 
-「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 없으면 한 줄 안내를 낸다. **막지 않는다.**
+「풀린 입력」의 frontmatter 에 `type: interview-seed` · `type: interview-state` 둘 다 없으면 한 줄 안내를 낸다. **막지 않는다.**
 
 > 💡 `/spec-distill:request-framing` 을 먼저 거치면 첫 턴이 정리된 상태로 시작합니다. 지금 그대로 진행해도 됩니다.
 
@@ -102,7 +102,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/state-file.md
 
 ### 4. 본 절차로
 
-아래 절들을 진행한다. 이 skill 과 그 references(`seed-input.md` · `finishing.md`)가 말하는 「풀린 입력」은 2 의 결과다(3 에서 `force` 를 뗐으면 그 나머지). 「풀린 입력」이 비어 있으면 «라운드 규약»의 인자 없는 경로로 시작한다.
+아래 절들을 진행한다. 이 skill 과 그 references(`seed-input.md` · `finishing.md`)가 말하는 「풀린 입력」은 2 의 결과다(3 에서 `force` 를 뗐으면 그 나머지 · 3.6 판결이 RESUME 이면 그 상태 파일의 `## 풀린 입력` 블록 — `state-file.md`). 「풀린 입력」이 비어 있으면 «라운드 규약»의 인자 없는 경로로 시작한다.
 
 당신은 spec-distill의 인터뷰 stage를 진행 중입니다. 이 stage는 *받아적는* 인터뷰가
 아니라 **강한 문제공간 stage**입니다(Double Diamond 1st diamond — brainstorming 해답공간

@@ -48,6 +48,52 @@ class EntryTest(Base):
         self.assertEqual(rc, 0)
         self.assertEqual(last(out), "interview-state: RESUME %s" % p)
 
+    def _outside(self):
+        import shutil
+        out = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, str(out), True)
+        return out
+
+    def test_resume_refuses_linked_state_file(self):
+        out = self._outside()
+        real = out / "2026-10-15-x-interview.state.md"
+        real.write_text("---\ntype: interview-state\nseed: 없음\n---\n밖\n", encoding="utf-8")
+        link = self.iv / "2026-10-15-x-interview.state.md"
+        os.symlink(str(real), str(link))
+        rc, out_, _ = run("entry", "--arg", str(link), "--session", SID, cwd=self.tmp)
+        self.assertEqual(rc, 2)
+        self.assertTrue(last(out_).startswith("interview-state: REJECT %s (" % link), last(out_))
+
+    def test_resume_refuses_linked_interview_dir(self):
+        import shutil
+        out = self._outside()
+        (out / "2026-10-15-x-interview.state.md").write_text(
+            "---\ntype: interview-state\nseed: 없음\n---\n밖\n", encoding="utf-8")
+        shutil.rmtree(str(self.iv))
+        os.symlink(str(out), str(self.iv))
+        arg = self.iv / "2026-10-15-x-interview.state.md"
+        rc, out_, _ = run("entry", "--arg", str(arg), "--session", SID, cwd=self.tmp)
+        self.assertEqual(rc, 2)
+        self.assertTrue(last(out_).startswith("interview-state: REJECT "), last(out_))
+
+    def test_resume_refuses_state_file_outside_worktree(self):
+        out = self._outside()
+        p = out / "2026-10-15-x-interview.state.md"
+        p.write_text("---\ntype: interview-state\nseed: 없음\n---\n밖\n", encoding="utf-8")
+        rc, out_, _ = run("entry", "--arg", str(p), "--session", SID, cwd=self.tmp)
+        self.assertEqual(rc, 2)
+        self.assertTrue(last(out_).startswith("interview-state: REJECT "), last(out_))
+
+    def test_resume_through_linked_cwd_is_allowed(self):
+        """양성 대조 — cwd 를 링크로 들어왔을 때(논리 경로 인자) 이어 간다. 출력은 물리 cwd 접두의 절대경로."""
+        p = self.put("2026-10-15-t-brief-interview.state.md", "interview-state", "seed: 없음\n")
+        lk = self._outside() / "lk"
+        os.symlink(str(self.tmp), str(lk))
+        arg = lk / p.relative_to(self.tmp)
+        rc, out_, _ = run("entry", "--arg", str(arg), "--session", SID, cwd=str(lk), env_extra={"PWD": str(lk)})
+        self.assertEqual(rc, 0, out_)
+        self.assertEqual(last(out_), "interview-state: RESUME %s" % p)
+
     def test_reject_state_named_other_kind(self):
         p = self.put("2026-10-15-t-interview.state.md", "interview-seed")
         rc, out, _ = run("entry", "--arg", str(p), "--session", SID, cwd=self.tmp)

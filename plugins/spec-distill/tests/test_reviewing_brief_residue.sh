@@ -542,8 +542,8 @@ GATE_BLK_E="$SCRATCH/gate-e.sh"; { echo 'set -euo pipefail'; cat "$GATE_BLK"; } 
   || no "H 추출: degrade-append 또는 진입 게이트 블록이 비었거나 문법이 깨졌다 — 아래 H 셀은 무의미하다"
 alone() {   # alone <sid> <script> <플러그인 루트> [env…] — 앞 블록 없이 새 셸에서 그 블록 하나만
   local sid="$1" script="$2" pr="$3"; shift 3
-  mkdir -p "$SCRATCH/$sid"
-  ( cd "$SCRATCH/$sid" && env -i PATH="$BASE" HOME="$SCRATCH/$sid" PYTHONDONTWRITEBYTECODE=1 \
+  mkdir -p "$SCRATCH/$sid/tmp"
+  ( cd "$SCRATCH/$sid" && env -i PATH="$BASE" HOME="$SCRATCH/$sid" TMPDIR="$SCRATCH/$sid/tmp" PYTHONDONTWRITEBYTECODE=1 \
       CLAUDE_PLUGIN_ROOT="$pr" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" "$@" bash "$script" ) >/dev/null 2>"$SCRATCH/$sid.alone.err"
 }
 
@@ -625,6 +625,7 @@ cp "$DOC_B" "$DOC_M3"; cp "$AUD_B" "$AUD_M3"
 printf -- '---\ntype: interview-state\nseed: 없음\nsession_id: rb58apnd\n---\n\nbody\n' > "$SF_M3"
 alone rb58apnd "$INPUT" "$RPR" PAYLOAD="$DOC_M3" AUDIT="$AUD_M3"
 FB_M3="$(where rb58apnd "$DOC_M3")/brief-degrade-fallback.txt"
+mkdir -p "${FB_M3%/*}"   # 원장 자리는 원장 열기 펜스가 만든다 — 머리는 만들지 않는다
 fill() { sed -e 's/<a>/pipeline/g' -e 's/<b>/all/g' -e 's/<c>/skipped/g' -e "s/<r>/$1/g" "$APPEND_BLK" > "$2"; }
 fill probe-land-q1 "$SCRATCH/append-1.sh"; fill probe-fallback-q2 "$SCRATCH/append-2.sh"
 if grep -q '^brief_review_degradations:' "$SF_M3"; then
