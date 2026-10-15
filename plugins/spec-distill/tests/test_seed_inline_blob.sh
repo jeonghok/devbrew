@@ -5,7 +5,7 @@
 # 소비자는 request-framing/SKILL.md 의 「### 번들」 블록이고, 그 블록이 만든 두 번들을 탐지
 # 리뷰어 · codex 러너(detect)와 재비판자(recritic)가 나눠 읽는다.
 #
-# 재는 것: 재료 다섯의 실림과 순서 · seed frontmatter 제거 · 재료별 부재 exit 2 · 절 부재의
+# 재는 것: 재료 여섯의 실림과 순서 · seed frontmatter 제거 · 재료별 부재 exit 2 · 절 부재의
 # 소리 · **재비판 번들에 `## 6` 의 판정 이력 줄이 0건**(AC11) · 두 변이(갈래를 지우면 AC11 이 RED,
 # frontmatter 제거를 지우면 누출 단언이 RED) · 비신뢰 `## 1` 안의 임의 `## ` 줄이
 # 절을 자르지 않는가(truncation) · 같은 audit 제목이 두 번 나오면 조립을 거절하는가(hijacking,
@@ -64,7 +64,7 @@ printf '# CLAUDE.md\nCLAUDE_MD_MARKER 테스트용 규칙.\n' > "$TMP/CLAUDE.md"
 
 run() { python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/CLAUDE.md" "$@" 2>"$TMP/err.txt"; }
 
-# ── detect — 다섯 재료, 순서대로 ─────────────────────────────────────────────
+# ── detect — 여섯 재료, 순서대로 ─────────────────────────────────────────────
 out="$(run)"; rc=$?
 assert_eq "$rc" "0" "detect: exit 0"
 prev=0; order_ok=1
