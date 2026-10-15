@@ -268,5 +268,23 @@ class Failed(unittest.TestCase):
         self.assertTrue(cp.first_line(r).startswith("로드맵 상태 — 블록 0개"))
 
 
+class CodeStamp(unittest.TestCase):
+    def test_stamp_covers_roadmap_logic_files(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            for name in cp.CODE_STAMP_FILES:
+                Path(d, name).write_text("x", encoding="utf-8")
+            old = cp.SCRIPTS
+            cp.SCRIPTS = Path(d)
+            try:
+                for edited in ("roadmap_model.py", "check_bundle_coverage.py"):
+                    self.assertIn(edited, cp.CODE_STAMP_FILES)
+                    before = cp.code_stamp()
+                    Path(d, edited).write_text("changed-longer", encoding="utf-8")
+                    self.assertNotEqual(before, cp.code_stamp(), edited)
+            finally:
+                cp.SCRIPTS = old
+
+
 if __name__ == "__main__":
     unittest.main()

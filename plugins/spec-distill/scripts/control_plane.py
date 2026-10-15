@@ -482,10 +482,13 @@ def cache_key(repo: Repo, main, mode, targets, stamps):
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
 
+CODE_STAMP_FILES = ("roadmap_status.py", "roadmap_model.py", "check_bundle_coverage.py", "control_plane.py")
+
+
 def code_stamp() -> str:
     """상태 계산 · 표시 스크립트의 크기와 수정 시각 — 플러그인이 바뀌면 옛 결과를 쓰지 않는다."""
     out = []
-    for name in ("roadmap_status.py", "control_plane.py"):
+    for name in CODE_STAMP_FILES:
         try:
             st = os.stat(str(SCRIPTS / name))
             out.append("%s:%d:%d" % (name, st.st_size, st.st_mtime_ns))
