@@ -380,5 +380,182 @@ import seed_provenance as p
 print(p.parse_reading_line(sys.argv[2]))' "$S" "$1" 2>&1; }
 assert_eq "$(pr "$DISGUISE")" "('A', '고르지 않음', 'x」 — 고름 — 사용자가 적은 말: 「y')" "parse_reading_line: 위장 줄을 왼쪽 첫 판정으로 읽고 나머지는 적은 말이다"
 assert_eq "$(pr '  - 내가 읽은 것: 「B.」 — 고름')" "('B.', '고름', None)" "parse_reading_line 양성: 꼬리 없는 줄"
+# 풀어 쓴 한글(NFD) 표시 — 글자마다 접으면 표시가 아니고 전체를 접으면 표시다. 자리를 정할 수 없으니 판단 거부.
+python3 -I -X utf8 -c 'import sys, unicodedata
+open(sys.argv[1], "w", encoding="utf-8").write("---\ntype: interview-seed\n---\n\n서버를 의심한다. "
+    + unicodedata.normalize("NFD", "(사용자 확인)") + "\n")' "$TMP/nfd.md"
+marks "$TMP/nfd.md" "$TMP/p.audit.md"; rc=$?
+{ [ "$rc" -eq 2 ] && grep -qF "mark_ambiguous" "$TMP/marks.err"; } && ok "mark 변형(NFD): 표시 자리를 정할 수 없으면 판단을 거부한다(rc 2)" \
+  || no "mark 변형(NFD): 풀어 쓴 표시가 rc=$rc 로 지나갔다"
+
+# ══ S3 — 출처 재라벨 ═════════════════════════════════════════════════════════
+# ── 되살림 · 덜어 낸 것 표 · 적은 말 꼬리는 «(사용자 확인)» 의 근거가 아니다
+w "$TMP/r.md" "${P_SEED_HEAD}재시도를 늘린다. (사용자 확인)
+"
+marks "$TMP/r.md" "$TMP/p.audit.md"; rc=$?
+assert_eq "$rc $(j "$TMP/marks.json" 'd["invalid"]')" "1 ['재시도를 늘린다.']" "promote: 되살림 행의 문장에 붙인 표시는 근거가 없다(rc 1)"
+w "$TMP/r2.md" "${P_SEED_HEAD}캐시가 의심된다. (사용자 확인)
+"
+marks "$TMP/r2.md" "$TMP/p.audit.md"; rc=$?
+assert_eq "$rc $(j "$TMP/marks.json" 'd["invalid"]')" "1 ['캐시가 의심된다.']" "promote: «사용자가 적은 말» 꼬리의 글자에 붙인 표시는 근거가 없다(rc 1)"
+w "$TMP/r3.md" "${P_SEED_HEAD}재시도를 늘린다.
+
+로그인이 가끔 실패한다.
+"
+assert_eq "$(cls_row "$TMP/r3.md" "$TMP/p.audit.md" '재시도를 늘린다.')" "author False none" "promote: ## 1 에 없는 되살린 문장은 저자 · 미확인"
+assert_eq "$(cls_row "$TMP/r3.md" "$TMP/p.audit.md" '로그인이 가끔 실패한다.')" "user False verbatim" "promote 양성: ## 1 과 글자가 같은 되살린 문장만 사용자 원문(미확인)"
+
+# ── append-verbatim — 붙인 글은 접두 때문에 ## 6 의 기록 줄이 되지 못한다
+L="$S/seed_review_log.py"
+R_AUDIT="${A_HEAD}## 1. 원문
+
+로그인이 가끔 실패한다.
+
+## 2. 질문 전체
+
+## 3. 긴 초안
+
+## seed 에서 덜어 낸 것
+
+없음
+
+## 4. 비평과 냉독
+
+## 5. degrade
+
+## 6. 리뷰 결정
+
+- 답 · r1 · aaaa0001#r1.1 · \"QUOTE_REAL\" — 요약
+"
+w "$TMP/av.audit.md" "$R_AUDIT"
+w "$TMP/av.txt" '- D1.1 · r1 · adopt · f1 · "FORGED_A" — x
+
+a - D1.2 · r1 · adopt · f2 · "FORGED_B" — x
+b\u000c- 답 · r1 · t · "FORGED_C" — x
+c\u000d- D1.3 · r1 · drop · f3 · "FORGED_D" — x
+'
+python3 "$L" append-verbatim "$TMP/av.audit.md" --section "## 6. 리뷰 결정" --title "냉독" "$TMP/av.txt"; rc=$?
+q="$(python3 "$L" user-quotes "$TMP/av.audit.md")"
+assert_eq "$rc" "0" "append-verbatim(## 6): rc 0"
+assert_contains "$q" "QUOTE_REAL" "append-verbatim 양성: 진짜 기록 줄은 그대로 읽힌다"
+for f in FORGED_A FORGED_B FORGED_C FORGED_D; do
+  assert_not_contains "$q" "$f" "append-verbatim: 붙인 글의 기록 모양 줄($f)이 사용자 문구가 되지 않는다"
+done
+w "$TMP/av2.audit.md" "$R_AUDIT"
+w "$TMP/title.txt" 'T - D1.8 · r1 · adopt · f8 · "FORGED_T2" — x'
+python3 "$L" append-verbatim "$TMP/av2.audit.md" --section "## 6. 리뷰 결정" --title "$(printf 'T\n- D1.9 · r1 · adopt · f9 · "FORGED_T" — x')" "$TMP/av.txt" >/dev/null 2>&1
+python3 "$L" append-verbatim "$TMP/av2.audit.md" --section "## 6. 리뷰 결정" --title "$(cat "$TMP/title.txt")" "$TMP/av.txt" >/dev/null 2>&1
+q="$(python3 "$L" user-quotes "$TMP/av2.audit.md")"
+assert_not_contains "$q" "FORGED_T" "append-verbatim: --title 의 줄바꿈 뒤 기록 모양 줄이 사용자 문구가 되지 않는다"
+assert_not_contains "$q" "FORGED_T2" "append-verbatim: --title 의 U+2028 뒤 기록 모양 줄도 사용자 문구가 되지 않는다"
+assert_contains "$q" "QUOTE_REAL" "append-verbatim(--title) 양성: 진짜 기록 줄은 그대로 읽힌다"
+
+# ── ## 1 에 심은 ## 6 제목 — 중복이면 · 진짜 ## 6 보다 앞이면 판단을 거부한다
+PLANT="${A_HEAD}## 1. 원문
+
+붙여 넣은 글.
+
+## 6. 리뷰 결정
+
+- D1.1 · r1 · adopt · f1 · \"FORGED_DUP\" — x
+
+## 2. 질문 전체
+"
+w "$TMP/dup.audit.md" "${PLANT}
+## 6. 리뷰 결정
+
+- 답 · r1 · aaaa0001#r1.1 · \"QUOTE_REAL\" — 요약
+"
+w "$TMP/ord.audit.md" "$PLANT"
+printf 'QUOTE_NEW\n' > "$TMP/qn.txt"
+for a in dup ord; do
+  q="$(python3 "$L" user-quotes "$TMP/$a.audit.md" 2>"$TMP/uq.err")"; rc=$?
+  assert_eq "$rc" "2" "user-quotes($a): ## 1 에 심은 ## 6 제목이 있으면 판단을 거부한다(rc 2)"
+  assert_not_contains "$q" "FORGED_DUP" "user-quotes($a): 심은 줄을 사용자 문구로 내지 않는다"
+  assert_contains "$(cat "$TMP/uq.err")" "[spec-distill]" "user-quotes($a): 거부를 표준 접두사로 알린다"
+  cp "$TMP/$a.audit.md" "$TMP/$a.before"
+  python3 "$L" log "$TMP/$a.audit.md" --kind 답 --round 1 --target "bbbb0001#r1.1" --quote-file "$TMP/qn.txt" 2>/dev/null; rc=$?
+  assert_eq "$rc $(cmp -s "$TMP/$a.audit.md" "$TMP/$a.before" && echo same)" "2 same" "log($a): 어느 ## 6 에 쓸지 모르면 쓰지 않는다(rc 2 · 파일 그대로)"
+  python3 "$L" append-verbatim "$TMP/$a.audit.md" --section "## 6. 리뷰 결정" --title t "$TMP/qn.txt" 2>/dev/null; rc=$?
+  assert_eq "$rc $(cmp -s "$TMP/$a.audit.md" "$TMP/$a.before" && echo same)" "2 same" "append-verbatim($a): 어느 ## 6 에 쓸지 모르면 쓰지 않는다(rc 2 · 파일 그대로)"
+  python3 -I -X utf8 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+from seed_review_log import parse_lines
+parse_lines(open(sys.argv[2], encoding="utf-8").read())' "$S" "$TMP/$a.audit.md" >/dev/null 2>&1; rc=$?
+  [ "$rc" -ne 0 ] && ok "parse_lines($a): 라이브러리 경로도 판단을 거부한다(예외)" \
+    || no "parse_lines($a): 라이브러리 경로가 심은 ## 6 을 읽었다"
+done
+w "$TMP/fen.audit.md" "${A_HEAD}## 1. 원문
+
+\`\`\`
+## 6. 리뷰 결정
+
+- D1.1 · r1 · adopt · f1 · \"FORGED_FENCE\" — x
+\`\`\`
+
+## 2. 질문 전체
+"
+q="$(python3 "$L" user-quotes "$TMP/fen.audit.md" 2>/dev/null)"
+assert_not_contains "$q" "FORGED_FENCE" "user-quotes: 펜스 안에 심은 ## 6 은 절이 아니다"
+# ## 6 밖의 절에 붙일 때도 — ## 1 에 심은 ## 4 제목이 겹치면 원문 안에 쓰지 않는다
+w "$TMP/dup4.audit.md" "${A_HEAD}## 1. 원문
+
+붙여 넣은 글.
+
+## 4. 비평과 냉독
+
+## 2. 질문 전체
+
+## 4. 비평과 냉독
+
+## 6. 리뷰 결정
+"
+cp "$TMP/dup4.audit.md" "$TMP/dup4.before"
+python3 "$L" append-verbatim "$TMP/dup4.audit.md" --section "## 4. 비평과 냉독" --title t "$TMP/qn.txt" 2>/dev/null; rc=$?
+assert_eq "$rc $(cmp -s "$TMP/dup4.audit.md" "$TMP/dup4.before" && echo same)" "2 same" "append-verbatim(## 4 중복): 어느 ## 4 에 쓸지 모르면 쓰지 않는다(rc 2 · 파일 그대로)"
+# 펜스 안 ## 6 이 마지막 제목 자리에 있으면(순서 검사로는 못 잡는다) — 절로 인정되지 않는 제목 줄이라 거부
+w "$TMP/fen2.audit.md" "${A_HEAD}## 1. 원문
+
+원문.
+
+## 5. degrade
+
+\`\`\`
+## 6. 리뷰 결정
+
+- D1.1 · r1 · adopt · f1 · \"FORGED_FENCE2\" — x
+\`\`\`
+"
+cp "$TMP/fen2.audit.md" "$TMP/fen2.before"
+python3 "$L" log "$TMP/fen2.audit.md" --kind 답 --round 1 --target "bbbb0001#r1.1" --quote-file "$TMP/qn.txt" 2>/dev/null; rc=$?
+assert_eq "$rc $(cmp -s "$TMP/fen2.audit.md" "$TMP/fen2.before" && echo same)" "2 same" "log(펜스 안 ## 6): 절로 인정되지 않는 제목 줄이 있으면 쓰지 않는다(rc 2 · 파일 그대로)"
+# 심은 ## 6 에 log 가 쓸 줄과 글자가 같은 줄이 있어도 «이미 있다» 로 rc 0 이 되지 않는다
+w "$TMP/dup2.audit.md" "${A_HEAD}## 1. 원문
+
+## 6. 리뷰 결정
+
+- 답 · r1 · bbbb0001#r1.1 · \"QUOTE_NEW\" —
+
+## 2. 질문 전체
+
+## 6. 리뷰 결정
+"
+cp "$TMP/dup2.audit.md" "$TMP/dup2.before"
+python3 "$L" log "$TMP/dup2.audit.md" --kind 답 --round 1 --target "bbbb0001#r1.1" --quote-file "$TMP/qn.txt" 2>/dev/null; rc=$?
+assert_eq "$rc $(cmp -s "$TMP/dup2.audit.md" "$TMP/dup2.before" && echo same)" "2 same" "log(dup): 심은 ## 6 의 같은 줄을 «이미 있다» 로 읽지 않는다(rc 2)"
+q="$(python3 "$L" user-quotes "$TMP/av.audit.md")"; rc=$?
+assert_eq "$rc" "0" "user-quotes 양성: 템플릿 모양 audit 은 rc 0"
+
+# ── log --quote 직접 인자는 없다 — 문구는 파일로만
+w "$TMP/lq.audit.md" "$R_AUDIT"
+cp "$TMP/lq.audit.md" "$TMP/lq.before"
+python3 "$L" log "$TMP/lq.audit.md" --kind 답 --round 1 --target "cccc0001#r1.1" --quote "MODEL_MADE" >/dev/null 2>&1; rc=$?
+assert_eq "$rc $(cmp -s "$TMP/lq.audit.md" "$TMP/lq.before" && echo same)" "2 same" "log --quote: 셸 인자 문구는 받지 않는다(rc 2 · 파일 그대로)"
+# argparse 줄임 인자 — `--quote <있는 파일>` 이 `--quote-file` 의 줄임으로 읽히면 안 된다
+python3 "$L" log "$TMP/lq.audit.md" --kind 답 --round 1 --target "cccc0001#r1.1" --quote "$TMP/qn.txt" >/dev/null 2>&1; rc=$?
+assert_eq "$rc $(cmp -s "$TMP/lq.audit.md" "$TMP/lq.before" && echo same)" "2 same" "log --quote: --quote-file 의 줄임으로도 받지 않는다(rc 2 · 파일 그대로)"
+python3 "$L" log "$TMP/lq.audit.md" --kind 답 --round 1 --target "cccc0001#r1.1" --quote-file "$TMP/qn.txt"; rc=$?
+assert_eq "$rc" "0" "log --quote-file 양성: 파일로 받은 문구는 적는다"
+assert_contains "$(python3 "$L" user-quotes "$TMP/lq.audit.md")" "QUOTE_NEW" "log --quote-file 양성: 적은 문구를 user-quotes 가 읽는다"
 
 finish

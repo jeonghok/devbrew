@@ -92,7 +92,8 @@ assert_eq "$(chk '{"dropped": ["bbbb0001#r1.1"]}' "$TMP/no6.md")" "1" "check-dro
 # 되돌리는 길 — 사용자에게 다시 물어 받은 문구를 `거부` 줄로 적으면 통과한다(설계 D18 의
 # 「항목 / 거부 / 사용자 문구」 기록).
 cp "$AUD" "$TMP/fix.audit.md"
-python3 "$L" log "$TMP/fix.audit.md" --kind 거부 --round 2 --target "cccc0001#r1.1" --quote "QUOTE_REFUSE 그 지적은 반영하지 않는다" --note "다시 물어 받은 문구" >/dev/null
+printf 'QUOTE_REFUSE 그 지적은 반영하지 않는다\n' > "$TMP/refuse.txt"
+python3 "$L" log "$TMP/fix.audit.md" --kind 거부 --round 2 --target "cccc0001#r1.1" --quote-file "$TMP/refuse.txt" --note "다시 물어 받은 문구" >/dev/null
 assert_eq "$(chk '{"dropped": ["cccc0001#r1.1"]}' "$TMP/fix.audit.md")" "0" "check-drops: 문구가 빈 drop 도 사용자 문구로 쓴 거부 줄이 있으면 통과한다"
 # UTF-8 이 아닌 audit — 못 읽는 것은 위반(rc 1)이 아니라 입력 오류(rc 2)다.
 printf '## 6. 리뷰 결정\n\n- \377\376 깨진 줄\n' > "$TMP/bad.audit.md"
@@ -112,13 +113,14 @@ assert_contains "$(cat "$TMP/cd.out")" "duplicate_heading" "check-drops: 사유 
 # ── log — finding 없는 처분 한 줄 ─────────────────────────────────────────────
 cp "$TPL" "$TMP/t.audit.md"
 n_h="$(grep -c '^## ' "$TMP/t.audit.md")"
-python3 "$L" log "$TMP/t.audit.md" --kind 편집 --round 3 --target "덩어리 2 · 되돌린다" --quote 'say "hi"' --note "5행"; rc=$?
+printf 'say "hi"\n' > "$TMP/hi.txt"
+python3 "$L" log "$TMP/t.audit.md" --kind 편집 --round 3 --target "덩어리 2 · 되돌린다" --quote-file "$TMP/hi.txt" --note "5행"; rc=$?
 assert_eq "$rc" "0" "log rc 0"
 last6="$(awk '/^## 6\. 리뷰 결정/{f=1; next} /^## /{f=0} f' "$TMP/t.audit.md" | grep -v '^$' | tail -1)"
 assert_eq "$last6" "- 편집 · r3 · 덩어리 2 · 되돌린다 · \"say 'hi'\" — 5행" "log: ## 6 끝에 정해진 모양으로 한 줄(큰따옴표는 홑따옴표로)"
 assert_contains "$(python3 "$L" user-quotes "$TMP/t.audit.md")" "say 'hi'" "log 로 쓴 줄을 user-quotes 가 읽는다"
 assert_eq "$(grep -c '^## ' "$TMP/t.audit.md")" "$n_h" "log: 절 수가 그대로다"
-python3 "$L" log "$TMP/t.audit.md" --kind 기타 --round 1 --target x --quote y >/dev/null 2>&1; rc=$?
+python3 "$L" log "$TMP/t.audit.md" --kind 기타 --round 1 --target x --quote-file "$TMP/hi.txt" >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "log: 모르는 kind 는 rc 2"
 
 # ── log — 문구는 파일로 · 한 줄에 한 기록 · 빈 문구는 적지 않는다 ─────────────
@@ -195,7 +197,7 @@ assert_not_contains "$(cat "$TMP/scope.err")" "이미 있다" "절 범위: ## 1 
 python3 "$L" log "$TMP/plant.audit.md" --kind 거부 --round 1 --target x --quote-file "$TMP/nope.txt" >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "log: 문구 파일이 없으면 rc 2"
 python3 "$L" log "$TMP/plant.audit.md" --kind 거부 --round 1 --target x --quote a --quote-file "$TMP/q.txt" >/dev/null 2>&1; rc=$?
-assert_eq "$rc" "2" "log: --quote 와 --quote-file 은 함께 쓰지 않는다"
+assert_eq "$rc" "2" "log: --quote 직접 인자는 없다 — 문구 파일과 함께 줘도 받지 않는다"
 
 # ── one-line — 엔진 --reason 처럼 인자로만 받는 자리에 넘길 한 줄 ─────────────
 printf '첫 줄\n\n  둘째 줄  \n' > "$TMP/ol.txt"

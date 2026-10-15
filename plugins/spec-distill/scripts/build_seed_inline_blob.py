@@ -43,7 +43,7 @@ _SCRIPTS_DIR = str(pathlib.Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 import section6  # noqa: E402
-from seed_review_log import duplicate_headings, section_body, user_quotes  # noqa: E402
+from seed_review_log import AuditAmbiguous, duplicate_headings, section_body, user_quotes  # noqa: E402
 
 # 리뷰어에게 비신뢰 verbatim 으로 알릴 audit 자리 — seed 프로필 `## 처분 안내` 가 이 셋을 이름으로
 # 가리킨다(shared/tests/test_docreview_profiles.sh 가 이 튜플에서 도출해 대조한다). assemble() 은
@@ -180,7 +180,13 @@ def main() -> int:
         print(f"[spec-distill] 경고: {paths['audit_file']} 에 `{CUT_TABLE_SECTION}` 절이 없다 — 「(없음)」으로 조립한다",
               file=sys.stderr)
 
-    sys.stdout.write(assemble(seed_text, audit_text, claude_md_text, args.consumer))
+    try:
+        blob = assemble(seed_text, audit_text, claude_md_text, args.consumer)
+    except AuditAmbiguous as e:  # `## 6` 제목이 비신뢰 원문 안에 심긴 경우 — 사용자 결정 문구를 뽑지 않는다
+        print(f"[spec-distill] {paths['audit_file']} 의 절 경계를 하나로 정할 수 없다({e}). 번들을 조립하지 않는다.",
+              file=sys.stderr)
+        return 2
+    sys.stdout.write(blob)
     return 0
 
 

@@ -214,7 +214,8 @@ assert_contains "$sum_out" "round_gate_needed=False" "전제: 이 라운드에 �
 FIX_ID="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); print([f["id"] for f in d["findings"] if f.get("summary")=="CT_FIX"][0])' "$D/fin.json")"
 python3 "$S/docreview_state.py" fix --state-dir "$D" --id "$FIX_ID" --event drop --log-file "$T/s.audit.md" >/dev/null
 assert_contains "$(cold "$T/drops.sh")" "drops_rc=1" "AC12 실행: 문구 없이 누른 drop 이면 검사 펜스가 막는다"
-python3 "$S/seed_review_log.py" log "$T/s.audit.md" --kind 거부 --round 1 --target "$FIX_ID" --quote "CT_USER_REFUSE" --note "다시 물어 받은 문구" >/dev/null
+printf 'CT_USER_REFUSE\n' > "$T/said-refuse.txt"
+python3 "$S/seed_review_log.py" log "$T/s.audit.md" --kind 거부 --round 1 --target "$FIX_ID" --quote-file "$T/said-refuse.txt" --note "다시 물어 받은 문구" >/dev/null
 assert_contains "$(cold "$T/drops.sh")" "drops_rc=0" "AC12 양성 대조: 사용자 문구를 채우면 통과한다"
 
 # ── 답 기록 펜스 — 기록이 먼저, 성공했을 때만 ask 를 닫는다 ─────────────────────
@@ -497,7 +498,8 @@ cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$T/g
 printf -- '- D1.1 · r1 · drop · ffff0001#r1.1 · "" — GC_DROP 요약\n' >> "$T/gcd/a.audit.md"
 out_iii="$(coldx "$T/final_drops.sh" STATE_DIR="$T/gcd/gone" AUDIT_ABS="$T/gcd/a.audit.md")"
 assert_contains "$out_iii" "final_drops_rc=1" "I1 검사 3: 엔진 원장이 걷혀도 audit 에 기록된 문구 없는 drop 은 막는다"
-python3 "$S/seed_review_log.py" log "$T/gcd/a.audit.md" --kind 거부 --round 1 --target "ffff0001#r1.1" --quote "GC_USER_REFUSE" --note "다시 물어 받은 문구" >/dev/null
+printf 'GC_USER_REFUSE\n' > "$T/gcd/said-refuse.txt"
+python3 "$S/seed_review_log.py" log "$T/gcd/a.audit.md" --kind 거부 --round 1 --target "ffff0001#r1.1" --quote-file "$T/gcd/said-refuse.txt" --note "다시 물어 받은 문구" >/dev/null
 assert_contains "$(coldx "$T/final_drops.sh" STATE_DIR="$T/gcd/gone" AUDIT_ABS="$T/gcd/a.audit.md")" "final_drops_rc=0" "I1 검사 3 양성 대조: 같은 항목에 거부 줄을 채우면 통과한다"
 # (iv) UTF-8 이 아닌 audit — 엔진 원장은 있다. drop 검사는 «검사 불가»(rc 2)지 «거부 줄을 적어라» 가 아니다
 printf '## 6. 리뷰 결정\n\n- \377\376 깨진 줄\n' > "$T/bad.audit.md"

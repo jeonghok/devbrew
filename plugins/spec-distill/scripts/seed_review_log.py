@@ -10,11 +10,14 @@ audit `## 6. 리뷰 결정` 의 줄은 두 곳에서 온다. 엔진(`docreview_s
       `## 6` 의 사용자 문구만 — 판정 이력(결정 id · 라운드 · 채택/기각 · finding id · 요약) 없이.
   check-drops     <audit> <gate.json>
       엔진 `gate` 요약의 `dropped`(엔진이 센 fix drop 전부)마다 문구 있는 drop 줄이 있는가.
-  log             <audit> --kind 편집|답|거부 --round N --target T (--quote Q | --quote-file F)
+  log             <audit> --kind 편집|답|거부 --round N --target T --quote-file F
                   [--note S | --note-file F]
       finding 없는 처분(편집 · 답), 또는 문구 없이 눌린 drop 을 사용자에게 다시 물어 채운 기록(거부)
-      한 줄을 `## 6` 에 적는다. 사용자 문구 · 리뷰어 요약은 파일로 받는다(`--quote-file` ·
-      `--note-file`) — 셸 인자에 직접 쓰면 그 안의 백틱 · `$( )` 를 셸이 실행한다. 여러 줄은 한 줄로
+      한 줄을 `## 6` 에 적는다. 사용자 문구는 파일로만 받는다(`--quote-file` — 셸 인자 `--quote` 는
+      없다: 그 자리는 모델이 지어낸 글자를 사용자 문구로 박는 가장 쉬운 길이었다). 리뷰어 요약도 파일로
+      받는다(`--note-file`) — 셸 인자에 직접 쓰면 그 안의 백틱 · `$( )` 를 셸이 실행한다. **한계**: 문구
+      파일도 이 skill(모델)이 Write 로 쓴다 — 파일 경로는 출처를 보증하지 않고, 사용자 답을 그대로
+      옮겼는지는 skill 문면의 절차가 진다. 여러 줄은 한 줄로
       잇는다(`## 6` 은 한 줄에 한 기록이다). 문구가 비면 적지 않는다(rc 2). `답` · `거부` 는 같은 줄이
       이미 있으면 다시 적지 않고 rc 0 이다(대상이 finding id 라 줄이 처분을 유일하게 가리킨다) —
       부분 실패 뒤 펜스를 통째로 다시 돌려도 그 두 기록은 겹치지 않는다. `편집` 은 언제나 덧붙인다:
@@ -27,6 +30,12 @@ audit `## 6. 리뷰 결정` 의 줄은 두 곳에서 온다. 엔진(`docreview_s
   append-verbatim <audit> --section H --title T <file>
       <file> 내용을 인용 블록으로 H 절 끝에 붙인다. 줄 나눔은 읽는 쪽(`section_body`)과 같은
       `str.splitlines` 다 — `\n` 만으로 나누면 다른 줄 구분자 뒤 글자가 인용 표시 없는 줄로 읽힌다.
+      제목 T 도 한 줄로 잇는다 — 줄바꿈이 남으면 둘째 줄이 접두 없는 기록 줄로 `## 6` 에 선다.
+
+`## 6` 을 읽고 쓰는 모든 길(`user-quotes` · `check-drops` · `log` · `append-verbatim` · `parse_lines`)은
+audit 의 템플릿 제목이 겹치거나(`duplicate_headings`) `## 6` 제목이 다른 템플릿 제목보다 앞에 있으면
+(비신뢰 `## 1` 원문 안에 심긴 제목) 판단을 거부한다(rc 2 · `AuditAmbiguous`) — 어느 줄이 진짜 절인지
+이 코드가 골라 버리면 심은 글이 사용자 결정 문구로 읽히거나 기록이 원문 안에 적힌다.
 
 엔진 원장(`docreview-state.md`)의 내부 형식은 읽지 않는다 — 엔진이 CLI 로 내는 `gate` 요약과
 엔진이 audit 에 쓴 줄만 읽는다. 엔진 줄 모양이 바뀌면 tests/test_seed_review_log.sh 의 엔진
@@ -68,6 +77,10 @@ AUDIT_HEADINGS = (
     "## 5. degrade",
     "## 6. 리뷰 결정",
 )
+
+
+class AuditAmbiguous(ValueError):
+    """audit 의 절 경계를 하나로 정할 수 없다 — 판단을 거부한다(rc 2)."""
 
 
 def fold_for_match(s: str) -> str:
@@ -137,7 +150,26 @@ def duplicate_headings(text: str) -> list[tuple[str, list[int]]]:
     return out
 
 
+def require_unambiguous(audit_text: str, heading: str) -> None:
+    """`heading` 절을 읽거나 쓰기 전에 — 템플릿 제목이 겹치거나, `heading` 줄이 있는데 절 시작으로
+    인정되지 않거나(펜스 안 · 코드 블록 · 한 줄 안에 숨음), `## 6` 제목이 다른 템플릿 제목보다 앞에
+    있으면(`## 6` 은 템플릿의 마지막 절이다 — 앞에 있으면 비신뢰 원문 안에 심긴 줄이다) `AuditAmbiguous`."""
+    dups = duplicate_headings(audit_text)
+    if dups:
+        raise AuditAmbiguous("duplicate_heading %s" % ", ".join(h for h, _ in dups))
+    found = heading_lines(audit_text, heading)
+    if found and not any(ok for _, ok in found):
+        raise AuditAmbiguous("heading_not_a_section %s" % heading)
+    if heading == DECISION_HEADING and found:
+        at = found[0][0]
+        lines = audit_text.splitlines()
+        earlier = sorted({ln.strip() for ln in lines[at + 1:] if ln.strip() in AUDIT_HEADINGS})
+        if earlier:
+            raise AuditAmbiguous("heading_order %s 가 %s 보다 앞에 있다" % (heading, ", ".join(earlier)))
+
+
 def parse_lines(audit_text: str) -> list[dict]:
+    require_unambiguous(audit_text, DECISION_HEADING)
     out = []
     for line in (section_body(audit_text, DECISION_HEADING) or "").splitlines():
         m = ENGINE_LINE_RE.match(line)
@@ -177,10 +209,18 @@ def check_drops(audit_text: str, dropped: list[str]) -> list[dict]:
 
 
 def append_under(path: pathlib.Path, heading: str, block: str) -> None:
-    """`heading` 절의 끝(다음 `## ` 앞, 절 끝 빈 줄 앞)에 block 을 붙인다. 절이 없으면 파일 끝에 만든다."""
-    lines = path.read_text(encoding="utf-8").split("\n")
+    """`heading` 절의 끝(다음 `## ` 앞, 절 끝 빈 줄 앞)에 block 을 붙인다. 절이 없으면 파일 끝에 만든다.
+    읽는 쪽과 같은 절을 고른다 — 절 경계가 모호하면(`require_unambiguous`) 쓰지 않고 `AuditAmbiguous`."""
+    text = path.read_text(encoding="utf-8")
+    require_unambiguous(text, heading)
+    lines = text.split("\n")
     block_lines = block.rstrip("\n").split("\n")
-    start = next((i for i, l in enumerate(lines) if l.strip() == heading), None)
+    found = [i for i, ok in heading_lines(text, heading) if ok]
+    start = None
+    if found:
+        # 인정된 시작 줄은 `\n` 줄이라 그 앞의 `\n` 수가 곧 `\n` 나눔의 줄 번호다.
+        offset = sum(len(r) for r in text.splitlines(keepends=True)[:found[0]])
+        start = text.count("\n", 0, offset)
     if start is None:
         text = "\n".join(lines).rstrip("\n") + "\n\n" + heading + "\n\n" + "\n".join(block_lines) + "\n"
         path.write_text(text, encoding="utf-8")
@@ -222,11 +262,11 @@ def main(argv=None) -> int:
     sp = p.add_subparsers(dest="cmd", required=True)
     x = sp.add_parser("user-quotes"); x.add_argument("audit")
     x = sp.add_parser("check-drops"); x.add_argument("audit"); x.add_argument("gate_json")
-    x = sp.add_parser("log"); x.add_argument("audit")
+    # 줄임 인자를 받지 않는다 — 받으면 없앤 `--quote` 가 `--quote-file` 의 줄임으로 살아난다.
+    x = sp.add_parser("log", allow_abbrev=False); x.add_argument("audit")
     x.add_argument("--kind", required=True); x.add_argument("--round", required=True, type=int)
     x.add_argument("--target", required=True)
-    g = x.add_mutually_exclusive_group(required=True)
-    g.add_argument("--quote"); g.add_argument("--quote-file")
+    x.add_argument("--quote-file", required=True)
     g = x.add_mutually_exclusive_group()
     g.add_argument("--note", default=""); g.add_argument("--note-file")
     x = sp.add_parser("one-line"); x.add_argument("file")
@@ -253,10 +293,10 @@ def main(argv=None) -> int:
                 print(json.dumps({"ok": False, "error": "gate_has_no_dropped_list"}, ensure_ascii=False))
                 return 2
             audit_text = _read(a.audit)
-            dups = duplicate_headings(audit_text)
-            if dups:
-                print(json.dumps({"ok": False, "error": "duplicate_heading %s" % ", ".join(h for h, _ in dups)},
-                                 ensure_ascii=False))
+            try:
+                require_unambiguous(audit_text, DECISION_HEADING)
+            except AuditAmbiguous as e:
+                print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
                 return 2
             v = check_drops(audit_text, dropped)
             print(json.dumps({"ok": not v, "dropped": dropped, "violations": v}, ensure_ascii=False))
@@ -265,7 +305,8 @@ def main(argv=None) -> int:
             if a.kind not in HOST_KINDS:
                 print("kind 는 %s 중 하나다: %r" % ("/".join(HOST_KINDS), a.kind), file=sys.stderr)
                 return 2
-            quote = _read(a.quote_file) if a.quote_file else a.quote
+            require_unambiguous(_read(a.audit), DECISION_HEADING)
+            quote = _read(a.quote_file)
             note = _read(a.note_file) if a.note_file else a.note
             if not one_line(quote):
                 print("[spec-distill] 사용자 문구가 비었다(target=%r, file=%r) — 적지 않는다(고른 라벨 또는 "
@@ -297,8 +338,12 @@ def main(argv=None) -> int:
         if a.cmd == "append-verbatim":
             content = _read(a.file).splitlines() or [""]
             quoted = "\n".join(("> " + l) if l.strip() else ">" for l in content)
-            append_under(pathlib.Path(a.audit), a.section, "### %s\n\n%s" % (a.title, quoted))
+            append_under(pathlib.Path(a.audit), a.section, "### %s\n\n%s" % (one_line(a.title), quoted))
             return 0
+    except AuditAmbiguous as e:
+        print("[spec-distill] audit 의 절 경계를 하나로 정할 수 없어 판단하지 않는다(쓰지도 않는다): %s" % e,
+              file=sys.stderr)
+        return 2
     except (OSError, UnicodeError) as e:
         print("[spec-distill] 입력 오류: %s" % e, file=sys.stderr)
         return 2
