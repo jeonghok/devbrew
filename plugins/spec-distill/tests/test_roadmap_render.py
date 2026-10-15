@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""roadmap_render.py — 분해안 표 · 블록 · 묶음 · 로드맵 글과 정답 견본 대조(R4 AC4 · AC6).
+
+Run (리포 루트에서): python3 -m unittest plugins/spec-distill/tests/test_roadmap_render.py
+"""
+from __future__ import annotations
+
+import difflib
+import sys
+import unittest
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO / "plugins" / "spec-distill" / "scripts"))
+import roadmap_render as R  # noqa: E402
+from check_bundle_coverage import frontmatter, section_body, unquote  # noqa: E402
+
+RM_REL = "docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose"
+RM_DIR = REPO / RM_REL
+
+MINI_BRIEF = """---
+type: interview-brief
+user_sourced_items:
+  - id: C4
+    statement: "넷째 확정"
+  - id: D7
+    statement: "일곱째 결정"
+---
+
+# 작은 brief
+
+## 0. 한눈에
+
+**결정 목록**
+
+- OQ3 [열림] — 셋째 질문
+- OQ5 [해결 ⟨S2⟩] — 다섯째 질문
+
+## 1. Goal · Non-goal
+
+- Goal: 작은 목표.
+- Non-goal: 작은 비목표.
+
+## 2. 제약
+
+- ☑ confirmed **D7** — 일곱째 결정 ⟨S2⟩
+- 🗣 provisional **C4** — 넷째 확정 ⟨S1⟩
+
+## 3. Open Questions
+
+- OQ3: 셋째 질문
+
+## 4. External Landscape
+
+- 둘을 한 줄에 «zeta» · «alpha» — [취함] [→ OQ3]
+
+## 5. 기각 · Blind Spots
+
+- 위험 — 사실 | 고칠 자리 — RC9 (p/q.py) [RC9 → OQ3]
+- 기각 — 다른 갈래 — verdict: kept — ST4 — 부착 1/1
+- 위험 — 실패 양식: 조용한 실패 — 근거 사례
+- 위험 — 숨은 가정: 가정 셋 — 근거 약함
+
+## 6. 사용자 원문
+
+- **S1** 🗣 최초 요청:
+  > 작은 요청
+
+## 7. Next Action
+
+다음.
+"""
+MINI_AUDIT = """# audit
+
+## 6. 사용자 원문
+
+- **S2** ☑ 선택 (round 1):
+  > 고른 말
+
+## 7. 원자료
+
+- 없음
+"""
+TABLE = """# state
+
+## 분해안
+
+| 번호 | 이름 | 종류 | 의도 | 범위 | 의존 | 브랜치 | 경로 예약 | 배정 번호 | 받는 것 | 넘기는 것 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| P1 | 먼저 정할 것 | 결정 | 이름을 정한다 | 한다 결정 / 안 한다 코드 | 없음 | 없음 | 없음 | S2 · OQ5 | 없음 | 없음 |
+| A1 | 첫 에픽 | 묶음 | 첫 의도 | 한다 가 / 안 한다 나 | P1 | feature/a1 | x/y.py, z/ | RC9 · C4 · «zeta» · «alpha» · K2 · ST4 · D7 · OQ3 · S1 · K1 | P1 의 이름 | 없음 |
+| B1 | 앞선 브랜치 | 브랜치 docs/specs/b1-design.md | 브랜치를 머지 | 한다 머지 / 안 한다 새 일 | 없음 | feature/b1 | 없음 | S1 · C4 · OQ3 | 없음 | 없음 |
+"""
+
+
+def read(rel):
+    return (REPO / rel).read_text(encoding="utf-8")
+
+
+class Table(unittest.TestCase):
+    def test_parse(self):
+        rows = R.parse_table(TABLE)
+        self.assertEqual([r.id for r in rows], ["P1", "A1", "B1"])
+        self.assertEqual([r.kind for r in rows], [R.KIND_DECISION, R.KIND_BUNDLE, R.KIND_BRANCH])
+        self.assertEqual(rows[2].spec, "docs/specs/b1-design.md")
+        self.assertEqual(rows[1].reserved, "x/y.py, z/")
+        self.assertEqual(rows[1].receives, "P1 의 이름")
+
+    def test_round_trip(self):
+        rows = R.parse_table(TABLE)
+        self.assertEqual(R.parse_table(R.format_table(rows)), rows)
+
+    def test_pipe_in_cell_round_trip(self):
+        rows = R.parse_table(TABLE)
+        rows[1].scope = "한다 a | b / 안 한다 c"
+        text = R.format_table(rows)
+        self.assertIn("a \\| b", text)
+        self.assertEqual(R.parse_table(text)[1].scope, "한다 a | b / 안 한다 c")
+
+    def test_rejects(self):
+        bad = {
+            "머리": TABLE.replace("| 넘기는 것 |", "| 넘김 |", 1),
+            "빈 칸": TABLE.replace("| 첫 의도 |", "|  |"),
+            "종류": TABLE.replace("| 묶음 |", "| 꾸러미 |"),
+            "결정의 브랜치": TABLE.replace("| 결정 | 이름을 정한다 | 한다 결정 / 안 한다 코드 | 없음 | 없음 |",
+                                      "| 결정 | 이름을 정한다 | 한다 결정 / 안 한다 코드 | 없음 | feature/p1 |"),
+            "발화 없는 결정": TABLE.replace("| S2 · OQ5 |", "| OQ5 |"),
+            "번호 문법": TABLE.replace("| S2 · OQ5 |", "| S2 · OQ5~OQ6 |"),
+            "번호 두 번": TABLE.replace("| B1 | 앞선", "| A1 | 앞선"),
+            "절 없음": TABLE.replace("## 분해안", "## 다른 절"),
+        }
+        for name, text in bad.items():
+            with self.subTest(name):
+                with self.assertRaises(R.TableError):
+                    R.parse_table(text)
+
+
+class Render(unittest.TestCase):
+    def setUp(self):
+        self.rows = R.parse_table(TABLE)
+        self.idx = R.index_brief(MINI_BRIEF, MINI_AUDIT)
+
+    def test_blocks(self):
+        self.assertEqual(R.render_block(self.rows[0]), (
+            "### P1 — 먼저 정할 것\n- 의도: 이름을 정한다\n- 범위: 한다 결정 / 안 한다 코드\n- 의존: 없음\n"
+            "- 완료: 결정 기록\n- 묶음: 없음\n- 경로 예약: 없음\n- 발화: S2\n- 항목: OQ5\n"))
+        self.assertEqual(R.render_block(self.rows[1]), (
+            "### A1 — 첫 에픽\n- 의도: 첫 의도\n- 범위: 한다 가 / 안 한다 나\n- 의존: P1\n"
+            "- 브랜치: feature/a1\n- 묶음: A1.md\n- 경로 예약: x/y.py, z/\n"))
+        self.assertEqual(R.render_block(self.rows[2]), (
+            "### B1 — 앞선 브랜치\n- 의도: 브랜치를 머지\n- 범위: 한다 머지 / 안 한다 새 일\n- 의존: 없음\n"
+            "- 브랜치: feature/b1\n- 묶음: 없음\n- 경로 예약: 없음\n- spec: docs/specs/b1-design.md\n"
+            "- 발화: S1\n- 항목: C4 · OQ3\n"))
+
+    def test_bundle(self):
+        got = R.render_bundle(self.rows[1], self.idx, "rm/roadmap.md", "iv/b.md", "iv/b.audit.md")
+        self.assertTrue(got.startswith(
+            "---\ntype: epic-bundle\nepic: A1\nroadmap: rm/roadmap.md\nsource_brief: iv/b.md\n"
+            "ids: [C4, D7, OQ3, RC9, K1, K2, ST4, S1, «alpha», «zeta»]\n---\n\n# A1 — 첫 에픽 · 에픽 묶음\n"))
+        self.assertIn("- 원본 brief: `iv/b.md` (audit `iv/b.audit.md`)\n- 로드맵: `rm/roadmap.md` 의 `### A1` 블록\n", got)
+        self.assertIn("### 이 에픽의 Goal · Non-goal\n\n- 의도: 첫 의도\n- 범위: 한다 가 / 안 한다 나\n\n"
+                      "### 공통 목표\n\n- Goal: 작은 목표.\n- Non-goal: 작은 비목표.\n\n## 2. 제약\n\n"
+                      "- 🗣 provisional **C4** — 넷째 확정 ⟨S1⟩\n- ☑ confirmed **D7** — 일곱째 결정 ⟨S2⟩\n\n", got)
+        self.assertIn("## 3. 열린 질문\n\n- OQ3 [열림] — 셋째 질문\n\n", got)
+        self.assertIn("## 4. 웹 근거\n\n- 둘을 한 줄에 «zeta» · «alpha» — [취함] [→ OQ3]\n\n", got)
+        self.assertIn("## 5. 기각 · 위험\n\n- 위험 — 사실 | 고칠 자리 — RC9 (p/q.py) [RC9 → OQ3]\n"
+                      "- 기각 — 다른 갈래 — verdict: kept — ST4 — 부착 1/1\n"
+                      "- K1 — 위험 — 숨은 가정: 가정 셋 — 근거 약함\n"
+                      "- K2 — 위험 — 실패 양식: 조용한 실패 — 근거 사례\n\n", got)
+        self.assertIn("## 6. 사용자 원문\n\n- **S1** 🗣 최초 요청:\n  > 작은 요청\n\n\n- **S2** ☑ 선택 (round 1):\n"
+                      "  > 고른 말\n\n## 7. 인터페이스\n\n- 받는 것: P1 의 이름\n- 넘기는 것: 없음\n", got)
+        self.assertTrue(got.endswith("- 넘기는 것: 없음\n"))
+
+    def test_bundle_missing_line_refused(self):
+        self.rows[1].ids.append("C99")
+        with self.assertRaises(R.TableError):
+            R.render_bundle(self.rows[1], self.idx, "rm/roadmap.md", "iv/b.md", "iv/b.audit.md")
+
+    def test_roadmap(self):
+        text = R.render_roadmap(R.TEMPLATE.read_text(encoding="utf-8"), self.rows, self.idx, "작은 일",
+                                "iv/b.md", "rm/roadmap.md", "- 2026-10-15 · 처음 로드맵 · 승인 원문 「승인」")
+        self.assertTrue(text.startswith("---\ntype: roadmap\nsource_brief: iv/b.md\n---\n\n# 작은 일 — 로드맵\n"))
+        self.assertIn("## 에픽\n\n### P1 — 먼저 정할 것\n", text)
+        self.assertIn("- 항목: C4 · OQ3\n\n## 지휘 절차\n", text)
+        self.assertIn("`@rm/roadmap.md`", text)
+        self.assertIn("## 재분해 이력\n\n- 2026-10-15 · 처음 로드맵 · 승인 원문 「승인」\n\n## 위험 번호표\n", text)
+        self.assertTrue(text.endswith("- K1 — 위험 — 숨은 가정: 가정 셋 — 근거 약함\n"
+                                      "- K2 — 위험 — 실패 양식: 조용한 실패 — 근거 사례\n"))
+        self.assertNotIn("{{", text)
+        self.assertEqual(section_body(text, "## 에픽"),
+                         "\n" + "\n".join(R.render_block(r) for r in self.rows) + "\n")
+
+    def test_roadmap_without_risks(self):
+        brief = "\n".join(l for l in MINI_BRIEF.splitlines() if not l.startswith("- 위험 — 숨은")
+                          and not l.startswith("- 위험 — 실패")) + "\n"
+        idx = R.index_brief(brief, MINI_AUDIT)
+        self.assertEqual(idx.k_lines, {})
+        text = R.render_roadmap(R.TEMPLATE.read_text(encoding="utf-8"), self.rows, idx, "t", "iv/b.md",
+                                "rm/roadmap.md", "- h")
+        self.assertTrue(text.endswith("오른쪽은 brief 원문 그대로다.\n\n- 없음\n"))
+
+    def test_splice(self):
+        text = R.render_roadmap(R.TEMPLATE.read_text(encoding="utf-8"), self.rows, self.idx, "t", "iv/b.md",
+                                "rm/roadmap.md", "- 첫 줄")
+        blocks = R.epic_block_texts(text)
+        self.assertEqual(list(blocks), ["P1", "A1", "B1"])
+        self.assertEqual(blocks["A1"], R.render_block(self.rows[1]))
+        swapped = R.replace_epics(text, [blocks["B1"], blocks["P1"]])
+        self.assertEqual(list(R.epic_block_texts(swapped)), ["B1", "P1"])
+        self.assertEqual(swapped.split("## 지휘 절차")[1], text.split("## 지휘 절차")[1])
+        added = R.append_history(text, "- 둘째 줄")
+        self.assertIn("## 재분해 이력\n\n- 첫 줄\n- 둘째 줄\n\n## 위험 번호표\n", added)
+
+    def test_extract(self):
+        text = R.render_roadmap(R.TEMPLATE.read_text(encoding="utf-8"), self.rows, self.idx, "t", "iv/b.md",
+                                "rm/roadmap.md", "- h")
+        bundle = R.render_bundle(self.rows[1], self.idx, "rm/roadmap.md", "iv/b.md", "iv/b.audit.md")
+        rows = R.extract_rows(text, lambda name: bundle if name == "A1.md" else None)
+        want = R.parse_table(TABLE)
+        want[1].ids = sorted(set(want[1].ids), key=R.id_sort_key)  # 묶음은 정렬된 ids 를 싣는다
+        want[2].ids = ["S1", "C4", "OQ3"]
+        self.assertEqual(rows, want)
+
+
+class GoldenSample(unittest.TestCase):
+    """AC6 — 이번 로드맵에서 뽑은 표로 만든 묶음 · 블록이 손으로 만든 것과 바이트가 같다."""
+
+    def setUp(self):
+        self.roadmap = (RM_DIR / "roadmap.md").read_text(encoding="utf-8")
+        self.rows = R.extract_rows(
+            self.roadmap,
+            lambda n: (RM_DIR / n).read_text(encoding="utf-8") if (RM_DIR / n).is_file() else None)
+        self.brief_rel = unquote(frontmatter(self.roadmap)["source_brief"])
+        self.audit_rel = self.brief_rel[:-3] + ".audit.md"
+        self.idx = R.index_brief(read(self.brief_rel), read(self.audit_rel))
+
+    def _diff(self, name, want, got):
+        lines = difflib.unified_diff(want.splitlines(True), got.splitlines(True), "손", "생성", n=1)
+        return name + "\n" + "".join(list(lines)[:30])
+
+    def test_kinds_present(self):
+        kinds = {r.id: r.kind for r in self.rows}
+        self.assertEqual(kinds["P1"], R.KIND_BRANCH)
+        self.assertEqual(kinds["P3"], R.KIND_DECISION)
+        self.assertEqual(kinds["R0"], R.KIND_BRANCH)
+        self.assertEqual(sum(1 for k in kinds.values() if k == R.KIND_BUNDLE), 10)
+
+    def test_bundles_byte_equal(self):
+        diffs = []
+        for r in self.rows:
+            if r.kind != R.KIND_BUNDLE:
+                continue
+            want = (RM_DIR / (r.id + ".md")).read_text(encoding="utf-8")
+            got = R.render_bundle(r, self.idx, RM_REL + "/roadmap.md", self.brief_rel, self.audit_rel)
+            if got != want:
+                diffs.append(self._diff(r.id, want, got))
+        self.assertEqual(diffs, [], "\n".join(diffs))
+
+    def test_blocks_byte_equal(self):
+        hand = R.epic_block_texts(self.roadmap)
+        diffs = [self._diff(r.id, hand[r.id], R.render_block(r)) for r in self.rows
+                 if R.render_block(r) != hand[r.id]]
+        self.assertEqual(diffs, [], "\n".join(diffs))
+
+    def test_epics_section_rebuilds(self):
+        self.assertEqual(section_body(self.roadmap, "## 에픽"),
+                         "\n" + "\n".join(R.render_block(r) for r in self.rows) + "\n")
+
+    def test_risk_table(self):
+        hand = [l for l in section_body(self.roadmap, "## 위험 번호표").splitlines() if l.startswith("- K")]
+        self.assertEqual(list(self.idx.k_lines.values()), hand)
+
+    def test_table_round_trip(self):
+        self.assertEqual(R.parse_table(R.format_table(self.rows)), self.rows)
+
+
+if __name__ == "__main__":
+    unittest.main()
