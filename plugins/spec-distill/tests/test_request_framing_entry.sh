@@ -115,11 +115,12 @@ TAG_RE.finditer(body)
 URL_RE.finditer(body)
 body_of(text)
 visible_content(body)'
-assert_eq "$(cs_body_reads "$CS" | sort)" "$cs_want" "AC11: check_seed.py gate() 가 seed 본문을 읽는 자리는 기존 다섯뿐이고 새 검사는 audit 텍스트만 받는다"
+cs_want="$(printf '%s\n' "$cs_want" | LC_ALL=C sort)"  # 로케일 무관 — 양쪽 모두 C 정렬
+assert_eq "$(cs_body_reads "$CS" | LC_ALL=C sort)" "$cs_want" "AC11: check_seed.py gate() 가 seed 본문을 읽는 자리는 기존 다섯뿐이고 새 검사는 audit 텍스트만 받는다"
 # 양성 짝(이빨) — 본문을 읽는 새 검사를 얹은 사본은 집합이 달라진다
 CSX="$(mktemp -d -t sd-csx-XXXXXX)" && [ -d "$CSX" ] && {
   awk '/^    return problems$/{print "    if not re.search(r\"x\", body):"; print "        problems.append(\"x\")"} {print}' "$CS" > "$CSX/check_seed.py"
-  [ "$(cs_body_reads "$CSX/check_seed.py" | sort)" != "$cs_want" ] \
+  [ "$(cs_body_reads "$CSX/check_seed.py" | LC_ALL=C sort)" != "$cs_want" ] \
     && ok "AC11(변이): seed 본문을 읽는 새 검사를 얹으면 락이 RED 가 된다" \
     || no "AC11(변이): 본문 검사를 얹어도 락이 못 잡는다"
   rm -rf "$CSX"
