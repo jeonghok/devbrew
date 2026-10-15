@@ -143,4 +143,7 @@ assert_contains "$INPUT_SEC" "source_interview" "AC11: ## 입력 이 source_inte
 GATE_SEC="$(awk '/^## 게이트$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
 assert_contains "$GATE_SEC" "번호 대조 경고" "AC12: 게이트가 번호 대조 경고 수를 「경고 N개」에 더한다"
 assert_file_grep "$SKILL" '^argument-hint: .*--bundle' "argument-hint 에 --bundle"
+DEG_SEC="$(awk '/^## degrade 채널$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
+assert_contains "$DEG_SEC" "진입 펜스의 \`번호 대조 경고 <N>개\` 의 N 을 여기에 더한다" "AC12: degrade 채널의 N 규칙이 번호 대조 경고를 더한다"
+assert_contains "$DEG_SEC" "번호 대조 경고 N 이 0 이 아니면 셋이 비었어도 「이상 없음」·「경고 없음」은 쓰지 않는다" "AC12: degrade 채널의 「이상 없음」 조건이 번호 대조 경고 0 을 요구한다"
 finish
