@@ -122,6 +122,28 @@ class MigrateTest(Base):
         self.assertEqual(rc, 2)
         self.assertTrue(old.exists())
         self.assertEqual(tgt.read_bytes(), before)
+        self.assertIn("이미 파일이 있다", err)
+
+    def test_migrate_non_utf8_legacy_is_rc3(self):
+        old = self.legacy()
+        old.write_bytes(b"---\n\xff\xfe\n---\n")
+        rc, _, err = run("migrate-legacy", "--session", SID, "--topic", "t", "--date", "2026-10-15", cwd=self.tmp)
+        self.assertEqual(rc, 3)
+        self.assertIn("옮기지 못했다", err)
+        self.assertTrue(old.exists())
+        self.assertFalse((self.iv / "2026-10-15-t-interview.state.md").exists())
+
+    def test_migrate_readonly_dir_is_rc3(self):
+        old = self.legacy()
+        self.iv.chmod(0o500)
+        try:
+            if os.access(str(self.iv), os.W_OK):
+                self.skipTest("권한이 막지 못한다(root)")
+            rc, _, err = run("migrate-legacy", "--session", SID, "--topic", "t", "--date", "2026-10-15", cwd=self.tmp)
+        finally:
+            self.iv.chmod(0o700)
+        self.assertEqual(rc, 3)
+        self.assertTrue(old.exists())
 
     def test_migrate_without_legacy_is_rc1(self):
         rc, _, _ = run("migrate-legacy", "--session", SID, "--topic", "t", cwd=self.tmp)

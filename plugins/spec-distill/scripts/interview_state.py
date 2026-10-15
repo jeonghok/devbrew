@@ -4,6 +4,7 @@
 CLI (판결은 stdout 마지막 줄):
   interview_state.py entry --arg <경로|""> --session <sid> [--cwd <dir>]
   interview_state.py migrate-legacy --session <sid> --topic <kebab> [--seed <경로>] [--date D] [--cwd <dir>]
+    rc: 0 옮김 · 1 옮길 옛 파일 없음 · 2 자리 거부/대상 이미 있음 · 3 읽기/쓰기 실패(옛 파일 그대로) 또는 옛 파일 삭제 실패
   interview_state.py seed-audit-for-session --session <sid> [--cwd <dir>]
 """
 from __future__ import annotations
@@ -93,14 +94,27 @@ def cmd_migrate(a) -> int:
     if path.exists() or path.is_symlink():
         print("[spec-distill] 옮길 자리에 이미 파일이 있다 — {0}. 덮어쓰지 않는다.".format(path), file=sys.stderr)
         return 2
-    text = leg.read_text(encoding="utf-8")
-    head = "type: interview-state\nseed: {0}\n".format(seed_rel(a.seed) if a.seed else "없음")
-    new = "---\n" + head + text[4:] if text.startswith("---\n") else "---\n" + head + "---\n" + text
-    path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name("." + path.name + ".tmp")
-    tmp.write_text(new, encoding="utf-8")
-    os.replace(str(tmp), str(path))
-    leg.unlink()
+    try:
+        text = leg.read_text(encoding="utf-8")
+        head = "type: interview-state\nseed: {0}\n".format(seed_rel(a.seed) if a.seed else "없음")
+        new = "---\n" + head + text[4:] if text.startswith("---\n") else "---\n" + head + "---\n" + text
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(new, encoding="utf-8")
+        os.replace(str(tmp), str(path))
+    except (OSError, UnicodeDecodeError) as e:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        print("[spec-distill] 옛 진행 기록을 옮기지 못했다 — {0}".format(e), file=sys.stderr)
+        return 3
+    try:
+        leg.unlink()
+    except OSError as e:
+        print("[spec-distill] 새 파일은 자리에 놓였다 — {0}. 옛 파일 {1} 은 손으로 지워야 한다 ({2}).".format(
+            path, leg, e), file=sys.stderr)
+        return 3
     print("[spec-distill] 옛 위치의 진행 기록을 docs 로 옮겼다 — {0}".format(path))
     return 0
 
