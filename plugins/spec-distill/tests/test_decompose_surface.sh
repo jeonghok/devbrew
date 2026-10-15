@@ -64,4 +64,23 @@ assert_eq "$n_brief" "1" "나누지 않은 일의 brief 줄은 그대로 하나"
 assert_file_has "$SKILL" "「분해 판단」 단계부터" "SKILL: 종료 뒤 분해 판단을 가리킨다"
 assert_file_has "$TPL" "분해됨 — <로드맵 경로>" "brief 템플릿 §7: 분해 줄"
 
+# ── AC8 — 재분해 참조 ──────────────────────────────────────────────────────
+RED="$SD/references/redecompose.md"
+if [ -f "$RED" ]; then ok "redecompose.md 실재"; else no "redecompose.md 없음"; fi
+RTXT="$(cat "$RED" 2>/dev/null)"
+for lit in '빠짐 · 축소 · 여러 spec' '게이트 ③' '「인터뷰 다시 열기」' '지휘 세션' \
+           'roadmap_write.py" extract' '`## 분해안`' \
+           '| 에픽 | 바뀌는 것 | 옮겨 가는 번호 | 새 의존 | 진행 중인 브랜치 · 설계문서 |' \
+           '"이대로 다시 나눈다"' '"고치기"' '"그만둔다"' \
+           'R<max+1>' '사라지는 번호는 재사용하지 않는다' '머지된 에픽은 건드리지 않는다' '## 미룸' \
+           'roadmap_write.py" update' '재분해 이력' 'feature/roadmap-<요지>' '원래 바이트'; do
+  has "$RTXT" "$lit" "redecompose: $lit"
+done
+
+# ── AC11 — 재결정 규약 한 줄 ────────────────────────────────────────────────
+PG="$SD/references/proceed-gate.md"
+P23="$(win "$PG" '## 재결정 규약 (P23)' '## ')"
+has "$P23" '분해 단위의 변경은 `${CLAUDE_PLUGIN_ROOT}/references/redecompose.md` 로' "proceed-gate: 재결정 규약 절에 분해 단위 한 줄"
+has "$P23" '보고 후 재결정 허용' "proceed-gate: 확정 항목 단위 규약은 그대로"
+
 finish
