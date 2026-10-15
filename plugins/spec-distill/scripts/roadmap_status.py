@@ -39,6 +39,7 @@ NOTICE = ("머지됨 자동 판정은 merge commit 방식에서만 된다 — �
           "로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적는다. 경로 예약 겹침과 다른 에픽이 "
           "예약한 파일의 편집은 경고가 아니라 정보다 — 에픽은 병렬로 가고 충돌은 머지 때 푼다(나중 PR 이 main 을 "
           "merge 하고 스위트를 다시 돌린다).")
+# 경로 예약 겹침 · 위반에서 빼는 공유 파일 — 버전은 머지 직전에 정한다(N6).
 SHARED_BASENAMES = ("plugin.json", "CHANGELOG.md", "README.md")
 TASK_STATUS = {"대기": "pending", "준비": "pending", "설계 중": "in_progress",
                "계획": "in_progress", "머지됨": "completed", "끝남": "completed"}

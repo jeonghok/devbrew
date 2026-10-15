@@ -123,7 +123,6 @@ REQUIRED = {
 FORBIDDEN = {"bundle": ("spec", "발화", "항목", "완료"), "branch": ("완료",),
              "decision": ("브랜치", "spec")}
 RISK_PREFIXES = ("- 위험 — 숨은 가정", "- 위험 — 실패 양식", "- 위험 — 리뷰 참고")
-# 경로 예약 겹침 · 위반에서 빼는 공유 파일 — 버전은 머지 직전에 정한다(N6).
 BLOCK_HEAD_RE = re.compile(r"### ([A-Z][0-9]+[a-z]?) — (\S.*)")
 BLOCK_ID_RE = re.compile(r"[A-Z][0-9]+[a-z]?")
 BUNDLE_NAME_RE = re.compile(r"[A-Za-z0-9_-]+\.md")

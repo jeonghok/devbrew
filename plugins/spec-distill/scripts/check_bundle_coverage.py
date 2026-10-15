@@ -353,12 +353,14 @@ def deferred_rows(spec_text: str) -> list:
         return []
     rows = [l.strip() for l in body.splitlines() if l.strip().startswith("|")]
     if not rows:
-        rest = [l.strip().lstrip("-*").strip() for l in body.splitlines() if l.strip()]
-        if all(r == "없음" for r in rest):
+        rest = [l.strip().lstrip("-*").strip().rstrip(".。!").strip() for l in body.splitlines() if l.strip()]
+        if all(r.startswith("없음") or r.endswith("없음") for r in rest):
             return []
         raise FormatError("`## 미룸` 절에 표가 없다")
     if len(rows) < 2 or len(_cells(rows[0])) != 3:
         raise FormatError("`## 미룸` 표 머리 행이 칸 셋이 아니다")
+    if _cells(rows[0]) != ["항목", "이유", "받는 곳"]:
+        raise FormatError("`## 미룸` 표 머리 행이 항목 · 이유 · 받는 곳 순서가 아니다: %r" % rows[0])
     sep = _cells(rows[1])
     if len(sep) != 3 or not all(SEP_CELL_RE.fullmatch(c) for c in sep):
         raise FormatError("`## 미룸` 표 구분 행이 칸 셋이 아니다")

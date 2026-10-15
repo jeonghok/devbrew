@@ -346,5 +346,23 @@ print(rows)
 print([c.receiver_ok(r, {"R5"}) for r in ("없음", "#12", "R5", "R99", "다음에")])' "$P/di.md")"
 assert_contains "$out" "[('AC2', '다음 에픽에서', '없음'), ('r1.2', '리뷰 후속', '#12')]" "deferred_rows: 받는 곳의 백틱을 벗긴다"
 assert_contains "$out" "[False, True, True, False, False]" "receiver_ok: 없음 · 로드맵에 없는 에픽 · 그 밖 글은 받는 곳이 아니다"
+# 미룸 절 변형(R3 최종 리뷰) — 표 없는 「없음」 표기는 0행, 다른 글은 FormatError, 머리 행 순서 고정
+mkdefer() { printf '# d\n\n## 미룸\n\n%s\n\n## Metadata\n' "$1" > "$P/defer_var.md"; }
+defer_out() { (cd "$S" && python3 -c '
+import sys, check_bundle_coverage as c
+try:
+    print(c.deferred_rows(open(sys.argv[1], encoding="utf-8").read()))
+except c.FormatError as e:
+    print("FormatError:", e)' "$P/defer_var.md"); }
+for v in '없음.' '미룬 것 없음' '없음 — 미룬 것이 없다' '- 없음'; do
+  mkdefer "$v"
+  assert_eq "$(defer_out)" "[]" "deferred_rows: 표 없는 「${v}」는 0행"
+done
+mkdefer '미룬 것: AC2'
+assert_contains "$(defer_out)" "FormatError" "deferred_rows 양성 대조: 표 없는 다른 글은 FormatError"
+mkdefer '| 항목 | 받는 곳 | 이유 |
+|---|---|---|
+| AC2 | R5 | 나중 |'
+assert_contains "$(defer_out)" "항목 · 이유 · 받는 곳 순서가 아니다" "deferred_rows: 머리 행 순서가 다르면 FormatError"
 
 finish
