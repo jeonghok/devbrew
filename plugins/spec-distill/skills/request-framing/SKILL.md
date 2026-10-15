@@ -70,8 +70,8 @@ allowed-tools:
 **방식은 확산 후 압축** — 긴 초안을 먼저 쓰고 **그 다음 깎습니다.** 처음부터 짧게 쓰지
 않습니다. 크게 그린 다음 깎아낸 것이 처음부터 짧게 쓴 것보다 더 많은 것을 고려합니다.
 긴 초안은 `$AUDIT` 의 `## 3. 긴 초안` 절에 남고, **seed 로 나가는 것은 깎은 것뿐**입니다
-(`## 상태` 표에 그 행이 있습니다). 세션 state 에 두지 않는 이유는 TTL-GC 가 기본 24시간에
-그 폴더를 통째로 걷기 때문입니다 — 압축이 무엇을 떨어뜨렸는지는 그보다 오래 남아야 합니다.
+(`## 상태` 표에 그 행이 있습니다). `.claude/spec-distill/` 에 두지 않는 이유는 그 자리가 정리(TTL 기본
+24시간) 대상이기 때문입니다 — 압축이 무엇을 떨어뜨렸는지는 그보다 오래 남아야 합니다.
 
 ### 확정 표시와 «다시 검증할 것»
 
@@ -103,8 +103,8 @@ seed 는 태그를 쓰지 않습니다(`check_seed.py` 가 본문 태그를 금�
 
 이 skill 에 들어온 **첫 행동**이다(빈 요청일 때만 아래 주제 질문 하나가 앞선다) — `## 확산` 1번(audit
 첫 write) **전**에 묻는다. 그래야 audit 이 처음부터 워크트리 안에 쓰이고 «main 에 쓴 audit 을 옮기는»
-절차가 필요 없다. 이름 파일(`interview-basename`)은 세션 디렉토리(main repo 의 state root)에 있어
-cwd 이동과 무관하다.
+절차가 필요 없다. 이름은 audit 의 `session_id` 로 되찾으므로, audit 을 처음 쓰기 전에 워크트리로 옮기면 그
+뒤의 되찾기는 워크트리의 docs 를 본다.
 
 **요청이 비어 있으면 이 질문보다 먼저** 「무엇을 맡기려 하시나요」로 주제부터 묻는다 — 워크트리
 이름(`feature/<kebab-topic>`)도 audit 이름(`## 상태` 의 `TOPIC`)도 요청의 주제에서 나오는데 빈
@@ -197,7 +197,8 @@ HEAD 기준으로 바꾼다.
 
 1. **원문 보존** — 사용자가 준 원문(요청·생각·대화 로그·자료)을 **`$AUDIT` 파일의
    `## 1. 원문` 절**에 그대로 옮겨 적습니다(append-only — 이후 라운드의 원문도 요약하지
-   않고 계속 덧붙입니다). `$AUDIT` 경로와 이 skill 이 **무엇을 만들고 무엇을 만들지
+   않고 계속 덧붙입니다). 처음 쓸 때 템플릿 frontmatter 의 `session_id: <uuid>` 를 `## 상태` 블록의
+   `$sid` 실값으로 적습니다 — 다음 라운드의 이름 되찾기가 그 값을 봅니다. `$AUDIT` 경로와 이 skill 이 **무엇을 만들고 무엇을 만들지
    않는지**는 `## 상태` 한 곳에 있습니다 — 여기서 다시 세지 않습니다. 지금 요약하지 않습니다 —
    압축은 나중 단계이고, 지금 요약하면 압축이 무엇을 떨어뜨렸는지 audit 이 못 남깁니다.
    `## 1. 원문` 이라는 헤딩은 장식이 아닙니다: `build_seed_inline_blob.py` 가 그 절을
@@ -287,12 +288,10 @@ premortem · coverage-mapper 넷이 거기 있는 장치이고, 이 skill 에는
 
 | 만드는 것 | 어디에 | 언제 |
 |---|---|---|
-| audit (`$AUDIT`) | `docs/superpowers/interview/` | `## 확산` 1번부터 — 덧붙이기(예외 둘: `## 1` 의 인용 감싸기 · `## 2` 의 어긋난 풀이 줄 제자리 수정) |
+| audit (`$AUDIT`) | `docs/superpowers/interview/` | `## 확산` 1번부터 — 덧붙이기(예외 둘: `## 1` 의 인용 감싸기 · `## 2` 의 어긋난 풀이 줄 제자리 수정). 첫 write 때 frontmatter `session_id: <sid>` 를 적는다 — 이후 라운드의 이름 되찾기가 그 값을 본다 |
 | 긴 초안 | `$AUDIT` 의 `## 3. 긴 초안` 절 | 압축 **직전** — 깎기 전에 여기 먼저 쓴다 |
 | interview-seed (`$SEED`) | 〃 | 압축 직후 — **게이트 직전 구조 검사보다 먼저** |
-| 두 문서의 이름을 붙드는 `interview-basename` | 아래 `$SEED_DIR` | 아래 블록에서 `TOPIC` 자리표가 실값으로 치환된 실행 — 자리표가 그대로면 만들지 않는다 |
-| 세션 디렉토리 `$SEED_DIR` 자체 | `.claude/spec-distill/<session-id>/` | `sid` 가 실값이고 `mkdir` 이 성공했을 때만 — 실패하면 이름 파일을 아예 만들지 않는다 |
-| 리뷰 엔진 자리 `$STATE_DIR` — 엔진 원장 · 번들 둘(`$BUNDLE` · `$BUNDLE_RC`) · 리뷰어 산출물(`critic.txt` · `recritic.txt` · `$CODEX_YAML`) · 저자 편집 기준 사본(`$SEED_BASE`) | `<state-root>/.docreview/<seed 이름>-<해시>/` | 리뷰 라운드마다 — 경로는 seed 의 절대경로의 순수 함수다 |
+| 리뷰 엔진 자리 `$STATE_DIR` — 엔진 원장 · 번들 둘(`$BUNDLE` · `$BUNDLE_RC`) · 리뷰어 산출물(`critic.txt` · `recritic.txt` · `$CODEX_YAML`) · 저자 편집 기준 사본(`$SEED_BASE`) · 동시 리뷰 표지(`reviewing-by` · `last-session`) | `<state-root>/.docreview/<seed 이름>-<해시>/` | 리뷰 라운드마다 — 경로는 seed 의 절대경로의 순수 함수다 |
 
 **audit 과 seed 는 시점이 다르지만, 둘 다 승인 «전»에 디스크에 있어야 합니다.** audit 은
 확산 첫 항목부터, seed 는 압축 직후입니다 — 게이트 직전의 `check_seed.py` 가 둘 다
@@ -301,62 +300,39 @@ premortem · coverage-mapper 넷이 거기 있는 장치이고, 이 skill 에는
 입니다 — 다음 세션의 첫 턴이 `/spec-distill:spec-interview @<seed 경로>` 로 seed 파일을 가리키는 것이고, 그 턴의 모양은
 `## 확정 — proceed 게이트` 의 「호출 모양」 절이 정합니다.
 
-**만들지 않는 것: `state.local.md`.** degrade 원장은 그 **기존** 파일 안에 살고, 없으면
-없는 채로 갑니다(§`degrade 채널` 의 `no-state-in-phase-0`).
+**만들지 않는 것: 세션 폴더와 그 안의 파일.** `.claude/spec-distill/` 에는 리뷰 원장(`.docreview/`)만 생긴다.
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
-STATE="$ROOT/$sid/state.local.md"
-# 세션 디렉토리 — 이름 파일과 리뷰 엔진 자리가 그 아래 산다. 경로는 **세션의 순수 함수**여야 한다 —
-# 어느 블록이 언제 재도출해도 같은 파일을 가리켜야 하기 때문이다. `mktemp` 은 `$$`(PID) 와 **같은
-# 결함**이다: Bash 도구는 호출마다 새 셸이라 그 값이 소멸하고 **재발견이 불가능**하다.
-# 세션 «디렉토리»는 만들어도 된다 — state.local.md 를 만드는 것과 다른 일이다.
-#
-# **가드가 하나인 것이 요점이다.** `sid` 가 실값이고 `mkdir` 이 성공한 경우에만 이름 파일 경로가
-# 생긴다. `state_path.py` 는 GC 의 세션 이름 필터와 **같은 정규식**을 통과한 값만 stdout 으로
-# 내주므로(안 통과하면 exit 1 + 빈 stdout), 이 한 조건이 «플러그인 네임스페이스 안»과 «TTL-GC
-# 사정거리 안»을 동시에 보장한다. 네임스페이스 밖으로 나가는 fallback 을 두지 않는 이유가 그것이다:
-# `/tmp` 로 새면 두 보장이 함께 깨지고, 그 파일들은 사용자의 원문을 담은 채 아무도 걷지 않는 자리에 남는다.
-SEED_DIR=""
-[ -n "$sid" ] && mkdir -p "$ROOT/$sid" 2>/dev/null && SEED_DIR="$ROOT/$sid"
-NAME_FILE=""
-if [ -n "$SEED_DIR" ]; then
-  NAME_FILE="$SEED_DIR/interview-basename"
-else
-  echo "[spec-distill] 세션 디렉토리를 못 만들었다 (sid='${sid:-}' ROOT='$ROOT') — 이름 파일을 만들지 않는다. 플러그인 네임스페이스 밖에는 쓰지 않기 때문이다. 아래 가드들이 이름을 대고 멈춘다." >&2
-fi
-# 두 산출 문서. 이름은 **첫 라운드에 한 번** 정하고 이후 라운드는 되찾는다 — 그래서
-# 이 블록을 다시 돌리면 같은 두 경로가 나온다. 이름을 기억에서 다시 대는 판본은
-# `mktemp` 과 같은 결함이다: 다음 셸이 같은 값을 다시 만들 수 있어야 한다.
-# `TOPIC` 을 요청의 주제(공백 없는 kebab-case)로 바꿔 쓴다 — 공백이 든 이름은 아래 가드가
-# 거부한다(seed 경로가 한 토큰이어야 `/spec-distill:spec-interview` 가 `@경로` 로 푼다). **바꾸기 전에는 이름을 고정하지
-# 않는다** — 고정해 버리면 자리표가 파일명에 박히고, 그 뒤로는 「이 블록을 다시
-# 돌려라」가 바로 그 박제를 되풀이하는 행동이 된다.
+# 두 산출 문서의 이름. 첫 라운드는 TOPIC 으로 정하고, audit 을 처음 쓸 때 frontmatter `session_id` 에 이 세션 id 를
+# 적는다. 그 뒤로는 그 audit 에서 되찾는다 — 이 블록을 다시 돌리면 같은 두 경로가 나온다.
 TOPIC="<kebab-topic>"
-case "$TOPIC" in
-  ""|*"<"*|*">"*|*/*|*[[:space:]]*) : ;;
-  *) [ -n "$NAME_FILE" ] && { [ -s "$NAME_FILE" ] || printf '%s-%s-interview\n' "$(date +%F)" "$TOPIC" > "$NAME_FILE"; } ;;
-esac
-# 이름이 성하지 않으면 두 경로를 **만들지 않는다.** 반쯤 만들어진 경로
-# (`docs/superpowers/interview/.audit.md`)는 아래 가드들의 `-z` 검사를 통과해 조용히
-# 틀린 파일을 가리킨다 — 시끄럽게 틀리는 것보다 그쪽이 나쁘다. 비워 두면 가드가
-# 이름을 대고 멈춘다.
+IV_NAME=""
+if [ -z "$sid" ]; then
+  echo "[spec-distill] 세션 id 를 얻지 못했다 — 이름을 되찾을 수 없어 두 경로를 만들지 않는다. 아래 가드들이 이름을 대고 멈춘다." >&2
+else
+  f_rc=0; IV_NAME="$(python3 "$SD/scripts/interview_state.py" seed-audit-for-session --session "$sid")" || f_rc=$?
+  if [ "$f_rc" -eq 1 ]; then
+    case "$TOPIC" in
+      ""|*"<"*|*">"*|*/*|*[[:space:]]*) IV_NAME="" ;;
+      *) IV_NAME="$(date +%F)-${TOPIC}-interview" ;;
+    esac
+  elif [ "$f_rc" -ne 0 ]; then
+    IV_NAME=""
+    echo "[spec-distill] 이 세션의 seed audit 이 둘 이상이다(위 경로들) — 이름을 고르지 않고 멈춘다." >&2
+  fi
+fi
 AUDIT=""
 SEED=""
-IV_NAME=""
-[ -n "$NAME_FILE" ] && IV_NAME="$(head -n 1 "$NAME_FILE" 2>/dev/null)"
 case "$IV_NAME" in
   ""|*/*|*"<"*|*">"*|*[[:space:]]*)
-    echo "[spec-distill] 인터뷰 문서 이름을 못 구했다 (IV_NAME='$IV_NAME' NAME_FILE='$NAME_FILE'). NAME_FILE 이 비었으면 원인은 위 세션 디렉토리이고 그쪽 advisory 를 보라. 비어 있지 않으면 이 블록의 TOPIC 을 요청 주제(공백 없는 kebab-case)로 바꿔 다시 돌려라. 자리표가 이미 이름에 박혔으면 rm -f '$NAME_FILE' 로 지운 뒤 다시 돌려라 — 그 파일이 이름의 유일한 출처이므로 지우면 되돌아간다." >&2 ;;
+    echo "[spec-distill] 인터뷰 문서 이름을 못 구했다 (IV_NAME='$IV_NAME'). 첫 라운드면 이 블록의 TOPIC 을 요청 주제(공백 없는 kebab-case)로 바꿔 다시 돌려라 — audit 을 쓴 뒤에는 그 audit 의 session_id 로 되찾는다." >&2 ;;
   *)
     AUDIT="docs/superpowers/interview/$IV_NAME.audit.md"
     SEED="docs/superpowers/interview/$IV_NAME.md" ;;
 esac
-# 리뷰 엔진 자리 — 전부 seed 의 **절대경로**의 순수 함수다(`state-dir-for`). 엔진은 상대
-# `--doc` 을 거부한다(`doc_not_absolute`). seed 이름이 서기 전이면 전부 빈 값이고, 아래 펜스들이
-# 그 사실을 이름으로 대고 멈춘다.
 SEED_ABS=""; AUDIT_ABS=""; STATE_DIR=""
 if [ -n "$SEED" ]; then
   SEED_ABS="$(pwd)/$SEED"; AUDIT_ABS="$(pwd)/$AUDIT"
@@ -367,16 +343,12 @@ BUNDLE="${STATE_DIR:+$STATE_DIR/seed-bundle.md}"                 # 탐지 · cod
 BUNDLE_RC="${STATE_DIR:+$STATE_DIR/seed-bundle-recritic.md}"     # 재비판자가 읽는 번들 — 판정 이력 없음
 CODEX_YAML="${STATE_DIR:+$STATE_DIR/docreview-codex.yaml}"       # 4단계 산출물
 SEED_BASE="${STATE_DIR:+$STATE_DIR/seed-baseline.md}"            # 저자 편집 공시의 기준 사본
-if [ -n "$sid" ] && [ -f "$STATE" ]; then
-  python3 "$SD/scripts/brief_review_state.py" init "$STATE" --ledger-key framing_degradations; ledger_rc=$?
-else
-  ledger_rc=1
-fi
+ledger_rc=1   # Phase 0 에는 상태 파일이 없다 — degrade 는 no-state-in-phase-0 경로로 간다
 ```
 
-**이 블록이 경로의 유일한 도출 지점입니다.** `$SD`·`$sid`·`$ROOT`·`$STATE`·`$SEED_DIR`·`$AUDIT`·`$SEED`·
+**이 블록이 경로의 유일한 도출 지점입니다.** `$SD`·`$sid`·`$ROOT`·`$AUDIT`·`$SEED`·
 `$SEED_ABS`·`$AUDIT_ABS`·`$STATE_DIR`·`$PROFILE`·`$BUNDLE`·`$BUNDLE_RC`·`$CODEX_YAML`·`$SEED_BASE` 는 전부
-환경과 `$SEED_DIR` 의 순수 함수이므로, 셸이 바뀌었으면 **이 블록을 다시 돌려** 같은 값을 얻습니다. 아래 어느
+환경과 audit 의 `session_id` 의 순수 함수이므로, 셸이 바뀌었으면 **이 블록을 다시 돌려** 같은 값을 얻습니다. 아래 어느
 블록도 이 값들을 새로 만들지 않습니다 — `mktemp` 으로 만들면 다음 `Bash` 호출이 그 파일을 다시 찾지 못합니다.
 
 **실행 모양 — 아래 펜스들은 이 블록과 «같은 `Bash` 호출» 안에서 돕니다.** 이 블록을 그 펜스 **앞에 그대로
@@ -386,12 +358,7 @@ fi
 「먼저 돌려라」가 아니라 「앞에 이어 붙여라」라고 쓰는 이유가 그것입니다 — 별개 호출로 다시 돌리면 같은 빈
 상태가 그대로 재생산됩니다.
 
-`--ledger-key framing_degradations` 는 기본 원장 줄(`brief_review_degradations`)에 **더해** 이 원장 줄을 심습니다(치환이
-아닙니다 — brief 파이프라인의 원장은 그대로 남습니다). 이 호출이 없으면 뒤의
-`degrade-append` 가 「라인 부재」로 죽습니다 — 닫힌 열거에 이름이 있다는 것과 그 원장에
-쓸 수 있다는 것은 다른 사실입니다.
-
-`ledger_rc` 가 0 이 아니면 원장 없이 진행합니다. 그 처리는 `## degrade 채널` 에 있습니다.
+`ledger_rc` 는 늘 1 입니다 — degrade 원장 없이 진행하고, 그 처리는 `## degrade 채널` 에 있습니다.
 
 ## 검증
 
@@ -406,7 +373,8 @@ seed 는 공유 문서 리뷰 엔진으로 리뷰합니다. 한 라운드의 절
 ### seed 를 쓴 직후 — 한 번, 첫 라운드 앞
 
 압축이 seed 를 쓴 직후 두 가지를 합니다. 확인 질문에서 고른 풀이가 **글자 그대로** 남은 문장에만
-«(사용자 확인)» 이 남도록 근거 없는 표시를 떼고, 저자 편집 공시의 기준 사본을 뜹니다.
+«(사용자 확인)» 이 남도록 근거 없는 표시를 떼고, 저자 편집 공시의 기준 사본을 뜹니다. 기준 사본은 원장 자리에
+쓰이므로 `## 상태` 블록 → `### 표지와 원장 열기` 펜스 → 이 펜스를 한 Bash 호출로 이어 붙여 돕니다.
 
 ```bash
 if [ -z "${SEED_ABS:-}" ] || [ -z "${SEED_BASE:-}" ]; then
@@ -431,6 +399,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 
 그 파일의 여덟 단계를 **한 턴 안에서** 돕니다. 절차를 여기 복사하지 않습니다. 이 자리의 슬롯:
 
+- 매 라운드 선결 앞에(번들이 먼저면 번들 앞에) 아래 `### 표지와 원장 열기` 펜스를 돈다
 - `--state-dir` = `$STATE_DIR` · `--profile` = `$PROFILE` · `--doc` = `$SEED_ABS`
 - 탐지의 `<document>` = `$BUNDLE` 의 **내용** · codex 러너의 `<doc>` = `$BUNDLE` · 재비판의 `<document>` = `$BUNDLE_RC` 의 **내용**
 - 탐지 출력은 `$STATE_DIR/critic.txt`, 재비판 출력은 `$STATE_DIR/recritic.txt` 로 요약 · 전사 없이 저장한다
@@ -443,6 +412,77 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 
 라운드 수의 상한은 절차서의 `## 상한` 한 줄이 정본입니다 — 이 skill 은 그 숫자를 다시 적지 않습니다. 상한
 뒤의 라운드는 사용자가 승인 게이트에서 자기 문구로 열어야만 돕니다.
+
+### 표지와 원장 열기 — 라운드마다 선결 앞
+
+매 라운드 그 라운드의 첫 원장 펜스(번들 · 선결) 앞에, 그리고 `### seed 를 쓴 직후` 펜스 앞에 이 펜스를 돕니다 —
+`## 상태` 블록을 앞에 이어 붙여 같은 Bash 호출로 돌리고, 펜스 본문은 그 블록의 `$sid` · `$ROOT` · `$STATE_DIR` 을
+씁니다. 마지막 줄이 판결이고, `HELD` 가 아니면 펜스가 rc 3 으로 끝나 같은 호출의 뒤 명령이 돌지 않습니다. 원장
+자리가 레포 밖이거나 레포 꼭대기 아래에서 링크(`.claude` · `spec-distill` · `.docreview` 포함)를 지나면 만들지
+않습니다. 원장 정리는 이 세션이 이미 표지를 쥔 다음 라운드가 아니면 원장 자리를 만들기 전에 한 번 돕니다.
+`### 게이트 직전` 의 계수 기록 펜스가 표지를 푼 뒤에 라운드를 다시 열거나 처분 · 답 기록 · `check-intent` 를
+하려면 그보다 먼저 이 펜스를 다시 돕니다.
+
+<!-- ledger-open:begin -->
+```bash
+lo="ERROR"
+if [ -z "$sid" ]; then
+  echo "[spec-distill] 세션 id 를 얻지 못해 동시 리뷰 표지를 잡을 수 없다 — 이 라운드를 시작하지 않는다(degrade 채널에 남긴다)."
+  lo="NO_SESSION"
+elif [ -z "$STATE_DIR" ] || ! python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR"; then
+  echo "[spec-distill] 원장 자리를 열지 못했다(STATE_DIR='${STATE_DIR:-}' — 비었거나 레포 밖이거나 링크를 지난다, 위 사유) — 이 라운드를 시작하지 않는다(degrade 채널에 남긴다)."
+  lo="NO_DIR"
+else
+  own=""; [ -f "$STATE_DIR/reviewing-by" ] && [ ! -L "$STATE_DIR/reviewing-by" ] && own="$(head -n 1 "$STATE_DIR/reviewing-by" 2>/dev/null)"
+  [ "$own" = "$sid" ] || python3 "$SD/scripts/ledger_sweep.py" --root "$ROOT" || echo "[spec-distill] 원장 정리가 실패했다 — 리뷰는 계속한다."
+  if ! mkdir -p "$STATE_DIR" 2>/dev/null; then
+    echo "[spec-distill] 원장 자리를 만들지 못했다(STATE_DIR='${STATE_DIR}') — 이 라운드를 시작하지 않는다(degrade 채널에 남긴다)."
+    lo="NO_DIR"
+  else
+    python3 "$SD/scripts/ledger_marker.py" resume-note --dir "$STATE_DIR" --session "$sid"
+    m_rc=0; m_out="$(python3 "$SD/scripts/ledger_marker.py" acquire --dir "$STATE_DIR" --session "$sid")" || m_rc=$?
+    if [ "$m_rc" -eq 0 ]; then
+      lo="HELD"
+    elif [ "$m_rc" -eq 3 ]; then
+      case "$m_out" in ""|*[!A-Za-z0-9_-]*) m_who="(알 수 없는 표지)" ;; *) m_who="$m_out" ;; esac
+      echo "[spec-distill] 다른 세션(${m_who})이 이 seed 를 리뷰하고 있다 — ${STATE_DIR}"
+      lo="OTHER:${m_who}"
+    else
+      echo "[spec-distill] 동시 리뷰 표지를 잡지 못했다(rc ${m_rc}) — 이 라운드를 시작하지 않는다(degrade 채널에 남긴다)."
+      lo="ERROR"
+    fi
+  fi
+fi
+echo "ledger-open: ${lo}"
+[ "$lo" = HELD ] || exit 3
+```
+<!-- ledger-open:end -->
+
+| 마지막 줄 | 동작 |
+|---|---|
+| `ledger-open: HELD` | 그 라운드(또는 seed 직후 펜스)로 간다 |
+| `ledger-open: OTHER:<sid>` · `OTHER:(알 수 없는 표지)` | 멈추고 `AskUserQuestion` 하나 — 「그만둠 (권장)」/「이어 씀 — 표지를 내 것으로 바꾼다」. 이어 씀이면 아래 넘겨받기 펜스를 돈 뒤 이 펜스를 다시 돈다. 그만둠이면 이 라운드를 시작하지 않고 `## degrade 채널` 의 첫 행(reason = 판결)을 남긴다(남의 표지라 풀지 않는다) |
+| `ledger-open: NO_SESSION` · `NO_DIR` · `ERROR` | 그 `[spec-distill]` 줄을 보이고 이 라운드를 시작하지 않는다 — `## degrade 채널` 의 첫 행(reason = 판결)을 남긴다 |
+
+넘겨받기 펜스 — 사용자가 「이어 씀」을 고른 뒤에만, `## 상태` 블록을 앞에 이어 붙여 돈다.
+
+<!-- ledger-takeover:begin -->
+```bash
+[ -n "$sid" ] && [ -n "$STATE_DIR" ] && python3 "$SD/scripts/ledger_marker.py" takeover --dir "$STATE_DIR" --session "$sid"
+```
+<!-- ledger-takeover:end -->
+
+**원장 쓰기 전 확인.** 엔진 원장에 쓰는 명령 — `docreview_state.py` 의 `init` · `begin-round` · `record-findings` ·
+`decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice`, `docreview_route.py` 의 `prepare-recritic` · `finalize`,
+`docreview_anchor.py check-intent` — 은 전부 같은 Bash 호출 안에서 아래 한 줄 **다음에만** 부른다(이 skill 의
+처분 · 답 기록 · 계수 기록 펜스는 이 줄을 이미 담고 있다). rc 가 0 이 아니면 그 명령을 부르지 않고 사유를 보이고
+멈춘다 — 다른 세션이 표지를 넘겨받았거나 표지가 없다.
+
+<!-- ledger-guard:begin -->
+```bash
+g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
+```
+<!-- ledger-guard:end -->
 
 ### 번들 — 라운드마다, 1단계 앞에서
 
@@ -595,7 +635,7 @@ Agent({
 ### 산출물 기록 — 7단계 뒤, 게이트 앞
 
 ```bash
-# 엔진 산출물 셋을 판정 없이 audit `## 4. 비평과 냉독` 에 옮긴다 — 엔진 자리는 세션 정리로 사라지고,
+# 엔진 산출물 셋을 판정 없이 audit `## 4. 비평과 냉독` 에 옮긴다 — 엔진 자리는 원장 정리로 사라질 수 있고,
 # 사람이 나중에 되짚을 자리는 audit 이다. 없는 산출물은 그 사실을 적는다(침묵과 0 은 다르다).
 rnd="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" | python3 -I -X utf8 -c 'import json,sys; print(json.load(sys.stdin)["round"])')" || rnd="?"
 for pair in "탐지 (doc-critic)|critic.txt" "codex|docreview-codex.yaml" "재비판 (doc-recritic)|recritic.txt"; do
@@ -656,6 +696,7 @@ done
 자리표)도 이 자리에서는 `### 절차` 의 꼴로 바꿔 쓴다. 여러 줄 문구는 한 줄로 이어진다(audit `## 6` 은 한 줄에 한 기록이다).
 
 ```bash
+g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
 # 처분 — 엔진에 사용자 문구를 싣는 결정 하나. <id> 의 문구는 먼저 Write 도구로 "$STATE_DIR/said-<id>.txt" 에 쓴다.
 # EVENT 는 이 처분 하나: drop(fix 적용하지 않음) · adopt · reject · hold(decide). 문구 파일이 없거나 비면 누르지 않는다.
 EVENT="<drop | adopt | reject | hold>"
@@ -672,6 +713,7 @@ echo "q_rc=$q_rc"
 ```
 
 ```bash
+g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
 # 답 기록 — ask_open 항목 하나. <n> · <id> 는 게이트의 값이다. 문구 · 요약은 먼저 Write 도구로
 # "$STATE_DIR/said-<id>.txt" · "$STATE_DIR/note-<id>.txt" 에 쓴다. 통째로 다시 돌려도 같은 기록 줄은 다시 적지 않는다.
 log_rc=0; ask_rc=0
@@ -861,25 +903,23 @@ python3 "$SD/scripts/seed_review_log.py" append-verbatim "$AUDIT_ABS" --section 
 
 ## degrade 채널
 
-degrade 는 **채널 다섯**으로 나갑니다 — 엔진의 셋과 이 skill 의 둘.
+degrade 는 **채널 넷**으로 나갑니다 — 엔진의 셋과 이 skill 의 하나.
 
 - 엔진의 셋 — `fin.json` 의 `advisory[]`(codex 부재 · 재비판 부재 · 처분 회계의 degrade 사유) ·
   `fin.json` 의 `blocks`(critic 사망 · 항목 소실 · 셀 수 없음일 때만 참) · `gate --render` 의 **첫 줄**
   (그 라운드의 상태와 경고(렌더 첫 줄) — 「미검증」 라운드면 그 공시가 맨 앞이다).
   `advisory[]` 원문은 하나하나가 이 첫 줄의 경고 줄 중 하나에 대응한다(같은 사실을 두 출처가 말한 원문은 한 줄로 합친다).
   게이트 앞 글에는 이 첫 줄을 그대로 쓰고 `advisory[]` 원문을 다시 늘어놓지 않는다. 질문의 「경고 N개」에서 엔진 몫은
-  렌더 첫 줄의 N 이고, 이 skill 의 두 채널의 경고 줄은 그 위에 더한다. 렌더 첫 줄의 끝 문구(이상 없음 · 경고 없음 · 경고 K개)는 문서 리뷰 엔진 몫의 결론이다. 다른 채널에 경고가 있으면 첫 줄 아래에 「그 밖의 경고 M개:」 줄로 쓰고, 전체 결론은 질문의 상태 줄이 정한다(엔진 K + 그 밖의 M).
-- 이 skill 의 둘 — state 의 `framing_degradations` 원장(**`ledger_rc` 가 0 일 때만 존재**) ·
-  proceed 게이트 앞 글(**항상**). 원장이 없거나 개별 기록이 실패하면 게이트 앞 글이 유일한 채널이고,
-  그때는 「원장에 기록하지 못했다」는 사실 자체를 한 줄로 함께 싣습니다.
+  렌더 첫 줄의 N 이고, 이 skill 채널의 경고 줄은 그 위에 더한다. 렌더 첫 줄의 끝 문구(이상 없음 · 경고 없음 · 경고 K개)는 문서 리뷰 엔진 몫의 결론이다. 다른 채널에 경고가 있으면 첫 줄 아래에 「그 밖의 경고 M개:」 줄로 쓰고, 전체 결론은 질문의 상태 줄이 정한다(엔진 K + 그 밖의 M).
+- 이 skill 의 하나 — proceed 게이트 앞 글(**항상**). Phase 0 에는 상태 파일이 없어(`ledger_rc` 가 늘 1) 상태 파일의
+  `framing_degradations` 원장이 구조적으로 부재하므로 이것이 유일한 채널이고, 「원장에 기록하지 못했다」는 사실(`no-state-in-phase-0`)을 한 줄로 함께 싣습니다.
 
-엔진 밖의 사건은 이 skill 이 원장에 적습니다. 기록은 `brief_review_state.py degrade-append "$STATE"
---ledger-key framing_degradations --component <a> --axis <b> --status <c> --reason "<r>"` 이고 매 호출의
-종료 코드를 그 자리에서 잡습니다. **위에서부터 먼저 맞는 행**을 씁니다:
+엔진 밖의 사건은 이 skill 이 게이트 앞 글에 한 줄씩(component · axis · status · reason) 적습니다. **위에서부터 먼저
+맞는 행**을 씁니다:
 
-| 관측 | `--component` · `--axis` | `--status` | `--reason` |
+| 관측 | component · axis | status | reason |
 |---|---|---|---|
-| `$STATE_DIR` 이 비었다 · 엔진 `init` 이 rc ≠ 0 | `pipeline` · `all` | `unavailable` | 비어 있던 변수, 또는 `init` 이 낸 사유 |
+| 원장 열기가 `HELD` 가 아니다 · `$STATE_DIR` 이 비었다 · 엔진 `init` 이 rc ≠ 0 | `pipeline` · `all` | `unavailable` | 원장 열기의 판결, 비어 있던 변수, 또는 `init` 이 낸 사유 |
 | `bundle_rc` 가 0 이 아니다 | `pipeline` · `suppression` | `unavailable` | 번들 조립 실패 — 조립기 stderr 마지막 줄 |
 | `prof_rc` 가 0 이 아니다 | `critic` · `suppression` | `unavailable` | seed 프로필 판독 불가(cat rc) |
 | `marks_rc` 가 2 다(표시 검사 불가) | `pipeline` · `suppression` | `degraded` | `seed_provenance.py marks` 의 stderr — 표시가 떼어지지 않았을 수 있다 |
@@ -893,18 +933,13 @@ codex 부재 · 재비판 부재는 이 표에 없습니다 — 엔진이 `advis
 **기록이 없는 것과 degrade 가 없는 것은 다른 사실입니다.** 게이트 앞 글에서 둘을 구별해 씁니다 — 원장이
 없는 세션에 「이상 없음」·「경고 없음」이라고 쓰지 않습니다.
 
-**남은 갭 — `no-state-in-phase-0`.** `request-framing` 은 인터뷰 이전이라 state 파일이 아예 없는 세션이
-**정상**입니다. 그 세션에서 원장은 구조적으로 부재하고 채널 2 만 남습니다. state 파일을 새로 만드는
-설계(어디에 · 어떤 frontmatter 로 · 누가 지우나)는 이 skill 의 범위 밖이므로, 그 갭을 이 이름으로 부르고
-게이트 앞 글이 그 사실을 말합니다.
+**남은 갭 — `no-state-in-phase-0`.** `request-framing` 은 인터뷰 이전이라 상태 파일이 없습니다 — 그래서
+degrade 원장은 구조적으로 부재하고 게이트 앞 글만 남습니다. 그 갭을 이 이름으로 부르고 게이트 앞 글이 그
+사실을 말합니다.
 
-**딸린 상호작용 하나** — `## 상태` 가 `$SEED_DIR` 과 그 아래 리뷰 엔진 자리 `$STATE_DIR` 을 만들므로, 원래
-세션 디렉토리가 없었을 세션에도 디렉토리와 파일이 생깁니다. 그 파일들은 `gc_common.py` 의 TTL-GC 관할에
-들어갑니다 — **관할 밖에 놓이는 분기가 없기 때문**입니다: 그 블록의 단일 가드가 `sid` 실값과 `mkdir`
-성공을 함께 요구하고, `state_path.py` 가 GC 의 세션 이름 필터와 같은 정규식을 통과한 값만 내주므로, **이
-파일들이 존재한다는 것 자체가 GC 가 걷는 자리에 있다는 뜻**입니다. 폴더 나이는 **폴더 자신과 그 아래 모든
-항목의 최신 mtime**(링크는 따라가지 않는다)이고, TTL(기본 24시간, env override)을 넘기면 폴더가 통째로
-걷힙니다 — 리뷰 원장도 함께입니다. 리뷰 도중 그렇게 걷히면 엔진 호출이 `state_missing` 으로 죽고, 저자 편집
+**원장 자리의 수명** — 리뷰 엔진 자리 `$STATE_DIR` 은 세션 폴더가 아니라 `.docreview/` 아래 seed 마다 하나이고,
+세션이 끝나도 남습니다. 원장 열기 펜스가 부르는 정리(`ledger_sweep.py`)는 seed 가 더는 없고 TTL(기본 24시간)
+동안 쓰기가 없는 원장만 걷습니다. 원장이 사라지면 엔진 호출이 `state_missing` 으로 죽고, 저자 편집
 공시는 기준 사본 부재(`### 저자 편집 공시` 의 rc 3 경로)로 떨어집니다. 사용자 결정은 audit `## 6. 리뷰 결정`
 에 남아 있어 잃지 않고, 확정 직전 drop 검사는 엔진 원장 없이 그 기록으로 대조합니다(`### 게이트 직전` 검사 3).
 
@@ -954,7 +989,7 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 |---|---|
 | ① | `/compact` 후 `/spec-distill:spec-interview @<seed 경로>` (권장, 커밋 후) — 두 줄 명령을 노출하고 **턴 종료** |
 | ② | `/new` 후 `/spec-distill:spec-interview @<seed 경로>` (커밋 후) — 두 줄 명령을 노출하고 **턴 종료** |
-| ③ | 수정 필요 — 압축을 다시 깎고 이 게이트로 돌아옵니다 |
+| ③ | 수정 필요 — 압축을 다시 깎고 이 게이트로 돌아옵니다. 리뷰 라운드를 다시 열면 그 전에 원장 열기(`ledger-open`)를 먼저 다시 돕니다(계수 기록 펜스가 표지를 풀었다) |
 | ④ | 멈춤 — seed 와 audit 을 남기고 종료 |
 
 노출 모양(① 의 예 — ② 는 첫 줄이 `/new` 입니다):
@@ -970,12 +1005,11 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 **handoff 직전 커밋(①/② 에서만).** 워크트리 안이면 ①/② 를 고른 직후 handoff 직전
 커밋을 한 번 합니다 — 명령 노출(①/②) 바로 앞입니다.
 ③(수정)·④(멈춤)에서는 커밋하지 않습니다 — 수정마다 커밋이 늘고 멈춤에도 커밋이 남는
-것을 막기 위해서입니다. 단순 명령 셋, 메시지는 파일로:
+것을 막기 위해서입니다. 단순 명령 둘(`<topic>` 은 공백 없는 kebab-case 주제):
 
 ```bash
-printf 'docs(interview): <topic> interview seed + audit\n' > "$SEED_DIR/commit-msg.txt"
 git add "$AUDIT" "$SEED"
-git commit -q -F "$SEED_DIR/commit-msg.txt"
+git commit -q -m 'docs(interview): <topic> interview seed + audit'
 ```
 
 워크트리가 아니면(거절·부재·스위치) 커밋하지 않고 «미커밋 — 현재 디렉토리» 를 게이트 앞 글에
@@ -990,17 +1024,31 @@ git commit -q -F "$SEED_DIR/commit-msg.txt"
 **계수 기록 — 검사 1 앞에서, 막지 않습니다.** 엔진의 라운드별 계수 줄(`docreview 계수 — …`)을 audit `## 6. 리뷰
 결정` 에 적습니다. seed 프로필은 advisory 축이 없어 참고 목록이 늘 0건이라 보이지 않고 계수만 남깁니다. 같은
 (리뷰 정체, 라운드) 줄은 다시 적지 않으므로 ③ 뒤에 다시 돌아도 됩니다. 「## 상태」 블록을 앞에 이어 붙여 돌립니다.
+이 펜스가 이 리뷰의 마지막 원장 쓰기입니다 — 표지를 잡아(이미 잡았으면 그대로) 쓰고 끝에서 풉니다. 그 뒤에 라운드를
+다시 열거나 처분 · 답 기록 · `check-intent` 를 하려면 그보다 먼저 원장 열기(`ledger-open`)를 다시 돕니다.
 
+<!-- framing-count:begin -->
 ```bash
-cnt_rc=0
-if [ -n "${STATE_DIR:-}" ] && [ -f "$STATE_DIR/docreview-state.md" ]; then
-  python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --log-file "$AUDIT_ABS" >/dev/null || cnt_rc=$?
-else
-  cnt_rc=2
+lm_rc=0
+if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ] && [ -n "${sid:-}" ]; then
+  python3 "$SD/scripts/ledger_marker.py" acquire --dir "$STATE_DIR" --session "$sid" >/dev/null || lm_rc=$?
 fi
-[ "$cnt_rc" -eq 0 ] || echo "[spec-distill] 리뷰 계수 줄을 audit ## 6 에 적지 못했다(cnt_rc=$cnt_rc — 엔진 원장이 없거나 advice 가 실패했다). 게이트 앞 글에 싣는다 — 막지 않는다." >&2
+cnt_rc=0
+if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
+  cnt_rc=2
+elif [ "$lm_rc" -ne 0 ]; then
+  [ "$lm_rc" -eq 3 ] && why="표지가 다른 세션 것이다" || why="표지를 잡지 못했다"
+  echo "[spec-distill] 리뷰 계수 기록 건너뜀 — 이 원장의 ${why}(rc ${lm_rc}). audit ## 6 에 적지 않는다." >&2
+  cnt_rc=$lm_rc
+else
+  g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
+  python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --log-file "$AUDIT_ABS" >/dev/null || cnt_rc=$?
+fi
+[ "$cnt_rc" -eq 0 ] || echo "[spec-distill] 리뷰 계수 줄을 audit ## 6 에 적지 못했다(cnt_rc=$cnt_rc — 엔진 원장이 없거나 표지가 남의 것이거나 advice 가 실패했다). 게이트 앞 글에 싣는다 — 막지 않는다." >&2
 echo "cnt_rc=$cnt_rc"
+[ -z "${STATE_DIR:-}" ] || [ ! -d "$STATE_DIR" ] || [ -z "${sid:-}" ] || python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$sid"
 ```
+<!-- framing-count:end -->
 
 **검사 1 — 표시** — 떼지 않고 검사만 합니다. 근거 없는 «(사용자 확인)» 이 있으면(`marks_rc` 1) 막힙니다 —
 펜스의 stdout(`invalid` 목록)이 그 문장을 그대로 대므로 그 목록을 게이트 앞 글에 옮겨 싣습니다. 떼는
@@ -1019,7 +1067,7 @@ echo "cnt_rc=$cnt_rc"
 <고름 | 고르지 않음>`)은 이 사유로 막지 않습니다.
 
 ```bash
-# 검사 2 · 3 이 엔진 자리에 파일을 쓴다 — 세션 정리로 디렉토리가 사라졌으면 다시 만든다.
+# 검사 2 · 3 이 엔진 자리에 파일을 쓴다 — 원장 정리로 디렉토리가 사라졌으면 다시 만든다.
 if [ -n "${STATE_DIR:-}" ]; then mkdir -p "$STATE_DIR"; else echo "[spec-distill] 리뷰 엔진 자리 없음(STATE_DIR 빈 값) — 「## 상태」 블록을 이 펜스 앞에 이어 붙여라. 검사 2 · 3 은 «검사 불가»로 막힌다." >&2; fi
 marks_rc=0
 python3 "$SD/scripts/seed_provenance.py" marks "$SEED_ABS" "$AUDIT_ABS" || marks_rc=$?
@@ -1059,7 +1107,7 @@ esac
 ```
 
 **검사 3 — 문구 없는 drop** — `### 게이트` 의 검사와 같습니다. 엔진 원장(`$STATE_DIR/docreview-state.md`)이
-없으면 — 라운드가 시작되지 않았거나 세션 정리로 걷혔다 — `gate` 를 부르지 않고 audit `## 6. 리뷰 결정` 의 엔진
+없으면 — 라운드가 시작되지 않았거나 원장 정리로 걷혔다 — `gate` 를 부르지 않고 audit `## 6. 리뷰 결정` 의 엔진
 drop 줄로 대조하며, 펜스가 내는 «엔진 원장 없음» 줄을 게이트 앞 글에 싣습니다.
 
 ```bash

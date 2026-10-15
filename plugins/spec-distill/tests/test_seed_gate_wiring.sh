@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf plugins/spec-distill/scripts/build_seed_inline_blob.py plugins/spec-distill/scripts/seed_review_log.py shared/docreview/scripts/docreview_state.py
+# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf plugins/spec-distill/scripts/build_seed_inline_blob.py plugins/spec-distill/scripts/seed_review_log.py shared/docreview/scripts/docreview_state.py plugins/spec-distill/scripts/interview_state.py
 #
 # request-framing 의 `## 상태` 블록 · `### 번들` 펜스 · codex 게이트 펜스를 잘라내 **차가운 셸
 # (`env -i`)에서 실행**해 디스크 사후상태를 잰다. 읽어서 판정하지 않는다 — 옳아 보이는 펜스가
@@ -23,7 +23,8 @@ SK="$ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
 if [ "${1:-}" = "--emit-scanned" ]; then
   for f in plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/detect_codex.sh \
            plugins/spec-distill/scripts/codex-killswitch.conf plugins/spec-distill/scripts/build_seed_inline_blob.py \
-           plugins/spec-distill/scripts/seed_review_log.py shared/docreview/scripts/docreview_state.py; do
+           plugins/spec-distill/scripts/seed_review_log.py shared/docreview/scripts/docreview_state.py \
+           plugins/spec-distill/scripts/interview_state.py; do
     echo "$f"
   done
   exit 0
@@ -60,14 +61,14 @@ chk_blk 상태 "$W/state.sh" 'state-dir-for'
 chk_blk 번들 "$W/bundle.sh" 'build_seed_inline_blob.py'
 chk_blk "codex 게이트" "$W/gate.sh" 'run_docreview_codex_reviewer.sh" "$PROFILE" "$BUNDLE"'
 grep -q '^TOPIC="probe-topic"$' "$W/state.sh" && ok "추출: 자리표를 픽스처 주제로 바꿨다" \
-  || no "추출: TOPIC 줄 모양이 바뀌어 자리표를 못 바꿨다 — 이름 파일 없이 도는 경로만 잰다"
+  || no "추출: TOPIC 줄 모양이 바뀌어 자리표를 못 바꿨다 — audit 으로 이름을 되찾는 경로만 잰다"
 
 # ── 가짜 플러그인 루트 ────────────────────────────────────────────────────────
 PR="$W/plugin"; mkdir -p "$PR/scripts"
 for f in state_path.py detect_codex.sh codex-killswitch.conf docreview_state.py; do
   cp "$ROOT/plugins/spec-distill/scripts/$f" "$PR/scripts/"
 done
-for f in build_seed_inline_blob.py seed_review_log.py; do ln -s "$ROOT/plugins/spec-distill/scripts/$f" "$PR/scripts/$f"; done
+for f in build_seed_inline_blob.py seed_review_log.py interview_state.py; do ln -s "$ROOT/plugins/spec-distill/scripts/$f" "$PR/scripts/$f"; done
 ln -s "$ROOT/plugins/spec-distill/references" "$PR/references"
 cat > "$PR/scripts/run_docreview_codex_reviewer.sh" <<'STUB'
 #!/usr/bin/env bash
@@ -111,12 +112,14 @@ RAW_PROBE 사용자가 한 말.
 - D1.1 · r1 · adopt · abcd1234#r1.1 · "HIST_QUOTE_MARKER" — HIST_SUMMARY_MARKER 요약
 EOF
 
-home() {   # home <sid> [이름] → 차가운 셸의 cwd 를 만든다(이름 파일 · seed · audit · CLAUDE.md)
+home() {   # home <sid> [이름] → 차가운 셸의 cwd 를 만든다(seed · session_id 를 단 audit · CLAUDE.md)
   local sid="$1" name="${2:-probe-$1-interview}" h="$W/$1"
-  mkdir -p "$h/docs/superpowers/interview" "$h/.claude/spec-distill/$sid"
-  printf '%s\n' "$name" > "$h/.claude/spec-distill/$sid/interview-basename"
+  mkdir -p "$h/docs/superpowers/interview"
+  # 한 세션의 seed audit 은 하나다 — 같은 세션에 다른 이름을 주면 앞의 audit 을 치운다(둘이면 블록이 이름을 고르지 않는다)
+  find "$h/docs/superpowers/interview" -name '*.audit.md' -exec rm -f {} + 2>/dev/null || true
   printf -- '---\ntype: interview-seed\n---\n\nSEED_%s 로그인이 가끔 실패한다.\n' "$sid" > "$h/docs/superpowers/interview/$name.md"
-  cp "$W/audit.fixture.md" "$h/docs/superpowers/interview/$name.audit.md"
+  sed "s/^type: interview-seed-audit\$/type: interview-seed-audit\\
+session_id: $sid/" "$W/audit.fixture.md" > "$h/docs/superpowers/interview/$name.audit.md"
   printf '# CLAUDE.md\n규칙.\n' > "$h/CLAUDE.md"
 }
 run_in() {   # run_in <sid> <스크립트> [env…]
@@ -157,9 +160,13 @@ else ok "B: 재비판 번들에는 판정 이력이 없다(AC11)"; fi
 grep -qF 'HIST_QUOTE_MARKER' "$pl/seed-bundle-recritic.md" && ok "B: 재비판 번들에 사용자 문구는 남는다" || no "B: 재비판 번들에서 사용자 문구까지 빠졌다"
 [ ! -e "$pl/critic.txt" ] && [ ! -e "$pl/recritic.txt" ] && ok "B: 직전 라운드의 리뷰어 산출물을 치웠다" \
   || no "B: 직전 라운드 critic/recritic 이 남았다 — audit ## 4 에 이번 라운드 것으로 옮겨진다"
-rm -f "$W/fg10bndl/docs/superpowers/interview/probe-fg10bndl-interview.audit.md"
+# audit 을 지우면 이름을 되찾지 못해 다른 자리를 보게 된다 — 이름이 서는 frontmatter 만 남기고 원문 절을 없앤다
+printf -- '---\ntype: interview-seed-audit\nsession_id: fg10bndl\n---\n' > "$W/fg10bndl/docs/superpowers/interview/probe-fg10bndl-interview.audit.md"
+run_in fg10bndl "$W/state-print.sh"; sx="$(sed -n 's/^STATE_DIR=//p' "$W/fg10bndl.out")"
+[ -n "$sx" ] && [ "$(real "$sx")" = "$(real "$pl")" ] && ok "전제: 실패 라운드도 같은 엔진 자리를 본다" \
+  || no "전제: 실패 라운드가 다른 자리('$sx')를 봤다 — 아래 칸이 공허하다"
 run_in fg10bndl "$W/bundle-run.sh"
-grep -q '^bundle_rc=1$' "$W/fg10bndl.out" && ok "B: audit 이 없으면 조립 실패(rc 1)" || no "B: audit 없이도 조립 성공으로 보고했다"
+grep -q '^bundle_rc=1$' "$W/fg10bndl.out" && ok "B: audit 의 원문 절이 없으면 조립 실패(rc 1)" || no "B: 원문 절 없이도 조립 성공으로 보고했다"
 [ ! -s "$pl/seed-bundle.md" ] && [ ! -s "$pl/seed-bundle-recritic.md" ] && ok "B: 실패한 라운드는 직전 번들을 남기지 않는다" \
   || no "B: 실패한 라운드에 직전 번들이 남았다 — codex 게이트가 그것을 이번 번들로 넘긴다"
 

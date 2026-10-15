@@ -79,9 +79,9 @@ python3 \"\$SD/scripts/docreview_state.py\" begin-round --state-dir \"\$STATE_DI
 assert_eq "$rc" "3" "AC8: 표지 없음 — 쓰기 전 확인이 rc 3 으로 멈춘다"
 assert_eq "$(cksum < "$SDIR/docreview-state.md")" "$before" "AC8: 표지 없음 — 원장 파일이 바뀌지 않았다"
 
-# AC8 — 원장에 쓰는 명령마다 같은 펜스 안 앞에 확인이 있다(정적). request-framing 은 Task 8 이 이 목록에 더한다.
+# AC8 — 원장에 쓰는 명령마다 같은 펜스 안 앞에 확인이 있다(정적).
 WRITERS='docreview_state\.py" (init|begin-round|record-findings|decide|fix|ask|defer|observe-diff|advice)|docreview_route\.py" (prepare-recritic|finalize)|docreview_anchor\.py" check-intent'
-GUARDED="$SR $RB $FIN"
+GUARDED="$SR $RB $FIN $SD/skills/request-framing/SKILL.md"
 for f in $GUARDED; do
   python3 -I - "$f" "$WRITERS" <<'PY' && ok "AC8: $(basename "$(dirname "$f")")/$(basename "$f") — 원장 쓰기 명령 앞에 확인이 있다" || no "AC8: $f — 확인 없는 원장 쓰기"
 import re, sys
@@ -111,8 +111,8 @@ finb="$(fence "$FIN" advice-ba)"
 printf '%s\n' "$finb" | tail -n 3 | grep -qF 'ledger_marker.py" release' && ok "AC8: finishing B-A 가 release 로 끝난다" || no "AC8: finishing B-A 해제 없음"
 grep -qF 'ledger_marker.py" release' "$RB" && no "AC8: reviewing-brief 가 스스로 표지를 푼다(B-A 가 푼다)" || ok "AC8: reviewing-brief 는 표지를 풀지 않는다"
 
-# AC10 양의 짝 — 리뷰 진입이 ledger_sweep.py 를 부른다. request-framing 은 Task 8 이 이 목록에 더한다.
-SWEEPERS="$SR $RB"
+# AC10 양의 짝 — 리뷰 진입 셋이 ledger_sweep.py 를 부른다.
+SWEEPERS="$SR $RB $SD/skills/request-framing/SKILL.md"
 for f in $SWEEPERS; do
   fence "$f" ledger-open | grep -qF 'ledger_sweep.py" --root "$ROOT"' && ok "AC10: $(basename "$(dirname "$f")") 원장 열기가 정리를 부른다" || no "AC10: $f 정리 호출 없음"
 done
@@ -286,4 +286,157 @@ for f in "$SR" "$RB"; do
   o="$(open_at "$repo" "$d10" sess-llll2222 "$f")"
   assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: OTHER:(알 수 없는 표지)" "fix1(4): $(basename "$(dirname "$f")") — 두 줄 표지는 OTHER:(알 수 없는 표지)"
 done
+
+# ── Task 8 — request-framing: 이름 파일 없이 audit 의 session_id 로 이름을 되찾고, 원장 배선은 위와 같다 ──────
+RF="$SD/skills/request-framing/SKILL.md"
+grep -qF 'interview-basename' "$RF" && no "AC11: request-framing 에 interview-basename 이 남았다" || ok "AC11: interview-basename 이 없다"
+grep -qF 'interview_state.py" seed-audit-for-session --session "$sid"' "$RF" \
+  && ok "AC11 양의 짝: audit session_id 로 이름을 되찾는다" || no "AC11: 이름 되찾기 호출이 없다"
+grep -qE '^STATE="\$ROOT/\$sid/state\.local\.md"' "$RF" && no "§1-6: request-framing 의 세션 STATE 줄이 남았다" || ok "§1-6: 세션 STATE 줄이 없다"
+# 상태 블록 실행 — 같은 세션 seed audit 둘이면 이름을 만들지 않는다
+blk="$(awk '/^## 상태/{f=1} f&&/^```bash$/{c=1;next} c&&/^```$/{exit} c' "$RF")"
+rfr="$T/rf"; mkdir -p "$rfr/docs/superpowers/interview" && git -C "$rfr" init -q
+for n in a b; do printf -- '---\ntype: interview-seed-audit\nsession_id: sess-rf000001\n---\n' > "$rfr/docs/superpowers/interview/2026-10-15-$n-interview.audit.md"; done
+out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000001 bash -c "$blk
+echo \"SEED=[\$SEED]\"" 2>&1)"
+printf '%s\n' "$out" | grep -qF 'SEED=[]' && ok "AC11: 같은 세션 seed audit 이 둘이면 이름을 만들지 않는다" || no "AC11: 둘 이상에서 이름을 골랐다: $out"
+assert_contains "$out" "seed audit 이 둘 이상이다(위 경로들) — 이름을 고르지 않고 멈춘다" "AC11: 둘 이상이면 상태 블록이 멈춘 이유를 댄다"
+# TOPIC 을 실값으로 바꿔 둔 블록도 둘 이상에서 TOPIC 으로 새 이름을 만들지 않는다
+out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000001 bash -c "$(printf '%s\n' "$blk" | sed 's/^TOPIC="<kebab-topic>"$/TOPIC="rfz"/')
+echo \"SEED=[\$SEED]\"" 2>&1)"
+printf '%s\n' "$out" | grep -qF 'SEED=[]' && ok "AC11: 둘 이상이면 TOPIC 이 있어도 새 이름을 만들지 않는다" || no "AC11: 둘 이상에서 TOPIC 으로 새 이름을 만들었다: $out"
+rm -f "$rfr/docs/superpowers/interview/2026-10-15-b-interview.audit.md"
+out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000001 bash -c "$blk
+echo \"SEED=[\$SEED]\"" 2>&1)"
+printf '%s\n' "$out" | grep -qF 'SEED=[docs/superpowers/interview/2026-10-15-a-interview.md]' \
+  && ok "AC11: 하나면 그 이름을 되찾는다" || no "AC11: 이름을 되찾지 못했다: $out"
+# 같은 세션의 인터뷰 audit(type 이 다르다)은 이름 되찾기에 걸리지 않는다 — TOPIC 이 자리표면 이름이 없다
+printf -- '---\ntype: interview-audit\nsession_id: sess-rf000002\n---\n' > "$rfr/docs/superpowers/interview/2026-10-15-c-interview.audit.md"
+out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000002 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000002 bash -c "$blk
+echo \"SEED=[\$SEED]\"" 2>&1)"
+printf '%s\n' "$out" | grep -qF 'SEED=[]' && ok "AC11: 같은 세션의 인터뷰 audit 으로 이름을 되찾지 않는다" || no "AC11: 인터뷰 audit 이 이름 되찾기에 걸렸다: $out"
+[ -e "$rfr/.claude/spec-distill" ] && no "§2-5: 상태 블록이 .claude/spec-distill 아래에 무언가를 만들었다: $(ls -A "$rfr/.claude/spec-distill")" \
+  || ok "§2-5: 상태 블록은 세션 폴더를 만들지 않는다"
+
+# 펜스 실행 도구 — 상태 블록(TOPIC 을 픽스처 주제로)을 앞에 이어 붙인다. 두 세션 다 같은 날 · 같은 주제로 같은 seed 를 가리킨다.
+blkT="$(printf '%s\n' "$blk" | sed 's/^TOPIC="<kebab-topic>"$/TOPIC="rfx"/')"
+printf '%s\n' "$blkT" | grep -qx 'TOPIC="rfx"' && ok "전제: 상태 블록의 TOPIC 자리표를 픽스처 주제로 바꿨다" || no "전제: TOPIC 줄 모양이 바뀌었다 — 아래 칸이 공허하다"
+RFO="$(fence "$RF" ledger-open)"
+[ -n "$RFO" ] && ok "전제: request-framing 원장 열기 펜스가 있다" || no "전제: request-framing 원장 열기 펜스가 없다 — 아래 칸이 공허하다"
+rf_run() {   # rf_run <repo> <sid> <이어 붙일 스크립트> → 출력(rc 는 호출의 rc)
+  ( cd "$1" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID="$2" DEVBREW_SPEC_DISTILL_SESSION_ID="$2" bash -c "$blkT
+$3" 2>&1 )
+}
+rf_repo() {   # rf_repo <dir> → seed 하나를 둔 git 저장소를 만들고 그 seed 의 절대경로를 낸다
+  mkdir -p "$1/docs/superpowers/interview" && git -C "$1" init -q
+  printf -- '---\ntype: interview-seed\n---\n\n본문.\n' > "$1/docs/superpowers/interview/$(date +%F)-rfx-interview.md"
+  printf '%s\n' "$1/docs/superpowers/interview/$(date +%F)-rfx-interview.md"
+}
+bash_with() {   # bash_with <파일> <고정 문자열> → 그 문자열을 담은 첫 bash 펜스
+  awk -v pat="$2" '/^```bash$/ {b=1; buf=""; next} b && /^```$/ {b=0; if (!done && index(buf, pat)) {printf "%s", buf; done=1}; next} b {buf = buf $0 "\n"}' "$1"
+}
+
+rf1="$T/rf1"; sd1="$(rf_repo "$rf1")"
+RS1="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$rf1/.claude/spec-distill" --doc "$sd1")"
+o="$(rf_run "$rf1" sess-rfaa0001 "$RFO")"
+assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: HELD" "T8: request-framing 원장 열기가 빈 원장에서 표지를 잡는다"
+assert_eq "$(cat "$RS1/reviewing-by" 2>/dev/null)" "sess-rfaa0001" "T8: 표지가 seed 의 원장 폴더에 선다"
+o="$(rf_run "$rf1" sess-rfbb0002 "$RFO")"
+assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: OTHER:sess-rfaa0001" "T8: 다른 세션 — OTHER 로 멈춘다"
+grep -qF '「그만둠 (권장)」' "$RF" && grep -qF '「이어 씀 — 표지를 내 것으로 바꾼다」' "$RF" \
+  && ok "T8: OTHER 판결이 그만둠/이어 씀 질문으로 간다(문면)" || no "T8: request-framing 표지 질문 문면이 없다"
+grep -qF '`OTHER:(알 수 없는 표지)`' "$RF" && ok "T8: 판결 표에 OTHER:(알 수 없는 표지) 가 있다" || no "T8: 판결 표에 알 수 없는 표지 칸이 없다"
+o="$(cd "$rf1" && CLAUDE_PLUGIN_ROOT="$SD" bash -c "unset CLAUDE_CODE_SESSION_ID DEVBREW_SPEC_DISTILL_SESSION_ID
+$blkT
+$RFO" 2>&1)"
+assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: NO_SESSION" "T8: 세션 id 가 없으면 NO_SESSION"
+# 쓰기 전 확인 — 펜스와 실제 원장 쓰기 펜스(처분 · 답 기록)
+ledger "$RS1/docreview-state.md" "$sd1" 1
+printf -- '---\ntype: interview-seed-audit\nsession_id: sess-rfaa0001\n---\n\n## 6. 리뷰 결정\n' > "$rf1/docs/superpowers/interview/$(date +%F)-rfx-interview.audit.md"
+RG="$(fence "$RF" ledger-guard)"
+printf '%s\n' "$RG" | grep -qF 'ledger_marker.py" check --dir "$STATE_DIR" --session "$sid"' \
+  && ok "T8: request-framing 쓰기 전 확인이 \$sid 로 잰다" || no "T8: request-framing 쓰기 전 확인 펜스 꼴: $RG"
+rs1b="$(cksum < "$RS1/docreview-state.md")"
+out="$(bash -c "SD='$SD'; STATE_DIR='$RS1'; sid=sess-rfbb0002
+$RG
+echo wrote" 2>&1)"; rc=$?
+assert_eq "$rc" "3" "T8: 남의 표지 — 쓰기 전 확인이 rc 3"
+assert_contains "$out" "「이어 씀」" "T8: 남의 표지 — 「이어 씀」 을 안내한다"
+assert_not_contains "$out" "wrote" "T8: 남의 표지 — 뒤 명령이 돌지 않았다"
+out="$(bash -c "SD='$SD'; STATE_DIR='$RS1'; sid=sess-rfaa0001
+$RG
+echo wrote" 2>&1)"; rc=$?
+{ [ "$rc" -eq 0 ] && [ "$out" = "wrote" ]; } && ok "T8: 표지 주인 — 확인을 지난다(양의 짝)" || no "T8: 표지 주인인데 확인이 막았다(rc $rc): $out"
+DISP="$(bash_with "$RF" 'one-line "$STATE_DIR/said-<id>.txt"' | sed -e 's/<id>/RFID1/g' -e 's/<drop | adopt | reject | hold>/adopt/')"
+ANS="$(bash_with "$RF" 'kind 답' | sed -e 's/<n>/1/g' -e 's/<id>/RFID1/g')"
+for pair in "처분|$DISP" "답 기록|$ANS"; do
+  nm="${pair%%|*}"; body="${pair#*|}"
+  printf '채택\n' > "$RS1/said-RFID1.txt"; printf '요약\n' > "$RS1/note-RFID1.txt"
+  ab="$(cksum < "$rf1/docs/superpowers/interview/$(date +%F)-rfx-interview.audit.md")"
+  out="$(cd "$rf1" && bash -c "SD='$SD'; STATE_DIR='$RS1'; AUDIT_ABS='$rf1/docs/superpowers/interview/$(date +%F)-rfx-interview.audit.md'; sid=sess-rfbb0002
+$body" 2>&1)"; rc=$?
+  assert_eq "$rc" "3" "T8: ${nm} 펜스 — 남의 표지면 rc 3 으로 멈춘다"
+  assert_eq "$(cksum < "$RS1/docreview-state.md")" "$rs1b" "T8: ${nm} 펜스 — 남의 표지면 원장이 그대로다"
+  assert_eq "$(cksum < "$rf1/docs/superpowers/interview/$(date +%F)-rfx-interview.audit.md")" "$ab" "T8: ${nm} 펜스 — 남의 표지면 audit 도 그대로다"
+  [ -e "$RS1/said-RFID1.txt" ] && ok "T8: ${nm} 펜스 — 남의 표지면 문구 파일을 지우지 않는다" || no "T8: ${nm} 펜스 — 멈췄는데 문구 파일이 사라졌다"
+  out="$(cd "$rf1" && bash -c "SD='$SD'; STATE_DIR='$RS1'; AUDIT_ABS='$rf1/docs/superpowers/interview/$(date +%F)-rfx-interview.audit.md'; sid=sess-rfaa0001
+$body" 2>&1)"
+  case "$out" in *"q_rc="*|*"ans_rc="*) ok "T8: ${nm} 펜스 — 표지 주인이면 확인을 지나 엔진 호출에 닿는다(양의 짝)" ;;
+    *) no "T8: ${nm} 펜스 — 표지 주인인데 끝 줄에 닿지 않았다: $out" ;; esac
+done
+# 넘겨받기
+o="$(rf_run "$rf1" sess-rfbb0002 "$(fence "$RF" ledger-takeover)")"
+assert_eq "$(cat "$RS1/reviewing-by" 2>/dev/null)" "sess-rfbb0002" "T8: 「이어 씀」 뒤 넘겨받기 펜스가 표지를 바꾼다"
+# 끝맺음 펜스(계수 기록) — 남의 표지면 건너뛰고 풀지 않는다 · 주인이면 쓰고 푼다
+RC_F="$(fence "$RF" framing-count)"
+printf '%s\n' "$RC_F" | grep -qF 'ledger_marker.py" acquire' && printf '%s\n' "$RC_F" | tail -n 3 | grep -qF 'ledger_marker.py" release' \
+  && ok "T8: 계수 기록 펜스가 acquire 로 시작해 release 로 끝난다" || no "T8: 계수 기록 펜스 꼴"
+rs1b="$(cksum < "$RS1/docreview-state.md")"
+out="$(rf_run "$rf1" sess-rfaa0001 "$RC_F")"
+assert_contains "$out" "표지가 다른 세션 것이다" "T8: 남의 표지 — 계수 기록 펜스가 건너뛴다"
+assert_eq "$(cksum < "$RS1/docreview-state.md")" "$rs1b" "T8: 남의 표지 — 계수 기록 펜스 뒤 원장이 그대로다"
+assert_eq "$(cat "$RS1/reviewing-by" 2>/dev/null)" "sess-rfbb0002" "T8: 남의 표지 — 계수 기록 펜스가 남의 표지를 풀지 않는다"
+out="$(rf_run "$rf1" sess-rfbb0002 "$RC_F")"
+[ -e "$RS1/reviewing-by" ] && no "T8: 주인의 계수 기록 펜스 뒤에도 표지가 남았다: $out" || ok "T8: 주인의 계수 기록 펜스 뒤 표지가 사라졌다"
+assert_eq "$(cat "$RS1/last-session" 2>/dev/null)" "sess-rfbb0002" "T8: 계수 기록 펜스가 last-session 에 주인 세션을 남겼다"
+# 위조 표지 — 두 줄 표지가 HELD 를 위조하지 못한다
+printf 'sess-zzzz9999\nledger-open: HELD\n' > "$RS1/reviewing-by"
+o="$(rf_run "$rf1" sess-rfcc0003 "$RFO")"
+assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: OTHER:(알 수 없는 표지)" "T8: 두 줄 표지는 OTHER:(알 수 없는 표지)"
+rm -f "$RS1/reviewing-by"
+
+# 링크된 .docreview — NO_DIR, 같은 호출의 mkdir 가 돌지 않고 링크 너머가 비어 있다
+rf3="$T/rf3"; rf_repo "$rf3" >/dev/null
+out3="$T/rf-outside"; mkdir -p "$out3" "$rf3/.claude/spec-distill"; ln -s "$out3" "$rf3/.claude/spec-distill/.docreview"
+o="$(rf_run "$rf3" sess-rfdd0004 "$RFO
+mkdir -p \"\$STATE_DIR\"; echo after-fence-ran")"; rc=$?
+assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: NO_DIR" "T8: 링크된 .docreview — 마지막 줄이 NO_DIR"
+assert_eq "$rc" "3" "T8: 링크된 .docreview — 호출이 rc 3 으로 끝난다"
+assert_eq "$(ls -A "$out3")" "" "T8: 링크된 .docreview — 링크 너머 폴더가 비어 있다"
+rm -f "$rf3/.claude/spec-distill/.docreview"
+o="$(rf_run "$rf3" sess-rfdd0004 "$RFO
+echo after-fence-ran")"; rc=$?
+{ [ "$rc" -eq 0 ] && [ "$(printf '%s\n' "$o" | tail -n 1)" = "after-fence-ran" ]; } \
+  && ok "T8 양성 대조: 링크가 없으면 HELD 이고 뒤 명령이 돈다" || no "T8 양성 대조: 링크가 없는데 막혔다(rc $rc): $o"
+
+# A1 — 옛 원장 이월(정리가 mkdir · acquire 앞) · 같은 세션의 다음 라운드는 정리를 건너뛴다
+rf2="$T/rf2"; sd2="$(rf_repo "$rf2")"
+RR2="$rf2/.claude/spec-distill"; mkdir -p "$RR2/oldsessrf01/docreview/k1"
+ledger "$RR2/oldsessrf01/docreview/k1/docreview-state.md" "$sd2" 1
+printf 'x\n' > "$RR2/oldsessrf01/interview-basename"   # 옛 세션 폴더의 모양(직속 파일)
+age "$RR2/oldsessrf01"
+RS2="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$RR2" --doc "$sd2")"
+o="$(rf_run "$rf2" sess-rfee0005 "$RFO")"
+assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: HELD" "T8 A1(i): 옛 원장이 있는 첫 리뷰도 HELD"
+[ -f "$RS2/docreview-state.md" ] && grep -qF "doc: $sd2" "$RS2/docreview-state.md" \
+  && ok "T8 A1(i): 같은 seed 의 옛 원장이 .docreview/<키> 로 옮겨졌다" || no "T8 A1(i): 옛 원장이 옮겨지지 않았다: $o"
+mkdir -p "$RR2/.docreview/zz-0000000000000000"
+ledger "$RR2/.docreview/zz-0000000000000000/docreview-state.md" "$T/nope-design.md" 1
+age "$RR2/.docreview/zz-0000000000000000"
+o="$(rf_run "$rf2" sess-rfee0005 "$RFO")"
+assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: HELD" "T8 A1(ii): 같은 세션의 다음 라운드 — HELD"
+[ -d "$RR2/.docreview/zz-0000000000000000" ] && ok "T8 A1(ii): 같은 세션의 다음 라운드는 정리를 부르지 않는다" || no "T8 A1(ii): 같은 세션의 다음 라운드에서 정리가 돌았다"
+o="$(rf_run "$rf2" sess-rfff0006 "$RFO")"
+assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: OTHER:sess-rfee0005" "T8 A1(ii): 다른 세션 — OTHER"
+[ -d "$RR2/.docreview/zz-0000000000000000" ] && no "T8 A1(ii): 다른 세션의 진입이 정리를 부르지 않았다" || ok "T8 A1(ii): 다른 세션의 진입은 판결 전에 정리를 부른다"
 finish

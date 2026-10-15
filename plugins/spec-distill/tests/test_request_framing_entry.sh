@@ -150,6 +150,7 @@ grep -qF 'docs(interview): <topic> interview seed + audit' <<<"$gate_block" && o
 grep -qE '(①|②)[^.]{0,80}handoff 직전[^.]{0,40}커밋' <<<"$gate_flat" && ok "AC12: ①/② 에서 handoff 직전 커밋" || no "AC12: 커밋 시점 규칙 부재"
 grep -qE '(③|④)[^.]{0,40}커밋하지 않' <<<"$gate_flat" && ok "AC12: ③/④ 는 커밋 없음" || no "AC12: ③/④ 비커밋 규칙 부재"
 grep -qE '워크트리 절대경로|절대경로' <<<"$gate_flat" && ok "AC12: 게이트 텍스트에 워크트리 경로" || no "AC12: 게이트 경로 안내 부재"
-grep -qF 'git commit -q -F' <<<"$gate_block" && ok "AC12: 커밋은 -F 파일 한 줄 명령" || no "AC12: 커밋 명령 모양 부재"
+grep -qF "git commit -q -m 'docs(interview): <topic> interview seed + audit'" <<<"$gate_block" && ok "AC12: 커밋은 메시지 리터럴을 단 한 줄 명령" || no "AC12: 커밋 명령 모양 부재"
+grep -qF 'SEED_DIR' <<<"$gate_block" && no "AC12: 커밋 펜스가 사라진 세션 폴더(SEED_DIR)를 쓴다" || ok "AC12: 커밋 펜스가 세션 폴더에 기대지 않는다"
 
 finish
