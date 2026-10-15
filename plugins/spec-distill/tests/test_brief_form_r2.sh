@@ -144,7 +144,7 @@ rows = [
   ("noangle", "[해결 S1]", "상태 표시가"),
   ("nospace", "[해결⟨S99⟩]", "상태 표시가"),
   ("twice", "[해결 ⟨S1⟩] [해결 ⟨S1⟩]", "상태 표시가"),
-  ("fullwidth", chr(0xFF3B) + "해결 ⟨S99⟩" + chr(0xFF3D), "S99"),
+  ("fullwidth", chr(0xFF3B) + "해결 ⟨S99⟩" + chr(0xFF3D), "해결 토큰 S99 가 payload"),
   ("innerspace", "[ 해결 ⟨S99⟩ ]", "상태 표시가"),
   ("zwsp_open", "[" + Z + "해결 ⟨S99⟩]", "서식 글자"),
   ("zwsp_word", "[해" + Z + "결 ⟨S99⟩]", "서식 글자"),
