@@ -8,11 +8,12 @@
 
 ## 쓰는 법
 
-사용자가 부르는 진입 skill 은 셋입니다.
+사용자가 부르는 진입 skill 은 넷입니다.
 
 - `/request-framing` — 요청이 아직 흐릿해서 방향부터 맞추고 싶을 때. 다음 세션 첫 턴이 가리킬 요청 요약 파일(`interview-seed`)이 나옵니다.
 - `/spec-interview` — 요청을 인터뷰로 다듬고 싶을 때. 인터뷰 결과를 정리한 문서(interview brief)가 나옵니다.
 - `/spec-review` — brainstorming 이 설계문서를 쓴 뒤 검토하고 싶을 때. 문서 리뷰 결과와 다음 단계를 고르는 질문이 나옵니다.
+- `/roadmap-status` — 로드맵의 에픽 지도(단계 · 기다리는 에픽 · 경고 · 진행 중 인터뷰 조사 수)를 보고 싶을 때. 읽기만 합니다.
 
 ```
 /spec-interview todo 앱 만들어줘
@@ -115,6 +116,7 @@
   했어야 했는가」는 기계가 알 수 없고(`check_brief.py` 는 brief 파일만 읽는다) 0건 advisory 가 Step B
   게이트로 사람에게 간다.
 - **Law 1 · Law 2 — 멈춤의 주인은 독립 판정자 (5.5.0)** — 인터뷰가 한 번에 닫지 않고 결정에 닿는 새 사실이 없을 때까지 조사한다. 그 «없음» 을 조사하는 모델이 아니라 쓰기 권한 없는 `saturation-judge` 가 조사 원문에서 직접 판정하고, 「충분해 보인다」는 근거가 아니다. 구조 게이트(`check_brief.py` `saturation_failures`)가 판정 없는 종료를 거절한다.
+- **Law 3 (컨트롤 플레인, 5.7.0)** — 에픽 단계 · 경고 · 받은 시각을 상태줄과 `roadmap-status` 가 늘 보여, 모르는 사이의 드리프트를 다음 세션이 아니라 지금 본다. 「없음」과 「확인 못 함」(`검사 불가` · `셀 수 없음`)을 섞지 않는다.
 
 ### Principles 흡수
 
@@ -176,6 +178,42 @@
 
 종료 코드는 둘 다 0 이상 없음 · 1 경고 · 2 사용법 오류 · 3 검사 불가입니다. 형식은 `docs/superpowers/specs/2026-10-11-roadmap-walking-skeleton-design.md` §3 에 있습니다.
 
+### 상태줄
+
+에픽 단계 요약 · 경고 수 · 마지막 fetch 경과 · 진행 중 인터뷰 조사 수를 Claude Code 상태줄 한 줄로 늘 볼 수 있습니다. 예: `2026-10-11-persistent-explore-pm-decompose · 설계 2 · 구현 1 · 준비 3 · 경고 없음 · 받은 지 12분`. 자세히는 `/spec-distill:roadmap-status`, 지휘 세션의 작업 목록은 `python3 <플러그인>/scripts/control_plane.py show --tasks <로드맵>` 의 줄(`<제목>` 탭 `<pending|in_progress|completed|keep>`)로 맞춥니다.
+
+플러그인이 대신 켜 줄 수 없습니다 — 메인 `statusLine` 은 사용자 · 프로젝트 설정만 정합니다. 직접 켭니다.
+
+1. 아래 스크립트를 `~/.claude/devbrew-statusline` 로 저장합니다. 버전 붙은 플러그인 폴더를 박아 두지 않고, 실행할 때마다 설치된 spec-distill 을 찾습니다(Claude Code 가 설치 기록 `plugins/installed_plugins.json` 의 `installPath` 에 적은 폴더 — 2026-10-15 · 2.1.299 실측). 못 찾으면 빈 줄이 아니라 `상태줄 꺼짐 — 플러그인을 못 찾음` 을 냅니다. 로드맵도 진행 중 인터뷰도 없으면 빈 줄입니다.
+
+<!-- control-plane-statusline:begin -->
+```sh
+#!/bin/sh
+d="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+p=$(grep -o '"installPath": *"[^"]*/spec-distill/[^"]*"' "$d/plugins/installed_plugins.json" 2>/dev/null | head -n 1 | sed 's/.*"\([^"]*\)"$/\1/')
+if [ -n "$p" ] && [ -f "$p"/scripts/control_plane.py ]; then
+  exec python3 "$p"/scripts/control_plane.py statusline
+fi
+echo "상태줄 꺼짐 — 플러그인을 못 찾음"
+```
+<!-- control-plane-statusline:end -->
+
+2. 사용자 설정 `~/.claude/settings.json` 에 넣습니다(devbrew 레포의 프로젝트 설정에는 커밋하지 않습니다):
+
+```json
+{ "statusLine": { "type": "command", "command": "sh ~/.claude/devbrew-statusline" } }
+```
+
+이미 상태줄을 쓰고 있으면 기존 명령 뒤에 이어 붙입니다 — 상태줄 입력(JSON)을 두 명령에 똑같이 넘깁니다:
+
+```sh
+in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh ~/.claude/devbrew-statusline); printf '%s  %s\n' "$a" "$b"
+```
+
+캐시는 `<git 공용 디렉토리>/devbrew/control-plane.json` 하나이고 레포 파일과 git 상태는 바꾸지 않습니다. 상태 계산이 실패하면 `검사 불가` 조각이 붙습니다 — 「없음」과 섞지 않습니다.
+
+상태줄 한 번은 3초 안에 끝납니다. 넘으면 그 레포에서 마지막으로 낸 줄 뒤에 ` · 시간 초과` 를 붙여 내고, 낸 적이 없으면 `상태줄 — 시간 초과` 를 냅니다. 로드맵이 많거나 커서 첫 계산이 3초를 넘으면 `/spec-distill:roadmap-status` 를 한 번 부르면(30초 안) 같은 캐시가 채워집니다 — 다만 캐시는 브랜치나 origin/main 이 움직일 때마다 다시 계산되므로, 계산이 늘 3초를 넘는 레포에서는 상태줄에 ` · 시간 초과` 가 자주 붙습니다. 스크립트는 자기 하위 프로세스에 시간 제한을 두어 스스로 묶습니다. Claude Code 가 상태줄 실행을 도중에 버릴 때 그 자식을 끝내는지는 재지 않았습니다. 인터뷰 상태 파일은 일반 파일만 64 KiB 까지 읽고, 넘거나 링크 · 파이프면 `셀 수 없음` 으로 보입니다.
+
 ## Hooks Installed
 
 설치되는 훅이 없다(6.0.0) — 원장 정리는 리뷰 진입(`scripts/ledger_sweep.py`)이 한다. 5.x 의 SessionEnd 훅(끝나는 세션의 폴더 삭제 + TTL-GC)은 다른 세션이 아직 쓰는 리뷰 원장까지 지울 수 있었다. 원장이 문서 단위가 되어 세션 끝에 지울 것이 없고, 지울지는 원장을 여는 자리가 기록된 문서의 존재로 정한다.
@@ -189,7 +227,8 @@
 ### 스위치 목록
 
 - `DEVBREW_SPEC_DISTILL_DISABLE=1` — plugin 전체 abort, state 보존. 리뷰 진입의 원장 정리(`scripts/ledger_sweep.py`)도 아무것도 지우지 않는다.
-  진입 skill 셋(`request-framing` · `spec-interview` · `spec-review`)은 본문 전 사전 검사가 `DEVBREW_SPEC_DISTILL_DISABLE=1` 을 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 skill 호출을 끊는다 — 헤드리스에서는 출력 없이 끝난다.
+  진입 skill 넷(`request-framing` · `spec-interview` · `spec-review` · `roadmap-status`)은 본문 전 사전 검사가 `DEVBREW_SPEC_DISTILL_DISABLE=1` 을 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 skill 호출을 끊는다 — 헤드리스에서는 출력 없이 끝난다.
+- `DEVBREW_SKIP_HOOKS=spec-distill:statusline` (5.7.0) — 컨트롤 플레인(`scripts/control_plane.py`)을 끈다: 상태줄은 빈 줄, `/spec-distill:roadmap-status` 의 지도는 `꺼져 있다 — <스위치>` 한 줄, `show --tasks` 는 표준 출력을 비우고 rc 3. 훅이 아니지만 지목할 이름을 갖는다. `DEVBREW_SPEC_DISTILL_DISABLE=1` 도 같은 효과다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` (v0.20.0, v0.24.0 확대, 3.1.0 재배선) — codex 병렬 co-review만 skip. Claude 리뷰(탐지 · 재비판)는 정상 동작하고, codex 부재는 엔진이 `fin.json` 의 `advisory[]` 와 게이트 첫 줄로 loud 하게 공시한다. 전역 `DEVBREW_SPEC_DISTILL_DISABLE`과 독립. **적용 범위는 문서 리뷰 엔진 자리 셋 전부**: (a) design-doc 리뷰(`spec-review`), (b) brief 리뷰(`reviewing-brief`), (c) seed 리뷰(`request-framing`) — 세 자리 모두 codex 호출은 SKILL 의 리터럴 게이트 펜스(`codex-gate` 표지) 하나이고 매 라운드 4단계에서 돈다. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`(`skip_reason: kill_switch`)로 옮기고 펜스가 그 값으로 러너 호출을 가르며, 러너(`run_docreview_codex_reviewer.sh`)는 이 변수를 보지 않는다. 펜스 밖에서 러너를 부르면 opt-out이 무시된 채 지출이 나간다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` — 문서 리뷰 엔진의 **재비판 단계만** skip (`doc-recritic` dispatch 없음). 탐지·codex 는 정상 동작한다. 기각 경로가 0 이 된 사실은 `fin.json` 의 `advisory[]` 로 공시된다 — 오탐이 걸러지지 않은 라운드라는 뜻이므로 조용히 넘어가지 않는다.
 - `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT=<n>` (5.5.0) — interview 조사 subagent 호출 상한의 시작값(기본 20, 양의 정수가 아니면 20 과 한 줄 공시). 닿으면 연장 · 판정 · 종료를 묻는다. 끄는 스위치가 아니다. 이 상한이 사슬 전체의 바깥 조사 중 subagent 몫을 묶고(Phase 0 은 웹을 보지 않는다), 본체 직접 웹 검색은 라운드 규약(질문 하나 · 답 하나)이 묶는다.

@@ -234,6 +234,31 @@ def merged_by(git: Git, merges: list, main: str, branch: str, tip):
     return None
 
 
+class _GitTreeRepo:
+    """check() 가 로드맵 · 다른 묶음의 설계문서를 읽는 자리 — 작업 트리가 아니라 한 커밋(main)의 트리에서."""
+
+    def __init__(self, git: Git, tree: str):
+        self.git, self.tree = git, tree
+        self._memo = {}
+
+    def read(self, rel: str):
+        return self.git.blob(self.tree, rel)
+
+    def exists(self, rel: str) -> bool:
+        return self.git.exists(self.tree, rel)
+
+    def specs_for(self, source: str) -> list:
+        if source in self._memo:
+            return self._memo[source]
+        out = []
+        for path in self.git.grep_files(self.tree, source, "docs/superpowers/specs/"):
+            text = self.git.blob(self.tree, path)
+            if text and unquote(frontmatter(text).get("source_interview", "")) == source:
+                out.append((path, text))
+        self._memo[source] = sorted(out)
+        return self._memo[source]
+
+
 def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_dir: str):
     """블록마다 stage · reason · warnings · notes · specs 를 채운다. 반환: 번호 대조 검사 불가 사유 목록."""
     merges = git.first_parent_merges() if main else []
@@ -307,7 +332,9 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 cov_unknown.append("%s spec 을 읽지 못했다" % bid)
                 continue
             if b["kind"] == "bundle" and bundles.get(bid) is not None:
-                result = check(bundles[bid], spec_text)
+                result = check(bundles[bid], spec_text, repo=_GitTreeRepo(git, main) if main else None)
+                for w in coverage_warnings(result, spec):  # 경고 줄이라 종료 코드가 1 이 될 수 있다(막는 소비자 없음)
+                    b["warnings"].append(w)
                 if result["status"] == 1:
                     b["warnings"].append("생략: %s 이 번호 %d개를 빠뜨렸다 — %s" % (
                         spec, len(result["missing"]), " · ".join(result["missing"])))
@@ -336,6 +363,21 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                     b["notes"].append("경로 예약 위반: %s 은 %s 만 예약했다"
                                          % (path, " · ".join(owners)))
     return cov_unknown
+
+
+def coverage_warnings(result: dict, spec: str) -> list:
+    out = []
+    shallow = result.get("shallow") or []
+    if shallow:
+        out.append("얕은 답 %d개: %s — %s" % (len(shallow), spec, " · ".join(
+            "%s(%s)" % (x["id"], x["reason"]) for x in shallow)))
+    unknown = result.get("unknown") or []
+    if unknown:
+        out.append("번호 대조 셀 수 없음 %d개: %s — %s" % (len(unknown), spec, " · ".join(unknown)))
+    unserved = result.get("unserved") or []
+    if unserved:
+        out.append("받드는 에픽 없는 발화 %d개: %s — %s" % (len(unserved), spec, " · ".join(unserved)))
+    return out
 
 
 def overlaps(blocks: list) -> list:

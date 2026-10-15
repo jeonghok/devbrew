@@ -44,6 +44,17 @@
   - reviewing-brief 의 머리 · `finishing.md` B-A — payload · audit · 상태 파일을 쓰기 전에 `state_path.py payload-root` 가 낸 루트로 `path-inside` 를 잰다. 루트는 payload 폴더의 git 최상위다. git 이 그 폴더를 저장소 밖으로 보는데 위쪽 폴더에 `.git` 이 있으면(인터뷰 폴더가 저장소 밖 · 끊긴 자리로 가는 링크) 루트를 내지 않고 거부한다. 저장소가 아닌 곳에서만 payload 의 폴더를 루트로 쓰므로, 거기서는 세 파일 자체의 링크만 잡고 그 폴더 위쪽의 링크는 재지 않는다. 거부되면 머리는 사유를 보이고 멈추고(degrade 원장도 쓰지 않는다), B-A 는 참고 목록을 audit 에 쓰지 않는다. `path-inside` 는 논리 cwd(`$PWD`) 접두만 물리 경로로 읽는다 — 세션의 cwd 는 믿고, cwd 가 아닌 링크 접두는 풀지 않는다.
 - 상태 파일(커밋되는 파일)의 `## 풀린 입력` 블록은 P21 secret placeholder 치환을 거친 글만 적는다.
 
+## [5.7.0] — 2026-10-15
+
+### Added
+- `scripts/control_plane.py` — 로드맵 상태(`roadmap_status.py --json`)와 진행 중 인터뷰를 상태줄 한 줄(`statusline`) · 지도(`show`) · 작업 목록 줄(`show --tasks`)로 보인다. 결과는 `<git 공용 디렉토리>/devbrew/control-plane.json` 에 캐시하고(origin/main 커밋 · 브랜치 머리 · 로드맵 사본 · 상태 계산 스크립트의 크기와 수정 시각이 같으면 다시 계산하지 않는다 — 스크립트는 `roadmap_status.py` · `roadmap_model.py` · `section6.py` · `check_bundle_coverage.py` · `control_plane.py`), 받은 지 N분과 진행 중 인터뷰는 캐시 밖에서 매번 읽는다(병렬 worktree 가 한 캐시를 나눠 써도 서로의 칸을 밀지 않는다). 읽기만 한다.
+- 진입 skill `roadmap-status`(`/spec-distill:roadmap-status [<로드맵 경로>]`) — 에픽 지도를 보인다. 블록 줄에 끝나지 않은 의존(`← 기다림: …`), 고아 발화 · 미배정 번호를 경고로 보인다.
+- README 「상태줄」 — 버전 없는 상태줄 실행 스크립트와 설치 · 이어 붙이기 안내. 플러그인은 상태줄을 대신 켤 수 없다.
+- 끄기 스위치 `DEVBREW_SKIP_HOOKS=spec-distill:statusline`.
+- 상태줄은 3초, 지도는 30초 안에 끝난다 — git · 상태 계산 하위 프로세스는 시간을 넘기면 묶음째 끝내고, 상태줄은 마지막으로 낸 줄 + ` · 시간 초과` 또는 `상태줄 — 시간 초과` 를 낸다. 끝내라는 신호(SIGTERM · SIGHUP)를 받아도 하위 프로세스 묶음을 끝낸다. 인터뷰 상태 파일은 일반 파일만 64 KiB 까지 읽고, 사유는 80자로 줄인다.
+- `roadmap_status.py` 가 R3 의 얕은 답 · 받드는 에픽 없는 발화 · 읽지 못해 셀 수 없는 것(`번호 대조 셀 수 없음`)을 그 블록의 경고 줄로 싣는다. 경고 줄이라 종료 코드가 1 이 될 수 있다(막는 소비자 없음). 컨트롤 플레인이 읽는 경고 채널이다.
+- README 「상태줄」은 하위 프로세스를 스크립트가 시간 제한으로 묶는다는 것까지만 말한다 — Claude Code 가 상태줄 실행을 버릴 때 자식을 끝내는지는 재지 않았다.
+
 ## [5.6.0] — 2026-10-15
 
 ### Added
