@@ -24,7 +24,7 @@ ids: [C1, D2, OQ3, RC4, K5, ST1, S7, «web-key»]
 MD
 
 table_spec() {  # table_spec <첫 칸들...> — 각 인자가 한 행의 첫 칸
-  printf -- '---\nsource_interview: docs/x/R9.md\n---\n\n# 설계\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n'
+  printf -- '---\nsource_interview: docs/x/R9.md\n---\n\n# 설계\n\n### §1 설계\n\n- 하나\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n'
   for cell in "$@"; do printf '| %s | 반영 | §1 |\n' "$cell"; done
   printf '\n## Metadata\n\n- 끝\n'
 }
@@ -117,4 +117,170 @@ print(c.section_body is m.section_body, c.frontmatter is m.frontmatter,
 assert_eq "$out" "True True True True" "공유 모듈: 두 스크립트가 roadmap_model 의 같은 함수를 쓴다"
 assert_file_absent "$C" '^(import|from) roadmap_status' "check_bundle_coverage 는 roadmap_status 를 import 하지 않는다"
 assert_file_absent "$S/roadmap_model.py" '^(import|from) (check_bundle_coverage|roadmap_status)' "roadmap_model 은 두 스크립트 어느 쪽도 import 하지 않는다(순환 없음)"
+# ── 11~16: R3 §2 — 자리 · 기각 에픽 · 받듦 · 셀 수 없음 · brief 입력 · 출력 ─────────
+R="$T/repo"; mkdir -p "$R/docs/x" "$R/docs/superpowers/specs"
+cat > "$R/docs/x/roadmap.md" <<'MD'
+---
+type: roadmap
+source_brief: docs/x/brief.md
+---
+
+# 대조 로드맵
+
+## 에픽
+
+### R9 — 이 에픽
+- 의도: 아홉
+- 범위: 아홉
+- 의존: 없음
+- 브랜치: feature/r9
+- 묶음: R9.md
+- 경로 예약: 없음
+
+### R8 — 이웃 에픽
+- 의도: 여덟
+- 범위: 여덟
+- 의존: 없음
+- 브랜치: feature/r8
+- 묶음: R8.md
+- 경로 예약: 없음
+
+### P1 — 묶음 없는 블록
+- 의도: 하나
+- 범위: 하나
+- 의존: 없음
+- 브랜치: feature/p1
+- 묶음: 없음
+- 경로 예약: 없음
+- spec: docs/superpowers/specs/p1-design.md
+- 발화: S5
+- 항목: C5
+MD
+mkbundle() {  # mkbundle <에픽> <ids>
+  printf -- '---\ntype: epic-bundle\nepic: %s\nroadmap: docs/x/roadmap.md\nsource_brief: docs/x/brief.md\nids: [%s]\n---\n\n# %s 묶음\n' "$1" "$2" "$1" > "$R/docs/x/$1.md"
+}
+mkbundle R9 "C1, D2, S7, S8, S9"
+mkbundle R8 "S8, S9"
+# R8 의 설계문서는 S9 를 기각한다 — 배정만으로는 받듦이 아니다(N17)
+printf -- '---\nsource_interview: docs/x/R8.md\n---\n\n# R8 설계\n\n## Goals\n\n- 이웃\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| S8 | 반영 | Goals |\n| S9 | 기각 | 범위 밖 |\n' > "$R/docs/superpowers/specs/r8-design.md"
+r9_design() {  # r9_design <표 행들 — printf %b 로 푼다> — R9 설계문서를 낸다
+  printf -- '---\nsource_interview: docs/x/R9.md\n---\n\n# R9 설계\n\n## Goals\n\n- 목표\n\n## 설계\n\n### §1 첫 절\n\n1. 하나\n2. 둘\n\n```\n### §2 펜스 안 제목\n```\n\n## Acceptance Criteria\n\n- **AC10** 열째\n- AC2. 둘째\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n'
+  printf '%b' "$1"
+  printf '\n## Metadata\n\n- 끝\n'
+}
+jget() {  # jget <json 문자열> <파이썬 식 — r 이 결과>. 식은 이 테스트가 쓴 고정 문자열뿐이다.
+  J="$1" python3 -I -c 'import json, os, sys; r = json.loads(os.environ["J"]); print(eval(sys.argv[1]))' "$2"
+}
+
+# 11. 자리 확인(AC3) — §n-m · ACn(낱말 경계) · 펜스 안 제목 · 제목 낱말
+r9_design '| C1 | 반영 | §1-2 — 둘째 항목 |\n| D2 | 반영 | §1-7 — 없는 항목 |\n| S7 | 반영 | AC1 — AC10 과 헷갈리면 안 된다 |\n| S8 | 반영 | AC10 · Goals |\n| S9 | 반영 | §2 — 펜스 안에만 있다 |\n' > "$R/loc.md"
+out="$(python3 "$C" --json "$R/docs/x/R9.md" "$R/loc.md")"; rc=$?
+assert_eq "$rc" "0" "AC7: 얕은 답만 있으면 rc 0 (리뷰 전에 막을 것 없음)"
+assert_eq "$(jget "$out" "sorted(s['id'] for s in r['shallow'])")" "['D2', 'S7', 'S9']" "AC3: 없는 §1-7 · AC1(AC10 만 있다) · 펜스 안 §2 를 얕음으로 센다"
+assert_eq "$(jget "$out" "[s['reason'] for s in r['shallow'] if s['id']=='D2']")" "['가리킨 자리가 설계문서에 없다: §1-7']" "AC3: 얕음 사유가 가리킨 자리를 말한다"
+r9_design '| C1 | 반영 | 그냥 설명만 있다 |\n| D2 | 반영 | §1 |\n| S7 | 반영 | AC2 |\n| S8 | 반영 | Goals — 목표 |\n| S9 | 반영 | 설계 — §1-1 |\n' > "$R/loc2.md"
+out="$(python3 "$C" --json "$R/docs/x/R9.md" "$R/loc2.md")"
+assert_eq "$(jget "$out" "[(s['id'], s['reason']) for s in r['shallow']]")" "[('C1', '가리킨 자리가 없다')]" "AC3: 자리 표기가 하나도 없으면 얕음, 있으면(§1 · AC2 · 제목 낱말 · §1-1) 세지 않는다(양성 짝)"
+txt="$(python3 "$C" "$R/docs/x/R9.md" "$R/loc2.md")"
+assert_contains "$txt" "얕은 답 — C1: 가리킨 자리가 없다" "번호별 줄"
+# 변이(AC15) — 「자리 표기 없음」 판정을 끄면 위 단언이 무너진다
+M2="$T/mut2"; mkdir -p "$M2"; cp "$S/section6.py" "$S/roadmap_model.py" "$M2/"
+sed 's/^    if not found:$/    if False:/' "$C" > "$M2/check_bundle_coverage.py"
+cmp -s "$C" "$M2/check_bundle_coverage.py" && no "변이 적용 안 됨(자리 표기 없음)" || ok "변이 적용됨(자리 표기 없음)"
+out="$(python3 "$M2/check_bundle_coverage.py" --json "$R/docs/x/R9.md" "$R/loc2.md")"
+assert_eq "$(jget "$out" "len(r['shallow'])")" "0" "변이: 「자리 표기 없음」을 끄면 C1 이 얕음에서 빠진다 — AC3 단언에 이빨이 있다"
+
+# 12. 기각 행(AC4 · AC5) — 로드맵에 없는 에픽 · 받드는 에픽 없음 · 배정됐지만 그 설계문서가 기각(N17)
+r9_design '| C1 | 반영 | §1 |\n| D2 | 기각 | R99 로 넘긴다 |\n| S7 | 기각 | 범위 밖 |\n| S8 | 기각 | R8 이 받는다 |\n| S9 | 기각 | R8 이 받는다 |\n' > "$R/rej.md"
+out="$(python3 "$C" --json "$R/docs/x/R9.md" "$R/rej.md")"; rc=$?
+assert_eq "$rc" "0" "AC7: 얕음 · 받드는 에픽 없는 발화만 있으면 rc 0"
+assert_eq "$(jget "$out" "[(s['id'], s['reason']) for s in r['shallow']]")" "[('D2', '넘긴 에픽이 로드맵에 없다: R99')]" "AC4: 기각 칸의 에픽이 로드맵에 없으면 얕음"
+assert_eq "$(jget "$out" "r['unserved']")" "['S7', 'S9']" "AC5: 받드는 블록 없는 S7 과, 배정된 R8 의 설계문서가 기각한 S9(N17)가 받드는 에픽 없는 발화다 — R8 이 받드는 S8 은 아니다"
+assert_eq "$(jget "$out" "r['unknown']")" "[]" "로드맵을 읽었으면 셀 수 없음 0"
+cp -R "$R" "$T/repo2"
+sed 's/^| S9 | 기각 | 범위 밖 |$/| S9 | 반영 | Goals |/' "$R/docs/superpowers/specs/r8-design.md" > "$T/repo2/docs/superpowers/specs/r8-design.md"
+out="$(python3 "$C" --json "$T/repo2/docs/x/R9.md" "$R/rej.md")"
+assert_eq "$(jget "$out" "r['unserved']")" "['S7']" "N17 양성 짝: R8 설계문서가 S9 를 반영하면 S9 는 받든 것이다"
+
+# 13. 로드맵을 못 찾음(AC5 · AC7) — 그 항목만 셀 수 없음, rc 0, 첫 줄이 개수를 말한다
+mkdir -p "$T/lone"; cp "$R/docs/x/R9.md" "$T/lone/R9.md"
+txt="$(python3 "$C" "$T/lone/R9.md" "$R/rej.md")"; rc=$?
+assert_eq "$rc" "0" "AC7: 셀 수 없음만 있으면 rc 0"
+assert_eq "$(printf '%s\n' "$txt" | head -n 1)" "번호 대조: 빠진 번호 0개 · 얕은 답 0개 · 받드는 에픽 없는 발화 0개 · 셀 수 없음 4개" "AC7: 첫 줄이 셀 수 없음 개수를 말한다(조용한 0 이 아니다)"
+assert_contains "$txt" "셀 수 없음 — S7 — 로드맵을 찾지 못했다: docs/x/roadmap.md" "셀 수 없음 사유 줄"
+
+# 14. 출력 · 종료 코드(AC7) — 빠진 번호가 하나면 rc 1(양성 짝), JSON 키
+r9_design '| C1 | 반영 | §1 |\n| D2 | 반영 | §1 |\n| S7 | 반영 | §1 |\n| S8 | 반영 | §1 |\n' > "$R/miss1.md"
+txt="$(python3 "$C" "$R/docs/x/R9.md" "$R/miss1.md")"; rc=$?
+assert_eq "$rc" "1" "AC7 양성 짝: 빠진 번호 하나 → rc 1"
+assert_eq "$(printf '%s\n' "$txt" | head -n 1)" "번호 대조: 빠진 번호 1개 · 얕은 답 0개 · 받드는 에픽 없는 발화 0개" "AC7: 첫 줄 형식"
+out="$(python3 "$C" --json "$R/docs/x/R9.md" "$R/miss1.md")"
+assert_eq "$(jget "$out" "sorted(k for k in r if k in ('missing','shallow','unserved','unknown','extra','status'))")" "['extra', 'missing', 'shallow', 'status', 'unknown', 'unserved']" "AC7: --json 키"
+r9_design '| C1 · D2 · S7 · S8 · S9 | 반영 | §1-1 |\n' > "$R/ok9.md"
+txt="$(python3 "$C" "$R/docs/x/R9.md" "$R/ok9.md")"; rc=$?
+assert_eq "$rc" "0" "전부 정상 → rc 0"
+assert_eq "$txt" "번호 대조: 빠진 번호 없음 (묶음 번호 5개 · 표 번호 5개)" "전부 0 이면 지금의 「빠진 번호 없음」 한 줄"
+
+# 15. brief 입력(AC6) — brief 의 전체 번호로 대조하고 roadmap_status 와 같은 집합이다
+B="$T/brief"; mkdir -p "$B"
+cat > "$B/b.md" <<'MD'
+---
+type: interview-brief
+user_sourced_items:
+  - id: C3
+    statement: "셋째 확정"
+---
+
+# 대조용 brief
+
+## 0. 한눈에
+
+- OQ2 [열림] — 둘째 물음
+
+## 4. External Landscape
+
+- 대조 사례 «cov» — [취함]
+
+## 5. 기각 · Blind Spots
+
+- 기각 — 다른 길 — verdict: kept — ST2 — 부착 1/1
+- 위험 — 실패 양식: 대조가 빠진다 — 근거 없음 [RC3]
+
+## 6. 사용자 원문
+
+- **S3** 🗣 요청:
+  > 번호를 다 대조해 줘
+
+## 7. Next Action
+
+다음.
+MD
+printf '# audit\n\n## 6. 사용자 원문\n\n- **S4** 🗣 발화:\n  > 넷째 말\n\n## 7. 확산 원자료\n\n- 없음\n' > "$B/b.audit.md"
+bdesign() { printf -- '---\nsource_interview: x\n---\n\n# 설계\n\n### §1 절\n\n1. 하나\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| %s | 반영 | §1 |\n' "$1"; }
+bdesign "C3 · OQ2 · «cov» · RC3 · ST2 · K1 · S3 · S4" > "$B/d-all.md"
+txt="$(python3 "$C" "$B/b.md" "$B/d-all.md")"; rc=$?
+assert_eq "$rc" "0" "AC6: brief 입력 — 전체 번호가 표에 있으면 rc 0"
+assert_eq "$txt" "번호 대조: 빠진 번호 없음 (brief 번호 8개 · 표 번호 8개)" "AC6: brief 번호 8개(§2 · §0 OQ · §4 key · §5 RC · ST · K · §6 S)를 센다"
+bdesign "C3 · OQ2 · «cov» · RC3 · ST2 · K1 · S3" > "$B/d-miss.md"
+txt="$(python3 "$C" "$B/b.md" "$B/d-miss.md")"; rc=$?
+assert_eq "$rc" "1" "AC6: audit §6 의 S4 가 빠지면 rc 1"
+assert_contains "$txt" "빠진 번호 1개 — S4" "AC6: 빠진 번호 S4"
+out="$(cd "$S" && python3 -c '
+import sys, check_bundle_coverage as c, roadmap_model as m
+b = open(sys.argv[1], encoding="utf-8").read(); a = open(sys.argv[2], encoding="utf-8").read()
+non_s, s_ids, _k = m.brief_universe(b, a)
+r = c.coverage(sys.argv[1], sys.argv[3])
+print(r["bundle_count"] == len(non_s | s_ids) and r["mode"] == "brief")' "$B/b.md" "$B/b.audit.md" "$B/d-all.md")"
+assert_eq "$out" "True" "AC6: brief 모드의 번호 집합이 roadmap_status 의 brief_universe 와 같다"
+mkdir -p "$T/noaudit"; cp "$B/b.md" "$T/noaudit/b.md"
+txt="$(python3 "$C" "$T/noaudit/b.md" "$B/d-all.md")"; rc=$?
+assert_eq "$rc" "3" "AC6: brief 옆 audit 을 못 읽으면 rc 3"
+assert_contains "$txt" "brief 또는 audit 을 못 읽었다" "rc 3 사유"
+
+# 16. 함수 경로의 경고 수(spec-review 가 쓴다)
+out="$(cd "$S" && python3 -c '
+import sys, check_bundle_coverage as c
+print(c.warning_count(c.coverage(sys.argv[1], sys.argv[2])), c.warning_count({"status": 3}))' "$R/docs/x/R9.md" "$R/rej.md")"
+assert_eq "$out" "3 1" "warning_count: 얕음 1 + 받드는 에픽 없음 2 = 3, 검사 불가는 1"
+
 finish
