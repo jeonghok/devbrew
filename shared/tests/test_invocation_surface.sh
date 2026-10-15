@@ -32,7 +32,8 @@ def head(plugin, skill):
     return subprocess.run([sys.executable, lock, "--print-head", plugin, skill],
                           capture_output=True, text=True, check=True).stdout
 ENTRY = [("spec-distill", "request-framing", False), ("spec-distill", "spec-interview", False),
-         ("spec-distill", "spec-review", False), ("plugin-audit", "plugin-audit", True),
+         ("spec-distill", "spec-review", False), ("spec-distill", "roadmap-status", False),
+         ("plugin-audit", "plugin-audit", True),
          ("project-init", "project-init", True)]
 for p, s, user_only in ENTRY:
     fm = "---\nname: %s\ndescription: x\ncost_class: low\n%s" % (s, "disable-model-invocation: true\n" if user_only else "")

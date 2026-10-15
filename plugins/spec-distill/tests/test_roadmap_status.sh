@@ -210,7 +210,8 @@ printf '**Spec:** `docs/superpowers/specs/n1-design.md`\n' > "$W/docs/superpower
 g add -- docs && g commit -qm "n1"
 # V1 — spec 의 번호 대조가 D2 를 빠뜨림 → 생략 경고
 g checkout -q -b feature/v1 main; mkdir -p "$W/docs/superpowers/specs"
-spec_doc docs/rm/V1.md "C1 · S1" > "$W/docs/superpowers/specs/v1-design.md"
+spec_doc docs/rm/V1.md "C1" > "$W/docs/superpowers/specs/v1-design.md"
+printf '| S1 | 기각 | 범위 밖 |\n' >> "$W/docs/superpowers/specs/v1-design.md"
 g add -- docs && g commit -qm "v1"
 g checkout -q main
 g fetch -q origin
@@ -255,6 +256,12 @@ assert_file_grep "$RS" 'GIT_NO_LAZY_FETCH="1"' "partial clone 에서 빠진 객�
 assert_contains "$(warns "$OUT" L1)" "묶음 없음: docs/rm/L1.md" "L1: 묶음 없음"
 assert_contains "$(warns "$OUT" M1)" "spec 여럿" "M1: spec 여럿(따옴표 친 source_interview 포함)"
 assert_contains "$(warns "$OUT" V1)" "생략: docs/superpowers/specs/v1-design.md 이 번호 1개를 빠뜨렸다 — D2" "V1: 생략 경고"
+assert_contains "$(warns "$OUT" V1)" "얕은 답 1개: docs/superpowers/specs/v1-design.md — C1(" "V1: 얕은 답(R3)이 경고 줄로 나온다 — 반영 자리 §1 이 설계문서에 없다"
+assert_not_contains "$(warns "$OUT" V1)" "받드는 에픽 없는 발화" "V1: 기각한 S1 을 다른 에픽(N1 등)이 받들면 경고가 없다 — 로드맵을 main 트리에서 읽었다는 음의 짝"
+uk="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap_status as rs; print(rs.coverage_warnings({"unknown": ["S1 — 사유"]}, "x.md"))' "$S")"
+assert_eq "$uk" "['번호 대조 셀 수 없음 1개: x.md — S1 — 사유']" "셀 수 없음 경고 줄의 모양"
+uw="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap_status as rs; print(rs.coverage_warnings({"shallow": [], "unserved": ["S7", "S9"]}, "x.md"))' "$S")"
+assert_eq "$uw" "['받드는 에픽 없는 발화 2개: x.md — S7 · S9']" "받드는 에픽 없는 발화 경고 줄의 모양"
 assert_eq "$(js "$OUT" "r['unassigned']")" "[]" "미배정 번호 0"
 assert_eq "$(js "$OUT" "r['orphans']")" "[]" "고아 발화 0"
 assert_eq "$(js "$OUT" "[o['blocks'] for o in r['overlaps']]")" "[['E1', 'W1']]" "겹침(정보): E1 ↔ W1 만(README 는 빼고, J1→W1 은 의존이 있어 뺀다)"
@@ -363,6 +370,21 @@ assert_contains "$(js "$T/fg.json" "r['unknown_reasons']")" "git grep 실패" "g
 (cd "$W" && PATH="$T/fakebin-diff:$PATH" python3 "$RS" --json docs/rm/roadmap.md > "$T/fd.json"); rc=$?
 assert_eq "$rc" "3" "git diff 실패 → rc 3"
 assert_contains "$(js "$T/fd.json" "r['unknown_reasons']")" "git diff 실패" "git diff 실패가 검사 불가로 올라왔다"
+# 로드맵 blob 을 첫 읽기 뒤로 못 읽는 git(얕은 클론 · partial clone 흉내) — 「경고 없음」이 아니라 셀 수 없음 경고 줄이 나와야 한다
+mkdir -p "$T/fakebin-blob"
+cat > "$T/fakebin-blob/git" <<SH
+#!/bin/bash
+case "\$*" in
+  *"cat-file blob "*":docs/rm/roadmap.md"*)
+    if [ -e "$T/blob-first" ]; then echo "fatal: unable to read" >&2; exit 128; fi
+    : > "$T/blob-first" ;;
+esac
+exec "$REAL_GIT" "\$@"
+SH
+chmod +x "$T/fakebin-blob/git"; rm -f "$T/blob-first"
+(cd "$W" && PATH="$T/fakebin-blob:$PATH" python3 "$RS" --json docs/rm/roadmap.md > "$T/fb.json")
+assert_contains "$(warns "$T/fb.json" V1)" "번호 대조 셀 수 없음 1개: docs/superpowers/specs/v1-design.md — S1 — 로드맵을 못 읽었다: docs/rm/roadmap.md" "V1: 로드맵 blob 을 못 읽으면 셀 수 없음 경고 줄이 나온다(양성 짝)"
+assert_not_contains "$(warns "$OUT" V1)" "번호 대조 셀 수 없음" "V1: 읽히는 정상 실행에는 그 줄이 없다"
 PY="$(command -v python3)"
 (cd "$W" && PATH=/nonexistent-dir "$PY" "$RS" --json docs/rm/roadmap.md > "$T/crash.json"); rc=$?
 assert_eq "$rc" "3" "내부 오류(git 을 실행하지 못함) → rc 3"
