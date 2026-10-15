@@ -16,7 +16,9 @@ C="$SD/references/compression.md"; RF="$SD/skills/request-framing/SKILL.md"
 ST="$SD/templates/interview-seed-template.md"; SP="$SD/references/docreview-profiles/seed.md"
 # AC2 — 세 물음은 「빼면 표에 남긴다」, 고정점 문면은 그대로
 has   "$C" '빼면 표에 남긴다' "AC2: 압축 규약의 세 물음이 「빼면 표에 남긴다」를 말한다"
-assert_eq "$(flat "$C" | grep -o '빼면 표에 남긴다' | wc -l | tr -d ' ')" "3" "AC2: 세 물음 각각이 「빼면 표에 남긴다」를 말한다(셋 중 하나만 지워도 red)"
+n_keep="$(flat "$C" | grep -o '빼면 표에 남긴다' | wc -l | tr -d ' ')"
+[ "$n_keep" -ge 3 ] && ok "AC2: 세 물음 각각이 「빼면 표에 남긴다」를 말한다(셋 중 하나만 지워도 red) — $n_keep 회" \
+  || no "AC2: 「빼면 표에 남긴다」가 $n_keep 회 — 셋보다 적다"
 hasnt "$C" '어차피 맞게 할 거면 뺀다.' "AC2(부재): 「어차피 맞게 할 거면 뺀다.」 단독 문장이 없다"
 hasnt "$C" '있으면 뺀다.' "AC2(부재): 「있으면 뺀다.」 단독 문장이 없다"
 has   "$C" '## 상한을 두지 않는다' "AC2(고정점): 「상한을 두지 않는다」 절이 그대로다"
@@ -58,6 +60,8 @@ hasnt "$TE" '해당하면 다음 메시지를 출력하고 진행하지 않는�
 for f in "$RF" "$SI"; do
   has "$f" '「전체 과정으로」' "N11: $(basename "$(dirname "$f")") 의 trivia 단계가 「전체 과정으로」 분기를 말한다"
 done
+has   "$SI" '「전체 과정으로」면 3.5 로 갑니다' "ledger3: spec-interview 의 「전체 과정으로」는 3.5(seed 아닌 입력 조언)를 거친다"
+hasnt "$SI" '「전체 과정으로」면 4 로 갑니다' "ledger3(부재): 3.5 를 건너뛰고 4 로 가는 문면이 없다"
 
 # ── Task 4 — 리뷰 프로필 (AC5 · AC6 · AC7 · AC16b) ──
 BP="$SD/references/docreview-profiles/brief.md"; DP="$SD/references/docreview-profiles/design-doc.md"
@@ -140,6 +144,23 @@ hasnt "$RB" '`fix_anchors` §0·§2' "§3-2(부재): 옛 fix_anchors 문장이 �
 hasnt "$RB" '방향 · overdesign 항목은' "§3-2(부재): 방향을 참고로 부르는 문장이 없다"
 has   "$SR" '「참고 전부 보기」' "AC8(spec-review): 설계문서 승인 게이트 앞에 참고 전부 보기가 있다"
 has   "$SR" '<!-- advice-display:end -->' "AC8(양성 짝): advice 표시 펜스 표지가 그대로다"
+# 「참고 전부 보기」 펜스 — 원장이 없으면 「목록 없음」 한 줄로 끝나고 `$STATE_DIR/advice-all.json` 으로 쓰지 않는다
+ALLF="$(awk '/「참고 전부 보기」면 아래 펜스로/{s=1} s&&/^```bash$/{f=1;next} f&&/^```$/{exit} f' "$SR")"
+assert_contains "$ALLF" '[ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]' "ledger1: 참고 전부 보기 펜스가 빈 STATE_DIR · 원장 부재를 가린다"
+AT="$(mktemp -d -t sd-advall-XXXXXX)" || exit 1
+mkdir -p "$AT/root/scripts" "$AT/sd"
+printf '%s\n' 'print("stub")' > "$AT/root/scripts/state_path.py"
+printf '%s\n' 'import sys, os' 'a = sys.argv[1:]' \
+  'print(os.environ["ADV_SD"]) if a[0] == "state-dir-for" else print("{\"items\": [{\"category\": \"overdesign\", \"anchor\": \"x\", \"summary\": \"y\"}]}")' > "$AT/root/scripts/docreview_state.py"
+adv_out="$(cd "$AT" && CLAUDE_PLUGIN_ROOT="$AT/root" ADV_SD="$AT/sd" spec_path="$AT/doc.md" bash -c "$ALLF" 2>&1)"; adv_rc=$?
+{ [ "$adv_rc" -eq 0 ] && [ ! -e "$AT/sd/advice-all.json" ] && printf '%s' "$adv_out" | grep -qF '참고(advisory) 목록 없음'; } \
+  && ok "ledger1: 원장 없는 STATE_DIR 에서 「목록 없음」 한 줄로 끝나고 advice-all.json 을 쓰지 않는다" \
+  || no "ledger1: rc=$adv_rc out=$(printf '%s' "$adv_out" | head -c 200)"
+: > "$AT/sd/docreview-state.md"
+adv_out="$(cd "$AT" && CLAUDE_PLUGIN_ROOT="$AT/root" ADV_SD="$AT/sd" spec_path="$AT/doc.md" bash -c "$ALLF" 2>&1)"
+{ [ -f "$AT/sd/advice-all.json" ] && printf '%s' "$adv_out" | grep -qF '참고 전부 1건'; } \
+  && ok "ledger1(양성 짝): 원장이 있으면 목록 전부를 낸다" || no "ledger1(양성 짝): out=$(printf '%s' "$adv_out" | head -c 200)"
+rm -rf "$AT"
 
 # ── Task 9 — 라운드 공시 (AC15 · AC16c) ──
 has "$SI" '사실로 보고 직접 답한 질문 <N>개' "AC15: 라운드 요약에 사실로 보고 직접 답한 질문 수가 있다"

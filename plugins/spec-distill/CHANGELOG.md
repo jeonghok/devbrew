@@ -19,15 +19,17 @@
 - 확인 표시는 «다시 검증할 것» 문단에서도 따라간다.
 - 공유 리뷰 엔진의 freeze 검사는 payload §6 추가를 `frozen_change` 로 보고하며 reviewing-brief 가 그것을 공시한다.
 
-### Security
-- seed 본문은 하나의 허용 문법 `scripts/seed_body.parse_seed` 로 읽는다(`check_seed.py` · `seed_provenance.py` 공유). 산문만 허용하고 제목 · 목록 · 인용 · 표 · 펜스 · HTML · 링크와 참조 문법 · URL 은 코드 표기 안에서도 거절한다. 공백만 있는 줄과 `\n` 이 아닌 줄 구분자도 거절한다. 확인 표시는 정확한 «(사용자 확인)» 하나만 인정하고 변형은 무효다. 풀이 줄의 판정은 가장 왼쪽 것이라 사용자 말 꼬리로 뒤집을 수 없다.
-- audit 틀의 제목은 정확히 한 번 · 틀 순서일 때만 인정하고 중복 · 순서 바뀜은 거절한다. `## 6` 줄은 허용 목록이며 모르는 줄은 `user-quotes` · `check-drops` · `log` · bundle 을 거절한다.
-- `seed_review_log.py log --quote`(`--quote-file` 만 받는다). `append-verbatim` 은 `## 6` 에 쓰지 않는다.
-
 ### Removed
 - overdesign 판정자당 라운드 3건 상한. 「번호가 작은 쪽」 사다리 규칙.
 - 재제시 상한의 자동 강등.
 - 확인 표시의 문단 내림(N20). 해결 결정의 §3 제외(N22).
+- `seed_review_log.py log --quote`(`--quote-file` 만 받는다).
+
+### Security
+- seed 본문은 하나의 허용 문법 `scripts/seed_body.parse_seed` 로 읽는다(`check_seed.py` · `seed_provenance.py` 공유). 산문만 허용하고 제목 · 목록 · 인용 · 표 · 펜스 · HTML · 링크와 참조 문법 · URL 은 코드 표기 안에서도 거절한다. 공백만 있는 줄과 `\n` 이 아닌 줄 구분자도 거절한다. 확인 표시는 정확한 «(사용자 확인)» 하나만 인정하고 변형은 무효다. 풀이 줄의 판정은 가장 왼쪽 것이라 사용자 말 꼬리로 뒤집을 수 없다.
+- audit 틀의 제목은 정확히 한 번 · 틀 순서일 때만 인정하고 중복 · 순서 바뀜은 거절한다. `## 6` 줄은 허용 목록이며 모르는 줄은 `user-quotes` · `check-drops` · `log` · bundle 을 거절한다.
+- `seed_review_log.py log --quote` 를 없앴다(`--quote-file` 만 받는다). `append-verbatim` 은 `## 6` 에 쓰지 않는다.
+- payload §6 앵커는 state 원장의 발화여야 한다 — 원장 밖 앵커는 `check_verbatim_coverage.py` 가 `unknown_ids` 로 거절하고(최초 요청 `S1` 은 예외), N1b 는 들여 쓴 §6 앵커를 거절한다. 남의 항목 본문에 심은 `- **S<N>**` 줄이 결정 근거로 쓰이던 길이다.
 
 ## [5.7.0] — 2026-10-15
 
