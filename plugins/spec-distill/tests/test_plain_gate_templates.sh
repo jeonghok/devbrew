@@ -59,7 +59,9 @@ assert_eq "$(LINE="$RSC" python3 -c '
 import os, re
 l = os.environ["LINE"]
 m = re.match(r"((?:@<[^<>]+> )+)", l)
-print("ok" if m and not re.search(r"<[^<>]+>", l[m.end():]) else "no")')" "ok" "Review Focus 4: spec-review 다음 세션 줄의 꺾쇠 자리표는 줄 앞 @<…> 토큰에만 있다"
+names = set(re.findall(r"@<([^<>]+)>", m.group(1))) if m else set()
+rest = re.findall(r"<([^<>]+)>", l[m.end():]) if m else ["x"]
+print("ok" if m and all(x in names for x in rest) else "no")')" "ok" "Review Focus 4: spec-review 다음 세션 줄의 꺾쇠 자리표는 줄 앞 @<…> 토큰의 이름만 쓴다"
 
 # ⑦ request-framing 의 옛 채널 이름이 남지 않는다(처분 앵커 포함).
 FR_FLAT="$(tr '\n' ' ' < "$FR" | tr -s ' ')"

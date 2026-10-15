@@ -150,6 +150,7 @@
 - **P14 — 문서 단위 원장 · 문서가 사라질 때 정리 (6.0.0)**: 리뷰 원장은 `.claude/spec-distill/.docreview/<stem>-<hash>/` 에 문서마다 하나다(`docreview_state.py state-dir-for --root --doc`). 리뷰를 시작하는 진입 셋(spec-review · reviewing-brief · request-framing 의 리뷰)이 원장을 열 때 `scripts/ledger_sweep.py` 가 한 번 돈다 — 기록된 문서가 없고 원장 폴더에 TTL 동안 쓰기가 없는 원장을 지우고, 옛 버전의 세션 폴더 `<session-id>/` 중 `state.local.md` 가 없고 TTL 을 넘은 것을 지우되 그 안의 옛 원장 중 문서가 남은 것은 먼저 `.docreview/` 로 옮긴다. `state.local.md` 가 있는 옛 폴더는 시간과 무관하게 지우지 않고 알린다(아직 docs 로 옮기지 않은 인터뷰 기록이다 — 옮기거나 지우는 일은 사용자 몫이다). 정리는 루트 디렉토리 잠금(`O_NOFOLLOW` 로 연 디렉토리 fd 의 `flock`, 락 파일 없음) 안에서 돈다.
 - **동시 리뷰 표지 (6.0.0)** — 같은 문서를 두 세션이 함께 리뷰해 원장을 덮어쓰지 않게, 원장 열기가 원장 폴더의 `reviewing-by`(세션 id 한 줄)를 배타 생성으로 잡고 원장에 쓰는 명령마다 그 앞에서 표지를 확인한다(`scripts/ledger_marker.py`). 남의 표지면 멈추고 「그만둠 (권장)」/「이어 씀」을 묻는다 — 이어 씀이면 표지를 이 세션 것으로 바꾼다(임시 파일 + `os.replace`). 표지는 승인 게이트의 답을 원장에 적은 뒤 끝맺음 펜스가 푼다. 다른 세션의 원장을 이어 받을 때는 「이전 리뷰 라운드 <n> 에서 이어 간다」 한 줄이 나온다.
 - **P21 — 저장소가 심은 링크를 따라 쓰지 않는다 (6.0.0)**: 저장소는 어떤 이름으로든 링크를 커밋할 수 있다. 원장 · 표지 · 인터뷰 상태 파일을 쓰거나 옮기거나 지우는 자리는 경로 성분의 링크 · `..` · 작업 트리 밖을 거부한다(`state_path.py path-inside`). 그래서 `.claude` · `.claude/spec-distill` · `.docreview` 가 링크인 저장소에서는 리뷰 라운드 대신 거부 사유 한 줄이 나오고(원장 열기가 `NO_DIR` 로 끝나 리뷰 없이 끝난 사실이 각 자리의 안내 · degrade 로 보인다), 원장 정리는 링크인 state root · `.docreview` 를 「셀 수 없음」 으로 내고 그 너머를 옮기거나 지우지 않는다 — 링크가 저장소 **안**을 가리켜도 거부다. 인터뷰 상태 파일 경로가 링크이거나 작업 트리 밖이면 진입이 그 파일을 이어 가지 않고(`REJECT`), 끝의 brief · audit · 상태 파일 커밋도 하지 않고 세 경로와 사유를 보인다.
+- **Law 1 · Law 3 — 번호 인계 (5.6.0)** — brief · 에픽 묶음의 번호가 설계문서 · 계획 · 구현으로 넘어가는 이음매마다 기계 대조가 있다: 번호 대조(빠진 번호는 spec-review 진입 때 보이고 게이트 경고 수에 들며 지휘 절차는 그 때문에 spec-review 앞에서 멈춘다, 얕음 · 받드는 에픽 없음은 승인 때의 경고) · `--plan` · `--impl` · `roadmap_status.py` 의 받는 곳 없는 미룸 경고. 외부 skill(brainstorming · writing-plans · SDD)은 고치지 않는다 — 넘길 때 보내는 글과 돌아온 결과 검사만 devbrew 쪽에 있다. 내용이 실제로 답하는지는 리뷰어(design-doc 프로필의 scope 축)가 판정한다.
 
 ## External source absorption
 
@@ -164,7 +165,10 @@
 큰 일을 에픽으로 나눠 진행할 때 쓰는 읽기 전용 스크립트 둘이 있습니다. 둘 다 파일을 쓰지 않고 네트워크에 나가지 않습니다. 단위는 로드맵 > 에픽(spec 하나) > plan(PR 하나) > task 이고 에픽 하나가 PR 여럿을 낼 수 있지만, 지금의 상태 계산은 에픽 하나를 브랜치 하나로 셉니다.
 
 - `scripts/roadmap_status.py <로드맵 경로>` — `origin/main` 의 로드맵과 git 을 읽어 에픽마다 단계와 경고를 냅니다. 아직 main 에 없는 로드맵은 `--roadmap-file <파일>` 로 줍니다. 머지됨 자동 판정은 merge commit 방식에서만 됩니다. 브랜치가 지워졌으면 GitHub 의 머지 메시지 `Merge pull request #<n> from <owner>/<브랜치>` 로만 알아봅니다. squash · rebase 로 머지했거나 로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적어야 합니다.
-- `scripts/check_bundle_coverage.py <묶음> <설계문서>` — 에픽 묶음의 번호가 설계문서 `## 번호 대조` 표에 다 있는지 봅니다.
+- `scripts/check_bundle_coverage.py <묶음|brief> <설계문서>` — 정답 출처의 번호가 설계문서 `## 번호 대조` 표에 다 있는지(빠지면 종료 코드 1), 반영 칸이 설계문서의 실제 자리를 가리키는지 · 기각한 번호를 받드는 에픽이 있는지(경고 줄 — 종료 코드는 그대로) 봅니다. 로드맵을 못 찾으면 그 항목은 「셀 수 없음」으로 셉니다.
+- `scripts/check_bundle_coverage.py --plan <설계문서> <계획>` · `--impl <설계문서> <보고 파일>` — 설계문서 AC 가 계획 Task 에 다 있는지, 구현 보고의 미룸 · 빠짐이 설계문서 `## 미룸` 표에 받는 곳과 함께 올랐는지 봅니다.
+- `scripts/spec_review_bundle.py` — `spec-review <설계문서> --bundle <묶음|brief>` 의 정답 출처 확인 · 진입 대조 · 승인 때 로드맵 위치와 이웃 결정.
+- `references/epic-handoff.md` — 로드맵 에픽의 설계를 여는 넘김 줄. 지휘 세션이 자리표를 채워 씁니다.
 
 경로 예약 겹침과 다른 에픽이 예약한 파일의 편집은 경고가 아니라 정보입니다 — 종료 코드를 바꾸지 않고, 에픽은 병렬로 갑니다. 충돌은 머지 때 풉니다(나중에 머지하는 PR 이 main 을 merge 하고 스위트를 다시 돌립니다).
 
