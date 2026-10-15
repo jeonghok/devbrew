@@ -111,7 +111,7 @@ python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component 
 ### 표지와 원장 열기 — 라운드마다 선결 앞
 
 절차서의 선결(`mkdir -p` · `init`) 앞에 매 라운드 이 펜스를 같은 Bash 호출 앞에 이어 붙여 돈다(`$PAYLOAD` · `$AUDIT`
-대입이 먼저다). 마지막 줄이 판결이다. 원장 자리가 레포 밖이거나 레포 꼭대기 아래에서 링크(`.claude` · `spec-distill` · `.docreview` 포함)를
+대입이 먼저다). 마지막 줄이 판결이고, `HELD` 가 아니면 펜스가 rc 3 으로 끝나 같은 호출의 뒤 명령이 돌지 않는다. 원장 자리가 레포 밖이거나 레포 꼭대기 아래에서 링크(`.claude` · `spec-distill` · `.docreview` 포함)를
 지나면 만들지 않는다. 원장 정리는
 이 세션이 이미 표지를 쥔 다음 라운드가 아니면 원장 자리를 만들기 전에 한 번 돈다.
 
@@ -122,39 +122,43 @@ case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+lo="ERROR"
 if [ -z "$harness_sid" ]; then
   echo "[spec-distill] 세션 id 를 얻지 못해 동시 리뷰 표지를 잡을 수 없다 — 이 라운드를 시작하지 않는다(record 후 Step B)."
-  echo "ledger-open: NO_SESSION"
+  lo="NO_SESSION"
 elif [ -z "$STATE_DIR" ] || ! python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR"; then
   echo "[spec-distill] 원장 자리를 열지 못했다(STATE_DIR='${STATE_DIR:-}' — 비었거나 레포 밖이거나 링크를 지난다, 위 사유) — 이 라운드를 시작하지 않는다(record 후 Step B)."
-  echo "ledger-open: NO_DIR"
+  lo="NO_DIR"
 else
   own=""; [ -f "$STATE_DIR/reviewing-by" ] && [ ! -L "$STATE_DIR/reviewing-by" ] && own="$(head -n 1 "$STATE_DIR/reviewing-by" 2>/dev/null)"
   [ "$own" = "$harness_sid" ] || python3 "$PR/scripts/ledger_sweep.py" --root "$ROOT" || echo "[spec-distill] 원장 정리가 실패했다 — 리뷰는 계속한다."
   if ! mkdir -p "$STATE_DIR" 2>/dev/null; then
     echo "[spec-distill] 원장 자리를 만들지 못했다(STATE_DIR='${STATE_DIR}') — 이 라운드를 시작하지 않는다(record 후 Step B)."
-    echo "ledger-open: NO_DIR"
+    lo="NO_DIR"
   else
     python3 "$PR/scripts/ledger_marker.py" resume-note --dir "$STATE_DIR" --session "$harness_sid"
     m_rc=0; m_out="$(python3 "$PR/scripts/ledger_marker.py" acquire --dir "$STATE_DIR" --session "$harness_sid")" || m_rc=$?
     if [ "$m_rc" -eq 0 ]; then
-      echo "ledger-open: HELD"
+      lo="HELD"
     elif [ "$m_rc" -eq 3 ]; then
-      echo "[spec-distill] 다른 세션(${m_out})이 이 문서를 리뷰하고 있다 — ${STATE_DIR}"
-      echo "ledger-open: OTHER:${m_out}"
+      case "$m_out" in ""|*[!A-Za-z0-9_-]*) m_who="(알 수 없는 표지)" ;; *) m_who="$m_out" ;; esac
+      echo "[spec-distill] 다른 세션(${m_who})이 이 문서를 리뷰하고 있다 — ${STATE_DIR}"
+      lo="OTHER:${m_who}"
     else
       echo "[spec-distill] 동시 리뷰 표지를 잡지 못했다(rc ${m_rc}) — 이 라운드를 시작하지 않는다(record 후 Step B)."
-      echo "ledger-open: ERROR"
+      lo="ERROR"
     fi
   fi
 fi
+echo "ledger-open: ${lo}"
+[ "$lo" = HELD ] || exit 3
 ```
 <!-- ledger-open:end -->
 
 | 마지막 줄 | 동작 |
 |---|---|
 | `ledger-open: HELD` | 진입 게이트로 간다 |
-| `ledger-open: OTHER:<sid>` | 멈추고 `AskUserQuestion` 하나 — 「그만둠 (권장)」/「이어 씀 — 표지를 내 것으로 바꾼다」. 이어 씀이면 아래 넘겨받기 펜스를 돈 뒤 이 펜스를 다시 돈다. 그만둠이면 record(`pipeline` / `all` / `unavailable`, reason = 판결)를 남기고 Step B 로 돌아간다 |
+| `ledger-open: OTHER:<sid>` · `OTHER:(알 수 없는 표지)` | 멈추고 `AskUserQuestion` 하나 — 「그만둠 (권장)」/「이어 씀 — 표지를 내 것으로 바꾼다」. 이어 씀이면 아래 넘겨받기 펜스를 돈 뒤 이 펜스를 다시 돈다. 그만둠이면 record(`pipeline` / `all` / `unavailable`, reason = 판결)를 남기고 Step B 로 돌아간다 |
 | `ledger-open: NO_SESSION` · `NO_DIR` · `ERROR` | 그 `[spec-distill]` 줄을 보이고 record(`pipeline` / `all` / `unavailable`, reason = 판결)를 남기고 Step B 로 돌아간다 |
 
 <!-- ledger-takeover:begin -->
@@ -298,7 +302,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 
 <!-- ledger-guard:begin -->
 ```bash
-python3 "$PR/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" || { echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다."; exit 3; }
+g_out="$(python3 "$PR/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
 ```
 <!-- ledger-guard:end -->
 

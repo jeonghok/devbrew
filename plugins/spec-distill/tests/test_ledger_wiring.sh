@@ -195,4 +195,95 @@ ob1="$(open_at "$repo" "$d4" sess-aaaa1111 "$RB")"
 assert_eq "$(printf '%s\n' "$ob1" | tail -n 1)" "ledger-open: HELD" "AC8: reviewing-brief 원장 열기가 표지를 잡는다"
 ob2="$(open_at "$repo" "$d4" sess-bbbb2222 "$RB")"
 assert_eq "$(printf '%s\n' "$ob2" | tail -n 1)" "ledger-open: OTHER:sess-aaaa1111" "AC8: reviewing-brief — 남의 표지면 OTHER"
+
+# ── fix 1 ─────────────────────────────────────────────────────────────────────
+# (1) HELD 가 아닌 판결은 펜스를 rc 3 으로 끝내 같은 호출의 뒤 명령(절차서 선결의 mkdir)이 돌지 않는다
+rm -rf "$r3/.claude/spec-distill/.docreview"   # 위 양성 대조가 진짜 폴더를 만들었다 — ln 이 그 안에 링크를 놓지 않게
+ln -s "$outside" "$r3/.claude/spec-distill/.docreview"
+[ -L "$r3/.claude/spec-distill/.docreview" ] && ok "fix1(1) 전제: .docreview 가 링크다" || no "fix1(1) 전제: .docreview 가 링크가 아니다 — 아래 칸이 공허하다"
+for f in "$SR" "$RB"; do
+  o="$(cd "$r3" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-gggg7777 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-gggg7777 \
+      bash -c "spec_path='$d3'; PAYLOAD='$d3'
+$(fence "$f" ledger-open)
+mkdir -p \"\$STATE_DIR\"; echo after-fence-ran" 2>&1)"; rc=$?
+  nm="$(basename "$(dirname "$f")")"
+  assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: NO_DIR" "fix1(1): $nm — 뒤에 선결 mkdir 를 이어 붙여도 마지막 줄이 NO_DIR"
+  assert_eq "$rc" "3" "fix1(1): $nm — NO_DIR 판결이 호출을 rc 3 으로 끝낸다"
+  assert_eq "$(ls -A "$outside")" "" "fix1(1): $nm — 이어 붙인 mkdir 가 링크 너머에 원장 자리를 만들지 않았다"
+done
+rm -f "$r3/.claude/spec-distill/.docreview"
+o="$(cd "$r3" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-gggg7777 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-gggg7777 \
+    bash -c "spec_path='$d3'
+$(fence "$SR" ledger-open)
+echo after-fence-ran" 2>&1)"; rc=$?
+{ [ "$rc" -eq 0 ] && [ "$(printf '%s\n' "$o" | tail -n 1)" = "after-fence-ran" ]; } \
+  && ok "fix1(1) 양성 대조: HELD 면 같은 호출의 뒤 명령이 돈다" || no "fix1(1) 양성 대조: HELD 인데 뒤 명령이 돌지 않았다(rc $rc): $o"
+
+# (2) 쓰기 전 확인 — 표지 없음은 원장 열기로, 남의 표지는 「이어 씀」 으로 안내한다
+d9="$repo/docs/g-design.md"; printf '# G\n' > "$d9"
+S9="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$repo/.claude/spec-distill" --doc "$d9")"; mkdir -p "$S9"
+for f in "$SR" "$RB"; do
+  g="$(fence "$f" ledger-guard)"; nm="$(basename "$(dirname "$f")")"
+  rm -f "$S9/reviewing-by"
+  out="$(bash -c "SD='$SD'; PR='$SD'; STATE_DIR='$S9'; harness_sid=sess-cccc3333
+$g
+echo wrote" 2>&1)"; rc=$?
+  { [ "$rc" -eq 3 ] && assert_contains "$out" "원장 열기 펜스(ledger-open)를 먼저 다시 돌려라" "fix1(2): $nm — 표지 없음이면 원장 열기를 다시 돌리라고 한다"; } \
+    || no "fix1(2): $nm — 표지 없음에서 rc $rc"
+  assert_not_contains "$out" "「이어 씀」" "fix1(2): $nm — 표지 없음에서 「이어 씀」 을 안내하지 않는다"
+  printf 'sess-dddd4444\n' > "$S9/reviewing-by"
+  out="$(bash -c "SD='$SD'; PR='$SD'; STATE_DIR='$S9'; harness_sid=sess-cccc3333
+$g
+echo wrote" 2>&1)"; rc=$?
+  { [ "$rc" -eq 3 ] && assert_contains "$out" "「이어 씀」" "fix1(2): $nm — 남의 표지면 「이어 씀」 을 안내한다"; } \
+    || no "fix1(2): $nm — 남의 표지에서 rc $rc"
+  assert_not_contains "$out" "wrote" "fix1(2): $nm — 남의 표지에서 뒤 명령이 돌지 않았다"
+done
+
+# (3) 해제가 실제로 돈다 — 끝맺음 펜스 둘과 해제 펜스
+d6="$repo/docs/e-design.md"; printf '# E\n' > "$d6"
+o="$(open_at "$repo" "$d6" sess-hhhh8888 "$SR")"
+S6="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$repo/.claude/spec-distill" --doc "$d6")"
+ledger "$S6/docreview-state.md" "$d6" 1
+assert_eq "$(cat "$S6/reviewing-by" 2>/dev/null)" "sess-hhhh8888" "fix1(3): finalize 뒤(끝맺음 펜스 전)에는 표지가 남아 있다"
+( cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-hhhh8888 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-hhhh8888 \
+    bash -c "spec_path='$d6'
+$(fence "$SR" advice-display)" >/dev/null 2>&1 )
+[ -e "$S6/reviewing-by" ] && no "fix1(3): spec-review 끝맺음 펜스 뒤에도 표지가 남았다" || ok "fix1(3): spec-review 끝맺음 펜스 뒤 표지가 사라졌다"
+assert_eq "$(cat "$S6/last-session" 2>/dev/null)" "sess-hhhh8888" "fix1(3): spec-review 끝맺음 펜스가 last-session 에 자기 세션을 남겼다"
+
+d7="$repo/docs/f-brief.md"; printf '# F\n' > "$d7"
+o="$(open_at "$repo" "$d7" sess-iiii9999 "$RB")"
+S7="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$repo/.claude/spec-distill" --doc "$d7")"
+ledger "$S7/docreview-state.md" "$d7" 1
+assert_eq "$(cat "$S7/reviewing-by" 2>/dev/null)" "sess-iiii9999" "fix1(3): B-A 전에는 reviewing-brief 가 잡은 표지가 남아 있다"
+ba="$(fence "$FIN" advice-ba | python3 -I -c 'import sys; t = sys.stdin.buffer.read().decode("utf-8"); k = "<Step A.5 의 PAYLOAD 절대경로>"; sys.stdout.buffer.write(t.replace(k, sys.argv[1]).encode("utf-8")); sys.exit(0 if k in t else 1)' "$d7")" \
+  && ok "fix1(3): B-A 펜스의 PAYLOAD 자리표를 픽스처 경로로 바꿨다" || no "fix1(3): B-A 펜스에 PAYLOAD 자리표가 없다 — 아래 칸이 공허하다"
+( cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-iiii9999 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-iiii9999 \
+    bash -c "$ba" >/dev/null 2>&1 )
+[ -e "$S7/reviewing-by" ] && no "fix1(3): finishing B-A 뒤에도 표지가 남았다" || ok "fix1(3): finishing B-A 뒤 표지가 사라졌다"
+assert_eq "$(cat "$S7/last-session" 2>/dev/null)" "sess-iiii9999" "fix1(3): finishing B-A 가 last-session 에 자기 세션을 남겼다"
+
+d8="$repo/docs/h-design.md"; printf '# H\n' > "$d8"
+o="$(open_at "$repo" "$d8" sess-jjjj0000 "$SR")"
+S8="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$repo/.claude/spec-distill" --doc "$d8")"
+run_release() {   # run_release <sid>
+  ( cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID="$1" DEVBREW_SPEC_DISTILL_SESSION_ID="$1" \
+      bash -c "spec_path='$d8'
+$(fence "$SR" ledger-release)" >/dev/null 2>&1 )
+}
+run_release sess-kkkk1111
+assert_eq "$(cat "$S8/reviewing-by" 2>/dev/null)" "sess-jjjj0000" "fix1(3): 해제 펜스 — 남의 표지는 지우지 않는다"
+run_release sess-jjjj0000
+[ -e "$S8/reviewing-by" ] && no "fix1(3): 해제 펜스 — 주인이 불러도 표지가 남았다" || ok "fix1(3): 해제 펜스 — 주인이 부르면 표지가 사라진다"
+assert_eq "$(cat "$S8/last-session" 2>/dev/null)" "sess-jjjj0000" "fix1(3): 해제 펜스 — last-session 에 주인 세션을 남겼다"
+
+# (4) 표지 내용은 판결 줄에 그대로 실리지 않는다 — 두 줄 표지가 HELD 를 위조하지 못한다
+d10="$repo/docs/i-design.md"; printf '# I\n' > "$d10"
+S10="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$repo/.claude/spec-distill" --doc "$d10")"; mkdir -p "$S10"
+printf 'sess-zzzz9999\nledger-open: HELD\n' > "$S10/reviewing-by"
+for f in "$SR" "$RB"; do
+  o="$(open_at "$repo" "$d10" sess-llll2222 "$f")"
+  assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: OTHER:(알 수 없는 표지)" "fix1(4): $(basename "$(dirname "$f")") — 두 줄 표지는 OTHER:(알 수 없는 표지)"
+done
 finish
