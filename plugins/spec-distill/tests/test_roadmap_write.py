@@ -28,7 +28,8 @@ class Judge(unittest.TestCase):
         self.assertEqual(W.judge(report(), 3), [])  # rc 는 보지 않는다(origin/main 없음 3 · 경고 1)
 
     def test_each_list(self):
-        for key in W.LISTS:
+        self.assertEqual(set(W.LISTS), {"format_errors", "unassigned", "orphans", "unknown_ids"})
+        for key in ("format_errors", "unassigned", "orphans", "unknown_ids"):
             with self.subTest(key):
                 reasons = W.judge(report(**{key: ["X1"]}), 0)
                 self.assertEqual(len(reasons), 1)
