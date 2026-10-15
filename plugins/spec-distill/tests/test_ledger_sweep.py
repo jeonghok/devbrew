@@ -211,6 +211,17 @@ class OldSessionTest(Base):
         self.assertNotIn("- old", (tgt / "docreview-state.md").read_text(encoding="utf-8"))
         self.assertIn("새 쪽을 남겼다", out)
 
+    def test_conflict_marker_only_target_keeps_old_ledger(self):
+        doc = self.doc()
+        tgt = key_for(self.root, doc); tgt.mkdir(parents=True)
+        (tgt / "reviewing-by").write_text("sess-live0001\n", encoding="utf-8")
+        s = self.old_session("oldsess01", ledgers=[("k1", doc)])
+        rc, out, _ = self.sweep()
+        self.assertTrue((s / "docreview" / "k1" / "docreview-state.md").exists())
+        self.assertFalse((tgt / "docreview-state.md").exists())
+        self.assertIn("읽지 못한 원장 1개 남김 — %s\n" % tgt, out)
+        self.assertNotIn("새 쪽을 남겼다", out)
+
     def test_conflict_unreadable_target_keeps_both(self):
         doc, tgt, s = self._conflict(old_newer=True, target_unreadable=True)
         rc, out, _ = self.sweep()
@@ -252,6 +263,20 @@ class SafetyTest(Base):
             os.close(fd)
         self.assertTrue(s.exists())
         self.assertIn("건너뜀(다른 세션이 정리 중)", out)
+
+    def test_pyyaml_missing_touches_nothing(self):
+        shadow = self.tmp / "noyaml" / "yaml"; shadow.mkdir(parents=True)
+        (shadow / "__init__.py").write_text("raise ImportError('no yaml')\n", encoding="utf-8")
+        d = key_for(self.root, str(self.docs / "gone.md")); write_ledger(d, str(self.docs / "gone.md")); age(d)
+        s = self.old_session("oldsess01")
+        a = self.root / ".gc-pending-aaa"; a.mkdir(); age(a)
+        rc, out, _ = self.sweep({"PYTHONPATH": str(self.tmp / "noyaml")})
+        self.assertEqual(rc, 0)
+        self.assertEqual(out.count("원장 정리 — 셀 수 없음(pyyaml 없음)"), 1)
+        self.assertNotIn("읽지 못한 원장", out)
+        self.assertTrue(d.exists()); self.assertTrue(s.exists()); self.assertTrue(a.exists())
+        rc, out, _ = self.sweep()                      # 양성 대조 — yaml 이 있으면 지운다
+        self.assertFalse(d.exists()); self.assertFalse(s.exists()); self.assertFalse(a.exists())
 
     def test_gc_pending_swept_in_both_places(self):
         a = self.root / ".gc-pending-aaa"; a.mkdir(); age(a)

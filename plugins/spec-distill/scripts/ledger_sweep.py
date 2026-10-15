@@ -29,6 +29,7 @@ from gc_common import (  # noqa: E402
     GC_PENDING_PREFIX, folder_mtime_ns, gc_one, locked_root, root_escapes, safe_rmtree, ttl_ns,
 )
 from kill_switch_active import kill_switch_active  # noqa: E402
+import docreview_state  # noqa: E402
 from docreview_state import STATE_SUBDIR, load_state, state_dir_for  # noqa: E402
 
 MARKER = "reviewing-by"
@@ -143,12 +144,13 @@ def migrate_old_ledger(old: Path, root: Path, rep: Report) -> str:
         rep.moved += 1
         return "moved"
     key = target.name
-    if os.path.lexists(target / MARKER):
-        rep.conflicts.append("옛 원장 충돌 — {0}: 새 쪽을 남겼다".format(key))
-        return "kept-target"
+    # 읽지 못한 대상이 표지보다 먼저다 — 표지만 있는 대상에 밀려 읽히는 옛 원장이 폴더째 지워지면 안 된다.
     if recorded_doc(target) is None:
         rep.unread.append(str(target))
         return "unread"
+    if os.path.lexists(target / MARKER):
+        rep.conflicts.append("옛 원장 충돌 — {0}: 새 쪽을 남겼다".format(key))
+        return "kept-target"
     if os.lstat(old / STATE_FILE).st_mtime_ns > os.lstat(target / STATE_FILE).st_mtime_ns:
         aside = target.parent / "{0}{1}-{2}".format(GC_PENDING_PREFIX, key, time.time_ns())
         if not may_enter(aside, root):
@@ -254,6 +256,10 @@ def main(argv=None) -> int:
         print("[spec-distill] 원장 정리 — 셀 수 없음(state root '{0}' 가 링크를 거쳐 제자리 밖으로 풀린다)".format(root))
         return 0
     if not root.is_dir():
+        return 0
+    if docreview_state.yaml is None:
+        # 원장을 하나도 읽지 못한다 — 문서 유무를 모르는 채로 지우거나 옮기지 않는다.
+        print("[spec-distill] 원장 정리 — 셀 수 없음(pyyaml 없음)")
         return 0
     ttl = ttl_ns("DEVBREW_SPEC_DISTILL_TTL_HOURS")
     rep = Report()
