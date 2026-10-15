@@ -29,16 +29,14 @@ audit 을 못 읽으면 확인된 풀이와 원문 문장은 0 이다: marks 는
 사람과 모델도 왼쪽 첫 판정으로 읽는다. 그 밖의 나머지는 모양 어긋남이다.
 «(사용자 확인)» 의 근거는 `— 고름` 풀이 줄의 풀이 글자뿐이다 — 적은 말 꼬리 · `## seed 에서 덜어 낸 것`
 표(되살림 칸 포함)는 근거가 아니다. 되살린 문장은 `## 1` 원문과 글자가 같을 때만 사용자 원문(미확인)이다.
-확인 표시는 정본 글자 «(사용자 확인)» 하나뿐이다. 접어서(`seed_review_log.fold_for_match` + 공백 제거)
-`사용자확인`(또는 `사용자가확인` · `…확인함` · `…확인됨`)이 여는 괄호류(유니코드 Ps · Pi 와 `<`)와 닫는
-괄호류(Pe · Pf 와 `>`) 사이에 바로 놓인 것 — 전각 · 작은 괄호, `[ ]` · `【 】` · `〔 〕` · `< >` · `« »`,
-괄호 안 공백, 붙여 쓴 낱말, 제로폭 문자가 낀 것 — 은 사람과 모델이 확인 표시로 읽으므로 표시로 세되
-정본이 아니면 **근거 없는 표시**다(marks 위반 · `--fix` 가 뗀다 · classify 는 mark_invalid). 괄호 없는
-산문(«사용자 확인 절차»)은 표시가 아니다. 괄호로 감싼 낱말을 산문에서 쓴 것(«「사용자 확인」 절차»)도
-표시로 친다 — 읽는 쪽이 가를 수 없어 엄격한 쪽을 고른다. 글자 하나씩 접은 자리와 문자열 전체를 접은 수가 다르면(예: 풀어 쓴 한글 자모) 표시의
-자리를 정할 수 없어 marks 는 판단을 거부한다(rc 2).
-rc: 0 정상 · 1 marks 위반 · 2 입력 오류(seed 못 읽음 · seed 를 못 씀 · audit 을 못 믿음 · 풀이 줄 0 ·
-표시 자리를 정할 수 없음 · 그 밖의 예외). rc 1 은 위반에만 쓴다.
+seed 본문은 `seed_body.parse_seed` 하나로 읽는다 — 게이트(`check_seed.py`)와 같은 문법이다. 그 문법이
+거부하는 줄(산문이 아닌 구조 · 보이지 않는 글자 · 정본이 아닌 확인 표시 · URL 등)이 하나라도 있으면 marks 와
+classify 는 판단하지 않는다(rc 2) — 게이트가 막는 seed 의 출처를 이 코드가 따로 매기지 않는다. 확인 표시는
+정본 글자 «(사용자 확인)» 하나뿐이다. 줄바꿈에 걸쳐 감싼 표시처럼 문법을 지난 뒤 정본 글자와 다른 표시는
+근거 없는 표시다(marks 위반 · `--fix` 가 뗀다 · classify 는 mark_invalid). 글자 하나씩 접은 자리와
+문자열 전체를 접은 수가 다르면 표시의 자리를 정할 수 없어 marks 는 판단을 거부한다(rc 2).
+rc: 0 정상 · 1 marks 위반 · 2 입력 오류(seed 못 읽음 · seed 를 못 씀 · seed 문법 거부 · audit 을 못 믿음 ·
+풀이 줄 0 · 표시 자리를 정할 수 없음 · 그 밖의 예외). rc 1 은 위반에만 쓴다.
 """
 from __future__ import annotations
 
@@ -47,13 +45,12 @@ import json
 import pathlib
 import re
 import sys
-import unicodedata
 
-from seed_review_log import fold_for_match, heading_structure, section_body
+from seed_body import (MARK, fold_flat, mark_spans, marks_in_flat, parse_seed,  # noqa: F401
+                       rejected_lines_message, split_front)
+from seed_review_log import heading_structure, section_body
 
-MARK = "(사용자 확인)"
 REVERIFY_PREFIX = "다시 검증할 것 —"
-FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.S)
 # 풀이 줄 — `parse_reading_line` 이 읽는다. 끝의 선택 꼬리는 사용자가 «기타» 로 적은 말 · 「아니다」 뒤에
 # 덧붙인 말(N19)이다. 꼬리 안의 글자는 비신뢰 요청문이라 판정에 쓰지 않는다 — 줄 모양만 받는다.
 READING_HEAD = "- 내가 읽은 것: 「"
@@ -69,8 +66,6 @@ PLACEHOLDER_READING_RE = re.compile(
     r"^\s*- 내가 읽은 것:\s*「\s*<[^<>」]*>\s*」\s*—\s*<[^<>]*>"
     r"(?:\s*\[\s*—\s*사용자가 적은 말:\s*「\s*<[^<>」]*>\s*」\s*\])?\s*$")
 SENT_SPLIT_RE = re.compile(r"(?<=[.!?。])\s+|(?<=" + re.escape(MARK) + r")\s+")
-# 접은 열에서 표시의 낱말 — 앞뒤 한 글자가 괄호류여야 표시다(`_marks_in_flat`).
-MARK_CORE_RE = re.compile(r"사용자가?확인(?:함|됨)?")
 
 
 def parse_reading_line(line: str) -> tuple[str, str, str | None] | None:
@@ -94,56 +89,16 @@ def parse_reading_line(line: str) -> tuple[str, str, str | None] | None:
     return rest[:at], sep[len("」 — "):], said
 
 
-def _fold_flat(s: str) -> str:
-    return "".join(ch for ch in fold_for_match(s) if not ch.isspace())
-
-
-def _is_open(ch: str) -> bool:
-    return unicodedata.category(ch) in ("Ps", "Pi") or ch == "<"
-
-
-def _is_close(ch: str) -> bool:
-    return unicodedata.category(ch) in ("Pe", "Pf") or ch == ">"
-
-
-def _marks_in_flat(flat: str) -> list[tuple[int, int]]:
-    """접고 공백을 뺀 열에서 표시 자리 `[여는 괄호, 닫는 괄호 다음)`."""
-    out = []
-    for m in MARK_CORE_RE.finditer(flat):
-        a, b = m.start() - 1, m.end()
-        if a >= 0 and b < len(flat) and _is_open(flat[a]) and _is_close(flat[b]):
-            out.append((a, b + 1))
-    return out
-
-
-def mark_spans(s: str) -> list[tuple[int, int]]:
-    """s 안의 확인 표시 자리(정본 · 변형 모두) — 글자마다 접고 공백을 뺀 열에서 접은 표시를 찾아 원래
-    자리 `[시작, 끝)` 로 되돌린다."""
-    flat, where = [], []
-    for i, ch in enumerate(s):
-        for f in fold_for_match(ch):
-            if not f.isspace():
-                flat.append(f)
-                where.append(i)
-    return [(where[a], where[b - 1] + 1) for a, b in _marks_in_flat("".join(flat))]
-
-
 def mark_positions_ok(body: str, segs: list[dict]) -> bool:
     """표시 자리를 하나로 정할 수 있는가 — 본문 전체에서 글자마다 접어 찾은 수 · 문자열 전체를 접어 센 수 ·
     문장마다 센 수의 합이 모두 같아야 한다."""
     n = len(mark_spans(body))
-    return n == len(_marks_in_flat(_fold_flat(body))) == sum(s["n_marks"] for s in segs)
+    return n == len(marks_in_flat(fold_flat(body))) == sum(s["n_marks"] for s in segs)
 
 
 def norm(s: str) -> str:
     s = re.sub(r"\s+", " ", s).strip()
     return re.sub(r"\s+([.!?。,])", r"\1", s)
-
-
-def split_front(text: str) -> tuple[str, str]:
-    m = FRONTMATTER_RE.match(text)
-    head = m.group(0) if m else ""
-    return head, text[len(head):]
 
 
 def segments(body: str) -> list[dict]:
@@ -331,6 +286,13 @@ def main(argv=None) -> int:
         text = seed.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as e:
         print("seed 를 읽지 못했다: %s" % e, file=sys.stderr)
+        return 2
+    parsed = parse_seed(text)
+    if parsed.rejected:
+        for msg in rejected_lines_message(parsed.rejected):
+            print("[seed_provenance] " + msg, file=sys.stderr)
+        print("[spec-distill] seed 문법이 거부한 줄이 있어 %s 를 매기지 않는다(위반이 아니다 — check_seed 게이트가 "
+              "같은 줄을 막는다)" % a.cmd, file=sys.stderr)
         return 2
     audit_text, audit_state = _read_audit(a.audit)
     segs = with_mark_status(segments(split_front(text)[1]), confirmed_reading_sentences(audit_text))

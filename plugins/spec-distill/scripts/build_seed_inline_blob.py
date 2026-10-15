@@ -44,8 +44,8 @@ _SCRIPTS_DIR = str(pathlib.Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 import section6  # noqa: E402
-from seed_review_log import (AuditAmbiguous, duplicate_headings, heading_structure, section_body,  # noqa: E402
-                             user_quotes)
+from seed_review_log import (AuditAmbiguous, duplicate_headings, heading_structure,  # noqa: E402
+                             require_unambiguous, section_body, user_quotes)
 
 # 리뷰어에게 비신뢰 verbatim 으로 알릴 audit 자리 — seed 프로필 `## 처분 안내` 가 이 셋을 이름으로
 # 가리킨다(shared/tests/test_docreview_profiles.sh 가 이 튜플에서 도출해 대조한다). assemble() 은
@@ -159,6 +159,12 @@ def main() -> int:
         print(f"[spec-distill] {paths['audit_file']} 의 템플릿 제목 순서가 어긋난다({problem}) — 어느 줄이 "
               "그 절의 진짜 경계인지 정해지지 않는다. 번들을 조립하지 않는다.", file=sys.stderr)
     if heading_structure(audit_text):
+        return 2
+    try:
+        require_unambiguous(audit_text, UNTRUSTED_VERBATIM_SECTIONS[2])
+    except AuditAmbiguous as e:  # `## 6` 에 기록 모양이 아닌 줄 — 리뷰어에게 «리뷰 결정» 으로 싣지 않는다
+        print(str(e), file=sys.stderr)
+        print(f"[spec-distill] {paths['audit_file']} 의 `## 6` 을 판단할 수 없다. 번들을 조립하지 않는다.", file=sys.stderr)
         return 2
 
     sec_raw, sec_questions, _ = UNTRUSTED_VERBATIM_SECTIONS

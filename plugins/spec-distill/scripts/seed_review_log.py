@@ -30,7 +30,7 @@ audit `## 6. 리뷰 결정` 의 줄은 두 곳에서 온다. 엔진(`docreview_s
   append-verbatim <audit> --section H --title T <file>
       <file> 내용을 인용 블록으로 H 절 끝에 붙인다. 줄 나눔은 읽는 쪽(`section_body`)과 같은
       `str.splitlines` 다 — `\n` 만으로 나누면 다른 줄 구분자 뒤 글자가 인용 표시 없는 줄로 읽힌다.
-      제목 T 도 한 줄로 잇는다 — 줄바꿈이 남으면 둘째 줄이 접두 없는 기록 줄로 `## 6` 에 선다.
+      제목 T 도 한 줄로 잇는다. `## 6` 에는 붙이지 않는다(rc 2) — 그 절에는 기록 줄만 산다.
 
 audit 의 절 구조는 `heading_structure` 하나가 판정한다 — 일곱 템플릿 제목은 각각 많아야 한 번,
 템플릿 순서대로 나와야 한다(없는 제목은 «절 없음»). 비신뢰 `## 1` 원문 안에 심긴 제목은 펜스 안이든
@@ -39,6 +39,12 @@ audit 의 절 구조는 `heading_structure` 하나가 판정한다 — 일곱 �
 `check-drops` · `log` · `append-verbatim` · `parse_lines`)은 구조가 어긋나면 판단 · 쓰기를 거부한다
 (rc 2 · `AuditAmbiguous`) — 어느 줄이 진짜 절인지 이 코드가 골라 버리면 심은 글이 사용자 결정 문구로
 읽히거나 기록이 원문 안에 적힌다.
+
+`## 6` 의 줄은 허용 목록으로 읽는다 — 빈 줄이 아닌 줄은 전부 엔진 기록 줄(`ENGINE_LINE_RE`) · 이 파일의
+기록 줄(`HOST_LINE_RE`) · 엔진 계수 줄(`COUNT_LINE_RE` — 엔진의 `docreview_advice.count_line` 에서 도출) ·
+절 머리의 템플릿 안내 괄호(템플릿 파일 그대로) · `없음` 한 줄 중 하나여야 한다. 모르는 줄이 하나라도 있으면 «모르는 것은
+통과» 가 아니라 판단 · 쓰기 거부다(rc 2 · `AuditUnknownLine`). 거부 사유의 첫 줄은
+`[seed_review_log] ## 6 에 기록 모양이 아닌 줄이 있다 — <n>째 줄` 이고 줄 글자는 싣지 않는다.
 
 엔진 원장(`docreview-state.md`)의 내부 형식은 읽지 않는다 — 엔진이 CLI 로 내는 `gate` 요약과
 엔진이 audit 에 쓴 줄만 읽는다. 엔진 줄 모양이 바뀌면 tests/test_seed_review_log.sh 의 엔진
@@ -58,6 +64,7 @@ _SCRIPTS_DIR = str(pathlib.Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 import section6  # noqa: E402 — 제목 모양 판정은 이 리포에서 한 곳이다(§6-단일화 락)
+import docreview_advice  # noqa: E402 — 엔진 계수 줄의 모양은 엔진이 정한다
 
 DECISION_HEADING = "## 6. 리뷰 결정"
 HOST_KINDS = ("편집", "답", "거부")
@@ -84,6 +91,26 @@ AUDIT_HEADINGS = (
 
 class AuditAmbiguous(ValueError):
     """audit 의 절 경계를 하나로 정할 수 없다 — 판단을 거부한다(rc 2)."""
+
+
+class AuditUnknownLine(AuditAmbiguous):
+    """`## 6` 에 허용 목록 밖의 줄이 있다 — 판단 · 쓰기를 거부한다(rc 2). 메시지 첫 줄이 쉬운 사유다."""
+
+
+def _count_line_re() -> re.Pattern:
+    """엔진 계수 줄 모양 — 엔진의 `count_line` 이 자리표 값으로 만든 줄에서 도출한다(손으로 다시 적지 않는다)."""
+    marks = {"IDENTSENTINEL": r"\S+", "98765": r"\d+", "11111": r"\d+", "22222": r"\d+", "33333": r"\d+"}
+    pat = re.escape(docreview_advice.count_line(
+        "IDENTSENTINEL", 98765, {"advice_new": 11111, "advice_repeat": 22222, "mc_preexisting_new": 33333}))
+    for k, v in marks.items():
+        assert pat.count(k) == 1, k
+        pat = pat.replace(k, v)
+    return re.compile("^" + pat + "$")
+
+
+COUNT_LINE_RE = _count_line_re()
+EMPTY_SECTION = "없음"  # 기록이 없는 절을 적는 audit 관례(`## 5` 와 같다)
+TEMPLATE_PATH = pathlib.Path(__file__).resolve().parent.parent / "templates" / "interview-seed-audit-template.md"
 
 
 def fold_for_match(s: str) -> str:
@@ -169,6 +196,35 @@ def heading_structure(text: str) -> list[str]:
             % (b, at[b], a, at[a]) for a, b in zip(present, present[1:]) if at[a] > at[b]]
 
 
+def _template_guidance() -> list[str]:
+    """템플릿 `## 6` 의 안내 괄호 줄(앞뒤 공백 제외). 템플릿을 못 읽으면 빈 목록 — 안내 괄호를 받지 않는 쪽(엄격)."""
+    try:
+        tpl = TEMPLATE_PATH.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return []
+    return [ln.strip() for ln in (section_body(tpl, DECISION_HEADING) or "").splitlines() if ln.strip()]
+
+
+def decision_line_problems(audit_text: str) -> list[int]:
+    """`## 6` 의 빈 줄 아닌 줄 가운데 허용 목록(모듈 docstring) 밖의 줄 번호(파일 기준 1-based)."""
+    found = [i for i, ok in heading_lines(audit_text, DECISION_HEADING) if ok]
+    if not found:
+        return []
+    lines = audit_text.splitlines()
+    rows = []
+    for j in range(found[0] + 1, len(lines)):
+        if lines[j].strip() in AUDIT_HEADINGS:
+            break
+        if lines[j].strip():
+            rows.append((j + 1, lines[j]))
+    guide = _template_guidance()
+    if guide and [ln.strip() for _, ln in rows[:len(guide)]] == guide:
+        rows = rows[len(guide):]
+    return [n for n, ln in rows
+            if not (ENGINE_LINE_RE.match(ln) or HOST_LINE_RE.match(ln) or COUNT_LINE_RE.match(ln)
+                    or ln.strip() == EMPTY_SECTION)]
+
+
 def require_unambiguous(audit_text: str, heading: str) -> None:
     """`heading` 절을 읽거나 쓰기 전에 — 템플릿 제목 구조가 어긋나거나(`heading_structure`), `heading`
     줄이 있는데 절 시작으로 인정되지 않으면(코드 블록 · 한 줄 안에 숨음) `AuditAmbiguous`."""
@@ -178,6 +234,11 @@ def require_unambiguous(audit_text: str, heading: str) -> None:
     found = heading_lines(audit_text, heading)
     if found and not any(ok for _, ok in found):
         raise AuditAmbiguous("heading_not_a_section %s" % heading)
+    if heading == DECISION_HEADING:
+        bad = decision_line_problems(audit_text)
+        if bad:
+            raise AuditUnknownLine("\n".join("[seed_review_log] ## 6 에 기록 모양이 아닌 줄이 있다 — %d째 줄" % n
+                                             for n in bad))
 
 
 def parse_lines(audit_text: str) -> list[dict]:
@@ -308,6 +369,8 @@ def main(argv=None) -> int:
             try:
                 require_unambiguous(audit_text, DECISION_HEADING)
             except AuditAmbiguous as e:
+                if isinstance(e, AuditUnknownLine):
+                    print(str(e), file=sys.stderr)
                 print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
                 return 2
             v = check_drops(audit_text, dropped)
@@ -348,10 +411,18 @@ def main(argv=None) -> int:
             print(s)
             return 0
         if a.cmd == "append-verbatim":
+            if a.section.strip() == DECISION_HEADING:
+                print("[seed_review_log] ## 6 에는 기록 줄만 적는다 — append-verbatim 은 다른 절에 붙인다",
+                      file=sys.stderr)
+                return 2
             content = _read(a.file).splitlines() or [""]
             quoted = "\n".join(("> " + l) if l.strip() else ">" for l in content)
             append_under(pathlib.Path(a.audit), a.section, "### %s\n\n%s" % (one_line(a.title), quoted))
             return 0
+    except AuditUnknownLine as e:
+        print(str(e), file=sys.stderr)
+        print("[spec-distill] 위 줄 때문에 `## 6` 을 판단하지 않는다(쓰지도 않는다).", file=sys.stderr)
+        return 2
     except AuditAmbiguous as e:
         print("[spec-distill] audit 의 절 경계를 하나로 정할 수 없어 판단하지 않는다(쓰지도 않는다): %s" % e,
               file=sys.stderr)

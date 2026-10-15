@@ -497,7 +497,7 @@ needle = 'for para in re.split(r"\\n\\s*\\n", body.strip()):\n        whole'
 open(sys.argv[2], "w", encoding="utf-8").write(t.replace(needle, 'for para in [body]:\n        whole', 1))
 print("MUTATED" if needle in t else "UNCHANGED")
 PY
-cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$ROOT/plugins/spec-distill/scripts/section6.py" "$TMP/"
+cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$ROOT/plugins/spec-distill/scripts/section6.py" "$ROOT/plugins/spec-distill/scripts/seed_body.py" "$ROOT/plugins/spec-distill/scripts/docreview_advice.py" "$TMP/"
 python3 "$TMP/mutp.py" classify "$TMP/p.md" --audit "$TMP/p.audit.md" > "$TMP/pm.json" 2>/dev/null
 [ "$(j "$TMP/pm.json" '[s["basis"] for s in d["sentences"]]' 2>/dev/null)" = "['none']" ] \
   && ok "변이: 문단 경계를 지우면 다음 문단의 원문이 저자로 떨어진다 — 문단 경계 단언에 이빨이 있다" \
@@ -520,7 +520,7 @@ needle = 's = re.sub(r"\\s+", " ", s).strip()'
 open(sys.argv[2], "w", encoding="utf-8").write(t.replace(needle, "s = s.strip()", 1))
 print("MUTATED" if needle in t else "UNCHANGED")
 PY
-cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$ROOT/plugins/spec-distill/scripts/section6.py" "$TMP/"
+cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$ROOT/plugins/spec-distill/scripts/section6.py" "$ROOT/plugins/spec-distill/scripts/seed_body.py" "$ROOT/plugins/spec-distill/scripts/docreview_advice.py" "$TMP/"
 cp "$TMP/s.orig.md" "$TMP/s3.md"
 python3 "$TMP/mut.py" marks "$TMP/s3.md" "$TMP/a.audit.md" > "$TMP/m4.json" 2>/dev/null
 [ "$(j "$TMP/m4.json" 'len(d["invalid"])' 2>/dev/null)" = "4" ] \
