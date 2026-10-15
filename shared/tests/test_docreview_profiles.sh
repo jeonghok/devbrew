@@ -133,9 +133,10 @@ seed_contract_fails() {   # seed_contract_fails <profile> → 실패한 항목 �
   case "$gt" in *"그 밖의 줄"*) : ;; *) echo "gt_exclusion_missing" ;; esac
   printf '%s\n' "${gt#*그 밖의 줄}" | grep -qF '내가 읽은 것' || echo "gt_exclusion_missing"
   printf '%s\n' "${gt#*그 밖의 줄}" | grep -qF '정답이 아니다' || echo "gt_exclusion_missing"
+  printf '%s\n' "${gt#*그 밖의 줄}" | grep -qF '덜어 낸 것 표' || echo "gt_exclusion_missing"
   # 정답 목록은 글자 그대로 고정한다 — 넓어지는 방향을 열거하면(예: `## 2` 전부 · 풀이) 열거 밖의 넓어짐
   # (`## 3` · 질문 문구 · `## 4` 요약)이 통과한다. 이 파일은 리뷰어 페르소나와 같은 신중함으로 다룬다(CLAUDE.md).
-  [ "${gt%%그 밖의 줄*}" = '줄 단위 — audit `## 1. 원문` 전부 · `## 2. 질문 전체` 의 «당신이 답한 것» 줄 · `## 6. 리뷰 결정` 의 사용자 문구(각 줄의 큰따옴표 안). ' ] || echo "gt_widened"
+  [ "${gt%%그 밖의 줄*}" = '줄 단위 — audit `## 1. 원문` 전부 · `## 2. 질문 전체` 의 «당신이 답한 것» 줄과 풀이 줄 끝의 «사용자가 적은 말» 칸 · `## 6. 리뷰 결정` 의 사용자 문구(각 줄의 큰따옴표 안). ' ] || echo "gt_widened"
 }
 fails="$(seed_contract_fails "$SE")"
 [ -z "$fails" ] \
@@ -163,9 +164,10 @@ mut_expect untrusted 'untrusted_missing:`## 2. 질문 전체`' '`## 2. 질문 �
 mut_expect ground_truth "gt_answer_line_missing" '«당신이 답한 것» 줄' '질문 전체'
 mut_expect gt_widen "gt_widened" '`## 1. 원문` 전부' '`## 1. 원문` 전부 · `## 2. 질문 전체` 전부'
 mut_expect gt_widen_raw3 "gt_widened" '`## 1. 원문` 전부' '`## 1. 원문` 전부 · `## 3. 긴 초안` 전부'
-mut_expect gt_widen_question "gt_widened" '«당신이 답한 것» 줄 ·' '«당신이 답한 것» 줄과 질문 문구 ·'
+mut_expect gt_widen_question "gt_widened" '«사용자가 적은 말» 칸 ·' '«사용자가 적은 말» 칸과 질문 문구 ·'
 mut_expect gt_widen_critic "gt_widened" '큰따옴표 안).' '큰따옴표 안) · `## 4. 비평과 냉독` 의 탐지 요약.'
 mut_expect gt_exclusion "gt_exclusion_missing" '내가 읽은 것 · 결정 id' '결정 id'
+mut_expect gt_exclusion_table "gt_exclusion_missing" ' · 덜어 낸 것 표)' ')'
 
 # 번들의 비신뢰 자리 튜플(정본 — build_seed_inline_blob.py 의 UNTRUSTED_VERBATIM_SECTIONS)을 seed
 # 처분 안내가 전부 이름으로 가리키는가. 튜플에서 도출하므로 번들에 넷째 자리가 생기면 프로필이
