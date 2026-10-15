@@ -94,9 +94,16 @@ done
 # ── R3 넘김 — 분해된 일의 설계는 에픽 넘김 줄 · --bundle 로 ──────────────────
 RTPL="$SD/templates/roadmap-template.md"
 CONDUCT="$(win "$RTPL" '## 지휘 절차' '## ')"
-for lit in '`references/epic-handoff.md` 에 있는 에픽 넘김 줄' '`--bundle <묶음>`'; do
+for lit in '`references/epic-handoff.md` 에 있는 에픽 넘김 줄' '`--bundle <묶음>`' \
+           '`scripts/control_plane.py show --tasks {{ROADMAP}}`' '상태가 `keep` 이면(알 수 없음) 작업 상태는 바꾸지 않고' \
+           '`scripts/roadmap_status.py --roadmap-file {{ROADMAP}}` 로 대신 계산' \
+           '다른 파일이거나 읽을 수 없으면 spec-review 는 리뷰하지 않고 끝난다' '막지 않고 승인 게이트의 「경고 N개」에 더해지며'; do
   has "$CONDUCT" "$lit" "로드맵 템플릿 지휘 절차: $lit"
 done
+case "$CONDUCT" in
+  *'0 이 나오기 전에는 spec-review 로 가지 않는다'*) no "로드맵 템플릿 지휘 절차: 지휘자가 집행할 수 없는 rc 0 선행 조건이 남았다" ;;
+  *) ok "로드맵 템플릿 지휘 절차: rc 0 선행 조건 없음(spec-review --bundle 진입이 번호 대조를 보인다)" ;;
+esac
 for lit in '${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md 의 에픽 넘김 줄' '--bundle 과 그 묶음의 레포 루트 기준 상대경로'; do
   has "$DLINE" "$lit" "분해된 일 다음 세션 줄: $lit"
 done
