@@ -57,6 +57,7 @@ STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 —
 DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 init_rc=0; python3 "$PR/scripts/brief_review_state.py" init "$STATE" || init_rc=$?
 ```
@@ -103,6 +104,7 @@ STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 —
 DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component <a> --axis <b> --status <c> --reason "<r>" \
   || echo "- (state 기록 실패) component=<a> axis=<b> status=<c> reason=<r>" >> "$DEGRADE_FALLBACK_FILE"
@@ -122,6 +124,7 @@ case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 lo="ERROR"
 if [ -z "$harness_sid" ]; then
   echo "[spec-distill] 세션 id 를 얻지 못해 동시 리뷰 표지를 잡을 수 없다 — 이 라운드를 시작하지 않는다(record 후 Step B)."
@@ -168,6 +171,7 @@ case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && python3 "$PR/scripts/ledger_marker.py" takeover --dir "$STATE_DIR" --session "$harness_sid"
 ```
 <!-- ledger-takeover:end -->
@@ -193,6 +197,7 @@ STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 —
 DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 drop_bundle() {   # 직전 라운드 번들 — 지운다, 못 지우면 0바이트로 절단, 둘 다 못 하면 공시하고 rc 1
   [ -n "${BUNDLE:-}" ] && [ -e "$BUNDLE" ] || return 0
@@ -250,6 +255,7 @@ STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 —
 DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 drop_bundle() {   # 직전 라운드 번들 — 지운다, 못 지우면 0바이트로 절단, 둘 다 못 하면 공시하고 rc 1
   [ -n "${BUNDLE:-}" ] && [ -e "$BUNDLE" ] || return 0
@@ -325,6 +331,7 @@ if [ -z "${CODEX_YAML:-}" ]; then
   harness_sid="${harness_sid:-$(python3 "$SD/scripts/state_path.py" session-id || true)}"
   ROOT="${ROOT:-$(python3 "$SD/scripts/state_path.py" state-root || true)}"
   STATE_DIR="${STATE_DIR:-$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)}"
+  [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
   if [ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && mkdir -p "$STATE_DIR" 2>/dev/null; then
     CODEX_YAML="$STATE_DIR/docreview-codex.yaml"
   fi
@@ -408,6 +415,7 @@ STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 —
 DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
 prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
@@ -450,6 +458,7 @@ STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 —
 DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
 pc_rc=0; PJ="$(python3 "$PR/scripts/docreview_state.py" profile-check "$PROFILE")" || pc_rc=$?
@@ -592,6 +601,7 @@ STATE="${harness_sid:+$ROOT/$harness_sid/state.local.md}"   # degrade 원장 —
 DEGRADE_FALLBACK_FILE="${harness_sid:+$ROOT/$harness_sid/brief-degrade-fallback.txt}"; mkdir -p "${DEGRADE_FALLBACK_FILE%/*}" 2>/dev/null || true
 touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 blob_rc=0; BLOB="$(python3 "$PR/scripts/build_brief_inline_blob.py" "$PAYLOAD")" || blob_rc=$?
 ```

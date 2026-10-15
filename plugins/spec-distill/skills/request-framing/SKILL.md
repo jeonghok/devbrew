@@ -333,10 +333,11 @@ case "$IV_NAME" in
     AUDIT="docs/superpowers/interview/$IV_NAME.audit.md"
     SEED="docs/superpowers/interview/$IV_NAME.md" ;;
 esac
-SEED_ABS=""; AUDIT_ABS=""; STATE_DIR=""
+SEED_ABS=""; AUDIT_ABS=""; STATE_DIR=""; LEDGER_REFUSED=""
 if [ -n "$SEED" ]; then
   SEED_ABS="$(pwd)/$SEED"; AUDIT_ABS="$(pwd)/$AUDIT"
   STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "$SEED_ABS" || true)"
+  [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || { STATE_DIR=""; LEDGER_REFUSED=1; echo "[spec-distill] 원장 자리가 레포 밖으로 풀리거나 링크를 지난다(위 사유) — 리뷰 산출물(원장 · 번들 · 기준 사본)을 건너뛴다. 확정 직전 검사는 audit 기록으로 대조하고 막지 않는다." >&2; }
 fi
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/seed.md"
 BUNDLE="${STATE_DIR:+$STATE_DIR/seed-bundle.md}"                 # 탐지 · codex 가 읽는 번들
@@ -804,7 +805,7 @@ esac
   어느 덩어리가 승인된 수정인지 가를 기계가 없고, 저자의 권장은 바로 그 가름을 저자가 하는 것이다.
   덩어리 본문(`render`)은 질문 텍스트에 줄임 없이 싣는다 — 분량 상한을 두지 않는다(줄이면 공시가 아니다). 이 덩어리 본문은 규칙 블록의 「따로 정한 자리」다 — 「질문 본문엔 결정과 상태 한 줄만」의 예외로, 결정의 대상 자체라 질문에 그대로 싣는다.
 - 처분 없이는 다음 단계로 가지 않는다.
-- 기준 사본이 없으면(rc 3 — 세션 디렉토리가 정리됐다) 그 사실을 게이트 앞 글에 쓰고 seed 전문을 한 질문으로
+- 기준 사본이 없으면(rc 3 — 원장이 정리됐다) 그 사실을 게이트 앞 글에 쓰고 seed 전문을 한 질문으로
   보여 「이대로 둔다 / 멈춘다」를 묻는다. 「이대로 둔다」면 `seed_edit_diff.py init` 으로 새 기준 사본을 뜬다.
 
 처분을 받은 뒤 순서가 계약입니다 — **되돌리기 → 기록 → 기준 사본 교체.** 교체는 맨 끝에서만 합니다. 공시
@@ -923,7 +924,7 @@ degrade 는 **채널 넷**으로 나갑니다 — 엔진의 셋과 이 skill 의
 | `bundle_rc` 가 0 이 아니다 | `pipeline` · `suppression` | `unavailable` | 번들 조립 실패 — 조립기 stderr 마지막 줄 |
 | `prof_rc` 가 0 이 아니다 | `critic` · `suppression` | `unavailable` | seed 프로필 판독 불가(cat rc) |
 | `marks_rc` 가 2 다(표시 검사 불가) | `pipeline` · `suppression` | `degraded` | `seed_provenance.py marks` 의 stderr — 표시가 떼어지지 않았을 수 있다 |
-| `base_rc` 가 0 이 아니다 · 공시 펜스가 rc 3 | `pipeline` · `all` | `degraded` | 기준 사본 부재 — 저자 편집을 비교할 수 없는 구간이 있다 |
+| `base_rc` 가 0 이 아니다 · 공시 펜스가 rc 3 · 확정 직전 공시가 rc 4(원장 자리 거부) | `pipeline` · `all` | `degraded` | 기준 사본 부재 — 저자 편집을 비교할 수 없는 구간이 있다 |
 | `seed_text_rc` 가 0 이 아니다 | `readback` · `readback` | `unavailable` | 냉독 입력 부재 — 관측한 `$SEED` 값과 `seed_text_rc` |
 
 codex 부재 · 재비판 부재는 이 표에 없습니다 — 엔진이 `advisory[]` 와 게이트 첫 줄로 이미 공시합니다. 같은
@@ -1067,8 +1068,9 @@ echo "cnt_rc=$cnt_rc"
 <고름 | 고르지 않음>`)은 이 사유로 막지 않습니다.
 
 ```bash
-# 검사 2 · 3 이 엔진 자리에 파일을 쓴다 — 원장 정리로 디렉토리가 사라졌으면 다시 만든다.
-if [ -n "${STATE_DIR:-}" ]; then mkdir -p "$STATE_DIR"; else echo "[spec-distill] 리뷰 엔진 자리 없음(STATE_DIR 빈 값) — 「## 상태」 블록을 이 펜스 앞에 이어 붙여라. 검사 2 · 3 은 «검사 불가»로 막힌다." >&2; fi
+# 검사 2 · 3 이 엔진 자리에 파일을 쓴다 — 원장 정리로 디렉토리가 사라졌으면 다시 만든다. 원장 자리를 거부했으면(LEDGER_REFUSED)
+# 상태 블록이 이미 한 줄로 알렸고 검사 2 · 3 은 엔진 자리 없이 돈다.
+if [ -n "${STATE_DIR:-}" ]; then mkdir -p "$STATE_DIR"; elif [ -z "${LEDGER_REFUSED:-}" ]; then echo "[spec-distill] 리뷰 엔진 자리 없음(STATE_DIR 빈 값) — 「## 상태」 블록을 이 펜스 앞에 이어 붙여라. 검사 2 · 3 은 «검사 불가»로 막힌다." >&2; fi
 marks_rc=0
 python3 "$SD/scripts/seed_provenance.py" marks "$SEED_ABS" "$AUDIT_ABS" || marks_rc=$?
 case "$marks_rc" in
@@ -1081,11 +1083,15 @@ echo "marks_rc=$marks_rc"
 
 **검사 2 — 저자 편집 공시** — `### 저자 편집 공시` 의 처분 절차 그대로입니다. 마지막 라운드 뒤의 편집(채택 결정의
 반영 · ③ 뒤에 다시 깎은 것)이 사용자 앞에 오는 유일한 자리입니다. 덩어리 하나라도 「되돌린다」를 받으면 검사 1 부터
-다시 돕니다 — 되돌리기가 검사 1 뒤에 뗀 표시를 되살릴 수 있습니다.
+다시 돕니다 — 되돌리기가 검사 1 뒤에 뗀 표시를 되살릴 수 있습니다. 원장 자리를 거부한 세션(`## 상태` 블록이 그 한
+줄을 냈다)은 기준 사본이 없어 대조할 수 없으므로, 이 검사는 seed 전문을 보이고 막지 않습니다 — 그 사실을 게이트 앞 글에 싣습니다.
 
 ```bash
 final_hunks_rc=0
-if [ -z "${STATE_DIR:-}" ] || [ -z "${SEED_BASE:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
+if [ -z "${STATE_DIR:-}" ] && [ -n "${LEDGER_REFUSED:-}" ] && [ -f "${SEED_ABS:-}" ]; then
+  # 원장 자리를 거부했다 — 기준 사본이 없어 대조할 수 없다. seed 전문을 보이고 막지 않는다(막으면 심은 링크 하나로 게이트가 영영 닫힌다).
+  final_hunks_rc=4
+elif [ -z "${STATE_DIR:-}" ] || [ -z "${SEED_BASE:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
   final_hunks_rc=2
 else
   find "$STATE_DIR" -maxdepth 1 -name 'said-hunk-*.txt' -exec rm -f {} + 2>/dev/null || true
@@ -1102,20 +1108,32 @@ for h in d["hunks"]:
     print()
 ' "$STATE_DIR/hunks-final.json" ;;
   3) echo "[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자가 seed 를 고쳤는지 대조할 수 없다. seed 전문을 보이고 「이대로 둔다 / 멈춘다」를 물어라. 게이트를 띄우지 않는다." >&2 ;;
+  4) cat "$SEED_ABS"
+     echo "[spec-distill] 저자 편집 대조 불가 — 원장 자리를 쓰지 않아 기준 사본이 없다. seed 전문을 위에 보였다. 게이트 앞 글에 싣고 진행한다(막지 않는다)." >&2 ;;
   *) echo "[spec-distill] 확정 직전 공시 검사 불가(rc $final_hunks_rc) — 엔진 자리가 없거나(STATE_DIR='${STATE_DIR:-}') 입력을 읽지 못했다. 게이트를 띄우지 않는다." >&2 ;;
 esac
 ```
 
 **검사 3 — 문구 없는 drop** — `### 게이트` 의 검사와 같습니다. 엔진 원장(`$STATE_DIR/docreview-state.md`)이
 없으면 — 라운드가 시작되지 않았거나 원장 정리로 걷혔다 — `gate` 를 부르지 않고 audit `## 6. 리뷰 결정` 의 엔진
-drop 줄로 대조하며, 펜스가 내는 «엔진 원장 없음» 줄을 게이트 앞 글에 싣습니다.
+drop 줄로 대조하며, 펜스가 내는 «엔진 원장 없음» 줄을 게이트 앞 글에 싣습니다. 원장 자리를 거부한 세션도 같은
+대조로 갑니다 — 중간 파일은 원장 자리가 아니라 펜스 안의 임시 파일에 쓰고 지웁니다.
 
 ```bash
 final_drops_rc=0
-if [ -z "${STATE_DIR:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
+gf=""
+if [ -z "${STATE_DIR:-}" ] && [ -n "${LEDGER_REFUSED:-}" ]; then
+  # 원장 자리를 거부했다 — 엔진 원장 없이 audit 으로 대조하고, 중간 파일은 이 펜스 안에서만 쓰고 지운다.
+  gf="$(mktemp "${TMPDIR:-/tmp}/sd-gate-final.XXXXXX")" || final_drops_rc=2
+elif [ -z "${STATE_DIR:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
   final_drops_rc=2
-elif [ -f "$STATE_DIR/docreview-state.md" ]; then
-  python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$STATE_DIR/gate-final.json" || final_drops_rc=2
+else
+  gf="$STATE_DIR/gate-final.json"
+fi
+if [ "$final_drops_rc" -ne 0 ]; then
+  :
+elif [ -n "${STATE_DIR:-}" ] && [ -f "$STATE_DIR/docreview-state.md" ]; then
+  python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$gf" || final_drops_rc=2
 else
   # 엔진 원장이 없다 — dropped 를 audit ## 6 의 엔진 drop 줄에서 만든다. 기록된 drop 마다 문구가 있는지는 그대로 잰다.
   python3 -I -X utf8 -c '
@@ -1125,10 +1143,11 @@ from seed_review_log import parse_lines
 text = open(sys.argv[2], encoding="utf-8").read()
 ids = [i for e in parse_lines(text) if e["source"] == "engine" and e["choice"] == "drop" for i in e["ids"]]
 json.dump({"dropped": ids}, open(sys.argv[3], "w", encoding="utf-8"), ensure_ascii=False)
-' "$SD/scripts" "$AUDIT_ABS" "$STATE_DIR/gate-final.json" || final_drops_rc=2
+' "$SD/scripts" "$AUDIT_ABS" "$gf" || final_drops_rc=2
   [ "$final_drops_rc" -ne 0 ] || echo '[spec-distill] 엔진 원장 없음 — audit `## 6` 기록으로 대조했다. 엔진이 audit 에 적지 않은 drop 은 이 대조에 보이지 않는다.' >&2
 fi
-[ "$final_drops_rc" -ne 0 ] || python3 "$SD/scripts/seed_review_log.py" check-drops "$AUDIT_ABS" "$STATE_DIR/gate-final.json" || final_drops_rc=$?
+[ "$final_drops_rc" -ne 0 ] || python3 "$SD/scripts/seed_review_log.py" check-drops "$AUDIT_ABS" "$gf" || final_drops_rc=$?
+[ -n "${STATE_DIR:-}" ] || [ -z "$gf" ] || rm -f "$gf"
 case "$final_drops_rc" in
   0) : ;;
   1) echo "[spec-distill] 문구 없는 drop(final_drops_rc=1) — 사용자에게 다시 묻고 거부 줄을 적은 뒤 이 절을 다시 탄다." >&2 ;;

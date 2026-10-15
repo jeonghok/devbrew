@@ -146,6 +146,7 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 if [ ! -f "$SD/scripts/state_path.py" ]; then
   STATE_DIR=""
   echo "[spec-distill] 상태 리졸버 부재: $SD/scripts/state_path.py (플러그인 루트 미해석) — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
@@ -193,6 +194,7 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 lo="ERROR"
 if [ -z "$harness_sid" ]; then
   echo "[spec-distill] 세션 id 를 얻지 못해 동시 리뷰 표지를 잡을 수 없다 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
@@ -238,6 +240,7 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && python3 "$SD/scripts/ledger_marker.py" takeover --dir "$STATE_DIR" --session "$harness_sid"
 ```
 <!-- ledger-takeover:end -->
@@ -253,6 +256,7 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && [ -d "$STATE_DIR" ] && python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$harness_sid"
 ```
 <!-- ledger-release:end -->
@@ -307,6 +311,7 @@ if [ -z "${CODEX_YAML:-}" ]; then
   harness_sid="${harness_sid:-$(python3 "$SD/scripts/state_path.py" session-id || true)}"
   ROOT="${ROOT:-$(python3 "$SD/scripts/state_path.py" state-root || true)}"
   STATE_DIR="${STATE_DIR:-$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)}"
+  [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
   if [ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && mkdir -p "$STATE_DIR" 2>/dev/null; then
     CODEX_YAML="$STATE_DIR/docreview-codex.yaml"
   fi
@@ -414,6 +419,7 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/design-doc.md"
 prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
@@ -519,6 +525,7 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 lm_rc=0
 if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ] && [ -n "${harness_sid:-}" ]; then
   python3 "$SD/scripts/ledger_marker.py" acquire --dir "$STATE_DIR" --session "$harness_sid" >/dev/null || lm_rc=$?

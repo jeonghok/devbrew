@@ -244,6 +244,7 @@ AUDIT="${PAYLOAD%.md}.audit.md"
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "$PAYLOAD" || true)"
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 lm_rc=0
 if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ] && [ -n "${harness_sid:-}" ]; then
   python3 "$SD/scripts/ledger_marker.py" acquire --dir "$STATE_DIR" --session "$harness_sid" >/dev/null || lm_rc=$?

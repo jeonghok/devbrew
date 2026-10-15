@@ -439,4 +439,91 @@ assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: HELD" "T8 A1(ii): �
 o="$(rf_run "$rf2" sess-rfff0006 "$RFO")"
 assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: OTHER:sess-rfee0005" "T8 A1(ii): 다른 세션 — OTHER"
 [ -d "$RR2/.docreview/zz-0000000000000000" ] && no "T8 A1(ii): 다른 세션의 진입이 정리를 부르지 않았다" || ok "T8 A1(ii): 다른 세션의 진입은 판결 전에 정리를 부른다"
+
+# ── T8 fix1 — 도출 지점의 관문: 링크된 .docreview 면 STATE_DIR 이 비고 어느 펜스도 링크 너머에 쓰지 않는다 ──────
+cgate() { awk '/codex-gate:begin[[:space:]]+runner=run_docreview_codex_reviewer\.sh/ {g=1; next} /codex-gate:end/ {g=0} g && /^```bash$/ {b=1; next} g && b && /^```$/ {b=0; next} g && b' "$1"; }
+crashy() { printf '%s\n' "$1" | grep -E 'unbound variable|syntax error|Traceback|command not found' || true; }
+C1="$(bash_with "$RF" 'marks "$SEED_ABS" "$AUDIT_ABS" || marks_rc')"; C2="$(bash_with "$RF" 'hunks-final.json')"; C3="$(bash_with "$RF" 'gate-final.json')"
+SRIN="$(bash_with "$SR" '# 엔진 상태 — 이 문서만의 디렉토리')"; SRCX="$(cgate "$SR")"
+RBBU="$(bash_with "$RB" 'build_brief_bundle.py" "$PAYLOAD" "$AUDIT" > "$BUNDLE"')"; RBCX="$(cgate "$RB")"
+for v in C1 C2 C3 SRIN SRCX RBBU RBCX; do
+  eval "x=\"\$$v\""; [ -n "$x" ] && ok "전제(T8 관문): 펜스 $v 를 뽑았다" || no "전제(T8 관문): 펜스 $v 가 비었다 — 아래 칸이 공허하다"
+done
+G_LINE='|| python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" ||'
+python3 -I - "$SR" "$RB" "$RF" "$FIN" <<'PY' && ok "T8 관문: STATE_DIR 을 도출하는 줄마다 바로 다음 줄이 path-inside 관문이다(네 파일)" || no "T8 관문: 관문 없는 STATE_DIR 도출이 있다"
+import re, sys
+der = re.compile(r'^\s*STATE_DIR="(?:\$\{STATE_DIR:-)?\$\(python3 "\$(SD|PR)/scripts/docreview_state\.py" state-dir-for ')
+bad = []; n = 0
+for p in sys.argv[1:]:
+    ls = open(p, encoding="utf-8").read().split("\n")
+    for i, l in enumerate(ls):
+        m = der.match(l)
+        if not m:
+            continue
+        n += 1
+        g = '[ -z "${STATE_DIR:-}" ] || python3 "$%s/scripts/state_path.py" path-inside --root "${ROOT%%/.claude/spec-distill}" "$STATE_DIR" || ' % m.group(1)
+        if g not in ls[i + 1] or 'STATE_DIR=""' not in ls[i + 1]:
+            bad.append("%s:%d" % (p, i + 1))
+print("\n".join(bad), file=sys.stderr)
+sys.exit(1 if bad or n < 19 else 0)
+PY
+lk_env() { env -i PATH=/usr/bin:/bin HOME="$T" PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID="$1" DEVBREW_SPEC_DISTILL_SESSION_ID="$1" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1 bash -c "$2" 2>&1; }
+lk_setup() {   # lk_setup <repo> <밖 폴더> [link] → seed · audit · brief 를 둔 저장소, link 면 .docreview 를 밖으로
+  sd="$(rf_repo "$1")"
+  printf -- '---\ntype: interview-seed-audit\nsession_id: sess-lk000001\n---\n\n## 1. 원문\n\n원문.\n\n## 6. 리뷰 결정\n' > "${sd%.md}.audit.md"
+  printf -- '---\ntype: interview-brief\n---\n# brief\n' > "$1/docs/b-interview.md"; printf -- '---\ntype: interview-audit\n---\n# a\n' > "$1/docs/b-interview.audit.md"
+  printf '# D\n' > "$1/docs/d-design.md"
+  mkdir -p "$2" "$1/.claude/spec-distill"
+  [ "${3:-}" != link ] || ln -s "$2" "$1/.claude/spec-distill/.docreview"
+}
+lkr="$T/lk"; lko="$T/lk-outside"; lk_setup "$lkr" "$lko" link
+[ -L "$lkr/.claude/spec-distill/.docreview" ] && ok "전제(T8 관문): .docreview 가 밖을 가리키는 링크다" || no "전제(T8 관문): 링크가 아니다"
+# (a) request-framing — 상태 블록 + 확정 직전 검사 1 · 2 · 3, 각각 한 호출
+for i in 1 2 3; do
+  eval "body=\"\$C$i\""
+  o="$(cd "$lkr" && lk_env sess-lk000001 "$blkT
+$body")"
+  eval "LKA$i=\"\$o\""
+  assert_eq "$(crashy "$o")" "" "T8 관문(a): request-framing 검사 $i 가 링크 아래에서 죽지 않는다"
+  assert_contains "$o" "원장 자리가 레포 밖으로 풀리거나 링크를 지난다" "T8 관문(a): 검사 $i — 리뷰 산출물을 건너뛴다는 한 줄을 낸다"
+done
+assert_contains "$LKA1" "marks_rc=" "T8 관문(a): 검사 1 이 판정 줄을 낸다"
+assert_not_contains "$LKA1" "검사 불가»로 막힌다" "T8 관문(a): 검사 1 이 검사 2 · 3 을 «검사 불가» 로 막는다고 하지 않는다"
+assert_contains "$LKA2" "저자 편집 대조 불가" "T8 관문(a): 검사 2 는 대조 불가를 알리고 막지 않는다"
+assert_not_contains "$LKA2" "게이트를 띄우지 않는다" "T8 관문(a): 검사 2 가 게이트를 막지 않는다"
+assert_contains "$LKA3" "final_drops_rc=0" "T8 관문(a): 검사 3 은 audit 으로 대조해 통과 판정을 낸다"
+assert_eq "$(ls -A "$lko")" "" "T8 관문(a): 링크 너머 폴더가 비어 있다"
+# (b) spec-review — ## 입력 + codex 펜스
+o="$(cd "$lkr" && lk_env sess-lk000001 "spec_path='$lkr/docs/d-design.md'
+$SRIN
+$SRCX")"
+assert_eq "$(crashy "$o")" "" "T8 관문(b): spec-review 입력 + codex 펜스가 링크 아래에서 죽지 않는다"
+assert_eq "$(ls -A "$lko")" "" "T8 관문(b): spec-review codex 펜스 뒤 링크 너머 폴더가 비어 있다"
+# (c) reviewing-brief — 번들 펜스 · codex 펜스
+o="$(cd "$lkr" && lk_env sess-lk000001 "PAYLOAD='$lkr/docs/b-interview.md'; AUDIT='$lkr/docs/b-interview.audit.md'
+$RBBU")"
+assert_eq "$(crashy "$o")" "" "T8 관문(c): reviewing-brief 번들 펜스가 링크 아래에서 죽지 않는다"
+assert_contains "$o" "엔진 상태 디렉토리 없음" "T8 관문(c): 번들 펜스는 엔진 자리 없음으로 라운드를 시작하지 않는다"
+o="$(cd "$lkr" && lk_env sess-lk000001 "PAYLOAD='$lkr/docs/b-interview.md'
+$RBCX")"
+assert_eq "$(crashy "$o")" "" "T8 관문(c): reviewing-brief codex 펜스가 링크 아래에서 죽지 않는다"
+assert_eq "$(ls -A "$lko")" "" "T8 관문(c): reviewing-brief 펜스 뒤 링크 너머 폴더가 비어 있다"
+# 양성 대조 — 링크가 없으면 같은 펜스가 원장 자리에 산출물을 만든다
+lpr="$T/lkp"; lk_setup "$lpr" "$T/lkp-outside"
+o="$(cd "$lpr" && lk_env sess-lk000001 "$blkT
+$C3")"
+LP_RF="$(cd "$lpr" && lk_env sess-lk000001 "$blkT
+echo \"SD_IS=\$STATE_DIR\"" | sed -n 's/^SD_IS=//p')"
+{ [ -n "$LP_RF" ] && [ -f "$LP_RF/gate-final.json" ]; } && ok "T8 관문 양성 대조(a): 링크가 없으면 검사 3 이 원장 자리에 gate-final.json 을 쓴다" || no "T8 관문 양성 대조(a): 원장 자리 산출물이 없다('$LP_RF'): $o"
+assert_not_contains "$o" "원장 자리가 레포 밖으로" "T8 관문 양성 대조(a): 링크가 없으면 건너뜀 줄이 없다"
+o="$(cd "$lpr" && lk_env sess-lk000001 "spec_path='$lpr/docs/d-design.md'
+$SRIN
+$SRCX")"
+LP_SR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$lpr/.claude/spec-distill" --doc "$lpr/docs/d-design.md")"
+[ -d "$LP_SR" ] && ok "T8 관문 양성 대조(b): 링크가 없으면 spec-review codex 펜스가 원장 자리를 만든다" || no "T8 관문 양성 대조(b): 원장 자리가 없다: $o"
+o="$(cd "$lpr" && lk_env sess-lk000001 "PAYLOAD='$lpr/docs/b-interview.md'; AUDIT='$lpr/docs/b-interview.audit.md'
+$RBBU")"
+LP_RB="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$lpr/.claude/spec-distill" --doc "$lpr/docs/b-interview.md")"
+[ -d "$LP_RB" ] && ok "T8 관문 양성 대조(c): 링크가 없으면 reviewing-brief 번들 펜스가 원장 자리를 만든다" || no "T8 관문 양성 대조(c): 원장 자리가 없다: $o"
+assert_not_contains "$o" "엔진 상태 디렉토리 없음" "T8 관문 양성 대조(c): 링크가 없으면 엔진 자리 없음이 나지 않는다"
 finish
