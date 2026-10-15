@@ -111,9 +111,12 @@ class LedgerRootTest(Base):
     def test_docreview_symlink_uncountable(self):
         outside = self.tmp / "outside"; outside.mkdir()
         os.symlink(outside, self.root / ".docreview")
+        s = self.old_session("oldsess01", ledgers=[("k1", self.doc())])   # ② 의 이월도 링크 너머로 가지 않는다
         rc, out, _ = self.sweep()
         self.assertIn("원장 정리 — 셀 수 없음(", out)
         self.assertTrue(outside.exists())
+        self.assertEqual(os.listdir(outside), [])
+        self.assertTrue((s / "docreview" / "k1" / "docreview-state.md").exists())
 
     def test_korean_doc_path_kept_and_migrated(self):
         doc = self.doc("설계 문서.md")
