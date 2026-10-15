@@ -54,7 +54,7 @@ allowed-tools:
 
 ### 3. trivia 판정
 
-`${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고 「풀린 입력」을 다섯 패턴과 대조한다. 해당하면 그 파일의 안내 문면을 `<command>` = `spec-distill:request-framing` 으로 채워 내고 진행하지 않는다.
+`${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고 「풀린 입력」을 다섯 패턴과 대조한다. 해당하면 그 파일의 질문을 `<command>` = `spec-distill:request-framing` 으로 채워 띄운다 — 「그대로」면 그 파일의 안내 문면을 내고 진행하지 않고, 「전체 과정으로」면 4 로 간다.
 
 ### 4. 회의로
 

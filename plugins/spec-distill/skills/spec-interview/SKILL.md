@@ -68,7 +68,7 @@ Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 �
 
 ### 3. trivia 판정
 
-「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다. 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 그 다섯 패턴에 「풀린 입력」을 대조한다. 해당하면 그 파일의 안내 문면을 `<command>` = `spec-distill:spec-interview` 로 채워 내고, 인터뷰를 시작하지 않습니다.
+「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다. 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 그 다섯 패턴에 「풀린 입력」을 대조한다. 해당하면 그 파일의 질문을 `<command>` = `spec-distill:spec-interview` 로 채워 띄웁니다 — 「그대로」면 안내 문면을 내고 인터뷰를 시작하지 않습니다. 「전체 과정으로」면 4 로 갑니다.
 
 ### 3.5 seed 아닌 입력에 대한 조언
 
