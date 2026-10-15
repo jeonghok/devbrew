@@ -105,16 +105,10 @@ for sk in spec-review reviewing-brief; do
     || no "C4(사실): $sk 의 공유 러너 codex 게이트 펜스가 '${n_fence:-없음}'개 — README 의 「펜스 하나」 주장과 어긋난다"
 done
 
-# --- T18 / AC22a : 훅 집합 고정 열거 + 'brief' 문자열 0건 --------------------
-EXPECTED="hooks.json session-end-cleanup.py"
-ACTUAL="$(cd "$HOOKS" && ls -1 | sort | tr '\n' ' ' | sed 's/ $//')"
-EXPECTED_SORTED="$(tr ' ' '\n' <<<"$EXPECTED" | sort | tr '\n' ' ' | sed 's/ $//')"
-[[ "$ACTUAL" == "$EXPECTED_SORTED" ]] \
-  && ok "T18: hooks/ 집합이 고정 열거와 정확히 일치 (2개)" \
-  || no "T18: hooks/ 집합 불일치 — 기대[$EXPECTED_SORTED] 실제[$ACTUAL]"
-n_brief="$(grep -cF 'brief' "$HOOKS/hooks.json" || true)"
-[[ "$n_brief" == "0" ]] && ok "T18: hooks.json에 'brief' 문자열 0건" \
-                        || no "T18: hooks.json에 'brief' ${n_brief}건 (훅 표면 확장)"
+# --- T18 / AC22a : 훅 표면 무증가 — 6.0.0 부터 설치되는 훅이 없다(hooks/ 부재) -----
+[[ ! -e "$HOOKS" ]] \
+  && ok "T18: hooks/ 가 없다 — 훅 표면이 늘지 않았다" \
+  || no "T18: hooks/ 가 생겼다 — 새 훅 표면 [$(ls -1 "$HOOKS" 2>/dev/null | tr '\n' ' ')]"
 
 # --- T29 / AC22c : 결정론 체크 전수 열거표 ----------------------------------
 # 윈도우 종료는 진입과 같은 레벨(###)뿐 아니라 상위 레벨(##)에서도 exit해야 한다.

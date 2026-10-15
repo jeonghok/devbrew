@@ -170,11 +170,7 @@
 
 ## Hooks Installed
 
-| Event | Script | 책임 | 왜 skill이 아닌가 |
-|---|---|---|---|
-| SessionEnd | `hooks/session-end-cleanup.py` | ① kill switch → ② 끝나는 세션의 `.claude/spec-distill/<sid>/` 삭제(v0.6.0) → ③ `finally` 에서 TTL-GC(`scripts/spec-distill-gc.py`) 기동(3.0.0) — payload 가 깨져도 GC 는 돈다. polite-stop이나 approve 누락 시에도 cleanup 보장. Kill switch: `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` / `:session-end-cleanup` — **세션 정리와 TTL-GC 를 함께 끈다**. GC 만 끄려면 `spec-distill:spec-distill-gc`. 알려진 한계: `.claude` 나 `.claude/spec-distill` 이 링크인 저장소(안을 가리켜도)에서는 정리와 GC 가 거부로 멈추고 상태 폴더가 쌓인다 — 신호는 이 훅의 stderr 뿐이다. | Claude lifecycle 이벤트는 hook이 catch해야 함 — skill은 사용자/LLM이 invoke해야 동작. |
-
-**Output:** SessionEnd 훅은 stdout 을 내지 않는다 — 실패와 거부(stdin 판독 · GC 비정상 종료 · 심볼릭 링크로 풀리는 state root)는 stderr 로만 알린다 — 접두는 `[spec-distill]` 이고, 공용 삭제 가드(`gc_common.safe_rmtree`)의 거부만 `[devbrew-gc]` 다. GC 스크립트의 stderr 는 훅이 그대로 옮긴다.
+설치되는 훅이 없다(6.0.0) — 원장 정리는 리뷰 진입(`scripts/ledger_sweep.py`)이 한다.
 
 ## 끄는 법
 
@@ -192,10 +188,10 @@
 - `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT=<n>` (5.5.0) — 포화 판정자 호출 상한의 시작값(기본 5). floor 가 닫힌 뒤 판정 고리가 사용자 턴 없이 도는 것을 묶는다.
 - `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` (v0.3.0, 3.0.0 재정의) — `spec-review` 진입 검사가 설계문서 리뷰를 끈다 — **수동 호출 포함** skill 전체다(2.x 까지는 자동 리뷰와 구조 검사만 끄고 수동 호출은 살아 있었다). 파일 분류(content-aware 판별)는 없다 — 이 skill 은 받은 경로를 `design-doc.md` 프로필로 리뷰한다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` (3.0.0) — 같은 효과의 이름 붙은 스위치. 수신처는 `scripts/review_entry.py` 의 진입 검사다(`spec-distill:review-entry`) — 훅이 아니지만 지목할 이름을 갖는다(`spec-distill-gc` 와 같은 관례).
-- `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` (alias: `spec-distill:session-end-cleanup`) — SessionEnd 훅 전체를 끈다: 끝나는 세션의 폴더 정리 **와** TTL-GC 기동 둘 다. GC 만 끄려면 아래 `spec-distill:spec-distill-gc`.
-- `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` — TTL-GC 스크립트(`scripts/spec-distill-gc.py` — SessionEnd 훅이 기동한다)만 skip. 훅이 아니지만 지목할 이름을 갖는다 — 그전에는 이 스크립트가 `DEVBREW_SKIP_HOOKS`를 **아예 읽지 않아서**, 그 변수로 껐다고 믿어도 GC는 계속 돌았다.
+- `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` (alias: `spec-distill:session-end-cleanup`) — 6.0.0 부터 리뷰 진입 때의 원장 정리(`scripts/ledger_sweep.py`)를 끈다. 설치되는 훅은 없다.
+- `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` — 같은 원장 정리를 끈다. 이 이름의 TTL-GC 스크립트는 6.0.0 에서 지워졌다.
 - `DEVBREW_SPEC_DISTILL_TTL_HOURS=<int>` (v0.6.0) — TTL-GC orphan 정리 임계값 (default 24h). 짧게 설정 시 자주 정리, in-flight 작업 risk 증가.
-- `DEVBREW_SPEC_DISTILL_GC_VERBOSE=1` (v0.6.0) — TTL-GC가 cleanup 발생 시 stdout summary 출력. 그 요약은 `scripts/spec-distill-gc.py` 를 손으로 돌릴 때만 보인다 — SessionEnd 훅은 GC 의 stdout 을 삼킨다. CI/디버깅용.
+- `DEVBREW_SPEC_DISTILL_GC_VERBOSE=1` (v0.6.0) — 읽는 곳이 없다. 이 변수를 읽던 TTL-GC 스크립트가 6.0.0 에서 지워졌다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` (v0.12.0, AC21로 범위 확대, 3.1.0 재배선) — 이 kill switch 가
   **두 자리**의 웹 접근을 끈다: interview 웹 리서치(landscape · 웹 agent dispatch, v0.12.0), 그리고
   brief 리뷰 자리의 웹 둘 — codex 웹 검색(공유 러너 `run_docreview_codex_reviewer.sh` 가 이 스위치와

@@ -303,15 +303,16 @@ def read_head(path: str):
 
 
 class TestHooksJson(unittest.TestCase):
-    """AC1 — `Stop` 이 없고 `SessionEnd` 가 있다(부재 ↔ 존재 짝)."""
+    """AC1 — `Stop` 이 없다. 6.0.0 부터 `hooks.json` 자체가 없다(존재 짝이던 SessionEnd 도 걷혔다 —
+    그 부재는 `test_hooks.sh` 의 AC10 이, 후계 `ledger_sweep.py` 의 존재는 `test_successors_present`
+    가 잰다). 파일이 다시 생기면 `Stop` 부재를 그 파일에서 잰다."""
 
-    def test_no_stop_and_session_end_present(self):
-        d = json.loads((REPO / SD / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-        hooks = d.get("hooks", {})
+    def test_no_stop(self):
+        hj = REPO / SD / "hooks" / "hooks.json"
+        if not hj.exists():
+            return
+        hooks = json.loads(hj.read_text(encoding="utf-8")).get("hooks", {})
         self.assertNotIn("Stop", hooks)
-        cmds = [h.get("command", "") for blk in hooks.get("SessionEnd", [])
-                for h in blk.get("hooks", [])]
-        self.assertTrue(any("session-end-cleanup.py" in c for c in cmds), cmds)
 
 
 class TestDeletedFiles(unittest.TestCase):
@@ -321,7 +322,7 @@ class TestDeletedFiles(unittest.TestCase):
         self.assertEqual([p for p in DELETED if (REPO / p).exists()], [])
 
     def test_successors_present(self):
-        for p in (f"{SD}/hooks/session-end-cleanup.py", f"{SD}/scripts/review_entry.py",
+        for p in (f"{SD}/scripts/ledger_sweep.py", f"{SD}/scripts/review_entry.py",
                   HOOK_COMMON):
             with self.subTest(p=p):
                 self.assertTrue((REPO / p).is_file())

@@ -27,11 +27,7 @@ RESOLVER="shared/python/devbrew-python.sh"
 # 축을 더하는 Task 가 자기 줄을 **그때** 더한다(위 `# guards:` 글롭도 함께).
 SCANNED="shared/python/devbrew-python.sh
 plugins/project-init/scripts/devbrew-python.sh
-plugins/spec-distill/scripts/devbrew-python.sh
 plugins/project-init/hooks/hooks.json
-plugins/spec-distill/hooks/hooks.json
-plugins/spec-distill/scripts/hook_common.py
-plugins/spec-distill/hooks/session-end-cleanup.py
 plugins/project-init/hooks/post-tool-use.py
 pyproject.toml
 .python-version
@@ -556,7 +552,7 @@ done
 # True 다〔실측〕. 여기 두면 「감사기가 커버된다」는 착시만 만든다. AC11 의 감사기 절반은
 # 배선이 생기는 아래 **축 C** 가 지고, 그 자리에서 심볼릭 링크 변이가 판정을 뒤집는다.
 
-note "── 축 C: 배선 — hooks.json 2 자리 (AC1) ──────────────────────────────"
+note "── 축 C: 배선 — hooks.json 1 자리 (AC1) ──────────────────────────────"
 
 cmds_of() {   # hooks.json 하나에서 «(이벤트 키, command)» 쌍을 전부. 한 줄 = `<이벤트> <command>`.
   # **이벤트 키를 버리지 않는다.** 버리면 `--event` 값이 자기를 담은 이벤트 키와 같은지를
@@ -656,7 +652,7 @@ for hj in $HOOKS_JSONS; do   # 축 B 머리에서 git ls-files 로 도출했다
 $hj_cmds
 EOF
 done
-assert_eq "$n_cmd" "2" "C/AC1: hooks.json $(printf '%s\n' "$HOOKS_JSONS" | grep -c .)개 파일에서 호출 자리 2건을 셌다"
+assert_eq "$n_cmd" "1" "C/AC1: hooks.json $(printf '%s\n' "$HOOKS_JSONS" | grep -c .)개 파일에서 호출 자리 1건을 셌다"
 assert_eq "$n_bare" "0" "C/AC1: bare python3 로 시작하는 자리가 0 이다"
 
 # AC9 (설계 2026-09-23) — 위는 command 의 «모양» 이다. 실제로 cwd 의 `sh` 를 안 집는지는 실행으로
@@ -692,7 +688,7 @@ for hj in $HOOKS_JSONS; do   # 축 B 머리에서 git ls-files 로 도출했다
 $hj_cmds
 EOF
 done
-assert_eq "$n_shexec" "2" "C/AC9: 실행으로 잰 command 자리가 2건이다"
+assert_eq "$n_shexec" "1" "C/AC9: 실행으로 잰 command 자리가 1건이다"
 
 # ── AC11 의 «감사기» 절반 — 이 자리에서 비로소 이빨이 생긴다 ─────────────────
 # Task 2 에서는 이 단언이 아무것도 재지 못했다: `hooks.json` 이 해석기를 가리키지 않아
@@ -735,10 +731,9 @@ else
 fi
 
 if [ "$iso_ok" -eq 1 ]; then
-  # 실제 훅 «둘» 을 그대로 쓴다 — AC12 가 말하는 것이 그것이다. 해석에 실패하면 해석기가
+  # 실제 훅을 그대로 쓴다 — AC12 가 말하는 것이 그것이다. 해석에 실패하면 해석기가
   # exec 하지 않으므로 훅 파이썬은 한 줄도 돌지 않는다.
-  for spec in "SessionEnd:spec-distill:session-end-cleanup:plugins/spec-distill/hooks/session-end-cleanup.py" \
-              "PostToolUse:project-init:post-tool-use:plugins/project-init/hooks/post-tool-use.py"; do
+  for spec in "PostToolUse:project-init:post-tool-use:plugins/project-init/hooks/post-tool-use.py"; do
     ev="${spec%%:*}"; r1="${spec#*:}"; pl="${r1%%:*}"; r2="${r1#*:}"; hk="${r2%%:*}"; tgt="${r2#*:}"
     out="$(printf '{"session_id":"00000000-0000-0000-0000-0000000000c2","cwd":"%s","tool_name":"Bash","tool_input":{"command":"true"}}' "$TMP" \
            | env PATH=/usr/bin:/bin /bin/sh "$R" \
@@ -769,8 +764,7 @@ fi
 # 거기서 관측할 수 없다 — 만족 PATH($PATH_FLOOR)에서 exec 여부로 직접 재야 한다: 스위치가
 # 꺼지면 $TARGET 이 돌아 TARGET-RAN 이 나오고, 켜지면 exec 자체가 없어 사라진다. 이 satisfying
 # PATH 는 호스트의 실제 python3 와 무관하므로 `iso_ok` 게이트 밖에 둔다.
-for spec in "SessionEnd:spec-distill:session-end-cleanup" \
-            "PostToolUse:project-init:post-tool-use"; do
+for spec in "PostToolUse:project-init:post-tool-use"; do
   ev="${spec%%:*}"; r1="${spec#*:}"; pl="${r1%%:*}"; hk="${r1#*:}"
 
   out_run="$(run_resolver "$PATH_FLOOR" /bin/sh "$R" \
@@ -805,17 +799,24 @@ esac
 # 코퍼스는 설계 Context/Why 4 의 도출을 그대로 쓴다 — 「훅·스크립트 .py 전수 grep」.
 # **BRE 의 `\|` 를 쓰지 않는다** — GNU 확장이라 macOS/BSD grep 에서는 alternation 이 아니라
 # 리터럴 `|` 로 읽혀 이 검사가 조용히 아무것도 안 찾는다. 따옴표 두 모양을 각각 훑는다.
-child_spawns="$( { grep -rn '"python3"' plugins --include='*.py'
-                   grep -rn "'python3'" plugins --include='*.py'; } 2>/dev/null \
-  | grep -v '/tests/' || true)"
+spawn_hits() {   # spawn_hits <디렉토리> — 그 아래 tests/ 밖 .py 의 "python3" · 'python3' 리터럴 줄
+  { grep -rn '"python3"' "$1" --include='*.py'
+    grep -rn "'python3'" "$1" --include='*.py'; } 2>/dev/null | grep -v '/tests/' || true
+}
+child_spawns="$(spawn_hits plugins)"
 if [ -z "$child_spawns" ]; then
   ok "E/AC10: 훅·스크립트가 spawn 하는 python3 가 0 건이다"
 else
   no "E/AC10: 훅·스크립트가 여전히 python3 를 spawn 한다"
   printf '%s\n' "$child_spawns" | head -5
 fi
-assert_file_grep plugins/spec-distill/scripts/hook_common.py 'sys\.executable' \
-  "E/AC10: hook_common.py 가 sys.executable 을 쓴다 (양의 짝 — 위는 음의 락)"
+# 양의 짝 — 같은 검사기가 심은 두 따옴표 모양을 둘 다 잡는다. 자식 파이썬을 sys.executable 로 띄우는
+# 출하 .py 가 6.0.0 에서 사라져(spec-distill 의 hook_common GC 기동) 실재 파일 대신 카나리로 잰다.
+mkdir -p "$TMP/e10/scripts"
+printf 'cmd = ["python3", "x.py"]\n' > "$TMP/e10/scripts/dq.py"
+printf "cmd = ['python3', 'x.py']\n" > "$TMP/e10/scripts/sq.py"
+assert_eq "$(spawn_hits "$TMP/e10" | grep -c .)" "2" \
+  "E/AC10: 양의 짝 — 검사기가 심은 \"python3\" · 'python3' 두 줄을 잡는다 (위는 음의 락)"
 
 
 note "── 축 D: 두 바닥의 분리 (AC9) ────────────────────────────────────────"
