@@ -163,7 +163,7 @@ R5 전까지 지휘 세션이 따르는 절차다. 장치가 아니라 절차다
 - P3 · 결정 · 2026-10-13 · 「quality-pipeline 을 진입으로 (권장)」 · 「따로 진입 artifact-critique」
   - 앞 답은 코드 검사(`/qg`)의 진입이다 — `commands/qg.md` 를 지우고 `quality-pipeline` skill 을 진입으로 세운다(완전명 `/quality-gates:quality-pipeline`). 뒤 답은 문서 비평(`/qg critique`)의 진입이다 — `critiquing-artifacts` 를 따로 진입 skill `artifact-critique` 로 바꾼다(완전명 `/quality-gates:artifact-critique`). 적용은 R2a 가 한다.
 - P4 · 결정 · 2026-10-13 · 「끝난 기록으로 둠 (권장)」
-  - 옛 훅 쓰기 경로 계획(`docs/superpowers/plans/2026-08-23-hook-write-path-bypass.md`)은 고아가 아니다 — 구현 브랜치가 #134 로 머지됐고 main 밖 커밋은 0이다. 전제 파일이 없는 것은 계획 자신이 지웠거나(쓰기 감시 훅 셋 · qg 사전 검사 · docs-lint) 뒤 개편이 대체했기 때문이다(검사를 넘겨받은 Stop 훅 `review-dispatch.py` 는 e7c6bbb9 가 지웠다). 계획 파일과 브랜치는 기록으로 둔다.
+  - 옛 훅 쓰기 경로 계획(`docs/superpowers/plans/2026-08-23-hook-write-path-bypass.md`)은 고아가 아니다 — 구현 브랜치가 #134 로 머지됐고 main 밖 커밋은 0이다. 전제 파일이 없는 것은 계획 자신이 지웠거나(쓰기 감시 훅 셋 · qg 사전 검사 · docs-lint) 뒤 개편이 대체했기 때문이다(검사를 넘겨받은 Stop 훅은 e7c6bbb9 가 지웠다). 계획 파일과 브랜치는 기록으로 둔다.
 
 ## 재분해 이력
 
