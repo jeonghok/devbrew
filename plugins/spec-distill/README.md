@@ -8,11 +8,12 @@
 
 ## 쓰는 법
 
-사용자가 부르는 진입 skill 은 셋입니다.
+사용자가 부르는 진입 skill 은 넷입니다.
 
 - `/request-framing` — 요청이 아직 흐릿해서 방향부터 맞추고 싶을 때. 다음 세션 첫 턴이 가리킬 요청 요약 파일(`interview-seed`)이 나옵니다.
 - `/spec-interview` — 요청을 인터뷰로 다듬고 싶을 때. 인터뷰 결과를 정리한 문서(interview brief)가 나옵니다.
 - `/spec-review` — brainstorming 이 설계문서를 쓴 뒤 검토하고 싶을 때. 문서 리뷰 결과와 다음 단계를 고르는 질문이 나옵니다.
+- `/roadmap-status` — 로드맵의 에픽 지도(단계 · 기다리는 에픽 · 경고 · 진행 중 인터뷰 조사 수)를 보고 싶을 때. 읽기만 합니다.
 
 ```
 /spec-interview todo 앱 만들어줘
@@ -113,6 +114,7 @@
   했어야 했는가」는 기계가 알 수 없고(`check_brief.py` 는 brief 파일만 읽는다) 0건 advisory 가 Step B
   게이트로 사람에게 간다.
 - **Law 1 · Law 2 — 멈춤의 주인은 독립 판정자 (5.5.0)** — 인터뷰가 한 번에 닫지 않고 결정에 닿는 새 사실이 없을 때까지 조사한다. 그 «없음» 을 조사하는 모델이 아니라 쓰기 권한 없는 `saturation-judge` 가 조사 원문에서 직접 판정하고, 「충분해 보인다」는 근거가 아니다. 구조 게이트(`check_brief.py` `saturation_failures`)가 판정 없는 종료를 거절한다.
+- **Law 3 (컨트롤 플레인, 5.7.0)** — 에픽 단계 · 경고 · 받은 시각을 상태줄과 `roadmap-status` 가 늘 보여, 모르는 사이의 드리프트를 다음 세션이 아니라 지금 본다. 「없음」과 「확인 못 함」(`검사 불가` · `셀 수 없음`)을 섞지 않는다.
 
 ### Principles 흡수
 
@@ -146,6 +148,7 @@
 - **P14 (State Survives Compaction)** — state.local.md frontmatter 보존.
 - **P3 — graceful degradation with loud logging**: `resolve_session_id` 검증 실패 시 None 반환 + stderr advisory. SessionEnd 의 세션 정리(②)에서 정말 조용한 것은 셋뿐이다 — payload 가 JSON 이 아닐 때 · sid 가 없거나 형식에 맞지 않을 때(정리를 건너뛴다) · `ignore_errors` 아래의 rmtree 오류. 그 밖의 실패와 거부는 stderr 로 낸다. TTL-GC(③)는 stat · 개명에 실패한 폴더를 줄 없이 건너뛰고 다음 실행에서 다시 시도한다. 미커밋 확인·진입 검사 실패는 advisory — 사용자 attention 가용성에 따라 loud 정도 조정. 진입 검사 자신의 실패는 끔으로 친다(fail-closed).
 - **P14 — 세션 수명 동안 보존 · 종료 시 정리**: 세션 폴더는 세션 동안 남고 SessionEnd 훅이 지운다. TTL-GC 는 self-session 보호 + grace window 로 in-flight data 를 지킨다. TTL-GC 와 SessionEnd 정리는 링크를 거쳐 풀리는 state root 를 **모두** 거부한다 — `.claude` 나 `.claude/spec-distill` 이 링크면 그 링크가 저장소 **안**을 가리켜도 거부다. GC 의 락은 루트 디렉토리 자신(`O_NOFOLLOW` 로 연 디렉토리 fd 의 `flock`)이고 락 파일은 없다 — 루트 아래 고정 이름 파일은 저장소가 링크로 커밋할 수 있다(3.0.0). 그래서 그런 저장소에서는 세션 정리와 GC 가 멈추고 상태 폴더가 쌓인다. 신호는 SessionEnd stderr 의 거부 줄(세션 정리 · GC 각각)뿐이다.
+- **Law 1 · Law 3 — 번호 인계 (5.6.0)** — brief · 에픽 묶음의 번호가 설계문서 · 계획 · 구현으로 넘어가는 이음매마다 기계 대조가 있다: 번호 대조(빠진 번호는 spec-review 진입 때 보이고 게이트 경고 수에 들며 지휘 절차는 그 때문에 spec-review 앞에서 멈춘다, 얕음 · 받드는 에픽 없음은 승인 때의 경고) · `--plan` · `--impl` · `roadmap_status.py` 의 받는 곳 없는 미룸 경고. 외부 skill(brainstorming · writing-plans · SDD)은 고치지 않는다 — 넘길 때 보내는 글과 돌아온 결과 검사만 devbrew 쪽에 있다. 내용이 실제로 답하는지는 리뷰어(design-doc 프로필의 scope 축)가 판정한다.
 
 ## External source absorption
 
@@ -160,13 +163,52 @@
 큰 일을 에픽으로 나눠 진행할 때 쓰는 읽기 전용 스크립트 둘이 있습니다. 둘 다 파일을 쓰지 않고 네트워크에 나가지 않습니다. 단위는 로드맵 > 에픽(spec 하나) > plan(PR 하나) > task 이고 에픽 하나가 PR 여럿을 낼 수 있지만, 지금의 상태 계산은 에픽 하나를 브랜치 하나로 셉니다.
 
 - `scripts/roadmap_status.py <로드맵 경로>` — `origin/main` 의 로드맵과 git 을 읽어 에픽마다 단계와 경고를 냅니다. 아직 main 에 없는 로드맵은 `--roadmap-file <파일>` 로 줍니다. 머지됨 자동 판정은 merge commit 방식에서만 됩니다. 브랜치가 지워졌으면 GitHub 의 머지 메시지 `Merge pull request #<n> from <owner>/<브랜치>` 로만 알아봅니다. squash · rebase 로 머지했거나 로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적어야 합니다.
-- `scripts/check_bundle_coverage.py <묶음> <설계문서>` — 에픽 묶음의 번호가 설계문서 `## 번호 대조` 표에 다 있는지 봅니다.
+- `scripts/check_bundle_coverage.py <묶음|brief> <설계문서>` — 정답 출처의 번호가 설계문서 `## 번호 대조` 표에 다 있는지(빠지면 종료 코드 1), 반영 칸이 설계문서의 실제 자리를 가리키는지 · 기각한 번호를 받드는 에픽이 있는지(경고 줄 — 종료 코드는 그대로) 봅니다. 로드맵을 못 찾으면 그 항목은 「셀 수 없음」으로 셉니다.
+- `scripts/check_bundle_coverage.py --plan <설계문서> <계획>` · `--impl <설계문서> <보고 파일>` — 설계문서 AC 가 계획 Task 에 다 있는지, 구현 보고의 미룸 · 빠짐이 설계문서 `## 미룸` 표에 받는 곳과 함께 올랐는지 봅니다.
+- `scripts/spec_review_bundle.py` — `spec-review <설계문서> --bundle <묶음|brief>` 의 정답 출처 확인 · 진입 대조 · 승인 때 로드맵 위치와 이웃 결정.
+- `references/epic-handoff.md` — 로드맵 에픽의 설계를 여는 넘김 줄. 지휘 세션이 자리표를 채워 씁니다.
 
 경로 예약 겹침과 다른 에픽이 예약한 파일의 편집은 경고가 아니라 정보입니다 — 종료 코드를 바꾸지 않고, 에픽은 병렬로 갑니다. 충돌은 머지 때 풉니다(나중에 머지하는 PR 이 main 을 merge 하고 스위트를 다시 돌립니다).
 
 머지 메시지로 머지됨을 판정할 때는 브랜치 이름만 봅니다 — 머지된 PR 과 같은 이름으로 다시 만든 브랜치나 다른 owner 의 같은 이름 브랜치도 머지됨으로 보일 수 있습니다.
 
 종료 코드는 둘 다 0 이상 없음 · 1 경고 · 2 사용법 오류 · 3 검사 불가입니다. 형식은 `docs/superpowers/specs/2026-10-11-roadmap-walking-skeleton-design.md` §3 에 있습니다.
+
+### 상태줄
+
+에픽 단계 요약 · 경고 수 · 마지막 fetch 경과 · 진행 중 인터뷰 조사 수를 Claude Code 상태줄 한 줄로 늘 볼 수 있습니다. 예: `2026-10-11-persistent-explore-pm-decompose · 설계 2 · 구현 1 · 준비 3 · 경고 없음 · 받은 지 12분`. 자세히는 `/spec-distill:roadmap-status`, 지휘 세션의 작업 목록은 `python3 <플러그인>/scripts/control_plane.py show --tasks <로드맵>` 의 줄(`<제목>` 탭 `<pending|in_progress|completed|keep>`)로 맞춥니다.
+
+플러그인이 대신 켜 줄 수 없습니다 — 메인 `statusLine` 은 사용자 · 프로젝트 설정만 정합니다. 직접 켭니다.
+
+1. 아래 스크립트를 `~/.claude/devbrew-statusline` 로 저장합니다. 버전 붙은 플러그인 폴더를 박아 두지 않고, 실행할 때마다 설치된 spec-distill 을 찾습니다(Claude Code 가 설치 기록 `plugins/installed_plugins.json` 의 `installPath` 에 적은 폴더 — 2026-10-15 · 2.1.299 실측). 못 찾으면 빈 줄이 아니라 `상태줄 꺼짐 — 플러그인을 못 찾음` 을 냅니다. 로드맵도 진행 중 인터뷰도 없으면 빈 줄입니다.
+
+<!-- control-plane-statusline:begin -->
+```sh
+#!/bin/sh
+d="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+p=$(grep -o '"installPath": *"[^"]*/spec-distill/[^"]*"' "$d/plugins/installed_plugins.json" 2>/dev/null | head -n 1 | sed 's/.*"\([^"]*\)"$/\1/')
+if [ -n "$p" ] && [ -f "$p"/scripts/control_plane.py ]; then
+  exec python3 "$p"/scripts/control_plane.py statusline
+fi
+echo "상태줄 꺼짐 — 플러그인을 못 찾음"
+```
+<!-- control-plane-statusline:end -->
+
+2. 사용자 설정 `~/.claude/settings.json` 에 넣습니다(devbrew 레포의 프로젝트 설정에는 커밋하지 않습니다):
+
+```json
+{ "statusLine": { "type": "command", "command": "sh ~/.claude/devbrew-statusline" } }
+```
+
+이미 상태줄을 쓰고 있으면 기존 명령 뒤에 이어 붙입니다 — 상태줄 입력(JSON)을 두 명령에 똑같이 넘깁니다:
+
+```sh
+in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh ~/.claude/devbrew-statusline); printf '%s  %s\n' "$a" "$b"
+```
+
+캐시는 `<git 공용 디렉토리>/devbrew/control-plane.json` 하나이고 레포 파일과 git 상태는 바꾸지 않습니다. 상태 계산이 실패하면 `검사 불가` 조각이 붙습니다 — 「없음」과 섞지 않습니다.
+
+상태줄 한 번은 3초 안에 끝납니다. 넘으면 그 레포에서 마지막으로 낸 줄 뒤에 ` · 시간 초과` 를 붙여 내고, 낸 적이 없으면 `상태줄 — 시간 초과` 를 냅니다. 로드맵이 많거나 커서 첫 계산이 3초를 넘으면 `/spec-distill:roadmap-status` 를 한 번 부르면(30초 안) 같은 캐시가 채워집니다 — 다만 캐시는 브랜치나 origin/main 이 움직일 때마다 다시 계산되므로, 계산이 늘 3초를 넘는 레포에서는 상태줄에 ` · 시간 초과` 가 자주 붙습니다. 스크립트는 자기 하위 프로세스에 시간 제한을 두어 스스로 묶습니다. Claude Code 가 상태줄 실행을 도중에 버릴 때 그 자식을 끝내는지는 재지 않았습니다. 인터뷰 상태 파일은 일반 파일만 64 KiB 까지 읽고, 넘거나 링크 · 파이프면 `셀 수 없음` 으로 보입니다.
 
 ## Hooks Installed
 
@@ -185,7 +227,8 @@
 ### 스위치 목록
 
 - `DEVBREW_SPEC_DISTILL_DISABLE=1` — plugin 전체 abort, state 보존.
-  진입 skill 셋(`request-framing` · `spec-interview` · `spec-review`)은 본문 전 사전 검사가 `DEVBREW_SPEC_DISTILL_DISABLE=1` 을 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 skill 호출을 끊는다 — 헤드리스에서는 출력 없이 끝난다.
+  진입 skill 넷(`request-framing` · `spec-interview` · `spec-review` · `roadmap-status`)은 본문 전 사전 검사가 `DEVBREW_SPEC_DISTILL_DISABLE=1` 을 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 skill 호출을 끊는다 — 헤드리스에서는 출력 없이 끝난다.
+- `DEVBREW_SKIP_HOOKS=spec-distill:statusline` (5.7.0) — 컨트롤 플레인(`scripts/control_plane.py`)을 끈다: 상태줄은 빈 줄, `/spec-distill:roadmap-status` 의 지도는 `꺼져 있다 — <스위치>` 한 줄, `show --tasks` 는 표준 출력을 비우고 rc 3. 훅이 아니지만 지목할 이름을 갖는다. `DEVBREW_SPEC_DISTILL_DISABLE=1` 도 같은 효과다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` (v0.20.0, v0.24.0 확대, 3.1.0 재배선) — codex 병렬 co-review만 skip. Claude 리뷰(탐지 · 재비판)는 정상 동작하고, codex 부재는 엔진이 `fin.json` 의 `advisory[]` 와 게이트 첫 줄로 loud 하게 공시한다. 전역 `DEVBREW_SPEC_DISTILL_DISABLE`과 독립. **적용 범위는 문서 리뷰 엔진 자리 셋 전부**: (a) design-doc 리뷰(`spec-review`), (b) brief 리뷰(`reviewing-brief`), (c) seed 리뷰(`request-framing`) — 세 자리 모두 codex 호출은 SKILL 의 리터럴 게이트 펜스(`codex-gate` 표지) 하나이고 매 라운드 4단계에서 돈다. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`(`skip_reason: kill_switch`)로 옮기고 펜스가 그 값으로 러너 호출을 가르며, 러너(`run_docreview_codex_reviewer.sh`)는 이 변수를 보지 않는다. 펜스 밖에서 러너를 부르면 opt-out이 무시된 채 지출이 나간다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` — 문서 리뷰 엔진의 **재비판 단계만** skip (`doc-recritic` dispatch 없음). 탐지·codex 는 정상 동작한다. 기각 경로가 0 이 된 사실은 `fin.json` 의 `advisory[]` 로 공시된다 — 오탐이 걸러지지 않은 라운드라는 뜻이므로 조용히 넘어가지 않는다.
 - `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT=<n>` (5.5.0) — interview 조사 subagent 호출 상한의 시작값(기본 20, 양의 정수가 아니면 20 과 한 줄 공시). 닿으면 연장 · 판정 · 종료를 묻는다. 끄는 스위치가 아니다. 이 상한이 사슬 전체의 바깥 조사 중 subagent 몫을 묶고(Phase 0 은 웹을 보지 않는다), 본체 직접 웹 검색은 라운드 규약(질문 하나 · 답 하나)이 묶는다.

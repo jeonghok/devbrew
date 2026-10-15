@@ -1,121 +1,94 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""check_bundle_coverage.py — 에픽 묶음의 번호 집합과 에픽 spec 의 `## 번호 대조` 표를 맞춘다.
+"""check_bundle_coverage.py — 정답 출처(에픽 묶음 · brief)의 번호와 설계문서 `## 번호 대조` 표를 맞춘다.
 
-명령줄: check_bundle_coverage.py <묶음.md> <spec.md> [--json]
-종료 코드: 0 빠진 번호 없음 · 1 빠진 번호 있음 · 2 사용법 오류 ·
-3 검사 불가(`ids:` 없음 · 표 깨짐 · `## 번호 대조` 절 없음 · 파일을 못 읽음).
+명령줄:
+  check_bundle_coverage.py <묶음|brief> <설계문서> [--json]        번호 대조(설계문서 단계)
+  check_bundle_coverage.py --plan <설계문서> <계획> [--json]        계획 `### Task` 절에 없는 AC — 0 · 1 · 3
+  check_bundle_coverage.py --impl <설계문서> <보고 파일> [--json]   구현 보고의 미룸 · 빠짐 — 0 · 1(경고) · 3
+종료 코드 — 리뷰 전에 막을 것만 말한다: 0 빠진 번호 없음 · 1 빠진 번호 있음 · 2 사용법 오류 ·
+3 검사 불가(`ids:` 없음 · 표 깨짐 · `## 번호 대조` 절 없음 · 파일이나 brief · audit 을 못 읽음 · 내부 오류).
+얕은 답 · 받드는 에픽 없는 발화 · 셀 수 없음(로드맵을 못 읽음)은 종료 코드를 바꾸지 않는다 — 첫 줄의 개수와
+번호별 줄, `--json` 의 `shallow` · `unserved` · `unknown` 이 말한다. rc 0 은 「리뷰 전에 막을 것 없음」이다.
 
-`roadmap_status.py` 는 `check(bundle_text, spec_text)` 를 import 해 `git show` 로 읽은 글을 넘긴다.
-읽기만 한다 — 파일을 쓰지 않고 네트워크에 나가지 않는다.
+계수 규칙(R3 설계 Deferred N17 · N18):
+- 「기각」 행은 그 번호를 덮은 것으로 센다(빠진 번호가 아니다). 대신 기각 이유의 에픽 번호는 로드맵에 있어야
+  하고(없으면 얕음), 기각한 발화(S)는 로드맵의 다른 블록이 받들어야 한다(없으면 받드는 에픽 없는 발화).
+- 받듦은 배정만으로 세지 않는다 — 다른 블록에 배정됐어도 그 블록의 작업 트리 설계문서가 그 S 를 「기각」했으면
+  받들지 않는다. 설계문서가 아직 없거나 표를 못 읽으면 배정이 받듦이다.
+- brief 입력에는 로드맵이 없어 기각 에픽 · 받듦 검사를 하지 않는다.
+
+`roadmap_status.py` 는 `check(bundle_text, spec_text, repo=…)` 를 import 해 `git show` 로 읽은 글과 main 트리를 읽는 repo 를
+넘기고, status 와 함께 shallow · unserved · unknown 을 블록의 경고 줄로 싣는다(경고가 있으면 그 종료 코드는 1 이다).
+읽기만 한다 — 파일을 쓰지 않고 git · 네트워크를 부르지 않는다.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
+from pathlib import Path
 
-# 번호 한 개 — 확정 C/D · 열린 질문 OQ · 레포 근거 RC · 위험 K · steelman ST · 발화 S, 또는 «key».
-TOKEN_RE = re.compile(r"(?:C|D|OQ|RC|K|ST|S)\d+|«[^«»,·\s]+»")
-# 번호 여럿의 구분 — 쉼표 또는 ` · `. 범위 표기(`K1~K7`)는 토큰 문법에 맞지 않아 깨짐으로 친다.
-SEP_RE = re.compile(r"\s*,\s*|\s+·\s+")
-SEP_CELL_RE = re.compile(r":?-{3,}:?")
-PREFIX_ORDER = ("C", "D", "OQ", "RC", "K", "ST", "S")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from roadmap_model import (  # noqa: E402,F401 — 이 이름들은 이 모듈의 공개 표면이기도 하다
+    FormatError, PREFIX_ORDER, SEP_CELL_RE, SEP_RE, TOKEN_RE, brief_universe, bundle_ids,
+    collect_assigned, frontmatter, id_sort_key, parse_ids, parse_roadmap, section_body, unquote)
+
 TABLE_HEADING = "## 번호 대조"
+AC_HEADING = "## Acceptance Criteria"
+# 자리 표기 — `§<n>` · `§<n>-<m>` · `AC<n>`. 숫자 뒤에 숫자가 이어지면 다른 토큰이다(AC1 ≠ AC10).
+SECTION_TOKEN_RE = re.compile(r"§(\d+)(?:-(\d+))?(?!\d)")
+AC_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])AC(\d+)(?!\d)")
+AC_ITEM_RE = re.compile(r"\s*[-*]\s+(?:\*\*)?AC(\d+)(?!\d)")
+EPIC_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])(R\d+[a-z]?|P\d+)(?![A-Za-z0-9])")
 
 
-class FormatError(ValueError):
-    """검사할 수 없는 입력 — 종료 코드 3."""
+class Repo:
+    """레포 루트 기준 읽기 — 로드맵 · 다른 묶음 · 작업 트리 설계문서. 읽기만 한다."""
+
+    def __init__(self, root: str):
+        self.root = root
+        self._specs = None
+
+    def read(self, rel: str):
+        try:
+            with open(os.path.join(self.root, rel), encoding="utf-8") as fh:
+                return fh.read()
+        except (OSError, UnicodeDecodeError):
+            return None
+
+    def exists(self, rel: str) -> bool:
+        return os.path.exists(os.path.join(self.root, rel))
+
+    def specs_for(self, source: str) -> list:
+        """`docs/superpowers/specs/*.md` 중 frontmatter `source_interview` 가 source 인 (경로, 글)."""
+        if self._specs is None:
+            self._specs = []
+            try:
+                names = sorted(os.listdir(os.path.join(self.root, "docs", "superpowers", "specs")))
+            except OSError:
+                names = []
+            for name in names:
+                if not name.endswith(".md"):
+                    continue
+                rel = "docs/superpowers/specs/" + name
+                text = self.read(rel)
+                if text is not None:
+                    self._specs.append((rel, unquote(frontmatter(text).get("source_interview", "")), text))
+        return [(rel, text) for rel, src, text in self._specs if src == source]
 
 
-def parse_ids(cell: str) -> list:
-    """번호 칸 하나를 토큰 목록으로. 문법에 맞지 않는 토큰이 하나라도 있으면 FormatError."""
-    cell = cell.strip()
-    if not cell:
-        raise FormatError("빈 번호 칸")
-    out = []
-    for piece in SEP_RE.split(cell):
-        if not TOKEN_RE.fullmatch(piece):
-            raise FormatError("번호 문법에 맞지 않는 토큰: %r" % piece)
-        out.append(piece)
-    return out
-
-
-def id_sort_key(token: str):
-    if token.startswith("«"):
-        return (len(PREFIX_ORDER), 0, token)
-    for i, p in enumerate(PREFIX_ORDER):
-        rest = token[len(p):]
-        if token.startswith(p) and rest.isdigit():
-            return (i, int(rest), token)
-    return (len(PREFIX_ORDER) + 1, 0, token)
-
-
-def frontmatter(text: str) -> dict:
-    """맨 앞 `---` 블록의 최상위 `키: 값` 줄. 들여쓴 줄 · 목록 줄은 건너뛴다. 없거나 안 닫혔으면 {}."""
-    lines = text.split("\n")
-    if not lines or lines[0].rstrip("\r") != "---":
-        return {}
-    out = {}
-    for line in lines[1:]:
-        line = line.rstrip("\r")
-        if line == "---":
-            return out
-        if not line or line[0] in " \t-#" or ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        out.setdefault(key.strip(), value.strip())
-    return {}
-
-
-def unquote(value: str) -> str:
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-        return value[1:-1]
-    return value
-
-
-def _heading_indexes(lines):
-    """펜스 밖의 `## ` 줄 번호들. `### ` 는 `## ` 로 시작하지 않으므로 들지 않는다."""
-    in_fence = False
-    for i, line in enumerate(lines):
-        if line.lstrip().startswith("```"):
-            in_fence = not in_fence
-            continue
-        if not in_fence and line.startswith("## "):
-            yield i
-
-
-def section_body(text: str, heading: str):
-    """`heading` 과 같거나 `heading + " "` 로 시작하는 `## ` 줄 다음부터 다음 `## ` 줄 앞까지.
-
-    없으면 None, 둘 이상이면 FormatError. §6 은 이 함수로 읽지 않는다 — `section6.body` 한 곳이다.
-    """
-    if heading.startswith("## 6."):
-        raise ValueError("§6 은 section6.body 로만 읽는다")
-    lines = text.splitlines(keepends=True)
-    heads = list(_heading_indexes(lines))
-    hits = [i for i in heads
-            if lines[i].rstrip("\r\n") == heading or lines[i].startswith(heading + " ")]
-    if not hits:
+def find_repo(bundle_path: str, roadmap_rel: str):
+    """묶음 파일의 디렉토리부터 위로 — `<조상>/<roadmap_rel>` 이 파일인 첫 조상을 레포 루트로 쓴다."""
+    if not roadmap_rel:
         return None
-    if len(hits) > 1:
-        raise FormatError("%s 절이 %d개다" % (heading, len(hits)))
-    start = hits[0]
-    later = [j for j in heads if j > start]
-    end = later[0] if later else len(lines)
-    return "".join(lines[start + 1:end])
-
-
-def bundle_ids(text: str) -> list:
-    raw = frontmatter(text).get("ids")
-    if raw is None:
-        raise FormatError("묶음 frontmatter 에 ids 가 없다")
-    if not (raw.startswith("[") and raw.endswith("]")):
-        raise FormatError("ids 는 한 줄 목록([…])이어야 한다")
-    if not raw[1:-1].strip():
-        raise FormatError("ids 가 비었다")
-    return parse_ids(raw[1:-1])
+    here = Path(os.path.abspath(bundle_path)).parent
+    for anc in [here, *here.parents]:
+        if (anc / roadmap_rel).is_file():
+            return Repo(str(anc))
+    return None
 
 
 def _cells(row: str) -> list:
@@ -124,8 +97,8 @@ def _cells(row: str) -> list:
     return [c.strip() for c in row[1:-1].split("|")]
 
 
-def table_ids(spec_text: str) -> set:
-    """`## 번호 대조` 표의 첫 칸 번호 전부. 절이 없거나 표가 깨졌으면 FormatError."""
+def table_rows(spec_text: str) -> list:
+    """`## 번호 대조` 표의 (번호 목록, 처리, 셋째 칸) 행들. 절이 없거나 표가 깨졌으면 FormatError."""
     body = section_body(spec_text, TABLE_HEADING)
     if body is None:
         raise FormatError("spec 에 `## 번호 대조` 절이 없다")
@@ -137,7 +110,7 @@ def table_ids(spec_text: str) -> set:
     sep = _cells(rows[1])
     if len(sep) != 3 or not all(SEP_CELL_RE.fullmatch(c) for c in sep):
         raise FormatError("번호 대조 표 구분 행이 칸 셋이 아니다")
-    out = set()
+    out = []
     for row in rows[2:]:
         cells = _cells(row)
         if len(cells) != 3:
@@ -146,69 +119,490 @@ def table_ids(spec_text: str) -> set:
             raise FormatError("둘째 칸이 반영/기각이 아니다: %r" % row)
         if not cells[2]:
             raise FormatError("셋째 칸(자리 또는 이유)이 비었다: %r" % row)
-        out.update(parse_ids(cells[0]))
+        out.append((parse_ids(cells[0]), cells[1], cells[2]))
     return out
 
 
-def check(bundle_text: str, spec_text: str) -> dict:
-    """묶음 ids 중 표에 없는 번호(missing)와 표에만 있는 번호(extra)."""
+def table_ids(spec_text: str) -> set:
+    """`## 번호 대조` 표의 첫 칸 번호 전부."""
+    out = set()
+    for ids, _verb, _cell in table_rows(spec_text):
+        out.update(ids)
+    return out
+
+
+def _outside_fences(text: str):
+    in_fence = False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence:
+            yield line
+
+
+def design_sections(spec_text: str) -> dict:
+    """펜스 밖 `### §<n>` 절마다 본문 줄 — {n: [줄]}. 다음 `## ` · `### ` 제목에서 끝난다."""
+    out, cur = {}, None
+    for line in _outside_fences(spec_text):
+        if line.startswith("## ") or line.startswith("### "):
+            cur = None
+            if line.startswith("### §"):
+                digits = ""
+                for ch in line[len("### §"):]:
+                    if ch not in "0123456789":
+                        break
+                    digits += ch
+                if digits:
+                    cur = out.setdefault(int(digits), [])
+            continue
+        if cur is not None:
+            cur.append(line)
+    return out
+
+
+def heading_parts(spec_text: str) -> set:
+    """펜스 밖 `## ` 제목 전체와 ` / ` · ` · ` 로 나눈 조각들(`## 번호 대조` 는 빼고)."""
+    parts = set()
+    for line in _outside_fences(spec_text):
+        if not line.startswith("## ") or line.rstrip() == TABLE_HEADING:
+            continue
+        title = line[3:].strip()
+        if not title:
+            continue
+        parts.add(title)
+        for sep in (" / ", " · "):
+            parts.update(p.strip() for p in title.split(sep) if p.strip())
+    return parts
+
+
+def _word_char(ch: str) -> bool:
+    return ch.isalnum() or ch == "_"
+
+
+def has_word(cell: str, word: str) -> bool:
+    """cell 안에 word 가 글자 · 숫자 경계로 있는가(「Goals」는 「Goals —」에 맞고 「Goalsx」에 안 맞는다)."""
+    start = 0
+    while True:
+        i = cell.find(word, start)
+        if i < 0:
+            return False
+        j = i + len(word)
+        if (i == 0 or not _word_char(cell[i - 1])) and (j == len(cell) or not _word_char(cell[j])):
+            return True
+        start = i + 1
+
+
+def acceptance_ids(spec_text: str):
+    """`## Acceptance Criteria` 항목 머리의 AC 번호(등장 순서, 중복 제거). 절이 없으면 None."""
+    body = section_body(spec_text, AC_HEADING)
+    if body is None:
+        return None
+    out = []
+    for line in body.splitlines():
+        m = AC_ITEM_RE.match(line)
+        if m and "AC" + m.group(1) not in out:
+            out.append("AC" + m.group(1))
+    return out
+
+
+def location_problem(cell: str, sections: dict, acs: list, parts: set):
+    """반영 칸의 자리 표기 문제 — 없으면 None, 있으면 사유."""
+    found, absent = False, []
+    for m in SECTION_TOKEN_RE.finditer(cell):
+        found = True
+        body = sections.get(int(m.group(1)))
+        sub = m.group(2)
+        if body is None or (sub is not None and not any(l.startswith("%d. " % int(sub)) for l in body)):
+            absent.append(m.group(0))
+    for m in AC_TOKEN_RE.finditer(cell):
+        found = True
+        if "AC" + m.group(1) not in acs:
+            absent.append("AC" + m.group(1))
+    if any(has_word(cell, p) for p in parts):
+        found = True
+    if absent:
+        return "가리킨 자리가 설계문서에 없다: " + " · ".join(absent)
+    if not found:
+        return "가리킨 자리가 없다"
+    return None
+
+
+def _is_s(token: str) -> bool:
+    return token.startswith("S") and token[1:].isdigit()
+
+
+def _roadmap_view(fm: dict, repo):
+    """(view, 사유). view 는 {"blocks", "rel", "errors"} — 로드맵을 못 읽으면 None 과 사유."""
+    rel = unquote(fm.get("roadmap", ""))
+    if not rel:
+        return None, "묶음 frontmatter 에 roadmap 이 없다"
+    if repo is None:
+        return None, "로드맵을 찾지 못했다: %s" % rel
+    text = repo.read(rel)
+    if text is None:
+        return None, "로드맵을 못 읽었다: %s" % rel
+    meta, blocks, _records, _risk, errors = parse_roadmap(text)
+    if errors:
+        return None, "로드맵 형식이 깨졌다: %s" % errors[0]
+    _bundles, _union, errs = collect_assigned(blocks, meta, rel, repo.read, repo.exists)
+    return {"blocks": blocks, "rel": rel, "errors": errs}, None
+
+
+def _block_specs(block: dict, view: dict, repo) -> list:
+    """그 블록의 작업 트리 설계문서 글들."""
+    if block["kind"] == "branch":
+        rel = block["fields"].get("spec", "").strip().strip("`")
+        text = repo.read(rel) if rel else None
+        return [text] if text is not None else []
+    if block["kind"] == "bundle":
+        rdir = view["rel"].rsplit("/", 1)[0] if "/" in view["rel"] else "."
+        return [text for _rel, text in repo.specs_for(rdir + "/" + block["fields"]["묶음"])]
+    return []
+
+
+def _serves(block: dict, s: str, view: dict, repo, epic: str) -> bool:
+    """다른 블록이 S 를 받드는가 — 배정됐고, 그 블록의 설계문서가 그 S 를 기각하지 않았다(N17)."""
+    if block["id"] == epic or s not in block.get("assigned", []):
+        return False
+    for text in _block_specs(block, view, repo):
+        try:
+            rows = table_rows(text)
+        except FormatError:
+            continue
+        if any(s in ids and verb.startswith("기각") for ids, verb, _cell in rows):
+            return False
+    return True
+
+
+def _unchecked(reason: str) -> dict:
+    return {"status": 3, "mode": None, "missing": [], "extra": [], "shallow": [], "unserved": [],
+            "unknown": [], "bundle_count": None, "table_count": None, "reason": reason}
+
+
+def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None) -> dict:
+    """정답 출처의 번호 중 표에 없는 번호(missing) · 얕은 답 · 받드는 에픽 없는 발화 · 셀 수 없음."""
+    fm = frontmatter(bundle_text)
+    mode = "brief" if unquote(fm.get("type", "")) == "interview-brief" else "bundle"
     try:
-        want = bundle_ids(bundle_text)
-        have = table_ids(spec_text)
+        if mode == "brief":
+            if audit_text is None:
+                raise FormatError("brief 또는 audit 을 못 읽었다")
+            non_s, s_ids, _k = brief_universe(bundle_text, audit_text)
+            want = sorted(non_s | s_ids, key=id_sort_key)
+        else:
+            want = bundle_ids(bundle_text)
+        rows = table_rows(spec_text)
+        acs = acceptance_ids(spec_text) or []
     except FormatError as exc:
-        return {"status": 3, "missing": [], "extra": [], "bundle_count": None,
-                "table_count": None, "reason": str(exc)}
-    seen = set()
-    missing = []
+        return _unchecked(str(exc))
+    have = set()
+    for ids, _verb, _cell in rows:
+        have.update(ids)
+    seen, missing = set(), []
     for token in want:
         if token not in have and token not in seen:
             missing.append(token)
         seen.add(token)
     extra = sorted(have - seen, key=id_sort_key)
-    return {"status": 1 if missing else 0, "missing": missing, "extra": extra,
+    sections, parts = design_sections(spec_text), heading_parts(spec_text)
+    view, note = _roadmap_view(fm, repo) if mode == "bundle" else (None, None)
+    epic = unquote(fm.get("epic", ""))
+    shallow, unserved, unknown = [], [], []
+    for ids, verb, cell in rows:
+        if verb.startswith("반영"):
+            why = location_problem(cell, sections, acs, parts)
+            if why:
+                shallow += [{"id": t, "reason": why} for t in ids]
+            continue
+        if mode != "bundle":
+            continue
+        epics = EPIC_TOKEN_RE.findall(cell)
+        rejected_s = [t for t in ids if _is_s(t) and t in seen]
+        if view is None:
+            targets = list(ids) if epics else rejected_s
+            unknown += ["%s — %s" % (t, note) for t in targets]
+            continue
+        known = {b["id"] for b in view["blocks"]}
+        absent = [e for e in epics if e not in known]
+        if absent:
+            shallow += [{"id": t, "reason": "넘긴 에픽이 로드맵에 없다: " + " · ".join(absent)} for t in ids]
+        for s in rejected_s:
+            if any(_serves(b, s, view, repo, epic) for b in view["blocks"]):
+                continue
+            if view["errors"]:
+                unknown.append("%s — 로드맵의 묶음을 다 읽지 못했다: %s" % (s, view["errors"][0]))
+            else:
+                unserved.append(s)
+    return {"status": 1 if missing else 0, "mode": mode, "missing": missing, "extra": extra,
+            "shallow": shallow, "unserved": unserved, "unknown": unknown,
             "bundle_count": len(seen), "table_count": len(have), "reason": None}
+
+
+DEFER_HEADING = "## 미룸"
+RECEIVER_EPIC_RE = re.compile(r"[A-Z]\d+[a-z]?")
+RECEIVER_PR_RE = re.compile(r"#\d+")
+REPORT_HEAD_RE = re.compile(r"AC\d+:")
+REPORT_LINE_RE = re.compile(r"AC(\d+): (구현됨|미룸|빠짐) — (\S.*)")
+VERDICTS = ("구현됨", "미룸", "빠짐")
+
+
+def _says_none(line: str) -> bool:
+    """표 없는 미룸 절의 한 줄이 「미룬 것 없음」만 말하나. 번호 토큰이나 「미룸」이 든 줄은 아니다."""
+    if "미룸" in line or any(ch.isdigit() and i > 0 and (line[i - 1] in "#PR" or line[i - 2:i] == "AC")
+                            for i, ch in enumerate(line)):
+        return False
+    for head in ("없음", "미룬 것 없음"):
+        if line == head or line.startswith(head + " — "):
+            return True
+    return False
+
+
+def deferred_rows(spec_text: str) -> list:
+    """`## 미룸` 표의 (항목, 이유, 받는 곳) 행들. 절이 없거나 「없음」뿐이면 []. 표가 깨졌으면 FormatError."""
+    body = section_body(spec_text, DEFER_HEADING)
+    if body is None:
+        return []
+    rows = [l.strip() for l in body.splitlines() if l.strip().startswith("|")]
+    if not rows:
+        rest = [l.strip().lstrip("-*").strip().rstrip(".。!").strip() for l in body.splitlines() if l.strip()]
+        if all(_says_none(r) for r in rest):
+            return []
+        raise FormatError("`## 미룸` 절에 표가 없다")
+    if len(rows) < 2 or len(_cells(rows[0])) != 3:
+        raise FormatError("`## 미룸` 표 머리 행이 칸 셋이 아니다")
+    if _cells(rows[0]) != ["항목", "이유", "받는 곳"]:
+        raise FormatError("`## 미룸` 표 머리 행이 항목 · 이유 · 받는 곳 순서가 아니다: %r" % rows[0])
+    sep = _cells(rows[1])
+    if len(sep) != 3 or not all(SEP_CELL_RE.fullmatch(c) for c in sep):
+        raise FormatError("`## 미룸` 표 구분 행이 칸 셋이 아니다")
+    out = []
+    for row in rows[2:]:
+        cells = _cells(row)
+        if len(cells) != 3 or not all(cells):
+            raise FormatError("`## 미룸` 표 행이 빈칸 없는 칸 셋이 아니다: %r" % row)
+        out.append((cells[0], cells[1], cells[2].strip("`").strip()))
+    return out
+
+
+def receiver_ok(receiver: str, epic_ids: set) -> bool:
+    """받는 곳이 `#<숫자>` 이거나 로드맵에 있는 에픽 번호인가. `없음` · 그 밖 글은 받는 곳이 아니다."""
+    if RECEIVER_PR_RE.fullmatch(receiver):
+        return True
+    return bool(RECEIVER_EPIC_RE.fullmatch(receiver)) and receiver in epic_ids
+
+
+def plan_task_text(plan_text: str) -> str:
+    """`### Task` 절들(머리 줄 포함)을 이어 붙인 글. 펜스 안 줄은 절 경계가 아니지만 본문에는 든다."""
+    out, on, in_fence = [], False, False
+    for line in plan_text.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and (line.startswith("## ") or line.startswith("### ")):
+            on = line.startswith("### Task")
+        if on:
+            out.append(line)
+    return "\n".join(out)
+
+
+def _acs_or_error(spec_text: str) -> list:
+    acs = acceptance_ids(spec_text)
+    if acs is None:
+        raise FormatError("설계문서에 `## Acceptance Criteria` 절이 없다")
+    if not acs:
+        raise FormatError("`## Acceptance Criteria` 절에 AC 항목이 없다")
+    return acs
+
+
+def _plan_unchecked(reason: str) -> dict:
+    return {"status": 3, "missing": [], "ac_count": None, "reason": reason}
+
+
+def check_plan(spec_text: str, plan_text: str) -> dict:
+    try:
+        acs = _acs_or_error(spec_text)
+    except FormatError as exc:
+        return _plan_unchecked(str(exc))
+    have = {"AC" + m.group(1) for m in AC_TOKEN_RE.finditer(plan_task_text(plan_text))}
+    missing = [a for a in acs if a not in have]
+    return {"status": 1 if missing else 0, "missing": missing, "ac_count": len(acs), "reason": None}
+
+
+def render_plan(r: dict) -> str:
+    if r["status"] == 3:
+        return "계획 대조 검사 불가 — %s" % r["reason"]
+    if r["missing"]:
+        return "계획 대조: 계획에 없는 AC %d개 — %s" % (len(r["missing"]), " · ".join(r["missing"]))
+    return "계획 대조: 계획에 없는 AC 없음 (AC %d개)" % r["ac_count"]
+
+
+def parse_report(text: str) -> dict:
+    """{AC: (판정, 한 줄)}. `AC<n>:` 로 시작하는데 형식이 다르거나 같은 AC 가 두 번이면 FormatError."""
+    out = {}
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith("- ") or s.startswith("* "):
+            s = s[2:].strip()
+        if not REPORT_HEAD_RE.match(s):
+            continue
+        m = REPORT_LINE_RE.fullmatch(s)
+        if not m:
+            raise FormatError("보고 줄이 `AC<n>: 구현됨|미룸|빠짐 — <한 줄>` 이 아니다: %r" % s)
+        ac = "AC" + m.group(1)
+        if ac in out:
+            raise FormatError("보고에 %s 가 두 번 있다" % ac)
+        out[ac] = (m.group(2), m.group(3))
+    return out
+
+
+def _impl_unchecked(reason: str) -> dict:
+    return {"status": 3, "unreported": [], "unlisted": [], "no_receiver": [], "dropped": [],
+            "unknown_acs": [], "counts": None, "ac_count": None, "reason": reason}
+
+
+def check_impl(spec_text: str, report_text: str) -> dict:
+    try:
+        acs = _acs_or_error(spec_text)
+        report = parse_report(report_text)
+        if not report:
+            raise FormatError("보고에 AC 판정 줄이 없다")
+        deferred = deferred_rows(spec_text)
+    except FormatError as exc:
+        return _impl_unchecked(str(exc))
+    listed = {"AC" + m.group(1) for item, _why, _recv in deferred for m in AC_TOKEN_RE.finditer(item)}
+    judged = [a for a in acs if a in report]
+    return {
+        "status": 0, "reason": None, "ac_count": len(acs),
+        "unreported": [a for a in acs if a not in report],
+        "unlisted": ["%s(%s)" % (a, report[a][0]) for a in judged
+                     if report[a][0] != "구현됨" and a not in listed],
+        "no_receiver": [item for item, _why, recv in deferred if recv == "없음"],
+        "dropped": ["%s: %s" % (a, report[a][1]) for a in judged if report[a][0] == "빠짐"],
+        "unknown_acs": sorted((a for a in report if a not in acs), key=lambda a: int(a[2:])),
+        "counts": {v: sum(1 for a in judged if report[a][0] == v) for v in VERDICTS},
+    }
+
+
+IMPL_GROUPS = (("보고에 없는 AC", "unreported"), ("미룸 표에 없는 미룸/빠짐", "unlisted"),
+               ("받는 곳 없는 미룸", "no_receiver"), ("빠짐", "dropped"))
+
+
+def _impl_status(r: dict) -> dict:
+    if r["status"] != 3:
+        r["status"] = 1 if any(r[k] for _label, k in IMPL_GROUPS) else 0
+    return r
+
+
+def render_impl(r: dict) -> str:
+    if r["status"] == 3:
+        return "구현 대조 검사 불가 — %s" % r["reason"]
+    n = sum(len(r[k]) for _label, k in IMPL_GROUPS)
+    if n:
+        lines = ["구현 대조: 경고 %d개 — %s"
+                 % (n, " · ".join("%s %d개" % (label, len(r[k])) for label, k in IMPL_GROUPS))]
+        lines += ["%s — %s" % (label, " · ".join(r[k])) for label, k in IMPL_GROUPS if r[k]]
+        if r["dropped"]:
+            lines.append("빠짐은 머지 전에 고치거나 사용자가 미룸으로 옮긴다(설계문서 `## 미룸` 표).")
+    else:
+        c = r["counts"]
+        lines = ["구현 대조: 경고 없음 (AC %d개 · 구현됨 %d개 · 미룸 %d개)" % (r["ac_count"], c["구현됨"], c["미룸"])]
+    if r["unknown_acs"]:
+        lines.append("정보: 설계문서에 없는 AC 가 보고에 있다 — %s" % " · ".join(r["unknown_acs"]))
+    return "\n".join(lines)
+
+
+def _two_files(first: str, second: str, fn, unchecked) -> dict:
+    texts = []
+    for path in (first, second):
+        text, exc = _read(path)
+        if text is None:
+            return unchecked("파일을 못 읽었다: %s (%s)" % (path, exc))
+        texts.append(text)
+    try:
+        return fn(texts[0], texts[1])
+    except Exception as exc:  # 검사 자체가 죽어도 이상 없음(0)으로 내지 않는다
+        return unchecked("내부 오류 — %s: %s" % (type(exc).__name__, exc))
+
+
+def warning_count(result: dict) -> int:
+    """spec-review 게이트의 「경고 N개」에 더할 수 — 검사 불가는 1."""
+    if result.get("status") == 3:
+        return 1
+    return sum(len(result[k]) for k in ("missing", "shallow", "unserved", "unknown"))
 
 
 def render(result: dict) -> str:
     if result["status"] == 3:
         return "번호 대조 검사 불가 — %s" % result["reason"]
-    lines = []
-    if result["missing"]:
-        lines.append("번호 대조: 빠진 번호 %d개 — %s"
-                     % (len(result["missing"]), " · ".join(result["missing"])))
+    brief = result.get("mode") == "brief"
+    m, sh, un, uk = (result[k] for k in ("missing", "shallow", "unserved", "unknown"))
+    if not (m or sh or un or uk):
+        lines = ["번호 대조: 빠진 번호 없음 (%s %d개 · 표 번호 %d개)"
+                 % ("brief 번호" if brief else "묶음 번호", result["bundle_count"], result["table_count"])]
     else:
-        lines.append("번호 대조: 빠진 번호 없음 (묶음 번호 %d개 · 표 번호 %d개)"
-                     % (result["bundle_count"], result["table_count"]))
+        head = "번호 대조: 빠진 번호 %d개 · 얕은 답 %d개 · 받드는 에픽 없는 발화 %d개" % (len(m), len(sh), len(un))
+        if uk:
+            head += " · 셀 수 없음 %d개" % len(uk)
+        lines = [head]
+        if m:
+            lines.append("빠진 번호 %d개 — %s" % (len(m), " · ".join(m)))
+        lines += ["얕은 답 — %s: %s" % (s["id"], s["reason"]) for s in sh]
+        lines += ["받드는 에픽 없는 발화 — %s: 이 설계문서가 기각했는데 로드맵의 다른 에픽이 받들지 않는다" % s
+                  for s in un]
+        lines += ["셀 수 없음 — %s" % u for u in uk]
     if result["extra"]:
-        lines.append("정보: 묶음에 없는 번호 %d개가 표에 있다 — %s"
-                     % (len(result["extra"]), " · ".join(result["extra"])))
+        lines.append("정보: %s 없는 번호 %d개가 표에 있다 — %s"
+                     % ("brief 에" if brief else "묶음에", len(result["extra"]), " · ".join(result["extra"])))
     return "\n".join(lines)
+
+
+def _read(path: str):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read(), None
+    except (OSError, UnicodeDecodeError) as exc:
+        return None, exc
+
+
+def coverage(first_path: str, spec_path: str) -> dict:
+    """번호 대조 한 번 — 파일을 읽고, brief 면 옆 audit 을, 묶음이면 로드맵이 있는 레포를 찾아 check 를 부른다."""
+    texts = []
+    for path in (first_path, spec_path):
+        text, exc = _read(path)
+        if text is None:
+            return _unchecked("파일을 못 읽었다: %s (%s)" % (path, exc))
+        texts.append(text)
+    try:
+        fm = frontmatter(texts[0])
+        if unquote(fm.get("type", "")) == "interview-brief":
+            audit = _read(first_path[:-3] + ".audit.md")[0] if first_path.endswith(".md") else None
+            return check(texts[0], texts[1], audit_text=audit)
+        return check(texts[0], texts[1], repo=find_repo(first_path, unquote(fm.get("roadmap", ""))))
+    except Exception as exc:  # 검사 자체가 죽어도 이상 없음(0)으로 내지 않는다
+        return _unchecked("내부 오류 — %s: %s" % (type(exc).__name__, exc))
 
 
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(prog="check_bundle_coverage.py",
-                                 description="에픽 묶음의 번호와 spec 의 번호 대조 표를 맞춘다.")
-    ap.add_argument("bundle")
-    ap.add_argument("spec")
+                                 description="정답 출처의 번호와 설계문서 AC 를 설계문서 · 계획 · 구현 보고와 맞춘다.")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--plan", action="store_true", help="<설계문서> <계획>: 계획 Task 절에 없는 AC")
+    mode.add_argument("--impl", action="store_true", help="<설계문서> <보고 파일>: 구현 보고의 미룸 · 빠짐")
+    ap.add_argument("first", help="묶음 · brief(기본) 또는 설계문서(--plan · --impl)")
+    ap.add_argument("second", help="설계문서(기본) · 계획(--plan) · 보고 파일(--impl)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
-    texts = []
-    for path in (args.bundle, args.spec):
-        try:
-            with open(path, encoding="utf-8") as fh:
-                texts.append(fh.read())
-        except (OSError, UnicodeDecodeError) as exc:
-            result = {"status": 3, "missing": [], "extra": [], "bundle_count": None,
-                      "table_count": None, "reason": "파일을 못 읽었다: %s (%s)" % (path, exc)}
-            print(json.dumps(result, ensure_ascii=False) if args.json else render(result))
-            return 3
-    try:
-        result = check(texts[0], texts[1])
-    except Exception as exc:  # 검사 자체가 죽어도 이상 없음(0)으로 내지 않는다
-        result = {"status": 3, "missing": [], "extra": [], "bundle_count": None,
-                  "table_count": None, "reason": "내부 오류 — %s: %s" % (type(exc).__name__, exc)}
-    print(json.dumps(result, ensure_ascii=False) if args.json else render(result))
+    if args.plan:
+        result = _two_files(args.first, args.second, check_plan, _plan_unchecked)
+        text = render_plan(result)
+    elif args.impl:
+        result = _impl_status(_two_files(args.first, args.second, check_impl, _impl_unchecked))
+        text = render_impl(result)
+    else:
+        result = coverage(args.first, args.second)
+        text = render(result)
+    print(json.dumps(result, ensure_ascii=False) if args.json else text)
     return result["status"]
 
 
