@@ -96,6 +96,11 @@ LK="$(printf '%s' "$H" | grep -oE '\[(RC[0-9]+ *)?→[^]]*\]$')"
 printf -- "%s\n  둘째 줄. %s\n" "$HL" "$LK" > "$TMP/s4"
 rep4 "$TMP/s4"; gate; rc=$?
 [ "$rc" -ne 0 ] && ok "s4_link_on_body: 결정 연결이 첫 줄 끝이 아니면 red" || no "s4_link_on_body: 통과했다"
+# 첫 줄 연결은 그대로 두고 본문 줄에 연결을 하나 더 — 첫 줄만 읽는 ① 은 조용하므로 본문 줄 규칙만이 red 를 낸다.
+base; H="$(first4)"
+printf -- "%s\n  둘째 줄. [→ 없음]\n" "$H" > "$TMP/s4"
+rep4 "$TMP/s4"; gate; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q '§4 항목의 결정 연결' "$TMP/out"; } && ok "s4_second_link_on_body: 첫 줄 연결이 있어도 본문 줄의 연결은 red" || no "s4_second_link_on_body: rc=$rc"
 base; H="$(first4)"
 printf -- "%s\n  본문에 RC77 을 숨긴다.\n" "$H" > "$TMP/s4"
 rep4 "$TMP/s4"; gate; rc=$?
