@@ -76,14 +76,17 @@ R7 과 병렬로 간다(의존 R0). 이 에픽은 표시만 하고 상태 계산
    (`docs/superpowers/interview/*-interview.state.md`) 중 짝 brief 가 없는 것의 R1 포화 판정 줄과 조사 상한 줄(`research_dispatches` ·
    `research_limit`). R7 이 아직 머지되지 않았으면 이 항목은 「셀 수 없음」. ③ `roadmap_status.py --json` 블록의 `rulings[]` — R5 가 더할
    칸 이름을 여기서 약속한다. 없으면 그 절을 내지 않는다.
-2. **로드맵 고르기.** `docs/superpowers/roadmaps/*/roadmap.md` 중 끝나지 않은 블록(머지됨 · 끝남이 아닌)이 있는 것 전부. 인자로 경로를 주면 그것만.
+2. **로드맵 고르기.** origin/main 트리의 `docs/superpowers/roadmaps/*/roadmap.md` 중 끝나지 않은 블록(머지됨 · 끝남이 아닌)이 있는 것 전부.
+   인자로 경로를 주면 그것만. 상태 계산은 `roadmap_status.py <경로> --json`(origin/main 사본 — 지휘 절차 1번과 같은 사본)으로 부르고,
+   작업 트리 사본(`--roadmap-file`)은 쓰지 않는다. 그래서 아직 main 에 없는 로드맵은 고르기 대상이 아니고, 인자로 주면 상태 계산이
+   「로드맵을 못 읽었다」로 3 을 내 `· 검사 불가` 로 보인다.
 3. **`statusline`.** 한 줄: `<로드맵 폴더 이름> · 설계 <a> · 구현 <b> · 준비 <c> · 경고 <w> · 받은 지 <분>분`. 경고 0 이면 `경고 없음`.
    진행 중 인터뷰가 있으면 `· 인터뷰 조사 <n>/<limit>`. 상태 계산이 3 이면 `· 검사 불가`. 로드맵이 없으면 빈 줄.
 4. **`show`.** 첫 줄은 상태 계산의 쉬운 첫 줄 그대로. 이어 블록마다 `<번호> <이름> — <단계> · <이유>` 와 들여쓴 경고, 인터뷰 절, 판정 줄 절.
 5. **`show --tasks`.** 블록마다 한 줄 `<번호> <이름> — <단계>\t<pending|in_progress|completed>` — 지휘 절차가 작업 목록을 맞출 때 읽는다
    (상태 계산의 `task_status` 매핑을 그대로 쓴다).
 6. **캐시.** `<git rev-parse --git-common-dir>/devbrew/control-plane.json`. 키 = `origin/main` 커밋 · `git for-each-ref` 의 브랜치 머리
-   목록 해시 · 대상 로드맵 파일 내용 해시 · 진행 중 인터뷰 상태 파일의 mtime. 키가 같으면 캐시를 쓰고, 다르면 다시 계산해 원자적으로
+   목록 해시 · 대상 로드맵의 origin/main 사본 내용 해시 · 진행 중 인터뷰 상태 파일의 mtime. 키가 같으면 캐시를 쓰고, 다르면 다시 계산해 원자적으로
    쓴다(임시 파일 + `os.replace`). 캐시가 깨졌거나 쓸 수 없으면 캐시 없이 계산하고 `show` 에 「캐시를 쓰지 못했다 — <사유>」 한 줄.
 7. **받은 지 N분.** `fetched_at`(상태 계산이 이미 내는 마지막 fetch 시각)에서 계산. 숫자 기준으로 경고하지 않는다.
 8. **읽기 전용.** 레포 파일과 git 상태를 바꾸지 않는다. Python 은 `-I` 없이 스크립트로 부르고 인라인 python 은 쓰지 않는다(레포 규칙).
