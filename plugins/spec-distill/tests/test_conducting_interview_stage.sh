@@ -172,6 +172,28 @@ b0_block="$(awk '/^#### B-0/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
   && ! grep -qF '모든 항목을 잠정(provisional)으로 둔다' <<<"$b0_block"; } \
   && ok "AC12: 재제시 상한에 자동 강등이 없다 (양성 짝: 자동 강등은 없다)" \
   || no "AC12: 자동 강등 문면이 남았거나 부재 선언이 없다"
+# 재제시 상한 질문의 몸체 — 방아쇠 · AskUserQuestion 펜스 · 게이트 재제시 · handoff 부재.
+# teeth: 펜스 삭제 / 방아쇠 문구 삭제 / 「지금 목록으로 확정」 설명을 handoff 로 바꾸면 각각 RED.
+cap_prose="$(awk '/^\*\*재제시 상한\*\*/{f=1} /^카운터는 프로즈/{f=0} f' <<<"$b0_block")"
+cap_fence="$(awk '/^```javascript/{buf="";inf=1;next} /^```/{if(inf&&buf ~ /header: "확정 목록"/){print buf};inf=0;next} inf{buf=buf $0 "\n"}' <<<"$cap_prose")"
+{ grep -qF '2회에 닿은 뒤 다시 ③ 을 고르면' <<<"$cap_prose" \
+  && grep -qF 'AskUserQuestion({ questions' <<<"$cap_fence" \
+  && grep -qF '{label: "계속 고친다(2번 더)"' <<<"$cap_fence" \
+  && grep -qF '{label: "지금 목록으로 확정"' <<<"$cap_fence" \
+  && grep -qF '{label: "brief 만 종료"' <<<"$cap_fence"; } \
+  && ok "AC12: 재제시 상한이 2회 뒤 ③ 에서 AskUserQuestion 펜스로 세 선택을 묻는다" \
+  || no "AC12: 재제시 상한 방아쇠 문구 또는 AskUserQuestion 펜스가 없다"
+{ grep -qF 'B-2 게이트를 다시 띄운다 — 다음 단계는 그 게이트에서 고른다.' <<<"$cap_fence" \
+  && ! grep -qF 'brainstorming' <<<"$cap_prose"; } \
+  && ok "AC12: 「지금 목록으로 확정」은 B-2 게이트를 다시 띄우고 상한 경로에 brainstorming handoff 가 없다" \
+  || no "AC12: 「지금 목록으로 확정」이 게이트를 다시 띄우지 않거나 상한 경로가 brainstorming 을 언급한다"
+b3_block="$(awk '/^#### B-3/{f=1;print;next} /^#### /{f=0} f' "$FIN" | tr '\n' ' ' | tr -s ' ')"
+{ grep -qF '「지금 목록으로 확정」은 확정 반영 절차를 적용한 뒤 B-2 게이트를 다시 띄우며 스스로 멈추거나 넘기지 않는다' <<<"$b3_block" \
+  && grep -qF '`confirm_repost_count = 0` 을 쓰고 B-0 으로 돌아간다' <<<"$b3_block" \
+  && grep -qF '「brief 만 종료」는 ④ 를 따른다' <<<"$b3_block" \
+  && grep -qF '`status` 는 이 편집으로 바뀌지 않고 게이트(①/②)를 통해서만 바뀐다' <<<"$b3_block"; } \
+  && ok "AC12: B-3 이 재제시 상한 질문의 세 답과 확정된 목록 ③ 을 명시한다" \
+  || no "AC12: B-3 에 재제시 상한 답 처리 또는 확정 목록 ③ 문장이 없다"
 grep -qE '제외한 것도|제외 항목' <<<"$b0_block" \
   && ok "AC2: 확정 후보에서 제외한 항목도 함께 제시 (누락 검출 가능)" \
   || no "AC2: 제외 항목 제시 요구가 없다"

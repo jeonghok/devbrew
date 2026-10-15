@@ -220,11 +220,11 @@ Step A가 끝난 시점에 `user_sourced_items`는 **전부 `provisional`**입�
    의 `evidence` 에도 쓰이지 않은 발화, 하나에 한 줄. 0개면 `확정으로 올리지 않은 발화 0개`.
 4. `위험으로 보낸 참고 <N>개 — <id> · <이유>` — B-A 가 §5 `위험 — 리뷰 참고` 로 보낸 항목, 하나에 한 줄.
 5. (붙여넣은 seed 로 시작한 세션만) `출처를 가르지 못한 seed 문장 <N>개 — 붙여넣기라 분류기를 못 돌림` —
-   `seed-input.md` 가 R1 에서 보인 그 줄을 다시 보입니다.
+   이 폴더의 `seed-input.md` 가 R1 에서 보인 그 줄을 다시 보입니다.
 
 「확정 목록 수정」(③)에서 사용자는 이 다섯을 고칠 수 있습니다 — §1 줄을 고치거나 빼고(출처 표시도 함께, 줄 끝
 `⟨S<n>⟩` | `⟨모델 추론⟩` 모양을 지킨다), 안 올린 발화를 확정 후보에 더하고, 위험으로 보낸 참고를 §3 열린 질문으로
-올리고(§0 에도 `[열림]` 으로 — §0 · §3 이 같은 OQ 집합을 갖는다), 붙여넣은 seed 의 문장 중 자기 말을 사용자 출처로
+올리고(§0 에도 `[열림]` 으로 — §0 · §3 이 같은 OQ 집합을 갖는다. 올린 항목의 §5 `위험 — 리뷰 참고` 줄은 같은 write 에서 지운다), 붙여넣은 seed 의 문장 중 자기 말을 사용자 출처로
 표시해 확정 후보에 더합니다(`source: verbatim` · `evidence: S1`). 고친 뒤 `check_brief.py gate` 를 다시 돕니다.
 
 **재제시 상한** (금지 패턴 *Unbounded autonomy* 가드): 최초 제시는 0회째입니다. 사용자가 옵션 ③(확정 목록
@@ -251,7 +251,7 @@ AskUserQuestion({ questions: [{
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
 STATE="$ROOT/<session-id>/state.local.md"
-# confirm_repost_count read-modify-write via python3 -I -X utf8 -c / python3 -I -X utf8 - heredoc (-I 없이 부르면 사용자 리포의 json.py 등이 표준 모듈 대신 실행된다)
+# confirm_repost_count read-modify-write(③ 마다 +1, 「계속 고친다(2번 더)」는 0 으로 되돌림) via python3 -I -X utf8 -c / python3 -I -X utf8 - heredoc (-I 없이 부르면 사용자 리포의 json.py 등이 표준 모듈 대신 실행된다)
 ```
 
 #### B-A — 참고(advisory) 목록 — 한 번 보이고 §3 · §5 에 박제
@@ -426,10 +426,15 @@ AskUserQuestion({
   실제로 입력한 **다음 턴**에 **사용자 트리거**로만 일어난다(NG4·P17).
 
 - **③ 확정 목록 수정**: 확정 전이 없음. `confirm_repost_count` +1 후 B-0 으로 돌아가 수정된
-  목록을 재제시(2회에 닿으면 B-0 의 재제시 상한 질문).
+  목록을 재제시(2회에 닿으면 B-0 의 재제시 상한 질문). 이미 확정된 목록에서 ③ 을 골랐다면 확정된 목록을
+  고치는 것이다 — `status` 는 이 편집으로 바뀌지 않고 게이트(①/②)를 통해서만 바뀐다.
 
 - **④ brief만 종료**: 전 항목 `provisional` 유지. brief terminal advisory(B-1 부재 advisory와
   같은 톤) 출력 후 종료. handoff 안 함. state는 SessionEnd hook이 cleanup.
+
+- **재제시 상한 질문의 답** (B-0): 「지금 목록으로 확정」은 확정 반영 절차를 적용한 뒤 B-2 게이트를 다시 띄우며
+  스스로 멈추거나 넘기지 않는다 — 다음 단계는 그 게이트에서 고른다. 「계속 고친다(2번 더)」는 state 에
+  `confirm_repost_count = 0` 을 쓰고 B-0 으로 돌아간다. 「brief 만 종료」는 ④ 를 따른다.
 
 #### B-4 — 두 가드 (load-bearing)
 

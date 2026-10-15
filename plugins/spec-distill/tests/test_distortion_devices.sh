@@ -104,7 +104,12 @@ has   "$FN" '「brief 만 종료」' "AC12: 재제시 상한에 「brief 만 종
 hasnt "$FN" '모든 항목을 잠정(provisional)으로 둔다' "AC12(부재): 자동 강등 고정 문자열이 없다"
 hasnt "$FN" '전 항목을 `provisional`로 강등' "AC12(부재): 자동 강등 문면이 없다"
 has   "$FN" '자동 강등은 없다' "AC12: 자동 강등이 없음을 말한다"
-has   "$FN" '「참고 전부 보기」' "AC8(brief): B-A 에 참고 전부 보기 선택이 있다"
+BA="$(awk '/^#### B-A/{f=1;print;next} /^#### /{f=0} f' "$FN" | tr '\n' ' ' | tr -s ' ')"
+for lit in '접는 줄(`… 외 K건`)이 있으면' '「참고 전부 보기」' '「접은 채로 둔다」' 'python3 -I -X utf8 -c'; do
+  assert_contains "$BA" "$lit" "AC8(brief): B-A 블록에 「${lit}」 가 있다"
+done
+has   "$FN" '이 폴더의 `seed-input.md`' "포인터: B-0 이 같은 폴더의 seed-input.md 를 가리킨다"
+has   "$FN" '§5 `위험 — 리뷰 참고` 줄은 같은 write 에서 지운다' "B-0: 위험 참고를 §3 으로 올리면 §5 줄을 지운다"
 hasnt "$FN" '방향 · overdesign(참고 축)은 라운드 게이트에 오지 않았습니다' "N1(부재): 방향이 참고 축이라는 B-2 문장이 없다"
 hasnt "$FN" '리뷰가 payload를 수정할 수 있습니다(§0·§2' "§2-4(부재): Step A.5 의 §0·§2 문장이 없다"
 has   "$SIN" '출처를 가르지 못한 seed 문장 <N>개 — 붙여넣기라 분류기를 못 돌림' "AC16c(N15): 붙여넣기 경로가 출처를 못 가른 문장 수를 공시한다"
