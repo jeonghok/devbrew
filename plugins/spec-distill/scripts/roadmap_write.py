@@ -78,6 +78,13 @@ def _atomic(path: Path, data: bytes):
     try:
         os.write(fd, data)
         os.close(fd)
+        if path.exists():
+            mode = path.stat().st_mode & 0o777
+        else:
+            mask = os.umask(0)
+            os.umask(mask)
+            mode = 0o666 & ~mask
+        os.chmod(tmp, mode)
         os.replace(tmp, str(path))
     except BaseException:
         try:

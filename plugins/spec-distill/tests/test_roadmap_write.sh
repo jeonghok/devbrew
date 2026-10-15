@@ -172,6 +172,7 @@ assert_file_has "$T/out.txt" "unassigned" "unassigned: 사유에 목록 이름"
 table "$T/state6.md" "$P1_ROW" "${E1_ROW/ · S2 |/ |}" "$E2_ROW"
 assert_eq "$(create "$T/state6.md" docs/rm5)" "1" "orphans: rc 1"
 assert_file_has "$T/out.txt" "orphans" "orphans: 사유에 목록 이름"
+assert_file_has "$T/out.txt" "S2" "orphans: 사유에 번호"
 
 # ── 실패 뒤 재실행 — 표를 고치면 성공한다 ───────────────────────────────────
 table "$T/state4.md" "$P1_ROW" "$E1_ROW" "$E2_ROW"
@@ -190,5 +191,34 @@ assert_eq "$rc" "2" "사용법 오류: rc 2"
 assert_eq "$(sed -n '3,4p' "$T/extracted.md")" "$(printf '%s\n%s' "$HEAD_ROW" "$SEP_ROW")" "extract: 표 머리"
 assert_file_has "$T/extracted.md" "$P1_ROW" "extract: 결정 행이 표 행과 같다"
 assert_file_has "$T/extracted.md" "| E2 | 둘째 에픽 | 묶음 |" "extract: 묶음 행"
+
+# ── 기록에 있는 묶음을 표에서 뺀 성공 — 낡은 묶음을 지운다 ───────────────────
+E1_ALL='| E1 | 첫 에픽 | 묶음 | 첫 의도 | 한다 가 / 안 한다 나 | P1 | feature/e1 | a/x.py | C1 · D2 · OQ1 · RC1 · K1 · «ext-a» · S1 · S2 · C3 · ST1 · K2 · «ext-b» | 없음 | 없음 |'
+table "$T/state8.md" "$P1_ROW" "$E1_ROW" "$E2_ROW"
+assert_eq "$(create "$T/state8.md" docs/rm7)" "0" "낡은 묶음: 처음 생성 rc 0"
+table "$T/state9.md" "$P1_ROW" "$E1_ALL"
+sed -n '/^## 생성 기록/,$p' "$T/state8.md" >> "$T/state9.md"
+assert_eq "$(create "$T/state9.md" docs/rm7)" "0" "낡은 묶음: 다시 생성 rc 0"
+[ -e "$W/docs/rm7/E2.md" ] && no "낡은 묶음: E2 묶음이 남았다" || ok "낡은 묶음: E2 묶음을 지웠다"
+assert_eq "$(tree_of "$W/docs/rm7")" "$(printf './E1.md\n./roadmap.md')" "낡은 묶음: 로드맵 하나 · 묶음 하나"
+if grep -qF -- "- docs/rm7/E2.md" "$T/state9.md"; then no "낡은 묶음: 생성 기록에 E2 가 남았다"; else ok "낡은 묶음: 생성 기록에서 E2 를 뺐다"; fi
+assert_eq "$(four_empty docs/rm7/roadmap.md)" "ok" "낡은 묶음: 검사기 네 목록이 빈 목록"
+
+# ── 기록에 있는 파일 위에서 검증 실패 — 덮어쓴 것 · 지운 것을 되돌린다 ─────────
+table "$T/state10.md" "$P1_ROW" "$E1_ROW" "$E2_ROW"
+assert_eq "$(create "$T/state10.md" docs/rm8)" "0" "되돌리기: 처음 생성 rc 0"
+table "$T/state11.md" "${P1_ROW/S3 · OQ2/S3 · OQ2 · C99}" "${E1_ALL/첫 의도/첫 의도 고침}"
+sed -n '/^## 생성 기록/,$p' "$T/state10.md" >> "$T/state11.md"
+cp "$W/docs/rm8/roadmap.md" "$T/rm8.roadmap.before"
+cp "$W/docs/rm8/E1.md" "$T/rm8.E1.before"
+cp "$W/docs/rm8/E2.md" "$T/rm8.E2.before"
+cp "$T/state11.md" "$T/state11.before"
+assert_eq "$(create "$T/state11.md" docs/rm8)" "1" "되돌리기: 검증 실패 rc 1"
+assert_file_has "$T/out.txt" "C99" "되돌리기: 사유에 번호"
+cmp -s "$T/rm8.roadmap.before" "$W/docs/rm8/roadmap.md" && ok "되돌리기: 로드맵이 같은 바이트" || no "되돌리기: 로드맵이 바뀌었다"
+cmp -s "$T/rm8.E1.before" "$W/docs/rm8/E1.md" && ok "되돌리기: 덮어쓴 E1 이 원래 바이트로" || no "되돌리기: E1 이 바뀌었다"
+cmp -s "$T/rm8.E2.before" "$W/docs/rm8/E2.md" && ok "되돌리기: 지운 E2 가 원래 바이트로 돌아왔다" || no "되돌리기: E2 가 없거나 바뀌었다"
+cmp -s "$T/state11.before" "$T/state11.md" && ok "되돌리기: 표 파일이 같은 바이트" || no "되돌리기: 표 파일이 바뀌었다"
+assert_eq "$(tree_of "$W/docs/rm8")" "$(printf './E1.md\n./E2.md\n./roadmap.md')" "되돌리기: 폴더에 남은 임시 파일 없음"
 
 finish

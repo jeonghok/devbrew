@@ -55,6 +55,7 @@ class Transaction(unittest.TestCase):
             kept, gone, new = d / "kept.md", d / "gone.md", d / "sub" / "new.md"
             kept.write_bytes("원래\n".encode("utf-8"))
             gone.write_bytes(b"gone\n")
+            kept.chmod(0o644)
             txn = W.Txn()
             txn.write(kept, "바뀜\n")
             txn.write(kept, "두 번 바뀜\n")
@@ -65,6 +66,7 @@ class Transaction(unittest.TestCase):
             self.assertEqual(txn.rollback(), [])
             self.assertEqual(kept.read_bytes(), "원래\n".encode("utf-8"))
             self.assertEqual(gone.read_bytes(), b"gone\n")
+            self.assertEqual(kept.stat().st_mode & 0o777, 0o644)
             self.assertFalse(new.exists())
             self.assertFalse(new.parent.exists())
             self.assertEqual(sorted(p.name for p in d.iterdir()), ["gone.md", "kept.md"])
