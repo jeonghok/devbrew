@@ -114,4 +114,20 @@ hasnt "$FN" '방향 · overdesign(참고 축)은 라운드 게이트에 오지 �
 hasnt "$FN" '리뷰가 payload를 수정할 수 있습니다(§0·§2' "§2-4(부재): Step A.5 의 §0·§2 문장이 없다"
 has   "$SIN" '출처를 가르지 못한 seed 문장 <N>개 — 붙여넣기라 분류기를 못 돌림' "AC16c(N15): 붙여넣기 경로가 출처를 못 가른 문장 수를 공시한다"
 
+# ── Task 8 — 비용 문장 · 냉독 · 참고 전부 보기 (AC8 · AC9 · AC13) ──
+SR="$SD/skills/spec-review/SKILL.md"; RM="$SD/README.md"
+for f in "$FN" "$RB" "$RM"; do
+  hasnt "$f" '지출 통제는 엔진의 재리뷰 상한' "AC13(부재): $(basename "$f") 에 「지출 통제는 엔진의 재리뷰 상한」이 없다"
+  has   "$f" '재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다' "AC13: $(basename "$f") 에 안전 정지 문장이 있다"
+done
+hasnt "$RB" '이 자리의 지출 통제가 그것이다' "AC13(부재): reviewing-brief 의 「이 자리의 지출 통제」가 없다"
+hasnt "$RM" '지출 상한은 엔진의 재리뷰 상한이 맡는다' "AC13(부재): README P22 의 옛 문장이 없다"
+has   "$RB" '| G7 | **그 밖** —' "AC9: 냉독 분류에 「그 밖」이 있다"
+hasnt "$RB" '**닫힌 여섯 클래스**다' "N10(부재): 냉독 분류가 닫힌 여섯이 아니다"
+has   "$RB" '`fix_anchors` §0 · §2~§5' "§3-2: reviewing-brief 가 넓힌 fix_anchors 를 댄다"
+hasnt "$RB" '`fix_anchors` §0·§2' "§3-2(부재): 옛 fix_anchors 문장이 없다"
+hasnt "$RB" '방향 · overdesign 항목은' "§3-2(부재): 방향을 참고로 부르는 문장이 없다"
+has   "$SR" '「참고 전부 보기」' "AC8(spec-review): 설계문서 승인 게이트 앞에 참고 전부 보기가 있다"
+has   "$SR" '<!-- advice-display:end -->' "AC8(양성 짝): advice 표시 펜스 표지가 그대로다"
+
 finish

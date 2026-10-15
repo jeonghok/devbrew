@@ -454,6 +454,27 @@ fi
 ```
 <!-- advice-display:end -->
 
+펜스 출력에 접는 줄(`… 외 K건`)이 있으면 2단계 게이트를 띄우기 전에 `AskUserQuestion` 한 번 — 「참고 전부 보기」 ·
+「접은 채로 둔다」. 「참고 전부 보기」면 아래 펜스로 엔진 목록 전부를 요약 전문으로 보인다(박제된 표는 설계문서의
+`### Deferred to plan` 에 이미 있다 — 이 펜스는 원장을 읽기만 한다). 앞 펜스와 같이 `spec_path='<…>'` 한 줄을 붙여
+같은 Bash 호출로 돌린다:
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
+harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}" || true)"
+python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$STATE_DIR/advice-all.json" \
+  || { echo "[spec-distill] 참고 전부 보기 실패 — 엔진 원장을 읽지 못했다. 게이트 앞 글에 싣는다."; exit 0; }
+python3 -I -X utf8 -c '
+import json, sys
+items = json.load(open(sys.argv[1], encoding="utf-8")).get("items") or []
+print("참고 전부 %d건" % len(items))
+for it in items:
+    print("- [%s] %s — %s" % (it.get("category"), it.get("anchor"), " ".join(str(it.get("summary") or "").split())))
+' "$STATE_DIR/advice-all.json"
+```
+
 승인 게이트를 띄우기 직전에 `$spec_path` 가 working-tree 에 있는지 다시 본다 — 없으면
 `### 대상 부재` 문면으로 끝낸다(게이트 없음).
 

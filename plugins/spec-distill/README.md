@@ -48,7 +48,7 @@
                                        │  라운드마다 먼저: 진입 게이트 둘(check_brief.py · check_verbatim_coverage.py) → payload+audit 번들
                                        ├─ 층 1 방향성 · 층 2 충실도  doc-critic-web(DISABLE_WEB 이면 doc-critic) + codex → doc-recritic
                                        │                라운드 게이트 → 저자 수정 → 다음 라운드 (재리뷰 상한 2)
-                                       └─ 냉독    brief-readback  (엔진 밖 advisory, G1–G6 gap)
+                                       └─ 냉독    brief-readback  (엔진 밖 advisory, G1–G7 gap)
                                        ▼ 산출물 셋 (엔진 게이트 결과 / 냉독 요약+gap / degrade 채널)
                                        ▼ [Step B proceed 게이트] ①/compact 후 다음 세션 줄 · ②/new 후 다음 세션 줄 · ③확정 목록 수정 · ④brief만 종료  (superpowers 있을 때만)
                                    superpowers:brainstorming → -design.md
@@ -98,7 +98,7 @@
 - **Law 1 (Clarity) — 핸드오프 게이트 (v0.23.0)** — brief 구조 검사가 두 파일을 모두 읽고, 하나라도 못 읽으면 통과시키지 않는 방식(**2파일 fail-closed**)으로 넓어졌다. payload frontmatter `audit_file`(basename만, traversal 거부)로 audit을 해석하고, 못 열면 payload-only로 degrade하지 않고 red를 낸다. `user_sourced_items` 스키마 + 세 bijection(A: payload §5 ↔ audit §3 / B: body §2 ↔ frontmatter — statement 내용까지 / C: `evidence: S<N>` → payload §6 ∪ audit §6)이 라벨과 내용이 어긋나는 drift를 기계로 잡는다.
 - **P17 (User sovereignty) — 확정 권한 반환 (v0.23.0)** — 무엇이 확정인지는 사용자가 인터뷰 끝에 한 번에 정한다. 라운드마다 결정을 잠그던 producer를 제거하고 `status: confirmed`를 **종료 시 사용자 일괄 확인**으로만 발생시킨다. 확인은 새 의례가 아니라 기존 proceed 게이트에 흡수돼 상호작용이 1회로 유지된다(trivia ceremony 회피). 재제시에는 상한 2회가 있고 초과 시 전 항목이 `provisional`로 강등된다 — **덜 잠그는 쪽이 안전한 방향**(Unbounded-autonomy 가드).
 - **Law 2 (brief 자리, v0.24.0 → 3.1.0 엔진 전환)** — brief 를 쓴 쪽이 자기 brief 를 승인하지 못하도록 읽기만 하는 리뷰어가 따로 검토한다. `reviewing-brief` 가 `shared/docreview/` 엔진의 두 번째 껍데기다(옛 3단계 파이프라인의 agent · 스크립트 이름은 `CHANGELOG.md` `[3.1.0]` Removed 참고). 탐지 `doc-critic-web` → 재비판 `doc-recritic` 이 층 1(방향성) · 층 2(충실도)를 한 라운드에서 보고, 둘 다 `tools:` 에 쓰기 · 실행 · 위임이 없다. 3중 분리: (a) **리뷰어 도구 분리** — `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 이면 선택 펜스가 웹 도구 없는 `doc-critic` 을 지명한다(dispatch 는 지명된 블록을 따르고 그 선택을 강제하는 훅은 없다 — 물리적인 것은 그 사본의 `tools:` 에 웹 도구가 없다는 것뿐이다), (b) **입력 격리** — 탐지 · 재비판은 번들의 내용을 받고 냉독 `brief-readback` 은 `tools: []` 로 payload 전문만 받으며, 네 페르소나 모두 원문 블록을 데이터로 읽는다(주입 경계), (c) **수정 후 재리뷰** — 저자 수정은 다음 라운드의 fresh 탐지를 거친다(재리뷰 상한 2, 라운드 4 이상은 사용자 문구로 승인) — writer 가 자기 수정을 승인하는 경로가 없다.
-- **Law 3 (brief 자리)** — 리뷰가 놓친 결함은 다음 리뷰가 잡도록 검사 기준 자체를 고쳐 쌓는다. brief 프로필(`references/docreview-profiles/brief.md`)의 충실도 범주 여섯(`layer_rubric.layer2`)과 냉독 gap 클래스 G1–G6 가
+- **Law 3 (brief 자리)** — 리뷰가 놓친 결함은 다음 리뷰가 잡도록 검사 기준 자체를 고쳐 쌓는다. brief 프로필(`references/docreview-profiles/brief.md`)의 충실도 범주 여섯(`layer_rubric.layer2`)과 냉독 gap 클래스 G1–G7 가
   compounding substrate다. 리뷰가 놓친 결함류가 나오면 그 프로필과 페르소나를 편집하는 것이
   compounding 이벤트다 — codex 도 같은 프로필 본문을 받으므로 한 곳을 고치면 두 판정자가 함께 바뀐다(persona = 보안-민감 코드).
 - **Law 2 (seed 자리) — 처분 주체는 사용자 (request-framing)** — 요청 요약(seed)의 리뷰 지적을 받아들일지는 사용자가 정하고, 저자가 먼저 고치지 않는다. Phase 0 seed 를 `shared/docreview/` 엔진의 셋째 껍데기로 리뷰한다(탐지 `doc-critic` + codex → 재비판 `doc-recritic` — 옛 격리 critic · seed 전용 codex 러너 · 빌더 · 체크리스트는 삭제). seed 는 헤딩이 없어 엔진의 얼림 · 보호가 꺼지므로 차단은 호스트가 진다: 저자는 사용자가 처분하기 전에 seed 를 편집하지 않고, 엔진이 게이트를 열지 않는 `fix` · `ask` 도 사용자 앞에 올리며, 저자 편집은 기준 사본 diff(`scripts/seed_edit_diff.py`)로 라운드 게이트와 확정 게이트 앞에서 덩어리마다 처분받고, 문구 없는 `drop` 은 진행을 막는다(`scripts/seed_review_log.py`). 형성 라운드의 풀이는 공시가 아니라 양의 선택 질문으로 확인받고 압축이 고친 문장의 확인 표시는 떨어지며(`scripts/seed_provenance.py`), Phase 1 은 audit 원문과 대조해 출처와 확인을 두 축으로 가른다. **한계**: 차단은 엔진의 기계적 거부가 아니라 호스트의 단계 순서 + 관측이다 — 어긴 편집은 다음 공시에서 반드시 보이고 보이면 멈추지만, 엔진처럼 거부하지는 않는다.
@@ -125,7 +125,7 @@
 - **P18 (Stagnation detection)** — 라운드 n 의 **열린 계보**(`open_lineages`) 집합이 n−1 과 같고 그 사이 진행이 0 건이면 stagnation 이고, 승인 게이트가 즉시 열린다(`shared/docreview/scripts/docreview_state.py` 의 `gate_summary`). 「진행」은 `check-intent` 를 통과한 fix 적용과 채택 결정의 permit 적용 둘을 센다 — 채택대로 고친 라운드는 계보가 같아도 stagnation 이 아니다.
 - **P18 보강 — must-catch 멈춤 기준** (v4.5.0) — 프로필이 `must_catch` 로 막는 축을 지목하면 그 밖의 rubric 축 finding 은 참고(advisory)로 라우팅돼 승인을 막지 않고 끝에서 한 번 보인다(`shared/docreview/scripts/docreview_advice.py`). 라운드별 계수 줄이 결정 기록 절에 남아 다음 사이클이 must-catch 축의 수렴 가정을 잰다(Law 3).
 - **P21 (Secret 기록 금지 / untrusted input)** — state.local.md token/key/credential placeholder 치환. **v0.23.0**: `audit_file`은 frontmatter에서 오는 신뢰 경계 밖 입력이므로 basename으로 제한한다(`../`·절대경로·서브경로 전부 거부).
-- **P22 (Cost class)** — 모든 skill cost_class 선언 (spec-interview: variable / request-framing: variable / spec-review: medium / reviewing-brief: medium — 3.1.0 에서 high 의 진입 지출 승인 게이트를 없앴고, 지출 상한은 엔진의 재리뷰 상한이 맡는다).
+- **P22 (Cost class)** — 모든 skill cost_class 선언 (spec-interview: variable / request-framing: variable / spec-review: medium / reviewing-brief: medium — 3.1.0 에서 high 의 진입 지출 승인 게이트를 없앴고, 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다).
 - **P23 (Decisions Stay Refutable)** — `request-framing`의 「재결정 규약」 절(정본은 `references/proceed-gate.md`)이 확산에서 확정된 것을 압축 단계가 뒤집을 때 임의 변경이 아니라 근거 제시 + 사용자 동의 + audit *원래/재결정/근거* 세 칸 기록을 강제한다. `spec-interview`도 하류에서 같은 원칙을 잇는다(v0.41.0) — 인터뷰 중 새 발화가 seed의 확정을 뒤집으면 조용히 덮어쓰지 않고 새 발화가 이기며, §5 기각에 같은 *원래/재결정/근거* 형태로 남는다.
 - **worktree-safe state path (P5·P14)**: state 파일 위치를 `state_path.state_root()`로 단일화하여 worktree 호출 시에도 main repo `.claude/spec-distill/`에만 기록 — `ExitWorktree action: remove` 시 원장 state silent loss 차단.
 

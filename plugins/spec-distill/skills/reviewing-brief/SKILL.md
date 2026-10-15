@@ -225,7 +225,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 - 결정 기록의 `--log-file` = `$AUDIT` — 프로필 `decision_log` 이 audit 의 `## 8. 리뷰 결정` 을 가리킨다
 - 엔진 호출마다 `## 입력` 의 머리를 앞에 붙인다 — `$PAYLOAD` 는 머리가 절대화한 값이고 `$STATE_DIR` 은 그 문서의 자리다
 
-상한은 그 문서가 정하는 **재리뷰 상한 2** 다. 이 자리의 지출 통제가 그것이다 — 라운드 4 이상은
+상한은 그 문서가 정하는 **재리뷰 상한 2** 다. 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다 — 라운드 4 이상은
 사용자가 승인 게이트에서 자기 문구로 열어야만 돈다.
 
 4단계 codex 는 이 자리의 리터럴 게이트다. 조건을 산문으로 적지 않는다 — 산문 조건은 집행되지 않고,
@@ -452,7 +452,7 @@ Agent({
 
 ## 수정 권한
 
-프로필이 엔진에 싣는 것(`fix_anchors` §0·§2 · `protected_headings` §1 · `immutable` §6)에 더해 저자 규칙 셋:
+프로필이 엔진에 싣는 것(`fix_anchors` §0 · §2~§5 · `protected_headings` §1 · `immutable` §6 — §6 은 추가만)에 더해 저자 규칙 셋:
 
 | 자리 | 규칙 |
 |---|---|
@@ -544,7 +544,7 @@ ${BLOB}
 프롬프트에 판정 기준·출력 형식·검사 항목을 **주지 않는다** — 형식 자체가 오염원이다. 출력이 비거나
 실패하면 record(`readback` / `readback` / `unavailable`)를 남긴다 — 「gap 0」으로 읽지 않는다.
 
-받은 산문 요약을 payload 의 §0/§1/§2/§3/§7 과 대조해 gap 을 분류한다. **닫힌 여섯 클래스**다:
+받은 산문 요약을 payload 의 §0/§1/§2/§3/§7 과 대조해 gap 을 분류한다. **여섯 클래스와 「그 밖」**이다:
 
 | # | gap 클래스 | 판정 |
 |---|---|---|
@@ -554,8 +554,9 @@ ${BLOB}
 | G4 | **Goal ↔ Non-goal 반전** — §1 의 Non-goal 을 goal 로(또는 역) 요약 | 방향이 뒤집힌 서술 존재 |
 | G5 | **다음 행동 오독** — §7 Next Action 과 다른 다음 단계를 서술 | 요약의 next step ≠ §7 |
 | G6 | **상태 표기와 본문 서술의 불일치** — 같은 항목을 frontmatter/표와 본문 산문이 다르게 말함 | 요약이 두 서술 중 한쪽만 담고, 나머지가 payload 에 그대로 있음 |
+| G7 | **그 밖** — 위 여섯에 들지 않지만 요약이 payload 와 다르게 읽은 곳 | 어느 클래스에도 맞지 않는 어긋남 — 무엇이 다른지 한 줄로 |
 
-G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **세 조각**으로 넘긴다 — *어느 클래스 /
+G1–G7 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **세 조각**으로 넘긴다 — *어느 클래스 /
 요약의 어느 문장 / payload 의 어느 절*. 판정은 advisory 다: 프레시 에이전트는 잘못 재구성된 payload 도
 정확히 요약할 수 있어 hard verdict 로 쓰면 false block 이 난다.
 
@@ -573,8 +574,8 @@ G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **�
 돌아가기 전에 같은 셋을 audit(`$AUDIT`) §5 의 `### brief 리뷰 (reviewing-brief — 문서 리뷰 엔진)` 에 템플릿
 줄 모양대로 한 줄씩 채운다 — 기록이지 게이트가 아니다. 결정 자체는 엔진이 `## 8. 리뷰 결정` 에 이미 썼다.
 
-참고(advisory) 목록은 이 skill 이 보이지 않는다 — 엔진 `advice` 원장에 쌓인 방향 · overdesign 항목은 호출자
-Step B(`spec-interview` `finishing.md` 의 `#### B-A`)가 끝에서 한 번 보이고 brief §3 · §5 에 박제한다.
+참고(advisory) 목록은 이 skill 이 보이지 않는다 — 엔진 `advice` 원장에 쌓인 참고 항목(overdesign — 방향은 라운드 게이트로 간다)은 호출자
+Step B(`spec-interview` `finishing.md` 의 `#### B-A`)가 끝에서 한 번 보이고(접혔으면 「참고 전부 보기」로 펼친다) brief §3 · §5 에 박제한다.
 
 ## degrade 채널
 

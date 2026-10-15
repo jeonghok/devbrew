@@ -165,7 +165,7 @@ Skill spec-distill:reviewing-brief $PAYLOAD $AUDIT
 
 두 인자는 **주석이 아니라 호출 라인 위에** 있어야 합니다 — `reviewing-brief`는 이 값들을 스스로 정의하지 않는다고 명시하므로, `#` 뒤에만 적혀 있으면 호출은 인자 없이 나가고 callee는 정의되지 않은 변수를 쥡니다.
 
-- 지출 승인 게이트는 없습니다(`cost_class: medium`) — 지출 통제는 엔진의 재리뷰 상한이 합니다: 상한 뒤의
+- 지출 승인 게이트는 없습니다(`cost_class: medium`). 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다 — 상한 뒤의
   추가 라운드는 사용자가 그 skill 의 승인 게이트에서 자기 문구로 열어야만 돕니다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1`이면 파이프라인이 전체 skip되고 skip record가
   Step B 게이트 질문에 표시됩니다 — 조용한 생략이 아닙니다.

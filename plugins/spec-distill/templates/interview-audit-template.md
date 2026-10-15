@@ -106,7 +106,7 @@ red 다. 판정마다 한 줄, 사용자 선택마다 한 줄을 시간 순으�
 - 라운드: <n> · 재리뷰 카운트 <k> · 추가 라운드 <m> — 승인 게이트 도달 사유: <열린 것 없음|상한|stagnation|미검증> · 리뷰 완료: <예 | 아니오 — <unreviewed_reason>>
 - 결정: `## 8. 리뷰 결정` <n>건 · 열린 채 남은 항목 <n>건(<ask·decide 의 id>)
 - codex: <있음 | 없음 — <skip_reason>> · 웹: Claude <doc-critic-web | doc-critic(DISABLE_WEB) | doc-critic(프로필 판독 불가)> · codex <켜짐 | 꺼짐(DISABLE_WEB) | codex 부재>
-- 냉독: gap <n>건 (<G1..G6 중 어느 클래스>)
+- 냉독: gap <n>건 (<G1..G7 중 어느 클래스>)
 - degrade: <component:reason 한 줄씩 | 없음>
 
 ## 6. 사용자 원문
