@@ -45,7 +45,7 @@ grep -q '"not_contained": \["S2"\]' <<<"$out" \
 # L2(not_contained S2)인지까지 본다.
 for cut in head mid tail; do
   tmpd_cut="$(mktemp -d)" || exit 1
-  python3 - "$FX/brief-verbatim-ok.md" "$FX/brief-verbatim-ok.audit.md" "$tmpd_cut" "$cut" <<'PY'
+  python3 -I -X utf8 - "$FX/brief-verbatim-ok.md" "$FX/brief-verbatim-ok.audit.md" "$tmpd_cut" "$cut" <<'PY'
 import sys, pathlib
 pay, aud, dst, where = sys.argv[1], sys.argv[2], pathlib.Path(sys.argv[3]), sys.argv[4]
 old = '"3 에이전트 + codex, 계약별 분리"'
@@ -413,7 +413,7 @@ rm -f "$tmpe"
 # (원문 있으면 user_statements가 S2부터 시작). payload에는 원문(S1)이 있지만 state의
 # `user_statements`에는 없다(원문은 매 round 사용자 발화가 아니므로 append 대상이 아니다)
 # — 그래서 이 스크립트는 원문 자체를 판정하지 않고, state가 실제로 아는 S2·S3만 대조한다.
-# v0.43.0: S2·S3는 이제 audit 쪽에 산다(원문 S1만 payload 잔류).
+# R2: S1~S3 전부 payload §6 에 있고, audit §6 은 S2·S3 를 같은 글자로 겹쳐 가진다.
 rc="$(rc_of "$FX/brief-verbatim-original-request.md" "$FX/state-verbatim-original-request.md" "$FX/brief-verbatim-original-request.audit.md")"
 [[ "$rc" == "0" ]] \
   && ok "C5: 원문 있음 + 오프셋 적용(S2부터) → exit 0 (S1 예약과 정합)" \

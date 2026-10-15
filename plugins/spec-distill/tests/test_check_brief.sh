@@ -726,7 +726,7 @@ python3 "$SCRIPT" gate "$FX/interview-brief-payload-s2.md" >/dev/null 2>&1; rc=$
 n1b_case() {  # n1b_case <drop_s2|add_s4> <기대 grep> — valid 쌍의 payload §6 을 바꿔 gate 를 돈다
   cp "$FX/interview-brief-valid.md" "$TMPD/n1b-$1.md"
   cp "$FX/interview-brief-valid.audit.md" "$TMPD/n1b-$1.audit.md"
-  python3 - "$TMPD/n1b-$1.md" "$1" <<'PY'
+  python3 -I -X utf8 - "$TMPD/n1b-$1.md" "$1" <<'PY'
 import pathlib, sys
 p, mode = pathlib.Path(sys.argv[1]), sys.argv[2]
 t = p.read_text(encoding="utf-8")

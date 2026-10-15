@@ -12,7 +12,7 @@ printf '%s' "$out" | grep -qF '<<<PAYLOAD>>>' && ok "T2: PAYLOAD 라벨" || no "
 printf '%s' "$out" | grep -qF '<<<AUDIT-VERBATIM>>>' && ok "T3: AUDIT-VERBATIM 라벨" || no "T3: 라벨 부재"
 
 # (ㄴ) 실린 절의 내부 헤딩은 벗긴다 — 안 벗기면 `## 6. 사용자 원문` 이 번들에 둘이 되고
-# 「§6 을 보라」는 지시가 먼저 나오는 payload(S1 하나)에 걸린다. 이 절이 닫으려는 fail-open 이다.
+# 「§6 을 보라」는 지시가 먼저 나오는 payload §6 에 걸린다. 이 절이 닫으려는 fail-open 이다.
 n="$(printf '%s' "$out" | grep -cF '## 6. 사용자 원문')"
 [[ "$n" -le 1 ]] && ok "T4: 번들에 §6 헤딩이 최대 1개 (동명 충돌 없음)" \
   || no "T4: §6 헤딩이 $n 개 — audit 절 헤딩을 안 벗겼다"

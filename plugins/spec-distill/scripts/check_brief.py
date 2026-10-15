@@ -1450,7 +1450,8 @@ def gate(path: Path) -> int:
     # 경계가 비유일하면 N1b·bijection C를 묻지 않는다 — 그 상태의 앵커 집합은 공집합이라
     # "앵커가 없다"는 **원인과 어긋난 red**가 되고, 저자는 §6에 앵커를 더 넣으려 든다.
     # audit 을 못 읽었거나 audit §6 경계가 비유일하면 audit 앵커는 공집합으로 넘긴다(그 사실은
-    # 위에서 이미 red 다).
+    # 위에서 이미 red 다). audit 앵커 집합은 펜스를 벗긴 코퍼스(`verbatim_anchors`)라 audit 펜스 안에만 있는
+    # 앵커는 여기서 안 보인다 — 그것은 brief 리뷰 진입 게이트의 `check_verbatim_coverage.py` 가 잡는다.
     if not sec6_absent and not sec6_dup:
         n1b_audit = verbatim_anchors(audit_text) if audit_text and not audit_sec6_dup else set()
         for msg in payload_verbatim_n1b_failures(text, n1b_audit):
