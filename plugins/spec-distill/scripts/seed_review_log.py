@@ -32,10 +32,13 @@ audit `## 6. 리뷰 결정` 의 줄은 두 곳에서 온다. 엔진(`docreview_s
       `str.splitlines` 다 — `\n` 만으로 나누면 다른 줄 구분자 뒤 글자가 인용 표시 없는 줄로 읽힌다.
       제목 T 도 한 줄로 잇는다 — 줄바꿈이 남으면 둘째 줄이 접두 없는 기록 줄로 `## 6` 에 선다.
 
-`## 6` 을 읽고 쓰는 모든 길(`user-quotes` · `check-drops` · `log` · `append-verbatim` · `parse_lines`)은
-audit 의 템플릿 제목이 겹치거나(`duplicate_headings`) `## 6` 제목이 다른 템플릿 제목보다 앞에 있으면
-(비신뢰 `## 1` 원문 안에 심긴 제목) 판단을 거부한다(rc 2 · `AuditAmbiguous`) — 어느 줄이 진짜 절인지
-이 코드가 골라 버리면 심은 글이 사용자 결정 문구로 읽히거나 기록이 원문 안에 적힌다.
+audit 의 절 구조는 `heading_structure` 하나가 판정한다 — 일곱 템플릿 제목은 각각 많아야 한 번,
+템플릿 순서대로 나와야 한다(없는 제목은 «절 없음»). 비신뢰 `## 1` 원문 안에 심긴 제목은 펜스 안이든
+밖이든 겹치거나 순서가 어긋난다. 펜스는 보지 않는다 — 원문의 닫히지 않은 펜스(잘린 붙여 넣기)가 뒤 절의
+펜스와 짝지어져 진짜 제목을 삼키면 정직한 audit 이 막힌다. `## 6` 을 읽고 쓰는 모든 길(`user-quotes` ·
+`check-drops` · `log` · `append-verbatim` · `parse_lines`)은 구조가 어긋나면 판단 · 쓰기를 거부한다
+(rc 2 · `AuditAmbiguous`) — 어느 줄이 진짜 절인지 이 코드가 골라 버리면 심은 글이 사용자 결정 문구로
+읽히거나 기록이 원문 안에 적힌다.
 
 엔진 원장(`docreview-state.md`)의 내부 형식은 읽지 않는다 — 엔진이 CLI 로 내는 `gate` 요약과
 엔진이 audit 에 쓴 줄만 읽는다. 엔진 줄 모양이 바뀌면 tests/test_seed_review_log.sh 의 엔진
@@ -54,7 +57,7 @@ import unicodedata
 _SCRIPTS_DIR = str(pathlib.Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
-import section6  # noqa: E402 — 펜스 · 제목 모양 판정은 이 리포에서 한 곳이다(§6-단일화 락)
+import section6  # noqa: E402 — 제목 모양 판정은 이 리포에서 한 곳이다(§6-단일화 락)
 
 DECISION_HEADING = "## 6. 리뷰 결정"
 HOST_KINDS = ("편집", "답", "거부")
@@ -97,33 +100,30 @@ _LINE_ENDINGS = ("\n", "\r\n")
 def heading_lines(text: str, heading: str) -> list[tuple[int, bool]]:
     """줄 전체(앞뒤 공백 제외)가 `heading` 인 줄마다 `(splitlines 줄 번호 0-based, 절 시작으로 인정되는가)`.
 
-    인정 조건 셋 — 셋 다 «이 줄을 사람 · 모델 · 마크다운 렌더러가 제목으로 읽는가» 를 묻는다:
+    인정 조건 둘 — «이 줄을 사람 · 모델 · 마크다운 렌더러가 제목으로 읽는가» 를 묻는다:
     (1) 제목 모양이다(`section6.HEADING_SHAPED_RE` — 들여쓰기 0–3칸. 4칸이면 코드 블록이다),
-    (2) 펜스 밖이다(`section6.fence_spans`),
-    (3) `\\n` 줄이다 — 앞 줄이 `\\n` 으로 끝나고 이 줄도 `\\n` · 파일 끝으로 끝난다. `str.splitlines` 는
+    (2) `\\n` 줄이다 — 앞 줄이 `\\n` 으로 끝나고 이 줄도 `\\n` · 파일 끝으로 끝난다. `str.splitlines` 는
         U+2028 · 폼 피드 같은 구분자에서도 끊지만 마크다운은 거기서 줄을 나누지 않는다 — 한 줄 안에
-        숨은 제목이 절을 열면 안 된다."""
-    spans = section6.fence_spans(text)
+        숨은 제목이 절을 열면 안 된다.
+    펜스는 보지 않는다(모듈 docstring — 심긴 제목은 `heading_structure` 가 잡는다)."""
     out: list[tuple[int, bool]] = []
-    pos, prev_ok = 0, True
+    prev_ok = True
     for i, raw in enumerate(text.splitlines(keepends=True)):
         content = raw.splitlines()[0]
         ending = raw[len(content):]
         if content.strip() == heading:
             ok = (prev_ok and (ending in _LINE_ENDINGS or ending == "")
-                  and section6.HEADING_SHAPED_RE.match(content) is not None
-                  and not any(s <= pos < e for s, e in spans))
+                  and section6.HEADING_SHAPED_RE.match(content) is not None)
             out.append((i, ok))
         prev_ok = ending in _LINE_ENDINGS
-        pos += len(raw)
     return out
 
 
 def section_body(text: str, heading: str) -> str | None:
     """`heading` 절 시작으로 인정되는 첫 줄(`heading_lines`) 다음부터, `AUDIT_HEADINGS` 일곱 제목 중
     하나와 줄 전체가 같은 다음 줄 전까지(임의의 `## ` 줄이 아니다 — 비신뢰 본문 안에 `## ` 로 시작하는
-    줄이 있어도 그 줄에서 절이 끊기지 않는다). 끝은 펜스 안 · 들여 쓴 제목 줄에서도 끊는다 — 끊는 쪽으로
-    틀리면 덜 읽을 뿐이다. 인정되는 시작 줄이 없으면 None."""
+    줄이 있어도 그 줄에서 절이 끊기지 않는다). 끝은 들여 쓴 제목 줄에서도 끊는다 — 끊는 쪽으로 틀리면
+    덜 읽을 뿐이다. 인정되는 시작 줄이 없으면 None. 겹침 · 순서는 `heading_structure` 가 따로 본다."""
     starts = [i for i, ok in heading_lines(text, heading) if ok]
     if not starts:
         return None
@@ -150,22 +150,34 @@ def duplicate_headings(text: str) -> list[tuple[str, list[int]]]:
     return out
 
 
+def heading_structure(text: str) -> list[str]:
+    """일곱 템플릿 제목(`AUDIT_HEADINGS`)이 각각 많아야 한 번, 템플릿 순서대로 나오는가 — 어긋난 사유들
+    (제목과 1-based 줄 번호). 비어 있으면 구조가 하나로 정해진다. 줄은 `duplicate_headings` 와 같이 센다
+    (줄 전체 일치 · 펜스 · 들여쓰기를 가리지 않는다). 없는 제목은 사유가 아니다 — «절 없음» 은 소비자가 판단한다."""
+    out = ["duplicate_heading `%s` 줄 %s" % (h, "·".join(map(str, nums)))
+           for h, nums in duplicate_headings(text)]
+    if out:
+        return out
+    lines = text.splitlines()
+    at = {}
+    for h in AUDIT_HEADINGS:
+        nums = [i + 1 for i, line in enumerate(lines) if line.strip() == h]
+        if nums:
+            at[h] = nums[0]
+    present = [h for h in AUDIT_HEADINGS if h in at]
+    return ["heading_order `%s`(줄 %d) 가 `%s`(줄 %d) 보다 앞에 있다 — 템플릿에서는 뒤에 온다"
+            % (b, at[b], a, at[a]) for a, b in zip(present, present[1:]) if at[a] > at[b]]
+
+
 def require_unambiguous(audit_text: str, heading: str) -> None:
-    """`heading` 절을 읽거나 쓰기 전에 — 템플릿 제목이 겹치거나, `heading` 줄이 있는데 절 시작으로
-    인정되지 않거나(펜스 안 · 코드 블록 · 한 줄 안에 숨음), `## 6` 제목이 다른 템플릿 제목보다 앞에
-    있으면(`## 6` 은 템플릿의 마지막 절이다 — 앞에 있으면 비신뢰 원문 안에 심긴 줄이다) `AuditAmbiguous`."""
-    dups = duplicate_headings(audit_text)
-    if dups:
-        raise AuditAmbiguous("duplicate_heading %s" % ", ".join(h for h, _ in dups))
+    """`heading` 절을 읽거나 쓰기 전에 — 템플릿 제목 구조가 어긋나거나(`heading_structure`), `heading`
+    줄이 있는데 절 시작으로 인정되지 않으면(코드 블록 · 한 줄 안에 숨음) `AuditAmbiguous`."""
+    problems = heading_structure(audit_text)
+    if problems:
+        raise AuditAmbiguous("; ".join(problems))
     found = heading_lines(audit_text, heading)
     if found and not any(ok for _, ok in found):
         raise AuditAmbiguous("heading_not_a_section %s" % heading)
-    if heading == DECISION_HEADING and found:
-        at = found[0][0]
-        lines = audit_text.splitlines()
-        earlier = sorted({ln.strip() for ln in lines[at + 1:] if ln.strip() in AUDIT_HEADINGS})
-        if earlier:
-            raise AuditAmbiguous("heading_order %s 가 %s 보다 앞에 있다" % (heading, ", ".join(earlier)))
 
 
 def parse_lines(audit_text: str) -> list[dict]:

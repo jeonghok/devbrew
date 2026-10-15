@@ -24,8 +24,9 @@
 세 verbatim 절(`UNTRUSTED_VERBATIM_SECTIONS`)의 경계와 중복은 `seed_review_log.section_body` ·
 `duplicate_headings` 한 곳이 정한다 — 이 파일이 자기 정규식으로 절을 다시 자르면 audit 템플릿
 제목이 아닌 임의의 `## ` 줄에서 잘리거나(truncation), 비신뢰 본문 안에 심긴 가짜 제목 줄이 진짜
-절을 가릴 수 있다(hijacking). `duplicate_headings` 가 하나라도 잡으면 조립하지 않는다 — 어느
-occurrence 가 진짜인지 이 코드가 골라 버리면 그 선택 자체가 공격 표면이 된다.
+절을 가릴 수 있다(hijacking). `duplicate_headings` 가 하나라도 잡거나 템플릿 제목 순서가 어긋나면
+(`heading_structure`) 조립하지 않는다 — 어느 occurrence 가 진짜인지 이 코드가 골라 버리면 그 선택 자체가
+공격 표면이 된다.
 
 Usage: build_seed_inline_blob.py <seed_file> <audit_file> <claude_md_file> [--for detect|recritic]
 """
@@ -43,7 +44,8 @@ _SCRIPTS_DIR = str(pathlib.Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 import section6  # noqa: E402
-from seed_review_log import AuditAmbiguous, duplicate_headings, section_body, user_quotes  # noqa: E402
+from seed_review_log import (AuditAmbiguous, duplicate_headings, heading_structure, section_body,  # noqa: E402
+                             user_quotes)
 
 # 리뷰어에게 비신뢰 verbatim 으로 알릴 audit 자리 — seed 프로필 `## 처분 안내` 가 이 셋을 이름으로
 # 가리킨다(shared/tests/test_docreview_profiles.sh 가 이 튜플에서 도출해 대조한다). assemble() 은
@@ -152,6 +154,11 @@ def main() -> int:
             print(f"[spec-distill] {paths['audit_file']} 의 `{heading}` 가 {len(nums)}번(줄 "
                   f"{', '.join(str(n) for n in nums)}) 나온다 — 어느 줄이 그 절의 진짜 경계인지 "
                   "정해지지 않는다. 번들을 조립하지 않는다.", file=sys.stderr)
+        return 2
+    for problem in heading_structure(audit_text):
+        print(f"[spec-distill] {paths['audit_file']} 의 템플릿 제목 순서가 어긋난다({problem}) — 어느 줄이 "
+              "그 절의 진짜 경계인지 정해지지 않는다. 번들을 조립하지 않는다.", file=sys.stderr)
+    if heading_structure(audit_text):
         return 2
 
     sec_raw, sec_questions, _ = UNTRUSTED_VERBATIM_SECTIONS

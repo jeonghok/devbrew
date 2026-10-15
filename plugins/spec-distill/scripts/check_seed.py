@@ -19,18 +19,22 @@ audit 쪽 존재 검사는 **원문 보존**과 **덜어 낸 것 표** 둘이다
 **판정은 접은 글자로 한다.** 부재 검사 셋은 본문을 `seed_review_log.fold_for_match`(서식 문자 제거 +
 NFKC + 결합 기호 제거)로 접고 대소문자를 접은(casefold) 뒤 판정한다 — 전각 `＃` · `［open:` · `ｈｔｔｐｓ` ·
 제로폭 문자가 낀 낱말을 사람과 모델은 같은 글자로 읽는다. 허용 표기를 열거하지 않는다.
-- 답-슬롯 헤딩: `#` 로 시작하는 줄(들여쓰기 · `#` 개수 · `#` 뒤 공백을 가리지 않는다 — CommonMark 제목
-  모양 `section6.HEADING_SHAPED_RE` 보다 넓다: 코드 블록으로 렌더되는 4칸 들여쓰기나 `##대안` 도 모델은
-  제목으로 읽는다)과 setext 제목(글 줄 바로 다음 줄이 `=` 만 · `-` 만)의 제목 글자에서 앞의 번호 · 기호를
-  걷고 금지 낱말로 시작하는지 본다. **펜스 안의 금지 헤딩도 금지다** — seed 는 다음 세션의 첫 메시지이지
-  코드 예시가 아니고, 소비자 모델은 펜스 안 `## 대안` 도 읽는다. 줄은 `str.splitlines` 로 나눈다(U+2028
-  같은 구분자 뒤의 글도 줄로 본다 — 넓은 쪽).
-- URL: 스킴(`<영문자>…://`) · 스킴 없는 `www.` · 마크다운 인라인 링크 목적지 `](…)` · 참조 정의 `[x]: …`.
+- 답-슬롯 헤딩: 줄 머리의 들여쓰기 · 인용 `>` · 목록 표지(`-` `*` `+` `1.` `1)`)를 겹친 만큼 걷은 뒤,
+  ATX 제목 모양(`section6.HEADING_SHAPED_RE` — `#` 줄 뒤 공백. 걷은 뒤라 4칸 들여쓰기도 잡는다)이거나
+  `##` 로 시작하는 줄(`##대안` — 옛 게이트도 막았고 모델은 제목으로 읽는다), setext 제목(글 줄 바로 다음
+  줄이 `=` 만 · `-` 만), HTML `<h1>`–`<h6>` 의 제목 글자에서 앞의 번호 · 기호를 걷고 금지 낱말로 시작하는지
+  본다. `#` 하나에 공백 없는 `#대안` 은 제목이 아니다(해시태그 모양 문장). **펜스 안의 금지 헤딩도 금지다**
+  — seed 는 다음 세션의 첫 메시지이지 코드 예시가 아니고, 소비자 모델은 펜스 안 `## 대안` 도 읽는다. 줄은
+  `str.splitlines` 로 나눈다(U+2028 같은 구분자 뒤의 글도 줄로 본다 — 넓은 쪽).
+- URL: 스킴(`<영문자>…://`) · 스킴 없는 `www.` · 마크다운 인라인 링크 목적지 `](…)` · 참조 정의(CommonMark
+  모양 — `[라벨]:` 뒤 공백 없는 목적지 하나, 그 뒤는 줄 끝이나 따옴표 · 괄호 제목뿐. `[참고]: 이 부분은 …`
+  같은 문장은 참조 정의가 아니다).
   `mailto:` 처럼 `//` 없는 스킴과 스킴 없는 맨 도메인(`example.com/x`)은 이 검사 밖이다.
 
-**audit 절은 다른 소비자와 같은 파서로 찾는다** — `seed_review_log.section_body` · `duplicate_headings`
-(`seed_provenance` · `build_seed_inline_blob` 이 쓰는 것). 템플릿 제목이 겹치면 판단하지 않는다(실패).
-펜스 안 · 4칸 들여쓰기 · 한 줄 안에 숨은 제목 줄은 절을 열지 않는다.
+**audit 절은 다른 소비자와 같은 파서로 찾는다** — `seed_review_log.section_body` · `heading_structure`
+(`seed_provenance` · `build_seed_inline_blob` 이 쓰는 것). 템플릿 제목이 겹치거나 템플릿 순서가 어긋나면
+판단하지 않는다(실패). 4칸 들여쓰기 · 한 줄 안에 숨은 제목 줄은 절을 열지 않는다. 펜스는 보지 않는다 —
+`## 1` 원문의 닫히지 않은 펜스가 뒤 절을 삼켜 정직한 audit 을 막지 않게, 심긴 제목은 겹침 · 순서로 잡는다.
 """
 from __future__ import annotations
 
@@ -43,14 +47,22 @@ import unicodedata
 _SCRIPTS_DIR = str(pathlib.Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
-from seed_review_log import duplicate_headings, fold_for_match, section_body  # noqa: E402
+from seed_review_log import fold_for_match, heading_structure, section_body  # noqa: E402
+import section6  # noqa: E402 — 제목 모양 판정은 이 리포에서 한 곳이다(§6-단일화 락)
 
 # 답-슬롯 헤딩 — 이 넷은 «공간을 닫는» 산출물의 표지다. seed 는 질문을 닫지 않는다. 접은(공백 제거 ·
 # casefold) 제목 글자의 머리로 본다.
 ANSWER_SLOT_WORDS = ("미해결질문", "openquestions", "대안", "alternatives", "인수조건",
                      "acceptancecriteria", "기각", "rejected")
 TAG_RE = re.compile(r'\[\s*(open|추론|외부)\s*:')
-URL_RE = re.compile(r'[a-z][a-z0-9+.-]*://|www\.\S|\]\(\s*[^)\s]|^[ \t]*\[[^\]\n]+\]:[ \t]*\S', re.M)
+URL_RE = re.compile(
+    r'[a-z][a-z0-9+.-]*://|www\.\S|\]\(\s*[^)\s]'
+    r'|^[ \t]*\[[^\]\n]+\]:[ \t]*(?:<[^>\n]*>|[^\s<]\S*)[ \t]*'
+    r'(?:(?:"[^"\n]*"|' r"'[^'\n]*'" r'|\([^)\n]*\))[ \t]*)?$', re.M)
+# 줄 머리의 컨테이너 표지 — 인용 `>` · 목록 표지(`-` `*` `+` · `1.` `1)`)와 들여쓰기, 겹친 만큼.
+CONTAINER_RE = re.compile(r'^(?:[ \t]*(?:>|[-*+](?=[ \t])|\d{1,9}[.)](?=[ \t])))+[ \t]*')
+HTML_HEADING_RE = re.compile(r'<h([1-6])\b[^>]*>(.*?)(?:</h\1\s*>|$)')
+INNER_TAG_RE = re.compile(r'<[^>]*>')
 RAW_HEADING = "## 1. 원문"
 FRONTMATTER_RE = re.compile(r'\A---\n.*?\n---\n', re.S)
 
@@ -100,17 +112,30 @@ def _is_setext_underline(line: str) -> bool:
     return bool(u) and (set(u) == {"="} or set(u) == {"-"})
 
 
+def _uncontained(line: str) -> str:
+    """줄 머리의 들여쓰기 · 인용 · 목록 표지를 걷은 글자."""
+    return CONTAINER_RE.sub("", line, count=1).strip()
+
+
+def _is_atx(s: str) -> bool:
+    return section6.HEADING_SHAPED_RE.match(s) is not None or s.startswith("##")
+
+
 def answer_slot_headings(body: str) -> list:
-    """답-슬롯 헤딩으로 읽히는 줄(접은 글자). ATX 는 `#` 로 시작하는 모든 줄, setext 는 글 줄 + 밑줄."""
-    lines = _seen(body).splitlines()
+    """답-슬롯 헤딩으로 읽히는 줄(접은 글자). 컨테이너 표지를 걷은 뒤 ATX · setext(글 줄 + 밑줄) ·
+    HTML `<h1>`–`<h6>` 을 본다(모듈 docstring)."""
+    raw = _seen(body).splitlines()
+    lines = [_uncontained(ln) for ln in raw]
     out = []
-    for i, line in enumerate(lines):
-        s = line.strip()
-        if s.startswith("#") and _slot_word(s.lstrip("#")):
-            out.append(s)
+    for i, s in enumerate(lines):
+        if _is_atx(s) and _slot_word(s.lstrip("#")):
+            out.append(raw[i].strip())
         elif (s and i + 1 < len(lines) and _is_setext_underline(lines[i + 1])
               and not _is_setext_underline(s) and _slot_word(s)):
-            out.append(s + " / " + lines[i + 1].strip())
+            out.append(raw[i].strip() + " / " + lines[i + 1])
+        else:
+            out += [m.group(0) for m in HTML_HEADING_RE.finditer(s)
+                    if _slot_word(INNER_TAG_RE.sub("", m.group(2)))]
     return out
 
 
@@ -137,21 +162,21 @@ def _squash(s: str) -> str:
     return "".join(ch for ch in fold_for_match(s) if not ch.isspace())
 
 
-def duplicate_problem(atext: str) -> list:
-    dups = duplicate_headings(atext)
-    if not dups:
+def structure_problem(atext: str) -> list:
+    problems = heading_structure(atext)
+    if not problems:
         return []
-    return ["audit 의 템플릿 제목이 겹친다(%s) — 어느 줄이 진짜 절인지 정해지지 않아 원문 보존 · 덜어 낸 것을 "
-            "판단하지 않는다" % ", ".join("`%s` 줄 %s" % (h, "·".join(map(str, n))) for h, n in dups)]
+    return ["audit 의 템플릿 제목이 겹치거나 순서가 어긋난다(%s) — 어느 줄이 진짜 절인지 정해지지 않아 원문 "
+            "보존 · 덜어 낸 것을 판단하지 않는다" % "; ".join(problems)]
 
 
 def cut_table_problems(atext: str) -> list:
     """audit `## seed 에서 덜어 낸 것` — 표(머리 행 + 데이터 행 하나 이상) 또는 `없음` 한 줄(설계 §1-1 · §1-4).
     seed 본문이 아니라 audit 쪽 존재 검사다 — seed 를 양식으로 만들지 않는다(`test_seed_one_sentence.sh`).
     절은 `section_body` 로 찾는다(다른 소비자와 같은 파서). 머리 행 비교는 접고 공백을 뺀 뒤다."""
-    dup = duplicate_problem(atext)
-    if dup:
-        return dup
+    bad = structure_problem(atext)
+    if bad:
+        return bad
     body = section_body(atext, CUT_HEADING)
     if body is None:
         return ["audit 에 `## seed 에서 덜어 낸 것` 절이 없다 — 덜어 낸 것이 없으면 `없음` 한 줄을 적는다"]
@@ -207,7 +232,7 @@ def gate(seed_path: pathlib.Path, audit_path: pathlib.Path | None) -> list:
         except OSError as e:
             problems.append(f"audit 을 읽을 수 없다: {e}")
         else:
-            if not duplicate_problem(atext):  # 겹치면 아래 cut_table_problems 가 한 번 보고한다
+            if not structure_problem(atext):  # 어긋나면 아래 cut_table_problems 가 한 번 보고한다
                 raw = section_body(atext, RAW_HEADING)
                 if raw is None:
                     problems.append("audit 에 `## 1. 원문` 절이 없다")

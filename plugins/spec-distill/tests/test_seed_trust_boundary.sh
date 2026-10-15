@@ -76,21 +76,29 @@ blocked "답-슬롯 헤딩" "heading: # 하나" '# 미해결 질문
 
 - 어디서 재현되나?'
 blocked "답-슬롯 헤딩" "heading: 들여쓰기 3칸" '   ## Open Questions'
-blocked "답-슬롯 헤딩" "heading: 전각 ＃" '＃＃ 대안'
+blocked "답-슬롯 헤딩" "heading: 전각 \uff03" '\uff03\uff03 대안'
 blocked "답-슬롯 헤딩" "heading: setext ---" 'Open Questions
 ---'
 blocked "답-슬롯 헤딩" "heading: setext ===" '대안
 ==='
-blocked "답-슬롯 헤딩" "heading: 전각 라틴" '## Ａｌｔｅｒｎａｔｉｖｅｓ'
-blocked "답-슬롯 헤딩" "heading: 제로폭(U+200B)이 낀 낱말" '## 대​안'
-blocked "답-슬롯 헤딩" "heading: 제로폭(U+200D)이 낀 라틴" '## Rej‍ected'
+blocked "답-슬롯 헤딩" "heading: 전각 라틴" '## \uff21\uff4c\uff54\uff45\uff52\uff4e\uff41\uff54\uff49\uff56\uff45\uff53'
+blocked "답-슬롯 헤딩" "heading: 제로폭(U+200B)이 낀 낱말" '## 대\u200b안'
+blocked "답-슬롯 헤딩" "heading: 제로폭(U+200D)이 낀 라틴" '## Rej\u200dected'
 blocked "답-슬롯 헤딩" "heading: 번호 붙은 제목" '## 3. 대안'
 blocked "답-슬롯 헤딩" "heading: 소문자" '## open questions'
 blocked "답-슬롯 헤딩" "heading: 펜스 안도 금지(seed 는 코드 예시가 아니다)" '```
 ## 대안
 ```'
 blocked "답-슬롯 헤딩" "heading: # 뒤 공백 없음" '##대안'
-blocked "답-슬롯 헤딩" "heading: U+2028 뒤의 줄" '앞 글 ## 대안'
+blocked "답-슬롯 헤딩" "heading: U+2028 뒤의 줄" '앞 글\u2028## 대안'
+blocked "답-슬롯 헤딩" "heading: 인용 블록 안" '> ## 대안'
+blocked "답-슬롯 헤딩" "heading: 목록 항목 안" '- ## Open Questions'
+blocked "답-슬롯 헤딩" "heading: 인용 안 목록 안(겹침)" '> - > ## 대안'
+blocked "답-슬롯 헤딩" "heading: 번호 목록 안" '1. ## 기각'
+blocked "답-슬롯 헤딩" "heading: HTML h2" '<h2>대안</h2>'
+blocked "답-슬롯 헤딩" "heading: HTML 대문자 · 속성 · 안쪽 태그" '<div><H3 class="x"><b>Open Questions</b></H3></div>'
+passes "heading 양성: # 뒤 공백 없는 한 개(해시태그 모양)" '#대안 은 아직 없다.'
+passes "heading 양성: 번호 목록의 낱말" '1. 대안을 찾는다.'
 passes "heading 양성: 문장 안의 낱말" '대안을 찾는 것이 목표다.'
 passes "heading 양성: 금지 낱말이 아닌 제목" '## 배경'
 passes "heading 양성: 빈 줄 뒤의 --- 는 setext 가 아니다" '대안은 아직 없다.
@@ -102,20 +110,22 @@ passes "heading 양성: 빈 줄 뒤의 --- 는 setext 가 아니다" '대안은 
 # ── 태그
 blocked "태그" "tag: 대문자" '[OPEN: 정하지 않음]'
 blocked "태그" "tag: 콜론 앞 공백" '[Open : 정하지 않음]'
-blocked "태그" "tag: 전각 괄호" '［open: 정하지 않음］'
-blocked "태그" "tag: 전각 콜론" '[open： 정하지 않음]'
-blocked "태그" "tag: 제로폭이 낀 낱말" '[op​en: 정하지 않음]'
+blocked "태그" "tag: 전각 괄호" '\uff3bopen: 정하지 않음\uff3d'
+blocked "태그" "tag: 전각 콜론" '[open\uff1a 정하지 않음]'
+blocked "태그" "tag: 제로폭이 낀 낱말" '[op\u200ben: 정하지 않음]'
 blocked "태그" "tag: 괄호 뒤 공백" '[ 추론 : 정하지 않음]'
 passes "tag 양성: 콜론 없는 꺾쇠 낱말" '[참고] 이것은 문장이다.'
 
 # ── URL
 blocked "URL" "url: 대문자 스킴" 'HTTPS://example.com'
-blocked "URL" "url: 전각 스킴" 'ｈｔｔｐｓ://example.com'
-blocked "URL" "url: 제로폭이 낀 스킴" 'ht​tps://example.com'
+blocked "URL" "url: 전각 스킴" '\uff48\uff54\uff54\uff50\uff53://example.com'
+blocked "URL" "url: 제로폭이 낀 스킴" 'ht\u200btps://example.com'
 blocked "URL" "url: 다른 스킴" 'ftp://example.com/x'
 blocked "URL" "url: 스킴 없는 www." 'www.example.com 에 있다.'
 blocked "URL" "url: 마크다운 인라인 링크" '[자료](example.com) 를 본다.'
 blocked "URL" "url: 마크다운 참조 정의" '[자료]: example.com'
+passes "url 양성: 꺾쇠 라벨 뒤 콜론과 문장(참조 정의 모양이 아니다)" '[참고]: 이 부분은 다시 본다.'
+blocked "URL" "url: 참조 정의 + 제목" '[자료]: example.com "제목"'
 passes "url 양성: 점이 든 낱말" '버전은 v1.2.3 이고 파일은 check_seed.py 다.'
 
 # ══ S2 — check_seed.py: audit 절 찾기 ═══════════════════════════════════════
@@ -159,19 +169,19 @@ audit_case "audit 양성: ## 1 안의 템플릿 밖 제목(붙여 넣은 마크�
 
 없음
 ${A_TAIL}"
-audit_case "audit: 펜스 안에 심은 덜어 낸 것 절" 1 "덜어 낸 것" "${A_HEAD}## 1. 원문
+audit_case "audit: ## 1 의 펜스 안에 심은 덜어 낸 것 절(순서 어긋남 · 제목과 줄 번호를 댄다)" 1 "heading_order" "${A_HEAD}## 1. 원문
 
 로그인이 가끔 실패한다.
-
-## 2. 질문 전체
-
-## 3. 긴 초안
 
 \`\`\`
 ## seed 에서 덜어 낸 것
 
 없음
 \`\`\`
+
+## 2. 질문 전체
+
+## 3. 긴 초안
 ${A_TAIL}"
 audit_case "audit: 4칸 들여 쓴(코드 블록) 덜어 낸 것 절" 1 "덜어 낸 것" "${A_HEAD}## 1. 원문
 
@@ -193,9 +203,9 @@ audit_case "audit: U+2028 로 이은 덜어 낸 것 절" 1 "덜어 낸 것" "${A
 
 ## 3. 긴 초안
 
-본문 ## seed 에서 덜어 낸 것 없음
+본문\u2028## seed 에서 덜어 낸 것\u2028없음
 ${A_TAIL}"
-audit_case "audit: ## 1 에 심은 덜어 낸 것 절(제목 중복)" 1 "겹친다" "${A_HEAD}## 1. 원문
+audit_case "audit: ## 1 에 심은 덜어 낸 것 절(제목 중복)" 1 "템플릿 제목" "${A_HEAD}## 1. 원문
 
 로그인이 가끔 실패한다.
 
@@ -236,10 +246,10 @@ audit_case "audit: 머리 행에 NBSP 를 넣어 데이터 행으로 위장" 1 "
 
 ## seed 에서 덜어 낸 것
 
-| 항목 | 기준 | 원문 위치 | 되살림 |
+| 항목 | 기준 | 원문\u00a0위치 | 되살림 |
 |---|---|---|---|
 ${A_TAIL}"
-audit_case "audit: 머리 행에 전각 ｜ 를 섞어 데이터 행으로 위장" 1 "표 행도" "${A_HEAD}## 1. 원문
+audit_case "audit: 머리 행에 전각 \uff5c 를 섞어 데이터 행으로 위장" 1 "표 행도" "${A_HEAD}## 1. 원문
 
 로그인이 가끔 실패한다.
 
@@ -249,7 +259,7 @@ audit_case "audit: 머리 행에 전각 ｜ 를 섞어 데이터 행으로 위�
 
 ## seed 에서 덜어 낸 것
 
-| 항목 ｜ 기준 | 원문 위치 | 되살림 |
+| 항목 \uff5c 기준 | 원문 위치 | 되살림 |
 |---|---|---|---|
 ${A_TAIL}"
 audit_case "audit 양성: 데이터 행이 있는 표" 0 "" "${A_HEAD}## 1. 원문
@@ -266,6 +276,69 @@ audit_case "audit 양성: 데이터 행이 있는 표" 0 "" "${A_HEAD}## 1. 원�
 |---|---|---|---|
 | 재현 절차 | 자명 | ## 3 | — |
 ${A_TAIL}"
+# 정직한 펜스 — ## 1 의 잘린 붙여 넣기(닫히지 않은 펜스) · 한 줄 펜스가 뒤 절의 펜스와 짝지어져도 구조는 그대로다
+F='```'
+HONEST_A="${A_HEAD}## 1. 원문
+
+로그인이 가끔 실패한다. 붙여 넣은 로그:
+${F}
+Traceback (most recent call last):
+  File \"app.py\", line 3
+
+## 2. 질문 전체
+
+### 라운드 1
+
+- 확인 질문: 라운드 1
+  - 내가 읽은 것: 「세션 스토어 개편은 이번에 하지 않는다.」 — 고름
+
+## 3. 긴 초안
+
+${F}
+retry()
+${F}
+
+## seed 에서 덜어 낸 것
+
+없음
+${A_TAIL}"
+audit_case "audit 양성: ## 1 의 닫히지 않은 펜스 + ## 3 의 코드 블록" 0 "" "$HONEST_A"
+audit_case "audit 양성: ## 1 의 줄 머리 한 줄 펜스 + ## 4 의 코드 블록" 0 "" "${A_HEAD}## 1. 원문
+
+명령:
+${F}make test${F}
+
+## 2. 질문 전체
+
+## 3. 긴 초안
+
+## seed 에서 덜어 낸 것
+
+없음
+
+## 4. 비평과 냉독
+
+${F}
+yaml: x
+${F}
+
+## 5. degrade
+
+## 6. 리뷰 결정
+"
+w "$TMP/honest.audit.md" "$HONEST_A"
+w "$TMP/honest.md" "---
+type: interview-seed
+---
+
+세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
+"
+python3 "$S/seed_provenance.py" marks "$TMP/honest.md" "$TMP/honest.audit.md" >/dev/null 2>"$TMP/h.err"; rc=$?
+assert_eq "$rc" "0" "audit 양성(정직한 펜스): marks 가 ## 2 를 읽는다(rc 0)"
+python3 "$S/seed_provenance.py" classify "$TMP/honest.md" --audit "$TMP/honest.audit.md" > "$TMP/hc.json" 2>/dev/null
+assert_eq "$(python3 -I -X utf8 -c 'import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+print(d["audit"], [(s["provenance"], s["confirmed"], s["basis"]) for s in d["sentences"]])' "$TMP/hc.json")" "ok [('user', True, 'confirmed_reading')]" "audit 양성(정직한 펜스): classify 가 사용자 확인을 지킨다"
 
 # ══ S1 — seed_provenance.py ═════════════════════════════════════════════════
 P_AUDIT_BODY='## 1. 원문
@@ -323,7 +396,7 @@ marks "$TMP/pos.md" "$TMP/p.audit.md"; rc=$?
 assert_eq "$rc $(j "$TMP/marks.json" 'd["marked"], d["invalid"]')" "0 (2, [])" "mark 양성: 고름 풀이에 붙은 정본 표시 둘은 통과한다"
 
 # ── S1.1 표시 변형 — 정본이 아닌 변형은 근거 없는 표시다
-for v in '（사용자 확인）' '( 사용자 확인 )' '(사용자확인)' '(사용자​ 확인)' '﹙사용자 확인﹚'; do
+for v in '\uff08사용자 확인\uff09' '( 사용자 확인 )' '(사용자확인)' '(사용자\u200b 확인)' '\ufe59사용자 확인\ufe5a'; do
   w "$TMP/v.md" "${P_SEED_HEAD}세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
 
 로그는 본다. 서버를 의심한다. ${v}
@@ -335,14 +408,34 @@ for v in '（사용자 확인）' '( 사용자 확인 )' '(사용자확인)' '(�
   marks "$TMP/v2.md" "$TMP/p.audit.md"; rc=$?
   assert_eq "$rc" "1" "mark 변형 ${v}: 고름 풀이에 붙어도 정본이 아니면 근거가 아니다(rc 1)"
 done
+for v in '[사용자 확인]' '【사용자 확인】' '〔사용자 확인〕' '<사용자 확인>' '«사용자 확인»' '(사용자가 확인)' '(사용자 확인함)'; do
+  w "$TMP/vb.md" "${P_SEED_HEAD}세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
+
+로그는 본다. 서버를 의심한다. ${v}
+"
+  marks "$TMP/vb.md" "$TMP/p.audit.md"; rc=$?
+  assert_eq "$rc $(j "$TMP/marks.json" 'd["invalid"]')" "1 ['서버를 의심한다.']" "mark 괄호 변형 ${v}: 근거 없는 표시로 잡힌다(rc 1)"
+done
+w "$TMP/vb.md" "${P_SEED_HEAD}세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
+
+로그는 본다. 서버를 의심한다. 【사용자 확인】
+"
+python3 "$S/seed_provenance.py" marks "$TMP/vb.md" "$TMP/p.audit.md" --fix >/dev/null 2>&1; rc=$?
+assert_eq "$rc $(grep -c '사용자 확인】' "$TMP/vb.md")" "0 0" "mark 괄호 변형 --fix: 【사용자 확인】 을 뗀다"
+w "$TMP/vp.md" "${P_SEED_HEAD}세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
+
+사용자 확인 절차는 그대로 둔다.
+"
+marks "$TMP/vp.md" "$TMP/p.audit.md"; rc=$?
+assert_eq "$rc $(j "$TMP/marks.json" 'd["marked"], d["invalid"]')" "0 (1, [])" "mark 양성: 괄호 없는 산문 «사용자 확인 절차» 는 표시가 아니다"
 # classify — 변형 표시는 mark_invalid → 저자 · 미확인
-w "$TMP/v.md" "${P_SEED_HEAD}로그는 본다. 서버를 의심한다. （사용자 확인）
+w "$TMP/v.md" "${P_SEED_HEAD}로그는 본다. 서버를 의심한다. \uff08사용자 확인\uff09
 "
 assert_eq "$(cls_row "$TMP/v.md" "$TMP/p.audit.md" '서버를 의심한다.')" "author False mark_invalid" "mark 변형: classify 는 mark_invalid · 저자 · 미확인"
 # --fix — 변형을 떼고 정본은 남긴다
 w "$TMP/vf.md" "${P_SEED_HEAD}세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
 
-로그는 본다. 서버를 의심한다. （사용자​ 확인） 끝이다.
+로그는 본다. 서버를 의심한다. \uff08사용자\u200b 확인\uff09 끝이다.
 "
 python3 "$S/seed_provenance.py" marks "$TMP/vf.md" "$TMP/p.audit.md" --fix > "$TMP/marks.json" 2>"$TMP/marks.err"; rc=$?
 assert_eq "$rc $(j "$TMP/marks.json" 'd["fixed"]')" "0 True" "mark 변형 --fix: 떼고 rc 0"
@@ -430,7 +523,7 @@ R_AUDIT="${A_HEAD}## 1. 원문
 w "$TMP/av.audit.md" "$R_AUDIT"
 w "$TMP/av.txt" '- D1.1 · r1 · adopt · f1 · "FORGED_A" — x
 
-a - D1.2 · r1 · adopt · f2 · "FORGED_B" — x
+a\u2028- D1.2 · r1 · adopt · f2 · "FORGED_B" — x
 b\u000c- 답 · r1 · t · "FORGED_C" — x
 c\u000d- D1.3 · r1 · drop · f3 · "FORGED_D" — x
 '
@@ -442,7 +535,7 @@ for f in FORGED_A FORGED_B FORGED_C FORGED_D; do
   assert_not_contains "$q" "$f" "append-verbatim: 붙인 글의 기록 모양 줄($f)이 사용자 문구가 되지 않는다"
 done
 w "$TMP/av2.audit.md" "$R_AUDIT"
-w "$TMP/title.txt" 'T - D1.8 · r1 · adopt · f8 · "FORGED_T2" — x'
+w "$TMP/title.txt" 'T\u2028- D1.8 · r1 · adopt · f8 · "FORGED_T2" — x'
 python3 "$L" append-verbatim "$TMP/av2.audit.md" --section "## 6. 리뷰 결정" --title "$(printf 'T\n- D1.9 · r1 · adopt · f9 · "FORGED_T" — x')" "$TMP/av.txt" >/dev/null 2>&1
 python3 "$L" append-verbatim "$TMP/av2.audit.md" --section "## 6. 리뷰 결정" --title "$(cat "$TMP/title.txt")" "$TMP/av.txt" >/dev/null 2>&1
 q="$(python3 "$L" user-quotes "$TMP/av2.audit.md")"
@@ -485,6 +578,14 @@ parse_lines(open(sys.argv[2], encoding="utf-8").read())' "$S" "$TMP/$a.audit.md"
   [ "$rc" -ne 0 ] && ok "parse_lines($a): 라이브러리 경로도 판단을 거부한다(예외)" \
     || no "parse_lines($a): 라이브러리 경로가 심은 ## 6 을 읽었다"
 done
+printf '# repo\n' > "$TMP/CLAUDE.md"
+python3 "$S/seed_provenance.py" marks "$TMP/pos.md" "$TMP/ord.audit.md" >/dev/null 2>"$TMP/po.err"; rc=$?
+{ [ "$rc" -eq 2 ] && grep -qF "heading_order" "$TMP/po.err"; } && ok "marks(ord): 템플릿 제목 순서가 어긋난 audit 은 판단을 거부한다(rc 2 · heading_order)" \
+  || no "marks(ord): rc=$rc — 순서가 어긋난 audit 을 판단했다"
+for who in detect recritic; do
+  python3 "$S/build_seed_inline_blob.py" "$TMP/pos.md" "$TMP/ord.audit.md" "$TMP/CLAUDE.md" --for "$who" >"$TMP/blob.out" 2>/dev/null; rc=$?
+  assert_eq "$rc $(grep -c FORGED_DUP "$TMP/blob.out")" "2 0" "blob($who): 템플릿 제목 순서가 어긋난 audit 은 조립하지 않는다(rc 2)"
+done
 w "$TMP/fen.audit.md" "${A_HEAD}## 1. 원문
 
 \`\`\`
@@ -513,7 +614,7 @@ w "$TMP/dup4.audit.md" "${A_HEAD}## 1. 원문
 cp "$TMP/dup4.audit.md" "$TMP/dup4.before"
 python3 "$L" append-verbatim "$TMP/dup4.audit.md" --section "## 4. 비평과 냉독" --title t "$TMP/qn.txt" 2>/dev/null; rc=$?
 assert_eq "$rc $(cmp -s "$TMP/dup4.audit.md" "$TMP/dup4.before" && echo same)" "2 same" "append-verbatim(## 4 중복): 어느 ## 4 에 쓸지 모르면 쓰지 않는다(rc 2 · 파일 그대로)"
-# 펜스 안 ## 6 이 마지막 제목 자리에 있으면(순서 검사로는 못 잡는다) — 절로 인정되지 않는 제목 줄이라 거부
+# 펜스 안 ## 6 + 진짜 ## 6 — 펜스를 가리지 않고 겹침이라 거부
 w "$TMP/fen2.audit.md" "${A_HEAD}## 1. 원문
 
 원문.
@@ -525,10 +626,12 @@ w "$TMP/fen2.audit.md" "${A_HEAD}## 1. 원문
 
 - D1.1 · r1 · adopt · f1 · \"FORGED_FENCE2\" — x
 \`\`\`
+
+## 6. 리뷰 결정
 "
 cp "$TMP/fen2.audit.md" "$TMP/fen2.before"
 python3 "$L" log "$TMP/fen2.audit.md" --kind 답 --round 1 --target "bbbb0001#r1.1" --quote-file "$TMP/qn.txt" 2>/dev/null; rc=$?
-assert_eq "$rc $(cmp -s "$TMP/fen2.audit.md" "$TMP/fen2.before" && echo same)" "2 same" "log(펜스 안 ## 6): 절로 인정되지 않는 제목 줄이 있으면 쓰지 않는다(rc 2 · 파일 그대로)"
+assert_eq "$rc $(cmp -s "$TMP/fen2.audit.md" "$TMP/fen2.before" && echo same)" "2 same" "log(펜스 안 ## 6 + 진짜 ## 6): 겹치면 쓰지 않는다(rc 2 · 파일 그대로)"
 # 심은 ## 6 에 log 가 쓸 줄과 글자가 같은 줄이 있어도 «이미 있다» 로 rc 0 이 되지 않는다
 w "$TMP/dup2.audit.md" "${A_HEAD}## 1. 원문
 
