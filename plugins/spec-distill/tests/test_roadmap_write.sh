@@ -221,4 +221,78 @@ cmp -s "$T/rm8.E2.before" "$W/docs/rm8/E2.md" && ok "되돌리기: 지운 E2 가
 cmp -s "$T/state11.before" "$T/state11.md" && ok "되돌리기: 표 파일이 같은 바이트" || no "되돌리기: 표 파일이 바뀌었다"
 assert_eq "$(tree_of "$W/docs/rm8")" "$(printf './E1.md\n./E2.md\n./roadmap.md')" "되돌리기: 폴더에 남은 임시 파일 없음"
 
+# ── update 픽스처: docs/rm 을 main 에 올리고 E1 을 머지한다 ──────────────────
+g add -- docs/rm && g commit -qm roadmap
+g checkout -qb feature/e1 && mkdir -p "$W/a" && printf 'x\n' > "$W/a/x.py" && g add -- a && g commit -qm e1
+g checkout -q main && g merge -q --no-ff feature/e1 -m "Merge pull request #1 from o/feature/e1"
+g push -q origin main && g fetch -q origin
+snap() { rm -rf "$T/snap" && cp -R "$W/docs/rm" "$T/snap"; }
+same_as_snap() { diff -r "$T/snap" "$W/docs/rm" >/dev/null 2>&1 && echo same || echo changed; }
+update() {  # update <표 파일> — rc 를 echo 한다
+  local rc=0
+  (cd "$W" && python3 "$RW" update --roadmap docs/rm/roadmap.md --brief docs/iv/brief.md \
+     --audit docs/iv/brief.audit.md --plan-table "$1" --date 2026-10-16 --change "경계 조정" \
+     --approval "이대로 다시 나눈다") > "$T/out.txt" 2>&1 || rc=$?
+  echo "$rc"
+}
+(cd "$W" && python3 "$RW" extract --roadmap docs/rm/roadmap.md) > "$T/now.md"
+E1_NOW="$(grep '^| E1 |' "$T/now.md")"
+E2_NOW="$(grep '^| E2 |' "$T/now.md")"
+P1_NOW="$(grep '^| P1 |' "$T/now.md")"
+
+# 바뀐 것 없음 — 쓰지 않는다
+snap
+assert_eq "$(update "$T/now.md")" "0" "update 변화 없음: rc 0"
+assert_eq "$(same_as_snap)" "same" "update 변화 없음: 아무것도 쓰지 않는다"
+
+# 머지된 E1 은 그대로, 진행 전 E2 만 바뀐다 (AC10)
+table "$T/u1.md" "$P1_NOW" "$E1_NOW" "${E2_NOW/한다 다 /한다 다 · 마 }"
+cp "$W/docs/rm/E1.md" "$T/E1.keep"
+assert_eq "$(update "$T/u1.md")" "0" "update: rc 0"
+cmp -s "$T/E1.keep" "$W/docs/rm/E1.md" && ok "update: 머지된 E1 묶음은 바이트 그대로" || no "update: E1 묶음이 바뀌었다"
+assert_file_has "$W/docs/rm/E2.md" "- 범위: 한다 다 · 마 / 안 한다 라" "update: 바뀐 E2 묶음 범위 줄"
+assert_file_has "$W/docs/rm/roadmap.md" "- 범위: 한다 다 · 마 / 안 한다 라" "update: 바뀐 E2 블록 범위 줄"
+assert_file_has "$W/docs/rm/roadmap.md" "- 2026-10-16 · 재분해 · 경계 조정 · 바뀜 E2 「이대로 다시 나눈다」" "update: 재분해 이력 줄"
+assert_eq "$(four_empty docs/rm/roadmap.md)" "ok" "update: 검사기 네 목록이 빈 목록"
+
+# 머지된 E1 을 바꾸는 표는 거부 — 아무것도 쓰지 않는다
+snap
+table "$T/u2.md" "$P1_NOW" "${E1_NOW/첫 의도/첫 의도 고침}" "$(grep '^| E2 |' "$T/u1.md")"
+assert_eq "$(update "$T/u2.md")" "1" "머지된 에픽 변경: rc 1"
+assert_file_has "$T/out.txt" "E1" "머지된 에픽 변경: 사유에 번호"
+assert_eq "$(same_as_snap)" "same" "머지된 에픽 변경: 바이트 그대로"
+
+# 새 에픽 E3 — 다음 번호 · 묶음 생성, 그다음 E3 를 지우고, 같은 번호 재사용은 거부
+E2_U1="$(grep '^| E2 |' "$T/u1.md")"
+E3_ROW='| E3 | 셋째 에픽 | 묶음 | 셋째 의도 | 한다 바 / 안 한다 사 | E2 | feature/e3 | 없음 | C3 · S1 | E2 의 결과 | 없음 |'
+table "$T/u3.md" "$P1_NOW" "$E1_NOW" "$E2_U1" "$E3_ROW"
+assert_eq "$(update "$T/u3.md")" "0" "새 에픽: rc 0"
+[ -f "$W/docs/rm/E3.md" ] && ok "새 에픽: 묶음을 만든다" || no "새 에픽: E3.md 없음"
+table "$T/u4.md" "$P1_NOW" "$E1_NOW" "$E2_U1"
+assert_eq "$(update "$T/u4.md")" "0" "에픽 지우기: rc 0"
+[ -e "$W/docs/rm/E3.md" ] && no "에픽 지우기: E3.md 가 남았다" || ok "에픽 지우기: 묶음을 지운다"
+assert_file_has "$W/docs/rm/roadmap.md" "사라짐 E3" "에픽 지우기: 이력에 사라진 번호"
+snap
+assert_eq "$(update "$T/u3.md")" "1" "번호 재사용: rc 1"
+assert_eq "$(same_as_snap)" "same" "번호 재사용: 바이트 그대로"
+table "$T/u5.md" "$P1_NOW" "$E1_NOW" "$E2_U1" "${E3_ROW/| E3 |/| E4a |}"
+assert_eq "$(update "$T/u5.md")" "1" "꼬리 붙은 새 번호: rc 1"
+
+# 검증 실패 — 덮어쓴 파일은 원래 바이트, 새 묶음은 남지 않는다 (AC10)
+snap
+E4_ROW='| E4 | 넷째 에픽 | 묶음 | 넷째 의도 | 한다 아 / 안 한다 자 | E2 | feature/e4 | 없음 | C1 · S1 | 없음 | 없음 |'
+table "$T/u6.md" "${P1_NOW/S3 · OQ2/S3 · OQ2 · C99}" "$E1_NOW" "${E2_U1/둘째 에픽/둘째 에픽 고침}" "$E4_ROW"
+assert_eq "$(update "$T/u6.md")" "1" "update 검증 실패: rc 1"
+assert_file_has "$T/out.txt" "unknown_ids" "update 검증 실패: 사유"
+assert_eq "$(same_as_snap)" "same" "update 검증 실패: 로드맵 · 묶음이 원래 바이트, 새 묶음 없음"
+
+# origin/main 없음 — 머지 여부를 모르면 쓰지 않는다
+snap
+MAIN_SHA="$(g rev-parse refs/remotes/origin/main)"
+g update-ref -d refs/remotes/origin/main
+assert_eq "$(update "$T/u3.md")" "1" "origin/main 없음: rc 1"
+assert_file_has "$T/out.txt" "머지 여부를 알 수 없다" "origin/main 없음: 사유"
+assert_eq "$(same_as_snap)" "same" "origin/main 없음: 바이트 그대로"
+g update-ref refs/remotes/origin/main "$MAIN_SHA"
+
 finish

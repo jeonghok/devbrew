@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -275,6 +276,98 @@ def cmd_extract(a) -> int:
     return 0
 
 
+DONE = ("머지됨", "끝남")
+NEW_ID_RE = re.compile(r"[A-Z][0-9]+")
+ID_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])([A-Z])([0-9]+)")
+
+
+def stages(top: Path, roadmap: Path) -> dict:
+    out, rc, err = _status_json(top, roadmap)
+    try:
+        report = json.loads(out) if not err else None
+    except ValueError:
+        report = None
+    if not isinstance(report, dict):
+        raise Refused("머지 여부를 알 수 없다 — 검사기 출력을 읽지 못했다(rc %d) %s" % (rc, err))
+    got = {b.get("id"): b.get("stage") for b in report.get("blocks") or []}
+    unknown = sorted(i for i, s in got.items() if s in (None, "알 수 없음"))
+    if not got or unknown:
+        why = report.get("unknown_reasons") or report.get("format_errors") or unknown or ["블록 없음"]
+        raise Refused("머지 여부를 알 수 없다 — %s" % " · ".join(str(x) for x in why))
+    return got
+
+
+def used_numbers(roadmap_text: str) -> dict:
+    """글자마다 로드맵 블록 번호 · 재분해 이력에 나온 가장 큰 숫자."""
+    corpus = " ".join(R.epic_block_texts(roadmap_text)) + "\n" + (section_body(roadmap_text, "## 재분해 이력") or "")
+    best = {}
+    for letter, num in ID_TOKEN_RE.findall(corpus):
+        best[letter] = max(best.get(letter, -1), int(num))
+    return best
+
+
+def cmd_update(a) -> int:
+    roadmap = Path(os.path.realpath(a.roadmap))
+    top = git_top(roadmap)
+    rdir = roadmap.parent
+    roadmap_rel, brief_rel, audit_rel = rel(top, roadmap), rel(top, a.brief), rel(top, a.audit)
+    date = _date(a.date)
+    old_text = read(roadmap)
+    if unquote(frontmatter(old_text).get("source_brief", "")) != brief_rel:
+        raise Refused("로드맵의 source_brief 가 --brief(%s) 와 다르다" % brief_rel)
+    old_rows = R.extract_rows(old_text, lambda n: read(rdir / n) if (rdir / n).is_file() else None)
+    new_rows = R.parse_table(read(a.plan_table))
+    idx = R.index_brief(read(a.brief), read(a.audit))
+    old = {r.id: r for r in old_rows}
+    new = {r.id: r for r in new_rows}
+    changed = [i for i in new if i in old and new[i] != old[i]]
+    added = [i for i in new if i not in old]
+    removed = [i for i in old if i not in new]
+    if not (changed or added or removed) and list(new) == list(old):
+        print("[spec-distill] 바뀐 에픽이 없다 — 쓰지 않았다")
+        return 0
+    st = stages(top, roadmap)
+    frozen = [i for i in changed + removed if st.get(i) in DONE]
+    if frozen:
+        raise Refused("머지되거나 끝난 에픽은 바꾸거나 지우지 않는다 — %s" % " · ".join(frozen))
+    used = used_numbers(old_text)
+    bad = [i for i in added if not NEW_ID_RE.fullmatch(i) or int(i[1:]) <= used.get(i[0], -1)]
+    if bad:
+        raise Refused("새 에픽은 쓴 적 없는 다음 번호(`<글자><가장 큰 수+1>` 이상)여야 한다 — %s" % " · ".join(bad))
+    texts = R.epic_block_texts(old_text)
+    blocks = [texts[r.id] if r.id in old and r.id not in changed else R.render_block(r) for r in new_rows]
+    parts = [a.change] + ["%s %s" % (label, " · ".join(ids))
+                          for label, ids in (("바뀜", changed), ("새", added), ("사라짐", removed)) if ids]
+    new_text = R.append_history(R.replace_epics(old_text, blocks),
+                                "- %s · 재분해 · %s 「%s」" % (date, " · ".join(parts), a.approval))
+    writes, removes = {roadmap: new_text}, []
+    for i in changed + added:
+        path = rdir / (i + ".md")
+        if new[i].kind == R.KIND_BUNDLE:
+            text = R.render_bundle(new[i], idx, roadmap_rel, brief_rel, audit_rel)
+            if not path.is_file() or path.read_text(encoding="utf-8") != text:
+                writes[path] = text
+        elif i in old and old[i].kind == R.KIND_BUNDLE and path.exists():
+            removes.append(path)
+    removes += [rdir / (i + ".md") for i in removed
+                if old[i].kind == R.KIND_BUNDLE and (rdir / (i + ".md")).exists()]
+    txn = Txn()
+
+    def body():
+        for path, text in writes.items():
+            txn.write(path, text)
+        for path in removes:
+            txn.remove(path)
+        reasons = validate(top, roadmap)
+        if reasons:
+            raise Refused("검증 실패 — %s" % " / ".join(reasons))
+
+    run_txn(txn, body)
+    print("[spec-distill] 로드맵을 다시 나눴다: %s — %s · 묶음 %d개 씀 · %d개 지움"
+          % (roadmap_rel, " · ".join(parts[1:]) or "순서만", len(writes) - 1, len(removes)))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="roadmap_write.py",
                                  description="분해안 표로 로드맵 · 에픽 묶음을 쓰고 검증한다.")
@@ -285,10 +378,13 @@ def build_parser() -> argparse.ArgumentParser:
         c.add_argument(flag, required=True)
     e = sub.add_parser("extract")
     e.add_argument("--roadmap", required=True)
+    u = sub.add_parser("update")
+    for flag in ("--roadmap", "--brief", "--audit", "--plan-table", "--date", "--change", "--approval"):
+        u.add_argument(flag, required=True)
     return ap
 
 
-COMMANDS = {"create": cmd_create, "extract": cmd_extract}
+COMMANDS = {"create": cmd_create, "update": cmd_update, "extract": cmd_extract}
 
 
 def main(argv=None) -> int:
