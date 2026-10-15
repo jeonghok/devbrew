@@ -40,8 +40,12 @@ def legacy_state(sid: str, cwd: str | None) -> Path | None:
 
 def resume_candidates(seed: str) -> list[Path]:
     want = seed_rel(seed)
+    real_dir = os.path.dirname(os.path.realpath(seed))
+    root, _ = worktree_root(real_dir)
     out = []
-    for p in sorted(Path(os.path.realpath(seed)).parent.glob("*-interview.state.md")):
+    for p in sorted(Path(real_dir).glob("*-interview.state.md")):
+        if inside_root(p, root):   # 링크이거나 작업 트리 밖이면 후보로 내지 않는다
+            continue
         fm = frontmatter_scalars(p) or {}
         if fm.get("type") != "interview-state" or fm.get("seed") != want:
             continue

@@ -114,6 +114,32 @@ class EntryTest(Base):
         self.assertEqual(last(out), "interview-state: ASK")
         self.assertIn("candidate: %s" % st, out)
 
+    def test_linked_candidate_is_not_offered(self):
+        seed = self.put("2026-10-15-t-interview.md", "interview-seed")
+        out_dir = self._outside()
+        real = out_dir / "2026-10-15-t-brief-interview.state.md"
+        real.write_text("---\ntype: interview-state\nseed: docs/superpowers/interview/2026-10-15-t-interview.md\n---\n밖\n",
+                        encoding="utf-8")
+        link = self.iv / "2026-10-15-t-brief-interview.state.md"
+        os.symlink(str(real), str(link))
+        st = self.put("2026-10-15-t-brief-0930-interview.state.md", "interview-state",
+                      "seed: docs/superpowers/interview/2026-10-15-t-interview.md\n")
+        rc, out, _ = run("entry", "--arg", str(seed), "--session", SID, cwd=self.tmp)
+        self.assertEqual(last(out), "interview-state: ASK")
+        self.assertIn("candidate: %s" % st, out)            # 양성 대조 — 보통 파일은 그대로 후보
+        self.assertNotIn("candidate: %s" % link, out)        # 링크는 후보로 내지 않는다
+        self.assertEqual([l for l in out.splitlines() if l.startswith("candidate: ")], ["candidate: %s" % st])
+
+    def test_only_linked_candidate_means_new_seed(self):
+        seed = self.put("2026-10-15-t-interview.md", "interview-seed")
+        out_dir = self._outside()
+        real = out_dir / "x.state.md"
+        real.write_text("---\ntype: interview-state\nseed: docs/superpowers/interview/2026-10-15-t-interview.md\n---\n밖\n",
+                        encoding="utf-8")
+        os.symlink(str(real), str(self.iv / "2026-10-15-t-brief-interview.state.md"))
+        rc, out, _ = run("entry", "--arg", str(seed), "--session", SID, cwd=self.tmp)
+        self.assertTrue(last(out).startswith("interview-state: NEW-SEED t-brief "), out)
+
     def test_finished_state_is_not_a_candidate(self):
         seed = self.put("2026-10-15-t-interview.md", "interview-seed")
         self.put("2026-10-15-t-brief-interview.state.md", "interview-state",

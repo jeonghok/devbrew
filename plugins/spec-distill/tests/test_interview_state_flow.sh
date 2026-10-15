@@ -148,6 +148,16 @@ sys.exit(0 if "type: interview-state" in s3 and "type: interview-state" in s35 e
 PY
 grep -qF '본문 맨 앞에는 `## 풀린 입력` 블록을 두고' "$SF" && grep -qF 'NEW 면 받은 요청' "$SF" \
   && ok "fix1: 만들 때 「풀린 입력」을 블록에 남긴다(문면)" || no "fix1: 풀린 입력 블록 문면 없음"
+python3 -I - "$SF" <<'PY' && ok "fix2: 풀린 입력 블록은 P21 치환본이고 치환 뒤에만 고치지 않는다(블록 지시 문장 안)" || no "fix2: 풀린 입력 블록 지시에 P21 치환이 없다 — 비밀이 그대로 커밋된다"
+import sys
+t = " ".join(open(sys.argv[1], encoding="utf-8").read().split())
+i = t.find("본문 맨 앞에는 `## 풀린 입력` 블록을 두고")
+s = t[i:t.find("- 판결이", i)] if i >= 0 else ""
+sys.exit(0 if ("P21 secret placeholder 치환을 적용한 뒤 그대로 적는다" in s and "치환 뒤에는 이 블록을 고치지 않는다" in s
+               and "<REDACTED>" in s) else 1)
+PY
+grep -qF "ARG_PATH='<후보 경로>'" "$SF" && grep -qF '판결이 RESUME 일 때만' "$SF" \
+  && ok "fix2: 이어 감을 고르면 그 후보로 진입 펜스를 다시 돌려 RESUME 일 때만 간다(문면)" || no "fix2: ASK 이어 감의 재판정 문면 없음"
 grep -qF '상태 파일 전문이 아니다' "$SF" && grep -qF '`S1` 없음' "$SF" && grep -qF '사용자에게 한 번 알린다' "$SF" \
   && ok "fix1: 이어 갈 때 「풀린 입력」은 블록 · 없으면 알린다(문면)" || no "fix1: 이어 갈 때 풀린 입력 문면 없음"
 
