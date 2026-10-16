@@ -94,9 +94,15 @@ bad = []
 # `$` · `$(` · 백틱 불가), 줄이 `\` 로 이어지면 다음 줄이 `||` 로 시작하며, 이어진 명령의 쓰기 명령이 전부
 # `advice` 일 때만 뺀다.
 ARG = r'(?:"(?:[^"$`\\]|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)*"|\'[^\']*\'|[A-Za-z0-9_./-]+)'
-ro = re.compile(r'\s+--state-dir\s+' + ARG + r'(?:\s+2?>\s*' + ARG + r')?(?:\s+\\)?\s*')
+# 넘기는 자리(명령 뒤 · 명령 앞 모두)는 같은 펜스에서 `이름="$(mktemp …)"` 로 만든 이름의 `"$이름"` 꼴만 받는다 —
+# 그 밖(글자 경로 · 다른 변수 · STATE_DIR 이 든 자리 · 따옴표 없음)은 예외에서 빠진다.
+def ro_for(names):
+    tgt = r'"\$(?:' + "|".join(map(re.escape, names)) + r')"' if names else r'(?!)'
+    return re.compile(r'\s+--state-dir\s+' + ARG + r'(?:\s+2?>\s*' + tgt + r')?(?:\s+\\)?\s*'), tgt
 for body in re.findall(r"^```bash\n(.*?)^```$", text, re.S | re.M):
     lines = body.splitlines()
+    names = re.findall(r'^\s*([A-Za-z_][A-Za-z0-9_]*)=(?:"\$\(|\$\()\s*mktemp\b', body, re.M)
+    ro, tgt = ro_for(names)
     for i, line in enumerate(lines):
         if not w.search(line) or g in "\n".join(lines[:i]):
             continue
@@ -105,9 +111,9 @@ for body in re.findall(r"^```bash\n(.*?)^```$", text, re.S | re.M):
             j += 1; cmd = cmd + "\n" + lines[j]
         m = re.search(r'docreview_state\.py" advice(.*)$', line)
         cont_ok = not line.rstrip().endswith("\\") or (i + 1 < len(lines) and lines[i + 1].lstrip().startswith("||"))
-        redir = re.search(r'\s2?>\s*(\S+)', m.group(1)) if m else None
-        to_ledger = bool(redir and 'STATE_DIR' in redir.group(1))   # 넘기는 자리가 원장 폴더면 쓰기다
-        if (m and not to_ledger and ro.fullmatch(m.group(1)) and cont_ok
+        pre = line[:m.start()] if m else ""
+        pre_ok = all(re.match(r'>\s*' + tgt, pre[k:]) is not None and (k == 0 or pre[k-1] in '2 \t') for k in [x.start() for x in re.finditer('>', pre)])
+        if (m and pre_ok and ro.fullmatch(m.group(1)) and cont_ok
                 and all(x.group(0).endswith('" advice') for x in w.finditer(cmd))):
             continue
         bad.append(line.strip()[:120])
@@ -132,12 +138,22 @@ for probe in 'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STAT
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$(echo "$STATE_DIR")"' \
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$STATE_DIR/advice-all.json"' \
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "${STATE_DIR}/advice-all.json"' \
-             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" 2> $STATE_DIR/err'; do
+             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" 2> $STATE_DIR/err' \
+             'OUT=$STATE_DIR/x
+python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$OUT"' \
+             'OUT="$STATE_DIR/x"
+python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$OUT"' \
+             '> "$STATE_DIR/x" python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR"' \
+             'OUT="$(mktemp)"
+> "$STATE_DIR/x" python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$OUT"' \
+             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > /tmp/x'; do
   printf '```bash\n%s\n```\n' "$probe" > "$ac8f"
   ac8_scan "$ac8f" 2>/dev/null && no "AC8 예외 양성 짝: 확인 없는 쓰기가 예외로 빠졌다: $probe" || ok "AC8 예외 양성 짝: 확인 없는 쓰기는 잡힌다 — $(printf '%s' "$probe" | head -n 1 | cut -c 40-100)"
 done
 # 예외 — 「참고 전부 보기」 펜스의 바로 그 꼴(넘기기 + `\` 로 이어진 `|| { … }`)
-printf '```bash\n%s\n```\n' 'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$adv_all" \
+printf '```bash\n%s\n```\n' 'adv_all="$(mktemp "${TMPDIR:-/tmp}/x.XXXXXX")" \
+  || { echo "임시 파일 실패"; exit 0; }
+python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$adv_all" \
   || { rm -f "$adv_all"; echo "실패"; exit 0; }' > "$ac8f"
 ac8_scan "$ac8f" 2>/dev/null && ok "AC8 예외: 플래그 없는 advice(읽기 전용)는 확인 없이 둘 수 있다" || no "AC8 예외: 플래그 없는 advice 가 쓰기로 잡혔다"
 
