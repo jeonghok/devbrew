@@ -195,6 +195,14 @@ out="$(probe_pf 'assert_not_grep "$BIG" "NOT_THERE" "큰 텍스트 금지 패턴
 [ "$rc" -eq 0 ] \
   && t_ok "pipefail: assert_not_grep 이 금지 패턴 없는 큰 텍스트를 통과로 센다" \
   || t_no "pipefail: assert_not_grep 이 금지 패턴 없는 큰 텍스트를 실패로 센다 (rc=$rc)"
+# field · field_line 도 첫 매치에서 끝난다 — pipefail 이면 값은 맞아도 rc 141 이 `set -e` · `$?` 호출부를 깬다.
+for fn in field field_line; do
+  out="$(probe_pf 'got="$('"$fn"' MATCH_HERE "MATCH_HERE: v
+$BIG")"; r=$?; [ "$r" -eq 0 ] && ok "rc 0" || no "rc $r"')"; rc=$?
+  [ "$rc" -eq 0 ] \
+    && t_ok "pipefail: $fn 이 큰 텍스트에서 rc 0 으로 끝난다" \
+    || t_no "pipefail: $fn 이 큰 텍스트에서 non-zero 로 끝난다 — 파이프 SIGPIPE 의심 ($out)"
+done
 
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [ "$fail" -eq 0 ]
