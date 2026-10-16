@@ -44,13 +44,17 @@ assert_not_contains() {  # assert_not_contains <haystack> <needle> <msg>
   esac
 }
 
+# 텍스트 판정은 파이프가 아니라 here-string 으로 grep 에 넘긴다. `printf | grep -q` 는
+# 호출 테스트가 `set -o pipefail` 이고 텍스트가 파이프 버퍼보다 크면, grep 이 맞는 줄에서
+# 일찍 끝날 때 printf 가 SIGPIPE(141)로 죽어 파이프라인이 실패로 읽힌다 — assert_grep 은
+# 거짓 실패, assert_not_grep 은 거짓 통과(부재 락 fail-open)다. `test_assert_behavior.sh` 가 잡는다.
 assert_grep() {      # assert_grep <text> <ERE> <msg>
-  if printf '%s\n' "$1" | grep -qE -- "$2"; then ok "$3"
+  if grep -qE -- "$2" <<< "$1"; then ok "$3"
   else no "$3"; printf '      pattern:  %s\n      text:     %s\n' "$2" "$(printf '%s' "$1" | head -c 400)"; fi
 }
 
 assert_not_grep() {  # assert_not_grep <text> <ERE> <msg>   — assert_grep 의 짝
-  if printf '%s\n' "$1" | grep -qE -- "$2"; then
+  if grep -qE -- "$2" <<< "$1"; then
     no "$3"; printf '      금지 패턴: %s\n' "$2"
   else ok "$3"; fi
 }

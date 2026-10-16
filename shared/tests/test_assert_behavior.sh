@@ -165,5 +165,36 @@ out="$(probe "assert_file_absent \"$TMP/dashpattern.txt\" \"-v\" \"대시 패턴
   && t_ok "-- 보존: assert_file_absent 가 '-'로 시작하는 금지 패턴을 찾아 실패로 센다" \
   || t_no "-- 보존: assert_file_absent 가 '-'로 시작하는 패턴을 못 찾아 vacuous 통과시킨다 (-- 누락 의심, rc=$rc)"
 
+# 큰 텍스트 · pipefail 에서 판정이 뒤집히지 않는지 rc 로 잰다. 텍스트 대상 헬퍼가 파이프로
+# grep 에 넘기면, 호출 테스트가 `set -o pipefail` 이고 텍스트가 파이프 버퍼보다 클 때 grep 이
+# 첫 줄에서 끝나며 printf 가 SIGPIPE 로 죽어 파이프라인이 실패로 읽힌다 — 맞는데 실패
+# (assert_grep), 금지 패턴이 있는데 통과(assert_not_grep, 부재 락 fail-open). 2MB 로 30/30
+# 재현했다(2026-10-16). 첫 줄에 맞는 글을 두어 grep 이 가장 일찍 끝나게 한다.
+{ printf 'MATCH_HERE\n'; head -c 2000000 /dev/zero | tr '\0' 'x'; printf '\n'; } > "$TMP/big.txt"
+probe_pf() {   # $1 = 헬퍼 호출 한 줄 — $BIG 에 큰 텍스트, pipefail 켬
+  cat > "$TMP/probe_pf.sh" <<PROBE
+#!/usr/bin/env bash
+set -u -o pipefail
+. "$HERE/assert.sh"
+BIG="\$(cat "$TMP/big.txt")"
+$1
+finish
+PROBE
+  bash "$TMP/probe_pf.sh" 2>&1
+}
+out="$(probe_pf 'assert_grep "$BIG" "MATCH_HERE" "큰 텍스트 매치"')"; rc=$?
+[ "$rc" -eq 0 ] \
+  && t_ok "pipefail: assert_grep 이 큰 텍스트의 첫 줄 매치를 통과로 센다" \
+  || t_no "pipefail: assert_grep 이 맞는 큰 텍스트를 실패로 센다 — 파이프 SIGPIPE 의심 (rc=$rc)"
+out="$(probe_pf 'assert_not_grep "$BIG" "MATCH_HERE" "큰 텍스트 금지 패턴 → 실패 기대"')"; rc=$?
+[ "$rc" -ne 0 ] \
+  && t_ok "pipefail: assert_not_grep 이 큰 텍스트의 금지 패턴을 실패로 센다" \
+  || t_no "pipefail: assert_not_grep 이 금지 패턴이 있는 큰 텍스트를 통과시킨다 — 부재 락 fail-open (rc=$rc)"
+# 양의 짝 — 없는 패턴이면 assert_not_grep 은 통과여야 한다(항상-실패 헬퍼가 아님).
+out="$(probe_pf 'assert_not_grep "$BIG" "NOT_THERE" "큰 텍스트 금지 패턴 없음"')"; rc=$?
+[ "$rc" -eq 0 ] \
+  && t_ok "pipefail: assert_not_grep 이 금지 패턴 없는 큰 텍스트를 통과로 센다" \
+  || t_no "pipefail: assert_not_grep 이 금지 패턴 없는 큰 텍스트를 실패로 센다 (rc=$rc)"
+
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [ "$fail" -eq 0 ]
