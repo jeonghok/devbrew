@@ -82,20 +82,44 @@ assert_eq "$(cksum < "$SDIR/docreview-state.md")" "$before" "AC8: 표지 없음 
 # AC8 — 원장에 쓰는 명령마다 같은 펜스 안 앞에 확인이 있다(정적).
 WRITERS='docreview_state\.py" (init|begin-round|record-findings|decide|fix|ask|defer|observe-diff|advice)|docreview_route\.py" (prepare-recritic|finalize)|docreview_anchor\.py" check-intent'
 GUARDED="$SR $RB $FIN $SD/skills/request-framing/SKILL.md"
-for f in $GUARDED; do
-  python3 -I - "$f" "$WRITERS" <<'PY' && ok "AC8: $(basename "$(dirname "$f")")/$(basename "$f") — 원장 쓰기 명령 앞에 확인이 있다" || no "AC8: $f — 확인 없는 원장 쓰기"
+ac8_scan() {   # ac8_scan <파일> → rc 0 이면 확인 없는 원장 쓰기가 없다
+  python3 -I - "$1" "$WRITERS" <<'PY'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
 w = re.compile(sys.argv[2]); g = 'ledger_marker.py" check --dir "$STATE_DIR"'
 bad = []
+# 플래그 없는 `advice` 는 읽기 전용이다(목록 JSON 만 낸다) — 이어진 줄(`\`)까지 합친 명령의 쓰기 명령이
+# 전부 `advice` 이고 쓰는 플래그(--render · --sink · --log-file)가 없을 때만 뺀다.
+wf = re.compile(r'--(render|sink|log-file)\b')
 for body in re.findall(r"^```bash\n(.*?)^```$", text, re.S | re.M):
-    for i, line in enumerate(body.splitlines()):
-        if w.search(line) and g not in "\n".join(body.splitlines()[:i]):
-            bad.append(line.strip()[:120])
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        if not w.search(line) or g in "\n".join(lines[:i]):
+            continue
+        j, cmd = i, line
+        while cmd.rstrip().endswith("\\") and j + 1 < len(lines):
+            j += 1; cmd = cmd + "\n" + lines[j]
+        if all(m.group(0).endswith('" advice') for m in w.finditer(cmd)) and not wf.search(cmd):
+            continue
+        bad.append(line.strip()[:120])
 print("\n".join(bad), file=sys.stderr)
 sys.exit(1 if bad else 0)
 PY
+}
+for f in $GUARDED; do
+  ac8_scan "$f" && ok "AC8: $(basename "$(dirname "$f")")/$(basename "$f") — 원장 쓰기 명령 앞에 확인이 있다" || no "AC8: $f — 확인 없는 원장 쓰기"
 done
+# AC8 읽기 전용 예외의 양성 짝 — 쓰는 플래그가 붙은 advice(이어진 줄 포함)와 같은 줄의 다른 쓰기 명령은 여전히 잡힌다.
+ac8f="$T/ac8-probe.md"
+for probe in 'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render' \
+             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" \
+  --sink "$spec_path"' \
+             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > x; python3 "$SD/scripts/docreview_state.py" decide --state-dir "$STATE_DIR"'; do
+  printf '```bash\n%s\n```\n' "$probe" > "$ac8f"
+  ac8_scan "$ac8f" 2>/dev/null && no "AC8 예외 양성 짝: 확인 없는 쓰기가 예외로 빠졌다: $probe" || ok "AC8 예외 양성 짝: 확인 없는 쓰기는 잡힌다 — $(printf '%s' "$probe" | head -n 1 | cut -c 40-90)"
+done
+printf '```bash\n%s\n```\n' 'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$adv_all"' > "$ac8f"
+ac8_scan "$ac8f" 2>/dev/null && ok "AC8 예외: 플래그 없는 advice(읽기 전용)는 확인 없이 둘 수 있다" || no "AC8 예외: 플래그 없는 advice 가 쓰기로 잡혔다"
 
 # AC8 — 해제는 게이트 응답 기록 뒤(문면 순서) · 끝맺음 펜스가 release 로 끝난다
 adv="$(fence "$SR" advice-display)"

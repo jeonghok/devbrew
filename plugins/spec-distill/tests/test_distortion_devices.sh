@@ -144,22 +144,35 @@ hasnt "$RB" '`fix_anchors` §0·§2' "§3-2(부재): 옛 fix_anchors 문장이 �
 hasnt "$RB" '방향 · overdesign 항목은' "§3-2(부재): 방향을 참고로 부르는 문장이 없다"
 has   "$SR" '「참고 전부 보기」' "AC8(spec-review): 설계문서 승인 게이트 앞에 참고 전부 보기가 있다"
 has   "$SR" '<!-- advice-display:end -->' "AC8(양성 짝): advice 표시 펜스 표지가 그대로다"
-# 「참고 전부 보기」 펜스 — 원장이 없으면 「목록 없음」 한 줄로 끝나고 `$STATE_DIR/advice-all.json` 으로 쓰지 않는다
-ALLF="$(awk '/「참고 전부 보기」면 아래 펜스로/{s=1} s&&/^```bash$/{f=1;next} f&&/^```$/{exit} f' "$SR")"
+# 「참고 전부 보기」 펜스 — 원장이 없으면 「목록 없음」 한 줄로 끝나고, 있으면 전부를 내되 원장 폴더에는 아무것도 쓰지 않는다.
+# 스텁은 R7 의 실제 계약을 흉내 낸다: state-dir-for 는 `--session` 을 받으면 rc 2, advice 는 쓰는 플래그가 붙으면 rc 3,
+# path-inside 는 ADV_OUTSIDE=1 이면 rc 1(관문이 STATE_DIR 을 비워야 한다).
+ALLF="$(awk -v b='<!-- advice-all:begin -->' -v e='<!-- advice-all:end -->' 'index($0,b){f=1;next} index($0,e){f=0} f&&/^```bash$/{c=1;next} f&&c&&/^```$/{c=0;next} f&&c' "$SR")"
+[ -n "$ALLF" ] && ok "전제(ledger1): advice-all 펜스를 뽑았다" || no "전제(ledger1): advice-all 펜스가 비었다 — 아래 칸이 공허하다"
 assert_contains "$ALLF" '[ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]' "ledger1: 참고 전부 보기 펜스가 빈 STATE_DIR · 원장 부재를 가린다"
 AT="$(mktemp -d -t sd-advall-XXXXXX)" || exit 1
-mkdir -p "$AT/root/scripts" "$AT/sd"
-printf '%s\n' 'print("stub")' > "$AT/root/scripts/state_path.py"
+mkdir -p "$AT/root/scripts" "$AT/sd" "$AT/tmp"
 printf '%s\n' 'import sys, os' 'a = sys.argv[1:]' \
-  'print(os.environ["ADV_SD"]) if a[0] == "state-dir-for" else print("{\"items\": [{\"category\": \"overdesign\", \"anchor\": \"x\", \"summary\": \"y\"}]}")' > "$AT/root/scripts/docreview_state.py"
-adv_out="$(cd "$AT" && CLAUDE_PLUGIN_ROOT="$AT/root" ADV_SD="$AT/sd" spec_path="$AT/doc.md" bash -c "$ALLF" 2>&1)"; adv_rc=$?
-{ [ "$adv_rc" -eq 0 ] && [ ! -e "$AT/sd/advice-all.json" ] && printf '%s' "$adv_out" | grep -qF '참고(advisory) 목록 없음'; } \
-  && ok "ledger1: 원장 없는 STATE_DIR 에서 「목록 없음」 한 줄로 끝나고 advice-all.json 을 쓰지 않는다" \
+  'sys.exit(1 if a[0] == "path-inside" and os.environ.get("ADV_OUTSIDE") == "1" else 0) if a[0] == "path-inside" else print("stub")' > "$AT/root/scripts/state_path.py"
+printf '%s\n' 'import sys, os' 'a = sys.argv[1:]' \
+  'if a[0] == "state-dir-for" and "--session" in a: sys.exit(2)' \
+  'if a[0] == "advice" and any(x in a for x in ("--render", "--sink", "--log-file")): sys.exit(3)' \
+  'print(os.environ["ADV_SD"]) if a[0] == "state-dir-for" else print("{\"items\": [{\"category\": \"overdesign\", \"anchor\": \"x\", \"summary\": \"y\"}, {\"category\": \"overdesign\", \"anchor\": \"z\", \"summary\": \"w\"}]}")' > "$AT/root/scripts/docreview_state.py"
+adv_run() { (cd "$AT" && CLAUDE_PLUGIN_ROOT="$AT/root" ADV_SD="$AT/sd" TMPDIR="$AT/tmp" spec_path="$AT/doc.md" bash -c "$ALLF" 2>&1); }
+adv_out="$(adv_run)"; adv_rc=$?
+{ [ "$adv_rc" -eq 0 ] && [ -z "$(ls -A "$AT/sd")" ] && printf '%s' "$adv_out" | grep -qF '참고(advisory) 목록 없음'; } \
+  && ok "ledger1: 원장 없는 STATE_DIR 에서 「목록 없음」 한 줄로 끝나고 원장 폴더에 쓰지 않는다" \
   || no "ledger1: rc=$adv_rc out=$(printf '%s' "$adv_out" | head -c 200)"
 : > "$AT/sd/docreview-state.md"
-adv_out="$(cd "$AT" && CLAUDE_PLUGIN_ROOT="$AT/root" ADV_SD="$AT/sd" spec_path="$AT/doc.md" bash -c "$ALLF" 2>&1)"
-{ [ -f "$AT/sd/advice-all.json" ] && printf '%s' "$adv_out" | grep -qF '참고 전부 1건'; } \
-  && ok "ledger1(양성 짝): 원장이 있으면 목록 전부를 낸다" || no "ledger1(양성 짝): out=$(printf '%s' "$adv_out" | head -c 200)"
+adv_out="$(adv_run)"; adv_rc=$?
+{ [ "$adv_rc" -eq 0 ] && printf '%s' "$adv_out" | grep -qF '참고 전부 2건' && printf '%s' "$adv_out" | grep -qF -- '- [overdesign] x — y' \
+    && printf '%s' "$adv_out" | grep -qF -- '- [overdesign] z — w' && ! printf '%s' "$adv_out" | grep -qF '목록 없음' && ! printf '%s' "$adv_out" | grep -qF '실패'; } \
+  && ok "ledger1(양성 짝): 원장이 있으면 「목록 없음」 없이 목록 전부를 낸다" || no "ledger1(양성 짝): rc=$adv_rc out=$(printf '%s' "$adv_out" | head -c 300)"
+[ "$(ls -A "$AT/sd")" = "docreview-state.md" ] && ok "ledger1: 표지를 푼 뒤라 원장 폴더에 아무것도 쓰지 않는다" || no "ledger1: 원장 폴더에 새 파일: $(ls -A "$AT/sd" | tr '\n' ' ')"
+[ -z "$(ls -A "$AT/tmp")" ] && ok "ledger1: 임시 파일을 지우고 끝난다" || no "ledger1: 임시 파일이 남았다: $(ls -A "$AT/tmp" | tr '\n' ' ')"
+adv_out="$(ADV_OUTSIDE=1 adv_run)"
+{ printf '%s' "$adv_out" | grep -qF '참고(advisory) 목록 없음' && ! printf '%s' "$adv_out" | grep -qF '참고 전부'; } \
+  && ok "ledger1: path-inside 관문이 거부하면 STATE_DIR 을 비우고 「목록 없음」으로 끝난다" || no "ledger1: 관문 거부 뒤에도 원장을 읽었다: $(printf '%s' "$adv_out" | head -c 200)"
 rm -rf "$AT"
 
 # ── Task 9 — 라운드 공시 (AC15 · AC16c) ──
@@ -171,8 +184,8 @@ has "$SI" '### 지금 이해' "AC15(양성 짝): 라운드 규약 템플릿이 �
 
 # ── Task 10 — 릴리스 표면 (AC18) ──
 PJ="$SD/.claude-plugin/plugin.json"; CL="$SD/CHANGELOG.md"
-assert_grep "$(cat "$PJ")" '"version": "5\.9\.[0-9]+"' "AC18: spec-distill minor 가 5.9 이다"
-assert_grep "$(head -5 "$CL")" '^## \[5\.9\.[0-9]+\] — 2026-10-1[0-9]$' "AC18: CHANGELOG 머리가 5.9 이다"
+assert_grep "$(cat "$PJ")" '"version": "6\.1\.[0-9]+"' "AC18: spec-distill minor 가 6.1 이다"
+assert_grep "$(head -5 "$CL")" '^## \[6\.1\.[0-9]+\] — 2026-10-1[0-9]$' "AC18: CHANGELOG 머리가 6.1 이다"
 has "$RM" '덜어 낸 것' "Law 3: README 가 덜어 낸 것 공시를 말한다"
 
 finish
