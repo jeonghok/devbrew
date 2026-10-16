@@ -1,5 +1,25 @@
 # Changelog
 
+## [5.8.0] — 2026-10-15
+
+### Added
+- 인터뷰 종료의 「분해 판단」 단계 — brief 를 쓰기 전에 신호 셋(따로 승인할 수 있는 덩어리 · 파일 영역 · 사용자 원문 갈래, 근거 번호 포함)과 권고 한 줄을 보이고 사용자가 「spec 하나로 / 나눈다」를 고른다. 숫자 컷오프는 없다. 나누면 에픽 표(칸 열하나)를 제안받아 고치거나 승인하고, 승인된 표는 state `## 분해안` 에 남는다.
+- `scripts/roadmap_write.py`(create · update · extract)와 `scripts/roadmap_render.py` · `templates/roadmap-template.md` — 승인된 표로 R0 형식의 로드맵 · 에픽 묶음을 쓰고 `roadmap_status.py --json` 의 네 목록(`format_errors` · `unassigned` · `orphans` · `unknown_ids`)이 모두 비었는지 바로 검증한다. 실패하면 만든 파일을 지우고 덮어쓴 파일을 원래 바이트(파일 모드 포함)로 되돌린다. create 는 `## 생성 기록` 에 적은 파일만 다시 덮어쓴다. update 는 새 에픽 번호가 문자마다 최댓값 다음부터 빈틈없이 이어져야 하고, 재분해 이력의 「…」 인용은 번호 판정에서 뺀다. 자기 것이 아닌 `<id>.md` 를 덮어쓰게 되면 쓰기 전에 거부한다.
+- `references/redecompose.md` — 하류의 재분해 신호(번호 대조 경고 · spec-review 게이트 ③ · 지휘 세션)를 같은 로드맵으로 받아 영향 표 · 승인 뒤에만 다시 나눈다. 새 번호만 쓰고 사라진 번호는 재사용하지 않으며 머지된 에픽은 건드리지 않는다.
+
+### Changed
+- `roadmap_write.py update` 는 묶음 행의 번호를 정렬 순서로, 그 밖의 행은 발화(S) 먼저로 맞춰 견준다 — 순서만 다른 표를 바뀜으로 세거나 머지된 에픽을 바꾼 것으로 거부하지 않는다. `create` · `update` 는 `--audit` 이 `--brief` 경로의 `.md` 를 `.audit.md` 로 바꾼 파일이 아니면 사용법 오류(2)다.
+- 인터뷰 종료 Step B 의 로드맵 다시 생성이 rc 1 로 새 번호(미배정 · 고아)를 알리면 Step A.5 · 게이트를 다시 돌리지 않고 표에 배정한 뒤 생성만 다시 돈다. 재분해 절차는 전용 브랜치(새로 fetch 한 `origin/main`)에서 돌고 `references/redecompose.md` 에 끝내기 절이 있다.
+- 분해된 일의 다음 세션 줄은 brief 하나 대신 `@<로드맵>` 지휘 줄이다(finishing.md 의 「다음 세션 줄 — 분해된 일 ①/② 공통」 아래 인라인 코드 문단). Step B 의 마지막 brief 쓰기 직후 언제나 로드맵 · 묶음을 한 번 더 생성하고, 함께 커밋하라는 안내 한 줄을 보인다. 나누지 않은 일은 그대로다.
+- `spec-review` 게이트 ③ — 설계문서 frontmatter 에 `roadmap:` 줄이 있으면 「인터뷰 다시 열기」 갈래가 재분해 절차로 간다. 다른 갈래와 로드맵 밖 문서는 그대로다.
+- `references/proceed-gate.md` 재결정 규약에 「분해 단위의 변경은 `${CLAUDE_PLUGIN_ROOT}/references/redecompose.md` 로」 한 줄. brief 템플릿 §7 에 분해 줄.
+
+### Fixed
+- `roadmap_render.py` · `roadmap_write.py` 가 번호 문법 · 로드맵 해석(`BLOCK_ID_RE` · `KEY_RE` · `OQ_LINE_RE` · `DATE_RE` 등)을 5.6.0 의 공유 모듈 `roadmap_model.py` 에서 가져온다 — `roadmap_status.py` 가 더는 그 정규식을 내보내지 않아 두 스크립트가 import 에서 죽었다.
+- 분해된 일의 설계가 5.6.0 의 넘김을 탄다 — 로드맵 템플릿 지휘 절차 · 분해된 일의 다음 세션 줄 · `references/redecompose.md` 끝내기가 에픽 설계를 `references/epic-handoff.md` 의 에픽 넘김 줄로 열고 spec-review 를 `--bundle <묶음>` 으로 부르게 한다. 에픽 넘김 줄은 설계문서 frontmatter 에 `source_interview` 와 함께 `roadmap:` 을 적게 해 spec-review 게이트 ③ 이 로드맵 에픽을 알아본다. 재분해로 옮겨 가는 범위는 설계문서 `## 미룸` 표(항목 · 이유 · 받는 곳)에 받는 에픽 번호로 남긴다.
+- 로드맵 템플릿 지휘 절차 1 은 5.7.0 의 `control_plane.py show --tasks` 로 작업 목록을 맞추고(로드맵이 아직 origin/main 에 없으면 `roadmap_status.py --roadmap-file`), 절차 3 은 「번호 대조 rc 0 전에는 spec-review 로 가지 않는다」 대신 spec-review `--bundle` 진입이 실제로 하는 일(정답 출처가 다르면 리뷰하지 않음 · 번호 대조 결과는 막지 않고 승인 게이트의 경고 수에 더함)을 적는다.
+- 생성기의 사후 검사는 5.7.0 이 `roadmap_status.py` 에 더한 블록 경고(얕은 답 · 받드는 에픽 없는 발화 · 번호 대조 셀 수 없음)와 그 때문의 종료 코드 1 로 되돌리지 않는다 — 네 목록만 본다는 것을 테스트로 묶었다.
+
 ## [5.7.0] — 2026-10-15
 
 ### Added
