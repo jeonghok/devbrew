@@ -276,7 +276,7 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
 - AC16c 붙여넣은 seed 로 시작하면 R1 「지금 이해」에 `출처를 가르지 못한 seed 문장 <N>개` 줄이 있다(N15). 「지금 이해」 규약에 `줄인 사실 <N>개` 와 「전부 보기」가 있다(N16).
 - AC16d seed audit 템플릿 확인 질문 줄에 `사용자가 적은 말` 칸이 있고 seed 리뷰 기준에 실린다(N19). «(사용자 확인)» 이 붙은 풀이를 «다시 검증할 것 —» 문단으로 옮겨도 `seed_provenance.py` 의 `classify` 가 그 문장을 사용자 확인으로 내고, 표시가 없는 문장은 그 문단에서 저자 · 미확인이다(양성 짝)(N20). brief 템플릿 §1 줄마다 출처 표시가 있고 `check_brief.py gate` 가 없으면 실패하며, B-0 에 §1 이 출처와 함께 보인다(N21). `[해결 ⟨S<n>⟩]` 로 닫은 결정이 해결 내용과 함께 brief §3 에 남고 — §0 에서 해결로 닫은 결정이 §3 에 없거나 `[해결 ⟨S<n>⟩]` 의 `S<n>` 이 payload §6 에 없으면 `check_brief.py gate` 가 실패한다(양성 짝: §3 에 남은 해결 결정은 통과)(N22).
 - AC17 통과가 정답인 새 단언(AC2 · AC5 · AC6 · AC11 · AC12 · AC13 · AC16a · AC16b)은 변이로 이빨을 확인하고 양성 대조를 둔다.
-- AC18 spec-distill minor bump.
+- AC18 spec-distill major bump(7.0.0 — 사용자 재확인).
 
 ## Files to Modify
 
@@ -393,7 +393,7 @@ spec-distill 안의 장치는 셋에 모여 있다. ① request-framing 이 확�
 ## Metadata
 
 - 에픽: R2 · 브랜치 `feature/distill-distortion-devices` · 의존 R0(머지됨 `6e55f593`) · P1(머지됨 `07d8489a`)
-- 플러그인: spec-distill minor bump(번호는 머지 직전)
+- 플러그인: spec-distill major bump(7.0.0 — 사용자 재확인)
 - 겹침(정보): `design-doc.md`(R3) · `finishing.md`(R3 · R7) · `spec-interview/SKILL.md`(R1 · R7) · `spec-review/SKILL.md`(R3)
 
 ### Deferred to plan
