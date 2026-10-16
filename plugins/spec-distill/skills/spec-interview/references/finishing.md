@@ -488,7 +488,8 @@ case "$BRIEF" in
   cur="$(git -C "${top:-.}" branch --show-current 2>/dev/null)" || cur=""
   # 로드맵 폴더 — brief §7 의 첫 `분해됨 — <로드맵 경로>` 줄. 없으면 나누지 않은 일이다.
   r7="$(awk -v p='분해됨 — ' 'index($0,"## 7.")==1{f=1;next} f&&/^## /{exit} f{l=$0; sub(/^[ \t]*(- )?`?/,"",l); if(index(l,p)==1){l=substr(l,length(p)+1); sub(/`.*$/,"",l); sub(/[ \t]+$/,"",l); print l; exit}}' "$BRIEF" 2>/dev/null)" || r7=""
-  RDIR=""; r_err=""
+  RDIR=""
+  r_err=""
   if [ -n "$r7" ]; then
     case "$r7" in "$cwd_l"/*) r7="$(pwd -P)/${r7#"$cwd_l"/}" ;; esac
     case "$r7" in /*) RDIR="$(dirname -- "$r7")" ;; *) RDIR="${top}/$(dirname -- "$r7")" ;; esac
