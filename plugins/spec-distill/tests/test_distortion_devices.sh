@@ -62,6 +62,8 @@ for f in "$RF" "$SI"; do
 done
 has   "$SI" '「전체 과정으로」면 3.5 로 갑니다' "ledger3: spec-interview 의 「전체 과정으로」는 3.5(seed 아닌 입력 조언)를 거친다"
 hasnt "$SI" '「전체 과정으로」면 4 로 갑니다' "ledger3(부재): 3.5 를 건너뛰고 4 로 가는 문면이 없다"
+has   "$TE" '진입 skill 이 정한 다음 단계(request-framing `### 4.` · spec-interview `### 3.5`)로 간다' "ledger3: trivia-escape 의 「전체 과정으로」는 진입 skill 별 다음 단계를 댄다"
+hasnt "$TE" '(`### 4.`)로 간다' "ledger3(부재): trivia-escape 가 spec-interview 의 3.5 를 건너뛰는 단일 `### 4.` 를 말하지 않는다"
 
 # ── Task 4 — 리뷰 프로필 (AC5 · AC6 · AC7 · AC16b) ──
 BP="$SD/references/docreview-profiles/brief.md"; DP="$SD/references/docreview-profiles/design-doc.md"

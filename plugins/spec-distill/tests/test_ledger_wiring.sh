@@ -105,7 +105,9 @@ for body in re.findall(r"^```bash\n(.*?)^```$", text, re.S | re.M):
             j += 1; cmd = cmd + "\n" + lines[j]
         m = re.search(r'docreview_state\.py" advice(.*)$', line)
         cont_ok = not line.rstrip().endswith("\\") or (i + 1 < len(lines) and lines[i + 1].lstrip().startswith("||"))
-        if (m and ro.fullmatch(m.group(1)) and cont_ok
+        redir = re.search(r'\s2?>\s*(\S+)', m.group(1)) if m else None
+        to_ledger = bool(redir and 'STATE_DIR' in redir.group(1))   # 넘기는 자리가 원장 폴더면 쓰기다
+        if (m and not to_ledger and ro.fullmatch(m.group(1)) and cont_ok
                 and all(x.group(0).endswith('" advice') for x in w.finditer(cmd))):
             continue
         bad.append(line.strip()[:120])
@@ -127,7 +129,10 @@ for probe in 'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STAT
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --log-f "$AUDIT"' \
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" $ADV_FLAGS' \
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir $STATE_DIR' \
-             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$(echo "$STATE_DIR")"'; do
+             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$(echo "$STATE_DIR")"' \
+             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$STATE_DIR/advice-all.json"' \
+             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "${STATE_DIR}/advice-all.json"' \
+             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" 2> $STATE_DIR/err'; do
   printf '```bash\n%s\n```\n' "$probe" > "$ac8f"
   ac8_scan "$ac8f" 2>/dev/null && no "AC8 예외 양성 짝: 확인 없는 쓰기가 예외로 빠졌다: $probe" || ok "AC8 예외 양성 짝: 확인 없는 쓰기는 잡힌다 — $(printf '%s' "$probe" | head -n 1 | cut -c 40-100)"
 done
