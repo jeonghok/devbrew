@@ -146,6 +146,14 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
   for n in '`/new` 후 같은 다음 세션 줄' '턴 종료'; do assert_contains "$r2" "$n" "spec-review ② 행에 $n"; done
   assert_not_contains "$r2" '권장' "spec-review: 권장은 ① 하나"
   assert_not_contains "$rows" '바로' "spec-review 2단계 표에 「바로」 진행 행이 없다"
+  r3="$(printf '%s\n' "$rows" | grep -E '^\| ③ \|' || true)"
+  assert_contains "$r3" '`spec-interview` 재진입' "spec-review ③ 행: 인터뷰 재진입 갈래는 그대로 있다"
+  BR="$(printf '%s\n' "$GATE" | awk '/^\*\*③ 의 세 갈래와 로드맵 에픽\.\*\*/{f=1} f&&/^- \*\*①\/② 의 정지 요건\*\*/{exit} f')"
+  if [ -n "$BR" ]; then ok "spec-review: ③ 로드맵 분기 문단 창"; else no "spec-review: ③ 로드맵 분기 문단이 없다"; fi
+  for n in '「지적대로 고치기」' '「인터뷰 다시 열기」' '「직접 편집」' 'frontmatter 에 `roadmap:` 줄이 있으면' \
+           'references/redecompose.md' '지금 그대로다'; do
+    assert_contains "$BR" "$n" "spec-review ③ 로드맵 분기: $n"
+  done
   RSL="$(nsl "$SKILL")"
   if nonempty "spec-review 다음 세션 줄" "$RSL"; then
     assert_eq "$(split_line "$RSL" first)" "@<spec_path>" "spec-review 다음 세션 줄의 첫 토큰은 @<spec_path> (주 산출물)"

@@ -120,3 +120,5 @@ user_sourced_items:
 (superpowers 있으면: 이 brief를 context로 `superpowers:brainstorming` 호출 → `-design.md` 작성·커밋
  → 그 설계문서 경로로 `spec-distill:spec-review`(brainstorming 의 사용자 리뷰 게이트 대신) → 승인
  게이트에서 진행을 고른 뒤 `superpowers:writing-plans`. 없으면: 이 brief가 완결 산출물 — 직접 사용.)
+
+(분해된 일이면 첫 줄은 `분해됨 — <로드맵 경로>` 이다 — 다음 단계는 brainstorming 하나가 아니라 그 로드맵의 지휘 절차다.)

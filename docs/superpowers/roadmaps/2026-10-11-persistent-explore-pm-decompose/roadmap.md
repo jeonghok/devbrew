@@ -146,7 +146,7 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 
 R5 전까지 지휘 세션이 따르는 절차다. 장치가 아니라 절차다 — 지휘자 skill 은 R5 가 만든다. 지휘 세션은 `/new` 뒤 첫 줄에 `@docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md` 를 붙여 연다.
 
-1. `git fetch origin` → `python3 plugins/spec-distill/scripts/roadmap_status.py docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md` → 작업 목록을 결과에 맞춘다. 에픽 하나에 작업 하나, 제목은 「<번호> <이름> — <단계>」. 대기 · 준비는 시작 전, 설계 중 · 계획은 진행 중, 머지됨 · 끝남은 완료다. 알 수 없음은 작업 상태를 바꾸지 않고 제목 끝에 「알 수 없음(이유)」을 붙인다. 종료 코드가 3 이면 작업 목록을 바꾸지 않고 「검사 불가」 사유를 사용자에게 그대로 보인다 — 일부 단계가 계산돼 보여도 믿지 않는다.
+1. `git fetch origin` → `python3 plugins/spec-distill/scripts/control_plane.py show --tasks docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md` → 작업 목록을 결과에 맞춘다. 줄마다 `<제목><탭><작업 상태>` 이고 에픽 하나에 작업 하나다 — 제목은 그대로 쓰고, 상태가 `keep` 이면(알 수 없음) 작업 상태는 바꾸지 않고 제목만 바꾼다. 종료 코드가 3 이면 작업 목록을 바꾸지 않고 표준 오류의 「검사 불가」 사유를 사용자에게 그대로 보인다 — 일부 단계가 계산돼 보여도 믿지 않는다. 로드맵이 아직 origin/main 에 없으면(방금 분해해 머지 전) `python3 plugins/spec-distill/scripts/roadmap_status.py --roadmap-file <로드맵 경로>` 로 대신 계산하고, 대기 · 준비는 시작 전, 설계 중 · 계획은 진행 중, 머지됨 · 끝남은 완료로 맞춘다.
 2. 준비 단계 에픽을 고른다. 블록의 `브랜치:` 이름으로 `origin/main` 에서 브랜치와 worktree 를 먼저 만들고, 그 에픽의 설계문서 · 계획은 모두 그 브랜치에 커밋한다. 설계 단계(brainstorming → 설계문서 → spec-review 승인)는 이 세션에서 한 에픽씩 돈다 — spec 승인은 사용자가 에픽마다 한다. 상태를 git 에서 계산하므로 에픽마다 세션을 따로 열어 설계(brainstorming)도 병렬로 할 수 있다 — 한 세션 안에서는 한 에픽씩이다(실측 M1).
 3. 설계문서를 커밋한 뒤 spec-review 를 부르기 전에 `python3 plugins/spec-distill/scripts/check_bundle_coverage.py <묶음> <설계문서>` 를 돌려 결과를 사용자에게 보인다. 빠진 번호가 있으면 spec-review 전에 고친다. 종료 코드가 3 이면(표가 없거나 깨짐) 표를 고쳐 다시 돌리고, 0 이 나오기 전에는 spec-review 로 가지 않는다.
 4. superpowers 가 묻는 자리(plan 검토 · 실행 방식 · 머지 메뉴)는 그대로 사용자에게 간다.
@@ -173,6 +173,7 @@ R5 전까지 지휘 세션이 따르는 절차다. 장치가 아니라 절차다
 - 2026-10-15 · R7 착수 중 수정 · 사람 몫을 판단해 몰아 받고 나머지는 쭉 병렬로 가는 지휘를 R5 범위에 더했다 「사람이 있을때 사람이 진행해야 하는걸 몰아 하는거지」 · 「그게 되게끔 구현도 해야한단 말이야」 · 「근데 이 몰아서 물어보는거는 억지로 하는게 아니라 되는거까지 하는거야 판단하는 과정이 있어야겠지」 · 「그래 이런 느낌은 맞는데 설명과 배경 이해는 더 기켜줘야 겠어」 · 「너무 질문만 몰아치는 느낌이네」 · 「기존 brainstorming방식을 해치진 말아줘」 · 「R5 지휘자 범위에 더함 (권장)」 · superpowers 가 묻는 세 자리(계획 검토 · 실행 방식 · 머지 메뉴)는 미리 답해 둔다(S36 재결정) 「미리 답해 둠 (권장)」.
 - 2026-10-15 · R3 설계 중 수정 · 번호 인계를 설계문서에서 계획 · 구현까지 넓혔다 「구현을 다 안하는거도 문제이고」 · 「R3 를 넓힘 (권장)」.
 - 2026-10-15 · 병렬 구현 중 수정 · 머지 전 에픽 사이 통합 리뷰와 모든 에픽 머지 뒤 끝에서 끝 확인을 R5 범위에 더했다 「궁금한거 하나 지휘자가 각각 구현도 다 보고 조율 하는거 맞지?」 · 「더함 + 끝에 끝에서 끝 확인 (권장)」 · R4 경로 예약에 구현이 만든 새 파일 넷을 적었다(R0 계획: 예약 없던 에픽은 설계가 정하면 작은 로드맵 PR 로 더함).
+- 2026-10-15 · R6 머지 뒤 수정 · 지휘 절차 1 의 작업 목록 맞추기를 컨트롤 플레인의 작업 목록 줄(`control_plane.py show --tasks`)로 바꿨다 — R6 설계 판정 「새 세션 작업 목록 재충전은 지휘 절차가 맡는다」 · origin/main 에 아직 없는 로드맵은 `roadmap_status.py --roadmap-file` 로 대신 계산한다(통합 리뷰).
 
 ## 위험 번호표
 
