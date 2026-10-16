@@ -180,6 +180,23 @@ grep -qF 'docs(interview): <topic> interview seed + audit' <<<"$gate_block" && o
 grep -qE '(①|②)[^.]{0,80}handoff 직전[^.]{0,40}커밋' <<<"$gate_flat" && ok "AC12: ①/② 에서 handoff 직전 커밋" || no "AC12: 커밋 시점 규칙 부재"
 grep -qE '(③|④)[^.]{0,40}커밋하지 않' <<<"$gate_flat" && ok "AC12: ③/④ 는 커밋 없음" || no "AC12: ③/④ 비커밋 규칙 부재"
 grep -qE '워크트리 절대경로|절대경로' <<<"$gate_flat" && ok "AC12: 게이트 텍스트에 워크트리 경로" || no "AC12: 게이트 경로 안내 부재"
-grep -qF 'git commit -q -F' <<<"$gate_block" && ok "AC12: 커밋은 -F 파일 한 줄 명령" || no "AC12: 커밋 명령 모양 부재"
+grep -qF "git commit -q --only -m 'docs(interview): <topic> interview seed + audit' -- \"\$AUDIT\" \"\$SEED\"" <<<"$gate_block" && ok "AC12: 커밋은 메시지 리터럴을 단 한 줄 명령(경로 지정)" || no "AC12: 커밋 명령 모양 부재"
+# 경로 지정 커밋 — 이미 stage 된 다른 작업을 쓸어 담지 않는다. 펜스 두 줄을 실제 저장소에서 돈다.
+cm_block="$(awk '/^\*\*handoff 직전 커밋/{f=1} f&&/^```bash$/{c=1;next} c&&/^```$/{exit} c' "$SK")"
+grep -qxF 'git add -- "$AUDIT" "$SEED"' <<<"$cm_block" && ok "AC12: 커밋 펜스의 add 는 두 경로만" || no "AC12: 커밋 펜스 add 모양"
+cmr="$(mktemp -d)"; [ -n "$cmr" ] && [ -d "$cmr" ] || { echo "mktemp 실패"; exit 1; }
+cmr="$(cd "$cmr" && pwd -P)"; [ -n "$cmr" ] && [ "$cmr" != "/" ] || { echo "mktemp 경로 해석 실패"; exit 1; }
+git -C "$cmr" init -q; git -C "$cmr" config user.email t@t.t; git -C "$cmr" config user.name t
+git -C "$cmr" commit -q --allow-empty -m init
+mkdir -p "$cmr/docs/superpowers/interview"
+printf 'a\n' > "$cmr/docs/superpowers/interview/2026-10-15-t-interview.audit.md"
+printf 's\n' > "$cmr/docs/superpowers/interview/2026-10-15-t-interview.md"
+printf 'other\n' > "$cmr/other.txt"; git -C "$cmr" add -- other.txt
+( cd "$cmr" && AUDIT="docs/superpowers/interview/2026-10-15-t-interview.audit.md" SEED="docs/superpowers/interview/2026-10-15-t-interview.md" \
+    bash -c "${cm_block//<topic>/t}" ) >/dev/null 2>&1
+assert_eq "$(git -C "$cmr" show --name-only --format= HEAD | sort | tr '\n' ' ')" "docs/superpowers/interview/2026-10-15-t-interview.audit.md docs/superpowers/interview/2026-10-15-t-interview.md " "AC12: 커밋에는 seed · audit 둘만 든다"
+assert_eq "$(git -C "$cmr" diff --cached --name-only)" "other.txt" "AC12: 이미 stage 된 다른 파일은 stage 된 채로 남는다"
+rm -rf "$cmr"
+grep -qF 'SEED_DIR' <<<"$gate_block" && no "AC12: 커밋 펜스가 사라진 세션 폴더(SEED_DIR)를 쓴다" || ok "AC12: 커밋 펜스가 세션 폴더에 기대지 않는다"
 
 finish

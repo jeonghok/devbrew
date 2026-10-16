@@ -252,7 +252,9 @@ fi
 
 has 'polite[- ]?stop|narrate.*금지|silent 종료 금지' "AC22: AP2 polite-stop ban codified"
 
-has 'state_path\.py state-root|Bash.*state|state.*Bash' "PN1: state-write-via-Bash contract"
+# R7 §1-3: 상태 파일은 작업 트리 안이라 Write · Edit 로 고친다 — 작업 트리 밖 경로 때문이던 Bash 전용 쓰기 계약은 걷혔다.
+grep -qF '작업 트리 안이라 `Write` · `Edit` 로 고친다' "$FIN_DIR/state-file.md" \
+  && ok "R7 §1-3: 상태 파일은 Write · Edit 로 고친다" || no "R7 §1-3: 상태 파일 쓰기 계약 문면이 없다"
 
 grep -q 'drafting-spec' "${CI_ALL[@]}" && no "AC10: drafting-spec still referenced" || ok "AC10: no drafting-spec reference"
 

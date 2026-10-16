@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.2] — 2026-10-15
+
+### Fixed
+
+- 감사자 계약(`scripts/audit-workflow.js`)의 「읽기는 무제한」 예시가 spec-distill 6.0.0 에서 지워진 `plugins/spec-distill/hooks/*.py` 를 가리키던 것을 지금 있는 `plugins/project-init/hooks/*.py` 로 바꿨다.
+
 ## [1.1.1] — 2026-10-11
 
 ### Security

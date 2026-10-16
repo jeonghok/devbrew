@@ -435,7 +435,7 @@ case_advice_write_failure_loud() {   # 사용자 문서 쓰기 실패 — rc 1 �
 }
 case_advice_module_missing() {   # 원장 스크립트만 복사한 트리 — 다른 서브커맨드는 돌고 advice 만 사유를 내고 멈춘다
   local t rc; t="$(mktemp -d -t advlone-XXXXXX)"; cp -L "$SCRIPTS/docreview_state.py" "$t/"
-  python3 "$t/docreview_state.py" state-dir-for --root "$t/root" --session s1 --doc "$FX/design-sample.md" >/dev/null 2>&1; rc=$?
+  python3 "$t/docreview_state.py" state-dir-for --root "$t/root" --doc "$FX/design-sample.md" >/dev/null 2>&1; rc=$?
   assert_eq "$rc" "0" "형제 부재: docreview_advice 가 없어도 원장 스크립트의 다른 서브커맨드는 돈다"
   python3 "$t/docreview_state.py" advice --state-dir "$t" >/dev/null 2>"$t/err"; rc=$?
   assert_eq "$rc $(grep -c advice_module_missing "$t/err")" "1 1" "형제 부재: advice 는 advice_module_missing rc 1 로 멈춘다(traceback 아님)"

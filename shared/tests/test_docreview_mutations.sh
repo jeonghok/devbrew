@@ -775,9 +775,13 @@ mut 1/1 init_profile_compare_off case_init_other_profile_refused sed_state \
 #    케이스는 이름이 같은 두 문서로 잰다.
 mut 1/1 state_dir_for_doc_dropped case_state_dir_for_per_doc sed_state \
   's/digest = hashlib\.sha256(os\.fsencode(ident))\.hexdigest()\[:16\]/digest = hashlib.sha256(os.fsencode(str(root))).hexdigest()[:16]/'
-# (58) 세션 검사를 구분자·점만 막던 넓은 형태로 되돌린다 — 개행이 든 세션이 두 줄 경로를 낸다.
-mut 1/1 session_charset_widened case_state_dir_for_per_doc sed_state \
-  's|if not a\.session or not _SESSION_OK\.fullmatch(a\.session):|if not a.session or a.session in (".", "..") or "/" in a.session:|'
+# (58) 원장 루트가 점 없는 `docreview` 로 돌아간다 — 옛 정리 코드의 세션 이름 정규식에 맞아 원장
+#    전체가 옛 세션 폴더로 지워질 수 있는 이름이다.
+mut 1/1 state_subdir_undotted case_state_dir_for_per_doc sed_state \
+  's/^STATE_SUBDIR = "\.docreview"$/STATE_SUBDIR = "docreview"/'
+# (58b) 세션 칸이 되살아난다 — 같은 문서가 세션마다 다른 원장으로 갈린다.
+mut 1/1 state_dir_session_component_restored case_state_dir_for_per_doc sed_state \
+  's|return Path(root) / STATE_SUBDIR / |return Path(root) / "sess0001" / STATE_SUBDIR / |'
 # (59) `state-dir-for` 가 상대 문서를 받는다 — 같은 문서의 키가 cwd 마다 갈린다.
 mut 1/1 state_dir_for_relative_doc_accepted case_state_dir_for_per_doc sed_state \
   's/    if not os\.path\.isabs(a\.doc):/    if False:/'

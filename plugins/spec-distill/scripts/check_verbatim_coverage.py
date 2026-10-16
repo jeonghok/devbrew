@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """spec-distill — payload/audit §6 원문 완전성 검사 (Spec B AC10/AC11/AC12/AC14).
 
-payload §6 과 audit §6 을 state.local.md(`user_statements` 원장)와 대조한다.
+payload §6 과 audit §6 을 <상태 파일>(`user_statements` 원장)와 대조한다.
 payload §6 이 원문 전량이고 audit §6 은 S2 이상의 같은 글자 사본이다(R2). 그래서 이
 스크립트는 **세 파일**을 읽는다 — 우회에 세 곳 모두의 조작이 필요하므로 이빨이
 있다(spec §6.3). 게이트를 분리해 둔 덕에 `check_brief.py`의 "brief 파일만 읽는다"
@@ -301,8 +301,8 @@ def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, di
     try:
         # payload(+audit)를 **먼저** 판다. 순서를 뒤집으면 state의 ParseError가
         # payload의 StructuralViolation을 선점해, state에서 키 하나만 빼는 것으로 구조
-        # 위반(차단)이 검사 불가(계속)로 되돌아간다 — state는 저자가 쓰는 git-ignored
-        # 파일이다.
+        # 위반(차단)이 검사 불가(계속)로 되돌아간다 — state는 저자가 쓰는 파일이다(작업
+        # 트리의 `<줄기>-interview.state.md` — 인터뷰가 끝날 때 brief · audit 와 함께 커밋된다).
         items = parse_section6_union(payload_text, audit_text)
         pay_ids = set(parse_section6(payload_text, "payload"))
         statements = parse_user_statements(_frontmatter(state_text))
@@ -393,7 +393,7 @@ def main(argv: list[str]) -> int:
         except (AttributeError, ValueError):
             pass
     if len(argv) != 4:
-        print("usage: check_verbatim_coverage.py <payload> <state.local.md> <audit>",
+        print("usage: check_verbatim_coverage.py <payload> <상태 파일> <audit>",
               file=sys.stderr)
         return EXIT_USAGE
     try:

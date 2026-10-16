@@ -14,7 +14,7 @@
 - floor `open_questions` closed — 미해결 명시(박제, "유추 금지").
 
 각 차원의 status 전이(open→in-progress→closed)와 evidence 기록은 **orchestrator만** 수행하며
-(coverage-mapper·blind-spot-prober는 read-only 제안자, Law 2), state.local.md에 쓰는 동시에
+(coverage-mapper·blind-spot-prober는 read-only 제안자, Law 2), 상태 파일에 쓰는 동시에
 audit §1 `## Coverage Ledger`에 직렬화합니다.
 
 **사용자-승인 박제로 닫힌 floor** — `evidence` 가 `사용자-승인 박제` 로 시작하는 차원은
@@ -59,16 +59,17 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 
    표 아래에 `미배정 번호 <n> · 고아 발화 <m>` 한 줄을 보이고, 0 이 아니면 그 번호를 나열한다. brief 를 쓰기 전이라 이 계산은 모델이 한다 — 인터뷰 state 의 번호 목록(위 일곱 종류)에서 표의 배정 번호 합집합을 뺀다. 확정 판정은 Step A 8 의 생성기 검증(`roadmap_status.py` 규칙)이 한다.
 4. **고치기 · 승인.** `AskUserQuestion` 하나 — 옵션 셋: 「승인」(표를 확정하고 Step A 로) · 「고치기」(말로 받아 표를 고쳐 다시 보인다) · 「spec 하나로」(나누지 않고 Step A 로). 고친 횟수는 state `decompose_edits` 에 센다. 세 번 고칠 때마다 「계속 고칠까요」를 묻고(옵션: 「계속 고친다」 · 「지금 표로 승인」 · 「spec 하나로」) 자동으로 끝내지 않는다.
-5. **기록.** 승인된 표를 state 파일(`$ROOT/<session-id>/state.local.md`) 본문의 `## 분해안` 절에 위 머리 그대로 적고, 표 아래에 `승인: 「<사용자가 고른 옵션 또는 말>」` 한 줄을 둔다. 로드맵 폴더는 `docs/superpowers/roadmaps/<YYYY-MM-DD>-<kebab-topic>/` 다(brief 와 같은 날짜 · 주제). Step A 는 brief §7 첫 줄에 `분해됨 — <로드맵 경로>` 를 쓴다.
+5. **기록.** 승인된 표를 인터뷰 상태 파일(`<줄기>.state.md` — `state-file.md`) 본문의 `## 분해안` 절에 위 머리 그대로 적고, 표 아래에 `승인: 「<사용자가 고른 옵션 또는 말>」` 한 줄을 둔다. 로드맵 폴더는 `docs/superpowers/roadmaps/<YYYY-MM-DD>-<kebab-topic>/` 다(brief 와 같은 날짜 · 주제). Step A 는 brief §7 첫 줄에 `분해됨 — <로드맵 경로>` 를 쓴다 — 로드맵 경로는 그 폴더의 `roadmap.md` 를 레포 루트 기준 상대경로로 쓴다(끝내기 커밋 펜스가 이 줄에서 로드맵 폴더를 도출한다).
 
 ### Step A — brief 작성 (terminal 산출물, 2파일)
 
 1. `${CLAUDE_PLUGIN_ROOT}/templates/interview-brief-template.md`로 payload **8-section**
    구조(§0 한눈에 – §7 Next Action)를, `${CLAUDE_PLUGIN_ROOT}/templates/interview-audit-template.md`로
    audit **5-section** 구조를 확보합니다.
-2. 경로 (둘 다 워크트리 안 → `Write` tool 사용):
-   - payload: `docs/superpowers/interview/<YYYY-MM-DD>-<kebab-topic>-interview.md`
-   - audit:   `docs/superpowers/interview/<YYYY-MM-DD>-<kebab-topic>-interview.audit.md`
+2. 경로 (둘 다 워크트리 안 → `Write` tool 사용): payload · audit 경로는 상태 파일 이름에서 `.state.md` 를 뗀
+   `<줄기>` 에 `.md` · `.audit.md` 를 붙인 것이다(`state-file.md`). 날짜 · 주제로 다시 계산하지 않는다.
+   - payload: `<줄기>.md` (`docs/superpowers/interview/<YYYY-MM-DD>-<kebab-topic>-interview.md`)
+   - audit:   `<줄기>.audit.md`
    - payload frontmatter: `type: interview-brief`, `next_phase: superpowers:brainstorming`,
      `session_id`(기존 spec-distill 세션 재사용), `audit_file`(audit의 **basename만** —
      경로 구분자가 들어가면 게이트가 거부합니다), `user_sourced_items[]`.
@@ -80,6 +81,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    **audit §6** 에도 같은 글자로 **전문 보존**(append-only)하며 각각 `S<N>` 앵커를 답니다.
    **최초 요청 원문은 `S1`이다.** 「풀린 입력」(진입 단계 2 의 결과 — rough request 그대로이거나
    `@경로` 의 파일 전문)을 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다.
+   상태 파일로 이어 간 인터뷰면 「풀린 입력」은 그 파일의 `## 풀린 입력` 블록이다(`state-file.md`).
    Phase 0 을 거친 세션에서는 `## 진입 단계` 2 가 `@경로` 를 풀었든 사용자가 전문을 붙여넣었든
    그 「풀린 입력」이 `interview-seed` 파일 전문이고, 그때도 같은 규칙이 그대로 적용됩니다:
    ```yaml
@@ -188,9 +190,9 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 8. **로드맵 · 묶음 생성 — 분해된 일만.** 분해 판단에서 표를 승인했으면 게이트를 통과한 직후 생성기를 돌린다:
    ```bash
    SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-   ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
-   python3 "$SD/scripts/roadmap_write.py" create --brief "docs/superpowers/interview/<file>" \
-     --audit "docs/superpowers/interview/<audit file>" --plan-table "$ROOT/<session-id>/state.local.md" \
+   BRIEF_REL="docs/superpowers/interview/<file>"
+   python3 "$SD/scripts/roadmap_write.py" create --brief "$BRIEF_REL" \
+     --audit "${BRIEF_REL%.md}.audit.md" --plan-table "${BRIEF_REL%.md}.state.md" \
      --out "docs/superpowers/roadmaps/<YYYY-MM-DD>-<kebab-topic>/" --title "<주제 한 줄>" \
      --date "<YYYY-MM-DD>" --approval "<승인 원문>"
    ```
@@ -295,30 +297,44 @@ AskUserQuestion({ questions: [{
 }]})
 ```
 
-카운터는 프로즈 self-tracking이 아니라 state에 씁니다(PN1 Bash write contract):
+카운터는 프로즈 self-tracking이 아니라 상태 파일에 씁니다:
 
 ```bash
-SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
-STATE="$ROOT/<session-id>/state.local.md"
-# confirm_repost_count read-modify-write(③ 마다 +1, 「계속 고친다(2번 더)」는 0 으로 되돌림) via python3 -I -X utf8 -c / python3 -I -X utf8 - heredoc (-I 없이 부르면 사용자 리포의 json.py 등이 표준 모듈 대신 실행된다)
+# confirm_repost_count 는 상태 파일(<줄기>-interview.state.md)의 frontmatter 에 Edit 로 쓴다(③ 마다 +1, 「계속 고친다(2번 더)」는 0 으로 되돌림)
 ```
 
 #### B-A — 참고(advisory) 목록 — 한 번 보이고 §3 · §5 에 박제
 
 B-1 분기와 무관하게 B-1 보다 먼저 돕니다. 엔진 `advice` 원장의 참고 항목(`must_catch` 밖 축 — 오늘은 overdesign)은
 라운드 게이트에 오지 않았습니다 — 여기서 한 번 보이고 brief 에 박제합니다. `PAYLOAD` 는 Step A.5 의 그 절대경로입니다.
+이 펜스가 brief 리뷰 원장의 마지막 쓰기입니다 — 표지를 잡아(이미 잡았으면 그대로) 쓰고 끝에서 풉니다.
 
+<!-- advice-ba:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 PAYLOAD="<Step A.5 의 PAYLOAD 절대경로>"
 AUDIT="${PAYLOAD%.md}.audit.md"
+STATE="${PAYLOAD%.md}.state.md"
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
-STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "$PAYLOAD" || true)"
-if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
-  echo "[spec-distill] 참고(advisory) 목록 없음 — brief 리뷰 원장이 없다(STATE_DIR='${STATE_DIR:-}'): 리뷰가 skip 됐거나 세션 정리로 걷혔다. 게이트 앞 글에 싣는다."
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "$PAYLOAD" || true)"
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+wt_top="$(python3 "$SD/scripts/state_path.py" payload-root "$PAYLOAD")" || wt_top=""
+paths_ok=0; [ -n "$wt_top" ] && python3 "$SD/scripts/state_path.py" path-inside --root "$wt_top" "$PAYLOAD" "$AUDIT" "$STATE" && paths_ok=1
+lm_rc=0
+if [ "$paths_ok" -eq 1 ] && [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ] && [ -n "${harness_sid:-}" ]; then
+  python3 "$SD/scripts/ledger_marker.py" acquire --dir "$STATE_DIR" --session "$harness_sid" >/dev/null || lm_rc=$?
+fi
+if [ "$paths_ok" -ne 1 ]; then
+  echo "[spec-distill] 참고(advisory) 목록 건너뜀 — brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}'). audit 에 쓰지 않는다. 게이트 앞 글에 싣는다."
+elif [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
+  echo "[spec-distill] 참고(advisory) 목록 없음 — brief 리뷰 원장이 없다(STATE_DIR='${STATE_DIR:-}'): 리뷰가 skip 됐거나 원장이 정리됐다. 게이트 앞 글에 싣는다."
+elif [ "$lm_rc" -eq 3 ]; then
+  echo "[spec-distill] 참고(advisory) 목록 건너뜀 — 이 원장의 표지가 다른 세션 것이다(rc ${lm_rc}). 박제 · 계수 · 표시를 하지 않는다. 게이트 앞 글에 싣는다."
+elif [ "$lm_rc" -ne 0 ]; then
+  echo "[spec-distill] 참고(advisory) 목록 건너뜀 — 표지를 확인하지 못했다(rc ${lm_rc}) — 원장 쓰기를 하지 않는다. 박제 · 계수 · 표시를 하지 않는다. 게이트 앞 글에 싣는다."
 else
+  g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
   adv_rc=0
   adv_err="$STATE_DIR/advice-err.json"
   python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$STATE_DIR/advice-list.json" 2>"$adv_err" || adv_rc=$?
@@ -332,7 +348,9 @@ else
     grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' "$adv_err" || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8 --where "brief §3 · §5" || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 게이트 앞 글에 싣는다."
   fi
 fi
+[ -z "${STATE_DIR:-}" ] || [ ! -d "$STATE_DIR" ] || [ -z "${harness_sid:-}" ] || python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$harness_sid"
 ```
+<!-- advice-ba:end -->
 
 펜스 출력(머리 한 줄 + 최대 8줄 + `외 K건`)과 `[spec-distill]` 줄을 그대로 보입니다. 이어 `advice-list:` 줄이 가리킨
 파일을 Read 하고, 그 `items` 중 `shown` 이 거짓이던 항목을 payload 에 박제합니다 — 표시가 돌았으면 방금 보인
@@ -373,7 +391,9 @@ python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
 
 - **superpowers 부재 시**: 현행 graceful degradation 그대로 — brief를 완료하고 **loud advisory**를 낸 뒤 **정지(STOP)**. 게이트 없음(다음 세션에 넘길 대상 자체가 없음). crash·spec-mode fallback **금지**(단독 완결, graceful degrade):
 
-  > `[spec-distill] interview brief 를 만들었다: docs/superpowers/interview/<file>. superpowers 가 없어 여기서 멈춘다. 이 brief 를 다음 작업의 입력으로 쓰세요.`
+  > `[spec-distill] interview brief 를 만들었다: docs/superpowers/interview/<file>. superpowers 가 없어 여기서 멈춘다. 이 brief 를 다음 작업의 입력으로 쓰세요. brief · audit · 상태 파일은 커밋하지 않았다 — 브랜치에서 직접 커밋하라.`
+
+  분해된 일이면 끝 문장은 `brief · audit · 상태 파일 · 로드맵 폴더(<Step A 8 의 --out 값>)는 커밋하지 않았다 — 브랜치에서 함께 직접 커밋하라.` 다(B-R 다시 생성 뒤에 낸다).
 
 - **superpowers 가용 시**: B-2 proceed 게이트 제시.
 
@@ -381,7 +401,7 @@ python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
 
 게이트 *이전*에 brief 경로 존재를 확인합니다(`[[ -f <brief-path> ]]` — race 방어 경량 가드,
 `AskUserQuestion` 게이트 자체는 아님). 부재 시 정본(`proceed-gate.md`)의 `## Step A` 대로
-두 줄 명령을 노출하지 *않고* loud advisory 후 STOP(brief 는 막 검증됐고 하류·SessionEnd 가 cleanup 을 맡는다 — 설계 §5.3):
+두 줄 명령을 노출하지 *않고* loud advisory 후 STOP(brief 는 막 검증됐다 — 설계 §5.3):
 
 > `[spec-distill] brief '<brief-path>' 부재 — 재작성/세션 리셋 필요`
 
@@ -463,7 +483,7 @@ AskUserQuestion({
 로드맵 에픽의 설계를 여는 줄은 이 줄이 아니라 `${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md` 의 에픽 넘김 줄이다 — 지휘 세션이 쓴다.
 
 - **① 확정하고 /compact 후 brainstorming**: 확정 후보를 `status: confirmed`로 반영 → brief 재저장 →
-  `check_brief.py gate` 재실행(통과 확인) → 두 줄을 *그대로 보이게* 노출한다. 첫 줄은 맨 `/compact`
+  `check_brief.py gate` 재실행(통과 확인) → 분해된 일이면 B-R 다시 생성 → 아래 커밋 펜스(`interview-commit` — 세 파일, 분해된 일이면 로드맵 폴더까지) → 두 줄을 *그대로 보이게* 노출한다. 첫 줄은 맨 `/compact`
   (뒤에 아무것도 붙이지 않는다 — 붙인 텍스트는 요약 지시로만 쓰인다), 둘째 줄은 위 다음 세션 줄이다.
   두 줄을 따로 입력하라는 안내와 git 작업 트리 루트의 절대경로를 함께 낸다(정본
   `## 다음 세션 명령` 규칙 1 · 7).
@@ -480,8 +500,86 @@ AskUserQuestion({
   목록을 재제시(2회에 닿으면 B-0 의 재제시 상한 질문). 이미 확정된 목록에서 ③ 을 골랐다면 확정된 목록을
   고치는 것이다 — `status` 는 이 편집으로 바뀌지 않고 게이트(①/②)를 통해서만 바뀐다.
 
-- **④ brief만 종료**: 전 항목 `provisional` 유지. brief terminal advisory(B-1 부재 advisory와
-  같은 톤) 출력 후 종료. handoff 안 함. state는 SessionEnd hook이 cleanup.
+- **④ brief만 종료**: 전 항목 `provisional` 유지. 분해된 일이면 B-R 다시 생성 뒤, 아래 커밋 펜스(`interview-commit`)를 돌린 뒤 brief terminal
+  advisory(B-1 부재 advisory와 같은 톤)를 내고 종료. handoff 안 함.
+
+**끝내기 커밋 — ①/② 는 게이트 재실행 통과 · B-R 다시 생성 뒤 두 줄 노출 전, ④ 는 종료 안내 직전, 한 번.** ③ 은 커밋하지 않는다.
+게이트 재실행이 통과하지 않으면 커밋하지 않는다. 펜스의 `BRIEF` 자리표를 Step A.5 의 PAYLOAD 절대경로로 바꿔 돌리고,
+나온 `[spec-distill]` 줄을 그대로 보인다. 로드맵 폴더는 펜스가 brief §7 의 첫 `분해됨 — <로드맵 경로>` 줄에서 도출한다 —
+그 줄이 없으면 나누지 않은 일이고(B-R 의 「spec 하나로」 갈래가 그 줄을 뺀다), 있으면 그 폴더가 있을 때만 세 파일과 한 커밋에 든다.
+경로가 `roadmap.md` 로 끝나지 않거나, 폴더의 부모가 `docs/superpowers/roadmaps` 가 아니거나, 폴더가 아닌 것이면 커밋하지 않는다. 진행은 막지 않는다.
+
+<!-- interview-commit:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
+case "$BRIEF" in
+  ""|*"<"*) echo "[spec-distill] 커밋 입력 부재 — BRIEF 가 비었거나 자리표 그대로다(Step A.5 의 PAYLOAD 절대경로로 바꿔 다시 돌려라)." ;;
+  *)
+  # cwd 접두만 물리 경로로 바꾼다 — 그 아래 성분(링크 포함)은 path-inside 가 잰다.
+  cwd_l="$(pwd -L)"
+  case "$BRIEF" in "$cwd_l"/*) BRIEF="$(pwd -P)/${BRIEF#"$cwd_l"/}" ;; esac
+  stem="${BRIEF%.md}"
+  AUDIT_F="${stem}.audit.md"
+  STATE_F="${stem}.state.md"
+  top="$(git -C "$(dirname -- "$BRIEF")" rev-parse --show-toplevel 2>/dev/null)" || top=""
+  def="$(git -C "${top:-.}" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)" || def=""
+  def="${def#origin/}"
+  cur="$(git -C "${top:-.}" branch --show-current 2>/dev/null)" || cur=""
+  # 로드맵 폴더 — brief §7 의 첫 `분해됨 — <로드맵 경로>` 줄. 없으면 나누지 않은 일이다.
+  r7="$(awk -v p='분해됨 — ' 'index($0,"## 7.")==1{f=1;next} f&&/^## /{exit} f{l=$0; sub(/^[ \t]*(- )?`?/,"",l); if(index(l,p)==1){l=substr(l,length(p)+1); sub(/`.*$/,"",l); sub(/[ \t]+$/,"",l); print l; exit}}' "$BRIEF" 2>/dev/null)" || r7=""
+  RDIR=""
+  r_err=""
+  if [ -n "$r7" ]; then
+    case "$r7" in "$cwd_l"/*) r7="$(pwd -P)/${r7#"$cwd_l"/}" ;; esac
+    case "$r7" in /*) RDIR="$(dirname -- "$r7")" ;; *) RDIR="${top}/$(dirname -- "$r7")" ;; esac
+    case "$r7" in */roadmap.md) ;; *) r_err="brief §7 의 로드맵 경로가 roadmap.md 로 끝나지 않는다(${r7})" ;; esac
+    case "$(basename -- "$RDIR")" in .|..) r_err="${r_err:-brief §7 의 로드맵 폴더 이름이 . 이나 .. 다(${RDIR})}" ;; esac
+    [ -n "$r_err" ] || [ "$(dirname -- "$RDIR")" = "${top}/docs/superpowers/roadmaps" ] \
+      || r_err="brief §7 의 로드맵 폴더가 docs/superpowers/roadmaps 바로 아래가 아니다(${RDIR})"
+    if [ -z "$r_err" ]; then
+      if [ -e "$RDIR" ] || [ -L "$RDIR" ]; then
+        [ -d "$RDIR" ] || r_err="brief §7 의 로드맵 폴더 자리가 폴더가 아니다(${RDIR})"
+      else
+        echo "[spec-distill] brief §7 의 로드맵 폴더가 없어 빼고 진행한다: ${RDIR}"
+        RDIR=""
+      fi
+    fi
+  fi
+  FILES="$BRIEF · $AUDIT_F · $STATE_F${RDIR:+ · $RDIR}"
+  if [ -z "$top" ]; then
+    echo "[spec-distill] 커밋하지 않았다 — git 저장소가 아니다. 파일은 docs 에 있다: ${FILES}"
+  elif [ -n "$r_err" ]; then
+    echo "[spec-distill] 커밋하지 않았다 — ${r_err}. brief §7 을 고친 뒤 다시 돌리거나 직접 커밋하라: ${FILES}"
+  elif ! python3 "$SD/scripts/state_path.py" path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"}; then
+    echo "[spec-distill] 커밋하지 않았다 — 세 파일(분해된 일이면 로드맵 폴더까지) 중 작업 트리 밖이거나 링크를 거치는 경로가 있다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"
+  elif [ -z "$def" ]; then
+    echo "[spec-distill] 커밋하지 않았다 — 기본 브랜치를 판정하지 못했다(origin/HEAD 없음). 직접 커밋하라: ${FILES}"
+  elif [ -z "$cur" ]; then
+    echo "[spec-distill] 커밋하지 않았다 — 지금 브랜치 위가 아니다(detached HEAD). 브랜치에서 커밋하라: ${FILES}"
+  elif [ "$cur" = "$def" ]; then
+    echo "[spec-distill] 커밋하지 않았다 — 지금 기본 브랜치(${def})에 있다. 브랜치에서 커밋하라: ${FILES}"
+  else
+    c_rc=0
+    git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} || c_rc=$?
+    # 빈 폴더는 add 를 통과해도 커밋의 경로 지정에 맞는 파일이 없어 커밋 전체를 실패시킨다 — 인덱스에 든 것이 없으면 뺀다.
+    if [ "$c_rc" -eq 0 ] && [ -n "$RDIR" ] && [ -z "$(git -C "$top" ls-files -- "$RDIR")" ]; then
+      echo "[spec-distill] 로드맵 폴더에 커밋할 파일이 없어 빼고 진행한다: ${RDIR}"
+      RDIR=""
+    fi
+    [ "$c_rc" -ne 0 ] || git -C "$top" commit -q --only -m "docs(interview): $(basename -- "$stem") brief · audit · 상태 기록" -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} || c_rc=$?
+    if [ "$c_rc" -ne 0 ]; then
+      echo "[spec-distill] 커밋이 실패했다(rc ${c_rc}) — 파일은 docs 에 있다: ${FILES}"
+    elif [ -n "$RDIR" ]; then
+      echo "[spec-distill] brief · audit · 상태 파일 · 로드맵 폴더를 커밋했다 — $(git -C "$top" rev-parse --short HEAD) (${cur})"
+    else
+      echo "[spec-distill] brief · audit · 상태 파일을 커밋했다 — $(git -C "$top" rev-parse --short HEAD) (${cur})"
+    fi
+  fi
+  ;;
+esac
+```
+<!-- interview-commit:end -->
 
 - **재제시 상한 질문의 답** (B-0): 「지금 목록으로 확정」은 확정 반영 절차를 적용한 뒤 B-2 게이트를 다시 띄우며
   스스로 멈추거나 넘기지 않는다 — 다음 단계는 그 게이트에서 고른다. 「계속 고친다(2번 더)」는 state 에
@@ -489,18 +587,13 @@ AskUserQuestion({
 
 #### B-R — 로드맵 다시 생성 (분해된 일만)
 
-분해된 일이면 Step B 를 끝내는 모든 갈래(① · ② · ④ · 확정 목록 재제시 상한의 종료 · B-1 superpowers 부재 정지)에서, 그 갈래가 brief 를 마지막으로 쓴 직후 · 두 줄이나 정지 문구를 보이기 전에 Step A 8 의 명령을 그대로 언제나 한 번 더 돌린다. 항목이 바뀌었는지와 상관없다 — 확정 반영은 brief 줄을 늘 바꾸고, 리뷰 · B-A 박제도 항목을 더한다. 두 번째 실행은 첫 실행이 표 파일에 적은 `## 생성 기록` 에 있는 파일만 덮어쓰고 기록 밖의 파일은 건드리지 않는다. rc 1 이면 사유를 보이고 갈래를 사유로 가른다.
+분해된 일이면 Step B 를 끝내는 모든 갈래(① · ② · ④ · 재제시 상한 질문의 「brief 만 종료」(=④) · B-1 superpowers 부재 정지 — 「지금 목록으로 확정」은 B-2 로 돌아가 그 게이트의 갈래에서 한 번 돈다)에서, 그 갈래가 brief 를 마지막으로 쓴 직후 · 두 줄이나 정지 문구를 보이기 전에 Step A 8 의 명령을 그대로 언제나 한 번 더 돌린다. 항목이 바뀌었는지와 상관없다 — 확정 반영은 brief 줄을 늘 바꾸고, 리뷰 · B-A 박제도 항목을 더한다. 두 번째 실행은 첫 실행이 표 파일에 적은 `## 생성 기록` 에 있는 파일만 덮어쓰고 기록 밖의 파일은 건드리지 않는다. rc 1 이면 사유를 보이고 갈래를 사유로 가른다.
 
-- 사유가 `unassigned` 또는 `orphans` 면 — 보통 B-A 가 brief 에 `OQ<n>` 줄이나 `위험 — 리뷰 참고` 줄을 더해 새 번호가 생긴 것이다 — 새 번호를 보이고 분해 판단 3–5(표 고치기 · 승인)로 그 번호를 배정한다. 승인되면 Step A 8 의 명령**만** 다시 돌린 뒤, 같은 Step B 갈래를 이어 간다(커밋 줄, 그다음 두 줄이나 정지 문구). Step A.5 리뷰를 다시 돌리지 않고 Step B 게이트도 다시 띄우지 않는다 — 사용자는 이미 ①/② 를 골랐다. 그 되돌아온 길에서 사용자가 「spec 하나로」 를 고르면: 이미 성공한 생성이 있으니 상태 파일 `## 생성 기록` 에 적힌 파일(생성된 로드맵 폴더의 파일)을 지우고 brief §7 의 `분해됨 — <로드맵 경로>` 줄을 뺀 뒤, 나누지 않은 일의 다음 세션 줄로 이어 간다.
-- 표로 고칠 수 없는 사유(생성기가 만들지 않은 파일의 덮어쓰기 거부 · 못 읽는 파일 · 빈 ROOT 나 상태 파일 경로)면 사유를 그대로 보이고 멈춘다. 표로 돌아가 반복하지 않고, 멈춤에는 로드맵이 최신이 아니라는 advisory 를 붙인다.
+- 사유가 `unassigned` 또는 `orphans` 면 — 보통 B-A 가 brief 에 `OQ<n>` 줄이나 `위험 — 리뷰 참고` 줄을 더해 새 번호가 생긴 것이다 — 새 번호를 보이고 분해 판단 3–5(표 고치기 · 승인)로 그 번호를 배정한다. 승인되면 Step A 8 의 명령**만** 다시 돌린 뒤, 같은 Step B 갈래를 이어 간다(커밋 펜스, 그다음 두 줄이나 정지 문구). Step A.5 리뷰를 다시 돌리지 않고 Step B 게이트도 다시 띄우지 않는다 — 사용자는 이미 ①/② 를 골랐다. 그 되돌아온 길에서 사용자가 「spec 하나로」 를 고르면: 이미 성공한 생성이 있으니 상태 파일 `## 생성 기록` 에 적힌 파일(생성된 로드맵 폴더의 파일)을 지우고 brief §7 의 `분해됨 — <로드맵 경로>` 줄을 뺀 뒤, 나누지 않은 일의 다음 세션 줄로 이어 간다.
+- 표로 고칠 수 없는 사유(생성기가 만들지 않은 파일의 덮어쓰기 거부 · 못 읽는 파일 — 상태 파일 포함)면 사유를 그대로 보이고 멈춘다. 표로 돌아가 반복하지 않고, 멈춤에는 로드맵이 최신이 아니라는 advisory 와 `[spec-distill] 커밋하지 않았다 — 로드맵 다시 생성이 멈췄다. 고친 뒤 직접 커밋하라: <brief 경로> · <audit 경로> · <상태 파일 경로> · <로드맵 폴더>` 한 줄을 붙인다(커밋 펜스는 돌리지 않는다).
+- rc 2 는 사용법 오류다(작업 트리 밖 경로 · `--audit` 짝 불일치 · 날짜 꼴). 사유를 보이고, 인자가 Step A 8 의 명령과 글자 그대로인지 맞춘 뒤 한 번만 다시 돌린다. 또 rc 2 면 위의 고칠 수 없는 사유와 같이 멈춘다(advisory 와 「커밋하지 않았다」 줄).
 
-커밋 전에 도는 단계라 이 결과가 커밋 대상이다.
-
-**커밋 — 분해된 일만.** 이 파일에 경로 지정 커밋 단계가 아직 없으면 다시 생성 직후, 두 줄이나 정지 문구 **앞에** 이 한 줄을 보인다. 그런 단계가 있으면 그 경로 지정에 로드맵 폴더를 더한다:
-
-> `[spec-distill] brief · audit · 상태 파일 · 로드맵 폴더를 함께 커밋하라 — <brief 경로> · <audit 경로> · <상태 파일 경로> · <로드맵 폴더>. 지휘 세션은 이 파일들이 기본 브랜치에 머지된 뒤 연다.`
-
-상태 파일이 git 이 무시하는 자리(또는 작업 트리 밖)에 있으면 그것은 빼고 커밋한다 — 무시되는 경로를 `git add` 하면 rc 1, 작업 트리 밖 경로는 rc 128 로 끝나 나머지 커밋까지 막는다.
+커밋 전에 도는 단계라 이 결과가 커밋 대상이다 — 그 갈래의 커밋 펜스(`interview-commit`)가 brief §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해 세 파일과 한 커밋에 넣는다(B-1 은 커밋하지 않고 그 안내에 로드맵 폴더를 적는다). 분해된 일의 두 줄 앞에는 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
 
 **다음 세션 줄 — 분해된 일 ①/② 공통**
 

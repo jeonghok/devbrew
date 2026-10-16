@@ -1,6 +1,6 @@
 # Changelog
 
-## [5.9.0] — 2026-10-16
+## [6.1.0] — 2026-10-16
 
 ### Added
 - seed audit 의 `## seed 에서 덜어 낸 것` 표와 `check_seed.py` 의 표 검사. seed 게이트 앞에 `seed 에서 덜어 낸 것` · `확인받지 못한 풀이` 공시와 「되살리기」. 풀이 줄에 «사용자가 적은 말» 칸. seed 프로필 `omission`.
@@ -33,6 +33,52 @@
 - audit 틀의 제목은 정확히 한 번 · 틀 순서일 때만 인정하고 중복 · 순서 바뀜은 거절한다. `## 6` 줄은 허용 목록이며 모르는 줄은 `user-quotes` · `check-drops` · `log` · bundle 을 거절한다.
 - `seed_review_log.py log --quote` 를 없앴다(`--quote-file` 만 받는다). `append-verbatim` 은 `## 6` 에 쓰지 않는다.
 - payload §6 앵커는 state 원장의 발화여야 한다 — 원장 밖 앵커는 `check_verbatim_coverage.py` 가 `unknown_ids` 로 거절하고(최초 요청 `S1` 은 예외), N1b 는 들여 쓴 §6 앵커를 거절한다. 남의 항목 본문에 심은 `- **S<N>**` 줄이 결정 근거로 쓰이던 길이다.
+
+## [6.0.0] — 2026-10-15
+
+상태 자리가 바뀌고 설치되는 훅이 없어져 major 다. 진행 중인 옛 인터뷰는 진입 때 docs 로 옮겨지고, 다른 세션의 옛 기록은 지우지 않고 알린다.
+
+### Changed
+- 인터뷰 진행 기록이 `.claude/spec-distill/<session-id>/state.local.md` 에서 작업 트리의 `docs/superpowers/interview/<날짜>-<주제>-interview.state.md` 로 옮겼다(frontmatter 첫 키 `type: interview-state`, 다음 `seed:`). 새 세션에서 `/spec-distill:spec-interview @<상태 파일>` 로 이어 가고, 같은 seed 의 끝나지 않은 상태 파일이 있으면 「이어 감 (권장)」/「새로 시작」을 묻는다(새로 시작은 기존 파일을 지우지 않는다). 진입 판정은 `interview_state.py entry` 의 마지막 줄 판결(`RESUME` · `ASK` · `LEGACY` · `NEW-SEED` · `NEW` · `REJECT`)이다. seed 로 시작한 인터뷰는 `--topic <주제>-brief` 로 경로를 내 seed · seed audit 와 겹치지 않는다.
+- 인터뷰가 끝날 때 brief · audit · 상태 파일(분해된 일이면 로드맵 폴더도)만 한 번 커밋한다(`docs(interview): <줄기> brief · audit · 상태 기록`, Step B ①/② 는 게이트 재실행 통과 뒤 · ④ 는 종료 안내 직전, ③ 은 커밋하지 않는다). 기본 브랜치 · detached HEAD · git 저장소 밖에서는 커밋하지 않고 그 경로들을 보인다.
+- 5.x 에서 진행 중이던 인터뷰(`.claude/spec-distill/<session-id>/state.local.md`)는 같은 세션 id 로 인터뷰에 들어올 때만 docs 로 옮겨진다. 다른 세션의 기록은 지우지 않고 리뷰 진입 때 「옮기지 않은 옛 인터뷰 기록」 으로 알린다. 옮기려면 그 세션을 이어 열고(`claude --resume`) 인터뷰에 들어오거나, 작업 트리에서 `python3 <플러그인 루트>/scripts/interview_state.py migrate-legacy --session <옛 세션 id> --topic <kebab 주제> [--seed <seed 경로>]` 를 돌린다.
+- 분해된 일(5.8.0 의 분해 판단)은 분해안 표와 `## 생성 기록` 을 docs 상태 파일에 두고(`roadmap_write.py create --plan-table <줄기>.state.md`), 인터뷰 끝 커밋이 로드맵 폴더를 세 파일과 한 커밋에 넣는다 — 폴더는 brief §7 의 첫 `분해됨 — <로드맵 경로>` 줄에서 도출하고(경로는 `docs/superpowers/roadmaps/<폴더>/roadmap.md` 꼴이어야 하며 아니면 커밋하지 않는다), 폴더가 없거나 비었으면 빼고 그 사실을 보인다. 5.8.0 의 「brief · audit · 상태 파일 · 로드맵 폴더를 함께 커밋하라」 안내 줄은 없어졌다. 재분해(`references/redecompose.md`)의 새 표는 세션 폴더가 아니라 펜스가 만든 임시 파일에 쓰고 끝나면 지운다.
+- 리뷰 원장이 세션 폴더 `<session-id>/docreview/<키>/` 에서 문서 단위 `.claude/spec-distill/.docreview/<stem>-<hash>/` 로 옮겼다 — 같은 문서는 세션을 넘어 라운드 · 재리뷰 상한을 이어 받는다. 다른 세션의 원장을 이어 받을 때 「이전 리뷰 라운드 <n> 에서 이어 간다」 한 줄이 나온다.
+- `docreview_state.py state-dir-for` 가 `--session` 을 받지 않는다(주면 exit 2) — `--root --doc` 만 받아 `<root>/.docreview/<stem40>-<hash16>` 을 낸다. 부르는 펜스 전부가 `--session` 없이 부른다.
+- **옛 스위치 토큰 셋 `spec-distill:SessionEnd` · `spec-distill:session-end-cleanup` · `spec-distill:spec-distill-gc` 는 이제 리뷰 진입 때의 원장 정리(`scripts/ledger_sweep.py`)를 끈다.** 5.x 에서 앞의 둘은 SessionEnd 훅 전체를, 셋째는 TTL-GC 만 멈췄다 — 셋 다 시간 기준 정리를 멈추던 이름이라, 훅이 없어져도 정리를 꺼 둔 사용자에게 삭제가 조용히 다시 켜지지 않게 그대로 읽는다. 은퇴하는 끄기 스위치 이름은 없다.
+- `DEVBREW_SPEC_DISTILL_TTL_HOURS`(기본 24)는 원장 정리의 두 자리에 쓴다 — 기록된 문서가 사라진 원장의 삭제 유예(원장 폴더에 그 시간 동안 쓰기가 없어야 지운다)와 옛 세션 폴더의 정리 판정. `state.local.md` 가 있는 옛 폴더는 시간과 무관하게 지우지 않는다.
+- request-framing 은 이름 파일 없이 audit frontmatter `session_id` 로 산출 문서 이름을 되찾는다(같은 세션 id 의 audit 이 둘 이상이면 멈춘다).
+- 문서를 모르는 codex 잔존물 쓸기(`<session-id>/docreview/*/docreview-codex.yaml` 전부)를 걷었다 — 원장이 세션 밖으로 나가면 그 글롭이 다른 세션이 리뷰 중인 문서의 codex 판정을 지운다. 문서를 모르는 라운드는 `init` 이 멈추므로 쓸 것이 없다.
+- README Prerequisites 의 Python 줄 — 훅이 없어 출하 Python 바닥을 집행하는 해석기를 거치지 않는다. 스킬이 부르는 스크립트는 사용자의 `python3` 로 돈다.
+
+### Added
+- `scripts/state_path.py interview-state` — 인터뷰 상태 파일 경로를 낸다(kebab 이 아닌 topic · 같은 날 seed/seed audit 와 겹치는 topic · 그 자리의 종류 다른 파일은 exit 2).
+- `scripts/interview_state.py` — 진입 판정(`entry`) · 옛 자리 이월(`migrate-legacy`) · seed audit 이름 되찾기(`seed-audit-for-session`). 이 세션의 옛 `<session-id>/state.local.md` 가 있으면 인터뷰 진입이 docs 로 옮기고 그 사실을 보인다.
+- `scripts/ledger_marker.py` — 동시 리뷰 표지 `reviewing-by`(세션 id 한 줄). 원장 열기가 배타 생성으로 잡고(`acquire`), 원장에 쓰는 명령마다 그 앞에서 확인한다(`check` — 표지가 이 세션 것일 때만 rc 0). 남의 표지면 멈추고 「그만둠 (권장)」/「이어 씀」을 묻는다 — 이어 씀이면 `takeover` 가 표지를 임시 파일 + `os.replace` 로 바꾼다. 표지는 승인 게이트의 답을 원장에 적은 뒤 끝맺음 펜스가 푼다(`release` 는 남의 표지를 지우지 않는다).
+- `scripts/ledger_sweep.py` — 리뷰를 시작하는 진입 셋이 원장을 열 때 한 번 도는 정리. 기록된 문서가 없는 원장을 지우고(TTL 유예), 옛 세션 폴더 중 `state.local.md` 가 없고 TTL 을 넘은 것을 지우되 그 안의 옛 원장 중 문서가 남은 것은 먼저 `.docreview/<새 키>/` 로 옮긴다(대상이 이미 있으면 더 새 쪽을 남기고 충돌 줄을 낸다 · 대상에 표지가 있으면 대상을 남긴다). 읽지 못한 원장은 지우지 않고 알리고, `state.local.md` 가 있는 옛 폴더는 「옮기지 않은 옛 인터뷰 기록 <n>개」 로 알린다. 루트 디렉토리 잠금 안에서 돌고, 다른 세션이 정리 중이면 「건너뜀」 을 낸다. 정리가 실패해도 리뷰는 계속한다.
+- `state_path.py path-inside --root <R> <경로>…` — 경로 성분의 링크 · `..` · 루트 밖을 거부한다(아래 Security).
+
+### Removed
+- SessionEnd 훅 — `hooks/hooks.json` · `hooks/session-end-cleanup.py`(`hooks/` 디렉토리째). 설치되는 훅이 없다. 훅 전용 해석기 사본 `scripts/devbrew-python.sh` 도 함께 지웠다.
+- `scripts/spec-distill-gc.py`(TTL-GC) — 정리는 `scripts/ledger_sweep.py` 가 리뷰 진입에서 한다.
+- `hook_common.fire_and_forget_gc`.
+- request-framing 의 이름 파일 `interview-basename`.
+- `DEVBREW_SPEC_DISTILL_GC_VERBOSE` — TTL-GC 의 진단 출력 변수였다(끄는 스위치가 아니다). 읽던 스크립트가 지워져 읽는 곳이 없다. README 「은퇴한 스위치」 절에 적었다.
+
+### Fixed
+- request-framing 의 handoff 직전 커밋이 경로 지정 커밋이다(`add -- "$AUDIT" "$SEED"` 뒤 `commit --only … -- "$AUDIT" "$SEED"`) — 이미 stage 된 다른 작업을 seed 커밋에 쓸어 담지 않는다.
+- 다른 세션의 SessionEnd · TTL-GC 가 아직 쓰는 리뷰 원장을 지워 모든 `decide` 가 `state_missing` 으로 끝나던 일(2026-09-18) — 원장이 문서 단위가 되고, 기록된 문서가 사라졌을 때만 지운다. 세션 종료 · 압축 · 다른 세션의 정리 뒤에도 인터뷰 진행 기록이 남는다.
+
+### Security
+- 저장소가 심은 링크를 따라 쓰지 않는다 — 저장소는 어떤 이름으로든 링크를 커밋할 수 있다. `.claude` · `.claude/spec-distill` · `.docreview` 나 인터뷰 경로가 링크인 저장소에서는 리뷰 산출물 · 커밋 대신 거부 사유 한 줄이 나온다.
+  - `state_path.inside_root` · `state_path.py path-inside` — 경로 성분에 링크가 있거나 `..` 이거나 realpath 가 루트 밖이면 거부한다. 인터뷰 상태 경로(`interview-state`)도 링크 · 탈출 자리를 거부한다.
+  - 원장 자리 도출 직후의 게이트 — spec-review · reviewing-brief · request-framing · `finishing.md` B-A 가 `STATE_DIR` 을 도출하자마자 `path-inside --root <저장소 최상위>` 로 재고, 거부되면 비운다(사유 한 줄). 그 뒤의 `mkdir -p` · 원장 · codex 산출물 쓰기가 링크 너머로 가지 않고, 원장 열기는 `NO_DIR` 로 끝난다.
+  - `ledger_marker.py` — `--dir` 이나 그 부모가 링크거나 부모 밖으로 풀리면 rc 2. 표지 · 임시 파일을 `O_CREAT|O_EXCL|O_NOFOLLOW` 로 만들고 `os.replace` 로 바꾸며, 읽기도 `O_NOFOLLOW` 다.
+  - `ledger_sweep.py` — 링크를 거쳐 풀리는 state root 와 링크인 `.docreview` 를 「셀 수 없음」 으로 거부한다. 링크를 거치는 옛 원장은 옮기지도 지우지도 않고 「읽지 못한 원장」 으로 세며, 옮길 대상 이름이 링크면 따라가지 않는다.
+  - 인터뷰 끝 커밋 펜스 — brief · audit · 상태 파일(분해된 일이면 로드맵 폴더까지) 중 하나라도 작업 트리 밖이거나 링크를 거치면 `git add` · `commit` 을 하지 않고 경로와 사유를 보인다.
+  - `interview_state.py` — `RESUME` 은 받은 경로와 그 짝 brief(`<줄기>.md`) · audit(`<줄기>.audit.md`)가 작업 트리 안이고 링크(끊긴 링크 포함)를 거치지 않을 때만 낸다(아니면 `REJECT`) — 끝낼 때의 brief 쓰기 · 엔진 `--log-file` · degrade 원장 쓰기가 그 짝 경로를 쓰기 때문이다. 짝 brief 가 이미 있으면(끝난 인터뷰) `REJECT`. `ASK` 후보에서 링크 · 작업 트리 밖 후보와 짝 brief · audit 가 링크인 후보를 뺀다. seed 가 링크이거나 작업 트리 밖이면 상태 파일의 `seed:` 를 `없음` 으로 적고 사유 한 줄을 낸다(경로를 드러내지 않는다). 옛 자리 이월은 링크인 옛 파일 · 대상 자리를 거부하고 임시 파일을 `O_NOFOLLOW` 로 만든다.
+  - reviewing-brief 의 머리 · `finishing.md` B-A — payload · audit · 상태 파일을 쓰기 전에 `state_path.py payload-root` 가 낸 루트로 `path-inside` 를 잰다. 루트는 payload 폴더의 git 최상위다. git 이 그 폴더를 저장소 밖으로 보는데 위쪽 폴더에 `.git` 이 있으면(인터뷰 폴더가 저장소 밖 · 끊긴 자리로 가는 링크) 루트를 내지 않고 거부한다. 저장소가 아닌 곳에서만 payload 의 폴더를 루트로 쓰므로, 거기서는 세 파일 자체의 링크만 잡고 그 폴더 위쪽의 링크는 재지 않는다. 거부되면 머리는 사유를 보이고 멈추고(degrade 원장도 쓰지 않는다), B-A 는 참고 목록을 audit 에 쓰지 않는다. `path-inside` 는 논리 cwd(`$PWD`) 접두만 물리 경로로 읽는다 — 세션의 cwd 는 믿고, cwd 가 아닌 링크 접두는 풀지 않는다.
+- 상태 파일(커밋되는 파일)의 `## 풀린 입력` 블록은 P21 secret placeholder 치환을 거친 글만 적는다.
 
 ## [5.8.0] — 2026-10-15
 

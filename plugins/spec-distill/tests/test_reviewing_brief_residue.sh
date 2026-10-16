@@ -12,12 +12,12 @@
 #   D  하류(`prepare-recritic`)가 실제로 무엇을 섭취하는가 — 대조군과 같은가
 #   A2 지우지 못하면 절단하는가 · A3 둘 다 못 하는 조합에서 하류의 시점 판별이 막는가(그 전제 포함)
 #   E  앞 블록의 `set -euo pipefail` 을 물려받아도 같은 사후상태·같은 공시인가
-#   P  문서별 자리가 실행으로 갈리는가 · S sweep 이 codex 산출물만 지우는가 · S! sweep 의 중화 불가 공시
+#   P  문서별 자리가 실행으로 갈리는가 · S 문서를 모르는 라운드가 다른 문서의 산출물을 건드리지 않는가
 # 이 자리에만 있는 것:
 #   · 게이트 입력이 하나 더 있다(번들) — 번들 부재도 codex 를 건너뛰는 skip 경로다(A·E 번들 부재).
 #   · R 러너 인자 넷의 실측 — 넷 다 비지 않고, 둘째가 payload 가 아니라 번들인가.
 #   · P×자리 — 같은 세션에서 design doc 자리(`spec-review`)와 brief 자리가 다른 자리를 받는가.
-#   · S×자리 — brief 쪽 sweep 이 design doc 자리의 codex 산출물까지 중화하되 번들·원장은 남기는가.
+#   · S×자리 — payload 를 모르는 brief 쪽 fence 가 design doc 자리와 brief 자리의 어느 것도 건드리지 않는가.
 #   · B 번들 조립이 실패한 라운드가 직전 번들을 남기지 않는가, 그 뒤 fence 가 codex 를 건너뛰는가.
 #   · H 따로 도는 블록(Bash 호출마다 새 셸) — `## 입력` 만 돌아도 payload 가 절대경로가 되는가(I1),
 #     `## 번들` 이 머리 없이 들어온 상대경로로도 조립되는가, 진입 게이트 실패가 직전 번들을 세 층으로
@@ -134,9 +134,9 @@ DOC_D="$FX/design-sample.md"
 PROF_B="$ROOT/plugins/spec-distill/references/docreview-profiles/brief.md"
 SDS="$ROOT/plugins/spec-distill/scripts"
 
-where() {   # where <sid> <doc> → 그 세션·문서의 엔진 상태 디렉토리 (fence 와 같은 엔진 도출)
+where() {   # where <sid> <doc> → 그 셀(홈)·문서의 엔진 상태 디렉토리 (fence 와 같은 엔진 도출 — 세션 칸 없음)
   python3 "$PR/scripts/docreview_state.py" state-dir-for \
-      --root "$SCRATCH/$1/.claude/spec-distill" --session "$1" --doc "$2" 2>/dev/null
+      --root "$SCRATCH/$1/.claude/spec-distill" --doc "$2" 2>/dev/null
 }
 real() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
 state_of() {   # state_of <path> → absent | 0byte | <N>B
@@ -152,8 +152,8 @@ stale_into() {   # stale_into <path> — 직전 라운드가 정상으로 끝낸
 # ── 계측기 전제 — 쓰는 sid 전부가 세션 이름 검사와 문서별 도출을 통과하는가 ────
 SIDS="rb01kill rb02noin rb03nopl rb04nobd rb05rc3x rb06nodt rb07keep rb08trap rb09lock
       rb10down rb11ctlx rb12trnc rb13pred rb21kill rb22noin rb23nopl rb24nobd rb25rc3x
-      rb26nodt rb27lock rb30plce rb31swep rb32swpe rb33swlk rb34swle rb40bndl rb41bndf rb42bnde rb43bndk
-      rb50relx rb51relb rb52gtrm rb53gttr rb54gtst rb55gtre rb56bdst rb57nopl rb58apnd"
+      rb26nodt rb27lock rb30plce rb31swep rb32swpe rb40bndl rb41bndf rb42bnde rb43bndk
+      rb50relx rb51relb rb52gtrm rb53gttr rb54gtst rb55gtre rb56bdst rb57nopl rb58apnd rb59nosd"
 bad=""
 for s in $SIDS; do
   DEVBREW_SPEC_DISTILL_SESSION_ID="$s" python3 "$PR/scripts/state_path.py" session-id >/dev/null 2>&1 || bad="$bad $s"
@@ -190,7 +190,12 @@ a_case() {   # a_case <라벨> <sid> <bin> <stub_write> <stub_rc> [env…]
 }
 a_case "kill switch"              rb01kill "$BIN_OK"   none 0 PAYLOAD="$DOC_B" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1
 a_case "codex 미설치"              rb02noin "$BIN_NONE" none 0 PAYLOAD="$DOC_B"
-a_case "게이트 입력 부재 — payload" rb03nopl "$BIN_OK"   none 0
+# payload 미상 — fence 가 경로를 도출하지 못한다. 원장은 문서 단위라 세션을 넘어 공유되므로 그 자리의 codex
+# 산출물은 다른 리뷰의 것일 수 있다 — 건드리지 않고 codex 축을 건너뛴다.
+yml="$(fire rb03nopl "$BIN_OK" plant none 0)"
+{ [ -s "$yml" ] && grep -q "$OLD" "$yml" && grep -q 'codex 리뷰를 건너뛰었다 (reason: gate_inputs_missing)' "$SCRATCH/rb03nopl.err"; } \
+  && ok "A(게이트 입력 부재 — payload): 문서를 모르면 그 자리의 codex 산출물을 건드리지 않고 codex 축을 건너뛴다 (gate_inputs_missing)" \
+  || no "A(게이트 입력 부재 — payload): 문서를 모르는 라운드가 codex 산출물을 바꿨거나($(state_of "$yml")) gate_inputs_missing 공시가 없다"
 NO_BUNDLE=1 a_case "게이트 입력 부재 — 번들" rb04nobd "$BIN_OK" none 0 PAYLOAD="$DOC_B"
 a_case "러너 rc=3 (껍데기)"        rb05rc3x "$BIN_OK"   husk 3 PAYLOAD="$DOC_B"
 mv "$DETECTOR" "$SCRATCH/detector.bak"
@@ -356,7 +361,11 @@ e_case() {   # e_case <라벨> <sid> <쌍둥이 sid> <bin> <stub_write> <stub_rc
 }
 e_case "kill switch"              rb21kill rb01kill "$BIN_OK"   none 0 kill_switch           PAYLOAD="$DOC_B" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1
 e_case "codex 미설치"              rb22noin rb02noin "$BIN_NONE" none 0 not_installed         PAYLOAD="$DOC_B"
-e_case "게이트 입력 부재 — payload" rb23nopl rb03nopl "$BIN_OK"   none 0 gate_inputs_missing
+yml="$(WITH_FENCE="$FENCE_E" fire rb23nopl "$BIN_OK" plant none 0)"
+{ [ "$(state_of "$yml")" = "$(state_of "$(where rb03nopl "$DOC_B")/docreview-codex.yaml")" ] && grep -q "$OLD" "$yml" \
+  && grep -q 'codex 리뷰를 건너뛰었다 (reason: gate_inputs_missing)' "$SCRATCH/rb23nopl.err"; } \
+  && ok "E(게이트 입력 부재 — payload): errexit 아래서도 그 자리의 codex 산출물이 그대로이고 gate_inputs_missing 이 공시된다" \
+  || no "E(게이트 입력 부재 — payload): errexit 아래 사후상태 $(state_of "$yml") 또는 공시가 평상시와 다르다"
 NO_BUNDLE=1 e_case "게이트 입력 부재 — 번들" rb24nobd rb04nobd "$BIN_OK" none 0 gate_inputs_missing PAYLOAD="$DOC_B"
 e_case "러너 rc=3 (껍데기)"        rb25rc3x rb05rc3x "$BIN_OK"   husk 3 -                     PAYLOAD="$DOC_B"
 mv "$DETECTOR" "$SCRATCH/detector.bak"
@@ -426,19 +435,19 @@ fi
 [ -n "$r1_dir" ] && [ "$r1_dir" = "$r2_dir" ] \
   && ok "P5: 상대경로 payload 가 절대경로와 같은 자리를 받는다 (엔진은 상대 --doc 을 거부한다 — 자리가 cwd 의 함수가 되지 않는다)" \
   || no "P5: 상대경로 payload 의 자리($r1_dir)가 절대경로의 자리($r2_dir)와 다르다"
-sess="${b_state%/state.local.md}"
-[ -n "$b_state" ] && [ "$sess" != "$b_state" ] && [ "${b_dir%/*}" = "$sess/docreview" ] && [ "${s_dir%/*}" = "$sess/docreview" ] \
-  && ok "P6: degrade 원장(\$STATE)은 세션의 한 파일이고 두 자리의 문서별 디렉토리는 같은 세션 아래 docreview/ 에 앉는다" \
+[ -n "$b_state" ] && [ "$b_state" = "${DOC_B%-interview.md}-interview.state.md" ] && [ -n "$b_dir" ] && [ "${b_dir%/*}" = "${s_dir%/*}" ] && [ "${b_dir%/*/*}/.docreview" = "${b_dir%/*}" ] \
+  && ok "P6: degrade 원장(\$STATE)은 payload 이름에서 도출한 그 인터뷰의 상태 파일이고 두 자리의 문서별 디렉토리는 같은 상태 루트 아래 .docreview/ 에 앉는다 (세션 칸 없음)" \
   || no "P6: degrade 원장 또는 문서별 디렉토리의 자리가 어긋났다 (STATE $b_state · $b_dir · $s_dir)"
 
-# ── S) 문서 미상 sweep — 범위·자리 교차 ────────────────────────────────────────
-# brief 쪽 fence 가 `$PAYLOAD` 없이 돌면 세션의 문서별 codex 산출물 전부를 훑는다. 같은 세션에
-# 살아야 할 것 — degrade 원장 · 다른 이름의 파일 · brief 엔진 원장 · critic 원문 · **번들** ·
-# design doc 자리의 엔진 원장 — 을 심고 바이트 동일을 잰다. 두 자리의 codex 산출물이 모두
-# 중화되는 것은 「문서를 모르면 전부가 후보」의 양의 쪽이다.
-sweep_case() {   # sweep_case <라벨> <sid> <fence>
+# ── S) payload 미상 — 다른 자리의 산출물을 건드리지 않는다 ────────────────────────
+# brief 쪽 fence 가 `$PAYLOAD` 없이 돌면 경로를 도출하지 못한다. 원장은 문서 단위라 세션을 넘어 공유되고
+# (`.docreview/`), 그 아래 다른 문서의 codex 산출물은 다른 리뷰(다른 세션일 수 있다)의 것이다 — 문서를 모르는
+# 라운드는 아무것도 지우지 않는다. brief 자리와 design doc 자리에 codex 산출물 · 엔진 원장 · critic 원문 · 번들 ·
+# degrade 원장 · 다른 이름의 파일을 심고 전부 바이트 동일로 남는지 잰다(잠근 산출물도 — 지움 시도의 실패 공시가
+# 나오지 않아야 한다).
+unknown_payload_case() {   # unknown_payload_case <라벨> <sid> <fence>
   local label="$1" sid="$2" fence="$3" home S AB AD g i f lost=""
-  home="$SCRATCH/$sid"; S="$home/.claude/spec-distill/$sid"
+  home="$SCRATCH/$sid"; S="$home/.claude/spec-distill/$sid"; mkdir -p "$S"
   AB="$(where "$sid" "$DOC_B")"; AD="$(where "$sid" "$DOC_D")"; mkdir -p "$AB" "$AD"
   printf 'brief_review_degradations: []\n' > "$S/state.local.md"
   printf 'unrelated\n' > "$S/notes-unrelated.txt"
@@ -448,45 +457,31 @@ sweep_case() {   # sweep_case <라벨> <sid> <fence>
   printf -- '---\ndocreview: {doc: design}\n---\n' > "$AD/docreview-state.md"
   stale_into "$AB/docreview-codex.yaml"; stale_into "$AD/docreview-codex.yaml"
   g="$SCRATCH/$sid.golden"; mkdir -p "$g"; i=0
-  for f in "$S/state.local.md" "$S/notes-unrelated.txt" "$AB/docreview-state.md" "$AB/critic.txt" "$AB/brief-bundle.md" "$AD/docreview-state.md"; do
+  for f in "$S/state.local.md" "$S/notes-unrelated.txt" "$AB/docreview-state.md" "$AB/critic.txt" "$AB/brief-bundle.md" "$AB/docreview-codex.yaml" "$AD/docreview-state.md" "$AD/docreview-codex.yaml"; do
     i=$((i+1)); cp "$f" "$g/$i"
   done
+  # design doc 자리를 잠근다(파일 444 · 디렉토리 555) — 지우지도 절단하지도 못하는 자리라, 쓸기 분기가 되살아나면
+  # residue_unclearable 를 내야 한다. 복원은 cleanup 트랩의 `chmod -R u+w` 도 진다.
+  chmod 444 "$AD/docreview-codex.yaml"; chmod 555 "$AD"
   ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t PYTHONDONTWRITEBYTECODE=1 \
       CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" bash "$fence" ) >/dev/null 2>"$SCRATCH/$sid.err"
+  chmod 755 "$AD"; chmod 644 "$AD/docreview-codex.yaml"
   { [ "$AB" != "$AD" ] && grep -q 'codex 리뷰를 건너뛰었다 (reason: gate_inputs_missing)' "$SCRATCH/$sid.err"; } \
     && ok "S($label) 전제: 두 자리가 다르고 fence 가 문서 미상 경로(gate_inputs_missing)로 돌았다" \
-    || no "S($label) 전제 붕괴: 두 자리가 같거나 fence 가 sweep 경로로 돌지 않았다"
+    || no "S($label) 전제 붕괴: 두 자리가 같거나 fence 가 문서 미상 경로로 돌지 않았다"
   i=0
-  for f in "$S/state.local.md" "$S/notes-unrelated.txt" "$AB/docreview-state.md" "$AB/critic.txt" "$AB/brief-bundle.md" "$AD/docreview-state.md"; do
-    i=$((i+1)); cmp -s "$g/$i" "$f" 2>/dev/null || lost="$lost ${f#"$S"/}"
+  for f in "$S/state.local.md" "$S/notes-unrelated.txt" "$AB/docreview-state.md" "$AB/critic.txt" "$AB/brief-bundle.md" "$AB/docreview-codex.yaml" "$AD/docreview-state.md" "$AD/docreview-codex.yaml"; do
+    i=$((i+1)); cmp -s "$g/$i" "$f" 2>/dev/null || lost="$lost ${f#"$home"/}"
   done
   [ -z "$lost" ] \
-    && ok "S($label): degrade 원장 · 다른 이름의 파일 · 두 자리의 엔진 원장 · critic 원문 · 번들이 바이트 동일로 남는다" \
-    || no "S($label): sweep 이 살아야 할 파일을 지우거나 바꿨다:$lost"
-  { cleared "$AB/docreview-codex.yaml" && cleared "$AD/docreview-codex.yaml"; } \
-    && ok "S($label): brief 자리와 design doc 자리의 codex 산출물이 모두 중화된다 (자리 교차 — 양의 쪽)" \
-    || no "S($label): 중화되지 않은 자리가 있다 (brief $(state_of "$AB/docreview-codex.yaml") · design $(state_of "$AD/docreview-codex.yaml"))"
+    && ok "S($label): 문서를 모르면 두 자리의 codex 산출물 · 엔진 원장 · critic 원문 · 번들 · degrade 원장 · 다른 파일이 바이트 동일로 남는다" \
+    || no "S($label): 문서를 모르는 라운드가 파일을 지우거나 바꿨다:$lost"
+  grep -q 'residue_unclearable' "$SCRATCH/$sid.err" \
+    && no "S($label): 문서를 모르는 라운드가 남의 산출물을 지우려다 residue_unclearable 를 냈다 — 걷어낸 쓸기 분기가 살아 있다" \
+    || ok "S($label): 잠근 남의 산출물에 대해 중화 불가 공시가 없다 (지우려 하지 않았다)"
 }
-sweep_case "평상시" rb31swep "$FENCE"
-sweep_case "errexit" rb32swpe "$FENCE_E"
-sweep_lock() {   # sweep_lock <라벨> <sid> <fence>
-  local label="$1" sid="$2" fence="$3" at yml left tail
-  at="$(where "$sid" "$DOC_B")"; mkdir -p "$at"; yml="$at/docreview-codex.yaml"
-  stale_into "$yml"; chmod 444 "$yml"; chmod 555 "$at"
-  ( cd "$SCRATCH/$sid" && env -i PATH="$BIN_OK:$BASE" HOME="$SCRATCH/$sid" CODEX_API_KEY=t PYTHONDONTWRITEBYTECODE=1 \
-      CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" bash "$fence" ) >/dev/null 2>"$SCRATCH/$sid.err"
-  left="$(state_of "$yml")"; chmod 755 "$at"; chmod 644 "$yml"
-  tail="${yml#"$SCRATCH"/}"   # fence 는 cwd 의 물리 경로로 적는다 — 스크래치 뒤 꼬리로 대조한다
-  if [ "$left" = "absent" ] || [ "$left" = "0byte" ]; then
-    no "S!($label) 전제 붕괴: 잠금이 중화를 막지 못했다 ($left)"
-  elif grep -q 'codex 리뷰를 건너뛰었다 (reason: residue_unclearable)' "$SCRATCH/$sid.err" && grep -qF "$tail" "$SCRATCH/$sid.err"; then
-    ok "S!($label): 문서 미상 라운드에서 치우지 못한 산출물이 residue_unclearable 와 그 경로로 공시된다 ($left 잔존)"
-  else
-    no "S!($label): 문서 미상 라운드의 중화 불가가 공시되지 않는다 — residue_unclearable 또는 경로($tail)가 stderr 에 없다"
-  fi
-}
-sweep_lock "평상시" rb33swlk "$FENCE"
-sweep_lock "errexit" rb34swle "$FENCE_E"
+unknown_payload_case "평상시" rb31swep "$FENCE"
+unknown_payload_case "errexit" rb32swpe "$FENCE_E"
 
 # ── B) 번들 — 조립 성공은 파일을 남기고, 실패는 직전 번들을 남기지 않는다 ─────────
 { cat "$INPUT"; cat "$BUNDLE_BLK"; } > "$SCRATCH/b-bundle.sh"
@@ -547,8 +542,8 @@ GATE_BLK_E="$SCRATCH/gate-e.sh"; { echo 'set -euo pipefail'; cat "$GATE_BLK"; } 
   || no "H 추출: degrade-append 또는 진입 게이트 블록이 비었거나 문법이 깨졌다 — 아래 H 셀은 무의미하다"
 alone() {   # alone <sid> <script> <플러그인 루트> [env…] — 앞 블록 없이 새 셸에서 그 블록 하나만
   local sid="$1" script="$2" pr="$3"; shift 3
-  mkdir -p "$SCRATCH/$sid"
-  ( cd "$SCRATCH/$sid" && env -i PATH="$BASE" HOME="$SCRATCH/$sid" PYTHONDONTWRITEBYTECODE=1 \
+  mkdir -p "$SCRATCH/$sid/tmp"
+  ( cd "$SCRATCH/$sid" && env -i PATH="$BASE" HOME="$SCRATCH/$sid" TMPDIR="$SCRATCH/$sid/tmp" PYTHONDONTWRITEBYTECODE=1 \
       CLAUDE_PLUGIN_ROOT="$pr" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" "$@" bash "$script" ) >/dev/null 2>"$SCRATCH/$sid.alone.err"
 }
 
@@ -612,27 +607,40 @@ rc=0; alone rb57nopl "$BUNDLE_BLK" "$PR" AUDIT="$AUD_B" || rc=$?
 { [ "$rc" != "0" ] && grep -q 'PAYLOAD 가 비었다' "$SCRATCH/rb57nopl.alone.err" && ! grep -q '세션 id 미해석' "$SCRATCH/rb57nopl.alone.err"; } \
   && ok "M5: 빈 payload 로 들어온 번들 블록이 그 사유(Skill 인자 1)를 대고 멈춘다" \
   || no "M5: 빈 payload 의 공시가 사유를 잘못 대거나 멈추지 않는다 (rc=$rc · $(head -c 200 "$SCRATCH/rb57nopl.alone.err" 2>/dev/null))"
+# M5b — payload 는 있고 세션 id 가 없다. 엔진 자리는 세션 없이 도출되므로(`.docreview/`) 진입 게이트의
+# 세션 검사만이 이 라운드를 막는다 — 세션 id 를 대고 멈추고, 번들을 만들지 않는다.
+nosd_at="$(where rb59nosd "$DOC_B")"; mkdir -p "$SCRATCH/rb59nosd"
+rc=0; ( cd "$SCRATCH/rb59nosd" && env -i PATH="$BASE" HOME="$SCRATCH/rb59nosd" PYTHONDONTWRITEBYTECODE=1 \
+    CLAUDE_PLUGIN_ROOT="$PR" PAYLOAD="$DOC_B" AUDIT="$AUD_B" bash "$BUNDLE_BLK" ) >/dev/null 2>"$SCRATCH/rb59nosd.alone.err" || rc=$?
+{ [ -n "$nosd_at" ] && [ "$rc" != "0" ] && grep -q '세션 id 미해석' "$SCRATCH/rb59nosd.alone.err" && [ ! -e "$nosd_at/brief-bundle.md" ]; } \
+  && ok "M5b: payload 가 있어도 세션 id 가 없으면 번들 블록이 세션 id 를 대고 멈추고 번들을 만들지 않는다" \
+  || no "M5b: 세션 id 없이 번들 블록이 진행했거나 사유를 대지 않았다 (rc=$rc · 번들 $(state_of "${nosd_at:-/nonexistent}/brief-bundle.md") · $(head -c 200 "$SCRATCH/rb59nosd.alone.err" 2>/dev/null))"
 
 # M3 — 따로 돈 degrade-append 블록의 record 가 닿는다. 원장이 쓰기 불가면 두 번째 채널 파일에 닿는다.
 # 슬롯(<a>·<b>·<c>·<r>)은 모델이 채우는 자리라 여기서도 채워 돌린다.
-home="$SCRATCH/rb58apnd"; S="$home/.claude/spec-distill/rb58apnd"; mkdir -p "$S"
-printf -- '---\nsession_id: rb58apnd\n---\n\nbody\n' > "$S/state.local.md"
-alone rb58apnd "$INPUT" "$RPR" PAYLOAD="$DOC_B" AUDIT="$AUD_B"
+# 원장 = payload 옆 그 인터뷰의 상태 파일, 두 번째 채널 = 그 payload 의 원장 자리 안.
+home="$SCRATCH/rb58apnd"; mkdir -p "$home/docs"
+DOC_M3="$home/docs/brief-sample-interview.md"; AUD_M3="$home/docs/brief-sample-interview.audit.md"; SF_M3="$home/docs/brief-sample-interview.state.md"
+cp "$DOC_B" "$DOC_M3"; cp "$AUD_B" "$AUD_M3"
+printf -- '---\ntype: interview-state\nseed: 없음\nsession_id: rb58apnd\n---\n\nbody\n' > "$SF_M3"
+alone rb58apnd "$INPUT" "$RPR" PAYLOAD="$DOC_M3" AUDIT="$AUD_M3"
+FB_M3="$(where rb58apnd "$DOC_M3")/brief-degrade-fallback.txt"
+mkdir -p "${FB_M3%/*}"   # 원장 자리는 원장 열기 펜스가 만든다 — 머리는 만들지 않는다
 fill() { sed -e 's/<a>/pipeline/g' -e 's/<b>/all/g' -e 's/<c>/skipped/g' -e "s/<r>/$1/g" "$APPEND_BLK" > "$2"; }
 fill probe-land-q1 "$SCRATCH/append-1.sh"; fill probe-fallback-q2 "$SCRATCH/append-2.sh"
-if grep -q '^brief_review_degradations:' "$S/state.local.md"; then
+if grep -q '^brief_review_degradations:' "$SF_M3"; then
   ok "M3 전제: \`## 입력\` 머리의 init 이 degrade 원장 키를 심었다"
 else
   no "M3 전제 붕괴: degrade 원장 키가 없다 — 아래 셀은 append 를 재지 않는다 ($(head -c 200 "$SCRATCH/rb58apnd.alone.err" 2>/dev/null))"
 fi
-alone rb58apnd "$SCRATCH/append-1.sh" "$RPR" PAYLOAD="$DOC_B" AUDIT="$AUD_B"
-grep -q 'probe-land-q1' "$S/state.local.md" \
+alone rb58apnd "$SCRATCH/append-1.sh" "$RPR" PAYLOAD="$DOC_M3" AUDIT="$AUD_M3"
+grep -q 'probe-land-q1' "$SF_M3" \
   && ok "M3: 앞 블록 없이 따로 돈 degrade-append 의 record 가 원장에 닿는다" \
   || no "M3: 따로 돈 degrade-append 의 record 가 원장에 없다 — 그 record 는 「degrade 없음」으로 사라진다 ($(head -c 200 "$SCRATCH/rb58apnd.alone.err" 2>/dev/null))"
-chmod 444 "$S/state.local.md"
-alone rb58apnd "$SCRATCH/append-2.sh" "$RPR" PAYLOAD="$DOC_B" AUDIT="$AUD_B"
-chmod 644 "$S/state.local.md"
-{ grep -q 'probe-fallback-q2' "$S/brief-degrade-fallback.txt" 2>/dev/null && ! grep -q 'probe-fallback-q2' "$S/state.local.md"; } \
+chmod 444 "$SF_M3"
+alone rb58apnd "$SCRATCH/append-2.sh" "$RPR" PAYLOAD="$DOC_M3" AUDIT="$AUD_M3"
+chmod 644 "$SF_M3"
+{ [ "$FB_M3" != /brief-degrade-fallback.txt ] && grep -q 'probe-fallback-q2' "$FB_M3" 2>/dev/null && ! grep -q 'probe-fallback-q2' "$SF_M3"; } \
   && ok "M3: 원장이 쓰기 불가면 따로 돈 블록의 record 가 머리가 다시 도출한 두 번째 채널 파일에 닿는다" \
-  || no "M3: 원장 쓰기 실패의 record 가 두 번째 채널 파일($S/brief-degrade-fallback.txt)에 없다 — \`>> \"\"\` 로 사라졌다"
+  || no "M3: 원장 쓰기 실패의 record 가 두 번째 채널 파일($FB_M3)에 없다 — \`>> \"\"\` 로 사라졌다"
 finish

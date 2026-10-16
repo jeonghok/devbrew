@@ -303,15 +303,16 @@ def read_head(path: str):
 
 
 class TestHooksJson(unittest.TestCase):
-    """AC1 — `Stop` 이 없고 `SessionEnd` 가 있다(부재 ↔ 존재 짝)."""
+    """AC1 — `Stop` 이 없다. 6.0.0 부터 `hooks.json` 자체가 없다(존재 짝이던 SessionEnd 도 걷혔다 —
+    그 부재는 `test_hooks.sh` 의 AC10 이, 후계 `ledger_sweep.py` 의 존재는 `test_successors_present`
+    가 잰다). 파일이 다시 생기면 `Stop` 부재를 그 파일에서 잰다."""
 
-    def test_no_stop_and_session_end_present(self):
-        d = json.loads((REPO / SD / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-        hooks = d.get("hooks", {})
+    def test_no_stop(self):
+        hj = REPO / SD / "hooks" / "hooks.json"
+        if not hj.exists():
+            return
+        hooks = json.loads(hj.read_text(encoding="utf-8")).get("hooks", {})
         self.assertNotIn("Stop", hooks)
-        cmds = [h.get("command", "") for blk in hooks.get("SessionEnd", [])
-                for h in blk.get("hooks", [])]
-        self.assertTrue(any("session-end-cleanup.py" in c for c in cmds), cmds)
 
 
 class TestDeletedFiles(unittest.TestCase):
@@ -321,7 +322,7 @@ class TestDeletedFiles(unittest.TestCase):
         self.assertEqual([p for p in DELETED if (REPO / p).exists()], [])
 
     def test_successors_present(self):
-        for p in (f"{SD}/hooks/session-end-cleanup.py", f"{SD}/scripts/review_entry.py",
+        for p in (f"{SD}/scripts/ledger_sweep.py", f"{SD}/scripts/review_entry.py",
                   HOOK_COMMON):
             with self.subTest(p=p):
                 self.assertTrue((REPO / p).is_file())
@@ -439,11 +440,11 @@ class TestReviewingSpecContract(unittest.TestCase):
         m = re.search(r"^## 입력\n(.*?)^## ", t, re.S | re.M)
         self.assertIsNotNone(m, "## 입력 절을 못 찾았다")
         self.assertIn("호출 인자", m.group(1))
-        # 엔진 상태는 세션 아래 문서별 디렉토리다(spec-distill 3.1.0 · R78) — 세션 리터럴 대신 그 도출 줄을 잰다.
+        # 엔진 상태는 상태 루트 아래 문서별 디렉토리다(`.docreview/` — 세션 칸 없음) — 그 도출 줄을 잰다.
         # `## 입력` 절 안에서 잰다 — 같은 줄을 싣는 profile-content 펜스가 파일 전체 검색을 대신 만족시키지 못하게
         # (옛 세션 리터럴은 `## 입력` 에만 있었다).
         self.assertIn('STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for '
-                      '--root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}"', m.group(1))
+                      '--root "$ROOT" --doc "${spec_path:-}"', m.group(1))
 
     def test_fence_placement(self):
         """정적 배치만 잰다 — 모델이 이 순서를 따르는지는 재지 못한다(AC14 수동 e2e 몫).

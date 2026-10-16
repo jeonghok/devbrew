@@ -6,7 +6,7 @@
 `research_limit` · `saturation_limit` · `research_log` · `saturation_log`)만 없어서, 어느 조건에도 안 걸린 채
 그 키를 읽는 코드로 들어간다.
 
-state.local.md 로드 시 아래 중 **하나라도** 부재면 *non-mutating read* 로 승격한다
+상태 파일 로드 시 아래 중 **하나라도** 부재면 *non-mutating read* 로 승격한다
 (부재 키만 기본값으로 채우고, 이미 있는 값은 손대지 않는다):
 
 - `coverage.floor` 의 5개 차원(root_problem/landscape/skepticism/blind_spot/open_questions) —
@@ -46,8 +46,8 @@ state.local.md 로드 시 아래 중 **하나라도** 부재면 *non-mutating re
 그것은 이미 발화 레코드이고, 키 몇 개를 보충하려다 §6 원문을 통째로
 버리는 것은 마이그레이션이 아니라 손실입니다.
 
-**영속화 시점**: 승격된 스키마는 재개된 세션의 첫 액션으로, 첫 probe보다 먼저 Bash 전체-frontmatter
-write로 즉시 디스크에 반영합니다(PN1) — 조사 호출 카운터(`research_dispatches`)와
+**영속화 시점**: 승격된 스키마는 재개된 세션의 첫 액션으로, 첫 probe보다 먼저 상태 파일에 바로 쓴다
+(`Write`/`Edit`) — 조사 호출 카운터(`research_dispatches`)와
 재개방 원장(`reopen_log`)이 그 디스크 값을 직접 읽기 때문입니다. 신규 필드만
 추가하는 forward promotion이지 backward-rewrite가 아닙니다(`interview_round`는 자연 소멸, 다른
 기존 필드는 불변) — "다음 명시적 write"를 기다리는 연기가 아니라 resume 직후 1회입니다.
@@ -58,4 +58,4 @@ write로 즉시 디스크에 반영합니다(PN1) — 조사 호출 카운터(`r
 ```
 
 자동 promote 실패 시(파일 corruption 등) → "구세션 in-flight state 호환 실패 — 세션 재시작 권장"
-알림 + state.local.md 보존 (P14).
+알림 + 상태 파일 보존 (P14).

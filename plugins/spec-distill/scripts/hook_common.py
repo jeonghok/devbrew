@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""spec-distill `hooks/` 와 `scripts/` 가 함께 쓰는 조각.
+"""spec-distill `scripts/` 가 함께 쓰는 조각.
 
 **사본이 아니다** — 같은 플러그인 안이므로 import 하나로 중복이 소멸한다. 배포 경로는
-훅과 같은 플러그인 트리라 `${CLAUDE_PLUGIN_ROOT}/scripts/` 로 함께 실린다. `copy-of`
-마커도 사본 동일성 검사도 붙지 않는다 — 지킬 두 번째 파일이 없다.
+`${CLAUDE_PLUGIN_ROOT}/scripts/` 다. `copy-of` 마커도 사본 동일성 검사도 붙지 않는다 —
+지킬 두 번째 파일이 없다.
 
-소비자:
-
-  - `hooks/session-end-cleanup.py` 가 `fire_and_forget_gc` 를 쓴다.
-  - `brief_review_state.py` 가 `_yaml_scalar` 을 쓴다(census #45의 spec-distill 부분).
+소비자: 훅이 없어진 뒤(6.0.0) 남은 소비자는 `brief_review_state.py` 하나다 — `_yaml_scalar` 을
+쓴다(census #45의 spec-distill 부분).
 
 **담지 않는 것** — `kill_switch_active`(`shared/killswitch/` 정본의 형제 사본에서
 온다. 여기로 다시 가져오면 정본이 둘이 된다) · `resolve_session_id` / `state_root`
@@ -17,43 +15,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
-from pathlib import Path
-
-SCRIPTS_DIR = Path(__file__).resolve().parent
-
-GC_SCRIPT = SCRIPTS_DIR / "spec-distill-gc.py"
-
-
-def fire_and_forget_gc() -> None:
-    """TTL-GC 를 best-effort 로 한 번 돌린다. 실패는 non-fatal 이되 조용하지 않다.
-
-    동기로(timeout 5초) 기다리지만 결과로 훅의 동작을 바꾸지 않는다 — rc≠0 이면 rc 와
-    stderr 를, rc 0 이면 stderr 만 옮긴다. 실행 자체가 실패해도(timeout · OSError)
-    stderr 로 낸다 — GC 가 멈춘 사실이 보이지 않으면 상태 폴더가 조용히 쌓인다.
-    stdout(verbose 요약)은 옮기지 않는다.
-    """
-    try:
-        result = subprocess.run(
-            # **`python3` 가 아니라 자기 자신이다.** 훅은 `devbrew-python.sh` 가 고른
-            # 인터프리터로 돌고 있는데, 자식을 PATH 의 `python3` 로 띄우면 그 자식만
-            # 바닥 미만으로 떨어진다 — 해석의 효력이 프로세스 경계에서 끊긴다.
-            [sys.executable, str(GC_SCRIPT)],
-            timeout=5, check=False, capture_output=True, text=True,
-        )
-        if result.returncode != 0:
-            print(
-                f"[spec-distill] GC exited rc={result.returncode}: {result.stderr.strip()}",
-                file=sys.stderr,
-            )
-        elif result.stderr.strip():
-            print(result.stderr.strip(), file=sys.stderr)
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        print(
-            f"[spec-distill] gc fire-and-forget failed (non-fatal): {exc}",
-            file=sys.stderr,
-        )
 
 
 # `_yaml_scalar` 가 인용해야 하는 문자 — **두 축**이다. 이 두 상수는
