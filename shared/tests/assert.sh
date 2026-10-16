@@ -44,13 +44,20 @@ assert_not_contains() {  # assert_not_contains <haystack> <needle> <msg>
   esac
 }
 
+# 텍스트 판정은 파이프가 아니라 here-string 으로 grep 에 넘긴다. `printf | grep -q` 는
+# 호출 테스트가 `set -o pipefail` 이고 텍스트가 파이프 버퍼보다 크면, grep 이 맞는 줄에서
+# 일찍 끝날 때 printf 가 SIGPIPE(141)로 죽어 파이프라인이 실패로 읽힌다 — assert_grep 은
+# 거짓 실패, assert_not_grep 은 거짓 통과(부재 락 fail-open)다. `test_assert_behavior.sh` 가 잡는다.
+# field · field_line 의 awk 도 같은 이유로 here-string 이다(첫 매치에서 exit — pipefail 이면 rc 141).
+# 한계: bash 3.2 의 here-string 은 임시 파일을 쓴다 — TMPDIR 에 쓸 수 없으면 리다이렉트가 rc 1 로
+# 실패해 assert_not_grep 이 통과로 읽힌다. 그 환경에서는 mktemp 를 쓰는 테스트 대부분이 먼저 죽는다.
 assert_grep() {      # assert_grep <text> <ERE> <msg>
-  if printf '%s\n' "$1" | grep -qE -- "$2"; then ok "$3"
+  if grep -qE -- "$2" <<< "$1"; then ok "$3"
   else no "$3"; printf '      pattern:  %s\n      text:     %s\n' "$2" "$(printf '%s' "$1" | head -c 400)"; fi
 }
 
 assert_not_grep() {  # assert_not_grep <text> <ERE> <msg>   — assert_grep 의 짝
-  if printf '%s\n' "$1" | grep -qE -- "$2"; then
+  if grep -qE -- "$2" <<< "$1"; then
     no "$3"; printf '      금지 패턴: %s\n' "$2"
   else ok "$3"; fi
 }
@@ -93,19 +100,19 @@ assert_count_ge() {     # assert_count_ge <cmd> <expected> <msg>
 # awk 로 첫 콜론까지를 키로 보고 나머지를 값으로 낸다. 값에 공백이 있어도 보존한다
 # (기존 `awk '{print $2}'` 변형들은 첫 토큰만 냈다 — 값에 공백이 있으면 잘렸다).
 field() {
-  printf '%s\n' "$2" | awk -v k="$1" '
+  awk -v k="$1" '
     { i = index($0, ":") }
     i > 0 && substr($0, 1, i-1) == k {
       v = substr($0, i+1); sub(/^[[:space:]]+/, "", v); print v; exit
-    }'
+    }' <<< "$2"
 }
 
 # field_line <key> <text> → 그 키의 **줄 전체**. plugins/plugin-audit/tests/
 # test_audit_sandbox_mutation_guard.sh 의 forced_downgrade 판정이 쓰는 형태 —값만 내는 field 와 이름을 나눠 두 뜻이 한 이름에 겹치지 않게 한다.
 field_line() {
-  printf '%s\n' "$2" | awk -v k="$1" '
+  awk -v k="$1" '
     { i = index($0, ":") }
-    i > 0 && substr($0, 1, i-1) == k { print; exit }'
+    i > 0 && substr($0, 1, i-1) == k { print; exit }' <<< "$2"
 }
 
 finish() {
