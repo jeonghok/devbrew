@@ -14,6 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import section6  # noqa: E402
+from check_brief import section4_items  # noqa: E402
+from check_verbatim_coverage import ITEM_RE as S6_ITEM_RE  # noqa: E402
 from roadmap_model import (  # noqa: E402
     BLOCK_ID_RE, KEY_RE, OQ_LINE_RE, FormatError, brief_universe, bundle_ids, id_sort_key, parse_ids,
     parse_roadmap, section_body)
@@ -191,7 +193,7 @@ class BriefIndex:
     lines: dict      # 번호 → brief 줄(§2 C · D · §0 OQ · §4 «key» · §5 RC · ST)
     k_lines: dict    # K<n> → "- K<n> — <brief §5 위험 줄 원문>"
     goal: str        # brief §1 본문
-    s6: str          # brief §6 본문 + 빈 줄 + audit §6 본문
+    s6: str          # brief §6 본문 + 빈 줄 + audit §6 중 brief §6 에 없는 S<n> 항목
 
 
 def _body(text: str, heading: str) -> str:
@@ -199,6 +201,49 @@ def _body(text: str, heading: str) -> str:
     if body is None:
         raise FormatError("brief 에 %s 절이 없다" % heading)
     return body
+
+
+def _s6_ids(body: str) -> set:
+    return {m.group(1) for m in map(S6_ITEM_RE.match, body.splitlines()) if m}
+
+
+def _merge_s6(b6: str, a6: str) -> str:
+    """payload §6 을 먼저 싣고, audit §6 항목(앵커 줄부터 다음 앵커 줄 앞까지)은 그 S<n> 이 payload §6 에 없는
+    것만 더한다 — payload §6 이 S1~Sn 전량인 brief 에서 audit 의 같은 글 사본을 두 번 싣지 않는다. 겹치는
+    앵커가 없으면(payload §6 = S1 인 brief) 두 본문을 그대로 잇는다."""
+    have = _s6_ids(b6)
+    head, entries, cur = [], [], None
+    for line in a6.splitlines(keepends=True):
+        m = S6_ITEM_RE.match(line.rstrip("\r\n"))
+        if m:
+            cur = (m.group(1), [line])
+            entries.append(cur)
+        elif cur is None:
+            head.append(line)
+        else:
+            cur[1].append(line)
+    kept = [e for e in entries if e[0] not in have]
+    if len(kept) == len(entries):
+        return b6.rstrip("\n") + "\n\n" + a6
+    extra = "".join(head) + "".join("".join(lines) for _sid, lines in kept) if kept else ""
+    return b6.rstrip("\n") + "\n\n" + extra
+
+
+def _section4_index(brief: str) -> dict:
+    """§4 «key» → 그 key 가 머리 줄에 있는 항목(머리 줄 + 들여쓴 본문 줄). 항목 규칙은 게이트의
+    `check_brief.section4_items` 하나다. 본문 줄에만 있는 key 는 그 항목으로, 항목 밖 줄의 key 는 그 줄로 간다."""
+    out = {}
+    items = [(head, "\n".join([head] + ["  " + b for b in body]), body) for head, body in section4_items(brief)]
+    for head, text, _body_lines in items:
+        for key in KEY_RE.findall(head):
+            out[key] = text
+    for _head, text, body in items:
+        for key in KEY_RE.findall("\n".join(body)):
+            out.setdefault(key, text)
+    for line in _body(brief, "## 4.").splitlines():
+        for key in KEY_RE.findall(line):
+            out.setdefault(key, line)
+    return out
 
 
 def index_brief(brief: str, audit: str) -> BriefIndex:
@@ -212,9 +257,7 @@ def index_brief(brief: str, audit: str) -> BriefIndex:
         m = OQ_LINE_RE.match(line)
         if m:
             lines[m.group(1)] = line
-    for line in _body(brief, "## 4.").splitlines():
-        for key in KEY_RE.findall(line):
-            lines[key] = line
+    lines.update(_section4_index(brief))
     for line in _body(brief, "## 5.").splitlines():
         m = RC_LINE_RE.search(line)
         if m:
@@ -226,7 +269,7 @@ def index_brief(brief: str, audit: str) -> BriefIndex:
     if b6 is None or a6 is None:
         raise FormatError("brief 또는 audit 의 §6 을 하나로 읽을 수 없다")
     return BriefIndex(lines, {k: "- %s — %s" % (k, text) for k, text in k_expected},
-                      _body(brief, "## 1."), b6.rstrip("\n") + "\n\n" + a6)
+                      _body(brief, "## 1."), _merge_s6(b6, a6))
 
 
 # ── 블록 · 묶음 · 로드맵 ─────────────────────────────────────────────────────

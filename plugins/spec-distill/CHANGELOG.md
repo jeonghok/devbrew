@@ -25,6 +25,9 @@
 - 확인 표시의 문단 내림(N20). 해결 결정의 §3 제외(N22).
 - `seed_review_log.py log --quote`(`--quote-file` 만 받는다).
 
+### Fixed
+- `roadmap_render.py` 가 이 릴리스의 brief 형식을 읽는다. 에픽 묶음 §6 은 payload §6 을 먼저 싣고 audit §6 은 payload 에 없는 `S<n>` 항목만 더해 같은 발화를 두 번 싣지 않는다. §4 여러 줄 항목은 게이트의 항목 규칙(`check_brief.section4_items`)으로 머리 줄과 본문 줄을 함께 싣고, 본문 줄이 «key» 를 되풀이해도 머리 줄의 결정 연결을 덮어쓰지 않는다.
+
 ### Security
 - seed 본문은 하나의 허용 문법 `scripts/seed_body.parse_seed` 로 읽는다(`check_seed.py` · `seed_provenance.py` 공유). 산문만 허용하고 제목 · 목록 · 인용 · 표 · 펜스 · HTML · 링크와 참조 문법 · URL 은 코드 표기 안에서도 거절한다. 공백만 있는 줄과 `\n` 이 아닌 줄 구분자도 거절한다. 확인 표시는 정확한 «(사용자 확인)» 하나만 인정하고 변형은 무효다. 풀이 줄의 판정은 가장 왼쪽 것이라 사용자 말 꼬리로 뒤집을 수 없다.
 - audit 틀의 제목은 정확히 한 번 · 틀 순서일 때만 인정하고 중복 · 순서 바뀜은 거절한다. `## 6` 줄은 허용 목록이며 모르는 줄은 `user-quotes` · `check-drops` · `log` · bundle 을 거절한다.
