@@ -101,11 +101,6 @@ PY
 
 cf="$(fence "$FIN" interview-commit)"
 [ -n "$cf" ] && ok "AC5: 커밋 펜스(interview-commit)가 있다" || no "AC5: 커밋 펜스가 없다"
-cf_raw="$cf"   # 자리표 그대로 — 「커밋 입력 부재」 칸이 쓴다
-# 이 파일의 칸은 나누지 않은 일이다 — 로드맵 폴더 자리표를 빈 값으로(분해된 일은 test_finish_commit_roadmap.sh).
-RPH='<분해된 일이면 Step A 8 의 --out 값, 나누지 않은 일이면 빈 값>'
-case "$cf" in *"RDIR=\"$RPH\""*) ok "AC5: 커밋 펜스에 로드맵 폴더 자리표가 있다" ;; *) no "AC5: 로드맵 폴더 자리표가 없다 — 빈 값 치환이 공허하다" ;; esac
-cf="${cf//"$RPH"/}"
 mk() {   # mk <이름> → origin 을 가진 클론, docs 에 세 파일
   local o="$T/$1-origin.git" c="$T/$1"
   git init -q --bare -b main "$o"; git clone -q "$o" "$c" 2>/dev/null
@@ -140,7 +135,7 @@ c3="$(mk no-head)"; git -C "$c3" switch -q -c feature/y; git -C "$c3" remote set
 o="$(runc "$c3")"
 assert_eq "$(git -C "$c3" rev-list --count HEAD)" "1" "AC5: origin/HEAD 가 없으면 커밋하지 않는다"
 printf '%s\n' "$o" | grep -qF '기본 브랜치를 판정하지 못했다' && ok "AC5: 그 사유를 보인다" || no "AC5: 사유 없음: $o"
-o="$(cd "$c3" && CLAUDE_PLUGIN_ROOT="$SD" bash -c "$cf_raw" 2>&1)"
+o="$(cd "$c3" && CLAUDE_PLUGIN_ROOT="$SD" bash -c "$cf" 2>&1)"
 printf '%s\n' "$o" | grep -qF '커밋 입력 부재' && ok "AC5: BRIEF 가 비면 커밋하지 않고 사유를 보인다" || no "AC5: BRIEF 부재 출력: $o"
 
 # 보안 보충 — 링크인 상태 파일은 커밋하지 않고 링크 너머를 건드리지 않는다

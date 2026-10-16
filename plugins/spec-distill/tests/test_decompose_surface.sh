@@ -53,8 +53,13 @@ has "$STEPA" '--audit "${BRIEF_REL%.md}.audit.md"' "Step A 8: --audit 도 같은
 assert_file_absent "$FIN" 'session-id>/state\.local\.md' "finishing: 세션 폴더의 옛 상태 파일 경로가 없다"
 # R7 이음매 — 로드맵 폴더는 끝내기 커밋 펜스(interview-commit)의 경로 지정에 «있을 때만» 든다. 손 커밋 안내 줄은 없다.
 CF="$(awk 'index($0,"<!-- interview-commit:begin -->"){f=1;next} index($0,"<!-- interview-commit:end -->"){f=0} f' "$FIN")"
-has "$CF" 'RDIR="<분해된 일이면 Step A 8 의 --out 값, 나누지 않은 일이면 빈 값>"' "커밋 펜스: RDIR 자리표(Step A 8 의 --out)"
-has "$CF" 'if [ -n "$RDIR" ] && [ ! -e "$RDIR" ] && [ ! -L "$RDIR" ]; then' "커밋 펜스: 없는 로드맵 폴더는 경로 지정에서 뺀다"
+# 로드맵 폴더는 모델이 채우는 자리표가 아니라 brief §7 의 첫 `분해됨 — <로드맵 경로>` 줄에서 펜스가 도출한다.
+case "$CF" in *'RDIR="<'*) no "커밋 펜스: 로드맵 폴더가 모델이 채우는 자리표다" ;; *) ok "커밋 펜스: 로드맵 폴더 자리표가 없다(도출)" ;; esac
+has "$CF" "r7=\"\$(awk -v p='분해됨 — ' 'index(\$0,\"## 7.\")==1{f=1;next} f&&/^## /{exit}" "커밋 펜스: brief §7 의 분해됨 줄에서 도출"
+has "$CF" '[ "$(dirname -- "$RDIR")" = "${top}/docs/superpowers/roadmaps" ]' "커밋 펜스: 로드맵 폴더의 부모는 docs/superpowers/roadmaps"
+has "$CF" 'case "$r7" in */roadmap.md) ;; *) r_err=' "커밋 펜스: §7 경로는 roadmap.md 로 끝난다"
+has "$CF" '[ -d "$RDIR" ] || r_err=' "커밋 펜스: 로드맵 폴더 자리는 폴더다"
+has "$CF" 'if [ -e "$RDIR" ] || [ -L "$RDIR" ]; then' "커밋 펜스: 없는 로드맵 폴더는 빼고 진행한다"
 has "$CF" 'git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} || c_rc=$?' "커밋 펜스: add 경로 지정에 로드맵 폴더(있을 때만)"
 has "$CF" '-- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} || c_rc=$?' "커밋 펜스: commit 경로 지정에 로드맵 폴더(있을 때만)"
 has "$CF" 'path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"}; then' "커밋 펜스: 로드맵 폴더도 path-inside 로 잰다"
@@ -62,7 +67,10 @@ n_unq="$(printf '%s\n' "$CF" | grep -cE '"\$STATE_F" "\$RDIR"' || true)"
 assert_eq "$n_unq" "0" "커밋 펜스: 로드맵 폴더를 조건 없이 넣는 경로 지정이 없다"
 assert_file_absent "$FIN" '함께 커밋하라 —' "finishing: 손 커밋 안내 줄(「…함께 커밋하라 — <경로들>」)이 없다"
 assert_file_absent "$FIN" 'git 이 무시하는 자리' "finishing: 상태 파일이 git 무시 자리일 수 있다는 줄이 없다"
-has "$REGEN" '`RDIR` 에 Step A 8 의 `--out` 값을 받아' "B-R: 커밋 펜스가 로드맵 폴더를 받는다고 가리킨다"
+has "$REGEN" 'brief §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해' "B-R: 커밋 펜스가 §7 에서 로드맵 폴더를 도출한다고 가리킨다"
+has "$REGEN" '로드맵 다시 생성이 멈췄다. 고친 뒤 직접 커밋하라: <brief 경로> · <audit 경로> · <상태 파일 경로> · <로드맵 폴더>' "B-R: 멈춤에 「커밋하지 않았다」 줄(네 경로)"
+has "$REGEN" 'rc 2 는 사용법 오류다' "B-R: rc 2 의 처리"
+assert_file_absent "$FIN" '빼고 커밋한다' "finishing: 「빼고 커밋한다」 대신 「빼고 진행한다」"
 B1="$(win "$FIN" '#### B-1 — superpowers 가용성 분기' '#### ')"
 has "$B1" 'brief · audit · 상태 파일 · 로드맵 폴더(<Step A 8 의 --out 값>)는 커밋하지 않았다' "B-1: 분해된 일의 미커밋 안내에 로드맵 폴더"
 # 리뷰 보강(I1) — B-A 가 더한 번호로 rc 1: 생성만 다시 돌고 A.5 · 게이트는 다시 없다

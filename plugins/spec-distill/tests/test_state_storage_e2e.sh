@@ -29,10 +29,6 @@ for v in ENTRY COMMIT BA RB_OPEN RB_TAKE RB_GUARD RB_HEAD RB_PROF; do
   eval "x=\"\$$v\""; [ -n "$x" ] && ok "전제: 펜스 $v 를 뽑았다" || no "전제: 펜스 $v 가 비었다 — 아래 칸이 공허하다"
 done
 case "$COMMIT$BA" in *"$PH"*) ok "전제: 커밋 · B-A 펜스에 PAYLOAD 자리표가 있다" ;; *) no "전제: PAYLOAD 자리표가 없다 — 자리표 치환이 공허하다" ;; esac
-# 이 흐름은 나누지 않은 일이다 — 로드맵 폴더 자리표를 빈 값으로.
-RPH='<분해된 일이면 Step A 8 의 --out 값, 나누지 않은 일이면 빈 값>'
-case "$COMMIT" in *"RDIR=\"$RPH\""*) ok "전제: 커밋 펜스에 로드맵 폴더 자리표가 있다" ;; *) no "전제: 로드맵 폴더 자리표가 없다 — 빈 값 치환이 공허하다" ;; esac
-COMMIT="${COMMIT//"$RPH"/}"
 
 A=sess-e2eaaaa1; B=sess-e2ebbbb2
 nob() { no "$1"; printf '      출력: %s\n' "$2"; }   # 실패 이름은 고정 — 출력은 따로 보인다
