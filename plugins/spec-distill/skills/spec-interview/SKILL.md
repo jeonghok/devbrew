@@ -68,17 +68,34 @@ Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 �
 
 ### 3. trivia 판정
 
-「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다. 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 그 다섯 패턴에 「풀린 입력」을 대조한다. 해당하면 그 파일의 안내 문면을 `<command>` = `spec-distill:spec-interview` 로 채워 내고, 인터뷰를 시작하지 않습니다.
+「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다(`type: interview-state` 도 같다). 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 그 다섯 패턴에 「풀린 입력」을 대조한다. 해당하면 그 파일의 안내 문면을 `<command>` = `spec-distill:spec-interview` 로 채워 내고, 인터뷰를 시작하지 않습니다.
 
 ### 3.5 seed 아닌 입력에 대한 조언
 
-「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 없으면 한 줄 안내를 낸다. **막지 않는다.**
+「풀린 입력」의 frontmatter 에 `type: interview-seed` · `type: interview-state` 둘 다 없으면 한 줄 안내를 낸다. **막지 않는다.**
 
 > 💡 `/spec-distill:request-framing` 을 먼저 거치면 첫 턴이 정리된 상태로 시작합니다. 지금 그대로 진행해도 됩니다.
 
+### 3.6 상태 파일
+
+펜스 앞에 `ARG_PATH='<2 에서 Read 한 절대경로 — @ 가 발동하지 않았으면 빈 값>'` 한 줄을 붙여 같은 Bash 호출로 돌린다. 마지막 줄이 판결이다 — `interview-state: REJECT …` 면 그 줄을 보이고 멈춘다. 마지막 줄이 `interview-state:` 판결이 아니면 그 출력을 보이고 멈춘다. 마지막 줄의 판결마다 동작은 아래 `Read` 줄의 state-file.md 에 있다.
+
+<!-- interview-state-entry:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+python3 "$SD/scripts/interview_state.py" entry --arg "${ARG_PATH:-}" --session "$(python3 "$SD/scripts/state_path.py" session-id || true)"
+```
+<!-- interview-state-entry:end -->
+
+```
+Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/state-file.md
+```
+
+그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
+
 ### 4. 본 절차로
 
-아래 절들을 진행한다. 이 skill 과 그 references(`seed-input.md` · `finishing.md`)가 말하는 「풀린 입력」은 2 의 결과다(3 에서 `force` 를 뗐으면 그 나머지). 「풀린 입력」이 비어 있으면 «라운드 규약»의 인자 없는 경로로 시작한다.
+아래 절들을 진행한다. 이 skill 과 그 references(`seed-input.md` · `finishing.md`)가 말하는 「풀린 입력」은 2 의 결과다(3 에서 `force` 를 뗐으면 그 나머지 · 3.6 판결이 RESUME 이면 그 상태 파일의 `## 풀린 입력` 블록 — `state-file.md`). 「풀린 입력」이 비어 있으면 «라운드 규약»의 인자 없는 경로로 시작한다.
 
 당신은 spec-distill의 인터뷰 stage를 진행 중입니다. 이 stage는 *받아적는* 인터뷰가
 아니라 **강한 문제공간 stage**입니다(Double Diamond 1st diamond — brainstorming 해답공간
@@ -93,9 +110,8 @@ brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으
 
 ## State location
 
-`.claude/spec-distill/<session-id>/state.local.md` (per-session 격리, devbrew §4.8 준수)
-
-State frontmatter schema:
+`docs/superpowers/interview/<날짜>-<주제>-interview.state.md` — 작업 트리의 추적 파일(`### 3.6`). 끝날 때 brief · audit 와 함께 커밋한다.
+State frontmatter schema: (첫 두 키 `type` · `seed` 는 `state-file.md` 가 정한다)
 
 ```yaml
 ---
@@ -143,20 +159,6 @@ State body: 각 라운드의 `## R<n>` 기록(«라운드 규약» 형식) + 조
 `<SECRET:...>` · `<TOKEN:...>` · `<KEY:...>` · `<CREDENTIAL:...>` · `<PLACEHOLDER:...>`).
 `check_verbatim_coverage.py`가 payload §6 ∪ audit §6 원문 대조에서 **이 토큰 집합**을 보고 L2를 advisory로 강등하므로,
 다른 형태로 치환하면 정당한 치환이 red로 잡혀 사용자가 Step B에서 판정해야 합니다(fail-closed 방향).
-
-### State write contract (PN1 — worktree-safe)
-
-`state.local.md`는 `state_path.py`가 **main repo** `.claude/spec-distill/<sid>/`로 라우팅합니다
-(`git rev-parse --git-common-dir`). 워크트리 세션에서 이 경로는 워크트리 *밖*이라 `Write`/`Edit`
-tool이 차단됩니다 — state 갱신은 **반드시 Bash**로 하십시오:
-
-```bash
-ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/state_path.py" state-root)"
-STATE="$ROOT/<session-id>/state.local.md"
-# read-modify-write via python3 -I -X utf8 -c / python3 -I -X utf8 - heredoc (Edit tool 사용 금지 — main-repo 경로 · -I 없이 부르면 사용자 리포의 json.py 등이 표준 모듈 대신 실행된다)
-```
-
-**brief는 예외**: `docs/superpowers/interview/`는 워크트리 *안*이라 `Write` tool로 정상 작성.
 
 ## 라운드 규약 — 지금 이해 · 다음 결정 · 질문 하나
 
@@ -495,11 +497,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md
 
 ## In-flight state migration
 
-**이 절 전문은 `references/state-migration.md` 에 있다** — state.local.md 로드 시 §2.4 스키마의
-**어떤 키든 부재**를 감지했을 때 읽는다(조건부 로드). `coverage`/`orchestration` 이 통째로 없을
-때로 좁히면 **직전 릴리스 세션이 어느 조건에도 안 걸린다** — 그 세션은 두 구조를 이미 갖고
-`reopened`·`reopen_log` 같은 새 키만 없기 때문이다. 실제 업그레이드 경로가
-바로 그것이므로, 조건은 「구조가 없는가」가 아니라 「**부재 키가 있는가**」다(spec §2.4).
+상태 파일을 읽을 때 §2.4 스키마의 **어떤 키든 부재**면 아래 파일을 읽는다.
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/state-migration.md
@@ -509,6 +507,6 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/state-migration.md
 
 ## kill switch
 
-- `DEVBREW_SPEC_DISTILL_DISABLE=1`: `## 진입 단계` 1 이 멈춘다(no-op). 진행 중이던 state.local.md 는 보존한다(실패 분석용).
+- `DEVBREW_SPEC_DISTILL_DISABLE=1`: `## 진입 단계` 1 이 멈춘다(no-op). 상태 파일은 docs 에 그대로 남는다.
 - `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT=<n>` · `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT=<n>`: 조사 호출 · 포화 판정 상한의 시작값(기본 20 · 5). 상한은 끄는 스위치가 아니라 닿으면 사용자에게 묻는 자리다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`: web landscape(R2) 비활성 — loud advisory 후 codebase 근거만 사용.

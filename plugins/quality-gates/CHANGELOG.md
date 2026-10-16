@@ -3,6 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [13.0.3] — 2026-10-15
+
+### Changed
+- 공유 엔진 `docreview_state.py`(심볼릭 링크로 함께 배송)의 `state-dir-for` 가 세션 칸 없이 `<root>/.docreview/…` 를 낸다(`--session` 을 받지 않는다) — quality-gates 는 이 서브커맨드를 부르지 않아 동작은 같다(배포 바이트 변경에 따른 cache key bump).
+- 공유 엔진 `docreview_advice.py`(심볼릭 링크)의 `review_identity` 설명문을 새 원장 자리에 맞췄다 — 계수 줄의 키는 사실상 (문서, 라운드)다. 설명문만 바뀌고 동작은 같다.
+
 ## [13.0.2] — 2026-10-11
 
 ### Security

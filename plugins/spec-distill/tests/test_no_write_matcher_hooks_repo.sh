@@ -12,7 +12,7 @@
 #
 # 이 락은 음의 락(“위반 0건”)이라 코퍼스가 비면 공허하게 통과한다. 그래서 양의 짝을
 # 다섯 붙인다: 정의역이 비지 않았다(`assert paths`), **두 glob 이 각각 살아 있다**
-# (`assert EXEMPT <= paths` 가 shared 쪽을, `assert scanned >= 3` 이 plugins 쪽을),
+# (`assert EXEMPT <= paths` 가 shared 쪽을, `assert scanned >= 2` 이 plugins 쪽을),
 # 면제가 실제로 무언가를 면제하고 있다(양성 대조 3), 그리고 이 fix 가 남겨야 할 것들이
 # 살아 있다(양성 대조 1·2).
 set -euo pipefail
@@ -103,7 +103,9 @@ for p, m, why in bad:
 assert EXEMPT <= set(paths), (
     f"면제 대상이 정의역에 없다 — shared glob 이 그 파일에 닿지 않는다: "
     f"{sorted(EXEMPT - set(paths))}")
-assert scanned >= 3, f"검사한 파일이 {scanned}개뿐이다 — plugins 정의역이 좁아졌다"
+# 하한 2 = project-init 의 hooks.json + shared 의 seamprobe 픽스처. spec-distill 6.0.0 이 hooks/ 를 지웠다.
+# plugins glob 이 죽으면 scanned 는 1 이라 여전히 막힌다.
+assert scanned >= 2, f"검사한 파일이 {scanned}개뿐이다 — plugins 정의역이 좁아졌다"
 sys.exit(1 if bad else 0)
 PY
 then ok "A1: 리포 전수 — PostToolUse matcher 가 전부 '쓰기 도구 배제 증명 가능'"

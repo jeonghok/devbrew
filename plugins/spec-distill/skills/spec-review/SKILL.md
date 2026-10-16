@@ -171,7 +171,8 @@ git -C "$top" -c core.quotePath=false ls-files --others --exclude-standard -- 'd
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
-STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 if [ ! -f "$SD/scripts/state_path.py" ]; then
   STATE_DIR=""
   echo "[spec-distill] 상태 리졸버 부재: $SD/scripts/state_path.py (플러그인 루트 미해석) — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
@@ -184,12 +185,12 @@ fi
 두 `[spec-distill]` 줄(상태 리졸버 부재 · 세션 상태 디렉토리 미특정) 중 하나가 나오면 게이트 없이 끝낸다 —
 아래 `### 대상 부재` 의 하위 경우다.
 
-엔진 상태(`$STATE_DIR`)는 **문서별**이다 — 세션과 문서 경로의 순수 함수
-(`<state-root>/<sid>/docreview/<stem>-<해시>`)라서 같은 문서는 dispatch 를 넘어 같은 디렉토리로
-돌아와 라운드와 재리뷰 상한이 이어지고, 다른 문서는 다른 디렉토리로 간다. 세션 디렉토리 하나를
+엔진 상태(`$STATE_DIR`)는 **문서별**이다 — 문서 경로의 순수 함수
+(`<state-root>/.docreview/<stem>-<해시>`)라서 같은 문서는 dispatch 와 세션을 넘어 같은 디렉토리로
+돌아와 라운드와 재리뷰 상한이 이어지고, 다른 문서는 다른 디렉토리로 간다. 한 디렉토리를
 여러 문서가 쓰면 둘째 문서가 첫 문서의 라운드·상한·finding 위에서 시작한다(`init` 은 그런 원장을
 `state_doc_mismatch` 로 거부한다). 그러므로 `$spec_path` 를 이 블록보다 **먼저** 대입한다. 세션 id
-를 못 풀었거나 `$spec_path` 가 비면 도출이 사유를 stderr 로 내고 `$STATE_DIR` 은 빈 값이다 — 선결의
+를 못 풀면 위 블록이 `$STATE_DIR` 을 비우고, `$spec_path` 가 비면 도출이 사유를 stderr 로 내고 빈 값이다 — 선결의
 `init` 이 `state_dir_missing` 으로 멈춘다. **선결의 `init` 이 rc 0 이 아니면 값과 무관하게 이 라운드를
 진행하지 않는다** — `begin-round` 는 문서를 보지 않으므로, `state_doc_mismatch` 같은 거부를 넘어
 진행하면 다른 문서의 원장 위에서 라운드가 돈다.
@@ -201,6 +202,90 @@ fi
 한다.
 
 > `[spec-distill] current_spec '<path>' 부재 (working-tree 에 없거나 후보를 고르지 않았다) — handoff 진행 안 함. 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).`
+
+원장 열기가 표지를 잡은 뒤 이 경로로 끝나면 `## 표지와 원장 열기` 의 해제 펜스(`ledger-release`)로 푼다(남의 표지는
+풀지 않는다).
+
+## 표지와 원장 열기 — 라운드마다 선결 앞
+
+절차서의 선결(`mkdir -p` · `init`) 앞에 매 라운드 이 펜스를 같은 Bash 호출 앞에 이어 붙여 돈다. 펜스 앞에
+`spec_path='<「## 입력」에서 절대 경로로 바꾼 설계문서 경로>'` 한 줄을 붙인다. 마지막 줄이 판결이고, `HELD` 가 아니면 펜스가 rc 3 으로 끝나 같은 호출의 뒤 명령이 돌지 않는다.
+원장 자리가 레포 밖이거나 레포 꼭대기 아래에서 링크(`.claude` · `spec-distill` · `.docreview` 포함)를
+지나면 만들지 않는다. 원장 정리는 이 세션이 이미 표지를 쥔 다음 라운드가 아니면 원장 자리를 만들기
+전에 한 번 돈다.
+
+<!-- ledger-open:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
+harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+lo="ERROR"
+if [ -z "$harness_sid" ]; then
+  echo "[spec-distill] 세션 id 를 얻지 못해 동시 리뷰 표지를 잡을 수 없다 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
+  lo="NO_SESSION"
+elif [ -z "$STATE_DIR" ] || ! python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR"; then
+  echo "[spec-distill] 원장 자리를 열지 못했다(STATE_DIR='${STATE_DIR:-}' — 비었거나 레포 밖이거나 링크를 지난다, 위 사유) — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
+  lo="NO_DIR"
+else
+  own=""; [ -f "$STATE_DIR/reviewing-by" ] && [ ! -L "$STATE_DIR/reviewing-by" ] && own="$(head -n 1 "$STATE_DIR/reviewing-by" 2>/dev/null)"
+  [ "$own" = "$harness_sid" ] || python3 "$SD/scripts/ledger_sweep.py" --root "$ROOT" || echo "[spec-distill] 원장 정리가 실패했다 — 리뷰는 계속한다."
+  if ! mkdir -p "$STATE_DIR" 2>/dev/null; then
+    echo "[spec-distill] 원장 자리를 만들지 못했다(STATE_DIR='${STATE_DIR}') — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
+    lo="NO_DIR"
+  else
+    python3 "$SD/scripts/ledger_marker.py" resume-note --dir "$STATE_DIR" --session "$harness_sid"
+    m_rc=0; m_out="$(python3 "$SD/scripts/ledger_marker.py" acquire --dir "$STATE_DIR" --session "$harness_sid")" || m_rc=$?
+    if [ "$m_rc" -eq 0 ]; then
+      lo="HELD"
+    elif [ "$m_rc" -eq 3 ]; then
+      case "$m_out" in ""|*[!A-Za-z0-9_-]*) m_who="(알 수 없는 표지)" ;; *) m_who="$m_out" ;; esac
+      echo "[spec-distill] 다른 세션(${m_who})이 이 문서를 리뷰하고 있다 — ${STATE_DIR}"
+      lo="OTHER:${m_who}"
+    else
+      echo "[spec-distill] 동시 리뷰 표지를 잡지 못했다(rc ${m_rc}) — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
+      lo="ERROR"
+    fi
+  fi
+fi
+echo "ledger-open: ${lo}"
+[ "$lo" = HELD ] || exit 3
+```
+<!-- ledger-open:end -->
+
+| 마지막 줄 | 동작 |
+|---|---|
+| `ledger-open: HELD` | 선결로 간다 |
+| `ledger-open: OTHER:<sid>` · `OTHER:(알 수 없는 표지)` | 멈추고 `AskUserQuestion` 하나 — 「그만둠 (권장)」/「이어 씀 — 표지를 내 것으로 바꾼다」. 이어 씀이면 아래 넘겨받기 펜스를 돈 뒤 이 펜스를 다시 돈다. 그만둠이면 `[spec-distill] 다른 세션이 이 문서를 리뷰하고 있어 그만뒀다 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).` 한 줄을 보이고 게이트 없이 끝난다(남의 표지라 풀지 않는다) |
+| `ledger-open: NO_SESSION` · `NO_DIR` · `ERROR` | 그 `[spec-distill]` 줄을 보이고 게이트 없이 끝난다(`### 대상 부재` 의 하위 경우) |
+
+<!-- ledger-takeover:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
+harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+[ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && python3 "$SD/scripts/ledger_marker.py" takeover --dir "$STATE_DIR" --session "$harness_sid"
+```
+<!-- ledger-takeover:end -->
+
+이 펜스는 사용자가 「이어 씀」을 고른 뒤에만 돈다.
+
+해제 펜스 — 원장 열기가 `HELD` 를 낸 뒤 게이트 없이 끝나는 출구(`### 대상 부재`)에서 돈다. 펜스 앞에
+`spec_path='<「## 입력」에서 절대 경로로 바꾼 설계문서 경로>'` 한 줄을 붙인다.
+
+<!-- ledger-release:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
+harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+[ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && [ -d "$STATE_DIR" ] && python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$harness_sid"
+```
+<!-- ledger-release:end -->
 
 ## 프로필
 
@@ -221,6 +306,18 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 쓰기 때문에 공유 정본에 두는 것이다. `--state-dir` 는 위 `$STATE_DIR` 이고, 상한은 그 문서가 정하는
 **재리뷰 상한 2** 다(라운드 4 이상은 사용자가 승인 게이트에서 열어야만 돈다).
 
+**원장 쓰기 전 확인.** 절차서의 원장 쓰기 명령 — `docreview_state.py` 의 `init` · `begin-round` ·
+`record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice`, `docreview_route.py` 의
+`prepare-recritic` · `finalize`, `docreview_anchor.py check-intent` — 은 전부 같은 Bash 호출 안에서 아래 한 줄
+**다음에만** 부른다. rc 가 0 이 아니면 그 명령을 부르지 않고 사유를 보이고 멈춘다 — 다른 세션이 표지를 넘겨받았거나
+표지가 없다.
+
+<!-- ledger-guard:begin -->
+```bash
+g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
+```
+<!-- ledger-guard:end -->
+
 4단계 codex 는 이 자리의 리터럴 게이트다. 조건을 산문으로 적지 않는다 — 산문 조건은 집행되지 않고,
 kill switch 는 P21 보안 컨트롤이라 그 공백은 "껐다고 믿게만" 만든다.
 
@@ -231,7 +328,7 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 # 대입이 여기로 오지 않는다 — `SD=` 를 펜스마다 다시 세우는 것과 같은 이유다.
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/design-doc.md"
 # 러너의 네 인자는 전부 이 호출 안에서 서야 한다. 같은 이유(새 셸)로 여기서 함께 세운다 —
-# `$CODEX_YAML` 은 `## 입력` 의 `$STATE_DIR`(세션과 문서의 **순수 함수**) 안의 한 파일이라
+# `$CODEX_YAML` 은 `## 입력` 의 `$STATE_DIR`(문서의 **순수 함수**) 안의 한 파일이라
 # 어느 셸에서 다시 도출해도 같은 파일을 가리킨다. 도출은 `## 입력` 과 같은 `state-dir-for`
 # 한 줄이다. `mktemp` 은 `$$` 와 같은 결함이다 — 다음 호출이 그 파일을 재발견하지 못한다.
 # 이미 값이 있으면 그것을 쓴다: `## 입력` 을 이 펜스 앞에 이어 붙여 한 호출로 도는 것이
@@ -239,13 +336,14 @@ PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/design-doc.md"
 if [ -z "${CODEX_YAML:-}" ]; then
   harness_sid="${harness_sid:-$(python3 "$SD/scripts/state_path.py" session-id || true)}"
   ROOT="${ROOT:-$(python3 "$SD/scripts/state_path.py" state-root || true)}"
-  STATE_DIR="${STATE_DIR:-$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}" || true)}"
-  if [ -n "$STATE_DIR" ] && mkdir -p "$STATE_DIR" 2>/dev/null; then
+  STATE_DIR="${STATE_DIR:-$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)}"
+  [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+  if [ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && mkdir -p "$STATE_DIR" 2>/dev/null; then
     CODEX_YAML="$STATE_DIR/docreview-codex.yaml"
   fi
 fi
 # ── 잔존물 제거는 **여기**다 — 가용성 판정보다 «앞». ─────────────────────────
-# 이 경로는 세션과 문서의 순수 함수라 같은 문서의 라운드마다 같은 파일이다. 직전 라운드가
+# 이 경로는 문서의 순수 함수라 같은 문서의 라운드마다 같은 파일이다. 직전 라운드가
 # 성공했으면 그 YAML 은 `codex_failed: false` 를 달고 있어 내용만으로는 이번 라운드의 판정과 구별되지
 # 않는다 — 남은 파일이 5단계에서 이번 라운드의 codex 판정으로 읽히면 직전 라운드의
 # finding 이 이번 것으로 삼켜지고 `codex_absent: false`, degrade 없음으로 보고된다.
@@ -270,16 +368,9 @@ fi
 # 조용히 넘어가지 않고 아래에서 codex 축을 **끈다**.
 # 앞 블록을 이어 붙이면 그 셸 옵션(`set -e`)도 따라온다 — 실패할 수 있는 명령은 rc 를
 # 삼키거나 잡는다. 여기서 펜스가 죽으면 잔존물이 살고 SKIPPED 공시도 나지 않는다.
-# **문서를 모르면**(`$spec_path` 가 비어 경로를 도출하지 못했다) 이 세션의 문서별 산출물
-# 전부가 후보다 — 어느 것이 이번 라운드의 경로인지 가를 수 없으므로 전부 같은 규칙으로
-# 중화한다. codex 산출물은 한 라운드의 4단계가 쓰고 5단계가 읽고 끝나는 파일이라 지워서
-# 잃는 것이 없다. 게이트 입력 부재도 codex 를 건너뛴 라운드다 — 그 라운드만 잔존물을 남기면
-# 위의 결함이 그 경로로 그대로 돌아온다.
-# **전제: 한 세션은 리뷰 라운드를 동시에 둘 돌리지 않는다.** sweep 은 다른 문서의 codex
-# 산출물까지 중화한다 — 동시에 도는 라운드가 있으면 그 라운드가 방금 쓴 판정을 지운다.
-# 「잃는 것이 없다」와 이 sweep 의 fail-closed 는 이 전제 아래에서만 참이다. 지우는 것은 문서별
-# 디렉토리의 `docreview-codex.yaml` 뿐이고 원장(`docreview-state.md`)·세션 원장(`state.local.md`)·
-# 그 밖의 파일은 건드리지 않는다.
+# **문서를 모르면**(`$spec_path` 가 비어 경로를 도출하지 못했다) 지울 것이 없다 — 원장은 문서 단위라 세션을 넘어
+# 공유되고(`.docreview/`), 다른 문서의 codex 산출물은 다른 리뷰의 것이다. 그 라운드는 `init` 이 `state_dir_missing`
+# 으로 멈추고 아래에서 codex 축도 건너뛴다.
 residue_unclear=0; residue_left=""
 neutralise() {   # `$NEUTRALISE_TARGET` 을 지운다 — 못 지우면 0바이트로 절단한다. 둘 다 못 하면 rc 1
   rm -f "$NEUTRALISE_TARGET" 2>/dev/null || true
@@ -291,11 +382,6 @@ neutralise() {   # `$NEUTRALISE_TARGET` 을 지운다 — 못 지우면 0바이�
 }
 if [ -n "${CODEX_YAML:-}" ]; then
   NEUTRALISE_TARGET="$CODEX_YAML"; neutralise || { residue_unclear=1; residue_left="$CODEX_YAML"; }
-elif [ -n "${harness_sid:-}" ] && [ -n "${ROOT:-}" ]; then
-  for y in "$ROOT/$harness_sid"/docreview/*/docreview-codex.yaml; do
-    [ -e "$y" ] || continue
-    NEUTRALISE_TARGET="$y"; neutralise || { residue_unclear=1; residue_left="${residue_left:+$residue_left }$y"; }
-  done
 fi
 DETECT_OUT="$(bash "$SD/scripts/detect_codex.sh")" || true
 codex_avail="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^codex_available: //p')"
@@ -358,7 +444,8 @@ Read 가 거부된다. 탐지 dispatch 직전에(재dispatch 포함) 아래 펜�
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
-STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/design-doc.md"
 prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
@@ -455,19 +542,30 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 
 셋 다 멱등이라 ③ 수정 뒤 다시 와도 두 번 적지 않는다. 문서가 바뀌므로 ①/② 의 미커밋 확인이 그 변경을
 알리고, 그때 커밋한다. 펜스 앞에 `spec_path='<「## 입력」에서 절대 경로로 바꾼 설계문서 경로>'` 한 줄을 붙여
-같은 Bash 호출로 돌린다.
+같은 Bash 호출로 돌린다. 이 펜스가 이 리뷰의 마지막 원장 쓰기다 — 표지를 잡아(이미 잡았으면 그대로) 쓰고
+끝에서 푼다. ③ 이면 수정 · `check-intent` · 다음 라운드의 어느 원장 쓰기보다 먼저 원장 열기(`ledger-open`)를 다시 돈다 — 표지를 다시 잡는다.
 
 <!-- advice-display:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
-STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}" || true)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+lm_rc=0
+if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ] && [ -n "${harness_sid:-}" ]; then
+  python3 "$SD/scripts/ledger_marker.py" acquire --dir "$STATE_DIR" --session "$harness_sid" >/dev/null || lm_rc=$?
+fi
 if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
   echo "[spec-distill] 참고(advisory) 목록 없음 — 엔진 원장을 찾지 못했다(spec_path='${spec_path:-}' · STATE_DIR='${STATE_DIR:-}'). 2단계 게이트 앞 글에 싣는다."
+elif [ "$lm_rc" -eq 3 ]; then
+  echo "[spec-distill] 참고(advisory) 목록 건너뜀 — 이 원장의 표지가 다른 세션 것이다(rc ${lm_rc}). 박제 · 계수 · 표시를 하지 않는다."
+elif [ "$lm_rc" -ne 0 ]; then
+  echo "[spec-distill] 참고(advisory) 목록 건너뜀 — 표지를 확인하지 못했다(rc ${lm_rc}) — 원장 쓰기를 하지 않는다. 박제 · 계수 · 표시를 하지 않는다."
 elif [ ! -f "$spec_path" ]; then
   echo "[spec-distill] 참고(advisory) 목록 건너뜀 — 설계문서가 없다(spec_path='${spec_path}'). 박제 · 계수 · 표시를 하지 않는다 — 아래 대상 부재 재확인으로 간다."
 else
+  g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
   adv_rc=0
   adv_err="$STATE_DIR/advice-err.json"
   python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --sink "$spec_path" --log-file "$spec_path" --render --cap 8 2>"$adv_err" || adv_rc=$?
@@ -477,6 +575,7 @@ else
     grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' "$adv_err" || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8 || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 2단계 게이트 앞 글에 싣는다."
   fi
 fi
+[ -z "${STATE_DIR:-}" ] || [ ! -d "$STATE_DIR" ] || [ -z "${harness_sid:-}" ] || python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$harness_sid"
 ```
 <!-- advice-display:end -->
 
@@ -503,7 +602,7 @@ fi
 |---|---|
 | ① | 미커밋 확인 → `/compact` 후 다음 세션 줄 (권장) — 두 줄을 노출하고 **턴 종료** |
 | ② | 미커밋 확인 → `/new` 후 같은 다음 세션 줄 — 두 줄을 노출하고 **턴 종료** |
-| ③ | 수정 필요 — 후속 질문으로 revise per findings / `spec-interview` 재진입 / 사용자 직접 편집 분기 |
+| ③ | 수정 필요 — 후속 질문으로 revise per findings / `spec-interview` 재진입 / 사용자 직접 편집 분기. 수정 · `check-intent` · 다음 라운드 전에 원장 열기(`ledger-open`)를 먼저 다시 돈다(끝맺음 펜스가 표지를 풀었다) |
 | ④ | 멈춤 — 상태 보존하고 종료 |
 
 **③ 의 세 갈래와 로드맵 에픽.** ③ 을 고르면 후속 질문 하나로 갈래를 묻는다 — 「지적대로 고치기」(revise per findings) · 「인터뷰 다시 열기」(`spec-interview` 재진입) · 「직접 편집」(사용자 직접 편집). 설계문서 frontmatter 에 `roadmap:` 줄이 있으면 그 문서는 로드맵 에픽이다 — 그때 「인터뷰 다시 열기」 갈래는 인터뷰를 다시 열지 않고 같은 로드맵 위의 재분해 절차로 간다:

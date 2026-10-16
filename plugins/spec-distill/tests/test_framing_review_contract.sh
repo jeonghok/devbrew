@@ -180,6 +180,8 @@ nth_bash_with "$GATE" 'check-drops' > "$T/drops.sh"
 printf -- '---\ntype: interview-seed\n---\n\n로그인이 가끔 실패한다.\n' > "$T/s.md"
 cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$T/s.audit.md"
 D="$T/state"; mkdir -p "$D"
+# 처분 · 답 기록 펜스의 첫 줄은 쓰기 전 확인이다 — 이 세션이 표지를 쥔 원장에서 돌린다
+python3 "$S/ledger_marker.py" acquire --dir "$D" --session sess-ct000001 >/dev/null || no "전제: 원장 표지를 잡지 못했다"
 python3 "$S/docreview_state.py" init --state-dir "$D" --doc "$T/s.md" --profile "$ROOT/plugins/spec-distill/references/docreview-profiles/seed.md" >/dev/null
 python3 "$S/docreview_anchor.py" snapshot "$T/s.md" > "$D/snap.json"
 python3 "$S/docreview_state.py" begin-round --state-dir "$D" --snapshot "$D/snap.json" >/dev/null
@@ -202,7 +204,7 @@ cat > "$D/critic.txt" <<'EOF'
 EOF
 python3 "$S/docreview_route.py" prepare-recritic --state-dir "$D" --critic "$D/critic.txt" > "$D/prep.json"
 python3 "$S/docreview_route.py" finalize --state-dir "$D" --recritic-skipped --doc "$T/s.md" > "$D/fin.json"
-cold() { env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 SD="$ROOT/plugins/spec-distill" STATE_DIR="$D" AUDIT_ABS="$T/s.audit.md" bash "$1" 2>"$1.err"; }
+cold() { env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 SD="$ROOT/plugins/spec-distill" STATE_DIR="$D" AUDIT_ABS="$T/s.audit.md" sid=sess-ct000001 bash "$1" 2>"$1.err"; }
 coldx() {   # coldx <펜스 파일> <VAR=값 …> — 차가운 셸에서 펜스를 돌리고 stderr 는 <펜스 파일>.err 로
   f="$1"; shift
   env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 SD="$ROOT/plugins/spec-distill" "$@" bash "$f" 2>"$f.err"
@@ -240,7 +242,7 @@ assert_contains "$(cold "$T/answer.sh")" "ans_rc=2" "답 펜스: Write 없이 �
 assert_eq "$(n_ans)" "$((a0 + 1))" "답 펜스: 재사용 시도가 줄을 남기지 않았다"
 
 # ── 처분 펜스(drop · decide) — 문구 파일에서 먼저 받고, 없으면 누르지 않는다 ─────
-D2="$T/state2"; mkdir -p "$D2"; cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$T/s2.audit.md"
+D2="$T/state2"; mkdir -p "$D2"; python3 "$S/ledger_marker.py" acquire --dir "$D2" --session sess-ct000001 >/dev/null || no "전제: 원장 표지를 잡지 못했다"; cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$T/s2.audit.md"
 python3 "$S/docreview_state.py" init --state-dir "$D2" --doc "$T/s.md" --profile "$ROOT/plugins/spec-distill/references/docreview-profiles/seed.md" >/dev/null
 python3 "$S/docreview_anchor.py" snapshot "$T/s.md" > "$D2/snap.json"
 python3 "$S/docreview_state.py" begin-round --state-dir "$D2" --snapshot "$D2/snap.json" >/dev/null
@@ -268,7 +270,7 @@ FIX2="$(id2 CT2_FIX)"; DEC2="$(id2 CT2_DEC)"
 disp_engine() {   # disp_engine <id> <EVENT> → 자리표를 채운 처분 펜스
   nth_bash_with "$GATE" 'one-line "$STATE_DIR/said-<id>.txt"' | sed -e "s/<id>/$1/g" -e "s/<drop | adopt | reject | hold>/$2/"
 }
-cold2() { coldx "$1" STATE_DIR="$D2" AUDIT_ABS="$T/s2.audit.md"; }
+cold2() { coldx "$1" STATE_DIR="$D2" AUDIT_ABS="$T/s2.audit.md" sid=sess-ct000001; }
 dropped2() { python3 "$S/docreview_state.py" gate --state-dir "$D2" | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin)["dropped"]))'; }
 disp_engine "$FIX2" drop > "$T/drop.sh"
 [ -s "$T/drop.sh" ] && ok "추출: 처분 펜스" || no "추출: 처분 펜스가 비었다 — 아래 판정은 무의미하다"

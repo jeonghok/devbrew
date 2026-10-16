@@ -85,14 +85,18 @@ cp "$ROOT/shared/tests/fixtures/docreview/brief-sample.md" "$DOCS/brief-sample.m
 cp "$ROOT/shared/tests/fixtures/docreview/design-sample.md" "$DOCS/design-sample.md"
 printf -- '---\nx: 1\n---\n\n## 6. 사용자 원문\n\n- id: S2\n  source: verbatim\n  round: 1\n  text: "둘째 발화"\n' > "$DOCS/brief-sample.audit.md"
 
+brief_doc() { printf '%s' "$SCRATCH/$1/docs/brief-sample-interview.md"; }   # brief_doc <셀> → 그 셀의 payload 경로
 run_fence() {   # run_fence <셀> <펜스 파일> <플러그인 루트> [nodoc] — stdout·stderr·rc 를 scratch 에 남긴다
   # nodoc: 문서 슬롯(PAYLOAD · AUDIT · spec_path)을 넘기지 않는다 — 같은 Bash 호출에서 대입하지 않은 호출이다.
+  # brief 의 degrade 원장은 그 인터뷰의 상태 파일(payload 이름에서 도출)이다 — 셀마다 따로 두어야 셀끼리 기록이 섞이지 않는다.
   local cell="$1" fence="$2" pr="$3" home="$SCRATCH/$1"
-  local docvars=(PAYLOAD="$DOCS/brief-sample.md" AUDIT="$DOCS/brief-sample.audit.md" spec_path="$DOCS/design-sample.md")
+  local bdoc; bdoc="$(brief_doc "$cell")"
+  local docvars=(PAYLOAD="$bdoc" AUDIT="${bdoc%.md}.audit.md" spec_path="$DOCS/design-sample.md")
   [ "${4:-}" = nodoc ] && docvars=()
-  mkdir -p "$home/.claude/spec-distill/$cell"
-  printf -- '---\nsession_id: %s\n---\n\nbody\n' "$cell" > "$home/.claude/spec-distill/$cell/state.local.md"
-  ( cd "$home" && env -i PATH="$BASE" HOME="$home" PYTHONPATH="$YAML_SITE" PYTHONDONTWRITEBYTECODE=1 \
+  mkdir -p "$home/.claude/spec-distill" "$home/docs" "$home/tmp"
+  cp "$DOCS/brief-sample.md" "$bdoc"; cp "$DOCS/brief-sample.audit.md" "${bdoc%.md}.audit.md"
+  printf -- '---\ntype: interview-state\nseed: 없음\nsession_id: %s\n---\n\nbody\n' "$cell" > "${bdoc%.md}.state.md"
+  ( cd "$home" && env -i PATH="$BASE" HOME="$home" TMPDIR="$home/tmp" PYTHONPATH="$YAML_SITE" PYTHONDONTWRITEBYTECODE=1 \
       CLAUDE_PLUGIN_ROOT="$pr" DEVBREW_SPEC_DISTILL_SESSION_ID="$cell" \
       ${docvars[@]+"${docvars[@]}"} bash "$fence" ) \
       >"$SCRATCH/$cell.out" 2>"$SCRATCH/$cell.err"
@@ -108,11 +112,12 @@ seed_critic() {
       CLAUDE_PLUGIN_ROOT="$SD" DEVBREW_SPEC_DISTILL_SESSION_ID="$cell" python3 "$SD/scripts/state_path.py" state-root 2>/dev/null)"
   [ -n "$root" ] || return 0
   sdir="$(env -i PATH="$BASE" PYTHONPATH="$YAML_SITE" PYTHONDONTWRITEBYTECODE=1 \
-      python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$root" --session "$cell" --doc "$doc" 2>/dev/null)"
+      python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$root" --doc "$doc" 2>/dev/null)"
   [ -n "$sdir" ] && mkdir -p "$sdir" && printf '%s\n' "$CRITIC_SEED" > "$sdir/critic.txt" && echo "$sdir/critic.txt"
   return 0
 }
 
+seed_ok_plain_b=""; seed_no_plain_b=""   # brief 셀의 원장 자리(critic.txt 경로) — 아래 degrade 기록 판정이 쓴다
 for spec in "reviewing-brief:brief.md:3" "spec-review:design-doc.md:2"; do
   sk="${spec%%:*}"; rest="${spec#*:}"; prof="${rest%%:*}"; want_slots="${rest#*:}"
   SKILL="$SD/skills/$sk/SKILL.md"
@@ -154,19 +159,21 @@ for spec in "reviewing-brief:brief.md:3" "spec-review:design-doc.md:2"; do
 
   # X — 실행. 셀마다 그 셀의 문서별 상태 디렉토리에 직전 라운드의 critic 출력을 미리 둔다 — 실패 분기는 그것을
   # 비워야 하고(5단계가 critic 사망으로 읽는다), 성공 경로는 건드리지 않아야 한다.
-  case "$sk" in reviewing-brief) SDOC="$DOCS/brief-sample.md" ;; *) SDOC="$DOCS/design-sample.md" ;; esac
+  sdoc() { case "$sk" in reviewing-brief) brief_doc "$1" ;; *) printf '%s' "$DOCS/design-sample.md" ;; esac; }   # sdoc <셀>
   if [ "${n_fence:-0}" -ge 4 ]; then
     FENCE_E="$SCRATCH/$sk.fence-errexit.sh"; { echo 'set -euo pipefail'; cat "$FENCE"; } > "$FENCE_E"
     for mode in plain errexit; do
       f="$FENCE"; [ "$mode" = errexit ] && f="$FENCE_E"
-      seed_ok="$(seed_critic "ok-$sk-$mode" "$SDOC")"
+      seed_ok="$(seed_critic "ok-$sk-$mode" "$(sdoc "ok-$sk-$mode")")"
+      [ "$sk-$mode" = reviewing-brief-plain ] && seed_ok_plain_b="$seed_ok"
       run_fence "ok-$sk-$mode" "$f" "$SD"
       assert_eq "$(cat "$SCRATCH/ok-$sk-$mode.rc")" "0" "$sk X($mode): 실제 루트면 rc 0"
       assert_eq "$(cat "$SCRATCH/ok-$sk-$mode.out")" "$(expect_stripped "$PROF")" "$sk X($mode): stdout 이 프로필 파일에서 must_catch 줄만 뺀 것과 같다 ($prof)"
       assert_eq "$(grep -c '^must_catch:' "$SCRATCH/ok-$sk-$mode.out" || true)" "0" "$sk S($mode): 펜스 출력에 must_catch 줄이 없다"
       assert_eq "$(grep -c '^must_catch:' "$PROF" || true)" "1" "$sk S 전제: 프로필 파일에는 must_catch 줄이 있다(벗기기 단언이 공허하지 않다)"
       assert_eq "$(cat "$seed_ok" 2>/dev/null)" "$CRITIC_SEED" "$sk X($mode) 양의 짝: 성공 경로는 미리 채운 \$STATE_DIR/critic.txt 를 건드리지 않는다"
-      seed_no="$(seed_critic "no-$sk-$mode" "$SDOC")"
+      seed_no="$(seed_critic "no-$sk-$mode" "$(sdoc "no-$sk-$mode")")"
+      [ "$sk-$mode" = reviewing-brief-plain ] && seed_no_plain_b="$seed_no"
       { [ -n "$seed_no" ] && [ -s "$seed_no" ]; } \
         && ok "$sk X($mode) 전제: 실패 셀의 \$STATE_DIR/critic.txt 를 직전 라운드 출력으로 채워 뒀다 (아래 비움 단언이 공허하지 않다)" \
         || no "$sk X($mode) 전제: 실패 셀의 \$STATE_DIR/critic.txt 를 채우지 못했다 — 도출이 깨졌다 ('$seed_no')"
@@ -178,7 +185,7 @@ for spec in "reviewing-brief:brief.md:3" "spec-review:design-doc.md:2"; do
       assert_contains "$(cat "$SCRATCH/no-$sk-$mode.err")" "critic.txt)을 비웠다." "$sk X($mode): 그때 비운 «뒤에» 「비웠다」고 보고한다"
       # 문서 슬롯(brief 는 PAYLOAD · spec 은 spec_path)을 같은 Bash 호출에서 대입하지 않은 실패 분기 — STATE_DIR 이 비어
       # 비움을 건너뛰고, 그 사실을 말하며, 비웠다고 말하지 않는다(PR 3 qg iter 2 F-c).
-      seed_nd="$(seed_critic "nd-$sk-$mode" "$SDOC")"
+      seed_nd="$(seed_critic "nd-$sk-$mode" "$(sdoc "nd-$sk-$mode")")"
       run_fence "nd-$sk-$mode" "$f" "$PR_NOPROF" nodoc
       assert_eq "$(cat "$SCRATCH/nd-$sk-$mode.rc")" "1" "$sk X($mode) 문서 슬롯 없음: 그래도 rc 1 (dispatch 하지 않는다)"
       assert_contains "$(cat "$SCRATCH/nd-$sk-$mode.err")" "critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패" \
@@ -207,14 +214,18 @@ assert_eq "$(grep -c '^must_catch:' "$SCRATCH/fr.out" || true)" "0" "request-fra
 assert_eq "$(grep -c '^must_catch:' "$SEED_PROF" || true)" "1" "request-framing S 전제: seed 프로필에는 must_catch 줄이 있다"
 
 # brief 는 실패를 degrade 원장에 남긴다(Step B 로 가는 채널). 원장이 못 쓰이면 두 번째 채널.
-st_b="$SCRATCH/no-reviewing-brief-plain/.claude/spec-distill/no-reviewing-brief-plain/state.local.md"
-fb_b="$SCRATCH/no-reviewing-brief-plain/.claude/spec-distill/no-reviewing-brief-plain/brief-degrade-fallback.txt"
+# 원장 = 그 셀의 상태 파일, 두 번째 채널 = 그 셀의 원장 자리(.docreview/<키>) 안.
+st_b="$(brief_doc no-reviewing-brief-plain)"; st_b="${st_b%.md}.state.md"
+fb_b="$(dirname "$seed_no_plain_b")/brief-degrade-fallback.txt"
 if grep -qF '프로필 내용 판독 불가' "$st_b" 2>/dev/null || grep -qF '프로필 내용 판독 불가' "$fb_b" 2>/dev/null; then
   ok "reviewing-brief X: 프로필 판독 실패가 degrade 원장(또는 두 번째 채널)에 남는다"
 else
   no "reviewing-brief X: 프로필 판독 실패가 degrade 원장에도 두 번째 채널에도 없다 — Step B 가 사유를 모른다"
 fi
-grep -qF '프로필 내용 판독 불가' "$SCRATCH/ok-reviewing-brief-plain/.claude/spec-distill/ok-reviewing-brief-plain/state.local.md" 2>/dev/null \
+st_ok="$(brief_doc ok-reviewing-brief-plain)"; st_ok="${st_ok%.md}.state.md"
+fb_ok="$(dirname "$seed_ok_plain_b")/brief-degrade-fallback.txt"
+{ [ -f "$st_ok" ] && [ -n "$seed_ok_plain_b" ]; } && ok "reviewing-brief X(양의 짝) 전제: 성공 셀의 상태 파일 · 원장 자리가 있다" || no "reviewing-brief X(양의 짝) 전제: 성공 셀의 상태 파일 · 원장 자리를 못 찾았다"
+{ grep -qF '프로필 내용 판독 불가' "$st_ok" 2>/dev/null || grep -qF '프로필 내용 판독 불가' "$fb_ok" 2>/dev/null; } \
   && no "reviewing-brief X(양의 짝): 성공 셀에도 판독 불가 기록이 있다 — 위 기록 판정이 무엇이든 참이 된다" \
   || ok "reviewing-brief X(양의 짝): 성공 셀에는 판독 불가 기록이 없다"
 

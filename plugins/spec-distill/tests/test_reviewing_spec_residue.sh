@@ -104,11 +104,12 @@ cp "$ROOT/plugins/spec-distill/scripts/codex-killswitch.conf" "$PR/scripts/"
 cp "$ROOT/plugins/spec-distill/scripts/docreview_state.py"   "$PR/scripts/"
 ln -s "$ROOT/plugins/spec-distill/references" "$PR/references"
 DETECTOR="$PR/scripts/detect_codex.sh"
-# dir_of <sid> <doc> → 그 세션·문서의 엔진 상태 디렉토리. 펜스가 쓰는 도출과 같은 한 줄이다.
-# 스크래치 홈은 git 밖이라 상태 루트가 cwd fallback(`<홈>/.claude/spec-distill`)이 된다.
+# dir_of <sid> <doc> → 그 셀(홈)·문서의 엔진 상태 디렉토리. 펜스가 쓰는 도출과 같은 한 줄이다.
+# 스크래치 홈은 git 밖이라 상태 루트가 cwd fallback(`<홈>/.claude/spec-distill`)이 된다. 셀마다 홈이
+# 달라 상태 루트가 갈리므로 셀끼리 원장을 나눠 쓰지 않는다(도출 자체에는 세션 칸이 없다).
 dir_of() {
   python3 "$PR/scripts/docreview_state.py" state-dir-for \
-      --root "$SCRATCH/$1/.claude/spec-distill" --session "$1" --doc "$2" 2>/dev/null
+      --root "$SCRATCH/$1/.claude/spec-distill" --doc "$2" 2>/dev/null
 }
 
 cat > "$PR/scripts/run_docreview_codex_reviewer.sh" <<'STUB'
@@ -142,7 +143,7 @@ BASE="/usr/bin:/bin"
 # 전부 미리 통과시켜, 계측기가 죽은 채로 판정이 나오는 것을 막는다.
 SIDS="rs01kill rs02noin rs03noip rs05rc3x rs04nodt rs06keep rs07trap rs08lock rs09down rs10ctlx
       rs11trnc rs12pred rs21kill rs22noin rs23noip rs24nodt rs25rc3x rs26lock rs30plce
-      rs31swep rs32swpe rs33swlk rs34swle"
+      rs31swep rs32swpe"
 bad_sid=""
 for s in $SIDS; do
   DEVBREW_SPEC_DISTILL_SESSION_ID="$s" python3 "$PR/scripts/state_path.py" session-id >/dev/null 2>&1 \
@@ -196,8 +197,14 @@ residue_case() {   # residue_case <라벨> <sid> <bin> <stub_write> <stub_rc> [e
 }
 residue_case "kill switch"          rs01kill  "$BIN_OK"   none 0 spec_path="$SKILL" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1
 residue_case "codex 미설치"          rs02noin  "$BIN_NONE" none 0 spec_path="$SKILL"
-# 문서 미상 — 펜스가 경로를 도출하지 못한다. 그래도 이 세션의 문서별 산출물은 중화돼야 한다.
-residue_case "게이트 입력 부재"       rs03noip  "$BIN_OK"   none 0
+# 문서 미상 — 펜스가 경로를 도출하지 못한다. 원장은 문서 단위라 세션을 넘어 공유되므로(`.docreview/`)
+# 다른 문서의 codex 산출물은 다른 리뷰의 것이다 — 건드리지 않는다. 그 라운드는 codex 축을 건너뛴다.
+yml="$(run_fence rs03noip "$BIN_OK" plant none 0)"
+if [ -s "$yml" ] && grep -q "$STALE_MARK" "$yml" && grep -q 'codex 리뷰를 건너뛰었다 (reason: gate_inputs_missing)' "$SCRATCH/rs03noip.err"; then
+  ok "A(게이트 입력 부재): 문서를 모르면 다른 문서의 codex 산출물을 건드리지 않고 codex 축을 건너뛴다 (gate_inputs_missing)"
+else
+  no "A(게이트 입력 부재): 문서를 모르는 라운드가 다른 문서의 codex 산출물을 바꿨거나($(post_state "$yml")) gate_inputs_missing 공시가 없다"
+fi
 residue_case "러너 rc=3 (껍데기)"     rs05rc3x  "$BIN_OK"   husk 3 spec_path="$SKILL"
 
 # 감지기 부재 — 배포 지점이 사라진 상태. 리포를 건드리지 않고 «가짜 루트»에서만 지운다.
@@ -385,7 +392,13 @@ errexit_case() {   # errexit_case <라벨> <sid> <쌍둥이 sid> <bin> <stub_wri
 }
 errexit_case "kill switch"      rs21kill rs01kill "$BIN_OK"   none 0 kill_switch         spec_path="$SKILL" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1
 errexit_case "codex 미설치"      rs22noin rs02noin "$BIN_NONE" none 0 not_installed       spec_path="$SKILL"
-errexit_case "게이트 입력 부재"   rs23noip rs03noip "$BIN_OK"   none 0 gate_inputs_missing
+yml="$(RUN_FENCE="$FENCE_E" run_fence rs23noip "$BIN_OK" plant none 0)"
+if [ "$(post_state "$yml")" = "$(post_state "$(yml_of rs03noip)")" ] && grep -q "$STALE_MARK" "$yml" \
+   && grep -q 'codex 리뷰를 건너뛰었다 (reason: gate_inputs_missing)' "$SCRATCH/rs23noip.err"; then
+  ok "E(게이트 입력 부재): errexit 아래서도 다른 문서의 codex 산출물이 그대로이고 gate_inputs_missing 이 공시된다"
+else
+  no "E(게이트 입력 부재): errexit 아래 사후상태 $(post_state "$yml") 또는 공시가 평상시와 다르다"
+fi
 errexit_case "러너 rc=3 (껍데기)" rs25rc3x rs05rc3x "$BIN_OK"   husk 3 -                   spec_path="$SKILL"
 mv "$DETECTOR" "$SCRATCH/detector.bak"
 errexit_case "감지기 부재"       rs24nodt rs04nodt "$BIN_OK"   none 0 detector_not_runnable spec_path="$SKILL"
@@ -423,7 +436,7 @@ else
 fi
 
 # ── P) 문서별 자리 — `## 입력` + 펜스를 차가운 셸에서 실행해 경로를 관측한다 ──────────
-# 한 세션에서 문서 둘을 리뷰하면 둘의 엔진 상태와 codex 산출물이 다른 자리에 앉아야 한다 —
+# 문서 둘을 리뷰하면 둘의 엔진 상태와 codex 산출물이 다른 자리에 앉아야 한다 —
 # 한 자리를 나눠 쓰면 둘째 문서가 첫 문서의 라운드·재리뷰 상한·finding 을 물려받는다. 같은
 # 문서는 dispatch 를 넘어 같은 자리로 돌아와야 한다(라운드 연속성). 두 번째 문서는 첫 문서와
 # **파일 이름이 같다** — 이름표(stem)만으로 갈리면 도출에서 문서 경로가 빠져도 통과한다.
@@ -490,83 +503,61 @@ if [ -n "$sa" ] && [ "$ca" = "$sa/docreview-codex.yaml" ]; then
 else
   no "P4: codex 산출물($ca)이 그 문서의 상태 디렉토리($sa) 밖이다"
 fi
-# P5 — 문서별 디렉토리는 문서와 무관한 한 세션(`$ROOT/$harness_sid`) 아래 docreview/ 에 앉는다. 옛 P5 는 세션 쪽
-# 앵커로 arm 원장(`$STATE`)을 썼다 — 그 원장은 spec-distill 3.0.0 이 지웠다(R75). 앵커를 그 원장 경로를 만들던 두
-# 값(`$ROOT` · `$harness_sid`)으로 옮긴다. 두 문서가 같은 세션을 보는가(루트 · sid 동일)는 그대로 잰다.
-sess="$r1/$id1"
-if [ -n "$r1" ] && [ -n "$id1" ] && [ "$r1" = "$r2" ] && [ "$id1" = "$id2" ] && [ "${sa%/*}" = "$sess/docreview" ] && [ "${sb%/*}" = "$sess/docreview" ]; then
-  ok "P5: 두 문서는 같은 세션(\$ROOT/\$harness_sid)을 보고, 문서별 디렉토리는 그 세션 아래 docreview/ 에 앉는다"
+# P5 — 문서별 디렉토리는 세션 칸 없이 상태 루트(`$ROOT`) 아래 `.docreview/` 에 앉는다(원장은 문서 단위라 세션을
+# 넘어 이어진다). 두 문서가 같은 루트를 보는가와 sid 가 풀렸는가는 그대로 잰다 — sid 는 경로가 아니라 다른 장치
+# (동시 리뷰 표지)가 쓴다.
+if [ -n "$r1" ] && [ -n "$id1" ] && [ "$r1" = "$r2" ] && [ "$id1" = "$id2" ] && [ "${sa%/*}" = "$r1/.docreview" ] && [ "${sb%/*}" = "$r1/.docreview" ]; then
+  ok "P5: 두 문서는 같은 상태 루트(\$ROOT)를 보고, 문서별 디렉토리는 그 아래 .docreview/ 에 앉는다 (세션 칸 없음)"
 else
-  no "P5: 세션 또는 문서별 디렉토리의 자리가 어긋났다 (ROOT $r1 / $r2 · SID $id1 / $id2 · STATE_DIR $sa / $sb)"
+  no "P5: 상태 루트 또는 문서별 디렉토리의 자리가 어긋났다 (ROOT $r1 / $r2 · SID $id1 / $id2 · STATE_DIR $sa / $sb)"
 fi
 
-# ── S) 문서 미상 sweep — 범위와 중화 불가 공시 ────────────────────────────────────
-# `$spec_path` 가 비면 펜스는 세션의 문서별 codex 산출물 전부를 훑는다. 위 A(게이트 입력
-# 부재)는 codex 파일 하나만 심으므로 sweep 이 세션 디렉토리째 지우거나 문서 디렉토리의 모든
-# 파일을 지워도 GREEN 이다. 그래서 같은 세션에 **살아야 할 것**(세션 원장 `state.local.md` · 두 문서의 엔진
-# 원장 · 다른 이름의 파일)을 함께 심고 바이트 동일을 잰다. 다른 문서의 codex 산출물이
-# 중화되는 것은 「문서를 모르면 전부가 후보」의 양의 쪽이다.
-sweep_scope_case() {   # sweep_scope_case <라벨> <sid> <펜스>
-  local label="$1" sid="$2" fence="$3" home S DA DB g f i lost=""
-  home="$SCRATCH/$sid"; S="$home/.claude/spec-distill/$sid"
+# ── S) 문서 미상 — 다른 문서의 산출물을 건드리지 않는다 ────────────────────────────
+# `$spec_path` 가 비면 펜스는 경로를 도출하지 못한다. 원장은 문서 단위라 세션을 넘어 공유되고(`.docreview/`),
+# 그 아래 다른 문서의 codex 산출물은 다른 리뷰(다른 세션일 수 있다)의 것이다 — 문서를 모르는 라운드는
+# 아무것도 지우지 않는다. 그 라운드는 `init` 이 `state_dir_missing` 으로 멈추고 codex 축도 건너뛴다. 두 문서의
+# 자리에 codex 산출물 · 원장 · 다른 이름의 파일을 심고 전부 바이트 동일로 남는지 잰다(잠근 파일도 같다 — 잠금이
+# 지움 시도의 실패 공시를 끌어내지 않는다).
+unknown_doc_case() {   # unknown_doc_case <라벨> <sid> <펜스>
+  local label="$1" sid="$2" fence="$3" home DA DB g f i lost=""
+  home="$SCRATCH/$sid"
   DA="$(dir_of "$sid" "$DOC_D")"; DB="$(dir_of "$sid" "$DOC_B")"; mkdir -p "$DA" "$DB"
-  printf -- '---\nsession_id: %s\n---\n' "$sid" > "$S/state.local.md"
-  printf 'unrelated\n' > "$S/notes-unrelated.txt"
   mk_state "$DA"
   printf 'critic verbatim\n' > "$DA/critic.txt"
   printf -- '---\ndocreview: {doc: other}\n---\n' > "$DB/docreview-state.md"
   plant_stale "$DA/docreview-codex.yaml"; plant_stale "$DB/docreview-codex.yaml"
   g="$SCRATCH/$sid.golden"; mkdir -p "$g"; i=0
-  for f in "$S/state.local.md" "$S/notes-unrelated.txt" "$DA/docreview-state.md" "$DA/critic.txt" "$DB/docreview-state.md"; do
+  for f in "$DA/docreview-state.md" "$DA/critic.txt" "$DA/docreview-codex.yaml" "$DB/docreview-state.md" "$DB/docreview-codex.yaml"; do
     i=$((i+1)); cp "$f" "$g/$i"
   done
+  # 다른 문서의 자리를 잠근다(파일 444 · 디렉토리 555) — 지우지도 절단하지도 못하는 자리라, 쓸기 분기가
+  # 되살아나면 residue_unclearable 를 내야 한다. 복원은 cleanup 트랩의 `chmod -R u+w` 도 진다.
+  chmod 444 "$DB/docreview-codex.yaml"; chmod 555 "$DB"
   ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
       PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
       STUB_WRITE=none STUB_RC=0 bash "$fence" ) >/dev/null 2>"$SCRATCH/$sid.err"
+  chmod 755 "$DB"; chmod 644 "$DB/docreview-codex.yaml"
   if [ "$DA" != "$DB" ] && grep -q 'codex 리뷰를 건너뛰었다 (reason: gate_inputs_missing)' "$SCRATCH/$sid.err"; then
     ok "S($label) 전제: 두 문서가 다른 자리이고 펜스가 문서 미상 경로(gate_inputs_missing)로 돌았다"
   else
-    no "S($label) 전제 붕괴: 두 문서 자리가 같거나 펜스가 sweep 경로로 돌지 않았다 — 아래 판정은 sweep 을 재지 않는다"
+    no "S($label) 전제 붕괴: 두 문서 자리가 같거나 펜스가 문서 미상 경로로 돌지 않았다 — 아래 판정은 그 경로를 재지 않는다"
   fi
   i=0
-  for f in "$S/state.local.md" "$S/notes-unrelated.txt" "$DA/docreview-state.md" "$DA/critic.txt" "$DB/docreview-state.md"; do
-    i=$((i+1)); cmp -s "$g/$i" "$f" 2>/dev/null || lost="$lost ${f#"$S"/}"
+  for f in "$DA/docreview-state.md" "$DA/critic.txt" "$DA/docreview-codex.yaml" "$DB/docreview-state.md" "$DB/docreview-codex.yaml"; do
+    i=$((i+1)); cmp -s "$g/$i" "$f" 2>/dev/null || lost="$lost ${f#"$home"/}"
   done
   if [ -z "$lost" ]; then
-    ok "S($label): 세션 원장 · 두 문서의 엔진 원장 · 다른 이름의 파일이 바이트 동일로 남는다 (sweep 은 codex 산출물만 지운다)"
+    ok "S($label): 문서를 모르면 두 문서의 codex 산출물 · 엔진 원장 · 다른 파일이 바이트 동일로 남는다 (다른 리뷰의 판정을 지우지 않는다)"
   else
-    no "S($label): sweep 이 살아야 할 파일을 지우거나 바꿨다:$lost"
+    no "S($label): 문서를 모르는 라운드가 다른 문서의 파일을 지우거나 바꿨다:$lost"
   fi
-  if neutralised "$DA/docreview-codex.yaml" && neutralised "$DB/docreview-codex.yaml"; then
-    ok "S($label): 두 문서의 codex 산출물이 모두 중화된다 (문서를 모르면 전부가 후보 — 양의 쪽)"
+  if grep -q 'residue_unclearable' "$SCRATCH/$sid.err"; then
+    no "S($label): 문서를 모르는 라운드가 남의 산출물을 지우려다 residue_unclearable 를 냈다 — 걷어낸 쓸기 분기가 살아 있다"
   else
-    no "S($label): 문서별 codex 산출물 중 중화되지 않은 것이 있다 ($(post_state "$DA/docreview-codex.yaml") / $(post_state "$DB/docreview-codex.yaml"))"
-  fi
-}
-sweep_scope_case "평상시" rs31swep "$FENCE"
-sweep_scope_case "errexit" rs32swpe "$FENCE_E"
-# sweep 분기의 중화 불가 — 명시 경로의 A!/E(중화 불가)와 짝이다. 문서를 모르는 라운드에서
-# 지우지도 절단하지도 못한 파일이 남으면, 그 사실과 그 경로가 공시되지 않는 한 사람이 읽는
-# 채널은 gate_inputs_missing 만 보고 남은 파일은 5단계의 시점 판별 하나에 맡겨진다.
-sweep_lock_case() {   # sweep_lock_case <라벨> <sid> <펜스>
-  local label="$1" sid="$2" fence="$3" home D yml tail left
-  home="$SCRATCH/$sid"; D="$(dir_of "$sid" "$DOC_D")"; mkdir -p "$D"
-  yml="$D/docreview-codex.yaml"; plant_stale "$yml"; chmod 444 "$yml"; chmod 555 "$D"
-  ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
-      PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
-      STUB_WRITE=none STUB_RC=0 bash "$fence" ) >/dev/null 2>"$SCRATCH/$sid.err"
-  left="$(post_state "$yml")"
-  chmod 755 "$D"; chmod 644 "$yml"
-  tail="${yml#"$SCRATCH"/}"   # 펜스는 cwd 의 물리 경로(/private/var/…)로 적는다 — 스크래치 뒤 꼬리로 대조한다
-  if [ "$left" = "absent" ] || [ "$left" = "0byte" ]; then
-    no "S!($label) 전제 붕괴: 잠금이 중화를 막지 못했다 ($left) — 이 셀은 중화 불가를 재지 않는다"
-  elif grep -q 'codex 리뷰를 건너뛰었다 (reason: residue_unclearable)' "$SCRATCH/$sid.err" \
-       && grep -qF "$tail" "$SCRATCH/$sid.err"; then
-    ok "S!($label): 문서 미상 라운드에서 치우지 못한 문서별 산출물이 residue_unclearable 와 그 경로로 공시된다 ($left 잔존)"
-  else
-    no "S!($label): 문서 미상 라운드의 중화 불가가 공시되지 않는다 — residue_unclearable 또는 경로($tail)가 stderr 에 없다"
+    ok "S($label): 잠근 남의 산출물에 대해 중화 불가 공시가 없다 (지우려 하지 않았다)"
   fi
 }
-sweep_lock_case "평상시" rs33swlk "$FENCE"
-sweep_lock_case "errexit" rs34swle "$FENCE_E"
+unknown_doc_case "평상시" rs31swep "$FENCE"
+unknown_doc_case "errexit" rs32swpe "$FENCE_E"
+
 finish
