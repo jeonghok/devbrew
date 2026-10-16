@@ -128,7 +128,10 @@ CONDUCT="$(win "$RTPL" '## 지휘 절차' '## ')"
 for lit in '`references/epic-handoff.md` 에 있는 에픽 넘김 줄' '`--bundle <묶음>`' \
            '`scripts/control_plane.py show --tasks {{ROADMAP}}`' '상태가 `keep` 이면(알 수 없음) 작업 상태는 바꾸지 않고' \
            '`scripts/roadmap_status.py --roadmap-file {{ROADMAP}}` 로 대신 계산' \
-           '다른 파일이거나 읽을 수 없으면 spec-review 는 리뷰하지 않고 끝난다' '막지 않고 승인 게이트의 「경고 N개」에 더해지며'; do
+           '다른 파일이거나 읽을 수 없으면 spec-review 는 리뷰하지 않고 끝난다' '막지 않고 승인 게이트의 「경고 N개」에 더해지며' \
+           '머지를 요청하기 전에 PR 마다 아래 셋을 한다' '실패 «이름» 을 main 기준선과 대조한다' \
+           '쓰기 도구가 없는 리뷰어 하나를 가장 강한 모델로 부른다' '뒤 에픽의 통합 리뷰에서 실제로 고쳐졌는지 확인시킨다' \
+           '락 · 보안 경계 · 리뷰어 프로필을 바꾼 수정은 매번 좁은 재리뷰를 한 번 받는다' '처음부터 끝까지 실제 명령으로 걸어 본다'; do
   has "$CONDUCT" "$lit" "로드맵 템플릿 지휘 절차: $lit"
 done
 case "$CONDUCT" in
