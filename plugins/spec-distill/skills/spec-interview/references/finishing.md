@@ -59,7 +59,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 
    표 아래에 `미배정 번호 <n> · 고아 발화 <m>` 한 줄을 보이고, 0 이 아니면 그 번호를 나열한다. brief 를 쓰기 전이라 이 계산은 모델이 한다 — 인터뷰 state 의 번호 목록(위 일곱 종류)에서 표의 배정 번호 합집합을 뺀다. 확정 판정은 Step A 8 의 생성기 검증(`roadmap_status.py` 규칙)이 한다.
 4. **고치기 · 승인.** `AskUserQuestion` 하나 — 옵션 셋: 「승인」(표를 확정하고 Step A 로) · 「고치기」(말로 받아 표를 고쳐 다시 보인다) · 「spec 하나로」(나누지 않고 Step A 로). 고친 횟수는 state `decompose_edits` 에 센다. 세 번 고칠 때마다 「계속 고칠까요」를 묻고(옵션: 「계속 고친다」 · 「지금 표로 승인」 · 「spec 하나로」) 자동으로 끝내지 않는다.
-5. **기록.** 승인된 표를 state 파일(`$ROOT/<session-id>/state.local.md`) 본문의 `## 분해안` 절에 위 머리 그대로 적고, 표 아래에 `승인: 「<사용자가 고른 옵션 또는 말>」` 한 줄을 둔다. 로드맵 폴더는 `docs/superpowers/roadmaps/<YYYY-MM-DD>-<kebab-topic>/` 다(brief 와 같은 날짜 · 주제). Step A 는 brief §7 첫 줄에 `분해됨 — <로드맵 경로>` 를 쓴다.
+5. **기록.** 승인된 표를 인터뷰 상태 파일(`<줄기>.state.md` — `state-file.md`) 본문의 `## 분해안` 절에 위 머리 그대로 적고, 표 아래에 `승인: 「<사용자가 고른 옵션 또는 말>」` 한 줄을 둔다. 로드맵 폴더는 `docs/superpowers/roadmaps/<YYYY-MM-DD>-<kebab-topic>/` 다(brief 와 같은 날짜 · 주제). Step A 는 brief §7 첫 줄에 `분해됨 — <로드맵 경로>` 를 쓴다.
 
 ### Step A — brief 작성 (terminal 산출물, 2파일)
 
@@ -189,9 +189,9 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 8. **로드맵 · 묶음 생성 — 분해된 일만.** 분해 판단에서 표를 승인했으면 게이트를 통과한 직후 생성기를 돌린다:
    ```bash
    SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-   ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
-   python3 "$SD/scripts/roadmap_write.py" create --brief "docs/superpowers/interview/<file>" \
-     --audit "docs/superpowers/interview/<audit file>" --plan-table "$ROOT/<session-id>/state.local.md" \
+   BRIEF_REL="docs/superpowers/interview/<file>"
+   python3 "$SD/scripts/roadmap_write.py" create --brief "$BRIEF_REL" \
+     --audit "${BRIEF_REL%.md}.audit.md" --plan-table "${BRIEF_REL%.md}.state.md" \
      --out "docs/superpowers/roadmaps/<YYYY-MM-DD>-<kebab-topic>/" --title "<주제 한 줄>" \
      --date "<YYYY-MM-DD>" --approval "<승인 원문>"
    ```
@@ -354,6 +354,8 @@ python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
 
   > `[spec-distill] interview brief 를 만들었다: docs/superpowers/interview/<file>. superpowers 가 없어 여기서 멈춘다. 이 brief 를 다음 작업의 입력으로 쓰세요. brief · audit · 상태 파일은 커밋하지 않았다 — 브랜치에서 직접 커밋하라.`
 
+  분해된 일이면 끝 문장은 `brief · audit · 상태 파일 · 로드맵 폴더(<Step A 8 의 --out 값>)는 커밋하지 않았다 — 브랜치에서 함께 직접 커밋하라.` 다(B-R 다시 생성 뒤에 낸다).
+
 - **superpowers 가용 시**: B-2 proceed 게이트 제시.
 
 #### B-2 — 단일 `AskUserQuestion` proceed 게이트 (4옵션, AC2)
@@ -442,7 +444,7 @@ AskUserQuestion({
 로드맵 에픽의 설계를 여는 줄은 이 줄이 아니라 `${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md` 의 에픽 넘김 줄이다 — 지휘 세션이 쓴다.
 
 - **① 확정하고 /compact 후 brainstorming**: 확정 후보를 `status: confirmed`로 반영 → brief 재저장 →
-  `check_brief.py gate` 재실행(통과 확인) → 아래 세 파일 커밋 펜스(`interview-commit`) → 두 줄을 *그대로 보이게* 노출한다. 첫 줄은 맨 `/compact`
+  `check_brief.py gate` 재실행(통과 확인) → 분해된 일이면 B-R 다시 생성 → 아래 커밋 펜스(`interview-commit` — 세 파일, 분해된 일이면 로드맵 폴더까지) → 두 줄을 *그대로 보이게* 노출한다. 첫 줄은 맨 `/compact`
   (뒤에 아무것도 붙이지 않는다 — 붙인 텍스트는 요약 지시로만 쓰인다), 둘째 줄은 위 다음 세션 줄이다.
   두 줄을 따로 입력하라는 안내와 git 작업 트리 루트의 절대경로를 함께 낸다(정본
   `## 다음 세션 명령` 규칙 1 · 7).
@@ -458,52 +460,76 @@ AskUserQuestion({
 - **③ 확정 목록 수정**: 확정 전이 없음. `confirm_repost_count` +1 후 B-0으로 돌아가 수정된
   목록을 재제시(상한 2회 — 초과 시 B-0의 강등 경로).
 
-- **④ brief만 종료**: 전 항목 `provisional` 유지. 아래 세 파일 커밋 펜스(`interview-commit`)를 돌린 뒤 brief terminal
+- **④ brief만 종료**: 전 항목 `provisional` 유지. 분해된 일이면 B-R 다시 생성 뒤, 아래 커밋 펜스(`interview-commit`)를 돌린 뒤 brief terminal
   advisory(B-1 부재 advisory와 같은 톤)를 내고 종료. handoff 안 함.
 
-**세 파일 커밋 — ①/② 는 게이트 재실행 통과 뒤 두 줄 노출 전, ④ 는 종료 안내 직전, 한 번.** ③ 은 커밋하지 않는다.
-게이트 재실행이 통과하지 않으면 커밋하지 않는다. 펜스의 `BRIEF` 자리표를 Step A.5 의 PAYLOAD 절대경로로 바꿔 돌리고,
-나온 `[spec-distill]` 줄을 그대로 보인다. 진행은 막지 않는다.
+**끝내기 커밋 — ①/② 는 게이트 재실행 통과 · B-R 다시 생성 뒤 두 줄 노출 전, ④ 는 종료 안내 직전, 한 번.** ③ 은 커밋하지 않는다.
+게이트 재실행이 통과하지 않으면 커밋하지 않는다. 펜스의 `BRIEF` 자리표를 Step A.5 의 PAYLOAD 절대경로로, `RDIR` 자리표를
+분해된 일이면 Step A 8 의 `--out` 값으로, 나누지 않은 일(B-R 에서 「spec 하나로」 로 돌아선 일 포함)이면 빈 값으로 바꿔 돌리고,
+나온 `[spec-distill]` 줄을 그대로 보인다. 로드맵 폴더는 있을 때만 세 파일과 한 커밋에 든다. 진행은 막지 않는다.
 
 <!-- interview-commit:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
-case "$BRIEF" in
-  ""|*"<"*) echo "[spec-distill] 커밋 입력 부재 — BRIEF 가 비었거나 자리표 그대로다(Step A.5 의 PAYLOAD 절대경로로 바꿔 다시 돌려라)." ;;
-  *)
+RDIR="<분해된 일이면 Step A 8 의 --out 값, 나누지 않은 일이면 빈 값>"
+in_err=""
+case "$BRIEF" in ""|*"<"*) in_err="BRIEF 가 비었거나 자리표 그대로다(Step A.5 의 PAYLOAD 절대경로로 바꿔 다시 돌려라)" ;; esac
+case "$RDIR" in *"<"*) in_err="${in_err:+${in_err} · }RDIR 가 자리표 그대로다(분해된 일이면 Step A 8 의 --out 값, 나누지 않은 일이면 빈 값으로 바꿔 다시 돌려라)" ;; esac
+if [ -n "$in_err" ]; then
+  echo "[spec-distill] 커밋 입력 부재 — ${in_err}."
+else
   # cwd 접두만 물리 경로로 바꾼다 — 그 아래 성분(링크 포함)은 path-inside 가 잰다.
   cwd_l="$(pwd -L)"
   case "$BRIEF" in "$cwd_l"/*) BRIEF="$(pwd -P)/${BRIEF#"$cwd_l"/}" ;; esac
+  case "$RDIR" in
+    "") ;;
+    "$cwd_l"/*) RDIR="$(pwd -P)/${RDIR#"$cwd_l"/}" ;;
+    /*) ;;
+    *) RDIR="$(pwd -P)/${RDIR}" ;;
+  esac
+  RDIR="${RDIR%/}"
   stem="${BRIEF%.md}"
   AUDIT_F="${stem}.audit.md"
   STATE_F="${stem}.state.md"
+  # 로드맵 폴더는 있을 때만 커밋 대상이다 — 없는 경로를 git add 하면 세 파일의 커밋까지 실패한다.
+  if [ -n "$RDIR" ] && [ ! -e "$RDIR" ] && [ ! -L "$RDIR" ]; then
+    echo "[spec-distill] 로드맵 폴더가 없어 빼고 커밋한다: ${RDIR}"
+    RDIR=""
+  fi
+  FILES="$BRIEF · $AUDIT_F · $STATE_F${RDIR:+ · $RDIR}"
   top="$(git -C "$(dirname -- "$BRIEF")" rev-parse --show-toplevel 2>/dev/null)" || top=""
   def="$(git -C "${top:-.}" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)" || def=""
   def="${def#origin/}"
   cur="$(git -C "${top:-.}" branch --show-current 2>/dev/null)" || cur=""
   if [ -z "$top" ]; then
-    echo "[spec-distill] 커밋하지 않았다 — git 저장소가 아니다. 파일은 docs 에 있다: $BRIEF · $AUDIT_F · $STATE_F"
-  elif ! python3 "$SD/scripts/state_path.py" path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F"; then
-    echo "[spec-distill] 커밋하지 않았다 — 세 파일 중 작업 트리 밖이거나 링크를 거치는 경로가 있다(위 사유). 확인한 뒤 직접 커밋하라: $BRIEF · $AUDIT_F · $STATE_F"
+    echo "[spec-distill] 커밋하지 않았다 — git 저장소가 아니다. 파일은 docs 에 있다: ${FILES}"
+  elif ! python3 "$SD/scripts/state_path.py" path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"}; then
+    echo "[spec-distill] 커밋하지 않았다 — 세 파일(분해된 일이면 로드맵 폴더까지) 중 작업 트리 밖이거나 링크를 거치는 경로가 있다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"
   elif [ -z "$def" ]; then
-    echo "[spec-distill] 커밋하지 않았다 — 기본 브랜치를 판정하지 못했다(origin/HEAD 없음). 직접 커밋하라: $BRIEF · $AUDIT_F · $STATE_F"
+    echo "[spec-distill] 커밋하지 않았다 — 기본 브랜치를 판정하지 못했다(origin/HEAD 없음). 직접 커밋하라: ${FILES}"
   elif [ -z "$cur" ]; then
-    echo "[spec-distill] 커밋하지 않았다 — 지금 브랜치 위가 아니다(detached HEAD). 브랜치에서 커밋하라: $BRIEF · $AUDIT_F · $STATE_F"
+    echo "[spec-distill] 커밋하지 않았다 — 지금 브랜치 위가 아니다(detached HEAD). 브랜치에서 커밋하라: ${FILES}"
   elif [ "$cur" = "$def" ]; then
-    echo "[spec-distill] 커밋하지 않았다 — 지금 기본 브랜치(${def})에 있다. 브랜치에서 커밋하라: $BRIEF · $AUDIT_F · $STATE_F"
+    echo "[spec-distill] 커밋하지 않았다 — 지금 기본 브랜치(${def})에 있다. 브랜치에서 커밋하라: ${FILES}"
   else
     c_rc=0
-    git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" || c_rc=$?
-    [ "$c_rc" -ne 0 ] || git -C "$top" commit -q --only -m "docs(interview): $(basename -- "$stem") brief · audit · 상태 기록" -- "$BRIEF" "$AUDIT_F" "$STATE_F" || c_rc=$?
-    if [ "$c_rc" -eq 0 ]; then
-      echo "[spec-distill] brief · audit · 상태 파일을 커밋했다 — $(git -C "$top" rev-parse --short HEAD) (${cur})"
+    git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} || c_rc=$?
+    # 빈 폴더는 add 를 통과해도 커밋의 경로 지정에 맞는 파일이 없어 커밋 전체를 실패시킨다 — 인덱스에 든 것이 없으면 뺀다.
+    if [ "$c_rc" -eq 0 ] && [ -n "$RDIR" ] && [ -z "$(git -C "$top" ls-files -- "$RDIR")" ]; then
+      echo "[spec-distill] 로드맵 폴더에 커밋할 파일이 없어 빼고 커밋한다: ${RDIR}"
+      RDIR=""
+    fi
+    [ "$c_rc" -ne 0 ] || git -C "$top" commit -q --only -m "docs(interview): $(basename -- "$stem") brief · audit · 상태 기록" -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} || c_rc=$?
+    if [ "$c_rc" -ne 0 ]; then
+      echo "[spec-distill] 커밋이 실패했다(rc ${c_rc}) — 파일은 docs 에 있다: ${FILES}"
+    elif [ -n "$RDIR" ]; then
+      echo "[spec-distill] brief · audit · 상태 파일 · 로드맵 폴더를 커밋했다 — $(git -C "$top" rev-parse --short HEAD) (${cur})"
     else
-      echo "[spec-distill] 커밋이 실패했다(rc ${c_rc}) — 파일은 docs 에 있다: $BRIEF · $AUDIT_F · $STATE_F"
+      echo "[spec-distill] brief · audit · 상태 파일을 커밋했다 — $(git -C "$top" rev-parse --short HEAD) (${cur})"
     fi
   fi
-  ;;
-esac
+fi
 ```
 <!-- interview-commit:end -->
 
@@ -511,16 +537,10 @@ esac
 
 분해된 일이면 Step B 를 끝내는 모든 갈래(① · ② · ④ · 확정 목록 재제시 상한의 종료 · B-1 superpowers 부재 정지)에서, 그 갈래가 brief 를 마지막으로 쓴 직후 · 두 줄이나 정지 문구를 보이기 전에 Step A 8 의 명령을 그대로 언제나 한 번 더 돌린다. 항목이 바뀌었는지와 상관없다 — 확정 반영은 brief 줄을 늘 바꾸고, 리뷰 · B-A 박제도 항목을 더한다. 두 번째 실행은 첫 실행이 표 파일에 적은 `## 생성 기록` 에 있는 파일만 덮어쓰고 기록 밖의 파일은 건드리지 않는다. rc 1 이면 사유를 보이고 갈래를 사유로 가른다.
 
-- 사유가 `unassigned` 또는 `orphans` 면 — 보통 B-A 가 brief 에 `OQ<n>` 줄이나 `위험 — 리뷰 참고` 줄을 더해 새 번호가 생긴 것이다 — 새 번호를 보이고 분해 판단 3–5(표 고치기 · 승인)로 그 번호를 배정한다. 승인되면 Step A 8 의 명령**만** 다시 돌린 뒤, 같은 Step B 갈래를 이어 간다(커밋 줄, 그다음 두 줄이나 정지 문구). Step A.5 리뷰를 다시 돌리지 않고 Step B 게이트도 다시 띄우지 않는다 — 사용자는 이미 ①/② 를 골랐다. 그 되돌아온 길에서 사용자가 「spec 하나로」 를 고르면: 이미 성공한 생성이 있으니 상태 파일 `## 생성 기록` 에 적힌 파일(생성된 로드맵 폴더의 파일)을 지우고 brief §7 의 `분해됨 — <로드맵 경로>` 줄을 뺀 뒤, 나누지 않은 일의 다음 세션 줄로 이어 간다.
-- 표로 고칠 수 없는 사유(생성기가 만들지 않은 파일의 덮어쓰기 거부 · 못 읽는 파일 · 빈 ROOT 나 상태 파일 경로)면 사유를 그대로 보이고 멈춘다. 표로 돌아가 반복하지 않고, 멈춤에는 로드맵이 최신이 아니라는 advisory 를 붙인다.
+- 사유가 `unassigned` 또는 `orphans` 면 — 보통 B-A 가 brief 에 `OQ<n>` 줄이나 `위험 — 리뷰 참고` 줄을 더해 새 번호가 생긴 것이다 — 새 번호를 보이고 분해 판단 3–5(표 고치기 · 승인)로 그 번호를 배정한다. 승인되면 Step A 8 의 명령**만** 다시 돌린 뒤, 같은 Step B 갈래를 이어 간다(커밋 펜스, 그다음 두 줄이나 정지 문구). Step A.5 리뷰를 다시 돌리지 않고 Step B 게이트도 다시 띄우지 않는다 — 사용자는 이미 ①/② 를 골랐다. 그 되돌아온 길에서 사용자가 「spec 하나로」 를 고르면: 이미 성공한 생성이 있으니 상태 파일 `## 생성 기록` 에 적힌 파일(생성된 로드맵 폴더의 파일)을 지우고 brief §7 의 `분해됨 — <로드맵 경로>` 줄을 뺀 뒤, 나누지 않은 일의 다음 세션 줄로 이어 간다.
+- 표로 고칠 수 없는 사유(생성기가 만들지 않은 파일의 덮어쓰기 거부 · 못 읽는 파일 — 상태 파일 포함)면 사유를 그대로 보이고 멈춘다. 표로 돌아가 반복하지 않고, 멈춤에는 로드맵이 최신이 아니라는 advisory 를 붙인다.
 
-커밋 전에 도는 단계라 이 결과가 커밋 대상이다.
-
-**커밋 — 분해된 일만.** 이 파일에 경로 지정 커밋 단계가 아직 없으면 다시 생성 직후, 두 줄이나 정지 문구 **앞에** 이 한 줄을 보인다. 그런 단계가 있으면 그 경로 지정에 로드맵 폴더를 더한다:
-
-> `[spec-distill] brief · audit · 상태 파일 · 로드맵 폴더를 함께 커밋하라 — <brief 경로> · <audit 경로> · <상태 파일 경로> · <로드맵 폴더>. 지휘 세션은 이 파일들이 기본 브랜치에 머지된 뒤 연다.`
-
-상태 파일이 git 이 무시하는 자리(또는 작업 트리 밖)에 있으면 그것은 빼고 커밋한다 — 무시되는 경로를 `git add` 하면 rc 1, 작업 트리 밖 경로는 rc 128 로 끝나 나머지 커밋까지 막는다.
+커밋 전에 도는 단계라 이 결과가 커밋 대상이다 — 그 갈래의 커밋 펜스(`interview-commit`)가 `RDIR` 에 Step A 8 의 `--out` 값을 받아 로드맵 폴더를 세 파일과 한 커밋에 넣는다(B-1 은 커밋하지 않고 그 안내에 로드맵 폴더를 적는다). 분해된 일의 두 줄 앞에는 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
 
 **다음 세션 줄 — 분해된 일 ①/② 공통**
 

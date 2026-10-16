@@ -59,14 +59,20 @@ AskUserQuestion({
 
 ## 5. 적용
 
-승인된 새 표를 세션 상태 폴더의 `redecompose-table.md`(첫 절 `## 분해안`)로 쓰고 생성기를 부른다:
+승인된 새 표(첫 절 `## 분해안`)를 아래 펜스의 heredoc 자리에 넣어 생성기를 부른다. 표는 이 펜스가 만든 임시 파일에만 살고 펜스가 끝나면 지워진다 — 세션 상태 폴더에 쓰지 않는다:
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
+TABLE="$(mktemp "${TMPDIR:-/tmp}/redecompose-table.XXXXXX")" || { echo "[spec-distill] 표 임시 파일을 만들지 못했다" >&2; exit 1; }
+cat > "$TABLE" <<'REDECOMPOSE_TABLE'
+<승인된 새 표 — `## 분해안` 머리와 열한 칸 표>
+REDECOMPOSE_TABLE
+u_rc=0
 python3 "$SD/scripts/roadmap_write.py" update --roadmap "<로드맵 경로>" --brief "<원본 brief>" \
-  --audit "<원본 audit>" --plan-table "$ROOT/<session-id>/redecompose-table.md" \
-  --date "<YYYY-MM-DD>" --change "<바뀐 것 한 줄>" --approval "<승인 원문>"
+  --audit "<원본 audit>" --plan-table "$TABLE" \
+  --date "<YYYY-MM-DD>" --change "<바뀐 것 한 줄>" --approval "<승인 원문>" || u_rc=$?
+rm -f -- "$TABLE"
+exit "$u_rc"
 ```
 
 - 바뀐 블록과 그 묶음만 다시 쓰고, 재분해 이력에 한 줄(날짜 · 바뀐 것 · 바뀜/새/사라짐 번호 · 승인 원문)을 더한다.

@@ -44,9 +44,27 @@ has "$STEPA" '분해 판단 3' "Step A: 실패하면 분해안 표로 돌아간�
 REGEN="$(win "$FIN" '#### B-R — 로드맵 다시 생성 (분해된 일만)' '#### ')"
 if [ -n "$REGEN" ]; then ok "Step B: 다시 생성 절이 있다"; else no "Step B: B-R 창이 비었다"; fi
 for lit in 'brief 를 마지막으로 쓴 직후' '언제나 한 번' '항목이 바뀌었는지와 상관없다' '## 생성 기록' \
-           '커밋 전에 도는 단계' 'brief · audit · 상태 파일 · 로드맵 폴더를 함께 커밋하라'; do
+           '커밋 전에 도는 단계'; do
   has "$REGEN" "$lit" "B-R: $lit"
 done
+# R7 이음매 — 분해안 표 · 생성 기록은 docs 상태 파일(<줄기>.state.md)에 산다. 세션 폴더의 옛 이름을 넘기지 않는다.
+has "$STEPA" '--plan-table "${BRIEF_REL%.md}.state.md"' "Step A 8: --plan-table 은 brief 줄기의 docs 상태 파일"
+has "$STEPA" '--audit "${BRIEF_REL%.md}.audit.md"' "Step A 8: --audit 도 같은 줄기에서"
+assert_file_absent "$FIN" 'session-id>/state\.local\.md' "finishing: 세션 폴더의 옛 상태 파일 경로가 없다"
+# R7 이음매 — 로드맵 폴더는 끝내기 커밋 펜스(interview-commit)의 경로 지정에 «있을 때만» 든다. 손 커밋 안내 줄은 없다.
+CF="$(awk 'index($0,"<!-- interview-commit:begin -->"){f=1;next} index($0,"<!-- interview-commit:end -->"){f=0} f' "$FIN")"
+has "$CF" 'RDIR="<분해된 일이면 Step A 8 의 --out 값, 나누지 않은 일이면 빈 값>"' "커밋 펜스: RDIR 자리표(Step A 8 의 --out)"
+has "$CF" 'if [ -n "$RDIR" ] && [ ! -e "$RDIR" ] && [ ! -L "$RDIR" ]; then' "커밋 펜스: 없는 로드맵 폴더는 경로 지정에서 뺀다"
+has "$CF" 'git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} || c_rc=$?' "커밋 펜스: add 경로 지정에 로드맵 폴더(있을 때만)"
+has "$CF" '-- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} || c_rc=$?' "커밋 펜스: commit 경로 지정에 로드맵 폴더(있을 때만)"
+has "$CF" 'path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"}; then' "커밋 펜스: 로드맵 폴더도 path-inside 로 잰다"
+n_unq="$(printf '%s\n' "$CF" | grep -cE '"\$STATE_F" "\$RDIR"' || true)"
+assert_eq "$n_unq" "0" "커밋 펜스: 로드맵 폴더를 조건 없이 넣는 경로 지정이 없다"
+assert_file_absent "$FIN" '함께 커밋하라 —' "finishing: 손 커밋 안내 줄(「…함께 커밋하라 — <경로들>」)이 없다"
+assert_file_absent "$FIN" 'git 이 무시하는 자리' "finishing: 상태 파일이 git 무시 자리일 수 있다는 줄이 없다"
+has "$REGEN" '`RDIR` 에 Step A 8 의 `--out` 값을 받아' "B-R: 커밋 펜스가 로드맵 폴더를 받는다고 가리킨다"
+B1="$(win "$FIN" '#### B-1 — superpowers 가용성 분기' '#### ')"
+has "$B1" 'brief · audit · 상태 파일 · 로드맵 폴더(<Step A 8 의 --out 값>)는 커밋하지 않았다' "B-1: 분해된 일의 미커밋 안내에 로드맵 폴더"
 # 리뷰 보강(I1) — B-A 가 더한 번호로 rc 1: 생성만 다시 돌고 A.5 · 게이트는 다시 없다
 for lit in 'Step A 8 의 명령**만** 다시 돌린 뒤' 'Step A.5 리뷰를 다시 돌리지 않고 Step B 게이트도 다시 띄우지 않는다' \
            '`## 생성 기록` 에 적힌 파일' '`분해됨 — <로드맵 경로>` 줄을 뺀 뒤' '표로 고칠 수 없는 사유'; do
@@ -89,6 +107,11 @@ for lit in '새로 fetch 한 `origin/main` 에서 `feature/roadmap-<요지>` 브
            'spec-review 게이트 ③ 의 후속 질문' '`## 분해안` 표를 `roadmap_write.py extract` 출력으로 바꿔 둔다' \
            '머지되거나 끝난 에픽'; do
   has "$RTXT" "$lit" "redecompose(리뷰): $lit"
+done
+# R7 이음매 — 재분해 표는 세션 상태 폴더(ledger_sweep 이 TTL 뒤 지우는 옛 자리)가 아니라 펜스의 임시 파일에 산다.
+assert_file_absent "$RED" 'session-id>/redecompose-table|state_path\.py" state-root' "redecompose: 세션 상태 폴더에 표를 쓰지 않는다"
+for lit in 'TABLE="$(mktemp "${TMPDIR:-/tmp}/redecompose-table.XXXXXX")"' '--plan-table "$TABLE"' 'rm -f -- "$TABLE"'; do
+  has "$RTXT" "$lit" "redecompose: 표는 임시 파일 — $lit"
 done
 
 # ── R3 넘김 — 분해된 일의 설계는 에픽 넘김 줄 · --bundle 로 ──────────────────
