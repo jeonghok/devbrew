@@ -164,7 +164,9 @@ adv_out="$(adv_run)"; adv_rc=$?
   && ok "ledger1: 원장 없는 STATE_DIR 에서 「목록 없음」 한 줄로 끝나고 원장 폴더에 쓰지 않는다" \
   || no "ledger1: rc=$adv_rc out=$(printf '%s' "$adv_out" | head -c 200)"
 : > "$AT/sd/docreview-state.md"
+chmod a-w "$AT/sd"   # 원장 폴더에 쓰려 하면(잠깐 쓰고 지워도) 실패해 양성 짝이 RED 가 된다
 adv_out="$(adv_run)"; adv_rc=$?
+chmod u+w "$AT/sd"
 { [ "$adv_rc" -eq 0 ] && printf '%s' "$adv_out" | grep -qF '참고 전부 2건' && printf '%s' "$adv_out" | grep -qF -- '- [overdesign] x — y' \
     && printf '%s' "$adv_out" | grep -qF -- '- [overdesign] z — w' && ! printf '%s' "$adv_out" | grep -qF '목록 없음' && ! printf '%s' "$adv_out" | grep -qF '실패'; } \
   && ok "ledger1(양성 짝): 원장이 있으면 「목록 없음」 없이 목록 전부를 낸다" || no "ledger1(양성 짝): rc=$adv_rc out=$(printf '%s' "$adv_out" | head -c 300)"
