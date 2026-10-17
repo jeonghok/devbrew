@@ -10,7 +10,8 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
+sys.path.insert(0, str(SCRIPTS))
 import repo_defaults as rd  # noqa: E402
 
 
@@ -46,6 +47,23 @@ class Settings(unittest.TestCase):
         s = rd.repo_settings({"review_model": ""})
         self.assertIsNone(s["review_model"])
         self.assertTrue(any("review_model" in e for e in s["errors"]))
+
+
+class NoHardcodedFolders(unittest.TestCase):
+    """AC14 — 설계문서 · 계획 · SDD 폴더 기본값은 repo_defaults.py 에만 글자로 있다."""
+    FILES = ("roadmap_status.py", "check_bundle_coverage.py", "conductor_state.py", "control_plane.py",
+             "spec_review_bundle.py")
+    LITERALS = (rd.SPECS_DIR.rstrip("/"), rd.PLANS_DIR.rstrip("/"), rd.SDD_WORKSPACE.rstrip("/"))
+
+    def test_default_folders_only_in_repo_defaults(self):
+        for name in self.FILES:
+            text = (SCRIPTS / name).read_text(encoding="utf-8")
+            for lit in self.LITERALS:
+                self.assertNotIn(lit, text, "%s 에 %s 가 박혀 있다 — repo_defaults 를 써라" % (name, lit))
+
+    def test_lock_sees_a_planted_literal(self):   # 양성 대조 — 이 락이 글자를 실제로 본다
+        planted = "x = %r\n" % rd.SPECS_DIR
+        self.assertTrue(any(lit in planted for lit in self.LITERALS))
 
 
 if __name__ == "__main__":

@@ -569,7 +569,7 @@ E2E="$(cd "$W" && python3 "$S/spec_review_bundle.py" entry --spec docs/superpowe
 assert_contains "$E2E" "얕은 답 — S2: 가리킨 자리가 없다" "끝에서 끝: spec-review 진입이 얕은 행을 보인다"
 assert_contains "$E2E" "번호 대조 경고 1개" "끝에서 끝: 경고 수 1"
 PLN="$(cd "$W" && python3 "$S/check_bundle_coverage.py" --plan docs/superpowers/specs/g7-design.md docs/superpowers/plans/g7.md)"; rc=$?
-assert_eq "$rc:$PLN" "1:계획 대조: 계획에 없는 AC 1개 — AC2" "끝에서 끝: --plan 이 빠진 AC2 를 잡는다"
+assert_eq "$rc:$PLN" "1:계획 대조: 계획에 없는 AC 1개 — AC2 (AC 2개)" "끝에서 끝: --plan 이 빠진 AC2 를 잡는다"
 printf 'AC1: 구현됨 — 됐다\nAC2: 미룸 — 다음에\n' > "$T/g7-report.md"
 IMP="$(cd "$W" && python3 "$S/check_bundle_coverage.py" --impl docs/superpowers/specs/g7-design.md "$T/g7-report.md")"
 assert_contains "$IMP" "받는 곳 없는 미룸 — AC2" "끝에서 끝: --impl 이 받는 곳 없는 미룸을 잡는다"
