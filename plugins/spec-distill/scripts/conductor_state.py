@@ -1,0 +1,314 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""conductor_state.py — 지휘자 기계 상태(`machine.md`)의 형식 · 읽기 · 원자 쓰기 · 세션 표지와 넘김 상태 계산.
+
+기계 상태는 이 기계에서만 뜻이 있는 것(PR 번호 캐시 · 실행 원장 위치 · 자원 · 살아 있는 agent · 기다리는 질문 ·
+아직 커밋하지 못한 기록 · 임시 레포 설정)만 담는다. 이어 가기에 필요한 기록은 에픽 설계문서의 절이 주인이다.
+상태 계산(`roadmap_status.py`) · 화면(`control_plane.py`) · 지휘자 스크립트가 이 모듈 하나를 쓴다.
+
+명령줄(읽기만):
+  conductor_state.py path --roadmap <로드맵 레포 상대경로>   이 기계의 기계 상태 파일 경로
+  conductor_state.py show --roadmap <…>                     읽은 결과 JSON — 깨졌으면 사유와 rc 3
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import repo_defaults  # noqa: E402
+from ledger_marker import _atomic_write, _read_line  # noqa: E402 — 리뷰 원장 표지와 같은 방식
+from roadmap_model import FormatError, section_body  # noqa: E402
+from state_path import SESSION_PATTERN, state_root  # noqa: E402
+
+MACHINE_FILE = "machine.md"
+MARKER = "conducting-by"
+TYPE = "conductor-machine"
+SECTIONS = (
+    ("PR", ("브랜치", "번호", "상태", "확인한 때")),
+    ("실행 원장", ("에픽", "계획", "원장", "읽은 줄")),
+    ("자원", ("종류", "경로", "에픽", "용도", "만든 때")),
+    ("살아 있는 agent", ("이름", "에픽", "일", "worktree", "보낸 때")),
+    ("기다리는 질문", ("에픽", "기대는 일", "질문")),
+    ("쌓인 기록", ("에픽", "절", "글")),
+    ("레포 설정", ("키", "값")),
+)
+COLUMNS = dict(SECTIONS)
+PR_STATES = ("열림", "머지됨", "닫힘")
+PR_NUMBER_RE = re.compile(r"#\d+")
+SEP = " · "
+
+# 에픽 설계문서(또는 산출물)의 절 — 지휘자가 쓰고 상태 계산 · 화면이 읽는다.
+RULINGS_HEADING = "## 판정"
+RECORD_HEADING = "## 지휘 기록"
+IMPL_PREFIX = "## 구현 대조 — "
+CONFIRM_RE = re.compile(r"- 넘김 확인 · ([A-Z][0-9]+[a-z]?) · ([0-9a-f]{8}) · (\S.*)")
+ISSUE_RE = re.compile(r"#\d+")
+EPIC_RE = re.compile(r"[A-Z][0-9]+[a-z]?")
+RECEIVED = ("머지됨", "끝남")
+
+
+class MachineError(ValueError):
+    """기계 상태를 읽거나 쓸 수 없다 — 빈 상태로 읽지 않는다."""
+
+
+# ── 경로 ─────────────────────────────────────────────────────────────────────
+
+def machine_dir(root, roadmap_rel: str) -> Path:
+    """<state-root>/conductor/<로드맵 폴더 이름>."""
+    parts = [p for p in roadmap_rel.strip("/").split("/") if p]
+    if len(parts) < 2 or parts[-2] in (".", "..") or ".." in parts:
+        raise MachineError("로드맵 경로에서 폴더 이름을 얻지 못했다: %r" % roadmap_rel)
+    return Path(root) / repo_defaults.CONDUCTOR_DIR / parts[-2]
+
+
+def machine_path(root, roadmap_rel: str) -> Path:
+    return machine_dir(root, roadmap_rel) / MACHINE_FILE
+
+
+# ── 형식 ─────────────────────────────────────────────────────────────────────
+
+def empty() -> dict:
+    return dict((name, []) for name, _cols in SECTIONS)
+
+
+def _check_row(section: str, row: dict, where: str):
+    if section == "PR":
+        if not PR_NUMBER_RE.fullmatch(row["번호"]):
+            raise MachineError("%s: PR 번호는 `#<숫자>` 다: %r" % (where, row["번호"]))
+        if row["상태"] not in PR_STATES:
+            raise MachineError("%s: PR 상태는 %s 중 하나다: %r" % (where, " · ".join(PR_STATES), row["상태"]))
+    if section == "실행 원장" and not row["읽은 줄"].isdigit():
+        raise MachineError("%s: 읽은 줄은 숫자다: %r" % (where, row["읽은 줄"]))
+
+
+def parse_machine(text: str, roadmap_rel: str) -> dict:
+    lines = text.split("\n")
+    if not lines or lines[0] != "---":
+        raise MachineError("frontmatter 가 없다")
+    try:
+        end = lines.index("---", 1)
+    except ValueError:
+        raise MachineError("frontmatter 가 닫히지 않았다")
+    head = dict(line.split(": ", 1) for line in lines[1:end] if ": " in line)
+    if head.get("type") != TYPE:
+        raise MachineError("type 이 %s 가 아니다" % TYPE)
+    if head.get("roadmap") != roadmap_rel:
+        raise MachineError("다른 로드맵의 기계 상태다: %s" % head.get("roadmap"))
+    data, cur = empty(), None
+    for n, line in enumerate(lines[end + 1:], end + 2):
+        if not line.strip():
+            continue
+        if line.startswith("## "):
+            cur = line[3:].strip()
+            if cur not in COLUMNS:
+                raise MachineError("%d줄: 모르는 절 %r" % (n, cur))
+            continue
+        if cur is None or not line.startswith("- "):
+            raise MachineError("%d줄: 읽지 못한 줄 %r" % (n, line))
+        cols = COLUMNS[cur]
+        cells = [c.strip() for c in line[2:].split(SEP, len(cols) - 1)]
+        if len(cells) != len(cols) or not all(cells):
+            raise MachineError("%d줄: %s 절의 칸 %d개(%s)가 아니다" % (n, cur, len(cols), " · ".join(cols)))
+        row = dict(zip(cols, cells))
+        _check_row(cur, row, "%d줄" % n)
+        data[cur].append(row)
+    return data
+
+
+def render_machine(roadmap_rel: str, data: dict) -> str:
+    out = ["---", "type: " + TYPE, "roadmap: " + roadmap_rel, "---", ""]
+    for name, cols in SECTIONS:
+        out += ["## " + name, ""]
+        for row in data.get(name, []):
+            cells = [str(row[c]).replace("\n", " ").strip() for c in cols]
+            if not all(cells):
+                raise MachineError("%s 절에 빈 칸이 있다: %r" % (name, row))
+            if any(SEP in c for c in cells[:-1]):
+                raise MachineError("%s 절: 마지막 칸이 아닌 칸에 ` · ` 를 쓸 수 없다: %r" % (name, row))
+            _check_row(name, dict(zip(cols, cells)), name)
+            out.append("- " + SEP.join(cells))
+        out.append("")
+    return "\n".join(out)
+
+
+def load(path: Path, roadmap_rel: str) -> dict:
+    path = Path(path)
+    if path.is_symlink():
+        raise MachineError("기계 상태 파일이 링크다: %s" % path)
+    if not path.exists():
+        return empty()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise MachineError("기계 상태 파일을 읽지 못했다: %s (%s)" % (path, type(exc).__name__))
+    return parse_machine(text, roadmap_rel)
+
+
+# ── 표지 · 쓰기 ──────────────────────────────────────────────────────────────
+
+def holder(d: Path):
+    return _read_line(Path(d), MARKER) or None
+
+
+def acquire(d: Path, session: str) -> str:
+    """"acquired" · "held" 또는 표지를 쥔 다른 세션 id."""
+    if not SESSION_PATTERN.fullmatch(session or ""):
+        raise MachineError("세션 id 형식이 아니다: %r" % (session or "")[:32])
+    d = Path(d)
+    d.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(str(d / MARKER), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    except FileExistsError:
+        owner = holder(d)
+        return "held" if owner == session else (owner or "(빈 표지)")
+    try:
+        os.write(fd, (session + "\n").encode("utf-8"))
+    finally:
+        os.close(fd)
+    return "acquired"
+
+
+def release(d: Path, session: str) -> bool:
+    d = Path(d)
+    if holder(d) != session:
+        return False
+    os.unlink(str(d / MARKER))
+    return True
+
+
+def takeover(d: Path, session: str):
+    """표지를 넘겨받는다 — 사용자가 정했을 때만 부른다. 이전 주인을 돌려준다."""
+    d = Path(d)
+    prev = holder(d)
+    _atomic_write(d, MARKER, session + "\n")
+    return prev
+
+
+def save(path: Path, roadmap_rel: str, data: dict, session: str) -> None:
+    """표지를 쥔 세션만 쓴다. 임시 파일 + os.replace 로 원자적으로."""
+    path = Path(path)
+    owner = holder(path.parent)
+    if owner != session:
+        raise MachineError("표지가 이 세션 것이 아니다(쥔 세션: %s) — 읽기 전용이다" % (owner or "없음"))
+    text = render_machine(roadmap_rel, data)
+    parse_machine(text, roadmap_rel)
+    fd, tmp = tempfile.mkstemp(prefix=".machine.", suffix=".tmp", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, str(path))
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+# ── 설계문서의 절 ────────────────────────────────────────────────────────────
+
+def _headings(doc_text: str):
+    in_fence = False
+    for line in doc_text.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and line.startswith("## "):
+            yield line.rstrip()
+
+
+def impl_done(doc_text: str, plan_rel: str) -> bool:
+    """그 계획의 `## 구현 대조 — <계획 경로>` 절이 있는가 — 다른 계획의 절은 세지 않는다."""
+    want = IMPL_PREFIX + plan_rel
+    return any(h == want for h in _headings(doc_text))
+
+
+def section_lines(doc_text: str, heading: str):
+    try:
+        body = section_body(doc_text, heading)
+    except FormatError:
+        return None
+    return None if body is None else [l.rstrip() for l in body.splitlines() if l.strip()]
+
+
+def rulings_archived(doc_text: str):
+    """설계문서 `## 판정` 의 `- ` 줄들. 절이 없으면 None(빈 절은 [])."""
+    lines = section_lines(doc_text, RULINGS_HEADING)
+    return None if lines is None else [l for l in lines if l.startswith("- ")]
+
+
+def ledger_rulings(text: str) -> list:
+    """실행 방식 원장의 판정 줄 — `Ruling:` 이 든 줄."""
+    return [l.strip() for l in text.splitlines() if "Ruling:" in l]
+
+
+# ── 넘김 ─────────────────────────────────────────────────────────────────────
+
+def handoff_key(giver: str, item: str) -> str:
+    return hashlib.sha256(("%s\n%s" % (giver, item)).encode("utf-8")).hexdigest()[:8]
+
+
+def confirm_line(giver: str, item: str, basis: str) -> str:
+    return "- 넘김 확인 · %s · %s · %s" % (giver, handoff_key(giver, item), basis)
+
+
+def confirmed_keys(record_text: str) -> set:
+    out = set()
+    for line in record_text.splitlines():
+        m = CONFIRM_RE.fullmatch(line.rstrip())
+        if m:
+            out.add((m.group(1), m.group(2)))
+    return out
+
+
+def handoff_rows(givers, stages: dict, records: dict) -> list:
+    """넘김 한 줄씩. givers 는 [(준 에픽, 설계문서 경로, [(항목, 이유, 받는 곳)])], stages 는 {에픽: 단계},
+    records 는 {에픽: 그 에픽 설계문서들의 `## 지휘 기록` 글}.
+    상태: 열림 · 처리됨(받는 에픽 머지됨, 확인 전) · 확인됨 · 이슈(`#<n>` — 처리 여부는 GitHub) · 받는 곳 없음."""
+    out = []
+    for giver, spec, rows in givers:
+        for item, _why, recv in rows:
+            row = {"item": item, "giver": giver, "receiver": recv, "spec": spec}
+            if ISSUE_RE.fullmatch(recv):
+                row.update(state="이슈", basis="GitHub 이슈 %s — 처리 여부는 GitHub 이 안다" % recv)
+            elif not (EPIC_RE.fullmatch(recv) and recv in stages):
+                row.update(state="받는 곳 없음", basis="받는 곳 %r 이 로드맵의 에픽도 `#<n>` 도 아니다" % recv)
+            elif (giver, handoff_key(giver, item)) in confirmed_keys(records.get(recv, "")):
+                row.update(state="확인됨", basis="%s 설계문서의 %s 절" % (recv, RECORD_HEADING[3:]))
+            elif stages[recv] in RECEIVED:
+                row.update(state="처리됨", basis="%s 머지됨 — 확인 전" % recv)
+            else:
+                row.update(state="열림", basis="%s %s" % (recv, stages[recv]))
+            out.append(row)
+    return out
+
+
+# ── 명령줄 ───────────────────────────────────────────────────────────────────
+
+def main(argv=None) -> int:
+    sys.stdout.reconfigure(encoding="utf-8")
+    ap = argparse.ArgumentParser(prog="conductor_state.py", description="지휘자 기계 상태를 읽는다.")
+    ap.add_argument("cmd", choices=("path", "show"))
+    ap.add_argument("--roadmap", required=True)
+    a = ap.parse_args(argv)
+    try:
+        path = machine_path(state_root(), a.roadmap)
+        if a.cmd == "path":
+            print(path)
+            return 0
+        data = load(path, a.roadmap)
+    except MachineError as exc:
+        print("[spec-distill] 기계 상태를 읽지 못했다 — %s" % exc)
+        return 3
+    print(json.dumps({"path": str(path), "holder": holder(path.parent), "data": data}, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
