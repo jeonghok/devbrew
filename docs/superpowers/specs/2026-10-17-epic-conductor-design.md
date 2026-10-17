@@ -145,7 +145,7 @@ next_phase: superpowers:writing-plans
 - `scripts/conductor_ledger.py` — `conductor_state.py` 위에서 기계 상태 쓰기, 자원 목록과 정리 전 확인(수정 · 추적 안 된 파일 · git 밖 기록 나열), 「주인 모름」 worktree 목록, PR 인계 절 모으기(`gh` 가 있을 때), 실행 방식 원장의 판정 줄 거두기, 설계문서의 `## 판정` · `## 구현 대조` · `## 지휘 기록` 절 쓰기, 감사 후보 모으기(§5).
 - 기존 `control_plane.py` 는 기계 상태의 PR 번호 캐시 · 진행 중 판정을 합쳐 보이고, `roadmap_status.py` 는 git 만 읽는 지금 성질을 지킨다(§6).
 
-**기록 — 둘로 나눈다(D1.1).** 다시 불렀을 때 이어 가는 데 필요한 기록은 git 이 추적하는 주인 문서에 둔다(§1 역할표): 판정 · 구현 대조 요약 · 지휘 기록(고른 흐름 · 건너뛴 확인과 이유 · 보낸 일)은 에픽 설계문서의 `## 판정` · `## 구현 대조` · `## 지휘 기록` 절에 지휘자가 적어 에픽 브랜치에 커밋한다 — 머지와 함께 기본 브랜치로 가고, 다른 기기에서도 읽힌다. 그 브랜치에 바로 쓸 수 없는 때가 셋이다: (1) 하위 agent 가 그 브랜치에서 일하는 중 — 기록을 기계 상태에 쌓아 두고 agent 가 돌아온 뒤 한 번에 커밋한다(같은 worktree 에 두 writer 를 두지 않는다) · (2) 그 에픽이 이미 머지된 뒤(머지 뒤 넘김 확인 · 끝 단계 결과) — 다음 로드맵 수정 PR 의 본문 `## 지휘 기록` 절에 싣고, 그 PR 이 열릴 때까지는 기계 상태에 쌓아 둔다 · (3) 설계문서 없이 산출물만 내는 에픽 — 같은 세 절을 그 산출물 파일에 둔다. 넘김 · 미룸은 이미 설계문서 `## 미룸` 표와 PR 본문 인계 절에 있고, 처리 여부는 받는 쪽 설계문서와 머지에서 계산한다. 레포 설정은 로드맵 frontmatter 다(D1.2 · §6). 이 기계에서만 뜻이 있는 것 — 살아 있는 agent · 자원 · 잠금 · 기다리는 질문 · PR 번호 캐시 — 만 기계 상태 `<state-root>/conductor/<로드맵 폴더 이름>/machine.md` 에 둔다(`state_path.py state-root` 는 main 체크아웃의 `.claude/spec-distill` 이라 worktree 를 지워도 남는다). 기계 상태가 사라져도 잃는 것은 다시 만들 수 있는 것뿐이다 — 기다리는 질문은 걸음 2 가 다시 모으고, PR 번호는 GitHub 에서 다시 읽고, 자원은 「주인 모름」 목록으로 다시 보인다. 기타 규칙: 기본 브랜치는 어디에도 적지 않고 `origin/HEAD` 에서 읽는다. secret 은 적지 않는다. 기계 상태 쓰기는 잠금 아래에서만 한다 — 리뷰 원장의 표지(`ledger_marker.py`)와 같은 방식으로 세션 id 를 표지로 잡고, 다른 세션이 쥐고 있으면 그 사실을 알리고 그 세션의 지휘자는 읽기 전용으로 보여 준다(표지를 넘겨받을지는 사용자가 정한다). 쓰기는 임시 파일 + 교체로 원자적으로 한다.
+**기록 — 둘로 나눈다(D1.1).** 다시 불렀을 때 이어 가는 데 필요한 기록은 git 이 추적하는 주인 문서에 둔다(§1 역할표): 판정 · 구현 대조 요약 · 지휘 기록(고른 흐름 · 건너뛴 확인과 이유 · 보낸 일)은 에픽 설계문서의 `## 판정` · `## 구현 대조` · `## 지휘 기록` 절에 지휘자가 적어 에픽 브랜치에 커밋한다 — 머지와 함께 기본 브랜치로 가고, 다른 기기에서도 읽힌다. 그 브랜치에 바로 쓸 수 없는 때가 셋이다: (1) 하위 agent 가 그 브랜치에서 일하는 중 — 기록을 기계 상태에 쌓아 두고 agent 가 돌아온 뒤 한 번에 커밋한다(같은 worktree 에 두 writer 를 두지 않는다) · (2) 그 에픽이 이미 머지된 뒤(머지 뒤 넘김 확인 · 끝 단계 결과) — 다음 로드맵 수정 PR 의 본문 `## 지휘 기록` 절에 싣고, 그 PR 이 열릴 때까지는 기계 상태에 쌓아 둔다 · (3) 설계문서 없이 산출물만 내는 에픽 — 같은 세 절을 그 산출물 파일에 둔다. 넘김 · 미룸은 이미 설계문서 `## 미룸` 표와 PR 본문 인계 절에 있고, 처리 여부는 받는 쪽 설계문서와 머지에서 계산한다. 레포 설정은 로드맵 frontmatter 다(D1.2 · §6). 이 기계에서만 뜻이 있는 것 — 살아 있는 agent · 자원 · 잠금 · 기다리는 질문 · PR 번호 캐시 — 만 기계 상태 `<state-root>/conductor/<로드맵 폴더 이름>/machine.md` 에 둔다(`state_path.py state-root` 는 main 체크아웃의 `.claude/spec-distill` 이라 worktree 를 지워도 남는다). 기계 상태가 사라져도 잃는 것은 쌓인 기록(지우기 전에 커밋한다)을 빼면 다시 만들 수 있는 것뿐이다 — 기다리는 질문은 걸음 2 가 다시 모으고, PR 번호는 GitHub 에서 다시 읽고, 자원은 「주인 모름」 목록으로 다시 보인다. 기타 규칙: 기본 브랜치는 어디에도 적지 않고 `origin/HEAD` 에서 읽는다. secret 은 적지 않는다. 기계 상태 쓰기는 잠금 아래에서만 한다 — 리뷰 원장의 표지(`ledger_marker.py`)와 같은 방식으로 세션 id 를 표지로 잡고, 다른 세션이 쥐고 있으면 그 사실을 알리고 그 세션의 지휘자는 읽기 전용으로 보여 준다(표지를 넘겨받을지는 사용자가 정한다). 쓰기는 임시 파일 + 교체로 원자적으로 한다.
 
 ### §3 지휘 순환
 
@@ -505,6 +505,9 @@ next_phase: superpowers:writing-plans
 | 다른 파일에 박힌 레포 전용 값(로드맵 폴더 위치 검사 등) · `gh` · superpowers 부재 강등 | 경로 규약 범용화 · 부재 강등은 R8 범위 | R8 |
 | 지출 조항 — 지휘자 시작 승인을 「규모 공시만」으로 · 「끝에 할 일 하나」 · Law 1 중간 단계 | 규칙 문면은 R9 범위 | R9 |
 | 사용자 원칙(재사용 검토 · 레포 전용 값 금지 · 상하류 연계 · 계층 · 온톨로지 · 흐름 고정 금지 · 머지 전 확인 · 하위 같은 흐름)을 CLAUDE.md · 철학 문서로 옮기고 낡은 개념 삭제 | 사용자 결정 「새 에픽으로 지금 병렬 (권장)」 — 재분해(#221)로 새 에픽 R11 이 맡았다 | R11 |
+| 기본 브랜치(`origin/HEAD`)를 모를 때 상태줄이 빈칸이다 — 로드맵 없음 · 꺼짐과 구별되지 않는다(계획 1 최종 리뷰) | 상태줄은 모든 레포에서 돌아 조용함이 기본이다 — 작업 트리에 로드맵이 있을 때만 「검사 불가 · 기본 브랜치 모름」 을 낼지는 지휘 화면과 함께 정한다 | R5 |
+| 에픽 보기가 머지된 에픽의 PR 번호를 보이지 않는다(구현 끝 · 일부 머지에서만 PR 줄) | AC9 는 충족 — 머지 커밋 메시지의 PR 번호 읽기는 지휘자 기록 자리와 함께 | R5 |
+| `--impl` 의 받는 곳은 작업 트리 로드맵을, 상태 계산은 기본 브랜치 로드맵을 읽는다 · `DEFAULT_REF` · `NO_DEFAULT` 가 두 스크립트에 겹친다 | 계획 1 리뷰 미룸 — 규칙은 한 함수(`roadmap_model.receiver_ok`)라 판정은 같고 읽는 판만 다르다 | R5 |
 
 ## Metadata
 
@@ -540,3 +543,32 @@ next_phase: superpowers:writing-plans
 | 9e1747a6#r3.1 | 참고(ambiguity) #3-지휘-순환 — Step 3, 「블록의 `브랜치:` 이름으로 먼저 만든다」 (create the branch named in the block first), doesn't say what happens when an epic lists several branches: which branch is created when, what each one starts from (the default branch after the previous plan merges?), and how 「에픽 worktree」 maps to each branch. |
 | 84d5a0c7#r3.1 | 참고(handoff_incomplete) #6-상태-계산--로드맵-형식 — This roadmap has no `review_model` or `test_command`. When review_model is missing the reviewer silently runs on the session model, breaking the repo's 「review model is opus」 rule. When devbrew's test detection partly succeeds (shell tests without the execute bit are not picked up), the conductor never asks and silently runs only part of the suite. No plan is told to add these values to this roadmap's front matter. |
 | 1cdda836#r3.1 | 참고(handoff_incomplete) #files-to-modify — 본문은 지휘자 호출 안내를 skill이 생기는 셋째 계획에 배정하지만, 파일 목록은 같은 안내 변경을 둘째 계획에 배정한다. 계획 작성자가 어느 목록을 따르느냐에 따라 출시 순서가 달라진다. — 고치면: 파일 목록에서도 인터뷰의 지휘자 호출 줄과 템플릿의 지휘자 호출 안내를 셋째 계획으로 옮긴다. 여러 계획에서 수정하는 파일은 둘째 계획의 흐름 정리와 셋째 계획의 호출 연결을 구분해 적는다. |
+
+## 판정
+
+- Ruling: 재분해 agent 의 작은 테스트와 기준선 스위트가 시간상 겹칠 수 있다 — 다른 worktree 라 파일은 겹치지 않고 /tmp 경합만 남는다 — 틀리면 기준선에 거짓 실패 몇 줄; Task 15 대조에서 이름 차이로 드러난다
+- Ruling: roadmap_status.py · check_bundle_coverage.py · roadmap_model.py · spec_review_bundle.py 에서는 메서드 이름이 replace · mkdir 등(WRITE_ATTRS)인 호출을 쓰지 않는다 — 정적 쓰기 검사 락(test_roadmap_status.sh static_check) — Task 8 의 parse_acs(value.replace) 를 dispatch 에서 split 반복으로 바꾸게 한다 — 틀리면 그 락이 빨갛게 잡는다
+- Ruling: section_lines · rulings_archived 는 머리를 정확히 일치로 찾고 같은 머리가 둘이면 FormatError 를 올린다(없을 때만 None) — 깨진 문서와 절 없음을 가르려고 — Task 9 · 10 dispatch 에 그 예외를 잡아 블록 경고 줄로 보이게 실어야 한다 — 틀리면 넘김 확인이 조용히 열림으로 떨어진다
+- Ruling: extract_rows 는 「없음」 선택 칸을 넣지 않는다 — 계획 인터페이스(Row.extras 에 「없음」 없음)가 정본, 계획의 코드 한 줄이 그것과 어긋났다 — 틀리면 사람이 일부러 「없음」을 적은 칸이 재분해 때 사라진다(뜻은 같다)
+- Ruling: ③ 여러 브랜치 블록에서 결정 기록의 머지 줄은 브랜치 ref 가 없는(tip None, 지워진) 브랜치만 머지로 친다 — ref 가 살아 있고 기본 브랜치에 안 들어간 브랜치는 그대로 두고 「결정 기록 머지 줄을 이 브랜치에 적용하지 않았다」 경고 — 설계 §6 거짓 「머지됨」 금지 · AC5 — 틀리면 squash 뒤 브랜치를 안 지운 에픽이 일부 머지로 남아 사용자가 브랜치를 지우면 풀림
+- Ruling: ④ impl_done · _headings · IMPL_PREFIX 를 roadmap_model.py(잠긴 파일)로 옮기고 conductor_state 가 다시 내보낸다 — 계산기 import 그래프를 잠긴 파일 안에 가둠 — 틀리면 conductor_state 쪽 이름 경로만 바뀜
+- Ruling: 여러 브랜치 블록의 결정 기록 머지 줄은 그 줄 글에 이름이 나온 브랜치에만 적용 — 이름이 안 나온 브랜치는 ref 가 없어도 머지 아님 + 경고 — 아직 안 만든 브랜치와 지운 브랜치를 ref 만으로 못 가른다 — 틀리면 squash 뒤 브랜치 이름 없이 쓴 머지 줄은 일부 머지로 남고 경고가 이름을 적으라고 알림
+- Ruling: 블록의 머지 줄 전부를 모아 이름 합집합에 적용 · 이름 문자는 ASCII 영숫자와 /._- 만, 끝 . 뒤 공백·끝은 경계 · NOTICE 에 「머지한 브랜치 이름만 적는다」 — 멈출 조건: 이 축(결정 기록 머지 줄)은 라운드 3 이 마지막, 또 나오면 알려진 한계로 원장에 세우고 넘어간다(같은 자리 반복 = 층위 의심)
+- Ruling: ① settings errors 가 있으면 (None, 로드맵 형식이 깨졌다) — roadmap_status 와 같은 판정 ② 보고서에서 AC4 빠짐 · scope 유무 대조 + CLI 장면 ③ check_impl 에 scoped · 뺀 AC 수, render_plan · render_impl 둘 다 「--acs 로 고른 것 · 뺀 AC n개」 — 틀리면 출력 문구만 바뀜
+- Ruling: Task 9 의 conductor_state.handoff_rows · rulings_archived · section_lines · RECORD_HEADING 은 roadmap_model.py 로 옮기고 conductor_state 가 다시 내보냄 — 과제 7 의 잠긴 파일 import 규칙 — 틀리면 conductor_state 쪽 이름 경로만 바뀜
+- Ruling: 지휘 기록 · 판정 읽기 불가는 그 받는 쪽 넘김 행을 「셀 수 없음」 으로 + unknown_reasons(rc 3) — 과제 7 번호 대조와 같은 규칙 · 확인됨/처리됨/중복 지휘 기록 끝에서 끝 장면 — 틀리면 깨진 문서 하나가 rc 3 을 내 지휘자가 고치게 함
+- Ruling: AC43 문면 「conductor_state.py 한 모듈」 → 「roadmap_model.py 한 모듈(conductor_state 가 다시 내보냄)」 — 설계문서 고침(지휘 세션) · 과제 7 · 9 판정 근거
+- Ruling: 덧씌우기는 깊은 사본에 · machine.md 는 read_capped(상한) + parse_machine · statusline 은 판정을 읽지 않음 · 원장 개수 상한 + deadline · 원장 읽기 불가는 「원장 읽기 불가」 줄 + 보관본과 합침 · 끝에서 끝 셸 장면(실제 기계 상태 · FIFO · 큰 파일) — 보안 · 정확성 게이트
+- Ruling: 판정 줄 문구를 단계로 — 구현 전 단계만 「아직 없음(구현 전)」, 끝난 단계는 「없음 — 판정 기록 없이 머지됨/결정됨」, 알 수 없음은 「셀 수 없음」 · 검사 불가 로드맵에서 에픽 보기를 못 낸 사실 공시 · 열린 넘김 수에서 셀 수 없음 분리 · 테스트 빈틈 메움(생존 변이 전부)
+- Ruling: exit 3 에서 rc 2 는 format_errors 가 없을 때만, 있으면 대체 공시 + 지도 · 머지됨 + machine_error 면 셀 수 없음 문구 · 결정 블록 대기/준비 문구 「아직 없음」
+- Ruling: 문서를 설계 §1 · §2 · §6 대로 고침 + 주인 락을 정의 기호(def)로 도출 · 토큰을 종류별 코드 집합에 대조 · FIELDS 전부 에픽 행에 · 산출물 source_interview 링크 삭제 · 넘김 확인 쓰기/읽기 둘 · 가리킴 줄을 앞으로 · 경로 리터럴 conductor 대신 상수 이름 · 중복 단언 삭제
+- Ruling: 라운드 2 에서 다섯 다 — 특히 D 는 ast 로(거짓 RED 는 락을 고치게 가르친다)
+- Ruling: I-1 문법에 「- 원문: 없음 — <사유>」 허용, 판정 인용은 바뀜으로 — 설계문서 61242a2f 에 반영(지휘 세션) · I-2 승인 인용을 그 바뀜 항목 끝에(중복 허용) · I-3 migrate 는 범위 줄만 줄 단위로 고치고 나머지 바이트 그대로(아니면 거부) · I-4 PRE=ed0da79f + 항목별 순서 인용 목록 대조 · I-5 출처 문구 복원 · 「여기까지」 명시 · 지휘 절차 한정어 — 사용자 원문 귀속은 사용자 원칙
+- Ruling: O-1 8줄을 바뀜 1 끝으로 · O-2 항목별 원문 정확 목록(허용 목록 뺀 원래 줄 인용) · 바깥 인용 금지 · 바뀜 순서 이어붙임 = 원문 · 바뀜 항목별 승인 인용 고정 표 · CRLF 는 newline='' 로 보존
+- Ruling: 도구를 고친다 — history_entry 가 --approval 인용을 바뀜 항목 끝에도 붙임(update 는 --change 하나라 모든 승인이 그 바뀜을 승인) · 「바뀜 R5」 의 겹친 낱말 정리 · 렌더 · 쓰기 테스트 더함 → 깨끗한 트리에서 update 다시 — 손 편집은 도구와 손이 어긋나는 길이라 기각
+- Ruling: ②③ 은 한 번의 수정으로(값쌈) · ①④ 는 계획 3(지휘자 · 화면) 미룸 · ⑤ 그대로 미룸
+
+## 구현 대조 — docs/superpowers/plans/2026-10-17-epic-conductor-1-format-state.md
+
+- 구현 대조: 경고 없음 (AC 18개 · 구현됨 18개 · 미룸 0개 · --acs 로 고른 것 · 뺀 AC 27개) (받는 곳 규칙: 로드맵의 에픽 또는 PR 번호(#숫자))
+- 보고: AC 18개 중 구현됨 18 · 미룸 0 · 빠짐 0
