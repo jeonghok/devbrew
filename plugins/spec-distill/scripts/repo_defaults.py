@@ -28,7 +28,7 @@ def _folder(key: str, raw: str):
     if not value:
         return None, "%s 값이 비었다" % key
     if value.startswith("/") or value.startswith("~"):
-        return None, "%s 는 레포 상대경로다: %r" % (key, value)
+        return None, "%s 는 레포 상대경로여야 한다: %r" % (key, value)
     parts = value.split("/")
     if parts[-1] == "":
         parts = parts[:-1]

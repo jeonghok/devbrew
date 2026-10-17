@@ -488,7 +488,7 @@ printf 'x\n' >> "$W/README.txt"; after2="$(snap)"; git -C "$W" checkout -q -- RE
 [ "$before" != "$after2" ] && ok "양성 대조: 파일 하나를 바꾸면 비교가 잡는다" || no "양성 대조: 비교가 변화를 못 본다"
 
 # ── 6. 변이 — 첫째 부모 이력 제한(D4.24)과 조상 아님 조건(D1.1)에 이빨이 있는지 ──────
-M="$T/mut"; mkdir -p "$M"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$M/"
+M="$T/mut"; mkdir -p "$M"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M/"
 sed 's/"log", "--first-parent", "--merges"/"log", "--merges"/' "$RS" > "$M/roadmap_status.py"
 cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(--first-parent)" || ok "변이 적용됨(--first-parent)"
 (cd "$W" && python3 "$M/roadmap_status.py" --json docs/rm/roadmap.md > "$T/mfp.json")
@@ -540,7 +540,7 @@ assert_eq "$rc" "3" "AC9: ## 미룸 표가 깨지면 검사 불가(rc 3)"
 assert_contains "$(warns "$T/f9.json" F9)" "미룸 셀 수 없음(" "AC9: 깨진 표는 「셀 수 없음」"
 assert_contains "$(js "$T/f9.json" "r['unknown_reasons']")" "F9 미룸 표" "AC9: 셀 수 없음이 검사 불가 사유로 올라온다"
 # 변이(AC15) — 받는 곳 판정을 끄면 경고가 사라진다
-M3="$T/mut3"; mkdir -p "$M3"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$M3/"
+M3="$T/mut3"; mkdir -p "$M3"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M3/"
 sed 's/^            bad = \[item for item, _why, recv in rows if not receiver_ok(recv, known_ids)\]$/            bad = []/' "$RS" > "$M3/roadmap_status.py"
 cmp -s "$RS" "$M3/roadmap_status.py" && no "변이 적용 안 됨(받는 곳 판정)" || ok "변이 적용됨(받는 곳 판정)"
 (cd "$W" && python3 "$M3/roadmap_status.py" --json docs/rm8/roadmap.md > "$T/md8.json")
@@ -706,5 +706,45 @@ for f in roadmap_status.py control_plane.py spec_review_bundle.py; do
   assert_eq "$(grep -c 'origin/main' "$S/$f")" "0" "$f 에 origin/main 을 박지 않는다(AC39)"
 done
 W="$W_SAVE"
+
+# ── R5 AC14 · AC11 · AC12 — 레포 설정 폴더 · 백틱 없는 **Spec:** · 대조를 건너뛴 블록 ───────────
+g checkout -q main
+mkdir -p "$W/docs/rm2"
+bundle docs/rm2 D1 "C1, S1"; bundle docs/rm2 D2 "C1, S1"
+{ printf -- '---\ntype: roadmap\nsource_brief: docs/br/b.md\nspecs_dir: design\nplans_dir: work/plans/\n---\n\n# 로드맵\n\n## 에픽\n\n'
+  block D1 feature/d1 없음 없음
+  block D2 feature/d2 없음 없음
+  printf '### N2 — 묶음 없는 블록\n- 의도: n\n- 범위: n\n- 의존: 없음\n- 브랜치: feature/n2\n- 묶음: 없음\n- 경로 예약: 없음\n- spec: design/n2-design.md\n- 발화: S1\n- 항목: C1\n\n'
+  roadmap_tail ""
+} > "$W/docs/rm2/roadmap.md"
+g add -- docs/rm2 && g commit -qm "rm2" && g push -q origin main
+# D1 — 설계문서는 design/ 에 · 계획은 work/plans/ 에 · **Spec:** 뒤에 백틱 없이 → 계획
+g checkout -q -b feature/d1 main; mkdir -p "$W/design" "$W/work/plans" "$W/docs/superpowers/specs"
+spec_doc docs/rm2/D1.md "C1 · S1" > "$W/design/d1-design.md"
+printf '# 계획\n\n**Spec:** design/d1-design.md (§1)\n' > "$W/work/plans/d1.md"
+g add -- design work && g commit -qm "d1" && g push -q origin feature/d1
+# D2 — 기본 폴더(docs/superpowers/specs/)에만 설계문서 → 이 로드맵은 찾지 않는다
+g checkout -q -b feature/d2 main; mkdir -p "$W/docs/superpowers/specs"
+spec_doc docs/rm2/D2.md "C1 · S1" > "$W/docs/superpowers/specs/d2-design.md"
+g add -- docs && g commit -qm "d2" && g push -q origin feature/d2
+# N2 — 묶음 아닌 블록이 계획 단계
+g checkout -q -b feature/n2 main; mkdir -p "$W/design" "$W/work/plans"
+printf '# n2\n' > "$W/design/n2-design.md"; printf '**Spec:** `design/n2-design.md`\n' > "$W/work/plans/n2.md"
+g add -- design work && g commit -qm "n2" && g push -q origin feature/n2
+g checkout -q main; g fetch -q origin
+(cd "$W" && python3 "$RS" --json docs/rm2/roadmap.md > "$T/rm2.json")
+assert_eq "$(js "$T/rm2.json" "r['settings']['specs_dir']")" "design/" "레포 설정: specs_dir 를 frontmatter 에서"
+assert_eq "$(stage "$T/rm2.json" D1)" "계획" "D1: frontmatter 폴더 + 백틱 없는 **Spec:** → 계획"
+assert_eq "$(stage "$T/rm2.json" D2)" "설계 중" "D2: 기본 폴더의 설계문서는 frontmatter 가 폴더를 정한 로드맵에서 찾지 않는다"
+assert_eq "$(js "$T/rm2.json" "next(b['reason'] for b in r['blocks'] if b['id']=='D2')")" "브랜치 있음 · spec 없음" "D2 근거"
+assert_contains "$(warns "$T/rm2.json" N2)" "번호 대조 건너뜀(셀 수 없음) — 묶음이 아닌 블록" "N17: 묶음 아닌 블록이 계획 단계면 경고"
+assert_contains "$(warns "$OUT" A1)" "번호 대조 건너뜀(셀 수 없음) — 설계문서 없는 묶음" "N17: 설계문서 없이 머지된 묶음은 경고"
+assert_not_contains "$(warns "$OUT" G1)" "번호 대조 건너뜀" "N17: 설계 중 단계는 아직 경고하지 않는다"
+sed 's/^specs_dir: design$/specs_dir: ..\/x/' "$W/docs/rm2/roadmap.md" > "$T/rm2-bad.md"
+cp "$T/rm2-bad.md" "$W/docs/rm2/roadmap.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm2/roadmap.md > "$T/rm2-bad.json"); rc=$?
+assert_eq "$rc" "3" "레포 설정 값이 잘못되면 검사 불가"
+assert_contains "$(js "$T/rm2-bad.json" "' | '.join(r['format_errors'])")" "레포 설정 specs_dir" "잘못된 레포 설정 사유"
+g checkout -q -- docs/rm2/roadmap.md
 
 finish
