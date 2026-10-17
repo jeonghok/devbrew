@@ -250,7 +250,7 @@ class GoldenSample(unittest.TestCase):
         # 파일(지난 재분해의 찌꺼기)도, 묶음이 아닌 블록 이름의 파일도 실패다.
         bundles = sorted(i for i, k in kinds.items() if k == R.KIND_BUNDLE)
         self.assertGreaterEqual(len(bundles), 10)
-        on_disk = sorted(p.stem for p in RM_DIR.glob("*.md") if re.fullmatch(r"[PR]\d+a?", p.stem))
+        on_disk = sorted(p.stem for p in RM_DIR.glob("*.md") if re.fullmatch(r"[PR]\d+[a-z]?", p.stem))
         self.assertEqual(on_disk, bundles)
 
     def test_bundles_byte_equal(self):

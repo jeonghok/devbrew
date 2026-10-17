@@ -90,7 +90,7 @@
 - **위험 번호가 줄 순서라 다시 생성하면 rc 0 으로 엉뚱한 에픽에 간다(높음).** `plugins/spec-distill/scripts/roadmap_model.py` 의 K 번호가 brief §5 줄 순서에서 나온다. Step A.5 리뷰나 B-0 이 §5 를 고친 뒤 B-R 이 다시 생성하면, 지운 위험은 경고 없이 사라지고 남은 위험 글이 다른 에픽 묶음에 실린다. 고침 후보: Step A 에서 §5 줄에 `K<n>` 을 박거나, `## 생성 기록` 에 K→글을 남겨 글이 달라지면 B-R 을 실패시킨다.
 - **§4 의 레포 주장(RC)을 배정할 수 없다.** 템플릿과 게이트는 §4 에 `[RC<n> → OQ<n>]` 을 허용하는데 `brief_universe` · `index_brief` 는 RC 를 §5 에서만 본다(`roadmap_model.py` · `roadmap_render.py`). finishing.md 분해 판단이 RC 를 배정하라고 해서 배정하면 create 가 실패한다. 고침 후보: §4 항목 첫 줄의 RC 도 색인하거나, §4 RC 는 «key» 로만 다닌다고 적는다.
 - **조사만 하는 에픽의 종류가 없다.** 분해 판단의 종류는 묶음 · 브랜치 · 결정뿐이라 조사 에픽은 묶음이 되고, 결정은 산출물이 없다. R5 몫(넘김 · 상태)과 함께 본다.
-- **끝난 인터뷰의 상태 파일을 다시 들어와 덮어쓸 수 있다.** 「있는 상태 파일 위에 쓰지 않는다」 는 `references/state-file.md` 산문에만 있고, `state_path.py interview-state` 는 끝난 상태 파일 경로를 rc 0 으로 낸다. 고침 후보: rc ≠ 0 이나 구별되는 줄.
+- **같은 주제 · 같은 날짜의 새 인터뷰가 끝난 인터뷰의 상태 파일 자리에 내려앉을 수 있다.** 진입(`interview_state.py` entry)은 끝난 인터뷰를 이어 가기로 받지 않지만, NEW · NEW-SEED 로 시작한 인터뷰의 주제와 날짜가 끝난 것과 같으면 `state_path.py interview-state` 가 그 자리를 rc 0 으로 낸다 — 「남의 파일 위에 시작하지 않는다」(`references/state-file.md`) 는 산문뿐이다. 고침 후보: 그 경우 rc ≠ 0 이나 구별되는 줄.
 
 ### R5 가 받을 것
 - **`§n` 자리 표기는 `### §<n>` 머리에서만 풀린다.** `check_bundle_coverage.py` 만 아는 규칙이라 넘김 줄 · brief 다음 세션 줄이 말하지 않는다 — 보통의 `## n.` 머리 설계문서는 spec-review 게이트에서 거짓 「얕은 답」 을 받는다. 고침 후보: 넘김 줄에 한 구절, 또는 `## <n>.` 도 받기.
