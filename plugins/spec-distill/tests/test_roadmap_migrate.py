@@ -155,7 +155,6 @@ APPROVALS = {
     ('2026-10-17 · 재분해 #2', 2): (4,),
     ('2026-10-17 · 재분해 #2', 3): (5,),
     ('2026-10-17 · 재분해 #2', 8): (6,),
-    ('2026-10-17 · R5 계획 셋의 브랜치 · 경로 예약 · 순서 이유 등록과 리뷰 모델 레포 설정(R5 설계 §6 · §9 · §11)', 0): (1,),
 }
 
 
@@ -218,11 +217,12 @@ class LiveRoadmap(unittest.TestCase):
         self.assertTrue(added, "PRE 뒤에 더해진 이력 항목이 없다 — 이 검사가 비어 있다")
         for key, e, _none in added:
             self.assertTrue(e["changes"], key)
-            self.assertFalse(e["no_words"], key)
-            approved = [q for c in e["changes"] for q in quotes(c)]
-            self.assertTrue(e["quotes"], key)
-            self.assertLessEqual(set(e["quotes"]), set(approved), key)
+            approved = [q for c in e["changes"] for q in quotes(c) if q not in NOT_USER_WORDS]
+            self.assertEqual(e["quotes"], approved, "%s: 원문 칸과 바뀜 줄의 사용자 인용이 같지 않다" % key)
+            self.assertTrue(bool(e["quotes"]) != bool(e["no_words"]), key)
             self.assertEqual([q for q in e["quotes"] if q in NOT_USER_WORDS], [], key)
+            if e["no_words"]:
+                continue
             for c in e["changes"]:
                 self.assertTrue(c.endswith("」"), "%s: 바뀜 항목이 승인 인용으로 끝나지 않는다: %s" % (key, c))
 

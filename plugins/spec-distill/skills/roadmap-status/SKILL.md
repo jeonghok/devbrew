@@ -1,7 +1,7 @@
 ---
 name: roadmap-status
 description: >
-  사용자가 `/spec-distill:roadmap-status [<로드맵 경로> [<에픽>]]` 로 부른다. origin/main 의 로드맵마다 에픽 단계 ·
+  사용자가 `/spec-distill:roadmap-status [<로드맵 경로> [<에픽>]]` 로 부른다. 기본 브랜치(`origin/HEAD`)의 로드맵마다 에픽 단계 ·
   기다리는 에픽 · 경고 · 진행 중 인터뷰의 조사 수 · 판정 줄을 한 화면에 보인다. 에픽을 하나 더 주면 그 에픽의
   묶음 · 설계문서 · 계획 · 브랜치 · PR · 넘김 · 판정 줄 · 자원을 경로와 함께 보인다. 읽기만 한다.
 cost_class: low
