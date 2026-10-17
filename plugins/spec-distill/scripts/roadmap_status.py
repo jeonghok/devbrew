@@ -40,7 +40,7 @@ NO_DEFAULT = ("기본 브랜치를 알 수 없다 — origin/HEAD 가 없다. `g
 GIT_ALLOWED = frozenset({"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"})
 NOTICE = ("머지됨 자동 판정은 merge commit 방식에서만 된다 — 브랜치가 지워졌으면 GitHub 의 머지 메시지 "
           "`Merge pull request #<n> from <owner>/<브랜치>` 로만 알아본다. squash · rebase 로 머지했거나 "
-          "로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적는다. 경로 예약 겹침과 다른 에픽이 "
+          "로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적는다(여러 브랜치 블록이면 브랜치 이름을 적는다). 경로 예약 겹침과 다른 에픽이 "
           "예약한 파일의 편집은 경고가 아니라 정보다 — 에픽은 병렬로 가고 충돌은 머지 때 푼다(나중 PR 이 기본 브랜치를 "
           "merge 하고 스위트를 다시 돌린다).")
 # 경로 예약 겹침 · 위반에서 빼는 공유 파일 — 버전은 머지 직전에 정한다(N6).
@@ -309,6 +309,18 @@ def progress(git: Git, main: str, tip: str, block: dict, bundle_path, settings: 
     return "계획", "계획 있음", specs, paths
 
 
+def names_branch(text: str, branch: str) -> bool:
+    """text 에 브랜치 이름이 통째로(앞뒤가 이름 글자가 아닌 자리에서) 적혀 있는가."""
+    at = text.find(branch)
+    while at != -1:
+        before, after = text[at - 1:at] if at else "", text[at + len(branch):at + len(branch) + 1]
+        if not (before and (before.isalnum() or before in "/._-")) and not (
+                after and (after.isalnum() or after in "/._-")):
+            return True
+        at = text.find(branch, at + 1)
+    return False
+
+
 def merged_by(git: Git, merges: list, main: str, branch: str, tip):
     """머지됨 근거 한 줄, 아니면 None. 조상 관계만으로는 머지됨이 아니다(D1.1)."""
     if tip:
@@ -397,11 +409,13 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
         b["branch_states"] = states
         rec_merge = rec.get((bid, "머지"))
         if rec_merge and len(states) > 1 and not all(s["merged"] for s in states):
-            # 브랜치가 여럿이면 머지 줄은 ref 가 사라진 브랜치에만 닿는다 — 남은 브랜치까지 머지됨으로 만들지 않는다.
+            # 브랜치가 여럿이면 머지 줄은 글에 이름이 적힌 브랜치에만 닿고, 그 ref 가 사라졌을 때만 머지로 센다.
             for s in states:
                 if s["merged"]:
                     continue
-                if s["tip"] is None:
+                if not names_branch(rec_merge["quote"], s["branch"]):
+                    b["warnings"].append("결정 기록의 머지 줄이 %s 를 가리키지 않아 적용하지 않았다" % s["branch"])
+                elif s["tip"] is None:
                     s["merged"] = "결정 기록의 머지 기록 %s %s" % (rec_merge["date"], rec_merge["quote"])
                 else:
                     b["warnings"].append("결정 기록의 머지 줄을 %s 에 적용하지 않았다 — 브랜치가 남아 있다"
@@ -452,13 +466,16 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 b["warnings"].append("번호 대조 검사 불가(spec 을 읽지 못했다): %s" % spec)
                 cov_unknown.append("%s spec 을 읽지 못했다" % bid)
                 continue
+            no_cov_section = cov_broken = False
             try:
                 no_cov_section = "산출물" in b["fields"] and section_body(spec_text, "## 번호 대조") is None
             except FormatError as exc:
+                cov_broken = True
                 b["warnings"].append("번호 대조 검사 불가(%s): %s" % (exc, spec))
                 cov_unknown.append("%s 산출물 번호 대조 절 — %s" % (bid, exc))
-                continue
-            if no_cov_section:
+            if cov_broken:
+                pass  # 미룸 표는 이 절과 상관없이 아래에서 읽는다
+            elif no_cov_section:
                 b["warnings"].append("번호 대조 건너뜀(셀 수 없음) — 산출물에 `## 번호 대조` 절이 없다: %s" % spec)
             elif b["kind"] == "bundle" and bundles.get(bid) is not None:
                 result = check(bundles[bid], spec_text, repo=_GitTreeRepo(git, main, settings["specs_dir"]) if main else None)

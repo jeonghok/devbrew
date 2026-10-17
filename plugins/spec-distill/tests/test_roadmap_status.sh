@@ -841,24 +841,30 @@ bundle docs/rm4 P1 "C1, S1"; bundle docs/rm4 Q1 "C1, S1"
 } > "$W/docs/rm4/roadmap.md"
 g add -- docs/rm4 && g commit -qm "rm4" && g push -q origin main
 g checkout -q -b feature/p1 main; mkdir -p "$W/docs/research"
-printf -- '---\nsource_interview: docs/rm4/P1.md\n---\n\n# 조사\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| C1 · S1 | 반영 | §1 |\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| C1 | 반영 | §2 |\n' > "$W/docs/research/p1d.md"
+printf -- '---\nsource_interview: docs/rm4/P1.md\n---\n\n# 조사\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| C1 · S1 | 반영 | §1 |\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| C1 | 반영 | §2 |\n\n## 미룸\n\n| 항목 | 이유 | 받는 곳 |\n|---|---|---|\n| AC9 | 늦음 | 없음 |\n' > "$W/docs/research/p1d.md"
 g add -- docs && g commit -qm "p1 중복 머리"; g checkout -q main; g fetch -q origin
 (cd "$W" && python3 "$RS" --json docs/rm4/roadmap.md > "$T/rm4.json")
 assert_eq "$(stage "$T/rm4.json" Q1)" "준비" "산출물 번호 대조 머리가 둘이어도 다른 블록의 단계는 나온다"
 assert_contains "$(warns "$T/rm4.json" P1)" "번호 대조 검사 불가(" "산출물의 번호 대조 머리가 둘이면 그 블록에 경고"
 assert_contains "$(js "$T/rm4.json" "' | '.join(r['unknown_reasons'])")" "P1 산출물 번호 대조 절" "산출물 머리 중복이 검사 불가 사유로 올라온다"
+assert_contains "$(warns "$T/rm4.json" P1)" "받는 곳 없는 미룸 1개" "번호 대조 머리가 깨져도 미룸 표 검사는 이어진다"
 
 # ── R5 수정 2 · 3 · 5 — 기본 브랜치를 받아온 뒤 · 결정 기록 머지 줄 · 구현 끝 · 다른 spec 트레일러 ────────
 g checkout -q main
 mkdir -p "$W/docs/rm5"
-for b in Z5 V5 X5 H5 G5; do bundle docs/rm5 "$b" "C1, S1"; done
+for b in Z5 V5 X5 H5 G5 J5 K5 L5 M5 S5; do bundle docs/rm5 "$b" "C1, S1"; done
 { roadmap_head | sed 's|^# 로드맵|# 로드맵 다섯|'
   block Z5 "feature/z5a · feature/z5b" 없음 없음
   block V5 feature/v5 없음 없음
   block X5 feature/x5 없음 없음
   block H5 "feature/h5a · feature/h5b" 없음 없음
   block G5 feature/g5 H5 없음
-  roadmap_tail "$(printf -- '- H5 · 머지 · 2026-10-17 · 「h5a 를 squash 로 머지했다」')"
+  block J5 "feature/j5a · feature/j5b" 없음 없음
+  block K5 feature/k5 J5 없음
+  block L5 "feature/l5a · feature/l5b" 없음 없음
+  block M5 "feature/m5a · feature/m5b" 없음 없음
+  printf '### S5 — 목록 브랜치\n- 의도: s\n- 범위: s\n- 의존: 없음\n- 브랜치:\n  - feature/s5a\n  - feature/s5b\n- 묶음: S5.md\n- 경로 예약: 없음\n\n'
+  roadmap_tail "$(printf -- '- H5 · 머지 · 2026-10-17 · 「feature/h5a 를 squash 로 머지했다」\n- J5 · 머지 · 2026-10-17 · 「feature/j5a 를 squash 로 머지했다」\n- L5 · 머지 · 2026-10-17 · 「feature/l5a2 를 squash 로 머지했다」\n- M5 · 머지 · 2026-10-17 · 「feature/m5a 를 머지했다」')"
 } > "$W/docs/rm5/roadmap.md"
 g add -- docs/rm5 && g commit -qm "rm5" && g push -q origin main
 mkdir -p "$W/docs/superpowers/specs" "$W/docs/superpowers/plans"
@@ -891,6 +897,10 @@ g add -- docs && g commit -qm "x5 계획 둘"
 g checkout -q -b feature/h5a main; commit_file src/h5a.txt h5a "h5a"
 g checkout -q main; g merge -q --squash feature/h5a; g commit -qm "squash h5a"; g branch -q -D feature/h5a; g push -q origin main
 g checkout -q -b feature/h5b main; commit_file src/h5b.txt h5b "h5b"
+g checkout -q -b feature/m5a main; commit_file src/m5a.txt m5a "m5a"
+# J5 — j5a 는 squash 머지 뒤 지워졌고 j5b 는 아직 만들지 않았다(줄은 j5a 만 부른다)
+g checkout -q -b feature/j5a main; commit_file src/j5a.txt j5a "j5a"
+g checkout -q main; g merge -q --squash feature/j5a; g commit -qm "squash j5a"; g branch -q -D feature/j5a; g push -q origin main
 g checkout -q main; g fetch -q origin
 (cd "$W" && python3 "$RS" --json docs/rm5/roadmap.md > "$T/rm5.json")
 assert_eq "$(stage "$T/rm5.json" Z5)" "일부 머지 1/2" "수정 2: 기본 브랜치를 받아온 브랜치는 남의 트레일러로 구현 중이 되지 않는다"
@@ -899,8 +909,16 @@ assert_eq "$(stage "$T/rm5.json" V5)" "계획" "다른 spec 을 가리키는 트
 assert_eq "$(stage "$T/rm5.json" X5)" "구현 중" "수정 5: 계획 둘 중 하나만 구현 대조 절이 있으면 구현 끝이 아니다"
 assert_not_contains "$(js "$T/rm5.json" "next(b['reason'] for b in r['blocks'] if b['id']=='X5')")" "트레일러" "구현 중 근거는 구현 대조 절만 말한다(트레일러를 붙이지 않는다)"
 assert_eq "$(stage "$T/rm5.json" H5)" "일부 머지 1/2" "수정 3: 결정 기록 머지 줄은 ref 가 사라진 브랜치에만 닿는다"
-assert_contains "$(warns "$T/rm5.json" H5)" "결정 기록의 머지 줄을 feature/h5b 에 적용하지 않았다 — 브랜치가 남아 있다" "수정 3: 적용하지 않은 브랜치를 경고한다"
+assert_contains "$(warns "$T/rm5.json" H5)" "결정 기록의 머지 줄이 feature/h5b 를 가리키지 않아 적용하지 않았다" "수정 3: 줄이 부르지 않은 브랜치를 경고한다"
 assert_eq "$(stage "$T/rm5.json" G5)" "대기" "수정 3: 일부 머지인 에픽에 의존하면 준비가 아니다"
-assert_eq "$(js "$T/rm5.json" "type(next(b['branch'] for b in r['blocks'] if b['id']=='Z5')).__name__")" "str" "보고서의 branch 는 문자열이다"
+assert_eq "$(stage "$T/rm5.json" M5)" "설계 중" "수정 3: 줄이 부른 브랜치가 남아 있으면 머지로 세지 않는다"
+assert_contains "$(warns "$T/rm5.json" M5)" "결정 기록의 머지 줄을 feature/m5a 에 적용하지 않았다 — 브랜치가 남아 있다" "수정 3: 이름이 적힌 브랜치가 남아 있으면 남아 있다 경고"
+assert_eq "$(stage "$T/rm5.json" J5)" "일부 머지 1/2" "수정 3: 아직 만들지 않은 예정 브랜치는 머지 줄에 이름이 없으면 머지가 아니다"
+assert_contains "$(warns "$T/rm5.json" J5)" "결정 기록의 머지 줄이 feature/j5b 를 가리키지 않아 적용하지 않았다" "수정 3: 이름 없는 브랜치 경고"
+assert_eq "$(stage "$T/rm5.json" K5)" "대기" "수정 3: J5 에 의존하는 에픽은 준비가 아니다"
+assert_eq "$(stage "$T/rm5.json" L5)" "준비" "수정 3: 브랜치 이름이 없는 머지 줄은 여러 브랜치 블록을 머지로 만들지 않는다"
+assert_contains "$(warns "$T/rm5.json" L5)" "feature/l5a 를 가리키지 않아 적용하지 않았다" "수정 3: 이름 없는 머지 줄 경고(앞 브랜치)"
+assert_contains "$(warns "$T/rm5.json" L5)" "feature/l5b 를 가리키지 않아 적용하지 않았다" "수정 3: 이름 없는 머지 줄 경고(뒤 브랜치)"
+assert_eq "$(js "$T/rm5.json" "next(b['branch'] for b in r['blocks'] if b['id']=='S5')")" "feature/s5a · feature/s5b" "보고서의 branch 는 하위 항목 목록도 한 줄 글로 낸다"
 
 finish
