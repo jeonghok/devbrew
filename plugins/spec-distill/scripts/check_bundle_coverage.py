@@ -46,7 +46,8 @@ SECTION_TOKEN_RE = re.compile(r"§(\d+)(?:-(\d+))?(?!\d)")
 AC_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])AC(\d+)(?!\d)")
 AC_ITEM_RE = re.compile(r"\s*[-*]\s+(?:\*\*)?AC(\d+)(?!\d)")
 EPIC_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])([A-Z]\d+[a-z]?)(?![A-Za-z0-9])")
-ACS_PART_RE = re.compile(r"AC(\d+)(?:~AC(\d+))?")
+ACS_PART_RE = re.compile(r"AC(\d+)(?:~(?:AC)?(\d+))?")
+ACS_RANGE_MAX = 1000
 ACS_SEP = (",", "·")
 
 
@@ -62,18 +63,21 @@ def epic_refs(cell: str, known=None) -> list:
 
 
 def parse_acs(value: str) -> list:
-    """`AC1~AC14 · AC39, AC40` → AC 목록(나온 순서, 중복 제거)."""
+    """`AC1~AC14 · AC39, AC40` → AC 목록(나온 순서, 중복 제거). `AC1~14` · `AC1 ~ AC3` 도 받고 범위는 1000개까지."""
     pieces = [value]
     for sep in ACS_SEP:
         pieces = [q for piece in pieces for q in piece.split(sep)]
+    flat = "~".join(q.strip() for q in " ".join(pieces).split("~"))
     out = []
-    for piece in " ".join(pieces).split():
+    for piece in flat.split():
         m = ACS_PART_RE.fullmatch(piece)
         if not m:
             raise FormatError("--acs 조각이 AC<n> 또는 AC<a>~AC<b> 가 아니다: %r" % piece)
         a, b = int(m.group(1)), int(m.group(2) or m.group(1))
         if b < a:
             raise FormatError("--acs 범위가 거꾸로다: %r" % piece)
+        if b - a + 1 > ACS_RANGE_MAX:
+            raise FormatError("--acs 범위가 너무 크다(%d개까지): %r" % (ACS_RANGE_MAX, piece))
         out += [ac for ac in ("AC%d" % n for n in range(a, b + 1)) if ac not in out]
     if not out:
         raise FormatError("--acs 가 비었다")
@@ -188,7 +192,8 @@ def _lead_digits(text: str) -> str:
 
 
 def design_sections(spec_text: str) -> dict:
-    """펜스 밖 `### §<n>` 또는 `## <n>.` 절마다 본문 줄 — {n: [줄]}. 다음 `## ` · `### ` 제목에서 끝난다."""
+    """펜스 밖 `### §<n>` 또는 `## <n>.` 절마다 본문 줄 — {n: [줄]}. 다음 `## ` · `### ` 제목에서 끝난다.
+    `## <n>.` 꼴에서는 `### <n>.<m>` 하위 제목이 그 절의 본문을 끝낸다 — `§<n>-<m>` 으로 풀지 않는다."""
     out, cur = {}, None
     for line in _outside_fences(spec_text):
         if line.startswith("## ") or line.startswith("### "):
@@ -294,8 +299,10 @@ def _roadmap_view(fm: dict, repo):
     if errors:
         return None, "로드맵 형식이 깨졌다: %s" % errors[0]
     _bundles, _union, errs = collect_assigned(blocks, meta, rel, repo.read, repo.exists)
-    return {"blocks": blocks, "rel": rel, "errors": errs,
-            "specs_dir": repo_settings(meta)["specs_dir"] or SPECS_DIR}, None
+    settings = repo_settings(meta)
+    if settings["errors"]:
+        return None, "로드맵 형식이 깨졌다: %s" % settings["errors"][0]
+    return {"blocks": blocks, "rel": rel, "errors": errs, "specs_dir": settings["specs_dir"]}, None
 
 
 def _block_specs(block: dict, view: dict, repo) -> list:
@@ -463,8 +470,11 @@ def _acs_or_error(spec_text: str) -> list:
     return acs
 
 
+SCOPE_MARK = " · --acs 로 고른 것 · 뺀 AC %d개"
+
+
 def _plan_unchecked(reason: str) -> dict:
-    return {"status": 3, "missing": [], "ac_count": None, "scoped": False, "reason": reason}
+    return {"status": 3, "missing": [], "ac_count": None, "scoped": False, "omitted": 0, "reason": reason}
 
 
 def _only(acs: list, only):
@@ -482,19 +492,20 @@ def check_plan(spec_text: str, plan_text: str, only=None) -> dict:
         acs = _acs_or_error(spec_text)
     except FormatError as exc:
         return _plan_unchecked(str(exc))
+    total = len(acs)
     acs, why = _only(acs, only)
     if why:
         return _plan_unchecked(why)
     have = {"AC" + m.group(1) for m in AC_TOKEN_RE.finditer(plan_task_text(plan_text))}
     missing = [a for a in acs if a not in have]
     return {"status": 1 if missing else 0, "missing": missing, "ac_count": len(acs),
-            "scoped": only is not None, "reason": None}
+            "scoped": only is not None, "omitted": total - len(acs), "reason": None}
 
 
 def render_plan(r: dict) -> str:
     if r["status"] == 3:
         return "계획 대조 검사 불가 — %s" % r["reason"]
-    scope = " · --acs 로 고른 것" if r.get("scoped") else ""
+    scope = SCOPE_MARK % r["omitted"] if r.get("scoped") else ""
     if r["missing"]:
         return "계획 대조: 계획에 없는 AC %d개 — %s (AC %d개%s)" % (
             len(r["missing"]), " · ".join(r["missing"]), r["ac_count"], scope)
@@ -523,7 +534,7 @@ def parse_report(text: str) -> dict:
 def _impl_unchecked(reason: str) -> dict:
     return {"status": 3, "unreported": [], "unlisted": [], "no_receiver": [], "dropped": [],
             "receiver_unknown": [], "unknown_acs": [], "counts": None, "ac_count": None,
-            "receiver_rule": None, "reason": reason}
+            "receiver_rule": None, "scoped": False, "omitted": 0, "reason": reason}
 
 
 def check_impl(spec_text: str, report_text: str, only=None, epic_ids=None, receiver_problem=None) -> dict:
@@ -542,12 +553,13 @@ def check_impl(spec_text: str, report_text: str, only=None, epic_ids=None, recei
     judged = [a for a in acs if a in report]
     if epic_ids is not None:
         no_receiver = [item for item, _why, recv in deferred if not receiver_ok(recv, epic_ids)]
-        rule = "로드맵의 에픽 · #<n>"
+        rule = "로드맵의 에픽 또는 PR 번호(#숫자)"
     else:
         no_receiver = [item for item, _why, recv in deferred if recv == "없음"]
         rule = "로드맵 없음 — 「없음」만 받는 곳 없음으로 센다"
     return {
         "status": 0, "reason": None, "ac_count": len(acs), "receiver_rule": rule,
+        "scoped": only is not None, "omitted": len(all_acs) - len(acs),
         "unreported": [a for a in acs if a not in report],
         "unlisted": ["%s(%s)" % (a, report[a][0]) for a in judged
                      if report[a][0] != "구현됨" and a not in listed],
@@ -594,13 +606,17 @@ def render_impl(r: dict) -> str:
     if n:
         lines = ["구현 대조: 경고 %d개 — %s"
                  % (n, " · ".join("%s %d개" % (label, len(r[k])) for label, k in IMPL_GROUPS))]
+        if r["scoped"]:
+            lines[0] += " (%s)" % SCOPE_MARK[3:] % r["omitted"]
         lines += ["%s — %s" % (label, " · ".join(r[k])) for label, k in IMPL_GROUPS if r[k]]
         if r["dropped"]:
             lines.append("빠짐은 머지 전에 고치거나 사용자가 미룸으로 옮긴다(설계문서 `## 미룸` 표).")
+        lines.append("(받는 곳 규칙: %s)" % r["receiver_rule"])
     else:
         c = r["counts"]
-        lines = ["구현 대조: 경고 없음 (AC %d개 · 구현됨 %d개 · 미룸 %d개) · 받는 곳 규칙: %s"
-                 % (r["ac_count"], c["구현됨"], c["미룸"], r["receiver_rule"])]
+        scope = SCOPE_MARK % r["omitted"] if r["scoped"] else ""
+        lines = ["구현 대조: 경고 없음 (AC %d개 · 구현됨 %d개 · 미룸 %d개%s) (받는 곳 규칙: %s)"
+                 % (r["ac_count"], c["구현됨"], c["미룸"], scope, r["receiver_rule"])]
     if r["unknown_acs"]:
         lines.append("정보: 설계문서에 없는 AC 가 보고에 있다 — %s" % " · ".join(r["unknown_acs"]))
     return "\n".join(lines)

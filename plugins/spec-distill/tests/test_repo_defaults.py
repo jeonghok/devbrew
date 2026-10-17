@@ -6,6 +6,7 @@ Run (리포 루트에서): python3 -m unittest plugins/spec-distill/tests/test_r
 """
 from __future__ import annotations
 
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -50,20 +51,34 @@ class Settings(unittest.TestCase):
 
 
 class NoHardcodedFolders(unittest.TestCase):
-    """AC14 — 설계문서 · 계획 · SDD 폴더 기본값은 repo_defaults.py 에만 글자로 있다."""
+    """AC14 — 설계문서 · 계획 · SDD 폴더 기본값은 repo_defaults.py 에만 글자로 있다(이어 붙인 꼴 포함)."""
     FILES = ("roadmap_status.py", "check_bundle_coverage.py", "conductor_state.py", "control_plane.py",
-             "spec_review_bundle.py")
+             "spec_review_bundle.py", "roadmap_model.py")
     LITERALS = (rd.SPECS_DIR.rstrip("/"), rd.PLANS_DIR.rstrip("/"), rd.SDD_WORKSPACE.rstrip("/"))
+
+    @classmethod
+    def hits(cls, text):
+        """text 안에서 폴더 기본값이 글자로 있는 꼴 — 슬래시로 이은 꼴, 또는 조각이 따옴표 글자로 이어진 꼴."""
+        found = []
+        for lit in cls.LITERALS:
+            parts = lit.split("/")
+            split_form = re.compile(r"\s*[,+]?\s*".join("[\"']" + re.escape(p) + "/?[\"']" for p in parts))
+            if lit in text or split_form.search(text):
+                found.append(lit)
+        return found
 
     def test_default_folders_only_in_repo_defaults(self):
         for name in self.FILES:
             text = (SCRIPTS / name).read_text(encoding="utf-8")
-            for lit in self.LITERALS:
-                self.assertNotIn(lit, text, "%s 에 %s 가 박혀 있다 — repo_defaults 를 써라" % (name, lit))
+            self.assertEqual(self.hits(text), [], "%s 에 폴더 기본값이 박혀 있다 — repo_defaults 를 써라" % name)
 
-    def test_lock_sees_a_planted_literal(self):   # 양성 대조 — 이 락이 글자를 실제로 본다
-        planted = "x = %r\n" % rd.SPECS_DIR
-        self.assertTrue(any(lit in planted for lit in self.LITERALS))
+    def test_lock_sees_planted_literals(self):   # 양성 대조 — 이 락이 두 꼴을 실제로 본다
+        for planted in ("x = %r\n" % rd.SPECS_DIR,
+                        'p = os.path.join(root, "docs", "superpowers", "specs")\n',
+                        'p = "docs/" "superpowers/" "plans"\n'.replace('" "', '", "'),
+                        "q = ('.superpowers', 'sdd')\n"):
+            self.assertTrue(self.hits(planted), planted)
+        self.assertEqual(self.hits('os.path.join(root, "docs", "other")\n'), [])
 
 
 if __name__ == "__main__":

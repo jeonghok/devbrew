@@ -320,7 +320,7 @@ printf -- '# 설계\n\n## Acceptance Criteria\n\n- AC1 하나\n\n## 미룸\n\n�
 printf 'AC1: 구현됨 — 됐다\n' > "$P/rep-one.md"
 txt="$(python3 "$C" --impl "$P/di-none.md" "$P/rep-one.md")"; rc=$?
 assert_eq "$rc" "0" "AC10 양성 짝: 전부 구현됨 · ## 미룸 「없음」 → rc 0"
-assert_eq "$txt" "구현 대조: 경고 없음 (AC 1개 · 구현됨 1개 · 미룸 0개) · 받는 곳 규칙: 로드맵 없음 — 「없음」만 받는 곳 없음으로 센다" "경고 없음 줄"
+assert_eq "$txt" "구현 대조: 경고 없음 (AC 1개 · 구현됨 1개 · 미룸 0개) (받는 곳 규칙: 로드맵 없음 — 「없음」만 받는 곳 없음으로 센다)" "경고 없음 줄"
 printf 'AC1: 됐음 — 형식 밖\n' > "$P/rep-bad.md"
 python3 "$C" --impl "$P/di-none.md" "$P/rep-bad.md" >/dev/null; rc=$?
 assert_eq "$rc" "3" "보고 줄이 형식 밖이면 rc 3"
