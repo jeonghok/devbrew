@@ -390,7 +390,7 @@ PY="$(command -v python3)"
 (cd "$W" && PATH=/nonexistent-dir "$PY" "$RS" --json docs/rm/roadmap.md > "$T/crash.json"); rc=$?
 assert_eq "$rc" "3" "내부 오류(git 을 실행하지 못함) → rc 3"
 assert_contains "$(js "$T/crash.json" "r['unknown_reasons']")" "내부 오류" "내부 오류가 검사 불가로 올라왔다"
-assert_eq "$(js "$T/crash.json" "r['handoffs']")" "[]" "내부 오류 보고서에도 handoffs 키가 있다"
+assert_eq "$(js "$T/crash.json" "r['handoffs']")" "None" "내부 오류 보고서에도 handoffs 키가 있다(계산 못 함 = None)"
 
 # ── 5. 읽기 전용(AC7) — 정적 검사 + 실행 전후 비교, 각각 양성 대조 ──────────────
 static_check() {  # static_check <파일...> — 쓰기 · 네트워크 · 허용 밖 git · 이름 import 를 찾으면 줄을 낸다. 끝에 CHECKED n.
@@ -711,7 +711,7 @@ out="$(cd "$W" && python3 "$RS" docs/none/roadmap.md)"; rc=$?
 assert_eq "$rc" "4" "기본 브랜치에 없는 로드맵 → rc 4(검사 불가 3 과 다르다)"
 assert_contains "$out" "로드맵이 아직 기본 브랜치(origin/trunk)에 없다" "기본 브랜치에 없음 줄"
 (cd "$W" && python3 "$RS" --json docs/none/roadmap.md > "$T/none.json")
-assert_eq "$(js "$T/none.json" "r['handoffs']")" "[]" "rc 4 조기 반환 보고서에도 handoffs 키가 있다"
+assert_eq "$(js "$T/none.json" "r['handoffs']")" "None" "rc 4 조기 반환 보고서에도 handoffs 키가 있다(계산 못 함 = None)"
 assert_not_contains "$out" "검사 불가: " "기본 브랜치에 없음은 검사 불가 줄이 아니다"
 for f in roadmap_status.py control_plane.py spec_review_bundle.py; do
   assert_eq "$(grep -c 'origin/main' "$S/$f")" "0" "$f 에 origin/main 을 박지 않는다(AC39)"
@@ -940,7 +940,7 @@ printf '\n## 미룸\n\n| 항목 | 이유 | 받는 곳 |\n|---|---|---|\n| 넘길
 g add -- docs && g commit -qm "k2 미룸 · 판정"
 g checkout -q main
 (cd "$W" && python3 "$RS" --json docs/rm3/roadmap.md > "$T/rm3c.json")
-assert_eq "$(js "$T/rm3c.json" "[(h['giver'], h['receiver'], h['state']) for h in r['handoffs']]")" "[('K2', 'K3', '열림'), ('K2', '#5', '이슈')]" "AC43: 넘김 줄을 conductor_state 로 계산한다"
+assert_eq "$(js "$T/rm3c.json" "[(h['giver'], h['receiver'], h['state']) for h in r['handoffs']]")" "[('K2', 'K3', '열림'), ('K2', '#5', '이슈')]" "AC43: 넘김 줄을 상태 계산이 낸다"
 assert_eq "$(js "$T/rm3c.json" "next(b['rulings_archived'] for b in r['blocks'] if b['id']=='K2')")" "['- Task 1: Ruling: 가 — 왜 — 비용']" "AC8: 설계문서 ## 판정 보관본"
 assert_eq "$(js "$T/rm3c.json" "next(b['rulings_archived'] for b in r['blocks'] if b['id']=='K3')")" "None" "판정 절 없는 설계문서는 None(빈 목록과 다르다)"
 assert_eq "$(js "$T/rm3c.json" "next(b['extras'] for b in r['blocks'] if b['id']=='O1')")" "{'흐름': '조사 「조사로 간다」', '산출물': 'docs/research/o1.md'}" "선택 칸을 보고서에 싣는다"
@@ -958,6 +958,33 @@ assert_contains "$(warns "$T/rm3d.json" K3)" "판정 읽기 불가(" "판정 머
 assert_eq "$(js "$T/rm3d.json" "next(b['rulings_archived'] for b in r['blocks'] if b['id']=='K3')")" "None" "읽지 못한 판정 절은 보관본 None"
 assert_eq "$(js "$T/rm3d.json" "next(b['rulings_archived'] for b in r['blocks'] if b['id']=='K2')")" "['- Task 1: Ruling: 가 — 왜 — 비용']" "다른 블록의 보관본은 그대로 나온다"
 assert_eq "$(js "$T/rm3d.json" "len(r['handoffs'])")" "2" "다른 블록의 넘김 줄도 그대로 나온다"
+assert_contains "$(js "$T/rm3d.json" "' | '.join(r['unknown_reasons'])")" "K3 판정 읽기 불가" "읽을 수 없는 판정은 검사 불가 사유로도 올라온다"
+assert_eq "$(js "$T/rm3c.json" "next(b['extras'] for b in r['blocks'] if b['id']=='K2')")" "{}" "선택 칸이 없는 블록은 빈 dict(없음 값은 싣지 않는다)"
+assert_eq "$(js "$T/rm3c.json" "next(b['parallel'] for b in r['blocks'] if b['id']=='O1') is not None")" "True" "정상 보고서의 parallel 은 목록"
+
+# 지휘 기록 — 확인 줄이 있으면 확인됨, 받는 에픽이 머지됐으나 확인 전이면 처리됨, 읽을 수 없으면 셀 수 없음(rc 3)
+g checkout -q feature/k3
+g revert -q --no-edit HEAD
+KEY="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as c; print(c.handoff_key("K2", "넘길 일"))' "$S")"
+printf '\n## 지휘 기록\n\n- 넘김 확인 · K2 · %s · 받았다\n' "$KEY" >> "$W/docs/superpowers/specs/k3-design.md"
+g add -- docs && g commit -qm "k3 지휘 기록"
+g checkout -q feature/k2
+python3 -I -c 'import sys; p = sys.argv[1]; s = open(p, encoding="utf-8").read(); a = "| 이슈 일 | 이유 | #5 |\n"; assert a in s; open(p, "w", encoding="utf-8").write(s.replace(a, a + "| 머지 일 | 이유 | M2 |\n"))' "$W/docs/superpowers/specs/k2-design.md"
+g add -- docs && g commit -qm "k2 미룸 셋"
+g checkout -q main
+(cd "$W" && python3 "$RS" --json docs/rm3/roadmap.md > "$T/rm3e.json")
+assert_eq "$(js "$T/rm3e.json" "[(h['receiver'], h['state']) for h in r['handoffs']]")" "[('K3', '확인됨'), ('#5', '이슈'), ('M2', '처리됨')]" "넘김: 확인 줄 → 확인됨 · 받는 에픽 머지됨 + 확인 전 → 처리됨"
+assert_not_contains "$(js "$T/rm3e.json" "' | '.join(r['unknown_reasons'])")" "지휘 기록" "읽을 수 있는 지휘 기록은 검사 불가 사유가 아니다"
+g checkout -q feature/k3
+printf '\n## 지휘 기록\n\n- 메모\n' >> "$W/docs/superpowers/specs/k3-design.md"
+g add -- docs && g commit -qm "k3 지휘 기록 머리 둘"
+g checkout -q main
+(cd "$W" && python3 "$RS" --json docs/rm3/roadmap.md > "$T/rm3f.json"); rc=$?
+assert_eq "$rc" "3" "지휘 기록을 읽을 수 없으면 검사 불가(rc 3)"
+assert_eq "$(js "$T/rm3f.json" "[(h['receiver'], h['state'], h['basis']) for h in r['handoffs'] if h['receiver']=='K3']")" "[('K3', '셀 수 없음', 'K3 지휘 기록 읽기 불가')]" "읽을 수 없는 지휘 기록은 넘김을 셀 수 없음으로 — 처리됨 · 열림으로 오판하지 않는다"
+assert_contains "$(js "$T/rm3f.json" "' | '.join(r['unknown_reasons'])")" "K3 지휘 기록 읽기 불가" "검사 불가 사유에 올라온다"
+assert_eq "$(js "$T/rm3f.json" "[h['state'] for h in r['handoffs'] if h['receiver']!='K3']")" "['이슈', '처리됨']" "다른 받는 곳의 넘김은 그대로"
+assert_eq "$(js "$T/rm3f.json" "len(r['blocks'])")" "$(js "$T/rm3e.json" "len(r['blocks'])")" "다른 블록은 그대로 나온다"
 
 nb="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap_status as rs
 b = "feature/h5a"

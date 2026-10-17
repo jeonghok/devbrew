@@ -496,9 +496,17 @@ def impl_done(doc_text: str, plan_rel: str) -> bool:
 RULINGS_HEADING = "## 판정"
 RECORD_HEADING = "## 지휘 기록"
 CONFIRM_RE = re.compile(r"- 넘김 확인 · ([A-Z][0-9]+[a-z]?) · ([0-9a-f]{8}) · (\S.*)")
-ISSUE_RE = re.compile(r"#\d+")
-EPIC_RE = re.compile(r"[A-Z][0-9]+[a-z]?")
+RECEIVER_EPIC_RE = re.compile(r"[A-Z]\d+[a-z]?")
+RECEIVER_PR_RE = re.compile(r"#\d+")
+ISSUE_RE, EPIC_RE = RECEIVER_PR_RE, RECEIVER_EPIC_RE
 RECEIVED = ("머지됨", "끝남")
+
+
+def receiver_ok(receiver: str, epic_ids: set) -> bool:
+    """받는 곳이 `#<숫자>` 이거나 로드맵에 있는 에픽 번호인가. `없음` · 그 밖 글은 받는 곳이 아니다."""
+    if RECEIVER_PR_RE.fullmatch(receiver):
+        return True
+    return bool(RECEIVER_EPIC_RE.fullmatch(receiver)) and receiver in epic_ids
 
 
 def section_lines(doc_text: str, heading: str):
@@ -550,7 +558,7 @@ def handoff_rows(givers, stages: dict, records: dict) -> list:
             row = {"item": item, "giver": giver, "receiver": recv, "spec": spec}
             if ISSUE_RE.fullmatch(recv):
                 row.update(state="이슈", basis="GitHub 이슈 %s — 처리 여부는 GitHub 이 안다" % recv)
-            elif not (EPIC_RE.fullmatch(recv) and recv in stages):
+            elif not receiver_ok(recv, set(stages)):
                 row.update(state="받는 곳 없음", basis="받는 곳 %r 이 로드맵의 에픽도 `#<n>` 도 아니다" % recv)
             elif (giver, handoff_key(giver, item)) in confirmed_keys(records.get(recv, "")):
                 row.update(state="확인됨", basis="%s 설계문서의 %s 절" % (recv, RECORD_HEADING[3:]))

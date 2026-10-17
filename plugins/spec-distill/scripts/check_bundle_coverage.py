@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from repo_defaults import SPECS_DIR, repo_settings  # noqa: E402
 from roadmap_model import (  # noqa: E402,F401 — 이 이름들은 이 모듈의 공개 표면이기도 하다
     FormatError, PREFIX_ORDER, SEP_CELL_RE, SEP_RE, TOKEN_RE, brief_universe, bundle_ids,
-    collect_assigned, frontmatter, id_sort_key, parse_ids, parse_roadmap, section_body, unquote)
+    collect_assigned, frontmatter, id_sort_key, parse_ids, parse_roadmap, receiver_ok, section_body, unquote)
 
 TABLE_HEADING = "## 번호 대조"
 AC_HEADING = "## Acceptance Criteria"
@@ -396,8 +396,6 @@ def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None) -> di
 
 
 DEFER_HEADING = "## 미룸"
-RECEIVER_EPIC_RE = re.compile(r"[A-Z]\d+[a-z]?")
-RECEIVER_PR_RE = re.compile(r"#\d+")
 REPORT_HEAD_RE = re.compile(r"AC\d+:")
 REPORT_LINE_RE = re.compile(r"AC(\d+): (구현됨|미룸|빠짐) — (\S.*)")
 VERDICTS = ("구현됨", "미룸", "빠짐")
@@ -439,13 +437,6 @@ def deferred_rows(spec_text: str) -> list:
             raise FormatError("`## 미룸` 표 행이 빈칸 없는 칸 셋이 아니다: %r" % row)
         out.append((cells[0], cells[1], cells[2].strip("`").strip()))
     return out
-
-
-def receiver_ok(receiver: str, epic_ids: set) -> bool:
-    """받는 곳이 `#<숫자>` 이거나 로드맵에 있는 에픽 번호인가. `없음` · 그 밖 글은 받는 곳이 아니다."""
-    if RECEIVER_PR_RE.fullmatch(receiver):
-        return True
-    return bool(RECEIVER_EPIC_RE.fullmatch(receiver)) and receiver in epic_ids
 
 
 def plan_task_text(plan_text: str) -> str:
