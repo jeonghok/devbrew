@@ -6,12 +6,17 @@ Run (리포 루트에서):
 """
 from __future__ import annotations
 
+import inspect
+import os
+import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import control_plane as cp  # noqa: E402
+import conductor_state as cs  # noqa: E402
 import roadmap_status  # noqa: E402
 
 RM = "docs/superpowers/roadmaps/rm/roadmap.md"
@@ -300,6 +305,117 @@ class Parallel(unittest.TestCase):
         self.assertEqual(got["A"], [{"id": "C", "overlap": ["src/x"]}])
         self.assertEqual([p["id"] for p in got["B"]], ["C"])
         self.assertEqual(got["D"], [])
+
+
+def impl_done_block(bid="R5", branch="feature/a", **extra):
+    return blk(bid, "구현 끝", "in_progress", branch_states=[{"branch": branch, "tip": "abcdef12", "merged": None}],
+               **extra)
+
+
+class Overlay(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.ledger = self.tmp / "progress.md"
+        self.ledger.write_text("# SDD ledger — plan: p\nTask 1: Ruling: 가 — 왜 — 비용\n", encoding="utf-8")
+
+    def tearDown(self):
+        shutil.rmtree(str(self.tmp))
+
+    def machine(self, pr=None, ledger_for=None):
+        data = cs.empty()
+        if pr:
+            data["PR"].append({"브랜치": "feature/a", "번호": "#12", "상태": pr, "확인한 때": "2026-10-17 10:00"})
+        if ledger_for:
+            data["실행 원장"].append({"에픽": ledger_for, "계획": "p.md", "원장": str(self.ledger), "읽은 줄": "0"})
+        return lambda rel: (data, None)
+
+    def test_open_pr_in_machine_turns_impl_done_into_pr(self):
+        r = report([impl_done_block()])
+        cp.overlay([(RM, r)], self.machine(pr="열림"), None, True)
+        self.assertEqual(r["blocks"][0]["stage"], "PR")
+        self.assertEqual(r["blocks"][0]["task_status"], "in_progress")
+
+    def test_unknown_pr_keeps_stage_and_says_so(self):
+        r = report([impl_done_block()])
+        cp.overlay([(RM, r)], self.machine(), None, True)
+        self.assertEqual(r["blocks"][0]["stage"], "구현 끝")
+        self.assertIn("    PR: 알 수 없음 — 기계 상태에 없고 gh 가 없다", self.show_lines(r))
+
+    def test_statusline_mode_never_calls_gh(self):
+        r = report([impl_done_block()])
+        cp.overlay([(RM, r)], self.machine(), lambda br: self.fail("gh 를 불렀다"), False)
+        self.assertEqual(r["blocks"][0]["pr"]["state"], "알 수 없음")
+        self.assertIn("use_gh=False", inspect.getsource(cp.cmd_statusline))
+
+    def test_rulings_ledger_then_archive_then_uncountable(self):
+        r = report([impl_done_block("R5"), impl_done_block("R6", rulings_archived=["- 보관 판정"]),
+                    impl_done_block("R7"), blk("R0", "머지됨", "completed")])
+        cp.overlay([(RM, r)], self.machine(ledger_for="R5"), None, False)
+        got = dict((b["id"], b.get("rulings", "없음 키")) for b in r["blocks"])
+        self.assertEqual(got, {"R5": ["Task 1: Ruling: 가 — 왜 — 비용"], "R6": ["- 보관 판정"], "R7": None,
+                               "R0": "없음 키"})
+        self.assertIn("    R7: 셀 수 없음 — 실행 원장도 설계문서 `## 판정` 도 없다", self.show_lines(r))
+
+    def test_broken_machine_is_shown_not_emptied(self):
+        r = report([impl_done_block()])
+        cp.overlay([(RM, r)], lambda rel: (None, "3줄: 모르는 절 'x'"), None, False)
+        self.assertIsNone(r["machine"])
+        self.assertIn("기계 상태를 읽지 못했다 — 3줄: 모르는 절 'x'", self.show_lines(r))
+
+    def test_overlap_lines_show_content(self):
+        r = report(BASE, overlaps=[{"blocks": ["R1", "R2"], "paths": ["src/x.py", "docs/y/"]}])
+        lines = self.show_lines(r)
+        self.assertIn("경로 예약 겹침(정보): 1개", lines)
+        self.assertIn("    R1 ↔ R2: src/x.py · docs/y/", lines)
+
+    def test_partial_merge_counts_as_implementation(self):
+        counts, other = cp.bucket_counts([(RM, report([blk("R5", "일부 머지 1/3", "in_progress")]))])
+        self.assertEqual((counts["구현"], other), (1, 0))
+
+    def test_code_stamp_covers_state_computation_modules(self):
+        # 기계 상태는 캐시 밖이라 state_path · ledger_marker 는 열쇠가 아니다(인터뷰 지원 토글이 캐시를 밀지 않는다)
+        for name in ("conductor_state.py", "repo_defaults.py"):
+            self.assertIn(name, cp.CODE_STAMP_FILES)
+        self.assertNotIn("state_path.py", cp.CODE_STAMP_FILES)
+
+    def test_machine_for_catches_format_error(self):
+        class FakeRepo:
+            cwd = "/nonexistent"
+
+            def line(self, *args):
+                return ".git"
+        orig = cs.load
+
+        def boom(path, rel):
+            raise cp.FormatError("깨짐")
+        cs.load = boom
+        try:
+            data, why = cp.machine_for(FakeRepo(), RM)
+        finally:
+            cs.load = orig
+        self.assertIsNone(data)
+        self.assertIn("깨짐", why)
+
+    def test_gh_lookup_with_fake_gh(self):
+        bindir = self.tmp / "bin"
+        bindir.mkdir()
+        gh = bindir / "gh"
+        old_path = os.environ.get("PATH", "")
+        os.environ["PATH"] = str(bindir) + os.pathsep + old_path
+        try:
+            for body, want in (("echo '[{\"number\": 7, \"state\": \"OPEN\"}]'", {"number": "#7", "state": "열림"}),
+                               ("echo '[]'", {"number": None, "state": "없음"}),
+                               ("exit 1", {"number": None, "state": "알 수 없음"})):
+                gh.write_text("#!/bin/sh\n" + body + "\n", encoding="utf-8")
+                gh.chmod(0o755)
+                lookup = cp.gh_lookup_for(cp.Repo(str(self.tmp), cp.Deadline(5)), cp.Deadline(5))
+                got = lookup("feature/a")
+                self.assertEqual({"number": got["number"], "state": got["state"]}, want, body)
+        finally:
+            os.environ["PATH"] = old_path
+
+    def show_lines(self, r):
+        return cp.show_text([(RM, r)], NO_IV, [], lambda rep: "첫 줄", None).split("\n")
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@ import json
 import os
 import re
 import select
+import shutil
 import signal
 import stat
 import subprocess
@@ -34,10 +35,16 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
 from kill_switch_active import kill_switch_active  # noqa: E402
+import conductor_state as cs  # noqa: E402
+from roadmap_model import FormatError  # noqa: E402
+from state_path import state_root_for_common  # noqa: E402
 
 DONE = ("머지됨", "끝남")
 # 상태줄 묶음 — 상태 계산의 단계 이름 + R5 가 더할 이름. 대기 · 끝난 단계 · 알 수 없음은 세지 않는다.
 BUCKETS = (("설계", ("설계 중",)), ("구현", ("계획", "구현 중", "구현 끝", "PR")), ("준비", ("준비",)))
+IMPL_STAGES = ("구현 중", "구현 끝", "PR")
+GH_STATES = {"OPEN": "열림", "MERGED": "머지됨", "CLOSED": "닫힘"}
+LEDGER_MAX_BYTES = 1 << 20
 UNCOUNTED = ("대기", "머지됨", "끝남", "알 수 없음")
 TASK_STATES = ("pending", "in_progress", "completed")
 TOP_WARNINGS = (("고아 발화", "orphans"), ("미배정 번호", "unassigned"),
@@ -71,6 +78,9 @@ def bucket_counts(items):
     for _path, report in items:
         for b in report.get("blocks") or []:
             stage = b.get("stage")
+            if stage and stage.startswith("일부 머지"):
+                counts["구현"] += 1
+                continue
             for name, stages in BUCKETS:
                 if stage in stages:
                     counts[name] += 1
@@ -224,6 +234,8 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
     for path, report in items:
         lines.append(clean(first_line_fn(report)))
         lines.append(clean("로드맵: %s" % path))
+        if report.get("machine_error"):
+            lines.append(clean("기계 상태를 읽지 못했다 — %s" % report["machine_error"]))
         if report.get("not_on_default"):
             lines.append(clean("로드맵이 아직 기본 브랜치(%s)에 없다 — 머지 전이면 `--roadmap-file` 로 계산한다"
                                % (report.get("default_branch") or "알 수 없음")))
@@ -236,17 +248,29 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
                 line += " ← 기다림: " + " · ".join(waiting)
             lines.append(clean(line))
             lines += [clean("    경고: %s" % w) for w in b.get("warnings") or []]
+            if b.get("pr"):
+                lines.append(clean("    PR: %s" % pr_text(b["pr"])))
         for label, key in TOP_WARNINGS:
             vals = report.get(key)
             if vals is None:
                 lines.append("%s: 셀 수 없음" % label)
             elif vals:
                 lines.append(clean("%s: %d개 — %s" % (label, len(vals), " · ".join(vals))))
+        ov = report.get("overlaps") or []
+        if ov:
+            lines.append("경로 예약 겹침(정보): %d개" % len(ov))
+            lines += [clean("    %s ↔ %s: %s" % (o["blocks"][0], o["blocks"][1], " · ".join(o["paths"]))) for o in ov]
         lines += [clean("검사 불가: 형식 깨짐 — %s" % e) for e in report.get("format_errors") or []]
         lines += [clean("검사 불가: %s" % r) for r in report.get("unknown_reasons") or []]
-        if any("rulings" in b for b in blocks):
+        ruled = [b for b in blocks if "rulings" in b]
+        if ruled:
             lines.append("판정 줄:")
-            rows = [clean("    %s: %s" % (b.get("id"), r)) for b in blocks for r in b.get("rulings") or []]
+            rows = []
+            for b in ruled:
+                if b["rulings"] is None:
+                    rows.append(clean("    %s: 셀 수 없음 — 실행 원장도 설계문서 `## 판정` 도 없다" % b.get("id")))
+                else:
+                    rows += [clean("    %s: %s" % (b.get("id"), r)) for r in b["rulings"]]
             lines += rows or ["    없음"]
     lines += interview_lines(interview)
     lines += [clean("캐시를 쓰지 못했다 — %s" % n) for n in notes]
@@ -501,7 +525,7 @@ def cache_key(repo: Repo, main, main_full, mode, targets):
 
 
 CODE_STAMP_FILES = ("roadmap_status.py", "roadmap_model.py", "section6.py", "check_bundle_coverage.py", "control_plane.py",
-                    "repo_defaults.py")
+                    "repo_defaults.py", "conductor_state.py")
 
 
 def code_stamp() -> str:
@@ -611,7 +635,105 @@ def unfinished(report: dict) -> bool:
     return report.get("exit") in (3, 4) or any(b.get("stage") not in DONE for b in report.get("blocks") or [])
 
 
-def gather(cwd: str, arg, deadline: Deadline, ctx: dict):
+def _pr_unknown(why: str) -> dict:
+    return {"number": None, "state": "알 수 없음", "source": why}
+
+
+def pr_text(pr: dict) -> str:
+    if pr["state"] == "알 수 없음":
+        return "알 수 없음 — %s" % pr["source"]
+    if pr["number"] is None:
+        return "%s(%s)" % (pr["state"], pr["source"])
+    return "%s %s(%s)" % (pr["number"], pr["state"], pr["source"])
+
+
+def active_branch(b: dict):
+    return next((s["branch"] for s in b.get("branch_states") or [] if not s.get("merged") and s.get("tip")), None)
+
+
+def machine_for(repo, roadmap_rel: str):
+    """(기계 상태, 사유). 파일이 없으면 빈 것. 깨졌으면 (None, 사유) — 빈 것으로 읽지 않는다."""
+    common = repo.line("rev-parse", "--git-common-dir")
+    if not common:
+        return None, "git 공용 디렉토리를 찾지 못했다"
+    try:
+        path = cs.machine_path(state_root_for_common(Path(repo.cwd, common).resolve()), roadmap_rel)
+        return cs.load(path, roadmap_rel), None
+    except (cs.MachineError, FormatError) as exc:  # 한 파일이 깨져도 화면 전체를 비우지 않는다
+        return None, str(exc)
+
+
+def gh_lookup_for(repo, deadline):
+    """브랜치 → PR 사실을 `gh pr list` 로. gh 가 없으면 None."""
+    exe = shutil.which("gh")
+    if not exe:
+        return None
+    env = dict(os.environ, GH_PROMPT_DISABLED="1", NO_COLOR="1", GH_NO_UPDATE_NOTIFIER="1")
+
+    def lookup(branch: str) -> dict:
+        try:
+            rc, out = run_bounded([exe, "pr", "list", "--state", "all", "--head", branch,
+                                   "--json", "number,state", "--limit", "1"], repo.cwd, env, deadline, "gh pr list")
+        except TimedOut:
+            return _pr_unknown("gh 시간 초과")
+        if rc != 0:
+            return _pr_unknown("gh 실패(rc %d)" % rc)
+        try:
+            data = json.loads(out.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            return _pr_unknown("gh 출력을 읽지 못했다")
+        if not isinstance(data, list):
+            return _pr_unknown("gh 출력 모양이 다르다")
+        if not data:
+            return {"number": None, "state": "없음", "source": "gh"}
+        state, number = GH_STATES.get(data[0].get("state")), data[0].get("number")
+        if state is None or not isinstance(number, int):
+            return _pr_unknown("gh 출력 모양이 다르다")
+        return {"number": "#%d" % number, "state": state, "source": "gh"}
+    return lookup
+
+
+def overlay(items, machine_lookup, gh_lookup, use_gh: bool, read=read_capped) -> None:
+    """기계 상태 · 실행 원장 · gh 를 보고서에 얹는다 — 캐시 밖에서 매번 읽는다(캐시 열쇠에 넣지 않는다)."""
+    for path, report in items:
+        machine, why = machine_lookup(path)
+        report["machine"], report["machine_error"] = machine, why
+        ledgers, prs = {}, {}
+        for row in (machine or {}).get("실행 원장", []):
+            ledgers.setdefault(row["에픽"], []).append(row["원장"])
+        for row in (machine or {}).get("PR", []):
+            prs[row["브랜치"]] = row
+        for b in report.get("blocks") or []:
+            stage = b.get("stage") or ""
+            partial = stage.startswith("일부 머지")
+            br = active_branch(b)
+            if br and (stage == "구현 끝" or (partial and "구현 끝" in (b.get("reason") or ""))):
+                if br in prs:
+                    row = prs[br]
+                    b["pr"] = {"number": row["번호"], "state": row["상태"], "source": "기계 상태"}
+                elif not use_gh:
+                    b["pr"] = _pr_unknown("기계 상태에 없다(상태줄은 gh 를 부르지 않는다)")
+                elif gh_lookup is None:
+                    b["pr"] = _pr_unknown("기계 상태에 없고 gh 가 없다")
+                else:
+                    b["pr"] = gh_lookup(br)
+                if stage == "구현 끝" and b["pr"]["state"] == "열림":
+                    b["stage"], b["reason"] = "PR", "%s 열림(%s)" % (b["pr"]["number"], b["pr"]["source"])
+            if stage in IMPL_STAGES or partial or stage == "머지됨":
+                rulings = None
+                for ledger in ledgers.get(b.get("id"), []):
+                    try:
+                        rulings = (rulings or []) + cs.ledger_rulings(read(ledger, LEDGER_MAX_BYTES))
+                        b["rulings_source"] = "실행 원장"
+                    except (OSError, ValueError):
+                        continue
+                if rulings is None and b.get("rulings_archived") is not None:
+                    rulings, b["rulings_source"] = b["rulings_archived"], "설계문서 ## 판정"
+                if rulings is not None or stage != "머지됨":
+                    b["rulings"] = rulings
+
+
+def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True):
     """화면에 필요한 것 전부. 받은 시각은 캐시 밖에서 매번 읽는다. ctx 에 레포 최상위 · 캐시 상태를 남긴다."""
     view = {"items": [], "interview": None, "notes": [], "minutes": None, "select_error": None}
     repo = open_repo(cwd, deadline)
@@ -663,6 +785,7 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict):
                 view["notes"].append(err)
     for _p, r in items:
         r["fetched_at"] = fetched  # 첫 줄의 받은 시각도 캐시 밖에서
+    overlay(items, lambda rel: machine_for(repo, rel), gh_lookup_for(repo, deadline) if use_gh else None, use_gh)
     view.update(items=items, interview=interview, select_error=select_error)
     return view
 
@@ -733,7 +856,7 @@ def cmd_statusline() -> int:
             print("")
             return 0
         deadline = Deadline(STATUSLINE_BUDGET)
-        v = gather(stdin_dir() or os.getcwd(), None, deadline, ctx)
+        v = gather(stdin_dir() or os.getcwd(), None, deadline, ctx, use_gh=False)
         line = statusline_text(v["items"], v["interview"], v["minutes"], v["select_error"])
         remember_line(ctx, line)
         print(line)

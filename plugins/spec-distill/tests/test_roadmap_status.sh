@@ -765,6 +765,7 @@ cp "$T/rm2-bad.md" "$W/docs/rm2/roadmap.md"
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm2/roadmap.md > "$T/rm2-bad.json"); rc=$?
 assert_eq "$rc" "3" "레포 설정 값이 잘못되면 검사 불가"
 assert_contains "$(js "$T/rm2-bad.json" "' | '.join(r['format_errors'])")" "레포 설정 specs_dir" "잘못된 레포 설정 사유"
+assert_eq "$(js "$T/rm2-bad.json" "len(r['blocks']) > 0 and all(b['parallel'] is None for b in r['blocks'])")" "True" "형식 깨짐 보고서의 블록 parallel 은 None(빈 목록이 아니다)"
 g checkout -q -- docs/rm2/roadmap.md
 
 # ── R5 AC5 · AC6 · AC7 — 여러 브랜치 · 구현 중 · 구현 끝 · 산출물 ─────────────────────────────
@@ -776,7 +777,7 @@ for b in K1 K2 K3 M2 O1; do bundle docs/rm3 "$b" "C1, S1"; done
   block K2 feature/k2 없음 없음
   block K3 feature/k3 없음 없음
   block M2 "feature/m2a · feature/m2b" 없음 없음
-  printf '### O1 — 조사\n- 의도: o\n- 범위: o\n- 의존: 없음\n- 브랜치: feature/o1\n- 묶음: O1.md\n- 경로 예약: 없음\n- 흐름: 조사 「조사로 간다」\n- 산출물: docs/research/o1.md\n\n'
+  printf '### O1 — 조사\n- 의도: o\n- 범위: o\n- 의존: 없음\n- 브랜치: feature/o1\n- 묶음: O1.md\n- 경로 예약: 없음\n- 병렬: 없음\n- 흐름: 조사 「조사로 간다」\n- 산출물: docs/research/o1.md\n\n'
   roadmap_tail ""
 } > "$W/docs/rm3/roadmap.md"
 g add -- docs/rm3 && g commit -qm "rm3" && g push -q origin main
@@ -944,6 +945,7 @@ assert_eq "$(js "$T/rm3c.json" "[(h['giver'], h['receiver'], h['state']) for h i
 assert_eq "$(js "$T/rm3c.json" "next(b['rulings_archived'] for b in r['blocks'] if b['id']=='K2')")" "['- Task 1: Ruling: 가 — 왜 — 비용']" "AC8: 설계문서 ## 판정 보관본"
 assert_eq "$(js "$T/rm3c.json" "next(b['rulings_archived'] for b in r['blocks'] if b['id']=='K3')")" "None" "판정 절 없는 설계문서는 None(빈 목록과 다르다)"
 assert_eq "$(js "$T/rm3c.json" "next(b['extras'] for b in r['blocks'] if b['id']=='O1')")" "{'흐름': '조사 「조사로 간다」', '산출물': 'docs/research/o1.md'}" "선택 칸을 보고서에 싣는다"
+assert_eq "$(js "$T/rm3c.json" "'병렬' in next(b['extras'] for b in r['blocks'] if b['id']=='O1')")" "False" "없음 값 칸(- 병렬: 없음)은 extras 에서 빠진다"
 assert_eq "$(js "$T/rm3c.json" "next(b['bundle'] for b in r['blocks'] if b['id']=='K2')")" "docs/rm3/K2.md" "묶음 경로"
 assert_contains "$(js "$T/rm3c.json" "[p['id'] for p in next(b['parallel'] for b in r['blocks'] if b['id']=='K2')]")" "'K3'" "K2 와 K3 은 동시에 갈 수 있다"
 assert_not_contains "$(js "$T/rm3c.json" "[p['id'] for p in next(b['parallel'] for b in r['blocks'] if b['id']=='K2')]")" "'M2'" "머지된 에픽은 동시 가능 목록에 없다"
@@ -964,7 +966,7 @@ assert_eq "$(js "$T/rm3c.json" "next(b['parallel'] for b in r['blocks'] if b['id
 
 # 지휘 기록 — 확인 줄이 있으면 확인됨, 받는 에픽이 머지됐으나 확인 전이면 처리됨, 읽을 수 없으면 셀 수 없음(rc 3)
 g checkout -q feature/k3
-g revert -q --no-edit HEAD
+g revert --no-edit HEAD >/dev/null  # 판정 머리 둘 커밋을 되돌린다(revert 에는 -q 가 없다)
 KEY="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as c; print(c.handoff_key("K2", "넘길 일"))' "$S")"
 printf '\n## 지휘 기록\n\n- 넘김 확인 · K2 · %s · 받았다\n' "$KEY" >> "$W/docs/superpowers/specs/k3-design.md"
 g add -- docs && g commit -qm "k3 지휘 기록"
@@ -972,7 +974,7 @@ g checkout -q feature/k2
 python3 -I -c 'import sys; p = sys.argv[1]; s = open(p, encoding="utf-8").read(); a = "| 이슈 일 | 이유 | #5 |\n"; assert a in s; open(p, "w", encoding="utf-8").write(s.replace(a, a + "| 머지 일 | 이유 | M2 |\n"))' "$W/docs/superpowers/specs/k2-design.md"
 g add -- docs && g commit -qm "k2 미룸 셋"
 g checkout -q main
-(cd "$W" && python3 "$RS" --json docs/rm3/roadmap.md > "$T/rm3e.json")
+(cd "$W" && python3 "$RS" --json docs/rm3/roadmap.md > "$T/rm3e.json"); rc3e=$?
 assert_eq "$(js "$T/rm3e.json" "[(h['receiver'], h['state']) for h in r['handoffs']]")" "[('K3', '확인됨'), ('#5', '이슈'), ('M2', '처리됨')]" "넘김: 확인 줄 → 확인됨 · 받는 에픽 머지됨 + 확인 전 → 처리됨"
 assert_not_contains "$(js "$T/rm3e.json" "' | '.join(r['unknown_reasons'])")" "지휘 기록" "읽을 수 있는 지휘 기록은 검사 불가 사유가 아니다"
 g checkout -q feature/k3
@@ -980,7 +982,8 @@ printf '\n## 지휘 기록\n\n- 메모\n' >> "$W/docs/superpowers/specs/k3-desig
 g add -- docs && g commit -qm "k3 지휘 기록 머리 둘"
 g checkout -q main
 (cd "$W" && python3 "$RS" --json docs/rm3/roadmap.md > "$T/rm3f.json"); rc=$?
-assert_eq "$rc" "3" "지휘 기록을 읽을 수 없으면 검사 불가(rc 3)"
+assert_eq "$([ "$rc3e" -le 1 ] && echo ok || echo "rc $rc3e")" "ok" "지휘 기록 머리가 하나일 때는 검사 가능(rc 0 또는 1) — 아래 rc 3 의 다른 원인이 없다"
+assert_eq "$rc" "3" "지휘 기록 머리가 둘로 읽을 수 없게 되면 검사 불가(rc 3)"
 assert_eq "$(js "$T/rm3f.json" "[(h['receiver'], h['state'], h['basis']) for h in r['handoffs'] if h['receiver']=='K3']")" "[('K3', '셀 수 없음', 'K3 지휘 기록 읽기 불가')]" "읽을 수 없는 지휘 기록은 넘김을 셀 수 없음으로 — 처리됨 · 열림으로 오판하지 않는다"
 assert_contains "$(js "$T/rm3f.json" "' | '.join(r['unknown_reasons'])")" "K3 지휘 기록 읽기 불가" "검사 불가 사유에 올라온다"
 assert_eq "$(js "$T/rm3f.json" "[h['state'] for h in r['handoffs'] if h['receiver']!='K3']")" "['이슈', '처리됨']" "다른 받는 곳의 넘김은 그대로"
