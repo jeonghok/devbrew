@@ -19,6 +19,9 @@ DOC = PLUGIN / "references" / "roadmap-ontology.md"
 SOURCES = ("roadmap_model.py", "roadmap_status.py", "check_bundle_coverage.py", "repo_defaults.py",
            "conductor_state.py", "roadmap_render.py")
 LAYERS = ("컨트롤 플레인", "계획", "실행", "기록")
+OBJECTS = ("로드맵", "에픽", "에픽 묶음", "설계문서", "산출물", "계획", "레포 설정", "브랜치", "커밋", "PR",
+           "worktree · agent", "결정 기록 줄", "재분해 이력 항목", "번호 대조 행", "미룸 · 넘김 줄",
+           "넘김 확인 줄", "판정", "구현 대조", "지휘 기록", "기계 상태", "리뷰 원장")
 HEAD = ["객체", "층", "식별자", "속성", "링크(칸 · 키)", "주인"]
 BACKTICK = re.compile(r"`([^`]+)`")
 
@@ -44,6 +47,7 @@ class Ontology(unittest.TestCase):
         table = rows("## 객체")
         self.assertEqual(table[0], HEAD)
         self.assertGreaterEqual(len(table) - 2, 15)
+        self.assertEqual([r[0] for r in table[2:]], list(OBJECTS))
         for r in table[2:]:
             self.assertEqual(len(r), len(HEAD), r)
             self.assertIn(r[1], LAYERS, r)
