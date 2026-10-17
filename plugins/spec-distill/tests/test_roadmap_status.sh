@@ -394,11 +394,15 @@ assert_contains "$(js "$T/crash.json" "r['unknown_reasons']")" "내부 오류" "
 # ── 5. 읽기 전용(AC7) — 정적 검사 + 실행 전후 비교, 각각 양성 대조 ──────────────
 static_check() {  # static_check <파일...> — 쓰기 · 네트워크 · 허용 밖 git · 이름 import 를 찾으면 줄을 낸다. 끝에 CHECKED n.
   python3 - "$@" <<'PY'
-import ast, sys
+import ast, os, sys
 WRITE_ATTRS = {"write_text", "write_bytes", "unlink", "rmdir", "mkdir", "rename", "replace",
                "touch", "chmod", "remove", "makedirs", "rmtree", "symlink_to", "system", "popen"}
 NET_MODS = {"socket", "urllib", "http", "requests", "ftplib", "smtplib", "shutil"}
 READ_GIT = {"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"}
+LOCAL = set()
+if os.environ.get("LOCAL_DIR"):
+    LOCAL = {f[:-3] for f in os.listdir(os.environ["LOCAL_DIR"]) if f.endswith(".py")}
+ARGS = {os.path.basename(a)[:-3] for a in sys.argv[1:]}
 count = 0
 for path in sys.argv[1:]:
     count += 1
@@ -426,6 +430,8 @@ for path in sys.argv[1:]:
             for mod in mods:
                 if mod.split(".")[0] in NET_MODS:
                     print("%s:%d: 네트워크 · 파일 조작 모듈 %s" % (path, node.lineno, mod))
+                if mod.split(".")[0] in LOCAL and mod.split(".")[0] not in ARGS:
+                    print("%s:%d: 잠긴 파일 밖 로컬 모듈 import %s" % (path, node.lineno, mod))
         if isinstance(node, ast.Call):
             f = node.func
             name = getattr(f, "attr", getattr(f, "id", ""))
@@ -450,10 +456,10 @@ for path in sys.argv[1:]:
 print("CHECKED %d" % count)
 PY
 }
-out="$(static_check "$RS" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/spec_review_bundle.py" "$S/repo_defaults.py")"; rc=$?
+out="$(LOCAL_DIR="$S" static_check "$RS" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/spec_review_bundle.py" "$S/repo_defaults.py" "$S/section6.py")"; rc=$?
 assert_eq "$rc" "0" "정적 검사기가 죽지 않았다(rc 0)"
-assert_eq "$(printf '%s\n' "$out" | grep -v '^CHECKED ')" "" "정적: 다섯 스크립트에 쓰기 · 네트워크 · git 밖 subprocess · 허용 밖 git · 이름 import 가 없다"
-assert_eq "$(printf '%s\n' "$out" | grep '^CHECKED ')" "CHECKED 5" "정적 검사가 다섯 스크립트를 셌다"
+assert_eq "$(printf '%s\n' "$out" | grep -v '^CHECKED ')" "" "정적: 여섯 스크립트에 쓰기 · 네트워크 · git 밖 subprocess · 허용 밖 git · 이름 import · 잠긴 파일 밖 로컬 import 가 없다"
+assert_eq "$(printf '%s\n' "$out" | grep '^CHECKED ')" "CHECKED 6" "정적 검사가 여섯 스크립트를 셌다"
 sed 's/GIT_ALLOWED = frozenset({"show",/GIT_ALLOWED = frozenset({"fetch", "show",/' "$RS" > "$T/mut_fetch.py"
 assert_contains "$(static_check "$T/mut_fetch.py")" "GIT_ALLOWED" "양성 대조: fetch 를 허용 목록에 넣으면 정적 검사가 잡는다"
 printf 'from pathlib import Path\nPath("x").write_text("y", encoding="utf-8")\nimport urllib.request\n' > "$T/mut_write.py"
@@ -468,6 +474,8 @@ printf 'from pathlib import Path\nPath("x").open("w", encoding="utf-8")\n' > "$T
 assert_contains "$(static_check "$T/ctl_popen.py")" "쓰기 모드 open" "양성 대조: Path.open 의 쓰기 모드를 잡는다"
 printf 'import subprocess\nsubprocess.run(["ls"])\n' > "$T/ctl_run.py"
 assert_contains "$(static_check "$T/ctl_run.py")" "git 이 아닌 subprocess" "양성 대조: git 밖 subprocess.run 을 잡는다"
+printf 'import conductor_state\n' > "$T/ctl_local.py"
+assert_contains "$(LOCAL_DIR="$S" static_check "$T/ctl_local.py")" "잠긴 파일 밖 로컬 모듈 import conductor_state" "양성 대조: 잠긴 파일 밖 로컬 모듈 import 를 잡는다"
 printf 'from subprocess import run\n' > "$T/ctl_from.py"
 assert_contains "$(static_check "$T/ctl_from.py")" "subprocess 를 이름으로 import" "양성 대조: from subprocess import 를 잡는다"
 for sub in fetch push update-ref; do
@@ -488,7 +496,7 @@ printf 'x\n' >> "$W/README.txt"; after2="$(snap)"; git -C "$W" checkout -q -- RE
 [ "$before" != "$after2" ] && ok "양성 대조: 파일 하나를 바꾸면 비교가 잡는다" || no "양성 대조: 비교가 변화를 못 본다"
 
 # ── 6. 변이 — 첫째 부모 이력 제한(D4.24)과 조상 아님 조건(D1.1)에 이빨이 있는지 ──────
-M="$T/mut"; mkdir -p "$M"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$S/conductor_state.py" "$S/ledger_marker.py" "$S/state_path.py" "$M/"
+M="$T/mut"; mkdir -p "$M"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M/"
 sed 's/"log", "--first-parent", "--merges"/"log", "--merges"/' "$RS" > "$M/roadmap_status.py"
 cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(--first-parent)" || ok "변이 적용됨(--first-parent)"
 (cd "$W" && python3 "$M/roadmap_status.py" --json docs/rm/roadmap.md > "$T/mfp.json")
@@ -540,7 +548,7 @@ assert_eq "$rc" "3" "AC9: ## 미룸 표가 깨지면 검사 불가(rc 3)"
 assert_contains "$(warns "$T/f9.json" F9)" "미룸 셀 수 없음(" "AC9: 깨진 표는 「셀 수 없음」"
 assert_contains "$(js "$T/f9.json" "r['unknown_reasons']")" "F9 미룸 표" "AC9: 셀 수 없음이 검사 불가 사유로 올라온다"
 # 변이(AC15) — 받는 곳 판정을 끄면 경고가 사라진다
-M3="$T/mut3"; mkdir -p "$M3"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$S/conductor_state.py" "$S/ledger_marker.py" "$S/state_path.py" "$M3/"
+M3="$T/mut3"; mkdir -p "$M3"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M3/"
 sed 's/^            bad = \[item for item, _why, recv in rows if not receiver_ok(recv, known_ids)\]$/            bad = []/' "$RS" > "$M3/roadmap_status.py"
 cmp -s "$RS" "$M3/roadmap_status.py" && no "변이 적용 안 됨(받는 곳 판정)" || ok "변이 적용됨(받는 곳 판정)"
 (cd "$W" && python3 "$M3/roadmap_status.py" --json docs/rm8/roadmap.md > "$T/md8.json")
@@ -779,6 +787,8 @@ g add -- docs && g commit -qm "k1 계획 1"
 commit_file src/k1.txt k1 "$(printf 'k1 구현\n\nSpec: %s' "$SPEC_K1")"
 printf '\n## 구현 대조 — docs/superpowers/plans/k1-p1.md\n\n- 요약\n' >> "$W/$SPEC_K1"
 g add -- docs && g commit -qm "k1 구현 대조"
+(cd "$W" && python3 "$RS" --json docs/rm3/roadmap.md > "$T/rm3-pre.json")
+assert_eq "$(stage "$T/rm3-pre.json" K1)" "구현 끝" "AC7: 계획의 구현 대조 절이 모두 있으면 구현 끝"
 pr_merge 21 feature/k1a; g push -q origin main
 g checkout -q -b feature/k1b main
 printf '**Spec:** `%s`\n' "$SPEC_K1" > "$W/docs/superpowers/plans/k1-p2.md"
@@ -819,5 +829,78 @@ g branch -q -D feature/k1b
 (cd "$W" && python3 "$RS" --json docs/rm3/roadmap.md > "$T/rm3b.json")
 assert_eq "$(stage "$T/rm3b.json" K1)" "일부 머지 1/3" "AC5: 첫 머지 뒤 남은 예정 브랜치 때문에 머지됨이 아니다"
 assert_contains "$(js "$T/rm3b.json" "next(b['reason'] for b in r['blocks'] if b['id']=='K1')")" "다음 브랜치 없음: feature/k1b" "다음 예정 브랜치 이름을 보인다"
+
+# ── R5 수정 1 — 산출물에 `## 번호 대조` 머리가 둘이면 그 블록만 검사 불가 ────────────────────
+g checkout -q main
+mkdir -p "$W/docs/rm4"
+bundle docs/rm4 P1 "C1, S1"; bundle docs/rm4 Q1 "C1, S1"
+{ roadmap_head
+  printf '### P1 — 조사\n- 의도: p\n- 범위: p\n- 의존: 없음\n- 브랜치: feature/p1\n- 묶음: P1.md\n- 경로 예약: 없음\n- 흐름: 조사 「조사로 간다」\n- 산출물: docs/research/p1d.md\n\n'
+  block Q1 feature/q4 없음 없음
+  roadmap_tail ""
+} > "$W/docs/rm4/roadmap.md"
+g add -- docs/rm4 && g commit -qm "rm4" && g push -q origin main
+g checkout -q -b feature/p1 main; mkdir -p "$W/docs/research"
+printf -- '---\nsource_interview: docs/rm4/P1.md\n---\n\n# 조사\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| C1 · S1 | 반영 | §1 |\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| C1 | 반영 | §2 |\n' > "$W/docs/research/p1d.md"
+g add -- docs && g commit -qm "p1 중복 머리"; g checkout -q main; g fetch -q origin
+(cd "$W" && python3 "$RS" --json docs/rm4/roadmap.md > "$T/rm4.json")
+assert_eq "$(stage "$T/rm4.json" Q1)" "준비" "산출물 번호 대조 머리가 둘이어도 다른 블록의 단계는 나온다"
+assert_contains "$(warns "$T/rm4.json" P1)" "번호 대조 검사 불가(" "산출물의 번호 대조 머리가 둘이면 그 블록에 경고"
+assert_contains "$(js "$T/rm4.json" "' | '.join(r['unknown_reasons'])")" "P1 산출물 번호 대조 절" "산출물 머리 중복이 검사 불가 사유로 올라온다"
+
+# ── R5 수정 2 · 3 · 5 — 기본 브랜치를 받아온 뒤 · 결정 기록 머지 줄 · 구현 끝 · 다른 spec 트레일러 ────────
+g checkout -q main
+mkdir -p "$W/docs/rm5"
+for b in Z5 V5 X5 H5 G5; do bundle docs/rm5 "$b" "C1, S1"; done
+{ roadmap_head | sed 's|^# 로드맵|# 로드맵 다섯|'
+  block Z5 "feature/z5a · feature/z5b" 없음 없음
+  block V5 feature/v5 없음 없음
+  block X5 feature/x5 없음 없음
+  block H5 "feature/h5a · feature/h5b" 없음 없음
+  block G5 feature/g5 H5 없음
+  roadmap_tail "$(printf -- '- H5 · 머지 · 2026-10-17 · 「h5a 를 squash 로 머지했다」')"
+} > "$W/docs/rm5/roadmap.md"
+g add -- docs/rm5 && g commit -qm "rm5" && g push -q origin main
+mkdir -p "$W/docs/superpowers/specs" "$W/docs/superpowers/plans"
+SPEC_Z=docs/superpowers/specs/z5-design.md
+# Z5 — z5b 는 z5a 가 머지되기 전에 갈라져 계획 2 를 더하고(트레일러 없음) 기본 브랜치를 받아온다.
+g checkout -q -b feature/z5b main
+printf '**Spec:** `%s`\n' "$SPEC_Z" > "$W/docs/superpowers/plans/z5-p2.md"
+g add -- docs && g commit -qm "z5 계획 2"
+g checkout -q -b feature/z5a main
+spec_doc docs/rm5/Z5.md "C1 · S1" > "$W/$SPEC_Z"
+printf '**Spec:** `%s`\n' "$SPEC_Z" > "$W/docs/superpowers/plans/z5-p1.md"
+g add -- docs && g commit -qm "z5 계획 1"
+commit_file src/z5.txt z5 "$(printf 'z5 구현\n\nSpec: %s' "$SPEC_Z")"
+pr_merge 50 feature/z5a; g push -q origin main
+g checkout -q feature/z5b; g merge -q main -m "sync main"; g checkout -q main
+# V5 — 계획 뒤 커밋의 트레일러가 다른 spec 을 가리킨다 → 계획
+g checkout -q -b feature/v5 main
+spec_doc docs/rm5/V5.md "C1 · S1" > "$W/docs/superpowers/specs/v5-design.md"
+printf '**Spec:** `docs/superpowers/specs/v5-design.md`\n' > "$W/docs/superpowers/plans/v5.md"
+g add -- docs && g commit -qm "v5 계획"
+commit_file src/v5.txt v5 "$(printf 'v5 다른 일\n\nSpec: docs/superpowers/specs/other-design.md')"
+# X5 — 한 브랜치 계획 둘, 첫 계획만 구현 대조 절이 있다 → 구현 끝이 아니다
+g checkout -q -b feature/x5 main
+spec_doc docs/rm5/X5.md "C1 · S1" > "$W/docs/superpowers/specs/x5-design.md"
+printf '\n## 구현 대조 — docs/superpowers/plans/x5-p1.md\n\n- 요약\n' >> "$W/docs/superpowers/specs/x5-design.md"
+printf '**Spec:** `docs/superpowers/specs/x5-design.md`\n' > "$W/docs/superpowers/plans/x5-p1.md"
+printf '**Spec:** `docs/superpowers/specs/x5-design.md`\n' > "$W/docs/superpowers/plans/x5-p2.md"
+g add -- docs && g commit -qm "x5 계획 둘"
+# H5 — h5a 는 squash 머지 뒤 지워졌고(결정 기록의 머지 줄) h5b 는 열려 있다
+g checkout -q -b feature/h5a main; commit_file src/h5a.txt h5a "h5a"
+g checkout -q main; g merge -q --squash feature/h5a; g commit -qm "squash h5a"; g branch -q -D feature/h5a; g push -q origin main
+g checkout -q -b feature/h5b main; commit_file src/h5b.txt h5b "h5b"
+g checkout -q main; g fetch -q origin
+(cd "$W" && python3 "$RS" --json docs/rm5/roadmap.md > "$T/rm5.json")
+assert_eq "$(stage "$T/rm5.json" Z5)" "일부 머지 1/2" "수정 2: 기본 브랜치를 받아온 브랜치는 남의 트레일러로 구현 중이 되지 않는다"
+assert_contains "$(js "$T/rm5.json" "next(b['reason'] for b in r['blocks'] if b['id']=='Z5')")" "feature/z5b — 계획" "수정 2: 계획 단계로 읽는다"
+assert_eq "$(stage "$T/rm5.json" V5)" "계획" "다른 spec 을 가리키는 트레일러는 구현 중이 아니다"
+assert_eq "$(stage "$T/rm5.json" X5)" "구현 중" "수정 5: 계획 둘 중 하나만 구현 대조 절이 있으면 구현 끝이 아니다"
+assert_not_contains "$(js "$T/rm5.json" "next(b['reason'] for b in r['blocks'] if b['id']=='X5')")" "트레일러" "구현 중 근거는 구현 대조 절만 말한다(트레일러를 붙이지 않는다)"
+assert_eq "$(stage "$T/rm5.json" H5)" "일부 머지 1/2" "수정 3: 결정 기록 머지 줄은 ref 가 사라진 브랜치에만 닿는다"
+assert_contains "$(warns "$T/rm5.json" H5)" "결정 기록의 머지 줄을 feature/h5b 에 적용하지 않았다 — 브랜치가 남아 있다" "수정 3: 적용하지 않은 브랜치를 경고한다"
+assert_eq "$(stage "$T/rm5.json" G5)" "대기" "수정 3: 일부 머지인 에픽에 의존하면 준비가 아니다"
+assert_eq "$(js "$T/rm5.json" "type(next(b['branch'] for b in r['blocks'] if b['id']=='Z5')).__name__")" "str" "보고서의 branch 는 문자열이다"
 
 finish

@@ -22,6 +22,9 @@ SEP_CELL_RE = re.compile(r":?-{3,}:?")
 PREFIX_ORDER = ("C", "D", "OQ", "RC", "K", "ST", "S")
 
 
+IMPL_PREFIX = "## 구현 대조 — "
+
+
 class FormatError(ValueError):
     """검사할 수 없는 입력 — 종료 코드 3."""
 
@@ -471,3 +474,18 @@ def collect_assigned(blocks: list, meta: dict, roadmap_rel: str, read, exists):
             continue
         union.update(b["assigned"])
     return bundles, union, errors
+
+
+def _headings(doc_text: str):
+    in_fence = False
+    for line in doc_text.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and line.startswith("## "):
+            yield line.rstrip()
+
+
+def impl_done(doc_text: str, plan_rel: str) -> bool:
+    """그 계획의 `## 구현 대조 — <계획 경로>` 절이 있는가 — 다른 계획의 절은 세지 않는다."""
+    want = IMPL_PREFIX + plan_rel
+    return any(h == want for h in _headings(doc_text))

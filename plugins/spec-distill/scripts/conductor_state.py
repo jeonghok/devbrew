@@ -24,7 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import repo_defaults  # noqa: E402
 from ledger_marker import _atomic_write, _read_line  # noqa: E402 — 리뷰 원장 표지와 같은 방식
-from roadmap_model import FormatError  # noqa: E402
+from roadmap_model import FormatError, IMPL_PREFIX, _headings, impl_done  # noqa: E402,F401 — 옮긴 이름의 옛 자리
 from state_path import SESSION_PATTERN, state_root  # noqa: E402
 
 MACHINE_FILE = "machine.md"
@@ -47,7 +47,6 @@ SEP = " · "
 # 에픽 설계문서(또는 산출물)의 절 — 지휘자가 쓰고 상태 계산 · 화면이 읽는다.
 RULINGS_HEADING = "## 판정"
 RECORD_HEADING = "## 지휘 기록"
-IMPL_PREFIX = "## 구현 대조 — "
 CONFIRM_RE = re.compile(r"- 넘김 확인 · ([A-Z][0-9]+[a-z]?) · ([0-9a-f]{8}) · (\S.*)")
 ISSUE_RE = re.compile(r"#\d+")
 EPIC_RE = re.compile(r"[A-Z][0-9]+[a-z]?")
@@ -230,21 +229,6 @@ def save(path: Path, roadmap_rel: str, data: dict, session: str) -> None:
 
 
 # ── 설계문서의 절 ────────────────────────────────────────────────────────────
-
-def _headings(doc_text: str):
-    in_fence = False
-    for line in doc_text.splitlines():
-        if line.lstrip().startswith("```"):
-            in_fence = not in_fence
-        elif not in_fence and line.startswith("## "):
-            yield line.rstrip()
-
-
-def impl_done(doc_text: str, plan_rel: str) -> bool:
-    """그 계획의 `## 구현 대조 — <계획 경로>` 절이 있는가 — 다른 계획의 절은 세지 않는다."""
-    want = IMPL_PREFIX + plan_rel
-    return any(h == want for h in _headings(doc_text))
-
 
 def section_lines(doc_text: str, heading: str):
     """머리가 정확히 `heading` 인 절의 비지 않은 줄들(펜스 안 머리는 절이 아니다). 없으면 None,

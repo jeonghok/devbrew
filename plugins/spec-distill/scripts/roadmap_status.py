@@ -31,8 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_bundle_coverage import check, deferred_rows, receiver_ok  # noqa: E402
 from roadmap_model import (  # noqa: E402,F401 — 테스트가 rs.parse_roadmap · rs.brief_universe 로 부른다
     FormatError, brief_universe, collect_assigned, field_list, field_text, frontmatter, id_sort_key,
-    parse_ids, parse_roadmap, section_body, split_list, unquote)
-from conductor_state import impl_done  # noqa: E402
+    impl_done, parse_ids, parse_roadmap, section_body, split_list, unquote)
 from repo_defaults import SPECS_DIR, repo_settings  # noqa: E402
 
 DEFAULT_REF = "refs/remotes/origin/HEAD"
@@ -155,9 +154,10 @@ class Git:
         first = out.split("\n", 1)[0].strip()
         return first or None
 
-    def trailer_after(self, commit: str, tip: str, lines: set) -> bool:
-        """commit 뒤(commit 제외) tip 까지 커밋 메시지에 lines 중 한 줄이 그대로 있는가."""
-        rc, out, err = self.run_err("log", "--format=%x1e%B", "%s..%s" % (commit, tip))
+    def trailer_after(self, commit: str, tip: str, base: str, lines: set) -> bool:
+        """commit 뒤(commit 제외)에 이 브랜치가 더한 커밋 — base(기본 브랜치와 갈라진 곳)에서 닿는 것은 뺀다 —
+        의 메시지에 lines 중 한 줄이 그대로 있는가."""
+        rc, out, err = self.run_err("log", "--format=%x1e%B", tip, "^" + commit, "^" + base)
         if rc != 0:
             self.fail("log", rc, err)
             return False
@@ -301,9 +301,11 @@ def progress(git: Git, main: str, tip: str, block: dict, bundle_path, settings: 
     if len(done) == len(plans):
         return "구현 끝", "구현 대조 절 있음: %s" % " · ".join(done), specs, paths
     trailers = {"Spec: " + s for s in specs}
-    started = [p for p, c in plans if p not in done and c and git.trailer_after(c, tip, trailers)]
+    started = [p for p, c in plans if p not in done and c and git.trailer_after(c, tip, base, trailers)]
     if started or done:
-        return "구현 중", "Spec: 트레일러 커밋 있음: %s" % " · ".join(started + done), specs, paths
+        why = (["구현 대조 절 있음: %s" % " · ".join(done)] if done else []) + (
+            ["Spec: 트레일러 커밋 있음: %s" % " · ".join(started)] if started else [])
+        return "구현 중", " · ".join(why), specs, paths
     return "계획", "계획 있음", specs, paths
 
 
@@ -393,10 +395,21 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
             tip = git.commit("refs/heads/" + br) or git.commit("refs/remotes/origin/" + br)
             states.append({"branch": br, "tip": tip, "merged": merged_by(git, merges, main, br, tip)})
         b["branch_states"] = states
+        rec_merge = rec.get((bid, "머지"))
+        if rec_merge and len(states) > 1 and not all(s["merged"] for s in states):
+            # 브랜치가 여럿이면 머지 줄은 ref 가 사라진 브랜치에만 닿는다 — 남은 브랜치까지 머지됨으로 만들지 않는다.
+            for s in states:
+                if s["merged"]:
+                    continue
+                if s["tip"] is None:
+                    s["merged"] = "결정 기록의 머지 기록 %s %s" % (rec_merge["date"], rec_merge["quote"])
+                else:
+                    b["warnings"].append("결정 기록의 머지 줄을 %s 에 적용하지 않았다 — 브랜치가 남아 있다"
+                                         % s["branch"])
+            rec_merge = None
         n_merged = sum(1 for s in states if s["merged"])
         active = next((s for s in states if not s["merged"] and s["tip"]), None)
         b["tip"] = active["tip"] if active else None
-        rec_merge = rec.get((bid, "머지"))
         if n_merged == len(states) or rec_merge:
             why = (" · ".join(s["merged"] for s in states) if n_merged == len(states)
                    else "결정 기록의 머지 기록 %s %s" % (rec_merge["date"], rec_merge["quote"]))
@@ -439,7 +452,13 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 b["warnings"].append("번호 대조 검사 불가(spec 을 읽지 못했다): %s" % spec)
                 cov_unknown.append("%s spec 을 읽지 못했다" % bid)
                 continue
-            if "산출물" in b["fields"] and section_body(spec_text, "## 번호 대조") is None:
+            try:
+                no_cov_section = "산출물" in b["fields"] and section_body(spec_text, "## 번호 대조") is None
+            except FormatError as exc:
+                b["warnings"].append("번호 대조 검사 불가(%s): %s" % (exc, spec))
+                cov_unknown.append("%s 산출물 번호 대조 절 — %s" % (bid, exc))
+                continue
+            if no_cov_section:
                 b["warnings"].append("번호 대조 건너뜀(셀 수 없음) — 산출물에 `## 번호 대조` 절이 없다: %s" % spec)
             elif b["kind"] == "bundle" and bundles.get(bid) is not None:
                 result = check(bundles[bid], spec_text, repo=_GitTreeRepo(git, main, settings["specs_dir"]) if main else None)
@@ -585,7 +604,7 @@ def build(git: Git, args) -> dict:
         report["blocks"].append({
             "id": b["id"], "title": b["title"], "kind": b["kind"], "stage": b["stage"],
             "reason": b["reason"], "task_status": task_status(b["stage"]),
-            "branch": b["fields"].get("브랜치"), "branches": b["branches"],
+            "branch": field_text(b["fields"].get("브랜치", "")), "branches": b["branches"],
             "branch_states": b.get("branch_states", []), "tip": b.get("tip"), "plans": b.get("plans", []),
             "deps": b["deps"], "specs": b["specs"],
             "ids": sorted(ids, key=id_sort_key), "warnings": b["warnings"], "notes": b["notes"]})
