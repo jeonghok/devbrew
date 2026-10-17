@@ -411,7 +411,7 @@ def replace_epics(roadmap_text: str, blocks: list) -> str:
 
 
 def history_entry(date: str, reason: str, changes: list, quotes: list, no_words: str = "") -> str:
-    """새 재분해 이력 항목 하나 — `### <날짜> · <사유>` · `- 바뀜:` · `- 원문:` + 줄마다 「…」.
+    """새 재분해 이력 항목 하나 — `### <날짜> · <사유>` · `- 바뀜:`(끝에 승인 인용 「…」) · `- 원문:` + 줄마다 「…」.
 
     사용자 말이 없으면 quotes 를 비우고 no_words 에 사유를 준다 — `- 원문: 없음 — <사유>` 한 줄이 된다."""
     if no_words and quotes:
@@ -427,7 +427,8 @@ def history_entry(date: str, reason: str, changes: list, quotes: list, no_words:
         raise TableError("재분해 이력 사유는 한 줄이다: %r" % reason)
     out = ["### %s · %s" % (date, reason.strip())]
     if changes:
-        out.append("- 바뀜: " + " · ".join(changes))
+        out.append("- 바뀜: " + " · ".join(changes) + "".join(" 「%s」" % q if i == 0 else " · 「%s」" % q
+                                                              for i, q in enumerate(quotes)))
     if no_words:
         out.append("- 원문: 없음 — " + no_words.strip())
         return "\n".join(out) + "\n"

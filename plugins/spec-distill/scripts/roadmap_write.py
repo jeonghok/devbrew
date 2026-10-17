@@ -375,7 +375,7 @@ def cmd_update(a) -> int:
     texts = R.epic_block_texts(old_text)
     blocks = [texts[r.id] if r.id in old and r.id not in changed else R.render_block(r) for r in new_rows]
     changes = ["%s %s" % (label, " · ".join(ids))
-               for label, ids in (("바뀜", changed), ("새", added), ("사라짐", removed)) if ids]
+               for label, ids in (("바뀐 에픽", changed), ("새 에픽", added), ("사라진 에픽", removed)) if ids]
     entry = R.history_entry(date, a.change, changes or ["순서만"], a.approval)
     new_text = R.append_history(R.replace_epics(old_text, blocks), entry)
     writes, removes = {roadmap: new_text}, []

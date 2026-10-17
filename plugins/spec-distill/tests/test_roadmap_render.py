@@ -15,7 +15,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "plugins" / "spec-distill" / "scripts"))
 import roadmap_render as R  # noqa: E402
-from roadmap_model import frontmatter, section_body, unquote  # noqa: E402
+from roadmap_model import frontmatter, parse_history, quotes, section_body, unquote  # noqa: E402
 
 RM_REL = "docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose"
 RM_DIR = REPO / RM_REL
@@ -281,13 +281,26 @@ class FormatV2(unittest.TestCase):
         self.assertEqual(R.parse_table(narrow), [plain])
 
     def test_history_entry(self):
-        self.assertEqual(R.history_entry("2026-10-17", "재분해", ["바뀜 R5", "새 R11"], ["좋아", "가 「나」 다"]),
-                         "### 2026-10-17 · 재분해\n- 바뀜: 바뀜 R5 · 새 R11\n- 원문:\n  - 「좋아」\n  - 「가 「나」 다」\n")
+        self.assertEqual(R.history_entry("2026-10-17", "재분해", ["바뀐 에픽 R5", "새 에픽 R11"], ["좋아", "가 「나」 다"]),
+                         "### 2026-10-17 · 재분해\n- 바뀜: 바뀐 에픽 R5 · 새 에픽 R11 「좋아」 · 「가 「나」 다」\n"
+                         "- 원문:\n  - 「좋아」\n  - 「가 「나」 다」\n")
+        self.assertEqual(R.history_entry("2026-10-17", "재분해", ["바뀐 에픽 R5"], ["하나"]),
+                         "### 2026-10-17 · 재분해\n- 바뀜: 바뀐 에픽 R5 「하나」\n- 원문:\n  - 「하나」\n")
         self.assertEqual(R.history_entry("2026-10-17", "처음 로드맵", [], ["승인"]),
                          "### 2026-10-17 · 처음 로드맵\n- 원문:\n  - 「승인」\n")
         for bad in ("열린 「 하나", "닫힌 」 하나", "", "줄\n바꿈", "줄\r바꿈", "줄\u2028바꿈"):
             with self.assertRaises(R.TableError):
                 R.history_entry("2026-10-17", "x", [], [bad])
+
+    def test_history_entry_round_trips_with_quotes_at_end_of_change(self):
+        for qs in (["하나"], ["첫째", "둘째 「안」"]):
+            entry = R.history_entry("2026-10-17", "재분해", ["바뀐 에픽 R5"], qs)
+            got, errors = parse_history("## 재분해 이력\n\n" + entry + "\n## 위험 번호표\n")
+            self.assertEqual(errors, [])
+            self.assertEqual(got[0]["quotes"], ["「%s」" % q for q in qs])
+            self.assertEqual(len(got[0]["changes"]), 1)
+            self.assertTrue(got[0]["changes"][0].startswith("바뀐 에픽 R5 「"))
+            self.assertEqual(quotes(got[0]["changes"][0]), got[0]["quotes"])
 
     def test_history_entry_without_user_words(self):
         got = R.history_entry("2026-10-15", "판정", ["가 「설계 판정」"], [], no_words="사용자 말 없음(설계 판정)")

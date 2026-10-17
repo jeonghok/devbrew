@@ -257,7 +257,7 @@ assert_eq "$(same_as_snap)" "same" "처음 표 그대로 update: 아무것도 �
 # 처음 표 순서에서 E2 만 고치면 바뀜은 E2 하나다
 table "$T/o1.md" "$P1_ROW" "$E1_ROW" "${E2_REGEN/둘째 의도 고침/둘째 의도 다시}"
 assert_eq "$(update "$T/o1.md")" "0" "처음 표 순서에서 E2 만 고침: rc 0"
-assert_file_has "$W/docs/rm/roadmap.md" "- 바뀜: 바뀜 E2" "처음 표 순서에서 E2 만 고침: 바뀜은 E2 하나"
+grep -qxF -- "- 바뀜: 바뀐 에픽 E2 「이대로 다시 나눈다」" "$W/docs/rm/roadmap.md" && ok "처음 표 순서에서 E2 만 고침: 바뀜은 E2 하나" || no "처음 표 순서에서 E2 만 고침: 바뀜은 E2 하나: 이력 줄이 다르다"
 g checkout -q -- docs/rm
 # --audit 이 brief 의 `.md` → `.audit.md` 가 아니면 사용법 오류
 cp "$W/docs/iv/brief.audit.md" "$W/docs/iv/other.md"
@@ -279,7 +279,7 @@ assert_file_has "$W/docs/rm/E2.md" "- 범위: 한다 다 · 마 / 안 한다 라
 assert_file_has "$W/docs/rm/roadmap.md" "  - 한다: 다 · 마" "update: 바뀐 E2 블록 범위 한다"
 assert_file_has "$W/docs/rm/roadmap.md" "  - 안 한다: 라" "update: 바뀐 E2 블록 범위 안 한다"
 assert_file_has "$W/docs/rm/roadmap.md" "### 2026-10-16 · 경계 조정" "update: 재분해 이력 머리"
-assert_file_has "$W/docs/rm/roadmap.md" "- 바뀜: 바뀜 E2" "update: 재분해 이력 바뀜"
+grep -qxF -- "- 바뀜: 바뀐 에픽 E2 「이대로 다시 나눈다」" "$W/docs/rm/roadmap.md" && ok "update: 재분해 이력 바뀜 끝에 승인 인용" || no "update: 재분해 이력 바뀜 끝에 승인 인용: 이력 줄이 다르다"
 assert_file_has "$W/docs/rm/roadmap.md" "  - 「이대로 다시 나눈다」" "update: 재분해 이력 원문"
 assert_eq "$(four_empty docs/rm/roadmap.md)" "ok" "update: 검사기 네 목록이 빈 목록"
 
@@ -300,7 +300,7 @@ assert_eq "$(update "$T/u3.md")" "0" "새 에픽: rc 0"
 table "$T/u4.md" "$P1_NOW" "$E1_NOW" "$E2_U1"
 assert_eq "$(update "$T/u4.md")" "0" "에픽 지우기: rc 0"
 [ -e "$W/docs/rm/E3.md" ] && no "에픽 지우기: E3.md 가 남았다" || ok "에픽 지우기: 묶음을 지운다"
-assert_file_has "$W/docs/rm/roadmap.md" "사라짐 E3" "에픽 지우기: 이력에 사라진 번호"
+assert_file_has "$W/docs/rm/roadmap.md" "- 바뀜: 사라진 에픽 E3 「이대로 다시 나눈다」" "에픽 지우기: 이력에 사라진 번호"
 snap
 assert_eq "$(update "$T/u3.md")" "1" "번호 재사용: rc 1"
 assert_eq "$(same_as_snap)" "same" "번호 재사용: 바이트 그대로"
@@ -363,7 +363,7 @@ assert_eq "$(update "$T/v4.md")" "0" "연속 새 번호 둘: rc 0"
 E6_ROW='| E6 | 여섯째 에픽 | 묶음 | 여섯째 의도 | 한다 타 / 안 한다 파 | E2 | feature/e6 | 없음 | C1 · S1 | 없음 | 없음 |'
 table "$T/v5.md" "$P1_CUR" "$E1_CUR" "$E2_CUR" "$E4_ROW"
 assert_eq "$(APPROVAL='E9 까지 보자' update "$T/v5.md")" "0" "승인 원문에 번호: 지우기 rc 0"
-assert_file_has "$W/docs/rm/roadmap.md" "- 바뀜: 사라짐 E5" "승인 원문에 번호: 이력에 바뀜"
+grep -qxF -- "- 바뀜: 사라진 에픽 E5 「E9 까지 보자」" "$W/docs/rm/roadmap.md" && ok "승인 원문에 번호: 이력에 바뀜" || no "승인 원문에 번호: 이력에 바뀜: 이력 줄이 다르다"
 assert_file_has "$W/docs/rm/roadmap.md" "  - 「E9 까지 보자」" "승인 원문에 번호: 이력에 원문"
 table "$T/v6.md" "$P1_CUR" "$E1_CUR" "$E2_CUR" "$E4_ROW" "$E6_ROW"
 assert_eq "$(update "$T/v6.md")" "0" "승인 원문에 번호: 다음 번호는 E6 (E9 가 아님)"
@@ -406,7 +406,7 @@ for f in E2 E4 E6; do cmp -s "$T/$f.keep" "$W/docs/rm/$f.md" && ok "순서만: $
 assert_eq "$(block_of E2)" "$B_E2" "순서만: 바뀌지 않은 E2 블록(범위 하위 항목)은 바이트 그대로"
 assert_eq "$(block_of E6)" "$B_E6" "순서만: 바뀌지 않은 E6 블록은 바이트 그대로"
 assert_contains "$B_E2" "  - 한다: " "E2 블록은 새 꼴이다(이 단언이 하위 항목 블록을 잰다는 양성 짝)"
-grep -qxF -- "- 바뀜: 순서만" "$W/docs/rm/roadmap.md" && ok "순서만: 이력에 순서만이라 적는다" || no "순서만: 이력 줄이 다르다"
+grep -qxF -- "- 바뀜: 순서만 「이대로 다시 나눈다」" "$W/docs/rm/roadmap.md" && ok "순서만: 이력에 순서만이라 적는다" || no "순서만: 이력 줄이 다르다"
 
 # 끝남 에픽은 거부 — P1 의 결정 기록을 main 에 올린다
 python3 - "$W/docs/rm/roadmap.md" <<'PY'
