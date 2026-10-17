@@ -283,7 +283,7 @@ class CodeStamp(unittest.TestCase):
             old = cp.SCRIPTS
             cp.SCRIPTS = Path(d)
             try:
-                for edited in ("roadmap_model.py", "section6.py", "check_bundle_coverage.py"):
+                for edited in ("roadmap_model.py", "section6.py", "check_bundle_coverage.py", "repo_defaults.py"):
                     self.assertIn(edited, cp.CODE_STAMP_FILES)
                     before = cp.code_stamp()
                     Path(d, edited).write_text("changed-longer", encoding="utf-8")

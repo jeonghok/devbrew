@@ -450,10 +450,10 @@ for path in sys.argv[1:]:
 print("CHECKED %d" % count)
 PY
 }
-out="$(static_check "$RS" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/spec_review_bundle.py")"; rc=$?
+out="$(static_check "$RS" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/spec_review_bundle.py" "$S/repo_defaults.py")"; rc=$?
 assert_eq "$rc" "0" "정적 검사기가 죽지 않았다(rc 0)"
-assert_eq "$(printf '%s\n' "$out" | grep -v '^CHECKED ')" "" "정적: 네 스크립트에 쓰기 · 네트워크 · git 밖 subprocess · 허용 밖 git · 이름 import 가 없다"
-assert_eq "$(printf '%s\n' "$out" | grep '^CHECKED ')" "CHECKED 4" "정적 검사가 네 스크립트를 셌다"
+assert_eq "$(printf '%s\n' "$out" | grep -v '^CHECKED ')" "" "정적: 다섯 스크립트에 쓰기 · 네트워크 · git 밖 subprocess · 허용 밖 git · 이름 import 가 없다"
+assert_eq "$(printf '%s\n' "$out" | grep '^CHECKED ')" "CHECKED 5" "정적 검사가 다섯 스크립트를 셌다"
 sed 's/GIT_ALLOWED = frozenset({"show",/GIT_ALLOWED = frozenset({"fetch", "show",/' "$RS" > "$T/mut_fetch.py"
 assert_contains "$(static_check "$T/mut_fetch.py")" "GIT_ALLOWED" "양성 대조: fetch 를 허용 목록에 넣으면 정적 검사가 잡는다"
 printf 'from pathlib import Path\nPath("x").write_text("y", encoding="utf-8")\nimport urllib.request\n' > "$T/mut_write.py"
@@ -732,14 +732,21 @@ g checkout -q -b feature/n2 main; mkdir -p "$W/design" "$W/work/plans"
 printf '# n2\n' > "$W/design/n2-design.md"; printf '**Spec:** `design/n2-design.md`\n' > "$W/work/plans/n2.md"
 g add -- design work && g commit -qm "n2" && g push -q origin feature/n2
 g checkout -q main; g fetch -q origin
-(cd "$W" && python3 "$RS" --json docs/rm2/roadmap.md > "$T/rm2.json")
+(cd "$W" && python3 "$RS" --json docs/rm2/roadmap.md > "$T/rm2.json"); rc=$?
+assert_eq "$rc" "1" "N17 만 있는 실행은 경고(rc 1) — 검사 불가(3)가 아니다"
 assert_eq "$(js "$T/rm2.json" "r['settings']['specs_dir']")" "design/" "레포 설정: specs_dir 를 frontmatter 에서"
 assert_eq "$(stage "$T/rm2.json" D1)" "계획" "D1: frontmatter 폴더 + 백틱 없는 **Spec:** → 계획"
 assert_eq "$(stage "$T/rm2.json" D2)" "설계 중" "D2: 기본 폴더의 설계문서는 frontmatter 가 폴더를 정한 로드맵에서 찾지 않는다"
 assert_eq "$(js "$T/rm2.json" "next(b['reason'] for b in r['blocks'] if b['id']=='D2')")" "브랜치 있음 · spec 없음" "D2 근거"
 assert_contains "$(warns "$T/rm2.json" N2)" "번호 대조 건너뜀(셀 수 없음) — 묶음이 아닌 블록" "N17: 묶음 아닌 블록이 계획 단계면 경고"
 assert_contains "$(warns "$OUT" A1)" "번호 대조 건너뜀(셀 수 없음) — 설계문서 없는 묶음" "N17: 설계문서 없이 머지된 묶음은 경고"
-assert_not_contains "$(warns "$OUT" G1)" "번호 대조 건너뜀" "N17: 설계 중 단계는 아직 경고하지 않는다"
+assert_not_contains "$(warns "$T/rm2.json" D2)" "번호 대조 건너뜀" "N17: 설계문서 없는 묶음이어도 설계 중 단계는 아직 경고하지 않는다"
+sp="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap_status as rs
+for l in ("**Spec:** 설계 `design/a.md`", "**Spec:** design/a.md, design/b.md", "**Spec:** `design/c.md` (§1)", "**Spec:** design/d.md."): print(rs.spec_line_path(l))' "$S")"
+assert_eq "$sp" "design/a.md
+design/a.md
+design/c.md
+design/d.md" "Spec 줄 경로: 백틱 토큰 우선 · 없으면 첫 토큰의 끝 구두점을 뗀다"
 sed 's/^specs_dir: design$/specs_dir: ..\/x/' "$W/docs/rm2/roadmap.md" > "$T/rm2-bad.md"
 cp "$T/rm2-bad.md" "$W/docs/rm2/roadmap.md"
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm2/roadmap.md > "$T/rm2-bad.json"); rc=$?

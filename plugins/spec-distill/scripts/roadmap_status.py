@@ -212,8 +212,11 @@ def spec_line_path(line: str):
     if rest.startswith("`"):
         m = BACKTICK_RE.match(rest)
         return m.group(1) if m else None
-    tok = rest.split()[0] if rest.split() else ""
-    return tok.strip("`") or None
+    m = BACKTICK_RE.search(rest)
+    if m:
+        return m.group(1)
+    tok = rest.split()[0].rstrip(",.;:)") if rest.split() else ""
+    return tok or None
 
 
 def plan_specs(text: str) -> set:
