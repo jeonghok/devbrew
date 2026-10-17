@@ -110,9 +110,7 @@ def neighbors(bundle: str, root: str) -> list:
     for b in report["blocks"]:
         if b["id"] not in near or not b["specs"]:
             continue
-        branch = (b.get("branch") or "").strip().strip("`")
-        tree = main if b["stage"] == "머지됨" else (
-            git.commit("refs/heads/" + branch) or git.commit("refs/remotes/origin/" + branch))
+        tree = main if b["stage"] == "머지됨" else (b.get("tip") or main)
         for spec in b["specs"]:
             text = git.blob(tree, spec) if tree else None
             if text is None:

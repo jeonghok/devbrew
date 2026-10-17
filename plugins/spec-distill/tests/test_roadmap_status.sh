@@ -488,7 +488,7 @@ printf 'x\n' >> "$W/README.txt"; after2="$(snap)"; git -C "$W" checkout -q -- RE
 [ "$before" != "$after2" ] && ok "양성 대조: 파일 하나를 바꾸면 비교가 잡는다" || no "양성 대조: 비교가 변화를 못 본다"
 
 # ── 6. 변이 — 첫째 부모 이력 제한(D4.24)과 조상 아님 조건(D1.1)에 이빨이 있는지 ──────
-M="$T/mut"; mkdir -p "$M"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M/"
+M="$T/mut"; mkdir -p "$M"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$S/conductor_state.py" "$S/ledger_marker.py" "$S/state_path.py" "$M/"
 sed 's/"log", "--first-parent", "--merges"/"log", "--merges"/' "$RS" > "$M/roadmap_status.py"
 cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(--first-parent)" || ok "변이 적용됨(--first-parent)"
 (cd "$W" && python3 "$M/roadmap_status.py" --json docs/rm/roadmap.md > "$T/mfp.json")
@@ -540,7 +540,7 @@ assert_eq "$rc" "3" "AC9: ## 미룸 표가 깨지면 검사 불가(rc 3)"
 assert_contains "$(warns "$T/f9.json" F9)" "미룸 셀 수 없음(" "AC9: 깨진 표는 「셀 수 없음」"
 assert_contains "$(js "$T/f9.json" "r['unknown_reasons']")" "F9 미룸 표" "AC9: 셀 수 없음이 검사 불가 사유로 올라온다"
 # 변이(AC15) — 받는 곳 판정을 끄면 경고가 사라진다
-M3="$T/mut3"; mkdir -p "$M3"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M3/"
+M3="$T/mut3"; mkdir -p "$M3"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$S/conductor_state.py" "$S/ledger_marker.py" "$S/state_path.py" "$M3/"
 sed 's/^            bad = \[item for item, _why, recv in rows if not receiver_ok(recv, known_ids)\]$/            bad = []/' "$RS" > "$M3/roadmap_status.py"
 cmp -s "$RS" "$M3/roadmap_status.py" && no "변이 적용 안 됨(받는 곳 판정)" || ok "변이 적용됨(받는 곳 판정)"
 (cd "$W" && python3 "$M3/roadmap_status.py" --json docs/rm8/roadmap.md > "$T/md8.json")
@@ -742,16 +742,82 @@ assert_contains "$(warns "$T/rm2.json" N2)" "번호 대조 건너뜀(셀 수 없
 assert_contains "$(warns "$OUT" A1)" "번호 대조 건너뜀(셀 수 없음) — 설계문서 없는 묶음" "N17: 설계문서 없이 머지된 묶음은 경고"
 assert_not_contains "$(warns "$T/rm2.json" D2)" "번호 대조 건너뜀" "N17: 설계문서 없는 묶음이어도 설계 중 단계는 아직 경고하지 않는다"
 sp="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap_status as rs
-for l in ("**Spec:** 설계 `design/a.md`", "**Spec:** design/a.md, design/b.md", "**Spec:** `design/c.md` (§1)", "**Spec:** design/d.md."): print(rs.spec_line_path(l))' "$S")"
+for l in ("**Spec:** 설계 `design/a.md`", "**Spec:** design/a.md, design/b.md", "**Spec:** `design/c.md` (§1)", "**Spec:** design/d.md.", "**Spec:** design/e.md`", "**Spec:** (design/f.md)"): print(rs.spec_line_path(l))' "$S")"
 assert_eq "$sp" "design/a.md
 design/a.md
 design/c.md
-design/d.md" "Spec 줄 경로: 백틱 토큰 우선 · 없으면 첫 토큰의 끝 구두점을 뗀다"
+design/d.md
+design/e.md
+design/f.md" "Spec 줄 경로: 백틱 토큰 우선 · 없으면 첫 토큰의 끝 구두점 · 짝 없는 백틱 · 앞 여는 괄호를 뗀다"
 sed 's/^specs_dir: design$/specs_dir: ..\/x/' "$W/docs/rm2/roadmap.md" > "$T/rm2-bad.md"
 cp "$T/rm2-bad.md" "$W/docs/rm2/roadmap.md"
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm2/roadmap.md > "$T/rm2-bad.json"); rc=$?
 assert_eq "$rc" "3" "레포 설정 값이 잘못되면 검사 불가"
 assert_contains "$(js "$T/rm2-bad.json" "' | '.join(r['format_errors'])")" "레포 설정 specs_dir" "잘못된 레포 설정 사유"
 g checkout -q -- docs/rm2/roadmap.md
+
+# ── R5 AC5 · AC6 · AC7 — 여러 브랜치 · 구현 중 · 구현 끝 · 산출물 ─────────────────────────────
+g checkout -q main
+mkdir -p "$W/docs/rm3"
+for b in K1 K2 K3 M2 O1; do bundle docs/rm3 "$b" "C1, S1"; done
+{ roadmap_head | sed 's|^# 로드맵|# 로드맵 셋|'
+  block K1 "feature/k1a · feature/k1b · feature/k1c" 없음 없음
+  block K2 feature/k2 없음 없음
+  block K3 feature/k3 없음 없음
+  block M2 "feature/m2a · feature/m2b" 없음 없음
+  printf '### O1 — 조사\n- 의도: o\n- 범위: o\n- 의존: 없음\n- 브랜치: feature/o1\n- 묶음: O1.md\n- 경로 예약: 없음\n- 흐름: 조사 「조사로 간다」\n- 산출물: docs/research/o1.md\n\n'
+  roadmap_tail ""
+} > "$W/docs/rm3/roadmap.md"
+g add -- docs/rm3 && g commit -qm "rm3" && g push -q origin main
+mkdir -p "$W/docs/superpowers/specs" "$W/docs/superpowers/plans"
+SPEC_K1=docs/superpowers/specs/k1-design.md
+# K1 — 첫 브랜치(계획 1)는 구현 대조 절까지 · 머지. 둘째 브랜치(계획 2)는 계획만 — 첫 계획의 절을 물려받는다.
+g checkout -q -b feature/k1a main
+spec_doc docs/rm3/K1.md "C1 · S1" > "$W/$SPEC_K1"
+printf '**Spec:** `%s`\n' "$SPEC_K1" > "$W/docs/superpowers/plans/k1-p1.md"
+g add -- docs && g commit -qm "k1 계획 1"
+commit_file src/k1.txt k1 "$(printf 'k1 구현\n\nSpec: %s' "$SPEC_K1")"
+printf '\n## 구현 대조 — docs/superpowers/plans/k1-p1.md\n\n- 요약\n' >> "$W/$SPEC_K1"
+g add -- docs && g commit -qm "k1 구현 대조"
+pr_merge 21 feature/k1a; g push -q origin main
+g checkout -q -b feature/k1b main
+printf '**Spec:** `%s`\n' "$SPEC_K1" > "$W/docs/superpowers/plans/k1-p2.md"
+g add -- docs && g commit -qm "k1 계획 2"
+# K2 — 계획 뒤 Spec: 트레일러 커밋 → 구현 중
+g checkout -q -b feature/k2 main
+spec_doc docs/rm3/K2.md "C1 · S1" > "$W/docs/superpowers/specs/k2-design.md"
+printf '**Spec:** `docs/superpowers/specs/k2-design.md`\n' > "$W/docs/superpowers/plans/k2.md"
+g add -- docs && g commit -qm "$(printf 'k2 계획\n\nSpec: docs/superpowers/specs/k2-design.md')"
+commit_file src/k2.txt k2 "$(printf 'k2 구현\n\nSpec: docs/superpowers/specs/k2-design.md')"
+# K3 — 계획 커밋 자신에만 트레일러 → 아직 계획
+g checkout -q -b feature/k3 main
+spec_doc docs/rm3/K3.md "C1 · S1" > "$W/docs/superpowers/specs/k3-design.md"
+printf '**Spec:** `docs/superpowers/specs/k3-design.md`\n' > "$W/docs/superpowers/plans/k3.md"
+g add -- docs && g commit -qm "$(printf 'k3 계획\n\nSpec: docs/superpowers/specs/k3-design.md')"
+# M2 — 두 브랜치 모두 머지
+for br in feature/m2a feature/m2b; do
+  g checkout -q -b "$br" main; commit_file "src/${br##*/}.txt" x "$br"; pr_merge 30 "$br"
+done
+g push -q origin main
+# O1 — 산출물이 생김(번호 대조 절 없음)
+g checkout -q -b feature/o1 main; mkdir -p "$W/docs/research"
+printf -- '---\nsource_interview: docs/rm3/O1.md\n---\n\n# 조사 결과\n\n## 결정 기록\n\n- B1 · 결정 · 조사 결론\n' > "$W/docs/research/o1.md"
+g add -- docs && g commit -qm "o1"
+g checkout -q main; g fetch -q origin
+(cd "$W" && python3 "$RS" --json docs/rm3/roadmap.md > "$T/rm3.json")
+assert_eq "$(stage "$T/rm3.json" K1)" "일부 머지 1/3" "AC5: 세 브랜치 중 하나 머지 → 일부 머지 1/3"
+assert_contains "$(js "$T/rm3.json" "next(b['reason'] for b in r['blocks'] if b['id']=='K1')")" "feature/k1b — 계획" "AC7: 둘째 브랜치는 앞 계획의 구현 대조 절을 물려받아도 계획 단계"
+assert_eq "$(js "$T/rm3.json" "next(b['task_status'] for b in r['blocks'] if b['id']=='K1')")" "in_progress" "일부 머지는 진행 중"
+assert_eq "$(stage "$T/rm3.json" K2)" "구현 중" "AC7: 계획 뒤 Spec: 트레일러 커밋 → 구현 중"
+assert_eq "$(stage "$T/rm3.json" K3)" "계획" "AC7: 계획 커밋 자신의 트레일러는 구현 중이 아니다"
+assert_eq "$(stage "$T/rm3.json" M2)" "머지됨" "AC5: 모든 브랜치 머지 → 머지됨"
+assert_eq "$(stage "$T/rm3.json" O1)" "설계 중" "AC6: 산출물이 생기면 설계문서처럼 단계를 매긴다"
+assert_eq "$(js "$T/rm3.json" "next(b['specs'] for b in r['blocks'] if b['id']=='O1')")" "['docs/research/o1.md']" "AC6: 산출물을 설계문서 자리로 읽는다"
+assert_eq "$(js "$T/rm3.json" "' | '.join(r['unknown_reasons'])")" "" "AC6: 번호 대조 절 없는 산출물은 검사 불가가 아니다"
+# K1 — 둘째 브랜치를 아직 만들지 않았으면(첫 브랜치만 머지) 예정 브랜치를 미완료로 센다
+g branch -q -D feature/k1b
+(cd "$W" && python3 "$RS" --json docs/rm3/roadmap.md > "$T/rm3b.json")
+assert_eq "$(stage "$T/rm3b.json" K1)" "일부 머지 1/3" "AC5: 첫 머지 뒤 남은 예정 브랜치 때문에 머지됨이 아니다"
+assert_contains "$(js "$T/rm3b.json" "next(b['reason'] for b in r['blocks'] if b['id']=='K1')")" "다음 브랜치 없음: feature/k1b" "다음 예정 브랜치 이름을 보인다"
 
 finish
