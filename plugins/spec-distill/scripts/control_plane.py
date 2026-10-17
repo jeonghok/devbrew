@@ -1048,7 +1048,10 @@ def cmd_show(tasks: bool, arg, epic=None) -> int:
                 lines, rc = epic_view(_path, report, epic)
                 print("\n".join(lines))
                 return rc
-            print("에픽 보기를 내지 못했다 — 로드맵 검사 불가, 전체 지도를 보인다")
+            if report is not None and report.get("exit") == 4:
+                print("에픽 보기를 내지 못했다 — 로드맵이 아직 기본 브랜치에 없다, 전체 지도를 보인다")
+            else:
+                print("에픽 보기를 내지 못했다 — 로드맵 검사 불가, 전체 지도를 보인다")
             print(show_text(v["items"], v["interview"], v["notes"], first_line, shown_error))
             return 0
         lines, rc = epic_view(_path, report, epic)

@@ -715,6 +715,13 @@ class EpicView(unittest.TestCase):
         rc, lines = self.run_show(r, "R9")
         self.assertEqual(rc, 2)
 
+    def test_exit4_fallback_names_the_real_cause(self):
+        r = report([blk("R1", "머지됨", "completed")], 4, format_errors=["R5 - 머리가 깨짐"])
+        rc, lines = self.run_show(r, "R5")
+        self.assertEqual(rc, 0)
+        self.assertEqual(lines[0], "에픽 보기를 내지 못했다 — 로드맵이 아직 기본 브랜치에 없다, 전체 지도를 보인다")
+        self.assertNotIn("검사 불가", lines[0])
+
     def test_exit3_with_format_errors_falls_back_not_not_found(self):
         r = report([blk("R1", "머지됨", "completed")], 3, format_errors=["R5 - 머리가 깨짐"])
         rc, lines = self.run_show(r, "R5")
