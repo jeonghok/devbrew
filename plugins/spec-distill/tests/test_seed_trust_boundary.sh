@@ -1,0 +1,756 @@
+#!/usr/bin/env bash
+# seed 신뢰 경계 — 사용자 · 리포 · 모델이 심을 수 있는 입력(seed 본문 · audit 본문 · «사용자가 적은 말» ·
+# 붙여 넣은 마크다운)이 게이트(check_seed.py)나 출처 판정(seed_provenance.py · seed_review_log.py)을
+# 속이지 못한다. 축마다 우회 픽스처 → 막힘, 양성 대조 → 통과. 막힘은 «그 검사의 이름»으로 잰다 —
+# 다른 검사가 우연히 rc 1 을 내서 통과하는 일을 막는다.
+set -u
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+. "$ROOT/shared/tests/assert.sh"
+export PYTHONDONTWRITEBYTECODE=1
+S="$ROOT/plugins/spec-distill/scripts"
+TMP="$(mktemp -d -t sd-trust-XXXXXX)" || exit 1
+[ -n "$TMP" ] && [ -d "$TMP" ] || exit 1
+trap 'rm -rf "$TMP"' EXIT
+
+# 픽스처 쓰기 — 둘째 인자를 그대로 쓰되 `\uXXXX` 만 그 글자로 바꾼다(한글은 글자 그대로 적는다).
+w() {
+  python3 -I -X utf8 -c 'import re, sys
+s = re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), sys.argv[2])
+open(sys.argv[1], "w", encoding="utf-8").write(s)' "$1" "$2"
+}
+# j <json> <식> — 식은 이 파일이 쓴 고정 문자열뿐이다(입력 데이터가 식이 되지 않는다).
+j() { python3 -I -X utf8 -c 'import json, sys; d = json.load(open(sys.argv[1], encoding="utf-8")); print(eval(sys.argv[2]))' "$1" "$2" 2>/dev/null; }
+
+# ══ S2 — check_seed.py: seed 본문 부재 검사 셋 ════════════════════════════════
+GOOD_AUDIT='---
+type: interview-seed-audit
+---
+
+## 1. 원문
+
+로그인이 가끔 실패한다.
+
+## 2. 질문 전체
+
+## 3. 긴 초안
+
+긴 초안.
+
+## seed 에서 덜어 낸 것
+
+없음
+
+## 4. 비평과 냉독
+
+## 5. degrade
+
+## 6. 리뷰 결정
+'
+w "$TMP/good.audit.md" "$GOOD_AUDIT"
+SEED_HEAD='---
+type: interview-seed
+---
+
+로그인이 가끔 실패한다.
+
+'
+gate() { python3 "$S/check_seed.py" gate "$1" "$2" >/dev/null 2>"$TMP/gate.err"; }
+# blocked <축 이름(라벨용)> <라벨> <seed 꼬리> — 막힘은 seed 문법의 «산문이 아닌 구조» 한 가지 사유로 잰다
+STRUCT_MSG='[check_seed] seed 에 산문이 아닌 구조가 있다 —'
+blocked() {
+  w "$TMP/case.md" "${SEED_HEAD}$3"
+  gate "$TMP/case.md" "$TMP/good.audit.md"; local rc=$?
+  if [ "$rc" -eq 1 ] && grep -qF "$STRUCT_MSG" "$TMP/gate.err"; then ok "$2 — 막힌다($1)"
+  else no "$2 — 통과했다(rc=$rc, stderr: $(tr '\n' ' ' < "$TMP/gate.err" | head -c 200))"; fi
+}
+passes() {
+  w "$TMP/case.md" "${SEED_HEAD}$2"
+  gate "$TMP/case.md" "$TMP/good.audit.md"; local rc=$?
+  if [ "$rc" -eq 0 ]; then ok "$1 — 통과한다(양성 대조)"
+  else no "$1 — 막혔다(rc=$rc, stderr: $(tr '\n' ' ' < "$TMP/gate.err" | head -c 200))"; fi
+}
+
+passes "깨끗한 seed" ''
+
+# ── 답-슬롯 헤딩
+blocked "답-슬롯 헤딩" "heading: # 하나" '# 미해결 질문
+
+- 어디서 재현되나?'
+blocked "답-슬롯 헤딩" "heading: 들여쓰기 3칸" '   ## Open Questions'
+blocked "답-슬롯 헤딩" "heading: 전각 \uff03" '\uff03\uff03 대안'
+blocked "답-슬롯 헤딩" "heading: setext ---" 'Open Questions
+---'
+blocked "답-슬롯 헤딩" "heading: setext ===" '대안
+==='
+blocked "답-슬롯 헤딩" "heading: 전각 라틴" '## \uff21\uff4c\uff54\uff45\uff52\uff4e\uff41\uff54\uff49\uff56\uff45\uff53'
+blocked "답-슬롯 헤딩" "heading: 제로폭(U+200B)이 낀 낱말" '## 대\u200b안'
+blocked "답-슬롯 헤딩" "heading: 제로폭(U+200D)이 낀 라틴" '## Rej\u200dected'
+blocked "답-슬롯 헤딩" "heading: 번호 붙은 제목" '## 3. 대안'
+blocked "답-슬롯 헤딩" "heading: 소문자" '## open questions'
+blocked "답-슬롯 헤딩" "heading: 펜스 안도 금지(seed 는 코드 예시가 아니다)" '```
+## 대안
+```'
+blocked "답-슬롯 헤딩" "heading: # 뒤 공백 없음" '##대안'
+blocked "답-슬롯 헤딩" "heading: U+2028 뒤의 줄" '앞 글\u2028## 대안'
+blocked "답-슬롯 헤딩" "heading: 인용 블록 안" '> ## 대안'
+blocked "답-슬롯 헤딩" "heading: 목록 항목 안" '- ## Open Questions'
+blocked "답-슬롯 헤딩" "heading: 인용 안 목록 안(겹침)" '> - > ## 대안'
+blocked "답-슬롯 헤딩" "heading: 번호 목록 안" '1. ## 기각'
+blocked "답-슬롯 헤딩" "heading: HTML h2" '<h2>대안</h2>'
+blocked "답-슬롯 헤딩" "heading: HTML 대문자 · 속성 · 안쪽 태그" '<div><H3 class="x"><b>Open Questions</b></H3></div>'
+# 허용 목록 — 금지 낱말이 없어도 산문 줄이 아니면 막힌다(줄 머리 `#` · 번호 목록 · 제목 · 가로줄)
+blocked "허용 목록" "allowlist: 머리 # 한 개(해시태그 모양 줄)" '#대안 은 아직 없다.'
+blocked "허용 목록" "allowlist: 번호 목록" '1. 대안을 찾는다.'
+blocked "허용 목록" "allowlist: 금지 낱말이 아닌 제목" '## 배경'
+blocked "허용 목록" "allowlist: 빈 줄 뒤의 가로줄" '대안은 아직 없다.
+
+---
+
+끝.'
+blocked "허용 목록" "allowlist: 탭 들여쓰기" '\u0009들여 쓴 줄.'
+blocked "허용 목록" "allowlist: 4칸 들여쓰기(코드 블록)" '    들여 쓴 줄.'
+blocked "허용 목록" "allowlist: 표" '| a | b |'
+blocked "허용 목록" "allowlist: 줄 안 HTML" '여기는 <b>굵게</b> 쓴다.'
+blocked "허용 목록" "allowlist: 방향 제어 글자(U+202E)" '앞\u202e뒤.'
+blocked "허용 목록" "allowlist: 사용자 정의 글자(U+E000)" '앞\ue000뒤.'
+passes "heading 양성: 문장 안의 낱말" '대안을 찾는 것이 목표다.'
+passes "prose 양성: 인라인 코드 · 굵게 · 문장 안의 # 과 < " '`src/auth/` 안에서 **버그 #12** 를 본다. a < b 이다.'
+passes "prose 양성: 괄호 · 인용 부호 · 낫표로 시작하는 줄" '(그때) 본 것이다.
+「이렇게」 말했다.
+“따옴표” 도 쓴다.'
+passes "prose 양성: 숫자로 시작하지만 목록이 아닌 줄" '3.5 배 느려졌다.
+2026년에 시작했다.'
+passes "prose 양성: 다시 검증할 것 문단" '다시 검증할 것 — 서버 로그는 다시 봐야 한다.'
+
+# ── 라운드 3 A — 인라인 코드도 산문 규칙을 면제받지 않는다(코드 구간 흉내 파서를 걷었다)
+blocked "허용 목록" "code: 백틱 두 개 + 하나로 연 구간 안의 HTML" '설명 ``<h2>대안</h2>` 이다.'
+blocked "허용 목록" "code: 이스케이프한 백틱 뒤의 링크" '근거는 \`[여기](example.com/evil)` 를 본다.'
+blocked "허용 목록" "code: 백틱 두 개 + 하나로 연 구간 안의 태그" '설명 ``[OPEN: 미해결 질문]` 이다.'
+blocked "허용 목록" "code: 온전한 인라인 코드 안의 꺾쇠도" '설명 `<b>` 와 `[x]` 이다.'
+passes "code 양성: 경로 · 비교식 인라인 코드" '`src/auth/` 안에서만 본다. `a < b` 가 참이다.'
+
+# ── 라운드 3 B — 공백 글자만 있는 줄은 빈 줄이 아니다(문단 경계를 읽는 쪽마다 달리 보지 않게 거부)
+blocked "허용 목록" "blank: NBSP 만 있는 줄" '앞 문단이다.
+\u00a0
+뒤 문단이다.'
+blocked "허용 목록" "blank: 스페이스만 있는 줄" '앞 문단이다.
+\u0020\u0020\u0020
+뒤 문단이다.'
+blocked "허용 목록" "blank: 전각 공백만 있는 줄" '앞 문단이다.
+\u3000
+뒤 문단이다.'
+
+# ── 태그
+blocked "태그" "tag: 대문자" '[OPEN: 정하지 않음]'
+blocked "태그" "tag: 콜론 앞 공백" '[Open : 정하지 않음]'
+blocked "태그" "tag: 전각 괄호" '\uff3bopen: 정하지 않음\uff3d'
+blocked "태그" "tag: 전각 콜론" '[open\uff1a 정하지 않음]'
+blocked "태그" "tag: 제로폭이 낀 낱말" '[op\u200ben: 정하지 않음]'
+blocked "태그" "tag: 괄호 뒤 공백" '[ 추론 : 정하지 않음]'
+blocked "허용 목록" "allowlist: 콜론 없는 꺾쇠 낱말(링크 문법 바깥이라도 [ ] 는 산문이 아니다)" '[참고] 이것은 문장이다.'
+
+# ── URL
+blocked "URL" "url: 대문자 스킴" 'HTTPS://example.com'
+blocked "URL" "url: 전각 스킴" '\uff48\uff54\uff54\uff50\uff53://example.com'
+blocked "URL" "url: 제로폭이 낀 스킴" 'ht\u200btps://example.com'
+blocked "URL" "url: 다른 스킴" 'ftp://example.com/x'
+blocked "URL" "url: 스킴 없는 www." 'www.example.com 에 있다.'
+blocked "URL" "url: 마크다운 인라인 링크" '[자료](example.com) 를 본다.'
+blocked "URL" "url: 마크다운 참조 정의" '[자료]: example.com'
+blocked "허용 목록" "allowlist: 꺾쇠 라벨 뒤 콜론과 문장" '[참고]: 이 부분은 다시 본다.'
+blocked "URL" "url: 인라인 코드 안의 URL(비권위화는 고정점)" '`https://example.com` 을 본다.'
+blocked "URL" "url: 참조 정의 + 제목" '[자료]: example.com "제목"'
+passes "url 양성: 점이 든 낱말" '버전은 v1.2.3 이고 파일은 check_seed.py 다.'
+
+# ══ S2 — check_seed.py: audit 절 찾기 ═══════════════════════════════════════
+w "$TMP/seed.md" "${SEED_HEAD}"
+# audit_case <라벨> <기대 rc> <stderr 에 있어야 할 글자(rc 1 일 때)> <audit 본문>
+audit_case() {
+  w "$TMP/case.audit.md" "$4"
+  gate "$TMP/seed.md" "$TMP/case.audit.md"; local rc=$?
+  if [ "$2" = "0" ]; then
+    [ "$rc" -eq 0 ] && ok "$1 — 통과한다(양성 대조)" \
+      || no "$1 — 막혔다(rc=$rc, stderr: $(tr '\n' ' ' < "$TMP/gate.err" | head -c 200))"
+  else
+    { [ "$rc" -eq 1 ] && grep -qF "$3" "$TMP/gate.err"; } && ok "$1 — 막힌다" \
+      || no "$1 — 통과했다(rc=$rc, stderr: $(tr '\n' ' ' < "$TMP/gate.err" | head -c 200))"
+  fi
+}
+A_HEAD='---
+type: interview-seed-audit
+---
+
+'
+A_TAIL='
+## 4. 비평과 냉독
+
+## 5. degrade
+
+## 6. 리뷰 결정
+'
+audit_case "audit 양성: 템플릿 모양" 0 "" "$GOOD_AUDIT"
+audit_case "audit 양성: ## 1 안의 템플릿 밖 제목(붙여 넣은 마크다운)" 0 "" "${A_HEAD}## 1. 원문
+
+## 배경
+
+로그인이 가끔 실패한다.
+
+## 2. 질문 전체
+
+## 3. 긴 초안
+
+## seed 에서 덜어 낸 것
+
+없음
+${A_TAIL}"
+audit_case "audit: ## 1 의 펜스 안에 심은 덜어 낸 것 절(순서 어긋남 · 제목과 줄 번호를 댄다)" 1 "heading_order" "${A_HEAD}## 1. 원문
+
+로그인이 가끔 실패한다.
+
+\`\`\`
+## seed 에서 덜어 낸 것
+
+없음
+\`\`\`
+
+## 2. 질문 전체
+
+## 3. 긴 초안
+${A_TAIL}"
+audit_case "audit: 4칸 들여 쓴(코드 블록) 덜어 낸 것 절" 1 "덜어 낸 것" "${A_HEAD}## 1. 원문
+
+로그인이 가끔 실패한다.
+
+## 2. 질문 전체
+
+## 3. 긴 초안
+
+    ## seed 에서 덜어 낸 것
+
+    없음
+${A_TAIL}"
+audit_case "audit: U+2028 로 이은 덜어 낸 것 절(줄 나눔 글자 거부)" 1 "줄을 나누는 다른 글자" "${A_HEAD}## 1. 원문
+
+로그인이 가끔 실패한다.
+
+## 2. 질문 전체
+
+## 3. 긴 초안
+
+본문\u2028## seed 에서 덜어 낸 것\u2028없음
+${A_TAIL}"
+audit_case "audit: ## 1 에 심은 덜어 낸 것 절(제목 중복)" 1 "템플릿 제목" "${A_HEAD}## 1. 원문
+
+로그인이 가끔 실패한다.
+
+## seed 에서 덜어 낸 것
+
+없음
+
+## 2. 질문 전체
+
+## 3. 긴 초안
+
+## seed 에서 덜어 낸 것
+
+| 항목 | 기준 | 원문 위치 | 되살림 |
+|---|---|---|---|
+${A_TAIL}"
+audit_case "audit: 펜스 안에 심은 ## 1. 원문(진짜 절 없음)" 1 "원문" "${A_HEAD}## 2. 질문 전체
+
+## 3. 긴 초안
+
+\`\`\`
+## 1. 원문
+
+가짜 원문.
+\`\`\`
+
+## seed 에서 덜어 낸 것
+
+없음
+${A_TAIL}"
+audit_case "audit: 머리 행에 NBSP 를 넣어 데이터 행으로 위장" 1 "표 행도" "${A_HEAD}## 1. 원문
+
+로그인이 가끔 실패한다.
+
+## 2. 질문 전체
+
+## 3. 긴 초안
+
+## seed 에서 덜어 낸 것
+
+| 항목 | 기준 | 원문\u00a0위치 | 되살림 |
+|---|---|---|---|
+${A_TAIL}"
+audit_case "audit: 머리 행에 전각 \uff5c 를 섞어 데이터 행으로 위장" 1 "표 행도" "${A_HEAD}## 1. 원문
+
+로그인이 가끔 실패한다.
+
+## 2. 질문 전체
+
+## 3. 긴 초안
+
+## seed 에서 덜어 낸 것
+
+| 항목 \uff5c 기준 | 원문 위치 | 되살림 |
+|---|---|---|---|
+${A_TAIL}"
+audit_case "audit 양성: 데이터 행이 있는 표" 0 "" "${A_HEAD}## 1. 원문
+
+로그인이 가끔 실패한다.
+
+## 2. 질문 전체
+
+## 3. 긴 초안
+
+## seed 에서 덜어 낸 것
+
+| 항목 | 기준 | 원문 위치 | 되살림 |
+|---|---|---|---|
+| 재현 절차 | 자명 | ## 3 | — |
+${A_TAIL}"
+# 정직한 펜스 — ## 1 의 잘린 붙여 넣기(닫히지 않은 펜스) · 한 줄 펜스가 뒤 절의 펜스와 짝지어져도 구조는 그대로다
+F='```'
+HONEST_A="${A_HEAD}## 1. 원문
+
+로그인이 가끔 실패한다. 붙여 넣은 로그:
+${F}
+Traceback (most recent call last):
+  File \"app.py\", line 3
+
+## 2. 질문 전체
+
+### 라운드 1
+
+- 확인 질문: 라운드 1
+  - 내가 읽은 것: 「세션 스토어 개편은 이번에 하지 않는다.」 — 고름
+
+## 3. 긴 초안
+
+${F}
+retry()
+${F}
+
+## seed 에서 덜어 낸 것
+
+없음
+${A_TAIL}"
+audit_case "audit 양성: ## 1 의 닫히지 않은 펜스 + ## 3 의 코드 블록" 0 "" "$HONEST_A"
+audit_case "audit 양성: ## 1 의 줄 머리 한 줄 펜스 + ## 4 의 코드 블록" 0 "" "${A_HEAD}## 1. 원문
+
+명령:
+${F}make test${F}
+
+## 2. 질문 전체
+
+## 3. 긴 초안
+
+## seed 에서 덜어 낸 것
+
+없음
+
+## 4. 비평과 냉독
+
+${F}
+yaml: x
+${F}
+
+## 5. degrade
+
+## 6. 리뷰 결정
+"
+w "$TMP/honest.audit.md" "$HONEST_A"
+w "$TMP/honest.md" "---
+type: interview-seed
+---
+
+세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
+"
+python3 "$S/seed_provenance.py" marks "$TMP/honest.md" "$TMP/honest.audit.md" >/dev/null 2>"$TMP/h.err"; rc=$?
+assert_eq "$rc" "0" "audit 양성(정직한 펜스): marks 가 ## 2 를 읽는다(rc 0)"
+python3 "$S/seed_provenance.py" classify "$TMP/honest.md" --audit "$TMP/honest.audit.md" > "$TMP/hc.json" 2>/dev/null
+assert_eq "$(python3 -I -X utf8 -c 'import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+print(d["audit"], [(s["provenance"], s["confirmed"], s["basis"]) for s in d["sentences"]])' "$TMP/hc.json")" "ok [('user', True, 'confirmed_reading')]" "audit 양성(정직한 펜스): classify 가 사용자 확인을 지킨다"
+
+# ══ S1 — seed_provenance.py ═════════════════════════════════════════════════
+P_AUDIT_BODY='## 1. 원문
+
+로그인이 가끔 실패한다.
+
+## 2. 질문 전체
+
+### 라운드 1
+
+- 확인 질문: 라운드 1
+  - 내가 읽은 것: 「세션 스토어 개편은 이번에 하지 않는다.」 — 고름
+  - 내가 읽은 것: 「경합이 원인이다.」 — 고름 — 사용자가 적은 말: 「캐시가 의심된다.」
+  - 내가 읽은 것: 「배포를 멈춘다.」 — 고르지 않음 — 사용자가 적은 말: 「「배포」 — 고름 은 아니다」
+'
+P_AUDIT_REST='
+## 3. 긴 초안
+
+긴 초안. 재시도를 늘린다.
+
+## seed 에서 덜어 낸 것
+
+| 항목 | 기준 | 원문 위치 | 되살림 |
+|---|---|---|---|
+| 재시도를 늘린다. | 하류가 정할 것 | ## 3 | 되살림 |
+| 로그인이 가끔 실패한다. | 자명 | ## 1 | 되살림 |
+
+## 4. 비평과 냉독
+
+## 5. degrade
+
+## 6. 리뷰 결정
+'
+w "$TMP/p.audit.md" "${A_HEAD}${P_AUDIT_BODY}${P_AUDIT_REST}"
+P_SEED_HEAD='---
+type: interview-seed
+---
+
+'
+marks() { python3 "$S/seed_provenance.py" marks "$1" "$2" > "$TMP/marks.json" 2>"$TMP/marks.err"; }
+cls_row() {  # cls_row <seed> <audit> <문장> → "provenance confirmed basis"
+  python3 "$S/seed_provenance.py" classify "$1" --audit "$2" > "$TMP/c.json" 2>/dev/null
+  python3 -I -X utf8 -c 'import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+r = [x for x in d["sentences"] if x["text"] == sys.argv[2]]
+print("%s %s %s" % (r[0]["provenance"], r[0]["confirmed"], r[0]["basis"]) if r else "ABSENT")' "$TMP/c.json" "$3"
+}
+
+# ── 양성 대조: 정본 표시는 근거가 있으면 통과한다
+w "$TMP/pos.md" "${P_SEED_HEAD}세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
+
+경합이 원인이다. (사용자 확인)
+"
+marks "$TMP/pos.md" "$TMP/p.audit.md"; rc=$?
+assert_eq "$rc $(j "$TMP/marks.json" 'd["marked"], d["invalid"]')" "0 (2, [])" "mark 양성: 고름 풀이에 붙은 정본 표시 둘은 통과한다"
+
+# ── S1.1 표시 변형 — 정본이 아닌 괄호 표시는 seed 문법이 거부한다: gate rc 1 · marks rc 2 · classify rc 2
+PROV_MSG='[seed_provenance] seed 에 산문이 아닌 구조가 있다 —'
+for v in '\uff08사용자 확인\uff09' '( 사용자 확인 )' '(사용자확인)' '(사용자\u200b 확인)' '\ufe59사용자 확인\ufe5a' \
+         '[사용자 확인]' '【사용자 확인】' '〔사용자 확인〕' '<사용자 확인>' '«사용자 확인»' '(사용자가 확인)' '(사용자 확인함)'; do
+  w "$TMP/v.md" "${P_SEED_HEAD}세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
+
+로그는 본다. 서버를 의심한다. ${v}
+"
+  cp "$TMP/v.md" "$TMP/v.before"
+  gate "$TMP/v.md" "$TMP/p.audit.md"; g_rc=$?
+  python3 "$S/seed_provenance.py" marks "$TMP/v.md" "$TMP/p.audit.md" --fix >/dev/null 2>"$TMP/marks.err"; m_rc=$?
+  m_msg="$(grep -cF "$PROV_MSG" "$TMP/marks.err")"
+  python3 "$S/seed_provenance.py" classify "$TMP/v.md" --audit "$TMP/p.audit.md" >/dev/null 2>&1; c_rc=$?
+  assert_eq "$g_rc $m_rc $m_msg $c_rc $(cmp -s "$TMP/v.md" "$TMP/v.before" && echo same)" "1 2 1 2 same" \
+    "mark 변형 ${v}: gate 가 막고 marks(--fix 도) · classify 가 판단을 거부한다 — seed 는 그대로"
+done
+w "$TMP/vp.md" "${P_SEED_HEAD}세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
+
+사용자 확인 절차는 그대로 둔다.
+"
+marks "$TMP/vp.md" "$TMP/p.audit.md"; rc=$?
+assert_eq "$rc $(j "$TMP/marks.json" 'd["marked"], d["invalid"]')" "0 (1, [])" "mark 양성: 괄호 없는 산문 «사용자 확인 절차» 는 표시가 아니다"
+# 줄바꿈에 걸쳐 감싼 정본 표시 — 문법은 줄마다 표시를 보지 못하고, 문단을 이으면 정본이다. 근거가 없으면 rc 1 · --fix 가 뗀다
+w "$TMP/vw.md" "${P_SEED_HEAD}세션 스토어 개편은 이번에 하지 않는다. (사용자
+확인)
+
+로그는 본다. 서버를 의심한다. (사용자
+확인) 끝이다.
+"
+marks "$TMP/vw.md" "$TMP/p.audit.md"; rc=$?
+assert_eq "$rc $(j "$TMP/marks.json" 'd["marked"], d["invalid"]')" "1 (2, ['서버를 의심한다.'])" "mark 감싼 표시: 근거 있는 것은 확인 · 없는 것은 위반(rc 1)"
+assert_eq "$(cls_row "$TMP/vw.md" "$TMP/p.audit.md" '서버를 의심한다.')" "author False mark_invalid" "mark 감싼 표시: classify 는 mark_invalid · 저자 · 미확인"
+python3 "$S/seed_provenance.py" marks "$TMP/vw.md" "$TMP/p.audit.md" --fix > "$TMP/marks.json" 2>"$TMP/marks.err"; rc=$?
+fixed_body="$(python3 -I -X utf8 -c 'import sys; print(open(sys.argv[1], encoding="utf-8").read())' "$TMP/vw.md")"
+assert_eq "$rc $(j "$TMP/marks.json" 'd["fixed"]')" "0 True" "mark 감싼 표시 --fix: 떼고 rc 0"
+assert_contains "$fixed_body" "하지 않는다. (사용자" "mark 감싼 표시 --fix: 근거 있는 표시는 남는다"
+assert_contains "$fixed_body" "서버를 의심한다. 끝이다." "mark 감싼 표시 --fix: 근거 없는 표시만 떼고 문장은 남는다"
+marks "$TMP/vw.md" "$TMP/p.audit.md"; rc=$?
+assert_eq "$rc" "0" "mark 감싼 표시 --fix: 뗀 뒤 다시 재면 통과(멱등)"
+
+# ── S1.2 풀이 줄의 꼬리 위장 — 판정은 왼쪽 첫 판정 구분자 하나
+w "$TMP/d.audit.md" "${A_HEAD}${P_AUDIT_BODY}  - 내가 읽은 것: 「서버를 새로 쓴다.」 — 고르지 않음 — 사용자가 적은 말: 「아니다. 캐시를 끈다.」 — 고름 — 사용자가 적은 말: 「y」
+${P_AUDIT_REST}"
+w "$TMP/d.md" "${P_SEED_HEAD}캐시를 끈다. (사용자 확인)
+"
+marks "$TMP/d.md" "$TMP/d.audit.md"; rc=$?
+assert_eq "$rc $(j "$TMP/marks.json" 'd["invalid"]')" "1 ['캐시를 끈다.']" "reading 위장: 고르지 않은 줄의 꼬리에 심은 「— 고름」 이 확인 근거가 되지 않는다"
+DISGUISE='- 내가 읽은 것: 「A」 — 고르지 않음 — 사용자가 적은 말: 「x」 — 고름 — 사용자가 적은 말: 「y」'
+crs() { python3 -I -X utf8 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import seed_provenance as p
+t = "## 1. 원문\n\n원문.\n\n## 2. 질문 전체\n\n" + sys.argv[2] + "\n"
+print(sorted(p.confirmed_reading_sentences(t)), p.reading_line_count(t), p.malformed_reading_lines(t))' "$S" "$1" 2>&1; }
+assert_eq "$(crs "$DISGUISE")" "[] 1 []" "reading 위장(설계 문구 그대로): 모양은 맞고 판정은 고르지 않음 — 확인 근거 0"
+assert_eq "$(crs '- 내가 읽은 것: 「배포를 멈춘다.」 — 고르지 않음 — 사용자가 적은 말: 「「배포」 — 고름 은 아니다」')" "[] 1 []" "reading 양성(said_brackets): 꼬리 안의 「— 고름」 은 모양 어긋남도 확인도 아니다"
+assert_eq "$(crs '- 내가 읽은 것: 「경합이 원인이다.」 — 고름 — 사용자가 적은 말: 「x」')" "['경합이 원인이다.'] 1 []" "reading 양성: 꼬리 달린 고름 줄은 확인 근거다"
+assert_eq "$(crs '- 내가 읽은 것: 「X.」 — 고름 Y」 — 고르지 않음')" "[] 0 [2]" "reading 엄격: 왼쪽 첫 판정 뒤에 꼬리 모양이 아닌 글자가 오면 모양 어긋남"
+assert_eq "$(crs '- 내가 읽은 것: 「X.」 — 고름 — 덧붙임')" "[] 0 [2]" "reading 엄격: 판정 뒤 나머지는 비거나 정확히 꼬리 모양이어야 한다"
+pr() { python3 -I -X utf8 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import seed_provenance as p
+print(p.parse_reading_line(sys.argv[2]))' "$S" "$1" 2>&1; }
+assert_eq "$(pr "$DISGUISE")" "('A', '고르지 않음', 'x」 — 고름 — 사용자가 적은 말: 「y')" "parse_reading_line: 위장 줄을 왼쪽 첫 판정으로 읽고 나머지는 적은 말이다"
+assert_eq "$(pr '  - 내가 읽은 것: 「B.」 — 고름')" "('B.', '고름', None)" "parse_reading_line 양성: 꼬리 없는 줄"
+# 풀어 쓴 한글(NFD) 표시 — 글자마다 접으면 표시가 아니고 전체를 접으면 표시다. 자리를 정할 수 없으니 판단 거부.
+python3 -I -X utf8 -c 'import sys, unicodedata
+open(sys.argv[1], "w", encoding="utf-8").write("---\ntype: interview-seed\n---\n\n서버를 의심한다. "
+    + unicodedata.normalize("NFD", "(사용자 확인)") + "\n")' "$TMP/nfd.md"
+marks "$TMP/nfd.md" "$TMP/p.audit.md"; rc=$?
+{ [ "$rc" -eq 2 ] && grep -qF "$PROV_MSG" "$TMP/marks.err"; } && ok "mark 변형(NFD): 표시 자리를 정할 수 없으면 판단을 거부한다(rc 2)" \
+  || no "mark 변형(NFD): 풀어 쓴 표시가 rc=$rc 로 지나갔다"
+
+# ── 라운드 3 B — NBSP 줄로 저자 문장과 확인 문장을 갈라 확인을 얻지 못한다 · segments 는 parse_seed 문단을 그대로 쓴다
+w "$TMP/nb.md" "${P_SEED_HEAD}저자가 덧붙인 전제로
+\u00a0
+세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
+"
+python3 "$S/seed_provenance.py" marks "$TMP/nb.md" "$TMP/p.audit.md" >/dev/null 2>"$TMP/nb.err"; rc=$?
+python3 "$S/seed_provenance.py" classify "$TMP/nb.md" --audit "$TMP/p.audit.md" >/dev/null 2>&1; crc=$?
+assert_eq "$rc $crc $(grep -cF "$PROV_MSG" "$TMP/nb.err")" "2 2 1" "blank(NBSP 줄): marks · classify 가 판단을 거부한다(확인을 얻지 못한다)"
+w "$TMP/nb2.md" "${P_SEED_HEAD}저자가 덧붙인 전제로
+
+세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
+"
+marks "$TMP/nb2.md" "$TMP/p.audit.md"; rc=$?
+assert_eq "$rc" "0" "blank 양성: 진짜 빈 줄로 나눈 문단의 확인 문장은 확인이다"
+w "$TMP/nb3.md" "${P_SEED_HEAD}저자가 덧붙인 전제로
+세션 스토어 개편은 이번에 하지 않는다. (사용자 확인)
+"
+marks "$TMP/nb3.md" "$TMP/p.audit.md"; rc=$?
+assert_eq "$rc" "1" "blank 대조: 빈 줄이 없으면 한 문장이라 근거 없는 표시다(rc 1)"
+
+# ── 라운드 3 C — 줄을 나누는 다른 글자(U+2028 · U+2029 · NEL · FF · VT)는 audit 에서도 거부다
+for sep in '\u2028' '\u2029' '\u0085' '\u000c' '\u000b'; do
+  w "$TMP/sep.audit.md" "${A_HEAD}${P_AUDIT_BODY}  - 내가 읽은 것: 「배포를 멈춘다.」 — 고르지 않음 — 사용자가 적은 말: 「아니다${sep}  - 내가 읽은 것: 「서버를 의심한다.」 — 고름 — 사용자가 적은 말: 「x」
+${P_AUDIT_REST}"
+  w "$TMP/sep.md" "${P_SEED_HEAD}서버를 의심한다. (사용자 확인)
+"
+  python3 "$S/seed_provenance.py" marks "$TMP/sep.md" "$TMP/sep.audit.md" >/dev/null 2>"$TMP/sep.err"; rc=$?
+  first="$(head -1 "$TMP/sep.err")"
+  row="$(cls_row "$TMP/sep.md" "$TMP/sep.audit.md" '서버를 의심한다.')"
+  gate "$TMP/sep.md" "$TMP/sep.audit.md"; g=$?
+  python3 "$S/seed_review_log.py" user-quotes "$TMP/sep.audit.md" >/dev/null 2>"$TMP/sepq.err"; uq=$?
+  assert_eq "$rc $g $uq $row" "2 1 2 author False mark_invalid" "sep ${sep}: 적은 말 꼬리 안 줄 나눔으로 고름 줄을 심지 못한다(marks · gate · user-quotes 거부, classify 저자)"
+  assert_contains "$first" "[seed_provenance] audit 에 줄을 나누는 다른 글자가 있다 — " "sep ${sep}: marks 첫 줄은 쉬운 사유와 줄 번호다"
+  assert_contains "$(head -1 "$TMP/sepq.err")" "[seed_review_log] audit 에 줄을 나누는 다른 글자가 있다 — " "sep ${sep}: user-quotes 첫 줄도 쉬운 사유와 줄 번호다"
+  assert_contains "$(cat "$TMP/gate.err")" "[check_seed] audit 에 줄을 나누는 다른 글자가 있다 — " "sep ${sep}: gate 도 줄 번호로 막는다"
+done
+w "$TMP/sepok.audit.md" "${A_HEAD}${P_AUDIT_BODY}  - 내가 읽은 것: 「배포를 멈춘다.」 — 고르지 않음 — 사용자가 적은 말: 「아니다 - 내가 읽은 것: 「서버를 의심한다.」 — 고름 — 사용자가 적은 말: 「x」
+${P_AUDIT_REST}"
+marks "$TMP/sep.md" "$TMP/sepok.audit.md"; rc=$?
+assert_eq "$rc $(j "$TMP/marks.json" 'd["invalid"]')" "1 ['서버를 의심한다.']" "sep 대조: 같은 꼬리를 한 줄로 두면 왼쪽 첫 판정(고르지 않음)으로 읽혀 확인이 아니다"
+
+# ══ S3 — 출처 재라벨 ═════════════════════════════════════════════════════════
+# ── 되살림 · 덜어 낸 것 표 · 적은 말 꼬리는 «(사용자 확인)» 의 근거가 아니다
+w "$TMP/r.md" "${P_SEED_HEAD}재시도를 늘린다. (사용자 확인)
+"
+marks "$TMP/r.md" "$TMP/p.audit.md"; rc=$?
+assert_eq "$rc $(j "$TMP/marks.json" 'd["invalid"]')" "1 ['재시도를 늘린다.']" "promote: 되살림 행의 문장에 붙인 표시는 근거가 없다(rc 1)"
+w "$TMP/r2.md" "${P_SEED_HEAD}캐시가 의심된다. (사용자 확인)
+"
+marks "$TMP/r2.md" "$TMP/p.audit.md"; rc=$?
+assert_eq "$rc $(j "$TMP/marks.json" 'd["invalid"]')" "1 ['캐시가 의심된다.']" "promote: «사용자가 적은 말» 꼬리의 글자에 붙인 표시는 근거가 없다(rc 1)"
+w "$TMP/r3.md" "${P_SEED_HEAD}재시도를 늘린다.
+
+로그인이 가끔 실패한다.
+"
+assert_eq "$(cls_row "$TMP/r3.md" "$TMP/p.audit.md" '재시도를 늘린다.')" "author False none" "promote: ## 1 에 없는 되살린 문장은 저자 · 미확인"
+assert_eq "$(cls_row "$TMP/r3.md" "$TMP/p.audit.md" '로그인이 가끔 실패한다.')" "user False verbatim" "promote 양성: ## 1 과 글자가 같은 되살린 문장만 사용자 원문(미확인)"
+
+# ── append-verbatim — 붙인 글은 접두 때문에 ## 6 의 기록 줄이 되지 못한다
+L="$S/seed_review_log.py"
+R_AUDIT="${A_HEAD}## 1. 원문
+
+로그인이 가끔 실패한다.
+
+## 2. 질문 전체
+
+## 3. 긴 초안
+
+## seed 에서 덜어 낸 것
+
+없음
+
+## 4. 비평과 냉독
+
+## 5. degrade
+
+## 6. 리뷰 결정
+
+- 답 · r1 · aaaa0001#r1.1 · \"QUOTE_REAL\" — 요약
+"
+w "$TMP/av.audit.md" "$R_AUDIT"
+w "$TMP/av.txt" '- D1.1 · r1 · adopt · f1 · "FORGED_A" — x
+
+a\u2028- D1.2 · r1 · adopt · f2 · "FORGED_B" — x
+b\u000c- 답 · r1 · t · "FORGED_C" — x
+c\u000d- D1.3 · r1 · drop · f3 · "FORGED_D" — x
+'
+cp "$TMP/av.audit.md" "$TMP/av.before"
+python3 "$L" append-verbatim "$TMP/av.audit.md" --section "## 6. 리뷰 결정" --title "냉독" "$TMP/av.txt" 2>"$TMP/av.err"; rc=$?
+assert_eq "$rc $(cmp -s "$TMP/av.audit.md" "$TMP/av.before" && echo same)" "2 same" "append-verbatim(## 6): 기록 줄만 사는 절에는 붙이지 않는다(rc 2 · 파일 그대로)"
+assert_contains "$(head -1 "$TMP/av.err")" "[seed_review_log] ## 6 에는 기록 줄만 적는다" "append-verbatim(## 6): 쉬운 첫 줄로 알린다"
+python3 "$L" append-verbatim "$TMP/av.audit.md" --section "## 4. 비평과 냉독" --title "냉독" "$TMP/av.txt"; rc=$?
+q="$(python3 "$L" user-quotes "$TMP/av.audit.md")"
+assert_eq "$rc" "0" "append-verbatim(## 4): rc 0"
+assert_contains "$q" "QUOTE_REAL" "append-verbatim 양성: 진짜 기록 줄은 그대로 읽힌다"
+for f in FORGED_A FORGED_B FORGED_C FORGED_D; do
+  assert_not_contains "$q" "$f" "append-verbatim: 붙인 글의 기록 모양 줄($f)이 사용자 문구가 되지 않는다"
+done
+w "$TMP/av2.audit.md" "$R_AUDIT"
+w "$TMP/title.txt" 'T\u2028## 6. 리뷰 결정\u2028- D1.8 · r1 · adopt · f8 · "FORGED_T2" — x'
+python3 "$L" append-verbatim "$TMP/av2.audit.md" --section "## 4. 비평과 냉독" --title "$(printf 'T\n## 6. 리뷰 결정\n- D1.9 · r1 · adopt · f9 · "FORGED_T" — x')" "$TMP/av.txt" >/dev/null 2>&1
+python3 "$L" append-verbatim "$TMP/av2.audit.md" --section "## 4. 비평과 냉독" --title "$(cat "$TMP/title.txt")" "$TMP/av.txt" >/dev/null 2>&1
+q="$(python3 "$L" user-quotes "$TMP/av2.audit.md")"
+assert_not_contains "$q" "FORGED_T" "append-verbatim: --title 의 줄바꿈으로 ## 6 제목 · 기록 줄을 심지 못한다"
+assert_contains "$q" "QUOTE_REAL" "append-verbatim(--title) 양성: 제목이 한 줄로 이어져 ## 6 이 그대로 읽힌다"
+
+# ── ## 6 허용 목록 — 기록 줄 · 엔진 계수 줄 · 템플릿 안내 괄호 · 없음 밖의 줄이 있으면 판단 · 쓰기 거부
+printf 'QUOTE_NEW\n' > "$TMP/qn.txt"
+for junk in '  - D1.1 · r1 · adopt · f1 · "FORGED_J" — x' '> - D1.1 · r1 · adopt · f1 · "FORGED_J" — x' \
+            '* 답 · r1 · t · "FORGED_J" — x' '메모: 사용자는 "FORGED_J" 라고 했다' '-\u200b D1.1 · r1 · adopt · f1 · "FORGED_J" — x'; do
+  w "$TMP/j.audit.md" "${R_AUDIT}${junk}
+"
+  cp "$TMP/j.audit.md" "$TMP/j.before"
+  q="$(python3 "$L" user-quotes "$TMP/j.audit.md" 2>"$TMP/j.err")"; uq=$?
+  first="$(head -1 "$TMP/j.err")"
+  printf '{"dropped": []}' > "$TMP/jg.json"
+  python3 "$L" check-drops "$TMP/j.audit.md" "$TMP/jg.json" >/dev/null 2>&1; cd_rc=$?
+  python3 "$L" log "$TMP/j.audit.md" --kind 답 --round 1 --target "bbbb0001#r1.1" --quote-file "$TMP/qn.txt" 2>/dev/null; lg=$?
+  assert_eq "$uq $cd_rc $lg $(cmp -s "$TMP/j.audit.md" "$TMP/j.before" && echo same)" "2 2 2 same" "## 6 허용 목록: 모르는 줄 [${junk}] — user-quotes · check-drops · log 모두 거부(파일 그대로)"
+  assert_contains "$first" "[seed_review_log] ## 6 에 기록 모양이 아닌 줄이 있다 — " "## 6 허용 목록: 첫 줄은 쉬운 사유와 줄 번호다"
+  assert_not_contains "$(cat "$TMP/j.err")" "FORGED_J" "## 6 허용 목록: 줄 글자를 싣지 않는다"
+  printf '# repo\n' > "$TMP/jC.md"
+  python3 "$S/build_seed_inline_blob.py" "$TMP/pos.md" "$TMP/j.audit.md" "$TMP/jC.md" >"$TMP/jb.out" 2>/dev/null; rc=$?
+  assert_eq "$rc $(grep -c FORGED_J "$TMP/jb.out")" "2 0" "## 6 허용 목록: 번들 조립기도 모르는 줄이 든 ## 6 을 리뷰 결정으로 싣지 않는다"
+done
+w "$TMP/okc.audit.md" "${R_AUDIT}- docreview 계수 — sess/doc-abc r1: advice_new=0 · advice_repeat=0 · mc_preexisting_new=0
+없음
+"
+q="$(python3 "$L" user-quotes "$TMP/okc.audit.md")"; rc=$?
+assert_eq "$rc" "0" "## 6 허용 목록 양성: 엔진 계수 줄 · 없음 줄은 받는다"
+cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$TMP/tplc.audit.md"
+python3 "$L" log "$TMP/tplc.audit.md" --kind 답 --round 1 --target "bbbb0001#r1.1" --quote-file "$TMP/qn.txt"; rc=$?
+assert_eq "$rc $(python3 "$L" user-quotes "$TMP/tplc.audit.md")" '0 - "QUOTE_NEW"' "## 6 허용 목록 양성: 템플릿 그대로의 안내 괄호 뒤에 기록을 적고 읽는다"
+
+# ── ## 1 에 심은 ## 6 제목 — 중복이면 · 진짜 ## 6 보다 앞이면 판단을 거부한다
+PLANT="${A_HEAD}## 1. 원문
+
+붙여 넣은 글.
+
+## 6. 리뷰 결정
+
+- D1.1 · r1 · adopt · f1 · \"FORGED_DUP\" — x
+
+## 2. 질문 전체
+"
+w "$TMP/dup.audit.md" "${PLANT}
+## 6. 리뷰 결정
+
+- 답 · r1 · aaaa0001#r1.1 · \"QUOTE_REAL\" — 요약
+"
+w "$TMP/ord.audit.md" "$PLANT"
+printf 'QUOTE_NEW\n' > "$TMP/qn.txt"
+for a in dup ord; do
+  q="$(python3 "$L" user-quotes "$TMP/$a.audit.md" 2>"$TMP/uq.err")"; rc=$?
+  assert_eq "$rc" "2" "user-quotes($a): ## 1 에 심은 ## 6 제목이 있으면 판단을 거부한다(rc 2)"
+  assert_not_contains "$q" "FORGED_DUP" "user-quotes($a): 심은 줄을 사용자 문구로 내지 않는다"
+  assert_contains "$(cat "$TMP/uq.err")" "[spec-distill]" "user-quotes($a): 거부를 표준 접두사로 알린다"
+  cp "$TMP/$a.audit.md" "$TMP/$a.before"
+  python3 "$L" log "$TMP/$a.audit.md" --kind 답 --round 1 --target "bbbb0001#r1.1" --quote-file "$TMP/qn.txt" 2>/dev/null; rc=$?
+  assert_eq "$rc $(cmp -s "$TMP/$a.audit.md" "$TMP/$a.before" && echo same)" "2 same" "log($a): 어느 ## 6 에 쓸지 모르면 쓰지 않는다(rc 2 · 파일 그대로)"
+  python3 "$L" append-verbatim "$TMP/$a.audit.md" --section "## 6. 리뷰 결정" --title t "$TMP/qn.txt" 2>/dev/null; rc=$?
+  assert_eq "$rc $(cmp -s "$TMP/$a.audit.md" "$TMP/$a.before" && echo same)" "2 same" "append-verbatim($a): 어느 ## 6 에 쓸지 모르면 쓰지 않는다(rc 2 · 파일 그대로)"
+  python3 -I -X utf8 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+from seed_review_log import parse_lines
+parse_lines(open(sys.argv[2], encoding="utf-8").read())' "$S" "$TMP/$a.audit.md" >/dev/null 2>&1; rc=$?
+  [ "$rc" -ne 0 ] && ok "parse_lines($a): 라이브러리 경로도 판단을 거부한다(예외)" \
+    || no "parse_lines($a): 라이브러리 경로가 심은 ## 6 을 읽었다"
+done
+printf '# repo\n' > "$TMP/CLAUDE.md"
+python3 "$S/seed_provenance.py" marks "$TMP/pos.md" "$TMP/ord.audit.md" >/dev/null 2>"$TMP/po.err"; rc=$?
+{ [ "$rc" -eq 2 ] && grep -qF "heading_order" "$TMP/po.err"; } && ok "marks(ord): 템플릿 제목 순서가 어긋난 audit 은 판단을 거부한다(rc 2 · heading_order)" \
+  || no "marks(ord): rc=$rc — 순서가 어긋난 audit 을 판단했다"
+for who in detect recritic; do
+  python3 "$S/build_seed_inline_blob.py" "$TMP/pos.md" "$TMP/ord.audit.md" "$TMP/CLAUDE.md" --for "$who" >"$TMP/blob.out" 2>/dev/null; rc=$?
+  assert_eq "$rc $(grep -c FORGED_DUP "$TMP/blob.out")" "2 0" "blob($who): 템플릿 제목 순서가 어긋난 audit 은 조립하지 않는다(rc 2)"
+done
+w "$TMP/fen.audit.md" "${A_HEAD}## 1. 원문
+
+\`\`\`
+## 6. 리뷰 결정
+
+- D1.1 · r1 · adopt · f1 · \"FORGED_FENCE\" — x
+\`\`\`
+
+## 2. 질문 전체
+"
+q="$(python3 "$L" user-quotes "$TMP/fen.audit.md" 2>/dev/null)"
+assert_not_contains "$q" "FORGED_FENCE" "user-quotes: 펜스 안에 심은 ## 6 은 절이 아니다"
+# ## 6 밖의 절에 붙일 때도 — ## 1 에 심은 ## 4 제목이 겹치면 원문 안에 쓰지 않는다
+w "$TMP/dup4.audit.md" "${A_HEAD}## 1. 원문
+
+붙여 넣은 글.
+
+## 4. 비평과 냉독
+
+## 2. 질문 전체
+
+## 4. 비평과 냉독
+
+## 6. 리뷰 결정
+"
+cp "$TMP/dup4.audit.md" "$TMP/dup4.before"
+python3 "$L" append-verbatim "$TMP/dup4.audit.md" --section "## 4. 비평과 냉독" --title t "$TMP/qn.txt" 2>/dev/null; rc=$?
+assert_eq "$rc $(cmp -s "$TMP/dup4.audit.md" "$TMP/dup4.before" && echo same)" "2 same" "append-verbatim(## 4 중복): 어느 ## 4 에 쓸지 모르면 쓰지 않는다(rc 2 · 파일 그대로)"
+# 펜스 안 ## 6 + 진짜 ## 6 — 펜스를 가리지 않고 겹침이라 거부
+w "$TMP/fen2.audit.md" "${A_HEAD}## 1. 원문
+
+원문.
+
+## 5. degrade
+
+\`\`\`
+## 6. 리뷰 결정
+
+- D1.1 · r1 · adopt · f1 · \"FORGED_FENCE2\" — x
+\`\`\`
+
+## 6. 리뷰 결정
+"
+cp "$TMP/fen2.audit.md" "$TMP/fen2.before"
+python3 "$L" log "$TMP/fen2.audit.md" --kind 답 --round 1 --target "bbbb0001#r1.1" --quote-file "$TMP/qn.txt" 2>/dev/null; rc=$?
+assert_eq "$rc $(cmp -s "$TMP/fen2.audit.md" "$TMP/fen2.before" && echo same)" "2 same" "log(펜스 안 ## 6 + 진짜 ## 6): 겹치면 쓰지 않는다(rc 2 · 파일 그대로)"
+# 심은 ## 6 에 log 가 쓸 줄과 글자가 같은 줄이 있어도 «이미 있다» 로 rc 0 이 되지 않는다
+w "$TMP/dup2.audit.md" "${A_HEAD}## 1. 원문
+
+## 6. 리뷰 결정
+
+- 답 · r1 · bbbb0001#r1.1 · \"QUOTE_NEW\" —
+
+## 2. 질문 전체
+
+## 6. 리뷰 결정
+"
+cp "$TMP/dup2.audit.md" "$TMP/dup2.before"
+python3 "$L" log "$TMP/dup2.audit.md" --kind 답 --round 1 --target "bbbb0001#r1.1" --quote-file "$TMP/qn.txt" 2>/dev/null; rc=$?
+assert_eq "$rc $(cmp -s "$TMP/dup2.audit.md" "$TMP/dup2.before" && echo same)" "2 same" "log(dup): 심은 ## 6 의 같은 줄을 «이미 있다» 로 읽지 않는다(rc 2)"
+q="$(python3 "$L" user-quotes "$TMP/av.audit.md")"; rc=$?
+assert_eq "$rc" "0" "user-quotes 양성: 템플릿 모양 audit 은 rc 0"
+
+# ── log --quote 직접 인자는 없다 — 문구는 파일로만
+w "$TMP/lq.audit.md" "$R_AUDIT"
+cp "$TMP/lq.audit.md" "$TMP/lq.before"
+python3 "$L" log "$TMP/lq.audit.md" --kind 답 --round 1 --target "cccc0001#r1.1" --quote "MODEL_MADE" >/dev/null 2>&1; rc=$?
+assert_eq "$rc $(cmp -s "$TMP/lq.audit.md" "$TMP/lq.before" && echo same)" "2 same" "log --quote: 셸 인자 문구는 받지 않는다(rc 2 · 파일 그대로)"
+# argparse 줄임 인자 — `--quote <있는 파일>` 이 `--quote-file` 의 줄임으로 읽히면 안 된다
+python3 "$L" log "$TMP/lq.audit.md" --kind 답 --round 1 --target "cccc0001#r1.1" --quote "$TMP/qn.txt" >/dev/null 2>&1; rc=$?
+assert_eq "$rc $(cmp -s "$TMP/lq.audit.md" "$TMP/lq.before" && echo same)" "2 same" "log --quote: --quote-file 의 줄임으로도 받지 않는다(rc 2 · 파일 그대로)"
+python3 "$L" log "$TMP/lq.audit.md" --kind 답 --round 1 --target "cccc0001#r1.1" --quote-file "$TMP/qn.txt"; rc=$?
+assert_eq "$rc" "0" "log --quote-file 양성: 파일로 받은 문구는 적는다"
+assert_contains "$(python3 "$L" user-quotes "$TMP/lq.audit.md")" "QUOTE_NEW" "log --quote-file 양성: 적은 문구를 user-quotes 가 읽는다"
+
+finish

@@ -54,6 +54,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 # §6 경계는 이 리포에서 한 곳에서만 계산된다 — `scripts/section6.py`. 세 소비자(이 게이트 ·
@@ -221,6 +222,55 @@ def _entry_lines(section: str) -> list[str]:
 # `* floor:root_problem — …`이 원장 행 부재로 읽힌다). 방향은 fail-closed라 우회는 안 되지만, 항목을
 # 받아들이는 규칙과 해석하는 규칙이 어긋나는 건 이 커밋이 방금 닫은 바로 그 결함이다 — 한 층 아래에서
 # 되풀이하지 않는다.
+
+
+SECTION4 = ("4", "External Landscape")
+
+
+def section4_items(text: str) -> list[tuple[str, list[str]]]:
+    """§4 항목 — (첫 줄, 본문 줄들). R2(RC39): §4 항목은 여러 줄을 허용한다. 열 0 의 불릿 줄이 항목이고, 그 뒤
+    들여쓴 줄(불릿이든 아니든 — 첫 글자가 공백류(`str.isspace()`: 공백 · 탭 · NBSP · 전각 공백)인 줄)은 그 항목의
+    본문이다. 빈 줄은 항목을 닫지 않는다. 열 0 의 불릿이 아닌 줄은
+    항목을 닫는다. 항목이 열리기 전에 나온 들여쓴 불릿은 그 자체로 항목이다(fail-closed — 본문으로 삼켜
+    순회에서 빠지지 않게). **§4 에만 쓴다** — §0 · §3 · §5 의 항목 판독은 `_entry_lines` 그대로다."""
+    out: list[tuple[str, list[str]]] = []
+    cur = None
+    for ln in _section_text(text, *SECTION4).splitlines():
+        if not ln.strip():
+            continue
+        if re.match(r"^[-*]\s", ln) and ln.strip() not in ("-", "*"):
+            cur = (ln.strip(), [])
+            out.append(cur)
+        elif ln[:1].isspace():
+            if cur is None:
+                if ENTRY_BULLET_RE.match(ln) and ln.strip() not in ("-", "*"):
+                    cur = (ln.strip(), [])
+                    out.append(cur)
+            else:
+                cur[1].append(ln.strip())
+        else:
+            cur = None
+    return out
+
+
+def _section4_heads(text: str) -> list[str]:
+    return [h for h, _ in section4_items(text)]
+
+
+def section4_body_failures(text: str) -> list[str]:
+    """§4 여러 줄 항목의 본문 줄 규칙(R2 · RC39 · AC14) — 결정 연결은 항목 **첫 줄 끝**에만 선다. 본문 줄에
+    연결 괄호가 있거나, 첫 줄에 없는 `RC<n>` 이 본문 줄에 있으면 red. 본문으로 내린 연결이나 레포 주장이
+    조사 술어(①~⑤)의 순회 밖으로 빠지는 길을 막는다."""
+    fails = []
+    for head, body in section4_items(text):
+        head_rcs = set(RC_RE.findall(head))
+        for b in body:
+            if LINK_ANY_RE.search(b):
+                fails.append(f"§4 항목의 결정 연결이 첫 줄 끝이 아니라 본문 줄에 있다: {head[:60]}")
+            extra = sorted(set(RC_RE.findall(b)) - head_rcs)
+            if extra:
+                fails.append(f"§4 항목 본문 줄의 {', '.join(extra)} 가 첫 줄에 없다: {head[:60]}")
+    return sorted(set(fails))
 
 
 def _frontmatter(text: str) -> str:
@@ -521,7 +571,7 @@ def payload_verbatim_anchors(payload_text: str) -> set:
     충실도 리뷰어에게 **원문으로** 보인다. 게이트만 그것을 못 보는 상태가 정확히
     N1b가 막으려던 것이다.
 
-    경계가 유일하지 않거나 §6이 없으면 공집합 — N1b의 등식(`!= {"S1"}`)이 그 자리에서
+    경계가 유일하지 않거나 §6이 없으면 공집합 — N1b 의 S1 부재가 그 자리에서
     red를 내므로 침묵하지 않는다.
     """
     span = payload_section6_span(payload_text)
@@ -530,30 +580,44 @@ def payload_verbatim_anchors(payload_text: str) -> set:
     return set(S_ANCHOR_RE.findall(payload_text[span[0]:span[1]]))
 
 
-def payload_verbatim_is_s1_only(payload_text: str) -> bool:
-    """N1b — payload §6의 앵커 집합이 **정확히** {"S1"}인가 (v0.43.0).
+S_NUM_RE = re.compile(r"^S(\d+)$")
+# §6 항목은 줄 첫 칸에서 시작한다(템플릿). 들여 쓴 앵커는 남의 항목 본문 안에 있다.
+S_ANCHOR_NESTED_RE = re.compile(r"^[ \t]+[-*]\s+\*\*(S\d+)\*\*", re.MULTILINE)
 
-    `⊆ {"S1"}`이 아니라 `== {"S1"}`이다. ⊆로 쓰면 빈 §6이 통과하고, 그때
-    이를 잡아 줄 것으로 기대할 bijection C는 **항목이 0건인 payload에서 공허하다**
-    (`evidence`는 필수 필드라 항목이 있으면 순회가 비지 않지만, 항목 0건이면
-    루프가 아예 돌지 않는다). 등식이 그 구멍을 닫는다.
 
-    등식 술어라 **스스로 양성이다** — §6을 통째로 지워도 이 검사가 직접 red를 낸다.
-    이 자리를 bijection C에 귀속시키면 틀린 귀속이 되고, 잘못 귀속된 RED는
-    통과보다 나쁘다.
-
-    v0.46.0: 코퍼스가 `_body()`에서 **payload 원문 §6 span**으로 바뀌었다. `_body()`는
-    펜스를 벗기므로 §6 안 펜스에 `- **S5**`를 적으면 앵커 집합이 `{"S1"}`으로 계산돼
-    등식이 만족되는데, 그 줄은 payload에 그대로 남아 하류로 나갔다.
-    """
-    return payload_verbatim_anchors(payload_text) != {"S1"}
+def payload_verbatim_n1b_failures(payload_text: str, audit_anchors: set) -> list[str]:
+    """N1b — payload §6 은 사용자 원문 **S1~Sn 전부**다(R2 · 설계 §3-2). 코퍼스는 payload 원문 §6 span
+    (`payload_verbatim_anchors` — 펜스를 벗기지 않는다, v0.46.0). 넷을 본다: S1 이 있다 · 번호가 S1 부터 가장
+    큰 번호까지 빠짐없다 · audit §6 의 앵커가 전부 payload §6 에도 있다(audit 은 S2 이상을 같은 글자로 겹쳐
+    가진다 — 글자 대조는 `check_verbatim_coverage.py`) · 앵커가 줄 첫 칸에서 시작한다(들여 쓴 앵커는 남의 항목
+    본문 안이다). state 의 발화 전량과의 대조도 그 스크립트가 한다 —
+    이 게이트는 brief 파일만 읽는다. §6 이 없거나 경계가 유일하지 않으면 앵커가 공집합이라 S1 부재로 red 다."""
+    anchors = payload_verbatim_anchors(payload_text)
+    nums = sorted(int(m.group(1)) for a in anchors for m in [S_NUM_RE.match(a)] if m)
+    out = []
+    if 1 not in nums:
+        out.append("payload §6 에 S1(최초 요청 원문)이 없다")
+    if nums:
+        gaps = [f"S{n}" for n in range(1, nums[-1] + 1) if n not in nums]
+        if gaps:
+            out.append("payload §6 의 원문 번호가 빠졌다: " + ", ".join(gaps))
+    missing = sorted(a for a in audit_anchors if a not in anchors)
+    if missing:
+        out.append("audit §6 의 " + ", ".join(missing) + " 가 payload §6 에 없다 — payload §6 은 원문 전량이다")
+    span = payload_section6_span(payload_text)
+    nested = sorted(set(S_ANCHOR_NESTED_RE.findall(payload_text[span[0]:span[1]])) if span else (),
+                    key=lambda s: int(s[1:]))
+    if nested:
+        out.append("payload §6 의 " + ", ".join(nested) + " 앵커가 줄 첫 칸이 아니라 들여 쓰여 있다 — "
+                   "다른 항목 본문 안의 `- **S<N>**` 줄은 사용자 발화가 아니다")
+    return out
 
 
 def bijection_c_errors(payload_text: str, audit_text: str) -> list[str]:
     """bijection C — 모든 evidence: S<N>이 §6에서 해석된다 (AC6).
 
-    v0.43.0: 앵커 집합이 payload §6 **∪** audit §6이다. `S1`은 payload에,
-    `S2` 이상은 audit에 살므로 한쪽만 보면 반대쪽 전량이 "없는 앵커"가 된다.
+    v0.43.0: 앵커 집합이 payload §6 **∪** audit §6이다. payload §6 이 전량이고 audit §6 은
+    S2 이상의 사본이다 — 합집합은 사본이 어긋났을 때도 dangling 을 잘못 내지 않게 한다.
 
     **단방향이다.** 인용된 S<N>의 *존재*만 본다 — 모든 앵커가 인용될 것은
     요구하지 않는다. 그 역방향을 넣으면 audit §6 전량이 인용 의무로 끌려온다.
@@ -708,8 +772,7 @@ def landscape_unkeyed(text: str) -> list[str]:
     web-off brief는 §4에 순회할 항목이 없어 공허하게 통과하는 것이 옳다 —
     조사하지 않았으면 인용할 것도 없다.
     """
-    sec = _section_text(text, "4", "External Landscape")
-    return [ln for ln in _entry_lines(sec) if not SOURCE_KEY_RE.search(ln)]
+    return [ln for ln in _section4_heads(text) if not SOURCE_KEY_RE.search(ln)]
 
 
 def landscape_keys_declared(payload_text: str, audit_text: str) -> list[str]:
@@ -728,7 +791,7 @@ def landscape_keys_declared(payload_text: str, audit_text: str) -> list[str]:
     (설계 §10). 그 해석까지 묶는 것은 §3.4 ①의 교차 bijection이고 기각됐다.
     """
     want = {m.group(1).strip()
-            for ln in _entry_lines(_section_text(payload_text, "4", "External Landscape"))
+            for h, body in section4_items(payload_text) for ln in [h, *body]
             for m in SOURCE_KEY_RE.finditer(ln)}
     have = {m.group(1).strip()
             for m in SOURCE_KEY_RE.finditer(_section_text(audit_text, "7", "확산 원자료"))}
@@ -755,7 +818,7 @@ def landscape_present(text: str) -> bool:
         return False
     if _web_disabled() and re.search(r"\bN/?A\b|비활성|생략|web[ -]?disabled", sec, re.IGNORECASE):
         return True
-    return bool(_entry_lines(sec))
+    return bool(_section4_heads(text))
 
 
 def section5_entries(text: str) -> list[str]:
@@ -908,11 +971,11 @@ def coverage_anchor_failures(audit_text: str, anchors: set) -> list[str]:
 #   · payload §4 의 모든 항목 줄(프로필상 전부 landscape 다)
 #   · payload §5 의 항목 줄 중 **`RC<n>` 리터럴을 가진 줄** — 네 모양(기각·보류·검토·위험) 중
 #     어느 것인지는 묻지 않는다. `RC<n>` 이 있으면 레포 주장을 실은 줄이고 없으면 아니다.
-#   · **§3 은 순회 범위에 없다.** §3 항목은 그 자체가 «열린 결정» 이라 연결의 *대상*이고
+#   · **§3 은 순회 범위에 없다.** §3 항목은 결정(열린 것과 해결한 것)이라 연결의 *대상*이고
 #     출처가 아니다 — 거기에 연결을 걸면 자기지시가 되어 술어가 공허해진다.
 #
-# 연결의 위치는 **줄 끝**이고 하위 불릿은 금지다: `ENTRY_BULLET_RE`(`^\s*[-*]\s`)가 들여쓴
-# 불릿도 §4 항목으로 세므로 하위 불릿 형태는 즉시 `unkeyed landscape entries` red 가 된다.
+# 연결의 위치는 §4 항목 **첫 줄 끝**이다. §4 항목은 여러 줄을 허용하고(R2 · RC39), 본문 줄의 연결 · 첫 줄에
+# 없는 `RC<n>` 은 `section4_body_failures` 가 red 로 낸다. §5 는 지금처럼 한 줄 항목이다.
 #
 # **개수 술어를 두지 않는다**(설계 ⟨C5⟩·X7·AC8). 아래 술어는 전부 ∀ 이고 순회할 항목이 0건이면
 # 공허하게 통과한다 — `landscape_unkeyed` 가 §4 에 대해 이미 하는 것과 같은 형태다. 개수가
@@ -993,7 +1056,7 @@ def contract_unreadable(text: str):
 def _research_entries_split(text: str) -> tuple[list[str], list[str]]:
     """순회 정의의 두 절 — (§4 의 모든 항목 줄, §5 에서 `RC<n>` 을 가진 줄). 정의는 여기 하나다:
     ① 은 두 절을 다르게 판정하므로 나눠 받고, 나머지 술어는 `research_entries` 로 합쳐 받는다."""
-    e4 = _entry_lines(_section_text(text, "4", "External Landscape"))
+    e4 = _section4_heads(text)
     e5 = [ln for ln in section5_entries(text) if RC_RE.search(ln)]
     return e4, e5
 
@@ -1094,8 +1157,8 @@ def _leading_oq(line: str):
 def _declared_decisions(text: str) -> set:
     """payload §3 Open Questions ∪ §0 한눈에 의 결정 목록에 실재하는 `OQ<n>` 집합.
 
-    §0 이 상위집합이고 §3 이 그 중 열린 것이다(설계 §H ②). **상태 토큰은 보지 않는다** —
-    §0 은 해결된 결정도 `[해결 ⟨S<N>⟩]` 를 달고 남으므로, 「열려 있는가」를 보면 그 결정을
+    §0 과 §3 은 같은 결정 전량이다 — §3 은 해결한 결정도 해결 표시와 함께 지닌다(R2 · N22).
+    **상태 토큰은 보지 않는다** — §0 은 해결된 결정도 `[해결 ⟨S<N>⟩]` 를 달고 남으므로, 「열려 있는가」를 보면 그 결정을
     해결하는 데 기여한 조사가 red 가 된다(설계 L3 · R11).
 
     **선언은 항목 줄의 선두 `OQ<n>` 뿐이다**(`_leading_oq`) — ③ 이 「그 `OQ<n>` 줄」을 읽는 규칙과
@@ -1165,6 +1228,121 @@ def research_backref_missing(text: str) -> list[str]:
             for rc in line_rcs - sourced:
                 fails.add(f"§{num} 의 {oq or '항목'} 줄이 가리키는 근거 {rc} 가 조사 항목(§4·§5)에 없다")
     return sorted(fails)
+
+
+PROVENANCE_MARK_RE = re.compile(r"(?:⟨S\d+⟩(?:\s*·?\s*⟨S\d+⟩)*|⟨모델 추론⟩)\s*$")
+
+
+def section1_provenance_failures(text: str, anchors: set) -> list[str]:
+    """§1 Goal · Non-goal 줄마다 끝에 출처 표시(R2 · N21) — `⟨S<n>⟩`(여럿이면 `⟨S1⟩ · ⟨S4⟩`) 또는
+    `⟨모델 추론⟩`. 사용자가 말하지 않은 Non-goal 이나 좁힌 Goal 이 보이지 않은 채 하류의 범위가 되는 것을
+    B-0 이 출처와 함께 보이게 하는 표지다. `S<n>` 은 payload §6 에 실재해야 한다."""
+    fails = []
+    for ln in _entry_lines(_section_text(text, "1", "Goal · Non-goal")):
+        if not PROVENANCE_MARK_RE.search(ln):
+            fails.append(f"§1 줄에 출처 표시(⟨S<n>⟩ 또는 ⟨모델 추론⟩)가 없다: {ln[:60]}")
+            continue
+        for sid in re.findall(r"⟨(S\d+)⟩", ln):
+            if sid not in anchors:
+                fails.append(f"§1 줄의 출처 {sid} 가 payload §6 에 없다: {ln[:60]}")
+    return fails
+
+
+RESOLVED_RE = re.compile(r"\[해결 ⟨(S\d+)⟩\]")
+RESOLVED_MARK = "[해결"
+# 결정 줄의 선두 OQ 와 그 뒤 닫는 강조 — 나머지(`rest`)가 상태 자리다. 선두 판정은 `LEADING_OQ_RE` 와 같은 규칙.
+DECISION_HEAD_RE = re.compile(r"^[*_`]*\s*(OQ\d+)(?!_*[0-9A-Za-z])[*_`]*")
+# §0 상태 자리 허용 목록 — `[열림]` 또는 `[해결 ⟨S<n>⟩]` 다음 ` — <내용>`. 다른 모양은 전부 red.
+S0_SLOT_RE = re.compile(r"^\s+(\[열림\]|\[해결 ⟨(S\d+)⟩\])\s+—\s+\S")
+# §3 해결 결정 — `OQ<n> [해결 ⟨S<n>⟩]: <내용>`. 열린 결정은 `OQ<n>: <내용>`(자리 비움).
+S3_RESOLVED_RE = re.compile(r"^\s+\[해결 ⟨(S\d+)⟩\]:\s*\S")
+# 해결 내용 — `— 해결:` 뒤 `→`(역참조) 앞에 글자가 하나 이상.
+RESOLVED_BODY_RE = re.compile(r"— 해결:\s*[^\s→]")
+
+
+def _decision_line(num: str, line: str):
+    """§0 · §3 결정 줄 하나 → (선두 OQ 또는 None, 해결인가, `S<n>` 또는 None, 실패 문장 목록).
+
+    상태 자리는 **허용 목록**이다(철자 변형을 열거하지 않는다). 서식 글자(Cf — 영폭 공백 등)가 있으면
+    줄째 red 이고, 판독은 NFKC 로 정규화한 줄 위에서 한다(전각 괄호 · 전각 OQ 가 정본으로 읽혀 같은
+    검사를 받는다).
+    - §0: 선두 OQ 바로 뒤가 `[열림]` 또는 `[해결 ⟨S<n>⟩]`, 그 뒤 ` — <내용>`.
+    - §3: `OQ<n>: <내용>`(열림) 또는 `OQ<n> [해결 ⟨S<n>⟩]: <내용>`(해결). OQ 와 첫 `:` 사이(또는 `:` 가 없으면
+      OQ 바로 뒤)의 여는 · 닫는 괄호(유니코드 Ps · Pe)는 정본 해결 표시가 아니면 red.
+    - 상태 자리 밖의 `[해결` 은 red(자리를 비켜 선 해결 표시). 선두 OQ 가 없는 줄의 `[해결` 도 red."""
+    if any(unicodedata.category(c) == "Cf" for c in line):
+        return None, False, None, [f"§{num} 결정 줄에 보이지 않는 서식 글자(Cf)가 있다: {line[:60]}"]
+    ln = unicodedata.normalize("NFKC", line)
+    body = _strip_bullet(ln).strip()
+    h = DECISION_HEAD_RE.match(body)
+    if not h:
+        if RESOLVED_MARK in ln:
+            return None, False, None, [f"§{num} 의 해결 표시가 결정 줄(선두 OQ<n>)에 있지 않다: {line[:60]}"]
+        return None, False, None, []
+    oq, rest = h.group(1), body[h.end():]
+    if num == "0":
+        s = S0_SLOT_RE.match(rest)
+        if not s:
+            return oq, False, None, [f"§0 결정 줄의 상태 표시가 [열림] · [해결 ⟨S<n>⟩] 가 아니다: {line[:60]}"]
+        if RESOLVED_MARK in rest[s.end(1):]:
+            return oq, False, None, [f"§0 의 해결 표시가 상태 자리 밖에 또 있다: {line[:60]}"]
+        return oq, s.group(2) is not None, s.group(2), []
+    r = S3_RESOLVED_RE.match(rest)
+    if r:
+        if RESOLVED_MARK in rest[r.end(1):]:
+            return oq, True, None, [f"§3 의 해결 표시가 상태 자리 밖에 또 있다: {line[:60]}"]
+        return oq, True, r.group(1), []
+    pre = rest.partition(":")[0] if ":" in rest else rest.lstrip()[:1]
+    if any(unicodedata.category(c) in ("Ps", "Pe") for c in pre) or RESOLVED_MARK in rest:
+        return oq, False, None, [f"§3 결정 줄의 상태 표시가 비거나 [해결 ⟨S<n>⟩]: 가 아니다: {line[:60]}"]
+    return oq, False, None, []
+
+
+def resolved_decision_failures(text: str, anchors: set) -> list[str]:
+    """해결한 결정도 §3 에 남는다(R2 · N22). §0 과 §3 은 같은 결정 전량이다 — 두 절의 선두 OQ 집합이 같아야
+    한다(두 절이 다 있을 때). 같은 절 안의 같은 OQ 는 한 번뿐이다(먼저 온 줄이 이기는 순서 의존을 막는다).
+    상태 자리는 `_decision_line` 의 허용 목록이고, 해결 표시의 `S<n>` 은 payload §6 에 실재해야 한다 —
+    모델이 결정을 닫으면서 근거를 지어내는 길을 막는다. 해결 결정은 §0 과 §3 에서 같은 `S<n>` 을
+    가리키고, §3 줄은 `— 해결: <한 줄>` 로 해결 내용을 싣는다(역참조 `→` 만으로는 내용이 아니다).
+
+    §0 의 상태 자리 검사는 선두 OQ 로 시작하는 §0 줄에만 걸린다. §0 에 결정 목록이 없는 옛(v1) brief 는
+    그 검사에서는 조용하지만 집합 등식에서 §3 의 결정이 §0 에 없다고 red 다."""
+    fails = []
+    decisions = {}
+    for num, title in DECISION_SECTIONS:
+        d = decisions[num] = {}
+        for ln in _entry_lines(_section_text(text, num, title)):
+            oq, resolved, sid, errs = _decision_line(num, ln)
+            fails += errs
+            if sid and sid not in anchors:
+                fails.append(f"§{num} 의 해결 토큰 {sid} 가 payload §6 에 없다: {ln[:60]}")
+            if oq in d:
+                fails.append(f"§{num} 에 {oq} 가 두 번 있다 — 결정마다 한 줄이다")
+            elif oq:
+                d[oq] = (ln, resolved, sid)
+    both = not any(m.startswith(("0.", "3.")) for m in find_missing_sections(text))
+    s0, s3 = decisions["0"], decisions["3"]
+    for oq, (_, resolved, sid) in s0.items():
+        if oq not in s3:
+            if resolved:
+                fails.append(f"§0 에서 해결로 닫은 {oq} 가 §3 에 없다 — "
+                             "해결한 결정도 해결 내용과 함께 §3 에 남는다")
+            elif both:
+                fails.append(f"§0 의 {oq} 가 §3 에 없다 — §0 과 §3 은 같은 결정 전량이다")
+            continue
+        _, r3, sid3 = s3[oq]
+        if resolved and not r3:
+            fails.append(f"§3 의 {oq} 줄에 해결 표시([해결 ⟨S<n>⟩])가 없다")
+        elif r3 and not resolved:
+            fails.append(f"§3 의 {oq} 는 해결 표시를 달았는데 §0 의 {oq} 는 해결이 아니다")
+        elif sid and sid3 and sid != sid3:
+            fails.append(f"{oq} 의 해결 토큰이 §0({sid}) 과 §3({sid3}) 에서 다르다")
+    for oq, (ln3, r3, _) in s3.items():
+        if both and oq not in s0:
+            fails.append(f"§3 의 {oq} 가 §0 결정 목록에 없다 — §0 과 §3 은 같은 결정 전량이다")
+        if r3 and not RESOLVED_BODY_RE.search(unicodedata.normalize("NFKC", ln3)):
+            fails.append(f"§3 의 해결 결정 {oq} 줄에 해결 내용(`— 해결: <한 줄>`)이 없다")
+    return sorted(set(fails))
 
 
 def internal_research_dimension_failures(payload_text: str, audit_text: str) -> list[str]:
@@ -1374,13 +1552,6 @@ def gate(path: Path) -> int:
             "payload §6 경계가 유일하게 해석되지 않는다 — " + " · ".join(sec6_dup)
             + " (「payload에서 §6을 뺀 나머지」(N1a)도 「payload §6」(N1b)도 정의되지 않는다)")
     sec6_absent = any(m.startswith("6.") for m in miss)
-    # 경계가 비유일하면 N1b·bijection C를 묻지 않는다 — 그 상태의 앵커 집합은 공집합이라
-    # "앵커가 없다"는 **원인과 어긋난 red**가 되고, 저자는 §6에 앵커를 더 넣으려 든다.
-    if not sec6_absent and not sec6_dup and payload_verbatim_is_s1_only(text):
-        failures.append(
-            f"payload §6 앵커가 {{'S1'}}이 아니다: "
-            f"{sorted(payload_verbatim_anchors(text))} "
-            "(S1만 payload에, 나머지 전량은 audit §6에)")
 
     sec2_absent = any(m.startswith("2.") for m in miss)
     if not sec2_absent:
@@ -1398,6 +1569,7 @@ def gate(path: Path) -> int:
     # --- audit 해석 (fail-closed): 못 열면 audit 측 검증 전체를 skip하지 않고 red ---
     audit_path, audit_err = resolve_audit(path, fm)
     audit_text = ""
+    audit_sec6_dup: list = []
     if audit_err:
         failures.append(f"audit: {audit_err}")
     else:
@@ -1447,6 +1619,24 @@ def gate(path: Path) -> int:
                 failures += [f"saturation: {x}" for x in sf]
                 advisories += sa
 
+    # N1b — payload §6 이 원문 전량인가. audit §6 앵커와 대조하므로 audit 을 읽은 뒤에 돈다.
+    # 경계가 비유일하면 N1b·bijection C를 묻지 않는다 — 그 상태의 앵커 집합은 공집합이라
+    # "앵커가 없다"는 **원인과 어긋난 red**가 되고, 저자는 §6에 앵커를 더 넣으려 든다.
+    # audit 을 못 읽었거나 audit §6 경계가 비유일하면 audit 앵커는 공집합으로 넘긴다(그 사실은
+    # 위에서 이미 red 다). audit 앵커 집합은 펜스를 벗긴 코퍼스(`verbatim_anchors`)라 audit 펜스 안에만 있는
+    # 앵커는 여기서 안 보인다 — 그것은 brief 리뷰 진입 게이트의 `check_verbatim_coverage.py` 가 잡는다.
+    if not sec6_absent and not sec6_dup:
+        n1b_audit = verbatim_anchors(audit_text) if audit_text and not audit_sec6_dup else set()
+        for msg in payload_verbatim_n1b_failures(text, n1b_audit):
+            failures.append(
+                f"N1b — {msg} (payload §6 앵커: {sorted(payload_verbatim_anchors(text))})")
+        # §1 출처 표시(N21) · 해결한 결정(N22) — 둘 다 `S<n>` 을 payload §6 앵커에 대조하므로 N1b 와
+        # 같은 조건에서만 돈다. §6 이 없거나 비유일하면 앵커가 공집합이라 원인과 어긋난 red 가 된다
+        # (그 상태는 위에서 이미 red 다).
+        pa = payload_verbatim_anchors(text)
+        failures += section1_provenance_failures(text, pa)
+        failures += resolved_decision_failures(text, pa)
+
     sec4_absent = any(m.startswith("4.") for m in miss)
     if not sec4_absent and not landscape_present(text):
         failures.append("External Landscape empty (no entries and no web-disabled sentinel)")
@@ -1456,6 +1646,8 @@ def gate(path: Path) -> int:
     unk = landscape_unkeyed(text)
     if unk:
         failures.append(f"unkeyed landscape entries: {len(unk)}")
+    # §4 형식 규칙(R2 · RC39) — 계약 v2 와 무관하다. 본문 줄의 연결 · 첫 줄에 없는 `RC<n>` 은 red.
+    failures += section4_body_failures(text)
     entries5 = section5_entries(text) if not sec5_absent else []
     mal = _skepticism_malformed(entries5)
     if mal:

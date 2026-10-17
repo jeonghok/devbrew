@@ -8,9 +8,9 @@ source: spec-distill conducting-interview v0.43.0
 
 # Verbatim Cross-File Duplicate Anchor — Interview Audit
 
-U2-T4 전용 fixture다. S5가 payload §6과 이 audit §6 양쪽에 같은 앵커로 나온다 — 교차
-파일 append-only 위반. 어느 statement도 S5를 실제로 참조하지 않아도(state 원장은
-S1만 안다) 합집합 단계에서 앵커 교집합만으로 exit 1이 나야 한다.
+U2-T4 전용 fixture다. S5가 payload §6과 이 audit §6 양쪽에 같은 앵커 · **다른 글자**로
+나온다 — 이미 있는 원문 글자를 고친 위반. 어느 statement도 S5를 실제로 참조하지 않아도
+합집합 단계에서 같은 앵커의 글자 대조만으로 exit 1이 나야 한다.
 
 ## 1. Coverage Ledger
 

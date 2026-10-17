@@ -91,9 +91,39 @@ tpl_ex="$(awk '/^```markdown/{f=1;next} f&&/^```/{exit} f' "$TPL")"
 grep -qF '(사용자 확인)' <<<"$tpl_ex" && ok "AC11: seed 템플릿 예시에 확정 표시" || no "AC11: 템플릿 예시 확정 표시 부재"
 [[ "$(printf '%s\n' "$tpl_ex" | grep -v '^\s*$' | tail -1 | head -c 400)" == *"다시 검증할 것"* || "$(awk -v RS='' 'END{print}' <<<"$tpl_ex")" == "다시 검증할 것 —"* ]] \
   && ok "AC11: 템플릿 예시의 마지막 문단이 «다시 검증할 것 —»로 시작" || no "AC11: 템플릿 마지막 문단 규약 위반"
-# check_seed.py 는 손대지 않는다 — Task 착수 커밋(main merge) 대비 diff 0
-[[ -z "$(git -C "$ROOT" diff --name-only main -- plugins/spec-distill/scripts/check_seed.py)" ]] \
-  && ok "AC11: check_seed.py 무변경 (diff 0 vs main)" || no "AC11: check_seed.py 가 변경됐다"
+# check_seed.py 는 seed 본문에 슬롯 존재 검사를 더하지 않는다 — v0.57.0 에서는 파일 diff 0 으로 쟀으나 R2 가
+# audit 쪽 존재 검사(덜어 낸 것 표)를 의도로 더했다. 지키던 성질은 `gate()` 안에서 seed 본문 변수(`body` · `text`)를
+# 읽는 자리를 기존 다섯으로 못 박아 잰다(ast) — 본문을 읽는 새 검사가 어디에 붙든 이 집합이 달라진다.
+# R2 보안 검토(Task S)가 부재 검사 셋(답-슬롯 헤딩 · 태그 · URL)을 `seed_body.parse_seed` 문법(산문 문단만 받는
+# 허용 목록) 하나로 바꿨다 — 그것은 모양 · 부재 검사이지 슬롯 «존재» 검사가 아니다(무엇이 있어야 한다고 요구하지 않는다).
+# 행동 쪽 락은 test_seed_one_sentence.sh.
+CS="$ROOT/plugins/spec-distill/scripts/check_seed.py"
+cs_body_reads() {
+  python3 -I -X utf8 - "$1" <<'PYAST'
+import ast, sys
+tree = ast.parse(open(sys.argv[1], encoding="utf-8").read())
+g = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "gate"][0]
+for par in ast.walk(g):
+    for ch in ast.iter_child_nodes(par):
+        if isinstance(ch, ast.Name) and ch.id in ("body", "text") and isinstance(ch.ctx, ast.Load):
+            print(ast.unparse(par))
+    if isinstance(par, ast.Call) and "cut_table_problems" in ast.unparse(par.func):
+        print("CUT:" + ast.unparse(par))
+PYAST
+}
+cs_want='parse_seed(text)
+CUT:cut_table_problems(atext)
+visible_content(body)'
+cs_want="$(printf '%s\n' "$cs_want" | LC_ALL=C sort)"  # 로케일 무관 — 양쪽 모두 C 정렬
+assert_eq "$(cs_body_reads "$CS" | LC_ALL=C sort)" "$cs_want" "AC11: check_seed.py gate() 가 seed 본문을 읽는 자리는 둘(seed_body 문법 — 모양 · 부재 검사이지 슬롯 존재 검사가 아니다 · 파일 전체 비어 있음)뿐이고 새 검사는 audit 텍스트만 받는다"
+# 양성 짝(이빨) — 본문을 읽는 새 검사를 얹은 사본은 집합이 달라진다
+CSX="$(mktemp -d -t sd-csx-XXXXXX)" && [ -d "$CSX" ] && {
+  awk '/^    return problems$/{print "    if not re.search(r\"x\", body):"; print "        problems.append(\"x\")"} {print}' "$CS" > "$CSX/check_seed.py"
+  [ "$(cs_body_reads "$CSX/check_seed.py" | LC_ALL=C sort)" != "$cs_want" ] \
+    && ok "AC11(변이): seed 본문을 읽는 새 검사를 얹으면 락이 RED 가 된다" \
+    || no "AC11(변이): 본문 검사를 얹어도 락이 못 잡는다"
+  rm -rf "$CSX"
+}
 
 # --- v0.57.0 AC12: 워크트리 (블록 스코프) -------------------------------------------------
 wt_block="$(awk '/^## 워크트리 — 진입 직후/{f=1;print;next} /^## /{f=0} f' "$SK")"

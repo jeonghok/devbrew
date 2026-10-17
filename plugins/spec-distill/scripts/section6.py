@@ -80,7 +80,7 @@ def ambiguities(text: str) -> list:
     """§6 이 **모든 소비자에게 같은 영역**으로 해석되지 않는 이유들. 없으면 빈 목록.
 
     절이 아예 없는 것은 여기서 다루지 않는다 — 그것은 모호가 아니라 부재이고,
-    `find_missing_sections`(#1/#9)와 N1b 등식이 각자 자기 이름으로 red 를 낸다.
+    `find_missing_sections`(#1/#9)와 N1b 의 S1 부재가 각자 자기 이름으로 red 를 낸다.
     """
     reasons = []
     starts = start_candidates(text)

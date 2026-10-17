@@ -26,8 +26,8 @@ TTFP를 줄이는 것이 진짜 목표다.
 
 ## 1. Goal · Non-goal
 
-- Goal: 대시보드 최초 페인트 시간 단축
-- Non-goal: 전체 앱의 렌더링 전략 통일
+- Goal: 대시보드 최초 페인트 시간 단축 ⟨S1⟩
+- Non-goal: 전체 앱의 렌더링 전략 통일 ⟨S1⟩
 
 ## 2. 제약
 
@@ -36,6 +36,7 @@ TTFP를 줄이는 것이 진짜 목표다.
 ## 3. Open Questions
 
 - OQ1: 인증 뷰의 캐시 전략 → 근거 RC3
+- OQ4 [해결 ⟨S1⟩]: 렌더링 전략 — 해결: (픽스처) → 근거 RC3
 
 ## 4. External Landscape
 

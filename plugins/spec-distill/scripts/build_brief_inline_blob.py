@@ -19,7 +19,7 @@ v0.45.0에서 충실도 축이 `build_brief_bundle.py`로 갈라졌다(payload +
 `audit_file`을 redact해도 `name` + `created_at`으로 `<date>-<topic>-interview.audit.md`를
 **재구성**할 수 있으므로 세 값을 함께 지운다(round-1 리뷰가 적발한 경로).
 
-§6 사용자 원문(payload의 `S1`)은 **절대 건드리지 않는다.** 본문이 **자기** audit 파일명을
+§6 사용자 원문(payload §6 의 S1~Sn)은 **절대 건드리지 않는다.** 본문이 **자기** audit 파일명을
 언급하면(`audit_file`을 모르면 모든 `*.audit.md`) 원문 보존이 이기고 **exit 3**으로 알린다 —
 호출자가 degradation record를 남기고 계속한다.
 

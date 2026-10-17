@@ -76,8 +76,8 @@ grep -qE '^[[:space:]]*AskUserQuestion\(\{' "$SKILL" \
   && no "지출: AskUserQuestion 호출 리터럴이 있다 — 떼기로 한 지출 승인 게이트가 되살아났다" \
   || ok "지출: 자기 AskUserQuestion 호출 리터럴 없음 (진입 지출 게이트 없음)"
 W_PROC="$(section '절차')"
-{ has "$W_PROC" '재리뷰 상한 2' && has "$W_PROC" '라운드 4' && has "$W_PROC" '지출 통제'; } \
-  && ok "지출(양의 짝): \`## 절차\` 가 지출 통제를 엔진의 재리뷰 상한 2 와 라운드 4 의 명시 승인으로 댄다" \
+{ has "$W_PROC" '재리뷰 상한 2' && has "$W_PROC" '라운드 4' && has "$W_PROC" '안전 정지'; } \
+  && ok "지출(양의 짝): \`## 절차\` 가 재리뷰 상한을 안전 정지로 · 라운드 4 의 명시 승인으로 댄다" \
   || no "지출(양의 짝): 게이트를 뗀 자리에 무엇이 지출을 묶는지 \`## 절차\` 가 말하지 않는다"
 
 # ── 2. 호출자 계약 — 인자 둘, 훅 없음 ──────────────────────────────────────────
@@ -232,14 +232,15 @@ has "$W_RB" '그 외 non-zero 는 `2`와 동일하게 취급' && ok "냉독: blo
 for g in G1 G2 G3 G4 G5 G6; do
   grep -qE "^\| ${g} \|" <<<"$W_RB" && ok "냉독: gap 클래스 $g 행" || no "냉독: gap 클래스 $g 행이 사라졌다"
 done
-{ has "$W_RB" 'G1–G6 **전부 0건**' && has "$W_RB" '세 조각' && has "$W_RB" 'advisory'; } \
-  && ok "냉독: 성공 조건(G1–G6 전부 0건) · 세 조각 보고 · advisory" \
+{ has "$W_RB" 'G1–G7 **전부 0건**' && has "$W_RB" '세 조각' && has "$W_RB" 'advisory'; } \
+  && ok "냉독: 성공 조건(G1–G7 전부 0건) · 세 조각 보고 · advisory" \
   || no "냉독: 성공 조건 또는 보고 형식이 무너졌다"
 
 # ── 10. 수정 권한 ─────────────────────────────────────────────────────────────
 W_ED="$(section '수정 권한')"
-{ has "$W_ED" 'user_sourced_items' && has "$W_ED" '**불변**' && has "$W_ED" '**append-only**'; } \
-  && ok "수정 권한: §2 는 frontmatter 와 같은 write · payload §6 불변 · audit §6 append-only" \
+# R2(설계 §3-2): payload §6 은 「불변」에서 「추가만」으로 — 이미 있는 원문 글자는 여전히 못 고친다.
+{ has "$W_ED" 'user_sourced_items' && has "$W_ED" '**추가만** — 이미 있는 원문 글자는 어떤 처분도 고치지 못한다' && has "$W_ED" '**append-only**'; } \
+  && ok "수정 권한: §2 는 frontmatter 와 같은 write · payload §6 추가만(기존 글자 불변) · audit §6 append-only" \
   || no "수정 권한: 저자 규칙 셋 중 하나가 빠졌다 (laundering 이 열린다)"
 { has "$W_ED" '임의로 기각하지 못한다' && has "$W_ED" '미반영 findings' && has "$W_ED" 'Step B'; } \
   && ok "수정 권한: finding 임의 기각 금지 + 미반영은 이유와 함께 Step B" \

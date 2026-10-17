@@ -19,7 +19,7 @@ payload가 어느 audit을 자기 것이라 부를지 고르지 못하게 거절
 라벨 토큰은 **마크다운 헤딩이 아니다.** 헤딩이면 payload 자신의 절 헤딩들과 같은
 네임스페이스에 들어가 "몇 번째 ##인가"가 다시 문제가 된다. 그리고 실린 audit §6의
 **절 헤딩은 벗긴다** — 안 벗기면 payload의 같은 헤딩과 바이트 동일해져, 라벨을 붙여도
-"§6을 보라"는 지시가 먼저 나오는 쪽(S1 하나)에 걸린다.
+"§6을 보라"는 지시가 먼저 나오는 쪽(payload §6)에 걸린다.
 
 exit: 0 정상 / 2 payload·audit 부재·읽기 실패·audit §6 없음(무디스패치) /
 3 번들 payload 부분에 자기 audit 파일명 잔존(위생 미달 — 호출자가 degrade 기록 후 계속)
@@ -56,10 +56,10 @@ def own_audit_re(audit_name: str):
 # 경계가 없어진다(task-10 fix round 2 실측 — 라벨 토큰만 가리키고 payload 쪽 §6은 빠뜨린 결함).
 #
 # 왜 이 둘인가: `<<<PAYLOAD>>>` 다음에 실리는 payload 본문은 자신의 `## 6. 사용자 원문`
-# 절(S1)을 **바이트 그대로** 담고 있다 — redact_frontmatter()는 frontmatter 세 키만
+# 절(S1~Sn 원문 전량)을 **바이트 그대로** 담고 있다 — redact_frontmatter()는 frontmatter 세 키만
 # 건드리고 body는 손대지 않는다(위 모듈 docstring의 "실린 audit §6의 절 헤딩은 벗긴다 —
 # 안 벗기면 payload의 같은 헤딩과 바이트 동일해진다"는 대칭으로, payload 쪽 헤딩은 애초에
-# 벗길 대상이 아니라 그대로 남는다). audit_verbatim()이 만드는 두 번째 블록(S2 이상)은
+# 벗길 대상이 아니라 그대로 남는다). audit_verbatim()이 만드는 두 번째 블록(S2 이상의 같은 글자 사본)은
 # `<<<AUDIT-VERBATIM>>>` 라벨이 표지한다. 이 튜플이 정본이다 — 번들 포맷이 바뀌어 세
 # 번째 위치가 생기면 여기만 늘리면 되고, 프로필 문면이 그 표지를 놓치면
 # shared/tests/test_docreview_profiles.sh 의 교차 대조(이 튜플에서 도출)가 잡는다.

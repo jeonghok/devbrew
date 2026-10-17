@@ -5,7 +5,7 @@
 # 소비자는 request-framing/SKILL.md 의 「### 번들」 블록이고, 그 블록이 만든 두 번들을 탐지
 # 리뷰어 · codex 러너(detect)와 재비판자(recritic)가 나눠 읽는다.
 #
-# 재는 것: 재료 다섯의 실림과 순서 · seed frontmatter 제거 · 재료별 부재 exit 2 · 절 부재의
+# 재는 것: 재료 여섯의 실림과 순서 · seed frontmatter 제거 · 재료별 부재 exit 2 · 절 부재의
 # 소리 · **재비판 번들에 `## 6` 의 판정 이력 줄이 0건**(AC11) · 두 변이(갈래를 지우면 AC11 이 RED,
 # frontmatter 제거를 지우면 누출 단언이 RED) · 비신뢰 `## 1` 안의 임의 `## ` 줄이
 # 절을 자르지 않는가(truncation) · 같은 audit 제목이 두 번 나오면 조립을 거절하는가(hijacking,
@@ -52,6 +52,10 @@ RAW_TEXT_MARKER 사용자가 실제로 한 말.
 
 DRAFT_MARKER 긴 초안.
 
+## seed 에서 덜어 낸 것
+
+없음
+
 ## 6. 리뷰 결정
 
 - D1.1 · r1 · adopt · abcd1234#r1.1 · "USER_QUOTE_MARKER 채택" — HISTORY_SUMMARY_MARKER 요약
@@ -60,7 +64,7 @@ printf '# CLAUDE.md\nCLAUDE_MD_MARKER 테스트용 규칙.\n' > "$TMP/CLAUDE.md"
 
 run() { python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/CLAUDE.md" "$@" 2>"$TMP/err.txt"; }
 
-# ── detect — 다섯 재료, 순서대로 ─────────────────────────────────────────────
+# ── detect — 여섯 재료, 순서대로 ─────────────────────────────────────────────
 out="$(run)"; rc=$?
 assert_eq "$rc" "0" "detect: exit 0"
 prev=0; order_ok=1
@@ -72,7 +76,7 @@ for m in SEED_BODY_MARKER RAW_TEXT_MARKER QUESTION_MARKER HISTORY_SUMMARY_MARKER
 done
 [ "$order_ok" = 1 ] && ok "detect: 초안 → 원문 → 질문 전체 → 리뷰 결정 → CLAUDE.md 순서" || no "detect: 재료 순서가 어긋났다"
 assert_contains "$out" "ANSWER_MARKER" "detect: ## 2 의 «당신이 답한 것» 줄이 실린다"
-assert_not_contains "$out" "DRAFT_MARKER" "detect: ## 3 긴 초안은 싣지 않는다(재료 다섯 밖)"
+assert_not_contains "$out" "DRAFT_MARKER" "detect: ## 3 긴 초안은 싣지 않는다(재료 여섯 밖)"
 assert_not_contains "$out" "next_phase: spec-distill:interview" "detect: seed frontmatter 는 벗겨진다"
 
 # ── recritic — 판정 이력 0건, 사용자 문구는 남는다(AC11) ───────────────────────
@@ -142,7 +146,7 @@ cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$TMP/"
 # sibling `section6.py` 도 함께 옮긴다 — build_seed_inline_blob.py 가 heading-모양 판정을
 # section6 에서 import 한다(§6-단일화 락). 없으면 ModuleNotFoundError 로 죽어 mout 가 비고,
 # 그 빈 결과가 「이력이 안 샌다」로 오독된다(test_check_verbatim_coverage.sh 의 같은 교훈).
-cp "$ROOT/plugins/spec-distill/scripts/section6.py" "$TMP/"
+cp "$ROOT/plugins/spec-distill/scripts/section6.py" "$ROOT/plugins/spec-distill/scripts/docreview_advice.py" "$TMP/"
 mout="$(python3 "$TMP/mut1.py" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/CLAUDE.md" --for recritic 2>/dev/null)"
 grep -qF 'HISTORY_SUMMARY_MARKER' <<<"$mout" \
   && ok "변이: 소비자 갈래를 지우면 재비판 번들에 판정 이력이 샌다 — AC11 단언에 이빨이 있다" \
@@ -261,8 +265,10 @@ refs="$(python3 -c '
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
 for m in re.finditer(r"\(audit `([^`]*)`", text):
-    print(m.group(1))
+    if m.group(1) != "## seed 에서 덜어 낸 것":  # 저자가 쓴 표 — 비신뢰 verbatim 튜플 밖(별도 단언)
+        print(m.group(1))
 ' "$TMP/detect_out.txt")"
+assert_contains "$detect_out" '(audit `## seed 에서 덜어 낸 것` — 저자가 쓴 표)' "번들이 덜어 낸 것 절을 비신뢰 튜플 밖의 «저자가 쓴 표» 로 싣는다"
 tuple_vals="$(python3 -c '
 import ast, sys
 tree = ast.parse(open(sys.argv[1], encoding="utf-8").read())

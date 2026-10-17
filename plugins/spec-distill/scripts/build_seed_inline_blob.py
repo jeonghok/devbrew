@@ -5,11 +5,11 @@
 넘기는 문서가 이 파일의 출력이다. 엔진의 `--doc`(스냅숏 · 얼림 검사 대상)은 seed 파일 자신이고,
 리뷰어가 **읽는** 것은 이 번들이다.
 
-재료 다섯 — seed 본문 · audit `## 1. 원문` · audit `## 2. 질문 전체` · audit `## 6. 리뷰 결정` ·
-레포 CLAUDE.md. `## 2` 가 없으면 「1번」 같은 짧은 답이 무엇을 확인한 것인지 복원할 수 없다.
+재료 여섯 — seed 본문 · audit `## 1. 원문` · audit `## 2. 질문 전체` · audit `## seed 에서 덜어 낸 것`
+(저자가 쓴 표) · audit `## 6. 리뷰 결정` · 레포 CLAUDE.md. `## 2` 가 없으면 「1번」 같은 짧은 답이 무엇을 확인한 것인지 복원할 수 없다.
 
 소비자별로 갈린다(`--for`):
-  detect   (기본) 탐지 리뷰어 · codex — 다섯 재료 전부.
+  detect   (기본) 탐지 리뷰어 · codex — 여섯 재료 전부.
   recritic 재비판자 — `## 6` 대신 그 절의 사용자 문구만 뽑은 목록. 판정 이력(결정 id · 라운드 ·
            채택/기각 · finding id · 요약)이 가면 엔진이 5단계 익명화로 지운 프레이밍이 재비판자에게
            되돌아간다(엔진 절차서 6단계 — 입력은 문서 · items · 프로필, 그 밖에는 아무것도).
@@ -24,8 +24,9 @@
 세 verbatim 절(`UNTRUSTED_VERBATIM_SECTIONS`)의 경계와 중복은 `seed_review_log.section_body` ·
 `duplicate_headings` 한 곳이 정한다 — 이 파일이 자기 정규식으로 절을 다시 자르면 audit 템플릿
 제목이 아닌 임의의 `## ` 줄에서 잘리거나(truncation), 비신뢰 본문 안에 심긴 가짜 제목 줄이 진짜
-절을 가릴 수 있다(hijacking). `duplicate_headings` 가 하나라도 잡으면 조립하지 않는다 — 어느
-occurrence 가 진짜인지 이 코드가 골라 버리면 그 선택 자체가 공격 표면이 된다.
+절을 가릴 수 있다(hijacking). `duplicate_headings` 가 하나라도 잡거나 템플릿 제목 순서가 어긋나면
+(`heading_structure`) 조립하지 않는다 — 어느 occurrence 가 진짜인지 이 코드가 골라 버리면 그 선택 자체가
+공격 표면이 된다.
 
 Usage: build_seed_inline_blob.py <seed_file> <audit_file> <claude_md_file> [--for detect|recritic]
 """
@@ -43,13 +44,18 @@ _SCRIPTS_DIR = str(pathlib.Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 import section6  # noqa: E402
-from seed_review_log import duplicate_headings, section_body, user_quotes  # noqa: E402
+from seed_review_log import (AuditAmbiguous, duplicate_headings, heading_structure,  # noqa: E402
+                             require_unambiguous, section_body, separator_lines, separator_message,
+                             user_quotes)
 
 # 리뷰어에게 비신뢰 verbatim 으로 알릴 audit 자리 — seed 프로필 `## 처분 안내` 가 이 셋을 이름으로
 # 가리킨다(shared/tests/test_docreview_profiles.sh 가 이 튜플에서 도출해 대조한다). assemble() 은
 # 이 튜플을 **읽어서** 헤딩 문구와 `section_body` 조회 키를 만든다 — 같은 문자열을 따로 다시
 # 타이핑하면 넷째 자리가 생기거나 헤딩이 바뀌어도 락이 조용히 통과한다.
 UNTRUSTED_VERBATIM_SECTIONS = ("## 1. 원문", "## 2. 질문 전체", "## 6. 리뷰 결정")
+
+# 저자가 쓴 표라 위 튜플(비신뢰 verbatim)에는 넣지 않는다 — 두 소비자 모두에게 싣는다.
+CUT_TABLE_SECTION = "## seed 에서 덜어 낸 것"
 
 FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.S)
 
@@ -78,7 +84,7 @@ def _or_none(s: str | None) -> str:
 
 def _heading_line_no(text: str, heading: str) -> int | None:
     """`heading` 과 줄 전체가 같은 첫 줄의 1-based 줄 번호(`section_body` 와 같은 매치 규칙)."""
-    for i, line in enumerate(text.splitlines()):
+    for i, line in enumerate(text.split("\n")):
         if line.strip() == heading:
             return i + 1
     return None
@@ -92,7 +98,7 @@ def heading_shaped_warnings(audit_text: str, heading: str, body: str) -> list[in
         return []
     exempt_round_scaffold = heading == "## 2. 질문 전체"
     out = []
-    for i, line in enumerate(body.splitlines()):
+    for i, line in enumerate(body.split("\n")):
         if not section6.HEADING_SHAPED_RE.match(line):
             continue
         if exempt_round_scaffold and ROUND_SCAFFOLD_RE.match(line.strip()):
@@ -108,6 +114,8 @@ def assemble(seed_text: str, audit_text: str, claude_md_text: str, consumer: str
         f"## 사용자 원문 (audit `{sec_raw}`)\n\n" + _or_none(section_body(audit_text, sec_raw)),
         f"## 질문 전체 (audit `{sec_questions}`)\n\n" + _or_none(section_body(audit_text, sec_questions)),
     ]
+    parts.append(f"## 덜어 낸 것 (audit `{CUT_TABLE_SECTION}` — 저자가 쓴 표)\n\n"
+                 + _or_none(section_body(audit_text, CUT_TABLE_SECTION)))
     if consumer == "recritic":
         qs = user_quotes(audit_text)
         parts.append(f"## 사용자 결정 문구 (audit `{sec_decisions}` 에서 사용자 문구만)\n\n"
@@ -141,12 +149,30 @@ def main() -> int:
     audit_text = paths["audit_file"].read_text(encoding="utf-8", errors="replace")
     claude_md_text = paths["claude_md_file"].read_text(encoding="utf-8", errors="replace")
 
+    sep = separator_lines(audit_text)
+    if sep:
+        for ln in separator_message(sep).split("\n"):
+            print("[build_seed_inline_blob] " + ln, file=sys.stderr)
+        print(f"[spec-distill] {paths['audit_file']} 의 줄 구분을 하나로 정할 수 없다. 번들을 조립하지 않는다.",
+              file=sys.stderr)
+        return 2
     dups = duplicate_headings(audit_text)
     if dups:
         for heading, nums in dups:
             print(f"[spec-distill] {paths['audit_file']} 의 `{heading}` 가 {len(nums)}번(줄 "
                   f"{', '.join(str(n) for n in nums)}) 나온다 — 어느 줄이 그 절의 진짜 경계인지 "
                   "정해지지 않는다. 번들을 조립하지 않는다.", file=sys.stderr)
+        return 2
+    for problem in heading_structure(audit_text):
+        print(f"[spec-distill] {paths['audit_file']} 의 템플릿 제목 순서가 어긋난다({problem}) — 어느 줄이 "
+              "그 절의 진짜 경계인지 정해지지 않는다. 번들을 조립하지 않는다.", file=sys.stderr)
+    if heading_structure(audit_text):
+        return 2
+    try:
+        require_unambiguous(audit_text, UNTRUSTED_VERBATIM_SECTIONS[2])
+    except AuditAmbiguous as e:  # `## 6` 에 기록 모양이 아닌 줄 — 리뷰어에게 «리뷰 결정» 으로 싣지 않는다
+        print(str(e), file=sys.stderr)
+        print(f"[spec-distill] {paths['audit_file']} 의 `## 6` 을 판단할 수 없다. 번들을 조립하지 않는다.", file=sys.stderr)
         return 2
 
     sec_raw, sec_questions, _ = UNTRUSTED_VERBATIM_SECTIONS
@@ -171,7 +197,17 @@ def main() -> int:
                   f"줄이 있다(줄 {', '.join(str(n) for n in lns)}) — 리뷰어가 번들에서 이 줄을 "
                   "헤딩으로 볼 수 있다(비신뢰 본문이라 지우지 않는다).", file=sys.stderr)
 
-    sys.stdout.write(assemble(seed_text, audit_text, claude_md_text, args.consumer))
+    if section_body(audit_text, CUT_TABLE_SECTION) is None:
+        print(f"[spec-distill] 경고: {paths['audit_file']} 에 `{CUT_TABLE_SECTION}` 절이 없다 — 「(없음)」으로 조립한다",
+              file=sys.stderr)
+
+    try:
+        blob = assemble(seed_text, audit_text, claude_md_text, args.consumer)
+    except AuditAmbiguous as e:  # `## 6` 제목이 비신뢰 원문 안에 심긴 경우 — 사용자 결정 문구를 뽑지 않는다
+        print(f"[spec-distill] {paths['audit_file']} 의 절 경계를 하나로 정할 수 없다({e}). 번들을 조립하지 않는다.",
+              file=sys.stderr)
+        return 2
+    sys.stdout.write(blob)
     return 0
 
 

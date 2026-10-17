@@ -27,10 +27,12 @@ user_sourced_items:
 
 TTFP를 줄이는 것이 진짜 목표다. SPA 전환은 수단이었지 목표가 아니었다.
 
+- OQ1 [열림] — 인증 뷰의 캐시 전략 — 해답공간으로 이월.
+
 ## 1. Goal · Non-goal
 
-- Goal: 대시보드 최초 페인트 시간 단축
-- Non-goal: 전체 앱의 렌더링 전략 통일
+- Goal: 대시보드 최초 페인트 시간 단축 ⟨S1⟩
+- Non-goal: 전체 앱의 렌더링 전략 통일 ⟨S1⟩
 
 ## 2. 제약
 
@@ -58,6 +60,8 @@ TTFP를 줄이는 것이 진짜 목표다. SPA 전환은 수단이었지 목표�
 ## 6. 사용자 원문
 - **S1** 🗣 최초 요청:
   > "대시보드가 너무 느려요. 서버에서 그려주면 안 되나요?"
+- **S2** ☑ 선택 (캐시 범위):
+  > "인증 뷰는 일단 빼고 갑시다"
 ## 7. Next Action
 
 superpowers 있으면 이 brief를 context로 brainstorming 호출 → -design.md → reviewer → writing-plans.

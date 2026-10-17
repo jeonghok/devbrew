@@ -715,18 +715,46 @@ for sec in 6; do
     || no "U2-T2: audit §${sec} 제거가 안 잡힌다 — AUDIT_SECTIONS 확장에 이빨이 없다"
 done
 
-# --- U2-T3: N1b 등식 + bijection C 합집합 -----------------------------------
-# N1b 위쪽: payload §6 에 S2 가 있으면 red
-out="$(python3 "$SCRIPT" gate "$FX/interview-brief-payload-s2.md" 2>&1)"; rc=$?
-{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'payload §6'; } \
-  && ok "U2-T3: payload §6 에 S2 → red (N1b 위쪽)" \
-  || no "U2-T3: payload §6 의 S2 가 안 잡힌다"
+# --- U2-T3: N1b 원문 전량(R2) + bijection C 합집합 ----------------------------
+# payload §6 은 S1~Sn 전량이다(R2 · 설계 §3-2). S2 가 payload 에 있어도 전량이면 green.
+python3 "$SCRIPT" gate "$FX/interview-brief-payload-s2.md" >/dev/null 2>&1; rc=$?
+[[ $rc -eq 0 ]] \
+  && ok "U2-T3: payload §6 에 S1·S2 전량 + audit §6 S2 사본 → green (N1b 는 S1 만을 요구하지 않는다)" \
+  || no "U2-T3: payload §6 전량이 rc=$rc — 옛 「S1 만」 등식이 남았는가"
 
-# N1b 아래쪽: payload §6 을 비우면 red — 등식 술어는 스스로 양성이다
+# audit §6 의 앵커가 payload §6 에 없으면 red · 번호가 빠지면 red
+n1b_case() {  # n1b_case <drop_s2|add_s4> <기대 grep> — valid 쌍의 payload §6 을 바꿔 gate 를 돈다
+  cp "$FX/interview-brief-valid.md" "$TMPD/n1b-$1.md"
+  cp "$FX/interview-brief-valid.audit.md" "$TMPD/n1b-$1.audit.md"
+  python3 -I -X utf8 - "$TMPD/n1b-$1.md" "$1" <<'PY'
+import pathlib, sys
+p, mode = pathlib.Path(sys.argv[1]), sys.argv[2]
+t = p.read_text(encoding="utf-8")
+t = t.replace("audit_file: interview-brief-valid.audit.md", "audit_file: " + p.stem + ".audit.md")
+s2 = '- **S2** ☑ 선택 (캐시 범위):\n  > "인증 뷰는 일단 빼고 갑시다"\n'
+assert t.count(s2) == 1, "픽스처의 payload §6 S2 항목이 하나가 아니다 — 스윕을 확인하라"
+if mode == "drop_s2":
+    t = t.replace(s2, "")
+else:  # add_s4 — S3 를 건너뛴다
+    t = t.replace(s2, s2 + '- **S4** 🗣 R3 답:\n  > "번호를 건너뛴 원문"\n')
+p.write_text(t, encoding="utf-8")
+PY
+  sed -i.bak "s|^payload:.*|payload: n1b-$1.md|" "$TMPD/n1b-$1.audit.md"; rm -f "$TMPD/n1b-$1.audit.md.bak"
+  out="$(python3 "$SCRIPT" gate "$TMPD/n1b-$1.md" 2>&1)"; rc=$?
+  [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q "$2"
+}
+n1b_case drop_s2 'N1b — audit §6 의 S2 가 payload §6 에 없다' \
+  && ok "U2-T3: audit §6 의 S2 가 payload §6 에 없으면 red (N1b — payload 는 원문 전량)" \
+  || no "U2-T3: audit 에만 있는 S2 가 안 잡힌다: $(printf '%s' "$out" | tail -c 300)"
+n1b_case add_s4 'N1b — payload §6 의 원문 번호가 빠졌다: S3' \
+  && ok "U2-T3: payload §6 번호가 S2 → S4 로 건너뛰면 red (N1b — 빠진 S3)" \
+  || no "U2-T3: payload §6 번호 빠짐이 안 잡힌다: $(printf '%s' "$out" | tail -c 300)"
+
+# 빈 §6 은 red — S1 부재가 스스로 양성이다
 out="$(python3 "$SCRIPT" gate "$FX/interview-brief-payload-empty-sec6.md" 2>&1)"; rc=$?
 { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'payload §6'; } \
-  && ok "U2-T3: payload §6 을 비우면 red (N1b 아래쪽)" \
-  || no "U2-T3: 빈 payload §6 이 통과한다 — ⊆ 로 썼는가"
+  && ok "U2-T3: payload §6 을 비우면 red (N1b — S1 부재)" \
+  || no "U2-T3: 빈 payload §6 이 통과한다 — S1 부재 검사가 사라졌는가"
 
 # 항목 0건: #5 가 공허한 유일한 상태. N1b 만이 막는다.
 out="$(python3 "$SCRIPT" gate "$FX/interview-brief-zero-items.md" 2>&1)"; rc=$?
@@ -1106,9 +1134,11 @@ done <<< "$n1c_fallback"
 
 # ── N1b 의 코퍼스는 **출하되는 바이트**다 (v0.46.0) ─────────────────────────
 # 결함: N1b 가 `_body()` 를 경유해 §6 을 찾았다. `_body()` 는 펜스를 벗기므로 payload §6
-# **안**의 펜스에 `- **S5**` 를 적으면 앵커 집합이 `{S1}` 으로 계산돼 등식이 만족되는데,
+# **안**의 펜스에 `- **S5**` 를 적으면 앵커 집합에서 빠져 검사가 만족되는데,
 # 그 줄은 payload 에 그대로 남아 번들에 실려 충실도 리뷰어에게 원문으로 나갔다(실측 rc 0).
 # 축은 「앵커가 어떤 표기 안에 있는가」다 — 펜스 안 / 펜스 밖 둘 다 같은 판정이어야 한다.
+# R2: payload §6 은 원문 전량이라 S5 자체는 합법일 수 있다. 여기 S5 는 audit 에 없고 S3·S4 를
+# 건너뛰므로 번호 빠짐으로 red 다 — 펜스 안 S5 가 코퍼스에 안 보이면 그 red 가 사라진다.
 for variant in fenced plain; do
   cp "$FX/interview-brief-valid.md" "$TMPD/n1b-$variant.md"
   cp "$FX/interview-brief-valid.audit.md" "$TMPD/n1b-$variant.audit.md"
@@ -1131,7 +1161,7 @@ PY
     || no "N1b: payload §6 의 $variant 앵커 S5 가 안 잡힌다 — 코퍼스가 하류보다 적게 본다: $out"
 done
 # 양성 짝 — 같은 펜스에서 **앵커 줄만** 빼면 green. red 의 원인이 「펜스가 있다」가 아니라
-# 「§6 이 S1 아닌 앵커를 준다」임을 가른다.
+# 「§6 이 번호를 건너뛴 앵커 S5 를 준다」임을 가른다.
 cp "$FX/interview-brief-valid.md" "$TMPD/n1b-noanchor.md"
 cp "$FX/interview-brief-valid.audit.md" "$TMPD/n1b-noanchor.audit.md"
 python3 - "$TMPD/n1b-noanchor.md" <<'PY'
@@ -1185,7 +1215,7 @@ def reach(root):
 
 
 FORBIDDEN = ("_body", "_section_text")
-for root in ("payload_url_free", "payload_verbatim_is_s1_only"):
+for root in ("payload_url_free", "payload_verbatim_n1b_failures"):
     if root not in funcs:
         print("MISSING\t" + root)
         continue
@@ -1753,7 +1783,11 @@ tree = ast.parse(src)
 TARGET_FUNCS = ("research_link_missing", "research_link_targets_missing",
                 "research_backref_missing", "internal_research_dimension_failures",
                 "research_confirm_missing", "_declared_decisions", "_leading_oq",
-                "_research_entries_split", "research_entries", "payload_rc_ids")
+                "_research_entries_split", "research_entries", "payload_rc_ids",
+                # R2 — §4 순회는 `section4_items` 로 옮겨 갔고(`_research_entries_split` 가 위임한다),
+                # §1 · 해결 결정 술어도 항목을 순회한다. 이름으로 넣지 않으면 개수 술어가 락 밖에 숨는다.
+                "section4_items", "_section4_heads", "section4_body_failures",
+                "section1_provenance_failures", "resolved_decision_failures", "_decision_line")
 
 func_nodes = {n.name: n for n in ast.walk(tree)
               if isinstance(n, ast.FunctionDef) and n.name in TARGET_FUNCS}
@@ -1797,11 +1831,11 @@ for name, stmts in groups:
 if bad:
     print("NO\t" + " | ".join(bad))
 else:
-    print("YES\t술어 다섯 + 판정 헬퍼 다섯 + contract_v2 블록 전부 개수 술어(len 호출·정수 리터럴 비교) 없음")
+    print("YES\t술어 다섯 + 판정 헬퍼 + R2 순회 함수 + contract_v2 블록 전부 개수 술어(len 호출·정수 리터럴 비교) 없음")
 PY
 )"
 case "$c5static" in
-  YES*) ok "⟨C5⟩(정적): 다섯 술어 · 판정 헬퍼 다섯 · 옵트인 블록에 개수 술어가 없다" ;;
+  YES*) ok "⟨C5⟩(정적): 다섯 술어 · 판정 헬퍼 · R2 순회 함수(§4 항목 · §1 · 해결) · 옵트인 블록에 개수 술어가 없다" ;;
   *)    no "⟨C5⟩(정적): $c5static" ;;
 esac
 
@@ -2065,10 +2099,11 @@ assert s.count(o)==1; p.write_text(s.replace(o,"- OQ1: 인증 뷰의 캐시 전�
 
 # qg iter 1 — 레포 주장(`RC<n>` 을 실은 줄)이 웹 형식 연결을 달면 ③ 의 요구가 통째로 빠진다(최종 리뷰 I-4
 # 의 미집행). 연결을 `[→ …]` 로 바꾸고 역참조를 전부 지운다 — ① 이 그 줄을 연결 없음으로 세야 한다.
+# 역참조 줄은 넷이다(§0 · §3 의 OQ1 · OQ4) — R2(N22) 부터 해결한 OQ4 도 §3 에 남는다. 아래 셀들도 같은 수를 센다.
 v2mut repoweblink 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
 o="[RC3 → OQ1 · OQ4]"; assert s.count(o)==1; s=s.replace(o,"[→ OQ1 · OQ4]")
-assert s.count(" → 근거 RC3")==3; s=s.replace(" → 근거 RC3",""); p.write_text(s,encoding="utf-8")'
+assert s.count(" → 근거 RC3")==4; s=s.replace(" → 근거 RC3",""); p.write_text(s,encoding="utf-8")'
 { [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -q 'RC3' <<<"$V2OUT"; } \
   && ok "V2-①(레포 형식): RC 를 실은 줄의 웹 형식 연결은 연결이 아니다 — red" \
   || no "V2-①(레포 형식): 레포 주장이 웹 형식 연결로 역참조 ∀ 를 피했다 (rc=$V2RC)"
@@ -2158,7 +2193,7 @@ assert s.count(o)==1; p.write_text(s.replace(o,"- OQ1은 인증 뷰의 캐시 �
 v2mut otherrclink 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
 o="[RC3 → OQ1 · OQ4]"; assert s.count(o)==1; s=s.replace(o,"[RC5 → OQ1 · OQ4]")
-assert s.count(" → 근거 RC3")==3; s=s.replace(" → 근거 RC3"," → 근거 RC5"); p.write_text(s,encoding="utf-8")'
+assert s.count(" → 근거 RC3")==4; s=s.replace(" → 근거 RC3"," → 근거 RC5"); p.write_text(s,encoding="utf-8")'
 { [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -q 'RC3' <<<"$V2OUT"; } \
   && ok "V2-①(전역): 어느 연결에도 실리지 않은 RC3 — 다른 id 의 레포 연결로는 red" \
   || no "V2-①(전역): RC3 가 다른 id 의 연결 뒤에 숨어 역참조를 피했다 (rc=$V2RC)"
@@ -2196,7 +2231,7 @@ p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding='utf-8')
 o='[RC3 → OQ1 · OQ4]\n'; assert s.count(o)==1
 extra={'line':'- 위험 — 메모 | 같은 캐시 주장 — RC3 [RC3 → 없음]\n','subbullet':'  - [RC3 → 없음]\n'}['$shape']
 s=s.replace(o,'[→ OQ1 · OQ4]\n'+extra)
-assert s.count(' → 근거 RC3')==3; s=s.replace(' → 근거 RC3',''); p.write_text(s,encoding='utf-8')"
+assert s.count(' → 근거 RC3')==4; s=s.replace(' → 근거 RC3',''); p.write_text(s,encoding='utf-8')"
   { [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -qF 'RC3 [→ OQ1 · OQ4]' <<<"$V2OUT"; } \
     && ok "V2-①(§5 줄 단위·${shape}): 버리는 [RC3 → 없음] 이 실제 주장 줄의 웹 연결을 세탁하지 못한다" \
     || no "V2-①(§5 줄 단위·${shape}): 레포 주장 줄의 웹 연결이 세탁됐다 (rc=$V2RC)"
@@ -2206,7 +2241,7 @@ done
 v2mut doublelink5 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8")
 o="[RC3 → OQ1 · OQ4]\n"; assert s.count(o)==1; s=s.replace(o,"[→ OQ1 · OQ4] [RC3 → 없음]\n")
-assert s.count(" → 근거 RC3")==3; s=s.replace(" → 근거 RC3",""); p.write_text(s,encoding="utf-8")'
+assert s.count(" → 근거 RC3")==4; s=s.replace(" → 근거 RC3",""); p.write_text(s,encoding="utf-8")'
 { [[ "$V2RC" -ne 0 ]] && grep -q '결정 연결 없음' <<<"$V2OUT" && grep -qF '[→ OQ1 · OQ4] [RC3 → 없음]' <<<"$V2OUT"; } \
   && ok "V2-①(연결 하나·§5): 한 줄의 연결 괄호 둘은 세탁이다 — red" \
   || no "V2-①(연결 하나·§5): 앞 괄호의 결정이 끝 괄호 뒤에 숨었다 (rc=$V2RC)"
@@ -2298,6 +2333,7 @@ s=s.replace(o6,o6+"\n"+line,1); a.write_text(s,encoding="utf-8")'
   || no "V2-⑤(§5 범위): §5 밖의 확인 줄을 인정했다 (rc=$V2RC)"
 
 # qg iter 1 — AC9 「하위 불릿은 red」. 연결을 들여쓴 하위 불릿으로 내리면 항목 줄 끝에 연결이 없다.
+# R2(RC39) 부터 들여쓴 줄은 §4 항목의 본문이다 — 첫 줄 끝 연결 부재(①)와 본문 줄의 연결(`section4_body_failures`)이 둘 다 red.
 v2mut subbullet 'import sys,pathlib
 p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8"); o=" — 데이터 형태와 부합 [→ OQ1]\n"
 assert s.count(o)==1; p.write_text(s.replace(o," — 데이터 형태와 부합\n  - [→ OQ1]\n"),encoding="utf-8")'

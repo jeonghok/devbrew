@@ -155,23 +155,45 @@ grep -qF '/compact interview brief at' "${CI_ALL[@]}" \
   && no "AC4(next-session): 옛 /compact 보존 템플릿이 남았다" \
   || ok "AC4(next-session): 옛 /compact 보존 템플릿이 없다 (양성 짝: 위 다음 세션 줄)"
 
-# AC2: 재제시 상한 + 초과 시 강등 + 고정 advisory 문자열 (Unbounded-autonomy 가드)
+# AC2: 재제시 상한 + 초과 시 질문 (Unbounded-autonomy 가드)
 b0_block="$(awk '/^#### B-0/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
 { [[ -n "$b0_block" ]] && grep -q 'confirm_repost_count' <<<"$b0_block"; } \
   && ok "AC2: 재제시 카운터가 state에 기록됨 (프로즈 self-tracking 아님)" \
   || no "AC2: confirm_repost_count가 B-0 블록에 없다"
-grep -qF '[spec-distill] 확정 목록을 두 번 다시 보여 줬는데도 정하지 못했다 — 모든 항목을 잠정(provisional)으로 둔다' <<<"$b0_block" \
-  && ok "AC2: 상한 초과 고정 advisory 문자열 (verbatim)" \
-  || no "AC2: 상한 초과 advisory 문자열이 정확히 일치하지 않는다"
-# 이 assert는 위 advisory 고정 문자열이 아니라 **강등 프로즈**를 잠근다. 원래 패턴
-# ('전부 provisional|전 항목 .*provisional')은 프로즈(백틱·조사 때문에 불일치)가 아니라
-# advisory 문자열에만 매치돼 바로 위 grep -qF에 포섭됐다 — 프로즈만 지워도 GREEN인 가짜 이빨.
-# 아래 두 구절은 advisory 문자열에 등장하지 않는 body-unique 문구다: 강등 *동작*과 *방향 근거*.
-# teeth: 프로즈만 삭제 → 이 assert만 RED / advisory만 삭제 → 위 assert만 RED (서로 독립).
-{ grep -qF '전 항목을 `provisional`로 강등' <<<"$b0_block" \
-  && grep -qF '확정이 덜 되는 쪽이 안전한 방향' <<<"$b0_block"; } \
-  && ok "AC2: 상한 초과 시 덜-잠그는 쪽으로 강등 (프로즈 — advisory와 독립)" \
-  || no "AC2: 강등 프로즈(전 항목 provisional 강등 + 덜 되는 쪽이 안전)가 없다"
+# 재제시 상한은 자동 강등이 아니라 사용자에게 묻는다 — 세 라벨이 B-0 블록에 있고 강등 문면은 없다.
+# teeth: 세 라벨 중 하나만 지워도 RED / 강등 문면을 되살리면 RED.
+{ grep -qF '「계속 고친다(2번 더)」' <<<"$b0_block" \
+  && grep -qF '「지금 목록으로 확정」' <<<"$b0_block" \
+  && grep -qF '「brief 만 종료」' <<<"$b0_block"; } \
+  && ok "AC12: 재제시 상한이 세 선택(계속 고친다 · 지금 목록으로 확정 · brief 만 종료)을 묻는다" \
+  || no "AC12: 재제시 상한 질문의 세 라벨이 B-0 블록에 없다"
+{ grep -qF '자동 강등은 없다' <<<"$b0_block" \
+  && ! grep -qF '전 항목을 `provisional`로 강등' <<<"$b0_block" \
+  && ! grep -qF '모든 항목을 잠정(provisional)으로 둔다' <<<"$b0_block"; } \
+  && ok "AC12: 재제시 상한에 자동 강등이 없다 (양성 짝: 자동 강등은 없다)" \
+  || no "AC12: 자동 강등 문면이 남았거나 부재 선언이 없다"
+# 재제시 상한 질문의 몸체 — 방아쇠 · AskUserQuestion 펜스 · 게이트 재제시 · handoff 부재.
+# teeth: 펜스 삭제 / 방아쇠 문구 삭제 / 「지금 목록으로 확정」 설명을 handoff 로 바꾸면 각각 RED.
+cap_prose="$(awk '/^\*\*재제시 상한\*\*/{f=1} /^카운터는 프로즈/{f=0} f' <<<"$b0_block")"
+cap_fence="$(awk '/^```javascript/{buf="";inf=1;next} /^```/{if(inf&&buf ~ /header: "확정 목록"/){print buf};inf=0;next} inf{buf=buf $0 "\n"}' <<<"$cap_prose")"
+{ grep -qF '2회에 닿은 뒤 다시 ③ 을 고르면' <<<"$cap_prose" \
+  && grep -qF 'AskUserQuestion({ questions' <<<"$cap_fence" \
+  && grep -qF '{label: "계속 고친다(2번 더)"' <<<"$cap_fence" \
+  && grep -qF '{label: "지금 목록으로 확정"' <<<"$cap_fence" \
+  && grep -qF '{label: "brief 만 종료"' <<<"$cap_fence"; } \
+  && ok "AC12: 재제시 상한이 2회 뒤 ③ 에서 AskUserQuestion 펜스로 세 선택을 묻는다" \
+  || no "AC12: 재제시 상한 방아쇠 문구 또는 AskUserQuestion 펜스가 없다"
+{ grep -qF 'B-2 게이트를 다시 띄운다 — 다음 단계는 그 게이트에서 고른다.' <<<"$cap_fence" \
+  && ! grep -qF 'brainstorming' <<<"$cap_prose"; } \
+  && ok "AC12: 「지금 목록으로 확정」은 B-2 게이트를 다시 띄우고 상한 경로에 brainstorming handoff 가 없다" \
+  || no "AC12: 「지금 목록으로 확정」이 게이트를 다시 띄우지 않거나 상한 경로가 brainstorming 을 언급한다"
+b3_block="$(awk '/^#### B-3/{f=1;print;next} /^#### /{f=0} f' "$FIN" | tr '\n' ' ' | tr -s ' ')"
+{ grep -qF '「지금 목록으로 확정」은 확정 반영 절차를 적용한 뒤 B-2 게이트를 다시 띄우며 스스로 멈추거나 넘기지 않는다' <<<"$b3_block" \
+  && grep -qF '`confirm_repost_count = 0` 을 쓰고 B-0 으로 돌아간다' <<<"$b3_block" \
+  && grep -qF '「brief 만 종료」는 ④ 를 따른다' <<<"$b3_block" \
+  && grep -qF '`status` 는 이 편집으로 바뀌지 않고 게이트(①/②)를 통해서만 바뀐다' <<<"$b3_block"; } \
+  && ok "AC12: B-3 이 재제시 상한 질문의 세 답과 확정된 목록 ③ 을 명시한다" \
+  || no "AC12: B-3 에 재제시 상한 답 처리 또는 확정 목록 ③ 문장이 없다"
 grep -qE '제외한 것도|제외 항목' <<<"$b0_block" \
   && ok "AC2: 확정 후보에서 제외한 항목도 함께 제시 (누락 검출 가능)" \
   || no "AC2: 제외 항목 제시 요구가 없다"
@@ -947,7 +969,7 @@ grep -qF '*원래 / 재결정 / 근거*' <<<"$fin_stepA_flat" \
   && ok "AC7: 반증의 세 칸 기록" || no "AC7: 반증 세 칸 부재"
 grep -qF '재결정 자체는 사용자 동의로만' <<<"$fin_stepA_flat" \
   && ok "AC7/P23: 재결정은 사용자 동의로만" || no "AC7/P23: 재결정 권한 문구 부재 — 기록 형식이 판정 권한으로 읽힌다"
-for form in '[RC3 → OQ1]' '[RC3 → 없음]' '[→ OQ1]' '[→ 없음]' '→ 근거 RC3' '[해결 ⟨S10⟩]'; do
+for form in '[RC3 → OQ1]' '[RC3 → 없음]' '[→ OQ1]' '[→ 없음]' '→ 근거 RC3' '[해결 ⟨S2⟩]'; do
   grep -qF -- "$form" <<<"$fin_stepA" \
     && ok "AC19: 직렬화 형식 «${form}»" || no "AC19: 직렬화 형식 «${form}» 부재"
 done
@@ -962,17 +984,23 @@ grep -qF '**레포 주장은 연결 안에 항상 `RC<n>` 을 싣는다**(웹 �
 grep -qF '조사 항목 줄 **끝**에 넷 중 하나' <<<"$fin_stepA_flat" \
   && ok "AC19: 결정 연결의 위치 = 조사 항목 줄 끝 (게이트 LINK_RE 의 \$ 앵커와 같은 자리)" \
   || no "AC19: 결정 연결 위치가 «줄 끝» 이 아니거나 형식 수가 넷이 아니다 — 게이트는 줄 끝만 받는다"
+# R2(N22) — 해결로 닫은 결정도 §3 에 남는다. 옛 「§3 은 미해결의 목록」 은 부재로 문다(양성 짝은 아래 두 줄).
+grep -qF '해결로 닫은 결정도 §3 에 그대로 남고, 그 항목에 해결 표시와 해결 내용 한 줄을 붙인다' <<<"$fin_stepA_flat" \
+  && ok "AC19/N22: 해결한 결정도 §3 에 해결 표시와 함께 남는다" || no "AC19/N22: 해결 결정의 §3 잔류 문구 부재"
+grep -qF '§0 과 §3 모두 state `orchestration.open_decisions[]` **전량**이다' <<<"$fin_stepA_flat" \
+  && ok "AC19/N22: §0 과 §3 은 같은 결정 전량" || no "AC19/N22: §0/§3 전량 문구 부재"
 grep -qF '§3 은 미해결의 목록이다' <<<"$fin_stepA_flat" \
-  && ok "AC19: §0 이 상위집합 · §3 이 그 중 열린 것" || no "AC19: §0/§3 포함 관계 문구 부재"
+  && no "AC19/N22: 옛 규칙 「§3 은 미해결의 목록」 이 남았다" || ok "AC19/N22: 옛 규칙 「§3 은 미해결의 목록」 부재"
 grep -qF '§2 는 대상이 아니다' <<<"$fin_stepA_flat" \
   && ok "AC19: §2 는 새 술어의 대상이 아니다 (bijection B 와의 이음매 회피)" || no "AC19: §2 제외 문구 부재"
-# 하위 불릿 금지는 **지시**이고 커버리지가 0 이었다(Task 12 리뷰가 실측: 정반대로 뒤집어도
-# 스위트 무변화). 그 금지가 반대로 읽히면 저자가 하위 불릿을 쓰고 게이트가 그것도 §4 항목으로
-# 세어 red 를 낸다 — 지시가 사용자를 red 로 이끈다. 리터럴에 부정어 「않는다」 가 들어 있어
-# **한 단언이 반전과 삭제를 둘 다** 잡는다(실측: 반전 X · 삭제 X · 무해한 재줄바꿈 O).
+# §4 여러 줄 항목의 연결 위치는 **지시**다(R2 · RC39 — 하위 불릿 금지를 대신한다). 그 지시가 사라지거나
+# 「본문 줄」 로 바뀌면 저자가 연결을 들여쓴 줄에 두고 게이트가 red 를 낸다 — 지시가 사용자를 red 로 이끈다.
+# 위치 낱말 「첫 줄 끝」 을 리터럴 안에 문다(반전·삭제 둘 다 잡는다).
+grep -qF '**연결은 첫 줄 끝에 둔다** — 본문 줄의 연결이나 첫 줄에 없는 `RC<n>` 은 게이트가 red 로 낸다' <<<"$fin_stepA_flat" \
+  && ok "AC19/AC14: §4 여러 줄 항목의 연결은 첫 줄 끝 (지시 — 반전·삭제 둘 다 잡는다)" \
+  || no "AC19/AC14: §4 연결 위치 지시가 없거나 뒤집혔다 — 게이트는 본문 줄의 연결을 red 로 낸다"
 grep -qF '하위 불릿으로 쓰지 않는다' <<<"$fin_stepA_flat" \
-  && ok "AC19: 하위 불릿 금지 (지시 — 반전·삭제 둘 다 잡는다)" \
-  || no "AC19: 하위 불릿 금지가 없거나 뒤집혔다 — 게이트가 들여쓴 불릿도 §4 항목으로 센다"
+  && no "AC14: 옛 하위 불릿 금지가 남았다 — §4 는 여러 줄을 허용한다" || ok "AC14: 옛 하위 불릿 금지 부재"
 # Step B — 게이트 advisory 배달. 새 advisory 둘의 이름을 대야 한다.
 fin_stepB="$(awk '/^#### B-2 —/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
 grep -qF '내부 조사 0건' <<<"$fin_stepB" \
@@ -1373,12 +1401,18 @@ grep -qF 'user_statements' "$FIN" \
 # 독립적으로 "audit §6"를 담고 있어서, 이 지시 문장만 지워도 그 다른 문장이 이 grep을
 # 계속 만족시킨다(실측: 이 지시 문장을 통째로 지우고 돌려봤더니 이 단언이 조용히 계속
 # green이었다). 그래서 이 문장에서만 나는 복합 리터럴로 좁힌다.
-grep -qF '전량은 **audit §6**에' "$FIN" \
-  && ok "U2-T6: 원문의 거처가 audit §6 으로 지시된다" \
-  || no "U2-T6: finishing.md 가 원문을 audit §6 에 두라고 지시하지 않는다"
-grep -qE '발화 전부를 payload §6|전부를 payload §6 에' "$FIN" \
-  && no "U2-T6: 「전부를 payload §6 에」 옛 지시 잔존" \
-  || ok "U2-T6: 옛 거처 지시 제거됨"
+# R2(설계 §3-2 · N7): 거처가 「S1 은 payload, 나머지는 audit」에서 「payload §6 이 S1~Sn 전량,
+# audit §6 은 S2 이상의 같은 글자 사본」으로 바뀌었다. 두 자리 지시를 각각 이 문장에서만 나는
+# 리터럴로 잰다.
+grep -qF '`user_statements` 발화 전량(S1~Sn)을 두고' "$FIN" \
+  && ok "U2-T6: 원문 전량의 거처가 payload §6 으로 지시된다 (R2)" \
+  || no "U2-T6: finishing.md 가 발화 전량을 payload §6 에 두라고 지시하지 않는다"
+grep -qF '**audit §6** 에도 같은 글자로' "$FIN" \
+  && ok "U2-T6: audit §6 이 S2 이상의 같은 글자 사본으로 지시된다" \
+  || no "U2-T6: finishing.md 가 audit §6 사본을 지시하지 않는다"
+grep -qF '`S1`만 payload §6에 남고' "$FIN" \
+  && no "U2-T6: 「S1 만 payload §6 에」 옛 지시 잔존" \
+  || ok "U2-T6: 옛 거처 지시(S1 만 payload) 제거됨"
 
 # B-2 게이트 텍스트의 advisories 슬롯
 b2_block="$(awk '/^#### B-2/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
@@ -1566,10 +1600,12 @@ grep -qF '레포 주장은 연결 안에 항상 `RC<n>` 을 싣는다(웹 주장
   || no "AC19: payload 템플릿에서 RC 상시 탑재 규칙이 없거나 뒤집혔다"
 grep -qE '^- OQ1 \[열림\] ' "$TPL_B" \
   && ok "AC19: §0 결정 목록이 불릿 + 상태 토큰" || no "AC19: §0 결정 목록이 불릿 줄이 아니다 (게이트가 항목으로 못 읽는다)"
-grep -qF 'OQ4 [해결 ⟨S10⟩]' "$TPL_B" \
+# 예시의 `S<n>` 은 템플릿 §6 에 실재하는 앵커다 — 게이트가 해결 토큰의 앵커 실재를 본다(R2 · N22).
+grep -qE '^- OQ4 \[해결 ⟨S[0-9]+⟩\] — ' "$TPL_B" \
   && ok "AC19: §0 의 해결 상태 토큰 예시" || no "AC19: 해결 상태 토큰 예시 부재"
-# 템플릿이 자기 규칙과 모순하지 않는다(최종 리뷰 M-3) — 「해결된 결정은 §3 에서 빠지고 §0 에만 남는다」 ·
-# 「§0 이 상위집합」. §0 에서 `[해결 …]` 인 결정이 §3 에 열린 결정으로 있으면 템플릿이 그 모순을 가르친다.
+# 템플릿이 자기 규칙과 모순하지 않는다(최종 리뷰 M-3) — R2(N22) 부터 「해결한 결정도 §3 에 해결 표시와 함께
+# 남는다」 · 「§3 의 결정은 전부 §0 에 있다」. §0 에서 `[해결 …]` 인 결정이 §3 에 없거나 §3 줄에 해결 표시가
+# 없으면 템플릿이 옛 규칙(§3 은 미해결 목록)을 가르친다.
 # 결정 id 는 게이트와 같은 규칙(항목 줄의 **선두** OQ<n>)으로 읽는다. 원소 0 이면 공허하므로 양성 대조를 먼저.
 tpl_oq="$(PYTHONDONTWRITEBYTECODE=1 python3 - "$TPL_B" <<'PY'
 import re, sys
@@ -1586,8 +1622,8 @@ def lead(s):
 s0, s3 = lead(sec(0)), lead(sec(3))
 resolved = {k for k, v in s0.items() if any("[해결" in x for x in v)}
 print(("YES" if s0 and s3 and resolved else "NO") + "\t양성대조: §0·§3 결정 줄과 §0 의 해결 결정을 읽었다")
-bad = sorted(resolved & set(s3))
-print(("NO" if bad else "YES") + "\t§0 에서 해결된 결정이 §3 에 없다" + (f" (위반: {bad})" if bad else ""))
+bad = sorted(k for k in resolved if not any("[해결" in x for x in s3.get(k, [])))
+print(("NO" if bad else "YES") + "\t§0 에서 해결된 결정이 §3 에 해결 표시와 함께 있다" + (f" (위반: {bad})" if bad else ""))
 miss = sorted(set(s3) - set(s0))
 print(("NO" if miss else "YES") + "\t§3 의 결정이 전부 §0 에 있다 (§0 이 상위집합)" + (f" (누락: {miss})" if miss else ""))
 PY

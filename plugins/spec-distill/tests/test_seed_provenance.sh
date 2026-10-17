@@ -409,7 +409,7 @@ assert_not_contains "$(cat "$TMP/m.err")" "LEAKHEAD" "모양 어긋난 풀이 �
 assert_not_contains "$(cat "$TMP/m.err")" "LEAKTAIL" "모양 어긋난 풀이 줄: 줄 «끝» 도 싣지 않는다"
 # 부재 단언은 «내가 고른 낱말» 만 막는다 — 줄의 어느 토막이든 메시지 어디에 실려도 걸리게 하려면
 # 가변부가 번호 하나뿐임을 전문 동등으로 못 박아야 한다. 이 메시지를 고치면 여기가 RED 가 된다(그것이 의도다).
-exp_head='[spec-distill] audit `## 2. 질문 전체` 의 풀이 줄 1개가 모양(`- 내가 읽은 것: 「…」 — 고름|고르지 않음`)과 다르다 — 그 줄의 확인을 읽을 수 없어 판단하지 않는다(malformed_reading_lines, 위반이 아니다). 그 절 안에서 '
+exp_head='[spec-distill] audit `## 2. 질문 전체` 의 풀이 줄 1개가 모양(`- 내가 읽은 것: 「…」 — 고름|고르지 않음`, 끝에 ` — 사용자가 적은 말: 「…」` 가 붙을 수 있다)과 다르다 — 그 줄의 확인을 읽을 수 없어 판단하지 않는다(malformed_reading_lines, 위반이 아니다). 그 절 안에서 '
 exp_tail=' 번째 줄이다(줄 내용은 싣지 않는다 — 요청문에서 온 글자다).'
 assert_eq "$(cat "$TMP/m.err")" "${exp_head}${m_no}${exp_tail}" "모양 어긋난 풀이 줄: stderr 전문에서 가변인 것은 번호 하나뿐이다"
 assert_eq "$(cmp -s "$TMP/m.md" "$TMP/m.before" && echo same)" "same" "모양 어긋난 풀이 줄: --fix 여도 진짜 확인을 떼지 않는다"
@@ -458,8 +458,11 @@ assert_not_contains "$(cat "$TMP/t.err")" "malformed_reading_lines" "템플릿 �
 TPL="$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md"
 tline="$(grep -F '내가 읽은 것:' "$TPL" | head -1)"
 [ -n "$tline" ] && ok "템플릿에 풀이 줄이 있다" || no "템플릿에 '내가 읽은 것:' 줄이 없다 — 아래 판정은 무의미하다"
-pick="$(printf '%s\n' "$tline" | sed -e 's/<풀이 문장>/확인된 풀이다./' -e 's/<고름 | 고르지 않음>/고름/')"
-skip="$(printf '%s\n' "$tline" | sed -e 's/<풀이 문장>/안 고른 풀이다./' -e 's/<고름 | 고르지 않음>/고르지 않음/')"
+# 템플릿 줄 끝의 선택 꼬리 `[ — 사용자가 적은 말: 「<…>」]` 는 대괄호째 떼면 꼬리 없는 줄, 대괄호만 벗기고 채우면
+# 꼬리 있는 줄이다 — 두 모양 다 풀이 줄이어야 한다.
+pick="$(printf '%s\n' "$tline" | sed -e 's/<풀이 문장>/확인된 풀이다./' -e 's/<고름 | 고르지 않음>/고름/' -e 's/\[ — 사용자가 적은 말: 「<적은 말 그대로>」\]//')"
+skip="$(printf '%s\n' "$tline" | sed -e 's/<풀이 문장>/안 고른 풀이다./' -e 's/<고름 | 고르지 않음>/고르지 않음/' -e 's/\[ — 사용자가 적은 말: 「<적은 말 그대로>」\]//')"
+tailed="$(printf '%s\n' "$tline" | sed -e 's/<풀이 문장>/꼬리 있는 풀이다./' -e 's/<고름 | 고르지 않음>/고름/' -e 's/\[ — 사용자가 적은 말: 「<적은 말 그대로>」\]/ — 사용자가 적은 말: 「기타로 적었다」/')"
 [ "$pick" != "$tline" ] && [ "$skip" != "$tline" ] && ok "템플릿 풀이 줄의 자리표 둘을 채웠다" \
   || no "템플릿 풀이 줄의 자리표 모양이 바뀌었다('$tline') — 이 테스트의 치환과 seed_provenance 의 정규식을 함께 고쳐라"
 printf -- '---\ntype: interview-seed-audit\n---\n\n## 1. 원문\n\n원문.\n\n## 2. 질문 전체\n\n### 라운드 1\n\n- 확인 질문: 라운드 1\n%s\n%s\n' "$pick" "$skip" > "$TMP/t.audit.md"
@@ -467,6 +470,12 @@ printf -- '---\ntype: interview-seed\n---\n\n확인된 풀이다. (사용자 확
 python3 "$P" marks "$TMP/t.md" "$TMP/t.audit.md" > "$TMP/t.json" 2>/dev/null; rc=$?
 assert_eq "$rc" "1" "템플릿 줄 모양: 고르지 않은 풀이의 표시는 위반"
 assert_eq "$(j "$TMP/t.json" 'd["invalid"], d["reading_lines"]')" "(['안 고른 풀이다.'], 2)" "템플릿 줄 모양: 고른 풀이의 표시는 유지 · 풀이 줄 둘을 읽었다"
+# 꼬리 있는 모양(템플릿 도출) — 모양 어긋남(rc 2)이 아니고, 고름 풀이는 확인 근거다.
+printf -- '---\ntype: interview-seed-audit\n---\n\n## 1. 원문\n\n원문.\n\n## 2. 질문 전체\n\n### 라운드 1\n\n- 확인 질문: 라운드 1\n%s\n' "$tailed" > "$TMP/t.audit.md"
+printf -- '---\ntype: interview-seed\n---\n\n꼬리 있는 풀이다. (사용자 확인)\n' > "$TMP/t.md"
+python3 "$P" marks "$TMP/t.md" "$TMP/t.audit.md" > "$TMP/t.json" 2>/dev/null; rc=$?
+assert_eq "$rc" "0" "템플릿 줄 모양(꼬리): 사용자가 적은 말 꼬리가 달린 풀이 줄도 확인 근거다"
+assert_eq "$(j "$TMP/t.json" 'd["invalid"], d["reading_lines"]')" "([], 1)" "템플릿 줄 모양(꼬리): 꼬리 달린 줄을 풀이 줄로 읽었다"
 
 # ── seed 를 못 쓰면 rc 2 — rc 1(위반)과 섞이지 않는다 ─────────────────────────
 cp "$TMP/s.orig.md" "$TMP/ro.md"; chmod 444 "$TMP/ro.md"
@@ -488,7 +497,7 @@ needle = 'for para in re.split(r"\\n\\s*\\n", body.strip()):\n        whole'
 open(sys.argv[2], "w", encoding="utf-8").write(t.replace(needle, 'for para in [body]:\n        whole', 1))
 print("MUTATED" if needle in t else "UNCHANGED")
 PY
-cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$TMP/"
+cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$ROOT/plugins/spec-distill/scripts/section6.py" "$ROOT/plugins/spec-distill/scripts/seed_body.py" "$ROOT/plugins/spec-distill/scripts/docreview_advice.py" "$TMP/"
 python3 "$TMP/mutp.py" classify "$TMP/p.md" --audit "$TMP/p.audit.md" > "$TMP/pm.json" 2>/dev/null
 [ "$(j "$TMP/pm.json" '[s["basis"] for s in d["sentences"]]' 2>/dev/null)" = "['none']" ] \
   && ok "변이: 문단 경계를 지우면 다음 문단의 원문이 저자로 떨어진다 — 문단 경계 단언에 이빨이 있다" \
@@ -511,7 +520,7 @@ needle = 's = re.sub(r"\\s+", " ", s).strip()'
 open(sys.argv[2], "w", encoding="utf-8").write(t.replace(needle, "s = s.strip()", 1))
 print("MUTATED" if needle in t else "UNCHANGED")
 PY
-cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$TMP/"
+cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$ROOT/plugins/spec-distill/scripts/section6.py" "$ROOT/plugins/spec-distill/scripts/seed_body.py" "$ROOT/plugins/spec-distill/scripts/docreview_advice.py" "$TMP/"
 cp "$TMP/s.orig.md" "$TMP/s3.md"
 python3 "$TMP/mut.py" marks "$TMP/s3.md" "$TMP/a.audit.md" > "$TMP/m4.json" 2>/dev/null
 [ "$(j "$TMP/m4.json" 'len(d["invalid"])' 2>/dev/null)" = "4" ] \

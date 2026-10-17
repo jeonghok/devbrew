@@ -26,7 +26,7 @@ SIB="$(awk '/^## seed 를 입력으로 받았을 때/{f=1; next} /^## /{f=0} f' 
 [ -n "$SIB" ] && ok "절 추출: seed 입력 규약 (vacuous 아님)" || no "절 추출: seed 입력 규약이 비었다 — 아래 판정은 무의미하다"
 assert_contains "$SIB" "| 사용자 발화를 그대로 옮긴 것 | 사용자 | 표시가 있으면 확인, 없으면 미확인 |" "AC7: 사용자 원문은 확인 표시 없이도 사용자 출처"
 assert_contains "$SIB" "| 저자가 풀어 쓴 것에 «(사용자 확인)» 이 붙은 것 | 사용자(확인으로 획득) | 확인 |" "AC7: 확인된 풀이는 사용자 출처 · 확인"
-assert_contains "$SIB" "| 그 밖의 저자 문장(«다시 검증할 것 —» 문단 포함) | Phase 0 저자 | 미확인 |" "AC7: 저자 문장은 저자 출처"
+assert_contains "$SIB" "| 그 밖의 저자 문장(«다시 검증할 것 —» 문단 안의 표시 없는 문장 포함) | Phase 0 저자 | 미확인 |" "AC7: 저자 문장은 저자 출처"
 assert_not_contains "$SIB" "전부 사용자" "옛 규약(seed 전문이 전부 사용자 출처)이 없다"
 assert_contains "$SIB" '§6 `S1` 은 「풀린 입력」 원문 그대로다' "S1 규약은 그대로다(AC7)"
 assert_contains "$(bash_lines "$SIB")" 'seed_provenance.py" classify' "가름은 기계가 한다(실행 줄)"
