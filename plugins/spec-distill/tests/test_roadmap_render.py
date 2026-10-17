@@ -7,6 +7,7 @@ Run (리포 루트에서): python3 -m unittest plugins/spec-distill/tests/test_r
 from __future__ import annotations
 
 import difflib
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -244,7 +245,13 @@ class GoldenSample(unittest.TestCase):
         self.assertEqual(kinds["P1"], R.KIND_BRANCH)
         self.assertEqual(kinds["P3"], R.KIND_DECISION)
         self.assertEqual(kinds["R0"], R.KIND_BRANCH)
-        self.assertEqual(sum(1 for k in kinds.values() if k == R.KIND_BUNDLE), 10)
+        # 묶음 에픽 수는 살아 있는 로드맵에서 재분해로 늘 수 있다 — 숫자를 박지 않고, 에픽 번호 꼴의
+        # 파일(R10.md · P1.md 등)이 묶음 종류 블록과 정확히 같은 집합인지 양쪽으로 잰다: 블록 없는 묶음
+        # 파일(지난 재분해의 찌꺼기)도, 묶음이 아닌 블록 이름의 파일도 실패다.
+        bundles = sorted(i for i, k in kinds.items() if k == R.KIND_BUNDLE)
+        self.assertGreaterEqual(len(bundles), 10)
+        on_disk = sorted(p.stem for p in RM_DIR.glob("*.md") if re.fullmatch(r"[PR]\d+[a-z]?", p.stem))
+        self.assertEqual(on_disk, bundles)
 
     def test_bundles_byte_equal(self):
         diffs = []
