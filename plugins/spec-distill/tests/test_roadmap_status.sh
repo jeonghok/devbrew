@@ -647,7 +647,9 @@ PY
 REAL="$(real_check "$ROOT")"
 field_of() { printf '%s\n' "$REAL" | awk -F'\t' -v k="$1" '$1==k {print $2}'; }
 assert_eq "$(field_of ERRORS)" "[]" "실데이터 AC1: 로드맵 형식 깨짐 없음"
-assert_eq "$(field_of BLOCKS)" "P1:branch P2:branch P3:decision P4:decision R0:branch R1:bundle R2:bundle R7:bundle R3:bundle R4:bundle R6:bundle R2a:bundle R5:bundle R8:bundle R9:bundle" "실데이터 AC1: 블록 15개와 종류"
+# 처음 15블록은 이름 · 종류 · 순서가 그대로이고, 재분해로 뒤에 붙은 블록은 묶음 에픽이어야 한다
+# (references/redecompose.md — 새 에픽은 R<max+1>). 블록 수를 박지 않는다.
+assert_grep "$(field_of BLOCKS)" '^P1:branch P2:branch P3:decision P4:decision R0:branch R1:bundle R2:bundle R7:bundle R3:bundle R4:bundle R6:bundle R2a:bundle R5:bundle R8:bundle R9:bundle( R[0-9]+[a-z]?:bundle)*$' "실데이터 AC1: 처음 15블록과 종류 · 뒤에 붙은 블록은 묶음"
 assert_eq "$(field_of RISK)" "True" "실데이터: 위험 번호표 K1~K15 가 brief §5 원문과 같다"
 assert_eq "$(field_of BAD)" "[]" "실데이터 AC2: 묶음 10개의 frontmatter · 절 · §6 · 공통 목표 · 의도 · 범위가 바이트 그대로"
 assert_eq "$(field_of UNASSIGNED)" "[]" "실데이터 AC3: 미배정 번호 0"
