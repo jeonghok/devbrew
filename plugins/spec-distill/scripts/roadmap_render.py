@@ -172,7 +172,7 @@ def extract_rows(roadmap_text: str, read_bundle) -> list:
 
         def t(key, f=f):
             return field_text(f[key])
-        extras = dict((k, field_text(f[k])) for k in EXTRA_COLUMNS if k in f)
+        extras = dict((k, v) for k in EXTRA_COLUMNS if k in f for v in [field_text(f[k])] if v != "없음")
         if b["kind"] == "bundle":
             if f["묶음"] != b["id"] + ".md":
                 raise TableError("%s: 묶음 이름이 `%s.md` 가 아니다" % (b["id"], b["id"]))
@@ -413,11 +413,11 @@ def replace_epics(roadmap_text: str, blocks: list) -> str:
 def history_entry(date: str, reason: str, changes: list, quotes: list) -> str:
     """새 재분해 이력 항목 하나 — `### <날짜> · <사유>` · `- 바뀜:` · `- 원문:` + 줄마다 「…」."""
     for q in quotes:
-        if not q or "\n" in q or not is_quote("「%s」" % q):
+        if len(q.splitlines()) != 1 or not is_quote("「%s」" % q):
             raise TableError("원문은 한 줄이고 「 」 가 짝이 맞아야 한다: %r" % q)
     if not quotes:
         raise TableError("재분해 이력에 원문이 없다")
-    if not reason.strip() or "\n" in reason:
+    if len(reason.splitlines()) != 1 or not reason.strip():
         raise TableError("재분해 이력 사유는 한 줄이다: %r" % reason)
     out = ["### %s · %s" % (date, reason.strip())]
     if changes:

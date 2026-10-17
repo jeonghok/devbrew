@@ -259,6 +259,17 @@ class FormatV2(unittest.TestCase):
             "## 7. 인터페이스\n\n- 받는 것: 없음\n- 넘기는 것: 없음\n"))
         self.assertEqual(rows, [self.ROW])
 
+    def test_extract_table_parse_is_stable_with_none_and_list_fields(self):
+        block = ("### A1 — 가\n- 의도: 의도\n- 범위: 자유\n- 의존: 없음\n- 브랜치: feature/a\n- 묶음: A1.md\n"
+                 "- 경로 예약: 없음\n- 병렬: 없음\n- 근거:\n  - 하나\n  - 둘\n")
+        text = "---\ntype: roadmap\nsource_brief: b.md\n---\n\n## 에픽\n\n" + block + "\n## 재분해 이력\n\n- 없음\n"
+        bundle = ("---\ntype: epic-bundle\nepic: A1\nroadmap: r\nsource_brief: b.md\nids: [C4]\n---\n\n"
+                  "## 7. 인터페이스\n\n- 받는 것: 없음\n- 넘기는 것: 없음\n")
+        rows = R.extract_rows(text, lambda name: bundle)
+        self.assertNotIn("병렬", rows[0].extras)
+        self.assertIn("근거", rows[0].extras)
+        self.assertEqual(R.parse_table(R.format_table(rows)), rows)
+
     def test_table_narrow_unless_extras(self):
         plain = R.Row("B1", "나", R.KIND_DECISION, "", "i", "s", "없음", "없음", "없음", ["S1", "C4"])
         narrow = R.format_table([plain])
@@ -274,7 +285,7 @@ class FormatV2(unittest.TestCase):
                          "### 2026-10-17 · 재분해\n- 바뀜: 바뀜 R5 · 새 R11\n- 원문:\n  - 「좋아」\n  - 「가 「나」 다」\n")
         self.assertEqual(R.history_entry("2026-10-17", "처음 로드맵", [], ["승인"]),
                          "### 2026-10-17 · 처음 로드맵\n- 원문:\n  - 「승인」\n")
-        for bad in ("열린 「 하나", "닫힌 」 하나", "", "줄\n바꿈"):
+        for bad in ("열린 「 하나", "닫힌 」 하나", "", "줄\n바꿈", "줄\r바꿈", "줄\u2028바꿈"):
             with self.assertRaises(R.TableError):
                 R.history_entry("2026-10-17", "x", [], [bad])
 
