@@ -41,6 +41,8 @@ next_phase: superpowers:writing-plans
 - [번호 대조](#번호-대조)
 - [미룸](#미룸)
 - [Metadata](#metadata)
+- [판정](#판정)
+- [구현 대조 — 계획 1](#구현-대조--docssuperpowersplans2026-10-17-epic-conductor-1-format-statemd)
 
 ## Handoff Context
 
