@@ -665,7 +665,7 @@ assert_eq "$(field_of BAD)" "[]" "실데이터 AC2: 묶음 10개의 frontmatter 
 assert_eq "$(field_of UNASSIGNED)" "[]" "실데이터 AC3: 미배정 번호 0"
 assert_eq "$(field_of ORPHANS)" "[]" "실데이터 AC3: 고아 발화 0"
 assert_eq "$(field_of UNKNOWN)" "[]" "실데이터: brief 에 없는 번호 0"
-assert_eq "$(field_of OVERLAPS)" "[{'blocks': ['R2', 'R3'], 'paths': ['plugins/spec-distill/references/docreview-profiles/design-doc.md']}]" "실데이터: 의존 없이 겹치는 경로 예약은 정보 하나 — R2 ↔ R3 의 design-doc.md(병렬 유지, 충돌은 머지 때 푼다)"
+assert_eq "$(field_of OVERLAPS)" "[{'blocks': ['R2', 'R3'], 'paths': ['plugins/spec-distill/references/docreview-profiles/design-doc.md']}, {'blocks': ['R5', 'R10'], 'paths': ['plugins/spec-distill/skills/spec-interview/references/finishing.md']}]" "실데이터: 의존 없이 겹치는 경로 예약은 정보 둘 — R2 ↔ R3 의 design-doc.md · R5 ↔ R10 의 finishing.md(병렬 유지, 충돌은 머지 때 푼다)"
 assert_eq "$(field_of R0TABLE)" "True" "실데이터: R0 블록의 항목 · 발화 = R0 설계문서 번호 대조 표의 첫 칸"
 assert_eq "$(field_of LOCKBAD)" "[]" "실데이터: 락 지도의 모든 줄이 다른 에픽이 예약한 파일을 자기 것으로 적지 않았다"
 [ "$(field_of LOCKROWS)" -ge 10 ] && ok "실데이터: 락 지도 줄 $(field_of LOCKROWS)개를 읽었다(양성 대조 — 표를 못 읽으면 0)" || no "실데이터: 락 지도 줄을 10개 미만으로 읽었다($(field_of LOCKROWS))"

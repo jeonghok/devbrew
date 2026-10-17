@@ -155,6 +155,7 @@ APPROVALS = {
     ('2026-10-17 · 재분해 #2', 2): (4,),
     ('2026-10-17 · 재분해 #2', 3): (5,),
     ('2026-10-17 · 재분해 #2', 8): (6,),
+    ('2026-10-17 · R5 계획 셋의 브랜치 · 경로 예약 · 순서 이유 등록과 리뷰 모델 레포 설정(R5 설계 §6 · §9 · §11)', 0): (1,),
 }
 
 
@@ -175,7 +176,7 @@ class LiveRoadmap(unittest.TestCase):
         old_lines = [l for l in old_body.splitlines() if l.startswith("- 20")]
         new_body = self.text.split("## 재분해 이력\n", 1)[1].split("\n## ", 1)[0]
         entries = ["### " + e for e in new_body.split("\n### ")[1:]]
-        self.assertEqual(len(entries), len(old_lines))
+        self.assertGreaterEqual(len(entries), len(old_lines))
         for line, entry in zip(old_lines, entries):
             seq = quotes(entry)
             at = 0
@@ -191,18 +192,39 @@ class LiveRoadmap(unittest.TestCase):
         for e in entries:
             self.assertTrue(bool(e["quotes"]) != bool(e["no_words"]), e["date"])
 
-    def _entries(self):
-        """(키, 새 항목, 그 항목의 옛 줄 인용들) — 옛 줄과 새 항목은 날짜 순서로 짝지어진다."""
+    def _entries(self, added=False):
+        """(키, 새 항목, 그 항목의 옛 줄 인용들) — 옛 줄과 새 항목은 날짜 순서로 짝지어진다.
+
+        added=True 면 PRE 뒤에 더해진 항목(옛 줄이 없다)을 (키, 항목, None) 으로 낸다. 기본은 옛 줄이 있는 항목만."""
         old_entries, _ = parse_history(git_show(PRE + ":" + RM))
         new_entries, errors = parse_history(self.text)
         self.assertEqual(errors, [])
-        self.assertEqual([e["date"] for e in old_entries], [e["date"] for e in new_entries])
-        seen, out = {}, []
-        for o, n in zip(old_entries, new_entries):
+        self.assertGreaterEqual(len(new_entries), len(old_entries))
+        self.assertEqual([e["date"] for e in old_entries], [e["date"] for e in new_entries[:len(old_entries)]])
+        seen, out, extra = {}, [], []
+        for i, n in enumerate(new_entries):
             k = "%s · %s" % (n["date"], n["reason"])
             seen[k] = seen.get(k, 0) + 1
-            out.append((k if seen[k] == 1 else "%s #%d" % (k, seen[k]), n, o["quotes"]))
-        return out
+            key = k if seen[k] == 1 else "%s #%d" % (k, seen[k])
+            if i < len(old_entries):
+                out.append((key, n, old_entries[i]["quotes"]))
+            else:
+                extra.append((key, n, None))
+        return extra if added else out
+
+    def test_entries_added_after_pre_are_checked_by_their_own_rule(self):
+        """PRE 뒤에 더해진 항목은 옛 줄이 없다 — 원문은 자기 바뀜 항목 끝 승인 인용의 부분집합이고 사용자 말이 아닌 인용이 없다."""
+        added = self._entries(added=True)
+        self.assertTrue(added, "PRE 뒤에 더해진 이력 항목이 없다 — 이 검사가 비어 있다")
+        for key, e, _none in added:
+            self.assertTrue(e["changes"], key)
+            self.assertFalse(e["no_words"], key)
+            approved = [q for c in e["changes"] for q in quotes(c)]
+            self.assertTrue(e["quotes"], key)
+            self.assertLessEqual(set(e["quotes"]), set(approved), key)
+            self.assertEqual([q for q in e["quotes"] if q in NOT_USER_WORDS], [], key)
+            for c in e["changes"]:
+                self.assertTrue(c.endswith("」"), "%s: 바뀜 항목이 승인 인용으로 끝나지 않는다: %s" % (key, c))
 
     def test_user_words_column_is_exactly_the_original_user_quotes(self):
         for key, e, orig in self._entries():
@@ -222,7 +244,7 @@ class LiveRoadmap(unittest.TestCase):
             self.assertEqual(got, e["quotes"], key)
 
     def test_each_approval_sits_on_its_own_change(self):
-        for key, e, _orig in self._entries():
+        for key, e, _orig in self._entries() + self._entries(added=True):
             for i, c in enumerate(e["changes"]):
                 at = tuple(e["quotes"].index(q) + 1 for q in quotes(c) if q not in NOT_USER_WORDS)
                 self.assertEqual(at, APPROVALS.get((key, i), ()), "%s 바뀜 %d" % (key, i))

@@ -1,11 +1,12 @@
 ---
 type: roadmap
 source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.md
+review_model: opus
 ---
 
 # 집요한 탐색 · PM 분해 · 에픽별 지휘 · 의도 왜곡 장치 제거 — 로드맵
 
-승인된 분해안(S47)의 에픽 지도다. 에픽마다 원본 brief · 이 로드맵 · 에픽 묶음을 넘긴다(D39). 상태 칸은 없다 — 단계는 `plugins/spec-distill/scripts/roadmap_status.py` 가 git 에서 계산한다. 단위는 로드맵 > 에픽(spec 하나) > plan(PR 하나) > task 이고 에픽 하나가 plan · PR 여럿을 낼 수 있다 — 다만 지금의 상태 계산은 에픽 하나를 브랜치 하나로 센다(에픽 하나의 PR 여러 개 추적은 R5).
+승인된 분해안(S47)의 에픽 지도다. 에픽마다 원본 brief · 이 로드맵 · 에픽 묶음을 넘긴다(D39). 상태 칸은 없다 — 단계는 `plugins/spec-distill/scripts/roadmap_status.py` 가 git 에서 계산한다. 단위는 로드맵 > 에픽(spec 하나) > plan(PR 하나) > task 이고 에픽 하나가 plan · PR 여럿을 낼 수 있다 — 에픽 하나는 `브랜치:` 에 브랜치를 여럿 적어 PR 여럿을 낼 수 있고, 상태 계산은 브랜치마다 · 계획마다 센다.
 
 ## 에픽
 
@@ -148,9 +149,10 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
   - 한다: 사람 몫은 지금 답할 수 있는지 판단해 배경 설명과 함께 몰아 받고 나머지는 멈추지 않고 병렬로 끝까지 · 외부 정지는 사용자에게(미리 받은 답이 있으면 그 답으로) · 머지 전 에픽 사이 통합 리뷰 · 모든 에픽 머지 뒤 끝에서 끝 확인 · 하위(에픽 worktree · 브랜치)는 단일 세션과 같은 skill 호출 · 같은 동작(사용자 게이트는 skill 문면 그대로 전달 · 리뷰 원장은 지휘자가 같은 상태 경로를 넘겨 agent 를 바꿔도 이어짐) · 병렬은 불가피할 때만 멈추고 다시 이음 · R2 가 R3 에 넘긴 번호 대조 둘(설계 없는 묶음의 「셀 수 없음」 경고 · 기각 번호를 승인 게이트에 보이고 「반영」으로 되돌리기) · 사용자 몫 감사(혼자 정한 사용자 몫 · 줄어든 넘김을 찾아 배경과 함께 하나씩 묻기) · 미룸 · 넘김 조율(담당 에픽을 정해 넘기고 뒤에서 처리됐는지 확인) · 살아 있는 subagent 를 보이고 놀고 있는 것은 내림 · /compact 시점은 지휘자가 판단 · 구현 뒤 다시 불러도 같은 동작(설계 입력: 로드맵 roadmap.md `## 재분해 이력` 의 R5 줄 사용자 원문 전부 — 설계문서 `## 번호 대조` 에 원문마다 반영/기각 행) · 흐름 고정 점검(flexibility-audit.md)의 R5 행 · 실행 기록 회수 · 재개 · 부분 계속 · 머지 원칙 · qg 의도 회귀 · 에픽 사이 이음매 · base 이동 · 구현 이후 단계 · 쓴 자원 정리(브랜치 제외) · 계층 · 온톨로지 · 레포 전용 값 금지
   - 안 한다: 상태줄 · 패널(R6) · 리뷰 엔진 동작 변경(R2a)
 - 의존: R1, R2, R7, R3, R4, R6, P2, P3
-- 브랜치: feature/epic-conductor
+- 브랜치: feature/epic-conductor · feature/epic-conductor-seams · feature/epic-conductor-loop
 - 묶음: R5.md
-- 경로 예약: 없음
+- 경로 예약: plugins/spec-distill/skills/epic-conductor/, plugins/spec-distill/skills/roadmap-status/SKILL.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/skills/spec-interview/references/finishing.md, plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/references/roadmap-ontology.md, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/references/proceed-gate.md, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/roadmap_write.py, plugins/spec-distill/scripts/roadmap_render.py, plugins/spec-distill/scripts/check_bundle_coverage.py, plugins/spec-distill/scripts/spec_review_bundle.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/templates/roadmap-template.md
+- 순서 이유: 계획 셋을 차례로(형식 · 상태 → 이음매 → 지휘자) — 셋째는 R2a 가 qg 테스트 스크립트를 shared/ 로 옮긴 뒤(설계 D1.3 · §11)
 
 ### R8 — 의존 선언 · 부재 시 강등 · devbrew 밖 경로
 - 의도: 이 장치들이 devbrew 밖 레포와 superpowers 부재에서도 통하게 한다
@@ -374,6 +376,11 @@ R5 전까지 지휘 세션이 따르는 절차다. 장치가 아니라 절차다
   - 「R2a 가 고침 (권장)」
   - 「채택 — 이동은 R2a 가 (권장)」
   - 「이대로 다시 나눈다 (권장)」
+
+### 2026-10-17 · R5 계획 셋의 브랜치 · 경로 예약 · 순서 이유 등록과 리뷰 모델 레포 설정(R5 설계 §6 · §9 · §11)
+- 바뀜: 바뀐 에픽 R5 「① /compact 후 다음 세션 줄 (권장)」
+- 원문:
+  - 「① /compact 후 다음 세션 줄 (권장)」
 
 ## 위험 번호표
 
