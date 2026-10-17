@@ -6,6 +6,7 @@ Run (리포 루트에서): python3 -m unittest plugins/spec-distill/tests/test_r
 """
 from __future__ import annotations
 
+import ast
 import re
 import sys
 import unittest
@@ -36,7 +37,7 @@ PINS = {
     "브랜치": (("roadmap_status.py", "progress"),),
     "번호 대조 행": (("check_bundle_coverage.py", "table_rows"),),
     "미룸 · 넘김 줄": (("roadmap_model.py", "handoff_rows"),),
-    "넘김 확인 줄": (("conductor_state.py", "confirm_line"), ("roadmap_model.py", "CONFIRM_RE")),
+    "넘김 확인 줄": (("conductor_state.py", "confirm_line", "쓰기"), ("roadmap_model.py", "CONFIRM_RE", "읽기")),
     "기계 상태": (("conductor_state.py", "parse_machine"), ("control_plane.py", "overlay")),
 }
 ALLOW_LINK = ("#<n>", "- 넘김 확인", "받는 곳", "받듦", "Spec:", "**Spec:**")   # 코드 글에 그대로 있어야 한다
@@ -68,8 +69,24 @@ def link_ok(token: str, corpus: str) -> bool:
     return token in COLUMNS or token in KEYS
 
 
+def _target_names(target) -> list:
+    if isinstance(target, ast.Name):
+        return [target.id]
+    if isinstance(target, (ast.Tuple, ast.List)):
+        return [n for t in target.elts for n in _target_names(t)]
+    return []
+
+
 def defined(name: str, text: str) -> bool:
-    return re.search(r"^(def %s\b|%s\s*=)" % (name, name), text, re.M) is not None
+    """최상위 def · 대입(주석 달린 것 · 튜플 풀기 포함)이 이름을 정의한다. import 재수출은 정의가 아니다."""
+    for node in ast.parse(text).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == name:
+            return True
+        if isinstance(node, ast.Assign) and any(name in _target_names(t) for t in node.targets):
+            return True
+        if isinstance(node, ast.AnnAssign) and name in _target_names(node.target):
+            return True
+    return False
 
 
 class Ontology(unittest.TestCase):
@@ -100,9 +117,7 @@ class Ontology(unittest.TestCase):
         for r in rows("## 객체")[2:]:
             for seg in r[4].split(" · "):
                 m = re.search(r"[→←]", seg)
-                if not m:
-                    continue
-                src = seg[:m.start()].strip()
+                src = (seg[:m.start()] if m else seg).strip()
                 if src in ALLOW_SOURCE:
                     continue
                 if not (src.startswith("`") and src.endswith("`") and src.count("`") == 2):
@@ -113,9 +128,11 @@ class Ontology(unittest.TestCase):
         table = {r[0]: r for r in rows("## 객체")[2:]}
         problems = []
         for obj, pairs in PINS.items():
-            for script, sym in pairs:
+            for script, sym, *role in pairs:
                 if "`%s`" % script not in table[obj][5]:
                     problems.append("%s: 주인 칸에 %s 없음" % (obj, script))
+                if role and "%s `%s`" % (role[0], script) not in table[obj][5]:
+                    problems.append("%s: 주인 칸에 「%s `%s`」 없음" % (obj, role[0], script))
                 text = (SCRIPTS / script).read_text(encoding="utf-8")
                 if not defined(sym, text):
                     problems.append("%s: %s 에 %s 정의 없음" % (obj, script, sym))
@@ -128,7 +145,8 @@ class Ontology(unittest.TestCase):
     def test_epic_row_names_every_field_and_kind_rule(self):
         epic = next(r for r in rows("## 객체")[2:] if r[0] == "에픽")
         cell = epic[3]
-        self.assertEqual([f for f in FIELDS if f not in cell], [])
+        listed = cell.split("칸:")[1].split(".")[0].split(" · ")
+        self.assertEqual(sorted(x.strip() for x in listed), sorted(FIELDS))
         self.assertTrue(REQUIRED and FORBIDDEN)
         for name in ("REQUIRED", "FORBIDDEN"):
             self.assertIn("`%s`" % name, cell)
