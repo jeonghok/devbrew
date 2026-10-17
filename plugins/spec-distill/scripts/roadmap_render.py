@@ -17,11 +17,13 @@ import section6  # noqa: E402
 from check_brief import section4_items  # noqa: E402
 from check_verbatim_coverage import ITEM_RE as S6_ITEM_RE  # noqa: E402
 from roadmap_model import (  # noqa: E402
-    BLOCK_ID_RE, KEY_RE, OQ_LINE_RE, FormatError, brief_universe, bundle_ids, id_sort_key, parse_ids,
-    parse_roadmap, section_body)
+    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, OQ_LINE_RE, FormatError, brief_universe, bundle_ids, field_text,
+    id_sort_key, is_quote, parse_ids, parse_roadmap, section_body)
 
 TABLE_HEADING = "## 분해안"
 COLUMNS = ("번호", "이름", "종류", "의도", "범위", "의존", "브랜치", "경로 예약", "배정 번호", "받는 것", "넘기는 것")
+EXTRA_COLUMNS = EXTRA_FIELDS
+SCOPE_RE = re.compile(r"한다 (\S.*?) / 안 한다 (\S.*)")
 KIND_BUNDLE, KIND_BRANCH, KIND_DECISION = "bundle", "branch", "decision"
 TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "roadmap-template.md"
 C_LINE_RE = re.compile(r"- \S+ (?:confirmed|provisional) \*\*([CD]\d+)\*\* — ")
@@ -48,6 +50,7 @@ class Row:
     ids: list = field(default_factory=list)   # 칸에 적힌 순서 그대로
     receives: str = "없음"
     gives: str = "없음"
+    extras: dict = field(default_factory=dict)   # 선택 칸 — 크기 · 병렬 · 순서 이유 · 근거 · 흐름 · 산출물
 
     def kind_cell(self) -> str:
         if self.kind == KIND_BUNDLE:
@@ -84,7 +87,8 @@ def _split_row(line: str) -> list:
 
 
 def _row(c: list, line: str) -> Row:
-    rid, title, kind_cell, intent, scope, deps, branch, reserved, ids_cell, recv, give = c
+    rid, title, kind_cell, intent, scope, deps, branch, reserved, ids_cell, recv, give = c[:len(COLUMNS)]
+    extras = dict((k, v) for k, v in zip(EXTRA_COLUMNS, c[len(COLUMNS):]) if v != "없음")
     if any(not v for v in c):
         raise TableError("빈 칸이 있다 — 없으면 「없음」이라 쓴다: %r" % line)
     if not BLOCK_ID_RE.fullmatch(rid):
@@ -107,7 +111,7 @@ def _row(c: list, line: str) -> Row:
         n_s = sum(1 for t in ids if _is_s(t))
         if n_s == 0 or n_s == len(ids):
             raise TableError("%s: 묶음 없는 블록은 발화(S) 번호와 그 밖의 번호가 하나 이상씩 있어야 한다" % rid)
-    return Row(rid, title, kind, spec, intent, scope, deps, branch, reserved, ids, recv, give)
+    return Row(rid, title, kind, spec, intent, scope, deps, branch, reserved, ids, recv, give, extras)
 
 
 def parse_table(text: str) -> list:
@@ -120,16 +124,22 @@ def parse_table(text: str) -> list:
     lines = [l for l in body.splitlines() if l.strip().startswith("|")]
     if len(lines) < 3:
         raise TableError("분해안 표가 없거나 에픽 행이 없다")
-    if _split_row(lines[0]) != list(COLUMNS):
-        raise TableError("분해안 표 머리가 칸 열하나(%s)가 아니다" % " · ".join(COLUMNS))
+    head = _split_row(lines[0])
+    if head == list(COLUMNS):
+        width = len(COLUMNS)
+    elif head == list(COLUMNS + EXTRA_COLUMNS):
+        width = len(COLUMNS) + len(EXTRA_COLUMNS)
+    else:
+        raise TableError("분해안 표 머리가 칸 열하나(%s) 또는 그 뒤에 선택 칸 여섯(%s)을 더한 열일곱이 아니다"
+                         % (" · ".join(COLUMNS), " · ".join(EXTRA_COLUMNS)))
     sep = _split_row(lines[1])
-    if len(sep) != len(COLUMNS) or not all(c.count("-") >= 3 and set(c) <= set("-:") for c in sep):
-        raise TableError("분해안 표 구분 행이 칸 열하나가 아니다")
+    if len(sep) != width or not all(c.count("-") >= 3 and set(c) <= set("-:") for c in sep):
+        raise TableError("분해안 표 구분 행의 칸 수가 머리와 다르다")
     rows, seen = [], set()
     for line in lines[2:]:
         cells = _split_row(line)
-        if len(cells) != len(COLUMNS):
-            raise TableError("분해안 표 행이 칸 열하나가 아니다: %r" % line)
+        if len(cells) != width:
+            raise TableError("분해안 표 행의 칸 수가 머리와 다르다: %r" % line)
         row = _row(cells, line)
         if row.id in seen:
             raise TableError("에픽 번호 %s 가 두 번 있다" % row.id)
@@ -139,10 +149,14 @@ def parse_table(text: str) -> list:
 
 
 def format_table(rows: list) -> str:
-    out = [TABLE_HEADING, "", "| " + " | ".join(COLUMNS) + " |", "|" + "---|" * len(COLUMNS)]
+    wide = any(r.extras for r in rows)
+    cols = COLUMNS + (EXTRA_COLUMNS if wide else ())
+    out = [TABLE_HEADING, "", "| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
     for r in rows:
-        cells = (r.id, r.title, r.kind_cell(), r.intent, r.scope, r.deps, r.branch, r.reserved,
-                 " · ".join(r.ids), r.receives, r.gives)
+        cells = [r.id, r.title, r.kind_cell(), r.intent, r.scope, r.deps, r.branch, r.reserved,
+                 " · ".join(r.ids), r.receives, r.gives]
+        if wide:
+            cells += [r.extras.get(k, "없음") for k in EXTRA_COLUMNS]
         out.append("| " + " | ".join(c.replace("|", "\\|") for c in cells) + " |")
     return "\n".join(out) + "\n"
 
@@ -155,6 +169,10 @@ def extract_rows(roadmap_text: str, read_bundle) -> list:
     rows = []
     for b in blocks:
         f = b["fields"]
+
+        def t(key, f=f):
+            return field_text(f[key])
+        extras = dict((k, field_text(f[k])) for k in EXTRA_COLUMNS if k in f)
         if b["kind"] == "bundle":
             if f["묶음"] != b["id"] + ".md":
                 raise TableError("%s: 묶음 이름이 `%s.md` 가 아니다" % (b["id"], b["id"]))
@@ -173,16 +191,16 @@ def extract_rows(roadmap_text: str, read_bundle) -> list:
                         got[key] = line[len("- %s: " % key):]
             if len(got) != 2:
                 raise TableError("%s 묶음 §7 에 받는 것 · 넘기는 것 줄이 없다" % b["id"])
-            rows.append(Row(b["id"], b["title"], KIND_BUNDLE, "", f["의도"], f["범위"], f["의존"],
-                            f["브랜치"], f["경로 예약"], ids, got["받는 것"], got["넘기는 것"]))
+            rows.append(Row(b["id"], b["title"], KIND_BUNDLE, "", t("의도"), scope_text(f["범위"]), t("의존"),
+                            t("브랜치"), t("경로 예약"), ids, got["받는 것"], got["넘기는 것"], extras))
             continue
         try:
             ids = parse_ids(f["발화"]) + parse_ids(f["항목"])
         except FormatError as exc:
             raise TableError("%s: %s" % (b["id"], exc))
         kind = KIND_BRANCH if b["kind"] == "branch" else KIND_DECISION
-        rows.append(Row(b["id"], b["title"], kind, f.get("spec", ""), f["의도"], f["범위"], f["의존"],
-                        f.get("브랜치", "없음"), f["경로 예약"], ids))
+        rows.append(Row(b["id"], b["title"], kind, f.get("spec", ""), t("의도"), scope_text(f["범위"]), t("의존"),
+                        t("브랜치") if "브랜치" in f else "없음", t("경로 예약"), extras=extras, ids=ids))
     return rows
 
 
@@ -274,17 +292,37 @@ def index_brief(brief: str, audit: str) -> BriefIndex:
 
 # ── 블록 · 묶음 · 로드맵 ─────────────────────────────────────────────────────
 
+def scope_lines(scope: str) -> list:
+    """표 칸 「한다 X / 안 한다 Y」 → `- 범위:` 와 하위 항목 둘. 그 꼴이 아니면 한 줄 그대로."""
+    m = SCOPE_RE.fullmatch(scope)
+    if not m:
+        return ["- 범위: " + scope]
+    return ["- 범위:", "  - 한다: " + m.group(1), "  - 안 한다: " + m.group(2)]
+
+
+def scope_text(value) -> str:
+    """로드맵 범위 칸 → 표 칸. 하위 항목은 「한다: …」 · 「안 한다: …」 만이고 둘 다 있어야 한다."""
+    if isinstance(value, str):
+        return value
+    do = [i[len("한다: "):] for i in value if i.startswith("한다: ")]
+    dont = [i[len("안 한다: "):] for i in value if i.startswith("안 한다: ")]
+    if len(do) + len(dont) != len(value) or not do or not dont:
+        raise TableError("범위 하위 항목은 「한다: …」 · 「안 한다: …」 뿐이고 둘 다 있어야 한다: %r" % value)
+    return "한다 %s / 안 한다 %s" % (" · ".join(do), " · ".join(dont))
+
+
 def render_block(r: Row) -> str:
-    lines = ["### %s — %s" % (r.id, r.title), "- 의도: " + r.intent, "- 범위: " + r.scope,
-             "- 의존: " + r.deps,
-             "- 완료: 결정 기록" if r.kind == KIND_DECISION else "- 브랜치: " + r.branch,
-             "- 묶음: " + (r.id + ".md" if r.kind == KIND_BUNDLE else "없음"),
-             "- 경로 예약: " + r.reserved]
+    lines = ["### %s — %s" % (r.id, r.title), "- 의도: " + r.intent] + scope_lines(r.scope) + [
+        "- 의존: " + r.deps,
+        "- 완료: 결정 기록" if r.kind == KIND_DECISION else "- 브랜치: " + r.branch,
+        "- 묶음: " + (r.id + ".md" if r.kind == KIND_BUNDLE else "없음"),
+        "- 경로 예약: " + r.reserved]
     if r.kind == KIND_BRANCH:
         lines.append("- spec: " + r.spec)
     if r.kind != KIND_BUNDLE:
         lines.append("- 발화: " + " · ".join(t for t in r.ids if _is_s(t)))
         lines.append("- 항목: " + " · ".join(t for t in r.ids if not _is_s(t)))
+    lines += ["- %s: %s" % (k, r.extras[k]) for k in EXTRA_COLUMNS if k in r.extras]
     return "\n".join(lines) + "\n"
 
 
@@ -372,9 +410,28 @@ def replace_epics(roadmap_text: str, blocks: list) -> str:
     return "".join(lines[:start + 1]) + "\n" + "\n".join(blocks) + "\n" + "".join(lines[end:])
 
 
-def append_history(roadmap_text: str, line: str) -> str:
+def history_entry(date: str, reason: str, changes: list, quotes: list) -> str:
+    """새 재분해 이력 항목 하나 — `### <날짜> · <사유>` · `- 바뀜:` · `- 원문:` + 줄마다 「…」."""
+    for q in quotes:
+        if not q or "\n" in q or not is_quote("「%s」" % q):
+            raise TableError("원문은 한 줄이고 「 」 가 짝이 맞아야 한다: %r" % q)
+    if not quotes:
+        raise TableError("재분해 이력에 원문이 없다")
+    if not reason.strip() or "\n" in reason:
+        raise TableError("재분해 이력 사유는 한 줄이다: %r" % reason)
+    out = ["### %s · %s" % (date, reason.strip())]
+    if changes:
+        out.append("- 바뀜: " + " · ".join(changes))
+    out.append("- 원문:")
+    out += ["  - 「%s」" % q for q in quotes]
+    return "\n".join(out) + "\n"
+
+
+def append_history(roadmap_text: str, entry: str) -> str:
     lines = roadmap_text.splitlines(keepends=True)
     start, end = _span(lines, "## 재분해 이력")
     body = "".join(lines[start + 1:end]).rstrip("\n")
     tail = "".join(lines[end:])
-    return "".join(lines[:start + 1]) + body + "\n" + line + "\n" + ("\n" + tail if tail else "")
+    sep = "\n\n" if entry.startswith("### ") else "\n"
+    return ("".join(lines[:start + 1]) + body + sep + entry.rstrip("\n") + "\n"
+            + ("\n" + tail if tail else ""))

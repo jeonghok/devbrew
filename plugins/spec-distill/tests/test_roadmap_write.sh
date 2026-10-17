@@ -131,7 +131,8 @@ assert_file_has "$W/docs/rm/E1.md" "source_brief: docs/iv/brief.md" "묶음 fron
 assert_file_has "$W/docs/rm/E1.md" "- 받는 것: 없음" "묶음 §7 받는 것은 표 칸 그대로"
 assert_file_has "$W/docs/rm/E2.md" "- 받는 것: E1 의 x" "묶음 §7 받는 것은 표 칸 그대로(둘째)"
 assert_file_has "$W/docs/rm/E1.md" "- 넘기는 것: E2 에 x" "묶음 §7 넘기는 것은 표 칸 그대로"
-assert_file_has "$W/docs/rm/roadmap.md" "- 2026-10-15 · 처음 로드맵 · 승인 원문 「이대로 승인 (권장)」" "재분해 이력 첫 줄"
+assert_file_has "$W/docs/rm/roadmap.md" "### 2026-10-15 · 처음 로드맵" "재분해 이력 첫 머리"
+assert_file_has "$W/docs/rm/roadmap.md" "  - 「이대로 승인 (권장)」" "재분해 이력 첫 원문"
 assert_file_has "$T/state.md" "## 생성 기록" "표 파일에 생성 기록 절"
 assert_file_has "$T/state.md" "- docs/rm/E2.md" "생성 기록에 묶음 경로"
 
@@ -255,7 +256,7 @@ assert_eq "$(same_as_snap)" "same" "처음 표 그대로 update: 아무것도 �
 # 처음 표 순서에서 E2 만 고치면 바뀜은 E2 하나다
 table "$T/o1.md" "$P1_ROW" "$E1_ROW" "${E2_REGEN/둘째 의도 고침/둘째 의도 다시}"
 assert_eq "$(update "$T/o1.md")" "0" "처음 표 순서에서 E2 만 고침: rc 0"
-assert_file_has "$W/docs/rm/roadmap.md" "· 바뀜 E2 「이대로 다시 나눈다」" "처음 표 순서에서 E2 만 고침: 바뀜은 E2 하나"
+assert_file_has "$W/docs/rm/roadmap.md" "- 바뀜: 바뀜 E2" "처음 표 순서에서 E2 만 고침: 바뀜은 E2 하나"
 g checkout -q -- docs/rm
 # --audit 이 brief 의 `.md` → `.audit.md` 가 아니면 사용법 오류
 cp "$W/docs/iv/brief.audit.md" "$W/docs/iv/other.md"
@@ -274,8 +275,11 @@ cp "$W/docs/rm/E1.md" "$T/E1.keep"
 assert_eq "$(update "$T/u1.md")" "0" "update: rc 0"
 cmp -s "$T/E1.keep" "$W/docs/rm/E1.md" && ok "update: 머지된 E1 묶음은 바이트 그대로" || no "update: E1 묶음이 바뀌었다"
 assert_file_has "$W/docs/rm/E2.md" "- 범위: 한다 다 · 마 / 안 한다 라" "update: 바뀐 E2 묶음 범위 줄"
-assert_file_has "$W/docs/rm/roadmap.md" "- 범위: 한다 다 · 마 / 안 한다 라" "update: 바뀐 E2 블록 범위 줄"
-assert_file_has "$W/docs/rm/roadmap.md" "- 2026-10-16 · 재분해 · 경계 조정 · 바뀜 E2 「이대로 다시 나눈다」" "update: 재분해 이력 줄"
+assert_file_has "$W/docs/rm/roadmap.md" "  - 한다: 다 · 마" "update: 바뀐 E2 블록 범위 한다"
+assert_file_has "$W/docs/rm/roadmap.md" "  - 안 한다: 라" "update: 바뀐 E2 블록 범위 안 한다"
+assert_file_has "$W/docs/rm/roadmap.md" "### 2026-10-16 · 경계 조정" "update: 재분해 이력 머리"
+assert_file_has "$W/docs/rm/roadmap.md" "- 바뀜: 바뀜 E2" "update: 재분해 이력 바뀜"
+assert_file_has "$W/docs/rm/roadmap.md" "  - 「이대로 다시 나눈다」" "update: 재분해 이력 원문"
 assert_eq "$(four_empty docs/rm/roadmap.md)" "ok" "update: 검사기 네 목록이 빈 목록"
 
 # 머지된 E1 을 바꾸는 표는 거부 — 아무것도 쓰지 않는다
@@ -322,7 +326,7 @@ g update-ref refs/remotes/origin/main "$MAIN_SHA"
 
 # ── 번호는 빈틈없이 이어 붙인다 · 내 것이 아닌 파일은 건드리지 않는다 ────────
 cur_row() { (cd "$W" && python3 "$RW" extract --roadmap docs/rm/roadmap.md) | grep "^| $1 |"; }
-block_of() { awk -v id="$1" '/^### /{f=($2==id)} f' "$W/docs/rm/roadmap.md"; }
+block_of() { awk -v id="$1" '/^## /{f=0} /^### /{f=($2==id)} f' "$W/docs/rm/roadmap.md"; }
 E5_ROW='| E5 | 다섯째 에픽 | 묶음 | 다섯째 의도 | 한다 차 / 안 한다 카 | E4 | feature/e5 | 없음 | C1 · S1 | 없음 | 없음 |'
 P1_CUR="$(cur_row P1)"; E1_CUR="$(cur_row E1)"; E2_CUR="$(cur_row E2)"
 
@@ -358,7 +362,8 @@ assert_eq "$(update "$T/v4.md")" "0" "연속 새 번호 둘: rc 0"
 E6_ROW='| E6 | 여섯째 에픽 | 묶음 | 여섯째 의도 | 한다 타 / 안 한다 파 | E2 | feature/e6 | 없음 | C1 · S1 | 없음 | 없음 |'
 table "$T/v5.md" "$P1_CUR" "$E1_CUR" "$E2_CUR" "$E4_ROW"
 assert_eq "$(APPROVAL='E9 까지 보자' update "$T/v5.md")" "0" "승인 원문에 번호: 지우기 rc 0"
-assert_file_has "$W/docs/rm/roadmap.md" "사라짐 E5 「E9 까지 보자」" "승인 원문에 번호: 이력에 원문"
+assert_file_has "$W/docs/rm/roadmap.md" "- 바뀜: 사라짐 E5" "승인 원문에 번호: 이력에 바뀜"
+assert_file_has "$W/docs/rm/roadmap.md" "  - 「E9 까지 보자」" "승인 원문에 번호: 이력에 원문"
 table "$T/v6.md" "$P1_CUR" "$E1_CUR" "$E2_CUR" "$E4_ROW" "$E6_ROW"
 assert_eq "$(update "$T/v6.md")" "0" "승인 원문에 번호: 다음 번호는 E6 (E9 가 아님)"
 
@@ -391,12 +396,16 @@ cmp -s "$T/E6.keep" "$W/docs/rm/E6.md" && ok "update 되돌리기: 지운 묶음
 assert_eq "$(same_as_snap)" "same" "update 되돌리기: 폴더 그대로"
 
 # 순서만 바뀐 표 — 묶음 파일은 그대로, 이력 줄엔 바뀜 · 새 · 사라짐이 없다
+B_E2="$(block_of E2)"; B_E6="$(block_of E6)"
 for f in E2 E4 E6; do cp "$W/docs/rm/$f.md" "$T/$f.keep"; done
 table "$T/v11.md" "$P1_CUR" "$E1_CUR" "$E2_CUR" "$E6_ROW" "$E4_ROW"
 assert_eq "$(update "$T/v11.md")" "0" "순서만: rc 0"
-assert_eq "$(grep '^### ' "$W/docs/rm/roadmap.md" | sed 's/^### \([A-Z0-9a-z]*\) .*/\1/' | tr '\n' ' ')" "P1 E1 E2 E6 E4 " "순서만: 블록 순서가 바뀌었다"
+assert_eq "$(grep '^### [A-Z]' "$W/docs/rm/roadmap.md" | sed 's/^### \([A-Z0-9a-z]*\) .*/\1/' | tr '\n' ' ')" "P1 E1 E2 E6 E4 " "순서만: 블록 순서가 바뀌었다"
 for f in E2 E4 E6; do cmp -s "$T/$f.keep" "$W/docs/rm/$f.md" && ok "순서만: $f 묶음 바이트 그대로" || no "순서만: $f 묶음이 바뀌었다"; done
-grep -qxF -- "- 2026-10-16 · 재분해 · 경계 조정 「이대로 다시 나눈다」" "$W/docs/rm/roadmap.md" && ok "순서만: 이력 줄에 바뀜 · 새 · 사라짐이 없다" || no "순서만: 이력 줄이 다르다"
+assert_eq "$(block_of E2)" "$B_E2" "순서만: 바뀌지 않은 E2 블록(범위 하위 항목)은 바이트 그대로"
+assert_eq "$(block_of E6)" "$B_E6" "순서만: 바뀌지 않은 E6 블록은 바이트 그대로"
+assert_contains "$B_E2" "  - 한다: " "E2 블록은 새 꼴이다(이 단언이 하위 항목 블록을 잰다는 양성 짝)"
+grep -qxF -- "- 바뀜: 순서만" "$W/docs/rm/roadmap.md" && ok "순서만: 이력에 순서만이라 적는다" || no "순서만: 이력 줄이 다르다"
 
 # 끝남 에픽은 거부 — P1 의 결정 기록을 main 에 올린다
 python3 - "$W/docs/rm/roadmap.md" <<'PY'

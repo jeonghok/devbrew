@@ -30,7 +30,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import roadmap_render as R  # noqa: E402
-from roadmap_model import DATE_RE, FormatError, frontmatter, id_sort_key, section_body, unquote  # noqa: E402
+from roadmap_model import (  # noqa: E402
+    DATE_RE, FormatError, frontmatter, id_sort_key, section_body, strip_quotes, unquote)
 
 RS = Path(__file__).resolve().parent / "roadmap_status.py"
 RECORD_HEADING = "## 생성 기록"
@@ -237,7 +238,7 @@ def cmd_create(a) -> int:
     table_text = read(table_path)
     rows = R.parse_table(table_text)
     idx = R.index_brief(read(a.brief), read(a.audit))
-    history = "- %s · 처음 로드맵 · 승인 원문 「%s」" % (date, a.approval)
+    history = R.history_entry(date, "처음 로드맵", [], a.approval).rstrip("\n")
     files = {roadmap: R.render_roadmap(read(R.TEMPLATE), rows, idx, a.title, brief_rel, roadmap_rel, history)}
     for r in rows:
         if r.kind == R.KIND_BUNDLE:
@@ -280,7 +281,6 @@ def cmd_extract(a) -> int:
 DONE = ("머지됨", "끝남")
 NEW_ID_RE = re.compile(r"[A-Z][0-9]+")
 ID_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])([A-Z])([0-9]+)")
-QUOTE_RE = re.compile(r"「[^」]*」")
 
 
 def stages(top: Path, roadmap: Path) -> dict:
@@ -301,7 +301,7 @@ def stages(top: Path, roadmap: Path) -> dict:
 
 def used_numbers(roadmap_text: str) -> dict:
     """글자마다 로드맵 블록 번호 · 재분해 이력에 나온 가장 큰 숫자. 이력의 「…」 는 사용자 말이라 세지 않는다."""
-    history = QUOTE_RE.sub(" ", section_body(roadmap_text, "## 재분해 이력") or "")
+    history = strip_quotes(section_body(roadmap_text, "## 재분해 이력") or "")
     corpus = " ".join(R.epic_block_texts(roadmap_text)) + "\n" + history
     best = {}
     for letter, num in ID_TOKEN_RE.findall(corpus):
@@ -370,10 +370,10 @@ def cmd_update(a) -> int:
         raise Refused("이 생성기가 만들지 않은 파일은 덮어쓰지 않는다 — %s" % " · ".join(foreign))
     texts = R.epic_block_texts(old_text)
     blocks = [texts[r.id] if r.id in old and r.id not in changed else R.render_block(r) for r in new_rows]
-    parts = [a.change] + ["%s %s" % (label, " · ".join(ids))
-                          for label, ids in (("바뀜", changed), ("새", added), ("사라짐", removed)) if ids]
-    new_text = R.append_history(R.replace_epics(old_text, blocks),
-                                "- %s · 재분해 · %s 「%s」" % (date, " · ".join(parts), a.approval))
+    changes = ["%s %s" % (label, " · ".join(ids))
+               for label, ids in (("바뀜", changed), ("새", added), ("사라짐", removed)) if ids]
+    entry = R.history_entry(date, a.change, changes or ["순서만"], a.approval)
+    new_text = R.append_history(R.replace_epics(old_text, blocks), entry)
     writes, removes = {roadmap: new_text}, []
     for i in changed + added:
         path = rdir / (i + ".md")
@@ -398,7 +398,7 @@ def cmd_update(a) -> int:
 
     run_txn(txn, body)
     print("[spec-distill] 로드맵을 다시 나눴다: %s — %s · 묶음 %d개 씀 · %d개 지움"
-          % (roadmap_rel, " · ".join(parts[1:]) or "순서만", len(writes) - 1, len(removes)))
+          % (roadmap_rel, " · ".join(changes) or "순서만", len(writes) - 1, len(removes)))
     return 0
 
 
@@ -408,13 +408,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub = ap.add_subparsers(dest="cmd")
     sub.required = True
     c = sub.add_parser("create")
-    for flag in ("--brief", "--audit", "--plan-table", "--out", "--title", "--date", "--approval"):
+    for flag in ("--brief", "--audit", "--plan-table", "--out", "--title", "--date"):
         c.add_argument(flag, required=True)
+    c.add_argument("--approval", action="append", required=True)
     e = sub.add_parser("extract")
     e.add_argument("--roadmap", required=True)
     u = sub.add_parser("update")
-    for flag in ("--roadmap", "--brief", "--audit", "--plan-table", "--date", "--change", "--approval"):
+    for flag in ("--roadmap", "--brief", "--audit", "--plan-table", "--date", "--change"):
         u.add_argument(flag, required=True)
+    u.add_argument("--approval", action="append", required=True)
     return ap
 
 

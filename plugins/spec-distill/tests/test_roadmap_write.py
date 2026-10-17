@@ -96,5 +96,13 @@ class Record(unittest.TestCase):
         self.assertEqual(W.read_record("# state\n"), set())
 
 
+class Approval(unittest.TestCase):
+    def test_approval_repeats(self):
+        a = W.build_parser().parse_args(["update", "--roadmap", "r", "--brief", "b", "--audit", "a",
+                                         "--plan-table", "t", "--date", "2026-10-17", "--change", "c",
+                                         "--approval", "첫 말", "--approval", "둘째 말"])
+        self.assertEqual(a.approval, ["첫 말", "둘째 말"])
+
+
 if __name__ == "__main__":
     unittest.main()
