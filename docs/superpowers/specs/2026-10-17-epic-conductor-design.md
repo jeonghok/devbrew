@@ -154,7 +154,7 @@ next_phase: superpowers:writing-plans
 1. **맞추기.** `git fetch` → 상태 계산(`control_plane.py show --tasks`) → 작업 목록 맞추기 → 기계 상태 읽기(표지를 잡는다 — §2) → 주인과 캐시의 어긋남 고치기(§1). 살아 있는 agent 를 확인한다 — 끝났는데 보고하지 않은 것을 거두고 놀고 있는 것은 내린다. 기다림은 끊어서 하고 사이마다 살아 있는 하위를 다시 센다(SDD 의 「Waiting on dispatched subagents」 방식). 압축 · 새 세션 뒤에도 여기서 시작한다 — 무엇이 끝났는지 기억에 기대지 않는다.
 2. **사람 몫 모으기.** 열린 결정마다 「지금 답할 수 있나」를 판정한다 — 앞 에픽의 결과를 봐야 답할 수 있는 것은 아직 묻지 않는다. 답할 수 있는 것은 배경과 함께 하나씩 묻는다. 사용자 몫 감사(§5)도 여기서. 답을 기다리는 동안 그 답에 기대는 일(같은 에픽의 다음 단계 · 의존 에픽 · 같은 파일 에픽)은 진행하지 않는다. brief · 설계 · 계획처럼 방향을 정하는 단계의 질문이면 특히 그렇다. 계속 가는 것은 그 답과 무관한 일뿐이고, 무관하다고 본 이유를 적는다. 판단이 서지 않으면 기다린다.
 3. **다음 일 고르기와 보내기.** 준비된 에픽마다 흐름을 고른다 — 기본은 설계 흐름이고, 조사 · 측정 · 결정처럼 맞지 않으면 고른 흐름 · 이유 · 산출물을 보이고 `AskUserQuestion` 으로 승인받는다(거절이면 설계 흐름). 승인되면 로드맵 `흐름:` · `산출물:` 칸은 재분해 절차로 적는다. 브랜치 · worktree 는 블록의 `브랜치:` 이름으로 먼저 만든다(하니스 기본 기능 우선 — `superpowers:using-git-worktrees`). 사람에게 묻는 단계(brainstorming · spec 승인)는 사람이 있는 세션에서 — 지휘 세션이 직접 하거나 에픽 worktree 에서 새 세션을 열 줄을 준다. 한 세션은 한 번에 한 에픽만 설계한다. spec 이 승인되면 계획 · 구현 · 머지 준비는 백그라운드 agent 가 에픽 worktree 에서 한다 — 계획 agent 는 writing-plans 로 계획을 쓰고 커밋한 뒤, writing-plans 가 끝에 묻는 글(계획 검토 · 실행 방식)을 그대로 지휘자에게 돌려보내고 멈춘다(걸음 4 가 받는다). 의존 · 같은 파일 겹침이 없으면 동시에 보낸다(`superpowers:dispatching-parallel-agents`) — 띄우기 전에 규모를 알린다. 실행 방식은 writing-plans 가 권하는 것(`superpowers:subagent-driven-development` · `superpowers:executing-plans`)이다.
-4. **돌아오기를 장치로.** 다른 세션에서 설계한 에픽은 에픽 넘김 줄 끝의 지시로 spec 승인 뒤 지휘 세션으로 돌아와 지휘자를 다시 부른다(그 세션은 계획으로 들어가지 않는다 — 계획은 걸음 3 의 백그라운드 agent 몫). 백그라운드 agent 는 끝나면 알림이 지휘자에게 온다 — 지휘자는 걸음 1 로 간다. 계획 agent 가 돌아오면: 상태 다시 계산 → 작업 목록 갱신(M5) → 지휘자가 계획을 읽고 「설계에 없던 결정(범위 · 인터페이스 · 파일 배치 등)」이 있는지 가른다 — 계획을 쓴 agent 가 스스로 가르지 않는다. 없으면 경로만 보이고 실행 방식(writing-plans 가 권한 것)으로 구현 agent 를 보낸다. 있으면 그 결정들을 배경과 함께 사용자에게 묻고, 답이 오기 전에는 그 에픽의 구현을 보내지 않는다(걸음 2). 가른 결과와 이유는 `## 지휘 기록` 에 적는다. 구현 agent 는 finishing 의 머지 메뉴에서 Push 까지만 하고 돌아온다(PR 은 지휘자가 연다 — 미리 받은 답 「Push 후 PR」 은 그대로이고, PR 을 여는 손만 지휘자다). 돌아오면: 그 보고에서 판정 전체와 AC 보고 «내용 전체»를 거둔다(§4 — 작업 폴더는 지워질 수 있어 경로에 기대지 않는다) → 그 내용을 기계 상태 자원 폴더의 파일로 두고 `--impl` 대조(경고를 사용자에게 보인다) → 설계문서의 `## 판정` · `## 구현 대조 — <계획 경로>` 절을 쓰고 에픽 브랜치에 커밋 · push(이것이 그 계획의 「구현 끝」 근거다 — §6) → `gh` 로 PR 을 열고 번호를 기계 상태 캐시에 적는다(`gh` 가 없으면 PR 을 열 명령을 사용자에게 준다).
+4. **돌아오기를 장치로.** 다른 세션에서 설계한 에픽은 에픽 넘김 줄 끝의 지시로 spec 승인 뒤 지휘 세션으로 돌아와 지휘자를 다시 부른다(그 세션은 계획으로 들어가지 않는다 — 계획은 걸음 3 의 백그라운드 agent 몫). 백그라운드 agent 는 끝나면 알림이 지휘자에게 온다 — 지휘자는 걸음 1 로 간다. 계획 agent 가 돌아오면: 상태 다시 계산 → 작업 목록 갱신(M5) → 지휘자가 계획을 읽고 「설계에 없던 결정(범위 · 인터페이스 · 파일 배치 등)」이 있는지 가른다 — 계획을 쓴 agent 가 스스로 가르지 않는다. 없으면 경로만 보이고 실행 방식(writing-plans 가 권한 것)으로 구현 agent 를 보낸다. 있으면 그 결정들을 배경과 함께 사용자에게 묻고, 답이 오기 전에는 그 에픽의 구현을 보내지 않는다(걸음 2). 가른 결과와 이유는 `## 지휘 기록` 에 적는다. 구현 agent 는 finishing 의 머지 메뉴에서 「브랜치 그대로 두기」(3번)를 골라 skill 을 그대로 끝내고 돌아온다(83020e28 — 미리 받은 답이 「Push 후 PR」 에서 바뀌었다. finishing 이 묻는 기준 브랜치는 dispatch 에 미리 적는다). 돌아오면: 그 보고에서 판정 전체와 AC 보고 «내용 전체»를 거둔다(§4 — 작업 폴더는 지워질 수 있어 경로에 기대지 않는다) → 그 내용을 기계 상태 자원 폴더의 파일로 두고 `--impl` 대조(경고를 사용자에게 보인다) → 설계문서의 `## 판정` · `## 구현 대조 — <계획 경로>` 절을 쓰고 에픽 브랜치에 커밋 · push(이것이 그 계획의 「구현 끝」 근거다 — §6) → `gh` 로 PR 을 열고 번호를 기계 상태 캐시에 적는다(`gh` 가 없으면 PR 을 열 명령을 사용자에게 준다).
 5. **머지 전 확인.** PR 마다(문서만 고친 PR 도 — 모델이 읽는 skill · reference · 템플릿 · 리뷰어 프로필은 문서로 치지 않는다): 스위트 대조(`merge_check.py`) → 새 실패가 있으면 `superpowers:systematic-debugging` → 통합 리뷰(`superpowers:requesting-code-review` 로 쓰기 도구 없는 리뷰어를 로드맵 frontmatter 의 리뷰 모델로(없으면 세션 모델), 이음매가 여럿이면 여럿 동시에 — 합친 사본 · 이 PR diff · 열린 다른 에픽 diff · 앞선 인계 절을 주고 에픽 사이 이음매를 묻는다) → 지적은 「이 PR 이 고침」 · 「뒤 에픽이 고침」으로 나눠 PR 본문 `## 통합 리뷰 인계` 절에 → 고침은 `superpowers:receiving-code-review` 로 받고 좁은 재리뷰(동작 · 락 · 보안 경계 · 리뷰어 프로필 수정은 매번, PR 하나에 두 번까지, 멈출 조건은 첫 재리뷰 전에) → `superpowers:verification-before-completion` → 릴리스 번호는 이때 정하고 머지 명령 줄만 준비한다. 건너뛴 확인은 무엇을 왜 건너뛰었는지 적는다.
 6. **머지 뒤.** 머지를 확인하면 열린 에픽 브랜치에 기본 브랜치를 merge 하고 대조를 다시 돌린다. 그 브랜치에서 agent 가 일하고 있으면 지휘자가 직접 merge 하지 않는다 — 그 agent 가 돌아올 때까지 기다리거나, 다음 task 경계에서 merge 하라고 그 agent 에 전한다(같은 worktree 에 두 writer 를 두지 않는다). merge 가 충돌하면 그 에픽만 멈추고 알린다. 남은 에픽을 재평가하고, 바뀔 때만 재분해 절차(`references/redecompose.md`)로 사용자 승인 뒤 로드맵 PR. 받는 에픽이 머지되면 그 넘김이 처리됐는지 확인한다(§5).
 7. **끝.** 모든 에픽이 머지되면 끝에서 끝 확인 — 기본 경로와 설계 흐름이 아닌 에픽 경로를 실제 명령으로 걷는다. 그때 qg 를 한 번 — 로드맵 시작 커밋부터 지금 기본 브랜치까지(qg 의 범위 입력과, 범위 안 여러 설계문서를 모두 의도로 읽는 일은 R2a). 그 입력이 없으면 qg 없이 가고 그 사실을 알린다. 지적은 후속 PR 하나로. 넘김이 모두 처리됐는지 확인하고 쓴 자원을 정리한다.
@@ -168,9 +168,9 @@ next_phase: superpowers:writing-plans
 **하위에게 주는 글**(`references/conductor-dispatch.md`, 하위가 implementer · reviewer 어느 쪽이든):
 
 - 그 worktree 의 절대경로 · 고른 흐름과 이유 · 「이 흐름의 skill 을 단일 세션과 똑같이, 빼거나 다시 쓰지 말고 끝까지」.
-- 사람에게 묻는 자리는 둘로 나눠 준다. 미리 받은 답이 있는 자리는 dispatch 에 그 답을 적어 하위가 그대로 쓴다 — 머지 메뉴는 「Push 후 PR」(하위는 Push 까지, PR 은 지휘자), 실행 방식은 writing-plans 가 권한 것(지휘 절차 4). 하위는 그 자리와 쓴 답을 보고에 적는다. 그 밖의 자리(미리 받은 답이 없는 것, 그리고 계획 검토처럼 지휘자가 가를 자리)를 만나면 멈추고 skill 이 낸 문면 · 선택지를 그대로 돌려보낸다 — 지휘자도 요약 · 재작성 없이 사용자에게 옮긴다.
-- 마지막 보고에 판정 전체(실행 방식의 마지막 목록 그대로)와 AC 보고 내용 전체를 싣는다 — 실행 방식이 작업 폴더를 지울 수 있어 경로만으로는 부족하다. 구현 agent 는 머지 메뉴에서 Push 까지만 하고 PR 은 열지 않는다(지휘자가 구현 대조 뒤에 연다).
-- 금지 넷: 공유 임시 폴더의 glob 삭제(자기 하위 폴더만) · stash · 다른 worktree 의 git 조작 · 스위트를 직접 동시에 돌리기(지휘자의 잠금을 거친다).
+- 사람에게 묻는 자리는 둘로 나눠 준다. 미리 받은 답이 있는 자리는 dispatch 에 그 답을 적어 하위가 그대로 쓴다 — 머지 메뉴는 「브랜치 그대로 두기」(3번 — Push 와 PR 은 지휘자가 구현 대조 뒤에, 83020e28), 기준 브랜치는 dispatch 에 적은 것, 실행 방식은 writing-plans 가 권한 것(지휘 절차 4). 하위는 그 자리와 쓴 답을 보고에 적는다. 그 밖의 자리(미리 받은 답이 없는 것, 그리고 계획 검토처럼 지휘자가 가를 자리)를 만나면 멈추고 skill 이 낸 문면 · 선택지를 그대로 돌려보낸다 — 지휘자도 요약 · 재작성 없이 사용자에게 옮긴다.
+- 마지막 보고에 판정 전체(실행 방식의 마지막 목록 그대로)와 AC 보고 내용 전체를 싣는다 — 실행 방식이 작업 폴더를 지울 수 있어 경로만으로는 부족하다. 구현 agent 는 머지 메뉴에서 3번(그대로 두기)을 고르고, Push 와 PR 은 지휘자가 구현 대조 뒤에 한다.
+- 금지 셋: 공유 임시 폴더의 glob 삭제(자기 하위 폴더만) · stash · 다른 worktree 의 git 조작. skill 안의 테스트 실행은 그대로 둔다(같은 동작) — dispatch 가 하위마다 따로 쓸 임시 폴더(`TMPDIR`)를 주어 공유 자원 경합을 줄이고, 하위가 본 실패가 진짜인지는 지휘자의 잠긴 스위트 대조만 판정한다(94c2ba92). 그 대조에서 사라지는 실패는 경합으로 보고 알린다.
 - 구현 커밋에는 `Spec: <설계문서 레포 상대경로>` 트레일러를 단다 — qg 의 의도 출처가 이것을 읽는다(RC76).
 - 처분 줄: dispatch 자리마다 `**처분** — consumer=orchestrator · fail-closed · disclosure=하위가 돌려보낸 사람 자리 문면 · 판정 목록 · AC 보고를 요약 없이 사용자에게 보인다`.
 
@@ -265,9 +265,9 @@ next_phase: superpowers:writing-plans
 
 설계문서 하나에 계획 · PR 셋이고, 차례로 간다. 셋 모두 spec-distill 의 버전 · CHANGELOG · README 를 고치고, 둘째가 만드는 `references/conducting.md` 를 셋째가 채우기 때문이다. 브랜치 셋은 계획 1 PR 안에서 여러 브랜치를 읽는 해석기(AC5)와 함께 R5 블록에 등록한다(§6 — 해석기와 데이터가 같은 머지로 들어가 거짓 「머지됨」 도, 옛 해석기의 오독도 없다). 지휘자를 가리키는 진입 안내(나눈 일의 다음 세션 줄 · 템플릿의 지휘 절차 · 넘김 줄의 「지휘자로 돌아가기」 · 승인 게이트 줄의 로드맵 갈래)는 지휘자 skill 과 같은 계획 셋째에 둔다 — 아직 없는 skill 을 가리키는 릴리스가 생기지 않게.
 
-1. **형식 · 상태**(`feature/epic-conductor`) — AC1~AC14 · AC39 · AC40 · AC38.
+1. **형식 · 상태**(`feature/epic-conductor`) — AC1~AC14 · AC39 · AC40 · AC43 의 기계 상태 형식과 넘김 계산 모듈 · AC38.
 2. **이음매 · 흐름 풀기** — AC31 · AC32~AC35 · AC38 과 AC42 의 로드맵 아닌 갈래. 넘김 줄에서 지휘자를 가리키지 않는 변경, 재분해 신호, 게이트 ③ · N18, 진행 게이트, 승인 게이트 줄의 「고른 실행 방식」. `references/conducting.md` 를 손 절차(지금 로드맵의 지휘 절차 1~9 를 옮긴 것)로 먼저 만든다.
-3. **지휘자** — AC15~AC30 · AC36 · AC37 · AC41 · AC42 의 로드맵 갈래 · AC38. R2a 의 `shared/` 테스트 공유본이 머지된 뒤에 시작한다(D1.3). `conducting.md` 에 지휘 순환 걸음을 채우고, 지휘자를 가리키는 진입 안내를 이때 바꾼다.
+3. **지휘자** — AC15~AC30 · AC31 의 「지휘자로 돌아가기」 · AC36 · AC37 · AC41 · AC42 의 로드맵 갈래 · AC43 의 기록 자리와 PR 순서 · AC38. R2a 의 `shared/` 테스트 공유본이 머지된 뒤에 시작한다(D1.3). `conducting.md` 에 지휘 순환 걸음을 채우고, 지휘자를 가리키는 진입 안내를 이때 바꾼다.
 
 계획마다 그 계획 몫의 AC 만 대조한다 — `check_bundle_coverage.py --plan` 이 `--acs <AC 목록>` 을 받게 하고(AC40), 지휘자는 위 목록을 그대로 넘긴다. 구현 대조(`--impl`)도 같은 목록이다.
 
@@ -279,7 +279,7 @@ next_phase: superpowers:writing-plans
 - AC4 이 로드맵을 새 형식으로 옮기고, 옮기기 전후 「…」 원문 인용 집합이 같음을 테스트가 잰다. 렌더러 · 템플릿 · 실데이터 락이 새 형식을 낸다.
 - AC5 `브랜치:` 에 여럿을 적을 수 있고, 모두 머지되면 「머지됨」, 일부면 「일부 머지 n/m」이다.
 - AC6 `산출물:` 이 있는 블록은 그 파일이 브랜치에 생기면 설계문서처럼 단계가 매겨지고, 이웃 읽기가 그 파일을 읽는다.
-- AC7 계획 커밋 뒤 브랜치에 `Spec:` 트레일러 커밋이 있으면 「구현 중」, 설계문서에 `## 구현 대조` 절이 커밋돼 있으면 「구현 끝」이다(둘 다 git 만 읽음).
+- AC7 계획 커밋 뒤 브랜치에 `Spec:` 트레일러 커밋이 있으면 「구현 중」, 그 브랜치의 설계문서에 그 계획의 `## 구현 대조 — <계획 경로>` 절이 커밋돼 있으면 그 계획이 「구현 끝」이고, 앞 계획의 절은 뒤 계획을 「구현 끝」으로 만들지 않는다(둘 다 git 만 읽음).
 - AC8 `control_plane.py` 가 PR 단계(기계 상태 캐시 또는 `gh`)와 판정 줄(진행 중이면 실행 방식 원장, 끝났으면 설계문서 `## 판정`)을 합쳐 보이고, 출처가 없으면 그 단계는 「알 수 없음」, 판정 줄은 「셀 수 없음」이다. 기계 상태 · 실행 방식 원장은 캐시 열쇠에 넣지 않고 매번 읽는다.
 - AC9 `/spec-distill:roadmap-status <로드맵> <에픽>` 이 그 에픽의 묶음 · 설계문서 · 계획 · 브랜치 · PR · 열린 넘김 · 판정 줄 · 자원을 경로 · 번호와 함께 보인다.
 - AC10 `references/roadmap-ontology.md` 가 계층 넷 · 객체 · 식별자 · 속성 · 링크 · 주인 표를 담고, 락이 표의 링크 칸 이름이 해석기 칸 · frontmatter 키에 실재함을 잰다.
@@ -293,7 +293,7 @@ next_phase: superpowers:writing-plans
 - AC18 `merge_check.py` 가 합친 사본을 만들고 그 레포의 스위트를 기준선과 합친 사본에서 돌려, R2a 의 공유본으로 단위를 짝짓고 양쪽 다 빨간 단위는 실패 이름으로 대조한다(이름을 못 뽑는 러너는 「이름 대조 불가 — 단위 수준만」). 동시 실행은 잠금으로 막고, 테스트 명령을 못 찾으면 묻는 자리를 내고, 테스트가 없으면 「스위트 대조 없음」을 낸다.
 - AC19 PR 인계 모으기가 블록 브랜치들의 PR 본문 `## 통합 리뷰 인계` 절을 거두고, `gh` 가 없거나 GitHub 이 아니면 설계문서 `## 미룸` 표와 `## 지휘 기록` 을 쓰고 알린다.
 - AC20 자원이 기계 상태에 적히고 §5 의 시점에 정리된다. 지우기 전 수정 · 추적 안 된 파일을 보이고 묻고, `--force` 를 쓰지 않고, 브랜치를 지우지 않는다. 기계 상태에 없는 worktree 는 「주인 모름」 목록으로 보인다.
-- AC21 `references/conductor-dispatch.md` 가 절대경로 · 흐름과 이유 · 같은 skill 그대로 · 미리 받은 답과 사람 자리 문면 반환 · 마지막 보고의 판정 전체 · AC 보고 경로 · 금지 넷 · `Spec:` 트레일러 · 리뷰 원장 이어 가기를 담는다.
+- AC21 `references/conductor-dispatch.md` 가 절대경로 · 흐름과 이유 · 같은 skill 그대로 · 미리 받은 답과 사람 자리 문면 반환 · 마지막 보고의 판정 전체 · AC 보고 내용 전체 · 금지 셋 · 하위별 `TMPDIR` · `Spec:` 트레일러 · 리뷰 원장 이어 가기를 담는다.
 - AC22 진행 중 판정 줄이 실행 방식 원장에서 화면으로 가고, 실행이 끝나면 하위 보고의 판정 전체를 앞서 읽은 것과 대조해 설계문서 `## 판정` 에 보관본으로 커밋한다. 설계를 뒤집는 판정 · 막힘이면 그 에픽만 멈추고 묻는다. 보고에도 원장에도 판정이 없으면 「셀 수 없음」이다.
 - AC23 사람 몫 걸음이 「지금 답할 수 있나」를 판정하고 배경과 함께 하나씩 묻고, 기다리는 질문에 기대는 일을 진행하지 않으며(이유 기록), 계획 agent 가 돌아오면 지휘자가 「설계에 없던 결정」이 있는지 가려 있을 때만 묻고 그 답 전에는 구현을 보내지 않는다.
 - AC24 감사 후보(기각 행 · 미룸 표 · 판정 줄 · 리뷰 뒤 반영)를 스크립트가 모으고, 줄어든 넘김(준 쪽 넘김이 받은 쪽 번호 대조 · AC · 미룸에 없음)을 찾는다.
@@ -314,14 +314,15 @@ next_phase: superpowers:writing-plans
 - AC39 `roadmap_status.py` · `control_plane.py` 가 기본 브랜치를 `origin/HEAD` 에서 읽고(풀리지 않으면 그 사실을 알리는 검사 불가), 기본 브랜치 이름이 `main` 이 아닌 버릴 레포에서 같은 단계를 낸다.
 - AC40 `check_bundle_coverage.py --plan` · `--impl` 이 `--acs <AC 목록>` 을 받아 그 AC 만 대조하고, 없으면 지금처럼 전부를 대조한다.
 - AC42 spec-review 승인 게이트의 다음 세션 줄이 로드맵 에픽이면 지휘자로 돌아가기, 아니면 「고른 실행 방식의 마지막 전체 리뷰」 를 말한다(80a9fc4a).
-- AC43 기계 상태 형식 · 넘김 상태 계산이 `conductor_state.py` 한 모듈에 있고 화면과 지휘자가 그것을 쓴다(계획 1). 에픽 브랜치에 바로 쓸 수 없는 기록(하위가 일하는 중 · 머지 뒤 · 설계문서 없는 에픽)은 §2 의 세 자리로 간다. 구현 agent 는 Push 까지만 하고, 지휘자가 `--impl` 경고를 보이고 두 절을 커밋한 뒤 PR 을 연다.
+- AC43 기계 상태 형식 · 넘김 상태 계산이 `conductor_state.py` 한 모듈에 있고 화면과 지휘자가 그것을 쓴다(계획 1). 에픽 브랜치에 바로 쓸 수 없는 기록(하위가 일하는 중 · 머지 뒤 · 설계문서 없는 에픽)은 §2 의 세 자리로 간다. 구현 agent 는 머지 메뉴 3번(그대로 두기)으로 끝내고, 지휘자가 `--impl` 경고를 보이고 두 절을 커밋 · push 한 뒤 PR 을 연다.
 - AC41 머지 뒤 열린 에픽 브랜치에 기본 브랜치를 합칠 때 그 브랜치에서 agent 가 일하고 있으면 지휘자가 직접 merge 하지 않고 기다리거나 그 agent 에 전하며, merge 충돌이면 그 에픽만 멈추고 알린다. 기계 상태 쓰기는 세션 표지 아래에서만 하고, 다른 세션이 쥐고 있으면 읽기 전용으로 보인다.
 
 ## Files to Modify
 
-- 새로: `plugins/spec-distill/skills/epic-conductor/SKILL.md` · `plugins/spec-distill/references/conducting.md` · `plugins/spec-distill/references/conductor-dispatch.md` · `plugins/spec-distill/references/roadmap-ontology.md` · `plugins/spec-distill/scripts/merge_check.py` · `plugins/spec-distill/scripts/conductor_ledger.py` · 레포 설정 기본값 상수 모듈 · R2a 가 만든 `shared/` 테스트 공유본으로 가는 spec-distill 쪽 링크 · 각 새 파일의 테스트.
+- 새로: `plugins/spec-distill/skills/epic-conductor/SKILL.md` · `plugins/spec-distill/references/conducting.md` · `plugins/spec-distill/references/conductor-dispatch.md` · `plugins/spec-distill/references/roadmap-ontology.md` · `plugins/spec-distill/scripts/merge_check.py` · `plugins/spec-distill/scripts/conductor_state.py`(계획 1) · `plugins/spec-distill/scripts/conductor_ledger.py` · 레포 설정 기본값 상수 모듈 · R2a 가 만든 `shared/` 테스트 공유본으로 가는 spec-distill 쪽 링크 · 각 새 파일의 테스트.
 - 바뀜(계획 1): `plugins/spec-distill/scripts/roadmap_model.py` · `roadmap_status.py` · `roadmap_write.py` · `roadmap_render.py` · `check_bundle_coverage.py` · `spec_review_bundle.py` · `control_plane.py` · `skills/roadmap-status/SKILL.md` · `templates/roadmap-template.md` · 그 테스트들(`test_roadmap_status.sh` · `test_roadmap_render.py` · `test_roadmap_write.py` 등) · 이 로드맵 폴더의 `roadmap.md`.
-- 바뀜(계획 2): `plugins/spec-distill/references/epic-handoff.md` · `references/redecompose.md` · `references/proceed-gate.md` · `skills/spec-review/SKILL.md` · `skills/spec-interview/references/finishing.md`(나눈 일 다음 세션 줄 한 줄) · `references/conducting.md`(손 절차) · `templates/roadmap-template.md` 의 지휘 절차 · 해당 락.
+- 바뀜(계획 2): `plugins/spec-distill/references/epic-handoff.md`(지휘자를 가리키지 않는 변경) · `references/redecompose.md` · `references/proceed-gate.md` · `skills/spec-review/SKILL.md`(게이트 ③ · N18 · 승인 게이트 줄의 로드맵 아닌 갈래) · `references/conducting.md`(손 절차) · 해당 락.
+- 바뀜(계획 3): `plugins/spec-distill/skills/epic-conductor/SKILL.md` 와 새 스크립트 · `references/epic-handoff.md`(지휘자로 돌아가기) · `skills/spec-review/SKILL.md`(승인 게이트 줄의 로드맵 갈래) · `skills/spec-interview/references/finishing.md`(나눈 일 다음 세션 줄 한 줄 — R10 경로 예약과 겹침, 통합 리뷰에서 맞춤) · `templates/roadmap-template.md` 의 지휘 절차 · `references/conducting.md`(지휘 순환) · `control_plane.py`(기계 상태 합치기) · 해당 락.
 - 각 PR: `plugins/spec-distill/.claude-plugin/plugin.json` · `CHANGELOG.md` · `README.md`. qg 폴더는 고치지 않는다(D1.3).
 
 ## Verification Plan
@@ -390,6 +391,20 @@ next_phase: superpowers:writing-plans
 - D2.14 · r2 · adopt · c7f6ab3e#r2.1 · "채택 — §10 유지 (권장)" — finding 없이 바뀜: §10 위험에 대한 답 (modified)
 - D2.15 · r2 · adopt · cfedb4c6#r2.1 · "채택 — §9 유지 (권장)" — finding 없이 바뀜: §9 레포 전용 값 (modified)
 - D2.16 · r2 · adopt · e09185f8#r2.1 · "채택 — Goals 유지 (권장)" — finding 없이 바뀜: Goals (modified)
+- D3.17 · r3 · adopt · 0abbed1c#r3.1 · "채택 — §5 r3 유지 (권장)" — finding 없이 바뀜: §5 감사 · 넘김 조율 · 자원 정리 (modified)
+- D3.18 · r3 · adopt · 0b7af0b4#r3.1 · "채택 — Metadata r3 유지 (권장)" — finding 없이 바뀜: Metadata (modified)
+- D3.19 · r3 · adopt · 3d94c20d#r3.1 · "채택 — §4 r3 유지 (권장)" — finding 없이 바뀜: §4 하위 계약 · 구현 감시 (modified)
+- D3.20 · r3 · adopt · 83020e28#r3.1 · "채택 — 메뉴 3 그대로 두기 (권장)" — The pre-set answer tells the implementation agent to push but not open a PR. The finishing skill's menu has no such option: its PR option always pushes and opens the PR together. So the design asks the agent to run only half of a skill option, which breaks the rule that sub-agents run skills exactly as a single session would.
+- D3.21 · r3 · adopt · 93a5c0ad#r3.1 · "채택 — AC r3 유지 (권장)" — finding 없이 바뀜: Acceptance Criteria (modified)
+- D3.22 · r3 · adopt · 94c2ba92#r3.1 · "채택 — skill 대로 돌리고 판정은 대조만 (권장)" — Sub-agents are forbidden to run test suites at the same time, yet the skills they must run unchanged (finishing Step 1, test runs during implementation, verification-before-completion) run the suite themselves. The design never says how an agent would 「go through the conductor's lock」.
+- D3.23 · r3 · adopt · 968a9e0e#r3.1 · "채택 — §6 r3 유지 (권장)" — finding 없이 바뀜: §6 상태 계산 · 로드맵 형식 (modified)
+- D3.24 · r3 · adopt · 96a0a3cc#r3.1 · "채택 — 미룸 r3 유지 (권장)" — finding 없이 바뀜: 미룸 (modified)
+- D3.25 · r3 · adopt · c9df6f69#r3.1 · "채택 — §2 r3 유지 (권장)" — finding 없이 바뀜: §2 구성 (modified)
+- D3.26 · r3 · adopt · d47375b5#r3.1 · "채택 — §3 r3 유지 (권장)" — finding 없이 바뀜: §3 지휘 순환 (modified)
+- D3.27 · r3 · adopt · e939aca4#r3.1 · "채택 — §11 r3 유지 (권장)" — finding 없이 바뀜: §11 계획 나누기 (modified)
+- docreview 계수 — spec-distill/2026-10-17-epic-conductor-design-5188c286677c1fc3 r1: advice_new=8 · advice_repeat=0 · mc_preexisting_new=0
+- docreview 계수 — spec-distill/2026-10-17-epic-conductor-design-5188c286677c1fc3 r2: advice_new=6 · advice_repeat=5 · mc_preexisting_new=0
+- docreview 계수 — spec-distill/2026-10-17-epic-conductor-design-5188c286677c1fc3 r3: advice_new=7 · advice_repeat=6 · mc_preexisting_new=0
 
 ## 사용자 원문 대조
 
@@ -494,3 +509,27 @@ next_phase: superpowers:writing-plans
 
 | 9e1747a6#r1.1 | 실측 근거 없이 도구 동작을 단정한 곳이 있다. 「터미널을 보고 있으면 알림 도구가 보내지 않는다」와 「같은 agent 를 SendMessage 로 이어 부를 수 있다」가 그렇다. 후자는 그 도구가 기반으로 쓰지 않기로 한 실험 기능에 속하지 않는지도 함께 확인해야 한다. 계획이 먼저 실측한다. |
 | 2e6610eb#r2.1 | 스위트 대조 검증에 「손 헬퍼가 잡던 실패를 merge_check 도 잡는다」는 대조가 없다. devbrew 자체에서 손 헬퍼와 merge_check 를 같은 브랜치에 돌려 실패 이름 집합이 같은지 보는 절차는 계획이 정한다. |
+
+| # | 항목 |
+|---|---|
+| ed6d45de#r1.1 | 참고(component_relations) #11-계획-나누기 — 수용 기준을 세 계획에 나누는 방식이 기존 계획·구현 대조와 연결되지 않는다. 현재 검사 함수에 명시된 분할을 넣으면 각 계획에서 다른 계획 몫의 수용 기준이 각각 24개, 22개, 30개 누락으로 나온다. 기존 넘김 규약은 이 누락을 해당 계획에 추가하도록 요구한다. — 고치면: 계획별 담당 수용 기준을 명시하고 계획·구현 대조가 그 담당 범위를 검사하도록 계약을 확장한다. 별도로 세 계획의 합집합이 설계 전체를 덮는지 확인하고, 에픽 완료는 모든 계획의 구현 보고를 합쳐 판정한다. 넘김 규약에도 다른 계획 몫을 현재 계획에 추가하지 않는 기준을 반영한다. |
+| d8ac97bc#r1.1 | 참고(feasibility) #2-구성 — 재사용할 테스트 도구는 개별 실패 이름을 수집하지 않는다. 파일·패키지·전체 실행의 종료 코드만 비교하므로, 이미 실패하던 파일에 새 실패가 추가돼도 기존 실패로 분류할 수 있다. 파일을 그대로 옮기는 것으로는 설계가 약속한 실패 이름 대조를 구현할 수 없다. — 고치면: 러너 탐지와 실행은 재사용하되, 실패 이름을 얻는 결과 수집 계약을 추가한다. 개별 실패를 구별할 수 없는 실행은 비교 불가로 표시하고 기존 실패로 통과시키지 않는다. 검증에는 같은 파일에서 기존 실패와 새 실패가 함께 발생하는 경우를 포함한다. |
+| cd961b90#r1.1 | 참고(data_flow) #3-지휘-순환 — 계획(writing-plans)을 어느 세션이 하는지가 문서 안에서 세 가지로 갈린다: 백그라운드 agent, 설계한 그 세션, 에픽 worktree 의 새 세션. — 고치면: 한 갈래로 정한다. (가) 계획은 사람이 있는 설계 세션이 spec 승인 직후에 하고(새 결정이 있으면 그 자리에서 묻는다) 구현부터 백그라운드 agent 가 한다. (나) 계획도 백그라운드 agent 가 하되, 새 결정이 있으면 agent 가 멈추고 결정 목록을 지휘자에게 돌려보내 지휘자가 사람에게 묻는다. 고른 갈래를 §3 걸음 3 · 4, §7 그림, Metadata 에 같은 문장으로 적는다. |
+| 76b51357#r1.1 | 참고(overdesign) #6-상태-계산--로드맵-형식 — yagni: 로드맵에 새 선택 칸 넷(크기 · 병렬 · 순서 이유 · 근거)을 더하는데, 상태 계산 · 지휘 순환 · 화면 어디에서도 그 값을 읽지 않는다. — 고치면: 하위 항목 구조화와 흐름 · 산출물 칸만 더하고, 읽는 곳이 없는 넷은 뺀다. 그 내용은 의도 · 범위 하위 항목 끝의 괄호 근거로 둔다. 사용자 원문 「잘 작업을 고려하여」가 이 넷을 뜻한다면 남기되, 각 칸을 지휘자의 어느 걸음이 읽는지 적는다. └ 천장: 지휘자가 칸 값으로 판단을 바꾸는 걸음(병렬 판단에서 병렬 칸을 읽는 것 등)이 생기면 그때 그 칸을 더한다 |
+| cde2eebb#r1.1 | 참고(feasibility) #9-레포-전용-값 — 지휘자 첫 걸음이 기대는 상태 계산 스크립트 둘이 기본 브랜치를 origin/main 으로 박아 두었는데, 설계는 이것을 R8 로 넘긴다. 그래서 기본 브랜치가 main 이 아닌 레포에서는 지휘자가 첫 걸음부터 돌지 않는다. — 고치면: R5 가 이미 고치는 두 파일(roadmap_status.py · control_plane.py)에서 기본 브랜치 참조를 origin/HEAD 로 읽게 바꾸는 일을 범위에 넣고, 버릴 레포 확인은 기본 브랜치 이름이 main 이 아닌 레포에서 한다. 아니면 R8 에 남기되, 지휘자가 시작할 때 기본 브랜치가 main 이 아니면 그 사실을 알리고 멈춘다고 적는다. |
+| 230af7fa#r1.1 | 참고(data_flow) #metadata — 뒤의 두 브랜치를 첫 계획의 머지 이후에 등록하면, 첫 머지 직후에는 등록된 브랜치가 모두 머지된 상태가 된다. 문서의 완료 계산 규칙에 따르면 아직 두 계획이 남았는데 에픽 전체가 완료로 표시된다. — 고치면: 첫 계획을 머지하기 전에 남은 계획과 예정 브랜치를 로드맵에 등록한다. 아직 생성되지 않은 예정 브랜치도 미완료로 계산하고, 기존 해석기가 이 표현을 읽지 못하는 전환 기간에는 에픽 완료 판정을 보류하는 절차를 명시한다. |
+| f53a3818#r1.1 | 참고(isolation) #3-지휘-순환 — 머지 뒤 열린 브랜치를 갱신하는 절차에 해당 브랜치에서 실행 중인 agent와의 인계가 없다. 다른 에픽은 계속 구현하므로, 지휘자가 기본 브랜치를 합치는 동안 하위가 같은 작업 파일을 수정하거나 테스트할 수 있다. — 고치면: 갱신할 브랜치의 담당 agent가 안전한 중단 지점에 도달했음을 확인하고 작업 파일의 쓰기를 멈춘 뒤 기본 브랜치를 합친다. 충돌이나 미커밋 변경이 있으면 해당 에픽만 보류한다. 갱신된 커밋과 재검증 결과를 담당 agent에 전달한 뒤 구현을 재개한다. |
+| fccf272b#r1.1 | 참고(ambiguity) #acceptance-criteria — 새 스크립트에 레포 구조 경로를 박지 말라는 수용 기준과, 설계문서·계획을 찾을 때 쓰는 기본 경로(superpowers 의 기본 폴더)가 부딪힌다. 이 기본값은 새 스크립트 안에 글자로 들어가야 하는데, 어떤 경로가 「레포 전용」이고 어떤 경로가 허용되는 기본값인지 문서가 가르지 않는다. 그래서 락이 기본값 때문에 실패하거나, 범위가 정해지지 않은 예외 목록을 갖게 된다. — 고치면: AC29 에 허용 목록을 적는다. 외부 도구(superpowers · SDD)가 정한 기본 경로와 플러그인 자기 상태 경로는 허용하되, 그 값은 한 곳의 상수에만 두고 원장의 레포 설정이 있으면 그 값이 이긴다. 락은 그 상수 밖에서 같은 글자가 나오면 실패하게 한다. |
+| 12c1ed4b#r2.1 | 참고(data_flow) #5-감사--넘김-조율--자원-정리 — 넘김 처리 확인은 받는 에픽이 머지된 뒤에 생기는데, 기록을 기본 브랜치로 보내는 방법은 에픽 머지에 함께 싣는 것뿐이다. 이미 끝난 머지에는 새 확인 기록을 포함할 수 없다. — 고치면: 머지 뒤 생기는 확인 기록은 기본 브랜치에서 만든 후속 기록 PR로 같은 주인 문서에 반영한다. 기록 PR의 대기 상태와 원래 에픽의 머지 상태를 분리하고, 기록이 보존된 뒤 자원을 정리하도록 순서를 명시한다. |
+| 3c5c5f21#r2.1 | 참고(data_flow) #6-상태-계산--로드맵-형식 — 첫 계획의 완료 기록이 뒤 계획의 브랜치에도 상속된다. 문서에 구현 대조 절이 있다는 조건만으로는, 아직 구현하지 않은 다음 계획까지 구현 끝으로 판정한다. — 고치면: 구현 대조 기록에 대상 계획·브랜치·수용 기준 목록·검증한 구현 커밋을 연결한다. 현재 계획에 해당하는 완료 기록으로만 그 브랜치의 구현 끝을 판정하고, 에픽 전체 상태는 등록된 모든 계획의 결과를 합쳐 계산한다. 앞 계획의 기록을 상속한 새 브랜치는 완료로 세지 않는다. |
+| e2b5ba9e#r2.1 | 참고(component_relations) #미룸 — R5 의 계획 셋째와 끝 단계 qg 는 R2a 의 일 두 가지에 기댄다(테스트 실행 스크립트를 shared/ 로 옮기기, qg 범위 입력). 그런데 이 둘은 미룸 표에만 있고 로드맵의 R2a 범위에는 없다. 그런 넘김은 재분해로 로드맵에 넣는다는 이 문서의 규칙도 이 둘에는 적용되지 않았다. — 고치면: §11 이 첫 계획 전에 여는 로드맵 수정 PR 에 세 가지를 함께 넣는다. R2a 범위에 두 줄을 더하고, R2a 경로 예약에 공유본이 놓일 shared/ 자리를 더한다. R5 쪽에는 「계획 셋째는 R2a 머지 뒤」를 블록 칸(예: `순서 이유`)으로 남긴다. |
+| 044efd43#r2.1 | 참고(handoff_incomplete) #11-계획-나누기 — 단계별 배포 순서가 연결되지 않는다. 여러 브랜치 등록은 이를 읽는 코드보다 먼저 요구하고, 둘째 PR은 셋째 PR에서 생길 지휘자 호출로 진입 안내를 바꾼다. 끝의 메타데이터는 브랜치 등록 시점도 다르게 적었다. — 고치면: 첫 PR에서 여러 브랜치를 읽는 기능과 실제 브랜치 목록 갱신을 함께 배포한다. 둘째 PR은 손 절차와 하류 계약을 준비하되 진입 안내는 작동하는 기존 경로를 유지하고, 지휘자 호출로의 전환은 셋째 PR에 포함한다. 메타데이터와 파일 변경 목록도 같은 순서로 통일한다. |
+| 75a34b14#r2.1 | 참고(placeholder) #4-하위-계약--구현-감시 — 하위에게 일을 보내는 자리의 처분 줄에서 disclosure 값이 말줄임표로 비어 있다. 레포 규칙상 소비자가 orchestrator 일 때 이 값은 반드시 적어야 하는 리터럴이고, 이 값을 재는 락도 있다. |
+| 64c318eb#r2.1 | 참고(ambiguity) #2-구성 — 인자 없이 지휘자를 부르면 로드맵을 직접 찾아야 한다. 그러려면 로드맵이 어느 폴더에 있는지 알아야 한다. 그런데 레포 전용 값 금지 락의 허용 목록에는 로드맵 폴더가 없다. 로드맵 frontmatter 설정도 로드맵을 찾은 뒤에야 읽을 수 있어 이 값을 줄 수 없다. — 고치면: 로드맵을 찾는 방법을 하나로 정한다. (a) 로드맵 폴더 기본값을 플러그인이 만드는 산출물 경로로 보고 AC29 허용 목록에 넣는다. (b) 폴더를 보지 않고 git 추적 파일 가운데 frontmatter 가 `type: roadmap` 인 파일을 찾는다. (c) 인자 없이 부르는 경우를 빼고 로드맵 경로를 반드시 받는다. 고른 것을 §2 와 AC15·AC29 에 같은 문장으로 적는다. |
+| b4c01ceb#r3.1 | 참고(data_flow) #2-구성 — 머지 뒤 확인 결과를 다음 로드맵 수정 PR까지 기계 상태에만 보관한다. 마지막 에픽이 끝나면 다음 수정 PR이 없을 수 있고, PR 본문에 옮겨도 git 추적 문서가 되지는 않는다. 따라서 기계 상태를 지워도 기록을 복구한다는 보장이 성립하지 않는다. — 고치면: 머지 뒤 넘김 확인과 최종 검사 결과도 로드맵 또는 에픽 설계문서의 추적 절에 커밋한다. 다음 범위 변경이 없어도 기록용 후속 PR을 만들며, 기록 보관을 종료 조건에 포함한다. 재개 시 읽는 경로와 관련 수용 기준도 이 보관처로 통일한다. |
+| 35ec5993#r3.1 | 참고(overdesign) #2-구성 — yagni: the `test_failure_pattern` front-matter key appears only once in §2. It is missing from §6's list of repo-setting keys, from AC18 and from the Verification Plan, and no repo uses it. — 고치면: Drop the key. When none of the known output shapes match, report 「이름 대조 불가 — 단위 수준만」 (names can't be compared, unit level only), which the design already does. └ ceiling: if a real repo turns up whose `test_command` output matches none of the known shapes and unit-level comparison misses a new failure, add the key then and put it in §6's list. |
+| ef2b2afc#r3.1 | 참고(feasibility) #3-지휘-순환 — 설치본의 리뷰 요청 skill은 general-purpose agent를 호출하며, 템플릿에는 읽기 전용으로 행동하라는 문장만 있다. 이 호출만으로는 설계가 요구한 ‘쓰기 도구 없는 리뷰어’가 만들어지지 않는다. 실제 권한을 제한하는 실행 경로가 필요하다. — 고치면: 외부 skill의 리뷰 요청 템플릿은 재사용하고, 실제 리뷰어 호출은 devbrew가 도구 허용 목록으로 쓰기 권한을 제거한 경로에서 수행한다고 명시한다. 이 경계를 구성·수정 파일 목록에 반영하고, 리뷰어가 쓰기 도구를 사용할 수 없음을 검증 기준으로 둔다. |
+| 594338de#r3.1 | 참고(handoff_incomplete) #11-계획-나누기 — The conductor decides which epics can run in parallel from the reserved-path lists, but R5's own block says it reserves no paths. R5 edits files R10 has reserved (`skills/spec-interview/references/finishing.md`) as well as the template, spec-review and the hand-off files, and no plan is told to register those reservations in the roadmap. |
+| 9e1747a6#r3.1 | 참고(ambiguity) #3-지휘-순환 — Step 3, 「블록의 `브랜치:` 이름으로 먼저 만든다」 (create the branch named in the block first), doesn't say what happens when an epic lists several branches: which branch is created when, what each one starts from (the default branch after the previous plan merges?), and how 「에픽 worktree」 maps to each branch. |
+| 84d5a0c7#r3.1 | 참고(handoff_incomplete) #6-상태-계산--로드맵-형식 — This roadmap has no `review_model` or `test_command`. When review_model is missing the reviewer silently runs on the session model, breaking the repo's 「review model is opus」 rule. When devbrew's test detection partly succeeds (shell tests without the execute bit are not picked up), the conductor never asks and silently runs only part of the suite. No plan is told to add these values to this roadmap's front matter. |
+| 1cdda836#r3.1 | 참고(handoff_incomplete) #files-to-modify — 본문은 지휘자 호출 안내를 skill이 생기는 셋째 계획에 배정하지만, 파일 목록은 같은 안내 변경을 둘째 계획에 배정한다. 계획 작성자가 어느 목록을 따르느냐에 따라 출시 순서가 달라진다. — 고치면: 파일 목록에서도 인터뷰의 지휘자 호출 줄과 템플릿의 지휘자 호출 안내를 셋째 계획으로 옮긴다. 여러 계획에서 수정하는 파일은 둘째 계획의 흐름 정리와 셋째 계획의 호출 연결을 구분해 적는다. |
