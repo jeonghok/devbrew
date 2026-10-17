@@ -244,7 +244,12 @@ class GoldenSample(unittest.TestCase):
         self.assertEqual(kinds["P1"], R.KIND_BRANCH)
         self.assertEqual(kinds["P3"], R.KIND_DECISION)
         self.assertEqual(kinds["R0"], R.KIND_BRANCH)
-        self.assertEqual(sum(1 for k in kinds.values() if k == R.KIND_BUNDLE), 10)
+        # 묶음 에픽 수는 살아 있는 로드맵에서 재분해로 늘 수 있다 — 숫자를 박지 않고, 묶음 종류마다
+        # 묶음 파일이 실제로 있는지(그리고 묶음 파일이 없는 종류는 묶음 파일이 없는지)로 잰다.
+        bundles = sorted(i for i, k in kinds.items() if k == R.KIND_BUNDLE)
+        self.assertGreaterEqual(len(bundles), 10)
+        on_disk = sorted(p.stem for p in RM_DIR.glob("*.md") if p.stem in kinds)
+        self.assertEqual(on_disk, bundles)
 
     def test_bundles_byte_equal(self):
         diffs = []
