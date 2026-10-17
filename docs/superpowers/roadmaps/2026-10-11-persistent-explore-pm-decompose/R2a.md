@@ -19,7 +19,7 @@ ids: [C5, C11, C12, C13, C25, C32, C35, D15, D18, D21, D26, OQ2, OQ29, OQ31, RC6
 ### 이 에픽의 Goal · Non-goal
 
 - 의도: 공유 리뷰 엔진과 qg · 다른 플러그인의 의도 왜곡 장치를 제거하거나 고치고 persona 편집은 보안 리뷰를 거친다
-- 범위: 한다 공유 리뷰 엔진 상한 · 조언 접기 · qg 리뷰어 · 루프 상한 · R2 가 넘긴 보안 잔여의 검사 방식 전환(꼴 막기 대신 허용 문법 · 실제 파서) · 흐름 고정 점검(flexibility-audit.md)의 R2a 행(결함 셋 먼저) · 다른 플러그인의 장치 · qg 진입 이름 적용(P3 결정 — `commands/qg.md` 삭제 · `artifact-critique` 개명 · 호출 표면 락의 qg 위반 해소) / 안 한다 spec-distill 안쪽 장치(R2)
+- 범위: 한다 공유 리뷰 엔진 상한 · 조언 접기 · qg 리뷰어 · 루프 상한 · R2 가 넘긴 보안 잔여의 검사 방식 전환(꼴 막기 대신 허용 문법 · 실제 파서) · 흐름 고정 점검(flexibility-audit.md)의 R2a 행(결함 셋 먼저) · 다른 플러그인의 장치 · qg 진입 이름 적용(P3 결정 — `commands/qg.md` 삭제 · `artifact-critique` 개명 · 호출 표면 락의 qg 위반 해소) · qg 범위 입력(로드맵 시작 커밋부터 지금 기본 브랜치까지) · 「문서 경로」 정의(모델이 읽는 .md 포함) · 범위 안 여러 설계문서를 모두 의도로 읽기(지금 discover-spec.sh 는 가장 새 커밋의 Spec: 하나에서 멈춘다) · qg 의 테스트 실행 스크립트 셋(run-test-selection.sh · diff-test-results.py · compute-test-scope-candidates.sh)을 shared/test-selection/ 으로 바이트 그대로 옮기고 qg 쪽을 링크로 / 안 한다 spec-distill 안쪽 장치(R2)
 
 ### 공통 목표
 
@@ -200,4 +200,4 @@ ids: [C5, C11, C12, C13, C25, C32, C35, D15, D18, D21, D26, OQ2, OQ29, OQ31, RC6
 ## 7. 인터페이스
 
 - 받는 것: R0 의 다섯 형식 · P2 · P3 결과 · R2 의 처분 기준
-- 넘기는 것: 공유 엔진 변경을 qg 소비자와 R5 에 · persona 편집의 보안 리뷰 기록
+- 넘기는 것: 공유 엔진 변경을 qg 소비자와 R5 에 · persona 편집의 보안 리뷰 기록 · 테스트 실행 공유본(shared/test-selection/)을 R5 계획 셋째에
