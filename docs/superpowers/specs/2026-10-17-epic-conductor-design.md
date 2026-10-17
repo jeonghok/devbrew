@@ -153,8 +153,8 @@ next_phase: superpowers:writing-plans
 
 1. **맞추기.** `git fetch` → 상태 계산(`control_plane.py show --tasks`) → 작업 목록 맞추기 → 기계 상태 읽기(표지를 잡는다 — §2) → 주인과 캐시의 어긋남 고치기(§1). 살아 있는 agent 를 확인한다 — 끝났는데 보고하지 않은 것을 거두고 놀고 있는 것은 내린다. 기다림은 끊어서 하고 사이마다 살아 있는 하위를 다시 센다(SDD 의 「Waiting on dispatched subagents」 방식). 압축 · 새 세션 뒤에도 여기서 시작한다 — 무엇이 끝났는지 기억에 기대지 않는다.
 2. **사람 몫 모으기.** 열린 결정마다 「지금 답할 수 있나」를 판정한다 — 앞 에픽의 결과를 봐야 답할 수 있는 것은 아직 묻지 않는다. 답할 수 있는 것은 배경과 함께 하나씩 묻는다. 사용자 몫 감사(§5)도 여기서. 답을 기다리는 동안 그 답에 기대는 일(같은 에픽의 다음 단계 · 의존 에픽 · 같은 파일 에픽)은 진행하지 않는다. brief · 설계 · 계획처럼 방향을 정하는 단계의 질문이면 특히 그렇다. 계속 가는 것은 그 답과 무관한 일뿐이고, 무관하다고 본 이유를 적는다. 판단이 서지 않으면 기다린다.
-3. **다음 일 고르기와 보내기.** 준비된 에픽마다 흐름을 고른다 — 기본은 설계 흐름이고, 조사 · 측정 · 결정처럼 맞지 않으면 고른 흐름 · 이유 · 산출물을 보이고 `AskUserQuestion` 으로 승인받는다(거절이면 설계 흐름). 승인되면 로드맵 `흐름:` · `산출물:` 칸은 재분해 절차로 적는다. 브랜치 · worktree 는 블록의 `브랜치:` 이름으로 먼저 만든다(하니스 기본 기능 우선 — `superpowers:using-git-worktrees`). 사람에게 묻는 단계(brainstorming · spec 승인)는 사람이 있는 세션에서 — 지휘 세션이 직접 하거나 에픽 worktree 에서 새 세션을 열 줄을 준다. 한 세션은 한 번에 한 에픽만 설계한다. spec 이 승인되면 계획 · 구현 · 머지 준비는 백그라운드 agent 가 에픽 worktree 에서 한다 — 계획 agent 는 writing-plans 로 계획을 쓰고 커밋한 뒤, writing-plans 가 끝에 묻는 글(계획 검토 · 실행 방식)을 그대로 지휘자에게 돌려보내고 멈춘다(걸음 4 가 받는다). 의존 · 같은 파일 겹침이 없으면 동시에 보낸다(`superpowers:dispatching-parallel-agents`) — 띄우기 전에 규모를 알린다. 실행 방식은 writing-plans 가 권하는 것(`superpowers:subagent-driven-development` · `superpowers:executing-plans`)이다.
-4. **돌아오기를 장치로.** 다른 세션에서 설계한 에픽은 에픽 넘김 줄 끝의 지시로 spec 승인 뒤 지휘 세션으로 돌아와 지휘자를 다시 부른다(그 세션은 계획으로 들어가지 않는다 — 계획은 걸음 3 의 백그라운드 agent 몫). 백그라운드 agent 는 끝나면 알림이 지휘자에게 온다 — 지휘자는 걸음 1 로 간다. 계획 agent 가 돌아오면: 상태 다시 계산 → 작업 목록 갱신(M5) → 지휘자가 계획을 읽고 「설계에 없던 결정(범위 · 인터페이스 · 파일 배치 등)」이 있는지 가른다 — 계획을 쓴 agent 가 스스로 가르지 않는다. 없으면 경로만 보이고 실행 방식(writing-plans 가 권한 것)으로 구현 agent 를 보낸다. 있으면 그 결정들을 배경과 함께 사용자에게 묻고, 답이 오기 전에는 그 에픽의 구현을 보내지 않는다(걸음 2). 가른 결과와 이유는 `## 지휘 기록` 에 적는다. 구현 agent 는 finishing 의 머지 메뉴에서 「브랜치 그대로 두기」(3번)를 골라 skill 을 그대로 끝내고 돌아온다(83020e28 — 미리 받은 답이 「Push 후 PR」 에서 바뀌었다. finishing 이 묻는 기준 브랜치는 dispatch 에 미리 적는다). 돌아오면: 그 보고에서 판정 전체와 AC 보고 «내용 전체»를 거둔다(§4 — 작업 폴더는 지워질 수 있어 경로에 기대지 않는다) → 그 내용을 기계 상태 자원 폴더의 파일로 두고 `--impl` 대조(경고를 사용자에게 보인다) → 설계문서의 `## 판정` · `## 구현 대조 — <계획 경로>` 절을 쓰고 에픽 브랜치에 커밋 · push(이것이 그 계획의 「구현 끝」 근거다 — §6) → `gh` 로 PR 을 열고 번호를 기계 상태 캐시에 적는다(`gh` 가 없으면 PR 을 열 명령을 사용자에게 준다).
+3. **다음 일 고르기와 보내기.** 준비된 에픽마다 흐름을 고른다 — 기본은 설계 흐름이고, 조사 · 측정 · 결정처럼 맞지 않으면 고른 흐름 · 이유 · 산출물을 보이고 `AskUserQuestion` 으로 승인받는다(거절이면 설계 흐름). 승인되면 로드맵 `흐름:` · `산출물:` 칸은 재분해 절차로 적는다. 브랜치 · worktree 는 블록의 `브랜치:` 이름으로 먼저 만든다(하니스 기본 기능 우선 — `superpowers:using-git-worktrees`). 사람에게 묻는 단계(brainstorming · spec 승인)는 지휘 세션이 직접 한다 — 한 번에 한 에픽, 의존 사슬의 앞쪽부터. 사용자에게 다른 세션을 열라는 줄을 주지 않는다(같은 세션의 /compact 뒤 이어 갈 줄만 준다). 지휘 세션이 에픽 브랜치에 설계문서를 쓰고 커밋하려면 그 worktree 에 git 을 쓸 수 있어야 한다 — worktree 격리로 도는 세션은 다른 worktree 에 git · 파일 쓰기가 막힌다(2026-10-17 실측: `git -C <다른 worktree>` · 다른 경로 Write 거부, `git worktree add` 는 허용). 그래서 지휘 세션은 메인 체크아웃에서 열거나, 하위 agent 가 그 worktree 에서 일하지 않는 틈에 그 에픽 worktree 로 옮겨 간다(EnterWorktree) — 어느 쪽인지는 계획 3 이 재서 정하고, 막히면 그 사실과 대안을 시작 때 알린다. spec 이 승인되면 계획 · 구현 · 머지 준비는 백그라운드 agent 가 에픽 worktree 에서 한다 — 계획 agent 는 writing-plans 로 계획을 쓰고 커밋한 뒤, writing-plans 가 끝에 묻는 글(계획 검토 · 실행 방식)을 그대로 지휘자에게 돌려보내고 멈춘다(걸음 4 가 받는다). 의존 · 같은 파일 겹침이 없으면 동시에 보낸다(`superpowers:dispatching-parallel-agents`) — 띄우기 전에 규모를 알린다. 실행 방식은 writing-plans 가 권하는 것(`superpowers:subagent-driven-development` · `superpowers:executing-plans`)이다.
+4. **돌아오기를 장치로.** spec 이 승인되면 지휘 세션은 계획으로 들어가지 않고 계획 agent 를 보낸 뒤 다음 에픽 설계로 간다(계획은 걸음 3 의 백그라운드 agent 몫). 백그라운드 agent 는 끝나면 알림이 지휘자에게 온다 — 지휘자는 걸음 1 로 간다. 계획 agent 가 돌아오면: 상태 다시 계산 → 작업 목록 갱신(M5) → 지휘자가 계획을 읽고 「설계에 없던 결정(범위 · 인터페이스 · 파일 배치 등)」이 있는지 가른다 — 계획을 쓴 agent 가 스스로 가르지 않는다. 없으면 경로만 보이고 실행 방식(writing-plans 가 권한 것)으로 구현 agent 를 보낸다. 있으면 그 결정들을 배경과 함께 사용자에게 묻고, 답이 오기 전에는 그 에픽의 구현을 보내지 않는다(걸음 2). 가른 결과와 이유는 `## 지휘 기록` 에 적는다. 구현 agent 는 finishing 의 머지 메뉴에서 「브랜치 그대로 두기」(3번)를 골라 skill 을 그대로 끝내고 돌아온다(83020e28 — 미리 받은 답이 「Push 후 PR」 에서 바뀌었다. finishing 이 묻는 기준 브랜치는 dispatch 에 미리 적는다). 돌아오면: 그 보고에서 판정 전체와 AC 보고 «내용 전체»를 거둔다(§4 — 작업 폴더는 지워질 수 있어 경로에 기대지 않는다) → 그 내용을 기계 상태 자원 폴더의 파일로 두고 `--impl` 대조(경고를 사용자에게 보인다) → 설계문서의 `## 판정` · `## 구현 대조 — <계획 경로>` 절을 쓰고 에픽 브랜치에 커밋 · push(이것이 그 계획의 「구현 끝」 근거다 — §6) → `gh` 로 PR 을 열고 번호를 기계 상태 캐시에 적는다(`gh` 가 없으면 PR 을 열 명령을 사용자에게 준다).
 5. **머지 전 확인.** PR 마다(문서만 고친 PR 도 — 모델이 읽는 skill · reference · 템플릿 · 리뷰어 프로필은 문서로 치지 않는다): 스위트 대조(`merge_check.py`) → 새 실패가 있으면 `superpowers:systematic-debugging` → 통합 리뷰(`superpowers:requesting-code-review` 로 쓰기 도구 없는 리뷰어를 로드맵 frontmatter 의 리뷰 모델로(없으면 세션 모델), 이음매가 여럿이면 여럿 동시에 — 합친 사본 · 이 PR diff · 열린 다른 에픽 diff · 앞선 인계 절을 주고 에픽 사이 이음매를 묻는다) → 지적은 「이 PR 이 고침」 · 「뒤 에픽이 고침」으로 나눠 PR 본문 `## 통합 리뷰 인계` 절에 → 고침은 `superpowers:receiving-code-review` 로 받고 좁은 재리뷰(동작 · 락 · 보안 경계 · 리뷰어 프로필 수정은 매번, PR 하나에 두 번까지, 멈출 조건은 첫 재리뷰 전에) → `superpowers:verification-before-completion` → 릴리스 번호는 이때 정하고 머지 명령 줄만 준비한다. 건너뛴 확인은 무엇을 왜 건너뛰었는지 적는다.
 6. **머지 뒤.** 머지를 확인하면 열린 에픽 브랜치에 기본 브랜치를 merge 하고 대조를 다시 돌린다. 그 브랜치에서 agent 가 일하고 있으면 지휘자가 직접 merge 하지 않는다 — 그 agent 가 돌아올 때까지 기다리거나, 다음 task 경계에서 merge 하라고 그 agent 에 전한다(같은 worktree 에 두 writer 를 두지 않는다). merge 가 충돌하면 그 에픽만 멈추고 알린다. 남은 에픽을 재평가하고, 바뀔 때만 재분해 절차(`references/redecompose.md`)로 사용자 승인 뒤 로드맵 PR. 받는 에픽이 머지되면 그 넘김이 처리됐는지 확인한다(§5).
 7. **끝.** 모든 에픽이 머지되면 끝에서 끝 확인 — 기본 경로와 설계 흐름이 아닌 에픽 경로를 실제 명령으로 걷는다. 그때 qg 를 한 번 — 로드맵 시작 커밋부터 지금 기본 브랜치까지(qg 의 범위 입력과, 범위 안 여러 설계문서를 모두 의도로 읽는 일은 R2a). 그 입력이 없으면 qg 없이 가고 그 사실을 알린다. 지적은 후속 PR 하나로. 넘김이 모두 처리됐는지 확인하고 쓴 자원을 정리한다.
@@ -216,7 +216,7 @@ next_phase: superpowers:writing-plans
                                                  ▼
                          /spec-distill:epic-conductor <로드맵>   ◄─ 다시 불러도 같은 자리에서
   ┌─ 상태: git 계산 + 기계 상태 ── 같은 상태를 roadmap-status · 상태줄 · 작업 목록이 보임
-  ├─ 에픽마다: brainstorming ─► 설계문서 ─► spec-review --bundle ─► 승인 게이트 (사람 세션)
+  ├─ 에픽마다: brainstorming ─► 설계문서 ─► spec-review --bundle ─► 승인 게이트 (지휘 세션)
   │            writing-plans ─► --plan (백그라운드) ─► 지휘자가 새 결정 가름 ─► (있으면 물음)
   │            실행 방식 (백그라운드) ─► 판정 줄 ─► 화면 · 어긋남/막힘이면 그 에픽만 멈춤
   │            보고 ─► --impl ─► 설계문서 ## 판정 · ## 구현 대조 커밋 ─► finishing(Push · PR)
@@ -229,7 +229,7 @@ next_phase: superpowers:writing-plans
 
 **하류 이음매 — 흐름 고정 점검의 R5 행.**
 
-1. 에픽 넘김 줄(`references/epic-handoff.md`): brainstorming 은 기본값, 블록에 `흐름:` 이 있으면 그 흐름 · 「묶음을 다시 나누지 않는다」 → 「나눌 근거가 보이면 재분해로 보고한다」 · 「SDD 의 마지막 전체 리뷰」 → 「고른 실행 방식의 마지막 전체 리뷰(조사 에픽은 산출물의 AC 대조)」 · 새 지시 넷 — 설계문서에 「있는 것 검토」 절(외부 후보는 사용자 승인 뒤에만), 「상류 · 하류 연계」 절, 레포 전용 값을 박지 않기, spec 승인 뒤(계획으로 들어가지 않고) 지휘 세션으로 돌아가 지휘자를 다시 부르기 — 지휘자를 쓰지 않는 레포(지휘자를 끈 경우)에서는 지금처럼 그 세션이 계획 · 구현으로 간다.
+1. 에픽 넘김 줄(`references/epic-handoff.md`): brainstorming 은 기본값, 블록에 `흐름:` 이 있으면 그 흐름 · 「묶음을 다시 나누지 않는다」 → 「나눌 근거가 보이면 재분해로 보고한다」 · 「SDD 의 마지막 전체 리뷰」 → 「고른 실행 방식의 마지막 전체 리뷰(조사 에픽은 산출물의 AC 대조)」 · 새 지시 넷 — 설계문서에 「있는 것 검토」 절(외부 후보는 사용자 승인 뒤에만), 「상류 · 하류 연계」 절, 레포 전용 값을 박지 않기. 넘김 줄은 지휘자를 끈 경우(손 절차)에 쓰고, 그 세션은 지금처럼 계획 · 구현으로 간다 — 지휘자는 넘김 줄을 사용자에게 주지 않고 같은 내용을 자기 brainstorming 입력으로 쓴다.
 2. 재분해 신호(`references/redecompose.md` `## 1. 신호`): 셋으로 닫힌 목록 → 열린 목록 — 계획 · 구현 세션이 경계 오류를 찾은 경우를 예로 더한다.
 3. spec-review 게이트 ③(`skills/spec-review/SKILL.md`): 로드맵 에픽의 설계문서에서 「인터뷰 다시 열기」가 늘 재분해로 가던 것을, 지적이 그 에픽 안에서 끝나면 「이 에픽 다시 설계」 도 고를 수 있게.
 4. 지휘 절차 4(템플릿 · 이 로드맵): 실행 방식은 writing-plans 가 권하는 방식, 계획 검토는 새 결정이 있을 때만 기다림.
@@ -267,7 +267,7 @@ next_phase: superpowers:writing-plans
 
 1. **형식 · 상태**(`feature/epic-conductor`) — AC1~AC14 · AC39 · AC40 · AC43 의 기계 상태 형식과 넘김 계산 모듈 · AC38.
 2. **이음매 · 흐름 풀기** — AC31 · AC32~AC35 · AC38 과 AC42 의 로드맵 아닌 갈래. 넘김 줄에서 지휘자를 가리키지 않는 변경, 재분해 신호, 게이트 ③ · N18, 진행 게이트, 승인 게이트 줄의 「고른 실행 방식」. `references/conducting.md` 를 손 절차(지금 로드맵의 지휘 절차 1~9 를 옮긴 것)로 먼저 만든다.
-3. **지휘자** — AC15~AC30 · AC31 의 「지휘자로 돌아가기」 · AC36 · AC37 · AC41 · AC42 의 로드맵 갈래 · AC43 의 기록 자리와 PR 순서 · AC38. R2a 의 `shared/` 테스트 공유본이 머지된 뒤에 시작한다(D1.3). `conducting.md` 에 지휘 순환 걸음을 채우고, 지휘자를 가리키는 진입 안내를 이때 바꾼다.
+3. **지휘자** — AC15~AC30 · AC31 의 「넘김 줄은 지휘자를 끈 경우에만」 · AC44 · AC36 · AC37 · AC41 · AC42 의 로드맵 갈래 · AC43 의 기록 자리와 PR 순서 · AC38. R2a 의 `shared/` 테스트 공유본이 머지된 뒤에 시작한다(D1.3). `conducting.md` 에 지휘 순환 걸음을 채우고, 지휘자를 가리키는 진입 안내를 이때 바꾼다.
 
 계획마다 그 계획 몫의 AC 만 대조한다 — `check_bundle_coverage.py --plan` 이 `--acs <AC 목록>` 을 받게 하고(AC40), 지휘자는 위 목록을 그대로 넘긴다. 구현 대조(`--impl`)도 같은 목록이다.
 
@@ -303,7 +303,7 @@ next_phase: superpowers:writing-plans
 - AC28 모든 에픽 머지 뒤 끝에서 끝 확인을 걷고, qg 범위 입력이 있으면 로드맵 시작 커밋부터 qg 를 한 번 돌리고 없으면 건너뛴 사실을 알린다.
 - AC29 지휘자 skill · reference · 새 스크립트에 레포 전용 리터럴(레포 구조 경로 · 브랜치 접두 · 기본 브랜치 이름 · 모델 이름)이 없음을 락이 재고, 그 락은 변이로 이빨을 확인한다. 허용 목록은 하나다 — 외부 도구가 정한 기본 경로(superpowers 의 설계문서 · 계획 폴더, SDD 의 작업 폴더)와 플러그인 자기 상태 경로는 한 상수 모듈에만 두고, 로드맵 frontmatter 값이 있으면 그것이 이긴다. 그 상수 밖에서 같은 글자가 나오면 락이 실패한다.
 - AC30 devbrew 밖 버릴 레포(pytest · 셸 · node, 기본 브랜치 이름이 `main` 이 아닌 레포 포함)에서 설계 에픽 하나와 조사 에픽 하나로 지휘 순환의 기계 부분(상태 · 합친 사본 · 스위트 대조 · 기록 · 기계 상태 · 정리)이 돈다.
-- AC31 에픽 넘김 줄이 §7 하류 1 대로 바뀐다(brainstorming 기본값 · 재분해 보고 · 고른 실행 방식 · 있는 것 검토 · 연계 절 · 레포 전용 값 — 계획 2, 지휘자로 돌아가기 — 계획 3).
+- AC31 에픽 넘김 줄이 §7 하류 1 대로 바뀐다(brainstorming 기본값 · 재분해 보고 · 고른 실행 방식 · 있는 것 검토 · 연계 절 · 레포 전용 값 — 계획 2, 넘김 줄은 지휘자를 끈 경우에만 — 계획 3).
 - AC32 재분해 신호가 열린 목록이다.
 - AC33 spec-review 게이트 ③ 이 로드맵 에픽에서 「이 에픽 다시 설계」 갈래를 갖는다.
 - AC34 spec-review 승인 게이트가 기각 번호 수와 목록을 보이고 「반영」으로 되돌리는 길을 준다(N18).
@@ -316,13 +316,14 @@ next_phase: superpowers:writing-plans
 - AC42 spec-review 승인 게이트의 다음 세션 줄이 로드맵 에픽이면 지휘자로 돌아가기, 아니면 「고른 실행 방식의 마지막 전체 리뷰」 를 말한다(80a9fc4a).
 - AC43 기계 상태 형식 · 넘김 상태 계산이 `conductor_state.py` 한 모듈에 있고 화면과 지휘자가 그것을 쓴다(계획 1). 에픽 브랜치에 바로 쓸 수 없는 기록(하위가 일하는 중 · 머지 뒤 · 설계문서 없는 에픽)은 §2 의 세 자리로 간다. 구현 agent 는 머지 메뉴 3번(그대로 두기)으로 끝내고, 지휘자가 `--impl` 경고를 보이고 두 절을 커밋 · push 한 뒤 PR 을 연다.
 - AC41 머지 뒤 열린 에픽 브랜치에 기본 브랜치를 합칠 때 그 브랜치에서 agent 가 일하고 있으면 지휘자가 직접 merge 하지 않고 기다리거나 그 agent 에 전하며, merge 충돌이면 그 에픽만 멈추고 알린다. 기계 상태 쓰기는 세션 표지 아래에서만 하고, 다른 세션이 쥐고 있으면 읽기 전용으로 보인다.
+- AC44 지휘자는 사람 몫 단계(brainstorming · spec 승인 · 계획의 새 결정)를 자기 세션에서 한 번에 한 에픽씩 하고, 사용자에게 다른 세션을 열라는 줄을 내지 않는다(같은 세션의 /compact 뒤 이어 갈 줄은 낸다). 지휘 세션이 에픽 worktree 에 git 을 쓸 수 없는 하니스면 그 사실과 대안(메인 체크아웃에서 열기 · worktree 전환)을 시작할 때 알린다.
 
 ## Files to Modify
 
 - 새로: `plugins/spec-distill/skills/epic-conductor/SKILL.md` · `plugins/spec-distill/references/conducting.md` · `plugins/spec-distill/references/conductor-dispatch.md` · `plugins/spec-distill/references/roadmap-ontology.md` · `plugins/spec-distill/scripts/merge_check.py` · `plugins/spec-distill/scripts/conductor_state.py`(계획 1) · `plugins/spec-distill/scripts/conductor_ledger.py` · 레포 설정 기본값 상수 모듈 · R2a 가 만든 `shared/` 테스트 공유본으로 가는 spec-distill 쪽 링크 · 각 새 파일의 테스트.
 - 바뀜(계획 1): `plugins/spec-distill/scripts/roadmap_model.py` · `roadmap_status.py` · `roadmap_write.py` · `roadmap_render.py` · `check_bundle_coverage.py` · `spec_review_bundle.py` · `control_plane.py` · `skills/roadmap-status/SKILL.md` · `templates/roadmap-template.md` · 그 테스트들(`test_roadmap_status.sh` · `test_roadmap_render.py` · `test_roadmap_write.py` 등) · 이 로드맵 폴더의 `roadmap.md`.
 - 바뀜(계획 2): `plugins/spec-distill/references/epic-handoff.md`(지휘자를 가리키지 않는 변경) · `references/redecompose.md` · `references/proceed-gate.md` · `skills/spec-review/SKILL.md`(게이트 ③ · N18 · 승인 게이트 줄의 로드맵 아닌 갈래) · `references/conducting.md`(손 절차) · 해당 락.
-- 바뀜(계획 3): `plugins/spec-distill/skills/epic-conductor/SKILL.md` 와 새 스크립트 · `references/epic-handoff.md`(지휘자로 돌아가기) · `skills/spec-review/SKILL.md`(승인 게이트 줄의 로드맵 갈래) · `skills/spec-interview/references/finishing.md`(나눈 일 다음 세션 줄 한 줄 — R10 경로 예약과 겹침, 통합 리뷰에서 맞춤) · `templates/roadmap-template.md` 의 지휘 절차 · `references/conducting.md`(지휘 순환) · `control_plane.py`(기계 상태 합치기) · 해당 락.
+- 바뀜(계획 3): `plugins/spec-distill/skills/epic-conductor/SKILL.md` 와 새 스크립트 · `references/epic-handoff.md`(넘김 줄은 지휘자를 끈 경우에만) · `skills/spec-review/SKILL.md`(승인 게이트 줄의 로드맵 갈래) · `skills/spec-interview/references/finishing.md`(나눈 일 다음 세션 줄 한 줄 — R10 경로 예약과 겹침, 통합 리뷰에서 맞춤) · `templates/roadmap-template.md` 의 지휘 절차 · `references/conducting.md`(지휘 순환) · `control_plane.py`(기계 상태 합치기) · 해당 락.
 - 각 PR: `plugins/spec-distill/.claude-plugin/plugin.json` · `CHANGELOG.md` · `README.md`. qg 폴더는 고치지 않는다(D1.3).
 
 ## Verification Plan
@@ -375,6 +376,8 @@ next_phase: superpowers:writing-plans
 - 결정 · 2026-10-17 · 원칙 문서 정리 시점 — 「새 에픽으로 지금 병렬 (권장)」
 - 결정 · 2026-10-17 · 쓴 자원 정리 — 「아 그리고 사용했던거 있다면(워크트리나 등등, 브랜치는 아님) 정리하는거도 지휘자가 잘하고」
 - 결정 · 2026-10-17 · 「병렬」 칸(계획 1 작성 중 재결정 — 계산 결과를 칸에 적으면 재분해 때 낡은 사본이 남는다) — 「화면에서만 계산 (권장)」
+- 결정 · 2026-10-17 · 지휘 세션이 직접 진행(계획 1 구현 중 재결정) — 「세션을 연다고? 너가 진행해야지 지휘자로서」 · 「한가지 지금 구현하는 R5는 내가 말하는데로 가는거지? 다른 세션을 열라 하는건 곤란한데」
+- 결정 · 2026-10-17 · 재분해 #221(새 에픽 R11 · R2a · R5 · R8 · R9 · R10 범위) — 「R11 에 더함 (권장)」 · 「이대로 다시 나눈다 (권장)」
 - 결정 · 2026-10-17 · 절별 승인 — 1절 구성 · 연계도(위 「연계성」 답) · 2절 「ok …」 · 3절 「ok」 · 4절 「ok」 · 5절(위 역할표 답) · 6절 「ok」
 - D1.1 · r1 · adopt · dec7d5b2#r1.1 · "채택 — 남길 기록은 추적 문서로 (권장)" — 지휘자 원장(기다리는 질문 · 넘김 상태 · 판정 · 로그)을 git 이 추적하지 않는 상태 폴더에 둔다. 그런데 레포 규칙은 세션을 넘는 진행 기록을 docs 의 추적 파일에 두고 커밋하라고 한다.
 - D1.2 · r1 · adopt · 396af162#r1.1 · "채택 — 로드맵 frontmatter 에 경로 (권장)" — 문서는 상태 계산 스크립트가 git 만 읽는 성질을 지킨다고 한다. 그런데 같은 문서가 그 스크립트의 설계문서 · 계획 찾기를 git 밖 원장의 레포 설정에서 읽게 하고, 그 설정은 로드맵마다 따로 있는 원장에 들어 있다.
@@ -498,12 +501,12 @@ next_phase: superpowers:writing-plans
 | 분해 판단이 `흐름` · `산출물` 칸을 채움 · 인터뷰 조사의 레포 안 재사용 검토 · 나눈 일 다음 세션 줄 문면 조율 · 하나짜리 brief 의 다음 세션 줄(`finishing.md`)이 가정하는 「SDD 의 마지막 전체 리뷰」 를 「고른 실행 방식의 마지막 전체 리뷰」 로 | 인터뷰 쪽은 R10 범위(나눈 일의 그 한 줄 자체는 R5 · AC36, 승인 게이트 쪽 같은 줄은 R5 · AC42) | R10 |
 | 다른 파일에 박힌 레포 전용 값(로드맵 폴더 위치 검사 등) · `gh` · superpowers 부재 강등 | 경로 규약 범용화 · 부재 강등은 R8 범위 | R8 |
 | 지출 조항 — 지휘자 시작 승인을 「규모 공시만」으로 · 「끝에 할 일 하나」 · Law 1 중간 단계 | 규칙 문면은 R9 범위 | R9 |
-| 사용자 원칙(재사용 검토 · 레포 전용 값 금지 · 상하류 연계 · 계층 · 온톨로지 · 흐름 고정 금지 · 머지 전 확인 · 하위 같은 흐름)을 CLAUDE.md · 철학 문서로 옮기고 낡은 개념 삭제 | 사용자 결정 「새 에픽으로 지금 병렬 (권장)」 — 재분해로 새 에픽을 만든 뒤 받는 곳을 그 번호로 고친다 | 없음 |
+| 사용자 원칙(재사용 검토 · 레포 전용 값 금지 · 상하류 연계 · 계층 · 온톨로지 · 흐름 고정 금지 · 머지 전 확인 · 하위 같은 흐름)을 CLAUDE.md · 철학 문서로 옮기고 낡은 개념 삭제 | 사용자 결정 「새 에픽으로 지금 병렬 (권장)」 — 재분해(#221)로 새 에픽 R11 이 맡았다 | R11 |
 
 ## Metadata
 
 - 에픽: R5 · 브랜치 `feature/epic-conductor`(계획 둘째 · 셋째의 브랜치는 계획 1 PR 안에서 해석기와 함께 등록 — §11)
-- 설계: 지휘 세션이 직접 brainstorming(2026-10-17), spec 승인까지만 — 계획 · 구현은 에픽 worktree 의 새 세션
+- 설계: 지휘 세션이 직접 brainstorming(2026-10-17), spec 승인까지만 — 계획 1 은 같은 세션의 SDD, 이후 계획 · 구현은 백그라운드 agent
 - 맥락: 설계 대화의 사용자 결정은 `## 결정 기록` · `## 사용자 원문 대조` 에 전부 있다(레포 밖 메모에 기대지 않는다).
 
 ### Deferred to plan
