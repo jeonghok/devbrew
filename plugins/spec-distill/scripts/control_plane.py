@@ -17,7 +17,9 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime
+import errno
 import hashlib
 import json
 import os
@@ -45,6 +47,10 @@ BUCKETS = (("설계", ("설계 중",)), ("구현", ("계획", "구현 중", "구
 IMPL_STAGES = ("구현 중", "구현 끝", "PR")
 GH_STATES = {"OPEN": "열림", "MERGED": "머지됨", "CLOSED": "닫힘"}
 LEDGER_MAX_BYTES = 1 << 20
+MACHINE_MAX_BYTES = 1 << 20
+LEDGER_MAX_COUNT = 50
+GH_CALL_CAP = 5.0
+IMPL_DONE_MARK = " — 구현 끝 · "  # roadmap_status 가 일부 머지 이유에 붙이는 모양
 UNCOUNTED = ("대기", "머지됨", "끝남", "알 수 없음")
 TASK_STATES = ("pending", "in_progress", "completed")
 TOP_WARNINGS = (("고아 발화", "orphans"), ("미배정 번호", "unassigned"),
@@ -250,6 +256,9 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
             lines += [clean("    경고: %s" % w) for w in b.get("warnings") or []]
             if b.get("pr"):
                 lines.append(clean("    PR: %s" % pr_text(b["pr"])))
+            lines += [clean("    원장 읽기 불가: %s — %s" % (f["path"], f["reason"])) for f in b.get("ledger_failures") or []]
+            if b.get("ledger_cut"):
+                lines.append(clean("    %s" % b["ledger_cut"]))
         for label, key in TOP_WARNINGS:
             vals = report.get(key)
             if vals is None:
@@ -267,7 +276,9 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
             lines.append("판정 줄:")
             rows = []
             for b in ruled:
-                if b["rulings"] is None:
+                if b["rulings"] is None and b.get("ledger_failures"):
+                    rows.append(clean("    %s: 셀 수 없음 — 실행 원장을 읽지 못했고 설계문서 `## 판정` 도 없다" % b.get("id")))
+                elif b["rulings"] is None:
                     rows.append(clean("    %s: 셀 수 없음 — 실행 원장도 설계문서 `## 판정` 도 없다" % b.get("id")))
                 else:
                     rows += [clean("    %s: %s" % (b.get("id"), r)) for r in b["rulings"]]
@@ -647,6 +658,16 @@ def pr_text(pr: dict) -> str:
     return "%s %s(%s)" % (pr["number"], pr["state"], pr["source"])
 
 
+def _why(exc) -> str:
+    if isinstance(exc, FileNotFoundError):
+        return "파일이 없다"
+    if isinstance(exc, ValueError):
+        return str(exc)
+    if getattr(exc, "errno", None) == errno.ELOOP:
+        return "링크다"
+    return type(exc).__name__
+
+
 def active_branch(b: dict):
     return next((s["branch"] for s in b.get("branch_states") or [] if not s.get("merged") and s.get("tip")), None)
 
@@ -658,7 +679,13 @@ def machine_for(repo, roadmap_rel: str):
         return None, "git 공용 디렉토리를 찾지 못했다"
     try:
         path = cs.machine_path(state_root_for_common(Path(repo.cwd, common).resolve()), roadmap_rel)
-        return cs.load(path, roadmap_rel), None
+        try:
+            text = read_capped(path, MACHINE_MAX_BYTES)
+        except FileNotFoundError:
+            return cs.empty(), None
+        except (OSError, ValueError) as exc:  # 링크 · 파이프 · 큰 파일은 읽지 않고 사유로 낸다
+            return None, "기계 상태 파일을 읽지 못했다: %s (%s)" % (path, _why(exc))
+        return cs.parse_machine(text, roadmap_rel), None
     except (cs.MachineError, FormatError) as exc:  # 한 파일이 깨져도 화면 전체를 비우지 않는다
         return None, str(exc)
 
@@ -672,8 +699,9 @@ def gh_lookup_for(repo, deadline):
 
     def lookup(branch: str) -> dict:
         try:
+            own = Deadline(min(deadline.left("gh pr list"), GH_CALL_CAP))  # 호출마다 상한 — 하나가 멈춰도 나머지가 산다
             rc, out = run_bounded([exe, "pr", "list", "--state", "all", "--head", branch,
-                                   "--json", "number,state", "--limit", "1"], repo.cwd, env, deadline, "gh pr list")
+                                   "--json", "number,state", "--limit", "1"], repo.cwd, env, own, "gh pr list")
         except TimedOut:
             return _pr_unknown("gh 시간 초과")
         if rc != 0:
@@ -686,6 +714,8 @@ def gh_lookup_for(repo, deadline):
             return _pr_unknown("gh 출력 모양이 다르다")
         if not data:
             return {"number": None, "state": "없음", "source": "gh"}
+        if not isinstance(data[0], dict):
+            return _pr_unknown("gh 출력 모양이 다르다")
         state, number = GH_STATES.get(data[0].get("state")), data[0].get("number")
         if state is None or not isinstance(number, int):
             return _pr_unknown("gh 출력 모양이 다르다")
@@ -693,8 +723,40 @@ def gh_lookup_for(repo, deadline):
     return lookup
 
 
-def overlay(items, machine_lookup, gh_lookup, use_gh: bool, read=read_capped) -> None:
-    """기계 상태 · 실행 원장 · gh 를 보고서에 얹는다 — 캐시 밖에서 매번 읽는다(캐시 열쇠에 넣지 않는다)."""
+def _rulings(b: dict, paths: list, read, deadline) -> None:
+    """판정을 실행 원장에서, 못 읽은 원장이 있으면 설계문서 `## 판정` 보관본을 합쳐 b 에 싣는다."""
+    rulings, failures = None, []
+    if len(paths) > LEDGER_MAX_COUNT:
+        b["ledger_cut"] = "원장 %d개 중 %d개만 읽음" % (len(paths), LEDGER_MAX_COUNT)
+    for ledger in paths[:LEDGER_MAX_COUNT]:
+        if not os.path.isabs(ledger):
+            failures.append({"path": ledger, "reason": "절대 경로가 아니다"})
+            continue
+        try:
+            if deadline is not None:
+                deadline.left("원장 읽기")
+            rulings = (rulings or []) + cs.ledger_rulings(read(ledger, LEDGER_MAX_BYTES))
+        except TimedOut:
+            failures.append({"path": ledger, "reason": "시간 초과"})
+        except (OSError, ValueError) as exc:
+            failures.append({"path": ledger, "reason": _why(exc)})
+    archived = b.get("rulings_archived")
+    had_ledger = rulings is not None
+    if had_ledger:
+        b["rulings_source"] = "실행 원장"
+    if archived is not None and (rulings is None or failures):
+        seen = set(r.lstrip("- ").strip() for r in rulings or [])
+        rulings = (rulings or []) + [r for r in archived if r.lstrip("- ").strip() not in seen]
+        b["rulings_source"] = "실행 원장 + 설계문서 ## 판정" if had_ledger else "설계문서 ## 판정"
+    if failures:
+        b["ledger_failures"] = failures
+    if rulings is not None or failures or b.get("stage") != "머지됨":
+        b["rulings"] = rulings
+
+
+def overlay(items, machine_lookup, gh_lookup, use_gh: bool, read=read_capped, deadline=None) -> None:
+    """기계 상태 · 실행 원장 · gh 를 보고서에 얹는다 — 캐시 밖에서 매번 읽는다(캐시 열쇠에 넣지 않는다).
+    use_gh 가 거짓(상태줄)이면 gh 도 원장도 판정도 읽지 않는다 — 상태줄은 그것들을 보이지 않는다."""
     for path, report in items:
         machine, why = machine_lookup(path)
         report["machine"], report["machine_error"] = machine, why
@@ -707,7 +769,7 @@ def overlay(items, machine_lookup, gh_lookup, use_gh: bool, read=read_capped) ->
             stage = b.get("stage") or ""
             partial = stage.startswith("일부 머지")
             br = active_branch(b)
-            if br and (stage == "구현 끝" or (partial and "구현 끝" in (b.get("reason") or ""))):
+            if br and (stage == "구현 끝" or (partial and IMPL_DONE_MARK in (b.get("reason") or ""))):
                 if br in prs:
                     row = prs[br]
                     b["pr"] = {"number": row["번호"], "state": row["상태"], "source": "기계 상태"}
@@ -719,18 +781,8 @@ def overlay(items, machine_lookup, gh_lookup, use_gh: bool, read=read_capped) ->
                     b["pr"] = gh_lookup(br)
                 if stage == "구현 끝" and b["pr"]["state"] == "열림":
                     b["stage"], b["reason"] = "PR", "%s 열림(%s)" % (b["pr"]["number"], b["pr"]["source"])
-            if stage in IMPL_STAGES or partial or stage == "머지됨":
-                rulings = None
-                for ledger in ledgers.get(b.get("id"), []):
-                    try:
-                        rulings = (rulings or []) + cs.ledger_rulings(read(ledger, LEDGER_MAX_BYTES))
-                        b["rulings_source"] = "실행 원장"
-                    except (OSError, ValueError):
-                        continue
-                if rulings is None and b.get("rulings_archived") is not None:
-                    rulings, b["rulings_source"] = b["rulings_archived"], "설계문서 ## 판정"
-                if rulings is not None or stage != "머지됨":
-                    b["rulings"] = rulings
+            if use_gh and (stage in IMPL_STAGES or partial or stage == "머지됨"):
+                _rulings(b, ledgers.get(b.get("id"), []), read, deadline)
 
 
 def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True):
@@ -783,9 +835,11 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True):
             err = save_cache(path, kept, last)
             if err:
                 view["notes"].append(err)
+    items = copy.deepcopy(items)  # 덧씌움이 캐시 항목(ctx["entries"])에 섞여 디스크에 남지 않게
     for _p, r in items:
         r["fetched_at"] = fetched  # 첫 줄의 받은 시각도 캐시 밖에서
-    overlay(items, lambda rel: machine_for(repo, rel), gh_lookup_for(repo, deadline) if use_gh else None, use_gh)
+    overlay(items, lambda rel: machine_for(repo, rel), gh_lookup_for(repo, deadline) if use_gh else None, use_gh,
+            deadline=deadline)
     view.update(items=items, interview=interview, select_error=select_error)
     return view
 

@@ -408,6 +408,65 @@ out="$(cd "$W" && timed 10 python3 "$T/m-nonblock/control_plane.py" statusline <
 assert_eq "$out" "TIMEOUT" "변이 잡힘: 파이프를 막힘 없이 열지 않으면 상태줄이 멈춘다(시간 단언이 RED)"
 rm -rf "$STATE_DIR"
 
+echo "=== 기계 상태 덧씌우기 — 배선 · 캐시 · 상한 ==="
+MPATH="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as c; print(c.machine_path(sys.argv[2], sys.argv[3]))' "$REAL" "$W/.claude/spec-distill" "$RM")"
+LEDGER="$T/exec-ledger.md"
+printf '# SDD ledger — plan: p\nTask 1: Ruling: 가 — 왜 — 비용\n' > "$LEDGER"
+write_machine() {  # write_machine <PR 상태> <원장 경로> — 진짜 기계 상태 파일을 쓴다
+  mkdir -p "$(dirname "$MPATH")"
+  python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as c
+d = c.empty()
+d["PR"].append({"브랜치": "feature/a", "번호": "#12", "상태": sys.argv[4], "확인한 때": "2026-10-17 10:00"})
+d["실행 원장"].append({"에픽": "R5", "계획": "p.md", "원장": sys.argv[5], "읽은 줄": "0"})
+open(sys.argv[2], "w", encoding="utf-8").write(c.render_machine(sys.argv[3], d))' "$REAL" "$MPATH" "$RM" "$1" "$2"
+}
+python3 -I -c 'import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+d["blocks"] = [{"id": "R5", "title": "다섯", "kind": "bundle", "stage": "구현 끝", "reason": "계획 구현 대조 있음",
+                "task_status": "in_progress", "deps": [], "warnings": [], "notes": [],
+                "branch_states": [{"branch": "feature/a", "tip": "abcdef12", "merged": None}]}]
+d["orphans"] = []; d["exit"] = 0
+json.dump(d, open(sys.argv[2], "w", encoding="utf-8"), ensure_ascii=False)' "$S/report.json" "$S/stub-rm.json"
+rm -f "$CACHE"
+write_machine 열림 "$LEDGER"
+sl >/dev/null
+out="$(show)"
+assert_contains "$out" "R5 다섯 — PR · #12 열림(기계 상태)" "기계 상태의 열린 PR 이 단계를 PR 로 바꾼다(gather 배선)"
+assert_contains "$out" "    PR: #12 열림(기계 상태)" "PR 줄"
+assert_contains "$out" "    R5: Task 1: Ruling: 가 — 왜 — 비용" "실행 원장의 판정 줄"
+CALLS_BEFORE="$(calls)"
+write_machine 닫힘 "$LEDGER"
+sl >/dev/null
+out="$(show)"
+assert_eq "$(calls)" "$CALLS_BEFORE" "양성 짝: 캐시가 맞아 상태 계산은 다시 부르지 않았다"
+assert_contains "$out" "    PR: #12 닫힘(기계 상태)" "기계 상태를 바꾸면 캐시 뒤의 화면이 따라간다 — 덧씌움이 캐시에 남지 않는다"
+assert_not_contains "$out" "열림(기계 상태)" "옛 PR 상태가 캐시를 타고 남지 않는다"
+assert_not_contains "$(cat "$CACHE")" "기계 상태" "캐시 파일에 덧씌움이 없다"
+printf '깨진 파일\n' > "$MPATH"
+out="$(show)"
+assert_contains "$out" "기계 상태를 읽지 못했다 — frontmatter 가 없다" "깨진 기계 상태는 사유로 보인다"
+assert_contains "$out" "R5 다섯 — 구현 끝" "깨진 파일 하나가 보고서를 비우지 않는다"
+rm -f "$MPATH"; mkfifo "$MPATH"
+out="$(cd "$W" && timed 10 python3 "$S/control_plane.py" show </dev/null)"
+within "$out" 8 && ok "FIFO 기계 상태에도 지도가 멈추지 않는다" || no "FIFO 기계 상태에서 지도가 멈췄다: $(body "$out")"
+assert_contains "$out" "기계 상태 파일을 읽지 못했다" "FIFO 는 사유로 보인다"
+out="$(cd "$W" && timed 10 python3 "$S/control_plane.py" statusline </dev/null)"
+within "$out" 8 && ok "FIFO 기계 상태에도 상태줄이 멈추지 않는다" || no "FIFO 기계 상태에서 상태줄이 멈췄다"
+rm -f "$MPATH"
+head -c 3000000 /dev/zero | tr '\0' x > "$MPATH"
+out="$(cd "$W" && timed 10 python3 "$S/control_plane.py" show </dev/null)"
+within "$out" 8 && ok "큰 기계 상태에도 지도가 멈추지 않는다" || no "큰 기계 상태에서 지도가 멈췄다"
+assert_contains "$out" "바이트를 넘는다" "큰 파일은 사유로 보인다"
+rm -f "$MPATH"
+mkfifo "$T/fifo-ledger"
+write_machine 열림 "$T/fifo-ledger"
+out="$(cd "$W" && timed 10 python3 "$S/control_plane.py" show </dev/null)"
+within "$out" 8 && ok "FIFO 원장에도 지도가 멈추지 않는다" || no "FIFO 원장에서 지도가 멈췄다"
+assert_contains "$out" "    원장 읽기 불가: $T/fifo-ledger — 일반 파일이 아니다" "읽지 못한 원장은 경로와 사유를 보인다"
+out="$(cd "$W" && timed 10 python3 "$S/control_plane.py" statusline </dev/null)"
+within "$out" 8 && ok "FIFO 원장에도 상태줄이 멈추지 않는다" || no "FIFO 원장에서 상태줄이 멈췄다"
+rm -f "$MPATH" "$S/stub-rm.json" "$CACHE" "$T/fifo-ledger"
+
 echo "=== README 상태줄 스크립트(AC9) ==="
 README="$ROOT/plugins/spec-distill/README.md"
 awk '/<!-- control-plane-statusline:begin -->/{f=1;next} /<!-- control-plane-statusline:end -->/{f=0} f&&/^```sh$/{b=1;next} f&&b&&/^```$/{exit} f&&b' "$README" > "$T/sl.sh"
