@@ -342,14 +342,14 @@ assert_eq "$rc" "3" "로드맵 없음 → rc 3"
 (cd "$W" && python3 "$RS" >/dev/null 2>&1); rc=$?
 assert_eq "$rc" "2" "인자 없음 → rc 2"
 
-# ── 4. origin/main 없음 → 모든 블록 알 수 없음 · rc 3 ─────────────────────────
+# ── 4. origin/HEAD 없음(기본 브랜치를 모름) → 모든 블록 알 수 없음 · rc 3 ─────────────────────────
 git clone -q "$T/origin.git" "$T/noorigin" 2>/dev/null
 git -C "$T/noorigin" remote remove origin
 (cd "$T/noorigin" && python3 "$RS" --json --roadmap-file docs/rm/roadmap.md > "$T/no.json"); rc=$?
-assert_eq "$rc" "3" "origin/main 없음 → rc 3"
+assert_eq "$rc" "3" "origin/HEAD 없음 → rc 3"
 assert_eq "$(js "$T/no.json" "sorted({b['stage'] for b in r['blocks']})")" "['알 수 없음']" "모든 블록 알 수 없음"
 (cd "$T/noorigin" && python3 "$RS" --json docs/rm/roadmap.md > "$T/no2.json"); rc=$?
-assert_eq "$rc" "3" "origin/main 사본 모드에서 origin/main 없음 → rc 3"
+assert_eq "$rc" "3" "기본 브랜치 사본 모드에서 origin/HEAD 없음 → rc 3"
 
 # ── 4b. git 읽기 실패 · 내부 오류 → 검사 불가(3) — 빈 결과로 이상 없음을 내지 않는다(N3) ──
 REAL_GIT="$(command -v git)"

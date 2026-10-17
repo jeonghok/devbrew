@@ -12,7 +12,7 @@
 종료 코드: 0 성공 · 1 쓰지 않음(표 오류 · 덮어쓰기 거부 · 검증 실패 — 쓴 것은 모두 되돌렸다) · 2 사용법 오류.
 
 검증은 쓴 로드맵에 `roadmap_status.py --roadmap-file <로드맵> --json` 을 돌려 format_errors · unassigned ·
-orphans · unknown_ids 넷이 모두 빈 목록일 때만 성공이다. 검사기의 종료 코드는 보지 않는다 — origin/main 을
+orphans · unknown_ids 넷이 모두 빈 목록일 때만 성공이다. 검사기의 종료 코드는 보지 않는다 — 기본 브랜치(origin/HEAD)를
 못 읽으면 3, 진행 경고면 1 이 나와 생성물의 유효성과 무관하다.
 create 는 표 파일의 `## 생성 기록` 절에 자기가 만든 파일을 적고, 다시 돌 때 그 기록에 있는 파일만 덮어쓴다.
 """

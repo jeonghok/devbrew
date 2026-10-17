@@ -217,6 +217,12 @@ class Tasks(unittest.TestCase):
         out, _err, _rc = cp.tasks_output([(RM, r)])
         self.assertEqual([len(x.split("\t")) for x in out], [2])
 
+    def test_not_on_default_prints_nothing(self):
+        r = report([blk("R1", "설계 중", "in_progress")], 4)
+        out, err, rc = cp.tasks_output([(RM, r)])
+        self.assertEqual((out, rc), ([], 4))
+        self.assertIn("--roadmap-file", err)
+
     def test_unknown_exit_prints_nothing(self):
         r = report(BASE, 3, unknown_reasons=["로드맵을 못 읽었다: x (origin/main)"])
         out, err, rc = cp.tasks_output([(RM, r)])

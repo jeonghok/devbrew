@@ -231,9 +231,20 @@ rm -f "$S/state_path.py"
 echo "=== 진짜 상태 계산과의 인자 계약 ==="
 out="$(cd "$W" && python3 "$REAL/control_plane.py" show docs/superpowers/roadmaps/none/roadmap.md)"
 assert_contains "$out" "로드맵이 아직 기본 브랜치(origin/main)에 없다" "기본 브랜치에 없는 로드맵 — 없음 줄"
-out="$(cd "$W" && python3 "$REAL/control_plane.py" show --tasks docs/superpowers/roadmaps/none/roadmap.md 2>&1 >/dev/null)"; rc=$?
-assert_eq "$rc" "4" "작업 목록: 기본 브랜치에 없는 로드맵 → rc 4"
-assert_contains "$out" "--roadmap-file" "작업 목록: 머지 전이면 작업 트리 사본으로 계산하라는 안내"
+out="$(cd "$W" && python3 "$REAL/control_plane.py" show --tasks docs/superpowers/roadmaps/none/roadmap.md 2>"$T/err4")"; rc=$?
+assert_eq "$out|$rc" "|4" "작업 목록: 기본 브랜치에 없는 로드맵 → 표준 출력 비고 rc 4"
+assert_contains "$(cat "$T/err4")" "--roadmap-file" "작업 목록: 머지 전이면 작업 트리 사본으로 계산하라는 안내(표준 오류)"
+
+# origin/HEAD 만 없는 레포 — 「로드맵 없음」이 아니라 기본 브랜치를 모른다고 말한다
+git clone -q "$T/origin.git" "$T/nohead" 2>/dev/null
+git -C "$T/nohead" remote set-head origin -d >/dev/null 2>&1
+out="$(cd "$T/nohead" && python3 "$REAL/control_plane.py" show </dev/null)"
+assert_contains "$out" "기본 브랜치를 알 수 없다" "origin/HEAD 없음: show 는 기본 브랜치를 모른다고 말한다"
+assert_not_contains "$out" "로드맵 없음" "origin/HEAD 없음: 「로드맵 없음」으로 뭉개지 않는다"
+out="$(cd "$T/nohead" && python3 "$REAL/control_plane.py" show --tasks </dev/null 2>"$T/err5")"; rc=$?
+assert_eq "$out|$rc" "|3" "origin/HEAD 없음: 작업 목록은 비고 rc 3"
+assert_contains "$(cat "$T/err5")" "기본 브랜치를 알 수 없다" "origin/HEAD 없음: 사유가 표준 오류에"
+assert_eq "$(cd "$T/nohead" && python3 "$REAL/control_plane.py" statusline </dev/null)" "" "origin/HEAD 없음: 상태줄은 조용하다"
 
 echo "=== 변이(AC11) — 통과가 정답인 단언이 이빨을 갖는가 ==="
 mutant() {  # mutant <이름> <옛 글자> <새 글자> — 대역 폴더 사본에 한 곳을 바꾼다. 못 심으면 계측기 고장

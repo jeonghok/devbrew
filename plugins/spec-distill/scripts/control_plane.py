@@ -44,6 +44,8 @@ TOP_WARNINGS = (("고아 발화", "orphans"), ("미배정 번호", "unassigned")
                 ("brief 에 없는 번호", "unknown_ids"))
 CTRL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 QUEUE_HEADING = "## audit §2 대기 줄"
+NO_DEFAULT = ("기본 브랜치를 알 수 없다 — origin/HEAD 가 없다. `git remote set-head origin --auto` 로 만든 뒤 "
+              "다시 계산한다")
 NO_ROADMAP = "로드맵 없음 — 기본 브랜치에 끝나지 않은 블록이 있는 로드맵이 없다"
 
 
@@ -282,14 +284,6 @@ def tasks_output(items, select_error=None):
 # ── git · 인터뷰 파일 · 캐시 (읽기 전용 — 쓰는 것은 캐시 파일 하나) ──────────────────
 
 DEFAULT_REF = "refs/remotes/origin/HEAD"
-
-
-def default_ref(repo):
-    """(커밋, 전체 참조 이름) — origin/HEAD 가 가리키는 기본 브랜치. 없으면 (None, None)."""
-    sha = repo.line("rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
-    if not sha:
-        return None, None
-    return sha, repo.line("rev-parse", "--symbolic-full-name", DEFAULT_REF)
 ROADMAP_RE = re.compile(r"docs/superpowers/roadmaps/[^/]+/roadmap\.md")
 GIT_OK = frozenset({"rev-parse", "ls-tree", "for-each-ref"})
 CACHE_VERSION = 1
@@ -399,6 +393,13 @@ def fetch_stamp(repo: Repo):
             except OSError:
                 continue
     return max(stamps) if stamps else None
+
+def default_ref(repo):
+    """(커밋, 전체 참조 이름) — origin/HEAD 가 가리키는 기본 브랜치. 없으면 (None, None)."""
+    sha = repo.line("rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
+    if not sha:
+        return None, None
+    return sha, repo.line("rev-parse", "--symbolic-full-name", DEFAULT_REF)
 
 
 def candidates(repo: Repo, main):
@@ -625,6 +626,8 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict):
         view["minutes"] = max(0, int((time.time() - stamp) // 60))
         fetched = datetime.datetime.fromtimestamp(stamp).strftime("%Y-%m-%d %H:%M")
     main, main_full = default_ref(repo)
+    view["no_default"] = bool(not arg and main is None
+                              and repo.line("for-each-ref", "--count=1", "--format=%(refname)", "refs/remotes"))
     if arg:
         if os.path.isabs(arg):
             arg = os.path.relpath(os.path.realpath(arg), os.path.realpath(repo.cwd))
@@ -764,14 +767,15 @@ def cmd_show(tasks: bool, arg) -> int:
             return 3
         print(msg)
         return 0
+    shown_error = v["select_error"] or (NO_DEFAULT if v.get("no_default") and not v["items"] else None)
     if tasks:
-        out, err, rc = tasks_output(v["items"], v["select_error"])
+        out, err, rc = tasks_output(v["items"], shown_error)
         if out:
             print("\n".join(out))
         if err:
             sys.stderr.write(err + "\n")
         return rc
-    print(show_text(v["items"], v["interview"], v["notes"], first_line, v["select_error"]))
+    print(show_text(v["items"], v["interview"], v["notes"], first_line, shown_error))
     return 0
 
 
