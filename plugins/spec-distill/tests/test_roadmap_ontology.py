@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""references/roadmap-ontology.md — 계층 넷 · 객체 표 · 링크 칸 이름의 실재(R5 AC10).
+"""references/roadmap-ontology.md — 계층 넷 · 객체 표 · 링크 이름 · 주인의 실재(R5 AC10).
 
 Run (리포 루트에서): python3 -m unittest plugins/spec-distill/tests/test_roadmap_ontology.py
 """
@@ -12,8 +12,12 @@ import unittest
 from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PLUGIN / "scripts"))
-from roadmap_model import FIELDS, section_body  # noqa: E402
+SCRIPTS = PLUGIN / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+from roadmap_model import FIELDS, FORBIDDEN, REQUIRED, section_body  # noqa: E402
+from roadmap_render import BUNDLE_FORMAT  # noqa: E402
+from conductor_state import COLUMNS  # noqa: E402
+from repo_defaults import DIR_KEYS, TEXT_KEYS  # noqa: E402
 
 DOC = PLUGIN / "references" / "roadmap-ontology.md"
 SOURCES = ("roadmap_model.py", "roadmap_status.py", "check_bundle_coverage.py", "repo_defaults.py",
@@ -24,6 +28,19 @@ OBJECTS = ("로드맵", "에픽", "에픽 묶음", "설계문서", "산출물", 
            "넘김 확인 줄", "판정", "구현 대조", "지휘 기록", "기계 상태", "리뷰 원장")
 HEAD = ["객체", "층", "식별자", "속성", "링크(칸 · 키)", "주인"]
 BACKTICK = re.compile(r"`([^`]+)`")
+# 객체 → 주인 칸이 이름 붙여야 하는 (스크립트, 그 안에 정의된 기호). 기호는 코드에 실재해야 한다.
+PINS = {
+    "에픽": (("roadmap_model.py", "parse_roadmap"),),
+    "에픽 묶음": (("roadmap_write.py", "cmd_create"), ("roadmap_render.py", "render_bundle")),
+    "레포 설정": (("repo_defaults.py", "repo_settings"),),
+    "브랜치": (("roadmap_status.py", "progress"),),
+    "번호 대조 행": (("check_bundle_coverage.py", "table_rows"),),
+    "미룸 · 넘김 줄": (("roadmap_model.py", "handoff_rows"),),
+    "넘김 확인 줄": (("conductor_state.py", "confirm_line"), ("roadmap_model.py", "CONFIRM_RE")),
+    "기계 상태": (("conductor_state.py", "parse_machine"), ("control_plane.py", "overlay")),
+}
+ALLOW_LINK = ("#<n>", "- 넘김 확인", "받는 곳", "받듦", "Spec:", "**Spec:**")   # 코드 글에 그대로 있어야 한다
+ALLOW_SOURCE = ("PR 의 head", "문서 경로")
 
 
 def rows(section: str) -> list:
@@ -32,13 +49,32 @@ def rows(section: str) -> list:
     return [[c.strip() for c in l[1:-1].split("|")] for l in lines]
 
 
+def frontmatter_keys() -> set:
+    block = BUNDLE_FORMAT.split("---\n")[1]
+    return {l.split(":")[0] for l in block.splitlines() if ":" in l}
+
+
+KEYS = frontmatter_keys() | set(DIR_KEYS) | set(TEXT_KEYS) | {"source_brief", "source_interview", "roadmap"}
+
+
 def link_ok(token: str, corpus: str) -> bool:
-    return token.rstrip(":") in FIELDS or token in corpus
+    """링크 토큰을 종류별로 코드에서 뽑은 집합과 맞춘다 — 부분 문자열로 맞추지 않는다."""
+    if token in ALLOW_LINK:
+        return token in corpus
+    if token.endswith(":"):
+        return token[:-1] in FIELDS
+    if token.startswith("## "):
+        return token in corpus
+    return token in COLUMNS or token in KEYS
+
+
+def defined(name: str, text: str) -> bool:
+    return re.search(r"^(def %s\b|%s\s*=)" % (name, name), text, re.M) is not None
 
 
 class Ontology(unittest.TestCase):
     def setUp(self):
-        self.corpus = "\n".join((PLUGIN / "scripts" / n).read_text(encoding="utf-8") for n in SOURCES)
+        self.corpus = "\n".join((SCRIPTS / n).read_text(encoding="utf-8") for n in SOURCES)
 
     def test_four_layers(self):
         self.assertEqual([r[0] for r in rows("## 계층")[2:]], list(LAYERS))
@@ -46,7 +82,6 @@ class Ontology(unittest.TestCase):
     def test_object_table_shape(self):
         table = rows("## 객체")
         self.assertEqual(table[0], HEAD)
-        self.assertGreaterEqual(len(table) - 2, 15)
         self.assertEqual([r[0] for r in table[2:]], list(OBJECTS))
         for r in table[2:]:
             self.assertEqual(len(r), len(HEAD), r)
@@ -60,16 +95,56 @@ class Ontology(unittest.TestCase):
                     missing.append("%s: %s" % (r[0], token))
         self.assertEqual(missing, [])
 
-    def test_owner_scripts_exist(self):   # 주인 칸이 이름 붙인 스크립트는 실재한다
-        text = DOC.read_text(encoding="utf-8")
-        named = set(re.findall(r"`([a-z_]+\.py)`", text))
-        self.assertTrue({"roadmap_model.py", "conductor_state.py", "control_plane.py",
-                         "repo_defaults.py", "roadmap_status.py"} <= named)
-        self.assertEqual([n for n in sorted(named) if not (PLUGIN / "scripts" / n).is_file()], [])
+    def test_link_source_is_backticked(self):
+        bad = []
+        for r in rows("## 객체")[2:]:
+            for seg in r[4].split(" · "):
+                m = re.search(r"[→←]", seg)
+                if not m:
+                    continue
+                src = seg[:m.start()].strip()
+                if src in ALLOW_SOURCE:
+                    continue
+                if not (src.startswith("`") and src.endswith("`") and src.count("`") == 2):
+                    bad.append("%s: %s" % (r[0], src))
+        self.assertEqual(bad, [])
 
-    def test_lock_catches_a_made_up_link(self):   # 양성 대조 — 없는 칸 이름은 걸린다
+    def test_owner_symbols_are_defined_in_named_owner(self):
+        table = {r[0]: r for r in rows("## 객체")[2:]}
+        problems = []
+        for obj, pairs in PINS.items():
+            for script, sym in pairs:
+                if "`%s`" % script not in table[obj][5]:
+                    problems.append("%s: 주인 칸에 %s 없음" % (obj, script))
+                text = (SCRIPTS / script).read_text(encoding="utf-8")
+                if not defined(sym, text):
+                    problems.append("%s: %s 에 %s 정의 없음" % (obj, script, sym))
+        self.assertEqual(problems, [])
+
+    def test_every_script_named_exists(self):
+        named = set(re.findall(r"`([a-z_]+\.py)`", DOC.read_text(encoding="utf-8")))
+        self.assertEqual([n for n in sorted(named) if not (SCRIPTS / n).is_file()], [])
+
+    def test_epic_row_names_every_field_and_kind_rule(self):
+        epic = next(r for r in rows("## 객체")[2:] if r[0] == "에픽")
+        cell = epic[3]
+        self.assertEqual([f for f in FIELDS if f not in cell], [])
+        self.assertTrue(REQUIRED and FORBIDDEN)
+        for name in ("REQUIRED", "FORBIDDEN"):
+            self.assertIn("`%s`" % name, cell)
+
+    def test_state_folder_is_named_by_constant_not_literal(self):
+        text = DOC.read_text(encoding="utf-8")
+        self.assertIn("`repo_defaults.CONDUCTOR_DIR`", text)
+        self.assertTrue(defined("CONDUCTOR_DIR", (SCRIPTS / "repo_defaults.py").read_text(encoding="utf-8")))
+        self.assertNotIn("/conductor/", text)
+
+    def test_lock_catches_made_up_and_substring_links(self):   # 양성 대조
         self.assertFalse(link_ok("없는칸:", self.corpus))
         self.assertTrue(link_ok("묶음:", self.corpus))
+        self.assertFalse(link_ok("id", self.corpus))      # `ids` 의 부분 문자열은 키가 아니다
+        self.assertTrue(link_ok("ids", self.corpus))
+        self.assertFalse(link_ok("## 없는 절", self.corpus))
 
 
 if __name__ == "__main__":

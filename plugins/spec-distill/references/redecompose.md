@@ -4,6 +4,8 @@
 
 아래 펜스는 spec-distill 플러그인 루트가 있어야 돈다. spec-distill 이 로드된 적 없는 지휘 세션에서는 `${CLAUDE_PLUGIN_ROOT}` 가 풀리지 않아 펜스 가드가 멈춰 보고한다 — 그때는 추측하지 말고 멈추고, 사용자가 spec-distill 이 로드된 세션에서 이 절차를 돌린다.
 
+각 칸의 주인과 갱신 길(재분해 절차인지 로드맵 수정 PR 인지)은 `${CLAUDE_PLUGIN_ROOT}/references/roadmap-ontology.md` 로 확인한다.
+
 ## 1. 신호
 
 이 절차로 오는 신호는 셋이다. 신호를 잡는 일은 이 절차의 몫이 아니다.
@@ -91,5 +93,3 @@ exit "$u_rc"
 
 - 성공 — 바뀐 묶음을 보인 뒤, 심사 중이던 에픽 설계문서를 그 (바뀌었을 수 있는) 묶음에 맞춰 고쳐야 한다고 알린다. 고친 뒤 spec-review 를 부르기 전에 `check_bundle_coverage.py <묶음> <설계문서>` 를 먼저 돌려 빠진 번호가 없는지 보고, 그 설계문서 경로 뒤에 `--bundle <묶음의 레포 상대경로>` 를 붙여 spec-review 를 다시 돌린다. 새로 생긴 묶음 에픽의 설계는 `${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md` 의 에픽 넘김 줄로 연다. 다음 할 일 하나만 말하고 턴을 끝낸다.
 - 「그만둔다」 — 아무것도 쓰지 않고 spec-review 게이트 ③ 의 후속 질문(「지적대로 고치기」 · 「인터뷰 다시 열기」 · 「직접 편집」 세 갈래)으로 돌아간다. 게이트 ③ 에서 온 길이 아니면(신호 1 · 3) 어느 에픽 설계문서로 spec-review 를 다시 부를지 한 줄로 말하고 끝낸다.
-
-로드맵 객체 · 링크 · 주인(어느 칸을 누가 쓰는가)은 `${CLAUDE_PLUGIN_ROOT}/references/roadmap-ontology.md` 가 정본이다.

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""conductor_state.py — 지휘자 기계 상태(`machine.md`)의 형식 · 읽기 · 원자 쓰기 · 세션 표지와 넘김 상태 계산.
+"""conductor_state.py — 지휘자 기계 상태(`machine.md`)의 형식 · 읽기 · 원자 쓰기 · 세션 표지.
 
 기계 상태는 이 기계에서만 뜻이 있는 것(PR 번호 캐시 · 실행 원장 위치 · 자원 · 살아 있는 agent · 기다리는 질문 ·
 아직 커밋하지 못한 기록 · 임시 레포 설정)만 담는다. 이어 가기에 필요한 기록은 에픽 설계문서의 절이 주인이다.
-상태 계산(`roadmap_status.py`) · 화면(`control_plane.py`) · 지휘자 스크립트가 이 모듈 하나를 쓴다.
+넘김 상태 계산은 읽기 전용 `roadmap_model.py` 가 하고 여기서 다시 내보낸다. 상태 계산(`roadmap_status.py`) · 화면(`control_plane.py`) · 지휘자 스크립트가 이 모듈 하나를 쓴다.
 
 명령줄(읽기만):
   conductor_state.py path --roadmap <로드맵 레포 상대경로>   이 기계의 기계 상태 파일 경로
