@@ -112,15 +112,15 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 
 ### R2a — 공유 리뷰 엔진 · qg 파급 · persona 보안 리뷰
 - 의도: 공유 리뷰 엔진과 qg · 다른 플러그인의 의도 왜곡 장치를 제거하거나 고치고 persona 편집은 보안 리뷰를 거친다
-- 범위: 한다 공유 리뷰 엔진 상한 · 조언 접기 · qg 리뷰어 · 루프 상한 · R2 가 넘긴 보안 잔여의 검사 방식 전환(꼴 막기 대신 허용 문법 · 실제 파서) · 흐름 고정 점검(flexibility-audit.md)의 R2a 행(결함 셋 먼저) · 다른 플러그인의 장치 · qg 진입 이름 적용(P3 결정 — `commands/qg.md` 삭제 · `artifact-critique` 개명 · 호출 표면 락의 qg 위반 해소) / 안 한다 spec-distill 안쪽 장치(R2)
+- 범위: 한다 공유 리뷰 엔진 상한 · 조언 접기 · qg 리뷰어 · 루프 상한 · R2 가 넘긴 보안 잔여의 검사 방식 전환(꼴 막기 대신 허용 문법 · 실제 파서) · 흐름 고정 점검(flexibility-audit.md)의 R2a 행(결함 셋 먼저) · 다른 플러그인의 장치 · qg 진입 이름 적용(P3 결정 — `commands/qg.md` 삭제 · `artifact-critique` 개명 · 호출 표면 락의 qg 위반 해소) · qg 범위 입력(로드맵 시작 커밋부터 지금 기본 브랜치까지) · 「문서 경로」 정의(모델이 읽는 .md 포함) · 범위 안 여러 설계문서를 모두 의도로 읽기(지금 discover-spec.sh 는 가장 새 커밋의 Spec: 하나에서 멈춘다) · qg 의 테스트 실행 스크립트 셋(run-test-selection.sh · diff-test-results.py · compute-test-scope-candidates.sh)을 shared/test-selection/ 으로 바이트 그대로 옮기고 qg 쪽을 링크로 / 안 한다 spec-distill 안쪽 장치(R2)
 - 의존: R1, R2, R7, R3, R4, R6, P2, P3
 - 브랜치: feature/shared-review-engine-devices
 - 묶음: R2a.md
-- 경로 예약: shared/docreview/, plugins/spec-distill/references/reviewing-document.md, plugins/quality-gates/, plugins/project-init/, plugins/plugin-audit/
+- 경로 예약: shared/docreview/, plugins/spec-distill/references/reviewing-document.md, plugins/quality-gates/, plugins/project-init/, plugins/plugin-audit/, shared/test-selection/
 
 ### R5 — 지휘자
 - 의도: 한 세션이 로드맵을 따라 에픽을 끝까지 지휘하되 사용자의 결정권과 내용 검토가 남게 한다
-- 범위: 한다 사람 몫은 지금 답할 수 있는지 판단해 배경 설명과 함께 몰아 받고 나머지는 멈추지 않고 병렬로 끝까지 · 외부 정지는 사용자에게(미리 받은 답이 있으면 그 답으로) · 머지 전 에픽 사이 통합 리뷰 · 모든 에픽 머지 뒤 끝에서 끝 확인 · 하위(에픽 worktree · 브랜치)는 단일 세션과 같은 skill 호출 · 같은 동작(사용자 게이트는 skill 문면 그대로 전달 · 리뷰 원장은 지휘자가 같은 상태 경로를 넘겨 agent 를 바꿔도 이어짐) · 병렬은 불가피할 때만 멈추고 다시 이음 · R2 가 R3 에 넘긴 번호 대조 둘(설계 없는 묶음의 「셀 수 없음」 경고 · 기각 번호를 승인 게이트에 보이고 「반영」으로 되돌리기) · 사용자 몫 감사(혼자 정한 사용자 몫 · 줄어든 넘김을 찾아 배경과 함께 하나씩 묻기) · 미룸 · 넘김 조율(담당 에픽을 정해 넘기고 뒤에서 처리됐는지 확인) · 살아 있는 subagent 를 보이고 놀고 있는 것은 내림 · /compact 시점은 지휘자가 판단 · 구현 뒤 다시 불러도 같은 동작(설계 입력: 로드맵 roadmap.md `## 재분해 이력` 의 R5 줄 사용자 원문 전부 — 설계문서 `## 번호 대조` 에 원문마다 반영/기각 행) · 흐름 고정 점검(flexibility-audit.md)의 R5 행 · 실행 기록 회수 · 재개 · 부분 계속 · 머지 원칙 · qg 의도 회귀 · 에픽 사이 이음매 · base 이동 · 구현 이후 단계 / 안 한다 상태줄 · 패널(R6) · 리뷰 엔진 동작 변경(R2a)
+- 범위: 한다 사람 몫은 지금 답할 수 있는지 판단해 배경 설명과 함께 몰아 받고 나머지는 멈추지 않고 병렬로 끝까지 · 외부 정지는 사용자에게(미리 받은 답이 있으면 그 답으로) · 머지 전 에픽 사이 통합 리뷰 · 모든 에픽 머지 뒤 끝에서 끝 확인 · 하위(에픽 worktree · 브랜치)는 단일 세션과 같은 skill 호출 · 같은 동작(사용자 게이트는 skill 문면 그대로 전달 · 리뷰 원장은 지휘자가 같은 상태 경로를 넘겨 agent 를 바꿔도 이어짐) · 병렬은 불가피할 때만 멈추고 다시 이음 · R2 가 R3 에 넘긴 번호 대조 둘(설계 없는 묶음의 「셀 수 없음」 경고 · 기각 번호를 승인 게이트에 보이고 「반영」으로 되돌리기) · 사용자 몫 감사(혼자 정한 사용자 몫 · 줄어든 넘김을 찾아 배경과 함께 하나씩 묻기) · 미룸 · 넘김 조율(담당 에픽을 정해 넘기고 뒤에서 처리됐는지 확인) · 살아 있는 subagent 를 보이고 놀고 있는 것은 내림 · /compact 시점은 지휘자가 판단 · 구현 뒤 다시 불러도 같은 동작(설계 입력: 로드맵 roadmap.md `## 재분해 이력` 의 R5 줄 사용자 원문 전부 — 설계문서 `## 번호 대조` 에 원문마다 반영/기각 행) · 흐름 고정 점검(flexibility-audit.md)의 R5 행 · 실행 기록 회수 · 재개 · 부분 계속 · 머지 원칙 · qg 의도 회귀 · 에픽 사이 이음매 · base 이동 · 구현 이후 단계 · 쓴 자원 정리(브랜치 제외) · 계층 · 온톨로지 · 레포 전용 값 금지 / 안 한다 상태줄 · 패널(R6) · 리뷰 엔진 동작 변경(R2a)
 - 의존: R1, R2, R7, R3, R4, R6, P2, P3
 - 브랜치: feature/epic-conductor
 - 묶음: R5.md
@@ -128,27 +128,35 @@ source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decomp
 
 ### R8 — 의존 선언 · 부재 시 강등 · devbrew 밖 경로
 - 의도: 이 장치들이 devbrew 밖 레포와 superpowers 부재에서도 통하게 한다
-- 범위: 한다 의존 최소 버전 선언 · 부재 시 강등 · 경로 규약 범용화 · squash · rebase 머지 자동 판정 / 안 한다 규칙 문서(R9)
+- 범위: 한다 의존 최소 버전 선언 · 부재 시 강등 · 경로 규약 범용화 · squash · rebase 머지 자동 판정 · 다른 파일에 박힌 레포 전용 값(예: 인터뷰 끝의 로드맵 폴더 위치 검사) · gh · superpowers 부재 강등 / 안 한다 규칙 문서(R9)
 - 의존: R2a, R5
 - 브랜치: feature/dependency-portability
 - 묶음: R8.md
 - 경로 예약: 없음
 
 ### R9 — 규칙 · 문서 정리
-- 의도: 바뀐 장치에 맞춰 레포 규칙 · 철학 · README · CHANGELOG 를 정리한다
-- 범위: 한다 지출 승인 조항 · P22 개정 문안(사용자 승인) · 문서 정리 · 흐름 고정 점검(flexibility-audit.md)의 R9 행(「끝에 할 일 하나」 · Law 1 중간 단계 — 사용자 결정) / 안 한다 장치 동작 변경
-- 의존: R8
+- 의도: 바뀐 장치에 맞춰 레포 규칙 · 철학의 조항 문면을 고친다
+- 범위: 한다 지출 승인 조항(지휘자 시작 승인을 「규모 공시만」으로) · P22 개정 문안(사용자 승인) · 흐름 고정 점검(flexibility-audit.md)의 R9 행(「끝에 할 일 하나」 · Law 1 중간 단계 — 사용자 결정) / 안 한다 장치 동작 변경 · 원칙 문서 정리 · 낡은 개념 삭제(R11)
+- 의존: R8, R11
 - 브랜치: feature/rules-docs-cleanup
 - 묶음: R9.md
 - 경로 예약: CLAUDE.md, docs/philosophy/devbrew-harness-philosophy.md
 
 ### R10 — 인터뷰 조사 열기 · 신선한 근거 · 끝 게이트
 - 의도: 인터뷰가 모델 판단으로 조사를 넓게 열어 결정에 닿는 신선하고 믿을 만한 근거를 빠짐없이 채우게 한다 — 기존 방식에 더한다
-- 범위: 한다 조사 subagent 를 모델 판단으로 여럿 동시에 · 시의성 있는 사실의 신선한 근거(사용자 원칙 여덟 — 흐름 고정 점검 문서 R10 절, 설계문서 `## 번호 대조` 에 원칙마다 반영/기각 행) · 흐름 고정 점검(flexibility-audit.md)의 R10 행 · 인터뷰 끝 게이트 둘(분해된 일의 ①② 이름 · 다음 세션 줄의 에픽마다 brainstorming 고정, /compact 권장은 유지) / 안 한다 에픽 넘김 줄 · 지휘(R5) · 공유 리뷰 엔진(R2a)
+- 범위: 한다 조사 subagent 를 모델 판단으로 여럿 동시에 · 시의성 있는 사실의 신선한 근거(사용자 원칙 여덟 — 흐름 고정 점검 문서 R10 절, 설계문서 `## 번호 대조` 에 원칙마다 반영/기각 행) · 흐름 고정 점검(flexibility-audit.md)의 R10 행 · 인터뷰 끝 게이트 둘(분해된 일의 ①② 이름 · 다음 세션 줄의 에픽마다 brainstorming 고정, /compact 권장은 유지) · 분해 판단이 로드맵 `흐름` · `산출물` 칸을 채움 · 인터뷰 조사에 레포 안 재사용 검토 · 나눈 일 다음 세션 줄 문면 조율(그 한 줄 자체는 R5) · 하나짜리 brief 의 다음 세션 줄(finishing.md)이 가정하는 「SDD 의 마지막 전체 리뷰」를 「고른 실행 방식의 마지막 전체 리뷰」로 / 안 한다 에픽 넘김 줄 · 지휘(R5) · 공유 리뷰 엔진(R2a)
 - 의존: R1, R2, R3, R4, R7
 - 브랜치: feature/interview-open-research
 - 묶음: R10.md
 - 경로 예약: plugins/spec-distill/skills/spec-interview/, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/reviewing-brief/SKILL.md, plugins/spec-distill/agents/saturation-judge.md, plugins/spec-distill/agents/steelman-builder.md, plugins/spec-distill/templates/interview-brief-template.md, plugins/spec-distill/references/trivia-escape.md
+
+### R11 — 원칙 문서 정리
+- 의도: 사용자의 상시 원칙을 auto-memory 에서 CLAUDE.md · 철학 문서 · 주요 문서로 옮기고 낡은 개념은 과감히 지워 문서 크기를 줄인다
+- 범위: 한다 원칙 옮기기(있는 것 먼저 검토 — 레포 안 · 밖, 외부는 사용자 검토 뒤 · 레포 전용 값 박지 않기 · 상류 · 하류 연계 · 계층 · 온톨로지 · 컨트롤 플레인 진입점 · 흐름 고정 금지(기본값 + 모델 판단, 정석 의도 유지) · 머지 전 확인 규약 · 하위는 단일 세션과 같은 skill 흐름) · 낡은 개념 삭제로 크기 줄이기 · 플러그인 README · CHANGELOG 의 낡은 개념 정리(R9 에서 옮김) / 안 한다 지출 승인 조항 · P22 · 흐름 고정 점검 R9 행(R9) · 장치 동작 변경
+- 의존: R0
+- 브랜치: feature/principles-docs-cleanup
+- 묶음: R11.md
+- 경로 예약: CLAUDE.md, docs/philosophy/devbrew-harness-philosophy.md
 
 ## 지휘 절차
 
@@ -196,6 +204,7 @@ R5 전까지 지휘 세션이 따르는 절차다. 장치가 아니라 절차다
 - 2026-10-17 · 압축 감사 뒤 수정 · 대화 압축으로 기록에서 빠졌던 사용자 말을 R5 설계 입력으로 남기고, 지휘 절차 4 를 S36 재결정(미리 답해 둠)대로 고쳤다 · R5 범위에 살아 있는 subagent 정리 · /compact 시점 판단을 더했다: 「궁금한거 하나 지휘자가 각각 구현도 다 보고 조율 하는거 맞지? 내가 보기에 병렬 구현되면 지휘자 -> 에픽 담당자 -> 구현자(SDD인 경우) 로 잘 하고 있다고 보이긴 하는데 이렇게 잘 하고 있나」 · 「그리고 서브에이전트들 다 돌고 있는거 맞아? 아님 다 내리고」 · 「다 구현 된거야?」 · 「더 뭐해야해?그거하고 적절한 순간 compact 후 진행」 · 「내가 바로 사라지는건 아니니까」 · 「이해되지?」 · 「1, 좋아 지금 진행하는 방식보니 잘 이해한 느낌이내」(brainstorming 절별 확인 방식에 대한 답) — 여기까지 2026-10-15 · 「이전 세션에서 내가 말했던거 중에 반영 안된건 없을까? compact되며 날아간거」(2026-10-17). 날짜는 한국 시간이다.
 - 2026-10-17 · 재분해 · 새 에픽 R10(인터뷰 조사 열기 · 신선한 근거 · 끝 게이트)을 더하고 R5 · R2a · R9 범위에 흐름 고정 점검 행을 가리키게 했다 · 바뀜 R2a · R5 · R9 · 새 R10 「이대로 다시 나눈다」
 - 2026-10-17 · 흐름 고정 점검 뒤 수정 · 지휘 절차 2 · 3 의 brainstorming 고정을 기본값으로(설계 흐름이 아닌 에픽은 고른 흐름을 시작 전에 승인받음), 3 의 구현 대조 보고를 고른 실행 방식으로, 4 의 실행 방식을 writing-plans 권장으로, 8 의 통합 리뷰어 「하나」 를 여럿 · 동시로(qg 의 지금 한계를 적고 맞추는 일은 R5), 9 를 기본 경로와 설계 흐름이 아닌 에픽 경로로 고쳤다 · 점검 결과는 이 폴더의 flexibility-audit.md 다 「또 고정한걸 풀을곳은 없을까 devbrew에서」 · 「에픽 실행 방식 SDD 고정, 「끝에 할 일 하나」, Law 1 의 중간 단계, qg 리뷰어 모델 opus 고정, 1번의 경우 writing plan이 끝나면 권장 실행 방식이 있을거야 subagent driven이라고 되어있는걸 권장 구현 방식으로 간다고 해둬」 · 「좋아 이게 앞으로의 원칙이야」.
+- 2026-10-17 · 재분해 · 새 에픽 R11(원칙 문서 정리)을 R2a · R5 · R10 과 지금 병렬로 더하고 R9 의 문서 정리를 R11 로 옮겼다(R9 의존에 R11) 「내가 말하는 내용같은거 이번세션이나 저번 세션에서 메모리에 넣었자나 claude md나 devbrew철학 원장?  중요 docs들에 넣고 지금은 낡은 개념들은 과감히 지워서 크기를 줄이자」 · 「새 에픽으로 지금 병렬 (권장)」 · R9 의 플러그인 README · CHANGELOG 정리도 R11 범위로 「R11 에 더함 (권장)」 · R5 설계문서 `## 미룸` 행대로 R2a(qg 범위 입력 · 문서 경로 정의 · 범위 안 여러 설계문서를 모두 의도로 읽기 「R2a 가 고침 (권장)」 · qg 의 테스트 실행 스크립트 셋을 shared/test-selection/ 으로 옮기고 qg 쪽은 링크로, 경로 예약에 그 자리를 더함 「채택 — 이동은 R2a 가 (권장)」) · R10(`흐름` · `산출물` 칸 채움 · 레포 안 재사용 검토 · 다음 세션 줄 문면 조율 · 하나짜리 brief 다음 세션 줄이 가정하는 마지막 전체 리뷰를 SDD 대신 고른 실행 방식으로) · R8(다른 파일에 박힌 레포 전용 값 · gh · superpowers 부재 강등) · R9(지휘자 시작 승인을 규모 공시만으로) · R5(쓴 자원 정리 · 계층 · 온톨로지 · 레포 전용 값 금지, 받는 것에 R2a 의 테스트 실행 공유본) 범위에 더했다 · 바뀜 R2a · R5 · R8 · R9 · R10 · 새 R11 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
 
