@@ -24,7 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import repo_defaults  # noqa: E402
 from ledger_marker import _atomic_write, _read_line  # noqa: E402 — 리뷰 원장 표지와 같은 방식
-from roadmap_model import FormatError, section_body  # noqa: E402
+from roadmap_model import FormatError  # noqa: E402
 from state_path import SESSION_PATTERN, state_root  # noqa: E402
 
 MACHINE_FILE = "machine.md"
@@ -84,7 +84,7 @@ def _check_row(section: str, row: dict, where: str):
             raise MachineError("%s: PR 번호는 `#<숫자>` 다: %r" % (where, row["번호"]))
         if row["상태"] not in PR_STATES:
             raise MachineError("%s: PR 상태는 %s 중 하나다: %r" % (where, " · ".join(PR_STATES), row["상태"]))
-    if section == "실행 원장" and not row["읽은 줄"].isdigit():
+    if section == "실행 원장" and not re.fullmatch(r"[0-9]+", row["읽은 줄"]):
         raise MachineError("%s: 읽은 줄은 숫자다: %r" % (where, row["읽은 줄"]))
 
 
@@ -130,12 +130,20 @@ def render_machine(roadmap_rel: str, data: dict) -> str:
             cells = [str(row[c]).replace("\n", " ").strip() for c in cols]
             if not all(cells):
                 raise MachineError("%s 절에 빈 칸이 있다: %r" % (name, row))
-            if any(SEP in c for c in cells[:-1]):
-                raise MachineError("%s 절: 마지막 칸이 아닌 칸에 ` · ` 를 쓸 수 없다: %r" % (name, row))
+            if any(SEP in c or c.startswith("·") or c.endswith("·") for c in cells[:-1]):
+                raise MachineError("%s 절: 마지막 칸이 아닌 칸에 ` · ` 를 쓰거나 `·` 로 시작·끝낼 수 없다: %r" % (name, row))
             _check_row(name, dict(zip(cols, cells)), name)
             out.append("- " + SEP.join(cells))
         out.append("")
     return "\n".join(out)
+
+
+def _normalized(data: dict) -> dict:
+    out = empty()
+    for name, cols in SECTIONS:
+        for row in data.get(name, []):
+            out[name].append(dict((c, str(row[c]).replace("\n", " ").strip()) for c in cols))
+    return out
 
 
 def load(path: Path, roadmap_rel: str) -> dict:
@@ -153,14 +161,19 @@ def load(path: Path, roadmap_rel: str) -> dict:
 
 # ── 표지 · 쓰기 ──────────────────────────────────────────────────────────────
 
+def _need_session(session) -> str:
+    if not isinstance(session, str) or not SESSION_PATTERN.fullmatch(session):
+        raise MachineError("세션 id 형식이 아니다: %r" % (str(session) if session is not None else "")[:32])
+    return session
+
+
 def holder(d: Path):
     return _read_line(Path(d), MARKER) or None
 
 
 def acquire(d: Path, session: str) -> str:
     """"acquired" · "held" 또는 표지를 쥔 다른 세션 id."""
-    if not SESSION_PATTERN.fullmatch(session or ""):
-        raise MachineError("세션 id 형식이 아니다: %r" % (session or "")[:32])
+    _need_session(session)
     d = Path(d)
     d.mkdir(parents=True, exist_ok=True)
     try:
@@ -176,6 +189,7 @@ def acquire(d: Path, session: str) -> str:
 
 
 def release(d: Path, session: str) -> bool:
+    _need_session(session)
     d = Path(d)
     if holder(d) != session:
         return False
@@ -185,6 +199,7 @@ def release(d: Path, session: str) -> bool:
 
 def takeover(d: Path, session: str):
     """표지를 넘겨받는다 — 사용자가 정했을 때만 부른다. 이전 주인을 돌려준다."""
+    _need_session(session)
     d = Path(d)
     prev = holder(d)
     _atomic_write(d, MARKER, session + "\n")
@@ -194,11 +209,13 @@ def takeover(d: Path, session: str):
 def save(path: Path, roadmap_rel: str, data: dict, session: str) -> None:
     """표지를 쥔 세션만 쓴다. 임시 파일 + os.replace 로 원자적으로."""
     path = Path(path)
+    _need_session(session)
     owner = holder(path.parent)
     if owner != session:
         raise MachineError("표지가 이 세션 것이 아니다(쥔 세션: %s) — 읽기 전용이다" % (owner or "없음"))
     text = render_machine(roadmap_rel, data)
-    parse_machine(text, roadmap_rel)
+    if parse_machine(text, roadmap_rel) != _normalized(data):
+        raise MachineError("쓴 글을 다시 읽으면 넣은 값과 다르다 — 칸 값에 구분자가 섞였다")
     fd, tmp = tempfile.mkstemp(prefix=".machine.", suffix=".tmp", dir=str(path.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -230,11 +247,23 @@ def impl_done(doc_text: str, plan_rel: str) -> bool:
 
 
 def section_lines(doc_text: str, heading: str):
-    try:
-        body = section_body(doc_text, heading)
-    except FormatError:
+    """머리가 정확히 `heading` 인 절의 비지 않은 줄들(펜스 안 머리는 절이 아니다). 없으면 None,
+    같은 머리가 둘 이상이면 FormatError."""
+    in_fence, found, body, cur = False, 0, [], False
+    for line in doc_text.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and line.startswith("## "):
+            cur = line.rstrip() == heading
+            found += 1 if cur else 0
+            if found > 1:
+                raise FormatError("머리 %r 가 둘 이상이다" % heading)
+            continue
+        if found == 1 and cur:
+            body.append(line.rstrip())
+    if not found:
         return None
-    return None if body is None else [l.rstrip() for l in body.splitlines() if l.strip()]
+    return [l for l in body if l.strip()]
 
 
 def rulings_archived(doc_text: str):

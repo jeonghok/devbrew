@@ -103,6 +103,29 @@ class Storage(unittest.TestCase):
         self.assertTrue(cs.release(d, OTHER))
         self.assertIsNone(cs.holder(d))
 
+    def test_save_without_marker_or_with_bad_session_is_refused(self):
+        d = self.path.parent
+        d.mkdir(parents=True)
+        for sess in (SID, None, "bad id\nx"):
+            with self.assertRaises(cs.MachineError, msg=repr(sess)):
+                cs.save(self.path, RM, cs.empty(), sess)
+            self.assertFalse(self.path.exists())
+        with self.assertRaises(cs.MachineError):
+            cs.takeover(d, "bad id\nx")
+        with self.assertRaises(cs.MachineError):
+            cs.release(d, None)
+        self.assertFalse(cs.release(d, SID))
+
+    def test_cell_edge_dot_is_refused(self):
+        data = sample()
+        data["자원"][0]["종류"] = "worktree ·"
+        with self.assertRaises(cs.MachineError):
+            cs.render_machine(RM, data)
+        data = sample()
+        data["실행 원장"][0]["읽은 줄"] = "³"
+        with self.assertRaises(cs.MachineError):
+            cs.render_machine(RM, data)
+
     def test_state_root_for_common(self):
         self.assertEqual(state_path.state_root_for_common(Path("/r/.git")), Path("/r/.claude/spec-distill"))
 
@@ -135,6 +158,11 @@ class DocSections(unittest.TestCase):
     def test_rulings_archived(self):
         self.assertEqual(cs.rulings_archived(self.DOC), ["- Task 1: Ruling: 가 — 왜 — 비용"])
         self.assertIsNone(cs.rulings_archived("# 판정 절 없음\n"))
+
+    def test_duplicate_heading_raises_and_prefix_is_not_a_match(self):
+        with self.assertRaises(cs.FormatError):
+            cs.rulings_archived("## 판정\n\n- a\n\n## 판정\n\n- b\n")
+        self.assertIsNone(cs.rulings_archived("## 판정 근거\n\n- a\n"))
 
     def test_ledger_rulings(self):
         text = "# SDD ledger — plan: p\nTask 1: complete\nTask 2: Ruling: x — y — z\nFinal: Ruling: w\n"
