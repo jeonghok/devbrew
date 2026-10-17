@@ -39,7 +39,7 @@ SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
 from kill_switch_active import kill_switch_active  # noqa: E402
 import conductor_state as cs  # noqa: E402
-from roadmap_model import FormatError  # noqa: E402
+from roadmap_model import BLOCK_ID_RE, FormatError  # noqa: E402
 from state_path import state_root_for_common  # noqa: E402
 
 DONE = ("머지됨", "끝남")
@@ -930,9 +930,6 @@ def cmd_statusline() -> int:
     return 0
 
 
-EPIC_ARG_RE = re.compile(r"[A-Z][0-9]+[a-z]?")
-
-
 def epic_view(path: str, report: dict, epic: str):
     """(줄들, rc) — 에픽 하나의 묶음 · 설계문서 · 계획 · 브랜치 · PR · 의존 · 동시 가능 · 선택 칸 · 넘김 · 판정 · 자원.
     줄마다 경로나 번호가 있어 한 단계 더 내려갈 수 있다."""
@@ -972,12 +969,23 @@ def epic_view(path: str, report: dict, epic: str):
         out.append("  열린 넘김: 셀 수 없음")
     else:
         mine = [h for h in handoffs if epic in (h.get("giver"), h.get("receiver")) and h.get("state") != "확인됨"]
-        out.append("  열린 넘김: %s" % ("없음" if not mine else "%d개" % len(mine)))
+        unc = [h for h in mine if h.get("state") == "셀 수 없음"]
+        counted = len(mine) - len(unc)
+        text = "없음" if not mine else "%d개" % counted
+        if unc:
+            text = ("%d개 · " % counted if counted else "") + "셀 수 없음 %d개" % len(unc)
+        out.append("  열린 넘김: %s" % text)
         for h in mine:
             arrow = "받음 ← %s" % h["giver"] if h["receiver"] == epic else "줌 → %s" % h["receiver"]
             out.append(clean("    %s: %s · %s · %s" % (arrow, h["item"], h["state"], h["basis"])))
     if "rulings" not in b:
-        out.append("  판정 줄: 아직 없음(구현 전)")
+        stage = b.get("stage")
+        if stage in DONE:
+            out.append("  판정 줄: 없음 — 판정 기록 없이 %s" % stage)
+        elif stage == "알 수 없음":
+            out.append("  판정 줄: 셀 수 없음 — 단계를 알 수 없다")
+        else:
+            out.append("  판정 줄: 아직 없음(구현 전)")
     elif b["rulings"] is None:
         if report.get("machine_error"):
             out.append("  판정 줄: 셀 수 없음 — 기계 상태를 읽지 못해 원장을 모른다")
@@ -1032,6 +1040,11 @@ def cmd_show(tasks: bool, arg, epic=None) -> int:
     if epic:
         _path, report = v["items"][0] if v["items"] else (arg, None)
         if report is None or report.get("exit") in (3, 4):
+            if report is not None and report.get("blocks") and not any(x.get("id") == epic for x in report["blocks"]):
+                lines, rc = epic_view(_path, report, epic)
+                print("\n".join(lines))
+                return rc
+            print("에픽 보기를 내지 못했다 — 로드맵 검사 불가, 전체 지도를 보인다")
             print(show_text(v["items"], v["interview"], v["notes"], first_line, shown_error))
             return 0
         lines, rc = epic_view(_path, report, epic)
@@ -1075,7 +1088,7 @@ def main(argv=None) -> int:
         if args.roadmap is not None and (not args.roadmap.strip() or args.roadmap.startswith("-")):
             sys.stderr.write("사용법: 로드맵 경로는 비지 않고 - 로 시작하지 않는다\n")
             return 2
-        if args.epic is not None and (args.tasks or not EPIC_ARG_RE.fullmatch(args.epic)):
+        if args.epic is not None and (args.tasks or not BLOCK_ID_RE.fullmatch(args.epic)):
             sys.stderr.write("사용법: 에픽은 로드맵 경로 뒤에 하나(`<대문자><숫자>[소문자]`), --tasks 와 함께 쓰지 않는다\n")
             return 2
         return cmd_show(args.tasks, args.roadmap, args.epic)

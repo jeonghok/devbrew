@@ -614,6 +614,107 @@ class EpicView(unittest.TestCase):
         self.assertNotIn("기계 상태를 읽지 못했다 — 기계 상태 파일을", shown)
         self.assertIn("기계 상태를 읽지 못해 원장을 모른다", shown)
 
+    def view(self, r, epic="R5"):
+        return "\n".join(cp.epic_view(RM, r, epic)[0])
+
+    def test_pr_rulings_and_path_lines(self):
+        r = self.rep()
+        b = r["blocks"][1]
+        b["pr"] = {"number": "#12", "state": "열림", "source": "기계 상태"}
+        b["rulings"], b["rulings_source"] = ["- 판정 하나", "- 판정 둘"], "실행 원장"
+        text = self.view(r)
+        self.assertIn("  PR: " + cp.pr_text(b["pr"]), text)
+        self.assertIn("  판정 줄: 2개(실행 원장)", text)
+        self.assertIn("    - 판정 하나", text)
+        self.assertIn("    - 판정 둘", text)
+        self.assertIn("  로드맵: " + RM, text)
+
+    def test_ruling_line_by_stage(self):
+        r = self.rep()
+        b = r["blocks"][1]
+        del b["rulings"]
+        for stage, want in (("계획", "  판정 줄: 아직 없음(구현 전)"), ("머지됨", "  판정 줄: 없음 — 판정 기록 없이 머지됨"),
+                            ("끝남", "  판정 줄: 없음 — 판정 기록 없이 끝남"),
+                            ("알 수 없음", "  판정 줄: 셀 수 없음 — 단계를 알 수 없다")):
+            b["stage"] = stage
+            self.assertIn(want, self.view(r), stage)
+
+    def test_ledger_failure_lines(self):
+        r = self.rep()
+        b = r["blocks"][1]
+        b["ledger_failures"] = [{"path": "led/a.md", "reason": "너무 크다"}]
+        b["ledger_cut"] = "원장이 50개에서 잘렸다"
+        text = self.view(r)
+        self.assertIn("  판정 줄: 셀 수 없음 — 실행 원장을 읽지 못했고 설계문서 `## 판정` 도 없다", text)
+        self.assertIn("  원장 읽기 불가: led/a.md — 너무 크다", text)
+        self.assertIn("  원장이 50개에서 잘렸다", text)
+
+    def test_other_epics_rows_are_filtered_out(self):
+        r = self.rep()
+        r["handoffs"].append({"item": "남의 일", "giver": "R8", "receiver": "R9", "spec": "s", "state": "열림", "basis": "x"})
+        r["machine"]["자원"].append({"종류": "branch", "경로": "/w/other", "에픽": "R8", "용도": "x", "만든 때": "d"})
+        r["machine"]["기다리는 질문"].append({"에픽": "R8", "기대는 일": "x", "질문": "남의 질문"})
+        r["machine"]["살아 있는 agent"].append({"이름": "a-mine", "일": "구현", "worktree": "/w/r5", "에픽": "R5"})
+        r["machine"]["살아 있는 agent"].append({"이름": "a-other", "일": "구현", "worktree": "/w/o", "에픽": "R8"})
+        text = self.view(r)
+        for gone in ("남의 일", "/w/other", "남의 질문", "a-other"):
+            self.assertNotIn(gone, text)
+        self.assertIn("  살아 있는 agent: a-mine(구현 · /w/r5)", text)
+        self.assertIn("  열린 넘김: 1개", text)
+
+    def test_warnings_and_notes_lines(self):
+        r = self.rep()
+        r["blocks"][1]["warnings"], r["blocks"][1]["notes"] = ["경고 하나"], ["정보 하나"]
+        text = self.view(r)
+        self.assertIn("  경고: 경고 하나", text)
+        self.assertIn("  정보: 정보 하나", text)
+
+    def test_uncountable_handoffs_shown_separately(self):
+        r = self.rep()
+        r["handoffs"] += [{"item": "모름1", "giver": "R5", "receiver": "R7", "spec": "s", "state": "셀 수 없음", "basis": "b"},
+                          {"item": "모름2", "giver": "R5", "receiver": "R7", "spec": "s", "state": "셀 수 없음", "basis": "b"}]
+        self.assertIn("  열린 넘김: 1개 · 셀 수 없음 2개", self.view(r))
+
+    def run_show(self, rep, epic, items=None):
+        orig = (cp.gather, cp.switch_name)
+        v = {"items": [(RM, rep)] if items is None else items, "interview": None, "notes": [], "minutes": None,
+             "select_error": None}
+        cp.gather, cp.switch_name = (lambda *a, **k: v), (lambda: None)
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                rc = cp.main(["show", RM, epic])
+        finally:
+            cp.gather, cp.switch_name = orig
+        return rc, buf.getvalue().splitlines()
+
+    def test_cli_epic_branch(self):
+        for code in (0, 1):
+            r = self.rep()
+            r["exit"] = code
+            rc, lines = self.run_show(r, "R5")
+            self.assertEqual(rc, 0)
+            self.assertTrue(lines[0].startswith("R5 에픽 R5 — "), lines[0])
+        rc, lines = self.run_show(self.rep(), "R9")
+        self.assertEqual(rc, 2)
+        self.assertIn("있는 에픽: R1 · R5", lines[0])
+        self.assertEqual(cp.main(["show", RM, "R5abc"]), 2)
+
+    def test_cli_fallbacks_say_so(self):
+        r = self.rep()
+        r["exit"] = 3
+        r["blocks"] = []
+        rc, lines = self.run_show(r, "R5")
+        self.assertEqual(rc, 0)
+        self.assertEqual(lines[0], "에픽 보기를 내지 못했다 — 로드맵 검사 불가, 전체 지도를 보인다")
+        rc, lines = self.run_show(None, "R5", items=[])
+        self.assertEqual(rc, 0)
+        self.assertEqual(lines[0], "에픽 보기를 내지 못했다 — 로드맵 검사 불가, 전체 지도를 보인다")
+        r = self.rep()
+        r["exit"] = 4
+        rc, lines = self.run_show(r, "R9")
+        self.assertEqual(rc, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

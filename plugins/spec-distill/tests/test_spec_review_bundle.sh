@@ -150,7 +150,7 @@ assert_contains "$DEG_SEC" "번호 대조 경고 N 이 0 이 아니면 셋이 �
 # ── R5 AC6 — 이웃 읽기가 산출물을 읽는다 ─────────────────────────────────────
 g checkout -q main
 nb_bundle R7 "C1"
-R7_BLOCK="$(printf '### R7 — 이웃 조사\n- 의도: R7\n- 범위: R7\n- 의존: R3\n- 브랜치: feature/r7\n- 묶음: R7.md\n- 경로 예약: 없음\n- 크기: 작음\n- 산출물: docs/research/r7.md\n')"
+R7_BLOCK="$(printf '### R7 — 이웃 조사\n- 의도: R7\n- 범위: R7\n- 의존: R3\n- 브랜치: feature/r7\n- 묶음: R7.md\n- 경로 예약: 없음\n- 크기: 작음\n- 순서 이유: R2a 뒤\n- 산출물: docs/research/r7.md\n')"
 R7_BLOCK="$R7_BLOCK" awk 'index($0, "## 결정 기록") == 1 { print ENVIRON["R7_BLOCK"]; print "" } { print }' \
   "$W/docs/rm/roadmap.md" > "$T/rm.r7" && cp "$T/rm.r7" "$W/docs/rm/roadmap.md"
 g add -- docs && g commit -qm "R7 이웃" && g push -q origin main
@@ -161,5 +161,6 @@ nbr7="$(cd "$T" && python3 "$SRB" neighbors --bundle docs/rm/R3.md --root "$W")"
 assert_contains "$nbr7" "R7 — docs/research/r7.md" "AC6: 이웃 결정에 산출물 경로"
 assert_contains "$nbr7" "- B7 · 결정 · 2026-10-17 · 조사 결론" "AC6: 이웃 읽기가 산출물의 결정 줄을 읽는다"
 assert_contains "$nbr7" "크기 작음" "§6: 이웃 줄에 크기를 보인다"
+assert_contains "$nbr7" "순서 이유 R2a 뒤" "§6: 이웃 줄에 순서 이유를 보인다"
 
 finish
