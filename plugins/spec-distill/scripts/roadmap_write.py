@@ -8,6 +8,7 @@
   roadmap_write.py update --roadmap <로드맵> --brief <brief> --audit <audit> --plan-table <새 표 파일>
                           --date <YYYY-MM-DD> --change <바뀐 것 한 줄> --approval <승인 원문>
   roadmap_write.py extract --roadmap <로드맵>     로드맵 블록 · 묶음에서 분해안 표를 뽑아 낸다(쓰지 않는다)
+  roadmap_write.py migrate --roadmap <로드맵>     로드맵 블록을 새 형식으로 다시 쓴다(재분해 이력은 그대로)
 
 종료 코드: 0 성공 · 1 쓰지 않음(표 오류 · 덮어쓰기 거부 · 검증 실패 — 쓴 것은 모두 되돌렸다) · 2 사용법 오류.
 
@@ -31,7 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import roadmap_render as R  # noqa: E402
 from roadmap_model import (  # noqa: E402
-    DATE_RE, FormatError, frontmatter, id_sort_key, section_body, strip_quotes, unquote)
+    DATE_RE, FormatError, frontmatter, id_sort_key, quotes, section_body, strip_quotes, unquote)
 
 RS = Path(__file__).resolve().parent / "roadmap_status.py"
 RECORD_HEADING = "## 생성 기록"
@@ -402,6 +403,40 @@ def cmd_update(a) -> int:
     return 0
 
 
+def migrated_text(old_text: str, read_bundle) -> str:
+    """로드맵 블록을 새 형식으로 — 표로 뽑아 다시 그린다. 인용이 사라지거나 되읽은 표가 다르면 Refused."""
+    rows = R.extract_rows(old_text, read_bundle)
+    new_text = R.replace_epics(old_text, [R.render_block(r) for r in rows])
+    lost = set(quotes(old_text)) - set(quotes(new_text))
+    if lost:
+        raise Refused("옮기면 원문 인용이 사라진다 — %s" % " · ".join(sorted(lost)))
+    if R.extract_rows(new_text, read_bundle) != rows:
+        raise Refused("옮긴 블록을 되읽은 표가 옮기기 전과 다르다")
+    return new_text
+
+
+def cmd_migrate(a) -> int:
+    roadmap = Path(os.path.realpath(a.roadmap))
+    top = git_top(roadmap)
+    rdir = roadmap.parent
+    old_text = read(roadmap)
+    new_text = migrated_text(old_text, lambda n: read(rdir / n) if (rdir / n).is_file() else None)
+    if new_text == old_text:
+        print("[spec-distill] 옮길 것이 없다 — 블록이 이미 새 형식이다")
+        return 0
+    txn = Txn()
+
+    def body():
+        txn.write(roadmap, new_text)
+        reasons = validate(top, roadmap)
+        if reasons:
+            raise Refused("검증 실패 — %s" % " / ".join(reasons))
+
+    run_txn(txn, body)
+    print("[spec-distill] 로드맵 블록을 새 형식으로 옮겼다: %s — 재분해 이력은 옮기지 않았다" % rel(top, roadmap))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="roadmap_write.py",
                                  description="분해안 표로 로드맵 · 에픽 묶음을 쓰고 검증한다.")
@@ -413,6 +448,8 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--approval", action="append", required=True)
     e = sub.add_parser("extract")
     e.add_argument("--roadmap", required=True)
+    m = sub.add_parser("migrate")
+    m.add_argument("--roadmap", required=True)
     u = sub.add_parser("update")
     for flag in ("--roadmap", "--brief", "--audit", "--plan-table", "--date", "--change"):
         u.add_argument(flag, required=True)
@@ -420,7 +457,7 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-COMMANDS = {"create": cmd_create, "update": cmd_update, "extract": cmd_extract}
+COMMANDS = {"create": cmd_create, "update": cmd_update, "extract": cmd_extract, "migrate": cmd_migrate}
 
 
 def main(argv=None) -> int:

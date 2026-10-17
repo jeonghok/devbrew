@@ -585,7 +585,7 @@ real_check() {  # real_check <리포 루트> — 키<TAB>값 줄들
   (cd "$S" && python3 - "$1" <<'PY'
 import re, sys
 from pathlib import Path
-import check_bundle_coverage as cbc, roadmap_status as rs, section6
+import check_bundle_coverage as cbc, roadmap_render as R, roadmap_status as rs, section6
 root = Path(sys.argv[1])
 rm = "docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose"
 text = (root / rm / "roadmap.md").read_text(encoding="utf-8")
@@ -618,7 +618,7 @@ for b in blocks:
     if bt.split("### 공통 목표\n", 1)[1].split("\n## 2. ", 1)[0] + "\n" != s1:
         bad.append(b["id"] + ":공통 목표")
     mine = bt.split("### 이 에픽의 Goal · Non-goal\n\n", 1)[1].split("\n\n### 공통 목표", 1)[0]
-    if mine.splitlines() != ["- 의도: " + b["fields"]["의도"], "- 범위: " + b["fields"]["범위"]]:
+    if mine.splitlines() != ["- 의도: " + b["fields"]["의도"], "- 범위: " + R.scope_text(b["fields"]["범위"])]:
         bad.append(b["id"] + ":의도 · 범위")
 print("BAD\t%s" % bad)
 print("UNASSIGNED\t%s" % sorted(non_s - union, key=cbc.id_sort_key))
