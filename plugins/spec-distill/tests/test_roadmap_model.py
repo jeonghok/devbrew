@@ -160,7 +160,20 @@ class History(unittest.TestCase):
                                     "  - 「이대로 다시 나눈다」\n  - 「가 「나」 다」\n")
         self.assertEqual(errors, [])
         self.assertEqual(entries, [{"date": "2026-10-17", "reason": "재분해", "changes": ["바뀜 R5 · 새 R11"],
-                                    "quotes": ["「이대로 다시 나눈다」", "「가 「나」 다」"], "form": "new"}])
+                                    "quotes": ["「이대로 다시 나눈다」", "「가 「나」 다」"], "no_words": "",
+                                    "form": "new"}])
+
+    def test_no_user_words_form(self):
+        entries, errors = self.hist("### 2026-10-15 · 판정\n- 바뀜:\n  - 가 「설계 판정」\n"
+                                    "- 원문: 없음 — 사용자 말 없음(R6 설계 판정)\n")
+        self.assertEqual(errors, [])
+        self.assertEqual(entries[0]["quotes"], [])
+        self.assertEqual(entries[0]["no_words"], "사용자 말 없음(R6 설계 판정)")
+        for body, want in {"### 2026-10-15 · x\n- 원문: 없음 — \n": "원문이 없다",
+                           "### 2026-10-15 · x\n- 원문: 없음\n": "하위 항목으로",
+                           "### 2026-10-15 · x\n- 원문: 없음 — 사유\n- 원문:\n  - 「a」\n": "함께"}.items():
+            _e, errs = self.hist(body)
+            self.assertTrue(any(want in e for e in errs), (body, errs))
 
     def test_changes_as_sub_items(self):
         entries, errors = self.hist("### 2026-10-17 · 수정\n- 바뀜:\n  - 가\n  - 나\n- 원문:\n  - 「좋아」\n")

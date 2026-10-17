@@ -32,7 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import roadmap_render as R  # noqa: E402
 from roadmap_model import (  # noqa: E402
-    DATE_RE, FormatError, frontmatter, id_sort_key, quotes, section_body, strip_quotes, unquote)
+    DATE_RE, FormatError, frontmatter, id_sort_key, parse_roadmap, quotes, section_body, strip_quotes, unquote)
 
 RS = Path(__file__).resolve().parent / "roadmap_status.py"
 RECORD_HEADING = "## 생성 기록"
@@ -403,15 +403,51 @@ def cmd_update(a) -> int:
     return 0
 
 
-def migrated_text(old_text: str, read_bundle) -> str:
-    """로드맵 블록을 새 형식으로 — 표로 뽑아 다시 그린다. 인용이 사라지거나 되읽은 표가 다르면 Refused."""
-    rows = R.extract_rows(old_text, read_bundle)
-    new_text = R.replace_epics(old_text, [R.render_block(r) for r in rows])
+SCOPE_PREFIX = "- 범위: "
+
+
+def migrated_text(old_text: str, read_bundle=None) -> str:
+    """블록의 `- 범위: 한다 … / 안 한다 …` 한 줄만 하위 항목 꼴로 바꾸고 나머지 글자는 그대로 둔다.
+
+    바꿀 수 없는 범위 줄(한다 · 안 한다 가 한 번씩이 아닌 꼴)이나 옮긴 뒤 블록 칸이 달라지는 경우는 Refused.
+    `read_bundle` 은 옛 호출 꼴과 맞추려고 받을 뿐 쓰지 않는다 — 묶음 파일은 읽지도 고치지도 않는다."""
+    _meta, blocks_before, _rec, _risk, errors = parse_roadmap(old_text)
+    if errors:
+        raise Refused("로드맵 형식 오류가 있어 옮기지 않는다 — %s" % " / ".join(errors))
+    lines = old_text.splitlines(keepends=True)
+    start = next((i for i, l in enumerate(lines) if l.rstrip("\r\n") == "## 에픽"), None)
+    if start is None:
+        raise Refused("`## 에픽` 절이 없다")
+    end = next((j for j in range(start + 1, len(lines)) if lines[j].startswith("## ")), len(lines))
+    out, block = list(lines[:start + 1]), None
+    for line in lines[start + 1:end]:
+        body = line.rstrip("\r\n")
+        eol = line[len(body):]
+        if body.startswith("### "):
+            block = body[4:].split(" — ", 1)[0]
+        elif block is not None and body.startswith(SCOPE_PREFIX):
+            value = body[len(SCOPE_PREFIX):]
+            if not R.SCOPE_RE.fullmatch(value) or value.count(" / 안 한다 ") != 1:
+                raise Refused("%s 의 범위가 `한다 … / 안 한다 …` 한 번씩이 아니라 옮길 수 없다: %r" % (block, value))
+            m = R.SCOPE_RE.fullmatch(value)
+            out.extend(["- 범위:" + eol, "  - 한다: " + m.group(1) + eol, "  - 안 한다: " + m.group(2) + eol])
+            continue
+        out.append(line)
+    new_text = "".join(out + lines[end:])
     lost = set(quotes(old_text)) - set(quotes(new_text))
     if lost:
         raise Refused("옮기면 원문 인용이 사라진다 — %s" % " · ".join(sorted(lost)))
-    if R.extract_rows(new_text, read_bundle) != rows:
-        raise Refused("옮긴 블록을 되읽은 표가 옮기기 전과 다르다")
+    after = parse_roadmap(new_text)
+    blocks_after = after[1]
+    if after[4] or [b["id"] for b in blocks_before] != [b["id"] for b in blocks_after]:
+        raise Refused("옮긴 로드맵을 되읽으니 형식이 달라졌다 — %s" % " / ".join(after[4]))
+    for x, y in zip(blocks_before, blocks_after):
+        fx, fy = dict(x["fields"]), dict(y["fields"])
+        for f in (fx, fy):
+            if isinstance(f.get("범위"), list):
+                f["범위"] = R.scope_text(f["범위"])
+        if x["title"] != y["title"] or fx != fy:
+            raise Refused("%s 블록의 칸이 옮기기 전과 다르다" % x["id"])
     return new_text
 
 

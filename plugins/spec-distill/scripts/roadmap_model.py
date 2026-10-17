@@ -207,6 +207,7 @@ def parse_history(text: str):
     """`## 재분해 이력` → (항목들, 오류들). 항목 {"date","reason","changes","quotes","form"}.
 
     새 꼴: `### <날짜> · <사유>` 아래 `- 바뀜: …`(또는 `- 바뀜:` + 하위 항목)과 `- 원문:` + 하위 항목(줄마다 「…」 하나).
+    사용자 말이 없는 항목(설계 판정 등)은 하위 항목 대신 `- 원문: 없음 — <사유>` 한 줄이다("no_words" 에 담긴다).
     옛 꼴 `- <날짜> · …` 한 줄도 읽는다(인용은 줄 안의 「…」 전부). 새 항목 밖의 다른 줄은 전처럼 읽지 않는다.
     """
     try:
@@ -224,18 +225,20 @@ def parse_history(text: str):
             if not m:
                 errors.append("재분해 이력 머리가 `### <YYYY-MM-DD> · <사유>` 가 아니다: %r" % line)
                 continue
-            cur = {"date": m.group(1), "reason": m.group(2), "changes": [], "quotes": [], "form": "new"}
+            cur = {"date": m.group(1), "reason": m.group(2), "changes": [], "quotes": [], "no_words": "", "form": "new"}
             entries.append(cur)
         elif old:
             entries.append({"date": old.group(1), "reason": old.group(2), "changes": [],
-                            "quotes": quotes(line), "form": "old"})
+                            "quotes": quotes(line), "no_words": "", "form": "old"})
             cur, key = None, None
         elif cur is None:
             continue
         elif line.startswith("- 바뀜:") or line.startswith("- 원문:"):
             key, _sep, value = line[2:].partition(":")
             value = value.strip()
-            if key == "원문" and value:
+            if key == "원문" and value.startswith("없음 — ") and value[len("없음 — "):].strip():
+                cur["no_words"] = value[len("없음 — "):].strip()
+            elif key == "원문" and value:
                 errors.append("%s 재분해 이력: 원문은 하위 항목으로 줄마다 하나씩 적는다: %r" % (cur["date"], line))
             elif value:
                 cur["changes"].append(value)
@@ -250,8 +253,10 @@ def parse_history(text: str):
         else:
             errors.append("%s 재분해 이력에서 읽지 못한 줄: %r" % (cur["date"], line))
     for e in entries:
-        if e["form"] == "new" and not e["quotes"]:
+        if e["form"] == "new" and not e["quotes"] and not e["no_words"]:
             errors.append("%s 재분해 이력(%s)에 원문이 없다" % (e["date"], e["reason"]))
+        if e["form"] == "new" and e["quotes"] and e["no_words"]:
+            errors.append("%s 재분해 이력(%s)이 `원문: 없음` 과 원문 줄을 함께 적었다" % (e["date"], e["reason"]))
     return entries, errors
 
 

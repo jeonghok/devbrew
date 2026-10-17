@@ -410,18 +410,27 @@ def replace_epics(roadmap_text: str, blocks: list) -> str:
     return "".join(lines[:start + 1]) + "\n" + "\n".join(blocks) + "\n" + "".join(lines[end:])
 
 
-def history_entry(date: str, reason: str, changes: list, quotes: list) -> str:
-    """새 재분해 이력 항목 하나 — `### <날짜> · <사유>` · `- 바뀜:` · `- 원문:` + 줄마다 「…」."""
+def history_entry(date: str, reason: str, changes: list, quotes: list, no_words: str = "") -> str:
+    """새 재분해 이력 항목 하나 — `### <날짜> · <사유>` · `- 바뀜:` · `- 원문:` + 줄마다 「…」.
+
+    사용자 말이 없으면 quotes 를 비우고 no_words 에 사유를 준다 — `- 원문: 없음 — <사유>` 한 줄이 된다."""
+    if no_words and quotes:
+        raise TableError("원문 줄과 `원문: 없음` 은 함께 적지 않는다")
+    if no_words and (len(no_words.splitlines()) != 1 or not no_words.strip()):
+        raise TableError("원문 없음 사유는 한 줄이다: %r" % no_words)
     for q in quotes:
         if len(q.splitlines()) != 1 or not is_quote("「%s」" % q):
             raise TableError("원문은 한 줄이고 「 」 가 짝이 맞아야 한다: %r" % q)
-    if not quotes:
+    if not quotes and not no_words:
         raise TableError("재분해 이력에 원문이 없다")
     if len(reason.splitlines()) != 1 or not reason.strip():
         raise TableError("재분해 이력 사유는 한 줄이다: %r" % reason)
     out = ["### %s · %s" % (date, reason.strip())]
     if changes:
         out.append("- 바뀜: " + " · ".join(changes))
+    if no_words:
+        out.append("- 원문: 없음 — " + no_words.strip())
+        return "\n".join(out) + "\n"
     out.append("- 원문:")
     out += ["  - 「%s」" % q for q in quotes]
     return "\n".join(out) + "\n"

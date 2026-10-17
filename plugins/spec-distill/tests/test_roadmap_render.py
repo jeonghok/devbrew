@@ -289,6 +289,13 @@ class FormatV2(unittest.TestCase):
             with self.assertRaises(R.TableError):
                 R.history_entry("2026-10-17", "x", [], [bad])
 
+    def test_history_entry_without_user_words(self):
+        got = R.history_entry("2026-10-15", "판정", ["가 「설계 판정」"], [], no_words="사용자 말 없음(설계 판정)")
+        self.assertEqual(got, "### 2026-10-15 · 판정\n- 바뀜: 가 「설계 판정」\n- 원문: 없음 — 사용자 말 없음(설계 판정)\n")
+        for quotes, why in (([], ""), (["a"], "사유"), ([], "줄\n바꿈")):
+            with self.assertRaises(R.TableError):
+                R.history_entry("2026-10-15", "x", [], quotes, no_words=why)
+
     def test_append_history_new_entry_after_old_lines(self):
         text = "## 재분해 이력\n\n- 2026-10-11 · 처음 · 「a」\n\n## 위험 번호표\n"
         got = R.append_history(text, R.history_entry("2026-10-17", "재분해", [], ["b"]))
