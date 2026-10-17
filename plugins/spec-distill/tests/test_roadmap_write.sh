@@ -297,6 +297,7 @@ E3_ROW='| E3 | 셋째 에픽 | 묶음 | 셋째 의도 | 한다 바 / 안 한다 
 table "$T/u3.md" "$P1_NOW" "$E1_NOW" "$E2_U1" "$E3_ROW"
 assert_eq "$(update "$T/u3.md")" "0" "새 에픽: rc 0"
 [ -f "$W/docs/rm/E3.md" ] && ok "새 에픽: 묶음을 만든다" || no "새 에픽: E3.md 없음"
+grep -qxF -- "- 바뀜: 새 에픽 E3 「이대로 다시 나눈다」" "$W/docs/rm/roadmap.md" && ok "새 에픽: 이력 바뀜 줄" || no "새 에픽: 이력 바뀜 줄: 이력 줄이 다르다"
 table "$T/u4.md" "$P1_NOW" "$E1_NOW" "$E2_U1"
 assert_eq "$(update "$T/u4.md")" "0" "에픽 지우기: rc 0"
 [ -e "$W/docs/rm/E3.md" ] && no "에픽 지우기: E3.md 가 남았다" || ok "에픽 지우기: 묶음을 지운다"

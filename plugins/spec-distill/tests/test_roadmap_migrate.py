@@ -244,7 +244,10 @@ class LiveRoadmap(unittest.TestCase):
             self.assertEqual(got, e["quotes"], key)
 
     def test_each_approval_sits_on_its_own_change(self):
-        for key, e, _orig in self._entries() + self._entries(added=True):
+        """손으로 핀한 APPROVALS 는 PRE 에 있던 항목만 — 뒤에 더해진 항목은 위 검사가 자기 규칙으로 잰다."""
+        pinned = self._entries()
+        self.assertTrue(pinned, "PRE 의 이력 항목이 없다 — 이 검사가 비어 있다")
+        for key, e, _orig in pinned:
             for i, c in enumerate(e["changes"]):
                 at = tuple(e["quotes"].index(q) + 1 for q in quotes(c) if q not in NOT_USER_WORDS)
                 self.assertEqual(at, APPROVALS.get((key, i), ()), "%s 바뀜 %d" % (key, i))
