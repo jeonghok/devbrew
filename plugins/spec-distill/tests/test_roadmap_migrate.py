@@ -29,6 +29,25 @@ def git_show(rev_path: str) -> str:
 
 
 class MigrateText(unittest.TestCase):
+    def test_crlf_roadmap_keeps_every_crlf(self):
+        old = road(blk(), blk(head="### A2 — 나\n")).replace("\n", "\r\n")
+        new = W.migrated_text(old, None)
+        self.assertEqual(new.count("\r\n"), new.count("\n"))
+        self.assertEqual(new, old.replace(OLD_SCOPE.replace("\n", "\r\n"), NEW_SCOPE.replace("\n", "\r\n")))
+
+    def test_migrate_reads_crlf_without_folding_it(self):
+        import shutil
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        try:
+            path = Path(tmp) / "roadmap.md"
+            raw = road(blk()).replace("\n", "\r\n").encode("utf-8")
+            path.write_bytes(raw)
+            self.assertEqual(W.read(path, keep_newlines=True).encode("utf-8"), raw)
+            self.assertNotIn("\r", W.read(path))
+        finally:
+            shutil.rmtree(tmp)
+
     def test_old_blocks_become_new_with_same_quotes(self):
         old = git_show(PRE + ":" + RM)
         new = W.migrated_text(old, lambda n: git_show("%s:%s/%s" % (PRE, Path(RM).parent.as_posix(), n)))
@@ -97,6 +116,48 @@ class MigrateKeepsEveryOtherByte(unittest.TestCase):
                 W.migrated_text(road(blk(scope=scope)), lambda n: None)
 
 
+
+# 사용자 말이 아닌 「…」 — 원문 칸에 두지 않는다(설계 §6). 옛 줄에서 이 인용을 뺀 나머지가 사용자 말이다.
+NOT_USER_WORDS = {
+    "「에픽」": "단위 이름으로 고른 용어 표시",
+    "「하나」": "바꾸기 전 문구를 가리키는 용어 표시",
+    "「R7 착수 중 수정 — 몰아 받기」": "다른 이력 줄의 이름표",
+    "「병렬 구현 중 수정 — 통합 리뷰」": "다른 이력 줄의 이름표",
+    "「병렬 머지 중 수정 — 지휘 절차 8 · 9」": "다른 이력 줄의 이름표",
+    "「병렬 머지 중 수정 — 하위 동작 동일」": "다른 이력 줄의 이름표",
+    "「감사 뒤 수정」": "다른 이력 줄의 이름표",
+    "「새 세션 작업 목록 재충전은 지휘 절차가 맡는다」": "R6 설계 판정(사용자 말 아님)",
+}
+
+# (항목 키, 바뀜 항목 번호) → 그 항목 끝에 붙은 승인 인용의 원문 칸 번호(1부터). 키는 `날짜 · 사유`(같은 키가 또 나오면 ` #n`).
+# 여기 없는 바뀜 항목은 사용자 말을 담지 않는다.
+APPROVALS = {
+    ('2026-10-11 · 처음 로드맵', 0): (1,),
+    ('2026-10-11 · 승인 뒤 수정(R0 설계 B11~B13)', 0): (1,),
+    ('2026-10-11 · 승인 뒤 수정(R0 설계 B11~B13)', 1): (2,),
+    ('2026-10-11 · 승인 뒤 수정(R0 설계 B11~B13)', 2): (3,),
+    ('2026-10-13 · P3 결정 뒤 수정', 0): (1,),
+    ('2026-10-15 · R7 착수 중 수정', 0): (1, 2, 3, 4, 5, 6, 7),
+    ('2026-10-15 · R7 착수 중 수정', 1): (8,),
+    ('2026-10-15 · R3 설계 중 수정', 0): (1, 2),
+    ('2026-10-15 · 병렬 구현 중 수정', 0): (1, 2),
+    ('2026-10-16 · 병렬 머지 중 수정', 0): (1,),
+    ('2026-10-17 · 병렬 머지 중 수정', 0): (1,),
+    ('2026-10-17 · 병렬 머지 중 수정', 2): (2,),
+    ('2026-10-17 · 감사 뒤 수정', 0): (1,),
+    ('2026-10-17 · 감사 뒤 수정 #2', 0): (1,),
+    ('2026-10-17 · 지휘 점검 중 수정', 1): (1, 2, 3, 4, 5, 6),
+    ('2026-10-17 · 압축 감사 뒤 수정', 0): (1, 2, 3, 4, 5, 6, 7, 8),
+    ('2026-10-17 · 재분해', 1): (1,),
+    ('2026-10-17 · 흐름 고정 점검 뒤 수정', 5): (1, 2, 3),
+    ('2026-10-17 · 재분해 #2', 0): (1, 2),
+    ('2026-10-17 · 재분해 #2', 1): (3,),
+    ('2026-10-17 · 재분해 #2', 2): (4,),
+    ('2026-10-17 · 재분해 #2', 3): (5,),
+    ('2026-10-17 · 재분해 #2', 8): (6,),
+}
+
+
 class LiveRoadmap(unittest.TestCase):
     """이 로드맵은 옮겨졌다 — 옛 꼴 블록 · 옛 꼴 이력이 없고, 옮기기 전 인용을 하나도 잃지 않았다."""
 
@@ -129,6 +190,42 @@ class LiveRoadmap(unittest.TestCase):
         self.assertEqual(errors, [])
         for e in entries:
             self.assertTrue(bool(e["quotes"]) != bool(e["no_words"]), e["date"])
+
+    def _entries(self):
+        """(키, 새 항목, 그 항목의 옛 줄 인용들) — 옛 줄과 새 항목은 날짜 순서로 짝지어진다."""
+        old_entries, _ = parse_history(git_show(PRE + ":" + RM))
+        new_entries, errors = parse_history(self.text)
+        self.assertEqual(errors, [])
+        self.assertEqual([e["date"] for e in old_entries], [e["date"] for e in new_entries])
+        seen, out = {}, []
+        for o, n in zip(old_entries, new_entries):
+            k = "%s · %s" % (n["date"], n["reason"])
+            seen[k] = seen.get(k, 0) + 1
+            out.append((k if seen[k] == 1 else "%s #%d" % (k, seen[k]), n, o["quotes"]))
+        return out
+
+    def test_user_words_column_is_exactly_the_original_user_quotes(self):
+        for key, e, orig in self._entries():
+            want = [q for q in orig if q not in NOT_USER_WORDS]
+            self.assertEqual(e["quotes"], want, key)
+            if not want:
+                self.assertTrue(e["no_words"], key)
+
+    def test_no_foreign_quote_in_an_entry(self):
+        for key, e, orig in self._entries():
+            body = "\n".join(e["changes"] + e["quotes"])
+            self.assertLessEqual(set(quotes(body)), set(orig), key)
+
+    def test_changes_carry_the_user_quotes_in_the_same_order(self):
+        for key, e, _orig in self._entries():
+            got = [q for c in e["changes"] for q in quotes(c) if q not in NOT_USER_WORDS]
+            self.assertEqual(got, e["quotes"], key)
+
+    def test_each_approval_sits_on_its_own_change(self):
+        for key, e, _orig in self._entries():
+            for i, c in enumerate(e["changes"]):
+                at = tuple(e["quotes"].index(q) + 1 for q in quotes(c) if q not in NOT_USER_WORDS)
+                self.assertEqual(at, APPROVALS.get((key, i), ()), "%s 바뀜 %d" % (key, i))
 
     def test_history_is_new_form(self):
         entries, errors = parse_history(self.text)

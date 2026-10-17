@@ -67,8 +67,11 @@ def rel(top: Path, path) -> str:
         raise Usage("%s 가 작업 트리 %s 밖이다" % (path, top))
 
 
-def read(path) -> str:
+def read(path, keep_newlines: bool = False) -> str:
+    """UTF-8 글. keep_newlines 면 줄바꿈을 바꾸지 않고 바이트 그대로(CRLF 가 LF 로 접히지 않는다)."""
     try:
+        if keep_newlines:
+            return Path(path).read_bytes().decode("utf-8")
         return Path(path).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         raise Refused("못 읽었다: %s (%s)" % (path, exc))
@@ -455,7 +458,7 @@ def cmd_migrate(a) -> int:
     roadmap = Path(os.path.realpath(a.roadmap))
     top = git_top(roadmap)
     rdir = roadmap.parent
-    old_text = read(roadmap)
+    old_text = read(roadmap, keep_newlines=True)
     new_text = migrated_text(old_text, lambda n: read(rdir / n) if (rdir / n).is_file() else None)
     if new_text == old_text:
         print("[spec-distill] 옮길 것이 없다 — 블록이 이미 새 형식이다")
