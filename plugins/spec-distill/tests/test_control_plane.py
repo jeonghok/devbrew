@@ -715,6 +715,30 @@ class EpicView(unittest.TestCase):
         rc, lines = self.run_show(r, "R9")
         self.assertEqual(rc, 2)
 
+    def test_exit3_with_format_errors_falls_back_not_not_found(self):
+        r = report([blk("R1", "머지됨", "completed")], 3, format_errors=["R5 - 머리가 깨짐"])
+        rc, lines = self.run_show(r, "R5")
+        self.assertEqual(rc, 0)
+        self.assertEqual(lines[0], "에픽 보기를 내지 못했다 — 로드맵 검사 불가, 전체 지도를 보인다")
+        self.assertNotIn("에 없다", "\n".join(lines))
+
+    def test_merged_with_machine_error_is_uncountable(self):
+        r = self.rep()
+        b = r["blocks"][1]
+        del b["rulings"]
+        b["stage"] = "머지됨"
+        r["machine"], r["machine_error"] = None, "기계 상태 파일을 읽지 못했다: /x"
+        self.assertIn("  판정 줄: 셀 수 없음 — 기계 상태를 읽지 못해 원장을 모른다", self.view(r))
+
+    def test_decision_block_has_no_implementation_phrase(self):
+        r = self.rep()
+        b = r["blocks"][1]
+        del b["rulings"]
+        b["stage"], b["kind"] = "대기", "decision"
+        text = self.view(r)
+        self.assertIn("  판정 줄: 아직 없음\n", text + "\n")
+        self.assertNotIn("구현 전", text)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -980,10 +980,14 @@ def epic_view(path: str, report: dict, epic: str):
             out.append(clean("    %s: %s · %s · %s" % (arrow, h["item"], h["state"], h["basis"])))
     if "rulings" not in b:
         stage = b.get("stage")
-        if stage in DONE:
+        if stage in DONE and report.get("machine_error"):
+            out.append("  판정 줄: 셀 수 없음 — 기계 상태를 읽지 못해 원장을 모른다")
+        elif stage in DONE:
             out.append("  판정 줄: 없음 — 판정 기록 없이 %s" % stage)
         elif stage == "알 수 없음":
             out.append("  판정 줄: 셀 수 없음 — 단계를 알 수 없다")
+        elif b.get("kind") == "decision":
+            out.append("  판정 줄: 아직 없음")
         else:
             out.append("  판정 줄: 아직 없음(구현 전)")
     elif b["rulings"] is None:
@@ -1040,7 +1044,7 @@ def cmd_show(tasks: bool, arg, epic=None) -> int:
     if epic:
         _path, report = v["items"][0] if v["items"] else (arg, None)
         if report is None or report.get("exit") in (3, 4):
-            if report is not None and report.get("blocks") and not any(x.get("id") == epic for x in report["blocks"]):
+            if report is not None and report.get("blocks") and not report.get("format_errors") and not any(x.get("id") == epic for x in report["blocks"]):
                 lines, rc = epic_view(_path, report, epic)
                 print("\n".join(lines))
                 return rc
