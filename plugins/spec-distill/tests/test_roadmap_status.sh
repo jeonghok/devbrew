@@ -852,7 +852,7 @@ assert_contains "$(warns "$T/rm4.json" P1)" "받는 곳 없는 미룸 1개" "번
 # ── R5 수정 2 · 3 · 5 — 기본 브랜치를 받아온 뒤 · 결정 기록 머지 줄 · 구현 끝 · 다른 spec 트레일러 ────────
 g checkout -q main
 mkdir -p "$W/docs/rm5"
-for b in Z5 V5 X5 H5 G5 J5 K5 L5 M5 S5; do bundle docs/rm5 "$b" "C1, S1"; done
+for b in Z5 V5 X5 H5 G5 J5 K5 L5 M5 N5 O5 S5; do bundle docs/rm5 "$b" "C1, S1"; done
 { roadmap_head | sed 's|^# 로드맵|# 로드맵 다섯|'
   block Z5 "feature/z5a · feature/z5b" 없음 없음
   block V5 feature/v5 없음 없음
@@ -863,8 +863,10 @@ for b in Z5 V5 X5 H5 G5 J5 K5 L5 M5 S5; do bundle docs/rm5 "$b" "C1, S1"; done
   block K5 feature/k5 J5 없음
   block L5 "feature/l5a · feature/l5b" 없음 없음
   block M5 "feature/m5a · feature/m5b" 없음 없음
+  block N5 "feature/n5a · feature/n5b" 없음 없음
+  block O5 feature/o5 N5 없음
   printf '### S5 — 목록 브랜치\n- 의도: s\n- 범위: s\n- 의존: 없음\n- 브랜치:\n  - feature/s5a\n  - feature/s5b\n- 묶음: S5.md\n- 경로 예약: 없음\n\n'
-  roadmap_tail "$(printf -- '- H5 · 머지 · 2026-10-17 · 「feature/h5a 를 squash 로 머지했다」\n- J5 · 머지 · 2026-10-17 · 「feature/j5a 를 squash 로 머지했다」\n- L5 · 머지 · 2026-10-17 · 「feature/l5a2 를 squash 로 머지했다」\n- M5 · 머지 · 2026-10-17 · 「feature/m5a 를 머지했다」')"
+  roadmap_tail "$(printf -- '- H5 · 머지 · 2026-10-17 · 「feature/h5a 를 squash 로 머지했다」\n- J5 · 머지 · 2026-10-17 · 「feature/j5a 를 squash 로 머지했다」\n- L5 · 머지 · 2026-10-17 · 「feature/l5a2 를 squash 로 머지했다」\n- M5 · 머지 · 2026-10-17 · 「feature/m5a 를 머지했다」\n- N5 · 머지 · 2026-10-17 · 「feature/n5a를 squash 로 머지했다」\n- N5 · 머지 · 2026-10-18 · 「feature/n5b. 이것도 머지했다」')"
 } > "$W/docs/rm5/roadmap.md"
 g add -- docs/rm5 && g commit -qm "rm5" && g push -q origin main
 mkdir -p "$W/docs/superpowers/specs" "$W/docs/superpowers/plans"
@@ -898,6 +900,12 @@ g checkout -q -b feature/h5a main; commit_file src/h5a.txt h5a "h5a"
 g checkout -q main; g merge -q --squash feature/h5a; g commit -qm "squash h5a"; g branch -q -D feature/h5a; g push -q origin main
 g checkout -q -b feature/h5b main; commit_file src/h5b.txt h5b "h5b"
 g checkout -q -b feature/m5a main; commit_file src/m5a.txt m5a "m5a"
+# N5 — 머지 줄 둘(브랜치마다 한 줄 · 한글 조사 · 문장 부호), 두 브랜치 모두 squash 뒤 지워졌다
+for br in n5a n5b; do
+  g checkout -q -b "feature/$br" main; commit_file "src/$br.txt" "$br" "$br"
+  g checkout -q main; g merge -q --squash "feature/$br"; g commit -qm "squash $br"; g branch -q -D "feature/$br"
+done
+g push -q origin main
 # J5 — j5a 는 squash 머지 뒤 지워졌고 j5b 는 아직 만들지 않았다(줄은 j5a 만 부른다)
 g checkout -q -b feature/j5a main; commit_file src/j5a.txt j5a "j5a"
 g checkout -q main; g merge -q --squash feature/j5a; g commit -qm "squash j5a"; g branch -q -D feature/j5a; g push -q origin main
@@ -915,10 +923,17 @@ assert_eq "$(stage "$T/rm5.json" M5)" "설계 중" "수정 3: 줄이 부른 브�
 assert_contains "$(warns "$T/rm5.json" M5)" "결정 기록의 머지 줄을 feature/m5a 에 적용하지 않았다 — 브랜치가 남아 있다" "수정 3: 이름이 적힌 브랜치가 남아 있으면 남아 있다 경고"
 assert_eq "$(stage "$T/rm5.json" J5)" "일부 머지 1/2" "수정 3: 아직 만들지 않은 예정 브랜치는 머지 줄에 이름이 없으면 머지가 아니다"
 assert_contains "$(warns "$T/rm5.json" J5)" "결정 기록의 머지 줄이 feature/j5b 를 가리키지 않아 적용하지 않았다" "수정 3: 이름 없는 브랜치 경고"
+assert_eq "$(stage "$T/rm5.json" N5)" "머지됨" "수정: 머지 줄은 쌓인다 — 브랜치마다 한 줄이면 여러 브랜치 블록이 머지됨"
+assert_eq "$(stage "$T/rm5.json" O5)" "준비" "수정: 머지됨인 N5 에 의존하면 준비"
 assert_eq "$(stage "$T/rm5.json" K5)" "대기" "수정 3: J5 에 의존하는 에픽은 준비가 아니다"
 assert_eq "$(stage "$T/rm5.json" L5)" "준비" "수정 3: 브랜치 이름이 없는 머지 줄은 여러 브랜치 블록을 머지로 만들지 않는다"
 assert_contains "$(warns "$T/rm5.json" L5)" "feature/l5a 를 가리키지 않아 적용하지 않았다" "수정 3: 이름 없는 머지 줄 경고(앞 브랜치)"
 assert_contains "$(warns "$T/rm5.json" L5)" "feature/l5b 를 가리키지 않아 적용하지 않았다" "수정 3: 이름 없는 머지 줄 경고(뒤 브랜치)"
 assert_eq "$(js "$T/rm5.json" "next(b['branch'] for b in r['blocks'] if b['id']=='S5')")" "feature/s5a · feature/s5b" "보고서의 branch 는 하위 항목 목록도 한 줄 글로 낸다"
+
+nb="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap_status as rs
+b = "feature/h5a"
+for t in ("feature/h5a를 머지", "feature/h5a. 끝", "feature/h5a.", "feature/h5a2", "https://x/feature/h5a", "origin/feature/h5a", "feature/h5a/sub", "-feature/h5a", "_feature/h5a", "Feature/H5A", "(feature/h5a)"): print(int(rs.names_branch(t, b)))' "$S")"
+assert_eq "$(printf '%s' "$nb" | tr '\n' ' ')" "1 1 1 0 0 0 0 0 0 0 1" "이름 경계: 한글 조사 · 문장 부호 마침표는 경계, 숫자 · 경로 · 접두 · 대소문자 다름은 아니다"
 
 finish
