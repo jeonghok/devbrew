@@ -292,5 +292,15 @@ class CodeStamp(unittest.TestCase):
                 cp.SCRIPTS = old
 
 
+class Parallel(unittest.TestCase):
+    def test_parallel_with_skips_dependents_and_done(self):
+        blocks = [{"id": "A", "stage": "설계 중", "deps": []}, {"id": "B", "stage": "준비", "deps": ["A"]},
+                  {"id": "C", "stage": "준비", "deps": []}, {"id": "D", "stage": "머지됨", "deps": []}]
+        got = roadmap_status.parallel_with(blocks, [{"blocks": ["A", "C"], "paths": ["src/x"]}])
+        self.assertEqual(got["A"], [{"id": "C", "overlap": ["src/x"]}])
+        self.assertEqual([p["id"] for p in got["B"]], ["C"])
+        self.assertEqual(got["D"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

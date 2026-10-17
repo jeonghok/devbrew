@@ -390,6 +390,7 @@ PY="$(command -v python3)"
 (cd "$W" && PATH=/nonexistent-dir "$PY" "$RS" --json docs/rm/roadmap.md > "$T/crash.json"); rc=$?
 assert_eq "$rc" "3" "내부 오류(git 을 실행하지 못함) → rc 3"
 assert_contains "$(js "$T/crash.json" "r['unknown_reasons']")" "내부 오류" "내부 오류가 검사 불가로 올라왔다"
+assert_eq "$(js "$T/crash.json" "r['handoffs']")" "[]" "내부 오류 보고서에도 handoffs 키가 있다"
 
 # ── 5. 읽기 전용(AC7) — 정적 검사 + 실행 전후 비교, 각각 양성 대조 ──────────────
 static_check() {  # static_check <파일...> — 쓰기 · 네트워크 · 허용 밖 git · 이름 import 를 찾으면 줄을 낸다. 끝에 CHECKED n.
@@ -709,6 +710,8 @@ assert_eq "$(stage "$T/trunk.json" A1)" "머지됨" "기본 브랜치가 trunk �
 out="$(cd "$W" && python3 "$RS" docs/none/roadmap.md)"; rc=$?
 assert_eq "$rc" "4" "기본 브랜치에 없는 로드맵 → rc 4(검사 불가 3 과 다르다)"
 assert_contains "$out" "로드맵이 아직 기본 브랜치(origin/trunk)에 없다" "기본 브랜치에 없음 줄"
+(cd "$W" && python3 "$RS" --json docs/none/roadmap.md > "$T/none.json")
+assert_eq "$(js "$T/none.json" "r['handoffs']")" "[]" "rc 4 조기 반환 보고서에도 handoffs 키가 있다"
 assert_not_contains "$out" "검사 불가: " "기본 브랜치에 없음은 검사 불가 줄이 아니다"
 for f in roadmap_status.py control_plane.py spec_review_bundle.py; do
   assert_eq "$(grep -c 'origin/main' "$S/$f")" "0" "$f 에 origin/main 을 박지 않는다(AC39)"
@@ -930,6 +933,31 @@ assert_eq "$(stage "$T/rm5.json" L5)" "준비" "수정 3: 브랜치 이름이 �
 assert_contains "$(warns "$T/rm5.json" L5)" "feature/l5a 를 가리키지 않아 적용하지 않았다" "수정 3: 이름 없는 머지 줄 경고(앞 브랜치)"
 assert_contains "$(warns "$T/rm5.json" L5)" "feature/l5b 를 가리키지 않아 적용하지 않았다" "수정 3: 이름 없는 머지 줄 경고(뒤 브랜치)"
 assert_eq "$(js "$T/rm5.json" "next(b['branch'] for b in r['blocks'] if b['id']=='S5')")" "feature/s5a · feature/s5b" "보고서의 branch 는 하위 항목 목록도 한 줄 글로 낸다"
+
+# ── R5 AC8 · AC9 · AC43 — 판정 보관본 · 넘김 · 동시 가능 · 선택 칸 ──────────────────────────
+g checkout -q feature/k2
+printf '\n## 미룸\n\n| 항목 | 이유 | 받는 곳 |\n|---|---|---|\n| 넘길 일 | 이유 | K3 |\n| 이슈 일 | 이유 | #5 |\n\n## 판정\n\n- Task 1: Ruling: 가 — 왜 — 비용\n' >> "$W/docs/superpowers/specs/k2-design.md"
+g add -- docs && g commit -qm "k2 미룸 · 판정"
+g checkout -q main
+(cd "$W" && python3 "$RS" --json docs/rm3/roadmap.md > "$T/rm3c.json")
+assert_eq "$(js "$T/rm3c.json" "[(h['giver'], h['receiver'], h['state']) for h in r['handoffs']]")" "[('K2', 'K3', '열림'), ('K2', '#5', '이슈')]" "AC43: 넘김 줄을 conductor_state 로 계산한다"
+assert_eq "$(js "$T/rm3c.json" "next(b['rulings_archived'] for b in r['blocks'] if b['id']=='K2')")" "['- Task 1: Ruling: 가 — 왜 — 비용']" "AC8: 설계문서 ## 판정 보관본"
+assert_eq "$(js "$T/rm3c.json" "next(b['rulings_archived'] for b in r['blocks'] if b['id']=='K3')")" "None" "판정 절 없는 설계문서는 None(빈 목록과 다르다)"
+assert_eq "$(js "$T/rm3c.json" "next(b['extras'] for b in r['blocks'] if b['id']=='O1')")" "{'흐름': '조사 「조사로 간다」', '산출물': 'docs/research/o1.md'}" "선택 칸을 보고서에 싣는다"
+assert_eq "$(js "$T/rm3c.json" "next(b['bundle'] for b in r['blocks'] if b['id']=='K2')")" "docs/rm3/K2.md" "묶음 경로"
+assert_contains "$(js "$T/rm3c.json" "[p['id'] for p in next(b['parallel'] for b in r['blocks'] if b['id']=='K2')]")" "'K3'" "K2 와 K3 은 동시에 갈 수 있다"
+assert_not_contains "$(js "$T/rm3c.json" "[p['id'] for p in next(b['parallel'] for b in r['blocks'] if b['id']=='K2')]")" "'M2'" "머지된 에픽은 동시 가능 목록에 없다"
+
+# 판정 머리가 둘인 설계문서 하나가 보고서 전체를 지우지 않는다 — 그 블록에만 경고, 나머지 블록 · 넘김은 그대로
+g checkout -q feature/k3
+printf '\n## 판정\n\n- a\n\n## 판정\n\n- b\n' >> "$W/docs/superpowers/specs/k3-design.md"
+g add -- docs && g commit -qm "k3 판정 머리 둘"
+g checkout -q main
+(cd "$W" && python3 "$RS" --json docs/rm3/roadmap.md > "$T/rm3d.json")
+assert_contains "$(warns "$T/rm3d.json" K3)" "판정 읽기 불가(" "판정 머리가 둘이면 그 블록에 경고"
+assert_eq "$(js "$T/rm3d.json" "next(b['rulings_archived'] for b in r['blocks'] if b['id']=='K3')")" "None" "읽지 못한 판정 절은 보관본 None"
+assert_eq "$(js "$T/rm3d.json" "next(b['rulings_archived'] for b in r['blocks'] if b['id']=='K2')")" "['- Task 1: Ruling: 가 — 왜 — 비용']" "다른 블록의 보관본은 그대로 나온다"
+assert_eq "$(js "$T/rm3d.json" "len(r['handoffs'])")" "2" "다른 블록의 넘김 줄도 그대로 나온다"
 
 nb="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap_status as rs
 b = "feature/h5a"

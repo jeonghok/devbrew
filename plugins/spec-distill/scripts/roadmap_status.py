@@ -30,8 +30,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_bundle_coverage import check, deferred_rows, receiver_ok  # noqa: E402
 from roadmap_model import (  # noqa: E402,F401 — 테스트가 rs.parse_roadmap · rs.brief_universe 로 부른다
-    FormatError, brief_universe, collect_assigned, field_list, field_text, frontmatter, id_sort_key,
-    impl_done, parse_ids, parse_roadmap, section_body, split_list, unquote)
+    EXTRA_FIELDS, FormatError, RECORD_HEADING, brief_universe, collect_assigned, field_list, field_text,
+    frontmatter, handoff_rows, id_sort_key, impl_done, parse_ids, parse_roadmap, rulings_archived,
+    section_body, section_lines, split_list, unquote)
 from repo_defaults import SPECS_DIR, repo_settings  # noqa: E402
 
 DEFAULT_REF = "refs/remotes/origin/HEAD"
@@ -397,7 +398,7 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
 
     for bid in order:
         b = by_id[bid]
-        b.update(stage=None, reason="", warnings=[], notes=[], specs=[], tip=None, branch_states=[], plans=[])
+        b.update(stage=None, reason="", warnings=[], notes=[], specs=[], tip=None, branch_states=[], plans=[], docs=[], deferred=[])
         undone = [d for d in b["deps"] if by_id[d]["stage"] not in DONE]
         if main is None:
             b["stage"], b["reason"] = "알 수 없음", "기본 브랜치를 못 읽었다"
@@ -477,6 +478,7 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 b["warnings"].append("번호 대조 검사 불가(spec 을 읽지 못했다): %s" % spec)
                 cov_unknown.append("%s spec 을 읽지 못했다" % bid)
                 continue
+            b["docs"].append((spec, spec_text))
             no_cov_section = cov_broken = False
             try:
                 no_cov_section = "산출물" in b["fields"] and section_body(spec_text, "## 번호 대조") is None
@@ -505,6 +507,7 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 b["warnings"].append("미룸 셀 수 없음(%s): %s" % (exc, spec))
                 cov_unknown.append("%s 미룸 표 — %s" % (bid, exc))
                 continue
+            b["deferred"].append((spec, rows))
             bad = [item for item, _why, recv in rows if not receiver_ok(recv, known_ids)]
             if bad:
                 b["warnings"].append("받는 곳 없는 미룸 %d개: %s — %s" % (len(bad), spec, " · ".join(bad)))
@@ -550,13 +553,59 @@ def overlaps(blocks: list) -> list:
     return out
 
 
+def parallel_with(blocks: list, overlap_list: list) -> dict:
+    """블록마다 함께 갈 수 있는 끝나지 않은 블록 — 의존 관계가 어느 쪽으로도 없는 것. 경로 예약 겹침은 정보로 함께."""
+    reach = _reachable(blocks)
+    over = {}
+    for o in overlap_list:
+        a, b = o["blocks"]
+        over[(a, b)] = over[(b, a)] = o["paths"]
+    out = {}
+    for a in blocks:
+        if a["stage"] in DONE:
+            out[a["id"]] = []
+            continue
+        out[a["id"]] = [{"id": b["id"], "overlap": over.get((a["id"], b["id"]), [])} for b in blocks
+                        if b["id"] != a["id"] and b["stage"] not in DONE
+                        and b["id"] not in reach[a["id"]] and a["id"] not in reach[b["id"]]]
+    return out
+
+
+def _read_sections(block: dict, heading: str, label: str):
+    """블록의 설계문서마다 `heading` 절을 읽는다. 반환: ([(spec, 줄들)], 못 읽은 문서 수). 머리가 둘인 문서는
+    그 블록 경고로 올리고 다른 문서 · 블록은 그대로 읽는다."""
+    got, bad = [], 0
+    for spec, text in block.get("docs", []):
+        try:
+            got.append((spec, section_lines(text, heading)))
+        except FormatError as exc:
+            bad += 1
+            block["warnings"].append("%s 읽기 불가(%s): %s" % (label, exc, spec))
+    return got, bad
+
+
+def _archived(block: dict):
+    """설계문서들의 `## 판정` 보관본. 어느 문서에도 절이 없거나 읽지 못했으면 None."""
+    out, found = [], False
+    for spec, text in block.get("docs", []):
+        try:
+            lines = rulings_archived(text)
+        except FormatError as exc:
+            block["warnings"].append("판정 읽기 불가(%s): %s" % (exc, spec))
+            continue
+        if lines is not None:
+            found = True
+            out.extend(lines)
+    return out if found else None
+
+
 # ── 출력 ─────────────────────────────────────────────────────────────────────
 
 def build(git: Git, args) -> dict:
     report = {"roadmap": None, "source": None, "default_branch": None, "not_on_default": False,
               "fetched_at": git.fetched_at(), "notice": NOTICE, "blocks": [], "unassigned": None,
               "orphans": None, "unknown_ids": [], "overlaps": [], "format_errors": [], "unknown_reasons": [],
-              "settings": None, "exit": 3}
+              "settings": None, "handoffs": [], "exit": 3}
     main, main_name = git.default_branch()
     report["default_branch"] = main_name
     if args.roadmap_file:
@@ -595,7 +644,8 @@ def build(git: Git, args) -> dict:
                              "stage": "알 수 없음", "reason": "로드맵 형식 깨짐",
                              "task_status": None, "branch": field_text(b["fields"].get("브랜치", "")),
                              "branches": [], "branch_states": [], "tip": None, "plans": [],
-                             "deps": [], "specs": [], "ids": [], "warnings": [], "notes": []}
+                             "deps": [], "specs": [], "ids": [], "warnings": [], "notes": [],
+                             "bundle": None, "extras": {}, "parallel": [], "rulings_archived": None}
                             for b in blocks]
         return report
 
@@ -627,6 +677,14 @@ def build(git: Git, args) -> dict:
     report["unknown_reasons"] += ["번호 대조 검사 불가 — %s" % c for c in cov_unknown]
     report["unknown_reasons"] += ["git 읽기 실패 — %s" % f for f in git.failures]
     report["overlaps"] = overlaps(blocks)
+    stages = dict((b["id"], b["stage"]) for b in blocks)
+    records = {}
+    for b in blocks:
+        got, _bad = _read_sections(b, RECORD_HEADING, "지휘 기록")
+        records[b["id"]] = "\n".join("\n".join(lines or []) for _spec, lines in got)
+    givers = [(b["id"], spec, rows) for b in blocks for spec, rows in b.get("deferred", [])]
+    report["handoffs"] = handoff_rows(givers, stages, records)
+    parallel = parallel_with(blocks, report["overlaps"])
     for b in blocks:
         ids = b["assigned"]
         report["blocks"].append({
@@ -635,6 +693,9 @@ def build(git: Git, args) -> dict:
             "branch": field_text(b["fields"].get("브랜치", "")), "branches": b["branches"],
             "branch_states": b.get("branch_states", []), "tip": b.get("tip"), "plans": b.get("plans", []),
             "deps": b["deps"], "specs": b["specs"],
+            "bundle": (roadmap_dir + "/" + b["fields"]["묶음"]) if b["kind"] == "bundle" else None,
+            "extras": dict((k, field_text(b["fields"][k])) for k in EXTRA_FIELDS if k in b["fields"]),
+            "parallel": parallel.get(b["id"], []), "rulings_archived": _archived(b),
             "ids": sorted(ids, key=id_sort_key), "warnings": b["warnings"], "notes": b["notes"]})
     return report
 
@@ -701,7 +762,7 @@ def main(argv=None) -> int:
                   "blocks": [], "unassigned": None, "orphans": None, "unknown_ids": [],
                   "overlaps": [], "format_errors": [],
                   "unknown_reasons": ["내부 오류 — %s: %s" % (type(exc).__name__, exc)],
-                  "settings": None, "exit": 3}
+                  "settings": None, "handoffs": [], "exit": 3}
     print(json.dumps(report, ensure_ascii=False, indent=2) if args.json else render(report))
     return report["exit"]
 

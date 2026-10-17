@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -489,3 +490,73 @@ def impl_done(doc_text: str, plan_rel: str) -> bool:
     """그 계획의 `## 구현 대조 — <계획 경로>` 절이 있는가 — 다른 계획의 절은 세지 않는다."""
     want = IMPL_PREFIX + plan_rel
     return any(h == want for h in _headings(doc_text))
+
+
+# 에픽 설계문서(또는 산출물)의 절 — 지휘자가 쓰고 상태 계산 · 화면이 읽는다.
+RULINGS_HEADING = "## 판정"
+RECORD_HEADING = "## 지휘 기록"
+CONFIRM_RE = re.compile(r"- 넘김 확인 · ([A-Z][0-9]+[a-z]?) · ([0-9a-f]{8}) · (\S.*)")
+ISSUE_RE = re.compile(r"#\d+")
+EPIC_RE = re.compile(r"[A-Z][0-9]+[a-z]?")
+RECEIVED = ("머지됨", "끝남")
+
+
+def section_lines(doc_text: str, heading: str):
+    """머리가 정확히 `heading` 인 절의 비지 않은 줄들(펜스 안 머리는 절이 아니다). 없으면 None,
+    같은 머리가 둘 이상이면 FormatError."""
+    in_fence, found, body, cur = False, 0, [], False
+    for line in doc_text.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and line.startswith("## "):
+            cur = line.rstrip() == heading
+            found += 1 if cur else 0
+            if found > 1:
+                raise FormatError("머리 %r 가 둘 이상이다" % heading)
+            continue
+        if found == 1 and cur:
+            body.append(line.rstrip())
+    if not found:
+        return None
+    return [l for l in body if l.strip()]
+
+
+def rulings_archived(doc_text: str):
+    """설계문서 `## 판정` 의 `- ` 줄들. 절이 없으면 None(빈 절은 [])."""
+    lines = section_lines(doc_text, RULINGS_HEADING)
+    return None if lines is None else [l for l in lines if l.startswith("- ")]
+
+
+def handoff_key(giver: str, item: str) -> str:
+    return hashlib.sha256(("%s\n%s" % (giver, item)).encode("utf-8")).hexdigest()[:8]
+
+
+def confirmed_keys(record_text: str) -> set:
+    out = set()
+    for line in record_text.splitlines():
+        m = CONFIRM_RE.fullmatch(line.rstrip())
+        if m:
+            out.add((m.group(1), m.group(2)))
+    return out
+
+
+def handoff_rows(givers, stages: dict, records: dict) -> list:
+    """넘김 한 줄씩. givers 는 [(준 에픽, 설계문서 경로, [(항목, 이유, 받는 곳)])], stages 는 {에픽: 단계},
+    records 는 {에픽: 그 에픽 설계문서들의 `## 지휘 기록` 글}.
+    상태: 열림 · 처리됨(받는 에픽 머지됨, 확인 전) · 확인됨 · 이슈(`#<n>` — 처리 여부는 GitHub) · 받는 곳 없음."""
+    out = []
+    for giver, spec, rows in givers:
+        for item, _why, recv in rows:
+            row = {"item": item, "giver": giver, "receiver": recv, "spec": spec}
+            if ISSUE_RE.fullmatch(recv):
+                row.update(state="이슈", basis="GitHub 이슈 %s — 처리 여부는 GitHub 이 안다" % recv)
+            elif not (EPIC_RE.fullmatch(recv) and recv in stages):
+                row.update(state="받는 곳 없음", basis="받는 곳 %r 이 로드맵의 에픽도 `#<n>` 도 아니다" % recv)
+            elif (giver, handoff_key(giver, item)) in confirmed_keys(records.get(recv, "")):
+                row.update(state="확인됨", basis="%s 설계문서의 %s 절" % (recv, RECORD_HEADING[3:]))
+            elif stages[recv] in RECEIVED:
+                row.update(state="처리됨", basis="%s 머지됨 — 확인 전" % recv)
+            else:
+                row.update(state="열림", basis="%s %s" % (recv, stages[recv]))
+            out.append(row)
+    return out
