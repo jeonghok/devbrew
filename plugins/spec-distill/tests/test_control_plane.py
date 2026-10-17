@@ -551,5 +551,69 @@ class Overlay(unittest.TestCase):
         return cp.show_text([(RM, r)], NO_IV, [], lambda rep: "첫 줄", None).split("\n")
 
 
+class EpicView(unittest.TestCase):
+    def rep(self):
+        data = cs.empty()
+        data["자원"].append({"종류": "worktree", "경로": "/w/r5", "에픽": "R5", "용도": "구현", "만든 때": "2026-10-17"})
+        data["기다리는 질문"].append({"에픽": "R5", "기대는 일": "구현", "질문": "새 결정 하나"})
+        r5 = blk("R5", "일부 머지 1/3", "in_progress", deps=["R1"], bundle="docs/rm/R5.md",
+                 specs=["docs/s.md"], plans=["docs/p2.md"],
+                 branch_states=[{"branch": "feature/a", "tip": "aaaaaaaa1", "merged": "기본 브랜치의 머지 커밋 1"},
+                                {"branch": "feature/b", "tip": "bbbbbbbb2", "merged": None},
+                                {"branch": "feature/c", "tip": None, "merged": None}],
+                 parallel=[{"id": "R10", "overlap": ["src/x"]}], extras={"크기": "큼", "순서 이유": "R2a 뒤"},
+                 rulings=None)
+        r = report([blk("R1", "머지됨", "completed"), r5],
+                   handoffs=[{"item": "넘길 일", "giver": "R2", "receiver": "R5", "spec": "s", "state": "열림",
+                              "basis": "R5 설계 중"},
+                             {"item": "끝난 일", "giver": "R5", "receiver": "R8", "spec": "s", "state": "확인됨",
+                              "basis": "b"}])
+        r["machine"], r["machine_error"] = data, None
+        return r
+
+    def test_drill_down_lines(self):
+        lines, rc = cp.epic_view(RM, self.rep(), "R5")
+        text = "\n".join(lines)
+        self.assertEqual(rc, 0)
+        for want in ("R5 에픽 R5 — 일부 머지 1/3", "  묶음: docs/rm/R5.md", "  설계문서: docs/s.md", "  계획: docs/p2.md",
+                     "  브랜치: feature/a(머지됨) · feature/b(진행 — bbbbbbbb) · feature/c(아직 없음)",
+                     "  의존: R1(머지됨)", "  동시에 갈 수 있는 에픽: R10(경로 예약 겹침: src/x)",
+                     "  크기: 큼", "  순서 이유: R2a 뒤", "  열린 넘김: 1개", "    받음 ← R2: 넘길 일 · 열림 · R5 설계 중",
+                     "  판정 줄: 셀 수 없음 — 실행 원장도 설계문서 `## 판정` 도 없다",
+                     "  자원: worktree /w/r5(구현)", "  기다리는 질문: 새 결정 하나"):
+            self.assertIn(want, text)
+        self.assertNotIn("끝난 일", text)
+
+    def test_unknown_epic(self):
+        lines, rc = cp.epic_view(RM, self.rep(), "R9")
+        self.assertEqual(rc, 2)
+        self.assertIn("있는 에픽: R1 · R5", lines[0])
+
+    def test_cli_rejects_bad_epic_and_tasks_with_epic(self):
+        self.assertEqual(cp.main(["show", RM, "r5"]), 2)
+        self.assertEqual(cp.main(["show", "--tasks", RM, "R5"]), 2)
+
+    def test_none_is_uncountable_not_empty(self):
+        r = self.rep()
+        r["handoffs"] = None
+        r["blocks"][1]["parallel"] = None
+        text = "\n".join(cp.epic_view(RM, r, "R5")[0])
+        self.assertIn("  열린 넘김: 셀 수 없음", text)
+        self.assertNotIn("열린 넘김: 없음", text)
+        self.assertIn("  동시에 갈 수 있는 에픽: 셀 수 없음", text)
+
+    def test_machine_error_ruling_line_and_single_prefix(self):
+        r = self.rep()
+        r["machine"], r["machine_error"] = None, "기계 상태 파일을 읽지 못했다: /x (권한 없음)"
+        text = "\n".join(cp.epic_view(RM, r, "R5")[0])
+        self.assertIn("  판정 줄: 셀 수 없음 — 기계 상태를 읽지 못해 원장을 모른다", text)
+        self.assertNotIn("실행 원장도 설계문서", text)
+        self.assertNotIn("기계 상태를 읽지 못했다 — 기계 상태 파일을", text)
+        self.assertIn("  기계 상태 파일을 읽지 못했다: /x", text)
+        shown = cp.show_text([(RM, r)], None, [], cp.first_line)
+        self.assertNotIn("기계 상태를 읽지 못했다 — 기계 상태 파일을", shown)
+        self.assertIn("기계 상태를 읽지 못해 원장을 모른다", shown)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5,6 +5,7 @@
 명령줄:
   control_plane.py statusline                    상태줄 한 줄. 늘 rc 0.
   control_plane.py show [<로드맵 경로>]           지도. rc 0.
+  control_plane.py show <로드맵 경로> <에픽>   에픽 하나로 내려가는 보기. 없는 에픽이면 rc 2.
   control_plane.py show --tasks [<로드맵 경로>]   작업 목록 줄 `<제목><탭><pending|in_progress|completed|keep>`.
                                                  검사 불가 · 로드맵 없음 · 꺼짐이면 표준 출력이 비고 표준 오류에
                                                  사유, rc 3. 기본 브랜치에 없는 로드맵이면 rc 4.
@@ -231,6 +232,12 @@ def statusline_text(items, interview, minutes, select_error=None) -> str:
     return clean(" · ".join(parts))
 
 
+def machine_error_line(why) -> str:
+    """사유가 이미 «기계 상태» 로 시작하면 머리말을 겹쳐 붙이지 않는다."""
+    why = str(why)
+    return clean(why if why.startswith("기계 상태") else "기계 상태를 읽지 못했다 — %s" % why)
+
+
 def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
     lines = []
     if select_error:
@@ -241,7 +248,7 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
         lines.append(clean(first_line_fn(report)))
         lines.append(clean("로드맵: %s" % path))
         if report.get("machine_error"):
-            lines.append(clean("기계 상태를 읽지 못했다 — %s" % report["machine_error"]))
+            lines.append(machine_error_line(report["machine_error"]))
         if report.get("not_on_default"):
             lines.append(clean("로드맵이 아직 기본 브랜치(%s)에 없다 — 머지 전이면 `--roadmap-file` 로 계산한다"
                                % (report.get("default_branch") or "알 수 없음")))
@@ -278,6 +285,8 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
             for b in ruled:
                 if b["rulings"] is None and b.get("ledger_failures"):
                     rows.append(clean("    %s: 셀 수 없음 — 실행 원장을 읽지 못했고 설계문서 `## 판정` 도 없다" % b.get("id")))
+                elif b["rulings"] is None and report.get("machine_error"):
+                    rows.append(clean("    %s: 셀 수 없음 — 기계 상태를 읽지 못해 원장을 모른다" % b.get("id")))
                 elif b["rulings"] is None:
                     rows.append(clean("    %s: 셀 수 없음 — 실행 원장도 설계문서 `## 판정` 도 없다" % b.get("id")))
                 else:
@@ -921,7 +930,81 @@ def cmd_statusline() -> int:
     return 0
 
 
-def cmd_show(tasks: bool, arg) -> int:
+EPIC_ARG_RE = re.compile(r"[A-Z][0-9]+[a-z]?")
+
+
+def epic_view(path: str, report: dict, epic: str):
+    """(줄들, rc) — 에픽 하나의 묶음 · 설계문서 · 계획 · 브랜치 · PR · 의존 · 동시 가능 · 선택 칸 · 넘김 · 판정 · 자원.
+    줄마다 경로나 번호가 있어 한 단계 더 내려갈 수 있다."""
+    blocks = report.get("blocks") or []
+    b = next((x for x in blocks if x.get("id") == epic), None)
+    if b is None:
+        have = " · ".join(str(x.get("id")) for x in blocks) or "없음"
+        return [clean("에픽 %s 가 로드맵 %s 에 없다 — 있는 에픽: %s" % (epic, path, have))], 2
+    stages = dict((x.get("id"), x.get("stage")) for x in blocks)
+    out = [clean("%s %s — %s · %s" % (b["id"], b.get("title"), b.get("stage"), b.get("reason"))),
+           clean("  로드맵: %s" % path)]
+
+    def row(label, values):
+        out.append(clean("  %s: %s" % (label, " · ".join(values) if values else "없음")))
+
+    def branch_cell(s):
+        if s.get("merged"):
+            return "%s(머지됨)" % s["branch"]
+        return "%s(%s)" % (s["branch"], "진행 — %s" % s["tip"][:8] if s.get("tip") else "아직 없음")
+
+    row("묶음", [b["bundle"]] if b.get("bundle") else [])
+    row("설계문서", b.get("specs") or [])
+    row("계획", b.get("plans") or [])
+    row("브랜치", [branch_cell(s) for s in b.get("branch_states") or []])
+    if b.get("pr"):
+        out.append(clean("  PR: %s" % pr_text(b["pr"])))
+    row("의존", ["%s(%s)" % (d, stages.get(d)) for d in b.get("deps") or []])
+    if b.get("parallel") is None:
+        out.append("  동시에 갈 수 있는 에픽: 셀 수 없음")
+    else:
+        row("동시에 갈 수 있는 에픽", [p["id"] + ("(경로 예약 겹침: %s)" % " · ".join(p["overlap"]) if p.get("overlap") else "")
+                              for p in b["parallel"]])
+    for key, value in (b.get("extras") or {}).items():
+        out.append(clean("  %s: %s" % (key, value)))
+    handoffs = report.get("handoffs")
+    if handoffs is None:
+        out.append("  열린 넘김: 셀 수 없음")
+    else:
+        mine = [h for h in handoffs if epic in (h.get("giver"), h.get("receiver")) and h.get("state") != "확인됨"]
+        out.append("  열린 넘김: %s" % ("없음" if not mine else "%d개" % len(mine)))
+        for h in mine:
+            arrow = "받음 ← %s" % h["giver"] if h["receiver"] == epic else "줌 → %s" % h["receiver"]
+            out.append(clean("    %s: %s · %s · %s" % (arrow, h["item"], h["state"], h["basis"])))
+    if "rulings" not in b:
+        out.append("  판정 줄: 아직 없음(구현 전)")
+    elif b["rulings"] is None:
+        if report.get("machine_error"):
+            out.append("  판정 줄: 셀 수 없음 — 기계 상태를 읽지 못해 원장을 모른다")
+        elif b.get("ledger_failures"):
+            out.append("  판정 줄: 셀 수 없음 — 실행 원장을 읽지 못했고 설계문서 `## 판정` 도 없다")
+        else:
+            out.append("  판정 줄: 셀 수 없음 — 실행 원장도 설계문서 `## 판정` 도 없다")
+    else:
+        out.append(clean("  판정 줄: %d개(%s)" % (len(b["rulings"]), b.get("rulings_source"))))
+        out += [clean("    %s" % r) for r in b["rulings"]]
+    out += [clean("  원장 읽기 불가: %s — %s" % (f["path"], f["reason"])) for f in b.get("ledger_failures") or []]
+    if b.get("ledger_cut"):
+        out.append(clean("  %s" % b["ledger_cut"]))
+    if report.get("machine_error"):
+        out.append(clean("  " + machine_error_line(report["machine_error"])))
+    elif report.get("machine") is not None:
+        m = report["machine"]
+        row("자원", ["%s %s(%s)" % (r["종류"], r["경로"], r["용도"]) for r in m.get("자원", []) if r["에픽"] == epic])
+        row("살아 있는 agent", ["%s(%s · %s)" % (r["이름"], r["일"], r["worktree"])
+                              for r in m.get("살아 있는 agent", []) if r["에픽"] == epic])
+        row("기다리는 질문", [r["질문"] for r in m.get("기다리는 질문", []) if r["에픽"] == epic])
+    out += [clean("  경고: %s" % w) for w in b.get("warnings") or []]
+    out += [clean("  정보: %s" % n) for n in b.get("notes") or []]
+    return out, 0
+
+
+def cmd_show(tasks: bool, arg, epic=None) -> int:
     sw = switch_name()
     if sw:
         if tasks:
@@ -946,6 +1029,14 @@ def cmd_show(tasks: bool, arg) -> int:
         print(msg)
         return 0
     shown_error = v["select_error"] or (NO_DEFAULT if v.get("no_default") and not v["items"] else None)
+    if epic:
+        _path, report = v["items"][0] if v["items"] else (arg, None)
+        if report is None or report.get("exit") in (3, 4):
+            print(show_text(v["items"], v["interview"], v["notes"], first_line, shown_error))
+            return 0
+        lines, rc = epic_view(_path, report, epic)
+        print("\n".join(lines))
+        return rc
     if tasks:
         out, err, rc = tasks_output(v["items"], shown_error)
         if out:
@@ -976,6 +1067,7 @@ def main(argv=None) -> int:
     sp = sub.add_parser("show")
     sp.add_argument("--tasks", action="store_true")
     sp.add_argument("roadmap", nargs="?")
+    sp.add_argument("epic", nargs="?")
     args = ap.parse_args(argv)
     if args.cmd == "statusline":
         return cmd_statusline()
@@ -983,7 +1075,10 @@ def main(argv=None) -> int:
         if args.roadmap is not None and (not args.roadmap.strip() or args.roadmap.startswith("-")):
             sys.stderr.write("사용법: 로드맵 경로는 비지 않고 - 로 시작하지 않는다\n")
             return 2
-        return cmd_show(args.tasks, args.roadmap)
+        if args.epic is not None and (args.tasks or not EPIC_ARG_RE.fullmatch(args.epic)):
+            sys.stderr.write("사용법: 에픽은 로드맵 경로 뒤에 하나(`<대문자><숫자>[소문자]`), --tasks 와 함께 쓰지 않는다\n")
+            return 2
+        return cmd_show(args.tasks, args.roadmap, args.epic)
     ap.print_usage(sys.stderr)
     return 2
 

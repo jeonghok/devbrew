@@ -160,5 +160,6 @@ g add -- docs && g commit -qm "r7 산출물"; g checkout -q main; g fetch -q ori
 nbr7="$(cd "$T" && python3 "$SRB" neighbors --bundle docs/rm/R3.md --root "$W")"
 assert_contains "$nbr7" "R7 — docs/research/r7.md" "AC6: 이웃 결정에 산출물 경로"
 assert_contains "$nbr7" "- B7 · 결정 · 2026-10-17 · 조사 결론" "AC6: 이웃 읽기가 산출물의 결정 줄을 읽는다"
+assert_contains "$nbr7" "크기 작음" "§6: 이웃 줄에 크기를 보인다"
 
 finish

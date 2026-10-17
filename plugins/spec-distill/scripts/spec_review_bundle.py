@@ -77,7 +77,10 @@ def entry(spec: str, bundle: str, root: str) -> list:
 
 
 def _line(b: dict) -> str:
-    return "%s %s — %s · %s" % (b["id"], b["title"], b["stage"], b["reason"])
+    ex = b.get("extras") or {}
+    extra = ["%s %s" % (k, ex[k]) for k in ("크기", "순서 이유") if k in ex]
+    return "%s %s — %s · %s%s" % (b["id"], b["title"], b["stage"], b["reason"],
+                                  (" · " + " · ".join(extra)) if extra else "")
 
 
 def neighbors(bundle: str, root: str) -> list:
