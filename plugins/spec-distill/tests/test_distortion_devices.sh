@@ -188,8 +188,8 @@ has "$SI" '### 지금 이해' "AC15(양성 짝): 라운드 규약 템플릿이 �
 
 # ── Task 10 — 릴리스 표면 (AC18) ──
 PJ="$SD/.claude-plugin/plugin.json"; CL="$SD/CHANGELOG.md"
-assert_grep "$(cat "$PJ")" '"version": "7\.0\.[0-9]+"' "AC18: spec-distill 버전이 7.0 이다(호환 깨짐이라 major)"
-assert_grep "$(head -5 "$CL")" '^## \[7\.0\.[0-9]+\] — 2026-10-1[0-9]$' "AC18: CHANGELOG 머리가 7.0 이다"
+assert_grep "$(cat "$PJ")" '"version": "7\.[0-9]+\.[0-9]+"' "AC18: spec-distill 버전이 7 대이다(호환 깨짐이라 major)"
+assert_grep "$(head -5 "$CL")" '^## \[7\.[0-9]+\.[0-9]+\] — 2026-10-1[0-9]$' "AC18: CHANGELOG 머리가 7 대이다"
 has "$RM" '덜어 낸 것' "Law 3: README 가 덜어 낸 것 공시를 말한다"
 
 finish
