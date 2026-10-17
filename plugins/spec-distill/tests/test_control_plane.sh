@@ -230,10 +230,10 @@ rm -f "$S/state_path.py"
 
 echo "=== 진짜 상태 계산과의 인자 계약 ==="
 out="$(cd "$W" && python3 "$REAL/control_plane.py" show docs/superpowers/roadmaps/none/roadmap.md)"
-assert_contains "$out" "검사 불가: 로드맵을 못 읽었다: docs/superpowers/roadmaps/none/roadmap.md (origin/main)" "main 에 없는 로드맵 — 검사 불가"
-out="$(cd "$W" && python3 "$REAL/control_plane.py" show --tasks docs/superpowers/roadmaps/none/roadmap.md 2>"$T/err")"; rc=$?
-assert_eq "$out|$rc" "|3" "진짜 상태 계산이 3 — 작업 목록 비고 rc 3"
-assert_contains "$(cat "$T/err")" "로드맵을 못 읽었다" "진짜 사유가 표준 오류에"
+assert_contains "$out" "로드맵이 아직 기본 브랜치(origin/main)에 없다" "기본 브랜치에 없는 로드맵 — 없음 줄"
+out="$(cd "$W" && python3 "$REAL/control_plane.py" show --tasks docs/superpowers/roadmaps/none/roadmap.md 2>&1 >/dev/null)"; rc=$?
+assert_eq "$rc" "4" "작업 목록: 기본 브랜치에 없는 로드맵 → rc 4"
+assert_contains "$out" "--roadmap-file" "작업 목록: 머지 전이면 작업 트리 사본으로 계산하라는 안내"
 
 echo "=== 변이(AC11) — 통과가 정답인 단언이 이빨을 갖는가 ==="
 mutant() {  # mutant <이름> <옛 글자> <새 글자> — 대역 폴더 사본에 한 곳을 바꾼다. 못 심으면 계측기 고장

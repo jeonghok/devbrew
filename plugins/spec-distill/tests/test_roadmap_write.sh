@@ -103,6 +103,7 @@ git init -q --bare -b main "$T/origin.git"
 git init -q -b main "$W"
 g remote add origin "$T/origin.git"
 g add -- docs && g commit -qm brief && g push -q origin main && g fetch -q origin
+g remote set-head origin main
 
 HEAD_ROW='| 번호 | 이름 | 종류 | 의도 | 범위 | 의존 | 브랜치 | 경로 예약 | 배정 번호 | 받는 것 | 넘기는 것 |'
 SEP_ROW='|---|---|---|---|---|---|---|---|---|---|---|'

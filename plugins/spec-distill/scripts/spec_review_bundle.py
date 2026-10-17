@@ -105,7 +105,7 @@ def neighbors(bundle: str, root: str) -> list:
         out.append("  로드맵 상태 검사 불가 %d개 — 위 단계가 틀릴 수 있다: %s" % (len(problems), " · ".join(problems)))
     overlap = {x for o in report["overlaps"] if epic in o["blocks"] for x in o["blocks"] if x != epic}
     near = set(deps) | set(dependents) | overlap
-    main = git.commit(rs.MAIN_REF)
+    main, _name = git.default_branch()
     dec = []
     for b in report["blocks"]:
         if b["id"] not in near or not b["specs"]:

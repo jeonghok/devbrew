@@ -34,6 +34,7 @@ nb_block() {  # nb_block <id> <의존> <경로 예약>
   printf '## 결정 기록\n\n## 위험 번호표\n\n- K1 — 위험 — 숨은 가정: 이웃이 안 보인다 — 없음 [RC1]\n'
 } > "$W/docs/rm/roadmap.md"
 g add -- docs && g commit -qm "이웃 로드맵" && g push -q origin main
+g remote set-head origin main
 spec_with() {  # spec_with <경로> <source_interview> <결정 기록 본문(%b)>
   put "$1" "---\nsource_interview: $2\n---\n\n# 설계\n\n### §1 절\n\n1. 하나\n\n## 결정 기록\n\n$3\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| C1 | 반영 | §1 |\n| S1 | 반영 | 없는 자리만 말한다 |\n"
 }

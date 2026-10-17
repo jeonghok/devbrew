@@ -7,9 +7,10 @@
   control_plane.py show [<로드맵 경로>]           지도. rc 0.
   control_plane.py show --tasks [<로드맵 경로>]   작업 목록 줄 `<제목><탭><pending|in_progress|completed|keep>`.
                                                  검사 불가 · 로드맵 없음 · 꺼짐이면 표준 출력이 비고 표준 오류에
-                                                 사유, rc 3. 로드맵이 여럿인데 경로가 없으면 rc 2.
+                                                 사유, rc 3. 기본 브랜치에 없는 로드맵이면 rc 4.
+                                                 로드맵이 여럿인데 경로가 없으면 rc 2.
 
-단계 · 경고는 `roadmap_status.py <경로> --json`(origin/main 사본)을 하위 프로세스로 불러 읽기만 한다.
+단계 · 경고는 `roadmap_status.py <경로> --json`(기본 브랜치 사본)을 하위 프로세스로 불러 읽기만 한다.
 레포 파일과 git 상태를 바꾸지 않는다 — 쓰는 것은 `<git 공용 디렉토리>/devbrew/control-plane.json` 캐시 하나다.
 받은 지 N분은 캐시 밖에서 매번 FETCH_HEAD 수정 시각으로 읽는다.
 """
@@ -43,7 +44,7 @@ TOP_WARNINGS = (("고아 발화", "orphans"), ("미배정 번호", "unassigned")
                 ("brief 에 없는 번호", "unknown_ids"))
 CTRL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 QUEUE_HEADING = "## audit §2 대기 줄"
-NO_ROADMAP = "로드맵 없음 — origin/main 에 끝나지 않은 블록이 있는 로드맵이 없다"
+NO_ROADMAP = "로드맵 없음 — 기본 브랜치에 끝나지 않은 블록이 있는 로드맵이 없다"
 
 
 def clean(value) -> str:
@@ -205,6 +206,8 @@ def statusline_text(items, interview, minutes, select_error=None) -> str:
     seg = interview_segment(interview)
     if seg:
         parts.append(seg)
+    if any(r.get("exit") == 4 for _p, r in items):
+        parts.append("기본 브랜치에 없음")
     if select_error or any(r.get("exit") == 3 for _p, r in items):
         parts.append("검사 불가")
     return clean(" · ".join(parts))
@@ -219,6 +222,9 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
     for path, report in items:
         lines.append(clean(first_line_fn(report)))
         lines.append(clean("로드맵: %s" % path))
+        if report.get("not_on_default"):
+            lines.append(clean("로드맵이 아직 기본 브랜치(%s)에 없다 — 머지 전이면 `--roadmap-file` 로 계산한다"
+                               % (report.get("default_branch") or "알 수 없음")))
         blocks = report.get("blocks") or []
         stages = dict((b.get("id"), b.get("stage")) for b in blocks)
         for b in blocks:
@@ -254,6 +260,9 @@ def tasks_output(items, select_error=None):
     if len(items) > 1:
         return [], clean("로드맵이 여럿이다 — 경로를 하나 주라: %s" % " · ".join(p for p, _r in items)), 2
     _path, report = items[0]
+    if report.get("exit") == 4:
+        return [], clean("로드맵이 아직 기본 브랜치에 없다 — 머지 전이면 roadmap_status.py --roadmap-file %s 로 계산한다"
+                         % _path), 4
     if report.get("exit") == 3:
         reasons = (["형식 깨짐 — %s" % e for e in report.get("format_errors") or []]
                    + list(report.get("unknown_reasons") or []))
@@ -272,7 +281,15 @@ def tasks_output(items, select_error=None):
 
 # ── git · 인터뷰 파일 · 캐시 (읽기 전용 — 쓰는 것은 캐시 파일 하나) ──────────────────
 
-MAIN_REF = "refs/remotes/origin/main"
+DEFAULT_REF = "refs/remotes/origin/HEAD"
+
+
+def default_ref(repo):
+    """(커밋, 전체 참조 이름) — origin/HEAD 가 가리키는 기본 브랜치. 없으면 (None, None)."""
+    sha = repo.line("rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
+    if not sha:
+        return None, None
+    return sha, repo.line("rev-parse", "--symbolic-full-name", DEFAULT_REF)
 ROADMAP_RE = re.compile(r"docs/superpowers/roadmaps/[^/]+/roadmap\.md")
 GIT_OK = frozenset({"rev-parse", "ls-tree", "for-each-ref"})
 CACHE_VERSION = 1
@@ -385,12 +402,12 @@ def fetch_stamp(repo: Repo):
 
 
 def candidates(repo: Repo, main):
-    """([(경로, blob)], 사유). origin/main 이 없으면 고를 것이 없다(로드맵 없음과 같다)."""
+    """([(경로, blob)], 사유). 기본 브랜치가 없으면 고를 것이 없다(로드맵 없음과 같다)."""
     if not main:
         return [], None
-    rc, out = repo.git("ls-tree", "-r", "-z", MAIN_REF, "--", "docs/superpowers/roadmaps/")
+    rc, out = repo.git("ls-tree", "-r", "-z", main, "--", "docs/superpowers/roadmaps/")
     if rc != 0:
-        return [], "origin/main 의 로드맵 목록을 읽지 못했다(git ls-tree rc %d)" % rc
+        return [], "기본 브랜치의 로드맵 목록을 읽지 못했다(git ls-tree rc %d)" % rc
     found = []
     for entry in (e for e in out.split("\0") if e):
         meta, _tab, path = entry.partition("\t")
@@ -465,8 +482,8 @@ def read_interviews(supported, files, folder_error, deadline: Deadline) -> dict:
     return summary
 
 
-def cache_key(repo: Repo, main, mode, targets):
-    """origin/main 커밋 · 브랜치 머리 목록(origin/main · symref 줄 뺌) · 대상 로드맵의 origin/main 사본. 인터뷰 상태는
+def cache_key(repo: Repo, main, main_full, mode, targets):
+    """기본 브랜치 커밋 · 브랜치 머리 목록(기본 브랜치 · symref 줄 뺌) · 대상 로드맵의 기본 브랜치 사본. 인터뷰 상태는
     키에 없다(매번 읽는다). git 을 못 읽으면 None — 캐시를 쓰지 않는다."""
     rc, out = repo.git("for-each-ref", "--format=%(refname) %(objectname) %(symref)", "refs/heads", "refs/remotes")
     if rc != 0:
@@ -474,7 +491,7 @@ def cache_key(repo: Repo, main, mode, targets):
     kept = []
     for row in out.splitlines():
         name, _oid, symref = (row.split(" ") + ["", ""])[:3]
-        if name != MAIN_REF and not symref:  # origin/main 은 첫 요소가, 가리키는 참조(origin/HEAD)는 그 대상이 맡는다
+        if name != main_full and not symref:  # 기본 브랜치는 첫 요소가, 가리키는 참조(origin/HEAD)는 그 대상이 맡는다
             kept.append(row)
     refs = "\n".join(kept)
     refs_hash = hashlib.sha256(refs.encode("utf-8")).hexdigest()
@@ -583,13 +600,13 @@ def run_status(repo: Repo, path: str) -> dict:
     except (UnicodeDecodeError, ValueError):
         report = None
     if (not isinstance(report, dict) or not isinstance(report.get("blocks"), list)
-            or report.get("exit") not in (0, 1, 3)):
+            or report.get("exit") not in (0, 1, 3, 4)):
         return failed_report(path, "상태 계산 출력을 읽지 못했다(rc %d)" % rc)
     return report
 
 
 def unfinished(report: dict) -> bool:
-    return report.get("exit") == 3 or any(b.get("stage") not in DONE for b in report.get("blocks") or [])
+    return report.get("exit") in (3, 4) or any(b.get("stage") not in DONE for b in report.get("blocks") or [])
 
 
 def gather(cwd: str, arg, deadline: Deadline, ctx: dict):
@@ -607,17 +624,17 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict):
     if stamp is not None:
         view["minutes"] = max(0, int((time.time() - stamp) // 60))
         fetched = datetime.datetime.fromtimestamp(stamp).strftime("%Y-%m-%d %H:%M")
-    main = repo.line("rev-parse", "--verify", "--quiet", MAIN_REF + "^{commit}")
+    main, main_full = default_ref(repo)
     if arg:
         if os.path.isabs(arg):
             arg = os.path.relpath(os.path.realpath(arg), os.path.realpath(repo.cwd))
         arg = arg[2:] if arg.startswith("./") else arg
-        blob = repo.line("rev-parse", "--verify", "--quiet", "%s:%s" % (MAIN_REF, arg)) if main else None
+        blob = repo.line("rev-parse", "--verify", "--quiet", "%s:%s" % (main, arg)) if main else None
         targets, select_error = [(arg, blob or "-")], None
     else:
         targets, select_error = candidates(repo, main)
     mode = arg or "*"
-    key = cache_key(repo, main, mode, targets)
+    key = cache_key(repo, main, main_full, mode, targets)
     path = cache_file(repo)
     entries, last, note = load_cache(path) if path else ({}, {}, "git 공용 디렉토리를 찾지 못했다")
     ctx.update(top=repo.cwd, cache=path, entries=entries, last=last)

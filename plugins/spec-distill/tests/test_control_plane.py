@@ -178,7 +178,7 @@ class Show(unittest.TestCase):
         self.assertEqual(lines[i + 1], "    없음")
 
     def test_no_roadmap(self):
-        self.assertEqual(self.show([])[0], "로드맵 없음 — origin/main 에 끝나지 않은 블록이 있는 로드맵이 없다")
+        self.assertEqual(self.show([])[0], "로드맵 없음 — 기본 브랜치에 끝나지 않은 블록이 있는 로드맵이 없다")
 
     def test_select_error(self):
         self.assertEqual(self.show([], sel="목록을 못 읽었다")[0], "검사 불가: 목록을 못 읽었다")

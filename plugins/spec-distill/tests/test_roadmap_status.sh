@@ -121,6 +121,7 @@ git init -q --bare -b main "$T/origin.git"
 git clone -q "$T/origin.git" "$W" 2>/dev/null
 commit_file README.txt "시작" "init"
 g push -q origin main
+g remote set-head origin main
 
 # A1 — merge commit 으로 머지, 브랜치 남음 → 머지됨
 g checkout -q -b feature/a1 main; commit_file src/a.txt a "a1"; g checkout -q main && g merge -q --no-ff feature/a1 -m "Merge branch 'feature/a1'"
@@ -673,5 +674,37 @@ CTL="$(real_check "$T/ctl")"
 ctl_of() { printf '%s\n' "$CTL" | awk -F'\t' -v k="$1" '$1==k {print $2}'; }
 assert_eq "$(ctl_of UNASSIGNED)" "['D46']" "양성 대조: 묶음에서 D46 을 빼면 미배정으로 잡힌다"
 assert_contains "$(ctl_of BAD)" "R2:§6" "양성 대조: 묶음 §6 의 한 글자 변경을 잡는다"
+
+# ── R5 AC39 · AC11 — 기본 브랜치 이름이 main 이 아닌 레포 · origin/HEAD 없음 · 기본 브랜치에 없는 로드맵 ──
+git init -q --bare -b trunk "$T/trunk.git"
+git clone -q "$T/trunk.git" "$T/tw" 2>/dev/null
+W_SAVE="$W"; W="$T/tw"
+g symbolic-ref HEAD refs/heads/trunk
+commit_file README.txt "시작" "init"
+g push -q origin trunk
+write_brief "$W/docs/br"; mkdir -p "$W/docs/rm"
+bundle docs/rm A1 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"
+{ roadmap_head; block A1 feature/a1 없음 없음; roadmap_tail ""; } > "$W/docs/rm/roadmap.md"
+g add -- docs && g commit -qm "docs" && g push -q origin trunk
+g checkout -q -b feature/a1 trunk; commit_file src/a.txt a "a1"
+g checkout -q trunk && g merge -q --no-ff feature/a1 -m "Merge pull request #9 from o/feature/a1" && g push -q origin trunk
+g fetch -q origin
+g remote set-head origin -d >/dev/null 2>&1   # 새 git 은 push · fetch 때 origin/HEAD 를 만든다 — 없는 상태를 확정한다
+(cd "$W" && python3 "$RS" --json docs/rm/roadmap.md > "$T/trunk-nohead.json"); rc=$?
+assert_eq "$rc" "3" "origin/HEAD 없음 → 검사 불가(rc 3)"
+assert_contains "$(js "$T/trunk-nohead.json" "' | '.join(r['unknown_reasons'])")" "origin/HEAD" "origin/HEAD 없음 사유가 보인다 — 조용한 「로드맵 없음」이 아니다"
+g remote set-head origin trunk
+(cd "$W" && python3 "$RS" --json docs/rm/roadmap.md > "$T/trunk.json"); rc=$?
+assert_eq "$(js "$T/trunk.json" "r['default_branch']")" "origin/trunk" "기본 브랜치 이름을 origin/HEAD 에서 읽는다"
+assert_eq "$(js "$T/trunk.json" "r['source']")" "origin/trunk" "사본 이름도 기본 브랜치"
+assert_eq "$(stage "$T/trunk.json" A1)" "머지됨" "기본 브랜치가 trunk 여도 머지됨"
+out="$(cd "$W" && python3 "$RS" docs/none/roadmap.md)"; rc=$?
+assert_eq "$rc" "4" "기본 브랜치에 없는 로드맵 → rc 4(검사 불가 3 과 다르다)"
+assert_contains "$out" "로드맵이 아직 기본 브랜치(origin/trunk)에 없다" "기본 브랜치에 없음 줄"
+assert_not_contains "$out" "검사 불가: " "기본 브랜치에 없음은 검사 불가 줄이 아니다"
+for f in roadmap_status.py control_plane.py spec_review_bundle.py; do
+  assert_eq "$(grep -c 'origin/main' "$S/$f")" "0" "$f 에 origin/main 을 박지 않는다(AC39)"
+done
+W="$W_SAVE"
 
 finish
