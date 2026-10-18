@@ -434,7 +434,10 @@ trap 'rm -rf "$VB"' EXIT
 for spec in 'v_nbsp|anchor_unicode_space|\n- **S2**|\n\u00a0- **S2**' \
             'v_ideo|anchor_unicode_space|\n- **S2**|\n\u3000- **S2**' \
             'v_star|anchor_star_bullet|\n- **S2**|\n* **S2**' \
-            'v_indent|anchor_indented|\n- **S2**|\n  - **S2**'; do
+            'v_indent|anchor_indented|\n- **S2**|\n  - **S2**' \
+            'v_sep2028|anchor_line_separator|\n- **S2**|\u2028- **S2**' \
+            'v_sepvt|anchor_line_separator|\n- **S2**|\u000b- **S2**' \
+            'v_fullS|anchor_confusable|\n- **S2**|\n- **\uff332**'; do
   IFS='|' read -r stem why from to <<<"$spec"
   cp "$FX/brief-verbatim-ok.md" "$VB/$stem.md"
   python3 -I - "$VB/$stem.md" "$from" "$to" <<'PY'
@@ -452,6 +455,29 @@ PY
   { [[ "$rc" == "1" ]] && grep -qF "$why" <<<"$out"; } \
     && ok "AC18: 문법 밖 §6 앵커(${stem}) → exit 1 «${why}»" \
     || no "AC18: 문법 밖 §6 앵커(${stem})가 exit 1 + ${why} 가 아니다 (rc=$rc)"
+done
+
+# 같은 문법 밖 줄을 audit §6 에 두어도 막는다(payload 만 보던 틈).
+for spec in 'a_sep2028|anchor_line_separator|\n- **S2**|\u2028- **S2**' \
+            'a_fullS|anchor_confusable|\n- **S2**|\n- **\uff332**' \
+            'a_nbsp|anchor_unicode_space|\n- **S2**|\n\u00a0- **S2**'; do
+  IFS='|' read -r stem why from to <<<"$spec"
+  cp "$FX/brief-verbatim-ok.audit.md" "$VB/$stem.audit.md"
+  python3 -I - "$VB/$stem.audit.md" "$from" "$to" <<'PY'
+import json, sys
+p = sys.argv[1]
+old, rep = (json.loads('"' + a + '"') for a in sys.argv[2:4])
+t = open(p, encoding="utf-8").read()
+new = t.replace(old, rep)
+if new == t:
+    sys.exit("변형이 적용되지 않았다")
+open(p, "w", encoding="utf-8").write(new)
+PY
+  out="$(json_of "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" "$VB/$stem.audit.md")"
+  rc="$(rc_of "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" "$VB/$stem.audit.md")"
+  { [[ "$rc" == "1" ]] && grep -qF "$why" <<<"$out"; } \
+    && ok "AC18: audit §6 의 문법 밖 앵커(${stem}) → exit 1 «${why}»" \
+    || no "AC18: audit §6 의 문법 밖 앵커(${stem})가 exit 1 + ${why} 가 아니다 (rc=$rc)"
 done
 
 # --- usage -----------------------------------------------------------------

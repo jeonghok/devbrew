@@ -2511,7 +2511,12 @@ bb_gate bb_base >/dev/null && ok "AC18(양성대조): 변형 전 정상 쌍은 �
 for spec in 'u_nbsp|anchor_unicode_space|\n- **S2**|\n\u00a0- **S2**' \
             'u_ideo|anchor_unicode_space|\n- **S2**|\n\u3000- **S2**' \
             'u_star|anchor_star_bullet|\n- **S2**|\n* **S2**' \
-            'u_indent|anchor_indented|\n- **S2**|\n  - **S2**'; do
+            'u_indent|anchor_indented|\n- **S2**|\n  - **S2**' \
+            'u_sep2028|anchor_line_separator|\n- **S2**|\u2028- **S2**' \
+            'u_sepvt|anchor_line_separator|\n- **S2**|\u000b- **S2**' \
+            'u_fullS|anchor_confusable|\n- **S2**|\n- **\uff332**' \
+            'u_zwsp|anchor_confusable|\n- **S2**|\n- **S\u200b2**' \
+            'u_lead0|anchor_shape|\n- **S2**|\n- **S02**'; do
   IFS='|' read -r stem why from to <<<"$spec"
   bb_variant "$stem" "$from" "$to"
   out="$(bb_gate "$stem")"; rc=$?
@@ -2521,7 +2526,10 @@ for spec in 'u_nbsp|anchor_unicode_space|\n- **S2**|\n\u00a0- **S2**' \
 done
 for spec in 'd_num|decision_numbered|\n- OQ1: |\n1. OQ1: ' \
             'd_quote|decision_quoted|\n- OQ1: |\n> - OQ1: ' \
-            'd_num0|decision_numbered|\n- OQ1 [열림]|\n1. OQ1 [열림]'; do
+            'd_num0|decision_numbered|\n- OQ1 [열림]|\n1. OQ1 [열림]' \
+            'd_plus|decision_shape|\n- OQ1: |\n+ OQ1: ' \
+            'd_bare|decision_shape|\n- OQ1: |\nOQ1: ' \
+            'd_plus0|decision_shape|\n- OQ1 [열림]|\n+ OQ1 [열림]'; do
   IFS='|' read -r stem why from to <<<"$spec"
   bb_variant "$stem" "$from" "$to"
   out="$(bb_gate "$stem")"; rc=$?
@@ -2534,6 +2542,33 @@ out="$(bb_gate bb_ref)"; rc=$?
 { [[ $rc -ne 0 ]] && grep -qF "open_line_unknown_ref:S99" <<<"$out"; } \
   && ok "AC18: §3 열린 줄 산문 속 ⟨S99⟩ → red «open_line_unknown_ref»" \
   || { no "AC18: 열린 줄 속 없는 참조가 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+# audit §6 의 문법 밖 앵커 줄은 조용히 버려지지 않고 게이트 실패로 나온다.
+mkdir -p "$BB/bb_audit_bad"; cp "$FX/interview-brief-valid.md" "$FX/interview-brief-valid.audit.md" "$BB/bb_audit_bad/"
+python3 -I - "$BB/bb_audit_bad/interview-brief-valid.audit.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+new = t.replace("\n- **S2**", "\n- **\uff332**", 1)
+if new == t:
+    sys.exit("변형이 적용되지 않았다")
+open(p, "w", encoding="utf-8").write(new)
+PY
+out="$(bb_gate bb_audit_bad)"; rc=$?
+{ [[ $rc -ne 0 ]] && grep -qF "audit §6" <<<"$out" && grep -qF "anchor_confusable" <<<"$out"; } \
+  && ok "AC18: audit §6 의 전각 앵커 줄 → gate 실패로 나온다 (조용히 버리지 않는다)" \
+  || { no "AC18: audit §6 의 문법 밖 앵커가 gate 에 안 나왔다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+bb_variant bb_ref_full '\n- OQ1: 인증 뷰의 캐시 전략' '\n- OQ1: 인증 뷰의 캐시 전략 \u27e8\uff33\uff19\uff19\u27e9 근거'
+out="$(bb_gate bb_ref_full)"; rc=$?
+{ [[ $rc -ne 0 ]] && grep -qF "open_line_unknown_ref:S99" <<<"$out"; } \
+  && ok "AC18: 전각 글자로 쓴 S99 참조도 정규형으로 읽어 red «open_line_unknown_ref»" || no "AC18: 전각 참조가 막히지 않았다 (rc=$rc)"
+bb_variant bb_ref_fence '\n\n## 4. External Landscape' '\n```\n\u27e8S99\u27e9\n```\n\n## 4. External Landscape'
+out="$(bb_gate bb_ref_fence)"; rc=$?
+{ [[ $rc -ne 0 ]] && grep -qF "open_line_unknown_ref:S99" <<<"$out"; } \
+  && ok "AC18: 펜스 안 ⟨S99⟩ 도 원문 기준으로 읽어 red" || no "AC18: 펜스 안 참조가 막히지 않았다 (rc=$rc)"
+bb_variant bb_ref_paren '\n- OQ1: 인증 뷰의 캐시 전략' '\n- OQ1: 인증 뷰의 캐시 전략 (S99) 근거'
+out="$(bb_gate bb_ref_paren)"; rc=$?
+{ [[ $rc -ne 0 ]] && grep -qF "open_line_unknown_ref:S99" <<<"$out"; } \
+  && ok "AC18: 소괄호 (S99) 도 괄호 쌍에서 파생해 red" || no "AC18: 소괄호 참조가 막히지 않았다 (rc=$rc)"
 bb_variant bb_ref_ok '\n- OQ1: 인증 뷰의 캐시 전략' '\n- OQ1: 인증 뷰의 캐시 전략 ⟨S2⟩ 근거'
 out="$(bb_gate bb_ref_ok)"
 grep -q open_line_unknown_ref <<<"$out" \

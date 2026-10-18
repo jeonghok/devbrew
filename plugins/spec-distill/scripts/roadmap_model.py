@@ -444,7 +444,11 @@ def brief_universe(brief: str, audit: str):
         b6 = section6.body(doc)
         if b6 is None:
             raise FormatError("%s §6 을 하나로 읽을 수 없다" % label)
-        s_ids |= {sid for _n, sid, _r in brief_body.anchor_lines(b6)[0]}
+        ok6, bad6 = brief_body.anchor_lines(b6)
+        if bad6:
+            raise FormatError("%s §6 에 문법 밖 앵커 줄이 있어 번호를 셀 수 없다(%s)"
+                              % (label, ", ".join("%d번째 줄 %s" % t for t in bad6[:5])))
+        s_ids |= {sid for _n, sid, _r in ok6}
     if not non_s or not s_ids:
         raise FormatError("brief 번호 집합이 비었다")
     return non_s, s_ids, k_expected

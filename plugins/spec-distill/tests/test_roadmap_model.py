@@ -226,6 +226,15 @@ class BriefUniverseSection4(unittest.TestCase):
         self.assertIn("«second-key»", extra)
         self.assertIn("«cont-key»", extra)
 
+    def test_out_of_grammar_anchor_makes_universe_uncountable(self):
+        brief = (self.FX / "interview-brief-valid.md").read_text(encoding="utf-8")
+        audit = (self.FX / "interview-brief-valid.audit.md").read_text(encoding="utf-8")
+        for bad in ("\n- **\uff332**", "\n\u00a0- **S2**", "\n- **S2**\u2028- **S3**"):
+            with self.assertRaises(M.FormatError, msg=repr(bad)):
+                M.brief_universe(brief.replace("\n- **S2**", bad, 1), audit)
+            with self.assertRaises(M.FormatError, msg=repr(bad)):
+                M.brief_universe(brief, audit.replace("\n- **S2**", bad, 1))
+
 
 if __name__ == "__main__":
     unittest.main()

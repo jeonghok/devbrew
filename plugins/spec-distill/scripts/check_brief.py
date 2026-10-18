@@ -92,7 +92,7 @@ def _web_disabled() -> bool:
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 # Fenced code blocks are illustrative, not authored content — strip them before
 # section/entry detection so headers quoted inside ``` cannot satisfy the gate (F4).
-FENCE_RE = re.compile(r"^[ \t]*```.*?^[ \t]*```[^\n]*$", re.DOTALL | re.MULTILINE)
+FENCE_RE = brief_body.FENCE_RE
 
 SECTIONS = [
     ("0", "한눈에"),
@@ -204,7 +204,7 @@ def _section_text(text: str, num: str, title: str) -> str:
 # 우회할 수 있다: `- 인용된 항목` 하나와 `* 출처 없는 주장` 하나를 §4에 두면 `landscape_present`는
 # 하이픈 항목으로 만족되고 `landscape_unkeyed`는 애스터리스크 항목을 아예 못 봐서, R2의 "출처 «키»
 # 필수"가 통째로 통과한다(리뷰 실증: 같은 줄을 `-`로 쓰면 red, `*`로 쓰면 green).
-ENTRY_BULLET_RE = re.compile(r"^\s*[-*]\s")
+ENTRY_BULLET_RE = brief_body.ENTRY_BULLET_RE
 
 
 def _entry_lines(section: str) -> list[str]:
@@ -549,6 +549,11 @@ def verbatim_anchors(text: str) -> set:
     앵커가 게이트에만 안 보인 채 하류로 출하된다(v0.46.0에서 고친 결함).
     """
     return _anchor_ids(_section_text(text, "6", "사용자 원문"))
+
+
+def audit_anchor_rejects(audit_text: str) -> list:
+    """audit §6 의 문법 밖 앵커 줄 — `verbatim_anchors` 가 조용히 버리지 않고 사유와 함께 낸다."""
+    return brief_body.anchor_lines(_section_text(audit_text, "6", "사용자 원문"))[1]
 
 
 def payload_verbatim_anchors(payload_text: str) -> set:
@@ -1298,11 +1303,10 @@ def resolved_decision_failures(text: str, anchors: set) -> list[str]:
     decisions = {}
     for num, title in DECISION_SECTIONS:
         d = decisions[num] = {}
-        for raw in _section_text(text, num, title).splitlines():
+        for raw in brief_body.split_lines(_section_text(text, num, title)):
             why = brief_body.decision_line_problem(raw)
-            norm = unicodedata.normalize("NFKC", raw)
-            if why and (re.search(r"OQ\d", norm) or RESOLVED_MARK in norm or "[열림]" in norm):
-                fails.append(f"§{num} 결정 줄이 허용 문법 밖이다({why}) — 결정 줄은 `- OQ<n>` 불릿 줄이다: {raw.strip()[:60]}")
+            if why:
+                fails.append(f"§{num} 결정 줄이 허용 문법 밖이다({why}) — 결정 줄은 열 0 의 `- OQ<n>` 불릿 줄이다: {raw.strip()[:60]}")
         for ln in _entry_lines(_section_text(text, num, title)):
             oq, resolved, sid, errs = _decision_line(num, ln)
             fails += errs
@@ -1337,12 +1341,33 @@ def resolved_decision_failures(text: str, anchors: set) -> list[str]:
     return sorted(set(fails))
 
 
+def _raw_section_text(text: str, num: str, title: str) -> str:
+    """펜스를 벗기지 않은 절 원문 — 경계 헤딩은 펜스 밖의 것만 센다(펜스 안 가짜 헤딩이 절을 자르지 못하게)."""
+    m = FRONTMATTER_RE.match(text)
+    body = text[m.end():] if m else text
+    fenced = [mm.span() for mm in FENCE_RE.finditer(body)]
+
+    def outside(pos: int) -> bool:
+        return not any(a <= pos < b for a, b in fenced)
+
+    head_re = re.compile(rf"^##\s+{num}\.\s+{re.escape(title)}\b", re.MULTILINE | re.IGNORECASE)
+    start = next((mm for mm in head_re.finditer(body) if outside(mm.start())), None)
+    if start is None:
+        return ""
+    nxt = next((mm for mm in re.finditer(r"^##\s+\d+\.", body[start.end():], re.MULTILINE)
+                if outside(start.end() + mm.start())), None)
+    return body[start.end(): start.end() + nxt.start()] if nxt else body[start.end():]
+
+
 def open_line_ref_failures(text: str, anchors: set) -> list[str]:
-    """§3 산문 어디에 적힌 `⟨S<n>⟩` 든 §6 앵커(payload ∪ audit)에 실재해야 한다 — 위치와 무관하다.
-    결정 줄 머리의 해결 표시만 보면 열린 줄 산문 속 지어낸 근거가 지나간다(`open_line_unknown_ref`)."""
-    refs = brief_body.open_line_s_refs(_section_text(text, "3", "Open Questions"))
-    return [f"open_line_unknown_ref:{sid} — §3 의 ⟨{sid}⟩ 가 §6 앵커에 없다"
-            for sid in sorted(set(refs) - set(anchors), key=lambda x: int(x[1:]))]
+    """§0 · §3 원문(펜스 포함)에서 괄호 쌍 바로 안에 적힌 `S<번호>` 는 전부 §6 앵커(payload ∪ audit)에 풀려야 한다 —
+    위치와 철자(전각 · 보이지 않는 글자)와 무관하다. 결정 줄 머리의 해결 표시만 보면 열린 줄 산문 속 지어낸 근거가
+    지나간다."""
+    refs = set()
+    for num, title in DECISION_SECTIONS:
+        refs |= set(brief_body.open_line_s_refs(_raw_section_text(text, num, title)))
+    return [f"§0 · §3 의 줄이 §6 에 없는 원문 번호를 가리킨다 (open_line_unknown_ref:{sid})"
+            for sid in sorted(refs - set(anchors))]
 
 
 def internal_research_dimension_failures(payload_text: str, audit_text: str) -> list[str]:
@@ -1599,6 +1624,10 @@ def gate(path: Path) -> int:
                 if ce:
                     failures.append(f"bijection C (evidence→§6): {ce}")
             audit_sec6_absent = any(m.startswith("6.") for m in amiss)
+            if not audit_sec6_absent and not audit_sec6_dup:
+                for n, why in audit_anchor_rejects(audit_text):
+                    failures.append(f"audit §6 의 {n}번째 줄이 허용 문법 밖이다 — "
+                                    f"{brief_body.ANCHOR_REASON_TEXT[why]}({why})")
             if not audit_sec6_absent and attribution_block_missing(audit_text):
                 failures.append("audit §6 출처 표기 블록 부재 (🗣·☑·✎ 세 기호를 모두 담은 인용 줄 필요)")
             if not sec5_absent and not any(m.startswith("3.") for m in amiss):
@@ -1636,8 +1665,7 @@ def gate(path: Path) -> int:
         pa = payload_verbatim_anchors(text)
         failures += section1_provenance_failures(text, pa)
         failures += resolved_decision_failures(text, pa)
-        failures += open_line_ref_failures(
-            text, pa | (verbatim_anchors(audit_text) if audit_text and not audit_sec6_dup else set()))
+        failures += open_line_ref_failures(text, pa | n1b_audit)
 
     sec4_absent = any(m.startswith("4.") for m in miss)
     if not sec4_absent and not landscape_present(text):

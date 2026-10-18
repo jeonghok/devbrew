@@ -44,6 +44,54 @@ class AnchorGrammar(unittest.TestCase):
             self.assertEqual([r for _n, r in bad], [why], line)
 
 
+SEPARATORS = ["\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"]
+
+
+class Round1Anchors(unittest.TestCase):
+    def test_separator_inside_anchor_line_refused(self):
+        for sep in SEPARATORS:
+            ok, bad = B.anchor_lines("- **S4** 「t4」" + sep + "- **S5** 「t5」")
+            self.assertEqual(ok, [], repr(sep))
+            self.assertEqual([r for _n, r in bad], ["anchor_line_separator"], repr(sep))
+
+    def test_separator_in_plain_text_line_allowed(self):
+        self.assertEqual(B.anchor_lines("- **S4** 「t4」\r"), ([(1, "S4", "「t4」\r")], []))
+        self.assertEqual(B.anchor_lines("일반 줄" + "\u2028" + "이어서"), ([], []))
+
+    def test_separator_in_payload_section6_refused_by_coverage_reader(self):
+        for sep in SEPARATORS:
+            doc = "## 6. 사용자 원문\n- **S1** a\n- **S4** 「t4」" + sep + "- **S5** 「t5」\n## 7. Next Action\n"
+            with self.assertRaises(CVC.StructuralViolation, msg=repr(sep)):
+                CVC.parse_section6(doc, "payload")
+
+    def test_confusable_anchor_lines_refused(self):
+        cases = ["- **\uff335** 「x」", "- **\u200bS5** 「x」", "- **S\u200b5** 「x」", "- **S\uff15** 「x」"]
+        for line in cases:
+            ok, bad = B.anchor_lines(line)
+            self.assertEqual(ok, [], repr(line))
+            self.assertEqual([r for _n, r in bad], ["anchor_confusable"], repr(line))
+
+    def test_id_spelling(self):
+        for line in ["- **S01** x", "- **S\u0662** x", "- **S0** x"]:
+            ok, bad = B.anchor_lines(line)
+            self.assertEqual(ok, [], repr(line))
+            self.assertEqual(len(bad), 1, repr(line))
+
+    def test_reference_scan_is_canonical_and_bracket_derived(self):
+        for text in ["(S2)", "[S2]", "\u27e8S2\u27e9", "\u27e8\uff33\uff12\u27e9", "\u27e8S\u200b2\u27e9",
+                     "<S2>", "\u2039S2\u203a", "\u3008S2\u3009", "\uff08S2\uff09", "\u300cS2\u300d"]:
+            self.assertEqual(B.open_line_s_refs("- OQ1: " + text + " 끝"), ["S2"], repr(text))
+        self.assertEqual(B.open_line_s_refs("- OQ1: S2 만 적었다"), [])
+
+    def test_decision_shape(self):
+        self.assertEqual(B.decision_line_problem("+ OQ1 [해결 \u27e8S99\u27e9] — 정함"), "decision_shape")
+        self.assertEqual(B.decision_line_problem("OQ1 [해결 \u27e8S2\u27e9] — 정함"), "decision_shape")
+        self.assertEqual(B.decision_line_problem("\uff2fQ1 [해결 \u27e8S2\u27e9] — 정함"), "decision_shape")
+        self.assertIsNone(B.decision_line_problem("- OQ1: 열림"))
+        self.assertIsNone(B.decision_line_problem("* OQ1: 열림"))
+        self.assertIsNone(B.decision_line_problem("산문 줄이다"))
+
+
 class DecisionLines(unittest.TestCase):
     def test_numbered_and_quoted(self):
         self.assertEqual(B.decision_line_problem("1. [해결 ⟨S2⟩] — 정함"), "decision_numbered")

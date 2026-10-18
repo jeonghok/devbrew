@@ -141,13 +141,38 @@ branch_exits '^if \[ "\$gate_rc" -ne 0 \]' \
 branch_exits '^if \[ "\$vc_rc" -ne 0 \]' \
   && ok "진입 게이트: 원문 완전성 위반 · 확인 불가 분기가 실제로 멈춘다 (exit 1)" \
   || no "진입 게이트: 원문 완전성 위반 · 확인 불가 분기가 없거나 멈추지 않는다"
-# rc 3 · 4 · 그 밖은 위반(rc 1)과 달리 SKIP_VC=1 로만 지나간다 — 분기 조건이 rc 1 을 SKIP_VC 에서 빼고, 선택지를 안내한다.
-grep -qF '[ "$vc_rc" -eq 1 ] || [ "${SKIP_VC:-}" != 1 ]' <<<"$GATE_RUN" \
-  && ok "진입 게이트: rc 3 은 막고 SKIP_VC=1 일 때만 지나가며 rc 1 은 건너뛰지 못한다" \
+# rc 3 · 4 · 그 밖은 위반(rc 1)과 달리 DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE=1 로만 지나간다 — 분기 조건이 rc 1 을 그 변수에서 빼고, 선택지를 안내한다.
+grep -qF '[ "$vc_rc" -eq 1 ] || [ "${DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE:-}" != 1 ]' <<<"$GATE_RUN" \
+  && ok "진입 게이트: rc 3 은 막고 DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE=1 일 때만 지나가며 rc 1 은 건너뛰지 못한다" \
   || no "진입 게이트: 확인 불가(rc 3 등)가 막지 않거나 rc 1 까지 건너뛴다"
 { has "$W_GATE" '검사 없이 계속' && has "$W_GATE" '멈춘다 (권장)'; } \
   && ok "진입 게이트: 확인 불가 때 「멈춘다 (권장)」 · 「검사 없이 계속」 선택지를 안내한다" \
   || no "진입 게이트: 확인 불가 선택지 안내가 사라졌다"
+# 실행 증거 — 게이트 펜스를 꺼내 스텁 검사기로 돌린다(rc 3 은 멈춘다 · 변수가 있으면 큰 소리와 함께 계속 · rc 1 은 변수가 있어도 멈춘다).
+FENCE_RT="$(mktemp -d)" || exit 1
+[ -n "$FENCE_RT" ] && [ -d "$FENCE_RT" ] || exit 1
+mkdir -p "$FENCE_RT/scripts"
+printf 'import sys\nsys.exit(0)\n' > "$FENCE_RT/scripts/check_brief.py"
+printf 'import os, sys\nsys.exit(int(os.environ.get("STUB_VC_RC", "0")))\n' > "$FENCE_RT/scripts/check_verbatim_coverage.py"
+{ printf 'PR="%s"; PAYLOAD=p; STATE=s; AUDIT=a; BUNDLE=""\ndrop_bundle() { return 0; }\n' "$FENCE_RT"
+  awk '/^gate_rc=0;/{f=1} f && /^```/{exit} f' <<<"$W_GATE"; echo 'echo REACHED_ENGINE'; } > "$FENCE_RT/fence.sh"
+fence_run() {  # fence_run <stub rc> [skip 변수 값] → "rc|stdout|stderr" 한 줄로
+  local o e r
+  o="$(STUB_VC_RC="$1" DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE="${2:-}" bash "$FENCE_RT/fence.sh" 2>"$FENCE_RT/err")"; r=$?
+  e="$(tr '\n' ' ' < "$FENCE_RT/err")"
+  printf '%s|%s|%s' "$r" "$o" "$e"
+}
+r0="$(fence_run 0)"; r3="$(fence_run 3)"; r3s="$(fence_run 3 1)"; r1s="$(fence_run 1 1)"; r4="$(fence_run 4)"
+[[ "$r0" == "0|REACHED_ENGINE|" ]] && ok "펜스 실행: rc 0 은 조용히 엔진으로 간다" || no "펜스 실행: rc 0 이 어긋났다: $r0"
+{ [[ "$r3" == 1\|\|* ]] && [[ "$r3" == *'「검사 없이 계속」'* ]]; } && ok "펜스 실행: rc 3 은 멈추고(rc 1) 선택지를 말한다" || no "펜스 실행: rc 3 이 멈추지 않았다: $r3"
+{ [[ "$r4" == 1\|\|* ]]; } && ok "펜스 실행: rc 4 도 멈춘다" || no "펜스 실행: rc 4 가 멈추지 않았다: $r4"
+{ [[ "$r3s" == "0|REACHED_ENGINE|"* ]] && [[ "$r3s" == *'rc 3'* ]] && [[ "$r3s" == *'건너뛰고 계속'* ]]; } \
+  && ok "펜스 실행: 변수가 있으면 rc 3 을 큰 소리로 알리고 계속한다" || no "펜스 실행: 변수가 있을 때 rc 3 처리가 어긋났다: $r3s"
+[[ "$r1s" == 1\|\|* ]] && ok "펜스 실행: rc 1(위반)은 변수가 있어도 멈춘다" || no "펜스 실행: rc 1 이 변수로 건너뛰어졌다: $r1s"
+rm -rf "$FENCE_RT"
+has "$W_GATE" '게이트 실행 기록' && has "$W_GATE" 'exit <rc> — skipped_by_user: 검사 없이 계속' \
+  && ok "진입 게이트: 계속을 고르면 audit 게이트 실행 기록에 skipped_by_user 줄을 남긴다" \
+  || no "진입 게이트: audit 게이트 실행 기록 줄 안내가 없다"
 has "$W_GATE" 'skipped_by_user' \
   && ok "진입 게이트: 검사 없이 계속하면 skipped_by_user 로 기록한다" || no "진입 게이트: skipped_by_user 기록 안내가 없다"
 has "$W_GATE" '`completeness` / `skipped`) 후 계속' \

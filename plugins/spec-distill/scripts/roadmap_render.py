@@ -14,7 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import section6  # noqa: E402
-from brief_body import ANCHOR_LINE_RE as S6_ITEM_RE, section4_items  # noqa: E402
+import brief_body  # noqa: E402
+from brief_body import section4_items  # noqa: E402
 from roadmap_model import (  # noqa: E402
     BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, OQ_LINE_RE, FormatError, brief_universe, bundle_ids, field_text,
     id_sort_key, is_quote, parse_ids, parse_roadmap, section_body)
@@ -221,7 +222,7 @@ def _body(text: str, heading: str) -> str:
 
 
 def _s6_ids(body: str) -> set:
-    return {m.group(1) for m in map(S6_ITEM_RE.match, body.splitlines()) if m}
+    return {sid for _n, sid, _r in brief_body.anchor_lines(body)[0]}
 
 
 def _merge_s6(b6: str, a6: str) -> str:
@@ -229,11 +230,14 @@ def _merge_s6(b6: str, a6: str) -> str:
     것만 더한다 — payload §6 이 S1~Sn 전량인 brief 에서 audit 의 같은 글 사본을 두 번 싣지 않는다. 겹치는
     앵커가 없으면(payload §6 = S1 인 brief) 두 본문을 그대로 잇는다."""
     have = _s6_ids(b6)
+    ok6, bad6 = brief_body.anchor_lines(a6)
+    if bad6:
+        raise FormatError("audit §6 에 문법 밖 앵커 줄이 있어 합칠 수 없다(%s)" % ", ".join("%d번째 줄 %s" % t for t in bad6[:5]))
+    starts = {n: sid for n, sid, _r in ok6}
     head, entries, cur = [], [], None
-    for line in a6.splitlines(keepends=True):
-        m = S6_ITEM_RE.match(line.rstrip("\r\n"))
-        if m:
-            cur = (m.group(1), [line])
+    for n, line in enumerate(brief_body.split_lines(a6, keepends=True), 1):
+        if n in starts:
+            cur = (starts[n], [line])
             entries.append(cur)
         elif cur is None:
             head.append(line)
