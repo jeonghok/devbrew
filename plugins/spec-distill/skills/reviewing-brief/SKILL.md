@@ -220,18 +220,24 @@ if [ "$gate_rc" -ne 0 ]; then
   exit 1
 fi
 vc_rc=0; python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE" "$AUDIT" || vc_rc=$?
-if [ "$vc_rc" -ne 0 ] && { [ "$vc_rc" -eq 1 ] || [ "${DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE:-}" != 1 ]; }; then
+vc_skip=0   # 건너뛰기 = 변수 + audit 게이트 실행 기록 절의 오늘 날짜 · 같은 종료 코드 증거 줄. 위반(rc 1)은 건너뛰지 않는다
+if [ "${DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE:-}" = 1 ] && [ "$vc_rc" -ne 0 ] && [ "$vc_rc" -ne 1 ]; then
+  vc_want="- check_verbatim_coverage.py — exit ${vc_rc} — skipped_by_user: 검사 없이 계속 ($(date +%Y-%m-%d))"
+  sed -n '/^## 4\. 게이트 실행 기록/,/^## [0-9]/p' "$AUDIT" | grep -qxF -- "$vc_want" && vc_skip=1
+fi
+if [ "$vc_rc" -ne 0 ] && [ "$vc_skip" -ne 1 ]; then
   drop_bundle || true
   case "$vc_rc" in
     1) echo "[spec-distill] §6 원문 완전성 위반 — 이 라운드를 시작하지 않는다. 아래 표대로 고치고 이 절부터 다시 탄다." >&2 ;;
-    *) echo "[spec-distill] 원문이 빠짐없이 옮겨졌는지 확인하지 못했다(check_verbatim_coverage rc ${vc_rc}) — 이 라운드를 시작하지 않는다. 사용자에게 「멈춘다 (권장)」 · 「검사 없이 계속」을 묻는다." >&2 ;;
+    *) echo "[spec-distill] 원문이 빠짐없이 옮겨졌는지 확인하지 못했다(check_verbatim_coverage rc ${vc_rc}) — 이 라운드를 시작하지 않는다. 사용자에게 「멈춘다 (권장)」 · 「검사 없이 계속」을 묻는다." >&2
+       [ "${DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE:-}" != 1 ] || echo "[spec-distill] 건너뛰기 변수가 켜져 있지만 건너뛰지 않는다 — audit 「게이트 실행 기록」 절에 오늘 날짜로 이 종료 코드(rc ${vc_rc})를 건너뛴다는 증거 줄이 없다. 사용자가 「검사 없이 계속」을 고르면 그 줄을 먼저 적고 다시 돈다." >&2 ;;
   esac
   exit 1
 fi
 [ "$vc_rc" -eq 0 ] || echo "[spec-distill] 원문 완전성 검사를 건너뛰고 계속한다 — 사용자가 「검사 없이 계속」을 골랐다(check_verbatim_coverage rc ${vc_rc}). 원문이 빠짐없이 옮겨졌는지는 확인되지 않았다." >&2
 ```
 
-`vc_rc` 가 1 이 아닌 non-zero 이면 펜스가 위 문장을 내고 멈춘다. 이때 `AskUserQuestion` 하나를 띄운다 — 질문 「원문이 빠짐없이 옮겨졌는지 확인하지 못했다. 어떻게 할까?」, 선택지 「멈춘다 (권장)」(라운드를 시작하지 않고 끝낸다) · 「검사 없이 계속」(이 검사만 건너뛰고 리뷰를 시작한다). 「검사 없이 계속」을 고르면 두 곳에 남긴다 — audit `## 4. 게이트 실행 기록` 에 `- check_verbatim_coverage.py — exit <rc> — skipped_by_user: 검사 없이 계속 (<날짜>)` 줄을 더하고, degrade 원장에 record(`verbatim_coverage` / `completeness` / `skipped`, reason = `skipped_by_user: 검사 없이 계속`)를 남긴다. 그다음 같은 펜스를 `DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE=1` 을 덧붙여 다시 돈다 — 이 변수는 이번 한 번, 원문 완전성 검사 하나만 건너뛰고(위반 rc 1 은 건너뛰지 않는다) 구조 게이트는 그대로 돈다. 건너뛰면 펜스가 어떤 종료 코드를 건너뛰었는지 알리는 줄을 낸다. 사용자가 답하지 않았거나 「멈춘다 (권장)」이면 라운드를 시작하지 않는다.
+`vc_rc` 가 1 이 아닌 non-zero 이면 펜스가 위 문장을 내고 멈춘다. 이때 `AskUserQuestion` 하나를 띄운다 — 질문 「원문이 빠짐없이 옮겨졌는지 확인하지 못했다. 어떻게 할까?」, 선택지 「멈춘다 (권장)」(라운드를 시작하지 않고 끝낸다) · 「검사 없이 계속」(이 검사만 건너뛰고 리뷰를 시작한다). 「검사 없이 계속」을 고르면 두 곳에 남긴다 — audit `## 4. 게이트 실행 기록` 에 `- check_verbatim_coverage.py — exit <rc> — skipped_by_user: 검사 없이 계속 (<오늘 날짜 YYYY-MM-DD>)` 줄을 더하고, degrade 원장에 record(`verbatim_coverage` / `completeness` / `skipped`, reason = `skipped_by_user: 검사 없이 계속`)를 남긴다. 그다음 같은 펜스를 `DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE=1` 을 덧붙여 다시 돈다 — 펜스는 이 변수가 있고 **그리고** audit 게이트 실행 기록 절에 오늘 날짜 · 같은 종료 코드의 그 줄이 있을 때만 원문 완전성 검사 하나를 건너뛴다(위반 rc 1 은 건너뛰지 않는다 · 구조 게이트는 그대로 돈다). 줄이 없으면 변수가 있어도 멈추고 그 사실을 알린다. 건너뛰면 펜스가 어떤 종료 코드를 건너뛰었는지 알리는 줄을 낸다. 사용자가 답하지 않았거나 「멈춘다 (권장)」이면 라운드를 시작하지 않는다.
 
 | `vc_rc` | 뜻 | 동작 |
 |---|---|---|

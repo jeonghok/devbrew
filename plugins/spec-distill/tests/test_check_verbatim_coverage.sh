@@ -437,7 +437,10 @@ for spec in 'v_nbsp|anchor_unicode_space|\n- **S2**|\n\u00a0- **S2**' \
             'v_indent|anchor_indented|\n- **S2**|\n  - **S2**' \
             'v_sep2028|anchor_line_separator|\n- **S2**|\u2028- **S2**' \
             'v_sepvt|anchor_line_separator|\n- **S2**|\u000b- **S2**' \
-            'v_fullS|anchor_confusable|\n- **S2**|\n- **\uff332**'; do
+            'v_fullS|anchor_confusable|\n- **S2**|\n- **\uff332**' \
+            'v_inbody|anchor_in_body|\n- **S2**|\n  > 인용 가운데 **\u04053** 를 심었다\n- **S2**' \
+            'v_cyr|anchor_confusable|\n- **S2**|\n- **\u04052**' \
+            'v_di|anchor_confusable|\n- **S2**|\n- **S\u31642**'; do
   IFS='|' read -r stem why from to <<<"$spec"
   cp "$FX/brief-verbatim-ok.md" "$VB/$stem.md"
   python3 -I - "$VB/$stem.md" "$from" "$to" <<'PY'
@@ -460,7 +463,8 @@ done
 # 같은 문법 밖 줄을 audit §6 에 두어도 막는다(payload 만 보던 틈).
 for spec in 'a_sep2028|anchor_line_separator|\n- **S2**|\u2028- **S2**' \
             'a_fullS|anchor_confusable|\n- **S2**|\n- **\uff332**' \
-            'a_nbsp|anchor_unicode_space|\n- **S2**|\n\u00a0- **S2**'; do
+            'a_nbsp|anchor_unicode_space|\n- **S2**|\n\u00a0- **S2**' \
+            'a_inbody|anchor_in_body|\n- **S2**|\n  > - S9 「심은 줄」\n- **S2**'; do
   IFS='|' read -r stem why from to <<<"$spec"
   cp "$FX/brief-verbatim-ok.audit.md" "$VB/$stem.audit.md"
   python3 -I - "$VB/$stem.audit.md" "$from" "$to" <<'PY'

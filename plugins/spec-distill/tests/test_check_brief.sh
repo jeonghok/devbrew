@@ -2524,8 +2524,8 @@ for spec in 'u_nbsp|anchor_unicode_space|\n- **S2**|\n\u00a0- **S2**' \
     && ok "AC18: 문법 밖 §6 앵커(${stem}) → red «${why}»" \
     || { no "AC18: 문법 밖 §6 앵커(${stem})가 ${why} 로 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
 done
-for spec in 'd_num|decision_numbered|\n- OQ1: 인증 뷰의 캐시 전략|\n1. OQ1 [해결 \u27e8S2\u27e9]: 인증 뷰의 캐시 전략' \
-            'd_quote|decision_quoted|\n- OQ1 [열림]|\n> - OQ1 [열림]' \
+for spec in 'd_num|decision_numbered|\n- OQ1: |\n1. OQ1: ' \
+            'd_quote|decision_quoted|\n- OQ1: |\n> - OQ1: ' \
             'd_num0|decision_numbered|\n- OQ1 [열림]|\n1. OQ1 [열림]' \
             'd_plus|decision_shape|\n- OQ1: 인증 뷰의 캐시 전략|\n+ OQ1 [해결 \u27e8S99\u27e9]: 인증 뷰의 캐시 전략' \
             'd_bare|decision_shape|\n- OQ1: 인증 뷰의 캐시 전략|\nOQ1 [해결 \u27e8S2\u27e9]: 인증 뷰의 캐시 전략' \
@@ -2573,4 +2573,83 @@ bb_variant bb_ref_ok '\n- OQ1: 인증 뷰의 캐시 전략' '\n- OQ1: 인증 뷰
 out="$(bb_gate bb_ref_ok)"
 grep -q open_line_unknown_ref <<<"$out" \
   && no "AC18(양성대조): 실재하는 ⟨S2⟩ 참조가 막혔다" || ok "AC18(양성대조): 실재하는 ⟨S2⟩ 참조는 막지 않는다"
+
+# --- AC18 fix round 2 — 결정 줄은 정규형으로 판독하고 날 글자 불릿만 받는다(Ruling S12-c · F1 · F2) -------------
+# 글자는 JSON 문자열 이스케이프로 적는다. 결정 표지가 없는 열린 결정 줄도 결정 꼴이다(`OQ<n>` 뒤 `:` 또는 `[`).
+for spec in 'd2_plus|decision_shape|\n- OQ1: |\n+ OQ1: ' \
+            'd2_bare|decision_shape|\n- OQ1: |\nOQ1: ' \
+            'd2_kor|decision_shape|\n- OQ1 [열림]|\n가. OQ1 [열림]' \
+            'd2_circ|decision_shape|\n- OQ1: |\n\u2460 OQ1: ' \
+            'd2_claim|decision_shape|\n- OQ1: 인증 뷰의 캐시 전략 — 해답공간으로 이월.\n|\n- OQ1: 인증 뷰의 캐시 전략 — 해답공간으로 이월.\n결정: OQ1 [해결 \u27e8S2\u27e9] — 정함\n' \
+            'd2_arrow|decision_shape|\n- OQ1: 인증 뷰의 캐시 전략 — 해답공간으로 이월.\n|\n- OQ1: 인증 뷰의 캐시 전략 — 해답공간으로 이월.\n\u2192 결론 OQ1 [해결 \u27e8S2\u27e9]\n' \
+            'd2_conf|decision_confusable|\n- OQ1 [열림]|\n- \uff2f\uff311 [열림]' \
+            'd2_nbsp|decision_confusable|\n- OQ1: |\n-\u00a0OQ1: ' \
+            'd2_sep|decision_line_separator|\n- OQ1: 인증 뷰의 캐시 전략|\n- OQ1: 인증 뷰의 캐시 전략\u000b+ OQ2 [해결 \u27e8S2\u27e9]: 정함' \
+            'd2_sep_cr|decision_|\n- OQ1: 인증 뷰의 캐시 전략|\n- OQ1: 인증 뷰의 캐시 전략\r+ OQ2 [해결 \u27e8S2\u27e9]: 정함' \
+            'g2_sep|decision_line_separator|\n- Goal: 대시보드 최초 페인트 시간 단축 \u27e8S1\u27e9|\n- Goal: 대시보드 최초 페인트 시간 단축 \u27e8S1\u27e9\u2028- Non-goal: 끼운 줄 \u27e8S1\u27e9'; do
+  IFS='|' read -r stem why from to <<<"$spec"
+  bb_variant "$stem" "$from" "$to"
+  out="$(bb_gate "$stem")"; rc=$?
+  { [[ $rc -ne 0 ]] && grep -qF "$why" <<<"$out"; } \
+    && ok "AC18: 결정 · 항목 줄 모양(${stem}) → red «${why}»" \
+    || { no "AC18: 결정 · 항목 줄 모양(${stem})이 ${why} 로 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+done
+bb_variant d2_prose_ok '\n- OQ1: 인증 뷰의 캐시 전략 — 해답공간으로 이월.\n' '\n- OQ1: 인증 뷰의 캐시 전략 — 해답공간으로 이월.\n(OQ1 은 사용자가 정한 것이다. 상태는 `[열림]` 으로 적는다.)\n'
+out="$(bb_gate d2_prose_ok)"; rc=$?
+[[ $rc -eq 0 ]] && ok "AC18(양성대조): OQ 번호만 부르는 산문 · 코드 칸 안 표지는 결정 줄이 아니다" \
+  || { no "AC18(양성대조): 산문 줄이 결정 줄로 막혔다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+
+# --- AC18 fix round 2 — 원문 번호 참조는 §6 밖 payload 전체에서 `S<n>` 토큰으로 뽑는다(F4) --------------------------
+for spec in 'r2_list|\n- OQ1: 인증 뷰의 캐시 전략|\n- OQ1: 인증 뷰의 캐시 전략 (S2, S99)|S99' \
+            'r2_space|\n- OQ1: 인증 뷰의 캐시 전략|\n- OQ1: 인증 뷰의 캐시 전략 \u27e8 S99 \u27e9|S99' \
+            'r2_guil|\n\nsuperpowers 있으면|\n\n«S99» 를 참고한다.\nsuperpowers 있으면|S99' \
+            'r2_quote|\n✎ 렌더링 전략|\n✎ \u201cS99\u201d 렌더링 전략|S99' \
+            'r2_circ|\nTTFP를 줄이는|\n\u27e8S\u2490\u27e9 TTFP를 줄이는|S9' \
+            'r2_goal|\n- Goal: 대시보드 최초 페인트 시간 단축 \u27e8S1\u27e9|\n- Goal: 대시보드 최초 페인트 시간 단축 (S99) \u27e8S1\u27e9|S99' \
+            'r2_sec4|데이터 형태와 부합|데이터 형태와 부합 S99|S99' \
+            'r2_cyr|\n- OQ1: 인증 뷰의 캐시 전략|\n- OQ1: 인증 뷰의 캐시 전략 \u040599|S99'; do
+  IFS='|' read -r stem from to sid <<<"$spec"
+  bb_variant "$stem" "$from" "$to"
+  out="$(bb_gate "$stem")"; rc=$?
+  { [[ $rc -ne 0 ]] && grep -qF "open_line_unknown_ref:${sid}" <<<"$out"; } \
+    && ok "AC18: §6 밖의 원문 번호 참조(${stem}) → red «open_line_unknown_ref:${sid}»" \
+    || { no "AC18: §6 밖의 원문 번호 참조(${stem})가 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+done
+bb_variant r2_ok '\n\nsuperpowers 있으면' '\n\nS2 · \u27e8S1\u27e9 를 참고한다. 자리 표시 S<n> 은 번호가 아니다.\nsuperpowers 있으면'
+out="$(bb_gate r2_ok)"; rc=$?
+[[ $rc -eq 0 ]] && ok "AC18(양성대조): 풀리는 S 번호와 자리 표시 S<n> 은 막지 않는다" \
+  || { no "AC18(양성대조): 풀리는 참조가 막혔다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+
+# --- AC18 fix round 2 — §6 은 바이트 전부를 센다: 앵커 아닌 줄의 앵커 꼴 토큰 · 닮은 글자 머리(Ruling S13) ---------
+for spec in 's2_inbody|anchor_in_body|\n- **S2**|\n  > 인용 가운데 **\u04053** 를 심었다\n- **S2**' \
+            's2_bullet|anchor_in_body|\n- **S2**|\n  > - S3 「심은 줄」\n- **S2**' \
+            's2_cyr|anchor_confusable|\n- **S2**|\n- **\u04053** 「심은 줄」\n- **S2**' \
+            's2_di|anchor_confusable|\n- **S2**|\n- **S\u034f2**'; do
+  IFS='|' read -r stem why from to <<<"$spec"
+  bb_variant "$stem" "$from" "$to"
+  out="$(bb_gate "$stem")"; rc=$?
+  { [[ $rc -ne 0 ]] && grep -qF "$why" <<<"$out"; } \
+    && ok "AC18: §6 앵커 아닌 줄 · 닮은 글자(${stem}) → red «${why}»" \
+    || { no "AC18: §6 앵커 아닌 줄 · 닮은 글자(${stem})가 ${why} 로 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+done
+# coverage 하위 명령도 audit §6 의 문법 밖 앵커 줄을 버리지 않고 낸다.
+out="$(python3 "$SCRIPT" coverage "$BB/bb_audit_bad/interview-brief-valid.md" 2>/dev/null)"
+grep -qF "anchor_confusable" <<<"$out" \
+  && ok "AC18: coverage 하위 명령이 audit §6 의 문법 밖 앵커 줄을 낸다" \
+  || { no "AC18: coverage 하위 명령이 audit §6 의 문법 밖 앵커 줄을 버렸다"; printf '    %s\n' "$out" | head -c 400; }
+# audit §6 은 원문 그대로 센다 — 펜스 안 앵커도 번들 · 원문 완전성 검사처럼 게이트에 보인다(같은 바이트).
+mkdir -p "$BB/bb_audit_fence"; cp "$FX/interview-brief-valid.md" "$FX/interview-brief-valid.audit.md" "$BB/bb_audit_fence/"
+python3 -I - "$BB/bb_audit_fence/interview-brief-valid.audit.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+new = t.replace("\n- **S2**", "\n```text\n- **S9** 펜스 안에 심은 앵커\n```\n- **S2**", 1)
+if new == t:
+    sys.exit("변형이 적용되지 않았다")
+open(p, "w", encoding="utf-8").write(new)
+PY
+out="$(bb_gate bb_audit_fence)"; rc=$?
+{ [[ $rc -ne 0 ]] && grep -qF "S9" <<<"$out"; } \
+  && ok "AC18: audit §6 펜스 안 앵커도 게이트가 센다 (번들 · 원문 검사와 같은 바이트)" \
+  || { no "AC18: audit §6 펜스 안 앵커가 게이트에 안 보인다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
 finish

@@ -143,7 +143,6 @@ BUNDLE_NAME_RE = re.compile(r"[A-Za-z0-9_-]+\.md")
 RISK_ROW_RE = re.compile(r"- (K\d+) — (\S.*)")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 ID_ITEM_RE = re.compile(r"\s+- id: ([CD]\d+)\s*")
-OQ_LINE_RE = re.compile(r"- (OQ\d+) ")
 RC_RE = re.compile(r"\bRC\d+\b")
 ST_RE = re.compile(r"\bST\d+\b")
 KEY_RE = re.compile(r"«[^«»]+»")
@@ -432,11 +431,17 @@ def brief_universe(brief: str, audit: str):
     s5 = section_body(brief, "## 5.")
     if s0 is None or s4 is None or s5 is None:
         raise FormatError("brief 에 §0 · §4 · §5 중 없는 절이 있다")
-    non_s |= {m.group(1) for line in s0.splitlines() for m in [OQ_LINE_RE.match(line)] if m}
+    # §0 결정 번호는 게이트와 같은 판독기 · 같은 절 경계(`## <n>.` — 절 안 소제목은 절을 끊지 않는다)로 센다. 결정 줄 문법
+    # 밖 줄이 있으면 셀 수 없다(게이트도 그 brief 를 막는다).
+    oq_entries, oq_rejects = brief_body.decision_entries(brief_body.section_text(brief, "0"))
+    if oq_rejects:
+        raise FormatError("brief §0 에 결정 줄 문법 밖 줄이 있어 번호를 셀 수 없다(%s)"
+                          % ", ".join("%d번째 줄 %s" % t for t in oq_rejects[:5]))
+    non_s |= {oq for oq, _line in oq_entries if oq}
     non_s |= set(RC_RE.findall(s5)) | set(ST_RE.findall(s5)) | {k for head, body in section4_items(s4) for k in KEY_RE.findall("\n".join([head] + body))}
     k_expected = []
     for prefix in RISK_PREFIXES:
-        k_expected += [line[2:] for line in s5.splitlines() if line.startswith(prefix)]
+        k_expected += [line[2:] for line in brief_body.split_lines(s5) if line.startswith(prefix)]
     k_expected = [("K%d" % (i + 1), text) for i, text in enumerate(k_expected)]
     non_s |= {k for k, _ in k_expected}
     s_ids = set()

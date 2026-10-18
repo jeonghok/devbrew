@@ -17,7 +17,7 @@ import section6  # noqa: E402
 import brief_body  # noqa: E402
 from brief_body import section4_items  # noqa: E402
 from roadmap_model import (  # noqa: E402
-    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, OQ_LINE_RE, FormatError, brief_universe, bundle_ids, field_text,
+    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, FormatError, brief_universe, bundle_ids, field_text,
     id_sort_key, is_quote, parse_ids, parse_roadmap, section_body)
 
 TABLE_HEADING = "## 분해안"
@@ -267,16 +267,15 @@ def _section4_index(brief: str) -> dict:
 def index_brief(brief: str, audit: str) -> BriefIndex:
     _non_s, _s_ids, k_expected = brief_universe(brief, audit)
     lines = {}
-    for line in _body(brief, "## 2.").splitlines():
+    for line in brief_body.split_lines(_body(brief, "## 2.")):
         m = C_LINE_RE.match(line)
         if m:
             lines[m.group(1)] = line
-    for line in _body(brief, "## 0.").splitlines():
-        m = OQ_LINE_RE.match(line)
-        if m:
-            lines[m.group(1)] = line
+    for oq, line in brief_body.decision_entries(brief_body.section_text(brief, "0"))[0]:   # brief_universe 와 같은 판독
+        if oq:
+            lines[oq] = line
     lines.update(_section4_index(brief))
-    for line in _body(brief, "## 5.").splitlines():
+    for line in brief_body.split_lines(_body(brief, "## 5.")):
         m = RC_LINE_RE.search(line)
         if m:
             lines[m.group(1)] = line
