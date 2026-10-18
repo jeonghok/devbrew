@@ -406,7 +406,7 @@ def _log_verdicts(st, prof, r) -> dict:
             o, n = om.get(a), nm.get(a)
             if o is not None and n is not None and o.get("hash") == n.get("hash"):
                 continue
-            if not tracked or (o is not None and not isinstance(o.get("line_hashes"), list)):
+            if not tracked:   # 원장의 사실(엔진 줄 기록이 이 diff 뒤에 시작)로만 — 스냅숏 하나의 줄 해시 부재로는 열리지 않는다
                 if o is not None or a not in earlier:
                     out[a] = (a, "legacy")
                 continue
@@ -767,6 +767,21 @@ def _log_section_anchors(prof, sections) -> set:
     return out
 
 
+def snapshot_problem(snap, prof):
+    """호출자가 낸 스냅숏이 가드를 끌 모양인가 — (사유, 앵커) 또는 None. 울타리 절(불변 · 결정 기록 · 미룸)은 줄 해시가
+    있어야 하고(덧붙이기 · 줄 출처 판정의 재료), 머리 없음 표지는 절 목록과 맞아야 한다(둘 다 머리 없으면 통째 면제다)."""
+    if not isinstance(snap, dict) or not _snapshot_ok(snap):
+        return ("shape", [])
+    secs = snap["sections"]
+    is_doc = [s["anchor"] == DOC_ANCHOR for s in secs]
+    if not (all(is_doc) if snap.get("headingless") else not any(is_doc)):
+        return ("headingless_mismatch", sorted(s["anchor"] for s in secs if s["anchor"] != DOC_ANCHOR))
+    missing = sorted(s["anchor"] for s in secs if s["anchor"] in fence_anchors(prof, secs)
+                     and not (isinstance(s.get("line_hashes"), list)
+                              and all(isinstance(h, str) for h in s["line_hashes"])))
+    return ("fence_line_hashes_missing", missing) if missing else None
+
+
 def cmd_begin_round(a) -> int:
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
@@ -777,6 +792,10 @@ def cmd_begin_round(a) -> int:
         return 2
     cap = cfg["rereview_cap"]["value"]
     snap = json.loads(Path(a.snapshot).read_text(encoding="utf-8"))
+    bad = snapshot_problem(snap, prof)
+    if bad:   # 원장을 바꾸기 전에 멈춘다
+        fail("snapshot_invalid", why=bad[0], anchors=bad[1])
+        return 2
     n = int(st["round"]) + 1
     if a.extra_approval is not None and _blank_text(a.extra_approval):
         fail("extra_approval_blank")   # 빈 글자나 보이지 않는 글자뿐인 승인은 승인이 아니다

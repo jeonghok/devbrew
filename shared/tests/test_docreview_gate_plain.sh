@@ -101,7 +101,7 @@ check_render "adopt_unavailable" "$d" "정할 것 1개" "고친다(채택)는 �
 
 # 옛 원장(결정 기록 절의 줄 기록 없음)의 첫 라운드 — 덧붙이기 검사를 못 했다는 공시
 d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")"; log_docs "$d"; br "$d" "$d/r1.md"
-PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); [s.pop("line_hashes", None) for s in st["snapshots"]["1"]["sections"]]; save_state(d, st, "fixture: 옛 원장")' "$d"
+PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); [s.pop("line_hashes", None) for s in st["snapshots"]["1"]["sections"]]; st.pop("engine_lines", None); st.pop("engine_lines_since", None); save_state(d, st, "fixture: 옛 원장")' "$d"
 br "$d" "$d/r2a.md"
 check_render "log_check_skipped" "$d" "결정 기록 · 미룬 항목 절이 덧붙이기만 됐는지 이번 라운드는 확인하지 못했다"; rm -rf "$d"
 

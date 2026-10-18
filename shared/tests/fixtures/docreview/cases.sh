@@ -762,6 +762,48 @@ case_AC38_r4_m1_revert_target_flagged() {
   assert_not_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "원복하면 원래 글이 아니라" "AC38 4차m1 양성 짝: 앞 변경을 사용자가 받아들였으면 알리지 않는다"
   rm -rf "$d"
 }
+snap_edit() {   # snap_edit <snapshot.json> <python-stmt over d> — 호출자가 내미는 스냅숏을 고쳐 쓴다(위조 흉내)
+  python3 -I -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p,encoding="utf-8")); exec(sys.argv[2]); json.dump(d, open(p,"w",encoding="utf-8"), ensure_ascii=False)' "$1" "$2"
+}
+case_AC38_r4_snapshot_fields_cannot_switch_guards_off() {
+  # 4차 덧붙임 — begin-round 는 호출자가 낸 스냅숏을 받는다. 울타리 절의 줄 해시를 떼거나 머리 없음 표지를 거짓으로 달아
+  # 가드를 끄는 스냅숏은 받지 않는다(rc 2, 원장 불변). 옛 원장 판정은 스냅숏 하나가 아니라 원장의 사실(엔진 줄 기록)로 한다.
+  local d err rc
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 4차+: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  snap "$d/doc.md" "$d/s2.json"
+  snap_edit "$d/s2.json" '[s.pop("line_hashes", None) for s in d["sections"] if s["anchor"] == "#결정-기록"]'
+  err="$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc" "2" "AC38 4차+: 결정 기록 절의 줄 해시를 뗀 스냅숏은 rc 2"
+  assert_contains "$err" '"reason": "snapshot_invalid"' "AC38 4차+: 사유는 snapshot_invalid"
+  assert_eq "$(st_yaml "$d" 'st["round"]')" "1" "AC38 4차+: 거부는 원장을 바꾸지 않는다(라운드 그대로)"
+  # 원장에 줄 해시 없는 스냅숏이 들어 있어도(손으로 심은 위조) 출처 기록이 있는 원장은 옛 원장 면제를 주지 않는다
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); [s.pop("line_hashes", None) for s in st["snapshots"]["1"]["sections"]]; save_state(d, st, "fixture: 위조")' "$d"
+  doc_sub "$d/doc.md" "$LOG_L1" "$LOG_L1_FORGED"; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#결정-기록'], [])" "AC38 4차+: 줄 해시 없는 스냅숏 하나로는 옛 원장 면제가 열리지 않는다 — 고쳐 쓴 결정 기록은 frozen_change"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["log_check_skipped"]')" "[]" "AC38 4차+: 공시할 옛 원장 넘기기도 없다"
+  rm -rf "$d"
+  # 불변 절(§6)의 줄 해시를 뗀 스냅숏 · 머리가 있는데 머리 없음이라고 단 스냅숏도 받지 않는다
+  d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38 4차+: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"
+  snap_edit "$d/s1.json" '[s.pop("line_hashes", None) for s in d["sections"] if s["anchor"] == "#6-사용자-원문"]'
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "AC38 4차+: 불변 절의 줄 해시를 뗀 스냅숏은 rc 2"
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; snap_edit "$d/s1.json" 'd["headingless"] = True'
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "AC38 4차+: 머리가 있는 절들에 머리 없음 표지를 단 스냅숏은 rc 2"
+  snap "$FX/brief-append-r2-edit.md" "$d/s2.json"; snap_edit "$d/s2.json" 'd["headingless"] = True'
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; snap_edit "$d/s1.json" 'd["headingless"] = True'
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null 2>&1
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null 2>&1
+  assert_eq "$(st_yaml "$d" 'st["round"]')" "0" "AC38 4차+: 거짓 머리 없음 표지 두 라운드로 §6 고쳐 쓰기를 통째 면제받는 길이 없다(둘 다 거부)"
+  rm -rf "$d"
+  # 양성 짝 — 도구가 낸 그대로의 스냅숏(머리 없는 문서 포함)은 받는다
+  d="$(mk_state "$FX/headingless.md" "$PROF_SD/brief.md")" || { no "AC38 4차+: init 실패"; return; }
+  br "$d" "$FX/headingless.md"
+  assert_eq "$(st_yaml "$d" 'st["round"]')" "1" "AC38 4차+ 양성 짝: 머리 없는 문서의 정상 스냅숏은 받는다"
+  rm -rf "$d"
+}
 case_AC38_r4_m4_route_alternatives_filtered() {
   # 4차 m4 — 라우팅이 fin.json 에 싣는 선택지(decision_view.alternatives)도 decide 가 받는 것과 같다
   local d; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38 4차m4: init 실패"; return; }
