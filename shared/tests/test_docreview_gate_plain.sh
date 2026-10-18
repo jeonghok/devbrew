@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/docreview/scripts/docreview_state.py shared/docreview/references/reviewing-document.md
+# guards: shared/docreview/scripts/docreview_state.py shared/docreview/references/reviewing-document.md shared/tests/fixtures/docreview/golden/*.gate.txt
 # AC41 — 게이트 렌더의 모든 줄에 괄호 밖 내부 기호(지적 id · AC 번호 · §)가 없다.
 #
 # 두 코퍼스를 잰다.
@@ -11,7 +11,7 @@
 # 행마다 «실제로 섰는가» 양성 짝을 둔다(묶음 제목 줄) — 안 서면 그 행의 단언은 공허하다.
 set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
-  echo "shared/docreview/scripts/docreview_state.py"; echo "shared/docreview/references/reviewing-document.md"; echo "shared/tests/fixtures/docreview/golden"; exit 0
+  echo "shared/docreview/scripts/docreview_state.py"; echo "shared/docreview/references/reviewing-document.md"; (cd "$(dirname "$0")/../.." && ls shared/tests/fixtures/docreview/golden/*.gate.txt); exit 0
 fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
