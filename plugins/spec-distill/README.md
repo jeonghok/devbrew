@@ -8,12 +8,13 @@
 
 ## 쓰는 법
 
-사용자가 부르는 진입 skill 은 넷입니다.
+사용자가 부르는 진입 skill 은 다섯입니다.
 
 - `/request-framing` — 요청이 아직 흐릿해서 방향부터 맞추고 싶을 때. 다음 세션 첫 턴이 가리킬 요청 요약 파일(`interview-seed`)이 나옵니다.
 - `/spec-interview` — 요청을 인터뷰로 다듬고 싶을 때. 인터뷰 결과를 정리한 문서(interview brief)가 나옵니다.
 - `/spec-review` — brainstorming 이 설계문서를 쓴 뒤 검토하고 싶을 때. 문서 리뷰 결과와 다음 단계를 고르는 질문이 나옵니다.
 - `/roadmap-status` — 로드맵의 에픽 지도(단계 · 기다리는 에픽 · 경고 · 진행 중 인터뷰 조사 수)를 보고 싶을 때. 읽기만 합니다.
+- `/spec-distill:epic-conductor [<로드맵 경로>]` — 승인된 로드맵의 에픽을 이 세션에서 끝까지 지휘합니다(cost_class high — 시작 승인, 같은 세션 · 표지가 살아 있고 · 규모가 글자 그대로 같으면 공시만).
 
 ```
 /spec-interview todo 앱 만들어줘
@@ -159,6 +160,10 @@
 - **동시 리뷰 표지 (6.0.0)** — 같은 문서를 두 세션이 함께 리뷰해 원장을 덮어쓰지 않게, 원장 열기가 원장 폴더의 `reviewing-by`(세션 id 한 줄)를 배타 생성으로 잡고 원장에 쓰는 명령마다 그 앞에서 표지를 확인한다(`scripts/ledger_marker.py`). 남의 표지면 멈추고 「그만둠 (권장)」/「이어 씀」을 묻는다 — 이어 씀이면 표지를 이 세션 것으로 바꾼다(임시 파일 + `os.replace`). 표지는 승인 게이트의 답을 원장에 적은 뒤 끝맺음 펜스가 푼다. 다른 세션의 원장을 이어 받을 때는 「이전 리뷰 라운드 <n> 에서 이어 간다」 한 줄이 나온다.
 - **P21 — 저장소가 심은 링크를 따라 쓰지 않는다 (6.0.0)**: 저장소는 어떤 이름으로든 링크를 커밋할 수 있다. 원장 · 표지 · 인터뷰 상태 파일을 쓰거나 옮기거나 지우는 자리는 경로 성분의 링크 · `..` · 작업 트리 밖을 거부한다(`state_path.py path-inside`). 그래서 `.claude` · `.claude/spec-distill` · `.docreview` 가 링크인 저장소에서는 리뷰 라운드 대신 거부 사유 한 줄이 나오고(원장 열기가 `NO_DIR` 로 끝나 리뷰 없이 끝난 사실이 각 자리의 안내 · degrade 로 보인다), 원장 정리는 링크인 state root · `.docreview` 를 「셀 수 없음」 으로 내고 그 너머를 옮기거나 지우지 않는다 — 링크가 저장소 **안**을 가리켜도 거부다. 인터뷰 상태 파일 경로가 링크이거나 작업 트리 밖이면 진입이 그 파일을 이어 가지 않고(`REJECT`), 끝의 brief · audit · 상태 파일 커밋도 하지 않고 세 경로와 사유를 보인다.
 - **Law 1 · Law 3 — 번호 인계 (5.6.0)** — brief · 에픽 묶음의 번호가 설계문서 · 계획 · 구현으로 넘어가는 이음매마다 기계 대조가 있다: 번호 대조(빠진 번호는 spec-review 진입 때 보이고 게이트 경고 수에 들며 지휘 절차는 그 때문에 spec-review 앞에서 멈춘다, 얕음 · 받드는 에픽 없음은 승인 때의 경고) · `--plan` · `--impl` · `roadmap_status.py` 의 받는 곳 없는 미룸 경고. 외부 skill(brainstorming · writing-plans · SDD)은 고치지 않는다 — 넘길 때 보내는 글과 돌아온 결과 검사만 devbrew 쪽에 있다. 내용이 실제로 답하는지는 리뷰어(design-doc 프로필의 scope 축)가 판정한다.
+- **Law 2 — 통합 리뷰어는 쓰지 못한다 (7.3.0)** — 에픽 사이 이음매 리뷰는 `tools: Read, Grep, Glob` 인 `integration-reviewer` 가 한다. superpowers 리뷰 요청 skill 의 틀만 빌리고 그 skill 이 부르는 쓰기 가능한 agent 는 쓰지 않는다.
+- **Law 3 · P23 — 다시 불러도 같은 자리 (7.3.0)** — 지휘자는 무엇이 끝났는지 기억에 기대지 않고 git(설계문서의 승인 줄 · 판정 · 구현 대조 절)과 기계 상태에서 다시 계산한다. 기계 상태를 지워도 잃는 것은 다시 만들 수 있는 것뿐이다(`tests/test_conductor_e2e.sh`).
+- **레포 전용 값 금지 (7.3.0)** — 지휘자 표면에는 기본 브랜치 이름 · 브랜치 접두 · 레포 구조 경로 · 모델 이름이 없다. 외부 도구 기본 경로는 `scripts/repo_defaults.py` 상수에만 있고 로드맵 frontmatter 가 이긴다(`tests/test_repo_literals.sh`).
+- **cost_class high 의 이름 붙인 예외 (7.3.0)** — 같은 세션 · 표지가 살아 있고 · 규모가 글자 그대로 같으면 이미 받은 시작 승인을 다시 쓰고 공시만 한다. 규모가 바뀌거나 다른 세션이거나 새로 잡기 · 넘겨받기 · 놓기를 거치면 다시 묻는다.
 
 ## External source absorption
 
@@ -177,7 +182,11 @@
 - `scripts/check_bundle_coverage.py --plan <설계문서> <계획>` · `--impl <설계문서> <보고 파일>` — 설계문서 AC 가 계획 Task 에 다 있는지, 구현 보고의 미룸 · 빠짐이 설계문서 `## 미룸` 표에 받는 곳과 함께 올랐는지 봅니다. `--acs <AC 목록>` 이면 그 AC 만 대조합니다. `--impl` 의 받는 곳은 설계문서 `roadmap:` 의 로드맵에 있는 에픽이나 `#<n>` 이어야 합니다.
 - `scripts/spec_review_bundle.py` — `spec-review <설계문서> --bundle <묶음|brief>` 의 정답 출처 확인 · 진입 대조 · 승인 때 로드맵 위치와 이웃 결정. `rejected` 는 승인 게이트 2단계 앞 글에 설계가 받지 않기로 한 번호(번호 대조의 기각)의 수와 목록을 냅니다 — 되돌리려면 게이트 ③ 의 후속 질문 기타 칸에 번호를 적습니다.
 - `references/epic-handoff.md` — 로드맵 에픽의 설계를 여는 넘김 줄. 지휘 세션이 자리표를 채워 씁니다. brainstorming 이 기본이고 블록에 `흐름:` 이 있으면 그 흐름을 따르며, 나눌 근거가 보이면 재분해로 보고하고, 설계문서에 「있는 것 검토」 · 「상류 · 하류 연계」 절을 둡니다.
-- `references/conducting.md` — 로드맵의 에픽을 한 세션이 끝까지 지휘하는 손 절차입니다. 레포마다 다른 값은 로드맵 frontmatter 와 `origin/HEAD` 에서 읽습니다.
+- `references/conducting.md` — 지휘 순환 걸음 1~7(지휘자가 따른다)과 끝 절의 손 절차(지휘자를 껐을 때)입니다. 레포마다 다른 값은 로드맵 frontmatter 와 `origin/HEAD` 에서 읽습니다.
+- `references/conductor-dispatch.md` — 지휘자가 하위 agent 에게 보내는 글(자리 · 미리 받은 답 · 두 부분 반환 · 처분 줄).
+- `scripts/merge_check.py` — 머지 전 스위트 대조(실패를 단위와 이름으로 가름, 종료 코드 3 은 셀 수 없음 · 내부 오류).
+- `scripts/conductor_ledger.py` — 기계 상태 · 시작 승인 · 자원 정리(버릴 것만, `--force` 없음) · 설계문서 기록 절 · 통합 리뷰 묶음.
+- `agents/integration-reviewer.md` — 쓰기 권한 없는 통합 리뷰어(`Read, Grep, Glob`).
 - spec-review 게이트 ③ — 로드맵 에픽의 설계문서면 「이 에픽 다시 설계」(같은 묶음으로 brainstorming 을 다시) 와 재분해(「인터뷰 다시 열기」) 를 고를 수 있습니다. 재분해 신호는 열린 목록입니다(`references/redecompose.md` 1).
 - `scripts/roadmap_write.py create · update · extract · migrate` — 인터뷰가 승인받은 분해안 표(`## 분해안`, 칸 열하나)로 로드맵과 에픽 묶음을 쓰고(create), 재분해 때 바뀐 블록과 그 묶음만 다시 쓰고(update), 로드맵에서 표를 거꾸로 뽑습니다(extract). update 는 새 에픽 번호가 문자마다 최댓값 다음부터 빈틈없이 이어져야 하고, 「…」 인용은 재분해 이력의 번호 판정에서 뺍니다. create 는 상태 파일 `## 생성 기록` 에 적힌 파일만 덮어쓰고, 자기 것이 아닌 `<id>.md` 를 덮어쓰게 되면 쓰기 전에 거부합니다. 검증이 실패하면 새로 만든 파일은 지웁니다. `--audit` 은 `--brief` 경로의 `.md` 를 `.audit.md` 로 바꾼 파일이어야 하고(아니면 사용법 오류 2), update 는 묶음 번호 순서만 다른 표를 바뀜으로 세지 않습니다. 쓴 직후 `roadmap_status.py --json` 의 `format_errors` · `unassigned` · `orphans` · `unknown_ids` 중 하나라도 비지 않으면 쓴 것을 원래 바이트(파일 모드 포함)로 되돌리고 1 로 끝납니다. 머지된 에픽은 바꾸지 않고 사라진 번호는 다시 쓰지 않습니다. 재분해 절차는 `references/redecompose.md` 에 있습니다. migrate 는 옛 꼴 블록을 새 형식(범위 하위 항목)으로 다시 씁니다 — 각 블록의 `- 범위:` 줄만 고치고 바꿀 수 없는 것은 1 로 거절하며 CRLF 를 지킵니다.
 
@@ -236,7 +245,7 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
 ### 스위치 목록
 
 - `DEVBREW_SPEC_DISTILL_DISABLE=1` — plugin 전체 abort, state 보존. 리뷰 진입의 원장 정리(`scripts/ledger_sweep.py`)도 아무것도 지우지 않는다.
-  진입 skill 넷(`request-framing` · `spec-interview` · `spec-review` · `roadmap-status`)은 본문 전 사전 검사가 `DEVBREW_SPEC_DISTILL_DISABLE=1` 을 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 skill 호출을 끊는다 — 헤드리스에서는 출력 없이 끝난다.
+  진입 skill 다섯(`request-framing` · `spec-interview` · `spec-review` · `roadmap-status` · `epic-conductor`)은 본문 전 사전 검사가 `DEVBREW_SPEC_DISTILL_DISABLE=1` 을 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 skill 호출을 끊는다 — 헤드리스에서는 출력 없이 끝난다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:statusline` (5.7.0) — 컨트롤 플레인(`scripts/control_plane.py`)을 끈다: 상태줄은 빈 줄, `/spec-distill:roadmap-status` 의 지도는 `꺼져 있다 — <스위치>` 한 줄, `show --tasks` 는 표준 출력을 비우고 rc 3. 훅이 아니지만 지목할 이름을 갖는다. `DEVBREW_SPEC_DISTILL_DISABLE=1` 도 같은 효과다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` (v0.20.0, v0.24.0 확대, 3.1.0 재배선) — codex 병렬 co-review만 skip. Claude 리뷰(탐지 · 재비판)는 정상 동작하고, codex 부재는 엔진이 `fin.json` 의 `advisory[]` 와 게이트 첫 줄로 loud 하게 공시한다. 전역 `DEVBREW_SPEC_DISTILL_DISABLE`과 독립. **적용 범위는 문서 리뷰 엔진 자리 셋 전부**: (a) design-doc 리뷰(`spec-review`), (b) brief 리뷰(`reviewing-brief`), (c) seed 리뷰(`request-framing`) — 세 자리 모두 codex 호출은 SKILL 의 리터럴 게이트 펜스(`codex-gate` 표지) 하나이고 매 라운드 4단계에서 돈다. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`(`skip_reason: kill_switch`)로 옮기고 펜스가 그 값으로 러너 호출을 가르며, 러너(`run_docreview_codex_reviewer.sh`)는 이 변수를 보지 않는다. 펜스 밖에서 러너를 부르면 opt-out이 무시된 채 지출이 나간다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` — 문서 리뷰 엔진의 **재비판 단계만** skip (`doc-recritic` dispatch 없음). 탐지·codex 는 정상 동작한다. 기각 경로가 0 이 된 사실은 `fin.json` 의 `advisory[]` 로 공시된다 — 오탐이 걸러지지 않은 라운드라는 뜻이므로 조용히 넘어가지 않는다.
@@ -280,6 +289,8 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
   devbrew 의 출하 Python 바닥(루트 README 「Python」)을 집행하는 해석기를 거치지 않는다. 문서 리뷰 엔진은
   PyYAML 을 쓴다 — 없으면 리뷰 진입의 원장 정리는 「셀 수 없음(pyyaml 없음)」 을 내고 아무것도 지우지 않는다.
 - **superpowers** (외부, optional) — 있으면 brief를 `brainstorming` 해답공간으로 넘기고 `writing-plans`로 이어집니다. 없으면 interview는 brief를 완료하고 loud advisory 후 정지 (단독 완결, AC13).
+- **quality-gates** (같은 마켓플레이스, optional) — 지휘 순환 걸음 7 이 범위 입력을 받는 `/quality-gates:quality-pipeline` 을 부른다. 없으면 그 걸음은 강등하고 공시한다.
+- **gh CLI** (외부, optional) — 머지된 PR 번호 · PR 인계를 모은다. 없으면 공시하고 강등한다(crash 없음).
 - **codex CLI** (외부, optional) — 있으면 문서 리뷰 엔진 라운드(design doc · interview brief · interview seed)에 병렬 독립 co-reviewer로 참여(model diversity). 없거나 auth 미설정이면 Claude-only로 graceful degrade + loud advisory(crash 없음). kill switch `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1`.
 
 ## License
