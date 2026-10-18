@@ -84,10 +84,9 @@ assert_file_absent "$FIN" '항목이 바뀌면 확정 직후' "옛 「항목이 
 MARK='**다음 세션 줄 — 분해된 일 ①/② 공통**'
 DLINE="$(awk -v m="$MARK" '$0==m{f=1;next} f&&NF{print;exit}' "$FIN")"
 case "$DLINE" in
-  '`@<roadmap-path> 이 로드맵의 지휘 절차대로 진행하라.'*) ok "분해된 일: 다음 세션 줄이 @<roadmap-path> 지휘 줄" ;;
+  '`/spec-distill:epic-conductor <roadmap-path>`') ok "분해된 일: 다음 세션 줄이 지휘자 호출" ;;
   *) no "분해된 일: 다음 세션 줄이 다르다: $DLINE" ;;
 esac
-has "$DLINE" '사람에게 쓰는 글 규칙' "분해된 일: 다음 세션 줄이 글 규칙을 싣는다"
 n_brief="$(grep -cE '^[[:space:]]*> `(@<[^<>]+> )+이 interview brief 로' "$FIN" || true)"
 assert_eq "$n_brief" "1" "나누지 않은 일의 brief 줄은 그대로 하나"
 
@@ -125,18 +124,8 @@ done
 # ── R3 넘김 — 분해된 일의 설계는 에픽 넘김 줄 · --bundle 로 ──────────────────
 RTPL="$SD/templates/roadmap-template.md"
 CONDUCT="$(win "$RTPL" '## 지휘 절차' '## ')"
-for lit in '`references/epic-handoff.md` 에 있는 에픽 넘김 줄' '`--bundle <묶음>`' \
-           '`scripts/control_plane.py show --tasks {{ROADMAP}}`' '상태가 `keep` 이면(알 수 없음) 작업 상태는 바꾸지 않고' \
-           '`scripts/roadmap_status.py --roadmap-file {{ROADMAP}}` 로 대신 계산' \
-           '다른 파일이거나 읽을 수 없으면 spec-review 는 리뷰하지 않고 끝난다' '막지 않고 승인 게이트의 「경고 N개」에 더해지며'; do
+for lit in '/spec-distill:epic-conductor {{ROADMAP}}' '손으로 따르는 절차' '실행 방식은 writing-plans 가 권하는 방식이고, 계획 검토는 계획에 설계에 없던 결정이 있을 때만 기다린다.'; do
   has "$CONDUCT" "$lit" "로드맵 템플릿 지휘 절차: $lit"
-done
-case "$CONDUCT" in
-  *'0 이 나오기 전에는 spec-review 로 가지 않는다'*) no "로드맵 템플릿 지휘 절차: 지휘자가 집행할 수 없는 rc 0 선행 조건이 남았다" ;;
-  *) ok "로드맵 템플릿 지휘 절차: rc 0 선행 조건 없음(spec-review --bundle 진입이 번호 대조를 보인다)" ;;
-esac
-for lit in '${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md 의 에픽 넘김 줄' '--bundle 과 그 묶음의 레포 루트 기준 상대경로'; do
-  has "$DLINE" "$lit" "분해된 일 다음 세션 줄: $lit"
 done
 for lit in '`--bundle <묶음의 레포 상대경로>` 를 붙여 spec-review 를 다시 돌린다' \
            '`${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md` 의 에픽 넘김 줄로 연다' \
