@@ -3108,6 +3108,55 @@ case_detectors_count_mismatch() {
   assert_eq "$(jget "$d/prep.json" 'd["degrade"]["detectors"]["expected"], d["degrade"]["detectors"]["dead"]')" "(2, [2])" "AC10: 기대 2 인데 파일 1 이면 빠진 둘째를 사망으로 센다(조용히 1 로 줄이지 않는다)"
   rm -rf "$d"
 }
+case_detectors_dangling_block_no_tag_leak() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  local c1; c1="$(critic_now "$d" "$FX/critic-r1.txt")"; cp "$FX/critic-d2-dangling.txt" "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$c1" --critic "$d/critic-2.txt" > "$d/prep.json"
+  assert_eq "$(grep -c '@d' "$d/prep.json")" "0" "AC10: 재비판 입력 전체에 리뷰어 꼬리표(@d)가 없다(없는 항목을 막는 참조 포함)"
+  assert_eq "$(grep -c '@b' "$d/prep.json")" "0" "AC10: 블록 꼬리표(@b)도 없다"
+  assert_eq "$(jget "$d/prep.json" '[i["blocks"] for i in d["items"] if "없는 항목 참조" in i["summary"]]')" "[['c9']]" "AC10: 풀리지 않는 참조는 꼬리표를 뗀 중립 형태로 남는다(최종 단계가 어차피 버린다)"
+  rm -rf "$d"
+}
+case_detectors_overlap_absorbed() {
+  local d1 d2 n1 n2
+  d1="$(r1_detectors 1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  py docreview_route.py prepare-recritic --state-dir "$d1" --critic "$(critic_now "$d1" "$FX/critic-r1.txt")" > "$d1/prep.json"
+  n1="$(jget "$d1/prep.json" 'len(d["items"])')"
+  d2="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  critic_now "$d2" "$FX/critic-r1.txt" >/dev/null; cp "$FX/critic-r1.txt" "$d2/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d2" --critic "$d2/critic.txt" --critic "$d2/critic-2.txt" > "$d2/prep.json"
+  assert_eq "$(jget "$d2/prep.json" 'len(d["items"])')" "$n1" "AC10: 같은 지적 둘은 하나로 센다(두 배가 되지 않는다)"
+  assert_eq "$(st_yaml "$d2" 'len([e for e in st["pending_recritic"]["events"] if e[0]=="absorbed"])')" "$n1" "AC10: 버려진 중복 하나하나를 흡수로 센다"
+  rm -rf "$d1" "$d2"
+}
+case_detectors_overlap_repoints_blocks() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  cp "$FX/critic-d1-only.txt" "$d/critic-1.txt"; cp "$FX/critic-d2.txt" "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-1.txt" --critic "$d/critic-2.txt" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'len(d["items"])')" "2" "AC10: 겹치는 첫째 지적은 하나만 남는다"
+  assert_eq "$(jget "$d/prep.json" '[i["blocks"] for i in d["items"] if i["summary"].startswith("넘김 절의 경로")][0] == [i["f"] for i in d["items"] if i["summary"].startswith("넘김 절에 이어")]')" "True" "AC10: 버려진 지적을 막던 질문은 남은 지적을 막는다"
+  assert_eq "$(st_yaml "$d" 'sorted(p["finding"]["detector"] for p in st["pending_recritic"]["items"])')" "['d1', 'd2']" "AC10: 남은 것은 가장 앞 리뷰어의 지적이다"
+  rm -rf "$d"
+}
+case_detectors_one_warning_per_partial_death() {
+  local d; d="$(r1_detectors 3 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC11: r1 실패"; return; }
+  local c1; c1="$(critic_now "$d" "$FX/critic-r1.txt")"; cp "$FX/critic-d2.txt" "$d/critic-2.txt"; cp "$FX/critic-broken.txt" "$d/critic-3.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$c1" --critic "$d/critic-2.txt" --critic "$d/critic-3.txt" > "$d/prep.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" 'len([w for w in d["advisory"] if "탐지 3 중" in w])')" "1" "AC11: 일부 사망은 라우팅 경고 한 줄"
+  assert_eq "$(jget "$d/fin.json" 'len([w for w in d["advisory"] if "doc-critic#" in w])')" "0" "AC11: 같은 사실의 원장 문구가 둘째 경고로 나오지 않는다"
+  local first; first="$(py docreview_state.py gate --state-dir "$d" --render | head -1)"
+  assert_eq "$(printf '%s' "$first" | grep -c '보조 리뷰어')" "0" "AC11: 탐지 리뷰어를 보조라고 부르지 않는다"
+  assert_eq "$(printf '%s' "$first" | grep -o '탐지 리뷰어' | wc -l | tr -d ' ')" "1" "AC11: 게이트 첫 줄의 탐지 경고는 한 번"
+  rm -rf "$d"
+}
+case_detectors_single_layer2_reason_kept() {
+  local d; d="$(r1_detectors 1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  printf '```docreview-layer1\n[]\n```\n```docreview-layer2\na: b\n```\n' > "$d/critic.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic.txt" > "$d/prep.json"
+  assert_eq "$(st_yaml "$d" '[e[2] for e in st["pending_recritic"]["events"] if e[0]=="uncountable"]')" "['block not a list']" "AC10: 탐지 하나일 때 층 2 사유는 예전 문구 그대로"
+  rm -rf "$d"
+}
 case_detectors_stale_file_per_file() {
   local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
   cp "$FX/critic-d2.txt" "$d/critic-2.txt"; touch -t 200001010000 "$d/critic-2.txt"

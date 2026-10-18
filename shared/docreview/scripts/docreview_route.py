@@ -231,7 +231,7 @@ def _read_one_critic(st, path, i, ev, rec, prof):
         merged["docreview-layer1"] = len(l1s)
     if why or not isinstance(l1, list):
         return [], why or "not a list", False, merged, fresh
-    found, l2_missing = [], False
+    found, l2_missing = [], None
     for k, it in enumerate(l1, 1):
         n1 = normalize(it, 1, "c", k, rec)
         if n1:
@@ -242,9 +242,10 @@ def _read_one_critic(st, path, i, ev, rec, prof):
     if l2s is not None and len(l2s) > 1:
         merged["docreview-layer2"] = len(l2s)
     if e2 == "broken":
-        return [], "layer2 block broken", False, merged, fresh
+        return [], "layer2 block broken", None, merged, fresh
     if e2 or not isinstance(l2, list):
-        l2_missing = bool(prof["layer_rubric"].get("layer2"))
+        if prof["layer_rubric"].get("layer2"):
+            l2_missing = "%s" % (e2 or "not a list")
     else:
         for k, it in enumerate(l2, 1):
             n2 = normalize(it, 2, "c", 100 + k, rec)
@@ -255,8 +256,14 @@ def _read_one_critic(st, path, i, ev, rec, prof):
         it["detector"] = "d%d" % i
         if tag:
             it["ref"] = it["ref"] + tag
-            it["blocks"] = list(map(lambda r: r + tag, it["blocks"]))
-    return list(map(lambda it: ("critic", it), found)), None, l2_missing, merged, fresh
+            tagged = []
+            for r in it["blocks"]:
+                tagged.append(r + tag)
+            it["blocks"] = tagged
+    out = []
+    for it in found:
+        out.append(("critic", it))
+    return out, None, l2_missing, merged, fresh
 
 
 def cmd_prepare(a) -> int:
@@ -284,7 +291,7 @@ def cmd_prepare(a) -> int:
     dead, dead_reasons = [], {}
     for i in range(1, n_total + 1):
         if i > len(paths):
-            got, why, l2m, merged = [], "missing", False, {}
+            got, why, l2m, merged = [], "missing", None, {}
         else:
             got, why, l2m, merged, fresh = _read_one_critic(st, paths[i - 1], i, ev, rec, prof)
             if fresh:
@@ -300,7 +307,7 @@ def cmd_prepare(a) -> int:
             items.extend(got)
             if l2m:
                 degrade["layer2_missing"] = True
-                ev("uncountable", "layer2", "block missing" if n_total == 1 else "detector %d block missing" % i)
+                ev("uncountable", "layer2", "block %s" % l2m if n_total == 1 else "detector %d block %s" % (i, l2m))
             for k, v in merged.items():
                 bm = degrade.setdefault("blocks_merged", {})
                 bm[k] = bm.get(k, 0) + v
@@ -328,15 +335,41 @@ def cmd_prepare(a) -> int:
             nx = normalize(it, 2, "x", i, rec)
             if nx:
                 items.append(("codex", nx))
+    # 리뷰어 사이의 겹침 — (층, 분류, 앵커, 처분, 요약)이 같으면 가장 앞 리뷰어의 항목만 남기고 흡수로 센다.
+    # 비슷하기만 한 항목은 재비판으로 간다. 버려진 항목을 가리키던 blocks 는 남은 항목으로 옮긴다.
+    kept_by, alias, deduped = {}, {}, []
+    for src, it in items:
+        key = (it["layer"], it["category"], it["anchor"], it["disposition"], it["summary"])
+        first = kept_by.get(key) if src == "critic" else None
+        if first is None:
+            if src == "critic":
+                kept_by[key] = it
+            deduped.append((src, it))
+        elif first["detector"] != it["detector"]:
+            ev("absorbed", "critic#%s:%s" % (it["detector"], it["ref"]), "critic#%s:%s" % (first["detector"], first["ref"]))
+            alias[it["ref"]] = first["ref"]
+        else:
+            deduped.append((src, it))
+    items = deduped
     # 익명화 — 출처 순서를 복원할 수 없게 정렬한다(P9)
     items.sort(key=lambda t: (t[1]["layer"], t[1]["anchor"], t[1]["category"],
                               hashlib.sha1(t[1]["summary"].encode("utf-8")).hexdigest()))
     ref2f = {(src, it["ref"]): "f%d" % k for k, (src, it) in enumerate(items, 1)}
+    for dropped, kept in alias.items():
+        ref2f[("critic", dropped)] = ref2f[("critic", kept)]
     pending = []
     for k, (src, it) in enumerate(items, 1):
         pub = dict(it)
         pub["f"] = "f%d" % k
-        pub["blocks"] = [ref2f.get((src, r), r) for r in it["blocks"]]
+        mapped = []
+        for r in it["blocks"]:
+            if (src, r) in ref2f:
+                mapped.append(ref2f[(src, r)])
+            else:
+                # 없는 항목을 막는다는 참조 — 리뷰어(@d)·블록(@b) 꼬리표를 떼고 싣는다. 풀리지 않는 참조는
+                # finalize 의 `_remap_blocks` 가 어차피 버린다(계수 없음 — 예전과 같다).
+                mapped.append(r.split("@")[0])
+        pub["blocks"] = mapped
         pub.pop("ref", None)
         det = pub.pop("detector", None)   # 재비판에 가는 사본에는 출처 리뷰어를 싣지 않는다
         pending.append({"f": pub["f"], "source": src, "detector": det,
@@ -862,8 +895,16 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats, advice_stats=
         adv.append("기각 경로 0 — 오탐이 걸러지지 않았다 (doc-recritic %s)" % degrade["recritic_dead"])
     det = degrade.get("detectors")
     if det and det.get("dead") and not degrade.get("critic_dead"):
-        adv.append("탐지 %d 중 %d 사망 (%s)" % (det["expected"], len(det["dead"]),
-                   ", ".join(map(lambda kv: "d%s: %s" % kv, sorted(det["dead_reasons"].items())))))
+        # 같은 사실의 원장 문구(입력 실패(보조): doc-critic#i)는 이 한 줄이 대신 말한다 — 계수는 원장에 남는다
+        kept = []
+        for w in adv:
+            if not w.startswith("입력 실패(보조): doc-critic#"):
+                kept.append(w)
+        adv[:] = kept
+        why_parts = []
+        for k, v in sorted(det["dead_reasons"].items()):
+            why_parts.append("d%s: %s" % (k, v))
+        adv.append("탐지 %d 중 %d 사망 (%s)" % (det["expected"], len(det["dead"]), ", ".join(why_parts)))
     if degrade.get("layer2_missing"):
         adv.append("상세 미검증 — 층 2 블록 없음")
     if st["snapshots"][str(n)].get("headingless"):
