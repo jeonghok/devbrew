@@ -234,7 +234,7 @@ class TestData(unittest.TestCase):
         rc, err = run_validate(bad)
         self.assertEqual(rc, 1, f"axis=True(bool)가 axis 1로 통과 (bool is int subclass):\n{err}")
 
-    def test_refutation_null_is_clean_red_not_crash(self):  # C (/qg 2026-07-20 round-2 + codex re-verify)
+    def test_refutation_null_is_clean_red_not_crash(self):  # C (qg 2026-07-20 round-2 + codex re-verify)
         # code-reviewer + silent-failure-hunter: `f.get("refutation", {}).get("gate")`는 키 *부재*시만 {}.
         # `"refutation": null`이면 None.get()가 AttributeError → traceback(깨끗한 RED가 아닌 크래시).
         # codex re-verify(R3): `or {}`조차 truthy non-dict(문자열·리스트)는 통과시켜 여전히 크래시.
@@ -250,7 +250,7 @@ class TestData(unittest.TestCase):
             self.assertEqual(rc, 1, f"비-dict refutation({bad_ref!r})이 clean RED로 안 잡힘:\n{err}")
             self.assertIn("refutation", err, f"malformed refutation 사유가 stderr에 없음:\n{err}")
 
-    def test_missing_claude_source_verdict_is_red(self):  # SF2 (/qg 2026-07-20 round-2)
+    def test_missing_claude_source_verdict_is_red(self):  # SF2 (qg 2026-07-20 round-2)
         # silent-failure-hunter: 완결성(40-47)은 any-source 존재만, B7(53-59)은 codex-source 존재만
         # 강제한다. 대칭인 claude-source 존재 검사가 없어, backfill 회귀로 dead Claude 축이 codex 답변에
         # 가려져도 validate가 GREEN. D2의 claude 판정만 제거(codex는 유지) → fix 후 RED여야.

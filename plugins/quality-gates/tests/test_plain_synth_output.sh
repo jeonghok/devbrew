@@ -81,7 +81,7 @@ out="$(rf_synth "$T/aux" --recritic-diff "$T/aux/없는.diff" 2>/dev/null)"
 assert_eq "$(first "$out")" "리뷰를 합쳤다 — 지적 없음. 판정을 막지 않는 경고가 있다 — 아래를 본다." "R16: 막지 않는 경고도 첫 줄에 말한다"
 assert_grep "$out" '공시\(판정을 막지 않음\)' "R16: 그 경고의 본문(degrade 공시)이 아래에 있다(양성 짝)"
 
-# ④b 주 입력이 죽었다 — 아무도 확인하지 않은 것을 「지적 없음」이라고 말하지 않는다(설계 §3 원칙 3 · 합친 /qg #2)
+# ④b 주 입력이 죽었다 — 아무도 확인하지 않은 것을 「지적 없음」이라고 말하지 않는다(설계 §3 원칙 3 · 합친 qg #2)
 mkdir -p "$T/dead"; printf '[]\n' > "$T/dead/findings.yaml"; rf_prep "$T/dead"; rf_reply "$T/dead" 'verdicts: []'
 out="$(python3 "$SYNTH" --findings "$T/dead/없는.yaml" --recritic "$T/dead/reply.txt" --recritic-map "$T/dead/map.json" 2>/dev/null)"
 assert_eq "$(first "$out")" "리뷰를 합쳤다 — 읽지 못한 입력이 있어 지적 수를 확정하지 못했다. 판정을 막는 경고가 있다 — 아래를 본다." "#2: 주 입력 사망의 첫 줄은 확정하지 못했다고 말한다"
@@ -154,5 +154,5 @@ assert_not_contains "$err" "cannot create pipeline state" "R10: 옛 영어 세�
 err="$(cd "$T/w" && bash "$SETUP" --session-id 'bad id' 2>&1 >/dev/null)"
 assert_contains "$err" "가 허용 모양([A-Za-z0-9_-]{8,})이 아니다(fails pattern guard)." "R10: 세션 ID 모양 오류"
 err="$(cd "$T/w" && DEVBREW_QUALITY_GATES_DISABLE=1 bash "$SETUP" 2>&1 >/dev/null)"
-assert_contains "$err" "DEVBREW_QUALITY_GATES_DISABLE=1 이 켜져 있어 /qg 를 시작하지 않는다(setup-qg disabled)." "R10: kill switch 거부 줄"
+assert_contains "$err" "DEVBREW_QUALITY_GATES_DISABLE=1 이 켜져 있어 /quality-gates:quality-pipeline 을 시작하지 않는다(setup-qg disabled)." "R10: kill switch 거부 줄"
 finish

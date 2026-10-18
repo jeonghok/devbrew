@@ -136,7 +136,7 @@ def _walk_hook_commands(data):
 def _hooks_killswitch_present(pd):
     # CLAUDE.md §런타임 "모든 훅에 kill switch" — 여기서 "훅"은 hooks.json이 **등록한** 스크립트다.
     # hooks/ 아래를 통째 rglob하면 tests/·__init__.py·비-등록 공유 헬퍼까지 훅으로 오인해
-    # 정상 플러그인에 거짓 "kill switch 부재"를 낸다 (/qg 2026-07-20 codex, over-glob)
+    # 정상 플러그인에 거짓 "kill switch 부재"를 낸다 (qg 2026-07-20 codex, over-glob)
     # → hooks.json의 command가 가리키는 스크립트만 검증한다.
     # 당시의 실측 사례는 spec-distill 의 `state_path.py` 였다. 그 파일은 이후 그 플러그인의
     # `scripts/` 로 옮겨졌고, 지금은 어느 플러그인의 hooks/ 에도 비-등록 `.py` 가 없다 —

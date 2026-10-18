@@ -59,7 +59,7 @@ for f in excluded.md differential.yaml differential-not-counted.md verdict.out i
   [ -e "$RDIR/$f" ] && no "(a) 앞 실행의 $f 가 남았다" || ok "(a) 앞 실행의 $f 가 없다"
 done
 
-# (b) /qg 의 setup 이 막 만든 폴더(판정 없음) — result.md 는 그대로, 실행 단위 파일은 지운다
+# (b) /quality-gates:quality-pipeline 의 setup 이 막 만든 폴더(판정 없음) — result.md 는 그대로, 실행 단위 파일은 지운다
 seed_prev 0
 ( cd "$T" && CLAUDE_PLUGIN_ROOT="$QGP" CLAUDE_CODE_SESSION_ID="$SID" bash "$RUN" ) >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "0" "(b) P2 펜스가 새 폴더 위에서 0 으로 끝난다"

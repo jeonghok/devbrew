@@ -1,6 +1,6 @@
 # 로컬 결과 `result.md`
 
-`.claude/quality-gates/<session-id>/result.md` 는 한 번의 `/qg` 가 남기는 로컬 결과다. 게시
+`.claude/quality-gates/<session-id>/result.md` 는 한 번의 `/quality-gates:quality-pipeline` 이 남기는 로컬 결과다. 게시
 코멘트에 실리지 않는 것 — 지적 전부(SUGGESTION 포함) · 제외 패치 · 차등 요약 — 이 여기 남는다.
 
 `<session-id>` 는 `$CLAUDE_CODE_SESSION_ID` 이고 `[A-Za-z0-9_-]{8,}` 를 통과해야 한다. 형제 폴더는
@@ -45,7 +45,7 @@ started_at: "<ISO-8601 UTC>"
 
 <게시 펜스가 낸 줄 하나 — `posted: <url>` · `skipped: <사유>` · `skipped: aborted` · `게시 안 함 — …` ·
  `게시 결과 불명 — sink 출력 계약 위반(rc N)`. `게시 안 함 — …` 에는
- `게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커밋과 다르다 — 커밋·푸시 뒤 다시 /qg)` 가 든다>
+ `게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커밋과 다르다 — 커밋·푸시 뒤 다시 /quality-gates:quality-pipeline)` 가 든다>
 ```
 
 ## 생명주기

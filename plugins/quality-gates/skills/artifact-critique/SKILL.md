@@ -76,9 +76,9 @@ allowed-tools:
 classify_artifact_target.py <path>
 ```
 
-- `classification: code` → **종료**: `> [quality-gates] '<path>'는 코드 파일로 보입니다. 코드 리뷰는 /qg (Review 게이트)로 실행하세요.` (비-코드 전용 모드라 코드는 자율 커밋 루프에 넣지 않음.)
+- `classification: code` → **종료**: `> [quality-gates] '<path>'는 코드 파일로 보입니다. 코드 리뷰는 /quality-gates:quality-pipeline 으로 실행하세요.` (비-코드 전용 모드라 코드는 자율 커밋 루프에 넣지 않음.)
 - `classification: non_code` → 진행.
-- `classification: ambiguous` → E3 *이전에* `AskUserQuestion`으로 확인: *"이 파일(`<path>`)을 산출물로 비평할까요? (코드라면 /qg를 쓰세요.)"* — **예** 확인 없이 자율 루프 진입 금지. "아니오"면 종료.
+- `classification: ambiguous` → E3 *이전에* `AskUserQuestion`으로 확인: *"이 파일(`<path>`)을 산출물로 비평할까요? (코드라면 /quality-gates:quality-pipeline 을 쓰세요.)"* — **예** 확인 없이 자율 루프 진입 금지. "아니오"면 종료.
 
 ### E2 — 브랜치 안전 (project_dir 좌표 freeze)
 

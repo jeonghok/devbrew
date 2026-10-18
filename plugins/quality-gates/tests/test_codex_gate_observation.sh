@@ -232,7 +232,7 @@ for i in "${!GATED_RUNNER[@]}"; do
     *) no "$label: 미설치 → codex ${n}회" ;;
   esac
 
-  # 버전 바닥 미달 — **계측 가능한** below-floor mock 을 쓴다 (C1, /qg 2026-08-13).
+  # 버전 바닥 미달 — **계측 가능한** below-floor mock 을 쓴다 (C1, qg 2026-08-13).
   # 예전에는 `mocks/below-floor/codex` 를 썼는데 그 mock 은 CODEX_CAPTURE_DIR 에
   # 아무것도 쓰지 않는다. 그래서 아래 `0` 기대값은 "게이트가 막았다" 와 "게이트가
   # 발화했는데 실행된 바이너리가 캡처를 안 한다" 를 구별하지 못했다 — 죽은 계측기의

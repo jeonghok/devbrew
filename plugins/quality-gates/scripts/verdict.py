@@ -81,7 +81,7 @@ def read_or_none(path):
         # UnicodeDecodeError 는 ValueError 의 하위이지 OSError 가 아니다 — 위 절만
         # 두면 비-UTF-8 입력이 raw traceback + exit 1 로 이 docstring 이 금지한
         # 0/2/4 계약을 그대로 탈출한다. 형제 `diff-test-results.py` 의
-        # `read_text_or_fail4`(75-82행)는 이미 이 절을 갖고 있다(/qg iter-7 M2) —
+        # `read_text_or_fail4`(75-82행)는 이미 이 절을 갖고 있다(qg iter-7 M2) —
         # 여기만 없었던 것이 이번 라운드에서 잡힌 결함이다.
         fail4(f"차등 산출물이 UTF-8 이 아님: {path} ({exc})")
 

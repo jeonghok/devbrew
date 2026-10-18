@@ -145,7 +145,7 @@ class TestShapeCompleteness(unittest.TestCase):
             self.assertFalse(gaps["skills_cost_class"]["present"],
                              "frontmatter에 cost_class 없는데 본문 언급이 present=True로 통과 (header-satisfiable)")
 
-    def test_hooks_killswitch_ignores_non_registered_files(self):  # F (/qg 2026-07-20 round-2)
+    def test_hooks_killswitch_ignores_non_registered_files(self):  # F (qg 2026-07-20 round-2)
         # codex: _hook_scripts가 hooks/ 아래를 통째 rglob해 tests/·__init__.py·헬퍼(비-등록 파일)까지
         # 훅으로 오인 → 정상 플러그인(project-init·spec-distill)에 거짓 "kill switch 부재" 사실. hooks.json이
         # 등록한 command 스크립트만 봐야 한다. 등록 훅(real-hook.py)엔 kill switch 있음, 비-등록 tests/엔 없음.

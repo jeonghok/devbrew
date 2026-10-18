@@ -245,7 +245,7 @@ case_readme_describes_the_e2e_stage() {
 case_readme_states_the_e2e_limits() {
   assert_file_grep "$README" '^- e2e `stop` 은 승인된 명령이 띄운 프로세스 그룹을 내린다\. .*고르지 않는다\.$' "README: 데몬 · 남은 앱 한계 줄(독립 bullet)"
   assert_file_grep "$README" '^- e2e 남은 앱: .*남을 수 있다\.$' "README: 남은 앱 고아 한계"
-  assert_file_grep "$README" '^- e2e 남은 앱: .*다른 세션의 `/qg` 는 앞 세션의 폴더를 보지 않으므로' "M4: 다른 세션의 /qg 는 남은 앱을 내리지 않는다"
+  assert_file_grep "$README" '^- e2e 남은 앱: .*다른 세션의 `/quality-gates:quality-pipeline` 은 앞 세션의 폴더를 보지 않으므로' "M4: 다른 세션의 /quality-gates:quality-pipeline 은 남은 앱을 내리지 않는다"
   assert_file_grep "$README" '^- e2e 남은 앱: .*내리지 못하면 사유를 출력한 뒤 pgid 기록이 든 폴더를 지우므로' "M4: setup 백스톱이 stop 실패 뒤 기록을 지운다"
   assert_file_absent "$README" '`--ensure` 경로로 들어오면' "M4: 옛 「--ensure 경로」 고아 문장이 없다(P2 가 내린다)"
   assert_file_grep "$README" '^- e2e 증거 판독: .*`—` · `none` 같은 글자는 증거로 읽혀 `충족` 이 그대로 남는다\.$' "M4: 닫힌 증거 없음 목록"

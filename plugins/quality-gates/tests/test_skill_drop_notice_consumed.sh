@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 생산자와 소비자를 **한 락에서 함께** 잰다.
 #
-# 2026-08-05 /qg 라운드 2가 드러낸 반쪽 수정: `synthesize_findings.py`의 render()가
+# 2026-08-05 qg 라운드 2가 드러낸 반쪽 수정: `synthesize_findings.py`의 render()가
 # drop 공지를 내도록 고쳤고 그 락(`test_synthesize_promoted_findings.sh` 10/10b)도
 # GREEN이었는데, **유일한 소비자인 SKILL은 그 줄을 읽지 않았다**. step 4.5가 counts
 # line과 `No high-confidence findings…` 두 줄만 보고 분기했으므로, 버려진 CRITICAL

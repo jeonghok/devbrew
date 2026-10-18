@@ -222,7 +222,7 @@ assert_eq "$(printf '%s\n' "$e" | grep -c .)" "1" "E1: 마커 목록을 못 읽�
 assert_eq "$(snap "$WB")" "$before" "E1: 마커 목록을 못 읽으면 아무것도 지우거나 쓰지 않는다"
 
 note "── E1(자기 세션): 이 세션의 폴더는 마커 없이도 다시 만들고, 다른 세션의 폴더는 받지 않는다"
-# 게시 펜스는 같은 세션 폴더에 마커가 아닌 파일(comment.md)을 쓴다 — 그 뒤의 /qg 가 막히면 안 된다.
+# 게시 펜스는 같은 세션 폴더에 마커가 아닌 파일(comment.md)을 쓴다 — 그 뒤의 /quality-gates:quality-pipeline 이 막히면 안 된다.
 OWN="ownsession0001"
 for how in env same-arg; do
   WO="$TMP/e1own-$how"; mkdir -p "$WO/.claude/quality-gates/$OWN"

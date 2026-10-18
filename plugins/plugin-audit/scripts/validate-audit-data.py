@@ -49,7 +49,7 @@ def validate_data(data: dict) -> list:
         if x.get("verdict") not in VALID_VERDICT:
             errs.append(f"{x.get('id')}/{x.get('source')} verdict 무효: {x.get('verdict')}")
 
-    # claude-source 완결성 (SF2 — LD4 dead-axis masking backstop, /qg 2026-07-20):
+    # claude-source 완결성 (SF2 — LD4 dead-axis masking backstop, qg 2026-07-20):
     # 위 완결성 루프는 any-source 존재만, B7(아래)은 codex-source 존재만 강제한다. 대칭인
     # claude-source 검사가 없어, assemble backfill이 회귀해 dead Claude 축이 codex 답변에
     # 가려지면(codex만 있고 claude 부재) 두 검사 모두 통과해 validate가 GREEN이 된다 — dead 축은

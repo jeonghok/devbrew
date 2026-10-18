@@ -75,4 +75,4 @@ Default: **merge commit**
 ## Plugin Integration
 
 - **commit-commands**: 간소화된 PR 생성을 위해 `/commit-push-pr` 사용
-- **quality-gates** (설치 시): PR 을 연 뒤 `/qg` 를 직접 실행하면 리뷰 · 차등 테스트 · 판정 뒤 그 PR 에 새 코멘트 하나(이해글 + 판정 줄)를 남긴다
+- **quality-gates** (설치 시): PR 을 연 뒤 `/quality-gates:quality-pipeline` 을 직접 실행하면 리뷰 · 차등 테스트 · 판정 뒤 그 PR 에 새 코멘트 하나(이해글 + 판정 줄)를 남긴다

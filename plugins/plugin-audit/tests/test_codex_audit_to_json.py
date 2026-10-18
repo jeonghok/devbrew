@@ -49,7 +49,7 @@ class TestCodexAuditToJson(unittest.TestCase):
                       "정상 실행은 양성 성공 표식을 가져야 한다")
 
     def test_missing_collections_are_schema_mismatch_not_clean(self):
-        """E2 (/qg 2026-08-13): 키 부재는 `[]` 기본값이 아니라 schema_mismatch 다.
+        """E2 (qg 2026-08-13): 키 부재는 `[]` 기본값이 아니라 schema_mismatch 다.
 
         이 테스트는 원래 `codex_failed: False` 를 못 박고 있었다 — 즉 **결함을
         인코딩하고 있었다**. 이 추출기가 동봉하는 preamble 은 "어떤 키도 생략하지

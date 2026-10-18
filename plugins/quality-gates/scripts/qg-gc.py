@@ -2,7 +2,7 @@
 """TTL-based GC for quality-gates per-session state folders.
 
 Trigger (must be explicit, never SessionStart):
-  - setup-qg.sh start — every `/qg` (auto, fire-and-forget)
+  - setup-qg.sh start — every `/quality-gates:quality-pipeline` (auto, fire-and-forget)
 
 Race guard: 3-layer (state root 디렉토리 fd 락 + double-stat ns + rename-then-rmtree).
 락 파일은 없다 — 루트 아래 고정 이름 파일은 저장소가 링크로 커밋할 수 있어서 열지 않는다.
@@ -47,7 +47,7 @@ SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
 SESSION_MARKERS = ("result.md",)
 
 # 4.x 가 남긴 폴더는 유일한 파일이 `files.md` 인 경우가 있다 — 세션 tracker 가 편집
-# 파일을 적었지만 `/qg` 를 한 번도 안 돌린 세션이다. 5.0.0 이 그 생산자를 지워도
+# 파일을 적었지만 `/quality-gates:quality-pipeline` 을 한 번도 안 돌린 세션이다. 5.0.0 이 그 생산자를 지워도
 # **이미 디스크에 있는 폴더는 남는다**: 위 마커가 하나도 안 맞아 sweep 에서 매번
 # `continue` 되고, 기존 사용자 전원에게 영구 누수가 된다. 회수 마커를 따로 둔다.
 #
@@ -90,7 +90,7 @@ def gc(self_session_id: str | None = None) -> int:
     # 탈출 판정이 존재 검사보다 먼저다 — 매달린 루트 링크나 밖에 루트가 아직 없는 `.claude`
     # 링크에서 조용히 끝나면, 뒤이은 `setup-qg.sh` 의 `mkdir -p` 가 링크 너머에 폴더를 만드는
     # 동안 아무도 모른다. realpath 는 없는 경로도 풀므로 `.claude` 가 없는 저장소는 거부되지 않는다.
-    # 링크 대상은 옮겨 적지 않는다 — 저장소가 정한 문자열이고, 이 줄은 `/qg` 시작 경로에서 보인다.
+    # 링크 대상은 옮겨 적지 않는다 — 저장소가 정한 문자열이고, 이 줄은 `/quality-gates:quality-pipeline` 시작 경로에서 보인다.
     if root_escapes(ROOT, "quality-gates"):
         print(
             f"[quality-gates] GC 거부 — state root '{ROOT}' 가 심볼릭 링크를 거쳐 제자리 밖으로 "

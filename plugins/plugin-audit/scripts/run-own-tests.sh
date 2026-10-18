@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 자체 테스트 격리 어댑터 — 같은 플러그인의 audit-sandbox.sh 샌드박스 + 120s 타임아웃(호출자 감쌈).
 #
-# ⚠️ 알려진 보안 한계 (KNOWN LIMITATION — /qg 2026-07-20 적발, CRITICAL, 수정 연기):
+# ⚠️ 알려진 보안 한계 (KNOWN LIMITATION — qg 2026-07-20 적발, CRITICAL, 수정 연기):
 #   이 스크립트는 감사 대상(적대적일 수 있음)의 자체 테스트를 `python3 -m unittest`로
 #   **실행**한다. 그러나 "샌드박스"는 audit-sandbox.sh의 `git worktree add --detach HEAD`
 #   일 뿐 프로세스/네트워크/uid 격리가 없다 — mutation-guard는 repo-delta만 보므로 repo에

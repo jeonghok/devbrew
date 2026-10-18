@@ -55,7 +55,7 @@ git symbolic-ref --quiet HEAD        >/dev/null 2>&1 || emit_degraded
 [[ "$(git rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]] && emit_degraded
 
 base=""; base_ref=""
-# /qg iter-7 (M6): `symbolic-ref` 는 **대상의 존재를 검증하지 않는다.** master→main
+# qg iter-7 (M6): `symbolic-ref` 는 **대상의 존재를 검증하지 않는다.** master→main
 # rename 뒤 흔히 남는 dangling `origin/HEAD` 가 여기서 성공해 `base_ref=origin/master`
 # 를 세우고, 아래 `merge-base` 가 실패해 `degraded: yes` 가 난다 — `origin/main` 이
 # 멀쩡한데도 fallback 체인 전체가 도달 불가가 된다. 방향은 fail-closed 지만, 이것이

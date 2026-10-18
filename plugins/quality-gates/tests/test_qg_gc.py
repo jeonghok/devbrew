@@ -206,7 +206,7 @@ class TestQgGc(unittest.TestCase):
         self.assertFalse(folder.exists(), "옛 표지 pipeline.md 만 가진 만료 폴더도 지워진다")
 
     # M2 — 업그레이드 누수. 4.x 가 남긴 폴더는 유일한 파일이 `files.md` 인 경우가
-    # 있다(세션 tracker 가 파일을 적었지만 /qg 를 한 번도 안 돌린 세션). 5.0.0 이
+    # 있다(세션 tracker 가 파일을 적었지만 /quality-gates:quality-pipeline 을 한 번도 안 돌린 세션). 5.0.0 이
     # 그 생산자를 지워도 **이미 디스크에 있는 폴더는 남는다** — 어느 마커도 안 맞아
     # 영원히 회수되지 않는다. 기존 사용자 전원에게 실재하는 누수다.
     def test_legacy_4x_files_md_folder_collected(self):
@@ -595,7 +595,7 @@ class QgGcRootSafetyTest(unittest.TestCase):
 
     def test_n_refusal_line_does_not_echo_link_target(self):
         # 거부 줄은 링크가 가리키는 곳을 옮겨 적지 않는다 — 그 이름은 저장소가 정한 문자열이고,
-        # 이 stderr 는 `/qg` 시작 경로에서 모델에게 보인다.
+        # 이 stderr 는 `/quality-gates:quality-pipeline` 시작 경로에서 모델에게 보인다.
         self.root.rmdir()
         target = self.P / "INJECTMARK-target"
         target.mkdir()
@@ -609,7 +609,7 @@ class QgGcRootSafetyTest(unittest.TestCase):
 
 class SetupForwardsGcStderr(unittest.TestCase):
     def test_setup_gc_call_does_not_discard_stderr(self):
-        # GC 의 거부 · 락 실패 줄은 `/qg` 시작마다 도는 이 자동 경로에서 보여야 한다.
+        # GC 의 거부 · 락 실패 줄은 `/quality-gates:quality-pipeline` 시작마다 도는 이 자동 경로에서 보여야 한다.
         setup = GC.parent / "setup-qg.sh"
         # GC «실행» 줄만 센다 — qg-gc.py 를 프로그램으로 돌리는 줄(`python3 <경로>/qg-gc.py`).
         # 마커 목록을 읽는 importlib 로더나 거부 문구의 언급은 실행이 아니다.

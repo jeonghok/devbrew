@@ -171,7 +171,7 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     # validate의 B7은 부재를 fail-closed로 취급한다(validate-audit-data.py의 B7 주석 참조).
     codex_meta = dict(out_meta.get("codex") or {})
     codex_meta.setdefault("ran", False)
-    # ── E5 (/qg 2026-08-13 whole-branch 리뷰): 산출자는 있고 소비자가 없었다 ──────
+    # ── E5 (qg 2026-08-13 whole-branch 리뷰): 산출자는 있고 소비자가 없었다 ──────
     # `codex_audit_to_json.py` 는 실패를 `meta.codex_failed`/`meta.reason` 으로
     # 성실히 기록하지만, 이 조립기는 그 값을 **한 번도 읽지 않고** 곧바로
     # `setdefault("failed", False)` 로 넘어갔다. 즉 러너가 실패로 기록한 run 도

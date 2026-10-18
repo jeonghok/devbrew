@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/artifact-critique/SKILL.md plugins/quality-gates/README.md plugins/quality-gates/references/e2e.md
 #
-# 쉬운 말 출력 설계 §4 · AC6 — /qg 의 질문 셋 · 완료 표 · 모델이 그대로 내는 문구가 한국어이고,
+# 쉬운 말 출력 설계 §4 · AC6 — /quality-gates:quality-pipeline 의 질문 셋 · 완료 표 · 모델이 그대로 내는 문구가 한국어이고,
 # 완료 보고와 비평 최종 보고가 첫 줄 상태 · 끝 할 일 하나를 지시받는다. e2e 걷기 직후 게이트(④)가
 # 부르는 Fix-loop 선택지도 같은 라벨이다.
 # 부재 단언마다 같은 자리의 양성 짝이 있다(부재 락은 통째로 지워도 통과한다).
@@ -71,7 +71,7 @@ assert_not_contains "$SF" "the publish result line is the run's last output." "�
 # ⑤ 모델이 그대로 내는 문구 — trivia 줄 · 범위 줄 · 범위 경고
 assert_contains "$SF" '건너뛴다: `작은 수정이라 파이프라인을 건너뛰었다(trivia diff) — <한 문장 설명>.` 을 보이고' "AC6: trivia 줄이 한국어다"
 assert_file_absent "$S" 'Trivia diff — pipeline skipped' "AC6: 옛 trivia 줄이 없다"
-assert_file_grep "$S" '> 리뷰 범위: 이번 세션에서 바뀐 파일 <COUNT>개\. 브랜치 전체를 보려면 /qg branch\.' "AC6: session 범위 줄"
+assert_file_grep "$S" '> 리뷰 범위: 이번 세션에서 바뀐 파일 <COUNT>개\. 브랜치 전체를 보려면 /quality-gates:quality-pipeline branch\.' "AC6: session 범위 줄"
 assert_file_grep "$S" '> 리뷰 범위: 토픽 <topic_key> — 바뀐 파일 <COUNT>개 · 구성원 <branches>\.' "AC6: topic 범위 줄"
 assert_file_absent "$S" 'Review scope: (session|topic)' "AC6: 옛 범위 줄이 SKILL 에 없다"
 assert_file_absent "$RM" 'Review scope: (session|topic)' "AC6: 옛 범위 줄이 README 에 없다"

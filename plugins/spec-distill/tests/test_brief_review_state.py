@@ -240,7 +240,7 @@ class TestLedgerKeyOverride(Base):
 
 
 class TestDegradationLedgerValueValidation(unittest.TestCase):
-    """/qg iter-1 IMPORTANT — degradation 원장만 값 검증이 없던 결함.
+    """qg iter-1 IMPORTANT — degradation 원장만 값 검증이 없던 결함.
 
     `brief_review_degradations`는 `[]`/`[ ]`만 특수 처리하고 **그 외 스칼라는 전부
     record 스캔으로 흘러가** 빈 리스트를 반환했다.

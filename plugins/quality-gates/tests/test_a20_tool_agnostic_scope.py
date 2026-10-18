@@ -1,4 +1,4 @@
-"""A20 — Bash 로 쓴 파일이 `/qg` 기본 scope 에 들어간다.
+"""A20 — Bash 로 쓴 파일이 `/quality-gates:quality-pipeline` 기본 scope 에 들어간다.
 
 설계 §12 는 A20 을 헤드리스 턴으로 재라고 적었고, 그 측정은 여기서 대체하지 않는다.
 이 락이 재는 것은 **그 결과를 참으로 만드는 메커니즘**이다: 기본 scope 가 git 에서

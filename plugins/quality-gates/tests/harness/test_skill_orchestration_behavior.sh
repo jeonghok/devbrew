@@ -386,7 +386,7 @@ assert_order "Surface findings precedes iter-boundary decision" "$surface_line" 
 
 # 대상 소멸 (Task 7, AC1) — v2.4.0 Decision 1(gate-scope question, 'both gates'
 # anchor) · Dispatch Loop 참조(Decision 1 / short-circuit) · F1(단일-게이트
-# `/qg runtime` 의 R5a⁰ manifest 초기화) · F2(review-only 의 gate-scope-conditional
+# `qg runtime` 의 R5a⁰ manifest 초기화) · F2(review-only 의 gate-scope-conditional
 # 옵션 대체) · C4(effective_skip_runtime 배선 ≥3회) · F7(clean-exit 의 gate-scope
 # 라우팅)이 이 자리에 있었다. 한 파이프라인에는 게이트 범위가 없다 — 이 여섯 락
 # 전부가 지키던 SKILL.md 표면이 사라졌다(Flow 절이 후계 — 단일 흐름).

@@ -105,7 +105,7 @@ python3 "$SCRIPT" "$FX/nonexistent.md" >/dev/null 2>&1
 rc3=$?
 [[ "$rc3" == "2" ]] && ok "부재 파일 거부 (exit 2)" || no "부재 파일이 exit $rc3 (2가 아님)"
 
-# === /qg iter-1 CRITICAL : 읽기 실패는 문서화된 exit 2 (1이 아니다) ==========
+# === qg iter-1 CRITICAL : 읽기 실패는 문서화된 exit 2 (1이 아니다) ==========
 # 결함: `path.read_text(encoding="utf-8")`가 try 밖에 있어 비-UTF-8 payload가
 # uncaught UnicodeDecodeError → Python 기본 **exit 1**을 냈다. 호출 SKILL의 표는
 # 0/2/3만 라우팅하므로 1은 어느 분기에도 안 걸리고, `BLOB`이 빈 문자열인 채로

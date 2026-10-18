@@ -22,7 +22,7 @@ SD="$REPO_ROOT/plugins/spec-distill"
 # 원래 이 루프는 두 SKILL을 하드코딩했다. 그래서 `scripts/run_brief_codex_reviewer.sh`
 # 가 같은 스위치를 독립 확인하는 **세 번째 소비자**인데도 커버리지가 0이었다 —
 # 거기 스위치를 `if false`로 죽여도 이 락과 test_brief_codex_axes.sh 둘 다 GREEN이었다
-# (2026-08-04 /qg 라운드 1, mutation 확인). 열거는 공간에도 시간에도 fail-open이다.
+# (2026-08-04 qg 라운드 1, mutation 확인). 열거는 공간에도 시간에도 fail-open이다.
 #
 # 도출 기준은 "스위치를 언급하는가"가 **아니다** — 그건 순환이다(스위치를 지우면
 # 목록에서도 사라져 GREEN이 난다). 기준은 **웹에 도달할 수 있는가**이다:
@@ -304,7 +304,7 @@ fi
 
 # (b) 웹 도구 agent를 dispatch하는 skill
 #
-# 앵커를 **피검자 손에서 뺏는다** (2026-08-05 /qg 라운드 2, adversarial meta_note):
+# 앵커를 **피검자 손에서 뺏는다** (2026-08-05 qg 라운드 2, adversarial meta_note):
 #   예전 판정은 `grep -q "spec-distill:$a"` 였다. 그러면 접두사 없이
 #   `subagent_type: "spec-reviewer"` 로 쓴 저자는 **자기 skill을 감사 대상에서
 #   스스로 빼낸다** — 검사받는 파일이 자기가 검사받을지를 결정하는 구조다.
