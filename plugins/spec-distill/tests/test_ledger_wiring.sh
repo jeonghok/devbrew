@@ -81,39 +81,72 @@ assert_eq "$(cksum < "$SDIR/docreview-state.md")" "$before" "AC8: 표지 없음 
 
 # AC8 — 엔진 쓰기 하위 명령 앞에 같은 펜스의 표지 확인이 있다(정적). 판정은 하위 명령 «이름»으로만 한다.
 # 읽기 전용은 아래 허용 목록뿐이고 그 밖의 엔진 하위 명령은 전부 쓰기다(새 하위 명령은 기본이 쓰기다).
-# 엔진을 부르는 줄에 넘기기(`>`)가 있으면 읽기 · 쓰기와 무관하게 거부한다 — 결과는 `$(…)` 로 받는다.
-# mktemp · 재대입 · `||` 갈래를 파싱하지 않는다(줄 이음만 합친다).
+# 읽지 못하는 것은 막는 쪽으로 닫는다 — 엔진 스크립트 이름이 `"$변수/scripts/<이름>.py" <하위명령>` 꼴이 아닌 자리
+# (변수에 든 이름 · 작은따옴표 · eval · python3 -m · bash -c)는 「읽을 수 없는 엔진 호출」로 거부하고, 하위 명령이
+# 없거나 따옴표 · 변수면 쓰기로 본다. 첫 줄이 정확히 ```bash 인 펜스(0열, 뒤 공백 · CR 없음)만 검사 대상이라,
+# 그 밖의 펜스(```sh · 들여쓴 펜스 · 꼬리 공백 · CRLF)에 엔진 이름이 있으면 「검사 밖 펜스의 엔진 호출」로 거부한다.
+# 처분 한 줄(`**처분** — consumer=…`)은 경로를 이름으로 댈 뿐이라 검사 밖 펜스에서도 뺀다. 펜스 밖 산문은 읽지 않는다. 엔진을 부르는 줄의 같은 줄 넘기기(`>`)는 읽기 · 쓰기와 무관하게 거부한다 — 결과는
+# `$(…)` 로 받는다. 줄 이음(`\`)만 합치고 mktemp · 재대입 · `||` 갈래는 파싱하지 않는다.
+# 이 락의 범위 밖(AC17 · 엔진 밖 원장 쓰기): `| tee` · `exec >` · `{ … } >` · `$(…)` 로 받은 값을 `printf >` 로
+# 원장 폴더에 쓰는 줄. 같은 줄 `>` 만 본다.
 GUARDED="$SR $RB $FIN $SD/skills/request-framing/SKILL.md"
-ac8_scan() {   # ac8_scan <파일> → rc 0 이면 확인 없는 쓰기와 넘기기가 없다
+ac8_scan() {   # ac8_scan <파일> → rc 0 이면 확인 없는 쓰기 · 넘기기 · 읽을 수 없는 엔진 호출이 없다
   python3 -I - "$1" <<'PY'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
 READ_ONLY = {"advice-list", "gate", "related-changes", "state-dir-for", "profile-check", "gate-rows", "exempt-anchors"}
-ENGINE = re.compile(r'(docreview_state|docreview_route|docreview_anchor)\.py"?\s+([a-z][a-z-]*)')
+NAME = re.compile(r'docreview_(?:state|route|anchor)')
+CALL = re.compile(r'"\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/scripts/docreview_(?:state|route|anchor)\.py"(?:[ \t]+([a-z][a-z-]*)(?![A-Za-z0-9_$"\'-]))?')
 GUARD = 'ledger_marker.py" check --dir "$STATE_DIR"'
+DISPOSITION = re.compile(r'^[ \t]*(?://|#)?[ \t]*\*\*처분\*\* —')
+FENCE = re.compile(r'^[ \t]*(`{3,}|~{3,})')
 bad = []
-for body in re.findall(r"^```bash\n(.*?)^```$", text, re.S | re.M):
+fences, cur = [], None
+for ln in text.split("\n"):
+    if cur is None:
+        m = FENCE.match(ln)
+        if m:
+            cur = {"mark": m.group(1), "scan": ln == "```bash", "lines": []}
+    else:
+        if ln.strip() == cur["mark"]:
+            fences.append(cur); cur = None
+        else:
+            cur["lines"].append(ln)
+if cur is not None:
+    fences.append(cur)
+for fc in fences:
+    if not fc["scan"]:
+        for ln in fc["lines"]:
+            if DISPOSITION.match(ln) and not re.search(r'[;&|`]|\$\(', ln):
+                continue        # 처분 한 줄은 소비자 경로를 이름으로 댄다 — 부르는 줄이 아니다
+            if NAME.search(ln):
+                bad.append("검사 밖 펜스의 엔진 호출: " + ln.strip()[:120])
+        continue
     joined = []
-    for ln in body.split("\n"):            # 줄 잇기만 한다 — 셸 문법을 흉내 내지 않는다
+    for ln in fc["lines"]:                 # 줄 잇기만 한다 — 셸 문법을 흉내 내지 않는다
         if joined and joined[-1].endswith("\\"):
             joined[-1] = joined[-1][:-1] + " " + ln
         else:
             joined.append(ln)
     for i, ln in enumerate(joined):
-        hits = list(ENGINE.finditer(ln))
-        if hits and ">" in ln.replace("2>&1", "").replace("&>", ">"):
+        if not NAME.search(ln):
+            continue
+        calls = list(CALL.finditer(ln))
+        if len(NAME.findall(ln)) != len(calls):
+            bad.append("읽을 수 없는 엔진 호출: " + ln.strip()[:120])
+        if ">" in ln.replace("2>&1", "").replace("&>", ">"):
             bad.append("넘기기: " + ln.strip()[:120])
-        for m in hits:
-            if m.group(2) not in READ_ONLY and GUARD not in "\n".join(joined[:i]):
+        for m in calls:
+            if m.group(1) not in READ_ONLY and GUARD not in "\n".join(joined[:i]):
                 bad.append("표지 확인 없는 쓰기: " + ln.strip()[:120])
 print("\n".join(bad), file=sys.stderr)
 sys.exit(1 if bad else 0)
 PY
 }
 for f in $GUARDED; do
-  ac8_scan "$f" && ok "AC8: $(basename "$(dirname "$f")")/$(basename "$f") — 엔진 쓰기 앞에 확인이 있고 넘기기가 없다" || no "AC8: $f — 확인 없는 엔진 쓰기 또는 넘기기"
+  ac8_scan "$f" && ok "AC8: $(basename "$(dirname "$f")")/$(basename "$f") — 엔진 쓰기 앞에 확인이 있고 넘기기가 없다" || no "AC8: $f — 확인 없는 엔진 쓰기 · 넘기기 · 읽을 수 없는 엔진 호출"
 done
-# AC8 음성 프로브 — 하위 명령 이름 축 · 넘기기 축이 각각 잡는다(엔진 밖 원장 쓰기 — cp · echo > — 는 이 락의 대상이 아니다: AC17).
+# AC8 음성 프로브 — 하위 명령 이름 축 · 넘기기 축 · 읽을 수 없는 꼴 축이 각각 잡는다(엔진 밖 원장 쓰기 — cp · echo > — 는 AC17).
 ac8f="$T/ac8-probe.md"
 for probe in 'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render' \
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" \
@@ -132,15 +165,44 @@ python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR" > 
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" $ADV_FLAGS' \
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > /tmp/x' \
              'python3 "$SD/scripts/docreview_state.py" new-subcommand --state-dir "$STATE_DIR"' \
-             'python3 "$SD/scripts/docreview_route.py" finalize --state-dir "$STATE_DIR"'; do
+             'python3 "$SD/scripts/docreview_route.py" finalize --state-dir "$STATE_DIR"' \
+             'python3 "$SD/scripts/docreview_state.py" "advice" --state-dir "$STATE_DIR" --render' \
+             "python3 \"\$SD/scripts/docreview_state.py\" 'decide' --state-dir \"\$STATE_DIR\"" \
+             'python3 "$SD/scripts/docreview_state.py" "$sub" --state-dir "$STATE_DIR"' \
+             'python3 "$SD/scripts/docreview_state.py" --state-dir "$STATE_DIR"' \
+             'D=docreview_state.py
+python3 "$SD/scripts/$D" decide --state-dir "$STATE_DIR"' \
+             'python3 -m docreview_state decide --state-dir "$STATE_DIR"' \
+             'eval "python3 \"$SD/scripts/docreview_state.py\" decide --state-dir \"$STATE_DIR\""' \
+             "python3 'docreview_state.py' decide --state-dir \"\$STATE_DIR\"" \
+             'bash -c "python3 \"$SD/scripts/docreview_state.py\" decide"'; do
   printf '```bash\n%s\n```\n' "$probe" > "$ac8f"
   ac8_scan "$ac8f" 2>/dev/null && no "AC8 음성 프로브: 새는 꼴이 있다: $probe" || ok "AC8 음성 프로브: 잡힌다 — $(printf '%s' "$probe" | head -n 1 | cut -c 1-100)"
 done
+# 펜스 모양 축 — ```bash 가 아닌 펜스 안의 엔진 호출은 검사 밖이라 거부한다.
+D1='python3 "$SD/scripts/docreview_state.py" decide --state-dir "$STATE_DIR"'
+for fcase in '```sh' '```shell' '  ```bash' '```bash ' '~~~bash' '```BASH'; do
+  printf '%s\n%s\n%s\n' "$fcase" "$D1" "$(printf '%s' "$fcase" | tr -d 'a-zA-Z')" > "$ac8f"
+  ac8_scan "$ac8f" 2>/dev/null && no "AC8 펜스 모양: 검사 밖 펜스가 새는 꼴이 있다: «${fcase}»" || ok "AC8 펜스 모양: 잡힌다 — «${fcase}» 펜스의 엔진 호출"
+done
+printf '```bash\r\n%s\r\n```\r\n' "$D1" > "$ac8f"
+ac8_scan "$ac8f" 2>/dev/null && no "AC8 펜스 모양: CRLF 펜스가 새는 꼴이 있다" || ok "AC8 펜스 모양: 잡힌다 — CRLF 펜스의 엔진 호출"
+printf '```js\n%s\n```\n' '// **처분** — consumer=orchestrator · fail-closed · disclosure=x' > "$ac8f"
+ac8_scan "$ac8f" 2>/dev/null && ok "AC8 펜스 모양(양성 짝): 처분 한 줄은 검사 밖 펜스에서도 통과한다" || no "AC8 펜스 모양(양성 짝): 처분 한 줄이 막혔다"
+printf '```js\n%s\n```\n' '// **처분** — consumer=plugins/x/docreview_route.py · fail-closed' > "$ac8f"
+ac8_scan "$ac8f" 2>/dev/null && ok "AC8 펜스 모양(양성 짝): 소비자 경로에 엔진 이름이 있는 처분 줄은 통과한다" || no "AC8 펜스 모양(양성 짝): 소비자 경로 처분 줄이 막혔다"
+printf '```js\n%s\n```\n' '// **처분** — consumer=x; python3 "$SD/scripts/docreview_state.py" decide' > "$ac8f"
+ac8_scan "$ac8f" 2>/dev/null && no "AC8 펜스 모양: 처분 줄에 얹은 호출이 샌다" || ok "AC8 펜스 모양: 처분 줄에 얹은 엔진 호출은 잡힌다"
+# 알려진 경계(범위 밖 — AC17): 같은 줄 넘기기만 본다. `| tee` 는 이 락이 못 본다는 사실을 못 박는다(잡히면 이 단언을 고친다).
+printf '```bash\n%s\n```\n' 'python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR" | tee "$STATE_DIR/x"' > "$ac8f"
+ac8_scan "$ac8f" 2>/dev/null && ok "AC8 알려진 경계(AC17 몫): | tee 는 이 락이 보지 않는다" || no "AC8 알려진 경계: | tee 가 잡혔다 — 락 범위가 달라졌다, 문서와 이 단언을 고쳐라"
 # AC8 양성 대조 — 읽기 전용 하위 명령의 «받기»(`$(…)`)와, 표지 확인 뒤의 쓰기는 통과한다.
 for probe in 'adv="$(python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR")" || { echo "실패"; exit 0; }' \
              'g="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" 2>&1)" || exit 1' \
              'g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || exit 3
-python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8'; do
+python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8' \
+             'g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || exit 3
+python3 "$SD/scripts/docreview_route.py" finalize --state-dir "$STATE_DIR" --doc "$d"'; do
   printf '```bash\n%s\n```\n' "$probe" > "$ac8f"
   ac8_scan "$ac8f" 2>/dev/null && ok "AC8 양성 대조: 통과한다 — $(printf '%s' "$probe" | head -n 1 | cut -c 1-80)" || no "AC8 양성 대조: 정당한 꼴이 막혔다: $probe"
 done

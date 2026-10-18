@@ -418,9 +418,13 @@ case_AC38_audit_row10_11_entry_flags() {
   for v in '1_0' '+2' '２' ' 3'; do
     py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" --detectors "$v" >/dev/null 2>&1; rc=$?
     assert_eq "$rc" "2" "AC38 감사10: --detectors «${v}» 는 인자 오류(rc 2)"
-    py docreview_state.py advice --state-dir "$d" --cap "$v" >/dev/null 2>&1; rc=$?
-    assert_eq "$rc" "2" "AC38 감사10: --cap «${v}» 는 인자 오류(rc 2)"
+    py docreview_state.py advice --state-dir "$d" --render --cap "$v" >/dev/null 2>"$d/cap-err"; rc=$?
+    assert_eq "$rc $(grep -c 'ASCII 숫자만 쓸 수 있다' "$d/cap-err") $(grep -c advice_needs_flag "$d/cap-err")" "2 1 0" \
+      "AC38 감사10: --cap «${v}» 는 ASCII 정수 거부(rc 2 · 사유가 cap 이지 advice_needs_flag 가 아니다)"
   done
+  local dmc; dmc="$(r1 "$REPO_ROOT/plugins/spec-distill/references/docreview-profiles/design-doc.md" "$FX/design-sample.md")"   # must_catch 를 지목한 프로필 — advice 가 도는 원장
+  py docreview_state.py advice --state-dir "$dmc" --render --cap 3 >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "0" "AC38 감사10 양성 짝: --render 와 ASCII 정수 cap 은 받는다(rc 0)"
   assert_eq "$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" --detectors 1 | jgets 'd["ok"]')" "True" "AC38 감사10 양성 짝: ASCII 숫자는 받는다"
   snap "$FX/design-sample.md" "$d/s3.json"; snap "$FX/design-sample.md" "$d/s4.json"
   py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s3.json" >/dev/null

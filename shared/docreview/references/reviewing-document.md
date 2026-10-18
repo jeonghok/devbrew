@@ -66,8 +66,9 @@ advice 로 간 항목이나 적용 · drop 된 fix 를 `supersedes` 로 이은 �
 - brief — 호출자 Step B
 - seed — 계수만
 
-    docreview_state.py advice --state-dir D [--render [--cap 8] [--where <박제처>]] [--sink <doc>] [--log-file <decision_log 목적지>]
+    docreview_state.py advice --state-dir D [--render [--cap <n>] [--where <박제처>]] [--sink <doc>] [--log-file <decision_log 목적지>]
 
+- `--cap` 을 주지 않으면 줄 수는 환경 변수 > 프로필 > 8 순으로 정해진다(머리 줄이 값과 출처를 밝힌다).
 - `--render` 는 아직 안 보인 항목을 머리 한 줄 + 항목 한 줄씩(최대 cap) + `외 K건` 한 줄로 낸다(≤10줄).
 - `--sink` 는 프로필 `defer_target` 절에 아직 박제하지 않은 항목을 표 행으로 적는다. `defer_target` 이 없으면
   rc 1 `profile_has_no_defer_target` 이다.

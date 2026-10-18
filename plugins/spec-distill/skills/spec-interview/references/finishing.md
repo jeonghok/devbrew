@@ -339,7 +339,6 @@ else
   adv_list="$(python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR" 2>&1)" || adv_rc=$?
   adv_out="$adv_list"
   if [ "$adv_rc" -eq 0 ]; then
-    echo "state-dir: $STATE_DIR"
     echo "advice-list: $adv_list"
     adv_out="$(python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --log-file "$AUDIT" --render --where "brief §3 · §5" 2>&1)" || adv_rc=$?
     [ "$adv_rc" -ne 0 ] || printf '%s\n' "$adv_out"
@@ -354,18 +353,24 @@ fi
 ```
 <!-- advice-ba:end -->
 
-펜스 출력(머리 한 줄 + 최대 8줄 + `외 K건`)과 `[spec-distill]` 줄을 그대로 보입니다. 이어 `advice-list:` 줄의 JSON
+펜스 출력(머리 한 줄 + 항목 줄 + `외 K건` — 머리 줄이 줄 수 상한과 그 출처를 밝힙니다)과 `[spec-distill]` 줄을 그대로 보입니다. 이어 `advice-list:` 줄의 JSON
 (`advice-list` 하위 명령이 읽기 전용으로 낸 목록)의 `items` 중 `shown` 이 거짓이던 항목을 payload 에 박제합니다 — 표시가 돌았으면 방금 보인
 항목들이고, 「표시도 실패했다」 줄이 나왔으면 사용자가 보지 못한 항목이라 그 사실을 B-2 에 싣습니다.
 `advice-list:` 줄이 없으면(원장 없음 · 판독 실패) 박제할 것이 없고 그 `[spec-distill]` 줄을 B-2 에 싣습니다.
 
 펜스 출력에 접는 줄(`… 외 K건`)이 있으면 박제로 가기 전에 `AskUserQuestion` 한 번 — 「참고 전부 보기」 ·
-「접은 채로 둔다」. 「참고 전부 보기」면 아래 펜스로 `state-dir:` 줄의 폴더에서 목록 전부를 다시 읽어 요약 전문으로
+「접은 채로 둔다」. 「참고 전부 보기」면 아래 펜스로 목록 전부를 다시 읽어 요약 전문으로
 보입니다(`advice-list` 는 읽기 전용이다. 엔진의 접기 폭 · 요약 폭 상수는 R2a 의 일이다):
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — 경로를 추측하지 말고 멈춰 보고하라" >&2; exit 1; }
-STATE_DIR="(state-dir: 줄의 폴더)"
+PAYLOAD="<Step A.5 의 PAYLOAD 절대경로>"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "$PAYLOAD" || true)"
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
+  echo "[spec-distill] 참고(advisory) 목록 없음 — brief 리뷰 원장을 찾지 못했다(STATE_DIR='${STATE_DIR:-}'). 게이트 앞 글에 싣는다."; exit 0
+fi
 adv_all="$(python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR")" \
   || { echo "[spec-distill] 참고 전부 보기 실패 — 엔진 원장을 읽지 못했다. 게이트 앞 글에 싣는다."; exit 0; }
 printf '%s' "$adv_all" | python3 -I -X utf8 -c '
