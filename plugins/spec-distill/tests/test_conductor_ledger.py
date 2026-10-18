@@ -412,5 +412,86 @@ class Resources(Repo):
         self.assertIn("feature/stray", out)
 
 
+SPEC_DOC = "---\nroadmap: plan/rm/roadmap.md\n---\n\n# 설계\n\n## Acceptance Criteria\n\n- AC1 가\n"
+
+
+class Records(unittest.TestCase):
+    def test_insert_record_creates_and_appends(self):
+        t = L.insert_record(SPEC_DOC, "흐름: 설계 흐름(기본)")
+        self.assertTrue(t.endswith("## 지휘 기록\n\n- 흐름: 설계 흐름(기본)\n"), t)
+        t2 = L.insert_record(t + "\n## 판정\n\n- Ruling: x\n", "- 건너뜀: 통합 리뷰 — 테스트 없음")
+        self.assertIn("- 흐름: 설계 흐름(기본)\n- 건너뜀: 통합 리뷰 — 테스트 없음\n\n## 판정", t2)
+
+    def test_insert_record_refuses_duplicate_heading(self):
+        with self.assertRaises(L.Fail):
+            L.insert_record(SPEC_DOC + "\n## 지휘 기록\n\n- a\n\n## 지휘 기록\n\n- b\n", "c")
+
+    def test_approval_line_round_trips_with_status_reader(self):
+        import roadmap_model as M
+        t = L.insert_record(SPEC_DOC, L.approval_line("2026-10-18", "① /compact 후 다음 세션 줄 (권장)"))
+        self.assertEqual(M.approval_date(t), "2026-10-18")
+        self.assertIn("- spec 승인 · 2026-10-18 · 「① /compact 후 다음 세션 줄 (권장)」", t)
+
+    def test_insert_sections_new_and_continue(self):
+        t = L.insert_sections(SPEC_DOC, "plans/p1.md", ["- Ruling: a"], "경고 없음 (AC 1개)", "AC 1개 중 구현됨 1")
+        self.assertIn("## 판정\n\n### plans/p1.md\n\n- Ruling: a\n", t)
+        self.assertIn("## 구현 대조 — plans/p1.md\n\n- 구현 대조: 경고 없음 (AC 1개)\n- 보고: AC 1개 중 구현됨 1\n", t)
+        t2 = L.insert_sections(t, "plans/p2.md", ["- Ruling: b"], "경고 없음", "AC 1개 중 구현됨 1")
+        self.assertEqual(t2.count("## 판정"), 1)
+        self.assertLess(t2.index("### plans/p2.md"), t2.index("## 구현 대조 — plans/p1.md"))
+        with self.assertRaises(L.Fail) as cm:
+            L.insert_sections(t2, "plans/p2.md", [], "x", "y")
+        self.assertEqual(cm.exception.rc, 2)
+
+    def test_insert_sections_refuses_headless_rulings(self):
+        doc = SPEC_DOC + "\n## 판정\n\n- Ruling: 옛 줄\n"
+        with self.assertRaises(L.Fail) as cm:
+            L.insert_sections(doc, "plans/p2.md", ["- Ruling: b"], "x", "y")
+        self.assertEqual(cm.exception.rc, 3)
+
+    def test_harvest(self):
+        got = L.harvest("끝\n- Ruling: b — 왜 — 값\nRuling: c — 왜 — 값\n", ["- Ruling: a — 왜 — 값\n- Ruling: b — 왜 — 값\n"])
+        self.assertEqual(got["lines"], ["- Ruling: a — 왜 — 값", "- Ruling: b — 왜 — 값", "- Ruling: c — 왜 — 값"])
+        self.assertEqual((len(got["only_report"]), len(got["only_ledger"])), (1, 1))
+        self.assertEqual(L.harvest("없음", [])["lines"], [])
+
+    def test_write_atomic_keeps_file_on_bad_text(self):
+        d = Path(tempfile.mkdtemp())
+        try:
+            p = d / "x.md"
+            p.write_text("원래", encoding="utf-8")
+            with self.assertRaises(L.Fail):
+                L.write_atomic(p, "깨진 \udc80 글")
+            self.assertEqual(p.read_text(encoding="utf-8"), "원래")
+        finally:
+            shutil.rmtree(str(d))
+
+
+class Pending(Repo):
+    def test_flush_moves_rows_into_spec(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.cli("add", "--roadmap", RM, "--session", SID, "--section", "쌓인 기록",
+                 "--cells", "A1 · 지휘 기록 · 건너뜀: 통합 리뷰 — 이유 · 둘")
+        spec = self.w / "s.md"
+        spec.write_text(SPEC_DOC, encoding="utf-8")
+        rc, out = self.cli("pending", "--roadmap", RM)
+        self.assertIn("건너뜀: 통합 리뷰 — 이유 · 둘", out)
+        rc, _o = self.cli("flush", "--roadmap", RM, "--session", SID, "--epic", "A1", "--spec", str(spec))
+        self.assertEqual(rc, 0)
+        self.assertIn("## 지휘 기록\n\n- 건너뜀: 통합 리뷰 — 이유 · 둘\n", spec.read_text(encoding="utf-8"))
+        self.assertEqual(cs.load(L.mpath(self.w, RM), RM)["쌓인 기록"], [])
+
+    def test_record_rejects_bad_date_and_writes_good_one(self):
+        spec = self.w / "s.md"
+        spec.write_text(SPEC_DOC, encoding="utf-8")
+        for bad in ("2026-1-8", "26-10-18", "2026-13-40x", "2026-10-18 "):
+            rc, _o = self.cli("record", "--spec", str(spec), "--approval", "--date", bad, "--choice", "예")
+            self.assertEqual(rc, 2, bad)
+        self.assertEqual(spec.read_text(encoding="utf-8"), SPEC_DOC)
+        rc, _o = self.cli("record", "--spec", str(spec), "--approval", "--date", "2026-10-18", "--choice", "예")
+        self.assertEqual(rc, 0)
+        self.assertIn("- spec 승인 · 2026-10-18 · 「예」", spec.read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()

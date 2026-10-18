@@ -32,7 +32,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
-from roadmap_model import DEFAULT_REF, NO_DEFAULT, frontmatter, unquote  # noqa: E402
+from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, NO_DEFAULT, RECORD_HEADING,  # noqa: E402
+                           RULINGS_HEADING, FormatError, frontmatter, section_lines, unquote)
 from state_path import state_root  # noqa: E402
 
 DONE = ("머지됨", "끝남")
@@ -192,6 +193,124 @@ def require_user_worktree(root, path: Path) -> None:
     here = Path(os.getcwd()).resolve()
     if rp == Path(root).resolve() or rp == here or rp in here.parents:
         raise Fail(2, "지금 작업 중인 자리다 — 지우지 않는다: %s" % path)
+
+
+def _heads(lines: list) -> list:
+    """(줄 번호, 머리) — 펜스 밖 `## ` 머리."""
+    out, fence = [], False
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("```"):
+            fence = not fence
+        elif not fence and line.startswith("## "):
+            out.append((i, line.rstrip()))
+    return out
+
+
+def _section_end(lines: list, start: int) -> int:
+    nxt = [i for i, _h in _heads(lines) if i > start]
+    end = nxt[0] if nxt else len(lines)
+    while end > start + 1 and not lines[end - 1].strip():
+        end -= 1
+    return end
+
+
+def _finish(lines: list) -> str:
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def insert_record(text: str, line: str) -> str:
+    line = line if line.startswith("- ") else "- " + line
+    try:
+        section_lines(text, RECORD_HEADING)
+    except FormatError as exc:
+        raise Fail(3, "지휘 기록 절을 읽지 못했다: %s" % exc)
+    lines = text.rstrip("\n").split("\n")
+    at = [i for i, h in _heads(lines) if h == RECORD_HEADING]
+    if not at:
+        return _finish(lines + ["", RECORD_HEADING, "", line])
+    end = _section_end(lines, at[0])
+    if end == at[0] + 1:
+        return _finish(lines[:end] + ["", line] + lines[end:])
+    return _finish(lines[:end] + [line] + lines[end:])
+
+
+def approval_line(date: str, choice: str) -> str:
+    return "%s%s · 「%s」" % (APPROVAL_PREFIX, date, choice)
+
+
+def _date_shape(value: str) -> bool:
+    """YYYY-MM-DD 꼴 — 글자 검사 + 실제 달력 날짜."""
+    if len(value) != 10 or value[4] != "-" or value[7] != "-":
+        return False
+    if not (value[:4] + value[5:7] + value[8:]).isdigit() or not value.isascii():
+        return False
+    try:
+        datetime.date(int(value[:4]), int(value[5:7]), int(value[8:]))
+    except ValueError:
+        return False
+    return True
+
+
+def insert_sections(text: str, plan_rel: str, rulings: list, impl_line: str, counts: str) -> str:
+    lines = text.rstrip("\n").split("\n")
+    heads = _heads(lines)
+    if any(h == IMPL_PREFIX + plan_rel for _i, h in heads):
+        raise Fail(2, "이미 있다 — %s%s" % (IMPL_PREFIX, plan_rel))
+    try:
+        section_lines(text, RULINGS_HEADING)
+    except FormatError as exc:
+        raise Fail(3, "판정 절을 읽지 못했다: %s" % exc)
+    block = ["### " + plan_rel, ""] + [r if r.startswith("- ") else "- " + r for r in rulings]
+    at = [i for i, h in heads if h == RULINGS_HEADING]
+    if at:
+        end = _section_end(lines, at[0])
+        body = lines[at[0] + 1:end]
+        first_sub = next((k for k, l in enumerate(body) if l.startswith("### ")), len(body))
+        if any(l.startswith("- ") for l in body[:first_sub]):
+            raise Fail(3, "앞 계획의 판정 줄이 하위 머리 없이 있다 — 먼저 `### <앞 계획 경로>` 아래로 옮긴다")
+        lines = lines[:end] + [""] + block + lines[end:]
+    else:
+        lines = lines + ["", RULINGS_HEADING, ""] + block
+    lines += ["", IMPL_PREFIX + plan_rel, "", "- 구현 대조: " + impl_line, "- 보고: " + counts]
+    return _finish(lines)
+
+
+def harvest(report_text: str, ledger_texts: list) -> dict:
+    """실행 중 원장에서 읽은 판정과 하위의 마지막 보고의 판정을 합친다 — 보고에만 · 원장에만 있는 수도 낸다."""
+    def norm(l):
+        body = l.strip().lstrip("-*").strip()
+        return "- " + body
+    led = [norm(l) for t in ledger_texts for l in cs.ledger_rulings(t)]
+    rep = [norm(l) for l in cs.ledger_rulings(report_text)]
+    lines = list(dict.fromkeys(led + rep))
+    return {"lines": lines, "report": len(rep), "ledger": len(led),
+            "only_report": [l for l in rep if l not in led], "only_ledger": [l for l in led if l not in rep]}
+
+
+def write_atomic(path: Path, text: str) -> None:
+    """인코딩을 먼저 하고 임시 파일 + 교체 — 실패해도 원래 파일이 남는다."""
+    try:
+        data = text.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise Fail(3, "글을 UTF-8 로 바꾸지 못해 쓰지 않았다: %s" % exc)
+    fd, tmp = tempfile.mkstemp(prefix=".ledger.", suffix=".tmp", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        os.replace(tmp, str(path))
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _read(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise Fail(3, "읽지 못했다: %s (%s)" % (path, type(exc).__name__))
 
 
 # ── 하위 명령 ────────────────────────────────────────────────────────────────
@@ -396,6 +515,67 @@ def c_orphans(root, a) -> int:
     return 0
 
 
+def c_record(root, a) -> int:
+    path = Path(a.spec)
+    if a.approval:
+        if not (a.date and a.choice):
+            raise Fail(2, "--approval 에는 --date 와 --choice 가 필요하다")
+        if not _date_shape(a.date):
+            raise Fail(2, "--date 는 YYYY-MM-DD 꼴이어야 한다: %s" % a.date)
+        line = approval_line(a.date, a.choice)
+    elif a.line:
+        line = a.line
+    else:
+        raise Fail(2, "--line 또는 --approval 이 필요하다")
+    write_atomic(path, insert_record(_read(path), line))
+    print("적었다(커밋은 지휘자가) — %s: %s" % (path, line))
+    return 0
+
+
+def c_rulings(root, a) -> int:
+    got = harvest(_read(Path(a.report)), [_read(Path(p)) for p in a.ledger or []])
+    if not got["lines"]:
+        print("판정 줄 — 셀 수 없음(보고에도 원장에도 판정이 없다)")
+        return 3
+    text = "\n".join(got["lines"]) + "\n"
+    if a.out:
+        write_atomic(Path(a.out), text)
+    print(text, end="")
+    print("판정 %d개(보고 %d · 원장 %d · 보고에만 %d · 원장에만 %d)"
+          % (len(got["lines"]), got["report"], got["ledger"], len(got["only_report"]), len(got["only_ledger"])))
+    return 0
+
+
+def c_write_sections(root, a) -> int:
+    path = Path(a.spec)
+    rulings = [l for l in _read(Path(a.rulings)).splitlines() if l.startswith("- ")]
+    write_atomic(path, insert_sections(_read(path), a.plan, rulings, a.impl_line, a.counts))
+    print("판정 %d줄과 구현 대조 절을 썼다(커밋 · push 는 지휘자가) — %s" % (len(rulings), path))
+    return 0
+
+
+def c_flush(root, a) -> int:
+    path = Path(a.spec)
+    rows = [r for r in load(root, a.roadmap)["쌓인 기록"] if r["에픽"] == a.epic and r["절"] == "지휘 기록"]
+    text = _read(path)
+    for r in rows:
+        text = insert_record(text, r["글"])
+    write_atomic(path, text)
+    update(root, a.roadmap, a.session, lambda d: d.__setitem__(
+        "쌓인 기록", [r for r in d["쌓인 기록"] if not (r["에픽"] == a.epic and r["절"] == "지휘 기록")]))
+    print("쌓인 기록 %d줄을 옮겼다(커밋은 지휘자가) — %s" % (len(rows), path))
+    return 0
+
+
+def c_pending(root, a) -> int:
+    rows = [r for r in load(root, a.roadmap)["쌓인 기록"] if not a.epic or r["에픽"] == a.epic]
+    for r in rows:
+        print("- %s · %s" % (r["에픽"], r["글"]) if not a.epic else "- " + r["글"])
+    if not rows:
+        print("쌓인 기록 없음")
+    return 0
+
+
 def _rs(p):
     p.add_argument("--roadmap", required=True)
     p.add_argument("--session", required=True)
@@ -420,6 +600,18 @@ COMMANDS = {
                                                   p.add_argument("--roadmap", default=None))),
     "cleanup": (c_cleanup, lambda p: (_rs(p), p.add_argument("--path", required=True))),
     "orphans": (c_orphans, lambda p: p.add_argument("--roadmap", required=True)),
+    "record": (c_record, lambda p: (p.add_argument("--spec", required=True), p.add_argument("--line"),
+                                    p.add_argument("--approval", action="store_true"), p.add_argument("--date"),
+                                    p.add_argument("--choice"))),
+    "rulings": (c_rulings, lambda p: (p.add_argument("--report", required=True),
+                                      p.add_argument("--ledger", action="append"), p.add_argument("--out"))),
+    "write-sections": (c_write_sections, lambda p: (p.add_argument("--spec", required=True),
+                                                    p.add_argument("--plan", required=True),
+                                                    p.add_argument("--rulings", required=True),
+                                                    p.add_argument("--impl-line", required=True),
+                                                    p.add_argument("--counts", required=True))),
+    "flush": (c_flush, lambda p: (_rs(p), p.add_argument("--epic", required=True), p.add_argument("--spec", required=True))),
+    "pending": (c_pending, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic"))),
 }
 
 
