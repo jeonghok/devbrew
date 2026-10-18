@@ -345,6 +345,10 @@ next_phase: superpowers:writing-plans
 - docreview 계수 — 2c4cd0b0-bc55-4ac6-9130-0e998a7b92e7/2026-10-17-shared-review-engine-devices--ef660192c676324e r9: advice_new=0 · advice_repeat=8 · mc_preexisting_new=3
 - docreview 계수 — 2c4cd0b0-bc55-4ac6-9130-0e998a7b92e7/2026-10-17-shared-review-engine-devices--ef660192c676324e r10: advice_new=1 · advice_repeat=8 · mc_preexisting_new=0
 - 승인 게이트 2단계 · 2026-10-18 · 진행 옵션 — 사용자 원문 「2」 / 해석: 지휘자가 보인 순서의 둘째(「① 새 세션에서 계획 쓰기 (권장)」)로 읽든 skill 의 「② compact 후 계획 쓰기」로 읽든 결과는 같다 — 리뷰를 닫고 계획 쓰기로 간다(③ 수정은 고르지 않음). 지휘 아래라 세션을 새로 열지 않고 같은 작업 폴더에서 writing-plans 를 계획 1 부터 쓴다.
+- 계획 1 결정 · 2026-10-18 · 재비판 블록 — 원래 설계 문면: §2 「재비판 블록도 같은 함수라 같이 바뀐다」 / 계획의 결정: 지적 목록 블록(층 1 · 층 2)만 합치고, 재비판 매핑 블록은 마지막 블록을 읽되 개수를 공시한다 — 사용자 「계획대로 — 지적만 합침 (권장)」 / 근거: qg 재비판 합성기가 같은 함수를 쓰고(`plugins/quality-gates/scripts/synthesize_findings.py:466-467`) 「펜스가 둘이면 마지막이 판정 — 인용 예시가 판정이 되지 않는다」를 잠근다(`plugins/quality-gates/tests/test_synthesize_recritic.sh:705-712`).
+- 계획 1 결정 · 2026-10-18 · qg 인자 확인 자리 — 원래 설계 문면: §2 「`## 진입 단계` 에 `!` 사전 검사(지금 `setup-qg.sh` 가 하던 인자 확인 · 없어진 인자 안내)를 두고」 / 계획의 결정: 사전 검사 줄은 상수 인자만 받고, 인자 확인과 없어진 인자 안내는 본문 첫 단계(P2 의 `setup-qg.sh --ensure $ARGUMENTS`)가 한다 — 사용자 「계획대로 — 본문 첫 단계 (권장)」 / 근거: `shared/entry/entry_preflight.py` 는 사용자 입력을 받지 않고, 호출 표면 락이 사전 검사 줄의 모양을 고정하며 사용자 인자 토큰을 금지한다(`shared/entry/check_invocation_surface.py:47-48 · :213-218` · `axis_d`).
+- 계획 1 결정 · 2026-10-18 · 기준선 스크립트 — 원래 설계 문면: §2 「닫힌 묶음(셋 + 형제)째 옮기거나 소비 플러그인이 형제까지 링크하게 한다 — 어느 쪽인지는 측정이 정하고」 · §6 「qg 범위 | … `resolve-baseline.sh` … | qg」 / 계획의 결정: `resolve-baseline.sh` 도 `shared/test-selection/` 으로 함께 옮겨 넷을 닫힌 묶음으로 둔다 — 사용자 「계획대로 — 함께 옮김 (권장)」 / 근거: `compute-test-scope-candidates.sh:18,54` 가 링크를 풀지 않은 자기 폴더에서 `resolve-baseline.sh` 를 부른다 — 다른 플러그인이 qg 안 파일을 링크하면 설치본에서 닿지 못한다. 계획 3 의 범위 기준 변경은 공유본 변경이다.
+- 계획 1 실행 방식 · 2026-10-18 — 사용자 「Subagent-driven」.
 
 ## 번호 대조
 
