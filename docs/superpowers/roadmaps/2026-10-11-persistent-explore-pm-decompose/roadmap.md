@@ -2,6 +2,8 @@
 type: roadmap
 source_brief: docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.md
 review_model: opus
+test_command: bash tools/suite/run-all.sh
+test_failure_pattern: "^FAILED (.+)$"
 ---
 
 # 집요한 탐색 · PM 분해 · 에픽별 지휘 · 의도 왜곡 장치 제거 — 로드맵
