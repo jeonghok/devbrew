@@ -182,7 +182,7 @@
 
 머지 메시지로 머지됨을 판정할 때는 브랜치 이름만 봅니다 — 머지된 PR 과 같은 이름으로 다시 만든 브랜치나 다른 owner 의 같은 이름 브랜치도 머지됨으로 보일 수 있습니다.
 
-종료 코드는 둘 다 0 이상 없음 · 1 경고 · 2 사용법 오류 · 3 검사 불가이고, `roadmap_status.py` 는 4 (로드맵이 아직 기본 브랜치에 없음)를 더 냅니다. `roadmap_write.py` 는 0 성공 · 1 쓰지 않음 · 2 사용법 오류입니다. 형식은 `docs/superpowers/specs/2026-10-11-roadmap-walking-skeleton-design.md` §3 에 있습니다.
+종료 코드는 둘 다 0 이상 없음 · 1 경고 · 2 사용법 오류 · 3 검사 불가이고, `roadmap_status.py` 는 4 (로드맵이 아직 기본 브랜치에 없음)를 더 내고, `control_plane.py show --tasks` 도 4 를 낼 수 있습니다. `roadmap_write.py` 는 0 성공 · 1 쓰지 않음 · 2 사용법 오류입니다. 형식은 `docs/superpowers/specs/2026-10-11-roadmap-walking-skeleton-design.md` §3 에 있습니다.
 
 ### 상태줄
 

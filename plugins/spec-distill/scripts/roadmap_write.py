@@ -7,6 +7,7 @@
                           --title <제목> --date <YYYY-MM-DD> --approval <승인 원문>
   roadmap_write.py update --roadmap <로드맵> --brief <brief> --audit <audit> --plan-table <새 표 파일>
                           --date <YYYY-MM-DD> --change <바뀐 것 한 줄> --approval <승인 원문>
+                          (--approval 은 create · update 에서 여러 번 줄 수 있다)
   roadmap_write.py extract --roadmap <로드맵>     로드맵 블록 · 묶음에서 분해안 표를 뽑아 낸다(쓰지 않는다)
   roadmap_write.py migrate --roadmap <로드맵>     로드맵 블록을 새 형식으로 다시 쓴다(재분해 이력은 그대로)
 
