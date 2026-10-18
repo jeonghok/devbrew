@@ -10,9 +10,6 @@ critique_notice() {
   echo "> [quality-gates] 문서 비평은 이제 /quality-gates:artifact-critique <경로> 로 부른다 — 파이프라인은 실행하지 않는다."
   exit 2
 }
-if [[ "${1:-}" == "critique" ]]; then
-  critique_notice
-fi
 
 # --- kill switch (SKILL Preflight P1 도 같은 스위치를 본다 — 직접 호출도 막는다) ---
 if [[ "${DEVBREW_QUALITY_GATES_DISABLE:-}" == "1" ]]; then
@@ -25,6 +22,8 @@ REMOVED_ARGS=""   # v9 에서 없앤 게이트 인자 — 공지 후 진행
 GONE_ARGS=""      # v10 에서 없앤 인자 — 공지 후 실행하지 않음
 ENSURE_MODE="false"
 SESSION_ID=""
+SCOPE_ARGS=0      # 범위 인자(branch · --paths · range) 개수
+RANGE_SEEN=0      # range 인자 개수 — range 는 다른 범위 인자와 함께 줄 수 없다(branch + --paths 조합은 v9 부터 허용)
 
 gone() {   # gone <인자 표기> <안내>
   GONE_ARGS="${GONE_ARGS}> [quality-gates] \`${1}\` 인자는 없어졌다 — ${2}. 실행하지 않는다."$'\n'
@@ -40,21 +39,44 @@ while [[ $# -gt 0 ]]; do
       # 범위 override 는 SKILL 이 $ARGUMENTS 에서 직접 읽는다 — 여기서는 소비만 한다.
       # 글롭 0개 조건은 아래 while 이 한 번도 안 돌 조건과 같아야 한다.
       shift
-      if [[ $# -eq 0 ]] || [[ "$1" =~ ^-- ]] || [[ "$1" =~ ^(review|runtime|both|branch)$ ]]; then
+      SCOPE_ARGS=$((SCOPE_ARGS + 1))
+      if [[ "${1:-}" == "critique" ]]; then
+        critique_notice
+      fi
+      if [[ $# -eq 0 ]] || [[ "$1" =~ ^-- ]] || [[ "$1" =~ ^(review|runtime|both|branch|range)$ ]]; then
         echo "❌ --paths 뒤에 glob 이 하나도 없다(--paths requires at least one glob)." >&2
         exit 1
       fi
-      while [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]] && [[ ! "$1" =~ ^(review|runtime|both|branch)$ ]]; do
+      while [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]] && [[ ! "$1" =~ ^(review|runtime|both|branch|range|critique)$ ]]; do
         shift
       done
       ;;
     branch)
       # 맨 `branch` 는 범위 override 다(SKILL 이 읽는다). 뒤에 이름이 오면 v9 의 worktree 모드다.
       shift
-      if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^- ]] && [[ ! "$1" =~ ^(review|runtime|both)$ ]]; then
+      SCOPE_ARGS=$((SCOPE_ARGS + 1))
+      if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^- ]] && [[ ! "$1" =~ ^(review|runtime|both|range|critique)$ ]]; then
         gone "branch <name>" "다른 브랜치는 체크아웃하거나 그 브랜치의 git worktree 안에서 /quality-gates:quality-pipeline 을 돌린다"
         shift
       fi
+      ;;
+    range)
+      # 값 하나를 소비한다 — 모양만 본다(커밋 해석은 resolve-range.sh 가 한다).
+      shift
+      SCOPE_ARGS=$((SCOPE_ARGS + 1))
+      RANGE_SEEN=$((RANGE_SEEN + 1))
+      if [[ $# -eq 0 ]]; then
+        echo "❌ range 뒤에 시작 커밋이 없다(range requires <시작>[..<끝>])." >&2
+        exit 1
+      fi
+      if [[ "$1" == "critique" ]]; then
+        critique_notice
+      fi
+      if [[ "$1" =~ ^- ]]; then
+        echo "❌ range 의 값이 - 로 시작한다 — 커밋 이름이 아니다." >&2
+        exit 1
+      fi
+      shift
       ;;
     --reset)
       gone "--reset" "세션 폴더는 /quality-gates:quality-pipeline 을 시작할 때마다 지우고 다시 만든다"
@@ -95,11 +117,12 @@ while [[ $# -gt 0 ]]; do
 Quality Gates Pipeline Setup
 
 USAGE:
-  /quality-gates:quality-pipeline [branch] [--paths <glob>...]
+  /quality-gates:quality-pipeline [branch | --paths <glob>... | range <시작>[..<끝>]]
 
 ARGUMENTS:
   (none)               Review git-derived changes (branch + worktree) or the Spec: topic
   branch               Review the full branch diff against base
+  range <시작>[..<끝>]  Review the commits from <시작> to <끝>; <끝> defaults to origin/HEAD
 
 OPTIONS:
   --paths <glob>...    Scope override — review only the matched paths
@@ -108,6 +131,7 @@ OPTIONS:
   -h, --help           Show this help message
 
 REMOVED (v10): branch <name> · --reset · --gc · --pr-url · --plan — one notice line each, then exit 2.
+REMOVED:       critique (→ /quality-gates:artifact-critique) — one notice line, then exit 2.
 REMOVED (v9):  review · runtime · both · --skip-runtime — one notice line each, the run proceeds.
 HELP_EOF
       exit 0
@@ -119,6 +143,11 @@ HELP_EOF
       ;;
   esac
 done
+
+if [[ $RANGE_SEEN -gt 0 && $SCOPE_ARGS -gt 1 ]]; then
+  echo "❌ 범위 인자는 하나만 준다(branch · --paths · range 중 하나)." >&2
+  exit 1
+fi
 
 if [[ -n "$GONE_ARGS" ]]; then
   printf '%s' "$GONE_ARGS"
