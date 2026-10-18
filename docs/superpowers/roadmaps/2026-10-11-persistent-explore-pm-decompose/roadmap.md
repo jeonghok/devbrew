@@ -139,7 +139,7 @@ review_model: opus
   - 한다: 공유 리뷰 엔진 상한 · 조언 접기 · qg 리뷰어 · 루프 상한 · R2 가 넘긴 보안 잔여의 검사 방식 전환(꼴 막기 대신 허용 문법 · 실제 파서) · 흐름 고정 점검(flexibility-audit.md)의 R2a 행(결함 셋 먼저) · 다른 플러그인의 장치 · qg 진입 이름 적용(P3 결정 — `commands/qg.md` 삭제 · `artifact-critique` 개명 · 호출 표면 락의 qg 위반 해소) · qg 범위 입력(로드맵 시작 커밋부터 지금 기본 브랜치까지) · 「문서 경로」 정의(모델이 읽는 .md 포함) · 범위 안 여러 설계문서를 모두 의도로 읽기(지금 discover-spec.sh 는 가장 새 커밋의 Spec: 하나에서 멈춘다) · qg 의 테스트 실행 스크립트 셋(run-test-selection.sh · diff-test-results.py · compute-test-scope-candidates.sh)을 shared/test-selection/ 으로 바이트 그대로 옮기고 qg 쪽을 링크로
   - 안 한다: spec-distill 안쪽 장치(R2)
 - 의존: R1, R2, R7, R3, R4, R6, P2, P3
-- 브랜치: feature/shared-review-engine-devices
+- 브랜치: feature/shared-review-engine-devices · feature/shared-review-engine-core
 - 묶음: R2a.md
 - 경로 예약: shared/docreview/, plugins/spec-distill/references/reviewing-document.md, plugins/quality-gates/, plugins/project-init/, plugins/plugin-audit/, shared/test-selection/, plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/scripts/check_verbatim_coverage.py, plugins/spec-distill/scripts/seed_body.py, plugins/spec-distill/scripts/check_seed.py, plugins/spec-distill/scripts/seed_review_log.py, plugins/spec-distill/scripts/seed_provenance.py, plugins/spec-distill/scripts/brief_body.py, plugins/spec-distill/tests/test_check_brief.sh, plugins/spec-distill/tests/test_check_brief_frontmatter.py, plugins/spec-distill/tests/test_brief_verbatim_full.sh, plugins/spec-distill/tests/test_check_verbatim_coverage.sh, plugins/spec-distill/tests/test_check_seed.sh, plugins/spec-distill/tests/test_seed_review_log.sh, plugins/spec-distill/tests/test_seed_provenance.sh
 
@@ -388,6 +388,11 @@ R5 전까지 지휘 세션이 따르는 절차다. 장치가 아니라 절차다
   - 「pm-interview (권장)」
   - 「지휘자가 spec 리뷰까지 (권장)」
   - 「이대로 다시 나눈다」
+
+### 2026-10-18 · R2a 계획 2 의 브랜치 등록(R2a 설계 §10)
+- 바뀜: 바뀐 에픽 R2a — 브랜치 칸에 계획 2(공유 엔진 · R2 보안 잔여)의 feature/shared-review-engine-core 를 더했다 「이대로 (권장)」
+- 원문:
+  - 「이대로 (권장)」
 
 ## 위험 번호표
 
