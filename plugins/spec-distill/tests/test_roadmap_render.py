@@ -15,7 +15,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "plugins" / "spec-distill" / "scripts"))
 import roadmap_render as R  # noqa: E402
-from roadmap_model import frontmatter, section_body, unquote  # noqa: E402
+from roadmap_model import frontmatter, parse_history, quotes, section_body, unquote  # noqa: E402
 
 RM_REL = "docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose"
 RM_DIR = REPO / RM_REL
@@ -144,13 +144,13 @@ class Render(unittest.TestCase):
 
     def test_blocks(self):
         self.assertEqual(R.render_block(self.rows[0]), (
-            "### P1 — 먼저 정할 것\n- 의도: 이름을 정한다\n- 범위: 한다 결정 / 안 한다 코드\n- 의존: 없음\n"
+            "### P1 — 먼저 정할 것\n- 의도: 이름을 정한다\n- 범위:\n  - 한다: 결정\n  - 안 한다: 코드\n- 의존: 없음\n"
             "- 완료: 결정 기록\n- 묶음: 없음\n- 경로 예약: 없음\n- 발화: S2\n- 항목: OQ5\n"))
         self.assertEqual(R.render_block(self.rows[1]), (
-            "### A1 — 첫 에픽\n- 의도: 첫 의도\n- 범위: 한다 가 / 안 한다 나\n- 의존: P1\n"
+            "### A1 — 첫 에픽\n- 의도: 첫 의도\n- 범위:\n  - 한다: 가\n  - 안 한다: 나\n- 의존: P1\n"
             "- 브랜치: feature/a1\n- 묶음: A1.md\n- 경로 예약: x/y.py, z/\n"))
         self.assertEqual(R.render_block(self.rows[2]), (
-            "### B1 — 앞선 브랜치\n- 의도: 브랜치를 머지\n- 범위: 한다 머지 / 안 한다 새 일\n- 의존: 없음\n"
+            "### B1 — 앞선 브랜치\n- 의도: 브랜치를 머지\n- 범위:\n  - 한다: 머지\n  - 안 한다: 새 일\n- 의존: 없음\n"
             "- 브랜치: feature/b1\n- 묶음: 없음\n- 경로 예약: 없음\n- spec: docs/specs/b1-design.md\n"
             "- 발화: S1\n- 항목: C4 · OQ3\n"))
 
@@ -180,12 +180,13 @@ class Render(unittest.TestCase):
 
     def test_roadmap(self):
         text = R.render_roadmap(R.TEMPLATE.read_text(encoding="utf-8"), self.rows, self.idx, "작은 일",
-                                "iv/b.md", "rm/roadmap.md", "- 2026-10-15 · 처음 로드맵 · 승인 원문 「승인」")
+                                "iv/b.md", "rm/roadmap.md",
+                                R.history_entry("2026-10-15", "처음 로드맵", [], ["승인"]).rstrip("\n"))
         self.assertTrue(text.startswith("---\ntype: roadmap\nsource_brief: iv/b.md\n---\n\n# 작은 일 — 로드맵\n"))
         self.assertIn("## 에픽\n\n### P1 — 먼저 정할 것\n", text)
         self.assertIn("- 항목: C4 · OQ3\n\n## 지휘 절차\n", text)
         self.assertIn("`@rm/roadmap.md`", text)
-        self.assertIn("## 재분해 이력\n\n- 2026-10-15 · 처음 로드맵 · 승인 원문 「승인」\n\n## 위험 번호표\n", text)
+        self.assertIn("## 재분해 이력\n\n### 2026-10-15 · 처음 로드맵\n- 원문:\n  - 「승인」\n\n## 위험 번호표\n", text)
         self.assertTrue(text.endswith("- K1 — 위험 — 숨은 가정: 가정 셋 — 근거 약함\n"
                                       "- K2 — 위험 — 실패 양식: 조용한 실패 — 근거 사례\n"))
         self.assertNotIn("{{", text)
@@ -222,6 +223,97 @@ class Render(unittest.TestCase):
         want[1].ids = sorted(set(want[1].ids), key=R.id_sort_key)  # 묶음은 정렬된 ids 를 싣는다
         want[2].ids = ["S1", "C4", "OQ3"]
         self.assertEqual(rows, want)
+
+
+class FormatV2(unittest.TestCase):
+    """R5 AC2 · AC3 · AC4 — 범위 하위 항목 · 선택 칸 · 새 재분해 이력."""
+
+    ROW = R.Row("A1", "가", R.KIND_BUNDLE, "", "의도", "한다 상태줄 · 패널(M2 · M3 결과에 맞춤) / 안 한다 계산(R0 · R5)",
+                "없음", "feature/a · feature/b", "없음", ["C4"], extras={"크기": "중", "산출물": "docs/r.md"})
+
+    def test_scope_lines_and_text_are_inverse(self):
+        for scope in ("한다 a · b / 안 한다 c", "한다 x(가 · 나) / 안 한다 없음", "자유 글 범위"):
+            lines = R.scope_lines(scope)
+            value = [l[4:] for l in lines[1:]] if lines[0] == "- 범위:" else lines[0][len("- 범위: "):]
+            self.assertEqual(R.scope_text(value), scope)
+        self.assertEqual(R.scope_lines("한다 a / 안 한다 b"), ["- 범위:", "  - 한다: a", "  - 안 한다: b"])
+
+    def test_scope_text_joins_hand_written_items_and_rejects_others(self):
+        self.assertEqual(R.scope_text(["한다: a", "한다: b", "안 한다: c"]), "한다 a · b / 안 한다 c")
+        for bad in (["한다: a"], ["안 한다: c"], ["한다: a", "모름: b", "안 한다: c"]):
+            with self.assertRaises(R.TableError):
+                R.scope_text(bad)
+
+    def test_render_block_new_form(self):
+        self.assertEqual(R.render_block(self.ROW),
+                         "### A1 — 가\n- 의도: 의도\n- 범위:\n"
+                         "  - 한다: 상태줄 · 패널(M2 · M3 결과에 맞춤)\n  - 안 한다: 계산(R0 · R5)\n"
+                         "- 의존: 없음\n- 브랜치: feature/a · feature/b\n- 묶음: A1.md\n- 경로 예약: 없음\n"
+                         "- 크기: 중\n- 산출물: docs/r.md\n")
+
+    def test_block_round_trip_through_parser(self):
+        text = ("---\ntype: roadmap\nsource_brief: b.md\n---\n\n## 에픽\n\n" + R.render_block(self.ROW)
+                + "\n## 재분해 이력\n\n- 없음\n")
+        rows = R.extract_rows(text, lambda name: (
+            "---\ntype: epic-bundle\nepic: A1\nroadmap: r\nsource_brief: b.md\nids: [C4]\n---\n\n"
+            "## 7. 인터페이스\n\n- 받는 것: 없음\n- 넘기는 것: 없음\n"))
+        self.assertEqual(rows, [self.ROW])
+
+    def test_extract_table_parse_is_stable_with_none_and_list_fields(self):
+        block = ("### A1 — 가\n- 의도: 의도\n- 범위: 자유\n- 의존: 없음\n- 브랜치: feature/a\n- 묶음: A1.md\n"
+                 "- 경로 예약: 없음\n- 병렬: 없음\n- 근거:\n  - 하나\n  - 둘\n")
+        text = "---\ntype: roadmap\nsource_brief: b.md\n---\n\n## 에픽\n\n" + block + "\n## 재분해 이력\n\n- 없음\n"
+        bundle = ("---\ntype: epic-bundle\nepic: A1\nroadmap: r\nsource_brief: b.md\nids: [C4]\n---\n\n"
+                  "## 7. 인터페이스\n\n- 받는 것: 없음\n- 넘기는 것: 없음\n")
+        rows = R.extract_rows(text, lambda name: bundle)
+        self.assertNotIn("병렬", rows[0].extras)
+        self.assertIn("근거", rows[0].extras)
+        self.assertEqual(R.parse_table(R.format_table(rows)), rows)
+
+    def test_table_narrow_unless_extras(self):
+        plain = R.Row("B1", "나", R.KIND_DECISION, "", "i", "s", "없음", "없음", "없음", ["S1", "C4"])
+        narrow = R.format_table([plain])
+        self.assertIn("| " + " | ".join(R.COLUMNS) + " |", narrow)
+        self.assertNotIn("크기", narrow)
+        wide = R.format_table([plain, self.ROW])
+        self.assertIn(" | ".join(R.COLUMNS + R.EXTRA_COLUMNS), wide)
+        self.assertEqual(R.parse_table(wide), [plain, self.ROW])
+        self.assertEqual(R.parse_table(narrow), [plain])
+
+    def test_history_entry(self):
+        self.assertEqual(R.history_entry("2026-10-17", "재분해", ["바뀐 에픽 R5", "새 에픽 R11"], ["좋아", "가 「나」 다"]),
+                         "### 2026-10-17 · 재분해\n- 바뀜: 바뀐 에픽 R5 · 새 에픽 R11 「좋아」 · 「가 「나」 다」\n"
+                         "- 원문:\n  - 「좋아」\n  - 「가 「나」 다」\n")
+        self.assertEqual(R.history_entry("2026-10-17", "재분해", ["바뀐 에픽 R5"], ["하나"]),
+                         "### 2026-10-17 · 재분해\n- 바뀜: 바뀐 에픽 R5 「하나」\n- 원문:\n  - 「하나」\n")
+        self.assertEqual(R.history_entry("2026-10-17", "처음 로드맵", [], ["승인"]),
+                         "### 2026-10-17 · 처음 로드맵\n- 원문:\n  - 「승인」\n")
+        for bad in ("열린 「 하나", "닫힌 」 하나", "", "줄\n바꿈", "줄\r바꿈", "줄\u2028바꿈"):
+            with self.assertRaises(R.TableError):
+                R.history_entry("2026-10-17", "x", [], [bad])
+
+    def test_history_entry_round_trips_with_quotes_at_end_of_change(self):
+        for qs in (["하나"], ["첫째", "둘째 「안」"]):
+            entry = R.history_entry("2026-10-17", "재분해", ["바뀐 에픽 R5"], qs)
+            got, errors = parse_history("## 재분해 이력\n\n" + entry + "\n## 위험 번호표\n")
+            self.assertEqual(errors, [])
+            self.assertEqual(got[0]["quotes"], ["「%s」" % q for q in qs])
+            self.assertEqual(len(got[0]["changes"]), 1)
+            self.assertTrue(got[0]["changes"][0].startswith("바뀐 에픽 R5 「"))
+            self.assertEqual(quotes(got[0]["changes"][0]), got[0]["quotes"])
+
+    def test_history_entry_without_user_words(self):
+        got = R.history_entry("2026-10-15", "판정", ["가 「설계 판정」"], [], no_words="사용자 말 없음(설계 판정)")
+        self.assertEqual(got, "### 2026-10-15 · 판정\n- 바뀜: 가 「설계 판정」\n- 원문: 없음 — 사용자 말 없음(설계 판정)\n")
+        for quotes, why in (([], ""), (["a"], "사유"), ([], "줄\n바꿈")):
+            with self.assertRaises(R.TableError):
+                R.history_entry("2026-10-15", "x", [], quotes, no_words=why)
+
+    def test_append_history_new_entry_after_old_lines(self):
+        text = "## 재분해 이력\n\n- 2026-10-11 · 처음 · 「a」\n\n## 위험 번호표\n"
+        got = R.append_history(text, R.history_entry("2026-10-17", "재분해", [], ["b"]))
+        self.assertEqual(got, "## 재분해 이력\n\n- 2026-10-11 · 처음 · 「a」\n\n### 2026-10-17 · 재분해\n"
+                              "- 원문:\n  - 「b」\n\n## 위험 번호표\n")
 
 
 class GoldenSample(unittest.TestCase):

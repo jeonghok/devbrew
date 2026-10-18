@@ -7,12 +7,14 @@
                           --title <제목> --date <YYYY-MM-DD> --approval <승인 원문>
   roadmap_write.py update --roadmap <로드맵> --brief <brief> --audit <audit> --plan-table <새 표 파일>
                           --date <YYYY-MM-DD> --change <바뀐 것 한 줄> --approval <승인 원문>
+                          (--approval 은 create · update 에서 여러 번 줄 수 있다)
   roadmap_write.py extract --roadmap <로드맵>     로드맵 블록 · 묶음에서 분해안 표를 뽑아 낸다(쓰지 않는다)
+  roadmap_write.py migrate --roadmap <로드맵>     로드맵 블록을 새 형식으로 다시 쓴다(재분해 이력은 그대로)
 
 종료 코드: 0 성공 · 1 쓰지 않음(표 오류 · 덮어쓰기 거부 · 검증 실패 — 쓴 것은 모두 되돌렸다) · 2 사용법 오류.
 
 검증은 쓴 로드맵에 `roadmap_status.py --roadmap-file <로드맵> --json` 을 돌려 format_errors · unassigned ·
-orphans · unknown_ids 넷이 모두 빈 목록일 때만 성공이다. 검사기의 종료 코드는 보지 않는다 — origin/main 을
+orphans · unknown_ids 넷이 모두 빈 목록일 때만 성공이다. 검사기의 종료 코드는 보지 않는다 — 기본 브랜치(origin/HEAD)를
 못 읽으면 3, 진행 경고면 1 이 나와 생성물의 유효성과 무관하다.
 create 는 표 파일의 `## 생성 기록` 절에 자기가 만든 파일을 적고, 다시 돌 때 그 기록에 있는 파일만 덮어쓴다.
 """
@@ -30,7 +32,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import roadmap_render as R  # noqa: E402
-from roadmap_model import DATE_RE, FormatError, frontmatter, id_sort_key, section_body, unquote  # noqa: E402
+from roadmap_model import (  # noqa: E402
+    DATE_RE, FormatError, frontmatter, id_sort_key, parse_roadmap, quotes, section_body, strip_quotes, unquote)
 
 RS = Path(__file__).resolve().parent / "roadmap_status.py"
 RECORD_HEADING = "## 생성 기록"
@@ -65,8 +68,11 @@ def rel(top: Path, path) -> str:
         raise Usage("%s 가 작업 트리 %s 밖이다" % (path, top))
 
 
-def read(path) -> str:
+def read(path, keep_newlines: bool = False) -> str:
+    """UTF-8 글. keep_newlines 면 줄바꿈을 바꾸지 않고 바이트 그대로(CRLF 가 LF 로 접히지 않는다)."""
     try:
+        if keep_newlines:
+            return Path(path).read_bytes().decode("utf-8")
         return Path(path).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         raise Refused("못 읽었다: %s (%s)" % (path, exc))
@@ -237,7 +243,7 @@ def cmd_create(a) -> int:
     table_text = read(table_path)
     rows = R.parse_table(table_text)
     idx = R.index_brief(read(a.brief), read(a.audit))
-    history = "- %s · 처음 로드맵 · 승인 원문 「%s」" % (date, a.approval)
+    history = R.history_entry(date, "처음 로드맵", [], a.approval).rstrip("\n")
     files = {roadmap: R.render_roadmap(read(R.TEMPLATE), rows, idx, a.title, brief_rel, roadmap_rel, history)}
     for r in rows:
         if r.kind == R.KIND_BUNDLE:
@@ -280,7 +286,6 @@ def cmd_extract(a) -> int:
 DONE = ("머지됨", "끝남")
 NEW_ID_RE = re.compile(r"[A-Z][0-9]+")
 ID_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])([A-Z])([0-9]+)")
-QUOTE_RE = re.compile(r"「[^」]*」")
 
 
 def stages(top: Path, roadmap: Path) -> dict:
@@ -301,7 +306,7 @@ def stages(top: Path, roadmap: Path) -> dict:
 
 def used_numbers(roadmap_text: str) -> dict:
     """글자마다 로드맵 블록 번호 · 재분해 이력에 나온 가장 큰 숫자. 이력의 「…」 는 사용자 말이라 세지 않는다."""
-    history = QUOTE_RE.sub(" ", section_body(roadmap_text, "## 재분해 이력") or "")
+    history = strip_quotes(section_body(roadmap_text, "## 재분해 이력") or "")
     corpus = " ".join(R.epic_block_texts(roadmap_text)) + "\n" + history
     best = {}
     for letter, num in ID_TOKEN_RE.findall(corpus):
@@ -370,10 +375,10 @@ def cmd_update(a) -> int:
         raise Refused("이 생성기가 만들지 않은 파일은 덮어쓰지 않는다 — %s" % " · ".join(foreign))
     texts = R.epic_block_texts(old_text)
     blocks = [texts[r.id] if r.id in old and r.id not in changed else R.render_block(r) for r in new_rows]
-    parts = [a.change] + ["%s %s" % (label, " · ".join(ids))
-                          for label, ids in (("바뀜", changed), ("새", added), ("사라짐", removed)) if ids]
-    new_text = R.append_history(R.replace_epics(old_text, blocks),
-                                "- %s · 재분해 · %s 「%s」" % (date, " · ".join(parts), a.approval))
+    changes = ["%s %s" % (label, " · ".join(ids))
+               for label, ids in (("바뀐 에픽", changed), ("새 에픽", added), ("사라진 에픽", removed)) if ids]
+    entry = R.history_entry(date, a.change, changes or ["순서만"], a.approval)
+    new_text = R.append_history(R.replace_epics(old_text, blocks), entry)
     writes, removes = {roadmap: new_text}, []
     for i in changed + added:
         path = rdir / (i + ".md")
@@ -398,7 +403,77 @@ def cmd_update(a) -> int:
 
     run_txn(txn, body)
     print("[spec-distill] 로드맵을 다시 나눴다: %s — %s · 묶음 %d개 씀 · %d개 지움"
-          % (roadmap_rel, " · ".join(parts[1:]) or "순서만", len(writes) - 1, len(removes)))
+          % (roadmap_rel, " · ".join(changes) or "순서만", len(writes) - 1, len(removes)))
+    return 0
+
+
+SCOPE_PREFIX = "- 범위: "
+
+
+def migrated_text(old_text: str, read_bundle=None) -> str:
+    """블록의 `- 범위: 한다 … / 안 한다 …` 한 줄만 하위 항목 꼴로 바꾸고 나머지 글자는 그대로 둔다.
+
+    바꿀 수 없는 범위 줄(한다 · 안 한다 가 한 번씩이 아닌 꼴)이나 옮긴 뒤 블록 칸이 달라지는 경우는 Refused.
+    `read_bundle` 은 옛 호출 꼴과 맞추려고 받을 뿐 쓰지 않는다 — 묶음 파일은 읽지도 고치지도 않는다."""
+    _meta, blocks_before, _rec, _risk, errors = parse_roadmap(old_text)
+    if errors:
+        raise Refused("로드맵 형식 오류가 있어 옮기지 않는다 — %s" % " / ".join(errors))
+    lines = old_text.splitlines(keepends=True)
+    start = next((i for i, l in enumerate(lines) if l.rstrip("\r\n") == "## 에픽"), None)
+    if start is None:
+        raise Refused("`## 에픽` 절이 없다")
+    end = next((j for j in range(start + 1, len(lines)) if lines[j].startswith("## ")), len(lines))
+    out, block = list(lines[:start + 1]), None
+    for line in lines[start + 1:end]:
+        body = line.rstrip("\r\n")
+        eol = line[len(body):]
+        if body.startswith("### "):
+            block = body[4:].split(" — ", 1)[0]
+        elif block is not None and body.startswith(SCOPE_PREFIX):
+            value = body[len(SCOPE_PREFIX):]
+            if not R.SCOPE_RE.fullmatch(value) or value.count(" / 안 한다 ") != 1:
+                raise Refused("%s 의 범위가 `한다 … / 안 한다 …` 한 번씩이 아니라 옮길 수 없다: %r" % (block, value))
+            m = R.SCOPE_RE.fullmatch(value)
+            out.extend(["- 범위:" + eol, "  - 한다: " + m.group(1) + eol, "  - 안 한다: " + m.group(2) + eol])
+            continue
+        out.append(line)
+    new_text = "".join(out + lines[end:])
+    lost = set(quotes(old_text)) - set(quotes(new_text))
+    if lost:
+        raise Refused("옮기면 원문 인용이 사라진다 — %s" % " · ".join(sorted(lost)))
+    after = parse_roadmap(new_text)
+    blocks_after = after[1]
+    if after[4] or [b["id"] for b in blocks_before] != [b["id"] for b in blocks_after]:
+        raise Refused("옮긴 로드맵을 되읽으니 형식이 달라졌다 — %s" % " / ".join(after[4]))
+    for x, y in zip(blocks_before, blocks_after):
+        fx, fy = dict(x["fields"]), dict(y["fields"])
+        for f in (fx, fy):
+            if isinstance(f.get("범위"), list):
+                f["범위"] = R.scope_text(f["범위"])
+        if x["title"] != y["title"] or fx != fy:
+            raise Refused("%s 블록의 칸이 옮기기 전과 다르다" % x["id"])
+    return new_text
+
+
+def cmd_migrate(a) -> int:
+    roadmap = Path(os.path.realpath(a.roadmap))
+    top = git_top(roadmap)
+    rdir = roadmap.parent
+    old_text = read(roadmap, keep_newlines=True)
+    new_text = migrated_text(old_text, lambda n: read(rdir / n) if (rdir / n).is_file() else None)
+    if new_text == old_text:
+        print("[spec-distill] 옮길 것이 없다 — 블록이 이미 새 형식이다")
+        return 0
+    txn = Txn()
+
+    def body():
+        txn.write(roadmap, new_text)
+        reasons = validate(top, roadmap)
+        if reasons:
+            raise Refused("검증 실패 — %s" % " / ".join(reasons))
+
+    run_txn(txn, body)
+    print("[spec-distill] 로드맵 블록을 새 형식으로 옮겼다: %s — 재분해 이력은 옮기지 않았다" % rel(top, roadmap))
     return 0
 
 
@@ -408,17 +483,21 @@ def build_parser() -> argparse.ArgumentParser:
     sub = ap.add_subparsers(dest="cmd")
     sub.required = True
     c = sub.add_parser("create")
-    for flag in ("--brief", "--audit", "--plan-table", "--out", "--title", "--date", "--approval"):
+    for flag in ("--brief", "--audit", "--plan-table", "--out", "--title", "--date"):
         c.add_argument(flag, required=True)
+    c.add_argument("--approval", action="append", required=True)
     e = sub.add_parser("extract")
     e.add_argument("--roadmap", required=True)
+    m = sub.add_parser("migrate")
+    m.add_argument("--roadmap", required=True)
     u = sub.add_parser("update")
-    for flag in ("--roadmap", "--brief", "--audit", "--plan-table", "--date", "--change", "--approval"):
+    for flag in ("--roadmap", "--brief", "--audit", "--plan-table", "--date", "--change"):
         u.add_argument(flag, required=True)
+    u.add_argument("--approval", action="append", required=True)
     return ap
 
 
-COMMANDS = {"create": cmd_create, "update": cmd_update, "extract": cmd_extract}
+COMMANDS = {"create": cmd_create, "update": cmd_update, "extract": cmd_extract, "migrate": cmd_migrate}
 
 
 def main(argv=None) -> int:

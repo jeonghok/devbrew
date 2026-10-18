@@ -3,17 +3,19 @@
 """roadmap_status.py — 로드맵과 git 을 읽어 에픽별 단계 · 경고 · 정보를 낸다.
 
 명령줄:
-  roadmap_status.py <로드맵 경로>           origin/main 의 로드맵을 읽는다(레포 상대경로)
-  roadmap_status.py --roadmap-file <파일>   작업 트리의 로드맵을 읽는다(아직 main 에 없을 때)
+  roadmap_status.py <로드맵 경로>           기본 브랜치(origin/HEAD)의 로드맵을 읽는다(레포 상대경로)
+  roadmap_status.py --roadmap-file <파일>   작업 트리의 로드맵을 읽는다(아직 기본 브랜치에 없을 때)
   --json 이면 JSON 하나를 낸다.
 
 종료 코드: 0 이상 없음 · 1 경고 있음 · 2 사용법 오류 · 3 검사 불가(로드맵 없음 · 형식 깨짐 ·
-블록 하나라도 알 수 없음 · 번호 대조 검사 불가 · 미룸 표 깨짐 · 번호 전체 집합을 못 셈). 3 > 1 > 0.
+블록 하나라도 알 수 없음 · 번호 대조 검사 불가 · 미룸 표 깨짐 · 번호 전체 집합을 못 셈) ·
+4 로드맵이 아직 기본 브랜치에 없음(머지 전 — `--roadmap-file` 로 계산한다). 3 > 4 > 1 > 0.
 정보(경로 예약 겹침 · 다른 에픽이 예약한 파일의 편집)는 종료 코드를 바꾸지 않는다 — 충돌은 머지 때 푼다.
 
 읽기만 한다 — 파일을 쓰지 않고 네트워크에 나가지 않는다. git 은 `GIT_ALLOWED` 의 하위 명령만
 부르고 fetch 하지 않는다(지휘 절차가 계산 전에 fetch 한다). 단계는 git 으로 알 수 있는 것까지다 —
-구현 중 · 구현 끝 · PR 은 R5 가 붙인다.
+구현 중 · 구현 끝은 계획 파일과 설계문서의 구현 대조 절로 센다. PR 단계는 여기서 세지 않고
+control_plane 이 기계 상태 또는 `gh` 로 덧씌운다.
 """
 from __future__ import annotations
 
@@ -29,21 +31,35 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_bundle_coverage import check, deferred_rows, receiver_ok  # noqa: E402
 from roadmap_model import (  # noqa: E402,F401 — 테스트가 rs.parse_roadmap · rs.brief_universe 로 부른다
-    FormatError, brief_universe, collect_assigned, frontmatter, id_sort_key, parse_ids,
-    parse_roadmap, section_body, split_list, unquote)
+    EXTRA_FIELDS, FormatError, RECORD_HEADING, RULINGS_HEADING, brief_universe, collect_assigned, field_list, field_text,
+    frontmatter, handoff_rows, id_sort_key, impl_done, parse_ids, parse_roadmap,
+    section_body, section_lines, split_list, unquote)
+from repo_defaults import SPECS_DIR, repo_settings  # noqa: E402
 
-MAIN_REF = "refs/remotes/origin/main"
+DEFAULT_REF = "refs/remotes/origin/HEAD"
+NO_DEFAULT = ("기본 브랜치를 알 수 없다 — origin/HEAD 가 없다. `git remote set-head origin --auto` 로 만든 뒤 "
+              "다시 계산한다")
 GIT_ALLOWED = frozenset({"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"})
 NOTICE = ("머지됨 자동 판정은 merge commit 방식에서만 된다 — 브랜치가 지워졌으면 GitHub 의 머지 메시지 "
           "`Merge pull request #<n> from <owner>/<브랜치>` 로만 알아본다. squash · rebase 로 머지했거나 "
-          "로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적는다. 경로 예약 겹침과 다른 에픽이 "
-          "예약한 파일의 편집은 경고가 아니라 정보다 — 에픽은 병렬로 가고 충돌은 머지 때 푼다(나중 PR 이 main 을 "
+          "로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적는다(여러 브랜치 블록이면 머지한 브랜치 이름만 적는다 — 줄은 쌓이고 머지한 브랜치마다 한 줄이면 된다). 경로 예약 겹침과 다른 에픽이 "
+          "예약한 파일의 편집은 경고가 아니라 정보다 — 에픽은 병렬로 가고 충돌은 머지 때 푼다(나중 PR 이 기본 브랜치를 "
           "merge 하고 스위트를 다시 돌린다).")
 # 경로 예약 겹침 · 위반에서 빼는 공유 파일 — 버전은 머지 직전에 정한다(N6).
 SHARED_BASENAMES = ("plugin.json", "CHANGELOG.md", "README.md")
-TASK_STATUS = {"대기": "pending", "준비": "pending", "설계 중": "in_progress",
-               "계획": "in_progress", "머지됨": "completed", "끝남": "completed"}
+TASK_STATUS = {"대기": "pending", "준비": "pending", "설계 중": "in_progress", "계획": "in_progress",
+               "구현 중": "in_progress", "구현 끝": "in_progress", "PR": "in_progress",
+               "머지됨": "completed", "끝남": "completed"}
+
+
+def task_status(stage):
+    if stage and stage.startswith("일부 머지"):
+        return "in_progress"
+    return TASK_STATUS.get(stage)
+
+
 DONE = ("머지됨", "끝남")
+PAST_PLAN = ("계획", "구현 중", "구현 끝", "PR", "머지됨")
 
 MERGE_MSG_RE = re.compile(r"Merge pull request #\d+ from [^/\s]+/(\S+)")
 BACKTICK_RE = re.compile(r"`([^`]+)`")
@@ -96,9 +112,18 @@ class Git:
     def is_ancestor(self, a: str, b: str) -> bool:
         return self.run("merge-base", "--is-ancestor", a, b)[0] == 0
 
-    def first_parent_merges(self):
+    def default_branch(self):
+        """(커밋, 이름) — origin/HEAD 가 가리키는 기본 브랜치. 못 풀면 (None, None)."""
+        sha = self.commit(DEFAULT_REF)
+        if not sha:
+            return None, None
+        rc, out = self.run("rev-parse", "--symbolic-full-name", DEFAULT_REF)
+        full = out.strip() if rc == 0 else ""
+        return sha, (full[len("refs/remotes/"):] if full.startswith("refs/remotes/") else "origin/HEAD")
+
+    def first_parent_merges(self, main):
         rc, out, err = self.run_err("log", "--first-parent", "--merges",
-                                    "--format=%H%x09%P%x09%s", MAIN_REF)
+                                    "--format=%H%x09%P%x09%s", main)
         if rc != 0:
             self.fail("log", rc, err)
             return []
@@ -109,12 +134,36 @@ class Git:
                 merges.append((parts[0], parts[1].split(), parts[2]))
         return merges
 
-    def changed(self, base: str, tip: str):
-        rc, out, err = self.run_err("diff", "--name-only", "-z", "%s...%s" % (base, tip))
+    def merge_base(self, a: str, b: str):
+        rc, out = self.run("merge-base", a, b)
+        return out.strip() if rc == 0 and out.strip() else None
+
+    def changed(self, base: str, tip: str, pathspec=None):
+        args = ["diff", "--name-only", "-z", "%s...%s" % (base, tip)]
+        if pathspec:
+            args += ["--", pathspec]
+        rc, out, err = self.run_err(*args)
         if rc != 0:
             self.fail("diff", rc, err)
             return []
         return [p for p in out.split("\0") if p]
+
+    def first_touch(self, base: str, tip: str, path: str):
+        rc, out, err = self.run_err("log", "--format=%H", "--reverse", "%s..%s" % (base, tip), "--", path)
+        if rc != 0:
+            self.fail("log", rc, err)
+            return None
+        first = out.split("\n", 1)[0].strip()
+        return first or None
+
+    def trailer_after(self, commit: str, tip: str, base: str, lines: set) -> bool:
+        """commit 뒤(commit 제외)에 이 브랜치가 더한 커밋 — base(기본 브랜치와 갈라진 곳)에서 닿는 것은 뺀다 —
+        의 메시지에 lines 중 한 줄이 그대로 있는가."""
+        rc, out, err = self.run_err("log", "--format=%x1e%B", tip, "^" + commit, "^" + base)
+        if rc != 0:
+            self.fail("log", rc, err)
+            return False
+        return any(line.strip() in lines for body in out.split("\x1e") for line in body.splitlines())
 
     def grep_files(self, tree: str, fixed: str, pathspec: str):
         rc, out, err = self.run_err("grep", "-l", "-z", "-F", "-e", fixed, tree, "--", pathspec)
@@ -147,11 +196,11 @@ class Git:
 # ── 로드맵 · 묶음 · brief 읽기 ───────────────────────────────────────────────
 
 class Source:
-    """로드맵 · 묶음 · brief · audit 을 읽는 사본 — origin/main(rev) 또는 작업 트리(root)."""
+    """로드맵 · 묶음 · brief · audit 을 읽는 사본 — 기본 브랜치(rev) 또는 작업 트리(root)."""
 
-    def __init__(self, git: Git, rev=None, root=None):
+    def __init__(self, git: Git, rev=None, root=None, label=None):
         self.git, self.rev, self.root = git, rev, root
-        self.label = "origin/main" if rev else "작업 트리"
+        self.label = label or ("기본 브랜치" if rev else "작업 트리")
 
     def read(self, path: str):
         if self.rev:
@@ -192,27 +241,91 @@ def _reachable(blocks: list) -> dict:
     return reach
 
 
-def find_specs(git: Git, tree: str, block: dict, bundle_path):
+def spec_line_path(line: str):
+    """`**Spec:**` 줄의 경로 — 바로 뒤가 백틱이면 그 안, 아니면 줄에서 처음 나오는 백틱 토큰, 그것도 없으면
+    첫 일반 토큰(뒤의 `,.;:)` 와 짝 없는 백틱, 앞의 `(` 를 뗀다)."""
+    rest = line.lstrip()[len("**Spec:**"):].strip()
+    if rest.startswith("`"):
+        m = BACKTICK_RE.match(rest)
+        return m.group(1) if m else None
+    m = BACKTICK_RE.search(rest)
+    if m:
+        return m.group(1)
+    tok = rest.split()[0].strip("`").rstrip(",.;:)").lstrip("(").strip("`") if rest.split() else ""
+    return tok or None
+
+
+def plan_specs(text: str) -> set:
+    return {p for p in (spec_line_path(l) for l in text.splitlines() if l.lstrip().startswith("**Spec:**")) if p}
+
+
+def find_specs(git: Git, tree: str, block: dict, bundle_path, specs_dir: str):
+    if "산출물" in block["fields"]:
+        return [p for p in field_list(block["fields"]["산출물"]) if git.exists(tree, p)]
     if block["kind"] == "branch":
-        spec = block["fields"]["spec"].strip().strip("`")
+        spec = field_text(block["fields"]["spec"]).strip().strip("`")
         return [spec] if git.exists(tree, spec) else []
     if block["kind"] != "bundle" or bundle_path is None:
         return []
     found = []
-    for path in git.grep_files(tree, bundle_path, "docs/superpowers/specs/"):
+    for path in git.grep_files(tree, bundle_path, specs_dir):
         text = git.blob(tree, path)
         if text and unquote(frontmatter(text).get("source_interview", "")) == bundle_path:
             found.append(path)
     return sorted(found)
 
 
-def has_plan(git: Git, tree: str, spec: str) -> bool:
-    for path in git.grep_files(tree, spec, "docs/superpowers/plans/"):
-        for line in (git.blob(tree, path) or "").splitlines():
-            if line.lstrip().startswith("**Spec:**"):
-                m = BACKTICK_RE.search(line)
-                if m and m.group(1) == spec:
-                    return True
+def branch_plans(git: Git, base: str, tip: str, specs: list, plans_dir: str) -> list:
+    """이 브랜치가 기본 브랜치에서 갈라진 뒤 바꾼 계획 가운데 그 설계문서를 가리키는 것 — (경로, 처음 더한 커밋)."""
+    out = []
+    for path in git.changed(base, tip, plans_dir):
+        text = git.blob(tip, path)
+        if text is None or not (plan_specs(text) & set(specs)):
+            continue
+        out.append((path, git.first_touch(base, tip, path)))
+    return sorted(out)
+
+
+def progress(git: Git, main: str, tip: str, block: dict, bundle_path, settings: dict):
+    """(단계, 근거, 설계문서들, 계획들) — 브랜치 하나의 진행. 앞 계획의 구현 대조 절은 뒤 계획을 끝내지 않는다."""
+    specs = find_specs(git, tip, block, bundle_path, settings["specs_dir"])
+    if not specs:
+        return "설계 중", "브랜치 있음 · spec 없음", [], []
+    base = git.merge_base(main, tip)
+    if base is None:
+        return "설계 중", "spec 있음 · 기본 브랜치와 갈라진 곳을 못 찾았다", specs, []
+    plans = branch_plans(git, base, tip, specs, settings["plans_dir"])
+    if not plans:
+        return "설계 중", "spec 있음", specs, []
+    texts = [git.blob(tip, s) or "" for s in specs]
+    done = [p for p, _c in plans if any(impl_done(t, p) for t in texts)]
+    paths = [p for p, _c in plans]
+    if len(done) == len(plans):
+        return "구현 끝", "구현 대조 절 있음: %s" % " · ".join(done), specs, paths
+    trailers = {"Spec: " + s for s in specs}
+    started = [p for p, c in plans if p not in done and c and git.trailer_after(c, tip, base, trailers)]
+    if started or done:
+        why = (["구현 대조 절 있음: %s" % " · ".join(done)] if done else []) + (
+            ["Spec: 트레일러 커밋 있음: %s" % " · ".join(started)] if started else [])
+        return "구현 중", " · ".join(why), specs, paths
+    return "계획", "계획 있음", specs, paths
+
+
+def names_branch(text: str, branch: str) -> bool:
+    """text 에 브랜치 이름이 통째로 적혀 있는가 — 이름 글자는 ASCII 영숫자와 `/._-` 뿐이라 한글 조사는 경계다.
+    이름 뒤의 `.` 이 공백이나 글의 끝 앞이면 문장 부호로 본다."""
+    def name_char(ch: str) -> bool:
+        return ch != "" and ch.isascii() and (ch.isalnum() or ch in "/._-")
+
+    at = text.find(branch)
+    while at != -1:
+        end = at + len(branch)
+        before, after = text[at - 1:at] if at else "", text[end:end + 1]
+        if after == "." and not text[end + 1:end + 2].strip():
+            after = ""
+        if not name_char(before) and not name_char(after):
+            return True
+        at = text.find(branch, at + 1)
     return False
 
 
@@ -221,24 +334,24 @@ def merged_by(git: Git, merges: list, main: str, branch: str, tip):
     if tip:
         for sha, parents, _subj in merges:
             if len(parents) >= 2 and parents[1] == tip and not git.is_ancestor(tip, parents[0]):
-                return "main 의 머지 커밋 %s" % sha[:8]
-    # 머지 메시지가 이 브랜치를 정확히 부른다 — 브랜치가 지워졌거나, 남은 브랜치 끝이 main 에 다 들어가
-    # 있을 때만(머지 뒤 로컬 브랜치를 main 으로 앞당긴 경우). 머지 뒤 커밋이 더 붙었으면 머지됨이 아니다.
+                return "기본 브랜치의 머지 커밋 %s" % sha[:8]
+    # 머지 메시지가 이 브랜치를 정확히 부른다 — 브랜치가 지워졌거나, 남은 브랜치 끝이 기본 브랜치에 다 들어가
+    # 있을 때만(머지 뒤 로컬 브랜치를 기본 브랜치로 앞당긴 경우). 머지 뒤 커밋이 더 붙었으면 머지됨이 아니다.
     if tip and not git.is_ancestor(tip, main):
         return None
     for sha, _parents, subj in merges:
         m = MERGE_MSG_RE.fullmatch(subj.strip())
         if m and m.group(1) == branch:
-            return "머지 메시지 %s (%s)" % (sha[:8], "브랜치 끝이 main 에 들어 있음" if tip
+            return "머지 메시지 %s (%s)" % (sha[:8], "브랜치 끝이 기본 브랜치에 들어 있음" if tip
                                           else "브랜치는 지워짐")
     return None
 
 
 class _GitTreeRepo:
-    """check() 가 로드맵 · 다른 묶음의 설계문서를 읽는 자리 — 작업 트리가 아니라 한 커밋(main)의 트리에서."""
+    """check() 가 로드맵 · 다른 묶음의 설계문서를 읽는 자리 — 작업 트리가 아니라 한 커밋(기본 브랜치)의 트리에서."""
 
-    def __init__(self, git: Git, tree: str):
-        self.git, self.tree = git, tree
+    def __init__(self, git: Git, tree: str, specs_dir=None):
+        self.git, self.tree, self.specs_dir = git, tree, specs_dir
         self._memo = {}
 
     def read(self, rel: str):
@@ -247,23 +360,29 @@ class _GitTreeRepo:
     def exists(self, rel: str) -> bool:
         return self.git.exists(self.tree, rel)
 
-    def specs_for(self, source: str) -> list:
-        if source in self._memo:
-            return self._memo[source]
+    def specs_for(self, source: str, specs_dir=None) -> list:
+        folder = specs_dir or self.specs_dir or SPECS_DIR
+        key = (source, folder)
+        if key in self._memo:
+            return self._memo[key]
         out = []
-        for path in self.git.grep_files(self.tree, source, "docs/superpowers/specs/"):
+        for path in self.git.grep_files(self.tree, source, folder):
             text = self.git.blob(self.tree, path)
             if text and unquote(frontmatter(text).get("source_interview", "")) == source:
                 out.append((path, text))
-        self._memo[source] = sorted(out)
-        return self._memo[source]
+        self._memo[key] = sorted(out)
+        return self._memo[key]
 
 
-def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_dir: str):
+def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_dir: str, settings: dict):
     """블록마다 stage · reason · warnings · notes · specs 를 채운다. 반환: 번호 대조 검사 불가 사유 목록."""
-    merges = git.first_parent_merges() if main else []
+    merges = git.first_parent_merges(main) if main else []
     by_id = {b["id"]: b for b in blocks}
     rec = {(r["block"], r["kind"]): r for r in records}
+    merge_lines = {}
+    for r in records:
+        if r["kind"] == "머지":
+            merge_lines.setdefault(r["block"], []).append(r)
     cov_unknown = []
     order, seen = [], set()
 
@@ -280,10 +399,11 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
 
     for bid in order:
         b = by_id[bid]
-        b.update(stage=None, reason="", warnings=[], notes=[], specs=[], tip=None)
+        b.update(stage=None, reason="", warnings=[], notes=[], specs=[], tip=None, branch_states=[], plans=[], docs=[], deferred=[],
+                 bundle=(roadmap_dir + "/" + b["fields"]["묶음"]) if b["kind"] == "bundle" else None)
         undone = [d for d in b["deps"] if by_id[d]["stage"] not in DONE]
         if main is None:
-            b["stage"], b["reason"] = "알 수 없음", "origin/main 을 못 읽었다"
+            b["stage"], b["reason"] = "알 수 없음", "기본 브랜치를 못 읽었다"
             continue
         if b["kind"] == "decision":
             r = rec.get((bid, "결정"))
@@ -294,36 +414,65 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
             else:
                 b["stage"], b["reason"] = "준비", "의존 완료"
             continue
-        branch = b["fields"]["브랜치"].strip().strip("`")
-        tip = git.commit("refs/heads/" + branch) or git.commit("refs/remotes/origin/" + branch)
-        b["tip"] = tip
-        bundle_path = (roadmap_dir + "/" + b["fields"]["묶음"]) if b["kind"] == "bundle" else None
-        why = merged_by(git, merges, main, branch, tip)
-        if not why and (bid, "머지") in rec:
-            r = rec[(bid, "머지")]
-            why = "결정 기록의 머지 기록 %s %s" % (r["date"], r["quote"])
-        if why:
-            b["stage"], b["reason"] = "머지됨", why
-            b["specs"] = find_specs(git, main, b, bundle_path)
-        elif not tip:
-            if undone:
+        bundle_path = b["bundle"]
+        states = []
+        for br in b["branches"]:
+            tip = git.commit("refs/heads/" + br) or git.commit("refs/remotes/origin/" + br)
+            states.append({"branch": br, "tip": tip, "merged": merged_by(git, merges, main, br, tip)})
+        b["branch_states"] = states
+        rec_merge = rec.get((bid, "머지"))
+        if rec_merge and len(states) > 1 and not all(s["merged"] for s in states):
+            # 브랜치가 여럿이면 머지 줄은 쌓인다 — 글에 이름이 적힌 브랜치에만 닿고, 그 ref 가 사라졌을 때만 머지로 센다.
+            for s in states:
+                if s["merged"]:
+                    continue
+                line = next((r for r in merge_lines[bid] if names_branch(r["quote"], s["branch"])), None)
+                if line is None:
+                    b["warnings"].append("결정 기록의 머지 줄이 %s 를 가리키지 않아 적용하지 않았다" % s["branch"])
+                elif s["tip"] is None:
+                    s["merged"] = "결정 기록의 머지 기록 %s %s" % (line["date"], line["quote"])
+                else:
+                    b["warnings"].append("결정 기록의 머지 줄을 %s 에 적용하지 않았다 — 브랜치가 남아 있다"
+                                         % s["branch"])
+            rec_merge = None
+        n_merged = sum(1 for s in states if s["merged"])
+        active = next((s for s in states if not s["merged"] and s["tip"]), None)
+        b["tip"] = active["tip"] if active else None
+        if n_merged == len(states) or rec_merge:
+            why = (" · ".join(s["merged"] for s in states) if n_merged == len(states)
+                   else "결정 기록의 머지 기록 %s %s" % (rec_merge["date"], rec_merge["quote"]))
+            b["stage"], b["reason"], b["tip"] = "머지됨", why, None
+            b["specs"] = find_specs(git, main, b, bundle_path, settings["specs_dir"])
+        elif active is None:
+            if n_merged:
+                nxt = next(s["branch"] for s in states if not s["merged"])
+                b["stage"], b["reason"] = "일부 머지 %d/%d" % (n_merged, len(states)), "다음 브랜치 없음: %s" % nxt
+                b["specs"] = find_specs(git, main, b, bundle_path, settings["specs_dir"])
+            elif undone:
                 b["stage"], b["reason"] = "대기", "의존 미완료: %s" % " · ".join(undone)
             else:
                 b["stage"], b["reason"] = "준비", "의존 완료 · 브랜치 없음"
         else:
-            b["specs"] = find_specs(git, tip, b, bundle_path)
-            if any(has_plan(git, tip, s) for s in b["specs"]):
-                b["stage"], b["reason"] = "계획", "계획 있음"
+            stage, reason, b["specs"], b["plans"] = progress(git, main, active["tip"], b, bundle_path, settings)
+            if n_merged:
+                b["stage"] = "일부 머지 %d/%d" % (n_merged, len(states))
+                b["reason"] = "%s — %s · %s" % (active["branch"], stage, reason)
             else:
-                b["stage"] = "설계 중"
-                b["reason"] = "spec 있음" if b["specs"] else "브랜치 있음 · spec 없음"
+                b["stage"], b["reason"] = stage, reason
             if undone:
                 b["warnings"].append("의존 미머지 상태에서 진행 중: %s" % " · ".join(undone))
         if b["kind"] == "bundle" and bundles.get(bid) is None:
             b["warnings"].append("묶음 없음: %s" % bundle_path)
         if len(b["specs"]) > 1:
             b["warnings"].append("spec 여럿: %s" % " · ".join(b["specs"]))
-        tree = main if b["stage"] == "머지됨" else tip
+        if b["stage"] in PAST_PLAN or b["stage"].startswith("일부 머지"):
+            if b["kind"] == "bundle" and not b["specs"]:
+                b["warnings"].append("번호 대조 건너뜀(셀 수 없음) — 설계문서 없는 묶음이라 배정 번호 %d개를 "
+                                     "대조하지 않았다" % len(b["assigned"]))
+            elif b["kind"] == "branch":
+                b["warnings"].append("번호 대조 건너뜀(셀 수 없음) — 묶음이 아닌 블록이라 배정 번호 %s 를 대조하지 "
+                                     "않았다" % " · ".join(sorted(b["assigned"], key=id_sort_key)))
+        tree = b["tip"] or main
         known_ids = set(by_id)
         for spec in b["specs"]:
             spec_text = git.blob(tree, spec)
@@ -331,8 +480,20 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 b["warnings"].append("번호 대조 검사 불가(spec 을 읽지 못했다): %s" % spec)
                 cov_unknown.append("%s spec 을 읽지 못했다" % bid)
                 continue
-            if b["kind"] == "bundle" and bundles.get(bid) is not None:
-                result = check(bundles[bid], spec_text, repo=_GitTreeRepo(git, main) if main else None)
+            b["docs"].append((spec, spec_text))
+            no_cov_section = cov_broken = False
+            try:
+                no_cov_section = "산출물" in b["fields"] and section_body(spec_text, "## 번호 대조") is None
+            except FormatError as exc:
+                cov_broken = True
+                b["warnings"].append("번호 대조 검사 불가(%s): %s" % (exc, spec))
+                cov_unknown.append("%s 산출물 번호 대조 절 — %s" % (bid, exc))
+            if cov_broken:
+                pass  # 미룸 표는 이 절과 상관없이 아래에서 읽는다
+            elif no_cov_section:
+                b["warnings"].append("번호 대조 건너뜀(셀 수 없음) — 산출물에 `## 번호 대조` 절이 없다: %s" % spec)
+            elif b["kind"] == "bundle" and bundles.get(bid) is not None:
+                result = check(bundles[bid], spec_text, repo=_GitTreeRepo(git, main, settings["specs_dir"]) if main else None)
                 for w in coverage_warnings(result, spec):  # 경고 줄이라 종료 코드가 1 이 될 수 있다(막는 소비자 없음)
                     b["warnings"].append(w)
                 if result["status"] == 1:
@@ -348,12 +509,13 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 b["warnings"].append("미룸 셀 수 없음(%s): %s" % (exc, spec))
                 cov_unknown.append("%s 미룸 표 — %s" % (bid, exc))
                 continue
+            b["deferred"].append((spec, rows))
             bad = [item for item, _why, recv in rows if not receiver_ok(recv, known_ids)]
             if bad:
                 b["warnings"].append("받는 곳 없는 미룸 %d개: %s — %s" % (len(bad), spec, " · ".join(bad)))
 
     for b in blocks:
-        if b["tip"] and b["stage"] in ("설계 중", "계획"):
+        if b["tip"]:
             for path in git.changed(main, b["tip"]):
                 if _shared(path):
                     continue
@@ -393,13 +555,46 @@ def overlaps(blocks: list) -> list:
     return out
 
 
+def parallel_with(blocks: list, overlap_list: list) -> dict:
+    """블록마다 함께 갈 수 있는 끝나지 않은 블록 — 의존 관계가 어느 쪽으로도 없는 것. 경로 예약 겹침은 정보로 함께."""
+    reach = _reachable(blocks)
+    over = {}
+    for o in overlap_list:
+        a, b = o["blocks"]
+        over[(a, b)] = over[(b, a)] = o["paths"]
+    out = {}
+    for a in blocks:
+        if a["stage"] in DONE:
+            out[a["id"]] = []
+            continue
+        out[a["id"]] = [{"id": b["id"], "overlap": over.get((a["id"], b["id"]), [])} for b in blocks
+                        if b["id"] != a["id"] and b["stage"] not in DONE
+                        and b["id"] not in reach[a["id"]] and a["id"] not in reach[b["id"]]]
+    return out
+
+
+def _read_sections(block: dict, heading: str, label: str):
+    """블록의 설계문서마다 `heading` 절을 읽는다. 반환: ([(spec, 줄들 | None)], [읽기 불가 사유]). 머리가 둘인
+    문서는 그 블록 경고로 올리고 사유를 돌려준다 — 다른 문서 · 블록은 그대로 읽는다."""
+    got, errs = [], []
+    for spec, text in block.get("docs", []):
+        try:
+            got.append((spec, section_lines(text, heading)))
+        except FormatError as exc:
+            errs.append(str(exc))
+            block["warnings"].append("%s 읽기 불가(%s): %s" % (label, exc, spec))
+    return got, errs
+
+
 # ── 출력 ─────────────────────────────────────────────────────────────────────
 
 def build(git: Git, args) -> dict:
-    report = {"roadmap": None, "source": None, "fetched_at": git.fetched_at(), "notice": NOTICE,
-              "blocks": [], "unassigned": None, "orphans": None, "unknown_ids": [],
-              "overlaps": [], "format_errors": [], "unknown_reasons": [], "exit": 3}
-    main = git.commit(MAIN_REF)
+    report = {"roadmap": None, "source": None, "default_branch": None, "not_on_default": False,
+              "fetched_at": git.fetched_at(), "notice": NOTICE, "blocks": [], "unassigned": None,
+              "orphans": None, "unknown_ids": [], "overlaps": [], "format_errors": [], "unknown_reasons": [],
+              "settings": None, "handoffs": None, "exit": 3}
+    main, main_name = git.default_branch()
+    report["default_branch"] = main_name
     if args.roadmap_file:
         top = git.toplevel()
         if top is None:
@@ -408,26 +603,36 @@ def build(git: Git, args) -> dict:
         rel = os.path.relpath(os.path.realpath(args.roadmap_file), os.path.realpath(top))
         src = Source(git, root=top)
         if main is None:
-            report["unknown_reasons"].append("origin/main 을 못 읽었다")
+            report["unknown_reasons"].append(NO_DEFAULT)
     else:
         rel = args.roadmap.strip("/")
+        report["roadmap"] = rel
         if main is None:
-            report["unknown_reasons"].append("origin/main 을 못 읽었다")
-            report["roadmap"], report["source"] = rel, "origin/main"
+            report["unknown_reasons"].append(NO_DEFAULT)
+            report["source"] = "기본 브랜치"
             return report
-        src = Source(git, rev=main)
+        src = Source(git, rev=main, label=main_name)
+        if not src.exists(rel):
+            report["source"], report["not_on_default"] = main_name, True
+            return report
     report["roadmap"], report["source"] = rel, src.label
     text = src.read(rel)
     if text is None:
         report["unknown_reasons"].append("로드맵을 못 읽었다: %s (%s)" % (rel, src.label))
         return report
     meta, blocks, records, risk_rows, errors = parse_roadmap(text)
+    settings = repo_settings(meta)
+    report["settings"] = dict((k, settings[k]) for k in ("specs_dir", "plans_dir", "test_command",
+                                                            "review_model", "sources"))
+    errors = errors + settings["errors"]
     report["format_errors"] = errors
     if errors:
         report["blocks"] = [{"id": b["id"], "title": b["title"], "kind": b.get("kind"),
                              "stage": "알 수 없음", "reason": "로드맵 형식 깨짐",
-                             "task_status": None, "branch": b["fields"].get("브랜치"),
-                             "deps": [], "specs": [], "ids": [], "warnings": [], "notes": []}
+                             "task_status": None, "branch": field_text(b["fields"].get("브랜치", "")),
+                             "branches": [], "branch_states": [], "tip": None, "plans": [],
+                             "deps": [], "specs": [], "ids": [], "warnings": [], "notes": [],
+                             "bundle": None, "extras": {}, "parallel": None, "rulings_archived": None}
                             for b in blocks]
         return report
 
@@ -455,22 +660,49 @@ def build(git: Git, args) -> dict:
         report["orphans"] = sorted(s_ids - union, key=id_sort_key)
         report["unknown_ids"] = sorted(union - non_s - s_ids, key=id_sort_key)
 
-    cov_unknown = compute(git, main, blocks, records, bundles, roadmap_dir)
+    cov_unknown = compute(git, main, blocks, records, bundles, roadmap_dir, settings)
     report["unknown_reasons"] += ["번호 대조 검사 불가 — %s" % c for c in cov_unknown]
     report["unknown_reasons"] += ["git 읽기 실패 — %s" % f for f in git.failures]
     report["overlaps"] = overlaps(blocks)
+    stages = dict((b["id"], b["stage"]) for b in blocks)
+    records, bad_records, rulings = {}, {}, {}
+    for b in blocks:
+        got, errs = _read_sections(b, RECORD_HEADING, "지휘 기록")
+        records[b["id"]] = "\n".join("\n".join(lines or []) for _spec, lines in got)
+        if errs:
+            bad_records[b["id"]] = errs[0]
+            report["unknown_reasons"].append("%s 지휘 기록 읽기 불가 — %s" % (b["id"], errs[0]))
+        got, errs = _read_sections(b, RULINGS_HEADING, "판정")
+        if errs:
+            report["unknown_reasons"].append("%s 판정 읽기 불가 — %s" % (b["id"], errs[0]))
+        elif any(lines is not None for _spec, lines in got):
+            rulings[b["id"]] = [l for _spec, lines in got for l in (lines or []) if l.startswith("- ")]
+    givers = [(b["id"], spec, rows) for b in blocks for spec, rows in b.get("deferred", [])]
+    report["handoffs"] = handoff_rows(givers, stages, records)
+    for h in report["handoffs"]:
+        if h["receiver"] in bad_records and h["state"] in ("열림", "처리됨", "확인됨"):
+            h.update(state="셀 수 없음", basis="%s 지휘 기록 읽기 불가" % h["receiver"])
+    parallel = parallel_with(blocks, report["overlaps"])
     for b in blocks:
         ids = b["assigned"]
         report["blocks"].append({
             "id": b["id"], "title": b["title"], "kind": b["kind"], "stage": b["stage"],
-            "reason": b["reason"], "task_status": TASK_STATUS.get(b["stage"]),
-            "branch": b["fields"].get("브랜치"), "deps": b["deps"], "specs": b["specs"],
+            "reason": b["reason"], "task_status": task_status(b["stage"]),
+            "branch": field_text(b["fields"].get("브랜치", "")), "branches": b["branches"],
+            "branch_states": b.get("branch_states", []), "tip": b.get("tip"), "plans": b.get("plans", []),
+            "deps": b["deps"], "specs": b["specs"],
+            "bundle": b["bundle"],
+            "extras": dict((k, v) for k in EXTRA_FIELDS if k in b["fields"]
+                           for v in [field_text(b["fields"][k])] if v != "없음"),
+            "parallel": parallel.get(b["id"], []), "rulings_archived": rulings.get(b["id"]),
             "ids": sorted(ids, key=id_sort_key), "warnings": b["warnings"], "notes": b["notes"]})
     return report
 
 
 def exit_code(report: dict) -> int:
     """notes · overlaps 는 정보라 세지 않는다."""
+    if report.get("not_on_default") and not report["format_errors"] and not report["unknown_reasons"]:
+        return 4
     if (report["format_errors"] or report["unknown_reasons"]
             or any(b["stage"] == "알 수 없음" for b in report["blocks"])):
         return 3
@@ -483,11 +715,14 @@ def exit_code(report: dict) -> int:
 def render(report: dict) -> str:
     nwarn = sum(len(b["warnings"]) for b in report["blocks"])
     ninfo = sum(len(b.get("notes", [])) for b in report["blocks"]) + len(report["overlaps"])
-    lines = ["로드맵 상태 — 블록 %d개 · 경고 %d개 · 정보 %d개 · 검사 불가 %d개 (사본: %s · origin/main 받은 시각: %s)"
+    lines = ["로드맵 상태 — 블록 %d개 · 경고 %d개 · 정보 %d개 · 검사 불가 %d개 (사본: %s · 받은 시각: %s)"
              % (len(report["blocks"]), nwarn, ninfo,
                 len(report["format_errors"]) + len(report["unknown_reasons"]),
                 report["source"] or "알 수 없음", report["fetched_at"] or "알 수 없음"),
              report["notice"], ""]
+    if report.get("not_on_default"):
+        lines.append("로드맵이 아직 기본 브랜치(%s)에 없다 — 머지 전이면 `--roadmap-file` 로 계산한다: %s"
+                     % (report.get("default_branch") or "알 수 없음", report.get("roadmap")))
     for b in report["blocks"]:
         lines.append("%s %s — %s · %s" % (b["id"], b["title"], b["stage"], b["reason"]))
         if b.get("ids"):
@@ -513,7 +748,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="roadmap_status.py",
                                  description="로드맵과 git 을 읽어 에픽별 단계 · 경고 · 정보를 낸다.")
     where = ap.add_mutually_exclusive_group(required=True)
-    where.add_argument("roadmap", nargs="?", help="origin/main 기준 로드맵 레포 상대경로")
+    where.add_argument("roadmap", nargs="?", help="기본 브랜치 기준 로드맵 레포 상대경로")
     where.add_argument("--roadmap-file", help="작업 트리의 로드맵 파일")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
@@ -521,10 +756,12 @@ def main(argv=None) -> int:
         report = build(Git(os.getcwd()), args)
         report["exit"] = exit_code(report)
     except Exception as exc:  # 계산이 죽어도 이상 없음(0)·경고(1)로 내지 않는다
-        report = {"roadmap": None, "source": None, "fetched_at": None, "notice": NOTICE,
+        report = {"roadmap": None, "source": None, "default_branch": None, "not_on_default": False,
+                  "fetched_at": None, "notice": NOTICE,
                   "blocks": [], "unassigned": None, "orphans": None, "unknown_ids": [],
                   "overlaps": [], "format_errors": [],
-                  "unknown_reasons": ["내부 오류 — %s: %s" % (type(exc).__name__, exc)], "exit": 3}
+                  "unknown_reasons": ["내부 오류 — %s: %s" % (type(exc).__name__, exc)],
+                  "settings": None, "handoffs": None, "exit": 3}
     print(json.dumps(report, ensure_ascii=False, indent=2) if args.json else render(report))
     return report["exit"]
 

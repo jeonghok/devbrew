@@ -62,6 +62,11 @@ def resolve_session_id(payload: dict | None = None) -> str | None:
     return sid
 
 
+def state_root_for_common(git_common_dir: Path) -> Path:
+    """공용 git 디렉토리 → <main_repo>/.claude/spec-distill. 화면이 git 을 다시 부르지 않고 쓴다."""
+    return Path(git_common_dir).parent / ".claude" / "spec-distill"
+
+
 def state_root(cwd: str | None = None) -> Path:
     """Return <main_repo>/.claude/spec-distill. cwd fallback on git failure."""
     if cwd is None:
@@ -75,8 +80,7 @@ def state_root(cwd: str | None = None) -> Path:
             git_dir = Path(cp.stdout.strip())
             if not git_dir.is_absolute():
                 git_dir = (Path(cwd) / git_dir).resolve()
-            main_repo = git_dir.parent
-            return main_repo / ".claude" / "spec-distill"
+            return state_root_for_common(git_dir)
     except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
         pass
     fallback = Path(cwd) / ".claude" / "spec-distill"

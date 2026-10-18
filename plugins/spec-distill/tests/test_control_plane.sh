@@ -14,6 +14,9 @@ T="$(mktemp -d)" || exit 1
 trap 'rm -rf "$T"' EXIT
 W="$T/work"; U="$T/up"; S="$T/scripts"; LOG="$S/calls.log"; CACHE="$W/.git/devbrew/control-plane.json"
 RM="docs/superpowers/roadmaps/rm/roadmap.md"
+sp_off() {  # 인터뷰 상태 파일 지원이 꺼진 state_path.py — 진짜 모듈에서 지원 표지만 지운다
+  sed 's/interview-state/interview_state/g' "$REAL/state_path.py" > "$1"
+}
 g() { git -C "$W" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false "$@"; }
 u() { git -C "$U" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false "$@"; }
 push_file() {  # push_file <경로> <내용> — 다른 사본(U)이 main 에 올리고 W 는 받기만 한다 — W 의 로컬 브랜치는 그대로다
@@ -32,7 +35,9 @@ printf 'x\n' > "$U/README.txt" && u add README.txt && u commit -qm init && u pus
 git clone -q "$T/origin.git" "$W" 2>/dev/null
 push_file "$RM" "로드맵"
 mkdir -p "$S"
-cp "$REAL/control_plane.py" "$REAL/kill_switch_active.py" "$S/"
+cp "$REAL/control_plane.py" "$REAL/kill_switch_active.py" "$REAL/conductor_state.py" "$REAL/repo_defaults.py" \
+  "$REAL/ledger_marker.py" "$REAL/roadmap_model.py" "$REAL/section6.py" "$S/"
+sp_off "$S/state_path.py"
 cat > "$S/roadmap_status.py" <<'PY'
 #!/usr/bin/env python3
 """테스트 대역 — 부를 때마다 calls.log 에 인자를 적고 stub-<로드맵 폴더>.json(없으면 report.json)을 낸다."""
@@ -93,7 +98,7 @@ push_file other.txt "다른 파일"
 sl >/dev/null; assert_eq "$(calls)" "3" "키 요소 — origin/main 커밋만 바뀌어도(로드맵 그대로) 다시 계산"
 push_file "$RM" "로드맵 바뀜"
 sl >/dev/null; assert_eq "$(calls)" "4" "키 요소 — 대상 로드맵 사본이 바뀌면 다시 계산"
-printf 'interview-state\n' > "$S/state_path.py"
+cp "$REAL/state_path.py" "$S/state_path.py"
 sl >/dev/null; assert_eq "$(calls)" "4" "인터뷰 상태 파일 지원이 켜져도 키가 아니므로 다시 계산하지 않는다"
 write_state "$STATE_DIR" 2026-10-15-t-interview.state.md 1
 assert_eq "$(sl)" "$LINE · 인터뷰 조사 3/20" "진행 중 인터뷰 조각"
@@ -117,7 +122,7 @@ assert_eq "$(sl)" "$LINE" "짝 brief 가 생기면 진행 중이 아니다"
 printf -- '---\ntype: interview-state\n' > "$STATE_DIR/2026-10-16-u-interview.state.md"
 assert_eq "$(sl)" "$LINE · 인터뷰 셀 수 없음" "읽지 못한 상태 파일은 셀 수 없음 — 로드맵 부분은 그대로"
 assert_contains "$(show)" "    docs/superpowers/interview/2026-10-16-u-interview.state.md — 셀 수 없음(frontmatter 가 닫히지 않았다)" "지도에 사유"
-rm -f "$STATE_DIR/2026-10-16-u-interview.state.md" "$S/state_path.py"
+rm -f "$STATE_DIR/2026-10-16-u-interview.state.md"; sp_off "$S/state_path.py"
 
 echo "=== 받은 시각은 캐시 밖(AC13) ==="
 sl >/dev/null; before="$(calls)"
@@ -223,17 +228,28 @@ assert_contains "$out" "rm 외 1 · " "표준 입력 JSON 의 cwd 도 쓴다"
 git init -q "$T/noorigin"
 assert_eq "$(cd "$T/noorigin" && python3 "$S/control_plane.py" statusline </dev/null)" "" "origin 없는 레포 — 빈 줄"
 mkdir -p "$T/noorigin/docs/superpowers/interview"
-printf 'interview-state\n' > "$S/state_path.py"
+cp "$REAL/state_path.py" "$S/state_path.py"
 write_state "$T/noorigin/docs/superpowers/interview" 2026-10-15-v-interview.state.md 2
 assert_eq "$(cd "$T/noorigin" && python3 "$S/control_plane.py" statusline </dev/null)" "인터뷰 조사 4/20" "로드맵 없이 진행 중 인터뷰 — 인터뷰 조각만"
-rm -f "$S/state_path.py"
+sp_off "$S/state_path.py"
 
 echo "=== 진짜 상태 계산과의 인자 계약 ==="
 out="$(cd "$W" && python3 "$REAL/control_plane.py" show docs/superpowers/roadmaps/none/roadmap.md)"
-assert_contains "$out" "검사 불가: 로드맵을 못 읽었다: docs/superpowers/roadmaps/none/roadmap.md (origin/main)" "main 에 없는 로드맵 — 검사 불가"
-out="$(cd "$W" && python3 "$REAL/control_plane.py" show --tasks docs/superpowers/roadmaps/none/roadmap.md 2>"$T/err")"; rc=$?
-assert_eq "$out|$rc" "|3" "진짜 상태 계산이 3 — 작업 목록 비고 rc 3"
-assert_contains "$(cat "$T/err")" "로드맵을 못 읽었다" "진짜 사유가 표준 오류에"
+assert_contains "$out" "로드맵이 아직 기본 브랜치(origin/main)에 없다" "기본 브랜치에 없는 로드맵 — 없음 줄"
+out="$(cd "$W" && python3 "$REAL/control_plane.py" show --tasks docs/superpowers/roadmaps/none/roadmap.md 2>"$T/err4")"; rc=$?
+assert_eq "$out|$rc" "|4" "작업 목록: 기본 브랜치에 없는 로드맵 → 표준 출력 비고 rc 4"
+assert_contains "$(cat "$T/err4")" "--roadmap-file" "작업 목록: 머지 전이면 작업 트리 사본으로 계산하라는 안내(표준 오류)"
+
+# origin/HEAD 만 없는 레포 — 「로드맵 없음」이 아니라 기본 브랜치를 모른다고 말한다
+git clone -q "$T/origin.git" "$T/nohead" 2>/dev/null
+git -C "$T/nohead" remote set-head origin -d >/dev/null 2>&1
+out="$(cd "$T/nohead" && python3 "$REAL/control_plane.py" show </dev/null)"
+assert_contains "$out" "기본 브랜치를 알 수 없다" "origin/HEAD 없음: show 는 기본 브랜치를 모른다고 말한다"
+assert_not_contains "$out" "로드맵 없음" "origin/HEAD 없음: 「로드맵 없음」으로 뭉개지 않는다"
+out="$(cd "$T/nohead" && python3 "$REAL/control_plane.py" show --tasks </dev/null 2>"$T/err5")"; rc=$?
+assert_eq "$out|$rc" "|3" "origin/HEAD 없음: 작업 목록은 비고 rc 3"
+assert_contains "$(cat "$T/err5")" "기본 브랜치를 알 수 없다" "origin/HEAD 없음: 사유가 표준 오류에"
+assert_eq "$(cd "$T/nohead" && python3 "$REAL/control_plane.py" statusline </dev/null)" "" "origin/HEAD 없음: 상태줄은 조용하다"
 
 echo "=== 변이(AC11) — 통과가 정답인 단언이 이빨을 갖는가 ==="
 mutant() {  # mutant <이름> <옛 글자> <새 글자> — 대역 폴더 사본에 한 곳을 바꾼다. 못 심으면 계측기 고장
@@ -260,11 +276,11 @@ mutant main 'mode, main or "-",' 'mode, "-",'
 rm -f "$CACHE"; msl main >/dev/null; c1="$(mcalls main)"; push_file other2.txt "또"; msl main >/dev/null; c2="$(mcalls main)"
 [ "$c1" -gt 0 ] && [ "$c2" = "$c1" ] && ok "변이 잡힘: origin/main 요소를 빼면 커밋 단언이 RED" || no "변이 생존: origin/main 요소($c1 → $c2)"
 mutant stamps 'interview = read_interviews(supported, files, folder_error, deadline)  # 캐시 밖' 'interview = {"supported": False, "items": [], "errors": []}  # 캐시 밖'
-printf 'interview-state\n' > "$T/m-stamps/state_path.py"
+cp "$REAL/state_path.py" "$T/m-stamps/state_path.py"
 write_state "$STATE_DIR" 2026-10-15-t-interview.state.md 1; rm -f "$STATE_DIR/2026-10-15-t-interview.md"
 rm -f "$CACHE"; msl stamps >/dev/null
 mutant stampsctl 'interview = read_interviews(supported, files, folder_error, deadline)  # 캐시 밖' 'interview = read_interviews(supported, files, folder_error, deadline)  # 캐시 밖'
-printf 'interview-state\n' > "$T/m-stampsctl/state_path.py"
+cp "$REAL/state_path.py" "$T/m-stampsctl/state_path.py"
 [[ "$(msl stampsctl)" == *"인터뷰 조사 3/20" ]] && ok "양성 대조: 변이 없는 사본은 인터뷰 조각을 낸다" || no "양성 대조 실패 — 아래 단언이 공허하다"
 [[ "$(msl stamps)" != *"인터뷰 조사"* ]] && ok "변이 잡힘: 인터뷰를 안 읽으면 인터뷰 조각 단언이 RED" || no "변이 생존: 인터뷰 읽기"
 rm -rf "$W/docs/superpowers/interview"
@@ -319,7 +335,7 @@ out="$( (printf '{"cwd": "'; sleep 4) | (cd "$W" && timed 15 python3 "$S/control
 within "$out" 3 && ok "닫히지 않는 표준 입력 — 기다리지 않는다(${out##*@}초)" || no "닫히지 않는 표준 입력에 막혔다: $out"
 assert_eq "$(body "$out")" "$LINE2" "읽다 만 입력은 버리고 프로세스 cwd 를 쓴다"
 
-printf 'interview-state\n' > "$S/state_path.py"; mkdir -p "$STATE_DIR"
+cp "$REAL/state_path.py" "$S/state_path.py"; mkdir -p "$STATE_DIR"
 python3 -I -c 'import sys
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
     fh.write("---\ntype: interview-state\n  research_limit: " + "9" * 30000000 + "\n---\n")' "$STATE_DIR/2026-10-17-big-interview.state.md"
@@ -368,7 +384,7 @@ mutant stdin 'end = time.monotonic() + STDIN_WAIT' 'end = time.monotonic() + 30'
 out="$( (printf '{"cwd": "'; sleep 4) | (cd "$W" && timed 15 python3 "$T/m-stdin/control_plane.py" statusline) )"
 within "$out" 3 && no "변이 생존: 표준 입력 대기 상한" || ok "변이 잡힘: 입력을 끝까지 기다리면 시간 단언이 RED"
 mutant digits 'value.isdigit() and len(value) <= 9' 'value.isdigit()'
-printf 'interview-state\n' > "$T/m-digits/state_path.py"; mkdir -p "$STATE_DIR"
+cp "$REAL/state_path.py" "$T/m-digits/state_path.py"; mkdir -p "$STATE_DIR"
 python3 -I -c 'import sys
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
     fh.write("---\ntype: interview-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 60000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-interview.state.md"
@@ -377,7 +393,7 @@ assert_contains "$out" "2026-10-18-digits-interview.state.md" "양성 짝: 자�
 case "$out" in *"research_limit 가 수가 아니다"*) no "변이 생존: 자릿수 상한" ;; *) ok "변이 잡힘: 자릿수 상한이 없으면 사유 단언이 RED" ;; esac
 rm -rf "$STATE_DIR"
 mutant cap 'STATE_MAX_BYTES = 1 << 16' 'STATE_MAX_BYTES = 1 << 26'
-printf 'interview-state\n' > "$T/m-cap/state_path.py"; mkdir -p "$STATE_DIR"
+cp "$REAL/state_path.py" "$T/m-cap/state_path.py"; mkdir -p "$STATE_DIR"
 python3 -I -c 'import sys
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
     fh.write("---\ntype: interview-state\n  research_limit: " + "9" * 30000000 + "\n---\n")' "$STATE_DIR/2026-10-17-big-interview.state.md"
@@ -386,11 +402,70 @@ assert_contains "$out" "2026-10-17-big-interview.state.md — 셀 수 없음(" "
 case "$out" in *"바이트를 넘는다"*) no "변이 생존: 크기 상한" ;; *) ok "변이 잡힘: 크기 상한이 없으면 사유 단언이 RED" ;; esac
 rm -rf "$STATE_DIR"
 mutant nonblock 'os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0)' 'os.O_RDONLY'
-printf 'interview-state\n' > "$T/m-nonblock/state_path.py"; mkdir -p "$STATE_DIR"
+cp "$REAL/state_path.py" "$T/m-nonblock/state_path.py"; mkdir -p "$STATE_DIR"
 mkfifo "$STATE_DIR/2026-10-20-pipe-interview.state.md"
 out="$(cd "$W" && timed 10 python3 "$T/m-nonblock/control_plane.py" statusline </dev/null)"
 assert_eq "$out" "TIMEOUT" "변이 잡힘: 파이프를 막힘 없이 열지 않으면 상태줄이 멈춘다(시간 단언이 RED)"
 rm -rf "$STATE_DIR"
+
+echo "=== 기계 상태 덧씌우기 — 배선 · 캐시 · 상한 ==="
+MPATH="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as c; print(c.machine_path(sys.argv[2], sys.argv[3]))' "$REAL" "$W/.claude/spec-distill" "$RM")"
+LEDGER="$T/exec-ledger.md"
+printf '# SDD ledger — plan: p\nTask 1: Ruling: 가 — 왜 — 비용\n' > "$LEDGER"
+write_machine() {  # write_machine <PR 상태> <원장 경로> — 진짜 기계 상태 파일을 쓴다
+  mkdir -p "$(dirname "$MPATH")"
+  python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as c
+d = c.empty()
+d["PR"].append({"브랜치": "feature/a", "번호": "#12", "상태": sys.argv[4], "확인한 때": "2026-10-17 10:00"})
+d["실행 원장"].append({"에픽": "R5", "계획": "p.md", "원장": sys.argv[5], "읽은 줄": "0"})
+open(sys.argv[2], "w", encoding="utf-8").write(c.render_machine(sys.argv[3], d))' "$REAL" "$MPATH" "$RM" "$1" "$2"
+}
+python3 -I -c 'import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+d["blocks"] = [{"id": "R5", "title": "다섯", "kind": "bundle", "stage": "구현 끝", "reason": "계획 구현 대조 있음",
+                "task_status": "in_progress", "deps": [], "warnings": [], "notes": [],
+                "branch_states": [{"branch": "feature/a", "tip": "abcdef12", "merged": None}]}]
+d["orphans"] = []; d["exit"] = 0
+json.dump(d, open(sys.argv[2], "w", encoding="utf-8"), ensure_ascii=False)' "$S/report.json" "$S/stub-rm.json"
+rm -f "$CACHE"
+write_machine 열림 "$LEDGER"
+sl >/dev/null
+out="$(show)"
+assert_contains "$out" "R5 다섯 — PR · #12 열림(기계 상태)" "기계 상태의 열린 PR 이 단계를 PR 로 바꾼다(gather 배선)"
+assert_contains "$out" "    PR: #12 열림(기계 상태)" "PR 줄"
+assert_contains "$out" "    R5: Task 1: Ruling: 가 — 왜 — 비용" "실행 원장의 판정 줄"
+CALLS_BEFORE="$(calls)"
+write_machine 닫힘 "$LEDGER"
+sl >/dev/null
+out="$(show)"
+assert_eq "$(calls)" "$CALLS_BEFORE" "양성 짝: 캐시가 맞아 상태 계산은 다시 부르지 않았다"
+assert_contains "$out" "    PR: #12 닫힘(기계 상태)" "기계 상태를 바꾸면 캐시 뒤의 화면이 따라간다 — 덧씌움이 캐시에 남지 않는다"
+assert_not_contains "$out" "열림(기계 상태)" "옛 PR 상태가 캐시를 타고 남지 않는다"
+assert_not_contains "$(cat "$CACHE")" "기계 상태" "캐시 파일에 덧씌움이 없다"
+printf '깨진 파일\n' > "$MPATH"
+out="$(show)"
+assert_contains "$out" "기계 상태를 읽지 못했다 — frontmatter 가 없다" "깨진 기계 상태는 사유로 보인다"
+assert_contains "$out" "R5 다섯 — 구현 끝" "깨진 파일 하나가 보고서를 비우지 않는다"
+rm -f "$MPATH"; mkfifo "$MPATH"
+out="$(cd "$W" && timed 10 python3 "$S/control_plane.py" show </dev/null)"
+within "$out" 8 && ok "FIFO 기계 상태에도 지도가 멈추지 않는다" || no "FIFO 기계 상태에서 지도가 멈췄다: $(body "$out")"
+assert_contains "$out" "기계 상태 파일을 읽지 못했다" "FIFO 는 사유로 보인다"
+out="$(cd "$W" && timed 10 python3 "$S/control_plane.py" statusline </dev/null)"
+within "$out" 8 && ok "FIFO 기계 상태에도 상태줄이 멈추지 않는다" || no "FIFO 기계 상태에서 상태줄이 멈췄다"
+rm -f "$MPATH"
+head -c 3000000 /dev/zero | tr '\0' x > "$MPATH"
+out="$(cd "$W" && timed 10 python3 "$S/control_plane.py" show </dev/null)"
+within "$out" 8 && ok "큰 기계 상태에도 지도가 멈추지 않는다" || no "큰 기계 상태에서 지도가 멈췄다"
+assert_contains "$out" "바이트를 넘는다" "큰 파일은 사유로 보인다"
+rm -f "$MPATH"
+mkfifo "$T/fifo-ledger"
+write_machine 열림 "$T/fifo-ledger"
+out="$(cd "$W" && timed 10 python3 "$S/control_plane.py" show </dev/null)"
+within "$out" 8 && ok "FIFO 원장에도 지도가 멈추지 않는다" || no "FIFO 원장에서 지도가 멈췄다"
+assert_contains "$out" "    원장 읽기 불가: $T/fifo-ledger — 일반 파일이 아니다" "읽지 못한 원장은 경로와 사유를 보인다"
+out="$(cd "$W" && timed 10 python3 "$S/control_plane.py" statusline </dev/null)"
+within "$out" 8 && ok "FIFO 원장에도 상태줄이 멈추지 않는다" || no "FIFO 원장에서 상태줄이 멈췄다"
+rm -f "$MPATH" "$S/stub-rm.json" "$CACHE" "$T/fifo-ledger"
 
 echo "=== README 상태줄 스크립트(AC9) ==="
 README="$ROOT/plugins/spec-distill/README.md"
@@ -442,7 +517,7 @@ assert_eq "$(calls)" "$c1" "양성 대조: 코드가 그대로면 캐시를 쓴�
 age "$S/roadmap_status.py" 120; sl >/dev/null
 [ "$(calls)" -gt "$c1" ] && ok "상태 계산 코드가 바뀌면 캐시를 쓰지 않는다" || no "코드가 바뀌어도 옛 캐시를 썼다"
 mutant short 'return value if len(value) <= 80 else value[:80] + "…"' 'return value'
-printf 'interview-state\n' > "$T/m-short/state_path.py"; mkdir -p "$STATE_DIR"
+cp "$REAL/state_path.py" "$T/m-short/state_path.py"; mkdir -p "$STATE_DIR"
 python3 -I -c 'import sys
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
     fh.write("---\ntype: interview-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 60000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-interview.state.md"
