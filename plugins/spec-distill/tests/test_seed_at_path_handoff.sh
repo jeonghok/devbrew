@@ -143,7 +143,7 @@ assert_contains "$c1" '권장 핸드오프 — 맨 `/compact` 와 다음 세션 
 assert_contains "$c2" '차선 핸드오프 — `/new` 와 같은 다음 세션 줄을 노출하고 **턴 종료**' "AC1(next-session): ② = /new + 같은 다음 세션 줄"
 assert_contains "$(block '^## 다음 세션 명령' '^## ' "$CANON" | flat)" '첫 줄은 맨 `/compact`(①) 또는 `/new`(②)다.' "AC1(next-session): 규칙 1 — ① 맨 /compact · ② /new"
 assert_not_contains "$stepb" '바로 진행' "AC1(next-session): Step B 에 「바로 진행」이 없다 (양성 짝: 위 ①·② 행)"
-assert_eq "$(printf '%s\n' "$stepb" | grep -cE '^\| [①②③④] \|')" "4" "AC35: 진행 게이트 선택지는 넷 그대로"
+assert_eq "$(printf '%s\n' "$stepb" | grep -E '^\| ' | grep -vE '^\| # \||^\|---' | grep -c .)" "4" "AC35: 진행 게이트 선택지는 넷 그대로(표 본문 행 전부)"
 STEPB_F="$(printf '%s\n' "$stepb" | flat)"
 for n in '**기타 칸 — 「여기서 계속」.**' '①/② 고유 단계(예: `spec-review` 의 미커밋 확인)를 마친 뒤' \
          '압축 없이 이 세션에서 다음 세션 줄의 지시를 그대로 따른다' '게이트를 건너뛴 것이 아니다' \

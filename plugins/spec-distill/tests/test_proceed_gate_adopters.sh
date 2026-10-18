@@ -202,6 +202,13 @@ while IFS= read -r skill_dir; do
   [ "$rc" -ge 1 ] \
     && ok "$name: P23 재결정 규약 앵커 실재 — ${rc}줄" \
     || no "$name: P23 재결정 규약이 자기 표면에 없다 — 앞 단계의 확정을 뒤집을 근거가 생겨도 이 skill 에는 올릴 자리가 없다"
+
+  # AC35: 정본의 Step B(기타 칸 규칙 포함)가 이 skill 의 게이트에 실제로 «읽혀» 들어오는가.
+  # 정본을 이름으로만 가리키는 skill 은 정본의 규칙을 받지 못한다 — 정확한 Read 줄 한 줄을 요구한다.
+  rl="$(cat "${files[@]}" | grep -cxF 'Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md')"
+  [ "$rl" -ge 1 ] \
+    && ok "$name: 정본을 읽는 Read 줄 실재 — ${rl}줄" \
+    || no "$name: 정본 proceed-gate.md 를 읽는 \`Read \${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md\` 줄이 자기 표면에 없다 — 정본의 새 규칙이 이 게이트에 닿지 않는다"
 done < <(printf '%s' "$adopters")
 
 finish
