@@ -22,6 +22,7 @@ import datetime
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -33,7 +34,7 @@ sys.path.insert(0, str(HERE))
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, NO_DEFAULT, RECORD_HEADING,  # noqa: E402
-                           RULINGS_HEADING, FormatError, frontmatter, section_lines, unquote)
+                           RULINGS_HEADING, FormatError, approval_date, frontmatter, section_lines, unquote)
 from state_path import state_root  # noqa: E402
 
 DONE = ("머지됨", "끝남")
@@ -219,6 +220,8 @@ def _finish(lines: list) -> str:
 
 
 def insert_record(text: str, line: str) -> str:
+    if "\n" in line or "\r" in line:
+        raise Fail(2, "기록 한 줄에 줄바꿈이 들어 있다")
     line = line if line.startswith("- ") else "- " + line
     try:
         section_lines(text, RECORD_HEADING)
@@ -227,11 +230,18 @@ def insert_record(text: str, line: str) -> str:
     lines = text.rstrip("\n").split("\n")
     at = [i for i, h in _heads(lines) if h == RECORD_HEADING]
     if not at:
-        return _finish(lines + ["", RECORD_HEADING, "", line])
-    end = _section_end(lines, at[0])
-    if end == at[0] + 1:
-        return _finish(lines[:end] + ["", line] + lines[end:])
-    return _finish(lines[:end] + [line] + lines[end:])
+        out = _finish(lines + ["", RECORD_HEADING, "", line])
+    else:
+        end = _section_end(lines, at[0])
+        if end == at[0] + 1:
+            out = _finish(lines[:end] + ["", line] + lines[end:])
+        else:
+            out = _finish(lines[:end] + [line] + lines[end:])
+    try:
+        approval_date(out)
+    except FormatError as exc:
+        raise Fail(2, "이 줄을 더하면 승인 줄을 읽을 수 없게 된다: %s" % exc)
+    return out
 
 
 def approval_line(date: str, choice: str) -> str:
@@ -265,6 +275,8 @@ def insert_sections(text: str, plan_rel: str, rulings: list, impl_line: str, cou
     if at:
         end = _section_end(lines, at[0])
         body = lines[at[0] + 1:end]
+        if any(l.rstrip() == "### " + plan_rel for l in body):
+            raise Fail(2, "이미 있다 — ### %s (판정 절 안)" % plan_rel)
         first_sub = next((k for k, l in enumerate(body) if l.startswith("### ")), len(body))
         if any(l.startswith("- ") for l in body[:first_sub]):
             raise Fail(3, "앞 계획의 판정 줄이 하위 머리 없이 있다 — 먼저 `### <앞 계획 경로>` 아래로 옮긴다")
@@ -278,7 +290,9 @@ def insert_sections(text: str, plan_rel: str, rulings: list, impl_line: str, cou
 def harvest(report_text: str, ledger_texts: list) -> dict:
     """실행 중 원장에서 읽은 판정과 하위의 마지막 보고의 판정을 합친다 — 보고에만 · 원장에만 있는 수도 낸다."""
     def norm(l):
-        body = l.strip().lstrip("-*").strip()
+        body = l.strip()
+        if body[:2] in ("- ", "* "):
+            body = body[2:].strip()
         return "- " + body
     led = [norm(l) for t in ledger_texts for l in cs.ledger_rulings(t)]
     rep = [norm(l) for l in cs.ledger_rulings(report_text)]
@@ -297,6 +311,8 @@ def write_atomic(path: Path, text: str) -> None:
     try:
         with os.fdopen(fd, "wb") as fh:
             fh.write(data)
+        if path.exists():
+            os.chmod(tmp, stat.S_IMODE(path.stat().st_mode))
         os.replace(tmp, str(path))
     except BaseException:
         try:
@@ -548,7 +564,13 @@ def c_rulings(root, a) -> int:
 
 def c_write_sections(root, a) -> int:
     path = Path(a.spec)
-    rulings = [l for l in _read(Path(a.rulings)).splitlines() if l.startswith("- ")]
+    raw = [l for l in _read(Path(a.rulings)).splitlines() if l.strip()]
+    stray = [l for l in raw if not l.startswith("- ")]
+    if stray:
+        raise Fail(2, "판정 파일에 `- ` 로 시작하지 않는 줄이 있다 — 쓰지 않았다: %s" % " | ".join(stray[:3]))
+    rulings = raw
+    if not rulings:
+        raise Fail(3, "판정 줄 — 셀 수 없음(판정 파일에 판정이 없다) — 쓰지 않았다")
     write_atomic(path, insert_sections(_read(path), a.plan, rulings, a.impl_line, a.counts))
     print("판정 %d줄과 구현 대조 절을 썼다(커밋 · push 는 지휘자가) — %s" % (len(rulings), path))
     return 0
@@ -556,10 +578,15 @@ def c_write_sections(root, a) -> int:
 
 def c_flush(root, a) -> int:
     path = Path(a.spec)
+    owner = cs.holder(mpath(root, a.roadmap).parent)
+    if owner != a.session:
+        raise Fail(5, "읽기 전용 — 표지를 쥔 세션: %s" % (owner or "없음(먼저 claim)"))
     rows = [r for r in load(root, a.roadmap)["쌓인 기록"] if r["에픽"] == a.epic and r["절"] == "지휘 기록"]
     text = _read(path)
     for r in rows:
-        text = insert_record(text, r["글"])
+        have = section_lines(text, RECORD_HEADING) or []
+        if ("- " + r["글"]) not in [l.strip() for l in have]:
+            text = insert_record(text, r["글"])
     write_atomic(path, text)
     update(root, a.roadmap, a.session, lambda d: d.__setitem__(
         "쌓인 기록", [r for r in d["쌓인 기록"] if not (r["에픽"] == a.epic and r["절"] == "지휘 기록")]))

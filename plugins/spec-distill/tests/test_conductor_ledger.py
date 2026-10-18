@@ -423,8 +423,30 @@ class Records(unittest.TestCase):
         self.assertIn("- 흐름: 설계 흐름(기본)\n- 건너뜀: 통합 리뷰 — 테스트 없음\n\n## 판정", t2)
 
     def test_insert_record_refuses_duplicate_heading(self):
-        with self.assertRaises(L.Fail):
+        with self.assertRaises(L.Fail) as cm:
             L.insert_record(SPEC_DOC + "\n## 지휘 기록\n\n- a\n\n## 지휘 기록\n\n- b\n", "c")
+        self.assertEqual(cm.exception.rc, 3)
+
+    def test_insert_record_refuses_newline_and_unreadable_approval(self):
+        with self.assertRaises(L.Fail) as cm:
+            L.insert_record(SPEC_DOC, "a\n## 판정")
+        self.assertEqual(cm.exception.rc, 2)
+        with self.assertRaises(L.Fail) as cm:
+            L.insert_record(SPEC_DOC, "- spec 승인 · 날짜없음 · 「예」")
+        self.assertEqual(cm.exception.rc, 2)
+
+    def test_harvest_keeps_bold_marker(self):
+        self.assertEqual(L.harvest("**Ruling:** a", [])["lines"], ["- **Ruling:** a"])
+
+    def test_insert_sections_real_shape_and_duplicate_sub(self):
+        doc = (SPEC_DOC + "\n## 판정\n\n### plans/p1.md\n\n- Ruling: a\n\n### plans/p2.md\n\n- Ruling: b\n"
+               "\n## 구현 대조 — plans/p1.md\n\n- 구현 대조: x\n\n## 구현 대조 — plans/p2.md\n\n- 구현 대조: y\n")
+        t = L.insert_sections(doc, "plans/p3.md", ["- Ruling: c"], "z", "w")
+        self.assertLess(t.index("### plans/p3.md"), t.index("## 구현 대조 — plans/p1.md"))
+        self.assertEqual(t.count("## 판정"), 1)
+        with self.assertRaises(L.Fail) as cm:
+            L.insert_sections(doc, "plans/p2.md", ["- Ruling: c"], "z", "w")
+        self.assertEqual(cm.exception.rc, 2)
 
     def test_approval_line_round_trips_with_status_reader(self):
         import roadmap_model as M
@@ -463,6 +485,9 @@ class Records(unittest.TestCase):
             with self.assertRaises(L.Fail):
                 L.write_atomic(p, "깨진 \udc80 글")
             self.assertEqual(p.read_text(encoding="utf-8"), "원래")
+            os.chmod(str(p), 0o644)
+            L.write_atomic(p, "새로")
+            self.assertEqual(p.stat().st_mode & 0o777, 0o644)
         finally:
             shutil.rmtree(str(d))
 
@@ -480,6 +505,32 @@ class Pending(Repo):
         self.assertEqual(rc, 0)
         self.assertIn("## 지휘 기록\n\n- 건너뜀: 통합 리뷰 — 이유 · 둘\n", spec.read_text(encoding="utf-8"))
         self.assertEqual(cs.load(L.mpath(self.w, RM), RM)["쌓인 기록"], [])
+
+    def test_flush_non_holder_leaves_spec_and_twice_is_idempotent(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.cli("add", "--roadmap", RM, "--session", SID, "--section", "쌓인 기록",
+                 "--cells", "A1 · 지휘 기록 · 건너뜀: 통합 리뷰")
+        spec = self.w / "s.md"
+        spec.write_text(SPEC_DOC, encoding="utf-8")
+        rc, _o = self.cli("flush", "--roadmap", RM, "--session", OTHER, "--epic", "A1", "--spec", str(spec))
+        self.assertEqual(rc, 5)
+        self.assertEqual(spec.read_text(encoding="utf-8"), SPEC_DOC)
+        self.cli("flush", "--roadmap", RM, "--session", SID, "--epic", "A1", "--spec", str(spec))
+        self.cli("add", "--roadmap", RM, "--session", SID, "--section", "쌓인 기록",
+                 "--cells", "A1 · 지휘 기록 · 건너뜀: 통합 리뷰")
+        self.cli("flush", "--roadmap", RM, "--session", SID, "--epic", "A1", "--spec", str(spec))
+        self.assertEqual(spec.read_text(encoding="utf-8").count("- 건너뜀: 통합 리뷰"), 1)
+
+    def test_write_sections_refuses_empty_or_stray_rulings(self):
+        spec = self.w / "s.md"
+        spec.write_text(SPEC_DOC, encoding="utf-8")
+        r = self.w / "r.md"
+        for body, want in (("", 3), ("\n\n", 3), ("- Ruling: a\n그냥 글\n", 2), ("그냥 글\n", 2)):
+            r.write_text(body, encoding="utf-8")
+            rc, _o = self.cli("write-sections", "--spec", str(spec), "--plan", "plans/p1.md", "--rulings", str(r),
+                              "--impl-line", "x", "--counts", "y")
+            self.assertEqual(rc, want, body)
+            self.assertEqual(spec.read_text(encoding="utf-8"), SPEC_DOC)
 
     def test_record_rejects_bad_date_and_writes_good_one(self):
         spec = self.w / "s.md"
