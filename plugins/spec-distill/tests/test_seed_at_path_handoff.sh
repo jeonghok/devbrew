@@ -143,6 +143,13 @@ assert_contains "$c1" '권장 핸드오프 — 맨 `/compact` 와 다음 세션 
 assert_contains "$c2" '차선 핸드오프 — `/new` 와 같은 다음 세션 줄을 노출하고 **턴 종료**' "AC1(next-session): ② = /new + 같은 다음 세션 줄"
 assert_contains "$(block '^## 다음 세션 명령' '^## ' "$CANON" | flat)" '첫 줄은 맨 `/compact`(①) 또는 `/new`(②)다.' "AC1(next-session): 규칙 1 — ① 맨 /compact · ② /new"
 assert_not_contains "$stepb" '바로 진행' "AC1(next-session): Step B 에 「바로 진행」이 없다 (양성 짝: 위 ①·② 행)"
+assert_eq "$(printf '%s\n' "$stepb" | grep -E '^\| ' | grep -vE '^\| # \||^\|---' | grep -c .)" "4" "AC35: 진행 게이트 선택지는 넷 그대로(표 본문 행 전부)"
+STEPB_F="$(printf '%s\n' "$stepb" | flat)"
+for n in '**기타 칸 — 「여기서 계속」.**' '①/② 고유 단계(예: `spec-review` 의 미커밋 확인)를 마친 뒤' \
+         '압축 없이 이 세션에서 다음 세션 줄의 지시를 그대로 따른다' '게이트를 건너뛴 것이 아니다' \
+         '가드 2 가 다루는 자리도 아니다' '불분명하면 다시 묻는다'; do
+  assert_contains "$STEPB_F" "$n" "AC35: 정본 Step B — $n"
+done
 fill="$(awk '/^\*\*각 skill 이 채우는 것\*\*/{f=1} f && /^$/{exit} f' "$CANON" | flat)"
 [ -n "$fill" ] && ok "AC1(next-session)(양성): 「각 skill 이 채우는 것」 문단을 읽었다" || no "AC1(next-session)(양성): 「각 skill 이 채우는 것」 문단이 없다 — 아래 단언이 공허하다"
 assert_contains "$fill" '**읽힐 경로 목록과 다음 세션 줄**(`## 다음 세션 명령`)' "AC1(next-session): 각 skill 이 채우는 것 = 경로 목록과 다음 세션 줄"
@@ -161,6 +168,7 @@ assert_contains "$g2" '**명령을 노출하면 그 턴은 거기서 종료(STOP
 assert_contains "$g2" '①/②(`/compact` · `/new`)를 고르면' "AC1(next-session): 가드 2 — 대상은 ①/②"
 assert_not_contains "$g2" '바로 진행' "AC1(next-session): 가드 2 에 「바로 진행」이 없다"
 assert_not_contains "$g2" '명시적 예외' "AC1(next-session): 가드 2 의 정지 요건에 예외가 없다"
+assert_not_contains "$g2" '여기서 계속' "AC35: 기타 칸 규칙은 가드 2 블록이 아니라 Step B 에 있다(양성 짝: Step B 단언)"
 ver="$(block '^## 검증' '^## ' "$CANON" | flat)"
 assert_contains "$ver" '명령을 노출하는 각 옵션의 서술 *블록 안에서*' "§2: 검증 절 리뷰 레이어 = 명령 노출 옵션마다"
 assert_contains "$ver" '「호출 모양」 절 옵션 표 ①·② 행' "§2: 앵커 절 — framing 앵커에 ② 행"

@@ -146,6 +146,33 @@ done
 EH_LINE="$(grep -m1 '^> `@<bundle-abs>' "$SD/references/epic-handoff.md")"
 has "$EH_LINE" 'roadmap 에 <roadmap-rel> 을 적는다' "에픽 넘김 줄: 설계문서 frontmatter roadmap(게이트 ③ 의 열쇠)"
 
+# ── R5 계획 2 AC32 — 재분해 신호는 열린 목록 · 이력 설명은 새 꼴 ──────────────────
+SIG="$(win "$RED" '## 1. 신호' '## ')"
+for lit in '목록은 닫혀 있지 않다' '에픽 설계 세션' '계획 · 구현 세션' '경계를 스스로 고치지 않고 보고한다' \
+           '「이 에픽 다시 설계」 로 가고 이 절차로 오지 않는다'; do
+  has "$SIG" "$lit" "AC32: 재분해 신호 — $lit"
+done
+for lit in '- 에픽 설계 세션 —' '- 계획 · 구현 세션 —'; do
+  has "$SIG" "$lit" "AC32: 재분해 신호 불릿 꼴 — $lit"
+done
+RED_ALL="$(cat "$RED")"
+case "$RED_ALL" in *'이력에 한 줄'*) no "재분해 이력: 파일 어디에도 옛 「이력에 한 줄」 이 남았다" ;; *) ok "재분해 이력: 옛 「이력에 한 줄」 이 파일 어디에도 없다" ;; esac
+has "$RED_ALL" '재분해 이력에 항목 하나를 남긴다' "재분해 이력: 선택지 설명도 새 꼴(양성 짝)"
+case "$SIG" in *'신호는 셋이다'*) no "AC32: 닫힌 「셋」 목록 문장이 남았다" ;; *) ok "AC32: 닫힌 「셋」 목록 문장이 없다(양성 짝: 열린 목록)" ;; esac
+APPLY="$(win "$RED" '## 5. 적용' '## ')"
+for lit in '`### <날짜> · <사유>`' '`- 바뀜:`' '`- 원문:`' '원문 칸에는 사용자 말만 둔다' \
+           '--change "<사유 한 줄>"' '--approval "<사용자 말 그대로>"' '사용자 말이 여럿이면 `--approval` 을 말마다 하나씩'; do
+  has "$APPLY" "$lit" "재분해 이력 새 꼴: $lit"
+done
+case "$APPLY" in *'재분해 이력에 한 줄('*) no "재분해 이력: 옛 한 줄 꼴 설명이 남았다" ;; *) ok "재분해 이력: 옛 한 줄 꼴 설명이 없다(양성 짝: 새 꼴)" ;; esac
+FIN7="$(win "$RED" '## 7. 끝내기' '## ')"
+has "$FIN7" '(「지적대로 고치기」 · 「이 에픽 다시 설계」 · 「인터뷰 다시 열기」 · 「직접 편집」 네 갈래)' "AC33: 재분해 7 이 게이트 ③ 의 네 갈래로 돌아간다"
+case "$FIN7" in *'세 갈래)'*) no "AC33: 재분해 7 에 옛 「세 갈래」가 남았다" ;; *) ok "AC33: 재분해 7 에 옛 「세 갈래」가 없다(양성 짝: 네 갈래)" ;; esac
+assert_file_has "$SD/references/epic-handoff.md" '게이트 ③ 에서 「이 에픽 다시 설계」 와 재분해 갈래를 연다' "AC33: 넘김 줄 자리표 설명이 게이트 ③ 의 두 갈래를 말한다"
+UP="$(win "$RED" '## 6. 올리기' '## ')"
+has "$UP" '`${CLAUDE_PLUGIN_ROOT}/references/conducting.md` 의 손 절차 6' "재분해 6: 손 절차를 가리킨다"
+case "$UP" in *'(지휘 절차 6)'*) no "재분해 6: 로드맵의 지휘 절차를 가리키는 옛 꼬리가 남았다" ;; *) ok "재분해 6: 옛 꼬리가 없다" ;; esac
+
 # ── AC11 — 재결정 규약 한 줄 ────────────────────────────────────────────────
 PG="$SD/references/proceed-gate.md"
 P23="$(win "$PG" '## 재결정 규약 (P23)' '## ')"

@@ -163,4 +163,45 @@ assert_contains "$nbr7" "- B7 · 결정 · 2026-10-17 · 조사 결론" "AC6: �
 assert_contains "$nbr7" "크기 작음" "§6: 이웃 줄에 크기를 보인다"
 assert_contains "$nbr7" "순서 이유 R2a 뒤" "§6: 이웃 줄에 순서 이유를 보인다"
 
+# ── R5 계획 2 AC34(N18) — 승인 게이트의 기각 번호 ──────────────────────────────
+RJ="$T/rj"; mkdir -p "$RJ"
+rj_spec() {  # rj_spec <파일 이름> <번호 대조 절 본문(%b)>
+  printf '%b' "---\nsource_interview: docs/rm/R3.md\n---\n\n# 설계\n\n### §1 절\n\n본문\n\n$2" > "$RJ/$1"
+}
+rj() { (cd "$T" && python3 "$SRB" rejected --spec "$1" --root "$RJ"); }
+RJ_TBL='## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n'
+RJ_HEAD='이 설계가 받지 않기로 한 번호(번호 대조의 기각)'
+rj_spec two.md "${RJ_TBL}| C1 | 반영 | §1 |\n| S1 · S2 | 기각 | R4 로 넘김 |\n| OQ1 | 기각 — R4 | 범위 밖 |\n"
+out="$(rj two.md)"; rc=$?
+assert_eq "$rc" "0" "AC34: rejected 는 종료 코드 0"
+assert_eq "$(printf '%s\n' "$out" | head -n 1)" "$RJ_HEAD 3개 — 반영으로 되돌릴 번호가 있으면 ③ 수정 필요를 고르고 이어지는 질문의 기타 칸에 그 번호를 적는다." "AC34: 기각 수는 행이 아니라 번호로 센다"
+assert_contains "$out" "- S1 · S2 — R4 로 넘김" "AC34: 기각 목록에 번호와 이유"
+assert_contains "$out" "- OQ1 — 범위 밖" "AC34: 기각 목록 둘째 행"
+assert_not_contains "$out" "C1" "AC34: 반영 행은 싣지 않는다"
+rj_spec none.md "${RJ_TBL}| C1 | 반영 | §1 |\n"
+assert_eq "$(rj none.md)" "$RJ_HEAD 없음" "AC34: 기각이 없으면 「없음」 한 줄 — 침묵과 다르다"
+rj_spec notable.md ""
+assert_eq "$(rj notable.md)" "" "AC34: 번호 대조 절이 없는 설계문서면 아무것도 내지 않는다"
+rj_spec broken.md "## 번호 대조\n\n| 번호 | 처리 |\n|---|---|\n| C1 | 기각 |\n"
+assert_contains "$(rj broken.md)" "$RJ_HEAD — 셀 수 없음:" "Review Focus 1: 깨진 표는 「없음」이 아니라 「셀 수 없음」"
+rj_spec dup.md "${RJ_TBL}| C1 | 기각 | 범위 밖 |\n\n${RJ_TBL}| S1 | 기각 | 범위 밖 |\n"
+assert_contains "$(rj dup.md)" "$RJ_HEAD — 셀 수 없음:" "Review Focus 1: 번호 대조 절이 둘이면 「셀 수 없음」"
+assert_eq "$(rj absent.md)" "$RJ_HEAD — 셀 수 없음: 설계문서를 읽지 못했다(absent.md)" "AC34: 없는 설계문서는 「셀 수 없음」"
+(cd "$T" && python3 "$SRB" rejected --spec two.md >/dev/null 2>&1); rc=$?
+assert_eq "$rc" "2" "AC34: --root 없음 → 사용법 오류 2"
+# SKILL 배선 — 펜스를 실제로 돌리고 자리를 잰다
+RF="$(fence rejected-numbers)"
+[ -n "$RF" ] && ok "기각 펜스(rejected-numbers)가 있다" || no "기각 펜스(rejected-numbers)가 없다"
+out="$(run_fence "$RF" "$SDROOT" "spec_path='$RJ/two.md' repo_root='$RJ'")"
+assert_contains "$out" "$RJ_HEAD 3개" "AC34: 펜스가 기각 번호를 낸다"
+out="$(run_fence "$RF" "$T/emptyroot" "spec_path='$RJ/two.md' repo_root='$RJ'")"
+assert_contains "$out" "[spec-distill] 이 설계가 받지 않기로 한 번호를 셀 수 없다 — 스크립트가 실패했다." "AC34: 스크립트가 없으면 셀 수 없다고 말한다"
+pos_of() { awk -v m="$1" 'index($0,m){print NR; exit}' "$SKILL"; }
+pa="$(pos_of '<!-- advice-display:begin -->')"; pb="$(pos_of '<!-- rejected-numbers:begin -->')"; pc="$(pos_of '<!-- roadmap-position:begin -->')"
+{ [ -n "$pa" ] && [ -n "$pb" ] && [ -n "$pc" ] && [ "$pa" -lt "$pb" ] && [ "$pb" -lt "$pc" ]; } \
+  && ok "AC34: 기각 펜스는 참고 목록 뒤 · 로드맵 위치 앞" || no "AC34: 펜스 순서가 다르다(${pa} · ${pb} · ${pc})"
+GATE_RJ="$(awk '/^## 게이트$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
+assert_contains "$GATE_RJ" "이 수는 「경고 N개」에 더하지 않는다" "AC34: 기각 수는 경고가 아니다"
+assert_contains "$GATE_RJ" "**기각한 번호 — 2단계 질문 앞(N18).**" "AC34: 게이트 절에 기각 문단 머리"
+
 finish
