@@ -599,7 +599,7 @@ esac
 
 `/spec-distill:epic-conductor <roadmap-path>`
 
-분해된 일이면 ①/② 의 둘째 줄은 위 brief 줄 대신 이 줄이다 — 지휘자가 이 세션에서 로드맵의 에픽들을 끝까지 이끈다. `<roadmap-path>` 는 로드맵의 절대경로로 치환한다 — 치환하지 못하거나 경로에 공백이 있으면 줄을 노출하지 않고 `[spec-distill] 다음 세션 줄을 만들 수 없다 — <사유>. 로드맵: <로드맵 경로>. /spec-distill:epic-conductor 뒤에 이 로드맵 경로를 직접 붙여 부른다.` 한 줄을 보인 뒤 멈춘다. 나누지 않은 일의 둘째 줄은 위 brief 줄 그대로다.
+분해된 일이면 ①/② 의 둘째 줄은 위 brief 줄 대신 이 줄이다 — 지휘자가 이 세션에서 로드맵의 에픽들을 끝까지 이끈다. `<roadmap-path>` 는 로드맵의 절대경로로 치환한다 — 치환하지 못하거나 경로에 공백이 있으면 줄을 노출하지 않고 `[spec-distill] 다음 세션 줄을 만들 수 없다 — <사유>. /spec-distill:epic-conductor 를 인자 없이 부르면 로드맵을 찾는다.` 한 줄을 보인 뒤 멈춘다. 나누지 않은 일의 둘째 줄은 위 brief 줄 그대로다.
 
 #### B-4 — 두 가드 (load-bearing)
 

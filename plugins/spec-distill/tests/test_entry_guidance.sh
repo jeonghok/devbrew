@@ -33,7 +33,7 @@ assert_eq "$(grep -cF '지휘 세션이 붙여 넣는 줄' "$EH" || true)" "0" "
 assert_eq "$(grep -cF '새 세션(`/new`)의 첫 줄로' "$EH" || true)" "0" "넘김 줄 끝 문장: 새 세션을 전제하지 않는다"
 RB="$(awk '/^\*\*로드맵 에픽이면 — 둘째 줄은 지휘자 호출\.\*\*/{f=1} f&&/^- \*\*①\/② 의 정지 요건\*\*/{exit} f' "$SR")"
 [ -n "$RB" ] && ok "AC42: spec-review 의 로드맵 갈래 문단이 있다" || no "AC42: 로드맵 갈래 문단이 없다"
-for lit in '`roadmap:` 줄이 있으면' '`/spec-distill:epic-conductor <roadmap 절대경로>`' '계획 agent 의 입력(치지 않는다)' '`roadmap:` 줄이 없으면 위 줄 그대로다'; do
+for lit in '`roadmap:` 줄이 있으면' '`/spec-distill:epic-conductor <roadmap 절대경로>`' '계획 agent 의 입력(지휘자가 넘긴다 — 지휘자 없이 이 세션에서 이어 갈 때만 친다)' '`roadmap:` 줄이 없으면 위 줄 그대로다'; do
   assert_contains "$RB" "$lit" "AC42: $lit"
 done
 assert_contains "$(awk '/^## 5\. 적용/{f=1;next} f&&/^## /{exit} f' "$RED")" '고른 라벨을 글자 그대로' "재분해 5: 라벨만 고른 답의 --approval"
