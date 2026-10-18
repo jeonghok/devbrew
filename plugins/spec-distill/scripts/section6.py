@@ -41,9 +41,62 @@ from __future__ import annotations
 
 import re
 
-# 펜스 인식은 `check_brief._body()` 와 같은 문법이어야 한다 — 다르면 「펜스 안」의 정의가
-# 두 개가 되어 이 모듈이 없애려는 바로 그 어긋남이 재발한다.
-FENCE_RE = re.compile(r"^[ \t]*```.*?^[ \t]*```[^\n]*$", re.DOTALL | re.MULTILINE)
+# 펜스 인식은 이 모듈의 `FENCE_RE` 하나다 — 다르면 「펜스 안」의 정의가 둘이 되어 이 모듈이 없애려는 바로 그 어긋남이
+# 재발한다. 문법은 CommonMark 의 코드 펜스를 따른다: 여는 줄은 들여쓰기 0–3칸 + 같은 글자(`` ` `` 또는 `~`) 셋 이상이고
+# 백틱 펜스의 정보 문자열(여는 줄의 나머지)에는 백틱이 없다. 닫는 줄은 들여쓰기 0–3칸 + 같은 글자 + 여는 줄 이상의 길이 +
+# 공백뿐이다. 닫히지 않은 펜스는 글 끝까지다.
+_FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$", re.DOTALL)
+_FENCE_CLOSE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
+
+
+def _fence_spans(text: str) -> list:
+    spans, pos, opener, start = [], 0, None, 0
+    for line in text.split("\n"):
+        here, pos = pos, pos + len(line) + 1
+        end = min(pos - 1, len(text))
+        if opener is None:
+            m = _FENCE_OPEN_RE.match(line)
+            if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+                opener, start = m.group(1), here
+        else:
+            m = _FENCE_CLOSE_RE.match(line)
+            if m and m.group(1)[0] == opener[0] and len(m.group(1)) >= len(opener):
+                spans.append((start, end))
+                opener = None
+    if opener is not None:
+        spans.append((start, len(text)))
+    return spans
+
+
+class _Span:
+    def __init__(self, a: int, b: int):
+        self._ab = (a, b)
+
+    def span(self):
+        return self._ab
+
+    def start(self):
+        return self._ab[0]
+
+    def end(self):
+        return self._ab[1]
+
+
+class _FenceScanner:
+    """`re.Pattern` 의 `finditer` · `sub` 두 얼굴만 가진 펜스 판독기 — 부르는 쪽이 정규식처럼 쓴다."""
+
+    def finditer(self, text: str):
+        return iter([_Span(a, b) for a, b in _fence_spans(text)])
+
+    def sub(self, repl: str, text: str) -> str:
+        out, last = [], 0
+        for a, b in _fence_spans(text):
+            out += [text[last:a], repl]
+            last = b
+        return "".join(out) + text[last:]
+
+
+FENCE_RE = _FenceScanner()
 
 # 머리 정규식은 전부 한 줄만 읽는다 — `##` · 번호 · 제목 사이는 `[ \t]` 다(`\s` 는 줄 나눔을 건너 `##` 다음 줄의
 # `6. …` 을 머리로 읽는다). 빈 `##` 줄은 머리 후보(`BRIEF_HEADLIKE_RE`)라 brief 게이트가 막는다.
@@ -58,16 +111,18 @@ END_STRICT_RE = re.compile(r"(?m)^##[ \t]+\d+\.")
 # `## <n>.` 뒤가 숫자가 아니다(`## 0.1` 은 절 머리가 아니다). 위 §6 종결 규칙과 갈리는 줄(`## 6.1` · 다른 문자 체계 숫자 ·
 # 보이지 않는 글자를 끼운 머리)은 아래 머리 후보 규칙에 걸려 게이트가 `section_head_unknown` 으로 막는다.
 BRIEF_SECTION_HEAD_RE = re.compile(r"^##[ \t]+([0-9]+)\.(?![0-9])")
-BRIEF_HEADLIKE_RE = re.compile(r"^[ \t]{0,3}##[ \t]*(?:\d|$)")
+BRIEF_HEADLIKE_RE = re.compile(r"^[ \t]{0,3}##(?:[ \t]*\d|\s*$)")
 
 # 제목-모양 줄 판정 — markdown ATX 헤딩처럼 보이는 줄(들여쓰기 0–3칸 + `#`×1–6 + 공백)을
 # 분류할 뿐, 어떤 절 경계도 계산하지 않는다. 헤딩 마커를 소비하는 정규식이라 §6-단일화 락의
 # 수집 대상이 되므로(§6 경계 계산과 무관해도), 이 파일이 그 유일한 자리다.
 HEADING_SHAPED_RE = re.compile(r"^\s{0,3}#{1,6}\s")
+# ATX 제목 줄(CommonMark) — 들여쓰기 0–3칸 + `#`×1–6 + 공백 또는 줄 끝. setext 판독이 «제목 줄은 문단 줄이 아니다» 를 가를 때 쓴다.
+ATX_HEADING_RE = re.compile(r"^ {0,3}#{1,6}(?:[ \t]|$)")
 
 
 def fence_spans(text: str) -> list:
-    return [(m.start(), m.end()) for m in FENCE_RE.finditer(text)]
+    return [m.span() for m in FENCE_RE.finditer(text)]
 
 
 def _outside(m, spans) -> bool:

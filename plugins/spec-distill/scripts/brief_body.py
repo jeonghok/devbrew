@@ -28,6 +28,10 @@ DEFAULT_IGNORABLE_RANGES = (
 # 키릴 · 체로키 · 리수 · 리키아 · 데저렛 문자. 숫자 닮은꼴은 표로 쫓지 않는다 — `S` 바로 뒤의 비ASCII 숫자 · 글자는
 # `ref_confusables` 가 거부하고, §6 의 강조 머리는 `anchor_lines` 가 거부한다(Ruling S13-a).
 S_CONFUSABLES = (0x0405, 0x054F, 0x13D5, 0x13DA, 0xA4E2, 0x10296, 0x10420)
+# 결정 번호 머리 `OQ<n>` 의 `O` · `Q` 를 흉내 내는 글자 — 같은 confusables.txt 에서 대상이 `O`(U+004F) · `Q`(U+0051)이고 NFKC 가
+# 접지 않는 글자(그리스 · 키릴 · 아르메니아 · 티피나그 · 리키아 · 카리아 · 데저렛 문자). `S` 표와 별개로 둔다 — 쓰는 곳이 다르다.
+O_CONFUSABLES = (0x039F, 0x041E, 0x0555, 0x2D54, 0x10292, 0x102AB, 0x10404)
+Q_CONFUSABLES = (0x051A, 0x2D55)
 # 마크다운 구조 글자(`*` 강조 · 불릿, `-` 불릿)를 흉내 내는 글자 — NFKC 가 접지 않는 별표 · 빼기 · 하이픈 · 대시.
 STRUCT_LOOKALIKES = {
     0x2217: "*", 0x2731: "*", 0x204E: "*", 0x066D: "*", 0x2732: "*",
@@ -66,6 +70,10 @@ def _fold_char(c):
     o = ord(c)
     if o in S_CONFUSABLES:
         return "S"
+    if o in O_CONFUSABLES:
+        return "O"
+    if o in Q_CONFUSABLES:
+        return "Q"
     return STRUCT_LOOKALIKES.get(o, c)
 
 
@@ -73,7 +81,7 @@ def _fold_char(c):
 def fold(text):
     """`canon` 위에 구조 글자를 한 번 더 접는다 — `S` 를 흉내 내는 다른 문자 체계의 글자는 `S` 로, 별표 · 하이픈을
     흉내 내는 글자는 `*` · `-` 로. 숫자는 접지 않는다(닮은 숫자를 다른 번호로 풀지 않는다). 앵커 꼴 · 원문 번호 참조를
-    찾을 때만 쓴다."""
+    찾을 때만 쓴다. 결정 번호 머리의 `O` · `Q` 를 흉내 내는 글자도 접는다(`O_CONFUSABLES` · `Q_CONFUSABLES`)."""
     return "".join(_fold_char(c) for c in canon(text))
 
 
@@ -92,7 +100,7 @@ def split_lines(text, keepends=False):
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 # 펜스 정규식은 여기가 소유한다(`check_brief.FENCE_RE` 가 이것을 쓴다).
-FENCE_RE = re.compile(r"^[ \t]*```.*?^[ \t]*```[^\n]*$", re.DOTALL | re.MULTILINE)
+FENCE_RE = section6.FENCE_RE
 
 
 def body_text(text):
@@ -140,7 +148,62 @@ def section_text(text, num, title=None):
     return "".join(out)
 
 
+_SETEXT_UNDER_RE = re.compile(r"^( {0,3})(?:=+|-+)[ \t]*$")
+_THEMATIC_RE = re.compile(r"^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$")
+_ATX_RE = section6.ATX_HEADING_RE   # 제목 머리 정규식은 section6 이 소유한다
+_ITEM_RE = re.compile(r"^( {0,3})([-*+]|\d{1,9}[.)])([ \t]+|$)")
+_QUOTE_RE = re.compile(r"^ {0,3}> ?")
+_HTML_BLOCK_RE = re.compile(r"^ {0,3}<[A-Za-z/!?]")
+
+
+def setext_problems(text):
+    """setext 제목(글줄 아래 `===` · `---` 밑줄) -> [(글줄, `setext_heading`)]. 펜스 밖 어디서든 — 절 머리가 ATX(`## n. 제목`) 한
+    꼴로만 있게 한다. CommonMark 를 따른다: 밑줄은 들여쓰기 0–3칸, 글줄은 문단 줄이다(빈 줄 · 목록 · 제목 · 인용 · HTML 블록이 아니다).
+    목록 항목이나 인용 안의 문단은 그 컨테이너 안의 제목이거나(절 머리가 아니라 세지 않는다) 게으른 이음 줄 아래의 가로줄이다."""
+    out = []
+    lines = split_lines(body_text(text))
+    para = None   # 문단이 열려 있으면 (컨테이너 종류, 컨테이너 들여쓰기 너비, 마지막 글줄)
+    for ln in lines:
+        if not ln.strip():
+            para = None
+            continue
+        if para is not None:
+            kind, width, last = para
+            if kind == "quote":
+                q = _QUOTE_RE.match(ln)
+                inner = ln[q.end():] if q else None
+            elif kind == "item" and ln[:width].strip() == "" and len(ln) - len(ln.lstrip(" ")) >= width:
+                inner = ln[width:]
+            elif kind == "top":
+                inner = ln
+            else:
+                inner = None   # 컨테이너 밖에 놓인 줄 — 게으른 이음이거나 새 블록
+            if inner is not None and _SETEXT_UNDER_RE.match(inner):
+                if kind == "top":   # 인용 · 목록 안의 제목은 절 머리가 아니다 — 실제 brief 가 frontmatter 예시를 인용으로 싣는다
+                    out.append((last, "setext_heading"))
+                para = None
+                continue
+        if _THEMATIC_RE.match(ln) or _ATX_RE.match(ln) or _HTML_BLOCK_RE.match(ln):
+            para = None
+        elif _QUOTE_RE.match(ln):
+            q = _QUOTE_RE.match(ln)
+            rest = ln[q.end():]
+            para = ("quote", 0, rest) if rest.strip() and not _ITEM_RE.match(rest) and not _ATX_RE.match(rest) else None
+        elif _ITEM_RE.match(ln):
+            m = _ITEM_RE.match(ln)
+            rest = ln[m.end():]
+            width = m.end() if rest.strip() else len(m.group(1)) + len(m.group(2)) + 1
+            para = ("item", width, rest) if rest.strip() and not _ATX_RE.match(rest) else None
+        elif para is not None:
+            para = (para[0], para[1], ln)   # 이음 줄(게으른 이음 포함) — 컨테이너는 그대로
+        elif len(ln) - len(ln.lstrip(" ")) <= 3:
+            para = ("top", 0, ln)
+        # 들여쓰기 4칸 이상이고 열린 문단이 없으면 코드 블록이다
+    return out
+
+
 SECTION_REASON_TEXT = {
+    "setext_heading": "글줄 아래에 `===` 나 `---` 밑줄을 둔 제목(setext)이라 절 머리가 ATX 한 꼴로만 있다는 읽기가 깨진다",
     "section_missing": "제목 붙은 절 머리가 없다",
     "section_heading_duplicate": "같은 번호의 절 머리가 둘 이상이라 읽는 쪽마다 다른 절을 고를 수 있다",
     "section_head_unknown": "절 표에 없는 번호 머리(소번호 · 부록 · 전각 · 다른 문자 체계 숫자 등)라 어느 절로 읽을지 정해지지 않는다",
@@ -155,7 +218,7 @@ def head_problems(text):
     for ln in split_lines(body_text(text)):
         if _HEADLIKE_RE.match(canon(ln)) and not any(rx.match(ln) for rx in titled):
             out.append((ln, "section_head_unknown"))
-    return out
+    return out + setext_problems(text)
 
 
 def section_problem(text, num, title=None):
@@ -178,9 +241,27 @@ _ANCHOR_SHAPED = re.compile(r"^(?:[^\w\n]|\d+[.)])*\*\*S\d+\*\*")
 _IN_BODY_TOKEN = re.compile(r"\*\*S\d+\*\*|__S\d+__")
 _IN_BODY_BULLET = re.compile(r"^(?:[^\w\n]|\d+[.)])*?(?:[-*+]|\d+[.)])\s+[*_`]*S\d+(?![0-9])")
 # 열 0 의 줄 머리(불릿 하나는 건너)가 `S` 로 시작하는 강조(`**…**` · `__…__`) — 문법 안 앵커가 아니면 닮은 글자로 꾸민 앵커다.
-_EMPH_S_HEAD = re.compile(r"^(?:[-*+]\s+)?(?:\*\*|__)S(?!\\?<)")   # 자리 표시 `S<N>` · `S\<N\>`(템플릿)는 제외
+_EMPH_S_HEAD = re.compile(r"^ {0,3}(?:[-*+]\s+)?(?:\*\*|__)S(?!\\?<)")   # 자리 표시 `S<N>` · `S\<N\>`(템플릿)는 제외
+# 모양 보기 — 앵커 꼴 판정에만 쓰는 접은 모양: 인라인 HTML 태그를 지우고 백슬래시 이스케이프를 푼다. 렌더러는 이 모양으로
+# 앵커를 그리므로(`- <b>S9</b>` · `- *\\*S5*\\*`), 날 글자로는 문법 밖인데 이 모양으로 앵커처럼 읽히는 줄은 거부한다.
+_TAG_RE = re.compile(r"<[^>\n]+>")
+_ESCAPE_RE = re.compile(r"\\([!-/:-@\[-`{-~])")
+
+
+_PLACEHOLDER = re.compile(r"S\\?<[Nn]\\?>")   # 템플릿 자리 표시 `S<N>` — 태그로 읽어 지우지 않는다
+
+
+def _shape_view(text):
+    f = fold(text)
+    prev = None
+    while prev != f:
+        prev, f = f, _TAG_RE.sub("", f)
+    return _ESCAPE_RE.sub(r"\1", f)
+
+
 # 거부 사유 이름 → 사람이 읽는 말. 메시지는 이 말을 앞세우고 사유 이름은 괄호에 둔다.
 ANCHOR_REASON_TEXT = {
+    "anchor_markup": "HTML 태그나 백슬래시 이스케이프로 꾸며 앵커처럼 읽히는 줄",
     "anchor_indented": "들여 쓴 앵커 줄",
     "anchor_unicode_space": "공백 · 탭이 아닌 공백 글자(NBSP · 전각 공백 등)로 시작하는 앵커 줄",
     "anchor_star_bullet": "`*` 불릿 앵커 줄",
@@ -218,17 +299,20 @@ def anchor_lines(section_text):
             bad.append((n, "anchor_line_separator"))
             continue
         f = fold(line)
+        v = _shape_view(line)
         shaped = _ANCHOR_SHAPED.match(f)
         if not shaped:
             if _EMPH_S_HEAD.match(f):
                 bad.append((n, "anchor_confusable"))
             elif _in_body(f):
                 bad.append((n, "anchor_in_body"))
+            elif v != f and not _PLACEHOLDER.search(f) and (_ANCHOR_SHAPED.match(v) or _EMPH_S_HEAD.match(v) or _in_body(v)):
+                bad.append((n, "anchor_markup"))
             continue
         m = ANCHOR_LINE_RE.match(line)
         if m:
             ok.append((n, m.group(1), m.group(2) or ""))
-            if _IN_BODY_TOKEN.search(fold(m.group(2) or "")):
+            if _IN_BODY_TOKEN.search(_shape_view(m.group(2) or "")):
                 bad.append((n, "anchor_in_body"))
             continue
         why = _lead_ws_reason(line)
@@ -306,7 +390,7 @@ def _oq_lookalike(text):
 
 def decision_shaped(line):
     """정규형이 결정 꼴인가 — `OQ<n>` 머리, 해결 · 열림 표시, 또는 ASCII 가 아닌 숫자를 단 `OQ`."""
-    oq, marks = _decision_tokens(canon(line))
+    oq, marks = _decision_tokens(fold(line))
     return bool(oq or marks) or _oq_lookalike(line)
 
 
@@ -338,6 +422,9 @@ def decision_line_problem(line):
         return "oq_confusable"
     c = canon(line)
     tokens = _decision_tokens(c)
+    folded = _decision_tokens(fold(line))
+    if folded != tokens:   # 닮은 글자(`O` · `Q`)로 쓴 결정 번호 — 정규형은 못 읽고 접은 모양만 결정 꼴이다
+        return "decision_confusable"
     if not (tokens[0] or tokens[1]):
         return None
     # 날 글자의 구조 토큰(불릿 · `OQ<n>` · 표시)이 정규형과 같을 때만 받는다 — 앞붙이 · 본문의 정규형 차이(원 숫자 등)는 보지 않는다.

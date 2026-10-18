@@ -454,6 +454,50 @@ class Round5AuditLegend(unittest.TestCase):
             self.assertTrue(CB.attribution_block_missing(a2), repr(cut))
 
 
+class RenderedShapeRules(unittest.TestCase):
+    """Task 11 — markdown-it 교차 확인이 드러낸 부류: CommonMark 펜스 · 마크업으로 꾸민 앵커 · O/Q 닮은꼴 · CR 머리 · setext."""
+
+    def spans(self, doc):
+        return [m.span() for m in B.FENCE_RE.finditer(doc)]
+
+    def test_fence_follows_commonmark(self):
+        self.assertEqual(self.spans("```a``` x\n- **S9** y\n"), [])                  # 정보 문자열에 백틱 — 펜스가 아니다
+        self.assertEqual(self.spans("~~~\n- **S9** y\n~~~\n"), [(0, 18)])              # 물결 펜스
+        self.assertEqual(self.spans("```\nx\n~~~\n"), [(0, 10)])                      # 닫히지 않은 펜스는 글 끝까지
+        self.assertEqual(self.spans("````\nx\n```\ny\n````\n"), [(0, 17)])           # 닫는 줄은 여는 줄 이상의 길이
+        self.assertEqual(self.spans("    ```\nx\n    ```\n"), [])                    # 들여쓰기 4칸은 펜스가 아니다
+
+    def test_markup_dressed_anchor_is_refused(self):
+        for line in ("- <b>S9</b> x", "- *\\*S5*\\*", "- **S<i></i>9**"):
+            ok, bad = B.anchor_lines(line)
+            self.assertEqual(ok, [], line)
+            self.assertTrue(bad, line)
+        self.assertEqual(B.anchor_lines("- **S9** 「x」")[0], [(1, "S9", "「x」")])
+        self.assertEqual(B.anchor_lines("- **S<N>** 자리 표시")[1], [])    # 템플릿 자리 표시는 태그로 읽지 않는다
+        ok, bad = B.anchor_lines("  - **S" + chr(0x0417) + "**")
+        self.assertEqual((ok, [r for _n, r in bad]), ([], ["anchor_confusable"]))     # 들인 닮은 글자 머리
+
+    def test_o_q_lookalikes_fold(self):
+        self.assertEqual(B.fold(chr(0x041E) + chr(0x051A) + "1"), "OQ1")
+        line = "- " + chr(0x041E) + "Q1 결정 내용"
+        self.assertEqual(B.decision_line_problem(line), "decision_confusable")
+        self.assertTrue(B.decision_shaped(line))
+        self.assertIsNone(B.decision_line_problem("- OQ1 결정 내용"))
+
+    def test_empty_head_with_cr_is_a_candidate(self):
+        for head in ("##", "##\r", "## ", "  ##\t\r"):
+            doc = "본문\n\n" + head + "\n\n## 0. 한눈에\n"
+            self.assertEqual([r for _l, r in B.head_problems(doc)], ["section_head_unknown"], repr(head))
+
+    def test_setext_heading_is_refused_at_top_level_only(self):
+        self.assertEqual(B.setext_problems("제목\n---\n"), [("제목", "setext_heading")])
+        self.assertEqual(B.setext_problems("제목\n===\n"), [("제목", "setext_heading")])
+        for ok in ("제목\n\n---\n", "- 항목\n---\n", "> 인용\n> ---\n", "> 인용\n게으른 줄\n---\n", "# 제목\n---\n",
+                   "```\n제목\n---\n```\n", "---\nname: x\n---\n본문\n"):
+            self.assertEqual(B.setext_problems(ok), [], repr(ok))
+        self.assertEqual([r for _l, r in B.head_problems("제목\n---\n")], ["setext_heading"])
+
+
 class SharedGrammar(unittest.TestCase):
     def test_readers_share_one_object(self):
         self.assertIs(check_brief.ANCHOR_LINE_RE, B.ANCHOR_LINE_RE)

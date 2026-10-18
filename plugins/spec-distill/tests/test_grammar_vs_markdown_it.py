@@ -297,3 +297,60 @@ class SeedGrammar(unittest.TestCase):
     def test_seed_positive_control(self):
         sp = S.parse_seed("---\ntype: interview-seed\n---\n\n문장 하나.\n\n- 항목\n")
         self.assertEqual([n for n, _w in sp.rejected], [7])
+
+
+FENCE_CORPUS = [
+    "```\na\n```\n", "~~~\na\n~~~\n", "```a``` x\n- b\n", "```js\nx\n```\n", "````\n```\n````\n", "```\nx\n````\n",
+    "````\nx\n```\n", "```\nx\n``` y\n```\n", "~~~\nx\n```\n~~~\n", "   ```\nx\n   ```\n", "    ```\nx\n    ```\n",
+    "```\nunclosed\n", "~~~ a`b\nx\n~~~\n", "``` a`b\nx\n```\n", "```\nx\n ```\n", "```\nx\n```", "~~~\nx\n~~\n",
+    "a\n```\nx\n```\nb\n", "```\n```\n- 항목\n",
+]
+
+
+def parser_fence_lines(doc):
+    out = set()
+    for t in MD.parse(doc):
+        if t.type == "fence" and t.level == 0 and t.map:
+            out.update(range(t.map[0], t.map[1]))
+    return out
+
+
+def our_fence_lines(doc):
+    starts, pos = [], 0
+    for ln in doc.split("\n"):
+        starts.append(pos)
+        pos += len(ln) + 1
+    n = doc.count("\n") + (0 if doc.endswith("\n") else 1)
+    spans = [m.span() for m in B.FENCE_RE.finditer(doc)]
+    return {i for i, st in enumerate(starts) if i < n and any(a <= st < b for a, b in spans)}
+
+
+SETEXT_CORPUS = [
+    "a\n---\n", "a\n===\n", "a\n\n---\n", "- a\n---\n", "- a\n  ---\n", "> a\n---\n", "> a\n> ---\n", "a\nb\n---\n",
+    "# a\n---\n", "---\n---\n", "a\n -\n", "a\n----   \n", "    code\n---\n", "<div>\n---\n", "a\n    ---\n",
+    "* * *\n---\n", "a\n\n===\n", "1. a\n---\n", "a\n=\n", "> a\nb\n---\n", "- a\nb\n---\n",
+]
+
+
+def parser_setext_lines(doc):
+    return {t.map[1] - 2 for t in MD.parse(doc) if t.type == "heading_open" and t.level == 0 and t.markup in ("=", "-") and t.map}
+
+
+def our_setext_lines(doc):
+    lines = doc.split("\n")
+    wanted = {ln for ln, _why in B.setext_problems(doc)}
+    return {i for i, ln in enumerate(lines) if ln in wanted and i + 1 < len(lines)} if wanted else set()
+
+
+class FenceAndSetextAgreement(unittest.TestCase):
+    def test_fence_implementation_agrees_with_parser(self):
+        for doc in FENCE_CORPUS:
+            with self.subTest(doc):
+                self.assertEqual(our_fence_lines(doc), parser_fence_lines(doc), repr(doc))
+
+    def test_setext_rule_agrees_with_parser_at_top_level(self):
+        for doc in SETEXT_CORPUS:
+            with self.subTest(doc):
+                body = "---\nname: x\n---\n" + doc   # frontmatter 뒤 — 본문만 읽는다
+                self.assertEqual(sorted(ln for ln, _w in B.setext_problems(body)),
+                                 sorted(doc.split("\n")[i] for i in parser_setext_lines(doc)), repr(doc))
