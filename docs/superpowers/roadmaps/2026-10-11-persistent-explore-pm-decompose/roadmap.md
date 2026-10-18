@@ -141,12 +141,12 @@ review_model: opus
 - 의존: R1, R2, R7, R3, R4, R6, P2, P3
 - 브랜치: feature/shared-review-engine-devices
 - 묶음: R2a.md
-- 경로 예약: shared/docreview/, plugins/spec-distill/references/reviewing-document.md, plugins/quality-gates/, plugins/project-init/, plugins/plugin-audit/, shared/test-selection/
+- 경로 예약: shared/docreview/, plugins/spec-distill/references/reviewing-document.md, plugins/quality-gates/, plugins/project-init/, plugins/plugin-audit/, shared/test-selection/, plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/scripts/check_verbatim_coverage.py, plugins/spec-distill/scripts/seed_body.py, plugins/spec-distill/scripts/check_seed.py, plugins/spec-distill/scripts/seed_review_log.py, plugins/spec-distill/scripts/seed_provenance.py, plugins/spec-distill/scripts/brief_body.py, plugins/spec-distill/tests/test_check_brief.sh, plugins/spec-distill/tests/test_check_brief_frontmatter.py, plugins/spec-distill/tests/test_brief_verbatim_full.sh, plugins/spec-distill/tests/test_check_verbatim_coverage.sh, plugins/spec-distill/tests/test_check_seed.sh, plugins/spec-distill/tests/test_seed_review_log.sh, plugins/spec-distill/tests/test_seed_provenance.sh
 
 ### R5 — 지휘자
 - 의도: 한 세션이 로드맵을 따라 에픽을 끝까지 지휘하되 사용자의 결정권과 내용 검토가 남게 한다
 - 범위:
-  - 한다: 사람 몫은 지금 답할 수 있는지 판단해 배경 설명과 함께 몰아 받고 나머지는 멈추지 않고 병렬로 끝까지 · 외부 정지는 사용자에게(미리 받은 답이 있으면 그 답으로) · 머지 전 에픽 사이 통합 리뷰 · 모든 에픽 머지 뒤 끝에서 끝 확인 · 하위(에픽 worktree · 브랜치)는 단일 세션과 같은 skill 호출 · 같은 동작(사용자 게이트는 skill 문면 그대로 전달 · 리뷰 원장은 지휘자가 같은 상태 경로를 넘겨 agent 를 바꿔도 이어짐) · 병렬은 불가피할 때만 멈추고 다시 이음 · R2 가 R3 에 넘긴 번호 대조 둘(설계 없는 묶음의 「셀 수 없음」 경고 · 기각 번호를 승인 게이트에 보이고 「반영」으로 되돌리기) · 사용자 몫 감사(혼자 정한 사용자 몫 · 줄어든 넘김을 찾아 배경과 함께 하나씩 묻기) · 미룸 · 넘김 조율(담당 에픽을 정해 넘기고 뒤에서 처리됐는지 확인) · 살아 있는 subagent 를 보이고 놀고 있는 것은 내림 · /compact 시점은 지휘자가 판단 · 구현 뒤 다시 불러도 같은 동작(설계 입력: 로드맵 roadmap.md `## 재분해 이력` 의 R5 줄 사용자 원문 전부 — 설계문서 `## 번호 대조` 에 원문마다 반영/기각 행) · 흐름 고정 점검(flexibility-audit.md)의 R5 행 · 실행 기록 회수 · 재개 · 부분 계속 · 머지 원칙 · qg 의도 회귀 · 에픽 사이 이음매 · base 이동 · 구현 이후 단계 · 쓴 자원 정리(브랜치 제외) · 계층 · 온톨로지 · 레포 전용 값 금지
+  - 한다: 사람 몫은 지금 답할 수 있는지 판단해 배경 설명과 함께 몰아 받고 나머지는 멈추지 않고 병렬로 끝까지 · 외부 정지는 사용자에게(미리 받은 답이 있으면 그 답으로) · 머지 전 에픽 사이 통합 리뷰 · 모든 에픽 머지 뒤 끝에서 끝 확인 · 하위(에픽 worktree · 브랜치)는 단일 세션과 같은 skill 호출 · 같은 동작(spec 리뷰까지는 지휘 세션이 직접 · 하위가 돌려보낸 사람 자리는 쉬운 요약 + 원문(선택지 · 답은 그대로)) · 병렬은 불가피할 때만 멈추고 다시 이음 · R2 가 R3 에 넘긴 번호 대조 둘(설계 없는 묶음의 「셀 수 없음」 경고 · 기각 번호를 승인 게이트에 보이고 「반영」으로 되돌리기) · 사용자 몫 감사(혼자 정한 사용자 몫 · 줄어든 넘김을 찾아 배경과 함께 하나씩 묻기) · 미룸 · 넘김 조율(담당 에픽을 정해 넘기고 뒤에서 처리됐는지 확인) · 살아 있는 subagent 를 보이고 놀고 있는 것은 내림 · /compact 시점은 지휘자가 판단 · 구현 뒤 다시 불러도 같은 동작(설계 입력: 로드맵 roadmap.md `## 재분해 이력` 의 R5 줄 사용자 원문 전부 — 설계문서 `## 번호 대조` 에 원문마다 반영/기각 행) · 흐름 고정 점검(flexibility-audit.md)의 R5 행 · 실행 기록 회수 · 재개 · 부분 계속 · 머지 원칙 · qg 의도 회귀 · 에픽 사이 이음매 · base 이동 · 구현 이후 단계 · 쓴 자원 정리(브랜치 제외) · 계층 · 온톨로지 · 레포 전용 값 금지
   - 안 한다: 상태줄 · 패널(R6) · 리뷰 엔진 동작 변경(R2a)
 - 의존: R1, R2, R7, R3, R4, R6, P2, P3
 - 브랜치: feature/epic-conductor · feature/epic-conductor-seams · feature/epic-conductor-loop
@@ -177,12 +177,12 @@ review_model: opus
 ### R10 — 인터뷰 조사 열기 · 신선한 근거 · 끝 게이트
 - 의도: 인터뷰가 모델 판단으로 조사를 넓게 열어 결정에 닿는 신선하고 믿을 만한 근거를 빠짐없이 채우게 한다 — 기존 방식에 더한다
 - 범위:
-  - 한다: 조사 subagent 를 모델 판단으로 여럿 동시에 · 시의성 있는 사실의 신선한 근거(사용자 원칙 여덟 — 흐름 고정 점검 문서 R10 절, 설계문서 `## 번호 대조` 에 원칙마다 반영/기각 행) · 흐름 고정 점검(flexibility-audit.md)의 R10 행 · 인터뷰 끝 게이트 둘(분해된 일의 ①② 이름 · 다음 세션 줄의 에픽마다 brainstorming 고정, /compact 권장은 유지) · 분해 판단이 로드맵 `흐름` · `산출물` 칸을 채움 · 인터뷰 조사에 레포 안 재사용 검토 · 나눈 일 다음 세션 줄 문면 조율(그 한 줄 자체는 R5) · 하나짜리 brief 의 다음 세션 줄(finishing.md)이 가정하는 「SDD 의 마지막 전체 리뷰」를 「고른 실행 방식의 마지막 전체 리뷰」로
+  - 한다: 조사 subagent 를 모델 판단으로 여럿 동시에 · 시의성 있는 사실의 신선한 근거(사용자 원칙 여덟 — 흐름 고정 점검 문서 R10 절, 설계문서 `## 번호 대조` 에 원칙마다 반영/기각 행) · 흐름 고정 점검(flexibility-audit.md)의 R10 행 · 인터뷰 끝 게이트 둘(분해된 일의 ①② 이름 · 다음 세션 줄의 에픽마다 brainstorming 고정, /compact 권장은 유지) · 분해 판단이 로드맵 `흐름` · `산출물` 칸을 채움 · 인터뷰 조사에 레포 안 재사용 검토 · 나눈 일 다음 세션 줄 문면 조율(그 한 줄 자체는 R5) · 하나짜리 brief 의 다음 세션 줄(finishing.md)이 가정하는 「SDD 의 마지막 전체 리뷰」를 「고른 실행 방식의 마지막 전체 리뷰」로 · 인터뷰 진입 이름 `spec-interview` → `pm-interview`(호출 이름 변경은 레포 규칙대로 별칭 없이 즉시 · major bump)
   - 안 한다: 에픽 넘김 줄 · 지휘(R5) · 공유 리뷰 엔진(R2a)
 - 의존: R1, R2, R3, R4, R7
 - 브랜치: feature/interview-open-research
 - 묶음: R10.md
-- 경로 예약: plugins/spec-distill/skills/spec-interview/, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/reviewing-brief/SKILL.md, plugins/spec-distill/agents/saturation-judge.md, plugins/spec-distill/agents/steelman-builder.md, plugins/spec-distill/templates/interview-brief-template.md, plugins/spec-distill/references/trivia-escape.md
+- 경로 예약: plugins/spec-distill/skills/spec-interview/, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/reviewing-brief/SKILL.md, plugins/spec-distill/agents/saturation-judge.md, plugins/spec-distill/agents/steelman-builder.md, plugins/spec-distill/templates/interview-brief-template.md, plugins/spec-distill/references/trivia-escape.md, plugins/spec-distill/skills/pm-interview/
 
 ### R11 — 원칙 문서 정리
 - 의도: 사용자의 상시 원칙을 auto-memory 에서 CLAUDE.md · 철학 문서 · 주요 문서로 옮기고 낡은 개념은 과감히 지워 문서 크기를 줄인다
@@ -381,6 +381,13 @@ R5 전까지 지휘 세션이 따르는 절차다. 장치가 아니라 절차다
 - 바뀜: 바뀐 에픽 R5 「① /compact 후 다음 세션 줄 (권장)」
 - 원문:
   - 「① /compact 후 다음 세션 줄 (권장)」
+
+### 2026-10-18 · R2a 보안 잔여 경로 예약 · R10 에 pm-interview 개명 · R5 범위를 재결정에 맞춤
+- 바뀜: 바뀐 에픽 R2a · R5 · R10 「pm-interview (권장)」 · 「지휘자가 spec 리뷰까지 (권장)」 · 「이대로 다시 나눈다」
+- 원문:
+  - 「pm-interview (권장)」
+  - 「지휘자가 spec 리뷰까지 (권장)」
+  - 「이대로 다시 나눈다」
 
 ## 위험 번호표
 
