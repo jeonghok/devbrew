@@ -2943,3 +2943,47 @@ case_same_name_block_broken_kills_critic() {
   assert_eq "$rc" "4" "같은 이름 블록 하나라도 파손 → 출력 전체가 탐지 사망(rc 4)"
   rm -rf "$d"
 }
+# ── AC14 — 파서는 줄인 플래그를 거부한다 ─────────────────────────────────
+case_AC14_no_abbrev_flags() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC14: r1 실패"; return; }
+  py docreview_state.py advice --state-dir "$d" --rend >/dev/null 2>&1; local rc=$?
+  assert_eq "$rc" "2" "AC14: advice --rend(줄인 --render)는 사용법 오류 rc 2"
+  py docreview_state.py gate --state-dir "$d" --rend >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "AC14: gate --rend 도 rc 2"
+  py docreview_route.py finalize --state-dir "$d" --recritic-s >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "AC14: 라우터 finalize --recritic-s(줄인 --recritic-skipped)도 rc 2"
+  py docreview_state.py gate --state-dir "$d" --render >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "0" "AC14 양성 짝: 온전한 플래그는 그대로 rc 0"
+  rm -rf "$d"
+}
+# ── AC14 — brief 「## 6」 은 끝에 덧붙인 줄만이면 통과 ─────────────────────
+case_AC14_append_only_passes() {
+  local d s1 s2; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC14: init 실패"; return; }
+  s1="$d/s1.json"; snap "$FX/brief-append-r1.md" "$s1"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s1" >/dev/null
+  s2="$d/s2.json"; snap "$FX/brief-append-r2.md" "$s2"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s2" >/dev/null
+  py docreview_state.py exempt-anchors --state-dir "$d" > "$d/ex2.json"
+  # yaml 은 -I 로는 안 보이는 사용자 site 에 있을 수 있다 — st_get.py(비-I)에 식을 넘기고 엔진은 PYTHONPATH 로 건다.
+  local out; out="$(PYTHONPATH="$SCRIPTS" python3 "$FX/st_get.py" "$d/docreview-state.md" '(lambda D: ([c["anchor"] for c in D["changed"]], [e.get("scope") for e in D["exempt_applied"]]))(__import__("docreview_state").round_diff(st, __import__("docreview_state").load_profile(st["profile"]), 2))')"
+  assert_eq "$out" "([], ['append-only'])" "AC14: 「## 6」 끝에 덧붙인 줄만이면 changed 가 없고 append-only 면제로 보인다"
+  rm -rf "$d"
+}
+case_AC14_append_only_plus_edit() {
+  local d s1 s2; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC14: init 실패"; return; }
+  s1="$d/s1.json"; snap "$FX/brief-append-r1.md" "$s1"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s1" >/dev/null
+  s2="$d/s2.json"; snap "$FX/brief-append-r2-edit.md" "$s2"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s2" >/dev/null
+  # yaml 은 -I 로는 안 보이는 사용자 site 에 있을 수 있다 — st_get.py(비-I)에 식을 넘기고 엔진은 PYTHONPATH 로 건다.
+  local out; out="$(PYTHONPATH="$SCRIPTS" python3 "$FX/st_get.py" "$d/docreview-state.md" '(lambda D: [c["anchor"] for c in D["changed"]])(__import__("docreview_state").round_diff(st, __import__("docreview_state").load_profile(st["profile"]), 2))')"
+  assert_eq "$out" "['#6-사용자-원문']" "AC14: 이미 있는 원문 줄이 바뀌면 덧붙인 줄이 함께 있어도 frozen_change 대상이다"
+  rm -rf "$d"
+}
+case_AC14_line_hashes_only_immutable() {
+  local d s1; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC14: init 실패"; return; }
+  s1="$d/s1.json"; snap "$FX/brief-append-r1.md" "$s1"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s1" >/dev/null
+  assert_eq "$(st_yaml "$d" 'sorted(s["anchor"] for s in st["snapshots"]["1"]["sections"] if "line_hashes" in s)')" "['#6-사용자-원문']" "AC14: 원장 스냅숏은 불변 절에만 줄 해시를 남긴다(원장 크기)"
+  rm -rf "$d"
+}

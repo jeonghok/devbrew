@@ -939,12 +939,15 @@ def cmd_finalize(a) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="docreview_route.py")
+    p = argparse.ArgumentParser(prog="docreview_route.py", allow_abbrev=False)
     sp = p.add_subparsers(dest="cmd", required=True)
-    x = sp.add_parser("prepare-recritic"); x.add_argument("--state-dir", required=True)
+
+    def P(name):   # 하위 명령마다 줄인 플래그를 거부한다
+        return sp.add_parser(name, allow_abbrev=False)
+    x = P("prepare-recritic"); x.add_argument("--state-dir", required=True)
     x.add_argument("--critic", required=True); x.add_argument("--codex", default=None)
     x.set_defaults(fn=cmd_prepare)
-    x = sp.add_parser("finalize"); x.add_argument("--state-dir", required=True)
+    x = P("finalize"); x.add_argument("--state-dir", required=True)
     x.add_argument("--recritic", default=None); x.add_argument("--recritic-skipped", action="store_true")
     x.add_argument("--doc", default=None)
     x.set_defaults(fn=cmd_finalize)

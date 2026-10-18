@@ -296,6 +296,15 @@ def resolve_scope(scope: str, old_secs, new_secs) -> set:
     return set()
 
 
+def _appended_only(old_sec, new_sec) -> bool:
+    """불변 절의 「추가만 허용」 — 옛 줄 해시 목록이 새 목록의 앞부분과 같고 새 줄이 더 많을 때만 참.
+    줄 해시가 없는 절(불변이 아닌 절 · 옛 원장)은 거짓 — 지금처럼 바뀜으로 본다."""
+    o, n = old_sec.get("line_hashes"), new_sec.get("line_hashes")
+    if not isinstance(o, list) or not isinstance(n, list):
+        return False
+    return len(n) > len(o) and n[:len(o)] == o
+
+
 def diff_snapshots(old: dict, new: dict, exempt_scopes) -> dict:
     os_, ns = old.get("sections", []), new.get("sections", [])
     om = {s["anchor"]: s for s in os_}
@@ -323,7 +332,12 @@ def diff_snapshots(old: dict, new: dict, exempt_scopes) -> dict:
         if a not in om:
             rec(a, "added", s["title"], None, s["hash"])
         elif om[a]["hash"] != s["hash"]:
-            rec(a, "modified", s["title"], om[a]["hash"], s["hash"])
+            if _appended_only(om[a], s):
+                exempt_applied.append({"anchor": a, "kind": "appended", "title": s["title"],
+                                       "old_hash": om[a]["hash"], "new_hash": s["hash"], "scope": "append-only",
+                                       "evidence": "섹션 '%s' (%s) 끝에 줄만 더해짐" % (s["title"], a)})
+            else:
+                rec(a, "modified", s["title"], om[a]["hash"], s["hash"])
     for a, s in om.items():
         if a not in nm:
             rec(a, "removed", s["title"], s["hash"], None)
@@ -509,11 +523,15 @@ def cmd_begin_round(a) -> int:
         st["extra_rounds"].append({"round": n, "quote": a.extra_approval})
     st["round"] = n
     st["rereview_count"] = rr
-    st["snapshots"][str(n)] = {
-        "headingless": bool(snap.get("headingless")),
-        "sections": [{k: s.get(k) for k in ("anchor", "title", "level", "hash", "parents")}
-                     for s in snap.get("sections", [])],
-    }
+    prof = load_profile(st["profile"])
+    imm = set(anchors_matching(prof["immutable"], snap.get("sections", []))) if prof["immutable"] else set()
+    secs = []
+    for s in snap.get("sections", []):
+        row = {k: s.get(k) for k in ("anchor", "title", "level", "hash", "parents")}
+        if s.get("anchor") in imm and isinstance(s.get("line_hashes"), list):
+            row["line_hashes"] = list(s["line_hashes"])   # 불변 절에만 — 원장 크기
+        secs.append(row)
+    st["snapshots"][str(n)] = {"headingless": bool(snap.get("headingless")), "sections": secs}
     st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
     save_state(a.state_dir, st, "begin-round (rereview_count=%d%s)"
                % (rr, ", extra" if n > 1 + REREVIEW_CAP else ""))
@@ -1640,43 +1658,46 @@ def cmd_gate_rows(a) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="docreview_state.py")
+    p = argparse.ArgumentParser(prog="docreview_state.py", allow_abbrev=False)
     sp = p.add_subparsers(dest="cmd", required=True)
-    x = sp.add_parser("state-dir-for"); x.add_argument("--root", required=True)
+
+    def P(name):   # 하위 명령마다 줄인 플래그를 거부한다 — 줄인 플래그가 쓰기 플래그로 읽히지 않게(R2 인계)
+        return sp.add_parser(name, allow_abbrev=False)
+    x = P("state-dir-for"); x.add_argument("--root", required=True)
     x.add_argument("--doc", required=True)
     x.set_defaults(fn=cmd_state_dir_for)
-    x = sp.add_parser("init"); x.add_argument("--state-dir", required=True)
+    x = P("init"); x.add_argument("--state-dir", required=True)
     x.add_argument("--doc", required=True); x.add_argument("--profile", required=True)
     x.set_defaults(fn=cmd_init)
-    x = sp.add_parser("begin-round"); x.add_argument("--state-dir", required=True)
+    x = P("begin-round"); x.add_argument("--state-dir", required=True)
     x.add_argument("--snapshot", required=True); x.add_argument("--extra-approval", default=None)
     x.set_defaults(fn=cmd_begin_round)
-    x = sp.add_parser("profile-check"); x.add_argument("profile")
+    x = P("profile-check"); x.add_argument("profile")
     x.set_defaults(fn=cmd_profile_check)
 
     def sd(x):
         x.add_argument("--state-dir", required=True)
         return x
-    x = sd(sp.add_parser("record-findings")); x.add_argument("--json", required=True); x.set_defaults(fn=cmd_record_findings)
-    x = sd(sp.add_parser("exempt-anchors")); x.set_defaults(fn=cmd_exempt_anchors)
-    x = sd(sp.add_parser("decide")); x.add_argument("--id", required=True)
+    x = sd(P("record-findings")); x.add_argument("--json", required=True); x.set_defaults(fn=cmd_record_findings)
+    x = sd(P("exempt-anchors")); x.set_defaults(fn=cmd_exempt_anchors)
+    x = sd(P("decide")); x.add_argument("--id", required=True)
     x.add_argument("--choice", required=True, choices=("adopt", "reject", "hold"))
     x.add_argument("--quote", required=True); x.add_argument("--log-file", default=None); x.set_defaults(fn=cmd_decide)
-    x = sd(sp.add_parser("fix")); x.add_argument("--id", required=True)
+    x = sd(P("fix")); x.add_argument("--id", required=True)
     x.add_argument("--event", required=True, choices=("intent-pass", "drop", "hold", "unhold", "escalate"))
     x.add_argument("--scope", default=None); x.add_argument("--reason", default=None)
     x.add_argument("--log-file", default=None); x.set_defaults(fn=cmd_fix)
-    x = sd(sp.add_parser("ask")); x.add_argument("--id", required=True)
+    x = sd(P("ask")); x.add_argument("--id", required=True)
     x.add_argument("--answered", action="store_true"); x.set_defaults(fn=cmd_ask)
-    x = sd(sp.add_parser("defer")); x.add_argument("--id", required=True)
+    x = sd(P("defer")); x.add_argument("--id", required=True)
     x.add_argument("--log-file", required=True); x.set_defaults(fn=cmd_defer)
-    x = sd(sp.add_parser("observe-diff")); x.set_defaults(fn=cmd_observe_diff)
-    x = sd(sp.add_parser("gate")); x.add_argument("--render", action="store_true"); x.set_defaults(fn=cmd_gate)
-    x = sd(sp.add_parser("advice")); x.add_argument("--render", action="store_true")
+    x = sd(P("observe-diff")); x.set_defaults(fn=cmd_observe_diff)
+    x = sd(P("gate")); x.add_argument("--render", action="store_true"); x.set_defaults(fn=cmd_gate)
+    x = sd(P("advice")); x.add_argument("--render", action="store_true")
     x.add_argument("--cap", type=int, default=None); x.add_argument("--where", default=None)
     x.add_argument("--sink", default=None); x.add_argument("--log-file", default=None)
     x.set_defaults(fn=cmd_advice)
-    x = sp.add_parser("gate-rows"); x.set_defaults(fn=cmd_gate_rows)
+    x = P("gate-rows"); x.set_defaults(fn=cmd_gate_rows)
     return p
 
 

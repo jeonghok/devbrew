@@ -60,9 +60,13 @@ def parse_sections(text: str, keep_body: bool = False) -> dict:
     sections = []
 
     def add(anchor, title, level, a, b, parents):
-        body = "\n".join(x.rstrip() for x in lines[a:b]).strip("\n")
+        rows = [x.rstrip() for x in lines[a:b]]
+        while rows and rows[-1] == "":
+            rows.pop()
+        body = "\n".join(rows).strip("\n")
         item = {"anchor": anchor, "title": title, "level": level, "line": a + 1,
                 "hash": hashlib.sha1(body.encode("utf-8")).hexdigest()[:12],
+                "line_hashes": [hashlib.sha1(r.encode("utf-8")).hexdigest()[:12] for r in rows],
                 "parents": list(parents)}
         if keep_body:
             item["body"] = body
@@ -149,6 +153,10 @@ def cmd_diff(a) -> int:
     ex = json.loads(Path(a.exempt).read_text(encoding="utf-8")) if a.exempt else []
     if not isinstance(ex, list):
         return fail("exempt_not_list")
+    # 이 CLI 는 어느 절이 불변인지 모른다 — 줄 해시를 떼어 «덧붙이기만 허용» 면제가 모든 절에 번지지 않게 한다.
+    for snap in (old, new):
+        for s in snap.get("sections", []):
+            s.pop("line_hashes", None)
     _emit(diff_snapshots(old, new, ex))
     return 0
 
@@ -271,16 +279,19 @@ def cmd_check_intent(a) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="docreview_anchor.py")
+    p = argparse.ArgumentParser(prog="docreview_anchor.py", allow_abbrev=False)
     sp = p.add_subparsers(dest="cmd", required=True)
-    x = sp.add_parser("snapshot"); x.add_argument("doc"); x.set_defaults(fn=cmd_snapshot)
-    x = sp.add_parser("diff"); x.add_argument("old"); x.add_argument("new")
+
+    def P(name):   # 하위 명령마다 줄인 플래그를 거부한다
+        return sp.add_parser(name, allow_abbrev=False)
+    x = P("snapshot"); x.add_argument("doc"); x.set_defaults(fn=cmd_snapshot)
+    x = P("diff"); x.add_argument("old"); x.add_argument("new")
     x.add_argument("--exempt", default=None); x.set_defaults(fn=cmd_diff)
-    x = sp.add_parser("protected"); x.add_argument("anchor")
+    x = P("protected"); x.add_argument("anchor")
     x.add_argument("--profile", required=True); x.add_argument("--snapshot", required=True)
     x.set_defaults(fn=cmd_protected)
-    x = sp.add_parser("refs"); x.add_argument("anchor"); x.add_argument("doc"); x.set_defaults(fn=cmd_refs)
-    x = sp.add_parser("check-intent"); x.add_argument("finding_id")
+    x = P("refs"); x.add_argument("anchor"); x.add_argument("doc"); x.set_defaults(fn=cmd_refs)
+    x = P("check-intent"); x.add_argument("finding_id")
     x.add_argument("--intent", required=True); x.add_argument("--state-dir", required=True)
     x.add_argument("--decision-id", default=None); x.set_defaults(fn=cmd_check_intent)
     return p

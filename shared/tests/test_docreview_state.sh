@@ -84,4 +84,9 @@ case_state_dir_for_per_doc
 case_E1_skipped_round_permit_caught_up
 case_E5_revert_caught_up_by_its_round_snapshot
 case_state_gloss_covers_gate_rows
+# AC14 — 줄인 플래그 거부 · brief 원문 절 덧붙이기만 허용.
+case_AC14_no_abbrev_flags
+case_AC14_append_only_passes
+case_AC14_append_only_plus_edit
+case_AC14_line_hashes_only_immutable
 finish
