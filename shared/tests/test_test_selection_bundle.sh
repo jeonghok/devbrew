@@ -28,8 +28,8 @@ done
 # 이동 전 blob 은 그 커밋의 부모에 있던 qg 스크립트다. 커밋이나 부모를 못 찾으면(얕은 클론 등) 통과가 아니라 실패다.
 for n in $NAMES; do
   add_c="$(git log --diff-filter=A --format=%H -- "shared/test-selection/$n" | tail -1)"
-  after="$(git rev-parse "${add_c:-none}:shared/test-selection/$n" 2>/dev/null)"
-  before="$(git rev-parse "${add_c:-none}^:plugins/quality-gates/scripts/$n" 2>/dev/null)"
+  after="$(git rev-parse --verify -q "${add_c:-none}:shared/test-selection/$n" 2>/dev/null)"
+  before="$(git rev-parse --verify -q "${add_c:-none}^:plugins/quality-gates/scripts/$n" 2>/dev/null)"
   if [ -z "$after" ] || [ -z "$before" ]; then
     no "공유본 ${n} 의 이동 전후 blob 을 git 에서 풀지 못했다(공유본을 더한 커밋 또는 그 부모가 없다 — 얕은 클론이면 전체 이력을 받아라)"
   else
