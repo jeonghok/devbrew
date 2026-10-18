@@ -373,11 +373,14 @@ class Section2MultiLineAnswerWriterContract(Tmp):
     def test_template_and_skill_carry_the_one_line_contract(self):
         tpl = (HERE.parent / "templates" / "interview-seed-audit-template.md").read_text(encoding="utf-8")
         skill = (HERE.parent / "skills" / "request-framing" / "SKILL.md").read_text(encoding="utf-8")
-        for name, text in (("템플릿", tpl), ("request-framing SKILL", skill)):
+        for name, text, lead in (("템플릿", tpl, "두 칸의 값은"), ("request-framing SKILL", skill, "«당신이 답한 것» 값과 «사용자가 적은 말» 값은")):
             with self.subTest(name):
-                self.assertIn("seed_review_log.py", text)
-                self.assertIn("one-line", text)
-                self.assertIn("당신이 답한 것", text)
+                i = text.find(lead)
+                self.assertGreaterEqual(i, 0, "한 줄 계약 문장이 없다")
+                near = text[i:i + 220]
+                self.assertIn("seed_review_log.py", near)
+                self.assertIn("one-line", near)
+                self.assertIn("한 줄", near)
 
     def test_one_line_collapses_every_line_break(self):
         for name, sep in (("LF", "\n"), ("CR", CR), ("U+2028", LS), ("U+2029", chr(0x2029)), ("VT", chr(0x0B)), ("NEL", chr(0x85))):
