@@ -39,7 +39,7 @@ _SCRIPTS_DIR = str(pathlib.Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 from seed_body import parse_seed, rejected_lines_message  # noqa: E402
-from seed_review_log import (fold_for_match, heading_structure, section_body,  # noqa: E402
+from seed_review_log import (fold_for_match, heading_structure, read_audit_text, section_body,  # noqa: E402
                              separator_lines, separator_message)
 
 RAW_HEADING = "## 1. 원문"
@@ -139,7 +139,7 @@ def gate(seed_path: pathlib.Path, audit_path: pathlib.Path | None) -> list:
         problems.append("audit 경로가 주어지지 않았다 — 원문 보존을 확인할 수 없다")
     else:
         try:
-            atext = audit_path.read_text(encoding="utf-8")
+            atext = read_audit_text(audit_path)
         except OSError as e:
             problems.append(f"audit 을 읽을 수 없다: {e}")
         else:

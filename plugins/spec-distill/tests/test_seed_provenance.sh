@@ -493,8 +493,8 @@ fi
 python3 - "$P" "$TMP/mutp.py" <<'PY'
 import sys
 t = open(sys.argv[1], encoding="utf-8").read()
-needle = 'for para in re.split(r"\\n\\s*\\n", body.strip()):\n        whole'
-open(sys.argv[2], "w", encoding="utf-8").write(t.replace(needle, 'for para in [body]:\n        whole', 1))
+needle = 'for para in split_paragraphs(body.strip()):'
+open(sys.argv[2], "w", encoding="utf-8").write(t.replace(needle, 'for para in [body]:', 1))
 print("MUTATED" if needle in t else "UNCHANGED")
 PY
 cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$ROOT/plugins/spec-distill/scripts/section6.py" "$ROOT/plugins/spec-distill/scripts/seed_body.py" "$ROOT/plugins/spec-distill/scripts/docreview_advice.py" "$TMP/"
