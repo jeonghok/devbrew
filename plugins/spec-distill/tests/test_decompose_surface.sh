@@ -146,6 +146,23 @@ done
 EH_LINE="$(grep -m1 '^> `@<bundle-abs>' "$SD/references/epic-handoff.md")"
 has "$EH_LINE" 'roadmap 에 <roadmap-rel> 을 적는다' "에픽 넘김 줄: 설계문서 frontmatter roadmap(게이트 ③ 의 열쇠)"
 
+# ── R5 계획 2 AC32 — 재분해 신호는 열린 목록 · 이력 설명은 새 꼴 ──────────────────
+SIG="$(win "$RED" '## 1. 신호' '## ')"
+for lit in '목록은 닫혀 있지 않다' '에픽 설계 세션' '계획 · 구현 세션' '경계를 스스로 고치지 않고 보고한다' \
+           '「이 에픽 다시 설계」 로 가고 이 절차로 오지 않는다'; do
+  has "$SIG" "$lit" "AC32: 재분해 신호 — $lit"
+done
+case "$SIG" in *'신호는 셋이다'*) no "AC32: 닫힌 「셋」 목록 문장이 남았다" ;; *) ok "AC32: 닫힌 「셋」 목록 문장이 없다(양성 짝: 열린 목록)" ;; esac
+APPLY="$(win "$RED" '## 5. 적용' '## ')"
+for lit in '`### <날짜> · <사유>`' '`- 바뀜:`' '`- 원문:`' '원문 칸에는 사용자 말만 둔다' \
+           '--change "<사유 한 줄>"' '--approval "<사용자 말 그대로>"' '사용자 말이 여럿이면 `--approval` 을 말마다 하나씩'; do
+  has "$APPLY" "$lit" "재분해 이력 새 꼴: $lit"
+done
+case "$APPLY" in *'재분해 이력에 한 줄('*) no "재분해 이력: 옛 한 줄 꼴 설명이 남았다" ;; *) ok "재분해 이력: 옛 한 줄 꼴 설명이 없다(양성 짝: 새 꼴)" ;; esac
+UP="$(win "$RED" '## 6. 올리기' '## ')"
+has "$UP" '`${CLAUDE_PLUGIN_ROOT}/references/conducting.md` 의 손 절차 6' "재분해 6: 손 절차를 가리킨다"
+case "$UP" in *'(지휘 절차 6)'*) no "재분해 6: 로드맵의 지휘 절차를 가리키는 옛 꼬리가 남았다" ;; *) ok "재분해 6: 옛 꼬리가 없다" ;; esac
+
 # ── AC11 — 재결정 규약 한 줄 ────────────────────────────────────────────────
 PG="$SD/references/proceed-gate.md"
 P23="$(win "$PG" '## 재결정 규약 (P23)' '## ')"
