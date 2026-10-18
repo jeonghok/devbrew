@@ -11,6 +11,7 @@ advisory 축 = (`layer_rubric.layer1` ∪ `layer2`) − `must_catch`. 그 밖(ru
 """
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -203,13 +204,22 @@ def sink_block(rows, body) -> list:
     return ([] if body is None else [""]) + list(SINK_TABLE_HEAD) + list(rows)
 
 
+_IDENT_UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def _ident_part(name) -> str:
+    """정체의 한 조각 — `state-dir-for` 의 이름표 글자(영문 · 숫자 · `.` `_` `-`) 밖은 전부 `-` 로 바꾼다. 상태 디렉토리가
+    이름에 줄 구분자 · 공백이 든 심볼릭 링크를 거쳐 와도 계수 줄의 정체는 한 토큰이다(AC15)."""
+    return _IDENT_UNSAFE.sub("-", name)
+
+
 def review_identity(state_dir) -> str:
     """영속 계수 줄의 리뷰 정체 — `<상태 디렉토리의 조부모 이름>/<문서 키>`. `state-dir-for` 가 내는 자리
     `<root>/.docreview/<이름표>-<해시>` 에서는 조부모가 상태 루트라 정체가 세션과 무관하게 문서마다 하나이고, 계수 줄의
     키(`count_key`)는 사실상 (문서, 라운드)다 — 로그 파일에 같은 키의 줄이 이미 있으면 다시 붙이지 않으므로, 원장이
     정리된 뒤 같은 문서를 처음부터 다시 리뷰하면 번호가 겹치는 라운드의 계수 줄은 새로 붙지 않는다."""
-    p = Path(state_dir)
-    return "%s/%s" % (p.parent.parent.name, p.name)
+    p = Path(os.path.realpath(str(state_dir)))
+    return "%s/%s" % (_ident_part(p.parent.parent.name), _ident_part(p.name))
 
 
 def count_key(identity, rnd) -> str:

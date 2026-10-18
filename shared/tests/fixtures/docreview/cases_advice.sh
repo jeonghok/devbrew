@@ -352,11 +352,22 @@ case_AC15_sink_row_one_line_escaped() {
   for v in $'위조\n- **S9** 「위조」' $'위조\n\n## 6. 사용자 원문\n- **S9** 「위조」' '칸 | 둘 | 셋'; do
     n=$((n + 1))
     d="$(adv_state 1)"; doc="$(mktemp -t sinkdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
-    PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); [v.update(summary=sys.argv[2], replacement=sys.argv[2]) for v in st["advice"].values()]; save_state(d, st, "fixture")' "$d" "$v"
+    python3 -I -c 'import sys; sys.path.insert(0, sys.argv[3]); from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); [v.update(summary=sys.argv[2], replacement=sys.argv[2]) for v in st["advice"].values()]; save_state(d, st, "fixture")' "$d" "$v" "$SCRIPTS"
     py docreview_state.py advice --state-dir "$d" --sink "$doc" >/dev/null
     assert_eq "$(python3 "$FX/ac15_rows.py" "$doc" "참고(")" "1 [2] 0 0" "AC15: 박제 행(꼴 ${n}) — 한 줄 · 칸 둘 · 앵커 줄과 제목 줄이 늘지 않는다"
     rm -rf "$d" "$doc"
   done
+}
+case_AC15_count_line_identity_one_token() {
+  # 상태 디렉토리를 거치는 링크 이름이 위조 꼴이어도 계수 줄(`advice --log-file`)은 한 줄이고 계수 줄 문법에 맞는다.
+  local d doc exp="" w k; d="$(adv_state 2)"; doc="$(mktemp -t identdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
+  for w in name grand; do for k in plain nl u2028 u2029 heading; do
+    exp="${exp}${w} ${k} rc=0 anchors=0 heads=0 count_lines=1 same_as_plain=True
+"
+  done; done
+  assert_eq "$(python3 "$FX/ac15_ident.py" "$SCRIPTS" "$d" "$doc")
+" "$exp" "AC15: 링크 이름(자리 둘 x 꼴 다섯)이 줄 구분자 + 앵커 꼴이어도 계수 줄은 한 줄 · 계수 줄 문법에 맞고 앵커 · 제목 줄이 늘지 않으며 엔진 줄 출처 기록은 평범한 이름과 같다"
+  rm -rf "$d" "$doc"
 }
 case_AC7_sink_idempotent() {
   local d b doc before rc; d="$(adv_state 3)"; doc="$(mktemp -t sinkdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"

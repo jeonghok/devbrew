@@ -3749,9 +3749,9 @@ case_AC14_line_hashes_only_immutable() {
 
 # ── AC15 — 엔진이 쓰는 줄의 모든 칸은 한 줄 문법 ─────────────────────────────────
 case_AC15_log_line_one_line_every_field() {
-  # 위조 꼴은 허용 문법(한 줄)의 부정형 — 줄 구분자 전부 × 칸 넷. bash 3.2 의 $'…' 는 \u 를 모르므로 꼴은 python 안에서 만든다.
+  # 위조 꼴은 허용 문법(한 줄)의 부정형 — 줄 구분자 전부 × 칸 여섯. bash 3.2 의 $'…' 는 \u 를 모르므로 꼴은 python 안에서 만든다.
   local res; res="$(python3 "$FX/ac15_forge.py" "$SCRIPTS")"
-  assert_eq "$res" "36 0" "AC15: 칸 넷(요약 · 선택지 문구 · supersedes · 지적 id) × 줄 구분자 아홉 — 결정 줄은 늘 한 줄이고 앵커 줄이 생기지 않는다"
+  assert_eq "$res" "60 0" "AC15: 칸 여섯(요약 · 선택지 문구 · supersedes · 지적 id · 결정 id · 선택) × 꼴 열(줄 구분자 아홉 + 큰따옴표) — 결정 줄은 늘 한 줄이고 앵커 줄이 생기지 않으며 큰따옴표는 선택지 문구의 둘뿐이다"
 }
 case_AC15_forged_lines_gain_no_provenance() {
   local res; res="$(python3 "$FX/ac15_forge.py" "$SCRIPTS" prov)"
@@ -3780,7 +3780,7 @@ case_AC15_defer_row_one_line_escaped() {
     n=$((n + 1))
     d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
     fd="${F_FIX//bbbb0001/cccc0002}"; fd="${fd/\"disposition\":\"fix\"/\"disposition\":\"defer\"}"
-    fd="$(python3 -c 'import json,sys; o=json.loads(sys.argv[1]); o["summary"]=sys.argv[2]; print(json.dumps(o, ensure_ascii=False))' "$fd" "$v")"
+    fd="$(python3 -I -c 'import json,sys; o=json.loads(sys.argv[1]); o["summary"]=sys.argv[2]; print(json.dumps(o, ensure_ascii=False))' "$fd" "$v")"
     seed_findings "$d" "[$fd]"
     cp "$FX/design-sample.md" "$d/doc.md"
     py docreview_state.py defer --state-dir "$d" --id 'cccc0002#r1.1' --log-file "$d/doc.md" >/dev/null

@@ -3,6 +3,7 @@
 순서는 기본 < 프로필 < 진입 < 환경 — 뒤가 이긴다. 진입 선언은 탐지 수에만 있다(`begin-round --detectors`).
 값이 정수가 아니거나 최솟값보다 작으면 `ConfigInvalid` — 부르는 쪽이 라운드를 시작하지 않는다.
 표준 라이브러리만 쓴다. 파일 · 환경을 직접 읽지 않고 인자로 받는다(테스트가 주입한다).
+엔진이 쓰는 줄의 글 도우미(`one_line_field` · `table_cell`)도 여기 있다.
 """
 from __future__ import annotations
 

@@ -1163,11 +1163,13 @@ def engine_append(st, path, heading, line, own=False) -> None:
 
 def _log_line(entry, f) -> str:
     o = _cfg.one_line_field
-    s = "- %s · r%d · %s · %s · \"%s\"" % (o(entry["decision_id"]), int(entry["round"]), o(entry["choice"]),
-                                           ", ".join(o(x) for x in entry["finding_ids"]),
-                                           o(entry["quote"]).replace('"', "\u201d"))
+
+    def q(x):   # 요약 앞의 칸 — 큰따옴표는 선택지 문구를 여닫는 둘뿐이어야 엔진 줄 문법이 뒤 칸을 읽는다
+        return o(x).replace('"', "\u201d")
+    s = "- %s · r%d · %s · %s · \"%s\"" % (q(entry["decision_id"]), int(entry["round"]), q(entry["choice"]),
+                                                       ", ".join(q(x) for x in entry["finding_ids"]), q(entry["quote"]))
     if entry.get("supersedes"):
-        s += " · supersedes %s" % o(entry["supersedes"])
+        s += " · supersedes %s" % q(entry["supersedes"])
     return s + " — " + o(f.get("summary") or "")
 
 

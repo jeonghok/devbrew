@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# guards: shared/docreview/scripts/docreview_advice.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_state.py plugins/*/references/docreview-profiles/*.md shared/tests/fixtures/docreview/**
+# guards: shared/docreview/scripts/docreview_advice.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_config.py plugins/*/references/docreview-profiles/*.md shared/tests/fixtures/docreview/**
 #
 # must-catch 축 / 참고(advisory) 축 라우팅의 행동 — 설계 2026-09-27-review-stopping-criterion.
 # 케이스 본문은 fixtures/docreview/cases_advice.sh 에 있다(변이 매트릭스와 공유). 실제 프로필(must_catch 지목)로 돈다.
 set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "shared/docreview/scripts/docreview_advice.py"; echo "shared/docreview/scripts/docreview_route.py"
-  echo "shared/docreview/scripts/docreview_state.py"
+  echo "shared/docreview/scripts/docreview_state.py"; echo "shared/docreview/scripts/docreview_config.py"
   git ls-files -- 'plugins/*/references/docreview-profiles/*.md'
   bash "$(dirname "$0")/docreview_fixture_corpus.sh"; exit 0
 fi
@@ -69,4 +69,5 @@ case_advice_count_line_nested_log
 case_advice_render_where_label
 # AC15 — 박제 행도 한 줄 문법.
 case_AC15_sink_row_one_line_escaped
+case_AC15_count_line_identity_one_token
 finish

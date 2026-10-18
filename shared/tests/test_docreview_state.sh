@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# guards: shared/docreview/scripts/docreview_state.py shared/tests/fixtures/docreview/**
+# guards: shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_config.py shared/tests/fixtures/docreview/**
 #
 # docreview 원장의 **행동**을 고정한다 — D13 전이표의 상태·라운드·게이트 셀.
 # 케이스 본문은 fixtures/docreview/cases.sh 에 있다(mutation 락과 공유).
 set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
-  echo "shared/docreview/scripts/docreview_state.py"; bash "$(dirname "$0")/docreview_fixture_corpus.sh"; exit 0
+  echo "shared/docreview/scripts/docreview_state.py"; echo "shared/docreview/scripts/docreview_config.py"; bash "$(dirname "$0")/docreview_fixture_corpus.sh"; exit 0
 fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
