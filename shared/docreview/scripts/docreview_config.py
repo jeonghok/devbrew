@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+import re
+
 DEFAULTS = {"detectors": 1, "rereview_cap": 2, "render_cap": 8, "summary_width": 60}
 ENV = {"detectors": "DEVBREW_DOCREVIEW_DETECTORS", "rereview_cap": "DEVBREW_DOCREVIEW_REREVIEW_CAP",
        "render_cap": "DEVBREW_DOCREVIEW_RENDER_CAP", "summary_width": "DEVBREW_DOCREVIEW_SUMMARY_WIDTH"}
@@ -19,12 +21,20 @@ class ConfigInvalid(Exception):
         self.name, self.raw, self.where = name, raw, where
 
 
+_ENV_INT = re.compile(r"[0-9]+")   # ASCII 숫자만 — 「1_0」 · 유니코드 숫자 · 부호 · 공백은 거부한다
+
+
 def _int(name, raw, where):
+    """환경 값은 글자 그대로 ASCII 숫자만(앞뒤 공백도 거부), 프로필 · 진입 값은 정수형(bool · 문자열 거부)."""
     if isinstance(raw, bool):
         raise ConfigInvalid(name, raw, where)
-    try:
-        v = int(str(raw).strip(), 10)
-    except (TypeError, ValueError):
+    if where.startswith("환경"):
+        if not isinstance(raw, str) or not _ENV_INT.fullmatch(raw):
+            raise ConfigInvalid(name, raw, where)
+        v = int(raw, 10)
+    elif isinstance(raw, int):
+        v = raw
+    else:
         raise ConfigInvalid(name, raw, where)
     if v < MINIMUM[name]:
         raise ConfigInvalid(name, raw, where)
@@ -46,7 +56,16 @@ def resolve(prof, entry, env) -> dict:
     return out
 
 
+def _pick(cfg, k):
+    return (cfg or {}).get(k) or {"value": DEFAULTS[k], "source": "기본"}   # 옛 원장은 config 가 없다 — 기본값으로 읽는다
+
+
 def config_line(cfg) -> str:
-    """게이트 둘째 줄의 꼬리 — 탐지 수와 그 출처. 재리뷰 상한은 앞 마디가 직접 낸다."""
-    d = cfg.get("detectors") or {"value": DEFAULTS["detectors"], "source": "기본"}
-    return "탐지 리뷰어 %d명(%s)" % (d["value"], d["source"])
+    """게이트 둘째 줄의 꼬리 — 탐지 수 · 조언 줄 수 · 요약 폭과 각 출처. 재리뷰 상한은 앞 마디가 직접 낸다."""
+    d, r, w = _pick(cfg, "detectors"), _pick(cfg, "render_cap"), _pick(cfg, "summary_width")
+    return "탐지 리뷰어 %d명(%s) · 참고 목록 %d줄(%s) · 요약 %d자(%s)" % (
+        d["value"], d["source"], r["value"], r["source"], w["value"], w["source"])
+
+def advice_note(cap, cap_src, width, width_src) -> str:
+    """조언 표시 머리 줄의 꼬리 — 실제로 쓴 줄 수 · 요약 폭과 출처."""
+    return "참고 목록 %d줄(%s) · 요약 %d자(%s)" % (cap, cap_src, width, width_src)

@@ -161,9 +161,9 @@ def clip(s, width=SUMMARY_WIDTH) -> str:
     return s if len(s) <= width else s[:width - 1] + "…"
 
 
-def render_lines(items, cap, where, width=SUMMARY_WIDTH) -> list:
+def render_lines(items, cap, where, width=SUMMARY_WIDTH, note="") -> list:
     """끝의 한 번 표시 — 머리 한 줄 + 항목 한 줄씩(최대 cap) + 넘치면 접는 줄 한 줄. 합계 ≤ cap + 2."""
-    out = ["참고(advisory) %d건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: %s" % (len(items), where)]
+    out = ["참고(advisory) %d건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: %s%s" % (len(items), where, " · " + note if note else "")]
     for it in items[:cap]:
         out.append("- [%s] %s — %s" % (_safe(it.get("category")), _safe(it.get("anchor")), clip(it.get("summary"), width)))
     if len(items) > cap:

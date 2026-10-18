@@ -344,6 +344,7 @@ case_AC6_render_cap() {
   assert_eq "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" "5" "AC6: 환경 변수 조언 줄 수 3 이면 머리 1 + 항목 3 + 접는 줄 1"
   assert_contains "$(printf '%s\n' "$out" | tail -1)" "에 전부" "AC6: 값을 바꿔도 접는 줄이 전문이 있는 곳을 적는다"
   assert_contains "$(printf '%s\n' "$out" | tail -1)" "Deferred to plan" "AC6: 접는 줄에 박제처 이름이 있다"
+  assert_contains "$(printf '%s\n' "$out" | sed -n 1p)" "참고 목록 3줄(환경) · 요약 60자(기본)" "AC6: 조언 머리 줄이 쓴 줄 수와 출처(환경)를 공시한다"
   rm -rf "$d"
 }
 case_AC7_sink_idempotent() {
@@ -382,7 +383,7 @@ case_advice_render_once() {
   assert_eq "$(py docreview_state.py advice --state-dir "$d" | jgets '[it["shown"] for it in d["items"]]')" "[True, True, True]" \
     "Review Focus: 플래그 없는 호출은 읽기 전용 JSON 이고 shown 표지를 싣는다"
   adv_round2 "$d" 4
-  assert_eq "$(py docreview_state.py advice --state-dir "$d" --render)" "참고(advisory) 1건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: ### Deferred to plan
+  assert_eq "$(py docreview_state.py advice --state-dir "$d" --render)" "참고(advisory) 1건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: ### Deferred to plan · 참고 목록 8줄(기본) · 요약 60자(기본)
 - [feasibility] #1-context — 참고 항목 4 — feasibility" \
     "Review Focus: 첫 표시 뒤 라운드 2 가 새 항목 하나를 올리면 다음 --render 는 그 새 항목만 낸다(반복 셋은 안 낸다)"
   rm -rf "$d"
@@ -412,12 +413,13 @@ case_advice_odd_text_one_line() {
   local d doc out row id; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-odd.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
   doc="$(mktemp -t odd-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
   out="$(py docreview_state.py advice --state-dir "$d" --sink "$doc" --render)"
-  assert_eq "$out" "참고(advisory) 1건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: ### Deferred to plan
+  assert_eq "$out" "참고(advisory) 1건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: ### Deferred to plan · 참고 목록 8줄(기본) · 요약 60자(기본)
 - [tradeoffs] #1-context — 파이프 | 가 든 요약이고 둘째 줄로 이어지며 한 줄 폭 예순 자를 넘기도록 길게 늘인 문장이다 — 끝에서…" \
     "Review Focus: 개행이 든 80자 요약도 렌더 항목은 한 줄이고 59자 + 「…」로 잘린다(전문 대조)"
   rm -rf "$d"; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-odd.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
   out="$(DEVBREW_DOCREVIEW_SUMMARY_WIDTH=20 py docreview_state.py advice --state-dir "$d" --render)"
   assert_eq "$(printf '%s\n' "$out" | sed -n 2p | sed 's/^.* — //')" "파이프 | 가 든 요약이고 둘째 줄…" "Review Focus: 환경 변수 요약 폭 20 이면 19자 + 「…」로 잘린다"
+  assert_contains "$(printf '%s\n' "$out" | sed -n 1p)" "요약 20자(환경)" "Review Focus: 조언 머리 줄이 쓴 요약 폭과 출처(환경)를 공시한다"
   id="$(st_yaml "$d" 'list(st["advice"].values())[0]["id"]')"
   row="| $id | 참고(tradeoffs) #1-context — 파이프 \\| 가 든 요약이고 둘째 줄로 이어지며 한 줄 폭 예순 자를 넘기도록 길게 늘인 문장이다 — 끝에서 잘려야 하고 그 뒤로도 계속 이어진다 — 고치면: 고치면 A \\| B 로 나눈다 |"
   assert_eq "$(adv_deferred "$doc" | sed '/^$/d')" "| # | 항목 |
@@ -690,7 +692,7 @@ case_advice_count_line_nested_log() {   # ## 결정 기록 아래 ### Deferred t
 case_advice_render_where_label() {   # B-A 가 쓰는 --where — 머리 줄 · 접는 줄이 그 라벨을 가리킨다
   local d out; d="$(adv_state 11)"
   out="$(py docreview_state.py advice --state-dir "$d" --render --cap 8 --where "brief §3 · §5")"
-  assert_eq "$(printf '%s\n' "$out" | sed -n '1p;$p')" "참고(advisory) 11건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: brief §3 · §5
+  assert_eq "$(printf '%s\n' "$out" | sed -n '1p;$p')" "참고(advisory) 11건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: brief §3 · §5 · 참고 목록 8줄(진입) · 요약 60자(기본)
   … 외 3건 — brief §3 · §5 에 전부" "--where: 머리 줄과 접는 줄이 박제처 헤딩 대신 라벨을 가리킨다"
   rm -rf "$d"
 }

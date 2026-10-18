@@ -30,6 +30,7 @@ REPO_ROOT="$(cd "$HERE/../../../.." && pwd)"
 SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
 OUT="${1:-$HERE/golden}"
 export PYTHONDONTWRITEBYTECODE=1
+unset DEVBREW_DOCREVIEW_DETECTORS DEVBREW_DOCREVIEW_REREVIEW_CAP DEVBREW_DOCREVIEW_RENDER_CAP DEVBREW_DOCREVIEW_SUMMARY_WIDTH
 mkdir -p "$OUT"
 . "$REPO_ROOT/shared/tests/assert.sh"
 . "$HERE/cases.sh"

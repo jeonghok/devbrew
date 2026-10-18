@@ -533,7 +533,7 @@ def cmd_begin_round(a) -> int:
             _emit({"ok": False, "reason": "cap_reached", "round": n - 1,
                    "rereview_count": st["rereview_count"]})
             return 3
-        rr = cap
+        rr = max(int(st["rereview_count"]), cap)   # 재리뷰 횟수는 줄지 않는다 — 상한을 낮춰도
         st["extra_rounds"].append({"round": n, "quote": a.extra_approval})
     st["round"] = n
     st["rereview_count"] = rr
@@ -1629,6 +1629,7 @@ def cmd_advice(a) -> int:
         fail("config_invalid", name=e.name, value=str(e.raw), where=e.where)
         return 2
     cap = cfg["render_cap"]["value"] if a.cap is None else a.cap   # --cap 은 진입의 명시 값이다
+    cap_src = cfg["render_cap"]["source"] if a.cap is None else "진입"
     width = cfg["summary_width"]["value"]
     if cap < 1:
         return fail("cap_invalid", cap=cap)
@@ -1665,7 +1666,8 @@ def cmd_advice(a) -> int:
     shown = [it for it in items if not it.get("shown")] if a.render else []
     if a.render:
         where = a.where or (dt["heading"] if dt.get("kind") == "doc_section" else "advice 목록(JSON)")
-        print("\n".join(adv.render_lines(shown, cap, where, width)))
+        print("\n".join(adv.render_lines(shown, cap, where, width,
+                                        _cfg.advice_note(cap, cap_src, width, cfg["summary_width"]["source"]))))
     for it in shown:
         it["shown"] = True
     if shown:

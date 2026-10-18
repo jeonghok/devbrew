@@ -14,6 +14,8 @@ PROF_SD="${DOCREVIEW_PROF_SD:-$(bash "$FX/nofield_profiles.sh")}"
 [ -n "$PROF_SD" ] && [ -d "$PROF_SD" ] || { echo "[cases.sh] 사본 프로필 디렉토리 없음: '${PROF_SD}'" >&2; exit 1; }
 PROF_QG="$REPO_ROOT/plugins/quality-gates/references/docreview-profiles"
 export PYTHONDONTWRITEBYTECODE=1
+# 개발자 환경의 엔진 값이 케이스에 새지 않게 한다 — 값을 따지는 케이스는 호출마다 직접 지정한다.
+unset DEVBREW_DOCREVIEW_DETECTORS DEVBREW_DOCREVIEW_REREVIEW_CAP DEVBREW_DOCREVIEW_RENDER_CAP DEVBREW_DOCREVIEW_SUMMARY_WIDTH
 
 py()   { python3 "$SCRIPTS/$1" "${@:2}"; }                      # py <script> <args…>
 jget() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' "$1" "$2"; }
@@ -2996,6 +2998,7 @@ case_config_defaults_disclosed() {
     "config: 프로필 탐지 1 · 나머지 기본값과 출처가 라운드 1 에 적힌다"
   assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "재리뷰 0/2회 썼다(상한 2 — 기본)" "config: 게이트 둘째 줄이 상한과 출처를 공시한다"
   assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "탐지 리뷰어 1명(프로필)" "config: 탐지 수와 출처도 같은 줄에"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "참고 목록 8줄(기본) · 요약 60자(기본)" "config: 참고 목록 줄 수와 요약 폭도 출처와 함께 같은 줄에"
   rm -rf "$d"
 }
 case_config_env_wins() {
@@ -3020,6 +3023,11 @@ case_config_invalid_refused() {
   assert_eq "$rc" "2" "config: 정수가 아닌 환경 값은 라운드를 시작하지 않는다(rc 2)"
   assert_contains "$err" '"reason": "config_invalid"' "config: 사유 이름"
   assert_contains "$err" "DEVBREW_DOCREVIEW_DETECTORS" "config: 변수 이름을 낸다"
+  assert_contains "$err" '"value": "two"' "config: 거부된 값도 낸다"
+  for bad in 1_0 ' 2' '+2' '２'; do
+    DEVBREW_DOCREVIEW_DETECTORS="$bad" py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null 2>&1; rc=$?
+    assert_eq "$rc" "2" "config: 환경 값 '${bad}' 은 엄격한 정수가 아니라 거부된다"
+  done
   assert_eq "$(st_yaml "$d" 'st["round"]')" "0" "config: 거부는 원장을 바꾸지 않는다"
   DEVBREW_DOCREVIEW_RENDER_CAP=0 py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null 2>&1; rc=$?
   assert_eq "$rc" "2" "config: 조언 줄 수 0 은 범위 밖"
@@ -3040,4 +3048,23 @@ case_config_profile_fields() {
   assert_eq "$(env -u DEVBREW_DOCREVIEW_DETECTORS -u DEVBREW_DOCREVIEW_REREVIEW_CAP -u DEVBREW_DOCREVIEW_RENDER_CAP -u DEVBREW_DOCREVIEW_SUMMARY_WIDTH python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d" --snapshot "$s" | jgets 'tuple((k, v["value"], v["source"]) for k, v in sorted(d["config"].items()))')" \
     "(('detectors', 2, '프로필'), ('render_cap', 12, '프로필'), ('rereview_cap', 4, '프로필'), ('summary_width', 80, '프로필'))" "config: 프로필 필드 넷이 먹는다"
   rm -rf "$d" "$p"
+}
+case_config_profile_string_refused() {
+  local p; p="$(mktemp -d -t prof-XXXXXX)"
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); t=t.replace("detectors: 1\n","detectors: 1\nrender_cap: \"8\"\n",1); open(sys.argv[2],"w",encoding="utf-8").write(t)' "$PROF_SD/design-doc.md" "$p/design-doc.md"
+  py docreview_state.py profile-check "$p/design-doc.md" >/dev/null 2>&1; local rc=$?
+  assert_eq "$rc" "2" "config: 프로필의 문자열 값(render_cap: \"8\")은 정수형이 아니라 거부된다"
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); t=t.replace("detectors: 1\n","detectors: 1\nrender_cap: true\n",1); open(sys.argv[2],"w",encoding="utf-8").write(t)' "$PROF_SD/design-doc.md" "$p/design-doc.md"
+  py docreview_state.py profile-check "$p/design-doc.md" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "config: 프로필의 true 도 거부된다"
+  rm -rf "$p"
+}
+case_config_rereview_count_never_decreases() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "config: r1 실패"; return; }
+  next_round "$d" "$FX/design-sample.md" >/dev/null; next_round "$d" "$FX/design-sample.md" >/dev/null
+  assert_eq "$(st_yaml "$d" 'st["round"], st["rereview_count"]')" "(3, 2)" "config: 라운드 3 까지 재리뷰 2회"
+  local s="$d/s4.json"; snap "$FX/design-sample.md" "$s"
+  DEVBREW_DOCREVIEW_REREVIEW_CAP=1 py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval "승인 인용" >/dev/null
+  assert_eq "$(st_yaml "$d" 'st["round"], st["rereview_count"]')" "(4, 2)" "config: 상한을 낮춘 뒤 추가 승인으로 돈 라운드 4 도 재리뷰 횟수는 줄지 않는다"
+  rm -rf "$d"
 }

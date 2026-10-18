@@ -99,7 +99,7 @@ FENCE_E="$SCRATCH/fence-errexit.sh"; { echo 'set -euo pipefail'; cat "$FENCE"; }
 
 # ── 가짜 플러그인 루트 + 문서 ────────────────────────────────────────────────
 PR="$SCRATCH/plugin"; mkdir -p "$PR/scripts"
-for f in state_path.py detect_codex.sh codex-killswitch.conf docreview_state.py; do
+for f in state_path.py detect_codex.sh codex-killswitch.conf docreview_state.py docreview_config.py; do
   cp "$ROOT/plugins/spec-distill/scripts/$f" "$PR/scripts/"
 done
 ln -s "$ROOT/plugins/spec-distill/scripts/build_brief_bundle.py" "$PR/scripts/build_brief_bundle.py"
