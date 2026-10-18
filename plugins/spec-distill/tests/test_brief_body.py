@@ -507,6 +507,8 @@ class RenderedShapeRules(unittest.TestCase):
     def test_accepted_anchor_body_is_checked_raw_and_viewed(self):
         ok, bad = B.anchor_lines("- **S1** 「a」 <**S9**> 「b」")
         self.assertEqual(([n for n, _s, _b in ok], [r for _n, r in bad]), ([1], ["anchor_in_body"]))
+        ok, bad = B.anchor_lines("- **S1** 「a」 <!-- **S9** -->")   # 모양 보기에서는 지워지지만 날 글자에는 있다
+        self.assertEqual([r for _n, r in bad], ["anchor_in_body"])
         ok, bad = B.anchor_lines("- **S1** 「a」 <b>**S9**</b>")
         self.assertEqual([r for _n, r in bad], ["anchor_in_body"])
         self.assertEqual(B.anchor_lines("- **S1** 「a <i>굵게</i> b」")[1], [])
