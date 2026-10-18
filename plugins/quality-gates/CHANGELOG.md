@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.0.1] — 2026-10-19
+
+### Changed
+- README 에서 없는 agent(`codex-reviewer`) 설명 · 지난 버전 이력 · 실측 이력 괄호를 지우고 지금 사실로 고쳤다. 동작은 같다.
+
 ## [14.0.0] — 2026-10-18
 
 ### Changed
