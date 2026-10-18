@@ -110,7 +110,7 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 | 「사용자 리뷰 게이트」 용어(spec-distill README · skill · 템플릿 · 테스트) · worktree 격리 상속 · 스택 PR base 삭제 · SDD 과제 사이 이음매를 구현 틀에 | R5 후속(R5 설계 `## 미룸`) | superpowers 7.0.0 이음매와 함께 skill · README 를 같은 PR 에서 맞춰야 어긋나지 않는다 |
 | qg README 원칙 절 머리(「인스턴스화한 원칙」 vs 「Principles Instantiated」) · qg 판정 id 충돌 · kill switch 정규식(plugin-audit shape 검사) · docreview 엔진 결함 셋(finalize 두 번 · 복수 앵커 · § 앵커) · 설계문서 프로필의 대안 비교 축 | R2a | 그 파일 · 테스트가 R2a 예약 · 진행 중 |
 | brief §4 의 «» 키 · brief 묶음 rc 3 오탐 · spec-interview 개명에 따른 README 줄 | R10 | R10 예약(spec-interview · 템플릿) |
-| 하나짜리 brief 의 다음 세션 줄(`finishing.md`)에 원칙 2 · 3 · 4 · 6 이 없음 | R10 | R10 이 그 줄 문면을 맡음(`## 플러그인 동작 자리 대조`) |
+| 하나짜리 brief 의 다음 세션 줄(`finishing.md`)에 원칙 2 · 3 · 4 · 6 이 없음(원칙 5 는 작은 일엔 만들지 않으니 필요 여부를 R10 이 판단) | R10 | R10 이 그 줄 문면을 맡음(`## 플러그인 동작 자리 대조`) |
 | 에픽 넘김 줄(`epic-handoff.md`)에 원칙 5(계층 · 온톨로지)를 쓰라는 문장이 없음 | R5 후속(R5 설계 `## 미룸`) | R5 가 그 파일을 예약(`## 플러그인 동작 자리 대조`) |
 
 ### §6 메모리 정리 — 지휘 세션 몫, 레포 밖
@@ -226,7 +226,7 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 | 2 흐름 고정 금지 | `plugins/spec-distill/references/conducting.md:5` · `:78` · `plugins/spec-distill/references/epic-handoff.md:7` | `plugins/spec-distill/skills/spec-interview/references/finishing.md:478`(하나짜리 brief 다음 세션 줄) | R10 |
 | 3 레포 전용 값 | `plugins/spec-distill/references/conducting.md:86` · `plugins/spec-distill/references/epic-handoff.md:7` | `finishing.md:478` | R10 |
 | 4 상류 · 하류 연계 | `plugins/spec-distill/references/conducting.md:86` · `plugins/spec-distill/references/epic-handoff.md:7` | `finishing.md:478` | R10 |
-| 5 계층 · 온톨로지 | `plugins/spec-distill/references/roadmap-ontology.md:1` · `plugins/spec-distill/references/conducting.md:9` · `:82` | `plugins/spec-distill/references/epic-handoff.md:7`(쓰라는 문장 없음) · `finishing.md:478` | `epic-handoff.md` 는 R5 후속(R5 설계 `## 미룸`) · `finishing.md` 는 작은 일이라 R10 판단 |
+| 5 계층 · 온톨로지 | `plugins/spec-distill/references/roadmap-ontology.md:3` · `plugins/spec-distill/references/conducting.md:9` · `:82` | `plugins/spec-distill/references/epic-handoff.md:7`(쓰라는 문장 없음) · `finishing.md:478` | `epic-handoff.md` 는 R5 후속(R5 설계 `## 미룸`) · `finishing.md` 는 작은 일엔 만들지 않으니 필요 여부를 R10 이 판단 |
 | 6 있는 것 먼저 | `plugins/spec-distill/references/conducting.md:86` · `plugins/spec-distill/references/epic-handoff.md:7` | `finishing.md:478` | R10 |
 
 ## 미룸
@@ -235,10 +235,10 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 |---|---|---|
 | §5 의 R9 행 | R9 범위 | R9 |
 | §5 의 R8 행 | R8 범위 | R8 |
-| §5 의 지휘자 수리 행 | superpowers 7.0.0 이음매와 같은 PR | R5 후속(R5 설계 `## 미룸`) |
+| §5 의 R5 후속 행 | superpowers 7.0.0 이음매와 같은 PR | R5 후속(R5 설계 `## 미룸`) |
 | §5 의 R2a 행 | R2a 예약 · 진행 중 | R2a |
 | §5 의 R10 행 | R10 예약 | R10 |
-| §5 의 `finishing.md` 행(원칙 2 · 3 · 4 · 6) | R10 이 그 줄 문면을 맡음 | R10 |
+| §5 의 `finishing.md` 행(원칙 2 · 3 · 4 · 6, 원칙 5 는 R10 이 필요 여부 판단) | R10 이 그 줄 문면을 맡음 | R10 |
 | §5 의 `epic-handoff.md` 행(원칙 5) | R5 예약 파일 | R5 후속(R5 설계 `## 미룸`) |
 | §6 머지 뒤 메모리 정리 | 레포 밖 · 머지 뒤에만 | 지휘 세션 |
 
