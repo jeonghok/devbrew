@@ -7,6 +7,7 @@
 - superpowers 7.0.0 brainstorming 에 맞췄다: spec-review 의 자리는 brainstorming 이 설계문서 점검(builder check)과 그 질문을 마친 뒤 문서를 승인받는 자리다 — description · 리뷰 없이 끝나는 안내 · 에픽 넘김 줄 · brief 다음 세션 줄 · brief 템플릿 §7 · README 흐름도. 넘김 줄은 사용자 선호 입력(설계문서를 쓰는 크기 · 질문을 건너뛰어도 설계문서와 spec-review)과 확정 항목 되비춤을 싣고, 끝의 쉬운 말 규칙은 낱말 규칙만 남겨 메시지 모양은 brainstorming 을 따른다.
 - 지휘 절차: 배경을 붙여 묻는 것은 지휘자가 정할 질문(흐름 승인 · 감사 · 계획 검토 · 옮긴 질문 · spec 승인)이고 `AskUserQuestion` 으로, 에픽 이름은 질문 문장 앞머리에 쓴다. brainstorming 대화는 7.0.0 대로 열린 문장 질문(선택지는 막혔을 때만)이고, 다른 에픽 소식은 설계 대화 전체(brainstorming 첫 메시지부터 승인 게이트까지)에서 따로 된 메시지로 알린다. 「절별 승인」 을 「설계문서 점검의 질문」 으로 바꿨다. 사람에게 보이는 글에서 하위 agent 는 「계획 담당자」 · 「구현 담당자」 다.
 - 하위 agent 의 자리: 기본은 `isolation: "worktree"` agent 가 자기 worktree 에서 `git switch --ignore-other-worktrees <에픽 브랜치>` 로 에픽 브랜치에 서고 작업 기록 백업을 되살리는 것이다 — 보내기 전에 에픽 worktree 가 깨끗한지 보고 `switch --detach` 로 그 브랜치를 놓고, 돌아오면 agent 의 worktree 를 `## 자원` 의 에픽 worktree 로 바꿔 적는다. 같은 브랜치를 쥔 worktree 가 둘 이상이면 멈춘다. 다른 길은 지휘 세션이 그 에픽 worktree 에 머문 채 격리 없이 보내고 돌아올 때까지 떠나지 않는 것이다. 격리된 셸의 가드(스크립트 파일 · 임시 파일 + `cp`)를 적었다.
+- 지휘 순환 걸음 1 · 4 와 손 절차 1: agent 를 보내거나 거둘 때마다 동시 가능 목록과 승인된 설계의 남은 계획을 훑어, 의존 · 같은 파일 겹침이 없는 일은 규모를 알리고 바로 보낸다 — 고정된 동시 개수 상한은 없다(돌아오는 agent 를 기다리기만 하지 않는다).
 - 머지 전 확인에 쌓인 PR 주의(바탕 브랜치를 지우면 위 PR 이 닫힌다)를, 구현 agent 틀의 마지막 전체 리뷰에 과제 사이 이음매와 계획이 쓴 테스트 코드를 더했다.
 - 쉬운 말 블록(공유 정본 `shared/style/plain-language.md` 의 사본)에 예외 문장 한 줄을 맞췄다 — 부른 skill 이 메시지 모양을 정한 대화(예: brainstorming)에서는 그 skill 을 따르고, 이 블록은 낱말에만 적용한다.
 - README 의 External source absorption 에서 지워진 superpowers 파일(plan-document-reviewer) 언급을 걷어 냈다.
