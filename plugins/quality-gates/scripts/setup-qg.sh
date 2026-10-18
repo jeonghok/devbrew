@@ -6,9 +6,12 @@
 set -euo pipefail
 
 # --- 문서 비평은 이 파이프라인의 인자가 아니다 — 새 진입 이름을 안내하고 실행하지 않는다.
-if [[ "${1:-}" == "critique" ]]; then
+critique_notice() {
   echo "> [quality-gates] 문서 비평은 이제 /quality-gates:artifact-critique <경로> 로 부른다 — 파이프라인은 실행하지 않는다."
   exit 2
+}
+if [[ "${1:-}" == "critique" ]]; then
+  critique_notice
 fi
 
 # --- kill switch (SKILL Preflight P1 도 같은 스위치를 본다 — 직접 호출도 막는다) ---
@@ -74,6 +77,10 @@ while [[ $# -gt 0 ]]; do
     --ensure)
       ENSURE_MODE="true"
       shift
+      ;;
+    critique)
+      # 실제 호출은 `--ensure $ARGUMENTS` 라 첫 인자가 아니다 — 위치와 무관하게 안내한다(아무것도 쓰기 전).
+      critique_notice
       ;;
     --session-id)
       if [[ -z "${2:-}" ]]; then

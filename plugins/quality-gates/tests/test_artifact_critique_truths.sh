@@ -2,6 +2,13 @@
 # guards: plugins/quality-gates/skills/*/SKILL.md plugins/quality-gates/README.md plugins/quality-gates/agents/artifact-adversarial.md
 # AC2 — 문서 비평 skill 의 adversarial 도구 서술이 실제 tools: 와 맞고, README 에 지운 게이트 인용이 없다.
 set -u
+# test_guards_coverage_bidirectional.sh 가 읽는다 — 이 락이 여는 파일(리포 상대)을 낸다.
+if [ "${1:-}" = "--emit-scanned" ]; then
+  cd "$(dirname "$0")/../../.." || exit 1
+  ls plugins/quality-gates/skills/*/SKILL.md
+  printf '%s\n' plugins/quality-gates/README.md plugins/quality-gates/agents/artifact-adversarial.md
+  exit 0
+fi
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
 SK="$(ls "$ROOT"/plugins/quality-gates/skills/*/SKILL.md | xargs grep -l 'artifact-adversarial' | head -1)"

@@ -2,6 +2,15 @@
 # guards: shared/test-selection/* plugins/quality-gates/scripts/run-test-selection.sh plugins/quality-gates/scripts/diff-test-results.py plugins/quality-gates/scripts/compute-test-scope-candidates.sh plugins/quality-gates/scripts/resolve-baseline.sh
 # AC3 · AC4 — 테스트 실행 넷이 공유본에 바이트 그대로 있고, qg 는 상대 링크를 두며, 링크 · 다른 플러그인 링크 · 링크를 푼 사본이 같은 결과를 낸다.
 set -u
+# test_guards_coverage_bidirectional.sh 가 읽는다 — 이 락이 여는 파일(리포 상대)을 낸다.
+if [ "${1:-}" = "--emit-scanned" ]; then
+  cd "$(dirname "$0")/../.." || exit 1
+  ls shared/test-selection/*
+  for n in run-test-selection.sh diff-test-results.py compute-test-scope-candidates.sh resolve-baseline.sh; do
+    printf 'plugins/quality-gates/scripts/%s\n' "$n"
+  done
+  exit 0
+fi
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
 cd "$ROOT" || exit 1

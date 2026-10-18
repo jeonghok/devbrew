@@ -91,7 +91,7 @@ Every run then starts without the previous run's `excluded.md` · `differential.
 `intent.md` · `topic-scope.txt` · `comment-head.md` · `comment.md` · `publish.out` · `publish.err` and the e2e walk files
 (`e2e-record.md` · `e2e-flip.md` · `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt`).
 `e2e-app.pgid` is kept. The `stop` line brings down an app a cut-off earlier walk left running; show its output, and a non-zero `preflight-stop rc` does not stop the run — `## e2e` E0 tries again with the same record. Setup refuses an empty or malformed session id (E1). A gone
-argument (`branch <name>` · `--reset` · `--gc` · `--pr-url` · `--plan`) prints one line on stdout and exits 2 —
+argument (`branch <name>` · `--reset` · `--gc` · `--pr-url` · `--plan` · `critique`) prints one line on stdout and exits 2 —
 the run does not start. Non-zero exit → show its output (stdout and stderr) verbatim and stop.
 Below, `RD` is that folder under the **repo root** — setup moves to the git top level itself, so a
 session started in a subdirectory uses the same folder. Every fence that needs it assigns it the
