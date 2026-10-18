@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점의 형제를 읽는다
 from docreview_state import (  # noqa: E402
     DOC_ANCHOR, ProfileError, anchors_matching, diff_snapshots, fail, load_profile, load_state, save_state,
-    slugify,
+    scope_label_problem, slugify,
 )
 
 HEADING_RE = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
@@ -214,6 +214,9 @@ def cmd_check_intent(a) -> int:
     if not f:
         return _reject("unknown_finding", id=a.finding_id)
     intent = a.intent.strip()
+    why_label = scope_label_problem(intent)   # 면제 라벨 위조는 두 계약 모두에서 거부 — state 와 같은 검증기
+    if why_label:
+        return _reject(why_label, scope=intent)
     is_insert = intent.startswith("insert-after:")
     target = intent.split(":", 1)[1] if is_insert else intent
     cls = classify_anchor(target, sections, prof)

@@ -298,6 +298,133 @@ case_AC38_related_uncountable_disclosed() {
   assert_contains "$err" '"reason": "related_uncountable"' "AC38: related-changes 는 빈 목록 대신 이름 있는 사유로 실패한다"
   rm -rf "$d"
 }
+r2_changed() {   # r2_changed <state-dir> → 라운드 2 얼림 diff 의 changed 앵커 목록과 면제 (anchor, scope) 쌍
+  PYTHONPATH="$SCRIPTS" python3 "$FX/st_get.py" "$1/docreview-state.md" '(lambda D: ([c["anchor"] for c in D["changed"]], [(e["anchor"], e.get("scope")) for e in D["exempt_applied"]]))(__import__("docreview_state").round_diff(st, __import__("docreview_state").load_profile(st["profile"]), 2))'
+}
+plant_permit() {   # plant_permit <state-dir> <finding-id> <apply-anchor> [related-anchor] — 옛 원장 · 위조를 흉내 낸 permit 을 원장에 심는다
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d, fid, ap = sys.argv[1:4]; st=load_state(d); st["decides"][fid]["state"]="adopted"; p={"kind":"apply","apply_anchors":[ap],"round":2,"finding_id":fid,"consumed":False}; (p.update(related_anchors=[sys.argv[4]]) if len(sys.argv) > 4 else None); st["permits"]["D1.1"]=p; save_state(d, st, "fixture")' "$@"
+}
+F_BRIEF_NOIMM='{"id":"eeee0001#r1.1","lineage":"eeee0001#r1.1","bucket":"eeee0001","origin":"reviewer","layer":2,"category":"omission","anchor":"#2-확정","edit_scope":"EDIT_SCOPE","disposition":"decide","summary":"x","evidence":"S1","blocks":[],"kind":"pre"}'
+case_AC38_audit_row1_forged_related_scope() {
+  # 감사 1 — 리뷰어 edit_scope 로 쓴 「related:D9.9=#6」 이 불변 절을 얼림에서 빼는 우회
+  local d err; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" "[${F_BRIEF_NOIMM/EDIT_SCOPE/related:D9.9=#6-사용자-원문}]"
+  err="$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '고친다' 2>&1 >/dev/null)"
+  assert_contains "$err" '"why": "scope_label_forged"' "AC38 감사1: 위조 related: edit_scope 는 decide 가 permit 을 열지 않는다"
+  plant_permit "$d" 'eeee0001#r1.1' 'related:D9.9=#6-사용자-원문'
+  snap "$FX/brief-append-r2-edit.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  assert_eq "$(r2_changed "$d")" "(['#6-사용자-원문'], [])" "AC38 감사1: 심어 둔 위조 permit 도 §6 을 면제하지 못한다(exempt_scopes 이중 방어) — §6 은 frozen_change"
+  assert_eq "$(py docreview_anchor.py check-intent 'eeee0001#r1.1' --intent 'related:D9.9=#6-사용자-원문' --state-dir "$d" | jgets 'd["reason"]')" "scope_label_forged" "AC38 감사1: check-intent 도 위조 라벨을 거부한다"
+  rm -rf "$d"
+}
+case_AC38_audit_row2_edit_scope_immutable() {
+  # 감사 2 — 불변이 아닌 앵커의 finding 이 edit_scope 로 §6 을 가리킨 채 채택되는 우회
+  local d err; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" "[${F_BRIEF_NOIMM/EDIT_SCOPE/#6-사용자-원문}]"
+  err="$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '고친다' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "edit_scope_refused"' "AC38 감사2: 불변 절로 풀리는 edit_scope 의 채택은 permit 을 열지 않는다"
+  assert_eq "$(st_yaml "$d" 'len(st["permits"]), st["decides"]["eeee0001#r1.1"]["state"]')" "(0, 'open')" "AC38 감사2: 거부된 채택은 원장을 바꾸지 않는다"
+  plant_permit "$d" 'eeee0001#r1.1' '#6-사용자-원문'
+  snap "$FX/brief-append-r2-edit.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  assert_eq "$(r2_changed "$d")" "(['#6-사용자-원문'], [])" "AC38 감사2: 심어 둔 permit 의 §6 앵커도 면제하지 못한다(exempt_scopes 이중 방어)"
+  rm -rf "$d"
+  # 양성 짝 — 불변이 아닌 edit_scope 의 채택은 그대로 permit 을 연다
+  d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" "[${F_BRIEF_NOIMM/EDIT_SCOPE/#2-확정}]"
+  assert_eq "$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["permit"]["apply_anchors"]')" "['#2-확정']" "AC38 감사2 양성 짝: 정상 edit_scope 는 permit 을 연다"
+  rm -rf "$d"
+}
+case_AC38_audit_row3_insert_after_immutable() {
+  # 감사 3 — insert-after:#(불변 절 또는 그 하위 절) 를 신고로 받아 §6 안에 끼운 절을 면제하는 우회
+  local d err; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(t.rstrip("\n")+"\n\n### 하위\n\n본문 한 줄.\n")' "$FX/brief-append-r1.md" "$d/r1.md"
+  snap "$d/r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" "[${F_BRIEF_NOIMM/EDIT_SCOPE/#2-확정}]"
+  py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '고친다' >/dev/null
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision D1.1 --anchors 'insert-after:#하위' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "anchor_immutable"' "AC38 감사3: 불변 절의 하위 절 뒤에 끼우는 신고는 거부"
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision D1.1 --anchors 'insert-after:#6-사용자-원문' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "anchor_immutable"' "AC38 감사3: 불변 절 자신의 뒤에 끼우는 신고도 거부"
+  # 이중 방어 — 원장에 손으로 심은 insert-after 신고는 풀린 앵커(새 절의 조상 제목이 불변)로 걸러진다
+  plant_permit "$d" 'eeee0001#r1.1' '#2-확정' 'insert-after:#하위'
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(t.rstrip("\n")+"\n\n### 끼워 넣은 가짜 원문\n\n가짜.\n")' "$d/r1.md" "$d/r2.md"
+  snap "$d/r2.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  assert_not_contains "$(py docreview_state.py exempt-anchors --state-dir "$d")" "related:" "AC38 감사3: 불변 절 안에 끼운 절은 신고로 면제되지 않는다"
+  rm -rf "$d"
+}
+case_AC38_audit_row4_fix_intent_pass_validated() {
+  # 감사 4 — fix --event intent-pass --scope 로 아무 범위나 면제를 만드는 뒷문
+  local d err; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" '[{"id":"ffff0001#r1.1","lineage":"ffff0001#r1.1","bucket":"ffff0001","origin":"reviewer","layer":2,"category":"placeholder","anchor":"#2-확정","edit_scope":"#2-확정","disposition":"fix","summary":"x","evidence":null,"blocks":[]}]'
+  err="$(py docreview_state.py fix --state-dir "$d" --id 'ffff0001#r1.1' --event intent-pass --scope 'related:D9.9=#6-사용자-원문' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "scope_label_forged"' "AC38 감사4: fix intent-pass 는 위조 라벨을 거부한다"
+  err="$(py docreview_state.py fix --state-dir "$d" --id 'ffff0001#r1.1' --event intent-pass --scope '#6-사용자-원문' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "anchor_immutable"' "AC38 감사4: fix intent-pass 는 불변 절 범위를 거부한다"
+  assert_eq "$(st_yaml "$d" 'len(st["applied_scopes"]), st["fixes"]["ffff0001#r1.1"]["state"]')" "(0, 'pending')" "AC38 감사4: 거부된 intent-pass 는 원장을 바꾸지 않는다"
+  assert_eq "$(py docreview_state.py fix --state-dir "$d" --id 'ffff0001#r1.1' --event intent-pass --scope '#2-확정' | jgets 'd["state"]')" "intent_passed" "AC38 감사4 양성 짝: 정상 범위의 intent-pass 는 통과"
+  rm -rf "$d"
+}
+case_AC38_audit_row5_labels_never_apply() {
+  # 감사 5 — 면제 라벨(append-only)과 같은 글자를 범위로 쓴 fix 가 «적용됨» 으로 읽히는 우회
+  local d; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" '[{"id":"ffff0001#r1.1","lineage":"ffff0001#r1.1","bucket":"ffff0001","origin":"reviewer","layer":2,"category":"placeholder","anchor":"#2-확정","edit_scope":"#2-확정","disposition":"fix","summary":"x","evidence":null,"blocks":[]}]'
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); fx=st["fixes"]["ffff0001#r1.1"]; fx.update(state="intent_passed", scope="append-only", round=1); save_state(d, st, "fixture")' "$d"
+  snap "$FX/brief-append-r2.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  assert_eq "$(py docreview_state.py observe-diff --state-dir "$d" | jgets 'd["applied"]')" "[]" "AC38 감사5: 라벨 글자의 fix 범위는 §6 에 줄이 덧붙었다는 사실만으로 적용됨이 되지 않는다"
+  rm -rf "$d"
+}
+case_AC38_audit_row6_decision_log_append_only() {
+  # 감사 6 — 결정 기록 절 전체를 면제해 과거 결정 줄을 고쳐 써도 안 잡히던 틈
+  local d; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38: init 실패"; return; }
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(t.rstrip("\n")+"\n\n## 결정 기록\n\n- D1.1 · r1 · reject · x · \"이 방향은 안 된다\" — 요약\n")' "$FX/design-sample.md" "$d/r1.md"
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(t.replace("reject","adopt").replace("이 방향은 안 된다","좋다"))' "$d/r1.md" "$d/r2.md"
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(t.rstrip("\n")+"\n- D2.1 · r2 · adopt · y — 엔진이 덧붙인 줄\n")' "$d/r1.md" "$d/r2a.md"
+  snap "$d/r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  snap "$d/r2.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  assert_eq "$(r2_changed "$d")" "(['#결정-기록'], [])" "AC38 감사6: 과거 결정 줄을 고쳐 쓰면 frozen_change"
+  rm -rf "$d"
+  d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38: init 실패"; return; }
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(t.rstrip("\n")+"\n\n## 결정 기록\n\n- D1.1 · r1 · reject · x · \"이 방향은 안 된다\" — 요약\n")' "$FX/design-sample.md" "$d/r1.md"
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(t.rstrip("\n")+"\n- D2.1 · r2 · adopt · y — 엔진이 덧붙인 줄\n")' "$d/r1.md" "$d/r2a.md"
+  snap "$d/r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  snap "$d/r2a.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  assert_eq "$(r2_changed "$d")" "([], [('#결정-기록', 'append-only')])" "AC38 감사6 양성 짝: 엔진처럼 덧붙인 줄은 append-only 로 지나간다"
+  rm -rf "$d"
+}
+case_AC38_audit_row9_declare_stale_permit() {
+  # 감사 9 — 지난 라운드의 permit 에 신고를 받아 게이트에 안 보이게 되는 틈
+  local d err; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null
+  snap "$FX/design-sample.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  assert_eq "$(py docreview_state.py declare-related --state-dir "$d" --decision D1.1 --anchors '#2-goals' | jgets 'd["ok"]')" "True" "AC38 감사9 양성 짝: permit 라운드(현재 라운드)에는 신고를 받는다"
+  snap "$FX/design-sample.md" "$d/s3.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s3.json" >/dev/null
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision D1.1 --anchors '#3-non-goals' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "permit_round_mismatch"' "AC38 감사9: 지난 라운드의 permit 에는 신고를 받지 않는다"
+  rm -rf "$d"
+}
+case_AC38_audit_row10_11_entry_flags() {
+  # 감사 10·11 — 진입 플래그 정수는 환경 값과 같은 ASCII 숫자만, 공백뿐인 추가 승인은 승인이 아니다
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  snap "$FX/design-sample.md" "$d/s2.json"
+  local v
+  for v in '1_0' '+2' '２' ' 3'; do
+    py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" --detectors "$v" >/dev/null 2>&1; rc=$?
+    assert_eq "$rc" "2" "AC38 감사10: --detectors «${v}» 는 인자 오류(rc 2)"
+    py docreview_state.py advice --state-dir "$d" --cap "$v" >/dev/null 2>&1; rc=$?
+    assert_eq "$rc" "2" "AC38 감사10: --cap «${v}» 는 인자 오류(rc 2)"
+  done
+  assert_eq "$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" --detectors 1 | jgets 'd["ok"]')" "True" "AC38 감사10 양성 짝: ASCII 숫자는 받는다"
+  snap "$FX/design-sample.md" "$d/s3.json"; snap "$FX/design-sample.md" "$d/s4.json"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s3.json" >/dev/null
+  local err; err="$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s4.json" --extra-approval '   ' --extra-approval-source typed 2>&1 >/dev/null)"; rc=$?
+  assert_contains "$err" '"reason": "extra_approval_blank"' "AC38 감사11: 공백뿐인 추가 승인은 거부"
+  rm -rf "$d"
+}
 case_T22_permit_expired_reraise() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
   py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' >/dev/null
@@ -1973,7 +2100,12 @@ case_AC6_permit_contract() {
   # immutable 은 permit 으로도 못 넘는다
   d="$(r1 "$PROF_SD/brief.md" "$FX/brief-sample.md")"
   seed_findings "$d" '[{"id":"eeee0001#r1.1","lineage":"eeee0001#r1.1","bucket":"eeee0001","origin":"reviewer","layer":2,"category":"omission","anchor":"#6-사용자-원문","edit_scope":"#6-사용자-원문","disposition":"decide","summary":"x","evidence":"S1","blocks":[],"kind":"pre"}]'
-  did="$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '채택' | jgets 'd["decision_id"]')"
+  # [R2a plan 2 Task 5 fix round 2] 이제 decide 가 불변 절로 풀리는 edit_scope 의 permit 을 처음부터 열지 않는다 — 그 거부를 먼저 재고,
+  # check-intent 의 두 번째 방어선은 원장에 permit 을 손으로 심어(옛 원장 · 위조) 따로 잰다.
+  out="$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '채택' 2>&1 >/dev/null)"
+  assert_contains "$out" '"reason": "edit_scope_refused"' "AC6·AC11: 불변 절로 풀리는 edit_scope 는 decide 가 permit 을 열지 않는다"
+  did="D1.1"
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); st["decides"]["eeee0001#r1.1"]["state"]="adopted"; st["permits"]["D1.1"]={"kind":"apply","apply_anchors":["#6-사용자-원문"],"round":2,"finding_id":"eeee0001#r1.1","consumed":False}; save_state(d, st, "fixture")' "$d"
   snap "$FX/brief-sample.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
   out="$(_ci 'eeee0001#r1.1' --intent '#6-사용자-원문' --state-dir "$d" --decision-id "$did")"; rc=$?
   assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 anchor_immutable" "AC6·AC11: immutable 은 permit 으로도 절대 못 넘는다(immutable 플래그 없는 decide 의 permit 이 §6 을 겨눈 경우)"

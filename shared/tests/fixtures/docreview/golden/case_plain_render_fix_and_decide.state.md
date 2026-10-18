@@ -61,6 +61,11 @@ docreview:
         hash: 36a209eba25b
         parents:
         - '#handoff-context'
+        line_hashes:
+        - 36c9f135573f
+        - da39a3ee5e6b
+        - 745b53c65147
+        - 8272d43233d5
   findings:
     7c1226fa#r1.1:
       id: 7c1226fa#r1.1

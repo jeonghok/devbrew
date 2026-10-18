@@ -61,6 +61,11 @@ docreview:
         hash: 36a209eba25b
         parents:
         - '#handoff-context'
+        line_hashes:
+        - 36c9f135573f
+        - da39a3ee5e6b
+        - 745b53c65147
+        - 8272d43233d5
     '2':
       headingless: false
       sections:
@@ -116,6 +121,11 @@ docreview:
         hash: 36a209eba25b
         parents:
         - '#handoff-context'
+        line_hashes:
+        - 36c9f135573f
+        - da39a3ee5e6b
+        - 745b53c65147
+        - 8272d43233d5
   findings:
     fee27fc9#r1.1:
       id: fee27fc9#r1.1
