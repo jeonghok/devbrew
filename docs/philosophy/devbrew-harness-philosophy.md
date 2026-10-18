@@ -10,9 +10,9 @@
 
 **Law 1 — Clarity Before Code.** 명세가 모호한 상태에서는 구현이 진행되지 않는다. 명세 작성은 자신의 스킬·게이트·거절 동작을 가진 일급(first-class) 단계다. 코드를 shipping하는 모든 플러그인은 "아직 이건 코딩 못 한다"고 말할 수 있는 **실제 거절 메커니즘** — 최소한 필수 섹션(Context/Why·Goals·Non-goals·Constraints·Acceptance Criteria·Files to Modify·Verification Plan·Rejected Alternatives·Metadata)을 silent하게 skip할 수 없는 구조적 게이트 — 을 가져야 한다. 모델 신뢰만으로는 부족하다.
 
-**Law 2 — Writer and Reviewer Must Never Share a Pass.** 코드를 쓴 턴은 그 코드를 승인할 수 없다. 이것은 heuristic이 아니라 하드 규칙이다. 분리는 프롬프트가 아니라 물리적이어야 한다 — agent 의 `tools:` allowlist frontmatter로 리뷰어가 `Write`/`Edit`을 literally 갖지 못하게 만든다. 쓰기 권한이 있는 리뷰어는 리뷰어가 아니고, 검증은 나중 생각이 아니라 load-bearing 인프라다.
+**Law 2 — Writer and Reviewer Must Never Share a Pass.** 코드를 쓴 턴은 그 코드를 승인할 수 없다. 이것은 heuristic이 아니라 하드 규칙이고, 분리는 프롬프트가 아니라 도구 표면으로 한다(P3).
 
-**Law 3 — Every Cycle Must Leave the System Smarter.** N+1번째 작업이 N번째보다 엄밀히 더 쉬워야 한다. 메커니즘은 low-tech다 — 리포에 있는 파일을 미래 세션이 읽는 것. Compounding은 선택적 wrap-up이 아니라 discoverability check가 붙은 이름 붙은 단계다: 사이클이 learning을 생산하면 하니스는 파일로 capture하고, 미래 agent가 그것에 실제로 도달 가능한지 확인한다 — 위험하면 인덱스(`CLAUDE.md`/`AGENTS.md`)를 자동 편집한다. 아무 미래 agent도 읽지 않는 파일에 쓰는 것은 theater다.
+**Law 3 — Every Cycle Must Leave the System Smarter.** N+1번째 작업이 N번째보다 엄밀히 더 쉬워야 한다. 메커니즘은 low-tech다 — 리포에 있는 파일을 미래 세션이 읽는 것. 미래 세션에는 메모리 없는 레포 · 새 clone · 다른 레포도 들므로 교훈은 그 동작을 내는 skill · reference · 스크립트 · 락을 고쳐 남긴다. 아무 미래 agent도 읽지 않는 파일에 쓰는 것은 theater다.
 
 ## Structural Mechanisms
 
@@ -36,7 +36,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 코드: `plugins/quality-gates/agents/` (persona 파일군)
 
 ### P11 — Cross-Model Adversarial at High-Stakes Moments
-**Law 2 집행.** 되돌리기 어려운 결정(프로덕션 배포·스펙 mutation·보안-crit·스키마 마이그레이션)엔 단일 모델 의견이 부족 — cross-vendor second opinion을 게이트로. Load-bearing: Claude-only 리뷰가 반복적으로 놓친 보안 fail-open을 codex(read-only=leak-proof) 모델 다양성이 적발했다 — 단일 모델은 default, 다중 모델은 opt-in 게이트.
+**Law 2 집행.** 되돌리기 어려운 결정(프로덕션 배포·스펙 mutation·보안-crit·스키마 마이그레이션)엔 단일 모델 의견이 부족 — cross-vendor second opinion을 게이트로. Load-bearing: 단일 모델 리뷰는 같은 전제를 공유해 같은 자리를 놓친다 — codex(read-only)는 감지되면 늘 함께 돌고, 끄는 길은 각 플러그인의 kill switch 다.
 코드: `plugins/quality-gates/scripts/run_codex_reviewer.sh` · `plugins/quality-gates/agents/code-recritic.md` · `plugins/quality-gates/references/recritic-code-profile.md`
 
 ### P12 — Transparency of Planning
@@ -44,7 +44,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 코드: `plugins/spec-distill/skills/spec-interview/SKILL.md` 의 `## 진입 단계` 3 (trivia escape) · CLAUDE.md Trivia escape
 
 ### P13 — Hooks for Enforcement, Skills for Capability, Agents for Personas
-**Cross-cutting (L1·L2·L3) 집행.** hook=집행 레이어, skill=capability 표면, agent=scoped persona의 명확한 역할 분담 + 훅 공존 규칙(namespace·commutativity·mutation-free `SessionStart`·per-plugin kill switch). Load-bearing: 같은 event에 여러 플러그인 훅이 공존하려면 signal tag namespace(`<{plugin}-signal>`)와 순서 무관성이 구조적으로 필요하다.
+**Cross-cutting (L1·L2·L3) 집행.** hook=집행 레이어, skill=capability 표면, agent=scoped persona의 명확한 역할 분담 + 훅 공존 규칙(commutativity·mutation-free `SessionStart`·per-plugin kill switch). Load-bearing: 같은 event에 여러 플러그인 훅이 공존하려면 순서 무관성이 구조적으로 필요하다.
 코드: `plugins/*/hooks/hooks.json`
 
 ### P17 — User Sovereignty
@@ -64,8 +64,8 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 코드: `plugins/quality-gates/skills/quality-pipeline/SKILL.md` frontmatter `cost_class`
 
 ### P23 — Decisions Stay Refutable
-**Law 1 × P17 집행.** 확정된 결정은 재논의 대상이 아니지만 **반증 대상이다.** 앞 단계가 못 박은 것이 뒤 단계에서 틀린 것으로 드러나면, 그 단계는 근거를 제시하고 사용자 동의를 받아 피벗할 수 있어야 한다 — 임의 변경은 금지, 보고 후 재결정은 허용. Load-bearing: **오류를 가장 잘 볼 수 있는 자리는 그 오류를 만든 자리가 아니라 하류다** — 확정을 영구 봉인하면 볼 수 있는 자리와 고칠 수 있는 자리가 분리되고, 이른 단계의 오차가 하류 전 구간에 증폭된 채 아무도 말할 길이 없어진다. 재발견 금지는 반증 금지가 아니다.
-코드: `plugins/spec-distill/references/proceed-gate.md` 「재결정 규약」 절 · `plugins/spec-distill/skills/spec-review/SKILL.md`
+**Law 1 × P17 집행.** 확정된 결정은 재논의 대상이 아니지만 **반증 대상이다.** 앞 단계가 못 박은 것이 뒤 단계에서 틀린 것으로 드러나면, 그 단계는 근거를 제시하고 사용자 동의를 받아 피벗할 수 있어야 한다 — 임의 변경은 금지, 보고 후 재결정은 허용. Load-bearing: **오류를 가장 잘 볼 수 있는 자리는 그 오류를 만든 자리가 아니라 하류다** — 확정을 영구 봉인하면 볼 수 있는 자리와 고칠 수 있는 자리가 분리되고, 이른 단계의 오차가 하류 전 구간에 증폭된 채 아무도 말할 길이 없어진다. 재발견 금지는 반증 금지가 아니다. 그래서 설계마다 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 같은 상태를 읽는 표면과 이음매를 고치는 쪽을 적어, 하류의 오류가 돌아갈 길을 둔다.
+코드: `plugins/spec-distill/references/proceed-gate.md` 「재결정 규약」 절 · `plugins/spec-distill/skills/spec-review/SKILL.md` · `plugins/spec-distill/references/epic-handoff.md` (설계의 「상류 · 하류 연계」 절)
 
 ### AP3 — Self-Approval (the #1 anti-pattern)
 **Law 2 집행.** 같은 턴이 쓰고 승인하는 것 — Law 2로 엄격히 금지되고 P3 tool-deny로 구조적으로 집행된다. Load-bearing: fresh context가 self-bias anchor를 끊는다 — 같은 context의 reviewer는 자신이 방금 쓴 코드를 *defend*하는 default로 들어가므로, 승인은 다른 agent/다른 skill/최소한 fresh context reviewer로 route해야 한다.
@@ -73,7 +73,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 
 ## Load-bearing Meta-Rules
 
-CLAUDE.md에 부재하거나 미묘해서 이 essence에서만 완전히 생존하는 두 규칙.
+CLAUDE.md에 부재하거나 미묘해서 이 essence에서만 완전히 생존하는 규칙.
 
 ### P8 — Determinism Economy (Maintain Simplicity)
 아키텍처는 최소주의, 작업 실행은 극대주의다. 단순성은 코드 양뿐 아니라 *결정론적 메커니즘의 양*에도 적용된다 — 훅·스크립트·강제 규칙 같은 결정론 장치는 모델 신뢰가 불충분하고 오류 비용이 높을 때, 즉 load-bearing일 때만 정당하다. 두 방향으로 대칭이다:
@@ -81,14 +81,22 @@ CLAUDE.md에 부재하거나 미묘해서 이 essence에서만 완전히 생존�
 - (제거 방향) 편의·라우팅·NL-의도처럼 구조적 escape hatch가 이미 있는 영역엔 결정론 가드를 쌓지 말고 모델을 신뢰한다.
 - (부과 방향) 결정론은 보안/정확성 게이트(fail-closed)라는 load-bearing 지점에만 정확히 부과한다.
 
-예: qg v2.6.0의 self-honest verdict floor는 "검토 안 한 scope를 clean이라 부르지 않기"라는 정확성 보장 한 점에만 결정론을 걸고(kill 불가) 그 위의 redirect 제안·scope routing은 모델 신뢰(kill 가능)로 둔다.
+- (흐름) 규칙은 「기본은 X, 일의 모양이 다르면 모델이 판단하고 이유를 적는다」로 쓴다 — 정석 흐름(brainstorming → 계획 → 구현)의 의도는 지키되 순서를 강제하는 결정론은 두지 않는다.
+- (재사용) 새로 만들기 전에 레포 안 · 밖에 이미 있는 것을 먼저 검토하고, 외부 것은 사용자가 검토한 뒤에 쓴다(P17).
+- (이식성) 레포 전용 값(경로 · 테스트 명령 · 기본 브랜치 · 모델 · `gh`)을 박는 것은 이 레포에서만 맞는 결정론이라, 도출하거나 레포마다 정하게 한다.
+
+예: qg 의 판정 floor 는 「검토하지 않은 범위를 clean 이라 부르지 않는다」는 정확성 한 점에만 결정론을 걸고(kill 불가), 무엇을 리뷰할지 고르는 일은 모델 신뢰로 둔다.
 
 ### P14 — State Survives Compaction
-컨텍스트 윈도우는 compact될 것이다 — 하니스는 그럴 것이라 가정하고 설계한다. 규칙: **턴 종료 전 load-bearing 사실은 파일로 기록한다 — 대화에만 있는 사실은 compaction 후 사망한다.** Plan 파일·state 파일·스펙 파일·커밋 메시지·`CLAUDE.md`·review findings 마크다운 등 지속적인 것에 기록한다. 이 규칙은 CLAUDE.md에 부재하므로 이 essence가 정본이고, 플러그인 README 3곳 인용의 anchor target이다.
+컨텍스트 윈도우는 compact될 것이다 — 하니스는 그럴 것이라 가정하고 설계한다. 규칙: **턴 종료 전 load-bearing 사실은 파일로 기록한다 — 대화에만 있는 사실은 compaction 후 사망한다.** Plan 파일·state 파일·스펙 파일·커밋 메시지·`CLAUDE.md`·review findings 마크다운 등 지속적인 것에 기록한다. 이 규칙은 CLAUDE.md에 부재하므로 이 essence가 정본이다.
+
+### P5 — Filesystem as Memory
+상태는 context가 아니라 파일에 산다 — 최소 인덱스만 preload하고 나머지는 Glob/Read/Grep으로 just-in-time 로드한다. stale-index·vector store·RAG 없음. 산출물 · 상태가 얽히면 객체 · 링크 · 속성 · 주인을 명시해 진입점 하나에서 따라가게 하되, 작은 일에는 이 구조를 만들지 않는다.
+코드: `plugins/spec-distill/references/roadmap-ontology.md`
 
 ## Anti-Pattern Anchors
 
-인용되는 anti-pattern/규칙의 stub 앵커 — 정본은 CLAUDE.md Forbidden Patterns / Filesystem-as-Memory이고, 여기서는 cross-ref resolve만 보장한다.
+인용되는 anti-pattern의 stub 앵커 — 정본은 CLAUDE.md Forbidden Patterns이고, 여기서는 cross-ref resolve만 보장한다.
 
 ### AP2 → CLAUDE.md Forbidden Patterns
 Polite Stop — verified-done 후 사용자가 요청하지 않은 내러티브 요약을 삽입하는 것. 사용자가 redirect 가능한 approval gate(P17)와 구분된다.
@@ -101,12 +109,3 @@ Subagent spray — 선언 없는 fan-out. 규모 자체가 아니라 선언 없�
 
 ### AP16 → CLAUDE.md Forbidden Patterns
 Unbounded autonomy — max-iter 카운트·repeat 감지·사용자-override kill switch 없는 루프 (P18의 anti-corollary).
-
-### AP18 → CLAUDE.md Forbidden Patterns
-Self-narrating artifact — 모델이 읽고 행동하는 산출물(생성 템플릿·룰 파일·프롬프트)이 자기 출처·배경·존재 정당화를 담는 것. 토큰 낭비(P22)이자 의미 왜곡 — 읽는 쪽의 초점이 "무엇을 해야 하나"에서 "이게 왜 있나"로 옮겨가고 정당화가 지시로 오독된다 (P8 최소주의의 산출물 방향).
-
-### AP19 → CLAUDE.md Forbidden Patterns
-Sealed decision — 앞 단계의 확정이 하류에서 반증됐는데 피벗 경로가 없는 것 (P23의 anti-corollary).
-
-### P5 → CLAUDE.md / Filesystem-as-Memory
-상태는 context가 아니라 파일에 산다 — 최소 인덱스만 preload하고 나머지는 Glob/Read/Grep으로 just-in-time 로드한다. stale-index·vector store·RAG 없음. 규칙 정본은 CLAUDE.md.
