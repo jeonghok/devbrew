@@ -87,7 +87,7 @@ next_phase: superpowers:writing-plans
 
 ### §1 장치 처분표
 
-처분은 S10 을 그대로 적용한다. 「지키던 것」은 그 장치가 막던 실패다 — 수정은 그 실패를 다른 방법(공시 · 사용자가 여는 길)으로 계속 막는다. 「지키던 것」이 비용뿐인 행은 제거하고, 크게 쓰기 전에 규모만 알린다(C5). 안전장치(선언 없는 fan-out 금지 · 루프 상한)를 지키던 행만 수정으로 남는다(D1.3).
+처분은 S10 을 그대로 적용한다. 「지키던 것」은 그 장치가 막던 실패다 — 수정은 그 실패를 다른 방법(공시 · 사용자가 여는 길)으로 계속 막는다. 「지키던 것」이 비용뿐인 행은 제거하고, 크게 쓰기 전에 규모만 알린다(C5 · D1.3). 그 밖의 행 — 상한 · 압축이나 순서 고정, 사용자 결정을 덮던 자리 — 은 공시하고 사용자가 여는 형태로 수정한다(D18). 안전장치(선언 없는 fan-out 금지 · 루프 상한)는 그 수정 안에서 그대로 지킨다.
 
 | 장치 | 자리 | 지키던 것 | 처분 | 계획 |
 |---|---|---|---|---|
@@ -110,7 +110,8 @@ next_phase: superpowers:writing-plans
 | project-init 헌장 재질문 3회 뒤 중단(RC53) | `project-init/SKILL.md:160-164` | 빈 헌장 | 수정 — 3회 뒤 「건너뛰기 · 계속 묻기 · 중단」을 사용자가 고름 | 4 |
 | project-init AGENTS.md 이전 거절 → 전체 중단 | `project-init/SKILL.md:48, 199, 201` | 부분 진행(옛 AC21) | 수정 — 「CLAUDE.md 에 바로 쓰기」 선택지, 관련 없는 git-workflow 생성은 계속 | 4 |
 | project-init 질문 ≤4 · 관례 1–3개 | `project-init/SKILL.md:147, 156` | 질문 피로 | 수정 — 기본값, 더 받을 수 있게 | 4 |
-| project-init 템플릿 브랜치 접두 고정 · 「ALWAYS 브랜치 확인」 | `templates/*/branch-strategy.md` · `templates/*/agents-md-section.md:5` | 브랜치 규칙 일관 | 수정 — 접두는 고른 전략에서 도출 + 더하기(훅 `post-tool-use.py:138-148` 과 같은 규칙), 확인은 변경 작업일 때만 | 4 |
+| project-init 헌장 단계 직렬 순서(Step 3 이 끝난 뒤에만 시작, 교차 금지) | `project-init/SKILL.md:119` | 질문이 섞여 답이 엉킴 | 수정 — 질문 순서는 기본 직렬로 두고, 질문이 없는 Phase 0 스캔은 질문과 겹쳐 돌려도 된다(D3.11) | 4 |
+| project-init 템플릿 브랜치 접두 고정 · 「ALWAYS 브랜치 확인」 | `templates/*/branch-strategy.md` · `templates/*/agents-md-section.md:5` | 브랜치 규칙 일관 | 수정 — 접두는 고른 전략에서 도출 + 더하기(훅 `post-tool-use.py:138-148` 과 같은 규칙), 확인은 변경 작업일 때만. 규칙이 브랜치 전환만 전제하므로(`templates/github-flow/branch-strategy.md:57-61` 등 전략 셋) 브랜치를 worktree 에서 작업하는 길도 같은 규칙으로 적는다(점검 문서의 「worktree 경로」, D3.11) | 4 |
 | plugin-audit 근거 약한 지적을 공시 없이 버림(RC54) | `agents/plugin-auditor.md:56-57, 76-77` | 정밀도 · 취향 지적 | 수정 — 버리지 않고 「열린 질문」으로 보고서에 | 4 |
 | plugin-audit 반박자 「불확실하면 기각」 | `agents/audit-refuter.md:22-23` | 거짓 양성 증폭 | 수정 — 부록에서 기각과 「불확실」을 나눠 표시 | 4 |
 | plugin-audit 6축 고정 · 심층검증 8건 상한 | `scripts/audit-workflow.js:295, 498, 646-650` | fan-out 비용 | 제거 — 축 고정 · 8건 상한을 없앤다. 지출 동의 게이트(유지)에서 쓸 축과 검증 수, 그 규모를 알린다 | 4 |
@@ -318,6 +319,7 @@ next_phase: superpowers:writing-plans
 - D2.7 · r2 · adopt · 89a93115#r2.1 · "고친다 — 계획 4 보안 리뷰 AC" · supersedes D1.2 — plugin-audit 리뷰어 persona 둘도 보안 리뷰 대상에 넣었지만, 계획 4 의 설계 절과 수용 기준에는 그 리뷰가 없습니다. 보안 리뷰 기준은 qg persona(AC27)에만 있습니다.
 - D2.8 · r2 · adopt · c7ea8a5f#r2.1 · "고친다 — (대체안 미작성) / 후속 질문 답: 환경 변수 + settings.json env (권장)" — check-intent 거부 후 상향: 문서 경로 패턴을 '레포 설정으로 바꿀 수 있다'고만 적었다. 그 설정이 어느 파일의 어느 키에 사는지, FILTERED_DIFF 를 만드는 자리가 어디인지가 정해지지 않아 Files to Modify 에도 이름 없이 남았다.
 - D2.9 · r2 · adopt · e850cf32#r2.1 · "고친다 — AC17 을 둘로 나눔" · supersedes D1.4 — 원장 쓰기를 권한 경계로 막기로 결정했지만, 수용 기준은 여전히 원장 안 요약값이 엔진 밖 변경을 잡는다고 적고 있습니다. 권한 경계를 확인하는 기준은 하나도 없습니다.
+- D3.11 · r3 · adopt · 6e2f8815#r3.1 · "고친다 — 처분표에 두 행 더함" — 범위 입력으로 받은 흐름 고정 점검의 project-init 항목 가운데 「Phase 0 스캔은 질문과 겹쳐 돌려도 됨」과 「worktree 경로」가 처분표에 없고, 유지 목록에도 없다. 처분 없이 조용히 빠졌다.
 
 ## 번호 대조
 
