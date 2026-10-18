@@ -49,6 +49,63 @@ for lit in '끝에서 끝' '브랜치는 지우지 않는다'; do
   assert_contains "$(step 9)" "$lit" "걸음 9(끝): $lit"
 done
 
+# 담당 agent 분담 · 게이트 문면 중계 · 메인 체크아웃(걸음 2~3).
+for lit in '담당 agent' '그대로 돌려보내' '문면을 고쳐 쓰지 않고' '이유를 설계문서에 적는다'; do
+  assert_contains "$(step 3)" "$lit" "걸음 3(리뷰는 담당 agent · 문면 중계): $lit"
+done
+assert_contains "$(step 2)" '메인 체크아웃' "걸음 2: 메인 체크아웃에 머문다"
+assert_contains "$(step 2)" '권한다' "걸음 2: worktree 안 시작이면 메인에서 부르기를 권한다"
+assert_contains "$(step 5)" '다른 에픽은 계속' "걸음 5: 한 에픽이 멈춰도 다른 에픽은 계속"
+
+# 부재 락 — 문장 하나가 아니라 개념으로. 판정은 함수라 변이 대조가 같은 함수를 부른다.
+forbid_23() {  # 걸음 2~3 글: 새 세션을 열게 하는 말(명시 부정문 제외)
+  local t="${1//다른 세션을 열라고 하지 않는다/}" w
+  for w in '/new' '세션을 따로' '새 세션' '다른 세션을 열' '세션을 연다' '세션을 열어'; do
+    case "$t" in *"$w"*) printf '%s\n' "$w";; esac
+  done
+}
+forbid_4() {  # 걸음 4 글: 계획 검토를 안 기다림 · Push(허용 문장 밖) · 실행 방식 고정
+  local t="${1//Push 와 PR 은 지휘 세션이/}" w
+  for w in '기다리지 않' 'Push' '푸시'; do
+    case "$t" in *"$w"*) printf '%s\n' "$w";; esac
+  done
+}
+forbid_always_method() {  # 줄에 «언제나/항상» 과 실행 방식 이름이 함께
+  printf '%s\n' "$1" | grep -E '언제나|항상' | grep -E 'subagent|executing-plans|인라인|inline' || true
+}
+forbid_5() {
+  local w
+  for w in '모두 멈춘' '전부 멈춘'; do
+    case "$1" in *"$w"*) printf '%s\n' "$w";; esac
+  done
+}
+S23="$(step 2; step 3)"
+assert_eq "$(forbid_23 "$S23")" "" "걸음 2~3: 새 세션을 열게 하는 말이 없다"
+assert_eq "$(forbid_4 "$(step 4)")" "" "걸음 4: 계획 검토 무대기 · 허용 문장 밖 Push 가 없다"
+assert_eq "$(forbid_always_method "$MAN")" "" "손 절차: 「언제나/항상」+실행 방식 고정이 없다"
+assert_eq "$(forbid_5 "$(step 5)")" "" "걸음 5: 다른 에픽까지 멈추는 말이 없다"
+for lit in '/new 로 에픽 worktree 세션을 연다' '에픽마다 세션을 따로 열어' '새 세션에서 이어 간다' '사용자가 다른 세션을 열어 진행'; do
+  [ -n "$(forbid_23 "$S23 $lit")" ] && ok "양성 대조(2~3): 「${lit}」 를 잡는다" || no "양성 대조(2~3): 「${lit}」 를 못 잡는다"
+done
+for lit in '계획 검토는 기다리지 않는다' 'Push 하고 PR 만들기' '푸시 후 PR'; do
+  [ -n "$(forbid_4 "$(step 4) $lit")" ] && ok "양성 대조(4): 「${lit}」 를 잡는다" || no "양성 대조(4): 「${lit}」 를 못 잡는다"
+done
+for lit in '실행 방식은 언제나 subagent-driven 이다' '항상 인라인으로 실행한다'; do
+  [ -n "$(forbid_always_method "$MAN"$'\n'"$lit")" ] && ok "양성 대조(방식): 「${lit}」 를 잡는다" || no "양성 대조(방식): 「${lit}」 를 못 잡는다"
+done
+[ -n "$(forbid_5 "$(step 5) 다른 에픽도 모두 멈춘다")" ] && ok "양성 대조(5): 다른 에픽도 모두 멈춘다 를 잡는다" || no "양성 대조(5): 못 잡는다"
+
+# `--acs` 는 «--plan 문장» 안에 있어야 한다(--impl 문장의 것으로 갈음 못 한다).
+acs_in_plan() {
+  local s="${1#*check_bundle_coverage.py --plan}"
+  s="${s%%. *}"
+  case "$s" in *'--acs'*) printf 'yes\n';; *) printf 'no\n';; esac
+}
+assert_eq "$(acs_in_plan "$(step 5)")" "yes" "걸음 5: --plan 문장 안에 --acs"
+S5M="$(step 5 | sed 's/`--acs` 뒤에 그 계획이 맡은 AC 목록을 준다/그 계획이 맡은 AC 목록을 준다/')"
+[ "$S5M" != "$(step 5)" ] && ok "변이 입력이 실제로 달라졌다" || no "변이 입력이 원문과 같다 — 위 대조가 공허하다"
+assert_eq "$(acs_in_plan "$S5M")" "no" "양성 대조: --plan 문장에서 --acs 를 빼면 잡는다(--impl 문장에 남아도)"
+
 # 레포 전용 값 · 루트 토큰 · references/ 꼴 가리킴 — 줄마다 낸다.
 banned() {
   python3 -I - "$1" <<'PY'
@@ -56,7 +113,8 @@ import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
 pats = [r"origin/main", r"(?<![A-Za-z])main(?![A-Za-z])", r"(?<![A-Za-z])opus(?![A-Za-z])",
         r"(?<![A-Za-z])fable(?![A-Za-z])", r"plugins/spec-distill", r"docs/superpowers", r"feature/",
-        r"\.superpowers/", r"DEVBREW_", r"\$\{CLAUDE_PLUGIN_ROOT\}", r"references/[A-Za-z0-9_.-]+\.md"]
+        r"(?<![A-Za-z])master(?![A-Za-z])", r"(?<![A-Za-z])sonnet(?![A-Za-z])", r"(?<![A-Za-z])haiku(?![A-Za-z])",
+        r"plugins/", r"shared/tests", r"\.superpowers/", r"DEVBREW_", r"\$\{CLAUDE_PLUGIN_ROOT\}", r"references/[A-Za-z0-9_.-]+\.md"]
 for i, line in enumerate(text.splitlines(), 1):
     for p in pats:
         if re.search(p, line):
@@ -65,7 +123,8 @@ PY
 }
 assert_eq "$(banned "$CD")" "" "레포 전용 값 · 루트 토큰 · references/ 꼴 가리킴이 없다"
 for lit in 'origin/main' 'review_model: opus' 'python3 plugins/spec-distill/scripts/x.py' '${CLAUDE_PLUGIN_ROOT}/scripts' \
-           'references/epic-handoff.md' 'feature/roadmap-x' 'main 에서 만든다' '.superpowers/sdd/x'; do
+           'references/epic-handoff.md' 'feature/roadmap-x' 'main 에서 만든다' '.superpowers/sdd/x' \
+           'origin/master' 'review_model: sonnet' 'haiku 로 부른다' 'plugins/other/x.py' 'shared/tests/x.sh'; do
   { cat "$CD"; printf '%s\n' "$lit"; } > "$T/mut.md"
   [ -n "$(banned "$T/mut.md")" ] && ok "양성 대조: 「${lit}」 를 넣으면 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
 done
