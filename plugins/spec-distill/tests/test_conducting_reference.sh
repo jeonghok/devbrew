@@ -48,52 +48,72 @@ done
 for lit in '끝에서 끝' '브랜치는 지우지 않는다'; do
   assert_contains "$(step 9)" "$lit" "걸음 9(끝): $lit"
 done
-
-# 담당 agent 분담 · 게이트 문면 중계 · 메인 체크아웃(걸음 2~3).
-for lit in '담당 agent' '그대로 돌려보내' '문면을 고쳐 쓰지 않고' '이유를 설계문서에 적는다'; do
+# 담당 agent 분담 · 게이트 문면 중계 · 메인 체크아웃(걸음 2~3). 한 번뿐인 문장으로 잰다.
+for lit in 'spec-review 부터는 그 에픽의 담당 agent' '게이트 문면과 선택지를 그대로 돌려보내고 멈춘다' '문면을 고쳐 쓰지 않고' '이유를 설계문서에 적는다'; do
   assert_contains "$(step 3)" "$lit" "걸음 3(리뷰는 담당 agent · 문면 중계): $lit"
+  assert_eq "$(printf '%s\n' "$(step 3)" | grep -oF -- "$lit" | wc -l | tr -d ' ')" "1" "걸음 3: 「${lit}」 는 한 번뿐이다"
 done
 assert_contains "$(step 2)" '메인 체크아웃' "걸음 2: 메인 체크아웃에 머문다"
 assert_contains "$(step 2)" '권한다' "걸음 2: worktree 안 시작이면 메인에서 부르기를 권한다"
 assert_contains "$(step 5)" '다른 에픽은 계속' "걸음 5: 한 에픽이 멈춰도 다른 에픽은 계속"
 
-# 부재 락 — 문장 하나가 아니라 개념으로. 판정은 함수라 변이 대조가 같은 함수를 부른다.
-forbid_23() {  # 걸음 2~3 글: 새 세션을 열게 하는 말(명시 부정문 제외)
-  local t="${1//다른 세션을 열라고 하지 않는다/}" w
-  for w in '/new' '세션을 따로' '새 세션' '다른 세션을 열' '세션을 연다' '세션을 열어'; do
-    case "$t" in *"$w"*) printf '%s\n' "$w";; esac
-  done
+# 부재 락 — 부정된 개념으로 잰다. 판정은 함수라 변이 대조가 같은 함수를 부른다.
+hit() {  # hit <정규식> — 표준입력에서 맞은 글을 줄마다 낸다
+  PYTHONIOENCODING=utf-8 python3 -I -c 'import re,sys
+t = sys.stdin.read()
+for m in re.finditer(sys.argv[1], t):
+    print(m.group(0))' "$1"
 }
-forbid_4() {  # 걸음 4 글: 계획 검토를 안 기다림 · Push(허용 문장 밖) · 실행 방식 고정
-  local t="${1//Push 와 PR 은 지휘 세션이/}" w
-  for w in '기다리지 않' 'Push' '푸시'; do
-    case "$t" in *"$w"*) printf '%s\n' "$w";; esac
-  done
+forbid_23() {  # 걸음 2~3 글: 세션을 새로 열게 하는 말(명시 부정문 제외)
+  local t="${1//다른 세션을 열라고 하지 않는다/}"
+  printf '%s\n' "$t" | hit '세션[^\n]{0,6}[열연]|다음 세션에서|/new|새 세션|세션을 따로'
+}
+forbid_4() {  # 걸음 4 글: 계획 검토 무대기 · Push/PR 의 다른 주체 · 실행 방식 고정
+  local t="${1//Push 와 PR 은 지휘 세션이 구현 대조(5) 뒤에 한다/}"
+  printf '%s\n' "$t" | hit '기다리지 않|Push|푸시|subagent-driven|executing-plans'
 }
 forbid_always_method() {  # 줄에 «언제나/항상» 과 실행 방식 이름이 함께
   printf '%s\n' "$1" | grep -E '언제나|항상' | grep -E 'subagent|executing-plans|인라인|inline' || true
 }
-forbid_5() {
-  local w
-  for w in '모두 멈춘' '전부 멈춘'; do
-    case "$1" in *"$w"*) printf '%s\n' "$w";; esac
-  done
+forbid_5() {  # 걸음 5 글: 한 에픽이 막히면 다른 에픽도 멈춘다
+  printf '%s\n' "$1" | hit '다른 에픽[^\n]{0,8}멈춘'
+}
+forbid_conductor_review() {  # 걸음 3 글: 지휘 세션이 spec-review 를 돌리는 문장 · 게이트 문면을 요약
+  local t="${1//$'\n'/ }"
+  printf '%s\n' "$t" | sed 's/\. /.\
+/g' | grep -E '(지휘 세션|지휘자).*spec-review|spec-review.*(지휘 세션|지휘자)' || true
+  printf '%s\n' "$t" | hit '요약'
 }
 S23="$(step 2; step 3)"
-assert_eq "$(forbid_23 "$S23")" "" "걸음 2~3: 새 세션을 열게 하는 말이 없다"
-assert_eq "$(forbid_4 "$(step 4)")" "" "걸음 4: 계획 검토 무대기 · 허용 문장 밖 Push 가 없다"
+assert_eq "$(forbid_23 "$S23")" "" "걸음 2~3: 세션을 새로 열게 하는 말이 없다"
+assert_eq "$(forbid_4 "$(step 4)")" "" "걸음 4: 계획 검토 무대기 · 허용 문장 밖 Push · 실행 방식 고정이 없다"
 assert_eq "$(forbid_always_method "$MAN")" "" "손 절차: 「언제나/항상」+실행 방식 고정이 없다"
 assert_eq "$(forbid_5 "$(step 5)")" "" "걸음 5: 다른 에픽까지 멈추는 말이 없다"
-for lit in '/new 로 에픽 worktree 세션을 연다' '에픽마다 세션을 따로 열어' '새 세션에서 이어 간다' '사용자가 다른 세션을 열어 진행'; do
+assert_eq "$(forbid_conductor_review "$(step 3)")" "" "걸음 3: 지휘 세션이 spec-review 를 돌리거나 게이트 문면을 요약하는 말이 없다"
+for lit in '/new 로 에픽 worktree 세션을 연다' '에픽마다 세션을 따로 열어' '새 세션에서 이어 간다' '사용자가 다른 세션을 열어 진행' '다음 세션에서 이어 간다' '에픽마다 세션을 연다'; do
   [ -n "$(forbid_23 "$S23 $lit")" ] && ok "양성 대조(2~3): 「${lit}」 를 잡는다" || no "양성 대조(2~3): 「${lit}」 를 못 잡는다"
 done
-for lit in '계획 검토는 기다리지 않는다' 'Push 하고 PR 만들기' '푸시 후 PR'; do
+for lit in '계획 검토는 기다리지 않는다' 'Push 하고 PR 만들기' '푸시 후 PR' 'Push 와 PR 은 지휘 세션이 아니라 담당 agent 가 한다' '실행 방식은 subagent-driven 이다' '실행 방식은 executing-plans 다'; do
   [ -n "$(forbid_4 "$(step 4) $lit")" ] && ok "양성 대조(4): 「${lit}」 를 잡는다" || no "양성 대조(4): 「${lit}」 를 못 잡는다"
 done
 for lit in '실행 방식은 언제나 subagent-driven 이다' '항상 인라인으로 실행한다'; do
   [ -n "$(forbid_always_method "$MAN"$'\n'"$lit")" ] && ok "양성 대조(방식): 「${lit}」 를 잡는다" || no "양성 대조(방식): 「${lit}」 를 못 잡는다"
 done
-[ -n "$(forbid_5 "$(step 5) 다른 에픽도 모두 멈춘다")" ] && ok "양성 대조(5): 다른 에픽도 모두 멈춘다 를 잡는다" || no "양성 대조(5): 못 잡는다"
+for lit in '다른 에픽도 모두 멈춘다' '다른 에픽도 전부 멈춘다' '다른 에픽도 멈춘다'; do
+  [ -n "$(forbid_5 "$(step 5) $lit")" ] && ok "양성 대조(5): 「${lit}」 를 잡는다" || no "양성 대조(5): 「${lit}」 를 못 잡는다"
+done
+for lit in '엔진 라운드는 지휘 세션이 직접 `/spec-distill:spec-review` 로 돌린다.' '지휘자가 spec-review 를 부른다.' '게이트 문면은 요약해 알리고 계속한다.'; do
+  [ -n "$(forbid_conductor_review "$(step 3) $lit")" ] && ok "양성 대조(3): 「${lit}」 를 잡는다" || no "양성 대조(3): 「${lit}」 를 못 잡는다"
+done
+# 대조 변이: 담당 agent 문장을 지휘 세션 문장으로 바꾼 걸음 3
+M3="$(step 3 | sed 's/spec-review 부터는 그 에픽의 담당 agent 가 그 에픽 worktree 에서 맡는다/spec-review 부터는 지휘 세션이 맡는다/')"
+[ "$M3" != "$(step 3)" ] && ok "변이 입력(3)이 원문과 달라졌다" || no "변이 입력(3)이 원문과 같다 — 아래 대조가 공허하다"
+[ -n "$(forbid_conductor_review "$M3")" ] && ok "양성 대조(3): 담당 agent 를 지휘 세션으로 바꾸면 잡는다" || no "양성 대조(3): 바꿔도 못 잡는다"
+case "$M3" in *'spec-review 부터는 그 에픽의 담당 agent'*) no "변이(3) 뒤에도 담당 agent 문장이 남았다";; *) ok "변이(3) 뒤 담당 agent 문장이 사라졌다(위 한 번뿐 단언이 잡는다)";; esac
+
+# 판정 절 잇기: `### <계획 경로>` 가 쓰라는 말이어야 한다 — 같은 문장에 부정이 없다.
+assert_eq "$(step 5 | hit '### <계획 경로>`(?:(?!\. )[^\n])*(않|쓰지|말고|금지|안 )')" "" "걸음 5: ### <계획 경로> 로 잇는 문장에 부정이 없다"
+[ -n "$(printf '%s\n' '그 아래 `### <계획 경로>` 는 쓰지 않는다. 다음' | hit '### <계획 경로>`(?:(?!\. )[^\n])*(않|쓰지|말고|금지|안 )')" ] && ok "양성 대조: ### <계획 경로> 뒤 부정을 잡는다" || no "양성 대조: ### <계획 경로> 뒤 부정을 못 잡는다"
 
 # `--acs` 는 «--plan 문장» 안에 있어야 한다(--impl 문장의 것으로 갈음 못 한다).
 acs_in_plan() {
@@ -102,9 +122,11 @@ acs_in_plan() {
   case "$s" in *'--acs'*) printf 'yes\n';; *) printf 'no\n';; esac
 }
 assert_eq "$(acs_in_plan "$(step 5)")" "yes" "걸음 5: --plan 문장 안에 --acs"
-S5M="$(step 5 | sed 's/`--acs` 뒤에 그 계획이 맡은 AC 목록을 준다/그 계획이 맡은 AC 목록을 준다/')"
-[ "$S5M" != "$(step 5)" ] && ok "변이 입력이 실제로 달라졌다" || no "변이 입력이 원문과 같다 — 위 대조가 공허하다"
-assert_eq "$(acs_in_plan "$S5M")" "no" "양성 대조: --plan 문장에서 --acs 를 빼면 잡는다(--impl 문장에 남아도)"
+# 대조는 걸음 5 글과 무관한 합성 입력으로 한다 — 지운 절이 없어도 이 대조만 공허해지지 않는다.
+SYN_NO='x check_bundle_coverage.py --plan <설계문서> <계획> 을 돌려 더한다. 다음 check_bundle_coverage.py --impl <설계문서> <보고> 같은 `--acs` 를 준다.'
+SYN_OK='x check_bundle_coverage.py --plan <설계문서> <계획> 을 돌려 더한다 — `--acs` 를 준다. 다음 check_bundle_coverage.py --impl <설계문서> <보고> 를 돌린다.'
+assert_eq "$(acs_in_plan "$SYN_NO")" "no" "양성 대조: --plan 문장에 --acs 가 없고 --impl 문장에만 있으면 no"
+assert_eq "$(acs_in_plan "$SYN_OK")" "yes" "양성 짝: --plan 문장에 --acs 가 있으면 yes"
 
 # 레포 전용 값 · 루트 토큰 · references/ 꼴 가리킴 — 줄마다 낸다.
 banned() {
