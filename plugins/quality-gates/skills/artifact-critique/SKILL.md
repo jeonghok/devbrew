@@ -21,7 +21,7 @@ allowed-tools:
 
 | 그 자리의 내용 | 동작 |
 |---|---|
-| `[devbrew-entry] ok …` | 아래 절차로 간다. 그 줄의 `root=` 값을 `project_dir` 로 쓴다 |
+| `[devbrew-entry] ok …` | 아래 절차로 간다 — `project_dir` 는 E2 가 정한다 |
 | `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다 |
 | `[devbrew-entry] error …` | `[quality-gates] artifact-critique 사전 검사 실패 — <reason= 값>.` 을 내고 멈춘다 |
 | `[shell command execution disabled by policy]` | `[quality-gates] artifact-critique 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다.` 를 내고 멈춘다 |
@@ -69,7 +69,7 @@ allowed-tools:
 
 ### E1 — 대상 해석 + 코드/비-코드 분류
 
-`critique <path>`면 그 경로가 대상. NL 진입이면 대화/컨텍스트에서 단일 대상 경로를
+이 skill 의 인자로 받은 경로가 대상. NL 진입이면 대화/컨텍스트에서 단일 대상 경로를
 해석한다. 그 경로로:
 
 ```
