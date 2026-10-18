@@ -26,8 +26,10 @@ for n in $NAMES; do
 done
 B="$HOME/.claude/sdd-mirror/r2a-plan1/blobs-before.tsv"
 if [ -f "$B" ]; then
+  # 이동이 바이트를 바꾸지 않았는지는 공유본을 처음 더한 커밋에서 잰다 — 그 뒤의 의도한 편집은 이 대조 밖이다
   while IFS="$(printf '\t')" read -r n h; do
-    assert_eq "$(git hash-object "shared/test-selection/$n")" "$h" "공유본 ${n} 는 이동 전 blob 과 바이트가 같다"
+    add_c="$(git log --diff-filter=A --format=%H -- "shared/test-selection/$n" | tail -1)"
+    assert_eq "$(git rev-parse "${add_c:-none}:shared/test-selection/$n" 2>/dev/null)" "$h" "공유본 ${n} 는 처음 더한 커밋에서 이동 전 blob 과 바이트가 같다"
   done < "$B"
 else
   ok "이동 전 blob 기록이 이 기계에 없다 — 바이트 대조는 Step 1 을 돈 기계에서만"
