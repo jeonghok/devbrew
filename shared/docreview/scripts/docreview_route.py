@@ -71,6 +71,33 @@ def extract_blocks(text: str, name: str):
     return (None, "broken") if broken else (out, None)
 
 
+def _no_at(it, ev):
+    """리뷰어가 쓴 `ref` · `blocks` 의 `@` 를 `_` 로 바꾸고 센다 — `@d<i>` · `@b<k>` 꼬리표는 엔진만 붙인다."""
+    if not isinstance(it, dict):
+        return it
+    out, hit = it, False
+    if isinstance(it.get("ref"), str) and "@" in it["ref"]:
+        out, hit = dict(out), True
+        out["ref"] = it["ref"].replace("@", "_")
+    bl = it.get("blocks")
+    if isinstance(bl, str) and "@" in bl:
+        out, hit = dict(out), True
+        out["blocks"] = bl.replace("@", "_")
+    elif isinstance(bl, list):
+        fixed = []
+        for x in bl:
+            if isinstance(x, str) and "@" in x:
+                hit = True
+                x = x.replace("@", "_")
+            fixed.append(x)
+        if hit:
+            out = dict(out)
+            out["blocks"] = fixed
+    if hit:
+        ev("coerced", "ref", "(@ 포함)", None)
+    return out
+
+
 def merge_list_blocks(blocks, name, ev):
     """목록 블록 여럿을 하나로 — (항목 목록, 오류).
 
@@ -87,6 +114,7 @@ def merge_list_blocks(blocks, name, ev):
         return None, "not a list"
     merged, seen_refs, seen_items, final_ref = [], set(), {}, {}
     for k, blk in enumerate(blocks, 1):
+        blk = [_no_at(x, ev) for x in blk]
         # 1 걸음 — 항목마다 처분을 정한다: 글자까지 같은 항목은 흡수(자리는 살아남은 항목의 최종 ref),
         # 앞 블록과 ref 가 겹치는 새 항목은 `<ref>@b<k>` 로 바꾼다.
         local, plan = {}, []
@@ -366,6 +394,10 @@ def cmd_prepare(a) -> int:
                     first["blocks"].append(r)
             if first["edit_scope"] == first["anchor"] and it["edit_scope"] != it["anchor"]:
                 first["edit_scope"] = it["edit_scope"]
+            # 남은 항목의 빈 칸은 버려진 사본의 값으로 채운다 — 채워진 값은 덮지 않는다(`_absorb_same_as` 와 같은 규칙).
+            for fld in ("evidence", "replacement", "if_unfixed", "contradicts", "_contradicts_malformed"):
+                if not first.get(fld) and it.get(fld):
+                    first[fld] = it[fld]
         else:
             deduped.append((src, it))
     items = deduped
@@ -387,7 +419,11 @@ def cmd_prepare(a) -> int:
                 # 없는 항목을 막는다는 참조 — 리뷰어(@d)·블록(@b) 꼬리표를 떼고 싣는다. 풀리지 않는 참조는
                 # finalize 의 `_remap_blocks` 가 어차피 버린다(계수 없음 — 예전과 같다).
                 mapped.append(r.split("@")[0])
-        pub["blocks"] = mapped
+        deduped_refs = []
+        for m in mapped:
+            if m not in deduped_refs:
+                deduped_refs.append(m)
+        pub["blocks"] = deduped_refs   # 합친 두 리뷰어가 같은 항목을 가리키면 한 번만 센다
         pub.pop("ref", None)
         det = pub.pop("detector", None)   # 재비판에 가는 사본에는 출처 리뷰어를 싣지 않는다
         pending.append({"f": pub["f"], "source": src, "detector": det,

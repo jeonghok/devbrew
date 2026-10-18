@@ -3949,6 +3949,28 @@ case_detectors_overlap_keeps_both_blocks() {
   assert_eq "$(jget "$d/prep.json" '[len(i["blocks"]) for i in d["items"] if i["summary"].startswith("넘김 절의 경로")][0]')" "2" "AC10: 흡수된 사본이 막던 고침도 남은 질문이 계속 막는다(막는 항목 둘)"
   rm -rf "$d"
 }
+case_detectors_identical_pair_counts_blocks_once() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  cp "$FX/critic-d2.txt" "$d/critic-1.txt"; cp "$FX/critic-d2.txt" "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-1.txt" --critic "$d/critic-2.txt" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" '[len(i["blocks"]) for i in d["items"] if i["summary"].startswith("넘김 절의 경로")][0]')" "1" "AC10: 두 리뷰어가 같은 질문과 고침을 내도 막는 항목은 하나로 센다"
+  rm -rf "$d"
+}
+case_detectors_absorb_fills_contradicts() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  cp "$FX/critic-d1-blocks.txt" "$d/critic-1.txt"; cp "$FX/critic-d2-contra.txt" "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-1.txt" --critic "$d/critic-2.txt" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" '[i.get("contradicts") for i in d["items"] if i["summary"].startswith("넘김 절의 경로")][0]')" "D1.1" "AC39: 결정 반대 번호가 둘째 리뷰어에만 있어도 남은 지적이 이어받는다"
+  rm -rf "$d"
+}
+case_detectors_at_ref_coerced() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  cp "$FX/critic-d1-atref.txt" "$d/critic-1.txt"; cp "$FX/critic-d2-atref.txt" "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-1.txt" --critic "$d/critic-2.txt" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" '[i["blocks"] for i in d["items"] if i["summary"].startswith("넘김 절의 경로")][0] == [i["f"] for i in d["items"] if i["summary"].startswith("넘김 절에 이어")]')" "True" "AC10: 첫째 리뷰어가 둘째의 꼬리표를 흉내 내도 둘째의 질문은 제 고침을 계속 막는다"
+  assert_eq "$(st_yaml "$d" 'len([e for e in st["pending_recritic"]["events"] if e[0]=="coerced" and e[1]=="ref"])')" "1" "AC10: ref 의 @ 는 바꾸고 센다"
+  rm -rf "$d"
+}
 case_detectors_one_warning_per_partial_death() {
   local d; d="$(r1_detectors 3 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC11: r1 실패"; return; }
   local c1; c1="$(critic_now "$d" "$FX/critic-r1.txt")"; cp "$FX/critic-d2.txt" "$d/critic-2.txt"; cp "$FX/critic-broken.txt" "$d/critic-3.txt"

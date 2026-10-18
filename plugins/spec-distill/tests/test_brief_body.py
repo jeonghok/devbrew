@@ -737,6 +737,17 @@ class DecisionHeadIsLinear(unittest.TestCase):
         self.assertEqual(r.stdout.strip(), "False", r.stderr)
         self.assertTrue(check_brief.PROVENANCE_MARK_RE.search("글 ⟨S1⟩ · ⟨S2⟩ ⟨S3⟩"))
 
+    def test_emphasis_run_and_provenance_tail_are_linear(self):
+        self.assertEqual(self._run("'- ' + '`' * 50000"), "False")
+        import subprocess
+        code = ("import sys; sys.path.insert(0, %r); import check_brief as C; "
+                "print(bool(C.PROVENANCE_MARK_RE.search('x' + '⟨S1⟩ ' * 30000 + 'x')))"
+                % str(Path(B.__file__).resolve().parent))
+        try:
+            subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=5)
+        except subprocess.TimeoutExpired:
+            self.fail("출처 표시 꼬리 검사가 5초 안에 끝나지 않았다")
+
     def test_positive_pair_real_decision_head_still_read(self):
         self.assertTrue(B.decision_shaped("1. OQ3: 결정"))
         self.assertTrue(B.decision_shaped("- OQ3 [해결 ⟨S2⟩]"))

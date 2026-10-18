@@ -1219,7 +1219,7 @@ def research_backref_missing(text: str) -> list[str]:
     return sorted(fails)
 
 
-PROVENANCE_MARK_RE = re.compile(r"(?:⟨S\d+⟩(?:\s*(?:·\s*)?⟨S\d+⟩)*|⟨모델 추론⟩)\s*$")
+PROVENANCE_MARK_RE = re.compile(r"(?:⟨S\d+⟩|⟨모델 추론⟩)\s*$")   # 줄 끝의 표시 하나만 본다 — 앞 표시들은 각자 검사된다(반복 묶음은 이차 시간)
 
 
 def section1_provenance_failures(text: str, anchors: set) -> list[str]:

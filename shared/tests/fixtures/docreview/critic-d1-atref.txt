@@ -1,0 +1,12 @@
+```docreview-layer1
+[]
+```
+```docreview-layer2
+- ref: c2@d2
+  layer: 2
+  category: placeholder
+  anchor: "#handoff-context"
+  disposition: fix
+  summary: "다른 고침 — 리뷰어 하나가 둘째 리뷰어의 꼬리표를 흉내 낸다"
+  edit_scope: "#handoff-context"
+```
