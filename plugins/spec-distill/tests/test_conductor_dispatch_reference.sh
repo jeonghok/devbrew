@@ -30,6 +30,9 @@ done
 for lit in '계획 agent' '구현 agent 는 새로 보낸다' '커밋된 계획 경로 · 설계문서 경로' '리뷰 엔진의 문서별 상태 경로'; do
   assert_contains "$(sec '## 단계마다 새 agent')" "$lit" "단계마다 새 agent: $lit"
 done
+once '## 단계마다 새 agent' '같은 agent 를 이어 부른다(`SendMessage`)'
+once '## 단계마다 새 agent' '실행 방식 답은 계획 agent 에 돌려주지 않고 새 구현 agent 의 미리 받은 답으로 싣는다'
+once '## 단계마다 새 agent' '계획만 고치고 커밋한 뒤 다시 멈춘다 — 실행 skill 로 넘어가지 않는다'
 for lit in '판정 전체' 'AC 보고 내용 전체' '경로만으로는 부족하다' '잠긴 스위트 대조' '경합으로 보고'; do
   once '## 마지막 보고' "$lit"
 done
@@ -38,7 +41,6 @@ for lit in '### 계획 agent' '### 구현 agent' '### 이어 부르기'; do
   assert_contains "$TPL" "$lit" "틀: $lit"
 done
 assert_contains "$TPL" 'check_bundle_coverage.py --plan' "계획 틀: --plan 대조"
-assert_contains "$TPL" 'check_bundle_coverage.py' "틀: 대조 스크립트"
 assert_not_contains "$TXT" 'CLAUDE_PLUGIN_ROOT' "플러그인 루트 토큰을 쓰지 않는다(<SD> 자리표)"
 # 부재 락 — 옛 결정(실행 방식 고정 · Push 후 PR · 계획 검토 무대기)
 bad="$(printf '%s\n' "$TXT" | grep -nE 'Push 후 PR|푸시 후 PR|계획 검토는 기다리지 않|언제나 subagent|항상 subagent' || true)"
