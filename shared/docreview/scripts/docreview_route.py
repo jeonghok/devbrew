@@ -60,13 +60,14 @@ def extract_blocks(text: str, name: str):
     ms = re.findall(BLOCK_RE % re.escape(name), text, re.S)
     if not ms:
         return None, "missing"
-    out = []
+    out, broken = [], False
     for m in ms:
-        try:
-            out.append(scrub(yaml.safe_load(m)))
-        except Exception:  # yaml.YAMLError 계열 전부 — 블록 하나의 파손은 출력 전체의 파손이다
-            return None, "broken"
-    return out, None
+        if not broken:
+            try:
+                out.append(scrub(yaml.safe_load(m)))
+            except Exception:  # yaml.YAMLError 계열 전부 — 블록 하나의 파손은 출력 전체의 파손이다
+                broken = True
+    return (None, "broken") if broken else (out, None)
 
 
 def merge_list_blocks(blocks, name, ev):
@@ -78,7 +79,10 @@ def merge_list_blocks(blocks, name, ev):
       바꾸고, 같은 블록 안의 `blocks` 도 따라 바꾼다 — 질문은 자기 블록의 항목을 막는다.
     - 블록이 둘 이상이면 둘째부터 블록마다 흡수 한 건(`<name>#b<k>` → `<name>#b1`)을 센다.
     """
-    if not all(isinstance(b, list) for b in blocks):
+    not_list = False
+    for b in blocks:
+        not_list = not_list or not isinstance(b, list)
+    if not_list:
         return None, "not a list"
     merged, seen_refs, seen_items = [], set(), {}
     for k, blk in enumerate(blocks, 1):
@@ -92,15 +96,18 @@ def merge_list_blocks(blocks, name, ev):
             label = "%s#b%d:%s" % (name, k, (it.get("ref") if isinstance(it, dict) else "?"))
             if key in seen_items:
                 ev("absorbed", label, seen_items[key])
-                continue
-            seen_items[key] = label
-            if isinstance(it, dict) and local:
-                it = dict(it)
-                if it.get("ref") is not None and str(it["ref"]) in local:
-                    it["ref"] = local[str(it["ref"])]
-                if it.get("blocks") is not None:
-                    it["blocks"] = [local.get(r, r) for r in _refs(it["blocks"])]
-            merged.append(it)
+            else:
+                seen_items[key] = label
+                if isinstance(it, dict) and local:
+                    it = dict(it)
+                    if it.get("ref") is not None and str(it["ref"]) in local:
+                        it["ref"] = local[str(it["ref"])]
+                    if it.get("blocks") is not None:
+                        fixed = []
+                        for r in _refs(it["blocks"]):
+                            fixed.append(local.get(r, r))
+                        it["blocks"] = fixed
+                merged.append(it)
         for it in merged:
             if isinstance(it, dict) and it.get("ref") is not None:
                 seen_refs.add(str(it["ref"]))
@@ -805,8 +812,10 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats, advice_stats=
     if degrade.get("critic_freshness_unknown"):
         adv.append("critic 시점 판별 불가 (%s)" % degrade["critic_freshness_unknown"])
     if degrade.get("blocks_merged"):
-        adv.append("같은 이름 블록을 합쳤다 — %s" % " · ".join(
-            "%s %d개" % (k, v) for k, v in sorted(degrade["blocks_merged"].items())))
+        merged_note = []
+        for k, v in sorted(degrade["blocks_merged"].items()):
+            merged_note.append("%s %d개" % (k, v))
+        adv.append("같은 이름 블록을 합쳤다 — %s" % " · ".join(merged_note))
     if degrade.get("recritic_blocks"):
         adv.append("재비판 블록 %d개 — 마지막만 읽었다(앞 블록은 인용 예시로 본다)" % degrade["recritic_blocks"])
     out = {
