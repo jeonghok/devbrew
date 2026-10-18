@@ -71,6 +71,8 @@ CLAUDE.md 의 알맞은 기존 절 안에 한 줄씩 둔다(새 큰 절을 만�
 
 이미 플러그인 동작으로 들어가 있어 CLAUDE.md 에 다시 적지 않는 원칙: 머지 전 확인 규약 · 하위는 단일 세션과 같은 skill 흐름 · 게이트 전달은 혼자 읽혀야 · 지휘 세션이 에픽을 직접 진행(모두 `plugins/spec-distill/references/conducting.md` · `conductor-dispatch.md`). 원칙 1 의 뜻대로 그 자리가 정본이다.
 
+**두 갈래의 「다른 레포」.** CLAUDE.md · 철학 문서는 devbrew 를 개발하는 세션(메모리 없는 다른 기기 · 새 clone 포함)만 읽는다. devbrew 플러그인을 남의 레포에 설치해 쓰는 세션에서는 그 원칙이 플러그인의 동작 자리(skill · reference · 설계 틀 · 넘김 글)에 실려 있어야 지켜진다. 그래서 원칙 2~6 마다 플러그인 동작 자리를 표로 대조한다 — 이미 실려 있으면 그 파일:줄을 적고, 빈 곳은 그 파일을 잡은 에픽(또는 지휘자 수리 PR)으로 §5 넘김 행을 더한다. 이 에픽은 플러그인 동작 자리를 직접 고치지 않는다(Non-goals). 원칙 1 은 devbrew 개발 규칙이라 대조 대상이 아니다.
+
 ### §2 고르는 기준 (사용자 승인 「이 기준으로 (권장)」)
 
 - 옮긴다: 사용자가 「앞으로도 · 원칙」이라 한 것, 또는 같은 실수가 다른 레포에서도 다시 날 교훈 — 둘 다 devbrew 가 어떻게 동작하는지에 닿을 때만.
@@ -82,13 +84,13 @@ CLAUDE.md 의 알맞은 기존 절 안에 한 줄씩 둔다(새 큰 절을 만�
 
 조사 기록(지휘 세션 `~/.claude/sdd-mirror/epic-decisions/r11/docs-recon.md` 의 표)에서 R11 몫만. 처분 종류는 넷이다 — 지금 장치가 없는 개념 · 이미 바뀐 사실 · 중복 · 이력 서사.
 
-- **CLAUDE.md**: 훅 공존 줄의 signal tag 구절(`<{plugin}-signal>` 를 쓰는 곳 0) · Forbidden Patterns 머리의 「Full 카탈로그와 case study: … Structural Mechanisms 섹션」(철학 문서에 그 절 · case study 없음 — 「Anti-Pattern Anchors」로) · Polite handoff 줄을 `plugins/spec-distill/references/proceed-gate.md` 포인터와 금지 둘로 줄임(「spec-distill v0.11.0 AC19」 이력 · 옛 표현 지움) · 출처 · 실측 이력 괄호(`allowed-tools` 줄의 「2026-08-22 헤드리스 실측 5변형…」 · agent 줄의 「(`Monitor`가 … 그 실증)」 · Subagent spray 줄의 「(Opus 5 기본 시스템 프롬프트… 2026-08-22)」 · Korean-primary 줄의 「`*.ko.md` 동반 파일 모델은 폐기(…)」). Law 3 의 「인덱스를 자동 편집」 구절은 그 장치가 없으므로 §1 원칙 1 문장으로 바꿔 쓴다.
+- **CLAUDE.md**: 훅 공존 줄의 signal tag 구절(`<{plugin}-signal>` 를 쓰는 곳 0) · Forbidden Patterns 머리의 「Full 카탈로그와 case study」(철학 문서에 case study 는 없다 — 가리키는 절 이름은 철학 문서의 실제 절에 맞춘다) · Polite handoff 줄을 `plugins/spec-distill/references/proceed-gate.md` 포인터와 금지 둘로 줄임(「spec-distill v0.11.0 AC19」 이력 · 옛 표현 지움) · 출처 · 실측 이력 괄호(`allowed-tools` 줄의 「2026-08-22 헤드리스 실측 5변형…」 · agent 줄의 「(`Monitor`가 … 그 실증)」 · Subagent spray 줄의 「(Opus 5 기본 시스템 프롬프트… 2026-08-22)」 · Korean-primary 줄의 「`*.ko.md` 동반 파일 모델은 폐기(…)」). Law 3 의 「인덱스를 자동 편집」 구절은 그 장치가 없으므로 §1 원칙 1 문장으로 바꿔 쓴다.
 - **철학 문서**: Three Laws 절(CLAUDE.md 와 같은 글 — 포인터 한 줄로) · AP18 · AP19 스텁(인용 0, CLAUDE.md 와 같은 글) · P8 예시의 redirect(v2.7.0 에서 지워짐 — 현재 floor 예시로) · P11 의 「다중 모델은 opt-in 게이트」(지금 codex 는 감지되면 늘 돌고 끄는 길은 kill switch) · P11 · P8 의 사례 이력 문장 · P13 의 signal tag · P14 끝의 「README 3곳 인용의 anchor target」 문장 · AP 앵커 도입과 P5 의 「Filesystem-as-Memory」 절 언급(CLAUDE.md 에 없음 — §런타임 상태 & 훅으로).
-- **spec-distill README**: `**vX.Y.Z**` 이력 문단 11개(CHANGELOG 에 있음) · 「문서 리뷰 엔진 기반(v0.56.0) — 아직 쓰는 쪽 없이…」 · 「엔진 결함 일곱(v0.58.0)…」 · 버전 꼬리표 괄호 · 중복(P14 네 번 · AP2 두 번 · Law 3 / P5) · 죽은 개념 `needs_interview` · 틀린 라벨(P11 에 steelman, P3 에 graceful degradation) · External source absorption 절의 출처 이력(사용자 판단 대신 지휘자 판정 — 출처는 CHANGELOG · PR 몫) · Hooks Installed 의 5.x 이력.
+- **spec-distill README**: 줄머리 `**vX.Y.Z**` 이력 문단(`test_readme_sync.sh` 와 같은 패턴으로 지금 9줄)과 줄머리가 아닌 자리의 버전 이력 서사(CHANGELOG 에 있음) · 「문서 리뷰 엔진 기반(v0.56.0) — 아직 쓰는 쪽 없이…」 · 「엔진 결함 일곱(v0.58.0)…」 · 버전 꼬리표 괄호 · 중복(P14 네 번 · AP2 두 번 · Law 3 / P5) · 죽은 개념 `needs_interview` · 틀린 라벨(P11 에 steelman, P3 에 graceful degradation) · External source absorption 절의 출처 이력(사용자 판단 대신 지휘자 판정 — 출처는 CHANGELOG · PR 몫) · Hooks Installed 의 5.x 이력.
 - **quality-gates · project-init · plugin-audit README**: R2a 가 바꾸는 동작 밖의 줄만(R2a 설계가 넘긴 몫) — qg 의 「dispatch builder」 · 없는 `codex-reviewer` agent 설명 · 「문서 리뷰 엔진 기반(v7.4.0)」 · 실측 이력 괄호 · v10.0.0 훅 삭제 이력 · `MAX_TOTAL_ITERATIONS` 이력, project-init 의 버전 꼬리표 · 「CLAUDE.md 는 짧은 anchor 만」(지금 생성물과 다름), plugin-audit 의 「즉시 제거 — 근거는 …」 정당화 서사 · 샌드박스 별칭 이력 · severity 통일 이력. 구성표 · 상한 수치 · 의도 출처 · artifact-critique · persona 모델 고정 같은 R2a 몫 줄은 손대지 않는다.
 - 남긴다(지휘자 판정): 은퇴한 kill switch 공시 표(CLAUDE.md :37 요건) · `integrity` 필드 문장(쓰는 곳 0 이지만 규칙 선택지) · SessionStart 훅 규칙(앞으로의 훅에 걸림) · qg README 의 `baseline-cache/` 안내(남은 폴더가 있는 사용자 안내).
 
-크기 목표: 고친 문서마다 정리 전보다 작다. CLAUDE.md 는 원칙 여섯을 넣고도 지금(약 15.2KB) 이하.
+크기 목표: 정리 대상 문서(CLAUDE.md · 철학 문서 · 플러그인 README 넷)마다 정리 전보다 작다. `docs/plugin-authoring.md`(§4 더하기) · CHANGELOG · 테스트 파일은 대상이 아니다. CLAUDE.md 는 원칙 여섯을 넣고도 지금(약 15.2KB) 이하 — 넘치면 먼저 원칙 줄을 철학 문서를 가리키는 짧은 꼴로 줄이고, §3 목록 밖의 줄과 §5 넘김 조항(R9 · R8 몫)은 줄이지 않는다.
 
 ### §4 개발 규칙 — `docs/plugin-authoring.md`
 
@@ -137,10 +139,11 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 ## Acceptance Criteria
 
 - AC1 CLAUDE.md 에 §1 원칙 여섯이 각각 한 줄로 있고, 각 줄이 철학 문서의 해당 원칙을 가리킨다. 새 큰 절이 없다.
+- AC1a 원칙 2~6 마다 플러그인 동작 자리 대조표(실린 파일:줄 또는 §5 넘김 행)가 이 설계문서 `## 미룸` 앞 절에 있다.
 - AC2 철학 문서가 원칙 여섯의 이유 · 배경을 담고, 새 P# 가 있으면 기존 P# 에 흡수하지 못한 이유가 같은 절에 한 문장으로 있다.
 - AC3 §3 의 CLAUDE.md · 철학 문서 항목이 지워지거나 고쳐졌다(목록 항목마다 대조).
 - AC4 §3 의 플러그인 README 넷 항목이 지워지거나 고쳐졌고, R2a 몫 줄은 그대로다.
-- AC5 고친 문서마다 정리 전보다 작고, CLAUDE.md 는 정리 전 크기 이하다 — PR 본문에 파일별 전후 크기.
+- AC5 정리 대상 문서(CLAUDE.md · 철학 문서 · 플러그인 README 넷)마다 정리 전보다 작고, CLAUDE.md 는 정리 전 크기 이하다 — PR 본문에 파일별 전후 크기.
 - AC6 `docs/plugin-authoring.md` 에 §4 다섯 줄이 있다.
 - AC7 §5 넘김이 이 설계 `## 미룸` 표에 받는 곳과 함께 있다.
 - AC8 헌장 · README 를 읽는 락이 GREEN 이고, 뜻을 바꾼 락은 변이로 RED 를 보인다.
@@ -154,7 +157,7 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 - `plugins/quality-gates/README.md` · `.claude-plugin/plugin.json` · `CHANGELOG.md`
 - `plugins/project-init/README.md` · `.claude-plugin/plugin.json` · `CHANGELOG.md`
 - `plugins/plugin-audit/README.md` · `.claude-plugin/plugin.json` · `CHANGELOG.md`
-- `plugins/spec-distill/tests/test_readme_sync.sh`(이력 문단 단언) · 그 밖에 지운 문구를 핀한 락이 있으면 그 락
+- `plugins/spec-distill/tests/test_readme_sync.sh`(이력 문단 단언 — 이력 면제를 없애 모든 줄을 살아 있는 줄로 본다. 이력 문단이 다시 생기는지 재는 새 검사는 더하지 않는다(AC10)) · 그 밖에 지운 문구를 핀한 락이 있으면 그 락
 - 이 설계문서(`## 미룸` · 이후 `## 판정` · `## 구현 대조`)
 
 ## Verification Plan
@@ -163,7 +166,7 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 - 락: `plugins/plugin-audit/tests/test_check_shape_completeness.py` · `plugins/quality-gates/tests/test_law2_prose.sh` · `plugins/quality-gates/tests/test_governance_no_capability_caps.sh` · `plugins/spec-distill/tests/test_epic_conductor_skill.sh` · `shared/tests/test_charter_citations.sh` · `plugins/quality-gates/tests/test_e2e_docs.sh` · `plugins/spec-distill/tests/test_rereview_cap_consistency.sh` · `shared/tests/test_invocation_surface.sh` · `plugins/quality-gates/tests/test_publish_surface_removed.sh` · `plugins/spec-distill/tests/test_readme_sync.sh` · `shared/tests/test_changelog_integrity.sh` · README 를 읽는 qg 테스트.
 - 전체 스위트(로드맵 frontmatter `test_command`)를 기준선과 실패 이름으로 대조.
 - 크기: 고친 파일마다 `wc -c` 전후.
-- 끝에서 끝: 메모리를 쓰지 않는 버릴 레포 세션에서 CLAUDE.md · 철학 문서만으로 원칙 여섯을 찾아 따라갈 수 있는지 읽어 본다(사용자 성공 장면 「내가 말한게 다른 레포에서 사용해도 지켜지면」 — devbrew 개발 규칙은 devbrew 에서, 플러그인 동작 원칙은 넘김을 받은 에픽 · 지휘자 수리가 그 동작 자리에 넣었는지 함께 본다).
+- 끝에서 끝(사용자 성공 장면 「내가 말한게 다른 레포에서 사용해도 지켜지면」): (가) devbrew 개발 — 메모리를 쓰지 않는 devbrew 새 clone 세션에서 그 clone 의 CLAUDE.md · 철학 문서만으로 원칙 여섯을 찾아 따라갈 수 있는지 읽어 본다. (나) 플러그인 사용 — AC1a 대조표의 자리마다 원칙이 실렸는지(또는 넘김이 받는 에픽에 있는지) 본다.
 
 ## Rejected Alternatives
 
@@ -221,6 +224,8 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 | §6 머지 뒤 메모리 정리 | 레포 밖 · 머지 뒤에만 | 지휘 세션 |
 
 ## 지휘 기록
+
+- 설계문서 점검(builder check) 질문 셋은 대화 · 레포에서 답이 나오거나 계획이 정해도 되는 것이라 지휘 세션이 정했다(지휘자 판정): ① 「다른 레포」는 두 갈래 모두 — §1 두 갈래 문단 · AC1a ② 크기 규칙은 정리 대상 문서에만, 넘치면 원칙 줄을 짧은 꼴로 ③ `test_readme_sync.sh` 는 이력 면제만 없앤다(새 검사 없음). 사실 고침: 철학 문서에 Structural Mechanisms 절은 있다 — case study 만 없다.
 
 - 흐름: 설계 흐름(brainstorming → spec-review → 계획 → 구현). brainstorming 은 superpowers 7.0.0 — 설계문서 점검(builder check) 뒤 문서 승인 자리에서 spec-review 를 부른다.
 
