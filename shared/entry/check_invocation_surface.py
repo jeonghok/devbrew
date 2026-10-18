@@ -65,9 +65,11 @@ _LEAD = r"(?:^|(?<=[\s`'\"(「]))"
 _TRAIL = r"(?=$|[\s`'\"@)」])"
 FULL_CALL_RE = re.compile(_LEAD + r"/([a-z0-9][a-z0-9-]*):([a-z0-9][a-z0-9-]*)" + _TRAIL)
 OLD_NAME_RE = re.compile(
-    r"conducting-interview|framing-requests|reviewing-spec|auditing-plugins"
-    r"|commands/(?:interview|request-framing|plugin-audit|project-init)\.md")
-OLD_CALL_RE = re.compile(_LEAD + r"/interview" + _TRAIL)
+    r"conducting-interview|framing-requests|reviewing-spec|auditing-plugins|critiquing-artifacts"
+    r"|commands/(?:interview|request-framing|plugin-audit|project-init|qg)\.md")
+# 옛 호출은 뒤에 이름 글자 · 경로 글자가 이어지지 않으면 잡는다(조사 · 구두점이 붙은 꼴 포함) — _TRAIL 은 G 축과 함께 쓰므로 넓히지 않는다
+_OLD_TRAIL = r"(?![-A-Za-z0-9_/])"
+OLD_CALL_RE = re.compile(_LEAD + r"/(?:interview|qg)" + _OLD_TRAIL)
 MACHINE_DIRS = frozenset({"skills", "hooks", "scripts", "templates", "references", "agents"})
 LIVE_TOP = frozenset({"CLAUDE.md", "README.md", "docs/plugin-authoring.md"})
 LIVE_PREFIX = ("plugins/", "shared/", "docs/philosophy/")
@@ -296,7 +298,7 @@ class Scan:
                 for m in OLD_NAME_RE.finditer(ln):
                     self.L.add("I", rel, n, "옛 이름 '%s'" % m.group(0))
                 for _m in OLD_CALL_RE.finditer(ln):
-                    self.L.add("I", rel, n, "옛 호출 토큰 '/interview'")
+                    self.L.add("I", rel, n, "옛 호출 토큰 '%s'" % _m.group(0).strip())
         for p, s in ENTRY_SKILLS:
             v = self.skills.get((p, s))
             if v is None or first(v[2], "name") != s:
