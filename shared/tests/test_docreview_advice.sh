@@ -67,4 +67,6 @@ case_advice_atomic_write_keeps_link_and_mode
 case_advice_sink_after_headerless_defer_row
 case_advice_count_line_nested_log
 case_advice_render_where_label
+# AC15 — 박제 행도 한 줄 문법.
+case_AC15_sink_row_one_line_escaped
 finish

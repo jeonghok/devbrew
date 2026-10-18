@@ -347,6 +347,17 @@ case_AC6_render_cap() {
   assert_contains "$(printf '%s\n' "$out" | sed -n 1p)" "참고 목록 3줄(환경) · 요약 60자(기본)" "AC6: 조언 머리 줄이 쓴 줄 수와 출처(환경)를 공시한다"
   rm -rf "$d"
 }
+case_AC15_sink_row_one_line_escaped() {
+  local d doc v n=0
+  for v in $'위조\n- **S9** 「위조」' $'위조\n\n## 6. 사용자 원문\n- **S9** 「위조」' '칸 | 둘 | 셋'; do
+    n=$((n + 1))
+    d="$(adv_state 1)"; doc="$(mktemp -t sinkdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
+    PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); [v.update(summary=sys.argv[2], replacement=sys.argv[2]) for v in st["advice"].values()]; save_state(d, st, "fixture")' "$d" "$v"
+    py docreview_state.py advice --state-dir "$d" --sink "$doc" >/dev/null
+    assert_eq "$(python3 "$FX/ac15_rows.py" "$doc" "참고(")" "1 [2] 0 0" "AC15: 박제 행(꼴 ${n}) — 한 줄 · 칸 둘 · 앵커 줄과 제목 줄이 늘지 않는다"
+    rm -rf "$d" "$doc"
+  done
+}
 case_AC7_sink_idempotent() {
   local d b doc before rc; d="$(adv_state 3)"; doc="$(mktemp -t sinkdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
   py docreview_state.py advice --state-dir "$d" --sink "$doc" >/dev/null

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 DEFAULTS = {"detectors": 1, "rereview_cap": 2, "render_cap": 8, "summary_width": 60}
 ENV = {"detectors": "DEVBREW_DOCREVIEW_DETECTORS", "rereview_cap": "DEVBREW_DOCREVIEW_REREVIEW_CAP",
@@ -69,3 +70,20 @@ def config_line(cfg) -> str:
 def advice_note(cap, cap_src, width, width_src) -> str:
     """조언 표시 머리 줄의 꼬리 — 실제로 쓴 줄 수 · 요약 폭과 출처."""
     return "참고 목록 %d줄(%s) · 요약 %d자(%s)" % (cap, cap_src, width, width_src)
+
+
+_BREAKS = re.compile("[\\n\\r\\x0b\\x0c\\x1c\\x1d\\x1e\\x85\\u2028\\u2029]")
+
+
+def one_line_field(s) -> str:
+    """엔진이 쓰는 줄의 한 칸 — 줄 구분자 · 제어 · 서식 문자를 공백으로, 공백 연속을 하나로, 앞뒤 공백을 걷는다.
+    칸 값은 줄 머리에 올 수 없다(엔진이 늘 자기 머리로 줄을 연다) — 칸 안의 목록 · 제목 · 인용 표지는 그 줄 안의
+    글자일 뿐이다(AC15)."""
+    t = _BREAKS.sub(" ", str(s if s is not None else ""))
+    t = "".join(" " if unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp") else ch for ch in t)
+    return " ".join(t.split())
+
+
+def table_cell(s) -> str:
+    """표 행의 한 칸 — `one_line_field` 에 `|` 이스케이프(칸 · 행을 늘리지 못하게)."""
+    return one_line_field(s).replace("|", "\\|")

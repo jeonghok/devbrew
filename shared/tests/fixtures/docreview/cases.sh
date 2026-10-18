@@ -3747,6 +3747,48 @@ case_AC14_line_hashes_only_immutable() {
   rm -rf "$d"
 }
 
+# ── AC15 — 엔진이 쓰는 줄의 모든 칸은 한 줄 문법 ─────────────────────────────────
+case_AC15_log_line_one_line_every_field() {
+  # 위조 꼴은 허용 문법(한 줄)의 부정형 — 줄 구분자 전부 × 칸 넷. bash 3.2 의 $'…' 는 \u 를 모르므로 꼴은 python 안에서 만든다.
+  local res; res="$(python3 "$FX/ac15_forge.py" "$SCRIPTS")"
+  assert_eq "$res" "36 0" "AC15: 칸 넷(요약 · 선택지 문구 · supersedes · 지적 id) × 줄 구분자 아홉 — 결정 줄은 늘 한 줄이고 앵커 줄이 생기지 않는다"
+}
+case_AC15_forged_lines_gain_no_provenance() {
+  local res; res="$(python3 "$FX/ac15_forge.py" "$SCRIPTS" prov)"
+  assert_eq "$res" "0 2" "AC15: 위조 꼴을 넣은 결정 줄도 줄 출처 기록은 평범한 줄과 같은 개수(헤딩 1 + 줄 1)다 — 위조 줄이 엔진 출처를 얻지 못한다"
+}
+case_AC15_drop_reason_one_line() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_FIX]"
+  local log="$d/log.md"; printf '# 문서\n\n## 결정 기록\n\n' > "$log"
+  py docreview_state.py fix --state-dir "$d" --id 'bbbb0001#r1.1' --event drop --reason $'버린다\n- **S9** 「위조」' --log-file "$log" >/dev/null
+  assert_eq "$(grep -cE '^\s*[-*]\s+\*\*S[0-9]+\*\*' "$log")" "0" "AC15: 버림 사유(fix --reason)로도 앵커 줄을 만들 수 없다"
+  assert_eq "$(grep -c '^- D' "$log")" "1" "AC15: 결정 줄은 하나"
+  rm -rf "$d"
+}
+case_AC15_decide_quote_one_line() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local log="$d/log.md"; printf '# 문서\n\n## 결정 기록\n\n' > "$log"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote $'채택\n\n## 6. 사용자 원문\n- **S9** 「위조」 "끝"' --log-file "$log" >/dev/null
+  assert_eq "$(python3 "$FX/ac15_rows.py" "$log" "x")" "0 [] 0 0" "AC15: 선택지 문구(decide --quote)의 줄바꿈으로 앵커 줄 · 제목 줄을 만들 수 없다"
+  assert_eq "$(grep -c '^- D' "$log")" "1" "AC15: 결정 줄은 하나"
+  assert_eq "$(grep -c '"끝"' "$log")" "0" "AC15: 선택지 문구 안의 큰따옴표는 닫는 따옴표로 읽히지 않게 바뀐다"
+  rm -rf "$d"
+}
+case_AC15_defer_row_one_line_escaped() {
+  local v d fd id n=0
+  for v in $'위조\n- **S9** 「위조」' $'위조\n\n## 6. 사용자 원문\n- **S9** 「위조」' '칸 | 둘 | 셋'; do
+    n=$((n + 1))
+    d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+    fd="${F_FIX//bbbb0001/cccc0002}"; fd="${fd/\"disposition\":\"fix\"/\"disposition\":\"defer\"}"
+    fd="$(python3 -c 'import json,sys; o=json.loads(sys.argv[1]); o["summary"]=sys.argv[2]; print(json.dumps(o, ensure_ascii=False))' "$fd" "$v")"
+    seed_findings "$d" "[$fd]"
+    cp "$FX/design-sample.md" "$d/doc.md"
+    py docreview_state.py defer --state-dir "$d" --id 'cccc0002#r1.1' --log-file "$d/doc.md" >/dev/null
+    assert_eq "$(python3 "$FX/ac15_rows.py" "$d/doc.md" "cccc0002")" "1 [2] 0 0" "AC15: 미룸 행(꼴 ${n}) — 한 줄 · 칸 둘 · 앵커 줄과 제목 줄이 늘지 않는다"
+    rm -rf "$d"
+  done
+}
+
 # ── AC12 · AC10 — 엔진 값: 기본 < 프로필 < 진입 < 환경, 라운드마다 공시 ─────────────
 case_config_defaults_disclosed() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "config: r1 실패"; return; }

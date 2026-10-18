@@ -137,4 +137,10 @@ case_AC14_no_abbrev_flags
 case_AC14_append_only_passes
 case_AC14_append_only_plus_edit
 case_AC14_line_hashes_only_immutable
+# AC15 — 엔진이 쓰는 줄의 모든 칸은 한 줄 문법.
+case_AC15_log_line_one_line_every_field
+case_AC15_forged_lines_gain_no_provenance
+case_AC15_drop_reason_one_line
+case_AC15_decide_quote_one_line
+case_AC15_defer_row_one_line_escaped
 finish

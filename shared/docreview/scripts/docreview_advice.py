@@ -175,12 +175,13 @@ def render_lines(items, cap, where, width=SUMMARY_WIDTH, note="") -> list:
 
 
 def sink_row(it) -> str:
-    """박제처 절(`defer_target`)의 표 행 한 줄 — 요약(+ 대체안)을 접고 `|` 를 이스케이프한다."""
-    text = _one_line(it.get("summary"))
+    """박제처 절(`defer_target`)의 표 행 한 줄 — 칸마다 한 줄로 접고 `|` 를 이스케이프한다(AC15)."""
+    from docreview_config import table_cell   # 표 행을 쓰는 쪽(원장)에만 필요 — 계수 줄만 읽는 사본은 이 모듈을 안 부른다
+    text = table_cell(_safe(it.get("summary") or ""))
     if it.get("replacement"):
-        text += " — 고치면: " + _one_line(it["replacement"])
-    return "| %s | 참고(%s) %s — %s |" % (_safe(it.get("id")), _safe(it.get("category")), _safe(it.get("anchor")),
-                                        text.replace("|", "\\|"))
+        text += " — 고치면: " + table_cell(_safe(it["replacement"]))
+    return "| %s | 참고(%s) %s — %s |" % (table_cell(_safe(it.get("id"))), table_cell(_safe(it.get("category"))),
+                                        table_cell(_safe(it.get("anchor"))), text)
 
 
 def ends_with_table(body) -> bool:

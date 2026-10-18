@@ -1162,11 +1162,13 @@ def engine_append(st, path, heading, line, own=False) -> None:
 
 
 def _log_line(entry, f) -> str:
-    s = "- %s · r%d · %s · %s · \"%s\"" % (entry["decision_id"], entry["round"], entry["choice"],
-                                           ", ".join(entry["finding_ids"]), entry["quote"])
+    o = _cfg.one_line_field
+    s = "- %s · r%d · %s · %s · \"%s\"" % (o(entry["decision_id"]), int(entry["round"]), o(entry["choice"]),
+                                           ", ".join(o(x) for x in entry["finding_ids"]),
+                                           o(entry["quote"]).replace('"', "\u201d"))
     if entry.get("supersedes"):
-        s += " · supersedes %s" % entry["supersedes"]
-    return s + " — " + (f.get("summary") or "")
+        s += " · supersedes %s" % o(entry["supersedes"])
+    return s + " — " + o(f.get("summary") or "")
 
 
 def cmd_record_findings(a) -> int:
@@ -1449,7 +1451,7 @@ def cmd_defer(a) -> int:
     t = prof["defer_target"]
     if t.get("kind") != "doc_section":
         return fail("profile_has_no_defer_target")
-    engine_append(st, a.log_file, t["heading"], "| %s | %s |" % (a.id, f.get("summary") or ""))
+    engine_append(st, a.log_file, t["heading"], "| %s | %s |" % (_cfg.table_cell(a.id), _cfg.table_cell(f.get("summary") or "")))
     f["deferred"] = True
     save_state(a.state_dir, st, "defer %s appended" % a.id)
     _emit({"ok": True})
