@@ -544,7 +544,7 @@ def check_impl(spec_text: str, report_text: str, only=None, epic_ids=None, recei
     judged = [a for a in acs if a in report]
     if epic_ids is not None:
         no_receiver = [item for item, _why, recv in deferred if not receiver_ok(recv, epic_ids)]
-        rule = "로드맵의 에픽 또는 PR 번호(#숫자)"
+        rule = "로드맵의 에픽 또는 PR 번호(#숫자) — 작업 트리의 로드맵으로 쟀다"
     else:
         no_receiver = [item for item, _why, recv in deferred if recv == "없음"]
         rule = "로드맵 없음 — 「없음」만 받는 곳 없음으로 센다"

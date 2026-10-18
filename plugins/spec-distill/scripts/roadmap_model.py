@@ -500,6 +500,13 @@ def impl_done(doc_text: str, plan_rel: str) -> bool:
 # 에픽 설계문서(또는 산출물)의 절 — 지휘자가 쓰고 상태 계산 · 화면이 읽는다.
 RULINGS_HEADING = "## 판정"
 RECORD_HEADING = "## 지휘 기록"
+# 기본 브랜치 참조 — 상태 계산 · 화면 · 스위트 대조가 이 한 곳을 쓴다(계획 1 미룸: 두 스크립트에 겹쳤다).
+DEFAULT_REF = "refs/remotes/origin/HEAD"
+NO_DEFAULT = ("기본 브랜치를 알 수 없다 — origin/HEAD 가 없다. `git remote set-head origin --auto` 로 만든 뒤 "
+              "다시 계산한다")
+# `## 지휘 기록` 의 spec 승인 줄 — 지휘자가 `- spec 승인 · <YYYY-MM-DD> · 「<고른 선택지 원문>」` 로 쓴다.
+APPROVAL_PREFIX = "- spec 승인 · "
+APPROVAL_DENY = ("승인 대기", "승인 전", "승인 거절", "승인하지 않", "승인 안")
 CONFIRM_RE = re.compile(r"- 넘김 확인 · ([A-Z][0-9]+[a-z]?) · ([0-9a-f]{8}) · (\S.*)")
 RECEIVER_EPIC_RE = re.compile(r"[A-Z]\d+[a-z]?")
 RECEIVER_PR_RE = re.compile(r"#\d+")
@@ -532,6 +539,24 @@ def section_lines(doc_text: str, heading: str):
     if not found:
         return None
     return [l for l in body if l.strip()]
+
+
+def approval_date(doc_text: str):
+    """`## 지휘 기록` 의 spec 승인 날짜 가운데 가장 늦은 것. 절이 없거나 승인 줄이 없으면 None.
+    정해진 꼴 밖의 손으로 쓴 줄도 읽는다 — 날짜와 「승인」 이 함께 있고 부정 구절(APPROVAL_DENY)이 없는 `- ` 줄.
+    머리가 둘이면 FormatError(section_lines) — 깨진 문서를 「승인 없음」 으로 떨어뜨리지 않는다."""
+    lines = section_lines(doc_text, RECORD_HEADING)
+    dates = []
+    for line in lines or []:
+        if not line.startswith("- "):
+            continue
+        canonical = line.startswith(APPROVAL_PREFIX)
+        if not canonical and ("승인" not in line or any(w in line for w in APPROVAL_DENY)):
+            continue
+        found = DATE_RE.search(line[len(APPROVAL_PREFIX):] if canonical else line)
+        if found:
+            dates.append(found.group(0))
+    return max(dates) if dates else None
 
 
 def rulings_archived(doc_text: str):

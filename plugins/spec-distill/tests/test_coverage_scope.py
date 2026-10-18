@@ -97,12 +97,12 @@ class Render(unittest.TestCase):
     def test_scoped_and_rule_markers_in_every_line(self):
         r = cbc._impl_status(cbc.check_impl(SPEC, REPORT_DROP4, only=["AC1", "AC2", "AC3"], epic_ids={"R9"}))
         self.assertEqual(cbc.render_impl(r), "구현 대조: 경고 없음 (AC 3개 · 구현됨 2개 · 미룸 1개 · --acs 로 고른 것 · "
-                                            "뺀 AC 1개) (받는 곳 규칙: 로드맵의 에픽 또는 PR 번호(#숫자))")
+                                            "뺀 AC 1개) (받는 곳 규칙: 로드맵의 에픽 또는 PR 번호(#숫자) — 작업 트리의 로드맵으로 쟀다)")
         r = cbc._impl_status(cbc.check_impl(SPEC, REPORT_DROP4, only=["AC3", "AC4"], epic_ids={"R5"}))
         lines = cbc.render_impl(r).splitlines()
         self.assertEqual(lines[0], "구현 대조: 경고 3개 — 보고에 없는 AC 0개 · 미룸 표에 없는 미룸/빠짐 1개 · "
                                    "받는 곳 없는 미룸 1개 · 받는 곳 검사 불가 0개 · 빠짐 1개 (--acs 로 고른 것 · 뺀 AC 2개)")
-        self.assertEqual(lines[-1], "(받는 곳 규칙: 로드맵의 에픽 또는 PR 번호(#숫자))")
+        self.assertEqual(lines[-1], "(받는 곳 규칙: 로드맵의 에픽 또는 PR 번호(#숫자) — 작업 트리의 로드맵으로 쟀다)")
         r = cbc.check_plan(SPEC, PLAN, only=["AC1", "AC2"])
         self.assertEqual(cbc.render_plan(r), "계획 대조: 계획에 없는 AC 없음 (AC 2개 · --acs 로 고른 것 · 뺀 AC 2개)")
 
