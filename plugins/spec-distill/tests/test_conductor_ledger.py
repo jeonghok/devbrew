@@ -875,8 +875,6 @@ class PrHandoffEdges(Repo):
         self.assertIn("브랜치 없음", out)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class ReviewPack(Repo):
@@ -933,7 +931,7 @@ class ReviewPack(Repo):
         real = L.git
 
         def broken(cwd, *args):
-            if args and args[0] == "diff":
+            if "diff" in args:
                 return 128, "", "boom"
             return real(cwd, *args)
         L.git = broken
@@ -953,6 +951,42 @@ class ReviewPack(Repo):
                            "--out", str(self.t / "pack4"))
         self.assertEqual(rc, 2, out)
 
+    def test_pr_limit_and_skipped_branch(self):
+        self.branch("feature/a1", "x.txt", "a1\n")  # feature/a2 는 만들지 않는다
+        fake = self.t / "bin"
+        fake.mkdir()
+        gh = fake / "gh"
+        items = ",".join('{"number":%d,"state":"MERGED","body":""}' % i for i in range(20))
+        gh.write_text("#!/bin/sh\necho '[%s]'\n" % items, encoding="utf-8")
+        gh.chmod(0o755)
+        out_dir = self.t / "pack5"
+        old = os.environ.get("PATH", "")
+        os.environ["PATH"] = str(fake) + os.pathsep + old
+        try:
+            rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1",
+                               "--out", str(out_dir))
+        finally:
+            os.environ["PATH"] = old
+        self.assertEqual(rc, 0, out)
+        self.assertIn("한도에 닿았다", (out_dir / "handoffs.md").read_text(encoding="utf-8"))
+        self.assertIn("경고: feature/a1 PR 목록이 20개 한도에 닿았다", out)
+        c = (out_dir / "conflicts.txt").read_text(encoding="utf-8")
+        self.assertIn("A2(feature/a2): 브랜치를 찾지 못했다", c)
+        self.assertNotEqual(c.splitlines()[0], "충돌 없음")
+        self.assertIn("A2(feature/a2): 브랜치를 찾지 못했다", (out_dir / "README.txt").read_text(encoding="utf-8"))
+
+    def test_gh_missing_reason_is_warned_and_bad_epic(self):
+        self.branch("feature/a1", "x.txt", "a1\n")
+        old = os.environ.get("PATH", "")
+        os.environ["PATH"] = str(self.t)
+        try:
+            rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1",
+                               "--out", str(self.t / "pack6"))
+            self.assertIn("경고: PR 인계를 읽지 못했다", out)
+            self.assertEqual(self.cli("review-pack", "--roadmap", RM, "--epic", "../x", "--branch", "feature/a1")[0], 2)
+        finally:
+            os.environ["PATH"] = old
+
     def test_worktree_path(self):
         rc, out = self.cli("worktree-path", "--name", "a1")
         self.assertEqual(rc, 0)
@@ -960,3 +994,7 @@ class ReviewPack(Repo):
         self.assertTrue(out.strip().startswith(str(self.w.resolve())), out)
         self.assertEqual(self.cli("worktree-path", "--name", "../x")[0], 2)
         self.assertEqual(self.cli("worktree-path", "--name", "..")[0], 2)
+
+
+if __name__ == "__main__":
+    unittest.main()

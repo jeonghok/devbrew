@@ -530,7 +530,7 @@ def _roadmap_blocks(root, roadmap: str) -> list:
 
 
 def _pack_diff(root, tip: str, warns: list, label: str) -> str:
-    rc, d, err = git(root, "diff", "%s...%s" % (DEFAULT_REF, tip))
+    rc, d, err = git(root, "-c", "core.quotePath=false", "diff", "%s...%s" % (DEFAULT_REF, tip))
     if rc:
         warns.append("%s diff 를 만들지 못했다 — %s" % (label, err[-160:]))
         return "diff 를 만들지 못했다 — %s\n" % err[-160:]
@@ -928,6 +928,8 @@ def c_audit(root, a) -> int:
 
 
 def c_review_pack(root, a) -> int:
+    if not a.epic or not set(a.epic) <= NAME_CHARS or a.epic in (".", ".."):
+        raise Fail(2, "에픽 이름은 영숫자 · . · _ · - 만 쓴다: %r" % a.epic)
     blocks = _roadmap_blocks(root, a.roadmap)
     tip = _tip(root, a.branch)
     if tip is None:
@@ -940,7 +942,7 @@ def c_review_pack(root, a) -> int:
         raise Fail(2, "이미 있는 폴더다 — 새 폴더를 쓴다: %s" % out)
     except OSError as exc:
         raise Fail(3, "묶음 폴더를 만들지 못했다: %s (%s)" % (out, type(exc).__name__))
-    files, conflicts, warns = [], [], []
+    files, conflicts, warns, skipped = [], [], [], []
 
     def put(name, text):
         write_atomic(out / name, text)
@@ -948,8 +950,12 @@ def c_review_pack(root, a) -> int:
     put("pr.diff", _pack_diff(root, tip, warns, "pr.diff"))
     for b in blocks:
         for br in b.get("branches") or []:
-            other = _tip(root, br) if br != a.branch else None
+            if br == a.branch:
+                continue
+            other = _tip(root, br)
             if other is None:
+                skipped.append("%s(%s): 브랜치를 찾지 못했다(아직 안 만들었거나 받지 않음) — 충돌 미리 보기에서 빠짐"
+                               % (b["id"], br))
                 continue
             rc = git(root, "merge-base", "--is-ancestor", other, DEFAULT_REF)[0]
             if rc == 0:
@@ -958,22 +964,34 @@ def c_review_pack(root, a) -> int:
                 warns.append("%s(%s) 가 기본 브랜치에 들어갔는지 읽지 못했다 — 열린 것으로 다룬다" % (b["id"], br))
             name = "open-%s-%s.diff" % (b["id"], br.replace("/", "_"))
             put(name, _pack_diff(root, other, warns, name))
-            rc, mt, err = git(root, "merge-tree", "--write-tree", "--name-only", tip, other)
+            rc, mt, err = git(root, "-c", "core.quotePath=false", "merge-tree", "--write-tree", "--name-only", tip, other)
             if rc == 1:
                 names = []
                 for n in mt.splitlines()[1:]:
                     if not n.strip():
                         break  # 첫 빈 줄 뒤는 안내 글이다
                     names.append(n.strip())
-                conflicts.append("%s(%s): %s" % (b["id"], br, " · ".join(names)))
+                if names:
+                    conflicts.append("%s(%s): %s" % (b["id"], br, " · ".join(names)))
+                else:
+                    conflicts.append("%s(%s): 미리 보기 실패 — 충돌 파일 이름을 읽지 못했다" % (b["id"], br))
+                    warns.append("%s(%s) 충돌 파일 이름을 읽지 못했다" % (b["id"], br))
             elif rc != 0:
                 conflicts.append("%s(%s): 미리 보기 실패 — %s" % (b["id"], br, err[-160:]))
                 warns.append("%s(%s) 충돌 미리 보기를 만들지 못했다" % (b["id"], br))
-    put("conflicts.txt", ("\n".join(conflicts) or "충돌 없음") + "\n")
+    warns.extend(skipped)
+    body = list(conflicts) + skipped
+    if not conflicts:
+        body.insert(0, "충돌 없음(미리 본 브랜치만)" if skipped else "충돌 없음")
+    put("conflicts.txt", "\n".join(body) + "\n")
     try:
         lines = []
         for b in blocks:
-            for br, items, _hit in _prs(root, b):
+            for br, items, hit in _prs(root, b):
+                if hit:
+                    note = "%s PR 목록이 %d개 한도에 닿았다 — 더 있을 수 있다" % (br, PR_LIMIT)
+                    lines += ["(" + note + ")", ""]
+                    warns.append(note)
                 for it in items:
                     sec = handoff_section(str(it.get("body") or ""))
                     if sec:
@@ -981,13 +999,14 @@ def c_review_pack(root, a) -> int:
         handoffs = "\n".join(lines) or "앞선 인계 절 없음"
     except Fail as exc:
         handoffs = "(%s)" % exc
+        warns.append(str(exc))
     put("handoffs.md", handoffs + "\n")
     readme = ["이 폴더는 통합 리뷰 묶음이다 — %s 의 %s" % (a.epic, a.branch),
               "합친 사본: %s" % (a.merged or "(넘기지 않았다)"),
               "pr.diff — 기본 브랜치에서 갈라진 뒤 이 브랜치의 diff",
               "open-<에픽>-<브랜치>.diff — 아직 기본 브랜치에 안 들어간 다른 에픽 브랜치의 diff",
               "conflicts.txt — 이 브랜치와 열린 다른 브랜치를 합칠 때 충돌할 파일(git merge-tree)",
-              "handoffs.md — 앞선 PR 들의 `## 통합 리뷰 인계` 절"]
+              "handoffs.md — 앞선 PR 들의 `## 통합 리뷰 인계` 절"] + skipped
     put("README.txt", "\n".join(readme) + "\n")
     print(out)
     for f in files:
