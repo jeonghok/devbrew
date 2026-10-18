@@ -546,6 +546,12 @@ class RenderedShapeRules(unittest.TestCase):
 
 
 class SharedGrammar(unittest.TestCase):
+    def test_status_reader_sees_the_gate_lines(self):
+        import roadmap_status
+        reader = object.__new__(roadmap_status.Git)
+        reader.run = lambda *a, **k: (0, "a\r\nb\rc\n")
+        self.assertEqual(reader.blob("rev", "path"), "a\nb\nc\n")
+
     def test_readers_share_one_object(self):
         self.assertIs(check_brief.ANCHOR_LINE_RE, B.ANCHOR_LINE_RE)
         self.assertIs(CVC.ANCHOR_LINE_RE, B.ANCHOR_LINE_RE)
