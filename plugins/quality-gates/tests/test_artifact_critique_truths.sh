@@ -10,4 +10,5 @@ assert_eq "$tools" "Read, Grep, Glob" "artifact-adversarial 의 tools 는 읽기
 assert_not_contains "$(cat "$SK")" "egress 도구를 가지므로" "adversarial 이 egress 도구를 가진다는 거짓 문장이 없다"
 assert_contains "$(cat "$SK")" "adversarial 은 egress 도구가 없다" "고친 문장이 실제 tools 를 말한다(양성 짝)"
 assert_not_contains "$(cat "$ROOT/plugins/quality-gates/README.md")" "hard-review" "README 에 지운 게이트(authoring-time hard-review) 인용이 없다"
+assert_contains "$(cat "$ROOT/plugins/quality-gates/README.md")" "iteration 마다 찍는 선택·제외·실패 공시 줄" "README 가 지금 있는 공시 줄을 말한다(양성 짝)"
 finish
