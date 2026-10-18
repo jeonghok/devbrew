@@ -145,6 +145,13 @@ next_phase: superpowers:writing-plans
 
 **게이트 문구.** 상한 · 정체로 열리는 승인 게이트: 첫 줄에 열린 지적 수, 승인 선택지 이름에 「열린 지적 N개를 두고」. 선택지 라벨 규약 문단에 「라벨은 질문 바로 위 전문을 가리키는 손잡이」를 더한다.
 
+**결정을 한 번에 반영하고 게이트를 혼자 읽히게(짧은 설계, 2026-10-18 — B9~B13).** spec 리뷰 뒤 사용자에게 오는 설명이 매끄럽지 않고 그 설명만 보고 리뷰하기 어렵다는 사용자 지적에서 나온 네 가지다. 엔진을 쓰는 spec 리뷰 · brief 리뷰 · seed 리뷰가 함께 받고, qg 코드 리뷰는 무관하다. 있는 것(permit · 얼림 검사 · `decision_log` · `shared/style/plain-language.md`)을 넓혀 쓰고, 새 장치는 신고 명령 하나다.
+
+- **함께 고친 곳 신고(B9).** 「고친다」(adopt) 결정 뒤 저자가 그 결정 때문에 다른 절(수용 기준 · 처분표 등)도 고치면, 엔진 새 하위 명령 `declare-related --decision <결정 id> --anchors <앵커…>` 로 그 절을 결정에 묶는다. 묶인 절은 다음 라운드의 얼림 면제에 들어가되 숨지 않는다 — 게이트에 「이 결정 때문에 함께 바뀐 곳」 목록으로 보이고, 다음 라운드 탐지 · 재비판 입력에 바뀐 절 목록으로 실린다. 신고 없이 바뀐 곳은 지금처럼 「허가 없이 바뀐 곳」(`frozen_change`)이다. 기존 permit · `exempt_scopes` · `observe_ledger` 를 넓혀 쓴다.
+- **결정 반대 본문은 저자 고침(B10).** 리뷰어가 지적에 그 본문이 반대되는 결정 id 를 달면(지적 필드 `contradicts`), 라우터가 그 id 가 원장 `decision_log` 에 실재하는지 보고, 있으면 참고(advisory)가 아니라 저자 고침(`fix`)으로 보낸다(지금은 참고로만 쌓인다). 고친 곳은 B9 와 같이 보이고 다음 라운드가 확인한다. 없는 id 면 참고로 남기고 그 사실을 공시한다.
+- **추가 라운드 승인(B11).** `begin-round --extra-approval` 의 값은 사용자가 고른 선택지 이름 또는 기타 칸 원문이고, 원장 `extra_rounds` 에 출처(`label` · `typed`)를 함께 적는다. 게이트 문구 「사용자가 직접 쓴 말로 한 번 더 승인」을 지운다(엔진 렌더 `docreview_state.py:1548-1550` 과 `reviewing-document.md` 8단계).
+- **게이트 쉬운 말(B12).** 게이트 절 규칙: 질문 · 선택지 이름에 AC 번호 · 지적 id · `§` 기호를 쓰지 않고 설명 괄호에만 쓴다. 리뷰어 지시(`doc-critic` · `doc-critic-web` · `doc-recritic` persona 와 프로필)에 「항목 첫 줄은 내부 기호 없이 무엇이 문제인지 문장으로」를 더한다 — persona 편집이라 보안 리뷰를 거친다(아래 「경계 · 리뷰」). 엔진 렌더 출력에 「괄호 밖 내부 기호 없음」 테스트를 둔다.
+
 **R2 가 넘긴 엔진 몫.** 얼림 검사가 brief payload §6 의 「추가만 허용」을 가린다 — 이미 있는 원문 줄이 바뀌면 `frozen_change`, 끝에 덧붙인 줄만이면 통과. `docreview_state.py` 의 인자 파서에 `allow_abbrev=False`. 로드맵 쪽 `brief_universe` 정규식을 `check_brief.section4_items` 규칙과 맞춘다 — 이 함수는 `roadmap_model.py` 에 있고 R5 계획 1 이 그 파일을 고치는 중이라, 계획 2 는 R5 계획 1 머지 뒤 origin 기본 브랜치를 merge 하고 시작한다(겹침은 정보).
 
 **보안 — 결정 기록 줄 위조.** 엔진 `_log_line`(`docreview_state.py:767-772`)이 지적 요약을 그대로 붙여, 요약 속 줄바꿈으로 brief `## 6` 의 사용자 문구 줄을 위조할 수 있다. 같은 줄에 붙는 다른 칸도 같다 — 선택지 문구(`decide --quote`, `:824-826`)와 버림 사유(`fix --reason`, `:897-904`)가 그대로 들어간다. 그래서 `_log_line` 이 내는 줄 전체를 한 줄 허용 문법으로 쓴다(D5.14) — 요약 · 선택지 문구 · 버림 사유 · supersedes 칸 모두 줄바꿈 · CR · 제어 문자 · 유니코드 줄 구분자를 공백으로, 줄 머리의 목록 · 제목 · 인용 표지는 그 줄 안에서만 쓰이게. 회귀 테스트는 칸마다 위조를 시도하고, 위조 시도 꼴을 허용 문법의 부정형(「한 줄이 아닌 것 전부」)으로 고른다.
@@ -218,7 +225,7 @@ next_phase: superpowers:writing-plans
 ### §10 계획 나누기
 
 1. **결함 셋 · 테스트 실행 공유본 · qg 진입 이름** — 브랜치 `feature/shared-review-engine-devices`. 먼저 머지(R5 계획 셋째가 기다림). AC1~AC9.
-2. **공유 엔진 · R2 보안 잔여** — 시작 전에 로드맵 PR(경로 예약)과 R5 계획 1 머지 merge. AC10~AC20.
+2. **공유 엔진 · R2 보안 잔여** — 시작 전에 로드맵 PR(경로 예약)과 R5 계획 1 머지 merge. AC10~AC20 · AC38~AC41(짧은 설계 B9~B13).
 3. **qg 장치 · 범위 입력 · persona** — 계획 1 머지 뒤. AC21~AC30.
 4. **project-init · plugin-audit** — 앞의 셋과 독립. AC31~AC35.
 
@@ -249,6 +256,10 @@ next_phase: superpowers:writing-plans
 - AC18 `check_brief` 와 `check_verbatim_coverage` 가 같은 판독기 모듈을 쓰고, 열 0 · 유니코드 공백 앵커 · 번호 목록 · 인용 꼴 결정 줄 · §3 산문 속 `⟨S<n>⟩` 이 각각 잡힌다. `check_verbatim_coverage` rc 3 이면 게이트가 막히고 「검사 없이 계속」 선택이 audit 에 남는다.
 - AC19 markdown-it-py 가 `uv.lock` 의 개발 의존으로 고정되고, 교차 확인 테스트가 우회 사례 전부와 레포의 실제 brief · seed 에서 문법 판정과 파서 토큰이 같음을 잰다. 파서가 없으면 그 테스트는 「확인 못 함」을 내고 rc ≠ 0 이다.
 - AC20 R2 「알려진 우회」 나머지마다 재현 · 닫음 · 변이 결과 표가 PR 에 있고, 닫지 못한 것은 이유와 받는 곳이 `## 미룸` 에 있다. 보안 리뷰어 결과가 PR 본문에 있다.
+- AC38 `docreview_state.py declare-related --decision <결정 id> --anchors <앵커…>` 가 「고친다」 결정에 절을 묶는다(원장에 없는 결정 id · 「고친다」가 아닌 결정은 이름 있는 사유로 거부). 묶인 절이 바뀐 다음 라운드에서 그 절은 `frozen_change` 로 오르지 않고, 게이트 렌더에 「이 결정 때문에 함께 바뀐 곳」 목록으로 보이며, 그 라운드의 탐지 · 재비판 입력에 바뀐 절 목록으로 실린다. 묶지 않은 절이 바뀌면 여전히 `frozen_change` 다(B9).
+- AC39 지적 필드 `contradicts` 가 원장 `decision_log` 에 있는 결정 id 를 가리키면 라우터가 그 지적을 참고(advisory)로 보내지 않고 저자 고침(`fix`)으로 보낸다. 원장에 없는 id 면 참고로 남고, 「없는 결정 id」가 라우팅 보고에 공시된다(B10).
+- AC40 `begin-round --extra-approval` 이 고른 선택지 이름과 기타 칸 원문을 둘 다 받고, 원장 `extra_rounds` 항목에 출처(`label` 또는 `typed`)가 함께 적힌다. 엔진 게이트 렌더와 `reviewing-document.md` 에 「사용자가 직접 쓴 말로」 문구가 없다(B11).
+- AC41 기호 없는 요약을 가진 픽스처로 돌린 엔진 게이트 렌더(`gate --render`)의 모든 줄에 괄호 밖 내부 기호(지적 id · AC 번호 · `§`)가 없음을 테스트가 잰다. `reviewing-document.md` 게이트 절에 「질문 · 선택지 이름에 AC 번호 · 지적 id · § 를 쓰지 않고 설명 괄호에만」 규칙이 있고, `doc-critic` · `doc-critic-web` · `doc-recritic` persona 에 「항목 첫 줄은 내부 기호 없이 무엇이 문제인지 문장으로」 규칙이 있다. 그 persona diff 의 보안 리뷰(qg 보안 리뷰어, 웹 도구 없음) 결과가 PR 본문에 있다(B12).
 
 계획 3
 - AC21 `range <시작>[..<끝>]` 모드가 있고, 끝 생략 시 `origin/HEAD` 를 쓰며, diff 기준과 차등 테스트 기준선이 `<시작>` 이고 PR 코멘트를 게시하지 않았다고 공시한다.
@@ -276,7 +287,7 @@ next_phase: superpowers:writing-plans
 ## Files to Modify
 
 - 계획 1: `shared/docreview/scripts/docreview_route.py` · `shared/test-selection/`(새: 스크립트 셋 + 형제 · README) · `plugins/quality-gates/scripts/`(링크) · `plugins/quality-gates/commands/qg.md`(삭제) · `plugins/quality-gates/skills/quality-pipeline/SKILL.md` · `plugins/quality-gates/skills/critiquing-artifacts/` → `skills/artifact-critique/` · `plugins/quality-gates/scripts/run_codex_reviewer.sh` · `plugins/quality-gates/references/differential-test.md` · `plugins/quality-gates/README.md` · `CHANGELOG.md` · `plugin.json` · qg 테스트 · `shared/entry/check_invocation_surface.py` · `shared/tests/test_invocation_surface.sh` · `shared/tests/test_inline_python_isolated.sh` · `/qg` 를 부르는 문서들.
-- 계획 2: `shared/docreview/scripts/docreview_state.py` · `docreview_route.py` · `docreview_advice.py` · `shared/docreview/references/reviewing-document.md` · 진입 skill 셋의 펜스(`advice-list`) · 프로필 넷 · `plugins/spec-distill/scripts/brief_body.py`(새) · `check_brief.py` · `check_verbatim_coverage.py` · `seed_body.py` · `check_seed.py` · `seed_review_log.py` · `seed_provenance.py` · `plugins/spec-distill/scripts/roadmap_model.py`(`brief_universe`) · `plugins/spec-distill/tests/test_ledger_wiring.sh` · 값 락 테스트 · `shared/tests/fixtures/docreview/` · `pyproject.toml` · `uv.lock` · spec-distill `CHANGELOG.md` · `plugin.json`.
+- 계획 2: `shared/docreview/scripts/docreview_state.py` · `docreview_route.py` · `docreview_advice.py` · `shared/docreview/references/reviewing-document.md` · `shared/docreview/agents/doc-critic.md` · `doc-critic-web.md` · `doc-recritic.md`(persona — 보안 리뷰) · 진입 skill 셋의 펜스(`advice-list`) · 프로필 넷 · `plugins/spec-distill/scripts/brief_body.py`(새) · `check_brief.py` · `check_verbatim_coverage.py` · `seed_body.py` · `check_seed.py` · `seed_review_log.py` · `seed_provenance.py` · `plugins/spec-distill/scripts/roadmap_model.py`(`brief_universe`) · `plugins/spec-distill/tests/test_ledger_wiring.sh` · 값 락 테스트 · `shared/tests/fixtures/docreview/` · `pyproject.toml` · `uv.lock` · spec-distill `CHANGELOG.md` · `plugin.json`.
 - 계획 3: `plugins/quality-gates/skills/quality-pipeline/SKILL.md` · `scripts/discover-spec.sh` · `scripts/setup-qg.sh`(범위 인자) · `scripts/resolve-baseline.sh`(범위 기준) · `FILTERED_DIFF` 를 만드는 자리 · `agents/security-reviewer.md` · `agents/code-recritic.md` · `references/e2e.md` · `references/differential-test.md` · `skills/artifact-critique/SKILL.md` · qg 테스트 · README · CHANGELOG · `plugin.json`.
 - 계획 4: `plugins/project-init/skills/project-init/SKILL.md` · `templates/*/branch-strategy.md` · `templates/*/agents-md-section.md` · `plugins/plugin-audit/agents/plugin-auditor.md` · `agents/audit-refuter.md` · `scripts/audit-workflow.js` · `scripts/render-audit-report.py` · `skills/plugin-audit/SKILL.md` · 각 테스트 · README · CHANGELOG · `plugin.json`.
 - 로드맵: `roadmap.md` R2a 블록의 `경로 예약`(spec-distill 보안 잔여 스크립트) · `브랜치`(계획 2~4) — 로드맵 PR.
@@ -351,6 +362,11 @@ next_phase: superpowers:writing-plans
 - 계획 1 결정 · 2026-10-18 · qg 인자 확인 자리 — 원래 설계 문면: §2 「`## 진입 단계` 에 `!` 사전 검사(지금 `setup-qg.sh` 가 하던 인자 확인 · 없어진 인자 안내)를 두고」 / 계획의 결정: 사전 검사 줄은 상수 인자만 받고, 인자 확인과 없어진 인자 안내는 본문 첫 단계(P2 의 `setup-qg.sh --ensure $ARGUMENTS`)가 한다 — 사용자 「계획대로 — 본문 첫 단계 (권장)」 / 근거: `shared/entry/entry_preflight.py` 는 사용자 입력을 받지 않고, 호출 표면 락이 사전 검사 줄의 모양을 고정하며 사용자 인자 토큰을 금지한다(`shared/entry/check_invocation_surface.py:47-48 · :213-218` · `axis_d`).
 - 계획 1 결정 · 2026-10-18 · 기준선 스크립트 — 원래 설계 문면: §2 「닫힌 묶음(셋 + 형제)째 옮기거나 소비 플러그인이 형제까지 링크하게 한다 — 어느 쪽인지는 측정이 정하고」 · §6 「qg 범위 | … `resolve-baseline.sh` … | qg」 / 계획의 결정: `resolve-baseline.sh` 도 `shared/test-selection/` 으로 함께 옮겨 넷을 닫힌 묶음으로 둔다 — 사용자 「계획대로 — 함께 옮김 (권장)」 / 근거: `compute-test-scope-candidates.sh:18,54` 가 링크를 풀지 않은 자기 폴더에서 `resolve-baseline.sh` 를 부른다 — 다른 플러그인이 qg 안 파일을 링크하면 설치본에서 닿지 못한다. 계획 3 의 범위 기준 변경은 공유본 변경이다.
 - 계획 1 실행 방식 · 2026-10-18 — 사용자 「Subagent-driven」.
+- B9 · 결정 · 2026-10-18 · 리뷰 엔진 — 결정이 다른 절에 닿을 때(§3 함께 고친 곳 신고 · AC38) — 질문 「리뷰에서 「고친다」로 정한 결정이 문서의 다른 절(수용 기준 · 처분표 등)에도 닿을 때, 그 절들을 어떻게 고치게 할까요?」 → 「같이 고치고 보이고 다시 봄 (권장)」(근거는 B13)
+- B10 · 결정 · 2026-10-18 · 리뷰 엔진 — 결정과 반대인 본문(§3 결정 반대 본문은 저자 고침 · AC39) — 질문 「리뷰어가 「이 본문은 사용자가 정한 결정과 반대다」를 찾았을 때(지금은 참고로만 쌓임), 어떻게 처리할까요?」 → 「저자가 바로 고침 (권장)」(근거는 B13)
+- B11 · 결정 · 2026-10-18 · 리뷰 엔진 — 추가 라운드 승인(§3 추가 라운드 승인 · AC40) — 질문 「리뷰 추가 라운드를 여는 승인을 어떻게 받을까요?」 → 「고른 선택지를 승인으로 (권장)」(근거는 B13)
+- B12 · 결정 · 2026-10-18 · 리뷰 엔진 — 게이트 쉬운 말(§3 게이트 쉬운 말 · AC41) — 질문 「리뷰 게이트 글이 내부 기호 없이 혼자 읽히도록 어떻게 지킬까요?」 → 「규칙 + 엔진 글 검사 (권장)」(근거는 B13)
+- B13 · 결정 · 2026-10-18 · 리뷰 엔진 짧은 설계 전체(§3 B9~B12 · AC38~AC41 · 계획 2) — 「이대로 (권장)」 / 근거(사용자): 「지금 스펙리뷰한 이후 나에게 설명이 오는게 매끄럽지 않고 설명을 보고 내가 리뷰해주기에 어려운 상태야 …」 · 「R2a 에 넣기 (권장)」 · 「앞으로도 너가 판단하기에 에픽에 넣더라도 이거 brainstorming 거쳐서 추가해야 겠는지 판단을 할 수 있도록 해줘」 / 경로: 짧은 설계(채팅 안 설계 + 승인) — 사용자에게 보이는 리뷰 동작이자 새 요구라 brainstorming 이 필요하고, 이미 있는 엔진을 고치는 범위라 짧은 설계로 했다.
 
 ## 번호 대조
 
