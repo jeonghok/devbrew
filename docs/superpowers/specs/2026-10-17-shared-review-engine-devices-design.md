@@ -231,7 +231,7 @@ next_phase: superpowers:writing-plans
 - AC4 셋이 부르는 형제 전수가 측정돼 있고, qg 링크로 부를 때와 다른 플러그인 폴더의 링크로 부를 때 둘 다 같은 결과를 낸다. 소비자 규칙이 `shared/test-selection/README.md` 에 있다.
 - AC5 qg 스위트 · `shared/tests/test_inline_python_isolated.sh` 가 새 경로로 GREEN 이고, 설치본 경로(`--plugin-dir` 격리)에서 링크를 거쳐 차등 테스트가 돈다.
 - AC6 `plugins/quality-gates/commands/` 가 없고, `quality-pipeline` 이 `## 진입 단계` · `!` 사전 검사 · `entry_preflight.py` 링크 · 사전 검사 한 줄짜리 `allowed-tools` 를 가진 진입 skill 이다. 없어진 인자는 안내 한 줄을 내고 실행하지 않는다.
-- AC7 `critiquing-artifacts` 가 `artifact-critique` 로 개명돼(디렉토리 = `name`) `/quality-gates:artifact-critique <경로>` 로 불리고, 레포에 옛 이름 `reviewing-spec` · `/qg critique` · `critiquing-artifacts` 를 부르는 곳이 없다(역사 기록 · CHANGELOG 제외).
+- AC7 `critiquing-artifacts` 가 `artifact-critique` 로 개명돼(디렉토리 = `name`) `/quality-gates:artifact-critique <경로>` 로 불리고, 레포에 옛 이름 `reviewing-spec` · `/qg`(뒤에 `branch` · `critique` 등이 붙은 꼴 포함) · `critiquing-artifacts` 를 부르는 곳이 없다(역사 기록 · CHANGELOG 제외). 호출 표면 락의 옛 이름 축(`OLD_NAME_RE` · 살아 있는 표면)이 `/qg` 와 `critiquing-artifacts` 를 잡아 기계로 잰다(D10.22).
 - AC8 호출 표면 락에 qg 예외가 없고 qg 가 GREEN 이며, `commands/qg.md` 를 되살리는 변이에서 RED 다.
 - AC9 qg `plugin.json` 이 major bump 되고 CHANGELOG 에 `Removed`(`/qg` · `/qg critique`) · `Changed`(진입 이름) 와 README 갱신이 있다.
 
@@ -333,6 +333,7 @@ next_phase: superpowers:writing-plans
 - D9.19 · r9 · adopt · 89a93115#r9.1 · "고친다 — AC29·AC31 에 공시·여는 길" — 문서 비평의 dispatch 수와 project-init의 질문 수 · 관례 개수에 대해 기본값과 실제로 쓴 수를 그 자리에서 알리고 사용자가 그 자리에서 여는 길을 두기로 했지만, 수용 기준은 여전히 「기본값이고 바꿀 수 있다」만 확인한다.
 - D9.20 · r9 · adopt · 89a93115#r9.2 · "고친다 — AC15 를 칸 전체로" — 결정 기록 줄 위조 방지의 수용 기준이 아직 요약 칸만 확인한다. 줄 전체를 한 줄로 만들기로 한 결정이 기준에 들어가지 않아, 선택지 문구나 버림 사유 칸이 위조 경로로 남아도 통과한다.
 - D9.21 · r9 · adopt · e850cf32#r9.1 · "고친다 — 공시를 두 줄로 나눔" — qg 리뷰어 수를 알리는 「시작 줄」에 일시 실패 재시도처럼 시작 뒤에야 생기는 호출까지 세라고 해서, 이 줄이 dispatch 전에 찍히는지 후에 찍히는지가 정해지지 않았다. 지금 줄은 dispatch가 돌아온 뒤에 찍히므로 그대로 옮기면 「크게 쓰기 전에 규모를 알린다」는 확정 제약을 지키지 못한다.
+- D10.22 · r10 · adopt · 89a93115#r10.1 · "고친다 — AC7 에 /qg 더함" — 설계는 `/qg` 를 레포 전체에서 찾아 고친다고 했지만, 수용 기준은 `/qg critique` 만 검사한다. 그래서 기계가 내는 안내 속 그냥 `/qg`(`/qg branch` 등)가 남아도 통과한다. 호출 표면 락도 `/qg` 를 잡지 못한다.
 
 ## 번호 대조
 
