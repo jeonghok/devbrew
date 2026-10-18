@@ -2671,4 +2671,24 @@ bb_variant t3_ok '\n- OQ1: 인증 뷰의 캐시 전략 — 해답공간으로 �
 out="$(bb_gate t3_ok)"; rc=$?
 [[ $rc -eq 0 ]] && ok "AC18(양성대조): 구조 토큰 밖의 정규형 차이(원 숫자)와 한글 조사가 붙은 S2 는 막지 않는다" \
   || { no "AC18(양성대조): 정상 결정 줄이 막혔다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+# --- AC18 fix round 4 — 머리 판독 하나 · 읽히지 않는 결정 글 없음 · OQ 숫자는 ASCII(Ruling S14 · S13-b) ----------------
+for spec in 't4_sub|section_head_unknown|\n\n## 1. Goal|\n\n## 0.1 추가 결정\n\n- OQ8 [해결 \u27e8S2\u27e9] — 확정\n\n## 1. Goal' \
+            't4_fw|section_head_unknown|\n## 0. 한눈에|\n## \uff10. 한눈에\n\n- OQ9 [열림] — 미끼\n\n## 0. 한눈에' \
+            't4_zw|section_heading_duplicate|\n## 0. 한눈에|\n## 0\u200b. 한눈에\n\n- OQ9 [열림] — 미끼\n\n## 0. 한눈에' \
+            't4_app|section_head_unknown|brainstorming 호출 → -design.md → reviewer → writing-plans.|brainstorming 호출 → -design.md → reviewer → writing-plans.\n\n## 8. 부록\n\n- OQ7 [열림] — 숨김' \
+            't4_app2|decision_outside_sections|brainstorming 호출 → -design.md → reviewer → writing-plans.|brainstorming 호출 → -design.md → reviewer → writing-plans.\n\n## 8. 부록\n\n- OQ7 [열림] — 숨김' \
+            't4_s2dec|decision_outside_sections|\n✎ 렌더링 전략|\n- OQ5 [해결 \u27e8S2\u27e9] — 숨긴 결정\n✎ 렌더링 전략' \
+            't4_pre|decision_outside_sections|\n# Sample Topic — Interview Brief\n|\n# Sample Topic — Interview Brief\n\n- OQ6 [열림] — 머리말\n' \
+            't4_oqar|oq_confusable|\n- OQ1 [열림] — 인증 뷰의 캐시 전략 — 해답공간으로 이월.\n|\n- OQ1 [열림] — 인증 뷰의 캐시 전략 — 해답공간으로 이월.\n- OQ\u0661 [해결 \u27e8S2\u27e9] — 정함\n'; do
+  IFS='|' read -r stem why from to <<<"$spec"
+  bb_variant "$stem" "$from" "$to"
+  out="$(bb_gate "$stem")"; rc=$?
+  { [[ $rc -ne 0 ]] && grep -qF "$why" <<<"$out"; } \
+    && ok "AC18: 머리 · 절 밖 결정 · OQ 숫자(${stem}) → red «${why}»" \
+    || { no "AC18: 머리 · 절 밖 결정 · OQ 숫자(${stem})가 ${why} 로 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+done
+bb_variant t4_ok '\n✎ 렌더링 전략' '\n상태는 `[열림]` 또는 `[해결 \u27e8S<n>\u27e9]` 로 적는다.\n\n### 2.1 소소제목\n\n✎ 렌더링 전략'
+out="$(bb_gate t4_ok)"; rc=$?
+[[ $rc -eq 0 ]] && ok "AC18(양성대조): 자리 표시만 담은 코드 칸 설명 · ### 소제목은 막지 않는다" \
+  || { no "AC18(양성대조): 설명 줄 · 소제목이 막혔다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
 finish

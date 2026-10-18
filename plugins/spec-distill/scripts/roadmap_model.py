@@ -426,7 +426,7 @@ def brief_section(brief: str, num: str) -> str:
     """brief 의 §<num> 본문 — 게이트와 같은 판독(`brief_body.section_text` · 제목 붙은 경계 · 펜스 벗김). 제목 붙은 머리가
     없거나 같은 번호 머리가 둘 이상이면 FormatError(셀 수 없음). brief 절은 `section_body` 로 읽지 않는다 — 그것은 아무
     `## ` 줄에서나 끊고 다른 줄 나눔 글자에서도 잘라 게이트와 다른 절을 읽는다."""
-    why = brief_body.section_problem(brief, num)
+    why = brief_body.section_problem(brief, num) or (brief_body.head_problems(brief) and "section_head_unknown")
     if why:
         raise FormatError("brief §%s 를 하나로 읽을 수 없다 — %s(%s)" % (num, brief_body.SECTION_REASON_TEXT[why], why))
     return brief_body.section_text(brief, num)

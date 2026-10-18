@@ -364,6 +364,59 @@ class Round3Lookalikes(unittest.TestCase):
             self.assertEqual(B.open_line_s_refs(text), [], hex(ord(tail)))   # 다른 번호로 풀지 않는다
         for ok_text in ("S3에 따라", "S가 아니다", "S" + chr(0x4E00) + " 한자", "S<n>"):
             self.assertEqual(B.ref_confusables(ok_text), [], repr(ok_text))
+
+
+# ── fix round 4 (Ruling S14 · S13-b) — 머리 판독 하나 · 읽히지 않는 결정 글 없음 · OQ 숫자는 ASCII ───────────────────
+DOC4 = ("---\nname: t\n---\n\n# t\n\n## 0. 한눈에\n\n- OQ1 [열림] — x\n\n## 0.1 추가 결정\n\n- OQ8 [해결 " + LA + "S2" + RA
+        + "] — 확정\n\n## 1. Goal · Non-goal\n\n- Goal: g " + LA + "S1" + RA + "\n")
+
+
+class Round4Heads(unittest.TestCase):
+    def test_subheading_stays_inside_section(self):
+        self.assertIn("- OQ8", B.section_text(DOC4, "0"))
+        self.assertNotIn("Goal:", B.section_text(DOC4, "0"))
+
+    def test_duplicate_count_on_canonical_text(self):
+        real = "# t\n\n## 0. 한눈에\n\n- OQ1 [열림] — x\n\n## 1. Goal · Non-goal\n"
+        for decoy in ("## " + FW("0") + ". 한눈에\n\n", "## 0" + chr(0x200B) + ". 한눈에\n\n"):
+            doc = real.replace("## 0. 한눈에", decoy + "## 0. 한눈에", 1)
+            self.assertEqual(B.section_problem(doc, "0"), "section_heading_duplicate", repr(decoy))
+
+    def test_unknown_heads(self):
+        for head in ("## 0.1 추가 결정", "## 8. 부록", "## 00. 영영", "## " + chr(0x0660) + ". 아라비아 숫자",
+                     "## " + FW("0") + ". 한눈에", "##0. 한눈에", "## 2) 괄호"):
+            doc = "# t\n\n## 0. 한눈에\n\n" + head + "\n\n## 1. Goal · Non-goal\n"
+            self.assertEqual([r for _n, r in B.head_problems(doc)], ["section_head_unknown"], repr(head))
+        clean = "# t\n\n## 0. 한눈에\n\n```\n## 8. 펜스 안\n```\n\n### 0.5 소소제목\n\n## 메모\n\n## 1. Goal · Non-goal\n"
+        self.assertEqual(B.head_problems(clean), [])
+
+    def test_decision_outside_sections(self):
+        brief, _audit = _pair()
+        for where, add in (("# Sample Topic — Interview Brief\n", "\n- OQ6 [열림] — 머리말\n"),
+                           ("## 2. 제약\n", "\n- OQ5 [해결 " + LA + "S2" + RA + "] — 숨긴 결정\n"),
+                           ("## 7. Next Action\n", "\n```\n- OQ7 [열림] — 펜스 안\n```\n")):
+            doc = brief.replace(where, where + add, 1)
+            self.assertTrue(any("decision_outside_sections" in x for x in CB.decision_outside_failures(doc)), repr(add))
+        self.assertEqual(CB.decision_outside_failures(brief), [])
+        legend = brief.replace("## 2. 제약\n", "## 2. 제약\n\n상태는 `[열림]` 또는 `[해결 " + LA + "S<n>" + RA + "]` 로 적는다.\n", 1)
+        self.assertEqual(CB.decision_outside_failures(legend), [])
+
+    def test_oq_digits_are_ascii(self):
+        self.assertEqual(B.decision_line_problem("- OQ" + chr(0x0661) + " [해결 " + LA + "S2" + RA + "] — 정함"), "oq_confusable")
+        self.assertIsNone(B.leading_oq("- OQ" + chr(0x0661) + " [열림] — x"))
+        self.assertIsNone(CB.DECISION_HEAD_RE.match("OQ" + chr(0x0661)))
+
+    def test_no_literal_payload_titles(self):
+        # 절 제목은 brief_body.SECTIONS 하나에만 있다 — 판독기 소스에 payload 절 제목 리터럴이 남지 않는다.
+        scripts = Path(__file__).resolve().parent.parent / "scripts"
+        for name in ("check_brief.py", "roadmap_model.py", "roadmap_render.py"):
+            src = (scripts / name).read_text(encoding="utf-8")
+            for _num, title in B.SECTIONS:
+                n = src.count('"%s"' % title)
+                allowed = 1 if (name == "check_brief.py" and title == "사용자 원문") else 0   # AUDIT_SECTIONS 의 audit 제목
+                self.assertEqual(n, allowed, "%s: %s" % (name, title))
+
+
 class SharedGrammar(unittest.TestCase):
     def test_readers_share_one_object(self):
         self.assertIs(check_brief.ANCHOR_LINE_RE, B.ANCHOR_LINE_RE)

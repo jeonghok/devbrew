@@ -652,7 +652,7 @@ def bijection_b_errors(text: str) -> list[str]:
             items[it["id"]] = it
     errs: list[str] = []
     body = {}
-    for ln in brief_body.split_lines(_section_text(text, "2", "제약")):
+    for ln in brief_body.split_lines(_section_text(text, "2", brief_body.SECTION_TITLES["2"])):
         if not BODY_ITEM_LOOSE_RE.match(ln):
             continue
         m = BODY_ITEM_RE.match(ln)
@@ -792,7 +792,7 @@ def landscape_present(text: str) -> bool:
     기록`에 web-disabled 사유 칸을 둔 것은 그래서다 — 저술 시점의 환경을 아티팩트가
     날라, 나중 실행이 자기 환경으로 남의 brief를 판정하지 않게 한다.
     """
-    sec = _section_text(text, "4", "External Landscape").strip()
+    sec = _section_text(text, "4", brief_body.SECTION_TITLES["4"]).strip()
     if not sec:
         return False
     if _web_disabled() and re.search(r"\bN/?A\b|비활성|생략|web[ -]?disabled", sec, re.IGNORECASE):
@@ -801,7 +801,7 @@ def landscape_present(text: str) -> bool:
 
 
 def section5_entries(text: str) -> list[str]:
-    return _entry_lines(_section_text(text, "5", "기각 · Blind Spots"))
+    return _entry_lines(_section_text(text, "5", brief_body.SECTION_TITLES["5"]))
 
 
 ATTRIBUTION_MARKERS = ("🗣", "☑", "✎")
@@ -812,7 +812,7 @@ def attribution_block_missing(audit_text: str) -> bool:
 
     템플릿이 상속시키지만 개별 audit에서 지워질 수 있으므로 게이트가 확인한다.
     """
-    for ln in brief_body.split_lines(_section_text(audit_text, "6", "사용자 원문")):
+    for ln in brief_body.split_lines(_section_text(audit_text, "6", dict(AUDIT_SECTIONS)["6"])):
         if ln.lstrip().startswith(">") and all(m in ln for m in ATTRIBUTION_MARKERS):
             return False
     return True
@@ -964,7 +964,7 @@ def coverage_anchor_failures(audit_text: str, anchors: set) -> list[str]:
 # 처럼 조사가 붙은 id 를 못 읽는다(한국어 문면에서 흔한 모양). 숫자는 경계 밖이라 `RC1` 이 `RC12`
 # 안에서 맞지 않는다.
 RC_RE = re.compile(r"(?<![A-Za-z])RC\d+(?![0-9A-Za-z_])")
-OQ_RE = re.compile(r"(?<![A-Za-z])OQ\d+(?![0-9A-Za-z_])")
+OQ_RE = re.compile(r"(?<![A-Za-z])OQ[0-9]+(?![0-9A-Za-z_])")
 # 줄 끝 연결 — 넷 중 하나(§H ③ + 최종 리뷰 I-4): 레포 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]`,
 # 웹 `[→ OQ<n>]` · `[→ 없음]`. `없음` sentinel 은 정직한 답이고 red 가 아니다: §A 계약이
 # 「빈 배열은 허용이고 거짓 연결보다 낫다」를 못 박으므로 sentinel 없는 ∀ 는 그 계약과 충돌하고
@@ -973,11 +973,11 @@ OQ_RE = re.compile(r"(?<![A-Za-z])OQ\d+(?![0-9A-Za-z_])")
 # `RC<n>` 리터럴이 줄에서 사라질 수 있고, 그러면 `payload_rc_ids` 밖이라 ④⑤ 가 그 주장을 못 본다.
 # group(1) = 레포 id(웹이면 None) · group(2) = 대상(`OQ…` 목록 또는 `없음`).
 LINK_RE = re.compile(
-    r"\[(?:(RC\d+)\s*)?→\s*(OQ\d+(?:\s*·\s*OQ\d+)*|없음)\]\s*$")
+    r"\[(?:(RC\d+)\s*)?→\s*(OQ[0-9]+(?:\s*·\s*OQ[0-9]+)*|없음)\]\s*$")
 # 같은 모양의 앵커 없는 짝 — 한 줄의 연결 괄호를 **전부** 센다. `LINK_RE` 는 줄 끝 하나만 보므로
 # `RC3 [→ OQ1] [RC3 → 없음]` 처럼 실제 결정을 앞 괄호에 두고 버리는 연결을 끝에 달면 ①②③ 이 전부
 # 끝 괄호만 읽는다. 연결은 줄마다 **정확히 하나**다(복수 결정은 `[RC3 → OQ1 · OQ4]` 한 괄호).
-LINK_ANY_RE = re.compile(r"\[(?:RC\d+\s*)?→\s*(?:OQ\d+(?:\s*·\s*OQ\d+)*|없음)\]")
+LINK_ANY_RE = re.compile(r"\[(?:RC\d+\s*)?→\s*(?:OQ[0-9]+(?:\s*·\s*OQ[0-9]+)*|없음)\]")
 CONTRACT_KEY, CONTRACT_V2 = "contract", "v2"
 DERIVED_INTERNAL_RESEARCH = "derived:internal_research"
 CONFIRM_ROW_RE = re.compile(r"^확인\s+(RC\d+)\s+—\s+(확인|반증|미확인)\s+—\s*(\S.*)$")
@@ -1216,7 +1216,7 @@ def section1_provenance_failures(text: str, anchors: set) -> list[str]:
     `⟨모델 추론⟩`. 사용자가 말하지 않은 Non-goal 이나 좁힌 Goal 이 보이지 않은 채 하류의 범위가 되는 것을
     B-0 이 출처와 함께 보이게 하는 표지다. `S<n>` 은 payload §6 에 실재해야 한다."""
     fails = []
-    for ln in _entry_lines(_section_text(text, "1", "Goal · Non-goal")):
+    for ln in _entry_lines(_section_text(text, "1", brief_body.SECTION_TITLES["1"])):
         if not PROVENANCE_MARK_RE.search(ln):
             fails.append(f"§1 줄에 출처 표시(⟨S<n>⟩ 또는 ⟨모델 추론⟩)가 없다: {ln[:60]}")
             continue
@@ -1226,14 +1226,14 @@ def section1_provenance_failures(text: str, anchors: set) -> list[str]:
     return fails
 
 
-RESOLVED_RE = re.compile(r"\[해결 ⟨(S\d+)⟩\]")
+RESOLVED_RE = re.compile(r"\[해결 ⟨(S[0-9]+)⟩\]")
 RESOLVED_MARK = "[해결"
 # 결정 줄의 선두 OQ 와 그 뒤 닫는 강조 — 나머지(`rest`)가 상태 자리다. 선두 판정은 `LEADING_OQ_RE` 와 같은 규칙.
-DECISION_HEAD_RE = re.compile(r"^[*_`]*\s*(OQ\d+)(?!_*[0-9A-Za-z])[*_`]*")
+DECISION_HEAD_RE = re.compile(r"^[*_`]*\s*(OQ[0-9]+)(?!_*[0-9A-Za-z])[*_`]*")
 # §0 상태 자리 허용 목록 — `[열림]` 또는 `[해결 ⟨S<n>⟩]` 다음 ` — <내용>`. 다른 모양은 전부 red.
-S0_SLOT_RE = re.compile(r"^\s+(\[열림\]|\[해결 ⟨(S\d+)⟩\])\s+—\s+\S")
+S0_SLOT_RE = re.compile(r"^\s+(\[열림\]|\[해결 ⟨(S[0-9]+)⟩\])\s+—\s+\S")
 # §3 해결 결정 — `OQ<n> [해결 ⟨S<n>⟩]: <내용>`. 열린 결정은 `OQ<n>: <내용>`(자리 비움).
-S3_RESOLVED_RE = re.compile(r"^\s+\[해결 ⟨(S\d+)⟩\]:\s*\S")
+S3_RESOLVED_RE = re.compile(r"^\s+\[해결 ⟨(S[0-9]+)⟩\]:\s*\S")
 # 해결 내용 — `— 해결:` 뒤 `→`(역참조) 앞에 글자가 하나 이상.
 RESOLVED_BODY_RE = re.compile(r"— 해결:\s*[^\s→]")
 
@@ -1355,6 +1355,33 @@ def section_heading_failures(text: str) -> list[str]:
             f"{brief_body.SECTION_REASON_TEXT['section_heading_duplicate']} (section_heading_duplicate)"
             for num, _title in brief_body.SECTIONS
             if num != "6" and brief_body.section_problem(text, num) == "section_heading_duplicate"]
+
+
+def decision_outside_failures(text: str) -> list[str]:
+    """§0 · §3 밖의 결정 꼴 줄 -> red(`decision_outside_sections`) — 머리말 · 다른 절 · 표에 없는 머리 아래 · 펜스 안(어느 절이든)
+    · frontmatter 의 결정 줄은 어느 결정 판독기도 읽지 않는다. §6(사용자 원문)만 뺀다(`open_line_ref_failures` 와 같은 코퍼스).
+    절 구분은 `brief_body.section_text` 와 같은 머리 판독(`is_section_head` + 제목 붙은 머리)이다. 자리 표시만 담은 코드 칸
+    설명은 결정 꼴이 아니다(`brief_body.decision_shaped`)."""
+    sp = payload_section6_span(text)
+    m = FRONTMATTER_RE.match(text)
+    body_start = m.end() if m else 0
+    fenced = [(a + body_start, b + body_start) for a, b in (mm.span() for mm in FENCE_RE.finditer(text[body_start:]))]
+    titled = {num: re.compile(rf"^##\s+{num}\.\s+{re.escape(title)}\b", re.IGNORECASE) for num, title in brief_body.SECTIONS}
+    fails, cur, pos = [], None, 0
+    for ln in brief_body.split_lines(text):
+        here, pos = pos, pos + len(ln) + 1
+        if sp is not None and sp[0] <= here < sp[1]:
+            continue
+        infence = any(a <= here < b for a, b in fenced)
+        if here >= body_start and not infence:
+            num = brief_body.is_section_head(ln)
+            if num is not None:
+                cur = num if num in titled and titled[num].match(ln) else None
+                continue
+        if brief_body.decision_shaped(ln) and (infence or here < body_start or cur not in ("0", "3")):
+            fails.append(f"§0 · §3 밖에 결정 줄이 있다 — {brief_body.DECISION_REASON_TEXT['decision_outside_sections']} "
+                         f"(decision_outside_sections): {ln.strip()[:60]}")
+    return fails
 
 
 def open_line_ref_failures(text: str, anchors: set) -> list[str]:
@@ -1664,6 +1691,9 @@ def gate(path: Path) -> int:
         failures += open_line_ref_failures(text, pa | n1b_audit)
     failures += entry_line_failures(text)
     failures += section_heading_failures(text)
+    failures += [f"payload 에 절 표에 없는 절 머리가 있다 — {brief_body.SECTION_REASON_TEXT[why]} ({why}): {ln.strip()[:60]}"
+                 for ln, why in brief_body.head_problems(text)]
+    failures += decision_outside_failures(text)
     failures += [f"§6 밖의 글에 닮은 글자로 쓴 원문 번호가 있다 — 번호로 읽지 않는다 (ref_confusable:{tok})"
                  for tok in sorted(set(brief_body.ref_confusables(_payload_excluding_section6(text))))]
 

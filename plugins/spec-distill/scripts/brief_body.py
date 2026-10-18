@@ -5,12 +5,15 @@ r"""brief_body.py — brief 를 읽는 허용 문법 하나: 줄 나눔 · 정�
 `check_brief` · `check_verbatim_coverage` · `roadmap_model` · `roadmap_render` 가 함께 쓴다 — 판독기마다 같은 줄을 다르게
 읽는 틈을 없앤다(`seed_body.py` 방식). 줄은 `split_lines` 로만 자르고, 분류는 정규형(`canon` · `fold`) 위에서 한다.
 정규형으로는 구조(앵커 · 결정 줄 · 목록 머리)처럼 보이는데 날 글자로는 문법 밖인 줄은 사유 이름과 함께 거부한다.
-표준 라이브러리만 쓰고 파일을 읽지 않는다.
+표준 라이브러리와 같은 폴더의 `section6` 만 쓰고 파일을 읽지 않는다.
 """
 from __future__ import annotations
 
+import functools
 import re
 import unicodedata
+
+import section6  # 같은 scripts 폴더 — 표준 라이브러리만 쓰는 §6 경계 모듈
 
 # ── 정규형 ────────────────────────────────────────────────────────────────────
 # Default_Ignorable_Code_Point — Unicode DerivedCoreProperties.txt 의 그 속성 범위(예약 자리 포함). 화면에 안 보이므로
@@ -53,6 +56,7 @@ def has_ignorable(text):
     return any(_ignorable(c) for c in text)
 
 
+@functools.lru_cache(maxsize=65536)   # 같은 brief 를 여러 판독기가 줄마다 다시 읽는다
 def canon(text):
     """판독용 정규형 — 보이지 않는 글자(Default_Ignorable · Cf)를 지우고 NFKC 로 접는다. 분류는 이 모양 위에서 한다."""
     return _drop_ignorable(unicodedata.normalize("NFKC", _drop_ignorable(text)))
@@ -65,6 +69,7 @@ def _fold_char(c):
     return STRUCT_LOOKALIKES.get(o, c)
 
 
+@functools.lru_cache(maxsize=65536)
 def fold(text):
     """`canon` 위에 구조 글자를 한 번 더 접는다 — `S` 를 흉내 내는 다른 문자 체계의 글자는 `S` 로, 별표 · 하이픈을
     흉내 내는 글자는 `*` · `-` 로. 숫자는 접지 않는다(닮은 숫자를 다른 번호로 풀지 않는다). 앵커 꼴 · 원문 번호 참조를
@@ -101,31 +106,62 @@ def _titled_head(num, title):
     return re.compile(rf"^##\s+{re.escape(num)}\.\s+{re.escape(title)}\b", re.MULTILINE | re.IGNORECASE)
 
 
+# 절 머리 판독 하나 — 정규형 위에서, ASCII 숫자만, `## <n>.` 뒤가 숫자가 아니다(`## 0.1` 은 절 머리가 아니다). 절의 끝 ·
+# 같은 번호 머리 수 · 절 밖 결정 판독이 모두 이 규칙을 쓴다.
+# 머리 정규식은 `section6.py` 가 소유한다(§6 경계와 한 곳 — `test_check_brief.sh` §6단일화 락).
+SECTION_HEAD_RE = section6.BRIEF_SECTION_HEAD_RE
+# 절 번호처럼 보이는 머리 — `##` 뒤(공백 없어도) 숫자(다른 문자 체계의 숫자 포함)가 오면 모두 후보다.
+_HEADLIKE_RE = section6.BRIEF_HEADLIKE_RE
+
+
+def is_section_head(line):
+    """이 줄이 절 머리인가(정규형 · ASCII 숫자) -> 그 번호 또는 None."""
+    m = SECTION_HEAD_RE.match(canon(line))
+    return m.group(1) if m else None
+
+
 def section_text(text, num, title=None):
-    """게이트의 절 경계 — `## <num>. <title>` 다음부터 다음 `## <숫자>.` 앞까지(펜스는 벗긴 본문 위). 제목을 주지 않으면
-    brief 절 표(`SECTION_TITLES`)의 제목을 쓴다. 절 안의 다른 `## ` 소제목은 절을 끊지 않는다. 없으면 빈 문자열.
-    같은 번호 머리가 둘 이상인지는 `section_problem` 이 따로 판정한다."""
+    """게이트의 절 경계 — `## <num>. <title>` 머리 줄 다음부터 다음 절 머리(`is_section_head`) 앞까지(펜스는 벗긴 본문 위).
+    제목을 주지 않으면 brief 절 표(`SECTION_TITLES`)의 제목을 쓴다. `## 0.1` · `## 메모` 같은 소제목은 절을 끊지 않는다 —
+    그 아래 글도 그 절로 읽혀 검사를 받는다. 없으면 빈 문자열. 같은 번호 머리 수는 `section_problem`, 표에 없는 머리는
+    `head_problems` 가 판정한다."""
     body = body_text(text)
     start = _titled_head(num, title or SECTION_TITLES[num]).search(body)
     if not start:
         return ""
     eol = body.find("\n", start.end())
     rest = "" if eol < 0 else body[eol + 1:]   # 머리 줄의 나머지는 절 본문이 아니다
-    nxt = re.search(r"^##\s+\d+\.", rest, re.MULTILINE)
-    return rest[: nxt.start()] if nxt else rest
+    out = []
+    for ln in split_lines(rest, keepends=True):
+        if is_section_head(ln) is not None:
+            break
+        out.append(ln)
+    return "".join(out)
 
 
 SECTION_REASON_TEXT = {
     "section_missing": "제목 붙은 절 머리가 없다",
     "section_heading_duplicate": "같은 번호의 절 머리가 둘 이상이라 읽는 쪽마다 다른 절을 고를 수 있다",
+    "section_head_unknown": "절 표에 없는 번호 머리(소번호 · 부록 · 전각 · 다른 문자 체계 숫자 등)라 어느 절로 읽을지 정해지지 않는다",
 }
+
+
+def head_problems(text):
+    """펜스 밖 줄 중 절 번호처럼 보이는(정규형에서 `##` 뒤 숫자) 머리가 절 표의 제목 붙은 머리(날 글자) 하나가 아니면
+    거부 -> [(그 줄, `section_head_unknown`)]."""
+    titled = [_titled_head(n, title) for n, title in SECTIONS]
+    out = []
+    for ln in split_lines(body_text(text)):
+        if _HEADLIKE_RE.match(canon(ln)) and not any(rx.match(ln) for rx in titled):
+            out.append((ln, "section_head_unknown"))
+    return out
 
 
 def section_problem(text, num, title=None):
     """절 경계가 하나로 정해지는가 -> None 또는 사유 이름. 펜스 밖 `## <num>.` 머리(제목 무관 · `## 4.1` 같은 다른 번호
     제외)가 둘 이상이면 `section_heading_duplicate`, 제목 붙은 머리가 없으면 `section_missing`."""
     body = body_text(text)
-    if len(re.findall(rf"^##\s+{re.escape(num)}\.(?![0-9])", body, re.MULTILINE)) > 1:
+    if sum(1 for ln in split_lines(body) if is_section_head(ln) == num) > 1:
         return "section_heading_duplicate"
     if not _titled_head(num, title or SECTION_TITLES[num]).search(body):
         return "section_missing"
@@ -228,14 +264,16 @@ _NUMBERED_RE = re.compile(r"^\s*\d+[.)]\s")
 _QUOTED_RE = re.compile(r"^\s*>")
 # 결정 꼴 (가) — 줄 머리(공백 · 번호 · 인용 · 기호 같은 불릿 아닌 앞붙이 뒤, 강조 표시 건너)가 `OQ<n>`. 앞붙이에 여는 괄호 ·
 # 여는 따옴표가 있으면 머리가 아니다 — `(OQ1~OQ7 은 …` 같은 산문.
-_DECISION_HEAD_RE = re.compile(r"^((?:[\W\d_]|\w{1,3}[.)])*?)[*_`]*(OQ\d+)(?![0-9])")
+_DECISION_HEAD_RE = re.compile(r"^((?:[\W\d_]|\w{1,3}[.)])*?)[*_`]*(OQ[0-9]+)(?![0-9])")
 # 결정 꼴 (나) — 해결 · 열림 표시. 코드 칸(백틱) 안의 표시는 그 칸에 실제 원문 번호(`S` + ASCII 숫자)가 없을 때만 면제한다
 # — 자리 표시 `S<n>` 만 적은 설명은 결정 줄이 아니고, `[해결 ⟨S2⟩]` 를 코드 칸에 숨긴 줄은 결정 줄이다.
 _DECISION_MARK_RE = re.compile(r"\[해결|\[열림")
 _CODE_SPAN_RE = re.compile(r"(`+).*?\1")
 _REAL_SID_RE = re.compile(r"S[0-9]")
 # 선두 결정 번호 — 불릿을 뗀 본문이 (강조 표시를 사이에 두고도) `OQ<n>` 로 시작할 때 그 번호(`check_brief.LEADING_OQ_RE`).
-LEADING_OQ_RE = re.compile(r"^[*_`]*\s*(OQ\d+)(?!_*[0-9A-Za-z])")
+LEADING_OQ_RE = re.compile(r"^[*_`]*\s*(OQ[0-9]+)(?!_*[0-9A-Za-z])")
+# `OQ` 바로 뒤 비ASCII 숫자 — 다른 문자 체계의 숫자로 쓴 결정 번호(Ruling S13-b).
+_OQ_LOOKALIKE_RE = re.compile(r"(?<![A-Za-z0-9])OQ(?=[^\x00-\x7f])")
 _BULLET_PREFIX_RE = re.compile(r"^\s*[-*]\s+")
 DECISION_REASON_TEXT = {
     "decision_numbered": "번호 목록으로 쓴 결정 줄",
@@ -243,6 +281,8 @@ DECISION_REASON_TEXT = {
     "decision_shape": "열 0 의 `- ` 불릿이 아닌 결정 줄",
     "decision_confusable": "보이지 않는 글자나 닮은 글자로 머리를 꾸민 결정 줄",
     "decision_line_separator": "한 줄 안에 줄 나눔 글자가 있어 읽는 쪽마다 항목 수가 달라지는 줄",
+    "oq_confusable": "결정 번호를 ASCII 가 아닌 숫자로 쓴 줄",
+    "decision_outside_sections": "§0 · §3 밖(머리말 · 다른 절 · 펜스 · 표에 없는 머리 아래)에 있어 어느 결정 판독기도 읽지 않는 결정 줄",
     "entry_line_separator": "한 줄 안에 줄 나눔 글자가 있어 읽는 쪽마다 항목 수가 달라지는 줄",
 }
 
@@ -256,6 +296,17 @@ def _decision_tokens(text):
     masked = _CODE_SPAN_RE.sub(lambda s: s.group(0) if _REAL_SID_RE.search(fold(s.group(0))) else " " * len(s.group(0)),
                                text)
     return oq, _DECISION_MARK_RE.findall(masked)
+
+
+def _oq_lookalike(text):
+    f = fold(text)
+    return any(unicodedata.category(f[m.end()]) == "Nd" for m in _OQ_LOOKALIKE_RE.finditer(f))
+
+
+def decision_shaped(line):
+    """정규형이 결정 꼴인가 — `OQ<n>` 머리, 해결 · 열림 표시, 또는 ASCII 가 아닌 숫자를 단 `OQ`."""
+    oq, marks = _decision_tokens(canon(line))
+    return bool(oq or marks) or _oq_lookalike(line)
 
 
 def _decision_head_end(c):
@@ -282,6 +333,8 @@ def decision_line_problem(line):
     `decision_line_separator`."""
     if _separator_problem(line):
         return "decision_line_separator"
+    if _oq_lookalike(line):
+        return "oq_confusable"
     c = canon(line)
     tokens = _decision_tokens(c)
     if not (tokens[0] or tokens[1]):
