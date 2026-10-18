@@ -1661,6 +1661,8 @@ def gate(path: Path) -> int:
                 for n, why in audit_anchor_rejects(audit_text):
                     failures.append(f"audit §6 의 {n}번째 줄이 허용 문법 밖이다 — "
                                     f"{brief_body.ANCHOR_REASON_TEXT[why]}({why})")
+            failures += [f"audit 에 읽는 쪽마다 다르게 읽히는 글이 있다 — {brief_body.SECTION_REASON_TEXT[why]} ({why}): {ln.strip()[:60]}"
+                         for ln, why in brief_body.audit_subset_problems(audit_text)]
             if not audit_sec6_absent and attribution_block_missing(audit_text):
                 failures.append("audit §6 출처 표기 블록 부재 (🗣·☑·✎ 세 기호를 모두 담은 인용 줄 필요)")
             if not sec5_absent and not any(m.startswith("3.") for m in amiss):

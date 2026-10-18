@@ -492,7 +492,7 @@ class RenderedShapeRules(unittest.TestCase):
 
     def test_placeholder_does_not_exempt_the_whole_line(self):
         for line, why in (("- <b>S9</b> x S<N>", "html_inline_not_allowed"), ("- *\\*S5*\\* S\\<N\\>", "anchor_markup"),
-                          ("- **&#83;9** x", "anchor_markup"), ("- <b>S&#57;</b> x", "html_inline_not_allowed")):
+                          ("- **&#83;9** x", "char_ref_not_allowed"), ("- <b>S&#57;</b> x", "char_ref_not_allowed")):
             ok, bad = B.anchor_lines(line)
             self.assertEqual((ok, [r for _n, r in bad]), ([], [why]), line)
         self.assertEqual(B.anchor_lines("- **S<N>** 자리 표시 S<N>")[1], [])   # 자리 표시만 있는 줄은 그대로 받는다
@@ -634,6 +634,9 @@ RAW6_REFUSED = [
     ("자동 링크에 든 백틱, 템플릿 요소", ["- x <" + BT + "@x.y> <template>x</template> " + BT], "autolink_backtick"),
     ("자동 링크에 든 백틱 (URI 꼴)", ["- x <ab:b" + BT + "c> <ul>y</ul> " + BT], "autolink_backtick"),
     ("확장 자동 링크 www 에 든 백틱", ["- x www.a.b" + BT + "c <ul>y</ul> " + BT], "autolink_backtick"),
+    ("자리 표시 뒤 숫자 문자 참조", ["- **S<N>&#57;** x"], "char_ref_not_allowed"),
+    ("자리 표시 뒤 16진 문자 참조", ["- **S<N>&#x39;** x"], "char_ref_not_allowed"),
+    ("본문 자리 표시 뒤 문자 참조", ["- **S1** 「a」 **S<N>&#57;**"], "char_ref_not_allowed"),
     ("확장 자동 링크 스킴에 든 백틱", ["- x https://a.b" + BT + "c <ul>y</ul> " + BT], "autolink_backtick"),
 ]
 
@@ -644,6 +647,19 @@ class AuditSection6Subset(unittest.TestCase):
             with self.subTest(name):
                 ok, bad = B.anchor_lines("\n".join(lines))
                 self.assertIn(why, [r for _n, r in bad], (ok, bad))
+
+    def test_decision_marks_read_the_visible_text_through_the_exact_code_span_finder(self):
+        # 여는 백틱 하나(짝 없음)는 코드 칸이 아니라 글자다 — 그 뒤 `[해결` 은 눈에 보이는 표시다.
+        self.assertEqual(B._decision_tokens("- OQ1 " + BT + "[해결 x")[1], ["[해결"])
+        self.assertEqual(B._decision_tokens("- OQ1 " + BT + "[해결" + BT + " x")[1], [])      # 짝이 맞는 코드 칸 안은 가린다
+        self.assertEqual(B._decision_tokens("- OQ1 \\" + BT + "[해결" + BT + " x")[1], ["[해결"])   # 이스케이프한 백틱은 코드 칸을 열지 않는다
+
+    def test_scans_are_linear(self):
+        import time
+        for line in ("- " + "a" * 50000, "- " + "www." * 20000, "- " + "https://" * 8000, "- " + "<" * 20000 + "x"):
+            t0 = time.time()
+            B.anchor_lines(line)
+            self.assertLess(time.time() - t0, 2.0, line[:12])
 
     def test_column0_fence_content_is_still_skipped(self):
         # 열 0 에서 연 펜스 안의 줄은 코드다 — 인라인 판독을 하지 않는다(양성 대조).

@@ -308,6 +308,21 @@ class ConfirmationMarkVariants(unittest.TestCase):
             with self.subTest(ok):
                 self.assertIsNone(seed_body.line_problem(ok), ok)
 
+    def test_decomposed_hangul_spelling_is_refused(self):
+        import unicodedata
+        for v in ("(사용자 확인 완료)", "[사용자 확인 완료]", "(사용자 (확인))"):
+            with self.subTest(v):
+                nfd = unicodedata.normalize("NFD", v)
+                self.assertNotEqual(nfd, v)
+                self.assertTrue(seed_body.line_problem("좋다. " + nfd), v)
+
+    def test_url_scan_is_linear(self):
+        import time
+        for line in ("a" * 50000, "a" * 50000 + "://", "www." * 20000, "a-" * 25000):
+            t0 = time.time()
+            seed_body.line_problem(line)
+            self.assertLess(time.time() - t0, 2.0, line[:10])
+
     def test_mark_check_is_linear(self):
         import time
         line = "(" * 200 + "사용자" * 20000 + ")" * 200
@@ -361,9 +376,18 @@ class QuoteFileWrittenByModel(unittest.TestCase):
         self.assertIn("B16", row)
 
     def test_the_file_path_is_still_the_only_input(self):
-        rc, _o, err = run("seed_review_log.py", "log", "x.md", "--kind", "답", "--round", "1", "--target", "t", "--quote", "q")
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        qf = pathlib.Path(td.name) / "q.txt"
+        qf.write_text("문구\n", encoding="utf-8")
+        base = ["log", "x.md", "--kind", "답", "--round", "1", "--target", "t"]
+        rc, _o, err = run("seed_review_log.py", *base, "--quote", "q")
         self.assertEqual(rc, 2, err)
-        self.assertIn("--quote", err)
+        self.assertIn("the following arguments are required: --quote-file", err)
+        # 파일 인자를 함께 줘도 셸 인자 --quote 는 따로 거부된다(줄임 인자로 살아나지 않는다)
+        rc, _o, err = run("seed_review_log.py", *base, "--quote-file", qf, "--quote", "q")
+        self.assertEqual(rc, 2, err)
+        self.assertIn("unrecognized arguments: --quote q", err)
 
 
 class Section2MultiLineAnswerWriterContract(Tmp):
@@ -396,6 +420,58 @@ class Section2MultiLineAnswerWriterContract(Tmp):
         self.assertIn("R8", row)
         text = SPEC.read_text(encoding="utf-8").split("\n## 미룸\n", 1)[1].split("\n## ", 1)[0]
         self.assertNotIn("여러 줄 답", text)
+
+
+class AuditWholeBodySubsetRules(Tmp):
+    """audit 전체에 payload 와 같은 부분집합 규칙(S19) — §6 앞 절의 열린 HTML 블록 · 들여 쓴 펜스가 §6 머리의 상태를 바꿔 가짜 앵커를
+    그리지 못한다. 게이트는 빨갛고 로드맵 판독기는 FormatError 다."""
+
+    FX = HERE / "fixtures"
+    BT3 = "`" * 3
+    CASES = [
+        ("여는 주석이 §6 머리를 삼킨다", "<!--"),
+        ("div 가 §6 머리 앞에 열려 있다", "<div>"),
+        ("들인 펜스가 상태를 뒤집는다", "- a\n   " + "`" * 3 + "\n" + "`" * 3),
+        ("문자 참조", "표 &amp; 표"),
+        ("물결 들인 펜스", "  " + "~" * 3),
+    ]
+
+    def pair(self, extra):
+        brief = (self.FX / "interview-brief-valid.md").read_text(encoding="utf-8")
+        audit = (self.FX / "interview-brief-valid.audit.md").read_text(encoding="utf-8")
+        if extra:
+            audit = audit.replace("\n## 6. 사용자 원문", "\n" + extra + "\n\n## 6. 사용자 원문", 1)
+        return brief, audit
+
+    def write_pair(self, extra):
+        brief, audit = self.pair(extra)
+        self.write("interview-brief-valid.audit.md", audit)
+        return self.write("interview-brief-valid.md", brief)
+
+    def test_the_gate_is_red_for_each_case(self):
+        for name, extra in self.CASES:
+            with self.subTest(name):
+                rc, out, err = run("check_brief.py", "gate", self.write_pair(extra))
+                self.assertNotEqual(rc, 0, out)
+                self.assertIn("audit 에 읽는 쪽마다 다르게 읽히는 글이 있다", out)
+
+    def test_the_roadmap_readers_raise_format_error(self):
+        import roadmap_model
+        import roadmap_render
+        for name, extra in self.CASES:
+            with self.subTest(name):
+                brief, audit = self.pair(extra)
+                with self.assertRaises(roadmap_model.FormatError):
+                    roadmap_model.brief_universe(brief, audit)
+                with self.assertRaises(roadmap_model.FormatError):
+                    roadmap_render.index_brief(brief, audit)
+
+    def test_positive_control_the_untouched_pair_passes(self):
+        rc, out, err = run("check_brief.py", "gate", self.write_pair(""))
+        self.assertEqual(rc, 0, out)
+        import roadmap_model
+        brief, audit = self.pair("")
+        roadmap_model.brief_universe(brief, audit)
 
 
 class VerbatimUnitsSection1(unittest.TestCase):

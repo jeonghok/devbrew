@@ -236,6 +236,12 @@ def subset_problems(text):
     return out
 
 
+def audit_subset_problems(audit_text):
+    """audit 전체(frontmatter 뒤)에 payload 와 같은 부분집합 규칙 -> [(줄, 사유)]. audit 본문도 같은 렌더러가 읽으므로 §6 앞 절의 열린
+    HTML 블록 · 들여 쓴 펜스가 §6 머리의 상태를 바꿔 가짜 앵커를 그리지 못하게 한다."""
+    return subset_problems(audit_text)
+
+
 SUBSET_REASONS = ("html_block_not_allowed", "char_ref_not_allowed", "fence_indented")   # 절 머리가 아닌 부분집합 밖 구조
 
 
@@ -333,12 +339,13 @@ _PH_MARK = "\ue000"
 
 
 def _shape_view(text):
-    f = _PLACEHOLDER.sub("S" + _PH_MARK, fold(text).translate({ord(_PH_MARK): None}))
+    f = _PLACEHOLDER.sub("S" + _PH_MARK, html.unescape(fold(text)).translate({ord(_PH_MARK): None}))   # 문자 참조를 먼저 푼다
     return _ESCAPE_RE.sub(r"\1", html.unescape(_strip_tags(f)))
 
 
 # 거부 사유 이름 → 사람이 읽는 말. 메시지는 이 말을 앞세우고 사유 이름은 괄호에 둔다.
 ANCHOR_REASON_TEXT = {
+    "char_ref_not_allowed": "HTML 문자 참조(`&#57;` 같은 것)가 있어 렌더러만 다른 글자로 읽는 줄",
     "html_block_not_allowed": "HTML 블록으로 시작하는 줄이라 뒤따르는 앵커 줄을 삼킬 수 있는 줄",
     "fence_indented": "들여 쓴 코드 펜스를 여는 줄이라 목록 항목 안의 펜스로 읽는 쪽과 아닌 쪽이 갈리는 줄",
     "autolink_backtick": "백틱이 든 자동 링크 꼴(`<…>`)이라 코드 칸 짝짓기가 렌더러마다 갈리는 줄",
@@ -464,20 +471,23 @@ def inline_html(line):
     return bool(_INLINE_HTML_RE.search(masked))
 
 
+_TOKEN_RE = re.compile(r"[^\s<]+")
 _URI_AUTOLINK_RE = re.compile(r"<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\x00-\x20]*>")
 _LABEL = r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
 _EMAIL_AUTOLINK_RE = re.compile(r"<[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@" + _LABEL + r"(?:\." + _LABEL + r")*>")
 
 
-_EXT_AUTOLINK_BACKTICK_RE = re.compile(r"(?:www\.|[A-Za-z][A-Za-z0-9+.-]*://)[^\s<]*`")
 
 
 def autolink_with_backtick(line):
     """CommonMark 자동 링크(URI · 이메일) 꼴 안에 백틱이 든 줄인가. 렌더러는 `<` 에서 시작하는 자동 링크를 먼저 읽어 그 안의
     백틱을 글자로 쓰지만, 이 판독의 코드 칸 짝짓기는 그 백틱을 짝으로 읽어 뒤의 HTML 을 코드로 가린다. 읽는 쪽이 갈리므로
     거부한다(백슬래시로 이스케이프한 `\\<` 는 자동 링크가 아니다)."""
-    if _EXT_AUTOLINK_BACKTICK_RE.search(line):   # GFM 확장 자동 링크(`www.` · `스킴://`)도 백틱까지 한 링크로 읽는 렌더러가 있다
-        return True
+    for tok in _TOKEN_RE.finditer(line):   # GFM 확장 자동 링크(`www.` · `스킴://`)도 백틱까지 한 링크로 읽는 렌더러가 있다 — 선형 낱말 훑기
+        t = tok.group(0)
+        marks = [i for i in (t.find("www."), t.find("://")) if i >= 0]
+        if marks and t.rfind("`") > min(marks):
+            return True
     for rx in (_URI_AUTOLINK_RE, _EMAIL_AUTOLINK_RE):
         for m in rx.finditer(line):
             if "`" not in m.group(0):
@@ -513,6 +523,9 @@ def anchor_lines(section_text):
             continue
         if not in_fence and _HTML_BLOCK_RE.match(canon(line)):   # 줄 머리 `<` + 글자 — HTML 블록이 뒤 앵커 줄을 삼킬 수 있다
             bad.append((n, "html_block_not_allowed"))
+            continue
+        if not in_fence and _CHAR_REF_RE.search(canon(line)):   # 문자 참조는 §6 모든 줄에서 거부한다(코드 칸 안도)
+            bad.append((n, "char_ref_not_allowed"))
             continue
         if not in_fence and autolink_with_backtick(line):
             bad.append((n, "autolink_backtick"))
@@ -604,8 +617,11 @@ def _decision_tokens(text):
     m = _DECISION_HEAD_RE.match(text)
     if m and not any(unicodedata.category(ch) in ("Ps", "Pi") for ch in m.group(1)):
         oq = m.group(2)
-    masked = _CODE_SPAN_RE.sub(lambda s: s.group(0) if _REAL_SID_RE.search(fold(s.group(0))) else " " * len(s.group(0)),
-                               text)
+    chars = list(text)
+    for a, b, _run in code_spans(text):   # 정확한 코드 칸 판독 — 정규식 흉내가 아니다
+        if not _REAL_SID_RE.search(fold(text[a:b])):
+            chars[a:b] = " " * (b - a)
+    masked = "".join(chars)
     return oq, _DECISION_MARK_RE.findall(masked)
 
 

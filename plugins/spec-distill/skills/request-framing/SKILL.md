@@ -259,7 +259,17 @@ AskUserQuestion({ questions: [
 그대로 남깁니다(`${CLAUDE_PLUGIN_ROOT}/templates/interview-seed-audit-template.md`). 줄 모양이 계약입니다 —
 «당신이 답한 것» 줄은 리뷰의 정답 출처이고(seed 프로필 `ground_truth`), `- 내가 읽은 것: 「…」 — 고름`
 줄은 `seed_provenance.py marks` 가 «(사용자 확인)» 의 근거로 읽습니다. 꼬리의 «사용자가 적은 말» 칸은 seed
-프로필의 정답 출처에 듭니다. «당신이 답한 것» 값과 «사용자가 적은 말» 값은 한 줄로 잇습니다(사용자 답을 `seed_review_log.py one-line` 에 통과시킨 글자를 적는다) — 여러 줄 답이 풀이 줄 모양의 줄을 만들지 못하게 하는 계약입니다.
+프로필의 정답 출처에 듭니다. «당신이 답한 것» 값과 «사용자가 적은 말» 값은 한 줄로 잇습니다 — 사용자 답을 Write 도구로 `$STATE_DIR/said-r<n>.txt` 에 먼저 쓰고, 아래 펜스의 `seed_review_log.py one-line` 출력을 그 칸에 적습니다. 여러 줄 답이 풀이 줄 모양의 줄을 만들지 못하게 하는 계약입니다.
+
+```bash
+# audit `## 2` 의 «당신이 답한 것» · «사용자가 적은 말» 값 하나 — 문구 파일은 먼저 Write 도구로 쓴다.
+a_rc=0; a="$(python3 "$SD/scripts/seed_review_log.py" one-line "$STATE_DIR/said-r<n>.txt")" || a_rc=$?
+if [ "$a_rc" -ne 0 ]; then
+  echo "[spec-distill] 사용자 답 파일을 읽지 못했다 — audit 에 적지 않는다. 답을 Write 도구로 쓴 뒤 이 펜스를 다시 돌려라." >&2
+else
+  printf '%s\n' "$a"
+fi
+```
 
 **남는 한계** — «내가 풀어 썼는가»의 판정은 여전히 저자가 합니다. 저자가 풀어 쓴 줄 모르는 문장은 확인
 질문에 오르지 않습니다. 그 잔여는 리뷰 엔진의 탐지 리뷰어가 층 1 `inference_as_decision` 으로 봅니다 —

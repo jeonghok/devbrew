@@ -280,6 +280,9 @@ def index_brief(brief: str, audit: str) -> BriefIndex:
         m = ST_LINE_RE.search(line)
         if m:
             lines[m.group(1)] = line
+    found = brief_body.audit_subset_problems(audit)
+    if found:
+        raise FormatError("audit 에 읽는 쪽마다 다르게 읽히는 글이 있어 합칠 수 없다(%s)" % found[0][1])
     b6, a6 = section6.body(brief), section6.body(audit)
     if b6 is None or a6 is None:
         raise FormatError("brief 또는 audit 의 §6 을 하나로 읽을 수 없다")

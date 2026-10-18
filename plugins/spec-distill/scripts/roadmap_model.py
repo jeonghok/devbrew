@@ -454,6 +454,9 @@ def brief_universe(brief: str, audit: str):
     k_expected = [("K%d" % (i + 1), text) for i, text in enumerate(k_expected)]
     non_s |= {k for k, _ in k_expected}
     s_ids = set()
+    found = brief_body.audit_subset_problems(audit)
+    if found:   # audit 본문에도 payload 와 같은 부분집합 규칙 — 읽는 쪽마다 다르게 읽히는 글이 있으면 §6 을 셀 수 없다
+        raise FormatError("audit 에 읽는 쪽마다 다르게 읽히는 글이 있어 번호를 셀 수 없다(%s)" % found[0][1])
     for label, doc in (("brief", brief), ("audit", audit)):
         b6 = section6.body(doc)
         if b6 is None:

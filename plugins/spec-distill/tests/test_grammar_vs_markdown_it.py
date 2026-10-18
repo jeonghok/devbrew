@@ -204,6 +204,9 @@ ANCHOR_CASES = [
     ("자동 링크에 든 백틱, 숫자 머리", ["<1`@x.y> <b>x</b> `"], 0, None),
     ("자동 링크에 든 백틱, 템플릿 요소", ["<`@x.y> <template>x</template> `"], 0, None),
     ("자동 링크에 든 백틱 (URI 꼴)", ["- x <ab:b`c> <ul>y</ul> `"], 0, None),
+    ("자리 표시 뒤 숫자 문자 참조", ["- **S<N>&#57;** x"], 0, None),
+    ("자리 표시 뒤 16진 문자 참조", ["- **S<N>&#x39;** x"], 0, None),
+    ("본문 자리 표시 뒤 문자 참조", ["- **S1** 「a」 **S<N>&#57;**"], 0, None),
 ]
 
 HEAD_CASES = [
@@ -281,6 +284,26 @@ class CrossCheckClasses(unittest.TestCase):
                 self.assertEqual(parser_h2(ln + "\n"), set())
                 self.assertFalse(any(t.type == "heading_open" for t in MD.parse(ln + "\n")))
                 self.assertIsNone(B.is_section_head(ln))
+
+    def test_audit_body_before_section6_cannot_change_the_parser_state_at_the_heading(self):
+        """감사 전체에 부분집합 규칙 — §6 머리 앞 절의 열린 HTML 블록 · 들인 펜스가 파서가 보는 `## 6.` 머리를 바꾸면 거부해야 한다."""
+        head = "## 5. 프로세스 로그\n\n본문\n"
+        tail = "\n## 6. 사용자 원문\n\n- **S1** 「a」\n"
+        cases = [("a 주석", "<!--\n"), ("b div", "<div>\n"), ("c 들인 펜스", "- a\n   ```\n```\n"),
+                 ("d 물결 들인 펜스", "  ~~~\n"), ("정상(양성 대조)", "")]
+        flipped = 0
+        for name, mid in cases:
+            with self.subTest(name):
+                doc = head + mid + tail
+                sees = "## 6. 사용자 원문" in parser_h2(doc)
+                problems = B.audit_subset_problems(doc)
+                if not sees:
+                    flipped += 1
+                    self.assertTrue(problems, "%s: 파서는 §6 머리를 제목으로 읽지 않는데 감사 부분집합 규칙이 거부하지 않았다" % name)
+                if not mid:
+                    self.assertTrue(sees)
+                    self.assertEqual(problems, [])
+        self.assertGreaterEqual(flipped, 2, "머리가 뒤집히는 사례가 거의 없다 — 이 교차 확인이 공허하다")
 
     def test_anchor_positive_control(self):
         self.assertEqual(anchor_verdict([ANCHOR9], 0), ("accept", True))

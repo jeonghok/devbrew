@@ -44,9 +44,9 @@ MARK = "(사용자 확인)"
 FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.S)
 # 접은 열에서 표시의 낱말 — 앞뒤 한 글자가 괄호류여야 표시다(`marks_in_flat`).
 MARK_CORE_RE = re.compile(r"사용자가?확인(?:함|됨)?")
-URL_RE = re.compile(r"[a-z][a-z0-9+.-]*://|www\.\S|mailto:")
+URL_RE = re.compile(r"[a-z][a-z0-9+.-]{0,31}://|www\.\S|mailto:")
 CHAR_REF_RE = re.compile(r"&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);")
-BARE_DOMAIN_RE = re.compile(r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)+/")
+BARE_DOMAIN_RE = re.compile(r"\b[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63})+/")   # 라벨 길이를 묶어 선형으로 둔다
 FRONTMATTER_LINE_RE = re.compile(r"^([a-z_]+):(?: (.*))?$")
 BARE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z][A-Za-z0-9_-]*>")   # 속성 없는 여는 태그 하나 — 템플릿의 자리 표시(`<basename>`)
 ANGLE_RE = re.compile(r"<\S")
@@ -96,18 +96,17 @@ def mark_spans(s: str) -> list[tuple[int, int]]:
 
 
 def _flat_groups(s: str):
-    """-> (접고 공백을 뺀 열, 짝이 맞는 괄호 묶음 [(여는 자리, 닫는 자리)] — 그 열 위의 자리). 여는 괄호류는 짝을 깊이로 센다
-    (바깥 묶음과 안쪽 묶음 모두 낸다). 짝 없는 괄호는 묶음이 아니다. 접기는 한 번만 한다."""
-    flat = []
-    for ch in s:
-        flat.extend(f for f in fold_for_match(ch) if not f.isspace())
+    """-> (접고 공백을 뺀 열, 짝이 맞는 괄호 묶음 [(여는 자리, 닫는 자리)] — 그 열 위의 자리). 줄 전체를 한 번에 접는다(NFKC 는 글자
+    하나씩 접으면 놓치는 조합 — 풀어 쓴 한글 자모 — 을 합친다). 여는 괄호류는 짝을 깊이로 센다(바깥 묶음과 안쪽 묶음 모두 낸다).
+    짝 없는 괄호는 묶음이 아니다."""
+    flat = fold_flat(s)
     stack, out = [], []
     for k, ch in enumerate(flat):
         if _is_open(ch):
             stack.append(k)
         elif _is_close(ch) and stack:
             out.append((stack.pop(), k))
-    return "".join(flat), out
+    return flat, out
 
 
 _MAX_MARK_GROUPS = 200
