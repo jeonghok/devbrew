@@ -99,7 +99,7 @@ L cleanup --roadmap "$RM" --session "$SID" --path "$WT" >/dev/null; assert_eq "$
 assert_contains "$(g "$W" branch --list work/e1)" "work/e1" "브랜치는 지우지 않는다"
 assert_contains "$(L orphans --roadmap "$RM")" "work/e2" "기계 상태에 없는 E2 worktree 는 주인 모름"
 
-# 9 — 기계 상태를 지워도 상태는 git 에서 같다(AC17): 줄의 <제목><탭><상태> 만 비교
+# 9 — 기계 상태를 지워도 상태는 git 에서 같다(AC17): 작업 목록 출력(`show --tasks` 의 줄 전부)을 지우기 전후로 통째 비교
 L add --roadmap "$RM" --session "$SID" --section 자원 --cells "worktree · $WT2 · E2 · 조사 · t" >/dev/null
 assert_not_contains "$(L orphans --roadmap "$RM")" "work/e2" "자원에 적은 E2 worktree 는 주인 모름이 아니다"
 before="$(tasks_of)"

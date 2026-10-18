@@ -12,7 +12,7 @@ source_brief: {{SOURCE_BRIEF}}
 {{EPICS}}
 ## 지휘 절차
 
-이 로드맵은 지휘자가 이끈다 — `/spec-distill:epic-conductor {{ROADMAP}}`. 다시 불러도 git 과 기계 상태에서 상태를 다시 계산해 같은 자리에서 잇는다. 지휘자를 껐으면(`DEVBREW_SPEC_DISTILL_DISABLE=1`) spec-distill 의 `references/conducting.md` 끝 절 「손으로 따르는 절차」 를 따른다.
+이 로드맵은 지휘자가 이끈다 — `/spec-distill:epic-conductor {{ROADMAP}}`. 다시 불러도 git 과 기계 상태에서 상태를 다시 계산해 같은 자리에서 잇는다. `DEVBREW_SPEC_DISTILL_DISABLE=1` 로 꺼 두면 spec-distill 전체(리뷰 · 상태 계산 포함)가 꺼진다 — 지휘자 없이 진행하려면 끄지 말고 지휘자를 부르지 않은 채 spec-distill 의 `references/conducting.md` 끝 절 「손으로 따르는 절차」 를 따른다.
 
 - 사람 몫(brainstorming · spec 승인 · 계획의 설계에 없던 결정)은 지휘 세션이 한 번에 한 에픽씩 배경과 함께 묻는다.
 - 실행 방식은 writing-plans 가 권하는 방식이고, 계획 검토는 계획에 설계에 없던 결정이 있을 때만 기다린다.
