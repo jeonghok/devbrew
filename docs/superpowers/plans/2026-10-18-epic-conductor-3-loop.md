@@ -23,6 +23,7 @@
 - 사람에게 보이는 출력(스크립트 줄 · skill 의 글)은 `shared/style/plain-language.md` 를 따른다 — 내용을 먼저, 내부 용어 · 번호는 괄호에. SKILL.md 에는 `<!-- plain-language:begin -->` 블록을 `skills/roadmap-status/SKILL.md` 의 것과 바이트 그대로 둔다(`shared/tests/test_plain_language_block.sh`).
 - 같은 20줄(200자 이상) 블록을 두 파일에 두지 않는다(`shared/tests/test_no_new_duplication.sh`). 셸 테스트에서 변수 바로 뒤 비ASCII 글자는 중괄호(`「${lit}」`). 새 셸 테스트는 `chmod +x` 뒤 `git ls-files -s` 가 `100755` 인지 본다. 셸 테스트는 리포 루트에서 `bash <파일>` 로 돈다. `# guards:` 머리는 달지 않는다(달면 `--emit-scanned` 를 요구한다).
 - 스위트 둘을 같은 시각에 돌리지 않는다. 테스트 임시 폴더는 각 테스트가 `mktemp -d` 로 자기 것을 만들고 그것만 지운다 — 공유 임시 폴더를 glob 으로 지우지 않는다.
+- 레포 규칙 파일 `CLAUDE.md` 는 Task 11 Step 6 의 한 문장만 더한다(사용자 결정 B). 그 밖의 줄은 고치지 않는다.
 - 고치지 않는 것: superpowers 파일, `plugins/quality-gates/`, `shared/docreview/` · `shared/test-selection/`(R2a — 링크로 쓰기만), `skills/spec-interview/` 가운데 `references/finishing.md` 의 나눈 일 다음 세션 줄 한 줄 밖(R10 예약), `skills/request-framing/SKILL.md`(R10), 리뷰 엔진 동작.
 - 커밋은 Conventional Commits, 설명은 한국어, `type`·`scope` 영어. 구현 커밋마다 `Spec: docs/superpowers/specs/2026-10-17-epic-conductor-design.md` 트레일러. 커밋은 pathspec 으로(`git commit -m … -- <경로…>`) — 같은 worktree 의 다른 staged 변경을 쓸어 담지 않는다. 커밋 뒤 `git show --stat HEAD` 의 파일 수가 그 Task 의 파일 수와 같은지 본다. HEAD 를 뒤로 옮기지 않는다(reset · rebase · force 금지). 지휘 세션이 같은 worktree 에서 설계문서 · 로드맵을 고칠 수 있다 — 그 파일들을 되돌리지 않는다.
 - 버전: 이 PR 은 `plugins/spec-distill/.claude-plugin/plugin.json` 의 minor 를 하나 올린다(새 진입 skill · 새 스크립트 · 새 agent). 번호는 머지 직전에 origin 기본 브랜치의 값을 보고 정한다(Task 16).
@@ -74,12 +75,28 @@
 - **K. 로드맵 에픽의 승인 게이트 둘째 줄과 계획 agent 의 입력.** 설계는 AC42 에서 로드맵 에픽의 다음 세션 줄을 「지휘자 이어 부르기」 로 바꾸라 하고, AC44 · §3 에서는 「다음 세션 줄을 계획 agent 의 입력으로 넘긴다」 고 한다 — 둘째 줄이 지휘자 호출이면 계획 agent 가 받을 writing-plans 지시가 사라진다. 권장: 로드맵 에픽이면 ①/② 가 치게 하는 둘째 줄은 `/spec-distill:epic-conductor <로드맵 절대경로>` 로 바꾸고, 원래의 writing-plans 줄은 지우지 않고 「계획 agent 의 입력(치지 않는다)」 머리 아래 그대로 보인다 — 지휘자가 그 줄을 계획 agent 에게 넘긴다. 대안: 둘째 줄만 바꾸고 계획 agent 의 지시는 `conductor-dispatch.md` 의 계획 틀만으로(게이트 글이 짧아지지만 손 절차 걸음 3 의 「그 줄을 계획 agent 에게 넘긴다」 문장과 그 락을 함께 고쳐야 한다). 바뀌는 것: `skills/spec-review/SKILL.md` 의 한 문단과 그 락(Task 12).
 - **J. 머지된 에픽의 PR 번호.** 머지 커밋 메시지를 해석하지 않고(호스트마다 모양이 다르다) 기계 상태 캐시 → `gh pr list --state all --head <브랜치>` 순으로, 에픽 하나로 내려가는 보기에서만 찾는다(지도 전체에서 머지된 에픽마다 `gh` 를 부르면 느리다). 바뀌는 것: Task 2 의 `control_plane.py` 한 함수.
 
+## 계획 단계 판정
+
+위 「설계에 없던 결정」 을 2026-10-18 에 정했다.
+
+- 사용자가 정한 셋 — 원문은 설계문서 `## 결정 기록` 의 2026-10-18 줄 셋에 있다: B(같은 세션 이어 부르기의 시작 승인)는 이름 붙인 예외, E(devbrew 전체 테스트 명령)는 이 계획에서 더함, 실행 방식은 subagent-driven. B 는 레포 규칙(CLAUDE.md 의 `cost_class` 줄 — high 는 지출 전 명시적 `AskUserQuestion` 승인)의 예외라, 그 줄에 이름 붙인 예외 한 마디를 더하고 예외가 조건 밖으로 새지 않음을 테스트로 잰다(Task 11 Step 6 · Task 4 의 `StartApproval`).
+- Ruling: C · D · F · G · H · I · J · K 는 계획의 권장안대로 간다 — 지휘 세션 판정(2026-10-18), 기존 결정 · 레포 규칙(Law 2 · 레포 전용 값 금지 · 상태줄은 모든 레포에서 조용히 · 정적 읽기 전용 락 · 단계마다 새 agent 의 맥락 실측 · 사람 몫은 사람이 있는 세션에서)을 따르는 자리라 사용자에게 묻지 않았다 — 틀리면 해당 Task 의 문면 · 코드 몇 줄을 되돌린다.
+  - C: 승인 줄 꼴 `- spec 승인 · <날짜> · 「…」`, 단계 이름은 그대로 두고 「설계 중」 의 근거만 바꾼다.
+  - D: 새 읽기 전용 agent `integration-reviewer`(Law 2) — superpowers 리뷰 요청 skill 은 틀만 빌린다.
+  - F: 기본 브랜치를 모를 때 상태줄은 조용히 둔다.
+  - G: `--impl` 은 작업 트리의 로드맵을 읽고 그 사실을 출력에 적는다 — 지휘자가 대조 전에 기본 브랜치를 merge 해 둔다.
+  - H: 계획 agent 는 writing-plans 끝의 질문을 두 부분으로 돌려보내고, 구현 agent 에는 권한 실행 방식을 미리 받은 답으로 준다.
+  - I: 단계마다 새 agent — 재리뷰만 같은 agent 를 이어 부른다.
+  - J: 머지된 에픽의 PR 번호는 기계 상태 캐시 → `gh`, 에픽 하나로 내려가는 보기에서만.
+  - K: 로드맵 에픽의 승인 게이트는 지휘자 호출 줄과 「계획 agent 의 입력(치지 않는다)」 아래 writing-plans 줄을 둘 다 보인다.
+
 ## 경로 예약 겹침(정보)
 
 겹침은 막지 않는다 — 통합 리뷰에서 맞춘다.
 
 - `skills/spec-interview/references/finishing.md` — R10 예약(인터뷰 끝 게이트 · `spec-interview` → `pm-interview` 개명). 이 계획은 나눈 일의 다음 세션 줄 한 줄과 그 바로 아래 설명 문단만 고친다(AC36). R10 이 먼저 머지되면 파일 경로가 바뀐다 — merge 로 따라간다.
 - `shared/entry/check_invocation_surface.py` · `shared/tests/test_invocation_surface.sh` — 진입 skill 등록 두 줄. R10 의 개명도 같은 목록을 고친다.
+- `CLAUDE.md` — R9 · R11 이 예약했다. 이 계획은 `cost_class` 줄 끝에 이름 붙인 예외 한 마디만 더한다(Task 11 Step 6 — 사용자 결정 B). R9 의 지출 조항 개정 · R11 의 원칙 옮기기와 같은 줄이 겹칠 수 있다.
 - `tools/suite/run-all.sh`(새 파일, 결정 E)와 `docs/superpowers/roadmaps/…/roadmap.md` frontmatter · `## 지휘 절차` · `measurements.md` — 어느 에픽의 경로 예약에도 없다.
 - `plugins/spec-distill/.claude-plugin/plugin.json` · `CHANGELOG.md` · `README.md` — R10 · R2a 도 bump 한다. 번호는 머지 직전에.
 
@@ -2999,6 +3016,7 @@ git show --stat HEAD   # 파일 셋
 - Modify: `shared/entry/check_invocation_surface.py` (`ENTRY_SKILLS` 한 줄)
 - Modify: `shared/tests/test_invocation_surface.sh` (합성 리포 `ENTRY` 한 항목)
 - Create: `plugins/spec-distill/tests/test_epic_conductor_skill.sh`
+- Modify: `CLAUDE.md` (`cost_class` 줄 끝에 이름 붙인 예외 한 마디 — 사용자 결정 B)
 
 **Interfaces:**
 - Consumes: Task 4 의 `ledger roadmaps` · `claim` · `approval` · `approve`, Task 9 · 10 의 두 reference, Task 1 M9.
@@ -3265,18 +3283,44 @@ Agent(
 
 `<roadmap-status 펜스 첫 줄 그대로>` 두 자리는 실제 그 줄로 바꾼다(자리표를 남기지 않는다). `$ARGUMENTS` 는 위치 인자 락 밖이다(`$1` 류만 금지). 본문에 `$1` · `$2` 가 없는지 Step 6 이 공유 락으로 잰다.
 
-- [ ] **Step 6: 통과를 확인한다**
+- [ ] **Step 6: 레포 규칙에 이름 붙인 예외를 적는다(사용자 결정 B)**
 
-Run: `bash plugins/spec-distill/tests/test_epic_conductor_skill.sh 2>&1 | tail -5`
-Expected: 실패 0 — 그 안에서 공유 락 여덟(호출 표면 · dispatch 처분 · 입력 칸 · 쉬운 말 블록 · reference 포인터 · 플러그인 루트 · 위치 인자 · 인라인 python)이 모두 통과한다. dispatch 처분 락이 「앵커 수 ≠ dispatch 수」 로 빨개지면 `subagent_type` 줄 바로 아래 창 안에 처분 줄이 하나뿐인지, 설명 문단의 disclosure 문장이 처분 줄과 글자 그대로 같은지 본다.
+`CLAUDE.md` 의 `cost_class` 줄(「`high`는 지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함.」 으로 끝나는 줄)은 그 문장을 한 글자도 바꾸지 않고(`plugins/quality-gates/tests/test_governance_no_capability_caps.sh` AC8a 가 그 문장을 잠근다) 끝에 아래 한 문장을 덧붙인다:
 
-- [ ] **Step 7: 커밋**
+```markdown
+ 이름 붙인 예외 하나 — `epic-conductor` 를 같은 세션에서 같은 규모로 다시 부르면 이미 받은 승인을 다시 쓰고 공시만 한다(규모가 바뀌거나 다른 세션이면 다시 묻는다, 2026-10-18 사용자 결정).
+```
+
+`tests/test_epic_conductor_skill.sh` 의 `finish` 앞에 더한다 — 예외가 이름 · 조건과 함께 레포 규칙에 있고, 다른 skill 로 새지 않는다:
 
 ```bash
-git commit -m "feat(spec-distill): 진입 skill epic-conductor — 시작 승인 · 같은 세션 예외 · 지휘 순환 · 쓰기 권한 없는 통합 리뷰어
+CM="$ROOT/CLAUDE.md"
+COST="$(grep -F '**모든 skill에 `cost_class` 선언**' "$CM")"
+assert_contains "$COST" '지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함' "CLAUDE.md: 원래 승인 규칙 문장이 그대로"
+for lit in '이름 붙인 예외 하나 — `epic-conductor`' '같은 세션에서 같은 규모로 다시 부르면' '규모가 바뀌거나 다른 세션이면 다시 묻는다'; do
+  assert_contains "$COST" "$lit" "CLAUDE.md 예외: $lit"
+done
+assert_eq "$(grep -c '이름 붙인 예외' "$CM")" "1" "CLAUDE.md: 이름 붙인 예외는 하나"
+others="$(grep -l '이름 붙인 예외' "$ROOT"/plugins/*/skills/*/SKILL.md | grep -v '/skills/epic-conductor/' || true)"
+assert_eq "$others" "" "예외를 주장하는 다른 skill 이 없다"
+```
 
-Spec: docs/superpowers/specs/2026-10-17-epic-conductor-design.md" -- plugins/spec-distill/skills/epic-conductor/SKILL.md plugins/spec-distill/agents/integration-reviewer.md shared/entry/check_invocation_surface.py shared/tests/test_invocation_surface.sh plugins/spec-distill/tests/test_epic_conductor_skill.sh
-git show --stat HEAD   # 파일 다섯
+예외가 조건 밖으로 새지 않는 동작은 `tests/test_conductor_ledger.py` 의 `StartApproval`(규모가 바뀌면 「승인 필요」 · 다른 세션이면 「이 세션의 승인이 없다」 · 같은 세션 같은 규모만 「공시만」)과 Task 15 의 장면 2 가 잰다.
+
+- [ ] **Step 7: 통과를 확인한다**
+
+Run: `bash plugins/spec-distill/tests/test_epic_conductor_skill.sh 2>&1 | tail -5 && bash plugins/quality-gates/tests/test_governance_no_capability_caps.sh 2>&1 | tail -2 && bash shared/tests/test_charter_citations.sh 2>&1 | tail -2`
+Expected: 실패 0 — 그 안에서 공유 락 여덟(호출 표면 · dispatch 처분 · 입력 칸 · 쉬운 말 블록 · reference 포인터 · 플러그인 루트 · 위치 인자 · 인라인 python)이 모두 통과한다. dispatch 처분 락이 「앵커 수 ≠ dispatch 수」 로 빨개지면 `subagent_type` 줄 바로 아래 창 안에 처분 줄이 하나뿐인지, 설명 문단의 disclosure 문장이 처분 줄과 글자 그대로 같은지 본다.
+
+세 테스트 모두 실패 0 이어야 한다 — 헌장 인용 락이 `epic-conductor` 를 실재하는 이름으로 찾는다(이 Task 가 skill 을 만든 뒤라서).
+
+- [ ] **Step 8: 커밋**
+
+```bash
+git commit -m "feat(spec-distill): 진입 skill epic-conductor — 시작 승인 · 같은 세션 예외(레포 규칙에 이름 붙임) · 지휘 순환 · 쓰기 권한 없는 통합 리뷰어
+
+Spec: docs/superpowers/specs/2026-10-17-epic-conductor-design.md" -- plugins/spec-distill/skills/epic-conductor/SKILL.md plugins/spec-distill/agents/integration-reviewer.md shared/entry/check_invocation_surface.py shared/tests/test_invocation_surface.sh plugins/spec-distill/tests/test_epic_conductor_skill.sh CLAUDE.md
+git show --stat HEAD   # 파일 여섯
 ```
 
 ---
