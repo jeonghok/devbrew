@@ -24,16 +24,18 @@ for n in $NAMES; do
   assert_eq "$(readlink "plugins/quality-gates/scripts/$n")" "../../../shared/test-selection/$n" "qg 의 ${n} 는 공유본으로 가는 상대 링크다"
   assert_eq "$(git ls-files -s -- "shared/test-selection/$n" | awk '{print $1}')" "100755" "공유본 ${n} 는 실행 비트를 지킨다"
 done
-B="$HOME/.claude/sdd-mirror/r2a-plan1/blobs-before.tsv"
-if [ -f "$B" ]; then
-  # 이동이 바이트를 바꾸지 않았는지는 공유본을 처음 더한 커밋에서 잰다 — 그 뒤의 의도한 편집은 이 대조 밖이다
-  while IFS="$(printf '\t')" read -r n h; do
-    add_c="$(git log --diff-filter=A --format=%H -- "shared/test-selection/$n" | tail -1)"
-    assert_eq "$(git rev-parse "${add_c:-none}:shared/test-selection/$n" 2>/dev/null)" "$h" "공유본 ${n} 는 처음 더한 커밋에서 이동 전 blob 과 바이트가 같다"
-  done < "$B"
-else
-  ok "이동 전 blob 기록이 이 기계에 없다 — 바이트 대조는 Step 1 을 돈 기계에서만"
-fi
+# 이동이 바이트를 바꾸지 않았는지는 공유본을 처음 더한 커밋에서 잰다 — 그 뒤의 의도한 편집은 이 대조 밖이다.
+# 이동 전 blob 은 그 커밋의 부모에 있던 qg 스크립트다. 커밋이나 부모를 못 찾으면(얕은 클론 등) 통과가 아니라 실패다.
+for n in $NAMES; do
+  add_c="$(git log --diff-filter=A --format=%H -- "shared/test-selection/$n" | tail -1)"
+  after="$(git rev-parse "${add_c:-none}:shared/test-selection/$n" 2>/dev/null)"
+  before="$(git rev-parse "${add_c:-none}^:plugins/quality-gates/scripts/$n" 2>/dev/null)"
+  if [ -z "$after" ] || [ -z "$before" ]; then
+    no "공유본 ${n} 의 이동 전후 blob 을 git 에서 풀지 못했다(공유본을 더한 커밋 또는 그 부모가 없다 — 얕은 클론이면 전체 이력을 받아라)"
+  else
+    assert_eq "$after" "$before" "공유본 ${n} 는 처음 더한 커밋에서 이동 전 qg 스크립트와 바이트가 같다"
+  fi
+done
 assert_contains "$(cat shared/test-selection/README.md)" "넷을 전부" "소비자 규칙: 묶음 전체를 링크한다"
 # 세 경로가 같은 결과를 낸다: qg 링크 · 다른 플러그인 폴더의 링크 · 링크를 푼 사본(설치본 모양)
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
