@@ -129,7 +129,7 @@ def worktrees(root) -> list:
 
 def dirty_lines(path: Path) -> list:
     """지우기 전에 보일 것 — 수정 · 추적 안 된 파일과 git 밖 실행 기록 폴더(SDD 원장 등)."""
-    rc, out, _e = git(path, "status", "--porcelain", "--untracked-files=all")
+    rc, out, _e = git(path, "-c", "core.quotePath=false", "status", "--porcelain", "--untracked-files=all")
     if rc:
         raise Fail(2, "worktree 가 아니다: %s" % path)
     lines = ["바뀐 파일: %s" % l[3:] for l in out.splitlines() if l.strip()]
@@ -139,9 +139,47 @@ def dirty_lines(path: Path) -> list:
     return lines
 
 
-def _is_merge_copy(root, roadmap: str, path: Path) -> bool:
-    base = (mpath(root, roadmap).parent / repo_defaults.MERGE_CHECK_DIR).resolve()
-    return base in path.resolve().parents
+REVIEW_PACK_DIR = "review"
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def disposable_kind(root, roadmap: str, path: Path):
+    """지휘자가 직접 만든 일회용만 「merge」(스위트 대조 사본) · 「pack」(리뷰 묶음) — 그 밖은 None."""
+    mdir = mpath(root, roadmap).parent.resolve()
+    rp = path.resolve()
+    if (rp.parent.parent == mdir / repo_defaults.MERGE_CHECK_DIR and rp.parent.name.startswith("run-")
+            and rp.name in ("base", "merged")):
+        return "merge"
+    if rp.parent == mdir / REVIEW_PACK_DIR:
+        return "pack"
+    return None
+
+
+def _live_lock(root, roadmap: str) -> str:
+    owner = mpath(root, roadmap).parent / repo_defaults.MERGE_CHECK_DIR / "lock" / "owner"
+    try:
+        head = owner.read_text(encoding="utf-8").split(" ", 1)[0].strip()
+    except OSError:
+        return ""
+    return head if head.isdigit() and _alive(int(head)) else ""
+
+
+def require_user_worktree(root, path: Path) -> None:
+    """일회용이 아닌 경로는 등록된 worktree 이고 메인 체크아웃이 아니어야 한다."""
+    if path.is_symlink():
+        raise Fail(2, "worktree 가 아니다(심볼릭 링크): %s" % path)
+    items = worktrees(root)
+    if str(path.resolve()) not in {w["path"] for w in items[1:]}:
+        raise Fail(2, "worktree 가 아니다(또는 메인 체크아웃이다): %s" % path)
 
 
 # ── 하위 명령 ────────────────────────────────────────────────────────────────
@@ -268,6 +306,14 @@ def c_cleanup_check(root, a) -> int:
     if not path.is_dir():
         print("worktree 가 아니다: %s" % path)
         return 2
+    if a.roadmap and not path.is_symlink() and disposable_kind(root, a.roadmap, path):
+        print("일회용(지휘자가 만든 사본 · 묶음) — 확인 없이 지운다: %s" % path)
+        return 0
+    try:
+        require_user_worktree(root, path)
+    except Fail as exc:
+        print(exc)
+        return exc.rc
     lines = dirty_lines(path)
     for l in lines:
         print(l)
@@ -278,20 +324,39 @@ def c_cleanup_check(root, a) -> int:
 
 def c_cleanup(root, a) -> int:
     path = Path(a.path)
-    if _is_merge_copy(root, a.roadmap, path):
-        shutil.rmtree(str(path), ignore_errors=True)
-        git(root, "worktree", "prune")
+    owner = cs.holder(mpath(root, a.roadmap).parent)
+    if owner != a.session:
+        raise Fail(5, "읽기 전용 — 표지를 쥔 세션: %s" % (owner or "없음(먼저 claim)"))
+    if path.is_symlink():
+        raise Fail(3, "심볼릭 링크는 지우지 않는다: %s" % path)
+    kind = disposable_kind(root, a.roadmap, path)
+    if kind == "merge":
+        pid = _live_lock(root, a.roadmap)
+        if pid:
+            raise Fail(3, "스위트 대조가 도는 중이다(잠금 주인 %s) — 끝난 뒤 지운다: %s" % (pid, path))
+        rc, _o, err = git(root, "worktree", "remove", "--force", str(path))
+        if rc:
+            raise Fail(3, "스위트 대조 사본을 지우지 못했다: %s" % err)
+    elif kind == "pack":
+        try:
+            shutil.rmtree(str(path))
+        except OSError as exc:
+            raise Fail(3, "리뷰 묶음을 지우지 못했다: %s" % exc)
     else:
-        lines = dirty_lines(path) if path.is_dir() else []
+        if not path.is_dir():
+            raise Fail(2, "폴더가 없다: %s" % path)
+        require_user_worktree(root, path)
+        lines = dirty_lines(path)
         if lines:
             for l in lines:
                 print(l)
             print("지우지 않았다 — 위 내용을 사용자에게 보이고 묻는다(--force 를 쓰지 않는다)")
             return 1
-        if path.is_dir():
-            rc, _o, err = git(root, "worktree", "remove", str(path))
-            if rc:
-                raise Fail(3, "worktree 를 지우지 못했다: %s" % err)
+        rc, _o, err = git(root, "worktree", "remove", str(path))
+        if rc:
+            raise Fail(3, "worktree 를 지우지 못했다: %s" % err)
+    if path.exists():
+        raise Fail(3, "지웠는데 아직 남아 있다 — 자원 줄을 그대로 둔다: %s" % path)
     update(root, a.roadmap, a.session,
            lambda d: d.__setitem__("자원", [r for r in d["자원"] if Path(r["경로"]).resolve() != path.resolve()]))
     print("정리했다 — %s (브랜치는 그대로)" % path)
@@ -303,8 +368,15 @@ def c_orphans(root, a) -> int:
     items = worktrees(root)
     stray = [w for w in items[1:] if w["path"] not in known]
     for w in stray:
-        n = len(dirty_lines(Path(w["path"]))) if Path(w["path"]).is_dir() else 0
-        print("%s\t%s\t%s" % (w["path"], w["branch"], "깨끗" if not n else "남은 것 %d개" % n))
+        if not Path(w["path"]).is_dir():
+            state = "폴더 없음(prunable)"
+        else:
+            try:
+                n = len(dirty_lines(Path(w["path"])))
+                state = "깨끗" if not n else "남은 것 %d개" % n
+            except Fail:
+                state = "상태를 읽지 못함"
+        print("%s\t%s\t%s" % (w["path"], w["branch"], state))
     if not stray:
         print("주인 모름 worktree 없음")
     return 0
@@ -330,7 +402,8 @@ COMMANDS = {
     "approval": (c_approval, lambda p: (_rs(p), p.add_argument("--scale", required=True))),
     "approve": (c_approve, lambda p: (_rs(p), p.add_argument("--scale", required=True))),
     "resources": (c_resources, lambda p: p.add_argument("--roadmap", required=True)),
-    "cleanup-check": (c_cleanup_check, lambda p: p.add_argument("--path", required=True)),
+    "cleanup-check": (c_cleanup_check, lambda p: (p.add_argument("--path", required=True),
+                                                  p.add_argument("--roadmap", default=None))),
     "cleanup": (c_cleanup, lambda p: (_rs(p), p.add_argument("--path", required=True))),
     "orphans": (c_orphans, lambda p: p.add_argument("--roadmap", required=True)),
 }

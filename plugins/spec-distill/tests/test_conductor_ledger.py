@@ -262,6 +262,77 @@ class Resources(Repo):
         self.assertIn("feature/a1", sh(self.w, "branch", "--list", "feature/a1"))
         self.assertEqual(cs.load(L.mpath(self.w, RM), RM)["자원"], [])
 
+    def _mdir(self):
+        return L.mpath(self.w, RM).parent
+
+    def _row(self, p):
+        self.cli("add", "--roadmap", RM, "--session", SID, "--section", "자원",
+                 "--cells", "worktree · %s · A1 · 구현 · t" % p)
+
+    def _rows(self):
+        return cs.load(L.mpath(self.w, RM), RM)["자원"]
+
+    def test_cleanup_refuses_lock_and_live_lock_copy(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        mc = self._mdir() / "merge-check"
+        lock = mc / "lock"
+        lock.mkdir(parents=True)
+        (lock / "owner").write_text("%d t\n" % os.getpid(), encoding="utf-8")
+        rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(lock))
+        self.assertNotEqual(rc, 0)
+        self.assertTrue((lock / "owner").exists())
+        (mc / "run-x").mkdir()
+        copy = mc / "run-x" / "merged"
+        sh(self.w, "worktree", "add", "-q", "--detach", str(copy), "trunk")
+        self._row(copy)
+        rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(copy))
+        self.assertEqual(rc, 3, out)
+        self.assertTrue(copy.exists())
+        self.assertEqual(len(self._rows()), 1)
+
+    def test_cleanup_removes_merge_copy_and_review_pack(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        mc = self._mdir() / "merge-check"
+        (mc / "run-x").mkdir(parents=True)
+        copy = mc / "run-x" / "merged"
+        sh(self.w, "worktree", "add", "-q", "--detach", str(copy), "trunk")
+        (copy / "dirty.txt").write_text("x", encoding="utf-8")
+        pack = self._mdir() / "review" / "pack1"
+        pack.mkdir(parents=True)
+        (pack / "a.md").write_text("x", encoding="utf-8")
+        self._row(copy)
+        self._row(pack)
+        for p in (copy, pack):
+            rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(p))
+            self.assertEqual(rc, 0, out)
+            self.assertFalse(p.exists())
+        self.assertEqual(self._rows(), [])
+
+    def test_cleanup_refuses_symlink_and_non_worktrees(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        real = self.add_wt("real", "feature/r")
+        link = self.t / "link"
+        link.symlink_to(real)
+        self._row(link)
+        rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(link))
+        self.assertNotEqual(rc, 0)
+        self.assertTrue(real.exists())
+        self.assertEqual(len(self._rows()), 1)
+        self.assertEqual(self.cli("cleanup-check", "--path", str(link))[0], 2)
+        for p in (self.w / "plan", self.w, self.t / "nope"):
+            self.assertEqual(self.cli("cleanup-check", "--path", str(p))[0], 2, p)
+            rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(p))
+            self.assertEqual(rc, 2, (p, out))
+        self.assertTrue((self.w / "plan").exists())
+
+    def test_orphans_missing_folder(self):
+        gone = self.add_wt("gone", "feature/g")
+        shutil.rmtree(str(gone))
+        rc, out = self.cli("orphans", "--roadmap", RM)
+        self.assertEqual(rc, 0)
+        self.assertIn("폴더 없음(prunable)", out)
+        self.assertNotIn("깨끗", out)
+
     def test_orphans(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)
         known = self.add_wt("known")
