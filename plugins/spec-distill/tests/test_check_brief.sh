@@ -2652,4 +2652,23 @@ out="$(bb_gate bb_audit_fence)"; rc=$?
 { [[ $rc -ne 0 ]] && grep -qF "S9" <<<"$out"; } \
   && ok "AC18: audit §6 펜스 안 앵커도 게이트가 센다 (번들 · 원문 검사와 같은 바이트)" \
   || { no "AC18: audit §6 펜스 안 앵커가 게이트에 안 보인다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+# --- AC18 fix round 3 — 같은 바이트를 두 판독기가 다르게 읽는 자리(Ruling T10-d · S13-a) ------------------------
+for spec in 't3_dupsec|section_heading_duplicate|\n## 0. 한눈에|\n##  0. 메모\n\n- OQ9 [열림] — 미끼\n\n## 0. 한눈에' \
+            't3_cgj|decision_confusable|\n- OQ1: 인증 뷰의 캐시 전략|\n- OQ\u034f1 — 인증 뷰의 캐시 전략' \
+            't3_bare|decision_shape|\n- OQ1: 인증 뷰의 캐시 전략 — 해답공간으로 이월.\n|\n- OQ1: 인증 뷰의 캐시 전략 — 해답공간으로 이월.\nOQ2 — 맨 줄 결정\n' \
+            't3_code|decision_shape|\n- OQ1: 인증 뷰의 캐시 전략 — 해답공간으로 이월.\n|\n- OQ1: 인증 뷰의 캐시 전략 — 해답공간으로 이월.\n메모 `[해결 \u27e8S2\u27e9]` 를 숨겼다\n' \
+            't3_ref|ref_confusable|인증 뷰의 캐시 전략 — 해답공간으로 이월.\n\n## 4.|인증 뷰의 캐시 전략 S\u0417 — 해답공간으로 이월.\n\n## 4.' \
+            't3_s6|anchor_confusable|\n- **S2**|\n- **S\u0417** 「심은 줄」\n- **S2**' \
+            't3_dash|anchor_confusable|\n- **S2**|\n\u2212 **S2**'; do
+  IFS='|' read -r stem why from to <<<"$spec"
+  bb_variant "$stem" "$from" "$to"
+  out="$(bb_gate "$stem")"; rc=$?
+  { [[ $rc -ne 0 ]] && grep -qF "$why" <<<"$out"; } \
+    && ok "AC18: 판독기 불일치 자리(${stem}) → red «${why}»" \
+    || { no "AC18: 판독기 불일치 자리(${stem})가 ${why} 로 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+done
+bb_variant t3_ok '\n- OQ1: 인증 뷰의 캐시 전략 — 해답공간으로 이월.\n' '\n- OQ1: 인증 뷰의 캐시 전략 — \u2460 해답공간으로 이월. S2에 앞서 S1 을 본다.\n'
+out="$(bb_gate t3_ok)"; rc=$?
+[[ $rc -eq 0 ]] && ok "AC18(양성대조): 구조 토큰 밖의 정규형 차이(원 숫자)와 한글 조사가 붙은 S2 는 막지 않는다" \
+  || { no "AC18(양성대조): 정상 결정 줄이 막혔다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
 finish

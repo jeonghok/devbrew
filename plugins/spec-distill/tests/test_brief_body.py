@@ -266,6 +266,104 @@ class Round2Universe(unittest.TestCase):
         with self.assertRaises(roadmap_model.FormatError):
             self.universe("- " + FW("OQ") + "3 [열림] — x\n")
 
+
+# ── fix round 3 (Ruling T10-d · S13-a) — 남은 판독기 불일치 · 구조 글자 닮은꼴 ───────────────────────────────
+import check_brief as CB  # noqa: E402
+import roadmap_render  # noqa: E402
+
+FX3 = Path(__file__).resolve().parent / "fixtures"
+
+
+def _pair():
+    return ((FX3 / "interview-brief-valid.md").read_text(encoding="utf-8"),
+            (FX3 / "interview-brief-valid.audit.md").read_text(encoding="utf-8"))
+
+
+class Round3Sections(unittest.TestCase):
+    """로드맵도 게이트와 같은 절 경계(제목 붙은 `## <n>. <제목>`)로 읽고, 같은 번호 머리가 둘이면 거부한다."""
+
+    def test_one_title_table(self):
+        self.assertEqual(B.SECTION_TITLES["0"], "한눈에")
+        self.assertEqual(list(CB.SECTIONS), list(B.SECTIONS))
+
+    def test_duplicate_heading_refused(self):
+        doc = "# t\n\n## 0. 메모\n\n- OQ9 [열림] — 미끼\n\n## 0. 한눈에\n\n- OQ1 [열림] — x\n\n## 1. Goal · Non-goal\n"
+        self.assertEqual(B.section_problem(doc, "0"), "section_heading_duplicate")
+        fenced = ("# t\n\n```\n## 0. 메모\n```\n\n## 0. 한눈에\n\n- OQ1 [열림] — x\n\n"
+                  "## 4. External Landscape\n\n## 4.1 하위\n\n## 1. Goal · Non-goal\n")
+        self.assertIsNone(B.section_problem(fenced, "0"))   # 펜스 안 머리는 세지 않는다
+        self.assertIsNone(B.section_problem(fenced, "4"))   # `## 4.1` 은 다른 번호다
+        self.assertEqual(B.section_problem("# t\n\n## 0. 다른 제목\n", "0"), "section_missing")
+
+    def test_universe_refuses_decoy_heading(self):
+        brief, audit = _pair()
+        decoy = brief.replace("## 0. 한눈에", "##  0. 메모\n\n- OQ9 [열림] — 미끼\n\n## 0. 한눈에", 1)
+        with self.assertRaises(roadmap_model.FormatError):
+            roadmap_model.brief_universe(decoy, audit)
+
+    def test_subheading_and_separator_do_not_cut_section5(self):
+        brief, audit = _pair()
+        base_non_s, _s, base_k = roadmap_model.brief_universe(brief, audit)
+        self.assertIn("ST1", base_non_s)
+        self.assertEqual(len(base_k), 1)
+        base_idx = roadmap_render.index_brief(brief, audit)
+        head = "## 5. 기각 · Blind Spots\n\n"
+        self.assertIn(head, brief)
+        for extra in ("## 메모\n\n", "산문" + chr(0x2028) + "## 9. x\n\n"):
+            b2 = brief.replace(head, head + extra, 1)
+            non_s, _s, k = roadmap_model.brief_universe(b2, audit)
+            self.assertIn("ST1", non_s, repr(extra))
+            self.assertEqual(k, base_k, repr(extra))
+            idx = roadmap_render.index_brief(b2, audit)
+            self.assertEqual(idx.lines, base_idx.lines, repr(extra))
+            self.assertEqual(idx.k_lines, base_idx.k_lines, repr(extra))
+
+
+class Round3OneOQReader(unittest.TestCase):
+    REFUSED = {
+        "- OQ1: x [해" + chr(0xFE00) + "결 " + LA + "S2" + RA + "]": "decision_confusable",
+        "- OQ" + chr(0x034F) + "1 — 제목": "decision_confusable",
+        "- " + FW("OQ") + "1 — 제목": "decision_confusable",
+        "OQ1 — 제목만 적은 맨 줄": "decision_shape",
+        "**OQ1 — 제목**": "decision_shape",
+        "메모 `[해결 " + LA + "S2" + RA + "]` 를 코드 칸에 숨겼다": "decision_shape",
+    }
+
+    def test_refused(self):
+        for line, why in self.REFUSED.items():
+            self.assertEqual(B.decision_line_problem(line), why, repr(line))
+
+    def test_passes(self):
+        for line in ("- **OQ1 — cache 전략** [열림] — x", "- OQ1 — " + chr(0x2460) + " x [해결 " + LA + "S2" + RA + "]",
+                     "(OQ1~OQ7 은 S10 에서 사용자가 「일곱 개」로 박제한 것이다.",
+                     "**결정 목록** — 상태는 `[열림]` 또는 `[해결 " + LA + "S<n>" + RA + "]` 로 적는다.", "- OQ1 — 제목"):
+            self.assertIsNone(B.decision_line_problem(line), repr(line))
+
+    def test_gate_and_roadmap_read_the_same_oq(self):
+        for line in ("- " + FW("OQ") + "3 [열림] — x", "- OQ" + chr(0x034F) + "3 [열림] — x", "* **OQ3** [열림] — x"):
+            want = B.decision_entries(line)[0][0][0]
+            self.assertEqual(CB._leading_oq(line), want, repr(line))
+            self.assertEqual(CB._decision_line("0", line)[0], want, repr(line))
+
+
+class Round3Lookalikes(unittest.TestCase):
+    """Ruling S13-a — 숫자 닮은꼴 표를 쫓지 않는다. §6 의 강조 머리가 S 로 시작하면 앵커이거나 거부, §6 밖의 S 바로 뒤
+    비ASCII 숫자 · 한글/한자가 아닌 글자는 `ref_confusable`."""
+
+    def test_section6_emphasis_head(self):
+        for line in ("- **S" + chr(0x0417) + "** 「t」", "- **S" + chr(0x0A67) + "** 「t」", chr(0x2212) + " **S5** 「t」",
+                     "- " + chr(0x2217) * 2 + "S5" + chr(0x2217) * 2 + " 「t」", "- __S5__ 「t」", "- **S" + chr(0x0431) + "** 「t」"):
+            ok, bad = B.anchor_lines("- **S1** a\n" + line)
+            self.assertEqual([s for _n, s, _r in ok], ["S1"], repr(line))
+            self.assertEqual([r for _n, r in bad], ["anchor_confusable"], repr(line))
+
+    def test_ref_confusable(self):
+        for tail in (chr(0x0417), chr(0x0661), chr(0x0431), chr(0x0A67)):
+            text = "근거 S" + tail + " 끝"
+            self.assertEqual(B.ref_confusables(text), ["S" + tail], hex(ord(tail)))
+            self.assertEqual(B.open_line_s_refs(text), [], hex(ord(tail)))   # 다른 번호로 풀지 않는다
+        for ok_text in ("S3에 따라", "S가 아니다", "S" + chr(0x4E00) + " 한자", "S<n>"):
+            self.assertEqual(B.ref_confusables(ok_text), [], repr(ok_text))
 class SharedGrammar(unittest.TestCase):
     def test_readers_share_one_object(self):
         self.assertIs(check_brief.ANCHOR_LINE_RE, B.ANCHOR_LINE_RE)

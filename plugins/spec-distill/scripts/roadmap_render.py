@@ -17,7 +17,7 @@ import section6  # noqa: E402
 import brief_body  # noqa: E402
 from brief_body import section4_items  # noqa: E402
 from roadmap_model import (  # noqa: E402
-    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, FormatError, brief_universe, bundle_ids, field_text,
+    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, FormatError, brief_section, brief_universe, bundle_ids, field_text,
     id_sort_key, is_quote, parse_ids, parse_roadmap, section_body)
 
 TABLE_HEADING = "## 분해안"
@@ -215,10 +215,8 @@ class BriefIndex:
 
 
 def _body(text: str, heading: str) -> str:
-    body = section_body(text, heading)
-    if body is None:
-        raise FormatError("brief 에 %s 절이 없다" % heading)
-    return body
+    """brief 절 본문 — `## <n>.` 머리 문자열에서 번호를 받아 `roadmap_model.brief_section`(게이트와 같은 경계)으로 읽는다."""
+    return brief_section(text, heading[3:].rstrip("."))
 
 
 def _s6_ids(body: str) -> set:
@@ -271,7 +269,7 @@ def index_brief(brief: str, audit: str) -> BriefIndex:
         m = C_LINE_RE.match(line)
         if m:
             lines[m.group(1)] = line
-    for oq, line in brief_body.decision_entries(brief_body.section_text(brief, "0"))[0]:   # brief_universe 와 같은 판독
+    for oq, line in brief_body.decision_entries(_body(brief, "## 0."))[0]:   # brief_universe 와 같은 판독
         if oq:
             lines[oq] = line
     lines.update(_section4_index(brief))

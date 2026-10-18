@@ -189,6 +189,9 @@ audit_with '## 5. 프로세스 로그' 3; r3o="$(fence_run 3 1)"
 rm -rf "$FENCE_RT"
 has "$W_GATE" '고를 때만' \
   && ok "진입 게이트 rc 표: rc 3 행이 「사용자가 고를 때만」 계속한다고 적는다" || no "진입 게이트 rc 표: rc 3 행의 「고를 때만」 문면이 사라졌다"
+has "$W_GATE" '사용자 동의의 증명이 아니다' \
+  && ok "진입 게이트: audit 의 skipped_by_user 줄은 지휘 쪽이 쓴 기록일 뿐 사용자 동의의 증명이 아니라고 적는다" \
+  || no "진입 게이트: skipped_by_user 줄을 사용자 동의의 증명처럼 적는다"
 has "$W_GATE" '게이트 실행 기록' && has "$W_GATE" 'exit <rc> — skipped_by_user: 검사 없이 계속' \
   && ok "진입 게이트: 계속을 고르면 audit 게이트 실행 기록에 skipped_by_user 줄을 남긴다" \
   || no "진입 게이트: audit 게이트 실행 기록 줄 안내가 없다"

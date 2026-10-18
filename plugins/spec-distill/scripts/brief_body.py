@@ -22,8 +22,19 @@ DEFAULT_IGNORABLE_RANGES = (
     (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF),
 )
 # UTS #39 confusables.txt 에서 대상(prototype)이 구조 글자 `S`(U+0053)이고 NFKC 가 접지 않는 글자 — 아르메니아 ·
-# 키릴 · 체로키 · 리수 · 리키아 · 데저렛 문자. 숫자는 표 대신 유니코드 십진 숫자 값으로 접는다(`fold`).
+# 키릴 · 체로키 · 리수 · 리키아 · 데저렛 문자. 숫자 닮은꼴은 표로 쫓지 않는다 — `S` 바로 뒤의 비ASCII 숫자 · 글자는
+# `ref_confusables` 가 거부하고, §6 의 강조 머리는 `anchor_lines` 가 거부한다(Ruling S13-a).
 S_CONFUSABLES = (0x0405, 0x054F, 0x13D5, 0x13DA, 0xA4E2, 0x10296, 0x10420)
+# 마크다운 구조 글자(`*` 강조 · 불릿, `-` 불릿)를 흉내 내는 글자 — NFKC 가 접지 않는 별표 · 빼기 · 하이픈 · 대시.
+STRUCT_LOOKALIKES = {
+    0x2217: "*", 0x2731: "*", 0x204E: "*", 0x066D: "*", 0x2732: "*",
+    0x2212: "-", 0x2010: "-", 0x2011: "-", 0x2012: "-", 0x2013: "-", 0x2014: "-", 0x2015: "-",
+    0xFE63: "-", 0xFE58: "-", 0x2043: "-",
+}
+# brief 절 번호와 제목 — 게이트 · 로드맵이 같은 표로 절을 찾는다(제목 붙은 경계).
+SECTIONS = (("0", "한눈에"), ("1", "Goal · Non-goal"), ("2", "제약"), ("3", "Open Questions"),
+            ("4", "External Landscape"), ("5", "기각 · Blind Spots"), ("6", "사용자 원문"), ("7", "Next Action"))
+SECTION_TITLES = dict(SECTIONS)
 
 
 def _ignorable(c):
@@ -37,24 +48,27 @@ def _drop_ignorable(text):
     return "".join(c for c in text if not _ignorable(c))
 
 
+def has_ignorable(text):
+    """보이지 않는 글자(Default_Ignorable · Cf)가 하나라도 있는가."""
+    return any(_ignorable(c) for c in text)
+
+
 def canon(text):
     """판독용 정규형 — 보이지 않는 글자(Default_Ignorable · Cf)를 지우고 NFKC 로 접는다. 분류는 이 모양 위에서 한다."""
     return _drop_ignorable(unicodedata.normalize("NFKC", _drop_ignorable(text)))
 
 
 def _fold_char(c):
-    if ord(c) in S_CONFUSABLES:
+    o = ord(c)
+    if o in S_CONFUSABLES:
         return "S"
-    if ord(c) > 0x7F:
-        d = unicodedata.decimal(c, None)
-        if d is not None:
-            return str(d)
-    return c
+    return STRUCT_LOOKALIKES.get(o, c)
 
 
 def fold(text):
-    """`canon` 위에 구조 글자를 한 번 더 접는다 — `S` 를 흉내 내는 다른 문자 체계의 글자는 `S` 로, 다른 문자 체계의
-    십진 숫자는 ASCII 숫자로. 앵커 꼴 · 원문 번호 참조를 찾을 때만 쓴다."""
+    """`canon` 위에 구조 글자를 한 번 더 접는다 — `S` 를 흉내 내는 다른 문자 체계의 글자는 `S` 로, 별표 · 하이픈을
+    흉내 내는 글자는 `*` · `-` 로. 숫자는 접지 않는다(닮은 숫자를 다른 번호로 풀지 않는다). 앵커 꼴 · 원문 번호 참조를
+    찾을 때만 쓴다."""
     return "".join(_fold_char(c) for c in canon(text))
 
 
@@ -83,17 +97,39 @@ def body_text(text):
     return FENCE_RE.sub("", body)
 
 
+def _titled_head(num, title):
+    return re.compile(rf"^##\s+{re.escape(num)}\.\s+{re.escape(title)}\b", re.MULTILINE | re.IGNORECASE)
+
+
 def section_text(text, num, title=None):
     """게이트의 절 경계 — `## <num>. <title>` 다음부터 다음 `## <숫자>.` 앞까지(펜스는 벗긴 본문 위). 제목을 주지 않으면
-    번호만 본다. 절 안의 다른 `## ` 소제목은 절을 끊지 않는다. 없으면 빈 문자열."""
+    brief 절 표(`SECTION_TITLES`)의 제목을 쓴다. 절 안의 다른 `## ` 소제목은 절을 끊지 않는다. 없으면 빈 문자열.
+    같은 번호 머리가 둘 이상인지는 `section_problem` 이 따로 판정한다."""
     body = body_text(text)
-    head = (rf"^##\s+{re.escape(num)}\.\s+{re.escape(title)}\b" if title else rf"^##\s+{re.escape(num)}\.")
-    start = re.search(head, body, re.MULTILINE | re.IGNORECASE)
+    start = _titled_head(num, title or SECTION_TITLES[num]).search(body)
     if not start:
         return ""
-    rest = body[start.end():]
+    eol = body.find("\n", start.end())
+    rest = "" if eol < 0 else body[eol + 1:]   # 머리 줄의 나머지는 절 본문이 아니다
     nxt = re.search(r"^##\s+\d+\.", rest, re.MULTILINE)
     return rest[: nxt.start()] if nxt else rest
+
+
+SECTION_REASON_TEXT = {
+    "section_missing": "제목 붙은 절 머리가 없다",
+    "section_heading_duplicate": "같은 번호의 절 머리가 둘 이상이라 읽는 쪽마다 다른 절을 고를 수 있다",
+}
+
+
+def section_problem(text, num, title=None):
+    """절 경계가 하나로 정해지는가 -> None 또는 사유 이름. 펜스 밖 `## <num>.` 머리(제목 무관 · `## 4.1` 같은 다른 번호
+    제외)가 둘 이상이면 `section_heading_duplicate`, 제목 붙은 머리가 없으면 `section_missing`."""
+    body = body_text(text)
+    if len(re.findall(rf"^##\s+{re.escape(num)}\.(?![0-9])", body, re.MULTILINE)) > 1:
+        return "section_heading_duplicate"
+    if not _titled_head(num, title or SECTION_TITLES[num]).search(body):
+        return "section_missing"
+    return None
 
 
 # ── §6 앵커 줄 ────────────────────────────────────────────────────────────────
@@ -104,6 +140,8 @@ _ANCHOR_SHAPED = re.compile(r"^(?:[^\w\n]|\d+[.)])*\*\*S\d+\*\*")
 # 앵커가 아닌 줄(이음 줄 · 앵커 앞 줄 · 앵커 줄의 본문)에 있으면 안 되는 것 — 앵커 꼴 토큰 · S 번호를 단 목록 머리.
 _IN_BODY_TOKEN = re.compile(r"\*\*S\d+\*\*|__S\d+__")
 _IN_BODY_BULLET = re.compile(r"^(?:[^\w\n]|\d+[.)])*?(?:[-*+]|\d+[.)])\s+[*_`]*S\d+(?![0-9])")
+# 열 0 의 줄 머리(불릿 하나는 건너)가 `S` 로 시작하는 강조(`**…**` · `__…__`) — 문법 안 앵커가 아니면 닮은 글자로 꾸민 앵커다.
+_EMPH_S_HEAD = re.compile(r"^(?:[-*+]\s+)?(?:\*\*|__)S(?!\\?<)")   # 자리 표시 `S<N>` · `S\<N\>`(템플릿)는 제외
 # 거부 사유 이름 → 사람이 읽는 말. 메시지는 이 말을 앞세우고 사유 이름은 괄호에 둔다.
 ANCHOR_REASON_TEXT = {
     "anchor_indented": "들여 쓴 앵커 줄",
@@ -143,8 +181,11 @@ def anchor_lines(section_text):
             bad.append((n, "anchor_line_separator"))
             continue
         f = fold(line)
-        if not _ANCHOR_SHAPED.match(f):
-            if _in_body(f):
+        shaped = _ANCHOR_SHAPED.match(f)
+        if not shaped:
+            if _EMPH_S_HEAD.match(f):
+                bad.append((n, "anchor_confusable"))
+            elif _in_body(f):
                 bad.append((n, "anchor_in_body"))
             continue
         m = ANCHOR_LINE_RE.match(line)
@@ -157,7 +198,7 @@ def anchor_lines(section_text):
         if why is None:
             if line.startswith("* **S"):
                 why = "anchor_star_bullet"
-            elif f != line:
+            elif f != line or not shaped.group(0).isascii():
                 why = "anchor_confusable"
             else:
                 why = "anchor_shape"
@@ -185,11 +226,14 @@ _COL0_BULLET_RE = re.compile(r"^[-*][ \t]")
 _LIST_HEAD_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
 _NUMBERED_RE = re.compile(r"^\s*\d+[.)]\s")
 _QUOTED_RE = re.compile(r"^\s*>")
-# 결정 꼴 (가) — 줄 머리(공백 · 번호 · 인용 · 기호 같은 불릿 아닌 앞붙이 뒤)가 `OQ<n>` 이고 그 뒤(강조 표시 건너)에 `:` 또는 `[`.
-_DECISION_HEAD_RE = re.compile(r"^(?:[\W\d_]|\w{1,3}[.)])*?[*_`]*OQ\d+[*_`]*\s*[:\[]")
-# 결정 꼴 (나) — 코드 칸(백틱) 밖에 해결 · 열림 표시가 있다.
+# 결정 꼴 (가) — 줄 머리(공백 · 번호 · 인용 · 기호 같은 불릿 아닌 앞붙이 뒤, 강조 표시 건너)가 `OQ<n>`. 앞붙이에 여는 괄호 ·
+# 여는 따옴표가 있으면 머리가 아니다 — `(OQ1~OQ7 은 …` 같은 산문.
+_DECISION_HEAD_RE = re.compile(r"^((?:[\W\d_]|\w{1,3}[.)])*?)[*_`]*(OQ\d+)(?![0-9])")
+# 결정 꼴 (나) — 해결 · 열림 표시. 코드 칸(백틱) 안의 표시는 그 칸에 실제 원문 번호(`S` + ASCII 숫자)가 없을 때만 면제한다
+# — 자리 표시 `S<n>` 만 적은 설명은 결정 줄이 아니고, `[해결 ⟨S2⟩]` 를 코드 칸에 숨긴 줄은 결정 줄이다.
 _DECISION_MARK_RE = re.compile(r"\[해결|\[열림")
 _CODE_SPAN_RE = re.compile(r"(`+).*?\1")
+_REAL_SID_RE = re.compile(r"S[0-9]")
 # 선두 결정 번호 — 불릿을 뗀 본문이 (강조 표시를 사이에 두고도) `OQ<n>` 로 시작할 때 그 번호(`check_brief.LEADING_OQ_RE`).
 LEADING_OQ_RE = re.compile(r"^[*_`]*\s*(OQ\d+)(?!_*[0-9A-Za-z])")
 _BULLET_PREFIX_RE = re.compile(r"^\s*[-*]\s+")
@@ -203,12 +247,20 @@ DECISION_REASON_TEXT = {
 }
 
 
+def _decision_tokens(text):
+    """한 줄의 결정 구조 토큰 -> (머리 `OQ<n>` 또는 None, 표시 목록). 둘 다 비면 결정 꼴이 아니다."""
+    oq = None
+    m = _DECISION_HEAD_RE.match(text)
+    if m and not any(unicodedata.category(ch) in ("Ps", "Pi") for ch in m.group(1)):
+        oq = m.group(2)
+    masked = _CODE_SPAN_RE.sub(lambda s: s.group(0) if _REAL_SID_RE.search(fold(s.group(0))) else " " * len(s.group(0)),
+                               text)
+    return oq, _DECISION_MARK_RE.findall(masked)
+
+
 def _decision_head_end(c):
-    m = _DECISION_HEAD_RE.match(c)
-    if m:
-        return m.end()
-    mk = _DECISION_MARK_RE.search(_CODE_SPAN_RE.sub(lambda s: " " * len(s.group(0)), c))
-    return mk.end() if mk else None
+    oq, marks = _decision_tokens(c)
+    return 0 if (oq or marks) else None
 
 
 def _structural(part):
@@ -224,17 +276,18 @@ def _separator_problem(line):
 def decision_line_problem(line):
     """§0 · §3 한 줄의 결정 줄 판독 -> 사유 이름 또는 None.
 
-    정규형이 결정 꼴((가) 머리가 `OQ<n>` + `:`/`[` · (나) 코드 칸 밖 `[해결` · `[열림`)인데, 날 글자가 열 0 의 `- ` · `* `
-    불릿이 아니거나 정규형 머리가 날 머리와 다르면 거부한다 — 번호 목록 · 인용은 그 이름, 정규형으로만 불릿이면
+    정규형이 결정 꼴((가) 머리가 `OQ<n>` · (나) `[해결` · `[열림` 표시)인데, 날 글자가 열 0 의 `- ` · `* ` 불릿이 아니거나
+    날 글자의 구조 토큰(`OQ<n>` · 표시)이 정규형과 다르면 거부한다 — 번호 목록 · 인용은 그 이름, 정규형으로만 불릿이면
     `decision_confusable`, 그 밖은 `decision_shape`. 줄 안에 다른 줄 나눔 글자가 있고 그 조각이 구조처럼 보이면
     `decision_line_separator`."""
     if _separator_problem(line):
         return "decision_line_separator"
     c = canon(line)
-    end = _decision_head_end(c)
-    if end is None:
+    tokens = _decision_tokens(c)
+    if not (tokens[0] or tokens[1]):
         return None
-    if _COL0_BULLET_RE.match(line) and line.startswith(c[:end]):
+    # 날 글자의 구조 토큰(불릿 · `OQ<n>` · 표시)이 정규형과 같을 때만 받는다 — 앞붙이 · 본문의 정규형 차이(원 숫자 등)는 보지 않는다.
+    if _COL0_BULLET_RE.match(line) and _decision_tokens(line) == tokens:
         return None
     if _COL0_BULLET_RE.match(c):
         return "decision_confusable"
@@ -270,16 +323,36 @@ def decision_entries(section_text):
     """§0 · §3 본문 -> (결정 항목 [(선두 OQ 또는 None, 날 줄)], 거부 [(줄 번호, 사유)]). 선두 번호는 불릿을 뗀 정규형에서
     읽는다 — 게이트(`check_brief`)와 로드맵(`roadmap_model` · `roadmap_render`)이 같은 번호를 센다."""
     acc, rej = _entries(section_text, True, "decision_line_separator")
-    out = []
-    for _n, ln in acc:
-        m = LEADING_OQ_RE.match(canon(_BULLET_PREFIX_RE.sub("", ln, count=1)).strip())
-        out.append((m.group(1) if m else None, ln))
-    return out, rej
+    return [(leading_oq(ln), ln) for _n, ln in acc], rej
+
+
+def leading_oq(line):
+    """항목 줄의 선두 `OQ<n>` — 불릿 하나를 뗀 본문의 정규형이 (강조 표시를 사이에 두고도) `OQ<n>` 로 시작할 때 그 번호.
+    게이트(`check_brief._leading_oq` · `_decision_line`)와 로드맵이 이 하나로 읽는다."""
+    m = LEADING_OQ_RE.match(canon(_BULLET_PREFIX_RE.sub("", line, count=1)).strip())
+    return m.group(1) if m else None
 
 
 # ── 원문 번호 참조 ─────────────────────────────────────────────────────────────
 # `check_brief.ANCHOR_RE` 관례 — 앞이 ASCII 영숫자가 아닌 `S<숫자>`. 자리 표시 `S<n>` 은 숫자가 아니라 잡히지 않는다.
 _REF_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])S([0-9]+)(?![0-9])")
+
+
+# `S` 바로 뒤의 닮은 숫자 · 글자 — 비ASCII 숫자(N*)나 한글 · 한자(동아시아 전각 폭)가 아닌 글자(L*).
+_REF_LOOKALIKE_RE = re.compile(r"(?<![A-Za-z0-9])S(?=[^\x00-\x7f])")
+
+
+def ref_confusables(text):
+    """원문 번호처럼 보이는데 번호로 풀지 않는 토큰 -> [`S` + 그 글자] (Ruling S13-a). 접은 모양에서 `S` 바로 뒤가 비ASCII
+    숫자이거나 한글 · 한자가 아닌 글자면 닮은 글자로 쓴 번호다(키릴 글자 · 아라비아-인도 숫자 같은 것). 한국어 조사(`S가`)는 허용한다."""
+    f = fold(text)
+    out = []
+    for m in _REF_LOOKALIKE_RE.finditer(f):
+        ch = f[m.end()]
+        cat = unicodedata.category(ch)
+        if cat[0] == "N" or (cat[0] == "L" and unicodedata.east_asian_width(ch) not in ("W", "F")):
+            out.append("S" + ch)
+    return out
 
 
 def open_line_s_refs(text):

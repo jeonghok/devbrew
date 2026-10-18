@@ -94,16 +94,8 @@ FRONTMATTER_RE = brief_body.FRONTMATTER_RE
 # section/entry detection so headers quoted inside ``` cannot satisfy the gate (F4).
 FENCE_RE = brief_body.FENCE_RE
 
-SECTIONS = [
-    ("0", "한눈에"),
-    ("1", "Goal · Non-goal"),
-    ("2", "제약"),
-    ("3", "Open Questions"),
-    ("4", "External Landscape"),
-    ("5", "기각 · Blind Spots"),
-    ("6", "사용자 원문"),
-    ("7", "Next Action"),
-]
+# 절 번호 · 제목 표는 `brief_body.SECTIONS` 하나다 — 로드맵이 같은 표로 같은 경계를 읽는다.
+SECTIONS = list(brief_body.SECTIONS)
 
 # audit 섹션도 계약이다 — coverage_ledger_failures()와 steelman 대조가 섹션 번호+제목으로
 # 본문을 잘라내므로, audit 쪽 번호가 바뀌면 검증이 조용히 빈 문자열을 읽고 통과한다.
@@ -213,7 +205,7 @@ def _entry_lines(section: str) -> list[str]:
 # 되풀이하지 않는다.
 
 
-SECTION4 = ("4", "External Landscape")
+SECTION4 = ("4", brief_body.SECTION_TITLES["4"])
 
 
 def section4_items(text: str) -> list[tuple[str, list[str]]]:
@@ -1120,7 +1112,7 @@ def research_link_missing(text: str) -> list[str]:
 
 # 뒤 경계는 `_` 를 건너뛴 뒤에 본다 — `__OQ1__:` 의 닫는 밑줄 강조가 경계를 막지 않게(`OQ1_2` 는 여전히 거부).
 LEADING_OQ_RE = brief_body.LEADING_OQ_RE
-DECISION_SECTIONS = (("3", "Open Questions"), ("0", "한눈에"))
+DECISION_SECTIONS = (("3", brief_body.SECTION_TITLES["3"]), ("0", brief_body.SECTION_TITLES["0"]))
 
 
 def _leading_oq(line: str):
@@ -1137,8 +1129,7 @@ def _leading_oq(line: str):
     줄을 그 결정의 줄로 읽으면 정직한 상호참조가 ③ 의 역참조 요구를 받아 red 가 되고(최종 리뷰
     I-1 실측), ② 는 언급만으로 결정이 선언된다.
     """
-    m = LEADING_OQ_RE.match(_strip_bullet(line).strip())
-    return m.group(1) if m else None
+    return brief_body.leading_oq(line)
 
 
 def _declared_decisions(text: str) -> set:
@@ -1257,9 +1248,15 @@ def _decision_line(num: str, line: str):
     - §3: `OQ<n>: <내용>`(열림) 또는 `OQ<n> [해결 ⟨S<n>⟩]: <내용>`(해결). OQ 와 첫 `:` 사이(또는 `:` 가 없으면
       OQ 바로 뒤)의 여는 · 닫는 괄호(유니코드 Ps · Pe)는 정본 해결 표시가 아니면 red.
     - 상태 자리 밖의 `[해결` 은 red(자리를 비켜 선 해결 표시). 선두 OQ 가 없는 줄의 `[해결` 도 red."""
-    if any(unicodedata.category(c) == "Cf" for c in line):
-        return None, False, None, [f"§{num} 결정 줄에 보이지 않는 서식 글자(Cf)가 있다: {line[:60]}"]
-    ln = unicodedata.normalize("NFKC", line)
+    # 판독은 `brief_body.canon` 위에서 한다 — 로드맵(`brief_body.decision_entries`)과 같은 번호를 읽고, 보이지 않는 글자는
+    # 그 사실을 따로 red 로 싣는다.
+    inv = ([f"§{num} 결정 줄에 보이지 않는 서식 글자(Cf · 무시 글자)가 있다: {line[:60]}"]
+           if brief_body.has_ignorable(line) else [])
+    oq, resolved, sid, errs = _decision_line_canon(num, line, brief_body.canon(line))
+    return oq, resolved, sid, inv + errs
+
+
+def _decision_line_canon(num: str, line: str, ln: str):
     body = _strip_bullet(ln).strip()
     h = DECISION_HEAD_RE.match(body)
     if not h:
@@ -1327,14 +1324,13 @@ def resolved_decision_failures(text: str, anchors: set) -> list[str]:
     for oq, (ln3, r3, _) in s3.items():
         if both and oq not in s0:
             fails.append(f"§3 의 {oq} 가 §0 결정 목록에 없다 — §0 과 §3 은 같은 결정 전량이다")
-        if r3 and not RESOLVED_BODY_RE.search(unicodedata.normalize("NFKC", ln3)):
+        if r3 and not RESOLVED_BODY_RE.search(brief_body.canon(ln3)):
             fails.append(f"§3 의 해결 결정 {oq} 줄에 해결 내용(`— 해결: <한 줄>`)이 없다")
     return sorted(set(fails))
 
 
 # 항목 줄의 거부 사유 — §0 · §3 은 결정 줄 판독까지, §1 은 줄 나눔 글자를 결정 줄과 같은 이름으로 낸다.
-ENTRY_SECTIONS = (("0", "한눈에", True), ("1", "Goal · Non-goal", False), ("2", "제약", False),
-                  ("3", "Open Questions", True), ("4", "External Landscape", False), ("5", "기각 · Blind Spots", False))
+ENTRY_SECTIONS = tuple((num, title, num in ("0", "3")) for num, title in brief_body.SECTIONS[:6])
 
 
 def entry_line_failures(text: str) -> list[str]:
@@ -1350,6 +1346,15 @@ def entry_line_failures(text: str) -> list[str]:
             fails.append(f"§{num} 의 줄이 허용 문법 밖이다 — {brief_body.DECISION_REASON_TEXT[why]}({why}). "
                          f"결정 줄은 열 0 의 `- OQ<n>` 불릿 줄이고 한 줄에 항목 하나다: {lines[n - 1].strip()[:60]}")
     return fails
+
+
+def section_heading_failures(text: str) -> list[str]:
+    """payload 의 같은 번호 절 머리가 둘 이상이면 red — 제목 붙은 머리를 고르는 판독기와 번호만 보는 판독기가 다른 절을
+    읽는다(`brief_body.section_problem`). §6 은 `section6_ambiguous` 가 따로 본다."""
+    return [f"payload §{num} 머리가 하나로 정해지지 않는다 — "
+            f"{brief_body.SECTION_REASON_TEXT['section_heading_duplicate']} (section_heading_duplicate)"
+            for num, _title in brief_body.SECTIONS
+            if num != "6" and brief_body.section_problem(text, num) == "section_heading_duplicate"]
 
 
 def open_line_ref_failures(text: str, anchors: set) -> list[str]:
@@ -1658,6 +1663,9 @@ def gate(path: Path) -> int:
         failures += resolved_decision_failures(text, pa)
         failures += open_line_ref_failures(text, pa | n1b_audit)
     failures += entry_line_failures(text)
+    failures += section_heading_failures(text)
+    failures += [f"§6 밖의 글에 닮은 글자로 쓴 원문 번호가 있다 — 번호로 읽지 않는다 (ref_confusable:{tok})"
+                 for tok in sorted(set(brief_body.ref_confusables(_payload_excluding_section6(text))))]
 
     sec4_absent = any(m.startswith("4.") for m in miss)
     if not sec4_absent and not landscape_present(text):

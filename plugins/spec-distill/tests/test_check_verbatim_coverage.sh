@@ -440,7 +440,8 @@ for spec in 'v_nbsp|anchor_unicode_space|\n- **S2**|\n\u00a0- **S2**' \
             'v_fullS|anchor_confusable|\n- **S2**|\n- **\uff332**' \
             'v_inbody|anchor_in_body|\n- **S2**|\n  > 인용 가운데 **\u04053** 를 심었다\n- **S2**' \
             'v_cyr|anchor_confusable|\n- **S2**|\n- **\u04052**' \
-            'v_di|anchor_confusable|\n- **S2**|\n- **S\u31642**'; do
+            'v_di|anchor_confusable|\n- **S2**|\n- **S\u31642**' \
+            'v_ze|anchor_confusable|\n- **S2**|\n- **S\u0417** 「심은 줄」\n- **S2**'; do
   IFS='|' read -r stem why from to <<<"$spec"
   cp "$FX/brief-verbatim-ok.md" "$VB/$stem.md"
   python3 -I - "$VB/$stem.md" "$from" "$to" <<'PY'

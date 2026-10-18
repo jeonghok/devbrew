@@ -422,18 +422,24 @@ def _cycles(blocks: list) -> list:
     return errs
 
 
+def brief_section(brief: str, num: str) -> str:
+    """brief 의 §<num> 본문 — 게이트와 같은 판독(`brief_body.section_text` · 제목 붙은 경계 · 펜스 벗김). 제목 붙은 머리가
+    없거나 같은 번호 머리가 둘 이상이면 FormatError(셀 수 없음). brief 절은 `section_body` 로 읽지 않는다 — 그것은 아무
+    `## ` 줄에서나 끊고 다른 줄 나눔 글자에서도 잘라 게이트와 다른 절을 읽는다."""
+    why = brief_body.section_problem(brief, num)
+    if why:
+        raise FormatError("brief §%s 를 하나로 읽을 수 없다 — %s(%s)" % (num, brief_body.SECTION_REASON_TEXT[why], why))
+    return brief_body.section_text(brief, num)
+
+
 def brief_universe(brief: str, audit: str):
     """(non_s, s_ids, k_expected). 셀 수 없으면 FormatError."""
     fm_lines = brief.split("\n---", 1)[0].splitlines()
     non_s = {m.group(1) for line in fm_lines for m in [ID_ITEM_RE.fullmatch(line)] if m}
-    s0 = section_body(brief, "## 0.")
-    s4 = section_body(brief, "## 4.")
-    s5 = section_body(brief, "## 5.")
-    if s0 is None or s4 is None or s5 is None:
-        raise FormatError("brief 에 §0 · §4 · §5 중 없는 절이 있다")
-    # §0 결정 번호는 게이트와 같은 판독기 · 같은 절 경계(`## <n>.` — 절 안 소제목은 절을 끊지 않는다)로 센다. 결정 줄 문법
-    # 밖 줄이 있으면 셀 수 없다(게이트도 그 brief 를 막는다).
-    oq_entries, oq_rejects = brief_body.decision_entries(brief_body.section_text(brief, "0"))
+    s0, s4, s5 = (brief_section(brief, n) for n in ("0", "4", "5"))
+    # §0 결정 번호는 게이트와 같은 판독기 · 같은 절 경계로 센다. 결정 줄 문법 밖 줄이 있으면 셀 수 없다(게이트도 그 brief 를
+    # 막는다).
+    oq_entries, oq_rejects = brief_body.decision_entries(s0)
     if oq_rejects:
         raise FormatError("brief §0 에 결정 줄 문법 밖 줄이 있어 번호를 셀 수 없다(%s)"
                           % ", ".join("%d번째 줄 %s" % t for t in oq_rejects[:5]))
