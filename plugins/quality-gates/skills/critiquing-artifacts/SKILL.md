@@ -207,8 +207,8 @@ synthesize_artifact_findings.py --phase key --findings critic.yaml [--findings c
 
 **3. adversarial** — `artifact-adversarial` 디스패치(read-only). `merged.yaml`을 프롬프트에
    넣어 §10 verdict를 받는다(`finding_key`=각 finding의 `dedup_key`). 출력을 `verdicts.yaml`에
-   저장. `project_dir` + E2c가 인가한 `canonical`(raw `<path>` 아님 — adversarial도 산출물을
-   read하고 egress 도구를 가지므로 critic/codex와 동일하게 canonical로 freeze) 스레딩.
+   저장. `project_dir` + E2c가 인가한 `canonical`(raw `<path>` 아님 — adversarial 은 egress 도구가 없다(`tools: Read, Grep, Glob`). 그래도 산출물을
+   read 하므로, 읽는 대상이 E2c 가 인가한 그 파일로 고정되도록 critic/codex 와 같은 canonical 로 freeze) 스레딩.
    **`merged.yaml`의 keyed 내용(각 finding의
    `dedup_key` 포함)을 프롬프트에 그대로 inline** — 이 스레딩이 빠지면 adversarial이
    `finding_key`를 echo할 수 없어 모든 finding이 미판정(unadjudicated) 처리된다(§10 fail-closed
