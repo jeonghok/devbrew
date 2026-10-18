@@ -30,7 +30,7 @@ Run the quality pipeline — one pipeline, one verdict (`clean` · `defect` · `
 코드 파이프라인이 아니라 **산출물 비평-수정 루프** 모드다. 이 경우 `setup-qg.sh`·
 `quality-pipeline`을 실행하지 말고 곧장 신규 skill을 호출한다:
 
-`Skill("quality-gates:critiquing-artifacts")`
+`Skill("quality-gates:artifact-critique")`
 
 그 skill이 소유: E0 kill switch → E1 코드/비-코드 분류(코드면 "코드는 /qg로" 안내 후 종료)
 → E2 브랜치 안전 → E2b clean 전제 → E3 upfront 동의 게이트 → 비평-수정-재비평 루프

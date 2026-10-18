@@ -39,7 +39,7 @@
 # it — a prior round's stale YAML (which may carry a false-positive
 # `codex_failed: false`) would otherwise sit untouched and be read as this
 # round's codex verdict. Same contract as the shared document-review runner
-# (`run_docreview_codex_reviewer.sh`), whose callers (spec-distill's reviewing-spec
+# (`run_docreview_codex_reviewer.sh`), whose callers (spec-distill's spec-review
 # and reviewing-brief SKILLs) implement the rc==3 → rm -f pattern;
 # quality-pipeline/SKILL.md documents the same for this runner.
 #

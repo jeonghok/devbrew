@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-# --- `critique` 는 setup 의 몫이 아니다 — /qg critique 는 critiquing-artifacts 로 간다(qg.md).
+# --- `critique` 는 setup 의 몫이 아니다 — /qg critique 는 artifact-critique 로 간다(qg.md).
 # 출력도 상태도 남기지 않고 0 으로 끝난다. kill switch 는 그 skill 의 E0 가 본다.
 if [[ "${1:-}" == "critique" ]]; then
   exit 0

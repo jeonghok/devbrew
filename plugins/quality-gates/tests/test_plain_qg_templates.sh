@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/critiquing-artifacts/SKILL.md plugins/quality-gates/commands/qg.md plugins/quality-gates/README.md plugins/quality-gates/references/e2e.md
+# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/artifact-critique/SKILL.md plugins/quality-gates/commands/qg.md plugins/quality-gates/README.md plugins/quality-gates/references/e2e.md
 #
 # 쉬운 말 출력 설계 §4 · AC6 — /qg 의 질문 셋 · 완료 표 · 모델이 그대로 내는 문구가 한국어이고,
 # 완료 보고와 비평 최종 보고가 첫 줄 상태 · 끝 할 일 하나를 지시받는다. e2e 걷기 직후 게이트(④)가
@@ -14,7 +14,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
 fi
 . "$REPO_ROOT/shared/tests/assert.sh"
 S="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
-CA="$PLUGIN_ROOT/skills/critiquing-artifacts/SKILL.md"
+CA="$PLUGIN_ROOT/skills/artifact-critique/SKILL.md"
 QGMD="$PLUGIN_ROOT/commands/qg.md"
 RM="$PLUGIN_ROOT/README.md"
 E2R="$PLUGIN_ROOT/references/e2e.md"
