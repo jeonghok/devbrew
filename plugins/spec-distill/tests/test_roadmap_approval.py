@@ -39,9 +39,15 @@ class ApprovalDate(unittest.TestCase):
                      "승인을 기다린다", "승인이 아니다", "조사 흐름 고름 — 사용자 승인", "시작 승인 공시"):
             self.assertIsNone(M.approval_date(DOC % ("- 2026-10-18 " + tail)), tail)
 
+    def test_round2_lines_are_not_approval(self):
+        for tail in ("spec 승인받지 못함", "spec 승인 받을 예정", "spec 승인받기 전 리뷰", "spec 승인됨 아님",
+                     "spec 승인했던 것 무효", "spec 리뷰 통과, 승인 받으러 감", "specs 승인됨 아닌 다른 문서"):
+            self.assertIsNone(M.approval_date(DOC % ("- 2026-10-18 " + tail)), tail)
+
     def test_canonical_without_date_is_format_error(self):
-        with self.assertRaises(M.FormatError):
-            M.approval_date(DOC % "- spec 승인 · 어제 · 「①」")
+        for rest in ("어제 · 「①」", "어제 · 「2026-10-18 계획」", "2026-10-180 · 「①」"):
+            with self.assertRaises(M.FormatError, msg=rest):
+                M.approval_date(DOC % ("- spec 승인 · " + rest))
 
     def test_no_section_or_no_line(self):
         self.assertIsNone(M.approval_date("# 설계\n"))

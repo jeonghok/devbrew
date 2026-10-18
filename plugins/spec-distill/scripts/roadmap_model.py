@@ -507,8 +507,8 @@ NO_DEFAULT = ("기본 브랜치를 알 수 없다 — origin/HEAD 가 없다. `g
 # `## 지휘 기록` 의 spec 승인 줄 — 지휘자가 `- spec 승인 · <YYYY-MM-DD> · 「<고른 선택지 원문>」` 로 쓴다.
 APPROVAL_PREFIX = "- spec 승인 · "
 APPROVAL_DENY = ("승인 대기", "승인 전", "승인 거절", "승인하지 않", "승인 안", "미승인", "않", "철회", "취소", "보류",
-                 "요청", "필요", "기다", "아니")
-APPROVAL_YES = ("승인했", "승인함", "승인됨", "승인받", "승인 받")
+                 "요청", "필요", "기다", "아니", "못", "아님", "아닌", "무효", "예정")
+APPROVAL_YES = ("승인했", "승인함", "승인됨", "승인받았", "승인 받았", "승인받음", "승인 받음")
 CONFIRM_RE = re.compile(r"- 넘김 확인 · ([A-Z][0-9]+[a-z]?) · ([0-9a-f]{8}) · (\S.*)")
 RECEIVER_EPIC_RE = re.compile(r"[A-Z]\d+[a-z]?")
 RECEIVER_PR_RE = re.compile(r"#\d+")
@@ -545,7 +545,8 @@ def section_lines(doc_text: str, heading: str):
 
 def approval_date(doc_text: str):
     """`## 지휘 기록` 의 spec 승인 날짜 가운데 가장 늦은 것. 절이 없거나 승인 줄이 없으면 None.
-    정해진 꼴 밖의 손으로 쓴 줄도 읽는다 — 날짜와 「승인」 이 함께 있고 부정 구절(APPROVAL_DENY)이 없는 `- ` 줄.
+    읽는 줄은 둘이다 — 정해진 꼴(`- spec 승인 · <날짜> · …`, 날짜가 없거나 꼴이 어긋나면 FormatError),
+    또는 손으로 쓴 `- ` 줄(날짜 + "spec" + 끝난 긍정 꼴(APPROVAL_YES) + 부정 구절(APPROVAL_DENY) 없음).
     머리가 둘이면 FormatError(section_lines) — 깨진 문서를 「승인 없음」 으로 떨어뜨리지 않는다."""
     lines = section_lines(doc_text, RECORD_HEADING)
     dates = []
@@ -556,11 +557,15 @@ def approval_date(doc_text: str):
         if not canonical and not ("spec" in line.lower() and any(w in line for w in APPROVAL_YES)
                                   and not any(w in line for w in APPROVAL_DENY)):
             continue
-        found = DATE_RE.search(line[len(APPROVAL_PREFIX):] if canonical else line)
+        if canonical:
+            rest = line[len(APPROVAL_PREFIX):]
+            found = DATE_RE.match(rest)
+            if not found or not (rest[10:] == "" or rest[10:].startswith(" · ")):
+                raise FormatError("spec 승인 줄이 `<날짜> · …` 로 시작하지 않는다: %s" % line)
+        else:
+            found = DATE_RE.search(line)
         if found:
             dates.append(found.group(0))
-        elif canonical:
-            raise FormatError("spec 승인 줄에 날짜가 없다: %s" % line)
     return max(dates) if dates else None
 
 
