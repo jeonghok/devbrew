@@ -145,6 +145,8 @@ def dirty_lines(path: Path) -> list:
 
 
 REVIEW_PACK_DIR = "review"
+FILES_DIR = "files"                      # 기계 상태 자원 폴더 — <기계 상태 폴더>/files/<종류>/<이름>
+FILE_KINDS = ("tmp", "relay", "report")  # agent 몫 임시 폴더 · 옮김 기록 · 하위 보고
 LOCK_YOUNG = 60  # 주인 기록 전 잠금은 이 초 동안 바쁜 것으로 본다(merge_check 와 같은 규칙)
 
 
@@ -159,7 +161,8 @@ def _alive(pid: int) -> bool:
 
 
 def disposable_kind(root, roadmap: str, path: Path):
-    """지휘자가 직접 만든 일회용만 「merge」(스위트 대조 사본) · 「pack」(리뷰 묶음) — 그 밖은 None."""
+    """지휘자가 직접 만든 일회용만 「merge」(스위트 대조 사본) · 「pack」(리뷰 묶음) · 「file」(자원 폴더의 바로 아래
+    항목 — `resource-dir` 이 만든 것) — 그 밖은 None."""
     mdir = mpath(root, roadmap).parent.resolve()
     rp = path.resolve()
     if (rp.parent.parent == mdir / repo_defaults.MERGE_CHECK_DIR and rp.parent.name.startswith("run-")
@@ -167,6 +170,8 @@ def disposable_kind(root, roadmap: str, path: Path):
         return "merge"
     if rp.parent == mdir / REVIEW_PACK_DIR:
         return "pack"
+    if rp.parent.parent == mdir / FILES_DIR and rp.parent.name in FILE_KINDS:
+        return "file"
     return None
 
 
@@ -662,7 +667,7 @@ def c_cleanup_check(root, a) -> int:
         print("worktree 가 아니다: %s" % path)
         return 2
     if a.roadmap and not path.is_symlink() and disposable_kind(root, a.roadmap, path):
-        print("일회용(지휘자가 만든 사본 · 묶음) — 확인 없이 지운다: %s" % path)
+        print("일회용(지휘자가 만든 사본 · 묶음 · 자원 폴더 항목) — 확인 없이 지운다: %s" % path)
         return 0
     try:
         require_user_worktree(root, path)
@@ -699,6 +704,15 @@ def c_cleanup(root, a) -> int:
                 shutil.rmtree(str(path))
             except OSError as exc:
                 raise Fail(3, "리뷰 묶음을 지우지 못했다: %s" % exc)
+    elif kind == "file":
+        if path.exists():
+            try:
+                if path.is_dir():
+                    shutil.rmtree(str(path))
+                else:
+                    os.unlink(str(path))
+            except OSError as exc:
+                raise Fail(3, "자원 폴더의 항목을 지우지 못했다: %s" % exc)
     else:
         if not path.is_dir():
             raise Fail(2, "폴더가 없다: %s" % path)
@@ -1030,6 +1044,26 @@ def c_worktree_path(root, a) -> int:
     return 0
 
 
+def c_resource_dir(root, a) -> int:
+    """기계 상태 자원 폴더 `<기계 상태 폴더>/files/<종류>/<이름>` 을 만들고 경로를 낸다 — `cleanup` 이 확인 없이 치우는 자리."""
+    if not a.name or not set(a.name) <= NAME_CHARS or a.name in (".", ".."):
+        raise Fail(2, "자원 이름은 영숫자 · . · _ · - 만 쓴다: %r" % a.name)
+    mdir = mpath(root, a.roadmap).parent
+    base = mdir / FILES_DIR / a.kind
+    out = base / a.name
+    for p in (mdir, mdir / FILES_DIR, base, out):
+        if p.is_symlink():
+            raise Fail(3, "자원 폴더 경로에 심볼릭 링크가 있다 — 만들지 않는다: %s" % p)
+    try:
+        out.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise Fail(3, "자원 폴더를 만들지 못했다: %s (%s)" % (out, type(exc).__name__))
+    if disposable_kind(root, a.roadmap, out) != "file":
+        raise Fail(3, "만든 폴더가 자원 폴더 자리가 아니다: %s" % out)
+    print(out)
+    return 0
+
+
 def c_version(root, a) -> int:
     rc, msg = version_report(root, Path(a.plugin_json))
     print(msg)
@@ -1078,6 +1112,9 @@ COMMANDS = {
                                               p.add_argument("--branch", required=True), p.add_argument("--merged"),
                                               p.add_argument("--out"))),
     "worktree-path": (c_worktree_path, lambda p: p.add_argument("--name", required=True)),
+    "resource-dir": (c_resource_dir, lambda p: (p.add_argument("--roadmap", required=True),
+                                                p.add_argument("--kind", required=True, choices=FILE_KINDS),
+                                                p.add_argument("--name", required=True))),
     "version": (c_version, lambda p: p.add_argument("--plugin-json", required=True)),
 }
 

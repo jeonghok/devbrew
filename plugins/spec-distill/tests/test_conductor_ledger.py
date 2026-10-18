@@ -335,6 +335,79 @@ class Resources(Repo):
         self.assertEqual(rc, 0)
         self.assertIn("feature/bad", out)
 
+    def test_resource_dir_creates_and_cleanup_removes(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        made = {}
+        for kind in ("tmp", "relay", "report"):
+            rc, out = self.cli("resource-dir", "--roadmap", RM, "--kind", kind, "--name", "A1-plan")
+            self.assertEqual(rc, 0, out)
+            p = Path(out.strip())
+            self.assertEqual(p, self._mdir() / "files" / kind / "A1-plan")
+            self.assertTrue(p.is_dir())
+            self.assertEqual(L.disposable_kind(self.w, RM, p), "file")
+            (p / "sub").mkdir()
+            (p / "sub" / "x.md").write_text("x", encoding="utf-8")
+            self._row(p)
+            made[kind] = p
+        loose = self._mdir() / "files" / "relay" / "relay-A1-1.md"
+        loose.write_text("x", encoding="utf-8")
+        self._row(loose)
+        self.assertEqual(self.cli("cleanup-check", "--roadmap", RM, "--path", str(made["tmp"]))[0], 0)
+        for p in list(made.values()) + [loose]:
+            rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(p))
+            self.assertEqual(rc, 0, out)
+            self.assertFalse(p.exists())
+        self.assertEqual(self._rows(), [])
+
+    def test_resource_dir_refuses_bad_name_kind_and_symlink(self):
+        for name in ("", ".", "..", "a/b", "a b", "가"):
+            rc, out = self.cli("resource-dir", "--roadmap", RM, "--kind", "tmp", "--name", name)
+            self.assertEqual(rc, 2, (name, out))
+        with self.assertRaises(SystemExit):
+            self.cli("resource-dir", "--roadmap", RM, "--kind", "other", "--name", "x")
+        (self._mdir() / "files").mkdir(parents=True)
+        elsewhere = self.t / "elsewhere"
+        elsewhere.mkdir()
+        (self._mdir() / "files" / "tmp").symlink_to(elsewhere)
+        rc, out = self.cli("resource-dir", "--roadmap", RM, "--kind", "tmp", "--name", "x")
+        self.assertEqual(rc, 3, out)
+        self.assertEqual(list(elsewhere.iterdir()), [])
+
+    def test_resource_kind_only_direct_children(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        files = self._mdir() / "files"
+        (files / "tmp" / "a" / "deep").mkdir(parents=True)
+        (files / "other" / "b").mkdir(parents=True)
+        self.assertIsNone(L.disposable_kind(self.w, RM, files / "tmp" / "a" / "deep"))
+        self.assertIsNone(L.disposable_kind(self.w, RM, files / "other" / "b"))
+        self.assertIsNone(L.disposable_kind(self.w, RM, files / "tmp"))
+        rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(files / "tmp" / "a" / "deep"))
+        self.assertEqual(rc, 2, out)
+        self.assertTrue((files / "tmp" / "a" / "deep").exists())
+        target = self.t / "keep"
+        target.mkdir()
+        link = files / "tmp" / "link"
+        link.symlink_to(target)
+        rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(link))
+        self.assertEqual(rc, 3, out)
+        self.assertTrue(target.exists())
+
+    def test_cleanup_failed_resource_delete_keeps_row(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        rc, out = self.cli("resource-dir", "--roadmap", RM, "--kind", "report", "--name", "stuck")
+        p = Path(out.strip())
+        (p / "sub").mkdir()
+        (p / "sub" / "f.md").write_text("x", encoding="utf-8")
+        self._row(p)
+        os.chmod(str(p / "sub"), 0o500)
+        try:
+            rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(p))
+        finally:
+            os.chmod(str(p / "sub"), 0o755)
+        self.assertEqual(rc, 3, out)
+        self.assertTrue(p.exists())
+        self.assertEqual(len(self._rows()), 1)
+
     def test_cleanup_gone_review_pack_drops_row(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)
         pack = self._mdir() / "review" / "gone"
