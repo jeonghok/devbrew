@@ -38,6 +38,7 @@ from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, NO_DEFAULT
 from state_path import state_root  # noqa: E402
 
 DONE = ("머지됨", "끝남")
+GIT = shutil.which("git") or "git"
 
 
 class Fail(Exception):
@@ -47,7 +48,7 @@ class Fail(Exception):
 
 
 def git(cwd, *args):
-    p = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, encoding="utf-8", errors="replace")
+    p = subprocess.run([GIT, *args], cwd=str(cwd), capture_output=True, encoding="utf-8", errors="replace")
     return p.returncode, p.stdout.rstrip("\n"), p.stderr.strip()
 
 
@@ -341,6 +342,113 @@ def _read(path: Path) -> str:
         raise Fail(3, "읽지 못했다: %s (%s)" % (path, type(exc).__name__))
 
 
+HANDOFF_HEADING = "## 통합 리뷰 인계"
+AFTER_REVIEW = "리뷰 뒤 반영"
+CARRY_HEADS = ("## 번호 대조", "## Acceptance Criteria", "## 미룸")
+CARRY_PREFIX = 16
+
+
+def handoff_section(body: str) -> list:
+    out, inside = [], False
+    for line in body.splitlines():
+        if line.startswith("## "):
+            inside = line.rstrip() == HANDOFF_HEADING
+            continue
+        if inside and line.strip():
+            out.append(line.rstrip())
+    return out
+
+
+def after_review_lines(body: str) -> list:
+    return [l.rstrip() for l in body.splitlines() if AFTER_REVIEW in l and l.lstrip().startswith("- ")]
+
+
+def _plain(text: str) -> str:
+    return " ".join(text.translate({ord("`"): None, ord("*"): None}).split())
+
+
+def carried(item: str, receiver_text: str) -> bool:
+    """받은 쪽 설계문서의 번호 대조 · AC · 미룸 절에 넘김 항목의 앞부분이 있는가 — 「줄어든 넘김 의심」 후보용."""
+    key = _plain(item)[:CARRY_PREFIX]
+    body, inside = [], False
+    for line in receiver_text.splitlines():
+        if line.startswith("## "):
+            inside = line.rstrip() in CARRY_HEADS
+            continue
+        if inside:
+            body.append(line)
+    return bool(key) and key in _plain("\n".join(body))
+
+
+def _version_tuple(v: str):
+    return tuple(int(p) if p.isdigit() else 0 for p in v.split("."))
+
+
+def version_gap(root, plugin_json: Path):
+    """설치본 플러그인과 같은 이름의 플러그인 소스를 이 레포가 추적하고 그쪽이 더 새 판이면 그 사실 한 줄."""
+    try:
+        inst = json.loads(Path(plugin_json).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "설치본 플러그인 버전을 읽지 못했다: %s" % plugin_json
+    rc, out, _e = git(root, "ls-files", "--", "*plugin.json")
+    for rel in out.splitlines() if rc == 0 else []:
+        try:
+            src = json.loads((Path(root) / rel).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if src.get("name") == inst.get("name") and _version_tuple(str(src.get("version", ""))) > _version_tuple(str(inst.get("version", ""))):
+            return ("설치된 %s %s 이 레포 사본 %s 보다 옛 판이다 — 레포 사본의 기능(예: 묶음 대조 · 「여기서 계속」 · 기각 번호 보이기)이 "
+                    "없을 수 있다. 플러그인을 갱신하거나 레포 사본으로 지휘한다" % (inst.get("name"), inst.get("version"), src.get("version")))
+    return None
+
+
+def _status(root, roadmap: str) -> dict:
+    p = subprocess.run([sys.executable, str(HERE / "roadmap_status.py"), "--json", roadmap], cwd=str(root),
+                       capture_output=True, encoding="utf-8", errors="replace")
+    try:
+        return json.loads(p.stdout)
+    except ValueError:
+        raise Fail(3, "상태 계산을 읽지 못했다(rc %d): %s" % (p.returncode, p.stderr.strip()[-200:]))
+
+
+def _block(report: dict, epic: str) -> dict:
+    b = next((x for x in report.get("blocks") or [] if x.get("id") == epic), None)
+    if b is None:
+        raise Fail(2, "에픽 %s 가 로드맵에 없다" % epic)
+    return b
+
+
+def _doc(root, b: dict, path: str) -> str:
+    ref = b.get("tip") or DEFAULT_REF
+    _r, text, _e = git(root, "show", "%s:%s" % (ref, path))
+    return text
+
+
+def _gh() -> str:
+    exe = shutil.which("gh")
+    if not exe:
+        raise Fail(4, "PR 인계를 읽지 못했다 — gh 가 없다. 설계문서 `## 미룸` 표와 `## 지휘 기록` 을 쓴다")
+    return exe
+
+
+def _prs(root, b: dict):
+    exe = _gh()
+    out = []
+    for br in b.get("branches") or [s["branch"] for s in b.get("branch_states") or []]:
+        p = subprocess.run([exe, "pr", "list", "--state", "all", "--head", br, "--json", "number,state,body",
+                            "--limit", "5"], cwd=str(root), capture_output=True, encoding="utf-8", errors="replace",
+                           env=dict(os.environ, GH_PROMPT_DISABLED="1", NO_COLOR="1"))
+        if p.returncode:
+            raise Fail(4, "PR 인계를 읽지 못했다 — gh 실패(%s). 설계문서 `## 미룸` 표와 `## 지휘 기록` 을 쓴다"
+                       % p.stderr.strip()[-160:])
+        try:
+            items = json.loads(p.stdout)
+        except ValueError:
+            raise Fail(4, "PR 인계를 읽지 못했다 — gh 출력 모양이 다르다. 설계문서 `## 미룸` 표와 `## 지휘 기록` 을 쓴다")
+        out += [(br, it) for it in items if isinstance(it, dict)]
+    return out
+
+
 # ── 하위 명령 ────────────────────────────────────────────────────────────────
 
 def c_roadmaps(root, a) -> int:
@@ -622,6 +730,72 @@ def c_pending(root, a) -> int:
     return 0
 
 
+def c_pr_handoffs(root, a) -> int:
+    _gh()  # gh 가 없으면 상태 계산보다 먼저 강등을 알린다
+    b = _block(_status(root, a.roadmap), a.epic)
+    for br, it in _prs(root, b):
+        body = str(it.get("body") or "")
+        print("%s #%s(%s)" % (br, it.get("number"), it.get("state")))
+        for line in handoff_section(body) or ["(인계 절 없음)"]:
+            print("  " + line)
+        for line in after_review_lines(body):
+            print("  " + line)
+    return 0
+
+
+def c_audit(root, a) -> int:
+    import check_bundle_coverage as cbc
+    import spec_review_bundle as srb
+    from roadmap_model import rulings_archived
+    report = _status(root, a.roadmap)
+    b = _block(report, a.epic)
+    groups = []
+    for spec in b.get("specs") or []:
+        text = _doc(root, b, spec)
+        groups.append(("기각한 번호(%s)" % spec,
+                       srb.rejected(spec, str(root)) if (Path(root) / spec).exists() else []))
+        try:
+            groups.append(("미룸(%s)" % spec, ["%s → %s" % (it, recv) for it, _w, recv in cbc.deferred_rows(text)]))
+        except FormatError as exc:
+            groups.append(("미룸(%s)" % spec, ["셀 수 없음 — %s" % exc]))
+        try:
+            groups.append(("판정(%s)" % spec, rulings_archived(text) or []))
+        except FormatError as exc:
+            groups.append(("판정(%s)" % spec, ["셀 수 없음 — %s" % exc]))
+    try:
+        groups.append(("리뷰 뒤 반영", [l for _br, it in _prs(root, b) for l in after_review_lines(str(it.get("body") or ""))]))
+    except Fail as exc:
+        groups.append(("리뷰 뒤 반영", ["읽지 못함 — %s" % exc]))
+    shrunk = []
+    mine = "\n".join(_doc(root, b, s) for s in b.get("specs") or [])
+    for other in report.get("blocks") or []:
+        for spec in other.get("specs") or []:
+            try:
+                rows = cbc.deferred_rows(_doc(root, other, spec))
+            except FormatError:
+                continue
+            for item, _why, recv in rows:
+                if recv == a.epic and mine and not carried(item, mine):
+                    shrunk.append("%s → %s: %s" % (other["id"], a.epic, item))
+    groups.append(("줄어든 넘김 의심", shrunk))
+    shown = 0
+    for label, items in groups:
+        if items:
+            print("%s %d개" % (label, len(items)))
+            for it in items:
+                print("  " + it)
+            shown += 1
+    if not shown:
+        print("감사 후보 없음")
+    return 0
+
+
+def c_version(root, a) -> int:
+    gap = version_gap(root, Path(a.plugin_json))
+    print(gap or "설치본과 레포 사본의 판이 맞다(또는 레포에 같은 플러그인 소스가 없다)")
+    return 1 if gap else 0
+
+
 def _rs(p):
     p.add_argument("--roadmap", required=True)
     p.add_argument("--session", required=True)
@@ -658,6 +832,9 @@ COMMANDS = {
                                                     p.add_argument("--counts", required=True))),
     "flush": (c_flush, lambda p: (_rs(p), p.add_argument("--epic", required=True), p.add_argument("--spec", required=True))),
     "pending": (c_pending, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic"))),
+    "pr-handoffs": (c_pr_handoffs, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True))),
+    "audit": (c_audit, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True))),
+    "version": (c_version, lambda p: p.add_argument("--plugin-json", required=True)),
 }
 
 

@@ -575,5 +575,87 @@ class Pending(Repo):
         self.assertIn("- spec 승인 · 2026-10-18 · 「예」", spec.read_text(encoding="utf-8"))
 
 
+class Audit(unittest.TestCase):
+    def test_handoff_section_and_after_review(self):
+        body = ("## 요약\n\n가\n\n## 통합 리뷰 인계\n\n- 이 PR 이 고침: x\n- R3 이 고침: y\n\n## 기타\n\n"
+                "- 리뷰 뒤 반영(리뷰 라운드를 거치지 않았다): 오타\n")
+        self.assertEqual(L.handoff_section(body), ["- 이 PR 이 고침: x", "- R3 이 고침: y"])
+        self.assertEqual(L.after_review_lines(body), ["- 리뷰 뒤 반영(리뷰 라운드를 거치지 않았다): 오타"])
+        self.assertEqual(L.handoff_section("본문만"), [])
+
+    def test_carried(self):
+        recv = ("# r\n\n## 번호 대조\n\n| 번호 | 반영/기각 | 자리 |\n|---|---|---|\n| C1 | 반영 | §1 |\n\n"
+                "## Acceptance Criteria\n\n- AC1 qg 범위 입력(로드맵 시작 커밋부터)을 받는다\n\n## 미룸\n\n없음\n")
+        self.assertTrue(L.carried("qg 범위 입력(로드맵 시작 커밋부터) · 「문서 경로」 정의", recv))
+        self.assertFalse(L.carried("전혀 다른 넘김 항목이 여기 있다 길게", recv))
+
+    def test_version_gap(self):
+        d = Path(tempfile.mkdtemp())
+        try:
+            (d / "p").mkdir()
+            subprocess.run(["git", "init", "-q", str(d)], env=ENV, check=True)
+            (d / "p" / "plugin.json").write_text('{"name": "spec-distill", "version": "7.3.0"}', encoding="utf-8")
+            sh(d, "add", "-A")
+            sh(d, "commit", "-qm", "x")
+            inst = d / "installed.json"
+            inst.write_text('{"name": "spec-distill", "version": "5.3.0"}', encoding="utf-8")
+            self.assertIn("옛 판", L.version_gap(d, inst))
+            inst.write_text('{"name": "spec-distill", "version": "7.3.0"}', encoding="utf-8")
+            self.assertIsNone(L.version_gap(d, inst))
+        finally:
+            shutil.rmtree(str(d))
+
+
+class PrHandoffs(Repo):
+    def test_no_gh_degrades(self):
+        old = os.environ.get("PATH", "")
+        os.environ["PATH"] = str(self.t)  # gh 없는 PATH — git 은 절대경로로 부른다
+        try:
+            rc, out = self.cli("pr-handoffs", "--roadmap", RM, "--epic", "A1")
+        finally:
+            os.environ["PATH"] = old
+        self.assertEqual(rc, 4)
+        self.assertIn("설계문서 `## 미룸` 표와 `## 지휘 기록` 을 쓴다", out)
+
+    def test_gh_stub(self):
+        stub = self.t / "bin"
+        stub.mkdir()
+        (stub / "pr.json").write_text(json.dumps([{"number": 5, "state": "OPEN",
+                                                   "body": "## 통합 리뷰 인계\n\n- R2 가 고침: z\n"}]), encoding="utf-8")
+        (stub / "gh").write_text("#!/bin/sh\ncat '%s'\n" % (stub / "pr.json"), encoding="utf-8")
+        (stub / "gh").chmod(0o755)
+        old = os.environ.get("PATH", "")
+        os.environ["PATH"] = str(stub) + os.pathsep + old
+        try:
+            rc, out = self.cli("pr-handoffs", "--roadmap", RM, "--epic", "A1")
+        finally:
+            os.environ["PATH"] = old
+        self.assertEqual(rc, 0, out)
+        self.assertIn("#5", out)
+        self.assertIn("- R2 가 고침: z", out)
+
+    def _audit_with_gh(self, prs):
+        stub = self.t / "bin"
+        stub.mkdir()
+        (stub / "gh").write_text("#!/bin/sh\necho '%s'\n" % json.dumps(prs), encoding="utf-8")
+        (stub / "gh").chmod(0o755)
+        old = os.environ.get("PATH", "")
+        os.environ["PATH"] = str(stub) + os.pathsep + old
+        try:
+            return self.cli("audit", "--roadmap", RM, "--epic", "A1")
+        finally:
+            os.environ["PATH"] = old
+
+    def test_audit_without_candidates(self):
+        rc, out = self._audit_with_gh([])
+        self.assertEqual(rc, 0, out)
+        self.assertIn("감사 후보 없음", out)
+
+    def test_audit_lists_after_review_lines(self):
+        rc, out = self._audit_with_gh([{"number": 7, "state": "OPEN", "body": "- 리뷰 뒤 반영(리뷰 라운드를 거치지 않았다): 오타\n"}])
+        self.assertEqual(rc, 0, out)
+        self.assertIn("리뷰 뒤 반영 1개", out)
+
+
 if __name__ == "__main__":
     unittest.main()
