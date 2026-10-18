@@ -695,7 +695,7 @@ mut 1/1 reraise_kind_hardcoded_post case_AC22c_reraise_preserves_pre_kind sed_ro
 #    `case_AC22c_reraise_inherits_post_kind` 의 렌더 꼬리 단언만 RED — kind·
 #    즉시-applied 단언은 렌더 텍스트와 무관해 생존한다(실측 RED(1) 생존(2)).
 mut 1/1 rg_decide_post_tail_unwired case_AC22c_reraise_inherits_post_kind sed_state \
-  's/"- %s%s (%s%s)" % (_one(f\.get("summary")), _post_kind_notice(d), fid, " · 자동" if dv\.get("auto") else ""),/"- %s (%s%s)" % (_one(f.get("summary")), fid, " · 자동" if dv.get("auto") else ""),/'
+  's/"- %s%s (%s%s)%s" % (_one(f\.get("summary")), _post_kind_notice(d), fid, " · 자동" if dv\.get("auto") else "", cited),/"- %s (%s%s)%s" % (_one(f.get("summary")), fid, " · 자동" if dv.get("auto") else "", cited),/'
 # ── 쉬운 말 렌더 (쉬운 말 출력 PR 1 · AC3) ──────────────────────────────────
 # 0 인 집계 되살리기 — 0 을 거르는 조건을 지운다.
 mut 1/1 zero_counts_revived case_plain_render_nothing_left sed_state \
@@ -903,4 +903,10 @@ mut 1/1 advice_zero_listing_revived case_advice_plain_render_nothing_left_mc sed
 # 참고 0 의 쉬운 문장 뒤에 붙는 필수 지적 수를 끄기 — 전부터 있던 절의 새 필수 지적이 참고 줄에서 사라진다.
 mut 1/1 advice_zero_mc_append_dropped case_advice_plain_render_zero_with_mc_preexisting sed_state \
   's/^            if adv_g\["mc_preexisting_new"\] > 0:$/            if False:/'
+# (AC17) 시대 표지 검사를 끈다 — 확인값 줄을 지운 원장이 옛 원장으로 통과한다.
+mut 1/1 era_marker_check_dropped case_AC17_digest_line_strip_stops sed_state \
+  's/^    elif (p\.parent \/ ERA_FILE)\.exists():.*$/    elif False:/'
+# (AC17) 확인값 줄 모양 검사를 끈다 — 첫 줄이 아닌 자리나 대문자 16진수 확인값이 «없음» 으로 통과한다.
+mut 1/1 digest_key_shape_branch_dropped case_AC17_misplaced_or_malformed_digest_stops sed_state \
+  's/^    elif DIGEST_KEY in data:.*$/    elif False:/'
 finish

@@ -90,3 +90,5 @@ advice 로 간 항목이나 적용 · drop 된 fix 를 `supersedes` 로 이은 �
 ## degrade
 
 codex 부재·critic 층 2 부재·recritic 부재는 `fin.json` 의 `advisory[]` 와 게이트 첫 줄로 공시한다. 막는 것은 critic 사망(주 판정자)·항목 소실·셀 수 없음뿐이다(`fin.json` 의 `blocks`). critic 사망과 `finalize` 실패는 `fin.json` 이 없는 라운드에서도 게이트 요약(`unverified` · `round_reviewed`)과 렌더 첫 줄이 말한다.
+
+엔진이 `ledger_corrupt`(원장이 엔진이 쓴 것과 다르다)로 멈추면 거기서 멈춘다. 사용자에게 원장 경로와 복구 길 둘을 그대로 보이고, 원장을 손으로 고쳐 계속하지 않는다.

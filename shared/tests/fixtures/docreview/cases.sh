@@ -3969,6 +3969,11 @@ case_detectors_stale_file_per_file() {
 }
 
 # ── AC17 — 원장 요약값: 엔진 밖에서 고친 원장은 복구 길과 함께 멈춘다 ─────────────────
+# 확인값이 생기기 전 버전이 쓴 원장을 흉내 낸다 — 확인값 줄과 시대 표지 파일을 함께 없앤다.
+legacy_ledger() {   # legacy_ledger <state-dir>
+  python3 -I -c 'import sys,re; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); open(p,"w",encoding="utf-8").write(re.sub(r"^docreview_digest: .*\n","",t,count=1,flags=re.M))' "$1/docreview-state.md"
+  rm -f "$1/docreview-digest-era"
+}
 case_AC17_digest_mismatch_stops() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   assert_contains "$(head -3 "$d/docreview-state.md")" "docreview_digest:" "AC17: 엔진이 저장할 때 요약값을 쓴다"
@@ -3999,12 +4004,41 @@ case_AC17_digest_covers_engine_lines_and_body() {
 }
 case_AC17_digest_backfill_disclosed_once() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
-  python3 -I -c 'import sys,re; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); open(p,"w",encoding="utf-8").write(re.sub(r"^docreview_digest: .*\n","",t,count=1,flags=re.M))' "$d/docreview-state.md"
+  legacy_ledger "$d"
   py docreview_state.py gate --state-dir "$d" >/dev/null; local rc=$?
   assert_eq "$rc" "0" "AC17: 요약값 없는 기존 원장은 손상으로 보지 않는다"
   local s="$d/s2.json"; snap "$FX/design-sample.md" "$s"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null
   assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "원장 확인값을 이번에 채웠다" "AC17: 채운 라운드 머리에 한 번 공시"
   local s3="$d/s3.json"; snap "$FX/design-sample.md" "$s3"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$s3" >/dev/null
   assert_not_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "원장 확인값을 이번에 채웠다" "AC17: 다음 라운드엔 다시 말하지 않는다"
+  rm -rf "$d"
+}
+case_AC17_digest_line_strip_stops() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_eq "$([ -f "$d/docreview-digest-era" ] && echo yes)" "yes" "AC17: 처음 확인값을 쓰면 시대 표지 파일을 함께 둔다"
+  python3 -I -c 'import sys,re; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); t=re.sub(r"^docreview_digest: .*\n","",t,count=1,flags=re.M); open(p,"w",encoding="utf-8").write(t.replace("round: 1","round: 7",1))' "$d/docreview-state.md"
+  local err rc; err="$(py docreview_state.py gate --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "ledger_corrupt"')" "1 1" "AC17: 확인값 줄을 지우고 상태를 바꿔도 읽기 전용 gate 가 멈춘다"
+  rm -rf "$d"
+}
+case_AC17_legacy_disclosed_on_every_load() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  legacy_ledger "$d"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "원장 확인값이 없다" "AC17: 확인값 없는 옛 원장은 저장 전 읽기 전용 gate 에서도 알린다"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("digest_missing"))')" "True" "AC17: gate JSON 에 digest_missing"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "원장 확인값이 없다" "AC17: 두 번째 읽기에서도 다시 알린다"
+  rm -rf "$d"
+}
+case_AC17_misplaced_or_malformed_digest_stops() {
+  local d err rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  rm -f "$d/docreview-digest-era"   # 시대 표지가 없어야 «확인값 줄 모양» 가지만 잰다
+  cp "$d/docreview-state.md" "$d/orig.md"
+  python3 -I -c 'import sys,re; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); m=re.search(r"^docreview_digest: .*\n",t,re.M); t=t.replace(m.group(0),"",1).replace("\n---\n","\n"+m.group(0)+"---\n",1); open(p,"w",encoding="utf-8").write(t)' "$d/docreview-state.md"
+  err="$(py docreview_state.py gate --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "ledger_corrupt"')" "1 1" "AC17: 확인값 줄이 첫 줄이 아니면 멈춘다"
+  cp "$d/orig.md" "$d/docreview-state.md"
+  python3 -I -c 'import sys,re; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); open(p,"w",encoding="utf-8").write(re.sub(r"^(docreview_digest: )(.*)$",lambda m: m.group(1)+m.group(2).upper(),t,count=1,flags=re.M))' "$d/docreview-state.md"
+  err="$(py docreview_state.py gate --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "ledger_corrupt"')" "1 1" "AC17: 대문자 16진수 확인값은 멈춘다"
   rm -rf "$d"
 }

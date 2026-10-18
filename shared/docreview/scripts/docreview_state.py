@@ -249,6 +249,8 @@ def state_path(state_dir) -> Path:
 
 
 DIGEST_KEY = "docreview_digest"
+# 시대 표지 — 확인값을 처음 쓴 상태 폴더에 빈 파일로 남는다. 있는데 원장에 확인값 줄이 없으면 줄이 지워진 것이다.
+ERA_FILE = "docreview-digest-era"
 _DIGEST_LINE = re.compile(r"\A" + DIGEST_KEY + r": ([0-9a-f]{64})\n")
 RECOVER = ["엔진이 쓴 내용으로 되돌린다(이 파일을 손으로 고쳤다면 그 편집을 되돌린다)",
            "그 문서의 상태 폴더를 지우고 1라운드부터 다시 리뷰한다 — "
@@ -293,7 +295,9 @@ def load_state(state_dir) -> dict:
             raise LedgerCorrupt("ledger_corrupt", path=str(p), recover=RECOVER)
     elif DIGEST_KEY in data:   # 요약값이 있는데 첫 줄 모양이 아니다 — 없는 것으로 넘기지 않는다
         raise LedgerCorrupt("ledger_corrupt", path=str(p), recover=RECOVER)
-    else:   # 요약값이 생기기 전 버전이 쓴 원장 — 통과시키고 다음 저장이 채운다
+    elif (p.parent / ERA_FILE).exists():   # 확인값을 쓰기 시작한 폴더인데 줄이 없다 — 줄을 지운 것이다
+        raise LedgerCorrupt("ledger_corrupt", path=str(p), recover=RECOVER)
+    else:   # 확인값이 생기기 전 버전이 쓴 원장 — 통과시키고 다음 저장이 채운다
         st["_digest_missing"] = True
     st["_body"] = body
     return st
@@ -312,7 +316,15 @@ def save_state(state_dir, st, log_line=None) -> None:
                           default_flow_style=False)
     fm = "%s: %s\n%s" % (DIGEST_KEY, _digest(tree, body), tree)
     # 제자리 덮어쓰기다 — 쓰기 불가 폴더 안의 쓰기 가능한 원장도 갱신된다(진입 잔존물 락이 기대는 성질).
-    state_path(state_dir).write_text("---\n" + fm + "---\n" + body, encoding="utf-8")
+    data = ("---\n" + fm + "---\n" + body).encode("utf-8")   # 인코딩을 먼저 끝낸다 — 실패해도 원본이 잘리지 않는다
+    with open(str(state_path(state_dir)), "wb") as fh:
+        fh.write(data)
+    era = Path(state_dir) / ERA_FILE
+    if not era.exists():
+        try:
+            era.write_bytes(b"")
+        except OSError:   # 쓰기 불가 폴더 — 원장 갱신은 막지 않는다(표지가 없으면 줄 삭제 탐지만 약해진다)
+            pass
     st["_body"] = body
 
 
@@ -1692,6 +1704,8 @@ def gate_summary(st) -> dict:
     g = {"round": n, "rereview_count": rr, "cap_reached": rr >= cap, "config": cfg}
     for row in GATE_ROWS:
         g[row.name] = gate_bucket(st, row)
+    if st.get("_digest_missing"):   # 읽기만 해도 알린다 — 저장 전에는 채움 공시가 없다
+        g["digest_missing"] = True
     g["asks_open"] = sorted(i for i, x in asks.items() if not x.get("answered"))
     g["defers"] = sorted(i for i, f in st["findings"].items() if f.get("disposition") == "defer")
     g["dropped"] = sorted(i for i, f in fx.items() if f["state"] == "dropped")
@@ -2161,7 +2175,9 @@ def render_gate(st, g) -> str:
     if g["cap_reached"]:
         sub += " · 상한에 닿았다"
     if (st["rounds"].get(str(g["round"])) or {}).get("digest_backfilled"):
-        sub += " · 원장 확인값을 이번에 채웠다(이전 버전이 쓴 원장)"
+        sub += " · 원장 확인값을 이번에 채웠다(확인값이 없던 원장 — 이전 버전이 썼거나 줄이 지워졌다)"
+    if g.get("digest_missing"):
+        sub += " · 원장 확인값이 없다 — 이전 버전이 썼거나 확인값 줄이 지워졌다"
     if g["stagnation"]:
         sub += " · 진전 없음(stagnation)"
     out.append(sub)
