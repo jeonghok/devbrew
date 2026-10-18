@@ -13,6 +13,7 @@
 | M7 | 알림 도구가 있는가 · 보고 있을 때 안 보낸다고 하는가 · 끝난 agent 를 `SendMessage` 로 이어 부르면 맥락이 이어지는가 | `PushNotification` 은 이 측정 자리(지휘 세션이 보낸 SDD 실행 agent)의 도구 목록에 없다 — 「보고 있을 때 안 보낸다」 문면은 재지 못함(도구 없음), 지휘 세션 본체는 재지 못함. 끝난 agent 를 `SendMessage` 로 이어 부르면 앞 맥락을 갖고 이어 간다(숫자 7 을 답함) | R5 계획 3(conducting.md 알림 · conductor-dispatch.md 이어 부르기) |
 | M8 | `shared/test-selection` 공유본의 배정 · 단위 실행 · 귀속 입출력, 단위 실행의 표준 오류에 실패 이름이 실리는가 | 실린다 — `run … per-unit` 의 표준 오류에 pytest `FAILED tests/test_x.py::test_a` · unittest `FAIL: test_a (tests.test_y.T)` · 셸 `  ✗ 하나가 틀렸다` 가 그대로 나오고 rc 는 0. 테스트 아닌 파일은 `unclaimed` 행. `run` 이 detached 트리를 요구한다는 것은 소스 확인뿐이다(붙은 트리는 재지 못함). `diff-test-results.py` 는 대상 레포 루트에서 불러야 하고 `adapters` · `verdict_input` · `per_adapter` · `attributions` 를 내며, `unclaimed` 가 남아 있으면 `silent_drop: true` · `degrade_causes` 에 `silent-drop` 이 붙는다(pytest · unittest 관측, 셸은 false). `--total --tree HEAD` 는 테스트 파일 수(1)를 낸다 | R5 계획 3 Task 3(merge_check) |
 | M9 | `requesting-code-review` 가 부르는 agent 와 그 쓰기 권한 | ``Dispatch a `general-purpose` subagent`` — general-purpose 는 전체 도구(쓰기 포함)를 가진다 | R5 계획 3 결정 D(integration-reviewer) |
+| M10 | devbrew 에서 손 헬퍼(실패 이름 스크립트)와 merge_check 의 스위트 명령이 같은 브랜치에서 같은 새 실패 · 고쳐짐 집합을 내는가 | 새 실패 집합은 같다(5줄, 끝 공백만 다름). 고쳐짐 집합은 1줄 다르다 — 스위트 명령 쪽 기준선 실행에서 한 번 빨갰던 `test_codex_backward_compat.sh` 가 혼자 두 번 돌리면 통과(이름 추출 결함 아님) | R5 계획 3 Task 13 · 설계 Deferred 2e6610eb#r2.1 |
 
 ## M1
 
@@ -132,3 +133,14 @@
 - 34번째 줄: ``Dispatch a `general-purpose` subagent, filling the template at [code-reviewer.md](code-reviewer.md)``.
 
 판정: 리뷰 요청 skill 이 부르는 agent 는 `general-purpose` 다. 이 레포의 agent 목록에서 general-purpose 의 도구는 전체(`*`)이므로 쓰기 도구를 가진다 — 결정 D 의 근거.
+
+## M10
+
+방법: 기본 브랜치(`origin/HEAD`)의 detached 사본과, 거기에 이 브랜치 끝(`0205ed1c`)을 `--no-ff` 로 합친 사본을 만들었다. 각 사본에서 손 헬퍼(`suite-names.sh`)와 `tools/suite/run-all.sh` 를 한 번에 하나씩 돌렸다(스위트 잠금을 쥔 채, 한 번에 약 19분씩 넷). `run-all.sh` 출력은 `merge_check.names_in(text, "^FAILED (.+)$")` 로 이름을 뽑았다. 손 헬퍼는 spec-distill · quality-gates · shared 만 재므로 두 쪽 모두 그 범위로 좁혀 견줬다(`plugin-audit` 실패 한 줄은 범위 밖).
+
+결과(줄 수): 손 헬퍼 기준선 2 · 합친 것 7. 스위트 명령 원출력 기준선 4 · 합친 것 8, `names_in` 뒤 좁힌 집합 기준선 3 · 합친 것 7.
+
+- 새 실패 집합: 같다. 다섯 줄 — `test_epic_conductor_skill.sh` 둘(`격리 없는 인라인 python 호출`, `공유 락 test_inline_python_isolated.sh 가 통과한다`) · `test_readme_sync.sh` 둘(AP9 `UNLISTED integration-reviewer`, AP9 수 `10`/`10`/`11`) · `shared/tests/test_inline_python_isolated.sh` 하나. 날것 비교에서는 AP9 UNLISTED 줄 하나가 달랐는데, 손 헬퍼 쪽 줄 끝에 공백이 하나 남고 `names_in` 이 끝 공백을 떼기 때문이다. 끝 공백을 떼어 견주면 같다.
+- 고쳐짐 집합: 손 헬퍼는 0줄, 스위트 명령은 1줄(`plugins/quality-gates/tests/test_codex_backward_compat.sh: rc 1(실패 표시 줄 없음)`). 그 파일은 기준선 사본에서 `run-all.sh` 가 돌 때만 한 번 rc 1 이었고, 같은 사본에서 혼자 두 번 돌리자 둘 다 rc 0 이었으며 손 헬퍼의 기준선 실행에서도 통과했다. 이름 추출이 놓친 것이 아니라 그 테스트 자체의 한 번짜리 실패다.
+
+판정: 이름 추출(`names_in` + `test_failure_pattern`)은 새 실패를 손 헬퍼와 같게 뽑는다. 고쳐짐 집합의 차이는 실행 간 불안정한 테스트 한 건이며 `merge_check` · `run-all.sh` 를 고치지 않았다. 같은 사본에서 스위트를 한 번 더 돌려 확인하지는 않았다.
