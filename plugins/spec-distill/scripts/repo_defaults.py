@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """repo_defaults.py — 레포 설정의 기본값과 로드맵 frontmatter 의 레포 설정 읽기.
 
-외부 도구가 정한 기본 경로(superpowers 의 설계문서 · 계획 폴더, SDD 의 작업 폴더)와 이 플러그인의 지휘자 상태
+외부 도구가 정한 기본 경로(superpowers 의 설계문서 · 계획 폴더, SDD 의 작업 폴더, 하니스의 worktree 폴더)와 이 플러그인의 지휘자 상태
 폴더 이름은 이 모듈에만 글자로 둔다. 로드맵 frontmatter 에 값이 있으면 그것이 이긴다. 읽기만 한다.
 """
 from __future__ import annotations
@@ -11,6 +11,8 @@ SPECS_DIR = "docs/superpowers/specs/"
 PLANS_DIR = "docs/superpowers/plans/"
 SDD_WORKSPACE = ".superpowers/sdd/"
 CONDUCTOR_DIR = "conductor"
+WORKTREE_HOME = ".claude/worktrees/"   # 하니스(EnterWorktree)가 worktree 를 두고 옮겨 갈 수 있는 폴더 — 외부 도구 기본값
+MERGE_CHECK_DIR = "merge-check"        # 기계 상태 폴더 안의 스위트 대조 잠금 · 일회용 사본 자리
 DIR_KEYS = ("specs_dir", "plans_dir")
 TEXT_KEYS = ("test_command", "review_model")
 

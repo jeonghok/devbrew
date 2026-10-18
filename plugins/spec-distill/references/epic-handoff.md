@@ -1,6 +1,6 @@
 # 에픽 넘김 줄
 
-승인된 로드맵의 에픽 하나를 설계하는 세션을 열 때 지휘 세션이 붙여 넣는 줄이다. brief 흐름의 다음 세션 줄(`${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/finishing.md` 의 B-3)과 같은 모양이고, 첨부와 정답 출처가 brief 가 아니라 그 에픽의 묶음이다.
+승인된 로드맵의 에픽 하나를 설계하는 세션의 첫 줄이다 — 지휘자를 껐거나(지휘자를 부르지 않고 손 절차로 갈 때 — `DEVBREW_SPEC_DISTILL_DISABLE=1` 은 spec-distill 전체를 끈다) 사용자가 에픽을 자기 세션에서 따로 진행하겠다고 할 때만 쓴다. 지휘자는 이 줄을 사용자에게 주지 않고 같은 내용을 자기 brainstorming 입력으로 쓴다. brief 흐름의 다음 세션 줄(`${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/finishing.md` 의 B-3)과 같은 모양이고, 첨부와 정답 출처가 brief 가 아니라 그 에픽의 묶음이다.
 
 **에픽 넘김 줄**
 
@@ -13,4 +13,4 @@
 - `<roadmap-rel>` — 로드맵의 레포 루트 기준 상대경로. 설계문서 frontmatter `roadmap:` 값이 되고, spec-review 는 이 줄이 있는 설계문서를 로드맵 에픽으로 보고 게이트 ③ 에서 「이 에픽 다시 설계」 와 재분해 갈래를 연다. `<epic-id>` — 블록 번호(예 `R3`).
 - `${CLAUDE_PLUGIN_ROOT}` — spec-distill 플러그인의 절대경로.
 
-모든 자리표를 치환한 뒤 쓴다. 치환되지 않은 자리표가 남거나 경로에 공백이 있으면 쓰지 않는다 — 지휘 세션은 그 사유를 사용자에게 보인다(`proceed-gate.md` `## 다음 세션 명령` 규칙 5 와 같다). 새 세션(`/new`)의 첫 줄로 붙여 넣는다.
+모든 자리표를 치환한 뒤 쓴다. 치환되지 않은 자리표가 남거나 경로에 공백이 있으면 쓰지 않는다 — 지휘 세션은 그 사유를 사용자에게 보인다(`proceed-gate.md` `## 다음 세션 명령` 규칙 5 와 같다). 그 세션의 첫 줄로 붙여 넣는다.

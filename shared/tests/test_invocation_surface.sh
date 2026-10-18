@@ -32,7 +32,7 @@ def head(plugin, skill):
     return subprocess.run([sys.executable, lock, "--print-head", plugin, skill],
                           capture_output=True, text=True, check=True).stdout
 ENTRY = [("spec-distill", "request-framing", False), ("spec-distill", "spec-interview", False),
-         ("spec-distill", "spec-review", False), ("spec-distill", "roadmap-status", False),
+         ("spec-distill", "spec-review", False), ("spec-distill", "roadmap-status", False), ("spec-distill", "epic-conductor", False),
          ("plugin-audit", "plugin-audit", True),
          ("project-init", "project-init", True),
          ("quality-gates", "quality-pipeline", False), ("quality-gates", "artifact-critique", False)]

@@ -185,7 +185,7 @@ class Render(unittest.TestCase):
         self.assertTrue(text.startswith("---\ntype: roadmap\nsource_brief: iv/b.md\n---\n\n# 작은 일 — 로드맵\n"))
         self.assertIn("## 에픽\n\n### P1 — 먼저 정할 것\n", text)
         self.assertIn("- 항목: C4 · OQ3\n\n## 지휘 절차\n", text)
-        self.assertIn("`@rm/roadmap.md`", text)
+        self.assertIn("`/spec-distill:epic-conductor rm/roadmap.md`", text)
         self.assertIn("## 재분해 이력\n\n### 2026-10-15 · 처음 로드맵\n- 원문:\n  - 「승인」\n\n## 위험 번호표\n", text)
         self.assertTrue(text.endswith("- K1 — 위험 — 숨은 가정: 가정 셋 — 근거 약함\n"
                                       "- K2 — 위험 — 실패 양식: 조용한 실패 — 근거 사례\n"))

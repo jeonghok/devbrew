@@ -1,0 +1,1 @@
+../../../shared/test-selection/run-test-selection.sh
