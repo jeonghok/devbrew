@@ -12,7 +12,7 @@
 
 **Law 2 — Writer and Reviewer Must Never Share a Pass.** 코드를 쓴 턴은 그 코드를 승인할 수 없다. 이것은 heuristic이 아니라 하드 규칙이고, 분리는 프롬프트가 아니라 도구 표면으로 한다(P3).
 
-**Law 3 — Every Cycle Must Leave the System Smarter.** N+1번째 작업이 N번째보다 엄밀히 더 쉬워야 한다. 메커니즘은 low-tech다 — 리포에 있는 파일을 미래 세션이 읽는 것. 미래 세션에는 메모리 없는 레포 · 새 clone · 다른 레포도 들므로 교훈은 그 동작을 내는 skill · reference · 스크립트 · 락을 고쳐 남긴다. 아무 미래 agent도 읽지 않는 파일에 쓰는 것은 theater다.
+**Law 3 — Every Cycle Must Leave the System Smarter.** N+1번째 작업이 N번째보다 엄밀히 더 쉬워야 한다. 메커니즘은 low-tech다 — 리포에 있는 파일을 미래 세션이 읽는 것. 미래 세션에는 메모리 없는 레포 · 다른 레포도 들므로 교훈은 그 동작을 내는 skill · reference · 스크립트 · 락을 고쳐 남긴다. 아무 미래 agent도 읽지 않는 파일에 쓰는 것은 theater다.
 
 ## Structural Mechanisms
 
@@ -83,7 +83,7 @@ CLAUDE.md에 부재하거나 미묘해서 이 essence에서만 완전히 생존�
 
 - (흐름) 규칙은 「기본은 X, 일의 모양이 다르면 모델이 판단하고 이유를 적는다」로 쓴다 — 정석 흐름(brainstorming → 계획 → 구현)의 의도는 지키되 순서를 강제하는 결정론은 두지 않는다.
 - (재사용) 새로 만들기 전에 레포 안 · 밖에 이미 있는 것을 먼저 검토하고, 외부 것은 사용자가 검토한 뒤에 쓴다(P17).
-- (이식성) 레포 전용 값(경로 · 테스트 명령 · 기본 브랜치 · 모델 · `gh`)을 박는 것은 이 레포에서만 맞는 결정론이라, 도출하거나 레포마다 정하게 한다.
+- (이식성) 레포 전용 값을 박는 것은 이 레포에서만 맞는 결정론이라 다른 레포에서 조용히 틀린다 — 도출하거나 레포마다 정하게 한다.
 
 예: qg 의 판정 floor 는 「검토하지 않은 범위를 clean 이라 부르지 않는다」는 정확성 한 점에만 결정론을 걸고(kill 불가), 무엇을 리뷰할지 고르는 일은 모델 신뢰로 둔다.
 
@@ -91,7 +91,7 @@ CLAUDE.md에 부재하거나 미묘해서 이 essence에서만 완전히 생존�
 컨텍스트 윈도우는 compact될 것이다 — 하니스는 그럴 것이라 가정하고 설계한다. 규칙: **턴 종료 전 load-bearing 사실은 파일로 기록한다 — 대화에만 있는 사실은 compaction 후 사망한다.** Plan 파일·state 파일·스펙 파일·커밋 메시지·`CLAUDE.md`·review findings 마크다운 등 지속적인 것에 기록한다. 이 규칙은 CLAUDE.md에 부재하므로 이 essence가 정본이다.
 
 ### P5 — Filesystem as Memory
-상태는 context가 아니라 파일에 산다 — 최소 인덱스만 preload하고 나머지는 Glob/Read/Grep으로 just-in-time 로드한다. stale-index·vector store·RAG 없음. 산출물 · 상태가 얽히면 객체 · 링크 · 속성 · 주인을 명시해 진입점 하나에서 따라가게 하되, 작은 일에는 이 구조를 만들지 않는다.
+상태는 context가 아니라 파일에 산다 — 최소 인덱스만 preload하고 나머지는 Glob/Read/Grep으로 just-in-time 로드한다. stale-index·vector store·RAG 없음. 상태가 얽히면 객체 · 링크 · 속성 · 주인을 명시해 진입점 하나에서 따라가게 하되(주인 하나라야 끝이 정본), 작은 일에는 이 구조를 만들지 않는다. state 자리는 CLAUDE.md §런타임 상태 & 훅.
 코드: `plugins/spec-distill/references/roadmap-ontology.md`
 
 ## Anti-Pattern Anchors
