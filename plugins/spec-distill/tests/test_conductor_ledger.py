@@ -225,5 +225,56 @@ class Roadmaps(Repo):
         self.assertIn("origin/HEAD", out)
 
 
+class Resources(Repo):
+    def add_wt(self, name, branch=None):
+        p = self.t / name
+        if branch:
+            sh(self.w, "worktree", "add", "-q", "-b", branch, str(p), "trunk")
+        else:
+            sh(self.w, "worktree", "add", "-q", "--detach", str(p), "trunk")
+        return p
+
+    def test_cleanup_check_lists_dirty_and_outside_records(self):
+        p = self.add_wt("wt1", "feature/a1")
+        self.assertEqual(self.cli("cleanup-check", "--path", str(p))[0], 0)
+        (p / "new.txt").write_text("x", encoding="utf-8")
+        (p / ".superpowers" / "sdd" / "plan").mkdir(parents=True)
+        (p / ".superpowers" / "sdd" / "plan" / "progress.md").write_text("Ruling: a", encoding="utf-8")
+        rc, out = self.cli("cleanup-check", "--path", str(p))
+        self.assertEqual(rc, 1)
+        self.assertIn("new.txt", out)
+        self.assertIn("실행 방식 작업 폴더", out)
+        self.assertEqual(self.cli("cleanup-check", "--path", str(self.t / "nope"))[0], 2)
+
+    def test_cleanup_refuses_dirty_and_keeps_branch(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        p = self.add_wt("wt2", "feature/a1")
+        self.cli("add", "--roadmap", RM, "--session", SID, "--section", "자원",
+                 "--cells", "worktree · %s · A1 · 구현 · t" % p)
+        (p / "x.txt").write_text("x", encoding="utf-8")
+        rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(p))
+        self.assertEqual(rc, 1)
+        self.assertTrue(p.exists())
+        (p / "x.txt").unlink()
+        rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(p))
+        self.assertEqual(rc, 0, out)
+        self.assertFalse(p.exists())
+        self.assertIn("feature/a1", sh(self.w, "branch", "--list", "feature/a1"))
+        self.assertEqual(cs.load(L.mpath(self.w, RM), RM)["자원"], [])
+
+    def test_orphans(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        known = self.add_wt("known")
+        stray = self.add_wt("stray", "feature/stray")
+        self.cli("add", "--roadmap", RM, "--session", SID, "--section", "자원",
+                 "--cells", "worktree · %s · A1 · 설계 · t" % known)
+        rc, out = self.cli("orphans", "--roadmap", RM)
+        self.assertEqual(rc, 0)
+        self.assertIn(str(stray.resolve()), out)
+        self.assertNotIn(str(known.resolve()), out)
+        self.assertNotIn(str(self.w.resolve()) + "\t", out)
+        self.assertIn("feature/stray", out)
+
+
 if __name__ == "__main__":
     unittest.main()

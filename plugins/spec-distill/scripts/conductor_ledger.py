@@ -109,6 +109,41 @@ def scale_check(rows: list, session: str, scale: str):
     return True, "이 세션에서 %s 에 승인받은 규모 그대로다" % last["때"]
 
 
+def worktrees(root) -> list:
+    rc, out, err = git(root, "worktree", "list", "--porcelain")
+    if rc:
+        raise Fail(3, "worktree 목록을 읽지 못했다: %s" % err)
+    items, cur = [], None
+    for line in out.splitlines() + [""]:
+        if line.startswith("worktree "):
+            cur = {"path": str(Path(line[len("worktree "):]).resolve()), "branch": "detached", "head": ""}
+        elif cur is not None and line.startswith("branch "):
+            cur["branch"] = line[len("branch "):].split("refs/heads/", 1)[-1]
+        elif cur is not None and line.startswith("HEAD "):
+            cur["head"] = line[len("HEAD "):]
+        elif not line and cur is not None:
+            items.append(cur)
+            cur = None
+    return items
+
+
+def dirty_lines(path: Path) -> list:
+    """지우기 전에 보일 것 — 수정 · 추적 안 된 파일과 git 밖 실행 기록 폴더(SDD 원장 등)."""
+    rc, out, _e = git(path, "status", "--porcelain", "--untracked-files=all")
+    if rc:
+        raise Fail(2, "worktree 가 아니다: %s" % path)
+    lines = ["바뀐 파일: %s" % l[3:] for l in out.splitlines() if l.strip()]
+    work = path / repo_defaults.SDD_WORKSPACE
+    if work.is_dir() and any(work.iterdir()):
+        lines.append("실행 방식 작업 폴더(git 밖 기록 — 남길 것은 설계문서 절로 옮긴다): %s" % work)
+    return lines
+
+
+def _is_merge_copy(root, roadmap: str, path: Path) -> bool:
+    base = (mpath(root, roadmap).parent / repo_defaults.MERGE_CHECK_DIR).resolve()
+    return base in path.resolve().parents
+
+
 # ── 하위 명령 ────────────────────────────────────────────────────────────────
 
 def c_roadmaps(root, a) -> int:
@@ -219,6 +254,62 @@ def c_approve(root, a) -> int:
     return 0
 
 
+def c_resources(root, a) -> int:
+    rows = load(root, a.roadmap)["자원"]
+    for r in rows:
+        print(" · ".join(r[c] for c in cs.COLUMNS["자원"]))
+    if not rows:
+        print("없음")
+    return 0
+
+
+def c_cleanup_check(root, a) -> int:
+    path = Path(a.path)
+    if not path.is_dir():
+        print("worktree 가 아니다: %s" % path)
+        return 2
+    lines = dirty_lines(path)
+    for l in lines:
+        print(l)
+    if not lines:
+        print("깨끗하다 — 지워도 된다: %s" % path)
+    return 1 if lines else 0
+
+
+def c_cleanup(root, a) -> int:
+    path = Path(a.path)
+    if _is_merge_copy(root, a.roadmap, path):
+        shutil.rmtree(str(path), ignore_errors=True)
+        git(root, "worktree", "prune")
+    else:
+        lines = dirty_lines(path) if path.is_dir() else []
+        if lines:
+            for l in lines:
+                print(l)
+            print("지우지 않았다 — 위 내용을 사용자에게 보이고 묻는다(--force 를 쓰지 않는다)")
+            return 1
+        if path.is_dir():
+            rc, _o, err = git(root, "worktree", "remove", str(path))
+            if rc:
+                raise Fail(3, "worktree 를 지우지 못했다: %s" % err)
+    update(root, a.roadmap, a.session,
+           lambda d: d.__setitem__("자원", [r for r in d["자원"] if Path(r["경로"]).resolve() != path.resolve()]))
+    print("정리했다 — %s (브랜치는 그대로)" % path)
+    return 0
+
+
+def c_orphans(root, a) -> int:
+    known = {str(Path(r["경로"]).resolve()) for r in load(root, a.roadmap)["자원"]}
+    items = worktrees(root)
+    stray = [w for w in items[1:] if w["path"] not in known]
+    for w in stray:
+        n = len(dirty_lines(Path(w["path"]))) if Path(w["path"]).is_dir() else 0
+        print("%s\t%s\t%s" % (w["path"], w["branch"], "깨끗" if not n else "남은 것 %d개" % n))
+    if not stray:
+        print("주인 모름 worktree 없음")
+    return 0
+
+
 def _rs(p):
     p.add_argument("--roadmap", required=True)
     p.add_argument("--session", required=True)
@@ -238,6 +329,10 @@ COMMANDS = {
     "drop": (c_drop, lambda p: (_rows(p), p.add_argument("--where", required=True))),
     "approval": (c_approval, lambda p: (_rs(p), p.add_argument("--scale", required=True))),
     "approve": (c_approve, lambda p: (_rs(p), p.add_argument("--scale", required=True))),
+    "resources": (c_resources, lambda p: p.add_argument("--roadmap", required=True)),
+    "cleanup-check": (c_cleanup_check, lambda p: p.add_argument("--path", required=True)),
+    "cleanup": (c_cleanup, lambda p: (_rs(p), p.add_argument("--path", required=True))),
+    "orphans": (c_orphans, lambda p: p.add_argument("--roadmap", required=True)),
 }
 
 
