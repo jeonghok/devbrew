@@ -219,10 +219,19 @@ def _finish(lines: list) -> str:
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
+def _one_line(value: str, what: str) -> None:
+    """줄 나눔 글자(\\n · \\r · U+2028 …)가 든 값은 쓰지 않는다 — 쓴 문서가 달리 읽힌다."""
+    if len(value.splitlines()) > 1 or (value and value.splitlines() != [value]):
+        raise Fail(2, "%s 에 줄 나눔 글자가 들어 있다" % what)
+
+
+def _bullet(line: str) -> str:
+    return line if line.startswith("- ") else "- " + line
+
+
 def insert_record(text: str, line: str) -> str:
-    if "\n" in line or "\r" in line:
-        raise Fail(2, "기록 한 줄에 줄바꿈이 들어 있다")
-    line = line if line.startswith("- ") else "- " + line
+    _one_line(line, "기록 한 줄")
+    line = _bullet(line)
     try:
         section_lines(text, RECORD_HEADING)
     except FormatError as exc:
@@ -262,6 +271,9 @@ def _date_shape(value: str) -> bool:
 
 
 def insert_sections(text: str, plan_rel: str, rulings: list, impl_line: str, counts: str) -> str:
+    for what, val in [("계획 경로", plan_rel), ("구현 대조 줄", impl_line), ("보고 줄", counts)] + \
+            [("판정 줄", r) for r in rulings]:
+        _one_line(val, what)
     lines = text.rstrip("\n").split("\n")
     heads = _heads(lines)
     if any(h == IMPL_PREFIX + plan_rel for _i, h in heads):
@@ -569,7 +581,7 @@ def c_write_sections(root, a) -> int:
     if stray:
         raise Fail(2, "판정 파일에 `- ` 로 시작하지 않는 줄이 있다 — 쓰지 않았다: %s" % " | ".join(stray[:3]))
     rulings = raw
-    if not rulings:
+    if not [l for l in rulings if l[2:].strip()]:
         raise Fail(3, "판정 줄 — 셀 수 없음(판정 파일에 판정이 없다) — 쓰지 않았다")
     write_atomic(path, insert_sections(_read(path), a.plan, rulings, a.impl_line, a.counts))
     print("판정 %d줄과 구현 대조 절을 썼다(커밋 · push 는 지휘자가) — %s" % (len(rulings), path))
@@ -583,14 +595,21 @@ def c_flush(root, a) -> int:
         raise Fail(5, "읽기 전용 — 표지를 쥔 세션: %s" % (owner or "없음(먼저 claim)"))
     rows = [r for r in load(root, a.roadmap)["쌓인 기록"] if r["에픽"] == a.epic and r["절"] == "지휘 기록"]
     text = _read(path)
+    try:
+        section_lines(text, RECORD_HEADING)
+    except FormatError as exc:
+        raise Fail(3, "지휘 기록 절을 읽지 못했다: %s" % exc)
+    moved = 0
     for r in rows:
         have = section_lines(text, RECORD_HEADING) or []
-        if ("- " + r["글"]) not in [l.strip() for l in have]:
+        if _bullet(r["글"]) not in [l.strip() for l in have]:
             text = insert_record(text, r["글"])
+            moved += 1
     write_atomic(path, text)
     update(root, a.roadmap, a.session, lambda d: d.__setitem__(
         "쌓인 기록", [r for r in d["쌓인 기록"] if not (r["에픽"] == a.epic and r["절"] == "지휘 기록")]))
-    print("쌓인 기록 %d줄을 옮겼다(커밋은 지휘자가) — %s" % (len(rows), path))
+    print("쌓인 기록 %d줄을 옮겼고 %d줄은 이미 있어 건너뛰었다(커밋은 지휘자가) — %s"
+          % (moved, len(rows) - moved, path))
     return 0
 
 

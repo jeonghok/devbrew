@@ -447,6 +447,19 @@ class Records(unittest.TestCase):
         with self.assertRaises(L.Fail) as cm:
             L.insert_sections(doc, "plans/p2.md", ["- Ruling: c"], "z", "w")
         self.assertEqual(cm.exception.rc, 2)
+        only = SPEC_DOC + "\n## 판정\n\n### plans/p2.md\n\n- Ruling: b\n"
+        with self.assertRaises(L.Fail) as cm:
+            L.insert_sections(only, "plans/p2.md", ["- Ruling: c"], "z", "w")
+        self.assertEqual(cm.exception.rc, 2)
+        self.assertIn("판정 절 안", str(cm.exception))
+
+    def test_line_break_chars_refused_everywhere(self):
+        for bad in ("a\u2028b", "a\x0bb", "a\x85b", "a\rb"):
+            with self.assertRaises(L.Fail, msg=repr(bad)):
+                L.insert_record(SPEC_DOC, bad)
+            for args in ((bad, ["- r"], "i", "c"), ("p", [bad], "i", "c"), ("p", ["- r"], bad, "c"), ("p", ["- r"], "i", bad)):
+                with self.assertRaises(L.Fail, msg=repr(args)):
+                    L.insert_sections(SPEC_DOC, *args)
 
     def test_approval_line_round_trips_with_status_reader(self):
         import roadmap_model as M
@@ -521,11 +534,29 @@ class Pending(Repo):
         self.cli("flush", "--roadmap", RM, "--session", SID, "--epic", "A1", "--spec", str(spec))
         self.assertEqual(spec.read_text(encoding="utf-8").count("- 건너뜀: 통합 리뷰"), 1)
 
+    def test_flush_double_heading_rc3_and_dash_text_not_doubled(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.cli("add", "--roadmap", RM, "--session", SID, "--section", "쌓인 기록",
+                 "--cells", "A1 · 지휘 기록 · - 대시 시작")
+        spec = self.w / "s.md"
+        two = SPEC_DOC + "\n## 지휘 기록\n\n- a\n\n## 지휘 기록\n\n- b\n"
+        spec.write_text(two, encoding="utf-8")
+        rc, _o = self.cli("flush", "--roadmap", RM, "--session", SID, "--epic", "A1", "--spec", str(spec))
+        self.assertEqual(rc, 3)
+        self.assertEqual(spec.read_text(encoding="utf-8"), two)
+        spec.write_text(SPEC_DOC, encoding="utf-8")
+        self.cli("flush", "--roadmap", RM, "--session", SID, "--epic", "A1", "--spec", str(spec))
+        self.cli("add", "--roadmap", RM, "--session", SID, "--section", "쌓인 기록",
+                 "--cells", "A1 · 지휘 기록 · - 대시 시작")
+        rc, out = self.cli("flush", "--roadmap", RM, "--session", SID, "--epic", "A1", "--spec", str(spec))
+        self.assertEqual(spec.read_text(encoding="utf-8").count("- 대시 시작"), 1)
+        self.assertIn("건너뛰었다", out)
+
     def test_write_sections_refuses_empty_or_stray_rulings(self):
         spec = self.w / "s.md"
         spec.write_text(SPEC_DOC, encoding="utf-8")
         r = self.w / "r.md"
-        for body, want in (("", 3), ("\n\n", 3), ("- Ruling: a\n그냥 글\n", 2), ("그냥 글\n", 2)):
+        for body, want in (("", 3), ("\n\n", 3), ("- Ruling: a\n그냥 글\n", 2), ("그냥 글\n", 2), ("- \n", 3), ("-\n", 2)):
             r.write_text(body, encoding="utf-8")
             rc, _o = self.cli("write-sections", "--spec", str(spec), "--plan", "plans/p1.md", "--rulings", str(r),
                               "--impl-line", "x", "--counts", "y")
