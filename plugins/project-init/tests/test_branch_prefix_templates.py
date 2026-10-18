@@ -153,12 +153,24 @@ class BranchPrefixTemplateTests(unittest.TestCase):
             sec = re.split(r"\n#{2,3} ", sec, 1)[0]
             for needle in [
                 "git worktree add",
-                "-b",
                 "Branch Naming Pattern",
                 "git worktree add -b",
                 "확인하지 않는다",
+                "git push -u origin",
             ]:
                 self.assertIn(needle, sec, (s, needle))
+
+    def test_defaults_match_prefix_table(self):
+        for s in STRATEGIES:
+            table = strategy_doc(s).split("## Branch Prefixes", 1)[1].split("\n\n- ", 1)[0]
+            rows = re.findall(r"^\| `([a-z][a-z0-9-]*)/<", table, re.M)
+            self.assertEqual(rows, defaults_from_skill()[s], s)
+
+    def test_4d_branch_strategy_item_substitutes_placeholders(self):
+        sec = read(SKILL).split("#### 4d:", 1)[1].split("#### 4e:", 1)[0]
+        items = [ln for ln in sec.splitlines() if ln.startswith("1. ")]
+        self.assertEqual(len(items), 1)
+        self.assertIn("placeholder 치환", items[0])
 
 
 if __name__ == "__main__":

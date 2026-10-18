@@ -3,7 +3,7 @@
 ## Model
 
 - `main` (trunk) — 항상 deployable, 단일 source of truth
-- 단명 `feature/*` 또는 `fix/*` 브랜치 — 1–2일 내 merge
+- 단명 브랜치(접두는 아래 `Branch Naming Pattern`) — 1–2일 내 merge
 - 장수명 브랜치 없음 (`develop`, `release`, `staging`)
 - production에서 미완성 기능을 숨기려면 **feature flag** 사용
 
@@ -68,6 +68,8 @@ git fetch origin
 git worktree add -b <접두>/<이름> ../<폴더> origin/main
 git worktree remove ../<폴더>   # merge 직후
 ```
+
+첫 push 는 `git push -u origin <접두>/<이름>` 으로 한다(origin 기준 브랜치를 따라가므로 -u 가 필요하다).
 
 이름은 `Branch Naming Pattern` 과 같은 규칙이다. 훅(project-init)은 `git checkout -b` · `git switch -c` 로 만든 이름만 확인한다 — `git worktree add -b` 로 만든 이름은 확인하지 않는다.
 

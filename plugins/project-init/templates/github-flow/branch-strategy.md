@@ -3,7 +3,7 @@
 ## Model
 
 - `main`은 production 브랜치 — 항상 deployable
-- 모든 작업은 단명 `feature/*` 또는 `fix/*` 브랜치에서
+- 모든 작업은 단명 브랜치(접두는 아래 `Branch Naming Pattern`)에서
 - `develop`, `release`, `staging` 브랜치 없음
 
 ## Branch Naming Pattern
@@ -64,6 +64,8 @@ git worktree add -b <접두>/<이름> ../<폴더> origin/main
 # ... ../<폴더> 에서 작업 ...
 git worktree remove ../<폴더>
 ```
+
+첫 push 는 `git push -u origin <접두>/<이름>` 으로 한다(origin 기준 브랜치를 따라가므로 -u 가 필요하다).
 
 이름은 위 `Branch Naming Pattern` 과 같은 규칙을 따른다. project-init 훅은 `git checkout -b` · `git switch -c` 로 만든 이름만 확인한다 — `git worktree add -b` 로 만든 이름은 확인하지 않는다.
 

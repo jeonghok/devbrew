@@ -120,7 +120,7 @@ charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
    - 더하지 않음 (권장)
    - 더하기 (기타 칸에 쉼표로 적는다)
 
-   받은 낱말마다 규칙 `[a-z][a-z0-9-]*`(소문자로 시작, 소문자 · 숫자 · `-` 만 — 훅이 접두 목록을 읽는 규칙과 같다)과 중복을 본다. 규칙 밖이면 그 낱말과 이유를 보이고 다시 묻는다.
+   받은 낱말마다 규칙 `[a-z][a-z0-9-]*`(소문자로 시작, 소문자 · 숫자 · `-` 만 — 훅이 접두 목록을 읽는 규칙과 같다)과 중복을 본다. 규칙 밖이면 그 낱말과 이유를 보이고 다시 묻는다. 이미 있는 접두와 같은 낱말은 빼고 빠졌다고 알린다.
 
 **Git Flow 추가:**
 
@@ -237,7 +237,7 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 
 `docs/git-workflow/` 디렉토리가 없으면 생성. 다음 3개 파일 작성:
 
-1. `docs/git-workflow/branch-strategy.md` — `templates/<strategy>/branch-strategy.md`에서
+1. `docs/git-workflow/branch-strategy.md` — `templates/<strategy>/branch-strategy.md`에서 (placeholder 치환 후 — 4b 의 접두 세 행)
 2. `docs/git-workflow/commit-conventions.md` — `templates/shared/commit-conventions.md`에서 (placeholder 치환 후)
 3. `docs/git-workflow/pr-process.md` — `templates/shared/pr-process.md`에서 (placeholder 치환 후)
 

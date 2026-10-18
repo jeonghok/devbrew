@@ -8,6 +8,7 @@
 - `fix/*` — 버그 수정, `develop`에서 분기, `develop`에 merge back
 - `release/*` — release 준비, `develop`에서 분기, `main` + `develop`에 merge
 - `hotfix/*` — 긴급 production 수정, `main`에서 분기, `main` + `develop`에 merge
+- 사용자가 더한 접두(예: `docs/*`) — `feature/*` 처럼 `develop`에서 분기, `develop`에 merge back
 
 ## When NOT to use Git Flow
 
@@ -89,13 +90,15 @@ git checkout -b hotfix/<name>
 
 ### Working in a worktree
 
-브랜치를 전환하지 않고 별도 폴더에서 작업하려면 기준 브랜치에서 worktree 를 만든다. feature · fix 는 `develop`, hotfix 는 `main` 이 기준이다.
+브랜치를 전환하지 않고 별도 폴더에서 작업하려면 기준 브랜치에서 worktree 를 만든다. feature · fix 와 더한 접두는 `develop`, hotfix 는 `main` 이 기준이다.
 
 ```bash
 git fetch origin
-git worktree add -b feature/<이름> ../<폴더> origin/develop   # hotfix 는 origin/main
+git worktree add -b <접두>/<이름> ../<폴더> origin/develop   # hotfix 는 origin/main
 git worktree remove ../<폴더>   # 끝난 뒤
 ```
+
+첫 push 는 `git push -u origin <접두>/<이름>` 으로 한다(origin 기준 브랜치를 따라가므로 -u 가 필요하다).
 
 이름은 `Branch Naming Pattern` 과 같은 규칙이다. project-init 훅은 `git checkout -b` · `git switch -c` 로 만든 이름만 확인한다 — `git worktree add -b` 로 만든 이름은 확인하지 않는다.
 
