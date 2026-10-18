@@ -75,6 +75,27 @@ for i in range(1, len(parts), 2):
 print("%d %d" % (n, bad))' "$SK")"
 assert_eq "${fence_check#* }" "0" "3~4절: --session 을 쓰는 펜스가 같은 펜스에서 sid 와 루트 가드를 정한다"
 [ "${fence_check%% *}" -ge 5 ] && ok "3~4절: 세션을 쓰는 펜스 5개 이상(claim · takeover · approval · approve · release)" || no "세션 펜스 수 부족: ${fence_check}"
+# 3~4절 산문(펜스 밖)에는 셸 변수 sid · SD 가 없고, sid 를 쓰는 펜스는 빈 값이면 멈춘다
+fence_lint='import sys
+t = sys.stdin.read()
+a = t.index("### 3. ")
+b = t.index("### 5. ")
+parts = t[a:b].split("`" * 3)
+prose = 0
+nostop = 0
+for i, f in enumerate(parts):
+    if i % 2 == 0:
+        prose += sum(1 for ln in f.split("\n") if "$sid" in ln or "$SD" in ln)
+    elif "$sid" in f and "[ -n \"$sid\" ] ||" not in f and "if [ -n \"$sid\" ]" not in f:
+        nostop += 1
+print("%d %d" % (prose, nostop))'
+lint="$(python3 -I -c "$fence_lint" < "$SK")"
+assert_eq "$lint" "0 0" "3~4절: 산문에 셸 변수가 없고 sid 펜스는 빈 값이면 멈춘다"
+mutated="$(python3 -I -c 'import sys
+t = sys.stdin.read()
+print(t.replace("### 5. ", "`--session \"$sid\"` 를 산문에서 돌린다\n\n### 5. ", 1))' < "$SK")"
+bad_lint="$(printf '%s\n' "$mutated" | python3 -I -c "$fence_lint")"
+assert_eq "${bad_lint%% *}" "1" "양성 대조: 산문의 --session 줄을 락이 잡는다"
 assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" 'claim_rc=$?' "3절: claim 종료 코드를 낸다"
 assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" 'conductor_ledger.py" takeover' "3절: takeover 전체 명령"
 assert_contains "$APP" 'conductor_ledger.py" release' "4절: release 전체 명령"
