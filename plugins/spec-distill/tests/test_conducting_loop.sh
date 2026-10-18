@@ -33,7 +33,8 @@ for lit in '한 번에 한 에픽씩' '다른 세션을 열라는 줄을 주지 
            '묶음의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다' '`isolation: "worktree"`' 'git switch --ignore-other-worktrees <에픽 브랜치>' \
            '그 agent 가 돌아올 때까지 그 worktree 를 떠나지 않는다' '임시 파일에 쓴 뒤 `cp` 로 옮긴다' '세션이 옮기면 격리 없이 띄운 하위 agent 도 따라 옮긴다' \
            '`git -C <에픽 worktree> switch --detach` 로 그 브랜치를 놓는다' '깨끗하지 않으면 보내지 않고 보인다' \
-           'agent 가 쓴 worktree 를 `## 자원` 의 그 에픽 worktree 로 바꿔 적고' '그 브랜치를 체크아웃한 worktree 가 둘 이상이면 쓰지 않고 멈춰 보인다'; do once 3 "$lit"; done
+           'agent 가 쓴 worktree 를 `## 자원` 의 그 에픽 worktree 로 바꿔 적고' '그 브랜치를 체크아웃한 worktree 가 둘 이상이면 쓰지 않고 멈춰 보인다' \
+           '놓은 옛 worktree 에서는 커밋하지 않는다' '`ledger add --section "쌓인 기록"` 으로 쌓았다가 돌아온 뒤 `ledger flush` 로 옮기고'; do once 3 "$lit"; done
 for old in '절별 승인' '이 턴에는 계획 agent 를 띄우지 않는다' '턴을 끝낸다' '「여기서 계속」'; do
   assert_not_contains "$(step 3)" "$old" "걸음 3: 옛 문장 「${old}」 이 없다(양성 짝: 승인 질문 하나 · 같은 턴 계획 agent)"
 done
