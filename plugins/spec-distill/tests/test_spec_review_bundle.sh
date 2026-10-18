@@ -34,6 +34,7 @@ nb_block() {  # nb_block <id> <의존> <경로 예약>
   printf '## 결정 기록\n\n## 위험 번호표\n\n- K1 — 위험 — 숨은 가정: 이웃이 안 보인다 — 없음 [RC1]\n'
 } > "$W/docs/rm/roadmap.md"
 g add -- docs && g commit -qm "이웃 로드맵" && g push -q origin main
+g remote set-head origin main
 spec_with() {  # spec_with <경로> <source_interview> <결정 기록 본문(%b)>
   put "$1" "---\nsource_interview: $2\n---\n\n# 설계\n\n### §1 절\n\n1. 하나\n\n## 결정 기록\n\n$3\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| C1 | 반영 | §1 |\n| S1 | 반영 | 없는 자리만 말한다 |\n"
 }
@@ -146,4 +147,20 @@ assert_file_grep "$SKILL" '^argument-hint: .*--bundle' "argument-hint 에 --bund
 DEG_SEC="$(awk '/^## degrade 채널$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
 assert_contains "$DEG_SEC" "진입 펜스의 \`번호 대조 경고 <N>개\` 의 N 을 여기에 더한다" "AC12: degrade 채널의 N 규칙이 번호 대조 경고를 더한다"
 assert_contains "$DEG_SEC" "번호 대조 경고 N 이 0 이 아니면 셋이 비었어도 「이상 없음」·「경고 없음」은 쓰지 않는다" "AC12: degrade 채널의 「이상 없음」 조건이 번호 대조 경고 0 을 요구한다"
+# ── R5 AC6 — 이웃 읽기가 산출물을 읽는다 ─────────────────────────────────────
+g checkout -q main
+nb_bundle R7 "C1"
+R7_BLOCK="$(printf '### R7 — 이웃 조사\n- 의도: R7\n- 범위: R7\n- 의존: R3\n- 브랜치: feature/r7\n- 묶음: R7.md\n- 경로 예약: 없음\n- 크기: 작음\n- 순서 이유: R2a 뒤\n- 산출물: docs/research/r7.md\n')"
+R7_BLOCK="$R7_BLOCK" awk 'index($0, "## 결정 기록") == 1 { print ENVIRON["R7_BLOCK"]; print "" } { print }' \
+  "$W/docs/rm/roadmap.md" > "$T/rm.r7" && cp "$T/rm.r7" "$W/docs/rm/roadmap.md"
+g add -- docs && g commit -qm "R7 이웃" && g push -q origin main
+g checkout -q -b feature/r7 main
+put docs/research/r7.md '---\nsource_interview: docs/rm/R7.md\n---\n\n# 조사\n\n## 결정 기록\n\n- B7 · 결정 · 2026-10-17 · 조사 결론 — 「가」\n'
+g add -- docs && g commit -qm "r7 산출물"; g checkout -q main; g fetch -q origin
+nbr7="$(cd "$T" && python3 "$SRB" neighbors --bundle docs/rm/R3.md --root "$W")"
+assert_contains "$nbr7" "R7 — docs/research/r7.md" "AC6: 이웃 결정에 산출물 경로"
+assert_contains "$nbr7" "- B7 · 결정 · 2026-10-17 · 조사 결론" "AC6: 이웃 읽기가 산출물의 결정 줄을 읽는다"
+assert_contains "$nbr7" "크기 작음" "§6: 이웃 줄에 크기를 보인다"
+assert_contains "$nbr7" "순서 이유 R2a 뒤" "§6: 이웃 줄에 순서 이유를 보인다"
+
 finish

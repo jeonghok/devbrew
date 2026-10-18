@@ -77,7 +77,10 @@ def entry(spec: str, bundle: str, root: str) -> list:
 
 
 def _line(b: dict) -> str:
-    return "%s %s — %s · %s" % (b["id"], b["title"], b["stage"], b["reason"])
+    ex = b.get("extras") or {}
+    extra = ["%s %s" % (k, ex[k]) for k in ("크기", "순서 이유") if k in ex]
+    return "%s %s — %s · %s%s" % (b["id"], b["title"], b["stage"], b["reason"],
+                                  (" · " + " · ".join(extra)) if extra else "")
 
 
 def neighbors(bundle: str, root: str) -> list:
@@ -105,14 +108,12 @@ def neighbors(bundle: str, root: str) -> list:
         out.append("  로드맵 상태 검사 불가 %d개 — 위 단계가 틀릴 수 있다: %s" % (len(problems), " · ".join(problems)))
     overlap = {x for o in report["overlaps"] if epic in o["blocks"] for x in o["blocks"] if x != epic}
     near = set(deps) | set(dependents) | overlap
-    main = git.commit(rs.MAIN_REF)
+    main, _name = git.default_branch()
     dec = []
     for b in report["blocks"]:
         if b["id"] not in near or not b["specs"]:
             continue
-        branch = (b.get("branch") or "").strip().strip("`")
-        tree = main if b["stage"] == "머지됨" else (
-            git.commit("refs/heads/" + branch) or git.commit("refs/remotes/origin/" + branch))
+        tree = main if b["stage"] == "머지됨" else (b.get("tip") or main)
         for spec in b["specs"]:
             text = git.blob(tree, spec) if tree else None
             if text is None:

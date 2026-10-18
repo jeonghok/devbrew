@@ -5,23 +5,28 @@
 명령줄:
   control_plane.py statusline                    상태줄 한 줄. 늘 rc 0.
   control_plane.py show [<로드맵 경로>]           지도. rc 0.
+  control_plane.py show <로드맵 경로> <에픽>   에픽 하나로 내려가는 보기. 없는 에픽이면 rc 2.
   control_plane.py show --tasks [<로드맵 경로>]   작업 목록 줄 `<제목><탭><pending|in_progress|completed|keep>`.
                                                  검사 불가 · 로드맵 없음 · 꺼짐이면 표준 출력이 비고 표준 오류에
-                                                 사유, rc 3. 로드맵이 여럿인데 경로가 없으면 rc 2.
+                                                 사유, rc 3. 기본 브랜치에 없는 로드맵이면 rc 4.
+                                                 로드맵이 여럿인데 경로가 없으면 rc 2.
 
-단계 · 경고는 `roadmap_status.py <경로> --json`(origin/main 사본)을 하위 프로세스로 불러 읽기만 한다.
+단계 · 경고는 `roadmap_status.py <경로> --json`(기본 브랜치 사본)을 하위 프로세스로 불러 읽기만 한다.
 레포 파일과 git 상태를 바꾸지 않는다 — 쓰는 것은 `<git 공용 디렉토리>/devbrew/control-plane.json` 캐시 하나다.
 받은 지 N분은 캐시 밖에서 매번 FETCH_HEAD 수정 시각으로 읽는다.
 """
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime
+import errno
 import hashlib
 import json
 import os
 import re
 import select
+import shutil
 import signal
 import stat
 import subprocess
@@ -33,17 +38,29 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
 from kill_switch_active import kill_switch_active  # noqa: E402
+import conductor_state as cs  # noqa: E402
+from roadmap_model import BLOCK_ID_RE, FormatError  # noqa: E402
+from state_path import state_root_for_common  # noqa: E402
 
 DONE = ("머지됨", "끝남")
 # 상태줄 묶음 — 상태 계산의 단계 이름 + R5 가 더할 이름. 대기 · 끝난 단계 · 알 수 없음은 세지 않는다.
 BUCKETS = (("설계", ("설계 중",)), ("구현", ("계획", "구현 중", "구현 끝", "PR")), ("준비", ("준비",)))
+IMPL_STAGES = ("구현 중", "구현 끝", "PR")
+GH_STATES = {"OPEN": "열림", "MERGED": "머지됨", "CLOSED": "닫힘"}
+LEDGER_MAX_BYTES = 1 << 20
+MACHINE_MAX_BYTES = 1 << 20
+LEDGER_MAX_COUNT = 50
+GH_CALL_CAP = 5.0
+IMPL_DONE_MARK = " — 구현 끝 · "  # roadmap_status 가 일부 머지 이유에 붙이는 모양
 UNCOUNTED = ("대기", "머지됨", "끝남", "알 수 없음")
 TASK_STATES = ("pending", "in_progress", "completed")
 TOP_WARNINGS = (("고아 발화", "orphans"), ("미배정 번호", "unassigned"),
                 ("brief 에 없는 번호", "unknown_ids"))
 CTRL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 QUEUE_HEADING = "## audit §2 대기 줄"
-NO_ROADMAP = "로드맵 없음 — origin/main 에 끝나지 않은 블록이 있는 로드맵이 없다"
+NO_DEFAULT = ("기본 브랜치를 알 수 없다 — origin/HEAD 가 없다. `git remote set-head origin --auto` 로 만든 뒤 "
+              "다시 계산한다")
+NO_ROADMAP = "로드맵 없음 — 기본 브랜치에 끝나지 않은 블록이 있는 로드맵이 없다"
 
 
 def clean(value) -> str:
@@ -68,6 +85,9 @@ def bucket_counts(items):
     for _path, report in items:
         for b in report.get("blocks") or []:
             stage = b.get("stage")
+            if stage and stage.startswith("일부 머지"):
+                counts["구현"] += 1
+                continue
             for name, stages in BUCKETS:
                 if stage in stages:
                     counts[name] += 1
@@ -205,9 +225,17 @@ def statusline_text(items, interview, minutes, select_error=None) -> str:
     seg = interview_segment(interview)
     if seg:
         parts.append(seg)
+    if any(r.get("exit") == 4 for _p, r in items):
+        parts.append("기본 브랜치에 없음")
     if select_error or any(r.get("exit") == 3 for _p, r in items):
         parts.append("검사 불가")
     return clean(" · ".join(parts))
+
+
+def machine_error_line(why) -> str:
+    """사유가 이미 «기계 상태» 로 시작하면 머리말을 겹쳐 붙이지 않는다."""
+    why = str(why)
+    return clean(why if why.startswith("기계 상태") else "기계 상태를 읽지 못했다 — %s" % why)
 
 
 def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
@@ -219,6 +247,11 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
     for path, report in items:
         lines.append(clean(first_line_fn(report)))
         lines.append(clean("로드맵: %s" % path))
+        if report.get("machine_error"):
+            lines.append(machine_error_line(report["machine_error"]))
+        if report.get("not_on_default"):
+            lines.append(clean("로드맵이 아직 기본 브랜치(%s)에 없다 — 머지 전이면 `--roadmap-file` 로 계산한다"
+                               % (report.get("default_branch") or "알 수 없음")))
         blocks = report.get("blocks") or []
         stages = dict((b.get("id"), b.get("stage")) for b in blocks)
         for b in blocks:
@@ -228,17 +261,36 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
                 line += " ← 기다림: " + " · ".join(waiting)
             lines.append(clean(line))
             lines += [clean("    경고: %s" % w) for w in b.get("warnings") or []]
+            if b.get("pr"):
+                lines.append(clean("    PR: %s" % pr_text(b["pr"])))
+            lines += [clean("    원장 읽기 불가: %s — %s" % (f["path"], f["reason"])) for f in b.get("ledger_failures") or []]
+            if b.get("ledger_cut"):
+                lines.append(clean("    %s" % b["ledger_cut"]))
         for label, key in TOP_WARNINGS:
             vals = report.get(key)
             if vals is None:
                 lines.append("%s: 셀 수 없음" % label)
             elif vals:
                 lines.append(clean("%s: %d개 — %s" % (label, len(vals), " · ".join(vals))))
+        ov = report.get("overlaps") or []
+        if ov:
+            lines.append("경로 예약 겹침(정보): %d개" % len(ov))
+            lines += [clean("    %s ↔ %s: %s" % (o["blocks"][0], o["blocks"][1], " · ".join(o["paths"]))) for o in ov]
         lines += [clean("검사 불가: 형식 깨짐 — %s" % e) for e in report.get("format_errors") or []]
         lines += [clean("검사 불가: %s" % r) for r in report.get("unknown_reasons") or []]
-        if any("rulings" in b for b in blocks):
+        ruled = [b for b in blocks if "rulings" in b]
+        if ruled:
             lines.append("판정 줄:")
-            rows = [clean("    %s: %s" % (b.get("id"), r)) for b in blocks for r in b.get("rulings") or []]
+            rows = []
+            for b in ruled:
+                if b["rulings"] is None and b.get("ledger_failures"):
+                    rows.append(clean("    %s: 셀 수 없음 — 실행 원장을 읽지 못했고 설계문서 `## 판정` 도 없다" % b.get("id")))
+                elif b["rulings"] is None and report.get("machine_error"):
+                    rows.append(clean("    %s: 셀 수 없음 — 기계 상태를 읽지 못해 원장을 모른다" % b.get("id")))
+                elif b["rulings"] is None:
+                    rows.append(clean("    %s: 셀 수 없음 — 실행 원장도 설계문서 `## 판정` 도 없다" % b.get("id")))
+                else:
+                    rows += [clean("    %s: %s" % (b.get("id"), r)) for r in b["rulings"]]
             lines += rows or ["    없음"]
     lines += interview_lines(interview)
     lines += [clean("캐시를 쓰지 못했다 — %s" % n) for n in notes]
@@ -254,6 +306,9 @@ def tasks_output(items, select_error=None):
     if len(items) > 1:
         return [], clean("로드맵이 여럿이다 — 경로를 하나 주라: %s" % " · ".join(p for p, _r in items)), 2
     _path, report = items[0]
+    if report.get("exit") == 4:
+        return [], clean("로드맵이 아직 기본 브랜치에 없다 — 머지 전이면 roadmap_status.py --roadmap-file %s 로 계산한다"
+                         % _path), 4
     if report.get("exit") == 3:
         reasons = (["형식 깨짐 — %s" % e for e in report.get("format_errors") or []]
                    + list(report.get("unknown_reasons") or []))
@@ -272,7 +327,7 @@ def tasks_output(items, select_error=None):
 
 # ── git · 인터뷰 파일 · 캐시 (읽기 전용 — 쓰는 것은 캐시 파일 하나) ──────────────────
 
-MAIN_REF = "refs/remotes/origin/main"
+DEFAULT_REF = "refs/remotes/origin/HEAD"
 ROADMAP_RE = re.compile(r"docs/superpowers/roadmaps/[^/]+/roadmap\.md")
 GIT_OK = frozenset({"rev-parse", "ls-tree", "for-each-ref"})
 CACHE_VERSION = 1
@@ -383,14 +438,21 @@ def fetch_stamp(repo: Repo):
                 continue
     return max(stamps) if stamps else None
 
+def default_ref(repo):
+    """(커밋, 전체 참조 이름) — origin/HEAD 가 가리키는 기본 브랜치. 없으면 (None, None)."""
+    sha = repo.line("rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
+    if not sha:
+        return None, None
+    return sha, repo.line("rev-parse", "--symbolic-full-name", DEFAULT_REF)
+
 
 def candidates(repo: Repo, main):
-    """([(경로, blob)], 사유). origin/main 이 없으면 고를 것이 없다(로드맵 없음과 같다)."""
+    """([(경로, blob)], 사유). 기본 브랜치가 없으면 고를 것이 없다(로드맵 없음과 같다)."""
     if not main:
         return [], None
-    rc, out = repo.git("ls-tree", "-r", "-z", MAIN_REF, "--", "docs/superpowers/roadmaps/")
+    rc, out = repo.git("ls-tree", "-r", "-z", main, "--", "docs/superpowers/roadmaps/")
     if rc != 0:
-        return [], "origin/main 의 로드맵 목록을 읽지 못했다(git ls-tree rc %d)" % rc
+        return [], "기본 브랜치의 로드맵 목록을 읽지 못했다(git ls-tree rc %d)" % rc
     found = []
     for entry in (e for e in out.split("\0") if e):
         meta, _tab, path = entry.partition("\t")
@@ -465,8 +527,8 @@ def read_interviews(supported, files, folder_error, deadline: Deadline) -> dict:
     return summary
 
 
-def cache_key(repo: Repo, main, mode, targets):
-    """origin/main 커밋 · 브랜치 머리 목록(origin/main · symref 줄 뺌) · 대상 로드맵의 origin/main 사본. 인터뷰 상태는
+def cache_key(repo: Repo, main, main_full, mode, targets):
+    """기본 브랜치 커밋 · 브랜치 머리 목록(기본 브랜치 · symref 줄 뺌) · 대상 로드맵의 기본 브랜치 사본. 인터뷰 상태는
     키에 없다(매번 읽는다). git 을 못 읽으면 None — 캐시를 쓰지 않는다."""
     rc, out = repo.git("for-each-ref", "--format=%(refname) %(objectname) %(symref)", "refs/heads", "refs/remotes")
     if rc != 0:
@@ -474,7 +536,7 @@ def cache_key(repo: Repo, main, mode, targets):
     kept = []
     for row in out.splitlines():
         name, _oid, symref = (row.split(" ") + ["", ""])[:3]
-        if name != MAIN_REF and not symref:  # origin/main 은 첫 요소가, 가리키는 참조(origin/HEAD)는 그 대상이 맡는다
+        if name != main_full and not symref:  # 기본 브랜치는 첫 요소가, 가리키는 참조(origin/HEAD)는 그 대상이 맡는다
             kept.append(row)
     refs = "\n".join(kept)
     refs_hash = hashlib.sha256(refs.encode("utf-8")).hexdigest()
@@ -482,7 +544,8 @@ def cache_key(repo: Repo, main, mode, targets):
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
 
-CODE_STAMP_FILES = ("roadmap_status.py", "roadmap_model.py", "section6.py", "check_bundle_coverage.py", "control_plane.py")
+CODE_STAMP_FILES = ("roadmap_status.py", "roadmap_model.py", "section6.py", "check_bundle_coverage.py", "control_plane.py",
+                    "repo_defaults.py", "conductor_state.py")
 
 
 def code_stamp() -> str:
@@ -583,16 +646,155 @@ def run_status(repo: Repo, path: str) -> dict:
     except (UnicodeDecodeError, ValueError):
         report = None
     if (not isinstance(report, dict) or not isinstance(report.get("blocks"), list)
-            or report.get("exit") not in (0, 1, 3)):
+            or report.get("exit") not in (0, 1, 3, 4)):
         return failed_report(path, "상태 계산 출력을 읽지 못했다(rc %d)" % rc)
     return report
 
 
 def unfinished(report: dict) -> bool:
-    return report.get("exit") == 3 or any(b.get("stage") not in DONE for b in report.get("blocks") or [])
+    return report.get("exit") in (3, 4) or any(b.get("stage") not in DONE for b in report.get("blocks") or [])
 
 
-def gather(cwd: str, arg, deadline: Deadline, ctx: dict):
+def _pr_unknown(why: str) -> dict:
+    return {"number": None, "state": "알 수 없음", "source": why}
+
+
+def pr_text(pr: dict) -> str:
+    if pr["state"] == "알 수 없음":
+        return "알 수 없음 — %s" % pr["source"]
+    if pr["number"] is None:
+        return "%s(%s)" % (pr["state"], pr["source"])
+    return "%s %s(%s)" % (pr["number"], pr["state"], pr["source"])
+
+
+def _why(exc) -> str:
+    if isinstance(exc, FileNotFoundError):
+        return "파일이 없다"
+    if isinstance(exc, ValueError):
+        return str(exc)
+    if getattr(exc, "errno", None) == errno.ELOOP:
+        return "링크다"
+    return type(exc).__name__
+
+
+def active_branch(b: dict):
+    return next((s["branch"] for s in b.get("branch_states") or [] if not s.get("merged") and s.get("tip")), None)
+
+
+def machine_for(repo, roadmap_rel: str):
+    """(기계 상태, 사유). 파일이 없으면 빈 것. 깨졌으면 (None, 사유) — 빈 것으로 읽지 않는다."""
+    common = repo.line("rev-parse", "--git-common-dir")
+    if not common:
+        return None, "git 공용 디렉토리를 찾지 못했다"
+    try:
+        path = cs.machine_path(state_root_for_common(Path(repo.cwd, common).resolve()), roadmap_rel)
+        try:
+            text = read_capped(path, MACHINE_MAX_BYTES)
+        except FileNotFoundError:
+            return cs.empty(), None
+        except (OSError, ValueError) as exc:  # 링크 · 파이프 · 큰 파일은 읽지 않고 사유로 낸다
+            return None, "기계 상태 파일을 읽지 못했다: %s (%s)" % (path, _why(exc))
+        return cs.parse_machine(text, roadmap_rel), None
+    except (cs.MachineError, FormatError) as exc:  # 한 파일이 깨져도 화면 전체를 비우지 않는다
+        return None, str(exc)
+
+
+def gh_lookup_for(repo, deadline):
+    """브랜치 → PR 사실을 `gh pr list` 로. gh 가 없으면 None."""
+    exe = shutil.which("gh")
+    if not exe:
+        return None
+    env = dict(os.environ, GH_PROMPT_DISABLED="1", NO_COLOR="1", GH_NO_UPDATE_NOTIFIER="1")
+
+    def lookup(branch: str) -> dict:
+        try:
+            own = Deadline(min(deadline.left("gh pr list"), GH_CALL_CAP))  # 호출마다 상한 — 하나가 멈춰도 나머지가 산다
+            rc, out = run_bounded([exe, "pr", "list", "--state", "all", "--head", branch,
+                                   "--json", "number,state", "--limit", "1"], repo.cwd, env, own, "gh pr list")
+        except TimedOut:
+            return _pr_unknown("gh 시간 초과")
+        if rc != 0:
+            return _pr_unknown("gh 실패(rc %d)" % rc)
+        try:
+            data = json.loads(out.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            return _pr_unknown("gh 출력을 읽지 못했다")
+        if not isinstance(data, list):
+            return _pr_unknown("gh 출력 모양이 다르다")
+        if not data:
+            return {"number": None, "state": "없음", "source": "gh"}
+        if not isinstance(data[0], dict):
+            return _pr_unknown("gh 출력 모양이 다르다")
+        state, number = GH_STATES.get(data[0].get("state")), data[0].get("number")
+        if state is None or not isinstance(number, int):
+            return _pr_unknown("gh 출력 모양이 다르다")
+        return {"number": "#%d" % number, "state": state, "source": "gh"}
+    return lookup
+
+
+def _rulings(b: dict, paths: list, read, deadline) -> None:
+    """판정을 실행 원장에서, 못 읽은 원장이 있으면 설계문서 `## 판정` 보관본을 합쳐 b 에 싣는다."""
+    rulings, failures = None, []
+    if len(paths) > LEDGER_MAX_COUNT:
+        b["ledger_cut"] = "원장 %d개 중 %d개만 읽음" % (len(paths), LEDGER_MAX_COUNT)
+    for ledger in paths[:LEDGER_MAX_COUNT]:
+        if not os.path.isabs(ledger):
+            failures.append({"path": ledger, "reason": "절대 경로가 아니다"})
+            continue
+        try:
+            if deadline is not None:
+                deadline.left("원장 읽기")
+            rulings = (rulings or []) + cs.ledger_rulings(read(ledger, LEDGER_MAX_BYTES))
+        except TimedOut:
+            failures.append({"path": ledger, "reason": "시간 초과"})
+        except (OSError, ValueError) as exc:
+            failures.append({"path": ledger, "reason": _why(exc)})
+    archived = b.get("rulings_archived")
+    had_ledger = rulings is not None
+    if had_ledger:
+        b["rulings_source"] = "실행 원장"
+    if archived is not None and (rulings is None or failures):
+        seen = set(r.lstrip("- ").strip() for r in rulings or [])
+        rulings = (rulings or []) + [r for r in archived if r.lstrip("- ").strip() not in seen]
+        b["rulings_source"] = "실행 원장 + 설계문서 ## 판정" if had_ledger else "설계문서 ## 판정"
+    if failures:
+        b["ledger_failures"] = failures
+    if rulings is not None or failures or b.get("stage") != "머지됨":
+        b["rulings"] = rulings
+
+
+def overlay(items, machine_lookup, gh_lookup, use_gh: bool, read=read_capped, deadline=None) -> None:
+    """기계 상태 · 실행 원장 · gh 를 보고서에 얹는다 — 캐시 밖에서 매번 읽는다(캐시 열쇠에 넣지 않는다).
+    use_gh 가 거짓(상태줄)이면 gh 도 원장도 판정도 읽지 않는다 — 상태줄은 그것들을 보이지 않는다."""
+    for path, report in items:
+        machine, why = machine_lookup(path)
+        report["machine"], report["machine_error"] = machine, why
+        ledgers, prs = {}, {}
+        for row in (machine or {}).get("실행 원장", []):
+            ledgers.setdefault(row["에픽"], []).append(row["원장"])
+        for row in (machine or {}).get("PR", []):
+            prs[row["브랜치"]] = row
+        for b in report.get("blocks") or []:
+            stage = b.get("stage") or ""
+            partial = stage.startswith("일부 머지")
+            br = active_branch(b)
+            if br and (stage == "구현 끝" or (partial and IMPL_DONE_MARK in (b.get("reason") or ""))):
+                if br in prs:
+                    row = prs[br]
+                    b["pr"] = {"number": row["번호"], "state": row["상태"], "source": "기계 상태"}
+                elif not use_gh:
+                    b["pr"] = _pr_unknown("기계 상태에 없다(상태줄은 gh 를 부르지 않는다)")
+                elif gh_lookup is None:
+                    b["pr"] = _pr_unknown("기계 상태에 없고 gh 가 없다")
+                else:
+                    b["pr"] = gh_lookup(br)
+                if stage == "구현 끝" and b["pr"]["state"] == "열림":
+                    b["stage"], b["reason"] = "PR", "%s 열림(%s)" % (b["pr"]["number"], b["pr"]["source"])
+            if use_gh and (stage in IMPL_STAGES or partial or stage == "머지됨"):
+                _rulings(b, ledgers.get(b.get("id"), []), read, deadline)
+
+
+def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True):
     """화면에 필요한 것 전부. 받은 시각은 캐시 밖에서 매번 읽는다. ctx 에 레포 최상위 · 캐시 상태를 남긴다."""
     view = {"items": [], "interview": None, "notes": [], "minutes": None, "select_error": None}
     repo = open_repo(cwd, deadline)
@@ -607,17 +809,19 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict):
     if stamp is not None:
         view["minutes"] = max(0, int((time.time() - stamp) // 60))
         fetched = datetime.datetime.fromtimestamp(stamp).strftime("%Y-%m-%d %H:%M")
-    main = repo.line("rev-parse", "--verify", "--quiet", MAIN_REF + "^{commit}")
+    main, main_full = default_ref(repo)
+    view["no_default"] = bool(not arg and main is None
+                              and repo.line("for-each-ref", "--count=1", "--format=%(refname)", "refs/remotes"))
     if arg:
         if os.path.isabs(arg):
             arg = os.path.relpath(os.path.realpath(arg), os.path.realpath(repo.cwd))
         arg = arg[2:] if arg.startswith("./") else arg
-        blob = repo.line("rev-parse", "--verify", "--quiet", "%s:%s" % (MAIN_REF, arg)) if main else None
+        blob = repo.line("rev-parse", "--verify", "--quiet", "%s:%s" % (main, arg)) if main else None
         targets, select_error = [(arg, blob or "-")], None
     else:
         targets, select_error = candidates(repo, main)
     mode = arg or "*"
-    key = cache_key(repo, main, mode, targets)
+    key = cache_key(repo, main, main_full, mode, targets)
     path = cache_file(repo)
     entries, last, note = load_cache(path) if path else ({}, {}, "git 공용 디렉토리를 찾지 못했다")
     ctx.update(top=repo.cwd, cache=path, entries=entries, last=last)
@@ -640,8 +844,11 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict):
             err = save_cache(path, kept, last)
             if err:
                 view["notes"].append(err)
+    items = copy.deepcopy(items)  # 덧씌움이 캐시 항목(ctx["entries"])에 섞여 디스크에 남지 않게
     for _p, r in items:
         r["fetched_at"] = fetched  # 첫 줄의 받은 시각도 캐시 밖에서
+    overlay(items, lambda rel: machine_for(repo, rel), gh_lookup_for(repo, deadline) if use_gh else None, use_gh,
+            deadline=deadline)
     view.update(items=items, interview=interview, select_error=select_error)
     return view
 
@@ -712,7 +919,7 @@ def cmd_statusline() -> int:
             print("")
             return 0
         deadline = Deadline(STATUSLINE_BUDGET)
-        v = gather(stdin_dir() or os.getcwd(), None, deadline, ctx)
+        v = gather(stdin_dir() or os.getcwd(), None, deadline, ctx, use_gh=False)
         line = statusline_text(v["items"], v["interview"], v["minutes"], v["select_error"])
         remember_line(ctx, line)
         print(line)
@@ -723,7 +930,93 @@ def cmd_statusline() -> int:
     return 0
 
 
-def cmd_show(tasks: bool, arg) -> int:
+def epic_view(path: str, report: dict, epic: str):
+    """(줄들, rc) — 에픽 하나의 묶음 · 설계문서 · 계획 · 브랜치 · PR · 의존 · 동시 가능 · 선택 칸 · 넘김 · 판정 · 자원.
+    줄마다 경로나 번호가 있어 한 단계 더 내려갈 수 있다."""
+    blocks = report.get("blocks") or []
+    b = next((x for x in blocks if x.get("id") == epic), None)
+    if b is None:
+        have = " · ".join(str(x.get("id")) for x in blocks) or "없음"
+        return [clean("에픽 %s 가 로드맵 %s 에 없다 — 있는 에픽: %s" % (epic, path, have))], 2
+    stages = dict((x.get("id"), x.get("stage")) for x in blocks)
+    out = [clean("%s %s — %s · %s" % (b["id"], b.get("title"), b.get("stage"), b.get("reason"))),
+           clean("  로드맵: %s" % path)]
+
+    def row(label, values):
+        out.append(clean("  %s: %s" % (label, " · ".join(values) if values else "없음")))
+
+    def branch_cell(s):
+        if s.get("merged"):
+            return "%s(머지됨)" % s["branch"]
+        return "%s(%s)" % (s["branch"], "진행 — %s" % s["tip"][:8] if s.get("tip") else "아직 없음")
+
+    row("묶음", [b["bundle"]] if b.get("bundle") else [])
+    row("설계문서", b.get("specs") or [])
+    row("계획", b.get("plans") or [])
+    row("브랜치", [branch_cell(s) for s in b.get("branch_states") or []])
+    if b.get("pr"):
+        out.append(clean("  PR: %s" % pr_text(b["pr"])))
+    row("의존", ["%s(%s)" % (d, stages.get(d)) for d in b.get("deps") or []])
+    if b.get("parallel") is None:
+        out.append("  동시에 갈 수 있는 에픽: 셀 수 없음")
+    else:
+        row("동시에 갈 수 있는 에픽", [p["id"] + ("(경로 예약 겹침: %s)" % " · ".join(p["overlap"]) if p.get("overlap") else "")
+                              for p in b["parallel"]])
+    for key, value in (b.get("extras") or {}).items():
+        out.append(clean("  %s: %s" % (key, value)))
+    handoffs = report.get("handoffs")
+    if handoffs is None:
+        out.append("  열린 넘김: 셀 수 없음")
+    else:
+        mine = [h for h in handoffs if epic in (h.get("giver"), h.get("receiver")) and h.get("state") != "확인됨"]
+        unc = [h for h in mine if h.get("state") == "셀 수 없음"]
+        counted = len(mine) - len(unc)
+        text = "없음" if not mine else "%d개" % counted
+        if unc:
+            text = ("%d개 · " % counted if counted else "") + "셀 수 없음 %d개" % len(unc)
+        out.append("  열린 넘김: %s" % text)
+        for h in mine:
+            arrow = "받음 ← %s" % h["giver"] if h["receiver"] == epic else "줌 → %s" % h["receiver"]
+            out.append(clean("    %s: %s · %s · %s" % (arrow, h["item"], h["state"], h["basis"])))
+    if "rulings" not in b:
+        stage = b.get("stage")
+        if stage in DONE and report.get("machine_error"):
+            out.append("  판정 줄: 셀 수 없음 — 기계 상태를 읽지 못해 원장을 모른다")
+        elif stage in DONE:
+            out.append("  판정 줄: 없음 — 판정 기록 없이 %s" % stage)
+        elif stage == "알 수 없음":
+            out.append("  판정 줄: 셀 수 없음 — 단계를 알 수 없다")
+        elif b.get("kind") == "decision":
+            out.append("  판정 줄: 아직 없음")
+        else:
+            out.append("  판정 줄: 아직 없음(구현 전)")
+    elif b["rulings"] is None:
+        if report.get("machine_error"):
+            out.append("  판정 줄: 셀 수 없음 — 기계 상태를 읽지 못해 원장을 모른다")
+        elif b.get("ledger_failures"):
+            out.append("  판정 줄: 셀 수 없음 — 실행 원장을 읽지 못했고 설계문서 `## 판정` 도 없다")
+        else:
+            out.append("  판정 줄: 셀 수 없음 — 실행 원장도 설계문서 `## 판정` 도 없다")
+    else:
+        out.append(clean("  판정 줄: %d개(%s)" % (len(b["rulings"]), b.get("rulings_source"))))
+        out += [clean("    %s" % r) for r in b["rulings"]]
+    out += [clean("  원장 읽기 불가: %s — %s" % (f["path"], f["reason"])) for f in b.get("ledger_failures") or []]
+    if b.get("ledger_cut"):
+        out.append(clean("  %s" % b["ledger_cut"]))
+    if report.get("machine_error"):
+        out.append(clean("  " + machine_error_line(report["machine_error"])))
+    elif report.get("machine") is not None:
+        m = report["machine"]
+        row("자원", ["%s %s(%s)" % (r["종류"], r["경로"], r["용도"]) for r in m.get("자원", []) if r["에픽"] == epic])
+        row("살아 있는 agent", ["%s(%s · %s)" % (r["이름"], r["일"], r["worktree"])
+                              for r in m.get("살아 있는 agent", []) if r["에픽"] == epic])
+        row("기다리는 질문", [r["질문"] for r in m.get("기다리는 질문", []) if r["에픽"] == epic])
+    out += [clean("  경고: %s" % w) for w in b.get("warnings") or []]
+    out += [clean("  정보: %s" % n) for n in b.get("notes") or []]
+    return out, 0
+
+
+def cmd_show(tasks: bool, arg, epic=None) -> int:
     sw = switch_name()
     if sw:
         if tasks:
@@ -747,14 +1040,31 @@ def cmd_show(tasks: bool, arg) -> int:
             return 3
         print(msg)
         return 0
+    shown_error = v["select_error"] or (NO_DEFAULT if v.get("no_default") and not v["items"] else None)
+    if epic:
+        _path, report = v["items"][0] if v["items"] else (arg, None)
+        if report is None or report.get("exit") in (3, 4):
+            if report is not None and report.get("blocks") and not report.get("format_errors") and not any(x.get("id") == epic for x in report["blocks"]):
+                lines, rc = epic_view(_path, report, epic)
+                print("\n".join(lines))
+                return rc
+            if report is not None and report.get("exit") == 4:
+                print("에픽 보기를 내지 못했다 — 로드맵이 아직 기본 브랜치에 없다, 전체 지도를 보인다")
+            else:
+                print("에픽 보기를 내지 못했다 — 로드맵 검사 불가, 전체 지도를 보인다")
+            print(show_text(v["items"], v["interview"], v["notes"], first_line, shown_error))
+            return 0
+        lines, rc = epic_view(_path, report, epic)
+        print("\n".join(lines))
+        return rc
     if tasks:
-        out, err, rc = tasks_output(v["items"], v["select_error"])
+        out, err, rc = tasks_output(v["items"], shown_error)
         if out:
             print("\n".join(out))
         if err:
             sys.stderr.write(err + "\n")
         return rc
-    print(show_text(v["items"], v["interview"], v["notes"], first_line, v["select_error"]))
+    print(show_text(v["items"], v["interview"], v["notes"], first_line, shown_error))
     return 0
 
 
@@ -777,6 +1087,7 @@ def main(argv=None) -> int:
     sp = sub.add_parser("show")
     sp.add_argument("--tasks", action="store_true")
     sp.add_argument("roadmap", nargs="?")
+    sp.add_argument("epic", nargs="?")
     args = ap.parse_args(argv)
     if args.cmd == "statusline":
         return cmd_statusline()
@@ -784,7 +1095,10 @@ def main(argv=None) -> int:
         if args.roadmap is not None and (not args.roadmap.strip() or args.roadmap.startswith("-")):
             sys.stderr.write("사용법: 로드맵 경로는 비지 않고 - 로 시작하지 않는다\n")
             return 2
-        return cmd_show(args.tasks, args.roadmap)
+        if args.epic is not None and (args.tasks or not BLOCK_ID_RE.fullmatch(args.epic)):
+            sys.stderr.write("사용법: 에픽은 로드맵 경로 뒤에 하나(`<대문자><숫자>[소문자]`), --tasks 와 함께 쓰지 않는다\n")
+            return 2
+        return cmd_show(args.tasks, args.roadmap, args.epic)
     ap.print_usage(sys.stderr)
     return 2
 

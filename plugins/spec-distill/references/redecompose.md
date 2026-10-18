@@ -4,6 +4,8 @@
 
 아래 펜스는 spec-distill 플러그인 루트가 있어야 돈다. spec-distill 이 로드된 적 없는 지휘 세션에서는 `${CLAUDE_PLUGIN_ROOT}` 가 풀리지 않아 펜스 가드가 멈춰 보고한다 — 그때는 추측하지 말고 멈추고, 사용자가 spec-distill 이 로드된 세션에서 이 절차를 돌린다.
 
+각 칸의 주인과 갱신 길(재분해 절차인지 로드맵 수정 PR 인지)은 `${CLAUDE_PLUGIN_ROOT}/references/roadmap-ontology.md` 로 확인한다.
+
 ## 1. 신호
 
 이 절차로 오는 신호는 셋이다. 신호를 잡는 일은 이 절차의 몫이 아니다.

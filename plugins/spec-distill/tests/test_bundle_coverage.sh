@@ -106,7 +106,7 @@ assert_grep "$out" "^[0-9]+ True True True$" "R0 설계문서 표가 한 칸 여
 # 9. 변이 — 빠진 번호 판정을 지우면 2번 단언이 무너지는지(통과가 정답인 1번의 짝)
 sed 's/return {"status": 1 if missing else 0,/return {"status": 0,/' "$C" > "$T/mut.py"
 cmp -s "$C" "$T/mut.py" && no "변이가 적용되지 않았다" || ok "변이 적용됨"
-cp "$S/section6.py" "$S/roadmap_model.py" "$T/" 2>/dev/null
+cp "$S/section6.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$T/" 2>/dev/null
 python3 "$T/mut.py" "$T/bundle.md" "$T/miss.md" >/dev/null; rc=$?
 assert_eq "$rc" "0" "변이: status 를 0 으로 고정하면 빠진 번호가 rc 0 — 2번 단언에 이빨이 있다"
 # 10. 공유 모듈(R3 §2-5) — 두 스크립트가 같은 함수를 쓰고 순환 import 가 없다
@@ -184,7 +184,7 @@ assert_eq "$(jget "$out" "[(s['id'], s['reason']) for s in r['shallow']]")" "[('
 txt="$(python3 "$C" "$R/docs/x/R9.md" "$R/loc2.md")"
 assert_contains "$txt" "얕은 답 — C1: 가리킨 자리가 없다" "번호별 줄"
 # 변이(AC15) — 「자리 표기 없음」 판정을 끄면 위 단언이 무너진다
-M2="$T/mut2"; mkdir -p "$M2"; cp "$S/section6.py" "$S/roadmap_model.py" "$M2/"
+M2="$T/mut2"; mkdir -p "$M2"; cp "$S/section6.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M2/"
 sed 's/^    if not found:$/    if False:/' "$C" > "$M2/check_bundle_coverage.py"
 cmp -s "$C" "$M2/check_bundle_coverage.py" && no "변이 적용 안 됨(자리 표기 없음)" || ok "변이 적용됨(자리 표기 없음)"
 out="$(python3 "$M2/check_bundle_coverage.py" --json "$R/docs/x/R9.md" "$R/loc2.md")"
@@ -289,10 +289,10 @@ printf -- '# 설계\n\n## Acceptance Criteria\n\n- AC1 하나\n- **AC2** 둘\n- 
 printf -- '# 계획\n\n## Global\n\nAC2 는 여기에만 있다.\n\n### Task 1: 하나\n\n- AC10 을 만든다\n\n```bash\n# AC1 도 펜스 안에서 센다\n```\n\n### Task 2: 둘\n\n- 끝\n' > "$P/p-miss.md"
 txt="$(python3 "$C" --plan "$P/d.md" "$P/p-miss.md")"; rc=$?
 assert_eq "$rc" "1" "AC8: 계획에 없는 AC 가 있으면 rc 1"
-assert_eq "$txt" "계획 대조: 계획에 없는 AC 1개 — AC2" "AC8: Task 절 밖의 AC2 는 계획에 없는 것이다(펜스 안 AC1 · AC10 은 있다)"
+assert_eq "$txt" "계획 대조: 계획에 없는 AC 1개 — AC2 (AC 3개)" "AC8: Task 절 밖의 AC2 는 계획에 없는 것이다(펜스 안 AC1 · AC10 은 있다)"
 printf -- '# 계획\n\n### Task 1: 하나\n\n- AC10 만 있다\n' > "$P/p-ten.md"
 txt="$(python3 "$C" --plan "$P/d.md" "$P/p-ten.md")"
-assert_eq "$txt" "계획 대조: 계획에 없는 AC 2개 — AC1 · AC2" "AC8: AC10 이 AC1 을 덮지 않는다(낱말 경계)"
+assert_eq "$txt" "계획 대조: 계획에 없는 AC 2개 — AC1 · AC2 (AC 3개)" "AC8: AC10 이 AC1 을 덮지 않는다(낱말 경계)"
 printf -- '# 계획\n\n### Task 1: 전부\n\n- AC1 · AC2 · AC10\n' > "$P/p-ok.md"
 txt="$(python3 "$C" --plan "$P/d.md" "$P/p-ok.md")"; rc=$?
 assert_eq "$rc" "0" "AC8 양성 짝: 다 있으면 rc 0"
@@ -309,7 +309,7 @@ printf -- '# 설계\n\n## Acceptance Criteria\n\n- AC1 하나\n- AC2 둘\n- AC3 
 printf 'AC1: 구현됨 — 됐다\n- AC2: 미룸 — 다음에\nAC3: 빠짐 — 못 했다\nAC10: 구현됨 — 됐다\nAC99: 구현됨 — 설계문서에 없는 AC\n' > "$P/rep.md"
 txt="$(python3 "$C" --impl "$P/di.md" "$P/rep.md")"; rc=$?
 assert_eq "$rc" "1" "AC10: 경고가 있으면 rc 1"
-assert_eq "$(printf '%s\n' "$txt" | head -n 1)" "구현 대조: 경고 3개 — 보고에 없는 AC 0개 · 미룸 표에 없는 미룸/빠짐 1개 · 받는 곳 없는 미룸 1개 · 빠짐 1개" "AC10: 첫 줄"
+assert_eq "$(printf '%s\n' "$txt" | head -n 1)" "구현 대조: 경고 3개 — 보고에 없는 AC 0개 · 미룸 표에 없는 미룸/빠짐 1개 · 받는 곳 없는 미룸 1개 · 받는 곳 검사 불가 0개 · 빠짐 1개" "AC10: 첫 줄"
 assert_contains "$txt" "미룸 표에 없는 미룸/빠짐 — AC3(빠짐)" "AC10: 빠짐인데 ## 미룸 에 없는 AC"
 assert_contains "$txt" "받는 곳 없는 미룸 — AC2" "AC10: 받는 곳이 없음인 행"
 assert_contains "$txt" "정보: 설계문서에 없는 AC 가 보고에 있다 — AC99" "설계문서에 없는 AC 는 정보"
@@ -320,7 +320,7 @@ printf -- '# 설계\n\n## Acceptance Criteria\n\n- AC1 하나\n\n## 미룸\n\n�
 printf 'AC1: 구현됨 — 됐다\n' > "$P/rep-one.md"
 txt="$(python3 "$C" --impl "$P/di-none.md" "$P/rep-one.md")"; rc=$?
 assert_eq "$rc" "0" "AC10 양성 짝: 전부 구현됨 · ## 미룸 「없음」 → rc 0"
-assert_eq "$txt" "구현 대조: 경고 없음 (AC 1개 · 구현됨 1개 · 미룸 0개)" "경고 없음 줄"
+assert_eq "$txt" "구현 대조: 경고 없음 (AC 1개 · 구현됨 1개 · 미룸 0개) (받는 곳 규칙: 로드맵 없음 — 「없음」만 받는 곳 없음으로 센다)" "경고 없음 줄"
 printf 'AC1: 됐음 — 형식 밖\n' > "$P/rep-bad.md"
 python3 "$C" --impl "$P/di-none.md" "$P/rep-bad.md" >/dev/null; rc=$?
 assert_eq "$rc" "3" "보고 줄이 형식 밖이면 rc 3"
