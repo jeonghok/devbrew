@@ -492,7 +492,7 @@ class RenderedShapeRules(unittest.TestCase):
 
     def test_placeholder_does_not_exempt_the_whole_line(self):
         for line, why in (("- <b>S9</b> x S<N>", "html_inline_not_allowed"), ("- *\\*S5*\\* S\\<N\\>", "anchor_markup"),
-                          ("- **&#83;9** x", "char_ref_not_allowed"), ("- <b>S&#57;</b> x", "char_ref_not_allowed")):
+                          ("- **S<N>9** x", "anchor_markup"), ("- <b>S9</b> x S<N>9", "html_inline_not_allowed")):
             ok, bad = B.anchor_lines(line)
             self.assertEqual((ok, [r for _n, r in bad]), ([], [why]), line)
         self.assertEqual(B.anchor_lines("- **S<N>** 자리 표시 S<N>")[1], [])   # 자리 표시만 있는 줄은 그대로 받는다

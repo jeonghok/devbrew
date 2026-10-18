@@ -44,9 +44,9 @@ MARK = "(사용자 확인)"
 FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.S)
 # 접은 열에서 표시의 낱말 — 앞뒤 한 글자가 괄호류여야 표시다(`marks_in_flat`).
 MARK_CORE_RE = re.compile(r"사용자가?확인(?:함|됨)?")
-URL_RE = re.compile(r"[a-z][a-z0-9+.-]{0,31}://|www\.\S|mailto:")
+URL_RE = re.compile(r"[a-z0-9+.-]://|www\.\S|mailto:")   # 스킴 글자 바로 뒤 `://` — 길이를 재지 않아 선형이고 긴 스킴도 거부한다
 CHAR_REF_RE = re.compile(r"&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);")
-BARE_DOMAIN_RE = re.compile(r"\b[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63})+/")   # 라벨 길이를 묶어 선형으로 둔다
+BARE_DOMAIN_RE = re.compile(r"(?<![a-z0-9.-])[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63})+/")   # 낱말 머리에서만 시작 — 선형
 FRONTMATTER_LINE_RE = re.compile(r"^([a-z_]+):(?: (.*))?$")
 BARE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z][A-Za-z0-9_-]*>")   # 속성 없는 여는 태그 하나 — 템플릿의 자리 표시(`<basename>`)
 ANGLE_RE = re.compile(r"<\S")

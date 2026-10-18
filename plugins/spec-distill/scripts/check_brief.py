@@ -1579,6 +1579,14 @@ def frontmatter_errors(text: str) -> list[str]:
     return errs
 
 
+def _line_no(text: str, line: str) -> int:
+    """거부된 줄이 글에서 처음 나오는 줄 번호(1부터, 못 찾으면 0) — 거부 메시지는 줄 글자가 아니라 번호만 싣는다."""
+    try:
+        return text.split("\n").index(line) + 1
+    except ValueError:
+        return 0
+
+
 def gate(path: Path) -> int:
     try:
         text = path.read_text(encoding="utf-8")
@@ -1661,7 +1669,7 @@ def gate(path: Path) -> int:
                 for n, why in audit_anchor_rejects(audit_text):
                     failures.append(f"audit §6 의 {n}번째 줄이 허용 문법 밖이다 — "
                                     f"{brief_body.ANCHOR_REASON_TEXT[why]}({why})")
-            failures += [f"audit 에 읽는 쪽마다 다르게 읽히는 글이 있다 — {brief_body.SECTION_REASON_TEXT[why]} ({why}): {ln.strip()[:60]}"
+            failures += [f"audit 에 읽는 쪽마다 다르게 읽히는 글이 있다 — {brief_body.SECTION_REASON_TEXT[why]} ({why}): {_line_no(audit_text, ln)}번째 줄"
                          for ln, why in brief_body.audit_subset_problems(audit_text)]
             if not audit_sec6_absent and attribution_block_missing(audit_text):
                 failures.append("audit §6 출처 표기 블록 부재 (🗣·☑·✎ 세 기호를 모두 담은 인용 줄 필요)")
@@ -1703,9 +1711,9 @@ def gate(path: Path) -> int:
         failures += open_line_ref_failures(text, pa | n1b_audit)
     failures += entry_line_failures(text)
     failures += section_heading_failures(text)
-    failures += [(f"payload 에 읽는 쪽마다 다르게 읽히는 글이 있다 — {brief_body.SECTION_REASON_TEXT[why]} ({why}): {ln.strip()[:60]}"
+    failures += [(f"payload 에 읽는 쪽마다 다르게 읽히는 글이 있다 — {brief_body.SECTION_REASON_TEXT[why]} ({why}): {_line_no(text, ln)}번째 줄"
                   if why in brief_body.SUBSET_REASONS else
-                  f"payload 에 절 표에 없는 절 머리가 있다 — {brief_body.SECTION_REASON_TEXT[why]} ({why}): {ln.strip()[:60]}")
+                  f"payload 에 절 표에 없는 절 머리가 있다 — {brief_body.SECTION_REASON_TEXT[why]} ({why}): {_line_no(text, ln)}번째 줄")
                  for ln, why in brief_body.head_problems(text)]
     failures += decision_outside_failures(text)
     failures += [f"§6 밖의 글에 닮은 글자로 쓴 원문 번호가 있다 — 번호로 읽지 않는다 (ref_confusable:{tok})"

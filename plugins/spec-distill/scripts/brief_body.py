@@ -592,7 +592,6 @@ _DECISION_HEAD_RE = re.compile(r"^((?:[\W\d_]|\w{1,3}[.)])*?)[*_`]*(OQ[0-9]+)(?!
 # 결정 꼴 (나) — 해결 · 열림 표시. 코드 칸(백틱) 안의 표시는 그 칸에 실제 원문 번호(`S` + ASCII 숫자)가 없을 때만 면제한다
 # — 자리 표시 `S<n>` 만 적은 설명은 결정 줄이 아니고, `[해결 ⟨S2⟩]` 를 코드 칸에 숨긴 줄은 결정 줄이다.
 _DECISION_MARK_RE = re.compile(r"\[해결|\[열림")
-_CODE_SPAN_RE = re.compile(r"(`+).*?\1")
 _REAL_SID_RE = re.compile(r"S[0-9]")
 # 선두 결정 번호 — 불릿을 뗀 본문이 (강조 표시를 사이에 두고도) `OQ<n>` 로 시작할 때 그 번호(`check_brief.LEADING_OQ_RE`).
 LEADING_OQ_RE = re.compile(r"^[*_`]*\s*(OQ[0-9]+)(?!_*[0-9A-Za-z])")

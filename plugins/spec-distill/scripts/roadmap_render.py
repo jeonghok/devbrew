@@ -280,7 +280,7 @@ def index_brief(brief: str, audit: str) -> BriefIndex:
         m = ST_LINE_RE.search(line)
         if m:
             lines[m.group(1)] = line
-    found = brief_body.audit_subset_problems(audit)
+    found = brief_body.audit_subset_problems(audit)   # 방어층 — brief_universe 가 먼저 같은 검사를 하지만 이 함수가 따로 불려도 막는다
     if found:
         raise FormatError("audit 에 읽는 쪽마다 다르게 읽히는 글이 있어 합칠 수 없다(%s)" % found[0][1])
     b6, a6 = section6.body(brief), section6.body(audit)

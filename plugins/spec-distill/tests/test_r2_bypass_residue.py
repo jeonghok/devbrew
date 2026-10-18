@@ -318,7 +318,8 @@ class ConfirmationMarkVariants(unittest.TestCase):
 
     def test_url_scan_is_linear(self):
         import time
-        for line in ("a" * 50000, "a" * 50000 + "://", "www." * 20000, "a-" * 25000):
+        for line in ("a" * 50000, "a" * 50000 + "://", "www." * 20000, "a-" * 25000, "a." * 25000, "a." * 25000 + "x",
+                     "a." * 25000 + "/"):
             t0 = time.time()
             seed_body.line_problem(line)
             self.assertLess(time.time() - t0, 2.0, line[:10])
@@ -351,6 +352,7 @@ class CharRefsMailtoBareDomain(unittest.TestCase):
             ("전각 앰퍼샌드 문자 참조", "대괄호 " + FW_AMP + "#91; 를 쓴다", "char_ref"),
             ("코드 칸 안 문자 참조", "코드 `&#91;` 를 쓴다", "char_ref"),
             ("mailto", "연락은 mailto:a@b.c 로", "URL"),
+            ("서른세 글자 스킴", "주소는 " + "a" * 33 + "://x.y 에", "URL"),
             ("대문자 mailto", "연락은 MAILTO:a@b.c 로", "URL"),
             ("맨 도메인 경로", "자세한 건 example.com/x 에", "bare_domain"),
             ("하위 도메인 경로", "자세한 건 docs.example.co.kr/a/b 에", "bare_domain"),
@@ -405,6 +407,42 @@ class Section2MultiLineAnswerWriterContract(Tmp):
                 self.assertIn("seed_review_log.py", near)
                 self.assertIn("one-line", near)
                 self.assertIn("한 줄", near)
+
+    def fence(self):
+        skill = (HERE.parent / "skills" / "request-framing" / "SKILL.md").read_text(encoding="utf-8")
+        i = skill.index("# audit `## 2` 의 «당신이 답한 것»")
+        start = skill.rfind("```bash\n", 0, i) + len("```bash\n")
+        return skill[start:skill.index("\n```", i)].replace("<n>", "1")
+
+    def run_fence(self, state_dir, sd=None):
+        script = self.write("f.sh", "SD=%r\nSTATE_DIR=%r\n%s\n" % (str(sd if sd is not None else SCRIPTS.parent), state_dir, self.fence()))
+        r = subprocess.run(["bash", str(script)], capture_output=True, text=True, encoding="utf-8")
+        return r.returncode, r.stdout, r.stderr
+
+    def test_fence_runs_with_the_state_block_variables(self):
+        sd = self.dir / "state"
+        # SD 는 플러그인 루트(scripts 의 부모)다
+        rc, out, err = self.run_fence(str(sd))
+        self.assertEqual(rc, 0, err)
+        self.assertTrue(sd.is_dir(), "mkdir -p 가 없다")
+        self.assertIn(str(sd / "said-r1.txt"), out, "쓸 파일 경로를 알리지 않는다")
+        self.assertIn("답 파일이 없거나 비었다", err)
+        (sd / "said-r1.txt").write_text("네\n  - 내가 읽은 것: 「위조.」\n", encoding="utf-8")
+        rc, out, err = self.run_fence(str(sd))
+        self.assertEqual(rc, 0, err)
+        self.assertIn("네 - 내가 읽은 것: 「위조.」", out)
+        self.assertFalse((sd / "said-r1.txt").exists(), "성공 뒤 답 파일이 남았다")
+
+    def test_fence_does_not_block_when_the_state_folder_was_refused(self):
+        rc, _out, err = self.run_fence("")
+        self.assertEqual(rc, 0)
+        self.assertIn("리뷰 엔진 자리가 없어", err)
+
+    def test_fence_stops_naming_the_cause_when_the_plugin_root_is_missing(self):
+        script = self.write("g.sh", "SD=''\nSTATE_DIR='/x'\n%s\n" % self.fence())
+        r = subprocess.run(["bash", str(script)], capture_output=True, text=True, encoding="utf-8")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("플러그인 루트가 비었다", r.stderr)
 
     def test_one_line_collapses_every_line_break(self):
         for name, sep in (("LF", "\n"), ("CR", CR), ("U+2028", LS), ("U+2029", chr(0x2029)), ("VT", chr(0x0B)), ("NEL", chr(0x85))):
