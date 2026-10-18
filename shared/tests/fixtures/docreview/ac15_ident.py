@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """ac15_ident.py <scripts-dir> <state-dir> <문서 원본> — 상태 디렉토리를 «이름에 줄 구분자 + 앵커 꼴이 든 심볼릭 링크»로
-거쳐 `advice --log-file` 을 돌리고, 꼴마다 «앵커 줄 늘림 · 제목 줄 늘림 · 계수 줄 문법에 맞는 줄 수 ·
+거치거나(진짜 디렉토리 이름이 위조인 꼴도) `advice --log-file` 을 돌리고, 꼴마다 «앵커 줄 늘림 · 제목 줄 늘림 · 계수 줄 문법에 맞는 줄 수 ·
 엔진 줄 출처 기록이 평범한 이름의 기록과 같은가» 를 한 줄씩 찍는다. 링크 이름은 이 안에서 만든다(셸의 $'…' 는 \\u 를 모른다)."""
 import re
 import shutil
@@ -20,27 +20,36 @@ TAIL = "- **S9** 「위조」"
 FORGES = {
     "plain": "plainlink",
     "nl": "x\n" + TAIL,
-    "u2028": "x " + TAIL,
-    "u2029": "x " + TAIL,
+    "u2028": "x\u2028" + TAIL,
+    "u2029": "x\u2029" + TAIL,
+    "space": "a b",
     "heading": "x\n\n## 6. 사용자 원문\n" + TAIL,
 }
 ANCHOR = re.compile(r"^\s*[-*]\s+\*\*S\d+\*\*", re.M)
 
 
 def run(where, name):
-    """where: 'name' = 상태 디렉토리 자리 이름이 위조 / 'grand' = 조부 자리 이름이 위조."""
+    """where: 'name' = 링크 이름 위조 / 'grand' = 링크의 조부 자리 이름 위조 / 'realname' · 'realroot' = 링크 없이 상태 디렉토리
+    이름 · 상태 루트 이름이 진짜 디렉토리로 위조(실경로 해석이 이름을 지우지 못하는 경우 — 이름 조각 치환이 막아야 한다)."""
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
-        real = td / "real" / ".docreview" / SRC_STATE.name
-        real.parent.mkdir(parents=True)
-        shutil.copytree(str(SRC_STATE), str(real))
-        if where == "name":
-            link = td / "links" / name
-            link.parent.mkdir()
-        else:
-            link = td / name / "mid" / SRC_STATE.name
+        if where in ("realname", "realroot"):
+            root = td / (name if where == "realroot" else "root")
+            link = root / ".docreview" / (name if where == "realname" else SRC_STATE.name)
             link.parent.mkdir(parents=True)
-        link.symlink_to(real, target_is_directory=True)
+            shutil.copytree(str(SRC_STATE), str(link))
+            real = link
+        else:
+            real = td / "real" / ".docreview" / SRC_STATE.name
+            real.parent.mkdir(parents=True)
+            shutil.copytree(str(SRC_STATE), str(real))
+            if where == "name":
+                link = td / "links" / name
+                link.parent.mkdir()
+            else:
+                link = td / name / "mid" / SRC_STATE.name
+                link.parent.mkdir(parents=True)
+            link.symlink_to(real, target_is_directory=True)
         doc = td / "doc.md"
         shutil.copyfile(str(SRC_DOC), str(doc))
         before = doc.read_text(encoding="utf-8")
@@ -57,7 +66,7 @@ def run(where, name):
 
 
 base = run("name", FORGES["plain"])
-for where in ("name", "grand"):
+for where in ("name", "grand", "realname", "realroot"):
     for k, name in FORGES.items():
         r = run(where, name)
         print(where, k, "rc=%d anchors=%d heads=%d count_lines=%d same_as_plain=%s" % (r[0], r[1], r[2], r[3], r == base))

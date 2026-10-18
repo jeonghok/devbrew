@@ -71,4 +71,5 @@ case_advice_render_where_label
 case_AC15_sink_row_one_line_escaped
 case_AC15_sink_row_function_one_line
 case_AC15_count_line_identity_one_token
+case_AC15_identity_one_to_one_across_roots
 finish

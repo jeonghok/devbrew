@@ -352,7 +352,7 @@ case_AC15_sink_row_one_line_escaped() {
   for v in $'위조\n- **S9** 「위조」' $'위조\n\n## 6. 사용자 원문\n- **S9** 「위조」' '칸 | 둘 | 셋'; do
     n=$((n + 1))
     d="$(adv_state 1)"; doc="$(mktemp -t sinkdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
-    python3 -I -c 'import sys; sys.path.insert(0, sys.argv[3]); from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); [v.update(summary=sys.argv[2], replacement=sys.argv[2]) for v in st["advice"].values()]; save_state(d, st, "fixture")' "$d" "$v" "$SCRIPTS"
+    assert_eq "$(PYTHONPATH="$SCRIPTS" python3 "$FX/ac15_adv_seed.py" "$SCRIPTS" "$d" "$v")" "1" "AC15: 박제 행(꼴 ${n}) — 위조 값이 상태에 실제로 들어갔다(전제)"
     py docreview_state.py advice --state-dir "$d" --sink "$doc" >/dev/null
     assert_eq "$(python3 "$FX/ac15_rows.py" "$doc" "참고(")" "1 [2] 0 0" "AC15: 박제 행(꼴 ${n}) — 한 줄 · 칸 둘 · 앵커 줄과 제목 줄이 늘지 않는다"
     rm -rf "$d" "$doc"
@@ -365,21 +365,21 @@ import sys
 sys.path.insert(0, sys.argv[1])
 import docreview_advice as a
 bad = 0
-for f in ["\n- **S9** x", " - **S9** x", " - **S9** x", "\r\n\n## 6. y\n- **S9** x", "\x85- **S9** x"]:
+for f in ["\n- **S9** x", "\u2028- **S9** x", "\u2029- **S9** x", "\r\n\n## 6. y\n- **S9** x", "\x85- **S9** x"]:
     r = a.sink_row({"id": "i" + f, "category": "c" + f, "anchor": "a" + f, "summary": "s" + f, "replacement": "r" + f})
-    if len(r.splitlines()) != 1 or "\n" in r or " " in r or " " in r or "\x85" in r:
+    if len(r.splitlines()) != 1 or "\n" in r or "\u2028" in r or "\u2029" in r or "\x85" in r:
         bad += 1
 print(bad)' "$SCRIPTS")" "0" "AC15: 박제 행 함수는 칸 다섯 모두에 줄 구분자 꼴을 넣어도 한 줄을 낸다"
 }
 case_AC15_count_line_identity_one_token() {
   # 상태 디렉토리를 거치는 링크 이름이 위조 꼴이어도 계수 줄(`advice --log-file`)은 한 줄이고 계수 줄 문법에 맞는다.
   local d doc exp="" w k; d="$(adv_state 2)"; doc="$(mktemp -t identdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
-  for w in name grand; do for k in plain nl u2028 u2029 heading; do
+  for w in name grand realname realroot; do for k in plain nl u2028 u2029 space heading; do
     exp="${exp}${w} ${k} rc=0 anchors=0 heads=0 count_lines=1 same_as_plain=True
 "
   done; done
   assert_eq "$(python3 "$FX/ac15_ident.py" "$SCRIPTS" "$d" "$doc")
-" "$exp" "AC15: 링크 이름(자리 둘 x 꼴 다섯)이 줄 구분자 + 앵커 꼴이어도 계수 줄은 한 줄 · 계수 줄 문법에 맞고 앵커 · 제목 줄이 늘지 않으며 엔진 줄 출처 기록은 평범한 이름과 같다"
+" "$exp" "AC15: 링크 이름 · 진짜 디렉토리 이름(자리 넷 x 꼴 여섯)이 줄 구분자 + 앵커 꼴이어도 계수 줄은 한 줄 · 계수 줄 문법에 맞고 앵커 · 제목 줄이 늘지 않으며 엔진 줄 출처 기록은 평범한 이름과 같다"
   rm -rf "$d" "$doc"
 }
 case_AC7_sink_idempotent() {
@@ -394,11 +394,24 @@ case_AC7_sink_idempotent() {
   assert_eq "$rc $(grep -c profile_has_no_defer_target "$b/err")" "1 1" "AC7: brief 프로필(defer_target none)은 profile_has_no_defer_target rc 1"
   rm -rf "$d" "$b" "$doc"
 }
+case_AC15_identity_one_to_one_across_roots() {
+  # 이름이 한글 글자만 다른(같은 길이) 두 상태 루트 — 이름 조각은 같게 치환되지만 정체는 달라야 하고 계수 줄이 둘 다 적힌다.
+  local d r1 r2 doc i1 i2
+  d="$(adv_state 2)"; r1="$(mktemp -d -t identroot-XXXXXX)"; r2="$(mktemp -d -t identroot-XXXXXX)"
+  doc="$(mktemp -t identdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
+  python3 "$FX/ac15_roots.py" "$d" "$r1" "$r2" "가나" "다라" > /dev/null
+  i1="$(adv_ident "$r1/가나/.docreview/$(basename "$d")")"; i2="$(adv_ident "$r2/다라/.docreview/$(basename "$d")")"
+  assert_eq "$([ "$i1" != "$i2" ] && echo differ || echo same)" "differ" "AC15: 한글 글자만 다른 두 루트의 리뷰 정체는 달라야 한다(치환이 손실이어도 일대일)"
+  py docreview_state.py advice --state-dir "$r1/가나/.docreview/$(basename "$d")" --log-file "$doc" >/dev/null
+  py docreview_state.py advice --state-dir "$r2/다라/.docreview/$(basename "$d")" --log-file "$doc" >/dev/null
+  assert_eq "$(grep -c -- '- docreview 계수 — ' "$doc")" "2" "AC15: 두 루트의 계수 줄이 둘 다 적힌다(정체 겹침으로 건너뛰지 않는다)"
+  rm -rf "$d" "$r1" "$r2" "$doc"
+}
 case_AC17_count_line_carrier() {
   local d e doc id_d; d="$(adv_state 2)"; e="$(adv_state 2)"; doc="$(mktemp -t logdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
   id_d="$(adv_ident "$d")"
-  assert_eq "$(adv_ident /r/sess-9/docreview/design-ab12)" "sess-9/design-ab12" \
-    "AC17: 리뷰 정체는 <세션>/<문서 키> — 상태 디렉토리의 조부 이름과 자기 이름(문서 키만이면 세션이 빠진다)"
+  assert_eq "$(adv_ident /r/sess-9/docreview/design-ab12 | grep -cE '^sess-9-[0-9a-f]{8}/design-ab12$')" "1" \
+    "AC17: 리뷰 정체는 <세션>-<루트 해시 8자>/<문서 키> — 상태 디렉토리의 조부 이름 · 루트 실경로 해시 · 자기 이름"
   py docreview_state.py advice --state-dir "$d" --log-file "$doc" >/dev/null
   py docreview_state.py advice --state-dir "$d" --log-file "$doc" >/dev/null
   assert_eq "$(grep -cF -- "- docreview 계수 — $id_d r1: advice_new=2 · advice_repeat=0 · mc_preexisting_new=0" "$doc")" "1" \
