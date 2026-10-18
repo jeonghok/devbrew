@@ -3068,3 +3068,50 @@ case_config_rereview_count_never_decreases() {
   assert_eq "$(st_yaml "$d" 'st["round"], st["rereview_count"]')" "(4, 2)" "config: 상한을 낮춘 뒤 추가 승인으로 돈 라운드 4 도 재리뷰 횟수는 줄지 않는다"
   rm -rf "$d"
 }
+# ── AC10 · AC11 — 탐지 리뷰어 여럿 ───────────────────────────────────────
+r1_detectors() {   # r1_detectors <N> <profile> <doc> → round 1 begun with N detectors (환경으로)
+  local d s; d="$(mk_state "$3" "$2")" || return 1; s="$d/s1.json"; snap "$3" "$s"
+  DEVBREW_DOCREVIEW_DETECTORS="$1" py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null; echo "$d"
+}
+case_detectors_merge_and_source() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  local c1 c2; c1="$(critic_now "$d" "$FX/critic-r1.txt")"; cp "$FX/critic-d2.txt" "$d/critic-2.txt"; c2="$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$c1" --critic "$c2" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'any("detector" in i for i in d["items"])')" "False" "AC10: 재비판 입력에는 출처 리뷰어가 없다(익명화)"
+  assert_eq "$(st_yaml "$d" 'sorted({p["finding"].get("detector") for p in st["pending_recritic"]["items"] if p["source"]=="critic"})')" "['d1', 'd2']" "AC10: 원장 준비에는 리뷰어마다 출처가 있다"
+  assert_eq "$(st_yaml "$d" '[p["finding"]["blocks"] for p in st["pending_recritic"]["items"] if p["finding"]["summary"].startswith("넘김 절의 경로")][0] == [[p["f"] for p in st["pending_recritic"]["items"] if p["finding"]["summary"].startswith("넘김 절에 이어")][0]]')" "True" "AC10: 둘째 리뷰어의 질문은 자기 c1 을 막는다(번호 충돌 없음)"
+  rm -rf "$d"
+}
+case_detectors_partial_death() {
+  local d; d="$(r1_detectors 3 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC11: r1 실패"; return; }
+  local c1 c2; c1="$(critic_now "$d" "$FX/critic-r1.txt")"; cp "$FX/critic-d2.txt" "$d/critic-2.txt"; c2="$d/critic-2.txt"
+  cp "$FX/critic-broken.txt" "$d/critic-3.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$c1" --critic "$c2" --critic "$d/critic-3.txt" > "$d/prep.json"; local rc=$?
+  assert_eq "$rc" "0" "AC11: 일부 사망은 라운드를 죽이지 않는다(rc 0)"
+  assert_eq "$(jget "$d/prep.json" 'd["degrade"]["detectors"]["expected"], d["degrade"]["detectors"]["dead"], d["degrade"]["critic_dead"]')" "(3, [3], False)" "AC11: 탐지 3 중 셋째 사망 · 주 판정자 사망 아님"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_contains "$(jget "$d/fin.json" '" | ".join(d["advisory"])')" "탐지 3 중 1 사망" "AC11: 라우팅 보고가 degrade 로 공시한다"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | head -1)" "탐지 리뷰어 3명 중 1명이 결과를 내지 못했다" "AC11: 게이트 첫 줄 경고가 쉬운 말로 말한다"
+  rm -rf "$d"
+}
+case_detectors_all_dead() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC11: r1 실패"; return; }
+  cp "$FX/critic-broken.txt" "$d/critic-1.txt"; cp "$FX/critic-broken.txt" "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-1.txt" --critic "$d/critic-2.txt" > "$d/prep.json"; local rc=$?
+  assert_eq "$rc" "4" "AC11: 전부 죽으면 지금처럼 critic 사망 rc 4"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["unverified"]')" "critic_dead" "AC11: 게이트는 「미검증」"
+  rm -rf "$d"
+}
+case_detectors_count_mismatch() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'd["degrade"]["detectors"]["expected"], d["degrade"]["detectors"]["dead"]')" "(2, [2])" "AC10: 기대 2 인데 파일 1 이면 빠진 둘째를 사망으로 센다(조용히 1 로 줄이지 않는다)"
+  rm -rf "$d"
+}
+case_detectors_stale_file_per_file() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  cp "$FX/critic-d2.txt" "$d/critic-2.txt"; touch -t 200001010000 "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --critic "$d/critic-2.txt" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'd["degrade"]["detectors"]["dead_reasons"].get("2")')" "critic_predates_round" "AC10: 신선도는 파일마다 — 라운드 시작보다 오래된 둘째만 사망"
+  rm -rf "$d"
+}

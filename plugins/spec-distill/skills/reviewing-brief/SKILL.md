@@ -409,8 +409,8 @@ fi
 `${PROFILE}` 에는 경로가 아니라 **프로필 파일의 내용**을 싣는다 — 플러그인 캐시는 사용자 프로젝트 밖이라 리뷰어의
 Read 가 거부된다. 탐지 dispatch 직전에(재dispatch 포함) 아래 펜스를 돌려 그 stdout 전문을 탐지와 재비판의
 `<profile>` 슬롯에 싣는다. 펜스의 rc 가 0 이 아니면 dispatch 하지 않는다 — 펜스가 critic 출력 파일
-(`$STATE_DIR/critic.txt`)을 비우고(`$STATE_DIR` 이 비면 건너뛴다) 5단계가 그것을 critic 사망(rc 4)으로 읽어
-재dispatch 1회(이 펜스부터 다시), 또 실패면 「미검증」이다. 엔진도 라운드 시작보다 오래된 critic 파일을 부재로
+(`$STATE_DIR/critic.txt` 와 `$STATE_DIR/critic-<번호>.txt`)을 비우고(`$STATE_DIR` 이 비면 건너뛴다) 5단계가 그것을
+critic 사망(rc 4)으로 읽어 재dispatch 1회(이 펜스부터 다시), 또 실패면 「미검증」이다. 엔진도 라운드 시작보다 오래된 critic 파일을 부재로
 읽는다(`critic_predates_round`).
 
 <!-- profile-content:begin -->
@@ -431,10 +431,15 @@ prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
   echo "[spec-distill] 프로필 내용을 읽지 못했다(cat rc $prof_rc): $PROFILE — 탐지 · 재비판을 dispatch 하지 않는다. 5단계가 critic 사망으로 읽는다(재dispatch 1회 → 「미검증」)." >&2
   if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then
-    if { : > "$STATE_DIR/critic.txt"; } 2>/dev/null; then
-      echo "[spec-distill] critic 출력 파일($STATE_DIR/critic.txt)을 비웠다." >&2
+    critic_left=""
+    for f in "$STATE_DIR"/critic.txt "$STATE_DIR"/critic-[0-9]*.txt; do
+      [ -e "$f" ] || continue
+      { : > "$f"; } 2>/dev/null || critic_left="$critic_left $f"
+    done
+    if [ -z "$critic_left" ]; then
+      echo "[spec-distill] critic 출력 파일($STATE_DIR 의 critic.txt · critic-<번호>.txt)을 비웠다." >&2
     else
-      echo "[spec-distill] critic 출력 파일($STATE_DIR/critic.txt)을 비우지 못했다 — 5단계가 라운드 시작보다 오래된 그 파일을 부재로 읽는다(critic_predates_round)." >&2
+      echo "[spec-distill] critic 출력 파일을 비우지 못했다:${critic_left} — 5단계가 라운드 시작보다 오래된 그 파일을 부재로 읽는다(critic_predates_round)." >&2
     fi
   else
     echo "[spec-distill] critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패(PAYLOAD='${PAYLOAD:-}' · harness_sid='${harness_sid:-}' · STATE_DIR='${STATE_DIR:-}'). PAYLOAD 는 이 펜스와 같은 Bash 호출에서 대입한다. 5단계는 라운드 시작보다 오래된 critic 파일을 부재로 읽는다(critic_predates_round)." >&2
@@ -497,8 +502,9 @@ echo "CRITIC_AGENT=$CRITIC_AGENT"
 <!-- critic-select:end -->
 
 `${DOCUMENT}` 에는 이번 라운드 `$BUNDLE` 의 **내용**을 싣는다(경로가 아니다 — 정답이 원문이라 외부 정보가
-오염원이다). 한 번 dispatch 하고 출력을 요약·전사 없이 verbatim 파일(`$STATE_DIR/critic.txt`)로 저장한다. 파싱은
-`docreview_route.py` 가 그 파일에서 한다. 두 블록은 `description`·`subagent_type` 만 다르다.
+오염원이다). 1단계 출력의 `config.detectors.value`(N) 만큼 dispatch 한다(한 메시지에 Agent 호출 여럿 — 병렬). 리뷰어 i 의
+출력을 요약·전사 없이 verbatim 파일 `$STATE_DIR/critic-<i>.txt`(i = 1…N)로 저장한다. N 명이라는 규모는 게이트 둘째
+줄이 알린다 — 선언된 fan-out 이다. 파싱은 `docreview_route.py` 가 그 파일들에서 한다. 두 블록은 `description`·`subagent_type` 만 다르다.
 
 `CRITIC_AGENT=spec-distill:doc-critic-web` 이면:
 

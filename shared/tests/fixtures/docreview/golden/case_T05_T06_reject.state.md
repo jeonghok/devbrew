@@ -94,6 +94,7 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: d1
     011167c4#r1.2:
       id: 011167c4#r1.2
       lineage: 011167c4#r1.2
@@ -116,6 +117,7 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: d1
     d56c5e0c#r1.1:
       id: d56c5e0c#r1.1
       lineage: d56c5e0c#r1.1
@@ -139,6 +141,7 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: d1
     9dea7cf3#r1.1:
       id: 9dea7cf3#r1.1
       lineage: 9dea7cf3#r1.1
@@ -171,6 +174,7 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: null
     d949ac4c#r1.1:
       id: d949ac4c#r1.1
       lineage: d949ac4c#r1.1
@@ -193,6 +197,7 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: d1
     11adb9c3#r1.1:
       id: 11adb9c3#r1.1
       lineage: 11adb9c3#r1.1
@@ -225,6 +230,7 @@ docreview:
       promoted_from: fix
       immutable: false
       kind: pre
+      detector: d1
     e1b5b3be#r1.1:
       id: e1b5b3be#r1.1
       lineage: e1b5b3be#r1.1
@@ -247,6 +253,7 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: null
     65e28991#r1.1:
       id: 65e28991#r1.1
       lineage: 65e28991#r1.1
@@ -269,6 +276,7 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: d1
     1615824b#r1.1:
       id: 1615824b#r1.1
       lineage: 1615824b#r1.1
@@ -301,6 +309,7 @@ docreview:
       promoted_from: ask
       immutable: false
       kind: pre
+      detector: null
     011167c4#r1.1:
       id: 011167c4#r1.1
       lineage: 011167c4#r1.1
@@ -323,6 +332,7 @@ docreview:
       promoted_from: null
       immutable: null
       kind: null
+      detector: d1
   decides:
     fee27fc9#r1.1:
       state: open

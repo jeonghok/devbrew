@@ -15,6 +15,7 @@
    "replacement": null,
    "if_unfixed": null,
    "f": "f1",
+   "detector": "d1",
    "origin": "reviewer",
    "immutable": false,
    "kind": "pre",

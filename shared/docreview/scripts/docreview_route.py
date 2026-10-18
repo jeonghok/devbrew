@@ -205,6 +205,60 @@ def _round_staleness(st, path, predates):
     return None
 
 
+def _read_one_critic(st, path, i, ev, rec, prof):
+    """탐지 리뷰어 i 의 출력 — (항목 [(src, it)], 사망 사유 또는 None, 층 2 부재, 합친 블록 수, 시점 미상 사유).
+
+    리뷰어 i ≥ 2 의 임시 번호와 그 `blocks` 에는 `@d<i>` 를 붙인다 — 합치기 단계의 `@b<k>`(블록 순번)와
+    다른 접미라 겹치지 않고, 질문은 자기 리뷰어의 항목을 막는다.
+    """
+    critic = Path(path)
+    merged, fresh = {}, None
+    if not critic.is_file():
+        return [], "missing", False, merged, fresh
+    stale = _round_staleness(st, critic, "critic_predates_round")
+    if stale == "critic_predates_round":
+        return [], stale, False, merged, fresh
+    if stale:
+        fresh = stale
+    try:
+        text = critic.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return [], "undecodable", False, merged, fresh
+    l1s, e1 = extract_blocks(text, "docreview-layer1")
+    l1, e1m = (merge_list_blocks(l1s, "docreview-layer1", ev) if l1s is not None else (None, None))
+    why = e1 or e1m
+    if l1s is not None and len(l1s) > 1:
+        merged["docreview-layer1"] = len(l1s)
+    if why or not isinstance(l1, list):
+        return [], why or "not a list", False, merged, fresh
+    found, l2_missing = [], False
+    for k, it in enumerate(l1, 1):
+        n1 = normalize(it, 1, "c", k, rec)
+        if n1:
+            found.append(n1)
+    l2s, e2 = extract_blocks(text, "docreview-layer2")
+    l2, e2m = (merge_list_blocks(l2s, "docreview-layer2", ev) if l2s is not None else (None, None))
+    e2 = e2 or e2m
+    if l2s is not None and len(l2s) > 1:
+        merged["docreview-layer2"] = len(l2s)
+    if e2 == "broken":
+        return [], "layer2 block broken", False, merged, fresh
+    if e2 or not isinstance(l2, list):
+        l2_missing = bool(prof["layer_rubric"].get("layer2"))
+    else:
+        for k, it in enumerate(l2, 1):
+            n2 = normalize(it, 2, "c", 100 + k, rec)
+            if n2:
+                found.append(n2)
+    tag = "" if i == 1 else "@d%d" % i
+    for it in found:
+        it["detector"] = "d%d" % i
+        if tag:
+            it["ref"] = it["ref"] + tag
+            it["blocks"] = list(map(lambda r: r + tag, it["blocks"]))
+    return list(map(lambda it: ("critic", it), found)), None, l2_missing, merged, fresh
+
+
 def cmd_prepare(a) -> int:
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
@@ -223,56 +277,39 @@ def cmd_prepare(a) -> int:
 
     degrade = {"critic_dead": False, "layer2_missing": False, "codex_absent": False, "codex_reason": None}
     items = []
-    critic = Path(a.critic)
-    critic_why = None    # critic 사망 사유 — None 이면 층 1 블록의 판정에 맡긴다
-    text = ""
-    if critic.is_file():
-        # 라운드 시작 표식보다 먼저(또는 같은 시각에) 쓰인 critic 출력은 직전 라운드 것이다 — 탐지를 dispatch
-        # 하지 못한 라운드에 같은 자리에 남은 출력을 이번 라운드의 탐지로 섭취하지 않는다(codex 와 같은 판별).
-        # 표식 부재 · 비정수(`round_start_unrecorded` · `round_start_unreadable`)는 critic 을 닫지 않는다(R69) —
-        # 다만 시점을 판별하지 못했다는 사실은 codex 경로와 독립으로 `degrade.critic_freshness_unknown` 에 이름을
-        # 남기고 `finalize` 가 advisory 로 공시한다(차단 아님). 그 키는 이 경우에만 생긴다.
-        critic_stale = _round_staleness(st, critic, "critic_predates_round")
-        if critic_stale == "critic_predates_round":
-            critic_why = "critic_predates_round"
+    expected = int((((st.get("rounds") or {}).get(str(st.get("round"))) or {}).get("config") or {})
+                   .get("detectors", {}).get("value", 1))
+    paths = list(a.critic or [])
+    n_total = max(expected, len(paths))
+    dead, dead_reasons = [], {}
+    for i in range(1, n_total + 1):
+        if i > len(paths):
+            got, why, l2m, merged = [], "missing", False, {}
         else:
-            if critic_stale:
-                degrade["critic_freshness_unknown"] = critic_stale
-            try:
-                text = critic.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                # 깨진 critic 출력 — 설계 §9 의 sentinel 깨짐과 같은 판정(critic 사망 → 재dispatch 1회 → 「미검증」)
-                critic_why = "undecodable"
-    l1s, e1 = extract_blocks(text, "docreview-layer1")
-    l1, e1m = (merge_list_blocks(l1s, "docreview-layer1", ev) if l1s is not None else (None, None))
-    critic_why = critic_why or e1 or e1m
-    if l1s is not None and len(l1s) > 1:
-        degrade.setdefault("blocks_merged", {})["docreview-layer1"] = len(l1s)
-    if critic_why or not isinstance(l1, list):
-        degrade["critic_dead"] = True
-        ev("source_failed", "doc-critic", "layer1 block %s" % (critic_why or "not a list"), True)
-    else:
-        for i, it in enumerate(l1, 1):
-            n1 = normalize(it, 1, "c", i, rec)
-            if n1:
-                items.append(("critic", n1))
-        l2s, e2 = extract_blocks(text, "docreview-layer2")
-        l2, e2m = (merge_list_blocks(l2s, "docreview-layer2", ev) if l2s is not None else (None, None))
-        e2 = e2 or e2m
-        if l2s is not None and len(l2s) > 1:
-            degrade.setdefault("blocks_merged", {})["docreview-layer2"] = len(l2s)
-        if e2 == "broken":
-            degrade["critic_dead"] = True
-            ev("source_failed", "doc-critic", "layer2 block broken", True)
-        elif e2 or not isinstance(l2, list):
-            if prof["layer_rubric"].get("layer2"):
+            got, why, l2m, merged, fresh = _read_one_critic(st, paths[i - 1], i, ev, rec, prof)
+            if fresh:
+                degrade["critic_freshness_unknown"] = fresh
+        if why:
+            dead.append(i)
+            dead_reasons[str(i)] = why
+            if n_total == 1:
+                ev("source_failed", "doc-critic", why if why.startswith("layer2") else "layer1 block %s" % why, True)
+            else:
+                ev("source_failed", "doc-critic#%d" % i, "detector %d %s" % (i, why), False)
+        else:
+            items.extend(got)
+            if l2m:
                 degrade["layer2_missing"] = True
-                ev("uncountable", "layer2", "block %s" % (e2 or "not a list"))
-        else:
-            for i, it in enumerate(l2, 1):
-                n2 = normalize(it, 2, "c", 100 + i, rec)
-                if n2:
-                    items.append(("critic", n2))
+                ev("uncountable", "layer2", "block missing" if n_total == 1 else "detector %d block missing" % i)
+            for k, v in merged.items():
+                bm = degrade.setdefault("blocks_merged", {})
+                bm[k] = bm.get(k, 0) + v
+    if n_total > 1:
+        degrade["detectors"] = {"expected": n_total, "dead": dead, "dead_reasons": dead_reasons}
+    if len(dead) == n_total:
+        degrade["critic_dead"] = True
+        if n_total > 1:
+            ev("source_failed", "doc-critic", "all detectors dead (%s)" % ",".join(sorted(set(dead_reasons.values()))), True)
     cx, stale = None, None
     if a.codex and Path(a.codex).is_file():
         stale = _round_staleness(st, Path(a.codex), "codex_predates_round")
@@ -301,10 +338,17 @@ def cmd_prepare(a) -> int:
         pub["f"] = "f%d" % k
         pub["blocks"] = [ref2f.get((src, r), r) for r in it["blocks"]]
         pub.pop("ref", None)
-        pending.append({"f": pub["f"], "source": src, "finding": pub})
+        det = pub.pop("detector", None)   # 재비판에 가는 사본에는 출처 리뷰어를 싣지 않는다
+        pending.append({"f": pub["f"], "source": src, "detector": det,
+                        "finding": dict(pub, detector=det) if det else pub})
     st["pending_recritic"] = {"round": int(st["round"]), "items": pending, "degrade": degrade, "events": events}  # round — docreview_state.pending_mismatch
     save_state(a.state_dir, st, "prepare-recritic (%d items%s)" % (len(pending), ", critic dead" if degrade["critic_dead"] else ""))
-    print(json.dumps({"ok": not degrade["critic_dead"], "items": [p["finding"] for p in pending],
+    shown = []
+    for p in pending:
+        view = dict(p["finding"])
+        view.pop("detector", None)
+        shown.append(view)
+    print(json.dumps({"ok": not degrade["critic_dead"], "items": shown,
                       "degrade": degrade}, ensure_ascii=False, indent=1))
     return 4 if degrade["critic_dead"] else 0
 
@@ -816,6 +860,10 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats, advice_stats=
         adv.insert(0, "codex 없음 — 모델 다양성 0 (%s)" % degrade.get("codex_reason"))
     if degrade.get("recritic_dead"):
         adv.append("기각 경로 0 — 오탐이 걸러지지 않았다 (doc-recritic %s)" % degrade["recritic_dead"])
+    det = degrade.get("detectors")
+    if det and det.get("dead") and not degrade.get("critic_dead"):
+        adv.append("탐지 %d 중 %d 사망 (%s)" % (det["expected"], len(det["dead"]),
+                   ", ".join(map(lambda kv: "d%s: %s" % kv, sorted(det["dead_reasons"].items())))))
     if degrade.get("layer2_missing"):
         adv.append("상세 미검증 — 층 2 블록 없음")
     if st["snapshots"][str(n)].get("headingless"):
@@ -945,7 +993,7 @@ def build_parser() -> argparse.ArgumentParser:
     def P(name):   # 하위 명령마다 줄인 플래그를 거부한다
         return sp.add_parser(name, allow_abbrev=False)
     x = P("prepare-recritic"); x.add_argument("--state-dir", required=True)
-    x.add_argument("--critic", required=True); x.add_argument("--codex", default=None)
+    x.add_argument("--critic", required=True, action="append"); x.add_argument("--codex", default=None)
     x.set_defaults(fn=cmd_prepare)
     x = P("finalize"); x.add_argument("--state-dir", required=True)
     x.add_argument("--recritic", default=None); x.add_argument("--recritic-skipped", action="store_true")

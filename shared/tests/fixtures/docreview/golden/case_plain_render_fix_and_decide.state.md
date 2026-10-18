@@ -94,6 +94,7 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: d1
     9dea7cf3#r1.1:
       id: 9dea7cf3#r1.1
       lineage: 9dea7cf3#r1.1
@@ -116,6 +117,7 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: d1
   decides:
     7c1226fa#r1.1:
       state: open

@@ -1,0 +1,19 @@
+```docreview-layer1
+[]
+```
+```docreview-layer2
+- ref: c1
+  layer: 2
+  category: placeholder
+  anchor: "#handoff-context"
+  disposition: fix
+  summary: "넘김 절에 이어 갈 사람이 볼 경로가 없다"
+  edit_scope: "#handoff-context"
+- ref: c2
+  layer: 2
+  category: ambiguity
+  anchor: "#handoff-context"
+  disposition: ask
+  summary: "넘김 절의 경로를 어디로 둘지 정해야 한다"
+  blocks: [c1]
+```

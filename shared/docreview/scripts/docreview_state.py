@@ -567,7 +567,8 @@ PUBLIC_FIELDS = ("id", "lineage", "bucket", "supersedes", "origin", "layer", "ca
                  # `if it["disposition"] == "decide":` 게이트) 그쪽에만
                  # 실으면 fix·defer·ask 로 난 항목의 대체안이 원장에 한 글자도 안 남는다.
                  "replacement", "if_unfixed",
-                 "decision_view", "state", "promotion", "promoted_from", "immutable", "kind")
+                 "decision_view", "state", "promotion", "promoted_from", "immutable", "kind",
+                 "detector")
 
 
 GateRow = collections.namedtuple("GateRow", "name ledger pred open blocks render")
@@ -1336,6 +1337,8 @@ WARN_GLOSS = (
     (r"상세 미검증 — 층 2 블록 없음", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다"),
     (re.escape("앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위"), "앵커 불가", "문서에 제목이 없어 지적의 자리를 가리키지 못한다 — 얼림·보호 검사가 꺼졌고 모든 수정이 문서 전체 범위다"),
     (r"critic 시점 판별 불가 \((?P<why>.*)\)", "critic 시점", "리뷰어 결과가 이번 라운드 것인지 확인하지 못했다"),
+    (r"탐지 (?P<n>\d+) 중 (?P<k>\d+) 사망 \((?P<why>.*)\)", "탐지",
+     "탐지 리뷰어 {n}명 중 {k}명이 결과를 내지 못했다 — 남은 리뷰어 결과로 갔다"),
     (r"입력 실패\(주\): (?P<why>.*)", None, "꼭 있어야 할 리뷰어 결과를 읽지 못했다"),
     (r"입력 실패\(보조\): (?P<why>.*)", None, "보조 리뷰어 결과를 읽지 못했다"),
     (r"셀 수 없음: (?P<why>.*)", None, "셀 수 없는 것이 있다"),
@@ -1360,6 +1363,8 @@ def _plain_warns(warns) -> list:
             m = re.fullmatch(row[0], w, re.S)
             if m:
                 break
+        if m and "{n}" in row[2]:   # 숫자를 싣는 행 — 문장의 {n}·{k} 를 원문의 값으로 채운다
+            row = (row[0], row[1], row[2].format(**m.groupdict()))
         if not m:
             k = w
         elif row[1] is None:

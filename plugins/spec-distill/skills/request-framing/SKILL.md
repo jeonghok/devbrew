@@ -409,7 +409,8 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 - 매 라운드 선결 앞에(번들이 먼저면 번들 앞에) 아래 `### 표지와 원장 열기` 펜스를 돈다
 - `--state-dir` = `$STATE_DIR` · `--profile` = `$PROFILE` · `--doc` = `$SEED_ABS`
 - 탐지의 `<document>` = `$BUNDLE` 의 **내용** · codex 러너의 `<doc>` = `$BUNDLE` · 재비판의 `<document>` = `$BUNDLE_RC` 의 **내용**
-- 탐지 출력은 `$STATE_DIR/critic.txt`, 재비판 출력은 `$STATE_DIR/recritic.txt` 로 요약 · 전사 없이 저장한다
+- 탐지는 1단계 출력의 `config.detectors.value`(N) 만큼 dispatch 하고(한 메시지에 여럿 — 병렬; N 은 게이트 둘째 줄이 알린다),
+  리뷰어 i 의 출력은 `$STATE_DIR/critic-<i>.txt`, 재비판 출력은 `$STATE_DIR/recritic.txt` 로 요약 · 전사 없이 저장한다
 - 결정 기록의 `--log-file` = `$AUDIT_ABS` — seed 프로필의 `decision_log` 이 audit 의 `## 6. 리뷰 결정` 을 가리킨다
 - 추가 라운드를 여는 1단계는 사용자 문구를 `$STATE_DIR/said-extra-r<n>.txt` 에 쓰고
   `q="$(python3 "$SD/scripts/seed_review_log.py" one-line "$STATE_DIR/said-extra-r<n>.txt")"` 로 받아
@@ -502,7 +503,7 @@ if [ -z "${STATE_DIR:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
   echo "[spec-distill] 리뷰 엔진 자리 없음 — STATE_DIR='${STATE_DIR:-}' sid='${sid:-}' SEED='${SEED:-}'. 「## 상태」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 함께 돌려라. 이 라운드를 시작하지 않는다." >&2
   bundle_rc=2
 else
-  rm -f "$STATE_DIR/critic.txt" "$STATE_DIR/recritic.txt" 2>/dev/null || true
+  rm -f "$STATE_DIR/critic.txt" "$STATE_DIR"/critic-[0-9]*.txt "$STATE_DIR/recritic.txt" 2>/dev/null || true
   bundle_rc=0
   python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md --for detect > "$BUNDLE" || bundle_rc=1
   python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md --for recritic > "$BUNDLE_RC" || bundle_rc=1
@@ -537,7 +538,9 @@ fi
 prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
   echo "[spec-distill] seed 프로필을 읽지 못했다(cat rc $prof_rc): ${PROFILE:-} — 탐지 · 재비판을 dispatch 하지 않는다." >&2
-  if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then : > "$STATE_DIR/critic.txt" 2>/dev/null || true; fi
+  if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then
+    for f in "$STATE_DIR"/critic.txt "$STATE_DIR"/critic-[0-9]*.txt; do [ -e "$f" ] && { : > "$f" 2>/dev/null || true; }; done
+  fi
   exit 1
 fi
 # frontmatter 의 `must_catch:` 줄(엔진 라우팅 키)은 리뷰어에게 싣지 않는다 — 막는 축을 아는 리뷰어는 category 로 차단 여부를 조종할 수 있다.
@@ -609,6 +612,8 @@ fi
 
 `${PROFILE}` 에는 경로가 아니라 `### 프로필 내용` 펜스가 낸 **내용**을 싣습니다. 탐지의 `${DOCUMENT}` 는
 이번 라운드 `$BUNDLE` 의 내용입니다. seed 프로필이 웹을 허용하지 않으므로 웹 사본을 고르는 펜스가 없습니다.
+아래 탐지 블록은 N 번 dispatch 합니다 — 한 메시지에 Agent 호출 여럿(병렬), 리뷰어 i 의 출력은
+`$STATE_DIR/critic-<i>.txt` 입니다.
 
 ```
 Agent({
