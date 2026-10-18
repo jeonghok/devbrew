@@ -420,4 +420,21 @@ test('refute prompt no longer says refute when unsure', async () => {
   assert.ok(rp.includes('uncertain'))
   const dp = calls.find((c) => c.opts.phase === '심층검증').prompt
   assert.ok(!dp.includes('확신이 없으면 refute하라'))
+  assert.ok(dp.includes('uncertain: true'))
+})
+
+test('CONTRACT discloses staleness exclusion counts', async () => {
+  const pack = { ...DEFAULT_PACK, staleness_excluded: { fence_lines: 7, placeholder_or_url: 2, generation_target: 1 } }
+  const { calls } = await runWorkflow(WF, {
+    stubAgent: stubOneFinding(),
+    args: { target: 'sample', evidencePack: pack, codexFindings: [] },
+  })
+  const p = calls.find((c) => c.opts.phase === '감사').prompt
+  assert.ok(p.includes('코드 펜스 안 7줄'))
+  assert.ok(p.includes('자리표시자·URL 2개'))
+  assert.ok(p.includes('생성 대상 경로 1개'))
+  const { calls: c2 } = await runWorkflow(WF, { stubAgent: stubOneFinding() })
+  const q = c2.find((c) => c.opts.phase === '감사').prompt
+  assert.ok(q.includes('뺀 개수를 받지 못했다 — 셀 수 없음'))
+  assert.ok(!q.includes('코드 펜스 안 '))
 })

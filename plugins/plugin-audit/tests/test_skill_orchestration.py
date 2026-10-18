@@ -43,6 +43,7 @@ INVARIANTS = [
     "audit-journal.jsonl",
     # H R5 (codex re-verify): raw transcript journal 저술 전 P21 secret 스캔 필수 (자격증명 유출 방지).
     "P21 secret 스캔",
+    "staleness_excluded",                                   # 수집에서 뺀 수 공시 (pack 필드 · meta.json 키)
 ]
 
 

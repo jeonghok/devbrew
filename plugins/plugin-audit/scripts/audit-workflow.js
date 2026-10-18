@@ -237,7 +237,10 @@ const CONTRACT = [
   '',
   '## 결정론 staleness sweep — **사실만. 판정은 네가 한다** (§5.4a)',
   '아래는 파일시스템 전수 열거가 낸 *관측된 사실*이다. 각 사실이 갭인지는 **네가** 판정한다',
-  '(코드 펜스·플레이스홀더·생성물 경로는 이미 제외됐다 — 그래도 원문을 직접 확인하라).',
+  (ex => ex
+    ? '(뺀 것: 코드 펜스 안 ' + ex.fence_lines + '줄 · 자리표시자·URL ' + ex.placeholder_or_url
+      + '개 · 생성 대상 경로 ' + ex.generation_target + '개 — 그래도 원문을 직접 확인하라).'
+    : '(뺀 개수를 받지 못했다 — 셀 수 없음. 그래도 원문을 직접 확인하라).')(pack.staleness_excluded),
   ...((pack.staleness_facts || []).length
     ? pack.staleness_facts.map((f) => '  - [' + f.class + '] `' + f.file + ':' + f.line + '` — ' + f.quote)
     : ['  - (staleness sweep 미실행 또는 사실 0건 — 없음을 사실로 받는다)']),

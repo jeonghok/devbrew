@@ -453,6 +453,29 @@ class TestAppendix(unittest.TestCase):
         sec = md.split("## 목록에서 뺀 지적", 1)[1]
         self.assertEqual(sec.count("(없음)"), 3)
 
+    def test_exclusion_section(self):
+        ex = {"fence_lines": 7, "placeholder_or_url": 2, "generation_target": 1}
+        rc, md, err, _ = render(dict(self._data([]), meta=dict(META_OK, staleness_excluded=ex)))
+        self.assertEqual(rc, 0, err)
+        sec = md.split("## 수집에서 뺀 것", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("코드 펜스 안 7줄", sec)
+        self.assertIn("자리표시자·URL 2개", sec)
+        self.assertIn("생성 대상 경로 1개", sec)
+        self.assertNotIn("셀 수 없음", sec)
+        rc, md, err, _ = render(self._data([]))
+        self.assertEqual(rc, 0, err)
+        sec = md.split("## 수집에서 뺀 것", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("셀 수 없음", sec)
+
+    def test_appendix_title_missing_value(self):
+        fnd = f("A1-5", "SUGGESTION", "S", status="refuted",
+                refutation={"stage": "axis", "gate": "A", "reason": "r"})
+        fnd.pop("title", None)
+        rc, md, err, _ = render(self._data([fnd]))
+        self.assertEqual(rc, 0, err)
+        sec = md.split("## 목록에서 뺀 지적", 1)[1]
+        self.assertNotIn("- None", sec)
+
 
 if __name__ == "__main__":
     unittest.main()

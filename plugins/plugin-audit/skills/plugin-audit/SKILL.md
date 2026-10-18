@@ -122,7 +122,7 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
    *도중* 감사 자신의 persona/스크립트가 변조되는 걸 잡기 위함.
 2. **evidence pack 조립** — 결과 evidence pack이 Workflow(`audit-workflow.js`)가 실제로 읽는 필드 이름과
    정확히 일치해야 한다:
-   `plugin_version, file_count, total_lines, staleness_facts, own_tests, precedent_paths`
+   `plugin_version, file_count, total_lines, staleness_facts, staleness_excluded, own_tests, precedent_paths`
    (**`precedent_corpus`가 아니다** — 예전 이름), `steelman_hints`(optional),
    `extra_scope[]`, `open_questions[{id,axis,question}]`, `candidate_clues[{id,axis,claim,file,line}]`,
    `structure_facts[]`, `shape_gaps[]`.
@@ -136,7 +136,8 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
    evidence pack으로 직접 쓰지 않는다.
    - `plugin_version`/`file_count`/`total_lines`는 LD5 코퍼스 스캔(BEFORE 스냅샷과 같은 스코프)에서
      채운다.
-   - `staleness_facts`는 `check-staleness.py plugins/<target>`, `own_tests`는
+   - `staleness_facts` · `staleness_excluded` 는 `check-staleness.py plugins/<target>` 출력의
+     `facts` · `excluded`, `own_tests`는
      `run-own-tests.sh plugins/<target> <sandbox id>` — `<sandbox id>` 는
      phase 0 step 4 의 둘째 줄이다. `audit-sandbox.sh create-sandbox` 는 id 의 앞 8글자만 sandbox 이름에 쓰고
      같은 이름의 sandbox 를 지우고 다시 만들므로 실행 키를 그대로 넘기지 않는다. `structure_facts`/
@@ -227,7 +228,8 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    journal을 얻지 못하거나 secret 때문에 persist를 못 하면 그 사실을 `degraded[]`(meta.pre1_degraded)에 넣는다
    — **assemble 前**이라 이후 render 배너(AC-3)에 반영된다(render 後에 확보하면 이미 렌더된 배너에 못 싣는다,
    codex re-verify R4).
-2. `assemble-audit-data.py --workflow-return <wf.json> --codex-side <codex.json> --meta <meta.json>
+2. `<meta.json>` 에 `staleness_excluded` 를 pre-1 의 같은 값으로 적는다.
+   `assemble-audit-data.py --workflow-return <wf.json> --codex-side <codex.json> --meta <meta.json>
    --assigned <assigned.json> --repo-root . --out "$RUN_DIR/audit-data.json"` (내부에서
    `check-grounding.py`를 동적 import해 재읽기 — A grounding: 인용 실재 검증, null-degrade/폐기/line-교정.
    별도 CLI 호출이 아니다).

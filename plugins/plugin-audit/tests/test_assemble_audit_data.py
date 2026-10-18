@@ -122,6 +122,8 @@ class TestAssemble(unittest.TestCase):
         n = [q for q in data["new_open_questions"] if q["id"] == "A2-9"]
         self.assertTrue(n, "uncertain gate-E NOQ 미생성")
         self.assertEqual(n[0].get("reason_code"), "gate_e_scope_out")
+        self.assertIn("범위 판단 불가", n[0]["why_not_gap"])
+        self.assertNotIn("범위 밖", n[0]["why_not_gap"])
         kept = [x for x in data["findings"] if x["id"] == "A2-9"]
         self.assertEqual(kept[0]["refutation"]["uncertain"], True)
         with tempfile.TemporaryDirectory() as d:
@@ -130,6 +132,28 @@ class TestAssemble(unittest.TestCase):
             v = SCRIPT.parent / "validate-audit-data.py"
             rv = subprocess.run([sys.executable, str(v), "--data", str(p)], capture_output=True, text=True)
             self.assertEqual(rv.returncode, 0, rv.stdout + rv.stderr)
+
+    def test_definite_gate_e_keeps_scope_out_wording(self):
+        f = {"id": "A2-8", "axis": 2, "source": "claude", "status": "refuted",
+             "refutation": {"stage": "axis", "gate": "E", "reason": "범위 밖"},
+             "evidence": [{"file": "x", "line": 1, "quote": "q"}], "severity": "SUGGESTION"}
+        r, data = run(
+            workflow_return={"findings": [f], "d_verdicts": [], "oq_answers": [],
+                             "new_open_questions": [], "axis_failures": [], "degraded_events": []},
+            codex_side={"d_verdicts": [], "oq_answers": [], "new_open_questions": []},
+            meta=BASE_META, assigned={"assigned_d": [], "assigned_oq": []})
+        n = [q for q in data["new_open_questions"] if q["id"] == "A2-8"]
+        self.assertIn("범위 밖", n[0]["why_not_gap"])
+        self.assertNotIn("판단 불가", n[0]["why_not_gap"])
+
+    def test_meta_carries_staleness_excluded(self):
+        ex = {"fence_lines": 3, "placeholder_or_url": 1, "generation_target": 0}
+        r, data = run(
+            workflow_return={"findings": [], "d_verdicts": [], "oq_answers": [],
+                             "new_open_questions": [], "axis_failures": [], "degraded_events": []},
+            codex_side={"d_verdicts": [], "oq_answers": [], "new_open_questions": []},
+            meta=dict(BASE_META, staleness_excluded=ex), assigned={"assigned_d": [], "assigned_oq": []})
+        self.assertEqual(data["meta"]["staleness_excluded"], ex)
 
     def test_meta_and_degraded_attached(self):
         r, data = run(
