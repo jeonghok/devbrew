@@ -35,7 +35,7 @@ next_phase: superpowers:writing-plans
 - 메모리 232개를 전부 옮기는 것 — 고르는 기준(§2)을 넘는 것은 옮기지 않는다.
 - 새 결정론 검사(원칙 준수를 재는 lint 등)를 더하는 것.
 - 다른 열린 에픽이 잡은 조항 · 파일을 직접 고치는 것(§5 넘김).
-- 플러그인 동작 변경. 교훈 가운데 플러그인 동작에 닿는 것은 지휘자 수리 PR(R5 후속) · R2a · R10 이 고친다.
+- 플러그인 동작 변경. 교훈 가운데 플러그인 동작에 닿는 것은 R5 후속(R5 설계 `## 미룸`) · R2a · R10 이 고친다.
 - CHANGELOG 의 지난 버전 항목 고치기 — 이력이라 그대로 둔다. 플러그인 CHANGELOG 넷에서 이력이 아닌 낡은 글(아직 내지 않은 머리 항목 · 지금 동작을 설명하는 안내 문단)만 이 에픽이 정리하고, 찾아보아 없으면 PR 본문에 「없음」을 적는다(D1.1).
 - 짧아진 계획(superpowers 7.0.0 writing-plans)의 영향을 보완하는 장치 — 사용자 「짧아진 계획의 영향을 신경쓰진 일단 말아봐 그걸 근거로 과한 구현 안했음 좋겠으니」.
 
@@ -71,7 +71,7 @@ CLAUDE.md 의 알맞은 기존 절 안에 한 줄씩 둔다(새 큰 절을 만�
 
 이미 플러그인 동작으로 들어가 있어 CLAUDE.md 에 다시 적지 않는 원칙: 머지 전 확인 규약 · 하위는 단일 세션과 같은 skill 흐름 · 게이트 전달은 혼자 읽혀야 · 지휘 세션이 에픽을 직접 진행(모두 `plugins/spec-distill/references/conducting.md` · `conductor-dispatch.md`). 원칙 1 의 뜻대로 그 자리가 정본이다.
 
-**두 갈래의 「다른 레포」.** CLAUDE.md · 철학 문서는 devbrew 를 개발하는 세션(메모리 없는 다른 기기 · 새 clone 포함)만 읽는다. devbrew 플러그인을 남의 레포에 설치해 쓰는 세션에서는 그 원칙이 플러그인의 동작 자리(skill · reference · 설계 틀 · 넘김 글)에 실려 있어야 지켜진다. 그래서 원칙 2~6 마다 플러그인 동작 자리를 표로 대조한다 — 계획의 첫 과제가 이 설계문서의 새 절 `## 플러그인 동작 자리 대조`(`## 미룸` 바로 앞)에 표를 만들어 커밋한다. 이미 실려 있으면 그 파일:줄을 적고, 빈 곳은 그 파일을 잡은 에픽(또는 지휘자 수리 PR)으로 §5 넘김 행과 `## 미룸` 행을 더한다. 지휘 세션이 그 행을 받는 쪽의 설계 입력으로 넘기고, 받는 쪽이 머지되면 처리됐는지 확인한다. 이 에픽은 플러그인 동작 자리를 직접 고치지 않는다(Non-goals). 원칙 1 은 devbrew 개발 규칙이라 대조 대상이 아니다.
+**두 갈래의 「다른 레포」.** CLAUDE.md · 철학 문서는 devbrew 를 개발하는 세션(메모리 없는 다른 기기 · 새 clone 포함)만 읽는다. devbrew 플러그인을 남의 레포에 설치해 쓰는 세션에서는 그 원칙이 플러그인의 동작 자리(skill · reference · 설계 틀 · 넘김 글)에 실려 있어야 지켜진다. 그래서 원칙 2~6 마다 플러그인 동작 자리를 표로 대조한다 — 계획의 첫 과제가 이 설계문서의 새 절 `## 플러그인 동작 자리 대조`(`## 미룸` 바로 앞)에 표를 만들어 커밋한다. 이미 실려 있으면 그 파일:줄을 적고, 빈 곳은 그 파일을 잡은 에픽(또는 R5 후속(R5 설계 `## 미룸`))으로 §5 넘김 행과 `## 미룸` 행을 더한다. 지휘 세션이 그 행을 받는 쪽의 설계 입력으로 넘기고, 받는 쪽이 머지되면 처리됐는지 확인한다. 이 에픽은 플러그인 동작 자리를 직접 고치지 않는다(Non-goals). 원칙 1 은 devbrew 개발 규칙이라 대조 대상이 아니다.
 
 ### §2 고르는 기준 (사용자 승인 「이 기준으로 (권장)」)
 
@@ -107,9 +107,11 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 |---|---|---|
 | Law 1 필수 섹션 게이트(구현 0) 문면 · 지출 승인 조항 · P22 · P12 trivia · CLAUDE.md 「새 플러그인 — plugin-structure 먼저」 · 「버그가 새면 persona 편집」 | R9 | R9 범위(규칙 · 문서 정리 · 흐름 고정 점검 R9 행) |
 | CLAUDE.md 의존 최소 버전 줄 · spec-distill README 의 superpowers · qg · gh 부재 동작 | R8 | R8 범위(의존 선언 · 부재 시 강등) |
-| 「사용자 리뷰 게이트」 용어(spec-distill README · skill · 템플릿 · 테스트) · worktree 격리 상속 · 스택 PR base 삭제 · SDD 과제 사이 이음매를 구현 틀에 | 지휘자 수리 PR(R5 후속) | superpowers 7.0.0 이음매와 함께 skill · README 를 같은 PR 에서 맞춰야 어긋나지 않는다 |
+| 「사용자 리뷰 게이트」 용어(spec-distill README · skill · 템플릿 · 테스트) · worktree 격리 상속 · 스택 PR base 삭제 · SDD 과제 사이 이음매를 구현 틀에 | R5 후속(R5 설계 `## 미룸`) | superpowers 7.0.0 이음매와 함께 skill · README 를 같은 PR 에서 맞춰야 어긋나지 않는다 |
 | qg README 원칙 절 머리(「인스턴스화한 원칙」 vs 「Principles Instantiated」) · qg 판정 id 충돌 · kill switch 정규식(plugin-audit shape 검사) · docreview 엔진 결함 셋(finalize 두 번 · 복수 앵커 · § 앵커) · 설계문서 프로필의 대안 비교 축 | R2a | 그 파일 · 테스트가 R2a 예약 · 진행 중 |
 | brief §4 의 «» 키 · brief 묶음 rc 3 오탐 · spec-interview 개명에 따른 README 줄 | R10 | R10 예약(spec-interview · 템플릿) |
+| 하나짜리 brief 의 다음 세션 줄(`finishing.md`)에 원칙 2 · 3 · 4 · 6 이 없음 | R10 | R10 이 그 줄 문면을 맡음(`## 플러그인 동작 자리 대조`) |
+| 에픽 넘김 줄(`epic-handoff.md`)에 원칙 5(계층 · 온톨로지)를 쓰라는 문장이 없음 | R5 후속(R5 설계 `## 미룸`) | R5 가 그 파일을 예약(`## 플러그인 동작 자리 대조`) |
 
 ### §6 메모리 정리 — 지휘 세션 몫, 레포 밖
 
@@ -127,7 +129,7 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 - 받는 곳: R5 설계 `## 미룸` 의 사용자 원칙 행 · 로드맵 재분해 이력의 R11 원문 · 흐름 고정 점검 문서(`docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/flexibility-audit.md` — 원칙 2 의 사용자 원문 출처) · auto-memory · 문서 조사 표.
 - 넘기는 곳: 원칙이 실린 CLAUDE.md · 철학 문서 — R9 · R8 · R10 이 그 위에서 고친다(R9 의존에 R11). §5 넘김은 각 에픽의 설계 입력으로 간다.
 - 되돌아오는 길: 이 설계를 다시 나눌 근거가 보이면 재분해 신호로 지휘 세션에 보고(`plugins/spec-distill/references/redecompose.md`).
-- 같은 상태를 읽는 다른 표면: CLAUDE.md 를 읽는 락 · `plugin-audit` 의 shape 검사(`check-shape-completeness.py` 가 CLAUDE.md 앵커를 읽음) · 철학 문서 인용 락(`test_charter_citations.sh`) · README 를 읽는 테스트(`test_readme_sync.sh` 등). 이음매 담당은 이 에픽.
+- 같은 상태를 읽는 다른 표면: CLAUDE.md 를 읽는 락 · `plugin-audit` 의 shape 회귀 테스트(`plugins/plugin-audit/tests/test_check_shape_completeness.py` 의 `test_checklist_synced_with_claude_md` 가 CLAUDE.md §Plugin Shape 의 앵커를 읽는다 — 검사 스크립트는 고정 목록) · 철학 문서 인용 락(`test_charter_citations.sh`) · README 를 읽는 테스트(`test_readme_sync.sh` 등). 이음매 담당은 이 에픽.
 
 ## 위험
 
@@ -215,15 +217,29 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 | S44 | 반영 | Non-goals · §1 원칙 1 |
 | S49 | 반영 | §5 — 줄이지 않고 넘긴다 |
 
+## 플러그인 동작 자리 대조
+
+원칙 1 은 devbrew 개발 규칙이라 대상이 아니다. 줄 번호는 2026-10-19 에 grep 으로 잰 것이다.
+
+| 원칙 | 실린 자리(파일:줄) | 빈 곳 | 받는 곳 |
+|---|---|---|---|
+| 2 흐름 고정 금지 | `plugins/spec-distill/references/conducting.md:5` · `:78` · `plugins/spec-distill/references/epic-handoff.md:7` | `plugins/spec-distill/skills/spec-interview/references/finishing.md:478`(하나짜리 brief 다음 세션 줄) | R10 |
+| 3 레포 전용 값 | `plugins/spec-distill/references/conducting.md:86` · `plugins/spec-distill/references/epic-handoff.md:7` | `finishing.md:478` | R10 |
+| 4 상류 · 하류 연계 | `plugins/spec-distill/references/conducting.md:86` · `plugins/spec-distill/references/epic-handoff.md:7` | `finishing.md:478` | R10 |
+| 5 계층 · 온톨로지 | `plugins/spec-distill/references/roadmap-ontology.md:1` · `plugins/spec-distill/references/conducting.md:9` · `:82` | `plugins/spec-distill/references/epic-handoff.md:7`(쓰라는 문장 없음) · `finishing.md:478` | `epic-handoff.md` 는 R5 후속(R5 설계 `## 미룸`) · `finishing.md` 는 작은 일이라 R10 판단 |
+| 6 있는 것 먼저 | `plugins/spec-distill/references/conducting.md:86` · `plugins/spec-distill/references/epic-handoff.md:7` | `finishing.md:478` | R10 |
+
 ## 미룸
 
 | 항목 | 이유 | 받는 곳 |
 |---|---|---|
 | §5 의 R9 행 | R9 범위 | R9 |
 | §5 의 R8 행 | R8 범위 | R8 |
-| §5 의 지휘자 수리 행 | superpowers 7.0.0 이음매와 같은 PR | 지휘자 수리 PR(R5 후속) |
+| §5 의 지휘자 수리 행 | superpowers 7.0.0 이음매와 같은 PR | R5 후속(R5 설계 `## 미룸`) |
 | §5 의 R2a 행 | R2a 예약 · 진행 중 | R2a |
 | §5 의 R10 행 | R10 예약 | R10 |
+| §5 의 `finishing.md` 행(원칙 2 · 3 · 4 · 6) | R10 이 그 줄 문면을 맡음 | R10 |
+| §5 의 `epic-handoff.md` 행(원칙 5) | R5 예약 파일 | R5 후속(R5 설계 `## 미룸`) |
 | §6 머지 뒤 메모리 정리 | 레포 밖 · 머지 뒤에만 | 지휘 세션 |
 
 ## 지휘 기록
