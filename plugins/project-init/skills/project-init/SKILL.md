@@ -116,7 +116,7 @@ charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
 
 ### Step 3.5: Project Charter (신규)
 
-**직렬 순서**: Step 3.5는 Step 3(release-branch 질문 포함)이 *모두 끝난 뒤* 시작한다. branching 질문과 charter 질문을 교차하지 않는다. Phase 1의 "≤4개" 한도는 charter 질문에만 적용되며 git step 질문 수와 합산하지 않는다 (독립 카운트).
+**질문 순서**: 기본은 직렬이다 — Step 3(release 브랜치 질문 포함)의 질문이 모두 끝난 뒤 헌장 질문을 시작하고, git 질문과 헌장 질문을 교차하지 않는다(답이 엉키지 않게). Phase 0 스캔은 질문이 없으므로 Step 2 · 3 질문과 겹쳐 돌려도 된다 — 예: Step 2 질문을 띄우기 전에 스캔을 시작한다. 헌장 질문 수는 git 질문 수와 따로 센다.
 
 C-S2(완전 헌장 존재)면 먼저 "헌장을 업데이트할까요?"를 묻고, **거절 시 Step 3.5를 건너뛴다**(unchanged — NG7 경계상 합법, Law 1 게이트 비적용). 승인 또는 C-S1/C-S3(a)면 아래 Phase 0+1을 진행한다. C-S3(b)(docs 파일만 누락)는 질문 없이 Step 4e에서 기존 섹션 값으로 누락 파일만 생성한다.
 
@@ -144,24 +144,36 @@ C-S2(완전 헌장 존재)면 먼저 "헌장을 업데이트할까요?"를 묻�
 
 이 경우 Phase 1 ④는 `[감지됨]` 확인 대신 open-ended tech-stack 질문이 된다.
 
-#### Phase 1 — 판단 질문 (AskUserQuestion, ≤4개)
+#### Phase 1 — 판단 질문 (AskUserQuestion, 기본 4개)
 
-`AskUserQuestion`으로 다음 4개만 묻는다 (자동 감지된 사실은 open-ended 재질문 금지 — AC3):
+`AskUserQuestion`으로 다음 4개를 묻는다(기본값 — 아래 「더 묻기」로 더 연다) (자동 감지된 사실은 open-ended 재질문 금지 — AC3):
 
 1. **Vision** (필수, 1문장) — "이 프로젝트의 한 문장 vision은?"
 2. **Non-goals** (필수) — "명시적으로 하지 *않을* 것 (non-goals)은?"
-3. **핵심 conventions** (필수, 1–3개) — "지켜야 할 핵심 코딩/구조 컨벤션 1–3개는?"
+3. **핵심 conventions** (필수) — "지켜야 할 핵심 코딩/구조 컨벤션은? (보통 1–3개, 더 적어도 된다)" — 받은 관례는 개수와 상관없이 모두 쓴다(자르지 않는다).
 4. **Tech-stack 확인** (필수) — Phase 0 후보를 보여주고 "감지된 tech-stack이 맞나요? 수정·추가할 것은?" (fallback 시 open-ended 입력).
 
 **Glossary 트리거 (AC7, 별도 질문 아님)**: 위 4개 답변 안에서 사용자가 *프로젝트 고유 도메인 용어*(일반 SW 어휘가 아닌, 이 프로젝트에서 특정 의미로 정의해 쓰는 명사 — 예: "ledger", "tenant", "rollup")를 명시적으로 정의·언급한 경우에만 glossary 후보로 수집한다. 용어를 **추측해 만들지 않는다**. 모호하면 수집하지 않는다(보수적). 수집된 용어가 0개면 `glossary.md`를 생성하지 않는다(빈 파일 금지).
 
+**쓴 수 공시와 더 묻기**: 4개 질문 뒤 공시 줄을 낸다.
+
+> `[project-init] 헌장 질문 <n>개를 물었고(기본 4개) 관례 <m>개를 받았다(기본 1–3개).`
+
+이어 `AskUserQuestion` 한 번 — 「이대로 진행 (권장)」 · 「더 묻기」. 「더 묻기」면 `AskUserQuestion` 한 번에 질문을 최대 넷 — 관례 더 · 목표(`{{GOALS}}`) · 성공 기준(`{{SUCCESS_CRITERIA}}`) · 사용자(`{{PERSONAS}}`) — 묻고, 답한 칸은 4e 의 기본값(파생 · `_명시되지 않음 — 추후 보강._`) 대신 그 답을 쓴다. 그 뒤 공시 줄을 새 수로 다시 내고 같은 선택을 다시 묻는다.
+
 #### Law 1 구조적 게이트 (bounded — AC10/C9)
 
-C-S1 및 C-S3(a)에서 **vision·non-goals·conventions·tech-stack**가 채워질 때까지 진행을 막는다. 각 필수 항목에 대해 빈/무의미 응답이면 AskUserQuestion 재질문을 **최대 3회**까지 한다. 3회 후에도 비면 charter step을 *loud advisory와 함께 abort*한다:
+C-S1 및 C-S3(a)에서 **vision·non-goals·conventions·tech-stack**가 채워질 때까지 진행을 막는다. 각 필수 항목에 대해 빈/무의미 응답이면 AskUserQuestion 재질문을 **최대 3회**까지 한다. 3회 뒤에도 비면 `AskUserQuestion` 한 번으로 사용자가 고른다:
 
-> `[project-init] charter 미완료: <항목> 비어 abort. git-workflow 산출물은 정상 생성됩니다. 미완 항목의 사후 자동 플래그는 없습니다 — 헌장을 채우려면 /project-init:project-init 을 다시 실행하세요.`
+- 「건너뛰기」 — 헌장 단계를 건너뛴다. 헌장 절과 `docs/project/` 파일을 쓰지 않는다. git 규칙 파일은 그대로 만든다.
+- 「계속 묻기」 — 그 항목을 다시 최대 3회 묻고, 그래도 비면 이 선택을 다시 묻는다.
+- 「중단」 — 실행 전체를 멈춘다. Step 4 전이라 아무 파일도 쓰지 않았다.
 
-abort 후에도 Step 4의 git-workflow 파일 생성은 정상 진행한다(부분 산출물 금지 아님 — git-workflow는 charter와 독립). C-S2(완전 헌장 갱신)는 이 게이트 면제.
+「건너뛰기」를 고르면 이렇게 알린다:
+
+> `[project-init] 헌장 단계를 건너뛰었다 — 미완 항목: <항목>. git 규칙 파일은 그대로 만든다. 헌장을 채우려면 /project-init:project-init 을 다시 실행하세요.`
+
+「중단」이면 `[project-init] 사용자가 중단을 골랐다 — 아무 파일도 쓰지 않았다.` 를 내고 멈춘다. C-S2(완전 헌장 갱신)는 이 게이트 면제.
 
 ### Step 4: 파일 생성
 
@@ -212,7 +224,7 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 
 #### 4e: Project Charter 발행 (§6 state matrix)
 
-charter step이 abort(Law 1 게이트 실패)되지 않았다면, Step 1에서 판정한 charter state에 따라 발행한다 (C-S2 갱신 거절은 abort가 아니라 아래 C-S2 행의 unchanged로 처리). template은 `${CLAUDE_PLUGIN_ROOT}/templates/project/`에서 읽어 placeholder를 elicit된 값으로 치환한다 (C7 — 의견 콘텐츠 주입 금지, AC14).
+헌장 단계를 건너뛰지 않았다면(Law 1 게이트에서 「건너뛰기」를 고르지 않았고 C-S2 갱신을 거절하지 않았다면), Step 1에서 판정한 charter state에 따라 발행한다 (C-S2 갱신 거절은 건너뛰기가 아니라 아래 C-S2 행의 unchanged로 처리). template은 `${CLAUDE_PLUGIN_ROOT}/templates/project/`에서 읽어 placeholder를 elicit된 값으로 치환한다 (C7 — 의견 콘텐츠 주입 금지, AC14).
 
 읽을 template:
 - `${CLAUDE_PLUGIN_ROOT}/templates/project/agents-md-section.md` → `AGENTS.md`의 `## Project Charter` 섹션
@@ -229,7 +241,7 @@ placeholder 치환 매핑:
 | `{{TECH_STACK}}` | Phase 1 ④ (확정 tech-stack) |
 | `{{GOALS}}` | vision에서 파생한 1–3개 목표 (사용자 답변 기반) |
 | `{{SUCCESS_CRITERIA}}` | 사용자가 success/DoD를 언급했으면 그 값, 아니면 `_명시되지 않음 — 추후 보강._` |
-| `{{PERSONAS}}` | vision·non-goals 답변에 audience/사용자가 언급됐으면 그로부터 파생; 없으면 `_명시되지 않음 — 추후 보강._` (canned persona 주입 금지, AC14). **personas는 Law 1 게이트 항목이 아니므로**(AC10은 vision·non-goals·conventions·tech-stack만) 비어 있어도 abort하지 않는다. |
+| `{{PERSONAS}}` | vision·non-goals 답변에 audience/사용자가 언급됐으면 그로부터 파생; 없으면 `_명시되지 않음 — 추후 보강._` (canned persona 주입 금지, AC14). **personas는 Law 1 게이트 항목이 아니므로**(AC10은 vision·non-goals·conventions·tech-stack만) 비어 있어도 게이트에 걸리지 않는다. |
 | `{{NAMING}}`·`{{DIRECTORY_STRUCTURE}}`·`{{ERROR_HANDLING}}`·`{{ANTI_PATTERNS}}` | Phase 1 ③ conventions 답변을 항목별로 분배; 해당 답변이 없으면 `_명시되지 않음._` |
 | `{{BUILD_TEST}}` | Phase 0에서 감지한 build·test 명령; 없으면 `_명시되지 않음._` |
 | `{{GLOSSARY_TERMS}}` | 수집된 도메인 용어를 `- **<용어>**: <정의>` 목록으로 (용어 0개면 glossary.md 미생성) |
@@ -263,4 +275,5 @@ placeholder 치환 매핑:
 > - (도메인 용어가 있으면) `docs/project/glossary.md`
 >
 > `project-init` 플러그인 hook이 `Bash` 호출에서 브랜치 이름과 commit 메시지를 자동 검증합니다. 그 둘이 이 hook이 검사하는 전부입니다 — 위에 생성된 문서의 내용·구조·상호 포인터를 사후에 검증하는 것은 없습니다.
+> 헌장을 건너뛰었다면: 미완 항목 <항목> — 헌장 파일은 만들지 않았다.
 > 다음 할 일: 새 브랜치를 하나 만들어 보라 — `git checkout -b feature/<이름>` 이면 훅이 이름을 바로 확인한다.

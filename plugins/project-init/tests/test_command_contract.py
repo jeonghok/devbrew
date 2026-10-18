@@ -255,5 +255,63 @@ class TestMigrationPromptStillGated(unittest.TestCase):
         self.assertIn("부분 진행 금지", step1)
 
 
+class TestCharterGateChoice(unittest.TestCase):
+    """AC31 — 재질문 3회 뒤 기계가 멈추지 않고 사용자가 고른다."""
+
+    def setUp(self):
+        self.text = COMMAND.read_text(encoding="utf-8")
+        self.gate = section(self.text, "#### Law 1 구조적 게이트", "### Step 4:")
+
+    def test_three_choices_after_three_asks(self):
+        for label in ("「건너뛰기」", "「계속 묻기」", "「중단」"):
+            self.assertIn(label, self.gate)
+        self.assertIn("최대 3회", self.gate)
+
+    def test_machine_abort_is_gone(self):
+        self.assertTrue(self.gate.strip(), "게이트 절이 비었다 — 부재 단언이 공허하다")
+        self.assertNotIn("abort한다", self.gate)
+        self.assertNotIn("charter 미완료: <항목> 비어 abort", self.gate)
+
+    def test_skip_discloses_incomplete_items(self):
+        self.assertIn("[project-init] 헌장 단계를 건너뛰었다 — 미완 항목: <항목>", self.gate)
+
+    def test_skip_writes_no_charter(self):
+        self.assertIn("헌장 절과 `docs/project/` 파일을 쓰지 않는다", self.gate)
+        step4e = section(self.text, "#### 4e:", "### Step 5:")
+        self.assertIn("헌장 단계를 건너뛰지 않았다면", step4e)
+        self.assertNotIn("abort(Law 1 게이트 실패)", step4e)
+
+
+class TestQuestionDefaultsDisclosed(unittest.TestCase):
+    """AC31 — 질문 4개 · 관례 1–3개는 기본값, 쓴 수를 공시하고 「더 묻기」로 연다."""
+
+    def setUp(self):
+        text = COMMAND.read_text(encoding="utf-8")
+        self.phase1 = section(text, "#### Phase 1", "#### Law 1 구조적 게이트")
+
+    def test_no_hard_cap_wording(self):
+        self.assertTrue(self.phase1.strip())
+        self.assertNotIn("≤4개", self.phase1)
+        self.assertNotIn("4개만 묻는다", self.phase1)
+
+    def test_disclosure_line_and_more_option(self):
+        self.assertIn("헌장 질문 <n>개를 물었고(기본 4개) 관례 <m>개를 받았다(기본 1–3개)", self.phase1)
+        self.assertIn("「이대로 진행 (권장)」", self.phase1)
+        self.assertIn("「더 묻기」", self.phase1)
+        for slot in ("{{GOALS}}", "{{SUCCESS_CRITERIA}}", "{{PERSONAS}}"):
+            self.assertIn(slot, self.phase1)
+
+
+class TestPhase0MayOverlap(unittest.TestCase):
+    """AC31 — 질문 순서는 기본 직렬, 질문 없는 Phase 0 스캔은 겹쳐 돌 수 있다."""
+
+    def test_serial_default_and_scan_overlap(self):
+        text = COMMAND.read_text(encoding="utf-8")
+        head = section(text, "### Step 3.5:", "#### Phase 0")
+        self.assertIn("기본은 직렬", head)
+        self.assertIn("Phase 0 스캔은 질문이 없으므로", head)
+        self.assertNotIn("*모두 끝난 뒤* 시작한다", head)
+
+
 if __name__ == "__main__":
     unittest.main()
