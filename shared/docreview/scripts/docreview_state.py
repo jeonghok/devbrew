@@ -529,10 +529,11 @@ def cmd_begin_round(a) -> int:
     if bool(a.extra_approval) != bool(a.extra_approval_source):
         fail("extra_approval_source_missing" if a.extra_approval else "extra_approval_missing")
         return 2
+    unused_note = ""
     if n <= 1 + cap:
         rr = n - 1
         if a.extra_approval:
-            print("추가 승인 값이 왔지만 상한 아래라 쓰지 않았다", file=sys.stderr)
+            unused_note = ", 추가 승인 값이 왔지만 상한 아래라 쓰지 않았다"
     else:
         if not a.extra_approval:
             _emit({"ok": False, "reason": "cap_reached", "round": n - 1,
@@ -552,8 +553,8 @@ def cmd_begin_round(a) -> int:
     st["snapshots"][str(n)] = {"headingless": bool(snap.get("headingless")), "sections": secs}
     st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
     st["rounds"][str(n)]["config"] = cfg
-    save_state(a.state_dir, st, "begin-round (rereview_count=%d%s)"
-               % (rr, ", extra" if n > 1 + cap else ""))
+    save_state(a.state_dir, st, "begin-round (rereview_count=%d%s%s)"
+               % (rr, ", extra" if n > 1 + cap else "", unused_note))
     # 라운드 시작 표식 — codex · critic 산출물이 이보다 먼저 쓰였으면 직전 라운드 것이다
     # (`docreview_route._round_staleness`). 프로세스 시계가 아니라 방금 쓴 상태 파일의
     # mtime 을 쓴다: 같은 디렉토리의 codex 파일도 같은 파일시스템 시계로 찍히므로 해상도가
@@ -1186,7 +1187,7 @@ def gate_summary(st) -> dict:
     g["defers"] = sorted(i for i, f in st["findings"].items() if f.get("disposition") == "defer")
     g["dropped"] = sorted(i for i, f in fx.items() if f["state"] == "dropped")
     g["extra_rounds"] = st["extra_rounds"]
-    g["open_total"] = sum(len(g[row.name]) for row in GATE_ROWS if row.blocks)
+    g["open_total"] = sum(len(g[row.name]) for row in GATE_ROWS)   # 첫 줄 «남았다» 목록의 모든 행
     cur = st["rounds"].get(str(n), {})
     prev = st["rounds"].get(str(n - 1), {})
     g["stagnation"] = bool(n >= 2 and cur.get("open_lineages") and

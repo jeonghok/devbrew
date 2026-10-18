@@ -727,6 +727,14 @@ case_T38_stagnation() {
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["stagnation"], d["approval_gate_open"], d["two_stage"], d["next_round_mode"]')" "(True, True, True, 'budget')" "T38: 열린 계보 동일 + 진행 0 → stagnation, 두 단계 게이트, 예산 남음"
   rm -rf "$d"
 }
+case_AC13_stagnation_first_line() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_FIX]"
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  seed_findings "$d" "[${F_FIX/bbbb0001#r1.1\"/bbbb0001#r2.1\"}]"
+  assert_eq "$(gsum "$d" 'd["stagnation"], d["cap_reached"]')" "(True, False)" "AC13 전제: 상한 전 정체다"
+  assert_contains "$(gfirst "$d")" "열린 지적 2개 — 아직 안 고친 곳 2개가 남았다" "AC13: 정체 경로의 첫 줄도 열린 지적 수를 싣고 그 수가 같은 문장의 항목 합이다"
+  rm -rf "$d"
+}
 case_T39_gate_derivation() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["approval_ready"], d["round_gate_needed"], d["approval_gate_open"], d["two_stage"], d["next_round_mode"]')" "(True, False, True, False, None)" "T39: finding 0 → 승인 준비"
@@ -768,6 +776,14 @@ case_AC40_extra_source_required() {
   assert_eq "$rc" "2" "AC40: 출처만 오면 rc 2"
   py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval '한 번 더 봐 줘' --extra-approval-source typed >/dev/null
   assert_eq "$(st_yaml "$d" 'st["extra_rounds"][-1]["quote"], st["extra_rounds"][-1]["source"]')" "('한 번 더 봐 줘', 'typed')" "AC40: 기타 칸 원문은 typed 로 적힌다"
+  rm -rf "$d"
+}
+case_AC40_below_cap_approval_logged() {
+  local d s; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC40: init 실패"; return; }
+  s="$d/s.json"; snap "$FX/design-sample.md" "$s"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval '미리 승인' --extra-approval-source typed >/dev/null
+  assert_eq "$(st_yaml "$d" 'len(st["extra_rounds"])')" "0" "AC40: 상한 아래서 온 승인 값은 extra_rounds 에 안 남는다"
+  assert_contains "$(cat "$d/docreview-state.md")" "추가 승인 값이 왔지만 상한 아래라 쓰지 않았다" "AC40: 그 사실이 그 라운드 로그 줄(원장 본문)에 남는다"
   rm -rf "$d"
 }
 case_AC13_open_count_and_label() {
@@ -1613,7 +1629,7 @@ case_T46_unverified_two_stage_with_open_items() {   # 「미검증」 + 이전 �
   critic_dead_twice "$d"
   assert_eq "$(gsum "$d" 'd["unverified"], d["approval_gate_open"], d["approval_ready"], d["two_stage"], d["next_round_mode"]')" \
     "('critic_dead', True, False, True, 'budget')" "T46: 「미검증」 + 열린 항목 → 승인 게이트를 열되 두 단계 · 다음 라운드는 예산"
-  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "다음: 승인 게이트(「미검증」) 1단계 — 남은 항목을 처리하거나 「열린 지적 $(gsum "$d" 'd["open_total"]')개를 두고 진행」 (다음 라운드: 재리뷰 횟수 안에서)" \
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "다음: 승인 게이트(「미검증」) 1단계 — 남은 항목을 처리하거나 「열린 지적 8개를 두고 진행」 (다음 라운드: 재리뷰 횟수 안에서)" \
     "T46: 렌더의 다음 줄이 「미검증」 라벨의 두 단계 승인 게이트다"
   rm -rf "$d"
 }
