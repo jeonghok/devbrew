@@ -87,6 +87,13 @@ check_render "blocking_ask_open" "$d" "수정의 전제가 되는 질문 1개" "
 d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_ASK_ONLY]"
 check_render "ask_open" "$d" "답을 기다리는 질문 1개"; rm -rf "$d"
 
+# 결정 때문에 함께 고친 절(신고) — 두 행 종류. 결정 id(D1.1)도 괄호 안에만 둔다.
+d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+py docreview_state.py decide --state-dir "$d" --id "$D1" --choice adopt --quote '채택' >/dev/null
+py docreview_state.py declare-related --state-dir "$d" --decision D1.1 --anchors '#2-goals' '#3-non-goals' >/dev/null
+next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+check_render "related_changed_unchanged" "$d" "이 결정 때문에 함께 바뀐 곳 1개 (D1.1)" "신고했지만 바뀌지 않은 곳 1개 (D1.1)"; rm -rf "$d"
+
 # 첫 줄을 바꾸는 상태
 d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
 check_render "approval_ready" "$d" "다음: 승인 게이트 — 진행 옵션을 고를 수 있다"; rm -rf "$d"

@@ -188,6 +188,61 @@ case_T21_permit_applied() {
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["adopted"], d["blocked_expired"], d["approval_ready"]')" "([], [], True)" "T21: 정상 적용 뒤엔 adopted·blocked_expired 둘 다 비고 승인 게이트가 열린다"
   rm -rf "$d"
 }
+case_AC38_related_declared_exempt_and_shown() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#2-goals' > "$d/rel.json"
+  assert_eq "$(jget "$d/rel.json" 'd["ok"], d["related"]')" "(True, ['#2-goals'])" "AC38: 고친다 결정에 절을 묶는다"
+  local df; df="$(next_round "$d" "$FX/design-sample-r2.md")"
+  assert_eq "$(jget "$df" '[c["anchor"] for c in d["changed"]]')" "[]" "AC38: 묶인 절의 변경은 frozen_change 로 오르지 않는다"
+  assert_eq "$did" "D1.1" "AC38: 라운드 1 의 첫 결정 id"
+  assert_eq "$(jget "$df" 'sorted(e["scope"] for e in d["exempt_applied"])')" "['#12-files-to-modify', 'related:D1.1']" "AC38: 면제 사유가 신고로 보인다"
+  local r; r="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$r" "이 결정 때문에 함께 바뀐 곳" "AC38: 게이트에 목록 제목"
+  assert_contains "$r" "2. Goals" "AC38: 게이트에 절 제목"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["related_changes"][0]["decision_id"], d["related_changes"][0]["changed"], d["related_changes"][0]["unchanged"]')" "('D1.1', ['#2-goals'], [])" "AC38: gate JSON 의 related_changes"
+  assert_eq "$(py docreview_state.py related-changes --state-dir "$d" | jgets '[x["anchor"] for x in d]')" "['#2-goals']" "AC38: 탐지 · 재비판 입력용 목록"
+  local h1 h2; h1="$(md5 -q "$d/docreview-state.md" 2>/dev/null || md5sum "$d/docreview-state.md")"
+  py docreview_state.py related-changes --state-dir "$d" >/dev/null
+  h2="$(md5 -q "$d/docreview-state.md" 2>/dev/null || md5sum "$d/docreview-state.md")"
+  assert_eq "$h2" "$h1" "AC38: related-changes 는 읽기 전용(원장 해시 불변)"
+  rm -rf "$d"
+}
+case_AC38_related_undeclared_still_frozen() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null
+  local df; df="$(next_round "$d" "$FX/design-sample-r2.md")"
+  assert_eq "$(jget "$df" '[c["anchor"] for c in d["changed"]]')" "['#2-goals']" "AC38: 신고하지 않은 절은 여전히 frozen_change"
+  rm -rf "$d"
+}
+case_AC38_related_refusals() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local err
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision D9.9 --anchors '#2-goals' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "unknown_decision"' "AC38: 원장에 없는 결정 id 는 거부"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice reject --quote '그대로' | jgets 'd["decision_id"]')"
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#2-goals' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "decision_not_adopted"' "AC38: 고친다가 아닌 결정은 거부"
+  rm -rf "$d"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#없는-절' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "anchor_not_in_snapshot"' "AC38: 스냅숏에 없는 앵커는 거부"
+  py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors 'insert-after:#2-goals' > "$d/rel.json"
+  assert_eq "$(jget "$d/rel.json" 'd["ok"]')" "True" "AC38: insert-after 꼴은 받는다"
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#3-non-goals' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "permit_consumed"' "AC38: 이미 소비된 permit 에는 묶지 못한다"
+  rm -rf "$d"
+}
+case_AC38_related_declared_but_unchanged_disclosed() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#3-non-goals' >/dev/null
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "신고했지만 바뀌지 않은 곳" "AC38: 신고했는데 안 바뀐 절도 공시한다"
+  rm -rf "$d"
+}
 case_T22_permit_expired_reraise() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
   py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' >/dev/null

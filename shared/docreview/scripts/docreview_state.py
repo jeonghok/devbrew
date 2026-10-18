@@ -291,6 +291,8 @@ DOC_ANCHOR = "#__doc__"
 
 def resolve_scope(scope: str, old_secs, new_secs) -> set:
     """scope → 앵커 집합. `insert-after:#x` 는 new 에서 #x 바로 다음이고 old 에 없던 앵커 하나."""
+    if scope.startswith("related:") and "=" in scope:   # 「related:<D id>=<앵커>」 — 결정에 묶인 절(AC38)
+        return {scope.split("=", 1)[1]}
     if not scope.startswith("insert-after:"):
         return {scope}
     after = scope.split(":", 1)[1]
@@ -330,7 +332,8 @@ def diff_snapshots(old: dict, new: dict, exempt_scopes) -> dict:
             item["scope"] = DOC_ANCHOR
             exempt_applied.append(item)
         elif anchor in ex:
-            item["scope"] = ex[anchor]
+            sc = ex[anchor]
+            item["scope"] = sc.split("=", 1)[0] if sc.startswith("related:") and "=" in sc else sc
             exempt_applied.append(item)
         else:
             changed.append(item)
@@ -409,6 +412,9 @@ def exempt_scopes(st, prof, r) -> list:
         k, _kind, anchors, _fid = _permit_fields(did, p)
         if k == r:
             out.extend(anchors)
+            for x in p.get("related_anchors") or []:
+                if isinstance(x, str):
+                    out.append("related:%s=%s" % (did, x))
     for key in ("decision_log", "defer_target"):
         t = prof[key]
         if t.get("kind") == "doc_section":
@@ -835,6 +841,51 @@ def cmd_exempt_anchors(a) -> int:
     return 0
 
 
+def cmd_declare_related(a) -> int:
+    """「고친다」 결정 때문에 함께 고친 절을 그 결정의 permit 에 묶는다(AC38). 묶인 절은 permit 라운드의 얼림 면제에
+    들되 게이트 · 다음 리뷰어 입력에 보인다 — 숨기는 면제가 아니다."""
+    st = load_state(a.state_dir)
+    did = a.decision
+    entry = next((e for e in st["decision_log"] if e.get("decision_id") == did), None)
+    if entry is None:
+        return fail("unknown_decision", decision_id=did)
+    p = (st.get("permits") or {}).get(did)
+    if entry.get("choice") != "adopt" or not p or p.get("kind") != "apply":
+        return fail("decision_not_adopted", decision_id=did, choice=entry.get("choice"))
+    if p.get("consumed"):
+        return fail("permit_consumed", decision_id=did, round=p.get("round"))
+    try:
+        known = {s["anchor"] for s in snapshot_at(st, int(st["round"]))["sections"]}
+    except LedgerCorrupt as e:
+        return fail(e.reason, **e.extra)
+    bad = [x for x in a.anchors if not x.startswith("insert-after:") and x not in known]
+    if bad:
+        return fail("anchor_not_in_snapshot", anchors=bad)
+    rel = list(p.get("related_anchors") or [])
+    for x in a.anchors:
+        if x not in rel and x not in p["apply_anchors"]:
+            rel.append(x)
+    p["related_anchors"] = rel
+    save_state(a.state_dir, st, "declare-related %s %s" % (did, " ".join(a.anchors)))
+    _emit({"ok": True, "decision_id": did, "related": rel})
+    return 0
+
+
+def cmd_related_changes(a) -> int:
+    """이번 라운드에 결정 때문에 함께 바뀐 절의 목록(읽기 전용) — 탐지 · 재비판의 입력 슬롯용. 결정 이유는 싣지 않는다."""
+    st = load_state(a.state_dir)
+    g = gate_summary(st)
+    titles = {s["anchor"]: s.get("title") for s in ((st["snapshots"].get(str(g["round"])) or {}).get("sections") or [])}
+    seen, out = set(), []
+    for rc in g.get("related_changes") or []:
+        for x in rc["changed"]:
+            if x not in seen:
+                seen.add(x)
+                out.append({"anchor": x, "title": titles.get(x) or x})
+    print(json.dumps(out, ensure_ascii=False))
+    return 0
+
+
 def cmd_decide(a) -> int:
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
@@ -1187,6 +1238,19 @@ def gate_summary(st) -> dict:
     g["defers"] = sorted(i for i, f in st["findings"].items() if f.get("disposition") == "defer")
     g["dropped"] = sorted(i for i, f in fx.items() if f["state"] == "dropped")
     g["extra_rounds"] = st["extra_rounds"]
+    rel = []
+    for did, p in (st.get("permits") or {}).items():
+        if int(p.get("round", -1)) != n or not p.get("related_anchors"):
+            continue
+        try:
+            dd = round_diff(st, load_profile(st["profile"]), n)
+            touched = {e["anchor"] for e in dd["exempt_applied"]} | {c["anchor"] for c in dd["changed"]}
+        except (LedgerCorrupt, ProfileError, OSError):
+            touched = set()
+        anchors = list(p["related_anchors"])
+        rel.append({"decision_id": did, "anchors": anchors,
+                    "changed": [x for x in anchors if x in touched], "unchanged": [x for x in anchors if x not in touched]})
+    g["related_changes"] = rel
     g["open_total"] = sum(len(g[row.name]) for row in GATE_ROWS)   # 첫 줄 «남았다» 목록의 모든 행
     cur = st["rounds"].get(str(n), {})
     prev = st["rounds"].get(str(n - 1), {})
@@ -1577,6 +1641,14 @@ def render_gate(st, g) -> str:
                 out.append("  ┆ 같은 자리(%s)" % _one(anchor))
             prev_anchor = anchor
             out.extend(fn(st, g, fid))
+    titles = {s["anchor"]: s.get("title") for s in ((st["snapshots"].get(str(g["round"])) or {}).get("sections") or [])}
+    for rc in g.get("related_changes") or []:
+        if rc["changed"]:
+            out.append("이 결정 때문에 함께 바뀐 곳 %d개 (%s)" % (len(rc["changed"]), rc["decision_id"]))
+            out.extend("- %s (%s)" % (_one(titles.get(x) or x), x) for x in rc["changed"])
+        if rc["unchanged"]:
+            out.append("신고했지만 바뀌지 않은 곳 %d개 (%s)" % (len(rc["unchanged"]), rc["decision_id"]))
+            out.extend("- %s (%s)" % (_one(titles.get(x) or x), x) for x in rc["unchanged"])
     parts = [t % c[k] for k, t, scope in COUNT_GLOSS if c[k] and scope == "round"]
     if parts:
         out.append("이번 라운드 집계: " + " · ".join(parts))
@@ -1736,6 +1808,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--answered", action="store_true"); x.set_defaults(fn=cmd_ask)
     x = sd(P("defer")); x.add_argument("--id", required=True)
     x.add_argument("--log-file", required=True); x.set_defaults(fn=cmd_defer)
+    x = sd(P("declare-related")); x.add_argument("--decision", required=True)
+    x.add_argument("--anchors", required=True, nargs="+"); x.set_defaults(fn=cmd_declare_related)
+    x = sd(P("related-changes")); x.set_defaults(fn=cmd_related_changes)
     x = sd(P("observe-diff")); x.set_defaults(fn=cmd_observe_diff)
     x = sd(P("gate")); x.add_argument("--render", action="store_true"); x.set_defaults(fn=cmd_gate)
     x = sd(P("advice")); x.add_argument("--render", action="store_true")
