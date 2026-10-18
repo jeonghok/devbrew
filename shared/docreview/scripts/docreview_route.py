@@ -31,6 +31,7 @@ from docreview_advice import (  # noqa: E402
     route_step2, scrub,
 )
 
+_DECISION_ID = re.compile(r"D[0-9]+\.[0-9]+")
 BLOCK_RE = r"```%s[ \t]*\n(.*?)\n```"
 DISPOSITIONS = tuple(sorted(RANK, key=lambda k: -RANK[k]))  # decide, ask, fix, defer, drop
 
@@ -146,14 +147,23 @@ def normalize(item, layer_default, prefix, idx, ledger):
         layer = int(item.get("layer") or layer_default)
     except (TypeError, ValueError):
         layer = layer_default
+    contradicts, malformed = None, False
+    if item.get("contradicts"):
+        raw = str(item["contradicts"]).strip()
+        if _DECISION_ID.fullmatch(raw):
+            contradicts = raw
+        else:
+            # 받은 글자는 어디에도 되풀이하지 않는다 — 자리표시자만 센다.
+            ledger.coerced("contradicts", "(형식 위반)", None)
+            malformed = True
     return {
         "ref": str(item.get("ref") or tag), "layer": 1 if layer == 1 else 2,
         "category": str(item.get("category") or "other"), "anchor": anchor,
         "disposition": disp, "summary": summary,
         "edit_scope": str(item.get("edit_scope") or anchor), "blocks": _refs(item.get("blocks")),
         "supersedes": (str(item["supersedes"]) if item.get("supersedes") else None),
-        # 이미 내린 결정과 반대인 본문 — 가리킨 결정 id(`D<r>.<n>`). 실재 여부는 `_classify_items` 가 본다.
-        "contradicts": (str(item["contradicts"]).strip() or None) if item.get("contradicts") else None,
+        # 이미 내린 결정과 반대인 본문 — 가리킨 결정 id(`D<r>.<n>`). 형식은 아래에서, 실재 · 묶임은 `_classify_items` 가 본다.
+        "contradicts": contradicts, "_contradicts_malformed": malformed,
         "evidence": (str(item["evidence"]) if item.get("evidence") else None),
         # 갈래 2 의 칸 둘. 여기 없으면 리뷰어가 무엇을 적든 «조용히» 버려진다 —
         # 이 dict 는 입력을 갱신하는 것이 아니라 처음부터 새로 짓는다. 두 칸의 개행·공백
@@ -590,16 +600,61 @@ def _absorb_same_as(items, same_as, L):
     return keep_of
 
 
+def _decision_footprint(st, entry) -> set:
+    """결정이 닿은 절 — 그 결정이 다룬 finding 들의 앵커 · 범위 ∪ 그 결정 permit 의 적용 · 신고 앵커."""
+    out = set()
+    for fid in entry.get("finding_ids") or []:
+        f = (st.get("findings") or {}).get(fid) or {}
+        for k in ("anchor", "edit_scope"):
+            if isinstance(f.get(k), str):
+                out.add(f[k])
+    p = (st.get("permits") or {}).get(entry.get("decision_id"))
+    if p:
+        for k in ("apply_anchors", "related_anchors"):
+            for x in p.get(k) or []:
+                if isinstance(x, str):
+                    out.add(x)
+    return out
+
+
+def _contradiction_binding(st, entry_by_id, cid, it, cls, fenced) -> str:
+    """지적이 가리킨 결정 id 가 이 지적을 묶는가 — "bound" · "unknown"(기록에 없다) · "unbound"(있으나 이 자리의 결정이 아니다).
+
+    묶이려면 ① 사용자의 채택(`choice == adopt`)이고 ② 뒤 결정이 그것을 잇지(`supersedes`) 않았고 ③ 지적의 앵커나 범위가
+    그 결정이 닿은 절 안이고 ④ 불변 절 · 결정 기록 · 미룸 절(울타리)이 아니어야 한다."""
+    entry = entry_by_id.get(cid)
+    if entry is None:
+        return "unknown"
+    if entry.get("choice") != "adopt":
+        return "unbound"
+    superseded = False
+    for e in entry_by_id.values():
+        if e.get("supersedes") == cid:
+            superseded = True
+    if superseded:
+        return "unbound"
+    places = {it["anchor"], it.get("edit_scope") or it["anchor"]}
+    if not (places & _decision_footprint(st, entry)):
+        return "unbound"
+    if cls["immutable"] or (places & fenced):
+        return "unbound"
+    return "bound"
+
+
 def _classify_items(items, st, prof, sections, n, L):
     """프로필 허용 처분 강제 · 앵커 분류(보호·불변) · 승격.
 
-    흡수된 항목은 버리고 기각된 항목은 따로 모은다 — (final, rejected_items, unknown_decisions).
-    `unknown_decisions` 는 지적이 가리킨 결정 id 중 원장에 없는 것(순서대로, 중복 없이)이다.
+    흡수된 항목은 버리고 기각된 항목은 따로 모은다 — (final, rejected_items, contra_notes).
+    `contra_notes` 는 `contradicts` 를 비운 사유별 공시 재료다: unknown_decisions(기록에 없는 id) · unbound_decisions(있으나
+    이 자리의 결정이 아닌 id) — 순서대로 중복 없이 — 와 malformed_decisions(형식이 아니라 비운 지적 수).
     """
     allowed = prof["allowed_dispositions"]
     final, rejected_items = [], []
-    decision_ids = {e.get("decision_id") for e in st.get("decision_log") or []}
-    unknown_decisions = []
+    entry_by_id = {e.get("decision_id"): e for e in st.get("decision_log") or []}
+    notes = {"unknown_decisions": [], "unbound_decisions": [], "malformed_decisions": 0}
+    for x in items.values():
+        if x.get("_contradicts_malformed"):
+            notes["malformed_decisions"] += 1
     fenced = _log_section_anchors(prof, sections)
     for f, it in items.items():
         # 흡수된 항목은 렌더되지 않는다 — 그 값의 접기를 세면 생존자가 물려받은 같은 값이 두 번 센다.
@@ -638,18 +693,17 @@ def _classify_items(items, st, prof, sections, n, L):
         cls = classify_anchor(it["anchor"], sections, prof)
         cid = it.get("contradicts")
         if cid:
-            if cid not in decision_ids:
-                # 가리킨 결정이 기록에 없다 — 참고로 둔다(저자 고침으로 올리지 않는다). 값이 바뀐 것이니 센다.
-                L.coerced("contradicts", cid, None)
-                if cid not in unknown_decisions:
-                    unknown_decisions.append(cid)
-                it["contradicts"] = None
-            elif not cls["immutable"] and it["anchor"] not in fenced:
-                # 불변 절 · 결정 기록 절(울타리)은 결정 반대여도 지금처럼 사용자가 정한다.
-                if d != "fix" and "fix" in allowed:
-                    L.coerced("disposition", d, "fix")
-                    it["disposition"] = d = "fix"
+            verdict = _contradiction_binding(st, entry_by_id, cid, it, cls, fenced)
+            if verdict == "bound":
+                # 처분은 건드리지 않는다 — contradicts 는 참고 축에서 빼 줄 뿐 판단을 낮추지 못한다.
                 it["_decision_backed"] = True
+            else:
+                # 값이 바뀐 것이니 센다. 참고로 두고 어디서 왔는지 공시한다.
+                L.coerced("contradicts", cid, None)
+                key = "unknown_decisions" if verdict == "unknown" else "unbound_decisions"
+                if cid not in notes[key]:
+                    notes[key].append(cid)
+                it["contradicts"] = None
         it["origin"] = "reviewer"
         it["immutable"] = cls["immutable"]
         it["kind"] = "pre"
@@ -658,8 +712,7 @@ def _classify_items(items, st, prof, sections, n, L):
             it["promotion"] = "immutable"
             it["disposition"] = "decide"
             it["origin"] = "auto"
-        elif (cls["protected"] and d != "decide" and not it.get("_decision_backed")
-              and not _permit_covers(st, n, it["anchor"])):
+        elif cls["protected"] and d != "decide" and not _permit_covers(st, n, it["anchor"]):
             it["promoted_from"] = d
             it["promotion"] = "protected"
             it["disposition"] = "decide"
@@ -667,7 +720,7 @@ def _classify_items(items, st, prof, sections, n, L):
         final.append(it)
     # 참고(advisory) 표지 1 걸음 — 축과 처분만 보면 정해지는 것(docreview_advice.route_step1)
     route_step1(final, advisory_axes(prof))
-    return final, rejected_items, unknown_decisions
+    return final, rejected_items, notes
 
 
 def _auto_decides(a, diff, st, prof, sections, n, L):
@@ -941,6 +994,10 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats, advice_stats=
         adv.append("재비판 블록 %d개 — 마지막만 읽었다(앞 블록은 인용 예시로 본다)" % degrade["recritic_blocks"])
     if degrade.get("unknown_decisions"):
         adv.append("없는 결정 id %s — 참고로 둠" % ", ".join(degrade["unknown_decisions"]))
+    if degrade.get("unbound_decisions"):
+        adv.append("이 자리의 결정이 아닌 id %s — 참고로 둠" % ", ".join(degrade["unbound_decisions"]))
+    if degrade.get("malformed_decisions"):
+        adv.append("형식이 아닌 결정 id — 참고로 둠")
     out = {
         "ok": True, "round": n, "findings": [_pub(it) for it in final],
         "by_disposition": {d: [it["id"] for it in final if it["disposition"] == d and it.get("route") != ROUTE_ADVICE]
@@ -1021,9 +1078,10 @@ def cmd_finalize(a) -> int:
     verdicts, added = _read_recritic(a, degrade, L)
     same_as = _apply_recritic(items, verdicts, added, L)
     keep_of = _absorb_same_as(items, same_as, L)
-    final, rejected_items, unknown_decisions = _classify_items(items, st, prof, sections, n, L)
-    if unknown_decisions:
-        degrade["unknown_decisions"] = unknown_decisions
+    final, rejected_items, contra_notes = _classify_items(items, st, prof, sections, n, L)
+    for k, v in contra_notes.items():
+        if v:
+            degrade[k] = v
     extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, diff, st, prof, sections, n, L)
     final.extend(extra)
     bucket_conflicts, lineage_mismatch, revived = _resolve_ids_and_lineage(st, final, rejected_items, n)

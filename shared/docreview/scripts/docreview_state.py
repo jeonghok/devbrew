@@ -1867,6 +1867,9 @@ WARN_GLOSS = (
     (r"셀 수 없음: (?P<why>.*)", None, "셀 수 없는 것이 있다"),
     (r"보류: (?P<why>.*)", None, "판정하지 못하고 보류한 지적이 있다"),
     (r"없는 결정 id (?P<why>.*) — 참고로 둠", "결정 id", "지적이 가리킨 결정을 기록에서 찾지 못해 참고로 두었다"),
+    (r"이 자리의 결정이 아닌 id (?P<why>.*) — 참고로 둠", "결정 id",
+     "지적이 가리킨 결정이 이 자리를 다룬 사용자의 채택이 아니라서 참고로 두었다"),
+    (re.escape("형식이 아닌 결정 id — 참고로 둠"), "결정 id", "지적에 붙은 결정 id 의 모양이 틀려 참고로 두었다"),
     (r"강제\(게이트 변경\): (?P<why>.*)", None, "판정 값을 강제로 바꿨고 그 때문에 게이트 결과가 달라졌다"),
 )
 
@@ -1957,7 +1960,8 @@ def _rg_decide(st, g, fid):
     dv = f.get("decision_view") or {}
     d = st["decides"].get(fid) or {}
     alternatives = [choice_label(c, d.get("kind")) for c in decide_choices(st, fid)]
-    lines = ["- %s%s (%s%s)" % (_one(f.get("summary")), _post_kind_notice(d), fid, " · 자동" if dv.get("auto") else ""),
+    cited = " (반대라고 한 결정: %s)" % _one(f["contradicts"]) if f.get("contradicts") else ""
+    lines = ["- %s%s (%s%s)%s" % (_one(f.get("summary")), _post_kind_notice(d), fid, " · 자동" if dv.get("auto") else "", cited),
              "  그대로 두면: %s" % _one(dv.get("if_unfixed", "(리뷰어가 안 적음)")),
              "  고치면: %s" % _one(dv.get("replacement", "(대체안 미작성)")),
              "  근거: %s" % _one(dv.get("basis", f.get("evidence") or "—")),

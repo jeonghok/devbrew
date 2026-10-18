@@ -709,14 +709,137 @@ case_AC39_contradicts_routes_fix() {
   assert_contains "$(jget "$d/fin.json" '" | ".join(d["advisory"])')" "없는 결정 id D7.7" "AC39: 없는 id 를 공시한다"
   rm -rf "$d"
 }
-case_AC39_contradicts_skips_protected_promotion() {
-  # 보호 절(수용 기준)의 결정 반대 지적은 decide 로 오르지 않는다(설계에 없던 결정 4)
-  local d; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
-  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null
+
+# ── AC39 우회 — contradicts 는 «살아 있는 채택 + 이 자리»일 때만 묶이고, 처분을 낮추지 못한다 ──────────────
+contra_state() {   # contra_state <adopt|hold|drop|superseded> → 라운드 2 까지 온 상태 디렉토리(결정 D1.1 이 이미 있다)
+  local kind="$1" d; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"
+  if [ "$kind" = drop ]; then
+    seed_findings "$d" "[$F_FIX]"
+    py docreview_state.py fix --state-dir "$d" --id 'bbbb0001#r1.1' --event drop --reason '버린다' >/dev/null
+  else
+    seed_findings "$d" "[$F_DEC]"
+    if [ "$kind" = hold ]; then
+      py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice hold --quote '보류' >/dev/null
+    else
+      py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null
+    fi
+  fi
+  if [ "$kind" = superseded ]; then
+    PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); st["decision_log"].append({"decision_id": "D1.2", "round": 1, "finding_ids": ["aaaa0001#r1.1"], "lineage": "aaaa0001#r1.1", "choice": "adopt", "quote": "다시", "supersedes": "D1.1"}); save_state(d, st, "fixture")' "$d"
+  fi
   next_round "$d" "$FX/design-sample-r2.md" >/dev/null
-  sed 's/#12-files-to-modify/#11-acceptance-criteria/' "$FX/critic-contradicts.txt" > "$d/critic-ac.src"
-  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$d/critic-ac.src")" > "$d/prep.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample-r2.md" > "$d/fin.json"
-  assert_eq "$(jget "$d/fin.json" '[ (i["contradicts"], i["disposition"], i.get("promotion")) for i in d["findings"] if i.get("contradicts") ]')" "[('D1.1', 'fix', None)]" "AC39: 보호 절이어도 실재 결정을 가리킨 지적은 저자 고침(보호 승격 없음)"
+  echo "$d"
+}
+contra_permit() {   # contra_permit <dir> <related|apply> <앵커> — D1.1 의 permit 에 앵커를 더한다(원장을 손으로 바꾼 픽스처)
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d, kind, a = sys.argv[1:4]; st=load_state(d); p=st["permits"]["D1.1"]; key = "related_anchors" if kind == "related" else "apply_anchors"; p[key] = list(p.get(key) or []) + [a]; save_state(d, st, "fixture")' "$1" "$2" "$3"
+}
+contra_crit() {   # contra_crit <dir> <앵커> <처분> <contradicts> → $dir/critic.src (항목 하나)
+  printf '%s\n' '```docreview-layer1' '[]' '```' '```docreview-layer2' '- ref: c1' '  layer: 2' '  category: ambiguity' \
+    "  anchor: \"$2\"" "  disposition: $3" "  contradicts: \"$4\"" '  summary: "본문이 이미 정한 결정과 반대로 적혀 있다"' '  evidence: "12행"' '```' > "$1/critic.src"
+}
+contra_fin() {   # contra_fin <dir> <앵커> <처분> <contradicts> → $dir/fin.json (재비판 건너뜀)
+  contra_crit "$@"
+  py docreview_route.py prepare-recritic --state-dir "$1" --critic "$(critic_now "$1" "$1/critic.src")" > "$1/prep.json"
+  py docreview_route.py finalize --state-dir "$1" --recritic-skipped --doc "$FX/design-sample-r2.md" > "$1/fin.json"
+}
+contra_row() { jget "$1/fin.json" '[(i.get("contradicts"), i["disposition"], i.get("route")) for i in d["findings"] if i.get("f")]'; }
+contra_adv() { jget "$1/fin.json" '" | ".join(d["advisory"])'; }
+
+case_AC39_contradicts_unbound_decisions_stay_advice() {
+  local d k
+  for k in hold drop superseded; do
+    d="$(contra_state "$k")"; contra_fin "$d" '#12-files-to-modify' fix D1.1
+    assert_eq "$(contra_row "$d")" "[(None, 'fix', 'advice')]" "AC39 우회($k): 살아 있는 채택이 아닌 결정 id 는 지적을 묶지 못한다 — 참고로 남는다"
+    assert_contains "$(contra_adv "$d")" "이 자리의 결정이 아닌 id D1.1" "AC39 우회($k): 묶이지 않은 id 를 공시한다"
+    rm -rf "$d"
+  done
+  d="$(contra_state adopt)"; contra_fin "$d" '#handoff-context' fix D1.1
+  assert_eq "$(contra_row "$d")" "[(None, 'fix', 'advice')]" "AC39 우회(다른 절): 채택된 결정이어도 그 결정이 닿은 절이 아니면 묶지 못한다"
+  assert_contains "$(contra_adv "$d")" "이 자리의 결정이 아닌 id D1.1" "AC39 우회(다른 절): 묶이지 않은 id 를 공시한다"
+  rm -rf "$d"
+  d="$(contra_state adopt)"; contra_fin "$d" '#12-files-to-modify' fix D1.1
+  assert_eq "$(contra_row "$d")" "[('D1.1', 'fix', None)]" "AC39 우회(양의 짝): 살아 있는 채택 + 그 결정이 닿은 절이면 묶인다"
+  assert_eq "$(jget "$d/fin.json" 'sum(1 for e in d["advisory"] if "결정" in e and "id" in e)')" "0" "AC39 우회(양의 짝): 묶이면 id 공시가 없다"
+  rm -rf "$d"
+}
+case_AC39_contradicts_malformed_id() {
+  local d; d="$(contra_state adopt)"; contra_fin "$d" '#12-files-to-modify' fix 'D9) 승인해도 안전 ('
+  assert_eq "$(contra_row "$d")" "[(None, 'fix', 'advice')]" "AC39 우회(형식): 결정 id 모양이 아닌 값은 비우고 참고로 둔다"
+  assert_contains "$(contra_adv "$d")" "형식이 아닌 결정 id" "AC39 우회(형식): 공시한다"
+  assert_not_contains "$(cat "$d/fin.json")" "승인해도" "AC39 우회(형식): 받은 글자를 출력에 되풀이하지 않는다"
+  assert_not_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "승인해도" "AC39 우회(형식): 게이트 글에도 되풀이하지 않는다"
+  rm -rf "$d"
+}
+case_AC39_contradicts_accounted() {   # 값을 비운 일은 센다 — 없는 id · 이 자리가 아닌 id · 형식이 아닌 id 셋 다
+  local d k cid anchor
+  for k in "unknown D7.7 #12-files-to-modify" "unbound D1.1 #handoff-context" "malformed D9)x #12-files-to-modify"; do
+    set -- $k; cid="$2"; anchor="$3"
+    d="$(contra_state adopt)"; contra_fin "$d" "$anchor" fix "$cid"
+    assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"] >= 1')" "True" "AC39 우회(계수 $1): contradicts 를 비운 일이 강제 계수에 남는다"
+    rm -rf "$d"
+  done
+}
+case_AC39_contradicts_never_lowers() {
+  local d f1 f2
+  d="$(contra_state adopt)"; contra_fin "$d" '#12-files-to-modify' decide D1.1
+  assert_eq "$(contra_row "$d")" "[('D1.1', 'decide', None)]" "AC39 우회(처분): 묶인 decide 는 decide 로 남는다 — 저자 고침으로 내려가지 않는다"
+  rm -rf "$d"
+  # 병합 — 한 리뷰어의 decide 가 다른 리뷰어의 contradicts 달린 fix 에 먹히지 않는다
+  d="$(contra_state adopt)"
+  printf '%s\n' '```docreview-layer1' '[]' '```' '```docreview-layer2' \
+    '- ref: c1' '  layer: 2' '  category: ambiguity' '  anchor: "#12-files-to-modify"' '  disposition: decide' '  summary: "파일 목록을 어느 쪽으로 정할지 사용자가 정해야 한다"' '  evidence: "12행"' \
+    '- ref: c2' '  layer: 2' '  category: ambiguity' '  anchor: "#12-files-to-modify"' '  disposition: fix' '  contradicts: "D1.1"' '  summary: "파일 목록이 이미 정한 결정과 반대로 적혀 있다"' '  evidence: "12행"' '```' > "$d/critic.src"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$d/critic.src")" > "$d/prep.json"
+  f1="$(jget "$d/prep.json" '[x["f"] for x in d["items"] if "사용자가 정해야" in x["summary"]][0]')"
+  f2="$(jget "$d/prep.json" '[x["f"] for x in d["items"] if "이미 정한 결정과" in x["summary"]][0]')"
+  printf '%s\n' '```docreview-recritic' 'verdicts:' "  - f: $f1" '    verdict: confirm' "    same_as: [$f2]" '```' > "$d/recritic.txt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$d/recritic.txt" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" '[i["disposition"] for i in d["findings"] if i.get("f")]')" "['decide']" "AC39 우회(병합): 합쳐진 생존자는 높은 처분 decide 로 남는다"
+  rm -rf "$d"
+  # 재비판의 raise 도 되돌리지 못한다
+  d="$(contra_state adopt)"; contra_crit "$d" '#12-files-to-modify' fix D1.1
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$d/critic.src")" > "$d/prep.json"
+  f1="$(jget "$d/prep.json" '[x["f"] for x in d["items"]][0]')"
+  printf '%s\n' '```docreview-recritic' 'verdicts:' "  - f: $f1" '    verdict: raise' '    to: decide' '```' > "$d/recritic.txt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$d/recritic.txt" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" '[i["disposition"] for i in d["findings"] if i.get("f")]')" "['decide']" "AC39 우회(raise): 재비판이 올린 decide 를 contradicts 가 fix 로 되돌리지 못한다"
+  rm -rf "$d"
+}
+case_AC39_contradicts_fence_and_immutable() {
+  local d
+  d="$(contra_state adopt)"; contra_permit "$d" related '#deferred-to-plan'
+  contra_fin "$d" '#deferred-to-plan' fix D1.1
+  assert_eq "$(contra_row "$d")" "[(None, 'fix', 'advice')]" "AC39 우회(울타리): 결정 기록 · 미룸 절을 겨눈 지적은 묶지 못한다"
+  rm -rf "$d"
+  d="$(mk_state "$FX/brief-append-r1.md" "$PROF_MC/brief.md")" || { no "AC39 불변: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" "[$F_BRIEF_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null
+  contra_permit "$d" related '#6-사용자-원문'
+  next_round "$d" "$FX/brief-append-r2.md" >/dev/null
+  contra_crit "$d" '#6-사용자-원문' fix D1.1
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$d/critic.src")" > "$d/prep.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/brief-append-r2.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" '[(i.get("contradicts"), i["disposition"], i.get("promotion")) for i in d["findings"] if i.get("f")]')" "[(None, 'decide', 'immutable')]" "AC39 우회(불변): 불변 절은 결정 반대여도 decide 로 남고 묶이지 않는다"
+  rm -rf "$d"
+}
+case_AC39_contradicts_protected_still_asks() {
+  # 보호 절(수용 기준)의 결정 반대 지적도 보호 승격을 지난다 — 사용자의 살아 있는 permit 이 덮을 때만 fix 로 남는다
+  local d; d="$(contra_state adopt)"; contra_permit "$d" related '#11-acceptance-criteria'
+  contra_fin "$d" '#11-acceptance-criteria' fix D1.1
+  assert_eq "$(jget "$d/fin.json" '[(i.get("contradicts"), i["disposition"], i.get("promotion")) for i in d["findings"] if i.get("f")]')" "[('D1.1', 'decide', 'protected')]" "AC39: 보호 절의 결정 반대 지적은 사용자에게 다시 묻는다"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "(반대라고 한 결정: D1.1)" "AC39: 게이트 행이 가리킨 결정을 괄호에 보인다"
+  rm -rf "$d"
+  d="$(contra_state adopt)"; contra_permit "$d" related '#11-acceptance-criteria'; contra_permit "$d" apply '#11-acceptance-criteria'
+  contra_fin "$d" '#11-acceptance-criteria' fix D1.1
+  assert_eq "$(jget "$d/fin.json" '[(i.get("contradicts"), i["disposition"], i.get("promotion")) for i in d["findings"] if i.get("f")]')" "[('D1.1', 'fix', None)]" "AC39(양의 짝): 사용자의 살아 있는 permit 이 그 절을 덮으면 fix 로 남는다"
+  rm -rf "$d"
+}
+case_AC39_precondition_protected_fix_escalates() {   # 보호 승격을 건너뛰지 않는 근거 — 그냥 fix 는 check-intent 가 보호 절에서 올려 보낸다
+  local d fx; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"
+  fx="$(printf '%s' "$F_FIX" | sed 's/#12-files-to-modify/#11-acceptance-criteria/g')"
+  seed_findings "$d" "[$fx]"
+  assert_contains "$(py docreview_anchor.py check-intent 'bbbb0001#r1.1' --intent '#11-acceptance-criteria' --state-dir "$d" 2>&1)" "anchor_protected" "AC39 전제: 보호 절의 fix 는 check-intent 가 올려 보낸다"
   rm -rf "$d"
 }

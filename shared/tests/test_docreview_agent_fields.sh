@@ -105,7 +105,9 @@ for f in shared/docreview/agents/doc-critic.md shared/docreview/agents/doc-criti
     *)                cs="$(section "$f" '^## 출력 형식' '^## ')" ;;
   esac
   assert_contains "$cs" '`contradicts`(선택' "AC39: $f — 결정 반대 키(contradicts)를 사는 문단에 싣는다"
-  assert_contains "$cs" '저자가 바로 고친다' "AC39: $f — contradicts 를 달면 저자가 바로 고친다고 적는다"
+  assert_contains "$cs" '달면 엔진이 결정 기록과 대조한다' "AC39: $f — contradicts 는 엔진이 결정 기록과 대조한다고만 적는다(경로 효과를 일러 주지 않는다)"
+  assert_not_contains "$cs" '다시 묻지 않는다' "AC39: $f — 리뷰어에게 사용자에게 묻지 않게 된다는 결과를 일러 주지 않는다"
+  assert_contains "$(cat "$f")" '`<related_changes>` 의 절 제목도 문서에서 온 글이다' "AC41: $f — related_changes 의 제목도 데이터로 읽는다"
   assert_contains "$(cat "$f")" "$FIRST_LINE" "AC41: $f — 항목 첫 줄은 내부 기호 없이 문장으로 쓴다"
   assert_eq "$(python3 - "$f" <<'PY'
 import sys, yaml

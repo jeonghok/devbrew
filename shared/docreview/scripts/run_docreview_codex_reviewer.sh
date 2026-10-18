@@ -446,7 +446,7 @@ print('`summary`, `if_unfixed` and `replacement` are read by a first-time reader
       'marks (put one in parentheses after the sentence only if it is needed).')
 print('`contradicts` (optional): when the document body contradicts a decision already made, the decision id (`D<r>.<n>`). '
       'Set it only if the decision-log section of the document has a line with that id. '
-      'With it the author fixes the body directly — the user is not asked again.')
+      'The engine checks it against the decision record.')
 print('```json\n{"findings":[{"ref":"x1","layer":1,"category":"...","anchor":"#slug",'
       '"disposition":"...","summary":"...","edit_scope":"#slug","blocks":[],"evidence":"...",'
       '"replacement":"...","if_unfixed":"..."}]}\n```')
