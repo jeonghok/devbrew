@@ -31,9 +31,9 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 `plugins/*`의 모든 플러그인은 [canonical 디렉토리 구조](docs/plugin-authoring.md)를 따르고 아래를 모두 만족해야 합니다.
 
-- **기본값과 판단.** 규칙은 「기본은 X, 모양이 다르면 모델이 판단하고 이유를 적는다」로 쓴다. 결정론은 보안 · 정확성 게이트에만(철학 P8).
+- **기본값과 판단.** 규칙은 「기본은 X, 일의 모양이 다르면 모델이 판단하고 이유를 적는다」로 쓰고 정석 흐름의 의도는 지킨다. 결정론은 보안 · 정확성 게이트에만(철학 P8).
 - **레포 전용 값 금지.** 경로 · 테스트 명령 · 브랜치 · 모델 · `gh` 같은 값은 도출하거나 레포마다 정하게 한다(철학 P8).
-- **상류 · 하류 연계.** 설계마다 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 이음매 담당을 보인다(철학 P23).
+- **상류 · 하류 연계.** 설계마다 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 같은 상태를 읽는 표면과 이음매 담당을 보인다(철학 P23).
 - **진입점에서 따라 내려가기.** 산출물 · 상태가 얽히면 객체 · 링크 · 속성 · 주인을 적어 진입점에서 따라가게 한다(철학 P5).
 - **있는 것 먼저.** 만들기 전에 레포 안 · 밖의 있는 것을 검토하고 외부 것은 사용자 검토 뒤 쓴다(철학 P8).
 
@@ -83,7 +83,7 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 ## Forbidden Patterns
 
-원칙과 그 anti-corollary: [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md)의 Structural Mechanisms · Anti-Pattern Anchors 절. 리뷰에서 이름으로 cite. 이 리포에서 가장 자주 fire하는 것들:
+원칙과 그 anti-corollary: [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md)의 Structural Mechanisms · Anti-Pattern Anchors 절. 리뷰에서 이름으로 cite. 자주 fire하는 것들:
 
 - **Self-approval** — 같은 턴의 writer/reviewer (Law 2 위반).
 - **Polite stop** — 긍정적 리뷰 후 다음 액션으로 가지 않고 요약을 narrate. Approval gate와 구분: gate는 사용자가 redirect 가능, polite stop은 acknowledge만 가능.
@@ -91,12 +91,13 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 - **Subagent spray** — 선언 없는 fan-out. 비용과 fan-out을 선언하지 않고 대규모로 퍼뜨리는 것이 anti-pattern이다 (규모 자체가 아니라 선언 없음이). **Agent(subagent) 호출 자체는 이 리포에서 상시 허용** — 매번 승인을 묻지 않는다. 금지되는 것은 선언 없는 대규모 fan-out 뿐이다. Workflow 와 deep-research 는 범위 밖 — 여전히 명시 요청이 필요하다.
 - **Self-narrating artifact** — 모델이 읽고 행동하는 산출물(생성 템플릿, 룰 파일, 프롬프트)이 자기 출처("무엇이 이 파일을 만들었다")·배경·존재 정당화를 담는 것. 토큰 낭비이자 의미 왜곡 — 읽는 쪽의 초점이 "무엇을 해야 하나"에서 "이게 왜 있나"로 옮겨가고, 정당화 문장이 지시로 오독된다. 근거와 이력은 CHANGELOG·PR·리뷰에 남기고 산출물에는 행동에 필요한 것만 둔다.
 - **Unbounded autonomy** — max-iter count, repeat 감지, 사용자-override kill switch 없는 루프.
-- **Polite handoff** — 리뷰 승인 뒤 proceed 게이트를 띄우지 않고 다음 단계를 narrate만 하는 것, 그리고 게이트가 정한 멈춤을 건너뛰고 다음 단계로 직진하는 것. 둘 다 게이트(P17)를 건너뛴 polite stop 이다(AP2 variant). 게이트 계약과 그 예외의 정본은 `plugins/spec-distill/references/proceed-gate.md`.
+- **Polite handoff** — 리뷰 승인 뒤 proceed 게이트 없이 다음 단계를 narrate만 하는 것, 게이트가 정한 멈춤을 건너뛰고 직진하는 것. 둘 다 게이트(P17)를 건너뛴 polite stop(AP2 variant). 게이트 계약 · 예외의 정본은 `plugins/spec-distill/references/proceed-gate.md`.
 - **Sealed decision** — 앞 단계의 확정이 하류에서 반증됐는데 피벗 경로가 없는 것 (철학 P23 의 anti-corollary). 재발견 금지는 반증 금지가 아니다 — 근거 있는 재결정은 사용자 동의를 받아 허용하고, 임의 변경만 금지한다.
 
 **버그가 리뷰를 탈출하면**, 해결책은 잡았어야 할 reviewer persona 파일을 편집하는 것 — 코드만 패치하는 게 아님. 그 commit이 compounding 이벤트 (Law 3).
 
 ## Doc Conventions
 
-- **Korean-primary, English-terms-only.** `CLAUDE.md`와 `docs/philosophy/*.md` 등 user-facing 문서는 한국어를 primary로 작성. 영어는 **식별자**(P#, AP#, Law N, §X.Y, plugin 이름), **고유명사**(OMC, gstack, Ouroboros, CE, Anthropic 등), **원문 인용**(verbatim, 어느 방향으로도 gloss 추가 안 함), **기술 용어 중 자연스러운 한국어 대응이 없는 것**(`frontmatter`, `PreCompact`, `subagent`, `hook`, `skill` 등)에 한정.- **범위.** 위의 영어 범위와 「원문 인용에 풀이를 붙이지 않는다」는 **레포 문서**의 규칙이다. 플러그인이 실행 중 사람에게 내는 글은 `shared/style/plain-language.md` 를 따른다.
+- **Korean-primary, English-terms-only.** `CLAUDE.md`와 `docs/philosophy/*.md` 등 user-facing 문서는 한국어를 primary로 작성. 영어는 **식별자**(P#, AP#, Law N, §X.Y, plugin 이름), **고유명사**(OMC, gstack, Ouroboros, CE, Anthropic 등), **원문 인용**(verbatim, 어느 방향으로도 gloss 추가 안 함), **기술 용어 중 자연스러운 한국어 대응이 없는 것**(`frontmatter`, `PreCompact`, `subagent`, `hook`, `skill` 등)에 한정.
+- **범위.** 위의 영어 범위와 「원문 인용에 풀이를 붙이지 않는다」는 **레포 문서**의 규칙이다. 플러그인이 실행 중 사람에게 내는 글은 `shared/style/plain-language.md` 를 따른다.
 - **`docs/**.md` 파일이 ~300줄 이상이면 상단(제목 + 에피그래프 + 한 줄 정체성 다음, 본문 진입 직전)에 `## 목차` 섹션 필수.** §X.Y depth로 anchor 링크. 섹션 추가/이름 변경/삭제 시 같은 commit에서 TOC도 동기화 (drift 시 cite-by-anchor 깨짐). 짧은 doc(<300줄, git-workflow 가이드 등)은 면제.
