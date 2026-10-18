@@ -30,7 +30,7 @@ for lit in '실행 방식은 writing-plans 가 권하는 방식이고, 계획 �
            '계획을 쓴 agent 가 스스로 가르지 않는다' '답 전에는 그 에픽의 구현을 보내지 않는다' '그 에픽만 멈추고' '다른 에픽은 계속한다' \
            'ledger rulings' '판정 줄 — 셀 수 없음' 'check_bundle_coverage.py --impl' 'ledger write-sections' 'ledger flush' '같은 worktree 에 두 writer 를 두지 않는다'; do once 4 "$lit"; done
 for lit in 'merge_check.py run --roadmap <로드맵> --branch <브랜치> --keep-merged' 'ledger review-pack' \
-           '`review_model`' '「이 PR 이 고침」 · 「뒤 에픽이 고침」' '`## 통합 리뷰 인계`' 'PR 하나에 두 번까지' '머지는 사용자가 한다'; do once 5 "$lit"; done
+           '`review_model`' '「이 PR 이 고침」 · 「뒤 에픽이 고침」' '`## 통합 리뷰 인계`' 'PR 하나에 두 번까지' '머지는 사용자가 한다' '3(검사 불가)이면 사유를 그대로 보이고 그 PR 의 머지 준비를 멈춘다'; do once 5 "$lit"; done
 for lit in 'superpowers:systematic-debugging' 'superpowers:verification-before-completion' 'superpowers:receiving-code-review'; do
   assert_contains "$(step 5)" "$lit" "걸음 5: $lit"
 done
@@ -47,6 +47,17 @@ t = sys.argv[1]
 a, b = t.find("`pwd` 와 `git rev-parse --show-toplevel` 이 그 worktree 인지 보고"), t.find("확인한 뒤 리뷰한다")
 print("yes" if 0 <= a < b else "no")' "$(step 3)")"
 assert_eq "$order" "yes" "걸음 3: 위치 확인 → root= 확인 → 리뷰 순서"
+# 순서: ① · ② 면 계획 agent 를 보낸 뒤에야 턴을 끝낸다(다음 에픽으로 같은 턴에 가지 않는다)
+order2="$(PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
+t = sys.argv[1]
+a, b = t.find("계획 agent 를 보내고 기록을 커밋하고 기계 상태를 저장한 뒤"), t.find("턴을 끝낸다")
+print("yes" if 0 <= a < b and t.count("턴을 끝낸다") == 1 else "no")' "$(step 3)")"
+assert_eq "$order2" "yes" "걸음 3: 계획 agent 보내기 → 턴을 끝낸다 순서"
+assert_eq "$(printf '%s\n' "$LOOP" | grep -oF -- '설계문서 없이 산출물만 내는 에픽이면 같은 절(지휘 기록 · 판정 · 구현 대조)을 그 산출물 파일에 둔다' | wc -l | tr -d ' ')" "1" "지휘 순환: 설계문서 없는 에픽의 기록 자리"
+assert_eq "$(step 3 | grep -oF -- '브랜치나 worktree 가 이미 있으면(압축 뒤 다시 부른 경우 등) 새로 만들지 않고 그것을 쓴다' | wc -l | tr -d ' ')" "1" "걸음 3: 이미 있는 worktree 는 다시 만들지 않는다"
+assert_eq "$(step 7 | grep -cF -- '끝에서 끝으로 걸어 본 결과' || true)" "1" "걸음 7: 기록 칸의 결과 문구"
+assert_not_contains "$ALERT" '보고 있' "알림: 사용자가 보고 있을 때의 동작을 단정하지 않는다(실측 없음)"
+[ -n "$(printf '%s\n' '사용자가 보고 있으면 보내지 않는다' | grep -F '보고 있' || true)" ] && ok "양성 대조: 「보고 있」 를 잡는다" || no "양성 대조: 「보고 있」 를 못 잡는다"
 # 부재 — 다른 세션을 열게 하는 말 · 옛 미리 받은 답 · 플러그인 루트 토큰
 forbid() { local t="${1//다른 세션을 열라는 줄을 주지 않는다/}"; t="${t//세션을 새로 열지 않고/}"; printf '%s\n' "$t" | grep -nE '세션을 (새로 )?열어|/new 로|새 세션에서|Push 후 PR|계획 검토는 기다리지 않' || true; }
 assert_eq "$(forbid "$LOOP")" "" "지휘 순환: 세션을 새로 열게 하는 말 · 옛 미리 받은 답이 없다"

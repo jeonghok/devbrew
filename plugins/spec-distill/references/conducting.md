@@ -2,7 +2,7 @@
 
 ## 지휘 순환
 
-지휘자 skill(`/spec-distill:epic-conductor`)이 불릴 때마다 걸음 1 부터 차례로 돈다. 걸음마다 다섯 칸(기본값 · 판단 · 부를 skill · 기록 · 기계 상태)이고, 기본값과 다르게 하면 무엇을 왜 다르게 했는지 그 에픽 설계문서 `## 지휘 기록` 에 적는다(에픽에 매이지 않은 판단은 다음 로드맵 수정 PR 본문의 `## 지휘 기록` 절에). 정석 흐름(brainstorming → 계획 → 구현)의 뜻은 지킨다. superpowers 는 부르기만 하고 고치지 않는다.
+지휘자 skill(`/spec-distill:epic-conductor`)이 불릴 때마다 걸음 1 부터 차례로 돈다. 걸음마다 다섯 칸(기본값 · 판단 · 부를 skill · 기록 · 기계 상태)이고, 기본값과 다르게 하면 무엇을 왜 다르게 했는지 그 에픽 설계문서 `## 지휘 기록` 에 적는다(에픽에 매이지 않은 판단은 다음 로드맵 수정 PR 본문의 `## 지휘 기록` 절에). 설계문서 없이 산출물만 내는 에픽이면 같은 절(지휘 기록 · 판정 · 구현 대조)을 그 산출물 파일에 둔다. 정석 흐름(brainstorming → 계획 → 구현)의 뜻은 지킨다. superpowers 는 부르기만 하고 고치지 않는다.
 
 - `<SD>` 는 spec-distill 플러그인 폴더의 절대경로, `<로드맵>` 은 로드맵 파일의 레포 루트 기준 경로, `<세션>` 은 `python3 "<SD>"/scripts/state_path.py session-id` 의 값이다. `ledger <명령>` 은 `python3 "<SD>"/scripts/conductor_ledger.py <명령>` 을 줄인 것이다.
 - 레포마다 다른 값은 박지 않고 읽는다 — 기본 브랜치는 `origin/HEAD`, 브랜치 이름은 로드맵 블록의 `브랜치:`, 설계문서 · 계획 폴더 · 테스트 명령 · 리뷰 모델은 로드맵 frontmatter 의 `specs_dir` · `plans_dir` · `test_command` · `review_model` 이다.
@@ -25,12 +25,12 @@
 ### 3. 다음 일 고르기와 보내기
 - 기본값: 준비된 에픽마다 설계 흐름(brainstorming → spec-review → 계획 → 구현)이다. 사람에게 묻는 단계(brainstorming 의 질문 · 절별 승인 · spec 승인)는 이 세션이 한 번에 한 에픽씩, 의존 사슬의 앞쪽부터 직접 한다. 사용자에게 다른 세션을 열라는 줄을 주지 않는다 — 같은 세션의 `/compact` 뒤 이어 갈 줄만 준다.
 - 판단: 조사 · 측정 · 결정처럼 설계 흐름이 맞지 않으면 고른 흐름 · 이유 · 산출물을 보이고 `AskUserQuestion` 으로 승인받는다(거절이면 설계 흐름). 승인된 흐름 · 산출물은 같은 폴더 `redecompose.md` 의 재분해 절차로 로드맵 `흐름:` · `산출물:` 칸에 적는다. brainstorming 의 입력과 지시는 같은 폴더 `epic-handoff.md` 의 에픽 넘김 줄이 싣는 것과 같다 — 그 줄을 사용자에게 주지 않고 이 세션의 입력으로 쓴다.
-  - 에픽 worktree: 블록의 `브랜치:` 이름으로 먼저 만든다 — `git worktree add "$(python3 "<SD>"/scripts/conductor_ledger.py worktree-path --name <이름>)" -b <브랜치> origin/HEAD`. 하니스가 옮겨 갈 수 있는 폴더에 만들고, worktree 안에 있는 세션은 하니스의 새 worktree 만들기를 쓸 수 없어서 `git worktree add` 로 만든다. `브랜치:` 가 여럿이면 적힌 순서가 계획 순서이고, 다음 계획의 브랜치는 앞 계획이 머지됐으면 기본 브랜치에서, 아직이면 앞 계획의 브랜치에서 만든다.
+  - 에픽 worktree: 브랜치나 worktree 가 이미 있으면(압축 뒤 다시 부른 경우 등) 새로 만들지 않고 그것을 쓴다. 없으면 블록의 `브랜치:` 이름으로 먼저 만든다 — `git worktree add "$(python3 "<SD>"/scripts/conductor_ledger.py worktree-path --name <이름>)" -b <브랜치> origin/HEAD`. 하니스가 옮겨 갈 수 있는 폴더에 만들고, worktree 안에 있는 세션은 하니스의 새 worktree 만들기를 쓸 수 없어서 `git worktree add` 로 만든다. `브랜치:` 가 여럿이면 적힌 순서가 계획 순서이고, 다음 계획의 브랜치는 앞 계획이 머지됐으면 기본 브랜치에서, 아직이면 앞 계획의 브랜치에서 만든다.
   - 옮겨 가는 길(2026-10-18 실측): 하니스의 worktree 옮겨 가기(`EnterWorktree`, 경로 지정)로 그 worktree 에 들어가 할 일을 하고 앞 자리로 돌아온다(앞 자리도 경로 지정으로, 메인 체크아웃이면 하니스의 worktree 나가기 `ExitWorktree` keep). 옮기기 전에 지금 자리의 쓰기(커밋 포함)를 끝낸다 — 옮긴 뒤 앞 자리는 다시 들어가기 전까지 읽기 전용이다. 하니스로 옮겨 갈 수 없으면(하니스 worktree 폴더 밖의 worktree 등) 메인 체크아웃에서 Bash 로 셸의 작업 폴더를 옮기고, 그것도 안 되면 그 에픽 담당 agent 가 두 부분으로 돌려보내는 길로 하고 그 사실을 알린다.
   - spec 리뷰: 설계문서는 이 세션이 brainstorming 끝에 써서 에픽 worktree 에서 커밋하고, spec 리뷰도 이 세션이 같은 skill(`/spec-distill:spec-review <설계문서 절대경로> --bundle <묶음 절대경로>`)로 직접 돌린다. 옮겨 간 뒤 `pwd` 와 `git rev-parse --show-toplevel` 이 그 worktree 인지 보고, 진입 사전 검사 줄의 `root=` 가 그 worktree 인지 확인한 뒤 리뷰한다 — 아니면 멈춘다. 리뷰 반영 커밋도 그 worktree 에서 한다. 리뷰 도중 압축되면 같은 설계문서 경로로 다시 부른다 — 리뷰 원장이 라운드 · 상한을 잇는다.
-  - 승인 게이트: ① · ② · 기타 칸 「여기서 계속」 은 선택지를 그대로 보이되, 무엇을 골라도 이 세션은 writing-plans 를 따르지 않고 게이트가 낸 계획 agent 의 입력 줄을 계획 agent 에게 넘긴다. 승인 사실은 미커밋 확인 뒤 `ledger record --spec <설계문서> --approval --date <YYYY-MM-DD> --choice "<고른 선택지 원문>"` 으로 적어 그 에픽 worktree 에서 커밋한다. ① 이면 이 세션의 `/compact` 를 권하고, ② 를 골라도 세션을 새로 열지 않고 ① 과 같이 처리한다고 알린다.
+  - 승인 게이트: ① · ② · 기타 칸 「여기서 계속」 은 선택지를 그대로 보이되, 무엇을 골라도 이 세션은 writing-plans 를 따르지 않고 게이트가 낸 계획 agent 의 입력 줄을 계획 agent 에게 넘긴다. 승인 사실은 미커밋 확인 뒤 `ledger record --spec <설계문서> --approval --date <YYYY-MM-DD> --choice "<고른 선택지 원문>"` 으로 적어 그 에픽 worktree 에서 커밋한다. ① 이면 이 세션의 `/compact` 를 권하고, ② 를 골라도 세션을 새로 열지 않고 ① 과 같이 처리한다고 알린다. ① · ② 면 계획 agent 를 보내고 기록을 커밋하고 기계 상태를 저장한 뒤 두 줄(`/compact` 와 `/spec-distill:epic-conductor <로드맵>`)을 주고 거기서 턴을 끝낸다 — 다음 에픽으로는 「여기서 계속」 을 골랐을 때나 압축 뒤(걸음 1 부터)에만 간다.
   - 보내기: spec 이 승인되면 계획 agent 를 그 에픽 worktree 로 보내고(`conductor-dispatch.md` 의 계획 틀) 다음 에픽의 설계로 간다. 의존 · 같은 파일 겹침(상태 계산의 동시 가능 목록)이 없으면 동시에 보낸다 — 띄우기 전에 규모(몇 agent · 무엇)를 알린다.
-- 부를 skill: `superpowers:brainstorming` · `superpowers:using-git-worktrees`(하니스 기본 기능 우선) · `/spec-distill:spec-review` · `superpowers:dispatching-parallel-agents`.
+- 부를 skill: `superpowers:brainstorming` · `superpowers:using-git-worktrees`(만들기는 위 `git worktree add`) · `/spec-distill:spec-review` · `superpowers:dispatching-parallel-agents`.
 - 기록: 고른 흐름과 이유 · spec 승인 줄 → 그 에픽 설계문서 `## 지휘 기록`(에픽 worktree 에서 커밋).
 - 기계 상태: `## 자원`(에픽 worktree · 질문 원문 파일 · agent 몫 임시 폴더) · `## 살아 있는 agent`(계획 agent).
 
@@ -45,7 +45,7 @@
 ### 5. 머지 전 확인
 - 기본값: PR 마다(문서만 고친 PR 도 — 모델이 읽는 skill · reference · 템플릿 · 리뷰어 프로필은 문서로 치지 않는다) 스위트 대조 → 통합 리뷰 → 리뷰 뒤 반영 → 완료 전 확인을 한다. 건너뛴 확인은 무엇을 왜 건너뛰었는지 적는다.
 - 판단:
-  - 스위트 대조: `python3 "<SD>"/scripts/merge_check.py run --roadmap <로드맵> --branch <브랜치> --keep-merged`. 종료 코드 1(새 실패)이면 `superpowers:systematic-debugging` 으로 원인을 찾아 고치거나 이유를 적고, 4(이름으로 가르지 못한 단위)면 그 줄을 사용자에게 보이고, 5(다른 대조가 도는 중)면 끝난 뒤 다시 돌고, 6(테스트 명령을 모른다)이면 사용자에게 한 번 물어 기계 상태 `## 레포 설정` 에 임시로 둔 뒤 다음 로드맵 수정 PR 에서 frontmatter `test_command` 로 올리고, 7(테스트 없음)이면 「스위트 대조 없음」 을 알리고 통합 리뷰만 한다. 하위가 본 실패가 이 대조에서 사라지면 경합으로 보고 알린다.
+  - 스위트 대조: `python3 "<SD>"/scripts/merge_check.py run --roadmap <로드맵> --branch <브랜치> --keep-merged`. 종료 코드 1(새 실패)이면 `superpowers:systematic-debugging` 으로 원인을 찾아 고치거나 이유를 적고, 4(이름으로 가르지 못한 단위)면 그 줄을 사용자에게 보이고, 5(다른 대조가 도는 중)면 끝난 뒤 다시 돌고, 6(테스트 명령을 모른다)이면 사용자에게 한 번 물어 기계 상태 `## 레포 설정` 에 임시로 둔 뒤 다음 로드맵 수정 PR 에서 frontmatter `test_command` 로 올리고, 7(테스트 없음)이면 「스위트 대조 없음」 을 알리고 통합 리뷰만 한다. 3(검사 불가)이면 사유를 그대로 보이고 그 PR 의 머지 준비를 멈춘다 — 충돌이면 6 의 충돌 처리와 같이 그 에픽만 멈추고 알린다. 하위가 본 실패가 이 대조에서 사라지면 경합으로 보고 알린다.
   - 통합 리뷰: `ledger review-pack --roadmap <로드맵> --epic <에픽> --branch <브랜치> --merged <합친 사본>` 이 이 PR diff · 열린 다른 에픽 diff · 충돌 미리 보기 · 앞선 인계 절을 한 폴더에 모은다. 그 폴더와 `superpowers:requesting-code-review` 의 리뷰 요청 틀로, 쓰기 도구가 없는 통합 리뷰어(지휘자 skill 본문의 dispatch 자리)를 로드맵 frontmatter `review_model`(없으면 세션 모델)로 부른다 — 이음매가 여럿이면 여럿을 동시에. 지적은 「이 PR 이 고침」 · 「뒤 에픽이 고침」으로 나눠 PR 본문 `## 통합 리뷰 인계` 절에 담당 에픽과 함께 적는다. 뒤 에픽의 통합 리뷰는 앞선 인계 절의 항목이 실제로 고쳐졌는지 확인한다. `gh` 가 없거나 GitHub 레포가 아니면 설계문서 `## 미룸` 표와 `## 지휘 기록` 에 적고 알린다.
   - 리뷰 뒤 반영: 고침은 `superpowers:receiving-code-review` 로 받는다. 동작 · 락 · 보안 경계 · 리뷰어 프로필을 바꾼 수정은 매번 좁은 재리뷰를 받고, 좁은 재리뷰는 PR 하나에 두 번까지다 — 첫 재리뷰를 보내기 전에 멈출 조건(남는 지적을 잔여로 공시하고 넘길 곳)을 PR 본문에 적는다. 동작을 바꾸지 않는 수정은 PR 본문에 「리뷰 뒤 반영(리뷰 라운드를 거치지 않았다)」 으로 적는다.
   - 끝으로 `superpowers:verification-before-completion`. 릴리스 번호는 이때 정한다(먼저 머지되는 쪽이 낮은 번호). 머지 명령 줄만 준비하고 머지는 사용자가 한다. 리뷰가 끝나면 합친 사본과 리뷰 묶음을 `ledger cleanup` 으로 지운다.
@@ -64,7 +64,7 @@
 - 기본값: 모든 에픽이 머지되면 끝에서 끝 확인 — 기본 경로(인터뷰 → 분해 → 에픽 설계 → spec-review → 계획 · 구현 대조 → 작업 목록 · 상태줄)와 설계 흐름이 아닌 에픽의 경로를 실제 명령으로 걷는다. 그때 품질 게이트(`/quality-gates:quality-pipeline`)를 한 번, 로드맵 시작 커밋부터 지금 기본 브랜치까지 돌린다.
 - 판단: 품질 게이트가 범위 입력을 받는지는 그 skill 의 인자 안내로 정한다 — 받지 않으면 품질 게이트 없이 가고 그 사실을 알린다. 지적은 후속 PR 하나로. 넘김이 모두 처리됐는지 `python3 "<SD>"/scripts/control_plane.py show <로드맵> <에픽>` 의 열린 넘김으로 확인하고, 쌓인 기록이 남았으면 기록만 담은 로드맵 수정 PR 로 싣는다. 쓴 자원을 `ledger resources` · `ledger orphans` 로 보고 정리한 뒤 표지를 푼다(`ledger release`).
 - 부를 skill: `/quality-gates:quality-pipeline`(범위 입력이 있을 때).
-- 기록: 그 확인 결과 · 품질 게이트를 건너뛴 사실 → 마지막 로드맵 수정 PR 본문 `## 지휘 기록`.
+- 기록: 끝에서 끝으로 걸어 본 결과 · 품질 게이트를 건너뛴 사실 → 마지막 로드맵 수정 PR 본문 `## 지휘 기록`.
 - 기계 상태: 비운다(남은 자원 · agent · 쌓인 기록이 없을 때).
 
 ### /compact 시점
