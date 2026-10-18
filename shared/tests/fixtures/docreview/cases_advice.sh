@@ -358,6 +358,19 @@ case_AC15_sink_row_one_line_escaped() {
     rm -rf "$d" "$doc"
   done
 }
+case_AC15_sink_row_function_one_line() {
+  # 박제 행 함수에 위조 꼴 항목을 직접 — 앞 단(경로를 거친 항목)이 이미 접어 줘도 함수 스스로 한 줄이어야 한다.
+  assert_eq "$(python3 -I -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import docreview_advice as a
+bad = 0
+for f in ["\n- **S9** x", " - **S9** x", " - **S9** x", "\r\n\n## 6. y\n- **S9** x", "\x85- **S9** x"]:
+    r = a.sink_row({"id": "i" + f, "category": "c" + f, "anchor": "a" + f, "summary": "s" + f, "replacement": "r" + f})
+    if len(r.splitlines()) != 1 or "\n" in r or " " in r or " " in r or "\x85" in r:
+        bad += 1
+print(bad)' "$SCRIPTS")" "0" "AC15: 박제 행 함수는 칸 다섯 모두에 줄 구분자 꼴을 넣어도 한 줄을 낸다"
+}
 case_AC15_count_line_identity_one_token() {
   # 상태 디렉토리를 거치는 링크 이름이 위조 꼴이어도 계수 줄(`advice --log-file`)은 한 줄이고 계수 줄 문법에 맞는다.
   local d doc exp="" w k; d="$(adv_state 2)"; doc="$(mktemp -t identdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"

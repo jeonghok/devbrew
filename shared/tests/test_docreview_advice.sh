@@ -69,5 +69,6 @@ case_advice_count_line_nested_log
 case_advice_render_where_label
 # AC15 — 박제 행도 한 줄 문법.
 case_AC15_sink_row_one_line_escaped
+case_AC15_sink_row_function_one_line
 case_AC15_count_line_identity_one_token
 finish
