@@ -360,6 +360,12 @@ def cmd_prepare(a) -> int:
         elif first["detector"] != it["detector"]:
             ev("absorbed", "critic#%s:%s" % (it["detector"], it["ref"]), "critic#%s:%s" % (first["detector"], first["ref"]))
             alias[it["ref"]] = first["ref"]
+            # 버려진 사본이 막던 항목은 남은 항목이 이어서 막는다 — 안 그러면 질문이 고침 하나만 막고 나머지는 풀린다.
+            for r in it["blocks"]:
+                if r not in first["blocks"]:
+                    first["blocks"].append(r)
+            if first["edit_scope"] == first["anchor"] and it["edit_scope"] != it["anchor"]:
+                first["edit_scope"] = it["edit_scope"]
         else:
             deduped.append((src, it))
     items = deduped
