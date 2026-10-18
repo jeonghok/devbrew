@@ -49,6 +49,20 @@ else
   no "pytest 가 없어 1번 장면을 돌리지 못했다 — 이 기계에 pytest 를 깔고 다시 돈다"
 fi
 
+# 1b — pytest: 양쪽 빨간 파일 안에서 fixture 가 터지는 새 테스트(ERROR 줄)도 새 실패다
+if python3 -m pytest --version >/dev/null 2>&1; then
+  mkrepo pe; put pytest.ini '[pytest]'
+  put tests/test_x.py $'def test_a():\n    assert 1 == 2'
+  push_base
+  put tests/test_x.py $'import pytest\n\n@pytest.fixture\ndef boom():\n    raise RuntimeError("setup broke")\n\ndef test_a():\n    assert 1 == 2\n\ndef test_c(boom):\n    pass'
+  branch_with feature/pe
+  out="$(mc --branch feature/pe)"; rc=$?
+  assert_eq "$rc" "1" "pytest: fixture 오류로 터지는 새 테스트 → rc 1"
+  assert_contains "$out" "tests/test_x.py::test_c" "pytest: ERROR 줄의 새 이름"
+else
+  no "pytest 가 없어 1b 장면을 돌리지 못했다 — 이 기계에 pytest 를 깔고 다시 돈다"
+fi
+
 # 2 — unittest: 초록이던 테스트가 빨개진다(단위 수준 새 실패) · 이름도 낸다
 mkrepo ut; put tests/__init__.py ''
 put tests/test_y.py $'import unittest\nclass T(unittest.TestCase):\n    def test_a(self):\n        self.assertEqual(1, 1)'
@@ -104,6 +118,22 @@ out="$(mc --branch feature/ask)"; rc=$?
 assert_eq "$rc" "6" "실행 비트 없는 셸 테스트만 → rc 6(묻는 자리)"
 assert_contains "$out" "test_command" "묻는 자리: 로드맵 frontmatter 키를 말한다"
 
+# 7b — 테스트 파일 수를 못 세면 「스위트 대조 없음」 이 아니라 검사 불가(rc 3)
+mkrepo cn; put README.md r; push_base; put x.txt x; branch_with feature/cn
+out="$(cd "$W" && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m
+m.test_file_count = lambda tree: None
+sys.exit(m.main(["run", "--roadmap", sys.argv[2], "--no-fetch", "--branch", "feature/cn"]))' "$ROOT/plugins/spec-distill/scripts" "$RM" 2>&1)"; rc=$?
+assert_eq "$rc" "3" "파일 수를 못 셈 → rc 3(0 으로 접지 않는다)"
+assert_contains "$out" "테스트 파일 수를 세지 못했다" "파일 수 못 셈 사유"
+
+# 7c — 예상 못 한 예외는 rc 3 + 내부 오류 줄(파이썬 기본 rc 1 은 「새 실패 있음」)
+out="$(cd "$W" && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m
+def boom(*a, **k): raise ValueError("x")
+m.compare_detected = boom
+sys.exit(m.main(["run", "--roadmap", sys.argv[2], "--no-fetch", "--branch", "feature/cn"]))' "$ROOT/plugins/spec-distill/scripts" "$RM" 2>&1)"; rc=$?
+assert_eq "$rc" "3" "내부 오류 → rc 3"
+assert_contains "$out" "내부 오류: ValueError: x" "내부 오류 줄"
+
 # 8 — 잠금: 살아 있는 주인이면 5, 죽은 주인이면 풀고 간다
 LOCKD="$(cd "$T/ut" && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as cs, repo_defaults as r, state_path as s; print(cs.machine_dir(s.state_root(), sys.argv[2]) / r.MERGE_CHECK_DIR / "lock")' "$ROOT/plugins/spec-distill/scripts" "$RM")"
 mkdir -p "$LOCKD"; printf '%s x\n' "$$" > "$LOCKD/owner"
@@ -133,8 +163,8 @@ assert_contains "$out" "origin/HEAD 가 없다" "기본 브랜치 모름 사유"
 
 # 10 — names_in: 알려진 모양 · 모양 없음
 NAMES="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m
-for t in ("FAILED a.py::t1 - x", "FAIL: t2 (m.C)", "not ok 3 - t3", "  ✗ t4", "nothing here"):
+for t in ("FAILED a.py::t1 - x", "FAIL: t2 (m.C)", "not ok 3 - t3", "  ✗ t4", "ERROR x.py::t5 - e", "nothing here"):
     print(sorted(m.names_in(t, None)[0]), m.names_in(t, None)[1])' "$ROOT/plugins/spec-distill/scripts")"
-assert_eq "$NAMES" "$(printf "%s\n" "['a.py::t1'] pytest" "['t2 (m.C)'] unittest" "['t3'] tap" "['t4'] ✗ 표시" "[] None")" "names_in: 알려진 모양 넷과 모양 없음"
+assert_eq "$NAMES" "$(printf "%s\n" "['a.py::t1'] pytest" "['t2 (m.C)'] unittest" "['t3'] tap" "['t4'] ✗ 표시" "['x.py::t5'] pytest" "[] None")" "names_in: 알려진 모양 넷과 모양 없음"
 
 finish

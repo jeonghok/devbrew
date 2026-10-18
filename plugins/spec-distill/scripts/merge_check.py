@@ -39,7 +39,7 @@ SELECT = HERE / "run-test-selection.sh"
 DIFF = HERE / "diff-test-results.py"
 SCOPE = HERE / "compute-test-scope-candidates.sh"
 KNOWN_SHAPES = (
-    ("pytest", re.compile(r"^FAILED (?!\()(\S+)", re.M)),
+    ("pytest", re.compile(r"^(?:FAILED|ERROR) (?!\()(\S+)", re.M)),
     ("unittest", re.compile(r"^(?:FAIL|ERROR): (.+)$", re.M)),
     ("tap", re.compile(r"^\s*not ok \d+ - (.+)$", re.M)),
     ("✗ 표시", re.compile(r"^\s*✗ (.+)$", re.M)),
@@ -89,19 +89,27 @@ def _alive(pid: int) -> bool:
 
 def take_lock(d: Path) -> None:
     d.parent.mkdir(parents=True, exist_ok=True)
-    for _try in (1, 2):
+    for _try in (1, 2, 3):
         try:
             d.mkdir()
         except FileExistsError:
-            owner_file = d / "owner"
-            owner = owner_file.read_text(encoding="utf-8").strip() if owner_file.is_file() else ""
-            head = owner.split(" ", 1)[0]
-            pid = int(head) if head.isdigit() else None
-            young = (time.time() - d.stat().st_mtime) < LOCK_YOUNG
+            try:
+                owner_file = d / "owner"
+                owner = owner_file.read_text(encoding="utf-8").strip() if owner_file.is_file() else ""
+                head = owner.split(" ", 1)[0]
+                pid = int(head) if head.isdigit() else None
+                young = (time.time() - d.stat().st_mtime) < LOCK_YOUNG
+            except FileNotFoundError:
+                continue
             if (pid is not None and _alive(pid)) or (pid is None and young):
                 raise Stop(5, "다른 스위트 대조가 도는 중이다(잠금 %s · 주인 %s) — 끝난 뒤 다시 돈다" % (d, owner or "기록 전"))
+            gone = d.parent / ("lock.stale-%d-%d" % (os.getpid(), int(time.time() * 1000)))
+            try:
+                os.rename(str(d), str(gone))
+            except OSError:
+                continue
             print("[spec-distill] 주인 없는 잠금을 풀었다(%s · %s)" % (d, owner or "주인 기록 없음"))
-            shutil.rmtree(str(d), ignore_errors=True)
+            shutil.rmtree(str(gone), ignore_errors=True)
             continue
         (d / "owner").write_text("%d %s\n" % (os.getpid(), stamp()), encoding="utf-8")
         return
@@ -148,8 +156,10 @@ def drop_copy(root: Path, d: Path, work: Path) -> None:
     """일회용 사본만 지운다 — work 밖 경로는 건드리지 않는다. 테스트가 남긴 파일 때문에 rmtree 뒤 prune."""
     if work not in d.parents:
         return
-    shutil.rmtree(str(d), ignore_errors=True)
-    git(root, "worktree", "prune")
+    rc, _o, _e = git(root, "worktree", "remove", "--force", str(d))
+    if rc and d.exists():
+        shutil.rmtree(str(d), ignore_errors=True)
+        print("[spec-distill] 일회용 사본을 git 으로 지우지 못해 폴더만 지웠다 — 남은 기록은 사용자가 정리한다(%s)" % d)
 
 
 # ── 테스트 명령 ──────────────────────────────────────────────────────────────
@@ -266,6 +276,8 @@ def compare_detected(base: Path, merged: Path, base_sha: str, merged_sha: str, w
     count = test_file_count(merged)
     final, rows = assignment(merged, work) if runners else (None, [])
     if not rows:
+        if count is None:
+            raise Stop(3, "테스트 파일 수를 세지 못했다 — compute-test-scope-candidates 가 숫자를 내지 않았다")
         if count:
             raise Stop(6, "테스트로 보이는 파일 %d개를 돌릴 러너를 모른다 — 테스트 명령을 정해 주면 로드맵 "
                           "frontmatter `test_command` 로 올린다" % count)
@@ -399,6 +411,9 @@ def main(argv=None) -> int:
     except Stop as stop:
         print("[spec-distill] 스위트 대조 — %s" % stop)
         return stop.rc
+    except Exception as exc:  # 기본 종료 코드 1 은 「새 실패 있음」 이라 섞이면 안 된다
+        print("[spec-distill] 스위트 대조 — 내부 오류: %s: %s" % (type(exc).__name__, exc))
+        return 3
 
 
 if __name__ == "__main__":
