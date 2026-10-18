@@ -36,7 +36,7 @@ next_phase: superpowers:writing-plans
 - 새 결정론 검사(원칙 준수를 재는 lint 등)를 더하는 것.
 - 다른 열린 에픽이 잡은 조항 · 파일을 직접 고치는 것(§5 넘김).
 - 플러그인 동작 변경. 교훈 가운데 플러그인 동작에 닿는 것은 지휘자 수리 PR(R5 후속) · R2a · R10 이 고친다.
-- CHANGELOG 항목 정리 — 이력이라 그대로 둔다.
+- CHANGELOG 의 지난 버전 항목 고치기 — 이력이라 그대로 둔다. 플러그인 CHANGELOG 넷에서 이력이 아닌 낡은 글(아직 내지 않은 머리 항목 · 지금 동작을 설명하는 안내 문단)만 이 에픽이 정리하고, 찾아보아 없으면 PR 본문에 「없음」을 적는다(D1.1).
 - 짧아진 계획(superpowers 7.0.0 writing-plans)의 영향을 보완하는 장치 — 사용자 「짧아진 계획의 영향을 신경쓰진 일단 말아봐 그걸 근거로 과한 구현 안했음 좋겠으니」.
 
 ## Anti-goals
@@ -71,7 +71,7 @@ CLAUDE.md 의 알맞은 기존 절 안에 한 줄씩 둔다(새 큰 절을 만�
 
 이미 플러그인 동작으로 들어가 있어 CLAUDE.md 에 다시 적지 않는 원칙: 머지 전 확인 규약 · 하위는 단일 세션과 같은 skill 흐름 · 게이트 전달은 혼자 읽혀야 · 지휘 세션이 에픽을 직접 진행(모두 `plugins/spec-distill/references/conducting.md` · `conductor-dispatch.md`). 원칙 1 의 뜻대로 그 자리가 정본이다.
 
-**두 갈래의 「다른 레포」.** CLAUDE.md · 철학 문서는 devbrew 를 개발하는 세션(메모리 없는 다른 기기 · 새 clone 포함)만 읽는다. devbrew 플러그인을 남의 레포에 설치해 쓰는 세션에서는 그 원칙이 플러그인의 동작 자리(skill · reference · 설계 틀 · 넘김 글)에 실려 있어야 지켜진다. 그래서 원칙 2~6 마다 플러그인 동작 자리를 표로 대조한다 — 이미 실려 있으면 그 파일:줄을 적고, 빈 곳은 그 파일을 잡은 에픽(또는 지휘자 수리 PR)으로 §5 넘김 행을 더한다. 이 에픽은 플러그인 동작 자리를 직접 고치지 않는다(Non-goals). 원칙 1 은 devbrew 개발 규칙이라 대조 대상이 아니다.
+**두 갈래의 「다른 레포」.** CLAUDE.md · 철학 문서는 devbrew 를 개발하는 세션(메모리 없는 다른 기기 · 새 clone 포함)만 읽는다. devbrew 플러그인을 남의 레포에 설치해 쓰는 세션에서는 그 원칙이 플러그인의 동작 자리(skill · reference · 설계 틀 · 넘김 글)에 실려 있어야 지켜진다. 그래서 원칙 2~6 마다 플러그인 동작 자리를 표로 대조한다 — 계획의 첫 과제가 이 설계문서의 새 절 `## 플러그인 동작 자리 대조`(`## 미룸` 바로 앞)에 표를 만들어 커밋한다. 이미 실려 있으면 그 파일:줄을 적고, 빈 곳은 그 파일을 잡은 에픽(또는 지휘자 수리 PR)으로 §5 넘김 행과 `## 미룸` 행을 더한다. 지휘 세션이 그 행을 받는 쪽의 설계 입력으로 넘기고, 받는 쪽이 머지되면 처리됐는지 확인한다. 이 에픽은 플러그인 동작 자리를 직접 고치지 않는다(Non-goals). 원칙 1 은 devbrew 개발 규칙이라 대조 대상이 아니다.
 
 ### §2 고르는 기준 (사용자 승인 「이 기준으로 (권장)」)
 
@@ -85,7 +85,7 @@ CLAUDE.md 의 알맞은 기존 절 안에 한 줄씩 둔다(새 큰 절을 만�
 조사 기록(지휘 세션 `~/.claude/sdd-mirror/epic-decisions/r11/docs-recon.md` 의 표)에서 R11 몫만. 처분 종류는 넷이다 — 지금 장치가 없는 개념 · 이미 바뀐 사실 · 중복 · 이력 서사.
 
 - **CLAUDE.md**: 훅 공존 줄의 signal tag 구절(`<{plugin}-signal>` 를 쓰는 곳 0) · Forbidden Patterns 머리의 「Full 카탈로그와 case study」(철학 문서에 case study 는 없다 — 가리키는 절 이름은 철학 문서의 실제 절에 맞춘다) · Polite handoff 줄을 `plugins/spec-distill/references/proceed-gate.md` 포인터와 금지 둘로 줄임(「spec-distill v0.11.0 AC19」 이력 · 옛 표현 지움) · 출처 · 실측 이력 괄호(`allowed-tools` 줄의 「2026-08-22 헤드리스 실측 5변형…」 · agent 줄의 「(`Monitor`가 … 그 실증)」 · Subagent spray 줄의 「(Opus 5 기본 시스템 프롬프트… 2026-08-22)」 · Korean-primary 줄의 「`*.ko.md` 동반 파일 모델은 폐기(…)」). Law 3 의 「인덱스를 자동 편집」 구절은 그 장치가 없으므로 §1 원칙 1 문장으로 바꿔 쓴다.
-- **철학 문서**: Three Laws 절(CLAUDE.md 와 같은 글 — 포인터 한 줄로) · AP18 · AP19 스텁(인용 0, CLAUDE.md 와 같은 글) · P8 예시의 redirect(v2.7.0 에서 지워짐 — 현재 floor 예시로) · P11 의 「다중 모델은 opt-in 게이트」(지금 codex 는 감지되면 늘 돌고 끄는 길은 kill switch) · P11 · P8 의 사례 이력 문장 · P13 의 signal tag · P14 끝의 「README 3곳 인용의 anchor target」 문장 · AP 앵커 도입과 P5 의 「Filesystem-as-Memory」 절 언급(CLAUDE.md 에 없음 — §런타임 상태 & 훅으로).
+- **철학 문서**: Three Laws 절에서 CLAUDE.md 와 겹치는 문장만 줄이고, CLAUDE.md 에 없는 설명(명세 작성은 일급 단계 · 하드 규칙 · N+1 번째 작업이 더 쉬워야 · low-tech 메커니즘)은 남긴다 · AP18 · AP19 스텁(인용 0, CLAUDE.md 와 같은 글) · P8 예시의 redirect(v2.7.0 에서 지워짐 — 현재 floor 예시로) · P11 의 「다중 모델은 opt-in 게이트」(지금 codex 는 감지되면 늘 돌고 끄는 길은 kill switch) · P11 · P8 의 사례 이력 문장 · P13 의 signal tag · P14 끝의 「README 3곳 인용의 anchor target」 문장 · AP 앵커 도입과 P5 의 「Filesystem-as-Memory」 절 언급(CLAUDE.md 에 없음 — §런타임 상태 & 훅으로).
 - **spec-distill README**: 줄머리 `**vX.Y.Z**` 이력 문단(`test_readme_sync.sh` 와 같은 패턴으로 지금 9줄)과 줄머리가 아닌 자리의 버전 이력 서사(CHANGELOG 에 있음) · 「문서 리뷰 엔진 기반(v0.56.0) — 아직 쓰는 쪽 없이…」 · 「엔진 결함 일곱(v0.58.0)…」 · 버전 꼬리표 괄호 · 중복(P14 네 번 · AP2 두 번 · Law 3 / P5) · 죽은 개념 `needs_interview` · 틀린 라벨(P11 에 steelman, P3 에 graceful degradation) · External source absorption 절의 출처 이력(사용자 판단 대신 지휘자 판정 — 출처는 CHANGELOG · PR 몫) · Hooks Installed 의 5.x 이력.
 - **quality-gates · project-init · plugin-audit README**: R2a 가 바꾸는 동작 밖의 줄만(R2a 설계가 넘긴 몫) — qg 의 「dispatch builder」 · 없는 `codex-reviewer` agent 설명 · 「문서 리뷰 엔진 기반(v7.4.0)」 · 실측 이력 괄호 · v10.0.0 훅 삭제 이력 · `MAX_TOTAL_ITERATIONS` 이력, project-init 의 버전 꼬리표 · 「CLAUDE.md 는 짧은 anchor 만」(지금 생성물과 다름), plugin-audit 의 「즉시 제거 — 근거는 …」 정당화 서사 · 샌드박스 별칭 이력 · severity 통일 이력. 구성표 · 상한 수치 · 의도 출처 · artifact-critique · persona 모델 고정 같은 R2a 몫 줄은 손대지 않는다.
 - 남긴다(지휘자 판정): 은퇴한 kill switch 공시 표(CLAUDE.md :37 요건) · `integrity` 필드 문장(쓰는 곳 0 이지만 규칙 선택지) · SessionStart 훅 규칙(앞으로의 훅에 걸림) · qg README 의 `baseline-cache/` 안내(남은 폴더가 있는 사용자 안내).
@@ -124,7 +124,7 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 
 ## 상류 · 하류 연계
 
-- 받는 곳: R5 설계 `## 미룸` 의 사용자 원칙 행 · 로드맵 재분해 이력의 R11 원문 · auto-memory · 문서 조사 표.
+- 받는 곳: R5 설계 `## 미룸` 의 사용자 원칙 행 · 로드맵 재분해 이력의 R11 원문 · 흐름 고정 점검 문서(`docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/flexibility-audit.md` — 원칙 2 의 사용자 원문 출처) · auto-memory · 문서 조사 표.
 - 넘기는 곳: 원칙이 실린 CLAUDE.md · 철학 문서 — R9 · R8 · R10 이 그 위에서 고친다(R9 의존에 R11). §5 넘김은 각 에픽의 설계 입력으로 간다.
 - 되돌아오는 길: 이 설계를 다시 나눌 근거가 보이면 재분해 신호로 지휘 세션에 보고(`plugins/spec-distill/references/redecompose.md`).
 - 같은 상태를 읽는 다른 표면: CLAUDE.md 를 읽는 락 · `plugin-audit` 의 shape 검사(`check-shape-completeness.py` 가 CLAUDE.md 앵커를 읽음) · 철학 문서 인용 락(`test_charter_citations.sh`) · README 를 읽는 테스트(`test_readme_sync.sh` 등). 이음매 담당은 이 에픽.
@@ -187,6 +187,7 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 - B6 · 결정 · 2026-10-19 · 계획 길이 보완 장치 없음 — 「짧아진 계획의 영향을 신경쓰진 일단 말아봐 그걸 근거로 과한 구현 안했음 좋겠으니」
 - B7 · 결정 · 2026-10-19 · 원칙 7(kill switch 개명 별칭) · 8(superpowers 를 덮지 않고 자기 몫을) 을 CLAUDE.md 에 넣지 않음 — 「여덟째는 넣지마 그리고 일곱째도 넣는건 좀 그러네」(B5 는 이로써 문면 없음)
 - 메모리 — 「메모리 경우는 정리만 잘해둬 원래 클로드 원칙 잇자나」
+- D1.1 · r1 · adopt · c43e2738#r1.1 · "고친다 — 이력 아닌 글만 정리 (권장)" — 에픽 묶음은 플러그인 README 와 CHANGELOG 의 낡은 개념 정리를 이 에픽의 일로 넘겼는데, 설계는 CHANGELOG 정리를 사용자 결정 기록 없이 범위 밖으로 뺐다.
 
 ## 번호 대조
 
