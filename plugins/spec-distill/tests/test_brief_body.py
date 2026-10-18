@@ -496,13 +496,49 @@ class RenderedShapeRules(unittest.TestCase):
             self.assertEqual((ok, [r for _n, r in bad]), ([], ["anchor_markup"]), line)
         self.assertEqual(B.anchor_lines("- **S<N>** 자리 표시 S<N>")[1], [])   # 자리 표시만 있는 줄은 그대로 받는다
 
+    def test_placeholder_token_with_digit_is_ordinary_text(self):
+        for line in ("- **S<N>9** x", "- **S<n>12** 「x」", "- __S<N>3__ x"):
+            ok, bad = B.anchor_lines(line)
+            self.assertEqual((ok, [r for _n, r in bad]), ([], ["anchor_markup"]), line)
+        ok, bad = B.anchor_lines("- **S1** 「a」 **S<N>9**")
+        self.assertEqual(([n for n, _s, _b in ok], [r for _n, r in bad]), ([1], ["anchor_in_body"]))
+        self.assertEqual(B.anchor_lines("- **S<N>** 자리 표시 S<N>")[1], [])
+
+    def test_accepted_anchor_body_is_checked_raw_and_viewed(self):
+        ok, bad = B.anchor_lines("- **S1** 「a」 <**S9**> 「b」")
+        self.assertEqual(([n for n, _s, _b in ok], [r for _n, r in bad]), ([1], ["anchor_in_body"]))
+        ok, bad = B.anchor_lines("- **S1** 「a」 <b>**S9**</b>")
+        self.assertEqual([r for _n, r in bad], ["anchor_in_body"])
+        self.assertEqual(B.anchor_lines("- **S1** 「a <i>굵게</i> b」")[1], [])
+
+    def test_tag_stripping_follows_raw_html_grammar_in_one_linear_pass(self):
+        self.assertEqual(B._strip_tags("a<b>c</b><!-- x --><?p?>d<![CDATA[y]]>e<**S9**>"), "acde<**S9**>")
+        self.assertEqual(B._strip_tags("<<b>b>"), "<b>")
+        import time
+        t0 = time.time()
+        for text in ("<" * 20000 + "b" + ">" * 20000, "<!--" * 20000, "<a " * 20000, "<?" * 20000):
+            B._strip_tags(text)
+        self.assertLess(time.time() - t0, 2.0)
+
+    def test_empty_list_item_cannot_interrupt_a_paragraph(self):
+        for mark in ("*", "+", "1.", "1)"):
+            self.assertEqual(B.setext_problems("x\n%s\n---\n" % mark), [(mark, "setext_heading")], mark)
+        self.assertEqual(B.setext_problems("7\\. Next Action\n*\n-----\n"), [("*", "setext_heading")])
+
+    def test_attribution_block_reads_document_coordinate_fences(self):
+        mark = " ".join(CB.ATTRIBUTION_MARKERS)
+        head = "---\nname: x\n---\n## 6. 사용자 원문\n\n"
+        self.assertFalse(CB.attribution_block_missing(head + "> " + mark + "\n\n- **S1** 「a」\n"))
+        self.assertTrue(CB.attribution_block_missing(head + "```\n> " + mark + "\n```\n- **S1** 「a」\n"))
+
     def test_html_and_char_refs_are_outside_the_subset(self):
         why = lambda doc: [w for _l, w in B.subset_problems(doc)]
         self.assertEqual(why("<div>\n- a\n</div>\n"), ["html_block_not_allowed", "html_block_not_allowed"])
         self.assertEqual(why("<!-- c -->\n"), ["html_block_not_allowed"])
         self.assertEqual(why("- &#79;Q1 결정\n"), ["char_ref_not_allowed"])
         self.assertEqual(why("- &#x53;9 · &amp; · &copy;\n"), ["char_ref_not_allowed"])
-        self.assertEqual(why("- 코드 칸 `&#83;` 안은 그대로\n"), [])
+        self.assertEqual(why("- 코드 칸 `&#83;` 안도 거부\n"), ["char_ref_not_allowed"])
+        self.assertEqual(why("- \\`&#79;Q1` · " + chr(0xFF40) + "&#79;" + chr(0xFF40) + "\n"), ["char_ref_not_allowed"])
         self.assertEqual(why("```\n<div>&#83;\n```\n"), [])                 # 펜스 안은 읽지 않는다
         self.assertEqual(why("- 산문 a < b 와 R&D 는 괜찮다\n"), [])
 

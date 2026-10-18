@@ -159,6 +159,11 @@ ANCHOR_CASES = [
     ("이스케이프 + 자리 표시 꼬리", ["- *\\*S5*\\* S\\<N\\>"], 0, None),
     ("숫자 문자 참조 S", ["- **&#83;9** 「x」"], 0, None),
     ("태그 + 문자 참조 숫자", ["- <b>S&#57;</b> x"], 0, None),
+    ("자리 표시 꼴 + 숫자", ["- **S<N>9** x"], 0, None),
+    ("소문자 자리 표시 꼴 + 숫자", ["- **S<n>12** 「x」"], 0, None),
+    ("밑줄 자리 표시 꼴 + 숫자", ["- __S<N>3__ x"], 0, None),
+    ("본문에 자리 표시 꼴 + 숫자", ["- **S1** 「a」 **S<N>9**"], 0, None),
+    ("본문에 꺾쇠로 감춘 앵커 꼴", ["- **S1** 「a」 <**S9**> 「b」"], 0, None),
     ("div 블록 감싼 앵커", ["<div>", ANCHOR9, "</div>"], 1, None),
     ("주석 블록 감싼 앵커", ["<!--", ANCHOR9, "-->"], 1, None),
     ("div 블록 감싼 펜스 앵커", ["<div>", "```", ANCHOR9, "```"], 2, None),
@@ -172,6 +177,9 @@ HEAD_CASES = [
     ("빈 h2", ["##"], 0),
     ("빈 h2 + CR", ["##\r"], 0),
     ("setext h2", ["7\\. Next Action", "-----"], 0),
+    ("setext h2 + 빈 별표 항목", ["7\\. Next Action", "*", "-----"], 0),
+    ("setext h2 + 빈 더하기 항목", ["7\\. Next Action", "+", "-----"], 0),
+    ("setext h2 + 빈 번호 항목", ["7\\. Next Action", "1.", "-----"], 0),
     ("setext h1(h2 아님)", ["7\\. Next Action", "====="], 0),
 ]
 
@@ -187,6 +195,9 @@ DECISION_CASES = [
     ("키릴 대문자 오 머리 + 표시", "- " + CYR_O + "Q1 [해결 ⟨S2⟩]"),
     ("키릴 대문자 오 머리, 표시 없음", "- " + CYR_O + "Q1 결정 내용"),
     ("숫자 문자 참조 O 머리", "- &#79;Q1 결정"),
+    ("코드 칸 안의 문자 참조", "- `&#79;Q1 결정`"),
+    ("이스케이프한 백틱 + 문자 참조", "- \\`&#79;Q1 결정`"),
+    ("전각 백틱 + 문자 참조", "- " + chr(0xFF40) + "&#79;Q1 결정" + chr(0xFF40)),
 ]
 
 
@@ -369,7 +380,7 @@ def our_fence_lines(doc):
 SETEXT_CORPUS = [
     "a\n---\n", "a\n===\n", "a\n\n---\n", "- a\n---\n", "- a\n  ---\n", "> a\n---\n", "> a\n> ---\n", "a\nb\n---\n",
     "# a\n---\n", "---\n---\n", "a\n -\n", "a\n----   \n", "    code\n---\n", "<div>\n---\n", "a\n    ---\n",
-    "x\n7. Next Action\n---\n", "<b>x</b>\n---\n", "* * *\n---\n", "a\n\n===\n", "1. a\n---\n", "a\n=\n", "> a\nb\n---\n", "- a\nb\n---\n",
+    "x\n7. Next Action\n---\n", "x\n*\n---\n", "x\n+\n---\n", "x\n1.\n---\n", "x\n1)\n---\n", "7\\. Next Action\n*\n-----\n", "<b>x</b>\n---\n", "* * *\n---\n", "a\n\n===\n", "1. a\n---\n", "a\n=\n", "> a\nb\n---\n", "- a\nb\n---\n",
 ]
 
 
@@ -390,7 +401,7 @@ class FenceAndSetextAgreement(unittest.TestCase):
             with self.subTest(doc):
                 ours, theirs = our_fence_lines(doc), parser_fence_lines(doc)
                 lines = doc.split("\n")
-                quoted_only = ours <= theirs and all(lines[i].startswith(">") for i in theirs - ours)   # 인용 안 펜스는 최상위 줄을 가리지 않는다
+                quoted_only = ours <= theirs and all(lines[i].lstrip(" ").startswith(">") for i in theirs - ours)   # 인용 안 펜스는 최상위 줄을 가리지 않는다
                 if ours != theirs and not quoted_only:
                     self.assertIn("fence_indented", [w for _l, w in B.head_problems(doc)], repr(doc))
 

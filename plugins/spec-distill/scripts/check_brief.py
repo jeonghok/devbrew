@@ -814,7 +814,15 @@ def attribution_block_missing(audit_text: str) -> bool:
     """
     # 번들이 싣는 audit §6(`section6.body`)에서 본다 — 절 판독(`_section_text`)은 `## 7.1` · 다른 문자 체계 숫자 머리를
     # 지나쳐 출처 표기를 찾지만, 싣는 §6 은 그 머리에서 끝나 출처 표기가 빠진다. 펜스 안은 출처 표기가 아니다.
-    for ln in brief_body.split_lines(FENCE_RE.sub("", _audit_section6(audit_text))):
+    sp = section6.span(audit_text)
+    if sp is None:
+        return True
+    fenced = section6.fence_spans(audit_text)   # 문서 좌표의 펜스 — 잘라 낸 조각 안에서 다시 세지 않는다
+    pos = sp[1]
+    for ln in brief_body.split_lines(audit_text[sp[1]:sp[2]]):
+        here, pos = pos, pos + len(ln) + 1
+        if any(a <= here < b for a, b in fenced):
+            continue
         if ln.lstrip().startswith(">") and all(m in ln for m in ATTRIBUTION_MARKERS):
             return False
     return True
@@ -1693,7 +1701,9 @@ def gate(path: Path) -> int:
         failures += open_line_ref_failures(text, pa | n1b_audit)
     failures += entry_line_failures(text)
     failures += section_heading_failures(text)
-    failures += [f"payload 에 절 표에 없는 절 머리가 있다 — {brief_body.SECTION_REASON_TEXT[why]} ({why}): {ln.strip()[:60]}"
+    failures += [(f"payload 에 읽는 쪽마다 다르게 읽히는 글이 있다 — {brief_body.SECTION_REASON_TEXT[why]} ({why}): {ln.strip()[:60]}"
+                  if why in brief_body.SUBSET_REASONS else
+                  f"payload 에 절 표에 없는 절 머리가 있다 — {brief_body.SECTION_REASON_TEXT[why]} ({why}): {ln.strip()[:60]}")
                  for ln, why in brief_body.head_problems(text)]
     failures += decision_outside_failures(text)
     failures += [f"§6 밖의 글에 닮은 글자로 쓴 원문 번호가 있다 — 번호로 읽지 않는다 (ref_confusable:{tok})"

@@ -33,9 +33,10 @@ S_CONFUSABLES = (0x0405, 0x054F, 0x10BD, 0x10FD, 0x13D5, 0x13DA, 0x1CBD, 0xA4E2,
 # 결정 번호 머리 `OQ<n>` 의 `O` · `Q` 를 흉내 내는 글자 — 같은 confusables.txt 에서 대상이 `O`(U+004F) · `Q`(U+0051)이고 NFKC 가
 # 접지 않는 글자. `S` 표와 별개로 둔다 — 쓰는 곳이 다르다. 세 표(S · O · Q)는 UTS #39 confusables.txt(Version 18.0.0,
 # Date 2026-08-06)에서 파서로 뽑았다: 원천이 ASCII 가 아니고, NFKC 가 이미 대상으로 접거나 이미 표에 있는 글자로 접는 글자와
-# 숫자(Nd)는 뺐다(숫자는 접지 않는다).
+# 숫자(Nd)는 뺐다(숫자는 접지 않는다). 숫자 여부는 실행하는 파이썬의 유니코드 자료로 판정하므로, 더 새 자료에서는 표를 같은 규칙으로
+# 다시 뽑아야 한다.
 O_CONFUSABLES = (0x039F, 0x041E, 0x0555, 0x0B20, 0x12D0, 0x1CBF, 0x2C9E, 0x2D54, 0x3007, 0xA4F3, 0x10292, 0x102AB,
-                 0x1030F, 0x10404, 0x104C2, 0x10516, 0x10C17, 0x118B5, 0x11DE0, 0x16AE9, 0x1CCE4, 0x1CCF0)
+                 0x1030F, 0x10404, 0x104C2, 0x10516, 0x10C17, 0x118B5, 0x16AE9, 0x1CCE4)
 Q_CONFUSABLES = (0x051A, 0x2D55, 0x1CCE6)
 # 마크다운 구조 글자(`*` 강조 · 불릿, `-` 불릿)를 흉내 내는 글자 — NFKC 가 접지 않는 별표 · 빼기 · 하이픈 · 대시.
 STRUCT_LOOKALIKES = {
@@ -162,9 +163,11 @@ _HTML_BLOCK_RE = re.compile(r"^ {0,3}<[A-Za-z/!?]")
 
 
 def _cannot_interrupt(ln):
-    """열린 문단을 끊지 못하는 목록 줄 — 1 이 아닌 번호로 시작하는 번호 목록(CommonMark)."""
+    """열린 문단을 끊지 못하는 목록 줄 — 내용이 없는 항목, 1 이 아닌 번호로 시작하는 번호 목록(CommonMark)."""
     m = _ITEM_RE.match(ln)
     num = m.group(2)
+    if not ln[m.end():].strip():
+        return True   # 내용이 없는 항목은 어떤 표지든 문단을 끊지 못한다
     return num[-1] in ".)" and num[:-1].lstrip("0") != "1"
 
 
@@ -214,7 +217,6 @@ def setext_problems(text):
     return out
 
 
-_HTML_START_RE = re.compile(r"^ {0,3}<[A-Za-z/!?]")
 _CHAR_REF_RE = re.compile(r"&[A-Za-z][A-Za-z0-9]*;|&#[0-9]+;|&#[xX][0-9A-Fa-f]+;")
 
 
@@ -225,18 +227,21 @@ def subset_problems(text):
     out = []
     for ln in split_lines(body_text(text)):
         c = canon(ln)
-        if _HTML_START_RE.match(c):
+        if _HTML_BLOCK_RE.match(c):
             out.append((ln, "html_block_not_allowed"))
-        if _CHAR_REF_RE.search(_CODE_SPAN_RE.sub("", c)):
+        if _CHAR_REF_RE.search(c):
             out.append((ln, "char_ref_not_allowed"))
     for ln in section6.indented_fence_openers(text):
         out.append((ln, "fence_indented"))
     return out
 
 
+SUBSET_REASONS = ("html_block_not_allowed", "char_ref_not_allowed", "fence_indented")   # 절 머리가 아닌 부분집합 밖 구조
+
+
 SECTION_REASON_TEXT = {
     "html_block_not_allowed": "HTML 블록으로 시작하는 줄이라 읽는 쪽마다 다른 구조로 읽힌다",
-    "char_ref_not_allowed": "HTML 문자 참조(`&#83;` 같은 것)가 있어 렌더러만 다른 글자로 읽는다",
+    "char_ref_not_allowed": "HTML 문자 참조(`&#83;` 같은 것)가 있어 렌더러만 다른 글자로 읽는다(코드 칸 안도 마찬가지다)",
     "fence_indented": "들여 쓴 코드 펜스라 목록 항목 안의 펜스로 읽는 쪽과 아닌 쪽이 갈린다",
     "setext_heading": "글줄 아래에 `===` 나 `---` 밑줄을 둔 제목(setext)이라 절 머리가 ATX 한 꼴로만 있다는 읽기가 깨진다",
     "section_missing": "제목 붙은 절 머리가 없다",
@@ -279,20 +284,55 @@ _IN_BODY_BULLET = re.compile(r"^(?:[^\w\n]|\d+[.)])*?(?:[-*+]|\d+[.)])\s+[*_`]*S
 _EMPH_S_HEAD = re.compile(r"^ {0,3}(?:[-*+]\s+)?(?:\*\*|__)S(?!\\?<|\ue000)")   # 자리 표시 `S<N>` · `S\<N\>`(템플릿)는 제외
 # 모양 보기 — 앵커 꼴 판정에만 쓰는 접은 모양: 인라인 HTML 태그를 지우고 백슬래시 이스케이프를 푼다. 렌더러는 이 모양으로
 # 앵커를 그리므로(`- <b>S9</b>` · `- *\\*S5*\\*`), 날 글자로는 문법 밖인데 이 모양으로 앵커처럼 읽히는 줄은 거부한다.
-_TAG_RE = re.compile(r"<[^<>\n]+>")
+# CommonMark 의 인라인 원시 HTML 문법만 «태그»로 읽는다(여는 · 닫는 태그, 주석, 처리 명령, 선언, CDATA). 꺾쇠 안이 이 문법이
+# 아니면(`<**S9**>`) 렌더러도 글자로 그리므로 지우지 않는다. 한 번에 훑어 선형이다.
+_TAG_OPEN_RE = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:[ \t][^<>\n]*)?/?>|<![A-Za-z][^<>\n]*>")
+
+
+_RAW_CLOSERS = (("<!--", "-->"), ("<?", "?>"), ("<![CDATA[", "]]>"))
+
+
+def _strip_tags(text):
+    out, i = [], 0
+    gone = set()   # 닫는 표지가 더는 없는 종류 — 같은 종류의 뒤 여는 표지를 다시 찾지 않는다
+    while True:
+        j = text.find("<", i)
+        if j < 0:
+            break
+        out.append(text[i:j])
+        end = None
+        for opener, closer in _RAW_CLOSERS:
+            if text.startswith(opener, j):
+                if opener not in gone:
+                    k = text.find(closer, j + len(opener))
+                    if k < 0:
+                        gone.add(opener)
+                    else:
+                        end = k + len(closer)
+                break
+        else:
+            m = _TAG_OPEN_RE.match(text, j)
+            if m:
+                end = m.end()
+        if end is None:
+            out.append("<")
+            i = j + 1
+        else:
+            i = end
+    out.append(text[i:])
+    return "".join(out)
+
+
 _ESCAPE_RE = re.compile(r"\\([!-/:-@\[-`{-~])")
 
 
-_PLACEHOLDER = re.compile(r"S\\?<[Nn]\\?>")   # 템플릿 자리 표시 `S<N>` — 줄 전체가 아니라 그 토큰만 태그 지우기에서 비킨다
+_PLACEHOLDER = re.compile(r"S\\?<[Nn]\\?>(?![0-9])")   # 템플릿 자리 표시 `S<N>` — 줄 전체가 아니라 그 토큰만 태그 지우기에서 비킨다
 _PH_MARK = "\ue000"
 
 
 def _shape_view(text):
     f = _PLACEHOLDER.sub("S" + _PH_MARK, fold(text).translate({ord(_PH_MARK): None}))
-    prev = None
-    while prev != f:
-        prev, f = f, _TAG_RE.sub("", f)
-    return _ESCAPE_RE.sub(r"\1", html.unescape(f))
+    return _ESCAPE_RE.sub(r"\1", html.unescape(_strip_tags(f)))
 
 
 # 거부 사유 이름 → 사람이 읽는 말. 메시지는 이 말을 앞세우고 사유 이름은 괄호에 둔다.
@@ -315,6 +355,10 @@ def _lead_ws_reason(line):
     if i == 0:
         return None
     return "anchor_indented" if set(line[:i]) <= {" ", "\t"} else "anchor_unicode_space"
+
+
+def _in_body_text(f):
+    return bool(_IN_BODY_TOKEN.search(f) or _IN_BODY_BULLET.match(f))
 
 
 def _in_body(f):
@@ -348,7 +392,8 @@ def anchor_lines(section_text):
         m = ANCHOR_LINE_RE.match(line)
         if m:
             ok.append((n, m.group(1), m.group(2) or ""))
-            if _IN_BODY_TOKEN.search(_shape_view(m.group(2) or "")):
+            body = m.group(2) or ""
+            if _in_body_text(fold(body)) or _in_body_text(_shape_view(body)):
                 bad.append((n, "anchor_in_body"))
             continue
         why = _lead_ws_reason(line)
