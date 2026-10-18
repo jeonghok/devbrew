@@ -168,6 +168,8 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
              '## 미룸 표' 'check_bundle_coverage.py --impl <spec_path>'; do
       assert_contains "$RSL" "$n" "AC1 · AC10: spec-review 다음 세션 줄(writing-plans 진행 안내)에 「${n}」"
     done
+    assert_contains "$RSL" '고른 실행 방식의 마지막 전체 리뷰' "AC42: 승인 게이트 다음 세션 줄이 고른 실행 방식의 마지막 전체 리뷰를 말한다"
+    assert_not_contains "$RSL" 'SDD 의 마지막 전체 리뷰' "AC42: 다음 세션 줄이 SDD 로 고정하지 않는다(양성 짝: 위 줄)"
     assert_eq "$(lead_only "$RSL")" "ok" "spec-review 다음 세션 줄의 꺾쇠 자리표는 <spec_path> 뿐이다"
   fi
   STOP="$(printf '%s\n' "$GATE" | awk '/^- \*\*①\/② 의 정지 요건\*\*/{f=1;print;next} f&&/^- /{f=0} f' | tr '\n' ' ' | tr -s ' ')"
