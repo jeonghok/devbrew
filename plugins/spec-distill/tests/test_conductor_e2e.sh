@@ -79,12 +79,17 @@ assert_eq "$(stage_of E1)" "구현 끝" "구현 대조 절 → 구현 끝"
 # 6 — 스위트 대조(pytest · 새 실패 없음)
 out="$(cd "$W" && python3 "$S/merge_check.py" run --roadmap "$RM" --branch work/e1 --no-fetch)"; rc=$?
 assert_eq "$rc" "0" "스위트 대조 rc 0: $out"
+assert_contains "$out" "pytest" "스위트 대조가 탐지한 러너는 pytest"
 
 # 7 — 조사 에픽: 산출물이 브랜치에 생기면 설계 중
 WT2="$(L worktree-path --name e2)"
 g "$W" worktree add -q "$WT2" -b work/e2 origin/HEAD
-mkdir -p "$WT2/plan/research"; printf '# E2 조사\n' > "$WT2/plan/research/e2.md"; g "$WT2" add -A; g "$WT2" commit -qm research
+assert_eq "$(reason_of E2)" "브랜치 있음 · spec 없음" "조사 에픽: 브랜치만으로는 산출물이 없다"
+mkdir -p "$WT2/plan/research"
+printf '# E2 조사\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| «e2e-k» | 반영 | 조사 결과 |\n| K1 | 반영 | 조사 결과 |\n' > "$WT2/plan/research/e2.md"
+g "$WT2" add -A; g "$WT2" commit -qm research
 assert_eq "$(stage_of E2)" "설계 중" "조사 에픽: 산출물 → 설계 중"
+assert_eq "$(reason_of E2)" "spec 있음" "조사 에픽: 산출물이 spec 으로 읽힌다"
 
 # 8 — 머지(사용자 몫을 흉내) → 머지됨 → 정리(브랜치는 남는다) → 주인 모름은 E2 worktree
 g "$W" merge -q --no-ff work/e1 -m "Merge pull request #1 from o/work/e1"; g "$W" push -q origin trunk; g "$W" fetch -q origin
@@ -95,17 +100,23 @@ assert_contains "$(g "$W" branch --list work/e1)" "work/e1" "브랜치는 지우
 assert_contains "$(L orphans --roadmap "$RM")" "work/e2" "기계 상태에 없는 E2 worktree 는 주인 모름"
 
 # 9 — 기계 상태를 지워도 상태는 git 에서 같다(AC17): 줄의 <제목><탭><상태> 만 비교
-titles_status() { printf '%s\n' "$1" | awk -F'\t' 'NF>=2{print $1 "\t" $2}'; }
-before="$(titles_status "$(tasks_of)")"
+L add --roadmap "$RM" --session "$SID" --section 자원 --cells "worktree · $WT2 · E2 · 조사 · t" >/dev/null
+assert_not_contains "$(L orphans --roadmap "$RM")" "work/e2" "자원에 적은 E2 worktree 는 주인 모름이 아니다"
+before="$(tasks_of)"
 SP="$(cd "$W" && python3 "$S/conductor_state.py" path --roadmap "$RM")"
 [ -n "$before" ] && ok "비교할 작업 줄이 있다(빈 둘을 같다고 보지 않는다)" || no "작업 줄이 비어 있다"
 [ -f "$SP" ] && ok "지우기 전에 기계 상태 파일이 있다" || no "기계 상태 파일이 없다: $SP"
 rm -f -- "$SP"
-after="$(titles_status "$(tasks_of)")"
+after="$(tasks_of)"
 assert_eq "$after" "$before" "기계 상태를 지워도 작업 목록이 같다"
-assert_eq "$(L resources --roadmap "$RM")" "없음" "잃은 것은 다시 만들 수 있는 자원 목록뿐"
+assert_contains "$(L orphans --roadmap "$RM")" "work/e2" "기계 상태를 잃으면 E2 worktree 는 주인 모름으로 다시 드러난다"
+L claim --roadmap "$RM" --session "$SID" >/dev/null
+L approval --roadmap "$RM" --session "$SID" --scale "$SCALE" >/dev/null; assert_eq "$?" "1" "기계 상태를 잃으면 시작 승인을 다시 묻는다"
 
 # 10 — 레포 전용 값이 박혀 있지 않다: 이 레포에는 main · feature/ · docs/superpowers 가 없다
 assert_eq "$(g "$W" branch -a --list '*main*' | wc -l | tr -d ' ')" "0" "버릴 레포에 main 브랜치가 없다"
 [ -d "$W/docs" ] && no "버릴 레포에 docs 폴더가 생겼다(기본 폴더를 박은 곳이 있다)" || ok "기본 폴더를 쓰지 않았다(frontmatter 폴더만)"
+rs="$(status_json)"
+assert_eq "$(printf '%s' "$rs" | python3 -I -c 'import json,sys; s=json.load(sys.stdin)["settings"]["sources"]; print(s["specs_dir"], s["plans_dir"])')" "frontmatter frontmatter" "설계문서 · 계획 폴더는 frontmatter 에서 읽었다"
+assert_eq "$(printf '%s' "$rs" | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["default_branch"])')" "origin/trunk" "기본 브랜치는 origin/trunk 로 읽혔다"
 finish

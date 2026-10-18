@@ -71,10 +71,14 @@ sys.path.insert(0, sys.argv[1])
 import conductor_ledger
 print("\n".join(sorted(conductor_ledger.COMMANDS)))' "$ROOT/plugins/spec-distill/scripts")"
 unknown_ledger_cmds() {  # unknown_ledger_cmds <본문> — COMMANDS 에 없는 `ledger <명령>` 을 한 줄씩
-  printf '%s\n' "$1" | grep -oE 'ledger [a-z][a-z-]*' | sed 's/^ledger //' | sort -u \
+  printf '%s\n' "$1" | grep -oE '(conductor_)?ledger(\.py)? [a-z][a-z_-]*' | sed -E 's/^(conductor_)?ledger(\.py)? //' | sort -u \
     | while IFS= read -r c; do printf '%s\n' "$LEDGER_KEYS" | grep -qxF -- "$c" || printf '%s\n' "$c"; done
 }
-assert_eq "$(unknown_ledger_cmds "$LOOP")" "" "지휘 순환의 ledger 명령 이름은 모두 COMMANDS 의 키다"
+WHOLE="$(cat "$CD")"
+assert_eq "$(unknown_ledger_cmds "$WHOLE")" "" "conducting.md 전체의 ledger 명령 이름은 모두 COMMANDS 의 키다"
+assert_contains "$(printf '%s\n' "$WHOLE" | grep -oE '(conductor_)?ledger(\.py)? [a-z][a-z_-]*' | sort -u)" "conductor_ledger.py worktree-path" "추출이 worktree-path 줄을 본다"
+mutated="$(printf '%s\n' "$WHOLE" | sed 's/conductor_ledger.py worktree-path/conductor_ledger.py nosuch-cmd/')"
+assert_eq "$(unknown_ledger_cmds "$mutated")" "nosuch-cmd" "변이: worktree-path 이름을 바꾸면 잡는다"
 assert_contains "$LEDGER_KEYS" "claim" "COMMANDS 키를 읽었다"
 assert_eq "$(unknown_ledger_cmds 'ledger nosuchcmd')" "nosuchcmd" "양성 대조: 없는 ledger 명령을 잡는다"
 finish
