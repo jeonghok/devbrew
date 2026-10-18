@@ -25,11 +25,17 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 **Law 2 — Writer and Reviewer Must Never Share a Pass.** 코드를 쓴 턴은 그 코드를 승인할 수 없음. 분리는 프롬프트가 아니라 물리적: `tools:` allowlist frontmatter로 리뷰어가 `Write`/`Edit`을 literally 갖지 못하게 만들기. 쓰기 권한이 있는 리뷰어는 리뷰어가 아님. 검증은 load-bearing 인프라, 나중 생각이 아님.
 
-**Law 3 — Every Cycle Must Leave the System Smarter.** Compounding은 선택적 wrap-up이 아니라 discoverability check가 붙은 이름 붙은 단계. 사이클이 learning을 생산하면 하니스는 그것을 파일로 capture하고 다음 세션이 실제로 찾을 것임을 확인 — discoverability가 위험하면 인덱스 (`AGENTS.md`/`CLAUDE.md`)를 자동 편집. 어떤 미래 agent도 읽지 않는 파일에 기록하는 것은 theater.
+**Law 3 — Every Cycle Must Leave the System Smarter.** Compounding은 선택적 wrap-up이 아니라 discoverability check가 붙은 이름 붙은 단계. 사이클이 learning을 생산하면 하니스는 그것을 파일로 capture하고 다음 세션이 실제로 찾을 것임을 확인 — 「다음 세션」은 메모리 없는 레포의 세션도 뜻한다: 교훈은 메모리가 아니라 그 동작을 내는 skill · reference · 스크립트 · 락을 고쳐 남긴다(철학 Law 3). 어떤 미래 agent도 읽지 않는 파일에 기록하는 것은 theater.
 
 ## Plugin Shape
 
 `plugins/*`의 모든 플러그인은 [canonical 디렉토리 구조](docs/plugin-authoring.md)를 따르고 아래를 모두 만족해야 합니다.
+
+- **기본값과 판단.** 규칙은 「기본은 X, 모양이 다르면 모델이 판단하고 이유를 적는다」로 쓴다. 결정론은 보안 · 정확성 게이트에만(철학 P8).
+- **레포 전용 값 금지.** 경로 · 테스트 명령 · 브랜치 · 모델 · `gh` 같은 값은 도출하거나 레포마다 정하게 한다(철학 P8).
+- **상류 · 하류 연계.** 설계마다 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 이음매 담당을 보인다(철학 P23).
+- **진입점에서 따라 내려가기.** 산출물 · 상태가 얽히면 객체 · 링크 · 속성 · 주인을 적어 진입점에서 따라가게 한다(철학 P5).
+- **있는 것 먼저.** 만들기 전에 레포 안 · 밖의 있는 것을 검토하고 외부 것은 사용자 검토 뒤 쓴다(철학 P8).
 
 ### 메타데이터 & 버전 관리
 
@@ -39,8 +45,8 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 ### 컴포넌트 격리
 
-- **Scoped agents — default-everything 금지.** 모든 agent는 `tools:` allowlist를 선언한다 (fail-closed — 열거하지 않은 것은 전부 차단). **denylist(`disallowedTools`) 단독 금지**: 공간에 대해 fail-open(열거를 잊은 도구는 허용)이고 **denylist는 시간에 대해 fail-open**이다 — 내일 추가될 도구는 오늘 열거할 수 없다 (`Monitor`가 이름만 다른 셸+네트워크 egress로 그 실증). 역할 프롬프트는 *"You are X. You are responsible for Y. You are NOT responsible for Z."*로 시작. 쓰기 권한이 있는 리뷰어는 Law 2 위반. **agent frontmatter의 실재 필드는 `tools`(allowlist)와 `disallowedTools`(denylist) 둘뿐이다** — 이와 헷갈려 command/skill 계층의 `allowed-tools`(kebab, 실재 키)를 agent에 camelCase로 옮겨 적으면 존재하지 않는 필드가 되어 조용히 무시된다.
-- **`allowed-tools` 는 제한이 아니다.** command 에서는 쓰지 않는다. skill 에서는 진입 사전 검사 한 줄의 사전 허용으로만 쓰고 다른 도구를 열거하지 않는다. 2026-08-22 헤드리스 실측 5변형(`--plugin-dir` 격리 플러그인)에서 `["Read"]`로 `Bash`를 빼놓아도 `Bash`가 실행됐고, 스코프 표기(`Bash(<pattern>:*)`)도 범위 밖 명령을 막지 못했다 — **이 계층은 제한이 아니다.** 바로 위 agent의 `tools:`와는 다르다 — 그것은 fail-closed이고 Law 2의 집행 지점이다. 막지 않는 것을 막는다고 믿게 만드는 선언은 없는 것보다 나쁘다.
+- **Scoped agents — default-everything 금지.** 모든 agent는 `tools:` allowlist를 선언한다 (fail-closed — 열거하지 않은 것은 전부 차단). **denylist(`disallowedTools`) 단독 금지**: 공간에 대해 fail-open(열거를 잊은 도구는 허용)이고 **denylist는 시간에 대해 fail-open**이다 — 내일 추가될 도구는 오늘 열거할 수 없다. 역할 프롬프트는 *"You are X. You are responsible for Y. You are NOT responsible for Z."*로 시작. 쓰기 권한이 있는 리뷰어는 Law 2 위반. **agent frontmatter의 실재 필드는 `tools`(allowlist)와 `disallowedTools`(denylist) 둘뿐이다** — 이와 헷갈려 command/skill 계층의 `allowed-tools`(kebab, 실재 키)를 agent에 camelCase로 옮겨 적으면 존재하지 않는 필드가 되어 조용히 무시된다.
+- **`allowed-tools` 는 제한이 아니다.** command 에서는 쓰지 않는다. skill 에서는 진입 사전 검사 한 줄의 사전 허용으로만 쓰고 다른 도구를 열거하지 않는다. 목록 밖 도구도 실행되고 스코프 표기(`Bash(<pattern>:*)`)도 범위 밖 명령을 막지 못한다 — **이 계층은 제한이 아니다.** 바로 위 agent의 `tools:`와는 다르다 — 그것은 fail-closed이고 Law 2의 집행 지점이다. 막지 않는 것을 막는다고 믿게 만드는 선언은 없는 것보다 나쁘다.
 - **최소 버전이 선언된 의존성.** `other-plugin:agent-name`을 dispatch하는 플러그인은 README prerequisites에 `other-plugin`을 리스트. Silent coupling은 버그.
 - **모든 skill에 `cost_class` 선언** (`low`|`medium`|`high`|`variable`). `high`는 지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함. 이름 붙인 예외 하나 — `epic-conductor` 를 같은 세션에서 같은 규모로 다시 부르면 이미 받은 승인을 다시 쓰고 공시만 한다(규모가 바뀌거나 다른 세션이면 다시 묻는다, 2026-10-18 사용자 결정).
 - **subagent 발견은 처분을 밝힌다.** 모든 dispatch 자리는
@@ -63,7 +69,7 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 - **JSON이 아니라 마크다운 state.** 런타임 state 는 `.claude/<plugin>/` 하위에 산다(git-ignored, plugin namespace 밖으로 나가지 않는다) — 세션 단위 state 는 `.claude/<plugin>/<session-id>/<file>`(성공 시 auto-delete, 실패 시 디버깅을 위해 보존), 문서 단위 리뷰 원장은 그 문서가 사라질 때 정리한다. 인터뷰처럼 세션을 넘는 진행 기록은 docs 의 추적 파일에 두고 산출물과 함께 커밋한다. **Secret 기록 금지** — placeholder 참조 사용 (철학 P21).
 - **모든 훅에 kill switch.** `DEVBREW_<PLUGIN>_DISABLE=1` 또는 `DEVBREW_SKIP_HOOKS=<plugin>:<hook>`. 어떤 훅도 자신의 kill switch 존중을 거부할 수 없음 — kill switch는 보안 컨트롤.
-- **훅 공존.** 같은 event 내 훅은 교환 가능해야 함. Signal tag는 `<{plugin}-signal>` 네임스페이스. `SessionStart` 훅은 read-only 조언자, 절대 mutate 안 함. 각 훅은 README의 "Hooks Installed"에 "왜 skill이 아닌가"의 한 줄 justification과 함께 문서화.
+- **훅 공존.** 같은 event 내 훅은 교환 가능해야 함. `SessionStart` 훅은 read-only 조언자, 절대 mutate 안 함. 각 훅은 README의 "Hooks Installed"에 "왜 skill이 아닌가"의 한 줄 justification과 함께 문서화.
 - **Loud logging을 동반한 graceful degradation.** 누락된 optional 의존성은 capability를 downgrade, crash하지 않음 — 사용자가 출력에서 fallback이 돌았음을 알 수 있어야 함.
 
 ### 네이밍 & 보안
@@ -77,21 +83,20 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 ## Forbidden Patterns
 
-Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md)의 Structural Mechanisms 섹션 (각 원칙의 anti-corollary). 리뷰에서 이름으로 cite. 이 리포에서 가장 자주 fire하는 것들:
+원칙과 그 anti-corollary: [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md)의 Structural Mechanisms · Anti-Pattern Anchors 절. 리뷰에서 이름으로 cite. 이 리포에서 가장 자주 fire하는 것들:
 
 - **Self-approval** — 같은 턴의 writer/reviewer (Law 2 위반).
 - **Polite stop** — 긍정적 리뷰 후 다음 액션으로 가지 않고 요약을 narrate. Approval gate와 구분: gate는 사용자가 redirect 가능, polite stop은 acknowledge만 가능.
 - **Trivia ceremony** — 한 문장 diff에 full pipeline 실행 (Anthropic *Best Practices*).
-- **Subagent spray** — 선언 없는 fan-out. 비용과 fan-out을 선언하지 않고 대규모로 퍼뜨리는 것이 anti-pattern이다 (규모 자체가 아니라 선언 없음이). **Agent(subagent) 호출 자체는 이 리포에서 상시 허용** — 매번 승인을 묻지 않는다 (Opus 5 기본 시스템 프롬프트의 `unless the user requested it` 를 사용자가 상시 요청으로 해제, 2026-08-22). 금지되는 것은 선언 없는 대규모 fan-out 뿐이다. Workflow 와 deep-research 는 범위 밖 — 여전히 명시 요청이 필요하다.
+- **Subagent spray** — 선언 없는 fan-out. 비용과 fan-out을 선언하지 않고 대규모로 퍼뜨리는 것이 anti-pattern이다 (규모 자체가 아니라 선언 없음이). **Agent(subagent) 호출 자체는 이 리포에서 상시 허용** — 매번 승인을 묻지 않는다. 금지되는 것은 선언 없는 대규모 fan-out 뿐이다. Workflow 와 deep-research 는 범위 밖 — 여전히 명시 요청이 필요하다.
 - **Self-narrating artifact** — 모델이 읽고 행동하는 산출물(생성 템플릿, 룰 파일, 프롬프트)이 자기 출처("무엇이 이 파일을 만들었다")·배경·존재 정당화를 담는 것. 토큰 낭비이자 의미 왜곡 — 읽는 쪽의 초점이 "무엇을 해야 하나"에서 "이게 왜 있나"로 옮겨가고, 정당화 문장이 지시로 오독된다. 근거와 이력은 CHANGELOG·PR·리뷰에 남기고 산출물에는 행동에 필요한 것만 둔다.
 - **Unbounded autonomy** — max-iter count, repeat 감지, 사용자-override kill switch 없는 루프.
-- **Polite handoff** — brainstorming/spec-distill review-approved 후 다음 단계를 narrate만 하고 spec-distill 의 `AskUserQuestion` proceed 게이트를 띄우지 않음. 이 게이트는 `spec-review` 의 `## 게이트` 절과 `spec-interview` 종료 Step B **양쪽**에 있고, 둘은 같은 계약(`plugins/spec-distill/references/proceed-gate.md`)을 공유한다 — 정본은 그 파일이다. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 봉쇄 장치 — 게이트를 skip한 narrate-only 종료가 polite-stop의 한 종류 (AP2 variant). 대칭으로, 옵션 ①·②(`/new`·`/compact` 뒤 다음 세션 줄) 선택 시 명령 노출 후 같은 턴에 다음 단계로 직진하는 cross-compact 조기 진행도 게이트 P17 우회의 대칭 실패로 금지 (AP2 variant, spec-distill v0.11.0 AC19).
+- **Polite handoff** — 리뷰 승인 뒤 proceed 게이트를 띄우지 않고 다음 단계를 narrate만 하는 것, 그리고 게이트가 정한 멈춤을 건너뛰고 다음 단계로 직진하는 것. 둘 다 게이트(P17)를 건너뛴 polite stop 이다(AP2 variant). 게이트 계약과 그 예외의 정본은 `plugins/spec-distill/references/proceed-gate.md`.
 - **Sealed decision** — 앞 단계의 확정이 하류에서 반증됐는데 피벗 경로가 없는 것 (철학 P23 의 anti-corollary). 재발견 금지는 반증 금지가 아니다 — 근거 있는 재결정은 사용자 동의를 받아 허용하고, 임의 변경만 금지한다.
 
 **버그가 리뷰를 탈출하면**, 해결책은 잡았어야 할 reviewer persona 파일을 편집하는 것 — 코드만 패치하는 게 아님. 그 commit이 compounding 이벤트 (Law 3).
 
 ## Doc Conventions
 
-- **Korean-primary, English-terms-only.** `CLAUDE.md`와 `docs/philosophy/*.md` 등 user-facing 문서는 한국어를 primary로 작성. 영어는 **식별자**(P#, AP#, Law N, §X.Y, plugin 이름), **고유명사**(OMC, gstack, Ouroboros, CE, Anthropic 등), **원문 인용**(verbatim, 어느 방향으로도 gloss 추가 안 함), **기술 용어 중 자연스러운 한국어 대응이 없는 것**(`frontmatter`, `PreCompact`, `subagent`, `hook`, `skill` 등)에 한정. `*.ko.md` 동반 파일 모델은 폐기 (drift 비용 > 이중 노출 가치).
-- **범위.** 위의 영어 범위와 「원문 인용에 풀이를 붙이지 않는다」는 **레포 문서**의 규칙이다. 플러그인이 실행 중 사람에게 내는 글은 `shared/style/plain-language.md` 를 따른다.
+- **Korean-primary, English-terms-only.** `CLAUDE.md`와 `docs/philosophy/*.md` 등 user-facing 문서는 한국어를 primary로 작성. 영어는 **식별자**(P#, AP#, Law N, §X.Y, plugin 이름), **고유명사**(OMC, gstack, Ouroboros, CE, Anthropic 등), **원문 인용**(verbatim, 어느 방향으로도 gloss 추가 안 함), **기술 용어 중 자연스러운 한국어 대응이 없는 것**(`frontmatter`, `PreCompact`, `subagent`, `hook`, `skill` 등)에 한정.- **범위.** 위의 영어 범위와 「원문 인용에 풀이를 붙이지 않는다」는 **레포 문서**의 규칙이다. 플러그인이 실행 중 사람에게 내는 글은 `shared/style/plain-language.md` 를 따른다.
 - **`docs/**.md` 파일이 ~300줄 이상이면 상단(제목 + 에피그래프 + 한 줄 정체성 다음, 본문 진입 직전)에 `## 목차` 섹션 필수.** §X.Y depth로 anchor 링크. 섹션 추가/이름 변경/삭제 시 같은 commit에서 TOC도 동기화 (drift 시 cite-by-anchor 깨짐). 짧은 doc(<300줄, git-workflow 가이드 등)은 면제.
