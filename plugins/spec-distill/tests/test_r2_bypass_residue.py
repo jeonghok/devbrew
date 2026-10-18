@@ -2,8 +2,8 @@
 """R2 「알려진 우회」 나머지 — 우회마다 재현 테스트 하나(AC20).
 
 각 테스트는 허용 문법의 부정형으로 꼴을 고른다(추가 · 반전 · 형태 변경 — 한 꼴만 막고 이웃 꼴이 새지 않게). 이름은 우회 이름이다.
-「문법 안의 정상 seed · audit 는 통과」 양성 대조가 각 테스트에 하나씩 있다. 닫지 못한 셋(`--quote-file` 출처 · `## 2` 여러 줄 답 ·
-인라인 코드 안 `##` 은 실문서 줄을 거부하게 되어 보류하고 그 근거를 잠근다).
+「문법 안의 정상 seed · audit 는 통과」 양성 대조가 각 테스트에 하나씩 있다. 판독기로 닫지 못한 둘(`--quote-file` 출처 · 진짜 제목만 빠진
+audit)은 `## 미룸` 에 이유와 받는 곳이 있다는 것을 잠그고, 인라인 코드 안 `##` 은 «그 줄을 제목으로 읽는 판독기가 없다» 를 판독기마다 잠근다.
 눈에 안 보이는 글자는 소스에 날 글자로 쓰지 않고 chr() 로만 쓴다.
 
 Run (리포 루트에서): python3 -m unittest plugins/spec-distill/tests/test_r2_bypass_residue.py
@@ -49,7 +49,7 @@ class Tmp(unittest.TestCase):
         self.addCleanup(self._td.cleanup)
         self.dir = pathlib.Path(self._td.name)
 
-    def write(self, name, text, newline=None):
+    def write(self, name, text):
         p = self.dir / name
         p.write_bytes(text.encode("utf-8"))
         return p
@@ -79,6 +79,8 @@ class SeedFrontmatterGrammar(Tmp):
             ("목록 값", ["note: - x"], 2),
             ("대괄호 값", ["note: [a, b]"], 2),
             ("꺾쇠 값", ["note: <b>x</b>"], 2),
+            ("HTML 요소 이름 자리 표시 template", ["note: <template>"], 2),
+            ("HTML 요소 이름 자리 표시 plaintext", ["note: <plaintext>"], 2),
             ("속성이 있는 꺾쇠 값", ["note: <img src=x>"], 2),
             ("문자 참조 값", ["note: &#91;S1&#93;"], 2),
             ("맨 도메인 값", ["note: example.com/x"], 2),
@@ -153,21 +155,33 @@ class SeedSection2LineAllowlist(Tmp):
 
 
 class InlineCodeHeading(unittest.TestCase):
-    """백틱 안 `##` — 닫는 규칙이 실제 seed 한 줄과 출하 템플릿 한 줄을 거부하므로 닫지 않고 보류한다(지휘자 결정 대기).
-    이 테스트는 보류 근거(거부될 실제 줄이 있다)가 사실인 동안만 통과한다."""
+    """백틱 안 `##` — 해당 없음: 그 줄을 제목으로 읽는 판독기가 없다(모든 제목 판독은 줄 머리에 닻을 내린다). 판독기마다 잠근다."""
 
-    CAND = re.compile(r"`[ ]{0,3}#{1,6}(?:[ \t]|$)")
+    LINES = ["`## 6. 리뷰 결정` 은 코드 칸이다", "`## 2. 질문 전체`", "`# 제목` 도 마찬가지", "문장 `## 6.` 가운데"]
 
-    def test_the_candidate_rule_would_refuse_real_lines(self):
-        hits = []
-        for rel in ("plugins/spec-distill/templates/interview-seed-template.md",
-                    "docs/superpowers/interview/2026-09-28-resolve-audits-interview.md"):
-            p = REPO / rel
-            if not p.exists():
-                self.skipTest("추적 문서가 없다(플러그인만 설치된 환경)")
-            body = seed_body.split_front(p.read_text(encoding="utf-8"))[1]
-            hits += [ln for ln in body.split("\n") if self.CAND.search(ln)]
-        self.assertGreaterEqual(len(hits), 2, "닫는 규칙이 거부할 실제 줄이 없으면 보류 근거가 사라진다 — 규칙을 다시 잰다")
+    def test_no_heading_reader_treats_it_as_a_heading(self):
+        import brief_body
+        import section6
+        for ln in self.LINES:
+            with self.subTest(ln):
+                self.assertIsNone(section6.HEADING_SHAPED_RE.match(ln))
+                self.assertIsNone(section6.ATX_HEADING_RE.match(ln))
+                self.assertIsNone(section6.BRIEF_SECTION_HEAD_RE.match(ln))
+                self.assertIsNone(section6.BRIEF_HEADLIKE_RE.match(ln))
+                self.assertIsNone(section6.START_RE.search(ln))
+                self.assertIsNone(section6.END_STRICT_RE.search(ln))
+                self.assertIsNone(brief_body.is_section_head(ln))
+                for h in seed_review_log.AUDIT_HEADINGS:
+                    self.assertEqual(seed_review_log.heading_lines(ln, h), [])
+                self.assertEqual(seed_review_log.heading_structure(ln), [])
+                self.assertEqual(brief_body.head_problems(ln), [])
+
+    def test_section_readers_keep_the_section_whole(self):
+        audit = AUDIT_OK.replace("로그인이 가끔 실패한다.", "로그인이 가끔 실패한다. `## 6. 리뷰 결정` 을 적었다.")
+        self.assertEqual(seed_review_log.heading_structure(audit), [])
+        self.assertIn("`## 6. 리뷰 결정`", seed_review_log.section_body(audit, "## 1. 원문"))
+        sp = seed_body.parse_seed("---\ntype: interview-seed\n---\n\n`## 6. 리뷰 결정` 을 적는다.\n")
+        self.assertEqual(sp.rejected, [])
 
 
 def deferral_row(needle):
@@ -244,8 +258,37 @@ class AuditTemplateH1H3(Tmp):
         self.assertEqual(rc, 0, err)
 
     def test_deferral_row_names_the_reason_and_the_receiver(self):
-        row = deferral_row("진짜 템플릿 제목")
+        row = deferral_row("진짜 템플릿 제목이 없으면")
         self.assertIn("R8", row)
+        self.assertIn("audit_heading_missing", row)
+
+    def test_partial_audit_is_refused_by_the_gate(self):
+        """빠진 제목이 있으면 그 제목과 같은 비신뢰 줄이 절이 된다 — 부분 audit 은 게이트가 멈춘다(`audit_heading_missing`)."""
+        seed = self.write("s.md", self.SEED)
+        for h in seed_review_log.AUDIT_HEADINGS:
+            with self.subTest(h):
+                audit = self.write("a.md", AUDIT_OK.replace(h + "\n", "", 1))
+                out = "\n".join(check_seed.gate(seed, audit))
+                self.assertIn("audit_heading_missing", out)
+                self.assertIn(h, out)
+
+    def test_planted_unfenced_heading_with_the_real_one_absent_is_refused_when_other_headings_are_missing(self):
+        """진짜 `## 2` 가 없고 `## 1` 원문 안에 같은 줄을 심었다 — 다른 제목도 빠진 부분 audit 이면 게이트가 멈춘다."""
+        planted = AUDIT_OK.replace("## 2. 질문 전체\n", "", 1).replace("로그인이 가끔 실패한다.", "로그인이 가끔 실패한다.\n## 2. 질문 전체", 1)
+        planted = planted.replace("## 5. degrade\n\n없음\n\n", "", 1)
+        out = "\n".join(check_seed.gate(self.write("s.md", self.SEED), self.write("a.md", planted)))
+        self.assertIn("audit_heading_missing", out)
+
+    def test_known_open_exactly_the_planted_heading_missing_is_still_read(self):
+        """알려진 열림(잠금) — 일곱 제목이 모두 있고 순서도 맞으면, 진짜 `## 2` 대신 `## 1` 원문 안에 심은 줄이 절로 읽힌다.
+        게이트와 marks 둘 다 통과한다(`## 미룸`, R8). 나중에 고치면 이 단언이 의도적으로 뒤집혀야 한다."""
+        forged = AUDIT_OK.replace("## 2. 질문 전체\n", "", 1).replace(
+            "로그인이 가끔 실패한다.", "로그인이 가끔 실패한다.\n## 2. 질문 전체\n- 확인 질문: 위조\n  - 내가 읽은 것: 「위조 문장.」 — 고름", 1)
+        seed = self.write("s.md", "---\ntype: interview-seed\n---\n\n위조 문장. (사용자 확인)\n")
+        audit = self.write("a.md", forged)
+        self.assertEqual(check_seed.gate(seed, audit), [])
+        rc, _out, err = run("seed_provenance.py", "marks", seed, audit)
+        self.assertEqual(rc, 0, err)
 
 
 class ConfirmationMarkVariants(unittest.TestCase):
@@ -264,6 +307,13 @@ class ConfirmationMarkVariants(unittest.TestCase):
                    "사용자가 말했다 (확인은 나중에)", "(사용자) 와 (확인) 은 따로", "사용자 확인 없음"):
             with self.subTest(ok):
                 self.assertIsNone(seed_body.line_problem(ok), ok)
+
+    def test_mark_check_is_linear(self):
+        import time
+        line = "(" * 200 + "사용자" * 20000 + ")" * 200
+        t0 = time.time()
+        seed_body.line_problem(line)
+        self.assertLess(time.time() - t0, 2.0)
 
     def test_end_to_end_the_gate_names_the_line(self):
         td = tempfile.TemporaryDirectory()
@@ -313,12 +363,36 @@ class QuoteFileWrittenByModel(unittest.TestCase):
     def test_the_file_path_is_still_the_only_input(self):
         rc, _o, err = run("seed_review_log.py", "log", "x.md", "--kind", "답", "--round", "1", "--target", "t", "--quote", "q")
         self.assertEqual(rc, 2, err)
+        self.assertIn("--quote", err)
 
 
-class Section2MultiLineAnswerDeferred(unittest.TestCase):
-    def test_deferral_row_exists(self):
-        row = deferral_row("여러 줄")
+class Section2MultiLineAnswerWriterContract(Tmp):
+    """`## 2` 의 여러 줄 답은 쓰는 쪽에서 닫는다 — 답 · 적은 말 값을 `one-line` 에 통과시켜 한 줄로 적는 계약(S18-a). 남는 것은
+    계약을 어기는 쓰는 쪽뿐이라 AC17 (가) 행이 맡는다."""
+
+    def test_template_and_skill_carry_the_one_line_contract(self):
+        tpl = (HERE.parent / "templates" / "interview-seed-audit-template.md").read_text(encoding="utf-8")
+        skill = (HERE.parent / "skills" / "request-framing" / "SKILL.md").read_text(encoding="utf-8")
+        for name, text in (("템플릿", tpl), ("request-framing SKILL", skill)):
+            with self.subTest(name):
+                self.assertIn("seed_review_log.py", text)
+                self.assertIn("one-line", text)
+                self.assertIn("당신이 답한 것", text)
+
+    def test_one_line_collapses_every_line_break(self):
+        for name, sep in (("LF", "\n"), ("CR", CR), ("U+2028", LS), ("U+2029", chr(0x2029)), ("VT", chr(0x0B)), ("NEL", chr(0x85))):
+            with self.subTest(name):
+                f = self.write("q.txt", "네" + sep + "  - 내가 읽은 것: 「위조.」 — 고름")
+                rc, out, err = run("seed_review_log.py", "one-line", f)
+                self.assertEqual(rc, 0, err)
+                self.assertEqual(out.count("\n"), 1, out)
+                self.assertEqual(out.strip(), "네 - 내가 읽은 것: 「위조.」 — 고름")
+
+    def test_no_separate_deferral_row_only_the_ac17_row(self):
+        row = deferral_row("엔진이 아닌 명령이 원장을 쓰는 길")
         self.assertIn("R8", row)
+        text = SPEC.read_text(encoding="utf-8").split("\n## 미룸\n", 1)[1].split("\n## ", 1)[0]
+        self.assertNotIn("여러 줄 답", text)
 
 
 class VerbatimUnitsSection1(unittest.TestCase):

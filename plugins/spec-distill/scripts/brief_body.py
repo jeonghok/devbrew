@@ -448,17 +448,7 @@ P21_PLACEHOLDER_RE = re.compile(
 )
 # HTML 요소 이름 — WHATWG 요소 색인 + 옛 요소 · 원문 텍스트 요소 + CommonMark HTML 블록 6종 이름. 속성 없는 여는 태그라도 이 이름이면
 # 진짜 요소라 브라우저가 뒤 글을 가리거나 가짜 앵커를 그리므로 자리 표시 낱말로 두지 않는다(`<file>` · `<date>` 는 요소가 아니다).
-HTML_ELEMENT_NAMES = frozenset("""
-a abbr address area article aside audio b base bdi bdo blockquote body br button canvas caption cite code col colgroup data
-datalist dd del details dfn dialog div dl dt em embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header
-hgroup hr html i iframe img input ins kbd label legend li link main map mark math menu meta meter nav noscript object ol
-optgroup option output p param picture pre progress q rp rt ruby s samp script search section select selectedcontent slot
-small source span strong style sub summary sup svg table tbody td template textarea tfoot th thead time title tr track u ul
-var video wbr
-acronym applet basefont bgsound big blink center command content dir font frame frameset image isindex keygen listing
-marquee menuitem multicol nextid nobr noembed noframes plaintext rb rtc shadow spacer strike tt xmp
-fencedframe portal geolocation model
-""".split())
+HTML_ELEMENT_NAMES = section6.HTML_ELEMENT_NAMES   # 요소 이름 표는 section6 이 소유한다(seed_body 도 쓴다)
 _BARE_OPEN_TAG_RE = re.compile(r"<([A-Za-z][A-Za-z0-9-]*)>")   # 속성 · 공백 · `/` 가 없는 여는 태그 — 자리 표시 낱말(`<file>`)로 둔다
 _PLACEHOLDER_OK_RE = re.compile(r"S<[Nn]>(?=(?:\*\*|__)?(?![\d<*_]))")
 
@@ -479,10 +469,15 @@ _LABEL = r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
 _EMAIL_AUTOLINK_RE = re.compile(r"<[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@" + _LABEL + r"(?:\." + _LABEL + r")*>")
 
 
+_EXT_AUTOLINK_BACKTICK_RE = re.compile(r"(?:www\.|[A-Za-z][A-Za-z0-9+.-]*://)[^\s<]*`")
+
+
 def autolink_with_backtick(line):
     """CommonMark 자동 링크(URI · 이메일) 꼴 안에 백틱이 든 줄인가. 렌더러는 `<` 에서 시작하는 자동 링크를 먼저 읽어 그 안의
     백틱을 글자로 쓰지만, 이 판독의 코드 칸 짝짓기는 그 백틱을 짝으로 읽어 뒤의 HTML 을 코드로 가린다. 읽는 쪽이 갈리므로
     거부한다(백슬래시로 이스케이프한 `\\<` 는 자동 링크가 아니다)."""
+    if _EXT_AUTOLINK_BACKTICK_RE.search(line):   # GFM 확장 자동 링크(`www.` · `스킴://`)도 백틱까지 한 링크로 읽는 렌더러가 있다
+        return True
     for rx in (_URI_AUTOLINK_RE, _EMAIL_AUTOLINK_RE):
         for m in rx.finditer(line):
             if "`" not in m.group(0):

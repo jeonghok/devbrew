@@ -141,6 +141,20 @@ class _FenceScanner:
 
 FENCE_RE = _FenceScanner()
 
+# HTML 요소 이름 — WHATWG 요소 색인 + 옛 요소 · 원문 텍스트 요소 + CommonMark HTML 블록 6종 이름. 속성 없는 여는 태그라도 이 이름이면
+# 진짜 요소라 브라우저가 뒤 글을 가리거나 가짜 앵커를 그리므로 자리 표시 낱말로 두지 않는다(`<file>` · `<date>` 는 요소가 아니다).
+HTML_ELEMENT_NAMES = frozenset("""
+a abbr address area article aside audio b base bdi bdo blockquote body br button canvas caption cite code col colgroup data
+datalist dd del details dfn dialog div dl dt em embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header
+hgroup hr html i iframe img input ins kbd label legend li link main map mark math menu meta meter nav noscript object ol
+optgroup option output p param picture pre progress q rp rt ruby s samp script search section select selectedcontent slot
+small source span strong style sub summary sup svg table tbody td template textarea tfoot th thead time title tr track u ul
+var video wbr
+acronym applet basefont bgsound big blink center command content dir font frame frameset image isindex keygen listing
+marquee menuitem multicol nextid nobr noembed noframes plaintext rb rtc shadow spacer strike tt xmp
+fencedframe portal geolocation model
+""".split())
+
 # 머리 정규식은 전부 한 줄만 읽는다 — `##` · 번호 · 제목 사이는 `[ \t]` 다(`\s` 는 줄 나눔을 건너 `##` 다음 줄의
 # `6. …` 을 머리로 읽는다). 빈 `##` 줄은 머리 후보(`BRIEF_HEADLIKE_RE`)라 brief 게이트가 막는다.
 # 시작 후보 — 제목을 요구하지 않는다. 제목을 요구하면 `## 6. 참고 자료` 같은 줄이 후보에서

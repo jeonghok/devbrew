@@ -274,6 +274,14 @@ class CrossCheckClasses(unittest.TestCase):
                 self.assertTrue(refused or not seen, "%s: 파서는 HTML 로 읽는데 감사 §6 원문에서 우리는 어느 줄도 거부하지 않았다 %r" % (name, lines))
         self.assertGreater(seen_any, 5, "HTML 로 읽히는 사례가 거의 없다 — 이 교차 확인이 공허하다")
 
+    def test_inline_code_double_hash_is_not_a_heading_for_the_parser(self):
+        """백틱으로 시작하는 줄 · 줄 가운데 코드 칸 속 `##` 는 파서도 제목으로 읽지 않는다 — 우리 판독기가 제목으로 안 읽는 것과 같은 답."""
+        for ln in ("`## 6. 리뷰 결정` 은 코드 칸이다", "문장 `## 6.` 가운데", "`# 제목`"):
+            with self.subTest(ln):
+                self.assertEqual(parser_h2(ln + "\n"), set())
+                self.assertFalse(any(t.type == "heading_open" for t in MD.parse(ln + "\n")))
+                self.assertIsNone(B.is_section_head(ln))
+
     def test_anchor_positive_control(self):
         self.assertEqual(anchor_verdict([ANCHOR9], 0), ("accept", True))
         self.assertEqual(anchor_verdict(["- **S" + CYR_ZE + "** x"], 0), ("refuse", True))

@@ -95,40 +95,37 @@ def mark_spans(s: str) -> list[tuple[int, int]]:
     return [(where[a], where[b - 1] + 1) for a, b in marks_in_flat("".join(flat))]
 
 
-def _bracket_groups(s: str):
-    """접고 공백을 뺀 열에서 짝이 맞는 괄호 묶음 -> [(여는 자리, 닫는 자리)] — 원래 글자 자리로 되돌린다. 여는 괄호류는 짝을
-    깊이로 센다(바깥 묶음과 안쪽 묶음 모두 낸다). 짝 없는 괄호는 묶음이 아니다."""
-    flat, where = [], []
-    for i, ch in enumerate(s):
-        for f in fold_for_match(ch):
-            if not f.isspace():
-                flat.append(f)
-                where.append(i)
+def _flat_groups(s: str):
+    """-> (접고 공백을 뺀 열, 짝이 맞는 괄호 묶음 [(여는 자리, 닫는 자리)] — 그 열 위의 자리). 여는 괄호류는 짝을 깊이로 센다
+    (바깥 묶음과 안쪽 묶음 모두 낸다). 짝 없는 괄호는 묶음이 아니다. 접기는 한 번만 한다."""
+    flat = []
+    for ch in s:
+        flat.extend(f for f in fold_for_match(ch) if not f.isspace())
     stack, out = [], []
     for k, ch in enumerate(flat):
         if _is_open(ch):
             stack.append(k)
         elif _is_close(ch) and stack:
-            out.append((where[stack.pop()], where[k]))
-    return out
+            out.append((stack.pop(), k))
+    return "".join(flat), out
 
 
-_WHO_CONFIRM_RE = re.compile(r"사용자.*확인", re.S)
 _MAX_MARK_GROUPS = 200
 
 
 def mark_variant(line: str) -> bool:
     """확인 표시를 닮은 괄호(`사용자` 다음에 `확인` 을 담은 묶음)가 정본 «(사용자 확인)» 글자 그대로가 아닌가. 정본 표시를 한 번
     뺀 묶음에 아직 두 낱말이 남으면 변형이다 — 정본 표시를 따옴표 안에 인용한 줄은 변형이 아니다. 괄호 묶음이 지나치게 많은 줄은
-    판정하지 않고 변형으로 본다."""
-    groups = _bracket_groups(line)
+    판정하지 않고 변형으로 본다. 접기는 줄당 한 번, 낱말 찾기는 `find` 라 줄 길이에 선형이다."""
+    flat, groups = _flat_groups(line)
     if len(groups) > _MAX_MARK_GROUPS:
         return True
+    flat_mark = fold_flat(MARK)
     for a, b in groups:
-        sub = line[a:b + 1]
-        if not _WHO_CONFIRM_RE.search(fold_flat(sub.replace(MARK, ""))):
-            continue
-        return True
+        t = flat[a:b + 1].replace(flat_mark, "")
+        i = t.find("사용자")
+        if i >= 0 and t.find("확인", i + 3) >= 0:
+            return True
     return False
 
 
@@ -207,6 +204,12 @@ def split_paragraphs(text: str) -> list[str]:
     return out
 
 
+def _mask_placeholders(value: str) -> str:
+    """속성 없는 꺾쇠 낱말 중 HTML 요소 이름이 아닌 것(`<basename>`)만 글자로 바꾼다 — `<template>` 같은 진짜 요소는 남겨 거부된다."""
+    from section6 import HTML_ELEMENT_NAMES
+    return BARE_PLACEHOLDER_RE.sub(lambda m: m.group(0) if m.group(0)[1:-1].lower() in HTML_ELEMENT_NAMES else "x", value)
+
+
 def frontmatter_problems(head: str) -> list[tuple[int, str]]:
     """frontmatter 는 `키: 값` 줄만 받는다 — 키는 `[a-z_]+`, 값은 비었거나 산문 줄 규칙(`line_problem`)을 지나는 한 줄(속성 없는 꺾쇠 낱말 `<basename>` 은 템플릿의 자리 표시라 글자로 본다). 그 밖은
     -> [(파일 줄 번호 1-based, `frontmatter_line` | `frontmatter_value`)]. `head` 는 `split_front` 의 앞부분이다."""
@@ -217,7 +220,7 @@ def frontmatter_problems(head: str) -> list[tuple[int, str]]:
         m = FRONTMATTER_LINE_RE.match(ln)
         if not m:
             out.append((i, "frontmatter_line"))
-        elif m.group(2) is not None and m.group(2) != "" and line_problem(BARE_PLACEHOLDER_RE.sub("x", m.group(2))):
+        elif m.group(2) is not None and m.group(2) != "" and line_problem(_mask_placeholders(m.group(2))):
             out.append((i, "frontmatter_value"))
     return out
 
@@ -242,9 +245,9 @@ def parse_seed(text: str) -> SeedParse:
 REASON_GLOSS = {
     "frontmatter_line": "frontmatter 줄이 `키: 값` 한 줄이 아니다",
     "frontmatter_value": "frontmatter 값이 산문 한 줄이 아니다",
-    "char_ref": "HTML 문자 참조(`&#91;` 같은 것)가 있다",
-    "bare_domain": "도메인으로 시작하는 주소(`example.com/…`)가 있다",
-    "mark_variant": "확인 표시를 닮은 괄호가 정본 «(사용자 확인)» 이 아니다",
+    "char_ref": "HTML 문자 참조(`&#91;` 같은 것)가 있다 — 그 글자를 그대로 적는다",
+    "bare_domain": "도메인으로 시작하는 주소(`example.com/…`)가 있다 — 주소 대신 이름이나 설명으로 적는다",
+    "mark_variant": "확인 표시를 닮은 괄호가 정본 «(사용자 확인)» 이 아니다 — 정확히 «(사용자 확인)» 으로 적거나 «사용자» · «확인» 을 괄호 밖으로 뺀다",
 }
 
 

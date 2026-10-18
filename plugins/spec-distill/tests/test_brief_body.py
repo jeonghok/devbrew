@@ -633,6 +633,8 @@ RAW6_REFUSED = [
     ("자동 링크에 든 백틱, 숫자 머리", ["<1" + BT + "@x.y> <b>x</b> " + BT], "autolink_backtick"),
     ("자동 링크에 든 백틱, 템플릿 요소", ["- x <" + BT + "@x.y> <template>x</template> " + BT], "autolink_backtick"),
     ("자동 링크에 든 백틱 (URI 꼴)", ["- x <ab:b" + BT + "c> <ul>y</ul> " + BT], "autolink_backtick"),
+    ("확장 자동 링크 www 에 든 백틱", ["- x www.a.b" + BT + "c <ul>y</ul> " + BT], "autolink_backtick"),
+    ("확장 자동 링크 스킴에 든 백틱", ["- x https://a.b" + BT + "c <ul>y</ul> " + BT], "autolink_backtick"),
 ]
 
 
