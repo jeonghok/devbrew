@@ -373,27 +373,33 @@ def merged_by(git: Git, merges: list, main: str, branch: str, tip):
     return None
 
 
-def extra_branches(git: Git, main: str, rel: str, blocks: list) -> dict:
-    """{에픽 번호: [브랜치 …]} — 기본 브랜치의 블록 `브랜치:` 에 없는데, 기본 브랜치에 아직 들어가지 않은 브랜치의
-    로드맵 사본이 그 블록에 더한 이름(처음 본 차례). 계획 2 의 브랜치는 자기 브랜치의 사본에서만 블록에 자신을 더하므로
-    기본 브랜치 사본만 읽으면 계획 1 머지 뒤 에픽이 「머지됨」으로 보인다. 사본을 못 읽으면 그 사본은 건너뛴다."""
+def extra_branches(git: Git, main: str, rel: str, blocks: list):
+    """({에픽 번호: [브랜치 …]}, 형식이 깨진 사본 수) — 기본 브랜치의 블록 `브랜치:` 에 없는데, 기본 브랜치에 아직
+    들어가지 않은 브랜치의 로드맵 사본이 그 블록에 더한 이름(처음 본 차례). 계획 2 의 브랜치는 자기 브랜치의 사본에서만
+    블록에 자신을 더하므로 기본 브랜치 사본만 읽으면 계획 1 머지 뒤 에픽이 「머지됨」으로 보인다. 사본의 블록이 기본 브랜치
+    블록의 브랜치를 모두 품을 때만 그 블록을 잇는 사본으로 본다 — 재분해 전 · 같은 경로를 다시 쓴 낡은 사본은 세지 않는다.
+    로드맵 파일이 없는 사본은 건너뛰고, 형식이 깨진 사본은 읽을 수 있는 블록만 쓰되 그 수를 낸다."""
     listed = {b["id"]: list(b["branches"]) for b in blocks if b["kind"] != "decision"}
-    out = {}
+    out, broken = {}, 0
     for tip in git.unmerged_tips(main):
         text = git.blob(tip, rel)
         if not text:
             continue
         try:
-            other = parse_roadmap(text)[1]
+            _meta, other, _rec, _risk, errs = parse_roadmap(text)
         except FormatError:
-            continue
+            other, errs = [], ["형식 깨짐"]
+        if errs:
+            broken += 1
         for ob in other:
-            if ob["id"] not in listed:
+            mine = listed.get(ob["id"])
+            theirs = ob.get("branches") or []
+            if not mine or not set(mine) <= set(theirs):
                 continue
-            for br in ob.get("branches") or []:
-                if br not in listed[ob["id"]] and br not in out.setdefault(ob["id"], []):
+            for br in theirs:
+                if br not in mine and br not in out.setdefault(ob["id"], []):
                     out[ob["id"]].append(br)
-    return out
+    return out, broken
 
 
 class _GitTreeRepo:
@@ -431,11 +437,13 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
     extra_cache = []
 
     def extras_for(bid):
+        """(더한 브랜치 이름들, 형식이 깨진 사본 수)."""
         if roadmap_rel is None or main is None:
-            return []
+            return [], 0
         if not extra_cache:
             extra_cache.append(extra_branches(git, main, roadmap_rel, blocks))
-        return extra_cache[0].get(bid, [])
+        found, broken = extra_cache[0]
+        return found.get(bid, []), broken
     by_id = {b["id"]: b for b in blocks}
     rec = {(r["block"], r["kind"]): r for r in records}
     merge_lines = {}
@@ -497,7 +505,11 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
         n_merged = sum(1 for s in states if s["merged"])
         if states and (n_merged == len(states) or rec_merge):
             more = []
-            for br in extras_for(bid):
+            names, broken = extras_for(bid)
+            if broken:
+                b["notes"].append("기본 브랜치에 아직 들어가지 않은 브랜치의 로드맵 사본 %d개는 형식이 깨져 읽은 블록만 셌다 — "
+                                  "그 사본이 이 블록에 더한 브랜치는 세지 못했을 수 있다" % broken)
+            for br in names:
                 tip = git.commit("refs/heads/" + br) or git.commit("refs/remotes/origin/" + br)
                 if tip and not merged_by(git, merges, main, br, tip):
                     more.append({"branch": br, "tip": tip, "merged": None})
