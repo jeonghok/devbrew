@@ -39,7 +39,7 @@
 ```docreview-layer2
 - ref: c1
   category: ambiguity
-  anchor: "#2-goals"
+  anchor: "#11-acceptance-criteria"
   disposition: fix
   summary: "목표 B 가 두 가지로 읽힌다"
 - ref: c2
