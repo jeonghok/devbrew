@@ -93,7 +93,7 @@ GUARDED="$SR $RB $FIN $SD/skills/request-framing/SKILL.md"
 ac8_scan() {   # ac8_scan <파일> → rc 0 이면 확인 없는 쓰기 · 넘기기 · 읽을 수 없는 엔진 호출이 없다
   python3 -I - "$1" <<'PY'
 import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
+text = open(sys.argv[1], encoding="utf-8", newline="").read()   # CRLF 를 LF 로 바꿔 읽지 않는다
 READ_ONLY = {"advice-list", "gate", "related-changes", "state-dir-for", "profile-check", "gate-rows", "exempt-anchors"}
 NAME = re.compile(r'docreview_(?:state|route|anchor)')
 CALL = re.compile(r'"\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/scripts/docreview_(?:state|route|anchor)\.py"(?:[ \t]+([a-z][a-z-]*)(?![A-Za-z0-9_$"\'-]))?')
