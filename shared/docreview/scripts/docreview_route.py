@@ -825,8 +825,8 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats, advice_stats=
     if degrade.get("blocks_merged"):
         merged_note = []
         for k, v in sorted(degrade["blocks_merged"].items()):
-            merged_note.append("%s %d개" % (k, v))
-        adv.append("같은 이름 블록을 합쳤다 — %s" % " · ".join(merged_note))
+            merged_note.append("층 %s 블록 %d개" % (k[-1], v))
+        adv.append("같은 이름 블록을 합쳤다 — %s (%s)" % (" · ".join(merged_note), " · ".join(sorted(degrade["blocks_merged"]))))
     if degrade.get("recritic_blocks"):
         adv.append("재비판 블록 %d개 — 마지막만 읽었다(앞 블록은 인용 예시로 본다)" % degrade["recritic_blocks"])
     out = {

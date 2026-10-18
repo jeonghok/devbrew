@@ -2907,6 +2907,7 @@ case_same_name_blocks_disclosed() {
   assert_eq "$(jget "$d/prep.json" 'len(d["items"])')" "5" "같은 이름 블록: 겹친 항목 하나만 빠지고 5건이 남는다"
   assert_eq "$(jget "$d/fin.json" 'd["degrade"].get("blocks_merged")')" "{'docreview-layer1': 2, 'docreview-layer2': 2}" "같은 이름 블록: 합친 개수가 degrade 에 남는다"
   assert_eq "$(jget "$d/fin.json" 'any("같은 이름 블록을 합쳤다" in a for a in d["advisory"])')" "True" "같은 이름 블록: 공시 줄"
+  assert_eq "$(jget "$d/fin.json" '[a for a in d["advisory"] if "같은 이름 블록을 합쳤다" in a][0]')" "같은 이름 블록을 합쳤다 — 층 1 블록 2개 · 층 2 블록 2개 (docreview-layer1 · docreview-layer2)" "같은 이름 블록: 공시 줄은 쉬운 말이 먼저고 내부 이름은 괄호 안이다"
   assert_eq "$(jget "$d/fin.json" 'd["adjudication_absorbed"] >= 3, d["blocks"]')" "(True, False)" "같은 이름 블록: 블록 둘 + 겹친 항목 하나가 흡수로 세지고 막지 않는다"
   rm -rf "$d"
 }
@@ -2937,7 +2938,7 @@ case_recritic_two_blocks_last_wins_disclosed() {
 }
 case_same_name_block_broken_kills_critic() {
   local d f; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; f="$d/critic-in.txt"
-  { cat "$FX/critic-r1.txt"; printf '\n```docreview-layer1\n- ref: c9\n  summary: [깨진\n```\n'; } > "$f"
+  { printf '```docreview-layer1\n- ref: c9\n  summary: [깨진\n```\n\n'; cat "$FX/critic-r1.txt"; } > "$f"  # 깨진 블록이 먼저, 멀쩡한 블록이 뒤 — 마지막 블록만 읽으면 통과해 버린다
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$f")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep.json"; local rc=$?
   assert_eq "$rc" "4" "같은 이름 블록 하나라도 파손 → 출력 전체가 탐지 사망(rc 4)"
   rm -rf "$d"
