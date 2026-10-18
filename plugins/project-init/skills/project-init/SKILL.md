@@ -70,7 +70,7 @@ branching strategy 템플릿을 선택해 git workflow 룰을 초기화하고, �
 - 「CLAUDE.md 에 바로 쓰기」 — AGENTS.md 를 만들지 않고 관리 절 `## Git Workflow` · `## Project Charter` 를 CLAUDE.md 안에서 제자리 갱신한다. S3 의 절 갱신 규칙을 CLAUDE.md 에 그대로 적용하고 비-관리 컨텐츠는 보존한다. `docs/git-workflow/` 파일은 그대로 만든다.
 - 「중단」 — 아무 파일도 쓰지 않고 멈춘다.
 
-위 git 규칙 질문에서 「git 규칙은 그대로 두고 헌장만」을 골랐다면 그 선택이 이 아래 모든 「git-workflow 파일은 만든다」 문장보다 앞선다 — `docs/git-workflow/` 에는 아무것도 쓰지 않고 기존 `## Git Workflow` 내용도 그대로 둔다(S2a 는 새 template 없이 기존 절을 AGENTS.md 로 옮기고, S1 · S2b 는 헌장 절과 포인터만 쓴다).
+위 git 규칙 질문에서 「git 규칙은 그대로 두고 헌장만」을 골랐다면 그 선택이 이 문서에서 git 규칙 파일을 만든다는 모든 문장(바로 위 「CLAUDE.md 에 바로 쓰기」의 「`docs/git-workflow/` 파일은 그대로 만든다」 · 4c S4 · 게이트 안내 포함)보다 앞선다 — `docs/git-workflow/` 에는 아무것도 쓰지 않고 기존 `## Git Workflow` 내용도 그대로 둔다(S2a 는 새 template 없이 기존 절을 AGENTS.md 로 옮기고, S1 · S2b 는 헌장 절과 포인터만 쓴다).
 
 #### Charter 상태 감지 (파일 레벨 — Phase 0보다 선행)
 
@@ -177,7 +177,7 @@ C-S1 및 C-S3(a)에서 **vision·non-goals·conventions·tech-stack**가 채워�
 - 「계속 묻기」 — 그 항목을 다시 최대 3회 묻고, 그래도 비면 이 선택을 다시 묻는다.
 - 「중단」 — 실행 전체를 멈춘다. Step 4 전이라 아무 파일도 쓰지 않았다.
 
-「건너뛰기」를 고르면 이렇게 알린다:
+「건너뛰기」를 고르면 이렇게 알린다 (Step 1 에서 「git 규칙은 그대로 두고 헌장만」을 골랐다면 git 규칙 파일도 만들지 않으므로 그 문장을 「git 규칙 파일도 바꾸지 않았다.」로 바꾼다):
 
 > `[project-init] 헌장 단계를 건너뛰었다 — 미완 항목: <항목>. git 규칙 파일은 그대로 만든다. 헌장을 채우려면 /project-init:project-init 을 다시 실행하세요.`
 

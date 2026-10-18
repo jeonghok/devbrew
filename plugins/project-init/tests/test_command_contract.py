@@ -300,7 +300,10 @@ class TestMigrationRefusalChoices(unittest.TestCase):
         self.assertIn("git 규칙을 그대로 뒀다면: 브랜치 전략과 git 규칙 파일은 바꾸지 않았다", step5)
 
     def test_keep_git_choice_outranks_git_workflow_file_clauses(self):
-        self.assertIn("그 선택이 이 아래 모든 「git-workflow 파일은 만든다」 문장보다 앞선다", self.step1)
+        self.assertIn("그 선택이 이 문서에서 git 규칙 파일을 만든다는 모든 문장", self.step1)
+        self.assertIn("바로 위 「CLAUDE.md 에 바로 쓰기」의", self.step1)
+        gate = section(self.text, "#### Law 1 구조적 게이트", "### Step 4:")
+        self.assertIn("「git 규칙 파일도 바꾸지 않았다.」로 바꾼다", gate)
         self.assertIn("S1 · S2b 는 헌장 절과 포인터만 쓴다", self.step1)
 
 
