@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/commands/qg.md
+# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md
 # test_one_pipeline_surface.sh — 한 파이프라인의 표면 (설계 §6.1 · §6.4.4 · §6.5.1, AC1 · AC2).
 #
 # 음의 락(옛 게이트 · verifier 토큰 부재)은 대상을 통째로 지워도 GREEN 이다 — 그래서 양의
@@ -8,14 +8,12 @@ set -u
 # test_guards_coverage_bidirectional.sh 가 읽는다 — 이 락이 여는 파일(리포 상대)을 낸다.
 [ "${1:-}" = "--emit-scanned" ] && { printf '%s\n' \
   plugins/quality-gates/skills/quality-pipeline/SKILL.md \
-  plugins/quality-gates/skills/quality-pipeline/references/differential-test.md \
-  plugins/quality-gates/commands/qg.md; exit 0; }
+  plugins/quality-gates/skills/quality-pipeline/references/differential-test.md; exit 0; }
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 . "$(cd "$SCRIPT_DIR/../../.." && pwd)/shared/tests/assert.sh"
 SKILL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 REF="$PLUGIN_ROOT/skills/quality-pipeline/references/differential-test.md"
-QGMD="$PLUGIN_ROOT/commands/qg.md"
 
 assert_file_absent_ci() {  # 대소문자 무관 변형 — shared/tests/assert.sh 는 이 라운드의
   # 수정 대상 밖이라(carry-notes 동결) 로컬로 둔다. assert_file_absent 와 같은 모양에 -i 만 더한다.
@@ -26,17 +24,17 @@ assert_file_absent_ci() {  # 대소문자 무관 변형 — shared/tests/assert.
 }
 
 case_old_surface_absent() {
-  # 파일 단위 제외 없이 — 이 세 파일에 이 토큰이 설 자리는 없다(설계 §6.4.4 일곱 · §6.5.1).
+  # 파일 단위 제외 없이 — 이 두 파일에 이 토큰이 설 자리는 없다(설계 §6.4.4 일곱 · §6.5.1).
   #
   # PASS/FAIL 경계 정규식은 대소문자 그대로 둔다 — `pass`/`fail`/`fail-open`/`fail-closed`
   # 는 차등 테스트의 현재 어휘(개별 unit 결과·정책 이름)로 레퍼런스 전체에 수십 회
   # 등장한다. -i 를 붙이면 이 락이 자기 코퍼스 대부분에서 RED 가 된다(실측: fix round 1
-  # 에서 grep -i 로 확인 — SKILL.md 6곳 · differential-test.md 20+곳 · qg.md 1곳).
+  # 에서 grep -i 로 확인 — SKILL.md 6곳 · differential-test.md 20+곳 · 옛 qg.md 1곳).
   # 옛 판정 어휘(대문자 PASS/FAIL, verdict.py 밖 금지)와 새 소문자 pass/fail 어휘를 가르는
   # 것이 바로 이 대소문자 구분이다 — 둘을 섞으면 락의 이빨이 아니라 락 자체가 무너진다.
   local tok f
   for tok in '(^|[^A-Za-z_])PASS([^A-Za-z_]|$)' '(^|[^A-Za-z_-])FAIL([^A-Za-z_:]|$)'; do
-    for f in "$SKILL" "$REF" "$QGMD"; do
+    for f in "$SKILL" "$REF"; do
       assert_file_absent "$f" "$tok" "$(basename "$f") 에 '$tok' 이 없다"
     done
   done
@@ -53,7 +51,7 @@ case_old_surface_absent() {
              '(^|[^-A-Za-z])runtime gate' '(^|[^-A-Za-z])review gate' \
              'runtime-gate\.md' 'Tier [ABC]' 'ac_coverage' \
              'Runtime 게이트' 'Review 게이트'; do
-    for f in "$SKILL" "$REF" "$QGMD"; do
+    for f in "$SKILL" "$REF"; do
       assert_file_absent_ci "$f" "$tok" "$(basename "$f") 에 '$tok' 이 없다(대소문자 무관)"
     done
   done
@@ -64,16 +62,16 @@ case_new_skeleton_present() {
   assert_file_grep "$SKILL" '^## Differential test$'                "SKILL 에 차등 테스트 포인터 절이 있다"
   assert_file_grep "$SKILL" 'references/differential-test\.md'      "포인터가 새 레퍼런스를 가리킨다"
   assert_eq "$(grep -E '^## ' "$SKILL" | tr '\n' '|')" \
-    "## 사람에게 쓰는 글|## Preflight|## Flow|## Review|## Differential test|## Fix-loop|## e2e|## Final verdict|## Publish|## kill switch|## Rules|## Requirement index|" \
+    "## 진입 단계|## 사람에게 쓰는 글|## Preflight|## Flow|## Review|## Differential test|## Fix-loop|## e2e|## Final verdict|## Publish|## kill switch|## Rules|## Requirement index|" \
     "K-8 — SKILL 의 ## 절이 이 순서다(③ 은 Publish, ④ 는 e2e 를 끼우며 이 핀을 고친다)"
   assert_file_grep "$REF"   'scripts/seal-worktree\.sh" seal'       "HEAD 축은 봉인에서 선다"
   assert_file_grep "$REF"   'scripts/qg-worktree\.sh" create-head'  "HEAD 축 트리를 만든다"
   assert_file_grep "$REF"   'scripts/qg-worktree\.sh" create-baseline' "기준선 축 트리를 만든다"
   assert_file_grep "$REF"   'scripts/diff-test-results\.py" --assign' "짝짓기는 배정 파일을 받아 diff-test-results.py 가 한다"
   # qg.md 자체의 양의 짝 — 세 파일 중 하나가 지워져도 이 절대 안 걸리던 공백을 메운다.
-  assert_file_grep "$QGMD"  'one pipeline'                          "qg.md 가 '한 파이프라인' 정체성을 말한다"
-  assert_file_grep "$QGMD"  'Skill\("quality-gates:quality-pipeline"\)' "qg.md 가 새 skill 을 호출한다"
-  assert_file_grep "$QGMD"  'not-certified'                         "qg.md 가 새 판정 어휘를 쓴다"
+  assert_file_grep "$SKILL" 'one pipeline'                          "SKILL 이 '한 파이프라인' 정체성을 말한다"
+  assert_file_grep "$SKILL" '^## 진입 단계$'                         "SKILL 이 진입 단계를 가진다(명령 층이 없다)"
+  assert_file_grep "$SKILL" 'not-certified'                         "SKILL 이 새 판정 어휘를 쓴다"
 }
 
 

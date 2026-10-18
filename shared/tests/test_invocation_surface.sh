@@ -34,7 +34,8 @@ def head(plugin, skill):
 ENTRY = [("spec-distill", "request-framing", False), ("spec-distill", "spec-interview", False),
          ("spec-distill", "spec-review", False), ("spec-distill", "roadmap-status", False),
          ("plugin-audit", "plugin-audit", True),
-         ("project-init", "project-init", True)]
+         ("project-init", "project-init", True),
+         ("quality-gates", "quality-pipeline", False), ("quality-gates", "artifact-critique", False)]
 for p, s, user_only in ENTRY:
     fm = "---\nname: %s\ndescription: x\ncost_class: low\n%s" % (s, "disable-model-invocation: true\n" if user_only else "")
     rows = ("\n| `[devbrew-entry] ok …` | 간다 |\n| `[devbrew-entry] disabled …` | 멈춘다 |\n"
@@ -44,7 +45,6 @@ for p, s, user_only in ENTRY:
     w("plugins/%s/scripts/entry_preflight.py" % p, "# stub\n")
 w("plugins/spec-distill/skills/reviewing-brief/SKILL.md",
   "---\nname: reviewing-brief\ndescription: x\ncost_class: medium\nuser-invocable: false\n---\n\nbody\n")
-w("plugins/quality-gates/commands/qg.md", "---\ndescription: qg\n---\n")
 w("plugins/spec-distill/README.md", "# spec-distill\n\n`/spec-interview` 를 친다.\n")
 w("README.md", "# r\n")
 subprocess.run(["git", "init", "-q", d], check=True)
@@ -154,15 +154,19 @@ variant c11; edit "$TMP/v-c11/$SR" "## 진입 단계" "산문 한 줄
 
 ## 진입 단계"; expect_red "$TMP/v-c11" C "C 추가: 사전 검사 줄과 절 사이 산문" "사이에"
 variant g5; put "$TMP/v-g5/plugins/spec-distill/scripts/q.py" "# /quality-gates:qg"
-expect_green "$TMP/v-g5" "G 음성 대조: /quality-gates:qg 는 commands/qg.md 로 풀린다"
+expect_red "$TMP/v-g5" G "G 반전: /quality-gates:qg 는 commands/qg.md 가 없어 풀리지 않는다" "풀리지 않는다"
+variant g6; put "$TMP/v-g6/plugins/spec-distill/scripts/q.py" "# /quality-gates:quality-pipeline"
+expect_green "$TMP/v-g6" "G 음성 대조: /quality-gates:quality-pipeline 은 진입 skill 로 풀린다"
 
-# qg 보고 모드와 그 수명
-variant q1; put "$TMP/v-q1/plugins/quality-gates/README.md" "framing-requests"
-expect_green "$TMP/v-q1" "qg 보고 모드: qg 안 옛 이름은 RED 가 아니다"
-rep="$(python3 "$LOCK" --root "$TMP/v-q1" --report)"
-assert_contains "$rep" "plugins/quality-gates/README.md" "qg 보고 모드: --report 표에 행으로 실린다"
-rm -rf "$TMP/v-q1/plugins/quality-gates/commands"
-expect_red "$TMP/v-q1" I "qg 수명: commands/ 가 사라지면 같은 위반이 RED" "옛 이름"
+# qg 도 예외가 없다 — 보고 모드 폐지
+variant q1; put "$TMP/v-q1/plugins/quality-gates/commands/qg.md" "---
+description: qg
+---"
+expect_red "$TMP/v-q1" H "qg 도 예외 없다 — commands/qg.md 가 다시 생기면 RED" "commands/ 층"
+variant q2; put "$TMP/v-q2/plugins/quality-gates/README.md" "framing-requests"
+expect_red "$TMP/v-q2" I "qg 안 옛 이름도 RED 다(보고 모드 없음)" "옛 이름"
+variant q3; rm -rf "$TMP/v-q3/plugins/quality-gates/skills/quality-pipeline"
+expect_red "$TMP/v-q3" I "qg 진입 skill 이 빠지면 RED(양성 짝)" "quality-pipeline"
 
 # 음성 대조 — 경로 조각 · fixture · CHANGELOG · 락 자신 · README 의 짧은 이름은 GREEN
 variant n1

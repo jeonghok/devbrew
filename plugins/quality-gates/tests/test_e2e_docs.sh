@@ -213,7 +213,6 @@ case_X3_local_origin_rule() {
 
 PHIL="$ROOT/docs/philosophy/devbrew-harness-philosophy.md"
 README="$PLUGIN_ROOT/README.md"
-QGMD="$PLUGIN_ROOT/commands/qg.md"
 
 case_AC26_P4_sentence_replaced() {
   local s; s=$(section "$PHIL" "### P4 — Verification Is Infrastructure")
@@ -270,8 +269,8 @@ case_readme_security_paragraph_and_principle() {
   assert_file_grep "$README" '^- \*\*e2e\*\* — `curl`\(API 시나리오를 걸을 때' "README 사전 요건: curl 은 API 시나리오용"
 }
 
-case_qgmd_has_disable_e2e_row() {
-  assert_file_grep "$QGMD" '^\| `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` \| e2e 를 끈다 — 판정 줄의 e2e 칸이 `꺼짐\(kill switch\)` \|$' "qg.md 표에 DISABLE_E2E 줄이 있다"
+case_readme_has_disable_e2e_line() {
+  assert_file_grep "$README" '`DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 은 e2e 를 끈다\(판정 줄의 e2e 칸이 `꺼짐\(kill switch\)`\)' "README 범위 절에 DISABLE_E2E 줄이 있다"
 }
 
 for c in $(declare -F | awk '{print $3}' | grep '^case_'); do

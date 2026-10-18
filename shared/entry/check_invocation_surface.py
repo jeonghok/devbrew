@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """devbrew 호출 표면 정합 락 — 설계 docs/superpowers/specs/2026-10-09-skill-only-surface-design.md §4.
 
-축 A~I 를 git 이 아는 파일(추적 + 미추적 비무시)에서 도출해 잰다. quality-gates 파일의 위반은
-`plugins/quality-gates/commands/` 가 있는 동안 보고 모드다 — RED 대신 `--report` 표의 행이 된다.
+축 A~I 를 git 이 아는 파일(추적 + 미추적 비무시)에서 도출해 잰다.
 
   check_invocation_surface.py [--root DIR]                 위반이 있으면 rc 1
-  check_invocation_surface.py --report [--root DIR]        qg 보고 표(마크다운)
   check_invocation_surface.py --emit-scanned [--root DIR]  실제로 읽은 경로
   check_invocation_surface.py --print-head <plugin> <skill>
 """
@@ -17,11 +15,7 @@ import re
 import subprocess
 import sys
 
-QG = "plugins/quality-gates/"
-QG_COMMANDS = "plugins/quality-gates/commands/"
 SELF_FILES = frozenset({"shared/entry/check_invocation_surface.py", "shared/tests/test_invocation_surface.sh"})
-SCOPE_ON = "qg 는 plugins/quality-gates/commands/ 가 있는 동안 보고만 된다(--report)"
-SCOPE_OFF = "qg 보고 모드 종료 — plugins/quality-gates/commands/ 가 없어 qg 위반도 RED 다"
 
 ENTRY_SKILLS = (
     ("spec-distill", "request-framing"),
@@ -30,6 +24,8 @@ ENTRY_SKILLS = (
     ("spec-distill", "roadmap-status"),
     ("plugin-audit", "plugin-audit"),
     ("project-init", "project-init"),
+    ("quality-gates", "quality-pipeline"),
+    ("quality-gates", "artifact-critique"),
 )
 USER_ONLY = frozenset({("plugin-audit", "plugin-audit"), ("project-init", "project-init")})
 
@@ -78,17 +74,11 @@ LIVE_PREFIX = ("plugins/", "shared/", "docs/philosophy/")
 
 
 class Ledger:
-    def __init__(self, report_mode):
-        self.report_mode = report_mode
+    def __init__(self):
         self.red = []
-        self.rep = []
 
     def add(self, axis, path, line, msg):
-        row = (axis, path, line, msg)
-        if self.report_mode and path.startswith(QG):
-            self.rep.append(row)
-        else:
-            self.red.append(row)
+        self.red.append((axis, path, line, msg))
 
 
 def git_files(root):
@@ -138,7 +128,7 @@ class Scan:
         self.files = git_files(root)
         self.fset = frozenset(self.files)
         self.scanned = set()
-        self.L = Ledger(any(f.startswith(QG_COMMANDS) for f in self.files))
+        self.L = Ledger()
         self.skills = {}
         for rel in self.files:
             m = SKILL_PATH_RE.match(rel)
@@ -290,7 +280,7 @@ class Scan:
     def axis_h(self):
         for rel in self.files:
             if ANY_COMMAND_RE.match(rel):
-                self.L.add("H", rel, 1, "commands/ 층은 qg 밖에 두지 않는다 — 사전 단계는 진입 skill 의 사전 검사 줄로")
+                self.L.add("H", rel, 1, "commands/ 층은 두지 않는다 — 사전 단계는 진입 skill 의 사전 검사 줄로")
 
     # 축 I — 살아 있는 표면의 옛 이름 + 양성 짝
     def axis_i(self):
@@ -319,23 +309,9 @@ def print_head(plugin, skill):
         ALLOW_TMPL.format(plugin=plugin, skill=skill), BANG_TMPL.format(plugin=plugin, skill=skill), ENTRY_HEADING))
 
 
-def render_report(L):
-    out = ["<!-- check_invocation_surface.py --report -->"]
-    if not L.report_mode:
-        out.append("> 보고 모드가 아니다 — %s." % SCOPE_OFF)
-    else:
-        out.append("> 이 표는 `plugins/quality-gates/commands/` 가 있는 동안 유지되는 보고 모드의 산출이다. "
-                   "그 디렉토리가 사라지면 같은 행이 RED 가 된다.")
-    out += ["", "| # | 축 | 위치 | 위반 | v10 설계 |", "|---|---|---|---|---|"]
-    for i, (axis, path, line, msg) in enumerate(sorted(L.rep), 1):
-        out.append("| %d | %s | `%s:%d` | %s | |" % (i, axis, path, line, msg.replace("|", "\\|")))
-    return "\n".join(out) + "\n"
-
-
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    ap.add_argument("--report", action="store_true")
     ap.add_argument("--emit-scanned", action="store_true")
     ap.add_argument("--print-head", nargs=2, metavar=("PLUGIN", "SKILL"))
     a = ap.parse_args(argv)
@@ -351,16 +327,12 @@ def main(argv=None):
     if a.emit_scanned:
         sys.stdout.write("".join(p + "\n" for p in sorted(scan.scanned)))
         return 0
-    if a.report:
-        sys.stdout.write(render_report(L))
-        return 0
     for axis, path, line, msg in sorted(L.red):
         print("RED %s %s:%d %s" % (axis, path, line, msg))
     if L.red:
-        print("[invocation-surface] RED %d건 — 축 A~I (설계 2026-10-09 §4). %s"
-              % (len(L.red), SCOPE_ON if L.report_mode else SCOPE_OFF))
+        print("[invocation-surface] RED %d건 — 축 A~I (설계 2026-10-09 §4)." % len(L.red))
         return 1
-    print("[invocation-surface] GREEN — qg 보고 행 %d건. %s" % (len(L.rep), SCOPE_ON if L.report_mode else SCOPE_OFF))
+    print("[invocation-surface] GREEN.")
     return 0
 
 

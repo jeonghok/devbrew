@@ -76,8 +76,6 @@ quality-gates/
 │   ├── security-reviewer.md     # ① 보안 각도 always-run (model: opus) — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`
 │   ├── artifact-critic.md       # `/qg critique` 게이트 — tier-unpinned critic; 비-코드 산출물의 논리 갭·미기술 전제·불완전·근거 없는 주장·모호성 (read-only)
 │   ├── artifact-adversarial.md  # `/qg critique` 게이트 — tier-unpinned 판정자; critic/codex 발견을 confirm/downgrade/reject 하고 놓친 것을 추가 (read-only)
-├── commands/
-│   ├── qg.md               # /qg slash command (branch · --paths · critique 라우팅)
 ├── scripts/
 │   ├── setup-qg.sh                           # 파이프라인 초기화
 │   ├── discover-spec.sh                      # 의도 출처 (`--intent-out`; `Spec:` 트레일러 → 커밋 메시지 + 열린 PR 본문)
@@ -121,7 +119,7 @@ quality-gates/
 
 `quality-pipeline` skill은 `cost_class: variable` — 리뷰어는 기본 셋(code-reviewer · security-reviewer · codex) + 조건부 ≤4 + 재비판(iteration 당 최대 8)이고, 비용은 diff 크기와 iteration 수(≤5)에 따라 달라진다. trivia 로 닫힌 실행은 리뷰어를 부르지 않는다.
 
-트리거 조건과 override flag는 [`commands/qg.md`](commands/qg.md) 참고.
+트리거 조건과 override flag는 아래 「쓰는 법」 · 「범위」 절 참고.
 
 ### Codex reviewer cost
 
@@ -288,10 +286,12 @@ trivia escape 를 쓰지 않는다. 애매하면 trivia 가 아니다.
 
 | 이럴 때 | 친다 | 나오는 것 |
 |---|---|---|
-| 지금 바꾼 것을 내보내기 전에 | `/qg` | 판정 하나와 남은 지적 표. 지적이 남으면 고칠지 묻고(최대 5번), 판정 전에 앱을 띄워 걸어 볼지 묻는다. 열린 PR 이 있으면 코멘트 하나를 단다 |
-| 브랜치 전체를 보고 싶을 때 | `/qg branch` | main 대비 브랜치 전체 diff 의 판정 |
-| 일부 경로만 볼 때 | `/qg --paths <glob>...` | 그 경로만 리뷰한 판정 |
-| 문서 · 설계 · 설정을 비평받을 때 | `/qg critique <path>` | 비평 · 수정 라운드(라운드마다 커밋). 코드는 `/qg` 로 본다 |
+| 지금 바꾼 것을 내보내기 전에 | `/quality-gates:quality-pipeline` | 판정 하나와 남은 지적 표. 지적이 남으면 고칠지 묻고(최대 5번), 판정 전에 앱을 띄워 걸어 볼지 묻는다. 열린 PR 이 있으면 코멘트 하나를 단다 |
+| 브랜치 전체를 보고 싶을 때 | `/quality-gates:quality-pipeline branch` | main 대비 브랜치 전체 diff 의 판정 |
+| 일부 경로만 볼 때 | `/quality-gates:quality-pipeline --paths <glob>...` | 그 경로만 리뷰한 판정 |
+| 문서 · 설계 · 설정을 비평받을 때 | `/quality-gates:artifact-critique <path>` | 비평 · 수정 라운드(라운드마다 커밋). 코드는 `/quality-gates:quality-pipeline` 로 본다 |
+
+`/quality-gates:quality-pipeline critique …` 는 실행하지 않고 위 새 이름을 안내한다(종료 코드 2).
 
 `both` · `review` · `runtime` · `--skip-runtime` 은 제거됐다 — 한 줄 공지 후 그대로 진행한다(한 파이프라인이라 게이트 범위가 없다).
 
@@ -299,6 +299,16 @@ trivia escape 를 쓰지 않는다. 애매하면 trivia 가 아니다.
 내고 실행하지 않는다. 세션 폴더는 `/qg` 시작마다 지우고 다시 만들고, 오래된 폴더는 같은 시점의 TTL GC 가 회수한다.
 
 `--plan` 은 13.0.0 에서 없어졌다 — 안내 한 줄을 내고 실행하지 않는다. 차등 테스트는 계획 파일을 읽지 않는다.
+
+## 범위
+
+기본 범위는 git 이 보고하는 변경이다 — base 대비 브랜치 diff 와 작업트리 변경의 합집합을 오케스트레이터가 직접 정한다. `Spec:` 트레일러로 선언된 토픽이면 토픽 전체(합친 트리)가 범위다(「토픽 스코프」). 리포 밖 절대경로 편집은 잡히지 않으므로 `--paths` 로 명시한다.
+
+암묵 session 범위로 돌 때는 한 줄로 밝힌다: `리뷰 범위: 이번 세션에서 바뀐 파일 N개.` 토픽이면 `리뷰 범위: 토픽 <키> — 바뀐 파일 N개 · 구성원 <branches>.` 를 밝힌다. 자연어로 브랜치 전체 리뷰 의도를 말하면 모델이 `branch` 범위로 해석한다.
+
+판정은 `clean` · `defect` · `not-certified (<사유>)` 중 하나다. 막는 지적이나 차등 defect 가 남으면 반복마다 항목별 적용/제외 분류표와 함께 `고치고 다시 돌기` / `지금 판정으로 끝내기` / `멈추기` 로 사용자가 진행을 정한다(최대 5회). 「고치고 다시 돌기」는 「적용」 항목만 고친다.
+
+차단 스위치: `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 은 차등 테스트를 건너뛴다(판정은 `not-certified (kill-switch)`). `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 은 e2e 를 끈다(판정 줄의 e2e 칸이 `꺼짐(kill switch)`). `DEVBREW_QUALITY_GATES_DISABLE=1` 은 전부를 끈다.
 
 ## Recipes
 
@@ -418,7 +428,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 |---|---|---|
 | `quality-gates:qg-gc` | `scripts/qg-gc.py` | TTL-GC 스크립트. 훅이 아니지만 지목할 이름을 갖는다 — 전역 스위치 없이 "이 GC만 끈다"를 위한 자리다. `.claude` 나 state root 가 링크인 경우의 해법이 아니다 — 그때는 setup 이 `/qg` 를 거부하므로 실제 디렉토리로 바꾼다(「파이프라인 state」 절) |
 
-대조는 **전체 토큰**이다(앞뒤 공백은 떼고, 쉼표로 여럿을 준다) — `quality-gates:qg` 같은 부분 일치나
+대조는 **전체 토큰**이다(앞뒤 공백은 떼고, 쉼표로 여럿을 준다) — 이름의 앞부분만 준 값 같은 부분 일치나
 `quality-gates:qg-gc:x` 같은 더 긴 토큰은 끄지 않는다(`tests/test_entry_safety_e1_e6.sh` E5).
 
 (`MAX_TOTAL_ITERATIONS`와 cross-gate restart 루프는 v1.5.0에서 제거됨.)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/artifact-critique/SKILL.md plugins/quality-gates/commands/qg.md plugins/quality-gates/README.md plugins/quality-gates/references/e2e.md
+# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/artifact-critique/SKILL.md plugins/quality-gates/README.md plugins/quality-gates/references/e2e.md
 #
 # 쉬운 말 출력 설계 §4 · AC6 — /qg 의 질문 셋 · 완료 표 · 모델이 그대로 내는 문구가 한국어이고,
 # 완료 보고와 비평 최종 보고가 첫 줄 상태 · 끝 할 일 하나를 지시받는다. e2e 걷기 직후 게이트(④)가
@@ -15,7 +15,6 @@ fi
 . "$REPO_ROOT/shared/tests/assert.sh"
 S="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 CA="$PLUGIN_ROOT/skills/artifact-critique/SKILL.md"
-QGMD="$PLUGIN_ROOT/commands/qg.md"
 RM="$PLUGIN_ROOT/README.md"
 E2R="$PLUGIN_ROOT/references/e2e.md"
 # 산문은 줄바꿈을 지운 본문에서 잰다 — 다시 쓰일 때 문장이 줄을 넘을 수 있다.
@@ -75,18 +74,18 @@ assert_file_absent "$S" 'Trivia diff — pipeline skipped' "AC6: 옛 trivia 줄�
 assert_file_grep "$S" '> 리뷰 범위: 이번 세션에서 바뀐 파일 <COUNT>개\. 브랜치 전체를 보려면 /qg branch\.' "AC6: session 범위 줄"
 assert_file_grep "$S" '> 리뷰 범위: 토픽 <topic_key> — 바뀐 파일 <COUNT>개 · 구성원 <branches>\.' "AC6: topic 범위 줄"
 assert_file_absent "$S" 'Review scope: (session|topic)' "AC6: 옛 범위 줄이 SKILL 에 없다"
-assert_file_absent "$QGMD" 'Review scope: (session|topic)' "AC6: 옛 범위 줄이 qg.md 에 없다"
-assert_file_grep "$QGMD" '리뷰 범위: 이번 세션에서 바뀐 파일 N개\.' "AC6: qg.md 가 새 session 범위 줄을 설명한다(양성 짝)"
-assert_file_grep "$QGMD" '리뷰 범위: 토픽 <키> — 바뀐 파일 N개 · 구성원 <branches>\.' "AC6: qg.md 가 새 topic 범위 줄을 설명한다(양성 짝)"
+assert_file_absent "$RM" 'Review scope: (session|topic)' "AC6: 옛 범위 줄이 README 에 없다"
+assert_file_grep "$RM" '리뷰 범위: 이번 세션에서 바뀐 파일 N개\.' "AC6: README 가 새 session 범위 줄을 설명한다(양성 짝)"
+assert_file_grep "$RM" '리뷰 범위: 토픽 <키> — 바뀐 파일 N개 · 구성원 <branches>\.' "AC6: README 가 새 topic 범위 줄을 설명한다(양성 짝)"
 assert_file_grep "$S" '범위를 확인하지 못했다\(scope check degraded — detached HEAD' "AC6: 범위 경고가 쉬운 말로 시작하고 토큰을 괄호에 둔다"
 assert_file_grep "$S" '바뀐 파일이 0개인지 보는 검사를 건너뛰었다\(fail-open\)' "AC6: 범위 경고가 건너뛴 검사를 말한다"
 assert_file_absent "$S" 'empty-scope detection skipped' "AC6: 옛 영어 범위 경고 꼬리가 없다"
 
-# ⑥ qg.md 가 부르는 라벨
-assert_eq "$(grep -cF '`고치고 다시 돌기` / `지금 판정으로 끝내기` / `멈추기`' "$QGMD")" "2" "AC6: qg.md 가 새 라벨을 두 자리에서 부른다"
-assert_file_absent "$QGMD" '`Retry` / `Accept and finish` / `Stop`' "AC6: qg.md 에 옛 라벨 나열이 없다"
-assert_contains "$(flat "$QGMD")" '「고치고 다시 돌기」는 「적용」 항목만 고친다.' "AC6: qg.md 가 고치는 범위를 새 라벨로 말한다"
-assert_not_contains "$(flat "$QGMD")" 'Retry 는 「적용」 항목만 고친다' "AC6: qg.md 에 옛 라벨 문장이 없다"
+# ⑥ README 의 범위 절이 부르는 라벨
+assert_eq "$(grep -cF '`고치고 다시 돌기` / `지금 판정으로 끝내기` / `멈추기`' "$RM")" "1" "AC6: README 가 새 라벨을 한 자리에서 부른다"
+assert_file_absent "$RM" '`Retry` / `Accept and finish` / `Stop`' "AC6: README 범위 절에 옛 라벨 나열이 없다"
+assert_contains "$(flat "$RM")" '「고치고 다시 돌기」는 「적용」 항목만 고친다.' "AC6: README 가 고치는 범위를 새 라벨로 말한다"
+assert_not_contains "$(flat "$RM")" 'Retry 는 「적용」 항목만 고친다' "AC6: README 에 옛 라벨 문장이 없다"
 
 # ⑦ README 상태도가 같은 라벨을 부른다(질문 앵커 표지는 test_readme_state_diagram_complete.sh 가 잰다)
 assert_file_grep "$RM" '분류표\(항목마다 적용 / 제외 \+ 사유\) · 고치고 다시 돌기 / 지금 판정으로 끝내기 / 멈추기$' "AC6: README 상태도가 새 라벨을 부른다"

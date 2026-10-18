@@ -5,10 +5,10 @@
 
 set -euo pipefail
 
-# --- `critique` 는 setup 의 몫이 아니다 — /qg critique 는 artifact-critique 로 간다(qg.md).
-# 출력도 상태도 남기지 않고 0 으로 끝난다. kill switch 는 그 skill 의 E0 가 본다.
+# --- 문서 비평은 이 파이프라인의 인자가 아니다 — 새 진입 이름을 안내하고 실행하지 않는다.
 if [[ "${1:-}" == "critique" ]]; then
-  exit 0
+  echo "> [quality-gates] 문서 비평은 이제 /quality-gates:artifact-critique <경로> 로 부른다 — 파이프라인은 실행하지 않는다."
+  exit 2
 fi
 
 # --- kill switch (SKILL Preflight P1 도 같은 스위치를 본다 — 직접 호출도 막는다) ---

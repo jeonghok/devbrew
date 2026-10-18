@@ -1,8 +1,8 @@
 ---
 name: quality-pipeline
 description: >
-  Runs the quality-gates pipeline in a single assistant turn. Triggered by
-  `/qg`, "run quality gates", "verify my implementation", "check code quality",
+  Runs the quality-gates pipeline in a single assistant turn. Called as
+  `/quality-gates:quality-pipeline` or on "run quality gates", "verify my implementation", "check code quality",
   or "is my PR ready to merge". One pipeline, one verdict — scope, reviewers
   against one criteria block and the intent source, a framing-blind re-critique,
   a differential test against the baseline (always), an optional human-approved e2e walk, and synthesis. Fix-loop
@@ -10,36 +10,24 @@ description: >
   ends by posting one new PR comment (understanding text + verdict line) through
   the publish sink.
 cost_class: variable
+argument-hint: "[branch|--paths <glob>...]"
 allowed-tools:
-  # Preflight
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/discover-spec.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-topic.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/topic-head.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/verdict.py:*)
-  # Differential test (references/differential-test.md)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-baseline.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/seal-worktree.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py:*)
-  - Bash(mktemp:*)
-  # Review
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/publish-comment.sh:*)
-  - Agent
-  - AskUserQuestion
-  - Read
-  - Glob
-  - Grep
-  - Edit
-  - Write
+  - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" quality-gates quality-pipeline)
 ---
+
+!`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" quality-gates quality-pipeline`
+
+## 진입 단계
+
+이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽는다.
+
+| 그 자리의 내용 | 동작 |
+|---|---|
+| `[devbrew-entry] ok …` | 아래 `## Preflight` 로 간다 |
+| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다 |
+| `[devbrew-entry] error …` | `[quality-gates] quality-pipeline 사전 검사 실패 — <reason= 값>.` 을 내고 멈춘다 |
+| `[shell command execution disabled by policy]` | `[quality-gates] quality-pipeline 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다.` 를 내고 멈춘다 |
+| 감시줄 없음 · 그 밖 | `[quality-gates] quality-pipeline 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실).` 을 내고 멈춘다 |
 
 # Quality Gates — In-Turn Orchestrator (v13.0.1)
 
@@ -95,8 +83,8 @@ bash "$QG/scripts/e2e-state.sh" stop --dir "$RD"; echo "preflight-stop rc=$?"
 rm -f "$RD/excluded.md" "$RD/differential.yaml" "$RD/differential-not-counted.md" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt"
 ```
 
-`--ensure` keeps this session's folder `.claude/quality-gates/<session-id>/` when the `/qg`
-command's setup already made it; otherwise setup creates it with a `result.md` skeleton
+`--ensure` keeps this session's folder `.claude/quality-gates/<session-id>/` when an earlier
+step of this run already made it; otherwise setup creates it with a `result.md` skeleton
 ([state-file-format](references/state-file-format.md)). A `result.md` that already has `## 판정`
 belongs to a finished earlier run in this session — setup without `--ensure` recreates the folder.
 Every run then starts without the previous run's `excluded.md` · `differential.yaml` · `differential-not-counted.md` · `verdict.out` ·

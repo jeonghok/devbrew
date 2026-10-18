@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/style/plain-language.md plugins/*/skills/*/SKILL.md plugins/*/commands/*.md shared/tests/plain_language_block.py
+# guards: shared/style/plain-language.md plugins/*/skills/*/SKILL.md shared/tests/plain_language_block.py
 #
 # 「사람에게 쓰는 글」 블록 동일성 — 대상은 두 글롭에서 도출한다(목록을 손으로 적지 않는다).
 # 새 SKILL.md · 명령 파일이 블록 없이 들어오면 RED 다. 판정은 plain_language_block.py 가 한다.

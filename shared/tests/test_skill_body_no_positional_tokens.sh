@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/*/skills/*/SKILL.md plugins/*/commands/*.md
+# guards: plugins/*/skills/*/SKILL.md
 #
 # skill · command 본문에 위치 인자 토큰이 없는가 — 저장소 전체에서 도출한 코퍼스 전부를 잰다.
 #

@@ -253,15 +253,15 @@ WU="$TMP/e1noenv"; mkdir -p "$WU/.claude/quality-gates/$OWN"
 : > "$WU/.claude/quality-gates/$OWN/comment.md"
 refusal_check "환경 변수 없이 --session-id 만 — 마커 없는 폴더(comment.md 만)" "$WU" "$OWN"
 
-note "── E1(critique): 첫 인자 critique 는 setup 의 몫이 아니다 — 출력 · 상태 없이 exit 0"
+note "── E1(critique): 첫 인자 critique 는 새 이름을 안내하고 exit 2 — 상태를 쓰지 않는다"
 WC="$TMP/e1critique"; mkdir -p "$WC"
 out="$(cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 "$SETUP" critique docs/x.md 2>"$TMP/critique.err")"; rc=$?
-assert_eq "$rc" "0" "E1: setup-qg.sh critique docs/x.md 는 exit 0"
-assert_eq "$out" "" "E1: critique 는 stdout 이 비어 있다"
+assert_eq "$rc" "2" "E1: setup-qg.sh critique docs/x.md 는 exit 2"
+assert_contains "$out" "/quality-gates:artifact-critique" "E1: critique 는 stdout 에 새 이름을 안내한다"
 assert_eq "$(cat "$TMP/critique.err")" "" "E1: critique 는 stderr 가 비어 있다"
 [ ! -e "$WC/.claude" ] && ok "E1: critique 는 세션 폴더를 만들지 않는다" || no "E1: critique 가 상태를 남겼다"
 (cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 DEVBREW_QUALITY_GATES_DISABLE=1 "$SETUP" critique docs/x.md >/dev/null 2>&1); rc=$?
-assert_eq "$rc" "0" "E1: critique 는 전역 kill switch 도 setup 이 아니라 artifact-critique(E0)에 맡긴다"
+assert_eq "$rc" "2" "E1: critique 안내는 전역 kill switch 와 무관하게 같다(exit 2)"
 (cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 "$SETUP" docs/x.md >/dev/null 2>&1); rc=$?
 assert_eq "$rc" "1" "E1: critique 가 첫 인자가 아니면 여전히 Unknown argument 다 (양의 짝)"
 (cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 "$SETUP" >/dev/null 2>&1)
@@ -295,7 +295,7 @@ stale_session "$W" "stalee2sess01"
 
 note "── E3: skill · 커맨드 본문에 셸 위치 인자를 쓰지 않는다"
 scanned="$(bash "$ROOT/shared/tests/test_skill_body_no_positional_tokens.sh" --emit-scanned)"
-for f in plugins/quality-gates/commands/qg.md plugins/quality-gates/skills/quality-pipeline/SKILL.md; do
+for f in plugins/quality-gates/skills/quality-pipeline/SKILL.md; do
   printf '%s\n' "$scanned" | grep -qxF "$f" \
     && ok "E3: $f 가 위치 인자 검사의 코퍼스에 있다" || no "E3: $f 가 위치 인자 검사에서 빠졌다"
 done

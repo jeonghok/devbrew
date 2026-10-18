@@ -1,29 +1,18 @@
 #!/usr/bin/env bash
-# T11/AC1 — qg.md routes `critique` to artifact-critique (deterministic-row prose lock).
+# guards: plugins/quality-gates/scripts/setup-qg.sh plugins/quality-gates/skills/quality-pipeline/SKILL.md
+# AC6 — 명령 층이 없고, 파이프라인에 문서 비평 인자가 오면 새 이름을 안내하고 실행하지 않는다.
 set -u
-Q="plugins/quality-gates/commands/qg.md"
-. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
-
-assert_contains "$(cat "$Q")" 'artifact-critique' "qg.md references artifact-critique skill"
-# body-unique (not header/table-satisfiable): "산출물...비평...모드" only occurs in the
-# routing-mode prose sentence ("...산출물 비평-수정 루프** 모드다."), not in the section
-# heading ("...산출물 비평 루프)") or the Quick Reference table row (no "모드" there).
-assert_file_grep "$Q" '산출물.*비평.*모드' "critique routing described"
-# critique branch must precede/short-circuit the setup-qg.sh + quality-pipeline path
-crit_ln="$(grep -nF 'artifact-critique' "$Q" | head -1 | cut -d: -f1)"
-pipe_ln="$(grep -nF 'quality-gates:quality-pipeline' "$Q" | head -1 | cut -d: -f1)"
-if [ -n "$crit_ln" ] && [ -n "$pipe_ln" ] && [ "$crit_ln" -lt "$pipe_ln" ]; then
-  ok "critique branch appears before code-pipeline dispatch"
-else
-  no "critique branch must precede quality-pipeline (crit=$crit_ln pipe=$pipe_ln)"
-fi
-# Quick Reference row for critique — literal "<path>" placeholder is table-row-unique
-# (body prose uses a concrete example "docs/design.md", not the "<path>" placeholder).
-assert_contains "$(cat "$Q")" '/qg critique <path>' "Quick Reference documents /qg critique"
-# NL-routing is model-owned (no deterministic token parser claim). Body-unique phrase:
-# a pre-existing unrelated branch-scope NL note elsewhere in qg.md also contains
-# "자연어"/"모델이", so a bare alternation is satisfied even with the critique section
-# fully absent — pin the exact critique-section wording instead.
-assert_contains "$(cat "$Q")" '자연어 의도는 모델이' "NL critique intent noted as model-owned"
-
+[ "${1:-}" = "--emit-scanned" ] && { printf '%s\n' plugins/quality-gates/scripts/setup-qg.sh plugins/quality-gates/skills/quality-pipeline/SKILL.md; exit 0; }
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+. "$ROOT/shared/tests/assert.sh"
+assert_eq "$(ls "$ROOT/plugins/quality-gates/commands" 2>/dev/null | wc -l | tr -d ' ')" "0" "commands/ 층이 없다"
+T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+( cd "$T" && git init -q . && git commit -q --allow-empty -m init )
+out="$(cd "$T" && CLAUDE_CODE_SESSION_ID=session-routing-1 bash "$ROOT/plugins/quality-gates/scripts/setup-qg.sh" critique docs/x.md 2>&1)"; rc=$?
+assert_eq "$rc" "2" "critique 인자: exit 2(실행하지 않는다)"
+assert_contains "$out" "/quality-gates:artifact-critique" "critique 인자: 새 이름을 안내한다"
+assert_eq "$(find "$T/.claude" -type f 2>/dev/null | wc -l | tr -d ' ')" "0" "critique 인자: 아무것도 쓰지 않는다"
+SK="$ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
+assert_contains "$(cat "$SK")" '## 진입 단계' "quality-pipeline 은 진입 단계 절을 가진다"
+assert_contains "$(cat "$SK")" 'setup-qg.sh" --ensure $ARGUMENTS' "인자 확인은 본문 P2 가 한다(사전 검사 줄이 아니다)"
 finish

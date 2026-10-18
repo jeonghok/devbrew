@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/*/agents/*.md plugins/*/skills/** plugins/*/commands/** plugins/*/hooks/** plugins/*/scripts/*.js shared/docreview/agents/*.md
+# guards: plugins/*/agents/*.md plugins/*/skills/** plugins/*/hooks/** plugins/*/scripts/*.js shared/docreview/agents/*.md
 #
 # AC22 (설계 §6.3.4 · §11) — docreview agent 의 **사본 집합과 디스패치 집합이 정확히
 # 일치한다.** 디스패치하는데 사본이 없어도, 사본이 있는데 디스패치하지 않아도 RED.
