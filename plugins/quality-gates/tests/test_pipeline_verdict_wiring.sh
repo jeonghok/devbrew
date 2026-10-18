@@ -340,7 +340,7 @@ a = seg(r'.{0,20}STILL_GREEN.{0,160}')
 print(f"ATTR_FOUND:{1 if a is not None else 0}")
 # 이 정규식은 backtick 을 담는다 — f-string 중괄호 «안» 에 직접 넣지 않는다
 # (bash 가 $(...) 의 짝을 heredoc 본문까지 통틀어 backtick 짝수로 찾다가, 홀수
-# backtick 하나로 이 스크립트 자체의 문법을 깬다 — 실측: /qg 최종 리뷰 2차 라운드).
+# backtick 하나로 이 스크립트 자체의 문법을 깬다 — 실측: qg 최종 리뷰 2차 라운드).
 attr_negated = bool(a and re.search(r'STILL_GREEN`?\s*이?\s*\*{0,2}아닌', a))
 print(f"ATTR_NEGATED:{1 if attr_negated else 0}")
 print(f"ATTR_EXAMPLE:{1 if (a and 'NEW_REGRESSION' in a) else 0}")

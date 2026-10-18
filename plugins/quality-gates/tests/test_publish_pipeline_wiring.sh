@@ -86,7 +86,7 @@ qg: decoy-이 줄은 판정 절 밖이다
 EOF
   printf '## 한 줄 요약\n무엇이 바뀌나.\n' > "$T/proj/.claude/quality-gates/$SID/comment-head.md"
 }
-DIRTY="게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커밋과 다르다 — 커밋·푸시 뒤 다시 /qg)"
+DIRTY="게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커밋과 다르다 — 커밋·푸시 뒤 다시 /quality-gates:quality-pipeline)"
 STATUS_FAIL="게시 안 함 — 작업 트리 상태를 읽지 못했다(git status 실패)"
 HEAD_VLINE="게시 안 함 — 이해글에 판정 줄 모양이 있다"
 AGAIN="게시 안 함 — 이 실행은 이미 게시 단계를 돌았다"

@@ -214,7 +214,7 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
 ## post-1 — 조립·검증·렌더 (orchestrator, 결정론)
 
 이하 `<data.json>` = `$RUN_DIR/audit-data.json` (step 7의 `--artifacts`가 검증하는 바로 그 파일). 다른
-경로에 쓰면 step 7이 파일을 못 찾아 산출물 검증이 깨진다 (H /qg 2026-07-20). `<wf.json>` · `<codex.json>` ·
+경로에 쓰면 step 7이 파일을 못 찾아 산출물 검증이 깨진다 (H qg 2026-07-20). `<wf.json>` · `<codex.json>` ·
 `<meta.json>` · `<assigned.json>` 도 `$RUN_DIR/` 아래 같은 이름의 파일이다.
 
 1. **원장 확보 (assemble 前 — P21)**: Workflow 실행이 남긴 `journal.jsonl`(그 run의 transcript

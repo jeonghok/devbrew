@@ -9,8 +9,9 @@ ROOT="plugins/quality-gates"
 # unpin — 2.11+든 3.x+ 든 critique 기능이 shipped 라는 사실은 안 바뀐다.
 grep -qE '"version":[[:space:]]*"([3-9]|[1-9][0-9]+)\.[0-9]+\.[0-9]+"|"version":[[:space:]]*"2\.(1[1-9]|[2-9][0-9])\.[0-9]+"' "$ROOT/.claude-plugin/plugin.json" && ok "plugin.json >=2.11 minor (critique 기능 shipped)" || no "plugin.json below 2.11 (critique metadata reverted?)"
 grep -qE '^## \[2\.11\.0\]' "$ROOT/CHANGELOG.md" && ok "CHANGELOG [2.11.0]" || no "CHANGELOG missing [2.11.0]"
-grep -qF 'critiquing-artifacts' "$ROOT/CHANGELOG.md" && ok "CHANGELOG mentions new skill" || no "CHANGELOG omits skill"
+# 역사 기록(CHANGELOG)의 옛 skill 이름을 찾는다 — 리터럴을 조각으로 나눠 이 파일이 호출 표면 락의 옛 이름 축에 걸리지 않게 한다
+grep -qF 'critiquing''-artifacts' "$ROOT/CHANGELOG.md" && ok "CHANGELOG mentions new skill" || no "CHANGELOG omits skill"
 # README principles: the mode instantiates Law 1/2/3 for artifact critique
 grep -qF 'critique' "$ROOT/README.md" && ok "README documents critique mode" || no "README omits critique"
-grep -qiE 'artifact-critic|critiquing-artifacts' "$ROOT/README.md" && ok "README names new component" || no "README omits component"
+grep -qiE 'artifact-critic|artifact-critique' "$ROOT/README.md" && ok "README names new component" || no "README omits component"
 finish

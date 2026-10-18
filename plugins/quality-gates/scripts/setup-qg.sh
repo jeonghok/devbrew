@@ -5,15 +5,18 @@
 
 set -euo pipefail
 
-# --- `critique` 는 setup 의 몫이 아니다 — /qg critique 는 critiquing-artifacts 로 간다(qg.md).
-# 출력도 상태도 남기지 않고 0 으로 끝난다. kill switch 는 그 skill 의 E0 가 본다.
+# --- 문서 비평은 이 파이프라인의 인자가 아니다 — 새 진입 이름을 안내하고 실행하지 않는다.
+critique_notice() {
+  echo "> [quality-gates] 문서 비평은 이제 /quality-gates:artifact-critique <경로> 로 부른다 — 파이프라인은 실행하지 않는다."
+  exit 2
+}
 if [[ "${1:-}" == "critique" ]]; then
-  exit 0
+  critique_notice
 fi
 
 # --- kill switch (SKILL Preflight P1 도 같은 스위치를 본다 — 직접 호출도 막는다) ---
 if [[ "${DEVBREW_QUALITY_GATES_DISABLE:-}" == "1" ]]; then
-  echo "[quality-gates] DEVBREW_QUALITY_GATES_DISABLE=1 이 켜져 있어 /qg 를 시작하지 않는다(setup-qg disabled)." >&2
+  echo "[quality-gates] DEVBREW_QUALITY_GATES_DISABLE=1 이 켜져 있어 /quality-gates:quality-pipeline 을 시작하지 않는다(setup-qg disabled)." >&2
   exit 1
 fi
 
@@ -49,16 +52,16 @@ while [[ $# -gt 0 ]]; do
       # 맨 `branch` 는 범위 override 다(SKILL 이 읽는다). 뒤에 이름이 오면 v9 의 worktree 모드다.
       shift
       if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^- ]] && [[ ! "$1" =~ ^(review|runtime|both)$ ]]; then
-        gone "branch <name>" "다른 브랜치는 체크아웃하거나 그 브랜치의 git worktree 안에서 /qg 를 돌린다"
+        gone "branch <name>" "다른 브랜치는 체크아웃하거나 그 브랜치의 git worktree 안에서 /quality-gates:quality-pipeline 을 돌린다"
         shift
       fi
       ;;
     --reset)
-      gone "--reset" "세션 폴더는 /qg 를 시작할 때마다 지우고 다시 만든다"
+      gone "--reset" "세션 폴더는 /quality-gates:quality-pipeline 을 시작할 때마다 지우고 다시 만든다"
       shift
       ;;
     --gc)
-      gone "--gc" "TTL GC 는 /qg 를 시작할 때마다 자동으로 돈다"
+      gone "--gc" "TTL GC 는 /quality-gates:quality-pipeline 을 시작할 때마다 자동으로 돈다"
       shift
       ;;
     --pr-url)
@@ -75,6 +78,10 @@ while [[ $# -gt 0 ]]; do
       ENSURE_MODE="true"
       shift
       ;;
+    critique)
+      # 실제 호출은 `--ensure $ARGUMENTS` 라 첫 인자가 아니다 — 위치와 무관하게 안내한다(아무것도 쓰기 전).
+      critique_notice
+      ;;
     --session-id)
       if [[ -z "${2:-}" ]]; then
         echo "❌ --session-id 뒤에 값이 없다(--session-id requires an argument)." >&2
@@ -88,7 +95,7 @@ while [[ $# -gt 0 ]]; do
 Quality Gates Pipeline Setup
 
 USAGE:
-  /qg [branch] [--paths <glob>...]
+  /quality-gates:quality-pipeline [branch] [--paths <glob>...]
 
 ARGUMENTS:
   (none)               Review git-derived changes (branch + worktree) or the Spec: topic
@@ -127,7 +134,7 @@ if [[ -z "$SESSION_ID" ]]; then
   cat >&2 <<EOF
 ❌ Quality Gates: 세션 ID(session ID)가 비어 있어 상태 폴더를 만들 수 없다.
    --session-id <id> 인자도 CLAUDE_CODE_SESSION_ID 환경 변수도 없다.
-   Claude Code 안에서 /qg 를 다시 돌리거나 --session-id 를 직접 준다.
+   Claude Code 안에서 /quality-gates:quality-pipeline 을 다시 돌리거나 --session-id 를 직접 준다.
 EOF
   exit 1
 fi
@@ -217,7 +224,7 @@ if ! load_markers; then
   refuse "qg-gc.py 에서 세션 마커 목록을 읽지 못했다"
 fi
 if root_escapes; then
-  refuse "'.claude' 나 state root '$STATE_ROOT' 가 제자리의 실제 디렉토리가 아니다(심볼릭 링크 등 — 실제 디렉토리로 바꿔야 /qg 가 돈다)"
+  refuse "'.claude' 나 state root '$STATE_ROOT' 가 제자리의 실제 디렉토리가 아니다(심볼릭 링크 등 — 실제 디렉토리로 바꿔야 /quality-gates:quality-pipeline 이 돈다)"
 elif [[ -L "$STATE_DIR" ]]; then
   refuse "세션 폴더 '$STATE_DIR' 자신이 링크다"
 elif [[ -e "$STATE_DIR" ]] && [[ ! -d "$STATE_DIR" ]]; then

@@ -6,7 +6,8 @@
 id/계보 · 사후 auto decide · 원장 기록).
 
 리뷰어 산출물: 펜스 ```docreview-layer1 / ```docreview-layer2 (YAML 리스트) · ```docreview-recritic
-(YAML 매핑 {verdicts, added}). 같은 이름이 여럿이면 마지막 블록.
+(YAML 매핑 {verdicts, added}). 리스트 블록은 같은 이름이 여럿이면 전부 읽어 합친다(합친 개수 공시 ·
+회계 흡수). 매핑 블록(재비판)은 마지막 블록을 읽고 개수를 공시한다 — 인용 예시가 판정이 되지 않게.
 """
 from __future__ import annotations
 
@@ -52,6 +53,78 @@ def _refs(v):
     if isinstance(v, list):
         return [str(x) for x in v]
     return []
+
+
+def extract_blocks(text: str, name: str):
+    """같은 이름 블록 전부 — (값 목록, 오류). 없으면 (None, "missing"), 하나라도 파손이면 (None, "broken")."""
+    ms = re.findall(BLOCK_RE % re.escape(name), text, re.S)
+    if not ms:
+        return None, "missing"
+    out, broken = [], False
+    for m in ms:
+        if not broken:
+            try:
+                out.append(scrub(yaml.safe_load(m)))
+            except Exception:  # yaml.YAMLError 계열 전부 — 블록 하나의 파손은 출력 전체의 파손이다
+                broken = True
+    return (None, "broken") if broken else (out, None)
+
+
+def merge_list_blocks(blocks, name, ev):
+    """목록 블록 여럿을 하나로 — (항목 목록, 오류).
+
+    - 목록이 아닌 블록이 하나라도 있으면 (None, "not a list").
+    - 글자까지 같은 항목(정렬한 JSON 이 같다)은 처음 것만 남기고 나머지를 흡수로 센다.
+    - 블록 k(2 이상)가 앞 블록에서 이미 쓴 임시 번호(ref)를 다시 쓰면 그 블록 안에서 `<ref>@b<k>` 로
+      바꾸고, 같은 블록 안의 `blocks` 도 따라 바꾼다 — 질문은 자기 블록의 항목을 막는다.
+    - 블록이 둘 이상이면 둘째부터 블록마다 흡수 한 건(`<name>#b<k>` → `<name>#b1`)을 센다.
+    """
+    not_list = False
+    for b in blocks:
+        not_list = not_list or not isinstance(b, list)
+    if not_list:
+        return None, "not a list"
+    merged, seen_refs, seen_items, final_ref = [], set(), {}, {}
+    for k, blk in enumerate(blocks, 1):
+        # 1 걸음 — 항목마다 처분을 정한다: 글자까지 같은 항목은 흡수(자리는 살아남은 항목의 최종 ref),
+        # 앞 블록과 ref 가 겹치는 새 항목은 `<ref>@b<k>` 로 바꾼다.
+        local, plan = {}, []
+        for it in blk:
+            key = json.dumps(it, sort_keys=True, ensure_ascii=False, default=str)
+            ref = str(it["ref"]) if isinstance(it, dict) and it.get("ref") is not None else None
+            label = "%s#b%d:%s" % (name, k, (it.get("ref") if isinstance(it, dict) else "?"))
+            if key in seen_items:
+                ev("absorbed", label, seen_items[key])
+                plan.append((None, None))
+                if ref is not None and final_ref.get(key) is not None:
+                    local[ref] = final_ref[key]
+            else:
+                seen_items[key] = label
+                new_ref = ref
+                if ref is not None and k > 1 and ref in seen_refs:
+                    new_ref = "%s@b%d" % (ref, k)
+                    local[ref] = new_ref
+                final_ref[key] = new_ref
+                plan.append((it, new_ref))
+        # 2 걸음 — 살아남은 항목에 새 ref 와 `blocks` 를 적는다.
+        for it, new_ref in plan:
+            if it is not None:
+                if isinstance(it, dict) and local:
+                    it = dict(it)
+                    if new_ref is not None:
+                        it["ref"] = new_ref
+                    if it.get("blocks") is not None:
+                        fixed = []
+                        for r in _refs(it["blocks"]):
+                            fixed.append(local.get(r, r))
+                        it["blocks"] = fixed
+                merged.append(it)
+        for it in merged:
+            if isinstance(it, dict) and it.get("ref") is not None:
+                seen_refs.add(str(it["ref"]))
+        if k > 1:
+            ev("absorbed", "%s#b%d" % (name, k), "%s#b1" % name)
+    return merged, None
 
 
 def normalize(item, layer_default, prefix, idx, ledger):
@@ -170,8 +243,11 @@ def cmd_prepare(a) -> int:
             except UnicodeDecodeError:
                 # 깨진 critic 출력 — 설계 §9 의 sentinel 깨짐과 같은 판정(critic 사망 → 재dispatch 1회 → 「미검증」)
                 critic_why = "undecodable"
-    l1, e1 = extract_block(text, "docreview-layer1")
-    critic_why = critic_why or e1
+    l1s, e1 = extract_blocks(text, "docreview-layer1")
+    l1, e1m = (merge_list_blocks(l1s, "docreview-layer1", ev) if l1s is not None else (None, None))
+    critic_why = critic_why or e1 or e1m
+    if l1s is not None and len(l1s) > 1:
+        degrade.setdefault("blocks_merged", {})["docreview-layer1"] = len(l1s)
     if critic_why or not isinstance(l1, list):
         degrade["critic_dead"] = True
         ev("source_failed", "doc-critic", "layer1 block %s" % (critic_why or "not a list"), True)
@@ -180,8 +256,15 @@ def cmd_prepare(a) -> int:
             n1 = normalize(it, 1, "c", i, rec)
             if n1:
                 items.append(("critic", n1))
-        l2, e2 = extract_block(text, "docreview-layer2")
-        if e2 or not isinstance(l2, list):
+        l2s, e2 = extract_blocks(text, "docreview-layer2")
+        l2, e2m = (merge_list_blocks(l2s, "docreview-layer2", ev) if l2s is not None else (None, None))
+        e2 = e2 or e2m
+        if l2s is not None and len(l2s) > 1:
+            degrade.setdefault("blocks_merged", {})["docreview-layer2"] = len(l2s)
+        if e2 == "broken":
+            degrade["critic_dead"] = True
+            ev("source_failed", "doc-critic", "layer2 block broken", True)
+        elif e2 or not isinstance(l2, list):
             if prof["layer_rubric"].get("layer2"):
                 degrade["layer2_missing"] = True
                 ev("uncountable", "layer2", "block %s" % (e2 or "not a list"))
@@ -289,6 +372,9 @@ def _read_recritic(a, degrade, L):
         L.source_failed("doc-recritic", "kill switch", primary=False)
         return [], []
     text = Path(a.recritic).read_text(encoding="utf-8") if a.recritic and Path(a.recritic).is_file() else ""
+    n_blocks = len(re.findall(BLOCK_RE % re.escape("docreview-recritic"), text, re.S))
+    if n_blocks > 1:
+        degrade["recritic_blocks"] = n_blocks
     blk, err = extract_block(text, "docreview-recritic")
     if err or not isinstance(blk, dict):
         degrade["recritic_dead"] = err or "not a mapping"
@@ -736,6 +822,13 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats, advice_stats=
         adv.append("앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위")
     if degrade.get("critic_freshness_unknown"):
         adv.append("critic 시점 판별 불가 (%s)" % degrade["critic_freshness_unknown"])
+    if degrade.get("blocks_merged"):
+        merged_note = []
+        for k, v in sorted(degrade["blocks_merged"].items()):
+            merged_note.append("층 %s 블록 %d개" % (k[-1], v))
+        adv.append("같은 이름 블록을 합쳤다 — %s (%s)" % (" · ".join(merged_note), " · ".join(sorted(degrade["blocks_merged"]))))
+    if degrade.get("recritic_blocks"):
+        adv.append("재비판 블록 %d개 — 마지막만 읽었다(앞 블록은 인용 예시로 본다)" % degrade["recritic_blocks"])
     out = {
         "ok": True, "round": n, "findings": [_pub(it) for it in final],
         "by_disposition": {d: [it["id"] for it in final if it["disposition"] == d and it.get("route") != ROUTE_ADVICE]

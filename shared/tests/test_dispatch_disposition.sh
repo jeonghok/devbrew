@@ -86,7 +86,7 @@ for pat in ("plugins/*/skills/**/*", "plugins/*/commands/**/*",
 corpus = sorted(set(corpus))
 
 # ── 3) **표기 필터가 이름 매칭보다 먼저** 걸린다. 순서를 뒤집으면 산문 속
-#       영어 단어가 dispatch 로 잡힌다 (실측: critiquing-artifacts/SKILL.md 에서
+#       영어 단어가 dispatch 로 잡힌다 (실측: artifact-critique/SKILL.md 에서
 #       맨 `adversarial` 이 5줄에 등장하고 전부 산문이다).
 #       **콜론까지 포함**해야 한다. `agentType`(콜론 없음)으로 쓰면
 #       smoke-workflow.js:8 의 주석이 19번째 dispatch 로 잡힌다.
@@ -165,7 +165,7 @@ print("ZERO_AGENTS %s" % ",".join(zero))
 
 # ── 축 A③ : 각 dispatch 줄은 «정확히 한 에이전트»에 귀속.
 #    이것이 경계 규칙(§5.1③)의 진짜 계측기다 — 규칙이 없으면
-#    critiquing-artifacts/SKILL.md:194 한 줄이 `adversarial` 과
+#    artifact-critique/SKILL.md:194 한 줄이 `adversarial` 과
 #    `artifact-adversarial` 둘 다에 귀속되어 여기서 RED 가 난다.
 attrib = {}
 for (rel, dl, ag) in dispatch:

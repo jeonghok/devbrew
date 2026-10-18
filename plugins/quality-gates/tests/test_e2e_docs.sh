@@ -213,7 +213,6 @@ case_X3_local_origin_rule() {
 
 PHIL="$ROOT/docs/philosophy/devbrew-harness-philosophy.md"
 README="$PLUGIN_ROOT/README.md"
-QGMD="$PLUGIN_ROOT/commands/qg.md"
 
 case_AC26_P4_sentence_replaced() {
   local s; s=$(section "$PHIL" "### P4 — Verification Is Infrastructure")
@@ -246,7 +245,7 @@ case_readme_describes_the_e2e_stage() {
 case_readme_states_the_e2e_limits() {
   assert_file_grep "$README" '^- e2e `stop` 은 승인된 명령이 띄운 프로세스 그룹을 내린다\. .*고르지 않는다\.$' "README: 데몬 · 남은 앱 한계 줄(독립 bullet)"
   assert_file_grep "$README" '^- e2e 남은 앱: .*남을 수 있다\.$' "README: 남은 앱 고아 한계"
-  assert_file_grep "$README" '^- e2e 남은 앱: .*다른 세션의 `/qg` 는 앞 세션의 폴더를 보지 않으므로' "M4: 다른 세션의 /qg 는 남은 앱을 내리지 않는다"
+  assert_file_grep "$README" '^- e2e 남은 앱: .*다른 세션의 `/quality-gates:quality-pipeline` 은 앞 세션의 폴더를 보지 않으므로' "M4: 다른 세션의 /quality-gates:quality-pipeline 은 남은 앱을 내리지 않는다"
   assert_file_grep "$README" '^- e2e 남은 앱: .*내리지 못하면 사유를 출력한 뒤 pgid 기록이 든 폴더를 지우므로' "M4: setup 백스톱이 stop 실패 뒤 기록을 지운다"
   assert_file_absent "$README" '`--ensure` 경로로 들어오면' "M4: 옛 「--ensure 경로」 고아 문장이 없다(P2 가 내린다)"
   assert_file_grep "$README" '^- e2e 증거 판독: .*`—` · `none` 같은 글자는 증거로 읽혀 `충족` 이 그대로 남는다\.$' "M4: 닫힌 증거 없음 목록"
@@ -270,8 +269,8 @@ case_readme_security_paragraph_and_principle() {
   assert_file_grep "$README" '^- \*\*e2e\*\* — `curl`\(API 시나리오를 걸을 때' "README 사전 요건: curl 은 API 시나리오용"
 }
 
-case_qgmd_has_disable_e2e_row() {
-  assert_file_grep "$QGMD" '^\| `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` \| e2e 를 끈다 — 판정 줄의 e2e 칸이 `꺼짐\(kill switch\)` \|$' "qg.md 표에 DISABLE_E2E 줄이 있다"
+case_readme_has_disable_e2e_line() {
+  assert_file_grep "$README" '`DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 은 e2e 를 끈다\(판정 줄의 e2e 칸이 `꺼짐\(kill switch\)`\)' "README 범위 절에 DISABLE_E2E 줄이 있다"
 }
 
 for c in $(declare -F | awk '{print $3}' | grep '^case_'); do

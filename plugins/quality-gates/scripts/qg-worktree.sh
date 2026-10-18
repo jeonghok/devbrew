@@ -148,7 +148,7 @@ case "${1:-}" in
       || die "rm -rf fallback also failed: $target"  # fallback when git lost track
     ;;
   memo-init)
-    # 실행 안 메모 — 한 번의 /qg 동안 기준선 행 · 배정 · 대조 산출을 담는다. 검사 대상 트리
+    # 실행 안 메모 — 한 번의 /quality-gates:quality-pipeline 동안 기준선 행 · 배정 · 대조 산출을 담는다. 검사 대상 트리
     # 밖이어야 봉인(HEAD 축)에 섞이지 않는다(R6).
     [[ $# -eq 2 ]] || die "usage: memo-init <project-dir>"
     root=$(git -C "$2" rev-parse --show-toplevel 2>/dev/null) || die "git 리포가 아니다: $2"

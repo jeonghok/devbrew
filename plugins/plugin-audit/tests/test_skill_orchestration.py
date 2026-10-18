@@ -36,7 +36,7 @@ INVARIANTS = [
     '[ -d "$RUN_DIR" ] ||',
     # sandbox 이름은 실행 키가 아니라 그 해시다 — audit-sandbox.sh create-sandbox 는 id 앞 8글자만 쓴다 (D1.1).
     "run-own-tests.sh plugins/<target> <sandbox id>",
-    # H (/qg 2026-07-20 round-2): step-2 --out은 step-7이 검증하는 경로에 pin돼야 한다.
+    # H (qg 2026-07-20 round-2): step-2 --out은 step-7이 검증하는 경로에 pin돼야 한다.
     '--out "$RUN_DIR/audit-data.json"',
     '--artifacts "$RUN_DIR/audit-data.json" --report "$RUN_DIR/audit.md"',
     # H: Workflow journal을 실행 디렉토리의 원장 파일로 persist (render 의 "journal로 확인하라" 포인터의 실체).

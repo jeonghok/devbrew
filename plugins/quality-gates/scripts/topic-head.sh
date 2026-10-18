@@ -67,7 +67,7 @@ emit() {   # <status> <reason>
 val() { printf '%s\n' "$2" | sed -n "s/^$1: //p" | head -1; }
 
 # exit 2 는 사용 오류뿐이다. 아래 단계의 실패(하위 스크립트 비0 · 기대 키 부재)는 status 로
-# 낸다 — SKILL ① 이 비0 을 「멈춘다」로 읽으므로, 일시적 git 실패가 /qg 전체를 세우지 않고
+# 낸다 — SKILL ① 이 비0 을 「멈춘다」로 읽으므로, 일시적 git 실패가 /quality-gates:quality-pipeline 전체를 세우지 않고
 # session 으로 내려가 그 사유가 공시되게 한다.
 
 # 1. 토픽 키

@@ -5,6 +5,12 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.0.3] — 2026-10-18
+
+### Changed
+
+- `README.md` 와 `templates/shared/pr-process.md` 의 quality-gates 줄이 옛 이름 `/qg` 대신 `/quality-gates:quality-pipeline` 을 가리킨다.
+
 ## [5.0.2] — 2026-10-10
 
 ### Changed

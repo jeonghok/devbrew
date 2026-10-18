@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/*/skills/*.md plugins/*/commands/*.md plugins/*/references/*.md
+# guards: plugins/*/skills/*.md plugins/*/references/*.md
 #
 # skill · command · reference 마크다운이 모델에게 건네는 플러그인 루트는 cwd 로 풀리지 않는다.
 #

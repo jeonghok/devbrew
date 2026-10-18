@@ -1,35 +1,33 @@
 ---
-name: critiquing-artifacts
+name: artifact-critique
 description: >
   Critique → revise → re-critique loop for a single NON-CODE artifact
-  (doc / spec / plan / config / prose). Triggered by `/qg critique <path>` or a
+  (doc / spec / plan / config / prose). Called as `/quality-gates:artifact-critique <path>` or on a
   natural-language critique intent ("이 설계문서 비평해줘"). A tier-unpinned
   critic + adversarial (+ optional codex co-reviewer) review read-only; the
   orchestrator applies fixes and commits each round. Bounded by max-rounds +
-  stagnation + kill switch. Not a code gate — code targets route to the normal
-  /qg pipeline (one pipeline, one verdict).
+  stagnation + kill switch. Not a code gate — code targets route to
+  /quality-gates:quality-pipeline (one pipeline, one verdict).
 cost_class: variable
 allowed-tools:
-  - Read
-  - Grep
-  - Glob
-  - Edit
-  - Write
-  - Agent
-  - AskUserQuestion
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/classify_artifact_target.py:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/artifact_branch_guard.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/artifact_path_auth.py:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/artifact_change_signal.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/artifact_commit.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/artifact_max_rounds.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_artifact_findings.py:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/artifact_stagnation.py:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_artifact_codex_reviewer.sh:*)
+  - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" quality-gates artifact-critique)
 ---
 
-# Critiquing Artifacts (`/qg critique`)
+!`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" quality-gates artifact-critique`
+
+## 진입 단계
+
+이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽는다.
+
+| 그 자리의 내용 | 동작 |
+|---|---|
+| `[devbrew-entry] ok …` | 아래 절차로 간다 — `project_dir` 는 E2 가 정한다 |
+| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다 |
+| `[devbrew-entry] error …` | `[quality-gates] artifact-critique 사전 검사 실패 — <reason= 값>.` 을 내고 멈춘다 |
+| `[shell command execution disabled by policy]` | `[quality-gates] artifact-critique 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다.` 를 내고 멈춘다 |
+| 감시줄 없음 · 그 밖 | `[quality-gates] artifact-critique 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실).` 을 내고 멈춘다 |
+
+# Artifact Critique (`/quality-gates:artifact-critique`)
 
 <!-- plain-language:begin -->
 ## 사람에게 쓰는 글
@@ -71,16 +69,16 @@ allowed-tools:
 
 ### E1 — 대상 해석 + 코드/비-코드 분류
 
-`critique <path>`면 그 경로가 대상. NL 진입이면 대화/컨텍스트에서 단일 대상 경로를
+이 skill 의 인자로 받은 경로가 대상. NL 진입이면 대화/컨텍스트에서 단일 대상 경로를
 해석한다. 그 경로로:
 
 ```
 classify_artifact_target.py <path>
 ```
 
-- `classification: code` → **종료**: `> [quality-gates] '<path>'는 코드 파일로 보입니다. 코드 리뷰는 /qg (Review 게이트)로 실행하세요.` (비-코드 전용 모드라 코드는 자율 커밋 루프에 넣지 않음.)
+- `classification: code` → **종료**: `> [quality-gates] '<path>'는 코드 파일로 보입니다. 코드 리뷰는 /quality-gates:quality-pipeline 으로 실행하세요.` (비-코드 전용 모드라 코드는 자율 커밋 루프에 넣지 않음.)
 - `classification: non_code` → 진행.
-- `classification: ambiguous` → E3 *이전에* `AskUserQuestion`으로 확인: *"이 파일(`<path>`)을 산출물로 비평할까요? (코드라면 /qg를 쓰세요.)"* — **예** 확인 없이 자율 루프 진입 금지. "아니오"면 종료.
+- `classification: ambiguous` → E3 *이전에* `AskUserQuestion`으로 확인: *"이 파일(`<path>`)을 산출물로 비평할까요? (코드라면 /quality-gates:quality-pipeline 을 쓰세요.)"* — **예** 확인 없이 자율 루프 진입 금지. "아니오"면 종료.
 
 ### E2 — 브랜치 안전 (project_dir 좌표 freeze)
 
@@ -173,7 +171,7 @@ Agent({
     — 지우지 않으면 직전 라운드의 YAML(양성 `codex_failed: false`를 담고 있을 수
     있다)이 그대로 남아 이번 라운드의 codex 판정으로 읽힌다. 형제
     `run_docreview_codex_reviewer.sh`(spec-distill 의 문서 리뷰 러너)와 동일한 exit-3
-    계약이고, 그 호출자(`spec-distill`의 `reviewing-spec`·`reviewing-brief` SKILL)가 같은
+    계약이고, 그 호출자(`spec-distill`의 `spec-review`·`reviewing-brief` SKILL)가 같은
     `rc==3 → rm -f` 패턴을 구현하고 있다.
   - 출력이 `codex_failed: true`면 **가용 판정 후 런타임 실패**: `> [quality-gates] codex 가용 판정 후 런타임 실패(<reason>) — degraded, tier-unpinned 단독.` (crash 아님, C7) codex.yaml은 병합에서 제외.
 - `codex_available: false` → **미가용**: `> [quality-gates] codex 미가용(<skip_reason>) — tier-unpinned 단독 비평.` (위 런타임-실패 문구와 **구분**된 별도 라인.) `<skip_reason>` 자리에는
@@ -207,8 +205,8 @@ synthesize_artifact_findings.py --phase key --findings critic.yaml [--findings c
 
 **3. adversarial** — `artifact-adversarial` 디스패치(read-only). `merged.yaml`을 프롬프트에
    넣어 §10 verdict를 받는다(`finding_key`=각 finding의 `dedup_key`). 출력을 `verdicts.yaml`에
-   저장. `project_dir` + E2c가 인가한 `canonical`(raw `<path>` 아님 — adversarial도 산출물을
-   read하고 egress 도구를 가지므로 critic/codex와 동일하게 canonical로 freeze) 스레딩.
+   저장. `project_dir` + E2c가 인가한 `canonical`(raw `<path>` 아님 — adversarial 은 egress 도구가 없다(`tools: Read, Grep, Glob`). 그래도 산출물을
+   read 하므로, 읽는 대상이 E2c 가 인가한 그 파일로 고정되도록 critic/codex 와 같은 canonical 로 freeze) 스레딩.
    **`merged.yaml`의 keyed 내용(각 finding의
    `dedup_key` 포함)을 프롬프트에 그대로 inline** — 이 스레딩이 빠지면 adversarial이
    `finding_key`를 echo할 수 없어 모든 finding이 미판정(unadjudicated) 처리된다(§10 fail-closed

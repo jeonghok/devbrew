@@ -152,7 +152,7 @@ class TestRunOwnTests(unittest.TestCase):
             r, obj = run("plugins/myplugin", "sid12345678", qg)
             self.assertTrue(obj["own_tests"]["ran"])
 
-    def test_timeout_reports_ran_false(self):   # E (AC-11, /qg 2026-07-20 round-2)
+    def test_timeout_reports_ran_false(self):   # E (AC-11, qg 2026-07-20 round-2)
         # AC-11 (spec §14 L496): "120s 타임아웃 → own_tests:{ran:false}". 현재 line 46은 exit code를
         # 버리고 ran=true를 무조건 세워, 타임아웃(timeout/gtimeout kill = exit 124)·크래시-on-import가
         # 성공과 구별 불가하고 §14 배너 신호도 안 뜬다. fake `timeout`(exit 124)로 타임아웃 kill을 흉내.

@@ -5,7 +5,7 @@
 > **Historical (v2.2.x snapshot).** Model lines below predate the 2026-09-06 «no `model` key» convention; scenario H's "Task 1 model-override experiment" measured dispatch-time override of `inherit`, which gate agents no longer receive.
 
 This document records the manual verification scenarios for the v1.5.0 redesign.
-Live `/qg` runs require an interactive Claude Code session against a real PR;
+Live `/quality-gates:quality-pipeline` runs require an interactive Claude Code session against a real PR;
 this file specifies *what to test* and *what passing looks like* so a reviewer
 or a future re-verification can reproduce the results.
 
@@ -26,22 +26,22 @@ A static-checks summary is at the bottom.
 
 ### A — Trivia (whitespace)
 **Setup**: pick any single source file; add one trailing-whitespace edit.
-**Run**: `/qg`
+**Run**: `/quality-gates:quality-pipeline`
 **Expected**: instant PASS, 0 dispatches. State file shows `outcome: trivia-skipped`, `trivia_kind: whitespace`. Pipeline message says "Trivia change (whitespace); review skipped."
 
 ### A2 — Trivia (rename)
 **Setup**: `git mv old.py new.py` with no other edits.
-**Run**: `/qg`
+**Run**: `/quality-gates:quality-pipeline`
 **Expected**: instant PASS, 0 dispatches. `trivia_kind: rename`.
 
 ### A3 — NOT trivia (comment-only safety check)
 **Setup**: edit one comment line (single file, ≤3 lines, but not whitespace/rename).
-**Run**: `/qg`
+**Run**: `/quality-gates:quality-pipeline`
 **Expected**: trivia escape does NOT fire. Pipeline proceeds to Gate 1, then Quick depth in Gate 2. Confirms our intentional decision to leave comment-only outside the trivia path (language fragility).
 
 ### B — Quick (small single-file diff)
 **Setup**: single Python file, ~30 LOC change, no new files.
-**Run**: `/qg`
+**Run**: `/quality-gates:quality-pipeline`
 **Expected** dispatches in order:
 - (역사) scout 가 `depth: quick` 을 냈다 — 지금은 오케스트레이터가 리뷰어 구성을 정한다
 - pr-review-toolkit:code-reviewer (upstream Opus) — Phase 1
@@ -50,7 +50,7 @@ Total: 3 dispatches. AskUserQuestion does NOT fire (Phase 1+2 = 1 < 4).
 
 ### C — Standard (multi-file, mid-size)
 **Setup**: ~100 LOC across two files.
-**Run**: `/qg`
+**Run**: `/quality-gates:quality-pipeline`
 **Expected** dispatches:
 - (역사) scout 가 `depth: standard` 를 냈다
 - code-reviewer (Opus, upstream) + silent-failure-hunter (Sonnet override) — Phase 1
@@ -61,7 +61,7 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 
 ### D — Deep (large diff, AskUserQuestion gate)
 **Setup**: ≥200 LOC AND new file added AND a config file (`*.json` / `*.toml`) touched.
-**Run**: `/qg`
+**Run**: `/quality-gates:quality-pipeline`
 **Expected**:
 - (역사) scout 가 `depth: deep` 을 냈다.
 - Phase 1+2 = 5 ≥ 4 → **AskUserQuestion fires** with the three options.
@@ -69,36 +69,36 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 
 ### E — No cross-gate restart
 **Setup**: PR with code that intentionally has a Gate 2 issue requiring file changes (e.g., bug that the reviewer will spot).
-**Run**: `/qg`
-**Expected**: Gate 2 emits `NEEDS_RESTART` after fix-loop exhaustion → user-choice prompt fires (`gate2_user_choice`). Pipeline does NOT auto-restart from Gate 1. User picks "Apply changes and re-run `/qg`" → pipeline ends with abort signal.
+**Run**: `/quality-gates:quality-pipeline`
+**Expected**: Gate 2 emits `NEEDS_RESTART` after fix-loop exhaustion → user-choice prompt fires (`gate2_user_choice`). Pipeline does NOT auto-restart from Gate 1. User picks "Apply changes and re-run `/quality-gates:quality-pipeline`" → pipeline ends with abort signal.
 
 ### F — Within-Gate-2 fix loop
 **Setup**: PR where Phase 1 finds CRITICAL issues that the skill can fix in-place.
-**Run**: `/qg`
+**Run**: `/quality-gates:quality-pipeline`
 **Expected**: fix → re-run review (delta diff: only changed files) → either PASS or another fix iteration. After ≤5 iterations, either PASS or `gate2_max_exceeded` user-choice fires.
 
-### G — `/qg --paths` override
+### G — `/quality-gates:quality-pipeline --paths` override
 **Setup**: edit files outside `plugins/quality-gates/`.
-**Run**: `/qg --paths "plugins/quality-gates/**"`
+**Run**: `/quality-gates:quality-pipeline --paths "plugins/quality-gates/**"`
 **Expected**: review sees only the matched paths (the others are excluded from diff). Session-files content is ignored.
 
 ### H — Cross-plugin model respect
-**Run**: any /qg invocation that dispatches `pr-review-toolkit:code-reviewer`.
+**Run**: any /quality-gates:quality-pipeline invocation that dispatches `pr-review-toolkit:code-reviewer`.
 **Inspect**: state file dispatch summary should show `model: opus` for that agent (upstream-hardcoded, not overridden), while devbrew agents (no `model` key) show `model: sonnet` (Task 1 model-override experiment confirmed this works).
 
 ### I — Repeat detection
 **Setup**: contrive a PR where Phase 1 finds the same finding twice (e.g., the auto-fix doesn't actually fix the root cause).
-**Run**: `/qg`
+**Run**: `/quality-gates:quality-pipeline`
 **Expected**: after iteration 2 with an identical dispatch + synthesizer result, the SKILL surfaces the Gate 2 iter-boundary decision via AskUserQuestion (Retry / Proceed to Gate 3 / Stop) with a repeat-detected note in the prompt, before reaching the hard cap `max_gate2_iterations=5`.
 
 ### J — Branch switch mid-session
-**Run**: edit a file on `feature/qg-cost-reduction`, then `git checkout main`, then `/qg`.
-**Expected**: scope is git-derived fresh at invocation time (branch diff against base, unioned with the worktree's own changed files), not cached from a prior turn or session file — `/qg` on `main` reviews `main`'s own diff against its base, not the leftover `feature/qg-cost-reduction` diff. No explicit reset step is needed; there is no session-scope file to go stale.
+**Run**: edit a file on `feature/qg-cost-reduction`, then `git checkout main`, then `/quality-gates:quality-pipeline`.
+**Expected**: scope is git-derived fresh at invocation time (branch diff against base, unioned with the worktree's own changed files), not cached from a prior turn or session file — `/quality-gates:quality-pipeline` on `main` reviews `main`'s own diff against its base, not the leftover `feature/qg-cost-reduction` diff. No explicit reset step is needed; there is no session-scope file to go stale.
 
 
 ### L — `DEVBREW_QUALITY_GATES_DISABLE=1`
-**Run**: set env var, then start a new Claude Code session AND attempt `/qg`.
-**Expected**: the `/qg` command's setup fence calls `setup-qg.sh`, which refuses with one line (`[quality-gates] DEVBREW_QUALITY_GATES_DISABLE=1 이 켜져 있어 /qg 를 시작하지 않는다(setup-qg disabled).`) and exit 1 before writing anything (`tests/test_entry_safety_e1_e6.sh`); `/qg` shows that line and stops — the pipeline skill is not invoked. If the skill is reached anyway, SKILL Preflight P1 returns immediately.
+**Run**: set env var, then start a new Claude Code session AND attempt `/quality-gates:quality-pipeline`.
+**Expected**: the `/quality-gates:quality-pipeline` skill's setup fence calls `setup-qg.sh`, which refuses with one line (`[quality-gates] DEVBREW_QUALITY_GATES_DISABLE=1 이 켜져 있어 /quality-gates:quality-pipeline 을 시작하지 않는다(setup-qg disabled).`) and exit 1 before writing anything (`tests/test_entry_safety_e1_e6.sh`); `/quality-gates:quality-pipeline` shows that line and stops — the pipeline skill is not invoked. If the skill is reached anyway, SKILL Preflight P1 returns immediately.
 
 ## Static Wiring Checks (automated)
 
@@ -146,8 +146,8 @@ OK
 ### V1 — Concurrent sessions do not share pipeline state
 
 **Setup**: Two terminal sessions A and B in the same project (same worktree). Both have valid `CLAUDE_CODE_SESSION_ID` env vars (`$SID_A`, `$SID_B`).
-1. In A: run `/qg`. Verify `.claude/quality-gates/$SID_A/result.md` is created.
-2. In B: run `/qg`. Verify `.claude/quality-gates/$SID_B/result.md` is created, independent of A's.
+1. In A: run `/quality-gates:quality-pipeline`. Verify `.claude/quality-gates/$SID_A/result.md` is created.
+2. In B: run `/quality-gates:quality-pipeline`. Verify `.claude/quality-gates/$SID_B/result.md` is created, independent of A's.
 3. Review scope itself is git-derived (branch diff against base, unioned with the worktree's own changed files) — since A and B share the same worktree, both sessions resolve the SAME scope from git; there is no per-session file tracker to isolate.
 
 **Pass**: `$SID_A` and `$SID_B` each have their own `result.md`; neither session's result file is touched by the other's run.
@@ -160,7 +160,7 @@ old=$(($(date +%s) - 25 * 3600))
 touch -t "$(date -r $old +%Y%m%d%H%M)" .claude/quality-gates/oldsess0001/pipeline.md
 touch -t "$(date -r $old +%Y%m%d%H%M)" .claude/quality-gates/oldsess0001
 ```
-1. Run `/qg` (any flavor). Verify `.claude/quality-gates/oldsess0001/` no longer exists.
+1. Run `/quality-gates:quality-pipeline` (any flavor). Verify `.claude/quality-gates/oldsess0001/` no longer exists.
 2. Set `DEVBREW_QUALITY_GATES_GC_VERBOSE=1` and observe stdout: `[quality-gates] GC: removed 1 stale session folder(s)`.
 
 
@@ -174,13 +174,13 @@ fd = os.open(".claude/quality-gates", os.O_RDONLY | os.O_DIRECTORY)
 fcntl.flock(fd, fcntl.LOCK_EX); print("holding"); time.sleep(600)'
 # (keep shell open with lock held)
 ```
-2. In another terminal, run `/qg`. The GC step inside setup should silently skip (no error).
+2. In another terminal, run `/quality-gates:quality-pipeline`. The GC step inside setup should silently skip (no error).
 3. Stale folders preserved.
 
 ### V6 — Kill switch globally disables
 
 ```bash
-DEVBREW_QUALITY_GATES_DISABLE=1 /qg
+DEVBREW_QUALITY_GATES_DISABLE=1 /quality-gates:quality-pipeline
 ```
 1. Verify no `.claude/quality-gates/` folder created.
 2. Verify `qg-gc.py` exits 0 without action.
@@ -189,7 +189,7 @@ DEVBREW_QUALITY_GATES_DISABLE=1 /qg
 
 **Setup:** 일회용 리포에 형제 브랜치 둘(`Spec: docs/x.md#p1`), 현재 브랜치에 미커밋 파일.
 
-**Run:** `/qg`
+**Run:** `/quality-gates:quality-pipeline`
 
 **Expected:**
 - `리뷰 범위: 토픽 …` 한 줄.

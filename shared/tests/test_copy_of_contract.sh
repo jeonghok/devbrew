@@ -25,7 +25,7 @@
 # 셋이 함께 깨질 때 함께 RED 가 되어야 한다(설계 §6.1①). 설정이 실리는지만 보고
 # 부재 시 동작을 아무도 안 보면, fail-open 으로 퇴화해도 모든 검사가 GREEN 이다.
 #
-# 실행 지점은 `/qg` Runtime gate 하나다. 상시 자동 실행이 아니다 —
+# 실행 지점은 `/quality-gates:quality-pipeline` Runtime gate 하나다. 상시 자동 실행이 아니다 —
 # C16 이 실행 지점 신설을 금했으므로 이 제약 아래의 최선이다.
 #
 # **이 락이 스스로 지키지 못하는 것**은 이 파일 자신을 고치는 편집인데, 그 모양이 정확히
@@ -644,7 +644,7 @@ fi
 # 이 세 제외는 **좁히는 방향**이라 빠뜨리면 거짓 RED 로 시끄럽게 드러난다(넓히는
 # 방향의 열거와 달리 조용히 fail-open 하지 않는다).
 SHARED_BASENAMES="$(git ls-files -- 'shared/*' \
-  | grep -vE '^shared/tests/' | grep -vE '^shared/[^/]+\.md$' \
+  | grep -vE '^shared/tests/' | grep -vE '^shared/[^/]+\.md$' | grep -vE '(^|/)README\.md$' \
   | while IFS= read -r p; do [ -s "$p" ] && basename -- "$p"; done | sort -u)"
 n_sb="$(printf '%s\n' "$SHARED_BASENAMES" | grep -c . || true)"
 if [ "$n_sb" -ge 1 ]; then
@@ -652,6 +652,10 @@ if [ "$n_sb" -ge 1 ]; then
 else
   no "copy-of: 배포 대상 정본이 0건 도출됐다 — 아래 사본 후보 판별이 통째로 vacuous 하다"
 fi
+# 양성 짝: 하위 폴더의 README.md 는 정본 basename 이 아니고(플러그인 README 가 거짓 RED 가 되지 않는다),
+# 하위 폴더의 진짜 정본(shared/test-selection/ 의 스크립트)은 계속 도출된다.
+assert_eq "$(printf '%s\n' "$SHARED_BASENAMES" | grep -cx 'README.md' || true)" "0" "copy-of: 하위 폴더 README.md 는 정본 basename 에 들지 않는다"
+assert_eq "$(printf '%s\n' "$SHARED_BASENAMES" | grep -cx 'run-test-selection.sh' || true)" "1" "copy-of: 하위 폴더의 진짜 정본(run-test-selection.sh)은 계속 정본 basename 으로 도출된다"
 
 while IFS= read -r cand; do
   [ -n "$cand" ] || continue

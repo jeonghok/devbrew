@@ -190,17 +190,20 @@ QG_SCAN_PY
 
 # 일부러 리포 코드를 돌리는 자리 — 경로 · 줄에 들어 있는 글자 · 사유. 줄이 사라지면 그 예외도 지운다.
 EXEMPT_PATHS=(
+  "shared/test-selection/run-test-selection.sh"
   "plugins/quality-gates/scripts/run-test-selection.sh"
   "plugins/plugin-audit/scripts/run-own-tests.sh"
   "plugins/plugin-audit/scripts/run-own-tests.sh"
 )
 EXEMPT_NEEDLES=(
   "python3 -m venv .venv"
+  "python3 -m venv .venv"
   "python3 -m unittest discover"
   'add_why "$cand(python): 러너 비정상 종료'
 )
 EXEMPT_REASONS=(
   "차등 테스트의 venv setup 명령 — 리뷰 대상 리포의 setup 을 일부러 돌린다(R22 kill switch 가 막는다)"
+  "같은 공유본을 qg 링크 경로로 읽은 줄이다(위 항목과 같은 사유)"
   "감사 대상 플러그인의 자체 테스트를 샌드박스에서 일부러 돌린다(README 의 알려진 한계)"
   "호출이 아니라 실패 사유 문자열 안의 글자다"
 )
@@ -318,7 +321,7 @@ for f in \
   plugins/quality-gates/scripts/discover-spec.sh \
   plugins/quality-gates/scripts/e2e-state.sh \
   plugins/quality-gates/scripts/publish-comment.sh \
-  plugins/quality-gates/scripts/run-test-selection.sh \
+  shared/test-selection/run-test-selection.sh \
   plugins/plugin-audit/scripts/check-plugin-structure.sh \
   plugins/plugin-audit/scripts/run-own-tests.sh \
   plugins/spec-distill/skills/request-framing/SKILL.md \

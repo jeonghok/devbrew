@@ -46,7 +46,7 @@ class TestParseSeed(unittest.TestCase):
         self.assertEqual(json.loads(r.stdout), {})
         self.assertIn("seed", r.stderr.lower())
 
-    def test_malformed_clue_in_section_warns(self):  # SF1 (/qg 2026-07-20 round-2)
+    def test_malformed_clue_in_section_warns(self):  # SF1 (qg 2026-07-20 round-2)
         # silent-failure-hunter: 인식된 섹션 안에서 CLUE_RE/OQ_RE에 안 맞는 불릿(em-dash·file:line 누락 등)이
         # 조용히 드롭된다 — 사용자의 감사 단서가 흔적 없이 증발(CONTRACT rule 11을 입력에 위반). 경고를 내야.
         seed = ("## 후보 단서\n"

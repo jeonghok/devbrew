@@ -43,7 +43,7 @@ case_new_wording_present() {
     "security-reviewer 설명이 한 파이프라인의 Phase 1 을 이름 붙인다"
   assert_file_grep "$QG/agents/security-reviewer.md" '^You are \*\*security-reviewer\*\*, the code-level security specialist for review pipeline Phase 1\.$' \
     "security-reviewer 역할 문장이 한 파이프라인의 Phase 1 을 이름 붙인다"
-  assert_file_grep "$QG/skills/critiquing-artifacts/SKILL.md" '^  /qg pipeline \(one pipeline, one verdict\)\.$' \
+  assert_file_grep "$QG/skills/artifact-critique/SKILL.md" '^  /quality-gates:quality-pipeline \(one pipeline, one verdict\)\.$' \
     "critiquing SKILL 이 코드 대상을 한 파이프라인으로 보낸다"
 }
 

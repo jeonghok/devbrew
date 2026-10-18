@@ -244,7 +244,7 @@ for gone in brief-critic brief-direction-reviewer; do
 done
 
 # 역할 프롬프트가 X / NOT Z를 명시한다 (CLAUDE.md 컴포넌트 격리 규약)
-# /qg iter-1: 이전 형태 `grep -q "NOT"`는 **"NOTE"·"NOTHING"으로 충족**됐다 — 세 `**NOT**`
+# qg iter-1: 이전 형태 `grep -q "NOT"`는 **"NOTE"·"NOTHING"으로 충족**됐다 — 세 `**NOT**`
 # 불릿을 "NOTE: 자유롭게 쓰세요."로 바꿔 역할 경계를 뒤집어도 green이었다. 마커 형태와
 # 열거 크기를 함께 핀한다. T4: 대상에서 brief-critic·brief-direction-reviewer 를 뺀다
 # (삭제됐다) — doc-critic·doc-recritic 은 같은 경계를 "- **NOT** " 불릿이 아니라

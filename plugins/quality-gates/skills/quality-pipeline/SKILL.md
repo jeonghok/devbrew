@@ -1,8 +1,8 @@
 ---
 name: quality-pipeline
 description: >
-  Runs the quality-gates pipeline in a single assistant turn. Triggered by
-  `/qg`, "run quality gates", "verify my implementation", "check code quality",
+  Runs the quality-gates pipeline in a single assistant turn. Called as
+  `/quality-gates:quality-pipeline` or on "run quality gates", "verify my implementation", "check code quality",
   or "is my PR ready to merge". One pipeline, one verdict — scope, reviewers
   against one criteria block and the intent source, a framing-blind re-critique,
   a differential test against the baseline (always), an optional human-approved e2e walk, and synthesis. Fix-loop
@@ -10,38 +10,26 @@ description: >
   ends by posting one new PR comment (understanding text + verdict line) through
   the publish sink.
 cost_class: variable
+argument-hint: "[branch|--paths <glob>...]"
 allowed-tools:
-  # Preflight
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/discover-spec.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-topic.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/topic-head.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/verdict.py:*)
-  # Differential test (references/differential-test.md)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-baseline.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/seal-worktree.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py:*)
-  - Bash(mktemp:*)
-  # Review
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/publish-comment.sh:*)
-  - Agent
-  - AskUserQuestion
-  - Read
-  - Glob
-  - Grep
-  - Edit
-  - Write
+  - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" quality-gates quality-pipeline)
 ---
 
-# Quality Gates — In-Turn Orchestrator (v13.0.1)
+!`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" quality-gates quality-pipeline`
+
+## 진입 단계
+
+이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽는다.
+
+| 그 자리의 내용 | 동작 |
+|---|---|
+| `[devbrew-entry] ok …` | 아래 `## Preflight` 로 간다 |
+| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다 |
+| `[devbrew-entry] error …` | `[quality-gates] quality-pipeline 사전 검사 실패 — <reason= 값>.` 을 내고 멈춘다 |
+| `[shell command execution disabled by policy]` | `[quality-gates] quality-pipeline 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다.` 를 내고 멈춘다 |
+| 감시줄 없음 · 그 밖 | `[quality-gates] quality-pipeline 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실).` 을 내고 멈춘다 |
+
+# Quality Gates — In-Turn Orchestrator (v14.0.0)
 
 <!-- plain-language:begin -->
 ## 사람에게 쓰는 글
@@ -83,11 +71,15 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 **P1 — global kill switch.** If `DEVBREW_QUALITY_GATES_DISABLE=1`, emit
 `[quality-gates] disabled via DEVBREW_QUALITY_GATES_DISABLE=1` and return. No script, no agent.
 
+**P1b — 문서 비평 요청은 새 이름으로 안내한다.** 사용자의 인자나 요청이 코드가 아닌 문서(설계문서 · 명세 · 계획 · 설정 · 글)를 비평해 달라는 뜻이면 파이프라인을 돌리지 않는다. 아래 한 줄만 내고 setup 도 돌리지 않은 채 멈춘다. 코드 변경을 검증해 달라는 요청에는 적용하지 않는다 — 그때는 P2 로 간다.
+
+> [quality-gates] 문서 비평은 이제 /quality-gates:artifact-critique <경로> 로 부른다 — 파이프라인은 실행하지 않는다.
+
 **P2 — setup.** Once:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 "$QG/scripts/setup-qg.sh" --ensure $ARGUMENTS || exit
 if grep -q '^## 판정$' "$RD/result.md" 2>/dev/null; then "$QG/scripts/setup-qg.sh" $ARGUMENTS || exit; fi
@@ -95,15 +87,15 @@ bash "$QG/scripts/e2e-state.sh" stop --dir "$RD"; echo "preflight-stop rc=$?"
 rm -f "$RD/excluded.md" "$RD/differential.yaml" "$RD/differential-not-counted.md" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt"
 ```
 
-`--ensure` keeps this session's folder `.claude/quality-gates/<session-id>/` when the `/qg`
-command's setup already made it; otherwise setup creates it with a `result.md` skeleton
+`--ensure` keeps this session's folder `.claude/quality-gates/<session-id>/` when an earlier
+step of this run already made it; otherwise setup creates it with a `result.md` skeleton
 ([state-file-format](references/state-file-format.md)). A `result.md` that already has `## 판정`
 belongs to a finished earlier run in this session — setup without `--ensure` recreates the folder.
 Every run then starts without the previous run's `excluded.md` · `differential.yaml` · `differential-not-counted.md` · `verdict.out` ·
 `intent.md` · `topic-scope.txt` · `comment-head.md` · `comment.md` · `publish.out` · `publish.err` and the e2e walk files
 (`e2e-record.md` · `e2e-flip.md` · `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt`).
 `e2e-app.pgid` is kept. The `stop` line brings down an app a cut-off earlier walk left running; show its output, and a non-zero `preflight-stop rc` does not stop the run — `## e2e` E0 tries again with the same record. Setup refuses an empty or malformed session id (E1). A gone
-argument (`branch <name>` · `--reset` · `--gc` · `--pr-url` · `--plan`) prints one line on stdout and exits 2 —
+argument (`branch <name>` · `--reset` · `--gc` · `--pr-url` · `--plan` · `critique`) prints one line on stdout and exits 2 —
 the run does not start. Non-zero exit → show its output (stdout and stderr) verbatim and stop.
 Below, `RD` is that folder under the **repo root** — setup moves to the git top level itself, so a
 session started in a subdirectory uses the same folder. Every fence that needs it assigns it the
@@ -116,7 +108,7 @@ Arguments: `branch` · `--paths <glob>...` override the review scope (Review Ste
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 "$QG/scripts/discover-spec.sh" --intent-out "$RD/intent.md"
 echo "intent rc=$?"
@@ -138,7 +130,7 @@ reviewers, and it never lowers or skips a finding.
 ## Flow
 
 ```
-/qg
+/quality-gates:quality-pipeline
  ├ Preflight ── kill switch · setup · intent: 한 줄
  ├ trivia 판단 ── 한 문장 diff 면 not-certified (trivia) 로 끝
  ├ iteration N = 1..5
@@ -236,7 +228,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 
    **Deriving from git is what makes the scope tool-agnostic** — git reports a changed file the same way whichever tool produced it, so a file written by a Bash heredoc or `sed -i` is in the default scope exactly like one written by `Write` (A20). Never source the scope from a per-session record of "files this turn edited": such a record is produced by a hook keyed on the writing tool's name, so every write outside that name list vanishes from the scope silently — the pre-5.0.0 defect this release removed.
 
-   **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> 리뷰 범위: 이번 세션에서 바뀐 파일 <COUNT>개. 브랜치 전체를 보려면 /qg branch.` (`<COUNT>` = `$resolved_scope_file_count` — 정의는 Step 4.5 "Resolved-scope file count" 참조, `check-review-scope.sh` 산출값이 아니다). 스코프가 `topic` 으로 풀렸으면(N=1) 대신 `> 리뷰 범위: 토픽 <topic_key> — 바뀐 파일 <COUNT>개 · 구성원 <branches>.` 를 낸다. 명시적 `/qg branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/qg branch`는 결정론적 escape hatch로 유지).
+   **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> 리뷰 범위: 이번 세션에서 바뀐 파일 <COUNT>개. 브랜치 전체를 보려면 /quality-gates:quality-pipeline branch.` (`<COUNT>` = `$resolved_scope_file_count` — 정의는 Step 4.5 "Resolved-scope file count" 참조, `check-review-scope.sh` 산출값이 아니다). 스코프가 `topic` 으로 풀렸으면(N=1) 대신 `> 리뷰 범위: 토픽 <topic_key> — 바뀐 파일 <COUNT>개 · 구성원 <branches>.` 를 낸다. 명시적 `/quality-gates:quality-pipeline branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/quality-gates:quality-pipeline branch`는 결정론적 escape hatch로 유지).
 
 ### Step 1b — changes-exist signal (N = 1 only)
 
@@ -266,7 +258,7 @@ as `$degraded == yes` for the floor (Step 4.5's degraded advisory). This is
 an already-known value; do not re-measure.
 
 > **Review-scope ownership.** You own review-scope resolution. If the scope you resolved at step 1
-> is empty (0 files) but `$changes_exist == yes`, you MUST NOT certify clean — offer `/qg branch`;
+> is empty (0 files) but `$changes_exist == yes`, you MUST NOT certify clean — offer `/quality-gates:quality-pipeline branch`;
 > Step 4 carries `--reason scope-empty`.
 
 ### Step 3 — reviewers
@@ -276,7 +268,7 @@ Every dispatch in this step carries the same two blocks, read fresh each iterati
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 cat "${CLAUDE_PLUGIN_ROOT}/references/review-criteria.md"
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 cat "${TOP}/.claude/quality-gates/<session-id>/intent.md"
 ```
 
@@ -525,7 +517,7 @@ different-premise: absent(not-installed)
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 RV="<Step 3.5 의 절대 경로>"
 python3 "$QG/scripts/synthesize_findings.py" --findings "$RV/findings.yaml" \
@@ -635,7 +627,7 @@ AskUserQuestion({
       options: [
         {label: "고치고 다시 돌기",      description: "분류표의 「적용」 항목을 이 턴에서 파일에 고치고 다음 반복을 돈다(차등 테스트 포함)."},
         {label: "지금 판정으로 끝내기", description: "남은 지적을 그대로 두고 지금 판정으로 끝낸다."},
-        {label: "멈추기",               description: "이 반복에서 멈춘다 — PR 코멘트도 달지 않는다. 지적을 고친 뒤 /qg 를 다시 돌린다."}
+        {label: "멈추기",               description: "이 반복에서 멈춘다 — PR 코멘트도 달지 않는다. 지적을 고친 뒤 /quality-gates:quality-pipeline 을 다시 돌린다."}
       ],
       multiSelect: false
     },
@@ -680,7 +672,7 @@ AskUserQuestion({
       header: "qg 최대 반복",
       options: [
         {label: "지금 판정으로 끝내기", description: "남은 지적을 그대로 두고 지금 판정으로 끝낸다."},
-        {label: "멈추기",               description: "파이프라인을 멈춘다 — PR 코멘트도 달지 않는다. 지적을 고친 뒤 /qg 를 다시 돌린다."}
+        {label: "멈추기",               description: "파이프라인을 멈춘다 — PR 코멘트도 달지 않는다. 지적을 고친 뒤 /quality-gates:quality-pipeline 을 다시 돌린다."}
       ],
       multiSelect: false
     }
@@ -747,7 +739,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/e2e.md
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 D="${TOP}/.claude/quality-gates/<session-id>"
 "$QG/scripts/e2e-state.sh" stop --dir "$D"; echo "leftover-stop rc=$?"
 "$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-gate.txt"; echo "e2e-gate rc=$?"
@@ -770,7 +762,7 @@ D="${TOP}/.claude/quality-gates/<session-id>"
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 D="${TOP}/.claude/quality-gates/<session-id>"
 rm -f "$D/e2e-evidence.tsv" "$D/e2e-after.txt" "$D/e2e-before.txt"
 cat > "$D/e2e-cmd.txt" <<'E2E_CMD'
@@ -800,7 +792,7 @@ CLI 걷기는 리뷰 대상 코드를 직접 실행한다 — 이 `before rc` �
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 D="${TOP}/.claude/quality-gates/<session-id>"
 rm -f "$D/e2e-evidence.tsv" "$D/e2e-after.txt" "$D/e2e-before.txt"
 "$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-before.txt"; echo "before rc=$?"
@@ -813,7 +805,7 @@ rm -f "$D/e2e-evidence.tsv" "$D/e2e-after.txt" "$D/e2e-before.txt"
 **E2 — 걷기.** 레퍼런스 3 절의 규칙대로 걷고, 4 절의 증거표를 `$D/e2e-evidence.tsv` 에 쓴다(칸 사이는 탭).
 
 ```bash
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 D="${TOP}/.claude/quality-gates/<session-id>"
 cat > "$D/e2e-evidence.tsv" <<'E2E_EVIDENCE'
 기대 상태	판정	증거
@@ -825,7 +817,7 @@ E2E_EVIDENCE
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 D="${TOP}/.claude/quality-gates/<session-id>"
 "$QG/scripts/e2e-state.sh" stop --dir "$D"; echo "stop rc=$?"
 "$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-after.txt"; echo "after rc=$?"
@@ -860,7 +852,7 @@ e2e 칸과 「사람이 뒤집음」을 정한다. 어느 결과든 E5 로 기�
 않는다 — `## Final verdict` 의 기록 펜스가 옮긴다.
 
 ```bash
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 D="${TOP}/.claude/quality-gates/<session-id>"
 cat >> "$D/e2e-record.md" <<'E2E_RECORD'
 ### 걷기 <n>
@@ -873,7 +865,7 @@ E2E_RECORD
 뒤집었으면 `e2e-flip.md` 에 한 줄을 덧붙인다.
 
 ```bash
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 D="${TOP}/.claude/quality-gates/<session-id>"
 cat >> "$D/e2e-flip.md" <<'E2E_FLIP'
 - e2e: <판정안> → <결과> — <사람의 한 줄 사유>
@@ -892,7 +884,7 @@ walk (a line in `e2e-flip.md`) does not count.
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 SYN="<마지막 iteration 의 RV>/synth.out"
 [ -s "$SYN" ] || { echo "[quality-gates] 합성 출력이 없거나 비었다: ${SYN} — 판정 줄을 만들지 않는다" >&2; exit 4; }
@@ -917,7 +909,7 @@ A trivia run has no `$RV` and no e2e walk — render its verdict directly:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 python3 "$QG/scripts/verdict.py" --reason trivia --line --blocking 0 --optional 0 --new-failures 0 --excluded 0 --iter 0 --sha "$(git rev-parse --short HEAD)" --e2e '안 함' > "$RD/verdict.out"
 echo "verdict rc=$?"; cat "$RD/verdict.out"
@@ -929,7 +921,7 @@ Then render the summary and record the local result (a trivia run sets `SYN=""`)
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 SYN="<마지막 iteration 의 RV>/synth.out"
 printf '판정\t%s\n반복\t<N>번\n결과\t<finished | accepted with findings iter N | aborted iter N>\n' "$(tail -n 1 "$RD/verdict.out")" \
@@ -951,7 +943,7 @@ Then run D8 of `references/differential-test.md` (drop the run's memo) when ② 
 read the session-folder copies, not the memo.
 Then run [Publish](#publish) — the publish result line is the run's last script output. The session folder stays for the TTL GC.
 
-The completion report opens — before the table — with one Korean sentence: how the run ended (the 결과 cell in plain words) and the verdict value as-is (e.g. 「qg 를 반복 2번 만에 끝냈다 — 판정 defect, 남은 지적을 둔 채 끝냈다.」). The counts stay in the verdict line — do not restate them. After the publish result line, end with exactly one next action for the user (e.g. 「남은 지적 2개를 고친 뒤 /qg 를 다시 돌린다」 or 「할 일 없음」).
+The completion report opens — before the table — with one Korean sentence: how the run ended (the 결과 cell in plain words) and the verdict value as-is (e.g. 「qg 를 반복 2번 만에 끝냈다 — 판정 defect, 남은 지적을 둔 채 끝냈다.」). The counts stay in the verdict line — do not restate them. After the publish result line, end with exactly one next action for the user (e.g. 「남은 지적 2개를 고친 뒤 /quality-gates:quality-pipeline 을 다시 돌린다」 or 「할 일 없음」).
 
 ## Publish
 
@@ -1016,7 +1008,7 @@ case "$OUTCOME" in
     if ! st="$(git status --porcelain --untracked-files=no -- . ':!.claude/quality-gates' 2>/dev/null)"; then
       line="게시 안 함 — 작업 트리 상태를 읽지 못했다(git status 실패)"
     elif [ -n "$st" ]; then
-      line="게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커밋과 다르다 — 커밋·푸시 뒤 다시 /qg)"
+      line="게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커밋과 다르다 — 커밋·푸시 뒤 다시 /quality-gates:quality-pipeline)"
     elif [ -z "$vline" ] || [ ! -s "$D/comment-head.md" ]; then
       line="게시 안 함 — result.md 의 판정 줄이나 이해글이 없다"
     elif grep -q '^qg: ' "$D/comment-head.md"; then
@@ -1039,11 +1031,11 @@ printf '%s\n' "$line"
 ```
 <!-- publish-fence:end -->
 
-이 펜스는 `/qg` 한 번에 한 번만 돈다 — 결과가 무엇이든 다시 돌리지 않는다(다시 돌리면 펜스가 거절한다).
+이 펜스는 `/quality-gates:quality-pipeline` 한 번에 한 번만 돈다 — 결과가 무엇이든 다시 돌리지 않는다(다시 돌리면 펜스가 거절한다).
 
 `skipped: <사유>` 는 실패가 아니다 — 판정은 바뀌지 않는다. 사유는 `no-pr` · `pr-closed` · `kill-switch` ·
 `scan-failed` · `gh-unavailable` · `too-long` · `aborted` 중 하나다. `scan-failed` 면 sink 가 stderr 로 낸 finding
-(값은 가려져 있다)을 그대로 보이고 이해글을 고쳐 다시 게시하지 않는다 — 다음 `/qg` 실행이 다시 쓴다.
+(값은 가려져 있다)을 그대로 보이고 이해글을 고쳐 다시 게시하지 않는다 — 다음 `/quality-gates:quality-pipeline` 실행이 다시 쓴다.
 
 ## kill switch
 

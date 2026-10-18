@@ -20,7 +20,7 @@ PROF_BRIEF="$SD/references/docreview-profiles/brief.md"
 # T7 에서 삭제됐고, 같은 **주장**은 아래 개념-별칭 스윕이 production 전량에서 잡는다.
 OLD_EN='the brief gets no separated review'
 
-# --- /qg iter-1 IMPORTANT : 식별자가 아니라 **개념 별칭**으로 스윕 -----------
+# --- qg iter-1 IMPORTANT : 식별자가 아니라 **개념 별칭**으로 스윕 -----------
 # 결함: 위 assert들은 $GATE 와 리뷰어 파일 두 경로를 하드코딩해, 같은 주장을 **다른 문구로**
 # 하는 세 번째 인스턴스를 구조적으로 볼 수 없었다 — 실제로 spec-review/SKILL.md가
 # 현재시제로 "interview는 brief까지 단독 완결, design doc만 Law 2 분리 reviewer 대상"을

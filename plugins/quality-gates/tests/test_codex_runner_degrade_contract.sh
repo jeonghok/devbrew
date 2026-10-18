@@ -7,7 +7,7 @@
 #
 # 봉쇄하는 실패: `> "$OUTPUT_PATH"`는 python3가 crash하기 *전에* 이미 파일을 비운다.
 # 가드가 없으면 0바이트 산출물이 남고, 소비자에게 그것은 "codex 성공, 발견 없음"
-# 으로 읽힌다 — 리뷰어 하나가 조용히 사라진다(2026-08-04 /qg 라운드 1 적발).
+# 으로 읽힌다 — 리뷰어 하나가 조용히 사라진다(2026-08-04 qg 라운드 1 적발).
 #
 # ★ 러너 목록은 **도출**한다(태스크 20, AC23) — 아래 "0 — 러너 도출" 참고.
 #   하드코딩된 run_codex_reviewer.sh 하나로는 형제 러너(run_artifact_/run_brief_/
@@ -87,7 +87,7 @@ fi
 # stderr가 **비어있지 않다**로는 아무것도 재지 못한다: 이 러너는 모든 분기에서
 # `[quality-gates] codex intent: …` 한 줄을 stderr에 쓰므로 `[ -s err.txt ]`는
 # 반증 불가능한 assert였고, degrade echo를 통째로 지워도 GREEN이었다
-# (2026-08-05 /qg 라운드 2, mutation 확인). degrade **고유** 문구를 찾는다.
+# (2026-08-05 qg 라운드 2, mutation 확인). degrade **고유** 문구를 찾는다.
 if grep -q '추출 실패' "$tmp/err.txt" 2>/dev/null; then
   ok "3 — degrade가 stderr에 loud하게 남는다 (degrade 고유 문구)"
 else
@@ -115,7 +115,7 @@ fi
 # SIGTERM/`set -u` abort/OOM/Bash-tool timeout 어느
 # 경로로 죽어도 **이전 iteration의 YAML이 그대로 남았다**. 오케스트레이터는 그것을
 # 이번 라운드의 codex 판정으로 읽는다 — stale이 clean이면 진짜 결함이 clean 인증을
-# 받고, 발견을 담고 있으면 이미 고친 결함을 다시 쫓는다 (2026-08-05 /qg 라운드 2).
+# 받고, 발견을 담고 있으면 이미 고친 결함을 다시 쫓는다 (2026-08-05 qg 라운드 2).
 #
 # 트리거는 SIGTERM 이다(shared/tests/abort_trigger.sh). 예전 트리거는 플러그인 루트
 # 환경변수를 지워 `set -u` 를 위반시키는 것이었는데, 러너가 fallback 을 갖게 되면서

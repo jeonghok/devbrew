@@ -56,6 +56,6 @@ for sub in diagram accuracy-warnings; do
   printf '%s\n' "$err" | grep -q 'invalid choice' \
     && ok "render-terminal ${sub}: 사유가 invalid choice 다(필수 인자 누락이 아니다)" || no "render-terminal ${sub}: stderr 에 invalid choice 가 없다 — $(printf '%s' "$err" | head -n 1)"
 done
-grep -qF 'Skill("quality-gates:quality-pipeline")' "$QG/commands/qg.md" \
-  && ok "qg 진입이 파이프라인 skill 을 부른다(양성 증인)" || no "qg.md 가 파이프라인 skill 을 부르지 않는다"
+grep -qx 'name: quality-pipeline' "$QG/skills/quality-pipeline/SKILL.md" && grep -qx '## 진입 단계' "$QG/skills/quality-pipeline/SKILL.md" \
+  && ok "파이프라인 skill 이 곧 진입이다(양성 증인)" || no "quality-pipeline SKILL 이 진입 단계를 갖지 않는다"
 finish

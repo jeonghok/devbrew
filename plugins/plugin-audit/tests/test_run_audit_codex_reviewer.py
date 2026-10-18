@@ -59,7 +59,7 @@ class TestRunAuditCodexReviewer(unittest.TestCase):
 
     def _run(self, env_extra=None):
         env = dict(os.environ)
-        # ── I1 (/qg 2026-08-13 whole-branch 리뷰): PATH 는 **교체**한다 ──────────────
+        # ── I1 (qg 2026-08-13 whole-branch 리뷰): PATH 는 **교체**한다 ──────────────
         # 이전 코드는 상속 PATH **앞에** mock 을 붙였다(prepend). mock 설정이 어떤
         # 이유로든 실패하면 해석이 뒤로 흘러 실제 과금 바이너리(/opt/homebrew/bin/codex)
         # 에 도달한다 — 리포 전체를 `-C` 대상으로, `web_search=live` 로. 그 상태에서도

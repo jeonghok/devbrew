@@ -214,12 +214,12 @@ assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_li
 #
 # 앞 버전은 quality-pipeline/SKILL.md 제목 하나만 봤다(리터럴 `v2.7.0` 핀의
 # 후신). 이 플러그인엔 SKILL.md 가 둘이다 — quality-pipeline(버전 있음) ·
-# critiquing-artifacts(버전 없음). 한 파일만 보는 락은 나머지에 구조적으로 눈이 먼다 —
+# artifact-critique(버전 없음). 한 파일만 보는 락은 나머지에 구조적으로 눈이 먼다 —
 # 버전을 단 둘째 SKILL(v10 ③ 에서 삭제)이 plugin.json bump 뒤에도 제목에 구버전을
 # 그대로 달고 있는 걸 못 잡은 적이 있다.
 #
 # 음의 락: 버전을 단 제목은 전부 major 가 shipped 와 같아야 한다. 버전이
-# 아예 없는 제목(critiquing-artifacts)은 위반이 아니다 — 무버전 제목은 애초에
+# 아예 없는 제목(artifact-critique)은 위반이 아니다 — 무버전 제목은 애초에
 # stale 해질 수 없는 모양이라 legal 로 둔다(SKILL.md:136 에서 stale 서술을
 # 재버전 대신 삭제로 택한 것과 같은 방향). major 만 재고 minor/patch 는 풀어
 # 둔다: major 는 계약이고 minor/patch 는 그렇지 않다.
@@ -386,7 +386,7 @@ assert_order "Surface findings precedes iter-boundary decision" "$surface_line" 
 
 # 대상 소멸 (Task 7, AC1) — v2.4.0 Decision 1(gate-scope question, 'both gates'
 # anchor) · Dispatch Loop 참조(Decision 1 / short-circuit) · F1(단일-게이트
-# `/qg runtime` 의 R5a⁰ manifest 초기화) · F2(review-only 의 gate-scope-conditional
+# `qg runtime` 의 R5a⁰ manifest 초기화) · F2(review-only 의 gate-scope-conditional
 # 옵션 대체) · C4(effective_skip_runtime 배선 ≥3회) · F7(clean-exit 의 gate-scope
 # 라우팅)이 이 자리에 있었다. 한 파이프라인에는 게이트 범위가 없다 — 이 여섯 락
 # 전부가 지키던 SKILL.md 표면이 사라졌다(Flow 절이 후계 — 단일 흐름).
@@ -474,11 +474,11 @@ done
 # 시작하지 않는 줄) 또는 frontmatter 닫는 '---' 중 먼저 오는 것 앞까지를 뽑는다.
 ng6_block="$(awk '/^allowed-tools:/{f=1;next} f&&/^---$/{exit} f&&/^[^ -]/{exit} f{print}' "$SKILL_MD")"
 
-# 양성 증인 먼저 — 도출한 블록이 비어 있지 않고, 알려진 항목(setup-qg.sh 진입점)을
+# 양성 증인 먼저 — 도출한 블록이 비어 있지 않고, 알려진 항목(사전 검사 줄)을
 # 담는다. 이게 없으면 앵커가 죽어 $ng6_block 이 빈 문자열이 될 때 아래 부재
 # 단언이 공허참으로 통과한다.
-if [[ -n "$ng6_block" ]] && grep -qF 'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)' <<<"$ng6_block"; then
-  echo "PASS: NG6 양성 증인 — allowed-tools 블록 도출 유효(setup-qg.sh 항목 확인)"
+if [[ -n "$ng6_block" ]] && grep -qF 'entry_preflight.py" quality-gates quality-pipeline' <<<"$ng6_block"; then
+  echo "PASS: NG6 양성 증인 — allowed-tools 블록 도출 유효(사전 검사 항목 확인)"
 else
   echo "FAIL: NG6 양성 증인 실패 — allowed-tools 블록 도출이 비었거나 앵커가 죽음"; fail=$((fail+1))
 fi

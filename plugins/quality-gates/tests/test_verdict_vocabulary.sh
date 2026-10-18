@@ -270,7 +270,7 @@ case_non_utf8_differential_is_fail_closed() {
   # read_or_none() 이 OSError 만 잡던 상태에서는 비-UTF-8 바이트가 raw traceback +
   # exit 1 로 0/2/4 계약을 그대로 탈출했다(실측). 형제 diff-test-results.py 의
   # read_text_or_fail4(75-82행)가 이미 같은 결함을 잡아 뒀던 자리인데
-  # (/qg iter-7 M2) 이 모듈만 없었다. 이 케이스가 그 문을 못박는다 — 바로 위
+  # (qg iter-7 M2) 이 모듈만 없었다. 이 케이스가 그 문을 못박는다 — 바로 위
   # case_unreadable_differential_is_fail_closed 옆에 둔다.
   #
   # Minor (라운드 2) — 라운드 1 픽스처는 `printf '\xff\xfe\x00bad'` 한 줄뿐이었다.

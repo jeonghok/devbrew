@@ -28,7 +28,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 - "$ROOT" > "$OUT" <<'PY'
 import fnmatch, json, os, re, subprocess, sys
 
 sys.stdout.reconfigure(encoding="utf-8")
-QG_DESC = ("Checks a change before you ship it: one /qg run reviews the diff from several independent angles, "
+QG_DESC = ("Checks a change before you ship it: one /quality-gates:quality-pipeline run reviews the diff from several independent angles, "
            "runs the tests whose behavior changed, can walk the running app with your approval, and gives one "
            "verdict. When the branch has an open PR, it posts that verdict with a plain-language summary as one "
            "new comment.")

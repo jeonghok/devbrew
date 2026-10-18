@@ -71,7 +71,7 @@ rf_prep "$T/cx"; rf_reply "$T/cx" 'verdicts:
   - {f: f1, verdict: confirm}'
 out="$(rf_synth "$T/cx")"
 assert_grep "$out" '\| 길이를 확인하지 않아 범위를 넘어 읽는다 \(경계 검사 누락\) \|' "AC9: codex 지적의 plain 이 화면에 먼저 나온다"
-# 쓸 수 없는 plain(목록 · 객체 · 숫자)은 변환기가 칸째 뺀다 — str() 로 옮기면 「['x', 'y']」 같은 글자가 화면에 나간다(합친 /qg #5)
+# 쓸 수 없는 plain(목록 · 객체 · 숫자)은 변환기가 칸째 뺀다 — str() 로 옮기면 「['x', 'y']」 같은 글자가 화면에 나간다(합친 qg #5)
 python3 - "$T/codex-bad.jsonl" <<'PY'
 import json, sys
 fs = [{"file": "y.py", "line": 1, "severity": "IMPORTANT", "summary": "목록칸", "plain": ["x", "y"], "proposed_fix": "f"},
@@ -119,7 +119,7 @@ K="$(python3 -c 'import sys,yaml; print(yaml.safe_load(open(sys.argv[1],encoding
 printf 'verdicts:\n  - {finding_key: "%s", verdict: confirm, evidence: real}\n' "$K" > "$T/adv.yaml"
 out="$(python3 "$ART" --phase synth --findings "$T/merged.yaml" --adversarial "$T/adv.yaml" 2>/dev/null)"
 assert_contains "$out" "이 절은 앞 절과 반대로 말한다" "AC9: artifact synth 의 kept 에 plain 이 남는다"
-# ⑤c 비코드 codex 경로 — codex JSONL → extract_codex_artifact_yaml → key → synth. 중간 변환을 실제로 지난다(AC9 · 합친 /qg #4)
+# ⑤c 비코드 codex 경로 — codex JSONL → extract_codex_artifact_yaml → key → synth. 중간 변환을 실제로 지난다(AC9 · 합친 qg #4)
 python3 - "$T/acx.jsonl" <<'PY'
 import json, sys
 text = "```yaml\nfindings:\n  - {category: logic, target_anchor: \"#x\", severity: IMPORTANT, summary: \"x 절이 비었다\", plain: \"이 절에는 내용이 없다\", proposed_fix: \"채운다\"}\n```"
@@ -188,7 +188,7 @@ out="$(rf_synth "$T/dup")"
 assert_eq "$(printf '%s\n' "$out" | grep -c '^| IMPORTANT | d\.py:5 |')" "1" "Review Focus 5: 같은 지적 셋이 한 행으로 합쳐졌다"
 assert_contains "$out" "같은 줄을 두 리뷰어가 짚었다 (같은 지적)" "Review Focus 5: 남는 쪽에 plain 이 없으면 합쳐진 다른 쪽 중 먼저 온 쪽의 plain 을 물려받는다"
 assert_not_contains "$out" "셋째가 쓴 다른 문장" "Review Focus 5: 물려받는 것은 하나 — 먼저 온 쪽이다"
-# 요약이 다른 지적은 같은 줄에 합쳐져도 plain 을 물려받지 않는다 — 다른 결함의 쉬운 문장이 엉뚱한 설명 옆에 붙는다(합친 /qg #1)
+# 요약이 다른 지적은 같은 줄에 합쳐져도 plain 을 물려받지 않는다 — 다른 결함의 쉬운 문장이 엉뚱한 설명 옆에 붙는다(합친 qg #1)
 mkdir -p "$T/dupx"
 printf -- '- {agent: code-reviewer, file: e.py, line: 7, severity: IMPORTANT, summary: "반복 경계가 하나 넘친다", proposed_fix: "< 로 바꾼다"}\n- {agent: security-reviewer, file: e.py, line: 7, severity: IMPORTANT, summary: "경로 탐색", plain: "사용자가 준 경로로 폴더 밖 파일을 읽을 수 있다", proposed_fix: "경로를 정규화한다"}\n' > "$T/dupx/findings.yaml"
 rf_prep "$T/dupx"; rf_reply "$T/dupx" 'verdicts:

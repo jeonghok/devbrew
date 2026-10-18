@@ -124,7 +124,7 @@ case_no_new_surfaces() {
   # 내던 판정값이었고, 그 게이트 자체가 대상 소멸했다. 레거시 3종
   # (PARTIAL/INCONCLUSIVE/DEGRADED_VERDICT) 은 애초에 실재한 적이 없어 그대로 0종.
   #
-  # **부재를 통과로 읽지 않는다 (/qg iter-5 C3 계승).** `$SKILL` 이 없으면 grep 은
+  # **부재를 통과로 읽지 않는다 (qg iter-5 C3 계승).** `$SKILL` 이 없으면 grep 은
   # **exit 2**(파일 오류)를 내고, 그것을 "매치 없음"과 같은 non-zero 로 읽으면
   # 파일을 지워도·이름을 바꿔도·경로를 오타내도 GREEN 이 된다 — 그래서 파일 실재를
   # 먼저 확인한다.

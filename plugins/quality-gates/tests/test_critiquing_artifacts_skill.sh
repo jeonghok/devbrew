@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# T10 — critiquing-artifacts SKILL orchestration-shape locks (AC2/AC3/AC5/AC10/AC11/AC14).
+# T10 — artifact-critique SKILL orchestration-shape locks (AC2/AC3/AC5/AC10/AC11/AC14).
 set -u
-S="plugins/quality-gates/skills/critiquing-artifacts/SKILL.md"
+S="plugins/quality-gates/skills/artifact-critique/SKILL.md"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # frontmatter + narrow Bash allowlist (no wildcard)
-assert_file_grep "$S" '^name: critiquing-artifacts$' "skill name"
+assert_file_grep "$S" '^name: artifact-critique$' "skill name"
 assert_file_absent "$S" '^\s*-\s*Bash\(\*\)\s*$' "no Bash(*) wildcard (narrow allowlist)"
 assert_contains "$(cat "$S")" 'classify_artifact_target.py' "wires E1 classifier"
 assert_contains "$(cat "$S")" 'artifact_branch_guard.sh' "wires E2 branch guard"

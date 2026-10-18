@@ -18,13 +18,13 @@ case_table_aligned() {
 }
 
 case_table_aligned
-# 소비자 배선 — quality-pipeline SKILL 이 render-terminal 을 allowed-tools 에 두고, `## Final verdict` 절(펜스 밖 헤딩만
+# 소비자 배선 — quality-pipeline SKILL 본문(머리말 밖)이 render-terminal 을 부르고, `## Final verdict` 절(펜스 밖 헤딩만
 # 절 경계로 센다)이 `table` 을 부른다. 헤딩부터 EOF 까지 읽으면 뒤따르는 `## Publish` 가 만족시킬 수 있어 절 창으로 잰다.
 SKILL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
-AT="$(awk '/^allowed-tools:/{f=1} f{print} f&&/^---[[:space:]]*$/{exit}' "$SKILL")"
-grep -qF 'render-terminal.py' <<<"$AT" \
-  && ok "render-terminal.py wired into allowed-tools" \
-  || no "render-terminal.py missing from allowed-tools"
+BODY="$(awk '/^---[[:space:]]*$/{n++; next} n>=2{print}' "$SKILL")"
+grep -qF 'render-terminal.py' <<<"$BODY" \
+  && ok "render-terminal.py is called from the SKILL body" \
+  || no "render-terminal.py missing from the SKILL body"
 FV="$(awk '/^```/{inf=!inf} !inf && /^## /{f=($0=="## Final verdict")} f' "$SKILL")"
 if grep -qF 'render-terminal.py" table' <<<"$FV"; then
   ok "Final verdict uses render-terminal.py table"

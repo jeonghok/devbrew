@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/*/agents/*.md plugins/*/skills/**/*.md plugins/*/commands/*.md tools/adjudication/check_slots.py tools/adjudication/cite.py shared/tests/fixtures/adjudication/run_slots.py
+# guards: plugins/*/agents/*.md plugins/*/skills/**/*.md tools/adjudication/check_slots.py tools/adjudication/cite.py shared/tests/fixtures/adjudication/run_slots.py
 #
 # 수정 라운드 1 (F6) — 판정기 자신을 declare 한다. `fixtures/adjudication/
 # run_slots.py` 가 `import check_slots` 하므로 이 락이 그 코퍼스다(도출은

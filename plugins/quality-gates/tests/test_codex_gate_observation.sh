@@ -58,7 +58,7 @@ obs_setup "$SCRATCH"
 # (미등재), 등재된 항목에 게이트가 생기면 stale로 RED다 — 목록은 줄어들기만 한다.
 # 설계 §10 미해결 1·2가 여기 그대로 서 있고, 테스트 출력에 매번 보인다.
 UNGATED_run_codex_reviewer_sh='quality-pipeline/SKILL.md 이 산문 게이트 — 이 사이클 범위 밖 (설계 §10 미해결 1)'
-UNGATED_run_artifact_codex_reviewer_sh='critiquing-artifacts/SKILL.md 이 산문 게이트 — 이 사이클 범위 밖 (설계 §10 미해결 1)'
+UNGATED_run_artifact_codex_reviewer_sh='artifact-critique/SKILL.md 이 산문 게이트 — 이 사이클 범위 밖 (설계 §10 미해결 1)'
 UNGATED_test_codex_json_extraction_sh='수동 spike — 어떤 SKILL도 부르지 않는다'
 # spec-distill 의 옛 design-doc 러너 등재는 여기서 **지웠다**(T7). 등재 사유는 "게이트
 # 마커는 이미 옮겨갔는데 러너 파일이 아직 남아 ratchet 이 RED 를 낸다"였고, T7 이 그
@@ -67,7 +67,7 @@ UNGATED_test_codex_json_extraction_sh='수동 spike — 어떤 SKILL도 부르�
 # 헤더의 "목록은 줄어들기만 한다"는 «게이트가 생김» 방향에만 참이다). 그래서 삭제를
 # 손으로 함께 했다 — 남겨두면 조용히 썩는 죽은 코드다.
 # `run_docreview_codex_reviewer.sh`의 등재는 여기서 **지웠다**(2026-09-08). 등재 사유는
-# "호출자 0 — 진입 skill이 아직 이 러너를 안 부른다"였는데, `reviewing-spec`이 문서 리뷰
+# "호출자 0 — 진입 skill이 아직 이 러너를 안 부른다"였는데, `spec-review`이 문서 리뷰
 # 엔진의 껍데기가 되면서 그 skill의 SKILL.md가 `codex-gate:begin runner=run_docreview_
 # codex_reviewer.sh` 마커 짝으로 이 러너를 부른다 — 위 ratchet이 그 순간 "게이트가
 # 생겼는데 원장에 아직 있다(stale)"로 RED를 냈고, 이 삭제가 그 RED가 지시한 조치다.
@@ -232,7 +232,7 @@ for i in "${!GATED_RUNNER[@]}"; do
     *) no "$label: 미설치 → codex ${n}회" ;;
   esac
 
-  # 버전 바닥 미달 — **계측 가능한** below-floor mock 을 쓴다 (C1, /qg 2026-08-13).
+  # 버전 바닥 미달 — **계측 가능한** below-floor mock 을 쓴다 (C1, qg 2026-08-13).
   # 예전에는 `mocks/below-floor/codex` 를 썼는데 그 mock 은 CODEX_CAPTURE_DIR 에
   # 아무것도 쓰지 않는다. 그래서 아래 `0` 기대값은 "게이트가 막았다" 와 "게이트가
   # 발화했는데 실행된 바이너리가 캡처를 안 한다" 를 구별하지 못했다 — 죽은 계측기의

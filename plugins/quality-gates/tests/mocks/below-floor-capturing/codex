@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 바닥(0.118.0) 미만 + **호출 기록**. `below-floor/codex`의 계측 가능한 쌍둥이.
 #
-# 왜 별도 자산인가 (C1, /qg 2026-08-13 whole-branch 리뷰):
+# 왜 별도 자산인가 (C1, qg 2026-08-13 whole-branch 리뷰):
 # `test_codex_gate_observation.sh`의 `버전 바닥 미달` 시나리오는 codex 호출이 0회임을
 # 주장하는데, 그 시나리오의 PATH에는 캡처 mock이 **없었다**. 그래서 `obs_call_count`는
 # 게이트가 막았을 때도 0, 게이트가 발화해 비캡처 바이너리를 실행했을 때도 0을 읽었다 —

@@ -58,7 +58,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 ```
 
 ```bash
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 S="$RD/topic-scope.txt"
 if [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then printf 'scope0=topic\nboundary=%s\n' "$(sed -n 's/^boundary: //p' "$S")"; else echo "scope0=session"; fi
@@ -82,7 +82,7 @@ D0 에서 기억해 둔 값이다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 rm -f "$RD/differential.yaml" "$RD/differential-not-counted.md"
 SCOPE0="<D0 의 스코프: topic | session>"; BASE0="<D0 의 기준선 커밋>"
@@ -92,7 +92,7 @@ if [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then
   hc=$(sed -n 's/^head_commit: //p' "$S"); tree=$(sed -n 's/^tree: //p' "$S")
 fi
 if [ "$scope" != "$SCOPE0" ] || [ "$base" != "$BASE0" ]; then
-  echo "[quality-gates] 이번 반복의 비교 기준(${scope} @ ${base:--})이 처음 반복의 기준(${SCOPE0} @ ${BASE0})과 달라서, 이번 반복의 테스트 비교는 판정에 쓰지 않는다(error-axis). 기준을 바꾸려면 /qg 를 처음부터 다시 돌린다." >&2
+  echo "[quality-gates] 이번 반복의 비교 기준(${scope} @ ${base:--})이 처음 반복의 기준(${SCOPE0} @ ${BASE0})과 달라서, 이번 반복의 테스트 비교는 판정에 쓰지 않는다(error-axis). 기준을 바꾸려면 /quality-gates:quality-pipeline 을 처음부터 다시 돌린다." >&2
   echo "axis=mismatch"; exit 0
 fi
 head_tree=""; cand=""
@@ -214,7 +214,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /qg 는 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 cd "$TOP" || exit 1
 "$QG/scripts/diff-test-results.py" --assign "<memo>/assign-i<N>.tsv" --rows "<memo>" --iter <N> \

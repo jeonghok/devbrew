@@ -64,7 +64,7 @@ def validate_collections(payload: dict) -> tuple[dict[str, list], dict[str, Any]
     필드 단위 완전성까지 올리지 않는 이유는 형제 추출기와 같다: 서술 필드 하나가 빠진
     정상 라운드를 degrade로 올리면 진짜 발견이 소실된다.
 
-    E2 (/qg 2026-08-13 whole-branch 리뷰): **키 존재**는 컨테이너 타입과 같은 층이다.
+    E2 (qg 2026-08-13 whole-branch 리뷰): **키 존재**는 컨테이너 타입과 같은 층이다.
     이전 코드는 `payload.get(key, [])` + `raw is None` 으로 키 부재와 명시적 null 을
     조용히 `[]` 로 만들고 `codex_failed: False` 를 찍었다 — 즉 `{}` 페이로드가 clean
     감사로 기록됐다. 이 프롬프트가 동봉하는 preamble 은 "어떤 키도 생략하지 말라"를

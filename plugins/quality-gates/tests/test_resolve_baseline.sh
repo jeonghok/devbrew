@@ -96,7 +96,7 @@ case_review_scope_contract() {
   cleanup
 }
 
-# ── /qg iter-2 CRITICAL — merge_base ref 변조 ─────────────────────────────────
+# ── qg iter-2 CRITICAL — merge_base ref 변조 ─────────────────────────────────
 #
 # base 후보 ref 는 전부 **공유 common gitdir** 에 있고, `run` 이 실행하는 저장소
 # 코드가 호스트 권한으로 `git update-ref` 를 할 수 있다. base 를 HEAD 로 옮기면

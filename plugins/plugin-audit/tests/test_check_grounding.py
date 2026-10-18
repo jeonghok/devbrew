@@ -104,7 +104,7 @@ class TestGrounding(unittest.TestCase):
             self.assertTrue(f["grounding_verified"], "여러 줄 인용이 거짓 폐기됨 (단일-라인 매칭)")
             self.assertNotEqual(f["status"], "discarded")
 
-    def test_null_quote_does_not_crash(self):  # B (/qg 2026-07-20 round-2)
+    def test_null_quote_does_not_crash(self):  # B (qg 2026-07-20 round-2)
         # security-reviewer: `ev.get("quote", "")`는 키 *부재*시만 "" — {"quote": null}(키 존재, 값 None)이면
         # None 반환 → `_norm(None)`=re.sub(None) TypeError. line 24는 try 밖이라 uncaught. codex findings는
         # schema 미검증으로 findings에 병합되므로(assemble step-7), 미신뢰 대상이 유도한 null-quote 인용

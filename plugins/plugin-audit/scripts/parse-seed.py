@@ -11,7 +11,7 @@ OQ_RE = re.compile(r"-\s*(OQ\d+)\s*:\s*(?:축\s*(\d+)\s*—\s*)?(.+?)\s*$")
 def parse(text):
     """(추출결과 dict, warnings list) 반환. warnings = 인식된 섹션 안에서 형식에 안 맞아 **드롭된**
     불릿들 — seed는 감사에서 가장 표적화된 입력이라, 조용히 버리면 사용자의 단서가 흔적 없이 증발한다
-    (CONTRACT rule 11을 입력에 적용, SF1 /qg 2026-07-20). main이 이 warnings를 loud하게 stderr로 낸다."""
+    (CONTRACT rule 11을 입력에 적용, SF1 qg 2026-07-20). main이 이 warnings를 loud하게 stderr로 낸다."""
     out = {"target": None, "extra_scope": [], "open_questions": [], "candidate_clues": []}
     warnings = []
     m = re.search(r"^target:\s*(.+?)\s*$", text, re.M)
