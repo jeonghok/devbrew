@@ -8,8 +8,8 @@
 |---|---|---|---|
 | plugins/spec-distill/tests/test_conducting_interview_stage.sh:577 | 조사 장치 예산 식 `coverage_mapper_dispatches < 1 + Σ(모든 차원의 reopened)` 문구 | R1 | 그 에픽이 같은 PR 에서 고친다 |
 | plugins/spec-distill/tests/test_conducting_interview_stage.sh:290 | 상태 스키마의 `orchestration` 필드 목록(`blind_spot_dispatches` · `coverage_mapper_dispatches` 초기값 0) | R1 | 그 에픽이 같은 PR 에서 고친다 |
-| plugins/spec-distill/tests/test_check_brief.sh:1510 | 구조 게이트: 조사 장치 호출 수 0 이고 불가 사유가 없으면 거절 | R2a | R1 이 #206 에서 고쳤다 — 이제 R2a 예약 파일이라 R2a 계획 2 가 이 테스트를 고칠 때 이 동작을 지킨다 |
-| plugins/spec-distill/tests/test_check_brief.sh:1516 | 구조 게이트: 호출 수 0 이라도 불가 사유가 있으면 조언으로 통과 | R2a | R1 이 #206 에서 고쳤다 — 이제 R2a 예약 파일이라 R2a 계획 2 가 이 테스트를 고칠 때 이 동작을 지킨다 |
+| plugins/spec-distill/tests/test_check_brief.sh:1510 | 구조 게이트: 조사 장치 호출 수 0 이고 불가 사유가 없으면 거절 | R2a | R1(#206)이 다뤘고 이 동작은 남겼다 — 이제 R2a 예약 파일이라 R2a 계획 2 가 이 테스트를 고칠 때 이 동작을 지킨다 |
+| plugins/spec-distill/tests/test_check_brief.sh:1516 | 구조 게이트: 호출 수 0 이라도 불가 사유가 있으면 조언으로 통과 | R2a | R1(#206)이 다뤘고 이 동작은 남겼다 — 이제 R2a 예약 파일이라 R2a 계획 2 가 이 테스트를 고칠 때 이 동작을 지킨다 |
 | plugins/spec-distill/tests/test_conducting_interview_stage.sh:716 | 리듬 강제: 열린 결정을 담은 답이면 `non_user_streak` +0, 아니면 +1 | R1 | 그 에픽이 같은 PR 에서 고친다 |
 | plugins/spec-distill/tests/test_conducting_interview_stage.sh:451 | 되묻기 상한 문장 「같은 주제의 연속 되묻기는 최대 2회」 | R1 | 그 에픽이 같은 PR 에서 고친다 |
 | plugins/spec-distill/tests/test_stale_terms.sh:362 | 위와 같은 상한 문장을 라운드 규약에서 양성으로 다시 확인 | R1 | 그 에픽이 같은 PR 에서 고친다 |
