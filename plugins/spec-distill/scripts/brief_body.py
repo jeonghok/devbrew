@@ -35,9 +35,15 @@ _BULLET_HEAD_RE = re.compile(r"^[-*]\s")
 ENTRY_BULLET_RE = re.compile(r"^\s*[-*]\s")
 _NUMBERED_RE = re.compile(r"^\s*\d+[.)]\s")
 _QUOTED_RE = re.compile(r"^\s*>")
-# 결정 표지는 줄 «머리»의 것이다 — 머리 기호 · 번호를 걷어 낸 첫머리가 `OQ<n>` · `[해결` · `[열림]`. 산문 가운데 적힌
-# 표지 글자(설명 줄)는 결정 줄이 아니다.
-_DECISION_MARK_RE = re.compile(r"^[^\w\[\n]*(?:\d+[.)]\s*)?[^\w\[\n]*(?:OQ\d|\[해결|\[열림\])")
+# 결정 표지는 해결 · 열림 표시(`[해결` · `[열림`)다 — 줄 머리에 있거나, 줄 머리의 `OQ<n>` 뒤에 따라온다. OQ 번호만 부르는
+# 산문(`(OQ1~OQ7 은 …`)이나 설명 줄 가운데 적힌 표지 글자는 결정 줄이 아니다.
+_DECISION_HEAD_RE = re.compile(r"^[^\w\[\n]*(?:\d+[.)]\s*)?[^\w\[\n]*(OQ\d|\[해결|\[열림\])")
+_RESOLUTION_MARK_RE = re.compile(r"\[해결|\[열림")
+
+
+def _is_decision_line(c):
+    m = _DECISION_HEAD_RE.match(c)
+    return bool(m) and (not m.group(1).startswith("OQ") or bool(_RESOLUTION_MARK_RE.search(c)))
 
 
 def canon(text):
@@ -108,7 +114,7 @@ def decision_line_problem(line):
     항목 줄(`_entry_lines` 가 받는 줄)이 아니면 사유 이름을 낸다. 번호 목록 · 인용은 이름을 유지하고 그 밖은
     `decision_shape`. 문제가 없으면 None."""
     c = canon(line)
-    if not _DECISION_MARK_RE.search(c):
+    if not _is_decision_line(c):
         return None
     if ENTRY_BULLET_RE.match(c) and c.strip() not in ("-", "*"):
         return None

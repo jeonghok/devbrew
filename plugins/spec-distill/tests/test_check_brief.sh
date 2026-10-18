@@ -2524,11 +2524,11 @@ for spec in 'u_nbsp|anchor_unicode_space|\n- **S2**|\n\u00a0- **S2**' \
     && ok "AC18: 문법 밖 §6 앵커(${stem}) → red «${why}»" \
     || { no "AC18: 문법 밖 §6 앵커(${stem})가 ${why} 로 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
 done
-for spec in 'd_num|decision_numbered|\n- OQ1: |\n1. OQ1: ' \
-            'd_quote|decision_quoted|\n- OQ1: |\n> - OQ1: ' \
+for spec in 'd_num|decision_numbered|\n- OQ1: 인증 뷰의 캐시 전략|\n1. OQ1 [해결 \u27e8S2\u27e9]: 인증 뷰의 캐시 전략' \
+            'd_quote|decision_quoted|\n- OQ1 [열림]|\n> - OQ1 [열림]' \
             'd_num0|decision_numbered|\n- OQ1 [열림]|\n1. OQ1 [열림]' \
-            'd_plus|decision_shape|\n- OQ1: |\n+ OQ1: ' \
-            'd_bare|decision_shape|\n- OQ1: |\nOQ1: ' \
+            'd_plus|decision_shape|\n- OQ1: 인증 뷰의 캐시 전략|\n+ OQ1 [해결 \u27e8S99\u27e9]: 인증 뷰의 캐시 전략' \
+            'd_bare|decision_shape|\n- OQ1: 인증 뷰의 캐시 전략|\nOQ1 [해결 \u27e8S2\u27e9]: 인증 뷰의 캐시 전략' \
             'd_plus0|decision_shape|\n- OQ1 [열림]|\n+ OQ1 [열림]'; do
   IFS='|' read -r stem why from to <<<"$spec"
   bb_variant "$stem" "$from" "$to"

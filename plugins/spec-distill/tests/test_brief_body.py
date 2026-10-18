@@ -90,6 +90,8 @@ class Round1Anchors(unittest.TestCase):
         self.assertIsNone(B.decision_line_problem("- OQ1: 열림"))
         self.assertIsNone(B.decision_line_problem("* OQ1: 열림"))
         self.assertIsNone(B.decision_line_problem("산문 줄이다"))
+        self.assertIsNone(B.decision_line_problem("(OQ1~OQ7 은 사용자가 「일곱 개」로 박제한 것이다."))
+        self.assertIsNone(B.decision_line_problem("**결정 목록** — 상태는 `[열림]` 또는 `[해결 \u27e8S<n>\u27e9]` 로 적는다."))
 
 
 class DecisionLines(unittest.TestCase):
