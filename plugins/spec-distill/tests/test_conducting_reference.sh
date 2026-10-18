@@ -14,11 +14,16 @@ trap 'rm -rf "$T"' EXIT
 
 [ -f "$CD" ] && ok "conducting.md 가 있다" || { no "conducting.md 가 없다"; finish; exit $?; }
 assert_eq "$(grep -cxF '## 손으로 따르는 절차' "$CD" || true)" "1" "손 절차 절 머리가 정확히 하나"
-MAN="$(awk '$0=="## 손으로 따르는 절차"{f=1;next} f&&/^## /{exit} f' "$CD")"
+man_of() {  # man_of <파일> — 그 파일의 손 절차 절
+  awk '$0=="## 손으로 따르는 절차"{f=1;next} f&&/^## /{exit} f' "$1"
+}
+MAN="$(man_of "$CD")"
 [ -n "$MAN" ] && ok "손 절차 절을 읽었다" || no "손 절차 절이 비었다 — 아래 단언이 공허하다"
 assert_eq "$(printf '%s\n' "$MAN" | grep -oE '^[1-9]\. ' | tr -d '. ' | tr '\n' ' ')" "1 2 3 4 5 6 7 8 9 " "걸음 1~9 가 차례로 있다"
-step() {  # step <n> — 손 절차 걸음 n 의 글(다음 번호 걸음 앞까지)
-  printf '%s\n' "$MAN" | awk -v n="$1" 'index($0, n ". ")==1{f=1; print; next} f && /^[1-9]\. /{exit} f'
+step() {  # step <n> [파일] — 손 절차 걸음 n 의 글(다음 번호 걸음 앞까지). 파일이 없으면 conducting.md
+  local m="$MAN"
+  [ $# -ge 2 ] && m="$(man_of "$2")"
+  printf '%s\n' "$m" | awk -v n="$1" 'index($0, n ". ")==1{f=1; print; next} f && /^[1-9]\. /{exit} f'
 }
 for n in 1 2 3 4 5 6 7 8 9; do
   [ -n "$(step "$n")" ] && ok "걸음 $n 을 읽었다" || no "걸음 $n 이 비었다"
@@ -53,13 +58,13 @@ done
 once() {  # once <걸음> <문장> — 그 걸음 글에 문장이 정확히 한 번
   assert_eq "$(printf '%s\n' "$(step "$1")" | grep -oF -- "$2" | wc -l | tr -d ' ')" "1" "걸음 $1: 「${2}」 는 정확히 한 번이다"
 }
-for lit in 'spec-review 도 지휘 세션이 직접 돌린다' '`root=` 가 그 worktree 가 아니면 멈춘다' '다음 세션 줄의 writing-plans 를 직접 따르지 않고' '`## 지휘 기록` 에 한 줄로 커밋한다' '리뷰 원장이 라운드 · 상한을 잇는다'; do
+for lit in 'spec-review 도 지휘 세션이 직접 돌린다' '`--bundle` 값이 설계문서 frontmatter `source_interview` 와 다르거나 읽을 수 없으면 리뷰하지 않고 끝나고' '`root=` 가 그 worktree 가 아니면 멈춘다' '다음 세션 줄의 writing-plans 를 직접 따르지 않고' '`## 지휘 기록` 에 한 줄로 커밋한다' '리뷰 원장이 라운드 · 상한을 잇는다'; do
   once 3 "$lit"
 done
-for lit in '(a) 사람에게 보일 쉬운 요약' '선택지의 수 · 순서 · 라벨 · skill 자신의 「(권장)」 표시와 사용자 답은 글자 그대로' '「지휘자 의견:」 한 줄' '원문은 늘 붙인다' '이유를 설계문서에 적는다'; do
+for lit in '(a) 사람에게 보일 쉬운 요약' '내부 기호는 괄호에만' 'writing-plans 가 끝에 묻는 계획 검토' '선택지의 수 · 순서 · 라벨(돌려줄 값) · skill 자신의 「(권장)」 표시와 사용자 답은 글자 그대로' '「고르면 무엇이 달라지나」(그대로 두면 · 고치면)' '「지휘자 의견:」 한 줄' '원문은 늘 붙인다' '사용자 답은 글자 그대로 같은 agent 에 돌려보내 이어 가게 한다' '이유를 설계문서에 적는다'; do
   once 4 "$lit"
 done
-for lit in '그 리뷰 게이트 질문에 섞지 않고' '첫 줄에 에픽 이름' 'worktree 를 떠날 수 있는지'; do
+for lit in '그 리뷰 게이트 질문에 섞지 않고' '첫 줄에 에픽 이름' 'worktree 를 떠날 수 있는지' '다른 에픽의 spec 리뷰는 그 에픽 담당 agent 를 거쳐'; do
   once 2 "$lit"
 done
 assert_contains "$(step 2)" '메인 체크아웃' "걸음 2: 메인 체크아웃에 머문다"
@@ -87,11 +92,21 @@ forbid_always_method() {  # 줄에 «언제나/항상» 과 실행 방식 이름
 forbid_5() {  # 걸음 5 글: 한 에픽이 막히면 다른 에픽도 멈춘다
   printf '%s\n' "$1" | hit '다른 에픽[^\n]{0,8}멈춘'
 }
-forbid_agent_review() {  # 걸음 3 글: agent 가 spec-review 를 맡는 문장 · 게이트 문면을 그대로 돌려보내는 중계(옛 결정)
+# 걸음 4 에서 문면을 돌려보내도 되는 문장은 이 하나뿐이다(두 부분 반환) — 문장째 허용한다.
+ALLOW_B='적어 준 답이 없는 자리(writing-plans 가 끝에 묻는 계획 검토 등)에서 agent 는 멈추고 (a) 사람에게 보일 쉬운 요약(무엇을 정하나 · 고르면 무엇이 달라지나 · 배경, 내부 기호는 괄호에만)과 (b) skill 이 낸 문면 · 선택지 원문을 함께 돌려보낸다.'
+forbid_relay() {  # 걸음 3 · 4 글: 게이트 문면을 돌려보내는 중계(옛 결정). 허용 문장 하나는 문장째 뺀다
+  local t="${1//$'\n'/ }"
+  t="${t//"$ALLOW_B"/}"
+  printf '%s\n' "$t" | hit '문면[^\n]{0,20}돌려보[내낸]'  # 「돌려보낸다」의 낸 은 내 와 다른 글자다
+}
+forbid_agent_review() {  # 걸음 3 글: agent 가 spec-review 를 맡는 문장(어순 무관) · 게이트 문면 중계(옛 결정)
   local t="${1//$'\n'/ }"
   printf '%s\n' "$t" | sed 's/\. /.\
-/g' | grep -E 'agent.*spec-review|spec-review.*agent' || true
-  printf '%s\n' "$t" | hit '문면[^\n]{0,16}그대로 ?돌려보내'
+/g' | grep -E '(agent|에이전트).*spec-review|spec-review.*(agent|에이전트)' || true
+  forbid_relay "$t"
+}
+forbid_2_main() {  # 걸음 2 글: 메인 체크아웃에서 부르기를 권하는 옛 문장(양성 짝: 「worktree 를 떠날 수 있는지」 정확히 한 번)
+  printf '%s\n' "$1" | hit '메인 체크아웃[^.]{0,20}권'
 }
 S23="$(step 2; step 3)"
 assert_eq "$(forbid_23 "$S23")" "" "걸음 2~3: 세션을 새로 열게 하는 말이 없다"
@@ -99,6 +114,9 @@ assert_eq "$(forbid_4 "$(step 4)")" "" "걸음 4: 계획 검토 무대기 · 허
 assert_eq "$(forbid_always_method "$MAN")" "" "손 절차: 「언제나/항상」+실행 방식 고정이 없다"
 assert_eq "$(forbid_5 "$(step 5)")" "" "걸음 5: 다른 에픽까지 멈추는 말이 없다"
 assert_eq "$(forbid_agent_review "$(step 3)")" "" "걸음 3: agent 가 spec-review 를 맡거나 게이트 문면을 그대로 중계하는 말이 없다(음성 대조)"
+assert_eq "$(forbid_relay "$(step 4)")" "" "걸음 4: 허용 문장 밖에서 게이트 문면을 돌려보내는 중계가 없다(음성 대조)"
+assert_eq "$(printf '%s\n' "$(step 4)" | grep -oF -- "$ALLOW_B" | wc -l | tr -d ' ')" "1" "걸음 4: 허용 문장(두 부분 반환)이 정확히 한 번 있다 — 허용 목록이 낡지 않았다"
+assert_eq "$(forbid_2_main "$(step 2)")" "" "걸음 2: 메인 체크아웃에서 부르기를 권하는 옛 문장이 없다"
 for lit in '/new 로 에픽 worktree 세션을 연다' '에픽마다 세션을 따로 열어' '새 세션에서 이어 간다' '사용자가 다른 세션을 열어 진행' '다음 세션에서 이어 간다' '에픽마다 세션을 연다'; do
   [ -n "$(forbid_23 "$S23 $lit")" ] && ok "양성 대조(2~3): 「${lit}」 를 잡는다" || no "양성 대조(2~3): 「${lit}」 를 못 잡는다"
 done
@@ -111,13 +129,19 @@ done
 for lit in '다른 에픽도 모두 멈춘다' '다른 에픽도 전부 멈춘다' '다른 에픽도 멈춘다'; do
   [ -n "$(forbid_5 "$(step 5) $lit")" ] && ok "양성 대조(5): 「${lit}」 를 잡는다" || no "양성 대조(5): 「${lit}」 를 못 잡는다"
 done
-for lit in 'spec-review 부터는 담당 agent 가 맡는다.' '담당 agent 가 게이트 문면을 그대로 돌려보내고 멈춘다.' 'agent 가 /spec-distill:spec-review 를 돌린다.'; do
+for lit in 'spec-review 부터는 담당 agent 가 맡는다.' '담당 agent 가 게이트 문면을 그대로 돌려보내고 멈춘다.' 'agent 가 /spec-distill:spec-review 를 돌린다.' '담당 에이전트가 spec-review 를 돌린다.' 'spec-review 는 하위 에이전트에게 맡긴다.' '게이트 문면과 선택지를 돌려보내고 멈춘다.'; do
   [ -n "$(forbid_agent_review "$(step 3) $lit")" ] && ok "양성 대조(3): 「${lit}」 를 잡는다" || no "양성 대조(3): 「${lit}」 를 못 잡는다"
+done
+for lit in '담당 agent 는 게이트 문면과 선택지를 그대로 돌려보내고 멈춘다.' '(b) skill 이 낸 문면을 돌려보낸다.'; do
+  [ -n "$(forbid_relay "$(step 4) $lit")" ] && ok "양성 대조(4 중계): 「${lit}」 를 잡는다" || no "양성 대조(4 중계): 「${lit}」 를 못 잡는다"
+done
+for lit in '메인 체크아웃에서 부르기를 권한다.' '메인 체크아웃으로 옮기기를 권한다.'; do
+  [ -n "$(forbid_2_main "$(step 2) $lit")" ] && ok "양성 대조(2 메인): 「${lit}」 를 잡는다" || no "양성 대조(2 메인): 「${lit}」 를 못 잡는다"
 done
 # 대조 변이(실파일 사본): 지휘 세션 문장을 옛 담당 agent 문장으로 되돌린 걸음 3
 sed 's/spec-review 도 지휘 세션이 직접 돌린다/spec-review 부터는 그 에픽의 담당 agent 가 그 에픽 worktree 에서 맡는다/' "$CD" > "$T/m3.md"
 cmp -s "$CD" "$T/m3.md" && no "변이 사본(3)이 원문과 같다 — 아래 대조가 공허하다" || ok "변이 사본(3)이 원문과 달라졌다"
-M3="$(awk '$0=="## 손으로 따르는 절차"{f=1;next} f&&/^## /{exit} f' "$T/m3.md" | awk 'index($0, "3. ")==1{f=1; print; next} f && /^[1-9]\. /{exit} f')"
+M3="$(step 3 "$T/m3.md")"
 [ -n "$M3" ] && ok "변이 사본(3)의 걸음 3 을 읽었다" || no "변이 사본(3)의 걸음 3 이 비었다 — 아래 대조가 공허하다"
 [ -n "$(forbid_agent_review "$M3")" ] && ok "변이(3): 옛 담당 agent 문장으로 되돌리면 부재 락이 잡는다" || no "변이(3): 되돌려도 부재 락이 못 잡는다"
 assert_eq "$(printf '%s\n' "$M3" | grep -oF -- 'spec-review 도 지휘 세션이 직접 돌린다' | wc -l | tr -d ' ')" "0" "변이(3): 되돌리면 지휘 세션 문장이 사라진다(위 정확히 한 번 단언이 잡는다)"
