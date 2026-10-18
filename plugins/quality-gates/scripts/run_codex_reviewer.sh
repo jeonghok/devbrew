@@ -45,6 +45,11 @@
 # and reviewing-brief SKILLs) implement the rc==3 → rm -f pattern;
 # quality-pipeline/SKILL.md documents the same for this runner.
 #
+# exit 2 는 잘못된 호출이다(두 갈래). <output_yaml_path> 가 비었으면 usage 만 내고 아무것도
+# 쓰지 않는다(쓸 곳이 없다). 넷째 인자부터가 `--range <start> <end>` 꼴이 아니면 usage 를 내고
+# 산출물에 `codex_failed: true` · `reason: bad_arguments` 를 적은 뒤 exit 2 — 산출물을 먼저
+# 비우므로 지난 라운드 YAML 이 남지 않고, 호출자는 rc 3 처럼 지울 필요 없이 그대로 읽으면 된다.
+#
 # Sandbox guarantees: codex exec -s read-only (Layer 3) — codex subprocess
 # cannot write to the working tree even though the script invokes it.
 
@@ -175,8 +180,19 @@ INTENT_FILE="/dev/null"
 if [[ "${DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE:-}" == "1" ]]; then
   echo "[quality-gates] DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE 는 없어졌다 — 의도 입력은 언제나 codex 에 실린다. codex 를 끄려면 DEVBREW_QUALITY_GATES_DISABLE_CODEX=1 을 쓴다." >&2
 fi
-INTENT_JSON="$(bash "${PLUGIN_ROOT}/scripts/discover-spec.sh" --intent-out "$SCRATCH/intent.md" ${RANGE_ARGS[@]+"${RANGE_ARGS[@]}"} 2>/dev/null || true)"
-if [[ -s "$SCRATCH/intent.md" ]]; then
+# rc 와 stderr 를 받아 둔다 — 의도가 비었을 때 실제 원인(못 푸는 --range 커밋 등)을 이름으로 낸다.
+DS_RC=0
+INTENT_JSON="$(bash "${PLUGIN_ROOT}/scripts/discover-spec.sh" --intent-out "$SCRATCH/intent.md" ${RANGE_ARGS[@]+"${RANGE_ARGS[@]}"} 2>"$SCRATCH/discover.err")" || DS_RC=$?
+DS_ERR="$(tail -n 1 "$SCRATCH/discover.err" 2>/dev/null || true)"
+if [[ "$DS_RC" -ne 0 ]]; then
+  case "$DS_RC" in
+    127) DS_HINT="script missing? check CLAUDE_PLUGIN_ROOT" ;;
+    2)   DS_HINT="잘못된 호출" ;;
+    3)   DS_HINT="의도 · 임시 파일에 쓸 수 없음" ;;
+    *)   DS_HINT="crashed" ;;
+  esac
+  echo "[quality-gates] codex intent: discover-spec.sh rc=${DS_RC} (${DS_HINT})${DS_ERR:+: ${DS_ERR}} — empty <intent>." >&2
+elif [[ -s "$SCRATCH/intent.md" ]]; then
   INTENT_FILE="$SCRATCH/intent.md"
   INTENT_SRC="$(printf '%s' "$INTENT_JSON" | sed -n 's/.*"intent_source": "\([^"]*\)".*/\1/p')"
   INTENT_NOTE="$(printf '%s' "$INTENT_JSON" | sed -n 's/.*"intent_note": "\([^"]*\)".*/\1/p')"

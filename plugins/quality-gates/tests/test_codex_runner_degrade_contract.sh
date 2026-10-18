@@ -181,6 +181,17 @@ assert_grep "$(cat "$tmp/ds.log")" '^--intent-out .* --range AAA BBB$' "8 — �
 range_run "$tmp/range-out3.yaml"
 assert_eq "$(grep -c -- '--range' "$tmp/ds.log")" "0" "8 — 인자 셋이면 --range 를 넘기지 않는다"
 assert_grep "$(cat "$tmp/ds.log")" '^--intent-out ' "8 — 양성 짝: 인자 셋으로도 discover-spec.sh 는 불렸다"
+# 진짜 discover-spec.sh 가 못 푸는 --range 커밋으로 rc 2 를 내면 러너는 그 원인을 이름으로 낸다
+# (「script missing」 으로 오도하지 않는다) — 그래도 codex 는 빈 의도로 돈다(degrade 그대로).
+mkdir -p "$tmp/rangeroot2"
+cp -RL "$QG/scripts" "$tmp/rangeroot2/"
+cp -RL "$QG/references" "$tmp/rangeroot2/"
+rm -rf "$tmp/rangecap"
+CODEX_CAPTURE_DIR="$tmp/rangecap" PATH="$QG/tests/mocks/capture-codex:$PATH" CLAUDE_PLUGIN_ROOT="$tmp/rangeroot2" \
+  bash "$QG/scripts/run_codex_reviewer.sh" "$tmp/tiny.diff" "$ROOT" "$tmp/range-unres.yaml" --range AAA BBB >/dev/null 2>"$tmp/range-unres.err"
+assert_grep "$(cat "$tmp/range-unres.err")" 'discover-spec\.sh rc=2 .*커밋을 풀 수 없다: AAA' "8 — 못 푸는 --range 커밋은 rc 와 원인을 이름으로 낸다"
+assert_not_grep "$(cat "$tmp/range-unres.err")" 'script missing' "8 — 못 푸는 --range 커밋을 「script missing」 으로 오도하지 않는다"
+[ -d "$tmp/rangecap/call-0" ] && ok "8 — 의도가 비어도 codex 는 돈다(degrade 유지)" || no "8 — 의도가 비어도 codex 는 돈다(degrade 유지)"
 for bad in "--bogus" "--range AAA" "--range AAA BBB CCC"; do
   : > "$tmp/ds.log"
   # shellcheck disable=SC2086

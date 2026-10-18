@@ -21,7 +21,7 @@
 # 의도 본문은 <file> 에 쓴다 — 설계문서가 하나면 그 내용 그대로, 둘 이상이면 문서마다
 # `<!-- qg-spec <k>/<N>: <경로> -->` 줄 뒤 내용, 그 뒤 빈 줄.
 #
-# exit: 0 정상 · 2 잘못된 호출 · 3 <file> 에 쓸 수 없음.
+# exit: 0 정상 · 2 잘못된 호출(`--range` 커밋을 못 풂 포함) · 3 쓸 수 없음(<file> 또는 작업용 임시 폴더).
 set -u
 
 OUT=""
@@ -45,9 +45,14 @@ if [ -n "$RANGE_MODE" ]; then
   [ -z "$BASE" ] || { echo "discover-spec.sh: --base 와 --range 는 함께 쓸 수 없다" >&2; exit 2; }
   for c in "$R_START" "$R_END"; do
     case "$c" in ''|-*) echo "discover-spec.sh: --range 의 커밋 모양이 아니다: $c" >&2; exit 2 ;; esac
-    git rev-parse -q --verify "$c^{commit}" >/dev/null 2>&1 \
-      || { echo "discover-spec.sh: --range 의 커밋을 풀 수 없다: $c" >&2; exit 2; }
   done
+  # 한 번 풀어 전체 커밋 id 로 얼린다 — 아래 log · ls-tree · show 는 모두 이 값만 쓴다.
+  arg="$R_START"
+  R_START="$(git rev-parse --verify --quiet --end-of-options "$arg^{commit}" 2>/dev/null)" \
+    || { echo "discover-spec.sh: --range 의 커밋을 풀 수 없다: $arg" >&2; exit 2; }
+  arg="$R_END"
+  R_END="$(git rev-parse --verify --quiet --end-of-options "$arg^{commit}" 2>/dev/null)" \
+    || { echo "discover-spec.sh: --range 의 커밋을 풀 수 없다: $arg" >&2; exit 2; }
 fi
 case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
 : > "$OUT" 2>/dev/null || { echo "discover-spec.sh: 의도 파일에 쓸 수 없다: $OUT" >&2; exit 3; }
@@ -74,7 +79,7 @@ emit() {  # emit <intent_source> <intent_note> — specs 는 전역 SPECS(실은
 top="$(git rev-parse --show-toplevel 2>/dev/null)"
 root=""
 [ -n "$top" ] && root="$(python3 -I -X utf8 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$top")"
-WORK="$(mktemp -d)" || { echo "discover-spec.sh: 임시 폴더를 만들 수 없다" >&2; exit 3; }
+WORK="$(mktemp -d)" || { echo "discover-spec.sh: 작업용 임시 폴더에 쓸 수 없다" >&2; exit 3; }
 trap 'rm -rf "$WORK"' EXIT
 TAB="$(printf '\t')"
 nrej=0
@@ -92,7 +97,7 @@ take() {
     nrej=$((nrej + 1))
   fi
 }
-git log --reverse --format='%H' $RANGE 2>/dev/null > "$WORK/commits"
+git log --reverse --format='%H' "$RANGE" 2>/dev/null > "$WORK/commits"
 while IFS= read -r h; do
   git log -1 --format='%B' "$h" | grep -E '^Spec: ' | sed -E 's/^Spec: //' > "$WORK/trailers"
   while IFS= read -r v; do
@@ -121,13 +126,14 @@ while IFS= read -r h; do
       take "$v" git -C "$top" show "$R_END:$v"
       continue
     fi
-    [ -f "$top/$v" ] || continue
+    # 보통 파일이 아니면(없음 · 디렉토리 · glob · pathspec 마법) 범위 모드처럼 거부로 센다.
+    [ -f "$top/$v" ] || { nrej=$((nrej + 1)); continue; }
     real="$(python3 -I -X utf8 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$top/$v")"
     case "$real" in
       "$root"/*) ;;
       *) nrej=$((nrej + 1)); continue ;;
     esac
-    [ -f "$real" ] || continue
+    [ -f "$real" ] || { nrej=$((nrej + 1)); continue; }
     rel="${real#"$root"/}"
     # `.git/` 는 추적 검사가 이미 막지만(HEAD 트리에 없다) 깊이 방어로 따로 거부한다.
     case "$rel" in
@@ -164,7 +170,7 @@ fi
 # ── 2. 커밋 메시지 + 열린 PR 본문 ─────────────────────────────────────
 {
   echo "## 커밋 메시지"
-  git log --format='- %h %s%n%w(0,2,2)%b' $RANGE 2>/dev/null
+  git log --format='- %h %s%n%w(0,2,2)%b' "$RANGE" 2>/dev/null
 } > "$OUT"
 
 # 범위 모드는 열린 PR 이 없는 범위다 — gh 를 부르지 않고 그 사실을 싣는다.

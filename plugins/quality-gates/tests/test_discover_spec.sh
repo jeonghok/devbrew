@@ -159,6 +159,41 @@ case_range_symlink_spec_rejected() {
 }
 case_range_symlink_spec_rejected
 
+# 범위 모드 — 트리 경로 · glob · pathspec 마법은 거부, `./` 는 떼고 같은 설계문서로 한 번만.
+# 범위 값은 한 번 풀어 얼린다 — 줄인 커밋 id · 브랜치 이름도 받는다.
+case_range_tree_glob_dotslash() {
+  local X="$T/rtree"; newrepo "$X"
+  local S; S="$(git -C "$X" rev-parse HEAD)"
+  printf '# A\n- a\n' > "$X/$SP/a-design.md"; git -C "$X" add -A
+  gc "$X" -m "feat: a" -m "Spec: $SP
+Spec: $SP/*.md
+Spec: :(top)$SP/a-design.md
+Spec: ./$SP/a-design.md
+Spec: $SP/a-design.md"
+  git -C "$X" checkout -q -b topic
+  out="$( cd "$X" && PATH="$NOGH" bash "$D" --intent-out "$T/intent.md" --range "$(git -C "$X" rev-parse --short "$S")" topic )"; rc=$?
+  assert_eq "$rc" "0" "범위 모드 — 줄인 id · 브랜치 이름도 범위로 받는다"
+  assert_eq "$(printf '%s' "$out" | spec_list)" "$SP/a-design.md" "범위 모드 — ./ 를 떼면 같은 설계문서라 한 번만 싣는다"
+  assert_eq "$(printf '%s' "$out" | key intent_note)" "spec 경로 거부 3개" "범위 모드 — 트리 경로 · glob · pathspec 마법 셋을 거부로 센다"
+  assert_file_absent "$T/intent.md" 'qg-spec' "범위 모드 — 하나로 세어 구분 줄이 없다"
+}
+case_range_tree_glob_dotslash
+
+# 범위 모드 아님 — 보통 파일이 아닌 트레일러(디렉토리 · glob · pathspec 마법 · 없는 파일)도 거부로 센다
+case_nonrange_nonfile_rejected() {
+  local X="$T/nfile"; newrepo "$X"
+  printf '# A\n- a\n' > "$X/$SP/a-design.md"; git -C "$X" add -A
+  gc "$X" -m "feat: a" -m "Spec: $SP
+Spec: $SP/*.md
+Spec: :(top)$SP/a-design.md
+Spec: $SP/missing-design.md
+Spec: $SP/a-design.md"
+  out="$( cd "$X" && PATH="$NOGH" bash "$D" --intent-out "$T/intent.md" --base "$(git -C "$X" rev-parse HEAD~1)" )"
+  assert_eq "$(printf '%s' "$out" | spec_list)" "$SP/a-design.md" "보통 파일이 아닌 트레일러는 빼고 정상은 싣는다"
+  assert_eq "$(printf '%s' "$out" | key intent_note)" "spec 경로 거부 4개" "디렉토리 · glob · pathspec 마법 · 없는 파일을 거부로 센다"
+}
+case_nonrange_nonfile_rejected
+
 # 범위 모드 — 트레일러 없는 범위는 커밋 메시지만, gh 는 부르지 않는다
 case_range_no_gh_call() {
   local X="$T/rnogh"; newrepo "$X"
@@ -186,8 +221,11 @@ case_base_and_range_exclusive() {
 case_base_and_range_exclusive
 
 # review-criteria.md — 설계문서가 여럿일 때 막는 지적의 근거 표기
-assert_file_grep "$SCRIPT_DIR/../references/review-criteria.md" '^의도 출처에 설계문서가 여럿이면\(구분 줄 `<!-- qg-spec k/N: 경로 -->`\), 막는 지적마다 summary 끝 괄호에 근거 문서의 경로와 AC 번호를 단다' \
-  "기준 블록에 「설계문서가 여럿이면」 근거 표기 줄이 있다"
+assert_file_grep "$SCRIPT_DIR/../references/review-criteria.md" '^의도 출처에 설계문서가 여럿이면' \
+  "기준 블록에 「설계문서가 여럿이면」 줄이 있다"
+# 근거 표기는 의도 출처의 요구를 어긴 막는 지적에만 — 막는 지적 전부로 넓어지지 않는다.
+assert_file_grep "$SCRIPT_DIR/../references/review-criteria.md" '^의도 출처에 설계문서가 여럿이면\(구분 줄 `<!-- qg-spec k/N: 경로 -->`\), 의도 출처의 요구를 어긴 막는 지적마다 summary 끝 괄호에 근거 문서의 경로와 AC 번호를 단다\(예: `\(docs/a-design\.md AC3\)`\)\.$' \
+  "근거 표기 줄은 의도 출처의 요구를 어긴 막는 지적으로 좁혀져 있다"
 
 # 2 — 트레일러 없음 · gh 없음 → 커밋 메시지만, 그 사실을 공시
 git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "fix: third (no trailer)"
@@ -225,6 +263,7 @@ touch "$R/docs/superpowers/specs/new-design.md"
 out="$( cd "$R" && PATH="$NOGH" bash "$D" --intent-out "$T/intent.md" --base "$BASE2" )"
 assert_file_absent "$T/intent.md" '^- new$' "가리킨 파일이 없으면 다른 spec 을 mtime 으로 고르지 않는다"
 assert_eq "$(printf '%s' "$out" | key intent_source)" "commits" "커밋 메시지로 내려간다"
+assert_eq "$(printf '%s' "$out" | key intent_note)" "spec 경로 거부 1개" "가리킨 파일이 없으면 거부로 공시한다(조용히 버리지 않는다)"
 assert_not_grep "$(grep -v '^[[:space:]]*#' "$D")" 'mtime|stat -|-nt |getmtime|st_mtime|pick_newest' "스크립트 코드가 mtime 을 읽지 않는다"
 assert_grep "$(grep -v '^[[:space:]]*#' "$D")" 'Spec: ' "양의 짝 — 코드 코퍼스가 비지 않았다(트레일러 추출이 보인다)"
 
