@@ -188,6 +188,8 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 - B7 · 결정 · 2026-10-19 · 원칙 7(kill switch 개명 별칭) · 8(superpowers 를 덮지 않고 자기 몫을) 을 CLAUDE.md 에 넣지 않음 — 「여덟째는 넣지마 그리고 일곱째도 넣는건 좀 그러네」(B5 는 이로써 문면 없음)
 - 메모리 — 「메모리 경우는 정리만 잘해둬 원래 클로드 원칙 잇자나」
 - D1.1 · r1 · adopt · c43e2738#r1.1 · "고친다 — 이력 아닌 글만 정리 (권장)" — 에픽 묶음은 플러그인 README 와 CHANGELOG 의 낡은 개념 정리를 이 에픽의 일로 넘겼는데, 설계는 CHANGELOG 정리를 사용자 결정 기록 없이 범위 밖으로 뺐다.
+- docreview 계수 — spec-distill/2026-10-19-principles-docs-cleanup-desig-24d551eddb1c50c0 r1: advice_new=1 · advice_repeat=0 · mc_preexisting_new=0
+- docreview 계수 — spec-distill/2026-10-19-principles-docs-cleanup-desig-24d551eddb1c50c0 r2: advice_new=5 · advice_repeat=1 · mc_preexisting_new=0
 
 ## 번호 대조
 
@@ -229,9 +231,21 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 - 설계문서 점검(builder check) 질문 셋은 대화 · 레포에서 답이 나오거나 계획이 정해도 되는 것이라 지휘 세션이 정했다(지휘자 판정): ① 「다른 레포」는 두 갈래 모두 — §1 두 갈래 문단 · AC1a ② 크기 규칙은 정리 대상 문서에만, 넘치면 원칙 줄을 짧은 꼴로 ③ `test_readme_sync.sh` 는 이력 면제만 없앤다(새 검사 없음). 사실 고침: 철학 문서에 Structural Mechanisms 절은 있다 — case study 만 없다.
 
 - 흐름: 설계 흐름(brainstorming → spec-review → 계획 → 구현). brainstorming 은 superpowers 7.0.0 — 설계문서 점검(builder check) 뒤 문서 승인 자리에서 spec-review 를 부른다.
+- spec 승인 · 2026-10-19 · 「① /compact 후 계획으로 (권장)」
 
 ## Metadata
 
 - 에픽: R11 · 브랜치 `feature/principles-docs-cleanup`
 - 묶음: `docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/R11.md`
 - 조사 기록(레포 밖): `~/.claude/sdd-mirror/epic-decisions/r11/docs-recon.md` · `memory-recon.md`
+
+### Deferred to plan
+
+| # | 항목 |
+|---|---|
+| fccf272b#r1.1 | 참고(ambiguity) #acceptance-criteria — 크기 기준이 CLAUDE.md 를 두고 '정리 전보다 작다'와 '정리 전 크기 이하'로 둘로 갈려, 같은 크기면 통과인지 실패인지 정할 수 없다. |
+| daa1d4a8#r2.1 | 참고(data_flow) #5-넘김--다른-에픽-몫 — 넘김 행 하나와 앞으로 생길 대조표 빈칸이 받는 곳을 「지휘자 수리 PR(R5 후속)」으로 적었는데, 이 받는 곳은 로드맵에도 R5 설계문서에도 없고 이 설계문서에만 있습니다. 그래서 받았는지 확인할 기록이 없습니다. — 고치면: 받는 곳을 리포에 기록이 있는 자리로 바꿉니다. (가) 지휘자 수리를 재분해 절차(redecompose.md)로 로드맵 에픽에 등록해 묶음과 설계문서를 갖게 하거나, (나) 넘길 항목을 이미 열린 에픽(R8 · R10 등) 가운데 그 파일을 맡을 곳으로 보냅니다. 어느 쪽이든 §5 · `## 미룸` · §1 두 갈래 문단의 받는 곳 표기를 같이 맞춥니다. |
+| 88c5c9a0#r2.1 | 참고(feasibility) #상류--하류-연계 — 헌장 문구를 읽는 파일이 잘못 적혀 있습니다. 실제로는 회귀 테스트가 헌장을 읽고, 검사 스크립트는 코드에 고정된 목록을 사용합니다. — 고치면: `plugin-audit`의 검사 목록은 `check-shape-completeness.py`에 고정되어 있고, `tests/test_check_shape_completeness.py`의 `test_checklist_synced_with_claude_md`가 CLAUDE.md의 대응 문구를 읽어 확인한다. |
+| a52f1c68#r2.1 | 참고(ambiguity) #3-지울-낡은-개념 — 크기 목표는 정리 대상 문서마다 정리 전보다 작아야 한다고 합니다(AC5). 그런데 철학 문서는 원칙 여섯의 이유 · 배경을 새로 받아야 하고(AC2), 넘칠 때 무엇부터 줄일지는 CLAUDE.md 에만 적혀 있고 철학 문서에는 없습니다. — 고치면: §3 크기 목표에 철학 문서가 넘칠 때의 순서를 한 줄 더합니다. 예: 원칙마다 이유를 기존 P# 안 한 문장으로 줄이고, 그래도 넘치면 그 사실과 전후 크기를 PR 본문에 적어 사용자에게 보입니다. |
+| 0b618227#r2.1 | 참고(testing) #acceptance-criteria — 이번에 사용자가 고른 CHANGELOG 정리(이력이 아닌 낡은 글만 정리, 없으면 「없음」)를 확인할 수용 기준이 없고, Goals 에도 빠져 있습니다. — 고치면: Goals 둘째 줄에 CHANGELOG 의 이력이 아닌 글을 더하고, AC 하나를 둡니다: 「플러그인 CHANGELOG 넷마다 이력이 아닌 낡은 글을 정리했거나, PR 본문에 그 CHANGELOG 는 「없음」이라고 적혀 있다」. |
+| 70cfa8df#r2.1 | 참고(handoff_incomplete) #verification-plan — 지울 줄을 고정하는 테스트(핀 락)를 찾을 때 리포 밖 조사 기록(~/.claude/sdd-mirror/...)의 표를 쓰라고 합니다. 그런데 계획 · 구현 agent 는 작업 폴더 밖 파일을 못 읽을 수 있고, §3 목록이 그 표 대신 범위 전체인지도 적혀 있지 않습니다. — 고치면: §3 머리에 「아래 목록이 이 에픽 범위의 전부다 — 조사 표는 참고용이고, 핀 락은 grep 으로 찾는다」를 적고, Verification Plan 의 괄호를 grep 기준으로 고칩니다. |
