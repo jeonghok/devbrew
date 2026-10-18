@@ -52,7 +52,7 @@
 너는 <에픽> 의 계획 agent 다. 자리: <에픽 worktree 절대경로>(브랜치 <브랜치>). 이 worktree 밖의 git 은 조작하지 않는다.
 흐름: <고른 흐름> — <이유>. 입력: 설계문서 <설계문서 절대경로>. 승인 게이트가 낸 계획 agent 의 입력 줄: <그 줄 그대로>.
 superpowers:writing-plans 를 단일 세션과 똑같이, 단계를 빼거나 다시 쓰지 말고 끝까지 돈다. 계획을 커밋한 뒤
-python3 <SD>/scripts/check_bundle_coverage.py --plan <설계문서> <계획>[ --acs "<이 계획 몫 AC>"] 를 돌려 빠진 AC 를 계획에 더하고 그 첫 줄을 보고한다.
+python3 "<SD>"/scripts/check_bundle_coverage.py --plan <설계문서> <계획>[ --acs "<이 계획 몫 AC>"] 를 돌려 빠진 AC 를 계획에 더하고 그 첫 줄을 보고한다.
 writing-plans 가 끝에 묻는 질문(계획 검토 · 실행 방식)에서 멈추고 (a) 사람에게 보일 쉬운 요약 (b) 질문 원문을 함께 돌려보낸다.
 skill 안의 테스트 실행도 그대로 둔다. 지휘 세션이 같은 worktree 의 설계문서를 고칠 수 있으니 그 파일을 되돌리지 않는다.
 금지: 공유 임시 폴더 glob 삭제 · git stash · 다른 worktree 의 git · HEAD 뒤로 옮기기. 커밋은 pathspec. TMPDIR=<이 agent 폴더>.
