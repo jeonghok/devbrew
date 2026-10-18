@@ -701,5 +701,34 @@ class SharedGrammar(unittest.TestCase):
         self.assertIs(roadmap_model.section4_items, B.section4_items)
 
 
+class DecisionHeadIsLinear(unittest.TestCase):
+    """결정 머리 정규식은 입력 길이에 선형이다 — 숫자 뒤 `.` 가 두 갈래로 읽히면 지수 시간이다(보안 리뷰)."""
+
+    PROBES = (
+        "'1.' * 40 + 'x'",
+        "'- ' + ', '.join(['10.0.0.1'] * 10)",
+        "'- ' + ' · '.join(['2026.10.19'] * 12)",
+    )
+
+    def _run(self, expr):
+        import subprocess
+        code = ("import sys; sys.path.insert(0, %r); import brief_body as B; "
+                "print(B.decision_shaped(%s))" % (str(Path(B.__file__).resolve().parent), expr))
+        try:
+            r = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=5)
+        except subprocess.TimeoutExpired:
+            self.fail("5초 안에 끝나지 않았다(지수 시간): " + expr)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout.strip()
+
+    def test_long_dotted_prefixes_finish_fast(self):
+        for expr in self.PROBES:
+            self.assertEqual(self._run(expr), "False", expr)
+
+    def test_positive_pair_real_decision_head_still_read(self):
+        self.assertTrue(B.decision_shaped("1. OQ3: 결정"))
+        self.assertTrue(B.decision_shaped("- OQ3 [해결 ⟨S2⟩]"))
+
+
 if __name__ == "__main__":
     unittest.main()
