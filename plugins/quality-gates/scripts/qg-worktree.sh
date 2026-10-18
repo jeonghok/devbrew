@@ -9,13 +9,16 @@
 #                                -> echoes absolute worktree path; detached at merge_base,
 #                                   NO working-tree overlay (baseline must not inherit
 #                                   HEAD's uncommitted changes)
-#   create-head <sealed-sha> <session-id> [--topic <topic-key>]
+#   create-head <sealed-sha> <session-id> [--topic <topic-key> | --range <range-scope-file>]
 #                                -> echoes absolute worktree path; detached at the given
-#                                   commit. Without --topic: re-seals the working tree
+#                                   commit. Without a flag: re-seals the working tree
 #                                   (seal-worktree.sh) and asserts the trees match. With
 #                                   --topic: re-derives the combined topic tree
 #                                   (topic-head.sh --topic) and asserts the trees match.
-#                                   Either way the sha is not a declared free variable
+#                                   With --range: reads the file resolve-range.sh froze at
+#                                   run start and requires status ok, start != end, and the
+#                                   given commit == its end (no re-derivation from refs).
+#                                   Every way the sha is not a declared free variable
 #                                   (§6.4.1). No sandbox required.
 #
 # 샌드박스(create-sandbox · mutation-guard)는 plugins/plugin-audit/scripts/audit-sandbox.sh 로 옮겨 갔다.
@@ -91,15 +94,33 @@ case "${1:-}" in
     # 대조는 거부만 할 수 있고 선택은 못 한다: 값의 출처는 여전히 호출자다.
     # 선언 경로(--topic)의 HEAD 축은 봉인이 아니라 «봉인 + 구성원 끝점»을 합친 트리다.
     # 같은 규율 — 기대 트리를 지금 다시 도출해 대조한다(topic-head.sh 가 봉인부터 다시 뜬다).
-    ch_topic=""
+    # 범위 경로(--range)의 HEAD 축은 resolve-range.sh 가 실행 시작에 얼린 끝 커밋이다.
+    # 지금 작업 트리 · ref 를 다시 뜨지 않는다 — 실행 중 fetch 로 ref 가 움직여도 얼린 값만 받는다.
+    ch_topic="" ch_range=""
     if [[ $# -eq 5 && "$4" == "--topic" && -n "$5" ]]; then
       ch_topic="$5"
+    elif [[ $# -eq 5 && "$4" == "--range" && -n "$5" ]]; then
+      ch_range="$5"
     elif [[ $# -ne 3 ]]; then
-      die "usage: create-head <sealed-sha> <session-id> [--topic <topic-key>]"
+      die "usage: create-head <sealed-sha> <session-id> [--topic <topic-key> | --range <range-scope-file>]"
     fi
     git rev-parse --verify --quiet "$2^{commit}" >/dev/null \
       || die "not a commit: $2"
-    if [[ -z "$ch_topic" ]]; then
+    if [[ -n "$ch_range" ]]; then
+      [[ -f "$ch_range" ]] \
+        || die "range scope not ok: 범위 파일이 없다 — $ch_range"
+      ch_r_mode=$(sed -n 's/^mode: //p' "$ch_range" | head -1)
+      ch_r_status=$(sed -n 's/^status: //p' "$ch_range" | head -1)
+      ch_r_start=$(sed -n 's/^start: //p' "$ch_range" | head -1)
+      ch_r_end=$(sed -n 's/^end: //p' "$ch_range" | head -1)
+      [[ "$ch_r_mode" == "range" && "$ch_r_status" == "ok" ]] \
+        || die "range scope not ok (mode: ${ch_r_mode:-?}, status: ${ch_r_status:-?}) — 풀린 범위가 없어 HEAD 축을 만들지 않는다"
+      [[ -n "$ch_r_start" && "$ch_r_start" != "-" && -n "$ch_r_end" && "$ch_r_end" != "-" \
+         && "$ch_r_start" != "$ch_r_end" ]] \
+        || die "range scope not ok (start: ${ch_r_start:-?}, end: ${ch_r_end:-?}) — 시작 · 끝이 둘 다 있고 달라야 한다"
+      [[ "$(git rev-parse --verify --quiet "$2^{commit}")" == "$ch_r_end" ]] \
+        || die "range end mismatch: '$2' is not the frozen end commit ($ch_r_end) — the HEAD axis must be built from the range file's end, not from the start, a moved ref, or a stale value"
+    elif [[ -z "$ch_topic" ]]; then
       ch_expected=$(bash "$(dirname "${BASH_SOURCE[0]}")/seal-worktree.sh" seal "$3") \
         || die "cannot re-seal the working tree to verify the HEAD axis"
       [[ "$(git rev-parse "$2^{tree}")" == "$(git rev-parse "$ch_expected^{tree}")" ]] \
