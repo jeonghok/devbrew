@@ -25,7 +25,7 @@ for lit in '「지금 답할 수 있나」' '배경과 함께 하나씩' '첫 �
 for lit in '한 번에 한 에픽씩' '다른 세션을 열라는 줄을 주지 않는다' '`AskUserQuestion` 으로 승인받는다' '`epic-handoff.md`' \
            'worktree-path --name <이름>' '하니스의 새 worktree 만들기를 쓸 수 없어서' '옮기기 전에 지금 자리의 쓰기(커밋 포함)를 끝낸다' \
            '진입 사전 검사 줄의 `root=` 가 그 worktree 인지 확인한 뒤 리뷰한다' '리뷰 원장이 라운드 · 상한을 잇는다' \
-           'ledger record --spec <설계문서> --approval' '규모(몇 agent · 무엇)를 알린다'; do once 3 "$lit"; done
+           'ledger record --spec <설계문서> --approval' '규모(몇 agent · 무엇)를 알린다' '이 턴에는 계획 agent 를 띄우지 않는다'; do once 3 "$lit"; done
 for lit in '실행 방식은 writing-plans 가 권하는 방식이고, 계획 검토는 계획에 설계에 없던 결정이 있을 때만 기다린다.' \
            '계획을 쓴 agent 가 스스로 가르지 않는다' '답 전에는 그 에픽의 구현을 보내지 않는다' '그 에픽만 멈추고' '다른 에픽은 계속한다' \
            'ledger rulings' '판정 줄 — 셀 수 없음' 'check_bundle_coverage.py --impl' 'ledger write-sections' 'ledger flush' '같은 worktree 에 두 writer 를 두지 않는다'; do once 4 "$lit"; done
@@ -60,7 +60,7 @@ if s < 0 or e < 0 or t.count("턴을 끝낸다") != 1:
 seg = t[s:e]
 ks = ["미커밋 확인", "ledger record --spec <설계문서> --approval", "worktree 에서 커밋", "기계 상태 저장", "두 줄(`/compact` 와 `/spec-distill:epic-conductor <로드맵>`)"]
 ix = [seg.find(k) for k in ks]
-sent = any(v in seg for v in ("계획 agent 를 보내", "계획 agent 를 그 에픽", "계획 agent 를 띄운"))
+sent = "계획 agent" in seg.replace("계획 agent 의 입력", "")
 c = t.find("「여기서 계속」 이면", e)
 cont = t[c:t.find(".", c)] if c >= 0 else ""
 print("yes" if min(ix) >= 0 and ix == sorted(ix) and not sent and "계획 agent 를 보내" in cont else "no")' "$1"
@@ -70,9 +70,19 @@ OLD_STOP='① · ② 면 이 세션은 정리만 하고 멈춘다 — 계획 age
 assert_eq "$(stop_order "$OLD_STOP")" "no" "양성 대조: ① · ② 문장 안에서 계획 agent 를 보내면 no"
 NO_SAVE='① · ② 면 이 세션은 정리만 하고 멈춘다 — 미커밋 확인 → ledger record --spec <설계문서> --approval → worktree 에서 커밋 → 두 줄(`/compact` 와 `/spec-distill:epic-conductor <로드맵>`) → 거기서 턴을 끝낸다. 「여기서 계속」 이면 같은 턴에 계획 agent 를 보내고 이어 간다.'
 assert_eq "$(stop_order "$NO_SAVE")" "no" "양성 대조: 기계 상태 저장이 빠지면 no"
+SYN='① · ② 면 이 세션은 정리만 하고 멈춘다 — 미커밋 확인 → ledger record --spec <설계문서> --approval → worktree 에서 커밋 → 기계 상태 저장(계획 agent 에게 입력 줄을 넘기고) → 두 줄(`/compact` 와 `/spec-distill:epic-conductor <로드맵>`) → 거기서 턴을 끝낸다. 「여기서 계속」 이면 같은 턴에 계획 agent 를 보내고 이어 간다.'
+assert_eq "$(stop_order "$SYN")" "no" "양성 대조: ① · ② 문장 안의 계획 agent 동의어 전달도 보내기로 센다"
 GOOD='① · ② 면 이 세션은 정리만 하고 멈춘다 — 미커밋 확인 → ledger record --spec <설계문서> --approval → worktree 에서 커밋 → 기계 상태 저장 → 두 줄(`/compact` 와 `/spec-distill:epic-conductor <로드맵>`) → 거기서 턴을 끝낸다. 「여기서 계속」 이면 같은 턴에 계획 agent 를 보내고 이어 간다.'
 assert_eq "$(stop_order "$GOOD")" "yes" "양성 짝: 규칙대로 쓴 문장은 yes"
 assert_not_contains "$(step 3)" '계획 agent 를 보내고 기록을 커밋하고' "걸음 3: ① · ② 에서 계획 agent 를 먼저 보내던 옛 문장이 없다"
+# Ruling R42: 계획 agent 는 같은 에픽 · 일로 살아 있는 agent 가 없을 때만 보낸다(두 writer 금지)
+GUARD_RE='live-agent --roadmap <로드맵> --epic <에픽> --work 계획` 이 1'
+assert_contains "$(step 1)" "$GUARD_RE" "걸음 1: 계획 agent 보내기 앞에 live-agent 확인"
+assert_contains "$(step 3)" "$GUARD_RE" "걸음 3: 보내기 앞에 live-agent 확인"
+HAND="$(awk '$0=="## 손으로 따르는 절차"{f=1;next} f' "$CD" | grep -E '^3\. \*\*흐름과 설계')"
+assert_contains "$HAND" "$GUARD_RE" "손 절차 3: 보내기 앞에 live-agent 확인"
+assert_contains "$HAND" '--section "살아 있는 agent"' "손 절차 3: 보낸 뒤 살아 있는 agent 에 적는다"
+assert_contains "$(step 3)" '--section "살아 있는 agent"' "걸음 3: 보낸 뒤 살아 있는 agent 에 적는다"
 assert_contains "$(step 1)" '「spec 승인됨(…) · 계획 없음」' "걸음 1: 승인됐고 계획이 없는 에픽에 계획 agent 를 보낸다"
 assert_contains "$(step 3)" '압축 뒤 다시 불렀을 때나 「여기서 계속」 을 골랐을 때뿐이다' "걸음 3: 다음 에픽의 설계로 가는 때를 한정한다"
 assert_contains "$(step 5)" '걸음 6 의 충돌 처리' "걸음 5: 충돌 처리는 걸음 6 을 가리킨다"

@@ -648,6 +648,39 @@ class Pending(Repo):
         self.assertIn("- spec 승인 · 2026-10-18 · 「예」", spec.read_text(encoding="utf-8"))
 
 
+class LiveAgent(Repo):
+    def _add(self, cells):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.assertEqual(self.cli("add", "--roadmap", RM, "--session", SID, "--section", "살아 있는 agent",
+                                  "--cells", cells)[0], 0)
+
+    def _ask(self, epic, work):
+        return self.cli("live-agent", "--roadmap", RM, "--epic", epic, "--work", work)
+
+    def test_no_row_is_rc1(self):
+        self.assertEqual(self._ask("A1", "계획")[0], 1)
+
+    def test_matching_row_is_rc0_and_printed(self):
+        self._add("plan-a1 · A1 · 계획 · /w/a1 · 2026-10-18")
+        rc, out = self._ask("A1", "계획")
+        self.assertEqual(rc, 0)
+        self.assertIn("plan-a1 · A1 · 계획 · /w/a1", out)
+
+    def test_other_epic_or_other_work_is_rc1(self):
+        self._add("plan-a1 · A1 · 계획 · /w/a1 · 2026-10-18")
+        self.assertEqual(self._ask("A2", "계획")[0], 1)
+        self.assertEqual(self._ask("A1", "구현")[0], 1)
+
+    def test_broken_machine_state_is_rc3_not_none(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        path = L.mpath(self.w, RM)
+        path.write_text("깨진 글\n", encoding="utf-8")
+        rc, out = self._ask("A1", "계획")
+        self.assertEqual(rc, 3)
+        self.assertNotIn("agent 없음", out)
+        self.assertEqual(path.read_text(encoding="utf-8"), "깨진 글\n")
+
+
 class Audit(unittest.TestCase):
     def test_handoff_section_and_after_review(self):
         body = ("## 요약\n\n가\n\n## 통합 리뷰 인계\n\n- 이 PR 이 고침: x\n- R3 이 고침: y\n\n## 기타\n\n"

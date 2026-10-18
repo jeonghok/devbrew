@@ -832,6 +832,16 @@ def c_pending(root, a) -> int:
     return 0
 
 
+def c_live_agent(root, a) -> int:
+    """살아 있는 agent 행 가운데 에픽 · 일이 같은 것을 낸다 — 0 있음 · 1 없음 · 3 기계 상태를 못 읽음."""
+    rows = [r for r in load(root, a.roadmap)["살아 있는 agent"] if r["에픽"] == a.epic and r["일"] == a.work]
+    for r in rows:
+        print(" · ".join(r[c] for c in cs.COLUMNS["살아 있는 agent"]))
+    if not rows:
+        print("%s · %s 로 살아 있는 agent 없음" % (a.epic, a.work))
+    return 0 if rows else 1
+
+
 def c_pr_handoffs(root, a) -> int:
     _gh()  # gh 가 없으면 상태 계산보다 먼저 강등을 알린다
     b = _block(_status(root, a.roadmap), a.epic)
@@ -1106,6 +1116,8 @@ COMMANDS = {
                                                     p.add_argument("--counts", required=True))),
     "flush": (c_flush, lambda p: (_rs(p), p.add_argument("--epic", required=True), p.add_argument("--spec", required=True))),
     "pending": (c_pending, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic"))),
+    "live-agent": (c_live_agent, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True),
+                                            p.add_argument("--work", required=True))),
     "pr-handoffs": (c_pr_handoffs, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True))),
     "audit": (c_audit, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True))),
     "review-pack": (c_review_pack, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True),
