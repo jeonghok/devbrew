@@ -1,0 +1,51 @@
+리뷰를 마쳤다. 층 1.
+
+```docreview-layer1
+- ref: c0
+  category: scope
+  anchor: "#3-non-goals"
+  disposition: decide
+  summary: "Non-goals 가 브리프의 범위 항목 하나를 조용히 뺐다"
+  evidence: "브리프 §2 C3 vs 문서 §3"
+```
+
+빠뜨린 것을 덧붙인다.
+
+```docreview-layer1
+- ref: c0
+  category: scope
+  anchor: "#3-non-goals"
+  disposition: decide
+  summary: "Non-goals 가 브리프의 범위 항목 하나를 조용히 뺐다"
+  evidence: "브리프 §2 C3 vs 문서 §3"
+- ref: c5
+  category: goal_fit
+  anchor: "#2-goals"
+  disposition: decide
+  summary: "목표가 브리프와 다른 문제를 겨눈다"
+  evidence: "브리프 §1 vs 문서 §2"
+```
+
+층 2.
+
+```docreview-layer2
+- ref: c1
+  category: placeholder
+  anchor: "#12-files-to-modify"
+  disposition: fix
+  summary: "c.py 가 목록에 없다"
+```
+
+```docreview-layer2
+- ref: c1
+  category: ambiguity
+  anchor: "#2-goals"
+  disposition: fix
+  summary: "목표 B 가 두 가지로 읽힌다"
+- ref: c2
+  category: ambiguity
+  anchor: "#2-goals"
+  disposition: ask
+  summary: "목표 B 를 둘로 나누나?"
+  blocks: [c1]
+```
