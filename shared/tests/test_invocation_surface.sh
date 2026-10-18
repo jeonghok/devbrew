@@ -145,6 +145,8 @@ expect_red "$TMP/v-i_qk" I "축 I: 옛 호출 /q""g 뒤에 조사 · 구두점�
 variant i_ok; put "$TMP/v-i_ok/plugins/spec-distill/scripts/q.py" "# .claude/quality-gates/<id> 와 /quality-gates:quality-pipeline 은 옛 이름이 아니다"
 put "$TMP/v-i_ok/plugins/spec-distill/scripts/q.py" "# scripts/qg-gc.py · plugins/qg/scripts · docs/superpowers/interview/x.md 는 경로 조각이다"
 expect_green "$TMP/v-i_ok" "축 I 음성 대조: 새 이름과 상태 경로는 걸리지 않는다"
+variant i_ol; put "$TMP/v-i_ol/plugins/spec-distill/scripts/q.py" '# "/qg-gc.py" 와 `/qg-publish` · `/interview/` 는 이름 · 경로 글자가 이어져 옛 호출이 아니다'
+expect_green "$TMP/v-i_ol" "축 I 음성 대조: 옛 호출 뒤에 이름 · 경로 글자가 이어지면 걸리지 않는다"
 
 variant h2; put "$TMP/v-h2/plugins/spec-distill/commands/sub/x.md" "---"; expect_red "$TMP/v-h2" H "H 깊이: 중첩 commands/ 경로" "commands/ 층"
 variant g4; put "$TMP/v-g4/plugins/spec-distill/skills/spec-review/references/t.md" '`/spec-distil:spec-review` 로'; expect_red "$TMP/v-g4" G "G 오타: 없는 플러그인 완전명" "풀리지 않는다"
