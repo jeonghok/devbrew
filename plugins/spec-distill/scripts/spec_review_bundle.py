@@ -5,11 +5,14 @@
 명령줄:
   spec_review_bundle.py entry --spec <설계문서> [--bundle <묶음|brief>] --root <레포 루트>
   spec_review_bundle.py neighbors --bundle <묶음> --root <레포 루트>
+  spec_review_bundle.py rejected --spec <설계문서> --root <레포 루트>
 
 entry 의 마지막 줄은 `bundle-entry: PROCEED <정답 출처 절대경로 또는 ->` 이거나 `bundle-entry: REFUSE` 다.
 `--bundle` 이 있으면 PROCEED 바로 앞 줄이 `번호 대조 경고 <N>개` 다. `--bundle` 은 리뷰어에게 가지 않는다 —
 그 값이 설계문서 frontmatter `source_interview` 와 같은 파일인지 확인하고 진입 대조 · 로드맵 위치의 입력이 된다.
 neighbors 는 정답 출처가 에픽 묶음이 아니거나 그 에픽이 로드맵에 없으면 아무것도 내지 않는다.
+rejected 는 설계문서 `## 번호 대조` 표의 「기각」 행을 번호 수와 목록으로 낸다(승인 게이트 2단계 앞 글 — N18).
+표 절이 없으면 아무것도 내지 않고, 표를 못 읽으면 「셀 수 없음」 줄이다 — 「없음」과 다르다.
 종료 코드는 0 이다(사용법 오류만 2) — 판정은 줄이 말한다. 읽기만 한다(roadmap_status 의 읽기 전용 git 만 부른다).
 """
 from __future__ import annotations
@@ -27,6 +30,7 @@ from roadmap_model import FormatError, frontmatter, section_body, unquote  # noq
 
 KINDS = ("epic-bundle", "interview-brief")
 DECISION_LINE_RE = re.compile(r"- B\d+ · 결정 · ")
+REJECTED_HEAD = "이 설계가 받지 않기로 한 번호(번호 대조의 기각)"
 
 
 def _resolve(value: str, root: str) -> str:
@@ -133,10 +137,29 @@ def neighbors(bundle: str, root: str) -> list:
     return out + dec
 
 
+def rejected(spec: str, root: str) -> list:
+    """설계문서 `## 번호 대조` 표의 「기각」 행 — 번호 수와 줄마다 번호 · 이유. 표 절이 없으면 빈 목록."""
+    text = _read(_resolve(spec, root))
+    if text is None:
+        return ["%s — 셀 수 없음: 설계문서를 읽지 못했다(%s)" % (REJECTED_HEAD, spec)]
+    try:
+        if section_body(text, cbc.TABLE_HEADING) is None:
+            return []
+        rows = [(ids, cell) for ids, verb, cell in cbc.table_rows(text) if verb.startswith("기각")]
+    except FormatError as exc:
+        return ["%s — 셀 수 없음: %s" % (REJECTED_HEAD, exc)]
+    n = sum(len(ids) for ids, _cell in rows)
+    if not n:
+        return ["%s 없음" % REJECTED_HEAD]
+    head = ("%s %d개 — 반영으로 되돌릴 번호가 있으면 ③ 수정 필요를 고르고 이어지는 질문의 기타 칸에 그 번호를 적는다."
+            % (REJECTED_HEAD, n))
+    return [head] + ["- %s — %s" % (" · ".join(ids), cell) for ids, cell in rows]
+
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(prog="spec_review_bundle.py",
-                                 description="spec-review --bundle: 정답 출처 확인 · 진입 대조 · 로드맵 위치와 이웃 결정.")
+                                 description="spec-review --bundle: 정답 출처 확인 · 진입 대조 · 로드맵 위치와 이웃 결정 · 기각 번호.")
     sub = ap.add_subparsers(dest="cmd", required=True)
     e = sub.add_parser("entry")
     e.add_argument("--spec", required=True)
@@ -145,13 +168,23 @@ def main(argv=None) -> int:
     n = sub.add_parser("neighbors")
     n.add_argument("--bundle", required=True)
     n.add_argument("--root", required=True)
+    r = sub.add_parser("rejected")
+    r.add_argument("--spec", required=True)
+    r.add_argument("--root", required=True)
     args = ap.parse_args(argv)
     try:
-        lines = entry(args.spec, args.bundle, args.root) if args.cmd == "entry" else neighbors(args.bundle, args.root)
+        if args.cmd == "entry":
+            lines = entry(args.spec, args.bundle, args.root)
+        elif args.cmd == "rejected":
+            lines = rejected(args.spec, args.root)
+        else:
+            lines = neighbors(args.bundle, args.root)
     except Exception as exc:  # 확인이 죽어도 조용히 통과로 내지 않는다 — 사유를 줄로 낸다
         if args.cmd == "entry":
             lines = ["[spec-distill] 번호 대조 진입 검사 내부 오류 — %s: %s. --bundle 확인과 번호 대조 없이 리뷰한다."
                      % (type(exc).__name__, exc), "번호 대조 경고 1개", "bundle-entry: PROCEED -"]
+        elif args.cmd == "rejected":
+            lines = ["%s — 셀 수 없음: 내부 오류 %s: %s" % (REJECTED_HEAD, type(exc).__name__, exc)]
         else:
             lines = ["[spec-distill] 로드맵 속 위치를 보일 수 없다 — 내부 오류 %s: %s" % (type(exc).__name__, exc)]
     if lines:
