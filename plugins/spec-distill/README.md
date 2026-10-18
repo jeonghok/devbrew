@@ -94,6 +94,7 @@
 - **Law 1 (Clarity Before Code)** — 이 플러그인이 있는 이유다: 명세가 모호하면 구현으로 가지 않는다. 인터뷰 → brief → design doc → reviewer → human gate. **설계문서에는 필수 섹션 구조 게이트가 없다(3.0.0)** — 그것을 검사하던 코드(spec 모드 검사)는 생산자가 없어 발동하지 않았고 리뷰 훅과 함께 삭제됐다. 설계문서의 명확성은 `doc-critic` 층 2(`placeholder`·`ambiguity`)와 승인 게이트가 판정한다 — 이 리포의 Law 1 필수 섹션 게이트 구현은 0 이다(CHANGELOG `[3.0.0]`).
 - **Law 1 (Clarity) — 문제공간 게이트 (v0.12.0)** — 인터뷰가 끝나려면 다섯 가지 확인(R1–R5: 사용자 말 그대로 · 사례 조사 · 반대 입장 시험 · 해보고 버린 것 · 열린 질문)을 거쳐야 하고, 그것을 `check_brief.py`로 기계가 검사하는 구조 게이트다. 약한 방향(무인용 landscape·un-challenged 의심·빈 시행착오)은 brief 종료를 차단.
 - **Law 1 — 진입 skill 의 본문 전 사전 검사(`!`)가 kill switch 를 모델 판단 밖에서 집행한다.** 끄기로 해 둔 기능은 모델이 마음을 바꿔도 돌지 않는다는 뜻이다 — skill 본문을 읽기 전에 정해진 검사가 먼저 돌아 스위치를 확인한다.
+- **Law 1 — 허용 문법 판독기(`brief_body`)** — brief · seed · audit 는 기계가 쓰는 글이라 판독기가 허용 문법 하나(`scripts/brief_body.py`)로 읽고, 문법 밖은 해석하지 않고 거부한다. 꼴을 막는 정규식을 늘어놓지 않고 읽는 쪽을 하나로 둔다.
 - **Law 2 (Writer/Reviewer 분리)** — `tools:` allowlist frontmatter로 doc-critic(`Read, Grep, Glob`) + doc-critic-web(`Read, Grep, Glob, WebSearch, WebFetch`) + doc-recritic(`Read, Grep, Glob`) + coverage-mapper(`Read, Grep, Glob, WebSearch, WebFetch`) + blind-spot-prober(`Read, Grep, Glob, WebSearch, WebFetch`) + repo-researcher(`Read, Grep, Glob`) + saturation-judge(`Read, Grep, Glob`) agent의 *물리적* 분리. 프롬프트가 아닌 frontmatter scoping이며, **허용할 도구만 적는 방식이라 적지 않은 쓰기·실행·위임 도구는 자동으로 막힌다**(막을 도구만 적는 방식(denylist)은 내일 생길 도구를 오늘 적을 수 없어 기본값이 열림이 되므로 v0.21.0에서 폐기).
 - **Law 2 — 리뷰 진입은 집행이 아니다 (3.0.0)** — 설계문서 리뷰 진입에 훅 강제가 없다. brainstorming 뒤·writing-plans 앞에 `spec-review` 를 부르는 것은 오케스트레이터이고, 근거는 인터뷰 핸드오프 문구와 이 skill 의 description 이다 — 철학 P13(hook = 집행 / skill = capability 표면) 기준으로 이 자리의 집행이 사라졌다. `/brainstorming` 직접 경로는 description 하나에 기대므로 건너뛰는 일이 흔할 것이다 — 그때는 `/spec-distill:spec-review <경로>` 로 부른다. 리뷰어의 물리 분리(`tools:` allowlist)는 그대로다.
 - **Law 3 (Compounding) — 처분 회계(adjudication `Ledger`)** (v0.52.0) — 리뷰가 찾은 결함을 버릴 때마다 장부에 남겨 조용히 사라지지 않게 한다. 버려지는 자리가 `shared/adjudication/adjudication.py` 의 처분을 부른다. 소비자는 문서 리뷰 엔진의 `scripts/docreview_route.py`(`shared/docreview/` 심볼릭 링크 — design doc · brief · seed 세 자리의 finding 이 여기서 라우팅된다) 등이고, 전수 목록은 `tools/adjudication/check_wiring.py` 가 import 로 도출한다 — 여기서 열거하지 않는다. 집행은 `shared/tests/test_adjudication_{wiring,consumed}.sh`. **범위**: `consumer=orchestrator`/`human` 인 dispatch 자리는 `disclosure=` 리터럴 실재까지만 검사된다(CLAUDE.md 축 C 한계) — 이 플러그인의 앵커 다수가 그쪽이다.
@@ -236,6 +237,19 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
 ## Hooks Installed
 
 설치되는 훅이 없다(6.0.0) — 원장 정리는 리뷰 진입(`scripts/ledger_sweep.py`)이 한다. 5.x 의 SessionEnd 훅(끝나는 세션의 폴더 삭제 + TTL-GC)은 다른 세션이 아직 쓰는 리뷰 원장까지 지울 수 있었다. 원장이 문서 단위가 되어 세션 끝에 지울 것이 없고, 지울지는 원장을 여는 자리가 기록된 문서의 존재로 정한다.
+
+## 설정
+
+문서 리뷰 엔진은 값 넷을 쓴다. 환경 변수로 바꾸면 이번 리뷰부터 적용된다. 정하는 순서는 기본 < 프로필 < 진입 < 환경 변수이고, 라운드마다 게이트 둘째 줄에 쓴 값과 그 출처를 밝힌다.
+
+| 환경 변수 | 뜻 | 기본 |
+|---|---|---|
+| `DEVBREW_DOCREVIEW_DETECTORS` | 탐지 리뷰어 수 | 1 |
+| `DEVBREW_DOCREVIEW_REREVIEW_CAP` | 한 문서의 재리뷰 상한(0 이면 재리뷰 없음) | 2 |
+| `DEVBREW_DOCREVIEW_RENDER_CAP` | 조언 목록에 펼치는 지적 수 | 8 |
+| `DEVBREW_DOCREVIEW_SUMMARY_WIDTH` | 지적 요약 줄 너비 | 60 |
+
+정수가 아니거나 범위 밖이면 그 값은 쓰지 않고 이름과 값을 밝히며 멈춘다.
 
 ## 끄는 법
 

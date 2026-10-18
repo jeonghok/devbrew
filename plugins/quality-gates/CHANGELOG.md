@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.0.1] — 2026-10-19
+
+### Changed
+- 공유 리뷰 엔진 링크(`docreview_state.py` · `docreview_route.py` · `docreview_config.py` 등)가 spec-distill 7.4.0 과 같은 바이트를 싣는다. 탐지 리뷰어 여럿 · 엔진 값 넷 · 결정 반대 지적 · 원장 확인값 · 한 줄 문법이 qg 의 문서 비평에도 같이 들어간다.
+
 ## [14.0.0] — 2026-10-18
 
 ### Changed
