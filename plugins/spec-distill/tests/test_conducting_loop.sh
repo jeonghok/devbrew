@@ -47,12 +47,36 @@ t = sys.argv[1]
 a, b = t.find("`pwd` 와 `git rev-parse --show-toplevel` 이 그 worktree 인지 보고"), t.find("확인한 뒤 리뷰한다")
 print("yes" if 0 <= a < b else "no")' "$(step 3)")"
 assert_eq "$order" "yes" "걸음 3: 위치 확인 → root= 확인 → 리뷰 순서"
-# 순서: ① · ② 면 계획 agent 를 보낸 뒤에야 턴을 끝낸다(다음 에픽으로 같은 턴에 가지 않는다)
-order2="$(PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
+# 순서(Ruling R34): ① · ② 면 정리만 하고 멈춘다 — 미커밋 확인 → 승인 줄 기록 · 커밋 → 기계 상태 저장 → 두 줄 → 턴을 끝낸다.
+# 그 문장(「① · ② 면 이 세션은 정리만 하고 멈춘다」 부터 「턴을 끝낸다」 까지) 안에서 계획 agent 를 보내지 않고,
+# 같은 턴에 보내는 길은 「여기서 계속」 문장뿐이다.
+stop_order() {  # stop_order <글> — 규칙대로면 yes
+  PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
 t = sys.argv[1]
-a, b = t.find("계획 agent 를 보내고 기록을 커밋하고 기계 상태를 저장한 뒤"), t.find("턴을 끝낸다")
-print("yes" if 0 <= a < b and t.count("턴을 끝낸다") == 1 else "no")' "$(step 3)")"
-assert_eq "$order2" "yes" "걸음 3: 계획 agent 보내기 → 턴을 끝낸다 순서"
+s = t.find("① · ② 면 이 세션은 정리만 하고 멈춘다")
+e = t.find("턴을 끝낸다", s)
+if s < 0 or e < 0 or t.count("턴을 끝낸다") != 1:
+    print("no"); sys.exit()
+seg = t[s:e]
+ks = ["미커밋 확인", "ledger record --spec <설계문서> --approval", "worktree 에서 커밋", "기계 상태 저장", "두 줄(`/compact` 와 `/spec-distill:epic-conductor <로드맵>`)"]
+ix = [seg.find(k) for k in ks]
+sent = any(v in seg for v in ("계획 agent 를 보내", "계획 agent 를 그 에픽", "계획 agent 를 띄운"))
+c = t.find("「여기서 계속」 이면", e)
+cont = t[c:t.find(".", c)] if c >= 0 else ""
+print("yes" if min(ix) >= 0 and ix == sorted(ix) and not sent and "계획 agent 를 보내" in cont else "no")' "$1"
+}
+assert_eq "$(stop_order "$(step 3)")" "yes" "걸음 3: ① · ② 는 기록 · 커밋 · 저장 · 두 줄 뒤 턴을 끝내고 계획 agent 는 「여기서 계속」 에서만 같은 턴에 보낸다"
+OLD_STOP='① · ② 면 이 세션은 정리만 하고 멈춘다 — 계획 agent 를 보내고 미커밋 확인 → ledger record --spec <설계문서> --approval → worktree 에서 커밋 → 기계 상태 저장 → 두 줄(`/compact` 와 `/spec-distill:epic-conductor <로드맵>`) → 거기서 턴을 끝낸다. 「여기서 계속」 이면 같은 턴에 계획 agent 를 보내고 이어 간다.'
+assert_eq "$(stop_order "$OLD_STOP")" "no" "양성 대조: ① · ② 문장 안에서 계획 agent 를 보내면 no"
+NO_SAVE='① · ② 면 이 세션은 정리만 하고 멈춘다 — 미커밋 확인 → ledger record --spec <설계문서> --approval → worktree 에서 커밋 → 두 줄(`/compact` 와 `/spec-distill:epic-conductor <로드맵>`) → 거기서 턴을 끝낸다. 「여기서 계속」 이면 같은 턴에 계획 agent 를 보내고 이어 간다.'
+assert_eq "$(stop_order "$NO_SAVE")" "no" "양성 대조: 기계 상태 저장이 빠지면 no"
+GOOD='① · ② 면 이 세션은 정리만 하고 멈춘다 — 미커밋 확인 → ledger record --spec <설계문서> --approval → worktree 에서 커밋 → 기계 상태 저장 → 두 줄(`/compact` 와 `/spec-distill:epic-conductor <로드맵>`) → 거기서 턴을 끝낸다. 「여기서 계속」 이면 같은 턴에 계획 agent 를 보내고 이어 간다.'
+assert_eq "$(stop_order "$GOOD")" "yes" "양성 짝: 규칙대로 쓴 문장은 yes"
+assert_not_contains "$(step 3)" '계획 agent 를 보내고 기록을 커밋하고' "걸음 3: ① · ② 에서 계획 agent 를 먼저 보내던 옛 문장이 없다"
+assert_contains "$(step 1)" '「spec 승인됨(…) · 계획 없음」' "걸음 1: 승인됐고 계획이 없는 에픽에 계획 agent 를 보낸다"
+assert_contains "$(step 3)" '압축 뒤 다시 불렀을 때나 「여기서 계속」 을 골랐을 때뿐이다' "걸음 3: 다음 에픽의 설계로 가는 때를 한정한다"
+assert_contains "$(step 5)" '걸음 6 의 충돌 처리' "걸음 5: 충돌 처리는 걸음 6 을 가리킨다"
+assert_contains "$(step 6)" '--section "쌓인 기록" --where' "걸음 6: PR 본문에 실은 쌓인 기록을 뺀다"
 assert_eq "$(printf '%s\n' "$LOOP" | grep -oF -- '설계문서 없이 산출물만 내는 에픽이면 같은 절(지휘 기록 · 판정 · 구현 대조)을 그 산출물 파일에 둔다' | wc -l | tr -d ' ')" "1" "지휘 순환: 설계문서 없는 에픽의 기록 자리"
 assert_eq "$(step 3 | grep -oF -- '브랜치나 worktree 가 이미 있으면(압축 뒤 다시 부른 경우 등) 새로 만들지 않고 그것을 쓴다' | wc -l | tr -d ' ')" "1" "걸음 3: 이미 있는 worktree 는 다시 만들지 않는다"
 assert_eq "$(step 7 | grep -cF -- '끝에서 끝으로 걸어 본 결과' || true)" "1" "걸음 7: 기록 칸의 결과 문구"
@@ -76,6 +100,12 @@ unknown_ledger_cmds() {  # unknown_ledger_cmds <본문> — COMMANDS 에 없는 
 }
 WHOLE="$(cat "$CD")"
 assert_eq "$(unknown_ledger_cmds "$WHOLE")" "" "conducting.md 전체의 ledger 명령 이름은 모두 COMMANDS 의 키다"
+DISP="$(cat "$ROOT/plugins/spec-distill/references/conductor-dispatch.md")"
+assert_eq "$(unknown_ledger_cmds "$DISP")" "" "conductor-dispatch.md 의 ledger 명령 이름도 모두 COMMANDS 의 키다"
+for t in "$WHOLE" "$DISP"; do
+  assert_contains "$(printf '%s\n' "$t" | grep -oE '(conductor_)?ledger(\.py)? [a-z][a-z_-]*' | sort -u)" "resource-dir" "추출이 resource-dir 줄을 본다"
+done
+assert_contains "$LEDGER_KEYS" "resource-dir" "COMMANDS 에 resource-dir 이 있다"
 assert_contains "$(printf '%s\n' "$WHOLE" | grep -oE '(conductor_)?ledger(\.py)? [a-z][a-z_-]*' | sort -u)" "conductor_ledger.py worktree-path" "추출이 worktree-path 줄을 본다"
 mutated="$(printf '%s\n' "$WHOLE" | sed 's/conductor_ledger.py worktree-path/conductor_ledger.py nosuch-cmd/')"
 assert_eq "$(unknown_ledger_cmds "$mutated")" "nosuch-cmd" "변이: worktree-path 이름을 바꾸면 잡는다"

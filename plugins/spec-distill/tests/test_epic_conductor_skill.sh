@@ -18,9 +18,14 @@ fm() { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$1"; }
 assert_eq "$(fm "$SK" | grep -c '^name: epic-conductor$')" "1" "name 이 디렉토리 이름과 같다"
 BODY="$(cat "$SK")"
 sec() { awk -v h="$1" '$0==h{f=1;next} f&&/^##/{exit} f' "$SK"; }
-for lit in 'conductor_ledger.py" roadmaps' '여럿이면 `AskUserQuestion`'; do
+for lit in 'conductor_ledger.py" roadmaps' '여럿이면 `AskUserQuestion`' '앞의 `@` 하나는 뗀다' \
+           'cd "<root>" && git worktree list --porcelain' '그 경로를 품는 worktree(가장 깊은 것)' \
+           '로드맵의 레포 상대경로는 어느 worktree 에서나 같다' '어느 worktree 안에도 없다'; do
   assert_contains "$(sec '### 2. 로드맵 정하기')" "$lit" "로드맵 정하기: $lit"
 done
+assert_not_contains "$(sec '### 2. 로드맵 정하기')" '절대경로면 `root=` 기준 상대경로로' "로드맵 정하기: root= 하나만 기준으로 삼던 옛 문장이 없다(다른 worktree 의 절대경로를 놓친다)"
+CLAIM_LINE="$(sec '### 3. 자리 · 세션 · 표지' | grep -F 'claim --roadmap' || true)"
+assert_contains "$CLAIM_LINE" 'then cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" claim' "자리 · 세션 · 표지: claim 줄도 cd 에 묶였다"
 for lit in 'worktree 안에서 시작했다' '여기서도 지휘한다' 'state_path.py" session-id' 'conductor_ledger.py" claim' '읽기 전용'; do
   assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" "$lit" "자리 · 세션 · 표지: $lit"
 done
@@ -42,6 +47,17 @@ assert_contains "$BODY" 'Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-dispatc
 assert_contains "$BODY" '손으로 따르는 절차' "꺼짐: 손 절차를 가리킨다"
 assert_file_grep "$SK" '^\| `\[devbrew-entry\] disabled …` \| .*손으로 따르는 절차.*멈춘다 \|$' "감시줄 표의 꺼짐 행이 손 절차를 가리키고 멈춘다"
 assert_contains "$BODY" 'subagent_type: "spec-distill:integration-reviewer"' "통합 리뷰어 dispatch 자리"
+assert_contains "$(sec '### 7. 옮김 대조')" 'subagent_type: "spec-distill:relay-checker"' "옮김 대조 dispatch 자리(Ruling R37)"
+assert_contains "$(sec '### 7. 옮김 대조')" '`review_model`' "옮김 대조: 모델 칸은 review_model"
+assert_contains "$(grep -F '[devbrew-entry] disabled' "$SK")" 'spec-distill 전체(리뷰 · 상태 계산 포함)가 꺼져' "꺼짐 행: 플러그인 전체가 꺼진다고 알린다(Ruling R35)"
+assert_contains "$(grep -F '[devbrew-entry] disabled' "$SK")" '지휘자를 부르지 않은 채' "꺼짐 행: 손 절차는 지휘자를 부르지 않고 따른다"
+RC="$ROOT/plugins/spec-distill/agents/relay-checker.md"
+assert_eq "$(fm "$RC" | grep -E '^tools:' )" "tools: Read, Grep, Glob" "relay-checker tools 는 Read, Grep, Glob 뿐"
+assert_eq "$(fm "$RC" | grep -cE '^(disallowedTools|allowed-tools|allowedTools):' || true)" "0" "relay-checker 에 거부 목록 · 오기 필드가 없다"
+for lit in 'You are the relay checker' 'You are responsible for' 'You are NOT responsible for' '확인 못 함 — <이유>' '판정: 일치'; do
+  assert_file_grep "$RC" "$lit" "relay-checker: $lit"
+done
+assert_eq "$(fm "$RC" | grep -c 'tag: relay_files$')" "1" "relay-checker 입력 칸 relay_files"
 assert_not_contains "$BODY" '다른 세션을 열어' "다른 세션을 열라는 말이 없다"
 # agent — 쓰기 도구 없음(Law 2) · 역할 문장 · 입력 칸
 assert_eq "$(fm "$AG" | grep -E '^tools:' )" "tools: Read, Grep, Glob" "agent tools 는 Read, Grep, Glob 뿐"

@@ -26,7 +26,7 @@ allowed-tools:
 예) 전: (codex 정상 · 재비판 정상 · 저자 편집 없음 · ask_open 0건) → 후: 이상 없음.
 <!-- plain-language:end -->
 
-지휘의 걸음은 두 reference 가 담는다 — 이 본문은 진입 · 시작 승인 · 차례 · 통합 리뷰어 dispatch 자리만 둔다.
+지휘의 걸음은 두 reference 가 담는다 — 이 본문은 진입 · 시작 승인 · 차례 · 통합 리뷰어와 옮김 대조의 dispatch 자리만 둔다.
 
 !`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill epic-conductor`
 
@@ -39,7 +39,7 @@ allowed-tools:
 | 그 자리의 내용 | 동작 |
 |---|---|
 | `[devbrew-entry] ok …` | 2 로 간다. 그 줄의 `root=` 값을 아래에서 쓴다 |
-| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고, 지휘자가 꺼져 있으니 이 플러그인 references 폴더의 지휘 절차 파일(conducting.md) 끝 절인 손으로 따르는 절차를 따르라고 한 줄로 알린 뒤 멈춘다 |
+| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고, spec-distill 전체(리뷰 · 상태 계산 포함)가 꺼져 있어 지휘하지 않는다고 알린다 — 지휘자 없이 진행하려면 스위치를 풀고 지휘자를 부르지 않은 채 이 플러그인 references 폴더의 지휘 절차 파일(conducting.md) 끝 절인 손으로 따르는 절차를 따르라고 한 줄로 알린 뒤 멈춘다 |
 | `[devbrew-entry] error …` | `[spec-distill] epic-conductor 사전 검사 실패 — <reason= 값>. 지휘하지 않는다.` 를 내고 멈춘다 |
 | `[shell command execution disabled by policy]` | `[spec-distill] epic-conductor 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 지휘하지 않는다.` 를 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[spec-distill] epic-conductor 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 지휘하지 않는다.` 를 내고 멈춘다 |
@@ -48,7 +48,13 @@ allowed-tools:
 
 ### 2. 로드맵 정하기
 
-받은 인자(`$ARGUMENTS`)를 본다. 토큰이 하나면 로드맵 경로다 — 영문자 · 숫자 · `.` `_` `/` `@` `+` `-` 로만 되어 있고 `-` 로 시작하지 않아야 한다(아니면 셸에 넘기지 않고 `[spec-distill] epic-conductor 인자는 로드맵 경로 하나다 — 받은 것: <인자>.` 를 내고 멈춘다). 절대경로면 `root=` 기준 상대경로로 바꿔 쓴다. 비었으면 아래 펜스로 찾는다(`<root>` 는 감시줄 `root=` 값).
+받은 인자(`$ARGUMENTS`)를 본다. 토큰이 하나면 로드맵 경로다 — 앞의 `@` 하나는 뗀다(첨부 꼴로 받은 경우). 뗀 뒤 영문자 · 숫자 · `.` `_` `/` `@` `+` `-` 로만 되어 있고 `-` 로 시작하지 않아야 한다(아니면 셸에 넘기지 않고 `[spec-distill] epic-conductor 인자는 로드맵 경로 하나다 — 받은 것: <인자>.` 를 내고 멈춘다). 절대경로면 아래 펜스의 `git worktree list --porcelain` 이 낸 worktree 루트들 가운데 그 경로를 품는 worktree(가장 깊은 것)를 찾아 그 루트 기준 상대경로로 바꿔 쓴다 — 로드맵의 레포 상대경로는 어느 worktree 에서나 같다(메인 체크아웃 · 에픽 worktree 모두). 어느 worktree 아래도 아니면 `[spec-distill] epic-conductor 로드맵이 이 레포의 어느 worktree 안에도 없다 — 받은 것: <인자>.` 를 내고 멈춘다.
+
+```bash
+cd "<root>" && git worktree list --porcelain | sed -n 's/^worktree //p'
+```
+
+비었으면 아래 펜스로 찾는다(`<root>` 는 감시줄 `root=` 값).
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -64,7 +70,7 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 cd "<root>" && echo "toplevel=$(git rev-parse --show-toplevel)" && git worktree list --porcelain | head -1
 sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""
 claim_rc=
-if [ -n "$sid" ]; then python3 "$SD/scripts/conductor_ledger.py" claim --roadmap "<로드맵>" --session "$sid"; claim_rc=$?; fi
+if [ -n "$sid" ]; then cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" claim --roadmap "<로드맵>" --session "$sid"; claim_rc=$?; fi
 echo "session=${sid:-없음}"
 echo "claim_rc=${claim_rc:-없음}"
 ```
@@ -130,7 +136,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-dispatch.md
 
 두 파일의 `<SD>` 는 위 `Read` 줄의 플러그인 폴더(이 skill 이 쓰는 spec-distill 의 절대경로)다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
-`conducting.md` 의 `## 지휘 순환` 걸음 1~7 을 차례로 돈다 — 1 맞추기 · 2 사람 몫 모으기 · 3 다음 일 고르기와 보내기 · 4 돌아오기 · 5 머지 전 확인 · 6 머지 뒤 · 7 끝. 하위에게 보내는 글은 `conductor-dispatch.md` 의 틀이고 그 파일의 처분 줄을 보내는 자리마다 단다. `conducting.md` 의 손으로 따르는 절차는 지휘자를 껐을 때의 것이다 — 이 skill 안에서는 따르지 않는다.
+`conducting.md` 의 `## 지휘 순환` 걸음 1~7 을 차례로 돈다 — 1 맞추기 · 2 사람 몫 모으기 · 3 다음 일 고르기와 보내기 · 4 돌아오기 · 5 머지 전 확인 · 6 머지 뒤 · 7 끝. 하위에게 보내는 글은 `conductor-dispatch.md` 의 틀이고 그 파일의 처분 줄을 보내는 자리마다 단다. `conducting.md` 의 손으로 따르는 절차는 지휘자를 부르지 않고 진행할 때의 것이다 — 이 skill 안에서는 따르지 않는다.
 
 ### 6. 통합 리뷰어
 
@@ -147,6 +153,20 @@ Agent(
     <pr_diff>${PR_DIFF}</pr_diff>
     <open_diffs>${OPEN_DIFFS}</open_diffs>
     <handoffs>${HANDOFFS}</handoffs>"
+)
+```
+
+### 7. 옮김 대조
+
+하위가 돌려보낸 사람 자리를 옮긴 에픽이 끝나면(걸음 6) 아래 자리에서 옮김 대조 agent 를 부른다. `RELAY_FILES` 는 그 에픽의 relay 폴더(`conductor_ledger.py resource-dir --roadmap <로드맵> --kind relay --name <에픽>` 이 내는 경로) 안 파일들의 절대경로를 한 줄에 하나씩 적은 글이다. 파일이 없으면 부르지 않고 「옮긴 질문 없음」 한 줄을 그 에픽 이름과 함께 보인다. 모델 칸은 6 과 같다 — 로드맵 frontmatter `review_model` 이 받는 이름이면 그 값을 주고, 아니면 빼서 세션 모델로 가며 그 사실을 알린다. 옮김 대조 결과 전부(일치 · 어긋남 · 확인 못 함)를 그 에픽 이름과 함께 사용자에게 보인다 — 어긋남이 있으면 그 자리를 그 에픽 설계문서 `## 지휘 기록` 에 적는다.
+
+```
+Agent(
+  description: "Check relayed questions against originals",
+  subagent_type: "spec-distill:relay-checker",
+  // **처분** — consumer=orchestrator · fail-closed · disclosure=옮김 대조 결과 전부(일치 · 어긋남 · 확인 못 함)를 그 에픽 이름과 함께 사용자에게 보인다
+  model: "<review_model — 받는 이름일 때만>",
+  prompt: "<relay_files>${RELAY_FILES}</relay_files>"
 )
 ```
 
