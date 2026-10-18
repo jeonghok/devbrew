@@ -40,6 +40,8 @@
 
 ### Task 1: 기준선 · 설계문서 받는 곳 표기 · 플러그인 동작 자리 대조표
 
+**AC:** AC1a · AC7
+
 **Files:**
 - Modify: `docs/superpowers/specs/2026-10-19-principles-docs-cleanup-design.md`(§1 두 갈래 문단 · §5 표 · `## 상류 · 하류 연계` · 새 절 `## 플러그인 동작 자리 대조` · `## 미룸`)
 - Create(추적 안 함): `.claude/spec-distill/principles-docs-cleanup/baseline-failures.txt` · `sizes-before.txt`
@@ -96,6 +98,8 @@ git commit -m "docs(spec): R11 받는 곳 표기 · 플러그인 동작 자리 �
 ---
 
 ### Task 2: CLAUDE.md — 원칙 여섯 줄 · §3 낡은 구절
+
+**AC:** AC1 · AC3 · AC5 · AC8 · AC10
 
 **Files:**
 - Modify: `CLAUDE.md`(Law 3 문단 · `## Plugin Shape` 머리 · 컴포넌트 격리 두 줄 · 훅 공존 줄 · Forbidden Patterns 머리 · Subagent spray · Polite handoff · Korean-primary 줄)
@@ -166,6 +170,8 @@ git commit -m "docs(claude-md): 원칙 여섯 줄 · 낡은 구절 정리" -- CL
 ---
 
 ### Task 3: 철학 문서 — 원칙 이유 · §3 낡은 글
+
+**AC:** AC2 · AC3 · AC5 · AC8
 
 **Files:**
 - Modify: `docs/philosophy/devbrew-harness-philosophy.md`(The Three Laws · P8 · P11 · P13 · P14 · P23 · Load-bearing Meta-Rules · Anti-Pattern Anchors · P5 옮김)
@@ -254,6 +260,8 @@ git commit -m "docs(philosophy): 원칙 이유 흡수 · 겹침과 낡은 앵커
 
 ### Task 4: `docs/plugin-authoring.md` — 개발 교훈 다섯 줄
 
+**AC:** AC6
+
 **Files:**
 - Modify: `docs/plugin-authoring.md`(`**Merge 전:**` 문단 바로 앞)
 
@@ -294,6 +302,8 @@ git commit -m "docs(authoring): devbrew 개발 규칙 다섯 줄" -- docs/plugin
 ---
 
 ### Task 5: spec-distill README · 이력 면제 락 · bump
+
+**AC:** AC4 · AC5 · AC8 · AC9 · AC10
 
 **Files:**
 - Modify: `plugins/spec-distill/README.md` · `plugins/spec-distill/tests/test_readme_sync.sh` · `plugins/spec-distill/.claude-plugin/plugin.json`(7.3.0 → 7.3.1) · `plugins/spec-distill/CHANGELOG.md`
@@ -380,6 +390,8 @@ bash shared/tests/test_changelog_integrity.sh > .claude/spec-distill/principles-
 
 ### Task 6: quality-gates README · bump
 
+**AC:** AC4 · AC5 · AC9
+
 **Files:**
 - Modify: `plugins/quality-gates/README.md` · `plugins/quality-gates/.claude-plugin/plugin.json`(14.0.0 → 14.0.1) · `plugins/quality-gates/CHANGELOG.md`
 
@@ -449,6 +461,8 @@ git commit -m "docs(qg): README 의 없는 agent 설명 · 낡은 이력 정리"
 
 ### Task 7: project-init · plugin-audit README · bump
 
+**AC:** AC4 · AC5 · AC9
+
 **Files:**
 - Modify: `plugins/project-init/README.md` · `plugins/project-init/.claude-plugin/plugin.json`(5.0.3 → 5.0.4) · `plugins/project-init/CHANGELOG.md`
 - Modify: `plugins/plugin-audit/README.md` · `plugins/plugin-audit/.claude-plugin/plugin.json`(1.1.3 → 1.1.4) · `plugins/plugin-audit/CHANGELOG.md`
@@ -510,6 +524,8 @@ git commit -m "docs(plugins): project-init · plugin-audit README 이력 서사 
 ---
 
 ### Task 8: CHANGELOG 이력 아닌 글(D1.1) · 전체 스위트 대조 · 크기표 · 끝에서 끝
+
+**AC:** AC5 · AC8 · D1.1 대조
 
 **Files:**
 - Modify(필요할 때만): `plugins/{spec-distill,quality-gates,project-init,plugin-audit}/CHANGELOG.md` — 이력 아닌 낡은 글이 있을 때
