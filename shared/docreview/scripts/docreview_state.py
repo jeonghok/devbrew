@@ -338,9 +338,14 @@ def _line_hash(line) -> str:
 
 
 def _engine_tracked(st, r) -> bool:
-    """라운드 r 의 diff(스냅숏 r−1 → r)에 들어온 엔진 줄이 전부 기록돼 있는가."""
-    since = st.get("engine_lines_since")
-    return isinstance(since, int) and not isinstance(since, bool) and since <= r - 1
+    """라운드 r 의 diff(스냅숏 r−1 → r)를 줄 출처로 잴 수 있는가. 거짓(옛 원장 넘기기)은 기록이 아예 없는 원장이거나
+    기록이 바로 그 라운드에 시작된 경우뿐이다 — 그 앞 라운드의 diff 는 넘기지 않고 엄격하게 잰다."""
+    if "engine_lines_since" not in st:
+        return False
+    since = st["engine_lines_since"]
+    if isinstance(since, bool) or not isinstance(since, int) or since < 0 or since > int(st.get("round") or 0):
+        raise LedgerCorrupt("engine_lines_since_corrupt", value=str(since))
+    return r != since
 
 
 def _engine_lines(st, heading) -> list:
@@ -359,19 +364,31 @@ def _engine_lines(st, heading) -> list:
     return out
 
 
-def _log_change_ok(st, heading, new_lh, base, base_round, group_new) -> bool:
-    """결정 기록 · 미룸 절 한 개의 변경이 «엔진 줄만 더함» 인가 — 새 줄 해시 = BASE + TAIL, TAIL 의 보이는 줄은 전부
-    엔진이 이 절에 쓴 줄, 그리고 BASE 이후(라운드 base_round 부터) 엔진이 이 절 묶음에 쓴 줄은 하나도 빠지지 않았다
-    (`group_new` = 새 스냅숏의 그 묶음 줄 해시 전부). 면제와 원복 관측이 같은 판정을 쓴다."""
+def _window_lines(st, heading, base_round, r) -> collections.Counter:
+    """판정하는 스냅숏 r 에 들어올 수 있는 엔진 줄 — BASE 스냅숏(base_round) 뒤 · 스냅숏 r 앞에 쓴 줄(base_round ≤ 라운드 < r),
+    해시별 쓴 횟수."""
+    return collections.Counter(e["hash"] for e in _engine_lines(st, heading) if base_round <= e["round"] < r)
+
+
+def _engine_lines_kept(window, group_new) -> bool:
+    """창 안의 엔진 줄이 새 스냅숏의 그 묶음에 하나도 빠지지 않고(쓴 횟수만큼) 있는가."""
+    have = collections.Counter(group_new)
+    return all(have[h] >= c for h, c in window.items())
+
+
+def _log_change_ok(st, heading, new_lh, base, base_round, r, group_new) -> bool:
+    """결정 기록 · 미룸 절 한 개의 변경이 «엔진 줄만 더함» 인가 — 새 줄 해시 = BASE + TAIL, TAIL 의 보이는 줄은 창 안의
+    엔진 줄이고 각 줄은 엔진이 쓴 횟수보다 많지 않으며, 창 안의 엔진 줄은 하나도 빠지지 않았다(`group_new` = 새 스냅숏의
+    그 묶음 줄 해시 전부). 면제와 원복 관측이 같은 판정을 쓴다."""
     if not isinstance(base, list) or not isinstance(new_lh, list):
         return False
     if len(new_lh) < len(base) or new_lh[:len(base)] != base:
         return False
-    eng = _engine_lines(st, heading)
-    written = {e["hash"] for e in eng}
-    if any(h != _BLANK_LINE_HASH and h not in written for h in new_lh[len(base):]):
+    window = _window_lines(st, heading, base_round, r)
+    tail = collections.Counter(h for h in new_lh[len(base):] if h != _BLANK_LINE_HASH)
+    if any(c > window[h] for h, c in tail.items()):
         return False
-    return {e["hash"] for e in eng if e["round"] >= base_round} <= set(group_new)
+    return _engine_lines_kept(window, group_new)
 
 
 def _log_verdicts(st, prof, r) -> dict:
@@ -414,11 +431,14 @@ def _log_verdicts(st, prof, r) -> dict:
             for anchors, p in reverts:
                 if a not in anchors:
                     continue
-                if n is None:
-                    hit = "expect_hash" in p and p["expect_hash"] is None
-                elif isinstance(p.get("expect_round"), int) and not isinstance(p.get("expect_round"), bool):
-                    hit = _log_change_ok(st, h, n.get("line_hashes"), p.get("expect_line_hashes"), p["expect_round"],
-                                         group_new)
+                er = p.get("expect_round")
+                if isinstance(er, bool) or not isinstance(er, int):
+                    continue
+                if n is None:   # 없던 절로 되돌림 — 그 사이 엔진이 이 묶음에 쓴 줄이 문서에 남아 있어야 한다
+                    hit = ("expect_hash" in p and p["expect_hash"] is None
+                           and _engine_lines_kept(_window_lines(st, h, er, r), group_new))
+                else:
+                    hit = _log_change_ok(st, h, n.get("line_hashes"), p.get("expect_line_hashes"), er, r, group_new)
                 if hit:
                     break
             if hit:
@@ -426,9 +446,9 @@ def _log_verdicts(st, prof, r) -> dict:
             elif n is None:
                 continue
             elif o is None:
-                if a not in earlier and _log_change_ok(st, h, n.get("line_hashes"), [], r - 1, group_new):
+                if a not in earlier and _log_change_ok(st, h, n.get("line_hashes"), [], r - 1, r, group_new):
                     out[a] = (a, "creation")
-            elif _log_change_ok(st, h, n.get("line_hashes"), o.get("line_hashes"), r - 1, group_new):
+            elif _log_change_ok(st, h, n.get("line_hashes"), o.get("line_hashes"), r - 1, r, group_new):
                 out[a] = ("append-only", "append")
     return out
 
@@ -734,7 +754,8 @@ def cmd_profile_check(a) -> int:
     return 0
 
 
-_BLANK_CATEGORIES = ("Cc", "Cf", "Zs", "Zl", "Zp")   # 제어 · 서식(폭 없는 공백 등) · 공백 · 줄 · 문단 구분
+_BLANK_CATEGORIES = ("Cc", "Cf", "Zs", "Zl", "Zp", "Mn", "Me")   # 제어 · 서식(폭 없는 공백 등) · 공백 · 줄 · 문단 구분 ·
+# 결합 부호(변형 선택자 포함) — 결합 부호뿐인 글은 보이는 글자가 없다(보이는 글자에 붙으면 그 글자가 남는다)
 # 부류로는 글자(Lo · So · Mn)지만 빈칸으로 그려지는 것 — 한글 채움 문자 · 초성/중성 채움 · 점자 빈칸 · 자소 결합자 · 반각 한글 채움 ·
 # 크메르 모음 고유 부호 둘
 _BLANK_CHARS = frozenset("\u3164\u115f\u1160\u2800\u034f\uffa0\u17b4\u17b5")
@@ -1242,12 +1263,19 @@ def cmd_related_changes(a) -> int:
 
 
 def _expected_lines(st, anchor, h, n):
-    """해시 h 를 가진 그 앵커의 가장 늦은 스냅숏(라운드 n 앞)의 (줄 해시, 라운드) — 없으면 None."""
-    if not isinstance(h, str):
-        return None
+    """되돌릴 글의 가장 늦은 스냅숏(라운드 n 앞) — (줄 해시, 라운드). h 가 None 이면 그 앵커가 없던 가장 늦은 스냅숏
+    (줄 해시 None). 없으면 None."""
     for k in range(n - 1, 0, -1):
-        for s in ((st.get("snapshots") or {}).get(str(k)) or {}).get("sections") or []:
-            if s.get("anchor") == anchor and s.get("hash") == h and isinstance(s.get("line_hashes"), list):
+        secs = ((st.get("snapshots") or {}).get(str(k)) or {}).get("sections")
+        if not isinstance(secs, list):
+            continue
+        if h is None:
+            if not any(isinstance(s, dict) and s.get("anchor") == anchor for s in secs):
+                return None, k
+            continue
+        for s in secs:
+            if (isinstance(s, dict) and s.get("anchor") == anchor and s.get("hash") == h
+                    and isinstance(s.get("line_hashes"), list)):
                 return list(s["line_hashes"]), k
     return None
 
@@ -1313,7 +1341,7 @@ def cmd_decide(a) -> int:
             permit = {"kind": "revert", "apply_anchors": [f["anchor"]], "expect_hash": d.get("prev_hash"),
                       "round": n + 1, "finding_id": a.id, "consumed": False}
             base = _expected_lines(st, f["anchor"], d.get("prev_hash"), n)
-            if base:   # 되돌릴 글자의 줄 해시와 그 스냅숏 라운드 — 결정 기록 · 미룸 절의 원복은 이것 + 엔진 줄로 잰다
+            if base:   # 되돌릴 글자의 줄 해시(없던 절이면 None)와 그 스냅숏 라운드 — 결정 기록 · 미룸 절의 원복은 이것 + 엔진 줄로 잰다
                 permit["expect_line_hashes"], permit["expect_round"] = base
         else:
             d["state"] = "rejected"

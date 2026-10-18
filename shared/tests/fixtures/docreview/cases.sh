@@ -804,6 +804,90 @@ case_AC38_r4_snapshot_fields_cannot_switch_guards_off() {
   assert_eq "$(st_yaml "$d" 'st["round"]')" "1" "AC38 4차+ 양성 짝: 머리 없는 문서의 정상 스냅숏은 받는다"
   rm -rf "$d"
 }
+# ── AC38 5차 ─────────────────────────────────────────────────────────────────────────
+log_added_then_rejected() {   # log_added_then_rejected <log-file-flag:yes|no> → state dir: 라운드 2 에 작성자가 지어낸 결정 기록 절을
+  # 만들고(사후 결정, prev_hash 없음) 사용자가 기각했다. yes 면 그 기각 줄을 엔진이 그 절에 썼다.
+  local d fp; d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || return 1
+  br "$d" "$d/doc.md"; with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_FAKE"; br "$d" "$d/doc.md"
+  fp="${F_POST//#12-files-to-modify/#결정-기록}"; fp="${fp/\"prev_hash\":\"PREV\"/\"prev_hash\":null}"; seed_findings "$d" "[$fp]"
+  if [ "$1" = yes ]; then
+    py docreview_state.py decide --state-dir "$d" --id 'dddd0001#r2.1' --choice reject --quote '원복하라' --log-file "$d/doc.md" >/dev/null
+  else
+    py docreview_state.py decide --state-dir "$d" --id 'dddd0001#r2.1' --choice reject --quote '원복하라' >/dev/null
+  fi
+  cp "$FX/design-sample.md" "$d/doc.md"; br "$d" "$d/doc.md"   # 라운드 3 — 절을 통째로 지운다
+  echo "$d"
+}
+case_AC38_r5_1_revert_to_absence_keeps_engine_lines() {
+  # 5차 1 — 없던 절로 되돌리는 원복도 엔진이 그 절에 쓴 줄(기각 줄)을 지우면 원복이 아니다
+  local d; d="$(log_added_then_rejected yes)" || { no "AC38 5차1: 준비 실패"; return; }
+  assert_eq "$(rk_changed "$d" 3)" "(['#결정-기록'], [])" "AC38 5차1: 엔진의 기각 줄째 절을 지운 «원복» 은 frozen_change"
+  assert_eq "$(py docreview_state.py observe-diff --state-dir "$d" | jgets 'd["applied"], d["expired"]')" "([], ['dddd0001#r2.1'])" "AC38 5차1: 그 «원복» 은 적용으로 관측되지 않는다"
+  rm -rf "$d"
+  d="$(log_added_then_rejected no)" || { no "AC38 5차1: 준비 실패"; return; }
+  assert_eq "$(rk_changed "$d" 3)" "([], [('#결정-기록', '#결정-기록')])" "AC38 5차1 양성 짝: 엔진 줄이 없는 절을 지운 원복은 면제"
+  assert_eq "$(py docreview_state.py observe-diff --state-dir "$d" | jgets 'd["applied"]')" "['dddd0001#r2.1']" "AC38 5차1 양성 짝: 그 원복은 적용으로 관측된다"
+  rm -rf "$d"
+}
+case_AC38_r5_2_window_upper_bound() {
+  # 5차 2 — 판정하는 스냅숏 «뒤에» 엔진이 쓴 줄은 그 스냅숏에 있을 수 없다. 같은 라운드 다시 계산 · 늦은 관측이 거짓으로 뒤집히지 않는다.
+  local d h fp
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 5차2: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  eng_log "$d" bbbb0010; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', 'append-only')])" "AC38 5차2 전제: 라운드 2 의 엔진 덧붙이기는 append-only"
+  eng_log "$d" bbbb0011   # 라운드 2 게이트의 decide --log-file — 스냅숏 2 뒤에 쓴 줄
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', 'append-only')])" "AC38 5차2: 같은 라운드에 다시 계산해도(재-finalize) 스냅숏 뒤에 쓴 엔진 줄 때문에 frozen_change 가 되지 않는다"
+  rm -rf "$d"
+  # 늦은 관측 — 정직한 원복(라운드 3) 뒤 라운드 3 에 엔진이 줄을 더 쓰고 라운드 4 에야 관측한다
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 5차2: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  doc_sub "$d/doc.md" "$LOG_L1" "$LOG_L1_FORGED"; br "$d" "$d/doc.md"
+  h="$(jget "$d/s1.json" '[s["hash"] for s in d["sections"] if s["anchor"]=="#결정-기록"][0]')"
+  fp="${F_POST//#12-files-to-modify/#결정-기록}"; seed_findings "$d" "[${fp/PREV/$h}]"
+  py docreview_state.py decide --state-dir "$d" --id 'dddd0001#r2.1' --choice reject --quote '원복하라' --log-file "$d/doc.md" >/dev/null
+  doc_sub "$d/doc.md" "$LOG_L1_FORGED" "$LOG_L1"; br "$d" "$d/doc.md"
+  eng_log "$d" bbbb0012; br "$d" "$d/doc.md"
+  assert_eq "$(py docreview_state.py observe-diff --state-dir "$d" | jgets 'd["applied"]')" "['dddd0001#r2.1']" "AC38 5차2: 라운드 4 에 따라잡은 정직한 원복은 그 뒤 엔진 줄 때문에 만료로 뒤집히지 않는다"
+  rm -rf "$d"
+}
+case_AC38_r5_3_since_corrupt_and_legacy_once() {
+  # 5차 3 — 엔진 줄 기록 시작 라운드가 정수가 아니거나 현재 라운드보다 크면 원장 파손(이름 있는 실패), 옛 원장 넘기기는 그 라운드 한 번뿐
+  local d v err
+  for v in '"1"' 'True' '99'; do
+    d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 5차3: init 실패"; return; }
+    with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"; br "$d" "$d/doc.md"
+    PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); st["engine_lines_since"]=eval(sys.argv[2]); save_state(d, st, "fixture")' "$d" "$v"
+    err="$(py docreview_state.py exempt-anchors --state-dir "$d" 2>&1 >/dev/null)"
+    assert_contains "$err" '"reason": "engine_lines_since_corrupt"' "AC38 5차3: engine_lines_since=${v} 는 원장 파손으로 멈춘다"
+    rm -rf "$d"
+  done
+  # 기록 시작(라운드 3)보다 앞 라운드의 diff 는 옛 원장 넘기기를 받지 않는다(그 라운드 한 번만)
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 5차3: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  doc_append "$d/doc.md" "$LOG_FAKE"; br "$d" "$d/doc.md"; br "$d" "$d/doc.md"
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); st["engine_lines_since"]=3; save_state(d, st, "fixture")' "$d"
+  assert_eq "$(rk_changed "$d" 2)" "(['#결정-기록'], [])" "AC38 5차3: 기록 시작 전 라운드의 지어낸 줄은 옛 원장 넘기기를 받지 않는다"
+  rm -rf "$d"
+}
+case_AC38_r5_4_duplicate_engine_line() {
+  # 5차 4 — 엔진이 한 번 쓴 줄을 작성자가 한 번 더 붙이면 엔진 줄이 아니다(개수로 잰다)
+  local d; d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 5차4: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  eng_log "$d" bbbb0013; doc_append "$d/doc.md" "$(tail -1 "$d/doc.md")"; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#결정-기록'], [])" "AC38 5차4: 엔진 줄을 한 번 더 베껴 붙인 결정 기록은 frozen_change"
+  rm -rf "$d"
+}
+case_AC38_r5_5_combining_only_blank() {
+  # 5차 5 — 변형 선택자 · 결합 부호뿐인 추가 승인도 승인이 아니다
+  local d rc v; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; snap "$FX/design-sample.md" "$d/s2.json"
+  for v in FE0F E0100 0301 20DD; do
+    py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" --extra-approval "$(python3 -I -c 'import sys; print(chr(int(sys.argv[1], 16)), end="")' "$v")" --extra-approval-source typed >/dev/null 2>&1; rc=$?
+    assert_eq "$rc" "2" "AC38 5차5: U+${v} 뿐인 추가 승인은 rc 2"
+  done
+  assert_eq "$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" --extra-approval "$(python3 -I -c 'print("é", end="")')" --extra-approval-source typed | jgets 'd["ok"]')" "True" "AC38 5차5 양성 짝: 보이는 글자에 붙은 결합 부호는 받는다"
+  rm -rf "$d"
+}
 case_AC38_r4_m4_route_alternatives_filtered() {
   # 4차 m4 — 라우팅이 fin.json 에 싣는 선택지(decision_view.alternatives)도 decide 가 받는 것과 같다
   local d; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38 4차m4: init 실패"; return; }
