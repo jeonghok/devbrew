@@ -31,7 +31,9 @@ for lit in '한 번에 한 에픽씩' '다른 세션을 열라는 줄을 주지 
            'ledger record --spec <설계문서> --approval' '규모(몇 agent · 무엇)를 알린다' '「승인 — 계획 담당자에게」' \
            '같은 턴에 아래 보내기대로 계획 agent 를 보낸다' '지휘 소식(상태 · 목록 · 다른 에픽 소식)은 그 메시지에 얹지 않는다' \
            '묶음의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다' '`isolation: "worktree"`' 'git switch --ignore-other-worktrees <에픽 브랜치>' \
-           '그 agent 가 돌아올 때까지 그 worktree 를 떠나지 않는다' '임시 파일에 쓴 뒤 `cp` 로 옮긴다' '세션이 옮기면 격리 없이 띄운 하위 agent 도 따라 옮긴다'; do once 3 "$lit"; done
+           '그 agent 가 돌아올 때까지 그 worktree 를 떠나지 않는다' '임시 파일에 쓴 뒤 `cp` 로 옮긴다' '세션이 옮기면 격리 없이 띄운 하위 agent 도 따라 옮긴다' \
+           '`git -C <에픽 worktree> switch --detach` 로 그 브랜치를 놓는다' '깨끗하지 않으면 보내지 않고 보인다' \
+           'agent 가 쓴 worktree 를 `## 자원` 의 그 에픽 worktree 로 바꿔 적고' '그 브랜치를 체크아웃한 worktree 가 둘 이상이면 쓰지 않고 멈춰 보인다'; do once 3 "$lit"; done
 for old in '절별 승인' '이 턴에는 계획 agent 를 띄우지 않는다' '턴을 끝낸다' '「여기서 계속」'; do
   assert_not_contains "$(step 3)" "$old" "걸음 3: 옛 문장 「${old}」 이 없다(양성 짝: 승인 질문 하나 · 같은 턴 계획 agent)"
 done
@@ -71,6 +73,15 @@ ix = [seg.find(k) for k in ks]
 stop = "턴을 끝" in seg or "`/compact` 와" in seg
 print("yes" if min(ix) >= 0 and ix == sorted(ix) and not stop else "no")' "$1"
 }
+seat_order() {  # seat_order <글> — 「하위 agent 의 자리」 안에서 놓기 → 돌아오면 바꿔 적기 순서면 yes
+  PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
+t = sys.argv[1]
+s = t.find("하위 agent 의 자리(")
+a, b = t.find("switch --detach", s), t.find("돌아오면 agent 가 쓴 worktree", s)
+print("yes" if 0 <= s < a < b else "no")' "$1"
+}
+assert_eq "$(seat_order "$(step 3)")" "yes" "걸음 3: 격리 agent 를 보내기 전에 에픽 worktree 가 브랜치를 놓고, 돌아오면 자원을 바꿔 적는다"
+assert_eq "$(seat_order '하위 agent 의 자리(x): 돌아오면 agent 가 쓴 worktree 로. 그다음 switch --detach.')" "no" "양성 대조: 놓기가 돌아온 뒤면 no"
 assert_eq "$(approve_order "$(step 3)")" "yes" "걸음 3: 승인이면 기록 · 커밋 · 저장 뒤 같은 턴에 계획 agent 를 보낸다"
 OLD_STOP='승인이면 이 세션은 writing-plans 를 따르지 않고 — 미커밋 확인 → ledger record --spec <설계문서> --approval → worktree 에서 커밋 → 기계 상태 저장 → 두 줄(`/compact` 와 `/spec-distill:epic-conductor <로드맵>`) → 거기서 턴을 끝내고 다음에 같은 턴에 계획 agent 를 보낸다.'
 assert_eq "$(approve_order "$OLD_STOP")" "no" "양성 대조: 승인 문장 안에서 두 줄을 주고 턴을 끝내면 no"
