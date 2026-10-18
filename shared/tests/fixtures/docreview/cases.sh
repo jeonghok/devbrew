@@ -243,6 +243,61 @@ case_AC38_related_declared_but_unchanged_disclosed() {
   assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "신고했지만 바뀌지 않은 곳" "AC38: 신고했는데 안 바뀐 절도 공시한다"
   rm -rf "$d"
 }
+F_BRIEF_DEC='{"id":"aaaa0001#r1.1","lineage":"aaaa0001#r1.1","bucket":"aaaa0001","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#2-확정","edit_scope":"#2-확정","disposition":"decide","summary":"확정 항목이 두 가지로 읽힌다","evidence":"3행","blocks":[],"kind":"pre"}'
+case_AC38_related_immutable_refused_and_frozen() {
+  local d s1 s2 err; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  s1="$d/s1.json"; snap "$FX/brief-append-r1.md" "$s1"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s1" >/dev/null
+  seed_findings "$d" "[$F_BRIEF_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#6-사용자-원문' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "anchor_immutable"' "AC38: 불변 절(사용자 원문)은 신고로 묶지 못한다"
+  # 이중 방어 — 원장이 손으로 바뀌어 불변 절이 related_anchors 에 들어 있어도 면제하지 않는다
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); [p.update(related_anchors=["#6-사용자-원문"]) for p in st["permits"].values()]; save_state(d, st, "fixture")' "$d"
+  s2="$d/s2.json"; snap "$FX/brief-append-r2-edit.md" "$s2"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s2" >/dev/null
+  assert_not_contains "$(py docreview_state.py exempt-anchors --state-dir "$d")" "related:" "AC38: 불변 절은 exempt 집합에 안 든다(이중 방어)"
+  assert_eq "$(PYTHONPATH="$SCRIPTS" python3 "$FX/st_get.py" "$d/docreview-state.md" '[c["anchor"] for c in __import__("docreview_state").round_diff(st, __import__("docreview_state").load_profile(st["profile"]), 2)["changed"]]')" "['#6-사용자-원문']" "AC38: 불변 절의 비-추가 수정은 여전히 frozen_change"
+  rm -rf "$d"
+}
+case_AC38_related_insert_after() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  local err; err="$(py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors 'insert-after:#없는-절' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "anchor_not_in_snapshot"' "AC38: insert-after 의 기준 앵커가 스냅숏에 없으면 거부"
+  py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors 'insert-after:#2-goals' >/dev/null
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); i=t.index("## 3."); open(sys.argv[2],"w",encoding="utf-8").write(t[:i]+"## 새 절\n\n본문 한 줄.\n\n"+t[i:])' "$FX/design-sample.md" "$d/ins.md"
+  local df; df="$(next_round "$d" "$d/ins.md")"
+  assert_eq "$(jget "$df" '[c["anchor"] for c in d["changed"]]')" "[]" "AC38: 신고한 insert-after 로 들어온 절은 frozen_change 가 아니다"
+  assert_eq "$(jget "$df" '[(e["anchor"], e["scope"]) for e in d["exempt_applied"]]')" "[('#새-절', 'related:D1.1')]" "AC38: 면제 사유가 신고로 보인다"
+  local r; r="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$r" "이 결정 때문에 함께 바뀐 곳 1개 (D1.1)" "AC38: 끼워 넣은 절이 바뀐 곳으로 보인다"
+  assert_not_contains "$r" "신고했지만 바뀌지 않은 곳" "AC38: 끼워 넣은 절을 안 바뀐 곳으로 세지 않는다"
+  assert_eq "$(py docreview_state.py related-changes --state-dir "$d" | jgets '[x["anchor"] for x in d]')" "['#새-절']" "AC38: related-changes 가 끼워 넣은 절을 낸다"
+  rm -rf "$d"
+}
+case_AC38_related_scoped_to_permit_round() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#2-goals' >/dev/null
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  local df; df="$(next_round "$d" "$FX/design-sample.md")"
+  assert_eq "$(jget "$df" 'sorted(c["anchor"] for c in d["changed"])')" "['#12-files-to-modify', '#2-goals']" "AC38: 신고는 permit 라운드 밖에서 면제하지 않는다(라운드 3 에서 둘 다 frozen_change)"
+  rm -rf "$d"
+}
+case_AC38_related_uncountable_disclosed() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#2-goals' >/dev/null
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); del st["snapshots"]["1"]; save_state(d, st, "fixture")' "$d"
+  local r; r="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$r" "이 결정 때문에 함께 바뀐 곳을 셀 수 없다" "AC38: 못 읽으면 「셀 수 없음」 을 낸다"
+  assert_not_contains "$r" "신고했지만 바뀌지 않은 곳" "AC38: 못 읽은 것을 «안 바뀜» 으로 내지 않는다"
+  local err; err="$(py docreview_state.py related-changes --state-dir "$d" 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "related_uncountable"' "AC38: related-changes 는 빈 목록 대신 이름 있는 사유로 실패한다"
+  rm -rf "$d"
+}
 case_T22_permit_expired_reraise() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
   py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' >/dev/null

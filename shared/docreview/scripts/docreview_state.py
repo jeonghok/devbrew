@@ -291,8 +291,8 @@ DOC_ANCHOR = "#__doc__"
 
 def resolve_scope(scope: str, old_secs, new_secs) -> set:
     """scope → 앵커 집합. `insert-after:#x` 는 new 에서 #x 바로 다음이고 old 에 없던 앵커 하나."""
-    if scope.startswith("related:") and "=" in scope:   # 「related:<D id>=<앵커>」 — 결정에 묶인 절(AC38)
-        return {scope.split("=", 1)[1]}
+    if scope.startswith("related:") and "=" in scope:   # 「related:<D id>=<앵커 또는 insert-after:#x>」 — 결정에 묶인 절(AC38)
+        return resolve_scope(scope.split("=", 1)[1], old_secs, new_secs)
     if not scope.startswith("insert-after:"):
         return {scope}
     after = scope.split(":", 1)[1]
@@ -322,6 +322,8 @@ def diff_snapshots(old: dict, new: dict, exempt_scopes) -> dict:
     ex = {}
     for sc in exempt_scopes or []:
         for a in resolve_scope(sc, os_, ns):
+            if sc.startswith("related:") and a in ex:
+                continue   # 같은 앵커의 직접 permit · fix 사유가 신고보다 앞선다 — 라벨이 엉뚱한 결정을 주장하지 않게
             ex[a] = sc
     changed, exempt_applied = [], []
 
@@ -412,9 +414,14 @@ def exempt_scopes(st, prof, r) -> list:
         k, _kind, anchors, _fid = _permit_fields(did, p)
         if k == r:
             out.extend(anchors)
-            for x in p.get("related_anchors") or []:
-                if isinstance(x, str):
-                    out.append("related:%s=%s" % (did, x))
+            rel = [x for x in (p.get("related_anchors") or []) if isinstance(x, str)]
+            if rel:
+                # 불변 절은 신고로 면제하지 않는다(선언이 거부해도 원장이 손으로 바뀐 경우의 이중 방어).
+                imm = set()
+                if prof["immutable"]:
+                    for kk in (r - 1, r):
+                        imm |= set(anchors_matching(prof["immutable"], snapshot_at(st, kk)["sections"]))
+                out.extend("related:%s=%s" % (did, x) for x in rel if x not in imm)
     for key in ("decision_log", "defer_target"):
         t = prof[key]
         if t.get("kind") == "doc_section":
@@ -855,12 +862,19 @@ def cmd_declare_related(a) -> int:
     if p.get("consumed"):
         return fail("permit_consumed", decision_id=did, round=p.get("round"))
     try:
-        known = {s["anchor"] for s in snapshot_at(st, int(st["round"]))["sections"]}
+        secs = snapshot_at(st, int(st["round"]))["sections"]
+        prof = load_profile(st["profile"])
     except LedgerCorrupt as e:
         return fail(e.reason, **e.extra)
-    bad = [x for x in a.anchors if not x.startswith("insert-after:") and x not in known]
+    known = {s["anchor"] for s in secs}
+    bad = [x for x in a.anchors
+           if (x[len("insert-after:"):] if x.startswith("insert-after:") else x) not in known]
     if bad:
         return fail("anchor_not_in_snapshot", anchors=bad)
+    imm = set(anchors_matching(prof["immutable"], secs)) if prof["immutable"] else set()
+    locked = [x for x in a.anchors if x in imm]
+    if locked:
+        return fail("anchor_immutable", anchors=locked)
     rel = list(p.get("related_anchors") or [])
     for x in a.anchors:
         if x not in rel and x not in p["apply_anchors"]:
@@ -875,6 +889,9 @@ def cmd_related_changes(a) -> int:
     """이번 라운드에 결정 때문에 함께 바뀐 절의 목록(읽기 전용) — 탐지 · 재비판의 입력 슬롯용. 결정 이유는 싣지 않는다."""
     st = load_state(a.state_dir)
     g = gate_summary(st)
+    bad = [rc for rc in g.get("related_changes") or [] if rc.get("uncountable")]
+    if bad:   # 빈 목록과 «셀 수 없음» 은 다른 사실이다
+        return fail("related_uncountable", decisions=[{"decision_id": rc["decision_id"], "reason": rc["uncountable"]} for rc in bad])
     titles = {s["anchor"]: s.get("title") for s in ((st["snapshots"].get(str(g["round"])) or {}).get("sections") or [])}
     seen, out = set(), []
     for rc in g.get("related_changes") or []:
@@ -1238,18 +1255,41 @@ def gate_summary(st) -> dict:
     g["defers"] = sorted(i for i, f in st["findings"].items() if f.get("disposition") == "defer")
     g["dropped"] = sorted(i for i, f in fx.items() if f["state"] == "dropped")
     g["extra_rounds"] = st["extra_rounds"]
-    rel = []
+    rel, ctx = [], None
     for did, p in (st.get("permits") or {}).items():
-        if int(p.get("round", -1)) != n or not p.get("related_anchors"):
+        if not p.get("related_anchors"):
             continue
         try:
-            dd = round_diff(st, load_profile(st["profile"]), n)
-            touched = {e["anchor"] for e in dd["exempt_applied"]} | {c["anchor"] for c in dd["changed"]}
-        except (LedgerCorrupt, ProfileError, OSError):
-            touched = set()
+            k = _permit_fields(did, p)[0]
+        except LedgerCorrupt as e:
+            rel.append({"decision_id": did, "anchors": [], "uncountable": e.reason})
+            continue
+        if k != n:
+            continue
         anchors = list(p["related_anchors"])
-        rel.append({"decision_id": did, "anchors": anchors,
-                    "changed": [x for x in anchors if x in touched], "unchanged": [x for x in anchors if x not in touched]})
+        if ctx is None:   # 프로필 · diff 는 한 번만 — 못 읽으면 그 사유를 모든 신고에 단다
+            try:
+                dd = round_diff(st, load_profile(st["profile"]), n)
+                ctx = {"touched": {e["anchor"] for e in dd["exempt_applied"]} | {c["anchor"] for c in dd["changed"]},
+                       "old": snapshot_at(st, n - 1)["sections"], "new": snapshot_at(st, n)["sections"]}
+            except LedgerCorrupt as e:
+                ctx = {"err": e.reason}
+            except ProfileError as e:
+                ctx = {"err": "profile_error"}
+            except OSError:
+                ctx = {"err": "profile_unreadable"}
+        if "err" in ctx:
+            rel.append({"decision_id": did, "anchors": anchors, "uncountable": ctx["err"]})
+            continue
+        changed, unchanged = [], []
+        for x in anchors:
+            res = sorted(resolve_scope(x, ctx["old"], ctx["new"]))
+            hit = [y for y in res if y in ctx["touched"]]
+            if hit:
+                changed.extend(y for y in hit if y not in changed)
+            else:
+                unchanged.append(x)
+        rel.append({"decision_id": did, "anchors": anchors, "changed": changed, "unchanged": unchanged})
     g["related_changes"] = rel
     g["open_total"] = sum(len(g[row.name]) for row in GATE_ROWS)   # 첫 줄 «남았다» 목록의 모든 행
     cur = st["rounds"].get(str(n), {})
@@ -1643,12 +1683,15 @@ def render_gate(st, g) -> str:
             out.extend(fn(st, g, fid))
     titles = {s["anchor"]: s.get("title") for s in ((st["snapshots"].get(str(g["round"])) or {}).get("sections") or [])}
     for rc in g.get("related_changes") or []:
+        if rc.get("uncountable"):
+            out.append("이 결정 때문에 함께 바뀐 곳을 셀 수 없다 — 원장을 읽지 못했다 (%s · %s)" % (rc["decision_id"], rc["uncountable"]))
+            continue
         if rc["changed"]:
             out.append("이 결정 때문에 함께 바뀐 곳 %d개 (%s)" % (len(rc["changed"]), rc["decision_id"]))
-            out.extend("- %s (%s)" % (_one(titles.get(x) or x), x) for x in rc["changed"])
+            out.extend("- %s (%s)" % (_one(titles.get(x) or x), _one(x)) for x in rc["changed"])
         if rc["unchanged"]:
             out.append("신고했지만 바뀌지 않은 곳 %d개 (%s)" % (len(rc["unchanged"]), rc["decision_id"]))
-            out.extend("- %s (%s)" % (_one(titles.get(x) or x), x) for x in rc["unchanged"])
+            out.extend("- %s (%s)" % (_one(titles.get(x) or x), _one(x)) for x in rc["unchanged"])
     parts = [t % c[k] for k, t, scope in COUNT_GLOSS if c[k] and scope == "round"]
     if parts:
         out.append("이번 라운드 집계: " + " · ".join(parts))
