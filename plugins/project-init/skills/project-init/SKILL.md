@@ -155,7 +155,7 @@ C-S2(완전 헌장 존재)면 먼저 "헌장을 업데이트할까요?"를 묻�
 
 **Glossary 트리거 (AC7, 별도 질문 아님)**: 위 4개 답변 안에서 사용자가 *프로젝트 고유 도메인 용어*(일반 SW 어휘가 아닌, 이 프로젝트에서 특정 의미로 정의해 쓰는 명사 — 예: "ledger", "tenant", "rollup")를 명시적으로 정의·언급한 경우에만 glossary 후보로 수집한다. 용어를 **추측해 만들지 않는다**. 모호하면 수집하지 않는다(보수적). 수집된 용어가 0개면 `glossary.md`를 생성하지 않는다(빈 파일 금지).
 
-**쓴 수 공시와 더 묻기**: 4개 질문 뒤 공시 줄을 낸다.
+**쓴 수 공시와 더 묻기**: 필수 4개 항목이 Law 1 게이트(아래)를 통과한 뒤에 공시 줄을 낸다 — 사용자가 「건너뛰기」나 「중단」을 골랐으면 이 공시와 선택은 하지 않는다.
 
 > `[project-init] 헌장 질문 <n>개를 물었고(기본 4개) 관례 <m>개를 받았다(기본 1–3개).`
 
@@ -239,9 +239,9 @@ placeholder 치환 매핑:
 | `{{VISION}}` | Phase 1 ① |
 | `{{NON_GOALS}}` | Phase 1 ② |
 | `{{TECH_STACK}}` | Phase 1 ④ (확정 tech-stack) |
-| `{{GOALS}}` | vision에서 파생한 1–3개 목표 (사용자 답변 기반) |
-| `{{SUCCESS_CRITERIA}}` | 사용자가 success/DoD를 언급했으면 그 값, 아니면 `_명시되지 않음 — 추후 보강._` |
-| `{{PERSONAS}}` | vision·non-goals 답변에 audience/사용자가 언급됐으면 그로부터 파생; 없으면 `_명시되지 않음 — 추후 보강._` (canned persona 주입 금지, AC14). **personas는 Law 1 게이트 항목이 아니므로**(AC10은 vision·non-goals·conventions·tech-stack만) 비어 있어도 게이트에 걸리지 않는다. |
+| `{{GOALS}}` | 「더 묻기」 답이 있으면 그 답, 아니면 vision에서 파생한 1–3개 목표 (사용자 답변 기반) |
+| `{{SUCCESS_CRITERIA}}` | 「더 묻기」 답이 있으면 그 답; 아니면 사용자가 success/DoD를 언급했으면 그 값, 아니면 `_명시되지 않음 — 추후 보강._` |
+| `{{PERSONAS}}` | 「더 묻기」 답이 있으면 그 답; 아니면 vision·non-goals 답변에 audience/사용자가 언급됐으면 그로부터 파생; 없으면 `_명시되지 않음 — 추후 보강._` (canned persona 주입 금지, AC14). **personas는 Law 1 게이트 항목이 아니므로**(AC10은 vision·non-goals·conventions·tech-stack만) 비어 있어도 게이트에 걸리지 않는다. |
 | `{{NAMING}}`·`{{DIRECTORY_STRUCTURE}}`·`{{ERROR_HANDLING}}`·`{{ANTI_PATTERNS}}` | Phase 1 ③ conventions 답변을 항목별로 분배; 해당 답변이 없으면 `_명시되지 않음._` |
 | `{{BUILD_TEST}}` | Phase 0에서 감지한 build·test 명령; 없으면 `_명시되지 않음._` |
 | `{{GLOSSARY_TERMS}}` | 수집된 도메인 용어를 `- **<용어>**: <정의>` 목록으로 (용어 0개면 glossary.md 미생성) |
@@ -269,10 +269,10 @@ placeholder 치환 매핑:
 > - `docs/git-workflow/branch-strategy.md` — 브랜치 룰
 > - `docs/git-workflow/commit-conventions.md` — Commit 컨벤션
 > - `docs/git-workflow/pr-process.md` — PR 프로세스
-> - `AGENTS.md` — `## Project Charter` 요약 섹션 (vision·non-goals·tech-stack + docs/project/ 포인터)
-> - `docs/project/charter.md` — vision·goals·non-goals·success criteria·personas
-> - `docs/project/conventions.md` — naming·구조·error handling·anti-patterns·build & test
-> - (도메인 용어가 있으면) `docs/project/glossary.md`
+> - `AGENTS.md` — `## Project Charter` 요약 섹션 (vision·non-goals·tech-stack + docs/project/ 포인터) (헌장을 건너뛰지 않았다면)
+> - `docs/project/charter.md` — vision·goals·non-goals·success criteria·personas (헌장을 건너뛰지 않았다면)
+> - `docs/project/conventions.md` — naming·구조·error handling·anti-patterns·build & test (헌장을 건너뛰지 않았다면)
+> - (헌장을 건너뛰지 않았고 도메인 용어가 있으면) `docs/project/glossary.md`
 >
 > `project-init` 플러그인 hook이 `Bash` 호출에서 브랜치 이름과 commit 메시지를 자동 검증합니다. 그 둘이 이 hook이 검사하는 전부입니다 — 위에 생성된 문서의 내용·구조·상호 포인터를 사후에 검증하는 것은 없습니다.
 > 헌장을 건너뛰었다면: 미완 항목 <항목> — 헌장 파일은 만들지 않았다.

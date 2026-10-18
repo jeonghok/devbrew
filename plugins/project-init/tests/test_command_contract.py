@@ -269,7 +269,7 @@ class TestCharterGateChoice(unittest.TestCase):
 
     def test_machine_abort_is_gone(self):
         self.assertTrue(self.gate.strip(), "게이트 절이 비었다 — 부재 단언이 공허하다")
-        self.assertNotIn("abort한다", self.gate)
+        self.assertNotIn("abort", self.gate)
         self.assertNotIn("charter 미완료: <항목> 비어 abort", self.gate)
 
     def test_skip_discloses_incomplete_items(self):
