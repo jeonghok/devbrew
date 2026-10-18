@@ -248,6 +248,27 @@ def state_path(state_dir) -> Path:
     return Path(state_dir) / STATE_FILE
 
 
+DIGEST_KEY = "docreview_digest"
+_DIGEST_LINE = re.compile(r"\A" + DIGEST_KEY + r": ([0-9a-f]{64})\n")
+RECOVER = ["엔진이 쓴 내용으로 되돌린다(이 파일을 손으로 고쳤다면 그 편집을 되돌린다)",
+           "그 문서의 상태 폴더를 지우고 1라운드부터 다시 리뷰한다 — "
+           "라운드 · 재리뷰 횟수 · 지적 이력을 잃는다"]
+
+
+class LedgerCorrupt(Exception):
+    """원장이 관측 · 얼림 검사에 필요한 것을 갖지 않는다(상태 파손) — 이름 있는 실패. 빈 diff 로 넘어가지 않는다."""
+
+    def __init__(self, reason, **extra):
+        super().__init__(reason)
+        self.reason = reason
+        self.extra = extra
+
+
+def _digest(tree_text: str, body: str) -> str:
+    """원장 요약값 — `docreview:` 트리 글자와 본문. 엔진 밖에서 손으로 고친 원장을 가려낸다."""
+    return hashlib.sha256((tree_text + "\x00" + body).encode("utf-8")).hexdigest()
+
+
 def load_state(state_dir) -> dict:
     p = state_path(state_dir)
     if not p.is_file():
@@ -260,11 +281,21 @@ def load_state(state_dir) -> dict:
     end = text.find("\n---\n", 4)
     if end < 0:
         raise ValueError("frontmatter_unclosed")
-    data = yaml.safe_load(text[4:end]) or {}
+    fm = text[4:end]
+    body = text[end + 5:]
+    data = yaml.safe_load(fm) or {}
     st = data.get("docreview") if isinstance(data, dict) else None
     if not isinstance(st, dict):
         raise ValueError("docreview_key_missing")
-    st["_body"] = text[end + 5:]
+    m = _DIGEST_LINE.match(fm + "\n")
+    if m:
+        if _digest((fm + "\n")[m.end():], body) != m.group(1):
+            raise LedgerCorrupt("ledger_corrupt", path=str(p), recover=RECOVER)
+    elif DIGEST_KEY in data:   # 요약값이 있는데 첫 줄 모양이 아니다 — 없는 것으로 넘기지 않는다
+        raise LedgerCorrupt("ledger_corrupt", path=str(p), recover=RECOVER)
+    else:   # 요약값이 생기기 전 버전이 쓴 원장 — 통과시키고 다음 저장이 채운다
+        st["_digest_missing"] = True
+    st["_body"] = body
     return st
 
 
@@ -272,10 +303,15 @@ def save_state(state_dir, st, log_line=None) -> None:
     if yaml is None:
         raise RuntimeError("pyyaml_missing")
     body = st.pop("_body", "# docreview 원장\n")
+    if st.pop("_digest_missing", False) and int(st.get("round") or 0) > 0:
+        rd = st["rounds"].setdefault(str(st["round"]), {"open_lineages": [], "progress": 0, "route_report": None})
+        rd["digest_backfilled"] = True
     if log_line:
         body = body.rstrip("\n") + "\n- r%s: %s\n" % (st.get("round"), log_line)
-    fm = yaml.safe_dump({"docreview": st}, allow_unicode=True, sort_keys=False,
-                        default_flow_style=False)
+    tree = yaml.safe_dump({"docreview": st}, allow_unicode=True, sort_keys=False,
+                          default_flow_style=False)
+    fm = "%s: %s\n%s" % (DIGEST_KEY, _digest(tree, body), tree)
+    # 제자리 덮어쓰기다 — 쓰기 불가 폴더 안의 쓰기 가능한 원장도 갱신된다(진입 잔존물 락이 기대는 성질).
     state_path(state_dir).write_text("---\n" + fm + "---\n" + body, encoding="utf-8")
     st["_body"] = body
 
@@ -560,15 +596,6 @@ def diff_snapshots(old: dict, new: dict, exempt_scopes, fence=(), log_anchors=No
         if a not in nm:
             rec(a, "removed", s["title"], s["hash"], None)
     return {"headingless": headingless, "changed": changed, "exempt_applied": exempt_applied}
-
-
-class LedgerCorrupt(Exception):
-    """원장이 관측 · 얼림 검사에 필요한 것을 갖지 않는다(상태 파손) — 이름 있는 실패. 빈 diff 로 넘어가지 않는다."""
-
-    def __init__(self, reason, **extra):
-        super().__init__(reason)
-        self.reason = reason
-        self.extra = extra
 
 
 def _snapshot_ok(snap) -> bool:
@@ -2133,6 +2160,8 @@ def render_gate(st, g) -> str:
                                                    capv["source"], _cfg.config_line(cfg))
     if g["cap_reached"]:
         sub += " · 상한에 닿았다"
+    if (st["rounds"].get(str(g["round"])) or {}).get("digest_backfilled"):
+        sub += " · 원장 확인값을 이번에 채웠다(이전 버전이 쓴 원장)"
     if g["stagnation"]:
         sub += " · 진전 없음(stagnation)"
     out.append(sub)
@@ -2394,6 +2423,8 @@ def main(argv=None) -> int:
         return fail("text_encoding_invalid", arg="--" + bad.replace("_", "-"))
     try:
         return a.fn(a)
+    except LedgerCorrupt as e:
+        return fail(e.reason, **e.extra)
     except FileNotFoundError as e:
         return fail("state_missing", path=str(e))
     except UnicodeEncodeError as e:   # ValueError 의 하위라 앞에 둔다 — 쓰거나 내보낼 글자의 인코딩 실패(디코딩 실패는 아래 판독 실패)

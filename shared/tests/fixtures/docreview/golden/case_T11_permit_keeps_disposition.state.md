@@ -1,4 +1,5 @@
 ---
+docreview_digest: <DIGEST>
 docreview:
   doc: <REPO_ROOT>/shared/tests/fixtures/docreview/design-sample.md
   profile: <REPO_ROOT>/plugins/spec-distill/references/docreview-profiles/design-doc.md

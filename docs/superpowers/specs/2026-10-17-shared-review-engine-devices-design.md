@@ -423,6 +423,8 @@ next_phase: superpowers:writing-plans
 | CHANGELOG 다듬기: spec-distill 7.2.1 의 절 순서(Fixed 가 Changed 앞) · 옛 skill 이름 `critiquing-artifacts` 가 Changed 에만 있고 Removed 에 없다 · qg 새 링크 `scripts/entry_preflight.py` 가 CHANGELOG 에 없다 — 끝냄: 5d1796b0 에서 고쳤다(qg 14.0.0 의 절 순서도 함께) | 계획 1 머지 전에 고쳤다 — 남은 일 없음 | R2a |
 | 공유본 넷을 모두 링크 — `compute-test-scope-candidates.sh` 가 형제 `resolve-baseline.sh` 를 자기 폴더에서 부른다(R5 설계 §5 · 변경표는 「스크립트 셋」이라 적었다, 소비 규칙은 `shared/test-selection/README.md`). 설치본 캐시 사본에서 형제 경로(compute → resolve-baseline, diff → run-test-selection)는 계획 1 이 `detect` 로만 쟀다 | R5 계획 셋째가 공유본을 링크하고 합친 사본 스위트로 잰다 | R5 |
 | qg 새 진입 이름 `/quality-gates:quality-pipeline` · `/quality-gates:artifact-critique` — R5 끝 단계의 qg 호출 꼴은 계획 3 의 범위 모드(`range <시작>[..<끝>]`)에서 정해진다 | 호출 꼴은 범위 모드가 생긴 뒤 확정 | R5 |
+| 엔진이 아닌 명령이 원장을 쓰는 길(AC17 가): 쓰기 · 고치기 도구는 훅이나 권한 설정으로 막을 수 있다(헤드리스 측정에서 둘 다 파일이 그대로였다). 그러나 셸로 상태와 요약값을 함께 다시 계산해 쓰는 시도는 훅 · 권한 설정 · 파일 모드(`chmod a-w`, 소유자가 `chmod u+w` 로 되돌린다) 어느 것도 막지 못했다(측정 기록 `boundary-measure.md`, 레포 밖 sdd-mirror). 측정은 후보 셋 × 시도 셋(파일 모드는 셋째에 되돌리는 시도 하나를 더했다) 전부 파일의 바이트로 판정했다. 요약값 대조(AC17 나)는 엔진 밖에서 상태만 바꾼 원장을 멈추지만 요약값까지 맞춰 쓴 원장은 알아보지 못한다 | 쓰기 권한 경계가 레포 밖(하니스 권한 · 샌드박스)에 있다. 쓰기 · 고치기만 막는 부분 훅은 더하지 않는다(B17) — 막는다는 믿음만 주고 셸 길은 열려 있다 | R8 (B16) |
+| 지휘 세션이 `begin-round` 에 넘기는 스냅숏 칸(해시 · 제목 · 부모 · 앵커)을 엔진이 그대로 믿는다: 쓰는 세션 안에서는 엔진이 만든 스냅숏과 쓴 사람이 만든 스냅숏을 가를 수 없어, 위조한 스냅숏이 보호 절의 변경을 가릴 수 있다(AC17 가와 같은 축 — 엔진 밖의 쓰는 쪽을 권한으로 가르지 못하는 문제) | 스냅숏을 엔진이 문서에서 직접 만들게 하려면 문서를 읽는 권한 경계가 필요하고 그 경계는 레포 밖이다 | R8 (B16) |
 
 ## Metadata
 

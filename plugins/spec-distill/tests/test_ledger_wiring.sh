@@ -9,6 +9,12 @@ unset DEVBREW_SPEC_DISTILL_DISABLE DEVBREW_SKIP_HOOKS DEVBREW_SPEC_DISTILL_TTL_H
 T="$(mktemp -d)"; [ -n "$T" ] && [ -d "$T" ] || { echo "mktemp 실패"; exit 1; }
 T="$(cd "$T" && pwd -P)"; trap 'rm -rf "$T"' EXIT
 
+engine_ledger() {   # engine_ledger <파일> <문서> <라운드> — 엔진의 save_state 로 쓴다(손으로 만든 원장이 아니게)
+  PYTHONPATH="$SD/scripts" python3 -c 'import sys, pathlib, docreview_state as ds
+p = pathlib.Path(sys.argv[1]); st = ds._empty(sys.argv[2], "design-doc"); st["round"] = int(sys.argv[3]); st["_body"] = "# x\n"
+ds.save_state(p.parent, st)' "$1" "$2" "$3"
+}
+
 fence() {   # fence <파일> <마커 이름> → 그 마커 사이 첫 bash 펜스 본문
   awk -v b="<!-- $2:begin -->" -v e="<!-- $2:end -->" '
     index($0,b){f=1;next} index($0,e){f=0} f&&/^```bash$/{c=1;next} f&&c&&/^```$/{c=0;next} f&&c' "$1"
@@ -37,7 +43,7 @@ $(fence "$SR" ledger-open)" 2>&1)"
 assert_eq "$(printf '%s\n' "$o3" | tail -n 1)" "ledger-open: NO_SESSION" "§2-4: 세션 id 가 없으면 리뷰를 시작하지 않는다"
 
 # AC7 — 이어 감 줄 두 분기
-printf -- '---\ndocreview:\n  doc: %s\n  profile: design-doc\n  round: 2\n---\n# x\n' "$doc" > "$SDIR/docreview-state.md"
+engine_ledger "$SDIR/docreview-state.md" "$doc" 2
 python3 "$SD/scripts/ledger_marker.py" release --dir "$SDIR" --session sess-aaaa1111 >/dev/null
 o4="$(run_open sess-cccc3333)"
 printf '%s\n' "$o4" | grep -qF "[spec-distill] 이전 리뷰 라운드 2 에서 이어 간다 — $SDIR" \
@@ -244,7 +250,7 @@ open_at() {   # open_at <repo> <문서> <sid> <skill 파일> → 원장 열기 �
 $(fence "$4" ledger-open)" 2>&1 )
 }
 ledger() {   # ledger <파일> <문서> <라운드>
-  printf -- '---\ndocreview:\n  doc: %s\n  profile: design-doc\n  round: %s\n---\n# x\n' "$2" "$3" > "$1"
+  engine_ledger "$1" "$2" "$3"
 }
 
 # (i) 올린 뒤 첫 리뷰 — 같은 문서의 옛 원장이 원장 열기에서 .docreview 로 옮겨진다

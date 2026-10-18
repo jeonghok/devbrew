@@ -3967,3 +3967,44 @@ case_detectors_stale_file_per_file() {
   assert_eq "$(jget "$d/prep.json" 'd["degrade"]["detectors"]["dead_reasons"].get("2")')" "critic_predates_round" "AC10: 신선도는 파일마다 — 라운드 시작보다 오래된 둘째만 사망"
   rm -rf "$d"
 }
+
+# ── AC17 — 원장 요약값: 엔진 밖에서 고친 원장은 복구 길과 함께 멈춘다 ─────────────────
+case_AC17_digest_mismatch_stops() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_contains "$(head -3 "$d/docreview-state.md")" "docreview_digest:" "AC17: 엔진이 저장할 때 요약값을 쓴다"
+  python3 -I -c 'import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); open(p,"w",encoding="utf-8").write(t.replace("round: 1","round: 7",1))' "$d/docreview-state.md"
+  local err rc; err="$(py docreview_state.py gate --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc" "1" "AC17: 상태만 바꾼 원장은 멈춘다"
+  assert_contains "$err" '"reason": "ledger_corrupt"' "AC17: 사유 이름"
+  assert_contains "$err" "1라운드부터 다시 리뷰" "AC17: 복구 길을 함께 낸다"
+  assert_contains "$err" "$d/docreview-state.md" "AC17: 원장 경로를 낸다"
+  err="$(py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "ledger_corrupt"')" "1 1" "AC17: 라우터도 같은 사유로 멈춘다"
+  rm -rf "$d"
+}
+case_AC17_digest_covers_engine_lines_and_body() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  cp "$d/docreview-state.md" "$d/orig.md"
+  python3 -I -c 'import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); assert "  engine_lines: []\n" in t; open(p,"w",encoding="utf-8").write(t.replace("  engine_lines: []\n","  engine_lines:\n  - aaaaaaaaaaaa\n",1))' "$d/docreview-state.md"
+  local err rc; err="$(py docreview_state.py gate --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "ledger_corrupt"')" "1 1" "AC17: 엔진 줄 기록만 바꿔도 멈춘다"
+  cp "$d/orig.md" "$d/docreview-state.md"
+  printf -- '- r1: 손으로 덧붙인 줄\n' >> "$d/docreview-state.md"
+  err="$(py docreview_state.py gate --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "ledger_corrupt"')" "1 1" "AC17: 본문 줄만 덧붙여도 멈춘다"
+  cp "$d/orig.md" "$d/docreview-state.md"
+  py docreview_state.py gate --state-dir "$d" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "0" "AC17 양성 대조: 엔진이 쓴 그대로면 통과한다"
+  rm -rf "$d"
+}
+case_AC17_digest_backfill_disclosed_once() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  python3 -I -c 'import sys,re; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); open(p,"w",encoding="utf-8").write(re.sub(r"^docreview_digest: .*\n","",t,count=1,flags=re.M))' "$d/docreview-state.md"
+  py docreview_state.py gate --state-dir "$d" >/dev/null; local rc=$?
+  assert_eq "$rc" "0" "AC17: 요약값 없는 기존 원장은 손상으로 보지 않는다"
+  local s="$d/s2.json"; snap "$FX/design-sample.md" "$s"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "원장 확인값을 이번에 채웠다" "AC17: 채운 라운드 머리에 한 번 공시"
+  local s3="$d/s3.json"; snap "$FX/design-sample.md" "$s3"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$s3" >/dev/null
+  assert_not_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "원장 확인값을 이번에 채웠다" "AC17: 다음 라운드엔 다시 말하지 않는다"
+  rm -rf "$d"
+}

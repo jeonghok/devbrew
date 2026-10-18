@@ -1130,6 +1130,8 @@ def main(argv=None) -> int:
     a = build_parser().parse_args(argv)
     try:
         return a.fn(a)
+    except LedgerCorrupt as e:
+        return fail(e.reason, **e.extra)
     except FileNotFoundError as e:
         return fail("state_missing", path=str(e))
     except UnicodeEncodeError as e:   # ValueError 의 하위라 앞에 둔다 — 입구 정화(`scrub`) 밖의 글자(비 UTF-8 CLI 인자 · 원장)

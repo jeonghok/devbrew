@@ -143,4 +143,8 @@ case_AC15_forged_lines_gain_no_provenance
 case_AC15_drop_reason_one_line
 case_AC15_decide_quote_one_line
 case_AC15_defer_row_one_line_escaped
+# AC17 — 원장 요약값.
+case_AC17_digest_mismatch_stops
+case_AC17_digest_covers_engine_lines_and_body
+case_AC17_digest_backfill_disclosed_once
 finish

@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점의 형제를 읽는다
 from docreview_state import (  # noqa: E402
-    DOC_ANCHOR, ProfileError, anchors_matching, diff_snapshots, fail, load_profile, load_state, save_state,
+    DOC_ANCHOR, LedgerCorrupt, ProfileError, anchors_matching, diff_snapshots, fail, load_profile, load_state, save_state,
     scope_label_problem, scope_problem, slugify,
 )
 
@@ -302,6 +302,8 @@ def main(argv=None) -> int:
     a = build_parser().parse_args(argv)
     try:
         return a.fn(a)
+    except LedgerCorrupt as e:
+        return fail(e.reason, **e.extra)
     except FileNotFoundError as e:
         return fail("file_missing", path=str(e))
     except (ValueError, RuntimeError) as e:
