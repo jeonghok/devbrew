@@ -103,13 +103,13 @@ next_phase: superpowers:writing-plans
 | 「바뀐 코드만」 | `quality-pipeline/SKILL.md:353` · `agents/security-reviewer.md:112` | 범위 밖 잡음 | 수정 — 「위치는 diff 밖이어도 원인이 이 변경이면 보고」 | 3 |
 | 정의 없는 「문서 경로」 제외 | `quality-pipeline/SKILL.md:217, 338` · `agents/security-reviewer.md:40` | 문서 잡음 | 수정 — 정의를 세움(§4), 뺀 경로 수 공시 | 3 |
 | 리뷰어 모델 opus 고정 둘 | `agents/security-reviewer.md:6` · `agents/code-recritic.md:13` | 판정 품질 | 제거 — 세션 모델을 따른다(사용자 결정, `flexibility-audit.md`) | 3 |
-| 문서 비평 기본 5라운드(RC58) · 대상 하나 · 커밋 강제 · dispatch 수 고정 | `critiquing-artifacts/SKILL.md:72-75, 107-108, 141-151, 258-259, 276` | 루프 · 무결성 | 수정 — 상한에서 사용자가 엶 · 여러 대상 · 「지적만 받기」 읽기 전용 모드(커밋 불필요) · dispatch 수는 기본값 | 3 |
+| 문서 비평 기본 5라운드(RC58) · 대상 하나 · 커밋 강제 · dispatch 수 고정 | `critiquing-artifacts/SKILL.md:72-75, 107-108, 141-151, 258-259, 276` | 루프 · 무결성 | 수정 — 상한에서 사용자가 엶 · 여러 대상 · 「지적만 받기」 읽기 전용 모드(커밋 불필요) · dispatch 수는 기본값이고 기본값과 실제로 쓴 수를 공시하며, 사용자가 그 자리에서 dispatch 수를 지정할 수 있다(D8.18) | 3 |
 | e2e 시나리오 단일 선택 | `references/e2e.md:34` | 선택지 범람 | 수정 — 여러 선택 | 3 |
 | 토픽 선언이면 trivia 우회 불가 | `quality-pipeline/SKILL.md:164-172` | 토픽 일부만 보는 우회 | 수정 — 토픽 diff 전체가 trivia 면 허용, 사유 공시 | 3 |
 | 차등 테스트 밖 스위트 실행 금지 | `references/differential-test.md:130` | 판정 오염 | 수정 — 조사용 실행 허용, 「조사용 — 판정에 안 씀」 표시 | 3 |
 | project-init 헌장 재질문 3회 뒤 중단(RC53) | `project-init/SKILL.md:160-164` | 빈 헌장 | 제거 — 기계가 정하던 중단을 없애고, 3회 뒤 「건너뛰기 · 계속 묻기 · 중단」을 사용자가 고름(D7.17) | 4 |
 | project-init AGENTS.md 이전 거절 → 전체 중단 | `project-init/SKILL.md:48, 199, 201` | 부분 진행(옛 AC21) | 제거 — 기계가 정하던 전체 중단을 없애고, 「CLAUDE.md 에 바로 쓰기」 선택지, 관련 없는 git-workflow 생성은 계속(D7.17) | 4 |
-| project-init 질문 ≤4 · 관례 1–3개 | `project-init/SKILL.md:147, 156` | 질문 피로 | 수정 — 기본값, 더 받을 수 있게 | 4 |
+| project-init 질문 ≤4 · 관례 1–3개 | `project-init/SKILL.md:147, 156` | 질문 피로 | 수정 — 질문 4개 · 관례 1–3개는 기본값이고, 기본값과 실제로 쓴 수를 그 자리에서 공시하며, 사용자가 「더 묻기」로 그 자리에서 더 연다(D8.18) | 4 |
 | project-init 헌장 단계 직렬 순서(Step 3 이 끝난 뒤에만 시작, 교차 금지) | `project-init/SKILL.md:119` | 질문이 섞여 답이 엉킴 | 수정 — 질문 순서는 기본 직렬로 두고, 질문이 없는 Phase 0 스캔은 질문과 겹쳐 돌려도 된다(D3.11) | 4 |
 | project-init 템플릿 브랜치 접두 고정 · 「ALWAYS 브랜치 확인」 | `templates/*/branch-strategy.md` · `templates/*/agents-md-section.md:5` | 브랜치 규칙 일관 | 수정 — 접두는 고른 전략에서 도출 + 더하기(훅 `post-tool-use.py:138-148` 과 같은 규칙), 확인은 변경 작업일 때만. 규칙이 브랜치 전환만 전제하므로(`templates/github-flow/branch-strategy.md:57-61` 등 전략 셋) 브랜치를 worktree 에서 작업하는 길도 같은 규칙으로 적는다(점검 문서의 「worktree 경로」, D3.11) | 4 |
 | plugin-audit 근거 약한 지적을 공시 없이 버림(RC54) | `agents/plugin-auditor.md:56-57, 76-77` | 정밀도 · 취향 지적 | 수정 — 버리지 않고 「열린 질문」으로 보고서에 | 4 |
@@ -329,6 +329,7 @@ next_phase: superpowers:writing-plans
 - D6.15 · r6 · adopt · 89a93115#r6.1 · "고친다 — 빠진 행마다 AC 더함" — 장치 처분표의 몇몇 행에는 그 행을 닫는 수용 기준이 없다. 그래서 「처분표의 모든 행이 어느 AC 로 닫힌다」(AC37)를 이 문서 스스로 만족하지 못한다. 3라운드에 더한 project-init 두 행(Phase 0 스캔 겹침 · worktree 경로)도 수용 기준과 계획 4 의 설계 절에 들어가지 않았다.
 - D6.16 · r6 · adopt · 89a93115#r6.2 · "고친다 — AC23 을 결정에 맞춤" — 문서 경로 수용 기준(AC23)이 이미 내린 두 결정을 반영하지 않았다. 기본 제외 목록에 지운 docs/** 가 아직 들어 있고, 설정이 바뀐 iteration 은 기본 목록으로 되돌린다는 보호 규칙과 걸러진 diff 가 비면 not-certified 로 낸다는 규칙이 없다.
 - D7.17 · r7 · adopt · 3383275a#r7.1 · "고친다 — D18 원문대로 제거로 분류" — 처분표의 판정 규칙이 확정 제약 D18 과 반대로 적혀 있다. D18 은 사용자 결정을 덮는 장치를 「제거」하라고 하는데, 문서는 그런 장치를 「수정」 쪽으로 분류한다.
+- D8.18 · r8 · adopt · 3383275a#r8.1 · "고친다 — 쓴 값 공시 + 사용자가 엶" — 처분표에서 '수정'으로 남긴 두 상한(project-init 질문 4개·관례 1–3개, 문서 비평 dispatch 수)이 공시도 없고 사용자가 여는 길도 없이 '기본값, 더 받을 수 있게'로만 적혀 있다. 확정 제약은 상한을 수정할 때 공시하고 사용자가 여는 형태로 하라고 한다.
 
 ## 번호 대조
 
