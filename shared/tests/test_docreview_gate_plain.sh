@@ -105,6 +105,10 @@ PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_s
 br "$d" "$d/r2a.md"
 check_render "log_check_skipped" "$d" "결정 기록 · 미룬 항목 절이 덧붙이기만 됐는지 이번 라운드는 확인하지 못했다"; rm -rf "$d"
 
+# 사후 결정의 원복 대상이 앞 라운드의 허가 없는 변경 — 그 사실을 알리는 줄(결정 id 는 괄호 안)
+d="$(revert_target_flagged_state)"
+check_render "revert_target_flagged" "$d" "원복하면 원래 글이 아니라 라운드 2 에 허가 없이 바뀐 글로 돌아간다"; rm -rf "$d"
+
 # 첫 줄을 바꾸는 상태
 d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
 check_render "approval_ready" "$d" "다음: 승인 게이트 — 진행 옵션을 고를 수 있다"; rm -rf "$d"

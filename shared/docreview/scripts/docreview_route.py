@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점
 from adjudication import Ledger  # noqa: E402
 from docreview_anchor import classify_anchor, refs_of  # noqa: E402
 from docreview_state import (  # noqa: E402
-    RANK, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, category_gloss, choice_label, fail, load_profile,
+    RANK, LedgerCorrupt, offered_choices_for, category_gloss, choice_label, fail, load_profile,
     load_state, observe_ledger, open_lineages, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
 from docreview_advice import (  # noqa: E402
@@ -399,10 +399,10 @@ def _decision_view(it, doc, st):
     # (`_resolve_ids_and_lineage`, 이 함수 호출 직전)에서 이미 원본 레코드에
     # 찍히므로 지금 계산 가능하다 — 대상은 이 id 자신이 아니라 그 id 를 가리키는
     # «다른» 레코드라서 이 id 가 원장에 없어도 무관하다. 그래서 원장 래퍼가 아니라
-    # 순수 함수 `_decide_choices_for` 를 직접 쓴다 — 선택지 로직은 여전히
+    # 순수 함수 `_decide_choices_for` 위의 `offered_choices_for` 를 쓴다 — 선택지 로직은 여전히
     # `docreview_state.py` 한 곳뿐이고(`decide_choices`·`_rg_decide`·`_rg_expired`
-    # 와 같은 원본), 이 자리가 `decide_choices` 를 재구현하지 않는다.
-    choices = _decide_choices_for("open", _is_reraise_successor(st, it["id"]))
+    # 와 같은 원본 · 같은 채택 거름), 이 자리가 `decide_choices` 를 재구현하지 않는다.
+    choices = offered_choices_for(st, it)
     nref = None
     if doc and Path(doc).is_file():
         nref = len(refs_of(doc, it["anchor"]))

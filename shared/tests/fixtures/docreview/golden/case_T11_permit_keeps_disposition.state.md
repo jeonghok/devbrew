@@ -618,6 +618,8 @@ docreview:
       round: 1
   escalated: []
   reraise: []
+  engine_lines: []
+  engine_lines_since: 0
 ---
 # docreview 원장
 - r0: init

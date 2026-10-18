@@ -240,6 +240,7 @@ def _empty(doc, profile):
         "fixes": {}, "asks": {}, "permits": {}, "applied_scopes": [],
         "decision_log": [], "rounds": {}, "pending_recritic": None,
         "rejected_lineages": {}, "escalated": [], "reraise": [],
+        "engine_lines": [], "engine_lines_since": 0,
     }
 
 
@@ -310,8 +311,8 @@ def resolve_scope(scope: str, old_secs, new_secs) -> set:
 # ── 울타리(fence) — 어떤 범위로도 면제되지 않는 절 ─────────────────────────────────────
 # 울타리 = 불변 절(사용자 원문) ∪ 결정 기록 · 미룸 절(엔진만 줄을 덧붙이는 자리)과 그 하위 절. 기록 경로(permit ·
 # fix 범위 · 신고 · 앞으로 생길 무엇이든)의 범위는 울타리 절을 면제하지 못한다 — 쓰는 때(`exempt_scopes`) 한 곳이 정한다.
-# 울타리 절이 지나가는 길은 엔진이 도출한 규칙뿐이다: 결정 기록 · 미룸 절을 만드는 라운드 · 덧붙이기만(`line_hashes`) ·
-# 원래 글자로 정확히 되돌린 원복(`expect_hash`) · 줄 기록이 없는 옛 원장의 첫 라운드 한 번(게이트에 공시).
+# 울타리 절이 지나가는 길은 엔진이 도출한 규칙뿐이다: 불변 절은 덧붙이기만(`line_hashes`) · 원래 글자로 정확히 되돌린
+# 원복(`expect_hash`). 결정 기록 · 미룸 절은 줄 출처 규칙 하나(`_log_verdicts`) — 엔진이 쓴 줄만 더해졌을 때만 지나간다.
 def fence_anchors(prof, sections) -> set:
     out = set(anchors_matching(prof["immutable"], sections)) if prof["immutable"] else set()
     return out | _log_section_anchors(prof, sections)
@@ -324,11 +325,112 @@ def round_fence(st, prof, r) -> set:
             | fence_anchors(prof, (snaps.get(str(r)) or {}).get("sections") or []))
 
 
-def legacy_log_anchors(prof, old_secs) -> list:
-    """이 변경 전의 원장 — 직전 스냅숏의 결정 기록 · 미룸 절에 줄 해시가 없어 «덧붙이기만» 을 잴 수 없는 절."""
-    logs = _log_section_anchors(prof, old_secs)
-    return sorted(s["anchor"] for s in old_secs
-                  if s.get("anchor") in logs and not isinstance(s.get("line_hashes"), list))
+# ── 결정 기록 · 미룸 절의 줄 출처 ────────────────────────────────────────────────────
+# 엔진은 결정 기록 · 미룸 절에 쓰는 줄마다(절을 만들면 헤딩 줄도) 해시를 원장 `engine_lines` 에 쌓는다
+# ({round, heading, hash} — 원장의 문서에 쓴 줄만). `engine_lines_since` 는 그 기록이 시작된 라운드다 — 그 전 라운드에
+# 쓴 줄은 기록에 없으므로 그 라운드의 diff 는 출처를 잴 수 없다(옛 원장 — 한 번 넘기고 게이트에 공시한다).
+_BLANK_LINE_HASH = hashlib.sha1(b"").hexdigest()[:12]
+
+
+def _line_hash(line) -> str:
+    """`docreview_anchor.parse_sections` 의 줄 해시와 같은 함수 — 오른쪽 공백을 걷은 줄의 sha1 앞 12자."""
+    return hashlib.sha1(line.rstrip().encode("utf-8")).hexdigest()[:12]
+
+
+def _engine_tracked(st, r) -> bool:
+    """라운드 r 의 diff(스냅숏 r−1 → r)에 들어온 엔진 줄이 전부 기록돼 있는가."""
+    since = st.get("engine_lines_since")
+    return isinstance(since, int) and not isinstance(since, bool) and since <= r - 1
+
+
+def _engine_lines(st, heading) -> list:
+    rec = st.get("engine_lines")
+    if rec is None:
+        return []
+    if not isinstance(rec, list):
+        raise LedgerCorrupt("engine_lines_corrupt")
+    out = []
+    for i, e in enumerate(rec):
+        if (not isinstance(e, dict) or not isinstance(e.get("hash"), str) or not isinstance(e.get("heading"), str)
+                or isinstance(e.get("round"), bool) or not isinstance(e.get("round"), int)):
+            raise LedgerCorrupt("engine_lines_corrupt", index=i)
+        if e["heading"] == heading:
+            out.append(e)
+    return out
+
+
+def _log_change_ok(st, heading, new_lh, base, base_round, group_new) -> bool:
+    """결정 기록 · 미룸 절 한 개의 변경이 «엔진 줄만 더함» 인가 — 새 줄 해시 = BASE + TAIL, TAIL 의 보이는 줄은 전부
+    엔진이 이 절에 쓴 줄, 그리고 BASE 이후(라운드 base_round 부터) 엔진이 이 절 묶음에 쓴 줄은 하나도 빠지지 않았다
+    (`group_new` = 새 스냅숏의 그 묶음 줄 해시 전부). 면제와 원복 관측이 같은 판정을 쓴다."""
+    if not isinstance(base, list) or not isinstance(new_lh, list):
+        return False
+    if len(new_lh) < len(base) or new_lh[:len(base)] != base:
+        return False
+    eng = _engine_lines(st, heading)
+    written = {e["hash"] for e in eng}
+    if any(h != _BLANK_LINE_HASH and h not in written for h in new_lh[len(base):]):
+        return False
+    return {e["hash"] for e in eng if e["round"] >= base_round} <= set(group_new)
+
+
+def _log_verdicts(st, prof, r) -> dict:
+    """라운드 r 에 바뀐 결정 기록 · 미룸 절 앵커 중 지나가는 것 → (면제 라벨, 규칙). 규칙은 넷이다 —
+    append(옛 줄 + 엔진 줄) · revert(원복 permit 의 `expect_line_hashes` + 엔진 줄) · creation(이 원장의 앞 스냅숏 어디에도
+    없던 절, 줄 전부가 엔진 줄) · legacy(출처를 잴 수 없는 옛 원장 — 한 번, 게이트 공시). 여기 없는 바뀐 절은 changed 다."""
+    snaps = st.get("snapshots") or {}
+    old_secs = (snaps.get(str(r - 1)) or {}).get("sections") or []
+    new_secs = (snaps.get(str(r)) or {}).get("sections") or []
+    om = {s["anchor"]: s for s in old_secs}
+    nm = {s["anchor"]: s for s in new_secs}
+    g_old, g_new = _log_groups(prof, old_secs), _log_groups(prof, new_secs)
+    earlier = set()
+    for k, snap in snaps.items():
+        try:
+            if int(k) < r and isinstance(snap, dict):
+                earlier |= {s.get("anchor") for s in snap.get("sections") or [] if isinstance(s, dict)}
+        except ValueError:
+            continue
+    tracked = _engine_tracked(st, r)
+    reverts = []
+    for did, p in (st.get("permits") or {}).items():
+        k, kind, anchors, _fid = _permit_fields(did, p)
+        if k == r and kind == "revert":
+            reverts.append((anchors, p))
+    out = {}
+    for h in sorted(set(g_old) | set(g_new)):
+        group_new = []
+        for a in g_new.get(h, ()):
+            group_new.extend(nm[a].get("line_hashes") or [])
+        for a in sorted(g_old.get(h, set()) | g_new.get(h, set())):
+            o, n = om.get(a), nm.get(a)
+            if o is not None and n is not None and o.get("hash") == n.get("hash"):
+                continue
+            if not tracked or (o is not None and not isinstance(o.get("line_hashes"), list)):
+                if o is not None or a not in earlier:
+                    out[a] = (a, "legacy")
+                continue
+            hit = False
+            for anchors, p in reverts:
+                if a not in anchors:
+                    continue
+                if n is None:
+                    hit = "expect_hash" in p and p["expect_hash"] is None
+                elif isinstance(p.get("expect_round"), int) and not isinstance(p.get("expect_round"), bool):
+                    hit = _log_change_ok(st, h, n.get("line_hashes"), p.get("expect_line_hashes"), p["expect_round"],
+                                         group_new)
+                if hit:
+                    break
+            if hit:
+                out[a] = (a, "revert")
+            elif n is None:
+                continue
+            elif o is None:
+                if a not in earlier and _log_change_ok(st, h, n.get("line_hashes"), [], r - 1, group_new):
+                    out[a] = (a, "creation")
+            elif _log_change_ok(st, h, n.get("line_hashes"), o.get("line_hashes"), r - 1, group_new):
+                out[a] = ("append-only", "append")
+    return out
 
 
 # ── 범위(scope) 검증 — 기록할 때 한 함수(`scope_problem`), 쓸 때 울타리 ─────────────────────────
@@ -379,15 +481,18 @@ def _appended_only(old_sec, new_sec) -> bool:
     return len(n) > len(o) and n[:len(o)] == o
 
 
-def diff_snapshots(old: dict, new: dict, exempt_scopes, fence=()) -> dict:
+def diff_snapshots(old: dict, new: dict, exempt_scopes, fence=(), log_anchors=None, log_exempt=None) -> dict:
     """두 스냅숏의 헤딩 단위 변경. 두 쪽 다 머리 없으면 변경 전부가 `#__doc__` 면제다. 한쪽만 머리 없는 전이에서는
-    `fence`(울타리 절) 앵커가 통째 면제에서 빠진다 — 면제 집합에 없으면 changed 다."""
+    `fence`(울타리 절) 앵커가 통째 면제에서 빠진다 — 면제 집합에 없으면 changed 다. `log_anchors`(결정 기록 · 미룸 절)가
+    오면 그 절은 면제 집합 · 덧붙이기만 규칙을 보지 않고 `log_exempt`(줄 출처 판정 `_log_verdicts` 의 라벨)만 본다."""
     os_, ns = old.get("sections", []), new.get("sections", [])
     om = {s["anchor"]: s for s in os_}
     nm = {s["anchor"]: s for s in ns}
     both_headingless = bool(old.get("headingless") and new.get("headingless"))
     headingless = bool(old.get("headingless") or new.get("headingless"))
     fence = set(fence or ())
+    logs = set(log_anchors) if log_anchors is not None else set()
+    log_exempt = dict(log_exempt or {})
     ex = {}
     for sc in exempt_scopes or []:
         for a in resolve_scope(sc, os_, ns):
@@ -402,6 +507,15 @@ def diff_snapshots(old: dict, new: dict, exempt_scopes, fence=()) -> dict:
         if both_headingless:
             item["scope"] = DOC_ANCHOR
             exempt_applied.append(item)
+        elif anchor in logs:
+            if anchor in log_exempt:
+                item["scope"] = log_exempt[anchor]
+                if item["scope"] == "append-only":
+                    item["kind"] = "appended"
+                    item["evidence"] = "섹션 '%s' (%s) 끝에 엔진이 쓴 줄만 더해짐" % (title, anchor)
+                exempt_applied.append(item)
+            else:
+                changed.append(item)
         elif anchor in ex:
             sc = ex[anchor]
             item["scope"] = sc.split("=", 1)[0] if sc.startswith("related:") and "=" in sc else sc
@@ -416,7 +530,7 @@ def diff_snapshots(old: dict, new: dict, exempt_scopes, fence=()) -> dict:
         if a not in om:
             rec(a, "added", s["title"], None, s["hash"])
         elif om[a]["hash"] != s["hash"]:
-            if _appended_only(om[a], s):
+            if a not in logs and _appended_only(om[a], s):
                 exempt_applied.append({"anchor": a, "kind": "appended", "title": s["title"],
                                        "old_hash": om[a]["hash"], "new_hash": s["hash"], "scope": "append-only",
                                        "evidence": "섹션 '%s' (%s) 끝에 줄만 더해짐" % (s["title"], a)})
@@ -476,11 +590,13 @@ def exempt_scopes(st, prof, r) -> list:
     울타리(`round_fence`)가 여기서 면제를 정한다: 면제 라벨을 흉내 내는 글자와 울타리 절로 풀리는 범위(직접 · insert-after 기준 ·
     라운드 r−1/r 스냅숏에서 풀린 앵커)는 어디서 기록됐든 면제에 들지 못한다. 울타리 절이 드는 길은 도출 규칙뿐이다 —
     결정 기록 · 미룸 절을 만드는 라운드의 헤딩, 원래 글자로 정확히 되돌린 원복 permit 의 앵커(새 해시 = `expect_hash`),
-    줄 해시가 없는 옛 원장의 첫 라운드(`legacy_log_anchors`). 덧붙인 줄은 `diff_snapshots` 의 «덧붙이기만 허용» 이 본다."""
+    결정 기록 · 미룸 절은 줄 출처 판정(`_log_verdicts`)이 지나가게 한 것만(만드는 라운드 · 원복 · 옛 원장 — 덧붙이기는
+    `diff_snapshots` 가 그 판정의 라벨로 본다). 불변 절의 덧붙인 줄은 `diff_snapshots` 의 «덧붙이기만 허용» 이 본다."""
     snaps = st.get("snapshots") or {}
     old_secs = (snaps.get(str(r - 1)) or {}).get("sections") or []
     new_secs = (snaps.get(str(r)) or {}).get("sections") or []
     fence = round_fence(st, prof, r)
+    logs = _log_section_anchors(prof, old_secs) | _log_section_anchors(prof, new_secs)
     new_hash = {s["anchor"]: s.get("hash") for s in new_secs}
 
     def allowed(sc):
@@ -505,19 +621,13 @@ def exempt_scopes(st, prof, r) -> list:
         for x in anchors:
             if allowed(x):
                 out.append(x)
-            elif (kind == "revert" and x in fence and "expect_hash" in p
+            elif (kind == "revert" and x in fence and x not in logs and "expect_hash" in p
                   and new_hash.get(x) == p["expect_hash"]):
-                out.append(x)   # 원래 글자로 정확히 되돌린 울타리 절 — 진짜 복원만
+                out.append(x)   # 원래 글자로 정확히 되돌린 불변 절 — 진짜 복원만
         if kind == "apply":
             rel = [x for x in (p.get("related_anchors") or []) if isinstance(x, str)]
             out.extend("related:%s=%s" % (did, x) for x in rel if allowed(x))
-    for key in ("decision_log", "defer_target"):
-        t = prof[key]
-        if t.get("kind") == "doc_section":
-            ha = heading_anchor(t["heading"])
-            if not any(x["anchor"] == ha for x in old_secs):   # 절을 만드는 라운드만 — 기존 줄은 덧붙이기 규칙이 본다
-                out.append(ha)
-    out.extend(legacy_log_anchors(prof, old_secs))   # 옛 원장 — 이번 한 번만 옛 절 면제(게이트가 공시한다)
+    out.extend(sc for sc, rule in _log_verdicts(st, prof, r).values() if rule != "append")
     return sorted(set(out))
 
 
@@ -527,7 +637,11 @@ def round_diff(st, prof, r) -> dict:
     for k in (r - 1, r):
         if not _snapshot_ok(snaps.get(str(k))):
             raise LedgerCorrupt("snapshot_missing", round=k, diff_round=r)
-    return diff_snapshots(snaps[str(r - 1)], snaps[str(r)], exempt_scopes(st, prof, r), round_fence(st, prof, r))
+    logs = (_log_section_anchors(prof, snaps[str(r - 1)]["sections"])
+            | _log_section_anchors(prof, snaps[str(r)]["sections"]))
+    verdicts = _log_verdicts(st, prof, r)
+    return diff_snapshots(snaps[str(r - 1)], snaps[str(r)], exempt_scopes(st, prof, r), round_fence(st, prof, r),
+                          logs, {a: v[0] for a, v in verdicts.items()})
 
 
 # ── 문서의 정체 · 문서별 상태 디렉토리 ────────────────────────────────────────
@@ -621,24 +735,35 @@ def cmd_profile_check(a) -> int:
 
 
 _BLANK_CATEGORIES = ("Cc", "Cf", "Zs", "Zl", "Zp")   # 제어 · 서식(폭 없는 공백 등) · 공백 · 줄 · 문단 구분
+# 부류로는 글자(Lo · So · Mn)지만 빈칸으로 그려지는 것 — 한글 채움 문자 · 초성/중성 채움 · 점자 빈칸 · 자소 결합자 · 반각 한글 채움 ·
+# 크메르 모음 고유 부호 둘
+_BLANK_CHARS = frozenset("\u3164\u115f\u1160\u2800\u034f\uffa0\u17b4\u17b5")
 
 
 def _blank_text(s) -> bool:
     """보이는 글자가 하나도 없다 — 빈 글자 포함."""
-    return all(unicodedata.category(ch) in _BLANK_CATEGORIES for ch in s)
+    return all(ch in _BLANK_CHARS or unicodedata.category(ch) in _BLANK_CATEGORIES for ch in s)
 
 
-def _log_section_anchors(prof, sections) -> set:
-    """프로필 `decision_log` · `defer_target` 이 사용자 문서 절이면 그 절과 하위 절의 앵커 — 엔진이 줄을 덧붙이는 자리다
-    (덧붙인 줄은 마지막 하위 절 끝에 앉을 수 있다)."""
-    out = set()
+def _log_groups(prof, sections) -> dict:
+    """프로필 `decision_log` · `defer_target` 이 사용자 문서 절이면 {헤딩 줄: 그 절과 하위 절의 앵커} — 엔진이 줄을
+    덧붙이는 자리다(덧붙인 줄은 마지막 하위 절 끝에 앉을 수 있다)."""
+    out = {}
     for key in ("decision_log", "defer_target"):
         t = prof[key]
         if t.get("kind") == "doc_section":
             ha = heading_anchor(t["heading"])
+            grp = out.setdefault(t["heading"].strip(), set())
             for s in sections:
                 if s.get("anchor") == ha or ha in (s.get("parents") or []):
-                    out.add(s["anchor"])
+                    grp.add(s["anchor"])
+    return out
+
+
+def _log_section_anchors(prof, sections) -> set:
+    out = set()
+    for grp in _log_groups(prof, sections).values():
+        out |= grp
     return out
 
 
@@ -673,6 +798,9 @@ def cmd_begin_round(a) -> int:
         st["extra_rounds"].append({"round": n, "quote": a.extra_approval, "source": a.extra_approval_source})
     st["round"] = n
     st["rereview_count"] = rr
+    if "engine_lines_since" not in st:   # 옛 원장 — 엔진 줄 기록이 이 라운드부터 시작한다(그 전 줄은 출처를 잴 수 없다)
+        st["engine_lines_since"] = n
+        st.setdefault("engine_lines", [])
     imm = set(anchors_matching(prof["immutable"], snap.get("sections", []))) if prof["immutable"] else set()
     imm |= _log_section_anchors(prof, snap.get("sections", []))
     secs = []
@@ -795,24 +923,39 @@ def _immutable_adopt_anchors(prof, sections) -> list:
     return [x for x in anchors_matching(prof["fix_anchors"], sections) if x not in fence]
 
 
-def adopt_problem(st, fid, prof=None):
-    """이 decide 의 「고친다(채택)」가 열 permit 범위의 문제 — (사유, 범위) 또는 None. `cmd_decide` 의 거부 ·
-    `decide_choices` · 게이트 렌더가 같은 판정을 쓴다. 사후(post) 결정의 채택은 permit 을 열지 않으므로 문제가 없다."""
-    d = st["decides"].get(fid) or {}
-    if d.get("kind") == "post":
+def _adopt_problem_for(st, prof, kind, immutable, edit_scope, anchor):
+    if kind == "post":
         return None
-    f = st["findings"].get(fid) or {}
     if prof is None:
         try:
             prof = load_profile(st["profile"])
         except (ProfileError, OSError, ValueError, getattr(yaml, "YAMLError", ProfileError)):
             return ("profile_unreadable", str(st.get("profile")))
     secs = ((st.get("snapshots") or {}).get(str(st.get("round"))) or {}).get("sections") or []
-    if d.get("immutable"):
+    if immutable:
         return None if _immutable_adopt_anchors(prof, secs) else ("no_fix_anchor", "")
-    sc = f.get("edit_scope") or f.get("anchor")
+    sc = edit_scope or anchor
     why = scope_problem(sc, secs, prof)
     return (why, sc) if why else None
+
+
+def adopt_problem(st, fid, prof=None):
+    """이 decide 의 「고친다(채택)」가 열 permit 범위의 문제 — (사유, 범위) 또는 None. `cmd_decide` 의 거부 ·
+    `decide_choices` · 게이트 렌더 · 라우팅의 선택지(`offered_choices_for`)가 같은 판정을 쓴다. 사후(post) 결정의
+    채택은 permit 을 열지 않으므로 문제가 없다."""
+    d = st["decides"].get(fid) or {}
+    f = st["findings"].get(fid) or {}
+    return _adopt_problem_for(st, prof, d.get("kind"), d.get("immutable"), f.get("edit_scope"), f.get("anchor"))
+
+
+def offered_choices_for(st, it) -> list:
+    """라우팅 시점(이 id 가 아직 원장에 없다)의 선택지 — 곧 «open» 으로 적힐 항목의 `_decide_choices_for` 에서
+    `decide_choices` 와 같은 채택 거름을 한다(fin.json 의 선택지 = decide 가 받는 것)."""
+    ch = _decide_choices_for("open", _is_reraise_successor(st, it["id"]))
+    if "adopt" in ch and _adopt_problem_for(st, None, it.get("kind") or "pre", bool(it.get("immutable")),
+                                            it.get("edit_scope"), it.get("anchor")):
+        ch = [c for c in ch if c != "adopt"]
+    return ch
 
 
 def decide_choices(st, fid) -> list:
@@ -963,6 +1106,21 @@ def append_under_heading(path: Path, heading: str, line: str, own=False) -> None
     _write_atomic(path, "\n".join(lines))
 
 
+def engine_append(st, path, heading, line, own=False) -> None:
+    """`append_under_heading` 에 줄 출처 기록을 더한다 — 원장의 문서에 쓴 줄(절을 만들면 헤딩 줄도)의 해시를
+    `engine_lines` 에 쌓는다. 부르는 쪽이 원장을 저장한다."""
+    p = Path(path)
+    text = p.read_text(encoding="utf-8") if p.is_file() else ""
+    created = _section_span(text.split("\n"), heading, own) is None
+    append_under_heading(p, heading, line, own)
+    if not isinstance(st.get("doc"), str) or doc_identity(str(p)) != doc_identity(st["doc"]):
+        return
+    rows = ([heading.strip()] if created else []) + line.split("\n")
+    rec = st.setdefault("engine_lines", [])
+    n = int(st["round"])
+    rec.extend({"round": n, "heading": heading.strip(), "hash": _line_hash(x)} for x in rows if x.strip())
+
+
 def _log_line(entry, f) -> str:
     s = "- %s · r%d · %s · %s · \"%s\"" % (entry["decision_id"], entry["round"], entry["choice"],
                                            ", ".join(entry["finding_ids"]), entry["quote"])
@@ -1064,6 +1222,29 @@ def cmd_related_changes(a) -> int:
     return 0
 
 
+def _expected_lines(st, anchor, h, n):
+    """해시 h 를 가진 그 앵커의 가장 늦은 스냅숏(라운드 n 앞)의 (줄 해시, 라운드) — 없으면 None."""
+    if not isinstance(h, str):
+        return None
+    for k in range(n - 1, 0, -1):
+        for s in ((st.get("snapshots") or {}).get(str(k)) or {}).get("sections") or []:
+            if s.get("anchor") == anchor and s.get("hash") == h and isinstance(s.get("line_hashes"), list):
+                return list(s["line_hashes"]), k
+    return None
+
+
+def revert_hit(st, prof, k, p, anchor) -> bool:
+    """원복 permit(라운드 k)이 관측됐는가 — 결정 기록 · 미룸 절은 면제와 같은 줄 출처 판정(`_log_verdicts`),
+    그 밖의 절은 그 라운드 스냅숏의 해시 = `expect_hash`."""
+    snaps = st.get("snapshots") or {}
+    logs = (_log_section_anchors(prof, (snaps.get(str(k - 1)) or {}).get("sections") or [])
+            | _log_section_anchors(prof, snapshot_at(st, k)["sections"]))
+    if anchor in logs:
+        return _log_verdicts(st, prof, k).get(anchor, (None, None))[1] == "revert"
+    cur = {s["anchor"]: s["hash"] for s in snapshot_at(st, k)["sections"]}
+    return cur.get(anchor) == p.get("expect_hash")
+
+
 def cmd_decide(a) -> int:
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
@@ -1112,6 +1293,9 @@ def cmd_decide(a) -> int:
             d["state"] = "adopted"
             permit = {"kind": "revert", "apply_anchors": [f["anchor"]], "expect_hash": d.get("prev_hash"),
                       "round": n + 1, "finding_id": a.id, "consumed": False}
+            base = _expected_lines(st, f["anchor"], d.get("prev_hash"), n)
+            if base:   # 되돌릴 글자의 줄 해시와 그 스냅숏 라운드 — 결정 기록 · 미룸 절의 원복은 이것 + 엔진 줄로 잰다
+                permit["expect_line_hashes"], permit["expect_round"] = base
         else:
             d["state"] = "rejected"
     else:  # adopt
@@ -1141,7 +1325,7 @@ def cmd_decide(a) -> int:
         heading = prof["decision_log"].get("heading")
         if not heading:
             return fail("profile_decision_log_is_state_only")
-        append_under_heading(Path(a.log_file), heading, _log_line(entry, f))
+        engine_append(st, a.log_file, heading, _log_line(entry, f))
     _refresh_open_lineages(st, n)
     save_state(a.state_dir, st, "decide %s %s" % (a.id, a.choice))
     out = {"ok": True, "decision_id": entry["decision_id"], "state": d["state"], "permit": permit}
@@ -1169,8 +1353,8 @@ def cmd_fix(a) -> int:
         if a.log_file:
             prof = load_profile(st["profile"])
             if prof["decision_log"].get("heading"):
-                append_under_heading(Path(a.log_file), prof["decision_log"]["heading"],
-                                     _log_line(st["decision_log"][-1], st["findings"][a.id]))
+                engine_append(st, a.log_file, prof["decision_log"]["heading"],
+                              _log_line(st["decision_log"][-1], st["findings"][a.id]))
     elif ev == "hold":
         fx["state"] = "held"
     elif ev == "unhold":
@@ -1218,7 +1402,7 @@ def cmd_defer(a) -> int:
     t = prof["defer_target"]
     if t.get("kind") != "doc_section":
         return fail("profile_has_no_defer_target")
-    append_under_heading(Path(a.log_file), t["heading"], "| %s | %s |" % (a.id, f.get("summary") or ""))
+    engine_append(st, a.log_file, t["heading"], "| %s | %s |" % (a.id, f.get("summary") or ""))
     f["deferred"] = True
     save_state(a.state_dir, st, "defer %s appended" % a.id)
     _emit({"ok": True})
@@ -1268,8 +1452,7 @@ def observe_ledger(st, prof, n) -> dict:
         if kind == "apply":
             hit = any(x in touched(k) for x in anchors)
         else:
-            cur = {s["anchor"]: s["hash"] for s in snapshot_at(st, k)["sections"]}
-            hit = cur.get(anchors[0]) == p.get("expect_hash")
+            hit = revert_hit(st, prof, k, p, anchors[0])
         p["consumed"] = True
         d.pop("superseded_by", None)   # 이 만료 인스턴스는 끝났다 — 낡은 포인터가 다음 만료를 풀면 안 된다
         if hit:
@@ -1404,18 +1587,16 @@ def round_unverified(st):
 
 
 def _log_check_skipped(st, n):
-    """라운드 n 에 옛 원장 규칙(줄 해시 없음)으로 넘긴 결정 기록 · 미룸 절 중 실제로 바뀐 것. 못 읽으면 None(셀 수 없음)."""
+    """라운드 n 에 출처를 잴 수 없어(옛 원장) 넘긴 결정 기록 · 미룸 절 중 실제로 바뀐 것. 못 읽으면 None(셀 수 없음)."""
     if n < 2:
         return []
     try:
-        prof = load_profile(st["profile"])
-        legacy = set(legacy_log_anchors(prof, snapshot_at(st, n - 1)["sections"]))
-        if not legacy:
-            return []
-        d = round_diff(st, prof, n)
+        snapshot_at(st, n - 1)
+        snapshot_at(st, n)
+        v = _log_verdicts(st, load_profile(st["profile"]), n)
     except (LedgerCorrupt, ProfileError, OSError, ValueError, getattr(yaml, "YAMLError", ProfileError)):
         return None
-    return sorted({e["anchor"] for e in d["exempt_applied"] if e["anchor"] in legacy and e.get("scope") == e["anchor"]})
+    return sorted(a for a, (_sc, rule) in v.items() if rule == "legacy")
 
 
 def gate_summary(st) -> dict:
@@ -1739,7 +1920,31 @@ def _rg_decide(st, g, fid):
     if dv.get("category_unglossed"):
         lines.append("  ↳ 사람말 사상 없음: %s — 원래 이름 그대로 낸다" % _one(dv["category_unglossed"]))
     lines.extend(_adopt_unavailable_line(st, fid))
+    lines.extend(_revert_target_flagged_line(st, fid))
     return lines
+
+
+def _revert_target_flagged_line(st, fid) -> list:
+    """사후 결정의 「이전 상태로 원복」이 돌아갈 글이 그 자체로 허가 없이 바뀐 글(앞 라운드에 얼림 검사가 잡았고 사용자가
+    받아들이지 않은 변경)이면 그 사실을 한 줄로 — 원복이 원래 글이 아니라 그 변경으로 돌아간다."""
+    d = st["decides"].get(fid) or {}
+    if d.get("kind") != "post" or not isinstance(d.get("prev_hash"), str):
+        return []
+    anchor = (st["findings"].get(fid) or {}).get("anchor")
+    snaps = st.get("snapshots") or {}
+    j = next((k for k in range(int(st["round"]) - 1, 0, -1)
+              if any(s.get("anchor") == anchor and s.get("hash") == d["prev_hash"]
+                     for s in (snaps.get(str(k)) or {}).get("sections") or [])), None)
+    if j is None:
+        return []
+    adopted = {i for e in st.get("decision_log") or [] if e.get("choice") == "adopt" for i in e.get("finding_ids") or []}
+    flagged = sorted(o for o, od in st["decides"].items()
+                     if o != fid and od.get("kind") == "post" and od.get("round") == j and o not in adopted
+                     and (st["findings"].get(o) or {}).get("anchor") == anchor)
+    if not flagged:
+        return []
+    return ["  ↳ 원복하면 원래 글이 아니라 라운드 %d 에 허가 없이 바뀐 글로 돌아간다 — 그 변경은 아직 받아들여지지 않았다 (%s)"
+            % (j, ", ".join(flagged))]
 
 
 # 「고친다(채택)」를 고를 수 없는 이유의 사람말 — 사유 키는 `scope_problem` · `adopt_problem` 의 것.
@@ -1995,7 +2200,7 @@ def cmd_advice(a) -> int:
         path = Path(a.sink)
         try:
             block = adv.sink_block([adv.sink_row(it) for it in sunk], section_body(path, dt["heading"]))
-            append_under_heading(path, dt["heading"], "\n".join(block))
+            engine_append(st, path, dt["heading"], "\n".join(block))
         except (OSError, UnicodeError) as e:
             return fail("sink_write_failed", path=str(path), detail=str(e))
         for it in sunk:
@@ -2009,11 +2214,15 @@ def cmd_advice(a) -> int:
                 rep = st["rounds"][k].get("route_report") or {}
                 have = path.read_text(encoding="utf-8") if path.is_file() else ""
                 if "advice_new" in rep and adv.count_key(ident, int(k)) not in have:
-                    append_under_heading(path, heading, adv.count_line(ident, int(k), rep), own=True)
+                    engine_append(st, path, heading, adv.count_line(ident, int(k), rep), own=True)
                     logged.append(int(k))
         except (OSError, UnicodeError) as e:
+            if logged:   # 이미 쓴 계수 줄의 출처 기록은 남긴다
+                save_state(a.state_dir, st, "advice logged=%d (중단)" % len(logged))
             return fail("log_write_failed", path=str(path), detail=str(e), sunk=len(sunk), logged_rounds=logged)
-    shown = [it for it in items if not it.get("shown")] if a.render else []
+        if logged:
+            save_state(a.state_dir, st, "advice logged=%d" % len(logged))
+    shown =[it for it in items if not it.get("shown")] if a.render else []
     if a.render:
         where = a.where or (dt["heading"] if dt.get("kind") == "doc_section" else "advice 목록(JSON)")
         print("\n".join(adv.render_lines(shown, cap, where, width,
