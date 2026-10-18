@@ -767,7 +767,7 @@ def merged_prs(b: dict, prs: dict, gh_lookup) -> list:
         br = s["branch"]
         if br in prs:
             row = prs[br]
-            out.append((br, {"number": row["번호"], "state": row["상태"], "source": "기계 상태"}))
+            out.append((br, {"number": row["번호"], "state": "머지됨", "source": "기계 상태"}))
         elif gh_lookup is None:
             out.append((br, _pr_unknown("기계 상태에 없고 gh 가 없다")))
         else:

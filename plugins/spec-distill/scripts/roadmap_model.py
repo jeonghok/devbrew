@@ -506,7 +506,9 @@ NO_DEFAULT = ("기본 브랜치를 알 수 없다 — origin/HEAD 가 없다. `g
               "다시 계산한다")
 # `## 지휘 기록` 의 spec 승인 줄 — 지휘자가 `- spec 승인 · <YYYY-MM-DD> · 「<고른 선택지 원문>」` 로 쓴다.
 APPROVAL_PREFIX = "- spec 승인 · "
-APPROVAL_DENY = ("승인 대기", "승인 전", "승인 거절", "승인하지 않", "승인 안")
+APPROVAL_DENY = ("승인 대기", "승인 전", "승인 거절", "승인하지 않", "승인 안", "미승인", "않", "철회", "취소", "보류",
+                 "요청", "필요", "기다", "아니")
+APPROVAL_YES = ("승인했", "승인함", "승인됨", "승인받", "승인 받")
 CONFIRM_RE = re.compile(r"- 넘김 확인 · ([A-Z][0-9]+[a-z]?) · ([0-9a-f]{8}) · (\S.*)")
 RECEIVER_EPIC_RE = re.compile(r"[A-Z]\d+[a-z]?")
 RECEIVER_PR_RE = re.compile(r"#\d+")
@@ -551,11 +553,14 @@ def approval_date(doc_text: str):
         if not line.startswith("- "):
             continue
         canonical = line.startswith(APPROVAL_PREFIX)
-        if not canonical and ("승인" not in line or any(w in line for w in APPROVAL_DENY)):
+        if not canonical and not ("spec" in line.lower() and any(w in line for w in APPROVAL_YES)
+                                  and not any(w in line for w in APPROVAL_DENY)):
             continue
         found = DATE_RE.search(line[len(APPROVAL_PREFIX):] if canonical else line)
         if found:
             dates.append(found.group(0))
+        elif canonical:
+            raise FormatError("spec 승인 줄에 날짜가 없다: %s" % line)
     return max(dates) if dates else None
 
 

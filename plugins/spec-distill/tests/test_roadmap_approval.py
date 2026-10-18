@@ -34,6 +34,15 @@ class ApprovalDate(unittest.TestCase):
                      "- 2026-10-18 아직 승인하지 않았다", "- 2026-10-18 승인 안 됨"):
             self.assertIsNone(M.approval_date(DOC % line), line)
 
+    def test_probe_lines_are_not_approval(self):
+        for tail in ("미승인", "승인 요청 보냄", "승인 보류", "승인 철회", "승인 게이트 띄움", "재승인 필요",
+                     "승인을 기다린다", "승인이 아니다", "조사 흐름 고름 — 사용자 승인", "시작 승인 공시"):
+            self.assertIsNone(M.approval_date(DOC % ("- 2026-10-18 " + tail)), tail)
+
+    def test_canonical_without_date_is_format_error(self):
+        with self.assertRaises(M.FormatError):
+            M.approval_date(DOC % "- spec 승인 · 어제 · 「①」")
+
     def test_no_section_or_no_line(self):
         self.assertIsNone(M.approval_date("# 설계\n"))
         self.assertIsNone(M.approval_date(DOC % "- 넘김 확인 · R2 · 0123abcd · 받음"))
@@ -131,7 +140,7 @@ class MergedPrs(unittest.TestCase):
             {"branch": "feature/a", "tip": None, "merged": "x"}, {"branch": "feature/b", "tip": None, "merged": "y"}]}
 
     def test_cache_then_gh(self):
-        prs = {"feature/a": {"브랜치": "feature/a", "번호": "#7", "상태": "머지됨", "확인한 때": "t"}}
+        prs = {"feature/a": {"브랜치": "feature/a", "번호": "#7", "상태": "열림", "확인한 때": "t"}}
         calls = []
 
         def gh(br):
