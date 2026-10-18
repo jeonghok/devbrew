@@ -16,6 +16,8 @@ import os
 import re
 from pathlib import Path
 
+from docreview_config import table_cell   # 표 행 한 줄 문법 — 표준 라이브러리만 쓰는 잎 모듈이라 형제 사본이 늘 곁에 있다
+
 ENGINE_SOURCES = frozenset(("diff", "reraise", "escalated"))
 ROUTE_ADVICE = "advice"
 RENDER_CAP = 8          # 끝의 한 번 표시 — 머리 1 + 항목 8 + 접는 줄 1 = 10줄(⟨D9⟩)
@@ -178,7 +180,6 @@ def render_lines(items, cap, where, width=SUMMARY_WIDTH, note="") -> list:
 
 def sink_row(it) -> str:
     """박제처 절(`defer_target`)의 표 행 한 줄 — 칸마다 한 줄로 접고 `|` 를 이스케이프한다(AC15)."""
-    from docreview_config import table_cell   # 표 행을 쓰는 쪽(원장)에만 필요 — 계수 줄만 읽는 사본은 이 모듈을 안 부른다
     text = table_cell(_safe(it.get("summary") or ""))
     if it.get("replacement"):
         text += " — 고치면: " + table_cell(_safe(it["replacement"]))
