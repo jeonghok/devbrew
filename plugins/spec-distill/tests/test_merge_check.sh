@@ -83,6 +83,17 @@ out="$(mc --branch feature/sh)"; rc=$?
 assert_eq "$rc" "1" "셸: 양쪽 빨간 단위 안의 새 실패 → rc 1"
 assert_contains "$out" "둘" "셸: 새 실패 이름(✗ 줄)"
 
+# 3b — 셸 단위의 `ERROR:` 진단 줄이 이름 집합을 가로채지 않는다(러너별 모양 — Ruling R32)
+mkrepo se
+put tests/t.sh $'#!/usr/bin/env bash\necho "ERROR: could not reach cache"\necho "  ✗ a"\nexit 1'; chmod +x "$W/tests/t.sh"
+push_base
+put tests/t.sh $'#!/usr/bin/env bash\necho "ERROR: could not reach cache"\necho "  ✗ a"\necho "  ✗ b"\nexit 1'; chmod +x "$W/tests/t.sh"
+branch_with feature/se
+out="$(mc --branch feature/se)"; rc=$?
+assert_eq "$rc" "1" "셸: ERROR: 진단 줄이 있어도 양쪽 빨간 단위 안의 새 ✗ 실패 → rc 1"
+assert_contains "$out" "tests/t.sh: b" "셸: 새 실패 이름 b"
+assert_not_contains "$out" "could not reach cache" "셸: ERROR: 진단 줄은 실패 이름이 아니다"
+
 # 4 — test_command(node --test tap) · 고쳐짐도 보인다
 mkrepo nd 'test_command: node --test --test-reporter=tap tests/a.test.js\n'
 put tests/a.test.js $'const t = require("node:test"); const a = require("node:assert");\nt("one", () => a.equal(1, 2));\nt("two", () => a.equal(1, 1));'
@@ -107,6 +118,32 @@ put run.sh $'echo "BAD: alpha"\necho "BAD: beta"\nexit 1'; branch_with feature/p
 out="$(mc --branch feature/pt)"; rc=$?
 assert_eq "$rc" "1" "test_failure_pattern: 새 이름 → rc 1"
 assert_contains "$out" "beta" "test_failure_pattern: 새 이름 beta"
+
+# 6b — frontmatter 에 test_command 가 없으면 기계 상태 `## 레포 설정` 의 임시값을 돌린다(rc 6 의 답 — Ruling R33)
+mkrepo mt
+put run.sh $'echo "not ok 1 - alpha"\nexit 1'; push_base
+put run.sh $'echo "not ok 1 - alpha"\necho "not ok 2 - gamma"\nexit 1'; branch_with feature/mt
+machine() {  # machine <글> — 이 레포 로드맵의 기계 상태 파일을 그 글로 쓴다
+  (cd "$W" && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as cs, state_path as s
+p = cs.machine_path(s.state_root(), sys.argv[2]); p.parent.mkdir(parents=True, exist_ok=True)
+p.write_text(sys.argv[3], encoding="utf-8")' "$ROOT/plugins/spec-distill/scripts" "$RM" "$1")
+}
+machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_command · bash run.sh\n' "$RM")"
+out="$(mc --branch feature/mt)"; rc=$?
+assert_eq "$rc" "1" "기계 상태 임시값: 그 명령을 돌려 새 실패 → rc 1"
+assert_contains "$out" "gamma" "기계 상태 임시값: 새 이름 gamma"
+assert_contains "$out" "무엇을 돌렸나: test_command(\`bash run.sh\`)(기계 상태 임시값)" "기계 상태 임시값: 무엇을 돌렸나에 출처를 적는다"
+machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- 깨진 줄\n' "$RM")"
+out="$(mc --branch feature/mt)"; rc=$?
+assert_eq "$rc" "3" "깨진 기계 상태 → rc 3(조용히 무시하지 않는다)"
+assert_contains "$out" "기계 상태의 레포 설정을 읽지 못했다" "깨진 기계 상태 사유"
+mkrepo mf 'test_command: bash run.sh\n'
+put run.sh $'echo "not ok 1 - alpha"\nexit 1'; push_base
+put run.sh $'echo "not ok 1 - alpha"\necho "not ok 2 - delta"\nexit 1'; branch_with feature/mf
+machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_command · bash -c "exit 0"\n' "$RM")"
+out="$(mc --branch feature/mf)"; rc=$?
+assert_eq "$rc" "1" "frontmatter 가 기계 상태 임시값을 이긴다"
+assert_not_contains "$out" "(기계 상태 임시값)" "frontmatter 값이면 임시값 표시가 없다"
 
 # 7 — 테스트 없음 → 7 · 러너 없는 테스트 파일 → 6
 mkrepo none; put README.md r; push_base; put x.txt x; branch_with feature/none
@@ -166,5 +203,11 @@ NAMES="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_c
 for t in ("FAILED a.py::t1 - x", "FAIL: t2 (m.C)", "not ok 3 - t3", "  ✗ t4", "ERROR x.py::t5 - e", "nothing here"):
     print(sorted(m.names_in(t, None)[0]), m.names_in(t, None)[1])' "$ROOT/plugins/spec-distill/scripts")"
 assert_eq "$NAMES" "$(printf "%s\n" "['a.py::t1'] pytest" "['t2 (m.C)'] unittest" "['t3'] tap" "['t4'] ✗ 표시" "['x.py::t5'] pytest" "[] None")" "names_in: 알려진 모양 넷과 모양 없음"
+# 10b — 러너별 모양: 셸은 ✗ · FAIL: · tap 만, 모르는 러너는 이름을 뽑지 않는다
+SHAPED="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m
+t = "ERROR: diag\n  ✗ a\nFAIL: b\nnot ok 1 - c\nFAILED x.py::d - e"
+for r in ("shell", "pytest", "unittest", "jest"):
+    print(r, sorted(m.names_in(t, shapes=m.RUNNER_SHAPES.get(r, ()))[0]))' "$ROOT/plugins/spec-distill/scripts")"
+assert_eq "$SHAPED" "$(printf "%s\n" "shell ['a', 'b', 'c']" "pytest ['x.py::d']" "unittest ['b', 'diag']" "jest []")" "names_in: 러너별 모양만 쓴다"
 
 finish

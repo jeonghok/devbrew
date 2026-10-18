@@ -9,8 +9,10 @@
   merge_check.py run --roadmap <로드맵 레포 상대경로> --branch <브랜치> [--keep-merged] [--no-fetch] [--root <레포>]
 
 무엇을 돌리나: 기본 브랜치의 로드맵 frontmatter `test_command` 가 있으면 그것 — 실패 이름은 `test_failure_pattern`
-(정규식, 묶음이 있으면 첫 묶음) 또는 알려진 모양. 없으면 이 폴더의 공유본 링크로 러너 탐지 · 배정 · 단위 실행 ·
-귀속을 하고, 양쪽 다 빨간 단위는 그 단위의 러너 출력에서 실패 이름을 뽑아 대조한다.
+(정규식, 묶음이 있으면 첫 묶음) 또는 알려진 모양. frontmatter 에 없는 키는 이 로드맵 기계 상태의 `## 레포 설정`
+(지휘자가 물어 임시로 둔 값)에서 읽는다 — frontmatter 가 이기고, 기계 상태가 깨졌으면 검사 불가다. 둘 다 없으면 이
+폴더의 공유본 링크로 러너 탐지 · 배정 · 단위 실행 · 귀속을 하고, 양쪽 다 빨간 단위는 그 단위의 러너 출력에서 그
+러너의 실패 모양으로만 이름을 뽑아 대조한다(모양을 모르는 러너는 단위 수준만).
 
 종료 코드: 0 새 실패 없음 · 1 새 실패 있음 · 3 검사 불가 · 4 새 실패는 없으나 이름 대조 불가 단위가 있다 ·
 5 다른 대조가 도는 중 · 6 테스트 명령을 모른다(사용자에게 묻는다) · 7 스위트 대조 없음(테스트 없음).
@@ -44,6 +46,14 @@ KNOWN_SHAPES = (
     ("tap", re.compile(r"^\s*not ok \d+ - (.+)$", re.M)),
     ("✗ 표시", re.compile(r"^\s*✗ (.+)$", re.M)),
 )
+# 탐지 경로의 러너별 실패 모양 — 다른 러너의 모양(예: 셸 출력의 `ERROR:` 진단 줄)이 이름 집합을 가로채지 않게 한다.
+# 여기 없는 러너는 이름을 뽑지 않는다(「이름 대조 불가 — 단위 수준만」).
+RUNNER_SHAPES = {
+    "pytest": (KNOWN_SHAPES[0],),
+    "unittest": (KNOWN_SHAPES[1],),
+    "shell": (("✗ · FAIL: 표시", re.compile(r"^\s*(?:✗|FAIL:) (.+)$", re.M)), KNOWN_SHAPES[2]),
+}
+MACHINE_NOTE = "(기계 상태 임시값)"
 NEW, FIXED = ("NEW_REGRESSION", "NEW_TEST_RED"), ("FIXED",)
 LOCK_YOUNG = 60  # 주인 기록 전 잠금은 이 초 동안 바쁜 것으로 본다
 
@@ -63,8 +73,19 @@ def stamp() -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def names_in(text: str, pattern=None):
-    """(실패 이름 집합, 쓴 모양). 모양이 하나도 안 맞으면 (빈 집합, None) — 「이름 대조 불가」 의 근거다."""
+def names_in(text: str, pattern=None, shapes=None):
+    """(실패 이름 집합, 쓴 모양). 모양이 하나도 안 맞으면 (빈 집합, None) — 「이름 대조 불가」 의 근거다.
+
+    pattern 이 있으면 그것만, shapes(러너별 모양)를 주면 그 모양들이 뽑은 이름의 합집합, 둘 다 없으면 알려진 모양
+    가운데 처음 맞는 것."""
+    if not pattern and shapes is not None:
+        found, labels = set(), []
+        for label, rx in shapes:
+            got = set((m.group(1) if rx.groups else m.group(0)).strip() for m in rx.finditer(text))
+            if got:
+                found |= got
+                labels.append(label)
+        return found, (" · ".join(labels) if labels else None)
     shapes = [("test_failure_pattern", re.compile(pattern, re.M))] if pattern else list(KNOWN_SHAPES)
     for label, rx in shapes:
         found = set()
@@ -171,8 +192,12 @@ def run_command(cmd: str, tree: Path, tmp: Path):
     return p.returncode, p.stdout + "\n" + p.stderr
 
 
-def compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path) -> dict:
-    res = {"new": [], "fixed": [], "both": [], "unit_only": [], "notes": ["무엇을 돌렸나: test_command(`%s`)" % cmd]}
+def compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, sources=None) -> dict:
+    sources = sources or {}
+    res = {"new": [], "fixed": [], "both": [], "unit_only": [],
+           "notes": ["무엇을 돌렸나: test_command(`%s`)%s" % (cmd, sources.get("test_command", ""))]}
+    if pattern and sources.get("test_failure_pattern"):
+        res["notes"].append("실패 이름 정규식: test_failure_pattern%s" % sources["test_failure_pattern"])
     b_rc, b_out = run_command(cmd, base, work / "tmp-base")
     m_rc, m_out = run_command(cmd, merged, work / "tmp-merged")
     if 127 in (b_rc, m_rc):
@@ -299,8 +324,9 @@ def compare_detected(base: Path, merged: Path, base_sha: str, merged_sha: str, w
         if line.startswith("degrade_causes: ") and line != "degrade_causes: []":
             res["notes"].append("귀속 강등: %s" % line[len("degrade_causes: "):])
     for runner, unit, verdict in parse_attributions(p.stdout):
-        b_names, _s = names_in(b_logs.get((runner, unit), ""))
-        m_names, _s = names_in(m_logs.get((runner, unit), ""))
+        shapes = RUNNER_SHAPES.get(runner, ())
+        b_names, _s = names_in(b_logs.get((runner, unit), ""), shapes=shapes)
+        m_names, _s = names_in(m_logs.get((runner, unit), ""), shapes=shapes)
         if verdict in NEW:
             fresh = sorted(m_names - b_names)
             res["new"] += ["%s: %s" % (unit, n) for n in fresh] or ["%s — 이름 대조 불가 — 단위 수준만" % unit]
@@ -338,6 +364,20 @@ def report(res: dict) -> int:
     return 0
 
 
+def machine_settings(mroot: Path, roadmap: str) -> dict:
+    """이 로드맵 기계 상태의 `## 레포 설정` (키 → 값, 같은 키는 마지막 줄). 깨졌으면 검사 불가 — 조용히 넘기지 않는다."""
+    try:
+        data = cs.load(mroot / cs.MACHINE_FILE, roadmap)
+    except cs.MachineError as exc:
+        raise Stop(3, "기계 상태의 레포 설정을 읽지 못했다 — %s" % exc)
+    out = {}
+    for row in data.get("레포 설정", []):
+        value = unquote(row["값"].strip())
+        if value:
+            out[row["키"]] = value
+    return out
+
+
 def run(root: Path, a) -> int:
     if not a.no_fetch:
         rc, _o, err = git(root, "fetch", "--quiet", "origin")
@@ -354,15 +394,26 @@ def run(root: Path, a) -> int:
     if settings["errors"]:
         raise Stop(3, "레포 설정이 깨졌다: %s" % settings["errors"][0])
     pattern = unquote(meta["test_failure_pattern"]) if "test_failure_pattern" in meta else None
+    test_command = settings["test_command"]
+    try:
+        mroot = cs.machine_dir(state_root(str(root)), a.roadmap)
+    except cs.MachineError as exc:
+        raise Stop(3, str(exc))
+    sources = {}
+    if "test_command" not in meta or "test_failure_pattern" not in meta:
+        temp = machine_settings(mroot, a.roadmap)
+        if "test_command" not in meta and temp.get("test_command"):
+            test_command = temp["test_command"]
+            sources["test_command"] = MACHINE_NOTE
+        if "test_failure_pattern" not in meta and temp.get("test_failure_pattern"):
+            pattern = temp["test_failure_pattern"]
+            sources["test_failure_pattern"] = MACHINE_NOTE
     if pattern:
         try:
             re.compile(pattern)
         except re.error as exc:
-            raise Stop(3, "test_failure_pattern 정규식이 깨졌다: %s" % exc)
-    try:
-        mdir = cs.machine_dir(state_root(str(root)), a.roadmap) / repo_defaults.MERGE_CHECK_DIR
-    except cs.MachineError as exc:
-        raise Stop(3, str(exc))
+            raise Stop(3, "test_failure_pattern 정규식이 깨졌다%s: %s" % (sources.get("test_failure_pattern", ""), exc))
+    mdir = mroot / repo_defaults.MERGE_CHECK_DIR
     lock = mdir / "lock"
     take_lock(lock)
     work = mdir / ("run-%s-%d" % (datetime.datetime.now().strftime("%Y%m%d%H%M%S"), os.getpid()))
@@ -372,8 +423,8 @@ def run(root: Path, a) -> int:
         base, merged, base_sha, tip, merged_sha = make_copies(root, work, a.branch)
         print("[spec-distill] 스위트 대조 — %s(%s) 를 기본 브랜치 %s(%s) 에 합친 사본(%s)과 기본 브랜치 사본을 돌렸다"
               % (a.branch, tip[:8], ref_name, base_sha[:8], merged_sha[:8]))
-        if settings["test_command"]:
-            res = compare_command(settings["test_command"], pattern, base, merged, work)
+        if test_command:
+            res = compare_command(test_command, pattern, base, merged, work, sources)
         else:
             res = compare_detected(base, merged, base_sha, merged_sha, work)
         if a.keep_merged:
@@ -402,11 +453,11 @@ def main(argv=None) -> int:
     r.add_argument("--no-fetch", action="store_true")
     r.add_argument("--root")
     a = ap.parse_args(argv)
-    top = a.root or git(os.getcwd(), "rev-parse", "--show-toplevel")[1]
-    if not top:
-        print("[spec-distill] 스위트 대조 — git 레포 안이 아니다")
-        return 3
     try:
+        top = a.root or git(os.getcwd(), "rev-parse", "--show-toplevel")[1]
+        if not top:
+            print("[spec-distill] 스위트 대조 — git 레포 안이 아니다")
+            return 3
         return run(Path(top), a)
     except Stop as stop:
         print("[spec-distill] 스위트 대조 — %s" % stop)
