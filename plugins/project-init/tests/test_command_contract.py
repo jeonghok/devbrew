@@ -272,6 +272,36 @@ class TestMigrationRefusalChoices(unittest.TestCase):
     def test_charter_detection_reads_the_canonical_file(self):
         detect = section(self.text, "#### Charter 상태 감지", "### Step 2:")
         self.assertIn("「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md", detect)
+        self.assertIn("AGENTS.md 가 있으면 AGENTS.md, 없으면 CLAUDE.md", detect)
+
+    def test_s4_old_abort_is_gone(self):
+        s4 = self.matrix[self.matrix.index("**S4 ("):]
+        self.assertIn("「CLAUDE.md 는 그대로 두기」", s4)
+        self.assertNotIn("(ii) abort", s4)
+
+    def test_s2a_moves_the_charter_section_too(self):
+        s2 = self.matrix[self.matrix.index("**S2 (CLAUDE-only legacy)**"):self.matrix.index("**S3 (")]
+        self.assertIn("`## Git Workflow` 섹션과 `## Project Charter` 섹션(있으면, 관리 섹션이다) 추출", s2)
+
+    def test_template_target_names_claude_md_case(self):
+        step4e = section(self.text, "#### 4e:", "### Step 5:")
+        self.assertIn("`AGENTS.md`(「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md)의", step4e)
+
+    def test_step4_canonical_line_has_exception(self):
+        step4 = section(self.text, "### Step 4:", "#### 4a:")
+        self.assertIn("「CLAUDE.md 에 바로 쓰기」를 골랐다면 AGENTS.md 를 만들지 않고", step4)
+
+    def test_step5_notes_direct_claude_md_write(self):
+        step5 = self.text[self.text.index("### Step 5:"):]
+        self.assertIn("CLAUDE.md 에 바로 썼다면: 관리 절이 CLAUDE.md 에 있다", step5)
+
+    def test_step5_notes_kept_git_rules(self):
+        step5 = self.text[self.text.index("### Step 5:"):]
+        self.assertIn("git 규칙을 그대로 뒀다면: 브랜치 전략과 git 규칙 파일은 바꾸지 않았다", step5)
+
+    def test_keep_git_choice_outranks_git_workflow_file_clauses(self):
+        self.assertIn("그 선택이 이 아래 모든 「git-workflow 파일은 만든다」 문장보다 앞선다", self.step1)
+        self.assertIn("S1 · S2b 는 헌장 절과 포인터만 쓴다", self.step1)
 
 
 class TestGitWorkflowReplaceRefusal(unittest.TestCase):
@@ -279,14 +309,10 @@ class TestGitWorkflowReplaceRefusal(unittest.TestCase):
 
     def test_three_choices(self):
         step1 = section(COMMAND.read_text(encoding="utf-8"), "### Step 1:", "### Step 2:")
+        git_para = section(step1, "기존 Git Workflow 설정이 발견되면", "또한 root에")
         for label in ("「교체 (권장)」", "「git 규칙은 그대로 두고 헌장만」", "「중단」"):
-            self.assertIn(label, step1)
+            self.assertIn(label, git_para)
         self.assertNotIn("사용자가 거절하면 중단.", step1)
-
-    def test_step5_notes_direct_claude_md_write(self):
-        text = COMMAND.read_text(encoding="utf-8")
-        step5 = text[text.index("### Step 5:"):]
-        self.assertIn("CLAUDE.md 에 바로 썼다면: 관리 절이 CLAUDE.md 에 있다", step5)
 
 
 class TestCharterGateChoice(unittest.TestCase):
