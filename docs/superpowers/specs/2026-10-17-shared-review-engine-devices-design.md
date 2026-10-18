@@ -334,6 +334,16 @@ next_phase: superpowers:writing-plans
 - D9.20 · r9 · adopt · 89a93115#r9.2 · "고친다 — AC15 를 칸 전체로" — 결정 기록 줄 위조 방지의 수용 기준이 아직 요약 칸만 확인한다. 줄 전체를 한 줄로 만들기로 한 결정이 기준에 들어가지 않아, 선택지 문구나 버림 사유 칸이 위조 경로로 남아도 통과한다.
 - D9.21 · r9 · adopt · e850cf32#r9.1 · "고친다 — 공시를 두 줄로 나눔" — qg 리뷰어 수를 알리는 「시작 줄」에 일시 실패 재시도처럼 시작 뒤에야 생기는 호출까지 세라고 해서, 이 줄이 dispatch 전에 찍히는지 후에 찍히는지가 정해지지 않았다. 지금 줄은 dispatch가 돌아온 뒤에 찍히므로 그대로 옮기면 「크게 쓰기 전에 규모를 알린다」는 확정 제약을 지키지 못한다.
 - D10.22 · r10 · adopt · 89a93115#r10.1 · "고친다 — AC7 에 /qg 더함" — 설계는 `/qg` 를 레포 전체에서 찾아 고친다고 했지만, 수용 기준은 `/qg critique` 만 검사한다. 그래서 기계가 내는 안내 속 그냥 `/qg`(`/qg branch` 등)가 남아도 통과한다. 호출 표면 락도 `/qg` 를 잡지 못한다.
+- docreview 계수 — 2c4cd0b0-bc55-4ac6-9130-0e998a7b92e7/2026-10-17-shared-review-engine-devices--ef660192c676324e r1: advice_new=5 · advice_repeat=1 · mc_preexisting_new=0
+- docreview 계수 — 2c4cd0b0-bc55-4ac6-9130-0e998a7b92e7/2026-10-17-shared-review-engine-devices--ef660192c676324e r2: advice_new=5 · advice_repeat=2 · mc_preexisting_new=0
+- docreview 계수 — 2c4cd0b0-bc55-4ac6-9130-0e998a7b92e7/2026-10-17-shared-review-engine-devices--ef660192c676324e r3: advice_new=1 · advice_repeat=6 · mc_preexisting_new=1
+- docreview 계수 — 2c4cd0b0-bc55-4ac6-9130-0e998a7b92e7/2026-10-17-shared-review-engine-devices--ef660192c676324e r4: advice_new=3 · advice_repeat=6 · mc_preexisting_new=0
+- docreview 계수 — 2c4cd0b0-bc55-4ac6-9130-0e998a7b92e7/2026-10-17-shared-review-engine-devices--ef660192c676324e r5: advice_new=2 · advice_repeat=7 · mc_preexisting_new=3
+- docreview 계수 — 2c4cd0b0-bc55-4ac6-9130-0e998a7b92e7/2026-10-17-shared-review-engine-devices--ef660192c676324e r6: advice_new=0 · advice_repeat=4 · mc_preexisting_new=2
+- docreview 계수 — 2c4cd0b0-bc55-4ac6-9130-0e998a7b92e7/2026-10-17-shared-review-engine-devices--ef660192c676324e r7: advice_new=1 · advice_repeat=8 · mc_preexisting_new=1
+- docreview 계수 — 2c4cd0b0-bc55-4ac6-9130-0e998a7b92e7/2026-10-17-shared-review-engine-devices--ef660192c676324e r8: advice_new=3 · advice_repeat=7 · mc_preexisting_new=0
+- docreview 계수 — 2c4cd0b0-bc55-4ac6-9130-0e998a7b92e7/2026-10-17-shared-review-engine-devices--ef660192c676324e r9: advice_new=0 · advice_repeat=8 · mc_preexisting_new=3
+- docreview 계수 — 2c4cd0b0-bc55-4ac6-9130-0e998a7b92e7/2026-10-17-shared-review-engine-devices--ef660192c676324e r10: advice_new=1 · advice_repeat=8 · mc_preexisting_new=0
 
 ## 번호 대조
 
@@ -381,3 +391,29 @@ next_phase: superpowers:writing-plans
 - 에픽: R2a · 브랜치 `feature/shared-review-engine-devices`(계획 1). 계획 2~4 의 브랜치는 계획이 정해 로드맵 PR 로 블록에 더한다(§10).
 - 설계: 지휘 세션이 직접 brainstorming(2026-10-17), spec 승인까지만 — 계획 · 구현은 백그라운드 agent.
 - 맥락: 설계 대화의 사용자 결정은 `## 결정 기록` 에 전부 있다(레포 밖 메모에 기대지 않는다).
+
+### Deferred to plan
+
+| # | 항목 |
+|---|---|
+| 6e3a3bff#r1.1 | 참고(component_relations) #2-계획-1--결함-셋--테스트-실행-공유본--qg-진입-이름 — 테스트 실행 공유본의 형제 `resolve-baseline.sh` 가 공유 묶음으로 옮겨질지 qg 에 남을지를 '측정이 정한다'로 열어 두었다. 그런데 계획 3 은 범위 모드 때문에 바로 그 파일을 qg 파일로 고치고, 온톨로지는 그 주인을 qg 로 적는다. 주인이 두 갈래로 읽힌다. — 고치면: 측정은 이미 끝났다(형제는 resolve-baseline.sh). 설계에서 주인을 정한다. (a) resolve-baseline.sh 도 shared/test-selection/ 으로 옮기고 계획 3 의 범위 기준 변경을 공유본 변경으로 다루며, R5 소비자 스위트까지 잰다. 또는 (b) qg 에 두고 다른 소비 플러그인이 qg 쪽 파일을 링크하게 하되, 범위 모드가 추가하는 인자가 공유 소비자에게 닿지 않는 경계를 적는다. |
+| a9ec064b#r1.1 | 참고(feasibility) #2-계획-1--결함-셋--테스트-실행-공유본--qg-진입-이름 — 설계는 qg 의 인자 확인과 '없어진 인자 안내'를 진입 사전 검사(`!` 줄)에 맡긴다. 그러나 호출 표면 락은 그 줄을 인자 없는 고정 모양으로 강제하고, 사용자 인자 토큰이 들어가면 RED 로 만든다. 그래서 그 자리에서는 인자를 볼 수 없다. — 고치면: 사전 검사 줄은 락이 정한 모양(entry_preflight.py quality-gates quality-pipeline)만 갖는다. 인자 확인과 없어진 인자 안내는 skill 본문의 첫 단계(setup-qg.sh 호출)에 남긴다. §2·AC6 의 귀속을 그렇게 고치고 setup-qg.sh 를 계획 1 의 Files to Modify 에 더한다. |
+| fa444e32#r1.1 | 참고(data_flow) #4-계획-3--qg-장치--범위-입력--persona — 범위의 시작 커밋만 차등 테스트에 연결되고 끝 커밋의 소비 규칙은 빠져 있다. 현재 테스트 절차는 작업트리를 봉인해 실행하고, 설계문서 탐색은 HEAD까지의 커밋과 HEAD의 파일을 읽는다. 끝 커밋이 현재 체크아웃과 다르면 리뷰할 변경과 검증할 코드·의도가 달라진다. — 고치면: 범위 진입 시 시작과 끝을 커밋으로 확정하고, diff·테스트 후보·차등 테스트 대상 트리·설계문서 탐색이 같은 두 커밋을 사용한다. 설계문서 내용도 확정한 끝 커밋에서 읽는다. 수정 루프로 대상이 바뀌면 새 끝 커밋을 공시하고 모든 소비자가 함께 전환한다. 현재 체크아웃과 끝 커밋이 다른 경우에도 이 일치가 유지되는 것을 통과 조건으로 추가한다. |
+| c7ea8a5f#r1.1 | 참고(ambiguity) #4-계획-3--qg-장치--범위-입력--persona — 문서 제외 패턴과 모델 행동을 정하는 파일의 포함 규칙이 겹칠 때 우선순위가 없다. 예를 들어 docs 아래의 AGENTS.md나 모델용 템플릿은 기본 제외 패턴에도, 반드시 리뷰한다는 파일 종류에도 해당한다. — 고치면: 모델 행동을 정하는 파일의 포함 규칙을 문서 제외 패턴보다 먼저 적용한다. 해당 파일은 docs 아래에 있거나 제외 패턴과 겹쳐도 리뷰하며, 나머지 파일에만 문서 제외 설정을 적용한다. 포함·제외 규칙이 겹치는 파일이 리뷰에 남는 것을 통과 조건으로 명시한다. |
+| 0b618227#r1.2 | 참고(testing) #acceptance-criteria — AC13 의 '라벨 규약 문단에 손잡이 문장이 있다'는 지금 문서에서도 이미 참이라 아무것도 재지 않는다. shared/docreview/references/reviewing-document.md 43행에 '라벨은 그 줄을 가리키는 손잡이다'가 이미 있다. 정작 설계가 바꾸려는 '전문이 질문 바로 위에 늘 보인다'는 관측 기준이 없다. |
+| ef7faff6#r2.1 | 참고(ambiguity) #1-장치-처분표 — 처분표 머리말의 「안전장치를 지키던 행만 수정으로 남는다」가 표와 어긋납니다. 표에서는 화면 범람 · 질문 피로 · 문서 잡음 · 선택지 범람처럼 안전장치가 아닌 것을 지키던 행도 수정으로 남아 있습니다. 머리말을 확정 기준 문구(비용만 지키던 것은 제거, 상한 · 압축 · 사용자 결정 자리는 공시하고 사용자가 여는 수정)로 바꿉니다. |
+| 769966da#r2.1 | 참고(ambiguity) #3-계획-2--공유-엔진--r2-보안-잔여 — 탐지 리뷰어 수 N 의 결정 순서와 전달 길이 비어 있습니다. 프로필과 진입 선언 중 무엇이 우선하는지가 적혀 있지 않고, 환경 변수로 N 이 정해질 때 진입 skill 이 그 값을 어디서 읽어 N 명을 부르는지(엔진이 해석한 N 을 내보내는 곳)도 없습니다. 「기본 < 프로필 < 진입 < 환경」 같은 순서와 엔진이 정한 N 을 진입에 넘기는 출력을 적습니다. |
+| 640db5fa#r2.1 | 참고(ambiguity) #9-위험에-대한-답 — 위험에 대한 답 절이 아직 「동작 대조(원장 요약값)로 바꾼다」를 꼴 막기 재발의 해법으로 듭니다. 지금 설계에서 요약값은 우발적 손상 감지일 뿐이고 엔진 밖 쓰기는 권한 경계가 막으므로, 해법을 「권한 경계」로 바꿉니다. |
+| 124a1857#r2.1 | 참고(ambiguity) #rejected-alternatives — 기각안 「상한 값을 없앰」은 상한 일반을 없애는 것을 기각한 것으로 읽힙니다. 그런데 처분표는 qg 리뷰어 최대 8 과 plugin-audit 심층검증 8건 상한을 «제거»합니다. 이 기각안이 루프 상한(qg 수정 루프 5회 · 엔진 재리뷰 2회)만 가리킨다는 점을 문면에 밝혀야 두 결정이 어긋나 보이지 않습니다. — 고치면: 「루프 상한(qg 수정 루프 5회 · 엔진 재리뷰 2회)을 없앰 — 루프 상한은 안전장치다(P18). 공시와 사용자가 여는 길로 고친다. 비용만 지키던 상한(리뷰어 수 · 심층검증 건수)은 §1 에서 제거한다.」 |
+| fccf272b#r2.1 | 참고(ambiguity) #acceptance-criteria — AC16 의 「AC8 락」은 다른 문서의 AC 번호로, `test_ledger_wiring.sh` 안의 원장 쓰기 락을 가리킵니다. 그런데 이 문서에도 AC8(호출 표면 락)이 따로 있어서, 읽는 사람은 이 문서의 AC8 로 받아들일 수 있습니다. — 고치면: AC16 의 「AC8 락」을 「`test_ledger_wiring.sh` 의 원장 쓰기 락(그 테스트의 AC8)」으로 바꿉니다. |
+| 5c83a7eb#r3.1 | 참고(ambiguity) #5-계획-4--project-init--plugin-audit — 계획 4 본문이 아직 plugin-audit 의 「심층검증 상한을 늘린다(기본 6축 · 8건)」라고 쓴다. 처분표와 수용 기준 AC35 는 6축 고정과 8건 상한을 없애기로 했다. 계획 작성자가 이 절을 따르면 기본값과 상한이 남는다. — 고치면: 계획 4 본문과 번호 대조 표를 고쳐 축 고정과 심층검증 상한은 제거하고, 지출 동의 게이트에서 사용할 축·검증 수와 규모를 알린다고 통일한다. |
+| 63cb0475#r4.1 | 참고(feasibility) #7-상류--하류-연계 — 문서 비평 진입을 공유 리뷰 원장의 실제 소비자로 잘못 서술했습니다. 현재 critiquing-artifacts/SKILL.md는 자체 비평·수정 루프와 synthesize_artifact_findings.py를 사용하며 공유 원장을 호출하지 않습니다. 설계에도 이를 연결하는 변경은 없습니다. — 고치면: 공유 리뷰 원장의 실제 소비자는 spec-distill 진입 셋이라고 정정한다. qg는 공유 엔진 파일과 프로필을 배포하지만 문서 비평은 별도 루프로 실행한다고 밝히고, 공유 엔진 검증과 문서 비평 동작 검증을 구분한다. Context의 네 진입 공동 사용 설명도 함께 고친다. |
+| 4175608a#r4.1 | 참고(ambiguity) #2-계획-1--결함-셋--테스트-실행-공유본--qg-진입-이름 — 옛 이름을 지운다는 수용 기준이 「역사 기록」은 빼고 잰다고 하면서 역사 기록이 어느 파일인지 정하지 않았다. 계획 1 본문은 같은 docs 폴더에 있는 R5 설계의 이름은 고친다고 하므로, 어디까지 고쳐야 통과인지가 두 가지로 읽힌다. |
+| 13c64420#r4.1 | 참고(handoff_incomplete) #3-계획-2--공유-엔진--r2-보안-잔여 — 계획 2 앞의 경로 예약 PR 이 보안 잔여 스크립트만 더한다고 적었지만, 계획 2 는 예약 밖 파일을 더 고친다. spec-distill 진입 skill 펜스, 프로필, roadmap_model.py, test_ledger_wiring.sh, pyproject.toml, uv.lock 이 그렇고, 계획 1 의 shared/entry·shared/tests 도 예약 밖이다. 그중 request-framing·reviewing-brief SKILL 은 지금 병렬로 도는 R10 이 예약해 둔 파일인데, 연계 절에 그 겹침이 적혀 있지 않다. |
+| 11ed67a1#r5.1 | 참고(overdesign) #4-계획-3--qg-장치--범위-입력--persona — yagni: 범위 모드의 선택 인자 `..<끝>` 은 부르는 곳이 없다 — 묶음이 요구한 것은 시작 커밋부터 지금 기본 브랜치까지이고, R5 와의 계약도 시작 커밋만 넘긴다. — 고치면: `range <시작>` 하나만 두고 끝은 늘 기본 브랜치(`origin/HEAD` 에서 해석)로 한다. AC21 에서 `[..<끝>]` 을 뺀다. └ 천장: 과거의 두 커밋 사이를 리뷰해야 하는 소비자가 생기면(예: R5 가 로드맵 중간 지점까지만 검사) 그때 `..<끝>` 을 더한다. |
+| 17563e51#r5.1 | 참고(ambiguity) #번호-대조 — 번호 대조 표의 C5 행이 재결정 이전 내용 그대로다. 비용 상한을 「기본값 + 사용자가 여는 길」로 고친다고 적혀 있고, 비용 장치가 아닌 「질문 ≤4」까지 같은 묶음에 들어 있다. — 고치면: 번호 대조와 plugin-audit 설계 절을 비용 상한은 제거하고 시작 구성과 실행 규모만 공시한다는 설명으로 통일한다. 질문 수는 처분표에 적힌 질문 피로 방지용 기본값으로 구분한다. |
+| 90b57878#r7.1 | 참고(isolation) #3-계획-2--공유-엔진--r2-보안-잔여 — 탐지 리뷰어가 여럿이면 각자 c1·c2… 를 처음부터 매기므로 ref 가 서로 겹친다. 그런데 지금 라우터는 ref 를 「출처 critic + ref」로만 구분한다. 설계에 ref 를 리뷰어마다 따로 구분한다는 말이 없어서, 한 리뷰어의 ask 가 다른 리뷰어의 항목을 막는 것으로 잘못 이어질 수 있다. 또 「출처 리뷰어를 단다」가 재비판에게 보이는 지적에도 실리는지가 정해지지 않았다. 실린다면 지금의 익명화(출처 순서를 복원 못 하게 정렬)와 부딪친다. |
+| 985b28d0#r8.1 | 참고(data_flow) #3-계획-2--공유-엔진--r2-보안-잔여 — 탐지 리뷰어 수 N 을 어디서 최종으로 정하고 진입 skill 과 라우터에 어떻게 전하는지가 비어 있다. 프로필 선언과 진입 선언 중 어느 쪽이 이기는지도 적혀 있지 않다. 라우터가 'N 중 k 사망'을 세려면 기대 수 N 이 있어야 하는데, 그 값을 만드는 쪽이 정해져 있지 않다. |
+| d83a790c#r8.1 | 참고(feasibility) #4-계획-3--qg-장치--범위-입력--persona — 문서 경로 정의를 'Step 1 의 FILTERED_DIFF 를 만드는 한 자리(:217)'에서 읽는다고 했는데, 실제 :217 은 토픽 범위일 때만 지나가는 문장이다. session·branch·paths 범위와 새 range 범위에는 FILTERED_DIFF 를 만드는 자리가 따로 정해져 있지 않다. |
+| e1b5b3be#r8.1 | 참고(handoff_incomplete) #handoff-context — Handoff Context 가 범위 입력으로 flexibility-audit.md 와 'R5 설계문서 ## 미룸'을 경로 없이 이름만 든다. 대화를 압축한 뒤 이 문서만 읽고 이어 가는 사람은 그 파일을 찾을 수 없다. |
+| 5bc589cd#r10.1 | 참고(overdesign) #3-계획-2--공유-엔진--r2-보안-잔여 — yagni: 탐지 리뷰어 수를 선언하는 자리가 프로필과 진입 둘인데, 프로필의 주인이 바로 그 진입 플러그인이라 같은 값을 정하는 통로가 둘이다. 둘 사이의 우선순위도 정해져 있지 않다. — 고치면: 프로필의 `detectors` 와 환경 변수 `DEVBREW_DOCREVIEW_DETECTORS` 둘만 둔다. 출처는 기본 · 프로필 · 환경 셋이고 환경이 이긴다. AC10 의 출처 목록도 이에 맞춘다. └ 천장: 한 프로필을 둘 이상의 진입이 함께 쓰고 진입마다 다른 N 이 필요해지면 그때 진입 선언을 더한다. |
