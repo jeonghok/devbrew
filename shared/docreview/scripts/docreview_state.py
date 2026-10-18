@@ -2217,16 +2217,31 @@ def cmd_gate(a) -> int:
     return 0
 
 
+def cmd_advice_list(a) -> int:
+    """참고(advisory) 목록 — 읽기 전용. 쓰기 플래그가 없는 하위 명령이라 펜스의 원장 쓰기 락이 이름만으로 가른다."""
+    if _adv is None:
+        return fail("advice_module_missing", detail="docreview_advice.py 형제 사본이 이 스크립트 옆에 없다")
+    st = load_state(a.state_dir)
+    if not _adv.has_must_catch(load_profile(st["profile"])):
+        return fail("profile_has_no_must_catch", profile=st["profile"])
+    _emit({"ok": True, "items": _adv.scrub(list((st.get("advice") or {}).values()))})
+    return 0
+
+
 def cmd_advice(a) -> int:
     """참고(advisory) 목록 — 끝에서 한 번 표시(`--render`) · 박제(`--sink`) · 라운드별 계수 줄(`--log-file`).
 
-    플래그가 없으면 원장의 목록을 JSON 으로 낸다(읽기 전용). 한 호출 안의 순서는 박제 → 계수 → 표시다. 이미 보인
+    쓰기 플래그(`--render` · `--sink` · `--log-file`) 하나 이상이 있어야 돈다 — 목록만 읽으려면 `advice-list`
+    (읽기 전용)다. 플래그 없이 부르면 rc 2 `advice_needs_flag`. 한 호출 안의 순서는 박제 → 계수 → 표시다. 이미 보인
     항목(`shown`) · 박제한 항목(`sunk`)은 다시 내지 않고, 계수 줄의 멱등 키는 (리뷰 정체, 라운드)를 목적지 파일의
     글자로 판정한다 — 원장이 TTL 로 걷혀도 두 번 적지 않는다. 계수 줄은 decision_log 헤딩 자신의 본문 끝(첫 하위
     헤딩 앞)에 선다 — 박제처가 그 하위 절이어도 박제 표에 끼지 않는다. 부르는 자리는 진입 skill 셋이다(절차서는 계약만).
     박제는 미박제 행 전부를 한 번의 쓰기로 적고(전부 아니면 전무), 성공하면 계수 · 표시 **앞에서** `sunk` 를 원장에
     저장한다 — 뒤 단계가 무엇으로 죽어도 다음 호출이 같은 행을 다시 적지 않는다. 쓰기 · 읽기 실패는 rc 1 과 사유
     (`sink_write_failed` · `log_write_failed`) · 목적지 경로로 알린다."""
+    if not (a.render or a.sink or a.log_file):
+        fail("advice_needs_flag", hint="목록은 advice-list")
+        return 2
     adv = _adv
     if adv is None:
         return fail("advice_module_missing", detail="docreview_advice.py 형제 사본이 이 스크립트 옆에 없다")
@@ -2287,7 +2302,7 @@ def cmd_advice(a) -> int:
         it["shown"] = True
     if shown:
         save_state(a.state_dir, st, "advice shown=%d" % len(shown))
-    if not a.render:
+    if not a.render:   # --sink · --log-file 만 준 호출 — 한 일을 JSON 으로 알린다
         _emit({"ok": True, "items": adv.scrub(items), "sunk": len(sunk), "logged_rounds": logged})
     return 0
 
@@ -2351,6 +2366,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--cap", type=_ascii_int, default=None); x.add_argument("--where", default=None)
     x.add_argument("--sink", default=None); x.add_argument("--log-file", default=None)
     x.set_defaults(fn=cmd_advice)
+    x = sd(P("advice-list")); x.set_defaults(fn=cmd_advice_list)
     x = P("gate-rows"); x.set_defaults(fn=cmd_gate_rows)
     return p
 

@@ -79,83 +79,71 @@ python3 \"\$SD/scripts/docreview_state.py\" begin-round --state-dir \"\$STATE_DI
 assert_eq "$rc" "3" "AC8: 표지 없음 — 쓰기 전 확인이 rc 3 으로 멈춘다"
 assert_eq "$(cksum < "$SDIR/docreview-state.md")" "$before" "AC8: 표지 없음 — 원장 파일이 바뀌지 않았다"
 
-# AC8 — 원장에 쓰는 명령마다 같은 펜스 안 앞에 확인이 있다(정적).
-WRITERS='docreview_state\.py" (init|begin-round|record-findings|decide|fix|ask|defer|observe-diff|advice)|docreview_route\.py" (prepare-recritic|finalize)|docreview_anchor\.py" check-intent'
+# AC8 — 엔진 쓰기 하위 명령 앞에 같은 펜스의 표지 확인이 있다(정적). 판정은 하위 명령 «이름»으로만 한다.
+# 읽기 전용은 아래 허용 목록뿐이고 그 밖의 엔진 하위 명령은 전부 쓰기다(새 하위 명령은 기본이 쓰기다).
+# 엔진을 부르는 줄에 넘기기(`>`)가 있으면 읽기 · 쓰기와 무관하게 거부한다 — 결과는 `$(…)` 로 받는다.
+# mktemp · 재대입 · `||` 갈래를 파싱하지 않는다(줄 이음만 합친다).
 GUARDED="$SR $RB $FIN $SD/skills/request-framing/SKILL.md"
-ac8_scan() {   # ac8_scan <파일> → rc 0 이면 확인 없는 원장 쓰기가 없다
-  python3 -I - "$1" "$WRITERS" <<'PY'
+ac8_scan() {   # ac8_scan <파일> → rc 0 이면 확인 없는 쓰기와 넘기기가 없다
+  python3 -I - "$1" <<'PY'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
-w = re.compile(sys.argv[2]); g = 'ledger_marker.py" check --dir "$STATE_DIR"'
+READ_ONLY = {"advice-list", "gate", "related-changes", "state-dir-for", "profile-check", "gate-rows", "exempt-anchors"}
+ENGINE = re.compile(r'(docreview_state|docreview_route|docreview_anchor)\.py"?\s+([a-z][a-z-]*)')
+GUARD = 'ledger_marker.py" check --dir "$STATE_DIR"'
 bad = []
-# 플래그 없는 `advice` 는 읽기 전용이다(목록 JSON 만 낸다). 허용 목록으로만 뺀다 — argparse 는 접두 약어
-# (`--rend` · `--sin` · `--log-f`)를 받으므로 쓰는 플래그를 이름으로 막으면 샌다. `advice` 뒤가 정확히
-# `--state-dir <인자 하나>` 와 선택적 `>`/`2>` 넘기기뿐이고(인자는 따옴표 안 `$이름` 이나 맨 글자 — 따옴표 밖
-# `$` · `$(` · 백틱 불가), 줄이 `\` 로 이어지면 다음 줄이 `||` 로 시작하며, 이어진 명령의 쓰기 명령이 전부
-# `advice` 일 때만 뺀다.
-ARG = r'(?:"(?:[^"$`\\]|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)*"|\'[^\']*\'|[A-Za-z0-9_./-]+)'
-# 넘기는 자리(명령 뒤 · 명령 앞 모두)는 같은 펜스에서 `이름="$(mktemp …)"` 로 만든 이름의 `"$이름"` 꼴만 받는다 —
-# 그 밖(글자 경로 · 다른 변수 · STATE_DIR 이 든 자리 · 따옴표 없음)은 예외에서 빠진다.
-def ro_for(names):
-    tgt = r'"\$(?:' + "|".join(map(re.escape, names)) + r')"' if names else r'(?!)'
-    return re.compile(r'\s+--state-dir\s+' + ARG + r'(?:\s+2?>\s*' + tgt + r')?(?:\s+\\)?\s*'), tgt
 for body in re.findall(r"^```bash\n(.*?)^```$", text, re.S | re.M):
-    lines = body.splitlines()
-    names = re.findall(r'^\s*([A-Za-z_][A-Za-z0-9_]*)=(?:"\$\(|\$\()\s*mktemp\b', body, re.M)
-    ro, tgt = ro_for(names)
-    for i, line in enumerate(lines):
-        if not w.search(line) or g in "\n".join(lines[:i]):
-            continue
-        j, cmd = i, line
-        while cmd.rstrip().endswith("\\") and j + 1 < len(lines):
-            j += 1; cmd = cmd + "\n" + lines[j]
-        m = re.search(r'docreview_state\.py" advice(.*)$', line)
-        cont_ok = not line.rstrip().endswith("\\") or (i + 1 < len(lines) and lines[i + 1].lstrip().startswith("||"))
-        pre = line[:m.start()] if m else ""
-        pre_ok = all(re.match(r'>\s*' + tgt, pre[k:]) is not None and (k == 0 or pre[k-1] in '2 \t') for k in [x.start() for x in re.finditer('>', pre)])
-        if (m and pre_ok and ro.fullmatch(m.group(1)) and cont_ok
-                and all(x.group(0).endswith('" advice') for x in w.finditer(cmd))):
-            continue
-        bad.append(line.strip()[:120])
+    joined = []
+    for ln in body.split("\n"):            # 줄 잇기만 한다 — 셸 문법을 흉내 내지 않는다
+        if joined and joined[-1].endswith("\\"):
+            joined[-1] = joined[-1][:-1] + " " + ln
+        else:
+            joined.append(ln)
+    for i, ln in enumerate(joined):
+        hits = list(ENGINE.finditer(ln))
+        if hits and ">" in ln.replace("2>&1", "").replace("&>", ">"):
+            bad.append("넘기기: " + ln.strip()[:120])
+        for m in hits:
+            if m.group(2) not in READ_ONLY and GUARD not in "\n".join(joined[:i]):
+                bad.append("표지 확인 없는 쓰기: " + ln.strip()[:120])
 print("\n".join(bad), file=sys.stderr)
 sys.exit(1 if bad else 0)
 PY
 }
 for f in $GUARDED; do
-  ac8_scan "$f" && ok "AC8: $(basename "$(dirname "$f")")/$(basename "$f") — 원장 쓰기 명령 앞에 확인이 있다" || no "AC8: $f — 확인 없는 원장 쓰기"
+  ac8_scan "$f" && ok "AC8: $(basename "$(dirname "$f")")/$(basename "$f") — 엔진 쓰기 앞에 확인이 있고 넘기기가 없다" || no "AC8: $f — 확인 없는 엔진 쓰기 또는 넘기기"
 done
-# AC8 읽기 전용 예외의 양성 짝 — 쓰는 플래그가 붙은 advice(이어진 줄 포함)와 같은 줄의 다른 쓰기 명령은 여전히 잡힌다.
+# AC8 음성 프로브 — 하위 명령 이름 축 · 넘기기 축이 각각 잡는다(엔진 밖 원장 쓰기 — cp · echo > — 는 이 락의 대상이 아니다: AC17).
 ac8f="$T/ac8-probe.md"
 for probe in 'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render' \
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" \
   --sink "$spec_path"' \
-             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > x; python3 "$SD/scripts/docreview_state.py" decide --state-dir "$STATE_DIR"' \
+             'python3 "$SD/scripts/docreview_state.py" decide --state-dir "$STATE_DIR"' \
+             'python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR" > "$x"' \
+             'python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR" 2> "$x"' \
+             'x="$(mktemp "$STATE_DIR/a.XXXX")"
+python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR" > "$x"' \
+             'x="$(mktemp)"; x="$STATE_DIR/y"
+python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR" > "$x"' \
+             'python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR" || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render' \
+             '> "$x"/y python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR"' \
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --rend' \
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --sin "$spec_path"' \
-             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --log-f "$AUDIT"' \
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" $ADV_FLAGS' \
-             'python3 "$SD/scripts/docreview_state.py" advice --state-dir $STATE_DIR' \
-             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$(echo "$STATE_DIR")"' \
-             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$STATE_DIR/advice-all.json"' \
-             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "${STATE_DIR}/advice-all.json"' \
-             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" 2> $STATE_DIR/err' \
-             'OUT=$STATE_DIR/x
-python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$OUT"' \
-             'OUT="$STATE_DIR/x"
-python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$OUT"' \
-             '> "$STATE_DIR/x" python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR"' \
-             'OUT="$(mktemp)"
-> "$STATE_DIR/x" python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$OUT"' \
-             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > /tmp/x'; do
+             'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > /tmp/x' \
+             'python3 "$SD/scripts/docreview_state.py" new-subcommand --state-dir "$STATE_DIR"' \
+             'python3 "$SD/scripts/docreview_route.py" finalize --state-dir "$STATE_DIR"'; do
   printf '```bash\n%s\n```\n' "$probe" > "$ac8f"
-  ac8_scan "$ac8f" 2>/dev/null && no "AC8 예외 양성 짝: 확인 없는 쓰기가 예외로 빠졌다: $probe" || ok "AC8 예외 양성 짝: 확인 없는 쓰기는 잡힌다 — $(printf '%s' "$probe" | head -n 1 | cut -c 40-100)"
+  ac8_scan "$ac8f" 2>/dev/null && no "AC8 음성 프로브: 새는 꼴이 있다: $probe" || ok "AC8 음성 프로브: 잡힌다 — $(printf '%s' "$probe" | head -n 1 | cut -c 1-100)"
 done
-# 예외 — 「참고 전부 보기」 펜스의 바로 그 꼴(넘기기 + `\` 로 이어진 `|| { … }`)
-printf '```bash\n%s\n```\n' 'adv_all="$(mktemp "${TMPDIR:-/tmp}/x.XXXXXX")" \
-  || { echo "임시 파일 실패"; exit 0; }
-python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$adv_all" \
-  || { rm -f "$adv_all"; echo "실패"; exit 0; }' > "$ac8f"
-ac8_scan "$ac8f" 2>/dev/null && ok "AC8 예외: 플래그 없는 advice(읽기 전용)는 확인 없이 둘 수 있다" || no "AC8 예외: 플래그 없는 advice 가 쓰기로 잡혔다"
+# AC8 양성 대조 — 읽기 전용 하위 명령의 «받기»(`$(…)`)와, 표지 확인 뒤의 쓰기는 통과한다.
+for probe in 'adv="$(python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR")" || { echo "실패"; exit 0; }' \
+             'g="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" 2>&1)" || exit 1' \
+             'g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || exit 3
+python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8'; do
+  printf '```bash\n%s\n```\n' "$probe" > "$ac8f"
+  ac8_scan "$ac8f" 2>/dev/null && ok "AC8 양성 대조: 통과한다 — $(printf '%s' "$probe" | head -n 1 | cut -c 1-80)" || no "AC8 양성 대조: 정당한 꼴이 막혔다: $probe"
+done
 
 # AC8 — 해제는 게이트 응답 기록 뒤(문면 순서) · 끝맺음 펜스가 release 로 끝난다
 adv="$(fence "$SR" advice-display)"
@@ -369,7 +357,7 @@ ba12="$(fence "$FIN" advice-ba | python3 -I -c 'import sys; t = sys.stdin.buffer
 o="$(cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-mmmm3333 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-mmmm3333 bash -c "$ba12" 2>&1)"
 assert_contains "$o" "표지를 확인하지 못했다(rc 2) — 원장 쓰기를 하지 않는다" "M3: finishing B-A — rc 2 는 「표지를 확인하지 못했다」"
 assert_not_contains "$o" "표지가 다른 세션 것이다" "M3: finishing B-A — rc 2 를 남의 표지로 말하지 않는다"
-[ -e "$S12/advice-list.json" ] && no "M3: finishing B-A — rc 2 인데 원장 자리에 참고 목록을 썼다" || ok "M3: finishing B-A — rc 2 면 원장 자리에 쓰지 않는다"
+assert_not_contains "$o" "advice-list:" "M3: finishing B-A — rc 2 면 참고 목록을 읽지도 내지도 않는다"
 assert_eq "$(cat "$T/mk-victim")" "marker-victim" "M3: 심은 표지 링크 너머는 그대로다"
 
 d8="$repo/docs/h-design.md"; printf '# H\n' > "$d8"

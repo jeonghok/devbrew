@@ -38,6 +38,7 @@ case_advice_dangling_blocks
 case_advice_blocks_coercion_flips_gate
 case_advice_step2_order_independent
 case_AC6_render_cap
+case_AC16_advice_list_read_only
 case_AC7_sink_idempotent
 case_AC17_count_line_carrier
 case_advice_render_once

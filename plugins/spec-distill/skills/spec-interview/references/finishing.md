@@ -336,39 +336,45 @@ elif [ "$lm_rc" -ne 0 ]; then
 else
   g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
   adv_rc=0
-  adv_err="$STATE_DIR/advice-err.json"
-  python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$STATE_DIR/advice-list.json" 2>"$adv_err" || adv_rc=$?
+  adv_list="$(python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR" 2>&1)" || adv_rc=$?
+  adv_out="$adv_list"
   if [ "$adv_rc" -eq 0 ]; then
-    echo "advice-list: $STATE_DIR/advice-list.json"
-    python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --log-file "$AUDIT" --render --cap 8 --where "brief §3 · §5" 2>"$adv_err" || adv_rc=$?
+    echo "state-dir: $STATE_DIR"
+    echo "advice-list: $adv_list"
+    adv_out="$(python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --log-file "$AUDIT" --render --where "brief §3 · §5" 2>&1)" || adv_rc=$?
+    [ "$adv_rc" -ne 0 ] || printf '%s\n' "$adv_out"
   fi
   if [ "$adv_rc" -ne 0 ]; then
-    cat "$adv_err" >&2
+    printf '%s\n' "$adv_out" >&2
     echo "[spec-distill] 참고 목록 판독 · 표시 실패(rc $adv_rc) — 위 stderr 사유를 게이트 앞 글에 싣는다."
-    grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' "$adv_err" || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8 --where "brief §3 · §5" || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 게이트 앞 글에 싣는다."
+    printf '%s' "$adv_out" | grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --where "brief §3 · §5" || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 게이트 앞 글에 싣는다."
   fi
 fi
 [ -z "${STATE_DIR:-}" ] || [ ! -d "$STATE_DIR" ] || [ -z "${harness_sid:-}" ] || python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$harness_sid"
 ```
 <!-- advice-ba:end -->
 
-펜스 출력(머리 한 줄 + 최대 8줄 + `외 K건`)과 `[spec-distill]` 줄을 그대로 보입니다. 이어 `advice-list:` 줄이 가리킨
-파일을 Read 하고, 그 `items` 중 `shown` 이 거짓이던 항목을 payload 에 박제합니다 — 표시가 돌았으면 방금 보인
+펜스 출력(머리 한 줄 + 최대 8줄 + `외 K건`)과 `[spec-distill]` 줄을 그대로 보입니다. 이어 `advice-list:` 줄의 JSON
+(`advice-list` 하위 명령이 읽기 전용으로 낸 목록)의 `items` 중 `shown` 이 거짓이던 항목을 payload 에 박제합니다 — 표시가 돌았으면 방금 보인
 항목들이고, 「표시도 실패했다」 줄이 나왔으면 사용자가 보지 못한 항목이라 그 사실을 B-2 에 싣습니다.
 `advice-list:` 줄이 없으면(원장 없음 · 판독 실패) 박제할 것이 없고 그 `[spec-distill]` 줄을 B-2 에 싣습니다.
 
 펜스 출력에 접는 줄(`… 외 K건`)이 있으면 박제로 가기 전에 `AskUserQuestion` 한 번 — 「참고 전부 보기」 ·
-「접은 채로 둔다」. 「참고 전부 보기」면 아래 펜스로 `advice-list:` 줄이 가리킨 파일의 항목 전부를 요약 전문으로
-보입니다(엔진의 접기 폭 · 요약 폭 상수는 R2a 의 일이다):
+「접은 채로 둔다」. 「참고 전부 보기」면 아래 펜스로 `state-dir:` 줄의 폴더에서 목록 전부를 다시 읽어 요약 전문으로
+보입니다(`advice-list` 는 읽기 전용이다. 엔진의 접기 폭 · 요약 폭 상수는 R2a 의 일이다):
 
 ```bash
-python3 -I -X utf8 -c '
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — 경로를 추측하지 말고 멈춰 보고하라" >&2; exit 1; }
+STATE_DIR="(state-dir: 줄의 폴더)"
+adv_all="$(python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR")" \
+  || { echo "[spec-distill] 참고 전부 보기 실패 — 엔진 원장을 읽지 못했다. 게이트 앞 글에 싣는다."; exit 0; }
+printf '%s' "$adv_all" | python3 -I -X utf8 -c '
 import json, sys
-items = json.load(open(sys.argv[1], encoding="utf-8")).get("items") or []
+items = json.load(sys.stdin).get("items") or []
 print("참고 전부 %d건" % len(items))
 for it in items:
     print("- [%s] %s — %s" % (it.get("category"), it.get("anchor"), " ".join(str(it.get("summary") or "").split())))
-' "<advice-list: 줄이 가리킨 파일>"
+'
 ```
 
 가르는 판단은 한 줄입니다:

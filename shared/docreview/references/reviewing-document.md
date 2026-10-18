@@ -73,7 +73,8 @@ advice 로 간 항목이나 적용 · drop 된 fix 를 `supersedes` 로 이은 �
   rc 1 `profile_has_no_defer_target` 이다.
 - `--log-file` 은 라운드별 계수 줄(`docreview 계수 — <리뷰 정체> r<n>: …`)을 프로필 `decision_log` 절에 한 번씩
   적는다.
-- 플래그가 없으면 목록 JSON 을 낸다(읽기 전용).
+- `advice` 는 위 쓰기 플래그 하나 이상이 있어야 돈다 — 없으면 rc 2 `advice_needs_flag` 이다. 목록은
+  `advice-list --state-dir D`(쓰기 플래그 없음 · 원장을 쓰지 않음)로 받는다 — `$(…)` 로 받고 파일로 넘기지 않는다.
 
 셋 다 멱등이다. 「추가 라운드 1회 열기」를 고르면 부르지 않는다 — 다음 라운드 끝으로 미뤄진다.
 

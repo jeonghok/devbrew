@@ -716,13 +716,14 @@ g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --sessi
 # 처분 — 엔진에 사용자 문구를 싣는 결정 하나. <id> 의 문구는 먼저 Write 도구로 "$STATE_DIR/said-<id>.txt" 에 쓴다.
 # EVENT 는 이 처분 하나: drop(fix 적용하지 않음) · adopt · reject · hold(decide). 문구 파일이 없거나 비면 누르지 않는다.
 EVENT="<drop | adopt | reject | hold>"
+finding_id="<id>"
 q_rc=0; q="$(python3 "$SD/scripts/seed_review_log.py" one-line "$STATE_DIR/said-<id>.txt")" || q_rc=$?
 if [ "$q_rc" -ne 0 ]; then
   echo "[spec-distill] <id> 의 사용자 문구 파일을 읽지 못했다 — 처분을 누르지 않는다. 문구를 Write 도구로 쓴 뒤 이 펜스를 다시 돌려라." >&2
 elif [ "$EVENT" = drop ]; then
-  python3 "$SD/scripts/docreview_state.py" fix --state-dir "$STATE_DIR" --id "<id>" --event drop --reason="$q" --log-file "$AUDIT_ABS" || q_rc=$?
+  python3 "$SD/scripts/docreview_state.py" fix --state-dir "$STATE_DIR" --id "$finding_id" --event drop --reason="$q" --log-file "$AUDIT_ABS" || q_rc=$?
 else
-  python3 "$SD/scripts/docreview_state.py" decide --state-dir "$STATE_DIR" --id "<id>" --choice "$EVENT" --quote="$q" --log-file "$AUDIT_ABS" || q_rc=$?
+  python3 "$SD/scripts/docreview_state.py" decide --state-dir "$STATE_DIR" --id "$finding_id" --choice "$EVENT" --quote="$q" --log-file "$AUDIT_ABS" || q_rc=$?
 fi
 [ "$q_rc" -ne 0 ] || rm -f "$STATE_DIR/said-<id>.txt"
 echo "q_rc=$q_rc"
@@ -732,12 +733,13 @@ echo "q_rc=$q_rc"
 g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
 # 답 기록 — ask_open 항목 하나. <n> · <id> 는 게이트의 값이다. 문구 · 요약은 먼저 Write 도구로
 # "$STATE_DIR/said-<id>.txt" · "$STATE_DIR/note-<id>.txt" 에 쓴다. 통째로 다시 돌려도 같은 기록 줄은 다시 적지 않는다.
+finding_id="<id>"
 log_rc=0; ask_rc=0
 python3 "$SD/scripts/seed_review_log.py" log "$AUDIT_ABS" --kind 답 --round "<n>" --target "<id>" --quote-file "$STATE_DIR/said-<id>.txt" --note-file "$STATE_DIR/note-<id>.txt" || log_rc=$?
 if [ "$log_rc" -ne 0 ]; then
   echo "[spec-distill] 답 기록 실패(log_rc=$log_rc) — ask 를 닫지 않는다. 위 stderr 를 보고 파일을 고쳐 이 펜스를 다시 돌려라." >&2
 else
-  python3 "$SD/scripts/docreview_state.py" ask --state-dir "$STATE_DIR" --id "<id>" --answered || ask_rc=$?
+  python3 "$SD/scripts/docreview_state.py" ask --state-dir "$STATE_DIR" --id "$finding_id" --answered || ask_rc=$?
   if [ "$ask_rc" -eq 0 ]; then
     rm -f "$STATE_DIR/said-<id>.txt" "$STATE_DIR/note-<id>.txt"
   else
@@ -752,18 +754,17 @@ echo "ans_rc=$ans_rc"
 
 ```bash
 # 라운드 게이트에 올릴 것 — 엔진 요약에서 넷. 저자 편집 덩어리는 `### 저자 편집 공시` 가 센다.
-gate_json="$STATE_DIR/gate-summary.json"
-if ! python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$gate_json"; then
+if ! gate_json="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR")"; then
   echo "[spec-distill] 엔진 게이트 요약을 읽지 못했다(STATE_DIR='${STATE_DIR:-}') — 게이트를 띄우지 않는다. 「## 상태」 블록을 앞에 이어 붙였는지 확인하라." >&2
 else
-  python3 -I -X utf8 -c '
+  printf '%s' "$gate_json" | python3 -I -X utf8 -c '
 import json, sys
-g = json.load(open(sys.argv[1], encoding="utf-8"))
+g = json.load(sys.stdin)
 for k in ("open_decide", "blocking_ask_open", "unapplied_fix", "ask_open"):
     ids = g.get(k) or []
     print("%s=%d %s" % (k, len(ids), " ".join(ids)))
 print("round_gate_needed=%s approval_gate_open=%s" % (g.get("round_gate_needed"), g.get("approval_gate_open")))
-' "$gate_json"
+'
 fi
 ```
 
@@ -777,7 +778,9 @@ fi
 ```bash
 # 문구 없는 drop 검사 — 엔진 공개 요약의 dropped 대 audit ## 6 의 기록.
 drops_rc=0
-if ! python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$STATE_DIR/gate-drops.json"; then
+if ! gate_drops="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR")"; then
+  drops_rc=2
+elif ! printf '%s' "$gate_drops" > "$STATE_DIR/gate-drops.json"; then
   drops_rc=2
 else
   python3 "$SD/scripts/seed_review_log.py" check-drops "$AUDIT_ABS" "$STATE_DIR/gate-drops.json" || drops_rc=$?
@@ -1090,8 +1093,9 @@ elif [ "$lm_rc" -ne 0 ]; then
   cnt_rc=$lm_rc
 else
   g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
-  python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --log-file "$AUDIT_ABS" >/dev/null || cnt_rc=$?
+  cnt_out="$(python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --log-file "$AUDIT_ABS" 2>&1)" || cnt_rc=$?
 fi
+[ "$cnt_rc" -eq 0 ] || [ -z "${cnt_out:-}" ] || printf '%s\n' "$cnt_out" >&2
 [ "$cnt_rc" -eq 0 ] || echo "[spec-distill] 리뷰 계수 줄을 audit ## 6 에 적지 못했다(cnt_rc=$cnt_rc — 엔진 원장이 없거나 표지가 남의 것이거나 advice 가 실패했다). 게이트 앞 글에 싣는다 — 막지 않는다." >&2
 echo "cnt_rc=$cnt_rc"
 [ -z "${STATE_DIR:-}" ] || [ ! -d "$STATE_DIR" ] || [ -z "${sid:-}" ] || python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$sid"
@@ -1180,7 +1184,8 @@ fi
 if [ "$final_drops_rc" -ne 0 ]; then
   :
 elif [ -n "${STATE_DIR:-}" ] && [ -f "$STATE_DIR/docreview-state.md" ]; then
-  python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$gf" || final_drops_rc=2
+  gate_final="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR")" || final_drops_rc=2
+  [ "$final_drops_rc" -ne 0 ] || printf '%s' "$gate_final" > "$gf" || final_drops_rc=2
 else
   # 엔진 원장이 없다 — dropped 를 audit ## 6 의 엔진 drop 줄에서 만든다. 기록된 drop 마다 문구가 있는지는 그대로 잰다.
   python3 -I -X utf8 -c '

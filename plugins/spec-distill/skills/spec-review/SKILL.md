@@ -576,12 +576,13 @@ elif [ ! -f "$spec_path" ]; then
 else
   g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
   adv_rc=0
-  adv_err="$STATE_DIR/advice-err.json"
-  python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --sink "$spec_path" --log-file "$spec_path" --render --cap 8 2>"$adv_err" || adv_rc=$?
-  if [ "$adv_rc" -ne 0 ]; then
-    cat "$adv_err" >&2
+  adv_out="$(python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --sink "$spec_path" --log-file "$spec_path" --render 2>&1)" || adv_rc=$?
+  if [ "$adv_rc" -eq 0 ]; then
+    printf '%s\n' "$adv_out"
+  else
+    printf '%s\n' "$adv_out" >&2
     echo "[spec-distill] 참고 목록 표시 · 박제 실패(rc $adv_rc) — 위 stderr 의 사유를 2단계 게이트 앞 글에 싣는다. 진행은 막지 않는다."
-    grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' "$adv_err" || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8 || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 2단계 게이트 앞 글에 싣는다."
+    printf '%s' "$adv_out" | grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 2단계 게이트 앞 글에 싣는다."
   fi
 fi
 [ -z "${STATE_DIR:-}" ] || [ ! -d "$STATE_DIR" ] || [ -z "${harness_sid:-}" ] || python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$harness_sid"
@@ -591,7 +592,7 @@ fi
 펜스 출력에 접는 줄(`… 외 K건`)이 있으면 2단계 게이트를 띄우기 전에 `AskUserQuestion` 한 번 — 「참고 전부 보기」 ·
 「접은 채로 둔다」. 「참고 전부 보기」면 아래 펜스로 엔진 목록 전부를 요약 전문으로 보인다(박제된 표는 설계문서의
 `### Deferred to plan` 에 이미 있다 — 이 펜스는 원장을 읽기만 하고, 앞 펜스가 표지를 풀었으므로 원장 폴더에 아무것도
-쓰지 않는다 — 목록은 임시 파일로 받는다). 앞 펜스와 같이 `spec_path='<…>'` 한 줄을 붙여 같은 Bash 호출로 돌린다:
+쓰지 않는다 — 목록은 `advice-list` 가 읽기 전용으로 내고 `$(…)` 로 받는다). 앞 펜스와 같이 `spec_path='<…>'` 한 줄을 붙여 같은 Bash 호출로 돌린다:
 
 <!-- advice-all:begin -->
 ```bash
@@ -602,18 +603,15 @@ STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROO
 if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
   echo "[spec-distill] 참고(advisory) 목록 없음 — 엔진 원장을 찾지 못했다(spec_path='${spec_path:-}' · STATE_DIR='${STATE_DIR:-}'). 게이트 앞 글에 싣는다."; exit 0
 fi
-adv_all="$(mktemp "${TMPDIR:-/tmp}/spec-distill-advice-all.XXXXXX")" \
-  || { echo "[spec-distill] 참고 전부 보기 실패 — 임시 파일을 만들지 못했다. 게이트 앞 글에 싣는다."; exit 0; }
-python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$adv_all" \
-  || { rm -f "$adv_all"; echo "[spec-distill] 참고 전부 보기 실패 — 엔진 원장을 읽지 못했다. 게이트 앞 글에 싣는다."; exit 0; }
-python3 -I -X utf8 -c '
+adv_all="$(python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR")" \
+  || { echo "[spec-distill] 참고 전부 보기 실패 — 엔진 원장을 읽지 못했다. 게이트 앞 글에 싣는다."; exit 0; }
+printf '%s' "$adv_all" | python3 -I -X utf8 -c '
 import json, sys
-items = json.load(open(sys.argv[1], encoding="utf-8")).get("items") or []
+items = json.load(sys.stdin).get("items") or []
 print("참고 전부 %d건" % len(items))
 for it in items:
     print("- [%s] %s — %s" % (it.get("category"), it.get("anchor"), " ".join(str(it.get("summary") or "").split())))
-' "$adv_all"
-rm -f "$adv_all"
+'
 ```
 <!-- advice-all:end -->
 

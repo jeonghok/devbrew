@@ -315,6 +315,21 @@ case_advice_step2_order_independent() {
     "2 걸음 순환: 서로를 막는 advisory ask 는 advice 로 증명되지 않아 차단 쪽에 남는다"
 }
 
+# ── AC16 — 읽기 전용 목록은 advice-list 로, 쓰기 플래그 없는 advice 는 거부 ───────
+case_AC16_advice_list_read_only() {
+  local d; d="$(adv_state 3)" || { no "AC16: 원장 실패"; return; }
+  local before after rc; before="$(cksum < "$d/docreview-state.md")"
+  py docreview_state.py advice-list --state-dir "$d" > "$d/list.json"; rc=$?
+  after="$(cksum < "$d/docreview-state.md")"
+  assert_eq "$rc $before" "0 $after" "AC16: advice-list 는 원장을 쓰지 않는다"
+  assert_eq "$(jget "$d/list.json" 'd["ok"], isinstance(d["items"], list), len(d["items"])')" "(True, True, 3)" "AC16: 목록 JSON"
+  py docreview_state.py advice-list --state-dir "$d" --render >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "AC16: advice-list 는 쓰기 플래그를 모른다"
+  py docreview_state.py advice --state-dir "$d" >"$d/o" 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c advice_needs_flag "$d/err") $(wc -c < "$d/o" | tr -d ' ')" "2 1 0" "AC16: 플래그 없는 advice 는 rc 2 advice_needs_flag — 목록은 advice-list 로"
+  assert_eq "$(cksum < "$d/docreview-state.md")" "$before" "AC16: 거부된 advice 도 원장을 쓰지 않는다"
+  rm -rf "$d"
+}
 # ── advice 서브커맨드 ───────────────────────────────────────────────────────
 adv_state() {   # adv_state <n> → 참고 항목 n 개를 가진 design-doc 라운드 1 상태 디렉토리
   local c; c="$(mktemp -t advcritic-XXXXXX)"; python3 "$FX/mk_advice_critic.py" "$1" "$c"
@@ -430,8 +445,8 @@ case_advice_render_once() {
   py docreview_state.py advice --state-dir "$d" --render >/dev/null
   assert_eq "$(py docreview_state.py advice --state-dir "$d" --render | head -1 | grep -c '^참고(advisory) 0건')" "1" \
     "Review Focus: 두 번째 --render 는 이미 보인 항목을 다시 내지 않는다(shown 표지 — 멱등)"
-  assert_eq "$(py docreview_state.py advice --state-dir "$d" | jgets '[it["shown"] for it in d["items"]]')" "[True, True, True]" \
-    "Review Focus: 플래그 없는 호출은 읽기 전용 JSON 이고 shown 표지를 싣는다"
+  assert_eq "$(py docreview_state.py advice-list --state-dir "$d" | jgets '[it["shown"] for it in d["items"]]')" "[True, True, True]" \
+    "Review Focus: advice-list 는 읽기 전용 JSON 이고 shown 표지를 싣는다"
   adv_round2 "$d" 4
   assert_eq "$(py docreview_state.py advice --state-dir "$d" --render)" "참고(advisory) 1건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: ### Deferred to plan · 참고 목록 8줄(기본) · 요약 60자(기본)
 - [feasibility] #1-context — 참고 항목 4 — feasibility" \
@@ -455,8 +470,8 @@ s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
   assert_eq "$rc $(grep -c 'docreview 계수' "$n")" "0 0" "Review Focus: 업그레이드 전 원장 — --log-file 은 계수 줄 0 · rc 0"
   rm -rf "$d" "$n"
   d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
-  py docreview_state.py advice --state-dir "$d" >/dev/null 2>"$d/err"; rc=$?
-  assert_eq "$rc $(grep -c profile_has_no_must_catch "$d/err")" "1 1" "Review Focus: must_catch 없는 프로필의 advice 는 profile_has_no_must_catch rc 1"
+  py docreview_state.py advice-list --state-dir "$d" >/dev/null 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c profile_has_no_must_catch "$d/err")" "1 1" "Review Focus: must_catch 없는 프로필의 advice-list 는 profile_has_no_must_catch rc 1"
   rm -rf "$d"
 }
 case_advice_odd_text_one_line() {
@@ -497,8 +512,8 @@ case_advice_module_missing() {   # 원장 스크립트만 복사한 트리 — �
   local t rc; t="$(mktemp -d -t advlone-XXXXXX)"; cp -L "$SCRIPTS/docreview_state.py" "$SCRIPTS/docreview_config.py" "$t/"
   python3 "$t/docreview_state.py" state-dir-for --root "$t/root" --doc "$FX/design-sample.md" >/dev/null 2>&1; rc=$?
   assert_eq "$rc" "0" "형제 부재: docreview_advice 가 없어도 원장 스크립트의 다른 서브커맨드는 돈다"
-  python3 "$t/docreview_state.py" advice --state-dir "$t" >/dev/null 2>"$t/err"; rc=$?
-  assert_eq "$rc $(grep -c advice_module_missing "$t/err")" "1 1" "형제 부재: advice 는 advice_module_missing rc 1 로 멈춘다(traceback 아님)"
+  python3 "$t/docreview_state.py" advice-list --state-dir "$t" >/dev/null 2>"$t/err"; rc=$?
+  assert_eq "$rc $(grep -c advice_module_missing "$t/err")" "1 1" "형제 부재: advice-list 는 advice_module_missing rc 1 로 멈춘다(traceback 아님)"
   rm -rf "$t"
 }
 
@@ -566,8 +581,8 @@ case_advice_surrogate_sink_atomic() {   # 짝 없는 surrogate 가 사용자 문
     "surrogate: 박제 뒤에도 문서의 원래 바이트가 표 앞에 그대로 있다(0 바이트로 잘리지 않는다)"
   assert_eq "$(adv_deferred "$doc" | grep -c '| 참고(component_relations) #1-context — 외톨이 � 끝 — 고치면: 쌍 😀 · 외톨이 � |$')" "1" \
     "surrogate: 박제 행은 짝 없는 것을 U+FFFD 로, 짝이 맞는 쌍은 원래 글자로 적는다"
-  assert_eq "$(py docreview_state.py advice --state-dir "$d" | jgets '[it["summary"] for it in d["items"]]')" "['외톨이 � 끝']" \
-    "surrogate: 플래그 없는 JSON 도 rc 0 으로 U+FFFD 를 싣는다(state_unreadable 로 죽지 않는다)"
+  assert_eq "$(py docreview_state.py advice-list --state-dir "$d" | jgets '[it["summary"] for it in d["items"]]')" "['외톨이 � 끝']" \
+    "surrogate: advice-list JSON 도 rc 0 으로 U+FFFD 를 싣는다(state_unreadable 로 죽지 않는다)"
   cp "$FX/design-sample.md" "$doc"
   out="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
 from pathlib import Path
@@ -741,8 +756,8 @@ case_advice_count_line_nested_log() {   # ## 결정 기록 아래 ### Deferred t
 # ── --where 라벨 ─────────────────────────────────────────────────────────────
 case_advice_render_where_label() {   # B-A 가 쓰는 --where — 머리 줄 · 접는 줄이 그 라벨을 가리킨다
   local d out; d="$(adv_state 11)"
-  out="$(py docreview_state.py advice --state-dir "$d" --render --cap 8 --where "brief §3 · §5")"
-  assert_eq "$(printf '%s\n' "$out" | sed -n '1p;$p')" "참고(advisory) 11건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: brief §3 · §5 · 참고 목록 8줄(진입) · 요약 60자(기본)
+  out="$(py docreview_state.py advice --state-dir "$d" --render --where "brief §3 · §5")"
+  assert_eq "$(printf '%s\n' "$out" | sed -n '1p;$p')" "참고(advisory) 11건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: brief §3 · §5 · 참고 목록 8줄(기본) · 요약 60자(기본)
   … 외 3건 — brief §3 · §5 에 전부" "--where: 머리 줄과 접는 줄이 박제처 헤딩 대신 라벨을 가리킨다"
   rm -rf "$d"
 }
