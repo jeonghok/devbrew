@@ -253,7 +253,7 @@ WU="$TMP/e1noenv"; mkdir -p "$WU/.claude/quality-gates/$OWN"
 : > "$WU/.claude/quality-gates/$OWN/comment.md"
 refusal_check "환경 변수 없이 --session-id 만 — 마커 없는 폴더(comment.md 만)" "$WU" "$OWN"
 
-note "── E1(critique): 첫 인자 critique 는 새 이름을 안내하고 exit 2 — 상태를 쓰지 않는다"
+note "── E1(critique): critique 인자는 위치와 무관하게 새 이름을 안내하고 exit 2 — 상태를 쓰지 않는다"
 WC="$TMP/e1critique"; mkdir -p "$WC"
 out="$(cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 "$SETUP" critique docs/x.md 2>"$TMP/critique.err")"; rc=$?
 assert_eq "$rc" "2" "E1: setup-qg.sh critique docs/x.md 는 exit 2"
@@ -267,7 +267,7 @@ assert_eq "$rc" "2" "E1: SKILL P2 의 실제 모양(--ensure critique docs/x.md)
 assert_contains "$out" "/quality-gates:artifact-critique" "E1: --ensure critique 도 새 이름을 안내한다"
 [ ! -e "$WC/.claude" ] && ok "E1: --ensure critique 는 세션 폴더를 만들지 않는다" || no "E1: --ensure critique 가 상태를 남겼다"
 (cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 "$SETUP" docs/x.md >/dev/null 2>&1); rc=$?
-assert_eq "$rc" "1" "E1: critique 가 첫 인자가 아니면 여전히 Unknown argument 다 (양의 짝)"
+assert_eq "$rc" "1" "E1: critique 없는 낯선 인자(docs/x.md)는 Unknown argument 로 exit 1 이다 (양의 짝)"
 (cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 "$SETUP" >/dev/null 2>&1)
 [ -f "$WC/.claude/quality-gates/critiquesess1/result.md" ] \
   && ok "E1: 같은 환경에서 인자 없이는 세션 폴더를 만든다 (양의 짝 — 위 부재가 공허하지 않다)" || no "E1: 양의 짝 실행이 폴더를 만들지 않았다"

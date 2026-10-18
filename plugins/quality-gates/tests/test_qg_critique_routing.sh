@@ -22,4 +22,10 @@ assert_eq "$(find "$T2/.claude" -type f 2>/dev/null | wc -l | tr -d ' ')" "0" "-
 SK="$ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
 assert_contains "$(cat "$SK")" '## 진입 단계' "quality-pipeline 은 진입 단계 절을 가진다"
 assert_contains "$(cat "$SK")" 'setup-qg.sh" --ensure $ARGUMENTS' "인자 확인은 본문 P2 가 한다(사전 검사 줄이 아니다)"
+# 자연어 문서 비평 요청은 setup 이 아니라 P2 앞의 본문 지시(P1b)가 새 이름으로 안내한다.
+SKB="$(cat "$SK")"
+P1B="$(printf '%s\n' "$SKB" | awk '/^\*\*P1b — /{f=1} /^\*\*P2 — /{f=0} f')"
+assert_contains "$P1B" "/quality-gates:artifact-critique" "P1b: P2 앞 지시가 새 이름을 안내한다"
+assert_contains "$P1B" "setup 도 돌리지 않은 채 멈춘다" "P1b: 안내 뒤 setup 을 돌리지 않는다"
+assert_contains "$P1B" "코드 변경을 검증해 달라는 요청에는 적용하지 않는다" "P1b: 코드 요청은 P2 로 간다(음의 짝)"
 finish

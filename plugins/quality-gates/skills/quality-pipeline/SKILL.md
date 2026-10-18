@@ -29,7 +29,7 @@ allowed-tools:
 | `[shell command execution disabled by policy]` | `[quality-gates] quality-pipeline 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다.` 를 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[quality-gates] quality-pipeline 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실).` 을 내고 멈춘다 |
 
-# Quality Gates — In-Turn Orchestrator (v13.0.1)
+# Quality Gates — In-Turn Orchestrator (v14.0.0)
 
 <!-- plain-language:begin -->
 ## 사람에게 쓰는 글
@@ -70,6 +70,10 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 
 **P1 — global kill switch.** If `DEVBREW_QUALITY_GATES_DISABLE=1`, emit
 `[quality-gates] disabled via DEVBREW_QUALITY_GATES_DISABLE=1` and return. No script, no agent.
+
+**P1b — 문서 비평 요청은 새 이름으로 안내한다.** 사용자의 인자나 요청이 코드가 아닌 문서(설계문서 · 명세 · 계획 · 설정 · 글)를 비평해 달라는 뜻이면 파이프라인을 돌리지 않는다. 아래 한 줄만 내고 setup 도 돌리지 않은 채 멈춘다. 코드 변경을 검증해 달라는 요청에는 적용하지 않는다 — 그때는 P2 로 간다.
+
+> [quality-gates] 문서 비평은 이제 /quality-gates:artifact-critique <경로> 로 부른다 — 파이프라인은 실행하지 않는다.
 
 **P2 — setup.** Once:
 

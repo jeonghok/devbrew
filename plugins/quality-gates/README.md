@@ -396,7 +396,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_QUALITY_GATES_DISABLE=1` | `qg-gc.py` no-op. `/quality-gates:quality-pipeline` 의 setup 펜스(Preflight P2)는 그대로 `setup-qg.sh` 를 부르고, setup 이 거부 줄 하나를 내고 exit 1 로 끝나 `/quality-gates:quality-pipeline` 이 거기서 멈춘다 — 세션 폴더도 쓰지 않고 파이프라인 skill 도 agent 도 부르지 않는다(판정 자체가 나지 않는다 — `not-certified` 도 아니다). skill 이 직접 불려도 SKILL Preflight P1 이 즉시 리턴한다. `/quality-gates:artifact-critique` 는 setup 이 건드리지 않고 `artifact-critique` 의 E0 가 같은 스위치를 본다. |
+| `DEVBREW_QUALITY_GATES_DISABLE=1` | `qg-gc.py` no-op. `/quality-gates:quality-pipeline` 은 맨 앞 사전 검사가 `[devbrew-entry] disabled` 줄을 내고 거기서 멈춘다 — setup 도 파이프라인 본문(Preflight P2)도 부르지 않고 세션 폴더도 쓰지 않으며 agent 도 부르지 않는다(판정 자체가 나지 않는다 — `not-certified` 도 아니다). 본문이 직접 불려도 Preflight P1 이 즉시 리턴한다. `/quality-gates:artifact-critique` 도 사전 검사가 같은 줄로 먼저 멈추고, 그 skill 의 E0 가 같은 스위치를 한 번 더 본다. |
 
 **각도 · 리뷰어 단위 disable:**
 

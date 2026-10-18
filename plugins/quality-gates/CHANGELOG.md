@@ -11,6 +11,7 @@
 ### Changed
 - 진입은 `/quality-gates:quality-pipeline`(코드 변경 검증)과 `/quality-gates:artifact-critique`(문서 비평) 둘이다. 문서 비평 skill 이름은 `critiquing-artifacts` 에서 `artifact-critique` 로 바뀌었다.
 - `/quality-gates:quality-pipeline critique …` 는 새 이름을 알려 주는 안내를 찍고 종료 코드 2 로 끝난다 — 아무것도 실행하지 않는다.
+- 문서를 비평해 달라는 말이 `/quality-gates:quality-pipeline` 으로 오면 파이프라인 본문(P1b)이 같은 안내를 내고 setup 을 돌리지 않는다.
 - 차등 테스트를 고르고 돌리는 스크립트 넷(`compute-test-scope-candidates.sh` · `diff-test-results.py` · `resolve-baseline.sh` · `run-test-selection.sh`)은 `shared/test-selection/` 의 공유본을 링크로 싣는다.
 - 문서 비평 adversarial 에이전트의 도구 서술을 실제 도구(Read · Grep · Glob)에 맞게 바로잡았다.
 - README 의 지워진 게이트 인용을 바로잡았다. 호출 표면 락은 qg 에 보고서 모드 예외를 두지 않고 옛 이름 `/qg` · `critiquing-artifacts` 를 잡는다.
