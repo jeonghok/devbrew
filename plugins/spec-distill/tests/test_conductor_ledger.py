@@ -151,7 +151,68 @@ class StartApproval(Repo):
         self.assertEqual([r["규모"] for r in rows], ["b"])
 
 
+class ApprovalMarker(Repo):
+    SCALE = "남은 에픽 2"
+
+    def approved(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.cli("approve", "--roadmap", RM, "--session", SID, "--scale", self.SCALE)
+
+    def ask(self, session=SID):
+        return self.cli("approval", "--roadmap", RM, "--session", session, "--scale", self.SCALE)
+
+    def test_no_marker_needs_approval(self):
+        rc, out = self.ask()
+        self.assertEqual(rc, 1)
+        self.assertIn("표지를 쥐고 있지 않다", out)
+
+    def test_held_stays_disclosure(self):
+        self.approved()
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        rc, out = self.ask()
+        self.assertEqual(rc, 0)
+        self.assertTrue(out.startswith("공시만"), out)
+
+    def test_release_then_claim_needs_approval(self):
+        self.approved()
+        self.cli("release", "--roadmap", RM, "--session", SID)
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.assertEqual(self.ask()[0], 1)
+
+    def test_takeover_by_other_invalidates(self):
+        self.approved()
+        self.cli("takeover", "--roadmap", RM, "--session", OTHER)
+        self.assertEqual(self.ask()[0], 1)
+        self.cli("takeover", "--roadmap", RM, "--session", SID)
+        self.assertEqual(self.ask()[0], 1)
+
+    def test_other_cannot_add(self):
+        self.approved()
+        rc, out = self.cli("add", "--roadmap", RM, "--session", OTHER, "--section", "자원",
+                           "--cells", "worktree · /x · A1 · 설계 · t")
+        self.assertEqual(rc, 5)
+        self.assertIn(SID, out)
+
+    def test_drop_where_needs_equals(self):
+        self.approved()
+        rc, _o = self.cli("drop", "--roadmap", RM, "--session", SID, "--section", "자원", "--where", "경로")
+        self.assertEqual(rc, 2)
+
+
 class Roadmaps(Repo):
+    def test_unreadable_roadmap_is_listed_unchecked(self):
+        (self.w / "plan/rm/bad.md").write_text("---\ntype: roadmap\n---\n\n# x\n", encoding="utf-8")
+        (self.w / "plan/rm/quoted.md").write_bytes(b'---\r\ntype: "roadmap"\r\n---\r\n\r\n# x\r\n')
+        sh(self.w, "add", "-A")
+        sh(self.w, "commit", "-qm", "bad")
+        sh(self.w, "push", "-q", "origin", "trunk")
+        rc, out = self.cli("roadmaps")
+        self.assertEqual(rc, 0, out)
+        rows = dict(l.split("\t") for l in out.strip().splitlines())
+        self.assertEqual(rows.get("plan/rm/bad.md"), "검사 불가")
+        self.assertEqual(rows.get("plan/rm/quoted.md"), "검사 불가")
+
+
     def test_finds_by_frontmatter_not_folder(self):
         rc, out = self.cli("roadmaps")
         self.assertEqual(rc, 0, out)

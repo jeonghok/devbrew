@@ -115,7 +115,7 @@ def c_roadmaps(root, a) -> int:
     rc, _o, _e = git(root, "rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
     if rc:
         raise Fail(3, NO_DEFAULT)
-    rc, out, err = git(root, "grep", "-l", "-I", "--full-name", "-e", "^type: roadmap$", DEFAULT_REF, "--", "*.md")
+    rc, out, err = git(root, "grep", "-l", "-I", "--full-name", "-E", "-e", "^type:[[:space:]]*[\"']?roadmap", DEFAULT_REF, "--", "*.md")
     if rc not in (0, 1):
         raise Fail(3, "기본 브랜치의 파일을 읽지 못했다: %s" % err)
     found = 0
@@ -127,8 +127,13 @@ def c_roadmaps(root, a) -> int:
         p = subprocess.run([sys.executable, str(HERE / "roadmap_status.py"), "--json", path], cwd=str(root),
                            capture_output=True, encoding="utf-8", errors="replace")
         try:
-            blocks = json.loads(p.stdout).get("blocks") or []
-            left = str(sum(1 for b in blocks if b.get("stage") not in DONE))
+            rep_ = json.loads(p.stdout)
+            blocks = rep_.get("blocks") or []
+            staged = any(b.get("stage") for b in blocks)
+            if rep_.get("exit") == 3 or (not staged and (rep_.get("unknown_reasons") or rep_.get("format_errors"))):
+                left = "검사 불가"
+            else:
+                left = str(sum(1 for b in blocks if b.get("stage") not in DONE))
         except ValueError:
             left = "검사 불가"
         if left != "0":
@@ -140,9 +145,17 @@ def c_roadmaps(root, a) -> int:
     return 0
 
 
+def _drop_approval(root, a):
+    """표지를 새로 쥐면 옛 시작 승인은 효력이 없다(AC15) — 이 세션의 행을 지운다."""
+    update(root, a.roadmap, a.session,
+           lambda d: d.__setitem__("시작 승인", [r for r in d["시작 승인"] if r["세션"] != a.session]))
+
+
 def c_claim(root, a) -> int:
     got = cs.acquire(mpath(root, a.roadmap).parent, a.session)
     if got in ("acquired", "held"):
+        if got == "acquired":
+            _drop_approval(root, a)
         print(got)
         return 0
     print("다른 세션(%s)이 이 로드맵을 지휘하고 있다 — 이 세션은 읽기 전용으로 보인다. 넘겨받을지는 사용자가 정한다(takeover)" % got)
@@ -151,11 +164,14 @@ def c_claim(root, a) -> int:
 
 def c_takeover(root, a) -> int:
     prev = cs.takeover(mpath(root, a.roadmap).parent, a.session)
+    _drop_approval(root, a)
     print("표지를 넘겨받았다 — 이전 주인: %s" % (prev or "없음"))
     return 0
 
 
 def c_release(root, a) -> int:
+    if cs.holder(mpath(root, a.roadmap).parent) == a.session:
+        _drop_approval(root, a)
     print("표지를 풀었다" if cs.release(mpath(root, a.roadmap).parent, a.session) else "이 세션의 표지가 아니다 — 그대로 둔다")
     return 0
 
@@ -168,7 +184,9 @@ def c_add(root, a) -> int:
 
 
 def c_drop(root, a) -> int:
-    key, _eq, value = a.where.partition("=")
+    key, eq, value = a.where.partition("=")
+    if not eq:
+        raise Fail(2, "--where 는 <칸>=<값> 모양이다: %r" % a.where)
     if key not in cs.COLUMNS.get(a.section, ()):
         raise Fail(2, "%s 절에 %r 칸이 없다" % (a.section, key))
     gone = []
@@ -183,6 +201,10 @@ def c_drop(root, a) -> int:
 
 
 def c_approval(root, a) -> int:
+    owner = cs.holder(mpath(root, a.roadmap).parent)
+    if owner != a.session:
+        print("승인 필요 — 이 세션이 표지를 쥐고 있지 않다(표지를 쥔 세션: %s)" % (owner or "없음"))
+        return 1
     ok, why = scale_check(load(root, a.roadmap)["시작 승인"], a.session, a.scale)
     print(("공시만 — " if ok else "승인 필요 — ") + why)
     return 0 if ok else 1
