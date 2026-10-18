@@ -24,7 +24,7 @@ next_phase: superpowers:writing-plans
 
 ## Goals
 
-- 원칙 여덟(아래 §1)이 devbrew 개발 세션이 매번 읽는 CLAUDE.md 에 한 줄씩 있고, 이유 · 배경은 철학 문서에 있다.
+- 원칙 여섯(아래 §1)이 devbrew 개발 세션이 매번 읽는 CLAUDE.md 에 한 줄씩 있고, 이유 · 배경은 철학 문서에 있다.
 - 지금 없는 장치를 가리키는 글 · 이미 바뀐 사실 · 중복 · 버전 이력 서사를 CLAUDE.md · 철학 문서 · 플러그인 README 넷에서 지워 문서를 줄인다.
 - devbrew 개발 규칙이 된 교훈 몇 줄을 `docs/plugin-authoring.md` 에 둔다.
 - 다른 에픽 몫(파일 · 조항)은 고치지 않고 넘김으로 보내고, 지휘자가 처리됐는지 확인한다.
@@ -56,7 +56,7 @@ next_phase: superpowers:writing-plans
 
 ## 설계
 
-### §1 옮길 원칙 여덟 — CLAUDE.md 한 줄 + 철학 문서 이유
+### §1 옮길 원칙 여섯 — CLAUDE.md 한 줄 + 철학 문서 이유
 
 CLAUDE.md 의 알맞은 기존 절 안에 한 줄씩 둔다(새 큰 절을 만들지 않는다 — 크기). 한 줄은 「무엇을 한다」만 쓰고, 이유 · 배경 · 예외는 철학 문서의 해당 원칙으로 가리킨다. 철학 문서는 새 P# 를 만들기 전에 기존 P# 에 흡수할 수 있는지 먼저 보고(가벼움 기본값), 새 P# 가 필요하면 그 이유를 같은 절에 한 문장으로 적는다.
 
@@ -68,8 +68,6 @@ CLAUDE.md 의 알맞은 기존 절 안에 한 줄씩 둔다(새 큰 절을 만�
 | 4 | 상류 · 하류 연계 | 「devbrew에서는 이 연계성도 매우 중요한 파트니까 앞으로도 지키고」 | 설계마다 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 같은 상태를 읽는 표면과 이음매를 고치는 쪽을 보인다 |
 | 5 | 계층 · 온톨로지 · 컨트롤 플레인 진입점 | 「앞으로도 devbrew내에서는 적절한 곳에는 그래야하고」 | 여러 산출물 · 상태가 얽히면 객체 · 링크 · 속성 · 주인을 명시하고 진입점에서 따라 내려가게 한다(작은 일엔 과하게 만들지 않는다) |
 | 6 | 있는 것 먼저 | 「기존에 있던거를 사용할 수 있는지 검토하는 성향이면 좋겠어 레포 내부든 외부든 … 다만 외부는 나한테 검토 받고 사용하는거로」 | 만들기 전에 레포 안 · 밖의 있는 것을 먼저 검토한다 · 외부 것은 사용자 검토 뒤에만 쓴다 |
-| 7 | kill switch 개명엔 옛 이름 별칭 | (메모리 교훈 · PR #190) | kill switch 를 개명 · 이전하면 옛 이름도 계속 끄고 안내한다 — 공시는 차단이 아니다. 지금 CLAUDE.md 의 「은퇴시키려면 … 공시가 필수」 줄에 더한다 |
-| 8 | superpowers 를 덮지 않고 자기 몫을 한다 | 「외부는 건들지 말자」(S17) · 「몫만 이란거 보단 자기 몫을 이라고 하자」 · 「superpowers를 지휘자가 다루자나 그부분이 앞에 말한 덮지 말라는 원칙과 충돌한다고 뒤에서 판단할수도 있는데 그건 아니란 말이었어」 | 외부 플러그인의 파일 · 동작은 고치지 않는다. devbrew 가 그 skill 을 부르고 · 입력을 싣고 · 그 질문을 옮기거나 미리 받은 답으로 답하는 것은 자기 몫이지 덮기가 아니다 |
 
 이미 플러그인 동작으로 들어가 있어 CLAUDE.md 에 다시 적지 않는 원칙: 머지 전 확인 규약 · 하위는 단일 세션과 같은 skill 흐름 · 게이트 전달은 혼자 읽혀야 · 지휘 세션이 에픽을 직접 진행(모두 `plugins/spec-distill/references/conducting.md` · `conductor-dispatch.md`). 원칙 1 의 뜻대로 그 자리가 정본이다.
 
@@ -90,7 +88,7 @@ CLAUDE.md 의 알맞은 기존 절 안에 한 줄씩 둔다(새 큰 절을 만�
 - **quality-gates · project-init · plugin-audit README**: R2a 가 바꾸는 동작 밖의 줄만(R2a 설계가 넘긴 몫) — qg 의 「dispatch builder」 · 없는 `codex-reviewer` agent 설명 · 「문서 리뷰 엔진 기반(v7.4.0)」 · 실측 이력 괄호 · v10.0.0 훅 삭제 이력 · `MAX_TOTAL_ITERATIONS` 이력, project-init 의 버전 꼬리표 · 「CLAUDE.md 는 짧은 anchor 만」(지금 생성물과 다름), plugin-audit 의 「즉시 제거 — 근거는 …」 정당화 서사 · 샌드박스 별칭 이력 · severity 통일 이력. 구성표 · 상한 수치 · 의도 출처 · artifact-critique · persona 모델 고정 같은 R2a 몫 줄은 손대지 않는다.
 - 남긴다(지휘자 판정): 은퇴한 kill switch 공시 표(CLAUDE.md :37 요건) · `integrity` 필드 문장(쓰는 곳 0 이지만 규칙 선택지) · SessionStart 훅 규칙(앞으로의 훅에 걸림) · qg README 의 `baseline-cache/` 안내(남은 폴더가 있는 사용자 안내).
 
-크기 목표: 고친 문서마다 정리 전보다 작다. CLAUDE.md 는 원칙 여덟을 넣고도 지금(약 15.2KB) 이하.
+크기 목표: 고친 문서마다 정리 전보다 작다. CLAUDE.md 는 원칙 여섯을 넣고도 지금(약 15.2KB) 이하.
 
 ### §4 개발 규칙 — `docs/plugin-authoring.md`
 
@@ -138,18 +136,16 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 
 ## Acceptance Criteria
 
-- AC1 CLAUDE.md 에 §1 원칙 여덟이 각각 한 줄로 있고, 각 줄이 철학 문서의 해당 원칙을 가리킨다. 새 큰 절이 없다.
-- AC2 철학 문서가 원칙 여덟의 이유 · 배경을 담고, 새 P# 가 있으면 기존 P# 에 흡수하지 못한 이유가 같은 절에 한 문장으로 있다.
-- AC3 원칙 8 의 줄이 「부르고 · 입력을 싣고 · 질문을 옮기거나 미리 받은 답으로 답하는 것은 덮기가 아니다」를 함께 적는다.
-- AC4 CLAUDE.md 의 kill switch 줄이 개명 · 이전 때 옛 이름도 계속 끄고 안내하라고 적는다.
-- AC5 §3 의 CLAUDE.md · 철학 문서 항목이 지워지거나 고쳐졌다(목록 항목마다 대조).
-- AC6 §3 의 플러그인 README 넷 항목이 지워지거나 고쳐졌고, R2a 몫 줄은 그대로다.
-- AC7 고친 문서마다 정리 전보다 작고, CLAUDE.md 는 정리 전 크기 이하다 — PR 본문에 파일별 전후 크기.
-- AC8 `docs/plugin-authoring.md` 에 §4 다섯 줄이 있다.
-- AC9 §5 넘김이 이 설계 `## 미룸` 표에 받는 곳과 함께 있다.
-- AC10 헌장 · README 를 읽는 락이 GREEN 이고, 뜻을 바꾼 락은 변이로 RED 를 보인다.
-- AC11 README 를 고친 플러그인마다 `plugin.json` patch bump 와 CHANGELOG 항목이 있다.
-- AC12 새 결정론 검사(원칙 준수 lint 등)를 더하지 않았다.
+- AC1 CLAUDE.md 에 §1 원칙 여섯이 각각 한 줄로 있고, 각 줄이 철학 문서의 해당 원칙을 가리킨다. 새 큰 절이 없다.
+- AC2 철학 문서가 원칙 여섯의 이유 · 배경을 담고, 새 P# 가 있으면 기존 P# 에 흡수하지 못한 이유가 같은 절에 한 문장으로 있다.
+- AC3 §3 의 CLAUDE.md · 철학 문서 항목이 지워지거나 고쳐졌다(목록 항목마다 대조).
+- AC4 §3 의 플러그인 README 넷 항목이 지워지거나 고쳐졌고, R2a 몫 줄은 그대로다.
+- AC5 고친 문서마다 정리 전보다 작고, CLAUDE.md 는 정리 전 크기 이하다 — PR 본문에 파일별 전후 크기.
+- AC6 `docs/plugin-authoring.md` 에 §4 다섯 줄이 있다.
+- AC7 §5 넘김이 이 설계 `## 미룸` 표에 받는 곳과 함께 있다.
+- AC8 헌장 · README 를 읽는 락이 GREEN 이고, 뜻을 바꾼 락은 변이로 RED 를 보인다.
+- AC9 README 를 고친 플러그인마다 `plugin.json` patch bump 와 CHANGELOG 항목이 있다.
+- AC10 새 결정론 검사(원칙 준수 lint 등)를 더하지 않았다.
 
 ## Files to Modify
 
@@ -167,7 +163,7 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 - 락: `plugins/plugin-audit/tests/test_check_shape_completeness.py` · `plugins/quality-gates/tests/test_law2_prose.sh` · `plugins/quality-gates/tests/test_governance_no_capability_caps.sh` · `plugins/spec-distill/tests/test_epic_conductor_skill.sh` · `shared/tests/test_charter_citations.sh` · `plugins/quality-gates/tests/test_e2e_docs.sh` · `plugins/spec-distill/tests/test_rereview_cap_consistency.sh` · `shared/tests/test_invocation_surface.sh` · `plugins/quality-gates/tests/test_publish_surface_removed.sh` · `plugins/spec-distill/tests/test_readme_sync.sh` · `shared/tests/test_changelog_integrity.sh` · README 를 읽는 qg 테스트.
 - 전체 스위트(로드맵 frontmatter `test_command`)를 기준선과 실패 이름으로 대조.
 - 크기: 고친 파일마다 `wc -c` 전후.
-- 끝에서 끝: 메모리를 쓰지 않는 버릴 레포 세션에서 CLAUDE.md · 철학 문서만으로 원칙 여덟을 찾아 따라갈 수 있는지 읽어 본다(사용자 성공 장면 「내가 말한게 다른 레포에서 사용해도 지켜지면」 — devbrew 개발 규칙은 devbrew 에서, 플러그인 동작 원칙은 넘김을 받은 에픽 · 지휘자 수리가 그 동작 자리에 넣었는지 함께 본다).
+- 끝에서 끝: 메모리를 쓰지 않는 버릴 레포 세션에서 CLAUDE.md · 철학 문서만으로 원칙 여섯을 찾아 따라갈 수 있는지 읽어 본다(사용자 성공 장면 「내가 말한게 다른 레포에서 사용해도 지켜지면」 — devbrew 개발 규칙은 devbrew 에서, 플러그인 동작 원칙은 넘김을 받은 에픽 · 지휘자 수리가 그 동작 자리에 넣었는지 함께 본다).
 
 ## Rejected Alternatives
 
@@ -175,6 +171,7 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 - 철학 문서에만 — 가리켜야만 읽혀서 개발 세션이 놓친다.
 - 메모리 전부 옮기기 — 사용자 「모든걸 다 지키란말은 또 아니야」.
 - 원칙 준수 lint — 가벼움 원칙(결정론은 보안 · 정확성에만).
+- 원칙 7 · 8 을 CLAUDE.md 에 — 사용자 「여덟째는 넣지마 그리고 일곱째도 넣는건 좀 그러네」(B7).
 - R11 이 다른 에픽 파일까지 직접 고치기 — 사용자 「이 기준으로 (권장)」(넘김 + 지휘자 확인).
 
 ## 결정 기록
@@ -185,29 +182,30 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 - B4 · 결정 · 2026-10-19 · 원칙 자리 — 「ok」(규칙은 CLAUDE.md 한 줄, 이유는 철학 문서)
 - B5 · 결정 · 2026-10-19 · 원칙 8 문면 — 「몫만 이란거 보단 자기 몫을 이라고 하자」 · 「superpowers를 지휘자가 다루자나 그부분이 앞에 말한 덮지 말라는 원칙과 충돌한다고 뒤에서 판단할수도 있는데 그건 아니란 말이었어」
 - B6 · 결정 · 2026-10-19 · 계획 길이 보완 장치 없음 — 「짧아진 계획의 영향을 신경쓰진 일단 말아봐 그걸 근거로 과한 구현 안했음 좋겠으니」
+- B7 · 결정 · 2026-10-19 · 원칙 7(kill switch 개명 별칭) · 8(superpowers 를 덮지 않고 자기 몫을) 을 CLAUDE.md 에 넣지 않음 — 「여덟째는 넣지마 그리고 일곱째도 넣는건 좀 그러네」(B5 는 이로써 문면 없음)
 - 메모리 — 「메모리 경우는 정리만 잘해둬 원래 클로드 원칙 잇자나」
 
 ## 번호 대조
 
 | 번호 | 반영/기각 | 자리 또는 이유 |
 |---|---|---|
-| C25 | 반영 | §1 원칙 8 · Constraints |
+| C25 | 반영 | Constraints(외부 플러그인 파일 · 동작을 고치지 않는다) — 원칙 줄로는 넣지 않음(B7) |
 | C30 | 반영 | §1 원칙 1 · 3(devbrew 밖 레포) · Verification Plan 끝에서 끝 |
 | C32 | 반영 | §1 원칙 6 · 있는 것 검토 |
-| C35 | 반영 | §1 원칙 8 |
+| C35 | 반영 | Constraints(외부 플러그인 파일 · 동작을 고치지 않는다) — 원칙 줄로는 넣지 않음(B7) |
 | C44 | 반영 | Non-goals — 교훈을 따로 다루는 장치 없이 그 동작 자리를 고친다(§1 원칙 1) |
 | D21 | 반영 | 위험 |
-| D26 | 반영 | §1 원칙 8 |
+| D26 | 반영 | Constraints(외부 플러그인 파일 · 동작을 고치지 않는다) — 원칙 줄로는 넣지 않음(B7) |
 | D33 | 반영 | §1 원칙 6 · 있는 것 검토 |
 | K9 | 반영 | 위험 · §6 |
 | S1 | 반영 | Context / Why |
 | S13 | 반영 | 위험 |
-| S17 | 반영 | §1 원칙 8 |
-| S18 | 반영 | §1 원칙 8 |
+| S17 | 반영 | Constraints(외부 플러그인 파일 · 동작을 고치지 않는다) — 원칙 줄로는 넣지 않음(B7) |
+| S18 | 반영 | Constraints(외부 플러그인 파일 · 동작을 고치지 않는다) — 원칙 줄로는 넣지 않음(B7) |
 | S27 | 반영 | §1 원칙 1 · 3 |
 | S30 | 반영 | §1 원칙 6 |
 | S31 | 반영 | §1 원칙 6(실험 기능은 기반으로 쓰지 않음 — 이 설계는 새 장치 없음) |
-| S34 | 반영 | §1 원칙 8 |
+| S34 | 반영 | Constraints(외부 플러그인 파일 · 동작을 고치지 않는다) — 원칙 줄로는 넣지 않음(B7) |
 | S44 | 반영 | Non-goals · §1 원칙 1 |
 | S49 | 반영 | §5 — 줄이지 않고 넘긴다 |
 
