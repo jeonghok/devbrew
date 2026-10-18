@@ -185,6 +185,13 @@ ANCHOR_CASES = [
     ("두 줄 주석", ["- **S<!--", "-->9**"], 0, None),
     ("빈 태그 하나 + 숫자", ["- **S<i>9** x"], 0, None),
     ("본문 b 태그 감싼 앵커 꼴", ["- **S1** 「a」 <b>**S9**"], 0, None),
+    ("짝 없는 백틱이 밀어낸 주석", ["- **S1** 「a」 `", "` **S<!-- `", "-->9** 」"], 0, None),
+    ("짝 없는 백틱이 밀어낸 목록 HTML", ["- **S1** 「a」 `열림", "닫힘` <ul><li><b>S9</b> 「위조」</li></ul> `끝"], 0, None),
+    ("template 요소", ["- **S1** 「a」 <template>"], 0, None),
+    ("ul li b 요소로 그린 가짜 앵커", ["- **S1** 「a」 <ul><li><b>S9 「x」"], 0, None),
+    ("details 요소", ["- **S1** 「a」 <details>"], 0, None),
+    ("div 요소 항목", ["- <div>"], 0, None),
+    ("인용 안 div 요소", ["> <div>"], 0, None),
     ("div 블록 감싼 앵커", ["<div>", ANCHOR9, "</div>"], 1, None),
     ("주석 블록 감싼 앵커", ["<!--", ANCHOR9, "-->"], 1, None),
     ("div 블록 감싼 펜스 앵커", ["<div>", "```", ANCHOR9, "```"], 2, None),
@@ -230,6 +237,17 @@ class CrossCheckClasses(unittest.TestCase):
                 self.assertFalse(
                     disagreement(ours, sees),
                     "%s: %r — 우리=%s · 파서=%s" % (name, lines[key], ours, "최상위 «-» 항목" if sees else "그 구조 아님"))
+
+    def test_html_the_parser_sees_is_refused_somewhere_in_the_case(self):
+        """줄 하나씩이 아니라 사례 전체(줄 바꿈을 건너는 코드 칸 짝짓기 포함)를 파서에 넘긴다 — 파서가 HTML 로 읽는 사례는
+        우리가 어느 줄이든 거부해야 한다."""
+        for name, lines, key, other in ANCHOR_CASES:
+            with self.subTest(name):
+                doc = make_brief(dict(other or {}, **{"6": "\n".join(lines)}))
+                seen = any(c.type in ("html_inline", "html_block") for t in MD.parse(norm(doc)) for c in [t] + list(t.children or []))
+                sec = B.section_text(doc, "6")
+                refused = bool(B.anchor_lines(sec)[1]) or doc_refused(doc, lines)
+                self.assertTrue(refused or not seen, "%s: 파서는 HTML 로 읽는데 우리는 어느 줄도 거부하지 않았다 %r" % (name, lines))
 
     def test_anchor_positive_control(self):
         self.assertEqual(anchor_verdict([ANCHOR9], 0), ("accept", True))

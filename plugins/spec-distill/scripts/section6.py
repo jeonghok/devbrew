@@ -84,6 +84,11 @@ def _fence_spans(text: str) -> list:
     return _scan_fences(text)[0]
 
 
+def fence_spans_in(text: str) -> list:
+    """주어진 글 안의 펜스 구간(글 자기 좌표) — §6 조각처럼 frontmatter 가 없는 글을 읽는 판독기가 쓴다."""
+    return _fence_spans(text)
+
+
 def indented_fence_openers(text: str) -> list:
     """들여쓰기 1–3칸으로 여는 펜스 줄(frontmatter 뒤) — 부분집합은 열 0 의 펜스만 받는다(목록 항목 안의 펜스는 컨테이너마다
     다르게 읽혀 최상위 줄을 가릴 수 있다)."""

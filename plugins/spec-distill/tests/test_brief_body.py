@@ -508,9 +508,9 @@ class RenderedShapeRules(unittest.TestCase):
     def test_accepted_anchor_body_is_checked_raw_and_viewed(self):
         ok, bad = B.anchor_lines("- **S1** 「a」 <**S9**> 「b」")
         self.assertEqual(([n for n, _s, _b in ok], [r for _n, r in bad]), ([1], ["anchor_in_body"]))
-        for tail in ("<!-- **S9** -->", "<b>**S9**</b>", "<b>**S9**"):
+        for tail in ("<!-- **S9** -->", "<b>**S9**</b>", "<b>**S9**", "<x-b>**S9**"):
             self.assertTrue(B.anchor_lines("- **S1** 「a」 " + tail)[1], tail)
-        self.assertEqual([r for _n, r in B.anchor_lines("- **S1** 「a」 <b>**S9**")[1]], ["anchor_in_body"])
+        self.assertEqual([r for _n, r in B.anchor_lines("- **S1** 「a」 <x-b>**S9**")[1]], ["anchor_in_body"])
 
     def test_inline_html_is_refused_in_section6_lines_except_bare_placeholder_words(self):
         for line in ("- **S1** 「a」 </b>", "- **S1** 「a」 <!-- c -->", "- **S1** 「a」 <?p?>", "- **S1** 「a」 <![CDATA[x]]>",
@@ -520,7 +520,28 @@ class RenderedShapeRules(unittest.TestCase):
         for line in ("- **S1** 「a」 `<b>` 와 `</b>`", "- **S1** 「a」 \\<b\\> 와 a < b 와 x<3", "  > 이 자리에 <file> 과 ST<N> 과 <date>-<target>",
                      "- **S1** 「a」 ⟨S<N>⟩ · S<N> 끝", "- **S<N>** 자리 표시 S<N>", "- **S1** 「a」 ``<b>`` 와 `` ` `<b>` ``"):
             self.assertEqual(B.anchor_lines(line)[1], [], line)
-        self.assertEqual(B.anchor_lines("- **S1** 「a」 <b>**S9**")[1][0][1], "anchor_in_body")
+        self.assertEqual(B.anchor_lines("- **S1** 「a」 <x-b>**S9**")[1][0][1], "anchor_in_body")
+
+    def test_real_html_element_names_are_not_placeholder_words(self):
+        for name in ("template", "script", "style", "textarea", "title", "xmp", "plaintext", "noscript", "iframe", "noembed",
+                     "noframes", "details", "ul", "li", "b", "div", "TEMPLATE", "Div"):
+            ok, bad = B.anchor_lines("- **S1** 「a」 <%s>" % name)
+            self.assertEqual([r for _n, r in bad], ["html_inline_not_allowed"], name)
+        self.assertEqual([r for _n, r in B.anchor_lines("> <div>")[1]], ["html_inline_not_allowed"])
+        self.assertEqual([r for _n, r in B.anchor_lines("- <div>")[1]], ["html_inline_not_allowed"])
+        for name in ("file", "date", "target", "brief-path", "N", "n", "x-b"):
+            self.assertEqual(B.anchor_lines("- **S1** 「a」 <%s>" % name)[1], [], name)
+        self.assertTrue(B.HTML_ELEMENT_NAMES >= {"template", "script", "style", "textarea", "title", "details", "ul"})
+
+    def test_unpaired_backtick_run_is_outside_the_subset(self):
+        self.assertEqual(B.unpaired_backtick_runs("앞 `열림"), 1)
+        self.assertEqual(B.unpaired_backtick_runs("``a` `b``"), 0)
+        self.assertEqual(B.unpaired_backtick_runs("\\`a"), 0)
+        for lines in (["- **S1** 「a」 `", "` **S<!-- `", "-->9** 」"], ["- **S1** 「a」 `열림", "닫힘` <ul><li><b>S9</b> 「위조」</li></ul> `끝"]):
+            ok, bad = B.anchor_lines("\n".join(lines))
+            self.assertEqual(bad[0], (1, "code_span_unclosed"), lines)
+        # 펜스 안 줄은 코드라 인라인 판독을 하지 않는다
+        self.assertEqual(B.anchor_lines("```\n앞 `열림 <div>\n```\n")[1], [])
 
     def test_p21_placeholders_are_not_inline_html(self):
         for tok in ("<REDACTED>", "<REDACTED:라벨>", "<SECRET:api-key>", "<TOKEN_x>"):

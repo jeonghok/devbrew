@@ -339,6 +339,7 @@ def _shape_view(text):
 
 # 거부 사유 이름 → 사람이 읽는 말. 메시지는 이 말을 앞세우고 사유 이름은 괄호에 둔다.
 ANCHOR_REASON_TEXT = {
+    "code_span_unclosed": "한 줄 안에서 짝을 찾지 못한 백틱이 있어 다음 줄의 코드 칸 짝짓기를 밀어 버리는 줄",
     "html_inline_not_allowed": "인라인 HTML(`<태그>` · 주석 등)이 있어 렌더러만 다른 글을 그리는 줄(코드 칸 안은 제외)",
     "anchor_markup": "HTML 태그나 백슬래시 이스케이프로 꾸며 앵커처럼 읽히는 줄",
     "anchor_indented": "들여 쓴 앵커 줄",
@@ -370,7 +371,18 @@ _ASCII_PUNCT = frozenset("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
 def code_spans(line):
     """CommonMark 인라인 코드 칸 -> [(시작, 끝, 여는 백틱 수)]. 날 글자 위에서 왼쪽부터: 백슬래시 + ASCII 기호는 둘 다 글자이고,
     백틱 덩어리(최대 연속)는 뒤에서 **길이가 같은** 덩어리를 만나면 그 사이가 코드 칸이다. 짝이 없으면 그 덩어리는 글자다."""
+    return _scan_code_spans(line)[0]
+
+
+def unpaired_backtick_runs(line):
+    """한 줄 안에서 짝을 못 찾은 백틱 덩어리 수 — CommonMark 코드 칸은 줄 바꿈을 건너 짝을 짓지만 이 판독은 줄마다 짝을 지으므로,
+    짝 없는 덩어리가 있는 줄은 부분집합 밖이다(그 덩어리가 다음 줄의 짝짓기를 밀어 진짜 HTML 을 코드로 가린다)."""
+    return _scan_code_spans(line)[1]
+
+
+def _scan_code_spans(line):
     out, i, n = [], 0, len(line)
+    unpaired = 0
     dead = set()   # 뒤에 같은 길이의 닫는 덩어리가 없는 길이
     while i < n:
         c = line[i]
@@ -401,11 +413,12 @@ def code_spans(line):
             if close is None:
                 dead.add(run)
         if close is None:
+            unpaired += 1
             i = j
         else:
             out.append((i, close, run))
             i = close
-    return out
+    return out, unpaired
 
 
 def _literal_view(line):
@@ -424,13 +437,26 @@ def _literal_view(line):
 
 
 _INLINE_HTML_RE = re.compile(r"<(?=[A-Za-z/!?])")
-# P21 치환 토큰(`<REDACTED:라벨>` 등) — spec-interview 가 비밀 값을 바꿔 적는 정본 형태다. 이름 뒤 `:` 때문에 HTML 태그가 아니라
-# 글자로 그려지므로 `inline_html` 이 거부하지 않는다. `check_verbatim_coverage` 가 같은 정규식으로 원문 대조를 강등한다.
+# P21 치환 토큰(`<REDACTED:라벨>` 등) — spec-interview 가 비밀 값을 바꿔 적는 정본 형태다. 이름 뒤 `:` 때문에 HTML 태그가 아니다(마크다운
+# 파서는 이 꼴을 URI 자동 링크로 읽지만 보이는 글자는 그대로다). 그래서 `inline_html` 이 거부하지 않는다. `check_verbatim_coverage` 가 같은 정규식으로 원문 대조를 강등한다.
 P21_PLACEHOLDER_RE = re.compile(
     r"<(?:REDACTED|SECRET|TOKEN|KEY|CREDENTIAL|PLACEHOLDER)"
     r"(?:[:_-][\w.-]{0,64})?>"
 )
-_BARE_OPEN_TAG_RE = re.compile(r"<[A-Za-z][A-Za-z0-9-]*>")   # 속성 · 공백 · `/` 가 없는 여는 태그 — 자리 표시 낱말(`<file>`)로 둔다
+# HTML 요소 이름 — WHATWG 요소 색인 + 옛 요소 · 원문 텍스트 요소 + CommonMark HTML 블록 6종 이름. 속성 없는 여는 태그라도 이 이름이면
+# 진짜 요소라 브라우저가 뒤 글을 가리거나 가짜 앵커를 그리므로 자리 표시 낱말로 두지 않는다(`<file>` · `<date>` 는 요소가 아니다).
+HTML_ELEMENT_NAMES = frozenset("""
+a abbr address area article aside audio b base bdi bdo blockquote body br button canvas caption cite code col colgroup data
+datalist dd del details dfn dialog div dl dt em embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header
+hgroup hr html i iframe img input ins kbd label legend li link main map mark math menu meta meter nav noscript object ol
+optgroup option output p param picture pre progress q rp rt ruby s samp script search section select selectedcontent slot
+small source span strong style sub summary sup svg table tbody td template textarea tfoot th thead time title tr track u ul
+var video wbr
+acronym applet basefont bgsound big blink center command content dir font frame frameset image isindex keygen listing
+marquee menuitem multicol nextid nobr noembed noframes plaintext rb rtc shadow spacer strike tt xmp
+fencedframe portal geolocation model
+""".split())
+_BARE_OPEN_TAG_RE = re.compile(r"<([A-Za-z][A-Za-z0-9-]*)>")   # 속성 · 공백 · `/` 가 없는 여는 태그 — 자리 표시 낱말(`<file>`)로 둔다
 _PLACEHOLDER_OK_RE = re.compile(r"S<[Nn]>(?=(?:\*\*|__)?(?![\d<*_]))")
 
 
@@ -440,7 +466,8 @@ def inline_html(line):
     닫는 태그 · 주석 · 처리 명령 · 선언 · CDATA · 속성이 있는 태그는 거부한다. 이스케이프한 `\\<` 는 태그가 아니다."""
     masked = _PLACEHOLDER_OK_RE.sub(lambda m: "S" + " " * (len(m.group(0)) - 1), _literal_view(line))
     masked = P21_PLACEHOLDER_RE.sub(lambda m: " " * len(m.group(0)), masked)
-    masked = _BARE_OPEN_TAG_RE.sub(lambda m: " " * len(m.group(0)), masked)
+    masked = _BARE_OPEN_TAG_RE.sub(
+        lambda m: m.group(0) if m.group(1).lower() in HTML_ELEMENT_NAMES else " " * len(m.group(0)), masked)
     return bool(_INLINE_HTML_RE.search(masked))
 
 
@@ -452,12 +479,19 @@ def anchor_lines(section_text):
     발화의 앵커로 읽는다(Ruling S13 대체 규칙: 실제 brief 의 §6 은 출처 표기 · 앵커 앞 설명 · 따옴표 같은 원문 밖 글을
     싣고 있어 본문을 원장 글자와 같게 강제하지 않는다)."""
     ok, bad = [], []
+    fenced = section6.fence_spans_in(section_text)   # 펜스 안 줄은 코드라 인라인 판독을 하지 않는다
+    pos = 0
     for n, line in enumerate(split_lines(section_text), 1):
+        here, pos = pos, pos + len(line) + 1
+        in_fence = any(a <= here < b for a, b in fenced)
         parts = line.splitlines()
         if len(parts) > 1 and any(_ANCHOR_SHAPED.match(fold(p)) or _in_body(fold(p)) for p in parts):
             bad.append((n, "anchor_line_separator"))
             continue
-        if inline_html(line):
+        if not in_fence and unpaired_backtick_runs(line):
+            bad.append((n, "code_span_unclosed"))
+            continue
+        if not in_fence and inline_html(line):
             bad.append((n, "html_inline_not_allowed"))
             continue
         f = fold(line)
