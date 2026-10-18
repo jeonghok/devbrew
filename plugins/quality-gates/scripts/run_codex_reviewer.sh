@@ -18,9 +18,11 @@
 # (codex exec -s read-only OS-level sandbox) are preserved.
 #
 # Usage:
-#   run_codex_reviewer.sh <diff_path> <project_dir> <output_yaml_path>
+#   run_codex_reviewer.sh <diff_path> <project_dir> <output_yaml_path> [--range <start> <end>]
 #
 # 의도 출처는 스크립트 안에서 `discover-spec.sh` 로 정한다(다른 리뷰어와 같은 D13 사슬).
+# `--range <start> <end>` 를 받으면 그대로 `discover-spec.sh` 에 넘긴다(범위 모드 — 설계문서를
+# <end> 커밋에서 읽는다). 그 밖의 넷째 인자는 usage + exit 2 로 거부하고 산출물에 실패를 적는다.
 #
 # Emits: YAML to <output_yaml_path>. Schema (최상위 `agent:` 키는 **없다** — 산출자
 # codex_findings_to_yaml.py 의 yaml_emit 은 `agent:` 를 finding 마다 달 뿐 최상위에는
@@ -59,8 +61,18 @@ OUTPUT_PATH="${3:-}"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 if [[ -z "$OUTPUT_PATH" ]]; then
-  echo "[quality-gates] usage: run_codex_reviewer.sh <diff> <project_dir> <output>" >&2
+  echo "[quality-gates] usage: run_codex_reviewer.sh <diff> <project_dir> <output> [--range <start> <end>]" >&2
   exit 2
+fi
+# 넷째부터는 `--range <start> <end>` 꼴만 받는다 — 판정은 산출물을 비운 뒤(아래)에 내린다.
+RANGE_ARGS=()
+BAD_ARGS=""
+if [[ $# -gt 3 ]]; then
+  if [[ $# -eq 6 && "$4" == "--range" ]]; then
+    RANGE_ARGS=(--range "$5" "$6")
+  else
+    BAD_ARGS=1
+  fi
 fi
 
 # ── R1 (Task 20b 리뷰 라운드 1): 절대화는 cd 전에 ────────────────────────────
@@ -130,6 +142,14 @@ fi
 # 정본의 `-n` 가드가 rc=3 을 내고 **아무것도 쓰지 않는다**(degrade 소실).
 trap '_degrade_if_empty "$OUTPUT_PATH" aborted_before_completion' EXIT
 
+# 잘못된 넷째 인자 — 산출물은 이미 비웠으므로 지난 라운드 YAML 이 이번 판정으로 읽히지 않게
+# 실패를 적고 loud 하게 끝낸다.
+if [[ -n "$BAD_ARGS" ]]; then
+  echo "[quality-gates] usage: run_codex_reviewer.sh <diff> <project_dir> <output> [--range <start> <end>] — 넷째 인자부터가 이 꼴이 아니다" >&2
+  printf 'findings: []\nmeta:\n  codex_failed: true\n  reason: bad_arguments\n  exit_code: 0\n' > "$OUTPUT_PATH"
+  exit 2
+fi
+
 if [[ -z "$PROJECT_DIR" ]]; then
   echo '{"codex_failed": true, "reason": "missing_project_dir"}' > "$OUTPUT_PATH"
   exit 0
@@ -155,7 +175,7 @@ INTENT_FILE="/dev/null"
 if [[ "${DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE:-}" == "1" ]]; then
   echo "[quality-gates] DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE 는 없어졌다 — 의도 입력은 언제나 codex 에 실린다. codex 를 끄려면 DEVBREW_QUALITY_GATES_DISABLE_CODEX=1 을 쓴다." >&2
 fi
-INTENT_JSON="$(bash "${PLUGIN_ROOT}/scripts/discover-spec.sh" --intent-out "$SCRATCH/intent.md" 2>/dev/null || true)"
+INTENT_JSON="$(bash "${PLUGIN_ROOT}/scripts/discover-spec.sh" --intent-out "$SCRATCH/intent.md" ${RANGE_ARGS[@]+"${RANGE_ARGS[@]}"} 2>/dev/null || true)"
 if [[ -s "$SCRATCH/intent.md" ]]; then
   INTENT_FILE="$SCRATCH/intent.md"
   INTENT_SRC="$(printf '%s' "$INTENT_JSON" | sed -n 's/.*"intent_source": "\([^"]*\)".*/\1/p')"

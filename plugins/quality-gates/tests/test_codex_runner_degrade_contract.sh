@@ -158,6 +158,38 @@ else
   no "7 — OUTPUT_PATH 누락 시 usage + 비-0 종료 (rc=$usage_rc out=$usage_out)"
 fi
 
+# ── 8: --range <시작> <끝> 은 discover-spec.sh 에 그대로 넘어간다 (AC22 · AC21) ──
+# 러너는 의도를 스스로 정한다 — 범위 모드에서 설계문서를 끝 커밋에서 읽으려면 범위가
+# discover-spec.sh 까지 가야 한다. 플러그인 루트(CLAUDE_PLUGIN_ROOT) 사본의 discover-spec.sh 를
+# 인자를 적는 스텁으로 바꾸고, codex 는 tests/mocks 의 캡처 mock 이다(진짜 codex 를 부르지 않는다).
+mkdir -p "$tmp/rangeroot"
+# -L — 공유본을 가리키는 링크(prompt-preamble.md 등)는 사본에서 끊기므로 실체로 복사한다.
+cp -RL "$QG/scripts" "$tmp/rangeroot/"
+cp -RL "$QG/references" "$tmp/rangeroot/"
+rm -f "$tmp/rangeroot/scripts/discover-spec.sh"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "$DS_LOG"\n' > "$tmp/rangeroot/scripts/discover-spec.sh"
+range_run() {  # range_run <out> <추가 인자…> → rc
+  local o="$1"; shift
+  DS_LOG="$tmp/ds.log" CODEX_CAPTURE_DIR="$tmp/rangecap" PATH="$QG/tests/mocks/capture-codex:$PATH" CLAUDE_PLUGIN_ROOT="$tmp/rangeroot" \
+    bash "$QG/scripts/run_codex_reviewer.sh" "$tmp/tiny.diff" "$ROOT" "$o" "$@" >/dev/null 2>&1
+}
+: > "$tmp/ds.log"; rm -rf "$tmp/rangecap"
+range_run "$tmp/range-out.yaml" --range AAA BBB; assert_eq "$?" "0" "8 — --range AAA BBB 로 부르면 exit 0"
+assert_grep "$(cat "$tmp/ds.log")" '^--intent-out .* --range AAA BBB$' "8 — 받은 --range 를 그대로 discover-spec.sh 에 넘긴다"
+[ -d "$tmp/rangecap/call-0" ] && ok "8 — 양성 짝: 캡처 mock codex 까지 도달했다" || no "8 — 양성 짝: 캡처 mock codex 까지 도달했다"
+: > "$tmp/ds.log"
+range_run "$tmp/range-out3.yaml"
+assert_eq "$(grep -c -- '--range' "$tmp/ds.log")" "0" "8 — 인자 셋이면 --range 를 넘기지 않는다"
+assert_grep "$(cat "$tmp/ds.log")" '^--intent-out ' "8 — 양성 짝: 인자 셋으로도 discover-spec.sh 는 불렸다"
+for bad in "--bogus" "--range AAA" "--range AAA BBB CCC"; do
+  : > "$tmp/ds.log"
+  # shellcheck disable=SC2086
+  range_run "$tmp/range-bad.yaml" $bad; brc=$?
+  assert_eq "$brc" "2" "8 — 넷째 인자 「${bad}」 는 거부한다(exit 2)"
+  assert_file_grep "$tmp/range-bad.yaml" 'codex_failed: true' "8 — 「${bad}」 거부에도 산출물은 실패 표시다(stale 아님)"
+  [ ! -s "$tmp/ds.log" ] && ok "8 — 「${bad}」 면 discover-spec.sh 를 부르지 않는다" || no "8 — 「${bad}」 면 discover-spec.sh 를 부르지 않는다"
+done
+
 # ── 0: 러너 목록을 도출한다 (태스크 20, AC23) ────────────────────────────────
 # 위 1~7번은 run_codex_reviewer.sh 하드코딩 1개만 잰다. 이 검사는 그것으로
 # "다른 4개 러너에도 같은 계약이 있는가"를 재지 못한다는 사실 자체를 vacuity로
