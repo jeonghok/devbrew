@@ -22,6 +22,7 @@ ENTRY_SKILLS = (
     ("spec-distill", "spec-interview"),
     ("spec-distill", "spec-review"),
     ("spec-distill", "roadmap-status"),
+    ("spec-distill", "epic-conductor"),
     ("plugin-audit", "plugin-audit"),
     ("project-init", "project-init"),
     ("quality-gates", "quality-pipeline"),
