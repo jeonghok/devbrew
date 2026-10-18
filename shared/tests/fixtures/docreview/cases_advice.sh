@@ -402,6 +402,8 @@ case_AC15_identity_one_to_one_across_roots() {
   python3 "$FX/ac15_roots.py" "$d" "$r1" "$r2" "가나" "다라" > /dev/null
   i1="$(adv_ident "$r1/가나/.docreview/$(basename "$d")")"; i2="$(adv_ident "$r2/다라/.docreview/$(basename "$d")")"
   assert_eq "$([ "$i1" != "$i2" ] && echo differ || echo same)" "differ" "AC15: 한글 글자만 다른 두 루트의 리뷰 정체는 달라야 한다(치환이 손실이어도 일대일)"
+  ln -s "$r1/가나/.docreview/$(basename "$d")" "$r2/alias"
+  assert_eq "$(adv_ident "$r2/alias")" "$i1" "AC15: 같은 상태 디렉토리를 다른 이름의 링크로 가리켜도 리뷰 정체는 실경로 기준으로 같다"
   py docreview_state.py advice --state-dir "$r1/가나/.docreview/$(basename "$d")" --log-file "$doc" >/dev/null
   py docreview_state.py advice --state-dir "$r2/다라/.docreview/$(basename "$d")" --log-file "$doc" >/dev/null
   assert_eq "$(grep -c -- '- docreview 계수 — ' "$doc")" "2" "AC15: 두 루트의 계수 줄이 둘 다 적힌다(정체 겹침으로 건너뛰지 않는다)"
