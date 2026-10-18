@@ -50,7 +50,7 @@ check_render() {   # check_render <label> <dir> <needle>... — 렌더에 기호
 }
 
 F_ASK_ONLY='{"id":"cccc0001#r1.1","lineage":"cccc0001#r1.1","bucket":"cccc0001","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#12-files-to-modify","edit_scope":"#12-files-to-modify","disposition":"ask","summary":"그냥 물어본다","evidence":null,"blocks":[]}'
-F_ASK_NOFIX='{"id":"cccc0001#r1.1","lineage":"cccc0001#r1.1","bucket":"cccc0001","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#12-files-to-modify","edit_scope":"#12-files-to-modify","disposition":"ask","summary":"b.py 를 유지하나?","evidence":null,"blocks":["zzzz0001#r1.1"]}'
+F_ASK_NOFIX='{"id":"cccc0001#r1.1","lineage":"cccc0001#r1.1","bucket":"cccc0001","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#12-files-to-modify","edit_scope":"#12-files-to-modify","disposition":"ask","summary":"b.py 를 유지하나?","evidence":null,"blocks":["dddd0001#r1.1"]}'
 D1='aaaa0001#r1.1'; D2='bbbb0001#r1.1'
 
 # ── (1) 행마다 ──────────────────────────────────────────────────────────────
@@ -65,8 +65,8 @@ d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[
 py docreview_state.py decide --state-dir "$d" --id "$D1" --choice adopt --quote '채택' >/dev/null
 next_round "$d" "$FX/design-sample.md" >/dev/null
 check_render "blocked_expired" "$d" "기한이 지나 막힌 결정 1개"
-python3 "$FX/st_set_stale_pointer.py" "$d/docreview-state.md" "$D1" 'zzzz9999#r9.9' '#12-files-to-modify'
-check_render "superseded_expired" "$d" "다른 결정으로 넘어간 것 1개" "이어받은 것 zzzz9999#r9.9"; rm -rf "$d"
+python3 "$FX/st_set_stale_pointer.py" "$d/docreview-state.md" "$D1" 'dddd9999#r9.9' '#12-files-to-modify'
+check_render "superseded_expired" "$d" "다른 결정으로 넘어간 것 1개" "이어받은 것 dddd9999#r9.9"; rm -rf "$d"
 
 d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
 py docreview_state.py decide --state-dir "$d" --id "$D1" --choice hold --quote '나중에' >/dev/null
@@ -82,7 +82,7 @@ py docreview_state.py fix --state-dir "$d" --id "$D2" --event hold >/dev/null
 check_render "held_fix" "$d" "질문의 답을 기다리는 수정 1개"; rm -rf "$d"
 
 d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_ASK_NOFIX]"
-check_render "blocking_ask_open" "$d" "수정의 전제가 되는 질문 1개" "이 답을 기다리는 수정 1개 (cccc0001#r1.1 · 기다리는 것 zzzz0001#r1.1)"; rm -rf "$d"
+check_render "blocking_ask_open" "$d" "수정의 전제가 되는 질문 1개" "이 답을 기다리는 수정 1개 (cccc0001#r1.1 · 기다리는 것 dddd0001#r1.1)"; rm -rf "$d"
 
 d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_ASK_ONLY]"
 check_render "ask_open" "$d" "답을 기다리는 질문 1개"; rm -rf "$d"
