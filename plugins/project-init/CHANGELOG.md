@@ -5,6 +5,12 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.0.4] — 2026-10-19
+
+### Changed
+
+- README 에서 버전 꼬리표를 지우고, `CLAUDE.md` 생성물 설명을 지금 동작(`@AGENTS.md` 한 줄)에 맞췄다.
+
 ## [5.0.3] — 2026-10-18
 
 ### Changed
