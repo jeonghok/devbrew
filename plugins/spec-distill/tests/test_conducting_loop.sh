@@ -65,4 +65,16 @@ for lit in '새 세션에서 이어 간다' '에픽마다 세션을 새로 열�
   [ -n "$(forbid "$lit")" ] && ok "양성 대조: 「${lit}」 를 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
 done
 assert_not_contains "$LOOP" 'CLAUDE_PLUGIN_ROOT' "지휘 순환: 플러그인 루트 토큰 없음(<SD>)"
+# 지휘 순환이 부르는 `ledger <명령>` 이름은 모두 conductor_ledger.COMMANDS 의 키다(Ruling R15)
+LEDGER_KEYS="$(PYTHONDONTWRITEBYTECODE=1 python3 -I -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import conductor_ledger
+print("\n".join(sorted(conductor_ledger.COMMANDS)))' "$ROOT/plugins/spec-distill/scripts")"
+unknown_ledger_cmds() {  # unknown_ledger_cmds <본문> — COMMANDS 에 없는 `ledger <명령>` 을 한 줄씩
+  printf '%s\n' "$1" | grep -oE 'ledger [a-z][a-z-]*' | sed 's/^ledger //' | sort -u \
+    | while IFS= read -r c; do printf '%s\n' "$LEDGER_KEYS" | grep -qxF -- "$c" || printf '%s\n' "$c"; done
+}
+assert_eq "$(unknown_ledger_cmds "$LOOP")" "" "지휘 순환의 ledger 명령 이름은 모두 COMMANDS 의 키다"
+assert_contains "$LEDGER_KEYS" "claim" "COMMANDS 키를 읽었다"
+assert_eq "$(unknown_ledger_cmds 'ledger nosuchcmd')" "nosuchcmd" "양성 대조: 없는 ledger 명령을 잡는다"
 finish
