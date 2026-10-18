@@ -83,6 +83,12 @@ def verdict_line(texts_ok, texts_bad, target):
     return "silent"
 
 
+def doc_refused(doc, case_lines):
+    """부분집합 밖 구조 · 들여 쓴 펜스 · setext · 머리 후보로 문서가 거부되고 그 줄이 사례 줄에 든다 -> 사례 전체가 거부다."""
+    refused = {cmp_key(ln) for ln, _why in B.head_problems(doc)}
+    return any(cmp_key(c) in refused for c in case_lines)
+
+
 def anchor_verdict(lines6, key, other=None):
     doc = make_brief(dict(other or {}, **{"6": "\n".join(lines6)}))
     sec = B.section_text(doc, "6")
@@ -90,6 +96,8 @@ def anchor_verdict(lines6, key, other=None):
     ok, bad = B.anchor_lines(sec)
     ours = verdict_line([lines[n - 1] for n, _s, _b in ok], [lines[n - 1] for n, _r in bad], lines6[key])
     sees = cmp_key(lines6[key]) in parser_items(doc, DASH)
+    if doc_refused(doc, lines6):
+        ours = "refuse"
     return ours, sees
 
 
@@ -101,6 +109,8 @@ def head_verdict(lines6, key):
     refused = [ln for ln, _why in B.head_problems(doc)]
     ours = verdict_line([target] if target in heads else [], refused, target)
     sees = cmp_key(target) in parser_h2(doc)
+    if doc_refused(doc, lines6):
+        ours = "refuse"
     return ours, sees
 
 
@@ -111,6 +121,8 @@ def decision_verdict(line):
     acc, rej = B.decision_entries(sec)
     ours = verdict_line([ln for _oq, ln in acc if B.decision_shaped(ln)], [lines[n - 1] for n, _r in rej], line)
     sees = cmp_key(line) in parser_items(doc, ANY_BULLET)
+    if doc_refused(doc, [line]):
+        ours = "refuse"
     return ours, sees
 
 
@@ -143,6 +155,13 @@ ANCHOR_CASES = [
     ("두 칸 들인 닮은 글자 머리", ["  - **S" + CYR_ZE + "**"], 0, None),
     ("번호 닮은 글자 머리", ["1. **S" + CYR_ZE + "**"], 0, None),
     ("인용 닮은 글자 머리", ["> - **S" + CYR_ZE + "**"], 0, None),
+    ("태그 + 자리 표시 꼬리", ["- <b>S9</b> 「x」 S<N>"], 0, None),
+    ("이스케이프 + 자리 표시 꼬리", ["- *\\*S5*\\* S\\<N\\>"], 0, None),
+    ("숫자 문자 참조 S", ["- **&#83;9** 「x」"], 0, None),
+    ("태그 + 문자 참조 숫자", ["- <b>S&#57;</b> x"], 0, None),
+    ("div 블록 감싼 앵커", ["<div>", ANCHOR9, "</div>"], 1, None),
+    ("주석 블록 감싼 앵커", ["<!--", ANCHOR9, "-->"], 1, None),
+    ("div 블록 감싼 펜스 앵커", ["<div>", "```", ANCHOR9, "```"], 2, None),
 ]
 
 HEAD_CASES = [
@@ -167,6 +186,7 @@ DECISION_CASES = [
     ("인용 불릿", "> - OQ1 [해결 ⟨S2⟩]"),
     ("키릴 대문자 오 머리 + 표시", "- " + CYR_O + "Q1 [해결 ⟨S2⟩]"),
     ("키릴 대문자 오 머리, 표시 없음", "- " + CYR_O + "Q1 결정 내용"),
+    ("숫자 문자 참조 O 머리", "- &#79;Q1 결정"),
 ]
 
 
@@ -211,16 +231,27 @@ def git_files(pattern):
     return subprocess.check_output(["git", "ls-files", pattern], cwd=str(REPO), text=True).split("\n")[:-1]
 
 
+def docs_of_type(kind):
+    """추적된 interview 문서 중 frontmatter `type:` 이 kind 인 것 — 파일 이름이 아니라 frontmatter 로 고른다."""
+    out = []
+    for p in git_files("docs/superpowers/interview/*.md"):
+        text = (REPO / p).read_text(encoding="utf-8")
+        m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+        t = re.search(r"^type:[ \t]*(\S+)", m.group(1), re.M) if m else None
+        if t and t.group(1) == kind:
+            out.append((p, text))
+    return out
+
+
 _COL0 = re.compile(r"^[-*][ \t]")
 
 
 class RealBriefs(unittest.TestCase):
     def test_real_briefs(self):
-        paths = git_files("docs/superpowers/interview/*-interview.md")
-        self.assertGreater(len(paths), 0, "실제 brief 가 하나도 없다 — 코퍼스가 비면 이 락은 공허하다")
-        for p in paths:
+        docs = docs_of_type("interview-brief")
+        self.assertGreater(len(docs), 0, "실제 brief 가 하나도 없다 — 코퍼스가 비면 이 락은 공허하다")
+        for p, text in docs:
             with self.subTest(p):
-                text = (REPO / p).read_text(encoding="utf-8")
                 m = B.FRONTMATTER_RE.match(text)
                 doc = text[m.end():] if m else text
                 dash_items, any_items = parser_items(doc, DASH), parser_items(doc, ANY_BULLET)
@@ -279,6 +310,14 @@ class SeedGrammar(unittest.TestCase):
         missing += [a for a, b in spans if not any(a <= r <= b for r in rejected)]
         return missing, rejected
 
+    def test_real_seeds(self):
+        docs = docs_of_type("interview-seed")
+        self.assertGreater(len(docs), 0, "실제 seed 가 하나도 없다 — 코퍼스가 비면 이 락은 공허하다")
+        for p, text in docs:
+            with self.subTest(p):
+                missing, _rej = self.check(text)
+                self.assertEqual(missing, [], "파서는 구조로 보는데 우리는 거부하지 않은 seed 본문 줄(번호): %s" % missing)
+
     def test_template_example_is_plain_prose(self):
         m = re.search(r"```markdown\n(.*?)\n```", SEED_TEMPLATE.read_text(encoding="utf-8"), re.S)
         self.assertIsNotNone(m, "seed 템플릿에 예시 펜스가 없다 — 코퍼스가 비면 이 락은 공허하다")
@@ -303,6 +342,8 @@ FENCE_CORPUS = [
     "```\na\n```\n", "~~~\na\n~~~\n", "```a``` x\n- b\n", "```js\nx\n```\n", "````\n```\n````\n", "```\nx\n````\n",
     "````\nx\n```\n", "```\nx\n``` y\n```\n", "~~~\nx\n```\n~~~\n", "   ```\nx\n   ```\n", "    ```\nx\n    ```\n",
     "```\nunclosed\n", "~~~ a`b\nx\n~~~\n", "``` a`b\nx\n```\n", "```\nx\n ```\n", "```\nx\n```", "~~~\nx\n~~\n",
+    "- a\n  ```\n## 6. 사용자 원문\n  ```\n", "## 3. Open Questions\n- OQ1 [열림] a\n  ```\n## 3. Open Questions\n  ```\n",
+    "- a\n\n  ```\n  x\n  ```\n", "> ```\n> x\n> ```\n",
     "a\n```\nx\n```\nb\n", "```\n```\n- 항목\n",
 ]
 
@@ -310,7 +351,7 @@ FENCE_CORPUS = [
 def parser_fence_lines(doc):
     out = set()
     for t in MD.parse(doc):
-        if t.type == "fence" and t.level == 0 and t.map:
+        if t.type == "fence" and t.map:
             out.update(range(t.map[0], t.map[1]))
     return out
 
@@ -328,7 +369,7 @@ def our_fence_lines(doc):
 SETEXT_CORPUS = [
     "a\n---\n", "a\n===\n", "a\n\n---\n", "- a\n---\n", "- a\n  ---\n", "> a\n---\n", "> a\n> ---\n", "a\nb\n---\n",
     "# a\n---\n", "---\n---\n", "a\n -\n", "a\n----   \n", "    code\n---\n", "<div>\n---\n", "a\n    ---\n",
-    "* * *\n---\n", "a\n\n===\n", "1. a\n---\n", "a\n=\n", "> a\nb\n---\n", "- a\nb\n---\n",
+    "x\n7. Next Action\n---\n", "<b>x</b>\n---\n", "* * *\n---\n", "a\n\n===\n", "1. a\n---\n", "a\n=\n", "> a\nb\n---\n", "- a\nb\n---\n",
 ]
 
 
@@ -344,13 +385,20 @@ def our_setext_lines(doc):
 
 class FenceAndSetextAgreement(unittest.TestCase):
     def test_fence_implementation_agrees_with_parser(self):
+        """문서 전체(컨테이너 안 펜스 포함)를 파서와 맞춘다. 갈리는 문서는 들여 쓴 펜스로 거부돼야 한다."""
         for doc in FENCE_CORPUS:
             with self.subTest(doc):
-                self.assertEqual(our_fence_lines(doc), parser_fence_lines(doc), repr(doc))
+                ours, theirs = our_fence_lines(doc), parser_fence_lines(doc)
+                lines = doc.split("\n")
+                quoted_only = ours <= theirs and all(lines[i].startswith(">") for i in theirs - ours)   # 인용 안 펜스는 최상위 줄을 가리지 않는다
+                if ours != theirs and not quoted_only:
+                    self.assertIn("fence_indented", [w for _l, w in B.head_problems(doc)], repr(doc))
 
     def test_setext_rule_agrees_with_parser_at_top_level(self):
         for doc in SETEXT_CORPUS:
             with self.subTest(doc):
                 body = "---\nname: x\n---\n" + doc   # frontmatter 뒤 — 본문만 읽는다
-                self.assertEqual(sorted(ln for ln, _w in B.setext_problems(body)),
-                                 sorted(doc.split("\n")[i] for i in parser_setext_lines(doc)), repr(doc))
+                ours = sorted(ln for ln, _w in B.setext_problems(body))
+                theirs = sorted(doc.split("\n")[i] for i in parser_setext_lines(doc))
+                if ours != theirs:   # 부분집합 밖(HTML 블록)으로 거부되는 문서는 setext 판독을 따로 묻지 않는다
+                    self.assertIn("html_block_not_allowed", [w for _l, w in B.subset_problems(body)], repr(doc))

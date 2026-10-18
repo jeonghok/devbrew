@@ -49,8 +49,18 @@ _FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$", re.DOTALL)
 _FENCE_CLOSE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
 
 
-def _fence_spans(text: str) -> list:
-    spans, pos, opener, start = [], 0, None, 0
+# frontmatter — 모든 판독기가 같은 좌표(frontmatter 뒤)에서 펜스를 센다. 이 정규식도 여기가 소유한다.
+FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
+
+
+def body_start(text: str) -> int:
+    m = FRONTMATTER_RE.match(text)
+    return m.end() if m else 0
+
+
+def _scan_fences(text: str):
+    """-> (펜스 구간 [(시작, 끝)], 들여 쓴 여는 줄 [줄 글자]). 구간은 text 안의 좌표다."""
+    spans, indented, pos, opener, start = [], [], 0, None, 0
     for line in text.split("\n"):
         here, pos = pos, pos + len(line) + 1
         end = min(pos - 1, len(text))
@@ -58,6 +68,8 @@ def _fence_spans(text: str) -> list:
             m = _FENCE_OPEN_RE.match(line)
             if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
                 opener, start = m.group(1), here
+                if line.startswith(" "):
+                    indented.append(line)
         else:
             m = _FENCE_CLOSE_RE.match(line)
             if m and m.group(1)[0] == opener[0] and len(m.group(1)) >= len(opener):
@@ -65,7 +77,17 @@ def _fence_spans(text: str) -> list:
                 opener = None
     if opener is not None:
         spans.append((start, len(text)))
-    return spans
+    return spans, indented
+
+
+def _fence_spans(text: str) -> list:
+    return _scan_fences(text)[0]
+
+
+def indented_fence_openers(text: str) -> list:
+    """들여쓰기 1–3칸으로 여는 펜스 줄(frontmatter 뒤) — 부분집합은 열 0 의 펜스만 받는다(목록 항목 안의 펜스는 컨테이너마다
+    다르게 읽혀 최상위 줄을 가릴 수 있다)."""
+    return _scan_fences(text[body_start(text):])[1]
 
 
 class _Span:
@@ -122,7 +144,9 @@ ATX_HEADING_RE = re.compile(r"^ {0,3}#{1,6}(?:[ \t]|$)")
 
 
 def fence_spans(text: str) -> list:
-    return [m.span() for m in FENCE_RE.finditer(text)]
+    """원문 좌표의 펜스 구간 — frontmatter 는 펜스를 세지 않는다(`brief_body.body_text` 와 같은 좌표)."""
+    off = body_start(text)
+    return [(a + off, b + off) for a, b in _fence_spans(text[off:])]
 
 
 def _outside(m, spans) -> bool:

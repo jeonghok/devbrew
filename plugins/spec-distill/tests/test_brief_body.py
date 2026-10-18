@@ -15,6 +15,7 @@ import brief_body as B  # noqa: E402
 import check_brief  # noqa: E402
 import check_verbatim_coverage as CVC  # noqa: E402
 import roadmap_model  # noqa: E402
+import section6  # noqa: E402
 
 
 class AnchorGrammar(unittest.TestCase):
@@ -488,6 +489,52 @@ class RenderedShapeRules(unittest.TestCase):
         for head in ("##", "##\r", "## ", "  ##\t\r"):
             doc = "본문\n\n" + head + "\n\n## 0. 한눈에\n"
             self.assertEqual([r for _l, r in B.head_problems(doc)], ["section_head_unknown"], repr(head))
+
+    def test_placeholder_does_not_exempt_the_whole_line(self):
+        for line in ("- <b>S9</b> x S<N>", "- *\\*S5*\\* S\\<N\\>", "- **&#83;9** x", "- <b>S&#57;</b> x"):
+            ok, bad = B.anchor_lines(line)
+            self.assertEqual((ok, [r for _n, r in bad]), ([], ["anchor_markup"]), line)
+        self.assertEqual(B.anchor_lines("- **S<N>** 자리 표시 S<N>")[1], [])   # 자리 표시만 있는 줄은 그대로 받는다
+
+    def test_html_and_char_refs_are_outside_the_subset(self):
+        why = lambda doc: [w for _l, w in B.subset_problems(doc)]
+        self.assertEqual(why("<div>\n- a\n</div>\n"), ["html_block_not_allowed", "html_block_not_allowed"])
+        self.assertEqual(why("<!-- c -->\n"), ["html_block_not_allowed"])
+        self.assertEqual(why("- &#79;Q1 결정\n"), ["char_ref_not_allowed"])
+        self.assertEqual(why("- &#x53;9 · &amp; · &copy;\n"), ["char_ref_not_allowed"])
+        self.assertEqual(why("- 코드 칸 `&#83;` 안은 그대로\n"), [])
+        self.assertEqual(why("```\n<div>&#83;\n```\n"), [])                 # 펜스 안은 읽지 않는다
+        self.assertEqual(why("- 산문 a < b 와 R&D 는 괜찮다\n"), [])
+
+    def test_indented_fence_is_refused(self):
+        doc = "## 1. Goal · Non-goal\n- a\n  ```\n## 6. 사용자 원문\n  ```\n"
+        self.assertIn("fence_indented", [w for _l, w in B.head_problems(doc)])
+        self.assertEqual(section6.indented_fence_openers("```\nx\n```\n"), [])
+
+    def test_fence_coordinate_is_the_body_for_every_reader(self):
+        fm = "---\nname: x\nnote: |\n  ```\n---\n"
+        head = fm + "## 5. 기각 · Blind Spots\n본문\n\n## 6. 사용자 원문\n\n"
+        tail = "- **S1** 「뒤」\n\n## 7. Next Action\n끝\n"
+        plain = head + tail
+        self.assertEqual(section6.fence_spans(plain), [])           # frontmatter 의 펜스 꼴 줄은 세지 않는다
+        self.assertIn("- **S1** 「뒤」", section6.body(plain))
+        self.assertIn("- **S1** 「뒤」", B.section_text(plain, "6"))
+        hidden = head + "```\n## 7. x\n```\n" + tail
+        self.assertEqual(len(section6.fence_spans(hidden)), 1)
+        self.assertTrue(section6.ambiguities(hidden))               # 펜스 안 머리 — 관대 · 엄격 읽기가 갈려 게이트가 막는다
+        self.assertIsNone(section6.span(hidden))
+
+    def test_ordered_item_not_one_cannot_interrupt_a_paragraph(self):
+        self.assertEqual(B.setext_problems("x\n7. Next Action\n---\n"), [("7. Next Action", "setext_heading")])
+        self.assertEqual(B.setext_problems("x\n1. 목록\n---\n"), [])
+
+    def test_tables_cover_the_source_and_tag_scan_is_linear(self):
+        for cp, want in ((0x1CCE6, "Q"), (0x1030F, "O"), (0x16F3A, "S")):
+            self.assertEqual(B.fold(chr(cp)), want, hex(cp))
+        import time
+        t0 = time.time()
+        B.anchor_lines("- " + "<" * 20000 + "x")
+        self.assertLess(time.time() - t0, 2.0)
 
     def test_setext_heading_is_refused_at_top_level_only(self):
         self.assertEqual(B.setext_problems("제목\n---\n"), [("제목", "setext_heading")])

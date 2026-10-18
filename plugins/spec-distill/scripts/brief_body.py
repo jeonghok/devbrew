@@ -10,6 +10,7 @@ r"""brief_body.py — brief 를 읽는 허용 문법 하나: 줄 나눔 · 정�
 from __future__ import annotations
 
 import functools
+import html
 import re
 import unicodedata
 
@@ -27,11 +28,15 @@ DEFAULT_IGNORABLE_RANGES = (
 # UTS #39 confusables.txt 에서 대상(prototype)이 구조 글자 `S`(U+0053)이고 NFKC 가 접지 않는 글자 — 아르메니아 ·
 # 키릴 · 체로키 · 리수 · 리키아 · 데저렛 문자. 숫자 닮은꼴은 표로 쫓지 않는다 — `S` 바로 뒤의 비ASCII 숫자 · 글자는
 # `ref_confusables` 가 거부하고, §6 의 강조 머리는 `anchor_lines` 가 거부한다(Ruling S13-a).
-S_CONFUSABLES = (0x0405, 0x054F, 0x13D5, 0x13DA, 0xA4E2, 0x10296, 0x10420)
+S_CONFUSABLES = (0x0405, 0x054F, 0x10BD, 0x10FD, 0x13D5, 0x13DA, 0x1CBD, 0xA4E2, 0xA576, 0x10296, 0x10420, 0x16AD6,
+                 0x16F3A, 0x1CCE8)
 # 결정 번호 머리 `OQ<n>` 의 `O` · `Q` 를 흉내 내는 글자 — 같은 confusables.txt 에서 대상이 `O`(U+004F) · `Q`(U+0051)이고 NFKC 가
-# 접지 않는 글자(그리스 · 키릴 · 아르메니아 · 티피나그 · 리키아 · 카리아 · 데저렛 문자). `S` 표와 별개로 둔다 — 쓰는 곳이 다르다.
-O_CONFUSABLES = (0x039F, 0x041E, 0x0555, 0x2D54, 0x10292, 0x102AB, 0x10404)
-Q_CONFUSABLES = (0x051A, 0x2D55)
+# 접지 않는 글자. `S` 표와 별개로 둔다 — 쓰는 곳이 다르다. 세 표(S · O · Q)는 UTS #39 confusables.txt(Version 18.0.0,
+# Date 2026-08-06)에서 파서로 뽑았다: 원천이 ASCII 가 아니고, NFKC 가 이미 대상으로 접거나 이미 표에 있는 글자로 접는 글자와
+# 숫자(Nd)는 뺐다(숫자는 접지 않는다).
+O_CONFUSABLES = (0x039F, 0x041E, 0x0555, 0x0B20, 0x12D0, 0x1CBF, 0x2C9E, 0x2D54, 0x3007, 0xA4F3, 0x10292, 0x102AB,
+                 0x1030F, 0x10404, 0x104C2, 0x10516, 0x10C17, 0x118B5, 0x11DE0, 0x16AE9, 0x1CCE4, 0x1CCF0)
+Q_CONFUSABLES = (0x051A, 0x2D55, 0x1CCE6)
 # 마크다운 구조 글자(`*` 강조 · 불릿, `-` 불릿)를 흉내 내는 글자 — NFKC 가 접지 않는 별표 · 빼기 · 하이픈 · 대시.
 STRUCT_LOOKALIKES = {
     0x2217: "*", 0x2731: "*", 0x204E: "*", 0x066D: "*", 0x2732: "*",
@@ -98,8 +103,8 @@ def split_lines(text, keepends=False):
     return [p + "\n" for p in parts[:-1]] + ([parts[-1]] if parts[-1] else [])
 
 
-FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
-# 펜스 정규식은 여기가 소유한다(`check_brief.FENCE_RE` 가 이것을 쓴다).
+FRONTMATTER_RE = section6.FRONTMATTER_RE
+# 펜스 판독기는 `section6` 이 소유한다(`check_brief.FENCE_RE` 도 같은 객체).
 FENCE_RE = section6.FENCE_RE
 
 
@@ -156,6 +161,13 @@ _QUOTE_RE = re.compile(r"^ {0,3}> ?")
 _HTML_BLOCK_RE = re.compile(r"^ {0,3}<[A-Za-z/!?]")
 
 
+def _cannot_interrupt(ln):
+    """열린 문단을 끊지 못하는 목록 줄 — 1 이 아닌 번호로 시작하는 번호 목록(CommonMark)."""
+    m = _ITEM_RE.match(ln)
+    num = m.group(2)
+    return num[-1] in ".)" and num[:-1].lstrip("0") != "1"
+
+
 def setext_problems(text):
     """setext 제목(글줄 아래 `===` · `---` 밑줄) -> [(글줄, `setext_heading`)]. 펜스 밖 어디서든 — 절 머리가 ATX(`## n. 제목`) 한
     꼴로만 있게 한다. CommonMark 를 따른다: 밑줄은 들여쓰기 0–3칸, 글줄은 문단 줄이다(빈 줄 · 목록 · 제목 · 인용 · HTML 블록이 아니다).
@@ -189,7 +201,7 @@ def setext_problems(text):
             q = _QUOTE_RE.match(ln)
             rest = ln[q.end():]
             para = ("quote", 0, rest) if rest.strip() and not _ITEM_RE.match(rest) and not _ATX_RE.match(rest) else None
-        elif _ITEM_RE.match(ln):
+        elif _ITEM_RE.match(ln) and not (para is not None and _cannot_interrupt(ln)):
             m = _ITEM_RE.match(ln)
             rest = ln[m.end():]
             width = m.end() if rest.strip() else len(m.group(1)) + len(m.group(2)) + 1
@@ -202,7 +214,30 @@ def setext_problems(text):
     return out
 
 
+_HTML_START_RE = re.compile(r"^ {0,3}<[A-Za-z/!?]")
+_CHAR_REF_RE = re.compile(r"&[A-Za-z][A-Za-z0-9]*;|&#[0-9]+;|&#[xX][0-9A-Fa-f]+;")
+
+
+def subset_problems(text):
+    """부분집합 밖 구조 -> [(줄, 사유)] — brief 는 기계가 쓰는 마크다운의 부분집합이라 읽는 쪽이 모델하지 않는 것은 해석하지 않고
+    거부한다: HTML 블록 시작 줄(`html_block_not_allowed`), HTML 문자 참조(`char_ref_not_allowed`, 코드 칸 안은 제외),
+    들여 쓴 펜스 여는 줄(`fence_indented`)."""
+    out = []
+    for ln in split_lines(body_text(text)):
+        c = canon(ln)
+        if _HTML_START_RE.match(c):
+            out.append((ln, "html_block_not_allowed"))
+        if _CHAR_REF_RE.search(_CODE_SPAN_RE.sub("", c)):
+            out.append((ln, "char_ref_not_allowed"))
+    for ln in section6.indented_fence_openers(text):
+        out.append((ln, "fence_indented"))
+    return out
+
+
 SECTION_REASON_TEXT = {
+    "html_block_not_allowed": "HTML 블록으로 시작하는 줄이라 읽는 쪽마다 다른 구조로 읽힌다",
+    "char_ref_not_allowed": "HTML 문자 참조(`&#83;` 같은 것)가 있어 렌더러만 다른 글자로 읽는다",
+    "fence_indented": "들여 쓴 코드 펜스라 목록 항목 안의 펜스로 읽는 쪽과 아닌 쪽이 갈린다",
     "setext_heading": "글줄 아래에 `===` 나 `---` 밑줄을 둔 제목(setext)이라 절 머리가 ATX 한 꼴로만 있다는 읽기가 깨진다",
     "section_missing": "제목 붙은 절 머리가 없다",
     "section_heading_duplicate": "같은 번호의 절 머리가 둘 이상이라 읽는 쪽마다 다른 절을 고를 수 있다",
@@ -212,13 +247,13 @@ SECTION_REASON_TEXT = {
 
 def head_problems(text):
     """펜스 밖 줄 중 절 번호처럼 보이는(정규형에서 `##` 뒤 숫자) 머리가 절 표의 제목 붙은 머리(날 글자) 하나가 아니면
-    거부 -> [(그 줄, `section_head_unknown`)]."""
+    거부 -> [(그 줄, `section_head_unknown`)]. 부분집합 밖 구조(`subset_problems`)와 setext 제목도 같은 자리에서 낸다."""
     titled = [_titled_head(n, title) for n, title in SECTIONS]
     out = []
     for ln in split_lines(body_text(text)):
         if _HEADLIKE_RE.match(canon(ln)) and not any(rx.match(ln) for rx in titled):
             out.append((ln, "section_head_unknown"))
-    return out + setext_problems(text)
+    return out + subset_problems(text) + setext_problems(text)
 
 
 def section_problem(text, num, title=None):
@@ -241,22 +276,23 @@ _ANCHOR_SHAPED = re.compile(r"^(?:[^\w\n]|\d+[.)])*\*\*S\d+\*\*")
 _IN_BODY_TOKEN = re.compile(r"\*\*S\d+\*\*|__S\d+__")
 _IN_BODY_BULLET = re.compile(r"^(?:[^\w\n]|\d+[.)])*?(?:[-*+]|\d+[.)])\s+[*_`]*S\d+(?![0-9])")
 # 열 0 의 줄 머리(불릿 하나는 건너)가 `S` 로 시작하는 강조(`**…**` · `__…__`) — 문법 안 앵커가 아니면 닮은 글자로 꾸민 앵커다.
-_EMPH_S_HEAD = re.compile(r"^ {0,3}(?:[-*+]\s+)?(?:\*\*|__)S(?!\\?<)")   # 자리 표시 `S<N>` · `S\<N\>`(템플릿)는 제외
+_EMPH_S_HEAD = re.compile(r"^ {0,3}(?:[-*+]\s+)?(?:\*\*|__)S(?!\\?<|\ue000)")   # 자리 표시 `S<N>` · `S\<N\>`(템플릿)는 제외
 # 모양 보기 — 앵커 꼴 판정에만 쓰는 접은 모양: 인라인 HTML 태그를 지우고 백슬래시 이스케이프를 푼다. 렌더러는 이 모양으로
 # 앵커를 그리므로(`- <b>S9</b>` · `- *\\*S5*\\*`), 날 글자로는 문법 밖인데 이 모양으로 앵커처럼 읽히는 줄은 거부한다.
-_TAG_RE = re.compile(r"<[^>\n]+>")
+_TAG_RE = re.compile(r"<[^<>\n]+>")
 _ESCAPE_RE = re.compile(r"\\([!-/:-@\[-`{-~])")
 
 
-_PLACEHOLDER = re.compile(r"S\\?<[Nn]\\?>")   # 템플릿 자리 표시 `S<N>` — 태그로 읽어 지우지 않는다
+_PLACEHOLDER = re.compile(r"S\\?<[Nn]\\?>")   # 템플릿 자리 표시 `S<N>` — 줄 전체가 아니라 그 토큰만 태그 지우기에서 비킨다
+_PH_MARK = "\ue000"
 
 
 def _shape_view(text):
-    f = fold(text)
+    f = _PLACEHOLDER.sub("S" + _PH_MARK, fold(text).translate({ord(_PH_MARK): None}))
     prev = None
     while prev != f:
         prev, f = f, _TAG_RE.sub("", f)
-    return _ESCAPE_RE.sub(r"\1", f)
+    return _ESCAPE_RE.sub(r"\1", html.unescape(f))
 
 
 # 거부 사유 이름 → 사람이 읽는 말. 메시지는 이 말을 앞세우고 사유 이름은 괄호에 둔다.
@@ -306,7 +342,7 @@ def anchor_lines(section_text):
                 bad.append((n, "anchor_confusable"))
             elif _in_body(f):
                 bad.append((n, "anchor_in_body"))
-            elif v != f and not _PLACEHOLDER.search(f) and (_ANCHOR_SHAPED.match(v) or _EMPH_S_HEAD.match(v) or _in_body(v)):
+            elif v != f and (_ANCHOR_SHAPED.match(v) or _EMPH_S_HEAD.match(v) or _in_body(v)):
                 bad.append((n, "anchor_markup"))
             continue
         m = ANCHOR_LINE_RE.match(line)

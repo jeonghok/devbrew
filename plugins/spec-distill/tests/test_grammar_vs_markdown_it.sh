@@ -11,7 +11,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
 export PYTHONDONTWRITEBYTECODE=1
 if command -v uv >/dev/null 2>&1; then
-  ( cd "$HERE" && uv run --frozen --group dev --project "$ROOT" python -W ignore -m unittest -q test_grammar_vs_markdown_it )
+  ( cd "$HERE" && uv run --locked --group dev --project "$ROOT" python -W ignore -m unittest -q test_grammar_vs_markdown_it )
 else
-  ( cd "$HERE" && python3 -W ignore -m unittest -q test_grammar_vs_markdown_it )
+  echo "확인 못 함(uv 없음) — 고정한 개발 의존(markdown-it-py)을 받을 수 없어 교차 확인을 돌리지 못했다"
+  exit 3
 fi
