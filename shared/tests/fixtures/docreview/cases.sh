@@ -2916,6 +2916,19 @@ case_same_name_blocks_ref_collision() {
   assert_eq "$(jget "$d/prep.json" '[i["blocks"] for i in d["items"] if "둘로 나누나" in i["summary"]][0] == [[i["f"] for i in d["items"] if "두 가지로 읽힌다" in i["summary"]][0]]')" "True" "같은 이름 블록: 겹친 임시 번호는 자기 블록 안에서 풀린다"
   rm -rf "$d"
 }
+case_same_name_blocks_absorbed_ref_resolves() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-dupblocks.txt" "$FX/codex-failed.yaml" "$FX/recritic-missing.txt")"
+  # 둘째 층 1 블록이 다시 보낸 c0(흡수)을 c5 가 막는다 — blocks 는 살아남은 c0 의 번호로 풀려야 한다(떨어지면 안 된다).
+  assert_eq "$(jget "$d/prep.json" '[i["blocks"] for i in d["items"] if "다른 문제를 겨눈다" in i["summary"]][0] == [[i["f"] for i in d["items"] if "범위 항목 하나를 조용히 뺐다" in i["summary"]][0]]')" "True" "같은 이름 블록: 흡수된 항목을 가리킨 blocks 는 살아남은 항목으로 풀린다"
+  rm -rf "$d"
+}
+case_same_name_layer2_broken_kills_critic() {
+  local d f; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; f="$d/critic-in.txt"
+  { cat "$FX/critic-r1.txt"; printf '\n```docreview-layer2\n- ref: c9\n  summary: [깨진\n```\n'; } > "$f"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$f")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep.json"; local rc=$?
+  assert_eq "$rc" "4" "층 2 블록이 파손이면 층 1 이 멀쩡해도 탐지 사망(rc 4)"
+  rm -rf "$d"
+}
 case_recritic_two_blocks_last_wins_disclosed() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-r1.txt" "$FX/codex-failed.yaml" "$FX/recritic-two-blocks.txt.tmpl")"
   assert_eq "$(fsum "$d" 'c.py 가 목록에 없다' '["disposition"]')" "fix" "재비판 블록 둘: 마지막(confirm)이 판정 — 인용 예시(reject)가 판정이 되지 않는다"

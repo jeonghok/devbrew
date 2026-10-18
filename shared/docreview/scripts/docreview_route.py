@@ -84,24 +84,35 @@ def merge_list_blocks(blocks, name, ev):
         not_list = not_list or not isinstance(b, list)
     if not_list:
         return None, "not a list"
-    merged, seen_refs, seen_items = [], set(), {}
+    merged, seen_refs, seen_items, final_ref = [], set(), {}, {}
     for k, blk in enumerate(blocks, 1):
-        local = {}
-        if k > 1:
-            for it in blk:
-                if isinstance(it, dict) and it.get("ref") is not None and str(it["ref"]) in seen_refs:
-                    local[str(it["ref"])] = "%s@b%d" % (it["ref"], k)
+        # 1 걸음 — 항목마다 처분을 정한다: 글자까지 같은 항목은 흡수(자리는 살아남은 항목의 최종 ref),
+        # 앞 블록과 ref 가 겹치는 새 항목은 `<ref>@b<k>` 로 바꾼다.
+        local, plan = {}, []
         for it in blk:
             key = json.dumps(it, sort_keys=True, ensure_ascii=False, default=str)
+            ref = str(it["ref"]) if isinstance(it, dict) and it.get("ref") is not None else None
             label = "%s#b%d:%s" % (name, k, (it.get("ref") if isinstance(it, dict) else "?"))
             if key in seen_items:
                 ev("absorbed", label, seen_items[key])
+                plan.append((None, None))
+                if ref is not None and final_ref.get(key) is not None:
+                    local[ref] = final_ref[key]
             else:
                 seen_items[key] = label
+                new_ref = ref
+                if ref is not None and k > 1 and ref in seen_refs:
+                    new_ref = "%s@b%d" % (ref, k)
+                    local[ref] = new_ref
+                final_ref[key] = new_ref
+                plan.append((it, new_ref))
+        # 2 걸음 — 살아남은 항목에 새 ref 와 `blocks` 를 적는다.
+        for it, new_ref in plan:
+            if it is not None:
                 if isinstance(it, dict) and local:
                     it = dict(it)
-                    if it.get("ref") is not None and str(it["ref"]) in local:
-                        it["ref"] = local[str(it["ref"])]
+                    if new_ref is not None:
+                        it["ref"] = new_ref
                     if it.get("blocks") is not None:
                         fixed = []
                         for r in _refs(it["blocks"]):

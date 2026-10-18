@@ -23,6 +23,7 @@
   anchor: "#2-goals"
   disposition: decide
   summary: "목표가 브리프와 다른 문제를 겨눈다"
+  blocks: [c0]
   evidence: "브리프 §1 vs 문서 §2"
 ```
 
