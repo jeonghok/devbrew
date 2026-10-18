@@ -6,7 +6,7 @@
 - 같은 이름의 지적 블록이 둘 이상 오면 조용히 버리던 공유 라우터(`docreview_route.py`, 링크로 싣는다)를 고쳤다 — 합쳐서 쓰고 합친 사실을 알린다. 재비판 블록은 마지막 것을 따르되 몇 개였는지 알린다.
 
 ### Changed
-- 문서 · 스크립트 · 테스트 속 quality-gates 옛 이름(`/qg` · `critiquing-artifacts`)을 새 이름(`/quality-gates:quality-pipeline` · `/quality-gates:artifact-critique`)으로 바꿨다.
+- 스크립트 · 테스트의 출처 메모 속 `/qg` 를 `qg` 로 바꿨다(호출 이름이 아니라 기록이다). 테스트의 입력 흔들기 접두 하나도 `/qg ` 에서 `/compact ` 로 바꿨다. 동작은 같다.
 
 ## [7.2.0] — 2026-10-18
 

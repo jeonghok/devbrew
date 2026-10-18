@@ -4,7 +4,7 @@
 
 ### Changed
 
-- 스크립트 · SKILL · 테스트 속 quality-gates 옛 이름(`/qg` · `critiquing-artifacts`)을 새 이름으로 바꿨다. 동작은 같다.
+- 스크립트 · SKILL · 테스트의 출처 메모 속 `/qg` 를 `qg` 로 바꿨다(호출 이름이 아니라 기록이다). 동작은 같다.
 
 ## [1.1.2] — 2026-10-15
 
