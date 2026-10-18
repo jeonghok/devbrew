@@ -19,7 +19,7 @@
 - bash 3.2: `$var` 뒤에 한글 글자가 붙으면 `${var}` 로 쓴다. `$( )` 안 heredoc 금지.
 - 사용자에게 보이는 새 문면(안내 줄 · 공시 줄 · README · CHANGELOG)은 레포 `shared/style/plain-language.md` 규칙: 첫 줄 상태, 번호 · 내부 기호는 괄호 안.
 - 레포 전용 값을 박지 않는다(기본 브랜치 이름 · 절대 경로 · `main`).
-- R5 설계문서(`feature/epic-conductor` 브랜치)와 로드맵 `roadmap.md` 의 옛 이름은 이 브랜치에서 고치지 않는다 — 지휘자에게 넘긴다(Task 6 Step 6).
+- 이 계획은 기본 브랜치의 R5 계획 1(#222)을 merge 한 트리(7d716d66) 위에서 점검했다. 로드맵 `roadmap.md` 의 결정 줄은 역사 기록이라 고치지 않고, R5 에 넘길 것은 Task 6 Step 6 에 적었다.
 
 ## 설계와 다른 점 · 설계에 없던 결정
 
@@ -826,7 +826,9 @@ git commit -m "refactor(qg): 옛 이름 /qg · qg critique · critiquing-artifac
 
 - [ ] **Step 6: 이 브랜치 밖의 옛 이름을 넘긴다**
 
-R5 설계문서(`feature/epic-conductor` 브랜치)와 로드맵 `roadmap.md` 의 R5 · 결정 줄에 남은 `/qg` · `/qg critique` 는 이 브랜치에서 고치지 않는다(로드맵의 결정 줄은 역사 기록이다). PR 본문 「넘김」 절에 「R5 설계가 부르는 qg 이름 — `/quality-gates:quality-pipeline` · `/quality-gates:artifact-critique` 로 바꿀 것(R5 담당)」 한 줄을 적는다.
+R5 설계문서(`docs/superpowers/specs/2026-10-17-epic-conductor-design.md`, #222 로 기본 브랜치에 들어왔다)는 `/qg` 리터럴을 쓰지 않는다(2026-10-18 확인) — 고칠 옛 이름이 없다. 로드맵 `roadmap.md` 의 결정 줄은 역사 기록이라 고치지 않는다. PR 본문 「넘김」 절에 두 줄을 적는다:
+- 「R5 계획 셋째(합친 사본 스위트 대조)는 공유본 «넷»을 링크한다 — R5 설계 §5 · §변경표는 「스크립트 셋」이라 적었지만 `compute-test-scope-candidates.sh` 가 형제 `resolve-baseline.sh` 를 자기 폴더에서 부르므로 넷째도 링크해야 설치본에서 돈다(`shared/test-selection/README.md` 소비자 규칙)」 — 받는 곳 R5.
+- 「qg 의 새 진입 이름 — `/quality-gates:quality-pipeline` · `/quality-gates:artifact-critique`(R5 끝 단계의 qg 호출 꼴은 계획 3 의 범위 모드에서 정해진다)」 — 받는 곳 R5.
 
 ---
 
@@ -887,5 +889,5 @@ PR 본문에 표 하나: 설계 §1 처분표 행마다 「이 계획이 닫는�
 
 - [ ] **Step 4: 설계문서 대조 스크립트를 돌린다**
 
-Run: `python3 plugins/spec-distill/scripts/check_bundle_coverage.py --plan docs/superpowers/specs/2026-10-17-shared-review-engine-devices-design.md docs/superpowers/plans/2026-10-18-r2a-plan1-defects-test-selection-qg-entry.md`
-Expected: 계획 Task 절에 없는 AC 목록 — AC10~AC35 는 계획 2~4 몫이라 나와야 정상이다. AC1~AC9 · AC36 · AC37 이 목록에 있으면 그 AC 를 닫는 단계를 이 계획에 더한다.
+Run: `python3 plugins/spec-distill/scripts/check_bundle_coverage.py --plan docs/superpowers/specs/2026-10-17-shared-review-engine-devices-design.md docs/superpowers/plans/2026-10-18-r2a-plan1-defects-test-selection-qg-entry.md --acs "AC1~AC9 · AC36 · AC37"`
+Expected: 계획 1 몫 AC 중 빠진 것이 없다는 줄. 빠진 AC 가 나오면 그 AC 를 닫는 단계를 이 계획에 더한다.
