@@ -28,7 +28,7 @@ Atlassian도 현재 Git Flow를 ["legacy" workflow](https://www.atlassian.com/gi
 ## Branch Naming Pattern
 
 ```regex
-^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$
+^({{BRANCH_PREFIXES}})/[a-z0-9][a-z0-9.-]*$
 ```
 
 소문자 + 숫자 + 하이픈만 허용. URL-friendly + case-insensitive 파일시스템 충돌 방지. `release/v1.2.0`처럼 dot 포함은 OK (`v` 시작 → `[a-z0-9]` 통과, `1.2.0`은 `[a-z0-9.-]*` 통과).
@@ -41,6 +41,8 @@ Atlassian도 현재 Git Flow를 ["legacy" workflow](https://www.atlassian.com/gi
 | `fix/<name>` | `develop` | `develop` | `fix/login-redirect` |
 | `release/<version>` | `develop` | `main` + `develop` | `release/v1.2.0` |
 | `hotfix/<name>` | `main` | `main` + `develop` | `hotfix/critical-crash` |
+
+추가 접두: {{EXTRA_PREFIX_LIST}}
 
 - 설명에는 **kebab-case** 사용
 - 간결하게: 2–4 단어
@@ -85,15 +87,27 @@ git checkout -b hotfix/<name>
 - 브랜치 삭제: `git branch -d <branch-name>`
 - release의 경우: `main`에 version 번호로 태깅
 
+### Working in a worktree
+
+브랜치를 전환하지 않고 별도 폴더에서 작업하려면 기준 브랜치에서 worktree 를 만든다. feature · fix 는 `develop`, hotfix 는 `main` 이 기준이다.
+
+```bash
+git fetch origin
+git worktree add -b feature/<이름> ../<폴더> origin/develop   # hotfix 는 origin/main
+git worktree remove ../<폴더>   # 끝난 뒤
+```
+
+이름은 `Branch Naming Pattern` 과 같은 규칙이다. project-init 훅은 `git checkout -b` · `git switch -c` 로 만든 이름만 확인한다 — `git worktree add -b` 로 만든 이름은 확인하지 않는다.
+
 ## Rules for Claude
 
-- **ALWAYS** 작업 시작 전 현재 브랜치 확인: `git branch --show-current`
+- **변경 작업(파일 편집 · 커밋)을 시작하기 전** 현재 브랜치 확인: `git branch --show-current` — 읽기만 하는 작업에는 확인하지 않는다
 - **NEVER** `main`이나 `develop`에 직접 commit
 - **ALWAYS** `feature/*`와 `fix/*` 브랜치는 `develop`에서 생성, `main`에서 X
 - **ALWAYS** `hotfix/*` 브랜치는 `main`에서 생성
 - **ALWAYS** `release/*` 브랜치는 `develop`에서 생성
 - "X 작업 시작해" 요청 시 — `develop`에서 feature 브랜치 생성
-- `main`이나 `develop`에 있고 변경하려 할 때 — STOP, 브랜치 먼저 생성
+- `main`이나 `develop`에 있고 변경하려 할 때 — STOP, 브랜치 먼저 생성하거나 worktree 를 만든다(위)
 - release나 hotfix merge 시 — `main`과 `develop` *양쪽*에 merge
 - 기존 feature 브랜치로 전환 시 — `develop`에서 sync 필요한지 확인
 - **공유된 브랜치는 rebase하지 않는다.** 기존 feature 브랜치는 `git merge origin/develop`으로 sync한다. rebase는 commit SHA를 rewrite하므로, 이미 push돼 다른 사람이 받아간 브랜치에서는 unsafe하다. 아직 공유되지 않은 로컬 브랜치를 정리하는 것은 각자의 판단이다.

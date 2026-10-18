@@ -116,9 +116,15 @@ charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
    - Merge commit (모든 commit 보존)
    - Rebase (linear history)
 
+3. **브랜치 접두 추가** — "기본 접두는 <선택한 전략의 기본 접두>예요. 더할 접두가 있나요? (예: `docs` · `chore`)"
+   - 더하지 않음 (권장)
+   - 더하기 (기타 칸에 쉼표로 적는다)
+
+   받은 낱말마다 규칙 `[a-z][a-z0-9-]*`(소문자로 시작, 소문자 · 숫자 · `-` 만 — 훅이 접두 목록을 읽는 규칙과 같다)과 중복을 본다. 규칙 밖이면 그 낱말과 이유를 보이고 다시 묻는다.
+
 **Git Flow 추가:**
 
-3. **Release branch 명명** — "release 브랜치 포맷?"
+4. **Release branch 명명** — "release 브랜치 포맷?"
    - `release/v*` (예: `release/v1.2.0`) — default
    - 커스텀 포맷
 
@@ -208,6 +214,11 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 |-------------|---------|
 | `{{SCOPE_CONVENTION}}` | Step 3 질문 1의 scope 룰 |
 | `{{MERGE_STRATEGY}}` | Step 3 질문 2의 merge 전략 |
+| `{{BRANCH_PREFIXES}}` | 전략 기본 접두 + Step 3 질문 3 에서 더한 접두를 순서대로 중복 없이 `\|` 로 이은 정규식 갈래 |
+| `{{BRANCH_PREFIX_LIST}}` | 같은 낱말을 `` `<접두>/*` `` 로 감싸 ` · ` 로 이은 목록 |
+| `{{EXTRA_PREFIX_LIST}}` | 질문 3 에서 더한 접두만 같은 꼴로 이은 목록, 없으면 `없음` |
+
+**전략별 기본 접두** — github-flow: `feature, fix` · git-flow: `feature, fix, release, hotfix` · trunk-based: `feature, fix`
 
 #### 4c: AGENTS.md × CLAUDE.md 4-state matrix
 

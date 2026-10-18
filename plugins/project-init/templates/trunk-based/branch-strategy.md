@@ -10,7 +10,7 @@
 ## Branch Naming Pattern
 
 ```regex
-^(feature|fix)/[a-z0-9][a-z0-9.-]*$
+^({{BRANCH_PREFIXES}})/[a-z0-9][a-z0-9.-]*$
 ```
 
 소문자 + 숫자 + 하이픈 + dot만 허용 (예: `feature/v1.2-fix`). URL-friendly + case-insensitive 파일시스템 충돌 방지.
@@ -21,6 +21,8 @@
 |--------|-----|---------|
 | `feature/<name>` | 새 기능 (미완성이면 flag 뒤) | `feature/user-auth` |
 | `fix/<name>` | 버그 수정 | `fix/login-redirect` |
+
+추가 접두: {{EXTRA_PREFIX_LIST}}
 
 - 설명에는 **kebab-case** 사용
 - 간결하게: 2–4 단어
@@ -57,6 +59,18 @@ git pull origin main
 git branch -d feature/<name>
 ```
 
+### Working in a worktree
+
+브랜치를 전환하지 않고 별도 폴더에서 작업할 때도 trunk 에서 짧게 쓴다.
+
+```bash
+git fetch origin
+git worktree add -b <접두>/<이름> ../<폴더> origin/main
+git worktree remove ../<폴더>   # merge 직후
+```
+
+이름은 `Branch Naming Pattern` 과 같은 규칙이다. 훅(project-init)은 `git checkout -b` · `git switch -c` 로 만든 이름만 확인한다 — `git worktree add -b` 로 만든 이름은 확인하지 않는다.
+
 ## Feature Flags
 
 여러 날에 걸친 기능의 경우:
@@ -85,7 +99,7 @@ CI/CD가 tag push를 트리거로 deploy. 별도 release 브랜치 없음 — `m
 
 이미 출시된 옛 version (예: v1.x)에 hotfix를 backport해야 할 때만:
 
-> **Note:** `release/*` 브랜치는 본 strategy의 regex(`^(feature|fix)/…`) 스코프 밖이라 project-init hook이 **advisory 경고**(허용 prefix `feature`/`fix`를 제시하는 다중 줄 메시지 — 이 전략엔 관용 없는 예외)를 냅니다. 단, project-init hook은 **non-blocking**(PostToolUse advisory)이라 브랜치 생성을 **차단하지 않습니다** — 의도된 backport 예외이므로 경고를 무시하고 진행하세요. hook 전체를 끄지 마세요(commit 검증까지 함께 꺼집니다).
+> **Note:** `release/*` 브랜치는 본 strategy의 `Branch Naming Pattern` 스코프 밖이라 project-init hook이 **advisory 경고**(허용 prefix 목록을 제시하는 다중 줄 메시지 — 이 전략엔 관용 없는 예외)를 냅니다. 단, project-init hook은 **non-blocking**(PostToolUse advisory)이라 브랜치 생성을 **차단하지 않습니다** — 의도된 backport 예외이므로 경고를 무시하고 진행하세요. hook 전체를 끄지 마세요(commit 검증까지 함께 꺼집니다).
 
 ```bash
 # 1. 마지막 v1 태그에서 release 브랜치 cut (1회만; hook advisory 경고는 무시하고 진행)
@@ -110,11 +124,11 @@ git push origin release/v1.x v1.2.5
 
 ## Rules for Claude
 
-- **ALWAYS** 작업 시작 전 현재 브랜치 확인: `git branch --show-current`
+- **변경 작업(파일 편집 · 커밋)을 시작하기 전** 현재 브랜치 확인: `git branch --show-current` — 읽기만 하는 작업에는 확인하지 않는다
 - **NEVER** `main`에 직접 commit
-- **ALWAYS** `feature/*` 또는 `fix/*` 브랜치 명명 사용
+- **ALWAYS** 브랜치 이름은 위 `Branch Naming Pattern` 의 접두 중 하나로 시작
 - **ALWAYS** 브랜치 단명 유지 — 1–2일 내 merge
 - "X 작업 시작해" 요청 시 — 최신 `main`에서 브랜치 생성
 - 기능이 클 때 — feature flag 사용 + 부분 merge 제안
-- `main`에 있고 변경하려 할 때 — STOP, 브랜치 먼저 생성
+- `main`에 있고 변경하려 할 때 — STOP, 브랜치 먼저 생성하거나 worktree 를 만든다(위)
 - PR merge 후 — 브랜치 즉시 삭제
