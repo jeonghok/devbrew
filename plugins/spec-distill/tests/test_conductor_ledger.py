@@ -647,10 +647,11 @@ class PrHandoffs(Repo):
         finally:
             os.environ["PATH"] = old
 
-    def test_audit_without_candidates(self):
-        rc, out = self._audit_with_gh([])
+    def test_audit_with_unreadable_status_is_not_all_clear(self):
+        rc, out = self._audit_with_gh([])  # 이 fixture 는 brief 가 없어 상태 계산에 셀 수 없는 것이 있다
         self.assertEqual(rc, 0, out)
-        self.assertIn("감사 후보 없음", out)
+        self.assertIn("셀 수 없음", out)
+        self.assertNotIn("감사 후보 없음", out)
 
     def test_audit_lists_after_review_lines(self):
         rc, out = self._audit_with_gh([{"number": 7, "state": "OPEN", "body": "- 리뷰 뒤 반영(리뷰 라운드를 거치지 않았다): 오타\n"}])
@@ -697,12 +698,15 @@ class AuditReadFailures(unittest.TestCase):
         _rc, out = self.run_audit({"s.md": two})
         self.assertIn("기각한 번호(s.md) 2개", out)
         self.assertNotIn("받지 않기로 한", out)
+        multi = TABLE % "| C1 · C2 | 기각 | 이유 |"
+        _rc, out = self.run_audit({"s.md": multi})
+        self.assertIn("기각한 번호(s.md) 2개", out)
         zero = TABLE % "| C1 | 반영 | §1 |"
         _rc, out = self.run_audit({"s.md": zero})
         self.assertNotIn("기각한 번호", out)
         self.assertIn("감사 후보 없음", out)
 
-    def test_broken_giver_and_unreadable_receiver_are_reported(self):
+    def test_unreadable_handoff_state_and_unreadable_receiver_doc_are_reported(self):
         hs = [{"giver": "A2", "spec": "g.md", "item": "넘긴 항목입니다 길게 길게", "receiver": "A1",
                "state": "셀 수 없음", "basis": "A1 지휘 기록 읽기 불가"}]
         block = {"id": "A1", "stage": "설계 중", "tip": "abc", "specs": ["s.md"], "branches": []}
@@ -711,6 +715,20 @@ class AuditReadFailures(unittest.TestCase):
         hs[0]["state"] = "열림"
         _rc, out = self.run_audit({"s.md": None}, report={"blocks": [block], "handoffs": hs})
         self.assertIn("받는 쪽 설계문서를 읽지 못했다", out)
+
+    def test_unreadable_handoff_shown_even_without_receiver_specs(self):
+        hs = [{"giver": "A2", "spec": "g.md", "item": "항목", "receiver": "A1", "state": "셀 수 없음", "basis": "읽기 불가"}]
+        block = {"id": "A1", "stage": "준비", "specs": [], "branches": []}
+        _rc, out = self.run_audit({}, report={"blocks": [block], "handoffs": hs})
+        self.assertIn("줄어든 넘김 의심(셀 수 없음)", out)
+        self.assertNotIn("감사 후보 없음", out)
+
+    def test_unknown_reasons_block_the_all_clear(self):
+        block = {"id": "A1", "stage": "설계 중", "tip": "abc", "specs": ["s.md"], "branches": []}
+        _rc, out = self.run_audit({"s.md": "# 설계\n"}, report={"blocks": [block], "handoffs": [],
+                                                                "unknown_reasons": ["A2 미룸 표 셀 수 없음"]})
+        self.assertIn("A2 미룸 표 셀 수 없음", out)
+        self.assertNotIn("감사 후보 없음", out)
 
     def test_shrunk_handoff_is_listed(self):
         hs = [{"giver": "A2", "spec": "g.md", "item": "전혀 다른 넘김 항목이 여기 있다 길게", "receiver": "A1",
@@ -786,6 +804,75 @@ class NoPrBranch(Repo):
             os.environ["PATH"] = old
         self.assertEqual(rc, 0, out)
         self.assertIn("feature/a1 PR 없음", out)
+
+
+class AuditEndToEnd(Repo):
+    """실제 roadmap_status — 주는 쪽의 깨진 미룸 표는 「셀 수 없음」으로 올라와야 한다."""
+    def test_broken_giver_table_reaches_audit(self):
+        block = BLOCK.replace("- 묶음: A2.md\n", "- 묶음: A2.md\n- 산출물: docs/a2.md\n")
+        (self.w / RM).write_text(roadmap(block), encoding="utf-8")
+        sh(self.w, "commit", "-qam", "산출물")
+        sh(self.w, "push", "-q", "origin", "trunk")
+        sh(self.w, "checkout", "-q", "-b", "feature/a2")
+        (self.w / "docs").mkdir()
+        (self.w / "docs/a2.md").write_text("# 설계\n\n## 미룸\n\n| 항목 | 받는 곳 |\n|---|---|\n| AC2 | A1 |\n",
+                                           encoding="utf-8")
+        sh(self.w, "add", "-A")
+        sh(self.w, "commit", "-qm", "a2 spec")
+        sh(self.w, "push", "-q", "origin", "feature/a2")
+        sh(self.w, "checkout", "-q", "trunk")
+        sh(self.w, "fetch", "-q", "origin")
+        from unittest import mock
+        with mock.patch.object(L, "_prs", return_value=[]):
+            rc, out = self.cli("audit", "--roadmap", RM, "--epic", "A1")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("상태 계산 — 셀 수 없음", out)
+        self.assertIn("A2 미룸 표", out)
+        self.assertNotIn("감사 후보 없음", out)
+
+
+class DocRead(Repo):
+    def test_doc_missing_is_none_and_empty_is_empty(self):
+        (self.w / "empty.md").write_text("", encoding="utf-8")
+        sh(self.w, "add", "-A")
+        sh(self.w, "commit", "-qm", "empty")
+        b = {"tip": "HEAD"}
+        self.assertEqual(L._doc(self.w, b, "empty.md"), "")
+        self.assertIsNone(L._doc(self.w, b, "nope.md"))
+
+
+class PrHandoffEdges(Repo):
+    def stub(self, text):
+        stub = self.t / "bin"
+        stub.mkdir()
+        (stub / "pr.json").write_text(text, encoding="utf-8")
+        (stub / "gh").write_text("#!/bin/sh\ncat '%s'\n" % (stub / "pr.json"), encoding="utf-8")
+        (stub / "gh").chmod(0o755)
+        old = os.environ.get("PATH", "")
+        os.environ["PATH"] = str(stub) + os.pathsep + old
+        return old
+
+    def test_limit_reached_is_stated(self):
+        old = self.stub(json.dumps([{"number": n, "state": "OPEN", "body": ""} for n in range(L.PR_LIMIT)]))
+        try:
+            rc, out = self.cli("pr-handoffs", "--roadmap", RM, "--epic", "A1")
+        finally:
+            os.environ["PATH"] = old
+        self.assertEqual(rc, 0, out)
+        self.assertIn("한도에 닿았다", out)
+
+    def test_block_without_branch(self):
+        block = BLOCK.replace("- 브랜치: feature/a1\n", "- 브랜치: 없음\n")
+        (self.w / RM).write_text(roadmap(block), encoding="utf-8")
+        sh(self.w, "commit", "-qam", "no branch")
+        sh(self.w, "push", "-q", "origin", "trunk")
+        old = self.stub("[]")
+        try:
+            rc, out = self.cli("pr-handoffs", "--roadmap", RM, "--epic", "A1")
+        finally:
+            os.environ["PATH"] = old
+        self.assertEqual(rc, 0, out)
+        self.assertIn("브랜치 없음", out)
 
 
 if __name__ == "__main__":

@@ -450,6 +450,8 @@ def _status(root, roadmap: str) -> dict:
         raise Fail(3, "상태 계산 출력의 모양이 다르다")
     if rep.get("exit") in (3, 4) and not any(x.get("stage") for x in rep.get("blocks") or []):
         why = list(rep.get("unknown_reasons") or []) + list(rep.get("format_errors") or [])
+        if not why and rep.get("not_on_default"):
+            why = ["로드맵이 기본 브랜치에 없다(읽은 곳: %s)" % rep.get("source")]
         raise Fail(3, "상태를 셀 수 없다 — %s" % (" · ".join(str(w) for w in why) or "이유 없음(rc %s)" % rep.get("exit")))
     return rep
 
@@ -818,6 +820,9 @@ def c_audit(root, a) -> int:
 
     def add(label, items, count=None, bad=False):
         groups.append((label, items, len(items) if count is None else count, bad))
+    reasons = [str(r) for r in report.get("unknown_reasons") or []]
+    if reasons:
+        add("상태 계산", reasons, 0, True)
     specs = b.get("specs") or []
     texts = {}
     if b.get("stage") == "알 수 없음":
@@ -862,7 +867,7 @@ def c_audit(root, a) -> int:
     handoffs = report.get("handoffs")
     if handoffs is None:
         add("줄어든 넘김 의심", ["셀 수 없음 — 넘김 목록을 읽지 못했다"], 0, True)
-    elif specs:
+    else:
         mine = None if any(texts.get(s) is None for s in specs) else "\n".join(texts[s] for s in specs)
         shrunk, cannot = [], []
         for h in handoffs:
@@ -873,7 +878,7 @@ def c_audit(root, a) -> int:
                 cannot.append("셀 수 없음 — %s (%s)" % (tag, h.get("basis")))
             elif mine is None:
                 cannot.append("셀 수 없음 — %s (받는 쪽 설계문서를 읽지 못했다)" % tag)
-            elif not carried(str(h.get("item")), mine):
+            elif specs and not carried(str(h.get("item")), mine):  # 설계문서가 아직 없으면 줄어들 것도 없다
                 shrunk.append("%s → %s" % (tag, a.epic))
         add("줄어든 넘김 의심", shrunk)
         if cannot:
