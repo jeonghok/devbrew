@@ -414,7 +414,8 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 - 결정 기록의 `--log-file` = `$AUDIT_ABS` — seed 프로필의 `decision_log` 이 audit 의 `## 6. 리뷰 결정` 을 가리킨다
 - 추가 라운드를 여는 1단계는 사용자 문구를 `$STATE_DIR/said-extra-r<n>.txt` 에 쓰고
   `q="$(python3 "$SD/scripts/seed_review_log.py" one-line "$STATE_DIR/said-extra-r<n>.txt")"` 로 받아
-  `begin-round … --extra-approval="$q"` 로 넘긴다 — 파일이 없으면 `q` 가 비고, 엔진은 빈 승인을 승인으로 치지
+  `begin-round … --extra-approval="$q" --extra-approval-source "$src"` 로 넘긴다(`src` 는 사용자가 기타 칸에 썼으면
+  `typed`, 선택지를 골랐으면 `label` — 펜스 앞에서 대입한다) — 파일이 없으면 `q` 가 비고, 엔진은 빈 승인을 승인으로 치지
   않아 상한(rc 3)에서 멈춘다. 성공하면 그 파일을 지운다
 - 선결 `init` 앞에 `mkdir -p "$STATE_DIR"`. `$STATE_DIR` 이 비었거나 `init` 이 rc ≠ 0 이면 이 라운드를 시작하지 않고 `## degrade 채널` 의 record 를 남긴다
 

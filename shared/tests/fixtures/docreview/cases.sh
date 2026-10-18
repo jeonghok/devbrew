@@ -38,10 +38,10 @@ case_T37_cap_and_extra() {
   assert_eq "$r1 $r2 $r3" "0 1 2" "T37: rereview_count 는 라운드 1·2·3 에서 0·1·2"
   py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null 2>&1; r4=$?
   assert_eq "$r4" "3" "T37: 라운드 4 는 승인 없이 rc 3 (cap_reached)"
-  r4b="$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval '사용자: 한 라운드 더' | jgets 'd["round"]')"
+  r4b="$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval '추가 라운드 1회 열기' --extra-approval-source label | jgets 'd["round"]')"
   assert_eq "$r4b" "4" "T37: --extra-approval 이 있으면 라운드 4 가 열린다"
-  local nx; nx="$(python3 "$FX/st_get.py" "$d/docreview-state.md" 'len(st["extra_rounds"]), st["extra_rounds"][0]["round"], st["rereview_count"]')"
-  assert_eq "$nx" "(1, 4, 2)" "T37: extra_rounds 에 개별 기록 1건(round 4), 카운터는 2 에 머문다"
+  local nx; nx="$(python3 "$FX/st_get.py" "$d/docreview-state.md" 'len(st["extra_rounds"]), st["extra_rounds"][0]["round"], st["rereview_count"], st["extra_rounds"][0]["source"]')"
+  assert_eq "$nx" "(1, 4, 2, 'label')" "T37: extra_rounds 에 개별 기록 1건(round 4), 카운터는 2 에 머문다"
   rm -rf "$d"
 }
 
@@ -144,7 +144,7 @@ r1() {   # r1 <profile> <doc> → state dir with round 1 begun
 }
 next_round() {   # next_round <state-dir> <doc-for-this-round> [extra-quote]  → prints diff json path
   local d="$1" n; n="$(st_yaml "$d" 'st["round"]+1')"; snap "$2" "$d/s$n.json"
-  if [ -n "${3:-}" ]; then py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s$n.json" --extra-approval "$3" >/dev/null
+  if [ -n "${3:-}" ]; then py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s$n.json" --extra-approval "$3" --extra-approval-source label >/dev/null
   else py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s$n.json" >/dev/null; fi
   py docreview_state.py exempt-anchors --state-dir "$d" > "$d/ex$n.json"
   py docreview_anchor.py diff "$d/s$((n-1)).json" "$d/s$n.json" --exempt "$d/ex$n.json" > "$d/diff$n.json"
@@ -756,6 +756,30 @@ case_cap_zero_open_two_stage() {
   assert_contains "$gr" "추가 라운드 1회 열기" "상한 도달 + 열린 것 0: 렌더 1단계가 사용자 말로 「추가 라운드 1회 열기」를 싣는다"
   assert_contains "$gr" "진행 옵션으로" "상한 도달 + 열린 것 0: 1단계 둘째 선택지 「진행 옵션으로」도 함께 실린다"
   assert_not_contains "$gr" "= extra_approval" "상한 도달 + 열린 것 0: 렌더에 날 모드 토큰 'extra_approval' 이 없다"
+  rm -rf "$d"
+}
+case_AC40_extra_source_required() {
+  local d s; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC40: init 실패"; return; }
+  s="$d/s.json"; snap "$FX/design-sample.md" "$s"
+  local i; for i in 1 2 3; do py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null; done
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval '한 번 더 봐 줘' >/dev/null 2>&1; local rc=$?
+  assert_eq "$rc" "2" "AC40: 출처 없이 승인 값만 오면 rc 2"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval-source typed >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "AC40: 출처만 오면 rc 2"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval '한 번 더 봐 줘' --extra-approval-source typed >/dev/null
+  assert_eq "$(st_yaml "$d" 'st["extra_rounds"][-1]["quote"], st["extra_rounds"][-1]["source"]')" "('한 번 더 봐 줘', 'typed')" "AC40: 기타 칸 원문은 typed 로 적힌다"
+  rm -rf "$d"
+}
+case_AC13_open_count_and_label() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC,$F_FIX]"
+  local s="$d/s.json"; snap "$FX/design-sample.md" "$s"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null; py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null
+  local g; g="$(py docreview_state.py gate --state-dir "$d")"
+  assert_eq "$(printf '%s' "$g" | jgets 'd["cap_reached"], d["open_total"]')" "(True, 2)" "AC13: 상한에서 열린 지적 수를 센다"
+  local r; r="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$(printf '%s\n' "$r" | head -1)" "열린 지적 2개" "AC13: 게이트 첫 줄에 열린 지적 수"
+  assert_contains "$r" "「열린 지적 2개를 두고 진행」" "AC13: 승인 선택지 이름에 열린 지적 수"
+  assert_not_contains "$r" "사용자가 직접 쓴 말로" "AC40: 옛 문구가 없다"
   rm -rf "$d"
 }
 case_precap_zero_open_not_two_stage() {
@@ -1589,7 +1613,7 @@ case_T46_unverified_two_stage_with_open_items() {   # 「미검증」 + 이전 �
   critic_dead_twice "$d"
   assert_eq "$(gsum "$d" 'd["unverified"], d["approval_gate_open"], d["approval_ready"], d["two_stage"], d["next_round_mode"]')" \
     "('critic_dead', True, False, True, 'budget')" "T46: 「미검증」 + 열린 항목 → 승인 게이트를 열되 두 단계 · 다음 라운드는 예산"
-  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "다음: 승인 게이트(「미검증」) 1단계 — 남은 항목을 처리한 뒤 진행 옵션 (다음 라운드: 재리뷰 횟수 안에서)" \
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "다음: 승인 게이트(「미검증」) 1단계 — 남은 항목을 처리하거나 「열린 지적 $(gsum "$d" 'd["open_total"]')개를 두고 진행」 (다음 라운드: 재리뷰 횟수 안에서)" \
     "T46: 렌더의 다음 줄이 「미검증」 라벨의 두 단계 승인 게이트다"
   rm -rf "$d"
 }
@@ -2492,7 +2516,7 @@ print(len(pos) >= 2 and pos == sorted(pos), len(pos))
   # 항목 머리는 열 0 의 「- 」로 시작하고 id 괄호(「(<id>)」 · 「(<id> · 자동)」)로 끝난다 — 그 모양만 센다.
   # 묶음 제목과 「  그대로 두면:」 같은 이어지는 줄은 열 0 의 「- 」가 아니라 안 걸린다. n_items 는 GATE_ROWS
   # 전 행의 합이므로 두 값이 같으면 렌더가 항목을 빼거나 더하지 않았다는 뜻이다.
-  local n_headers; n_headers="$(printf '%s\n' "$render" | grep -cE '^- .* \([0-9a-f]+#r[0-9]+\.[0-9]+( · 자동)?\)$' || true)"
+  local n_headers; n_headers="$(printf '%s\n' "$render" | grep -cE '^- .* \([0-9a-f]+#r[0-9]+\.[0-9]+( · [^()]*)?\)$' || true)"
   [ "${n_items:-0}" -gt 0 ] \
     && ok "AC18' 양의 짝: 이 케이스에 열린 항목이 ${n_items}개 있다 (아래 등식이 0 == 0 으로 통과하지 않는다)" \
     || no "AC18': 열린 항목이 0개다 — 아래 등식이 공허하다. 항목을 만드는 픽스처로 바꿔라"
@@ -3064,7 +3088,7 @@ case_config_rereview_count_never_decreases() {
   next_round "$d" "$FX/design-sample.md" >/dev/null; next_round "$d" "$FX/design-sample.md" >/dev/null
   assert_eq "$(st_yaml "$d" 'st["round"], st["rereview_count"]')" "(3, 2)" "config: 라운드 3 까지 재리뷰 2회"
   local s="$d/s4.json"; snap "$FX/design-sample.md" "$s"
-  DEVBREW_DOCREVIEW_REREVIEW_CAP=1 py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval "승인 인용" >/dev/null
+  DEVBREW_DOCREVIEW_REREVIEW_CAP=1 py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval "승인 인용" --extra-approval-source typed >/dev/null
   assert_eq "$(st_yaml "$d" 'st["round"], st["rereview_count"]')" "(4, 2)" "config: 상한을 낮춘 뒤 추가 승인으로 돈 라운드 4 도 재리뷰 횟수는 줄지 않는다"
   rm -rf "$d"
 }

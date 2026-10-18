@@ -579,7 +579,7 @@ Agent({
 렌더 순서 맨 끝에 서고, 같은 4개씩 분할에 함께 세어지며, 선택지 「열기 / 열지 않음」 둘뿐인 그
 자신의 질문이다**(열린 항목을 마저 처리하는 것과는 독립적으로 고른다 — 다른 항목의 질문에
 얹지 않는다). 「추가 라운드 1회 열기」를 고르면 다음 라운드가 진입 게이트부터 다시 돌고, 그 1단계가
-`begin-round --extra-approval "<사용자 자신의 문구>"` 로 돈다.
+`begin-round --extra-approval "<고른 선택지 이름 또는 기타 칸에 쓴 말 그대로>" --extra-approval-source label|typed` 로 돈다 — 선택지를 골랐으면 `label`, 기타 칸에 썼으면 `typed`. 둘이 `extra_rounds` 에 함께 기록된다.
 
 **승인 게이트 2단계(진행 옵션 넷)는 이 skill 이 띄우지 않는다.** 진행 결정은 호출자
 `spec-interview` 종료 Step B 의 몫이다 — 같은 공통 계약(`proceed-gate.md`)을 쓰는 그 게이트가

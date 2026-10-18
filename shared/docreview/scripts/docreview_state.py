@@ -526,15 +526,20 @@ def cmd_begin_round(a) -> int:
     cap = cfg["rereview_cap"]["value"]
     snap = json.loads(Path(a.snapshot).read_text(encoding="utf-8"))
     n = int(st["round"]) + 1
+    if bool(a.extra_approval) != bool(a.extra_approval_source):
+        fail("extra_approval_source_missing" if a.extra_approval else "extra_approval_missing")
+        return 2
     if n <= 1 + cap:
         rr = n - 1
+        if a.extra_approval:
+            print("추가 승인 값이 왔지만 상한 아래라 쓰지 않았다", file=sys.stderr)
     else:
         if not a.extra_approval:
             _emit({"ok": False, "reason": "cap_reached", "round": n - 1,
                    "rereview_count": st["rereview_count"]})
             return 3
         rr = max(int(st["rereview_count"]), cap)   # 재리뷰 횟수는 줄지 않는다 — 상한을 낮춰도
-        st["extra_rounds"].append({"round": n, "quote": a.extra_approval})
+        st["extra_rounds"].append({"round": n, "quote": a.extra_approval, "source": a.extra_approval_source})
     st["round"] = n
     st["rereview_count"] = rr
     imm = set(anchors_matching(prof["immutable"], snap.get("sections", []))) if prof["immutable"] else set()
@@ -1181,6 +1186,7 @@ def gate_summary(st) -> dict:
     g["defers"] = sorted(i for i, f in st["findings"].items() if f.get("disposition") == "defer")
     g["dropped"] = sorted(i for i, f in fx.items() if f["state"] == "dropped")
     g["extra_rounds"] = st["extra_rounds"]
+    g["open_total"] = sum(len(g[row.name]) for row in GATE_ROWS if row.blocks)
     cur = st["rounds"].get(str(n), {})
     prev = st["rounds"].get(str(n - 1), {})
     g["stagnation"] = bool(n >= 2 and cur.get("open_lineages") and
@@ -1321,6 +1327,7 @@ COUNT_GLOSS = (
     ("reraise_unconsumed", "다시 올릴 대상이 없는 예약 %d건", "round"),
     ("escalated_unconsumed", "결정으로 올릴 대상이 없는 예약 %d건", "round"),
 )
+APPROVE_WITH_OPEN = "열린 지적 %d개를 두고 진행"
 NEXT_MODE_GLOSS = {"budget": "재리뷰 횟수 안에서", "extra_approval": "사용자가 연 추가 라운드"}
 # 렌더 첫 줄 경고의 사람말(쉬운 말 출력 설계 §3 · 계획 Q9). advisory 원문은 기계가 읽는 값이라(`fin.json` · 원장의
 # `route_report` · 테스트) 그대로 두고 렌더에서만 바꾼다. 행: (원문 정규식, 괄호 이름, 쉬운 문장) — 위에서부터 첫 일치.
@@ -1409,6 +1416,8 @@ def _first_line(g) -> str:
     warns = _plain_warns(warns)
     left = ["%s %d개" % (STATE_GLOSS.get(r.name, r.name), len(g[r.name])) for r in GATE_ROWS if g[r.name]]
     head = ("리뷰 %d라운드" if lead else "리뷰 %d라운드를 마쳤다") % g["round"]
+    if g.get("cap_reached") or g.get("stagnation"):
+        head += " — 열린 지적 %d개" % g["open_total"]
     s = head + (" — %s가 남았다." % " · ".join(left) if left else ("." if lead else " — 남은 것 없음."))
     if warns:
         s += " 경고 %d개: %s" % (len(warns), " · ".join(warns))
@@ -1463,7 +1472,7 @@ def _rg_expired(st, g, fid):
 
 def _rg_superseded(st, g, fid):
     d = st["decides"].get(fid) or {}
-    return ["- %s — 이어받은 결정: %s (%s)" % (_one(st["findings"][fid].get("summary")), d.get("superseded_by"), fid)]
+    return ["- %s — 다른 결정이 이어받았다 (%s · 이어받은 것 %s)" % (_one(st["findings"][fid].get("summary")), fid, d.get("superseded_by"))]
 
 
 def _rg_held_decide(st, g, fid):
@@ -1508,7 +1517,8 @@ def _rg_held_fix(st, g, fid):
 
 def _rg_blocking_ask(st, g, fid):
     f = st["findings"][fid]
-    return ["- %s — 이 답을 기다리는 수정: %s (%s)" % (_one(f.get("summary")), ", ".join(f.get("blocks") or []), fid)]
+    bl = f.get("blocks") or []
+    return ["- %s — 이 답을 기다리는 수정 %d개 (%s · 기다리는 것 %s)" % (_one(f.get("summary")), len(bl), fid, ", ".join(bl))]
 
 
 def _rg_ask_open(st, g, fid):
@@ -1587,13 +1597,13 @@ def render_gate(st, g) -> str:
     mode = NEXT_MODE_GLOSS.get(g["next_round_mode"], g["next_round_mode"])
     if g["two_stage"] and g["next_round_mode"] == "extra_approval":
         if g["approval_ready"]:
-            out.append("다음: " + ag + " 1단계 — 「추가 라운드 1회 열기」(사용자가 직접 쓴 말로 한 번 더 승인) 또는 「진행 옵션으로」")
+            out.append("다음: " + ag + " 1단계 — 「추가 라운드 1회 열기」(고른 선택지나 기타 칸에 쓴 말이 승인으로 남는다) 또는 「진행 옵션으로」")
         else:
-            out.append("다음: " + ag + " 1단계 — 남은 항목을 처리한 뒤 진행 옵션, 또는 「추가 라운드 1회 열기」(사용자가 직접 쓴 말로 한 번 더 승인)")
+            out.append("다음: " + ag + " 1단계 — 남은 항목을 처리하거나 「%s」, 또는 「추가 라운드 1회 열기」(고른 선택지나 기타 칸에 쓴 말이 승인으로 남는다)" % (APPROVE_WITH_OPEN % g["open_total"]))
     elif g["approval_ready"]:
         out.append("다음: " + ag + " — 진행 옵션을 고를 수 있다")
     elif g["two_stage"]:
-        out.append("다음: " + ag + " 1단계 — 남은 항목을 처리한 뒤 진행 옵션 (다음 라운드: %s)" % mode)
+        out.append("다음: " + ag + " 1단계 — 남은 항목을 처리하거나 「%s」 (다음 라운드: %s)" % (APPROVE_WITH_OPEN % g["open_total"], mode))
     else:
         out.append("다음: 리뷰 %d라운드 (%s)" % (g["round"] + 1, mode))
     if g.get("unreviewed_reason"):
@@ -1703,6 +1713,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.set_defaults(fn=cmd_init)
     x = P("begin-round"); x.add_argument("--state-dir", required=True)
     x.add_argument("--snapshot", required=True); x.add_argument("--extra-approval", default=None)
+    x.add_argument("--extra-approval-source", default=None, choices=("label", "typed"))
     x.add_argument("--detectors", type=int, default=None)
     x.set_defaults(fn=cmd_begin_round)
     x = P("profile-check"); x.add_argument("profile")
