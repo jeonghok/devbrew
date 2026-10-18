@@ -644,7 +644,7 @@ fi
 # 이 세 제외는 **좁히는 방향**이라 빠뜨리면 거짓 RED 로 시끄럽게 드러난다(넓히는
 # 방향의 열거와 달리 조용히 fail-open 하지 않는다).
 SHARED_BASENAMES="$(git ls-files -- 'shared/*' \
-  | grep -vE '^shared/tests/' | grep -vE '^shared/[^/]+\.md$' \
+  | grep -vE '^shared/tests/' | grep -vE '^shared/[^/]+\.md$' | grep -vE '(^|/)README\.md$' \
   | while IFS= read -r p; do [ -s "$p" ] && basename -- "$p"; done | sort -u)"
 n_sb="$(printf '%s\n' "$SHARED_BASENAMES" | grep -c . || true)"
 if [ "$n_sb" -ge 1 ]; then
@@ -652,6 +652,10 @@ if [ "$n_sb" -ge 1 ]; then
 else
   no "copy-of: 배포 대상 정본이 0건 도출됐다 — 아래 사본 후보 판별이 통째로 vacuous 하다"
 fi
+# 양성 짝: 하위 폴더의 README.md 는 정본 basename 이 아니고(플러그인 README 가 거짓 RED 가 되지 않는다),
+# 하위 폴더의 진짜 정본(shared/test-selection/ 의 스크립트)은 계속 도출된다.
+assert_eq "$(printf '%s\n' "$SHARED_BASENAMES" | grep -cx 'README.md' || true)" "0" "copy-of: 하위 폴더 README.md 는 정본 basename 에 들지 않는다"
+assert_eq "$(printf '%s\n' "$SHARED_BASENAMES" | grep -cx 'run-test-selection.sh' || true)" "1" "copy-of: 하위 폴더의 진짜 정본(run-test-selection.sh)은 계속 정본 basename 으로 도출된다"
 
 while IFS= read -r cand; do
   [ -n "$cand" ] || continue

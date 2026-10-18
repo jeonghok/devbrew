@@ -5,6 +5,9 @@ set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
 cd "$ROOT" || exit 1
+assert_ne() {  # assert_ne <a> <b> <msg> — 음성 대조: 두 값이 달라야 한다
+  if [ "$1" != "$2" ]; then ok "$3"; else no "$3"; printf '      같은 값: %s\n' "$1"; fi
+}
 NAMES="run-test-selection.sh diff-test-results.py compute-test-scope-candidates.sh resolve-baseline.sh"
 for n in $NAMES; do
   mode="$(git ls-files -s -- "plugins/quality-gates/scripts/$n" | awk '{print $1}')"
@@ -29,11 +32,31 @@ g1="$(bash plugins/quality-gates/scripts/run-test-selection.sh granularity shell
 g2="$(bash "$T/other/scripts/run-test-selection.sh" granularity shell 2>&1)"
 g3="$(bash "$T/deref/scripts/run-test-selection.sh" granularity shell 2>&1)"
 assert_eq "$g2|$g3" "$g1|$g1" "run-test-selection.sh: 세 경로가 같은 결과"
-r1="$(cd "$ROOT" && { bash plugins/quality-gates/scripts/compute-test-scope-candidates.sh 2>/dev/null; echo "rc=$?"; })"
-r2="$(cd "$ROOT" && { bash "$T/other/scripts/compute-test-scope-candidates.sh" 2>/dev/null; echo "rc=$?"; })"
-r3="$(cd "$ROOT" && { bash "$T/deref/scripts/compute-test-scope-candidates.sh" 2>/dev/null; echo "rc=$?"; })"
+# stderr 도 함께 잡는다 — 기준선이 없는 기계에서 셋이 모두 rc=4 로 같아지더라도 사유 문장이 다르면 갈린다.
+# 형제 없는 사본(음성 대조)은 설치본에서 한 개만 링크했을 때의 모양이고 r1 과 달라야 한다.
+mkdir -p "$T/lone/scripts"
+cp -L "$ROOT/plugins/quality-gates/scripts/compute-test-scope-candidates.sh" "$T/lone/scripts/"
+cp -L "$ROOT/plugins/quality-gates/scripts/diff-test-results.py" "$T/lone/scripts/"
+r1="$(cd "$ROOT" && { bash plugins/quality-gates/scripts/compute-test-scope-candidates.sh 2>&1; echo "rc=$?"; })"
+r2="$(cd "$ROOT" && { bash "$T/other/scripts/compute-test-scope-candidates.sh" 2>&1; echo "rc=$?"; })"
+r3="$(cd "$ROOT" && { bash "$T/deref/scripts/compute-test-scope-candidates.sh" 2>&1; echo "rc=$?"; })"
+r4="$(cd "$ROOT" && { bash "$T/lone/scripts/compute-test-scope-candidates.sh" 2>&1; echo "rc=$?"; })"
 assert_eq "$r2|$r3" "$r1|$r1" "compute-test-scope-candidates.sh: 세 경로가 같은 결과(형제 resolve-baseline.sh 를 자기 폴더에서 찾는다)"
-d1="$(python3 plugins/quality-gates/scripts/diff-test-results.py --help 2>&1 | head -3)"
-d3="$(python3 "$T/deref/scripts/diff-test-results.py" --help 2>&1 | head -3)"
-assert_eq "$d3" "$d1" "diff-test-results.py: 링크를 푼 사본도 같은 결과"
+assert_ne "$r4" "$r1" "compute-test-scope-candidates.sh: 형제 resolve-baseline.sh 가 없는 사본은 다른 결과다(음성 대조)"
+# diff-test-results.py 는 granularity_of 가 자기 폴더의 run-test-selection.sh 를 부르는 경로로 잰다(--help 는 거기 닿기 전에 끝난다).
+PROBE='import importlib.util, sys
+spec = importlib.util.spec_from_file_location("dtr", sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+try:
+    print(m.granularity_of("shell"))
+except SystemExit as e:
+    print("exit=%s" % (e.code,))'
+d1="$(python3 -I -c "$PROBE" "$ROOT/plugins/quality-gates/scripts/diff-test-results.py" 2>&1)"
+d2="$(python3 -I -c "$PROBE" "$T/other/scripts/diff-test-results.py" 2>&1)"
+d3="$(python3 -I -c "$PROBE" "$T/deref/scripts/diff-test-results.py" 2>&1)"
+d4="$(python3 -I -c "$PROBE" "$T/lone/scripts/diff-test-results.py" 2>&1)"
+assert_eq "$d1" "file" "diff-test-results.py: qg 링크 경로가 입도를 얻는다"
+assert_eq "$d2|$d3" "$d1|$d1" "diff-test-results.py: 다른 플러그인 링크 · 링크를 푼 사본도 같은 입도를 얻는다"
+assert_ne "$d4" "$d1" "diff-test-results.py: 형제 run-test-selection.sh 가 없는 사본은 입도를 얻지 못한다(음성 대조)"
 finish
