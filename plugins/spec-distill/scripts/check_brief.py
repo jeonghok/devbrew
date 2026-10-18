@@ -50,6 +50,7 @@ CLI subcommands (all print JSON):
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
@@ -1579,12 +1580,23 @@ def frontmatter_errors(text: str) -> list[str]:
     return errs
 
 
+@functools.lru_cache(maxsize=8)
+def _line_map(text: str) -> dict:
+    """글에서 줄 글자 -> 처음 나오는 줄 번호(1부터). frontmatter 와 펜스 안 줄은 넣지 않는다 — 거부는 펜스 밖 줄에서만 나므로 번호가
+    펜스 속 같은 글자의 줄을 가리키지 않는다(펜스를 여는 줄 자체는 넣는다: 들여 쓴 펜스 거부가 그 줄이다)."""
+    start = section6.body_start(text)
+    spans = section6.fence_spans(text)
+    out, pos = {}, 0
+    for n, line in enumerate(text.split("\n"), 1):
+        here, pos = pos, pos + len(line) + 1
+        if here >= start and not any(a < here < b for a, b in spans):
+            out.setdefault(line, n)
+    return out
+
+
 def _line_no(text: str, line: str) -> int:
-    """거부된 줄이 글에서 처음 나오는 줄 번호(1부터, 못 찾으면 0) — 거부 메시지는 줄 글자가 아니라 번호만 싣는다."""
-    try:
-        return text.split("\n").index(line) + 1
-    except ValueError:
-        return 0
+    """거부된 줄이 글에서 처음 나오는 펜스 밖 줄 번호(1부터) — 거부 메시지는 줄 글자가 아니라 번호만 싣는다."""
+    return _line_map(text).get(line, 0)
 
 
 def gate(path: Path) -> int:

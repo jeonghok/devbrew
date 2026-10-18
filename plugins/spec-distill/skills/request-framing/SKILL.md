@@ -259,23 +259,33 @@ AskUserQuestion({ questions: [
 그대로 남깁니다(`${CLAUDE_PLUGIN_ROOT}/templates/interview-seed-audit-template.md`). 줄 모양이 계약입니다 —
 «당신이 답한 것» 줄은 리뷰의 정답 출처이고(seed 프로필 `ground_truth`), `- 내가 읽은 것: 「…」 — 고름`
 줄은 `seed_provenance.py marks` 가 «(사용자 확인)» 의 근거로 읽습니다. 꼬리의 «사용자가 적은 말» 칸은 seed
-프로필의 정답 출처에 듭니다. «당신이 답한 것» 값과 «사용자가 적은 말» 값은 한 줄로 잇습니다 — 사용자 답을 Write 도구로 아래 펜스가 알리는 경로 `$STATE_DIR/said-r<n>.txt` 에 먼저 쓰고, 펜스의 `seed_review_log.py one-line` 출력을 그 칸에 적습니다. 여러 줄 답이 풀이 줄 모양의 줄을 만들지 못하게 하는 계약입니다. 이 펜스는 `## 상태` 블록을 **앞에 이어 붙여** 같은 `Bash` 호출에서 돕니다(`$SD` · `$STATE_DIR` 이 거기서 나옵니다).
+프로필의 정답 출처에 듭니다. «당신이 답한 것» 값과 «사용자가 적은 말» 값은 한 줄로 잇습니다 — 사용자 답을 Write 도구로 아래 첫 펜스가 알리는 경로 `$STATE_DIR/said-r<n>.txt` 에 먼저 쓰고, 둘째 펜스의 `seed_review_log.py one-line` 출력을 그 칸에 적습니다. 여러 줄 답이 풀이 줄 모양의 줄을 만들지 못하게 하는 계약입니다. 두 펜스는 `## 상태` 블록을 **앞에 이어 붙여** 같은 `Bash` 호출에서 돕니다(`$SD` · `$STATE_DIR` 이 거기서 나옵니다).
 
 ```bash
-# audit `## 2` 의 «당신이 답한 것» · «사용자가 적은 말» 값 하나 — 앞에 「## 상태」 블록을 이어 붙인다.
+# audit `## 2` 답 알림 — 앞에 「## 상태」 블록을 이어 붙인다. 옛 파일을 지우고 쓸 경로를 알린다(Write 도구가 이 경로에 쓴다).
 [ -n "${SD:-}" ] || { echo "[spec-distill] 플러그인 루트가 비었다 — 「## 상태」 블록을 이 펜스 앞에 이어 붙여라." >&2; exit 1; }
 if [ -n "${STATE_DIR:-}" ]; then
   mkdir -p "$STATE_DIR"
-  echo "답 파일 경로(Write 도구로 먼저 쓴다): $STATE_DIR/said-r<n>.txt"
+  rm -f "$STATE_DIR/said-r<n>.txt"
+  echo "답 파일 경로(Write 도구로 쓴다): $STATE_DIR/said-r<n>.txt"
+else
+  echo "[spec-distill] 리뷰 엔진 자리가 없어(거부 또는 빈 값) 답 파일을 둘 수 없다 — 사용자 답의 줄 나눔을 공백으로 이어 한 줄로 직접 적는다. 기록을 막지는 않는다." >&2
+fi
+```
+
+답을 그 경로에 쓴 뒤 읽는 펜스입니다(역시 `## 상태` 블록을 앞에 이어 붙입니다).
+
+```bash
+# audit `## 2` 답 읽기 — 한 줄로 이은 값을 내고 성공하면 파일을 지운다.
+[ -n "${SD:-}" ] || { echo "[spec-distill] 플러그인 루트가 비었다 — 「## 상태」 블록을 이 펜스 앞에 이어 붙여라." >&2; exit 1; }
+if [ -n "${STATE_DIR:-}" ]; then
   a_rc=0; a="$(python3 "$SD/scripts/seed_review_log.py" one-line "$STATE_DIR/said-r<n>.txt")" || a_rc=$?
   if [ "$a_rc" -ne 0 ]; then
-    echo "[spec-distill] 답 파일이 없거나 비었다(위 경로) — 답을 Write 도구로 쓴 뒤 이 펜스를 다시 돌려라. audit 에는 아직 적지 않는다." >&2
+    echo "[spec-distill] 답 파일이 없거나 비었다 — 답을 알린 경로에 Write 도구로 쓴 뒤 이 펜스를 다시 돌려라. audit 에는 아직 적지 않는다." >&2
   else
     printf '%s\n' "$a"
     rm -f "$STATE_DIR/said-r<n>.txt"
   fi
-else
-  echo "[spec-distill] 리뷰 엔진 자리가 없어(거부 또는 빈 값) 답 파일을 둘 수 없다 — 사용자 답의 줄 나눔을 공백으로 이어 한 줄로 직접 적는다. 기록을 막지는 않는다." >&2
 fi
 ```
 
@@ -315,7 +325,7 @@ premortem · coverage-mapper 넷이 거기 있는 장치이고, 이 skill 에는
 | 긴 초안 | `$AUDIT` 의 `## 3. 긴 초안` 절 | 압축 **직전** — 깎기 전에 여기 먼저 쓴다 |
 | interview-seed (`$SEED`) | 〃 | 압축 직후 — **게이트 직전 구조 검사보다 먼저** |
 | 덜어 낸 것 표 | `$AUDIT` 의 `## seed 에서 덜어 낸 것` 절 | 압축 직후 — seed 와 함께 쓴다 |
-| 리뷰 엔진 자리 `$STATE_DIR` — 엔진 원장 · 번들 둘(`$BUNDLE` · `$BUNDLE_RC`) · 리뷰어 산출물(`critic.txt` · `recritic.txt` · `$CODEX_YAML`) · 저자 편집 기준 사본(`$SEED_BASE`) · 동시 리뷰 표지(`reviewing-by` · `last-session`) · `## 2` 답 문구 파일(`said-r<n>.txt` — 한 줄로 이은 뒤 지운다) | `<state-root>/.docreview/<seed 이름>-<해시>/` | 리뷰 라운드마다 — 경로는 seed 의 절대경로의 순수 함수다 |
+| 리뷰 엔진 자리 `$STATE_DIR` — 엔진 원장 · 번들 둘(`$BUNDLE` · `$BUNDLE_RC`) · 리뷰어 산출물(`critic.txt` · `recritic.txt` · `$CODEX_YAML`) · 저자 편집 기준 사본(`$SEED_BASE`) · 동시 리뷰 표지(`reviewing-by` · `last-session`) · `## 2` 답 문구 파일(`said-r<n>.txt` — 질문 라운드마다, 한 줄로 이은 뒤 지운다) | `<state-root>/.docreview/<seed 이름>-<해시>/` | 리뷰 라운드마다 — 경로는 seed 의 절대경로의 순수 함수다 |
 
 **audit 과 seed 는 시점이 다르지만, 둘 다 승인 «전»에 디스크에 있어야 합니다.** audit 은
 확산 첫 항목부터, seed 는 압축 직후입니다 — 게이트 직전의 `check_seed.py` 가 둘 다

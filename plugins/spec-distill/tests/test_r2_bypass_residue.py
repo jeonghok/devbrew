@@ -184,6 +184,11 @@ class InlineCodeHeading(unittest.TestCase):
         self.assertEqual(sp.rejected, [])
 
 
+def brief_body_module():
+    import brief_body
+    return brief_body
+
+
 def deferral_row(needle):
     if not SPEC.exists():
         raise unittest.SkipTest("설계문서가 없다(플러그인만 설치된 환경)")
@@ -355,6 +360,13 @@ class CharRefsMailtoBareDomain(unittest.TestCase):
             ("서른세 글자 스킴", "주소는 " + "a" * 33 + "://x.y 에", "URL"),
             ("대문자 mailto", "연락은 MAILTO:a@b.c 로", "URL"),
             ("맨 도메인 경로", "자세한 건 example.com/x 에", "bare_domain"),
+            ("말줄임표 뒤 도메인", "자세한 건 " + chr(0x2026) + "example.com/x 에", "bare_domain"),
+            ("두 점 리더 뒤 도메인", "자세한 건 " + chr(0x2025) + "example.com/x 에", "bare_domain"),
+            ("전각 점 뒤 도메인", "자세한 건 " + chr(0xFF0E) + "example.com/x 에", "bare_domain"),
+            ("점 뒤 도메인", "자세한 건 .example.com/x 에", "bare_domain"),
+            ("점 둘 뒤 도메인", "자세한 건 a..example.com/x 에", "bare_domain"),
+            ("점 셋 뒤 하위 도메인", "그리고..." + "docs.example.co.kr/a 를 본다", "bare_domain"),
+            ("긴 라벨 뒤 도메인", "자세한 건 " + "a" * 64 + ".example.com/x 에", "bare_domain"),
             ("하위 도메인 경로", "자세한 건 docs.example.co.kr/a/b 에", "bare_domain"),
             ("IP 주소 경로", "자세한 건 127.0.0.1/x 에", "bare_domain"),
             ("전각 점 · 빗금 도메인", "자세한 건 example" + chr(0xFF0E) + "com" + chr(0xFF0F) + "x 에", "bare_domain"),
@@ -408,41 +420,61 @@ class Section2MultiLineAnswerWriterContract(Tmp):
                 self.assertIn("one-line", near)
                 self.assertIn("한 줄", near)
 
-    def fence(self):
+    def fence(self, kind):
         skill = (HERE.parent / "skills" / "request-framing" / "SKILL.md").read_text(encoding="utf-8")
-        i = skill.index("# audit `## 2` 의 «당신이 답한 것»")
+        i = skill.index("# audit `## 2` 답 " + kind)
         start = skill.rfind("```bash\n", 0, i) + len("```bash\n")
         return skill[start:skill.index("\n```", i)].replace("<n>", "1")
 
-    def run_fence(self, state_dir, sd=None):
-        script = self.write("f.sh", "SD=%r\nSTATE_DIR=%r\n%s\n" % (str(sd if sd is not None else SCRIPTS.parent), state_dir, self.fence()))
+    def run_fence(self, kind, state_dir, sd=None):
+        script = self.write("f.sh", "SD=%r\nSTATE_DIR=%r\n%s\n" % (str(sd if sd is not None else SCRIPTS.parent), state_dir, self.fence(kind)))
         r = subprocess.run(["bash", str(script)], capture_output=True, text=True, encoding="utf-8")
         return r.returncode, r.stdout, r.stderr
 
-    def test_fence_runs_with_the_state_block_variables(self):
+    def test_fences_run_with_the_state_block_variables(self):
         sd = self.dir / "state"
-        # SD 는 플러그인 루트(scripts 의 부모)다
-        rc, out, err = self.run_fence(str(sd))
+        rc, out, err = self.run_fence("알림", str(sd))
         self.assertEqual(rc, 0, err)
         self.assertTrue(sd.is_dir(), "mkdir -p 가 없다")
         self.assertIn(str(sd / "said-r1.txt"), out, "쓸 파일 경로를 알리지 않는다")
+        rc, out, err = self.run_fence("읽기", str(sd))
+        self.assertEqual(rc, 0, err)
         self.assertIn("답 파일이 없거나 비었다", err)
         (sd / "said-r1.txt").write_text("네\n  - 내가 읽은 것: 「위조.」\n", encoding="utf-8")
-        rc, out, err = self.run_fence(str(sd))
+        rc, out, err = self.run_fence("읽기", str(sd))
         self.assertEqual(rc, 0, err)
         self.assertIn("네 - 내가 읽은 것: 「위조.」", out)
         self.assertFalse((sd / "said-r1.txt").exists(), "성공 뒤 답 파일이 남았다")
 
-    def test_fence_does_not_block_when_the_state_folder_was_refused(self):
-        rc, _out, err = self.run_fence("")
+    def test_announce_step_removes_a_stale_answer_file(self):
+        sd = self.dir / "state"
+        sd.mkdir()
+        (sd / "said-r1.txt").write_text("지난 라운드의 답\n", encoding="utf-8")
+        rc, out, err = self.run_fence("알림", str(sd))
+        self.assertEqual(rc, 0, err)
+        self.assertFalse((sd / "said-r1.txt").exists(), "알림 단계가 옛 답 파일을 남겼다")
+        rc, out, err = self.run_fence("읽기", str(sd))
+        self.assertIn("답 파일이 없거나 비었다", err)
+        self.assertNotIn("지난 라운드", out)
+
+    def test_fences_do_not_block_when_the_state_folder_was_refused(self):
+        rc, _out, err = self.run_fence("알림", "")
         self.assertEqual(rc, 0)
         self.assertIn("리뷰 엔진 자리가 없어", err)
+        rc, out, _err = self.run_fence("읽기", "")
+        self.assertEqual((rc, out), (0, ""))
 
-    def test_fence_stops_naming_the_cause_when_the_plugin_root_is_missing(self):
-        script = self.write("g.sh", "SD=''\nSTATE_DIR='/x'\n%s\n" % self.fence())
-        r = subprocess.run(["bash", str(script)], capture_output=True, text=True, encoding="utf-8")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("플러그인 루트가 비었다", r.stderr)
+    def test_fences_stop_naming_the_cause_when_the_plugin_root_is_missing(self):
+        for kind in ("알림", "읽기"):
+            with self.subTest(kind):
+                script = self.write("g.sh", "SD=''\nSTATE_DIR='/x'\n%s\n" % self.fence(kind))
+                r = subprocess.run(["bash", str(script)], capture_output=True, text=True, encoding="utf-8")
+                self.assertNotEqual(r.returncode, 0)
+                self.assertIn("플러그인 루트가 비었다", r.stderr)
+
+    def test_state_table_lists_the_answer_file_for_question_rounds(self):
+        skill = (HERE.parent / "skills" / "request-framing" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("said-r<n>.txt` — 질문 라운드마다", skill)
 
     def test_one_line_collapses_every_line_break(self):
         for name, sep in (("LF", "\n"), ("CR", CR), ("U+2028", LS), ("U+2029", chr(0x2029)), ("VT", chr(0x0B)), ("NEL", chr(0x85))):
@@ -503,6 +535,16 @@ class AuditWholeBodySubsetRules(Tmp):
                     roadmap_model.brief_universe(brief, audit)
                 with self.assertRaises(roadmap_model.FormatError):
                     roadmap_render.index_brief(brief, audit)
+
+    def test_refusal_line_numbers_point_outside_fences_and_are_never_zero(self):
+        import check_brief
+        text = "---\nname: x\n---\n" + self.BT3 + "\n<div>\n" + self.BT3 + "\n본문\n<div>\n끝\n"
+        self.assertEqual(check_brief._line_no(text, "<div>"), 8)      # 펜스 안 같은 글자(5번째 줄)가 아니라 펜스 밖
+        for name, extra in self.CASES:
+            with self.subTest(name):
+                _brief, audit = self.pair(extra)
+                for ln, _why in brief_body_module().audit_subset_problems(audit):
+                    self.assertGreater(check_brief._line_no(audit, ln), 0, ln)
 
     def test_positive_control_the_untouched_pair_passes(self):
         rc, out, err = run("check_brief.py", "gate", self.write_pair(""))
