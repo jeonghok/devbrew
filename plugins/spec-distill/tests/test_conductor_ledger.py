@@ -877,3 +877,86 @@ class PrHandoffEdges(Repo):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewPack(Repo):
+    def branch(self, name, path, text):
+        sh(self.w, "checkout", "-q", "-b", name, "trunk")
+        (self.w / path).write_text(text, encoding="utf-8")
+        sh(self.w, "add", "-A")
+        sh(self.w, "commit", "-qm", name)
+        sh(self.w, "checkout", "-q", "trunk")
+
+    def test_pack(self):
+        self.branch("feature/a1", "x.txt", "a1\n")
+        self.branch("feature/a2", "x.txt", "a2\n")
+        out_dir = self.t / "pack"
+        old = os.environ.get("PATH", "")
+        os.environ["PATH"] = str(self.t)  # gh 없음 — handoffs.md 가 사유를 적는다
+        try:
+            rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1",
+                               "--merged", "/somewhere/merged", "--out", str(out_dir))
+        finally:
+            os.environ["PATH"] = old
+        self.assertEqual(rc, 0, out)
+        self.assertIn("review 폴더 밖", out)
+        self.assertIn("+a1", (out_dir / "pr.diff").read_text(encoding="utf-8"))
+        self.assertIn("+a2", (out_dir / "open-A2-feature_a2.diff").read_text(encoding="utf-8"))
+        self.assertIn("A2(feature/a2): x.txt", (out_dir / "conflicts.txt").read_text(encoding="utf-8"))
+        self.assertIn("gh 가 없다", (out_dir / "handoffs.md").read_text(encoding="utf-8"))
+        self.assertIn("/somewhere/merged", (out_dir / "README.txt").read_text(encoding="utf-8"))
+
+    def test_merged_branch_is_not_open(self):
+        self.branch("feature/a2", "y.txt", "y\n")
+        sh(self.w, "merge", "-q", "--no-ff", "feature/a2", "-m", "merge a2")
+        sh(self.w, "push", "-q", "origin", "trunk")
+        sh(self.w, "fetch", "-q", "origin")
+        self.branch("feature/a1", "x.txt", "a1\n")
+        out_dir = self.t / "pack2"
+        rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1", "--out", str(out_dir))
+        self.assertEqual(rc, 0, out)
+        self.assertFalse((out_dir / "open-A2-feature_a2.diff").exists())
+        self.assertEqual((out_dir / "conflicts.txt").read_text(encoding="utf-8").strip(), "충돌 없음")
+
+    def test_default_folder_has_no_outside_note(self):
+        self.branch("feature/a1", "x.txt", "a1\n")
+        rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1")
+        self.assertEqual(rc, 0, out)
+        first = out.splitlines()[0]
+        self.assertEqual(Path(first).parent.name, L.REVIEW_PACK_DIR)
+        self.assertNotIn("review 폴더 밖", out)
+        shutil.rmtree(first, ignore_errors=True)
+
+    def test_diff_failure_is_written_not_empty(self):
+        self.branch("feature/a1", "x.txt", "a1\n")
+        out_dir = self.t / "pack3"
+        real = L.git
+
+        def broken(cwd, *args):
+            if args and args[0] == "diff":
+                return 128, "", "boom"
+            return real(cwd, *args)
+        L.git = broken
+        try:
+            rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1",
+                               "--out", str(out_dir))
+        finally:
+            L.git = real
+        self.assertEqual(rc, 0, out)
+        self.assertIn("diff 를 만들지 못했다 — boom", (out_dir / "pr.diff").read_text(encoding="utf-8"))
+        self.assertIn("경고", out)
+
+    def test_existing_out_is_refused(self):
+        self.branch("feature/a1", "x.txt", "a1\n")
+        (self.t / "pack4").mkdir()
+        rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1",
+                           "--out", str(self.t / "pack4"))
+        self.assertEqual(rc, 2, out)
+
+    def test_worktree_path(self):
+        rc, out = self.cli("worktree-path", "--name", "a1")
+        self.assertEqual(rc, 0)
+        self.assertTrue(out.strip().endswith("/a1"), out)
+        self.assertTrue(out.strip().startswith(str(self.w.resolve())), out)
+        self.assertEqual(self.cli("worktree-path", "--name", "../x")[0], 2)
+        self.assertEqual(self.cli("worktree-path", "--name", "..")[0], 2)

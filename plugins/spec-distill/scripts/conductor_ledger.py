@@ -35,7 +35,7 @@ sys.path.insert(0, str(HERE))
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, NO_DEFAULT, RECORD_HEADING,  # noqa: E402
-                           RULINGS_HEADING, FormatError, approval_date, frontmatter, section_lines, unquote)
+                           RULINGS_HEADING, FormatError, approval_date, frontmatter, parse_roadmap, section_lines, unquote)
 from state_path import state_root  # noqa: E402
 
 DONE = ("머지됨", "끝남")
@@ -505,6 +505,38 @@ def _prs(root, b: dict):
     return out
 
 
+NAME_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+
+
+def _tip(root, branch: str):
+    for ref in ("refs/heads/" + branch, "refs/remotes/origin/" + branch):
+        rc, out, _e = git(root, "rev-parse", "--verify", "--quiet", ref + "^{commit}")
+        if rc == 0:
+            return out
+    return None
+
+
+def _roadmap_blocks(root, roadmap: str) -> list:
+    rc, _o, _e = git(root, "rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
+    if rc:
+        raise Fail(3, NO_DEFAULT)
+    rc, text, err = git(root, "show", "%s:%s" % (DEFAULT_REF, roadmap))
+    if rc:
+        raise Fail(3, "기본 브랜치에서 로드맵을 읽지 못했다: %s" % roadmap)
+    _m, blocks, _r, _k, errors = parse_roadmap(text)
+    if errors:
+        raise Fail(3, "로드맵 형식이 깨졌다: %s" % errors[0])
+    return blocks
+
+
+def _pack_diff(root, tip: str, warns: list, label: str) -> str:
+    rc, d, err = git(root, "diff", "%s...%s" % (DEFAULT_REF, tip))
+    if rc:
+        warns.append("%s diff 를 만들지 못했다 — %s" % (label, err[-160:]))
+        return "diff 를 만들지 못했다 — %s\n" % err[-160:]
+    return d + "\n"
+
+
 # ── 하위 명령 ────────────────────────────────────────────────────────────────
 
 def c_roadmaps(root, a) -> int:
@@ -895,6 +927,90 @@ def c_audit(root, a) -> int:
     return 0
 
 
+def c_review_pack(root, a) -> int:
+    blocks = _roadmap_blocks(root, a.roadmap)
+    tip = _tip(root, a.branch)
+    if tip is None:
+        raise Fail(3, "브랜치를 찾지 못했다: %s" % a.branch)
+    default_dir = mpath(root, a.roadmap).parent / REVIEW_PACK_DIR
+    out = Path(a.out) if a.out else default_dir / ("%s-%s" % (a.epic, datetime.datetime.now().strftime("%Y%m%d%H%M%S")))
+    try:
+        out.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        raise Fail(2, "이미 있는 폴더다 — 새 폴더를 쓴다: %s" % out)
+    except OSError as exc:
+        raise Fail(3, "묶음 폴더를 만들지 못했다: %s (%s)" % (out, type(exc).__name__))
+    files, conflicts, warns = [], [], []
+
+    def put(name, text):
+        write_atomic(out / name, text)
+        files.append(name)
+    put("pr.diff", _pack_diff(root, tip, warns, "pr.diff"))
+    for b in blocks:
+        for br in b.get("branches") or []:
+            other = _tip(root, br) if br != a.branch else None
+            if other is None:
+                continue
+            rc = git(root, "merge-base", "--is-ancestor", other, DEFAULT_REF)[0]
+            if rc == 0:
+                continue  # 이미 기본 브랜치에 들어갔다
+            if rc != 1:
+                warns.append("%s(%s) 가 기본 브랜치에 들어갔는지 읽지 못했다 — 열린 것으로 다룬다" % (b["id"], br))
+            name = "open-%s-%s.diff" % (b["id"], br.replace("/", "_"))
+            put(name, _pack_diff(root, other, warns, name))
+            rc, mt, err = git(root, "merge-tree", "--write-tree", "--name-only", tip, other)
+            if rc == 1:
+                names = []
+                for n in mt.splitlines()[1:]:
+                    if not n.strip():
+                        break  # 첫 빈 줄 뒤는 안내 글이다
+                    names.append(n.strip())
+                conflicts.append("%s(%s): %s" % (b["id"], br, " · ".join(names)))
+            elif rc != 0:
+                conflicts.append("%s(%s): 미리 보기 실패 — %s" % (b["id"], br, err[-160:]))
+                warns.append("%s(%s) 충돌 미리 보기를 만들지 못했다" % (b["id"], br))
+    put("conflicts.txt", ("\n".join(conflicts) or "충돌 없음") + "\n")
+    try:
+        lines = []
+        for b in blocks:
+            for br, items, _hit in _prs(root, b):
+                for it in items:
+                    sec = handoff_section(str(it.get("body") or ""))
+                    if sec:
+                        lines += ["### %s %s #%s(%s)" % (b["id"], br, it.get("number"), it.get("state")), ""] + sec + [""]
+        handoffs = "\n".join(lines) or "앞선 인계 절 없음"
+    except Fail as exc:
+        handoffs = "(%s)" % exc
+    put("handoffs.md", handoffs + "\n")
+    readme = ["이 폴더는 통합 리뷰 묶음이다 — %s 의 %s" % (a.epic, a.branch),
+              "합친 사본: %s" % (a.merged or "(넘기지 않았다)"),
+              "pr.diff — 기본 브랜치에서 갈라진 뒤 이 브랜치의 diff",
+              "open-<에픽>-<브랜치>.diff — 아직 기본 브랜치에 안 들어간 다른 에픽 브랜치의 diff",
+              "conflicts.txt — 이 브랜치와 열린 다른 브랜치를 합칠 때 충돌할 파일(git merge-tree)",
+              "handoffs.md — 앞선 PR 들의 `## 통합 리뷰 인계` 절"]
+    put("README.txt", "\n".join(readme) + "\n")
+    print(out)
+    for f in files:
+        print("  " + f)
+    for w in warns:
+        print("경고: " + w)
+    try:
+        inside = out.resolve().parent == default_dir.resolve()
+    except OSError:
+        inside = False
+    if not inside:
+        print("이 묶음은 지휘자의 review 폴더 밖에 있다 — `ledger cleanup` 이 지우지 않는다")
+    return 0
+
+
+def c_worktree_path(root, a) -> int:
+    if not a.name or not set(a.name) <= NAME_CHARS or a.name in (".", ".."):
+        raise Fail(2, "worktree 이름은 영숫자 · . · _ · - 만 쓴다: %r" % a.name)
+    main_checkout = Path(worktrees(root)[0]["path"])
+    print(main_checkout / repo_defaults.WORKTREE_HOME / a.name)
+    return 0
+
+
 def c_version(root, a) -> int:
     rc, msg = version_report(root, Path(a.plugin_json))
     print(msg)
@@ -939,6 +1055,10 @@ COMMANDS = {
     "pending": (c_pending, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic"))),
     "pr-handoffs": (c_pr_handoffs, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True))),
     "audit": (c_audit, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True))),
+    "review-pack": (c_review_pack, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True),
+                                              p.add_argument("--branch", required=True), p.add_argument("--merged"),
+                                              p.add_argument("--out"))),
+    "worktree-path": (c_worktree_path, lambda p: p.add_argument("--name", required=True)),
     "version": (c_version, lambda p: p.add_argument("--plugin-json", required=True)),
 }
 
