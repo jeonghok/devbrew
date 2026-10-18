@@ -424,5 +424,35 @@ class PlainLanguageReport(unittest.TestCase):
         self.assertIn("### [CRITICAL] 쉬운 한 문장 (제목 A1-1 · A1-1)\n", md)
 
 
+class TestAppendix(unittest.TestCase):
+    def _data(self, extra):
+        return {"meta": META_OK, "findings": [f("A1-1", "IMPORTANT", "S")] + extra}
+
+    def test_appendix_groups(self):
+        rej = f("A1-2", "SUGGESTION", "S", status="refuted",
+                refutation={"stage": "axis", "gate": "C", "reason": "취향", "facts": ["줄 3 확인"], "uncertain": False})
+        unc = f("A1-3", "SUGGESTION", "S", status="refuted",
+                refutation={"stage": "axis", "reason": "못 찾음", "uncertain": True})
+        dup = f("A1-4", "SUGGESTION", "S", status="refuted",
+                refutation={"stage": "dedup", "target_id": "A1-1", "reason": "흡수", "uncertain": False})
+        rc, md, err, _ = render(self._data([rej, unc, dup]))
+        self.assertEqual(rc, 0, err)
+        self.assertIn("## 목록에서 뺀 지적", md)
+        sec = md.split("## 목록에서 뺀 지적", 1)[1]
+        a = sec.split("### 기각", 1)[1].split("### 불확실", 1)[0]
+        b = sec.split("### 불확실", 1)[1].split("### 같은 지적에 흡수", 1)[0]
+        c = sec.split("### 같은 지적에 흡수", 1)[1]
+        self.assertIn("A1-2", a); self.assertIn("게이트 C", a); self.assertIn("확인한 사실: 줄 3 확인", a)
+        self.assertIn("A1-3", b)
+        self.assertNotIn("A1-3", a)
+        self.assertIn("A1-4", c); self.assertIn("A1-1", c)
+
+    def test_appendix_empty_groups_say_none(self):
+        rc, md, err, _ = render(self._data([]))
+        self.assertEqual(rc, 0, err)
+        sec = md.split("## 목록에서 뺀 지적", 1)[1]
+        self.assertEqual(sec.count("(없음)"), 3)
+
+
 if __name__ == "__main__":
     unittest.main()

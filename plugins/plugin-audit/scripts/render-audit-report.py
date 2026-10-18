@@ -95,6 +95,35 @@ def ev_text(ev: dict, with_claim: bool = False) -> str:
     return where(ev) + (" — " + body if body else "")
 
 
+STAGE_NAME = {"axis": "축 반박", "codex": "codex 반박", "deep": "심층검증"}
+
+
+def appendix_lines(all_findings: list) -> list:
+    """반박 단계가 목록에서 뺀 지적을 기각 · 불확실 · 흡수로 나눠 보인다."""
+    rejected, unsure, merged = [], [], []
+    for f in all_findings:
+        if f.get("status") != "refuted":
+            continue
+        r = f.get("refutation") or {}
+        if r.get("stage") == "dedup":
+            merged.append(f"- {f.get('id')} → {r.get('target_id')}에 흡수")
+            continue
+        head = f"- {f.get('title')} ({f.get('id')}) — {STAGE_NAME.get(r.get('stage'), val(r.get('stage')))}"
+        if r.get("gate"):
+            head += f" · 게이트 {r.get('gate')}"
+        entry = [f"{head}: {val(r.get('reason'))}"]
+        for fact in (r.get("facts") or []):
+            entry.append(f"  - 확인한 사실: {fact}")
+        (unsure if r.get("uncertain") is True else rejected).extend(entry)
+    out = ["## 목록에서 뺀 지적",
+           "반박 단계가 목록에서 뺀 지적이다 — 사용자가 반박을 다시 따져 볼 수 있게 남긴다.", ""]
+    for title, rows in (("기각", rejected), ("불확실", unsure), ("같은 지적에 흡수", merged)):
+        out.append(f"### {title}")
+        out += rows or ["(없음)"]
+        out.append("")
+    return out
+
+
 def render(data: dict) -> str | None:
     meta = data.get("meta", {})
     findings = [f for f in data.get("findings", []) if f.get("status") == "reported"]
@@ -209,6 +238,8 @@ def render(data: dict) -> str | None:
             lines.append(f"- **{q.get('id')}** (축{q.get('axis')}): {q.get('observation')} "
                          f"— *왜 갭이 아닌가*: {q.get('why_not_gap')}")
         lines.append("")
+
+    lines += appendix_lines(data.get("findings", []))
 
     if degraded:
         lines.append("## 결손 (degraded)")

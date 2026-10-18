@@ -145,7 +145,7 @@ const REFUTE_SCHEMA = {
         required: ['finding_id', 'verdict', 'reason'],
         properties: {
           finding_id: { type: 'string' },
-          verdict: { type: 'string', enum: ['refuted', 'survives'] },
+          verdict: { type: 'string', enum: ['refuted', 'survives', 'uncertain'] },
           gate: { type: 'string', enum: ['A', 'B', 'C', 'D', 'E', 'F'] },
           reason: { type: 'string' },
           facts: { type: 'array', items: { type: 'string' } },
@@ -163,6 +163,7 @@ const DEEP_SCHEMA = {
   properties: {
     finding_id: { type: 'string' },
     refuted: { type: 'boolean' },
+    uncertain: { type: 'boolean' },
     reason: { type: 'string' },
   },
 }
@@ -453,7 +454,8 @@ const refutePrompt = (findings, label) => [
   '# 적대적 검증 — 아래 갭들을 **반박하라**',
   '',
   '너의 **기본 verdict는 `refuted`다.** 갭이 살아남는 것은 예외이지 기본값이 아니다.',
-  '확신이 없으면 `refuted`다. 다음 게이트 중 **하나라도** 실패하면 kill하라:',
+  '다음 게이트 중 **하나라도** 실패하면 kill하라. 읽은 것으로 살리지도 죽이지도 못하면 `uncertain` 을',
+  '내고 어느 게이트에서 막혔는지와 이유를 적어라 — 목록에서는 빠지고 리포트 부록에 「불확실」로 따로 보인다:',
   '',
   '여섯 게이트 A–F는 네 시스템 프롬프트(persona)와 **의미 단위로 일치**한다. `refutation.gate`에',
   '어느 게이트가 죽였는지(A–F) 기록하라.',
@@ -550,9 +552,12 @@ for (const r of alive) {
       rec.status = 'reported'
       rec.deep_verified = null
       rec.unverified = true
-    } else if (v && v.verdict === 'refuted') {
+    } else if (v && (v.verdict === 'refuted' || v.verdict === 'uncertain')) {
       rec.status = 'refuted'
-      rec.refutation = { stage: 'axis', gate: v.gate, reason: v.reason, facts: v.facts || [] }
+      rec.refutation = {
+        stage: 'axis', gate: v.gate, reason: v.reason, facts: v.facts || [],
+        uncertain: v.verdict === 'uncertain',
+      }
       rec.deep_verified = null
     } else if (!v) {
       // The refuter answered but skipped this finding. Silence is not a verdict.
@@ -587,9 +592,12 @@ if (codexFindings.length) {
   for (const f of codexFindings) {
     const v = cv.get(f.id)
     const rec = { ...f, source: 'codex' }
-    if (v && v.verdict === 'refuted') {
+    if (v && (v.verdict === 'refuted' || v.verdict === 'uncertain')) {
       rec.status = 'refuted'
-      rec.refutation = { stage: 'codex', gate: v.gate, reason: v.reason, facts: v.facts || [] }
+      rec.refutation = {
+        stage: 'codex', gate: v.gate, reason: v.reason, facts: v.facts || [],
+        uncertain: v.verdict === 'uncertain',
+      }
       rec.deep_verified = null
     } else {
       rec.status = 'reported'
@@ -627,6 +635,7 @@ for (const f of findings) {
       stage: 'dedup',
       target_id: seen.get(key),
       reason: seen.get(key) + '에 흡수 (동일 source·축·file:line·제목)',
+      uncertain: false,
     }
     f.deep_verified = null
   } else {
@@ -662,7 +671,7 @@ const deepVotes = await parallel(
         '# 심층검증 — 렌즈: ' + lens.key,
         '',
         '이 갭은 이미 축별 반박을 **통과했다**. 너는 **두 번째 렌즈**다.',
-        '**기본 verdict는 refuted다.** 확신이 없으면 refute하라.',
+        '**기본 verdict는 refuted다.** 확신이 없으면 `refuted: true` 와 `uncertain: true` 를 함께 내라.',
         '',
         lens.ask,
         '',
@@ -673,7 +682,7 @@ const deepVotes = await parallel(
         label: 'deep:' + lens.key + ':' + f.id,
         phase: '심층검증',
         schema: DEEP_SCHEMA,
-      }).then((v) => (v ? { id: f.id, refuted: v.refuted, lens: lens.key, reason: v.reason } : null)),
+      }).then((v) => (v ? { id: f.id, refuted: v.refuted, uncertain: v.uncertain === true, lens: lens.key, reason: v.reason } : null)),
     ),
   ),
 )
@@ -695,7 +704,10 @@ for (const f of deepTargets) {
   const refutes = votes.filter((v) => v.refuted).length
   if (refutes >= 2) {
     f.status = 'refuted'
-    f.refutation = { stage: 'deep', reason: '심층검증 3표 중 ' + refutes + '표 refute', votes }
+    f.refutation = {
+      stage: 'deep', reason: '심층검증 3표 중 ' + refutes + '표 refute', votes,
+      uncertain: votes.filter((x) => x.refuted).every((x) => x.uncertain),
+    }
     f.deep_verified = null
   } else {
     // refuter가 죽었거나(unverified) 판정을 누락한 finding은 축 검증을 못 받았다 —

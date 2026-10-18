@@ -33,5 +33,21 @@ class TestAgentsGeneric(unittest.TestCase):
             self.assertNotIn("disallowedTools", fm, f"{name} uses denylist (fail-open in time)")
 
 
+    def test_auditor_never_drops(self):
+        body = read("plugin-auditor.md")
+        self.assertNotIn("or drop it", body)
+        self.assertNotIn("or drop the gap", body)
+        self.assertIn("new_open_questions", body)
+        self.assertIn("why_not_gap", body)
+
+    def test_refuter_marks_uncertain_separately(self):
+        body = read("audit-refuter.md")
+        self.assertNotIn("If you are uncertain, refute.", body)
+        self.assertIn("verdict: uncertain", body)
+        fm = body.split("---")[1]
+        line = next(l for l in fm.splitlines() if l.strip().startswith("tools:"))
+        self.assertEqual(line.strip(), "tools: Read, Grep, Glob, WebSearch, WebFetch")
+
+
 if __name__ == "__main__":
     unittest.main()

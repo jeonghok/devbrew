@@ -110,6 +110,27 @@ class TestAssemble(unittest.TestCase):
             meta=BASE_META, assigned={"assigned_d": [], "assigned_oq": []})
         self.assertTrue(any(n.get("why_not_gap") for n in data["new_open_questions"]), "gate-E refuted not routed to NOQ")
 
+    def test_uncertain_gate_e_goes_to_noq_and_appendix(self):
+        f = {"id": "A2-9", "axis": 2, "source": "claude", "status": "refuted",
+             "refutation": {"stage": "axis", "gate": "E", "reason": "범위 판단 불가", "uncertain": True},
+             "evidence": [{"file": "x", "line": 1, "quote": "q"}], "severity": "SUGGESTION"}
+        r, data = run(
+            workflow_return={"findings": [f], "d_verdicts": [], "oq_answers": [],
+                             "new_open_questions": [], "axis_failures": [], "degraded_events": []},
+            codex_side={"d_verdicts": [], "oq_answers": [], "new_open_questions": []},
+            meta=BASE_META, assigned={"assigned_d": [], "assigned_oq": []})
+        n = [q for q in data["new_open_questions"] if q["id"] == "A2-9"]
+        self.assertTrue(n, "uncertain gate-E NOQ 미생성")
+        self.assertEqual(n[0].get("reason_code"), "gate_e_scope_out")
+        kept = [x for x in data["findings"] if x["id"] == "A2-9"]
+        self.assertEqual(kept[0]["refutation"]["uncertain"], True)
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "data.json"
+            p.write_text(json.dumps(data), encoding="utf-8")
+            v = SCRIPT.parent / "validate-audit-data.py"
+            rv = subprocess.run([sys.executable, str(v), "--data", str(p)], capture_output=True, text=True)
+            self.assertEqual(rv.returncode, 0, rv.stdout + rv.stderr)
+
     def test_meta_and_degraded_attached(self):
         r, data = run(
             workflow_return={"findings": [], "d_verdicts": [], "oq_answers": [],

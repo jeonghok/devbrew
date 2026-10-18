@@ -354,3 +354,70 @@ test('감사자가 쓴 plain 이 Workflow 결과의 finding 에 그대로 남는
   const f = result.findings.find((x) => x.id === 'A1-1')
   assert.equal(f.plain, '쉬운 한 문장')
 })
+
+test('REFUTE_SCHEMA verdict enum includes uncertain', async () => {
+  const { captured } = await runWorkflow(WF, { stubAgent: stubOneFinding() })
+  const item = captured['검증'].properties.verdicts.items
+  const en = item.properties.verdict.enum
+  for (const v of ['refuted', 'survives', 'uncertain']) assert.ok(en.includes(v), v)
+  assert.equal(item.if.properties.verdict.const, 'refuted')
+  assert.deepEqual(item.then.required, ['gate'])
+})
+
+function axisVerdictStub(verdict) {
+  const base = stubOneFinding('SUGGESTION')
+  return async (prompt, o) => {
+    if (o.phase === '검증') return { verdicts: [verdict] }
+    return base(prompt, o)
+  }
+}
+
+test('uncertain verdict keeps the finding off the list but marked', async () => {
+  const { result } = await runWorkflow(WF, {
+    stubAgent: axisVerdictStub({ finding_id: 'A1-1', verdict: 'uncertain', reason: '근거 줄을 못 찾음' }),
+  })
+  const f = result.findings.find((x) => x.id === 'A1-1')
+  assert.equal(f.status, 'refuted')
+  assert.equal(f.refutation.uncertain, true)
+  assert.equal(f.refutation.stage, 'axis')
+  const { result: r2 } = await runWorkflow(WF, {
+    stubAgent: axisVerdictStub({ finding_id: 'A1-1', verdict: 'refuted', gate: 'A', reason: '틀림' }),
+  })
+  const g = r2.findings.find((x) => x.id === 'A1-1')
+  assert.equal(g.status, 'refuted')
+  assert.equal(g.refutation.uncertain, false)
+})
+
+test('deep kill by uncertain votes is marked uncertain', async () => {
+  const mk = (flags) => {
+    const base = stubOneFinding('IMPORTANT')
+    let i = 0
+    return async (prompt, o) => {
+      if (o.phase === '검증') return { verdicts: [{ finding_id: 'A1-1', verdict: 'survives', reason: 'ok' }] }
+      if (o.phase === '심층검증') return { finding_id: 'A1-1', refuted: true, reason: 'r', ...flags[i++ % flags.length] }
+      return base(prompt, o)
+    }
+  }
+  const both = await runWorkflow(WF, { stubAgent: mk([{ uncertain: true }, { uncertain: true }]) })
+  const f = both.result.findings.find((x) => x.id === 'A1-1')
+  assert.equal(f.refutation.stage, 'deep')
+  assert.equal(f.refutation.uncertain, true)
+  const one = await runWorkflow(WF, { stubAgent: mk([{ uncertain: true }, {}]) })
+  const g = one.result.findings.find((x) => x.id === 'A1-1')
+  assert.equal(g.refutation.stage, 'deep')
+  assert.equal(g.refutation.uncertain, false)
+})
+
+test('refute prompt no longer says refute when unsure', async () => {
+  const { calls } = await runWorkflow(WF, {
+    stubAgent: async (prompt, o) => {
+      if (o.phase === '검증') return { verdicts: [{ finding_id: 'A1-1', verdict: 'survives', reason: 'ok' }] }
+      return stubOneFinding('IMPORTANT')(prompt, o)
+    },
+  })
+  const rp = calls.find((c) => c.opts.phase === '검증').prompt
+  assert.ok(!rp.includes('확신이 없으면 `refuted`다'))
+  assert.ok(rp.includes('uncertain'))
+  const dp = calls.find((c) => c.opts.phase === '심층검증').prompt
+  assert.ok(!dp.includes('확신이 없으면 refute하라'))
+})
