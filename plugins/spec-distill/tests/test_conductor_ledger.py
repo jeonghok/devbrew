@@ -637,7 +637,8 @@ class PrHandoffs(Repo):
     def _audit_with_gh(self, prs):
         stub = self.t / "bin"
         stub.mkdir()
-        (stub / "gh").write_text("#!/bin/sh\necho '%s'\n" % json.dumps(prs), encoding="utf-8")
+        (stub / "pr.json").write_text(json.dumps(prs), encoding="utf-8")
+        (stub / "gh").write_text("#!/bin/sh\ncat '%s'\n" % (stub / "pr.json"), encoding="utf-8")
         (stub / "gh").chmod(0o755)
         old = os.environ.get("PATH", "")
         os.environ["PATH"] = str(stub) + os.pathsep + old
@@ -655,6 +656,136 @@ class PrHandoffs(Repo):
         rc, out = self._audit_with_gh([{"number": 7, "state": "OPEN", "body": "- 리뷰 뒤 반영(리뷰 라운드를 거치지 않았다): 오타\n"}])
         self.assertEqual(rc, 0, out)
         self.assertIn("리뷰 뒤 반영 1개", out)
+
+
+TABLE = "## 번호 대조\n\n| 번호 | 반영/기각 | 자리 |\n|---|---|---|\n%s\n"
+
+
+class AuditReadFailures(unittest.TestCase):
+    """읽지 못한 것은 「없음」이 아니라 「셀 수 없음」이다."""
+    def run_audit(self, docs, report=None, prs=None):
+        from unittest import mock
+        block = {"id": "A1", "stage": "설계 중", "tip": "abc", "specs": list(docs), "branches": ["b1"]}
+        rep = report or {"blocks": [block], "handoffs": []}
+        buf = io.StringIO()
+        with mock.patch.object(L, "_status", return_value=rep), \
+                mock.patch.object(L, "_doc", side_effect=lambda r, b, p: docs.get(p)), \
+                mock.patch.object(L, "_prs", return_value=prs if prs is not None else []), \
+                redirect_stdout(buf):
+            rc = L.main(["--root", ".", "audit", "--roadmap", "r.md", "--epic", "A1"])
+        return rc, buf.getvalue()
+
+    def test_unreadable_spec_is_not_none(self):
+        rc, out = self.run_audit({"s.md": None})
+        self.assertEqual(rc, 0)
+        self.assertIn("셀 수 없음", out)
+        self.assertNotIn("감사 후보 없음", out)
+
+    def test_nothing_found_when_all_read(self):
+        rc, out = self.run_audit({"s.md": "# 설계\n"})
+        self.assertIn("감사 후보 없음", out)
+
+    def test_unknown_stage_is_unreadable(self):
+        rep = {"blocks": [{"id": "A1", "stage": "알 수 없음", "reason": "기본 브랜치를 못 읽었다", "specs": []}],
+               "handoffs": []}
+        rc, out = self.run_audit({}, report=rep)
+        self.assertIn("셀 수 없음", out)
+        self.assertNotIn("감사 후보 없음", out)
+
+    def test_rejected_count_is_exact(self):
+        two = TABLE % "| C1 | 기각 | 이유 가 |\n| C2 | 기각 | 이유 나 |"
+        _rc, out = self.run_audit({"s.md": two})
+        self.assertIn("기각한 번호(s.md) 2개", out)
+        self.assertNotIn("받지 않기로 한", out)
+        zero = TABLE % "| C1 | 반영 | §1 |"
+        _rc, out = self.run_audit({"s.md": zero})
+        self.assertNotIn("기각한 번호", out)
+        self.assertIn("감사 후보 없음", out)
+
+    def test_broken_giver_and_unreadable_receiver_are_reported(self):
+        hs = [{"giver": "A2", "spec": "g.md", "item": "넘긴 항목입니다 길게 길게", "receiver": "A1",
+               "state": "셀 수 없음", "basis": "A1 지휘 기록 읽기 불가"}]
+        block = {"id": "A1", "stage": "설계 중", "tip": "abc", "specs": ["s.md"], "branches": []}
+        _rc, out = self.run_audit({"s.md": "# 설계\n"}, report={"blocks": [block], "handoffs": hs})
+        self.assertIn("줄어든 넘김 의심(셀 수 없음)", out)
+        hs[0]["state"] = "열림"
+        _rc, out = self.run_audit({"s.md": None}, report={"blocks": [block], "handoffs": hs})
+        self.assertIn("받는 쪽 설계문서를 읽지 못했다", out)
+
+    def test_shrunk_handoff_is_listed(self):
+        hs = [{"giver": "A2", "spec": "g.md", "item": "전혀 다른 넘김 항목이 여기 있다 길게", "receiver": "A1",
+               "state": "열림", "basis": ""}]
+        block = {"id": "A1", "stage": "설계 중", "tip": "abc", "specs": ["s.md"], "branches": []}
+        _rc, out = self.run_audit({"s.md": "# 설계\n"}, report={"blocks": [block], "handoffs": hs})
+        self.assertIn("줄어든 넘김 의심 1개", out)
+
+    def test_status_failure_is_rc3_not_missing_epic(self):
+        from unittest import mock
+        buf = io.StringIO()
+        rep = {"blocks": [], "exit": 3, "unknown_reasons": ["기본 브랜치를 못 읽었다"], "format_errors": []}
+        with mock.patch.object(L.subprocess, "run") as run, redirect_stdout(buf):
+            run.return_value = mock.Mock(stdout=json.dumps(rep), stderr="", returncode=3)
+            rc = L.main(["--root", ".", "audit", "--roadmap", "r.md", "--epic", "A1"])
+        self.assertEqual(rc, 3)
+        self.assertIn("기본 브랜치를 못 읽었다", buf.getvalue())
+        self.assertNotIn("로드맵에 없다", buf.getvalue())
+
+
+class VersionReport(unittest.TestCase):
+    def check(self, inst, repo):
+        d = Path(tempfile.mkdtemp())
+        try:
+            subprocess.run(["git", "init", "-q", str(d)], env=ENV, check=True)
+            if repo is not None:
+                (d / "plugin.json").write_text(repo, encoding="utf-8")
+            sh(d, "add", "-A")
+            (d / "installed.json").write_text(inst, encoding="utf-8")
+            return L.version_report(d, d / "installed.json")
+        finally:
+            shutil.rmtree(str(d))
+
+    def test_forms(self):
+        def mk(v):
+            return json.dumps({"name": "p", "version": v})
+        self.assertEqual(self.check(mk("7.3.1-rc1"), mk("7.3.1"))[0], 0)
+        self.assertEqual(self.check(mk("v7.3.0"), mk("7.3.0"))[0], 0)
+        self.assertEqual(self.check(mk("7.3"), mk("7.3.0"))[0], 0)
+        rc, msg = self.check(mk("7.3"), mk("7.3.1"))
+        self.assertEqual(rc, 1)
+        self.assertIn("옛 판", msg)
+        rc, msg = self.check(mk("8.0.0"), mk("7.3.1"))
+        self.assertEqual(rc, 0)
+        self.assertIn("새 판", msg)
+
+    def test_uncomparable_is_never_ok(self):
+        ok = json.dumps({"name": "p", "version": "1.0.0"})
+        for inst, repo in [(json.dumps({"version": "1.0.0"}), ok), ("[]", ok),
+                           (json.dumps({"name": "p", "version": "dev"}), ok),
+                           (ok, json.dumps({"name": "p", "version": "x"})), (ok, "{깨짐")]:
+            rc, msg = self.check(inst, repo)
+            self.assertEqual(rc, 1, (inst, repo, msg))
+            self.assertIn("판을 비교하지 못했다", msg)
+
+    def test_no_tracked_source_is_ok_line(self):
+        rc, msg = self.check(json.dumps({"name": "p", "version": "1.0.0"}), None)
+        self.assertEqual(rc, 0)
+        self.assertIn("플러그인 소스가 없다", msg)
+
+
+class NoPrBranch(Repo):
+    def test_no_pr_line(self):
+        stub = self.t / "bin"
+        stub.mkdir()
+        (stub / "gh").write_text("#!/bin/sh\necho '[]'\n", encoding="utf-8")
+        (stub / "gh").chmod(0o755)
+        old = os.environ.get("PATH", "")
+        os.environ["PATH"] = str(stub) + os.pathsep + old
+        try:
+            rc, out = self.cli("pr-handoffs", "--roadmap", RM, "--epic", "A1")
+        finally:
+            os.environ["PATH"] = old
+        self.assertEqual(rc, 0, out)
+        self.assertIn("feature/a1 PR 없음", out)
 
 
 if __name__ == "__main__":

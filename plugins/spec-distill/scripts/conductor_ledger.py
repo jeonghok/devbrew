@@ -21,6 +21,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -380,35 +381,77 @@ def carried(item: str, receiver_text: str) -> bool:
     return bool(key) and key in _plain("\n".join(body))
 
 
-def _version_tuple(v: str):
-    return tuple(int(p) if p.isdigit() else 0 for p in v.split("."))
+def _version_parts(v):
+    """앞쪽 숫자 마디(`7.3.1-rc1` → (7,3,1), `v7.3` → (7,3)). 읽을 수 없으면 None."""
+    m = re.match(r"^v?(\d+(?:\.\d+)*)", str(v).strip())
+    return tuple(int(p) for p in m.group(1).split(".")) if m else None
 
 
-def version_gap(root, plugin_json: Path):
-    """설치본 플러그인과 같은 이름의 플러그인 소스를 이 레포가 추적하고 그쪽이 더 새 판이면 그 사실 한 줄."""
+def version_report(root, plugin_json: Path):
+    """(rc, 한 줄). rc 1 = 설치본이 옛 판이거나 비교하지 못했다."""
+    def cannot(why):
+        return 1, "판을 비교하지 못했다 — %s" % why
     try:
         inst = json.loads(Path(plugin_json).read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return "설치본 플러그인 버전을 읽지 못했다: %s" % plugin_json
-    rc, out, _e = git(root, "ls-files", "--", "*plugin.json")
-    for rel in out.splitlines() if rc == 0 else []:
+        return cannot("설치본 plugin.json 을 읽지 못했다: %s" % plugin_json)
+    if not isinstance(inst, dict) or not str(inst.get("name") or "").strip():
+        return cannot("설치본 plugin.json 에 이름이 없다")
+    name = str(inst["name"]).strip()
+    iv = _version_parts(inst.get("version", ""))
+    if iv is None:
+        return cannot("설치본 판 %r 을 읽지 못했다" % inst.get("version"))
+    rc, out, err = git(root, "ls-files", "--", "*plugin.json")
+    if rc:
+        return cannot("추적 파일 목록을 읽지 못했다: %s" % err)
+    broken = []
+    for rel in out.splitlines():
         try:
             src = json.loads((Path(root) / rel).read_text(encoding="utf-8"))
         except (OSError, ValueError):
+            broken.append(rel)
             continue
-        if src.get("name") == inst.get("name") and _version_tuple(str(src.get("version", ""))) > _version_tuple(str(inst.get("version", ""))):
-            return ("설치된 %s %s 이 레포 사본 %s 보다 옛 판이다 — 레포 사본의 기능(예: 묶음 대조 · 「여기서 계속」 · 기각 번호 보이기)이 "
-                    "없을 수 있다. 플러그인을 갱신하거나 레포 사본으로 지휘한다" % (inst.get("name"), inst.get("version"), src.get("version")))
-    return None
+        if not isinstance(src, dict):
+            broken.append(rel)
+            continue
+        if str(src.get("name") or "").strip() != name:
+            continue
+        sv = _version_parts(src.get("version", ""))
+        if sv is None:
+            return cannot("레포 사본 판 %r 을 읽지 못했다" % src.get("version"))
+        n = max(len(iv), len(sv))
+        a_, b_ = iv + (0,) * (n - len(iv)), sv + (0,) * (n - len(sv))
+        if b_ > a_:
+            extra = (" — 레포 사본의 기능(예: 묶음 대조 · 「여기서 계속」 · 기각 번호 보이기)이 없을 수 있다"
+                     if name == "spec-distill" else "")
+            return 1, ("설치된 %s %s 이 레포 사본 %s 보다 옛 판이다%s. 플러그인을 갱신하거나 레포 사본으로 지휘한다"
+                       % (name, inst.get("version"), src.get("version"), extra))
+        if a_ > b_:
+            return 0, "설치된 %s %s 이 레포 사본 %s 보다 새 판이다" % (name, inst.get("version"), src.get("version"))
+        return 0, "설치본과 레포 사본의 판이 맞다(%s)" % inst.get("version")
+    if broken:
+        return cannot("추적 중인 plugin.json 을 읽지 못했다: %s" % " · ".join(broken[:3]))
+    return 0, "레포에 같은 이름(%s)의 플러그인 소스가 없다" % name
+
+
+def version_gap(root, plugin_json: Path):
+    rc, msg = version_report(root, plugin_json)
+    return msg if rc else None
 
 
 def _status(root, roadmap: str) -> dict:
     p = subprocess.run([sys.executable, str(HERE / "roadmap_status.py"), "--json", roadmap], cwd=str(root),
                        capture_output=True, encoding="utf-8", errors="replace")
     try:
-        return json.loads(p.stdout)
+        rep = json.loads(p.stdout)
     except ValueError:
         raise Fail(3, "상태 계산을 읽지 못했다(rc %d): %s" % (p.returncode, p.stderr.strip()[-200:]))
+    if not isinstance(rep, dict):
+        raise Fail(3, "상태 계산 출력의 모양이 다르다")
+    if rep.get("exit") in (3, 4) and not any(x.get("stage") for x in rep.get("blocks") or []):
+        why = list(rep.get("unknown_reasons") or []) + list(rep.get("format_errors") or [])
+        raise Fail(3, "상태를 셀 수 없다 — %s" % (" · ".join(str(w) for w in why) or "이유 없음(rc %s)" % rep.get("exit")))
+    return rep
 
 
 def _block(report: dict, epic: str) -> dict:
@@ -418,10 +461,14 @@ def _block(report: dict, epic: str) -> dict:
     return b
 
 
-def _doc(root, b: dict, path: str) -> str:
-    ref = b.get("tip") or DEFAULT_REF
-    _r, text, _e = git(root, "show", "%s:%s" % (ref, path))
-    return text
+def _ref(b: dict) -> str:
+    return b.get("tip") or DEFAULT_REF
+
+
+def _doc(root, b: dict, path: str):
+    """문서 글. 읽지 못하면 None — 빈 글과 다른 사실이다."""
+    rc, text, _e = git(root, "show", "%s:%s" % (_ref(b), path))
+    return text if rc == 0 else None
 
 
 def _gh() -> str:
@@ -431,13 +478,17 @@ def _gh() -> str:
     return exe
 
 
+PR_LIMIT = 20
+
+
 def _prs(root, b: dict):
+    """[(브랜치, [PR…], 한도에 닿았는가)]. 브랜치가 없으면 []."""
     exe = _gh()
     out = []
     for br in b.get("branches") or [s["branch"] for s in b.get("branch_states") or []]:
         p = subprocess.run([exe, "pr", "list", "--state", "all", "--head", br, "--json", "number,state,body",
-                            "--limit", "5"], cwd=str(root), capture_output=True, encoding="utf-8", errors="replace",
-                           env=dict(os.environ, GH_PROMPT_DISABLED="1", NO_COLOR="1"))
+                            "--limit", str(PR_LIMIT)], cwd=str(root), capture_output=True, encoding="utf-8",
+                           errors="replace", env=dict(os.environ, GH_PROMPT_DISABLED="1", NO_COLOR="1"))
         if p.returncode:
             raise Fail(4, "PR 인계를 읽지 못했다 — gh 실패(%s). 설계문서 `## 미룸` 표와 `## 지휘 기록` 을 쓴다"
                        % p.stderr.strip()[-160:])
@@ -445,7 +496,10 @@ def _prs(root, b: dict):
             items = json.loads(p.stdout)
         except ValueError:
             raise Fail(4, "PR 인계를 읽지 못했다 — gh 출력 모양이 다르다. 설계문서 `## 미룸` 표와 `## 지휘 기록` 을 쓴다")
-        out += [(br, it) for it in items if isinstance(it, dict)]
+        if not isinstance(items, list):
+            raise Fail(4, "PR 인계를 읽지 못했다 — gh 출력 모양이 다르다. 설계문서 `## 미룸` 표와 `## 지휘 기록` 을 쓴다")
+        items = [it for it in items if isinstance(it, dict)]
+        out.append((br, items, len(items) >= PR_LIMIT))
     return out
 
 
@@ -733,67 +787,113 @@ def c_pending(root, a) -> int:
 def c_pr_handoffs(root, a) -> int:
     _gh()  # gh 가 없으면 상태 계산보다 먼저 강등을 알린다
     b = _block(_status(root, a.roadmap), a.epic)
-    for br, it in _prs(root, b):
-        body = str(it.get("body") or "")
-        print("%s #%s(%s)" % (br, it.get("number"), it.get("state")))
-        for line in handoff_section(body) or ["(인계 절 없음)"]:
-            print("  " + line)
-        for line in after_review_lines(body):
-            print("  " + line)
+    got = _prs(root, b)
+    if not got:
+        print("%s 브랜치 없음" % a.epic)
+    for br, items, hit in got:
+        if not items:
+            print("%s PR 없음" % br)
+        for it in items:
+            body = str(it.get("body") or "")
+            print("%s #%s(%s)" % (br, it.get("number"), it.get("state")))
+            for line in handoff_section(body) or ["(인계 절 없음)"]:
+                print("  " + line)
+            for line in after_review_lines(body):
+                print("  " + line)
+        if hit:
+            print("%s PR 목록이 %d개 한도에 닿았다 — 더 있을 수 있다" % (br, PR_LIMIT))
     return 0
+
+
+def _unread(spec: str, b: dict) -> str:
+    return "셀 수 없음 — %s 을 %s 에서 읽지 못했다" % (spec, _ref(b))
 
 
 def c_audit(root, a) -> int:
     import check_bundle_coverage as cbc
-    import spec_review_bundle as srb
-    from roadmap_model import rulings_archived
+    from roadmap_model import rulings_archived, section_body
     report = _status(root, a.roadmap)
     b = _block(report, a.epic)
-    groups = []
-    for spec in b.get("specs") or []:
+    groups = []  # (머리, 항목 줄들, 셀 수 있는 후보 수, 셀 수 없는가)
+
+    def add(label, items, count=None, bad=False):
+        groups.append((label, items, len(items) if count is None else count, bad))
+    specs = b.get("specs") or []
+    texts = {}
+    if b.get("stage") == "알 수 없음":
+        add("설계문서", ["셀 수 없음 — %s" % (b.get("reason") or "단계를 알 수 없다")], 0, True)
+        specs = []
+    for spec in specs:
         text = _doc(root, b, spec)
-        groups.append(("기각한 번호(%s)" % spec,
-                       srb.rejected(spec, str(root)) if (Path(root) / spec).exists() else []))
+        texts[spec] = text
+        if text is None:
+            for label in ("기각한 번호", "미룸", "판정"):
+                add("%s(%s)" % (label, spec), [_unread(spec, b)], 0, True)
+            continue
+        label = "기각한 번호(%s)" % spec
         try:
-            groups.append(("미룸(%s)" % spec, ["%s → %s" % (it, recv) for it, _w, recv in cbc.deferred_rows(text)]))
+            if section_body(text, cbc.TABLE_HEADING) is None:
+                add(label, [])
+            else:
+                rows = [(ids, cell) for ids, verb, cell in cbc.table_rows(text) if verb.startswith("기각")]
+                add(label, ["%s — %s" % (" · ".join(ids), cell) for ids, cell in rows],
+                    sum(len(ids) for ids, _c in rows))
         except FormatError as exc:
-            groups.append(("미룸(%s)" % spec, ["셀 수 없음 — %s" % exc]))
+            add(label, ["셀 수 없음 — %s" % exc], 0, True)
         try:
-            groups.append(("판정(%s)" % spec, rulings_archived(text) or []))
+            add("미룸(%s)" % spec, ["%s → %s" % (it, recv) for it, _w, recv in cbc.deferred_rows(text)])
         except FormatError as exc:
-            groups.append(("판정(%s)" % spec, ["셀 수 없음 — %s" % exc]))
+            add("미룸(%s)" % spec, ["셀 수 없음 — %s" % exc], 0, True)
+        try:
+            add("판정(%s)" % spec, rulings_archived(text) or [])
+        except FormatError as exc:
+            add("판정(%s)" % spec, ["셀 수 없음 — %s" % exc], 0, True)
     try:
-        groups.append(("리뷰 뒤 반영", [l for _br, it in _prs(root, b) for l in after_review_lines(str(it.get("body") or ""))]))
+        lines, notes = [], []
+        for br, items, hit in _prs(root, b):
+            lines += [l for it in items for l in after_review_lines(str(it.get("body") or ""))]
+            if hit:
+                notes.append("%s PR 목록이 %d개 한도에 닿았다 — 더 있을 수 있다" % (br, PR_LIMIT))
+        add("리뷰 뒤 반영", lines)
+        if notes:
+            add("리뷰 뒤 반영(셀 수 없음)", notes, 0, True)
     except Fail as exc:
-        groups.append(("리뷰 뒤 반영", ["읽지 못함 — %s" % exc]))
-    shrunk = []
-    mine = "\n".join(_doc(root, b, s) for s in b.get("specs") or [])
-    for other in report.get("blocks") or []:
-        for spec in other.get("specs") or []:
-            try:
-                rows = cbc.deferred_rows(_doc(root, other, spec))
-            except FormatError:
+        add("리뷰 뒤 반영", ["읽지 못함 — %s" % exc], 0, True)
+    handoffs = report.get("handoffs")
+    if handoffs is None:
+        add("줄어든 넘김 의심", ["셀 수 없음 — 넘김 목록을 읽지 못했다"], 0, True)
+    elif specs:
+        mine = None if any(texts.get(s) is None for s in specs) else "\n".join(texts[s] for s in specs)
+        shrunk, cannot = [], []
+        for h in handoffs:
+            if h.get("receiver") != a.epic:
                 continue
-            for item, _why, recv in rows:
-                if recv == a.epic and mine and not carried(item, mine):
-                    shrunk.append("%s → %s: %s" % (other["id"], a.epic, item))
-    groups.append(("줄어든 넘김 의심", shrunk))
+            tag = "%s/%s: %s" % (h.get("giver"), h.get("spec"), h.get("item"))
+            if h.get("state") == "셀 수 없음":
+                cannot.append("셀 수 없음 — %s (%s)" % (tag, h.get("basis")))
+            elif mine is None:
+                cannot.append("셀 수 없음 — %s (받는 쪽 설계문서를 읽지 못했다)" % tag)
+            elif not carried(str(h.get("item")), mine):
+                shrunk.append("%s → %s" % (tag, a.epic))
+        add("줄어든 넘김 의심", shrunk)
+        if cannot:
+            add("줄어든 넘김 의심(셀 수 없음)", cannot, 0, True)
     shown = 0
-    for label, items in groups:
-        if items:
-            print("%s %d개" % (label, len(items)))
+    for label, items, count, bad in groups:
+        if count or bad:
+            print("%s %s" % (label, "— 셀 수 없음" if bad else "%d개" % count))
             for it in items:
                 print("  " + it)
             shown += 1
     if not shown:
-        print("감사 후보 없음")
+        print("감사 후보 없음(읽은 곳 모두에서)")
     return 0
 
 
 def c_version(root, a) -> int:
-    gap = version_gap(root, Path(a.plugin_json))
-    print(gap or "설치본과 레포 사본의 판이 맞다(또는 레포에 같은 플러그인 소스가 없다)")
-    return 1 if gap else 0
+    rc, msg = version_report(root, Path(a.plugin_json))
+    print(msg)
+    return rc
 
 
 def _rs(p):
