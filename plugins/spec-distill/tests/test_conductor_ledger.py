@@ -325,6 +325,71 @@ class Resources(Repo):
             self.assertEqual(rc, 2, (p, out))
         self.assertTrue((self.w / "plan").exists())
 
+    def test_orphans_unreadable_folder(self):
+        bad = self.add_wt("bad", "feature/bad")
+        os.chmod(str(bad), 0)
+        try:
+            rc, out = self.cli("orphans", "--roadmap", RM)
+        finally:
+            os.chmod(str(bad), 0o755)
+        self.assertEqual(rc, 0)
+        self.assertIn("feature/bad", out)
+
+    def test_cleanup_gone_review_pack_drops_row(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        pack = self._mdir() / "review" / "gone"
+        self._row(pack)
+        rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(pack))
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self._rows(), [])
+
+    def test_cleanup_refuses_own_seat(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        seat = self.add_wt("seat", "feature/seat")
+        inner = self.add_wt("inner", "feature/inner")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = L.main(["--root", str(seat), "cleanup-check", "--path", str(seat)])
+        self.assertEqual(rc, 2)
+        with redirect_stdout(buf):
+            rc = L.main(["--root", str(seat), "cleanup", "--roadmap", RM, "--session", SID, "--path", str(seat)])
+        self.assertEqual(rc, 2)
+        self.assertTrue(seat.exists())
+        old = os.getcwd()
+        os.chdir(str(inner))
+        try:
+            rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(inner))
+        finally:
+            os.chdir(old)
+        self.assertEqual(rc, 2)
+        self.assertTrue(inner.exists())
+
+    def test_cleanup_failed_delete_keeps_row_and_folder(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        pack = self._mdir() / "review" / "stuck"
+        (pack / "sub").mkdir(parents=True)
+        (pack / "sub" / "f.md").write_text("x", encoding="utf-8")
+        self._row(pack)
+        os.chmod(str(pack / "sub"), 0o500)
+        try:
+            rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(pack))
+        finally:
+            os.chmod(str(pack / "sub"), 0o755)
+        self.assertEqual(rc, 3, out)
+        self.assertTrue(pack.exists())
+        self.assertEqual(len(self._rows()), 1)
+
+    def test_young_lock_without_owner_is_live(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        mc = self._mdir() / "merge-check"
+        (mc / "lock").mkdir(parents=True)
+        (mc / "run-y").mkdir()
+        copy = mc / "run-y" / "base"
+        sh(self.w, "worktree", "add", "-q", "--detach", str(copy), "trunk")
+        rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(copy))
+        self.assertEqual(rc, 3, out)
+        self.assertTrue(copy.exists())
+
     def test_orphans_missing_folder(self):
         gone = self.add_wt("gone", "feature/g")
         shutil.rmtree(str(gone))

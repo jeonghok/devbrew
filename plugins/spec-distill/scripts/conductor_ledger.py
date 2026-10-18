@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -140,6 +141,7 @@ def dirty_lines(path: Path) -> list:
 
 
 REVIEW_PACK_DIR = "review"
+LOCK_YOUNG = 60  # 주인 기록 전 잠금은 이 초 동안 바쁜 것으로 본다(merge_check 와 같은 규칙)
 
 
 def _alive(pid: int) -> bool:
@@ -165,12 +167,18 @@ def disposable_kind(root, roadmap: str, path: Path):
 
 
 def _live_lock(root, roadmap: str) -> str:
-    owner = mpath(root, roadmap).parent / repo_defaults.MERGE_CHECK_DIR / "lock" / "owner"
+    lock = mpath(root, roadmap).parent / repo_defaults.MERGE_CHECK_DIR / "lock"
     try:
-        head = owner.read_text(encoding="utf-8").split(" ", 1)[0].strip()
+        head = (lock / "owner").read_text(encoding="utf-8").split(" ", 1)[0].strip()
+    except OSError:
+        head = ""
+    if head.isdigit():
+        return head if _alive(int(head)) else ""
+    try:
+        young = (time.time() - lock.stat().st_mtime) < LOCK_YOUNG
     except OSError:
         return ""
-    return head if head.isdigit() and _alive(int(head)) else ""
+    return "기록 전" if young else ""
 
 
 def require_user_worktree(root, path: Path) -> None:
@@ -178,8 +186,12 @@ def require_user_worktree(root, path: Path) -> None:
     if path.is_symlink():
         raise Fail(2, "worktree 가 아니다(심볼릭 링크): %s" % path)
     items = worktrees(root)
-    if str(path.resolve()) not in {w["path"] for w in items[1:]}:
+    rp = path.resolve()
+    if str(rp) not in {w["path"] for w in items[1:]}:
         raise Fail(2, "worktree 가 아니다(또는 메인 체크아웃이다): %s" % path)
+    here = Path(os.getcwd()).resolve()
+    if rp == Path(root).resolve() or rp == here or rp in here.parents:
+        raise Fail(2, "지금 작업 중인 자리다 — 지우지 않는다: %s" % path)
 
 
 # ── 하위 명령 ────────────────────────────────────────────────────────────────
@@ -334,14 +346,16 @@ def c_cleanup(root, a) -> int:
         pid = _live_lock(root, a.roadmap)
         if pid:
             raise Fail(3, "스위트 대조가 도는 중이다(잠금 주인 %s) — 끝난 뒤 지운다: %s" % (pid, path))
-        rc, _o, err = git(root, "worktree", "remove", "--force", str(path))
-        if rc:
-            raise Fail(3, "스위트 대조 사본을 지우지 못했다: %s" % err)
+        if path.exists():
+            rc, _o, err = git(root, "worktree", "remove", "--force", str(path))
+            if rc:
+                raise Fail(3, "스위트 대조 사본을 지우지 못했다: %s" % err)
     elif kind == "pack":
-        try:
-            shutil.rmtree(str(path))
-        except OSError as exc:
-            raise Fail(3, "리뷰 묶음을 지우지 못했다: %s" % exc)
+        if path.exists():
+            try:
+                shutil.rmtree(str(path))
+            except OSError as exc:
+                raise Fail(3, "리뷰 묶음을 지우지 못했다: %s" % exc)
     else:
         if not path.is_dir():
             raise Fail(2, "폴더가 없다: %s" % path)
@@ -368,14 +382,14 @@ def c_orphans(root, a) -> int:
     items = worktrees(root)
     stray = [w for w in items[1:] if w["path"] not in known]
     for w in stray:
-        if not Path(w["path"]).is_dir():
-            state = "폴더 없음(prunable)"
-        else:
-            try:
+        try:
+            if not Path(w["path"]).is_dir():
+                state = "폴더 없음(prunable)"
+            else:
                 n = len(dirty_lines(Path(w["path"])))
                 state = "깨끗" if not n else "남은 것 %d개" % n
-            except Fail:
-                state = "상태를 읽지 못함"
+        except (Fail, OSError):
+            state = "상태를 읽지 못함"
         print("%s\t%s\t%s" % (w["path"], w["branch"], state))
     if not stray:
         print("주인 모름 worktree 없음")
