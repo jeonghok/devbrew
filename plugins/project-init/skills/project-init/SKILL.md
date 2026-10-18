@@ -56,19 +56,25 @@ branching strategy 템플릿을 선택해 git workflow 룰을 초기화하고, �
 기존 Git Workflow 설정이 발견되면 사용자에게 묻는다:
 > "기존 git workflow 룰이 감지됐습니다. 새 템플릿으로 교체할까요?"
 
-사용자가 거절하면 중단.
+`AskUserQuestion` 으로 고르게 한다 (질문 하나에 결정 하나):
 
-또한 root에 `CLAUDE.md`가 존재하고 `AGENTS.md`가 없다면 사용자에게 묻는다:
+- 「교체 (권장)」 — 새 템플릿으로 바꾼다.
+- 「git 규칙은 그대로 두고 헌장만」 — 기존 git 규칙 파일과 `## Git Workflow` 절은 그대로 두고, Step 2 · 3 · 4b · 4c 의 `## Git Workflow` 갱신 · 4d 를 건너뛰고 헌장 단계로 간다.
+- 「중단」 — 아무 파일도 쓰지 않고 멈춘다.
+
+또한 root에 `CLAUDE.md`가 존재하고 `AGENTS.md`가 없다면 `AskUserQuestion` 으로 묻는다:
 
 > "기존 CLAUDE.md 발견. AGENTS.md로 migrate할까요? (CLAUDE.md는 `@AGENTS.md` thin pointer로 교체됩니다)"
 
-사용자 거절 시: 전체 `/project-init:project-init` 실행 abort — Step 2 이후의 docs/git-workflow/ 생성도 skip. AC21에 따라 부분 진행 금지.
+- 「AGENTS.md 로 옮기기 (권장)」 — 4c 의 S2a · S2b 대로 옮긴다.
+- 「CLAUDE.md 에 바로 쓰기」 — AGENTS.md 를 만들지 않고 관리 절 `## Git Workflow` · `## Project Charter` 를 CLAUDE.md 안에서 제자리 갱신한다. S3 의 절 갱신 규칙을 CLAUDE.md 에 그대로 적용하고 비-관리 컨텐츠는 보존한다. `docs/git-workflow/` 파일은 그대로 만든다.
+- 「중단」 — 아무 파일도 쓰지 않고 멈춘다.
 
 #### Charter 상태 감지 (파일 레벨 — Phase 0보다 선행)
 
 charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
 
-- (a) `AGENTS.md`에 `## Project Charter` 섹션이 존재하는가.
+- (a) 관리 절을 담는 파일 — AGENTS.md, 또는 「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md — 에 `## Project Charter` 섹션이 존재하는가.
 - (b) 그 섹션의 `**Vision:**`·`**Non-goals:**`·`**Tech Stack:**` 값이 모두 비어있지 않고 `{{...}}` placeholder가 아닌가 (= `charter_section_complete`).
 - (c) `docs/project/charter.md` **와** `docs/project/conventions.md`가 모두 존재하는가 (= `docs_complete`; `glossary.md`는 조건부라 completeness 판정에서 제외).
 
@@ -208,9 +214,9 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 | State | AGENTS.md | CLAUDE.md | Action |
 |---|---|---|---|
 | **S1 (clean slate)** | 없음 | 없음 | AGENTS.md 신규 작성 (`agents-md-section.md` content); CLAUDE.md 신규 작성 (`claude-md-pointer.md` content — `@AGENTS.md` 한 줄). |
-| **S2 (CLAUDE-only legacy)** | 없음 | 존재 | Step 1의 migration 프롬프트 (AC21) — 거절 시 전체 `/project-init:project-init` abort. 승인 시 CLAUDE.md 내용 분기 (AC16 정규화 절차 (frontmatter strip → HTML comment strip → str.strip()) 준용해 분류): **S2a** 정규화 결과가 `@AGENTS.md` 아니면 full content — (a) `## Git Workflow` 섹션 추출, (b) AGENTS.md로 이전·새 template과 merge, (c) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체, (d) 이전된 H1이 *원본 파일명을 지칭*하면 (`# CLAUDE.md`) `# AGENTS.md`로 재제목한다 — 그렇지 않은 H1(`# My Project` 등)은 프로젝트 제목이므로 비-관리 컨텐츠로 보존. 기존 CLAUDE.md의 `## LLM Coding Guidelines` 섹션은 plugin이 더 이상 *managed*로 취급하지 않으므로 자동으로 *비-관리 컨텐츠*로 분류되어, matrix 직후의 "비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존" 규칙에 따라 AGENTS.md migration 시 그대로 이전·보존됨 (사용자 4-bullet 컨텐츠 silent drop 없음). **S2b** 정규화 결과 == `@AGENTS.md`인 dangling pointer (AGENTS.md 부재) — 새 template만으로 AGENTS.md 신규 작성, CLAUDE.md unchanged. |
+| **S2 (CLAUDE-only legacy)** | 없음 | 존재 | Step 1 의 이전 질문 — 「AGENTS.md 로 옮기기」면 아래 S2a · S2b, 「CLAUDE.md 에 바로 쓰기」면 CLAUDE.md 안에서 관리 절만 제자리 갱신(AGENTS.md 를 만들지 않음), 「중단」이면 멈춘다. 「옮기기」를 고르면 CLAUDE.md 내용 분기 (AC16 정규화 절차 (frontmatter strip → HTML comment strip → str.strip()) 준용해 분류): **S2a** 정규화 결과가 `@AGENTS.md` 아니면 full content — (a) `## Git Workflow` 섹션 추출, (b) AGENTS.md로 이전·새 template과 merge, (c) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체, (d) 이전된 H1이 *원본 파일명을 지칭*하면 (`# CLAUDE.md`) `# AGENTS.md`로 재제목한다 — 그렇지 않은 H1(`# My Project` 등)은 프로젝트 제목이므로 비-관리 컨텐츠로 보존. 기존 CLAUDE.md의 `## LLM Coding Guidelines` 섹션은 plugin이 더 이상 *managed*로 취급하지 않으므로 자동으로 *비-관리 컨텐츠*로 분류되어, matrix 직후의 "비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존" 규칙에 따라 AGENTS.md migration 시 그대로 이전·보존됨 (사용자 4-bullet 컨텐츠 silent drop 없음). **S2b** 정규화 결과 == `@AGENTS.md`인 dangling pointer (AGENTS.md 부재) — 새 template만으로 AGENTS.md 신규 작성, CLAUDE.md unchanged. |
 | **S3 (AGENTS canonical, CLAUDE pointer)** | 존재 | 존재 + `@AGENTS.md` (R-pointer 통과) | AGENTS.md의 `## Git Workflow` 섹션만 in-place 갱신. CLAUDE.md는 unchanged. |
-| **S4 (AGENTS exists, CLAUDE divergent or absent)** | 존재 | 없음 또는 divergent content | 사용자에게 advisory + 두 옵션 — (i) CLAUDE.md가 존재하면 관리 섹션(`## Git Workflow` · `## Project Charter`)을 뺀 비-관리 컨텐츠를 AGENTS.md에서 **먼저 나오는 관리 섹션 앞**에 이전한 뒤(관리 섹션이 하나도 없으면 AGENTS.md 끝에) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체한다. 관리 섹션 뒤에 붙이지 않는다 — 헤딩 없는 본문은 바로 앞 절의 일부가 되어 그 절의 제자리 갱신(이어지는 S3 action, 다음 `/project-init:project-init` 실행)이 함께 덮는다. 관리 섹션을 이전 대상에서 빼는 것은 중복 절을 막기 위해서다. 원본 파일명을 지칭하는 H1(`# CLAUDE.md`)은 이전하지 않는다(S2a (d)와 같은 근거). CLAUDE.md가 없으면 `@AGENTS.md` 포인터만 쓴다. advisory는 이전될 비-관리 컨텐츠가 있다는 것을 밝힌다. (ii) abort. 승인 시 (i) 수행 + S3 action. |
+| **S4 (AGENTS exists, CLAUDE divergent or absent)** | 존재 | 없음 또는 divergent content | 사용자에게 advisory + 세 선택지 — (i) CLAUDE.md가 존재하면 관리 섹션(`## Git Workflow` · `## Project Charter`)을 뺀 비-관리 컨텐츠를 AGENTS.md에서 **먼저 나오는 관리 섹션 앞**에 이전한 뒤(관리 섹션이 하나도 없으면 AGENTS.md 끝에) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체한다. 관리 섹션 뒤에 붙이지 않는다 — 헤딩 없는 본문은 바로 앞 절의 일부가 되어 그 절의 제자리 갱신(이어지는 S3 action, 다음 `/project-init:project-init` 실행)이 함께 덮는다. 관리 섹션을 이전 대상에서 빼는 것은 중복 절을 막기 위해서다. 원본 파일명을 지칭하는 H1(`# CLAUDE.md`)은 이전하지 않는다(S2a (d)와 같은 근거). CLAUDE.md가 없으면 `@AGENTS.md` 포인터만 쓴다. advisory는 이전될 비-관리 컨텐츠가 있다는 것을 밝힌다. 선택지: 「옮기기 (권장)」((i) 수행 + S3 action) · 「CLAUDE.md 는 그대로 두기」(S3 action 만 — AGENTS.md 관리 절 갱신, CLAUDE.md 는 손대지 않음, git-workflow 파일은 만든다) · 「중단」(아무 파일도 쓰지 않고 멈춘다). |
 
 비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존. 유일한 예외는 파일명을 지칭하는 H1(`# CLAUDE.md`)이다 — 4c S2a (d)는 재제목하고 S4 (i)는 이전하지 않는다. 파일명을 지칭하는 제목은 이전 후 대상 파일을 잘못 가리키므로 보존 대상이 아니다.
 
@@ -227,7 +233,7 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 헌장 단계를 건너뛰지 않았다면(Law 1 게이트에서 「건너뛰기」를 고르지 않았고 C-S2 갱신을 거절하지 않았다면), Step 1에서 판정한 charter state에 따라 발행한다 (C-S2 갱신 거절은 건너뛰기가 아니라 아래 C-S2 행의 unchanged로 처리). template은 `${CLAUDE_PLUGIN_ROOT}/templates/project/`에서 읽어 placeholder를 elicit된 값으로 치환한다 (C7 — 의견 콘텐츠 주입 금지, AC14).
 
 읽을 template:
-- `${CLAUDE_PLUGIN_ROOT}/templates/project/agents-md-section.md` → `AGENTS.md`의 `## Project Charter` 섹션
+- `${CLAUDE_PLUGIN_ROOT}/templates/project/agents-md-section.md` → `AGENTS.md`(「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md)의 `## Project Charter` 섹션
 - `${CLAUDE_PLUGIN_ROOT}/templates/project/charter.md` → `docs/project/charter.md`
 - `${CLAUDE_PLUGIN_ROOT}/templates/project/conventions.md` → `docs/project/conventions.md`
 - `${CLAUDE_PLUGIN_ROOT}/templates/project/glossary.md` → `docs/project/glossary.md` (조건부)
@@ -276,4 +282,5 @@ placeholder 치환 매핑:
 >
 > `project-init` 플러그인 hook이 `Bash` 호출에서 브랜치 이름과 commit 메시지를 자동 검증합니다. 그 둘이 이 hook이 검사하는 전부입니다 — 위에 생성된 문서의 내용·구조·상호 포인터를 사후에 검증하는 것은 없습니다.
 > 헌장을 건너뛰었다면: 미완 항목 <항목> — 헌장 파일은 만들지 않았다.
+> CLAUDE.md 에 바로 썼다면: 관리 절이 CLAUDE.md 에 있다 — AGENTS.md 는 만들지 않았다.
 > 다음 할 일: 새 브랜치를 하나 만들어 보라 — `git checkout -b feature/<이름>` 이면 훅이 이름을 바로 확인한다.

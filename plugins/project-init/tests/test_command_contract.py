@@ -241,18 +241,52 @@ class TestCompletionReportPromisesOnlyWhatShips(unittest.TestCase):
                  f"{self.claims!r}"))
 
 
-class TestMigrationPromptStillGated(unittest.TestCase):
-    """AC21: refusing the CLAUDE.md→AGENTS.md migration aborts the whole run."""
+class TestMigrationRefusalChoices(unittest.TestCase):
+    """AC32 — 이전 거절이 실행 전체를 멈추지 않는다(옛 AC21 「부분 진행 금지」 폐지)."""
 
-    def test_refusal_aborts_entire_run(self) -> None:
+    def setUp(self):
+        self.text = COMMAND.read_text(encoding="utf-8")
+        self.step1 = section(self.text, "### Step 1:", "### Step 2:")
+        self.matrix = section(self.text, "#### 4c:", "#### 4d:")
+
+    def test_s2_offers_three_choices(self):
+        for label in ("「AGENTS.md 로 옮기기 (권장)」", "「CLAUDE.md 에 바로 쓰기」", "「중단」"):
+            self.assertIn(label, self.step1)
+
+    def test_git_workflow_files_continue(self):
+        self.assertIn("`docs/git-workflow/` 파일은 그대로 만든다", self.step1)
+
+    def test_old_whole_run_abort_is_gone(self):
+        self.assertTrue(self.step1.strip())
+        self.assertNotIn("부분 진행 금지", self.step1)
+        self.assertNotRegex(self.step1, r"사용자 거절 시.*전체 `/project-init:project-init` 실행 abort")
+        s2 = self.matrix[self.matrix.index("**S2 (CLAUDE-only legacy)**"):self.matrix.index("**S3 (")]
+        self.assertNotIn("거절 시 전체", s2)
+        self.assertIn("「CLAUDE.md 에 바로 쓰기」", s2)
+
+    def test_s4_offers_keep_claude_md(self):
+        s4 = self.matrix[self.matrix.index("**S4 ("):]
+        for label in ("「옮기기 (권장)」", "「CLAUDE.md 는 그대로 두기」", "「중단」"):
+            self.assertIn(label, s4)
+
+    def test_charter_detection_reads_the_canonical_file(self):
+        detect = section(self.text, "#### Charter 상태 감지", "### Step 2:")
+        self.assertIn("「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md", detect)
+
+
+class TestGitWorkflowReplaceRefusal(unittest.TestCase):
+    """설계에 없던 결정 1 — git 규칙 교체 거절이 헌장까지 멈추지 않는다."""
+
+    def test_three_choices(self):
+        step1 = section(COMMAND.read_text(encoding="utf-8"), "### Step 1:", "### Step 2:")
+        for label in ("「교체 (권장)」", "「git 규칙은 그대로 두고 헌장만」", "「중단」"):
+            self.assertIn(label, step1)
+        self.assertNotIn("사용자가 거절하면 중단.", step1)
+
+    def test_step5_notes_direct_claude_md_write(self):
         text = COMMAND.read_text(encoding="utf-8")
-        step1 = section(text, "### Step 1:", "### Step 2:")
-        self.assertRegex(
-            step1,
-            r"사용자 거절 시.*전체 `/project-init:project-init` 실행 abort",
-            "the migration refusal no longer aborts the run",
-        )
-        self.assertIn("부분 진행 금지", step1)
+        step5 = text[text.index("### Step 5:"):]
+        self.assertIn("CLAUDE.md 에 바로 썼다면: 관리 절이 CLAUDE.md 에 있다", step5)
 
 
 class TestCharterGateChoice(unittest.TestCase):
