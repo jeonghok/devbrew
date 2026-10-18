@@ -101,7 +101,7 @@ _DR_ESCALATED_FIX_NOT_LIVE = (
     "fix 가 «지금도» escalated 상태인지 모른다 — Task 2 의 누적(`>= n`)이 소비 "
     "창을 1 라운드에서 무한대로 넓혀, 예약이 만들어진 뒤 사용자가 `cmd_fix` 의 "
     "`event=drop`(상태 검사 없이 무조건 대입, docreview_state.py 의 `cmd_fix` 안 "
-    "\"drop\" 갈래)이나 `event=intent-pass`(같은 무조건 대입, \"intent-pass\" "
+    "\"drop\" 갈래)이나 `event=hold`(같은 무조건 대입, \"hold\" "
     "갈래)로 그 fix 를 escalated 밖으로 옮겼을 수 있다(F-3 실측: drop 뒤에도 옛 "
     "예약이 소비돼 후속을 부활시켰다). [Task 4 fix round 1 — 리뷰 M2] 이 두 갈래를 "
     "줄번호가 아니라 함수·갈래 이름으로 가리킨다 — 이 파일 위쪽이 늘 때마다 "

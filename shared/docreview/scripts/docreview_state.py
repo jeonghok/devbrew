@@ -24,6 +24,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 try:
@@ -306,7 +307,31 @@ def resolve_scope(scope: str, old_secs, new_secs) -> set:
     return set()
 
 
-# ── 범위(scope) 검증 — 기록할 때와 쓸 때가 같은 함수를 부른다 ─────────────────────────────
+# ── 울타리(fence) — 어떤 범위로도 면제되지 않는 절 ─────────────────────────────────────
+# 울타리 = 불변 절(사용자 원문) ∪ 결정 기록 · 미룸 절(엔진만 줄을 덧붙이는 자리)과 그 하위 절. 기록 경로(permit ·
+# fix 범위 · 신고 · 앞으로 생길 무엇이든)의 범위는 울타리 절을 면제하지 못한다 — 쓰는 때(`exempt_scopes`) 한 곳이 정한다.
+# 울타리 절이 지나가는 길은 엔진이 도출한 규칙뿐이다: 결정 기록 · 미룸 절을 만드는 라운드 · 덧붙이기만(`line_hashes`) ·
+# 원래 글자로 정확히 되돌린 원복(`expect_hash`) · 줄 기록이 없는 옛 원장의 첫 라운드 한 번(게이트에 공시).
+def fence_anchors(prof, sections) -> set:
+    out = set(anchors_matching(prof["immutable"], sections)) if prof["immutable"] else set()
+    return out | _log_section_anchors(prof, sections)
+
+
+def round_fence(st, prof, r) -> set:
+    """라운드 r 의 울타리 — 스냅숏 r−1 과 r 양쪽에서 구한다(어느 한쪽에만 있는 절도 든다)."""
+    snaps = st.get("snapshots") or {}
+    return (fence_anchors(prof, (snaps.get(str(r - 1)) or {}).get("sections") or [])
+            | fence_anchors(prof, (snaps.get(str(r)) or {}).get("sections") or []))
+
+
+def legacy_log_anchors(prof, old_secs) -> list:
+    """이 변경 전의 원장 — 직전 스냅숏의 결정 기록 · 미룸 절에 줄 해시가 없어 «덧붙이기만» 을 잴 수 없는 절."""
+    logs = _log_section_anchors(prof, old_secs)
+    return sorted(s["anchor"] for s in old_secs
+                  if s.get("anchor") in logs and not isinstance(s.get("line_hashes"), list))
+
+
+# ── 범위(scope) 검증 — 기록할 때 한 함수(`scope_problem`), 쓸 때 울타리 ─────────────────────────
 # `related:<D>=…` · `append-only` 는 엔진이 «면제 사유 라벨» 로만 쓰는 글자다. 리뷰어가 쓴 edit_scope · permit ·
 # fix 범위로 들어오면 라벨 위조이므로 거부한다 — `related:` 를 쓰는 것은 declare-related 뿐이다.
 RESERVED_SCOPES = ("append-only",)   # "#__doc__" 는 머리 없는 문서의 실제 앵커이기도 하다 — 예약하지 않는다
@@ -326,21 +351,22 @@ def scope_target(scope) -> str:
     return scope.split(":", 1)[1] if scope.startswith("insert-after:") else scope
 
 
-def scope_immutable(scope, sections, prof) -> bool:
-    """범위가 불변 절을 건드리나 — 직접 앵커 · insert-after 의 기준 앵커(끼워 넣은 절이 그 안에 들어간다) 모두.
-    불변 판정은 `anchors_matching` 이라 제목 · 조상 제목이 맞는 하위 절도 불변이다."""
-    if not prof["immutable"]:
-        return False
-    return scope_target(scope) in set(anchors_matching(prof["immutable"], sections))
-
-
-def validate_scope(scope, sections, prof):
-    """범위 한 개의 검증 — 라벨 위조 · 불변 절. 통과면 None, 아니면 이름 있는 사유."""
+def scope_problem(scope, sections, prof):
+    """범위 한 개를 기록할 때의 검증 — decide(edit_scope → permit) · declare-related · check-intent(두 계약)가 부른다.
+    라벨 위조 · 스냅숏에 없는 앵커 · 울타리 절(불변 · 결정 기록 · 미룸)을 이름 있는 사유로 거부한다. 통과면 None.
+    insert-after 는 기준 앵커로 잰다 — 끼워 넣은 절은 그 기준 절 뒤에 들어간다."""
     why = scope_label_problem(scope)
     if why:
         return why
-    if scope_immutable(scope, sections, prof):
-        return "insert_after_immutable" if scope.startswith("insert-after:") else "anchor_immutable"
+    ins = scope.startswith("insert-after:")
+    t = scope_target(scope)
+    if prof["immutable"] and t in set(anchors_matching(prof["immutable"], sections)):
+        return "insert_after_immutable" if ins else "anchor_immutable"
+    known = {s["anchor"] for s in sections}
+    if t != PREAMBLE and t not in known:
+        return "insert_after_unresolved" if ins else "anchor_unresolved"
+    if t in _log_section_anchors(prof, sections):
+        return "insert_after_log_section" if ins else "anchor_log_section"
     return None
 
 
@@ -353,11 +379,15 @@ def _appended_only(old_sec, new_sec) -> bool:
     return len(n) > len(o) and n[:len(o)] == o
 
 
-def diff_snapshots(old: dict, new: dict, exempt_scopes) -> dict:
+def diff_snapshots(old: dict, new: dict, exempt_scopes, fence=()) -> dict:
+    """두 스냅숏의 헤딩 단위 변경. 두 쪽 다 머리 없으면 변경 전부가 `#__doc__` 면제다. 한쪽만 머리 없는 전이에서는
+    `fence`(울타리 절) 앵커가 통째 면제에서 빠진다 — 면제 집합에 없으면 changed 다."""
     os_, ns = old.get("sections", []), new.get("sections", [])
     om = {s["anchor"]: s for s in os_}
     nm = {s["anchor"]: s for s in ns}
+    both_headingless = bool(old.get("headingless") and new.get("headingless"))
     headingless = bool(old.get("headingless") or new.get("headingless"))
+    fence = set(fence or ())
     ex = {}
     for sc in exempt_scopes or []:
         for a in resolve_scope(sc, os_, ns):
@@ -369,12 +399,15 @@ def diff_snapshots(old: dict, new: dict, exempt_scopes) -> dict:
     def rec(anchor, kind, title, oh, nh):
         item = {"anchor": anchor, "kind": kind, "title": title, "old_hash": oh, "new_hash": nh,
                 "evidence": "섹션 '%s' (%s) %s — hash %s→%s" % (title, anchor, kind, oh or "∅", nh or "∅")}
-        if headingless:
+        if both_headingless:
             item["scope"] = DOC_ANCHOR
             exempt_applied.append(item)
         elif anchor in ex:
             sc = ex[anchor]
             item["scope"] = sc.split("=", 1)[0] if sc.startswith("related:") and "=" in sc else sc
+            exempt_applied.append(item)
+        elif headingless and anchor not in fence:
+            item["scope"] = DOC_ANCHOR
             exempt_applied.append(item)
         else:
             changed.append(item)
@@ -440,22 +473,20 @@ def exempt_scopes(st, prof, r) -> list:
     permit 은 소비 여부와 무관하다: 라운드 r 의 diff 가 정의되는 시점(라운드 r 시작)에는 전부 미소비였고, `finalize` 는
     관측으로 소비한 **뒤** 얼림 diff 를 계산하므로 소비된 permit 을 빼면 허가된 편집이 `frozen_change` 로 둔갑한다.
 
-    기록한 범위도 여기서 다시 거른다(이중 방어): 면제 라벨을 흉내 내는 글자 · 불변 절로 풀리는 범위(직접 · insert-after 기준 ·
-    라운드 r−1/r 스냅숏에서 풀린 앵커)는 어디서 기록됐든 면제에 들지 못한다. 결정 기록 · 미룸 절의 기존 줄은 면제하지 않는다 —
-    엔진이 덧붙이는 줄만 «덧붙이기만 허용» 규칙(`line_hashes`)으로 지나간다."""
+    울타리(`round_fence`)가 여기서 면제를 정한다: 면제 라벨을 흉내 내는 글자와 울타리 절로 풀리는 범위(직접 · insert-after 기준 ·
+    라운드 r−1/r 스냅숏에서 풀린 앵커)는 어디서 기록됐든 면제에 들지 못한다. 울타리 절이 드는 길은 도출 규칙뿐이다 —
+    결정 기록 · 미룸 절을 만드는 라운드의 헤딩, 원래 글자로 정확히 되돌린 원복 permit 의 앵커(새 해시 = `expect_hash`),
+    줄 해시가 없는 옛 원장의 첫 라운드(`legacy_log_anchors`). 덧붙인 줄은 `diff_snapshots` 의 «덧붙이기만 허용» 이 본다."""
     snaps = st.get("snapshots") or {}
     old_secs = (snaps.get(str(r - 1)) or {}).get("sections") or []
     new_secs = (snaps.get(str(r)) or {}).get("sections") or []
-    imm = set()
-    if prof["immutable"]:
-        imm = set(anchors_matching(prof["immutable"], old_secs)) | set(anchors_matching(prof["immutable"], new_secs))
+    fence = round_fence(st, prof, r)
+    new_hash = {s["anchor"]: s.get("hash") for s in new_secs}
 
     def allowed(sc):
         if scope_label_problem(sc):
             return False
-        if not imm:
-            return True
-        return scope_target(sc) not in imm and not (resolve_scope(sc, old_secs, new_secs) & imm)
+        return scope_target(sc) not in fence and not (resolve_scope(sc, old_secs, new_secs) & fence)
 
     out = []
     for i, s in enumerate(st.get("applied_scopes") or []):
@@ -468,9 +499,16 @@ def exempt_scopes(st, prof, r) -> list:
         if sr == r - 1 and allowed(scope):
             out.append(scope)
     for did, p in (st.get("permits") or {}).items():
-        k, _kind, anchors, _fid = _permit_fields(did, p)
-        if k == r:
-            out.extend(x for x in anchors if allowed(x))
+        k, kind, anchors, _fid = _permit_fields(did, p)
+        if k != r:
+            continue
+        for x in anchors:
+            if allowed(x):
+                out.append(x)
+            elif (kind == "revert" and x in fence and "expect_hash" in p
+                  and new_hash.get(x) == p["expect_hash"]):
+                out.append(x)   # 원래 글자로 정확히 되돌린 울타리 절 — 진짜 복원만
+        if kind == "apply":
             rel = [x for x in (p.get("related_anchors") or []) if isinstance(x, str)]
             out.extend("related:%s=%s" % (did, x) for x in rel if allowed(x))
     for key in ("decision_log", "defer_target"):
@@ -479,6 +517,7 @@ def exempt_scopes(st, prof, r) -> list:
             ha = heading_anchor(t["heading"])
             if not any(x["anchor"] == ha for x in old_secs):   # 절을 만드는 라운드만 — 기존 줄은 덧붙이기 규칙이 본다
                 out.append(ha)
+    out.extend(legacy_log_anchors(prof, old_secs))   # 옛 원장 — 이번 한 번만 옛 절 면제(게이트가 공시한다)
     return sorted(set(out))
 
 
@@ -488,7 +527,7 @@ def round_diff(st, prof, r) -> dict:
     for k in (r - 1, r):
         if not _snapshot_ok(snaps.get(str(k))):
             raise LedgerCorrupt("snapshot_missing", round=k, diff_round=r)
-    return diff_snapshots(snaps[str(r - 1)], snaps[str(r)], exempt_scopes(st, prof, r))
+    return diff_snapshots(snaps[str(r - 1)], snaps[str(r)], exempt_scopes(st, prof, r), round_fence(st, prof, r))
 
 
 # ── 문서의 정체 · 문서별 상태 디렉토리 ────────────────────────────────────────
@@ -581,6 +620,14 @@ def cmd_profile_check(a) -> int:
     return 0
 
 
+_BLANK_CATEGORIES = ("Cc", "Cf", "Zs", "Zl", "Zp")   # 제어 · 서식(폭 없는 공백 등) · 공백 · 줄 · 문단 구분
+
+
+def _blank_text(s) -> bool:
+    """보이는 글자가 하나도 없다 — 빈 글자 포함."""
+    return all(unicodedata.category(ch) in _BLANK_CATEGORIES for ch in s)
+
+
 def _log_section_anchors(prof, sections) -> set:
     """프로필 `decision_log` · `defer_target` 이 사용자 문서 절이면 그 절과 하위 절의 앵커 — 엔진이 줄을 덧붙이는 자리다
     (덧붙인 줄은 마지막 하위 절 끝에 앉을 수 있다)."""
@@ -606,8 +653,8 @@ def cmd_begin_round(a) -> int:
     cap = cfg["rereview_cap"]["value"]
     snap = json.loads(Path(a.snapshot).read_text(encoding="utf-8"))
     n = int(st["round"]) + 1
-    if a.extra_approval is not None and not a.extra_approval.strip():
-        fail("extra_approval_blank")   # 빈 글자나 공백뿐인 승인은 승인이 아니다
+    if a.extra_approval is not None and _blank_text(a.extra_approval):
+        fail("extra_approval_blank")   # 빈 글자나 보이지 않는 글자뿐인 승인은 승인이 아니다
         return 2
     if bool(a.extra_approval) != bool(a.extra_approval_source):
         fail("extra_approval_source_missing" if a.extra_approval else "extra_approval_missing")
@@ -742,6 +789,32 @@ def _decide_choices_for(state, is_successor) -> list:
     return ["adopt", "reject", "hold"]
 
 
+def _immutable_adopt_anchors(prof, sections) -> list:
+    """불변 절을 겨눈 decide 의 채택이 여는 permit 앵커 — 프로필 fix_anchors 의 절 중 울타리 밖."""
+    fence = fence_anchors(prof, sections)
+    return [x for x in anchors_matching(prof["fix_anchors"], sections) if x not in fence]
+
+
+def adopt_problem(st, fid, prof=None):
+    """이 decide 의 「고친다(채택)」가 열 permit 범위의 문제 — (사유, 범위) 또는 None. `cmd_decide` 의 거부 ·
+    `decide_choices` · 게이트 렌더가 같은 판정을 쓴다. 사후(post) 결정의 채택은 permit 을 열지 않으므로 문제가 없다."""
+    d = st["decides"].get(fid) or {}
+    if d.get("kind") == "post":
+        return None
+    f = st["findings"].get(fid) or {}
+    if prof is None:
+        try:
+            prof = load_profile(st["profile"])
+        except (ProfileError, OSError, ValueError, getattr(yaml, "YAMLError", ProfileError)):
+            return ("profile_unreadable", str(st.get("profile")))
+    secs = ((st.get("snapshots") or {}).get(str(st.get("round"))) or {}).get("sections") or []
+    if d.get("immutable"):
+        return None if _immutable_adopt_anchors(prof, secs) else ("no_fix_anchor", "")
+    sc = f.get("edit_scope") or f.get("anchor")
+    why = scope_problem(sc, secs, prof)
+    return (why, sc) if why else None
+
+
 def decide_choices(st, fid) -> list:
     """이 항목에 «실제로 받아들여지는» 재결정 선택지 목록 — 원장에서 상태를 읽는 래퍼.
     `cmd_decide` 의 거부 술어와 `_rg_decide`(render_gate 의 「대안:」 줄)·`_rg_expired`
@@ -753,7 +826,10 @@ def decide_choices(st, fid) -> list:
     d = st["decides"].get(fid)
     if d is None:
         return []
-    return _decide_choices_for(d.get("state"), _is_reraise_successor(st, fid))
+    ch = _decide_choices_for(d.get("state"), _is_reraise_successor(st, fid))
+    if "adopt" in ch and adopt_problem(st, fid):   # decide 가 거부할 채택은 내지 않는다(제안 = 수용)
+        ch = [c for c in ch if c != "adopt"]
+    return ch
 
 
 def open_lineages(st) -> set:
@@ -919,6 +995,14 @@ def cmd_exempt_anchors(a) -> int:
     return 0
 
 
+DECLARE_REFUSALS = (
+    ("scope_label_forged", ("scope_invalid", "scope_label_forged")),
+    ("anchor_not_in_snapshot", ("anchor_unresolved", "insert_after_unresolved")),
+    ("anchor_immutable", ("anchor_immutable", "insert_after_immutable")),
+    ("anchor_log_section", ("anchor_log_section", "insert_after_log_section")),
+)
+
+
 def cmd_declare_related(a) -> int:
     """「고친다」 결정 때문에 함께 고친 절을 그 결정의 permit 에 묶는다(AC38). 묶인 절은 permit 라운드의 얼림 면제에
     들되 게이트 · 다음 리뷰어 입력에 보인다 — 숨기는 면제가 아니다."""
@@ -944,16 +1028,14 @@ def cmd_declare_related(a) -> int:
         prof = load_profile(st["profile"])
     except LedgerCorrupt as e:
         return fail(e.reason, **e.extra)
-    forged = [x for x in a.anchors if scope_label_problem(x)]
-    if forged:
-        return fail("scope_label_forged", anchors=forged)
-    known = {s["anchor"] for s in secs} | {PREAMBLE}   # check-intent 와 같은 머리말 규칙
-    bad = [x for x in a.anchors if scope_target(x) not in known]
-    if bad:
-        return fail("anchor_not_in_snapshot", anchors=bad)
-    locked = [x for x in a.anchors if validate_scope(x, secs, prof)]
-    if locked:
-        return fail("anchor_immutable", anchors=locked, why=validate_scope(locked[0], secs, prof))
+    probs = [(x, scope_problem(x, secs, prof)) for x in a.anchors]
+    for reason, whys in DECLARE_REFUSALS:   # 사유 이름은 이 명령의 것 — 판정은 scope_problem 하나
+        bad = [x for x, why in probs if why in whys]
+        if bad:
+            return fail(reason, anchors=bad, why=dict(probs)[bad[0]])
+    bad = [x for x, why in probs if why]
+    if bad:   # 위 표에 없는 사유 — 받지 않는다
+        return fail("anchor_refused", anchors=bad, why=dict(probs)[bad[0]])
     rel = list(p.get("related_anchors") or [])
     for x in a.anchors:
         if x not in rel and x not in p["apply_anchors"]:
@@ -1002,20 +1084,18 @@ def cmd_decide(a) -> int:
     allowed = decide_choices(st, a.id)
     if not allowed:
         return fail("decide_not_open", id=a.id, state=d["state"])
+    if a.choice == "adopt":
+        # permit 이 열 범위는 리뷰어가 쓴 edit_scope 다 — 사용자가 게이트에서 본 것은 finding 의 anchor 다. 범위가 기록 검증
+        # (`scope_problem`)을 못 넘으면 permit 을 열지 않고 거부한다(원장 불변). 게이트도 같은 판정으로 채택을 빼고 이유를 보인다.
+        prob = adopt_problem(st, a.id, prof)
+        if prob:
+            return fail("edit_scope_refused", id=a.id, scope=prob[1], why=prob[0])
     if a.choice not in allowed:
         if d["state"] == "expired":
             return fail("decide_hold_not_allowed_for_expired", id=a.id)
         return fail("decide_hold_not_allowed_for_reraise_successor", id=a.id)
     n = int(st["round"])
     f = st["findings"][a.id]
-    if a.choice == "adopt" and d.get("kind") != "post" and not d.get("immutable"):
-        # permit 이 열 범위는 리뷰어가 쓴 edit_scope 다 — 사용자가 게이트에서 본 것은 finding 의 anchor 다. 라벨 위조 · 불변 절로
-        # 풀리는 edit_scope 면 permit 을 열지 않고 거부한다(원장 불변). 사용자는 보류 · 기각으로 갈 수 있다.
-        sc0 = f.get("edit_scope") or f["anchor"]
-        secs0 = (st["snapshots"].get(str(n)) or {}).get("sections") or []
-        why0 = validate_scope(sc0, secs0, prof)
-        if why0:
-            return fail("edit_scope_refused", id=a.id, scope=sc0, why=why0)
     entry = {"decision_id": "D%d.%d" % (n, len(st["decision_log"]) + 1), "round": n,
              "finding_ids": [a.id], "lineage": f["lineage"], "choice": a.choice, "quote": a.quote}
     prev = [e for e in st["decision_log"] if e.get("lineage") == f["lineage"]]
@@ -1040,8 +1120,7 @@ def cmd_decide(a) -> int:
         else:
             d["state"] = "adopted"
             if d.get("immutable"):
-                secs = st["snapshots"][str(n)]["sections"]
-                anchors = anchors_matching(prof["fix_anchors"], secs)
+                anchors = _immutable_adopt_anchors(prof, st["snapshots"][str(n)]["sections"])
             else:
                 anchors = [f.get("edit_scope") or f["anchor"]]
             permit = {"kind": "apply", "apply_anchors": anchors, "round": n + 1,
@@ -1073,24 +1152,16 @@ def cmd_decide(a) -> int:
 
 
 def cmd_fix(a) -> int:
+    if a.event == "intent-pass":   # fix 범위를 기록하는 것은 check-intent(fix 계약) 하나다
+        return fail("intent_pass_removed", id=a.id,
+                    use="docreview_anchor.py check-intent <id> --intent <scope> --state-dir D")
     st = load_state(a.state_dir)
     fx = st["fixes"].get(a.id)
     if not fx:
         return fail("unknown_fix", id=a.id)
     n = int(st["round"])
     ev = a.event
-    if ev == "intent-pass":
-        if not a.scope:
-            return fail("scope_required")
-        secs1 = (st["snapshots"].get(str(n)) or {}).get("sections") or []
-        why1 = validate_scope(a.scope, secs1, load_profile(st["profile"]))
-        if why1:   # check-intent 와 같은 검증기 — 이 이벤트가 라벨 위조 · 불변 절 면제의 뒷문이 되지 않게
-            return fail(why1, id=a.id, scope=a.scope)
-        fx["state"] = "intent_passed"
-        fx["scope"] = a.scope
-        fx["round"] = n
-        st["applied_scopes"].append({"finding_id": a.id, "scope": a.scope, "round": n})
-    elif ev == "drop":
+    if ev == "drop":
         fx["state"] = "dropped"
         st["decision_log"].append({"decision_id": "D%d.%d" % (n, len(st["decision_log"]) + 1), "round": n,
                                    "finding_ids": [a.id], "lineage": st["findings"][a.id]["lineage"],
@@ -1175,9 +1246,12 @@ def observe_ledger(st, prof, n) -> dict:
     def touched(k):   # 라운드 k 의 diff 가 닿은 앵커 — 라운드마다 한 번 계산한다
         if k not in touched_at:
             diff = round_diff(st, prof, k)
-            t = {c["anchor"] for c in diff.get("changed", [])}
-            t |= {e["anchor"] for e in diff.get("exempt_applied", [])}
-            # 면제 라벨(append-only · related:* · #__doc__)은 적용의 증거가 아니다 — insert-after 범위만 «끼워 넣은 절이 들어옴» 이다.
+            fence = round_fence(st, prof, k)
+            # 적용의 증거는 울타리 밖 절의 실제 변경뿐이다 — 덧붙이기 면제(append-only)와 울타리 절(결정 기록 · 불변)은 아니다.
+            t = {c["anchor"] for c in diff.get("changed", []) if c["anchor"] not in fence}
+            t |= {e["anchor"] for e in diff.get("exempt_applied", [])
+                  if e.get("scope") != "append-only" and e["anchor"] not in fence}
+            # 면제 라벨(related:* · #__doc__)은 적용의 증거가 아니다 — insert-after 범위만 «끼워 넣은 절이 들어옴» 이다.
             t |= {e["scope"] for e in diff.get("exempt_applied", [])
                   if isinstance(e.get("scope"), str) and e["scope"].startswith("insert-after:")}
             touched_at[k] = t
@@ -1329,6 +1403,21 @@ def round_unverified(st):
     return None
 
 
+def _log_check_skipped(st, n):
+    """라운드 n 에 옛 원장 규칙(줄 해시 없음)으로 넘긴 결정 기록 · 미룸 절 중 실제로 바뀐 것. 못 읽으면 None(셀 수 없음)."""
+    if n < 2:
+        return []
+    try:
+        prof = load_profile(st["profile"])
+        legacy = set(legacy_log_anchors(prof, snapshot_at(st, n - 1)["sections"]))
+        if not legacy:
+            return []
+        d = round_diff(st, prof, n)
+    except (LedgerCorrupt, ProfileError, OSError, ValueError, getattr(yaml, "YAMLError", ProfileError)):
+        return None
+    return sorted({e["anchor"] for e in d["exempt_applied"] if e["anchor"] in legacy and e.get("scope") == e["anchor"]})
+
+
 def gate_summary(st) -> dict:
     n = int(st["round"])
     rr = int(st["rereview_count"])
@@ -1384,6 +1473,7 @@ def gate_summary(st) -> dict:
                 unchanged.append(x)
         rel.append({"decision_id": did, "anchors": anchors, "changed": changed, "unchanged": unchanged})
     g["related_changes"] = rel
+    g["log_check_skipped"] = _log_check_skipped(st, n)
     g["open_total"] = sum(len(g[row.name]) for row in GATE_ROWS)   # 첫 줄 «남았다» 목록의 모든 행
     cur = st["rounds"].get(str(n), {})
     prev = st["rounds"].get(str(n - 1), {})
@@ -1648,7 +1738,35 @@ def _rg_decide(st, g, fid):
     # 빈칸으로 두면 사상이 낡았다는 것이 아무 데도 안 남는다(D13-③ 이 안 닫힌다).
     if dv.get("category_unglossed"):
         lines.append("  ↳ 사람말 사상 없음: %s — 원래 이름 그대로 낸다" % _one(dv["category_unglossed"]))
+    lines.extend(_adopt_unavailable_line(st, fid))
     return lines
+
+
+# 「고친다(채택)」를 고를 수 없는 이유의 사람말 — 사유 키는 `scope_problem` · `adopt_problem` 의 것.
+ADOPT_PROBLEM_GLOSS = {
+    "scope_invalid": "고칠 범위가 비어 있다",
+    "scope_label_forged": "고칠 범위가 엔진이 쓰는 표시 글자를 흉내 낸다",
+    "anchor_immutable": "고칠 범위가 바꾸면 안 되는 사용자 원문 절이다",
+    "insert_after_immutable": "고칠 범위가 바꾸면 안 되는 사용자 원문 절 안이다",
+    "anchor_unresolved": "고칠 범위가 문서에 없는 자리다",
+    "insert_after_unresolved": "고칠 범위가 문서에 없는 자리 뒤다",
+    "anchor_log_section": "고칠 범위가 결정 기록 · 미룬 항목 절이다 — 그 절에는 엔진만 줄을 덧붙인다",
+    "insert_after_log_section": "고칠 범위가 결정 기록 · 미룬 항목 절 안이다 — 그 절에는 엔진만 줄을 덧붙인다",
+    "no_fix_anchor": "고칠 수 있는 절이 프로필에 없다",
+    "profile_unreadable": "프로필을 읽지 못했다",
+}
+
+
+def _adopt_unavailable_line(st, fid) -> list:
+    d = st["decides"].get(fid) or {}
+    if "adopt" not in _decide_choices_for(d.get("state"), _is_reraise_successor(st, fid)):
+        return []
+    prob = adopt_problem(st, fid)
+    if not prob:
+        return []
+    why, sc = prob
+    return ["  ↳ 고친다(채택)는 고를 수 없다 — %s (edit_scope_refused · %s%s)"
+            % (ADOPT_PROBLEM_GLOSS.get(why, "고칠 범위를 쓸 수 없다"), why, (" · " + _one(sc)) if sc else "")]
 
 
 def _rg_adopted(st, g, fid):
@@ -1665,7 +1783,8 @@ def _rg_expired(st, g, fid):
     # 통일한다(M3 부산물 — `_rg_decide` 와 라벨 어휘도 이제 같다).
     d = st["decides"].get(fid) or {}
     alt = " / ".join(choice_label(c, d.get("kind")) for c in decide_choices(st, fid))
-    return ["- %s — 고를 수 있는 것: %s%s (%s)" % (_one(st["findings"][fid].get("summary")), alt, _post_kind_notice(d), fid)]
+    return (["- %s — 고를 수 있는 것: %s%s (%s)" % (_one(st["findings"][fid].get("summary")), alt, _post_kind_notice(d), fid)]
+            + _adopt_unavailable_line(st, fid))
 
 
 def _rg_superseded(st, g, fid):
@@ -1786,6 +1905,12 @@ def render_gate(st, g) -> str:
         if rc["unchanged"]:
             out.append("신고했지만 바뀌지 않은 곳 %d개 (%s)" % (len(rc["unchanged"]), rc["decision_id"]))
             out.extend("- %s (%s)" % (_one(titles.get(x) or x), _one(x)) for x in rc["unchanged"])
+    skipped = g.get("log_check_skipped", [])
+    if skipped is None:
+        out.append("결정 기록 · 미룬 항목 절이 덧붙이기만 됐는지 셀 수 없다 — 원장이나 프로필을 읽지 못했다")
+    elif skipped:
+        out.append("결정 기록 · 미룬 항목 절이 덧붙이기만 됐는지 이번 라운드는 확인하지 못했다 — 이전 버전이 만든 원장에 줄 기록이 없어"
+                   " 이번 한 번은 절 전체를 넘겼다 (%s)" % ", ".join(_one(x) for x in skipped))
     parts = [t % c[k] for k, t, scope in COUNT_GLOSS if c[k] and scope == "round"]
     if parts:
         out.append("이번 라운드 집계: " + " · ".join(parts))

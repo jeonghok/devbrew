@@ -94,6 +94,17 @@ py docreview_state.py declare-related --state-dir "$d" --decision D1.1 --anchors
 next_round "$d" "$FX/design-sample-r2.md" >/dev/null
 check_render "related_changed_unchanged" "$d" "이 결정 때문에 함께 바뀐 곳 1개 (D1.1)" "신고했지만 바뀌지 않은 곳 1개 (D1.1)"; rm -rf "$d"
 
+# 고칠 범위가 기록 검증을 못 넘는 decide — 채택을 고를 수 없다는 줄(이유 · 사유 키 · 범위는 괄호 안)
+d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")"; br "$d" "$FX/brief-append-r1.md"
+seed_findings "$d" "[${F_BRIEF_NOIMM/EDIT_SCOPE/#6-사용자-원문}]"
+check_render "adopt_unavailable" "$d" "정할 것 1개" "고친다(채택)는 고를 수 없다 — 고칠 범위가 바꾸면 안 되는 사용자 원문 절이다 (edit_scope_refused"; rm -rf "$d"
+
+# 옛 원장(결정 기록 절의 줄 기록 없음)의 첫 라운드 — 덧붙이기 검사를 못 했다는 공시
+d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")"; log_docs "$d"; br "$d" "$d/r1.md"
+PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); [s.pop("line_hashes", None) for s in st["snapshots"]["1"]["sections"]]; save_state(d, st, "fixture: 옛 원장")' "$d"
+br "$d" "$d/r2a.md"
+check_render "log_check_skipped" "$d" "결정 기록 · 미룬 항목 절이 덧붙이기만 됐는지 이번 라운드는 확인하지 못했다"; rm -rf "$d"
+
 # 첫 줄을 바꾸는 상태
 d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
 check_render "approval_ready" "$d" "다음: 승인 게이트 — 진행 옵션을 고를 수 있다"; rm -rf "$d"
@@ -139,5 +150,6 @@ REF="$REPO_ROOT/shared/docreview/references/reviewing-document.md"
 body="$(grep -vE '^#' "$REF")"
 assert_contains "$body" "질문 · 선택지 이름에 AC 번호 · 지적 id · § 를 쓰지 않고 설명 괄호에만 쓴다" "AC41: 게이트 절 규칙 문장이 절차서 본문에 있다"
 assert_contains "$body" "--extra-approval-source" "AC40: 절차서가 출처 플래그를 가르친다"
+assert_contains "$body" "「고친다(채택)는 고를 수 없다」 줄이 붙은 결정은 그 선택지를 질문에 넣지 않는다" "AC38 3차: 절차서가 고를 수 없는 채택을 질문에서 빼라고 가르친다"
 assert_not_contains "$body" "사용자 자신의 문구" "AC40: 옛 승인 문면이 절차서에 없다"
 finish

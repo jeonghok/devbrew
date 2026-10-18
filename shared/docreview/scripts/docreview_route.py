@@ -695,7 +695,7 @@ def _auto_decides(a, diff, st, prof, sections, n, L):
         # F-3 재리뷰(Ruling 20) — 형제 재상승(이 함수의 reraise 순회, `if not d0 or d0.get("state") != "expired"`)
         # 과 같은 모양. `f0` 존재만으로는 이 fix 가 «지금도» escalated 상태인지 모른다 —
         # 예약이 만들어진 뒤 사용자가 drop 하거나(cmd_fix event=drop, 상태 검사 없이
-        # 무조건 대입) intent-pass 로 재시도했을 수 있다(둘 다 `st["fixes"][fid]["state"]`
+        # 무조건 대입) 보류했을 수 있다(cmd_fix event=hold — 둘 다 `st["fixes"][fid]["state"]`
         # 를 escalated 밖으로 옮긴다). 누적(`>= n`)이 이 창을 1 라운드에서 무한대로
         # 넓혔으므로, 지금 상태가 여전히 "escalated" 인 예약만 후속을 낸다 — 아니면
         # 사용자가 이미 다른 처분을 내린 것이고 그 처분이 의무를 진다(형제와 같은 이유,

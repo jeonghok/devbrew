@@ -241,7 +241,7 @@ PY
 case_advice_supersedes_open_lineage_only() {
   local d c p1 p2 p3 p4 surv; d="$(mc_r1)"; c="$d/critic-sup.txt"
   surv="$(jget "$d/fin.json" '[x["id"] for x in d["findings"] if x["summary"].startswith(("AD18:", "AD19:"))][0]')"
-  py docreview_state.py fix --state-dir "$d" --id "$surv" --event intent-pass --scope "#handoff-context" >/dev/null
+  py docreview_anchor.py check-intent "$surv" --intent "#handoff-context" --state-dir "$d" >/dev/null
   adv_sup_critic "$d/fin.json" "$FX/critic-mc-r2-supersedes.txt.tmpl" "$c"
   mc_round "$d" "$FX/design-sample-handoff.md" "$c" "$d/fin2.json"
   assert_eq "$(st_yaml "$d" "st['fixes']['$surv']['state']")" "applied" "supersedes 전제: 라운드 1 의 advisory fix(병합 생존자)가 라운드 2 에서 적용 관측됐다"

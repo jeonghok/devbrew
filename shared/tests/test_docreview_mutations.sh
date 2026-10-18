@@ -411,13 +411,11 @@ mut 1/1 post_tail_removed case_AC22_post_expiry_render_tail sed_state \
   's/ if d\.get("kind") == "post" else ""/ if False else ""/'
 
 # ── check-intent 일반 fix 경로의 앵커 실재 검사 (Task 5, AC23) ─────────────
-# ㉔ 일반 경로의 앵커 실재 검사 제거 — 슬러그 오타가 보호 검사를 건너뛴다.
-# insert-after 분기도 문자 그대로 같은 줄(`if not cls["found"] and target != PREAMBLE:`)을
-# 갖고 있어 순수 텍스트 sed 는 둘 다 잡는다(헤더-satisfiable 함정) — 바로 앞 줄인
-# `return escalate("anchor_immutable")`(파일에 유일)에 앵커해 `n` 으로 그 다음 줄만
-# 겨눈다(cell ② 와 같은 기법).
-mut 1/1 general_anchor_unresolved_off case_AC23_general_fix_anchor_unresolved sed_anchor \
-  '/return escalate("anchor_immutable")/{n;s/if not cls\["found"\] and target != PREAMBLE:/if False:/;}'
+# ㉔ 앵커 실재 검사 제거 — 슬러그 오타가 보호 검사를 건너뛴다. [R2a plan 2 Task 5 3차] 실재 검사는
+# 기록 검증 하나(`docreview_state.scope_problem`)로 옮겼다 — check-intent 두 계약 · decide · declare-related 가
+# 그 함수를 부른다. 그 함수의 실재 검사 줄(파일에 유일)을 끈다.
+mut 1/1 general_anchor_unresolved_off case_AC23_general_fix_anchor_unresolved sed_state \
+  's/    if t != PREAMBLE and t not in known:/    if False:/'
 
 # ── `_permit_covers` 의 라운드 경계 (Task 6, AC24) ──────────────────────────
 # ㉕ permit 의 라운드 경계 삭제 — 낡은 permit 이 영원히 보호 승격을 막는다.

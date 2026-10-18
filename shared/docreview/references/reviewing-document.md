@@ -81,6 +81,7 @@ advice 로 간 항목이나 적용 · drop 된 fix 를 `supersedes` 로 이은 �
 
 - `decide` → 라운드 게이트(결정 묶음). `defer` → `docreview_state.py defer --log-file <목적지>`. `fix` → 저자가 `check-intent <id> --intent <scope> --state-dir D` 통과 후 적용. `drop`·recritic `reject` → 회계에만 남고 게이트 앞 글에 개수 공시.
 - 채택된 `decide` 의 적용은 `check-intent <id> --intent <scope> --state-dir D --decision-id <D#>`(permit 계약).
+- 렌더에서 「고친다(채택)는 고를 수 없다」 줄이 붙은 결정은 그 선택지를 질문에 넣지 않는다 — 고칠 범위가 바꾸면 안 되는 절(사용자 원문 · 결정 기록 · 미룬 항목)이거나 문서에 없는 자리라 `decide` 가 거부한다(`edit_scope_refused`). 질문 앞 글에 그 줄을 그대로 옮긴다.
 - 채택한 결정 때문에 다른 절(수용 기준 · 처분표 등)도 고쳤으면 `docreview_state.py declare-related --state-dir D --decision <D#> --anchors <앵커…>` 로 그 절을 결정에 묶는다 — 묶은 절은 다음 라운드 얼림 검사에서 빠지되 게이트에 「이 결정 때문에 함께 바뀐 곳」으로 보이고 다음 라운드 리뷰어가 다시 본다. 묶지 않고 고친 절은 「허가 없이 바뀐 곳」으로 다시 사용자에게 간다.
 - 참고(advisory) → 라운드 게이트에 오지 않는다. 끝에서 한 번 `advice`(진입 자리)로 보이고 박제된다.
 
