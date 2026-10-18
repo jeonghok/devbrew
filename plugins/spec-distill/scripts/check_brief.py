@@ -1219,7 +1219,7 @@ def research_backref_missing(text: str) -> list[str]:
     return sorted(fails)
 
 
-PROVENANCE_MARK_RE = re.compile(r"(?:⟨S\d+⟩(?:\s*·?\s*⟨S\d+⟩)*|⟨모델 추론⟩)\s*$")
+PROVENANCE_MARK_RE = re.compile(r"(?:⟨S\d+⟩(?:\s*(?:·\s*)?⟨S\d+⟩)*|⟨모델 추론⟩)\s*$")
 
 
 def section1_provenance_failures(text: str, anchors: set) -> list[str]:
