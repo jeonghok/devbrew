@@ -44,6 +44,8 @@ next_phase: superpowers:writing-plans
 - [판정](#판정)
 - [구현 대조 — 계획 1](#구현-대조--docssuperpowersplans2026-10-17-epic-conductor-1-format-statemd)
 - [구현 대조 — 계획 2](#구현-대조--docssuperpowersplans2026-10-17-epic-conductor-2-seamsmd)
+- [지휘 기록](#지휘-기록)
+- [구현 대조 — 계획 3](#구현-대조--docssuperpowersplans2026-10-18-epic-conductor-3-loopmd)
 
 ## Handoff Context
 
@@ -388,6 +390,9 @@ next_phase: superpowers:writing-plans
 - 결정 · 2026-10-17 · 지휘 세션이 직접 진행(계획 1 구현 중 재결정) — 「세션을 연다고? 너가 진행해야지 지휘자로서」 · 「한가지 지금 구현하는 R5는 내가 말하는데로 가는거지? 다른 세션을 열라 하는건 곤란한데」
 - 결정 · 2026-10-17 · 재분해 #221(새 에픽 R11 · R2a · R5 · R8 · R9 · R10 범위) — 「R11 에 더함 (권장)」 · 「이대로 다시 나눈다 (권장)」
 - 결정 · 2026-10-17 · 절별 승인 — 1절 구성 · 연계도(위 「연계성」 답) · 2절 「ok …」 · 3절 「ok」 · 4절 「ok」 · 5절(위 역할표 답) · 6절 「ok」
+- 결정 · 2026-10-18 · 같은 세션에서 지휘자를 다시 부를 때의 시작 승인(계획 3 의 설계에 없던 결정 — AC15 와 `cost_class: high` 승인 규칙의 긴장) — 「이름 붙인 예외 (권장)」
+- 결정 · 2026-10-18 · devbrew 전체 테스트 명령을 계획 3 에서 더할지(탐지만으로는 실행 비트 없는 셸 · node 테스트가 빠짐) — 「더함 (권장)」
+- 결정 · 2026-10-18 · 계획 3 의 실행 방식 — 「Subagent-driven」
 - D1.1 · r1 · adopt · dec7d5b2#r1.1 · "채택 — 남길 기록은 추적 문서로 (권장)" — 지휘자 원장(기다리는 질문 · 넘김 상태 · 판정 · 로그)을 git 이 추적하지 않는 상태 폴더에 둔다. 그런데 레포 규칙은 세션을 넘는 진행 기록을 docs 의 추적 파일에 두고 커밋하라고 한다.
 - D1.2 · r1 · adopt · 396af162#r1.1 · "채택 — 로드맵 frontmatter 에 경로 (권장)" — 문서는 상태 계산 스크립트가 git 만 읽는 성질을 지킨다고 한다. 그런데 같은 문서가 그 스크립트의 설계문서 · 계획 찾기를 git 밖 원장의 레포 설정에서 읽게 하고, 그 설정은 로드맵마다 따로 있는 원장에 들어 있다.
 - D1.3 · r1 · adopt · c43e2738#r1.1 · "채택 — 이동은 R2a 가 (권장)" — qg 의 테스트 실행 스크립트 셋을 공유 폴더로 옮기고 qg 쪽을 링크로 바꾼다. 그런데 문서의 Non-goal 은 qg 수정을 R2a 몫으로 두고, 로드맵에서는 qg 폴더 전체를 R2a 가 예약해 두었다.
@@ -511,21 +516,29 @@ next_phase: superpowers:writing-plans
 | 다른 파일에 박힌 레포 전용 값(로드맵 폴더 위치 검사 등) · `gh` · superpowers 부재 강등 | 경로 규약 범용화 · 부재 강등은 R8 범위 | R8 |
 | 지출 조항 — 지휘자 시작 승인을 「규모 공시만」으로 · 「끝에 할 일 하나」 · Law 1 중간 단계 | 규칙 문면은 R9 범위 | R9 |
 | 사용자 원칙(재사용 검토 · 레포 전용 값 금지 · 상하류 연계 · 계층 · 온톨로지 · 흐름 고정 금지 · 머지 전 확인 · 하위 같은 흐름)을 CLAUDE.md · 철학 문서로 옮기고 낡은 개념 삭제 | 사용자 결정 「새 에픽으로 지금 병렬 (권장)」 — 재분해(#221)로 새 에픽 R11 이 맡았다 | R11 |
-| 기본 브랜치(`origin/HEAD`)를 모를 때 상태줄이 빈칸이다 — 로드맵 없음 · 꺼짐과 구별되지 않는다(계획 1 최종 리뷰) | 상태줄은 모든 레포에서 돌아 조용함이 기본이다 — 작업 트리에 로드맵이 있을 때만 「검사 불가 · 기본 브랜치 모름」 을 낼지는 지휘 화면과 함께 정한다 | R5 |
-| 에픽 보기가 머지된 에픽의 PR 번호를 보이지 않는다(구현 끝 · 일부 머지에서만 PR 줄) | AC9 는 충족 — 머지 커밋 메시지의 PR 번호 읽기는 지휘자 기록 자리와 함께 | R5 |
-| 맞추기 걸음에서 설치된 spec-distill 버전 확인 — 옛 판이면 `--bundle` · 「여기서 계속」 · 기각 번호 보이기가 없다 | 2026-10-18 R2a 실측(설치본 5.3.0 · 레포 7.x) | R5 |
-| 단계(계획 → 구현)마다 새 agent 로 바꾸고 원장 · 파일로 넘긴다 | agent 하나가 리뷰~계획을 이어 약 94만 토큰(2026-10-18) | R5 |
-| 에픽에 새 항목을 넣을 때 brainstorming 필요 판단 — 기존 결정 · 원칙 수리면 바로, 사용자에게 보이는 동작 · 새 요구 · 다른 에픽 경계면 (작으면 채팅 안 짧은 설계로) brainstorming, 판단 이유를 한 줄로 보인다 | 사용자 「앞으로도 너가 판단하기에 에픽에 넣더라도 이거 brainstorming 거쳐서 추가해야 겠는지 판단을 할 수 있도록 해줘」 | R5 |
-| 지휘자가 worktree 격리 세션일 때 그 worktree 를 떠날 수 있는지(하니스의 worktree 나가기) 실측 — 떠날 수 없으면 다른 에픽 spec 리뷰는 담당 agent 경유 | 2026-10-18 실현성 탐색 — 격리 세션은 다른 worktree 로 옮겨 가 쓰기가 막힌다 | R5 |
+| 기본 브랜치(`origin/HEAD`)를 모를 때 상태줄이 빈칸이다 — 로드맵 없음 · 꺼짐과 구별되지 않는다(계획 1 최종 리뷰) | 상태줄은 모든 레포에서 돌아 조용함이 기본이다 — 작업 트리에 로드맵이 있을 때만 「검사 불가 · 기본 브랜치 모름」 을 낼지는 지휘 화면과 함께 정한다 — 계획 3 에서 처리(Task 2 · 결정 F) | R5 |
+| 에픽 보기가 머지된 에픽의 PR 번호를 보이지 않는다(구현 끝 · 일부 머지에서만 PR 줄) | AC9 는 충족 — 머지 커밋 메시지의 PR 번호 읽기는 지휘자 기록 자리와 함께 — 계획 3 에서 처리(Task 2) | R5 |
+| 맞추기 걸음에서 설치된 spec-distill 버전 확인 — 옛 판이면 `--bundle` · 「여기서 계속」 · 기각 번호 보이기가 없다 | 2026-10-18 R2a 실측(설치본 5.3.0 · 레포 7.x) — 계획 3 에서 처리(Task 7 · Task 10) | R5 |
+| 단계(계획 → 구현)마다 새 agent 로 바꾸고 원장 · 파일로 넘긴다 | agent 하나가 리뷰~계획을 이어 약 94만 토큰(2026-10-18) — 계획 3 에서 처리(Task 9 · Task 10) | R5 |
+| 에픽에 새 항목을 넣을 때 brainstorming 필요 판단 — 기존 결정 · 원칙 수리면 바로, 사용자에게 보이는 동작 · 새 요구 · 다른 에픽 경계면 (작으면 채팅 안 짧은 설계로) brainstorming, 판단 이유를 한 줄로 보인다 | 사용자 「앞으로도 너가 판단하기에 에픽에 넣더라도 이거 brainstorming 거쳐서 추가해야 겠는지 판단을 할 수 있도록 해줘」 — 계획 3 에서 처리(Task 10) | R5 |
+| 지휘자가 worktree 격리 세션일 때 그 worktree 를 떠날 수 있는지(하니스의 worktree 나가기) 실측 — 떠날 수 없으면 다른 에픽 spec 리뷰는 담당 agent 경유 | 2026-10-18 실현성 탐색 — 격리 세션은 다른 worktree 로 옮겨 가 쓰기가 막힌다 — 계획 3 에서 처리(Task 1 · Task 10) | R5 |
 | 리뷰 엔진의 억제 장치 — 결정 하나에 허가가 한 절만 나 결정이 닿는 다른 절이 다음 라운드 지적으로 돌아옴 · 결정과 반대인 본문이 참고로만 쌓임 · 추가 라운드 승인 문구가 선택지 라벨로 채워짐 | 2026-10-18 점검(R2a 10라운드 · 참고 21건) — 엔진 동작을 바꾸므로 짧은 brainstorming 뒤 | R2a |
 | 게이트 글 쉬운 말 — 질문 · 선택지 · 항목 첫 줄에 내부 기호를 두지 않고, 혼자 읽히는지 잰다 | 사용자 「R2a 에 넣기 (권장)」 — 기존 규칙 위반 수리는 바로, 잴 락 · 첫 줄 형식은 짧은 brainstorming 뒤 | R2a |
-| 로드맵 R5 범위의 「사용자 게이트는 skill 문면 그대로 전달 · 리뷰 원장은 agent 를 바꿔도 이어짐」 을 재결정에 맞춤 | 로드맵은 사용자가 승인한 범위라 재분해 절차로(승인 뒤 로드맵 PR) | R5 |
-| 재분해 이력 설명에 생성기의 「순서만」 경우 · 사용자가 선택지 라벨만 고르고 따로 적은 말이 없을 때 `--approval` 에 무엇을 넘기나 | 계획 2 과제 3 리뷰 미룸 — 지휘 화면 · 게이트 문면과 함께 | R5 |
-| 실행 방식이 「미리 받은 답」인지 「사람에게 돌리는 자리」인지가 §3 걸음 3 · 4 와 §4 에서 다르게 읽힌다 | 계획 2 과제 8 리뷰 미룸 — 지휘 계약(`conductor-dispatch.md`)에서 하나로 | R5 |
-| 같은 세션에서 지휘자를 이어 부를 때 승인 대신 공시만(AC15)이 `cost_class: high` 의 명시 승인 규칙과 긴장한다 — 예외를 이름 붙여 밝히거나 승인을 유지 | 계획 2 최종 리뷰 | R5 |
-| 설계문서 `## 지휘 기록` 의 spec 승인 줄 형식 — 상태 계산이 읽을 꼴을 정하고, 그 전에 손으로 쓴 줄도 읽히게 | 계획 2 최종 리뷰 — 상태 계산이 그 줄을 읽는 것은 계획 3 | R5 |
-| 에픽 넘김 줄 머리말(「지휘 세션이 붙여 넣는 줄」 · 「새 세션의 첫 줄로」)이 재결정 전 표현 — 이제 사용자가 따로 진행하는 세션의 줄 | 계획 2 최종 리뷰 — 넘김 줄 문면은 §11 이 계획 3 에 둔다 | R5 |
-| `--impl` 의 받는 곳은 작업 트리 로드맵을, 상태 계산은 기본 브랜치 로드맵을 읽는다 · `DEFAULT_REF` · `NO_DEFAULT` 가 두 스크립트에 겹친다 | 계획 1 리뷰 미룸 — 규칙은 한 함수(`roadmap_model.receiver_ok`)라 판정은 같고 읽는 판만 다르다 | R5 |
+| 로드맵 R5 범위의 「사용자 게이트는 skill 문면 그대로 전달 · 리뷰 원장은 agent 를 바꿔도 이어짐」 을 재결정에 맞춤 | 로드맵은 사용자가 승인한 범위라 재분해 절차로(승인 뒤 로드맵 PR) — 계획 3 에서 처리(#224 — 지휘 기록에 적음) | R5 |
+| 재분해 이력 설명에 생성기의 「순서만」 경우 · 사용자가 선택지 라벨만 고르고 따로 적은 말이 없을 때 `--approval` 에 무엇을 넘기나 | 계획 2 과제 3 리뷰 미룸 — 지휘 화면 · 게이트 문면과 함께 — 계획 3 에서 처리(Task 12) | R5 |
+| 실행 방식이 「미리 받은 답」인지 「사람에게 돌리는 자리」인지가 §3 걸음 3 · 4 와 §4 에서 다르게 읽힌다 | 계획 2 과제 8 리뷰 미룸 — 지휘 계약(`conductor-dispatch.md`)에서 하나로 — 계획 3 에서 처리(Task 9) | R5 |
+| 같은 세션에서 지휘자를 이어 부를 때 승인 대신 공시만(AC15)이 `cost_class: high` 의 명시 승인 규칙과 긴장한다 — 예외를 이름 붙여 밝히거나 승인을 유지 | 계획 2 최종 리뷰 — 계획 3 에서 처리(Task 4 · Task 11) | R5 |
+| 설계문서 `## 지휘 기록` 의 spec 승인 줄 형식 — 상태 계산이 읽을 꼴을 정하고, 그 전에 손으로 쓴 줄도 읽히게 | 계획 2 최종 리뷰 — 상태 계산이 그 줄을 읽는 것은 계획 3 — 계획 3 에서 처리(Task 2 · Task 6) | R5 |
+| 에픽 넘김 줄 머리말(「지휘 세션이 붙여 넣는 줄」 · 「새 세션의 첫 줄로」)이 재결정 전 표현 — 이제 사용자가 따로 진행하는 세션의 줄 | 계획 2 최종 리뷰 — 넘김 줄 문면은 §11 이 계획 3 에 둔다 — 계획 3 에서 처리(Task 12) | R5 |
+| `--impl` 의 받는 곳은 작업 트리 로드맵을, 상태 계산은 기본 브랜치 로드맵을 읽는다 · `DEFAULT_REF` · `NO_DEFAULT` 가 두 스크립트에 겹친다 | 계획 1 리뷰 미룸 — 규칙은 한 함수(`roadmap_model.receiver_ok`)라 판정은 같고 읽는 판만 다르다 — 계획 3 에서 처리(Task 2 · 결정 G) | R5 |
+| 계획 agent 중복 방지 락의 빈틈 — `live-agent` 확인을 글자로만 재서 그 뒤에 규칙을 뒤집어도 통과하고, `## 살아 있는 agent` 행의 칸 순서와 `relay-*.md` 거르기가 잠기지 않았다 · 걸음 2 의 질문 원문 파일 `relay-<순번>.md` 이 옮김 기록 `relay-<번호>.md` 과 같은 이름 틀이라 옮김 대조에 섞이고 번호가 겹칠 수 있다 | 계획 3 R39 고침 재리뷰(Ruling R43) — 한 번 고침 · 한 번 재리뷰 지시로 다음으로 미룸 | R5 |
+| `git worktree remove` 전에 SDD 작업 폴더 밖의 git 이 무시하는 파일(`.env` · 로컬 메모 등)을 보이지 않는다 | 계획 3 최종 리뷰 분류 — AC20 「추적 안 된 파일」의 가장자리 | R5 |
+| squash · rebase 머지 레포에서 머지된 브랜치가 기본 브랜치의 조상이 아니라 리뷰 묶음이 열린 에픽으로 본다 | 계획 3 Task 8 리뷰 — 머지 방식 이식성 | R5 |
+| 손으로 쓴 spec 승인 줄 판독의 남은 빈틈(끝난 꼴 뒤 의문 · 조건 어미, `승인됐다` 같은 축약, 전각 숫자) | 계획 3 Task 2 멈출 조건(Ruling R8) — 지휘자는 정해진 꼴만 쓴다 | R5 |
+| `merge_check` 가 `test_command` · `test_failure_pattern` 중 하나만 없어도 기계 상태를 읽어, 기계 상태가 깨지면 frontmatter 에 명령이 있어도 검사 불가로 멈춘다 | 계획 3 최종 고침 재리뷰 — Ruling R33 대로 닫힌 쪽 | R5 |
+| `run-all.sh` 가 찾은 테스트 수를 증인으로 남기지 않아, 찾기가 실패하면 아무것도 돌리지 않고 「새 실패 없음」 이 된다 | 계획 3 Task 13 재리뷰 | R5 |
+| 걸음 6 에서 옮김 대조(SKILL §7)를 가리키는 줄 · SKILL §2 「비었으면」 → 「인자가 비었으면」 · `drop --where 글=` 이 다른 에픽의 같은 글 행까지 지움 · worktree 세션의 하위 agent 가 메인 체크아웃 `.claude` 아래 파일을 읽을 수 있는지 미측정 | 계획 3 최종 고침 재리뷰 | R5 |
+| 알림 도구(`PushNotification`)가 지휘 세션 본체에 있는지와 「보고 있으면 보내지 않는다」 문면 — M7 은 지휘 세션이 보낸 agent 자리에서만 쟀다 | 계획 3 Task 1(Ruling R2) — 첫 실사용(M11)에서 잰다 | R5 |
 
 ## Metadata
 
@@ -608,6 +621,58 @@ next_phase: superpowers:writing-plans
 - Ruling: 한 번의 수정 dispatch — Important 셋 + minor(CHANGELOG · 순서 · 걸음 5) 를 계획 2 에서 · AC15 cost_class 예외 · 지휘 기록 승인 줄 형식 · epic-handoff 머리말은 계획 3 미룸 행(Step 7) · 「이 에픽 다시 설계」 brainstorming 이음매는 재결정으로 풀림(미룸에 안 올림) — 틀리면 문면 되돌림
 - Ruling: 구현자가 계획 과제 7 의 --acs 목록에도 AC44 · AC45 를 더한 것을 받는다 — 계획 머리 Spec 줄과 어긋나지 않게 · 계획 파일 목차 없음은 받아들인다(레포 계획 파일 63개 중 33개가 목차 없음 · 계획 1 도 없이 머지 — 계획 파일은 사실상 면제 관행) — 틀리면 R9 문서 정리 몫
 
+### docs/superpowers/plans/2026-10-18-epic-conductor-3-loop.md
+
+- Ruling: R1 — Task 0 baseline reused from mirror (captured on 2573405c; origin/HEAD still d4d9dbe8, HEAD unchanged) — base did not move — costs a stale baseline only if the base had moved, which it did not.
+- Ruling: R2 — M7 measured in this SDD-controller seat (an agent dispatched by the conductor session), not the conductor main session: PushNotification absent from this seat's tool list (ToolSearch select:PushNotification found nothing); SendMessage to a completed agent resumed it with context (answered 7). measurements.md records the seat. Task 10 alarm sentence: no "not sent while watching" claim (no evidence) + the plan's fallback sentence for an absent tool — costs one sentence if the main session does have PushNotification (conductor can remeasure).
+- Ruling: R3 — Task 16 Step 7 (write 판정 · 구현 대조 sections into the design doc) is the conductor's — plan says "구현 대조를 거두는 쪽이 한 번만 한다(지휘 세션이 보냈으면 지휘 세션)"; this agent produces ac-report.md + final report only — costs nothing if wrong: conductor runs the three commands.
+- Ruling: R4 — Task 13 Step 4 runs 4 full suites (hand helper + run-all on base and merged copies) under the shared suite-lock.d, one at a time; codex fixture checked in each copy before deletion — costs time only.
+- Ruling: R5 — merge_check must call diff-test-results.py with cwd=<repo root> (M8 (c) — rc 4 「리포 루트에서 불러라」 otherwise) and parse_attributions must be checked against real output — carried into Task 3 dispatch — costs a Task 3 fix round if wrong
+- Ruling: R6 — narrow decision C's hand-written path (keeps the spec's 「손으로 쓴 줄도 읽히게」 intent): a non-canonical `- ` line counts only if it has a date, the word "spec" (case-insensitive), an affirmative form (승인했 · 승인함 · 승인됨 · 승인받 · 승인 받) and none of the extended deny substrings (승인 대기 · 승인 전 · 승인 거절 · 승인하지 않 · 승인 안 · 미승인 · 않 · 철회 · 취소 · 보류 · 요청 · 필요 · 기다 · 아니); the reviewer's ten probe lines become negative tests; a canonical line whose date fails DATE_RE raises FormatError (surfaces as 「지휘 기록 읽기 불가」, minor 1); merged_prs shows state 머지됨 for a cache row of a 머지됨 epic (minor 3) — fail-closed toward re-asking the human; costs: an unusual hand-written approval line reads as 「spec 있음」 and the conductor re-asks
+- Ruling: R7 — Task 9 (independent reference doc) runs while Tasks 3/4 reviews are open; Tasks 5–8 wait for Task 4's review because they edit the same file — costs nothing if Task 9 needs no later change
+- Ruling: R8 — one more round on this axis — YES = finished forms only (승인했 · 승인함 · 승인됨 · 승인받았 · 승인 받았 · 승인받음 · 승인 받음), DENY += 못 · 아님 · 무효 · 예정, canonical date anchored at the field start (DATE_RE.match + ` · ` or end), docstring fixed. Stop condition (memory 「whack-a-mole」/「멈출 조건은 시작 전에」): further hand-written phrasing leaks after this round are recorded as a known limitation, not another round — the conductor writes only canonical lines via `ledger record --approval`, and no existing design doc has a hand-written 지휘 기록 line — costs: an exotic hand-written negation could read as approved (fail-open) until R5's conductor rewrites it canonically
+- Ruling: R9 — Task 11 dispatch must say `approval` rc other than 0 (incl. rc 3 broken state) → ask with AskUserQuestion (or stop), never disclosure-only — reviewer ⚠️ on task-11-brief:232-234 — costs one sentence in SKILL.md
+- Ruling: R10 — decision I routing — execution-method answer goes to a new implementation agent as a pre-given answer; plan-change answers go back to the plan agent with 「계획만 고치고 커밋한 뒤 다시 멈춘다 — 실행 skill 로 넘어가지 않는다」 — consistent with decisions H and I — costs one paragraph if wrong
+- Ruling: R11 — the 처분 line in references/ is outside test_dispatch_disposition's corpus — enforcement happens at Task 11's SKILL.md dispatch site (axis C there) — noted for Task 11 dispatch
+- Ruling: R12 — shared/tests/test_skill_reference_pointers.sh reports conductor-dispatch.md as an orphan until Task 10/11 point at it — transient within the branch, checked again after Task 11 — costs a red lock only if Tasks 10/11 omit the pointer (their briefs include it)
+- Task 2: parked — known limitation under Ruling R8: hand-written lines with question/condition endings after a finished form still read as approval (승인했는지 모름 · 승인했으면 좋겠다 · 승인받았었으나 번복 …); fail-closed misses (승인됐다; deny word elsewhere in line); fullwidth digits accepted by DATE_RE; test gaps (match→search mutation survives; 못/예정 lack own lines) — Ruling: stop condition reached, the conductor only writes canonical lines; costs a mis-read only for exotic hand-written lines
+- Ruling: R13 — disposable set = merge-check/run-*/{base,merged} (refused while the merge-check lock has a live owner) + direct children of <machine dir>/review (review packs, which the loop text cleans with `ledger cleanup`); merge copies removed with scoped `git worktree remove --force` (no global prune), packs with rmtree without ignore_errors; verify gone before dropping the row; symlink paths refused; other paths must be registered non-main worktrees (else rc 2) — AC20 safety (never delete what the user did not choose) — costs a refusal the conductor must surface if a legit path falls outside the set
+- Ruling: R15 — add (at Task 15/final wave) a lock that every `ledger <cmd>` named in conducting.md is a key of conductor_ledger.COMMANDS — reviewer ⚠️ (commands of Tasks 6–8 not yet present) — costs one small test
+- Ruling: R16 — README prerequisites list quality-gates as optional (step 7 calls /quality-gates:quality-pipeline) — carried into Task 16 — CLAUDE.md silent-coupling rule
+- Ruling: R14 — quote `"<SD>"` in conductor-dispatch.md; add a parallel EXEMPT entry for plugins/spec-distill/scripts/run-test-selection.sh (same needle/reason as the quality-gates link) — lock edit kept minimal, reviewed in Task 11 review — costs one exemption line
+- Ruling: R17 — one more cheap round on Task 5 for safety follow-ups (orphans catches OSError — TCC/permission; missing pack = gone; refuse root/cwd worktree; failure-branch test; ownerless young lock = live) — the conductor itself may sit in a linked worktree — costs one small round
+- Ruling: R18 — tools/suite/run-all.sh:21 bare `python3 -m unittest discover` (plan-mandated text, Task 13) turns test_inline_python_isolated red (and Task 11's test through it). Fix after Task 13's suite runs finish (run-all is being executed live — editing it mid-run is unsafe): add `-I`, verify per-dir discovery results are identical with and without -I, note in measurements M10 — costs one line; M10 stays valid if discovery results match
+- Ruling: R19 — extend proceed-gate.md `## 다음 세션 명령` minimally (bare-path slash line for argument-taking entry skills; table row epic-conductor; absolute path; note that roadmap spec-review gate and split-work interview end use the conductor call as second line) — plan gap; CLAUDE.md names proceed-gate.md as the master — costs a few contract lines
+- Ruling: R20 — amend decision K's label to 「계획 agent 의 입력(지휘자가 넘긴다 — 지휘자 없이 이 세션에서 이어 갈 때만 친다)」 — keeps AC42 (second line = conductor call) and the AC31 own-session allowance from contradicting each other; K was a conductor-session ruling (not a user decision) — costs one label if the conductor prefers strict 「치지 않는다」 (then the epic-handoff header must drop the own-session case)
+- Ruling: R21 — Task 11 round 2 — guarded fence for the control_plane show command; lock rejects `$sid`/`$SD` in prose of sections 3–4 and requires the stop-if-empty clause — same defect class as Important 1 (memory 「Bash 도구는 호출마다 새 셸」) — costs one small round
+- Ruling: R22 — accept the implementer's deviation — no rule-4 table row for epic-conductor in proceed-gate.md (test_proceed_gate_adopters derives adopters from every skill named there; a row would require exempting epic-conductor and weakening that lock); the rule-3 bullet states the bare-path form without naming a skill — costs: the table no longer enumerates every slash receiver
+- Ruling: R23 — Task 16's CHANGELOG must use the R20 label, not the plan draft's 「(치지 않는다)」 — carried into Task 16 dispatch
+- Ruling: R24 — fix all six — 「셀 수 없음」 per unreadable source, 「감사 후보 없음」 only when all sources were read; exit 3/4 status → rc 3; rejected rows counted from tip text; strict semver-ish parse with 「판을 비교하지 못했다」 rc 1; explicit 「PR 없음」 lines — CLAUDE.md 「침묵과 0 은 다른 사실이다」 — costs one round
+- Ruling: R25 — accept Task 7's _status deviation — rc 3 only when exit 3/4 AND no block has a stage (exit 3 also fires for an unreadable brief while blocks are staged; strict would make audit unusable) — costs: unknown_reasons with staged blocks are not shown by audit unless it discloses them
+- Ruling: R26 — fix all four + no-slash superpowers paths; header lists remaining known limits — AC29 「변이로 이빨을 확인」 — costs one round
+- Ruling: R27 — the four linked shared/test-selection scripts (resolve-baseline.sh carries an origin/main → master fallback that contradicts NO_DEFAULT) and pre-existing literals in control_plane.py / redecompose.md stay outside the AC29 target list — spec 미룸 row 「다른 파일에 박힌 레포 전용 값 … R8」 routes them; shared/test-selection is R2a's (not editable here) — costs: merge_check's suite copies may silently accept a main/master fallback in repos without origin/HEAD (merge_check itself refuses without origin/HEAD first, so the fallback is not reached through merge_check's own path)
+- Ruling: R28 — accept M10's one-line fixed-set difference as a flaky test, not a name-extraction defect (it passed alone twice on the same base copy and in the hand helper's base run) — costs: if it is not flaky, merge_check would report a spurious 「고쳐짐」 — the final suite comparison re-observes it
+- Ruling: R29 — R18 reversed — run-all.sh keeps bare `python3 -m unittest discover` (with -I quality-gates discovery drops 142→107 tests with 4 import ERRORs, spec-distill gains 2 skips) and gets a reasoned exemption in test_inline_python_isolated.sh instead (repo-own suite, runs only at devbrew's root) — precedent: plugin-audit run-own-tests.sh exemption — costs: run-all.sh runs with cwd on sys.path (only ever in devbrew itself)
+- Ruling: R30 — leave shared/tests/test_inline_python_isolated.sh red on this branch (one bare-call hit at tools/suite/run-all.sh:21, which also reds test_epic_conductor_skill.sh's nested shared-lock check) and surface the decision to the human: (A) allow the exemption commit (patch ready), (B) -I and lose 35 quality-gates tests from run-all silently, (C) other — a permission-classifier denial is a security-sensitive stop, not mine to override — costs: two red test files on the branch until the human decides
+- Ruling: R31 (supersedes R29/R30) — run-all.sh calls a script-file runner tools/suite/run_unittest_dir.py instead of inline `python3 -m unittest` — the inline-python lock's threat (cwd on sys.path) does not apply to script-file calls, and the -I loss was user site-packages (PyYAML), not cwd (reviewer probe) — no exemption needed; plus FAIL: marker, rc capture, find sweep, stable node names, M10 wording — costs one round; the denied exemption patch is moot
+- Ruling: R32 (I1) — merge_check picks name shapes by runner (pytest→pytest shape, unittest→unittest shape, shell→✗/FAIL:/tap, unknown→none → 「이름 대조 불가」); test_command path keeps pattern-or-known-shapes; scene with a both-red shell unit printing an `ERROR:` line — Review Focus 3 — costs: a runner whose output uses another runner's shape is reported 「이름 대조 불가」 instead of compared
+- Ruling: R33 (I2) — merge_check falls back to the machine state `## 레포 설정` rows `test_command` / `test_failure_pattern` when the default-branch roadmap frontmatter lacks them (frontmatter wins), and says so in 「무엇을 돌렸나」 — conducting.md step 5 already tells the conductor to store the answer there — costs: a machine-state value can drive the suite until the roadmap-fix PR lands
+- Ruling: R34 (I3) — within the conductor, ①/② do only bookkeeping before the STOP — 미커밋 확인 → 승인 줄 기록 · 커밋 → 기계 상태 저장 → 두 줄 → 턴 종료; the plan agent is sent after compaction by step 1 (status 「spec 승인됨 · 계획 없음」) or in the same turn only on 「여기서 계속」 — aligns the loop with the hand procedure and CLAUDE.md's AP2 variant (no named exception needed); spec-review's roadmap branch and proceed-gate.md say this once; test_conducting_loop's order lock flipped accordingly; SKILL §2 strips any worktree toplevel of this repo from an absolute roadmap path — costs: the plan agent starts one /compact later than the spec's 「계획 agent 를 보낸 직후」 example (AC27 · AC44 still hold) — flag to the conductor
+- Ruling: R35 (I4) — reword the disabled row / template / CHANGELOG: DEVBREW_SPEC_DISTILL_DISABLE=1 turns off all of spec-distill (review · status included); the hand procedure is for running the loop without calling the conductor, with spec-distill on — keeps AC15's 「꺼져 있으면 손 절차를 가리키고 멈춘다」 — costs wording only
+- Ruling: R36 (I5) — add `ledger resource-dir --roadmap R --kind tmp|relay|report --name N` printing (and creating) `<machine dir>/files/<kind>/<name>`; `disposable_kind` treats direct children of `<machine dir>/files/<kind>/` as disposable (rmtree, verify gone, drop row); conducting.md / conductor-dispatch.md name the command instead of 「기계 상태 자원 폴더」 — AC20 · AC21 — costs one subcommand
+- Ruling: R37 (I6) — add read-only agent `agents/relay-checker.md` (tools: Read, Grep, Glob; role sentences; input slots) and its dispatch site in SKILL.md with a `**처분**` line; conductor-dispatch.md names it — CLAUDE.md Law 2 (a writer must not be the reviewer) — costs one small agent
+- Ruling: R38 — must-fix minors in the same wave — 「걸음 6 의」 (conducting.md:48); --spec as the epic worktree's absolute design-doc path in conducting.md; `ledger drop` of `## 쌓인 기록` rows after posting them to a roadmap PR (step 6/7); strip a leading `@` in SKILL §2; chain `cd "<root>" &&` to the claim line; merge_check main()'s rev-parse inside try; README:139 / :178 wording; stale comment test_conductor_e2e.sh:102 — everything else stays deferred per the final reviewer's triage
+- Ruling: R39 (residual, Important, load-bearing at run time) — duplicate plan agent after 「여기서 계속」 + /compact — step 1 / 「보내기」 send a plan agent for any epic in 「spec 승인됨 · 계획 없음」, which stays true while the first plan agent runs → a second writer in the same worktree (conducting.md:13, :32; hand :86). Not fixed in this branch (no second fix wave); surfaced to the conductor/human with the one-clause fix (「## 살아 있는 agent 에 그 에픽의 계획 agent 가 없을 때만 보낸다」 in loop steps 1 · 3 and hand step 3) — costs: until fixed, a conductor that compacts right after 「여기서 계속」 can double-dispatch
+- Task final: parked — I3 order lock literal-shaped (synonym inside the ①/② sentence and the loop's 「이 턴에는 계획 agent 를 띄우지 않는다」 unpinned) — Ruling: rule stated consistently in five places; tighten with R39's fix — costs a regression the lock would not catch
+- Task final: parked — epic-handoff.md:3 / CHANGELOG:16 「지휘자를 껐거나(손 절차)」 still reads as the kill switch next to R35 — Ruling: AC31 literal pinned; parenthetical-only fix proposed for the follow-up — costs misleading wording only
+- Task final: parked — relay folder mixes the plan-agent input line and raw question files with relay-*.md (SKILL §7 passes every file → 「확인 못 함」 noise); no 「없으면 다시 만든다」 for the input line — Ruling: fail-closed noise, follow-up — costs disclosure noise
+- Task final: parked — merge_check reads machine state when either key missing (broken state blocks even with frontmatter test_command) — Ruling: R33 as ruled, fail-closed; suggestion to read only when test_command missing — costs an extra rc 3 on a corrupt machine state
+- Task final: parked — step 6 lacks a pointer to SKILL §7 relay-checker; SKILL §2 「비었으면」 → 「인자가 비었으면」; drop --where 글= can remove another epic's same-text row; background agents reading the main repo's .claude path from a worktree session unmeasured — Ruling: minor follow-ups — costs wording / rare edge
+- Ruling: R40 — classify test_codex_backward_compat.sh's full-suite rc 1 as a pre-existing flaky test, not a regression of this branch — the branch does not touch plugins/quality-gates/; the same file failed once on origin/HEAD's own tree in M10's run-all base run; alone on HEAD it passed 3/3 (qgprobe-1..3.out) — costs: if it is a real interaction (e.g. load/timing with new tests), it would show up as an intermittent red in merge checks; the hand helper cannot name the failing check (it only reads ✗ lines) — recommend the conductor re-run it once in a quiet moment before merge
+- Ruling: R41 — keep the SDD workspace (not deleted) — the conductor's Task 16 Step 7 reads final-report.md / progress.md / ac-report.md from it (also mirrored) and residual R39 is open — costs a git-ignored folder left behind
+- Ruling: R42 — R39 fix — loop steps 1 · 3 and hand step 3 send a plan agent for an epic in 「spec 승인됨 · 계획 없음」 only when `## 살아 있는 agent` has no plan agent for that epic, and record the plan agent there when sending; lock pins the loop's 「이 턴에는 계획 agent 를 띄우지 않는다」, widens `sent`, and adds a live-plan-agent → no-second-dispatch check — conductor ruling within the approved design — costs a lookup per step 1
+- Ruling: R43 — per the conductor's one-fix-one-re-review instruction, no further round — park as R5 미룸 rows: (a) raw-question vs relay-record file naming (collision / 「확인 못 함」 noise); (b) lock gaps — live-agent guard checked as substring (an inverted rule after the literal passes) and `## 살아 있는 agent` --cells column order unlocked (a wrong order would silently re-open R39), relay-*.md filter unlocked — costs: these can regress silently until R5's follow-up lands
+
 ## 구현 대조 — docs/superpowers/plans/2026-10-17-epic-conductor-1-format-state.md
 
 - 구현 대조: 경고 없음 (AC 18개 · 구현됨 18개 · 미룸 0개 · --acs 로 고른 것 · 뺀 AC 27개) (받는 곳 규칙: 로드맵의 에픽 또는 PR 번호(#숫자))
@@ -617,3 +682,12 @@ next_phase: superpowers:writing-plans
 
 - 구현 대조: 경고 없음 (AC 9개 · 구현됨 9개 · 미룸 0개 · --acs 로 고른 것 · 뺀 AC 36개) (받는 곳 규칙: 로드맵의 에픽 또는 PR 번호(#숫자))
 - 보고: AC 9개 중 구현됨 9 · 미룸 0 · 빠짐 0
+
+## 지휘 기록
+
+- 미룸 「로드맵 R5 범위를 재결정에 맞춤」 은 #224 가 처리했다 — R5 블록 범위 줄이 「spec 리뷰까지는 지휘 세션이 직접」 을 싣는다
+
+## 구현 대조 — docs/superpowers/plans/2026-10-18-epic-conductor-3-loop.md
+
+- 구현 대조: 경고 없음 (AC 25개 · 구현됨 25개 · 미룸 0개 · --acs 로 고른 것 · 뺀 AC 20개) (받는 곳 규칙: 로드맵의 에픽 또는 PR 번호(#숫자) — 작업 트리의 로드맵으로 쟀다)
+- 보고: AC 25개 중 구현됨 25 · 미룸 0 · 빠짐 0

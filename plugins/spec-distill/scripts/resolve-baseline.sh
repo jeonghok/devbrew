@@ -1,0 +1,1 @@
+../../../shared/test-selection/resolve-baseline.sh

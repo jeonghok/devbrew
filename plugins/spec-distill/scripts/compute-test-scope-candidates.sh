@@ -1,0 +1,1 @@
+../../../shared/test-selection/compute-test-scope-candidates.sh

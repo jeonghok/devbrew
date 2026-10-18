@@ -195,5 +195,5 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
 fi
 assert_file_absent "$SKILL" '/compact 설계문서' "spec-review: 옛 /compact 보존 틀이 없다"
 assert_file_absent "$SKILL" '① 의 정지 요건' "spec-review: 옛 「① 의 정지 요건」 불릿 이름이 없다"
-assert_file_grep "$FIN" '\$\{CLAUDE_PLUGIN_ROOT\}/references/epic-handoff\.md' "finishing.md 가 에픽 넘김 줄 reference 를 가리킨다(AC2 · 고아 reference 방지)"
+assert_file_grep "$ROOT/plugins/spec-distill/references/conducting.md" 'epic-handoff\.md' "conducting.md 가 에픽 넘김 줄 reference 를 가리킨다(고아 reference 방지 — 나눈 일의 다음 세션 줄은 지휘자 호출이 됐다)"
 finish

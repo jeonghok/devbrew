@@ -31,14 +31,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_bundle_coverage import check, deferred_rows, receiver_ok  # noqa: E402
 from roadmap_model import (  # noqa: E402,F401 — 테스트가 rs.parse_roadmap · rs.brief_universe 로 부른다
-    EXTRA_FIELDS, FormatError, RECORD_HEADING, RULINGS_HEADING, brief_universe, collect_assigned, field_list, field_text,
+    DEFAULT_REF, EXTRA_FIELDS, FormatError, NO_DEFAULT, approval_date, RECORD_HEADING, RULINGS_HEADING, brief_universe, collect_assigned, field_list, field_text,
     frontmatter, handoff_rows, id_sort_key, impl_done, parse_ids, parse_roadmap,
     section_body, section_lines, split_list, unquote)
 from repo_defaults import SPECS_DIR, repo_settings  # noqa: E402
 
-DEFAULT_REF = "refs/remotes/origin/HEAD"
-NO_DEFAULT = ("기본 브랜치를 알 수 없다 — origin/HEAD 가 없다. `git remote set-head origin --auto` 로 만든 뒤 "
-              "다시 계산한다")
 GIT_ALLOWED = frozenset({"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"})
 NOTICE = ("머지됨 자동 판정은 merge commit 방식에서만 된다 — 브랜치가 지워졌으면 GitHub 의 머지 메시지 "
           "`Merge pull request #<n> from <owner>/<브랜치>` 로만 알아본다. squash · rebase 로 머지했거나 "
@@ -286,9 +283,23 @@ def branch_plans(git: Git, base: str, tip: str, specs: list, plans_dir: str) -> 
     return sorted(out)
 
 
+def approval_of(git: Git, tip: str, specs: list):
+    """(가장 늦은 spec 승인 날짜 | None, 읽기 불가 사유 | None) — 그 브랜치 설계문서들의 `## 지휘 기록`."""
+    dates = []
+    for s in specs:
+        try:
+            d = approval_date(git.blob(tip, s) or "")
+        except FormatError as exc:
+            return None, "지휘 기록 읽기 불가 — %s(%s)" % (exc, s)
+        if d:
+            dates.append(d)
+    return (max(dates) if dates else None), None
+
+
 def progress(git: Git, main: str, tip: str, block: dict, bundle_path, settings: dict):
     """(단계, 근거, 설계문서들, 계획들) — 브랜치 하나의 진행. 앞 계획의 구현 대조 절은 뒤 계획을 끝내지 않는다."""
     specs = find_specs(git, tip, block, bundle_path, settings["specs_dir"])
+    block.setdefault("approved", None)
     if not specs:
         return "설계 중", "브랜치 있음 · spec 없음", [], []
     base = git.merge_base(main, tip)
@@ -296,6 +307,12 @@ def progress(git: Git, main: str, tip: str, block: dict, bundle_path, settings: 
         return "설계 중", "spec 있음 · 기본 브랜치와 갈라진 곳을 못 찾았다", specs, []
     plans = branch_plans(git, base, tip, specs, settings["plans_dir"])
     if not plans:
+        when, why = approval_of(git, tip, specs)
+        block["approved"] = when
+        if why:
+            return "설계 중", "spec 있음 · " + why, specs, []
+        if when:
+            return "설계 중", "spec 승인됨(%s) · 계획 없음" % when, specs, []
         return "설계 중", "spec 있음", specs, []
     texts = [git.blob(tip, s) or "" for s in specs]
     done = [p for p, _c in plans if any(impl_done(t, p) for t in texts)]
@@ -399,7 +416,7 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
 
     for bid in order:
         b = by_id[bid]
-        b.update(stage=None, reason="", warnings=[], notes=[], specs=[], tip=None, branch_states=[], plans=[], docs=[], deferred=[],
+        b.update(stage=None, approved=None, reason="", warnings=[], notes=[], specs=[], tip=None, branch_states=[], plans=[], docs=[], deferred=[],
                  bundle=(roadmap_dir + "/" + b["fields"]["묶음"]) if b["kind"] == "bundle" else None)
         undone = [d for d in b["deps"] if by_id[d]["stage"] not in DONE]
         if main is None:

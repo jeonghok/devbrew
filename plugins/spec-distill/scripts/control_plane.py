@@ -39,7 +39,7 @@ SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
 from kill_switch_active import kill_switch_active  # noqa: E402
 import conductor_state as cs  # noqa: E402
-from roadmap_model import BLOCK_ID_RE, FormatError  # noqa: E402
+from roadmap_model import BLOCK_ID_RE, DEFAULT_REF, NO_DEFAULT, FormatError  # noqa: E402
 from state_path import state_root_for_common  # noqa: E402
 
 DONE = ("머지됨", "끝남")
@@ -58,8 +58,6 @@ TOP_WARNINGS = (("고아 발화", "orphans"), ("미배정 번호", "unassigned")
                 ("brief 에 없는 번호", "unknown_ids"))
 CTRL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 QUEUE_HEADING = "## audit §2 대기 줄"
-NO_DEFAULT = ("기본 브랜치를 알 수 없다 — origin/HEAD 가 없다. `git remote set-head origin --auto` 로 만든 뒤 "
-              "다시 계산한다")
 NO_ROADMAP = "로드맵 없음 — 기본 브랜치에 끝나지 않은 블록이 있는 로드맵이 없다"
 
 
@@ -327,7 +325,6 @@ def tasks_output(items, select_error=None):
 
 # ── git · 인터뷰 파일 · 캐시 (읽기 전용 — 쓰는 것은 캐시 파일 하나) ──────────────────
 
-DEFAULT_REF = "refs/remotes/origin/HEAD"
 ROADMAP_RE = re.compile(r"docs/superpowers/roadmaps/[^/]+/roadmap\.md")
 GIT_OK = frozenset({"rev-parse", "ls-tree", "for-each-ref"})
 CACHE_VERSION = 1
@@ -763,7 +760,22 @@ def _rulings(b: dict, paths: list, read, deadline) -> None:
         b["rulings"] = rulings
 
 
-def overlay(items, machine_lookup, gh_lookup, use_gh: bool, read=read_capped, deadline=None) -> None:
+def merged_prs(b: dict, prs: dict, gh_lookup) -> list:
+    """머지된 에픽의 브랜치마다 PR — 기계 상태 캐시가 먼저, 없으면 gh. 머지 커밋 메시지는 해석하지 않는다(호스트마다 다르다)."""
+    out = []
+    for s in b.get("branch_states") or []:
+        br = s["branch"]
+        if br in prs:
+            row = prs[br]
+            out.append((br, {"number": row["번호"], "state": "머지됨", "source": "기계 상태"}))
+        elif gh_lookup is None:
+            out.append((br, _pr_unknown("기계 상태에 없고 gh 가 없다")))
+        else:
+            out.append((br, gh_lookup(br)))
+    return out
+
+
+def overlay(items, machine_lookup, gh_lookup, use_gh: bool, read=read_capped, deadline=None, focus=None) -> None:
     """기계 상태 · 실행 원장 · gh 를 보고서에 얹는다 — 캐시 밖에서 매번 읽는다(캐시 열쇠에 넣지 않는다).
     use_gh 가 거짓(상태줄)이면 gh 도 원장도 판정도 읽지 않는다 — 상태줄은 그것들을 보이지 않는다."""
     for path, report in items:
@@ -790,11 +802,13 @@ def overlay(items, machine_lookup, gh_lookup, use_gh: bool, read=read_capped, de
                     b["pr"] = gh_lookup(br)
                 if stage == "구현 끝" and b["pr"]["state"] == "열림":
                     b["stage"], b["reason"] = "PR", "%s 열림(%s)" % (b["pr"]["number"], b["pr"]["source"])
+            if use_gh and focus is not None and b.get("id") == focus and stage == "머지됨":
+                b["merged_prs"] = merged_prs(b, prs, gh_lookup)
             if use_gh and (stage in IMPL_STAGES or partial or stage == "머지됨"):
                 _rulings(b, ledgers.get(b.get("id"), []), read, deadline)
 
 
-def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True):
+def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True, focus=None):
     """화면에 필요한 것 전부. 받은 시각은 캐시 밖에서 매번 읽는다. ctx 에 레포 최상위 · 캐시 상태를 남긴다."""
     view = {"items": [], "interview": None, "notes": [], "minutes": None, "select_error": None}
     repo = open_repo(cwd, deadline)
@@ -848,7 +862,7 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True):
     for _p, r in items:
         r["fetched_at"] = fetched  # 첫 줄의 받은 시각도 캐시 밖에서
     overlay(items, lambda rel: machine_for(repo, rel), gh_lookup_for(repo, deadline) if use_gh else None, use_gh,
-            deadline=deadline)
+            deadline=deadline, focus=focus)
     view.update(items=items, interview=interview, select_error=select_error)
     return view
 
@@ -956,6 +970,8 @@ def epic_view(path: str, report: dict, epic: str):
     row("브랜치", [branch_cell(s) for s in b.get("branch_states") or []])
     if b.get("pr"):
         out.append(clean("  PR: %s" % pr_text(b["pr"])))
+    if b.get("merged_prs"):
+        out.append(clean("  PR: " + " · ".join("%s %s" % (br, pr_text(pr)) for br, pr in b["merged_prs"])))
     row("의존", ["%s(%s)" % (d, stages.get(d)) for d in b.get("deps") or []])
     if b.get("parallel") is None:
         out.append("  동시에 갈 수 있는 에픽: 셀 수 없음")
@@ -1025,7 +1041,7 @@ def cmd_show(tasks: bool, arg, epic=None) -> int:
         print("꺼져 있다 — %s" % sw)
         return 0
     try:
-        v = gather(os.getcwd(), arg, Deadline(SHOW_BUDGET), {})
+        v = gather(os.getcwd(), arg, Deadline(SHOW_BUDGET), {}, focus=epic)
     except TimedOut as exc:
         msg = clean("검사 불가 — 시간 초과(%s, %d초)" % (exc, SHOW_BUDGET))
         if tasks:
