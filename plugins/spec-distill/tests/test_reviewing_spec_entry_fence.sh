@@ -330,7 +330,7 @@ fi
 #    플러그인으로 풀려야 리뷰가 돈다. 무치환이면 `## 입력` 은 가드에서 멈추고 cwd 의 미끼를 돌리지 않는다.
 INST="$SCRATCH/installed/spec-distill"
 mkdir -p "$INST/scripts" "$INST/references/docreview-profiles"
-cp -L "$SD_SCRIPTS/review_entry.py" "$SD_SCRIPTS/kill_switch_active.py" "$SD_SCRIPTS/state_path.py" "$SD_SCRIPTS/docreview_state.py" "$INST/scripts/"
+cp -L "$SD_SCRIPTS/review_entry.py" "$SD_SCRIPTS/kill_switch_active.py" "$SD_SCRIPTS/state_path.py" "$SD_SCRIPTS/docreview_state.py" "$SD_SCRIPTS/docreview_config.py" "$INST/scripts/"
 cp -L "$ROOT/plugins/spec-distill/references/docreview-profiles/design-doc.md" "$INST/references/docreview-profiles/"
 UREPO="$SCRATCH/userrepo"
 mkdir -p "$UREPO"

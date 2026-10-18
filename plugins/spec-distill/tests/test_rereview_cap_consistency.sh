@@ -32,7 +32,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$REPO_ROOT/shared/tests/assert.sh"
 
 REF="$REPO_ROOT/shared/docreview/references/reviewing-document.md"
-ENGINE="$REPO_ROOT/shared/docreview/scripts/docreview_state.py"
+ENGINE="$REPO_ROOT/shared/docreview/scripts/docreview_config.py"
 SKILL="$REPO_ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
 README="$REPO_ROOT/plugins/spec-distill/README.md"
 
@@ -93,11 +93,11 @@ echo "정본 재리뷰 상한 = $CAP (출처: shared/docreview/references/review
 echo
 
 # ── 1. 엔진 상수 ─────────────────────────────────────────────────────────────
-if grep -qE "^REREVIEW_CAP = ${CAP}\$" "$ENGINE"; then
-  ok "엔진 상수: docreview_state.py 의 REREVIEW_CAP = $CAP"
+if grep -E '^DEFAULTS = ' "$ENGINE" | grep -qE "\"rereview_cap\": ${CAP}[,}]"; then
+  ok "엔진 기본값: docreview_config.py 의 DEFAULTS rereview_cap = $CAP"
 else
-  ACT="$(grep -oE '^REREVIEW_CAP = [0-9]+' "$ENGINE" | grep -oE '[0-9]+' | head -1)"
-  no "엔진 상수 drift: docreview_state.py REREVIEW_CAP = ${ACT:-없음} (정본 $CAP) — 산문과 실행이 갈렸다"
+  ACT="$(grep -E '^DEFAULTS = ' "$ENGINE" | grep -oE '"rereview_cap": [0-9]+' | grep -oE '[0-9]+' | head -1)"
+  no "엔진 기본값 drift: docreview_config.py DEFAULTS rereview_cap = ${ACT:-없음} (정본 $CAP) — 산문과 실행이 갈렸다"
 fi
 
 # ── 2·3. 산문 자리 (양의 단언) ───────────────────────────────────────────────
@@ -153,7 +153,11 @@ for f in "$REF" "$ENGINE" "${TARGETS[@]}" "${NEG_ONLY[@]}"; do
     no "코퍼스 실재: $rel 를 읽을 수 없다 — 이 자리는 이번 판정에서 통째로 빠졌다(조용한 축소 금지)"
     continue
   fi
-  scan_text "$rel" "$(cat "$f")"
+  if [ "$f" = "$ENGINE" ]; then
+    scan_text "$rel" "$(grep -E '^DEFAULTS = ' "$f")"   # 같은 파일의 MINIMUM 줄(다른 값)은 상한 정본이 아니다
+  else
+    scan_text "$rel" "$(cat "$f")"
+  fi
 done
 if [ "$seen" -lt 6 ]; then
   no "음의 짝: 상한 어휘를 ${seen}건밖에 도출하지 못했다 — 코퍼스에서 최소 6건(정본 1 + 엔진 1 + SKILL 둘 각 1 + README 2)이 나와야 한다. 이 상태에서 'bad=0' 은 증거가 아니다"

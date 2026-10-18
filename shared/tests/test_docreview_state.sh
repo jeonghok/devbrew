@@ -13,6 +13,12 @@ REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
 . "$HERE/fixtures/docreview/cases.sh"
 case_T37_cap_and_extra
+case_config_defaults_disclosed
+case_config_env_wins
+case_config_entry_beats_profile
+case_config_invalid_refused
+case_config_changes_between_rounds
+case_config_profile_fields
 case_T18_adopt_issues_permit
 case_T19_reject_closes
 case_T20_hold_becomes_ask

@@ -208,6 +208,7 @@ mut() { mut_expect caught "$@"; }   # 기존 10셀의 계약: 변이는 항상 c
 sed_route()  { sed -i.bak "$1" "$2/docreview_route.py"  && rm -f "$2/docreview_route.py.bak"; }
 sed_anchor() { sed -i.bak "$1" "$2/docreview_anchor.py" && rm -f "$2/docreview_anchor.py.bak"; }
 sed_state()  { sed -i.bak "$1" "$2/docreview_state.py"  && rm -f "$2/docreview_state.py.bak"; }
+sed_config() { sed -i.bak "$1" "$2/docreview_config.py" && rm -f "$2/docreview_config.py.bak"; }
 sed_advice() { sed -i.bak "$1" "$2/docreview_advice.py" && rm -f "$2/docreview_advice.py.bak"; }
 
 # ① 얼림 diff 비활성 — 사후 auto decide 를 안 만든다.
@@ -274,7 +275,7 @@ mut 1/1 id_no_round case_T11_permit_keeps_disposition sed_route 's/"%s#r%d.%d" %
 # ⑥ defer 예외 제거(불허 defer 를 fix 로) — AC10 위반
 mut 1/1 defer_to_fix case_T08_defer_disallowed sed_route 's/if d == "defer":/if d == "defer" and False:/'
 # ⑦ 상한 3 으로 — 라운드 4 가 승인 없이 돈다
-mut 1/1 cap_three case_T37_cap_and_extra sed_state 's/^REREVIEW_CAP = 2$/REREVIEW_CAP = 3/'
+mut 1/1 cap_three case_T37_cap_and_extra sed_config 's/"rereview_cap": 2,/"rereview_cap": 3,/'
 # ⑧ check-intent 의 edit_scope 검사 제거 — 범위 밖도 통과
 mut 1/1 intent_no_scope case_AC6_fix_contract sed_anchor 's/if intent != scope:/if False and intent != scope:/'
 # ⑨ 보호 부류 캐스케이드 제거(자기 제목만) — 하위 절이 자유 편집
@@ -841,9 +842,9 @@ mut 1/1 blocks_coercion_gate_dropped case_advice_blocks_coercion_flips_gate sed_
 mut 1/1 blocking_ask_single_pass case_advice_step2_order_independent sed_advice \
   's/^    for _ in range(len(pending)):$/    for _ in range(1):/'
 # (78) cap 상수를 바꾼다 — 기본 호출이 9줄을 내고 「외 2건」이 된다.
-mut 1/1 render_cap_changed case_AC6_render_cap sed_advice 's/^RENDER_CAP = 8 /RENDER_CAP = 9 /'
+mut 1/1 render_cap_changed case_AC6_render_cap sed_config 's/"render_cap": 8,/"render_cap": 9,/'
 # (79) 요약 폭을 넓힌다 — 80자 요약이 다른 자리에서 잘려 렌더 항목 전문이 어긋난다.
-mut 1/1 summary_width_changed case_advice_odd_text_one_line sed_advice 's/^SUMMARY_WIDTH = 60 /SUMMARY_WIDTH = 74 /'
+mut 1/1 summary_width_changed case_advice_odd_text_one_line sed_config 's/"summary_width": 60}/"summary_width": 74}/'
 # (80) 원자 쓰기를 `write_text` 로 되돌린다 — 인코딩 전에 파일을 잘라 인코딩 실패가 사용자 문서를 0 바이트로 만든다.
 mut 1/1 atomic_write_reverted case_advice_surrogate_sink_atomic sed_state \
   's/^    data = text\.encode("utf-8")$/    path.write_text(text, encoding="utf-8"); data = text.encode("utf-8")/'

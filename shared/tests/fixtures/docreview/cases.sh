@@ -2987,3 +2987,57 @@ case_AC14_line_hashes_only_immutable() {
   assert_eq "$(st_yaml "$d" 'sorted(s["anchor"] for s in st["snapshots"]["1"]["sections"] if "line_hashes" in s)')" "['#6-사용자-원문']" "AC14: 원장 스냅숏은 불변 절에만 줄 해시를 남긴다(원장 크기)"
   rm -rf "$d"
 }
+
+# ── AC12 · AC10 — 엔진 값: 기본 < 프로필 < 진입 < 환경, 라운드마다 공시 ─────────────
+case_config_defaults_disclosed() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "config: r1 실패"; return; }
+  assert_eq "$(st_yaml "$d" 'tuple((k, v["value"], v["source"]) for k, v in sorted(st["rounds"]["1"]["config"].items()))')" \
+    "(('detectors', 1, '프로필'), ('render_cap', 8, '기본'), ('rereview_cap', 2, '기본'), ('summary_width', 60, '기본'))" \
+    "config: 프로필 탐지 1 · 나머지 기본값과 출처가 라운드 1 에 적힌다"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "재리뷰 0/2회 썼다(상한 2 — 기본)" "config: 게이트 둘째 줄이 상한과 출처를 공시한다"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "탐지 리뷰어 1명(프로필)" "config: 탐지 수와 출처도 같은 줄에"
+  rm -rf "$d"
+}
+case_config_env_wins() {
+  local d s; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "config: init 실패"; return; }
+  s="$d/s1.json"; snap "$FX/design-sample.md" "$s"
+  local out; out="$(DEVBREW_DOCREVIEW_DETECTORS=3 DEVBREW_DOCREVIEW_REREVIEW_CAP=0 py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --detectors 2)"
+  assert_eq "$(printf '%s' "$out" | jgets 'd["config"]["detectors"]["value"], d["config"]["detectors"]["source"], d["config"]["rereview_cap"]["value"]')" "(3, '환경', 0)" "config: 환경이 진입(--detectors 2)과 프로필을 이긴다"
+  DEVBREW_DOCREVIEW_REREVIEW_CAP=0 py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null 2>&1; local rc=$?
+  assert_eq "$rc" "3" "config: 상한 0 이면 라운드 2 는 승인 없이 rc 3"
+  rm -rf "$d"
+}
+case_config_entry_beats_profile() {
+  local d s; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "config: init 실패"; return; }
+  s="$d/s1.json"; snap "$FX/design-sample.md" "$s"
+  assert_eq "$(env -u DEVBREW_DOCREVIEW_DETECTORS python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d" --snapshot "$s" --detectors 2 | jgets 'd["config"]["detectors"]["value"], d["config"]["detectors"]["source"]')" "(2, '진입')" "config: 진입 선언이 프로필(1)을 이긴다"
+  rm -rf "$d"
+}
+case_config_invalid_refused() {
+  local d s; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "config: init 실패"; return; }
+  s="$d/s1.json"; snap "$FX/design-sample.md" "$s"
+  local err rc; err="$(DEVBREW_DOCREVIEW_DETECTORS=two py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc" "2" "config: 정수가 아닌 환경 값은 라운드를 시작하지 않는다(rc 2)"
+  assert_contains "$err" '"reason": "config_invalid"' "config: 사유 이름"
+  assert_contains "$err" "DEVBREW_DOCREVIEW_DETECTORS" "config: 변수 이름을 낸다"
+  assert_eq "$(st_yaml "$d" 'st["round"]')" "0" "config: 거부는 원장을 바꾸지 않는다"
+  DEVBREW_DOCREVIEW_RENDER_CAP=0 py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "config: 조언 줄 수 0 은 범위 밖"
+  rm -rf "$d"
+}
+case_config_changes_between_rounds() {
+  local d s; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "config: r1 실패"; return; }
+  s="$d/s2.json"; snap "$FX/design-sample.md" "$s"
+  DEVBREW_DOCREVIEW_DETECTORS=2 py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null
+  assert_eq "$(st_yaml "$d" 'st["rounds"]["1"]["config"]["detectors"]["value"], st["rounds"]["2"]["config"]["detectors"]["value"], st["rounds"]["2"]["config"]["detectors"]["source"]')" "(1, 2, '환경')" "config: 라운드마다 따로 적히고 앞 라운드 기록은 그대로다"
+  rm -rf "$d"
+}
+case_config_profile_fields() {
+  local p; p="$(mktemp -d -t prof-XXXXXX)"
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); t=t.replace("detectors: 1\n","detectors: 2\nrereview_cap: 4\nrender_cap: 12\nsummary_width: 80\n",1); open(sys.argv[2],"w",encoding="utf-8").write(t)' "$PROF_SD/design-doc.md" "$p/design-doc.md"
+  local d s; d="$(mk_state "$FX/design-sample.md" "$p/design-doc.md")" || { no "config: init 실패"; rm -rf "$p"; return; }
+  s="$d/s1.json"; snap "$FX/design-sample.md" "$s"
+  assert_eq "$(env -u DEVBREW_DOCREVIEW_DETECTORS -u DEVBREW_DOCREVIEW_REREVIEW_CAP -u DEVBREW_DOCREVIEW_RENDER_CAP -u DEVBREW_DOCREVIEW_SUMMARY_WIDTH python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d" --snapshot "$s" | jgets 'tuple((k, v["value"], v["source"]) for k, v in sorted(d["config"].items()))')" \
+    "(('detectors', 2, '프로필'), ('render_cap', 12, '프로필'), ('rereview_cap', 4, '프로필'), ('summary_width', 80, '프로필'))" "config: 프로필 필드 넷이 먹는다"
+  rm -rf "$d" "$p"
+}

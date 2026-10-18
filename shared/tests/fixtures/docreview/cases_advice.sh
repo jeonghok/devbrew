@@ -339,6 +339,11 @@ case_AC6_render_cap() {
   rm -rf "$d"; d="$(adv_state 11)"
   out="$(py docreview_state.py advice --state-dir "$d" --render)"
   assert_eq "$(printf '%s\n' "$out" | grep -c '^- \[') $(printf '%s\n' "$out" | grep -c '외 3건')" "8 1" "AC6: 기본 cap 이 8 이다"
+  rm -rf "$d"; d="$(adv_state 11)"
+  out="$(DEVBREW_DOCREVIEW_RENDER_CAP=3 py docreview_state.py advice --state-dir "$d" --render)"
+  assert_eq "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" "5" "AC6: 환경 변수 조언 줄 수 3 이면 머리 1 + 항목 3 + 접는 줄 1"
+  assert_contains "$(printf '%s\n' "$out" | tail -1)" "에 전부" "AC6: 값을 바꿔도 접는 줄이 전문이 있는 곳을 적는다"
+  assert_contains "$(printf '%s\n' "$out" | tail -1)" "Deferred to plan" "AC6: 접는 줄에 박제처 이름이 있다"
   rm -rf "$d"
 }
 case_AC7_sink_idempotent() {
@@ -391,7 +396,7 @@ for r in st["rounds"].values():
         (r.get("route_report") or {}).pop(k, None)
 s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
   out="$(py docreview_state.py gate --state-dir "$d" --render 2>&1)"; rc=$?
-  assert_eq "$rc $(printf '%s\n' "$out" | grep -c '^재리뷰 0/2회 썼다$')" "0 1" "Review Focus: 업그레이드 전 원장 — 게이트 렌더가 rc 0 으로 재리뷰 줄까지 낸다(죽지 않는다)"
+  assert_eq "$rc $(printf '%s\n' "$out" | grep -c '^재리뷰 0/2회 썼다(상한 2 — 기본)')" "0 1" "Review Focus: 업그레이드 전 원장 — 게이트 렌더가 rc 0 으로 재리뷰 줄까지 낸다(죽지 않는다)"
   assert_not_grep "$out" '^참고 ' "Review Focus: 업그레이드 전 원장 — 게이트 렌더에 참고 줄이 없다"
   assert_eq "$(py docreview_state.py advice --state-dir "$d" --render | head -1 | grep -c '^참고(advisory) 0건')" "1" "Review Focus: 업그레이드 전 원장 — --render 는 0건"
   n="$(mktemp -t pre-XXXXXX)"; cp "$FX/design-sample.md" "$n"
@@ -410,6 +415,9 @@ case_advice_odd_text_one_line() {
   assert_eq "$out" "참고(advisory) 1건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: ### Deferred to plan
 - [tradeoffs] #1-context — 파이프 | 가 든 요약이고 둘째 줄로 이어지며 한 줄 폭 예순 자를 넘기도록 길게 늘인 문장이다 — 끝에서…" \
     "Review Focus: 개행이 든 80자 요약도 렌더 항목은 한 줄이고 59자 + 「…」로 잘린다(전문 대조)"
+  rm -rf "$d"; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-odd.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  out="$(DEVBREW_DOCREVIEW_SUMMARY_WIDTH=20 py docreview_state.py advice --state-dir "$d" --render)"
+  assert_eq "$(printf '%s\n' "$out" | sed -n 2p | sed 's/^.* — //')" "파이프 | 가 든 요약이고 둘째 줄…" "Review Focus: 환경 변수 요약 폭 20 이면 19자 + 「…」로 잘린다"
   id="$(st_yaml "$d" 'list(st["advice"].values())[0]["id"]')"
   row="| $id | 참고(tradeoffs) #1-context — 파이프 \\| 가 든 요약이고 둘째 줄로 이어지며 한 줄 폭 예순 자를 넘기도록 길게 늘인 문장이다 — 끝에서 잘려야 하고 그 뒤로도 계속 이어진다 — 고치면: 고치면 A \\| B 로 나눈다 |"
   assert_eq "$(adv_deferred "$doc" | sed '/^$/d')" "| # | 항목 |
@@ -434,7 +442,7 @@ case_advice_write_failure_loud() {   # 사용자 문서 쓰기 실패 — rc 1 �
   rm -rf "$d" "$doc"
 }
 case_advice_module_missing() {   # 원장 스크립트만 복사한 트리 — 다른 서브커맨드는 돌고 advice 만 사유를 내고 멈춘다
-  local t rc; t="$(mktemp -d -t advlone-XXXXXX)"; cp -L "$SCRIPTS/docreview_state.py" "$t/"
+  local t rc; t="$(mktemp -d -t advlone-XXXXXX)"; cp -L "$SCRIPTS/docreview_state.py" "$SCRIPTS/docreview_config.py" "$t/"
   python3 "$t/docreview_state.py" state-dir-for --root "$t/root" --doc "$FX/design-sample.md" >/dev/null 2>&1; rc=$?
   assert_eq "$rc" "0" "형제 부재: docreview_advice 가 없어도 원장 스크립트의 다른 서브커맨드는 돈다"
   python3 "$t/docreview_state.py" advice --state-dir "$t" >/dev/null 2>"$t/err"; rc=$?

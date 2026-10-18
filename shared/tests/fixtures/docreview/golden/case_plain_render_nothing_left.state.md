@@ -86,6 +86,19 @@ docreview:
         lineage_mismatch: 0
         reraise_unconsumed: 0
         escalated_unconsumed: 0
+      config:
+        detectors:
+          value: 1
+          source: 프로필
+        rereview_cap:
+          value: 2
+          source: 기본
+        render_cap:
+          value: 8
+          source: 기본
+        summary_width:
+          value: 60
+          source: 기본
       started_mtime_ns: <MTIME_NS>
   pending_recritic: null
   rejected_lineages: {}

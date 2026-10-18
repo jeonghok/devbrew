@@ -37,15 +37,18 @@ try:
 except ImportError:  # pragma: no cover
     _adv = None
 
+# 값 해석(leaf 형제) — 모든 라운드의 필수 경로라 `try` 로 감싸지 않는다.
+import docreview_config as _cfg
+
 STATE_FILE = "docreview-state.md"
-REREVIEW_CAP = 2
+REREVIEW_CAP = _cfg.DEFAULTS["rereview_cap"]
 RANK = {"decide": 4, "ask": 3, "fix": 2, "defer": 1, "drop": 0}
 PROFILE_FIELDS = ("detectors", "ground_truth", "allowed_dispositions", "fix_anchors",
                   "immutable", "protected_headings", "layer_rubric", "decision_log",
                   "defer_target", "web")
 # 선택 필드 — 필수 목록에 넣으면 qg `generic`(이 필드 없음)이 `fields_missing` 으로 죽는다. 부재면 advisory 축이
 # 공집합이라 라우팅이 현행과 같다(docreview_advice.advisory_axes).
-OPTIONAL_PROFILE_FIELDS = ("must_catch",)
+OPTIONAL_PROFILE_FIELDS = ("must_catch",) + _cfg.PROFILE_KEYS
 LOG_KINDS = ("doc_section", "audit_section", "state")
 DEFER_KINDS = ("doc_section", "none")
 
@@ -141,8 +144,12 @@ def load_profile(path) -> dict:
         raise ProfileError("fields_missing:%s" % ",".join(missing))
     if extra:
         raise ProfileError("fields_unknown:%s" % ",".join(extra))
-    if data["detectors"] != 1:
-        raise ProfileError("detectors_unsupported:%r" % (data["detectors"],))
+    try:
+        for k in ("detectors",) + _cfg.PROFILE_KEYS:
+            if k in data:
+                _cfg._int(k, data[k], "프로필")
+    except _cfg.ConfigInvalid as e:
+        raise ProfileError("config_invalid:%s=%r" % (e.name, e.raw))
     ad = data["allowed_dispositions"]
     if (not isinstance(ad, list) or not ad or any(x not in RANK for x in ad)
             or "decide" not in ad or "ask" not in ad):
@@ -510,20 +517,26 @@ def cmd_profile_check(a) -> int:
 
 def cmd_begin_round(a) -> int:
     st = load_state(a.state_dir)
+    prof = load_profile(st["profile"])
+    try:
+        cfg = _cfg.resolve(prof, {"detectors": a.detectors}, os.environ)
+    except _cfg.ConfigInvalid as e:
+        fail("config_invalid", name=e.name, value=str(e.raw), where=e.where)
+        return 2
+    cap = cfg["rereview_cap"]["value"]
     snap = json.loads(Path(a.snapshot).read_text(encoding="utf-8"))
     n = int(st["round"]) + 1
-    if n <= 1 + REREVIEW_CAP:
+    if n <= 1 + cap:
         rr = n - 1
     else:
         if not a.extra_approval:
             _emit({"ok": False, "reason": "cap_reached", "round": n - 1,
                    "rereview_count": st["rereview_count"]})
             return 3
-        rr = REREVIEW_CAP
+        rr = cap
         st["extra_rounds"].append({"round": n, "quote": a.extra_approval})
     st["round"] = n
     st["rereview_count"] = rr
-    prof = load_profile(st["profile"])
     imm = set(anchors_matching(prof["immutable"], snap.get("sections", []))) if prof["immutable"] else set()
     secs = []
     for s in snap.get("sections", []):
@@ -533,15 +546,16 @@ def cmd_begin_round(a) -> int:
         secs.append(row)
     st["snapshots"][str(n)] = {"headingless": bool(snap.get("headingless")), "sections": secs}
     st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
+    st["rounds"][str(n)]["config"] = cfg
     save_state(a.state_dir, st, "begin-round (rereview_count=%d%s)"
-               % (rr, ", extra" if n > 1 + REREVIEW_CAP else ""))
+               % (rr, ", extra" if n > 1 + cap else ""))
     # 라운드 시작 표식 — codex · critic 산출물이 이보다 먼저 쓰였으면 직전 라운드 것이다
     # (`docreview_route._round_staleness`). 프로세스 시계가 아니라 방금 쓴 상태 파일의
     # mtime 을 쓴다: 같은 디렉토리의 codex 파일도 같은 파일시스템 시계로 찍히므로 해상도가
     # 같은 눈금이다.
     st["rounds"][str(n)]["started_mtime_ns"] = state_path(a.state_dir).stat().st_mtime_ns
     save_state(a.state_dir, st)
-    _emit({"ok": True, "round": n, "rereview_count": rr})
+    _emit({"ok": True, "round": n, "rereview_count": rr, "config": cfg})
     return 0
 
 
@@ -1157,7 +1171,9 @@ def gate_summary(st) -> dict:
     # defer · 재비판 reject — 이 하나만 와도 차단이 풀린다. 라우터의 자동 계보 연결이
     # 지목 없는 finding 에도 supersedes 를 붙이기 때문이다. superseded_by 를 쓰는 곳은
     # 재상승 루프 하나뿐이라 그 기록은 의무의 증거다. 기록이 없으면 막는다 — fail-closed.
-    g = {"round": n, "rereview_count": rr, "cap_reached": rr >= REREVIEW_CAP}
+    cfg = (st["rounds"].get(str(n)) or {}).get("config") or {}   # 옛 원장은 config 가 없다 — 기본값으로 읽는다
+    cap = (cfg.get("rereview_cap") or {}).get("value", REREVIEW_CAP)
+    g = {"round": n, "rereview_count": rr, "cap_reached": rr >= cap, "config": cfg}
     for row in GATE_ROWS:
         g[row.name] = gate_bucket(st, row)
     g["asks_open"] = sorted(i for i, x in asks.items() if not x.get("answered"))
@@ -1518,7 +1534,10 @@ def render_gate(st, g) -> str:
     GATE_ROWS 를 옮긴다(이 함수는 순서를 따로 정하지 않는다)."""
     c = dict(g["counts"], dropped=len(g["dropped"]))
     out = [_first_line(g)]
-    sub = "재리뷰 %d/%d회 썼다" % (g["rereview_count"], REREVIEW_CAP)
+    cfg = g.get("config") or {}
+    capv = cfg.get("rereview_cap") or {"value": REREVIEW_CAP, "source": "기본"}
+    sub = "재리뷰 %d/%d회 썼다(상한 %d — %s) · %s" % (g["rereview_count"], capv["value"], capv["value"],
+                                                   capv["source"], _cfg.config_line(cfg))
     if g["cap_reached"]:
         sub += " · 상한에 닿았다"
     if g["stagnation"]:
@@ -1604,7 +1623,13 @@ def cmd_advice(a) -> int:
     prof = load_profile(st["profile"])
     if not adv.has_must_catch(prof):
         return fail("profile_has_no_must_catch", profile=st["profile"])
-    cap = adv.RENDER_CAP if a.cap is None else a.cap
+    try:
+        cfg = _cfg.resolve(prof, {}, os.environ)
+    except _cfg.ConfigInvalid as e:
+        fail("config_invalid", name=e.name, value=str(e.raw), where=e.where)
+        return 2
+    cap = cfg["render_cap"]["value"] if a.cap is None else a.cap   # --cap 은 진입의 명시 값이다
+    width = cfg["summary_width"]["value"]
     if cap < 1:
         return fail("cap_invalid", cap=cap)
     dt = prof["defer_target"]
@@ -1640,7 +1665,7 @@ def cmd_advice(a) -> int:
     shown = [it for it in items if not it.get("shown")] if a.render else []
     if a.render:
         where = a.where or (dt["heading"] if dt.get("kind") == "doc_section" else "advice 목록(JSON)")
-        print("\n".join(adv.render_lines(shown, cap, where)))
+        print("\n".join(adv.render_lines(shown, cap, where, width)))
     for it in shown:
         it["shown"] = True
     if shown:
@@ -1671,6 +1696,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.set_defaults(fn=cmd_init)
     x = P("begin-round"); x.add_argument("--state-dir", required=True)
     x.add_argument("--snapshot", required=True); x.add_argument("--extra-approval", default=None)
+    x.add_argument("--detectors", type=int, default=None)
     x.set_defaults(fn=cmd_begin_round)
     x = P("profile-check"); x.add_argument("profile")
     x.set_defaults(fn=cmd_profile_check)
