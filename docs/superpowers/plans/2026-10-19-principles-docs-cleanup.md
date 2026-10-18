@@ -17,7 +17,8 @@
 - CLAUDE.md 가 넘치면: 먼저 원칙 다섯 줄을 「무엇을 한다」 + `(철학 P#)` 만 남긴 짧은 꼴로 줄인다. §3 목록 밖의 줄과 §5 넘김 조항(R9 · R8 몫)은 줄이지 않는다.
 - 철학 문서가 넘치면: 먼저 원칙마다 이유를 기존 P# 안 한 문장으로 줄인다. 그래도 정리 전보다 작지 않으면 §3 밖을 지우지 말고 멈춰서 전후 크기와 함께 지휘 세션에 보고한다(PR 본문에도 적는다).
 - 범위: 설계 §3 목록이 이 에픽 범위의 전부다. 조사 표(레포 밖)는 참고용이고, 핀 락은 grep 으로 찾는다.
-- 손대지 않는 줄: CLAUDE.md Law 1 필수 섹션 문면 · `cost_class` 지출 승인 조항(epic-conductor 예외 포함) · 「새 플러그인 — `plugin-dev:plugin-structure` 먼저」 · 「버그가 리뷰를 탈출하면」 · 「최소 버전이 선언된 의존성」(R9 · R8). 철학 P12 · P22(R9). spec-distill README 의 「사용자 리뷰 게이트」 용어(흐름도 57행 근처) · Prerequisites 의 superpowers · quality-gates · gh 줄 · 흐름도(R5 후속 · R8 · R10). qg README 의 리뷰어 구성표 · 상한 수치(P22 · P18 anti-corollary 줄) · 의도 출처(C66 줄 · `## 의도 출처`) · artifact-critique 줄(`Law 1/2/3 + P8/P18`) · persona 모델 고정(`### 재비판자(code-recritic) model`)(R2a). 은퇴한 kill switch 공시(spec-distill `### 은퇴한 스위치` 절 · plugin-audit 개명 표) · CLAUDE.md `integrity` 문장 · SessionStart 훅 규칙 · qg `baseline-cache/` 안내.
+- 손대지 않는 줄: CLAUDE.md Law 1 필수 섹션 문면 · `cost_class` 지출 승인 조항(epic-conductor 예외 포함) · 「새 플러그인 — `plugin-dev:plugin-structure` 먼저」 · 「버그가 리뷰를 탈출하면」 · 「최소 버전이 선언된 의존성」(R9 · R8). 철학 Law 1 문단 · P12 · P22(R9).
+- 원칙의 철학 자리: 원칙 1 → Law 3 · 원칙 2 · 3 · 6 → P8 · 원칙 4 → P23 · 원칙 5 → P5(Meta-Rules 로 옮김). 새 P# 없음. 원칙 3 을 P8 에 두는 이유: 레포 전용 값을 박는 것은 이 레포에서만 맞는 결정론을 쌓는 일이라, 결정론의 양과 자리를 다루는 P8 의 범위다(Law 3 의 축적과는 다른 축). spec-distill README 의 「사용자 리뷰 게이트」 용어(흐름도 57행 근처) · Prerequisites 의 superpowers · quality-gates · gh 줄 · 흐름도(R5 후속 · R8 · R10). qg README 의 리뷰어 구성표 · 상한 수치(P22 · P18 anti-corollary 줄) · 의도 출처(C66 줄 · `## 의도 출처`) · artifact-critique 줄(`Law 1/2/3 + P8/P18`) · persona 모델 고정(`### 재비판자(code-recritic) model`)(R2a). 은퇴한 kill switch 공시(spec-distill `### 은퇴한 스위치` 절 · plugin-audit 개명 표) · CLAUDE.md `integrity` 문장 · SessionStart 훅 규칙 · qg `baseline-cache/` 안내.
 - 레포 문서 규칙: Korean-primary, 영어는 식별자 · 고유명사 · 원문 인용 · 대응어 없는 기술어만. 원문 인용에 풀이를 붙이지 않는다. Self-narrating 금지 — 출처 · 이력 · 정당화는 CHANGELOG · PR 로.
 - 새 글은 `test_governance_no_capability_caps.sh` 의 금지(fan-out 을 숫자에 묶는 문장 · `≥5` · 「single-agent 를 default」 · `wall-clock`)와 `test_charter_citations.sh` 의 규칙(CLAUDE.md · 철학 문서의 백틱 경로 · 링크는 추적 파일로 실재 · 지워진 이름 금지)에 걸리지 않는다.
 - 원칙 문면은 「언제나 X」 꼴로 쓰지 않는다. 레포 전용 값을 박지 않는다(devbrew 밖 레포에도 맞게).
@@ -106,7 +107,7 @@ git commit -m "docs(spec): R11 받는 곳 표기 · 플러그인 동작 자리 �
 
 **Interfaces:**
 - Consumes: 없음
-- Produces: 원칙 줄이 가리키는 철학 이름 — `철학 Law 3`(원칙 1 · 3) · `철학 P8`(원칙 2 · 6) · `철학 P23`(원칙 4) · `철학 P5`(원칙 5). Task 3 이 그 자리에 이유를 쓴다.
+- Produces: 원칙 줄이 가리키는 철학 이름 — `철학 Law 3`(원칙 1) · `철학 P8`(원칙 2 · 3 · 6) · `철학 P23`(원칙 4) · `철학 P5`(원칙 5). Task 3 이 그 자리에 이유를 쓴다.
 
 - [ ] **Step 1: 확인 명령 — 지금은 실패**
 
@@ -129,7 +130,7 @@ Law 3 문단의 「— discoverability가 위험하면 인덱스 (`AGENTS.md`/`C
 
 ```markdown
 - **기본값과 판단.** 규칙은 「기본은 X, 일의 모양이 다르면 모델이 판단하고 이유를 적는다」로 쓰고 정석 흐름의 의도는 지킨다. 결정론은 보안 · 정확성 게이트에만(철학 P8).
-- **레포 전용 값 금지.** 경로 · 테스트 명령 · 기본 브랜치 · 브랜치 접두 · 모델 · `gh` 같은 값은 도출하거나 레포마다 정하게 한다(철학 Law 3).
+- **레포 전용 값 금지.** 경로 · 테스트 명령 · 기본 브랜치 · 브랜치 접두 · 모델 · `gh` 같은 값은 도출하거나 레포마다 정하게 한다(철학 P8).
 - **상류 · 하류 연계.** 설계마다 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 같은 상태를 읽는 표면과 이음매 담당을 보인다(철학 P23).
 - **진입점에서 따라 내려가기.** 산출물 · 상태가 얽히면 객체 · 링크 · 속성 · 주인을 적어 진입점에서 따라가게 한다. 작은 일엔 만들지 않는다(철학 P5).
 - **있는 것 먼저.** 만들기 전에 레포 안 · 밖의 있는 것을 검토하고, 외부 것은 사용자 검토 뒤에만 쓴다(철학 P8).
@@ -142,9 +143,9 @@ Law 3 문단의 「— discoverability가 위험하면 인덱스 (`AGENTS.md`/`C
 - 훅 공존 줄: 「Signal tag는 `<{plugin}-signal>` 네임스페이스.」 문장을 지운다.
 - Forbidden Patterns 머리: 「Full 카탈로그와 case study: […]의 Structural Mechanisms 섹션 (각 원칙의 anti-corollary).」 를 「원칙과 그 anti-corollary: [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md)의 Structural Mechanisms · Anti-Pattern Anchors 절.」 로.
 - Subagent spray: 「(Opus 5 기본 시스템 프롬프트의 … 해제, 2026-08-22)」 괄호를 지운다. 상시 허용 규칙 · Workflow 와 deep-research 문장은 그대로.
-- Polite handoff 줄 전체를 다음으로 바꾼다:
+- Polite handoff 줄 전체를 정본을 가리키는 꼴로 바꾼다. 예외(「여기서 계속」 등)는 CLAUDE.md 에 더하지 않는다 — 예외는 정본이 갖는다:
 
-> - **Polite handoff** — 리뷰 승인 뒤 다음 단계를 narrate만 하고 proceed 게이트를 띄우지 않는 것, 그리고 다음 세션 줄을 보인 뒤 같은 턴에 다음 단계로 직진하는 것(사용자가 「여기서 계속」을 고른 경우는 제외). 둘 다 게이트(P17)를 건너뛴 polite stop 이다(AP2 variant). 게이트 계약의 정본은 `plugins/spec-distill/references/proceed-gate.md`.
+> - **Polite handoff** — 리뷰 승인 뒤 proceed 게이트를 띄우지 않고 다음 단계를 narrate만 하는 것, 그리고 게이트가 정한 멈춤을 건너뛰고 다음 단계로 직진하는 것. 둘 다 게이트(P17)를 건너뛴 polite stop 이다(AP2 variant). 게이트 계약과 그 예외의 정본은 `plugins/spec-distill/references/proceed-gate.md`.
 
 - Korean-primary 줄: 「`*.ko.md` 동반 파일 모델은 폐기 (drift 비용 > 이중 노출 가치).」 를 지운다.
 
@@ -185,29 +186,28 @@ git commit -m "docs(claude-md): 원칙 여섯 줄 · 낡은 구절 정리" -- CL
 ```bash
 f=docs/philosophy/devbrew-harness-philosophy.md
 for p in '메모리 없는 레포' '기본은 X, 일의 모양이 다르면' '레포 안 · 밖에 이미 있는 것' '되돌아오는 길' '객체 · 링크 · 속성 · 주인' '재평가 대상이다' 'cost_class: high'; do grep -qF -- "$p" "$f" || echo "MISSING $p"; done
-for a in '### AP18' '### AP19' 'redirect 제안' 'opt-in 게이트' '반복적으로 놓친' '<{plugin}-signal>' 'anchor target' 'Filesystem-as-Memory' '자동 편집' '필수 섹션(Context/Why'; do grep -qF -- "$a" "$f" && echo "PRESENT $a"; done
+for a in '### AP18' '### AP19' 'redirect 제안' 'opt-in 게이트' '반복적으로 놓친' '<{plugin}-signal>' 'anchor target' 'Filesystem-as-Memory' '자동 편집'; do grep -qF -- "$a" "$f" && echo "PRESENT $a"; done
 grep -nE '언제나|항상|반드시' "$f" | grep -E '기본은 X|있는 것|되돌아오는 길|진입점' && echo "FIXED-RULE WORDING"
 awk '/^## Load-bearing Meta-Rules/{m=1} /^## Anti-Pattern Anchors/{m=0} m && /^### P5 /{print "P5-IN-META"}' "$f"
 [ "$(wc -c < "$f")" -lt 14876 ] || echo "SIZE $(wc -c < "$f")"
 ```
 Expected 지금: `MISSING` 다섯 줄 · `PRESENT` 여러 줄 · `P5-IN-META` 없음 · `SIZE …`.
 
-- [ ] **Step 2: The Three Laws 에서 CLAUDE.md 와 겹치는 문장을 줄이고 원칙 1 · 3 의 이유를 넣는다**
+- [ ] **Step 2: The Three Laws 의 Law 2 · Law 3 에서 CLAUDE.md 와 겹치는 문장을 줄이고 원칙 1 의 이유를 넣는다**
 
-남길 것: 명세 작성은 일급 단계 · 하드 규칙 · N+1 번째 작업이 더 쉬워야 · low-tech 메커니즘 · theater 문장. 세 문단을 다음으로 바꾼다:
+Law 1 문단은 손대지 않는다(Law 1 문면은 R9 몫 — 설계 §5). 남길 것: 하드 규칙 · N+1 번째 작업이 더 쉬워야 · low-tech 메커니즘 · theater 문장. Law 2 · Law 3 두 문단을 다음으로 바꾼다:
 
-> **Law 1 — Clarity Before Code.** 명세가 모호한 상태에서는 구현이 진행되지 않는다. 명세 작성은 자신의 스킬·게이트·거절 동작을 가진 일급(first-class) 단계이고, 코드를 shipping하는 플러그인은 "아직 이건 코딩 못 한다"고 말할 수 있는 실제 거절 메커니즘을 가져야 한다(최소 요건은 CLAUDE.md Law 1). 모델 신뢰만으로는 부족하다.
->
 > **Law 2 — Writer and Reviewer Must Never Share a Pass.** 코드를 쓴 턴은 그 코드를 승인할 수 없다. 이것은 heuristic이 아니라 하드 규칙이고, 분리는 프롬프트가 아니라 도구 표면으로 한다(P3).
 >
-> **Law 3 — Every Cycle Must Leave the System Smarter.** N+1번째 작업이 N번째보다 엄밀히 더 쉬워야 한다. 메커니즘은 low-tech다 — 리포에 있는 파일을 미래 세션이 읽는 것. 그 미래 세션에는 메모리 없는 레포 · 새 clone · devbrew 를 설치한 다른 레포의 세션도 든다. auto-memory 는 한 기기 · 한 경로에만 붙으므로 교훈은 그 동작을 내는 skill · reference · 스크립트 · 락을 고쳐 남기고, 그 자리에는 이 레포 전용 값(경로 · 테스트 명령 · 기본 브랜치 · 브랜치 접두 · 모델 · `gh`)을 박지 않고 도출하거나 레포마다 정하게 한다. 아무 미래 agent도 읽지 않는 파일에 쓰는 것은 theater다.
+> **Law 3 — Every Cycle Must Leave the System Smarter.** N+1번째 작업이 N번째보다 엄밀히 더 쉬워야 한다. 메커니즘은 low-tech다 — 리포에 있는 파일을 미래 세션이 읽는 것. 그 미래 세션에는 메모리 없는 레포 · 새 clone · devbrew 를 설치한 다른 레포의 세션도 든다. auto-memory 는 한 기기 · 한 경로에만 붙으므로 교훈은 그 동작을 내는 skill · reference · 스크립트 · 락을 고쳐 남긴다. 아무 미래 agent도 읽지 않는 파일에 쓰는 것은 theater다.
 
-- [ ] **Step 3: P8 · P23 에 원칙 2 · 6 · 4 의 이유를 넣고 P8 예시를 지금 floor 로 바꾼다**
+- [ ] **Step 3: P8 · P23 에 원칙 2 · 3 · 6 · 4 의 이유를 넣고 P8 예시를 지금 floor 로 바꾼다**
 
-P8 의 두 방향 목록 뒤에 두 줄을 더한다:
+P8 의 두 방향 목록 뒤에 세 줄을 더한다:
 
 > - (흐름) 규칙은 「기본은 X, 일의 모양이 다르면 모델이 판단하고 이유를 적는다」로 쓴다. 정석 흐름(brainstorming → 계획 → 구현)의 의도는 지키되 순서를 강제하는 결정론은 두지 않는다 — 고정한 흐름은 모델이 더 나은 길을 볼 때 그 길을 막는다.
 > - (재사용) 최소주의는 새로 만들기 전에 레포 안 · 밖에 이미 있는 것을 먼저 검토하는 데서 시작한다. 외부 것(패키지 · 프레임워크 · 서비스)은 후보로만 적고 사용자가 검토한 뒤에 쓴다(P17).
+> - (이식성) 레포 전용 값(경로 · 테스트 명령 · 기본 브랜치 · 브랜치 접두 · 모델 · `gh`)을 박는 것은 이 레포에서만 맞는 결정론을 쌓는 일이다 — 다른 레포에서는 조용히 틀린다. 그런 값은 그 자리에서 도출하거나 레포마다 정하게 한다.
 
 P8 예시 문단(「예: qg v2.6.0의 self-honest verdict floor는 …」)을 다음으로 바꾼다:
 
@@ -236,7 +236,7 @@ Meta-Rules 머리 「…이 essence에서만 완전히 생존하는 두 규칙.�
 - P14 끝: 「…이 essence가 정본이고, 플러그인 README 3곳 인용의 anchor target이다.」 를 「…이 essence가 정본이다.」 로.
 - `## Anti-Pattern Anchors` 머리: 「인용되는 anti-pattern/규칙의 stub 앵커 — 정본은 CLAUDE.md Forbidden Patterns / Filesystem-as-Memory이고, …」 를 「인용되는 anti-pattern의 stub 앵커 — 정본은 CLAUDE.md Forbidden Patterns이고, 여기서는 cross-ref resolve만 보장한다.」 로.
 - `### AP18 …` · `### AP19 …` 절 둘을 지운다(인용 0).
-- P4 · P12 · P22 · Structural Mechanisms 머리(「재평가 대상이다」)는 손대지 않는다(`test_e2e_docs.sh` · `test_governance_no_capability_caps.sh` · R9).
+- Law 1 문단 · P4 · P12 · P22 · Structural Mechanisms 머리(「재평가 대상이다」)는 손대지 않는다(R9 · `test_e2e_docs.sh` · `test_governance_no_capability_caps.sh`).
 
 - [ ] **Step 6: 확인 명령 — 이제 통과**
 
