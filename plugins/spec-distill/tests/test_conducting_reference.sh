@@ -58,8 +58,28 @@ done
 once() {  # once <걸음> <문장> — 그 걸음 글에 문장이 정확히 한 번
   assert_eq "$(printf '%s\n' "$(step "$1")" | grep -oF -- "$2" | wc -l | tr -d ' ')" "1" "걸음 $1: 「${2}」 는 정확히 한 번이다"
 }
-for lit in 'spec-review 도 지휘 세션이 직접 돌린다' '`--bundle` 값이 설계문서 frontmatter `source_interview` 와 다르거나 읽을 수 없으면 리뷰하지 않고 끝나고' '`root=` 가 그 worktree 가 아니면 멈춘다' '다음 세션 줄의 writing-plans 를 직접 따르지 않고' '`## 지휘 기록` 에 한 줄로 커밋한다' '리뷰 원장이 라운드 · 상한을 잇는다'; do
+for lit in 'spec-review 도 지휘 세션이 직접 돌린다' '`--bundle` 값이 설계문서 frontmatter `source_interview` 와 다르거나 읽을 수 없으면 리뷰하지 않고 끝나고' '`root=` 가 그 worktree 가 아니면 멈춘다' '다음 세션 줄의 writing-plans 를 직접 따르지 않고' '`## 지휘 기록` 에 한 줄로 커밋한다' '리뷰 원장이 라운드 · 상한을 잇는다' \
+           '그 줄은 계획 agent 의 입력이니 붙여 넣지 않아도 된다고 알린다' '그다음 메인 체크아웃으로 돌아온다' '① · ② 면 거기서 턴을 끝낸다' \
+           '승인 줄은 있고 계획은 없는 에픽' '「여기서 계속」 은 사용자가 이어 가기를 고른 것이라 같은 턴에 계획 agent 를 보내도 된다' \
+           '`<SD>`(이 세션이 쓰는 spec-distill 플러그인 폴더의 절대경로)로'; do
   once 3 "$lit"
+done
+once 5 '`### <앞 계획 경로>` 아래로 옮긴다'
+# 승인 뒤 차례: 승인 줄 커밋 → 메인 체크아웃으로 → 턴 끝(①·②). 첫 출현 위치로 잰다.
+approval_order() {  # approval_order <글> — 셋이 이 순서로 있으면 yes
+  PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
+t = sys.argv[1]
+ks = ["`## 지휘 기록` 에 한 줄로 커밋한다", "그다음 메인 체크아웃으로 돌아온다", "턴을 끝낸다"]
+ix = [t.find(k) for k in ks]
+print("yes" if min(ix) >= 0 and ix == sorted(ix) else "no")' "$1"
+}
+assert_eq "$(approval_order "$(step 3)")" "yes" "걸음 3: 승인 줄 커밋 → 메인 체크아웃으로 → 턴 끝 순서"
+assert_eq "$(approval_order '그다음 메인 체크아웃으로 돌아온다. `## 지휘 기록` 에 한 줄로 커밋한다. 턴을 끝낸다.')" "no" "양성 대조: 메인으로 먼저 돌아오면 no"
+assert_eq "$(approval_order '`## 지휘 기록` 에 한 줄로 커밋한다. 그다음 메인 체크아웃으로 돌아온다. 턴을 끝낸다.')" "yes" "양성 짝: 커밋 → 메인 → 턴 끝이면 yes"
+assert_not_contains "$(step 3)" '끝나면 메인 체크아웃으로 돌아온다' "걸음 3: 승인 줄 커밋 전에 메인으로 돌아오는 옛 문장이 없다(양성 짝: 위 순서)"
+COMPACT="$(grep '^\*\*/compact\.\*\*' "$CD" || true)"
+for lit in '이 절차 파일(conducting.md)을 다시 읽고' '지휘를 걸음 1 부터 잇는다' '압축 뒤 이 세션에 칠'; do
+  assert_contains "$COMPACT" "$lit" "/compact 줄: 이어 갈 줄 — $lit"
 done
 for lit in '(a) 사람에게 보일 쉬운 요약' '내부 기호는 괄호에만' 'writing-plans 가 끝에 묻는 계획 검토' '선택지의 수 · 순서 · 라벨(돌려줄 값) · skill 자신의 「(권장)」 표시와 사용자 답은 글자 그대로' '「고르면 무엇이 달라지나」(그대로 두면 · 고치면)' '「지휘자 의견:」 한 줄' '원문은 늘 붙인다' '사용자 답은 글자 그대로 같은 agent 에 돌려보내 이어 가게 한다' '이유를 설계문서에 적는다'; do
   once 4 "$lit"
@@ -171,7 +191,8 @@ text = open(sys.argv[1], encoding="utf-8").read()
 pats = [r"origin/main", r"(?<![A-Za-z])main(?![A-Za-z])", r"(?<![A-Za-z])opus(?![A-Za-z])",
         r"(?<![A-Za-z])fable(?![A-Za-z])", r"plugins/spec-distill", r"docs/superpowers", r"feature/",
         r"(?<![A-Za-z])master(?![A-Za-z])", r"(?<![A-Za-z])sonnet(?![A-Za-z])", r"(?<![A-Za-z])haiku(?![A-Za-z])",
-        r"plugins/", r"shared/tests", r"\.superpowers/", r"DEVBREW_", r"\$\{CLAUDE_PLUGIN_ROOT\}", r"references/[A-Za-z0-9_.-]+\.md"]
+        r"plugins/", r"shared/tests", r"\.superpowers/", r"DEVBREW_", r"\$\{CLAUDE_PLUGIN_ROOT\}", r"references/[A-Za-z0-9_.-]+\.md",
+        r"worktree 의 spec-distill"]
 for i, line in enumerate(text.splitlines(), 1):
     for p in pats:
         if re.search(p, line):
@@ -181,7 +202,8 @@ PY
 assert_eq "$(banned "$CD")" "" "레포 전용 값 · 루트 토큰 · references/ 꼴 가리킴이 없다"
 for lit in 'origin/main' 'review_model: opus' 'python3 plugins/spec-distill/scripts/x.py' '${CLAUDE_PLUGIN_ROOT}/scripts' \
            'references/epic-handoff.md' 'feature/roadmap-x' 'main 에서 만든다' '.superpowers/sdd/x' \
-           'origin/master' 'review_model: sonnet' 'haiku 로 부른다' 'plugins/other/x.py' 'shared/tests/x.sh'; do
+           'origin/master' 'review_model: sonnet' 'haiku 로 부른다' 'plugins/other/x.py' 'shared/tests/x.sh' \
+           '줄 안의 플러그인 루트 변수는 그 에픽 worktree 의 spec-distill 플러그인 폴더로'; do
   { cat "$CD"; printf '%s\n' "$lit"; } > "$T/mut.md"
   [ -n "$(banned "$T/mut.md")" ] && ok "양성 대조: 「${lit}」 를 넣으면 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
 done

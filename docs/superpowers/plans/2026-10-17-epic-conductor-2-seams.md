@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.9 표준 라이브러리, bash 3.2 셸 테스트(`shared/tests/assert.sh`), git.
 
-**Spec:** `docs/superpowers/specs/2026-10-17-epic-conductor-design.md` — 이 계획은 §11 의 계획 2(이음매 · 흐름 풀기)다. 이 계획의 AC: AC31(지휘자를 가리키지 않는 변경) · AC32 · AC33 · AC34 · AC35 · AC38 · AC42(로드맵 아닌 갈래). 나머지 AC 는 계획 1 · 3 몫이다. 브랜치는 `feature/epic-conductor-seams`(계획 1 브랜치 `feature/epic-conductor` 위)이다.
+**Spec:** `docs/superpowers/specs/2026-10-17-epic-conductor-design.md` — 이 계획은 §11 의 계획 2(이음매 · 흐름 풀기)다. 이 계획의 AC: AC31(지휘자를 가리키지 않는 변경) · AC32 · AC33 · AC34 · AC35 · AC38 · AC42(로드맵 아닌 갈래) · AC44 · AC45(손 절차 몫 — Task 8, 2026-10-18 재결정). 나머지 AC 는 계획 1 · 3 몫이다. 브랜치는 `feature/epic-conductor-seams`(계획 1 브랜치 `feature/epic-conductor` 위)이다.
 
 ## Global Constraints
 
@@ -883,8 +883,8 @@ Expected: 빈 출력(이 브랜치에만 있는 실패 이름 없음). 나오면
 
 - [ ] **Step 5: 계획 대조를 돌린다**
 
-Run: `python3 plugins/spec-distill/scripts/check_bundle_coverage.py --plan docs/superpowers/specs/2026-10-17-epic-conductor-design.md docs/superpowers/plans/2026-10-17-epic-conductor-2-seams.md --acs "AC31~AC35 · AC38 · AC42"`
-Expected: `계획 대조: 계획에 없는 AC 없음 (AC 7개 · --acs 로 고른 것 · 뺀 AC 38개)`.
+Run: `python3 plugins/spec-distill/scripts/check_bundle_coverage.py --plan docs/superpowers/specs/2026-10-17-epic-conductor-design.md docs/superpowers/plans/2026-10-17-epic-conductor-2-seams.md --acs "AC31~AC35 · AC38 · AC42 · AC44 · AC45"`
+Expected: `계획 대조: 계획에 없는 AC 없음 (AC 9개 · --acs 로 고른 것 · 뺀 AC 36개)`.
 
 - [ ] **Step 6: 커밋**
 
@@ -902,7 +902,7 @@ git show --stat HEAD   # 파일 셋
 실행 방식의 마지막 전체 리뷰가 `ac-report.md`(SDD 작업 폴더)에 AC 마다 한 줄을 적은 뒤:
 
 1. 미룸 · 빠짐과 리뷰 후속으로 미룬 것을 설계문서 `## 미룸` 표(항목 · 이유 · 받는 곳)에 올린다. 받는 곳은 로드맵의 에픽 번호나 `#<n>` 이다.
-2. Run: `python3 plugins/spec-distill/scripts/check_bundle_coverage.py --impl docs/superpowers/specs/2026-10-17-epic-conductor-design.md .superpowers/sdd/2026-10-17-epic-conductor-2-seams/ac-report.md --acs "AC31~AC35 · AC38 · AC42"` — 출력을 고치지 않고 사용자에게 보인다.
+2. Run: `python3 plugins/spec-distill/scripts/check_bundle_coverage.py --impl docs/superpowers/specs/2026-10-17-epic-conductor-design.md .superpowers/sdd/2026-10-17-epic-conductor-2-seams/ac-report.md --acs "AC31~AC35 · AC38 · AC42 · AC44 · AC45"` — 출력을 고치지 않고 사용자에게 보인다.
 3. 설계문서에 두 절을 쓴다. `## 판정` 절이 이미 있으면(계획 1) 새로 만들지 않고 그 절 끝에 `### docs/superpowers/plans/2026-10-17-epic-conductor-2-seams.md` 하위 머리와 줄들을 잇는다 — 같은 `## 판정` 머리가 둘이면 상태 계산이 형식 오류로 읽는다. 없으면 설계문서 끝에 절을 만든다.
 
 ```markdown
@@ -915,7 +915,7 @@ git show --stat HEAD   # 파일 셋
 ## 구현 대조 — docs/superpowers/plans/2026-10-17-epic-conductor-2-seams.md
 
 - 구현 대조: <위 2 의 첫 줄 그대로>
-- 보고: AC 7개 중 구현됨 <n> · 미룸 <n> · 빠짐 <n>
+- 보고: AC 9개 중 구현됨 <n> · 미룸 <n> · 빠짐 <n>
 ```
 
 4. 커밋한다:
@@ -926,3 +926,21 @@ git commit -m "docs(spec-distill): R5 계획 2 의 판정과 구현 대조
 Spec: docs/superpowers/specs/2026-10-17-epic-conductor-design.md" -- docs/superpowers/specs/2026-10-17-epic-conductor-design.md
 git show --stat HEAD   # 파일 하나
 ```
+
+### Task 8: 손 절차를 재결정(spec 리뷰는 지휘 세션)에 맞추고 락을 뒤집는다 (AC44 · AC45 의 손 절차 몫)
+
+**왜:** 2026-10-18 사용자 재결정 — 「지휘자가 spec 리뷰까지 (권장)」, 고칠 설계는 「이대로 (권장)」. R2a spec 리뷰를 담당 agent 가 돌리고 지휘 세션이 게이트를 중계한 10라운드에서 배경이 빠지고 질문이 내부 기호로 왔으며 게이트 밖 후속 질문이 생겼다(설계문서 `## 결정 기록` 2026-10-18 줄). Task 1 이 손 절차 걸음 3 에 넣은 「spec-review 부터는 담당 agent · 게이트 문면 그대로 중계」와 그것을 잠근 테스트가 정반대가 됐다. 정본은 설계문서 §3 걸음 2 · 3 · §4 「하위에게 주는 글」 둘째 불릿 · AC44 · AC45 다.
+
+**Files:**
+- Modify: `plugins/spec-distill/references/conducting.md` (걸음 2 · 3 · 4 · 5 · `/compact` 줄)
+- Modify: `plugins/spec-distill/tests/test_conducting_reference.sh`
+
+**무엇이 바뀌나:**
+- 걸음 2 — 지휘 세션은 메인 체크아웃에 머문다. worktree 격리로 시작됐으면 알리고 그 worktree 를 떠날 수 있는지 먼저 재며, 떠날 수 없으면 다른 에픽의 spec 리뷰는 그 에픽 담당 agent 를 거쳐(걸음 4 의 두 부분 반환) 하고 알린다. 한 에픽의 spec 리뷰가 도는 동안 다른 에픽에서 돌아온 질문 · 멈춤은 적어 두기만 하고 그 리뷰 게이트 질문에 섞지 않는다 — 질문마다 첫 줄에 에픽 이름.
+- 걸음 3 — spec-review 도 지휘 세션이 직접 돌린다: 에픽 worktree 로 옮겨 가 `pwd` · `git rev-parse --show-toplevel` 을 보고, 설계문서 · `--bundle` 을 절대경로로 주며, 진입 사전 검사 줄의 `root=` 가 그 worktree 가 아니면 멈춘다. 승인 게이트의 선택지는 그대로 보이고 다음 세션 줄은 계획 agent 의 입력이다(사용자가 붙여 넣지 않는다). 승인 줄을 그 worktree 에서 설계문서 `## 지휘 기록` 에 커밋한 뒤 메인 체크아웃으로 돌아오고, ① · ② 면 턴을 끝낸다 — 계획 agent 는 사용자의 다음 말이나 압축 뒤 걸음 1 에서 보낸다. 「여기서 계속」 이면 같은 턴에 보내도 된다. 에픽 넘김 줄의 플러그인 루트는 `<SD>` 다.
+- 걸음 4 — 미리 받은 답이 없는 자리는 (a) 쉬운 요약(내부 기호는 괄호에만)과 (b) skill 이 낸 문면 · 선택지 원문 두 부분으로 돌아온다. 선택지의 수 · 순서 · 라벨 · 「(권장)」 과 사용자 답은 글자 그대로, 지휘 세션의 의견은 선택지 밖 한 줄, 답은 같은 agent 로 돌려보낸다. 그대로 전할 수 없는 자리는 지휘 세션이 직접 돌리고 이유를 설계문서에 적는다.
+- 걸음 5 — `## 판정` 에 앞 계획의 줄이 하위 머리 없이 있으면 먼저 `### <앞 계획 경로>` 아래로 옮긴 뒤 잇는다.
+- `/compact` 줄 — 끊기 좋은 자리는 spec 리뷰가 끝나 계획 agent 를 보낸 직후이고, 압축 뒤 같은 세션에 칠 이어 갈 줄을 함께 준다.
+- 테스트 — 옛 「지휘 세션이 spec-review 를 돌리면 안 된다」 락을 뒤집는다: `forbid_agent_review`(걸음 3 의 한 문장 안 agent · 에이전트 와 spec-review), `forbid_relay`(걸음 3 · 4 의 게이트 문면 중계 — 두 부분 반환 문장 하나만 문장째 허용), `forbid_2_main`(옛 「메인 체크아웃에서 부르기를 권한다」), 새 문장마다 정확히 한 번, 승인 뒤 차례(커밋 → 메인 → 턴 끝), 실파일 사본 변이 대조.
+
+**검증:** 리포 루트에서 하나씩 `PYTHONDONTWRITEBYTECODE=1` — `plugins/spec-distill/tests/test_conducting_reference.sh` · `shared/tests/test_plugin_root_no_cwd_fallback.sh` · `shared/tests/test_skill_reference_pointers.sh` · `shared/tests/test_inline_python_isolated.sh` · `shared/tests/test_no_new_duplication.sh` · `shared/tests/test_changelog_integrity.sh`. 그 뒤 `check_bundle_coverage.py --plan … --acs "AC31~AC35 · AC38 · AC42 · AC44 · AC45"` 가 rc 0. 커밋은 두 파일 pathspec(계획 기록 · CHANGELOG 를 고친 커밋은 그 파일까지), `Spec:` 트레일러를 단다.
