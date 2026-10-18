@@ -169,7 +169,7 @@ def find_missing_sections(text: str, sections: list = SECTIONS) -> list[str]:
     missing = []
     for num, title in sections:
         pat = re.compile(
-            rf"^##\s+{num}\.\s+{re.escape(title)}\b",
+            rf"^##[ \t]+{num}\.[ \t]+{re.escape(title)}\b",
             re.MULTILINE | re.IGNORECASE,
         )
         if not pat.search(body):
@@ -812,7 +812,9 @@ def attribution_block_missing(audit_text: str) -> bool:
 
     템플릿이 상속시키지만 개별 audit에서 지워질 수 있으므로 게이트가 확인한다.
     """
-    for ln in brief_body.split_lines(_section_text(audit_text, "6", dict(AUDIT_SECTIONS)["6"])):
+    # 번들이 싣는 audit §6(`section6.body`)에서 본다 — 절 판독(`_section_text`)은 `## 7.1` · 다른 문자 체계 숫자 머리를
+    # 지나쳐 출처 표기를 찾지만, 싣는 §6 은 그 머리에서 끝나 출처 표기가 빠진다. 펜스 안은 출처 표기가 아니다.
+    for ln in brief_body.split_lines(FENCE_RE.sub("", _audit_section6(audit_text))):
         if ln.lstrip().startswith(">") and all(m in ln for m in ATTRIBUTION_MARKERS):
             return False
     return True
@@ -1366,7 +1368,7 @@ def decision_outside_failures(text: str) -> list[str]:
     m = FRONTMATTER_RE.match(text)
     body_start = m.end() if m else 0
     fenced = [(a + body_start, b + body_start) for a, b in (mm.span() for mm in FENCE_RE.finditer(text[body_start:]))]
-    titled = {num: re.compile(rf"^##\s+{num}\.\s+{re.escape(title)}\b", re.IGNORECASE) for num, title in brief_body.SECTIONS}
+    titled = {num: brief_body._titled_head(num, title) for num, title in brief_body.SECTIONS}
     fails, cur, pos = [], None, 0
     for ln in brief_body.split_lines(text):
         here, pos = pos, pos + len(ln) + 1

@@ -103,7 +103,8 @@ def body_text(text):
 
 
 def _titled_head(num, title):
-    return re.compile(rf"^##\s+{re.escape(num)}\.\s+{re.escape(title)}\b", re.MULTILINE | re.IGNORECASE)
+    # 한 줄만 읽는다 — `[ \t]` (`\s` 는 `##` 다음 줄의 `0. 한눈에` 를 같은 머리로 읽는다).
+    return re.compile(rf"^##[ \t]+{re.escape(num)}\.[ \t]+{re.escape(title)}\b", re.MULTILINE | re.IGNORECASE)
 
 
 # 절 머리 판독 하나 — 정규형 위에서, ASCII 숫자만, `## <n>.` 뒤가 숫자가 아니다(`## 0.1` 은 절 머리가 아니다). 절의 끝 ·

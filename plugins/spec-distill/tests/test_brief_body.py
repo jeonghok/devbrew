@@ -417,6 +417,43 @@ class Round4Heads(unittest.TestCase):
                 self.assertEqual(n, allowed, "%s: %s" % (name, title))
 
 
+# ── fix round 5 (Ruling S14-a · S14-b) — 머리 정규식은 한 줄만 읽는다 · audit §6 출처 표기는 싣는 바이트에서 ─────────────
+import section6  # noqa: E402
+
+
+class Round5OneLineHeads(unittest.TestCase):
+    DECOY = ("# t\n\n##\n0. 한눈에\n\n## 0. 한눈에\n\n- OQ8 [해결 " + LA + "S2" + RA + "] — 숨긴 결정\n\n"
+             "## 1. Goal · Non-goal\n")
+
+    def test_heading_does_not_span_lines(self):
+        self.assertIn("- OQ8", B.section_text(self.DECOY, "0"))
+        self.assertIsNone(B._titled_head("0", "한눈에").match("##\n0. 한눈에"))
+        self.assertEqual([r for _l, r in B.head_problems(self.DECOY)], ["section_head_unknown"])   # 빈 `##` 머리
+
+    def test_roadmap_refuses_split_heading(self):
+        brief, audit = _pair()
+        b2 = brief.replace("\n## 0. 한눈에\n", "\n##\n0. 한눈에\n\n## 0. 한눈에\n", 1)
+        with self.assertRaises(roadmap_model.FormatError):
+            roadmap_model.brief_universe(b2, audit)
+
+    def test_section6_heads_read_one_line(self):
+        doc = "# t\n\n## 5. 기각 · Blind Spots\n\n- x\n\n##\n6. 사용자 원문\n\n## 6. 사용자 원문\n- **S1** a\n## 7. Next Action\n"
+        self.assertEqual(len(section6.start_candidates(doc)), 1)
+        self.assertEqual(section6.body(doc), B.section_text(doc, "6"))
+        for rx in (section6.START_RE, section6.END_LOOSE_RE, section6.END_STRICT_RE, section6.BRIEF_SECTION_HEAD_RE,
+                   section6.BRIEF_HEADLIKE_RE):
+            self.assertIsNone(rx.search("##\n6. x"), rx.pattern)
+
+
+class Round5AuditLegend(unittest.TestCase):
+    def test_legend_read_from_shipped_section6(self):
+        _brief, audit = _pair()
+        self.assertFalse(CB.attribution_block_missing(audit))
+        for cut in ("## 7.1 끼운 소제목\n\n", "## " + chr(0x0667) + ". 끼운 머리\n\n"):
+            a2 = audit.replace("## 6. 사용자 원문\n\n", "## 6. 사용자 원문\n\n" + cut, 1)
+            self.assertTrue(CB.attribution_block_missing(a2), repr(cut))
+
+
 class SharedGrammar(unittest.TestCase):
     def test_readers_share_one_object(self):
         self.assertIs(check_brief.ANCHOR_LINE_RE, B.ANCHOR_LINE_RE)

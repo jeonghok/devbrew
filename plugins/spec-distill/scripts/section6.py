@@ -45,18 +45,20 @@ import re
 # 두 개가 되어 이 모듈이 없애려는 바로 그 어긋남이 재발한다.
 FENCE_RE = re.compile(r"^[ \t]*```.*?^[ \t]*```[^\n]*$", re.DOTALL | re.MULTILINE)
 
+# 머리 정규식은 전부 한 줄만 읽는다 — `##` · 번호 · 제목 사이는 `[ \t]` 다(`\s` 는 줄 나눔을 건너 `##` 다음 줄의
+# `6. …` 을 머리로 읽는다). 빈 `##` 줄은 머리 후보(`BRIEF_HEADLIKE_RE`)라 brief 게이트가 막는다.
 # 시작 후보 — 제목을 요구하지 않는다. 제목을 요구하면 `## 6. 참고 자료` 같은 줄이 후보에서
 # 빠지는데, 그 줄은 사람에게도 소비자에게도 「6번 절」로 읽힌다. 넓은 쪽으로 틀리면 red 가
 # 하나 더 날 뿐이고, 좁은 쪽으로 틀리면 통로가 열린다.
-START_RE = re.compile(r"(?m)^##\s*6\.")
+START_RE = re.compile(r"(?m)^##[ \t]*6\.")
 # 종결 후보 — 관대(원문·펜스 무시) / 엄격(펜스 밖·번호 요구).
-END_LOOSE_RE = re.compile(r"(?m)^##\s")
-END_STRICT_RE = re.compile(r"(?m)^##\s+\d+\.")
+END_LOOSE_RE = re.compile(r"(?m)^##[ \t]")
+END_STRICT_RE = re.compile(r"(?m)^##[ \t]+\d+\.")
 # brief 절 머리 판독 — `brief_body` 가 **정규형 위에서** 쓴다(절의 끝 · 같은 번호 머리 수 · 절 밖 결정 판독). ASCII 숫자만,
 # `## <n>.` 뒤가 숫자가 아니다(`## 0.1` 은 절 머리가 아니다). 위 §6 종결 규칙과 갈리는 줄(`## 6.1` · 다른 문자 체계 숫자 ·
 # 보이지 않는 글자를 끼운 머리)은 아래 머리 후보 규칙에 걸려 게이트가 `section_head_unknown` 으로 막는다.
-BRIEF_SECTION_HEAD_RE = re.compile(r"^##\s+([0-9]+)\.(?![0-9])")
-BRIEF_HEADLIKE_RE = re.compile(r"^\s{0,3}##\s*\d")
+BRIEF_SECTION_HEAD_RE = re.compile(r"^##[ \t]+([0-9]+)\.(?![0-9])")
+BRIEF_HEADLIKE_RE = re.compile(r"^[ \t]{0,3}##[ \t]*(?:\d|$)")
 
 # 제목-모양 줄 판정 — markdown ATX 헤딩처럼 보이는 줄(들여쓰기 0–3칸 + `#`×1–6 + 공백)을
 # 분류할 뿐, 어떤 절 경계도 계산하지 않는다. 헤딩 마커를 소비하는 정규식이라 §6-단일화 락의

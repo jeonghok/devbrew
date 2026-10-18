@@ -2691,4 +2691,33 @@ bb_variant t4_ok '\n✎ 렌더링 전략' '\n상태는 `[열림]` 또는 `[해�
 out="$(bb_gate t4_ok)"; rc=$?
 [[ $rc -eq 0 ]] && ok "AC18(양성대조): 자리 표시만 담은 코드 칸 설명 · ### 소제목은 막지 않는다" \
   || { no "AC18(양성대조): 설명 줄 · 소제목이 막혔다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+# --- AC18 fix round 5 — 머리 정규식은 한 줄만 · audit §6 출처 표기는 싣는 바이트에서(Ruling S14-a · S14-b) -------------
+bb_variant t5_decoy '\n## 0. 한눈에\n' '\n##\n0. 한눈에\n\n## 0. 한눈에\n'
+out="$(bb_gate t5_decoy)"; rc=$?
+{ [[ $rc -ne 0 ]] && grep -qF "section_head_unknown" <<<"$out"; } \
+  && ok "AC18: 두 줄에 걸친 미끼 머리(##\\n0. 한눈에) → red «section_head_unknown»" \
+  || { no "AC18: 두 줄에 걸친 미끼 머리가 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+bb_variant t5_lone6 '\n\n## 6. 사용자 원문' '\n\n##\n6. 사용자 원문\n\n## 6. 사용자 원문'
+out="$(bb_gate t5_lone6)"; rc=$?
+{ [[ $rc -ne 0 ]] && grep -qF "section_head_unknown" <<<"$out"; } \
+  && ok "AC18: §6 앞의 두 줄 머리(##\\n6.) → red «section_head_unknown» (section6 과 절 판독이 같은 §6 을 본다)" \
+  || { no "AC18: §6 앞의 두 줄 머리가 section_head_unknown 으로 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+for spec in 'a5_sub|## 7.1 끼운 소제목' 'a5_ar|## \u0667. 끼운 머리'; do
+  IFS='|' read -r stem cut <<<"$spec"
+  mkdir -p "$BB/$stem"; cp "$FX/interview-brief-valid.md" "$FX/interview-brief-valid.audit.md" "$BB/$stem/"
+  python3 -I - "$BB/$stem/interview-brief-valid.audit.md" "$cut" <<'PY'
+import json, sys
+p = sys.argv[1]
+cut = json.loads('"' + sys.argv[2] + '"')
+t = open(p, encoding="utf-8").read()
+new = t.replace("## 6. 사용자 원문\n\n", "## 6. 사용자 원문\n\n" + cut + "\n\n", 1)
+if new == t:
+    sys.exit("변형이 적용되지 않았다")
+open(p, "w", encoding="utf-8").write(new)
+PY
+  out="$(bb_gate "$stem")"; rc=$?
+  { [[ $rc -ne 0 ]] && grep -qF "출처 표기 블록 부재" <<<"$out"; } \
+    && ok "AC18: audit §6 출처 표기 앞의 끼운 머리(${stem}) → red (싣는 §6 에 출처 표기가 없다)" \
+    || { no "AC18: audit §6 출처 표기 앞의 끼운 머리(${stem})가 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+done
 finish
