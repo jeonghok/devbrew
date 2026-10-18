@@ -11,8 +11,8 @@
 | M5 | 지휘 세션이 brainstorming → spec-review → 승인 → writing-plans 를 이어 부른 뒤 지휘 절차로 돌아오는가 | 돌아왔다 — 다만 skill 이 데려다준 것이 아니라 지휘 세션이 로드맵을 다시 읽고 돌아왔다. writing-plans 는 계획 검토 + 실행 방식 질문으로 끝나고 브랜치 커밋 · 상태 계산 · 작업 목록 갱신을 말하지 않는다. 지휘 세션이 그 질문 전에 절차 1 · 2 를 했다(계획 커밋 → fetch → `roadmap_status.py` 「계획」 → 작업 제목 갱신) | R5(OQ30) |
 | M6 | 지휘 세션이 다른 worktree 로 옮겨 가 쓰고 돌아올 수 있는가 · 옮겨 간 뒤 진입 사전 검사의 `root=` · 하니스 폴더 밖 worktree | 하니스 worktree 폴더 아래로 `EnterWorktree(path=…)` 옮겨 가기 · 돌아오기 · git · 쓰기 됨, 옮긴 자리의 spec-review 사전 검사 `root=` 가 그 worktree(2026-10-18 지휘 세션 실측). 폴더 밖은 닿지 않고, 옮긴 뒤 앞 worktree 는 읽기 전용, worktree 안에서는 `EnterWorktree(name=…)` 로 새로 못 만든다 | R5 계획 3(conducting.md 걸음 3 의 옮겨 가는 길) |
 | M7 | 알림 도구가 있는가 · 보고 있을 때 안 보낸다고 하는가 · 끝난 agent 를 `SendMessage` 로 이어 부르면 맥락이 이어지는가 | `PushNotification` 은 이 측정 자리(지휘 세션이 보낸 SDD 실행 agent)의 도구 목록에 없다 — 「보고 있을 때 안 보낸다」 문면은 재지 못함(도구 없음), 지휘 세션 본체는 재지 못함. 끝난 agent 를 `SendMessage` 로 이어 부르면 앞 맥락을 갖고 이어 간다(숫자 7 을 답함) | R5 계획 3(conducting.md 알림 · conductor-dispatch.md 이어 부르기) |
-| M8 | `shared/test-selection` 공유본의 배정 · 단위 실행 · 귀속 입출력, 단위 실행의 표준 오류에 실패 이름이 실리는가 | 실린다 — `run … per-unit` 의 표준 오류에 pytest `FAILED tests/test_x.py::test_a` · unittest `FAIL: test_a (tests.test_y.T)` · 셸 `  ✗ 하나가 틀렸다` 가 그대로 나오고 rc 는 0. 테스트 아닌 파일은 `unclaimed` 행. `run` 은 detached 트리만 받는다. `diff-test-results.py` 는 대상 레포 루트에서 불러야 하고 `adapters` · `verdict_input` · `per_adapter` · `attributions` 를 낸다. `--total --tree HEAD` 는 테스트 파일 수(1)를 낸다 | R5 계획 3 Task 3(merge_check) |
-| M9 | `requesting-code-review` 가 부르는 agent 와 그 쓰기 권한 | `Dispatch a `general-purpose` subagent` — general-purpose 는 전체 도구(쓰기 포함)를 가진다 | R5 계획 3 결정 D(integration-reviewer) |
+| M8 | `shared/test-selection` 공유본의 배정 · 단위 실행 · 귀속 입출력, 단위 실행의 표준 오류에 실패 이름이 실리는가 | 실린다 — `run … per-unit` 의 표준 오류에 pytest `FAILED tests/test_x.py::test_a` · unittest `FAIL: test_a (tests.test_y.T)` · 셸 `  ✗ 하나가 틀렸다` 가 그대로 나오고 rc 는 0. 테스트 아닌 파일은 `unclaimed` 행. `run` 이 detached 트리를 요구한다는 것은 소스 확인뿐이다(붙은 트리는 재지 못함). `diff-test-results.py` 는 대상 레포 루트에서 불러야 하고 `adapters` · `verdict_input` · `per_adapter` · `attributions` 를 내며, `unclaimed` 가 남아 있으면 `silent_drop: true` · `degrade_causes` 에 `silent-drop` 이 붙는다(pytest · unittest 관측, 셸은 false). `--total --tree HEAD` 는 테스트 파일 수(1)를 낸다 | R5 계획 3 Task 3(merge_check) |
+| M9 | `requesting-code-review` 가 부르는 agent 와 그 쓰기 권한 | ``Dispatch a `general-purpose` subagent`` — general-purpose 는 전체 도구(쓰기 포함)를 가진다 | R5 계획 3 결정 D(integration-reviewer) |
 
 ## M1
 
@@ -119,9 +119,9 @@
 
 - (a) `assign` 에 `git ls-files` 전부를 넣으면 테스트 아닌 파일이 `unclaimed` 행으로 남는다. 증거: `pytest.ini	unclaimed	file` · `tests/__init__.py	unclaimed	file`. 끝에 `#qg-assign	adapters=pytest	rows=2` 형태의 요약 줄이 붙는다. `detect` 는 `runner:` · `granularity:` · `setup_cmd:` 세 줄(예 `runner: pytest` · `granularity: file` · `setup_cmd: -`)을 낸다.
 - (b) `run … per-unit` 의 표준 오류에 러너 출력이 실린다. 증거: pytest `FAILED tests/test_x.py::test_a - assert 1 == 2` · unittest `FAIL: test_a (tests.test_y.T)` · 셸 `  ✗ 하나가 틀렸다`. 실패하는 테스트인데도 `run` 의 rc 는 0 이었다.
-- (c) `diff-test-results.py` 출력은 `adapters:` · `verdict_input:`(`confirmed_product_defect` · `silent_drop` · `baseline_unrunnable`) · `attribution_status` · `degrade_causes` · `new_failures` · `unclaimed` · `per_adapter:`(`runner` · `granularity` · `causes` · `counts` · `attributions:` 의 `unit` · `verdict` · `note`) 모양이다. 기준선 행을 그대로 베낀 같은 커밋 두 개로 부르면 `verdict: BASELINE_UNRUNNABLE`, `note: "기준선과 HEAD 의 트리가 같다 — 비교할 차이가 없다"`, `attribution_status: degraded`. 레포 루트 밖에서 부르면 `커밋 … 의 트리를 읽지 못했다 — 리포 루트에서 불러라`, rc 4. 실제로 다른 두 커밋의 귀속(`new_regression` 등)은 재지 못함 — 이 측정은 같은 커밋만 썼다.
+- (c) `diff-test-results.py` 출력은 `adapters:` · `verdict_input:`(`confirmed_product_defect` · `silent_drop` · `baseline_unrunnable`) · `attribution_status` · `degrade_causes` · `new_failures` · `unclaimed` · `per_adapter:`(`runner` · `granularity` · `causes` · `counts` · `attributions:` 의 `unit` · `verdict` · `note`) 모양이다. 기준선 행을 그대로 베낀 같은 커밋 두 개로 부르면 `verdict: BASELINE_UNRUNNABLE`, `note: "기준선과 HEAD 의 트리가 같다 — 비교할 차이가 없다"`, `attribution_status: degraded`. `unclaimed` 가 비어 있지 않으면 `verdict_input.silent_drop: true` · `degrade_causes: [baseline-unrunnable, silent-drop]`(pytest · unittest 관측, 셸은 `unclaimed: []` 라 false; 소스 `diff-test-results.py` 246~247줄) — merge_check 는 `assign` 을 claimed 단위만으로 다시 돌려야 한다. 레포 루트 밖에서 부르면 `커밋 … 의 트리를 읽지 못했다 — 리포 루트에서 불러라`, rc 4. 실제로 다른 두 커밋의 귀속(`new_regression` 등)은 재지 못함 — 이 측정은 같은 커밋만 썼다.
 - (d) `run` 은 detached 트리를 요구한다. 측정에서는 모두 `git worktree add --detach` 트리를 넘겼다. 브랜치에 붙은 트리를 넘기는 경우는 돌려 보지 않았고 소스 `run-test-selection.sh` 의 `브랜치에 붙은 트리에서는 돌리지 않는다 — create-baseline/create-head 가 만든 detached 트리를 넘겨라` 거절 줄로만 확인했다.
-- (e) `compute-test-scope-candidates.sh --total --tree HEAD` 는 버릴 pytest 레포에서 `1`(rc 0)을 냈다 — 그 레포의 테스트 파일 수(`tests/test_x.py` 하나).
+- (e) `compute-test-scope-candidates.sh --total --tree HEAD` 는 버릴 pytest 레포에서 `1`(rc 0)을 냈다 — (이 레포의 테스트 파일 하나와 일치).
 
 판정: 「이름은 `run` 표준 오류에서 뽑는다」 가 성립한다(세 러너 모두 이름이 든 줄이 실린다).
 
@@ -129,6 +129,6 @@
 
 방법: `grep -n "general-purpose" <superpowers 7.0.0 캐시>/skills/requesting-code-review/SKILL.md`.
 
-- 34번째 줄: `Dispatch a `general-purpose` subagent, filling the template at [code-reviewer.md](code-reviewer.md)`.
+- 34번째 줄: ``Dispatch a `general-purpose` subagent, filling the template at [code-reviewer.md](code-reviewer.md)``.
 
 판정: 리뷰 요청 skill 이 부르는 agent 는 `general-purpose` 다. 이 레포의 agent 목록에서 general-purpose 의 도구는 전체(`*`)이므로 쓰기 도구를 가진다 — 결정 D 의 근거.
