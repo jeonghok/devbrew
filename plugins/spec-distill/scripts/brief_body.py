@@ -339,6 +339,9 @@ def _shape_view(text):
 
 # 거부 사유 이름 → 사람이 읽는 말. 메시지는 이 말을 앞세우고 사유 이름은 괄호에 둔다.
 ANCHOR_REASON_TEXT = {
+    "html_block_not_allowed": "HTML 블록으로 시작하는 줄이라 뒤따르는 앵커 줄을 삼킬 수 있는 줄",
+    "fence_indented": "들여 쓴 코드 펜스를 여는 줄이라 목록 항목 안의 펜스로 읽는 쪽과 아닌 쪽이 갈리는 줄",
+    "autolink_backtick": "백틱이 든 자동 링크 꼴(`<…>`)이라 코드 칸 짝짓기가 렌더러마다 갈리는 줄",
     "code_span_unclosed": "한 줄 안에서 짝을 찾지 못한 백틱이 있어 다음 줄의 코드 칸 짝짓기를 밀어 버리는 줄",
     "html_inline_not_allowed": "인라인 HTML(`<태그>` · 주석 등)이 있어 렌더러만 다른 글을 그리는 줄(코드 칸 안은 제외)",
     "anchor_markup": "HTML 태그나 백슬래시 이스케이프로 꾸며 앵커처럼 읽히는 줄",
@@ -471,6 +474,27 @@ def inline_html(line):
     return bool(_INLINE_HTML_RE.search(masked))
 
 
+_URI_AUTOLINK_RE = re.compile(r"<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\x00-\x20]*>")
+_LABEL = r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+_EMAIL_AUTOLINK_RE = re.compile(r"<[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@" + _LABEL + r"(?:\." + _LABEL + r")*>")
+
+
+def autolink_with_backtick(line):
+    """CommonMark 자동 링크(URI · 이메일) 꼴 안에 백틱이 든 줄인가. 렌더러는 `<` 에서 시작하는 자동 링크를 먼저 읽어 그 안의
+    백틱을 글자로 쓰지만, 이 판독의 코드 칸 짝짓기는 그 백틱을 짝으로 읽어 뒤의 HTML 을 코드로 가린다. 읽는 쪽이 갈리므로
+    거부한다(백슬래시로 이스케이프한 `\\<` 는 자동 링크가 아니다)."""
+    for rx in (_URI_AUTOLINK_RE, _EMAIL_AUTOLINK_RE):
+        for m in rx.finditer(line):
+            if "`" not in m.group(0):
+                continue
+            back = 0
+            while m.start() - back > 0 and line[m.start() - back - 1] == "\\":
+                back += 1
+            if back % 2 == 0:
+                return True
+    return False
+
+
 def anchor_lines(section_text):
     """§6 본문의 바이트 전부를 센다 -> (문법 안 앵커 [(줄 번호, sid, 본문)], 거부 줄 [(줄 번호, 사유)]). 줄 번호는 1부터.
 
@@ -479,7 +503,8 @@ def anchor_lines(section_text):
     발화의 앵커로 읽는다(Ruling S13 대체 규칙: 실제 brief 의 §6 은 출처 표기 · 앵커 앞 설명 · 따옴표 같은 원문 밖 글을
     싣고 있어 본문을 원장 글자와 같게 강제하지 않는다)."""
     ok, bad = [], []
-    fenced = section6.fence_spans_in(section_text)   # 펜스 안 줄은 코드라 인라인 판독을 하지 않는다
+    fenced = section6.col0_fence_spans_in(section_text)   # 열 0 에서 연 펜스 안 줄만 코드로 보고 인라인 판독을 하지 않는다
+    indented = set(section6.indented_fence_opener_numbers_in(section_text))
     pos = 0
     for n, line in enumerate(split_lines(section_text), 1):
         here, pos = pos, pos + len(line) + 1
@@ -487,6 +512,15 @@ def anchor_lines(section_text):
         parts = line.splitlines()
         if len(parts) > 1 and any(_ANCHOR_SHAPED.match(fold(p)) or _in_body(fold(p)) for p in parts):
             bad.append((n, "anchor_line_separator"))
+            continue
+        if n in indented:   # 들여 쓴 펜스 여는 줄 — 부분집합은 열 0 의 펜스만 받는다
+            bad.append((n, "fence_indented"))
+            continue
+        if not in_fence and _HTML_BLOCK_RE.match(canon(line)):   # 줄 머리 `<` + 글자 — HTML 블록이 뒤 앵커 줄을 삼킬 수 있다
+            bad.append((n, "html_block_not_allowed"))
+            continue
+        if not in_fence and autolink_with_backtick(line):
+            bad.append((n, "autolink_backtick"))
             continue
         if not in_fence and unpaired_backtick_runs(line):
             bad.append((n, "code_span_unclosed"))

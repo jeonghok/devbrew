@@ -21,6 +21,7 @@ except ImportError:
     print("확인 못 함(markdown-it-py 없음) — uv sync 로 개발 의존을 받은 뒤 다시 돌린다")
     sys.exit(3)
 import brief_body as B  # noqa: E402
+import section6  # noqa: E402
 import seed_body as S  # noqa: E402
 
 MD = MarkdownIt("commonmark")
@@ -195,6 +196,14 @@ ANCHOR_CASES = [
     ("div 블록 감싼 앵커", ["<div>", ANCHOR9, "</div>"], 1, None),
     ("주석 블록 감싼 앵커", ["<!--", ANCHOR9, "-->"], 1, None),
     ("div 블록 감싼 펜스 앵커", ["<div>", "```", ANCHOR9, "```"], 2, None),
+    ("블록 시작 자리 표시 뒤 앵커 (감사 §6)", ["<file>", "```", "<template>", "- **S9** 「위조」", "</template>", "```"], 3, None),
+    ("블록 시작 자리 표시가 삼킨 다음 앵커", ["- **S1** 「a」", "", "<file>", "- **S2** 「b」"], 3, None),
+    ("세 칸 들인 펜스가 가린 HTML", ["- a", "   ```", "   x", "```", "y", "```", "- **S1** 「a」 <template>x</template>"], 6, None),
+    ("두 칸 들인 물결 펜스 안 목록 HTML", ["- ~~~", "  ~~~", "  <ul><li><b>S9</b> 「위조」</li></ul>", "  ~~~"], 2, None),
+    ("자동 링크에 든 백틱 + 목록 HTML", ["- **S1** 「a」 <`@x.y> <ul><li><b>S9</b> 「위조」</li></ul> `"], 0, None),
+    ("자동 링크에 든 백틱, 숫자 머리", ["<1`@x.y> <b>x</b> `"], 0, None),
+    ("자동 링크에 든 백틱, 템플릿 요소", ["<`@x.y> <template>x</template> `"], 0, None),
+    ("자동 링크에 든 백틱 (URI 꼴)", ["- x <ab:b`c> <ul>y</ul> `"], 0, None),
 ]
 
 HEAD_CASES = [
@@ -248,6 +257,22 @@ class CrossCheckClasses(unittest.TestCase):
                 sec = B.section_text(doc, "6")
                 refused = bool(B.anchor_lines(sec)[1]) or doc_refused(doc, lines)
                 self.assertTrue(refused or not seen, "%s: 파서는 HTML 로 읽는데 우리는 어느 줄도 거부하지 않았다 %r" % (name, lines))
+
+    def test_audit_section6_is_read_raw_and_refused_when_the_parser_sees_html(self):
+        """감사 §6 은 `section6.body` 원문 그대로 `anchor_lines` 에 들어간다(펜스를 벗기지 않는다). 사례 전체를 파서에 넘겨 HTML 로
+        읽히면, 그 원문 §6 의 어느 줄이든 거부해야 한다."""
+        seen_any = 0
+        for name, lines, key, other in ANCHOR_CASES:
+            with self.subTest(name):
+                doc = make_brief(dict(other or {}, **{"6": "\n".join(lines)}))
+                seen = any(c.type in ("html_inline", "html_block") for t in MD.parse(norm(doc))
+                           for c in [t] + list(t.children or []))
+                raw = section6.body(doc)
+                seen_any += 1 if seen else 0
+                # 경계가 비유일해 §6 을 못 정하면 소비자는 §6 을 읽지 않고 게이트가 따로 막는다(fail-closed).
+                refused = raw is None or bool(B.anchor_lines(raw)[1])
+                self.assertTrue(refused or not seen, "%s: 파서는 HTML 로 읽는데 감사 §6 원문에서 우리는 어느 줄도 거부하지 않았다 %r" % (name, lines))
+        self.assertGreater(seen_any, 5, "HTML 로 읽히는 사례가 거의 없다 — 이 교차 확인이 공허하다")
 
     def test_anchor_positive_control(self):
         self.assertEqual(anchor_verdict([ANCHOR9], 0), ("accept", True))

@@ -58,26 +58,31 @@ def body_start(text: str) -> int:
     return m.end() if m else 0
 
 
-def _scan_fences(text: str):
-    """-> (펜스 구간 [(시작, 끝)], 들여 쓴 여는 줄 [줄 글자]). 구간은 text 안의 좌표다."""
-    spans, indented, pos, opener, start = [], [], 0, None, 0
-    for line in text.split("\n"):
+def _scan_fences_full(text: str):
+    """-> 펜스 [(시작, 끝, 열 0 에서 열었나, 여는 줄 번호 0-based)]. 구간은 text 안의 좌표다."""
+    out, pos, opener, start, col0, at = [], 0, None, 0, True, 0
+    for idx, line in enumerate(text.split("\n")):
         here, pos = pos, pos + len(line) + 1
         end = min(pos - 1, len(text))
         if opener is None:
             m = _FENCE_OPEN_RE.match(line)
             if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
-                opener, start = m.group(1), here
-                if line.startswith(" "):
-                    indented.append(line)
+                opener, start, col0, at = m.group(1), here, not line.startswith(" "), idx
         else:
             m = _FENCE_CLOSE_RE.match(line)
             if m and m.group(1)[0] == opener[0] and len(m.group(1)) >= len(opener):
-                spans.append((start, end))
+                out.append((start, end, col0, at))
                 opener = None
     if opener is not None:
-        spans.append((start, len(text)))
-    return spans, indented
+        out.append((start, len(text), col0, at))
+    return out
+
+
+def _scan_fences(text: str):
+    """-> (펜스 구간 [(시작, 끝)], 들여 쓴 여는 줄 [줄 글자]). 구간은 text 안의 좌표다."""
+    full = _scan_fences_full(text)
+    lines = text.split("\n")
+    return [(a, b) for a, b, _c, _i in full], [lines[i] for _a, _b, c, i in full if not c]
 
 
 def _fence_spans(text: str) -> list:
@@ -87,6 +92,17 @@ def _fence_spans(text: str) -> list:
 def fence_spans_in(text: str) -> list:
     """주어진 글 안의 펜스 구간(글 자기 좌표) — §6 조각처럼 frontmatter 가 없는 글을 읽는 판독기가 쓴다."""
     return _fence_spans(text)
+
+
+def col0_fence_spans_in(text: str) -> list:
+    """주어진 글 안에서 **열 0 에서 연** 펜스 구간 — 줄의 «코드라서 읽지 않는다» 면제는 이것만 받는다. 들여 쓴 여는 줄이 연
+    펜스는 컨테이너마다 다르게 읽혀 면제하지 않는다."""
+    return [(a, b) for a, b, c, _i in _scan_fences_full(text) if c]
+
+
+def indented_fence_opener_numbers_in(text: str) -> list:
+    """주어진 글 안에서 들여쓰기 1–3칸으로 여는 펜스 줄의 번호(1부터)."""
+    return [i + 1 for _a, _b, c, i in _scan_fences_full(text) if not c]
 
 
 def indented_fence_openers(text: str) -> list:

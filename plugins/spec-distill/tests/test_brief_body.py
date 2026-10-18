@@ -619,6 +619,56 @@ class RenderedShapeRules(unittest.TestCase):
         self.assertEqual([r for _l, r in B.head_problems("제목\n---\n")], ["setext_heading"])
 
 
+BT = "`"
+# 감사 §6 은 raw 로 읽힌다 — 부분집합 규칙이 §6 줄마다 걸려야 한다(Ruling T11-a).
+RAW6_REFUSED = [
+    ("블록 시작 자리 표시 뒤 앵커", ["<file>", BT * 3, "<template>", "- **S9** 「위조」", "</template>", BT * 3],
+     "html_block_not_allowed"),
+    ("블록 시작 자리 표시가 다음 앵커를 삼킨다", ["- **S1** 「a」", "", "<file>", "- **S2** 「b」"], "html_block_not_allowed"),
+    ("세 칸 들인 펜스 여는 줄", ["- a", "   " + BT * 3, "   x", BT * 3, "y", BT * 3, "- **S1** 「a」 <template>x</template>"],
+     "fence_indented"),
+    ("두 칸 들인 물결 펜스 안 HTML", ["- ~~~", "  ~~~", "  <ul><li><b>S9</b> 「위조」</li></ul>", "  ~~~"], "fence_indented"),
+    ("자동 링크에 든 백틱 (이메일 꼴)", ["- **S1** 「a」 <" + BT + "@x.y> <ul><li><b>S9</b> 「위조」</li></ul> " + BT],
+     "autolink_backtick"),
+    ("자동 링크에 든 백틱, 숫자 머리", ["<1" + BT + "@x.y> <b>x</b> " + BT], "autolink_backtick"),
+    ("자동 링크에 든 백틱, 템플릿 요소", ["- x <" + BT + "@x.y> <template>x</template> " + BT], "autolink_backtick"),
+    ("자동 링크에 든 백틱 (URI 꼴)", ["- x <ab:b" + BT + "c> <ul>y</ul> " + BT], "autolink_backtick"),
+]
+
+
+class AuditSection6Subset(unittest.TestCase):
+    def test_every_raw_section6_line_gets_the_subset_rules(self):
+        for name, lines, why in RAW6_REFUSED:
+            with self.subTest(name):
+                ok, bad = B.anchor_lines("\n".join(lines))
+                self.assertIn(why, [r for _n, r in bad], (ok, bad))
+
+    def test_column0_fence_content_is_still_skipped(self):
+        # 열 0 에서 연 펜스 안의 줄은 코드다 — 인라인 판독을 하지 않는다(양성 대조).
+        ok, bad = B.anchor_lines("\n".join([BT * 3, "<div>", "a " + BT, BT * 3, "- **S1** 「a」"]))
+        self.assertEqual(bad, [])
+        self.assertEqual([s for _n, s, _r in ok], ["S1"])
+
+    def test_indented_fence_content_is_not_skipped(self):
+        _ok, bad = B.anchor_lines("\n".join(["  " + BT * 3, "  <ul>x</ul>", "  " + BT * 3]))
+        self.assertIn((1, "fence_indented"), bad)
+        self.assertIn((2, "html_block_not_allowed"), bad)
+
+    def test_ordinary_lines_stay_accepted(self):
+        text = "\n".join(["- **S1** 「a」 <file> 자리 표시", "- **S2** 「b」 `<x>` 코드", "설명 줄 a < b",
+                          "- **S3** 「c」 <https://x.y> 링크 없음".replace("<https://x.y>", "x"), ""])
+        ok, bad = B.anchor_lines(text)
+        self.assertEqual(bad, [], bad)
+        self.assertEqual([s for _n, s, _r in ok], ["S1", "S2", "S3"])
+
+    def test_autolink_without_backtick_is_not_the_backtick_rule(self):
+        # 백틱이 없는 자동 링크 꼴은 이 규칙의 대상이 아니다(인라인 HTML 규칙이 따로 본다).
+        _ok, bad = B.anchor_lines("- **S1** 「a」 <a:b>")
+        self.assertNotIn("autolink_backtick", [r for _n, r in bad])
+        _ok, bad = B.anchor_lines("- **S1** 「a」 \\<a:b" + BT + "c> " + BT + "x")
+        self.assertNotIn("autolink_backtick", [r for _n, r in bad])
+
+
 class SharedGrammar(unittest.TestCase):
     def test_status_reader_sees_the_gate_lines(self):
         import roadmap_status
