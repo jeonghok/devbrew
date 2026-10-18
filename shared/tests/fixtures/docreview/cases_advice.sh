@@ -696,3 +696,27 @@ case_advice_render_where_label() {   # B-A 가 쓰는 --where — 머리 줄 · 
   … 외 3건 — brief §3 · §5 에 전부" "--where: 머리 줄과 접는 줄이 박제처 헤딩 대신 라벨을 가리킨다"
   rm -rf "$d"
 }
+
+# ── AC39 — 이미 내린 결정과 반대인 본문은 저자 고침 ─────────────────────────
+case_AC39_contradicts_routes_fix() {
+  local d; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null   # → D1.1
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-contradicts.txt")" > "$d/prep.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" '[ (i["contradicts"], i["disposition"], i.get("route")) for i in d["findings"] if i.get("contradicts") ]')" "[('D1.1', 'fix', None)]" "AC39: 실재하는 결정 id 를 단 지적은 참고가 아니라 저자 고침"
+  assert_eq "$(jget "$d/fin.json" '[i["summary"] for i in d["findings"] if i["anchor"]=="#handoff-context" and i.get("route")=="advice"]')" "['넘김 절이 없는 결정을 가리키며 반대라고 한다']" "AC39: 없는 id 는 참고로 남는다"
+  assert_contains "$(jget "$d/fin.json" '" | ".join(d["advisory"])')" "없는 결정 id D7.7" "AC39: 없는 id 를 공시한다"
+  rm -rf "$d"
+}
+case_AC39_contradicts_skips_protected_promotion() {
+  # 보호 절(수용 기준)의 결정 반대 지적은 decide 로 오르지 않는다(설계에 없던 결정 4)
+  local d; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  sed 's/#12-files-to-modify/#11-acceptance-criteria/' "$FX/critic-contradicts.txt" > "$d/critic-ac.src"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$d/critic-ac.src")" > "$d/prep.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" '[ (i["contradicts"], i["disposition"], i.get("promotion")) for i in d["findings"] if i.get("contradicts") ]')" "[('D1.1', 'fix', None)]" "AC39: 보호 절이어도 실재 결정을 가리킨 지적은 저자 고침(보호 승격 없음)"
+  rm -rf "$d"
+}

@@ -873,7 +873,7 @@ PUBLIC_FIELDS = ("id", "lineage", "bucket", "supersedes", "origin", "layer", "ca
                  # 실으면 fix·defer·ask 로 난 항목의 대체안이 원장에 한 글자도 안 남는다.
                  "replacement", "if_unfixed",
                  "decision_view", "state", "promotion", "promoted_from", "immutable", "kind",
-                 "detector")
+                 "detector", "contradicts")
 
 
 GateRow = collections.namedtuple("GateRow", "name ledger pred open blocks render")
@@ -1866,6 +1866,7 @@ WARN_GLOSS = (
     (r"입력 실패\(보조\): (?P<why>.*)", None, "보조 리뷰어 결과를 읽지 못했다"),
     (r"셀 수 없음: (?P<why>.*)", None, "셀 수 없는 것이 있다"),
     (r"보류: (?P<why>.*)", None, "판정하지 못하고 보류한 지적이 있다"),
+    (r"없는 결정 id (?P<why>.*) — 참고로 둠", "결정 id", "지적이 가리킨 결정을 기록에서 찾지 못해 참고로 두었다"),
     (r"강제\(게이트 변경\): (?P<why>.*)", None, "판정 값을 강제로 바꿨고 그 때문에 게이트 결과가 달라졌다"),
 )
 

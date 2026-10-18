@@ -100,6 +100,7 @@ docreview:
       immutable: false
       kind: pre
       detector: d1
+      contradicts: null
     9dea7cf3#r1.1:
       id: 9dea7cf3#r1.1
       lineage: 9dea7cf3#r1.1
@@ -123,6 +124,7 @@ docreview:
       immutable: false
       kind: pre
       detector: d1
+      contradicts: null
   decides:
     7c1226fa#r1.1:
       state: open

@@ -100,6 +100,7 @@ docreview:
       immutable: false
       kind: pre
       detector: d1
+      contradicts: null
     011167c4#r1.2:
       id: 011167c4#r1.2
       lineage: 011167c4#r1.2
@@ -123,6 +124,7 @@ docreview:
       immutable: false
       kind: pre
       detector: d1
+      contradicts: null
     d56c5e0c#r1.1:
       id: d56c5e0c#r1.1
       lineage: d56c5e0c#r1.1
@@ -147,6 +149,7 @@ docreview:
       immutable: false
       kind: pre
       detector: d1
+      contradicts: null
     9dea7cf3#r1.1:
       id: 9dea7cf3#r1.1
       lineage: 9dea7cf3#r1.1
@@ -180,6 +183,7 @@ docreview:
       immutable: false
       kind: pre
       detector: null
+      contradicts: null
     d949ac4c#r1.1:
       id: d949ac4c#r1.1
       lineage: d949ac4c#r1.1
@@ -203,6 +207,7 @@ docreview:
       immutable: false
       kind: pre
       detector: d1
+      contradicts: null
     11adb9c3#r1.1:
       id: 11adb9c3#r1.1
       lineage: 11adb9c3#r1.1
@@ -236,6 +241,7 @@ docreview:
       immutable: false
       kind: pre
       detector: d1
+      contradicts: null
     e1b5b3be#r1.1:
       id: e1b5b3be#r1.1
       lineage: e1b5b3be#r1.1
@@ -259,6 +265,7 @@ docreview:
       immutable: false
       kind: pre
       detector: null
+      contradicts: null
     65e28991#r1.1:
       id: 65e28991#r1.1
       lineage: 65e28991#r1.1
@@ -282,6 +289,7 @@ docreview:
       immutable: false
       kind: pre
       detector: d1
+      contradicts: null
     1615824b#r1.1:
       id: 1615824b#r1.1
       lineage: 1615824b#r1.1
@@ -315,6 +323,7 @@ docreview:
       immutable: false
       kind: pre
       detector: null
+      contradicts: null
     011167c4#r1.1:
       id: 011167c4#r1.1
       lineage: 011167c4#r1.1
@@ -338,6 +347,7 @@ docreview:
       immutable: null
       kind: null
       detector: d1
+      contradicts: null
   decides:
     fee27fc9#r1.1:
       state: open

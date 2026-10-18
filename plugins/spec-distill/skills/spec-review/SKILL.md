@@ -474,6 +474,7 @@ printf '%s\n' "$PROFILE_TEXT" | sed -e '2,/^---$/{' -e '/^must_catch:/d' -e '}'
 3단계 탐지 — 1단계 출력의 `config.detectors.value`(N) 만큼 아래 블록을 dispatch 한다(한 메시지에 Agent 호출 여럿 —
 병렬). 리뷰어 i 의 출력을 요약·전사 없이 verbatim 파일 `$STATE_DIR/critic-<i>.txt`(i = 1…N)로 저장한다. N 명이라는
 규모는 게이트 둘째 줄이 알린다 — 선언된 fan-out 이다. 파싱은 `docreview_route.py` 가 그 파일들에서 한다.
+`RELATED_CHANGES` 는 `python3 "$SD/scripts/docreview_state.py" related-changes --state-dir "$STATE_DIR"` 출력입니다 — 이번 라운드에 사용자가 고친다로 정한 결정 때문에 함께 바뀐 절의 제목과 앵커뿐이고, 없으면 빈 값입니다(명령이 실패하면 빈 값으로 두되 그 사실을 한 줄 알립니다).
 
 ```
 Agent({
@@ -482,12 +483,13 @@ Agent({
   // **처분** — consumer=plugins/spec-distill/scripts/docreview_route.py · fail-closed
   prompt: "<document>${DOCUMENT}</document>
     <profile>${PROFILE}</profile>
-    <prior_finding_ids>${PRIOR_FINDING_IDS}</prior_finding_ids>"
+    <prior_finding_ids>${PRIOR_FINDING_IDS}</prior_finding_ids>
+    <related_changes>${RELATED_CHANGES}</related_changes>"
 })
 ```
 
-6단계 재비판 — 입력 슬롯은 **넷**이고 그중 `diff` 는 **선택**이다: 문서 · `prep.json` 의
-`items`(출처 라벨 없음) · 프로필 · `diff`(선택). 이 자리(문서 경로)는 `diff` 를 싣지 않는다 —
+6단계 재비판 — 입력 슬롯은 **다섯**이고 그중 `diff` 와 `related_changes` 는 **선택**이다: 문서 · `prep.json` 의
+`items`(출처 라벨 없음) · 프로필 · `diff`(선택) · `related_changes`(선택 — 위 탐지와 같은 출력). 이 자리(문서 경로)는 `diff` 를 싣지 않는다 —
 싣는 것은 코드 경로뿐이고, 재비판자는 `diff` 를 못 받으면 「이 변경이 도입했는가」 축을 쓰지
 않는다. dispatch 사유도, 이전 대화도, 어느 리뷰어가 냈는지도 넣지 않는다 — 그것을 알면 판단이 그
 프레이밍을 흡수한다. 출력은 verbatim 파일(`recritic.txt`)로.
@@ -499,7 +501,8 @@ Agent({
   // **처분** — consumer=plugins/spec-distill/scripts/docreview_route.py · fail-open
   prompt: "<document>${DOCUMENT}</document>
     <findings>${FINDINGS}</findings>
-    <profile>${PROFILE}</profile>"
+    <profile>${PROFILE}</profile>
+    <related_changes>${RELATED_CHANGES}</related_changes>"
 })
 ```
 

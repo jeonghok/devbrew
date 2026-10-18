@@ -11,6 +11,7 @@
    "edit_scope": "#2-goals",
    "blocks": [],
    "supersedes": null,
+   "contradicts": null,
    "evidence": null,
    "replacement": null,
    "if_unfixed": null,

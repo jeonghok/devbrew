@@ -33,16 +33,16 @@ for a in doc-critic doc-recritic; do
   assert_not_grep "$(sed -n '/^---$/,/^---$/p' "$f")" '^disallowedTools:' "$a: frontmatter 에 disallowedTools 키 없음(allowlist 단독 원칙)"
   assert_grep "$(sed -n '/^---$/,/^---$/p' "$f")" '^name: '"$a"'$' "$a: name 일치"
 done
-# recritic 슬롯 정확히 넷, diff 만 optional (AC9 · AC18)
+# recritic 슬롯 정확히 다섯, diff · related_changes 만 optional (AC9 · AC18 · AC41)
 SL="$(fm "$A/doc-recritic.md" '[s["tag"] for s in yaml.safe_load(t[4:t.find(chr(10)+"---"+chr(10),4)])["input_slots"]]')"
-assert_eq "$SL" "['document', 'findings', 'profile', 'diff']" "doc-recritic: 입력 슬롯 정확히 넷 — diff 만 optional, dispatch 사유·이력·출처 라벨 슬롯 없음 (AC9 · AC18)"
+assert_eq "$SL" "['document', 'findings', 'profile', 'diff', 'related_changes']" "doc-recritic: 입력 슬롯 정확히 다섯 — diff · related_changes 만 optional, dispatch 사유·이력·출처 라벨 슬롯 없음 (AC9 · AC18 · AC41)"
 OPT="$(fm "$A/doc-recritic.md" '[s["tag"] for s in yaml.safe_load(t[4:t.find(chr(10)+"---"+chr(10),4)])["input_slots"] if s.get("optional")]')"
-assert_eq "$OPT" "['diff']" "doc-recritic: optional 인 슬롯은 diff 하나뿐 (나머지 셋은 필수)"
+assert_eq "$OPT" "['diff', 'related_changes']" "doc-recritic: optional 인 슬롯은 diff · related_changes 둘뿐 (나머지 셋은 필수)"
 KINDS="$(fm "$A/doc-recritic.md" 'sorted(set(s["kind"] for s in yaml.safe_load(t[4:t.find(chr(10)+"---"+chr(10),4)])["input_slots"]))')"
 assert_eq "$KINDS" "['artifact', 'repo_context']" "doc-recritic: kind 는 artifact·repo_context 만 (prior_verdict·orchestrator_framing 없음)"
 # critic 은 문서·프로필·(선택)이력 셋
 CS="$(fm "$A/doc-critic.md" '[s["tag"] for s in yaml.safe_load(t[4:t.find(chr(10)+"---"+chr(10),4)])["input_slots"]]')"
-assert_eq "$CS" "['document', 'profile', 'prior_finding_ids']" "doc-critic: 문서·프로필·이력(선택) 슬롯"
+assert_eq "$CS" "['document', 'profile', 'prior_finding_ids', 'related_changes']" "doc-critic: 문서·프로필·이력(선택)·함께 바뀐 절(선택) 슬롯"
 # critic 의 kind 어휘도 recritic 과 같은 강도로 잰다(대칭) — 이전에는 태그만 봐서
 # prior_finding_ids 의 kind 가 어휘 밖 값으로 바뀌어도 조용했다.
 CS_KINDS="$(fm "$A/doc-critic.md" 'sorted(set(s["kind"] for s in yaml.safe_load(t[4:t.find(chr(10)+"---"+chr(10),4)])["input_slots"]))')"

@@ -615,6 +615,7 @@ fi
 이번 라운드 `$BUNDLE` 의 내용입니다. seed 프로필이 웹을 허용하지 않으므로 웹 사본을 고르는 펜스가 없습니다.
 아래 탐지 블록은 N 번 dispatch 합니다 — 한 메시지에 Agent 호출 여럿(병렬), 리뷰어 i 의 출력은
 `$STATE_DIR/critic-<i>.txt` 입니다.
+`RELATED_CHANGES` 는 `python3 "$SD/scripts/docreview_state.py" related-changes --state-dir "$STATE_DIR"` 출력입니다 — 이번 라운드에 사용자가 고친다로 정한 결정 때문에 함께 바뀐 절의 제목과 앵커뿐이고, 없으면 빈 값입니다(명령이 실패하면 빈 값으로 두되 그 사실을 한 줄 알립니다).
 
 ```
 Agent({
@@ -623,12 +624,13 @@ Agent({
   // **처분** — consumer=plugins/spec-distill/scripts/docreview_route.py · fail-closed
   prompt: "<document>${DOCUMENT}</document>
     <profile>${PROFILE}</profile>
-    <prior_finding_ids>${PRIOR_FINDING_IDS}</prior_finding_ids>"
+    <prior_finding_ids>${PRIOR_FINDING_IDS}</prior_finding_ids>
+    <related_changes>${RELATED_CHANGES}</related_changes>"
 })
 ```
 
 재비판의 `${DOCUMENT}` 는 **`$BUNDLE_RC` 의 내용**입니다 — 탐지와 다른 번들입니다. 입력 슬롯은
-넷이고 그중 `diff` 는 선택입니다(그 번들 · `prep.json` 의 `items` · 프로필 · `diff`(선택)) —
+다섯이고 그중 `diff` 와 `related_changes` 는 선택입니다(그 번들 · `prep.json` 의 `items` · 프로필 · `diff`(선택) · `related_changes`(선택 — 위 탐지와 같은 출력)) —
 이 자리(문서 경로)는 `diff` 를 싣지 않습니다. 싣는 것은 코드 경로뿐이고, 재비판자는 `diff` 를
 못 받으면 「이 변경이 도입했는가」 축을 쓰지 않습니다. dispatch 사유도 이전 대화도 어느 리뷰어가
 냈는지도 넣지 않습니다.
@@ -641,7 +643,8 @@ Agent({
   // **처분** — consumer=plugins/spec-distill/scripts/docreview_route.py · fail-open
   prompt: "<document>${DOCUMENT}</document>
     <findings>${FINDINGS}</findings>
-    <profile>${PROFILE}</profile>"
+    <profile>${PROFILE}</profile>
+    <related_changes>${RELATED_CHANGES}</related_changes>"
 })
 ```
 

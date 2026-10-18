@@ -441,7 +441,12 @@ print('`replacement` is required for `decide` — what the document becomes if f
       'empty is NOT a deletion proposal. `if_unfixed` states what remains if nothing changes '
       '(the consequence, not a restatement of the problem).')
 print('`summary`, `if_unfixed` and `replacement` are read by a first-time reader at the gate: write them in plain words, '
-      'without internal IDs. Keep `evidence` as a verbatim quote of the document.')
+      'without internal IDs. Keep `evidence` as a verbatim quote of the document. '
+      'The first line of each finding (`summary`) says what is wrong in a sentence, with no finding ids, AC numbers or § '
+      'marks (put one in parentheses after the sentence only if it is needed).')
+print('`contradicts` (optional): when the document body contradicts a decision already made, the decision id (`D<r>.<n>`). '
+      'Set it only if the decision-log section of the document has a line with that id. '
+      'With it the author fixes the body directly — the user is not asked again.')
 print('```json\n{"findings":[{"ref":"x1","layer":1,"category":"...","anchor":"#slug",'
       '"disposition":"...","summary":"...","edit_scope":"#slug","blocks":[],"evidence":"...",'
       '"replacement":"...","if_unfixed":"..."}]}\n```')

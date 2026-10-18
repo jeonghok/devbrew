@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점
 from adjudication import Ledger  # noqa: E402
 from docreview_anchor import classify_anchor, refs_of  # noqa: E402
 from docreview_state import (  # noqa: E402
-    RANK, LedgerCorrupt, offered_choices_for, category_gloss, choice_label, fail, load_profile,
+    RANK, LedgerCorrupt, _log_section_anchors, offered_choices_for, category_gloss, choice_label, fail, load_profile,
     load_state, observe_ledger, open_lineages, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
 from docreview_advice import (  # noqa: E402
@@ -152,6 +152,8 @@ def normalize(item, layer_default, prefix, idx, ledger):
         "disposition": disp, "summary": summary,
         "edit_scope": str(item.get("edit_scope") or anchor), "blocks": _refs(item.get("blocks")),
         "supersedes": (str(item["supersedes"]) if item.get("supersedes") else None),
+        # 이미 내린 결정과 반대인 본문 — 가리킨 결정 id(`D<r>.<n>`). 실재 여부는 `_classify_items` 가 본다.
+        "contradicts": (str(item["contradicts"]).strip() or None) if item.get("contradicts") else None,
         "evidence": (str(item["evidence"]) if item.get("evidence") else None),
         # 갈래 2 의 칸 둘. 여기 없으면 리뷰어가 무엇을 적든 «조용히» 버려진다 —
         # 이 dict 는 입력을 갱신하는 것이 아니라 처음부터 새로 짓는다. 두 칸의 개행·공백
@@ -575,7 +577,7 @@ def _absorb_same_as(items, same_as, L):
         # 형제에게서 채운다 — 적힌 칸은 덮지 않는다. 오름차순이라 마지막에 쓴 값(처분이 가장
         # 높은 형제의 것)이 남는다. 공백뿐인 값은 빈 칸으로 친다(뒤의 I4 접기가 대체안 칸 둘을
         # None 으로 만드는 것과 같은 판정이다).
-        for k in ("evidence", "replacement", "if_unfixed"):
+        for k in ("evidence", "replacement", "if_unfixed", "contradicts"):
             if not (items[keep].get(k) or "").strip():
                 for m in sorted(live, key=lambda m: (RANK[items[m]["disposition"]], m)):
                     if (items[m].get(k) or "").strip():
@@ -591,10 +593,14 @@ def _absorb_same_as(items, same_as, L):
 def _classify_items(items, st, prof, sections, n, L):
     """프로필 허용 처분 강제 · 앵커 분류(보호·불변) · 승격.
 
-    흡수된 항목은 버리고 기각된 항목은 따로 모은다 — (final, rejected_items).
+    흡수된 항목은 버리고 기각된 항목은 따로 모은다 — (final, rejected_items, unknown_decisions).
+    `unknown_decisions` 는 지적이 가리킨 결정 id 중 원장에 없는 것(순서대로, 중복 없이)이다.
     """
     allowed = prof["allowed_dispositions"]
     final, rejected_items = [], []
+    decision_ids = {e.get("decision_id") for e in st.get("decision_log") or []}
+    unknown_decisions = []
+    fenced = _log_section_anchors(prof, sections)
     for f, it in items.items():
         # 흡수된 항목은 렌더되지 않는다 — 그 값의 접기를 세면 생존자가 물려받은 같은 값이 두 번 센다.
         if it.get("_absorbed_into"):
@@ -630,6 +636,20 @@ def _classify_items(items, st, prof, sections, n, L):
             it["disposition"] = new
             d = new
         cls = classify_anchor(it["anchor"], sections, prof)
+        cid = it.get("contradicts")
+        if cid:
+            if cid not in decision_ids:
+                # 가리킨 결정이 기록에 없다 — 참고로 둔다(저자 고침으로 올리지 않는다). 값이 바뀐 것이니 센다.
+                L.coerced("contradicts", cid, None)
+                if cid not in unknown_decisions:
+                    unknown_decisions.append(cid)
+                it["contradicts"] = None
+            elif not cls["immutable"] and it["anchor"] not in fenced:
+                # 불변 절 · 결정 기록 절(울타리)은 결정 반대여도 지금처럼 사용자가 정한다.
+                if d != "fix" and "fix" in allowed:
+                    L.coerced("disposition", d, "fix")
+                    it["disposition"] = d = "fix"
+                it["_decision_backed"] = True
         it["origin"] = "reviewer"
         it["immutable"] = cls["immutable"]
         it["kind"] = "pre"
@@ -638,7 +658,8 @@ def _classify_items(items, st, prof, sections, n, L):
             it["promotion"] = "immutable"
             it["disposition"] = "decide"
             it["origin"] = "auto"
-        elif cls["protected"] and d != "decide" and not _permit_covers(st, n, it["anchor"]):
+        elif (cls["protected"] and d != "decide" and not it.get("_decision_backed")
+              and not _permit_covers(st, n, it["anchor"])):
             it["promoted_from"] = d
             it["promotion"] = "protected"
             it["disposition"] = "decide"
@@ -646,7 +667,7 @@ def _classify_items(items, st, prof, sections, n, L):
         final.append(it)
     # 참고(advisory) 표지 1 걸음 — 축과 처분만 보면 정해지는 것(docreview_advice.route_step1)
     route_step1(final, advisory_axes(prof))
-    return final, rejected_items
+    return final, rejected_items, unknown_decisions
 
 
 def _auto_decides(a, diff, st, prof, sections, n, L):
@@ -918,6 +939,8 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats, advice_stats=
         adv.append("같은 이름 블록을 합쳤다 — %s (%s)" % (" · ".join(merged_note), " · ".join(sorted(degrade["blocks_merged"]))))
     if degrade.get("recritic_blocks"):
         adv.append("재비판 블록 %d개 — 마지막만 읽었다(앞 블록은 인용 예시로 본다)" % degrade["recritic_blocks"])
+    if degrade.get("unknown_decisions"):
+        adv.append("없는 결정 id %s — 참고로 둠" % ", ".join(degrade["unknown_decisions"]))
     out = {
         "ok": True, "round": n, "findings": [_pub(it) for it in final],
         "by_disposition": {d: [it["id"] for it in final if it["disposition"] == d and it.get("route") != ROUTE_ADVICE]
@@ -998,7 +1021,9 @@ def cmd_finalize(a) -> int:
     verdicts, added = _read_recritic(a, degrade, L)
     same_as = _apply_recritic(items, verdicts, added, L)
     keep_of = _absorb_same_as(items, same_as, L)
-    final, rejected_items = _classify_items(items, st, prof, sections, n, L)
+    final, rejected_items, unknown_decisions = _classify_items(items, st, prof, sections, n, L)
+    if unknown_decisions:
+        degrade["unknown_decisions"] = unknown_decisions
     extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, diff, st, prof, sections, n, L)
     final.extend(extra)
     bucket_conflicts, lineage_mismatch, revived = _resolve_ids_and_lineage(st, final, rejected_items, n)

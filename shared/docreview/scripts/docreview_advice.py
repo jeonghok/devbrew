@@ -38,7 +38,10 @@ def advisory_axes(prof) -> frozenset:
 def is_advisory(it, axes) -> bool:
     """advisory 축 소속인가 — 엔진 자동 생성 항목은 category 와 무관하게 아니다(재상승 · 상향 후속은 원본의
     category 를 물려받으므로 category 로는 못 가른다). same_as 병합 생존자는 기각되지 않은 구성원
-    (`_member_categories`) 전부가 advisory 일 때만 advisory 다."""
+    (`_member_categories`) 전부가 advisory 일 때만 advisory 다. 이미 내린 결정에 기댄 지적(`_decision_backed`)은
+    엔진 자동 항목과 같은 자리에서 must-catch 로 친다."""
+    if it.get("_decision_backed"):
+        return False
     if it.get("_source") in ENGINE_SOURCES:
         return False
     cats = it.get("_member_categories") or [it["category"]]
