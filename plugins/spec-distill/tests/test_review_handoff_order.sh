@@ -157,14 +157,17 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
   done
   for n in '「이 에픽 다시 설계」' '이 에픽의 묶음 안에서 끝날 때' 'Skill superpowers:brainstorming 을 다시 시작한다' \
            '같은 경로에 고쳐 쓰고 커밋한 뒤' '묶음 · 로드맵은 고치지 않는다' '지적이 다른 에픽의 경계에 닿을 때' \
-           '「(권장)」 과 이유 한 줄' '고르는 것은 사용자다' '`roadmap:` 줄이 없는 문서의 세 갈래는 지금 그대로다'; do
+           '라벨에 「(권장)」, 설명에 이유 한 줄' '고르는 것은 사용자다' '`roadmap:` 줄이 없는 문서의 세 갈래는 지금 그대로다'; do
     assert_contains "$BR" "$n" "AC33: spec-review ③ 로드맵 갈래 — $n"
   done
   for n in '**기타 칸 — 기각 번호 되돌리기.**' '「반영」으로 되돌린다' '`## 번호 대조` 표의 그 행' \
-           '- 결정 · <YYYY-MM-DD> · 기각 되돌림' '「지적대로 고치기」 와 같은 길' '로드맵 에픽이 아니어도 같다'; do
+           '- B<n> · 결정 · <YYYY-MM-DD> · 기각 되돌림' '그 문서 `## 결정 기록` 의 다음 B 번호' \
+           '먼저 원장 열기를 다시 돈다' '기각 목록에 없으면 그 사실을 보이고 다시 묻는다' '인터뷰 다시 열기」(재분해) 갈래를 권한다' '「지적대로 고치기」 와 같은 길' '로드맵 에픽이 아니어도 같다'; do
     assert_contains "$BR" "$n" "AC34: ③ 기타 칸의 기각 번호 되돌리기 — $n"
   done
-  BR_RD="$(printf '%s\n' "$BR" | grep -n '^Read \${CLAUDE_PLUGIN_ROOT}/references/redecompose\.md$' | cut -d: -f1)"
+  assert_not_contains "$BR" '`- 결정 · <YYYY-MM-DD>' "AC34: 되돌림 결정 줄에 읽히지 않는 옛 꼴(B 번호 없는 줄머리)이 없다(양성 짝: 위 B<n> 꼴)"
+  BR3="$(printf '%s\n' "$BR" | awk '/^\*\*다음 세션 줄 — ①\/② 공통\*\*/{exit} {print}')"
+  BR_RD="$(printf '%s\n' "$BR3" | grep -n '^Read \${CLAUDE_PLUGIN_ROOT}/references/redecompose\.md$' | cut -d: -f1)"
   [ -n "$BR_RD" ] && ok "AC33: 재분해 Read 줄이 ③ 문단 안에 들여쓰기 없이 있다" || no "AC33: 재분해 Read 줄이 ③ 문단 안에 없다(들여썼거나 꼬리가 붙었다)"
   RSL="$(nsl "$SKILL")"
   if nonempty "spec-review 다음 세션 줄" "$RSL"; then
