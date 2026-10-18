@@ -3,6 +3,21 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.0.0] — 2026-10-18
+
+### Removed
+- `commands/qg.md` 와 호출 `/qg` · `/qg critique` — alias 없이 지웠다(호출 이름 변경).
+
+### Changed
+- 진입은 `/quality-gates:quality-pipeline`(코드 변경 검증)과 `/quality-gates:artifact-critique`(문서 비평) 둘이다. 문서 비평 skill 이름은 `critiquing-artifacts` 에서 `artifact-critique` 로 바뀌었다.
+- `/quality-gates:quality-pipeline critique …` 는 새 이름을 알려 주는 안내를 찍고 종료 코드 2 로 끝난다 — 아무것도 실행하지 않는다.
+- 차등 테스트를 고르고 돌리는 스크립트 넷(`compute-test-scope-candidates.sh` · `diff-test-results.py` · `resolve-baseline.sh` · `run-test-selection.sh`)은 `shared/test-selection/` 의 공유본을 링크로 싣는다.
+- 문서 비평 adversarial 에이전트의 도구 서술을 실제 도구(Read · Grep · Glob)에 맞게 바로잡았다.
+- README 의 지워진 게이트 인용을 바로잡았다. 호출 표면 락은 qg 에 보고서 모드 예외를 두지 않고 옛 이름 `/qg` · `critiquing-artifacts` 를 잡는다.
+
+### Fixed
+- 같은 이름의 지적 블록이 둘 이상 오면 조용히 버리던 라우터를 고쳤다 — 합쳐서 쓰고 합친 사실을 알린다. 재비판 블록은 마지막 것을 따르되 몇 개였는지 알린다(공유 라우터 `docreview_route.py` 를 링크로 싣는다).
+
 ## [13.0.3] — 2026-10-15
 
 ### Changed

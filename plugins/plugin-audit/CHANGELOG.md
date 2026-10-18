@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.3] — 2026-10-18
+
+### Changed
+
+- 스크립트 · SKILL · 테스트 속 quality-gates 옛 이름(`/qg` · `critiquing-artifacts`)을 새 이름으로 바꿨다. 동작은 같다.
+
 ## [1.1.2] — 2026-10-15
 
 ### Fixed
