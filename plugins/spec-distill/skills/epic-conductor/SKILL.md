@@ -63,21 +63,52 @@ cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" roadmaps
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 cd "<root>" && echo "toplevel=$(git rev-parse --show-toplevel)" && git worktree list --porcelain | head -1
 sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""
-[ -n "$sid" ] && python3 "$SD/scripts/conductor_ledger.py" claim --roadmap "<로드맵>" --session "$sid"
+claim_rc=
+if [ -n "$sid" ]; then python3 "$SD/scripts/conductor_ledger.py" claim --roadmap "<로드맵>" --session "$sid"; claim_rc=$?; fi
 echo "session=${sid:-없음}"
+echo "claim_rc=${claim_rc:-없음}"
 ```
+
+Bash 도구는 호출마다 새 셸이다 — 아래 모든 펜스는 첫 줄(플러그인 루트 가드)과 세션 id 줄을 자기 안에 갖고, 한 번의 Bash 호출로 돌린다. 앞 펜스의 `$SD` · `$sid` 를 이어 쓰지 않는다.
 
 - `toplevel=` 이 첫 worktree 줄(메인 체크아웃)과 다르면 「이 세션은 worktree 안에서 시작했다(<경로>) — 여기서도 지휘한다. 에픽 worktree 로는 하니스의 worktree 옮겨 가기로 오간다」 를 한 줄로 알린다. 새 세션을 열라고 하지 않는다.
 - `session=없음` 이면 표지를 잡을 수 없다 — 「세션 id 를 얻지 못해 기계 상태를 쓸 수 없다 — 읽기 전용으로 지도만 보인다」 를 알리고 `control_plane.py show <로드맵>` 을 보인 뒤 멈춘다.
-- `claim` 이 종료 코드 5 면 다른 세션이 지휘 중이다 — 이 세션은 읽기 전용이다. 지도를 보이고, 넘겨받을지 `AskUserQuestion` 으로 묻는다(「읽기만 (권장)」 · 「넘겨받기 — 그 세션은 쓰기를 멈춘다」). 넘겨받기면 `conductor_ledger.py takeover` 뒤 4 로 간다.
+- `claim_rc=` 가 0 이면 4 로 간다. 5 면 다른 세션이 지휘 중이다 — 이 세션은 읽기 전용이다. 지도를 보이고, 넘겨받을지 `AskUserQuestion` 으로 묻는다(「읽기만 (권장)」 · 「넘겨받기 — 그 세션은 쓰기를 멈춘다」). 넘겨받기면 아래 펜스를 돌린 뒤 4 로 간다. 0 · 5 가 아닌 값(3 기계 상태 읽기 불가 포함)이면 그 사유를 보이고 멈춘다.
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""; [ -n "$sid" ] || { echo "[spec-distill] 세션 id 를 얻지 못했다 — 기계 상태를 쓰지 않고 멈춘다" >&2; exit 1; }
+cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" takeover --roadmap "<로드맵>" --session "$sid"
+```
 
 ### 4. 시작 승인
 
 `python3 "$SD/scripts/control_plane.py" show "<로드맵>"` 으로 남은 에픽과 의존 순서를 읽어 규모 줄 하나를 만든다 — `남은 에픽 <n>(<번호 목록>) · agent 약 <n> · 순서 <번호 → 번호 …>`. agent 수는 에픽마다 계획 1 · 구현 1(실행 방식 안의 agent 는 task 수에 따라 더) · 통합 리뷰 1 이상에, 이 세션의 spec 리뷰가 라운드마다 부르는 리뷰어 agent(탐지 · 재비판 둘 이상, 라운드 상한까지)를 더한 대략이다. 같은 상태에서는 같은 줄이 나오게 이 꼴 그대로 쓴다.
 
-규모 줄을 보이고 `python3 "$SD/scripts/conductor_ledger.py" approval --roadmap "<로드맵>" --session "$sid" --scale "<규모 줄>"` 을 돌린다.
+규모 줄을 보이고 아래 펜스로 승인 상태를 본다.
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""; [ -n "$sid" ] || { echo "[spec-distill] 세션 id 를 얻지 못했다 — 기계 상태를 쓰지 않고 멈춘다" >&2; exit 1; }
+cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" approval --roadmap "<로드맵>" --session "$sid" --scale "<규모 줄>"
+```
+
 - 종료 코드 0(「공시만 — …」): 그 줄을 보이고 5 로 간다.
-- 종료 코드 0 이 아니면(1 「승인 필요」 · 3 기계 상태 읽기 불가 포함, 그 밖 모두) 공시만 하고 가지 않는다. `AskUserQuestion` 으로 묻는다 — 「이 규모로 지휘 시작 (권장)」 · 「멈춤」. 3 이면 기계 상태를 읽지 못했다는 사유를 질문에 함께 보인다. 시작이면 `python3 "$SD/scripts/conductor_ledger.py" approve --roadmap "<로드맵>" --session "$sid" --scale "<규모 줄>"` 뒤 5 로, 멈춤이면 표지를 풀고(`release`) 멈춘다.
+- 종료 코드 0 이 아니면(1 「승인 필요」 · 3 기계 상태 읽기 불가 포함, 그 밖 모두) 공시만으로 넘어가지 않고 `AskUserQuestion` 으로 묻는다 — 「이 규모로 지휘 시작 (권장)」 · 「멈춤」. 3 이면 기계 상태를 읽지 못했다는 사유를 질문에 함께 보인다. 시작이면 아래 펜스를 돌리고, 종료 코드가 0 이 아니면 그 사유를 보이고 멈춘다(5 로 가지 않는다). 0 이면 5 로 간다.
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""; [ -n "$sid" ] || { echo "[spec-distill] 세션 id 를 얻지 못했다 — 기계 상태를 쓰지 않고 멈춘다" >&2; exit 1; }
+cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" approve --roadmap "<로드맵>" --session "$sid" --scale "<규모 줄>"
+```
+
+멈춤이면 표지를 풀고 멈춘다.
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""; [ -n "$sid" ] || { echo "[spec-distill] 세션 id 를 얻지 못했다 — 기계 상태를 쓰지 않고 멈춘다" >&2; exit 1; }
+cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" release --roadmap "<로드맵>" --session "$sid"
+```
 
 승인 전에는 agent 를 보내지 않는다. 그 뒤의 dispatch 는 띄우기 전에 규모만 알리고 간다.
 
@@ -92,11 +123,11 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-dispatch.md
 
 두 파일의 `<SD>` 는 위 `Read` 줄의 플러그인 폴더(이 skill 이 쓰는 spec-distill 의 절대경로)다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
-`conducting.md` 의 `## 지휘 순환` 걸음 1~7 을 차례로 돈다 — 1 맞추기 · 2 사람 몫 모으기 · 3 다음 일 고르기와 보내기 · 4 돌아오기 · 5 머지 전 확인 · 6 머지 뒤 · 7 끝. 하위에게 보내는 글은 `conductor-dispatch.md` 의 틀이고 그 파일의 처분 줄을 보내는 자리마다 단다. 같은 파일의 손으로 따르는 절차는 지휘자를 껐을 때의 것이다 — 이 skill 안에서는 따르지 않는다.
+`conducting.md` 의 `## 지휘 순환` 걸음 1~7 을 차례로 돈다 — 1 맞추기 · 2 사람 몫 모으기 · 3 다음 일 고르기와 보내기 · 4 돌아오기 · 5 머지 전 확인 · 6 머지 뒤 · 7 끝. 하위에게 보내는 글은 `conductor-dispatch.md` 의 틀이고 그 파일의 처분 줄을 보내는 자리마다 단다. `conducting.md` 의 손으로 따르는 절차는 지휘자를 껐을 때의 것이다 — 이 skill 안에서는 따르지 않는다.
 
 ### 6. 통합 리뷰어
 
-걸음 5 의 통합 리뷰는 아래 자리에서 부른다. `REVIEW_REQUEST` 는 `superpowers:requesting-code-review` 의 리뷰 요청 틀(`code-reviewer.md`)을 이 PR 로 채운 글, `MERGED_COPY` 는 `merge_check.py --keep-merged` 가 남긴 합친 사본, 나머지 셋은 `conductor_ledger.py review-pack` 이 만든 폴더의 파일 경로다. 그 skill 이 스스로 부르는 agent 는 쓰기 도구를 가져 쓰지 않는다 — 틀만 빌린다. 로드맵 frontmatter `review_model` 이 이 dispatch 의 모델 칸이 받는 이름이면 그 값을 주고, 아니면 모델 칸을 빼 세션 모델로 가며 그 사실을 알린다. 이음매가 여럿이면 여럿을 동시에 부른다. 통합 리뷰 지적 전부를 「이 PR 이 고침」 · 「뒤 에픽이 고침」으로 나눠 PR 본문 인계 절과 사용자에게 보인다.
+걸음 5 의 통합 리뷰는 아래 자리에서 부른다. `REVIEW_REQUEST` 는 `superpowers:requesting-code-review` 의 리뷰 요청 틀(`code-reviewer.md`)을 이 PR 로 채운 글, `MERGED_COPY` 는 `merge_check.py --keep-merged` 가 남긴 합친 사본, 나머지 셋은 `conductor_ledger.py review-pack` 이 만든 폴더의 파일 경로다. 그 skill 이 스스로 부르는 agent 는 쓰기 도구를 가져 쓰지 않는다 — 틀에서는 무엇을 · 왜 · 범위 칸만 빌려 채운다. 버전 관리 도구를 돌리라는 말과 틀의 출력 형식은 넣지 않는다: 리뷰어는 diff 를 그 도구가 아니라 `PR_DIFF` · `OPEN_DIFFS` 파일과 합친 사본에서 읽고, 내는 형식은 agent 의 `## 내는 것` 이다. 로드맵 frontmatter `review_model` 이 이 dispatch 의 모델 칸이 받는 이름이면 그 값을 주고, 아니면 모델 칸을 빼 세션 모델로 가며 그 사실을 알린다. 이음매가 여럿이면 여럿을 동시에 부른다. 통합 리뷰 지적 전부를 「이 PR 이 고침」 · 「뒤 에픽이 고침」으로 나눠 PR 본문 인계 절과 사용자에게 보인다.
 
 ```
 Agent(

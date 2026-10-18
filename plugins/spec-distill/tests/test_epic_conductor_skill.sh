@@ -58,6 +58,27 @@ for f in test_invocation_surface.sh test_dispatch_disposition.sh test_agent_inpu
   assert_eq "$rc" "0" "공유 락 $f 가 통과한다"
   [ "$rc" -eq 0 ] || printf '%s\n' "$out" | grep -E '✗|RED|FAIL' | head -5
 done
+# 3~4절 펜스: sid 를 쓰는 펜스는 같은 펜스 안에서 sid 와 루트 가드를 정한다(Bash 호출마다 새 셸)
+fence_check="$(PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+a = t.index("### 3. ")
+b = t.index("### 5. ")
+parts = t[a:b].split("`" * 3)
+n = 0
+bad = 0
+for i in range(1, len(parts), 2):
+    f = parts[i]
+    if "--session" in f:
+        n += 1
+        if "sid=\"$(" not in f or "CLAUDE_PLUGIN_ROOT" not in f:
+            bad += 1
+print("%d %d" % (n, bad))' "$SK")"
+assert_eq "${fence_check#* }" "0" "3~4절: --session 을 쓰는 펜스가 같은 펜스에서 sid 와 루트 가드를 정한다"
+[ "${fence_check%% *}" -ge 5 ] && ok "3~4절: 세션을 쓰는 펜스 5개 이상(claim · takeover · approval · approve · release)" || no "세션 펜스 수 부족: ${fence_check}"
+assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" 'claim_rc=$?' "3절: claim 종료 코드를 낸다"
+assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" 'conductor_ledger.py" takeover' "3절: takeover 전체 명령"
+assert_contains "$APP" 'conductor_ledger.py" release' "4절: release 전체 명령"
+assert_contains "$(cat "$AG")" '내는 형식은 아래 `## 내는 것`' "agent: 출력 형식은 내는 것 절"
 CM="$ROOT/CLAUDE.md"
 COST="$(grep -F '**모든 skill에 `cost_class` 선언**' "$CM")"
 assert_contains "$COST" '지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함' "CLAUDE.md: 원래 승인 규칙 문장이 그대로"
