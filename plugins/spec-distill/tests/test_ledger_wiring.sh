@@ -185,7 +185,7 @@ for fcase in '```sh' '```shell' '  ```bash' '```bash ' '~~~bash' '```BASH'; do
   printf '%s\n%s\n%s\n' "$fcase" "$D1" "$(printf '%s' "$fcase" | tr -d 'a-zA-Z')" > "$ac8f"
   ac8_scan "$ac8f" 2>/dev/null && no "AC8 펜스 모양: 검사 밖 펜스가 새는 꼴이 있다: «${fcase}»" || ok "AC8 펜스 모양: 잡힌다 — «${fcase}» 펜스의 엔진 호출"
 done
-printf '```bash\r\n%s\r\n```\r\n' "$D1" > "$ac8f"
+printf '```bash\r\n%s\r\n```\r\n' 'python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR"' > "$ac8f"   # 읽기 전용 호출 — 펜스 모양만이 잡는다
 ac8_scan "$ac8f" 2>/dev/null && no "AC8 펜스 모양: CRLF 펜스가 새는 꼴이 있다" || ok "AC8 펜스 모양: 잡힌다 — CRLF 펜스의 엔진 호출"
 printf '```js\n%s\n```\n' '// **처분** — consumer=orchestrator · fail-closed · disclosure=x' > "$ac8f"
 ac8_scan "$ac8f" 2>/dev/null && ok "AC8 펜스 모양(양성 짝): 처분 한 줄은 검사 밖 펜스에서도 통과한다" || no "AC8 펜스 모양(양성 짝): 처분 한 줄이 막혔다"
