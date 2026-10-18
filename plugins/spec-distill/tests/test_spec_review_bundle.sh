@@ -171,7 +171,7 @@ rj_spec() {  # rj_spec <파일 이름> <번호 대조 절 본문(%b)>
 rj() { (cd "$T" && python3 "$SRB" rejected --spec "$1" --root "$RJ"); }
 RJ_TBL='## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n'
 RJ_HEAD='이 설계가 받지 않기로 한 번호(번호 대조의 기각)'
-rj_spec two.md "${RJ_TBL}| C1 | 반영 | §1 |\n| S1 · S2 | 기각 | R4 로 넘김 |\n| OQ1 | 기각 | 범위 밖 |\n"
+rj_spec two.md "${RJ_TBL}| C1 | 반영 | §1 |\n| S1 · S2 | 기각 | R4 로 넘김 |\n| OQ1 | 기각 — R4 | 범위 밖 |\n"
 out="$(rj two.md)"; rc=$?
 assert_eq "$rc" "0" "AC34: rejected 는 종료 코드 0"
 assert_eq "$(printf '%s\n' "$out" | head -n 1)" "$RJ_HEAD 3개 — 반영으로 되돌릴 번호가 있으면 ③ 수정 필요를 고르고 이어지는 질문의 기타 칸에 그 번호를 적는다." "AC34: 기각 수는 행이 아니라 번호로 센다"

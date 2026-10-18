@@ -620,7 +620,6 @@ python3 "$SD/scripts/spec_review_bundle.py" rejected --spec "${spec_path:-}" --r
 ```
 <!-- rejected-numbers:end -->
 
-
 **로드맵 속 위치와 이웃 결정 — 2단계 질문 바로 앞.** 진입 펜스의 `PROCEED` 뒤 경로가 `-` 가 아니면 아래 펜스를 돌려 출력을 게이트 앞 글의 맨 끝(질문 바로 앞)에 그대로 싣는다. 출력이 없으면(brief · 로드맵 밖) 아무것도 싣지 않는다. 펜스 앞에 `bundle_path='<PROCEED 뒤 경로>' repo_root='<감시줄 root= 값>'` 한 줄을 붙인다.
 
 <!-- roadmap-position:begin -->
