@@ -6,7 +6,7 @@
 ## [14.0.1] — 2026-10-19
 
 ### Changed
-- 공유 리뷰 엔진 링크(`docreview_state.py` · `docreview_route.py` · `docreview_config.py` 등)가 spec-distill 7.4.0 과 같은 바이트를 싣는다. 탐지 리뷰어 여럿 · 엔진 값 넷 · 결정 반대 지적 · 원장 확인값 · 한 줄 문법이 qg 의 문서 비평에도 같이 들어간다.
+- 링크로 싣는 공유 리뷰 엔진 파일의 바이트가 바뀌었다(spec-distill 7.4.0 과 같은 바이트). 엔진 값을 푸는 `scripts/docreview_config.py` 링크가 새로 생겼다. qg 의 skill 은 아직 이 엔진을 부르지 않으므로 qg 의 동작은 달라지지 않는다.
 
 ## [14.0.0] — 2026-10-18
 
