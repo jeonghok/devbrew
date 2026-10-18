@@ -54,4 +54,6 @@ for n in '흐름: 칸이 있으면 brainstorming 대신 그 칸의 흐름' '설�
 done
 assert_not_contains "$ONE" 'SDD 의 마지막 전체 리뷰' "AC31: 실행 방식을 SDD 로 고정하지 않는다(양성 짝: 고른 실행 방식)"
 assert_not_contains "$ONE" '묶음을 다시 나누지 않는다' "AC31: 나누지 말라는 금지 대신 재분해 보고(양성 짝: 근거가 보이면)"
+assert_contains "$ONE" '모델이 판단해 맞추거나 건너뛰고 그 이유를 보고한다' "AC31: 흐름에 없는 단계는 모델이 판단하고 이유를 보고한다"
+assert_not_contains "$ONE" '그 흐름이 정한 대로 한다' "AC31: 순환 문구가 없다(양성 짝: 위 줄)"
 finish
