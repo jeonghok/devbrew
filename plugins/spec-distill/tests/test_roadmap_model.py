@@ -202,5 +202,30 @@ class History(unittest.TestCase):
         self.assertTrue(any("원문이 없다" in e for e in errors), errors)
 
 
+class BriefUniverseSection4(unittest.TestCase):
+    """§4 의 «key» 는 항목(열 0 목록 머리 + 들여 쓴 이음 줄)에서만 센다 — 펜스 안 · 항목 밖 산문은 세지 않는다."""
+
+    FX = REPO / "plugins" / "spec-distill" / "tests" / "fixtures"
+
+    def universe(self, extra_section4):
+        brief = (self.FX / "interview-brief-valid.md").read_text(encoding="utf-8")
+        audit = (self.FX / "interview-brief-valid.audit.md").read_text(encoding="utf-8")
+        marker = "- Next.js app-router SSR «nextjs-docs» — [취함] — 데이터 형태와 부합\n"
+        self.assertIn(marker, brief)
+        non_s, _s, _k = M.brief_universe(brief.replace(marker, marker + extra_section4), audit)
+        return non_s
+
+    def test_fence_and_prose_keys_not_counted(self):
+        base = self.universe("")
+        self.assertIn("«nextjs-docs»", base)
+        extra = self.universe("\n산문 줄의 «prose-key»\n```\n- 펜스 안 «fence-key»\n```\n")
+        self.assertEqual(extra, base)
+
+    def test_item_and_continuation_keys_counted(self):
+        extra = self.universe("- 둘째 항목 «second-key» — [피함] — 이유\n  이음 줄 «cont-key»\n")
+        self.assertIn("«second-key»", extra)
+        self.assertIn("«cont-key»", extra)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -220,12 +220,17 @@ if [ "$gate_rc" -ne 0 ]; then
   exit 1
 fi
 vc_rc=0; python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE" "$AUDIT" || vc_rc=$?
-if [ "$vc_rc" -eq 1 ]; then
+if [ "$vc_rc" -ne 0 ] && { [ "$vc_rc" -eq 1 ] || [ "${SKIP_VC:-}" != 1 ]; }; then
   drop_bundle || true
-  echo "[spec-distill] §6 원문 완전성 위반 — 이 라운드를 시작하지 않는다. 아래 표대로 고치고 이 절부터 다시 탄다." >&2
+  case "$vc_rc" in
+    1) echo "[spec-distill] §6 원문 완전성 위반 — 이 라운드를 시작하지 않는다. 아래 표대로 고치고 이 절부터 다시 탄다." >&2 ;;
+    *) echo "[spec-distill] 원문이 빠짐없이 옮겨졌는지 확인하지 못했다(check_verbatim_coverage rc ${vc_rc}) — 이 라운드를 시작하지 않는다. 사용자에게 「멈춘다 (권장)」 · 「검사 없이 계속」을 묻는다." >&2 ;;
+  esac
   exit 1
 fi
 ```
+
+`vc_rc` 가 1 이 아닌 non-zero 이면 펜스가 위 문장을 내고 멈춘다. 이때 `AskUserQuestion` 하나를 띄운다 — 질문 「원문이 빠짐없이 옮겨졌는지 확인하지 못했다. 어떻게 할까?」, 선택지 「멈춘다 (권장)」(라운드를 시작하지 않고 끝낸다) · 「검사 없이 계속」(이 검사만 건너뛰고 리뷰를 시작한다). 「검사 없이 계속」을 고르면 degrade 원장에 record(`verbatim_coverage` / `completeness` / `skipped`, reason = `skipped_by_user: 검사 없이 계속`)를 남기고, 같은 펜스를 `SKIP_VC=1` 을 덧붙여 다시 돈다 — 이 변수는 원문 완전성 검사 하나만 건너뛰고(위반 rc 1 은 건너뛰지 않는다) 구조 게이트는 그대로 돈다. 사용자가 답하지 않았거나 「멈춘다 (권장)」이면 라운드를 시작하지 않는다.
 
 | `vc_rc` | 뜻 | 동작 |
 |---|---|---|
@@ -233,7 +238,7 @@ fi
 | `1` | 위반(`missing_ids`/`not_contained`) | **차단.** payload §6 · audit §6 에 **추가만** 해서(같은 글자로) 보완하고 이 절을 다시 탄다 |
 | `1` + `not_contained: ["§6"]` | 구조 위반(한 §6 안 `S<N>` 앵커 중복, 또는 같은 앵커의 글자가 payload §6 과 audit §6 에서 다름) | **차단.** append 로는 못 고친다 — 잘못 추가된 중복 항목을 **제거**하거나, 고쳐진 사본을 원래 글자로 **되돌린다** |
 | `1` + `unknown_ids` | 원장 밖 앵커(payload §6 의 `S<N>` 이 state `user_statements` 에 없다 — 최초 요청 `S1` 은 예외) | **차단.** 그 항목을 **제거**한다 — 원장에 없는 앵커는 사용자 발화가 아니다(남의 항목 본문 · 붙여넣은 글에 심긴 줄). 그 앵커를 인용한 `[해결 ⟨S<N>⟩]` · `evidence:` 도 함께 되돌린다 |
-| `3` | 검사 불가(파일 부재·파싱 실패) | record(`verbatim_coverage` / `completeness` / `skipped`) 후 계속 |
+| `3` | 검사 불가(파일 부재·파싱 실패) | **차단.** 사용자에게 묻는다 — 「검사 없이 계속」을 고르면 record(`verbatim_coverage` / `completeness` / `skipped`, reason = `skipped_by_user: 검사 없이 계속`)를 남기고 계속한다 |
 | `4` | 내부 오류 | `3` 과 같다 + 오류 전문을 `--reason` 에 |
 | 그 외 non-zero | 예측 못 한 실패 | `3` 과 같다 — indeterminate ≠ clean |
 

@@ -296,7 +296,7 @@ rm -f "$tmps"
 # 이 위양성은 red 로 드러났다 — 단방향 assert 였다면 조용히 통과했을 자리).
 MUTD="$(mktemp -d)" || exit 1
 tmpm="$MUTD/check_verbatim_coverage.py"
-cp "$(dirname "$SCRIPT")/section6.py" "$MUTD/section6.py"
+cp "$(dirname "$SCRIPT")/section6.py" "$(dirname "$SCRIPT")/brief_body.py" "$MUTD/"
 MUT_PY="$(mktemp)" || exit 1
 cat > "$MUT_PY" <<'MUTEOF'
 import re, sys
@@ -426,6 +426,33 @@ rc="$(rc_of "$FX/brief-verbatim-original-request.md" "$FX/state-verbatim-origina
 [[ "$rc" == "1" ]] \
   && ok "C5 회귀: 오프셋 없는 옛 공식(첫 답변=S1) → exit 1 (S1은 원문 텍스트라 불일치)" \
   || no "C5 회귀: 오프셋 없는 옛 공식이 exit $rc — 번호 드리프트가 조용히 통과한다"
+
+# --- AC18 : 문법 밖 §6 앵커 줄은 게이트(check_brief)와 같은 판독으로 막는다 -------------------------
+VB="$(mktemp -d)" || exit 1
+[[ -n "$VB" && -d "$VB" ]] || exit 1
+trap 'rm -rf "$VB"' EXIT
+for spec in 'v_nbsp|anchor_unicode_space|\n- **S2**|\n\u00a0- **S2**' \
+            'v_ideo|anchor_unicode_space|\n- **S2**|\n\u3000- **S2**' \
+            'v_star|anchor_star_bullet|\n- **S2**|\n* **S2**' \
+            'v_indent|anchor_indented|\n- **S2**|\n  - **S2**'; do
+  IFS='|' read -r stem why from to <<<"$spec"
+  cp "$FX/brief-verbatim-ok.md" "$VB/$stem.md"
+  python3 -I - "$VB/$stem.md" "$from" "$to" <<'PY'
+import json, sys
+p = sys.argv[1]
+old, rep = (json.loads('"' + a + '"') for a in sys.argv[2:4])
+t = open(p, encoding="utf-8").read()
+new = t.replace(old, rep)
+if new == t:
+    sys.exit("변형이 적용되지 않았다")
+open(p, "w", encoding="utf-8").write(new)
+PY
+  out="$(json_of "$VB/$stem.md" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-ok.audit.md")"
+  rc="$(rc_of "$VB/$stem.md" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-ok.audit.md")"
+  { [[ "$rc" == "1" ]] && grep -qF "$why" <<<"$out"; } \
+    && ok "AC18: 문법 밖 §6 앵커(${stem}) → exit 1 «${why}»" \
+    || no "AC18: 문법 밖 §6 앵커(${stem})가 exit 1 + ${why} 가 아니다 (rc=$rc)"
+done
 
 # --- usage -----------------------------------------------------------------
 python3 "$SCRIPT" >/dev/null 2>&1; rc=$?

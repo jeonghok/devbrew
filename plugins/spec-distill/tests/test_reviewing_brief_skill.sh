@@ -138,9 +138,21 @@ branch_exits() {   # branch_exits <여는 if 정규식> → 그 분기 본문(fi
 branch_exits '^if \[ "\$gate_rc" -ne 0 \]' \
   && ok "진입 게이트: 구조 게이트 실패 분기가 실제로 멈춘다 (exit 1)" \
   || no "진입 게이트: 구조 게이트 실패 분기가 없거나 멈추지 않는다 — 검증되지 않은 문서가 엔진에 들어간다"
-branch_exits '^if \[ "\$vc_rc" -eq 1 \]' \
-  && ok "진입 게이트: 원문 완전성 위반 분기가 실제로 멈춘다 (exit 1)" \
-  || no "진입 게이트: 원문 완전성 위반 분기가 없거나 멈추지 않는다"
+branch_exits '^if \[ "\$vc_rc" -ne 0 \]' \
+  && ok "진입 게이트: 원문 완전성 위반 · 확인 불가 분기가 실제로 멈춘다 (exit 1)" \
+  || no "진입 게이트: 원문 완전성 위반 · 확인 불가 분기가 없거나 멈추지 않는다"
+# rc 3 · 4 · 그 밖은 위반(rc 1)과 달리 SKIP_VC=1 로만 지나간다 — 분기 조건이 rc 1 을 SKIP_VC 에서 빼고, 선택지를 안내한다.
+grep -qF '[ "$vc_rc" -eq 1 ] || [ "${SKIP_VC:-}" != 1 ]' <<<"$GATE_RUN" \
+  && ok "진입 게이트: rc 3 은 막고 SKIP_VC=1 일 때만 지나가며 rc 1 은 건너뛰지 못한다" \
+  || no "진입 게이트: 확인 불가(rc 3 등)가 막지 않거나 rc 1 까지 건너뛴다"
+{ has "$W_GATE" '검사 없이 계속' && has "$W_GATE" '멈춘다 (권장)'; } \
+  && ok "진입 게이트: 확인 불가 때 「멈춘다 (권장)」 · 「검사 없이 계속」 선택지를 안내한다" \
+  || no "진입 게이트: 확인 불가 선택지 안내가 사라졌다"
+has "$W_GATE" 'skipped_by_user' \
+  && ok "진입 게이트: 검사 없이 계속하면 skipped_by_user 로 기록한다" || no "진입 게이트: skipped_by_user 기록 안내가 없다"
+has "$W_GATE" '`completeness` / `skipped`) 후 계속' \
+  && no "진입 게이트: rc 표에 「record … 후 계속」 문면이 남았다 — rc 3 이 조용히 지나간다" \
+  || ok "진입 게이트: rc 표에 「record … 후 계속」 문면이 없다"
 for row in '비어 있지 않으면' '구조 위반' '그 외 non-zero' 'indeterminate ≠ clean'; do
   has "$W_GATE" "$row" && ok "진입 게이트 rc 표: '$row'" || no "진입 게이트 rc 표에서 '$row' 행이 사라졌다"
 done
@@ -358,7 +370,7 @@ drop_def="$(awk '/^drop_bundle\(\) \{/{f=1} f; f && /^\}$/{exit}' <<<"$GATE_RUN"
   && grep -qF '지우지도 비우지도 못했다' <<<"$drop_def" && grep -q 'return 1' <<<"$drop_def"; } \
   && ok "진입 게이트: 번들 정리가 세 층이다 (지움 → 절단 → 공시·rc 1)" \
   || no "진입 게이트: 번들 정리의 층이 빠졌다 — 지우지 못한 직전 번들이 조용히 남는다"
-for pat in '^if \[ "\$gate_rc" -ne 0 \]' '^if \[ "\$vc_rc" -eq 1 \]'; do
+for pat in '^if \[ "\$gate_rc" -ne 0 \]' '^if \[ "\$vc_rc" -ne 0 \]'; do
   P="$pat" awk '!inb && $0 ~ ENVIRON["P"] {inb=1; next} inb && /^fi$/ {exit} inb' <<<"$GATE_RUN" | grep -q '^[[:space:]]*drop_bundle' \
     && ok "진입 게이트: 실패 분기($pat)가 직전 번들을 치운다" \
     || no "진입 게이트: 실패 분기($pat)가 직전 번들을 남긴다 — codex 게이트의 -s 검사가 그것을 이번 번들로 넘긴다"

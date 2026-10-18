@@ -99,7 +99,9 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    `user_statements`의 순서를 따르고, 최초 요청이 없으면 첫 사용자 답변이 `S1`입니다.
    원문 보존은 **관례가 아니라 요구**입니다 — N1b 가 payload §6 앵커가 S1 부터 빠짐없고
    audit §6 앵커를 다 포함하는지 보고, `check_verbatim_coverage.py`(brief 리뷰 진입 게이트)가
-   state 발화 전량이 payload §6 에 같은 글자로 있는지 봅니다.
+   state 발화 전량이 payload §6 에 같은 글자로 있는지 봅니다. 앵커 줄은 열 0 의 `- **S<N>**` 꼴만
+   받습니다(들여 쓴 · 전각 공백 · `*` 불릿 줄은 거부). 이 검사를 돌리지 못하면(검사 불가) 게이트가
+   막고 사용자에게 계속할지 묻습니다.
    구조상 이 시점의 `confirmed`는 **항상 0건**이므로, frontmatter에 sentinel 한 줄
    (`# confirmed 0건 — 사용자가 전부 잠정으로 판단`)을 **반드시** 함께 씁니다 — 템플릿이
    `user_sourced_items:` 블록 첫 줄로 상속시키는 그 줄입니다. 이 줄이 sentinel로 인정되려면

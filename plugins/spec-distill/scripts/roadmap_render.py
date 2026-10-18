@@ -14,8 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import section6  # noqa: E402
-from check_brief import section4_items  # noqa: E402
-from check_verbatim_coverage import ITEM_RE as S6_ITEM_RE  # noqa: E402
+from brief_body import ANCHOR_LINE_RE as S6_ITEM_RE, section4_items  # noqa: E402
 from roadmap_model import (  # noqa: E402
     BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, OQ_LINE_RE, FormatError, brief_universe, bundle_ids, field_text,
     id_sort_key, is_quote, parse_ids, parse_roadmap, section_body)
@@ -249,18 +248,15 @@ def _merge_s6(b6: str, a6: str) -> str:
 
 def _section4_index(brief: str) -> dict:
     """§4 «key» → 그 key 가 머리 줄에 있는 항목(머리 줄 + 들여쓴 본문 줄). 항목 규칙은 게이트의
-    `check_brief.section4_items` 하나다. 본문 줄에만 있는 key 는 그 항목으로, 항목 밖 줄의 key 는 그 줄로 간다."""
+    `brief_body.section4_items` 하나다. 본문 줄에만 있는 key 는 그 항목으로 간다. 항목 밖 줄의 key 는 세지 않는다."""
     out = {}
-    items = [(head, "\n".join([head] + ["  " + b for b in body]), body) for head, body in section4_items(brief)]
+    items = [(head, "\n".join([head] + ["  " + b for b in body]), body) for head, body in section4_items(_body(brief, "## 4."))]
     for head, text, _body_lines in items:
         for key in KEY_RE.findall(head):
             out[key] = text
     for _head, text, body in items:
         for key in KEY_RE.findall("\n".join(body)):
             out.setdefault(key, text)
-    for line in _body(brief, "## 4.").splitlines():
-        for key in KEY_RE.findall(line):
-            out.setdefault(key, line)
     return out
 
 

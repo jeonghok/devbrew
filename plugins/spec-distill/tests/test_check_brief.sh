@@ -1369,7 +1369,7 @@ DOCS = [
 for label, doc in DOCS:
     a = None if cb.payload_section6_span(doc) is None else sorted(cb.payload_verbatim_anchors(doc))
     b = bb.audit_verbatim(doc)
-    b = None if b is None else sorted(set(cb.S_ANCHOR_RE.findall(b)))
+    b = None if b is None else sorted({sid for _n, sid, _r in __import__("brief_body").anchor_lines(b)[0]})
     try:
         c = sorted(cvc.parse_section6(doc, "x"))
     except Exception:
@@ -2488,4 +2488,54 @@ out="$(ac3_gate m5_order)"; rc=$?
 { [[ $rc -eq 0 ]] && ! grep -q 'coverage-mapper' <<<"$out" && ! grep -q '포화 판정' <<<"$out"; } \
   && ok "M5: 조사 호출 줄이 mapper 줄 앞 · 상한 도달 줄이 사이 → mapper · 포화 검사 둘 다 통과" \
   || { no "M5: 줄 위치가 판정을 바꿨다"; printf '    %s\n' "$out"; }
+
+# --- AC18 · 브리프 판독기 하나(brief_body) — 문법 밖 앵커 · 결정 줄 · 열린 줄 참조 ------------------
+# 같은 정상 쌍에서 줄 하나만 바꾼 변형이 게이트에 걸리는지 본다(양성 대조: 변형 전 쌍은 통과).
+BB="$TMPD/bb"; mkdir -p "$BB"
+bb_variant() {  # <stem> <바꿀 글자> <새 글자> — 글자는 JSON 문자열 이스케이프(\n · \uXXXX)로 적는다
+  mkdir -p "$BB/$1"; cp "$FX/interview-brief-valid.md" "$FX/interview-brief-valid.audit.md" "$BB/$1/"
+  python3 -I - "$BB/$1/interview-brief-valid.md" "$2" "$3" <<'PY'
+import json, sys
+p = sys.argv[1]
+old, rep = (json.loads('"' + a + '"') for a in sys.argv[2:4])
+t = open(p, encoding="utf-8").read()
+new = t.replace(old, rep)
+if new == t:
+    sys.exit("변형이 적용되지 않았다")
+open(p, "w", encoding="utf-8").write(new)
+PY
+}
+bb_gate() { python3 "$SCRIPT" gate "$BB/$1/interview-brief-valid.md" 2>/dev/null; }
+mkdir -p "$BB/bb_base"; cp "$FX/interview-brief-valid.md" "$FX/interview-brief-valid.audit.md" "$BB/bb_base/"
+bb_gate bb_base >/dev/null && ok "AC18(양성대조): 변형 전 정상 쌍은 통과" || no "AC18(양성대조): 정상 쌍이 통과하지 않는다"
+for spec in 'u_nbsp|anchor_unicode_space|\n- **S2**|\n\u00a0- **S2**' \
+            'u_ideo|anchor_unicode_space|\n- **S2**|\n\u3000- **S2**' \
+            'u_star|anchor_star_bullet|\n- **S2**|\n* **S2**' \
+            'u_indent|anchor_indented|\n- **S2**|\n  - **S2**'; do
+  IFS='|' read -r stem why from to <<<"$spec"
+  bb_variant "$stem" "$from" "$to"
+  out="$(bb_gate "$stem")"; rc=$?
+  { [[ $rc -ne 0 ]] && grep -qF "$why" <<<"$out"; } \
+    && ok "AC18: 문법 밖 §6 앵커(${stem}) → red «${why}»" \
+    || { no "AC18: 문법 밖 §6 앵커(${stem})가 ${why} 로 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+done
+for spec in 'd_num|decision_numbered|\n- OQ1: |\n1. OQ1: ' \
+            'd_quote|decision_quoted|\n- OQ1: |\n> - OQ1: ' \
+            'd_num0|decision_numbered|\n- OQ1 [열림]|\n1. OQ1 [열림]'; do
+  IFS='|' read -r stem why from to <<<"$spec"
+  bb_variant "$stem" "$from" "$to"
+  out="$(bb_gate "$stem")"; rc=$?
+  { [[ $rc -ne 0 ]] && grep -qF "$why" <<<"$out"; } \
+    && ok "AC18: 결정 줄 모양(${stem}) → red «${why}»" \
+    || { no "AC18: 결정 줄 모양(${stem})이 ${why} 로 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+done
+bb_variant bb_ref '\n- OQ1: 인증 뷰의 캐시 전략' '\n- OQ1: 인증 뷰의 캐시 전략 ⟨S99⟩ 근거'
+out="$(bb_gate bb_ref)"; rc=$?
+{ [[ $rc -ne 0 ]] && grep -qF "open_line_unknown_ref:S99" <<<"$out"; } \
+  && ok "AC18: §3 열린 줄 산문 속 ⟨S99⟩ → red «open_line_unknown_ref»" \
+  || { no "AC18: 열린 줄 속 없는 참조가 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+bb_variant bb_ref_ok '\n- OQ1: 인증 뷰의 캐시 전략' '\n- OQ1: 인증 뷰의 캐시 전략 ⟨S2⟩ 근거'
+out="$(bb_gate bb_ref_ok)"
+grep -q open_line_unknown_ref <<<"$out" \
+  && no "AC18(양성대조): 실재하는 ⟨S2⟩ 참조가 막혔다" || ok "AC18(양성대조): 실재하는 ⟨S2⟩ 참조는 막지 않는다"
 finish

@@ -66,6 +66,7 @@ _SCRIPTS_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 import section6  # noqa: E402
+import brief_body  # noqa: E402
 
 EXIT_OK = 0
 EXIT_VIOLATION = 1
@@ -73,7 +74,8 @@ EXIT_INDETERMINATE = 3
 EXIT_INTERNAL = 4
 EXIT_USAGE = 64
 
-ITEM_RE = re.compile(r"^\s*[-*]\s+\*\*(S\d+)\*\*(.*)$")
+# §6 앵커 줄의 판독은 `brief_body` 하나다 — 게이트(`check_brief`) · 로드맵과 같은 객체.
+ANCHOR_LINE_RE = brief_body.ANCHOR_LINE_RE
 # P21 canonical placeholder 토큰 (spec-interview SKILL.md의 P21 줄과 같은 집합).
 # 라벨 문자류는 `[\w.-]` — 파이썬 3에서 `\w`는 유니코드 인식이라 `[A-Za-z0-9_]`에
 # **다른 문자 체계의 글자/숫자**가 더해진다. producer 문서(Korean-primary)가 예시로
@@ -236,12 +238,17 @@ def parse_section6(text: str, label: str) -> dict[str, str]:
             # 하는지 아무도 모른 채 전 statement 의 L1·L2 가 skip 된다.
             raise StructuralViolation(f"{label} §6 경계가 유일하지 않다 — {amb[0]}")
         raise ParseError(f"{label}에 '## 6.' 섹션이 없다")
+    _ok, bad = brief_body.anchor_lines(body)
+    if bad:
+        raise StructuralViolation(
+            f"{label} §6에 문법 밖 앵커 줄이 있다 — "
+            + ", ".join(f"{n}번째 줄 {brief_body.ANCHOR_REASON_TEXT[why]}({why})" for n, why in bad[:5]))
     bodies: dict[str, list[str]] = {}
     heads: dict[str, str] = {}
     order: list[str] = []
     cur = None
     for ln in body.splitlines():
-        m2 = ITEM_RE.match(ln)
+        m2 = ANCHOR_LINE_RE.match(ln)
         if m2:
             cur = m2.group(1)
             if cur in bodies:
@@ -251,7 +258,7 @@ def parse_section6(text: str, label: str) -> dict[str, str]:
                 # 중복 앵커는 판독 실패가 아니라 append-only 규칙의 구조적 위반이다.
                 raise StructuralViolation(f"{label} §6에 {cur} 앵커가 중복 — append-only 위반")
             bodies[cur] = []
-            heads[cur] = m2.group(2)
+            heads[cur] = m2.group(2) or ""
             order.append(cur)
             continue
         if cur is not None:

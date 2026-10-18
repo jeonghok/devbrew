@@ -14,6 +14,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import section6  # noqa: E402
+import brief_body  # noqa: E402
+
+ANCHOR_LINE_RE = brief_body.ANCHOR_LINE_RE
+section4_items = brief_body.section4_items
 
 # 번호 한 개 — 확정 C/D · 열린 질문 OQ · 레포 근거 RC · 위험 K · steelman ST · 발화 S, 또는 «key».
 TOKEN_RE = re.compile(r"(?:C|D|OQ|RC|K|ST|S)\d+|«[^«»,·\s]+»")
@@ -143,7 +147,6 @@ OQ_LINE_RE = re.compile(r"- (OQ\d+) ")
 RC_RE = re.compile(r"\bRC\d+\b")
 ST_RE = re.compile(r"\bST\d+\b")
 KEY_RE = re.compile(r"«[^«»]+»")
-S_ANCHOR_RE = re.compile(r"\*\*(S\d+)\*\*")
 LIST_SEP_RE = re.compile(r"\s*,\s*|\s+·\s+")
 
 
@@ -430,7 +433,7 @@ def brief_universe(brief: str, audit: str):
     if s0 is None or s4 is None or s5 is None:
         raise FormatError("brief 에 §0 · §4 · §5 중 없는 절이 있다")
     non_s |= {m.group(1) for line in s0.splitlines() for m in [OQ_LINE_RE.match(line)] if m}
-    non_s |= set(RC_RE.findall(s5)) | set(ST_RE.findall(s5)) | set(KEY_RE.findall(s4))
+    non_s |= set(RC_RE.findall(s5)) | set(ST_RE.findall(s5)) | {k for head, body in section4_items(s4) for k in KEY_RE.findall("\n".join([head] + body))}
     k_expected = []
     for prefix in RISK_PREFIXES:
         k_expected += [line[2:] for line in s5.splitlines() if line.startswith(prefix)]
@@ -441,7 +444,7 @@ def brief_universe(brief: str, audit: str):
         b6 = section6.body(doc)
         if b6 is None:
             raise FormatError("%s §6 을 하나로 읽을 수 없다" % label)
-        s_ids |= set(S_ANCHOR_RE.findall(b6))
+        s_ids |= {sid for _n, sid, _r in brief_body.anchor_lines(b6)[0]}
     if not non_s or not s_ids:
         raise FormatError("brief 번호 집합이 비었다")
     return non_s, s_ids, k_expected
