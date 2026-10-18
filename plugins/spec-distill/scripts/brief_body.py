@@ -222,7 +222,7 @@ _CHAR_REF_RE = re.compile(r"&[A-Za-z][A-Za-z0-9]*;|&#[0-9]+;|&#[xX][0-9A-Fa-f]+;
 
 def subset_problems(text):
     """부분집합 밖 구조 -> [(줄, 사유)] — brief 는 기계가 쓰는 마크다운의 부분집합이라 읽는 쪽이 모델하지 않는 것은 해석하지 않고
-    거부한다: HTML 블록 시작 줄(`html_block_not_allowed`), HTML 문자 참조(`char_ref_not_allowed`, 코드 칸 안은 제외),
+    거부한다: HTML 블록 시작 줄(`html_block_not_allowed`), HTML 문자 참조(`char_ref_not_allowed`, 코드 칸 안도 거부),
     들여 쓴 펜스 여는 줄(`fence_indented`)."""
     out = []
     for ln in split_lines(body_text(text)):
@@ -326,7 +326,9 @@ def _strip_tags(text):
 _ESCAPE_RE = re.compile(r"\\([!-/:-@\[-`{-~])")
 
 
-_PLACEHOLDER = re.compile(r"S\\?<[Nn]\\?>(?![0-9])")   # 템플릿 자리 표시 `S<N>` — 줄 전체가 아니라 그 토큰만 태그 지우기에서 비킨다
+# 템플릿 자리 표시 `S<N>` — 줄 전체가 아니라 그 토큰만 비킨다. 뒤에 (굵게 닫는 `**` · `__` 하나를 건너) 숫자(유니코드 Nd 전부)
+# · `<` · `*` · `_` 가 오지 않을 때만이다(`**S<N>9**` · `S<N><i>` · `**S<N>**9` 는 렌더러가 다른 글을 그린다).
+_PLACEHOLDER = re.compile(r"S\\?<[Nn]\\?>(?=(?:\*\*|__)?(?![\d<*_]))")
 _PH_MARK = "\ue000"
 
 
@@ -337,6 +339,7 @@ def _shape_view(text):
 
 # 거부 사유 이름 → 사람이 읽는 말. 메시지는 이 말을 앞세우고 사유 이름은 괄호에 둔다.
 ANCHOR_REASON_TEXT = {
+    "html_inline_not_allowed": "인라인 HTML(`<태그>` · 주석 등)이 있어 렌더러만 다른 글을 그리는 줄(코드 칸 안은 제외)",
     "anchor_markup": "HTML 태그나 백슬래시 이스케이프로 꾸며 앵커처럼 읽히는 줄",
     "anchor_indented": "들여 쓴 앵커 줄",
     "anchor_unicode_space": "공백 · 탭이 아닌 공백 글자(NBSP · 전각 공백 등)로 시작하는 앵커 줄",
@@ -357,12 +360,88 @@ def _lead_ws_reason(line):
     return "anchor_indented" if set(line[:i]) <= {" ", "\t"} else "anchor_unicode_space"
 
 
-def _in_body_text(f):
-    return bool(_IN_BODY_TOKEN.search(f) or _IN_BODY_BULLET.match(f))
-
-
 def _in_body(f):
     return bool(_IN_BODY_TOKEN.search(f) or _IN_BODY_BULLET.match(f))
+
+
+_ASCII_PUNCT = frozenset("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
+
+
+def code_spans(line):
+    """CommonMark 인라인 코드 칸 -> [(시작, 끝, 여는 백틱 수)]. 날 글자 위에서 왼쪽부터: 백슬래시 + ASCII 기호는 둘 다 글자이고,
+    백틱 덩어리(최대 연속)는 뒤에서 **길이가 같은** 덩어리를 만나면 그 사이가 코드 칸이다. 짝이 없으면 그 덩어리는 글자다."""
+    out, i, n = [], 0, len(line)
+    dead = set()   # 뒤에 같은 길이의 닫는 덩어리가 없는 길이
+    while i < n:
+        c = line[i]
+        if c == "\\" and i + 1 < n and line[i + 1] in _ASCII_PUNCT:
+            i += 2
+            continue
+        if c != "`":
+            i += 1
+            continue
+        j = i
+        while j < n and line[j] == "`":
+            j += 1
+        run = j - i
+        close = None
+        if run not in dead:
+            k = j
+            while k < n:
+                if line[k] != "`":
+                    k += 1
+                    continue
+                m = k
+                while m < n and line[m] == "`":
+                    m += 1
+                if m - k == run:
+                    close = m
+                    break
+                k = m
+            if close is None:
+                dead.add(run)
+        if close is None:
+            i = j
+        else:
+            out.append((i, close, run))
+            i = close
+    return out
+
+
+def _literal_view(line):
+    """코드 칸과 백슬래시로 이스케이프한 글자를 공백으로 지운 줄 — 남은 글자만 마크업으로 읽힌다."""
+    chars = list(line)
+    for a, b, _run in code_spans(line):
+        chars[a:b] = " " * (b - a)
+    i = 0
+    while i + 1 < len(chars):
+        if chars[i] == "\\" and chars[i + 1] in _ASCII_PUNCT:
+            chars[i] = chars[i + 1] = " "
+            i += 2
+        else:
+            i += 1
+    return "".join(chars)
+
+
+_INLINE_HTML_RE = re.compile(r"<(?=[A-Za-z/!?])")
+# P21 치환 토큰(`<REDACTED:라벨>` 등) — spec-interview 가 비밀 값을 바꿔 적는 정본 형태다. 이름 뒤 `:` 때문에 HTML 태그가 아니라
+# 글자로 그려지므로 `inline_html` 이 거부하지 않는다. `check_verbatim_coverage` 가 같은 정규식으로 원문 대조를 강등한다.
+P21_PLACEHOLDER_RE = re.compile(
+    r"<(?:REDACTED|SECRET|TOKEN|KEY|CREDENTIAL|PLACEHOLDER)"
+    r"(?:[:_-][\w.-]{0,64})?>"
+)
+_BARE_OPEN_TAG_RE = re.compile(r"<[A-Za-z][A-Za-z0-9-]*>")   # 속성 · 공백 · `/` 가 없는 여는 태그 — 자리 표시 낱말(`<file>`)로 둔다
+_PLACEHOLDER_OK_RE = re.compile(r"S<[Nn]>(?=(?:\*\*|__)?(?![\d<*_]))")
+
+
+def inline_html(line):
+    """§6 줄에 인라인 HTML 시작(`<` + 글자 · `/` · `!` · `?`)이 있는가 — 코드 칸 밖에서, 느슨하게(문법을 흉내 내지 않는다). 속성 없는
+    여는 태그 하나(`<file>` · `ST<N>`)는 자리 표시 낱말이라 두고, 모양 보기가 그것을 지운 글로 앵커 꼴을 다시 가린다(`**S<i>9**`).
+    닫는 태그 · 주석 · 처리 명령 · 선언 · CDATA · 속성이 있는 태그는 거부한다. 이스케이프한 `\\<` 는 태그가 아니다."""
+    masked = _PLACEHOLDER_OK_RE.sub(lambda m: "S" + " " * (len(m.group(0)) - 1), _literal_view(line))
+    masked = P21_PLACEHOLDER_RE.sub(lambda m: " " * len(m.group(0)), masked)
+    masked = _BARE_OPEN_TAG_RE.sub(lambda m: " " * len(m.group(0)), masked)
+    return bool(_INLINE_HTML_RE.search(masked))
 
 
 def anchor_lines(section_text):
@@ -377,6 +456,9 @@ def anchor_lines(section_text):
         parts = line.splitlines()
         if len(parts) > 1 and any(_ANCHOR_SHAPED.match(fold(p)) or _in_body(fold(p)) for p in parts):
             bad.append((n, "anchor_line_separator"))
+            continue
+        if inline_html(line):
+            bad.append((n, "html_inline_not_allowed"))
             continue
         f = fold(line)
         v = _shape_view(line)
@@ -393,7 +475,7 @@ def anchor_lines(section_text):
         if m:
             ok.append((n, m.group(1), m.group(2) or ""))
             body = m.group(2) or ""
-            if _in_body_text(fold(body)) or _in_body_text(_shape_view(body)):
+            if _in_body(fold(body)) or _in_body(_shape_view(body)):
                 bad.append((n, "anchor_in_body"))
             continue
         why = _lead_ws_reason(line)

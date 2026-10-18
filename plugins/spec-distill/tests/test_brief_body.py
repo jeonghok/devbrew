@@ -491,9 +491,10 @@ class RenderedShapeRules(unittest.TestCase):
             self.assertEqual([r for _l, r in B.head_problems(doc)], ["section_head_unknown"], repr(head))
 
     def test_placeholder_does_not_exempt_the_whole_line(self):
-        for line in ("- <b>S9</b> x S<N>", "- *\\*S5*\\* S\\<N\\>", "- **&#83;9** x", "- <b>S&#57;</b> x"):
+        for line, why in (("- <b>S9</b> x S<N>", "html_inline_not_allowed"), ("- *\\*S5*\\* S\\<N\\>", "anchor_markup"),
+                          ("- **&#83;9** x", "anchor_markup"), ("- <b>S&#57;</b> x", "html_inline_not_allowed")):
             ok, bad = B.anchor_lines(line)
-            self.assertEqual((ok, [r for _n, r in bad]), ([], ["anchor_markup"]), line)
+            self.assertEqual((ok, [r for _n, r in bad]), ([], [why]), line)
         self.assertEqual(B.anchor_lines("- **S<N>** 자리 표시 S<N>")[1], [])   # 자리 표시만 있는 줄은 그대로 받는다
 
     def test_placeholder_token_with_digit_is_ordinary_text(self):
@@ -507,11 +508,25 @@ class RenderedShapeRules(unittest.TestCase):
     def test_accepted_anchor_body_is_checked_raw_and_viewed(self):
         ok, bad = B.anchor_lines("- **S1** 「a」 <**S9**> 「b」")
         self.assertEqual(([n for n, _s, _b in ok], [r for _n, r in bad]), ([1], ["anchor_in_body"]))
-        ok, bad = B.anchor_lines("- **S1** 「a」 <!-- **S9** -->")   # 모양 보기에서는 지워지지만 날 글자에는 있다
-        self.assertEqual([r for _n, r in bad], ["anchor_in_body"])
-        ok, bad = B.anchor_lines("- **S1** 「a」 <b>**S9**</b>")
-        self.assertEqual([r for _n, r in bad], ["anchor_in_body"])
-        self.assertEqual(B.anchor_lines("- **S1** 「a <i>굵게</i> b」")[1], [])
+        for tail in ("<!-- **S9** -->", "<b>**S9**</b>", "<b>**S9**"):
+            self.assertTrue(B.anchor_lines("- **S1** 「a」 " + tail)[1], tail)
+        self.assertEqual([r for _n, r in B.anchor_lines("- **S1** 「a」 <b>**S9**")[1]], ["anchor_in_body"])
+
+    def test_inline_html_is_refused_in_section6_lines_except_bare_placeholder_words(self):
+        for line in ("- **S1** 「a」 </b>", "- **S1** 「a」 <!-- c -->", "- **S1** 「a」 <?p?>", "- **S1** 「a」 <![CDATA[x]]>",
+                     "- **S1** 「a」 <a href=x>", "- **S1** 「a」 <br/>", "- **S<N><i></i>9** x", "- **S<N>**9 x",
+                     "- **S<N>" + chr(0x669) + "** x", "- **S<N>9** x", "- **S<N><N>9** x"):
+            self.assertTrue(B.anchor_lines(line)[1], line)
+        for line in ("- **S1** 「a」 `<b>` 와 `</b>`", "- **S1** 「a」 \\<b\\> 와 a < b 와 x<3", "  > 이 자리에 <file> 과 ST<N> 과 <date>-<target>",
+                     "- **S1** 「a」 ⟨S<N>⟩ · S<N> 끝", "- **S<N>** 자리 표시 S<N>", "- **S1** 「a」 ``<b>`` 와 `` ` `<b>` ``"):
+            self.assertEqual(B.anchor_lines(line)[1], [], line)
+        self.assertEqual(B.anchor_lines("- **S1** 「a」 <b>**S9**")[1][0][1], "anchor_in_body")
+
+    def test_p21_placeholders_are_not_inline_html(self):
+        for tok in ("<REDACTED>", "<REDACTED:라벨>", "<SECRET:api-key>", "<TOKEN_x>"):
+            ok, bad = B.anchor_lines("- **S1** 「앞 %s 뒤」" % tok)
+            self.assertEqual(([n for n, _s, _b in ok], bad), ([1], []), tok)
+        self.assertIs(CVC.P21_PLACEHOLDER_RE, B.P21_PLACEHOLDER_RE)
 
     def test_tag_stripping_follows_raw_html_grammar_in_one_linear_pass(self):
         self.assertEqual(B._strip_tags("a<b>c</b><!-- x --><?p?>d<![CDATA[y]]>e<**S9**>"), "acde<**S9**>")

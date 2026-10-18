@@ -164,6 +164,27 @@ ANCHOR_CASES = [
     ("밑줄 자리 표시 꼴 + 숫자", ["- __S<N>3__ x"], 0, None),
     ("본문에 자리 표시 꼴 + 숫자", ["- **S1** 「a」 **S<N>9**"], 0, None),
     ("본문에 꺾쇠로 감춘 앵커 꼴", ["- **S1** 「a」 <**S9**> 「b」"], 0, None),
+    ("자리 표시 둘 + 숫자", ["- **S<N><N>9** x"], 0, None),
+    ("자리 표시 + 빈 태그 + 숫자", ["- **S<N><b></b>9** x"], 0, None),
+    ("자리 표시 + i 태그 + 숫자", ["- **S<N><i></i>9** x"], 0, None),
+    ("자리 표시 + 주석 + 숫자", ["- **S<N><!-- -->9** x"], 0, None),
+    ("자리 표시 + 태그 안 숫자", ["- **S<N><b>9</b>** x"], 0, None),
+    ("자리 표시 닫은 뒤 숫자", ["- **S<N>**9 x"], 0, None),
+    ("자리 표시 + 아라비아 숫자", ["- **S<N>" + chr(0x669) + "** x"], 0, None),
+    ("본문 자리 표시 둘 + 숫자", ["- **S1** 「a」 **S<N><N>9**"], 0, None),
+    ("본문 자리 표시 + 빈 태그 + 숫자", ["- **S1** 「a」 **S<N><i></i>9**"], 0, None),
+    ("속성 값에 꺾쇠", ["- **S<a title=\"<\">9** x"], 0, None),
+    ("주석 꼴 <!-->", ["- **S<!-->9** x"], 0, None),
+    ("선언 꼴", ["- **S<!X<>9** x"], 0, None),
+    ("본문 속성 값에 닫는 꺾쇠", ["- **S1** 「a」 **S<a title=\">\">9**"], 0, None),
+    ("본문 주석 꼴 + 태그", ["- **S1** 「a」 <!--> **S<i></i>9** -->"], 0, None),
+    ("본문 <!---> 꼴", ["- **S1** 「a」 <!---> **S<i></i>9** -->"], 0, None),
+    ("본문 이스케이프 별표 태그", ["- **S1** 「a」 <b \\*\\*S9\\*\\*> 「b」"], 0, None),
+    ("닫는 태그 속성", ["- **S1** 「a」 </b \\*\\*S9\\*\\*> 「b」"], 0, None),
+    ("앞머리 이스케이프 태그", ["- <b \\*\\*S9\\*\\*> x"], 0, None),
+    ("두 줄 주석", ["- **S<!--", "-->9**"], 0, None),
+    ("빈 태그 하나 + 숫자", ["- **S<i>9** x"], 0, None),
+    ("본문 b 태그 감싼 앵커 꼴", ["- **S1** 「a」 <b>**S9**"], 0, None),
     ("div 블록 감싼 앵커", ["<div>", ANCHOR9, "</div>"], 1, None),
     ("주석 블록 감싼 앵커", ["<!--", ANCHOR9, "-->"], 1, None),
     ("div 블록 감싼 펜스 앵커", ["<div>", "```", ANCHOR9, "```"], 2, None),
@@ -394,6 +415,27 @@ def our_setext_lines(doc):
     return {i for i, ln in enumerate(lines) if ln in wanted and i + 1 < len(lines)} if wanted else set()
 
 
+CODE_SPAN_CORPUS = [
+    "`a`", "``a``", "`a``", "``a`", "a ` b", "`` a ` b ``", "\\`a`", "\\``a``", "`a\\`", "`<b>` x", "x `<b>`y`", "```a```",
+    "`a` `b`", "` a `", "`  `", "``` ` ```", "`a```b`", "``a```b``", "x\\\\`a`", "``", "`", "a`b`c`d", "`a`` b`", "`\\`` x `",
+]
+
+
+def normalised(content):
+    if len(content) >= 2 and content.startswith(" ") and content.endswith(" ") and content.strip(" "):
+        return content[1:-1]
+    return content
+
+
+class CodeSpanFinder(unittest.TestCase):
+    def test_finder_agrees_with_parser_code_inline(self):
+        for line in CODE_SPAN_CORPUS:
+            with self.subTest(line):
+                ours = [normalised(line[a + run:b - run]) for a, b, run in B.code_spans(line)]
+                theirs = [c.content for t in MD.parse(line) for c in (t.children or []) if c.type == "code_inline"]
+                self.assertEqual(ours, theirs, repr(line))
+
+
 class FenceAndSetextAgreement(unittest.TestCase):
     def test_fence_implementation_agrees_with_parser(self):
         """문서 전체(컨테이너 안 펜스 포함)를 파서와 맞춘다. 갈리는 문서는 들여 쓴 펜스로 거부돼야 한다."""
@@ -401,7 +443,7 @@ class FenceAndSetextAgreement(unittest.TestCase):
             with self.subTest(doc):
                 ours, theirs = our_fence_lines(doc), parser_fence_lines(doc)
                 lines = doc.split("\n")
-                quoted_only = ours <= theirs and all(lines[i].lstrip(" ").startswith(">") for i in theirs - ours)   # 인용 안 펜스는 최상위 줄을 가리지 않는다
+                quoted_only = ours <= theirs and all(re.match(r" {0,3}>", lines[i]) for i in theirs - ours)   # 인용 안 펜스는 최상위 줄을 가리지 않는다
                 if ours != theirs and not quoted_only:
                     self.assertIn("fence_indented", [w for _l, w in B.head_problems(doc)], repr(doc))
 

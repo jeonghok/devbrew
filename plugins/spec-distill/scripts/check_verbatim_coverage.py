@@ -84,10 +84,7 @@ ANCHOR_LINE_RE = brief_body.ANCHOR_LINE_RE
 # 좁히면 규약과 싸우게 된다. 넓힌 것은 **글자 종류뿐**이고 경계는 그대로다 —
 # 공백·`>`·`<`는 여전히 못 들어가고 길이 상한 64도 유지한다. 즉 산문 한 문장을 라벨로
 # 위장해 L2 비교를 통째로 강등시키는 경로는 열리지 않는다.
-P21_PLACEHOLDER_RE = re.compile(
-    r"<(?:REDACTED|SECRET|TOKEN|KEY|CREDENTIAL|PLACEHOLDER)"
-    r"(?:[:_-][\w.-]{0,64})?>"
-)
+P21_PLACEHOLDER_RE = brief_body.P21_PLACEHOLDER_RE   # 정규식은 brief_body 가 소유한다(§6 판독이 같은 토큰을 거부하지 않는다)
 
 
 class ParseError(Exception):
