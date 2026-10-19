@@ -49,8 +49,8 @@ branching strategy 템플릿을 선택해 git workflow 룰을 초기화하고, �
 
 ### Step 1: 프로젝트 상태 감지
 
-1. 프로젝트 root에 `CLAUDE.md`가 존재하는지 확인
-2. 존재한다면 `## Git Workflow` 섹션이 이미 있는지 확인
+1. 관리 절을 담는 파일을 정한다 — AGENTS.md 가 있으면 AGENTS.md, 없으면 CLAUDE.md(아래 Charter 상태 감지 (a) 와 같은 규칙. 앞선 실행에서 「AGENTS.md 로 옮기기」를 골랐다면 기존 `## Git Workflow` 는 AGENTS.md 에 있다)
+2. 그 파일에 `## Git Workflow` 섹션이 이미 있는지 확인
 3. `docs/git-workflow/` 디렉토리가 존재하는지 확인
 
 기존 Git Workflow 설정이 발견되면 사용자에게 묻는다:
@@ -220,6 +220,8 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 
 **전략별 기본 접두** — github-flow: `feature, fix` · git-flow: `feature, fix, release, hotfix` · trunk-based: `feature, fix`
 
+예: 기본 `feature, fix` 에 질문 3 에서 `docs` 를 더하면 `{{BRANCH_PREFIXES}}` = `feature|fix|docs` 다(표 안의 `\|` 는 표가 깨지지 않게 적은 `|` 다).
+
 #### 4c: AGENTS.md × CLAUDE.md 4-state matrix
 
 프로젝트 root의 `AGENTS.md`와 `CLAUDE.md` 상태에 따라 다음 matrix 적용 (AC22):
@@ -237,7 +239,7 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 
 `docs/git-workflow/` 디렉토리가 없으면 생성. 다음 3개 파일 작성:
 
-1. `docs/git-workflow/branch-strategy.md` — `templates/<strategy>/branch-strategy.md`에서 (placeholder 치환 후 — 4b 의 접두 세 행)
+1. `docs/git-workflow/branch-strategy.md` — `templates/<strategy>/branch-strategy.md`에서 (placeholder 치환 후 — 4b 의 `{{BRANCH_PREFIXES}}` · `{{EXTRA_PREFIX_LIST}}`)
 2. `docs/git-workflow/commit-conventions.md` — `templates/shared/commit-conventions.md`에서 (placeholder 치환 후)
 3. `docs/git-workflow/pr-process.md` — `templates/shared/pr-process.md`에서 (placeholder 치환 후)
 

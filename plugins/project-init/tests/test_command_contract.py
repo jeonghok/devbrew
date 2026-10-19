@@ -274,6 +274,14 @@ class TestMigrationRefusalChoices(unittest.TestCase):
         self.assertIn("「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md", detect)
         self.assertIn("AGENTS.md 가 있으면 AGENTS.md, 없으면 CLAUDE.md", detect)
 
+    def test_git_rules_detection_reads_the_canonical_file(self):
+        # 「git 규칙은 그대로 두고 헌장만」 + 「AGENTS.md 로 옮기기」 뒤 재실행에서 기존 `## Git Workflow` 는
+        # AGENTS.md 에 산다. CLAUDE.md 만 보면 감지가 비어 S3 action 이 그 절을 덮는다.
+        detect = section(self.step1, "### Step 1:", "기존 Git Workflow 설정이 발견되면")
+        self.assertIn("AGENTS.md 가 있으면 AGENTS.md, 없으면 CLAUDE.md", detect)
+        self.assertIn("그 파일에 `## Git Workflow` 섹션이 이미 있는지", detect)
+        self.assertNotIn("존재한다면 `## Git Workflow` 섹션이 이미 있는지", detect)
+
     def test_s4_old_abort_is_gone(self):
         s4 = self.matrix[self.matrix.index("**S4 ("):]
         self.assertIn("「CLAUDE.md 는 그대로 두기」", s4)
