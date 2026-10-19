@@ -2720,4 +2720,12 @@ PY
     && ok "AC18: audit §6 출처 표기 앞의 끼운 머리(${stem}) → red (싣는 §6 에 출처 표기가 없다)" \
     || { no "AC18: audit §6 출처 표기 앞의 끼운 머리(${stem})가 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
 done
+# --- R10 계획 2 AC25: 번호 박힌 §5 위험 줄 -----------------------------------------------
+ac3_pair k_stamped
+sed -i.bak 's#^- 위험 — 숨은 가정 |#- 위험 K1 — 숨은 가정 |#' "$TMPD/k_stamped.md"; rm -f "$TMPD/k_stamped.md.bak"
+grep -qF -- '- 위험 K1 — 숨은 가정 |' "$TMPD/k_stamped.md" \
+  && ok "AC25(양성 대조): 위험 줄에 K1 을 박았다" || no "AC25: 위험 줄 변형이 적용되지 않았다"
+out="$(ac3_gate k_stamped)"; rc=$?
+[[ $rc -eq 0 ]] && ok "AC25: 번호 박힌 위험 줄도 게이트를 지난다" \
+  || { no "AC25: 번호 박힌 위험 줄이 막혔다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
 finish

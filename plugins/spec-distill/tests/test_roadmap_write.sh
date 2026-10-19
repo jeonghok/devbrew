@@ -114,17 +114,19 @@ table() {  # table <파일> <행들…>
   local f="$1"; shift
   { printf '# state\n\n## 분해안\n\n%s\n%s\n' "$HEAD_ROW" "$SEP_ROW"; printf '%s\n' "$@"; } > "$f"
 }
-create() {  # create <표 파일> <폴더 레포 상대> — rc 를 echo 한다
+create_b() {  # create_b <brief 레포 상대> <표 파일> <폴더 레포 상대> — audit 는 brief 의 `.md` → `.audit.md`. rc 를 echo 한다
   local rc=0
-  (cd "$W" && python3 "$RW" create --brief docs/iv/brief.md --audit docs/iv/brief.audit.md \
-     --plan-table "$1" --out "$2" --title "픽스처 일" --date 2026-10-15 --approval "이대로 승인 (권장)") \
+  (cd "$W" && python3 "$RW" create --brief "$1" --audit "${1%.md}.audit.md" \
+     --plan-table "$2" --out "$3" --title "픽스처 일" --date 2026-10-15 --approval "이대로 승인 (권장)") \
      > "$T/out.txt" 2>&1 || rc=$?
   echo "$rc"
 }
+create() { create_b docs/iv/brief.md "$1" "$2"; }   # create <표 파일> <폴더 레포 상대> — rc 를 echo 한다
 
 # ── create 성공 (AC4) ───────────────────────────────────────────────────────
 table "$T/state.md" "$P1_ROW" "$E1_ROW" "$E2_ROW"
 assert_eq "$(create "$T/state.md" docs/rm)" "0" "create: rc 0"
+cp "$T/out.txt" "$T/out.create1.txt"
 assert_eq "$(tree_of "$W/docs/rm")" "$(printf './E1.md\n./E2.md\n./roadmap.md')" "create: 로드맵 하나 · 묶음 둘"
 assert_eq "$(four_empty docs/rm/roadmap.md)" "ok" "create: 검사기 네 목록이 빈 목록"
 assert_file_has "$W/docs/rm/E1.md" "roadmap: docs/rm/roadmap.md" "묶음 frontmatter 의 roadmap 은 레포 상대경로"
@@ -274,6 +276,7 @@ rm -f "$W/docs/iv/other.md"
 table "$T/u1.md" "$P1_NOW" "$E1_NOW" "${E2_NOW/한다 다 /한다 다 · 마 }"
 cp "$W/docs/rm/E1.md" "$T/E1.keep"
 assert_eq "$(update "$T/u1.md")" "0" "update: rc 0"
+cp "$T/out.txt" "$T/out.update1.txt"
 cmp -s "$T/E1.keep" "$W/docs/rm/E1.md" && ok "update: 머지된 E1 묶음은 바이트 그대로" || no "update: E1 묶음이 바뀌었다"
 assert_file_has "$W/docs/rm/E2.md" "- 범위: 한다 다 · 마 / 안 한다 라" "update: 바뀐 E2 묶음 범위 줄"
 assert_file_has "$W/docs/rm/roadmap.md" "  - 한다: 다 · 마" "update: 바뀐 E2 블록 범위 한다"
@@ -425,5 +428,59 @@ table "$T/v12.md" "${P1_CUR/무엇을 정한다/무엇을 정한다 고침}" "$E
 assert_eq "$(update "$T/v12.md")" "1" "끝남 에픽 변경: rc 1"
 assert_file_has "$T/out.txt" "P1" "끝남 에픽 변경: 사유에 번호"
 assert_eq "$(same_as_snap)" "same" "끝남 에픽 변경: 폴더 그대로"
+
+# ── 위험 번호를 brief 줄에 박는다 (AC25) ────────────────────────────────────
+# docs/rm2 · docs/rm3 는 위 사례가 이미 쓴다 — 새 폴더 docs/rmk.
+mkdir -p "$W/docs/iv2"
+cp "$W/docs/iv/brief.md" "$W/docs/iv/brief.audit.md" "$W/docs/iv2/"
+python3 -I - "$W/docs/iv2/brief.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+for old, new in (("- 위험 — 숨은 가정: 가정 — 근거 약함\n", "- 위험 K1 — 숨은 가정: 가정 — 근거 약함\n"),
+                 ("- 위험 — 실패 양식: 실패 — 근거 약함\n",
+                  "- 위험 K2 — 실패 양식: 실패 — 근거 약함\n- 위험 K3 — 리뷰 참고 | 셋째 — 근거\n")):
+    if t.count(old) != 1:
+        sys.exit("변형이 적용되지 않았다: " + old)
+    t = t.replace(old, new, 1)
+open(p, "w", encoding="utf-8").write(t)
+PY
+E2_K3="${E2_ROW/ · K2 · / · K2 · K3 · }"
+assert_contains "$E2_K3" "K2 · K3" "AC25(양성 대조): E2 배정에 K3 를 더한 행"
+# stamped — 박힌 번호대로 배정되고 알림 줄이 없다
+table "$T/k1.md" "$P1_ROW" "$E1_ROW" "$E2_K3"
+assert_eq "$(create_b docs/iv2/brief.md "$T/k1.md" docs/rmk)" "0" "AC25 stamped: rc 0"
+cp "$T/out.txt" "$T/out.stamped.txt"
+assert_eq "$(four_empty docs/rmk/roadmap.md)" "ok" "AC25 stamped: 검사기 네 목록이 빈 목록"
+assert_file_has "$W/docs/rmk/E1.md" "- K1 — 위험 — 숨은 가정: 가정 — 근거 약함" "AC25 stamped: K1 은 박힌 줄"
+assert_file_has "$W/docs/rmk/E2.md" "- K3 — 위험 — 리뷰 참고 | 셋째 — 근거" "AC25 stamped: K3 는 박힌 줄"
+# deleted_k — K2 줄을 지우면 같은 표는 brief 에 없는 K2 를 배정한 것이다
+python3 -I - "$W/docs/iv2/brief.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+old = "- 위험 K2 — 실패 양식: 실패 — 근거 약함\n"
+if t.count(old) != 1:
+    sys.exit("변형이 적용되지 않았다: " + old)
+open(p, "w", encoding="utf-8").write(t.replace(old, "", 1))
+PY
+assert_eq "$(create_b docs/iv2/brief.md "$T/k1.md" docs/rmk)" "1" "AC25 deleted_k: 지운 K2 를 배정한 표는 rc 1"
+# 묶음 에픽(E2)은 검사기 전에 묶음을 그리다 막힌다 — 사유는 unknown_ids 가 아니라 이 글이다.
+assert_file_has "$T/out.txt" "E2: brief 에서 줄을 찾지 못한 번호 — K2" "AC25 deleted_k: 사유에 지운 K2"
+# 결정 에픽(P1)에 지운 K2 를 배정하면 검사기가 unknown_ids 로 막는다
+table "$T/k3.md" "${P1_ROW/S3 · OQ2/S3 · OQ2 · K2}" "$E1_ROW" "${E2_K3/ · K2 · / · }"
+sed -n '/^## 생성 기록/,$p' "$T/k1.md" >> "$T/k3.md"
+assert_eq "$(create_b docs/iv2/brief.md "$T/k3.md" docs/rmk)" "1" "AC25 deleted_k: 결정 에픽에 지운 K2 를 배정한 표는 rc 1"
+assert_file_has "$T/out.txt" "unknown_ids: K2" "AC25 deleted_k: 사유에 unknown_ids: K2"
+table "$T/k2.md" "$P1_ROW" "$E1_ROW" "${E2_K3/ · K2 · / · }"
+sed -n '/^## 생성 기록/,$p' "$T/k1.md" >> "$T/k2.md"
+assert_eq "$(create_b docs/iv2/brief.md "$T/k2.md" docs/rmk)" "0" "AC25 deleted_k: K2 를 뺀 표는 rc 0"
+assert_file_has "$W/docs/rmk/E2.md" "- K3 — 위험 — 리뷰 참고 | 셋째 — 근거" "AC25 deleted_k: K3 는 지운 뒤에도 같은 줄"
+if grep -qF -- "- K2 —" "$W/docs/rmk/E2.md"; then no "AC25 deleted_k: E2 에 K2 줄이 남았다"; else ok "AC25 deleted_k: E2 에 K2 줄이 없다"; fi
+assert_file_has "$W/docs/rmk/E1.md" "- K1 — 위험 — 숨은 가정: 가정 — 근거 약함" "AC25 deleted_k: K1 은 그대로"
+# old_order_notice — 번호 없는 brief 는 알리고(create · update), 박힌 brief 는 알리지 않는다
+assert_file_has "$T/out.create1.txt" "줄 순서로 매겼다" "AC25 old_order_notice: 번호 없는 brief 의 create 는 알린다"
+assert_file_has "$T/out.update1.txt" "줄 순서로 매겼다" "AC25 old_order_notice: 번호 없는 brief 의 update 도 알린다"
+if grep -qF '줄 순서로 매겼다' "$T/out.stamped.txt"; then no "AC25 old_order_notice: 박힌 brief 에 알림이 나왔다"; else ok "AC25 old_order_notice: 박힌 brief 는 알리지 않는다(양의 짝)"; fi
 
 finish

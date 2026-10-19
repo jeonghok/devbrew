@@ -98,4 +98,25 @@ for old in '충돌 중 하나.' ', 2-4줄>'; do
   grep -qF "$old" "$SB" && no "AC20: steelman-builder 옛 «${old}» 잔존" || ok "AC20: 옛 «${old}» 없음(양성 짝: 위 단언)"
 done
 assert_contains "$(flat "$SM")" '**trigger** — 기본은 셋이다: landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의 충돌. 다른 이유로 방향이 의심되면 모델이 판단해 띄우고 그 이유를 trigger 로 적는다.' "AC20: 인터뷰 쪽 trigger 도 예시"
+# AC25 — 위험 번호를 brief §5 줄에 박는다
+DJ="$(win "$FIN" '^### 분해 판단' '^### ')"; SA="$(win "$FIN" '^### Step A ' '^### ')"
+BA="$(win "$FIN" '^#### B-A' '^#### ')"; BR="$(win "$FIN" '^#### B-R' '^#### ')"
+[ -n "$DJ" ] && [ -n "$SA" ] && [ -n "$BA" ] && [ -n "$BR" ] && ok "AC25(양성 대조): 분해 판단 · Step A · B-A · B-R 을 떴다" || no "AC25: 분해 판단 · Step A · B-A · B-R 부재"
+parab() { awk -v m="$2" 'index($0,m)==1{f=1} f&&!NF{exit} f{print}' "$1" | tr '\n' ' ' | tr -s ' '; }
+RISKP="$(parab "$FIN" '   **위험 번호.**')"
+assert_contains "$SA" ' **위험 번호.** payload §5 의 위험 줄마다' "AC25: 「위험 번호」 문단이 Step A 안에 있다"
+for lit in '`- 위험 K<n> — <숨은 가정 | 실패 양식 | 리뷰 참고> …`' '숨은 가정 · 실패 양식 · 리뷰 참고 순으로 K1 부터 매긴다' \
+           '다른 줄의 번호를 고치지 않고' '새로 더하는 위험 줄은 이 brief 의 가장 큰 K 다음 수를 받는다'; do
+  assert_contains "$RISKP" "$lit" "AC25: Step A 「위험 번호」 «${lit}»"
+done
+assert_contains "$DJ" '위험 K 는 Step A 가 brief §5 위험 줄에 박을 번호다' "AC25: 분해 표 배정 번호 불릿"
+grep -qF '번호 없는 위험 줄' "$FIN" && no "AC25: 옛 「번호 없는 위험 줄」 불릿 잔존" || ok "AC25: 옛 「번호 없는 위험 줄」 없음(양성 짝: 위 단언)"
+assert_contains "$BA" '`- 위험 K<n> — 리뷰 참고 | [<category>] <anchor> — <summary> (리뷰 <id>)`(`<n>` 은 이 brief 의 가장 큰 K 다음 수)' "AC25: B-A 의 §5 줄 꼴"
+for lit in '사유가 `unassigned` · `orphans` · `unknown_ids` 면' '`unknown_ids` 는 표가 brief 에 없는 번호(지운 위험의 K 등)를 배정한 것이다 — 표에서 그 번호를 뺀다.'; do
+  assert_contains "$BR" "$lit" "AC25: B-R «${lit}»"
+done
+TPL5="$(win "$TPL" '^## 5[.]' '^## ')"
+for lit in '- 위험 K1 — <숨은 가정 | 실패 양식>: <내용> — <근거>' '- 위험 K2 — 숨은 가정 | <내용> — RC3 (plugins/x/y.py#sym) [RC3 → OQ1]'; do
+  assert_contains "$TPL5" "$lit" "AC25: 템플릿 §5 «${lit}»"
+done
 finish

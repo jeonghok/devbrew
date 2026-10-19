@@ -17,8 +17,8 @@ import section6  # noqa: E402
 import brief_body  # noqa: E402
 from brief_body import section4_items  # noqa: E402
 from roadmap_model import (  # noqa: E402
-    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, FormatError, brief_section, brief_universe, bundle_ids, field_text,
-    id_sort_key, is_quote, parse_ids, parse_roadmap, section_body)
+    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, FormatError, brief_risk_numbers, brief_section, brief_universe, bundle_ids,
+    field_text, id_sort_key, is_quote, parse_ids, parse_roadmap, section_body)
 
 TABLE_HEADING = "## 분해안"
 COLUMNS = ("번호", "이름", "종류", "의도", "범위", "의존", "브랜치", "경로 예약", "배정 번호", "받는 것", "넘기는 것")
@@ -212,6 +212,7 @@ class BriefIndex:
     k_lines: dict    # K<n> → "- K<n> — <brief §5 위험 줄 원문>"
     goal: str        # brief §1 본문
     s6: str          # brief §6 본문 + 빈 줄 + audit §6 중 brief §6 에 없는 S<n> 항목
+    k_by_order: bool = False   # brief §5 위험 줄에 K 번호가 없어 줄 순서로 매겼다
 
 
 def _body(text: str, heading: str) -> str:
@@ -287,7 +288,7 @@ def index_brief(brief: str, audit: str) -> BriefIndex:
     if b6 is None or a6 is None:
         raise FormatError("brief 또는 audit 의 §6 을 하나로 읽을 수 없다")
     return BriefIndex(lines, {k: "- %s — %s" % (k, text) for k, text in k_expected},
-                      _body(brief, "## 1."), _merge_s6(b6, a6))
+                      _body(brief, "## 1."), _merge_s6(b6, a6), k_by_order=brief_risk_numbers(_body(brief, "## 5."))[1])
 
 
 # ── 블록 · 묶음 · 로드맵 ─────────────────────────────────────────────────────

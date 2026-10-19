@@ -38,6 +38,9 @@ from roadmap_model import (  # noqa: E402
 RS = Path(__file__).resolve().parent / "roadmap_status.py"
 RECORD_HEADING = "## 생성 기록"
 LISTS = ("format_errors", "unassigned", "orphans", "unknown_ids")
+RISK_ORDER_NOTICE = ("[spec-distill] brief §5 위험 줄에 K 번호가 없어 줄 순서로 매겼다 — "
+                     "위험 줄을 지우거나 옮긴 뒤 다시 만들면 번호가 다른 위험에 붙는다. "
+                     "위험 줄을 `- 위험 K<n> — …` 꼴로 박고 다시 만들면 번호가 그 줄에 붙어 다닌다.")
 
 
 class Refused(Exception):
@@ -271,6 +274,8 @@ def cmd_create(a) -> int:
     run_txn(txn, body)
     print("[spec-distill] 로드맵을 만들었다: %s (묶음 %d개) — 검사기 네 목록이 비었다"
           % (roadmap_rel, len(files) - 1))
+    if idx.k_by_order:
+        print(RISK_ORDER_NOTICE)
     return 0
 
 
@@ -404,6 +409,8 @@ def cmd_update(a) -> int:
     run_txn(txn, body)
     print("[spec-distill] 로드맵을 다시 나눴다: %s — %s · 묶음 %d개 씀 · %d개 지움"
           % (roadmap_rel, " · ".join(changes) or "순서만", len(writes) - 1, len(removes)))
+    if idx.k_by_order:
+        print(RISK_ORDER_NOTICE)
     return 0
 
 

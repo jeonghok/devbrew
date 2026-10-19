@@ -236,5 +236,35 @@ class BriefUniverseSection4(unittest.TestCase):
                 M.brief_universe(brief, audit.replace("\n- **S2**", bad, 1))
 
 
+class BriefRiskNumbers(unittest.TestCase):
+    """AC25 — 위험 번호는 줄에 박힌 것을 읽는다. 옛 brief 는 줄 순서 + 알림 표지."""
+
+    def test_stamped_numbers_are_read(self):
+        s5 = ("- 위험 K2 — 실패 양식: 둘 — 근거\n- 기각 — x → y\n"
+              "- 위험 K1 — 숨은 가정 | 하나 — RC3 [RC3 → OQ1]\n- 위험 K5 — 리뷰 참고 | 다섯\n")
+        rows, by_order = M.brief_risk_numbers(s5)
+        self.assertEqual(rows, [("K1", "위험 — 숨은 가정 | 하나 — RC3 [RC3 → OQ1]"),
+                                ("K2", "위험 — 실패 양식: 둘 — 근거"), ("K5", "위험 — 리뷰 참고 | 다섯")])
+        self.assertFalse(by_order)
+
+    def test_unstamped_keeps_old_order(self):
+        s5 = "- 위험 — 실패 양식: 둘\n- 위험 — 숨은 가정: 하나\n"
+        self.assertEqual(M.brief_risk_numbers(s5), ([("K1", "위험 — 숨은 가정: 하나"), ("K2", "위험 — 실패 양식: 둘")], True))
+
+    def test_no_risk_lines_is_not_by_order(self):
+        self.assertEqual(M.brief_risk_numbers("- 기각 — x → y\n"), ([], False))
+
+    def test_mixed_is_an_error(self):
+        with self.assertRaisesRegex(M.FormatError, "K3 부터 박는다"):
+            M.brief_risk_numbers("- 위험 K2 — 숨은 가정: a\n- 위험 — 리뷰 참고 | b\n")
+
+    def test_duplicate_is_an_error(self):
+        with self.assertRaisesRegex(M.FormatError, "겹친다: K1"):
+            M.brief_risk_numbers("- 위험 K1 — 숨은 가정: a\n- 위험 K1 — 실패 양식: b\n")
+
+    def test_other_kinds_are_not_risks(self):
+        self.assertEqual(M.brief_risk_numbers("- 위험 — 사실 | 사실 하나 — RC1 (a/b.py) [RC1 → OQ1]\n"), ([], False))
+
+
 if __name__ == "__main__":
     unittest.main()
