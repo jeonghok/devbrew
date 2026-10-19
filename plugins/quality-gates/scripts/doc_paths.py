@@ -2,18 +2,23 @@
 """리뷰 diff 에서 뺄 문서 경로 규칙 — 이 규칙의 유일한 자리다(AC23).
 
 패턴은 환경 변수 DEVBREW_QUALITY_GATES_DOC_PATHS(쉼표 목록)가 정하고, 없으면 기본 목록이다.
-빈 값은 「아무것도 빼지 않음」이다. 이 변경이 `.claude/settings.json` 의 그 키를 바꾸면
-기본 목록으로 돌아간다(리뷰 대상이 자기 리뷰 범위를 정하지 못하게).
+빈 값은 「아무것도 빼지 않음」이다. 이 변경이 `.claude/settings.json` 이나
+`.claude/settings.local.json` 의 그 키를 바꾸면 기본 목록으로 돌아간다(리뷰 대상이 자기
+리뷰 범위를 정하지 못하게).
 
 포함 규칙이 먼저다 — 패턴에 맞아도 문서 파일만 빠진다. 문서 파일 중 모델이 읽는 파일은 남긴다.
 패턴에 걸렸지만 남긴 경로는 `kept` 로 이름을 낸다.
 
 패턴 문법: `/` 가 없는 패턴은 어느 깊이의 파일 이름에나 맞고, `/` 가 있는 패턴은 레포 루트
-기준 경로 전체에 맞는다. `**` 는 여러 마디, `*` · `?` 는 한 마디 안, `[...]` 는 문자 묶음.
+기준 경로 전체에 맞는다(앞의 `/` 는 떼고 읽는다). `/` 로 끝나는 패턴 `<폴더>/` 는 `<폴더>/**`
+(그 폴더 아래 전부)다. `**` 는 여러 마디, `*` · `?` 는 한 마디 안, `[...]` 는 문자 묶음.
+정규식으로 옮기지 못하는 패턴(예: `[z-a]`)은 읽지 못한 패턴으로 공시한다.
 
   doc_paths.py select --names <file> --settings-base <file> --settings-head <file>
+                      [--settings-local-base <file> --settings-local-head <file>]
 
     --names 는 한 줄에 경로 하나. 설정 파일 인자는 없는 경로여도 된다(그쪽에 설정 없음).
+    local 두 인자는 함께 주거나 함께 뺀다(빼면 local 설정은 양쪽 모두 없음).
     stdout: doc_paths_source · doc_paths · bad_patterns · excluded · kept_model 다섯 줄 뒤에
     뺀 경로마다 `exclude<TAB><경로>`, 남긴 경로마다 `kept<TAB><경로>`.
     rc 0 · 사용 오류 2 · 입력 파일을 못 읽음 4.
@@ -49,8 +54,13 @@ def parse_patterns(raw: Optional[str]) -> Tuple[List[str], List[str], str]:
             continue
         if item.startswith((":", "!")) or _CTRL.search(item):
             bad.append(item)
-        else:
-            good.append(item)
+            continue
+        try:
+            _compile(item)
+        except re.error:
+            bad.append(item)
+            continue
+        good.append(item)
     return good, bad, "env"
 
 
@@ -100,14 +110,24 @@ def pattern_regex(pat: str) -> "re.Pattern[str]":
     return re.compile("".join(out), re.DOTALL)
 
 
+def _compile(pat: str) -> Tuple[bool, "re.Pattern[str]"]:
+    """패턴 → (경로 전체에 맞추는가, 정규식). 끝 `/` 는 `/**`, 앞 `/` 는 뗀다. 못 옮기면 re.error."""
+    if pat.endswith("/"):
+        pat = pat + "**"
+    full = "/" in pat
+    if pat.startswith("/"):
+        pat = pat[1:]
+    return full, pattern_regex(pat)
+
+
+def _hit(compiled: Tuple[bool, "re.Pattern[str]"], path: str) -> bool:
+    full, reg = compiled
+    target = path if full else path.rsplit("/", 1)[-1]
+    return reg.fullmatch(target) is not None
+
+
 def matches(pat: str, path: str) -> bool:
-    if "/" in pat:
-        target = path
-        if pat.startswith("/"):
-            pat = pat[1:]
-    else:
-        target = path.rsplit("/", 1)[-1]
-    return pattern_regex(pat).fullmatch(target) is not None
+    return _hit(_compile(pat), path)
 
 
 def is_doc_file(path: str) -> bool:
@@ -153,17 +173,11 @@ def settings_key_changed(base_text: Optional[str], head_text: Optional[str]) -> 
 
 def select(paths: List[str], patterns: List[str]) -> Tuple[List[str], List[str]]:
     """(뺀 경로, 패턴에 걸렸지만 남긴 경로)."""
-    regs = []
-    for p in patterns:
-        if "/" in p:
-            regs.append((True, pattern_regex(p[1:] if p.startswith("/") else p)))
-        else:
-            regs.append((False, pattern_regex(p)))
+    compiled = [_compile(p) for p in patterns]
     excluded: List[str] = []
     kept: List[str] = []
     for path in paths:
-        base = path.rsplit("/", 1)[-1]
-        if not any(r.fullmatch(path if full else base) for full, r in regs):
+        if not any(_hit(c, path) for c in compiled):
             continue
         if is_doc_file(path) and not is_model_read(path):
             excluded.append(path)
@@ -183,14 +197,19 @@ def _read_optional(path: str) -> Optional[str]:
 
 def _usage(msg: str) -> int:
     sys.stderr.write("doc_paths: %s\nusage: doc_paths.py select --names <file> "
-                     "--settings-base <file> --settings-head <file>\n" % msg)
+                     "--settings-base <file> --settings-head <file> "
+                     "[--settings-local-base <file> --settings-local-head <file>]\n" % msg)
     return 2
+
+
+_REQUIRED = ("--names", "--settings-base", "--settings-head")
+_LOCAL = ("--settings-local-base", "--settings-local-head")
 
 
 def main(argv: List[str]) -> int:
     if not argv or argv[0] != "select":
         return _usage("첫 인자는 select 여야 한다")
-    opts = {"--names": None, "--settings-base": None, "--settings-head": None}
+    opts = dict.fromkeys(_REQUIRED + _LOCAL)
     rest = argv[1:]
     i = 0
     while i < len(rest):
@@ -199,19 +218,23 @@ def main(argv: List[str]) -> int:
             return _usage("알 수 없는 인자 또는 값 없음: %s" % k)
         opts[k] = rest[i + 1]
         i += 2
-    if any(v is None or v == "" for v in opts.values()):
+    if any(not opts[k] for k in _REQUIRED):
         return _usage("--names · --settings-base · --settings-head 가 모두 필요하다")
+    if bool(opts[_LOCAL[0]]) != bool(opts[_LOCAL[1]]):
+        return _usage("--settings-local-base · --settings-local-head 는 함께 준다")
 
+    pairs = [(opts["--settings-base"], opts["--settings-head"])]
+    if opts[_LOCAL[0]]:
+        pairs.append((opts[_LOCAL[0]], opts[_LOCAL[1]]))
     try:
         with open(opts["--names"], "r", encoding="utf-8", errors="surrogateescape") as fh:
             paths = [ln.rstrip("\n") for ln in fh if ln.rstrip("\n")]
-        base_text = _read_optional(opts["--settings-base"])
-        head_text = _read_optional(opts["--settings-head"])
+        texts = [(_read_optional(b), _read_optional(h)) for b, h in pairs]
     except OSError as e:
         sys.stderr.write("doc_paths: 입력 파일을 읽지 못했다: %s\n" % e)
         return 4
 
-    if settings_key_changed(base_text, head_text):
+    if any(settings_key_changed(b, h) for b, h in texts):
         patterns, bad, source = list(DEFAULT_DOC_PATHS), [], "default-settings-changed"
     else:
         patterns, bad, source = parse_patterns(os.environ.get(ENV_KEY))

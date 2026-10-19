@@ -23,7 +23,7 @@ def run_cli(args, env_extra=None, drop_env=True):
     if env_extra:
         env.update(env_extra)
     return subprocess.run([sys.executable, str(SCRIPT)] + args,
-                          capture_output=True, text=True, env=env)
+                          capture_output=True, text=True, encoding="utf-8", env=env)
 
 
 class TestSelect(unittest.TestCase):
@@ -87,6 +87,26 @@ class TestPatterns(unittest.TestCase):
                          (["docs/*.md"], [":(exclude)x", "!y"], "env"))
         pats, bad, _ = m.parse_patterns("a\tb, ok.md")
         self.assertEqual((pats, bad), (["ok.md"], ["a\tb"]))
+
+    def test_uncompilable_pattern_disclosed(self):
+        pats, bad, src = m.parse_patterns("[z-a]*.md, docs/*.md")
+        self.assertEqual((pats, bad, src), (["docs/*.md"], ["[z-a]*.md"], "env"))
+
+    def test_trailing_slash_is_whole_folder(self):
+        self.assertTrue(m.matches("docs/", "docs/a.md"))
+        self.assertTrue(m.matches("docs/", "docs/x/y.md"))
+        self.assertFalse(m.matches("docs/", "docsx/a.md"))
+        self.assertFalse(m.matches("docs/", "a/docs/b.md"))
+        ex, _ = m.select(["docs/x/y.md", "src/a.md"], ["docs/"])
+        self.assertEqual(ex, ["docs/x/y.md"])
+
+    def test_select_agrees_with_matches(self):
+        pats = ["README*", "/docs/*.md", "docs/", "**/*.rst", "a?.txt"]
+        paths = ["README.md", "x/README.md", "docs/a.md", "docs/b/c.md", "x/docs/a.md",
+                 "p/q.rst", "ab.txt", "x/ab.txt", "abc.txt"]
+        for p in pats:
+            ex, kept = m.select(paths, [p])
+            self.assertEqual(sorted(ex + kept), sorted(x for x in paths if m.matches(p, x)), p)
 
     def test_glob_semantics(self):
         self.assertTrue(m.matches("docs/*.md", "docs/a.md"))
@@ -160,6 +180,27 @@ class TestCli(unittest.TestCase):
             self.assertEqual(lines[0], "doc_paths_source: default-settings-changed")
             self.assertEqual(lines[1], "doc_paths: README*,CHANGELOG*")
             self.assertEqual(lines[5:], ["exclude\tREADME.md"])
+
+    def test_cli_settings_local_changed_falls_back(self):
+        with tempfile.TemporaryDirectory() as d:
+            names = self._names(d, ["README.md", "docs/x.md"])
+            head = Path(d) / "local-head.json"
+            head.write_text('{"env": {"%s": "docs/**"}}' % m.ENV_KEY, encoding="utf-8")
+            base_args = ["select", "--names", names, "--settings-base", d + "/s0",
+                         "--settings-head", d + "/s1"]
+            r = run_cli(base_args + ["--settings-local-base", d + "/l0",
+                                     "--settings-local-head", str(head)],
+                        env_extra={m.ENV_KEY: "docs/**"})
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(r.stdout.splitlines()[0], "doc_paths_source: default-settings-changed")
+            # 양성 짝 — local 이 양쪽 같으면 환경 변수가 쓰인다.
+            r = run_cli(base_args + ["--settings-local-base", str(head),
+                                     "--settings-local-head", str(head)],
+                        env_extra={m.ENV_KEY: "docs/**"})
+            self.assertEqual(r.stdout.splitlines()[:2], ["doc_paths_source: env", "doc_paths: docs/**"])
+            # local 인자는 둘이 함께
+            r = run_cli(base_args + ["--settings-local-base", str(head)])
+            self.assertEqual(r.returncode, 2)
 
     def test_cli_rc(self):
         with tempfile.TemporaryDirectory() as d:

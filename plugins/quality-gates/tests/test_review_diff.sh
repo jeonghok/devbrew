@@ -66,14 +66,17 @@ case_session_doc_excluded() {
   mkfix
   echo "# changed" > "$R/README.md"
   echo 'x = 2' > "$R/src/a.py"
+  echo "new" > "$R/CHANGELOG.md"   # untracked 문서도 빠진다
   rd --mode session
   assert_eq "$RC" 0 "rc 0"
-  assert_eq "$(field excluded "$OUT")" 1 "excluded: 1"
+  assert_eq "$(field excluded "$OUT")" 2 "excluded: 2"
   assert_eq "$(field kept_model "$OUT")" 0 "kept_model: 0"
   assert_eq "$(field doc_paths_source "$OUT")" default "doc_paths_source: default"
-  assert_eq "$(field files "$OUT")" 2 "files: 2"
+  assert_eq "$(field files "$OUT")" 3 "files: 3"
   assert_eq "$(field filtered_files "$OUT")" 1 "filtered_files: 1"
   assert_file_absent "$D/review-i1.diff" 'README' "걸러진 diff 에 README 없음"
+  assert_file_absent "$D/review-i1.diff" 'CHANGELOG' "걸러진 diff 에 untracked CHANGELOG 없음"
+  assert_file_grep "$D/review-i1.full.diff" '^\+\+\+ b/CHANGELOG\.md$' "full.diff 에는 untracked CHANGELOG 가 있다"
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/src/a\.py$' "걸러진 diff 에 src/a.py 있음"
   assert_file_grep "$D/review-i1.full.diff" '^\+\+\+ b/README\.md$' "full.diff 에는 README 가 남는다"
   assert_file_grep "$D/review-i1.doc-paths" "^exclude${TAB}README\.md\$" "doc-paths 파일에 'exclude<TAB>README.md'"
@@ -190,6 +193,92 @@ case_no_ext_diff() {
   assert_file_grep "$D/review-i1.full.diff" '^\+\+\+ b/src/a\.py$' "양성 짝 — diff 는 만들어졌다"
 }
 
+case_no_textconv() {
+  echo "[textconv 를 부르지 않는다]"
+  mkfix
+  local marker="$ROOT/tc-marker" tc="$ROOT/tc.sh"
+  printf '#!/bin/sh\ntouch "%s"\ncat "$1"\n' "$marker" > "$tc"; chmod +x "$tc"
+  git -C "$R" config diff.mark.textconv "$tc"
+  printf '*.py diff=mark\n' > "$R/.git/info/attributes"
+  echo 'x = 2' > "$R/src/a.py"; echo 'n = 1' > "$R/new.py"
+  rd --mode session
+  assert_eq "$RC" 0 "rc 0"
+  [ ! -e "$marker" ] && ok "textconv 표지 없음" || no "textconv 가 실행됐다"
+  assert_file_grep "$D/review-i1.full.diff" '^\+\+\+ b/new\.py$' "양성 짝 — untracked diff 도 만들어졌다"
+}
+
+case_doc_rename() {
+  echo "[문서 rename — 두 경로 모두 보고 모두 뺀다]"
+  mkfix
+  git -C "$R" config diff.renames true
+  mkdir -p "$R/notes"; g "$R" mv README.md notes/README.md
+  echo 'x = 2' > "$R/src/a.py"
+  rd --mode session
+  assert_eq "$RC" 0 "rc 0"
+  assert_file_grep "$D/review-i1.names" '^README\.md$' "names 에 옛 경로"
+  assert_file_grep "$D/review-i1.names" '^notes/README\.md$' "names 에 새 경로"
+  assert_eq "$(field excluded "$OUT")" 2 "excluded: 2"
+  assert_file_absent "$D/review-i1.diff" 'README' "걸러진 diff 에 README 쪽 없음"
+  assert_eq "$(field filtered_files "$OUT")" 1 "filtered_files: 1"
+}
+
+case_literal_pathspecs_env() {
+  echo "[GIT_LITERAL_PATHSPECS=1 이 거르기를 끄지 못한다]"
+  mkfix
+  echo "# changed" > "$R/README.md"; echo 'x = 2' > "$R/src/a.py"
+  OUT=$(cd "$R" && GIT_LITERAL_PATHSPECS=1 bash "$RDIFF" --dir "$D" --iter 1 --mode session 2>"$ROOT/err"); RC=$?
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field filtered_files "$OUT")" 1 "filtered_files: 1"
+  assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/src/a\.py$' "걸러진 diff 에 src/a.py"
+  assert_file_absent "$D/review-i1.diff" 'README' "README 는 빠졌다"
+}
+
+case_self_state_not_reviewed() {
+  echo "[qg 상태 폴더가 리포 안 · 무시 규칙 없음 — 두 반복]"
+  mkfix
+  local S="$R/.claude/quality-gates/sid1"; mkdir -p "$S"
+  echo 'x = 2' > "$R/src/a.py"
+  OUT=$(cd "$R" && bash "$RDIFF" --dir "$S" --iter 1 --mode session 2>"$ROOT/err"); RC=$?
+  assert_eq "$RC" 0 "iter 1 rc 0"
+  assert_eq "$(field files "$OUT")" 1 "iter 1 files: 1"
+  OUT=$(cd "$R" && bash "$RDIFF" --dir "$S" --iter 2 --mode session 2>"$ROOT/err"); RC=$?
+  assert_eq "$RC" 0 "iter 2 rc 0"
+  assert_eq "$(field files "$OUT")" 1 "iter 2 files: 1 (앞 반복의 산출물을 세지 않는다)"
+  assert_eq "$(cat "$S/review-i2.names")" "src/a.py" "iter 2 names 는 src/a.py 하나"
+  OUT=$(cd "$R" && bash "$RDIFF" --dir "$S" --iter 3 --mode paths --globs '.claude/*' 'src/*' 2>"$ROOT/err"); RC=$?
+  assert_eq "$(cat "$S/review-i3.names")" "src/a.py" "paths 모드도 상태 폴더를 뺀다"
+}
+
+case_settings_local() {
+  echo "[settings.local.json — 추적되면 바뀜으로, 무시되면 개인 설정으로]"
+  # 사용자 전역 무시 목록(예: ~/.config/git/ignore 의 settings.local.json)에 기대지 않는다.
+  : > "$ROOT/empty-ignore"
+  mkfix
+  git -C "$R" config core.excludesFile "$ROOT/empty-ignore"
+  mkdir -p "$R/.claude"
+  printf '{"env": {"DEVBREW_QUALITY_GATES_DOC_PATHS": "docs/**"}}\n' > "$R/.claude/settings.local.json"
+  echo "doc2" > "$R/docs/x.md"
+  g "$R" add -A; g "$R" commit -q -m local
+  OUT=$(cd "$R" && DEVBREW_QUALITY_GATES_DOC_PATHS='docs/**' bash "$RDIFF" --dir "$D" --iter 1 --mode branch 2>"$ROOT/err"); RC=$?
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field doc_paths_source "$OUT")" default-settings-changed "추적된 local 변경 → default-settings-changed"
+  assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/docs/x\.md$' "docs/x.md 가 diff 에 남는다"
+  # 작업 트리의 무시된 local 파일은 이 변경이 아니다.
+  mkfix
+  git -C "$R" config core.excludesFile "$ROOT/empty-ignore"
+  mkdir -p "$R/.claude"
+  printf '{"env": {"DEVBREW_QUALITY_GATES_DOC_PATHS": "docs/**"}}\n' > "$R/.claude/settings.local.json"
+  printf '.claude/settings.local.json\n' > "$R/.git/info/exclude"
+  echo "doc2" > "$R/docs/x.md"
+  OUT=$(cd "$R" && DEVBREW_QUALITY_GATES_DOC_PATHS='docs/**' bash "$RDIFF" --dir "$D" --iter 1 --mode session 2>"$ROOT/err"); RC=$?
+  assert_eq "$(field doc_paths_source "$OUT")" env "무시된 local 파일 → doc_paths_source: env"
+  assert_eq "$(field excluded "$OUT")" 1 "docs/x.md 가 빠진다"
+  # 같은 파일이 무시되지 않은 untracked 면 이 변경의 일부다.
+  : > "$R/.git/info/exclude"
+  OUT=$(cd "$R" && DEVBREW_QUALITY_GATES_DOC_PATHS='docs/**' bash "$RDIFF" --dir "$D" --iter 1 --mode session 2>"$ROOT/err"); RC=$?
+  assert_eq "$(field doc_paths_source "$OUT")" default-settings-changed "무시되지 않은 untracked local → default-settings-changed"
+}
+
 case_from_subdir() {
   echo "[하위 디렉토리에서 불러도 리포 최상위 기준]"
   mkfix
@@ -220,6 +309,11 @@ case_filtered_empty
 case_degraded_session
 case_paths_mode
 case_no_ext_diff
+case_no_textconv
+case_doc_rename
+case_literal_pathspecs_env
+case_self_state_not_reviewed
+case_settings_local
 case_from_subdir
 case_usage
 finish

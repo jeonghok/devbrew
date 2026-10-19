@@ -20,8 +20,13 @@
 # doc_paths_source. session · branch · paths 의 기준선이 degraded 면 네 파일을 비워 두고
 # degraded: yes · files: - 로 rc 0. git 실패 rc 4, 사용 오류 rc 2.
 #
-# diff 는 사용자 git 설정(외부 diff · textconv · 접두 · rename)에 기대지 않는다. 읽기 전용 git 만 쓴다.
+# 모든 모드에서 qg 자기 상태 폴더 `.claude/quality-gates` 는 리뷰 경로에서 뺀다.
+# diff 는 사용자 git 설정(외부 diff · textconv · 접두 · rename · pathspec 환경 변수)에 기대지 않는다.
+# 읽기 전용 git 만 쓴다.
 set -u
+# 이 값들은 pathspec 해석을 바꾼다 — GIT_LITERAL_PATHSPECS=1 이면 제외 pathspec 이 글자 그대로 읽혀
+# 걸러진 diff 가 조용히 빈다.
+unset GIT_LITERAL_PATHSPECS GIT_GLOB_PATHSPECS GIT_NOGLOB_PATHSPECS GIT_ICASE_PATHSPECS
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TAB=$(printf '\t')
@@ -160,12 +165,17 @@ case "$MODE" in
     REV=("$BASE" "$HEAD_LABEL") ;;
 esac
 
+# 리뷰 경로 — paths 면 glob, 그 밖은 리포 전체. qg 자기 상태 폴더는 언제나 뺀다(대상 리포가 그 폴더를
+# 무시하지 않아도 앞 반복의 review-i*.* · 임시 폴더가 다음 반복의 변경으로 세어지지 않게).
+if [ "${#GLOBS[@]}" -gt 0 ]; then PS=("${GLOBS[@]}"); else PS=(.); fi
+PS+=(":(exclude).claude/quality-gates")
+
 # ── 거르기 전 경로 ──────────────────────────────────────────────────────────
-"${GITD[@]}" --name-only -z "${REV[@]}" -- ${GLOBS[@]+"${GLOBS[@]}"} > "$T/tracked.z" \
+"${GITD[@]}" --name-only -z "${REV[@]}" -- "${PS[@]}" > "$T/tracked.z" \
   || gitfail "git diff --name-only 가 실패했다: ${REV[*]}"
 : > "$T/untracked.z"
 if [ "$WORKTREE" -eq 1 ]; then
-  git ls-files --others --exclude-standard -z -- ${GLOBS[@]+"${GLOBS[@]}"} > "$T/untracked.z" \
+  git ls-files --others --exclude-standard -z -- "${PS[@]}" > "$T/untracked.z" \
     || gitfail "git ls-files --others 가 실패했다"
 fi
 
@@ -185,27 +195,37 @@ add_untracked() {   # <out> <path> — untracked 파일 하나를 /dev/null 대�
 }
 
 # ── 거르기 전 diff ─────────────────────────────────────────────────────────
-"${GITD[@]}" "${REV[@]}" -- ${GLOBS[@]+"${GLOBS[@]}"} > "$T/full.diff" \
+"${GITD[@]}" "${REV[@]}" -- "${PS[@]}" > "$T/full.diff" \
   || gitfail "git diff 가 실패했다: ${REV[*]}"
 for f in ${UNTR[@]+"${UNTR[@]}"}; do add_untracked "$T/full.diff" "$f"; done
 
 # ── 설정 비교 두 쪽 ────────────────────────────────────────────────────────
-SETTINGS=".claude/settings.json"
-show_settings() {   # <rev> <out> — 그 트리에 설정이 없으면 파일을 만들지 않는다
-  if git cat-file -e "$1:$SETTINGS" 2>/dev/null; then
-    git show "$1:$SETTINGS" > "$2" || gitfail "git show 가 실패했다: $1:$SETTINGS"
+# settings.json 과 settings.local.json 둘 다. 작업 트리 쪽 파일을 git 이 무시하면(추적 안 됨) 그 파일은
+# 이 변경의 일부가 아니다 — 기준 쪽과 같은 글로 본다(개인 설정이 늘 「바뀜」으로 읽혀 기본 목록으로
+# 돌아가지 않게).
+show_settings() {   # <rev> <path> <out> — 그 트리에 파일이 없으면 out 을 만들지 않는다
+  if git cat-file -e "$1:$2" 2>/dev/null; then
+    git show "$1:$2" > "$3" || gitfail "git show 가 실패했다: $1:$2"
   fi
 }
-show_settings "$BASE" "$T/settings-base"
-if [ "$WORKTREE" -eq 1 ]; then
-  SH="$top/$SETTINGS"
-else
-  show_settings "$HEAD_LABEL" "$T/settings-head"
-  SH="$T/settings-head"
-fi
+SARGS=()
+for pair in "settings:.claude/settings.json" "settings-local:.claude/settings.local.json"; do
+  tag="${pair%%:*}"; sp="${pair#*:}"
+  show_settings "$BASE" "$sp" "$T/$tag-base"
+  if [ "$WORKTREE" -eq 1 ]; then
+    if git check-ignore -q -- "$sp" 2>/dev/null; then
+      sh_path="$T/$tag-base"
+    else
+      sh_path="$top/$sp"
+    fi
+  else
+    show_settings "$HEAD_LABEL" "$sp" "$T/$tag-head"
+    sh_path="$T/$tag-head"
+  fi
+  SARGS+=("--$tag-base" "$T/$tag-base" "--$tag-head" "$sh_path")
+done
 
-python3 -X utf8 "$HERE/doc_paths.py" select --names "$T/names" \
-  --settings-base "$T/settings-base" --settings-head "$SH" > "$T/doc-paths"
+python3 -X utf8 "$HERE/doc_paths.py" select --names "$T/names" "${SARGS[@]}" > "$T/doc-paths"
 dp_rc=$?
 [ "$dp_rc" -eq 0 ] || gitfail "doc_paths.py 가 실패했다(rc $dp_rc)"
 
@@ -226,9 +246,9 @@ is_excluded() {   # <path>
 # ── 걸러진 diff ────────────────────────────────────────────────────────────
 XS=()
 for x in ${EXCL[@]+"${EXCL[@]}"}; do XS+=(":(exclude,literal)$x"); done
-"${GITD[@]}" "${REV[@]}" -- ${GLOBS[@]+"${GLOBS[@]}"} ${XS[@]+"${XS[@]}"} > "$T/diff" \
+"${GITD[@]}" "${REV[@]}" -- "${PS[@]}" ${XS[@]+"${XS[@]}"} > "$T/diff" \
   || gitfail "걸러진 git diff 가 실패했다: ${REV[*]}"
-"${GITD[@]}" --name-only -z "${REV[@]}" -- ${GLOBS[@]+"${GLOBS[@]}"} ${XS[@]+"${XS[@]}"} > "$T/filtered.z" \
+"${GITD[@]}" --name-only -z "${REV[@]}" -- "${PS[@]}" ${XS[@]+"${XS[@]}"} > "$T/filtered.z" \
   || gitfail "걸러진 git diff --name-only 가 실패했다: ${REV[*]}"
 FILTERED=$(tr -cd '\000' < "$T/filtered.z" | wc -c | tr -d ' ')
 for f in ${UNTR[@]+"${UNTR[@]}"}; do
