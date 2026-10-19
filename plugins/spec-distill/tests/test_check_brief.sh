@@ -2414,6 +2414,11 @@ out="$(ac3_gate s_user)"; rc=$?
 { [[ $rc -eq 0 ]] && grep -q '"advisories": \[.*사용자 판단 포화' <<<"$out"; } \
   && ok "R1/§5: 사용자 판단 포화(@S2) → advisory 통과, advisories 채널에 실림" \
   || { no "R1/§5: 사용자 판단 포화가 red 이거나 advisory 가 비었다"; printf '    %s\n' "$out"; }
+sat_case s_noresearch '- 포화 판정 2: 사용자 판단 포화(@S2) — 조사 불필요'
+out="$(ac3_gate s_noresearch)"; rc=$?
+{ [[ $rc -eq 0 ]] && grep -q '"advisories": \[.*사용자 판단 포화' <<<"$out"; } \
+  && ok "AC15: 조사 불필요 사용자 판단 포화 → advisory 통과" \
+  || { no "AC15: 조사 불필요 사용자 판단 포화가 red 이거나 advisory 가 비었다"; printf '    %s\n' "$out"; }
 sat_pass_case s_stop '- 사용자 종료(@S2) — 포화 판정 전' '사용자 종료 — 포화 판정 전'
 sat_pass_case s_stop2 $'- 포화 판정 1: 아직 — 빈 곳 2개\n- 사용자 종료(@S2) — 마지막 판정 아직' '아직 뒤 사용자 종료'
 # 실패 넷

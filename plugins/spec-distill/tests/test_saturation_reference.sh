@@ -71,7 +71,17 @@ grep -qF '양의 정수가 아니면 60 으로 두고' <<<"$SAT_FLAT" && grep -q
 grep -qF 'subagent_type: "spec-distill:saturation-judge"' "$SAT" && ok "D23: 판정자 dispatch" || no "D23: 판정자 dispatch 부재"
 grep -qF '**처분** — consumer=orchestrator · fail-closed · disclosure=포화 판정 불가 공시 + 사용자 선택' "$SAT" \
   && ok "RC18: 판정자 처분 줄" || no "RC18: 판정자 처분 줄 부재"
-grep -qF '최근 조사 두 번' <<<"$SAT_FLAT" && ok "AC4: 최근 조사 두 번 기준" || no "AC4: 최근 조사 두 번 기준 부재"
+grep -qF '최근 조사 두 묶음' <<<"$SAT_FLAT" && ok "AC7: 최근 조사 두 묶음 기준" || no "AC7: 최근 조사 두 묶음 기준 부재"
+grep -qF '최근 조사 두 번' <<<"$SAT_FLAT" && no "AC7: 「최근 조사 두 번」 잔존" || ok "AC7: 「최근 조사 두 번」 없음"
+# AC15 — 판단만 남은 경로: 판정자는 그대로 부르고, 사용자가 「조사 불필요」를 고르면 사용자 판단 포화로 닫는다.
+for lit in '「조사 불필요 — 판단만 남음」' \
+           '`- 포화 판정 <k>: 사용자 판단 포화(@S<m>) — 조사 불필요`' \
+           '남은 열린 결정이 모두 사용자의 판단 · 선호이고 조사로 답할 사실 질문이 없으면' \
+           '빈 곳이 「조사가 두 묶음 미만」 하나뿐인데' \
+           '반복 감지 · 빈 곳 조사로 가기 전에' \
+           '판정자는 그대로 부른다'; do
+  grep -qF -- "$lit" <<<"$NOTYET_FLAT" && ok "AC15: 포화 판정 절에 «${lit}»" || no "AC15: 포화 판정 절에 «${lit}» 부재"
+done
 grep -qF '요약으로 대신하지 않는다' <<<"$SAT_FLAT" && ok "RF1: 원문 블록이 없으면 요약으로 대신하지 않는다" || no "RF1: 원문 대체 금지 부재"
 grep -qF '`may_change` 결정 집합과 `device` 가 둘 다 같으면' <<<"$SAT_FLAT" && ok "D2.5: 반복 감지 기준" || no "D2.5: 반복 감지 기준 부재"
 grep -qF '[spec-distill] 포화 판정 불가 — <사유>' <<<"$SAT_FLAT" && ok "판정 불가 한 줄" || no "판정 불가 한 줄 부재"
@@ -82,7 +92,7 @@ for ln in '- 조사 호출 <n>/<limit> (장치별: 커버리지 <a> · 맹점 <b
           '- 상한 도달 <n>/<limit> — 사용자 선택 S<m>: 연장 | 판정으로 | 인터뷰 종료' \
           '- 판정 상한 도달 <k>/<limit> — 사용자 선택 S<m>: 연장 | 포화로 보고 종료 | 인터뷰 종료' \
           '- 포화 판정 <k>: 포화 — <basis 요지>' '- 포화 판정 <k>: 아직 — 빈 곳 <g>개' \
-          '- 포화 판정 <k>: 사용자 판단 포화(@S<m>) — <반복 빈 곳 | 판정 불가(<사유>) | 판정 상한>' \
+          '- 포화 판정 <k>: 사용자 판단 포화(@S<m>) — <반복 빈 곳 | 판정 불가(<사유>) | 판정 상한 | 조사 불필요>' \
           '- 포화 판정 <k>: 판정 불가(<사유>) — 조사 계속(@S<m>)' '- 포화 판정 <k>: 아직 — 반복 빈 곳 재조사(@S<m>)' \
           '- 사용자 종료(@S<m>) — 포화 판정 전' '- 사용자 종료(@S<m>) — 마지막 판정 아직'; do
   grep -qF -- "$ln" "$SAT" && ok "§4 줄: ${ln:0:40}…" || no "§4 줄 부재: $ln"
@@ -132,6 +142,8 @@ MIG_FLAT="$(tr '\n' ' ' < "$MIG" | tr -s ' ')"
 grep -qF '번호가 있는 `research_log` 항목' <<<"$SAT_FLAT" && ok "M3: saturation.md 의 블록 누락 = 번호 있는 항목만" || no "M3: saturation.md 블록 누락 범위 부재"
 grep -qF '이월 전에 한 조사는 번호가 없다' <<<"$MIG_FLAT" && ok "M3: 이월 전 조사는 번호 없음" || no "M3: state-migration 에 이월 전 조사 규칙 부재"
 grep -qF '`### 판정 불가` 경로로 간다' <<<"$MIG_FLAT" && no "M3: 이월 세션이 아직 판정 불가로 고정된다" || ok "M3: 이월 세션의 판정 불가 고정 없음"
+grep -qF '두 묶음 미만이면 판정자 규칙대로 «아직»' <<<"$MIG_FLAT" && ok "AC7: state-migration 이 판정자 규칙을 묶음 단위로 인용" || no "AC7: state-migration 의 판정자 규칙 인용이 묶음 단위가 아니다"
+grep -qF '두 항목 미만' <<<"$MIG_FLAT" && no "AC7: state-migration 에 「두 항목 미만」 잔존" || ok "AC7: state-migration 에 「두 항목 미만」 없음"
 grep -qF '`### 상한 값` 펜스가 정한다' <<<"$MIG_FLAT" && ok "M3: <시작값> 은 상한 값 펜스" || no "M3: <시작값> 출처 부재"
 # M4 — description · 도입부가 이중 종료(floor 5 closed + 포화 또는 사용자 종료)를 말한다.
 DUAL='포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때'

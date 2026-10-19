@@ -111,9 +111,23 @@ check_agent saturation-judge \
   "decisions:DECISIONS:task research_outputs:RESEARCH_OUTPUTS:artifact ledger_state:LEDGER_STATE:task" \
   "verdict novelty basis gaps changed opened look_at may_change opens device"
 SJ_FLAT="$(tr '\n' ' ' < "$AG/saturation-judge.md" | tr -s ' ')"
-grep -qF '최근 두 항목이 둘 다' <<<"$SJ_FLAT" && ok "saturation-judge: 최근 두 조사 기준" || no "saturation-judge: 최근 두 조사 기준 부재"
+# AC7 — 판정 단위는 묶음(동시에 띄운 조사)이다. 규칙 2 는 문장 전체를 문다 — 조건 하나(`opened: 없음` 등)만 빠져도 RED.
+grep -qF '최근 두 묶음의 항목이 모두 `changed: []` 이고 `opened: 없음` 이며, 더 볼 빈 곳이 없을 때만 낸다' <<<"$SJ_FLAT" \
+  && ok "saturation-judge: 최근 두 묶음 기준(규칙 2 전문)" || no "saturation-judge: 최근 두 묶음 기준(규칙 2 전문) 부재"
+grep -qF '최근 두 묶음 중 하나라도 결정을 바꿨거나 열었으면 `not_saturated` 다' <<<"$SJ_FLAT" \
+  && ok "saturation-judge: 최근 두 묶음 중 하나라도 바꾸면 아직(규칙 3)" || no "saturation-judge: 규칙 3 의 묶음 기준 부재"
 grep -qF '「충분해 보인다」를 근거로 쓰지 않는다' <<<"$SJ_FLAT" && ok "saturation-judge: 「충분해 보인다」 금지" || no "saturation-judge: 「충분해 보인다」 금지 부재"
-grep -qF '두 항목 미만이면' <<<"$SJ_FLAT" && ok "saturation-judge: 조사 두 번 미만 → confirm 빈 곳" || no "saturation-judge: 두 항목 미만 규칙 부재"
+grep -qF '두 묶음 미만이면' <<<"$SJ_FLAT" && ok "saturation-judge: 조사 두 묶음 미만 → confirm 빈 곳" || no "saturation-judge: 두 묶음 미만 규칙 부재"
+grep -qF '「조사가 두 묶음 미만 — 열린 결정에 닿는 조사를 하나 더」' <<<"$SJ_FLAT" \
+  && ok "saturation-judge: 두 묶음 미만 빈 곳 문구(saturation.md 의 판단만 남은 경로가 이 글자로 경우를 안다)" || no "saturation-judge: 두 묶음 미만 빈 곳 문구 부재"
+grep -qF '묶음은 블록 머리의 `묶음 <b>` 가 같은 블록들이다' <<<"$SJ_FLAT" && ok "saturation-judge: 묶음 정의" || no "saturation-judge: 묶음 정의 부재"
+grep -qF '묶음 표지가 없는 블록은 각자 한 묶음이다' <<<"$SJ_FLAT" && ok "saturation-judge: 표지 없는 옛 블록은 각자 한 묶음" || no "saturation-judge: 표지 없는 블록 규칙 부재"
+grep -qF '묶음의 새로움은 그 안 항목 novelty 를 합친 것이다' <<<"$SJ_FLAT" && ok "saturation-judge: 묶음 새로움 = 항목 합" || no "saturation-judge: 묶음 새로움 정의 부재"
+grep -qF '### 조사 <n> — <장치> · R<round> · 묶음 <b>' <<<"$SJ_FLAT" && ok "saturation-judge: 입력 블록 머리에 묶음 표지" || no "saturation-judge: 입력 블록 머리의 묶음 표지 부재"
+grep -qE '^ *device: .*open-researcher' "$AG/saturation-judge.md" && ok "saturation-judge: device 열거에 open-researcher" || no "saturation-judge: device 열거에 open-researcher 부재"
+# 음의 짝 — 위 묶음 리터럴들이 양의 짝이다. 항목 단위 문구가 남으면 판정자가 두 기준을 함께 읽는다.
+grep -qF '최근 두 항목' <<<"$SJ_FLAT" && no "saturation-judge: 「최근 두 항목」 잔존" || ok "saturation-judge: 「최근 두 항목」 없음"
+grep -qF '두 항목 미만' <<<"$SJ_FLAT" && no "saturation-judge: 「두 항목 미만」 잔존" || ok "saturation-judge: 「두 항목 미만」 없음"
 grep -qE 'confidence|score|prior_verdict' <<<"$SJ_FLAT" && no "saturation-judge: 점수 · 앞 판정 칸이 있다" || ok "saturation-judge: 점수 · 앞 판정 칸 없음"
 check_agent open-researcher \
   "order:RESEARCH_ORDER:task fresh_evidence:FRESH_EVIDENCE:repo_context claims_contract:CLAIMS_CONTRACT:repo_context open_decisions:OPEN_DECISIONS:task" \
