@@ -21,6 +21,7 @@ SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import conductor_ledger as L  # noqa: E402
 import conductor_state as cs  # noqa: E402
+import suite_lock  # noqa: E402
 
 SID, OTHER = "session-aaaa1111", "session-bbbb2222"
 RM = "plan/rm/roadmap.md"
@@ -275,8 +276,9 @@ class Resources(Repo):
     def test_cleanup_refuses_lock_and_live_lock_copy(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)
         mc = self._mdir() / "merge-check"
-        lock = mc / "lock"
+        lock = suite_lock.lock_path(self._mdir())  # 담당자 스위트와 같은 공유 잠금(지휘자 수리 2)
         lock.mkdir(parents=True)
+        mc.mkdir(parents=True)
         (lock / "owner").write_text("%d t\n" % os.getpid(), encoding="utf-8")
         rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(lock))
         self.assertNotEqual(rc, 0)
@@ -455,8 +457,8 @@ class Resources(Repo):
     def test_young_lock_without_owner_is_live(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)
         mc = self._mdir() / "merge-check"
-        (mc / "lock").mkdir(parents=True)
-        (mc / "run-y").mkdir()
+        suite_lock.lock_path(self._mdir()).mkdir(parents=True)
+        (mc / "run-y").mkdir(parents=True)
         copy = mc / "run-y" / "base"
         sh(self.w, "worktree", "add", "-q", "--detach", str(copy), "trunk")
         rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(copy))
@@ -1093,6 +1095,52 @@ class ReviewPack(Repo):
         finally:
             os.environ["PATH"] = old
 
+    def copy_branch(self, name, block_text, path, text):
+        """그 브랜치의 로드맵 사본이 블록을 block_text 로 바꾼다(계획 2 · 3 의 브랜치가 자기 사본에서 블록에 자신을 더하듯)."""
+        sh(self.w, "checkout", "-q", "-b", name, "trunk")
+        (self.w / RM).write_text(roadmap(block_text), encoding="utf-8")
+        (self.w / path).write_text(text, encoding="utf-8")
+        sh(self.w, "add", "-A")
+        sh(self.w, "commit", "-qm", name)
+        sh(self.w, "checkout", "-q", "trunk")
+
+    def test_open_branch_added_only_on_a_copy_is_found(self):
+        """지휘자 수리 2 — 열린 에픽 찾기도 상태 계산과 같은 규칙(블록을 잇는 사본 읽기)."""
+        self.branch("feature/a1", "x.txt", "a1\n")
+        self.branch("feature/a2", "y.txt", "a2\n")
+        self.copy_branch("feature/a2-next", BLOCK.replace("- 브랜치: feature/a2\n", "- 브랜치: feature/a2 · feature/a2-next\n"),
+                         "z.txt", "next\n")
+        self.copy_branch("feature/stale", BLOCK.replace("- 브랜치: feature/a2\n", "- 브랜치: feature/stale\n"),
+                         "s.txt", "stale\n")
+        out_dir = self.t / "pack-copy"
+        old = os.environ.get("PATH", "")
+        os.environ["PATH"] = str(self.t)  # gh 없음
+        try:
+            rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1", "--out", str(out_dir))
+        finally:
+            os.environ["PATH"] = old
+        self.assertEqual(rc, 0, out)
+        self.assertTrue((out_dir / "open-A2-feature_a2.diff").exists())
+        self.assertIn("+next", (out_dir / "open-A2-feature_a2-next.diff").read_text(encoding="utf-8"))
+        self.assertIn("feature/a2-next 도 열린 브랜치로 셌다", out)
+        self.assertFalse((out_dir / "open-A2-feature_stale.diff").exists(), "블록의 브랜치를 다 품지 않은 낡은 사본은 세지 않는다")
+
+    def test_copy_reading_failure_is_warned_not_silent(self):
+        self.branch("feature/a1", "x.txt", "a1\n")
+        import roadmap_status as rs
+        real = rs.extra_branches
+
+        def boom(*_a, **_k):
+            raise RuntimeError("git 을 실행하지 못했다: x")
+        rs.extra_branches = boom
+        try:
+            rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1",
+                               "--out", str(self.t / "pack-boom"))
+        finally:
+            rs.extra_branches = real
+        self.assertEqual(rc, 0, out)
+        self.assertIn("경고: 로드맵 사본을 읽지 못했다", out)
+
     def test_worktree_path(self):
         rc, out = self.cli("worktree-path", "--name", "a1")
         self.assertEqual(rc, 0)
@@ -1100,6 +1148,52 @@ class ReviewPack(Repo):
         self.assertTrue(out.strip().startswith(str(self.w.resolve())), out)
         self.assertEqual(self.cli("worktree-path", "--name", "../x")[0], 2)
         self.assertEqual(self.cli("worktree-path", "--name", "..")[0], 2)
+
+
+class ParallelTruth(Repo):
+    """지휘자 수리 2 — 공유 스위트 잠금 경로 · 원장 진행 · 「작업」 표(로드맵 밖 일 포함)."""
+    def test_suite_lock_path_and_state(self):
+        rc, out = self.cli("suite-lock", "--roadmap", RM)
+        self.assertEqual(rc, 0, out)
+        path, line = out.splitlines()[:2]
+        self.assertEqual(Path(path), suite_lock.lock_path(L.mpath(self.w, RM).parent))
+        self.assertEqual(line, "스위트 잠금: 비어 있음")
+        Path(path).mkdir(parents=True)
+        (Path(path) / "owner").write_text("%d impl t\n" % os.getppid(), encoding="utf-8")
+        _rc, out = self.cli("suite-lock", "--roadmap", RM)
+        self.assertIn("주인 %d impl t" % os.getppid(), out)
+        self.assertIn("잡은 시각", out)
+
+    def test_progress_shows_last_line_and_age(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        led = self.t / "progress.md"
+        led.write_text("# 진행\n\n- Task 1 끝\n- Task 2 스위트 잠금 대기\n", encoding="utf-8")
+        self.cli("add", "--roadmap", RM, "--session", SID, "--section", "실행 원장",
+                 "--cells", "A1 · plan.md · %s · 0" % led)
+        self.cli("add", "--roadmap", RM, "--session", SID, "--section", "실행 원장",
+                 "--cells", "A2 · plan2.md · %s · 0" % (self.t / "none.md"))
+        rc, out = self.cli("progress", "--roadmap", RM)
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(out.startswith("기준 "), out)
+        self.assertIn("A1 · plan.md · 마지막 고침", out)
+        self.assertIn("분 전) · - Task 2 스위트 잠금 대기", out)
+        self.assertIn("A2 · plan2.md · 원장을 읽지 못했다", out)
+
+    def test_progress_empty(self):
+        rc, out = self.cli("progress", "--roadmap", RM)
+        self.assertEqual(rc, 0)
+        self.assertIn("실행 원장 없음", out)
+
+    def test_works_table_holds_outside_roadmap_rows(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        rc, out = self.cli("add", "--roadmap", RM, "--session", SID, "--section", "작업",
+                           "--cells", "수리 PR · fix/conductor-parallel-truth · 로드맵 밖 · 구현 · conductor-fix2 · ~/x/design.md")
+        self.assertEqual(rc, 0, out)
+        rows = cs.load(L.mpath(self.w, RM), RM)["작업"]
+        self.assertEqual(rows, [{"종류": "수리 PR", "이름": "fix/conductor-parallel-truth", "에픽": "로드맵 밖",
+                                 "단계": "구현", "담당": "conductor-fix2", "근거": "~/x/design.md"}])
+        rc, _out = self.cli("add", "--roadmap", RM, "--session", SID, "--section", "작업", "--cells", "a · b · c")
+        self.assertEqual(rc, 2)
 
 
 if __name__ == "__main__":

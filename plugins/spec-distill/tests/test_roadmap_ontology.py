@@ -18,14 +18,14 @@ sys.path.insert(0, str(SCRIPTS))
 from roadmap_model import FIELDS, FORBIDDEN, REQUIRED, section_body  # noqa: E402
 from roadmap_render import BUNDLE_FORMAT  # noqa: E402
 from conductor_state import COLUMNS  # noqa: E402
-from repo_defaults import DIR_KEYS, TEXT_KEYS  # noqa: E402
+from repo_defaults import COUNT_KEYS, DIR_KEYS, TEXT_KEYS  # noqa: E402
 
 DOC = PLUGIN / "references" / "roadmap-ontology.md"
 SOURCES = ("roadmap_model.py", "roadmap_status.py", "check_bundle_coverage.py", "repo_defaults.py",
            "conductor_state.py", "roadmap_render.py")
 LAYERS = ("컨트롤 플레인", "계획", "실행", "기록")
 OBJECTS = ("로드맵", "에픽", "에픽 묶음", "설계문서", "산출물", "계획", "레포 설정", "브랜치", "커밋", "PR",
-           "worktree · agent", "결정 기록 줄", "재분해 이력 항목", "번호 대조 행", "미룸 · 넘김 줄",
+           "worktree · agent", "작업", "결정 기록 줄", "재분해 이력 항목", "번호 대조 행", "미룸 · 넘김 줄",
            "넘김 확인 줄", "판정", "구현 대조", "지휘 기록", "기계 상태", "리뷰 원장")
 HEAD = ["객체", "층", "식별자", "속성", "링크(칸 · 키)", "주인"]
 BACKTICK = re.compile(r"`([^`]+)`")
@@ -55,7 +55,7 @@ def frontmatter_keys() -> set:
     return {l.split(":")[0] for l in block.splitlines() if ":" in l}
 
 
-KEYS = frontmatter_keys() | set(DIR_KEYS) | set(TEXT_KEYS) | {"source_brief", "source_interview", "roadmap"}
+KEYS = frontmatter_keys() | set(DIR_KEYS) | set(TEXT_KEYS) | set(COUNT_KEYS) | {"source_brief", "source_interview", "roadmap"}
 
 
 def link_ok(token: str, corpus: str) -> bool:

@@ -50,6 +50,25 @@ for t in '### 계획 agent' '### 구현 agent'; do
   assert_contains "$blk" '네 worktree 에서 git switch --ignore-other-worktrees <브랜치> 로 그 브랜치에 선다' "${t} 틀: 자리의 기본(격리 agent 가 브랜치에 선다)"
   assert_not_contains "$blk" '자리: <에픽 worktree 절대경로>(브랜치 <브랜치>). 이 worktree 밖' "${t} 틀: 다른 worktree 를 자리로만 주던 옛 문장이 없다(양성 짝: 위 단언)"
 done
+# 지휘자 수리 2(병렬 진실) — 전체 스위트는 지휘자 대조와 같은 공유 잠금 아래서만. 경로는 기계 상태에서 도출해 싣는다.
+once '## 늘 싣는 것' 'conductor_ledger.py suite-lock --roadmap <로드맵>` 의 첫 줄로 얻어 싣는다(레포 전용 경로를 박지 않는다)'
+once '## 늘 싣는 것' '기다리는 것은 멈춤이 아니라 줄이다'
+once '## 늘 싣는 것' '하위가 띄우는 하위 agent(실행 방식의 과제 구현 · 리뷰)에게 보내는 글에도 이 잠금 줄과 경로를 그대로 싣는다'
+for t in '### 계획 agent' '### 구현 agent'; do
+  blk="$(printf '%s\n' "$TPL" | awk -v h="$t" '$0==h{f=1;next} f&&/^### /{exit} f')"
+  assert_contains "$blk" "suite_lock.py run --lock <스위트 잠금 경로> --owner <이 agent 이름> --wait <초> -- bash -c '<스위트 명령>' 으로만 돌린다" "${t} 틀: 전체 스위트는 공유 잠금 아래서만(bash -c 로 감싸 셸 연산자가 잠금 밖으로 새지 않게)"
+  assert_contains "$blk" '네가 띄우는 하위 agent(과제 구현 · 리뷰)에게 보내는 글에도 이 잠금 줄과 경로를 그대로 싣는다' "${t} 틀: 실행 방식의 하위 agent 에게도 잠금 줄"
+done
+assert_not_contains "$TXT" 'sdd-mirror' "공유 잠금 경로를 사용자 폴더로 박지 않는다(양성 짝: suite-lock 으로 얻어 싣는다)"
+IMPL0="$(printf '%s\n' "$TPL" | awk '$0=="### 구현 agent"{f=1;next} f&&/^### /{exit} f')"
+# 지휘자 수리 2 추가(2026-10-19 실측) — 격리 worktree 의 하위는 공유 체크아웃 쪽 폴더에 Write · Edit 도구로 쓸 수 없다(셸은 된다).
+# 임시 폴더는 resource-dir 경로 그대로(지휘자가 정리한다)이고, 셸로도 막히면 자기 worktree 안 git-ignored 자리를 쓰고 보고한다.
+once '## 늘 싣는 것' '격리 worktree 에서 일하는 하위는 이 폴더에 Write · Edit 도구로 쓸 수 없다 — 셸 명령 · 스크립트로 쓴다'
+once '## 늘 싣는 것' '셸로도 막히면 자기 worktree 안 `git check-ignore -q <자리>` 로 무시되는지 확인한 자리(예: `.claude/tmp/<agent 이름>`)를 쓰고 그 경로를 마지막 보고에 적는다'
+once '## 늘 싣는 것' '스위트 잠금은 옮기지 않는다 — 잡지 못하면(종료 코드 3 · 75) 잠금 없이 전체 스위트를 돌리지 말고 그 사실을 보고한다'
+once '## 늘 싣는 것' '스위트 잠금도 같은 폴더 아래라 `suite_lock.py`(셸)로 잡는다'
+# 구현 담당자가 이름 받은 테스트만 돌리면 공유 락의 회귀를 놓친다(R2a 계획 3 실측)
+assert_contains "$IMPL0" '과제 경계마다 바꾼 파일을 코퍼스로 읽는 락까지 넓게 돈다(테스트 안에서 그 파일 이름으로 찾는다) — 전체 스위트는 잠금 아래 끝에 한 번. 네가 띄우는 과제 구현 agent 에게 보내는 글에도 이 줄을 싣는다' "구현 틀: 과제 경계마다 바꾼 파일을 읽는 락까지 · 전체 스위트는 끝에 한 번 · 과제 구현 agent 에게도"
 # 지휘자 수리 5 — 구현 틀의 마지막 전체 리뷰가 과제 사이 이음매와 계획이 쓴 테스트 코드도 묻는다
 IMPL="$(printf '%s\n' "$TPL" | awk '$0=="### 구현 agent"{f=1;next} f&&/^### /{exit} f')"
 assert_contains "$IMPL" '과제 사이 이음매(끝에서 끝 흐름 · 종료 코드를 받는 쪽 · 상태 가정)와 계획이 쓴 테스트 코드도 묻게 한다' "구현 틀: 마지막 전체 리뷰에 이음매 · 계획이 쓴 테스트 코드"

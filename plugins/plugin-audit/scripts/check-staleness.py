@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+from typing import Optional
 from pathlib import Path
 
 # 결정론: 파일 목록은 항상 정렬해서 순회한다 (매니페스트 비결정 = 감사자가 실행마다 다른 사실).
@@ -125,6 +126,23 @@ def _looks_like_path_claim(cand: str) -> bool:
     return True
 
 
+def _bag(excluded: Optional[dict]) -> dict:
+    """뺀 수를 모으는 dict. 안 받았으면 버리는 dict."""
+    return excluded if excluded is not None else {
+        "fence_lines": 0, "placeholder_or_url": 0, "generation_target": 0}
+
+
+def _count_fence_lines(text: str) -> int:
+    """코드 펜스 안 줄 수(펜스 표지 줄은 뺀다)."""
+    n, in_fence = 0, False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+        elif in_fence:
+            n += 1
+    return n
+
+
 def _iter_docs(plugin_dir: Path):
     seen = []
     for pat in DOC_GLOBS:
@@ -141,7 +159,8 @@ def _repo_rel(plugin_dir, cand, repo_root):
         return cand
 
 
-def scan_dangling_doc_claims(plugin_dir: Path, repo_root: Path, facts):
+def scan_dangling_doc_claims(plugin_dir: Path, repo_root: Path, facts,
+                             excluded: Optional[dict] = None):
     """문서가 백틱으로 인용한 경로가 워킹트리에도 HEAD에도 없으면 flag — 2-way lookup
     (worktree + `git cat-file -e HEAD:...`).
 
@@ -158,6 +177,7 @@ def scan_dangling_doc_claims(plugin_dir: Path, repo_root: Path, facts):
     파일이 존재한다"류 주장이라 트리 어디든 그 basename이 있으면 satisfied — 실존 파일을 dangling
     으로 라벨링하는 건 거짓 사실이기 때문(reviewer Important 2)."""
     import subprocess
+    excluded = _bag(excluded)
     for rel in _iter_docs(plugin_dir):
         text = (plugin_dir / rel).read_text(encoding="utf-8", errors="replace")
         for lineno, line in iter_lines_outside_fences(text):
@@ -165,11 +185,15 @@ def scan_dangling_doc_claims(plugin_dir: Path, repo_root: Path, facts):
                 cand = m.group(1).strip()
                 if "/" not in cand and not cand.endswith(KNOWN_CLAIM_EXTENSIONS):
                     continue  # 슬래시도 확장자도 없음 — 경로 주장 아님 (산문 토큰)
-                if not PATHISH_RE.search(cand) or is_fp_claim(cand):
+                if not PATHISH_RE.search(cand):
+                    continue
+                if is_fp_claim(cand):
+                    excluded["placeholder_or_url"] += 1
                     continue
                 if not _looks_like_path_claim(cand):
                     continue
                 if _is_generation_target(cand, line):
+                    excluded["generation_target"] += 1
                     continue  # 타깃 저장소에 생성될 산출물 — 부재가 정상 (reviewer Important 1)
                 stripped = LINE_NUM_SUFFIX_RE.sub("", cand)  # `file.py:19` 줄-인용 접미사 제거
                 target = (plugin_dir / stripped)
@@ -258,10 +282,11 @@ def scan_version_incoherence(plugin_dir: Path, facts):
 DRAFT_MARKER_RE = re.compile("|".join(DRAFT_MARKERS))
 
 
-def scan_draft_residue(plugin_dir: Path, facts):
+def scan_draft_residue(plugin_dir: Path, facts, excluded: Optional[dict] = None):
     """출하 문서(README·CHANGELOG·commands·templates)에 초안 잔재 마커가 남아있는지.
 
     DRAFT_MARKERS는 스크립트가 소유 — 감사 프롬프트 표면에 노출하지 않는다 (자기매치 방지)."""
+    excluded = _bag(excluded)
     for rel in _iter_docs(plugin_dir):
         text = (plugin_dir / rel).read_text(encoding="utf-8", errors="replace")
         for lineno, line in iter_lines_outside_fences(text):
@@ -270,6 +295,7 @@ def scan_draft_residue(plugin_dir: Path, facts):
                 continue
             quote = line.strip()
             if is_fp_claim(quote):
+                excluded["placeholder_or_url"] += 1
                 continue
             emit(facts, "draft residue", str(rel), lineno, quote, marker=m.group(0))
 
@@ -335,7 +361,7 @@ def _prerequisites_declares(readme_text: str, plugin_name: str) -> bool:
     return plugin_name in m.group(1)
 
 
-def scan_dangling_refs(plugin_dir: Path, facts):
+def scan_dangling_refs(plugin_dir: Path, facts, excluded: Optional[dict] = None):
     """두 하위 패턴:
     (a) 자기 `/command` 자기-주장 — `commands/<name>.md` 도 `skills/<name>/SKILL.md` 도 없고, 같은 줄에 다른 플러그인
         귀속(선행 bold 또는 후행 괄호)이 없으면 flag (있으면 그 플러그인 커맨드에 대한 통합
@@ -347,6 +373,7 @@ def scan_dangling_refs(plugin_dir: Path, facts):
         판단으로 넘어간다) 사실에 `registry: "absent"`를 남긴다. 자기 이름 참조는 스킵
         (self-reference 표 관용구, 실측 quality-gates/spec-distill README).
     """
+    excluded = _bag(excluded)
     own_name = _own_plugin_name(plugin_dir)
     registry = _load_registry()
     registry_absent = registry is None
@@ -361,6 +388,7 @@ def scan_dangling_refs(plugin_dir: Path, facts):
             for m in SLASH_CMD_RE.finditer(line):
                 quote = m.group(0)
                 if is_fp_claim(quote):
+                    excluded["placeholder_or_url"] += 1
                     continue
                 attrs = [a.group(1) for a in BOLD_ATTR_RE.finditer(line) if a.start() < m.start()]
                 attrs += [a.group(1) for a in PAREN_ATTR_RE.finditer(line)]
@@ -375,7 +403,10 @@ def scan_dangling_refs(plugin_dir: Path, facts):
             for m in COLON_REF_RE.finditer(line):
                 other = m.group(1)
                 quote = m.group(0)
-                if is_fp_claim(quote) or other == own_name:
+                if is_fp_claim(quote):
+                    excluded["placeholder_or_url"] += 1
+                    continue
+                if other == own_name:
                     continue
                 if (not registry_absent) and _registry_has_plugin(registry, other):
                     continue  # 레지스트리가 설치를 확인 — dangling 아님
@@ -459,7 +490,7 @@ def _actual_skill_count(plugin_dir: Path) -> int:
     return sum(1 for d in skills_dir.iterdir() if d.is_dir() and (d / "SKILL.md").is_file())
 
 
-def scan_declared_surface(plugin_dir: Path, facts):
+def scan_declared_surface(plugin_dir: Path, facts, excluded: Optional[dict] = None):
     """README의 'Hooks Installed'/'N skills' 류 선언 개수 ↔ 디스크 실제 개수 불일치.
     선언 자체가 없으면(섹션 부재·숫자 언급 부재) 비교 대상이 없으므로 스킵 — 이는 category
     absence의 몫이지 이 클래스가 판단할 일이 아니다."""
@@ -478,7 +509,10 @@ def scan_declared_surface(plugin_dir: Path, facts):
 
     for lineno, line in iter_lines_outside_fences(text):
         m = SKILLS_COUNT_RE.search(line)
-        if not m or is_fp_claim(line):
+        if not m:
+            continue
+        if is_fp_claim(line):
+            _bag(excluded)["placeholder_or_url"] += 1
             continue
         declared_skills = int(m.group(1))
         actual_skills = _actual_skill_count(plugin_dir)
@@ -562,16 +596,20 @@ def main() -> int:
         return 1
     repo_root = args.repo_root or _find_git_root(plugin_dir)
     facts: list = []
-    scan_dangling_doc_claims(plugin_dir, repo_root, facts)   # Class 1
+    excluded = {"fence_lines": 0, "placeholder_or_url": 0, "generation_target": 0}
+    for rel in _iter_docs(plugin_dir):
+        excluded["fence_lines"] += _count_fence_lines(
+            (plugin_dir / rel).read_text(encoding="utf-8", errors="replace"))
+    scan_dangling_doc_claims(plugin_dir, repo_root, facts, excluded=excluded)   # Class 1
     scan_frontmatter_truncation(plugin_dir, facts)           # Class 2
     scan_version_incoherence(plugin_dir, facts)              # Class 3
-    scan_draft_residue(plugin_dir, facts)                    # Class 4
-    scan_dangling_refs(plugin_dir, facts)                    # Class 5
+    scan_draft_residue(plugin_dir, facts, excluded=excluded)     # Class 4
+    scan_dangling_refs(plugin_dir, facts, excluded=excluded)     # Class 5
     scan_description_drift(plugin_dir, repo_root, facts)     # Class 6
-    scan_declared_surface(plugin_dir, facts)                 # Class 7
+    scan_declared_surface(plugin_dir, facts, excluded=excluded)  # Class 7
     scan_category_absence(plugin_dir, facts)                 # Class 8
     facts.sort(key=lambda f: (f["class"], f["file"], f["line"]))  # 결정론
-    print(json.dumps({"facts": facts}, ensure_ascii=False, indent=2))
+    print(json.dumps({"facts": facts, "excluded": excluded}, ensure_ascii=False, indent=2))
     return 0
 
 

@@ -39,6 +39,8 @@ SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
 from kill_switch_active import kill_switch_active  # noqa: E402
 import conductor_state as cs  # noqa: E402
+import repo_defaults  # noqa: E402
+import suite_lock  # noqa: E402
 from roadmap_model import BLOCK_ID_RE, DEFAULT_REF, NO_DEFAULT, FormatError  # noqa: E402
 from state_path import state_root_for_common  # noqa: E402
 
@@ -236,6 +238,48 @@ def machine_error_line(why) -> str:
     return clean(why if why.startswith("기계 상태") else "기계 상태를 읽지 못했다 — %s" % why)
 
 
+OUTSIDE = "로드맵 밖"
+WORK_DONE = cs.WORK_DONE
+
+
+def recommended(report: dict):
+    """(권장 수, 출처). 로드맵 frontmatter `parallel_default` 가 없으면 기본값. 값이 깨졌으면 (None, 사유)."""
+    settings = report.get("settings") or {}
+    value = settings.get("parallel_default", repo_defaults.PARALLEL_DEFAULT) if settings else repo_defaults.PARALLEL_DEFAULT
+    if value is None:
+        return None, "로드맵 머리말 parallel_default 가 깨졌다"
+    src = (settings.get("sources") or {}).get("parallel_default", "기본값")
+    return value, ("로드맵 머리말" if src == "frontmatter" else src)
+
+
+def running(machine: dict) -> int:
+    """돌고 있는 큰 작업 수(사본) — 살아 있는 agent 이름과, 끝나지 않은 작업 줄의 담당 agent(수리 구현처럼 작업 표에만
+    적은 것)의 합집합."""
+    names = {r["이름"] for r in machine.get("살아 있는 agent") or []}
+    names |= {w["담당"] for w in machine.get("작업") or [] if w["담당"] != "없음" and w["단계"] not in WORK_DONE}
+    return len(names)
+
+
+def works_lines(report: dict) -> list:
+    """기계 상태의 「작업」 표(로드맵 밖 일 포함) · 돌고 있는 큰 작업 수와 권장 수 · 공유 스위트 잠금. 기계 상태 사본이다 —
+    지휘자는 사용자에게 말하기 전에 하니스 agent 목록으로 맞춘다."""
+    machine = report.get("machine")
+    lines = []
+    lock = report.get("suite_lock") or ""
+    busy = bool(lock) and not lock.endswith("비어 있음")
+    if machine is not None and (machine.get("살아 있는 agent") or machine.get("작업") or busy):
+        rec, src = recommended(report)
+        rec_text = ("권장 %d(%s — 상한이 아니다, 사용자가 늘린다)" % (rec, src)) if rec is not None else ("권장 수 모름 — %s" % src)
+        lines.append(clean("돌고 있는 큰 작업 %d(기계 상태 사본) · %s" % (running(machine), rec_text)))
+        rows = machine.get("작업") or []
+        lines.append("작업:" if rows else "작업: 없음(로드맵 밖 일 포함)")
+        for w in rows:
+            lines.append(clean("    %s %s — %s · %s · 담당 %s · %s" % (w["종류"], w["이름"], w["에픽"], w["단계"], w["담당"], w["근거"])))
+    if busy or (lock and lines):
+        lines.append(clean(lock))
+    return lines
+
+
 def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
     lines = []
     if select_error:
@@ -274,6 +318,7 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
         if ov:
             lines.append("경로 예약 겹침(정보): %d개" % len(ov))
             lines += [clean("    %s ↔ %s: %s" % (o["blocks"][0], o["blocks"][1], " · ".join(o["paths"]))) for o in ov]
+        lines += [clean("경고: %s" % w) for w in (report.get("settings") or {}).get("warnings") or []]
         lines += [clean("검사 불가: 형식 깨짐 — %s" % e) for e in report.get("format_errors") or []]
         lines += [clean("검사 불가: %s" % r) for r in report.get("unknown_reasons") or []]
         ruled = [b for b in blocks if "rulings" in b]
@@ -290,6 +335,7 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
                 else:
                     rows += [clean("    %s: %s" % (b.get("id"), r)) for r in b["rulings"]]
             lines += rows or ["    없음"]
+        lines += works_lines(report)
     lines += interview_lines(interview)
     lines += [clean("캐시를 쓰지 못했다 — %s" % n) for n in notes]
     return "\n".join(lines)
@@ -320,6 +366,11 @@ def tasks_output(items, select_error=None):
         else:
             reason = b.get("reason") or "작업 상태가 없다"
             out.append(clean("%s · 알 수 없음(%s)" % (title, reason)) + "\tkeep")
+    for w in (report.get("machine") or {}).get("작업") or []:
+        if w["에픽"] != OUTSIDE:
+            continue
+        state = "completed" if w["단계"] in WORK_DONE else "in_progress"
+        out.append(clean("%s %s %s — %s" % (OUTSIDE, w["종류"], w["이름"], w["단계"])) + "\t" + state)
     return out, "", 0
 
 
@@ -696,6 +747,18 @@ def machine_for(repo, roadmap_rel: str):
         return None, str(exc)
 
 
+def suite_lock_for(repo, roadmap_rel: str) -> str:
+    """공유 스위트 잠금의 주인 · 잡은 시각 한 줄. 경로를 못 풀면 그 사유."""
+    common = repo.line("rev-parse", "--git-common-dir")
+    if not common:
+        return "스위트 잠금: 읽지 못함 — git 공용 디렉토리를 찾지 못했다"
+    try:
+        mdir = cs.machine_dir(state_root_for_common(Path(repo.cwd, common).resolve()), roadmap_rel)
+    except cs.MachineError as exc:
+        return "스위트 잠금: 읽지 못함 — %s" % exc
+    return suite_lock.describe(suite_lock.lock_path(mdir))
+
+
 def gh_lookup_for(repo, deadline):
     """브랜치 → PR 사실을 `gh pr list` 로. gh 가 없으면 None."""
     exe = shutil.which("gh")
@@ -863,6 +926,9 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True, fo
         r["fetched_at"] = fetched  # 첫 줄의 받은 시각도 캐시 밖에서
     overlay(items, lambda rel: machine_for(repo, rel), gh_lookup_for(repo, deadline) if use_gh else None, use_gh,
             deadline=deadline, focus=focus)
+    if use_gh:
+        for p, r in items:
+            r["suite_lock"] = suite_lock_for(repo, p)
     view.update(items=items, interview=interview, select_error=select_error)
     return view
 

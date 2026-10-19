@@ -171,11 +171,24 @@ sys.exit(m.main(["run", "--roadmap", sys.argv[2], "--no-fetch", "--branch", "fea
 assert_eq "$rc" "3" "내부 오류 → rc 3"
 assert_contains "$out" "내부 오류: ValueError: x" "내부 오류 줄"
 
-# 8 — 잠금: 살아 있는 주인이면 5, 죽은 주인이면 풀고 간다
-LOCKD="$(cd "$T/ut" && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as cs, repo_defaults as r, state_path as s; print(cs.machine_dir(s.state_root(), sys.argv[2]) / r.MERGE_CHECK_DIR / "lock")' "$ROOT/plugins/spec-distill/scripts" "$RM")"
+# 8 — 잠금: 하위 agent 의 전체 스위트와 같은 공유 스위트 잠금(지휘자 수리 2). 살아 있는 주인이면 5, 죽은 주인이면 풀고 간다
+LOCKD="$(cd "$T/ut" && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as cs, suite_lock as sl, state_path as s; print(sl.lock_path(cs.machine_dir(s.state_root(), sys.argv[2])))' "$ROOT/plugins/spec-distill/scripts" "$RM")"
+LEDGER_LOCK="$(cd "$T/ut" && python3 "$ROOT/plugins/spec-distill/scripts/conductor_ledger.py" suite-lock --roadmap "$RM" | head -1)"
+assert_eq "$LEDGER_LOCK" "$LOCKD" "스위트 대조와 담당자에게 싣는 경로(ledger suite-lock)가 같은 잠금이다"
+case "$LOCKD" in */files/suite-lock) ok "잠금은 기계 상태 자원 폴더 아래에서 도출한다" ;; *) no "잠금 경로가 기계 상태 자원 폴더 아래가 아니다: $LOCKD" ;; esac
 mkdir -p "$LOCKD"; printf '%s x\n' "$$" > "$LOCKD/owner"
 W="$T/ut"; out="$(mc --branch feature/ut)"; rc=$?
 assert_eq "$rc" "5" "살아 있는 잠금 → rc 5"
+assert_contains "$out" "잡은 시각" "바쁜 잠금은 주인 · 잡은 시각을 보인다(잠금 대기는 줄)"
+printf 'r2a-plan2-impl 2026-10-19 08:07\n' > "$LOCKD/owner"; touch -t 202610190807 "$LOCKD"
+out="$(mc --branch feature/ut)"; rc=$?
+assert_eq "$rc" "5" "프로세스 번호 없는 주인(사람 · 다른 도구가 쓴 잠금)은 오래돼도 훔치지 않는다 → rc 5"
+assert_contains "$out" "r2a-plan2-impl" "그 주인을 보인다"
+assert_eq "$(cat "$LOCKD/owner")" "r2a-plan2-impl 2026-10-19 08:07" "남의 잠금을 그대로 둔다"
+printf '%s x\n' "$$" > "$LOCKD/owner"
+out="$(cd "$W" && python3 "$MC" run --roadmap "$RM" --no-fetch --branch feature/ut --wait 1 2>&1)"; rc=$?
+assert_eq "$rc" "5" "--wait 안에 못 잡으면 rc 5"
+assert_contains "$out" "기다린다(줄)" "--wait 는 줄을 선다고 알린다"
 printf '999999 x\n' > "$LOCKD/owner"
 out="$(mc --branch feature/ut)"; rc=$?
 assert_contains "$out" "주인 없는 잠금을 풀었다" "죽은 주인의 잠금은 알리고 푼다"

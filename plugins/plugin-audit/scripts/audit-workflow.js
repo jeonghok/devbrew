@@ -1,11 +1,11 @@
 export const meta = {
   name: 'plugin-audit',
-  description: 'devbrew 플러그인 읽기전용 6축 감사 — 축별 발견 → 적대적 반박 → 병합 → 심층검증',
+  description: 'devbrew 플러그인 읽기전용 감사 (고른 축) — 축별 발견 → 적대적 반박 → 병합 → 심층검증',
   phases: [
-    { title: '감사', detail: '6축 병렬 발견 (plugin-auditor, 쓰기 불가)' },
+    { title: '감사', detail: '고른 축 병렬 발견 (plugin-auditor, 쓰기 불가)' },
     { title: '검증', detail: '축별 적대적 반박 (audit-refuter, 기본 verdict = refuted)' },
     { title: '병합', detail: 'exact-key dedup + codex 갭 반박' },
-    { title: '심층검증', detail: 'CRITICAL/IMPORTANT 생존 갭에 2개 추가 렌즈 (캡 8)' },
+    { title: '심층검증', detail: 'CRITICAL/IMPORTANT 생존 갭에 2개 추가 렌즈 (상한 없음)' },
   ],
 }
 
@@ -28,6 +28,22 @@ const target = _args.target || 'unknown'
 const pack = _args.evidencePack
 const codexFindings = _args.codexFindings || []
 
+// Axes to run — chosen at the consent gate. Omitted = all six. Anything else that is not a
+// non-empty list of distinct integers 1..6 stops the run here, before the first dispatch.
+const AXES_RUN = (() => {
+  const raw = _args.axes
+  if (raw === undefined) return [1, 2, 3, 4, 5, 6]
+  const bad = (why) => { throw new Error('[plugin-audit] 축 선택이 잘못됐다 — ' + why) }
+  if (!Array.isArray(raw)) bad('목록이 아니다 (' + JSON.stringify(raw) + ')')
+  if (!raw.length) bad('고른 축이 없다')
+  for (const x of raw) {
+    if (!Number.isInteger(x) || x < 1 || x > 6) bad('1~6 정수가 아닌 값 ' + JSON.stringify(x))
+  }
+  if (new Set(raw).size !== raw.length) bad('같은 축이 두 번 있다 (' + JSON.stringify(raw) + ')')
+  return [...raw].sort((a, b) => a - b)
+})()
+const RUN_SECURITY = AXES_RUN.includes(6)
+
 // Gap scope (LD5) triad — built ONCE from the target + pack.extra_scope and referenced by BOTH
 // the CONTRACT preamble (spot 4) and Gate E (spot 7), so the two can never silently diverge.
 // A lockstep test pins that both carry `plugins/${target}`.
@@ -37,11 +53,12 @@ const gapScope = [
   '`.claude-plugin/marketplace.json`의 ' + target + ' 항목',
 ].join(' · ')
 
-// Candidate-clue / open-question ids come from the seed-derived pack. An EMPTY array means "no
-// pre-seeded clues" — we OMIT the enum entirely (JSON Schema `enum: []` matches nothing, which
-// would reject every id); omission lets the auditor mint fresh ids (spot 6).
-const dVerdictIds = (pack.candidate_clues || []).map((c) => c.id)
-const oqIds = (pack.open_questions || []).map((q) => q.id)
+// Candidate-clue / open-question ids come from the seed-derived pack, and each axis may judge only
+// its own — the same `it.axis === ax.n` filter as axisClueBlock / axisOqBlock / ASSIGNED_AXIS. An
+// EMPTY list means "no pre-seeded clues for this axis" — we OMIT the enum entirely (JSON Schema
+// `enum: []` matches nothing, which would reject every id); omission lets the auditor mint fresh ids (spot 6).
+const ownIds = (list, axisN) => (list || []).filter((it) => it.axis === axisN).map((it) => it.id)
+const idSchema = (ids) => ({ type: 'string', ...(ids.length ? { enum: ids } : {}) })
 
 const EVIDENCE = {
   type: 'array',
@@ -57,7 +74,10 @@ const EVIDENCE = {
   },
 }
 
-const AXIS_SCHEMA = {
+// `pending` defers axis 2's condition (c) to axis 6 — offered only when axis 6 runs.
+const STEELMAN_ENUM = ['a', 'b', 'c', 'd', 'none', ...(RUN_SECURITY ? ['pending'] : [])]
+
+const axisSchema = (axisN) => ({
   type: 'object',
   required: ['findings', 'd_verdicts', 'oq_answers', 'new_open_questions'],
   properties: {
@@ -81,7 +101,7 @@ const AXIS_SCHEMA = {
           fix_cost_rationale: { type: 'string' },
           reference_gap: { type: 'string' },
           oq_ref: { type: 'string' },
-          steelman_condition: { type: 'string', enum: ['a', 'b', 'c', 'd', 'none', 'pending'] },
+          steelman_condition: { type: 'string', enum: STEELMAN_ENUM },
           plain: { type: 'string', description: 'Optional. The same finding in one plain sentence a first-time reader understands — no internal IDs.' },
         },
       },
@@ -92,7 +112,7 @@ const AXIS_SCHEMA = {
         type: 'object',
         required: ['id', 'verdict', 'reason'],
         properties: {
-          id: { type: 'string', ...(dVerdictIds.length ? { enum: dVerdictIds } : {}) },
+          id: idSchema(ownIds(pack.candidate_clues, axisN)),
           verdict: { type: 'string', enum: ['confirmed', 'withdrawn', 'reclassified', 'unverified'] },
           reason: { type: 'string' },
           impact: { type: 'string' },
@@ -107,13 +127,13 @@ const AXIS_SCHEMA = {
         type: 'object',
         required: ['id', 'reason'],
         properties: {
-          id: { type: 'string', ...(oqIds.length ? { enum: oqIds } : {}) },
+          id: idSchema(ownIds(pack.open_questions, axisN)),
           answer: { type: 'string' },
           reason: { type: 'string' },
           evidence: { type: 'array', items: { type: 'object' } },
           left_evidence: { type: 'array', items: { type: 'object' } },
           right_evidence: { type: 'array', items: { type: 'object' } },
-          steelman_condition: { type: 'string', enum: ['a', 'b', 'c', 'd', 'none', 'pending'] },
+          steelman_condition: { type: 'string', enum: STEELMAN_ENUM },
         },
       },
     },
@@ -132,7 +152,7 @@ const AXIS_SCHEMA = {
       },
     },
   },
-}
+})
 
 const REFUTE_SCHEMA = {
   type: 'object',
@@ -145,7 +165,7 @@ const REFUTE_SCHEMA = {
         required: ['finding_id', 'verdict', 'reason'],
         properties: {
           finding_id: { type: 'string' },
-          verdict: { type: 'string', enum: ['refuted', 'survives'] },
+          verdict: { type: 'string', enum: ['refuted', 'survives', 'uncertain'] },
           gate: { type: 'string', enum: ['A', 'B', 'C', 'D', 'E', 'F'] },
           reason: { type: 'string' },
           facts: { type: 'array', items: { type: 'string' } },
@@ -163,8 +183,11 @@ const DEEP_SCHEMA = {
   properties: {
     finding_id: { type: 'string' },
     refuted: { type: 'boolean' },
+    uncertain: { type: 'boolean' },
     reason: { type: 'string' },
   },
+  if: { properties: { uncertain: { const: true } }, required: ['uncertain'] },
+  then: { properties: { refuted: { const: true } } },
 }
 
 // Shared prompt preamble. Facts and boundaries only — never a verdict. A shared premise
@@ -210,7 +233,10 @@ const CONTRACT = [
   '',
   '## 후보 단서 (검증하라, 전제하지 마라)',
   ...((pack.candidate_clues || []).length
-    ? pack.candidate_clues.map((c) => '- ' + c.id + ' (축' + c.axis + '): ' + c.claim + ' — ' + c.file + ':' + c.line)
+    ? [
+        ...pack.candidate_clues.map((c) => '- ' + c.id + ' (축' + c.axis + '): ' + c.claim + ' — ' + c.file + ':' + c.line),
+        '- 다른 축의 단서는 맥락이다 — `d_verdicts`에 판정하지 마라(판정해도 버려진다). 너의 축 단서는 아래 「이 축의 후보 단서」에 있다.',
+      ]
     : ['- 후보 단서 없음 — fresh discovery (씨앗 없이 네가 직접 발견하라).']),
   '',
   '## Evidence Pack (사실만)',
@@ -236,7 +262,10 @@ const CONTRACT = [
   '',
   '## 결정론 staleness sweep — **사실만. 판정은 네가 한다** (§5.4a)',
   '아래는 파일시스템 전수 열거가 낸 *관측된 사실*이다. 각 사실이 갭인지는 **네가** 판정한다',
-  '(코드 펜스·플레이스홀더·생성물 경로는 이미 제외됐다 — 그래도 원문을 직접 확인하라).',
+  (ex => (ex && ['fence_lines', 'placeholder_or_url', 'generation_target'].every((k) => Number.isInteger(ex[k])))
+    ? '(뺀 것: 코드 펜스 안 ' + ex.fence_lines + '줄 · 자리표시자·URL 때문에 건너뛴 후보 ' + ex.placeholder_or_url
+      + '건 · 생성 대상 경로 ' + ex.generation_target + '개 — 그래도 원문을 직접 확인하라).'
+    : '(뺀 개수를 받지 못했다 — 셀 수 없음. 그래도 원문을 직접 확인하라).')(pack.staleness_excluded),
   ...((pack.staleness_facts || []).length
     ? pack.staleness_facts.map((f) => '  - [' + f.class + '] `' + f.file + ':' + f.line + '` — ' + f.quote)
     : ['  - (staleness sweep 미실행 또는 사실 0건 — 없음을 사실로 받는다)']),
@@ -331,8 +360,12 @@ const AXES = [
       '**steelman 조건 (verbatim):**',
       STEELMAN,
       '',
-      '**조건 (c)는 축⑥(보안)의 판정에 의존한다.** 네가 (c)를 단독 판정할 수 없으면',
-      '`steelman_condition: "pending"`으로 두어라 — orchestrator가 축⑥의 판정으로 해소한다.',
+      ...(RUN_SECURITY
+        ? [
+          '**조건 (c)는 축⑥(보안)의 판정에 의존한다.** 네가 (c)를 단독 판정할 수 없으면',
+          '`steelman_condition: "pending"`으로 두어라 — orchestrator가 축⑥의 판정으로 해소한다.',
+        ]
+        : ['축⑥은 이번 감사에서 돌지 않는다 — (c) 를 네가 직접 판정하거나 `none` 으로 두어라.']),
       '',
       '**이 축의 후보 단서 (검증하라):**',
       ...axisClueBlock(2),
@@ -430,6 +463,19 @@ const AXES = [
   },
 ]
 
+// id → axis for every seed clue / open question an axis question block picks up — the same
+// `c.axis === ax.n` / `q.axis === ax.n` filters as axisClueBlock / axisOqBlock. Returned so the
+// post-run checks know which ids belong to an axis that did not run, without a hand-copied map.
+const ASSIGNED_AXIS = {}
+for (const it of [...(pack.candidate_clues || []), ...(pack.open_questions || [])]) {
+  if (!AXES.some((ax) => it.axis === ax.n)) continue
+  const prev = Object.prototype.hasOwnProperty.call(ASSIGNED_AXIS, it.id) ? ASSIGNED_AXIS[it.id] : undefined
+  if (prev !== undefined && prev !== it.axis) {
+    throw new Error('[plugin-audit] 같은 단서 id 가 두 축에 있다 — ' + it.id + ' (축' + prev + ' · 축' + it.axis + ')')
+  }
+  ASSIGNED_AXIS[it.id] = it.axis
+}
+
 const findPrompt = (ax) => {
   // The OQ→axis binding comes from the seed-derived pack (spot 5), not a hardcoded ['OQ1'] list.
   const oq = (pack.open_questions || []).filter((q) => q.axis === ax.n).map((q) => q.id)
@@ -453,7 +499,8 @@ const refutePrompt = (findings, label) => [
   '# 적대적 검증 — 아래 갭들을 **반박하라**',
   '',
   '너의 **기본 verdict는 `refuted`다.** 갭이 살아남는 것은 예외이지 기본값이 아니다.',
-  '확신이 없으면 `refuted`다. 다음 게이트 중 **하나라도** 실패하면 kill하라:',
+  '다음 게이트 중 **하나라도** 실패하면 kill하라. 읽은 것으로 살리지도 죽이지도 못하면 `uncertain` 을',
+  '내고 어느 게이트에서 막혔는지와 이유를 적어라 — 목록에서는 빠지고 리포트 부록에 「불확실」로 따로 보인다:',
   '',
   '여섯 게이트 A–F는 네 시스템 프롬프트(persona)와 **의미 단위로 일치**한다. `refutation.gate`에',
   '어느 게이트가 죽였는지(A–F) 기록하라.',
@@ -496,11 +543,11 @@ const axisFailures = []
 const degradedEvents = []
 
 const results = await pipeline(
-  AXES,
+  AXES.filter((ax) => AXES_RUN.includes(ax.n)),
   (ax) => auditor(findPrompt(ax), {
     label: '축' + ax.n + ' ' + ax.name,
     phase: '감사',
-    schema: AXIS_SCHEMA,
+    schema: axisSchema(ax.n),
   }),
   async (res, ax) => {
     // A dead axis loses everything it owned — schema retry exhaustion validates the whole
@@ -534,7 +581,7 @@ const results = await pipeline(
 )
 
 const alive = results.filter(Boolean)
-log('감사 완료: ' + alive.length + '/6 축 생존, 축 사망 ' + axisFailures.length + '건')
+log('감사 완료: ' + alive.length + '/' + AXES_RUN.length + ' 축 생존, 축 사망 ' + axisFailures.length + '건')
 
 // ── 병합 (barrier — dedup needs every finding in one place)
 phase('병합')
@@ -550,9 +597,12 @@ for (const r of alive) {
       rec.status = 'reported'
       rec.deep_verified = null
       rec.unverified = true
-    } else if (v && v.verdict === 'refuted') {
+    } else if (v && (v.verdict === 'refuted' || v.verdict === 'uncertain')) {
       rec.status = 'refuted'
-      rec.refutation = { stage: 'axis', gate: v.gate, reason: v.reason, facts: v.facts || [] }
+      rec.refutation = {
+        stage: 'axis', gate: v.gate, reason: v.reason, facts: v.facts || [],
+        uncertain: v.verdict === 'uncertain',
+      }
       rec.deep_verified = null
     } else if (!v) {
       // The refuter answered but skipped this finding. Silence is not a verdict.
@@ -565,7 +615,7 @@ for (const r of alive) {
       })
     } else {
       rec.status = 'reported'
-      rec.deep_verified = null   // deepPool에 들면 심층검증이 덮는다; 안 들면 null 유지 (3-상태, §9.2)
+      rec.deep_verified = null   // deepPool에 들면 심층검증이 덮는다; 안 들면 null 유지 (true · null, §9.2)
     }
     findings.push(rec)
   }
@@ -587,9 +637,12 @@ if (codexFindings.length) {
   for (const f of codexFindings) {
     const v = cv.get(f.id)
     const rec = { ...f, source: 'codex' }
-    if (v && v.verdict === 'refuted') {
+    if (v && (v.verdict === 'refuted' || v.verdict === 'uncertain')) {
       rec.status = 'refuted'
-      rec.refutation = { stage: 'codex', gate: v.gate, reason: v.reason, facts: v.facts || [] }
+      rec.refutation = {
+        stage: 'codex', gate: v.gate, reason: v.reason, facts: v.facts || [],
+        uncertain: v.verdict === 'uncertain',
+      }
       rec.deep_verified = null
     } else {
       rec.status = 'reported'
@@ -627,6 +680,7 @@ for (const f of findings) {
       stage: 'dedup',
       target_id: seen.get(key),
       reason: seen.get(key) + '에 흡수 (동일 source·축·file:line·제목)',
+      uncertain: false,
     }
     f.deep_verified = null
   } else {
@@ -634,7 +688,8 @@ for (const f of findings) {
   }
 }
 
-// ── 심층검증: two more lenses on surviving CRITICAL/IMPORTANT. Cap 8.
+// ── 심층검증: two more lenses on every surviving CRITICAL/IMPORTANT — no cap; the consent gate
+// announces the scale and the count is logged right before the lenses start.
 // (Task 28: 옛 HIGH → IMPORTANT — quality-gates와 severity 어휘 통일, §15.1 mapping)
 phase('심층검증')
 
@@ -643,17 +698,14 @@ const deepPool = findings
   .filter((f) => f.status === 'reported' && (f.severity === 'CRITICAL' || f.severity === 'IMPORTANT'))
   .sort((a, b) => (RANK[a.severity] - RANK[b.severity]) || (a.axis - b.axis) || (a.id < b.id ? -1 : 1))
 
-const DEEP_CAP = 8
-const deepTargets = deepPool.slice(0, DEEP_CAP)
-for (const f of deepPool.slice(DEEP_CAP)) f.deep_verified = false   // eligible, over the cap
-if (deepPool.length > DEEP_CAP) {
-  log('심층검증 캡 초과: ' + deepPool.length + '건 중 ' + DEEP_CAP + '건만 검증 (나머지는 deep_verified: false)')
-}
+const deepTargets = deepPool
 
 const LENSES = [
   { key: '재현성', ask: '이 갭의 실패 시나리오가 **구체적으로 재현 가능한가?** 어떤 입력이 어떤 잘못된 결과를 내는지 네가 직접 코드를 읽고 따라가 보라. 추상적 우려면 refute하라.' },
   { key: 'devbrew 원칙', ask: '이 갭의 **권고안**이 devbrew Forbidden Patterns(trivia ceremony · over-engineering · unbounded autonomy · subagent spray)에 저촉되는가? 저촉되면 refute하라 — 병보다 약이 나쁜 경우다.' },
 ]
+
+log('심층검증 ' + deepPool.length + '건 × 렌즈 ' + LENSES.length + ' = ' + deepPool.length * LENSES.length + '회 (상한 없음)')
 
 const deepVotes = await parallel(
   deepTargets.flatMap((f) =>
@@ -662,7 +714,7 @@ const deepVotes = await parallel(
         '# 심층검증 — 렌즈: ' + lens.key,
         '',
         '이 갭은 이미 축별 반박을 **통과했다**. 너는 **두 번째 렌즈**다.',
-        '**기본 verdict는 refuted다.** 확신이 없으면 refute하라.',
+        '**기본 verdict는 refuted다.** 확신이 없으면 `refuted: true` 와 `uncertain: true` 를 함께 내라.',
         '',
         lens.ask,
         '',
@@ -673,7 +725,11 @@ const deepVotes = await parallel(
         label: 'deep:' + lens.key + ':' + f.id,
         phase: '심층검증',
         schema: DEEP_SCHEMA,
-      }).then((v) => (v ? { id: f.id, refuted: v.refuted, lens: lens.key, reason: v.reason } : null)),
+      }).then((v) => (v ? {
+        // An unsure lens is a refute (default verdict) — a pass needs refuted:false without uncertain.
+        id: f.id, refuted: v.refuted === true || v.uncertain === true, uncertain: v.uncertain === true,
+        lens: lens.key, reason: v.reason,
+      } : null)),
     ),
   ),
 )
@@ -695,12 +751,16 @@ for (const f of deepTargets) {
   const refutes = votes.filter((v) => v.refuted).length
   if (refutes >= 2) {
     f.status = 'refuted'
-    f.refutation = { stage: 'deep', reason: '심층검증 3표 중 ' + refutes + '표 refute', votes }
+    f.refutation = {
+      stage: 'deep', reason: '심층검증 3표 중 ' + refutes + '표가 반박', votes,
+      uncertain: votes.filter((x) => x.refuted).every((x) => x.uncertain),
+    }
     f.deep_verified = null
   } else {
     // refuter가 죽었거나(unverified) 판정을 누락한 finding은 축 검증을 못 받았다 —
     // 심층 2렌즈 통과만으로 "두 모델 독립 확인(true)"을 참칭할 수 없다. null 유지.
-    f.deep_verified = (!f.unverified && votes.length === LENSES.length) ? true : null
+    // 반박한 렌즈가 하나라도 있으면(「모르겠다」 렌즈 포함 — 반박 한 표로 센다) 심층검증 통과라 부를 수 없다.
+    f.deep_verified = (!f.unverified && votes.length === LENSES.length && !votes.some((v) => v.refuted)) ? true : null
     f.deep_votes = votes
   }
 }
@@ -708,13 +768,30 @@ for (const f of deepTargets) {
 const surviving = findings.filter((f) => f.status === 'reported').length
 log('최종: 발견 ' + findings.length + '건 중 생존 ' + surviving + '건 (심층검증 ' + deepTargets.length + '건)')
 
+// A clue / question verdict counts only from the axis that owns the id. An axis with no ids of
+// its own has no id enum, so it can still name another axis's id — drop that verdict and say so.
+// Ids with no owner (fresh, or a seed line without an axis) are kept.
+const ownVerdicts = (r, key, kind) => (r.res[key] || []).filter((v) => {
+  const owner = Object.prototype.hasOwnProperty.call(ASSIGNED_AXIS, v.id) ? ASSIGNED_AXIS[v.id] : undefined
+  if (owner === undefined || owner === r.ax.n) return true
+  degradedEvents.push({
+    what: '축' + r.ax.n + ' 판정에서 뺐다: ' + kind + ' ' + v.id + ' (축' + owner + ' 몫)',
+    why: '항목은 그 축만 판정한다. 이번에 축' + owner + ' 감사가 돌지 않았다면 ' + v.id + ' 항목은 검증 안 됨으로 남는다',
+  })
+  return false
+})
+const claudeD = alive.flatMap((r) => ownVerdicts(r, 'd_verdicts', '후보 단서').map((d) => ({ ...d, source: 'claude' })))
+const claudeOq = alive.flatMap((r) => ownVerdicts(r, 'oq_answers', '열린 질문').map((o) => ({ ...o, source: 'claude' })))
+
 // findings only. No meta — the pipeline cannot account for itself, and the orchestrator
 // assembles audit-data.json from the harness's own journal.jsonl.
 return {
   findings,
-  d_verdicts: alive.flatMap((r) => (r.res.d_verdicts || []).map((d) => ({ ...d, source: 'claude' }))),
-  oq_answers: alive.flatMap((r) => (r.res.oq_answers || []).map((o) => ({ ...o, source: 'claude' }))),
+  d_verdicts: claudeD,
+  oq_answers: claudeOq,
   new_open_questions: alive.flatMap((r) => (r.res.new_open_questions || []).map((q) => ({ ...q, source: 'claude', axis: q.axis ?? r.ax.n }))),
   axis_failures: axisFailures,
   degraded_events: degradedEvents,
+  axes_run: AXES_RUN,
+  assigned_axis: ASSIGNED_AXIS,
 }

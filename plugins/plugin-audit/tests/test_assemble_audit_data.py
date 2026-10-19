@@ -110,6 +110,129 @@ class TestAssemble(unittest.TestCase):
             meta=BASE_META, assigned={"assigned_d": [], "assigned_oq": []})
         self.assertTrue(any(n.get("why_not_gap") for n in data["new_open_questions"]), "gate-E refuted not routed to NOQ")
 
+    def test_uncertain_gate_e_goes_to_noq_and_appendix(self):
+        f = {"id": "A2-9", "axis": 2, "source": "claude", "status": "refuted",
+             "refutation": {"stage": "axis", "gate": "E", "reason": "범위 판단 불가", "uncertain": True},
+             "evidence": [{"file": "x", "line": 1, "quote": "q"}], "severity": "SUGGESTION"}
+        r, data = run(
+            workflow_return={"findings": [f], "d_verdicts": [], "oq_answers": [],
+                             "new_open_questions": [], "axis_failures": [], "degraded_events": []},
+            codex_side={"d_verdicts": [], "oq_answers": [], "new_open_questions": []},
+            meta=BASE_META, assigned={"assigned_d": [], "assigned_oq": []})
+        n = [q for q in data["new_open_questions"] if q["id"] == "A2-9"]
+        self.assertTrue(n, "uncertain gate-E NOQ 미생성")
+        self.assertEqual(n[0].get("reason_code"), "gate_e_scope_out")
+        self.assertIn("범위 판단 불가", n[0]["why_not_gap"])
+        self.assertNotIn("범위 밖", n[0]["why_not_gap"])
+        kept = [x for x in data["findings"] if x["id"] == "A2-9"]
+        self.assertEqual(kept[0]["refutation"]["uncertain"], True)
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "data.json"
+            p.write_text(json.dumps(data), encoding="utf-8")
+            v = SCRIPT.parent / "validate-audit-data.py"
+            rv = subprocess.run([sys.executable, str(v), "--data", str(p)], capture_output=True, text=True)
+            self.assertEqual(rv.returncode, 0, rv.stdout + rv.stderr)
+
+    def test_definite_gate_e_keeps_scope_out_wording(self):
+        f = {"id": "A2-8", "axis": 2, "source": "claude", "status": "refuted",
+             "refutation": {"stage": "axis", "gate": "E", "reason": "범위 밖"},
+             "evidence": [{"file": "x", "line": 1, "quote": "q"}], "severity": "SUGGESTION"}
+        r, data = run(
+            workflow_return={"findings": [f], "d_verdicts": [], "oq_answers": [],
+                             "new_open_questions": [], "axis_failures": [], "degraded_events": []},
+            codex_side={"d_verdicts": [], "oq_answers": [], "new_open_questions": []},
+            meta=BASE_META, assigned={"assigned_d": [], "assigned_oq": []})
+        n = [q for q in data["new_open_questions"] if q["id"] == "A2-8"]
+        self.assertIn("범위 밖", n[0]["why_not_gap"])
+        self.assertNotIn("판단 불가", n[0]["why_not_gap"])
+
+    def test_meta_carries_staleness_excluded(self):
+        ex = {"fence_lines": 3, "placeholder_or_url": 1, "generation_target": 0}
+        r, data = run(
+            workflow_return={"findings": [], "d_verdicts": [], "oq_answers": [],
+                             "new_open_questions": [], "axis_failures": [], "degraded_events": []},
+            codex_side={"d_verdicts": [], "oq_answers": [], "new_open_questions": []},
+            meta=dict(BASE_META, staleness_excluded=ex), assigned={"assigned_d": [], "assigned_oq": []})
+        self.assertEqual(data["meta"]["staleness_excluded"], ex)
+
+    def test_meta_carries_axes(self):
+        empty_wf = {"findings": [], "d_verdicts": [], "oq_answers": [],
+                    "new_open_questions": [], "axis_failures": [], "degraded_events": []}
+        empty_cx = {"d_verdicts": [], "oq_answers": [], "new_open_questions": []}
+        none = {"assigned_d": [], "assigned_oq": []}
+        r, data = run(workflow_return=empty_wf, codex_side=empty_cx,
+                      meta=dict(BASE_META, axes=[1, 6]), assigned=none)
+        self.assertEqual(data["meta"]["axes"], [1, 6])
+        r, data = run(workflow_return=empty_wf, codex_side=empty_cx, meta=BASE_META, assigned=none)
+        self.assertNotIn("axes", data["meta"], "없는 키를 만들어 넣지 않는다")
+
+    def test_axes_come_from_axes_run_when_meta_lacks_them(self):
+        wf = {"findings": [], "d_verdicts": [], "oq_answers": [], "new_open_questions": [],
+              "axis_failures": [], "degraded_events": [], "axes_run": [1, 2]}
+        cx = {"d_verdicts": [], "oq_answers": [], "new_open_questions": []}
+        none = {"assigned_d": [], "assigned_oq": []}
+        r, data = run(workflow_return=wf, codex_side=cx, meta=BASE_META, assigned=none)
+        self.assertEqual(data["meta"]["axes"], [1, 2])
+        self.assertEqual(data["meta"]["axes_run"], [1, 2])
+        r, data = run(workflow_return=wf, codex_side=cx, meta=dict(BASE_META, axes=[1, 6]), assigned=none)
+        self.assertEqual(data["meta"]["axes"], [1, 6], "consent 쪽 값을 덮지 않는다 — 검증이 차이를 잡는다")
+        self.assertEqual(data["meta"]["axes_run"], [1, 2])
+
+    def test_assigned_axis_map_is_carried(self):
+        wf = {"findings": [], "d_verdicts": [], "oq_answers": [], "new_open_questions": [],
+              "axis_failures": [], "degraded_events": []}
+        cx = {"d_verdicts": [], "oq_answers": [], "new_open_questions": []}
+        assigned = {"assigned_d": ["D1", "D4"], "assigned_oq": ["OQ1"],
+                    "axis_of": {"D1": 1, "D4": 4, "OQ1": None, "OQ9": True, "D7": 9}}
+        r, data = run(workflow_return=wf, codex_side=cx, meta=BASE_META, assigned=assigned)
+        self.assertEqual(data["meta"]["assigned_axis"], {"D1": 1, "D4": 4})
+        self.assertEqual(data["meta"]["assigned_axis_source"], "assigned.json")
+        backfilled = [v for v in data["d_verdicts"] + data["oq_answers"] if v.get("backfilled") is True]
+        self.assertEqual(sorted(v["id"] for v in backfilled), ["D1", "D4", "OQ1"],
+                         "빈칸 채움 판정에는 구조화 표식이 붙는다")
+        wf2 = dict(wf, assigned_axis={"D1": 1, "D4": 4, "X": "4"})
+        r, data = run(workflow_return=wf2, codex_side=cx, meta=BASE_META,
+                      assigned=dict(assigned, axis_of={"D1": 4, "D4": 1}))
+        self.assertEqual(data["meta"]["assigned_axis"], {"D1": 1, "D4": 4}, "Workflow 지도가 이긴다")
+        self.assertEqual(data["meta"]["assigned_axis_source"], "workflow")
+        wf3 = dict(wf, d_verdicts=[{"id": "D1", "verdict": "confirmed", "reason": "r"}])
+        r, data = run(workflow_return=wf3, codex_side=cx, meta=BASE_META, assigned=assigned)
+        d1 = [v for v in data["d_verdicts"] if v["id"] == "D1"]
+        self.assertNotIn("backfilled", d1[0], "축이 낸 판정에는 표식이 없다")
+        wf4 = dict(wf, d_verdicts=[{"id": "D1", "verdict": "confirmed", "reason": "r", "backfilled": True}],
+                   oq_answers=[{"id": "OQ1", "reason": "r", "backfilled": True}])
+        cx4 = dict(cx, d_verdicts=[{"id": "D4", "verdict": "confirmed", "reason": "r", "backfilled": True}])
+        r, data = run(workflow_return=wf4, codex_side=cx4, meta=BASE_META, assigned=assigned)
+        marked = [(v["id"], v["source"]) for v in data["d_verdicts"] + data["oq_answers"] if "backfilled" in v]
+        self.assertEqual(sorted(marked), [("D4", "claude")],
+                         "들어온 backfilled 는 지우고, assemble 이 채운 빈칸(D4 claude)에만 단다")
+
+    def test_both_chosen_axes_dead_makes_no_report(self):
+        # axes 가 meta.json 에 빠져도 Workflow 의 axes_run 이 분모가 된다 (AC-4 우회 봉쇄).
+        render = SCRIPT.parent / "render-audit-report.py"
+        wf = {"findings": [], "d_verdicts": [], "oq_answers": [], "new_open_questions": [],
+              "axis_failures": [{"axis": 1, "why": "x"}, {"axis": 2, "why": "x"}],
+              "degraded_events": [], "axes_run": [1, 2]}
+        cx = {"d_verdicts": [], "oq_answers": [], "new_open_questions": []}
+        r, data = run(workflow_return=wf, codex_side=cx, meta=BASE_META,
+                      assigned={"assigned_d": [], "assigned_oq": []})
+        with tempfile.TemporaryDirectory() as t:
+            j = Path(t) / "d.json"
+            out = Path(t) / "r.md"
+            j.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            rr = subprocess.run([sys.executable, str(render), str(j), "--out", str(out)],
+                                capture_output=True, text=True)
+            self.assertEqual(rr.returncode, 1, rr.stderr)
+            self.assertFalse(out.exists())
+            wf["axis_failures"] = wf["axis_failures"][:1]
+            r, data = run(workflow_return=wf, codex_side=cx, meta=BASE_META,
+                          assigned={"assigned_d": [], "assigned_oq": []})
+            j.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            rr = subprocess.run([sys.executable, str(render), str(j), "--out", str(out)],
+                                capture_output=True, text=True)
+            self.assertEqual(rr.returncode, 0, rr.stderr)
+            self.assertIn("⚠ **축 1/2 완주**", out.read_text(encoding="utf-8"))
+
     def test_meta_and_degraded_attached(self):
         r, data = run(
             workflow_return={"findings": [], "d_verdicts": [], "oq_answers": [],

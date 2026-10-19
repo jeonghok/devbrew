@@ -55,7 +55,7 @@ def main(argv):
         return 2
     path = Path(argv[0])
     if not path.exists():
-        print(f"[parse-seed] seed 파일 없음: {path} — fresh 6축 discovery로 진행", file=sys.stderr)
+        print(f"[parse-seed] seed 파일 없음: {path} — fresh discovery로 진행", file=sys.stderr)
         print("{}")
         return 0
     text = path.read_text(encoding="utf-8")

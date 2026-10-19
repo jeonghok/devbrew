@@ -169,5 +169,19 @@ class DocSections(unittest.TestCase):
         self.assertEqual(cs.ledger_rulings(text), ["Task 2: Ruling: x — y — z", "Final: Ruling: w"])
 
 
+class OptionalWorks(unittest.TestCase):
+    """지휘자 수리 2 — 빈 「작업」 절은 머리를 쓰지 않아 옛 판(그 절을 모르는)도 파일을 읽는다."""
+    def test_empty_works_section_is_not_rendered(self):
+        import conductor_state as C
+        text = C.render_machine("a/rm/roadmap.md", C.empty())
+        self.assertNotIn("## 작업", text)
+        self.assertEqual(C.parse_machine(text, "a/rm/roadmap.md"), C.empty())
+        data = C.empty()
+        data["작업"].append(dict(zip(C.COLUMNS["작업"], ["수리 PR", "fix/x", "로드맵 밖", "구현", "a", "/d"])))
+        text = C.render_machine("a/rm/roadmap.md", data)
+        self.assertIn("## 작업", text)
+        self.assertEqual(C.parse_machine(text, "a/rm/roadmap.md")["작업"], data["작업"])
+
+
 if __name__ == "__main__":
     unittest.main()

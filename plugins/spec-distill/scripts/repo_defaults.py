@@ -12,9 +12,11 @@ PLANS_DIR = "docs/superpowers/plans/"
 SDD_WORKSPACE = ".superpowers/sdd/"
 CONDUCTOR_DIR = "conductor"
 WORKTREE_HOME = ".claude/worktrees/"   # 하니스(EnterWorktree)가 worktree 를 두고 옮겨 갈 수 있는 폴더 — 외부 도구 기본값
-MERGE_CHECK_DIR = "merge-check"        # 기계 상태 폴더 안의 스위트 대조 잠금 · 일회용 사본 자리
+MERGE_CHECK_DIR = "merge-check"        # 기계 상태 폴더 안의 스위트 대조 일회용 사본 자리(잠금은 suite_lock.py 의 공유 잠금)
+PARALLEL_DEFAULT = 3                   # 지휘자가 동시에 돌리는 큰 작업의 권장 수 — 기본값이지 상한이 아니다(사용자가 늘린다)
 DIR_KEYS = ("specs_dir", "plans_dir")
 TEXT_KEYS = ("test_command", "review_model")
+COUNT_KEYS = ("parallel_default",)
 
 
 def _unquote(value: str) -> str:
@@ -40,9 +42,10 @@ def _folder(key: str, raw: str):
 
 
 def repo_settings(meta: dict) -> dict:
-    """로드맵 frontmatter → 레포 설정. 잘못된 값은 errors 에 적고 그 키는 None — 기본값으로 조용히 바꾸지 않는다."""
+    """로드맵 frontmatter → 레포 설정. 잘못된 값은 errors 에 적고 그 키는 None — 기본값으로 조용히 바꾸지 않는다.
+    권장 수(parallel_default)만은 게이트가 아니라서 깨지면 기본값으로 세고 warnings 에 적는다(알리되 멈추지 않는다)."""
     out = {"specs_dir": SPECS_DIR, "plans_dir": PLANS_DIR, "test_command": None, "review_model": None,
-           "sources": {}, "errors": []}
+           "parallel_default": PARALLEL_DEFAULT, "sources": {}, "errors": [], "warnings": []}
     for key in DIR_KEYS:
         if key not in meta:
             out["sources"][key] = "기본값"
@@ -62,4 +65,17 @@ def repo_settings(meta: dict) -> dict:
             out[key] = value
         else:
             out["errors"].append("레포 설정 %s 값이 비었다" % key)
+    for key in COUNT_KEYS:
+        if key not in meta:
+            out["sources"][key] = "기본값"
+            continue
+        out["sources"][key] = "frontmatter"
+        value = _unquote(meta[key])
+        if value.isascii() and value.isdigit() and int(value) >= 1:
+            out[key] = int(value)
+        else:
+            # 권장 수는 게이트가 아니다 — 상태 계산 · 스위트 대조를 멈추지 않고 기본값으로 세되 크게 알린다
+            out[key] = PARALLEL_DEFAULT
+            out["sources"][key] = "기본값(머리말 값이 깨졌다)"
+            out["warnings"].append("레포 설정 %s 는 1 이상의 정수다: %r — 기본 %d 으로 센다" % (key, value, PARALLEL_DEFAULT))
     return out

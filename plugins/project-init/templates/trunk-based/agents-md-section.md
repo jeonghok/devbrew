@@ -2,7 +2,7 @@
 
 Trunk-based development. 모든 작업이 `main`으로 빠르게 merge. 상세는 `docs/git-workflow/`.
 
-- Branch: `main`에서 단명 `feature/*` 또는 `fix/*`. 1–2일 내 merge.
+- Branch: `main`에서 분기하는 단명 브랜치, 접두는 {{BRANCH_PREFIX_LIST}}. 1–2일 내 merge.
 - Commit: Conventional Commits (`<type>(<scope>): <description>`)
 - PR: {{MERGE_STRATEGY}}, `docs/git-workflow/pr-process.md` 참고
 - 미완성 기능에는 feature flag 사용. `main`은 항상 deployable 유지.

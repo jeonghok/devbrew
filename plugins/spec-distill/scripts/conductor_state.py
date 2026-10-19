@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """conductor_state.py — 지휘자 기계 상태(`machine.md`)의 형식 · 읽기 · 원자 쓰기 · 세션 표지.
 
-기계 상태는 이 기계에서만 뜻이 있는 것(PR 번호 캐시 · 실행 원장 위치 · 자원 · 살아 있는 agent · 기다리는 질문 ·
+기계 상태는 이 기계에서만 뜻이 있는 것(PR 번호 캐시 · 실행 원장 위치 · 자원 · 살아 있는 agent · 작업(로드맵 밖 일 포함) · 기다리는 질문 ·
 아직 커밋하지 못한 기록 · 임시 레포 설정 · 시작 승인(같은 세션 이어 부르기 공시))만 담는다. 이어 가기에 필요한 기록은 에픽 설계문서의 절이 주인이다.
 넘김 상태 계산은 읽기 전용 `roadmap_model.py` 가 하고 여기서 다시 내보낸다. 상태 계산(`roadmap_status.py`) · 화면(`control_plane.py`) · 지휘자 스크립트가 이 모듈 하나를 쓴다.
 
@@ -36,12 +36,15 @@ SECTIONS = (
     ("실행 원장", ("에픽", "계획", "원장", "읽은 줄")),
     ("자원", ("종류", "경로", "에픽", "용도", "만든 때")),
     ("살아 있는 agent", ("이름", "에픽", "일", "worktree", "보낸 때")),
+    ("작업", ("종류", "이름", "에픽", "단계", "담당", "근거")),
     ("기다리는 질문", ("에픽", "기대는 일", "질문")),
     ("쌓인 기록", ("에픽", "절", "글")),
     ("레포 설정", ("키", "값")),
     ("시작 승인", ("세션", "때", "규모")),
 )
 COLUMNS = dict(SECTIONS)
+OPTIONAL_SECTIONS = ("작업",)
+WORK_DONE = ("끝", "끝남", "머지됨")  # 「작업」 단계 칸에서 끝으로 세는 낱말 — 지휘 절차(conducting.md 걸음 1)가 같은 낱말을 밝힌다
 PR_STATES = ("열림", "머지됨", "닫힘")
 PR_NUMBER_RE = re.compile(r"#\d+")
 SEP = " · "
@@ -118,6 +121,8 @@ def parse_machine(text: str, roadmap_rel: str) -> dict:
 def render_machine(roadmap_rel: str, data: dict) -> str:
     out = ["---", "type: " + TYPE, "roadmap: " + roadmap_rel, "---", ""]
     for name, cols in SECTIONS:
+        if name in OPTIONAL_SECTIONS and not data.get(name):
+            continue  # 7.6 에 더한 절 — 비어 있으면 머리를 쓰지 않아 옛 판도 이 파일을 읽는다
         out += ["## " + name, ""]
         for row in data.get(name, []):
             cells = [str(row[c]).replace("\n", " ").strip() for c in cols]

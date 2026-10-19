@@ -5,11 +5,33 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.1.0] — 2026-10-19
+
+### Changed
+
+- 헌장 재질문을 3회 하고도 빈 항목이 남으면 사용자가 「건너뛰기 · 계속 묻기 · 중단」을 고른다. 기계가 정하던 중단을 없앴다.
+- 헌장 질문은 기본 4개, 관례는 보통 1–3개다(받은 것은 모두 쓴다). 쓴 수를 알리고, 「더 묻기」를 고르면 더 받는다. 처음 훑기(Phase 0 스캔)는 질문과 겹쳐 돌 수 있다.
+- AGENTS.md 로 옮기기를 거절해도 실행 전체가 멈추지 않는다(옛 AC21 「부분 진행 금지」를 바꿨다). 「CLAUDE.md 에 바로 쓰기」를 고를 수 있고, git-workflow 파일 만들기는 계속된다.
+- AGENTS.md 가 이미 있고 CLAUDE.md 와 내용이 다를 때도 거절이 실행을 끝내지 않는다. 선택지는 「옮기기 (권장)」 · 「CLAUDE.md 는 그대로 두기」(AGENTS.md 의 관리 절만 갱신하고 git-workflow 파일은 만든다) · 「중단」이다.
+- git 규칙 교체를 거절하면 선택지 셋이 나오고, 헌장은 그대로 진행한다. 「git 규칙은 그대로 두고 헌장만」을 고르면 다른 모든 「git 규칙 파일을 만든다」 조항보다 앞서 기존 git 규칙 내용을 건드리지 않는다. 마지막 보고에 헌장 건너뜀 · CLAUDE.md 직접 쓰기 · git 규칙 유지 줄이 나온다.
+- 헌장 상태 확인은 AGENTS.md 가 있으면 그것을, 없으면 CLAUDE.md 를 읽는다. AGENTS.md 로 옮길 때 CLAUDE.md 의 `## Project Charter` 도 함께 옮긴다.
+- 기존 git 규칙(`## Git Workflow`)을 CLAUDE.md 뿐 아니라 AGENTS.md 에서도 찾는다. 그대로 두기로 한 git 규칙이 다음 실행에서 덮이지 않는다.
+- 「git 규칙은 그대로 두고 헌장만」을 고르고 AGENTS.md 로 옮길 때(S4), AGENTS.md 에 `## Git Workflow` 가 없으면 CLAUDE.md 의 그 절도 AGENTS.md 로 옮긴다. 그대로 두기로 한 git 규칙이 CLAUDE.md 교체와 함께 사라지지 않는다.
+- S4 「옮기기」는 AGENTS.md 에 `## Project Charter` 가 없으면 CLAUDE.md 의 그 절도 AGENTS.md 로 옮긴다(git 규칙 선택과 상관없이). 헌장 상태 확인도 그 경우 CLAUDE.md 의 절을 읽어, 헌장을 다시 묻거나 두 번째 절을 더하지 않는다. 「CLAUDE.md 는 그대로 두기」로 절이 옮겨지지 않았으면 헌장 발행이 AGENTS.md 에 그 절을 새로 더하고 CLAUDE.md 에는 쓰지 않는다. 마지막 보고가 AGENTS.md 로 옮긴 절을 이름으로 밝히고, 「CLAUDE.md 는 그대로 두기」면 CLAUDE.md 의 관리 절이 AGENTS.md 와 다를 수 있다고 알린다.
+- 템플릿의 브랜치 「ALWAYS 확인」은 변경 작업일 때만 한다. Rules for Claude 의 접두 고정 문장은 `Branch Naming Pattern` 을 가리킨다.
+- 템플릿 worktree 절이, worktree 를 만들며 `-b` 로 지은 브랜치 이름은 훅이 검사하지 않는다고 밝힌다(훅은 그대로). 접두에 같은 낱말이 겹치면 하나만 남기고 알린다.
+- README 의 생성물 설명이 `CLAUDE.md` 는 기본이 `@AGENTS.md` 포인터이고, 「CLAUDE.md 에 바로 쓰기」 · 「CLAUDE.md 는 그대로 두기」를 고르면 달라진다고 밝힌다.
+
+### Added
+
+- 브랜치 접두 추가 질문과 템플릿 placeholder 셋(`{{BRANCH_PREFIXES}}` · `{{BRANCH_PREFIX_LIST}}` · `{{EXTRA_PREFIX_LIST}}`). 훅이 읽는 정규식이 정본이다.
+- 템플릿의 worktree 작업 절.
+
 ## [5.0.5] — 2026-10-19
 
 ### Changed
 
-- README 에서 버전 꼬리표를 지우고, `CLAUDE.md` 생성물 설명을 지금 동작(`@AGENTS.md` 한 줄)에 맞췄다.
+- README 에서 버전 꼬리표를 지우고, `CLAUDE.md` 생성물 설명을 그때 동작(`@AGENTS.md` 한 줄)에 맞췄다. 5.1.0 부터는 「CLAUDE.md 에 바로 쓰기」 · 「CLAUDE.md 는 그대로 두기」를 고르면 CLAUDE.md 가 포인터가 되지 않는다.
 
 ## [5.0.4] — 2026-10-19
 

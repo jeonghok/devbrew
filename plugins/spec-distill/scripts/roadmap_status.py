@@ -712,7 +712,7 @@ def build(git: Git, args) -> dict:
     meta, blocks, records, risk_rows, errors = parse_roadmap(text)
     settings = repo_settings(meta)
     report["settings"] = dict((k, settings[k]) for k in ("specs_dir", "plans_dir", "test_command",
-                                                            "review_model", "sources"))
+                                                            "review_model", "parallel_default", "sources", "warnings"))
     errors = errors + settings["errors"]
     report["format_errors"] = errors
     if errors:
