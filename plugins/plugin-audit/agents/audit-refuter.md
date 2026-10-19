@@ -94,4 +94,5 @@ the user's list → **refuted**, and say why.
 
 If a finding survives all six gates, return `refuted: false` and explain — in one paragraph — what
 exactly breaks and why nothing in the artifact prevents it.
-If you could not settle it, return `uncertain` — never `survives`.
+If you could not settle it: in a `verdict` schema return `uncertain`;
+in a `refuted` boolean schema return `refuted: true` with `uncertain: true` — never `survives` / `false`.

@@ -186,6 +186,8 @@ const DEEP_SCHEMA = {
     uncertain: { type: 'boolean' },
     reason: { type: 'string' },
   },
+  if: { properties: { uncertain: { const: true } }, required: ['uncertain'] },
+  then: { properties: { refuted: { const: true } } },
 }
 
 // Shared prompt preamble. Facts and boundaries only — never a verdict. A shared premise
@@ -466,7 +468,12 @@ const AXES = [
 // post-run checks know which ids belong to an axis that did not run, without a hand-copied map.
 const ASSIGNED_AXIS = {}
 for (const it of [...(pack.candidate_clues || []), ...(pack.open_questions || [])]) {
-  if (AXES.some((ax) => it.axis === ax.n)) ASSIGNED_AXIS[it.id] = it.axis
+  if (!AXES.some((ax) => it.axis === ax.n)) continue
+  const prev = Object.prototype.hasOwnProperty.call(ASSIGNED_AXIS, it.id) ? ASSIGNED_AXIS[it.id] : undefined
+  if (prev !== undefined && prev !== it.axis) {
+    throw new Error('[plugin-audit] 같은 단서 id 가 두 축에 있다 — ' + it.id + ' (축' + prev + ' · 축' + it.axis + ')')
+  }
+  ASSIGNED_AXIS[it.id] = it.axis
 }
 
 const findPrompt = (ax) => {
@@ -718,7 +725,11 @@ const deepVotes = await parallel(
         label: 'deep:' + lens.key + ':' + f.id,
         phase: '심층검증',
         schema: DEEP_SCHEMA,
-      }).then((v) => (v ? { id: f.id, refuted: v.refuted, uncertain: v.uncertain === true, lens: lens.key, reason: v.reason } : null)),
+      }).then((v) => (v ? {
+        // An unsure lens is a refute (default verdict) — a pass needs refuted:false without uncertain.
+        id: f.id, refuted: v.refuted === true || v.uncertain === true, uncertain: v.uncertain === true,
+        lens: lens.key, reason: v.reason,
+      } : null)),
     ),
   ),
 )
@@ -748,7 +759,8 @@ for (const f of deepTargets) {
   } else {
     // refuter가 죽었거나(unverified) 판정을 누락한 finding은 축 검증을 못 받았다 —
     // 심층 2렌즈 통과만으로 "두 모델 독립 확인(true)"을 참칭할 수 없다. null 유지.
-    f.deep_verified = (!f.unverified && votes.length === LENSES.length) ? true : null
+    // 「모르겠다」 렌즈가 하나라도 있으면 심층검증 통과라 부를 수 없다.
+    f.deep_verified = (!f.unverified && votes.length === LENSES.length && !votes.some((v) => v.uncertain)) ? true : null
     f.deep_votes = votes
   }
 }

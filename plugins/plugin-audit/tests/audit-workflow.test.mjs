@@ -695,3 +695,73 @@ test('no DEEP_CAP in source', async () => {
   for (const tok of ['DEEP_CAP', '캡 8', '6축']) assert.ok(!src.includes(tok), tok)
   assert.ok(src.includes('상한 없음'), 'positive pair — the no-cap wording is present')
 })
+
+// 심층검증의 «모르겠다» 한 표가 통과로 세지면 안 된다 — DEEP_SCHEMA 가 {refuted:false, uncertain:true}
+// 를 허용하던 자리. 코드가 기본 verdict(refuted)를 강제한다.
+const deepFlagStub = (votes) => {
+  const base = stubOneFinding('IMPORTANT')
+  let i = 0
+  return async (prompt, o) => {
+    if (o.phase === '검증') return { verdicts: [{ finding_id: 'A1-1', verdict: 'survives', reason: 'ok' }] }
+    if (o.phase === '심층검증') return { finding_id: 'A1-1', reason: 'r', ...votes[i++ % votes.length] }
+    return base(prompt, o)
+  }
+}
+
+test('deep unsure vote with refuted:false still counts as a refute', async () => {
+  const both = await runWorkflow(WF, {
+    stubAgent: deepFlagStub([{ refuted: false, uncertain: true }, { refuted: false, uncertain: true }]),
+  })
+  const f = both.result.findings.find((x) => x.id === 'A1-1')
+  assert.equal(f.status, 'refuted')
+  assert.equal(f.refutation.stage, 'deep')
+  assert.equal(f.refutation.uncertain, true)
+  assert.notEqual(f.deep_verified, true)
+  const one = await runWorkflow(WF, {
+    stubAgent: deepFlagStub([{ refuted: false, uncertain: true }, { refuted: false }]),
+  })
+  const g = one.result.findings.find((x) => x.id === 'A1-1')
+  assert.notEqual(g.deep_verified, true, 'an unsure lens must not yield 심층검증 통과')
+  // positive pair — two plain passes still earn the label
+  const pass = await runWorkflow(WF, { stubAgent: deepFlagStub([{ refuted: false }, { refuted: false }]) })
+  assert.equal(pass.result.findings.find((x) => x.id === 'A1-1').deep_verified, true)
+})
+
+test('DEEP_SCHEMA ties uncertain:true to refuted:true', async () => {
+  const { captured } = await runWorkflow(WF, { stubAgent: deepFlagStub([{ refuted: false }]) })
+  const s = captured['심층검증']
+  assert.equal(s.properties.uncertain.type, 'boolean')
+  assert.equal(s.if.properties.uncertain.const, true)
+  assert.deepEqual(s.if.required, ['uncertain'])
+  assert.equal(s.then.properties.refuted.const, true)
+})
+
+test('a clue id on two axes throws before any dispatch', async () => {
+  const pack = {
+    ...DEFAULT_PACK,
+    candidate_clues: [
+      { id: 'D1', axis: 2, claim: 'c', file: 'a', line: 1 },
+      { id: 'D1', axis: 5, claim: 'c', file: 'a', line: 2 },
+    ],
+  }
+  for (const args of [
+    { target: 'sample', evidencePack: pack, codexFindings: [] },
+    { target: 'sample', evidencePack: pack, codexFindings: [], axes: [2] },
+  ]) {
+    const calls = []
+    await assert.rejects(
+      runWorkflow(WF, { args, stubAgent: stubOneFinding(), calls }),
+      (e) => e instanceof Error && e.message === '[plugin-audit] 같은 단서 id 가 두 축에 있다 — D1 (축2 · 축5)',
+    )
+    assert.equal(calls.length, 0)
+  }
+  // positive pair — the same id twice on one axis is not this error
+  const same = { ...DEFAULT_PACK, candidate_clues: [
+    { id: 'D1', axis: 2, claim: 'c', file: 'a', line: 1 },
+    { id: 'D1', axis: 2, claim: 'c', file: 'a', line: 2 },
+  ] }
+  const { result } = await runWorkflow(WF, {
+    args: { target: 'sample', evidencePack: same, codexFindings: [] }, stubAgent: stubOneFinding(),
+  })
+  assert.equal(result.assigned_axis.D1, 2)
+})
