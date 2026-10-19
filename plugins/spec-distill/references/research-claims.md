@@ -55,3 +55,17 @@ auto-confirm 한 사실」 범주를 만들었다가 **4건 중 3건의 전제�
    orchestrator 가 V1 에서 인터뷰 전역 순번으로 다시 붙이고, 그 번호만 payload · audit 에 실린다.
 5. 계약을 못 받았으면 조사 주장을 내지 않는다 — 계약 없는 조사는 계약 있는 조사와 산출물에서
    구별되지 않는다.
+
+## 웹 근거 칸(선택)
+
+`evidence[]` 항목에 아래 칸을 더할 수 있다. 없어도 실패하지 않는다 — 어느 게이트도 이 칸을 읽지 않는다.
+
+```yaml
+# evidence[] 항목에 더하는 선택 칸
+source_kind: primary | secondary   # 공식 문서 · 1차 자료 | 그 밖
+checked_at: "YYYY-MM-DD"           # 확인한 날
+version: {used: "<이 레포가 쓰는 판 — 레포에서 읽음>", latest: "<최신 upstream>"}   # 기술 주장일 때
+certainty: confirmed | uncertain
+```
+
+brief §4 항목 줄에 실을 때는 결정 연결 **앞**에 `(<1차|2차> · 확인 <YYYY-MM-DD>)` 를 붙일 수 있다.
