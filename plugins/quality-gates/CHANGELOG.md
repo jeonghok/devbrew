@@ -7,6 +7,7 @@
 
 ### Changed
 - 링크로 싣는 공유 리뷰 엔진 파일의 바이트가 바뀌었다(spec-distill 7.5.0 과 같은 바이트). 엔진 값을 푸는 `scripts/docreview_config.py` 링크가 새로 생겼다. qg 의 skill 은 아직 이 엔진을 부르지 않으므로 qg 의 동작은 달라지지 않는다.
+- README 에서 없는 agent(`codex-reviewer`) 설명 · 지난 버전 이력 · 실측 이력 괄호를 지우고 지금 사실로 고쳤다. 동작은 같다.
 
 ## [14.0.1] — 2026-10-19
 
