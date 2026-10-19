@@ -320,10 +320,10 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 cat "${CLAUDE_PLUGIN_ROOT}/references/review-criteria.md"
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 cat "${TOP}/.claude/quality-gates/<session-id>/intent.md"
+echo "> [quality-gates] 리뷰어 모델: ${CLAUDE_CODE_SUBAGENT_MODEL:-세션 모델}(CLAUDE_CODE_SUBAGENT_MODEL 이 있으면 그 값, 없으면 세션 모델)"
 ```
 
 - `CRITERIA` = the criteria block's **content** (reviewers cannot read the plugin cache path).
-echo "> [quality-gates] 리뷰어 모델: ${CLAUDE_CODE_SUBAGENT_MODEL:-세션 모델}(CLAUDE_CODE_SUBAGENT_MODEL 이 있으면 그 값, 없으면 세션 모델)"
 - `INTENT` = the `intent:` line from P3, then the intent file's content.
 - `FILTERED_DIFF` = the content of `${TOP}/.claude/quality-gates/<session-id>/review-i<N>.diff` that Step 1c wrote for this iteration — every reviewer below (security · external · codex · re-critic) gets this one file.
 
