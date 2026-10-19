@@ -498,6 +498,33 @@ test('bad axes throw before any dispatch', async () => {
   }
 })
 
+test('assigned_axis is the id → axis map the question blocks used', async () => {
+  const pack = {
+    ...DEFAULT_PACK,
+    candidate_clues: [
+      { id: 'D1', axis: 1, claim: 'c', file: 'a', line: 1 },
+      { id: 'D2', axis: 2, claim: 'c', file: 'a', line: 2 },
+      { id: 'D6', axis: 6, claim: 'c', file: 'a', line: 3 },
+    ],
+    open_questions: [
+      { id: 'OQ1', axis: 1, question: 'q' },
+      { id: 'OQ2', axis: 2, question: 'q' },
+      { id: 'OQ6', axis: 6, question: 'q' },
+      { id: 'OQ9', axis: null, question: 'q' },
+    ],
+  }
+  const { result, calls } = await runWorkflow(WF, {
+    args: { target: 'sample', evidencePack: pack, codexFindings: [], axes: [1, 6] },
+    stubAgent: stubOneFinding(),
+  })
+  assert.deepEqual(result.assigned_axis, { D1: 1, D2: 2, D6: 6, OQ1: 1, OQ2: 2, OQ6: 6 })
+  assert.deepEqual(result.axes_run, [1, 6])
+  // the map matches what the dispatched question blocks carried
+  const ax6 = auditCalls(calls).find((c) => c.opts.label.startsWith('축6 ')).prompt.split('너의 축: 6')[1]
+  assert.ok(ax6.includes('D6: c') && ax6.includes('OQ6: q'))
+  assert.ok(!ax6.includes('D2: c'))
+})
+
 test('axes without 6 — axis 2 schema drops pending', async () => {
   const stEnums = (schema) => [
     schema.properties.findings.items.properties.steelman_condition.enum,

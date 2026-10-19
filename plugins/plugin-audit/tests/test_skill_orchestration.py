@@ -142,6 +142,7 @@ class TestSkillOrchestration(unittest.TestCase):
         self.assertIn("`<meta.json>` 에 `axes` 를 consent 아티팩트와 같은 값으로 적는다", body)
         self.assertIn("`fanout_declared` 는 consent 아티팩트의 `fanout` 을 글자 그대로 옮긴다", body)
         self.assertIn("`axis_of`", body)
+        self.assertIn("Workflow 결과에 `assigned_axis` 가 없을 때만 쓰는 대체", body)
         self.assertGreaterEqual(body.count("0 으로 채우지 않는다"), 2,
                                 "pack 과 meta.json 두 자리 모두 staleness_excluded 를 빼 두라고 해야 한다")
 

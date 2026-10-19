@@ -186,6 +186,19 @@ class TestAssemble(unittest.TestCase):
                     "axis_of": {"D1": 1, "D4": 4, "OQ1": None, "OQ9": True, "D7": 9}}
         r, data = run(workflow_return=wf, codex_side=cx, meta=BASE_META, assigned=assigned)
         self.assertEqual(data["meta"]["assigned_axis"], {"D1": 1, "D4": 4})
+        self.assertEqual(data["meta"]["assigned_axis_source"], "assigned.json")
+        backfilled = [v for v in data["d_verdicts"] + data["oq_answers"] if v.get("backfilled") is True]
+        self.assertEqual(sorted(v["id"] for v in backfilled), ["D1", "D4", "OQ1"],
+                         "빈칸 채움 판정에는 구조화 표식이 붙는다")
+        wf2 = dict(wf, assigned_axis={"D1": 1, "D4": 4, "X": "4"})
+        r, data = run(workflow_return=wf2, codex_side=cx, meta=BASE_META,
+                      assigned=dict(assigned, axis_of={"D1": 4, "D4": 1}))
+        self.assertEqual(data["meta"]["assigned_axis"], {"D1": 1, "D4": 4}, "Workflow 지도가 이긴다")
+        self.assertEqual(data["meta"]["assigned_axis_source"], "workflow")
+        wf3 = dict(wf, d_verdicts=[{"id": "D1", "verdict": "confirmed", "reason": "r"}])
+        r, data = run(workflow_return=wf3, codex_side=cx, meta=BASE_META, assigned=assigned)
+        d1 = [v for v in data["d_verdicts"] if v["id"] == "D1"]
+        self.assertNotIn("backfilled", d1[0], "축이 낸 판정에는 표식이 없다")
 
     def test_both_chosen_axes_dead_makes_no_report(self):
         # axes 가 meta.json 에 빠져도 Workflow 의 axes_run 이 분모가 된다 (AC-4 우회 봉쇄).

@@ -368,11 +368,20 @@ def _drop_codex(data, id_):
     return data
 
 
+def _mark_backfilled(data, id_):
+    # 고르지 않은 축의 id 는 claude 판정이 assemble 의 빈칸 채움뿐이다.
+    for x in data["d_verdicts"]:
+        if x["id"] == id_ and x["source"] == "claude":
+            x.update(verdict="unverified", backfilled=True,
+                     reason="이번 감사에서 고르지 않은 축이라 빈칸을 채웠다(backfilled — 검증 안 됨)")
+    return data
+
+
 class TestChosenAxes(unittest.TestCase):
     """고른 축만 돈 감사 — codex 도 고른 축만 감사한다(SKILL pre-1)."""
 
     def test_b7_skips_ids_on_unchosen_axes(self):
-        d_ = _drop_codex(copy.deepcopy(VALID), "D4")
+        d_ = _mark_backfilled(_drop_codex(copy.deepcopy(VALID), "D4"), "D4")
         d_["meta"].update(axes=[1], assigned_axis={"D1": 1, "D4": 4})
         rc, err = run_validate(d_)
         self.assertEqual(rc, 0, err)
@@ -386,11 +395,35 @@ class TestChosenAxes(unittest.TestCase):
             ("D4", dict(axes=[1], assigned_axis={"D4": True})),
         )
         for id_, extra in cases:
-            d_ = _drop_codex(copy.deepcopy(VALID), id_)
+            d_ = _mark_backfilled(_drop_codex(copy.deepcopy(VALID), id_), "D4")
             d_["meta"].update(extra)
             rc, err = run_validate(d_)
             self.assertEqual(rc, 1, f"{id_} {extra}")
             self.assertIn(f"{id_}의 codex 판정 없음", err)
+
+    def test_audited_id_needs_codex_even_if_map_says_unchosen(self):
+        # 손으로 옮긴 축 지도가 틀려도(D1 은 고른 축 1 인데 4 로 적힘) D1 에는 실제 claude 판정이 있다 —
+        # 돈 축이 감사했다는 뜻이므로 codex 판정 요구를 끄지 않는다 (B7 fail-open 봉쇄).
+        d_ = _drop_codex(copy.deepcopy(VALID), "D1")
+        d_["meta"].update(axes=[1], assigned_axis={"D1": 4})
+        rc, err = run_validate(d_)
+        self.assertEqual(rc, 1)
+        self.assertIn("D1의 codex 판정 없음", err)
+        # 양성 짝 — 같은 지도에서 claude 판정이 빈칸 채움뿐이면 통과한다.
+        d_ = _mark_backfilled(_drop_codex(copy.deepcopy(VALID), "D1"), "D1")
+        d_["meta"].update(axes=[1], assigned_axis={"D1": 4})
+        rc, err = run_validate(d_)
+        self.assertEqual(rc, 0, err)
+
+    def test_b7_message_points_at_the_fix(self):
+        d_ = _drop_codex(copy.deepcopy(VALID), "D1")
+        rc, err = run_validate(d_)
+        self.assertEqual(rc, 1)
+        line = [l for l in err.splitlines() if "D1의 codex 판정 없음" in l][0]
+        self.assertIn("assigned_axis", line)
+        self.assertIn("axis_of", line)
+        self.assertIn("assemble 을 다시 돌려라", line)
+        self.assertIn("$RUN_DIR", line)
 
     def test_axes_and_axes_run_must_match(self):
         d_ = copy.deepcopy(VALID); d_["meta"].update(axes=[1, 6], axes_run=[1, 2])
@@ -406,18 +439,21 @@ class TestChosenAxes(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("meta.axes_run 가 잘못됐다", err)
 
-    def _assemble_then_validate(self, codex_d):
+    def _assemble_then_validate(self, codex_d, axis_of=None, wf_axis=None):
         assemble = SCRIPTS_DIR / "assemble-audit-data.py"
         with tempfile.TemporaryDirectory() as t:
             t = Path(t)
             wf = {"findings": [], "d_verdicts": [d("D1", "claude")], "oq_answers": [],
                   "new_open_questions": [], "axis_failures": [], "degraded_events": [], "axes_run": [1]}
+            if wf_axis is not None:
+                wf["assigned_axis"] = wf_axis
             codex = {"d_verdicts": codex_d, "oq_answers": [], "new_open_questions": []}
             meta = {"date": "2026-01-01", "fanout_declared": "규모 문장",
                     "consent": {"approved": True, "at": "t", "fanout": "규모 문장", "axes": [1]},
                     "codex": {"ran": True, "version": "1.0"}, "target": "myplugin", "seed_provided": True,
                     "axes": [1]}
-            assigned = {"assigned_d": ["D1", "D4"], "assigned_oq": [], "axis_of": {"D1": 1, "D4": 4}}
+            assigned = {"assigned_d": ["D1", "D4"], "assigned_oq": [],
+                        "axis_of": axis_of if axis_of is not None else {"D1": 1, "D4": 4}}
             paths = {}
             for name, obj in (("wf", wf), ("codex", codex), ("meta", meta), ("assigned", assigned)):
                 p = t / f"{name}.json"
@@ -438,6 +474,21 @@ class TestChosenAxes(unittest.TestCase):
         d4 = [x for x in data["d_verdicts"] if x["id"] == "D4"]
         self.assertEqual([x["source"] for x in d4], ["claude"])
         self.assertEqual(d4[0]["verdict"], "unverified")
+
+    def test_end_to_end_mislabelled_axis_of_still_reds(self):
+        # 변이 — Workflow 지도가 없고 axis_of 가 D1(고른 축 1)을 4 로 잘못 적었다. D1 은 실제 claude 판정이 있다.
+        data, (rc, err) = self._assemble_then_validate([], axis_of={"D1": 4, "D4": 4})
+        self.assertEqual(data["meta"]["assigned_axis_source"], "assigned.json")
+        self.assertEqual(rc, 1)
+        self.assertIn("D1의 codex 판정 없음", err)
+
+    def test_end_to_end_workflow_map_wins(self):
+        data, (rc, err) = self._assemble_then_validate(
+            [{"id": "D1", "verdict": "confirmed", "reason": "r"}],
+            axis_of={"D1": 4, "D4": 1}, wf_axis={"D1": 1, "D4": 4})
+        self.assertEqual(data["meta"]["assigned_axis"], {"D1": 1, "D4": 4})
+        self.assertEqual(data["meta"]["assigned_axis_source"], "workflow")
+        self.assertEqual(rc, 0, err)
 
     def test_end_to_end_chosen_axis_missing_codex_still_reds(self):
         data, (rc, err) = self._assemble_then_validate([])

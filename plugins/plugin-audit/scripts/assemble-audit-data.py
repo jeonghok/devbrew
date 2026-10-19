@@ -116,7 +116,13 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     # 떠야 한다. any-source로 보면 codex 답변이 죽은 Claude 축을 조용히 가린다 (LD4 정직성 갭).
     # 고르지 않은 축의 id 는 사유가 다르다 — 축이 죽은 것이 아니라 이번 감사가 그 축을 돌리지 않았다.
     chosen = meta.get("axes") if "axes" in meta else wf.get("axes_run")
-    axis_of = _axis_map(assigned.get("axis_of"))
+    # 축 지도: Workflow 가 실제 dispatch 에 쓴 지도가 정본이고, 없을 때만 손으로 적는 assigned.json 의 axis_of.
+    if isinstance(wf.get("assigned_axis"), dict):
+        axis_of, axis_source = _axis_map(wf["assigned_axis"]), "workflow"
+    elif "axis_of" in assigned:
+        axis_of, axis_source = _axis_map(assigned.get("axis_of")), "assigned.json"
+    else:
+        axis_of, axis_source = {}, None
     unchosen_reason = "이번 감사에서 고르지 않은 축이라 빈칸을 채웠다(backfilled — 검증 안 됨)"
 
     def unchosen(i):
@@ -128,7 +134,7 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
             d_verdicts.append({"id": did, "verdict": "unverified",
                                "reason": (unchosen_reason if unchosen(did)
                                           else "축 감사가 끝나지 않아 빈칸을 채웠다(backfilled)"),
-                               "source": "claude"})
+                               "source": "claude", "backfilled": True})
     have_oq = {v["id"] for v in oq_answers if v.get("source") == "claude"}
     for oid in assigned.get("assigned_oq", []):
         if oid not in have_oq:
@@ -136,7 +142,7 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
             oq_answers.append({"id": oid, "answer": None,
                                "reason": (unchosen_reason if unchosen(oid)
                                           else "축 감사가 끝나지 않아 빈칸을 채웠다(backfilled — 검증 안 됨)"),
-                               "source": "claude"})
+                               "source": "claude", "backfilled": True})
 
     # (4) cross_model_confirmed (claude∪codex file:line 교집합)
     claude_ev, codex_ev = set(), set()
@@ -221,8 +227,9 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     if "axes_run" in wf:
         out_meta["axes_run"] = wf["axes_run"]
         out_meta.setdefault("axes", wf["axes_run"])
-    if axis_of:
+    if axis_source is not None:
         out_meta["assigned_axis"] = axis_of
+        out_meta["assigned_axis_source"] = axis_source
     return {"meta": out_meta, "findings": findings, "d_verdicts": d_verdicts,
             "oq_answers": oq_answers, "new_open_questions": noq,
             "axis_failures": wf.get("axis_failures", []), "degraded": degraded}

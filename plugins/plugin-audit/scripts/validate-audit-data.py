@@ -53,13 +53,21 @@ def validate_data(data: dict) -> list:
             and set(meta["axes"]) != set(meta["axes_run"]):
         errs.append(f"meta.axes({meta['axes']})와 Workflow 가 실제로 돈 축 axes_run({meta['axes_run']})이 다르다")
 
-    # 배정 id 의 축(assemble 이 assigned.json 의 axis_of 에서 옮긴다). 고르지 않은 축이라고 알 수 있는
-    # id 만 codex 판정 요구(B7)에서 뺀다 — 축을 모르면 요구한다(fail-closed).
+    # 배정 id 의 축(assemble 이 Workflow 의 assigned_axis, 없으면 assigned.json 의 axis_of 에서 옮긴다).
+    # 고르지 않은 축이라고 알 수 있는 id 만 codex 판정 요구(B7)에서 뺀다 — 축을 모르면 요구한다(fail-closed).
+    # 돈 축이 감사한 id(빈칸 채움이 아닌 claude 판정이 있다)는 지도가 뭐라든 요구한다 — 손으로 옮긴 지도가
+    # 틀려도 codex 누락이 조용히 통과하지 않게.
     assigned_axis = meta.get("assigned_axis") if isinstance(meta.get("assigned_axis"), dict) else {}
+    audited = {x.get("id") for x in data.get("d_verdicts", []) + data.get("oq_answers", [])
+               if x.get("source") == "claude" and x.get("backfilled") is not True}
 
     def _codex_expected(i):
         ax = assigned_axis.get(i)
-        return chosen is None or not (type(ax) is int and ax not in chosen)
+        return chosen is None or i in audited or not (type(ax) is int and ax not in chosen)
+
+    b7_hint = (" — codex 결과에 이 항목이 없다. 고르지 않은 축의 항목이라면 축 지도(Workflow 결과의"
+               " assigned_axis, 없으면 assigned.json 의 axis_of)를 확인하고 assemble 을 다시 돌려라."
+               " 입력 파일은 실행 디렉토리($RUN_DIR)에 남아 있다")
 
     # D/OQ 완결성 (row 16 이빨 — backfill 안 하면 여기서 RED)
     d_ids = {x.get("id") for x in data.get("d_verdicts", [])}
@@ -98,12 +106,12 @@ def validate_data(data: dict) -> list:
             if not _codex_expected(did):
                 continue   # codex 는 고른 축만 감사한다 (SKILL pre-1)
             if not any(x.get("id") == did and x.get("source") == "codex" for x in data.get("d_verdicts", [])):
-                errs.append(f"codex.ran=true인데 {did}의 codex 판정 없음 (B7 — LD4 참칭)")
+                errs.append(f"codex.ran=true인데 {did}의 codex 판정 없음 (B7 — LD4 참칭)" + b7_hint)
         for oid in assigned_oq:
             if not _codex_expected(oid):
                 continue
             if not any(x.get("id") == oid and x.get("source") == "codex" for x in data.get("oq_answers", [])):
-                errs.append(f"codex.ran=true인데 {oid}의 codex 답변 없음 (B7)")
+                errs.append(f"codex.ran=true인데 {oid}의 codex 답변 없음 (B7)" + b7_hint)
 
     findings = data.get("findings", [])
 

@@ -457,6 +457,14 @@ const AXES = [
   },
 ]
 
+// id → axis for every seed clue / open question an axis question block picks up — the same
+// `c.axis === ax.n` / `q.axis === ax.n` filters as axisClueBlock / axisOqBlock. Returned so the
+// post-run checks know which ids belong to an axis that did not run, without a hand-copied map.
+const ASSIGNED_AXIS = {}
+for (const it of [...(pack.candidate_clues || []), ...(pack.open_questions || [])]) {
+  if (AXES.some((ax) => it.axis === ax.n)) ASSIGNED_AXIS[it.id] = it.axis
+}
+
 const findPrompt = (ax) => {
   // The OQ→axis binding comes from the seed-derived pack (spot 5), not a hardcoded ['OQ1'] list.
   const oq = (pack.open_questions || []).filter((q) => q.axis === ax.n).map((q) => q.id)
@@ -754,4 +762,5 @@ return {
   axis_failures: axisFailures,
   degraded_events: degradedEvents,
   axes_run: AXES_RUN,
+  assigned_axis: ASSIGNED_AXIS,
 }
