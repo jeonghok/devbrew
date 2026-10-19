@@ -104,9 +104,9 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/state-file.md
 포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때만 허용됩니다(`## 조사 상한 · 포화 판정`) — landscape·skepticism 등
 통과 의례 메커니즘이 각 차원을 채우는 수단이며, `check_brief.py`가 이를 기계적으로 검증합니다(Law 1 구조 게이트).
 
-산출물은 `spec.md`가 아니라 **interview brief**(brainstorming용 meta-prompt)이며, 이
-brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으면 brainstorming으로
-넘기고(optional), 없으면 brief 자체로 완료합니다.
+산출물은 `spec.md`가 아니라 **interview brief**(기본 다음 단계가 brainstorming 인 meta-prompt)이며, 이
+brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으면 기본으로 brainstorming으로
+넘기고(optional — 일의 모양이 다르면 끝 게이트의 둘째 질문으로 다른 다음 단계를 고른다), 없으면 brief 자체로 완료합니다.
 
 ## State location
 

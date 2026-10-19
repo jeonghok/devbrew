@@ -4,7 +4,7 @@ type: interview-brief
 created_at: YYYY-MM-DD
 session_id: <uuid>
 source: spec-distill spec-interview v0.23.0
-next_phase: superpowers:brainstorming
+next_phase: superpowers:brainstorming   # 기본 다음 단계 — 끝 게이트의 둘째 질문에서 다른 단계를 고르면 그 skill 의 완전명
 # contract: v2 — 조사 축 술어 다섯의 옵트인 스위치. 빼면 전부 미발동 + advisory
 contract: v2
 audit_file: <YYYY-MM-DD>-<kebab-topic>-interview.audit.md   # basename만 (같은 디렉토리)
@@ -30,8 +30,8 @@ user_sourced_items:
 
 # <Topic> — Interview Brief
 
-> 이 brief는 단독 완결 산출물이다. superpowers가 있으면 §7대로 brainstorming 해답공간으로
-> 넘어가고, 없으면 이 brief 자체가 다음 단계의 입력이다. 텔레메트리는 `audit_file`에 있다.
+> 이 brief는 단독 완결 산출물이다. superpowers가 있으면
+> §7 대로 기본 다음 단계(brainstorming 해답공간)로 넘어가고, 없으면 이 brief 자체가 다음 단계의 입력이다. 텔레메트리는 `audit_file`에 있다.
 
 ## 0. 한눈에
 
@@ -117,7 +117,7 @@ user_sourced_items:
 
 ## 7. Next Action
 
-(superpowers 있으면: 이 brief를 context로 `superpowers:brainstorming` 호출 → `-design.md` 작성·커밋
+(기본 다음 단계 — superpowers 있으면: 이 brief를 context로 `superpowers:brainstorming` 호출 → `-design.md` 작성·커밋
  → 그 설계문서 경로로 `spec-distill:spec-review`(brainstorming 의 설계문서 점검과 그 질문을 마친 뒤 문서를 승인받는 자리) → 승인
  게이트에서 진행을 고른 뒤 `superpowers:writing-plans`. 없으면: 이 brief가 완결 산출물 — 직접 사용.)
 
