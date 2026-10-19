@@ -194,7 +194,7 @@ OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지> · 트레이�
   기록» 표대로 §3 Open Questions 로도 이월) 다음 질문의 선택지에 「이 주제를 더 파기」를 둔다 — 더 팔지는 사용자가 연다. 그 차원을 자동으로 닫지 않는다.
 - **한 라운드에 겹치면** 되묻기 → 외부 근거 처분(landscape·premortem 출력을 받아들일지) → 새 결정 순서로
   앞선 하나가 그 라운드의 질문이 되고, 나머지는 다음 라운드의 «다음 결정»으로 넘어간다 — 서로 기대지 않는
-  결정은 위 규칙대로 같은 호출에 묶을 수 있다; 되묻기는 직전 답에 기대므로 묶지 않는다. landscape·
+  결정은 위 규칙대로 같은 호출에 묶을 수 있다 — 되묻기는 직전 답에 기대므로 묶지 않는다. landscape·
   blind_spot 은 그 처분 S 로만 닫힌다. 넘어간 질문은 그 라운드 «지금 이해»에 `밀린 질문 <N>개 — <한 줄씩>` 으로 보인다 — 숨은 후순위를 두지 않는다.
 - **steelman 절차의 질문** — `references/steelman.md` 가 사용자에게 묻는 질문은 전부 그 파일의 규약(선택지
   순서·라벨·추천 표기·시점)을 따르고 각각 `## R<n>` 한 라운드로 기록한다. 이 절의 질문 수·`(권장)` 표기·
@@ -243,7 +243,7 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 CLAIMS="${CLAUDE_PLUGIN_ROOT}/references/research-claims.md"
 claims_rc=0; CLAIMS_CONTRACT="$(cat "$CLAIMS")" || claims_rc=$?
 if [ "$claims_rc" -ne 0 ] || [ -z "$CLAIMS_CONTRACT" ]; then
-  echo "[spec-distill] 조사 주장 계약을 읽지 못했다(cat rc $claims_rc): $CLAIMS — 이 장치를 dispatch 하지 않는다. 인터뷰는 계속하고, 그 차원을 자동으로 닫지 않는다. coverage-mapper 자리면 audit §2 Budget 에 coverage-mapper 0 (unavailable: 계약 배달 실패) 를 적고, blind-spot-prober 자리면 inline premortem 으로 강등하고, repo-researcher 자리면 본체가 직접 조사한다. open-researcher 자리면 본체가 직접 조사한다." >&2
+  echo "[spec-distill] 조사 주장 계약을 읽지 못했다(cat rc $claims_rc): $CLAIMS — 이 장치를 dispatch 하지 않는다. 인터뷰는 계속하고, 그 차원을 자동으로 닫지 않는다. coverage-mapper 자리면 audit §2 Budget 에 coverage-mapper 0 (unavailable: 계약 배달 실패) 를 적고, blind-spot-prober 자리면 inline premortem 으로 강등하고, repo-researcher · open-researcher 자리면 본체가 직접 조사한다." >&2
   exit 1
 fi
 printf '%s\n' "$CLAIMS_CONTRACT"
@@ -508,12 +508,12 @@ R&R 이다 — landscape · steelman · blind-spot premortem · coverage-mapper 
 **질문 라우팅** — 답을 사용자만 알 수 있으면 framing, 사용자 밖에서 찾아야 하면 interview.
 같은 주제도 이 기준으로 갈린다.
 
-토픽이 잡히면, 그리고 결정에 닿을 때마다 landscape sweep을 수행합니다(의례 R2 의 «≥1회» 는 하한이다). 각 web 검색 *직전에* kill switch를
+토픽이 잡히면, 그리고 결정에 닿을 때마다 landscape sweep을 수행합니다(의례 R2 의 «≥1회» 는 하한이고, 사용자가 고른 「외부 선례 무관」 닫힘이 그 하한을 대신한다). 각 web 검색 *직전에* kill switch를
 재평가합니다(세션 시작 시 캐시 금지).
 
 외부 선례가 상관없는 일이면, 라운드 질문에서 「외부 선례 무관 — <이유>」를 선택지로 보인다. 사용자가 고르면 그 답
 `S<m>` 으로 landscape 를 닫고 brief §4 에 불릿 없는 한 줄 `외부 선례 무관(@S<m>) — <이유>` 를 쓴다. 게이트는 그 `S<m>` 이
-audit §6 에 사용자 선택(☑)으로 있을 때만 받는다. 조사 시점은 모델 판단이다(필수 자리 둘은 그대로).
+audit §6 에 사용자 선택(☑)으로 있을 때만 받는다. 조사 시점은 모델 판단이다(필수 자리 둘 — 첫 질문 전 `coverage-mapper` · blind_spot 차원의 첫 `blind-spot-prober` — 은 그대로).
 
 - 모든 외부 주장은 **출처 URL 필수** — payload §4 External Landscape에 `[취함|피함|중립]` + 이유와 함께.
 - kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구 부재 → **loud** 생략(crash 금지):

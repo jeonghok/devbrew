@@ -65,7 +65,7 @@ assert_contains "$FLAT" '만들 것이 없는 일(조사 · 결정만)이면 건
 RB="$(awk '/^```/{c=!c} /^## 라운드 규약/{f=1;print;next} !c && /^## /{f=0} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
 assert_contains "$RB" 'AskUserQuestion 1회다. 기본은 질문 1개이고, 서로 기대지 않는 결정이 둘 이상이면 같은 호출에 질문을 여럿 묶을 수 있다' "AC13: 호출 하나 · 독립 결정 묶기"
 assert_contains "$RB" '답마다 `S<m>` 을 하나씩 기록한다' "AC13: 답마다 S"
-assert_contains "$RB" '나머지는 다음 라운드의 «다음 결정»으로 넘어간다 — 서로 기대지 않는 결정은 위 규칙대로 같은 호출에 묶을 수 있다; 되묻기는 직전 답에 기대므로 묶지 않는다' "AC13: 겹침 순서는 기대는 결정에만 — 독립 결정은 묶고 되묻기는 묶지 않는다"
+assert_contains "$RB" '나머지는 다음 라운드의 «다음 결정»으로 넘어간다 — 서로 기대지 않는 결정은 위 규칙대로 같은 호출에 묶을 수 있다 — 되묻기는 직전 답에 기대므로 묶지 않는다' "AC13: 겹침 순서는 기대는 결정에만 — 독립 결정은 묶고 되묻기는 묶지 않는다"
 # V1 이 웹 주장으로 넓어진다(fresh-evidence 원칙 2)
 assert_contains "$RB" '결정에 닿는 웹 주장(`evidence[]`)은 `${CLAUDE_PLUGIN_ROOT}/references/fresh-evidence.md` 원칙 2 대로 본체가 1차 자료로 한 번 더 확인하거나 «지금 이해»에 「확인 못 함」으로 둔다' "V1: 웹 주장 재확인 또는 「확인 못 함」"
 # AC3 — 웹 펜스를 차가운 셸에서 실행
@@ -95,5 +95,7 @@ R2="$(awk '/^```/{c=!c} /^### R2 — 웹 Landscape/{f=1;next} !c && /^##/{f=0} f
 assert_contains "$R2" '라운드 질문에서 「외부 선례 무관 — <이유>」를 선택지로 보인다' "AC14: R2 — 라운드 질문의 선택지"
 assert_contains "$R2" '불릿 없는 한 줄' "AC14: R2 — 불릿 없는 한 줄"
 assert_contains "$R2" '사용자 선택(☑)으로 있을 때만 받는다' "AC14: R2 — ☑ 일 때만"
+assert_contains "$R2" '«≥1회» 는 하한이고, 사용자가 고른 「외부 선례 무관」 닫힘이 그 하한을 대신한다' "AC14: R2 — 사용자가 고른 닫힘이 sweep 하한을 대신한다"
+assert_contains "$R2" '필수 자리 둘 — 첫 질문 전 `coverage-mapper` · blind_spot 차원의 첫 `blind-spot-prober` — 은 그대로' "AC14: R2 — 필수 자리 둘을 이름으로 댄다"
 
 finish
