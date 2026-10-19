@@ -90,5 +90,10 @@ mkdir -p "$SCRATCH/empty/references"
 got="$(env -i PATH=/usr/bin:/bin CLAUDE_PLUGIN_ROOT="$SCRATCH/empty" bash "$FF" 2>"$SCRATCH/f.err")"; rc=$?
 assert_eq "$rc" "1" "AC8: 파일 없는 루트면 rc 1"; assert_eq "$got" "" "AC8: 그때 stdout 비었다"
 assert_contains "$(cat "$SCRATCH/f.err")" '본체가 직접 조사한다' "AC8: 강등 경로를 말한다"
+# AC14 — R2 의 「외부 선례 무관」 닫힘(사용자가 고른 답 · 불릿 없는 한 줄 · ☑ 일 때만)
+R2="$(awk '/^```/{c=!c} /^### R2 — 웹 Landscape/{f=1;next} !c && /^##/{f=0} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
+assert_contains "$R2" '라운드 질문에서 「외부 선례 무관 — <이유>」를 선택지로 보인다' "AC14: R2 — 라운드 질문의 선택지"
+assert_contains "$R2" '불릿 없는 한 줄' "AC14: R2 — 불릿 없는 한 줄"
+assert_contains "$R2" '사용자 선택(☑)으로 있을 때만 받는다' "AC14: R2 — ☑ 일 때만"
 
 finish

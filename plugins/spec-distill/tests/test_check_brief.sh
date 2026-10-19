@@ -2725,4 +2725,119 @@ PY
     && ok "AC18: audit §6 출처 표기 앞의 끼운 머리(${stem}) → red (싣는 §6 에 출처 표기가 없다)" \
     || { no "AC18: audit §6 출처 표기 앞의 끼운 머리(${stem})가 막히지 않았다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
 done
+
+# === R10 계획 1 (설계 2026-10-19-interview-open-research) — 「외부 선례 무관」 닫힘(AC14) · §4 확인 꼬리(AC9) ===
+# 쌍은 v2-valid 에서 만든다. irr_build <stem> <§4 에 넣을 줄|-> <S2 표지 ☑|🗣|->
+#   §4 의 두 항목을 지우고, 둘째 인자가 있으면 그 줄을 §4 에 넣는다. 셋째 인자가 있으면 payload §6 · audit §6 끝에
+#   `- **S2** <표지> 선택 (외부 선례):` / `  > "외부 선례 무관"` 을 더한다.
+irr_build() {
+  cp "$FXV" "$TMPD/$1.md"; cp "${FXV%.md}.audit.md" "$TMPD/$1.audit.md"
+  sed -i.bak "s|^audit_file:.*|audit_file: $1.audit.md|" "$TMPD/$1.md"; rm -f "$TMPD/$1.md.bak"
+  sed -i.bak "s|^payload:.*|payload: $1.md|" "$TMPD/$1.audit.md"; rm -f "$TMPD/$1.audit.md.bak"
+  python3 -I - "$TMPD/$1.md" "$TMPD/$1.audit.md" "$2" "$3" <<'PY' || no "irr_build: $1 변형이 적용되지 않았다"
+import sys, pathlib
+pp, ap, line, mark = sys.argv[1:5]
+p = pathlib.Path(pp); s = p.read_text(encoding="utf-8")
+a = pathlib.Path(ap); t = a.read_text(encoding="utf-8")
+items = ("- Next.js app-router SSR «nextjs-docs» — [취함] — 데이터 형태와 부합 [→ OQ1]\n"
+         "- 부분 하이드레이션 «islands» — [중립] — 이 결정과 무관 [→ 없음]\n")
+if items not in s:
+    sys.exit("§4 항목 둘을 찾지 못했다")
+s = s.replace(items, "" if line == "-" else line + "\n", 1)
+if mark != "-":
+    anchor = f'- **S2** {mark} 선택 (외부 선례):\n  > "외부 선례 무관"\n'
+    tail = '  > "대시보드가 너무 느려요."\n## 7. Next Action'
+    if tail not in s:
+        sys.exit("payload §6 끝을 찾지 못했다")
+    s = s.replace(tail, tail.replace("\n## 7.", "\n" + anchor + "## 7.", 1), 1)
+    head = "## 7. 확산 원자료"
+    if head not in t:
+        sys.exit("audit §7 머리를 찾지 못했다")
+    t = t.replace(head, anchor + "\n" + head, 1)
+p.write_text(s, encoding="utf-8"); a.write_text(t, encoding="utf-8")
+PY
+}
+irr_run() { python3 "$SCRIPT" gate "$TMPD/$1.md" 2>/dev/null; }
+IRR_WHY='이 레포 안의 정리 일이라 바깥 선례가 결정을 바꾸지 않는다'
+
+# 양성 대조 — §4 항목만 지운 변형은 정확히 「empty」 하나로 red 다(다른 red 가 섞이면 아래 사례의 rc 가 무엇을 재는지 모른다).
+irr_build irr_ctl - -
+out="$(irr_run irr_ctl)"; rc=$?
+assert_eq "$(python3 -I -c 'import json,sys; print(json.load(sys.stdin)["failures"])' <<<"$out")" \
+  "['External Landscape empty (no entries and no web-disabled sentinel)']" \
+  "AC14 irr_ctl: §4 항목만 지운 변형의 실패는 「External Landscape empty」 하나뿐이다 (rc=${rc})"
+
+irr_build irr_ok "외부 선례 무관(@S2) — ${IRR_WHY}" ☑
+out="$(irr_run irr_ok)"; rc=$?
+[[ $rc -eq 0 ]] && ok "AC14: ☑ 사용자 선택 S 로 닫은 「외부 선례 무관」 → 통과" || { no "AC14: ☑ 사례가 red"; printf '    %s\n' "$out"; }
+
+irr_build irr_s1 "외부 선례 무관(@S1) — ${IRR_WHY}" ☑
+irr_build irr_ghost "외부 선례 무관(@S9) — ${IRR_WHY}" ☑
+irr_build irr_spoken "외부 선례 무관(@S2) — ${IRR_WHY}" 🗣
+for c in irr_s1 irr_ghost irr_spoken; do
+  out="$(irr_run "$c")"; rc=$?
+  { [[ $rc -ne 0 ]] && grep -qF '사용자 선택(☑)이 아니다' <<<"$out"; } && ok "AC14: ${c} → red(☑ 아님)" || { no "AC14: ${c} 가 통과했거나 사유가 다르다"; printf '    %s\n' "$out"; }
+done
+
+# 불릿으로 쓴 같은 꼴 — 「불릿 없이」를 먼저 말한다(출처키 없는 항목 red 보다 앞).
+irr_build irr_bullet "- 외부 선례 무관(@S2) — ${IRR_WHY}" ☑
+out="$(irr_run irr_bullet)"; rc=$?
+first="$(python3 -I -c 'import json,sys; f=json.load(sys.stdin)["failures"]; print(f[0] if f else "")' <<<"$out")"
+{ [[ $rc -ne 0 ]] && grep -qF '불릿 없이 한 줄로 쓴다' <<<"$first"; } \
+  && ok "AC14: irr_bullet → red, 첫 실패가 「불릿 없이 한 줄로 쓴다」" \
+  || { no "AC14: irr_bullet 이 통과했거나 첫 실패가 「불릿 없이」가 아니다 (rc=${rc})"; printf '    %s\n' "$out"; }
+
+# 이미 실제 항목이 있는 §4 에 덧붙인 「외부 선례 무관」도 ☑ 가 아니면 red — 닫힘이 필요 없는 자리라도 거짓 출처 표시를 남기지 않는다.
+cp "$FXV" "$TMPD/irr_extra.md"; cp "${FXV%.md}.audit.md" "$TMPD/irr_extra.audit.md"
+sed -i.bak 's|^audit_file:.*|audit_file: irr_extra.audit.md|' "$TMPD/irr_extra.md"; rm -f "$TMPD/irr_extra.md.bak"
+sed -i.bak 's|^payload:.*|payload: irr_extra.md|' "$TMPD/irr_extra.audit.md"; rm -f "$TMPD/irr_extra.audit.md.bak"
+python3 -I - "$TMPD/irr_extra.md" "$IRR_WHY" <<'PY' || no "irr_extra 변형이 적용되지 않았다"
+import sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
+old = "\n## 5. 기각 · Blind Spots"
+if old not in s:
+    sys.exit("§5 머리를 찾지 못했다")
+p.write_text(s.replace(old, f"외부 선례 무관(@S1) — {sys.argv[2]}\n" + old, 1), encoding="utf-8")
+PY
+out="$(irr_run irr_extra)"; rc=$?
+{ [[ $rc -ne 0 ]] && grep -qF '사용자 선택(☑)이 아니다' <<<"$out"; } \
+  && ok "AC14: 항목이 있는 §4 에 덧붙인 🗣 S 의 「외부 선례 무관」 → red(☑ 아님)" \
+  || { no "AC14: 항목이 있는 §4 의 거짓 「외부 선례 무관」이 조용히 통과했다 (rc=${rc})"; printf '    %s\n' "$out"; }
+
+# 인용 · 펜스 안의 같은 줄은 닫힘이 아니다 — §4 판독(`brief_body.section_text` 는 펜스를 벗긴다)과 열 0 규칙을 그대로 따른다.
+irr_build irr_quote "> 외부 선례 무관(@S2) — ${IRR_WHY}" ☑
+irr_build irr_fence "$(printf '```\n외부 선례 무관(@S2) — %s\n```' "$IRR_WHY")" ☑
+for c in irr_quote irr_fence; do
+  out="$(irr_run "$c")"; rc=$?
+  { [[ $rc -ne 0 ]] && grep -qF 'External Landscape empty' <<<"$out"; } \
+    && ok "AC14: ${c} → 닫힘으로 읽지 않는다(empty)" \
+    || { no "AC14: ${c} 가 닫힘으로 읽혔다 (rc=${rc})"; printf '    %s\n' "$out"; }
+done
+
+# AC9 — §4 항목 줄의 확인 꼬리. 결정 연결 앞이면 통과, 없어도 통과, 연결 뒤면 연결이 줄 끝이 아니라 red(양성 대조).
+fresh_build() {   # fresh_build <stem> <바꿀 글> — v2-valid 첫 §4 항목의 「데이터 형태와 부합 [→ OQ1]」 을 바꾼다
+  cp "$FXV" "$TMPD/$1.md"; cp "${FXV%.md}.audit.md" "$TMPD/$1.audit.md"
+  sed -i.bak "s|^audit_file:.*|audit_file: $1.audit.md|" "$TMPD/$1.md"; rm -f "$TMPD/$1.md.bak"
+  sed -i.bak "s|^payload:.*|payload: $1.md|" "$TMPD/$1.audit.md"; rm -f "$TMPD/$1.audit.md.bak"
+  python3 -I - "$TMPD/$1.md" "$2" <<'PY' || no "fresh_build: $1 변형이 적용되지 않았다"
+import sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
+old = "데이터 형태와 부합 [→ OQ1]"
+if s.count(old) != 1:
+    sys.exit("바꿀 글이 정확히 하나가 아니다")
+p.write_text(s.replace(old, sys.argv[2], 1), encoding="utf-8")
+PY
+}
+fresh_build fresh_tag '데이터 형태와 부합 (1차 · 확인 2026-10-19) [→ OQ1]'
+fresh_build fresh_tag2 '데이터 형태와 부합 (2차 · 확인 2026-10-19) [→ OQ1]'
+fresh_build fresh_none '데이터 형태와 부합 [→ OQ1]'
+fresh_build fresh_after '데이터 형태와 부합 [→ OQ1] (1차 · 확인 2026-10-19)'
+for c in fresh_tag fresh_tag2 fresh_none; do
+  out="$(irr_run "$c")"; rc=$?
+  [[ $rc -eq 0 ]] && ok "AC9: ${c} → 통과" || { no "AC9: ${c} 가 red"; printf '    %s\n' "$out"; }
+done
+out="$(irr_run fresh_after)"; rc=$?
+{ [[ $rc -ne 0 ]] && grep -qF '결정 연결 없음' <<<"$out"; } \
+  && ok "AC9 fresh_after(양성 대조): 확인 꼬리를 연결 뒤에 두면 red «결정 연결 없음»" \
+  || { no "AC9 fresh_after: 연결 뒤 꼬리가 통과했거나 사유가 다르다 (rc=${rc})"; printf '    %s\n' "$out"; }
 finish

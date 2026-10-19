@@ -494,7 +494,7 @@ brief 작성(+ optional brainstorming invoke)은 다음 5 의례를 **모두 통
 | # | 의례 | 통과 기준 | 메커니즘 |
 |---|---|---|---|
 | R1 | **사용자 말 그대로** | root_problem 은 S1 과 문제를 서술한 이후 사용자 발화를 **원문 그대로 인용**해 닫는다. 다시 쓴 문장 · 확인 질문 없음. | (d) ontological → payload §0 · §1 |
-| R2 | **Landscape 수집** | web sweep ≥1회, prior-art/대안이 **인용과 함께** 표면화. | path(a) 확장 → payload §4 External Landscape |
+| R2 | **Landscape 수집** | web sweep ≥1회, prior-art/대안이 **인용과 함께** 표면화(사용자가 고른 「외부 선례 무관」이면 그 한 줄). | path(a) 확장 → payload §4 External Landscape |
 | R3 | **Skepticism 통과** | 의심 triggered 방향이 모두 steelman 후 *유지 / 보완 / 전환 / 보류* 중 하나로 판정. un-challenged 의심 방향은 확정 후보가 될 수 없다. trigger 0건이면 `- 검토 — steelman 0건: …` 한 줄 명시(빈 섹션 금지). | steelman-builder dispatch → payload §5의 **`verdict:` 항목** |
 | R4 | **시행착오 기록** | steelman switch된 방향 **또는** 사용자가 명시적으로 폐기한 방향이 *이유와 함께* 기록. 0건이면 `- 기각 — N/A — 전부 first-time defend+lock` 한 줄 명시(빈 섹션 금지). | payload §5의 **`기각` 항목** |
 | R5 | **Open Questions 박제** | 미해결 명시("유추 금지"). | payload §3 Open Questions |
@@ -510,6 +510,10 @@ steelman · blind-spot premortem · coverage-mapper 넷이 전부 그 장치다.
 
 토픽이 잡히면, 그리고 결정에 닿을 때마다 landscape sweep을 수행합니다(의례 R2 의 «≥1회» 는 하한이다). 각 web 검색 *직전에* kill switch를
 재평가합니다(세션 시작 시 캐시 금지).
+
+외부 선례가 상관없는 일이면, 라운드 질문에서 「외부 선례 무관 — <이유>」를 선택지로 보인다. 사용자가 고르면 그 답
+`S<m>` 으로 landscape 를 닫고 brief §4 에 불릿 없는 한 줄 `외부 선례 무관(@S<m>) — <이유>` 를 쓴다. 게이트는 그 `S<m>` 이
+audit §6 에 사용자 선택(☑)으로 있을 때만 받는다. 조사 시점은 모델 판단이다(필수 자리 둘은 그대로).
 
 - 모든 외부 주장은 **출처 URL 필수** — payload §4 External Landscape에 `[취함|피함|중립]` + 이유와 함께.
 - kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구 부재 → **loud** 생략(crash 금지):
