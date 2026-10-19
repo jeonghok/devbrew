@@ -274,6 +274,15 @@ class TestMigrationRefusalChoices(unittest.TestCase):
         self.assertIn("「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md", detect)
         self.assertIn("AGENTS.md 가 있으면 AGENTS.md, 없으면 CLAUDE.md", detect)
 
+    def test_charter_detection_reads_claude_charter_that_s4_will_move(self):
+        # S4 「옮기기」는 CLAUDE.md 에만 있는 `## Project Charter` 를 4e 전에 AGENTS.md 로 옮긴다. 감지가
+        # AGENTS.md 만 보면 C-S1 이 되어 헌장을 다시 묻고 4e 가 옮긴 절 옆에 두 번째 절을 더한다.
+        detect = section(self.text, "#### Charter 상태 감지", "### Step 2:")
+        self.assertIn(
+            "AGENTS.md 가 있어도 거기 `## Project Charter` 가 없고 CLAUDE.md 에 있으면 CLAUDE.md 의 그 절을 읽는다",
+            detect)
+        self.assertIn("두 번째 `## Project Charter` 를 더하지 않는다", detect)
+
     def test_git_rules_detection_reads_the_canonical_file(self):
         # 「git 규칙은 그대로 두고 헌장만」 + 「AGENTS.md 로 옮기기」 뒤 재실행에서 기존 `## Git Workflow` 는
         # AGENTS.md 에 산다. CLAUDE.md 만 보면 감지가 비어 S3 action 이 그 절을 덮는다. 거꾸로 S4

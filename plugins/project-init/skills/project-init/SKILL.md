@@ -76,7 +76,7 @@ branching strategy 템플릿을 선택해 git workflow 룰을 초기화하고, �
 
 charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
 
-- (a) 관리 절을 담는 파일 — AGENTS.md 가 있으면 AGENTS.md, 없으면 CLAUDE.md(「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md) — 에 `## Project Charter` 섹션이 존재하는가.
+- (a) 관리 절을 담는 파일 — AGENTS.md 가 있으면 AGENTS.md, 없으면 CLAUDE.md(「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md) — 에 `## Project Charter` 섹션이 존재하는가. AGENTS.md 가 있어도 거기 `## Project Charter` 가 없고 CLAUDE.md 에 있으면 CLAUDE.md 의 그 절을 읽는다 — 4c S4 「옮기기」가 4e 전에 그 절을 AGENTS.md 로 옮기므로(S2a 는 AGENTS.md 가 없는 경우라 위 규칙대로 CLAUDE.md 를 읽는다), 4e 는 옮긴 절을 제자리 갱신하고 두 번째 `## Project Charter` 를 더하지 않는다.
 - (b) 그 섹션의 `**Vision:**`·`**Non-goals:**`·`**Tech Stack:**` 값이 모두 비어있지 않고 `{{...}}` placeholder가 아닌가 (= `charter_section_complete`).
 - (c) `docs/project/charter.md` **와** `docs/project/conventions.md`가 모두 존재하는가 (= `docs_complete`; `glossary.md`는 조건부라 completeness 판정에서 제외).
 
