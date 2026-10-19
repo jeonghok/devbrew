@@ -400,6 +400,7 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 | 계획 1 · 2 를 R2a 계획 2 머지 뒤 기본 브랜치에 맞추기(§11) | 그 브랜치가 같은 파일을 크게 고쳐 지금 줄 번호 · 함수 자리가 바뀐다 (R10 계획 1 · 2) | R10 |
 | `check_brief` 가 사용자 답을 state 의 `source: chosen` 과 대조하지 않는다 — 「외부 선례 무관」은 audit 사용자 원문 절의 ☑ 표지(모델이 쓴다)에 기대고(payload 🗣 · audit ☑ 도 통과), 「조사 불필요」는 표지를 보지 않고 답 번호가 사용자 원문 절(payload 또는 audit)에 있는지만 본다 | AC14 범위는 audit ☑ 판독까지이고, 대조는 게이트가 state 를 읽어야 해 엔진 · 게이트 몫이다 — 지금은 CHANGELOG · README 에 한계로 공시했다 (R10 계획 1 Task 6 리뷰) | R12 |
 | request-framing(번들 조립 · 실패 시 비움) · reviewing-brief 의 번들 경로 쓰기(`> "$BUNDLE"`)가 심어 둔 심볼릭 · 하드 링크를 따라 상태 폴더 밖 파일에 쓴다 | 같은 사용자 권한이 있어야 심을 수 있는 길이라 보안 SUGGESTION 이고, 한 자리만 고치면 겉치레다 — 엔진 skill 셋에 함께 쓰는 O_EXCL\|O_NOFOLLOW 또는 tmp+rename writer 로 함께 고친다 (R10 계획 1 Task 10 보안 리뷰) | R12 |
+| V1 확인 줄을 실을 자리가 없다 — 인터뷰 SKILL 의 V1 ⑤ 는 인터뷰 중 audit `## 5. 프로세스 로그` 에 적으라 하지만 그때는 audit 이 없고, `repo-researcher` · `open-researcher` 출력의 V1 줄은 state 에도 자리가 없다 | main 부터 있던 틈이고 finishing V2 · 게이트 ⑤ 에서 막혀 조용히 지나가지는 않는다 — 「대체됨」 줄과 같은 꼴(state 라운드 기록에 적고 finishing Step A 가 audit §5 로 옮긴다)로 고친다 (R10 계획 1 마지막 리뷰) | R12 |
 
 ## 지휘 기록
 
