@@ -99,6 +99,10 @@ for old in '충돌 중 하나.' ', 2-4줄>'; do
   grep -qF "$old" "$SB" && no "AC20: steelman-builder 옛 «${old}» 잔존" || ok "AC20: 옛 «${old}» 없음(양성 짝: 위 단언)"
 done
 assert_contains "$(flat "$SM")" '**trigger** — 기본은 셋이다: landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의 충돌. 다른 이유로 방향이 의심되면 모델이 판단해 띄우고 그 이유를 trigger 로 적는다.' "AC20: 인터뷰 쪽 trigger 도 예시"
+# 정본 둘째 질문 문단 — 지휘자 아래 승인 질문에는 둘째 질문이 없다(문단 한정: 「기타 칸」 문단의 비슷한 문장과 가른다)
+PG2="$(awk 'index($0,"**둘째 질문(선택) — 다음 단계 갈래.**")==1{f=1} f&&!NF{exit} f{print}' "$PG" | tr '\n' ' ')"
+[ -n "$PG2" ] && ok "AC17(양성 대조): 정본 둘째 질문 문단을 떴다" || no "AC17: 정본 둘째 질문 문단 부재"
+assert_contains "$PG2" '지휘자 아래 승인 질문에는 둘째 질문이 없다(에픽의 흐름은 로드맵 `흐름:` 칸이 정한다).' "AC17: 둘째 질문 문단이 지휘자 아래엔 없다고 말한다"
 # AC25 — 위험 번호를 brief §5 줄에 박는다
 DJ="$(win "$FIN" '^### 분해 판단' '^### ')"; SA="$(win "$FIN" '^### Step A ' '^### ')"
 BA="$(win "$FIN" '^#### B-A' '^#### ')"; BR="$(win "$FIN" '^#### B-R' '^#### ')"
