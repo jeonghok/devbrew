@@ -53,9 +53,11 @@ done
 # 지휘자 수리 2(병렬 진실) — 전체 스위트는 지휘자 대조와 같은 공유 잠금 아래서만. 경로는 기계 상태에서 도출해 싣는다.
 once '## 늘 싣는 것' 'conductor_ledger.py suite-lock --roadmap <로드맵>` 의 첫 줄로 얻어 싣는다(레포 전용 경로를 박지 않는다)'
 once '## 늘 싣는 것' '기다리는 것은 멈춤이 아니라 줄이다'
+once '## 늘 싣는 것' '하위가 띄우는 하위 agent(실행 방식의 과제 구현 · 리뷰)에게 보내는 글에도 이 잠금 줄과 경로를 그대로 싣는다'
 for t in '### 계획 agent' '### 구현 agent'; do
   blk="$(printf '%s\n' "$TPL" | awk -v h="$t" '$0==h{f=1;next} f&&/^### /{exit} f')"
-  assert_contains "$blk" 'suite_lock.py run --lock <스위트 잠금 경로> --owner <이 agent 이름> --wait <초> -- <스위트 명령> 으로만 돌린다' "${t} 틀: 전체 스위트는 공유 잠금 아래서만"
+  assert_contains "$blk" "suite_lock.py run --lock <스위트 잠금 경로> --owner <이 agent 이름> --wait <초> -- bash -c '<스위트 명령>' 으로만 돌린다" "${t} 틀: 전체 스위트는 공유 잠금 아래서만(bash -c 로 감싸 셸 연산자가 잠금 밖으로 새지 않게)"
+  assert_contains "$blk" '네가 띄우는 하위 agent(과제 구현 · 리뷰)에게 보내는 글에도 이 잠금 줄과 경로를 그대로 싣는다' "${t} 틀: 실행 방식의 하위 agent 에게도 잠금 줄"
 done
 assert_not_contains "$TXT" 'sdd-mirror' "공유 잠금 경로를 사용자 폴더로 박지 않는다(양성 짝: suite-lock 으로 얻어 싣는다)"
 # 지휘자 수리 5 — 구현 틀의 마지막 전체 리뷰가 과제 사이 이음매와 계획이 쓴 테스트 코드도 묻는다

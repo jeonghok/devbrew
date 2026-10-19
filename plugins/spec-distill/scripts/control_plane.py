@@ -249,7 +249,15 @@ def recommended(report: dict):
     if value is None:
         return None, "로드맵 머리말 parallel_default 가 깨졌다"
     src = (settings.get("sources") or {}).get("parallel_default", "기본값")
-    return value, ("로드맵 머리말" if src == "frontmatter" else "기본값")
+    return value, ("로드맵 머리말" if src == "frontmatter" else src)
+
+
+def running(machine: dict) -> int:
+    """돌고 있는 큰 작업 수(사본) — 살아 있는 agent 이름과, 끝나지 않은 작업 줄의 담당 agent(수리 구현처럼 작업 표에만
+    적은 것)의 합집합."""
+    names = {r["이름"] for r in machine.get("살아 있는 agent") or []}
+    names |= {w["담당"] for w in machine.get("작업") or [] if w["담당"] != "없음" and w["단계"] not in WORK_DONE}
+    return len(names)
 
 
 def works_lines(report: dict) -> list:
@@ -262,7 +270,9 @@ def works_lines(report: dict) -> list:
     if machine is not None and (machine.get("살아 있는 agent") or machine.get("작업") or busy):
         rec, src = recommended(report)
         rec_text = ("권장 %d(%s — 상한이 아니다, 사용자가 늘린다)" % (rec, src)) if rec is not None else ("권장 수 모름 — %s" % src)
-        lines.append(clean("돌고 있는 큰 작업 %d(기계 상태 사본) · %s" % (len(machine.get("살아 있는 agent") or []), rec_text)))
+        lines.append(clean("돌고 있는 큰 작업 %d(기계 상태 사본) · %s" % (running(machine), rec_text)))
+        for w_ in (report.get("settings") or {}).get("warnings") or []:
+            lines.append(clean("경고: %s" % w_))
         rows = machine.get("작업") or []
         lines.append("작업:" if rows else "작업: 없음(로드맵 밖 일 포함)")
         for w in rows:

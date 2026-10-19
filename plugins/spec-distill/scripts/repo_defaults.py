@@ -42,9 +42,10 @@ def _folder(key: str, raw: str):
 
 
 def repo_settings(meta: dict) -> dict:
-    """로드맵 frontmatter → 레포 설정. 잘못된 값은 errors 에 적고 그 키는 None — 기본값으로 조용히 바꾸지 않는다."""
+    """로드맵 frontmatter → 레포 설정. 잘못된 값은 errors 에 적고 그 키는 None — 기본값으로 조용히 바꾸지 않는다.
+    권장 수(parallel_default)만은 게이트가 아니라서 깨지면 기본값으로 세고 warnings 에 적는다(알리되 멈추지 않는다)."""
     out = {"specs_dir": SPECS_DIR, "plans_dir": PLANS_DIR, "test_command": None, "review_model": None,
-           "parallel_default": PARALLEL_DEFAULT, "sources": {}, "errors": []}
+           "parallel_default": PARALLEL_DEFAULT, "sources": {}, "errors": [], "warnings": []}
     for key in DIR_KEYS:
         if key not in meta:
             out["sources"][key] = "기본값"
@@ -73,6 +74,8 @@ def repo_settings(meta: dict) -> dict:
         if value.isascii() and value.isdigit() and int(value) >= 1:
             out[key] = int(value)
         else:
-            out[key] = None
-            out["errors"].append("레포 설정 %s 는 1 이상의 정수다: %r" % (key, value))
+            # 권장 수는 게이트가 아니다 — 상태 계산 · 스위트 대조를 멈추지 않고 기본값으로 세되 크게 알린다
+            out[key] = PARALLEL_DEFAULT
+            out["sources"][key] = "기본값(머리말 값이 깨졌다)"
+            out["warnings"].append("레포 설정 %s 는 1 이상의 정수다: %r — 기본 %d 으로 센다" % (key, value, PARALLEL_DEFAULT))
     return out

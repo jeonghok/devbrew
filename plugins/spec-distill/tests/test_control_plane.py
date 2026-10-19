@@ -233,7 +233,7 @@ class Works(unittest.TestCase):
                    machine=self.machine(2, [("수리 PR", "fix/x", "로드맵 밖", "구현", "conductor-fix2", "/d.md")]),
                    suite_lock="스위트 잠금: 주인 프로세스가 돌고 있다 — 주인 1 impl · 잡은 시각 2026-10-19 08:07:00")
         text = self.lines(r)
-        self.assertIn("돌고 있는 큰 작업 2(기계 상태 사본) · 권장 3(기본값 — 상한이 아니다, 사용자가 늘린다)", text)
+        self.assertIn("돌고 있는 큰 작업 3(기계 상태 사본) · 권장 3(기본값 — 상한이 아니다, 사용자가 늘린다)", text)  # agent 둘 + 작업 표에만 있는 수리 담당
         self.assertIn("작업:", text)
         self.assertIn("    수리 PR fix/x — 로드맵 밖 · 구현 · 담당 conductor-fix2 · /d.md", text)
         self.assertIn("스위트 잠금: 주인 프로세스가 돌고 있다 — 주인 1 impl · 잡은 시각 2026-10-19 08:07:00", text)
@@ -245,6 +245,22 @@ class Works(unittest.TestCase):
         r = report([], settings={"parallel_default": None, "sources": {"parallel_default": "frontmatter"}},
                    machine=self.machine(1))
         self.assertTrue(any("권장 수 모름" in l for l in self.lines(r)))
+
+    def test_running_counts_repair_agents_only_in_works(self):
+        m = self.machine(1, [("수리 PR", "fix/x", "로드맵 밖", "구현", "repair-agent", "/d"),
+                             ("구현", "R5 구현", "R5", "구현", "a0", "/e"),
+                             ("정리", "x", "로드맵 밖", "끝", "done-agent", "/f"),
+                             ("정리", "y", "로드맵 밖", "대기", "없음", "/g")])
+        r = report([], settings={"parallel_default": 3, "sources": {"parallel_default": "기본값"}}, machine=m)
+        self.assertTrue(any(l.startswith("돌고 있는 큰 작업 2(") for l in self.lines(r)), self.lines(r))
+
+    def test_broken_parallel_default_is_warned(self):
+        r = report([], settings={"parallel_default": 3, "sources": {"parallel_default": "기본값(머리말 값이 깨졌다)"},
+                                 "warnings": ["레포 설정 parallel_default 는 1 이상의 정수다: 'x' — 기본 3 으로 센다"]},
+                   machine=self.machine(1))
+        text = self.lines(r)
+        self.assertIn("돌고 있는 큰 작업 1(기계 상태 사본) · 권장 3(기본값(머리말 값이 깨졌다) — 상한이 아니다, 사용자가 늘린다)", text)
+        self.assertIn("경고: 레포 설정 parallel_default 는 1 이상의 정수다: 'x' — 기본 3 으로 센다", text)
 
     def test_quiet_when_nothing_runs(self):
         r = report([blk("R1", "준비", "pending")], machine=self.machine(), suite_lock="스위트 잠금: 비어 있음")

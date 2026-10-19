@@ -82,7 +82,8 @@ cap_hits() {  # cap_hits <글> — 상한 문장을 한 줄씩(명시 부정 「
   PYTHONIOENCODING=utf-8 python3 -I -c 'import re, sys
 SUBJ = re.compile(r"동시|병렬|한꺼번에|큰 작업|돌리는 (작업|일)|agent 수|agent 를 [^.]{0,12}개|concurren|parallel", re.I)
 QUANT = re.compile(r"[0-9]|하나|둘|셋|넷|다섯|여섯|일곱|여덟|아홉|한 ?개|두 ?개|세 ?개|네 ?개")
-LIMIT = re.compile(r"까지만|까지 만|이하|미만|초과|넘지|넘기지|넘으면|넘는|넘게|최대|상한|한도|at most|no more than|max|limit|cap\b", re.I)
+LIMIT = re.compile(r"까지만|까지 만|이하|미만|초과|넘지|넘기지|넘으면|넘는|넘게|넘을|넘어|넘기면|최대|상한|한도|제한|"
+                   r"[0-9셋넷둘다섯]+ ?(개)?만|이상[^.]{0,10}(금지|않)|at most|no more than|max|limit|cap\b", re.I)
 NEG = re.compile(r"상한(이|은|을|도) ?(아니|없|두지 않)[가-힣]*|한도(가|는) ?(아니|없)[가-힣]*|is not a (cap|limit)|not a (cap|limit)", re.I)
 W = 40  # 주어 앞뒤 이 글자 안에서만 수량 · 상한을 본다(같은 문장의 다른 상한 — 예: 리뷰 라운드 상한 — 과 엮지 않게)
 for sent in re.split(r"(?<=[.。!?])\s+|\n", sys.argv[1]):
@@ -98,7 +99,8 @@ for f in "$CD" "$ROOT/plugins/spec-distill/references/conductor-dispatch.md" "$S
   assert_eq "$(cap_hits "$(cat "$f")")" "" "$(basename "$f"): 동시 개수를 수량 상한에 묶는 문장이 없다"
 done
 for lit in '동시에 셋까지만 돌린다.' '병렬 agent 는 최대 3개다.' '큰 작업을 3개 넘게 돌리지 않는다.' '동시 개수 상한은 3 이다.' \
-           'Run at most 3 parallel agents.' '돌리는 큰 작업은 네 개 이하로 둔다.'; do
+           'Run at most 3 parallel agents.' '돌리는 큰 작업은 네 개 이하로 둔다.' '병렬 agent 는 3개로 제한한다.' \
+           '동시에 셋만 돌린다.' '큰 작업이 3개를 넘기면 안 된다.' '동시에 넷 이상은 금지다.'; do
   [ -n "$(cap_hits "$lit")" ] && ok "양성 대조: 「${lit}」 를 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
 done
 for lit in "$PAR" '권장 수는 기본 3 이고 상한이 아니다 — 사용자가 늘린다.' '좁은 재리뷰는 PR 하나에 두 번까지다.'; do

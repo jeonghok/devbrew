@@ -705,7 +705,7 @@ def c_cleanup(root, a) -> int:
     if kind == "merge":
         pid = _live_lock(root, a.roadmap)
         if pid:
-            raise Fail(3, "스위트 대조가 도는 중이다(잠금 주인 %s) — 끝난 뒤 지운다: %s" % (pid, path))
+            raise Fail(3, "공유 스위트 잠금을 누가 쥐고 있다(주인 %s) — 스위트가 끝난 뒤 지운다: %s" % (pid, path))
         if path.exists():
             rc, _o, err = git(root, "worktree", "remove", "--force", str(path))
             if rc:

@@ -43,6 +43,7 @@ SECTIONS = (
     ("시작 승인", ("세션", "때", "규모")),
 )
 COLUMNS = dict(SECTIONS)
+OPTIONAL_SECTIONS = ("작업",)
 PR_STATES = ("열림", "머지됨", "닫힘")
 PR_NUMBER_RE = re.compile(r"#\d+")
 SEP = " · "
@@ -119,6 +120,8 @@ def parse_machine(text: str, roadmap_rel: str) -> dict:
 def render_machine(roadmap_rel: str, data: dict) -> str:
     out = ["---", "type: " + TYPE, "roadmap: " + roadmap_rel, "---", ""]
     for name, cols in SECTIONS:
+        if name in OPTIONAL_SECTIONS and not data.get(name):
+            continue  # 7.5 에 더한 절 — 비어 있으면 머리를 쓰지 않아 옛 판도 이 파일을 읽는다
         out += ["## " + name, ""]
         for row in data.get(name, []):
             cells = [str(row[c]).replace("\n", " ").strip() for c in cols]

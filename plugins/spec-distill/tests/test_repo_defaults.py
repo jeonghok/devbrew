@@ -33,8 +33,10 @@ class Settings(unittest.TestCase):
         self.assertEqual((s["parallel_default"], s["sources"]["parallel_default"], s["errors"]), (5, "frontmatter", []))
         for bad in ("0", "-1", "abc", "", "3.5", "\uff13"):
             s = rd.repo_settings({"parallel_default": bad})
-            self.assertIsNone(s["parallel_default"], bad)
-            self.assertTrue(any("parallel_default" in e for e in s["errors"]), bad)
+            self.assertEqual(s["parallel_default"], 3, bad)  # 권장 수는 게이트가 아니다 — 기본값으로 세고
+            self.assertEqual(s["errors"], [], bad)  # 상태 계산 · 스위트 대조를 멈추지 않는다
+            self.assertTrue(any("parallel_default" in w and "기본 3" in w for w in s["warnings"]), bad)  # 크게 알린다
+            self.assertEqual(s["sources"]["parallel_default"], "기본값(머리말 값이 깨졌다)", bad)
 
     def test_frontmatter_wins_and_gets_trailing_slash(self):
         s = rd.repo_settings({"specs_dir": "design", "plans_dir": "\"work/plans/\""})

@@ -108,6 +108,27 @@ class Lock(unittest.TestCase):
         self.assertTrue(any("기다린다(줄)" in m for m in said), said)
         self.assertEqual(sl.state(self.d)["pid"], os.getpid())
 
+    def test_stale_judgement_raced_by_a_new_holder_is_restored(self):
+        """주인 없음을 판정한 뒤 다른 쪽이 새로 잡은 잠금을 옮겼으면 되돌린다 — 살아 있는 잠금을 훔치지 않는다."""
+        self.own("%d gone t\n" % dead_pid())
+        real_rename = os.rename
+        swapped = []
+
+        def racing_rename(src, dst):
+            if not swapped and str(src) == str(self.d):
+                swapped.append(1)  # 판정과 옮기기 사이에 다른 쪽이 풀고 새로 잡는다
+                shutil.rmtree(str(self.d))
+                self.d.mkdir()
+                (self.d / "owner").write_text("%d racer t\n" % os.getppid(), encoding="utf-8")
+            return real_rename(src, dst)
+        sl.os.rename = racing_rename
+        try:
+            with self.assertRaises(sl.Busy):
+                sl.take(self.d, "me", say=lambda m: None)
+        finally:
+            sl.os.rename = real_rename
+        self.assertIn("racer", (self.d / "owner").read_text(encoding="utf-8"))
+
     def test_describe_empty(self):
         self.assertEqual(sl.describe(self.d), "스위트 잠금: 비어 있음")
 
@@ -144,6 +165,22 @@ class Cli(unittest.TestCase):
     def test_run_without_command_is_usage(self):
         rc, _out = self.cli("run", "--lock", str(self.d), "--owner", "a")
         self.assertEqual(rc, 2)
+
+    def test_sigterm_stops_suite_and_releases(self):
+        mark = self.t / "child-alive"
+        child = ("import time, pathlib, sys\np = pathlib.Path(sys.argv[1])\np.write_text('x')\n"
+                 "time.sleep(30)\np.unlink()\n")
+        p = subprocess.Popen([sys.executable, str(SCRIPTS / "suite_lock.py"), "run", "--lock", str(self.d), "--owner", "a",
+                              "--", sys.executable, "-c", child, str(mark)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        for _ in range(100):
+            if mark.exists():
+                break
+            time.sleep(0.1)
+        self.assertTrue(self.d.exists())
+        p.terminate()
+        p.wait(timeout=20)
+        self.assertFalse(self.d.exists(), "SIGTERM 뒤 잠금이 남았다")
+        self.assertEqual(p.returncode, 143)
 
     def test_show(self):
         rc, out = self.cli("show", "--lock", str(self.d))

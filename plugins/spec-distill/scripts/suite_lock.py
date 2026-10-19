@@ -22,6 +22,7 @@ import argparse
 import datetime
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -59,8 +60,9 @@ def state(d: Path) -> dict:
     try:
         st = d.stat()
     except FileNotFoundError:
-        return {"held": False, "busy": False, "owner": "", "pid": None, "taken_at": "", "why": "비어 있음"}
+        return {"held": False, "busy": False, "owner": "", "pid": None, "taken_at": "", "why": "비어 있음", "ident": None}
     taken_at = datetime.datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+    ident = (st.st_ino, st.st_mtime_ns)
     try:
         owner = (d / "owner").read_text(encoding="utf-8").strip()
     except (OSError, UnicodeDecodeError):
@@ -76,7 +78,7 @@ def state(d: Path) -> dict:
     else:
         busy = True
         why = "주인이 살았는지 알 수 없다(프로세스 번호 없음) — 끝났으면 사람이 잠금 폴더를 지운다"
-    return {"held": True, "busy": busy, "owner": owner, "pid": pid, "taken_at": taken_at, "why": why}
+    return {"held": True, "busy": busy, "owner": owner, "pid": pid, "taken_at": taken_at, "why": why, "ident": ident}
 
 
 def describe(d: Path) -> str:
@@ -116,6 +118,18 @@ def take(d: Path, owner: str, wait: float = 0, say=print) -> None:
             try:
                 os.rename(str(d), str(gone))
             except OSError:
+                continue
+            try:
+                moved = gone.stat()
+                moved_owner = (gone / "owner").read_text(encoding="utf-8").strip() if (gone / "owner").is_file() else ""
+            except (OSError, UnicodeDecodeError):
+                moved, moved_owner = None, None
+            if moved is None or (moved.st_ino, moved.st_mtime_ns) != s["ident"] or moved_owner != s["owner"]:
+                # 판정한 뒤 다른 쪽이 새로 잡은 잠금을 옮겼다 — 되돌리고 다시 본다
+                try:
+                    os.rename(str(gone), str(d))
+                except OSError:
+                    say("[suite-lock] 경합 — 옮긴 잠금을 되돌리지 못했다(%s) — 그 주인에게 알린다" % gone)
                 continue
             say("[suite-lock] 주인 없는 잠금을 풀었다(%s · %s)" % (d, s["owner"] or s["why"]))
             shutil.rmtree(str(gone), ignore_errors=True)
@@ -162,12 +176,24 @@ def main(argv=None) -> int:
         return BUSY_RC
     print("[suite-lock] 잡았다 — %s" % lock)
     sys.stdout.flush()
+
+    def _term(signum, _frame):
+        raise SystemExit(128 + signum)
+    signal.signal(signal.SIGTERM, _term)
+    child = None
     try:
-        return subprocess.call(cmd)
+        child = subprocess.Popen(cmd)
+        return child.wait()
     except OSError as exc:
         print("[suite-lock] 명령을 실행하지 못했다: %s" % exc)
         return 127
     finally:
+        if child is not None and child.poll() is None:  # 끊겼으면 잠금을 풀기 전에 스위트를 멈춘다
+            child.terminate()
+            try:
+                child.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                child.kill()
         drop(lock)
         print("[suite-lock] 풀었다 — %s" % lock)
 
