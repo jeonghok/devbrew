@@ -432,13 +432,16 @@ for zsh_name in bash zsh; do
     esac
   done
 done
-# 비움 스크립트가 없는 루트 · 루트를 모름 — 그래도 rc 1, 비우지 않았다고 말하고 「비웠다」고 하지 않는다. 경로를 추측하지 않는다.
-for case_name in noclr noroot; do
+# 비움 스크립트가 없는 루트 · 루트를 모름 · 상태 폴더 없음(빈 값 · 폴더 아닌 경로) — 그래도 rc 1, 비우지 않았다고
+# 말하고 「비웠다」고 하지 않는다. 경로를 추측하지 않는다. 상태 폴더 없음의 문구는 reviewing-brief · spec-review 와 같은 꼴이다.
+for case_name in noclr noroot nostate nodir; do
   cell="frw-$case_name"; zdir="$SCRATCH/$cell/state"; mkdir -p "$zdir"
   printf '%s\n' "$CRITIC_SEED" > "$zdir/critic.txt"; printf '%s\n' "$CRITIC_SEED" > "$zdir/critic-2.txt"
   case "$case_name" in
     noclr) fr_run "$cell" bash "$zdir" "$PR_NOCLR"; want="비우는 스크립트가 돌지 않았다"; zl="request-framing W(스크립트 없음)" ;;
     noroot) fr_run "$cell" bash "$zdir" ""; want="critic 출력 파일을 비우지 않았다"; zl="request-framing W(루트 모름)" ;;
+    nostate) fr_run "$cell" bash "" "$SD"; want="critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패"; zl="request-framing W(상태 폴더 빈 값)" ;;
+    nodir) fr_run "$cell" bash "$zdir/critic.txt" "$SD"; want="critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패"; zl="request-framing W(상태 폴더가 파일)" ;;
   esac
   zerr="$(cat "$SCRATCH/$cell.err")"
   assert_eq "$(cat "$SCRATCH/$cell.rc")" "1" "$zl: rc 1 (dispatch 하지 않는다)"

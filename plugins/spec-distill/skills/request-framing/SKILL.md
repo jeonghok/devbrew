@@ -595,6 +595,8 @@ if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
       clr_rc=0; bash "$clr_root/scripts/clear_critic_outputs.sh" "$STATE_DIR" >&2 || clr_rc=$?
       case "$clr_rc" in 0|1|2) ;; *) echo "[spec-distill] critic 출력 파일을 비우지 못했다 — 비우는 스크립트가 돌지 않았다(rc ${clr_rc}): ${clr_root}/scripts/clear_critic_outputs.sh" >&2 ;; esac
     fi
+  else
+    echo "[spec-distill] critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패(STATE_DIR='${STATE_DIR:-}' — 비었거나 폴더가 아니다). 「## 상태」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출에서 돌린다. 5단계는 라운드 시작보다 오래된 critic 파일을 부재로 읽는다(critic_predates_round)." >&2
   fi
   exit 1
 fi
