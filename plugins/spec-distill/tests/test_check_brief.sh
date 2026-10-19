@@ -2772,6 +2772,9 @@ assert_eq "$(python3 -I -c 'import json,sys; print(json.load(sys.stdin)["failure
 irr_build irr_ok "외부 선례 무관(@S2) — ${IRR_WHY}" ☑
 out="$(irr_run irr_ok)"; rc=$?
 [[ $rc -eq 0 ]] && ok "AC14: ☑ 사용자 선택 S 로 닫은 「외부 선례 무관」 → 통과" || { no "AC14: ☑ 사례가 red"; printf '    %s\n' "$out"; }
+irr_build irr_vs16 "외부 선례 무관(@S2) — ${IRR_WHY}" "$(printf '\342\230\221\357\270\217')"
+out="$(irr_run irr_vs16)"; rc=$?
+[[ $rc -eq 0 ]] && ok "AC14: 이체 선택자를 붙인 ☑(U+2611 U+FE0F)도 사용자 선택이다 → 통과" || { no "AC14: ☑+U+FE0F 사례가 red"; printf '    %s\n' "$out"; }
 
 irr_build irr_s1 "외부 선례 무관(@S1) — ${IRR_WHY}" ☑
 irr_build irr_ghost "외부 선례 무관(@S9) — ${IRR_WHY}" ☑
