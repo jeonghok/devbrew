@@ -453,10 +453,17 @@ if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
   echo "[spec-distill] 프로필 내용을 읽지 못했다(cat rc $prof_rc): $PROFILE — 탐지 · 재비판을 dispatch 하지 않는다. 5단계가 critic 사망으로 읽는다(재dispatch 1회 → 「미검증」)." >&2
   if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then
     critic_left=""
-    for f in "$STATE_DIR"/critic.txt "$STATE_DIR"/critic-[0-9]*.txt; do
-      [ -e "$f" ] || continue
-      { : > "$f"; } 2>/dev/null || critic_left="$critic_left $f"
-    done
+    if [ -e "$STATE_DIR/critic.txt" ]; then { : > "$STATE_DIR/critic.txt"; } 2>/dev/null || critic_left=" $STATE_DIR/critic.txt"; fi
+    # 번호 붙은 출력은 글롭 대신 ls 목록을 한 줄씩 읽는다 — zsh 는 맞는 파일이 없는 글롭에서 멈추고, 목록을 단어로 쪼개면 이름이 갈린다.
+    crit_names="$(cd "$STATE_DIR" 2>/dev/null && ls 2>/dev/null)" \
+      || { echo "[spec-distill] 상태 폴더의 파일 목록을 읽지 못했다: $STATE_DIR" >&2; critic_left="$critic_left $STATE_DIR/critic-<번호>.txt(목록을 읽지 못함)"; }
+    while IFS= read -r crit_b; do
+      case "$crit_b" in critic-[0-9]*.txt) ;; *) continue ;; esac
+      [ -e "$STATE_DIR/$crit_b" ] || continue
+      { : > "$STATE_DIR/$crit_b"; } 2>/dev/null || critic_left="$critic_left $STATE_DIR/$crit_b"
+    done <<CRIT_NAMES
+$crit_names
+CRIT_NAMES
     if [ -z "$critic_left" ]; then
       echo "[spec-distill] critic 출력 파일($STATE_DIR 의 critic.txt · critic-<번호>.txt)을 비웠다." >&2
     else

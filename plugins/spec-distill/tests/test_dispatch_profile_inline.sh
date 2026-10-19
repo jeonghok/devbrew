@@ -98,7 +98,7 @@ run_fence() {   # run_fence <셀> <펜스 파일> <플러그인 루트> [nodoc] 
   printf -- '---\ntype: interview-state\nseed: 없음\nsession_id: %s\n---\n\nbody\n' "$cell" > "${bdoc%.md}.state.md"
   ( cd "$home" && env -i PATH="$BASE" HOME="$home" TMPDIR="$home/tmp" PYTHONPATH="$YAML_SITE" PYTHONDONTWRITEBYTECODE=1 \
       CLAUDE_PLUGIN_ROOT="$pr" DEVBREW_SPEC_DISTILL_SESSION_ID="$cell" \
-      ${docvars[@]+"${docvars[@]}"} bash "$fence" ) \
+      ${docvars[@]+"${docvars[@]}"} "${RUN_SHELL:-bash}" "$fence" ) \
       >"$SCRATCH/$cell.out" 2>"$SCRATCH/$cell.err"
   echo $? > "$SCRATCH/$cell.rc"
 }
@@ -202,6 +202,42 @@ for spec in "reviewing-brief:brief.md:3" "spec-review:design-doc.md:2"; do
 done
 
 # S — request-framing. 이 펜스는 `$PROFILE` 을 앞 블록(「## 상태」)에서 받으므로 그 값만 env 로 준다.
+# Z — 실패 분기의 비움을 bash 와 zsh 로, 직전 출력 모양 셋으로 돌린다: (only) critic.txt 만 · (both) critic.txt +
+# critic-2.txt · (none) 아무것도 없음. zsh 는 맞는 파일이 없는 글롭에서 멈추므로 bash 만으로는 (only)·(none) 이 안 보인다.
+ZSH_BIN="$(command -v zsh 2>/dev/null || true)"
+[ -n "$ZSH_BIN" ] || echo "  - Z(zsh): zsh 없음 — zsh 실행 확인을 건너뛴다"
+shape_seed() {   # shape_seed <셀> <문서> <only|both|none> → 그 셀의 상태 디렉토리(비면 도출 실패)
+  local c; c="$(seed_critic "$1" "$2")"
+  [ -n "$c" ] || return 0
+  case "$3" in only) rm -f "${c%/*}/critic-2.txt" ;; none) rm -f "$c" "${c%/*}/critic-2.txt" ;; esac
+  printf '%s' "${c%/*}"
+}
+z_check() {   # z_check <라벨> <상태 디렉토리> <모양> <stderr 파일>
+  case "$3" in
+    none) { [ ! -e "$2/critic.txt" ] && [ ! -e "$2/critic-2.txt" ]; } \
+            && ok "$1: 없던 critic 출력을 새로 만들지 않는다" || no "$1: 없던 critic 출력이 생겼다" ;;
+    *) assert_eq "$(wc -c < "$2/critic.txt" 2>/dev/null | tr -d ' ')" "0" "$1: critic.txt 를 비운다" ;;
+  esac
+  [ "$3" = both ] && assert_eq "$(wc -c < "$2/critic-2.txt" 2>/dev/null | tr -d ' ')" "0" "$1: critic-2.txt 도 비운다"
+  assert_not_contains "$(cat "$4")" "no matches found" "$1: 글롭이 셸을 멈추지 않는다"
+}
+for sk in reviewing-brief spec-review; do
+  FENCE="$SCRATCH/$sk.fence.sh"
+  for zsh_name in bash zsh; do
+    z_sh=bash; [ "$zsh_name" = zsh ] && { [ -n "$ZSH_BIN" ] || continue; z_sh="$ZSH_BIN"; }
+    for shape in only both none; do
+      cell="z-$sk-$zsh_name-$shape"
+      case "$sk" in reviewing-brief) zdoc="$(brief_doc "$cell")" ;; *) zdoc="$DOCS/design-sample.md" ;; esac
+      zdir="$(shape_seed "$cell" "$zdoc" "$shape")"
+      [ -n "$zdir" ] || { no "$sk Z(${zsh_name}·$shape) 전제: 상태 디렉토리를 도출하지 못했다"; continue; }
+      RUN_SHELL="$z_sh"; run_fence "$cell" "$FENCE" "$PR_NOPROF"; RUN_SHELL=bash
+      assert_eq "$(cat "$SCRATCH/$cell.rc")" "1" "$sk Z(${zsh_name}·$shape): 프로필이 없는 루트면 rc 1"
+      z_check "$sk Z(${zsh_name}·$shape)" "$zdir" "$shape" "$SCRATCH/$cell.err"
+      assert_contains "$(cat "$SCRATCH/$cell.err")" "critic-<번호>.txt)을 비웠다." "$sk Z(${zsh_name}·$shape): 비운 뒤 「비웠다」고 보고한다"
+    done
+  done
+done
+
 FR_FENCE="$SCRATCH/request-framing.fence.sh"; cut_marked "$SD/skills/request-framing/SKILL.md" > "$FR_FENCE"
 n_fr="$(grep -c . "$FR_FENCE" || true)"
 if [ "${n_fr:-0}" -ge 4 ] && bash -n "$FR_FENCE" 2>/dev/null; then
@@ -216,6 +252,19 @@ assert_eq "$fr_rc" "0" "request-framing S: 펜스 rc 0"
 assert_eq "$(cat "$SCRATCH/fr.out")" "$(expect_stripped "$SEED_PROF")" "request-framing S: stdout 이 seed 프로필에서 must_catch 줄만 뺀 것과 같다"
 assert_eq "$(grep -c '^must_catch:' "$SCRATCH/fr.out" || true)" "0" "request-framing S: 펜스 출력에 must_catch 줄이 없다"
 assert_eq "$(grep -c '^must_catch:' "$SEED_PROF" || true)" "1" "request-framing S 전제: seed 프로필에는 must_catch 줄이 있다"
+# Z — request-framing 실패 분기(프로필 없음)의 비움도 bash 와 zsh, 모양 셋으로.
+for zsh_name in bash zsh; do
+  z_sh=bash; [ "$zsh_name" = zsh ] && { [ -n "$ZSH_BIN" ] || continue; z_sh="$ZSH_BIN"; }
+  for shape in only both none; do
+    zdir="$SCRATCH/frz-$zsh_name-$shape/state"; mkdir -p "$zdir"
+    [ "$shape" = none ] || printf '%s\n' "$CRITIC_SEED" > "$zdir/critic.txt"
+    [ "$shape" = both ] && printf '%s\n' "$CRITIC_SEED" > "$zdir/critic-2.txt"
+    ( cd "$SCRATCH" && env -i PATH="$BASE" HOME="$SCRATCH" PROFILE="$SCRATCH/no-such-profile.md" STATE_DIR="$zdir" "$z_sh" "$FR_FENCE" ) \
+      > "$SCRATCH/frz.out" 2>"$SCRATCH/frz-$zsh_name-$shape.err"; frz_rc=$?
+    assert_eq "$frz_rc" "1" "request-framing Z(${zsh_name}·$shape): 프로필이 없으면 rc 1"
+    z_check "request-framing Z(${zsh_name}·$shape)" "$zdir" "$shape" "$SCRATCH/frz-$zsh_name-$shape.err"
+  done
+done
 
 # brief 는 실패를 degrade 원장에 남긴다(Step B 로 가는 채널). 원장이 못 쓰이면 두 번째 채널.
 # 원장 = 그 셀의 상태 파일, 두 번째 채널 = 그 셀의 원장 자리(.docreview/<키>) 안.

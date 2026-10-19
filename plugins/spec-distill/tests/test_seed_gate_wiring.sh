@@ -173,6 +173,25 @@ grep -q '^bundle_rc=1$' "$W/fg10bndl.out" && ok "B: audit 의 원문 절이 없�
 [ ! -s "$pl/seed-bundle.md" ] && [ ! -s "$pl/seed-bundle-recritic.md" ] && ok "B: 실패한 라운드는 직전 번들을 남기지 않는다" \
   || no "B: 실패한 라운드에 직전 번들이 남았다 — codex 게이트가 그것을 이번 번들로 넘긴다"
 
+# B(모양 × 셸) — 직전 출력 모양 셋((only) critic.txt 만 · (both) critic.txt + critic-2.txt · (none) 없음)을 bash 와 zsh 로.
+# zsh 는 맞는 파일이 없는 글롭에서 멈춰 rm 자체가 돌지 않으므로 bash 만으로는 (only)·(none) 이 안 보인다.
+ZSH_BIN="$(command -v zsh 2>/dev/null || true)"
+[ -n "$ZSH_BIN" ] || echo "  - B/K(zsh): zsh 없음 — zsh 실행 확인을 건너뛴다"
+for z_name in bash zsh; do
+  z_sh=bash; [ "$z_name" = zsh ] && { [ -n "$ZSH_BIN" ] || continue; z_sh="$ZSH_BIN"; }
+  for shape in only both none; do
+    zc="fb-${z_name}-${shape}"; home "$zc"; pl="$(place "$zc")"; mkdir -p "$pl"
+    printf 'OLD_RECRITIC\n' > "$pl/recritic.txt"
+    [ "$shape" = none ] || printf 'OLD_CRITIC\n' > "$pl/critic.txt"
+    [ "$shape" = both ] && printf 'OLD_CRITIC_2\n' > "$pl/critic-2.txt"
+    RUN_SHELL="$z_sh"; run_in "$zc" "$W/bundle-run.sh"; RUN_SHELL=bash
+    { grep -q '^bundle_rc=0$' "$W/$zc.out" && [ ! -e "$pl/critic.txt" ] && [ ! -e "$pl/critic-2.txt" ] && [ ! -e "$pl/recritic.txt" ] \
+      && ! grep -qF 'no matches found' "$W/$zc.err"; } \
+      && ok "B(${z_name}·${shape}): 조립 rc 0 · 직전 critic · critic-<번호> · recritic 을 모두 치웠다" \
+      || no "B(${z_name}·${shape}): 직전 산출물이 남았거나 셸이 멈췄다 — $(tail -2 "$W/$zc.err" | tr '\n' ' ')"
+  done
+done
+
 # ── K — 산출물 기록: 탐지 리뷰어마다 따로 옮긴다(critic-<i>.txt), 하나도 없을 때만 critic.txt ──────────────
 { cat "$W/state.sh"; cat "$W/record.sh"; } > "$W/record-run.sh"
 add_sec4() {   # add_sec4 <sid> — 픽스처 audit 에 `## 4` 절을 `## 6` 앞에 둔다(옮길 자리)
@@ -203,9 +222,20 @@ run_in fg14recbad "$W/record-run.sh"
 { grep -qF 'GOOD_DET_BODY' "$au" && ! grep -qF 'BAD_NAME_BODY' "$au" && grep -qF '옮기지 않는다: critic-3x.txt' "$W/fg14recbad.err"; } \
   && ok "K: 번호가 숫자가 아닌 탐지 출력 이름은 옮기지 않고 그 사실을 말한다(맞는 이름은 옮긴다)" \
   || no "K: critic-<숫자>.txt 가 아닌 이름을 옮겼거나 말하지 않았다 — $(tail -2 "$W/fg14recbad.err" | tr '\n' ' ')"
+home fg15recplant; pl="$(place fg15recplant)"; mkdir -p "$pl"; au="$(add_sec4 fg15recplant)"
+printf 'PLANT_BODY\n' > "$pl/critic-6 *.txt"; printf 'GOOD_SIX_BODY\n' > "$pl/critic-6.txt"
+run_in fg15recplant "$W/record-run.sh"
+{ grep -qF 'GOOD_SIX_BODY' "$au" && ! grep -qF 'PLANT_BODY' "$au" && grep -qF '옮기지 않는다: critic-6 *.txt' "$W/fg15recplant.err"; } \
+  && ok "K: 공백 · 글롭 글자를 심은 이름은 쪼개지지도 풀리지도 않고 통째로 거부된다" \
+  || no "K: 심어 둔 이름이 쪼개졌거나 옮겨졌다 — $(tail -2 "$W/fg15recplant.err" | tr '\n' ' ')"
 # K(zsh) — 같은 펜스를 zsh 로도 돌린다. zsh 는 배열 첨자 대입 · 맞는 파일 없는 글롭에서 멈추므로 bash 만으로는 못 본다.
-ZSH_BIN="$(command -v zsh 2>/dev/null || true)"
 if [ -n "$ZSH_BIN" ]; then
+  home fz13recolds; pl="$(place fz13recolds)"; mkdir -p "$pl"; au="$(add_sec4 fz13recolds)"
+  printf 'ZOLD_NAME_BODY\n' > "$pl/critic.txt"
+  RUN_SHELL="$ZSH_BIN"; run_in fz13recolds "$W/record-run.sh"; z_rc=$?; RUN_SHELL=bash
+  { [ "$z_rc" -eq 0 ] && grep -qF 'ZOLD_NAME_BODY' "$au"; } \
+    && ok "K(zsh): critic.txt 만 있으면 zsh 에서도 그것을 옮긴다" \
+    || no "K(zsh): critic.txt 만 있는 라운드가 zsh 에서 멈췄거나 옮기지 않았다(rc $z_rc) — $(tail -2 "$W/fz13recolds.err" | tr '\n' ' ')"
   home fz11recdet; pl="$(place fz11recdet)"; mkdir -p "$pl"; au="$(add_sec4 fz11recdet)"
   printf 'ZDET_ONE\n' > "$pl/critic-1.txt"; printf 'ZDET_TWO\n' > "$pl/critic-2.txt"; printf 'ZRECRITIC\n' > "$pl/recritic.txt"
   RUN_SHELL="$ZSH_BIN"; run_in fz11recdet "$W/record-run.sh"; z_rc=$?; RUN_SHELL=bash

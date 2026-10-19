@@ -532,7 +532,15 @@ if [ -z "${STATE_DIR:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
   echo "[spec-distill] 리뷰 엔진 자리 없음 — STATE_DIR='${STATE_DIR:-}' sid='${sid:-}' SEED='${SEED:-}'. 「## 상태」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 함께 돌려라. 이 라운드를 시작하지 않는다." >&2
   bundle_rc=2
 else
-  rm -f "$STATE_DIR/critic.txt" "$STATE_DIR"/critic-[0-9]*.txt "$STATE_DIR/recritic.txt" 2>/dev/null || true
+  rm -f "$STATE_DIR/critic.txt" "$STATE_DIR/recritic.txt" 2>/dev/null || true
+  # 번호 붙은 탐지 출력(critic-<번호>.txt)은 글롭 대신 ls 목록을 한 줄씩 읽어 치운다 — zsh 는 맞는 파일이 없는 글롭에서 멈춘다.
+  crit_names="$(cd "$STATE_DIR" 2>/dev/null && ls 2>/dev/null)" \
+    || echo "[spec-distill] 상태 폴더의 파일 목록을 읽지 못했다 — 직전 라운드의 번호 붙은 탐지 출력(critic-<번호>.txt)을 치우지 못했다: $STATE_DIR" >&2
+  while IFS= read -r crit_b; do
+    case "$crit_b" in critic-[0-9]*.txt) rm -f "$STATE_DIR/$crit_b" 2>/dev/null || true ;; esac
+  done <<CRIT_NAMES
+$crit_names
+CRIT_NAMES
   bundle_rc=0
   python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md --for detect > "$BUNDLE" || bundle_rc=1
   python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md --for recritic > "$BUNDLE_RC" || bundle_rc=1
@@ -568,7 +576,16 @@ prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
   echo "[spec-distill] seed 프로필을 읽지 못했다(cat rc $prof_rc): ${PROFILE:-} — 탐지 · 재비판을 dispatch 하지 않는다." >&2
   if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then
-    for f in "$STATE_DIR"/critic.txt "$STATE_DIR"/critic-[0-9]*.txt; do [ -e "$f" ] && { : > "$f" 2>/dev/null || true; }; done
+    [ ! -e "$STATE_DIR/critic.txt" ] || { : > "$STATE_DIR/critic.txt"; } 2>/dev/null || true
+    # 번호 붙은 출력은 글롭 대신 ls 목록을 한 줄씩 읽는다 — zsh 는 맞는 파일이 없는 글롭에서 멈춘다.
+    crit_names="$(cd "$STATE_DIR" 2>/dev/null && ls 2>/dev/null)" \
+      || echo "[spec-distill] 상태 폴더의 파일 목록을 읽지 못했다 — 번호 붙은 critic 출력(critic-<번호>.txt)을 비우지 못했다: $STATE_DIR" >&2
+    while IFS= read -r crit_b; do
+      case "$crit_b" in critic-[0-9]*.txt) ;; *) continue ;; esac
+      [ ! -e "$STATE_DIR/$crit_b" ] || { : > "$STATE_DIR/$crit_b"; } 2>/dev/null || true
+    done <<CRIT_NAMES
+$crit_names
+CRIT_NAMES
   fi
   exit 1
 fi
@@ -688,19 +705,28 @@ record_artifact() {   # 옮길 것: rec_title(audit 제목) · rec_name(STATE_DI
     rec_src="$STATE_DIR/absent-note.txt"
     printf '(이 라운드에 산출물 없음 — %s)\n' "$rec_name" > "$rec_src"
   fi
-  python3 "$SD/scripts/seed_review_log.py" append-verbatim "$AUDIT_ABS" --section "## 4. 비평과 냉독" --title "라운드 $rnd — $rec_title" "$rec_src" \
+  python3 "$SD/scripts/seed_review_log.py" append-verbatim "$AUDIT_ABS" --section "## 4. 비평과 냉독" --title "라운드 $rnd — $rec_title" "$rec_src" </dev/null \
     || echo "[spec-distill] audit ## 4 에 옮기지 못했다: $rec_title" >&2
 }
 found=0
-# 탐지 리뷰어 i 의 출력은 critic-<i>.txt — 하나씩 따로 옮긴다. 글롭 대신 ls 로 읽는다(zsh 는 맞는 파일이 없는 글롭에서 멈춘다).
-for b in $([ -n "${STATE_DIR:-}" ] && cd "$STATE_DIR" 2>/dev/null && ls 2>/dev/null); do
+# 탐지 리뷰어 i 의 출력은 critic-<i>.txt — 하나씩 따로 옮긴다. 글롭 대신 ls 목록을 한 줄씩 읽는다(zsh 는 맞는 파일이
+# 없는 글롭에서 멈추고, 목록을 단어로 쪼개면 심어 둔 이름이 갈리거나 글롭으로 풀린다).
+crit_names=""
+if [ -n "${STATE_DIR:-}" ]; then
+  crit_names="$(cd "$STATE_DIR" 2>/dev/null && ls 2>/dev/null)" \
+    || echo "[spec-distill] 상태 폴더의 파일 목록을 읽지 못했다 — 탐지 출력(critic-<번호>.txt)을 옮기지 못했다: $STATE_DIR" >&2
+fi
+while IFS= read -r b; do
   case "$b" in critic-[0-9]*.txt) ;; *) continue ;; esac
+  [ -e "$STATE_DIR/$b" ] || continue
   idx="${b#critic-}"; idx="${idx%.txt}"
   case "$idx" in
     ''|*[!0-9]*) echo "[spec-distill] 탐지 출력 이름이 critic-<숫자>.txt 가 아니다 — 옮기지 않는다: $b" >&2; continue ;;
   esac
   found=1; rec_title="탐지 ${idx} (doc-critic)"; rec_name="$b"; record_artifact
-done
+done <<CRIT_NAMES
+$crit_names
+CRIT_NAMES
 [ "$found" = 1 ] || { rec_title="탐지 (doc-critic)"; rec_name="critic.txt"; record_artifact; }   # 탐지 출력이 하나도 없을 때만 옛 이름을 본다
 rec_title="codex"; rec_name="docreview-codex.yaml"; record_artifact
 rec_title="재비판 (doc-recritic)"; rec_name="recritic.txt"; record_artifact
