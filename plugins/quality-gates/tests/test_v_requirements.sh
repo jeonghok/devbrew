@@ -164,25 +164,36 @@ case_max_iter_cap_is_five() {
 
 case_ac25_extra_iteration_record_runs() {
   # AC25 — 상한에서 연 반복의 기록 펜스를 실제로 돌린다: 원문은 펼쳐지지 않고 그대로 남고(신뢰하지 않는 데이터),
-  # 줄 수가 상한을 늘리며, Final verdict 기록 펜스가 그 파일이 있을 때만 `## 추가 반복` 을 `## 제외 패치` 다음에 남긴다.
+  # 여러 줄이어도 한 줄로 접혀 상한을 부풀리지 않으며, 줄 하나가 상한을 하나 늘린다. Final verdict 기록 펜스가 그 파일이
+  # 있을 때만 `## 추가 반복` 을 `## 제외 패치` 다음에 남긴다.
   local d top rd fx fv out sid=ac25record01
   d="$T/ac25"; mkdir -p "$d"
-  git -C "$d" init -q && git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  git -C "$d" init -q -b trunk \
+    && git -C "$d" -c core.hooksPath=/dev/null -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q --allow-empty -m init
   top="$(git -C "$d" rev-parse --show-toplevel)"; rd="$top/.claude/quality-gates/$sid"; mkdir -p "$rd"
   fx="$(sec '### Max-iter decision' | awk '/^```bash$/{f=1;next} f&&/^```$/{exit} f')"
   assert_contains "$fx" '>> "$RD/extra-iterations.md"' "AC25 — Max-iter 절에서 기록 펜스를 뽑았다(양성 짝)"
-  # 사람 원문 — 작은따옴표 · 명령 치환 · 백틱 · 형식 지시자 · 역슬래시. SKILL 규칙대로 ' 를 '\'' 로 바꿔 작은따옴표 인자 하나로 싣는다.
-  local raw='it'"'"'s $(touch PWNED) `touch PWNED2` %s %d \n end'
-  # 자리표시를 채우는 도우미 — 모델이 하는 일(원문의 ' 를 '\'' 로 바꿔 작은따옴표로 감싸기)을 그대로 한다.
+  # 사람 원문(여러 줄) — 작은따옴표 · 명령 치환 · 백틱 · 형식 지시자 · 역슬래시 · CR · 「- 」로 시작하는 줄 ·
+  # 앞에 글이 붙은 끝 줄 이름(here-doc 을 끝내지 않는다) · 끝 줄 이름만 있는 줄(SKILL 규칙대로 앞에 공백) ·
+  # 그 뒤의 셸 명령 줄(here-doc 이 일찍 끝났다면 실행돼 AFTERFILE 을 만든다).
+  local raw=$'it\'s $(touch PWNED) `touch PWNED2` %s %d \\n end\n- x\r\nfoo QG_EXTRA_RAW\nQG_EXTRA_RAW\necho AFTER > AFTERFILE'
+  # 자리표시 줄을 원문으로 바꾸는 도우미 — 모델이 하는 일(받은 그대로 넣고, 끝 줄 이름만 있는 줄에 공백 하나)을 그대로 한다.
   cat > "$T/ac25-fill.py" <<'PY'
-import os, re
-Q = chr(39)
+import os
 f = os.environ["QG_F"]
-quoted = Q + os.environ["QG_R"].replace(Q, Q + "\\" + Q + Q) + Q
+raw = "\n".join((" " + l) if l == "QG_EXTRA_RAW" else l for l in os.environ["QG_R"].split("\n"))
+out, n = [], 0
+for line in f.split("\n"):
+    if line.startswith("<고른 선택지 이름"):
+        out.append(raw)
+        n += 1
+    else:
+        out.append(line)
+f = "\n".join(out)
+Q = chr(39)
 f = f.replace("<session-id>", os.environ["QG_S"])
 f = f.replace(Q + "<N>" + Q, Q + os.environ["QG_N"] + Q)
 f = f.replace(Q + "<label 또는 typed>" + Q, Q + os.environ["QG_P"] + Q)
-f, n = re.subn(Q + "<고른 선택지 이름[^" + Q + "]*>" + Q, lambda m: quoted, f)
 print(f if n == 1 else "echo placeholder-missing; exit 9")
 PY
   fill() {  # <fence> <N> <출처> <원문> → 채운 펜스(stdout)
@@ -190,10 +201,12 @@ PY
   }
   fill "$fx" 5 typed "$raw" > "$T/ac25-r1.sh"
   out="$(cd "$d" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$T/ac25-r1.sh" 2>&1)"
-  assert_eq "$out" "cap: 6" "AC25 — 첫 승인 뒤 상한은 6 이다(기본 5 + 줄 하나)"
-  assert_eq "$(cat "$rd/extra-iterations.md" 2>/dev/null)" '- iter 5 뒤 · 반복 하나 더 · typed · '"$raw" \
-    "AC25 — 기타 칸 원문이 펼쳐지지 않고 글자 그대로 출처 typed 와 함께 남는다"
-  assert_eq "$(ls "$d" | grep -c PWNED)" "0" "AC25 — 원문 안의 명령 치환 · 백틱이 실행되지 않았다"
+  assert_eq "$out" "cap: 6" "AC25 — 첫 승인 뒤 상한은 6 이다(기본 5 + 줄 하나 — 원문의 「- 」 줄이 상한을 부풀리지 않는다)"
+  assert_eq "$(grep -c . "$rd/extra-iterations.md")" "1" "AC25 — 여러 줄 원문이 기록 한 줄로 접힌다"
+  assert_eq "$(cat "$rd/extra-iterations.md" 2>/dev/null)" \
+    $'- iter 5 뒤 · 반복 하나 더 · typed · it\'s $(touch PWNED) `touch PWNED2` %s %d \\n end - x foo QG_EXTRA_RAW  QG_EXTRA_RAW echo AFTER > AFTERFILE' \
+    "AC25 — 기타 칸 원문이 펼쳐지지 않고 글자 그대로(줄바꿈 · CR 만 접혀) 출처 typed 와 함께 남는다"
+  assert_eq "$(ls "$d" | grep -c 'PWNED\|AFTERFILE')" "0" "AC25 — 원문 안의 명령 치환 · 백틱 · 끝 줄 뒤 명령이 실행되지 않았다"
   fill "$fx" 6 label '한 번 더 돌기' > "$T/ac25-r2.sh"
   out="$(cd "$d" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$T/ac25-r2.sh" 2>&1)"
   assert_eq "$out" "cap: 7" "AC25 — 승인 하나에 상한이 하나씩 늘어난다(한 번에 하나)"

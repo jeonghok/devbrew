@@ -415,8 +415,10 @@ print(f"LEAD_N_LT_CAP:{1 if lead else 0}")
 # X8 — Step 5 결정 도구의 머리가 N < CAP 전용이고 N = CAP 는 Max-iter 로 간다(같은 줄)
 dtool = re.search(r'^\s*\*\*Decision tool .N < CAP only — N = CAP always goes to Max-iter decision instead', text, re.M)
 print(f"DECISION_TOOL_N_LT_CAP:{1 if dtool else 0}")
-# 옛 고정 상한 글자(N=5 · N < 5)가 라우팅 자리에 남지 않는다 — 위 양성(LEAD · DECISION_TOOL)이 짝이다
-print(f"OLD_N5_LITERAL:{len(re.findall(r'N ?= ?5 |N=5|N < 5', text))}")
+# 옛 고정 상한 글자(N=5 · N = 5 · N < 5 · N <5 · N <= 5 · N ≤ 5)가 남지 않는다 — 위 양성(LEAD · DECISION_TOOL)이 짝이다.
+# 비교 기호 앞뒤 공백은 몇 개든, 5 뒤에 숫자가 붙으면(N = 50) 다른 값이라 세지 않는다.
+old_n5 = re.findall(r'(?<![A-Za-z_])N\s*(?:=|<=|<|≤)\s*5(?![0-9])', text)
+print(f"OLD_N5_LITERAL:{len(old_n5)}")
 
 note = seg(r'\*\*「고치고 다시 돌기」 옵션 문구.*?(?=\n\nBranch on answer:)')
 print(f"RETRY_NOTE_FOUND:{1 if note is not None else 0}")
