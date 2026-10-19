@@ -246,9 +246,9 @@ CLR="$SD/scripts/clear_critic_outputs.sh"
 [ -f "$CLR" ] && ok "W 전제: 비움 스크립트가 있다" || no "W 전제: 비움 스크립트가 없다 ($CLR)"
 for zsh_name in bash zsh; do
   w_sh=bash; [ "$zsh_name" = zsh ] && { [ -n "$ZSH_BIN" ] || continue; w_sh="$ZSH_BIN"; }
-  for shape in only both none planted unlistable linked notfile; do
+  for shape in only both none planted unlistable linked notfile hardlinked; do
     wl="W(${zsh_name}·$shape)"; wdir="$SCRATCH/w-$zsh_name-$shape"; mkdir -p "$wdir"
-    wout="$SCRATCH/w-outside-$zsh_name"   # linked: 상태 폴더 밖의 파일 — 링크를 따라가 비우면 안 된다
+    wout="$SCRATCH/w-outside-$zsh_name"   # linked · hardlinked: 상태 폴더 밖의 파일 — 링크를 거쳐 비우면 안 된다
     case "$shape" in
       only) printf '%s\n' "$CRITIC_SEED" > "$wdir/critic.txt" ;;
       both|unlistable) printf '%s\n' "$CRITIC_SEED" > "$wdir/critic.txt"; printf '%s\n' "$CRITIC_SEED" > "$wdir/critic-2.txt" ;;
@@ -256,13 +256,15 @@ for zsh_name in bash zsh; do
       linked) printf '%s\n' "$CRITIC_SEED" > "$wout.a"; printf '%s\n' "$CRITIC_SEED" > "$wout.b"
               ln -s "$wout.a" "$wdir/critic.txt"; ln -s "$wout.b" "$wdir/critic-2.txt" ;;
       notfile) printf '%s\n' "$CRITIC_SEED" > "$wdir/critic.txt"; mkdir -p "$wdir/critic-3.txt" ;;
+      hardlinked) printf '%s\n' "$CRITIC_SEED" > "$wout.c"; printf '%s\n' "$CRITIC_SEED" > "$wout.d"
+                  ln "$wout.c" "$wdir/critic.txt"; ln "$wout.d" "$wdir/critic-4.txt" ;;
     esac
     [ "$shape" = unlistable ] && chmod 333 "$wdir"
     ( cd "$SCRATCH" && env -i PATH="$BASE" HOME="$SCRATCH" "$w_sh" "$CLR" "$wdir" ) \
       > "$SCRATCH/w.out" 2>"$SCRATCH/w-$zsh_name-$shape.err"; w_rc=$?
     werr="$(cat "$SCRATCH/w-$zsh_name-$shape.err")"
     assert_eq "$(grep -c . "$SCRATCH/w.out" || true)" "0" "$wl: stdout 에 아무것도 쓰지 않는다 (펜스의 stdout 은 프로필 슬롯이다)"
-    case "$shape" in planted|unlistable|linked|notfile) assert_not_contains "$werr" "no matches found" "$wl: 글롭이 셸을 멈추지 않는다" ;; esac   # 나머지 모양은 z_check 가 잰다
+    case "$shape" in planted|unlistable|linked|notfile|hardlinked) assert_not_contains "$werr" "no matches found" "$wl: 글롭이 셸을 멈추지 않는다" ;; esac   # 나머지 모양은 z_check 가 잰다
     case "$shape" in
       unlistable)
         if ( cd "$wdir" 2>/dev/null && ls >/dev/null 2>&1 ); then
@@ -293,6 +295,15 @@ for zsh_name in bash zsh; do
         assert_eq "$(wc -c < "$wdir/critic.txt" 2>/dev/null | tr -d ' ')" "0" "$wl: 보통 파일 critic.txt 는 비운다"
         [ -d "$wdir/critic-3.txt" ] && ok "$wl: 폴더인 critic-3.txt 는 건드리지 않는다" || no "$wl: 폴더인 critic-3.txt 가 사라지거나 바뀌었다"
         assert_contains "$werr" "critic-3.txt(파일이 아님)" "$wl: 건너뛴 항목을 이름으로 알린다" ;;
+      hardlinked)
+        assert_eq "$w_rc" "0" "$wl: 하드 링크 이름도 빈 파일로 바꿔 비우니 rc 0"
+        assert_eq "$(cat "$wout.c" 2>/dev/null)" "$CRITIC_SEED" "$wl: critic.txt 와 하드 링크로 이어진 폴더 밖 파일을 그대로 둔다"
+        assert_eq "$(cat "$wout.d" 2>/dev/null)" "$CRITIC_SEED" "$wl: critic-4.txt 와 하드 링크로 이어진 폴더 밖 파일을 그대로 둔다"
+        for hn in critic.txt critic-4.txt; do
+          { [ -f "$wdir/$hn" ] && [ ! -L "$wdir/$hn" ] && [ ! -s "$wdir/$hn" ]; } \
+            && ok "$wl: 상태 폴더의 $hn 는 빈 보통 파일로 남는다" || no "$wl: 상태 폴더의 $hn 가 빈 보통 파일이 아니다"
+        done
+        assert_contains "$werr" "critic-<번호>.txt)을 비웠다." "$wl: 비운 뒤 「비웠다」고 보고한다" ;;
       *)
         assert_eq "$w_rc" "0" "$wl: rc 0"
         z_check "$wl" "$wdir" "$shape" "$SCRATCH/w-$zsh_name-$shape.err"
