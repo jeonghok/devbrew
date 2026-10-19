@@ -3,7 +3,7 @@ name: plugin-audit
 description: >
   임의의 devbrew 플러그인을 읽기전용·증거기반·multi-agent로 감사한다. 사용자가
   `/plugin-audit:plugin-audit <target> [--seed <path>]` 로 부른다(모델은 부르지 않는다).
-  6축 발견 → 적대적 반박 → blind codex co-audit → 우선순위 갭 리포트.
+  고른 축(기본 여섯) 발견 → 적대적 반박 → blind codex co-audit → 우선순위 갭 리포트.
   지출 동의 게이트·정적 게이트·Workflow·결정론 post-1 조립을 소유한다.
 cost_class: high
 argument-hint: <target> [--seed <path>]
@@ -67,9 +67,18 @@ parse만 되고 `check()`엔 전달되지 않는 dead flag — cwd 민감성의 
    샌드박스 경로(`run-own-tests.sh`, `check-integrity.sh --target`)에 target을 꽂아 넣기 **전에** 끝낸다
    — 검증되지 않은 target을 경로 조립에 먼저 쓰면 그 아래의 모든 격리가 무의미해진다. 실패 시
    loud abort("target 플러그인 없음" 또는 "target 형식 불허") — consent 이전.
-3. **지출 동의 게이트 (cost_class: high, C2의 두 의무)** — fan-out(약 30 dispatch: 6축 + 축별 refute
-   + codex refute + deep-verify 최대 8×2)을 선언하고 `AskUserQuestion`으로 명시 승인을 받는다.
-   승인 없으면 종료 — 실행 디렉토리를 만들지 않는다.
+3. **지출 동의 게이트 (cost_class: high, C2의 두 의무)** — 감사할 축을 고르고, 규모를 알린 뒤 승인을 받는다.
+   (a) **축 고르기** — `AskUserQuestion` 한 질문: 「여섯 축 전부 (권장)」 · 「축 골라서」. 「축 골라서」면 한 번의
+   호출에 다중 선택 질문 둘을 싣는다 — 「축 1~3 중 쓸 것」(1 정합·정직성 · 2 아키텍처·shape · 3 집행 능력) ·
+   「축 4~6 중 쓸 것」(4 외부 대비·정체성 · 5 UX·디테일 · 6 보안). 하나도 안 고르면 「다시 고르기」 · 「중단」을
+   묻는다. 고른 축 번호의 목록이 `axes` 다(전부면 `[1,2,3,4,5,6]`).
+   (b) **규모 공시와 승인** — 고른 축 수를 k 라 하고 질문 본문에 규모를 적는다: 「감사자 k · 반박 최대 k ·
+   codex 감사 k회(설치돼 있으면)와 그 반박 1 · 심층검증은 반박을 통과한 심각·중요 지적마다 2회 — 상한 없음,
+   몇 건인지는 감사 뒤에 정해지고 시작 직전 실행 기록에 찍힌다」. 축을 골라 뺐으면
+   「고르지 않은 축의 seed 단서와 질문은 「검증 안 됨」으로 채워진다」도 본문에 싣는다. 보안 축(6)을 뺐으면
+   본문 첫 줄에 「보안 축을 뺐다 — 사용자 파일 파괴 경로를 아무도 보지 않는다」를 싣는다.
+   `AskUserQuestion`으로 명시 승인을 받는다 — 선택지 「승인」 · 「중단」. 승인 없으면 종료 — 실행 디렉토리를
+   만들지 않는다.
 4. **실행 디렉토리** — 승인 직후 **한 번만** 부른다:
    `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-run-dir.py" <target> --repo-root .`
    rc≠0 이거나 stdout 이 정확히 두 줄이 아니면 stderr 를 그대로 보이고 멈춘다(loud abort) — 디렉토리를
@@ -83,7 +92,8 @@ parse만 되고 `check()`엔 전달되지 않는 dead flag — cwd 민감성의 
    `[ -d "$RUN_DIR" ] || { echo "[plugin-audit] RUN_DIR 이 비었거나 없다 — 멈춘다" >&2; exit 1; }` 로
    가드한다 — 빈 값이면 `"$RUN_DIR/audit-data.json"` 이 루트의 `/audit-data.json` 이 된다. 한 감사
    안에서 다시 부르지 않는다 — 다시 부르면 `-2` 가 생겨 산출이 두 디렉토리로 갈라진다.
-   consent 아티팩트(`{approved, at, fanout}`)를 `$RUN_DIR/consent.json` 으로 저술한다. 이후의 모든
+   consent 아티팩트(`{approved, at, fanout, axes}`)를 `$RUN_DIR/consent.json` 으로 저술한다 — `fanout` 은
+   step 3 (b) 의 규모 문장 그대로, `axes` 는 step 3 (a) 의 목록이다. 이후의 모든
    중간 파일(무결성 스냅샷 · 축 질문 `$AXIS_FILE` · `$CODEX_JSON` · `wf.json` · `codex.json` ·
    `meta.json` · `assigned.json`)도 `$RUN_DIR` 에 둔다.
    **중간 abort** — 실행 디렉토리가 생긴 뒤(pre-0 hard error · 무결성 불일치 등) 멈추면 디렉토리를
@@ -137,7 +147,8 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
    - `plugin_version`/`file_count`/`total_lines`는 LD5 코퍼스 스캔(BEFORE 스냅샷과 같은 스코프)에서
      채운다.
    - `staleness_facts` · `staleness_excluded` 는 `check-staleness.py plugins/<target>` 출력의
-     `facts` · `excluded`, `own_tests`는
+     `facts` · `excluded`. 그 스크립트가 안 돌았거나 실패하면 `staleness_excluded` 키를 빼 둔다 —
+     0 으로 채우지 않는다(감사자와 리포트가 「셀 수 없음」을 본다). `own_tests`는
      `run-own-tests.sh plugins/<target> <sandbox id>` — `<sandbox id>` 는
      phase 0 step 4 의 둘째 줄이다. `audit-sandbox.sh create-sandbox` 는 id 의 앞 8글자만 sandbox 이름에 쓰고
      같은 이름의 sandbox 를 지우고 다시 만들므로 실행 키를 그대로 넘기지 않는다. `structure_facts`/
@@ -156,7 +167,7 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
    정본 `prompt-preamble.md`(untrusted-data, P21)를 프롬프트 앞에 싣고 축 질문을 이어
    붙인다.
 
-   축마다 축 질문을 파일(`$AXIS_FILE`)로 쓰고 아래 게이트를 **그대로** 실행한다. kill switch는
+   고른 축(`axes`)마다 축 질문을 파일(`$AXIS_FILE`)로 쓰고 아래 게이트를 **그대로** 실행한다. kill switch는
    `DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX=1`이며 `detect_codex.sh`가 그것을 읽는다 — 러너는 읽지
    않는다(게이트는 호출자 책임).
 
@@ -207,9 +218,10 @@ fi
 
 ```
 Workflow({scriptPath: "${CLAUDE_PLUGIN_ROOT}/scripts/audit-workflow.js",
-          args: {target, evidencePack, codexFindings}})
+          args: {target, evidencePack, codexFindings, axes}})
 ```
-args는 JSON 문자열로 전달됨([[reference_workflow_args_string]]) — 스크립트가 정규화. command/skill이
+args는 JSON 문자열로 전달됨([[reference_workflow_args_string]]) — 스크립트가 정규화. `axes` 는 consent
+아티팩트의 그 목록이다 — 잘못된 목록이면 스크립트가 첫 dispatch 전에 멈춘다. command/skill이
 Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
 
 ## post-1 — 조립·검증·렌더 (orchestrator, 결정론)
@@ -228,7 +240,8 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    journal을 얻지 못하거나 secret 때문에 persist를 못 하면 그 사실을 `degraded[]`(meta.pre1_degraded)에 넣는다
    — **assemble 前**이라 이후 render 배너(AC-3)에 반영된다(render 後에 확보하면 이미 렌더된 배너에 못 싣는다,
    codex re-verify R4).
-2. `<meta.json>` 에 `staleness_excluded` 를 pre-1 의 같은 값으로 적는다.
+2. `<meta.json>` 에 `staleness_excluded` 를 pre-1 의 같은 값으로 적는다 — pre-1 이 키를 빼 뒀으면 여기서도
+   빼 둔다, 0 으로 채우지 않는다. `<meta.json>` 에 `axes` 를 consent 아티팩트와 같은 값으로 적는다.
    `assemble-audit-data.py --workflow-return <wf.json> --codex-side <codex.json> --meta <meta.json>
    --assigned <assigned.json> --repo-root . --out "$RUN_DIR/audit-data.json"` (내부에서
    `check-grounding.py`를 동적 import해 재읽기 — A grounding: 인용 실재 검증, null-degrade/폐기/line-교정.
@@ -246,7 +259,7 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    조치는 `plugin.json`을 정본으로 marketplace 항목을 맞추는 것이다.
 3. `validate-audit-data.py --data <data.json>` → RED면 abort(완결성·consent·codex-merge·NOQ·gate-E).
 4. `render-audit-report.py <data.json> --out "$RUN_DIR/audit.md"`.
-   6축 전멸(exit 1) → 리포트 없음(AC-4).
+   고른 축 전멸(exit 1) → 리포트 없음(AC-4).
 5. **무결성 AFTER**: `check-integrity.sh ld5 "$RUN_DIR/after.txt" --target <target>` +
    `check-integrity.sh harness "$RUN_DIR/after-harness.txt"` → 각각 대응하는 BEFORE와 diff. 둘 중 하나라도
    불일치 → **감사 무효**(ld5=감사 중 target 변경 감지, harness=감사 중 plugin-audit 자신의

@@ -1,6 +1,6 @@
 # plugin-audit
 
-devbrew 플러그인 하나를 고치지 않고 읽기만 해서 감사한다. 읽기 전용 리뷰어 여섯이 축마다 빈틈을 찾고,
+devbrew 플러그인 하나를 고치지 않고 읽기만 해서 감사한다. 읽기 전용 리뷰어가 고른 축마다(기본 여섯) 빈틈을 찾고,
 다른 리뷰어가 그 지적을 하나씩 반박해 보며, codex(다른 모델)가 있으면 같은 대상을 따로 감사한다. 결과는
 증거가 붙은 빈틈 목록이고, 심각한 것부터 정렬된다.
 
@@ -14,9 +14,9 @@ devbrew 플러그인 하나를 고치지 않고 읽기만 해서 감사한다. �
 
 - `<target>` — 감사할 플러그인 이름 (예: `quality-gates`). scope는 `plugins/<target>/**`로 도출.
 - `--seed <path>` — optional. 추가 scope · Open Questions · 후보 단서를 담은 markdown.
-  없으면 6축 fresh discovery로 degrade(배너 표시).
+  없으면 fresh discovery로 degrade(배너 표시).
 
-`cost_class: high` — dispatch 전 `AskUserQuestion` 지출 동의 게이트를 통과해야 한다.
+`cost_class: high` — dispatch 전 `AskUserQuestion` 지출 동의 게이트를 통과해야 한다. 축을 고르고 규모(심층검증은 상한 없음)를 본 뒤 승인한다.
 Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 본문 전 사전 검사(`scripts/entry_preflight.py`)가 이 스위치를 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 그 스크립트나 `python3` 가 없으면 플랫폼이 호출을 끊는다(헤드리스에서는 출력 없이 끝난다).
 
@@ -84,7 +84,7 @@ exit 3 으로 멈추고, stderr 한 줄이 옛 이름과 새 이름으로의 개
 
 ### Three Laws
 - **Law 1 (Clarity Before Code)** — 1차 산출물은 증거로 뒷받침된 갭 목록. 빈 감사는 감사가 아니다
-  (6축 전멸 시 리포트 없음, AC-4). 갭이 적게 나오는 것은 실패가 아니고 없는 갭을 만드는 것이 실패.
+  (고른 축이 모두 죽으면 리포트 없음, AC-4). 갭이 적게 나오는 것은 실패가 아니고 없는 갭을 만드는 것이 실패.
 - **Law 2 (Writer ≠ Reviewer, 물리 분리)** — 3 agent(`plugin-auditor`·`audit-refuter`·`smoke-probe`)의
   `tools:` allowlist(`Read, Grep, Glob, WebSearch, WebFetch`)가 쓰기·실행을 fail-closed로 차단.
   프롬프트가 아니라 frontmatter scoping. `check-law2.py` 정적 게이트 + smoke가 런타임 실증.

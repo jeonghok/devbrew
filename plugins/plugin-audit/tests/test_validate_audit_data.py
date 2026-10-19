@@ -250,6 +250,19 @@ class TestData(unittest.TestCase):
             self.assertEqual(rc, 1, f"비-dict refutation({bad_ref!r})이 clean RED로 안 잡힘:\n{err}")
             self.assertIn("refutation", err, f"malformed refutation 사유가 stderr에 없음:\n{err}")
 
+    def test_axes_must_be_valid_subset(self):
+        for bad in ([], [0], [7], [1, 1], ["1"], [True], "16", None):
+            d_ = copy.deepcopy(VALID); d_["meta"]["axes"] = bad
+            rc, err = run_validate(d_)
+            self.assertEqual(rc, 1, f"meta.axes={bad!r} 가 통과했다")
+            self.assertIn("meta.axes 가 잘못됐다", err)
+        for good in ([1, 6], [1, 2, 3, 4, 5, 6], [3]):
+            d_ = copy.deepcopy(VALID); d_["meta"]["axes"] = good
+            rc, err = run_validate(d_)
+            self.assertEqual(rc, 0, err)
+        rc, err = run_validate(copy.deepcopy(VALID))   # 키 없음
+        self.assertEqual(rc, 0, err)
+
     def test_missing_claude_source_verdict_is_red(self):  # SF2 (qg 2026-07-20 round-2)
         # silent-failure-hunter: 완결성(40-47)은 any-source 존재만, B7(53-59)은 codex-source 존재만
         # 강제한다. 대칭인 claude-source 존재 검사가 없어, backfill 회귀로 dead Claude 축이 codex 답변에

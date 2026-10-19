@@ -165,7 +165,8 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     for f in findings:
         for gev in f.get("degraded_events", []):
             degraded.append(_grounding_degraded_note(gev))
-    out_meta = {k: meta[k] for k in ("date", "fanout_declared", "consent", "codex", "target", "seed_provided", "staleness_excluded") if k in meta}
+    out_meta = {k: meta[k] for k in ("date", "fanout_declared", "consent", "codex", "target", "seed_provided",
+                                     "staleness_excluded", "axes") if k in meta}
     # §4.1 truth table의 층⑤ 표현. `ran`/`failed` 쌍이 세 상태를 구분한다:
     #   미실행: ran=false, failed=false  |  실행-실패: ran=true, failed=true
     #   실행-성공: ran=true, failed=false

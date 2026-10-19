@@ -36,6 +36,13 @@ def validate_data(data: dict) -> list:
     if meta.get("fanout_declared") != consent.get("fanout"):
         errs.append(f"fanout_declared({meta.get('fanout_declared')}) != consent.fanout({consent.get('fanout')})")
 
+    # 고른 축 — 있으면 비지 않은 1~6 정수 목록, 중복 없음 (bool 은 int 가 아니다).
+    if "axes" in meta:
+        ax = meta.get("axes")
+        if not (isinstance(ax, list) and ax and all(type(x) is int and 1 <= x <= 6 for x in ax)
+                and len(set(ax)) == len(ax)):
+            errs.append(f"meta.axes 가 잘못됐다 ({ax!r}) — 비지 않은 1~6 정수 목록, 중복 없음이어야 한다")
+
     # D/OQ 완결성 (row 16 이빨 — backfill 안 하면 여기서 RED)
     d_ids = {x.get("id") for x in data.get("d_verdicts", [])}
     for did in assigned_d:

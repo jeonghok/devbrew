@@ -1,11 +1,11 @@
 export const meta = {
   name: 'plugin-audit',
-  description: 'devbrew 플러그인 읽기전용 6축 감사 — 축별 발견 → 적대적 반박 → 병합 → 심층검증',
+  description: 'devbrew 플러그인 읽기전용 감사 (고른 축) — 축별 발견 → 적대적 반박 → 병합 → 심층검증',
   phases: [
-    { title: '감사', detail: '6축 병렬 발견 (plugin-auditor, 쓰기 불가)' },
+    { title: '감사', detail: '고른 축 병렬 발견 (plugin-auditor, 쓰기 불가)' },
     { title: '검증', detail: '축별 적대적 반박 (audit-refuter, 기본 verdict = refuted)' },
     { title: '병합', detail: 'exact-key dedup + codex 갭 반박' },
-    { title: '심층검증', detail: 'CRITICAL/IMPORTANT 생존 갭에 2개 추가 렌즈 (캡 8)' },
+    { title: '심층검증', detail: 'CRITICAL/IMPORTANT 생존 갭에 2개 추가 렌즈 (상한 없음)' },
   ],
 }
 
@@ -27,6 +27,22 @@ const _args = typeof args === 'string' ? JSON.parse(args) : (args || {})
 const target = _args.target || 'unknown'
 const pack = _args.evidencePack
 const codexFindings = _args.codexFindings || []
+
+// Axes to run — chosen at the consent gate. Omitted = all six. Anything else that is not a
+// non-empty list of distinct integers 1..6 stops the run here, before the first dispatch.
+const AXES_RUN = (() => {
+  const raw = _args.axes
+  if (raw === undefined) return [1, 2, 3, 4, 5, 6]
+  const bad = (why) => { throw new Error('[plugin-audit] 축 선택이 잘못됐다 — ' + why) }
+  if (!Array.isArray(raw)) bad('목록이 아니다 (' + JSON.stringify(raw) + ')')
+  if (!raw.length) bad('고른 축이 없다')
+  for (const x of raw) {
+    if (!Number.isInteger(x) || x < 1 || x > 6) bad('1~6 정수가 아닌 값 ' + JSON.stringify(x))
+  }
+  if (new Set(raw).size !== raw.length) bad('같은 축이 두 번 있다 (' + JSON.stringify(raw) + ')')
+  return [...raw].sort((a, b) => a - b)
+})()
+const RUN_SECURITY = AXES_RUN.includes(6)
 
 // Gap scope (LD5) triad — built ONCE from the target + pack.extra_scope and referenced by BOTH
 // the CONTRACT preamble (spot 4) and Gate E (spot 7), so the two can never silently diverge.
@@ -57,6 +73,9 @@ const EVIDENCE = {
   },
 }
 
+// `pending` defers axis 2's condition (c) to axis 6 — offered only when axis 6 runs.
+const STEELMAN_ENUM = ['a', 'b', 'c', 'd', 'none', ...(RUN_SECURITY ? ['pending'] : [])]
+
 const AXIS_SCHEMA = {
   type: 'object',
   required: ['findings', 'd_verdicts', 'oq_answers', 'new_open_questions'],
@@ -81,7 +100,7 @@ const AXIS_SCHEMA = {
           fix_cost_rationale: { type: 'string' },
           reference_gap: { type: 'string' },
           oq_ref: { type: 'string' },
-          steelman_condition: { type: 'string', enum: ['a', 'b', 'c', 'd', 'none', 'pending'] },
+          steelman_condition: { type: 'string', enum: STEELMAN_ENUM },
           plain: { type: 'string', description: 'Optional. The same finding in one plain sentence a first-time reader understands — no internal IDs.' },
         },
       },
@@ -113,7 +132,7 @@ const AXIS_SCHEMA = {
           evidence: { type: 'array', items: { type: 'object' } },
           left_evidence: { type: 'array', items: { type: 'object' } },
           right_evidence: { type: 'array', items: { type: 'object' } },
-          steelman_condition: { type: 'string', enum: ['a', 'b', 'c', 'd', 'none', 'pending'] },
+          steelman_condition: { type: 'string', enum: STEELMAN_ENUM },
         },
       },
     },
@@ -237,9 +256,9 @@ const CONTRACT = [
   '',
   '## 결정론 staleness sweep — **사실만. 판정은 네가 한다** (§5.4a)',
   '아래는 파일시스템 전수 열거가 낸 *관측된 사실*이다. 각 사실이 갭인지는 **네가** 판정한다',
-  (ex => ex
-    ? '(뺀 것: 코드 펜스 안 ' + ex.fence_lines + '줄 · 자리표시자·URL ' + ex.placeholder_or_url
-      + '개 · 생성 대상 경로 ' + ex.generation_target + '개 — 그래도 원문을 직접 확인하라).'
+  (ex => (ex && ['fence_lines', 'placeholder_or_url', 'generation_target'].every((k) => Number.isInteger(ex[k])))
+    ? '(뺀 것: 코드 펜스 안 ' + ex.fence_lines + '줄 · 자리표시자·URL 때문에 건너뛴 후보 ' + ex.placeholder_or_url
+      + '건 · 생성 대상 경로 ' + ex.generation_target + '개 — 그래도 원문을 직접 확인하라).'
     : '(뺀 개수를 받지 못했다 — 셀 수 없음. 그래도 원문을 직접 확인하라).')(pack.staleness_excluded),
   ...((pack.staleness_facts || []).length
     ? pack.staleness_facts.map((f) => '  - [' + f.class + '] `' + f.file + ':' + f.line + '` — ' + f.quote)
@@ -335,8 +354,12 @@ const AXES = [
       '**steelman 조건 (verbatim):**',
       STEELMAN,
       '',
-      '**조건 (c)는 축⑥(보안)의 판정에 의존한다.** 네가 (c)를 단독 판정할 수 없으면',
-      '`steelman_condition: "pending"`으로 두어라 — orchestrator가 축⑥의 판정으로 해소한다.',
+      ...(RUN_SECURITY
+        ? [
+          '**조건 (c)는 축⑥(보안)의 판정에 의존한다.** 네가 (c)를 단독 판정할 수 없으면',
+          '`steelman_condition: "pending"`으로 두어라 — orchestrator가 축⑥의 판정으로 해소한다.',
+        ]
+        : ['축⑥은 이번 감사에서 돌지 않는다 — (c) 를 네가 직접 판정하거나 `none` 으로 두어라.']),
       '',
       '**이 축의 후보 단서 (검증하라):**',
       ...axisClueBlock(2),
@@ -501,7 +524,7 @@ const axisFailures = []
 const degradedEvents = []
 
 const results = await pipeline(
-  AXES,
+  AXES.filter((ax) => AXES_RUN.includes(ax.n)),
   (ax) => auditor(findPrompt(ax), {
     label: '축' + ax.n + ' ' + ax.name,
     phase: '감사',
@@ -539,7 +562,7 @@ const results = await pipeline(
 )
 
 const alive = results.filter(Boolean)
-log('감사 완료: ' + alive.length + '/6 축 생존, 축 사망 ' + axisFailures.length + '건')
+log('감사 완료: ' + alive.length + '/' + AXES_RUN.length + ' 축 생존, 축 사망 ' + axisFailures.length + '건')
 
 // ── 병합 (barrier — dedup needs every finding in one place)
 phase('병합')
@@ -573,7 +596,7 @@ for (const r of alive) {
       })
     } else {
       rec.status = 'reported'
-      rec.deep_verified = null   // deepPool에 들면 심층검증이 덮는다; 안 들면 null 유지 (3-상태, §9.2)
+      rec.deep_verified = null   // deepPool에 들면 심층검증이 덮는다; 안 들면 null 유지 (true · null, §9.2)
     }
     findings.push(rec)
   }
@@ -646,7 +669,8 @@ for (const f of findings) {
   }
 }
 
-// ── 심층검증: two more lenses on surviving CRITICAL/IMPORTANT. Cap 8.
+// ── 심층검증: two more lenses on every surviving CRITICAL/IMPORTANT — no cap; the consent gate
+// announces the scale and the count is logged right before the lenses start.
 // (Task 28: 옛 HIGH → IMPORTANT — quality-gates와 severity 어휘 통일, §15.1 mapping)
 phase('심층검증')
 
@@ -655,17 +679,14 @@ const deepPool = findings
   .filter((f) => f.status === 'reported' && (f.severity === 'CRITICAL' || f.severity === 'IMPORTANT'))
   .sort((a, b) => (RANK[a.severity] - RANK[b.severity]) || (a.axis - b.axis) || (a.id < b.id ? -1 : 1))
 
-const DEEP_CAP = 8
-const deepTargets = deepPool.slice(0, DEEP_CAP)
-for (const f of deepPool.slice(DEEP_CAP)) f.deep_verified = false   // eligible, over the cap
-if (deepPool.length > DEEP_CAP) {
-  log('심층검증 캡 초과: ' + deepPool.length + '건 중 ' + DEEP_CAP + '건만 검증 (나머지는 deep_verified: false)')
-}
+const deepTargets = deepPool
 
 const LENSES = [
   { key: '재현성', ask: '이 갭의 실패 시나리오가 **구체적으로 재현 가능한가?** 어떤 입력이 어떤 잘못된 결과를 내는지 네가 직접 코드를 읽고 따라가 보라. 추상적 우려면 refute하라.' },
   { key: 'devbrew 원칙', ask: '이 갭의 **권고안**이 devbrew Forbidden Patterns(trivia ceremony · over-engineering · unbounded autonomy · subagent spray)에 저촉되는가? 저촉되면 refute하라 — 병보다 약이 나쁜 경우다.' },
 ]
+
+log('심층검증 ' + deepPool.length + '건 × 렌즈 ' + LENSES.length + ' = ' + deepPool.length * LENSES.length + '회 (상한 없음)')
 
 const deepVotes = await parallel(
   deepTargets.flatMap((f) =>
@@ -732,4 +753,5 @@ return {
   new_open_questions: alive.flatMap((r) => (r.res.new_open_questions || []).map((q) => ({ ...q, source: 'claude', axis: q.axis ?? r.ax.n }))),
   axis_failures: axisFailures,
   degraded_events: degradedEvents,
+  axes_run: AXES_RUN,
 }

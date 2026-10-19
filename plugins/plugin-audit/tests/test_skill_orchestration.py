@@ -117,6 +117,32 @@ class TestSkillOrchestration(unittest.TestCase):
             "(the rendered .md), per validate-audit-data.py's real CLI contract.",
         )
 
+    def test_consent_gate_announces_axes_and_scale(self):
+        body = SKILL.read_text(encoding="utf-8")
+        start = body.index("3. **지출 동의 게이트")
+        sec = body[start:body.index("4. **실행 디렉토리**", start)]
+        for need in ("「여섯 축 전부 (권장)」", "「축 골라서」", "상한 없음", "심층검증",
+                     "보안 축을 뺐다 — 사용자 파일 파괴 경로를 아무도 보지 않는다",
+                     "「검증 안 됨」"):
+            self.assertIn(need, sec)
+        for gone in ("최대 8", "약 30", "6축"):
+            self.assertNotIn(gone, sec)
+        self.assertEqual(body.count("AskUserQuestion`으로 명시 승인"), 1)
+        self.assertIn("AskUserQuestion`으로 명시 승인", sec)
+        self.assertIn("{approved, at, fanout, axes}", body)
+
+    def test_workflow_call_passes_axes(self):
+        body = SKILL.read_text(encoding="utf-8")
+        wf = body.split("## Workflow", 1)[1].split("```", 2)[1]
+        self.assertIn("axes", wf)
+        self.assertIn("evidencePack", wf, "positive pair — the fence slice is the Workflow call")
+
+    def test_meta_gets_axes_and_staleness_key_is_never_zero_filled(self):
+        body = SKILL.read_text(encoding="utf-8")
+        self.assertIn("`<meta.json>` 에 `axes` 를 consent 아티팩트와 같은 값으로 적는다", body)
+        self.assertGreaterEqual(body.count("0 으로 채우지 않는다"), 2,
+                                "pack 과 meta.json 두 자리 모두 staleness_excluded 를 빼 두라고 해야 한다")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -155,6 +155,17 @@ class TestAssemble(unittest.TestCase):
             meta=dict(BASE_META, staleness_excluded=ex), assigned={"assigned_d": [], "assigned_oq": []})
         self.assertEqual(data["meta"]["staleness_excluded"], ex)
 
+    def test_meta_carries_axes(self):
+        empty_wf = {"findings": [], "d_verdicts": [], "oq_answers": [],
+                    "new_open_questions": [], "axis_failures": [], "degraded_events": []}
+        empty_cx = {"d_verdicts": [], "oq_answers": [], "new_open_questions": []}
+        none = {"assigned_d": [], "assigned_oq": []}
+        r, data = run(workflow_return=empty_wf, codex_side=empty_cx,
+                      meta=dict(BASE_META, axes=[1, 6]), assigned=none)
+        self.assertEqual(data["meta"]["axes"], [1, 6])
+        r, data = run(workflow_return=empty_wf, codex_side=empty_cx, meta=BASE_META, assigned=none)
+        self.assertNotIn("axes", data["meta"], "없는 키를 만들어 넣지 않는다")
+
     def test_meta_and_degraded_attached(self):
         r, data = run(
             workflow_return={"findings": [], "d_verdicts": [], "oq_answers": [],

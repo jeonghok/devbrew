@@ -88,9 +88,8 @@ class TestRender(unittest.TestCase):
         head = "\n".join(md.splitlines()[:20])
         self.assertIn("/6", head)  # "5/6 축 완주" 류
 
-    def test_deep_verified_three_states(self):  # §9.2
-        # toothless였던 원래 형태(assertIn("상한 초과", md) 전역 1건)는 3-state가 2-state로
-        # collapse돼도 GREEN — finding별 라인을 추출해 세 상태를 개별 단언한다.
+    def test_deep_verified_two_states(self):  # §9.2 — 심층검증 상한이 없어져 두 상태다
+        # finding별 라인을 추출해 상태를 개별 단언한다. 옛 데이터의 False 도 라벨 없이 나온다.
         data = {"meta": META_OK, "findings": [
             f("A1-1", "IMPORTANT", "S", deep_verified=True),
             f("A1-2", "IMPORTANT", "S", deep_verified=False),
@@ -108,9 +107,52 @@ class TestRender(unittest.TestCase):
 
         l1, l2, l3 = line_for("A1-1"), line_for("A1-2"), line_for("A1-3")
         self.assertIn("통과", l1, "True → 심층검증 통과 라벨이 있어야")
-        self.assertIn("상한 초과", l2, "False → 상한 초과 라벨이 있어야")
-        self.assertNotIn("통과", l3, "None은 통과 라벨이 없어야")
-        self.assertNotIn("상한 초과", l3, "None은 상한 초과 라벨도 없어야 (무라벨)")
+        self.assertNotIn("통과", l2)
+        self.assertNotIn("통과", l3, "None은 통과 라벨이 없어야 (무라벨)")
+        self.assertNotIn("상한 초과", md, "심층검증 상한은 없어졌다")
+        self.assertNotIn("미실시", md)
+
+    def test_axis_denominator_follows_chosen_axes(self):
+        data = {"meta": dict(META_OK, axes=[1, 2, 6]), "findings": [f("A1-1", "IMPORTANT", "S")],
+                "d_verdicts": [], "oq_answers": [], "new_open_questions": [],
+                "axis_failures": [{"axis": 2, "why": "x"}], "degraded": []}
+        rc, md, err, _ = render(data)
+        self.assertEqual(rc, 0, err)
+        head = "\n".join(md.splitlines()[:20])
+        self.assertIn("⚠ **축 2/3 완주**", head)
+        self.assertNotIn("/6 완주", head)
+        dead = dict(data, axis_failures=[{"axis": i, "why": "x"} for i in (1, 2, 6)])
+        rc, md, err, _ = render(dead)
+        self.assertEqual(rc, 1, "고른 축이 모두 죽었는데 리포트를 만들었다 (AC-4a)")
+        self.assertEqual(md, "")
+        self.assertIn("고른 축 전멸", err)
+
+    def test_unchosen_axes_banner(self):
+        data = {"meta": dict(META_OK, axes=[1, 6]), "findings": [f("A1-1", "IMPORTANT", "S")],
+                "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "axis_failures": [], "degraded": []}
+        rc, md, err, _ = render(data)
+        self.assertEqual(rc, 0, err)
+        head = "\n".join(md.splitlines()[:20])
+        self.assertIn("⚠ **고른 축 2/6** — 고르지 않은 축은 감사하지 않았다: ", head)
+        for name in ("2 아키텍처·shape", "3 enforcement 능력", "4 외부대비·정체성", "5 UX·디테일"):
+            self.assertIn(name, head)
+        banner = [l for l in md.splitlines() if l.startswith("⚠ **고른 축")][0]
+        self.assertNotIn("1 정합", banner)
+        self.assertNotIn("6 보안", banner)
+        for meta in (META_OK, dict(META_OK, axes=[1, 2, 3, 4, 5, 6])):
+            rc, md, err, _ = render(dict(data, meta=meta))
+            self.assertEqual(rc, 0, err)
+            self.assertNotIn("고른 축", md)
+
+    def test_axis_names_match_workflow(self):
+        import importlib.util, re
+        wf = (REPO / "scripts" / "audit-workflow.js").read_text(encoding="utf-8")
+        pairs = re.findall(r"n: (\d),\s*\n\s*name: '([^']+)'", wf)
+        self.assertEqual(len(pairs), 6, pairs)
+        spec = importlib.util.spec_from_file_location("render_audit_report", str(SCRIPT))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.assertEqual({int(n): name for n, name in pairs}, mod.AXIS_NAMES)
 
     def test_noq_section_and_cross_model_badge(self):
         data = {"meta": META_OK,
@@ -459,10 +501,14 @@ class TestAppendix(unittest.TestCase):
         self.assertEqual(rc, 0, err)
         sec = md.split("## 수집에서 뺀 것", 1)[1].split("\n## ", 1)[0]
         self.assertIn("코드 펜스 안 7줄", sec)
-        self.assertIn("자리표시자·URL 2개", sec)
+        self.assertIn("자리표시자·URL 때문에 건너뛴 후보 2건", sec)
         self.assertIn("생성 대상 경로 1개", sec)
         self.assertNotIn("셀 수 없음", sec)
         rc, md, err, _ = render(self._data([]))
+        self.assertEqual(rc, 0, err)
+        sec = md.split("## 수집에서 뺀 것", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("셀 수 없음", sec)
+        rc, md, err, _ = render(dict(self._data([]), meta=dict(META_OK, staleness_excluded={"fence_lines": 3})))
         self.assertEqual(rc, 0, err)
         sec = md.split("## 수집에서 뺀 것", 1)[1].split("\n## ", 1)[0]
         self.assertIn("셀 수 없음", sec)

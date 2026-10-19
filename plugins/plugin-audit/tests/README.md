@@ -11,13 +11,13 @@
 
 ## 감사 RUN 순서 (orchestrator = 메인 루프, 설계 §6·§20)
 1. **agent 파일 커밋 + 세션 재시작** — 레지스트리는 세션 시작에 스냅샷된다 (가정 i).
-2. **phase 0** 지출 동의 게이트 (`AskUserQuestion`, fanout 30) → 승인 직후 `prepare-run-dir.py` 로 실행
+2. **phase 0** 지출 동의 게이트 (축 고르기 · 규모 공시 · 승인) → 승인 직후 `prepare-run-dir.py` 로 실행
    디렉토리 생성 → consent artifact(`$RUN_DIR/consent.json`).
 3. **pre-0** `check-law2.py` (audit + smoke) → `check-no-verdict-injection.py` → 미니-workflow 스모크
    (sentinel 파일 부재를 디스크에서 확인).
 4. **pre-1** LD5-0 스냅샷 → 대상 자체 테스트 실행(`-B`) → `check-staleness.py` → evidence pack 조립
    → codex blind(`-s read-only`) → LD5-1=BEFORE + `LD5-0==LD5-1` 검사.
-5. **Workflow** `audit-workflow.js` (6축 pipeline) → findings 반환.
+5. **Workflow** `audit-workflow.js` (고른 축 pipeline) → findings 반환.
 6. **post-1** AFTER#1 → secret scan → journal 복사 → audit-data.json 조립(codex D/OQ/NOQ 병합 +
    **배정 D/OQ backfill** + cross-model + **gate-E→NOQ 회수** + steelman pending 해소) →
    `validate-audit-data.py --data` → `render-audit-report.py` → `validate-audit-data.py --artifacts` →

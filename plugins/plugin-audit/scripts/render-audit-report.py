@@ -5,7 +5,7 @@
 서수다 — fix_cost 문자(S/M/L)는 알파벳순(L<M<S)이 실제 순위(S<M<L)를 조용히 뒤집는다.
 severity(CRITICAL/IMPORTANT/SUGGESTION, Task 28 어휘통일)는 알파벳순이 우연히 순위와
 일치하지만(C<I<S) SEV_RANK로 명시한다 — 어휘가 다시 바뀌면 이 우연은 보장되지 않는다.
-fix_cost에 산문이 섞이면 비교자가 NaN을 낸다 → 첫 글자만 본다. AC-4: 6축 전멸이면 리포트를
+fix_cost에 산문이 섞이면 비교자가 NaN을 낸다 → 첫 글자만 본다. AC-4: 고른 축 전멸이면 리포트를
 안 만든다 (빈 감사는 감사가 아니다).
 """
 from __future__ import annotations
@@ -22,6 +22,19 @@ from pathlib import Path
 # 정렬한다 — 크래시하지 않고 뒤로 밀릴 뿐이므로 허용한다.
 SEV_RANK = {"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 2}
 COST_RANK = {"S": 0, "M": 1, "L": 2}
+
+# audit-workflow.js 의 축 `name` 과 같은 여섯 (test_axis_names_match_workflow 가 대조한다).
+AXIS_NAMES = {1: "정합·정직성", 2: "아키텍처·shape", 3: "enforcement 능력",
+              4: "외부대비·정체성", 5: "UX·디테일", 6: "보안"}
+
+
+def chosen_axes(meta: dict) -> list:
+    """meta.axes 가 유효한 목록이면 그 축, 아니면 여섯 전부."""
+    ax = meta.get("axes")
+    if (isinstance(ax, list) and ax and all(type(x) is int and 1 <= x <= 6 for x in ax)
+            and len(set(ax)) == len(ax)):
+        return sorted(ax)
+    return sorted(AXIS_NAMES)
 
 
 def cost_key(fix_cost) -> int:
@@ -43,9 +56,7 @@ def deep_label(f: dict) -> str:
     dv = f.get("deep_verified")
     if dv is True:
         return " (심층검증 통과)"
-    if dv is False:
-        return " (심층검증 미실시 — 상한 초과)"
-    return ""   # null → 무라벨
+    return ""   # null(또는 옛 데이터의 false) → 무라벨
 
 
 _SEV_KO = (("CRITICAL", "심각"), ("IMPORTANT", "중요"), ("SUGGESTION", "제안"))
@@ -103,8 +114,8 @@ def exclusion_lines(ex) -> list:
     out = ["## 수집에서 뺀 것"]
     keys = ("fence_lines", "placeholder_or_url", "generation_target")
     if isinstance(ex, dict) and all(isinstance(ex.get(k), int) for k in keys):
-        out.append(f"- 자동 사실 수집이 코드 펜스 안 {ex['fence_lines']}줄 · 자리표시자·URL "
-                   f"{ex['placeholder_or_url']}개 · 생성 대상 경로 {ex['generation_target']}개를 뺐다. "
+        out.append(f"- 자동 사실 수집이 코드 펜스 안 {ex['fence_lines']}줄 · 자리표시자·URL 때문에 건너뛴 후보 "
+                   f"{ex['placeholder_or_url']}건 · 생성 대상 경로 {ex['generation_target']}개를 뺐다. "
                    "감사자는 원문을 직접 읽는다.")
     else:
         out.append("- 셀 수 없음 — 이 감사 데이터에 뺀 수가 없다.")
@@ -144,15 +155,20 @@ def render(data: dict) -> str | None:
     axis_failures = data.get("axis_failures", [])
     degraded = data.get("degraded", [])
 
-    if len(axis_failures) >= 6:
+    axes = chosen_axes(meta)
+    n_axes = len(axes)
+    if len(axis_failures) >= n_axes:
         return None  # AC-4(a): 빈 감사는 감사가 아니다
 
     target = meta.get("target", "plugin")
     lines = [f"# {target} 읽기전용 감사 — " + meta.get("date", "")]
     lines.append(status_line(findings))
     banners = []
+    if n_axes < 6:
+        skipped = " · ".join(f"{n} {AXIS_NAMES[n]}" for n in sorted(AXIS_NAMES) if n not in axes)
+        banners.append(f"⚠ **고른 축 {n_axes}/6** — 고르지 않은 축은 감사하지 않았다: {skipped}")
     if axis_failures:
-        banners.append(f"⚠ **축 {6 - len(axis_failures)}/6 완주** — {len(axis_failures)}개 축은 감사하지 못했다")
+        banners.append(f"⚠ **축 {n_axes - len(axis_failures)}/{n_axes} 완주** — {len(axis_failures)}개 축은 감사하지 못했다")
     # §4.1 truth table 세 상태. 옛 코드는 `not ran`만 보아 "돌았으나 실패"를
     # "미실행"과 같은 배너로 뭉갰다 — 사용자가 조치할 대상이 다르다(설치 vs 재실행).
     _cx = meta.get("codex", {})
@@ -278,7 +294,7 @@ def main() -> int:
     data = json.loads(args.json.read_text(encoding="utf-8"))
     md = render(data)
     if md is None:
-        print("[render] 6축 전멸 — 리포트를 만들지 않는다 (AC-4a). 실패 보고 후 중단.", file=sys.stderr)
+        print("[render] 고른 축 전멸 — 리포트를 만들지 않는다 (AC-4a). 실패 보고 후 중단.", file=sys.stderr)
         return 1
     args.out.write_text(md, encoding="utf-8")
     print(f"[render] {args.out} ({len(md.splitlines())} 줄)", file=sys.stderr)

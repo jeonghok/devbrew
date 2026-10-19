@@ -431,10 +431,117 @@ test('CONTRACT discloses staleness exclusion counts', async () => {
   })
   const p = calls.find((c) => c.opts.phase === '감사').prompt
   assert.ok(p.includes('코드 펜스 안 7줄'))
-  assert.ok(p.includes('자리표시자·URL 2개'))
+  assert.ok(p.includes('자리표시자·URL 때문에 건너뛴 후보 2건'))
   assert.ok(p.includes('생성 대상 경로 1개'))
   const { calls: c2 } = await runWorkflow(WF, { stubAgent: stubOneFinding() })
   const q = c2.find((c) => c.opts.phase === '감사').prompt
   assert.ok(q.includes('뺀 개수를 받지 못했다 — 셀 수 없음'))
   assert.ok(!q.includes('코드 펜스 안 '))
+})
+
+test('CONTRACT says 셀 수 없음 when staleness_excluded lacks a count', async () => {
+  const pack = { ...DEFAULT_PACK, staleness_excluded: { fence_lines: 3 } }
+  const { calls } = await runWorkflow(WF, {
+    stubAgent: stubOneFinding(),
+    args: { target: 'sample', evidencePack: pack, codexFindings: [] },
+  })
+  const p = calls.find((c) => c.opts.phase === '감사').prompt
+  assert.ok(p.includes('뺀 개수를 받지 못했다 — 셀 수 없음'))
+  assert.ok(!p.includes('코드 펜스 안 3줄'))
+  assert.ok(!p.includes('undefined'))
+})
+
+const argsWithAxes = (axes) => {
+  const a = { target: 'sample', evidencePack: DEFAULT_PACK, codexFindings: [] }
+  if (axes !== undefined) a.axes = axes
+  return a
+}
+const auditCalls = (calls) => calls.filter((c) => c.opts.phase === '감사')
+
+test('axes default runs all six', async () => {
+  const { result, calls } = await runWorkflow(WF, { args: argsWithAxes(undefined), stubAgent: stubOneFinding() })
+  assert.equal(auditCalls(calls).length, 6)
+  assert.deepEqual(result.axes_run, [1, 2, 3, 4, 5, 6])
+})
+
+test('axes [1,6] runs exactly those', async () => {
+  const { result, calls } = await runWorkflow(WF, { args: argsWithAxes([1, 6]), stubAgent: stubOneFinding() })
+  const ac = auditCalls(calls)
+  assert.equal(ac.length, 2)
+  assert.ok(ac[0].opts.label.startsWith('축1 '), ac[0].opts.label)
+  assert.ok(ac[1].opts.label.startsWith('축6 '), ac[1].opts.label)
+  assert.deepEqual(result.axes_run, [1, 6])
+})
+
+test('bad axes throw before any dispatch', async () => {
+  for (const bad of [[0], [7], ['3'], [1, 1], [], 3, null, [1.5]]) {
+    const calls = []
+    await assert.rejects(
+      runWorkflow(WF, { args: argsWithAxes(bad), stubAgent: stubOneFinding(), calls }),
+      (e) => e instanceof Error && e.message.startsWith('[plugin-audit] 축 선택이 잘못됐다 — '),
+      JSON.stringify(bad),
+    )
+    assert.equal(calls.length, 0, 'dispatch before the axes check: ' + JSON.stringify(bad))
+  }
+})
+
+test('axes without 6 — axis 2 schema drops pending', async () => {
+  const stEnums = (schema) => [
+    schema.properties.findings.items.properties.steelman_condition.enum,
+    schema.properties.oq_answers.items.properties.steelman_condition.enum,
+  ]
+  const axis2 = (calls) => auditCalls(calls).find((c) => c.opts.label.startsWith('축2 '))
+  const SENT = '축⑥은 이번 감사에서 돌지 않는다'
+
+  const { calls } = await runWorkflow(WF, { args: argsWithAxes([2]), stubAgent: stubOneFinding() })
+  const a = axis2(calls)
+  for (const en of stEnums(a.opts.schema)) {
+    assert.ok(!en.includes('pending'), JSON.stringify(en))
+    assert.ok(en.includes('none'))
+  }
+  assert.ok(a.prompt.includes(SENT))
+  assert.ok(!a.prompt.includes('orchestrator가 축⑥의 판정으로 해소한다'))
+
+  const { calls: c2 } = await runWorkflow(WF, { args: argsWithAxes([2, 6]), stubAgent: stubOneFinding() })
+  const b = axis2(c2)
+  for (const en of stEnums(b.opts.schema)) assert.ok(en.includes('pending'), JSON.stringify(en))
+  assert.ok(!b.prompt.includes(SENT))
+  assert.ok(b.prompt.includes('orchestrator가 축⑥의 판정으로 해소한다'))
+})
+
+test('deep verify has no cap', async () => {
+  const ids = Array.from({ length: 12 }, (_, i) => 'A1-' + (i + 1))
+  const stub = async (prompt, o) => {
+    if (o.phase === '감사') {
+      const mine = o.label.startsWith('축1 ')
+      return {
+        findings: mine ? ids.map((id, i) => ({
+          id, axis: 1, title: 't' + id, user_harm: 'h', recommendation: 'r',
+          counter_argument: 'c', evidence: [{ file: 'f', line: i + 1, quote: 'q' }],
+          severity: 'IMPORTANT', fix_cost: 'S', fix_cost_rationale: 'x', reference_gap: 'none',
+        })) : [],
+        d_verdicts: [], oq_answers: [], new_open_questions: [],
+      }
+    }
+    if (o.phase === '검증') return { verdicts: ids.map((id) => ({ finding_id: id, verdict: 'survives', reason: 'ok' })) }
+    if (o.phase === '심층검증') return { finding_id: o.label.split(':').pop(), refuted: false, reason: 'ok' }
+    return { verdicts: [] }
+  }
+  const { result, calls } = await runWorkflow(WF, { stubAgent: stub })
+  assert.equal(calls.filter((c) => c.opts.phase === '심층검증').length, 24)
+  for (const id of ids) {
+    const f = result.findings.find((x) => x.id === id)
+    assert.notEqual(f.deep_verified, false, id)
+    assert.equal(f.deep_verified, true, id)
+  }
+})
+
+test('no DEEP_CAP in source', async () => {
+  const fs = await import('node:fs')
+  const path = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const src = fs.readFileSync(path.join(here, '..', 'scripts', 'audit-workflow.js'), 'utf8')
+  for (const tok of ['DEEP_CAP', '캡 8', '6축']) assert.ok(!src.includes(tok), tok)
+  assert.ok(src.includes('상한 없음'), 'positive pair — the no-cap wording is present')
 })
