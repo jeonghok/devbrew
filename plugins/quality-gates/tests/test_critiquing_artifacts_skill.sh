@@ -24,8 +24,10 @@ assert_contains "$(cat "$S")" 'detect_codex.sh' "reuses codex detection"
 # GREEN (verified by mutation: deleting E0's exit lines while leaving the inventory
 # passed). These exact user-facing exit messages appear ONLY in the E0 enforcement
 # lines and nowhere in the inventory.
-assert_contains "$(cat "$S")" 'critique skipped: quality-gates globally disabled' "E0 global kill switch (enforcement body, not inventory)"
-assert_contains "$(cat "$S")" 'critique mode disabled via DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE' "E0 mode kill switch (enforcement body, not inventory)"
+# R2a 계획 3 Task 12(미룸): 옛 모드 이름(`critique skipped` · `critique mode disabled`)을 skill 이름과
+# 쉬운 말로 바꿨다. 두 단언이 지키던 것(E0 집행 줄이 목록 절과 별개로 있다)은 새 문구로 그대로 잰다.
+assert_contains "$(cat "$S")" 'artifact-critique 를 건너뛰었다 — quality-gates 전체가 꺼져 있다(DEVBREW_QUALITY_GATES_DISABLE=1)' "E0 global kill switch (enforcement body, not inventory)"
+assert_contains "$(cat "$S")" 'artifact-critique 를 건너뛰었다 — DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1 이 켜져 있다' "E0 mode kill switch (enforcement body, not inventory)"
 
 # E1 three-branch classify
 assert_file_grep "$S" 'code.*(종료|안내|exit)|코드.*종료' "E1 code -> stop"
@@ -103,8 +105,10 @@ assert_file_grep "$S" '런타임 실패|runtime.*fail|가용 판정 후.*실패'
 assert_contains "$(cat "$S")" '이번 라운드 adversarial 판정 실패' "degraded adversarial -> NEEDS_RESOLUTION (enforcement body, not 종료 summary)"
 assert_file_grep "$S" '미판정|un-adjudicated|unadjudicated' "un-adjudicated loud log"
 
-# fan-out <=3 statement
-assert_file_grep "$S" 'fan-out.*(3|≤3|<5)|≤3|3.*동시' "fan-out <=3 documented"
+# fan-out statement — R2a 계획 3 Task 12(AC29): 비평자 수가 고정 1 에서 「기본 1 · 사용자가 E3 에서 정함」으로
+# 바뀌어 고정 상한 ≤3 은 기본값이 됐다. 옛 단언(`fan-out.*(3|≤3|<5)|≤3|3.*동시`)은 「3」 한 글자로도 맞는
+# 느슨한 꼴이었다 — 기본값 문장 그 자체를 잰다(본문에만 있다).
+assert_contains "$(cat "$S")" '라운드당 디스패치는 기본 3(비평자 1 · codex 가용 시 1 · 반박자 1)이다' "fan-out 기본 3 documented"
 
 # ORDERING LOCK (round-2 block bug): change-signal reference BEFORE commit reference.
 # Scoped to the BODY (frontmatter excluded) and to the LAST occurrence of each
@@ -190,5 +194,52 @@ else
   no "AC2: kill switch 목록 절(L${ks_lines:-?})이 앞 5,000토큰 경계(L${bound:-?}) 밖이다"
 fi
 assert_contains "$(sed -n "${ks_lines:-1},\$p" "$S" | sed -n '1,/^## [^k]/p')" 'DEVBREW_QUALITY_GATES_DISABLE_CODEX=1' "AC2(양의 짝): 옮긴 절에 codex 스위치 줄이 그대로 있다"
+
+# AC29(R2a 계획 3 Task 12) — 여러 대상 · 「지적만 받기」 읽기 전용 모드 · 상한에서 사용자가 엶 · 비평자 수.
+# 모든 문구는 본문에만 있다(제목 · frontmatter 는 영어거나 이 문구를 담지 않는다).
+assert_file_grep "$S" '지적만 받기' "읽기 전용 모드(AC29)"
+assert_file_grep "$S" '편집 · 커밋을 하지 않는다' "지적만 받기는 커밋하지 않는다"
+assert_file_grep "$S" '대상이 여럿' "여러 대상"
+assert_file_grep "$S" '비평자 <k>명\(기본 1명\)' "라운드마다 기본값과 쓴 수를 공시"
+assert_file_grep "$S" '라운드마다 비평자를 몇 명' "사용자가 그 자리에서 비평자 수를 정한다"
+assert_file_grep "$S" '한 번 더 돌기' "라운드 상한에서 사용자가 연다"
+assert_file_absent "$S" 'critique skipped|critique mode disabled' "옛 모드 이름이 kill switch 메시지에 없다(미룸)"
+# 위 단언들은 낱말 하나라 다른 문장이 대신 채울 수 있다 — 장치마다 그 자리의 문장을 함께 잰다.
+assert_contains "$(cat "$S")" '인자에 `--findings-only` 가 있거나' "E1: --findings-only 인자가 모드를 정한다"
+assert_contains "$(cat "$S")" '「지적만 받기」는 E2 의 `project_dir:` 만 쓰고 `branch_ok` · E2b 를 요구하지 않는다' "지적만 받기는 브랜치 · clean 전제 대신 경로 인가만 요구한다(결정 13)"
+assert_contains "$(cat "$S")" '**지적만 받기로 진행**' "고치며 돌기가 E2 · E2b 에서 멈추면 지적만 받기로 넘어가는 선택지"
+assert_contains "$(cat "$S")" '**지적만 받기로 바꾸기**' "E3 에서 모드를 바꾸는 선택지"
+assert_contains "$(cat "$S")" '「1명 (권장)」 · 「2명」 · 「3명」' "E3 비평자 수 선택지(기본 1명 권장)"
+assert_contains "$(cat "$S")" '대상이 여럿이면 대상마다 이 루프를 차례로 돈다' "대상마다 라운드 · 커밋 · 상한"
+assert_contains "$(cat "$S")" '--findings critic-1.yaml … --findings critic-k.yaml [--findings codex.yaml]' "2.5 가 비평자 k 명의 지적을 모두 합친다"
+assert_contains "$(cat "$S")" '`critic-<i>.yaml`' "1: 비평자마다 자기 파일"
+assert_contains "$(cat "$S")" '5~9 와 편집 · 커밋을 하지 않는다(종료 사유 `findings_only`)' "지적만 받기는 4 뒤에 보고하고 끝낸다"
+assert_contains "$(cat "$S")" '`추가 라운드 승인: <label | typed> · <원문>`' "상한에서 연 승인의 기록 줄(출처 label | typed — B11 꼴)"
+assert_contains "$(cat "$S")" 'converged / max_rounds(N) / stagnant(reason) / findings_only /' "종료 사유 목록에 findings_only"
+# 순서 락 — 공시 줄은 비평자 dispatch 앞(크게 쓰기 전에 규모를 알린다), 지적만 받기의 멈춤은 4(synth) 뒤 · 5 앞.
+ann_ln="$(body_lines | grep -nF '비평자 <k>명(기본 1명)' | head -1 | cut -d: -f1)"
+cdisp_ln="$(body_lines | grep -nF 'subagent_type: "quality-gates:artifact-critic"' | head -1 | cut -d: -f1)"
+if [ -n "$ann_ln" ] && [ -n "$cdisp_ln" ] && [ "$ann_ln" -lt "$cdisp_ln" ]; then
+  ok "라운드 공시 줄이 비평자 dispatch 보다 앞이다"
+else
+  no "라운드 공시 줄(L${ann_ln:-?})이 비평자 dispatch(L${cdisp_ln:-?})보다 앞이 아니다"
+fi
+synth_ln="$(body_lines | grep -nF -- '--phase synth' | head -1 | cut -d: -f1)"
+fo_ln="$(body_lines | grep -nF '5~9 와 편집 · 커밋을 하지 않는다' | head -1 | cut -d: -f1)"
+conv_ln="$(body_lines | grep -nF '**5. 수렴 체크**' | head -1 | cut -d: -f1)"
+if [ -n "$synth_ln" ] && [ -n "$fo_ln" ] && [ -n "$conv_ln" ] && [ "$synth_ln" -lt "$fo_ln" ] && [ "$fo_ln" -lt "$conv_ln" ]; then
+  ok "지적만 받기의 멈춤이 4(synth) 뒤 · 5(수렴) 앞이다"
+else
+  no "지적만 받기 멈춤 위치(synth=L${synth_ln:-?} fo=L${fo_ln:-?} conv=L${conv_ln:-?})"
+fi
+# 상한 게이트는 9(다음 라운드) 자리에 있다 — 한 번 더 돌기가 루프 밖(종료 요약 등)에만 있으면 RED.
+nine_ln="$(body_lines | grep -nF '**9. ' | head -1 | cut -d: -f1)"
+more_ln="$(body_lines | grep -nF '**한 번 더 돌기**' | head -1 | cut -d: -f1)"
+end_ln="$(body_lines | grep -nF '## 종료 & 최종 요약' | head -1 | cut -d: -f1)"
+if [ -n "$nine_ln" ] && [ -n "$more_ln" ] && [ -n "$end_ln" ] && [ "$nine_ln" -lt "$more_ln" ] && [ "$more_ln" -lt "$end_ln" ]; then
+  ok "상한 게이트(한 번 더 돌기)가 9 와 종료 요약 사이에 있다"
+else
+  no "상한 게이트 위치(9=L${nine_ln:-?} more=L${more_ln:-?} end=L${end_ln:-?})"
+fi
 
 finish
