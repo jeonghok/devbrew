@@ -308,7 +308,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 재리뷰 상한(기본 2 — 게이트 둘째 줄이 알린다)이다(라운드 4 이상은 사용자가 승인 게이트에서 열어야만 돈다).
 
 **원장 쓰기 전 확인.** 절차서의 원장 쓰기 명령 — `docreview_state.py` 의 `init` · `begin-round` ·
-`record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice` · `declare-related`, `docreview_route.py` 의
+`record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice` · `declare-related` · `log-decision`, `docreview_route.py` 의
 `prepare-recritic` · `finalize`, `docreview_anchor.py check-intent` — 은 전부 같은 Bash 호출 안에서 아래 한 줄
 **다음에만** 부른다. rc 가 0 이 아니면 그 명령을 부르지 않고 사유를 보이고 멈춘다 — 다른 세션이 표지를 넘겨받았거나
 표지가 없다.
@@ -657,7 +657,30 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/redecompose.md
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
-**기타 칸 — 기각 번호 되돌리기.** 후속 질문의 기타 칸에 사용자가 게이트 앞 글의 기각 번호(N18)를 적으면 그 번호를 「반영」으로 되돌린다 — 먼저 원장 열기를 다시 돈다(어느 편집보다 앞). 그다음 `## 번호 대조` 표의 그 행을 「반영」 과 설계문서의 자리로 고치고(자리가 없으면 그 내용을 설계에 더한다), `## 결정 기록` 에 `- B<n> · 결정 · <YYYY-MM-DD> · 기각 되돌림 <번호> — 「<사용자가 적은 글 그대로>」` 한 줄을 남긴다(`B<n>` 은 그 문서 `## 결정 기록` 의 다음 B 번호). 그 뒤 「지적대로 고치기」 와 같은 길로 다음 라운드를 돈다. 로드맵 에픽이 아니어도 같다. 적은 번호가 기각 목록에 없으면 그 사실을 보이고 다시 묻는다. 기각 사유가 다른 에픽을 가리키는 번호는 되돌리면 그 에픽의 경계에 닿으니 재분해 신호로 보고, 바로 되돌리지 말고 「인터뷰 다시 열기」(재분해) 갈래를 권한다.
+**기타 칸 — 기각 번호 되돌리기.** 후속 질문의 기타 칸에 사용자가 게이트 앞 글의 기각 번호(N18)를 적으면 그 번호를 「반영」으로 되돌린다 — 먼저 원장 열기를 다시 돈다(어느 편집보다 앞). 그다음 `## 번호 대조` 표의 그 행을 「반영」 과 설계문서의 자리로 고치고(자리가 없으면 그 내용을 설계에 더한다), `## 결정 기록` 에 `- B<n> · 결정 · <YYYY-MM-DD> · 기각 되돌림 <번호> — 「<사용자가 적은 글 그대로>」` 한 줄을 남긴다(`B<n>` 은 그 문서 `## 결정 기록` 의 다음 B 번호). 이 줄은 손으로 쓰지 않고 아래 결정 줄 펜스로 쓴다 — 손으로 쓴 줄은 다음 라운드에 「허가 없이 바뀜」 질문으로 돌아온다. 그 뒤 「지적대로 고치기」 와 같은 길로 다음 라운드를 돈다. 로드맵 에픽이 아니어도 같다. 적은 번호가 기각 목록에 없으면 그 사실을 보이고 다시 묻는다. 기각 사유가 다른 에픽을 가리키는 번호는 되돌리면 그 에픽의 경계에 닿으니 재분해 신호로 보고, 바로 되돌리지 말고 「인터뷰 다시 열기」(재분해) 갈래를 권한다.
+
+**결정 줄 펜스.** 사람이 내린 결정 한 줄(기각 되돌림 · 재결정 · 재분해)을 설계문서 `## 결정 기록` 끝에 엔진이 쓴다 — 엔진이 쓴 줄이라 다음 라운드의 얼림 검사를 지난다. 원장 열기 다음에 돈다. 펜스 앞에 `spec_path='<설계문서 절대 경로>'` 와 `decision_line='<줄 — 앞의 「- 」 와 끝의 「 — 「…」」 를 뺀 것>'` 두 줄을 붙이고, `DECISION_QUOTE` 사이 자리에 사용자가 적은 글을 그대로 넣는다. 엔진이 `- <줄> — 「<사용자 말>」` 한 줄을 쓴다. 줄은 이미 한 줄이어야 한다 — rc 2 면 사유를 보고 줄을 고쳐 다시 돈다. 이 문서에 리뷰 원장이 없으면 펜스가 그렇게 알리고 쓰지 않는다 — 그때는 줄을 손으로 쓴다(다음 리뷰가 기준선으로 받는다).
+
+<!-- decision-line:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 결정 줄을 쓰지 않았다." >&2; exit 1; }
+[ -n "${spec_path:-}" ] || { echo "[spec-distill] 결정 줄을 쓰지 않았다 — spec_path 가 비었다(이 펜스와 같은 Bash 호출에서 대입한다)." >&2; exit 1; }
+harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
+  echo "[spec-distill] 이 문서의 리뷰 원장이 없다 — 결정 줄을 엔진으로 쓰지 않았다. 결정 기록 끝에 손으로 쓴다(다음 리뷰가 기준선으로 받는다)."; exit 0
+fi
+QF="$(mktemp "${TMPDIR:-/tmp}/decision-quote.XXXXXX")" || { echo "[spec-distill] 사용자 말 임시 파일을 만들지 못했다 — 결정 줄을 쓰지 않았다." >&2; exit 1; }
+trap 'rm -f -- "$QF"' EXIT
+cat > "$QF" <<'DECISION_QUOTE'
+<사용자가 적은 글 그대로>
+DECISION_QUOTE
+g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
+python3 "$SD/scripts/docreview_state.py" log-decision --state-dir "$STATE_DIR" --log-file "$spec_path" --line "${decision_line:-}" --quote "$(cat "$QF")"
+```
+<!-- decision-line:end -->
 
 「지적대로 고치기」 · 「직접 편집」 갈래와, `roadmap:` 줄이 없는 문서의 세 갈래는 지금 그대로다.
 
@@ -684,7 +707,8 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/redecompose.md
   `## 진입 검사` 의 끔)면 명시적 advisory 단락을 동반한다 —
   게이트-less silent 종료는 금지다.
 - **재결정 규약 (P23)** — `decide` 처분이 인터뷰가 이미 확정한 항목을 겨냥하면 조용히 덮어쓰지
-  않는다. design.md 의 재결정 기록에 *원래 / 재결정 후보 / 근거* 를 적어 다음 라운드로 들고 가고,
+  않는다. 설계문서 `## 결정 기록` 에 *원래 / 재결정 후보 / 근거* 한 줄을 결정 줄 펜스로 적어(사용자 말은 그
+  결정을 고른 답) 다음 라운드로 들고 가고,
   확정이 실제로 뒤집히는 자리는 이 승인 게이트 하나다 — 사용자가 판정한다. 하류의 반증은 보고의
   근거이지 임의 변경의 근거가 아니다. 정본은 `proceed-gate.md` 의 「재결정 규약」 절.
 

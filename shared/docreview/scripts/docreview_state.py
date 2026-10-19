@@ -8,7 +8,7 @@ frontmatter 의 `docreview:` 트리가 원장, 본문은 사람이 읽는 사건
 건드리지 않는다 — 그 파일은 brief 파이프라인의 줄 파서가 소유한다.
 
 서브커맨드: state-dir-for · init · begin-round · exempt-anchors · decide · fix · ask · defer ·
-observe-diff · gate · advice
+observe-diff · gate · advice · log-decision
 전이 규칙의 정본은 plan(2026-09-06-document-review-engine.md)의 D13 표다.
 
 상태 디렉토리는 **문서별**이다 — 한 디렉토리의 원장(라운드 · 재리뷰 상한 · finding · permit ·
@@ -1500,6 +1500,47 @@ def cmd_defer(a) -> int:
     return 0
 
 
+# 사람이 내린 결정 줄(기각 되돌림 · 재결정 · 재분해 등)의 머리 — 줄 머리(`- `)는 엔진이 연다. 이 꼴로 시작하는 줄은
+# 엔진 결정 줄(`_log_line`) · brief 원문 앵커 · 목록 · 제목 · 인용 · 번호 표지를 흉내 낸 것이다.
+_DECISION_LINE_FORGED = re.compile(r"(?:D\d+\.\d+ · |\*\*S\d+\*\*|[-*+#>|]|\d+[.)])")
+
+
+def decision_line_problem(line, quote):
+    """`log-decision` 입력의 거부 사유(rc 2) 또는 None. 줄은 모델이 쓰는 구조라 엔진이 고칠 글자가 하나라도 있으면
+    고치지 않고 거부한다(AC15 의 한 줄 문법을 쓰는 쪽에서 지킨다). 사용자 말은 그대로 싣되 한 줄로 접는다."""
+    if _blank_text(line):
+        return "line_blank"
+    if _cfg.one_line_field(line) != line:
+        return "line_not_one_line"
+    if _DECISION_LINE_FORGED.match(line) or (_adv is not None and _adv.COUNT_PREFIX.strip() in line):
+        return "line_marker_forged"
+    if _blank_text(quote):
+        return "quote_blank"
+    return None
+
+
+def cmd_log_decision(a) -> int:
+    """사람이 내린 결정 한 줄을 프로필 `decision_log` 절 끝에 엔진이 쓰고 그 출처를 원장에 남긴다 — 울타리(결정 기록
+    절은 엔진이 쓴 줄만 지나간다)는 그대로 두고, 사람의 결정을 엔진을 거쳐 쓰게 한다. 줄은 `- <줄> — 「<사용자 말>」`."""
+    why = decision_line_problem(a.line, a.quote)
+    if why:
+        fail(why)
+        return 2
+    st = load_state(a.state_dir)
+    prof = load_profile(st["profile"])
+    t = prof["decision_log"]
+    if t.get("kind") != "doc_section":
+        return fail("profile_decision_log_not_doc_section", kind=t.get("kind"))
+    if not isinstance(st.get("doc"), str) or doc_identity(a.log_file) != doc_identity(st["doc"]):
+        return fail("log_file_not_ledger_doc", log_file=a.log_file, ledger_doc=st.get("doc"))
+    path = Path(a.log_file)
+    row = "- %s — 「%s」" % (a.line, _cfg.one_line_field(a.quote))
+    engine_append(st, path, t["heading"], row)
+    save_state(a.state_dir, st, "log-decision")
+    _emit({"ok": True, "line": row})
+    return 0
+
+
 def observe_ledger(st, prof, n) -> dict:
     """라운드 n 에서 permit · fix 의 적용을 관측한다 — `observe-diff` CLI 와 `finalize` 가 함께 쓰는 한 함수.
 
@@ -2405,6 +2446,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--log-file", required=True); x.set_defaults(fn=cmd_defer)
     x = sd(P("declare-related")); x.add_argument("--decision", required=True)
     x.add_argument("--anchors", required=True, nargs="+"); x.set_defaults(fn=cmd_declare_related)
+    x = sd(P("log-decision")); x.add_argument("--log-file", required=True)
+    x.add_argument("--line", required=True); x.add_argument("--quote", required=True)
+    x.set_defaults(fn=cmd_log_decision)
     x = sd(P("related-changes")); x.set_defaults(fn=cmd_related_changes)
     x = sd(P("observe-diff")); x.set_defaults(fn=cmd_observe_diff)
     x = sd(P("gate")); x.add_argument("--render", action="store_true"); x.set_defaults(fn=cmd_gate)
@@ -2418,7 +2462,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 # 원장 · 사용자 문서에 들어가거나 출력되는 자유 텍스트 인자. 경로 인자(--doc · --log-file 등)는 파일 이름이라 뺀다.
-FREE_TEXT_ARGS = ("reason", "quote", "scope", "extra_approval", "where")
+FREE_TEXT_ARGS = ("reason", "quote", "scope", "extra_approval", "where", "line")
 
 
 def unencodable_text_arg(a):

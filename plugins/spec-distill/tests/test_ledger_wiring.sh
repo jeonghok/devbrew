@@ -96,11 +96,13 @@ assert_eq "$(cksum < "$SDIR/docreview-state.md")" "$before" "AC8: 표지 없음 
 # 이 락의 범위 밖(AC17 · 엔진 밖 원장 쓰기): `| tee` · `exec >` · `{ … } >` · `$(…)` 로 받은 값을 `printf >` 로
 # 원장 폴더에 쓰는 줄. 같은 줄 `>` 만 본다.
 GUARDED="$SR $RB $FIN $SD/skills/request-framing/SKILL.md"
+# 읽기 전용 하위 명령 — 이 락의 유일한 목록이다(정적 검사와 아래 쓰기 명령 문단 대조가 함께 쓴다).
+AC8_READ_ONLY="advice-list gate related-changes state-dir-for profile-check gate-rows exempt-anchors"
 ac8_scan() {   # ac8_scan <파일> → rc 0 이면 확인 없는 쓰기 · 넘기기 · 읽을 수 없는 엔진 호출이 없다
-  python3 -I - "$1" <<'PY'
+  python3 -I - "$1" "$AC8_READ_ONLY" <<'PY'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8", newline="").read()   # CRLF 를 LF 로 바꿔 읽지 않는다
-READ_ONLY = {"advice-list", "gate", "related-changes", "state-dir-for", "profile-check", "gate-rows", "exempt-anchors"}
+READ_ONLY = set(sys.argv[2].split())
 NAME = re.compile(r'docreview_(?:state|route|anchor)')
 CALL = re.compile(r'"\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/scripts/docreview_(?:state|route|anchor)\.py"(?:[ \t]+([a-z][a-z-]*)(?![A-Za-z0-9_$"\'-]))?')
 GUARD = 'ledger_marker.py" check --dir "$STATE_DIR"'
@@ -171,6 +173,7 @@ python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR" > 
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" $ADV_FLAGS' \
              'python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > /tmp/x' \
              'python3 "$SD/scripts/docreview_state.py" new-subcommand --state-dir "$STATE_DIR"' \
+             'python3 "$SD/scripts/docreview_state.py" log-decision --state-dir "$STATE_DIR" --log-file "$spec_path" --line "$l" --quote "$q"' \
              'python3 "$SD/scripts/docreview_route.py" finalize --state-dir "$STATE_DIR"' \
              'python3 "$SD/scripts/docreview_state.py" "advice" --state-dir "$STATE_DIR" --render' \
              "python3 \"\$SD/scripts/docreview_state.py\" 'decide' --state-dir \"\$STATE_DIR\"" \
@@ -213,10 +216,55 @@ for probe in 'adv="$(python3 "$SD/scripts/docreview_state.py" advice-list --stat
              'g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || exit 3
 python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8' \
              'g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || exit 3
-python3 "$SD/scripts/docreview_route.py" finalize --state-dir "$STATE_DIR" --doc "$d"'; do
+python3 "$SD/scripts/docreview_route.py" finalize --state-dir "$STATE_DIR" --doc "$d"' \
+             'g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || exit 3
+python3 "$SD/scripts/docreview_state.py" log-decision --state-dir "$STATE_DIR" --log-file "$spec_path" --line "$l" --quote "$q"'; do
   printf '```bash\n%s\n```\n' "$probe" > "$ac8f"
-  ac8_scan "$ac8f" 2>/dev/null && ok "AC8 양성 대조: 통과한다 — $(printf '%s' "$probe" | head -n 1 | cut -c 1-80)" || no "AC8 양성 대조: 정당한 꼴이 막혔다: $probe"
+  ac8_scan "$ac8f" 2>/dev/null && ok "AC8 양성 대조: 통과한다 — $(printf '%s' "$probe" | tail -n 1 | cut -c 1-80)" || no "AC8 양성 대조: 정당한 꼴이 막혔다: $probe"
 done
+# AC8 — 진입 skill 셋의 「원장 쓰기 전 확인」 문단이 적는 `docreview_state.py` 쓰기 명령 = 엔진 하위 명령 − 읽기 전용(도출).
+# 새 쓰기 명령(log-decision 등)을 문단에 적지 않으면 RED — 표지 확인 줄 다음에만 부른다는 규칙이 그 명령에 닿지 않는다.
+for f in "$SR" "$RB" "$SD/skills/request-framing/SKILL.md"; do
+  python3 -I - "$SD/scripts" "$f" "$AC8_READ_ONLY" > "$T/ac8-writes.txt" 2>&1 <<'PY'
+import argparse, re, sys
+sys.path.insert(0, sys.argv[1])
+import docreview_state as S
+sub = next(a for a in S.build_parser()._actions if isinstance(a, argparse._SubParsersAction))
+writes = sorted(set(sub.choices) - set(sys.argv[3].split()))
+t = open(sys.argv[2], encoding="utf-8").read()
+i = t.find("**원장 쓰기 전 확인.**")
+j = t.find("`docreview_route.py` 의", i)
+k = t.find("`docreview_state.py` 의", i)
+listed = sorted(re.findall(r"`([a-z][a-z-]*)`", t[k:j])) if 0 <= i < k < j else None
+print("같다" if listed == writes else "다르다 — 문단 %s · 엔진 %s" % (listed, writes))
+PY
+  assert_eq "$(cat "$T/ac8-writes.txt")" "같다" "AC8: $(basename "$(dirname "$f")") 의 원장 쓰기 명령 문단 = 엔진 쓰기 하위 명령(도출)"
+done
+# 결정 줄 펜스 — 원장이 없으면 쓰지 않고 알린다 · 표지 주인이면 엔진이 줄을 쓰고 출처를 남긴다 · 남의 표지면 rc 3 으로 멈춘다.
+ddoc="$repo/docs/b-design.md"; printf '# B\n\n## 결정 기록\n\n- B1 · 결정 · 2026-10-19 · 처음 — 「네」\n' > "$ddoc"
+dl_run() {   # dl_run <sid> → 결정 줄 펜스 출력(자리에 사용자 말을 넣어 돈다)
+  ( cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID="$1" DEVBREW_SPEC_DISTILL_SESSION_ID="$1" \
+      bash -c "spec_path='$ddoc'; decision_line='B2 · 결정 · 2026-10-19 · 기각 되돌림 N7'
+$(fence "$SR" decision-line | sed 's/^<사용자가 적은 글 그대로>$/되돌려 줘/')" 2>&1 )
+}
+DL_FULL='- B2 · 결정 · 2026-10-19 · 기각 되돌림 N7 — 「되돌려 줘」'
+dlo="$(dl_run sess-eeee5555)"; rc=$?
+assert_eq "$rc $(grep -c 'B2 · 결정' "$ddoc")" "0 0" "결정 줄 펜스: 원장이 없으면 엔진으로 쓰지 않는다"
+assert_contains "$dlo" "리뷰 원장이 없다" "결정 줄 펜스: 원장이 없으면 손으로 쓰라고 알린다"
+( cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-eeee5555 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-eeee5555 \
+    bash -c "spec_path='$ddoc'
+$(fence "$SR" ledger-open)" >/dev/null 2>&1 )
+DSD="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$repo/.claude/spec-distill" --doc "$ddoc")"
+python3 "$SD/scripts/docreview_state.py" init --state-dir "$DSD" --doc "$ddoc" --profile "$SD/references/docreview-profiles/design-doc.md" >/dev/null
+python3 "$SD/scripts/docreview_anchor.py" snapshot "$ddoc" > "$T/dsnap.json"
+python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$DSD" --snapshot "$T/dsnap.json" >/dev/null
+dlo="$(dl_run sess-eeee5555)"; rc=$?
+assert_eq "$rc $(grep -cxF -- "$DL_FULL" "$ddoc")" "0 1" "결정 줄 펜스: 표지 주인이면 엔진이 결정 줄 한 줄을 쓴다"
+assert_eq "$(PYTHONPATH="$SD/scripts" python3 -c 'import sys, docreview_state as ds; print(len(ds.load_state(sys.argv[1])["engine_lines"]))' "$DSD")" "1" "결정 줄 펜스: 그 줄의 출처가 원장에 남는다"
+cp "$ddoc" "$T/ddoc.before"
+dlo="$(dl_run sess-ffff6666)"; rc=$?
+assert_eq "$rc" "3" "결정 줄 펜스: 남의 표지면 쓰기 전 확인이 rc 3 으로 멈춘다"
+cmp -s "$ddoc" "$T/ddoc.before" && ok "결정 줄 펜스: 남의 표지 — 문서가 그대로다" || no "결정 줄 펜스: 남의 표지인데 문서가 바뀌었다"
 
 # AC8 — 해제는 게이트 응답 기록 뒤(문면 순서) · 끝맺음 펜스가 release 로 끝난다
 adv="$(fence "$SR" advice-display)"

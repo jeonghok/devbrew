@@ -151,4 +151,11 @@ case_AC17_digest_line_strip_stops
 case_AC17_era_marker_failure_disclosed
 case_AC17_legacy_disclosed_on_every_load
 case_AC17_misplaced_or_malformed_digest_stops
+# AC38 · AC15 — 사람이 내린 결정 줄은 엔진 명령(log-decision)으로 쓰고, 울타리는 그대로다.
+case_AC38_human_decision_via_engine
+case_AC38_human_decision_by_hand_still_frozen
+case_AC38_human_decision_creates_section
+case_AC38_human_decision_quote_one_line
+case_AC38_human_decision_refusals
+case_AC38_human_decision_no_ledger_baseline
 finish

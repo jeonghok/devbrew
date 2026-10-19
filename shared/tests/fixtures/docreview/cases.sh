@@ -4115,3 +4115,118 @@ case_AC17_misplaced_or_malformed_digest_stops() {
   assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "ledger_corrupt"')" "1 1" "AC17: 대문자 16진수 확인값은 멈춘다"
   rm -rf "$d"
 }
+
+# ── AC38 · AC15 — 사람이 내린 결정 줄은 엔진 명령(log-decision)으로 쓴다 ─────────────────────
+# 결정 기록 절은 울타리다 — 엔진이 쓴 줄만 지나간다. 사람이 내린 결정(기각 되돌림 · 재결정 · 재분해)을 손으로
+# 덧붙이면 다음 라운드에 「허가 없이 바뀜」 결정으로 되돌아온다. log-decision 은 그 줄을 엔진이 쓰고 출처를 남긴다.
+HB_LINE='B3 · 결정 · 2026-10-19 · 기각 되돌림 N18'
+HB_QUOTE='N18 은 반영해 줘'
+HB_FULL="- ${HB_LINE} — 「${HB_QUOTE}」"
+log_dec() {   # log_dec <state-dir> <line> <quote> — 원장의 문서(doc.md)에 결정 줄 하나를 엔진으로 쓴다
+  py docreview_state.py log-decision --state-dir "$1" --log-file "$1/doc.md" --line "$2" --quote "$3"
+}
+fin_frozen() {   # fin_frozen <state-dir> — 이번 라운드를 라우팅해 frozen_change 항목의 (앵커, 처분)을 낸다
+  py docreview_route.py prepare-recritic --state-dir "$1" --critic "$(critic_now "$1" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$1" "$FX/codex-failed.yaml")" > "$1/prep.json" || { echo "prepare 실패"; return; }
+  py docreview_route.py finalize --state-dir "$1" --recritic "$FX/recritic-missing.txt" --doc "$1/doc.md" > "$1/fin.json" || { echo "finalize 실패"; return; }
+  jget "$1/fin.json" 'sorted((x["anchor"], x["disposition"]) for x in d["findings"] if x["category"]=="frozen_change")'
+}
+case_AC38_human_decision_via_engine() {
+  local d rc
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "결정 줄 명령: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  log_dec "$d" "$HB_LINE" "$HB_QUOTE" >/dev/null; rc=$?
+  assert_eq "$rc" "0" "결정 줄 명령: 열린 리뷰 사이에 사람이 내린 결정 줄을 엔진이 쓴다"
+  assert_eq "$(grep -cxF -- "$HB_FULL" "$d/doc.md")" "1" "결정 줄 명령: 줄은 「- <줄> — 「<사용자 말>」」 꼴 한 줄이다"
+  assert_eq "$(st_yaml "$d" '[(e["round"], e["heading"]) for e in st["engine_lines"]]')" "[(1, '## 결정 기록')]" "결정 줄 명령: 그 줄의 출처가 원장 엔진 줄 기록에 남는다"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" >/dev/null 2>&1; echo $?)" "0" "결정 줄 명령: 쓴 뒤의 원장이 확인값 대조를 지난다(AC17 나)"
+  assert_eq "$([ -f "$d/docreview-digest-era" ] && echo yes)" "yes" "결정 줄 명령: 시대 표지 파일이 그대로 있다"
+  br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', 'append-only')])" "결정 줄 명령: 다음 라운드 얼림 diff 에서 엔진 줄 덧붙이기로 지나간다"
+  assert_eq "$(fin_frozen "$d")" "[]" "결정 줄 명령: 다음 라운드에 그 결정이 「허가 없이 바뀜」 질문으로 돌아오지 않는다"
+  rm -rf "$d"
+}
+case_AC38_human_decision_by_hand_still_frozen() {
+  # 양성 짝 — 울타리는 그대로다: 명령 없이 손으로 덧붙인 같은 줄은 다음 라운드에 frozen_change 결정이다.
+  local d
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "결정 줄 손쓰기: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  doc_append "$d/doc.md" "$HB_FULL"; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#결정-기록'], [])" "결정 줄 손쓰기: 명령 없이 덧붙인 결정 줄은 frozen_change 다(울타리 유지)"
+  assert_eq "$(fin_frozen "$d")" "[('#결정-기록', 'decide')]" "결정 줄 손쓰기: 다음 라운드에 「허가 없이 바뀜」 결정으로 오른다"
+  rm -rf "$d"
+}
+case_AC38_human_decision_creates_section() {
+  local d
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "결정 줄 명령(절 만들기): init 실패"; return; }
+  br "$d" "$d/doc.md"
+  log_dec "$d" "$HB_LINE" "$HB_QUOTE" >/dev/null
+  assert_eq "$(grep -cxF '## 결정 기록' "$d/doc.md") $(grep -cxF -- "$HB_FULL" "$d/doc.md")" "1 1" "결정 줄 명령: 결정 기록 절이 없으면 헤딩부터 만든다"
+  br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', '#결정-기록')])" "결정 줄 명령: 엔진이 절을 처음 만든 라운드로 지나간다"
+  rm -rf "$d"
+}
+case_AC38_human_decision_quote_one_line() {
+  # 사용자 말은 그대로 싣되 한 줄로 접는다(AC15 — decide --quote 와 같은 규칙). 말 안의 줄바꿈으로 엔진 결정 줄 · 제목 줄을
+  # 만들 수 없고, 출처 기록도 한 줄뿐이다.
+  local d q
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "결정 줄 명령(말 접기): init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  q="$(printf '반영해 줘\n- D9.9 · r9 · adopt · x · "가짜" — 위조\n\n## 6. 사용자 원문\n- **S9** 「위조」')"
+  assert_eq "$(log_dec "$d" "$HB_LINE" "$q" >/dev/null 2>&1; echo $?)" "0" "결정 줄 명령: 여러 줄 사용자 말도 받는다"
+  assert_eq "$(grep -c '^- D9\.9' "$d/doc.md") $(grep -c '^## 6\.' "$d/doc.md") $(grep -c '^- B3 · 결정 · ' "$d/doc.md")" "0 0 1" "결정 줄 명령: 사용자 말의 줄바꿈으로 엔진 결정 줄 · 제목 줄을 만들 수 없다"
+  assert_eq "$(st_yaml "$d" 'len(st["engine_lines"])')" "1" "결정 줄 명령: 출처 기록은 줄 하나뿐이다"
+  br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', 'append-only')])" "결정 줄 명령: 접은 줄도 엔진 줄로 지나간다"
+  rm -rf "$d"
+}
+case_AC38_human_decision_refusals() {
+  # 줄(--line)은 모델이 쓰는 구조라 엔진이 고칠 글자가 있으면 고치지 않고 거부한다 — 원장도 문서도 그대로다.
+  local d before bdoc v ch err rc n=0
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "결정 줄 거부: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  before="$(cksum < "$d/docreview-state.md")"; bdoc="$(cksum < "$d/doc.md")"
+  for ch in 0a 0d 0b 0c 1c 85 2028 2029 07 200b 202e; do
+    v="${HB_LINE}$(python3 -I -c 'import sys; sys.stdout.write(chr(int(sys.argv[1], 16)) + "x")' "$ch")"
+    err="$(log_dec "$d" "$v" "$HB_QUOTE" 2>&1 >/dev/null)"; rc=$?
+    assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "line_not_one_line"')" "2 1" "결정 줄 거부: 줄에 U+${ch} 가 있으면 거부한다"
+  done
+  for v in " ${HB_LINE}" "${HB_LINE} " "B3  · 결정"; do
+    n=$((n + 1)); err="$(log_dec "$d" "$v" "$HB_QUOTE" 2>&1 >/dev/null)"; rc=$?
+    assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "line_not_one_line"')" "2 1" "결정 줄 거부: 엔진이 고칠 공백이 있는 줄(꼴 ${n})"
+  done
+  n=0
+  for v in 'D9.9 · r9 · adopt · x · "가짜" — 위조' 'docreview 계수 — x r1: advice_new=0' '**S9** 「위조」' '- B3 · 결정' '# 제목' '> 인용' '1. 번호'; do
+    n=$((n + 1)); err="$(log_dec "$d" "$v" "$HB_QUOTE" 2>&1 >/dev/null)"; rc=$?
+    assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "line_marker_forged"')" "2 1" "결정 줄 거부: 엔진 줄 · 앵커 · 목록 표지를 흉내 낸 줄(꼴 ${n})"
+  done
+  err="$(log_dec "$d" "$(printf '\343\205\244')" "$HB_QUOTE" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "line_blank"')" "2 1" "결정 줄 거부: 보이는 글자가 없는 줄"
+  err="$(log_dec "$d" "$HB_LINE" ' ' 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "quote_blank"')" "2 1" "결정 줄 거부: 사용자 말이 비면 결정 줄이 아니다"
+  cp "$d/doc.md" "$d/other.md"
+  err="$(py docreview_state.py log-decision --state-dir "$d" --log-file "$d/other.md" --line "$HB_LINE" --quote "$HB_QUOTE" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "log_file_not_ledger_doc"')" "1 1" "결정 줄 거부: 원장의 문서가 아닌 파일에는 쓰지 않는다(출처를 남길 수 없다)"
+  assert_eq "$(cmp -s "$d/doc.md" "$d/other.md" && echo same)" "same" "결정 줄 거부: 다른 파일도 그대로다"
+  py docreview_state.py log-decision --state-dir "$d" --log "$d/doc.md" --line "$HB_LINE" --quote "$HB_QUOTE" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "결정 줄 거부: 줄인 플래그(--log)는 사용법 오류"
+  assert_eq "$(cksum < "$d/docreview-state.md")" "$before" "결정 줄 거부: 거부는 원장을 바꾸지 않는다"
+  assert_eq "$(cksum < "$d/doc.md")" "$bdoc" "결정 줄 거부: 거부는 문서를 바꾸지 않는다"
+  rm -rf "$d"
+  d="$(mktemp -d -t docreview-XXXXXX)"; cp "$FX/design-sample.md" "$d/doc.md"
+  py docreview_state.py init --state-dir "$d" --doc "$d/doc.md" --profile "$PROF_QG/generic.md" >/dev/null; br "$d" "$d/doc.md"
+  err="$(log_dec "$d" "$HB_LINE" "$HB_QUOTE" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "profile_decision_log_not_doc_section"')" "1 1" "결정 줄 거부: 결정 기록이 문서 절이 아닌 프로필"
+  rm -rf "$d"
+}
+case_AC38_human_decision_no_ledger_baseline() {
+  # 원장이 없을 때(리뷰를 열기 전) 손으로 쓴 결정 줄은 첫 리뷰의 기준선이다 — 다음 라운드에 frozen_change 로 오르지 않는다.
+  local d
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "원장 없음 기준선: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1" "$HB_FULL"; br "$d" "$d/doc.md"
+  br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [])" "원장 없음 기준선: 리뷰를 열기 전에 손으로 쓴 결정 줄은 기준선이다"
+  assert_eq "$(fin_frozen "$d")" "[]" "원장 없음 기준선: 그 줄이 「허가 없이 바뀜」 질문이 되지 않는다"
+  log_dec "$d" 'B4 · 결정 · 2026-10-19 · 기각 되돌림 N19' '그것도' >/dev/null; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 3)" "([], [('#결정-기록', 'append-only')])" "원장 없음 기준선: 리뷰가 열린 뒤의 결정 줄은 명령으로 쓰면 지나간다"
+  rm -rf "$d"
+}

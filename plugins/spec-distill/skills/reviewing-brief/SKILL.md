@@ -321,7 +321,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 - 엔진 호출마다 `## 입력` 의 머리를 앞에 붙인다 — `$PAYLOAD` 는 머리가 절대화한 값이고 `$STATE_DIR` 은 그 문서의 자리다
 
 **원장 쓰기 전 확인.** 절차서의 원장 쓰기 명령 — `docreview_state.py` 의 `init` · `begin-round` ·
-`record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice` · `declare-related`, `docreview_route.py` 의
+`record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice` · `declare-related` · `log-decision`, `docreview_route.py` 의
 `prepare-recritic` · `finalize`, `docreview_anchor.py check-intent` — 은 전부 같은 Bash 호출 안에서 머리 뒤에 놓인 아래 한 줄
 **다음에만** 부른다. rc 가 0 이 아니면 그 명령을 부르지 않고 사유를 보이고 멈춘다 — 다른 세션이 표지를 넘겨받았거나
 표지가 없다.

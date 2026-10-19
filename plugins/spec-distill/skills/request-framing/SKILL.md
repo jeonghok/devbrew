@@ -510,7 +510,7 @@ echo "ledger-open: ${lo}"
 <!-- ledger-takeover:end -->
 
 **원장 쓰기 전 확인.** 엔진 원장에 쓰는 명령 — `docreview_state.py` 의 `init` · `begin-round` · `record-findings` ·
-`decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice` · `declare-related`, `docreview_route.py` 의 `prepare-recritic` · `finalize`,
+`decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice` · `declare-related` · `log-decision`, `docreview_route.py` 의 `prepare-recritic` · `finalize`,
 `docreview_anchor.py check-intent` — 은 전부 같은 Bash 호출 안에서 아래 한 줄 **다음에만** 부른다(이 skill 의
 처분 · 답 기록 · 계수 기록 펜스는 이 줄을 이미 담고 있다). rc 가 0 이 아니면 그 명령을 부르지 않고 사유를 보이고
 멈춘다 — 다른 세션이 표지를 넘겨받았거나 표지가 없다.
