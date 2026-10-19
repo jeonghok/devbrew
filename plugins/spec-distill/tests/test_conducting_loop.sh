@@ -76,6 +76,8 @@ assert_eq "$(recon_order '맞추기 순서(x): ① agent 목록 ② 상태 계�
 assert_contains "$(step 4)" '맞추기 순서(① agent 목록 → ② 상태 계산 → ③ 돌고 있는 수 대 권장 수 → ④ 채우기 → ⑤ 기준 시각 붙여 보고)' "걸음 4: 돌아오면 맞추기 순서로 다시 센다"
 once 3 '하위에게 보내는 글에는 `ledger suite-lock --roadmap <로드맵>` 의 첫 줄(공유 스위트 잠금 경로)을 싣는다'
 assert_contains "$(step 5)" '하위 agent 의 전체 스위트와 같은 잠금이다' "걸음 5: 스위트 대조는 담당자와 같은 공유 잠금"
+assert_contains "$(step 4 | grep -F -- '- 기록:')" '「설계에 없던 결정」 을 가른 결과와 이유 → 설계문서 `## 지휘 기록`' "걸음 4: 가른 결과는 지휘 기록에(결정 기록 울타리 밖)"
+assert_contains "$(step 4 | grep -F -- '- 기록:')" '`decision-line` — 엔진 `log-decision`' "걸음 4: 사용자 결정 원문은 열린 리뷰의 결정 줄 펜스로"
 for n in 1 3 4; do assert_contains "$(step "$n" | grep -F -- '- 기계 상태:')" '`## 작업`' "걸음 ${n}: 기계 상태 칸에 작업 표"; done
 # 음의 락 — 동시에 돌리는 일의 개수를 수량 상한에 묶는 문장(지휘자 수리 1 리뷰 넘김 · 수리 2). 「권장(기본값) · 사용자가 늘림」 은 허용.
 cap_hits() {  # cap_hits <글> — 상한 문장을 한 줄씩(명시 부정 「상한이 아니다」 류는 뺀 뒤 잰다)
