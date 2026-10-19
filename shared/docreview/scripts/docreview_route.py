@@ -395,9 +395,13 @@ def cmd_prepare(a) -> int:
             if first["edit_scope"] == first["anchor"] and it["edit_scope"] != it["anchor"]:
                 first["edit_scope"] = it["edit_scope"]
             # 남은 항목의 빈 칸은 버려진 사본의 값으로 채운다 — 채워진 값은 덮지 않는다(`_absorb_same_as` 와 같은 규칙).
-            for fld in ("evidence", "replacement", "if_unfixed", "contradicts", "_contradicts_malformed"):
+            for fld in ("evidence", "replacement", "if_unfixed", "contradicts"):
                 if not first.get(fld) and it.get(fld):
                     first[fld] = it[fld]
+            # 형식 위반 표시는 남은 항목에 살아 있는 `contradicts` 가 없을 때만 물려받는다 — 유효한 번호를 단 항목이
+            # 버려진 사본의 위반 때문에 「형식 위반」 공시를 받지 않게 한다.
+            if not first.get("contradicts") and not first.get("_contradicts_malformed") and it.get("_contradicts_malformed"):
+                first["_contradicts_malformed"] = it["_contradicts_malformed"]
         else:
             deduped.append((src, it))
     items = deduped
@@ -434,6 +438,9 @@ def cmd_prepare(a) -> int:
     for p in pending:
         view = dict(p["finding"])
         view.pop("detector", None)
+        for k in list(view):   # 엔진 내부 칸(`_` 시작)은 재비판자에게 보이지 않는다
+            if k.startswith("_"):
+                view.pop(k)
         shown.append(view)
     print(json.dumps({"ok": not degrade["critic_dead"], "items": shown,
                       "degrade": degrade}, ensure_ascii=False, indent=1))

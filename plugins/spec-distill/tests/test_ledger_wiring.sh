@@ -123,7 +123,7 @@ if cur is not None:
 for fc in fences:
     if not fc["scan"]:
         for ln in fc["lines"]:
-            if DISPOSITION.match(ln) and not re.search(r'[;&|`]|\$\(', ln):
+            if DISPOSITION.match(ln) and not re.search(r'[;&|`<>()]', ln):
                 continue        # 처분 한 줄은 소비자 경로를 이름으로 댄다 — 부르는 줄이 아니다
             if NAME.search(ln):
                 bad.append("검사 밖 펜스의 엔진 호출: " + ln.strip()[:120])
@@ -199,6 +199,11 @@ printf '```js\n%s\n```\n' '// **처분** — consumer=plugins/x/docreview_route.
 ac8_scan "$ac8f" 2>/dev/null && ok "AC8 펜스 모양(양성 짝): 소비자 경로에 엔진 이름이 있는 처분 줄은 통과한다" || no "AC8 펜스 모양(양성 짝): 소비자 경로 처분 줄이 막혔다"
 printf '```js\n%s\n```\n' '// **처분** — consumer=x; python3 "$SD/scripts/docreview_state.py" decide' > "$ac8f"
 ac8_scan "$ac8f" 2>/dev/null && no "AC8 펜스 모양: 처분 줄에 얹은 호출이 샌다" || ok "AC8 펜스 모양: 처분 줄에 얹은 엔진 호출은 잡힌다"
+for smuggle in 'cat <(python3 "$SD/scripts/docreview_state.py" decide)' 'tee >(python3 "$SD/scripts/docreview_state.py" decide)' \
+               '> /dev/null python3 "$SD/scripts/docreview_state.py" decide' 'python3 "$SD/scripts/docreview_state.py" decide < /dev/null' '(python3 "$SD/scripts/docreview_state.py" decide)'; do
+  printf '```js\n%s\n```\n' "// **처분** — consumer=x $smuggle" > "$ac8f"
+  ac8_scan "$ac8f" 2>/dev/null && no "AC8 펜스 모양: 처분 줄에 얹은 꼴이 샌다: $smuggle" || ok "AC8 펜스 모양: 처분 줄에 얹은 꼴은 잡힌다 — $(printf '%s' "$smuggle" | cut -c 1-40)"
+done
 # 알려진 경계(범위 밖 — AC17): 같은 줄 넘기기만 본다. `| tee` 는 이 락이 못 본다는 사실을 못 박는다(잡히면 이 단언을 고친다).
 printf '```bash\n%s\n```\n' 'python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR" | tee "$STATE_DIR/x"' > "$ac8f"
 ac8_scan "$ac8f" 2>/dev/null && ok "AC8 알려진 경계(AC17 몫): | tee 는 이 락이 보지 않는다" || no "AC8 알려진 경계: | tee 가 잡혔다 — 락 범위가 달라졌다, 문서와 이 단언을 고쳐라"

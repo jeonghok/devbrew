@@ -76,7 +76,7 @@ grep -qE '^[[:space:]]*AskUserQuestion\(\{' "$SKILL" \
   && no "지출: AskUserQuestion 호출 리터럴이 있다 — 떼기로 한 지출 승인 게이트가 되살아났다" \
   || ok "지출: 자기 AskUserQuestion 호출 리터럴 없음 (진입 지출 게이트 없음)"
 W_PROC="$(section '절차')"
-{ has "$W_PROC" '재리뷰 상한 2' && has "$W_PROC" '라운드 4' && has "$W_PROC" '안전 정지'; } \
+{ has "$W_PROC" '재리뷰 상한(기본 2' && has "$W_PROC" '라운드 4' && has "$W_PROC" '안전 정지'; } \
   && ok "지출(양의 짝): \`## 절차\` 가 재리뷰 상한을 안전 정지로 · 라운드 4 의 명시 승인으로 댄다" \
   || no "지출(양의 짝): 게이트를 뗀 자리에 무엇이 지출을 묶는지 \`## 절차\` 가 말하지 않는다"
 

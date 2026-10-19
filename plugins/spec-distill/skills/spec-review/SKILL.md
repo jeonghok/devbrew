@@ -305,10 +305,10 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 
 그 파일의 여덟 단계를 **한 턴 안에서** 돈다. 절차를 여기 복사하지 않는다 — 네 자리가 같은 절차를
 쓰기 때문에 공유 정본에 두는 것이다. `--state-dir` 는 위 `$STATE_DIR` 이고, 상한은 그 문서가 정하는
-**재리뷰 상한 2** 다(라운드 4 이상은 사용자가 승인 게이트에서 열어야만 돈다).
+재리뷰 상한(기본 2 — 게이트 둘째 줄이 알린다)이다(라운드 4 이상은 사용자가 승인 게이트에서 열어야만 돈다).
 
 **원장 쓰기 전 확인.** 절차서의 원장 쓰기 명령 — `docreview_state.py` 의 `init` · `begin-round` ·
-`record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice`, `docreview_route.py` 의
+`record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice` · `declare-related`, `docreview_route.py` 의
 `prepare-recritic` · `finalize`, `docreview_anchor.py check-intent` — 은 전부 같은 Bash 호출 안에서 아래 한 줄
 **다음에만** 부른다. rc 가 0 이 아니면 그 명령을 부르지 않고 사유를 보이고 멈춘다 — 다른 세션이 표지를 넘겨받았거나
 표지가 없다.

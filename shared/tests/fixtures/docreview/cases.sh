@@ -3932,6 +3932,23 @@ case_detectors_overlap_absorbed() {
   assert_eq "$(st_yaml "$d2" 'len([e for e in st["pending_recritic"]["events"] if e[0]=="absorbed"])')" "$n1" "AC10: 버려진 중복 하나하나를 흡수로 센다"
   rm -rf "$d1" "$d2"
 }
+case_detectors_overlap_malformed_notice_follows_contradicts() {
+  local d c1 c2 mk
+  mk() {   # mk <파일> <contradicts 줄 또는 빈 값> — 같은 지적 하나
+    printf '%s\n' '```docreview-layer1' '[]' '```' '```docreview-layer2' '- ref: c1' '  layer: 2' '  category: placeholder' '  anchor: "#handoff-context"' '  disposition: fix' '  summary: "넘김 절에 경로가 없다"' '  edit_scope: "#handoff-context"' ${2:+"$2"} '```' > "$1"
+  }
+  d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  c1="$d/critic-1.txt"; c2="$d/critic-2.txt"
+  mk "$c1" '  contradicts: D1.1'; mk "$c2" '  contradicts: "형식 아님 !"'
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$c1" --critic "$c2" > "$d/prep.json"
+  assert_eq "$(st_yaml "$d" 'len(st["pending_recritic"]["items"])')" "1" "AC10: 전제 — 같은 지적 둘은 하나로 합쳐진다"
+  assert_eq "$(st_yaml "$d" 'bool(st["pending_recritic"]["items"][0]["finding"].get("_contradicts_malformed"))')" "False" "AC39: 유효한 번호를 단 남은 항목은 버려진 사본의 형식 위반 표시를 물려받지 않는다"
+  assert_eq "$(jget "$d/prep.json" 'sorted(k for i in d["items"] for k in i if k.startswith("_"))')" "[]" "AC10: 재비판자에게 가는 항목에 엔진 내부 칸(_ 시작)이 없다"
+  mk "$c1" ''; mk "$c2" '  contradicts: "형식 아님 !"'
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$c1" --critic "$c2" > "$d/prep.json"
+  assert_eq "$(st_yaml "$d" 'bool(st["pending_recritic"]["items"][0]["finding"].get("_contradicts_malformed"))')" "True" "AC39 양성 짝: 남은 항목에 번호가 없으면 버려진 사본의 형식 위반 표시를 물려받는다"
+  rm -rf "$d"
+}
 case_detectors_overlap_repoints_blocks() {
   local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
   cp "$FX/critic-d1-only.txt" "$d/critic-1.txt"; cp "$FX/critic-d2.txt" "$d/critic-2.txt"
@@ -4063,6 +4080,19 @@ case_AC17_digest_line_strip_stops() {
   local err rc; err="$(py docreview_state.py gate --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
   assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "ledger_corrupt"')" "1 1" "AC17: 확인값 줄을 지우고 상태를 바꿔도 읽기 전용 gate 가 멈춘다"
   rm -rf "$d"
+}
+case_AC17_era_marker_failure_disclosed() {
+  local d s err rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  rm -f "$d/docreview-digest-era"
+  s="$d.snap.json"; snap "$FX/design-sample.md" "$s"
+  chmod 555 "$d"
+  err="$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" 2>&1 >/dev/null)"; rc=$?
+  chmod 755 "$d"
+  assert_eq "$rc" "0" "AC17: 표지 파일을 못 만들어도 원장 갱신은 계속된다"
+  assert_contains "$err" "시대 표지 파일을 만들지 못했다" "AC17: 표지 파일을 만들지 못한 것을 한 줄로 알린다"
+  assert_contains "$err" "$d/docreview-digest-era" "AC17: 그 줄이 표지 파일 경로를 댄다"
+  assert_eq "$([ -e "$d/docreview-digest-era" ] && echo yes || echo no)" "no" "AC17: 전제 — 표지 파일은 실제로 만들어지지 않았다"
+  rm -f "$s"; rm -rf "$d"
 }
 case_AC17_legacy_disclosed_on_every_load() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"

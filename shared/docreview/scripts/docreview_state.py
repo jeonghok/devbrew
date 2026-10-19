@@ -323,8 +323,9 @@ def save_state(state_dir, st, log_line=None) -> None:
     if not era.exists():
         try:
             era.write_bytes(b"")
-        except OSError:   # 쓰기 불가 폴더 — 원장 갱신은 막지 않는다(표지가 없으면 줄 삭제 탐지만 약해진다)
-            pass
+        except OSError as exc:   # 쓰기 불가 폴더 — 원장 갱신은 막지 않는다(표지가 없으면 줄 삭제 탐지만 약해진다)
+            print("[docreview] 원장 확인값의 시대 표지 파일을 만들지 못했다 (%s, errno %s) — 원장 갱신은 계속했고, "
+                  "확인값 줄을 지워도 알아채는 힘이 약하다." % (era, exc.errno), file=sys.stderr)
     st["_body"] = body
 
 

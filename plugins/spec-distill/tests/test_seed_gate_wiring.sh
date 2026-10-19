@@ -45,6 +45,7 @@ first_bash_in() {   # first_bash_in <시작 헤딩 정규식> <끝 헤딩 정규
 }
 first_bash_in '^## 상태$' '^## ' | sed 's/^TOPIC="<kebab-topic>"$/TOPIC="probe-topic"/' > "$W/state.sh"
 first_bash_in '^### 번들' '^##+ ' > "$W/bundle.sh"
+first_bash_in '^### 산출물 기록' '^##+ ' > "$W/record.sh"
 awk '/codex-gate:begin[[:space:]]+runner=run_docreview_codex_reviewer\.sh/ {g=1; next}
      /codex-gate:end/ {g=0}
      g && /^```bash$/ {b=1; next}
@@ -59,6 +60,7 @@ chk_blk() {   # chk_blk <라벨> <파일> <고정 문자열>
 }
 chk_blk 상태 "$W/state.sh" 'state-dir-for'
 chk_blk 번들 "$W/bundle.sh" 'build_seed_inline_blob.py'
+chk_blk 산출물기록 "$W/record.sh" 'append-verbatim'
 chk_blk "codex 게이트" "$W/gate.sh" 'run_docreview_codex_reviewer.sh" "$PROFILE" "$BUNDLE"'
 grep -q '^TOPIC="probe-topic"$' "$W/state.sh" && ok "추출: 자리표를 픽스처 주제로 바꿨다" \
   || no "추출: TOPIC 줄 모양이 바뀌어 자리표를 못 바꿨다 — audit 으로 이름을 되찾는 경로만 잰다"
@@ -151,6 +153,7 @@ grep -q 'unbound variable' "$W/p-all.err" && no "P: 상태 블록이 set -u 에�
 { cat "$W/state.sh"; cat "$W/bundle.sh"; echo 'echo "bundle_rc=$bundle_rc"'; } > "$W/bundle-run.sh"
 home fg10bndl; pl="$(place fg10bndl)"; mkdir -p "$pl"
 printf 'OLD_CRITIC\n' > "$pl/critic.txt"; printf 'OLD_RECRITIC\n' > "$pl/recritic.txt"
+printf 'OLD_CRITIC_1\n' > "$pl/critic-1.txt"; printf 'OLD_CRITIC_2\n' > "$pl/critic-2.txt"
 run_in fg10bndl "$W/bundle-run.sh"
 grep -q '^bundle_rc=0$' "$W/fg10bndl.out" && ok "B: 조립 rc 0" || no "B: 조립 실패 — $(tail -1 "$W/fg10bndl.err")"
 [ -s "$pl/seed-bundle.md" ] && [ -s "$pl/seed-bundle-recritic.md" ] && ok "B: 번들 둘이 엔진 자리에 있다" || no "B: 번들 둘 중 하나가 없다"
@@ -158,7 +161,7 @@ grep -qF 'HIST_SUMMARY_MARKER' "$pl/seed-bundle.md" && ok "B: 탐지 번들에�
 if grep -qF 'HIST_SUMMARY_MARKER' "$pl/seed-bundle-recritic.md"; then no "B: 재비판 번들에 판정 이력이 샜다(AC11)"
 else ok "B: 재비판 번들에는 판정 이력이 없다(AC11)"; fi
 grep -qF 'HIST_QUOTE_MARKER' "$pl/seed-bundle-recritic.md" && ok "B: 재비판 번들에 사용자 문구는 남는다" || no "B: 재비판 번들에서 사용자 문구까지 빠졌다"
-[ ! -e "$pl/critic.txt" ] && [ ! -e "$pl/recritic.txt" ] && ok "B: 직전 라운드의 리뷰어 산출물을 치웠다" \
+[ ! -e "$pl/critic.txt" ] && [ ! -e "$pl/critic-1.txt" ] && [ ! -e "$pl/critic-2.txt" ] && [ ! -e "$pl/recritic.txt" ] && ok "B: 직전 라운드의 리뷰어 산출물을 치웠다" \
   || no "B: 직전 라운드 critic/recritic 이 남았다 — audit ## 4 에 이번 라운드 것으로 옮겨진다"
 # audit 을 지우면 이름을 되찾지 못해 다른 자리를 보게 된다 — 이름이 서는 frontmatter 만 남기고 원문 절을 없앤다
 printf -- '---\ntype: interview-seed-audit\nsession_id: fg10bndl\n---\n' > "$W/fg10bndl/docs/superpowers/interview/probe-fg10bndl-interview.audit.md"
@@ -169,6 +172,31 @@ run_in fg10bndl "$W/bundle-run.sh"
 grep -q '^bundle_rc=1$' "$W/fg10bndl.out" && ok "B: audit 의 원문 절이 없으면 조립 실패(rc 1)" || no "B: 원문 절 없이도 조립 성공으로 보고했다"
 [ ! -s "$pl/seed-bundle.md" ] && [ ! -s "$pl/seed-bundle-recritic.md" ] && ok "B: 실패한 라운드는 직전 번들을 남기지 않는다" \
   || no "B: 실패한 라운드에 직전 번들이 남았다 — codex 게이트가 그것을 이번 번들로 넘긴다"
+
+# ── K — 산출물 기록: 탐지 리뷰어마다 따로 옮긴다(critic-<i>.txt), 하나도 없을 때만 critic.txt ──────────────
+{ cat "$W/state.sh"; cat "$W/record.sh"; } > "$W/record-run.sh"
+add_sec4() {   # add_sec4 <sid> — 픽스처 audit 에 `## 4` 절을 `## 6` 앞에 둔다(옮길 자리)
+  local au; au="$(ls "$W/$1/docs/superpowers/interview/"*.audit.md)"
+  awk '/^## 6\. 리뷰 결정/ && !d { print "## 4. 비평과 냉독\n"; d = 1 } { print }' "$au" > "$au.new" && mv "$au.new" "$au"
+  printf '%s\n' "$au"
+}
+home fg11recdet; pl="$(place fg11recdet)"; mkdir -p "$pl"; au="$(add_sec4 fg11recdet)"
+printf 'DET_ONE_BODY\n' > "$pl/critic-1.txt"; printf 'DET_TWO_BODY\n' > "$pl/critic-2.txt"; printf 'RECRITIC_BODY\n' > "$pl/recritic.txt"
+run_in fg11recdet "$W/record-run.sh"
+{ grep -qF '탐지 1 (doc-critic)' "$au" && grep -qF 'DET_ONE_BODY' "$au" && grep -qF '탐지 2 (doc-critic)' "$au" && grep -qF 'DET_TWO_BODY' "$au"; } \
+  && ok "K: 탐지 리뷰어 둘의 출력이 각자 제목으로 audit ## 4 에 옮겨진다" \
+  || no "K: critic-<i>.txt 가 audit ## 4 에 옮겨지지 않았다 — $(tail -2 "$W/fg11recdet.err" | tr '\n' ' ')"
+grep -qF 'RECRITIC_BODY' "$au" && ok "K: 재비판 출력도 함께 옮겨진다" || no "K: 재비판 출력이 옮겨지지 않았다"
+grep -qF '산출물 없음 — critic-' "$au" && no "K: 있는 탐지 출력을 「산출물 없음」으로 적었다" || ok "K: 있는 탐지 출력을 「산출물 없음」으로 적지 않는다"
+home fg12recnone; pl="$(place fg12recnone)"; mkdir -p "$pl"; au="$(add_sec4 fg12recnone)"
+printf 'RECRITIC_ONLY\n' > "$pl/recritic.txt"
+run_in fg12recnone "$W/record-run.sh"
+grep -qF '산출물 없음 — critic.txt' "$au" && ok "K: 탐지 출력이 하나도 없으면 없다는 사실을 critic.txt 이름으로 적는다" \
+  || no "K: 탐지 출력이 없는 라운드가 그 사실을 적지 않았다"
+home fg13recolds; pl="$(place fg13recolds)"; mkdir -p "$pl"; au="$(add_sec4 fg13recolds)"
+printf 'OLD_NAME_BODY\n' > "$pl/critic.txt"
+run_in fg13recolds "$W/record-run.sh"
+grep -qF 'OLD_NAME_BODY' "$au" && ok "K: critic-<i>.txt 가 없으면 옛 이름 critic.txt 를 옮긴다" || no "K: 옛 이름 폴백이 죽었다"
 
 # ── codex — A · A+ · R · X · E ───────────────────────────────────────────────
 { cat "$W/state.sh"; cat "$W/bundle.sh"; cat "$W/gate.sh"; } > "$W/full.sh"

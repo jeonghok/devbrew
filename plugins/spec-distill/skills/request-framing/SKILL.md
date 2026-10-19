@@ -325,7 +325,7 @@ premortem · coverage-mapper 넷이 거기 있는 장치이고, 이 skill 에는
 | 긴 초안 | `$AUDIT` 의 `## 3. 긴 초안` 절 | 압축 **직전** — 깎기 전에 여기 먼저 쓴다 |
 | interview-seed (`$SEED`) | 〃 | 압축 직후 — **게이트 직전 구조 검사보다 먼저** |
 | 덜어 낸 것 표 | `$AUDIT` 의 `## seed 에서 덜어 낸 것` 절 | 압축 직후 — seed 와 함께 쓴다 |
-| 리뷰 엔진 자리 `$STATE_DIR` — 엔진 원장 · 번들 둘(`$BUNDLE` · `$BUNDLE_RC`) · 리뷰어 산출물(`critic.txt` · `recritic.txt` · `$CODEX_YAML`) · 저자 편집 기준 사본(`$SEED_BASE`) · 동시 리뷰 표지(`reviewing-by` · `last-session`) · `## 2` 답 문구 파일(`said-r<n>.txt` — 질문 라운드마다, 한 줄로 이은 뒤 지운다) | `<state-root>/.docreview/<seed 이름>-<해시>/` | 리뷰 라운드마다 — 경로는 seed 의 절대경로의 순수 함수다 |
+| 리뷰 엔진 자리 `$STATE_DIR` — 엔진 원장 · 번들 둘(`$BUNDLE` · `$BUNDLE_RC`) · 리뷰어 산출물(`critic-<i>.txt` · `recritic.txt` · `$CODEX_YAML`) · 저자 편집 기준 사본(`$SEED_BASE`) · 동시 리뷰 표지(`reviewing-by` · `last-session`) · `## 2` 답 문구 파일(`said-r<n>.txt` — 질문 라운드마다, 한 줄로 이은 뒤 지운다) | `<state-root>/.docreview/<seed 이름>-<해시>/` | 리뷰 라운드마다 — 경로는 seed 의 절대경로의 순수 함수다 |
 
 **audit 과 seed 는 시점이 다르지만, 둘 다 승인 «전»에 디스크에 있어야 합니다.** audit 은
 확산 첫 항목부터, seed 는 압축 직후입니다 — 게이트 직전의 `check_seed.py` 가 둘 다
@@ -510,7 +510,7 @@ echo "ledger-open: ${lo}"
 <!-- ledger-takeover:end -->
 
 **원장 쓰기 전 확인.** 엔진 원장에 쓰는 명령 — `docreview_state.py` 의 `init` · `begin-round` · `record-findings` ·
-`decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice`, `docreview_route.py` 의 `prepare-recritic` · `finalize`,
+`decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice` · `declare-related`, `docreview_route.py` 의 `prepare-recritic` · `finalize`,
 `docreview_anchor.py check-intent` — 은 전부 같은 Bash 호출 안에서 아래 한 줄 **다음에만** 부른다(이 skill 의
 처분 · 답 기록 · 계수 기록 펜스는 이 줄을 이미 담고 있다). rc 가 0 이 아니면 그 명령을 부르지 않고 사유를 보이고
 멈춘다 — 다른 세션이 표지를 넘겨받았거나 표지가 없다.
@@ -682,7 +682,16 @@ Agent({
 # 엔진 산출물 셋을 판정 없이 audit `## 4. 비평과 냉독` 에 옮긴다 — 엔진 자리는 원장 정리로 사라질 수 있고,
 # 사람이 나중에 되짚을 자리는 audit 이다. 없는 산출물은 그 사실을 적는다(침묵과 0 은 다르다).
 rnd="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" | python3 -I -X utf8 -c 'import json,sys; print(json.load(sys.stdin)["round"])')" || rnd="?"
-for pair in "탐지 (doc-critic)|critic.txt" "codex|docreview-codex.yaml" "재비판 (doc-recritic)|recritic.txt"; do
+pairs=()
+for f in "$STATE_DIR"/critic-[0-9]*.txt; do   # 탐지 리뷰어 i 의 출력은 critic-<i>.txt — 하나씩 따로 옮긴다
+  [ -e "$f" ] || continue
+  b="${f##*/}"; idx="${b#critic-}"; idx="${idx%.txt}"
+  pairs[${#pairs[@]}]="탐지 ${idx} (doc-critic)|${b}"
+done
+[ "${#pairs[@]}" -gt 0 ] || pairs[0]="탐지 (doc-critic)|critic.txt"   # 탐지 출력이 하나도 없을 때만 옛 이름을 본다
+pairs[${#pairs[@]}]="codex|docreview-codex.yaml"
+pairs[${#pairs[@]}]="재비판 (doc-recritic)|recritic.txt"
+for pair in "${pairs[@]}"; do
   title="${pair%%|*}"; src="$STATE_DIR/${pair#*|}"
   if [ ! -s "$src" ]; then
     src="$STATE_DIR/absent-note.txt"

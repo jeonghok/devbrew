@@ -108,7 +108,7 @@ for f in "${TARGETS[@]}"; do
     */README.md) want=2 ;;
     *)           want=1 ;;
   esac
-  got="$(grep -cE "재리뷰 상한 ${CAP}([^0-9]|\$)" "$f" || true)"
+  got="$(grep -cE "재리뷰 상한( |\(기본 )${CAP}([^0-9]|\$)" "$f" || true)"
   if [ "${got:-0}" -ge "$want" ]; then
     ok "$rel: '재리뷰 상한 $CAP' ${got}건 (하한 ${want})"
   else
@@ -129,7 +129,7 @@ done
 # 서로 다른 상한(G6 의 `재시도 상한 3`)은 이 어휘에 걸리지 않는다 — 같은 숫자를 쓰더라도
 # 다른 값이므로 코퍼스에 넣지 않는다. brief 자리의 상한은 엔진의 `재리뷰 상한 2` 라 이 어휘가
 # 잡는 바로 그 값이다.
-CAP_RE='rereview_cap: [0-9]+|REREVIEW_CAP = [0-9]+|재리뷰 상한 [0-9]+|re-?review[^0-9]{0,12}(max|cap)[^0-9]{0,4}[0-9]+'
+CAP_RE='rereview_cap: [0-9]+|REREVIEW_CAP = [0-9]+|재리뷰 상한 [0-9]+|재리뷰 상한\(기본 [0-9]+|re-?review[^0-9]{0,12}(max|cap)[^0-9]{0,4}[0-9]+'
 bad=0
 seen=0
 scan_text() {   # scan_text <표시경로> <검사할 텍스트>
