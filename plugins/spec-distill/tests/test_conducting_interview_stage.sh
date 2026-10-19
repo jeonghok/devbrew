@@ -273,6 +273,9 @@ grep -qE '^ +research_dispatches: \{coverage_mapper: 0, blind_spot_prober: 0, st
 for k in research_limit saturation_limit research_log saturation_log; do
   grep -qE "^ +${k}:" <<<"$state_block" && ok "R1/state: orchestration.${k} in schema" || no "R1/state: orchestration.${k} 부재"
 done
+grep -qE '^ +research_log: \[\] +# 조사마다 \{n, device, round, batch, changed: ' <<<"$state_block" \
+  && ok "R10/state: research_log 항목 꼴이 묶음 번호(batch)를 싣는다" \
+  || no "R10/state: research_log 항목 꼴에 batch 가 없다 — 포화 판정의 묶음 단위가 기록에서 빠진다"
 for k in blind_spot_dispatches coverage_mapper_dispatches; do
   grep -qE "^ +${k}:" <<<"$state_block" && no "R1/state: 옛 카운터 ${k} 가 스키마에 잔존" || ok "R1/state: 옛 카운터 ${k} 없음"
 done
@@ -330,6 +333,9 @@ mig_block="$(awk '/^## In-flight state migration/{f=1;print;next} /^## /{f=0} f'
   && ok "R1/state: migration 절의 orchestration 열거가 새 키와 정확히 일치" \
   || no "R1/state: migration 절의 orchestration 열거가 새 키와 다르다"
 mig_flat="$(tr '\n' ' ' <<<"$mig_block" | tr -s ' ')"
+grep -qF '이 릴리스가 바꾼 키(`orchestration.research_dispatches` · `research_dispatches.open_researcher` · `research_limit` · `saturation_limit` · `research_log` · `research_log[].batch` · `saturation_log`)만' <<<"$mig_flat" \
+  && ok "R10/state: migration 절의 「이 릴리스가 바꾼 키」가 새 장치 칸 · 묶음 번호를 이름으로 댄다" \
+  || no "R10/state: migration 절의 「이 릴리스가 바꾼 키」 열거가 open_researcher · batch 를 빠뜨렸다"
 grep -qF '`coverage_mapper_dispatches: <k>` 는 `research_dispatches.coverage_mapper: <k>` 로' <<<"$mig_flat" \
   && ok "R1/state: 이월 — coverage_mapper_dispatches 값 보존" || no "R1/state: coverage_mapper_dispatches 이월 규칙 부재 — 상한 계수가 0 으로 되돌아간다"
 grep -qF '`blind_spot_dispatches: <k>` 는 `research_dispatches.blind_spot_prober: <k>` 로' <<<"$mig_flat" \

@@ -2,8 +2,8 @@
 
 판정은 **키 단위**다 — 「구조가 통째로 없는가」가 아니라 「§2.4 스키마의 **부재 키가 있는가**」.
 구조 부재로 좁히면 정작 **가장 흔한 업그레이드 경로가 빠진다**: 직전 릴리스 세션은
-`coverage`·`orchestration` 을 이미 갖고 있고 이 릴리스가 바꾼 키(`orchestration.research_dispatches` ·
-`research_limit` · `saturation_limit` · `research_log` · `saturation_log`)만 없어서, 어느 조건에도 안 걸린 채
+`coverage`·`orchestration` 을 이미 갖고 있고 이 릴리스가 바꾼 키(`orchestration.research_dispatches` · `research_dispatches.open_researcher` ·
+`research_limit` · `saturation_limit` · `research_log` · `research_log[].batch` · `saturation_log`)만 없어서, 어느 조건에도 안 걸린 채
 그 키를 읽는 코드로 들어간다.
 
 상태 파일 로드 시 아래 중 **하나라도** 부재면 *non-mutating read* 로 승격한다
