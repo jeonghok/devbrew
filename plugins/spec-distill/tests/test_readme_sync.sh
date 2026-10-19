@@ -237,5 +237,12 @@ brief_row="$(grep -E '^- \*\*Law 2' <<<"$pi_block" | grep -F 'reviewing-brief' |
 [ -n "$brief_row" ] \
   && ok "brief 자리/양의 짝: Principles 의 Law 2 불릿 한 줄이 reviewing-brief · doc-critic-web · doc-recritic 를 함께 댄다" \
   || no "brief 자리/양의 짝: Principles 에 brief 자리의 지금 리뷰어(doc-critic-web → doc-recritic)를 대는 Law 2 불릿이 없다 — 부재 단언이 불릿 삭제만으로 만족된다"
+# R10 — 사용자가 고른 답으로 닫는 두 길의 한계를 Principles 의 멈춤 불릿에 쉬운 말로 밝힌다. 「조사 불필요」는 답 번호만,
+# 「외부 선례 무관」은 ☑ 까지 게이트가 보고, 둘 다 사용자가 골랐는지는 증명하지 못한다(게이트가 실제로 하는 것과 같은 크기로).
+stop_row="$(grep -E '^- \*\*Law 1 · Law 2 — 멈춤의 주인' <<<"$pi_block" || true)"
+[ -n "$stop_row" ] && ok "R10(양성대조): Principles 의 멈춤 불릿을 찾았다" || no "R10: Principles 의 「멈춤의 주인」 불릿이 없다 — 아래 단언이 공허하다"
+assert_contains "$stop_row" '「조사 불필요」로 포화를 닫으면 게이트는 그 답 번호가 audit 의 사용자 원문 절에 있는지만 보고' "R10: 「조사 불필요」는 답 번호의 존재만 본다고 밝힌다"
+assert_contains "$stop_row" '그 답이 고른 선택지(☑)로 적혔는지까지 본다' "R10: 「외부 선례 무관」은 ☑ 까지 본다고 밝힌다"
+assert_contains "$stop_row" '둘 다 그 답을 모델이 아니라 사용자가 골랐는지는 증명하지 못한다' "R10: 사용자가 골랐는지는 증명 못 한다고 밝힌다"
 rm -f "$LIVE_TMP"
 finish
