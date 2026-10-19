@@ -49,8 +49,8 @@ branching strategy 템플릿을 선택해 git workflow 룰을 초기화하고, �
 
 ### Step 1: 프로젝트 상태 감지
 
-1. 관리 절을 담는 파일을 정한다 — AGENTS.md 가 있으면 AGENTS.md, 없으면 CLAUDE.md(아래 Charter 상태 감지 (a) 와 같은 규칙. 앞선 실행에서 「AGENTS.md 로 옮기기」를 골랐다면 기존 `## Git Workflow` 는 AGENTS.md 에 있다)
-2. 그 파일에 `## Git Workflow` 섹션이 이미 있는지 확인
+1. 프로젝트 root의 AGENTS.md 와 CLAUDE.md 가 각각 존재하는지 확인
+2. 있는 파일마다 `## Git Workflow` 섹션이 이미 있는지 확인 — AGENTS.md 와 CLAUDE.md 중 어느 쪽에 있어도 기존 규칙이다(앞선 실행에서 「AGENTS.md 로 옮기기」를 골랐다면 그 절은 AGENTS.md 에 있다)
 3. `docs/git-workflow/` 디렉토리가 존재하는지 확인
 
 기존 Git Workflow 설정이 발견되면 사용자에게 묻는다:
