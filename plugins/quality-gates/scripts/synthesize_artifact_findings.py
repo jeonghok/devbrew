@@ -15,7 +15,8 @@ Two phases (the same dedup_key/stagnation_key algorithm lives once here):
       Apply verdicts (confirm/downgrade/reject) by finding_key == dedup_key,
       compute the fail-closed kept set, and emit convergence / degraded /
       degraded_reason (adversarial|findings_load|sources_failed|none) /
-      unadjudicated / severity counts / stagnation_keys / kept list. A
+      unadjudicated / severity counts / stagnation_keys / kept list /
+      unadjudicated_items (the held findings themselves, last key). A
       findings-side load failure (missing/unparseable --findings file) or a
       nonzero `sources_failed` carried on the merged doc also forces
       degraded=true (fail-closed), symmetric to the adversarial-side guard —
@@ -148,6 +149,21 @@ def phase_key(paths, ledger=None):
     sys.stdout.write(yaml.safe_dump(out, allow_unicode=True, sort_keys=False))
 
 
+_HELD_FIELDS = ("category", "target_anchor", "target_lines", "severity", "summary", "plain", "dedup_key")
+
+
+def _held_items(held):
+    # 판정 못 한 지적 그 자체. 컴프리헨션 · 버리는 분기 없이 쓴다(test_adjudication_wiring 의 두 축).
+    out = []
+    for f in held:
+        item = {}
+        for k in _HELD_FIELDS:
+            if f.get(k) is not None:
+                item[k] = f.get(k)
+        out.append(item)
+    return out
+
+
 def phase_synth(findings_path, adversarial_path):
     merged_doc = _load(findings_path)
     # fail-closed: a missing / unparseable / empty / degenerate --findings file must
@@ -218,10 +234,12 @@ def phase_synth(findings_path, adversarial_path):
     by_v = {v.get("finding_key"): v for v in verdicts if isinstance(v, dict)}
 
     kept = []
+    held = []   # 판정 못 한 지적 그 자체 — 사람 소비자(지적만 받기 보고)가 라벨을 붙여 보인다
     for f in findings:
         v = by_v.get(f["dedup_key"])
         if v is None:
             L.hold(f["dedup_key"], "판정자 부재: adversarial 판정 없음")   # AC16: kept 에서 제외
+            held.append(f)
             continue
         verdict = str(v.get("verdict", "")).lower()
         if verdict == "reject":
@@ -310,6 +328,8 @@ def phase_synth(findings_path, adversarial_path):
              if f.get(k) is not None}
             for f in kept
         ],
+        # 뒤에 더한 키다 — 위 키들의 이름 · 순서 · 꼴은 그대로다. 항목 수는 `unadjudicated` 와 같다.
+        "unadjudicated_items": _held_items(held),
     }
     sys.stdout.write(yaml.safe_dump(out, allow_unicode=True, sort_keys=False))
 

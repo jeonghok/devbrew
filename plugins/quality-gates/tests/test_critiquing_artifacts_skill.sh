@@ -206,7 +206,40 @@ assert_file_grep "$S" '한 번 더 돌기' "라운드 상한에서 사용자가 
 assert_file_absent "$S" 'critique skipped|critique mode disabled' "옛 모드 이름이 kill switch 메시지에 없다(미룸)"
 # 위 단언들은 낱말 하나라 다른 문장이 대신 채울 수 있다 — 장치마다 그 자리의 문장을 함께 잰다.
 assert_contains "$(cat "$S")" '인자에 `--findings-only` 가 있거나' "E1: --findings-only 인자가 모드를 정한다"
-assert_contains "$(cat "$S")" '「지적만 받기」는 E2 의 `project_dir:` 만 쓰고 `branch_ok` · E2b 를 요구하지 않는다' "지적만 받기는 브랜치 · clean 전제 대신 경로 인가만 요구한다(결정 13)"
+assert_contains "$(cat "$S")" '「지적만 받기」는 E2 의 `project_dir:` 만 쓰고 `branch_ok` · E2b 를 요구하지 않는다(커밋하지 않는다) — 곧장 E2c 로 간다.' "지적만 받기는 브랜치 · clean 전제 대신 경로 인가(E2c)로 간다(결정 13)"
+# 수정 1(Important 1) — 지적만 받기 · 대상 여럿이 연 보안 불변식을 문장째 잰다.
+# 지적만 받기로 가는 문장은 모두 E2c(경로 인가)로 간다 — E3 등 다른 단계로 가면 인가 없이 바깥 파일이 codex 에 간다.
+# 단위는 줄이 아니라 문단(빈 줄로 나뉨)이다 — 「지적만 받기」와 「… 로 간다」가 줄바꿈으로 갈라져도 잡힌다.
+fo_routes="$(PYTHONDONTWRITEBYTECODE=1 python3 -I -c '
+import io, re, sys
+paras = io.open(sys.argv[1], encoding="utf-8").read().split("\n\n")
+hits = [m for p in paras if "지적만 받기" in p for m in re.findall(r"E[0-9][a-z]? 로 간다", p.replace("\n", " "))]
+print(len(hits), " ".join(sorted(set(hits))))
+' "$S")"
+assert_eq "${fo_routes#* }" "E2c 로 간다" "지적만 받기 문단의 「… 로 간다」는 모두 E2c 다(음성)"
+[ "${fo_routes%% *}" -ge 3 ] 2>/dev/null && ok "지적만 받기 문단의 길 안내가 셋 이상 잡힌다(창이 비지 않았다, n=${fo_routes%% *})" \
+  || no "지적만 받기 문단의 길 안내 수가 셋 미만(${fo_routes%% *})"
+assert_contains "$(cat "$S")" '지적만 받는다. 모드를 바꾸고 E2c 로 간다) /' "멈출 때의 선택: 지적만 받기로 진행은 E2c 로 간다(양성 짝)"
+assert_contains "$(cat "$S")" '「고치며 돌기」에서 `branch_ok: false`면 아래 안내 줄을 내고 멈춘다' "고치며 돌기는 branch_ok: false 에서 멈춘다"
+assert_contains "$(cat "$S")" '「고치며 돌기」에서만, 대상마다:' "E2b 는 고치며 돌기에서 대상마다 돈다"
+assert_contains "$(cat "$S")" '리뷰어 read가 인가보다 앞서는 순서 버그). 두 모드 모두, 대상마다:' "E2c 경로 인가는 두 모드 모두 대상마다 돈다"
+assert_contains "$(cat "$S")" '고르면 E2 의 `branch_ok` 검사와 E2b 를 다시 돈다 — `project_dir` 는 E2 에서 얼린 값 그대로' "고치며 돌기로 바꾸면 브랜치 · clean 검사를 다시 돈다(project_dir 는 그대로)"
+assert_contains "$(cat "$S")" '`auth: reject` → **종료**' "E2c 거부는 실행을 끝낸다"
+# Minor — 여러 대상: 질문 하나 · 실행 전체 전환 · 그 대상만 빼기 · canonical 로 중복 합치기.
+assert_contains "$(cat "$S")" '멈춘 대상이 여럿이어도 질문은 하나이고' "멈춘 대상이 여럿이어도 질문은 하나"
+assert_contains "$(cat "$S")" '**지적만 받기로 진행**(실행 전체를 「지적만 받기」로 바꾼다' "지적만 받기로 진행은 실행 전체를 바꾼다고 말한다"
+assert_contains "$(cat "$S")" '**그 대상만 빼고 진행**' "그 대상만 빼고 진행 선택지"
+assert_contains "$(cat "$S")" '와 같은 파일이라(<canonical>) 한 번만 비평한다' "같은 canonical 대상은 한 번만 비평하고 알린다"
+assert_contains "$(cat "$S")" '대상 파일의 내용이 codex(바깥' "E3 이 codex 에 파일 내용이 넘어간다고 알린다"
+assert_contains "$(cat "$S")" '부르는 수는 비평자 수 + 2(반박자 1 · codex 1), codex 를 못 쓰면 + 1' "비평자 수 질문이 라운드당 부르는 총수를 알린다"
+# 수정 1(Important 2) — 지적만 받기 보고가 판정 못 한 지적을 숨기지 않는다.
+assert_contains "$(cat "$S")" '「지적만 받기」: `> [quality-gates] 반박자가 판정 못 한 지적 <N>건' "미판정 loud log 가 지적만 받기에서는 편집 제외라고 말하지 않는다"
+assert_contains "$(cat "$S")" '「고치며 돌기」: `> [quality-gates] adversarial 미판정 <N>건 — 이번 라운드 편집 제외(fail-closed).`' "고치며 돌기의 미판정 loud log(양성 짝)"
+assert_contains "$(cat "$S")" '그 아래 `unadjudicated_items` 를 하나씩' "4b 가 판정 못 한 지적을 하나씩 보인다"
+assert_contains "$(cat "$S")" '첫 줄을 「남은 지적 없음」 ·' "판정 못 한 지적이 있으면 첫 줄이 깨끗하게 읽히지 않는다"
+assert_contains "$(cat "$S")" '- **판정 못 한 지적**(`unadjudicated > 0` 일 때, 모드 무관)' "종료 요약에 판정 못 한 지적 항목"
+lab_n="$(grep -c '「판정 못 함」' "$S")"
+[ "$lab_n" -ge 2 ] && ok "「판정 못 함」 라벨이 4b 와 요약 양쪽에 있다(count=$lab_n)" || no "「판정 못 함」 라벨 수 $lab_n < 2"
 assert_contains "$(cat "$S")" '**지적만 받기로 진행**' "고치며 돌기가 E2 · E2b 에서 멈추면 지적만 받기로 넘어가는 선택지"
 assert_contains "$(cat "$S")" '**지적만 받기로 바꾸기**' "E3 에서 모드를 바꾸는 선택지"
 assert_contains "$(cat "$S")" '「1명 (권장)」 · 「2명」 · 「3명」' "E3 비평자 수 선택지(기본 1명 권장)"

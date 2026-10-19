@@ -85,7 +85,8 @@ classify_artifact_target.py <path>
 
 모드를 정한다 — 모드는 실행 전체에 하나다. 인자에 `--findings-only` 가 있거나 요청이 고치지 말고 지적만 원하면
 「지적만 받기」(대상마다 한 라운드 비평만 받아 보고하고 편집 · 커밋을 하지 않는다), 아니면 「고치며 돌기」(라운드마다
-고치고 커밋한다). `--findings-only` 는 대상 경로가 아니다.
+고치고 커밋한다). `--findings-only` 는 대상 경로가 아니다. 같은 파일을 두 번 적었거나 symlink 와 그것이 가리키는 파일을
+함께 적었으면 E2c 가 `canonical` 로 하나로 합친다.
 
 ### E2 — 브랜치 안전 (project_dir 좌표 freeze)
 
@@ -116,9 +117,13 @@ artifact_change_signal.sh <path>
 - `tracked: true` AND `changed: true`(HEAD 대비 uncommitted 변경 존재) → 안내 줄을 내고 **멈춘다**: `> [quality-gates] '<path>'에 커밋되지 않은 변경이 있습니다. 먼저 커밋/stash 후 재실행하세요(라운드별 커밋 무결성 — pre-existing 변경이 라운드-1 커밋에 섞이지 않도록).`
 - `tracked: true` AND `changed: false` → 진행.
 
-**멈출 때의 선택** — E2 · E2b 의 안내 줄을 낸 뒤 바로 끝내지 않고 `AskUserQuestion`:
-*"고치며 돌 수 없다 — <안내 줄의 이유>. 편집 · 커밋 없이 지적만 받을까요?"* — 옵션:
-**지적만 받기로 진행**(편집 · 커밋 없이 대상마다 한 라운드 지적만 받는다 — 모드를 「지적만 받기」로 바꾸고 E2c 로 간다) /
+**멈출 때의 선택** — E2 와 모든 대상의 E2b 를 먼저 끝까지 돌려 멈춘 이유를 모은 뒤(안내 줄은 대상마다 낸다), 질문은
+한 번만 한다. 멈춘 대상이 여럿이어도 질문은 하나이고, 질문 글에 멈춘 대상과 이유를 대상마다 나열한다. `AskUserQuestion`:
+*"고치며 돌 수 없다 — <멈춘 대상과 이유 목록>. 어떻게 할까요?"* — 옵션:
+**지적만 받기로 진행**(실행 전체를 「지적만 받기」로 바꾼다 — 모드는 실행에 하나라 모든 대상이 편집 · 커밋 없이 한 라운드
+지적만 받는다. 모드를 바꾸고 E2c 로 간다) /
+**그 대상만 빼고 진행**(E2b 에서 멈춘 대상만 빼고 나머지는 「고치며 돌기」로 E2c 로 간다 — E2 에서 멈췄거나 빼면 남는
+대상이 0 이면 이 선택지를 내지 않는다) /
 **멈추기**(여기서 끝낸다 — 안내 줄대로 고친 뒤 다시 부른다).
 
 ### E2c — 대상 경로 인가 (canonical freeze; 리뷰어 read 前)
@@ -136,6 +141,8 @@ artifact_path_auth.py <project_dir> <path>
 - `auth: ok` → 반환된 `canonical:`을 그 대상의 이후 **모든** 단계(critic·codex·adversarial read, 편집)의
   **frozen 대상 경로**로 삼는다. **세 리뷰어 모두**의 read와 편집은 raw `<path>`가 아니라
   `canonical`을 쓴다(git 커밋/change-signal은 E2b가 검증한 tracked `<path>` 그대로).
+- 인가가 끝나면 `canonical` 이 같은 대상(같은 파일을 두 번 · symlink 와 그 대상)은 먼저 적은 하나만 남기고 알린다:
+  `> [quality-gates] '<path>'는 '<먼저 적은 path>'와 같은 파일이라(<canonical>) 한 번만 비평한다.`
 
 > **알려진 한계 (TOCTOU):** E2c는 경로 *문자열*을 freeze하지 캐노니컬 *inode*를 freeze하지
 > 않는다 — 인가와 read 사이 동시 로컬 프로세스가 파일을 교체하면 reviewer가 교체된 대상을
@@ -157,12 +164,14 @@ artifact_max_rounds.sh
 
 (1) 대상 목록 · 모드 · 상한:
 > *"대상 `<대상 목록>` 을 「<모드>」로 돌릴까요? (고치며 돌기: 대상마다 최대 `<effective_max_rounds>`라운드 · 브랜치 `<branch>` 에
-> 라운드마다 커밋 / 지적만 받기: 대상마다 한 라운드 · 편집 · 커밋 없음)"* — 옵션: **실행** / **대상 변경**(→ E1 재진입) /
+> 라운드마다 커밋 / 지적만 받기: 대상마다 한 라운드 · 편집 · 커밋 없음). codex 를 쓸 수 있으면 대상 파일의 내용이 codex(바깥
+> 프로그램)에 넘어간다 — 지적만 받기는 커밋하지 않은 파일도 그대로 넘긴다."* — 옵션: **실행** / **대상 변경**(→ E1 재진입) /
 > **지적만 받기로 바꾸기**(지금 고치며 돌기일 때 — 편집 · 커밋 없이 한 라운드 지적만) 또는 **고치며 돌기로 바꾸기**(지금 지적만
-> 받기일 때 — 고르면 E2 · E2b 를 다시 돈다) / **취소**.
+> 받기일 때 — 고르면 E2 의 `branch_ok` 검사와 E2b 를 다시 돈다 — `project_dir` 는 E2 에서 얼린 값 그대로) / **취소**.
 
 (2) 비평자 수:
-> *"라운드마다 비평자를 몇 명 부를까요? (기본 1명 — 늘리면 지적을 더 넓게 찾지만 라운드마다 그만큼 더 부른다)"* —
+> *"라운드마다 비평자를 몇 명 부를까요? (기본 1명 — 늘리면 지적을 더 넓게 찾지만 라운드마다 그만큼 더 부른다. 라운드마다
+> 부르는 수는 비평자 수 + 2(반박자 1 · codex 1), codex 를 못 쓰면 + 1 — 1명이면 3)"* —
 > 옵션: 「1명 (권장)」 · 「2명」 · 「3명」, 기타 칸에 다른 수. 기타 칸의 글이 1 이상의 정수가 아니면 다시 묻는다.
 > 고른 수를 `<k>` 로 기록해 루프의 모든 라운드에 쓴다.
 
@@ -264,7 +273,9 @@ synthesize_artifact_findings.py --phase synth --findings merged.yaml --adversari
 
 출력에서 `converged` / `degraded` / `degraded_reason` / `unadjudicated` / `kept_*` /
 `stagnation_keys` / `kept:`를 읽는다.
-- `unadjudicated > 0` → loud log: `> [quality-gates] adversarial 미판정 <N>건 — 이번 라운드 편집 제외(fail-closed).`
+- `unadjudicated > 0` → loud log(모드마다 다르다):
+  - 「고치며 돌기」: `> [quality-gates] adversarial 미판정 <N>건 — 이번 라운드 편집 제외(fail-closed).`
+  - 「지적만 받기」: `> [quality-gates] 반박자가 판정 못 한 지적 <N>건 — 고친 것도 버린 것도 아니다, 보고에 「판정 못 함」으로 따로 싣는다.`
 - `degraded: true` → adversarial가 0-verdict/파싱불가(findings는 있었음), 또는 findings-side
   로드 실패, 또는 손실 있는 phase-key 병합(`degraded_reason: adversarial|findings_load|sources_failed`).
   kept-empty를 수렴으로 읽지 **않는다** → **NEEDS_RESOLUTION**: `AskUserQuestion`으로
@@ -274,6 +285,8 @@ synthesize_artifact_findings.py --phase synth --findings merged.yaml --adversari
 
 **4b. 지적만 받기면 여기서 끝** — 「지적만 받기」 모드면 남은 `kept` 를(SUGGESTION 포함) 보고하고 그 대상을 끝낸다 —
    5~9 와 편집 · 커밋을 하지 않는다(종료 사유 `findings_only`). `degraded: true` 면 위 NEEDS_RESOLUTION 게이트가 먼저다.
+   `unadjudicated > 0` 이면 보고에 `판정 못 한 지적 <N>건` 을 따로 한 줄로 쓰고, 그 아래 `unadjudicated_items` 를 하나씩
+   「판정 못 함」 라벨을 붙여 보인다(`plain:` 이 있으면 먼저, `summary` 는 괄호에).
 
 **5. 수렴 체크** — `converged: true`(kept CRITICAL/IMPORTANT == 0, degraded 아님)면 **수렴,
    루프 종료**. SUGGESTION만 남으면 수렴으로 간주(목록만 surface, 수정 안 함). 수렴 판정은
@@ -334,11 +347,15 @@ artifact_stagnation.py --this "<이번 stagnation_keys>" --prev "<직전 stagnat
 ## 종료 & 최종 요약 (AC11)
 
 보고의 첫 줄은 끝났는지와 결과 한 문장이다(예: 「비평을 3라운드 돌고 수렴했다 — 남은 지적 없음.」 · 「상한 5라운드에 닿았다 — 남은 지적 2개.」 · 「지적만 받기로 한 라운드 돌았다 — 지적 3개, 고치지 않음.」). 잔여 `kept` 항목에 `plain:` 이 있으면 그것을 먼저 쓰고 원래 `summary` 는 뒤 괄호에 둔다. 맨 끝에 사용자가 할 일 하나를 쓴다.
+판정 못 한 지적이 있으면(`unadjudicated > 0`) 첫 줄에 「판정 못 한 지적 <N>건」을 함께 쓰고, 첫 줄을 「남은 지적 없음」 ·
+「이상 없음」처럼 깨끗하게 읽히게 쓰지 않는다.
 
 종료(수렴 / max-rounds / stagnation / 지적만 받기 / NEEDS_RESOLUTION-중단 / kill switch) 시 반드시 출력 — 대상이 여럿이면 대상마다:
 - **라운드 히스토리**: 라운드별 비평자 수 · kept 요약 + 각 커밋 SHA(지적만 받기는 커밋 없음) + 추가 라운드 승인 줄.
 - **종료 사유**: converged / max_rounds(N) / stagnant(reason) / findings_only / needs_resolution / killed.
 - **잔여 kept 집합**(중단 · 지적만 받기 시): 마지막 라운드의 미해소 CRITICAL/IMPORTANT(지적만 받기는 SUGGESTION 도).
+- **판정 못 한 지적**(`unadjudicated > 0` 일 때, 모드 무관): `판정 못 한 지적 <N>건` 한 줄과 마지막 라운드의
+  `unadjudicated_items` 를 하나씩 「판정 못 함」 라벨로.
 
 ## Law 2 보증
 
