@@ -125,4 +125,11 @@ done
 assert_eq "$(grep -c '이름 붙인 예외' "$CM")" "1" "CLAUDE.md: 이름 붙인 예외는 하나"
 others="$(grep -l '이름 붙인 예외' "$ROOT"/plugins/*/skills/*/SKILL.md | grep -v '/skills/epic-conductor/' || true)"
 assert_eq "$others" "" "예외를 주장하는 다른 skill 이 없다"
+# 지휘자 수리 2 — 보이기: 지휘자 질문과 brainstorming 대화의 모양을 나눈다 · 에픽 이름은 질문 문장 앞머리
+SHOW="$(awk '$0=="## 보이기"{f=1;next} f&&/^## /{exit} f' "$SK")"
+for lit in '질문 문장 앞머리에 에픽 이름을 쓴다' 'brainstorming 대화는 brainstorming 이 정한 메시지 모양(첫 메시지 · 열린 문장 질문 하나 · 되비춤)을 따른다' \
+           '위 규칙의 순서(첫 줄 상태 · 끝 할 일)를 붙이지 않고 낱말 규칙만 지키며' '그 메시지에 얹지 않고 따로 된 메시지로 보인다' '「계획 담당자」 · 「구현 담당자」'; do
+  assert_contains "$SHOW" "$lit" "보이기: $lit"
+done
+assert_not_contains "$SHOW" '질문마다 첫 줄에 에픽 이름' "보이기: 에픽 이름을 따로 된 첫 줄로 쓰던 옛 문장이 없다(양성 짝: 질문 문장 앞머리)"
 finish
