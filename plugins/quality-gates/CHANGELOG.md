@@ -3,10 +3,15 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.0.2] — 2026-10-19
+
+### Changed
+- 링크로 싣는 공유 리뷰 엔진 파일의 바이트가 바뀌었다(spec-distill 7.5.0 과 같은 바이트). 엔진 값을 푸는 `scripts/docreview_config.py` 링크가 새로 생겼다. qg 의 skill 은 아직 이 엔진을 부르지 않으므로 qg 의 동작은 달라지지 않는다.
+
 ## [14.0.1] — 2026-10-19
 
 ### Changed
-- 링크로 싣는 공유 리뷰 엔진 파일의 바이트가 바뀌었다(spec-distill 7.4.0 과 같은 바이트). 엔진 값을 푸는 `scripts/docreview_config.py` 링크가 새로 생겼다. qg 의 skill 은 아직 이 엔진을 부르지 않으므로 qg 의 동작은 달라지지 않는다.
+- 쉬운 말 블록(공유 정본 `shared/style/plain-language.md` 의 사본)에 예외 문장 한 줄을 맞췄다 — 부른 skill 이 메시지 모양을 정한 대화(예: brainstorming)에서는 그 skill 을 따르고, 이 블록은 낱말에만 적용한다.
 
 ## [14.0.0] — 2026-10-18
 

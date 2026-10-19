@@ -24,6 +24,8 @@ derive_git > "$LIST"
 FIND_N="$(cd "$ROOT" && find plugins -path '*/skills/*/SKILL.md' -o -path 'plugins/*/commands/*.md' | grep -c .)"
 GIT_N="$(grep -c . "$LIST" || true)"
 assert_eq "$GIT_N" "$FIND_N" "대상 도출: git 과 find 가 같은 수를 낸다"
+# 정본의 예외 문장 — 부른 skill(예: superpowers brainstorming)이 메시지 모양을 정한 대화에서는 그 skill, 이 블록은 낱말에만.
+assert_file_grep "$ROOT/shared/style/plain-language.md" '부른 skill 이 메시지 모양을 정한 대화\(예: brainstorming\)에서는 그 skill 을 따르고, 이 블록은 낱말에만 적용한다\.' "정본: 부른 skill 이 메시지 모양을 정한 대화의 예외 문장"
 python3 "$ROOT/shared/tests/plain_language_block.py" "$ROOT" "$LIST" > "$RES" 2>&1
 rc=$?
 assert_eq "$rc" "0" "판정 모듈이 rc 0 으로 끝났다"

@@ -989,6 +989,85 @@ assert_contains "$(js "$T/rm3f.json" "' | '.join(r['unknown_reasons'])")" "K3 �
 assert_eq "$(js "$T/rm3f.json" "[h['state'] for h in r['handoffs'] if h['receiver']!='K3']")" "['이슈', '처리됨']" "다른 받는 곳의 넘김은 그대로"
 assert_eq "$(js "$T/rm3f.json" "len(r['blocks'])")" "$(js "$T/rm3e.json" "len(r['blocks'])")" "다른 블록은 그대로 나온다"
 
+# ── 지휘자 수리 4 — 계획이 남은 에픽은 첫 계획 머지 뒤 「머지됨」이 아니다 ─────────────────────
+# 기본 브랜치 블록의 `브랜치:` 에는 계획 1 만 있고, 계획 2 의 브랜치는 자기 브랜치의 로드맵 사본에서만 블록에 자신을 더한다.
+g checkout -q main
+mkdir -p "$W/docs/rm6"
+bundle docs/rm6 E6 "C1, S1"
+{ roadmap_head | sed 's|^# 로드맵|# 로드맵 여섯|'
+  block E6 feature/e6a 없음 없음
+  roadmap_tail ""
+} > "$W/docs/rm6/roadmap.md"
+g add -- docs/rm6 && g commit -qm "rm6" && g push -q origin main
+SPEC_E6=docs/superpowers/specs/e6-design.md
+g checkout -q -b feature/e6a main
+mkdir -p "$W/docs/superpowers/specs" "$W/docs/superpowers/plans"
+spec_doc docs/rm6/E6.md "C1 · S1" > "$W/$SPEC_E6"
+printf '**Spec:** `%s`\n' "$SPEC_E6" > "$W/docs/superpowers/plans/e6-p1.md"
+g add -- docs && g commit -qm "e6 계획 1"
+pr_merge 61 feature/e6a; g push -q origin main
+g checkout -q -b feature/e6b main
+sed 's|^- 브랜치: feature/e6a$|- 브랜치: feature/e6a · feature/e6b|' "$W/docs/rm6/roadmap.md" > "$T/rm6-b.md" && cp "$T/rm6-b.md" "$W/docs/rm6/roadmap.md"
+printf '**Spec:** `%s`\n' "$SPEC_E6" > "$W/docs/superpowers/plans/e6-p2.md"
+g add -- docs && g commit -qm "e6 계획 2 — 블록에 자기 브랜치를 더함"
+g checkout -q main
+assert_eq "$(grep -c '^- 브랜치: feature/e6a$' "$W/docs/rm6/roadmap.md")" "1" "픽스처: 기본 브랜치 블록에는 계획 1 브랜치만 있다"
+(cd "$W" && python3 "$RS" --json docs/rm6/roadmap.md > "$T/rm6.json")
+assert_eq "$(stage "$T/rm6.json" E6)" "일부 머지 1/2" "수리 4: 다른 브랜치의 로드맵 사본이 더한 계획 브랜치가 남았으면 머지됨이 아니다"
+assert_contains "$(js "$T/rm6.json" "next(b['reason'] for b in r['blocks'] if b['id']=='E6')")" "feature/e6b — 계획" "수리 4: 남은 계획 브랜치의 단계를 보인다"
+assert_contains "$(notes "$T/rm6.json" E6)" "feature/e6b" "수리 4: 블록 밖에서 센 브랜치를 정보로 밝힌다"
+assert_eq "$(js "$T/rm6.json" "next(b['branches'] for b in r['blocks'] if b['id']=='E6')")" "['feature/e6a', 'feature/e6b']" "수리 4: 보고서 branches 에 더한 브랜치가 실린다(PR 인계 · 통합 리뷰 묶음이 읽는다)"
+assert_eq "$(js "$T/rm6.json" "next(b['task_status'] for b in r['blocks'] if b['id']=='E6')")" "in_progress" "수리 4: 작업 목록은 진행 중"
+# 양성 짝 — 그 브랜치가 없으면(지웠거나 아직 안 만든 이름) 머지됨 그대로
+g branch -q -m feature/e6b feature/e6b-kept
+g checkout -q -b feature/e6c main
+sed 's|^- 브랜치: feature/e6a$|- 브랜치: feature/e6a · feature/e6z|' "$W/docs/rm6/roadmap.md" > "$T/rm6-c.md" && cp "$T/rm6-c.md" "$W/docs/rm6/roadmap.md"
+g add -- docs && g commit -qm "e6 사본 — 없는 브랜치 이름"
+g checkout -q main
+(cd "$W" && python3 "$RS" --json docs/rm6/roadmap.md > "$T/rm6b.json")
+assert_eq "$(stage "$T/rm6b.json" E6)" "머지됨" "수리 4 양성 짝: 사본에만 있는 이름의 브랜치가 없으면 머지됨"
+assert_eq "$(js "$T/rm6b.json" "next(b['branches'] for b in r['blocks'] if b['id']=='E6')")" "['feature/e6a']" "수리 4 양성 짝: 없는 브랜치는 branches 에 더하지 않는다"
+# 양성 짝 — 더한 브랜치가 기본 브랜치에 머지됐으면(그 로드맵 사본도 함께 머지됨) 2/2 머지됨
+g branch -q -m feature/e6b-kept feature/e6b
+g branch -q -D feature/e6c
+pr_merge 62 feature/e6b; g push -q origin main
+(cd "$W" && python3 "$RS" --json docs/rm6/roadmap.md > "$T/rm6c.json")
+assert_eq "$(stage "$T/rm6c.json" E6)" "머지됨" "수리 4 양성 짝: 둘째 계획까지 머지되면 머지됨"
+# 수리 4 갈래 — F21: 결정 기록 머지 줄로 머지된 블록 브랜치 + 사본이 더한 브랜치 · G21: 사본이 더한 이름이 이미 머지됐으면 세지 않는다 ·
+# H21: 형식이 깨진 사본은 건너뛰되 그 수를 정보로 밝힌다
+g checkout -q main
+mkdir -p "$W/docs/rm21"
+for b in F21 G21 H21; do bundle docs/rm21 "$b" "C1, S1"; done
+{ roadmap_head | sed 's|^# 로드맵|# 로드맵 스물하나|'
+  block F21 feature/f21a 없음 없음
+  block G21 feature/g21a 없음 없음
+  block H21 feature/h21a 없음 없음
+  roadmap_tail "$(printf -- '- F21 · 머지 · 2026-10-19 · 「feature/f21a 를 squash 로 머지했다」')"
+} > "$W/docs/rm21/roadmap.md"
+g add -- docs/rm21 && g commit -qm "rm21" && g push -q origin main
+for br in feature/g21a feature/g21m feature/h21a; do
+  g checkout -q -b "$br" main; commit_file "src/${br##*/}.txt" x "$br"; pr_merge 70 "$br"
+done
+g push -q origin main
+g checkout -q -b feature/f21b main
+sed 's|^- 브랜치: feature/f21a$|- 브랜치: feature/f21a · feature/f21b|; s|^- 브랜치: feature/g21a$|- 브랜치: feature/g21a · feature/g21m|' "$W/docs/rm21/roadmap.md" > "$T/rm21-b.md" && cp "$T/rm21-b.md" "$W/docs/rm21/roadmap.md"
+g add -- docs && g commit -qm "f21 계획 2 · g21 사본(이미 머지된 이름)"
+g checkout -q -b feature/h21x main
+sed 's|^type: roadmap$|type: not-roadmap|' "$W/docs/rm21/roadmap.md" > "$T/rm21-x.md" && cp "$T/rm21-x.md" "$W/docs/rm21/roadmap.md"
+g add -- docs && g commit -qm "h21 깨진 사본"
+# 낡은 사본 — 블록의 브랜치를 품지 않고 다른 이름만 적은 사본(재분해 전 · 같은 경로를 다시 쓴 경우)은 이 블록을 잇는 사본이 아니다
+g checkout -q -b feature/g21old main
+sed 's|^- 브랜치: feature/g21a$|- 브랜치: feature/g21old|' "$W/docs/rm21/roadmap.md" > "$T/rm21-o.md" && cp "$T/rm21-o.md" "$W/docs/rm21/roadmap.md"
+g add -- docs && g commit -qm "g21 낡은 사본"
+g checkout -q main
+(cd "$W" && python3 "$RS" --json docs/rm21/roadmap.md > "$T/rm21.json")
+assert_eq "$(stage "$T/rm21.json" F21)" "일부 머지 1/2" "수리 4: 결정 기록 머지 줄로 머지된 블록 브랜치도 머지로 세고 사본이 더한 브랜치는 남은 것으로 센다"
+assert_contains "$(js "$T/rm21.json" "next(b['reason'] for b in r['blocks'] if b['id']=='F21')")" "feature/f21b — " "수리 4: 결정 기록 갈래에서도 남은 브랜치의 단계를 보인다"
+assert_eq "$(stage "$T/rm21.json" G21)" "머지됨" "수리 4: 사본이 더한 이름의 브랜치가 이미 머지됐거나, 블록의 브랜치를 품지 않은 낡은 사본이면 세지 않는다"
+assert_eq "$(js "$T/rm21.json" "next(b['branches'] for b in r['blocks'] if b['id']=='G21')")" "['feature/g21a']" "수리 4: 이미 머지된 이름은 branches 에 더하지 않는다"
+assert_contains "$(notes "$T/rm21.json" H21)" "로드맵 사본 1개" "수리 4: 형식이 깨진 사본은 건너뛴 수를 정보로 밝힌다(조용히 건너뛰지 않는다)"
+assert_eq "$(stage "$T/rm21.json" H21)" "머지됨" "수리 4: 깨진 사본만 있으면 판정은 머지됨 그대로"
+
 nb="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap_status as rs
 b = "feature/h5a"
 for t in ("feature/h5a를 머지", "feature/h5a. 끝", "feature/h5a.", "feature/h5a2", "https://x/feature/h5a", "origin/feature/h5a", "feature/h5a/sub", "-feature/h5a", "_feature/h5a", "Feature/H5A", "(feature/h5a)"): print(int(rs.names_branch(t, b)))' "$S")"

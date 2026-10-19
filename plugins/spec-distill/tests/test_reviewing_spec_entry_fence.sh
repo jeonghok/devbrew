@@ -42,8 +42,8 @@ SCRATCH="$(mktemp -d -t sd-entry-fence-XXXXXX)" || { echo "scratch 생성 실패
 [ -n "$SCRATCH" ] && [ -d "$SCRATCH" ] || { echo "scratch 경로가 비었다" >&2; exit 1; }
 trap 'rm -rf "$SCRATCH"' EXIT
 
-RETURN_MSG='[spec-distill] 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).'
-RETURN_TAIL='리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).'
+RETURN_MSG='[spec-distill] 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리).'
+RETURN_TAIL='리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리).'
 ends_with_return() {   # ends_with_return <라벨> <출력> — `[spec-distill]` 줄이 정확히 하나이고 복귀 지시로 끝난다
   local line n
   line="$(printf '%s\n' "$2" | grep -E '^\[spec-distill\]' || true)"
