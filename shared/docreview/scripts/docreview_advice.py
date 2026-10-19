@@ -231,6 +231,18 @@ def count_key(identity, rnd) -> str:
     return "%s%s r%d:" % (COUNT_PREFIX, identity, rnd)
 
 
+def count_head(identity, rnd) -> str:
+    """계수 줄의 머리(줄 머리 `- ` + 키) — 멱등 판정은 이 머리로 **줄 머리에서만** 맞춘다(`has_count_line`)."""
+    return "- " + count_key(identity, rnd)
+
+
+def has_count_line(text, identity, rnd) -> bool:
+    """`text` 에 (리뷰 정체, 라운드) 계수 줄이 이미 있는가 — 줄 머리 일치만 센다. 결정 줄의 사용자 말 같은 다른 줄이
+    키 글자를 줄 가운데 품어도 진짜 계수 줄을 가리지 못한다."""
+    head = count_head(identity, rnd)
+    return any(ln.startswith(head) for ln in text.splitlines())
+
+
 def count_line(identity, rnd, rep) -> str:
-    return "- %s advice_new=%d · advice_repeat=%d · mc_preexisting_new=%d" % (
-        count_key(identity, rnd), rep["advice_new"], rep["advice_repeat"], rep["mc_preexisting_new"])
+    return "%s advice_new=%d · advice_repeat=%d · mc_preexisting_new=%d" % (
+        count_head(identity, rnd), rep["advice_new"], rep["advice_repeat"], rep["mc_preexisting_new"])

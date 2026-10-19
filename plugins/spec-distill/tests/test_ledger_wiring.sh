@@ -242,15 +242,44 @@ PY
 done
 # 결정 줄 펜스 — 원장이 없으면 쓰지 않고 알린다 · 표지 주인이면 엔진이 줄을 쓰고 출처를 남긴다 · 남의 표지면 rc 3 으로 멈춘다.
 ddoc="$repo/docs/b-design.md"; printf '# B\n\n## 결정 기록\n\n- B1 · 결정 · 2026-10-19 · 처음 — 「네」\n' > "$ddoc"
-dl_run() {   # dl_run <sid> → 결정 줄 펜스 출력(자리에 사용자 말을 넣어 돈다)
-  ( cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID="$1" DEVBREW_SPEC_DISTILL_SESSION_ID="$1" \
-      bash -c "spec_path='$ddoc'; decision_line='B2 · 결정 · 2026-10-19 · 기각 되돌림 N7'
-$(fence "$SR" decision-line | sed 's/^<사용자가 적은 글 그대로>$/되돌려 줘/')" 2>&1 )
+dl_fill() {   # dl_fill <줄> <사용자 말> → 결정 줄 펜스 본문(두 heredoc 자리를 그 글로 채운다)
+  fence "$SR" decision-line | python3 -I -c 'import sys
+t = sys.stdin.read()
+t = t.replace("\n<결정 줄>\n", "\n" + sys.argv[1] + "\n").replace("\n<사용자가 적은 글 그대로>\n", "\n" + sys.argv[2] + "\n")
+sys.stdout.write(t)' "$1" "$2"
+}
+DL_LINE='B2 · 결정 · 2026-10-19 · 기각 되돌림 N7'
+dl_run() {   # dl_run <sid> [<spec_path> [<플러그인 루트> [<cwd>]]] → 결정 줄 펜스 출력(자리에 줄과 사용자 말을 넣어 돈다)
+  ( cd "${4:-$repo}" && CLAUDE_PLUGIN_ROOT="${3:-$SD}" CLAUDE_CODE_SESSION_ID="$1" DEVBREW_SPEC_DISTILL_SESSION_ID="$1" \
+      decision_line="$DL_LINE" bash -c "spec_path='${2:-$ddoc}'
+$(dl_fill "$DL_LINE" '되돌려 줘')" 2>&1 )
 }
 DL_FULL='- B2 · 결정 · 2026-10-19 · 기각 되돌림 N7 — 「되돌려 줘」'
 dlo="$(dl_run sess-eeee5555)"; rc=$?
 assert_eq "$rc $(grep -c 'B2 · 결정' "$ddoc")" "0 0" "결정 줄 펜스: 원장이 없으면 엔진으로 쓰지 않는다"
-assert_contains "$dlo" "리뷰 원장이 없다" "결정 줄 펜스: 원장이 없으면 손으로 쓰라고 알린다"
+assert_contains "$dlo" "리뷰 원장이 없다" "결정 줄 펜스: 원장이 없으면 그렇게 알린다"
+assert_contains "$dlo" "손으로 쓴다" "결정 줄 펜스: 원장 파일만 없을 때(자리는 찾음) 손으로 쓰라고 알린다(양성 짝)"
+# 원장 자리를 찾지 못한 것은 「원장 없음」이 아니다 — 손으로 쓰라고 하면 열린 리뷰의 결정 줄이 다시 「허가 없이 바뀜」으로
+# 돌아온다. 사유와 값을 보이고 비0 으로 멈춘다(원장 열기의 NO_DIR 과 같은 처리).
+dl_no_dir() {   # dl_no_dir <라벨> <출력> <rc> <보일 값>
+  { [ "$3" -ne 0 ] && ! printf '%s' "$2" | grep -qF "손으로 쓴다"; } \
+    && ok "결정 줄 펜스: $1 — 비0(rc $3)으로 멈추고 손으로 쓰라고 하지 않는다" || no "결정 줄 펜스: $1 — rc $3 · 출력: $2"
+  assert_contains "$2" "$4" "결정 줄 펜스: $1 — 사유에 값을 보인다"
+  assert_contains "$2" "결정 줄을 쓰지 않았다" "결정 줄 펜스: $1 — 쓰지 않았다고 알린다"
+}
+dlo="$(dl_run sess-eeee5555 docs/b-design.md)"; rc=$?
+dl_no_dir "spec_path 가 상대 경로" "$dlo" "$rc" "spec_path='docs/b-design.md'"
+stubsd="$T/stub-sd"; mkdir -p "$stubsd/scripts"
+for s in docreview_state.py ledger_marker.py; do ln -s "$SD/scripts/$s" "$stubsd/scripts/$s"; done
+printf 'import runpy, sys\nREAL = %s\nif sys.argv[1:2] == ["state-root"]:\n    sys.exit(1)\nsys.path.insert(0, REAL.rsplit("/", 1)[0]); sys.argv[0] = REAL\nrunpy.run_path(REAL, run_name="__main__")\n' \
+  "$(python3 -I -c 'import sys; print(repr(sys.argv[1]))' "$SD/scripts/state_path.py")" > "$stubsd/scripts/state_path.py"
+dlo="$(dl_run sess-eeee5555 "$ddoc" "$stubsd")"; rc=$?
+dl_no_dir "상태 루트를 얻지 못함" "$dlo" "$rc" "spec_path='$ddoc'"
+repo3="$T/repo3"; mkdir -p "$repo3/docs" "$repo3/.claude/spec-distill" "$T/elsewhere" && git -C "$repo3" init -q
+ln -s "$T/elsewhere" "$repo3/.claude/spec-distill/.docreview"; cp "$ddoc" "$repo3/docs/b-design.md"
+dlo="$(dl_run sess-eeee5555 "$repo3/docs/b-design.md" "$SD" "$repo3")"; rc=$?
+dl_no_dir "원장 자리가 링크를 지나 레포 밖" "$dlo" "$rc" "ROOT='$repo3/.claude/spec-distill'"
+assert_eq "$(grep -c 'B2 · 결정' "$ddoc" "$repo3/docs/b-design.md" | tr '\n' ' ')" "$ddoc:0 $repo3/docs/b-design.md:0 " "결정 줄 펜스: 원장 자리 실패 셋 — 어느 문서에도 쓰지 않았다"
 ( cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-eeee5555 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-eeee5555 \
     bash -c "spec_path='$ddoc'
 $(fence "$SR" ledger-open)" >/dev/null 2>&1 )
@@ -261,6 +290,16 @@ python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$DSD" --snapsh
 dlo="$(dl_run sess-eeee5555)"; rc=$?
 assert_eq "$rc $(grep -cxF -- "$DL_FULL" "$ddoc")" "0 1" "결정 줄 펜스: 표지 주인이면 엔진이 결정 줄 한 줄을 쓴다"
 assert_eq "$(PYTHONPATH="$SD/scripts" python3 -c 'import sys, docreview_state as ds; print(len(ds.load_state(sys.argv[1])["engine_lines"]))' "$DSD")" "1" "결정 줄 펜스: 그 줄의 출처가 원장에 남는다"
+# 줄과 사용자 말은 둘 다 따옴표 heredoc 으로 들어간다 — 작은따옴표 · 명령 치환 · 백틱 · 「-」 머리 · 옛 구분자와 같은 줄이
+# 셸로 새거나 옵션으로 읽히거나 heredoc 을 일찍 닫지 못한다.
+DL_TRICK_L="B3 · 결정 · 2026-10-19 · 재결정 'a' \$(touch $T/pwned-l) \`touch $T/pwned-b\`"
+DL_TRICK_Q="$(printf '%s\n%s\n%s' "-- it's ok \$(touch $T/pwned-q)" 'DECISION_QUOTE' "'; touch $T/pwned-s; '")"
+dlo="$(cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-eeee5555 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-eeee5555 \
+    bash -c "spec_path='$ddoc'
+$(dl_fill "$DL_TRICK_L" "$DL_TRICK_Q")" 2>&1)"; rc=$?
+DL_TRICK_FULL="- ${DL_TRICK_L} — 「-- it's ok \$(touch $T/pwned-q) DECISION_QUOTE '; touch $T/pwned-s; '」"
+assert_eq "$rc $(grep -cxF -- "$DL_TRICK_FULL" "$ddoc")" "0 1" "결정 줄 펜스: 따옴표 · 치환 · 「-」 머리 · 옛 구분자 줄이 든 줄과 말도 글자 그대로 한 줄로 쓴다"
+assert_eq "$(ls "$T" | grep -c '^pwned-')" "0" "결정 줄 펜스: 줄 · 말 안의 명령이 돌지 않았다"
 cp "$ddoc" "$T/ddoc.before"
 dlo="$(dl_run sess-ffff6666)"; rc=$?
 assert_eq "$rc" "3" "결정 줄 펜스: 남의 표지면 쓰기 전 확인이 rc 3 으로 멈춘다"

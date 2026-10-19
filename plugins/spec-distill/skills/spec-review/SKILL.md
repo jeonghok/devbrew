@@ -659,26 +659,37 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/redecompose.md
 
 **기타 칸 — 기각 번호 되돌리기.** 후속 질문의 기타 칸에 사용자가 게이트 앞 글의 기각 번호(N18)를 적으면 그 번호를 「반영」으로 되돌린다 — 먼저 원장 열기를 다시 돈다(어느 편집보다 앞). 그다음 `## 번호 대조` 표의 그 행을 「반영」 과 설계문서의 자리로 고치고(자리가 없으면 그 내용을 설계에 더한다), `## 결정 기록` 에 `- B<n> · 결정 · <YYYY-MM-DD> · 기각 되돌림 <번호> — 「<사용자가 적은 글 그대로>」` 한 줄을 남긴다(`B<n>` 은 그 문서 `## 결정 기록` 의 다음 B 번호). 이 줄은 손으로 쓰지 않고 아래 결정 줄 펜스로 쓴다 — 손으로 쓴 줄은 다음 라운드에 「허가 없이 바뀜」 질문으로 돌아온다. 그 뒤 「지적대로 고치기」 와 같은 길로 다음 라운드를 돈다. 로드맵 에픽이 아니어도 같다. 적은 번호가 기각 목록에 없으면 그 사실을 보이고 다시 묻는다. 기각 사유가 다른 에픽을 가리키는 번호는 되돌리면 그 에픽의 경계에 닿으니 재분해 신호로 보고, 바로 되돌리지 말고 「인터뷰 다시 열기」(재분해) 갈래를 권한다.
 
-**결정 줄 펜스.** 사람이 내린 결정 한 줄(기각 되돌림 · 재결정 · 재분해)을 설계문서 `## 결정 기록` 끝에 엔진이 쓴다 — 엔진이 쓴 줄이라 다음 라운드의 얼림 검사를 지난다. 원장 열기 다음에 돈다. 펜스 앞에 `spec_path='<설계문서 절대 경로>'` 와 `decision_line='<줄 — 앞의 「- 」 와 끝의 「 — 「…」」 를 뺀 것>'` 두 줄을 붙이고, `DECISION_QUOTE` 사이 자리에 사용자가 적은 글을 그대로 넣는다. 엔진이 `- <줄> — 「<사용자 말>」` 한 줄을 쓴다. 줄은 이미 한 줄이어야 한다 — rc 2 면 사유를 보고 줄을 고쳐 다시 돈다. 이 문서에 리뷰 원장이 없으면 펜스가 그렇게 알리고 쓰지 않는다 — 그때는 줄을 손으로 쓴다(다음 리뷰가 기준선으로 받는다).
+**결정 줄 펜스.** 사람이 내린 결정 한 줄(기각 되돌림 · 재결정 · 재분해)을 설계문서 `## 결정 기록` 끝에 엔진이 쓴다 — 엔진이 쓴 줄이라 다음 라운드의 얼림 검사를 지난다. 원장 열기 다음에 돈다. 펜스 앞에 `spec_path='<설계문서 절대 경로>'` 한 줄을 붙이고, 두 heredoc 자리에 글을 그대로 넣는다 — `<결정 줄>` 자리에는 줄(앞의 「- 」 와 끝의 「 — 「…」」 를 뺀 것), `<사용자가 적은 글 그대로>` 자리에는 사용자가 적은 글. 줄도 말도 따옴표 안에 넣지 않는다(heredoc 이 글자 그대로 넘긴다). 넣는 글에 구분 줄(`DEVBREW_DECISION_LINE_EOF` · `DEVBREW_DECISION_QUOTE_EOF`)과 똑같은 줄이 있으면 그 자리의 여는 줄과 닫는 줄의 구분자를 글에 없는 다른 낱말로 함께 바꾼다. 엔진이 `- <줄> — 「<사용자 말>」` 한 줄을 쓴다. 결과는 셋이다.
+
+- rc 2 — 넣은 글이 거부됐다. 줄은 이미 한 줄이어야 하고 엔진 줄 · 목록 · 제목 표지로 시작하지 못한다 — 사유가 줄이면(`line_*`) 줄을 고쳐 다시 돈다. 사유가 사용자 말이면(`quote_*`) 멈추고 사유를 사용자에게 보인다.
+- rc 1 · rc 3 — 쓰지 않았다. 원장 자리를 찾지 못했거나(`spec_path` 가 절대 경로가 아니다 · 상태 루트를 얻지 못했다 · 원장 자리가 레포 밖이거나 링크를 지난다), 엔진이 거부했거나(`profile_decision_log_not_doc_section` · `log_file_not_ledger_doc` · `state_missing` · 손상된 원장 등), 표지 확인이 멈췄다(rc 3). 사유와 값을 보이고 멈춘다 — 결정 줄을 손으로 쓰지 않는다(손으로 쓴 줄은 열린 리뷰의 다음 라운드에 「허가 없이 바뀜」 질문으로 돌아온다).
+- rc 0 — 엔진이 썼거나, 원장 자리는 찾았는데 이 문서의 리뷰 원장이 없다고 알렸다. 원장이 없을 때만 줄을 손으로 쓴다(다음 리뷰가 기준선으로 받는다).
 
 <!-- decision-line:begin -->
 ```bash
-SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 결정 줄을 쓰지 않았다." >&2; exit 1; }
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 [ -n "${spec_path:-}" ] || { echo "[spec-distill] 결정 줄을 쓰지 않았다 — spec_path 가 비었다(이 펜스와 같은 Bash 호출에서 대입한다)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
-if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
-  echo "[spec-distill] 이 문서의 리뷰 원장이 없다 — 결정 줄을 엔진으로 쓰지 않았다. 결정 기록 끝에 손으로 쓴다(다음 리뷰가 기준선으로 받는다)."; exit 0
+if [ -z "${STATE_DIR:-}" ]; then
+  echo "[spec-distill] 결정 줄을 쓰지 않았다 — 원장 자리를 찾지 못했다(spec_path='${spec_path}' · ROOT='${ROOT:-}' — 원장 자리가 비었거나 레포 밖이거나 링크를 지난다, 위 사유). 손으로 쓰지 말고 이 사유를 보고하라 — spec_path 는 절대 경로여야 하고 cwd 는 그 문서의 git 작업 트리 안이어야 한다." >&2; exit 1
 fi
-QF="$(mktemp "${TMPDIR:-/tmp}/decision-quote.XXXXXX")" || { echo "[spec-distill] 사용자 말 임시 파일을 만들지 못했다 — 결정 줄을 쓰지 않았다." >&2; exit 1; }
-trap 'rm -f -- "$QF"' EXIT
-cat > "$QF" <<'DECISION_QUOTE'
+if [ ! -f "$STATE_DIR/docreview-state.md" ]; then
+  echo "[spec-distill] 이 문서의 리뷰 원장이 없다(STATE_DIR='${STATE_DIR}') — 결정 줄을 엔진으로 쓰지 않았다. 결정 기록 끝에 손으로 쓴다(다음 리뷰가 기준선으로 받는다)."; exit 0
+fi
+LF="$(mktemp "${TMPDIR:-/tmp}/decision-line.XXXXXX")" || { echo "[spec-distill] 결정 줄 임시 파일을 만들지 못했다 — 결정 줄을 쓰지 않았다." >&2; exit 1; }
+QF="$(mktemp "${TMPDIR:-/tmp}/decision-quote.XXXXXX")" || { rm -f -- "$LF"; echo "[spec-distill] 사용자 말 임시 파일을 만들지 못했다 — 결정 줄을 쓰지 않았다." >&2; exit 1; }
+trap 'rm -f -- "$LF" "$QF"' EXIT
+cat > "$LF" <<'DEVBREW_DECISION_LINE_EOF'
+<결정 줄>
+DEVBREW_DECISION_LINE_EOF
+cat > "$QF" <<'DEVBREW_DECISION_QUOTE_EOF'
 <사용자가 적은 글 그대로>
-DECISION_QUOTE
+DEVBREW_DECISION_QUOTE_EOF
 g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
-python3 "$SD/scripts/docreview_state.py" log-decision --state-dir "$STATE_DIR" --log-file "$spec_path" --line "${decision_line:-}" --quote "$(cat "$QF")"
+python3 "$SD/scripts/docreview_state.py" log-decision --state-dir "$STATE_DIR" --log-file="$spec_path" --line="$(cat "$LF")" --quote="$(cat "$QF")"
 ```
 <!-- decision-line:end -->
 

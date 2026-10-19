@@ -440,6 +440,18 @@ case_AC17_count_line_carrier() {
     "AC17: 엔진 상태 디렉토리를 지워도 줄이 목적지 파일의 ## 결정 기록 절에 남는다"
   rm -f "$doc"
 }
+case_AC17_count_key_line_start() {
+  # 계수 줄의 멱등 키는 줄 머리(`- docreview 계수 — <정체> r<n>:`)로만 맞춘다 — 결정 줄의 사용자 말(decide --quote ·
+  # 손으로 쓴 줄)이 같은 글자를 줄 가운데 품어도 진짜 계수 줄을 가리지 못한다.
+  local d doc id; d="$(adv_state 2)"; doc="$(mktemp -t keydoc-XXXXXX)"; id="$(adv_ident "$d")"
+  { cat "$FX/design-sample.md"; printf '\n## 결정 기록\n\n- B3 · 결정 · 2026-10-19 · 재결정 — 「docreview 계수 — %s r1: 이라고 적어 둔다」\n' "$id"; } > "$doc"
+  py docreview_state.py advice --state-dir "$d" --log-file "$doc" >/dev/null
+  assert_eq "$(grep -cxF -- "- docreview 계수 — $id r1: advice_new=2 · advice_repeat=0 · mc_preexisting_new=0" "$doc")" "1" \
+    "AC17: 줄 가운데 같은 글자가 있어도 계수 줄을 쓴다(멱등 키는 줄 머리로만 맞춘다)"
+  py docreview_state.py advice --state-dir "$d" --log-file "$doc" >/dev/null
+  assert_eq "$(grep -c "^- docreview 계수 — $id r1: " "$doc")" "1" "AC17: 줄 머리 키로도 두 번째 호출은 다시 적지 않는다(멱등)"
+  rm -rf "$d" "$doc"
+}
 case_advice_render_once() {
   local d; d="$(adv_state 3)"
   py docreview_state.py advice --state-dir "$d" --render >/dev/null

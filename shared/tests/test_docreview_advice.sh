@@ -41,6 +41,7 @@ case_AC6_render_cap
 case_AC16_advice_list_read_only
 case_AC7_sink_idempotent
 case_AC17_count_line_carrier
+case_AC17_count_key_line_start
 case_advice_render_once
 case_advice_pre_upgrade_ledger
 case_advice_odd_text_one_line

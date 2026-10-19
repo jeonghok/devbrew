@@ -1507,15 +1507,21 @@ _DECISION_LINE_FORGED = re.compile(r"(?:D\d+\.\d+ · |\*\*S\d+\*\*|[-*+#>|]|\d+[
 
 def decision_line_problem(line, quote):
     """`log-decision` 입력의 거부 사유(rc 2) 또는 None. 줄은 모델이 쓰는 구조라 엔진이 고칠 글자가 하나라도 있으면
-    고치지 않고 거부한다(AC15 의 한 줄 문법을 쓰는 쪽에서 지킨다). 사용자 말은 그대로 싣되 한 줄로 접는다."""
+    고치지 않고 거부한다(AC15 의 한 줄 문법을 쓰는 쪽에서 지킨다). 사용자 말은 그대로 싣되 한 줄로 접는다. 계수 줄 머리는
+    줄에도 말에도 들이지 않는다 — 그 정본(형제 모듈)이 없으면 `count_prefix_check_unavailable`(호출자가 rc 1)."""
+    if _adv is None:   # 계수 줄 머리의 정본이 없으면 그 검사를 건너뛰지 않는다(fail-closed)
+        return "count_prefix_check_unavailable"
+    count_head = _adv.COUNT_PREFIX.strip()
     if _blank_text(line):
         return "line_blank"
     if _cfg.one_line_field(line) != line:
         return "line_not_one_line"
-    if _DECISION_LINE_FORGED.match(line) or (_adv is not None and _adv.COUNT_PREFIX.strip() in line):
+    if _DECISION_LINE_FORGED.match(line) or count_head in line:
         return "line_marker_forged"
     if _blank_text(quote):
         return "quote_blank"
+    if count_head in _cfg.one_line_field(quote):
+        return "quote_marker_forged"
     return None
 
 
@@ -1523,6 +1529,8 @@ def cmd_log_decision(a) -> int:
     """사람이 내린 결정 한 줄을 프로필 `decision_log` 절 끝에 엔진이 쓰고 그 출처를 원장에 남긴다 — 울타리(결정 기록
     절은 엔진이 쓴 줄만 지나간다)는 그대로 두고, 사람의 결정을 엔진을 거쳐 쓰게 한다. 줄은 `- <줄> — 「<사용자 말>」`."""
     why = decision_line_problem(a.line, a.quote)
+    if why == "count_prefix_check_unavailable":
+        return fail(why, detail="docreview_advice.py 형제 사본이 이 스크립트 옆에 없다")
     if why:
         fail(why)
         return 2
@@ -2371,7 +2379,7 @@ def cmd_advice(a) -> int:
             for k in sorted(st["rounds"], key=int):
                 rep = st["rounds"][k].get("route_report") or {}
                 have = path.read_text(encoding="utf-8") if path.is_file() else ""
-                if "advice_new" in rep and adv.count_key(ident, int(k)) not in have:
+                if "advice_new" in rep and not adv.has_count_line(have, ident, int(k)):
                     engine_append(st, path, heading, adv.count_line(ident, int(k), rep), own=True)
                     logged.append(int(k))
         except (OSError, UnicodeError) as e:

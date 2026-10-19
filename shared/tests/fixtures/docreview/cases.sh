@@ -4219,14 +4219,44 @@ case_AC38_human_decision_refusals() {
   rm -rf "$d"
 }
 case_AC38_human_decision_no_ledger_baseline() {
-  # 원장이 없을 때(리뷰를 열기 전) 손으로 쓴 결정 줄은 첫 리뷰의 기준선이다 — 다음 라운드에 frozen_change 로 오르지 않는다.
+  # 원장이 없을 때(리뷰를 열기 전 — init 앞) 손으로 쓴 결정 줄은 첫 리뷰의 기준선이다 — 다음 라운드에 frozen_change 로
+  # 오르지 않는다. 결정 줄 펜스가 「원장 없음 → 손으로 쓴다」 로 보내는 길이 바로 이것이다.
   local d
-  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "원장 없음 기준선: init 실패"; return; }
-  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1" "$HB_FULL"; br "$d" "$d/doc.md"
-  br "$d" "$d/doc.md"
-  assert_eq "$(rk_changed "$d" 2)" "([], [])" "원장 없음 기준선: 리뷰를 열기 전에 손으로 쓴 결정 줄은 기준선이다"
+  d="$(mktemp -d -t docreview-XXXXXX)" || { no "원장 없음 기준선: 임시 폴더 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1" "$HB_FULL"
+  assert_eq "$([ -f "$d/docreview-state.md" ] && echo yes || echo no)" "no" "원장 없음 기준선: 결정 줄을 쓸 때 원장이 없다"
+  py docreview_state.py init --state-dir "$d" --doc "$d/doc.md" --profile "$PROF_SD/design-doc.md" >/dev/null \
+    || { no "원장 없음 기준선: init 실패"; rm -rf "$d"; return; }
+  br "$d" "$d/doc.md"; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [])" "원장 없음 기준선: 원장이 생기기 전에 손으로 쓴 결정 줄은 기준선이다"
   assert_eq "$(fin_frozen "$d")" "[]" "원장 없음 기준선: 그 줄이 「허가 없이 바뀜」 질문이 되지 않는다"
   log_dec "$d" 'B4 · 결정 · 2026-10-19 · 기각 되돌림 N19' '그것도' >/dev/null; br "$d" "$d/doc.md"
   assert_eq "$(rk_changed "$d" 3)" "([], [('#결정-기록', 'append-only')])" "원장 없음 기준선: 리뷰가 열린 뒤의 결정 줄은 명령으로 쓰면 지나간다"
   rm -rf "$d"
+}
+case_AC38_human_decision_before_first_round_baseline() {
+  # 원장은 있으나 첫 라운드 스냅숏 전(init 뒤 · 첫 begin-round 앞)에 손으로 쓴 줄도 기준선이다 — 기준은 첫 스냅숏이다.
+  local d
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "첫 라운드 전 기준선: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1" "$HB_FULL"; br "$d" "$d/doc.md"
+  br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [])" "첫 라운드 전 기준선: 첫 스냅숏 앞에 손으로 쓴 결정 줄은 기준선이다"
+  assert_eq "$(fin_frozen "$d")" "[]" "첫 라운드 전 기준선: 그 줄이 「허가 없이 바뀜」 질문이 되지 않는다"
+  rm -rf "$d"
+}
+case_AC38_human_decision_count_prefix() {
+  # 계수 줄 머리(docreview 계수 — )는 줄에도 사용자 말에도 들이지 않는다 — 결정 줄이 계수 줄로 읽히거나 계수 줄의 멱등
+  # 키를 가리지 못하게. 그 머리를 아는 형제 모듈(docreview_advice)이 없으면 검사를 건너뛰지 않고 이름 있는 사유로 멈춘다.
+  local d t before bdoc err rc
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "결정 줄 계수 머리: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  before="$(cksum < "$d/docreview-state.md")"; bdoc="$(cksum < "$d/doc.md")"
+  err="$(log_dec "$d" "$HB_LINE" '그대로 docreview 계수 — x r1: advice_new=0' 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "quote_marker_forged"')" "2 1" "결정 줄 계수 머리: 사용자 말에 계수 줄 머리가 있으면 거부한다"
+  assert_eq "$(cksum < "$d/docreview-state.md") $(cksum < "$d/doc.md")" "$before $bdoc" "결정 줄 계수 머리: 거부는 원장도 문서도 바꾸지 않는다"
+  t="$(mktemp -d -t declone-XXXXXX)"; cp -L "$SCRIPTS/docreview_state.py" "$SCRIPTS/docreview_config.py" "$t/"
+  err="$(python3 "$t/docreview_state.py" log-decision --state-dir "$d" --log-file "$d/doc.md" --line "$HB_LINE" --quote "$HB_QUOTE" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "count_prefix_check_unavailable"')" "1 1" "결정 줄 계수 머리: 형제 모듈이 없으면 검사를 건너뛰지 않고 멈춘다"
+  assert_eq "$(cksum < "$d/docreview-state.md") $(cksum < "$d/doc.md")" "$before $bdoc" "결정 줄 계수 머리: 형제 부재로 멈춰도 원장도 문서도 그대로다"
+  rm -rf "$d" "$t"
 }
