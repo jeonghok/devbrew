@@ -169,7 +169,7 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 
 - **brief §4 의 «».** `check_brief.py` 의 `landscape_unkeyed()` · `landscape_keys_declared()` 가 §4 안의 모든 «» 를 출처 키로 읽어, 강조로 쓴 «» 가 「키를 선언하라」 실패를 낸다 — 사람이 audit §7 에 단어를 키로 더하는 잘못된 수정으로 간다. 키 자리만 읽게 좁히거나, 실패 메시지가 「강조라면 「」로」를 먼저 말하게 한다(어느 쪽인지는 계획이 정한다). 템플릿 §4 에도 한 줄.
 - **brief 묶음 rc 3 오탐.** `build_brief_bundle.py` · `build_brief_inline_blob.py` 의 audit 이름 잔존 검사(rc 3)가 다른 인터뷰의 `*.audit.md` 경로 인용에도 발화한다. 자기 audit 파일만 잡게 고친다.
-- **request-framing seed 기록 펜스의 zsh 실패.** 펜스가 bash 배열을 써서 zsh 에서 `pairs: assignment to invalid subscript range` 로 멈춘다(R2a 계획 2 담당자 재현). 배열 없이 고치고, 그 펜스를 zsh 와 macOS bash 3.2 로 돌리는 락을 더한다.
+- **request-framing seed 기록 펜스의 zsh 실패.** 펜스가 bash 배열을 써서 zsh 에서 `pairs: assignment to invalid subscript range` 로 멈춘다(R2a 계획 2 담당자 재현). 그 펜스는 기본 브랜치에 없고 R2a 계획 2(`feature/shared-review-engine-core`)에만 있으며, 그 브랜치의 커밋이 이미 배열을 없애고 zsh · bash 3.2 락을 더했다(설계문서 점검이 확인). R10 은 그 브랜치가 머지된 뒤 펜스가 zsh 와 bash 3.2 에서 도는지 확인만 하고, 다시 생겼으면 고친다.
 
 ### §9 진입 이름 pm-interview
 
@@ -189,9 +189,13 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 ### §11 계획 나누기
 
 기본 제안(계획 담당자가 바꿀 수 있고 이유를 적는다):
-1. **조사 열기 · 신선한 근거** — §1 · §2 · §3 · §4 · §5 의 조사 행(라운드 질문 · landscape 닫기 · 포화 최소 · request-framing 웹 · 다음 단계) · §8 의 zsh 펜스.
+1. **조사 열기 · 신선한 근거** — §1 · §2 · §3 · §4 · §5 의 조사 행(라운드 질문 · landscape 닫기 · 포화 최소 · request-framing 웹 · 다음 단계) · §8 의 zsh 펜스 확인.
 2. **끝 게이트 · 분해 · 결함** — §5 의 나머지 행(next_phase · trivia · steelman) · §6 · §7 · §8 의 «» · rc 3.
-3. **진입 이름** — §9. R2a 머지 뒤.
+3. **진입 이름** — §9.
+
+**시작 시점(지휘자 판정).** `check_brief.py` · `request-framing` · `reviewing-brief` 는 R2a 계획 2(`feature/shared-review-engine-core`)가 크게 고치고, §4 판독을 새 모듈 `scripts/brief_body.py` 로 옮겼다. 그래서 계획 1 · 2 의 구현은 그 브랜치가 머지된 기본 브랜치 위에서 시작한다 — §4 «» · RC 색인 · landscape 닫기는 그때의 판독 자리(`brief_body.py` 가 들어왔으면 그곳)에 넣는다. 계획 쓰기는 먼저 해도 되고, 계획 담당자는 머지 뒤 기본 브랜치를 다시 읽어 계획을 맞춘다. 계획 3 은 `spec-interview` 참조를 가진 열린 브랜치가 모두 머지된 뒤 시작한다 — 지금 기준 R2a 세 브랜치(core · plugins · qg)와 R11 이고, 시작 전에 열린 브랜치를 다시 센다.
+
+**브랜치 · 로드맵 블록(지휘자 판정).** 계획마다 브랜치 · PR 하나다 — 계획 1 `feature/interview-open-research`, 계획 2 `feature/interview-end-gates`, 계획 3 `feature/pm-interview-rename`. 로드맵 R10 블록의 브랜치 줄과 경로 예약(이 문서 `## Files to Modify` 의 새 · 바뀌는 파일)은 지휘자가 설계 승인 뒤 따로 로드맵 PR 로 고친다(#228 과 같은 꼴). 계획 안에 로드맵 고침 과제를 두지 않는다.
 
 ## 있는 것 검토
 
@@ -237,7 +241,7 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 - AC27: 같은 주제 · 같은 날짜의 끝난 인터뷰 자리에 새 인터뷰가 시작되지 않는다(rc 또는 구별되는 줄).
 - AC28: brief §4 의 강조 «» 가 「키를 선언하라」 쪽으로 이끌지 않는다.
 - AC29: brief 묶음 rc 3 이 다른 인터뷰의 audit 경로 인용에는 발화하지 않고 자기 audit 파일에는 발화한다.
-- AC30: request-framing seed 기록 펜스가 zsh 와 bash 3.2 에서 돌고 락이 그것을 잰다.
+- AC30: R2a 계획 2 머지 뒤 request-framing seed 기록 펜스가 zsh 와 bash 3.2 에서 돌고, 그것을 재는 락이 있다(R2a 가 더한 락이면 확인만).
 - AC31: 진입 이름이 `pm-interview` 이고 `spec-interview` 호출 이름이 남지 않으며(이력 기록 제외), spec-distill 이 major bump 되고 CHANGELOG · README 가 맞다.
 - AC32: 바꾼 동작마다 락이 있고, 통과가 정답인 락은 변이로 RED 를 확인했다.
 
@@ -249,7 +253,7 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 - `plugins/spec-distill/references/fresh-evidence.md`(새) · `references/research-claims.md` · `references/trivia-escape.md`.
 - `plugins/spec-distill/skills/request-framing/SKILL.md` · `skills/reviewing-brief/SKILL.md`(이름 참조).
 - `plugins/spec-distill/templates/interview-brief-template.md`.
-- `plugins/spec-distill/scripts/check_brief.py` · `roadmap_model.py` · `roadmap_render.py` · `state_path.py` · `build_brief_bundle.py` · `build_brief_inline_blob.py` · 상한 값을 읽는 곳.
+- `plugins/spec-distill/scripts/check_brief.py` · `brief_body.py`(R2a 계획 2 머지 뒤 §4 판독 자리) · `roadmap_model.py` · `roadmap_render.py` · `state_path.py` · `build_brief_bundle.py` · `build_brief_inline_blob.py` · 상한 값을 읽는 곳.
 - `plugins/spec-distill/README.md` · `CHANGELOG.md` · `.claude-plugin/plugin.json` · 루트 `.claude-plugin/marketplace.json`(설명이 바뀌면).
 - `plugins/spec-distill/tests/` 의 해당 락 · 이름 참조가 있는 다른 플러그인 · 문서(§9).
 
@@ -278,7 +282,7 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 - 결정 · 2026-10-17 · 조사 열기 — 「1, 일단 조사의 경우 흐름을 너무 강제하기보다 …」(흐름 고정 점검).
 - 결정 · 2026-10-17 · 끝 게이트 — 「새 인터뷰 에픽에 함께 (권장)」 · 「new 권장 말고 compact 로 가자」.
 - 결정 · 2026-10-17 · 진입 이름 — 「spec interview였나? 이름을 바꿔야 겠는데」 → 「pm-interview (권장)」.
-- 지휘자 판정(사용자 확인 전 — 설계문서 승인 때 함께 본다): `open-researcher` 이름 · 기본값 60 · 이어 부르기 1 · 질문 묶기에 새 상한 없음 · 원칙 5 를 brief 줄에 싣지 않음 · K 번호를 글에 박기 · §4 RC 색인.
+- 지휘자 판정(설계문서 승인 때 사용자가 함께 본다 — 승인되면 확정값): `open-researcher` 이름(출시 뒤엔 호출 이름이라 바꾸면 major bump) · 기본값 60 · 이어 부르기 1 · 질문 묶기에 새 상한 없음 · 원칙 5 를 brief 줄에 싣지 않음 · K 번호를 글에 박기 · §4 RC 색인 · 계획 1 · 2 는 R2a 계획 2 머지 뒤 · 계획 3 은 `spec-interview` 참조를 가진 열린 브랜치 모두 머지 뒤 · 계획마다 브랜치 하나 · 로드맵 블록은 지휘자의 로드맵 PR · zsh 펜스는 확인만(설계문서 점검의 질문 넷을 이렇게 정함).
 
 ## 사용자 원문 대조
 
@@ -365,7 +369,7 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 
 ## Metadata
 
-- 에픽: R10 · 브랜치 `feature/interview-open-research` · 묶음 `R10.md`
+- 에픽: R10 · 브랜치 `feature/interview-open-research` · `feature/interview-end-gates` · `feature/pm-interview-rename`(§11) · 묶음 `R10.md`
 - 크기: 계획 셋(§11)
 - 의존: R1 · R2 · R3 · R4 · R7(머지됨) · R5(머지됨 — 분해된 일의 다음 줄 · 로드맵 모델)
 - 버전: spec-distill — 계획 1 · 2 는 minor, 계획 3 은 major. 번호는 머지 직전에 정한다.
