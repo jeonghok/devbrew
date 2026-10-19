@@ -8,8 +8,9 @@
 
   축 1 — SKILL 이 부르는 리뷰 diff 스크립트를 **그대로 실행**한다. 스크립트는 SKILL.md 의
          문구가 아니라 **구조**(```bash 펜스 안에서 `review-diff.sh` 를 부르는 줄 — Step 1c)
-         에서 뽑고, 그 줄의 모드 자리에 session 이 있는지 본다. 그 스크립트를 session 모드로
-         돌린 경로 집합을, **다른 git 표면**(`git log --name-only` + `git status
+         에서 뽑고, 그 줄의 모드 자리에 session 이 있는지 본다. 실제 인자는 자리표시가 아니라
+         Step 1 창 안 1c 표의 session 행에서 읽는다(그 행이 기본 scope 를 정한다). 그
+         인자로 스크립트를 돌린 경로 집합을, **다른 git 표면**(`git log --name-only` + `git status
          --porcelain`)으로 독립 계산한 오라클과 **집합 상등**으로 비교한다 — 기대값이
          런타임 도출이라 상수로 만족시킬 수 없다. 리뷰어가 받는 걸러진 diff 에도 셸로 쓴
          파일이 전부 있어야 한다. 픽스처의 모든 변경은 오직 셸로만 만든다(heredoc ·
@@ -47,6 +48,9 @@ CHECK = PLUGIN_ROOT / "scripts" / "check-review-scope.sh"
 # 실행하지 않는다 — 이름이 가리키는 배포 스크립트를 인자 배열로 부른다.
 _RD_SCRIPT = re.compile(r'"\$QG/scripts/(review-diff\.sh)"')
 _RD_MODES = re.compile(r"--mode <([^>]*)>")
+# 기본 scope 의 실제 인자는 펜스의 자리표시가 아니라 Step 1 창 안 1c 표의 session 행이다.
+_STEP1 = re.compile(r"^### Step 1 — scope$(.*?)^### Step 1b", re.M | re.S)
+_SESSION_ROW = re.compile(r"^[ \t]*\| session \| `([^`]*)` \|[ \t]*$", re.M)
 
 
 def _read(path: Path) -> str:
@@ -69,6 +73,12 @@ def _bash_fence_lines(md: str) -> list:
 
 def _skill_review_diff_calls() -> list:
     return [ln for ln in _bash_fence_lines(_read(SKILL)) if _RD_SCRIPT.search(ln)]
+
+
+def _skill_session_rows() -> list:
+    """Step 1 창 안 1c 표의 session 행이 적은 인자(백틱 안)."""
+    m = _STEP1.search(_read(SKILL))
+    return _SESSION_ROW.findall(m.group(1)) if m else []
 
 
 def _legacy_markers() -> tuple:
@@ -179,11 +189,22 @@ class SkillReviewDiffCoversShellWrites(unittest.TestCase):
                       "스크립트를 지나지 않는다: %r" % (line,))
         script = PLUGIN_ROOT / "scripts" / _RD_SCRIPT.search(line).group(1)
         self.assertTrue(script.is_file(), "SKILL 이 부르는 스크립트가 없다: %s" % script)
+        # 모드는 고정하지 않는다 — SKILL 의 session 행이 적은 인자를 그대로 쓴다. 그 행이
+        # 다른 모드를 적으면 아래 집합 비교가 셸로 쓴 변경의 소실로 드러난다.
+        rows = _skill_session_rows()
+        self.assertEqual(
+            len(rows), 1,
+            "Step 1 창의 1c 표에서 session 행을 정확히 하나 찾지 못했다 — 기본 scope 의 "
+            "인자를 읽을 수 없다: %r" % (rows,))
+        args = rows[0].split()
+        self.assertTrue(args and args[0] == "--mode" and len(args) >= 2,
+                        "session 행이 --mode <값> 으로 시작하지 않는다: %r" % (rows[0],))
+        self.assertFalse(any("<" in a or ">" in a for a in args),
+                         "session 행의 인자에 자리표시가 남아 있다: %r" % (rows[0],))
         env = dict(self.fx.env)
         env["HOME"] = str(self.home)
         proc = subprocess.run(
-            ["bash", str(script), "--dir", str(self.out), "--iter", "1",
-             "--mode", "session"],
+            ["bash", str(script), "--dir", str(self.out), "--iter", "1"] + args,
             cwd=str(self.fx.root), env=env, capture_output=True, text=True)
         self.assertEqual(proc.returncode, 0,
                          "review-diff.sh session 이 실패했다: %s" % proc.stderr)

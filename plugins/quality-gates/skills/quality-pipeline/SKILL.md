@@ -233,7 +233,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
    | topic | `--mode topic --scope-file "$RD/topic-scope.txt"` |
 
    - `review-diff rc` 가 0 이 아니면(2 잘못된 호출 · 4 git 실패) stderr 를 그대로 보이고 멈춘다.
-   - stdout 의 `degraded:` 를 먼저 읽는다. `degraded: yes` 면 기준선을 풀지 못해 바뀐 파일 집합을 정할 수 없다 — `files:` · `excluded:` · `kept_model:` · `doc_paths_source:` · `self_state:` 의 `-` 를 0 으로 읽지 않고, Step 1b 의 「정할 수 없으면」 규칙대로 Step 4.5 의 degraded 갈래로 싣는다. 이때는 아래 문서 경로 공시 · 상태 파일 공시와 빈 diff 갈래를 건너뛴다.
+   - stdout 의 `degraded:` 를 먼저 읽는다. `degraded: yes` 면 기준선을 풀지 못해 바뀐 파일 집합을 정할 수 없다 — `files:` · `excluded:` · `kept_model:` · `doc_paths_source:` · `self_state:` 의 `-` 를 0 으로 읽지 않고, Step 1b 의 「정할 수 없으면」 규칙대로 Step 4.5 의 degraded 갈래로 싣는다. 이때는 아래 문서 경로 공시 · 상태 파일 공시와 빈 diff 갈래를 건너뛴다. 리뷰어는 빈 diff 를 받고 그대로 돌지만, 차등 테스트의 D2 가 같은 기준선을 풀지 못해 exit 4 로 멈추므로 판정 입력이 error-axis 가 된다 — 이 실행은 clean 이 아니다.
    - `degraded: no` 면 `$resolved_scope_file_count` = `files:` 값(문서 경로를 빼기 전 바뀐 파일 수)이다.
    - 매 iteration 공시 한 줄 — `<doc_paths>` 는 `.doc-paths` 의 `doc_paths:` 값, `<excluded>` 는 stdout 의 `excluded:` 값, 출처는 `doc_paths_source:` 가 `default` 면 「기본」, `env` 면 「환경 변수」, `default-settings-changed` 면 「기본 — 이 변경이 설정을 바꿨다」: `> [quality-gates] 문서 경로 <doc_paths>(출처: <기본 | 환경 변수 | 기본 — 이 변경이 설정을 바꿨다>) — 리뷰에서 뺀 경로 <excluded>개.`
    - `kept_model:` 이 0 보다 크면(`.doc-paths` 의 `kept` 줄들): `> [quality-gates] 문서 경로 패턴에 걸렸지만 모델이 읽거나 코드라 리뷰에 남겼다: <kept 경로들>`
@@ -468,13 +468,13 @@ Once per iteration, after detection. 탐지 결과가 0건이어도 디스패치
    TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
    RD="${TOP}/.claude/quality-gates/<session-id>"
    RV="<1 에서 만든 절대 경로>"
-   cp "$RD/review-i<N>.diff" "$RV/recritic.diff"
+   cp "$RD/review-i<N>.diff" "$RV/recritic.diff" || { echo "[quality-gates] Step 1c 의 리뷰 diff 를 재비판 폴더로 복사하지 못했다 — 재비판을 부르지 않는다" >&2; exit 1; }
    python3 "$QG/scripts/synthesize_findings.py" prepare --findings "$RV/findings.yaml" \
      --out-findings "$RV/recritic-findings.yaml" --out-map "$RV/recritic-map.json"
    cat "${CLAUDE_PLUGIN_ROOT}/references/recritic-code-profile.md" "${CLAUDE_PLUGIN_ROOT}/references/review-criteria.md"
    ```
 
-   If `prepare` exits non-zero, do not dispatch — Step 4 counts the missing response as the
+   If this fence exits non-zero (the diff copy or `prepare` failed), do not dispatch — Step 4 counts the missing response as the
    adjudication angle's primary input failure. `$RV/recritic.diff` 는 Step 1c 의 `$RD/review-i<N>.diff` 를
    `cp` 한 사본이다 — security-reviewer 에게 준 것과 같은 **raw unified diff**(hunk 만). `git show` · `git format-patch` · `git log -p` 의 출력은 쓰지 않는다 —
    그 출력은 커밋 메시지를 싣는다. 의도 출처는 `<intent>` 슬롯 하나로만 간다.
@@ -933,13 +933,14 @@ python3 "$QG/scripts/verdict.py" --reason trivia --line --blocking 0 --optional 
 echo "verdict rc=$?"; cat "$RD/verdict.out"
 ```
 
-걸러진 diff 가 빈 실행(Step 1c 에서 `files:` 가 0 보다 크고 `filtered_files: 0`)도 `$RV` 와 e2e 걷기가 없다 — `<N>` 에 그 iteration 번호를 넣고 판정을 바로 만든다:
+걸러진 diff 가 빈 실행(Step 1c 에서 `files:` 가 0 보다 크고 `filtered_files: 0`)도 `$RV` 와 e2e 걷기가 없다 — `<N>` 에 그 iteration 번호를 넣고 판정을 바로 만든다. 제외 패치 수는 위 펜스처럼 `excluded.md` 에서 센다(N>1 이면 앞 iteration 의 항목이 있다). `--new-failures 0` 은 차등 테스트를 돌지 않았기 때문이다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
-python3 "$QG/scripts/verdict.py" --reason scope-empty --line --blocking 0 --optional 0 --new-failures 0 --excluded 0 --iter <N> --sha "$(git rev-parse --short HEAD)" --e2e '안 함' > "$RD/verdict.out"
+X=0; [ -f "$RD/excluded.md" ] && X=$(grep -c '^- ' "$RD/excluded.md")
+python3 "$QG/scripts/verdict.py" --reason scope-empty --line --blocking 0 --optional 0 --new-failures 0 --excluded "$X" --iter <N> --sha "$(git rev-parse --short HEAD)" --e2e '안 함' > "$RD/verdict.out"
 echo "verdict rc=$?"; cat "$RD/verdict.out"
 ```
 
