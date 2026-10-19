@@ -81,6 +81,7 @@
 - **Law 3 (Compounding) — model diversity** — 서로 다른 모델이 같은 문서를 따로 읽게 하려고 codex 가 문서 리뷰에 나란히 도는 공동 리뷰어로 참여한다. codex가 Claude persona가 반복해 놓치는 결함류(fail-open)를 잡으면 → 그 자리의 persona 파일(`shared/docreview/agents/doc-critic.md`) 편집이 compounding 이벤트.
 - **Law 1 (Clarity) — 핸드오프 게이트** — 인터뷰는 매 라운드 사용자가 실제로 답한 것을 `user_statements` 에 판정 없이 기록하고, brief 구조 검사는 두 파일을 모두 읽어 하나라도 못 읽으면 통과시키지 않는다(**2파일 fail-closed**). payload frontmatter `audit_file`(basename만, traversal 거부)로 audit을 해석하고, 못 열면 payload-only로 degrade하지 않고 red를 낸다. `user_sourced_items` 스키마 + 세 bijection(A: payload §5 ↔ audit §3 / B: body §2 ↔ frontmatter — statement 내용까지 / C: `evidence: S<N>` → payload §6 ∪ audit §6)이 라벨과 내용이 어긋나는 drift를 기계로 잡는다.
 - **P17 (User sovereignty) — 확정 권한 반환** — 무엇이 확정인지는 사용자가 인터뷰 끝에 한 번에 정한다. 라운드마다 결정을 잠그지 않고 `status: confirmed`를 **종료 시 사용자 일괄 확인**으로만 발생시킨다. 확인은 새 의례가 아니라 기존 proceed 게이트에 흡수돼 상호작용이 1회로 유지된다(trivia ceremony 회피). 재제시에는 상한 2회가 있고 닿은 뒤 다시 고치려 하면 강등하지 않고 계속 고칠지 · 지금 목록으로 확정할지 · brief 만 종료할지를 사용자에게 묻는다(Unbounded-autonomy 가드).
+- **Law 3 · P17 — 인터뷰 조사 열기 (R10)** — 인터뷰의 조사는 모델이 판단해 서로 기대지 않는 것을 여럿 동시에 띄우고, 필요한 조사를 만들어 보낸다(`open-researcher`). 비상 끝은 띄운 agent 60개다. 신선한 근거 원칙 여덟(`references/fresh-evidence.md`)은 게이트가 아니라 기본 행동이고, 멈춤의 주인은 여전히 포화 판정자와 사용자다.
 - **덜어 낸 것은 보인다 (R2)** — seed 압축 · 확정 후보 · 리뷰 참고 · 라운드 요약이 덜어 낸 것을 사용자가 보는 자리에 한 줄로 공시하고 되살릴 길을 준다(압축 규약 `references/compression.md`).
 - **Law 2 (brief 자리)** — brief 를 쓴 쪽이 자기 brief 를 승인하지 못하도록 읽기만 하는 리뷰어가 따로 검토한다. `reviewing-brief` 가 `shared/docreview/` 엔진의 두 번째 껍데기다. 탐지 `doc-critic-web` → 재비판 `doc-recritic` 이 층 1(방향성) · 층 2(충실도)를 한 라운드에서 보고, 둘 다 `tools:` 에 쓰기 · 실행 · 위임이 없다. 3중 분리: (a) **리뷰어 도구 분리** — `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 이면 선택 펜스가 웹 도구 없는 `doc-critic` 을 지명한다(dispatch 는 지명된 블록을 따르고 그 선택을 강제하는 훅은 없다 — 물리적인 것은 그 사본의 `tools:` 에 웹 도구가 없다는 것뿐이다), (b) **입력 격리** — 탐지 · 재비판은 번들의 내용을 받고 냉독 `brief-readback` 은 `tools: []` 로 payload 전문만 받으며, 네 페르소나 모두 원문 블록을 데이터로 읽는다(주입 경계), (c) **수정 후 재리뷰** — 저자 수정은 다음 라운드의 fresh 탐지를 거친다(재리뷰 상한 2, 라운드 4 이상은 사용자 문구로 승인) — writer 가 자기 수정을 승인하는 경로가 없다.
 - **Law 3 (brief 자리)** — 리뷰가 놓친 결함은 다음 리뷰가 잡도록 검사 기준 자체를 고쳐 쌓는다. brief 프로필(`references/docreview-profiles/brief.md`)의 충실도 범주 여섯(`layer_rubric.layer2`)과 냉독 gap 클래스 G1–G7 가
@@ -229,7 +230,7 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
 - `DEVBREW_SKIP_HOOKS=spec-distill:statusline` — 컨트롤 플레인(`scripts/control_plane.py`)을 끈다: 상태줄은 빈 줄, `/spec-distill:roadmap-status` 의 지도는 `꺼져 있다 — <스위치>` 한 줄, `show --tasks` 는 표준 출력을 비우고 rc 3. 훅이 아니지만 지목할 이름을 갖는다. `DEVBREW_SPEC_DISTILL_DISABLE=1` 도 같은 효과다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` — codex 병렬 co-review만 skip. Claude 리뷰(탐지 · 재비판)는 정상 동작하고, codex 부재는 엔진이 `fin.json` 의 `advisory[]` 와 게이트 첫 줄로 loud 하게 공시한다. 전역 `DEVBREW_SPEC_DISTILL_DISABLE`과 독립. **적용 범위는 문서 리뷰 엔진 자리 셋 전부**: (a) design-doc 리뷰(`spec-review`), (b) brief 리뷰(`reviewing-brief`), (c) seed 리뷰(`request-framing`) — 세 자리 모두 codex 호출은 SKILL 의 리터럴 게이트 펜스(`codex-gate` 표지) 하나이고 매 라운드 4단계에서 돈다. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`(`skip_reason: kill_switch`)로 옮기고 펜스가 그 값으로 러너 호출을 가르며, 러너(`run_docreview_codex_reviewer.sh`)는 이 변수를 보지 않는다. 펜스 밖에서 러너를 부르면 opt-out이 무시된 채 지출이 나간다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` — 문서 리뷰 엔진의 **재비판 단계만** skip (`doc-recritic` dispatch 없음). 탐지·codex 는 정상 동작한다. 기각 경로가 0 이 된 사실은 `fin.json` 의 `advisory[]` 로 공시된다 — 오탐이 걸러지지 않은 라운드라는 뜻이므로 조용히 넘어가지 않는다.
-- `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT=<n>` — interview 조사 agent 호출 상한의 시작값(기본 60, 양의 정수가 아니면 60 과 한 줄 공시). 띄운 agent 수만 센다 — agent 안의 검색 · 출처 수는 세지 않는다. 닿으면 연장 · 판정 · 종료를 묻는다. 끄는 스위치가 아니다. 이 상한이 사슬 전체의 바깥 조사 중 subagent 몫을 묶고(Phase 0 은 웹을 보지 않는다), 본체 직접 웹 검색은 라운드 규약(라운드마다 질문 호출 하나 · 질문마다 답 하나)이 묶는다.
+- `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT=<n>` — interview 조사 agent 호출 상한의 시작값(기본 60, 양의 정수가 아니면 60 과 한 줄 공시). 띄운 agent 수만 센다 — agent 안의 검색 · 출처 수는 세지 않는다. 닿으면 연장 · 판정 · 종료를 묻는다. 끄는 스위치가 아니다. 이 상한이 사슬 전체의 바깥 조사 중 띄운 agent 몫을 묶고(Phase 0 은 레포를 읽고 웹은 이름 확인에만 쓰며 조사 agent 를 띄우지 않는다), 본체 직접 웹 검색은 라운드 규약(라운드마다 질문 호출 하나 · 질문마다 답 하나)이 묶는다.
 - `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT=<n>` — 포화 판정자 호출 상한의 시작값(기본 5). floor 가 닫힌 뒤 판정 고리가 사용자 턴 없이 도는 것을 묶는다.
 - `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` — `spec-review` 진입 검사가 설계문서 리뷰를 끈다 — **수동 호출 포함** skill 전체다. 파일 분류(content-aware 판별)는 없다 — 이 skill 은 받은 경로를 `design-doc.md` 프로필로 리뷰한다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` — 같은 효과의 이름 붙은 스위치. 수신처는 `scripts/review_entry.py` 의 진입 검사다(`spec-distill:review-entry`) — 훅이 아니지만 지목할 이름을 갖는다(`spec-distill-gc` 와 같은 관례).
@@ -237,7 +238,7 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
 - `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` — 같은 원장 정리를 끈다. 이 셋은 모두 옛 시간 기준 정리를 멈추던 이름이라, 훅이 없어진 뒤에도 정리를 꺼 둔 사용자에게 삭제가 다시 켜지지 않게 그대로 읽는다.
 - `DEVBREW_SPEC_DISTILL_TTL_HOURS=<int>` — 리뷰 진입의 원장 정리가 두 자리에 쓰는 시간(기본 24, 0 이하이거나 정수가 아니면 24): ① 기록된 문서가 사라진 원장의 삭제 유예 — 원장 폴더에 이 시간 동안 쓰기가 없어야 지운다(다른 브랜치로 옮겨 문서가 잠시 없는 동안 원장이 남는 창이다), ② 옛 버전 세션 폴더의 정리 판정 — 이 시간을 넘은 폴더만 지운다. `state.local.md` 가 있는 옛 폴더는 이 값과 무관하게 지우지 않는다. 짧게 잡으면 다른 브랜치에 오래 있다 돌아온 문서의 원장이 사라져 리뷰가 라운드 1 부터 다시 센다(사용자 결정은 문서의 결정 절에 남는다).
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` — 이 kill switch 가
-  **두 자리**의 웹 접근을 끈다: interview 웹 리서치(landscape · 웹 agent dispatch), 그리고
+  **두 자리**의 웹 접근을 끈다: interview 웹 리서치(landscape · 웹 agent dispatch · 만들어 보낸 조사 `open-researcher`), 그리고
   brief 리뷰 자리의 웹 둘 — codex 웹 검색(공유 러너 `run_docreview_codex_reviewer.sh` 가 이 스위치와
   `DEVBREW_QUALITY_GATES_DISABLE_WEB` 을 함께 본다)과 Claude 쪽 탐지(선택 펜스가 웹 사본
   `doc-critic-web` 대신 웹 도구 없는 `doc-critic` 을 **지명**한다 — dispatch 는 지명된 블록을 따르고,
@@ -245,7 +246,8 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
   advisory 로 공시한다. 어느 쪽이든 loud log(brief 자리는 degrade record 도)와 함께 생략, crash
   없음 (graceful degradation). **design-doc 리뷰는 이 스위치의 대상이 아니다** — `doc-critic`·
   `doc-recritic` 은 `tools:` 에 웹 도구가 아예 없고 `design-doc.md` 프로필이 `web: false` 를
-  고정해서 켜고 끌 것이 없다.
+  고정해서 켜고 끌 것이 없다. 이 스위치는 `request-framing` 의 이름 조회(웹을 이름 확인에만 쓰는
+  자리)도 끈다 — 조회 직전마다 정확히 `1` 인지 보고, 켜져 있으면 조회를 건너뛴다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE=1` — `request-framing` 진입 직후의 워크트리
   질문을 **묻지 않고** 현재 디렉토리에서 진행한다. `EnterWorktree` 도구 부재와 같은 경로다.
   audit §5 에 «워크트리 없음 —» 강등 기록이 남고, 어느 경우도 seed 작성을 막지 않는다.
