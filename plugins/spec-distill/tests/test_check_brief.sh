@@ -2728,7 +2728,8 @@ done
 
 # === R10 계획 1 (설계 2026-10-19-interview-open-research) — 「외부 선례 무관」 닫힘(AC14) · §4 확인 꼬리(AC9) ===
 # 쌍은 v2-valid 에서 만든다. irr_build <stem> <§4 에 넣을 줄|-> <S2 표지 ☑|🗣|->
-#   §4 의 두 항목을 지우고, 둘째 인자가 있으면 그 줄을 §4 에 넣는다. 셋째 인자가 있으면 payload §6 · audit §6 끝에
+#   §4 의 두 항목을 지우고, 둘째 인자가 있으면 그 줄을 §4 에 넣는다. audit §6 에는 늘 payload 와 같은 S1(🗣 첫 요청)을
+#   싣는다 — irr_s1 이 「없는 S」가 아니라 「있지만 🗣」를 잰다. 셋째 인자가 있으면 payload §6 · audit §6 끝에
 #   `- **S2** <표지> 선택 (외부 선례):` / `  > "외부 선례 무관"` 을 더한다.
 irr_build() {
   cp "$FXV" "$TMPD/$1.md"; cp "${FXV%.md}.audit.md" "$TMPD/$1.audit.md"
@@ -2744,15 +2745,16 @@ items = ("- Next.js app-router SSR «nextjs-docs» — [취함] — 데이터 �
 if items not in s:
     sys.exit("§4 항목 둘을 찾지 못했다")
 s = s.replace(items, "" if line == "-" else line + "\n", 1)
+head = "## 7. 확산 원자료"
+if head not in t:
+    sys.exit("audit §7 머리를 찾지 못했다")
+t = t.replace(head, '- **S1** 🗣 최초 요청:\n  > "대시보드가 너무 느려요."\n\n' + head, 1)
 if mark != "-":
     anchor = f'- **S2** {mark} 선택 (외부 선례):\n  > "외부 선례 무관"\n'
     tail = '  > "대시보드가 너무 느려요."\n## 7. Next Action'
     if tail not in s:
         sys.exit("payload §6 끝을 찾지 못했다")
     s = s.replace(tail, tail.replace("\n## 7.", "\n" + anchor + "## 7.", 1), 1)
-    head = "## 7. 확산 원자료"
-    if head not in t:
-        sys.exit("audit §7 머리를 찾지 못했다")
     t = t.replace(head, anchor + "\n" + head, 1)
 p.write_text(s, encoding="utf-8"); a.write_text(t, encoding="utf-8")
 PY
