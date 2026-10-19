@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md
+# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md plugins/quality-gates/README.md
 # test_range_wiring.sh — 범위 모드(range <시작>[..<끝>])가 파이프라인 전체에 이어져 있다(AC21 · AC22).
 #
 # 문면 락은 각 사실이 적힌 절 창 안에서 잰다(제목이 대신 만족시키지 못하게). 끝에서 끝 사슬은
@@ -9,13 +9,15 @@ set -u
 [ "${1:-}" = "--emit-scanned" ] && { printf '%s\n' \
   plugins/quality-gates/skills/quality-pipeline/SKILL.md \
   plugins/quality-gates/skills/quality-pipeline/references/differential-test.md \
-  plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md; exit 0; }
+  plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md \
+  plugins/quality-gates/README.md; exit 0; }
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 . "$(cd "$SCRIPT_DIR/../../.." && pwd)/shared/tests/assert.sh"
 SK="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 DT="$PLUGIN_ROOT/skills/quality-pipeline/references/differential-test.md"
 SF="$PLUGIN_ROOT/skills/quality-pipeline/references/state-file-format.md"
+RM="$PLUGIN_ROOT/README.md"
 export PYTHONDONTWRITEBYTECODE=1
 
 ROOT=$(mktemp -d)
@@ -100,6 +102,28 @@ case_text_locks() {
   assert_contains "$P2B" '리뷰 범위: <start 앞 12자>..<end 앞 12자>' "P2b: 풀리면 범위 한 줄을 낸다"
   assert_contains "$(awk '/^\*\*P2 — /{f=1} /^\*\*P2b — /{f=0} f && /^rm -f /' "$SK")" '"$RD/range-scope.txt"' "P2 가 앞 실행의 range-scope.txt 를 지운다"
 
+  # 리뷰어가 읽는 트리(final-review I1) — 범위 모드의 리뷰어 · codex · 재비판은 끝 커밋을 읽는다.
+  assert_contains "$(awk '/^\*\*P2 — /{f=1} /^\*\*P2b — /{f=0} f && /^rm -f /' "$SK")" '"$RD/review-tree.txt"' "P2 가 앞 실행의 review-tree.txt 를 지운다"
+  assert_contains "$P2B" '리뷰어가 읽는 트리: <지금 체크아웃 | 끝 커밋의 임시 트리>' "P2b: 범위 줄이 리뷰어가 읽는 트리를 밝힌다"
+  assert_contains "$(printf '%s\n' "$P2B" | fence_with 'review_tree:')" 'RT="$("$QG/scripts/qg-worktree.sh" create-head "$(sed -n '"'s/^end: //p'"' "$RS")" "<session-id>" --range "$RS")"' \
+    "P2b 리뷰 트리 펜스: 끝 커밋으로 create-head --range 를 부른다"
+  assert_contains "$P2B" '- `review_tree: <경로>` 면 그 경로가 이 실행의 `project_dir` 이다' "P2b: 임시 트리 경로가 project_dir 가 된다(규칙 줄)"
+  assert_contains "$P2B" '지금 체크아웃으로 대신하지 않는다' "P2b: 트리를 못 만들면 체크아웃으로 대신하지 않는다(규칙 줄)"
+  assert_contains "$(awk '/^\*\*P0 — /{f=1} /^\*\*P0b — /{f=0} f' "$SK")" '범위 모드만 예외가 하나다 — P2b 의 리뷰 트리 펜스가 `review_tree: <경로>` 를 내면 그 경로가 이 실행의 `project_dir` 이다' \
+    "P0: 범위 모드의 project_dir 예외"
+  local S3W; S3W="$(awk '/^### Step 3 — reviewers$/{f=1;next} f&&/^### Step 3\.5/{exit} f' "$SK")"
+  assert_contains "$S3W" '- `PROJECT_DIR` = P0 의 `project_dir` — 범위 모드에서 P2b 의 리뷰 트리 펜스가 `review_tree: <경로>` 를 냈으면 그 경로다.' \
+    "Step 3: 모든 dispatch 의 PROJECT_DIR 는 범위 모드의 리뷰 트리 경로"
+  assert_contains "$(awk '/^\*\*다른 전제 각도 — codex/{f=1} f&&/^\*\*Capture the runner/{exit} f' "$SK")" '`<project_dir>` 는 Step 3 의 `PROJECT_DIR` 다(범위 모드의 리뷰 트리면 그 경로 — 러너가 그리로 `cd` 한다)' \
+    "Step 3: codex 러너의 project_dir 도 리뷰 트리"
+  assert_contains "$(awk '/^### Step 3\.5 /{f=1;next} f&&/^### Step 4 /{exit} f' "$SK")" '`<project_dir>` = Step 3 의 `PROJECT_DIR`' "Step 3.5: 재비판의 project_dir 도 리뷰 트리"
+  assert_contains "$(awk '/^## Final verdict$/{f=1;next} f&&/^## Publish$/{exit} f' "$SK" | fence_with 'review-tree.txt')" \
+    'if "$QG/scripts/qg-worktree.sh" remove "$(cat "$RD/review-tree.txt")"; then' "Final verdict: 리뷰 트리를 지우는 펜스"
+  assert_not_contains "$(cat "$RM")" '리뷰 diff · 의도 출처 · codex · 차등 테스트 · 판정 줄이 모두 같은 두 커밋을 쓴다 — diff 의 기준과 차등 테스트 기준선은 시작 커밋, HEAD 축과 판정 줄의 커밋은 끝 커밋이다. 지금 작업 트리는 보지 않는다.' \
+    "README: 리뷰어가 작업 트리를 보지 않는다던 틀린 문장이 없다"
+  assert_contains "$(cat "$RM")" '리뷰어 · codex 가 diff 밖 코드를 열어 볼 때도 끝 커밋을 본다 — 지금 체크아웃이 끝 커밋이면 그 체크아웃을, 아니면 끝 커밋의 임시 트리를 하나 만들어 읽고(실행 끝에 지운다), 그 트리를 만들지 못하면 판정 없이 멈춘다.' \
+    "README: 리뷰어가 읽는 트리(옛 문장 부재의 양성 짝)"
+
   local P3W; P3W="$(awk '/^\*\*P3 — /{f=1} /^## Flow/{f=0} f' "$SK")"
   assert_contains "$P3W" '설계문서 N개' "P3: 여러 설계문서의 의도 줄"
   # 위 단언은 형식 줄(`<spec 첫 제목 | 설계문서 N개 …>`)로도 채워진다 — 규칙 문단 자신의 글을 잰다
@@ -112,6 +136,9 @@ case_text_locks() {
   assert_grep "$S1" '^ *\| range \| `--mode range --scope-file "\$RD/range-scope\.txt"` \|$' "Step 1c 표: range 행이 범위 파일을 넘긴다"
   assert_contains "$S1" '범위 모드는 1a 를 돌리지 않는다' "Step 1: 범위 모드는 override — 1a 를 돌리지 않는다"
   assert_contains "$(awk '/^### Step 1b /{f=1;next} f&&/^### Step 3 /{exit} f' "$SK")" '범위 모드는 `check-review-scope.sh` 를 돌리지 않는다' "Step 1b: 범위 모드는 건너뛴다"
+  # final-review M1 — 반복 상한은 5 고정이 아니다(CAP) — 캐시를 다시 쓰는 반복을 숫자로 묶지 않는다
+  assert_contains "$(awk '/^### Step 1b /{f=1;next} f&&/^### Step 3 /{exit} f' "$SK")" '`$degraded` for the turn — later iterations (up to CAP) reuse them.' "Step 1b: 뒤 반복(CAP 까지)이 캐시를 다시 쓴다"
+  assert_not_contains "$(awk '/^### Step 1b /{f=1;next} f&&/^### Step 3 /{exit} f' "$SK")" 'iterations 2–5' "Step 1b: 반복 2–5 로 묶던 옛 문구가 없다"
   assert_contains "$(awk '/^\*\*다른 전제 각도 — codex/{f=1} f&&/^\*\*Capture the runner/{exit} f' "$SK")" '<산출물 경로> --range "$(sed -n '"'s/^start: //p'"' "$RD/range-scope.txt")" "$(sed -n '"'s/^end: //p'"' "$RD/range-scope.txt")"' "Step 3: codex 러너에 범위 파일의 두 커밋을 sed 로 넘긴다"
   assert_contains "$(awk '/^### Step 4\.5 /{f=1;next} f&&/^---$/{exit} f' "$SK")" '`$RD/range-scope.txt` 를 그대로' "Step 4.5: 범위 모드면 범위 파일을 판정 꼬리 뒤에 보인다"
 
@@ -165,6 +192,63 @@ case_text_locks() {
   assert_contains "$d2" '"$QG/scripts/compute-test-scope-candidates.sh" --total --tree "$t"; echo "total rc=$?"' "D2 펜스: 분모는 --total --tree <끝>"
   assert_file_grep "$SF" '^## 범위$' "state-file-format: ## 범위 절"
   assert_contains "$(awk '/^같은 폴더의 다른 파일/{f=1} f' "$SF")" '`range-scope.txt`' "state-file-format: 다른 파일 목록에 range-scope.txt"
+  assert_contains "$(awk '/^같은 폴더의 다른 파일/{f=1} f' "$SF")" '`review-tree.txt`' "state-file-format: 다른 파일 목록에 review-tree.txt"
+}
+
+# 범위 모드의 리뷰어가 읽는 트리(final-review I1) — 체크아웃을 시작 커밋에 두고 P2b · 리뷰 트리 · 지우기 펜스를 그대로 돌린다.
+case_review_tree() {
+  echo "[리뷰 트리 — 펜스]"
+  local sid=sid12345 p2b tree rmf out rc rt
+  rt_run() {   # rt_run <본문> — R 에서 플러그인 루트를 주고 돌린다. out · rc 를 채운다.
+    printf '%s\n' "$1" > "$ROOT/rt.sh"
+    out=$(cd "$R" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$ROOT/rt.sh" 2>"$ROOT/rt.err"); rc=$?
+  }
+  local P2B; P2B="$(awk '/^\*\*P2b — /{f=1} /^\*\*P3 — /{f=0} f' "$SK")"
+  p2b="$(printf '%s\n' "$P2B" | fence_with 'resolve-range.sh')"
+  tree="$(printf '%s\n' "$P2B" | fence_with 'review_tree:' | LC_ALL=C sed "s/<session-id>/$sid/g")"
+  rmf="$(awk '/^## Final verdict$/{f=1;next} f&&/^## Publish$/{exit} f' "$SK" | fence_with 'review-tree.txt' | LC_ALL=C sed "s/<session-id>/$sid/g")"
+  [ -n "$tree" ] && ok "P2b 의 리뷰 트리 펜스를 뽑았다" || no "P2b 에 리뷰 트리 펜스(review_tree:)가 없다"
+  [ -n "$rmf" ] && ok "Final verdict 의 리뷰 트리 지우기 펜스를 뽑았다" || no "Final verdict 에 리뷰 트리 지우기 펜스가 없다"
+
+  # 1) 체크아웃이 시작 커밋(head_is_end: no) — 끝 커밋의 임시 트리를 읽는다
+  mkfix
+  rt_run "$(printf '%s\n' "$p2b" | LC_ALL=C sed -e "s/<session-id>/$sid/g" -e "s/\\\$ARGUMENTS/range $S/g")"
+  assert_eq "$(sed -n 's/^head_is_end: //p' "$F" 2>/dev/null)" "no" "전제: 체크아웃(시작 커밋)은 범위 끝이 아니다"
+  rt_run "$tree"
+  assert_eq "$rc" "0" "리뷰 트리 펜스 rc 0 (끝이 아님)"
+  rt="$(printf '%s\n' "$out" | sed -n 's/^review_tree: //p')"
+  if [ -n "$rt" ] && [ "$rt" != checkout ] && [ -d "$rt" ]; then
+    assert_eq "$(git -C "$rt" rev-parse HEAD)" "$E" "리뷰 트리의 HEAD = 끝 커밋(체크아웃은 시작 커밋)"
+    assert_eq "$(git -C "$R" rev-parse HEAD)" "$S" "체크아웃은 그대로 시작 커밋이다"
+    assert_eq "$(cat "$D/review-tree.txt" 2>/dev/null)" "$rt" "review-tree.txt 에 그 경로를 남긴다"
+    rt_run "$rmf"
+    [ ! -d "$rt" ] && ok "지우기 펜스가 리뷰 트리를 지웠다" || no "리뷰 트리가 남았다: $rt"
+    [ ! -e "$D/review-tree.txt" ] && ok "지우기 펜스가 review-tree.txt 도 지웠다" || no "review-tree.txt 가 남았다"
+  else
+    no "끝이 아닌데 끝 커밋의 임시 트리를 내지 않았다 (out: $out · err: $(cat "$ROOT/rt.err"))"
+  fi
+
+  # 2) 트리를 못 만들면 0 이 아닌 값으로 멈춘다 — 체크아웃으로 대신하지 않는다
+  cp "$F" "$ROOT/rs.bak"
+  sed 's/^end: .*/end: 0000000000000000000000000000000000000000/' "$ROOT/rs.bak" > "$F"
+  rt_run "$tree"
+  [ "$rc" -ne 0 ] && ok "트리를 못 만들면 0 이 아닌 값으로 끝난다 (rc $rc)" || no "트리를 못 만들었는데 rc 0"
+  assert_not_contains "$out" 'review_tree:' "못 만들면 리뷰 트리 줄을 내지 않는다(체크아웃으로 대신하지 않는다)"
+  [ ! -e "$D/review-tree.txt" ] && ok "못 만들면 review-tree.txt 가 없다" || no "못 만들었는데 review-tree.txt 가 있다"
+  assert_contains "$(cat "$ROOT/rt.err")" '지금 체크아웃으로 대신하지 않고 멈춘다' "못 만들면 멈춤 줄을 낸다"
+
+  # 3) 체크아웃이 끝 커밋(head_is_end: yes) — 지금 체크아웃을 읽는다
+  mkfix
+  git -C "$R" checkout -q --detach "$E"
+  rt_run "$(printf '%s\n' "$p2b" | LC_ALL=C sed -e "s/<session-id>/$sid/g" -e "s/\\\$ARGUMENTS/range $S/g")"
+  assert_eq "$(sed -n 's/^head_is_end: //p' "$F" 2>/dev/null)" "yes" "전제: 체크아웃이 범위 끝이다"
+  rt_run "$tree"
+  assert_eq "$rc" "0" "리뷰 트리 펜스 rc 0 (끝임)"
+  assert_eq "$(printf '%s\n' "$out" | grep -cx 'review_tree: checkout')" "1" "끝이면 지금 체크아웃을 읽는다"
+  [ ! -e "$D/review-tree.txt" ] && ok "끝이면 review-tree.txt 를 만들지 않는다" || no "끝인데 review-tree.txt 가 있다"
+  [ ! -e "$R/.claude/quality-gates/worktrees/head-${sid:0:8}" ] && ok "끝이면 임시 트리를 만들지 않는다" || no "끝인데 임시 트리를 만들었다"
+  rt_run "$rmf"
+  assert_eq "$rc" "0" "지울 트리가 없으면 지우기 펜스는 아무 일 없이 끝난다"
 }
 
 # ── 끝에서 끝 사슬 ───────────────────────────────────────────────────────
@@ -309,4 +393,5 @@ case_fences_agree() {
 case_text_locks
 case_chain_agrees
 case_fences_agree
+case_review_tree
 finish

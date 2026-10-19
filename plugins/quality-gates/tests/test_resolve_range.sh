@@ -126,7 +126,13 @@ case_unresolved_start() {
 case_no_origin_head() {
   echo "[no origin/HEAD]"
   mkfix
+  # 흔한 기본 브랜치 이름(main · master)을 원격에 둔다 — 그 이름으로 대신하면(origin/main 등) 끝이 풀려 이 경우가 실패한다.
+  g "$A" branch main "$C3"; g "$A" branch master "$C3"
+  git -C "$R" fetch -q origin
+  git -C "$R" branch -q main origin/main
   git -C "$R" remote set-head origin -d
+  git -C "$R" rev-parse --verify -q refs/remotes/origin/main >/dev/null && ok "전제: origin/main 이 있다" || no "전제: origin/main 이 없다 — 대체 이름 검사가 공허하다"
+  git -C "$R" rev-parse --verify -q refs/remotes/origin/master >/dev/null && ok "전제: origin/master 가 있다" || no "전제: origin/master 가 없다"
   rr range "$C1"
   assert_eq "$RC" 3 "rc 3"
   assert_eq "$(rfield status)" end-unresolved "status end-unresolved"

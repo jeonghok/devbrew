@@ -96,7 +96,7 @@ case "${1:-}" in
     # 같은 규율 — 기대 트리를 지금 다시 도출해 대조한다(topic-head.sh 가 봉인부터 다시 뜬다).
     # 범위 경로(--range)의 HEAD 축은 resolve-range.sh 가 실행 시작에 얼린 끝 커밋이다.
     # 지금 작업 트리 · ref 를 다시 뜨지 않는다 — 실행 중 fetch 로 ref 가 움직여도 얼린 값만 받는다.
-    ch_topic="" ch_range=""
+    ch_topic="" ch_range="" ch_sha="$2"
     if [[ $# -eq 5 && "$4" == "--topic" && -n "$5" ]]; then
       ch_topic="$5"
     elif [[ $# -eq 5 && "$4" == "--range" && -n "$5" ]]; then
@@ -120,6 +120,8 @@ case "${1:-}" in
         || die "range scope not ok (start: ${ch_r_start:-?}, end: ${ch_r_end:-?}) — 시작 · 끝이 둘 다 있고 달라야 한다"
       [[ "$(git rev-parse --verify --quiet "$2^{commit}")" == "$ch_r_end" ]] \
         || die "range end mismatch: '$2' is not the frozen end commit ($ch_r_end) — the HEAD axis must be built from the range file's end, not from the start, a moved ref, or a stale value"
+      # 확인한 값으로 만든다 — 인자가 ref 이름이면 확인과 만들기 사이에 움직일 수 있다.
+      ch_sha="$ch_r_end"
     elif [[ -z "$ch_topic" ]]; then
       ch_expected=$(bash "$(dirname "${BASH_SOURCE[0]}")/seal-worktree.sh" seal "$3") \
         || die "cannot re-seal the working tree to verify the HEAD axis"
@@ -137,7 +139,7 @@ case "${1:-}" in
         || die "head-commit mismatch: tree of '$2' is not the combined topic tree derived now — the topic HEAD axis must be built from topic-head.sh's head_commit, not from the seal alone, the boundary, or a stale value"
     fi
 
-    make_detached_worktree "$2" "$3" head
+    make_detached_worktree "$ch_sha" "$3" head
     ;;
   remove)
     # 같은 의미의 다른 사본: plugins/plugin-audit/scripts/audit-sandbox.sh 의 `remove` — 의미가 같다(가드 바꾸면 둘 다).

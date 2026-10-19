@@ -185,7 +185,7 @@ if [ "${#GLOBS[@]}" -gt 0 ]; then PS=("${GLOBS[@]}"); else PS=(.); fi
 # --dir 가 리포 밖이면(DIR_REL 없음) 아무것도 건너뛰지 않는다 — self_state: 0, stderr 에 이유 한 줄.
 # 출처:
 #   이름      references/state-file-format.md 「같은 폴더의 다른 파일」 + result.md,
-#             SKILL.md 의 $RD/ 쓰기(range-scope.txt · extra-iterations.md), 이 스크립트의 review-i<N>.*,
+#             SKILL.md 의 $RD/ 쓰기(range-scope.txt · review-tree.txt · extra-iterations.md), 이 스크립트의 review-i<N>.*,
 #             임시 이름(setup-qg.sh result.md.tmp.<pid> · e2e-state.sh <지문>.tmp · resolve-range.sh
 #             .resolve-range.XXXXXX · 이 스크립트가 끊겨 남긴 .review-diff.XXXXXX/ 안의 임시 이름)
 #   하위 폴더 qg-worktree.sh 의 <리포 최상위>/.claude/quality-gates/worktrees/(base|head)-<sid 앞 8자> —
@@ -193,7 +193,7 @@ if [ "${#GLOBS[@]}" -gt 0 ]; then PS=("${GLOBS[@]}"); else PS=(.); fi
 #             경로로 등록된 것만 건너뛰고, 등록되지 않은 같은 이름 폴더(안에 든 다른 리포)는 리뷰한다.
 #   테스트    test_review_diff.sh 가 state-file-format.md 의 목록 전부를 이 문법이 받는지 잰다.
 QG_NAMES='result\.md|intent\.md|excluded\.md|differential\.yaml|differential-not-counted\.md|verdict\.out'
-QG_NAMES="$QG_NAMES"'|topic-scope\.txt|range-scope\.txt|extra-iterations\.md'
+QG_NAMES="$QG_NAMES"'|topic-scope\.txt|range-scope\.txt|review-tree\.txt|extra-iterations\.md'
 QG_NAMES="$QG_NAMES"'|comment-head\.md|comment\.md|publish\.out|publish\.err'
 QG_NAMES="$QG_NAMES"'|e2e-record\.md|e2e-flip\.md|e2e-evidence\.tsv|e2e-cmd\.txt|e2e-gate\.txt'
 QG_NAMES="$QG_NAMES"'|e2e-before\.txt|e2e-after\.txt|e2e-app\.pgid|e2e-app\.log'

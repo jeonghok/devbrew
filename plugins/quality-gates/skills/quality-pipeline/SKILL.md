@@ -58,7 +58,7 @@ fixes the user approved at the Fix-loop gate.
 ## Preflight
 
 **P0 — project_dir.** Once, frozen for the turn: `project_dir=$(pwd)`. Every reviewer dispatch
-carries it in `project_dir:` (V12). Do not re-derive it later.
+carries it in `project_dir:` (V12). Do not re-derive it later. 범위 모드만 예외가 하나다 — P2b 의 리뷰 트리 펜스가 `review_tree: <경로>` 를 내면 그 경로가 이 실행의 `project_dir` 이다(실행에 한 번 정하고, 그 뒤로 다시 도출하지 않는다).
 
 **P0b — plugin root.** Every script lives under `${CLAUDE_PLUGIN_ROOT}/scripts/`. If that path does
 not read as absolute, do not guess one (the cwd included) — stop and report (E2). Every fence that
@@ -84,7 +84,7 @@ RD="${TOP}/.claude/quality-gates/<session-id>"
 "$QG/scripts/setup-qg.sh" --ensure $ARGUMENTS || exit
 if grep -q '^## 판정$' "$RD/result.md" 2>/dev/null; then "$QG/scripts/setup-qg.sh" $ARGUMENTS || exit; fi
 bash "$QG/scripts/e2e-state.sh" stop --dir "$RD"; echo "preflight-stop rc=$?"
-rm -f "$RD/excluded.md" "$RD/extra-iterations.md" "$RD/differential.yaml" "$RD/differential-not-counted.md" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/range-scope.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt"
+rm -f "$RD/excluded.md" "$RD/extra-iterations.md" "$RD/differential.yaml" "$RD/differential-not-counted.md" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/range-scope.txt" "$RD/review-tree.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt"
 ( cd "$RD" && find . ! -name . -prune -type f -name 'review-i*' -exec rm -f {} + )
 ```
 
@@ -93,7 +93,7 @@ step of this run already made it; otherwise setup creates it with a `result.md` 
 ([state-file-format](references/state-file-format.md)). A `result.md` that already has `## 판정`
 belongs to a finished earlier run in this session — setup without `--ensure` recreates the folder.
 Every run then starts without the previous run's `excluded.md` · `extra-iterations.md` · `differential.yaml` · `differential-not-counted.md` · `verdict.out` ·
-`intent.md` · `topic-scope.txt` · `range-scope.txt` · `comment-head.md` · `comment.md` · `publish.out` · `publish.err` and the e2e walk files
+`intent.md` · `topic-scope.txt` · `range-scope.txt` · `review-tree.txt` · `comment-head.md` · `comment.md` · `publish.out` · `publish.err` and the e2e walk files
 (`e2e-record.md` · `e2e-flip.md` · `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt`)
 and the review diff files of Review Step 1c (`review-i<N>.*` — the `find` line, which also works when there are none).
 `e2e-app.pgid` is kept. The `stop` line brings down an app a cut-off earlier walk left running; show its output, and a non-zero `preflight-stop rc` does not stop the run — `## e2e` E0 tries again with the same record. Setup refuses an empty or malformed session id (E1). A gone
@@ -116,11 +116,34 @@ RD="${TOP}/.claude/quality-gates/<session-id>"
 ```
 
 - `range: none` 이면(이때도 `range rc=0` 이다) 범위 모드가 아니다 — 아래 「범위 모드」 갈래를 모두 건너뛴다.
-- `range rc=0` 이고 출력에 `status: ok` 가 있으면 **범위 모드**다. 한 줄을 낸다: `> [quality-gates] 리뷰 범위: <start 앞 12자>..<end 앞 12자> — 커밋 <commits>개 · 바뀐 파일 <files>개(끝: <end_from 이 origin/HEAD 면 「기본 브랜치 끝」, given 이면 「적은 끝」>).`
+- `range rc=0` 이고 출력에 `status: ok` 가 있으면 **범위 모드**다. 아래 리뷰 트리 펜스를 돌린 뒤 한 줄을 낸다: `> [quality-gates] 리뷰 범위: <start 앞 12자>..<end 앞 12자> — 커밋 <commits>개 · 바뀐 파일 <files>개(끝: <end_from 이 origin/HEAD 면 「기본 브랜치 끝」, given 이면 「적은 끝」>) · 리뷰어가 읽는 트리: <지금 체크아웃 | 끝 커밋의 임시 트리>.`
 - `range rc=3` 이면 `[quality-gates] 범위를 풀지 못했다 (<status>: <reason>) — 실행하지 않는다.` 를 내고 멈춘다 — 판정도 게시도 없다.
 - `range rc=2` 면 stderr 를 그대로 보이고 멈춘다.
 
 `$RD/range-scope.txt` 는 실행 동안 고치지 않는다 — 모든 반복과 모든 소비자(리뷰 diff · 의도 출처 · codex · 차등 테스트 · 판정 줄)가 이 파일의 같은 두 커밋을 쓴다. diff 의 기준과 차등 테스트의 기준선은 시작 커밋(`start:`), HEAD 축과 판정 줄의 커밋은 끝 커밋(`end:`)이다. 범위는 이미 있는 커밋이라 지금 체크아웃과 다를 수 있다 — 그래서 범위 모드는 고치고 다시 돌지 않고([Fix-loop decision](#fix-loop-decision)), 앱을 걷지 않고([e2e](#e2e)), PR 코멘트를 달지 않는다([Publish](#publish)).
+
+**리뷰 트리 (범위 모드 · 실행에 한 번 · P2b 바로 뒤).** 리뷰어(보안 · 외부 · 재비판)와 codex 러너는 diff 밖 코드를 `project_dir` 에서 열어 본다. 지금 체크아웃이 범위 끝이 아니면(범위 파일의 `head_is_end: no`) 끝 커밋의 임시 트리를 하나 만들어 그 경로를 `project_dir` 로 쓴다 — 리뷰어가 시작 커밋이나 다른 체크아웃의 코드를 끝 커밋의 코드로 읽지 않게 한다:
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+RD="${TOP}/.claude/quality-gates/<session-id>"
+RS="$RD/range-scope.txt"; rm -f "$RD/review-tree.txt"
+if [ "$(sed -n 's/^head_is_end: //p' "$RS")" = yes ]; then
+  echo "review_tree: checkout"
+else
+  RT="$("$QG/scripts/qg-worktree.sh" create-head "$(sed -n 's/^end: //p' "$RS")" "<session-id>" --range "$RS")" && [ -n "$RT" ] && [ -d "$RT" ] \
+    || { echo "[quality-gates] 리뷰어가 읽을 끝 커밋의 임시 트리를 만들지 못했다 — 지금 체크아웃으로 대신하지 않고 멈춘다(판정 없음)." >&2; exit 6; }
+  printf '%s\n' "$RT" > "$RD/review-tree.txt" \
+    || { "$QG/scripts/qg-worktree.sh" remove "$RT"; echo "[quality-gates] 리뷰 트리 경로를 기록하지 못했다 — 트리를 지우고 멈춘다(판정 없음)." >&2; exit 6; }
+  echo "review_tree: $RT"
+fi
+```
+
+- `review_tree: checkout` 이면 `project_dir` 는 P0 값 그대로다 — 범위 줄의 트리 칸은 「지금 체크아웃」.
+- `review_tree: <경로>` 면 그 경로가 이 실행의 `project_dir` 이다 — Step 3 의 모든 리뷰어 dispatch · 외부 리뷰어 · codex 러너와 Step 3.5 의 재비판이 그것을 싣는다. 범위 줄의 트리 칸은 「끝 커밋의 임시 트리」. 차등 테스트 D1 은 같은 자리(일회용 트리 이름공간의 HEAD 축 자리)에 같은 끝 커밋으로 트리를 다시 만든다 — 리뷰가 ② 보다 먼저 끝나므로(C1) 리뷰어가 읽는 동안 트리가 바뀌지 않고, 내용도 같은 커밋이다.
+- 펜스가 0 이 아닌 값으로 끝나면 stderr 를 그대로 보이고 멈춘다 — 판정도 게시도 없다. 지금 체크아웃으로 대신하지 않는다.
+- 이 트리는 실행이 어느 경로로 끝나든(최종 판정 · 멈추기 · 중간에 멈춤) [Final verdict](#final-verdict) 의 「리뷰 트리 지우기」 펜스로 지운다. 지우지 못하고 남은 트리는 다음 실행이 같은 자리에 트리를 만들 때 먼저 지운다.
 
 **P3 — intent source.** Once:
 
@@ -288,7 +311,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 ```
 
 No arguments. Cache `$changes_exist`, `$branch_ahead_count`, `$worktree_dirty`, `$base`,
-`$degraded` for the turn — iterations 2–5 reuse them.
+`$degraded` for the turn — later iterations (up to CAP) reuse them.
 
 범위 모드는 `check-review-scope.sh` 를 돌리지 않는다 — 그 스크립트는 지금 브랜치와 작업 트리를 재는데, 범위는 이미 있는 두 커밋이다. `$changes_exist = yes`(빈 범위는 P2b 가 `empty` 로 멈췄다) · `$degraded = no` 로 둔다.
 
@@ -329,6 +352,7 @@ echo "> [quality-gates] 리뷰어 모델: ${CLAUDE_CODE_SUBAGENT_MODEL:-세션 �
 - `CRITERIA` = the criteria block's **content** (reviewers cannot read the plugin cache path).
 - `INTENT` = the `intent:` line from P3, then the intent file's content.
 - `FILTERED_DIFF` = the content of `${TOP}/.claude/quality-gates/<session-id>/review-i<N>.diff` that Step 1c wrote for this iteration — every reviewer below (security · external · codex · re-critic) gets this one file.
+- `PROJECT_DIR` = P0 의 `project_dir` — 범위 모드에서 P2b 의 리뷰 트리 펜스가 `review_tree: <경로>` 를 냈으면 그 경로다. 아래 모든 dispatch 의 `project_dir`(외부 리뷰어 프롬프트의 `<project_dir>` 포함)와 codex 러너 · Step 3.5 재비판이 이 값 하나를 쓴다.
 
 **시작 구성** — 아래 표는 시작점이다. diff 와 의도 출처를 보고 리뷰어를 더할 수 있다 — 신호가 없는 조건부 리뷰어나 이 세션에서 쓸 수 있는 다른 읽기 전용 리뷰 agent 를, 한 줄 근거와 함께. 재비판은 늘 하나다.
 
@@ -420,7 +444,7 @@ nothing readable is re-dispatched once; if the second try also fails it is marke
 regardless of scope, 부른다 — 모델 계열 다양성이 load-bearing 이다(V6). The diff blob is Step 1c's
 `$RD/review-i<N>.diff` itself — pass its absolute path:
 `run_codex_reviewer.sh <$RD/review-i<N>.diff 의 절대 경로> <project_dir> <산출물 경로>`. The runner resolves the intent
-source itself (`discover-spec.sh`, same chain) and loads the criteria block. **범위 모드면** 러너 끝에 범위를 붙인다 —
+source itself (`discover-spec.sh`, same chain) and loads the criteria block. `<project_dir>` 는 Step 3 의 `PROJECT_DIR` 다(범위 모드의 리뷰 트리면 그 경로 — 러너가 그리로 `cd` 한다). **범위 모드면** 러너 끝에 범위를 붙인다 —
 `run_codex_reviewer.sh <$RD/review-i<N>.diff 의 절대 경로> <project_dir> <산출물 경로> --range "$(sed -n 's/^start: //p' "$RD/range-scope.txt")" "$(sed -n 's/^end: //p' "$RD/range-scope.txt")"`
 (두 커밋은 옮겨 적지 않고 범위 파일에서 `sed` 로 읽는다 — 인자는 정확히 여섯이고, 러너가 범위를 `discover-spec.sh` 에 넘겨 P3 와 같은 의도 출처를 쓴다).
 If codex is unavailable, continue without it. 러너 stderr 에 `DISABLE_SPEC_CONFORMANCE 는 없어졌다` 줄이 있으면 그 줄을 그대로 사용자에게 보인다 — 옛 끔 설정이 더는 듣지 않는다는 알림이다.
@@ -528,7 +552,7 @@ Once per iteration, after detection. 탐지 결과가 0건이어도 디스패치
    adjudication angle's primary input failure. `$RV/recritic.diff` 는 Step 1c 의 `$RD/review-i<N>.diff` 를
    `cp` 한 사본이다 — security-reviewer 에게 준 것과 같은 **raw unified diff**(hunk 만). `git show` · `git format-patch` · `git log -p` 의 출력은 쓰지 않는다 —
    그 출력은 커밋 메시지를 싣는다. 의도 출처는 `<intent>` 슬롯 하나로만 간다.
-3. Dispatch with the six slots filled verbatim: `<project_dir>` · `<scope>` = this iteration's
+3. Dispatch with the six slots filled verbatim: `<project_dir>` = Step 3 의 `PROJECT_DIR` · `<scope>` = this iteration's
    scope path list · `<findings>` = content of `$RV/recritic-findings.yaml` · `<diff>` = content of
    `$RV/recritic.diff` · `<intent>` = `INTENT` · `<profile>` = what the `cat` above printed (content,
    not a path).
@@ -604,7 +628,10 @@ cat "$RV/synth.out"
 `mv "$RV/synth.out" "$RV/synth-before-restore.out"`. 그다음 위 펜스를 같은 판정 입력 그대로 다시 돌리되 `> "$RV/synth.out"` 앞에
 `--restore-lowered <번호들>` 을 더한다 — 번호는 「낮춘 지적」 표의 `L<k>` 를 쉼표로 잇고(예: `--restore-lowered L1,L3`), 전부면 `all` 이다.
 합성기는 그 번호의 lower 를 적용하지 않아 원래 심각도로 판정에 넣고, `restored:` 줄과 「낮춘 이유」 칸 머리의 `(사용자가 되올림)` 으로
-그 사실을 싣는다. 표에 없는 번호면 rc 2 다(`모르는 낮춘 지적 번호:`) — 위 rc 규칙대로 보고하고 멈춘다.
+그 사실을 싣는다. 표에 없는 번호면 rc 2 다(`모르는 낮춘 지적 번호:`). 번호는 Step 4.5 의 확인 펜스가 먼저 거르므로 여기 닿지 않아야 한다.
+그래도 rc 2 면 멈추지 않는다: `mv "$RV/synth-before-restore.out" "$RV/synth.out"` 으로 앞 출력을 되돌리고
+`> [quality-gates] 되올리기를 적용하지 못했다(합성기 rc 2 — <stderr 첫 줄>) — 낮춘 대로 둔 앞 판정으로 간다.` 를 낸 뒤 앞 출력으로
+Step 4.5 의 라우팅을 잇는다(리뷰가 이미 끝난 실행을 잘못 친 번호 하나로 버리지 않는다). rc 2 밖의 0 아닌 rc 는 위 rc 규칙대로 멈춘다.
 
 ### Step 4.5 — Surface the verdict
 
@@ -645,6 +672,20 @@ AskUserQuestion({ questions: [{
   Step 4 의 「되올려 다시 합성하기」를 돌려 `$RV/synth.out` 을 덮는다. 그 새 출력으로 이 Step 4.5 의 표면화(제목 줄 · 원문 · 범위 파일 ·
   degrade · 차등 요약)를 다시 한 뒤 아래 라우팅으로 간다. 새 출력에는 이 게이트를 다시 띄우지 않는다.
 - 「기타」에 `L<k>` 가 하나도 없으면 받은 글을 그대로 보이고 한 번만 다시 묻는다 — 두 번째도 없으면 그대로 둔다.
+- 「기타」 칸 번호는 다시 합성하기 전에 아래 펜스로 「낮춘 지적」 표의 번호와 맞춘다 — 선택지 이름으로 고른 번호와 「전부 되올린다」(`all`)는 표에서 온 것이라 맞추지 않는다.
+  `lowered-pick: bad …` 면 받은 글과 표의 번호를 보이고 한 번만 다시 묻는다. 두 번째 답에도 표에 없는 번호가 있으면 되올리지 않고 낮춘 대로 둔 채 라우팅으로 간다
+  (그 사실을 한 줄로 알린다: `> [quality-gates] 표에 없는 번호라 되올리지 않았다(<번호들>) — 낮춘 대로 둔다.`).
+
+```bash
+RV="<Step 3.5 의 절대 경로>"
+PICK='<기타 칸에서 읽은 L 번호들 — 쉼표로, 예: L1,L3>'
+KNOWN=$(sed -n '/^| 번호 | 위치 | 원래 심각도 |/,/^$/p' "$RV/synth.out" | sed -n 's/^| \(L[0-9][0-9]*\) |.*/\1/p' | tr '\n' ' ')
+BAD=""
+for k in $(printf '%s' "$PICK" | tr ',' ' '); do
+  case " ${KNOWN}" in *" ${k} "*) ;; *) BAD="${BAD} ${k}" ;; esac
+done
+if [ -n "$BAD" ]; then echo "lowered-pick: bad${BAD} (표의 번호: ${KNOWN% })"; else echo "lowered-pick: ok"; fi
+```
 
 그다음(N < CAP — N = CAP 는 아래 「상한(CAP)에서 도달하면」 문단이 이 라우팅을 대신한다):
 - `verdict: clean` → 루프를 나가 [Final verdict](#final-verdict).
@@ -940,7 +981,7 @@ E2E_CMD
 - `ready: …` 줄 (`boot rc=0`) — E2 로 간다.
 - `boot-failed: …` 줄 (`boot rc=4`) — 걷지 않는다. 판정안은 `미확인(부팅 실패)` 이고 증거는 펜스가 보인 부팅 출력
   끝부분이다. E3 의 `stop` 과 지문 비교는 건너뛰고 E4 로 간다.
-- 두 줄이 없고 `boot rc=3` — kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다.
+- 두 줄이 없고 `boot rc=3` — kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.
 - 두 줄이 없고 `boot rc=5` — 부팅이 실패한 뒤 boot 자신의 정리(stop)도 실패했다. 띄운 앱이 남았을 수 있다. 펜스 출력과
   `stop-failed:` 줄(있으면)을 그대로 공시하고, 남은 앱은 사람이 직접 내려야 한다고 알린다(기록 `e2e-app.pgid` 는 남는다).
   판정안은 `미확인(부팅 실패)` 이고 E3 를 건너뛰고 E4 로 간다.
@@ -962,7 +1003,7 @@ rm -f "$D/e2e-evidence.tsv" "$D/e2e-after.txt" "$D/e2e-before.txt"
 ```
 
 - `before rc=0` — E2 로 간다.
-- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다.
+- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.
 - `before rc` 가 그 밖의 0 아닌 값 — 걷지 않는다. stderr 사유를 공시하고 판정안 `미확인(지문 실패)` 로 E3 를 건너뛰고 E4 로 간다.
 
 **E2 — 걷기.** 레퍼런스 3 절의 규칙대로 걷고, 4 절의 증거표를 `$D/e2e-evidence.tsv` 에 쓴다(칸 사이는 탭).
@@ -989,7 +1030,7 @@ D="${TOP}/.claude/quality-gates/<session-id>"
 ```
 
 - `stop rc=5` — 띄운 프로세스가 남았거나 그 기록을 읽지 못했다. `stop-failed:` 줄이나 stderr 사유를 그대로 공시하고 E5 의 걷기 기록에 적는다.
-- `after rc=3` — 걷는 사이 kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 E5 로 기록한 뒤 `## Final verdict` 로 간다.
+- `after rc=3` — 걷는 사이 kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 E5 로 기록한 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.
 - E1 의 `sha256:` 값이 없으면 `compare` 줄을 빼고 돌리고 판정안은 `미확인(걷기 뒤 지문 실패)` 이다.
 - 그 밖의 판정안은 이 순서로 정한다: `compare` 의 마지막 줄이 `changed: <N>` 이면 `무효(코드 변경)` · `after rc` 가 0 이
   아니거나 `compare rc` 가 0 · 1 밖이거나 `compare rc=1` 인데 마지막 줄이 `changed: <N>` 가 아니면 `미확인(걷기 뒤 지문 실패)` · `propose rc=4` 면 증거표를 고쳐 `propose` 만 다시
@@ -1091,12 +1132,13 @@ python3 "$QG/scripts/verdict.py" --reason trivia --line --blocking 0 --optional 
 echo "verdict rc=$?"; cat "$RD/verdict.out"
 ```
 
-걸러진 diff 가 빈 실행(Step 1c 에서 `files:` 가 0 보다 크고 `filtered_files: 0`)도 `$RV` 와 e2e 걷기가 없다 — `<N>` 에 그 iteration 번호를 넣고 판정을 바로 만든다. 제외 패치 수는 위 펜스처럼 `excluded.md` 에서 센다(N>1 이면 앞 iteration 의 항목이 있다). `--new-failures 0` 은 차등 테스트를 돌지 않았기 때문이다:
+걸러진 diff 가 빈 실행(Step 1c 에서 `files:` 가 0 보다 크고 `filtered_files: 0`)도 `$RV` 와 e2e 걷기가 없다 — `<N>` 에 그 iteration 번호를 넣고 판정을 바로 만든다. 제외 패치 수는 위 펜스처럼 `excluded.md` 에서 센다(N>1 이면 앞 iteration 의 항목이 있다). `--new-failures 0` 은 차등 테스트를 돌지 않았기 때문이다. 같은 이유로 펜스가 앞 iteration 이 남긴 차등 사본(`differential.yaml` · `differential-not-counted.md`)을 먼저 지운다 — 남겨 두면 아래 기록 펜스가 그것을 이번 판정의 `## 차등 테스트` 로 옮긴다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
+rm -f "$RD/differential.yaml" "$RD/differential-not-counted.md"
 X=0; [ -f "$RD/excluded.md" ] && X=$(grep -c '^- ' "$RD/excluded.md")
 SHA_ARG="$(git rev-parse --short HEAD)"; RS="$RD/range-scope.txt"; if [ -f "$RS" ]; then SHA_ARG="$(git rev-parse --short "$(sed -n 's/^end: //p' "$RS")")"; fi
 python3 "$QG/scripts/verdict.py" --reason scope-empty --line --blocking 0 --optional 0 --new-failures 0 --excluded "$X" --iter <N> --sha "$SHA_ARG" --e2e '안 함' > "$RD/verdict.out"
@@ -1105,7 +1147,7 @@ echo "verdict rc=$?"; cat "$RD/verdict.out"
 
 A non-zero rc is not a verdict — report and stop.
 
-Then render the summary and record the local result (a trivia run and an empty-filtered-diff run set `SYN=""`):
+Then render the summary and record the local result (a trivia run and an empty-filtered-diff run set `SYN=""`). `<N>` 은 마지막 iteration 번호다 — `## 문서 경로` 는 그 iteration 의 Step 1c 공시 요약 줄(출처 · 쓰인 패턴 · 읽지 못한 패턴 · 뺀 수 · 남긴 수)과 건너뛴 qg 상태 파일 수만 옮긴다(경로 목록은 옮기지 않는다):
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -1117,6 +1159,11 @@ printf '판정\t%s\n반복\t<N>번\n결과\t<finished | accepted with findings i
 {
   printf '\n## 판정\n\n'; cat "$RD/verdict.out"
   if [ -f "$RD/range-scope.txt" ]; then printf '\n## 범위\n\n'; cat "$RD/range-scope.txt"; fi
+  DP="$RD/review-i<N>.doc-paths"; SSF="$RD/review-i<N>.self-state"
+  if [ -s "$DP" ]; then
+    printf '\n## 문서 경로\n\n'; grep -E '^(doc_paths_source|doc_paths|bad_patterns|excluded|kept_model): ' "$DP"
+    if [ -f "$SSF" ]; then printf 'self_state: %s\n' "$(grep -c . "$SSF")"; else echo "self_state: -"; fi
+  fi
   printf '\n## 지적\n\n'; if [ -f "$SYN" ] && grep -q '^| 심각도 |' "$SYN"; then sed -n '/^| 심각도 |/,/^$/p' "$SYN"; else echo "(없음)"; fi
   if [ -f "$SYN" ] && grep -q '^| 번호 | 위치 | 원래 심각도 |' "$SYN"; then printf '\n## 낮춘 지적\n\n'; sed -n '/^| 번호 | 위치 | 원래 심각도 |/,/^$/p' "$SYN"; fi
   printf '\n## 제외 패치\n\n'; if [ -s "$RD/excluded.md" ]; then cat "$RD/excluded.md"; else echo "(없음)"; fi
@@ -1132,6 +1179,23 @@ Then print the last synthesizer output's `scope:` block and `angles:` block verb
 Print the verdict line (the last line of `$RD/verdict.out`) on its own line, and `> 로컬 결과: <$RD/result.md 경로>`.
 Then run D8 of `references/differential-test.md` (drop the run's memo) when ② made one — the verdict line and the record above
 read the session-folder copies, not the memo.
+
+**리뷰 트리 지우기 (범위 모드).** P2b 가 리뷰 트리를 만들었으면(세션 폴더의 `review-tree.txt`) 실행이 어느 경로로 끝나든 —
+최종 판정 · 「멈추기」 · 합성기 rc 같은 중간 멈춤 — 마지막에 이 펜스를 돈다. 최종 판정이면 D8 바로 뒤, 게시 앞이다.
+차등 테스트 D6 이 같은 자리를 이미 지웠으면 아무 일 없이 끝난다(`remove` 는 없는 트리를 그냥 넘긴다):
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+RD="${TOP}/.claude/quality-gates/<session-id>"
+if [ -s "$RD/review-tree.txt" ]; then
+  if "$QG/scripts/qg-worktree.sh" remove "$(cat "$RD/review-tree.txt")"; then
+    rm -f "$RD/review-tree.txt"; echo "review-tree: removed"
+  else
+    echo "[quality-gates] 리뷰 트리를 지우지 못했다 — 다음 실행이 같은 자리에 트리를 만들 때 지우고, 아니면 오래된 세션 정리가 회수한다: $(cat "$RD/review-tree.txt")" >&2
+  fi
+fi
+```
 Then run [Publish](#publish) — the publish result line is the run's last script output. The session folder stays for the TTL GC.
 
 The completion report opens — before the table — with one Korean sentence: how the run ended (the 결과 cell in plain words) and the verdict value as-is (e.g. 「qg 를 반복 2번 만에 끝냈다 — 판정 defect, 남은 지적을 둔 채 끝냈다.」). The counts stay in the verdict line — do not restate them. After the publish result line, end with exactly one next action for the user (e.g. 「남은 지적 2개를 고친 뒤 /quality-gates:quality-pipeline 을 다시 돌린다」 or 「할 일 없음」).

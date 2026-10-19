@@ -37,7 +37,13 @@ case_step4() {
   assert_contains "$S4" '`mv "$RV/synth.out" "$RV/synth-before-restore.out"`' "Step 4: 앞 출력을 옮겨 둔다"
   assert_contains "$S4" '`--restore-lowered <번호들>` 을 더한다' "Step 4: 합성기에 --restore-lowered 를 싣는다"
   assert_contains "$S4" '(예: `--restore-lowered L1,L3`), 전부면 `all` 이다' "Step 4: 번호 꼴과 all"
-  assert_contains "$S4" '표에 없는 번호면 rc 2 다(`모르는 낮춘 지적 번호:`)' "Step 4: 모르는 번호는 rc 2 로 멈춘다"
+  assert_contains "$S4" '표에 없는 번호면 rc 2 다(`모르는 낮춘 지적 번호:`)' "Step 4: 모르는 번호는 rc 2 다"
+  # final-review M2 — 잘못 친 번호 하나로 리뷰가 끝난 실행 전체가 멈추지 않는다
+  assert_not_contains "$S4" '— 위 rc 규칙대로 보고하고 멈춘다.' "Step 4: 모르는 번호의 rc 2 로 실행을 멈추던 옛 문장이 없다"
+  assert_contains "$S4" '그래도 rc 2 면 멈추지 않는다: `mv "$RV/synth-before-restore.out" "$RV/synth.out"` 으로 앞 출력을 되돌리고' \
+    "Step 4: 다시 합성이 rc 2 면 앞 출력을 되돌린다(옛 문장 부재의 양성 짝)"
+  assert_contains "$S4" '`> [quality-gates] 되올리기를 적용하지 못했다(합성기 rc 2 — <stderr 첫 줄>) — 낮춘 대로 둔 앞 판정으로 간다.`' \
+    "Step 4: 되돌렸다고 공시한다"
 }
 
 case_step45_gate() {
@@ -55,6 +61,8 @@ case_step45_gate() {
   assert_contains "$S45" 'Step 4 의 「되올려 다시 합성하기」를 돌려 `$RV/synth.out` 을 덮는다' "게이트: 고르면 다시 합성한다"
   assert_contains "$S45" '새 출력에는 이 게이트를 다시 띄우지 않는다' "게이트: 다시 합성한 출력에 게이트를 또 띄우지 않는다(되풀이 없음)"
   assert_contains "$S45" '한 번만 다시 묻는다 — 두 번째도 없으면 그대로 둔다' "게이트: 기타 칸 재질문은 한 번뿐이다"
+  assert_contains "$S45" '「기타」 칸 번호는 다시 합성하기 전에 아래 펜스로 「낮춘 지적」 표의 번호와 맞춘다' "게이트: 기타 칸 번호를 표와 맞춘다(M2)"
+  assert_contains "$S45" '두 번째 답에도 표에 없는 번호가 있으면 되올리지 않고 낮춘 대로 둔 채 라우팅으로 간다' "게이트: 두 번째도 틀리면 낮춘 대로 두고 계속한다(M2)"
   # 순서 — 표면화(차등 요약) 뒤 · 라우팅 앞
   local diffsum gate route
   diffsum=$(line_of "$S45" '**차등 요약 (판정 줄 옆).**')
@@ -126,6 +134,25 @@ case_record_fence() {
   assert_not_contains "$out" '## 낮춘 지적' "기록: 낮춘 것이 없으면 절을 쓰지 않는다"
 }
 
+# final-review M2 — 기타 칸 번호 확인 펜스를 실제 합성기 출력(L1 하나)으로 돌린다
+case_pick_fence() {
+  note "Step 4.5 — 기타 칸 번호 확인 펜스"
+  local fence syn out
+  fence="$(printf '%s\n' "$S45" | awk '/^```bash$/{f=1;b="";next} f&&/^```$/{if(b ~ /lowered-pick:/) {printf "%s", b; exit}; f=0; next} f{b=b $0 "\n"}')"
+  [ -n "$fence" ] && ok "확인 펜스를 뽑았다" || { no "Step 4.5 에 lowered-pick: 펜스가 없다"; return; }
+  syn=$(make_synth pick 'verdicts:
+  - {f: f1, verdict: lower, evidence: "의도 출처는 캐시 무효화만 요구한다"}')
+  pick() {   # pick <번호들>
+    printf '%s\n' "$fence" | LC_ALL=C sed -e "s|<Step 3.5 의 절대 경로>|${syn%/synth.out}|" -e "s|<기타 칸에서 읽은 L 번호들 — 쉼표로, 예: L1,L3>|$1|" > "$ROOT/pick.sh"
+    bash "$ROOT/pick.sh" 2>&1
+  }
+  out=$(pick L1);    assert_eq "$out" "lowered-pick: ok" "표에 있는 번호(L1)는 통과"
+  out=$(pick L1,L7); assert_eq "$out" "lowered-pick: bad L7 (표의 번호: L1)" "표에 없는 번호(L7)를 이름으로 낸다"
+  out=$(pick L2);    assert_eq "$out" "lowered-pick: bad L2 (표의 번호: L1)" "표에 없는 번호만이면 bad"
+  out=$(pick L11);   assert_eq "$out" "lowered-pick: bad L11 (표의 번호: L1)" "앞자리가 같은 번호(L11)를 L1 로 읽지 않는다"
+  out=$(pick 1);     assert_eq "$out" "lowered-pick: bad 1 (표의 번호: L1)" "L 없는 번호(1)는 표의 L1 의 일부로 읽지 않는다(낱말 단위로 맞춘다)"
+}
+
 case_persona() {
   note "code-recritic — lower 의 evidence 가 사용자에게 보인다"
   local body lower same sent
@@ -158,6 +185,7 @@ case_state_format() {
 case_step4
 case_step45_gate
 case_record_fence
+case_pick_fence
 case_persona
 case_state_format
 finish
