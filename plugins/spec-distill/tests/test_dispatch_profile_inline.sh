@@ -113,7 +113,9 @@ seed_critic() {
   [ -n "$root" ] || return 0
   sdir="$(env -i PATH="$BASE" PYTHONPATH="$YAML_SITE" PYTHONDONTWRITEBYTECODE=1 \
       python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$root" --doc "$doc" 2>/dev/null)"
-  [ -n "$sdir" ] && mkdir -p "$sdir" && printf '%s\n' "$CRITIC_SEED" > "$sdir/critic.txt" && echo "$sdir/critic.txt"
+  # 번호 붙은 탐지 출력(critic-<번호>.txt — 탐지 리뷰어가 여럿일 때)도 함께 채운다 — 실패 분기는 둘 다 비운다.
+  [ -n "$sdir" ] && mkdir -p "$sdir" && printf '%s\n' "$CRITIC_SEED" > "$sdir/critic.txt" \
+    && printf '%s\n' "$CRITIC_SEED" > "$sdir/critic-2.txt" && echo "$sdir/critic.txt"
   return 0
 }
 
@@ -172,6 +174,7 @@ for spec in "reviewing-brief:brief.md:3" "spec-review:design-doc.md:2"; do
       assert_eq "$(grep -c '^must_catch:' "$SCRATCH/ok-$sk-$mode.out" || true)" "0" "$sk S($mode): 펜스 출력에 must_catch 줄이 없다"
       assert_eq "$(grep -c '^must_catch:' "$PROF" || true)" "1" "$sk S 전제: 프로필 파일에는 must_catch 줄이 있다(벗기기 단언이 공허하지 않다)"
       assert_eq "$(cat "$seed_ok" 2>/dev/null)" "$CRITIC_SEED" "$sk X($mode) 양의 짝: 성공 경로는 미리 채운 \$STATE_DIR/critic.txt 를 건드리지 않는다"
+      assert_eq "$(cat "${seed_ok%/*}/critic-2.txt" 2>/dev/null)" "$CRITIC_SEED" "$sk X($mode) 양의 짝: 성공 경로는 미리 채운 \$STATE_DIR/critic-2.txt 도 건드리지 않는다"
       seed_no="$(seed_critic "no-$sk-$mode" "$(sdoc "no-$sk-$mode")")"
       [ "$sk-$mode" = reviewing-brief-plain ] && seed_no_plain_b="$seed_no"
       { [ -n "$seed_no" ] && [ -s "$seed_no" ]; } \
@@ -182,7 +185,8 @@ for spec in "reviewing-brief:brief.md:3" "spec-review:design-doc.md:2"; do
       assert_eq "$(grep -c . "$SCRATCH/no-$sk-$mode.out" || true)" "0" "$sk X($mode): 그때 stdout 은 비었다 (빈 슬롯으로 dispatch 할 거리가 없다)"
       assert_contains "$(cat "$SCRATCH/no-$sk-$mode.err")" "dispatch 하지 않는다" "$sk X($mode): 그때 loud advisory 가 dispatch 금지를 말한다"
       assert_eq "$(wc -c < "$seed_no" 2>/dev/null | tr -d ' ')" "0" "$sk X($mode): 그때 실패 분기가 \$STATE_DIR/critic.txt(직전 라운드 critic 출력)를 비운다"
-      assert_contains "$(cat "$SCRATCH/no-$sk-$mode.err")" "critic.txt)을 비웠다." "$sk X($mode): 그때 비운 «뒤에» 「비웠다」고 보고한다"
+      assert_eq "$(wc -c < "${seed_no%/*}/critic-2.txt" 2>/dev/null | tr -d ' ')" "0" "$sk X($mode): 그때 실패 분기가 번호 붙은 탐지 출력(\$STATE_DIR/critic-2.txt)도 비운다"
+      assert_contains "$(cat "$SCRATCH/no-$sk-$mode.err")" "critic-<번호>.txt)을 비웠다." "$sk X($mode): 그때 비운 «뒤에» 「비웠다」고 보고한다"
       # 문서 슬롯(brief 는 PAYLOAD · spec 은 spec_path)을 같은 Bash 호출에서 대입하지 않은 실패 분기 — STATE_DIR 이 비어
       # 비움을 건너뛰고, 그 사실을 말하며, 비웠다고 말하지 않는다(PR 3 qg iter 2 F-c).
       seed_nd="$(seed_critic "nd-$sk-$mode" "$(sdoc "nd-$sk-$mode")")"

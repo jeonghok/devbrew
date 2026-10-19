@@ -127,7 +127,7 @@ session_id: $sid/" "$W/audit.fixture.md" > "$h/docs/superpowers/interview/$name.
 run_in() {   # run_in <sid> <스크립트> [env…]
   local sid="$1" script="$2"; shift 2
   ( cd "$W/$sid" && env -i PATH="$BIN_OK:$BASE" HOME="$W/$sid" CODEX_API_KEY=t PYTHONDONTWRITEBYTECODE=1 \
-      CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" "$@" bash "$script" ) >"$W/$sid.out" 2>"$W/$sid.err"
+      CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" "$@" "${RUN_SHELL:-bash}" "$script" ) >"$W/$sid.out" 2>"$W/$sid.err"
 }
 place() {   # place <sid> [이름] → 그 seed 의 엔진 자리(엔진 state-dir-for 가 낸 것)
   local sid="$1" name="${2:-probe-$1-interview}"
@@ -197,6 +197,30 @@ home fg13recolds; pl="$(place fg13recolds)"; mkdir -p "$pl"; au="$(add_sec4 fg13
 printf 'OLD_NAME_BODY\n' > "$pl/critic.txt"
 run_in fg13recolds "$W/record-run.sh"
 grep -qF 'OLD_NAME_BODY' "$au" && ok "K: critic-<i>.txt 가 없으면 옛 이름 critic.txt 를 옮긴다" || no "K: 옛 이름 폴백이 죽었다"
+home fg14recbad; pl="$(place fg14recbad)"; mkdir -p "$pl"; au="$(add_sec4 fg14recbad)"
+printf 'GOOD_DET_BODY\n' > "$pl/critic-3.txt"; printf 'BAD_NAME_BODY\n' > "$pl/critic-3x.txt"
+run_in fg14recbad "$W/record-run.sh"
+{ grep -qF 'GOOD_DET_BODY' "$au" && ! grep -qF 'BAD_NAME_BODY' "$au" && grep -qF '옮기지 않는다: critic-3x.txt' "$W/fg14recbad.err"; } \
+  && ok "K: 번호가 숫자가 아닌 탐지 출력 이름은 옮기지 않고 그 사실을 말한다(맞는 이름은 옮긴다)" \
+  || no "K: critic-<숫자>.txt 가 아닌 이름을 옮겼거나 말하지 않았다 — $(tail -2 "$W/fg14recbad.err" | tr '\n' ' ')"
+# K(zsh) — 같은 펜스를 zsh 로도 돌린다. zsh 는 배열 첨자 대입 · 맞는 파일 없는 글롭에서 멈추므로 bash 만으로는 못 본다.
+ZSH_BIN="$(command -v zsh 2>/dev/null || true)"
+if [ -n "$ZSH_BIN" ]; then
+  home fz11recdet; pl="$(place fz11recdet)"; mkdir -p "$pl"; au="$(add_sec4 fz11recdet)"
+  printf 'ZDET_ONE\n' > "$pl/critic-1.txt"; printf 'ZDET_TWO\n' > "$pl/critic-2.txt"; printf 'ZRECRITIC\n' > "$pl/recritic.txt"
+  RUN_SHELL="$ZSH_BIN"; run_in fz11recdet "$W/record-run.sh"; z_rc=$?; RUN_SHELL=bash
+  { [ "$z_rc" -eq 0 ] && grep -qF '탐지 1 (doc-critic)' "$au" && grep -qF 'ZDET_ONE' "$au" && grep -qF 'ZDET_TWO' "$au" && grep -qF 'ZRECRITIC' "$au"; } \
+    && ok "K(zsh): 탐지 리뷰어 둘과 재비판 출력이 zsh 에서도 audit ## 4 에 옮겨진다" \
+    || no "K(zsh): zsh 에서 산출물 기록이 깨졌다(rc $z_rc) — $(tail -2 "$W/fz11recdet.err" | tr '\n' ' ')"
+  home fz12recnone; pl="$(place fz12recnone)"; mkdir -p "$pl"; au="$(add_sec4 fz12recnone)"
+  printf 'ZRECRITIC_ONLY\n' > "$pl/recritic.txt"
+  RUN_SHELL="$ZSH_BIN"; run_in fz12recnone "$W/record-run.sh"; z_rc=$?; RUN_SHELL=bash
+  { [ "$z_rc" -eq 0 ] && grep -qF '산출물 없음 — critic.txt' "$au" && grep -qF 'ZRECRITIC_ONLY' "$au"; } \
+    && ok "K(zsh): 탐지 출력이 하나도 없어도 zsh 에서 멈추지 않고 없다는 사실을 적는다" \
+    || no "K(zsh): 탐지 출력이 없는 라운드가 zsh 에서 멈췄거나 적지 않았다(rc $z_rc) — $(tail -2 "$W/fz12recnone.err" | tr '\n' ' ')"
+else
+  echo "  - K(zsh): zsh 없음 — zsh 실행 확인을 건너뛴다"
+fi
 
 # ── codex — A · A+ · R · X · E ───────────────────────────────────────────────
 { cat "$W/state.sh"; cat "$W/bundle.sh"; cat "$W/gate.sh"; } > "$W/full.sh"

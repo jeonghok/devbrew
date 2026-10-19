@@ -682,24 +682,28 @@ Agent({
 # 엔진 산출물 셋을 판정 없이 audit `## 4. 비평과 냉독` 에 옮긴다 — 엔진 자리는 원장 정리로 사라질 수 있고,
 # 사람이 나중에 되짚을 자리는 audit 이다. 없는 산출물은 그 사실을 적는다(침묵과 0 은 다르다).
 rnd="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" | python3 -I -X utf8 -c 'import json,sys; print(json.load(sys.stdin)["round"])')" || rnd="?"
-pairs=()
-for f in "$STATE_DIR"/critic-[0-9]*.txt; do   # 탐지 리뷰어 i 의 출력은 critic-<i>.txt — 하나씩 따로 옮긴다
-  [ -e "$f" ] || continue
-  b="${f##*/}"; idx="${b#critic-}"; idx="${idx%.txt}"
-  pairs[${#pairs[@]}]="탐지 ${idx} (doc-critic)|${b}"
-done
-[ "${#pairs[@]}" -gt 0 ] || pairs[0]="탐지 (doc-critic)|critic.txt"   # 탐지 출력이 하나도 없을 때만 옛 이름을 본다
-pairs[${#pairs[@]}]="codex|docreview-codex.yaml"
-pairs[${#pairs[@]}]="재비판 (doc-recritic)|recritic.txt"
-for pair in "${pairs[@]}"; do
-  title="${pair%%|*}"; src="$STATE_DIR/${pair#*|}"
-  if [ ! -s "$src" ]; then
-    src="$STATE_DIR/absent-note.txt"
-    printf '(이 라운드에 산출물 없음 — %s)\n' "${pair#*|}" > "$src"
+record_artifact() {   # 옮길 것: rec_title(audit 제목) · rec_name(STATE_DIR 안 파일 이름)
+  rec_src="$STATE_DIR/$rec_name"
+  if [ ! -s "$rec_src" ]; then
+    rec_src="$STATE_DIR/absent-note.txt"
+    printf '(이 라운드에 산출물 없음 — %s)\n' "$rec_name" > "$rec_src"
   fi
-  python3 "$SD/scripts/seed_review_log.py" append-verbatim "$AUDIT_ABS" --section "## 4. 비평과 냉독" --title "라운드 $rnd — $title" "$src" \
-    || echo "[spec-distill] audit ## 4 에 옮기지 못했다: $title" >&2
+  python3 "$SD/scripts/seed_review_log.py" append-verbatim "$AUDIT_ABS" --section "## 4. 비평과 냉독" --title "라운드 $rnd — $rec_title" "$rec_src" \
+    || echo "[spec-distill] audit ## 4 에 옮기지 못했다: $rec_title" >&2
+}
+found=0
+# 탐지 리뷰어 i 의 출력은 critic-<i>.txt — 하나씩 따로 옮긴다. 글롭 대신 ls 로 읽는다(zsh 는 맞는 파일이 없는 글롭에서 멈춘다).
+for b in $([ -n "${STATE_DIR:-}" ] && cd "$STATE_DIR" 2>/dev/null && ls 2>/dev/null); do
+  case "$b" in critic-[0-9]*.txt) ;; *) continue ;; esac
+  idx="${b#critic-}"; idx="${idx%.txt}"
+  case "$idx" in
+    ''|*[!0-9]*) echo "[spec-distill] 탐지 출력 이름이 critic-<숫자>.txt 가 아니다 — 옮기지 않는다: $b" >&2; continue ;;
+  esac
+  found=1; rec_title="탐지 ${idx} (doc-critic)"; rec_name="$b"; record_artifact
 done
+[ "$found" = 1 ] || { rec_title="탐지 (doc-critic)"; rec_name="critic.txt"; record_artifact; }   # 탐지 출력이 하나도 없을 때만 옛 이름을 본다
+rec_title="codex"; rec_name="docreview-codex.yaml"; record_artifact
+rec_title="재비판 (doc-recritic)"; rec_name="recritic.txt"; record_artifact
 ```
 
 ### 게이트 — 처분은 사용자가, 편집은 처분 뒤에

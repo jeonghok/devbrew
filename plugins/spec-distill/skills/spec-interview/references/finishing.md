@@ -365,7 +365,7 @@ fi
 보입니다(`advice-list` 는 읽기 전용이다. 엔진의 접기 폭 · 요약 폭 상수는 R2a 의 일이다):
 
 ```bash
-SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — 경로를 추측하지 말고 멈춰 보고하라" >&2; exit 1; }
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 PAYLOAD="<Step A.5 의 PAYLOAD 절대경로>"
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "$PAYLOAD" || true)"
