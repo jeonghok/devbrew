@@ -36,5 +36,5 @@ print(" ".join("L%d(%d)" % (i + 1, len(L[i])) for i in range(s, e) if len(L[i]) 
 assert_eq "$long" "" "egress 문단에 160자 넘는 줄이 없다"
 assert_grep "$(sed -n '/^\*\*3\. adversarial\*\*/,/^```/p' "$SK")" 'adversarial 은 egress 도구가 없다' "160자 창이 egress 문장을 담는다(창이 비지 않았다 — 양성 짝)"
 assert_not_contains "$(cat "$ROOT/plugins/quality-gates/README.md")" "hard-review" "README 에 지운 게이트(authoring-time hard-review) 인용이 없다"
-assert_contains "$(cat "$ROOT/plugins/quality-gates/README.md")" "iteration 마다 찍는 선택·제외·실패 공시 줄" "README 가 지금 있는 공시 줄을 말한다(양성 짝)"
+assert_contains "$(cat "$ROOT/plugins/quality-gates/README.md")" "dispatch 전 시작 줄" "README 가 지금 있는 공시 줄을 말한다(양성 짝)"
 finish

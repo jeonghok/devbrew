@@ -13,7 +13,7 @@
 - **Law 2 (Writer ≠ Reviewer)** — 순수 read-only reviewer agent(`security-reviewer`/`code-recritic`)가 `tools: Read, Grep, Glob` fail-closed allowlist 선언 (frontmatter scoping으로 물리적 격리 — write/exec/delegation 도구는 목록에 없어 물리적으로 부재; 이름 기반 denylist는 시간에 대해 fail-open이라 대체됨). qg 자체 agent 는 모두 쓰기 권한이 없다. 외부 추가 리뷰어(`pr-review-toolkit` 등)는 쓰기 가능할 수 있으나 advisory 이고 fix 는 오케스트레이터가 소유한다 — 테스트는 오케스트레이터가 자기가 만든 트리에서 직접 돌린다.
 - **Law 3 (Compounding)** — reviewer-persona 편집이 학습된 교훈을 인코딩하는 substrate.
 - **P12 anti-corollary (former AP5, trivia ceremony) 회피** — 한 문장으로 설명되는 diff(typo · rename · 주석만 · 포매팅 — 파일 수와 무관)를 오케스트레이터가 판단해 trivia 로 닫는다(판정 `not-certified (trivia)`). `Spec:` 선언이 있으면 trivia escape 를 쓰지 않는다.
-- **P22 anti-corollary (former AP9, over-dispatching / subagent spray) 회피** — 파이프라인은 fan-out consent 게이트를 fire하지 않고(documented-not-implemented였음), transparency 라인 + 선언된 max fan-out(리뷰어 구성 iteration 당 ≤ 8, 총/iteration ≤ 10) + iteration 마다 찍는 선택·제외·실패 공시 줄로 subagent spray를 드러낸다.
+- **P22 anti-corollary (former AP9, over-dispatching / subagent spray) 회피** — 파이프라인은 fan-out consent 게이트를 fire하지 않고(documented-not-implemented였음), 리뷰어 상한 없이 iteration 마다 찍는 두 공시 줄(dispatch 전 시작 줄: 계획한 수와 더한 수 · 모두 돌아온 뒤 끝 줄: 다시 부른 수와 실패)로 subagent spray를 드러낸다.
 - **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — 파이프라인 내부 fix-loop이 iteration 상한 5(N=5 에는 Retry 가 없고 Max-iter decision 으로 간다) + 항목마다 사용자 적용/제외 결정 + kill switch로 묶임.
 - **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (따로 무시되지 않는다 — 「파이프라인 state」 절; `/quality-gates:quality-pipeline` 시작마다 자기 폴더를 다시 만들고 TTL sweep 으로 폴더 GC).
 - **P8 determinism-economy (harness lightness — trust the model)** (v2.5.0) — 암묵 session scope로 파이프라인이 돌 때 그 사실을 사용자-가시 한 줄로 밝히는 **scope 투명성**. 버려진 결정론적 under-coverage 경고를 결정론 가드가 아니라 *모델 행동*으로 대체(git 비교·차단 없음). 자연어 scope 의도는 별도 parser 없이 모델이 branch scope로 해석 — `/quality-gates:quality-pipeline branch`는 결정론적 escape hatch로 유지. devbrew P8 determinism-economy refinement("Zero hooks" 일반화) instantiation.
@@ -117,7 +117,7 @@ quality-gates/
 
 ## Cost Class
 
-`quality-pipeline` skill은 `cost_class: variable` — 리뷰어는 기본 셋(code-reviewer · security-reviewer · codex) + 조건부 ≤4 + 재비판(iteration 당 최대 8)이고, 비용은 diff 크기와 iteration 수(≤5)에 따라 달라진다. trivia 로 닫힌 실행은 리뷰어를 부르지 않는다.
+`quality-pipeline` skill은 `cost_class: variable` — 리뷰어는 시작 구성(code-reviewer · security-reviewer · codex + 신호에 맞는 조건부 + 재비판)에 모델이 근거를 적어 더한 리뷰어가 얹히고 상한은 없으며, 비용은 diff 크기와 iteration 수(≤5)에 따라 달라진다. trivia 로 닫힌 실행은 리뷰어를 부르지 않는다.
 
 트리거 조건과 override flag는 아래 「쓰는 법」 · 「범위」 절 참고.
 
@@ -190,8 +190,9 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 | 주석 | `pr-review-toolkit:comment-analyzer` | 주석 · docstring 대량 변경 |
 | 재비판 | `quality-gates:code-recritic` | 항상(탐지 0건이어도) |
 
-조건부 넷은 오케스트레이터가 SKILL Step 3 의 신호 규칙표로 매 iteration 고르고, 고른 것과 뺀 것을 한 줄로
-밝힌다. 모든 dispatch(외부 포함)와 codex 프롬프트가 같은 기준 블록과 의도 출처를 받는다.
+위 표는 시작 구성이다. 조건부 넷은 오케스트레이터가 SKILL Step 3 의 신호 규칙표로 매 iteration 고르고,
+diff 를 보고 근거를 적어 리뷰어를 더할 수도 있다. 규모는 두 줄로 알린다 — 첫 dispatch 앞의 시작 줄(부를 수와
+더한 수)과 dispatch 가 모두 돌아온 뒤의 끝 줄(다시 부른 수). 실패한 리뷰어는 한 번 다시 부른다. 모든 dispatch(외부 포함)와 codex 프롬프트가 같은 기준 블록과 의도 출처를 받는다.
 
 **Prerequisites (optional dependency):** `pr-review-toolkit`(code-reviewer + pr-test-analyzer +
 silent-failure-hunter + type-design-analyzer + comment-analyzer). 미설치 시 그 리뷰어는 unavailable 로
@@ -199,15 +200,14 @@ degrade 하고 나머지로 계속한다(loud log). `security-reviewer` · `code
 
 **Fan-out:** 파이프라인은 fan-out consent 게이트를 fire하지 **않는다**(과거
 dispatch-수 기반 consent 게이트 주장은 documented-not-implemented였음). P22
-anti-corollary(subagent spray) instantiation은 **transparency 라인(매 iter 선택/제외 가시화)
-+ 선언된 max fan-out** 기반으로 억제한다 (리포 전역 `fan-out ≥5` 하드 게이트는 억제 sweep에서 제거됐다 — 없는 백스톱을 근거로 들지 않는다).
-max fan-out: **리뷰어 구성 ≤ 8**(기본 셋 + 조건부 ≤4 + 재비판 `code-recritic`), **총/iteration ≤ 10**
-(구성 8. 차등 테스트는 agent 를 부르지 않는다. `synthesize_findings.py` 는 스크립트 호출이지 dispatch 가
-아니므로 이 집계에 안 든다).
+anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억제한다 — 매 iter 시작 줄(선택 · 더함 · 제외와 계획한 수)과
+끝 줄(다시 부른 수). 리뷰어 수에 상한은 없다 — 선언 없는 대규모 fan-out 이 문제이지 규모가 문제가 아니다
+(리포 전역 `fan-out ≥5` 하드 게이트는 억제 sweep에서 제거됐다 — 없는 백스톱을 근거로 들지 않는다).
+차등 테스트는 agent 를 부르지 않고 `synthesize_findings.py` 는 스크립트 호출이지 dispatch 가 아니다.
 
 ## 파이프라인 흐름 (single-turn)
 
-파이프라인은 한 턴 안에서 끝까지 돈다(`quality-pipeline` SKILL 이 리뷰어를 차례로 부른다). 지적이 남으면 반복마다 `AskUserQuestion` 으로 고칠지 묻는다 — 이 질문은 진행만 정하고 리뷰어 수를 막지 않는다. 리뷰어 수는 위 「Fan-out」 의 선언된 상한이 묶는다.
+파이프라인은 한 턴 안에서 끝까지 돈다(`quality-pipeline` SKILL 이 리뷰어를 차례로 부른다). 지적이 남으면 반복마다 `AskUserQuestion` 으로 고칠지 묻는다 — 이 질문은 진행만 정하고 리뷰어 수를 막지 않는다. 리뷰어 수는 위 「Fan-out」 의 두 줄로 공시된다.
 
 ```
 /quality-gates:quality-pipeline  (single assistant turn)

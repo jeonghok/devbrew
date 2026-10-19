@@ -24,7 +24,24 @@ done
 for a in pr-test-analyzer silent-failure-hunter type-design-analyzer comment-analyzer; do
   assert_grep "$S3" "^\| [^|]+ \| \`pr-review-toolkit:$a\` \| [^|]{12,} \|$" "조건부 행 — $a 가 신호 규칙을 갖는다"
 done
-assert_contains "$S3" '> [quality-gates] iter N — 선택:' "transparency 줄"
+assert_contains "$S3" '선택: <리뷰어>(근거: <신호>)' "시작 줄의 선택 자리(옛 transparency 줄이 지키던 것 — 고른 리뷰어와 근거 공시)"
+# AC24 — 리뷰어 상한 8 · 같은 리뷰어 재호출 금지 제거, 규모는 시작 · 끝 두 줄
+assert_not_grep "$S3" 'at most 8|최대 8' "Step 3: 리뷰어 상한 8 이 없다(AC24 — 비용 장치 제거)"
+assert_not_grep "$(cat "$SKILL")" 'Do not re-dispatch the same reviewer|같은 리뷰어를 다시 부르지' "같은 반복 재호출 금지가 없다(AC24)"
+assert_contains "$S3" '시작 구성' "구성표는 시작 구성이다"
+assert_contains "$S3" '> [quality-gates] iter N — 리뷰어 <계획한 수>명을 부른다(구성표 <a>명 · 근거를 적어 더한 <b>명)' "시작 줄 꼴"
+assert_contains "$S3" '/ 더함: <리뷰어>(근거: <한 줄>)' "시작 줄의 더함 자리"
+assert_contains "$S3" '> [quality-gates] iter N — 다시 부른 리뷰어 <r>명(일시 실패 재시도 <x> · 나눠 돌림 <y>)' "끝 줄 꼴"
+start_ln=$(printf '%s\n' "$S3" | grep -n '리뷰어 <계획한 수>명을 부른다' | head -1 | cut -d: -f1)
+end_ln=$(printf '%s\n' "$S3" | grep -n '다시 부른 리뷰어 <r>명' | head -1 | cut -d: -f1)
+agent_ln=$(printf '%s\n' "$S3" | grep -n 'subagent_type: "quality-gates:security-reviewer"' | head -1 | cut -d: -f1)
+[ -n "$start_ln" ] && [ -n "$agent_ln" ] && [ "$start_ln" -lt "$agent_ln" ] && ok "시작 줄은 첫 dispatch 앞에 있다(크게 쓰기 전에 규모를 알린다)" || no "시작 줄이 dispatch 뒤에 있거나 없다"
+[ -n "$end_ln" ] && [ -n "$start_ln" ] && [ "$end_ln" -gt "$start_ln" ] && ok "끝 줄은 시작 줄 뒤에 있다(양성 짝 — 두 줄이 모두 있다)" || no "끝 줄이 없거나 시작 줄 앞이다"
+assert_contains "$S3" '일시 실패' "일시 실패 1회 재시도 규칙"
+assert_contains "$S3" '보안 리뷰어도 같다' "재시도는 보안 리뷰어에도 적용"
+assert_contains "$S3" '나눠 돌림' "큰 diff 는 파일 묶음으로 나눠 같은 리뷰어를 나란히"
+assert_not_grep "$(cat "$QG/README.md")" '최대 8|≤ 8' "README 에 리뷰어 상한 8 이 없다(AC24)"
+assert_contains "$(cat "$QG/README.md")" '위 표는 시작 구성이다' "README 구성표는 시작 구성(양성 짝)"
 assert_contains "$S3" 'unavailable (<plugin> 미설치) — degraded coverage' "미설치 degrade 는 loud"
 assert_not_grep "$S3" '^[[:space:]]*model:' "외부 dispatch 에 model: override 가 없다"
 

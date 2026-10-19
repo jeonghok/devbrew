@@ -19,8 +19,8 @@ gone  "subagent fan-out gate 문구 제거(190/240)" 'subagent fan-out gate'
 gone  "gates subagent fan-out 문구 제거(37-40)"  'gates subagent fan-out'
 
 echo "== AC9 positive: 재계산 max fan-out 선언 =="
-present "리뷰어 구성 ≤ 8"        '리뷰어 구성 ≤ 8'
-present "총/iteration ≤ 10"      '총/iteration ≤ 10'
+present "리뷰어 상한 없이 두 공시 줄"  '리뷰어 상한 없이'
+present "끝 줄(다시 부른 수)"      '끝 줄'
 present "P22 transparency-기반 restate" 'transparency'
 
 echo "== AC10: 리뷰어 구성 표 + prerequisites (v10 — spec §2 · AC11) =="
