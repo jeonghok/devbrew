@@ -331,6 +331,30 @@ class TestMigrationRefusalChoices(unittest.TestCase):
             "CLAUDE.md 의 `## Git Workflow` 는 이전한다",
             s4)
 
+    def test_s4_move_carries_claude_only_charter(self):
+        # 헌장 감지는 AGENTS.md 가 있으면 AGENTS.md 만 읽는다. S4 (i) 가 관리 절을 이전 대상에서 빼고
+        # CLAUDE.md 를 포인터로 바꾸면 CLAUDE.md 에만 있던 `## Project Charter` 는 아무 공지 없이
+        # 사라진다. S2a 처럼 옮기되, AGENTS.md 에 이미 그 절이 있으면 중복을 막는 규칙은 남는다.
+        s4 = standalone_line(self.matrix, "| **S4 (")
+        self.assertIn(
+            "AGENTS.md 에 `## Project Charter` 가 없으면 CLAUDE.md 의 `## Project Charter` 는 "
+            "git 규칙 선택과 상관없이 이전한다",
+            s4)
+        self.assertIn("헌장 절은 중복 없이 그대로 AGENTS.md 끝에 옮긴다", s4)
+        self.assertIn("관리 섹션을 이전 대상에서 빼는 것은 중복 절을 막기 위해서다", s4)
+
+    def test_step5_report_names_moved_sections(self):
+        # 옮긴 절은 보고에서 이름으로 드러나야 한다 — git 규칙을 그대로 둔 실행의 `## Git Workflow` 이전,
+        # 그리고 git 선택과 상관없는 `## Project Charter` 이전.
+        block = _report_block(self.text)
+        keep = standalone_line("\n".join(block), "> git 규칙을 그대로 뒀다면:")
+        self.assertIn("CLAUDE.md 에서 옮겼다면 기존 `## Git Workflow` 를 바꾸지 않고 AGENTS.md 로 옮겼다", keep)
+        charter = standalone_line("\n".join(block), "> 헌장 절을 옮겼다면:")
+        self.assertIn("CLAUDE.md 에 있던 `## Project Charter` 를 AGENTS.md 로 옮겼다", charter)
+        for ln in (keep, charter):
+            for word in ("hook", "훅", "검증"):
+                self.assertNotIn(word, ln)
+
 
 class TestGitWorkflowReplaceRefusal(unittest.TestCase):
     """설계에 없던 결정 1 — git 규칙 교체 거절이 헌장까지 멈추지 않는다."""
