@@ -5,9 +5,9 @@
 # `inherit` 는 사용자의 subagent 기본 티어 설정(`CLAUDE_CODE_SUBAGENT_MODEL`)을 덮어쓴다. 키가
 # 없어야 하니스가 「사용자 설정 → 세션 모델」 순으로 위임한다.
 #
-# 예외는 아래 PINNED 둘뿐이고 값은 정확히 `opus` 다 — qg 소유 리뷰 agent 는 opus 로 고정한다(qg v10
-# 재결정 R3, 사용자 지시 「리뷰는 opus」). 예외 목록은 열거지만 «더 넓히는» 방향의 실수를 막는다:
-# 목록 밖 agent 에 키가 생기면 RED, 목록 안 agent 의 값이 opus 가 아니거나 키가 둘이어도 RED 다.
+# 예외는 없다 — qg 리뷰 agent 도 키가 없다(R2a 사용자 결정 「세션 모델을 따른다」). 옛 qg v10
+# 재결정 R3(「리뷰는 opus」, 사용자 지시)이 두 agent 를 `model: opus` 로 고정했던 것을 뒤집었다.
+# 어느 agent 든 model 키가 생기면 RED 다.
 #
 # 범위 밖: 외부(비-devbrew) 플러그인의 하드코딩 핀은 존중한다 — 이 스윕은 이 리포의 `plugins/` 만 본다.
 set -u -o pipefail
@@ -16,10 +16,6 @@ cd "$ROOT" || exit 1
 . "$ROOT/shared/tests/assert.sh"
 
 MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
-PINNED=(
-  "plugins/quality-gates/agents/code-recritic.md"
-  "plugins/quality-gates/agents/security-reviewer.md"
-)
 
 shopt -s nullglob
 agents=(plugins/*/agents/*.md)
@@ -33,25 +29,21 @@ else
 fi
 
 fm_of() { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$1"; }
-is_pinned() { local p; for p in "${PINNED[@]}"; do [ "$p" = "$1" ] && return 0; done; return 1; }
 
-keyed=(); bad_pin=()
+keyed=()
 for f in "${agents[@]}"; do
   lines="$(fm_of "$f" | grep -E "$MODEL_KEY")"
-  if is_pinned "$f"; then
-    [ "$lines" = "model: opus" ] || bad_pin+=("$f: «${lines:-키 없음}»")
-  elif [ -n "$lines" ]; then
+  if [ -n "$lines" ]; then
     keyed+=("$f: $(printf '%s\n' "$lines" | head -1)")
   fi
 done
 
-[ "${#keyed[@]}" -eq 0 ] && ok "1 — PINNED 밖에서 frontmatter 에 model 키를 둔 agent 0개" || {
-  no "1 — PINNED 밖에서 model 키를 둔 agent ${#keyed[@]}개"
+[ "${#keyed[@]}" -eq 0 ] && ok "1 — frontmatter 에 model 키를 둔 agent 0개" || {
+  no "1 — model 키를 둔 agent ${#keyed[@]}개"
   printf '      %s\n' "${keyed[@]}"; }
-[ "${#bad_pin[@]}" -eq 0 ] && ok "2 — PINNED ${#PINNED[@]}개가 정확히 한 줄 \`model: opus\` 를 갖는다" || {
-  no "2 — PINNED 의 model 이 정확히 \`model: opus\` 한 줄이 아니다"
-  printf '      %s\n' "${bad_pin[@]}"; }
-for p in "${PINNED[@]}"; do
-  [ -f "$p" ] && ok "3 — PINNED 파일이 실재한다: $p" || no "3 — PINNED 파일이 없다: $p (예외 목록이 낡았다)"
-done
+# README 가 고정 해제의 실제 우선순위(환경 변수 먼저, 없으면 세션 모델)를 그대로 말한다.
+README="plugins/quality-gates/README.md"
+grep -qF -- '모델을 고정하지 않는다 — `CLAUDE_CODE_SUBAGENT_MODEL` 이 있으면 그 값, 없으면 세션 모델을 따른다.' "$README" \
+  && ok "2 — README 모델 절이 우선순위(CLAUDE_CODE_SUBAGENT_MODEL → 세션 모델)를 말한다" \
+  || no "2 — README 모델 절의 우선순위 문장이 없다"
 finish

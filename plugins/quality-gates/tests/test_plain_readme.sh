@@ -22,23 +22,24 @@ assert_contains "$lead" "원하면 판정 전에 사람이 승인한 명령으�
 assert_not_contains "$lead" "Claude Code용 품질 검증 파이프라인" "§8: 옛 첫 문단이 없다"
 use="$(awk '/^## 쓰는 법$/{f=1;next} f&&/^## /{exit} f' "$RM")"
 assert_grep "$use" '^\| 이럴 때 \| 친다 \| 나오는 것 \|$' "§8: 쓰는 법이 「이럴 때 · 친다 · 나오는 것」 표다"
-for c in '`/quality-gates:quality-pipeline`' '`/quality-gates:quality-pipeline branch`' '`/quality-gates:quality-pipeline --paths <glob>...`' '`/quality-gates:artifact-critique <path>`'; do
+for c in '`/quality-gates:quality-pipeline`' '`/quality-gates:quality-pipeline branch`' '`/quality-gates:quality-pipeline --paths <glob>...`' '`/quality-gates:quality-pipeline range <시작>[..<끝>]`' '`/quality-gates:artifact-critique <path>`'; do
   assert_contains "$use" "| ${c} |" "§8: 쓰는 법 표에 ${c} 행이 있다"
 done
-assert_eq "$(printf '%s\n' "$use" | grep -c '^| [^-|]')" "5" "§8: 표는 머리 하나와 행 넷이다(없는 명령 행이 없다 — --plan 은 13.0.0 에서 없어졌다)"
+assert_eq "$(printf '%s\n' "$use" | grep -c '^| [^-|]')" "6" "§8: 표는 머리 하나와 행 다섯이다(없는 명령 행이 없다 — --plan 은 13.0.0 에서 없어졌다)"
 assert_contains "$use" "열린 PR 이 있으면 코멘트 하나를 단다" "R17: 게시는 파이프라인 행이 말한다(별도 명령이 없다)"
 assert_contains "$use" "판정 전에 앱을 띄워 걸어 볼지 묻는다." "R21: 파이프라인 행이 e2e 질문을 말한다"
-# 「친다」 칸은 위 넷 가운데 하나여야 한다 — 없어진 명령의 이름을 여기 적지 않는다(그 이름은
+# 「친다」 칸은 위 다섯 가운데 하나여야 한다 — 없어진 명령의 이름을 여기 적지 않는다(그 이름은
 # tests/test_publish_surface_removed.sh 의 개념 별칭 스윕이 이 파일에서도 잡는다).
 cmds="$(printf '%s\n' "$use" | awk -F'|' '/^\| / && !/^\| 이럴 때 /{gsub(/^ +| +$/, "", $3); print $3}')"
-bad="$(printf '%s\n' "$cmds" | grep -vxF -e '`/quality-gates:quality-pipeline`' -e '`/quality-gates:quality-pipeline branch`' -e '`/quality-gates:quality-pipeline --paths <glob>...`' -e '`/quality-gates:artifact-critique <path>`')"
-assert_eq "${bad}" "" "R17: 표의 「친다」 칸은 진입 명령 넷뿐이다(없어진 명령 행이 없다)"
+bad="$(printf '%s\n' "$cmds" | grep -vxF -e '`/quality-gates:quality-pipeline`' -e '`/quality-gates:quality-pipeline branch`' -e '`/quality-gates:quality-pipeline --paths <glob>...`' -e '`/quality-gates:quality-pipeline range <시작>[..<끝>]`' -e '`/quality-gates:artifact-critique <path>`')"
+assert_eq "${bad}" "" "R17: 표의 「친다」 칸은 진입 명령 다섯뿐이다(없어진 명령 행이 없다)"
 assert_file_absent "$RM" '^## 사용$' "§8: 옛 「사용」 절이 없다(쓰는 법이 대신한다)"
 flow="$(awk '/^## 파이프라인 흐름/{f=1;next} f&&/^```/{exit} f' "$RM" | tr '\n' ' ' | tr -s ' ')"
 assert_contains "$flow" "파이프라인은 한 턴 안에서 끝까지 돈다" "§8: 흐름 첫 문단이 쉬운 말이다"
 assert_contains "$flow" "이 질문은 진행만 정하고 리뷰어 수를 막지 않는다." "§8: 흐름 첫 문단이 질문이 하는 일과 하지 않는 일을 말한다"
 assert_not_contains "$flow" "serial dispatch로 실행합니다" "§8: 옛 흐름 문단이 없다"
-assert_file_grep "$RM" '^## 인스턴스화한 원칙$' "CLAUDE.md: 원칙 절은 그대로 있다"
+assert_file_grep "$RM" '^## Principles Instantiated$' "CLAUDE.md: 원칙 절은 레포 규칙 이름(Principles Instantiated)이다"
+assert_file_absent "$RM" '^## 인스턴스화한 원칙$' "원칙 절의 옛 제목이 없다(plugin-audit 이 영어 제목만 읽는다)"
 assert_file_absent "$RM" 'Stop·중단' "M3: 게시 문단에 옛 라벨(Stop)이 없다"
 assert_file_grep "$RM" '멈추기 · 중단으로 끝난 실행은 sink 를 부르지 않는다' "M3(양의 짝): 게시 문단이 새 라벨(멈추기)로 말한다"
 finish

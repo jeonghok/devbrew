@@ -180,4 +180,28 @@ assert "X4b: stop 이 실패해도 setup 은 exit 0" "test '$RC' -eq 0"
 assert "X4b: stderr 에 내리지 못한 사유가 실린다" "grep -q 'pgid 파일이 판독 불가' err"
 cd / && rm -rf "$TMPDIR"
 
+# --- AC21: range 인자 ---
+TMPDIR=$(mktemp -d); cd "$TMPDIR"; git init -q -b trunk; unset CLAUDE_CODE_SESSION_ID
+out="$("$SCRIPT" --session-id "test-range-$$" range abc123 2>&1)"; rc=$?
+assert "range <값>: rc 0" "[ $rc = 0 ]"
+assert "range <값>: 모르는 인자로 읽지 않는다" "! printf '%s' \"\$out\" | grep -q '모르는 인자'"
+out="$("$SCRIPT" --session-id "test-range-$$" range 2>&1)"; rc=$?
+assert "range 값 없음: rc 1" "[ $rc = 1 ]"
+assert "range 값 없음: 이유 한 줄" "printf '%s' \"\$out\" | grep -q 'range 뒤에 시작 커밋이 없다'"
+out="$("$SCRIPT" --session-id "test-range-$$" range --gc 2>&1)"; rc=$?
+assert "range 값이 - 로 시작: rc 1" "[ $rc = 1 ]"
+assert "range 값이 - 로 시작: 이유" "printf '%s' \"\$out\" | grep -q 'range 의 값이 - 로 시작한다'"
+for combo in "branch range x" "--paths a/* range x" "range x branch"; do
+  out="$("$SCRIPT" --session-id "test-range-$$" $combo 2>&1)"; rc=$?
+  assert "범위 인자 둘($combo): rc 1" "[ $rc = 1 ]"
+  assert "범위 인자 둘($combo): 이유" "printf '%s' \"\$out\" | grep -q '범위 인자는 하나만'"
+done
+h="$("$SCRIPT" --help)"
+assert "--help 가 range 를 안내한다" "printf '%s' \"\$h\" | grep -qF 'range <시작>[..<끝>]'"
+assert "--help 가 critique 를 없어진 인자로 안내한다" "printf '%s' \"\$h\" | grep -qF 'critique (→ /quality-gates:artifact-critique)'"
+out="$("$SCRIPT" --session-id "test-range-$$" range abc..def 2>&1)"; rc=$?
+assert "range a..b: rc 0" "[ $rc = 0 ]"
+assert "range a..b: 모르는 인자로 읽지 않는다" "! printf '%s' \"\$out\" | grep -q '모르는 인자'"
+cd / && rm -rf "$TMPDIR"
+
 finish

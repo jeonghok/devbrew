@@ -83,6 +83,22 @@ verdicts:
 Y
 out="$(python3 "$S" --phase synth --findings "$tmp/merged.yaml" --adversarial "$tmp/adv3.yaml")"
 echo "$out" | grep -q "unadjudicated: 1" && ok "un-adjudicated counted" || no "unadjudicated should be 1 ($out)"
+# R2a 계획 3 Task 12 수정 1 — 판정 못 한 지적 그 자체를 낸다(지적만 받기 보고가 「판정 못 함」 라벨로 보인다).
+printf '%s\n' "$out" > "$tmp/synth3.yaml"
+uq() { python3 -c 'import sys,yaml; d=yaml.safe_load(open(sys.argv[1],encoding="utf-8")); exec(sys.argv[2])' "$1" "$2"; }
+assert_eq "$(uq "$tmp/synth3.yaml" 'print(",".join(i["target_anchor"]+"/"+i["severity"]+"/"+i["summary"] for i in d["unadjudicated_items"]))')" "#s2/IMPORTANT/amb B" \
+  "unadjudicated_items 가 판정 못 한 지적(#s2) 그 자체를 낸다"
+assert_eq "$(uq "$tmp/synth3.yaml" 'print(len(d["unadjudicated_items"])==d["unadjudicated"]==1)')" "True" \
+  "unadjudicated_items 의 수는 unadjudicated 와 같다"
+assert_eq "$(uq "$tmp/synth3.yaml" 'print(any(k["dedup_key"]==i["dedup_key"] for k in d["kept"] for i in d["unadjudicated_items"]))')" "False" \
+  "판정 못 한 지적은 kept 에 없다(fail-closed 그대로)"
+# 뒤 호환 — 기존 키의 이름 · 순서는 그대로이고 새 키는 맨 뒤에 하나 더해졌다.
+assert_eq "$(uq "$tmp/synth3.yaml" 'print(" ".join(d.keys()))')" \
+  "converged degraded degraded_reason unadjudicated kept_critical kept_important kept_suggestion stagnation_keys ledger adjudication kept unadjudicated_items" \
+  "synth 출력 키: 기존 순서 그대로 + unadjudicated_items 가 맨 뒤"
+out_all="$(python3 "$S" --phase synth --findings "$tmp/merged.yaml" --adversarial "$tmp/adv1.yaml")"
+printf '%s\n' "$out_all" > "$tmp/synth1.yaml"
+assert_eq "$(uq "$tmp/synth1.yaml" 'print(d["unadjudicated_items"])')" "[]" "모두 판정되면 unadjudicated_items 는 빈 목록이다(양성 짝)"
 
 # --- whole-branch review fix: un-adjudicated CRITICAL must NOT false-converge ---
 # Only #s2 (IMPORTANT) is judged here; #s1 (CRITICAL, K1) is left entirely

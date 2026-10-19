@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # test_code_recritic_frontmatter.sh — AC10 · V4: code-recritic 의 frontmatter 와 출력 계약.
 #
-# 재비판자는 판정 각도의 주 판정자다. 쓰기 도구를 가지면 Law 2 위반이고, opus 가 아니면 재결정
-# R3 위반이며, 출력 블록 이름이 합성기의 BLOCK 과 다르면 모든 응답이 「판정자 사망」으로 읽힌다.
+# 재비판자는 판정 각도의 주 판정자다. 쓰기 도구를 가지면 Law 2 위반이고, model 키를 다시 달면 R2a 결정
+# (세션 모델을 따른다) 위반이며, 출력 블록 이름이 합성기의 BLOCK 과 다르면 모든 응답이 「판정자 사망」으로 읽힌다.
 # frontmatter 가 YAML 로 파싱되지 않으면 런타임은 전 도구로 싣는다 — 그래서 tools · model 을
 # 줄 grep 과 YAML 파서 양쪽에서 잰다.
 set -u
@@ -16,8 +16,7 @@ export PYTHONDONTWRITEBYTECODE=1
 fm="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$A")"
 MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
 assert_grep "$fm" '^name: code-recritic$' "name"
-assert_eq "$(printf '%s\n' "$fm" | grep -cE "$MODEL_KEY")" "1" "model 키는 정확히 한 줄"
-assert_eq "$(printf '%s\n' "$fm" | grep -E "$MODEL_KEY")" "model: opus" "model: opus (재결정 R3)"
+assert_eq "$(printf '%s\n' "$fm" | grep -cE "$MODEL_KEY")" "0" "model 키가 없다 (세션 모델을 따른다 — R2a 사용자 결정)"
 assert_grep "$fm" '^tools: Read, Grep, Glob$' "tools: Read, Grep, Glob (Law 2 — 쓰기·실행·웹 없음)"
 assert_not_grep "$fm" '^(allowedTools|disallowedTools):' "allowlist 하나로만 막는다"
 
@@ -32,7 +31,7 @@ print("tools=%s" % fm.get("tools"))
 print("model=%s" % fm.get("model"))
 print("slots=%s" % " ".join(s["tag"] for s in fm["input_slots"]))' "$A" 2>&1)"
 assert_grep "$parsed" '^tools=Read, Grep, Glob$' "YAML 파싱 — tools 값이 정확히 Read, Grep, Glob"
-assert_grep "$parsed" '^model=opus$' "YAML 파싱 — model 값이 opus"
+assert_grep "$parsed" '^model=None$' "YAML 파싱 — model 키가 없다"
 assert_grep "$parsed" '^slots=project_dir scope findings diff intent profile$' "입력 슬롯 여섯 — 출처·이력 슬롯이 없다"
 
 # 출력 블록 이름은 리터럴로 잰다 — 합성기 import 가 실패해 값이 비면 `^```$` 가 아무 펜스에나
@@ -79,4 +78,8 @@ assert_fixed "$body" '**reject** — 오탐이다. **반드시 `evidence` 에 �
 assert_fixed "$body" '**raise** — severity 가 너무 낮다. `to` 에 올릴 값(`IMPORTANT` · `CRITICAL`)을 적는다. 위로만 올린다.' "raise 는 위로만"
 assert_file_grep "$A" '목적지는 `SUGGESTION` 하나뿐이다' "lower 의 목적지는 SUGGESTION 하나 (관문 E)"
 assert_file_grep "$A" '반드시 `evidence` 에 의도 출처나 diff 를 인용' "lower 에는 근거가 필요하다"
+# 고침 라운드 2 — 재비판자의 읽기 범위: 이 변경이 원인이라며 인용한 범위 밖 파일도 읽는다(AC27 이음매).
+assert_fixed "$body" '읽는 곳은 `<scope>` 의 파일이지만, finding 이 이 변경이 원인이라고 하면서 범위 밖 파일(예: 변경이 깬 호출자)을 인용하면 그 파일도 읽어 확인한다.' "본문: 범위 밖 인용 파일도 읽는다"
+assert_fixed "$(printf '%s\n' "$fm" | tr '\n' ' ' | tr -s ' ')" '이 변경이 원인이라며 범위 밖 파일을 인용하면 그 파일도 읽는다. 파일을 고치지 않는다(Law 2).' "frontmatter description 도 같은 읽기 범위를 말한다"
+
 finish
