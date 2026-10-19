@@ -271,8 +271,6 @@ def works_lines(report: dict) -> list:
         rec, src = recommended(report)
         rec_text = ("권장 %d(%s — 상한이 아니다, 사용자가 늘린다)" % (rec, src)) if rec is not None else ("권장 수 모름 — %s" % src)
         lines.append(clean("돌고 있는 큰 작업 %d(기계 상태 사본) · %s" % (running(machine), rec_text)))
-        for w_ in (report.get("settings") or {}).get("warnings") or []:
-            lines.append(clean("경고: %s" % w_))
         rows = machine.get("작업") or []
         lines.append("작업:" if rows else "작업: 없음(로드맵 밖 일 포함)")
         for w in rows:
@@ -320,6 +318,7 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
         if ov:
             lines.append("경로 예약 겹침(정보): %d개" % len(ov))
             lines += [clean("    %s ↔ %s: %s" % (o["blocks"][0], o["blocks"][1], " · ".join(o["paths"]))) for o in ov]
+        lines += [clean("경고: %s" % w) for w in (report.get("settings") or {}).get("warnings") or []]
         lines += [clean("검사 불가: 형식 깨짐 — %s" % e) for e in report.get("format_errors") or []]
         lines += [clean("검사 불가: %s" % r) for r in report.get("unknown_reasons") or []]
         ruled = [b for b in blocks if "rulings" in b]

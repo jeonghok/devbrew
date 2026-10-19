@@ -262,6 +262,12 @@ class Works(unittest.TestCase):
         self.assertIn("돌고 있는 큰 작업 1(기계 상태 사본) · 권장 3(기본값(머리말 값이 깨졌다) — 상한이 아니다, 사용자가 늘린다)", text)
         self.assertIn("경고: 레포 설정 parallel_default 는 1 이상의 정수다: 'x' — 기본 3 으로 센다", text)
 
+    def test_broken_parallel_default_warned_even_when_nothing_runs(self):
+        r = report([blk("R1", "준비", "pending")], machine=self.machine(),
+                   settings={"parallel_default": 3, "sources": {"parallel_default": "기본값(머리말 값이 깨졌다)"},
+                             "warnings": ["레포 설정 parallel_default 는 1 이상의 정수다: 'x' — 기본 3 으로 센다"]})
+        self.assertIn("경고: 레포 설정 parallel_default 는 1 이상의 정수다: 'x' — 기본 3 으로 센다", self.lines(r))
+
     def test_quiet_when_nothing_runs(self):
         r = report([blk("R1", "준비", "pending")], machine=self.machine(), suite_lock="스위트 잠금: 비어 있음")
         text = "\n".join(self.lines(r))

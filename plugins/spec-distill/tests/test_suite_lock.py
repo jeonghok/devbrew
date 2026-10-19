@@ -129,6 +129,25 @@ class Lock(unittest.TestCase):
             sl.os.rename = real_rename
         self.assertIn("racer", (self.d / "owner").read_text(encoding="utf-8"))
 
+    def test_restore_loop_is_bounded(self):
+        """되돌린 잠금이 계속 「다른 것」 으로 보이는 파일시스템에서도 끝없이 돌지 않는다."""
+        self.own("%d gone t\n" % dead_pid())
+        real_state = sl.state
+
+        def drifting(d):
+            s = real_state(d)
+            if s["held"]:
+                s = dict(s, ident=("drift", time.time()))  # 옮긴 뒤 비교가 늘 어긋난다
+            return s
+        sl.state = drifting
+        try:
+            with self.assertRaises(sl.Busy) as cm:
+                sl.take(self.d, "me", say=lambda m: None)
+        finally:
+            sl.state = real_state
+        self.assertIn("경합했다", str(cm.exception))
+        self.assertTrue(self.d.exists())
+
     def test_describe_empty(self):
         self.assertEqual(sl.describe(self.d), "스위트 잠금: 비어 있음")
 
@@ -168,10 +187,15 @@ class Cli(unittest.TestCase):
 
     def test_sigterm_stops_suite_and_releases(self):
         mark = self.t / "child-alive"
-        child = ("import time, pathlib, sys\np = pathlib.Path(sys.argv[1])\np.write_text('x')\n"
-                 "time.sleep(30)\np.unlink()\n")
+        pidf = self.t / "grandchild.pid"
+        child = ("import os, time, pathlib, sys\np = pathlib.Path(sys.argv[1])\n"
+                 "pathlib.Path(sys.argv[2]).write_text(str(os.getpid()))\np.write_text('x')\ntime.sleep(30)\n")
+        script = self.t / "g.py"
+        script.write_text(child, encoding="utf-8")
+        # bash -c 의 복합 명령 — 손자(파이썬)까지 멈춰야 한다
+        inner = "'%s' '%s' '%s' '%s'; true" % (sys.executable, script, mark, pidf)
         p = subprocess.Popen([sys.executable, str(SCRIPTS / "suite_lock.py"), "run", "--lock", str(self.d), "--owner", "a",
-                              "--", sys.executable, "-c", child, str(mark)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                              "--", "bash", "-c", inner], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         for _ in range(100):
             if mark.exists():
                 break
@@ -181,6 +205,16 @@ class Cli(unittest.TestCase):
         p.wait(timeout=20)
         self.assertFalse(self.d.exists(), "SIGTERM 뒤 잠금이 남았다")
         self.assertEqual(p.returncode, 143)
+        gpid = int(pidf.read_text(encoding="utf-8"))
+        for _ in range(50):
+            try:
+                os.kill(gpid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.1)
+        else:
+            os.kill(gpid, 9)
+            self.fail("손자 프로세스(스위트)가 잠금 밖에 남았다")
 
     def test_show(self):
         rc, out = self.cli("show", "--lock", str(self.d))

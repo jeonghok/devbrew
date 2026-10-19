@@ -32,6 +32,7 @@ LOCK_NAME = "suite-lock"   # 기계 상태 자원 폴더(files/) 아래 이름
 FILES_DIR = "files"
 LOCK_YOUNG = 60            # 주인 기록 전 잠금은 이 초 동안 바쁜 것으로 본다
 POLL = 15                  # 기다릴 때 다시 보는 간격(초)
+RESTORE_MAX = 3            # 주인 없는 잠금을 풀다 경합으로 되돌린 횟수가 이것을 넘으면 바쁜 것으로 본다
 BUSY_RC = 75               # 명령의 종료 코드와 섞이지 않게 고른 값(EX_TEMPFAIL)
 
 
@@ -99,6 +100,7 @@ def take(d: Path, owner: str, wait: float = 0, say=print) -> None:
     label = " ".join(owner.split())
     deadline = time.time() + max(0.0, wait)
     announced = False
+    restored = 0
     while True:
         try:
             d.mkdir()
@@ -125,11 +127,14 @@ def take(d: Path, owner: str, wait: float = 0, say=print) -> None:
             except (OSError, UnicodeDecodeError):
                 moved, moved_owner = None, None
             if moved is None or (moved.st_ino, moved.st_mtime_ns) != s["ident"] or moved_owner != s["owner"]:
-                # 판정한 뒤 다른 쪽이 새로 잡은 잠금을 옮겼다 — 되돌리고 다시 본다
+                # 판정한 뒤 다른 쪽이 새로 잡은 잠금을 옮겼다 — 되돌리고 다시 본다(횟수 상한)
                 try:
                     os.rename(str(gone), str(d))
                 except OSError:
-                    say("[suite-lock] 경합 — 옮긴 잠금을 되돌리지 못했다(%s) — 그 주인에게 알린다" % gone)
+                    raise Busy("경합 — 옮긴 잠금이 %s 에 남았다, 사람이 확인한다" % gone)
+                restored += 1
+                if restored > RESTORE_MAX:
+                    raise Busy("주인 없는 잠금을 풀다 %d번 경합했다 — %s" % (restored, describe(d)))
                 continue
             say("[suite-lock] 주인 없는 잠금을 풀었다(%s · %s)" % (d, s["owner"] or s["why"]))
             shutil.rmtree(str(gone), ignore_errors=True)
@@ -143,6 +148,13 @@ def drop(d: Path) -> None:
     d = Path(d)
     if state(d)["pid"] == os.getpid():
         shutil.rmtree(str(d), ignore_errors=True)
+
+
+def _kill_group(child, sig) -> None:
+    try:
+        os.killpg(child.pid, sig)
+    except (ProcessLookupError, PermissionError):
+        pass
 
 
 def main(argv=None) -> int:
@@ -182,18 +194,19 @@ def main(argv=None) -> int:
     signal.signal(signal.SIGTERM, _term)
     child = None
     try:
-        child = subprocess.Popen(cmd)
+        child = subprocess.Popen(cmd, start_new_session=True)  # 끊기면 명령의 프로세스 묶음 전체를 멈춘다
         return child.wait()
     except OSError as exc:
         print("[suite-lock] 명령을 실행하지 못했다: %s" % exc)
         return 127
     finally:
-        if child is not None and child.poll() is None:  # 끊겼으면 잠금을 풀기 전에 스위트를 멈춘다
-            child.terminate()
+        if child is not None and child.poll() is None:  # 끊겼으면 잠금을 풀기 전에 스위트(손자 포함)를 멈춘다
+            _kill_group(child, signal.SIGTERM)
             try:
                 child.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                child.kill()
+                _kill_group(child, signal.SIGKILL)
+                child.wait()
         drop(lock)
         print("[suite-lock] 풀었다 — %s" % lock)
 
