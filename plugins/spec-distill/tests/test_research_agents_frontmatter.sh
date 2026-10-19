@@ -9,6 +9,57 @@ AG="$REPO_ROOT/plugins/spec-distill/agents"
 fm_of()   { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$1"; }
 body_of() { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{f=0;b=1;next} b' "$1"; }
 
+# frontmatter(표준입력)를 실제 파서로 읽는다. 인자: 레포 루트 · 기대 tools 값. PyYAML 이 없거나 레포 안 것이면 FAIL(조용히 건너뛰지 않는다).
+FM_PY='
+import os, sys
+root = os.path.realpath(sys.argv[1])
+def inside(p):
+    q = os.path.realpath(p or os.curdir)
+    return q == root or q.startswith(root + os.sep)
+sys.path[:] = [p for p in sys.path if not inside(p)]
+try:
+    import yaml
+except ImportError:
+    print("PYYAML_MISSING (PyYAML 이 없어 tools 를 못 잰다)"); sys.exit(3)
+yf = getattr(yaml, "__file__", None) or ""
+if not yf or inside(yf):
+    print("PYYAML_SHADOWED " + yf); sys.exit(3)
+class Dup(Exception): pass
+class L(yaml.SafeLoader):
+    def construct_mapping(self, node, deep=False):
+        if isinstance(node, yaml.MappingNode):
+            self.flatten_mapping(node)
+            seen = set()
+            for k, _v in node.value:
+                key = self.construct_object(k, deep=deep)
+                if key in seen: raise Dup(repr(key))
+                seen.add(key)
+        return yaml.SafeLoader.construct_mapping(self, node, deep=deep)
+text = sys.stdin.buffer.read().decode("utf-8")
+for ch in "\r\x0b\x0c\x85\u2028\u2029":
+    if ch in text:
+        print("비-LF 줄바꿈 U+%04X" % ord(ch)); sys.exit(1)
+try:
+    d = yaml.load(text, Loader=L)
+except Dup as e:
+    print("키 중복 " + str(e)); sys.exit(1)
+except yaml.YAMLError as e:
+    print("YAML 오류 " + type(e).__name__); sys.exit(1)
+if not isinstance(d, dict):
+    print("frontmatter 가 매핑이 아니다"); sys.exit(1)
+t = d.get("tools")
+if isinstance(t, str):
+    got = sorted(x.strip() for x in t.split(","))
+elif isinstance(t, list) and all(isinstance(x, str) for x in t):
+    got = sorted(x.strip() for x in t)
+else:
+    print("tools 가 없거나 형이 이상하다"); sys.exit(1)
+want = sorted(x.strip() for x in sys.argv[2].split(","))
+if got != want:
+    print("tools 집합 불일치 %r" % (got,)); sys.exit(1)
+print("FM_OK")
+'
+
 # agent 이름 · 기대 슬롯(tag:var:kind) · 본문 출력 키 · [tools 줄] · [cost_class]
 check_agent() {
   local name="$1" slots="$2" keys="$3" tools_line="${4:-tools: Read, Grep, Glob}" cost="${5:-low}" f="$AG/$1.md"
@@ -16,15 +67,14 @@ check_agent() {
   local fm body; fm="$(fm_of "$f")"; body="$(body_of "$f")"
   grep -qxF "name: $name" <<<"$fm" && ok "$name: name" || no "$name: name 불일치"
   grep -qxF "$tools_line" <<<"$fm" && ok "$name: tools 가 정확히 ${tools_line#tools: }" || no "$name: tools 가 ${tools_line#tools: } 이 아니다"
-  # tools 는 머리 한 줄로만 만족시킬 수 없다 — 중복 최상위 키 · 이어지는 들여쓰기 줄 · 파싱한 집합을 따로 잰다
-  local dupk; dupk="$(grep -E '^[A-Za-z_]+:' <<<"$fm" | sed 's/:.*//' | sort | uniq -d | tr '\n' ' ')"
-  [[ -z "$dupk" ]] && ok "$name: 최상위 키 중복 없음" || no "$name: 최상위 키 중복: $dupk"
-  awk '/^tools:/{t=1;next} t&&/^[[:space:]]/{bad=1} {t=0} END{exit bad}' <<<"$fm" \
-    && ok "$name: tools 뒤 이어지는 줄 없음" || no "$name: tools 줄 뒤에 들여쓴 이어지는 줄이 있다"
-  local got want
-  got="$(grep -E '^tools:' <<<"$fm" | sed 's/^tools:[[:space:]]*//' | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sort | tr '\n' ' ')"
-  want="$(sed 's/^tools:[[:space:]]*//' <<<"$tools_line" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sort | tr '\n' ' ')"
-  [[ "$got" == "$want" ]] && ok "$name: 파싱한 tools 집합이 기대와 같다" || no "$name: tools 집합 불일치 ($got)"
+  # tools 는 실제 YAML 파서로 잰다 — 줄 모양을 흉내 낸 검사는 따옴표 키 · 빈 줄 뒤 이어쓰기 · 줄바꿈 변종으로 우회된다
+  local yout yrc
+  yout="$(fm_of "$f" | python3 -c "$FM_PY" "$REPO_ROOT" "${tools_line#tools: }" 2>&1)"; yrc=$?
+  if [[ $yrc -eq 0 && "$yout" == "FM_OK" ]]; then
+    ok "$name: frontmatter 를 YAML 로 읽으면 키 중복 · 비-LF 줄바꿈 없고 tools 집합이 기대와 같다"
+  else
+    no "$name: frontmatter YAML 검사 실패 (rc=$yrc): $yout"
+  fi
   for t in Write Edit MultiEdit NotebookEdit Bash Agent Monitor WebSearch WebFetch; do
     case ", ${tools_line#tools: }," in *", $t,"*) continue ;; esac
     grep -qE "^tools:.*(^|,)[[:space:]]*${t}[[:space:]]*(,|$)" <<<"$fm" && no "$name: tools 에 $t (Law 2)" || ok "$name: tools 에 $t 없음"
