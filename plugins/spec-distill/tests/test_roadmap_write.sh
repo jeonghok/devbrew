@@ -503,4 +503,22 @@ table "$T/rc7n.md" "$P1_ROW" "$E1_ROW" "$E2_ROW"
 assert_eq "$(create_b docs/iv3/brief.md "$T/rc7n.md" docs/rmrc2)" "1" "AC26 head_rc: RC7 을 뺀 표는 rc 1(양의 짝)"
 assert_file_has "$T/out.txt" "unassigned: RC7" "AC26 head_rc: 사유에 unassigned: RC7"
 
+# ── AC24: 열일곱 칸 표(선택 칸 여섯) — 흐름 · 산출물이 에픽 블록에 실린다 ─────
+HEAD17="${HEAD_ROW} 크기 | 병렬 | 순서 이유 | 근거 | 흐름 | 산출물 |"
+SEP17="${SEP_ROW}---|---|---|---|---|---|"
+NONE6=' 없음 | 없음 | 없음 | 없음 | 없음 | 없음 |'
+table17() {  # table17 <파일> <행들…> — 열일곱 칸 머리로 쓴다
+  local f="$1"; shift
+  { printf '# state\n\n## 분해안\n\n%s\n%s\n' "$HEAD17" "$SEP17"; printf '%s\n' "$@"; } > "$f"
+}
+E2_FLOW=' 없음 | 없음 | 없음 | 없음 | 조사 — 질문 정리 → 조사 → 결과 문서 | docs/research/e2.md |'
+table17 "$T/t17.md" "${P1_ROW}${NONE6}" "${E1_ROW}${NONE6}" "${E2_ROW}${E2_FLOW}"
+assert_eq "$(create "$T/t17.md" docs/rm17)" "0" "AC24 열일곱 칸: rc 0"
+assert_eq "$(four_empty docs/rm17/roadmap.md)" "ok" "AC24 열일곱 칸: 검사기 네 목록이 빈 목록"
+assert_file_has "$W/docs/rm17/roadmap.md" "- 흐름: 조사 — 질문 정리 → 조사 → 결과 문서" "AC24 열일곱 칸: E2 블록에 흐름 줄"
+assert_file_has "$W/docs/rm17/roadmap.md" "- 산출물: docs/research/e2.md" "AC24 열일곱 칸: E2 블록에 산출물 줄"
+E1BLK="$(awk '/^### E1[^0-9]/{f=1;print;next} f&&/^###? /{exit} f{print}' "$W/docs/rm17/roadmap.md")"
+[ -n "$E1BLK" ] && ok "AC24(양성 대조): E1 블록을 떴다" || no "AC24: E1 블록 부재"
+case "$E1BLK" in *'- 흐름:'*) no "AC24 열일곱 칸: E1 블록에 흐름 줄이 있다";; *) ok "AC24 열일곱 칸: E1 블록에 흐름 줄이 없다";; esac
+
 finish

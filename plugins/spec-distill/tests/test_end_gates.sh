@@ -131,4 +131,17 @@ TPL5="$(win "$TPL" '^## 5[.]' '^## ')"
 for lit in '- 위험 K1 — <숨은 가정 | 실패 양식>: <내용> — <근거>' '- 위험 K2 — 숨은 가정 | <내용> — RC3 (plugins/x/y.py#sym) [RC3 → OQ1]'; do
   assert_contains "$TPL5" "$lit" "AC25: 템플릿 §5 «${lit}»"
 done
+# AC24 — 분해 표의 선택 칸 여섯 · 조사 에픽
+DT="$(win "$FIN" '^3[.] [*][*]분해안 표' '^4[.] [*][*]')"
+[ -n "$DT" ] && ok "AC24(양성 대조): 분해 판단 3 창을 떴다" || no "AC24: 분해 판단 3 창 부재"
+for lit in '칸은 기본 열하나다:' \
+           '선택 칸 여섯(크기 · 병렬 · 순서 이유 · 근거 · 흐름 · 산출물)을 더한 열일곱 칸' \
+           '쓰지 않는 칸은 「없음」이다' \
+           '`${CLAUDE_PLUGIN_ROOT}/references/roadmap-ontology.md` 의 에픽 · 산출물 행' \
+           '조사 에픽은 종류 「묶음」에 `흐름` 「조사 — <단계 한 줄>」, `산출물` 에 결과 파일의 레포 상대경로를 쓴다' \
+           '「결정」은 산출물 없이 로드맵 결정 기록으로 끝나는 일이다'; do
+  assert_contains "$DT" "$lit" "AC24: 분해 판단 3 «${lit}»"
+done
+assert_not_contains "$DT" '칸은 열하나다:' "AC24: 옛 «칸은 열하나다:» 없음(양성 짝: 위 단언)"
+[ -f "$SD/references/roadmap-ontology.md" ] && ok "AC24: 인용한 roadmap-ontology.md 가 있다" || no "AC24: roadmap-ontology.md 부재"
 finish
