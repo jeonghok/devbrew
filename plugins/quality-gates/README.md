@@ -127,7 +127,7 @@ The optional `codex-reviewer` agent has `cost_class: variable` — as an **avail
 
 ### 재비판자(code-recritic) model
 
-qg 리뷰 agent(`code-recritic` · `security-reviewer`)는 모델을 고정하지 않는다 — 세션 모델을 따른다.
+qg 리뷰 agent(`code-recritic` · `security-reviewer`)는 모델을 고정하지 않는다 — `CLAUDE_CODE_SUBAGENT_MODEL` 이 있으면 그 값, 없으면 세션 모델을 따른다.
 `code-recritic` 은 파이프라인 안에서 **단일 model-based 판정 각도**다: 탐지 리뷰어가 findings 를 내고
 그 뒤의 synthesizer 는 결정론적 스크립트이므로, 사용자가 보는 모든 finding 은 재비판자의 판정을
 거친다. 판정 관문 A–E 는 `references/recritic-code-profile.md` 가 싣는다. Runs once per pipeline

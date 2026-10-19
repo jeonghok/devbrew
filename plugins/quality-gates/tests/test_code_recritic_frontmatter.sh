@@ -78,4 +78,8 @@ assert_fixed "$body" '**reject** — 오탐이다. **반드시 `evidence` 에 �
 assert_fixed "$body" '**raise** — severity 가 너무 낮다. `to` 에 올릴 값(`IMPORTANT` · `CRITICAL`)을 적는다. 위로만 올린다.' "raise 는 위로만"
 assert_file_grep "$A" '목적지는 `SUGGESTION` 하나뿐이다' "lower 의 목적지는 SUGGESTION 하나 (관문 E)"
 assert_file_grep "$A" '반드시 `evidence` 에 의도 출처나 diff 를 인용' "lower 에는 근거가 필요하다"
+# 고침 라운드 2 — 재비판자의 읽기 범위: 이 변경이 원인이라며 인용한 범위 밖 파일도 읽는다(AC27 이음매).
+assert_fixed "$body" '읽는 곳은 `<scope>` 의 파일이지만, finding 이 이 변경이 원인이라고 하면서 범위 밖 파일(예: 변경이 깬 호출자)을 인용하면 그 파일도 읽어 확인한다.' "본문: 범위 밖 인용 파일도 읽는다"
+assert_fixed "$(printf '%s\n' "$fm" | tr '\n' ' ' | tr -s ' ')" '이 변경이 원인이라며 범위 밖 파일을 인용하면 그 파일도 읽는다. 파일을 고치지 않는다(Law 2).' "frontmatter description 도 같은 읽기 범위를 말한다"
+
 finish

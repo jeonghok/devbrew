@@ -41,4 +41,9 @@ done
 [ "${#keyed[@]}" -eq 0 ] && ok "1 — frontmatter 에 model 키를 둔 agent 0개" || {
   no "1 — model 키를 둔 agent ${#keyed[@]}개"
   printf '      %s\n' "${keyed[@]}"; }
+# README 가 고정 해제의 실제 우선순위(환경 변수 먼저, 없으면 세션 모델)를 그대로 말한다.
+README="plugins/quality-gates/README.md"
+grep -qF -- '모델을 고정하지 않는다 — `CLAUDE_CODE_SUBAGENT_MODEL` 이 있으면 그 값, 없으면 세션 모델을 따른다.' "$README" \
+  && ok "2 — README 모델 절이 우선순위(CLAUDE_CODE_SUBAGENT_MODEL → 세션 모델)를 말한다" \
+  || no "2 — README 모델 절의 우선순위 문장이 없다"
 finish
