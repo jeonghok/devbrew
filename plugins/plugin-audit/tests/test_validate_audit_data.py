@@ -439,7 +439,7 @@ class TestChosenAxes(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("meta.axes_run 가 잘못됐다", err)
 
-    def _assemble_then_validate(self, codex_d, axis_of=None, wf_axis=None):
+    def _assemble_then_validate(self, codex_d, axis_of=None, wf_axis=None, wf_d=None):
         assemble = SCRIPTS_DIR / "assemble-audit-data.py"
         with tempfile.TemporaryDirectory() as t:
             t = Path(t)
@@ -447,6 +447,8 @@ class TestChosenAxes(unittest.TestCase):
                   "new_open_questions": [], "axis_failures": [], "degraded_events": [], "axes_run": [1]}
             if wf_axis is not None:
                 wf["assigned_axis"] = wf_axis
+            if wf_d is not None:
+                wf["d_verdicts"] = wf_d
             codex = {"d_verdicts": codex_d, "oq_answers": [], "new_open_questions": []}
             meta = {"date": "2026-01-01", "fanout_declared": "규모 문장",
                     "consent": {"approved": True, "at": "t", "fanout": "규모 문장", "axes": [1]},
@@ -479,6 +481,14 @@ class TestChosenAxes(unittest.TestCase):
         # 변이 — Workflow 지도가 없고 axis_of 가 D1(고른 축 1)을 4 로 잘못 적었다. D1 은 실제 claude 판정이 있다.
         data, (rc, err) = self._assemble_then_validate([], axis_of={"D1": 4, "D4": 4})
         self.assertEqual(data["meta"]["assigned_axis_source"], "assigned.json")
+        self.assertEqual(rc, 1)
+        self.assertIn("D1의 codex 판정 없음", err)
+
+    def test_end_to_end_incoming_backfilled_marker_is_ignored(self):
+        # 표식은 assemble 만 단다 — Workflow 가 보낸 backfilled 는 지우고 판단한다.
+        d1 = dict(d("D1", "claude"), backfilled=True)
+        data, (rc, err) = self._assemble_then_validate([], wf_axis={"D1": 4, "D4": 4}, wf_d=[d1])
+        self.assertNotIn("backfilled", [x for x in data["d_verdicts"] if x["id"] == "D1"][0])
         self.assertEqual(rc, 1)
         self.assertIn("D1의 codex 판정 없음", err)
 

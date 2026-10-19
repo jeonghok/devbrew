@@ -14,7 +14,7 @@ def _sanitize_finding(f):
     ev_keys(unhashable set-key/.get())·gate-E(.get())·grounding·validate·render 어디서든 크래시한다.
     **ingestion에서 한 번** 정규형으로 강등하면 downstream 소비자 전부가 malformed 입력에서 안전해진다
     (근본 봉쇄 — 소비자마다 개별 가드하는 whack-a-mole 대신, codex re-verify round-2). claude findings는
-    이미 AXIS_SCHEMA로 정형이라 이 정규화가 no-op이다."""
+    이미 축 스키마(axisSchema)로 정형이라 이 정규화가 no-op이다."""
     g = dict(f)
     ev = []
     for e in (g.get("evidence") or []):
@@ -81,6 +81,10 @@ def ev_keys(f):
     return {(e.get("file"), e.get("line"))}
 
 
+def _drop_marker(v):
+    return {k: x for k, x in v.items() if k != "backfilled"} if isinstance(v, dict) else v
+
+
 def _axis_map(raw):
     """assigned.json 의 axis_of — id → 축(1~6 정수). 그 밖의 값은 버린다(축을 모르는 id 로 남는다)."""
     if not isinstance(raw, dict):
@@ -91,8 +95,9 @@ def _axis_map(raw):
 
 def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     findings = [_sanitize_finding(f) for f in wf["findings"]]   # codex-source malformed 입력 근본 봉쇄
-    d_verdicts = list(wf.get("d_verdicts", []))
-    oq_answers = list(wf.get("oq_answers", []))
+    # `backfilled` 표식은 assemble 만 단다(아래 빈칸 채움) — 들어온 판정의 같은 키는 지운다.
+    d_verdicts = [_drop_marker(v) for v in wf.get("d_verdicts", [])]
+    oq_answers = [_drop_marker(v) for v in wf.get("oq_answers", [])]
     noq = list(wf.get("new_open_questions", []))
     # workflow return의 claude-source 기본값 stamp (source 미부착 시)
     for v in d_verdicts + oq_answers + noq:
@@ -102,10 +107,10 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     codex_dropped = []
     for v in _sanitize_collection(codex_side.get("d_verdicts", []),
                                   "d_verdicts", codex_dropped):
-        d_verdicts.append({**v, "source": "codex"})
+        d_verdicts.append({**_drop_marker(v), "source": "codex"})
     for v in _sanitize_collection(codex_side.get("oq_answers", []),
                                   "oq_answers", codex_dropped):
-        oq_answers.append({**v, "source": "codex"})
+        oq_answers.append({**_drop_marker(v), "source": "codex"})
     for v in _sanitize_collection(codex_side.get("new_open_questions", []),
                                   "new_open_questions", codex_dropped):
         noq.append({**v, "source": "codex"})

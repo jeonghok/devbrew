@@ -53,11 +53,12 @@ const gapScope = [
   '`.claude-plugin/marketplace.json`의 ' + target + ' 항목',
 ].join(' · ')
 
-// Candidate-clue / open-question ids come from the seed-derived pack. An EMPTY array means "no
-// pre-seeded clues" — we OMIT the enum entirely (JSON Schema `enum: []` matches nothing, which
-// would reject every id); omission lets the auditor mint fresh ids (spot 6).
-const dVerdictIds = (pack.candidate_clues || []).map((c) => c.id)
-const oqIds = (pack.open_questions || []).map((q) => q.id)
+// Candidate-clue / open-question ids come from the seed-derived pack, and each axis may judge only
+// its own — the same `it.axis === ax.n` filter as axisClueBlock / axisOqBlock / ASSIGNED_AXIS. An
+// EMPTY list means "no pre-seeded clues for this axis" — we OMIT the enum entirely (JSON Schema
+// `enum: []` matches nothing, which would reject every id); omission lets the auditor mint fresh ids (spot 6).
+const ownIds = (list, axisN) => (list || []).filter((it) => it.axis === axisN).map((it) => it.id)
+const idSchema = (ids) => ({ type: 'string', ...(ids.length ? { enum: ids } : {}) })
 
 const EVIDENCE = {
   type: 'array',
@@ -76,7 +77,7 @@ const EVIDENCE = {
 // `pending` defers axis 2's condition (c) to axis 6 — offered only when axis 6 runs.
 const STEELMAN_ENUM = ['a', 'b', 'c', 'd', 'none', ...(RUN_SECURITY ? ['pending'] : [])]
 
-const AXIS_SCHEMA = {
+const axisSchema = (axisN) => ({
   type: 'object',
   required: ['findings', 'd_verdicts', 'oq_answers', 'new_open_questions'],
   properties: {
@@ -111,7 +112,7 @@ const AXIS_SCHEMA = {
         type: 'object',
         required: ['id', 'verdict', 'reason'],
         properties: {
-          id: { type: 'string', ...(dVerdictIds.length ? { enum: dVerdictIds } : {}) },
+          id: idSchema(ownIds(pack.candidate_clues, axisN)),
           verdict: { type: 'string', enum: ['confirmed', 'withdrawn', 'reclassified', 'unverified'] },
           reason: { type: 'string' },
           impact: { type: 'string' },
@@ -126,7 +127,7 @@ const AXIS_SCHEMA = {
         type: 'object',
         required: ['id', 'reason'],
         properties: {
-          id: { type: 'string', ...(oqIds.length ? { enum: oqIds } : {}) },
+          id: idSchema(ownIds(pack.open_questions, axisN)),
           answer: { type: 'string' },
           reason: { type: 'string' },
           evidence: { type: 'array', items: { type: 'object' } },
@@ -151,7 +152,7 @@ const AXIS_SCHEMA = {
       },
     },
   },
-}
+})
 
 const REFUTE_SCHEMA = {
   type: 'object',
@@ -536,7 +537,7 @@ const results = await pipeline(
   (ax) => auditor(findPrompt(ax), {
     label: '축' + ax.n + ' ' + ax.name,
     phase: '감사',
-    schema: AXIS_SCHEMA,
+    schema: axisSchema(ax.n),
   }),
   async (res, ax) => {
     // A dead axis loses everything it owned — schema retry exhaustion validates the whole

@@ -199,6 +199,13 @@ class TestAssemble(unittest.TestCase):
         r, data = run(workflow_return=wf3, codex_side=cx, meta=BASE_META, assigned=assigned)
         d1 = [v for v in data["d_verdicts"] if v["id"] == "D1"]
         self.assertNotIn("backfilled", d1[0], "축이 낸 판정에는 표식이 없다")
+        wf4 = dict(wf, d_verdicts=[{"id": "D1", "verdict": "confirmed", "reason": "r", "backfilled": True}],
+                   oq_answers=[{"id": "OQ1", "reason": "r", "backfilled": True}])
+        cx4 = dict(cx, d_verdicts=[{"id": "D4", "verdict": "confirmed", "reason": "r", "backfilled": True}])
+        r, data = run(workflow_return=wf4, codex_side=cx4, meta=BASE_META, assigned=assigned)
+        marked = [(v["id"], v["source"]) for v in data["d_verdicts"] + data["oq_answers"] if "backfilled" in v]
+        self.assertEqual(sorted(marked), [("D4", "claude")],
+                         "들어온 backfilled 는 지우고, assemble 이 채운 빈칸(D4 claude)에만 단다")
 
     def test_both_chosen_axes_dead_makes_no_report(self):
         # axes 가 meta.json 에 빠져도 Workflow 의 axes_run 이 분모가 된다 (AC-4 우회 봉쇄).

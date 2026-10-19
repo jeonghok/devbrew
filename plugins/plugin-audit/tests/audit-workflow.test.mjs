@@ -17,8 +17,10 @@ test('row 3 — d_verdicts.id enum is derived from pack candidate clues', async 
     },
     codexFindings: [],
   }
-  const { captured } = await runWorkflow(WF, { args, stubAgent: stubOneFinding() })
-  const enumIds = captured['감사'].properties.d_verdicts.items.properties.id.enum
+  const { calls } = await runWorkflow(WF, { args, stubAgent: stubOneFinding() })
+  // Both clues sit on axis 1, so axis 1's schema carries them (each axis judges only its own ids).
+  const ax1 = calls.find((c) => c.opts.phase === '감사' && c.opts.label.startsWith('축1 '))
+  const enumIds = ax1.opts.schema.properties.d_verdicts.items.properties.id.enum
   assert.deepEqual(enumIds, ['D1', 'D2'])
 })
 
@@ -341,7 +343,7 @@ test('결함 #9 대칭 절반 양성 짝 — 축 refuter 가 판정하면 그 �
   assert.equal(axisMissedVerdictEvents(result).length, 0)
 })
 
-test('AXIS_SCHEMA findings 에 plain 이 선택 속성으로 있다', async () => {
+test('axisSchema findings 에 plain 이 선택 속성으로 있다', async () => {
   const { captured } = await runWorkflow(WF, { stubAgent: stubOneFinding() })
   const items = captured['감사'].properties.findings.items
   assert.equal(items.properties.plain.type, 'string')
@@ -523,6 +525,37 @@ test('assigned_axis is the id → axis map the question blocks used', async () =
   const ax6 = auditCalls(calls).find((c) => c.opts.label.startsWith('축6 ')).prompt.split('너의 축: 6')[1]
   assert.ok(ax6.includes('D6: c') && ax6.includes('OQ6: q'))
   assert.ok(!ax6.includes('D2: c'))
+})
+
+test('each axis schema enums only its own clue / question ids', async () => {
+  const pack = {
+    ...DEFAULT_PACK,
+    candidate_clues: [
+      { id: 'D1', axis: 1, claim: 'c', file: 'a', line: 1 },
+      { id: 'D4', axis: 4, claim: 'c', file: 'a', line: 4 },
+    ],
+    open_questions: [
+      { id: 'OQ1', axis: 1, question: 'q' },
+      { id: 'OQ4', axis: 4, question: 'q' },
+    ],
+  }
+  const { calls } = await runWorkflow(WF, {
+    args: { target: 'sample', evidencePack: pack, codexFindings: [] },
+    stubAgent: stubOneFinding(),
+  })
+  const schemaOf = (n) => auditCalls(calls).find((c) => c.opts.label.startsWith('축' + n + ' ')).opts.schema
+  const ids = (s) => [s.properties.d_verdicts.items.properties.id, s.properties.oq_answers.items.properties.id]
+  const [d1, o1] = ids(schemaOf(1))
+  assert.deepEqual(d1.enum, ['D1'])
+  assert.deepEqual(o1.enum, ['OQ1'])
+  const [d4, o4] = ids(schemaOf(4))
+  assert.deepEqual(d4.enum, ['D4'])
+  assert.deepEqual(o4.enum, ['OQ4'])
+  // an axis with no ids of its own keeps a valid schema: the enum is omitted, never enum: []
+  for (const p of ids(schemaOf(3))) {
+    assert.equal(p.type, 'string')
+    assert.ok(!('enum' in p), JSON.stringify(p))
+  }
 })
 
 test('axes without 6 — axis 2 schema drops pending', async () => {
