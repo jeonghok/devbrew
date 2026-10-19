@@ -28,7 +28,8 @@ assert_grep "$(qlines "$S")" 'question: "qg 가 최대 5번 반복했다\. 마�
 assert_grep "$(qlines "$S")" 'question: "<file> 수정에 실패했다: <reason>\. 이번 수정 반복을 멈출까, 이 파일만 건너뛰고 나머지를 계속할까\?"' "AC6: 수정 실패 질문이 한국어다"
 assert_grep "$(qlines "$S")" 'question: "분류표의 적용/제외를 바꿀까요\?' "분류 질문은 그대로 있다(양성 짝)"
 assert_not_grep "$(qlines "$S")" 'findings remain|What next|reached max|Retry failed at' "AC6: 영어 질문이 남지 않았다"
-assert_eq "$(qlines "$S" | grep -c .)" "4" "AC6: 이 SKILL 의 question 줄은 넷이다(새로 생기거나 사라진 질문 없음)"
+assert_grep "$(qlines "$S")" 'question: "qg 반복 N: 남은 지적이 있다\(<summary>\)\. 범위 모드는 이미 있는 커밋을 본다 — 고칠 것은 새 브랜치에서 고친다\. 어떻게 끝낼까\?"' "AC6: 범위 모드 Fix-loop 질문이 한국어다(AC21)"
+assert_eq "$(qlines "$S" | grep -c .)" "5" "AC6: 이 SKILL 의 question 줄은 다섯이다(넷 + 범위 모드 질문 — 새로 생기거나 사라진 질문 없음)"
 
 # ② 선택지 라벨 · 머리글 — 새 라벨 양성 · 옛 라벨 부재
 for l in '고치고 다시 돌기' '지금 판정으로 끝내기' '멈추기' '이번 반복 멈추기' '이 파일만 건너뛰기' '분류표 그대로'; do

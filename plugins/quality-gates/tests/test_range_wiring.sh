@@ -1,0 +1,281 @@
+#!/usr/bin/env bash
+# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md
+# test_range_wiring.sh — 범위 모드(range <시작>[..<끝>])가 파이프라인 전체에 이어져 있다(AC21 · AC22).
+#
+# 문면 락은 각 사실이 적힌 절 창 안에서 잰다(제목이 대신 만족시키지 못하게). 끝에서 끝 사슬은
+# 실제 스크립트와 SKILL · reference 의 펜스를 시작 커밋에 체크아웃한 픽스처에서 돌려 모든 소비자가
+# 같은 두 커밋(diff 기준 · 차등 기준선 = <시작>, HEAD 축 · 판정 커밋 = <끝>)을 쓰는지 본다.
+set -u
+[ "${1:-}" = "--emit-scanned" ] && { printf '%s\n' \
+  plugins/quality-gates/skills/quality-pipeline/SKILL.md \
+  plugins/quality-gates/skills/quality-pipeline/references/differential-test.md \
+  plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md; exit 0; }
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+. "$(cd "$SCRIPT_DIR/../../.." && pwd)/shared/tests/assert.sh"
+SK="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
+DT="$PLUGIN_ROOT/skills/quality-pipeline/references/differential-test.md"
+SF="$PLUGIN_ROOT/skills/quality-pipeline/references/state-file-format.md"
+export PYTHONDONTWRITEBYTECODE=1
+
+ROOT=$(mktemp -d)
+trap 'rm -rf "$ROOT"' EXIT
+
+# 펜스 뽑기 — stdin 의 글에서 본문에 needle 이 든 첫 ```bash 펜스(들여쓰기를 걷어 낸 본문).
+# 파이썬 본문은 `$( )` 안 heredoc 으로 두지 않는다 — 최상위 heredoc 으로 변수에 담는다.
+IFS= read -r -d '' PY_FENCE <<'PY' || true
+import re, sys, textwrap
+text = sys.stdin.read()
+needle = sys.argv[1]
+lines = text.splitlines()
+open_re = re.compile(r'^[ \t]*```bash\s*$')
+close_re = re.compile(r'^[ \t]*```\s*$')
+i = 0
+while i < len(lines):
+    if open_re.match(lines[i]):
+        j = i + 1
+        body = []
+        while j < len(lines) and not close_re.match(lines[j]):
+            body.append(lines[j])
+            j += 1
+        if any(needle in l for l in body):
+            print(textwrap.dedent("\n".join(body)))
+            break
+        i = j + 1
+    else:
+        i += 1
+PY
+fence_with() { python3 -I -c "$PY_FENCE" "$1"; }
+
+# 판정 펜스 셋(일반 · trivia · scope-empty) — verdict.py 를 부르는 펜스마다 SHA_ARG 를 쓰는가
+IFS= read -r -d '' PY_VERDICT_FENCES <<'PY' || true
+import re, sys
+text = sys.stdin.read()
+lines = text.splitlines()
+open_re = re.compile(r'^[ \t]*```bash\s*$')
+close_re = re.compile(r'^[ \t]*```\s*$')
+sha_line = ('SHA_ARG="$(git rev-parse --short HEAD)"; RS="$RD/range-scope.txt"; '
+            'if [ -f "$RS" ]; then SHA_ARG="$(git rev-parse --short "$(sed -n \'s/^end: //p\' "$RS")")"; fi')
+fences = []
+i = 0
+while i < len(lines):
+    if open_re.match(lines[i]):
+        j = i + 1
+        body = []
+        while j < len(lines) and not close_re.match(lines[j]):
+            body.append(lines[j].strip())
+            j += 1
+        fences.append(body)
+        i = j + 1
+    else:
+        i += 1
+vf = [b for b in fences if any('scripts/verdict.py' in l for l in b)]
+print("VERDICT_FENCES:%d" % len(vf))
+good = 0
+for b in vf:
+    s = [k for k, l in enumerate(b) if l == sha_line]
+    v = [k for k, l in enumerate(b) if 'scripts/verdict.py' in l]
+    calls = " ".join(b[v[0]:]) if v else ""
+    if len(s) == 1 and v and s[0] < v[0] and '--sha "$SHA_ARG"' in calls and '--short HEAD)" --e2e' not in calls:
+        good += 1
+print("SHA_ARG_FENCES:%d" % good)
+PY
+
+g() {   # g <repo> <git args…> — 전역 설정에 기대지 않는 커밋
+  local r="$1"; shift
+  git -C "$r" -c user.email=t@t -c user.name=t -c commit.gpgsign=false "$@"
+}
+
+# ── 문면 락 ─────────────────────────────────────────────────────────────
+
+case_text_locks() {
+  echo "[문면 — SKILL]"
+  assert_grep "$(sed -n '1,20p' "$SK")" '^argument-hint: .*range <시작>\[\.\.<끝>\]' "인자 안내에 range 가 있다 — R5 가 이것으로 범위 입력 여부를 정한다"
+  assert_grep "$(awk '/^\*\*P2 — /{f=1} /^\*\*P2b — /{f=0} f' "$SK")" '^Arguments: .*`range <시작>\[\.\.<끝>\]`.*origin/HEAD' "Arguments 줄: range 와 끝 생략 = origin/HEAD"
+
+  local P2B; P2B="$(awk '/^\*\*P2b — /{f=1} /^\*\*P3 — /{f=0} f' "$SK")"
+  [ -n "$P2B" ] && ok "P2b 창이 있다(양성 짝)" || no "P2b 창이 없다 — 아래 단언이 공허하다"
+  assert_contains "$P2B" 'resolve-range.sh" --out "$RD/range-scope.txt" -- $ARGUMENTS' "P2b 가 범위를 한 번 얼린다"
+  assert_contains "$P2B" '범위를 풀지 못했다' "P2b: 못 풀면 판정 없이 멈추는 줄"
+  assert_contains "$P2B" '리뷰 범위: <start 앞 12자>..<end 앞 12자>' "P2b: 풀리면 범위 한 줄을 낸다"
+  assert_contains "$(awk '/^\*\*P2 — /{f=1} /^\*\*P2b — /{f=0} f && /^rm -f /' "$SK")" '"$RD/range-scope.txt"' "P2 가 앞 실행의 range-scope.txt 를 지운다"
+
+  local P3W; P3W="$(awk '/^\*\*P3 — /{f=1} /^## Flow/{f=0} f' "$SK")"
+  assert_contains "$P3W" '설계문서 N개' "P3: 여러 설계문서의 의도 줄"
+  assert_contains "$(printf '%s\n' "$P3W" | fence_with ' --range ')" '"$QG/scripts/discover-spec.sh" --intent-out "$RD/intent.md" --range "$(sed -n '"'s/^start: //p'"' "$RS")" "$(sed -n '"'s/^end: //p'"' "$RS")"' \
+    "P3: 범위 모드 펜스가 얼린 두 커밋으로 discover-spec 을 부른다"
+
+  local S1; S1="$(awk '/^### Step 1 — scope$/{f=1;next} f&&/^### Step 1b/{exit} f' "$SK")"
+  assert_grep "$S1" '^ *\| range \| `--mode range --scope-file "\$RD/range-scope\.txt"` \|$' "Step 1c 표: range 행이 범위 파일을 넘긴다"
+  assert_contains "$S1" '범위 모드는 1a 를 돌리지 않는다' "Step 1: 범위 모드는 override — 1a 를 돌리지 않는다"
+  assert_contains "$(awk '/^### Step 1b /{f=1;next} f&&/^### Step 3 /{exit} f' "$SK")" '범위 모드는 `check-review-scope.sh` 를 돌리지 않는다' "Step 1b: 범위 모드는 건너뛴다"
+  assert_contains "$(awk '/^\*\*다른 전제 각도 — codex/{f=1} f&&/^\*\*Capture the runner/{exit} f' "$SK")" '<산출물 경로> --range <range-scope.txt 의 start: 값> <end: 값>' "Step 3: codex 러너에 범위를 넘긴다"
+  assert_contains "$(awk '/^### Step 4\.5 /{f=1;next} f&&/^---$/{exit} f' "$SK")" '`$RD/range-scope.txt` 를 그대로' "Step 4.5: 범위 모드면 범위 파일을 판정 꼬리 뒤에 보인다"
+
+  local FL; FL="$(awk '/^### Fix-loop decision$/{f=1;next} f&&/^### Max-iter/{exit} f' "$SK")"
+  assert_contains "$FL" '범위 모드' "Fix-loop: 범위 모드 갈래가 있다(양성 짝)"
+  assert_contains "$FL" '범위 모드는 반복 1 에서 끝나므로 Max-iter 에 닿지 않는다' "Fix-loop: 범위 모드는 Max-iter 에 닿지 않는다"
+  # 범위 모드 질문의 선택지 줄들에 「고치고 다시 돌기」가 없다 — 범위 갈래 블록(그 질문을 담은 펜스)을 잘라 잰다
+  local RB; RB="$(printf '%s\n' "$FL" | awk '/^\*\*범위 모드 갈래/{f=1} f' | awk '/^```$/{n++; if(n==1){f=1;next} if(n==2){exit}} f')"
+  assert_contains "$RB" '범위 모드는 이미 있는 커밋을 본다 — 고칠 것은 새 브랜치에서 고친다. 어떻게 끝낼까?' "범위 갈래: 질문 문구(양성 짝)"
+  assert_contains "$RB" 'label: "지금 판정으로 끝내기"' "범위 갈래: 「지금 판정으로 끝내기」 선택지"
+  assert_contains "$RB" 'label: "멈추기"' "범위 갈래: 「멈추기」 선택지"
+  assert_not_contains "$RB" '고치고 다시 돌기' "범위 갈래: 「고치고 다시 돌기」 선택지가 없다"
+  assert_not_contains "$RB" 'header: "분류"' "범위 갈래: 분류 질문이 없다"
+
+  local E2; E2="$(awk '/^## e2e$/{f=1;next} f&&/^\*\*E0/{exit} f' "$SK")"
+  assert_contains "$E2" '범위 모드' "e2e: 범위 모드는 걷지 않는다"
+  assert_contains "$E2" '> [quality-gates] 범위 모드라 앱을 걷지 않는다 — 지금 체크아웃이 범위 끝과 다를 수 있다.' "e2e: 걷지 않는 이유를 공시한다"
+
+  local FV; FV="$(awk '/^## Final verdict$/{f=1;next} f&&/^## Publish$/{exit} f' "$SK")"
+  assert_count_ge "printf '%s\n' \"\$FV\" | grep -c 'range-scope.txt'" 3 "판정 펜스(일반 · trivia · scope-empty)가 범위 모드면 끝 커밋을 쓴다"
+  local vf; vf="$(printf '%s\n' "$FV" | python3 -I -c "$PY_VERDICT_FENCES")"
+  assert_grep "$vf" '^VERDICT_FENCES:3$' "판정 펜스는 셋이다(양성 짝)"
+  assert_grep "$vf" '^SHA_ARG_FENCES:3$' "판정 펜스 셋 모두 verdict.py 앞에서 SHA_ARG 를 정하고 --sha 에 그것을 넘긴다"
+  assert_eq "$(printf '%s\n' "$FV" | grep -cF -- '--sha "$(git rev-parse --short HEAD)"')" "0" "판정 펜스에 HEAD 를 바로 넘기는 --sha 가 남지 않았다"
+  assert_contains "$(printf '%s\n' "$FV" | fence_with "printf '\n## 판정")" "if [ -f \"\$RD/range-scope.txt\" ]; then printf '\n## 범위\n\n'; cat \"\$RD/range-scope.txt\"; fi" "기록 펜스: 범위 모드면 ## 범위 절을 남긴다"
+
+  local PB; PB="$(awk '/^## Publish$/{f=1;next} f&&/^## kill switch$/{exit} f' "$SK")"
+  assert_contains "$PB" '게시 안 함 — 범위 모드라 PR 코멘트를 달지 않는다' "게시: 범위 모드는 달지 않고 공시한다"
+
+  echo "[문면 — differential-test.md · state-file-format.md]"
+  assert_file_grep "$DT" 'scope0=range' "D0: 범위 모드의 기준선은 시작 커밋"
+  # 위 단언은 D0 아래 설명 줄(`scope0=range` 이면 …)로도 채워진다 — 펜스 본문의 판별 줄을 따로 잰다
+  assert_contains "$(fence_with 'scope0=' < "$DT")" "printf 'scope0=range\\nboundary=%s\\n' \"\$(sed -n 's/^start: //p' \"\$RS\")\"" "D0 펜스: 범위면 시작 커밋을 기준선으로 찍는다"
+  assert_file_grep "$DT" '\-\-range "\$RD/range-scope.txt"' "D1: HEAD 축은 create-head --range"
+  assert_file_grep "$DT" '\-\-topic <start> <end>' "D2: 범위의 후보는 --topic <start> <end>"
+  assert_file_grep "$DT" '\-\-total \-\-tree <end>' "D2: 범위의 분모는 --total --tree <end>"
+  assert_file_grep "$SF" '^## 범위$' "state-file-format: ## 범위 절"
+  assert_contains "$(awk '/^같은 폴더의 다른 파일/{f=1} f' "$SF")" '`range-scope.txt`' "state-file-format: 다른 파일 목록에 range-scope.txt"
+}
+
+# ── 끝에서 끝 사슬 ───────────────────────────────────────────────────────
+# 픽스처: 레포 A(trunk: S → c1(설계 a · 코드) → E(설계 b · tests/test_x.sh 100755)) · 클론 R 을 S 에 체크아웃.
+# 전역 A R S E D F 를 채운다.
+mkfix() {
+  local d; d=$(mktemp -d "$ROOT/fix.XXXXXX")
+  A="$d/A"; R="$d/R"
+  git init -q -b trunk "$A"
+  echo "# a" > "$A/README.md"; g "$A" add README.md; g "$A" commit -q -m c0
+  S=$(git -C "$A" rev-parse HEAD)
+  mkdir -p "$A/docs/specs" "$A/src" "$A/tests"
+  printf '# A 설계\n- a\n' > "$A/docs/specs/a-design.md"
+  printf 'echo x\n' > "$A/src/x.sh"
+  g "$A" add -A; g "$A" commit -q -m "feat: x" -m "Spec: docs/specs/a-design.md"
+  printf '# B 설계\n- b\n' > "$A/docs/specs/b-design.md"
+  printf '#!/bin/sh\n. ./src/x.sh\n' > "$A/tests/test_x.sh"; chmod +x "$A/tests/test_x.sh"
+  g "$A" add -A; g "$A" commit -q -m "test: x" -m "Spec: docs/specs/b-design.md"
+  E=$(git -C "$A" rev-parse HEAD)
+  git clone -q "$A" "$R"
+  git -C "$R" checkout -q --detach "$S"
+  D="$R/.claude/quality-gates/sid12345"; mkdir -p "$D"; F="$D/range-scope.txt"
+}
+
+specs_of() {   # 읽을 수 없는 JSON 은 빈 줄 — 단언이 실패로 센다
+  python3 -I -c '
+import json, sys
+try:
+    print(" ".join(json.loads(sys.stdin.read())["specs"]))
+except Exception:
+    print("")'
+}
+
+case_chain_agrees() {
+  echo "[사슬 — 스크립트]"
+  mkfix
+  assert_eq "$(git -C "$R" rev-parse HEAD)" "$S" "전제: R 은 시작 커밋에 체크아웃돼 있다"
+  assert_eq "$(git -C "$A" ls-files -s tests/test_x.sh | cut -c1-6)" "100755" "전제: tests/test_x.sh 는 실행 비트가 있다"
+  local out rc
+  out=$(cd "$R" && bash "$PLUGIN_ROOT/scripts/resolve-range.sh" --out "$F" -- range "$S" 2>"$ROOT/err"); rc=$?
+  assert_eq "$rc" "0" "resolve-range rc 0"
+  assert_eq "$(sed -n 's/^start: //p' "$F")" "$S" "범위 파일 start = S"
+  assert_eq "$(sed -n 's/^end: //p' "$F")" "$E" "범위 파일 end = E (origin/HEAD)"
+  assert_eq "$(sed -n 's/^end_from: //p' "$F")" "origin/HEAD" "끝을 생략하면 origin/HEAD 에서 온다"
+
+  out=$(cd "$R" && bash "$PLUGIN_ROOT/scripts/review-diff.sh" --dir "$D" --iter 1 --mode range --scope-file "$F" 2>"$ROOT/err"); rc=$?
+  assert_eq "$rc" "0" "review-diff rc 0"
+  assert_eq "$(field base "$out")" "$S" "review-diff 의 base: = S"
+  assert_eq "$(field head "$out")" "$E" "review-diff 의 head: = E"
+  assert_file_grep "$D/review-i1.names" '^src/x\.sh$' "리뷰 diff 에 범위 안 코드 변경이 있다"
+
+  out=$(cd "$R" && bash "$PLUGIN_ROOT/scripts/discover-spec.sh" --intent-out "$D/intent.md" --range "$S" "$E" 2>"$ROOT/err"); rc=$?
+  assert_eq "$rc" "0" "discover-spec rc 0"
+  assert_eq "$(printf '%s' "$out" | specs_of)" "docs/specs/a-design.md docs/specs/b-design.md" "specs 둘, 커밋 순서"
+  assert_file_grep "$D/intent.md" '^<!-- qg-spec 2/2: docs/specs/b-design\.md -->$' "의도 파일에 문서 구분 줄이 있다"
+
+  out=$(cd "$R" && bash "$PLUGIN_ROOT/scripts/compute-test-scope-candidates.sh" --topic "$S" "$E" 2>"$ROOT/err"); rc=$?
+  assert_eq "$rc" "0" "후보 rc 0"
+  assert_grep "$out" '^tests/test_x\.sh$' "후보에 tests/test_x.sh"
+
+  local ht
+  ht=$(cd "$R" && bash "$PLUGIN_ROOT/scripts/qg-worktree.sh" create-head "$E" sid12345 --range "$F" 2>"$ROOT/err"); rc=$?
+  assert_eq "$rc" "0" "create-head --range rc 0"
+  if [ -n "$ht" ] && [ -d "$ht" ]; then
+    assert_eq "$(git -C "$ht" rev-parse HEAD)" "$E" "HEAD 축 트리의 HEAD = E"
+    (cd "$R" && bash "$PLUGIN_ROOT/scripts/qg-worktree.sh" remove "$ht" >/dev/null 2>&1)
+    [ ! -d "$ht" ] && ok "만든 트리를 지웠다" || no "만든 트리가 남았다: $ht"
+  else
+    no "HEAD 축 트리를 만들지 못했다: $(cat "$ROOT/err")"
+  fi
+}
+
+# 같은 사슬을 SKILL · reference 의 펜스 그대로 — 펜스가 스크립트에 넘기는 값이 범위 파일의 두 커밋인가
+case_fences_agree() {
+  echo "[사슬 — 펜스]"
+  mkfix
+  local sid=sid12345 body out rc
+  run_fence() {   # run_fence <본문> — R 에서 플러그인 루트를 주고 돌린다. out · rc 를 채운다.
+    printf '%s\n' "$1" > "$ROOT/fence.sh"
+    out=$(cd "$R" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$ROOT/fence.sh" 2>"$ROOT/err"); rc=$?
+  }
+
+  body="$(awk '/^\*\*P2b — /{f=1} /^\*\*P3 — /{f=0} f' "$SK" | fence_with 'resolve-range.sh')"
+  [ -n "$body" ] && ok "P2b 펜스를 뽑았다" || no "P2b 펜스가 없다"
+  body="$(printf '%s\n' "$body" | LC_ALL=C sed -e "s/<session-id>/$sid/g" -e "s/\\\$ARGUMENTS/range $S/g")"
+  run_fence "$body"
+  assert_contains "$out" 'range rc=0' "P2b 펜스: range rc=0"
+  assert_eq "$(sed -n 's/^end: //p' "$F" 2>/dev/null)" "$E" "P2b 펜스가 범위 파일을 세션 폴더에 썼다(end = E)"
+
+  body="$(awk '/^\*\*P3 — /{f=1} /^## Flow/{f=0} f' "$SK" | fence_with ' --range ' | LC_ALL=C sed "s/<session-id>/$sid/g")"
+  run_fence "$body"
+  assert_contains "$out" 'intent rc=0' "P3 범위 펜스: intent rc=0"
+  assert_eq "$(printf '%s\n' "$out" | grep '^{' | specs_of)" "docs/specs/a-design.md docs/specs/b-design.md" "P3 범위 펜스: specs 둘"
+
+  body="$(fence_with 'scope0=' < "$DT" | LC_ALL=C sed "s/<session-id>/$sid/g")"
+  run_fence "$body"
+  assert_grep "$out" '^scope0=range$' "D0 펜스: scope0=range"
+  assert_grep "$out" "^boundary=$S\$" "D0 펜스: 기준선 커밋 = S"
+
+  body="$(fence_with 'create-head' < "$DT" | LC_ALL=C sed -e "s/<session-id>/$sid/g" -e 's/<D0 의 스코프: [^>]*>/range/' -e "s/<D0 의 기준선 커밋>/$S/")"
+  run_fence "$body"
+  assert_grep "$out" '^axis=ok$' "D1 펜스: axis=ok"
+  assert_grep "$out" '^scope=range$' "D1 펜스: scope=range"
+  assert_grep "$out" "^head_commit=$E\$" "D1 펜스: head_commit = E"
+  local ht; ht="$(printf '%s\n' "$out" | sed -n 's/^head_tree=//p')"
+  if [ -n "$ht" ] && [ -d "$ht" ]; then
+    assert_eq "$(git -C "$ht" rev-parse HEAD)" "$E" "D1 펜스: HEAD 축 트리의 HEAD = E"
+    (cd "$R" && bash "$PLUGIN_ROOT/scripts/qg-worktree.sh" remove "$ht" >/dev/null 2>&1)
+  else
+    no "D1 펜스가 HEAD 축 트리를 만들지 못했다: $(cat "$ROOT/err")"
+  fi
+
+  local line; line="$(awk '/^## Final verdict$/{f=1;next} f&&/^## Publish$/{exit} f' "$SK" | grep '^SHA_ARG=' | head -n 1)"
+  run_fence "RD=\"$D\"; $line; printf 'sha=%s\n' \"\$SHA_ARG\""
+  assert_eq "$out" "sha=$(git -C "$R" rev-parse --short "$E")" "판정 커밋: 범위 모드면 끝 커밋(체크아웃은 시작 커밋)"
+  run_fence "RD=\"$ROOT/no-range\"; $line; printf 'sha=%s\n' \"\$SHA_ARG\""
+  assert_eq "$out" "sha=$(git -C "$R" rev-parse --short HEAD)" "판정 커밋: 범위 파일이 없으면 HEAD(양성 짝)"
+
+  printf -- '---\nsession_id: "%s"\n---\n\n# qg result\n' "$sid" > "$D/result.md"
+  body="$(awk '/^## Publish$/{f=1;next} f&&/^## kill switch$/{exit} f' "$SK" | fence_with '범위 모드라 PR' | LC_ALL=C sed "s/<session-id>/$sid/g")"
+  run_fence "$body"
+  assert_eq "$out" "게시 안 함 — 범위 모드라 PR 코멘트를 달지 않는다(범위에는 열린 PR 이 없다)" "범위 게시 펜스: 공시 줄"
+  assert_eq "$(grep -cx '## 게시' "$D/result.md")" "1" "범위 게시 펜스: ## 게시 절을 남긴다"
+  run_fence "$body"
+  assert_eq "$out" "게시 안 함 — 이 실행은 이미 게시 단계를 돌았다" "범위 게시 펜스: 두 번째는 거절한다"
+  assert_eq "$(grep -cx '## 게시' "$D/result.md")" "1" "범위 게시 펜스: ## 게시 는 하나뿐이다"
+}
+
+case_text_locks
+case_chain_agrees
+case_fences_agree
+finish

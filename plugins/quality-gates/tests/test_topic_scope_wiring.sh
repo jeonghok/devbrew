@@ -139,7 +139,7 @@ print("PARA_DELETE_NEG:%d" % (1 if "지우지 않" in para_text else 0))
 # override 조건 자체의 극성 — 문단 전체가 「override 다」쪽으로 조건을 뒤집어도
 # 위 네 토큰 존재 검사는 전부 그대로 만족된다(토큰은 안 지웠다). 조건절의 긍정형을
 # 리터럴로 고정하고, 그 부정형 표지가 섞여 있지 않은지 별도로 잰다.
-print("PARA_OVERRIDE_POSITIVE:%d" % (1 if "override(`branch` · `--paths`)면" in para_text else 0))
+print("PARA_OVERRIDE_POSITIVE:%d" % (1 if "override(`branch` · `--paths` · `range`)면" in para_text else 0))
 print("PARA_OVERRIDE_NEGATED:%d" % (1 if ("가 없으면" in para_text or "가 없을 때" in para_text) else 0))
 PY
 

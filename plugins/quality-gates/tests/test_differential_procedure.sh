@@ -106,8 +106,8 @@ case_topic_path_wiring() {
   assert_contains "$d1" 'create-head "$hc" "<session-id>" --topic "$key"' "토픽: HEAD 축 트리는 --topic 으로 다시 도출해 대조한다"
   assert_not_grep "$d0" 'create-head|head_commit' "토픽: D0(한 번)은 HEAD 축 값을 정하지 않는다"
   assert_contains "$d0" '기준선 커밋은 실행마다 하나로 고정된다' "기준선 고정과 그 공시가 D0 에 있다"
-  assert_contains "$(cat "$REF")" '토픽 스코프면 `--topic <boundary> <tree>` 를 붙인다' "토픽: 후보는 경계..트리"
-  assert_contains "$(cat "$REF")" '(토픽 스코프면 `--total --tree <tree>`)' "토픽: 분모도 그 트리에서"
+  assert_contains "$(cat "$REF")" '토픽 · 범위 스코프면 `--topic <boundary> <tree>` 를 붙인다' "토픽: 후보는 경계..트리"
+  assert_contains "$(cat "$REF")" '(토픽 · 범위 스코프면 `--total --tree <tree>`' "토픽: 분모도 그 트리에서"
 }
 
 # D1 펜스를 실제로 돌린다 — 플러그인 루트는 호출을 기록하는 대역이다.
@@ -122,7 +122,7 @@ case_topic_axis_is_read_every_iteration() {
   local F; F=$(d1_fence)
   [ -n "$F" ] && ok "D1 펜스를 뽑았다" || { no "D1 펜스가 없다"; rm -rf "$T"; return; }
   run_d1() {   # run_d1 <scope0> <base0> [STUB_FAIL]
-    printf '%s\n' "$F" | sed "s/<session-id>/$SID/g; s/<D0 의 스코프: topic | session>/$1/g; s/<D0 의 기준선 커밋>/$2/g" > "$T/d1.sh"
+    printf '%s\n' "$F" | sed "s/<session-id>/$SID/g; s/<D0 의 스코프: topic | session | range>/$1/g; s/<D0 의 기준선 커밋>/$2/g" > "$T/d1.sh"
     ( cd "$T/r" && CLAUDE_PLUGIN_ROOT="$T/stub" STUB_LOG="$T/log" STUB_FAIL="${3:-}" bash "$T/d1.sh" 2>/dev/null )
   }
   ts() { printf 'topic_key: k1\nstatus: ok\nboundary: %s\ntree: %s\nhead_commit: %s\n' "$1" "$3" "$2" > "$RDX/topic-scope.txt"; }
