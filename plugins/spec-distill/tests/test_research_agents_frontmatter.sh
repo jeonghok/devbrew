@@ -126,8 +126,12 @@ grep -qF '최근 두 묶음은 블록 번호 순으로 마지막 두 묶음이�
 # 이월 세션: 표지 없는 옛 블록 뒤에 새 「묶음 1」이 온다 — 옛 블록에 번호를 지어 감소로 읽으면 이후 판정이 모두 «아직»이다.
 grep -qF '순서 검사는 묶음 표지가 있는 블록끼리만 본다 — 묶음 표지가 없는 블록은 순서 검사에서 빼고, 최근 두 묶음을 셀 때는 그대로 각자 한 묶음으로 센다.' <<<"$SJ_FLAT" \
   && ok "saturation-judge: 표지 없는 블록은 순서 검사에서 빠지고 두 묶음 창에는 센다" || no "saturation-judge: 표지 없는 블록의 순서 검사 제외 문장 부재"
-grep -qF '순서 검사는 최근 두 묶음 중 블록 번호가 앞선 묶음의 첫 블록부터 끝까지만 본다.' <<<"$SJ_FLAT" \
+grep -qF '순서 검사는 최근 두 묶음 중 자리가 앞선 묶음의 첫 블록부터 끝까지만 본다.' <<<"$SJ_FLAT" \
   && ok "saturation-judge: 순서 검사 범위 = 최근 두 묶음 창" || no "saturation-judge: 순서 검사 범위 문장 부재"
+# 갈라진 묶음의 자리를 첫 블록으로 읽으면 마지막 블록의 변화가 최근 두 묶음 밖으로 숨는다 — 자리는 마지막 블록이다.
+grep -qF '묶음의 자리는 그 묶음의 마지막 블록이다 — 마지막 두 블록이 든 묶음은 언제나 최근 두 묶음에 든다.' <<<"$SJ_FLAT" \
+  && ok "saturation-judge: 묶음의 자리 = 마지막 블록" || no "saturation-judge: 묶음의 자리 정의 부재"
+grep -qF '블록 번호가 앞선 묶음' <<<"$SJ_FLAT" && no "saturation-judge: 「블록 번호가 앞선 묶음」 잔존 — 갈라진 묶음의 자리가 두 뜻으로 읽힌다" || ok "saturation-judge: 「블록 번호가 앞선 묶음」 없음"
 grep -qF '「조사가 두 묶음 미만 — 열린 결정에 닿는 조사를 하나 더」' <<<"$SJ_FLAT" \
   && ok "saturation-judge: 두 묶음 미만 빈 곳 문구(saturation.md 의 판단만 남은 경로가 이 글자로 경우를 안다)" || no "saturation-judge: 두 묶음 미만 빈 곳 문구 부재"
 grep -qF '묶음은 블록 머리의 `묶음 <b>` 가 같은 블록들이다' <<<"$SJ_FLAT" && ok "saturation-judge: 묶음 정의" || no "saturation-judge: 묶음 정의 부재"
