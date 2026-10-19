@@ -21,10 +21,11 @@
 # doc_paths_source · self_state. session · branch · paths 의 기준선이 degraded 면 다섯 파일을
 # 비워 두고 degraded: yes · files: - · self_state: - 로 rc 0. git 실패 rc 4, 사용 오류 rc 2.
 #
-# qg 자기 산출물(아래 「qg 산출물 문법」 하나에 맞는 `.claude/quality-gates/…` 경로)은 session ·
-# paths 의 untracked 목록에서만 건너뛰고(앞 반복의 산출물이 다음 반복의 변경으로 세어지지 않게) 그 수와
-# 경로를 공시한다. 문법에 맞지 않는 untracked 파일, 추적되는 변경, 커밋된 변경은 그 폴더 아래여도
-# 리뷰한다 — 그 자리에 둔 코드가 리뷰를 피하지 못하게.
+# qg 자기 산출물(이 실행의 --dir 바로 아래에서 아래 「qg 산출물 문법」 하나에 맞는 경로와 이 리포에
+# 등록된 qg 일회용 worktree)은 session · paths 의 untracked 목록에서만 건너뛰고(앞 반복의 산출물이 다음
+# 반복의 변경으로 세어지지 않게) 그 수와 경로를 공시한다. 다른 세션 폴더의 파일, 문법에 맞지 않는
+# untracked 파일, 추적되는 변경, 커밋된 변경은 그 폴더 아래여도 리뷰한다 — 그 자리에 둔 코드가 리뷰를
+# 피하지 못하게. --dir 가 리포 밖이면 아무것도 건너뛰지 않는다(self_state: 0 — stderr 에 그 이유).
 # diff 는 사용자 git 설정(외부 diff · textconv · 접두 · rename · pathspec 환경 변수)에 기대지 않는다.
 # 읽기 전용 git 만 쓴다.
 set -u
@@ -93,6 +94,8 @@ if [ -n "$SCOPE" ]; then
 fi
 
 top="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -n "$top" ] || die "git 리포 안에서 돌려야 한다"
+# DIR 과 같은 물리 경로로 굳힌다 — 한쪽만 링크를 풀면 리포 안 세션 폴더가 리포 밖으로 읽힌다.
+top="$(cd "$top" && pwd -P)" && [ -n "$top" ] || gitfail "리포 최상위로 옮기지 못했다: $top"
 cd "$top" || gitfail "리포 최상위로 옮기지 못했다: $top"
 
 OUT_NAMES="$DIR/review-i$ITER.names"
@@ -174,19 +177,21 @@ esac
 # 리뷰 경로 — paths 면 glob, 그 밖은 리포 전체. 추적 · 커밋된 변경은 어느 폴더든 리뷰한다.
 if [ "${#GLOBS[@]}" -gt 0 ]; then PS=("${GLOBS[@]}"); else PS=(.); fi
 # ── qg 산출물 문법 (허용 목록 하나 — 여기만 고친다) ──────────────────────────────
-# untracked 경로가 이 문법에 맞을 때만 qg 자기 상태로 보고 건너뛴다(self_state 로 공시). 대상 리포가
-# `.claude/quality-gates` 를 무시하지 않아도 앞 반복의 산출물이 다음 반복의 변경으로 세어지지 않게.
-# 맞지 않는 것 — 폴더 바로 아래 파일, 세션 폴더의 모르는 이름, 코드 파일 — 은 모두 리뷰한다.
+# untracked 경로가 이 실행의 세션 폴더(--dir, 리포 기준 상대 경로 DIR_REL) 바로 아래의 이 이름일 때만
+# qg 자기 상태로 보고 건너뛴다(self_state 로 공시). 대상 리포가 `.claude/quality-gates` 를 무시하지
+# 않아도 앞 반복의 산출물이 다음 반복의 변경으로 세어지지 않게. 다른 세션 폴더의 같은 이름, 폴더 바로
+# 아래 파일, 세션 폴더의 모르는 이름, 코드 파일은 모두 리뷰한다 — qg 소비자는 이 실행의 --dir 만
+# 읽으므로 다른 폴더에 둔 「산출물 이름」 파일은 상태가 아니라 리뷰를 피하려는 파일일 수 있다.
+# --dir 가 리포 밖이면(DIR_REL 없음) 아무것도 건너뛰지 않는다 — self_state: 0, stderr 에 이유 한 줄.
 # 출처:
-#   세션 id   setup-qg.sh 의 SID 가드 ^[A-Za-z0-9_-]{8,}$, 예약 이름 worktrees · baseline-cache 는 세션 아님
 #   이름      references/state-file-format.md 「같은 폴더의 다른 파일」 + result.md,
 #             SKILL.md 의 $RD/ 쓰기(range-scope.txt · extra-iterations.md), 이 스크립트의 review-i<N>.*,
 #             임시 이름(setup-qg.sh result.md.tmp.<pid> · e2e-state.sh <지문>.tmp · resolve-range.sh
 #             .resolve-range.XXXXXX · 이 스크립트가 끊겨 남긴 .review-diff.XXXXXX/ 안의 임시 이름)
-#   하위 폴더 qg-worktree.sh 의 worktrees/(base|head)-<sid 앞 8자> — git worktree 라 ls-files 가 폴더
-#             한 줄(끝 /)로만 내고 안을 열지 않는다. 그 안이 낱 파일로 보이면(worktree 가 아니면) 리뷰한다.
+#   하위 폴더 qg-worktree.sh 의 <리포 최상위>/.claude/quality-gates/worktrees/(base|head)-<sid 앞 8자> —
+#             git worktree 라 ls-files 가 폴더 한 줄(끝 /)로만 낸다. `git worktree list` 에 같은 물리
+#             경로로 등록된 것만 건너뛰고, 등록되지 않은 같은 이름 폴더(안에 든 다른 리포)는 리뷰한다.
 #   테스트    test_review_diff.sh 가 state-file-format.md 의 목록 전부를 이 문법이 받는지 잰다.
-QG_SID='[A-Za-z0-9_-]{8,}'
 QG_NAMES='result\.md|intent\.md|excluded\.md|differential\.yaml|differential-not-counted\.md|verdict\.out'
 QG_NAMES="$QG_NAMES"'|topic-scope\.txt|range-scope\.txt|extra-iterations\.md'
 QG_NAMES="$QG_NAMES"'|comment-head\.md|comment\.md|publish\.out|publish\.err'
@@ -197,14 +202,32 @@ QG_NAMES="$QG_NAMES"'|result\.md\.tmp\.[0-9]+|e2e-(before|after)\.txt\.tmp|\.res
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(tracked|untracked|filtered)\.z'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(names|full\.diff|diff|doc-paths|self-state)'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/settings(-local)?-(base|head)'
-QG_STATE_RE="^\\.claude/quality-gates/(($QG_SID)/($QG_NAMES)|worktrees/(base|head)-[A-Za-z0-9_-]{8}/)\$"
+QG_NAMES_RE="^($QG_NAMES)\$"
+QG_WT_RE='^\.claude/quality-gates/worktrees/(base|head)-[A-Za-z0-9_-]{8}/$'
+DIR_REL=""
+case "$DIR" in "$top"/?*) DIR_REL="${DIR#"$top"/}" ;; esac
+WT_REG=() wt_loaded=0
+is_registered_wt() {   # <리포 기준 폴더 경로/> — 이 리포에 등록된 worktree 와 물리 경로가 같은가
+  local want line p x
+  want="$(cd "$top/${1%/}" 2>/dev/null && pwd -P)" || return 1
+  if [ "$wt_loaded" -eq 0 ]; then
+    wt_loaded=1
+    while IFS= read -r line; do
+      case "$line" in
+        "worktree "*) p="$(cd "${line#worktree }" 2>/dev/null && pwd -P)" && WT_REG+=("$p") ;;
+      esac
+    done < <(git worktree list --porcelain 2>/dev/null)
+  fi
+  for x in ${WT_REG[@]+"${WT_REG[@]}"}; do [ "$x" = "$want" ] && return 0; done
+  return 1
+}
 is_qg_state() {   # <path>
-  [[ "$1" =~ $QG_STATE_RE ]] || return 1
+  [ -n "$DIR_REL" ] || return 1
   case "$1" in
-    .claude/quality-gates/worktrees/base-*/|.claude/quality-gates/worktrees/head-*/) return 0 ;;
-    .claude/quality-gates/worktrees/*|.claude/quality-gates/baseline-cache/*) return 1 ;;
+    "$DIR_REL"/*) [[ "${1#"$DIR_REL"/}" =~ $QG_NAMES_RE ]] && return 0 ;;
   esac
-  return 0
+  [[ "$1" =~ $QG_WT_RE ]] && is_registered_wt "$1" && return 0
+  return 1
 }
 # 이 실행의 임시 폴더는 변경도 상태도 아니다 — 세지 않는다.
 T_REL=""
@@ -217,6 +240,8 @@ case "$T" in "$top"/*) T_REL="${T#"$top"/}" ;; esac
 if [ "$WORKTREE" -eq 1 ]; then
   git ls-files --others --exclude-standard -z -- "${PS[@]}" > "$T/untracked.z" \
     || gitfail "git ls-files --others 가 실패했다"
+  [ -n "$DIR_REL" ] || echo "review-diff: 출력 폴더(--dir)가 리포 밖이라 qg 산출물을 건너뛰지 않는다 —" \
+    "추적되지 않은 파일을 모두 리뷰한다(self_state 0): $DIR" >&2
 fi
 
 NAMES=(); UNTR=(); SELF=()

