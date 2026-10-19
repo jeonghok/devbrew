@@ -5,11 +5,17 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
-## [5.0.4] — 2026-10-19
+## [5.0.5] — 2026-10-19
 
 ### Changed
 
 - README 에서 버전 꼬리표를 지우고, `CLAUDE.md` 생성물 설명을 지금 동작(`@AGENTS.md` 한 줄)에 맞췄다.
+
+## [5.0.4] — 2026-10-19
+
+### Changed
+
+- 쉬운 말 블록(공유 정본 `shared/style/plain-language.md` 의 사본)에 예외 문장 한 줄을 맞췄다 — 부른 skill 이 메시지 모양을 정한 대화(예: brainstorming)에서는 그 skill 을 따르고, 이 블록은 낱말에만 적용한다.
 
 ## [5.0.3] — 2026-10-18
 

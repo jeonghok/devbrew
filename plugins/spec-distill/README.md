@@ -54,10 +54,10 @@
                                        ▼ 산출물 셋 (엔진 게이트 결과 / 냉독 요약+gap / degrade 채널)
                                        ▼ [Step B proceed 게이트] ①/compact 후 다음 세션 줄 · ②/new 후 다음 세션 줄 · ③확정 목록 수정 · ④brief만 종료  (superpowers 있을 때만)
                                    superpowers:brainstorming → -design.md
-                                       ▼ brainstorming 이 설계문서를 쓰고 커밋 — 사용자 리뷰 게이트 자리
+                                       ▼ brainstorming 이 설계문서를 쓰고 커밋 · 설계문서 점검(builder check)과 그 질문 — 그 뒤 문서 승인 자리
                                        ▼ 오케스트레이터가 그 경로로 spec-review 호출 (핸드오프 지시 · description — 훅 강제 없음)
                                    [3] spec-review → 문서 리뷰 엔진 doc-critic → doc-recritic (Law 2, design-mode only)
-                                       ├─ approval_gate_open → [5] proceed 게이트 → 재리뷰 상한 2 → writing-plans
+                                       ├─ approval_gate_open → [5] proceed 게이트 → 재리뷰 상한 2 → writing-plans  (지휘 세션이 돌린 로드맵 에픽은 승인 질문 하나 → 같은 턴에 계획 담당자)
                                        └─ round_gate_needed(decide 묶음 + 차단 ask) → brainstorming author 수정 → fresh 재리뷰
 ```
 
@@ -142,7 +142,7 @@
 
 큰 일을 에픽으로 나눠 진행할 때 쓰는 로드맵 · 묶음 스크립트 넷이 있습니다. 그 넷 가운데 `roadmap_write.py` 만 로드맵과 묶음을 쓰고 나머지 셋은 읽기 전용입니다. 지휘자 스크립트 둘은 로드맵 · 묶음은 쓰지 않지만 쓰기를 합니다 — `conductor_ledger.py` 는 기계 상태 · 자원 폴더와 설계문서의 기록 절을, `merge_check.py` 는 잠금과 일회용 사본을 씁니다. 앞의 넷(`roadmap_status.py` · `check_bundle_coverage.py` · `spec_review_bundle.py` · `roadmap_write.py`)은 네트워크에 나가지 않습니다. 지휘자 스크립트 둘은 나갑니다 — `merge_check.py` 는 `--no-fetch` 가 없으면 `git fetch origin` 을 하고, `conductor_ledger.py` 의 `pr-handoffs` · `audit` · `review-pack` 은 `gh` 를 부릅니다. 단위는 로드맵 > 에픽(spec 하나) > plan(PR 하나) > task 이고, 에픽 하나는 `브랜치:` 에 브랜치를 여럿 적어 PR 여럿을 냅니다. 객체 · 링크 · 주인은 `references/roadmap-ontology.md` 에 있습니다.
 
-- `scripts/roadmap_status.py <로드맵 경로>` — 기본 브랜치(`origin/HEAD`)의 로드맵과 git 을 읽어 에픽마다 단계와 경고를 냅니다. 아직 기본 브랜치에 없는 로드맵은(이때 종료 코드 4) `--roadmap-file <파일>` 로 줍니다. 머지됨 자동 판정은 merge commit 방식에서만 됩니다. 브랜치가 지워졌으면 GitHub 의 머지 메시지 `Merge pull request #<n> from <owner>/<브랜치>` 로만 알아봅니다. squash · rebase 로 머지했거나 로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적어야 합니다. 설계문서 · 계획 폴더는 로드맵 frontmatter `specs_dir` · `plans_dir`(없으면 superpowers 기본 폴더)에서 찾고, 단계는 브랜치마다 · 계획마다 구현 중 · 구현 끝까지 셉니다.
+- `scripts/roadmap_status.py <로드맵 경로>` — 기본 브랜치(`origin/HEAD`)의 로드맵과 git 을 읽어 에픽마다 단계와 경고를 냅니다. 아직 기본 브랜치에 없는 로드맵은(이때 종료 코드 4) `--roadmap-file <파일>` 로 줍니다. 머지됨 자동 판정은 merge commit 방식에서만 됩니다. 브랜치가 지워졌으면 GitHub 의 머지 메시지 `Merge pull request #<n> from <owner>/<브랜치>` 로만 알아봅니다. squash · rebase 로 머지했거나 로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적어야 합니다. 설계문서 · 계획 폴더는 로드맵 frontmatter `specs_dir` · `plans_dir`(없으면 superpowers 기본 폴더)에서 찾고, 단계는 브랜치마다 · 계획마다 구현 중 · 구현 끝까지 셉니다. 블록에 적힌 브랜치가 모두 머지된 에픽은 기본 브랜치에 아직 들어가지 않은 브랜치의 로드맵 사본이 그 블록에 더한 브랜치(사본의 블록이 기본 브랜치 블록의 브랜치를 모두 품고, 그 브랜치가 있고 아직 머지되지 않았을 때만)도 세어 「일부 머지」 로 내고 그 사실을 정보 줄로 밝힙니다 — 다음 계획의 브랜치가 자기 브랜치에서만 블록에 자신을 더한 경우입니다. 사본을 만든 뒤 기본 브랜치 블록의 `브랜치:` 가 바뀌면 그 사본은 세지 않습니다 — 열린 브랜치에 기본 브랜치를 merge 하면 풀립니다.
 - `scripts/check_bundle_coverage.py <묶음|brief> <설계문서>` — 정답 출처의 번호가 설계문서 `## 번호 대조` 표에 다 있는지(빠지면 종료 코드 1), 반영 칸이 설계문서의 실제 자리를 가리키는지 · 기각한 번호를 받드는 에픽이 있는지(경고 줄 — 종료 코드는 그대로) 봅니다. 로드맵을 못 찾으면 그 항목은 「셀 수 없음」으로 셉니다.
 - `scripts/check_bundle_coverage.py --plan <설계문서> <계획>` · `--impl <설계문서> <보고 파일>` — 설계문서 AC 가 계획 Task 에 다 있는지, 구현 보고의 미룸 · 빠짐이 설계문서 `## 미룸` 표에 받는 곳과 함께 올랐는지 봅니다. `--acs <AC 목록>` 이면 그 AC 만 대조합니다. `--impl` 의 받는 곳은 설계문서 `roadmap:` 의 로드맵에 있는 에픽이나 `#<n>` 이어야 합니다.
 - `scripts/spec_review_bundle.py` — `spec-review <설계문서> --bundle <묶음|brief>` 의 정답 출처 확인 · 진입 대조 · 승인 때 로드맵 위치와 이웃 결정. `rejected` 는 승인 게이트 2단계 앞 글에 설계가 받지 않기로 한 번호(번호 대조의 기각)의 수와 목록을 냅니다 — 되돌리려면 게이트 ③ 의 후속 질문 기타 칸에 번호를 적습니다.
@@ -206,7 +206,7 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
 
 ### 먼저 — 설계문서 리뷰를 끄는 법
 
-설계문서 리뷰 진입은 `spec-review` 가 엔진 라운드 전에 도는 진입 검사(`scripts/review_entry.py` + 리터럴 펜스)가 판정한다. 끄는 스위치는 셋이고 셋 다 수동 호출(`/spec-distill:spec-review`)까지 끈다: `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` · `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` · 플러그인 전체 `DEVBREW_SPEC_DISTILL_DISABLE=1`. 진입 검사 자신이 실패하면(모듈 부재 · rc≠0 · 출력 계약 위반) 끔으로 친다 — 그 사실이 advisory 로 나오고 brainstorming 의 사용자 리뷰 게이트로 돌아간다. 전부 세션 스코프 env var 라 재시작이 필요하다.
+설계문서 리뷰 진입은 `spec-review` 가 엔진 라운드 전에 도는 진입 검사(`scripts/review_entry.py` + 리터럴 펜스)가 판정한다. 끄는 스위치는 셋이고 셋 다 수동 호출(`/spec-distill:spec-review`)까지 끈다: `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` · `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` · 플러그인 전체 `DEVBREW_SPEC_DISTILL_DISABLE=1`. 진입 검사 자신이 실패하면(모듈 부재 · rc≠0 · 출력 계약 위반) 끔으로 친다 — 그 사실이 advisory 로 나오고 brainstorming 의 문서 승인 자리로 돌아간다. 전부 세션 스코프 env var 라 재시작이 필요하다.
 
 ### 스위치 목록
 
