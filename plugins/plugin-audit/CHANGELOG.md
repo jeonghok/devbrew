@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.2.0] — 2026-10-19
+
+### Removed
+
+- 6축 고정과 심층검증 8건 상한. 상한은 비용만 지키던 장치였다.
+
+### Added
+
+- Workflow 인자 `axes`. 동의 게이트에서 축을 고르고 규모를 본다.
+- 반박 판정 `uncertain`, 리포트 절 「목록에서 뺀 지적」(기각 · 불확실 · 흡수)과 「수집에서 뺀 것」, `check-staleness.py` 출력 `excluded`.
+- `assigned.json` 의 선택 필드 `axis_of`(보조), Workflow 반환 `axes_run` · `assigned_axis`, 메타 `axes_run` · `assigned_axis_source`.
+
+### Changed
+
+- 감사자는 근거 약한 지적을 버리지 않고 열린 질문으로 낸다. 반박자는 불확실을 기각과 나눠 낸다(persona).
+- 심층검증 수를 시작 직전 실행 기록에 찍는다.
+- codex 확인(validate B7)은 고르지 않은 축의 id 만 면제하고, 축이 판정한 id 에는 언제나 codex 판정을 요구한다.
+- 각 축은 자기 seed id 만 판정한다. 다른 축 id 에 낸 판정은 빼고 공시한다.
+- 자리표시자 건수는 「자리표시자·URL 때문에 건너뛴 후보 M건」으로 센다(건너뛴 후보 수). check-staleness 가 돌지 않았으면 리포트가 「셀 수 없음」이라 쓰고 키를 비운다(0 으로 채우지 않는다). 고르지 않은 축의 채움 사유는 그 축을 고르지 않았다고 쓴다.
+
 ## [1.1.4] — 2026-10-19
 
 ### Changed

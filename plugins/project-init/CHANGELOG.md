@@ -5,6 +5,23 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.1.0] — 2026-10-19
+
+### Changed
+
+- 헌장 재질문을 3회 하고도 빈 항목이 남으면 사용자가 「건너뛰기 · 계속 묻기 · 중단」을 고른다. 기계가 정하던 중단을 없앴다.
+- 헌장 질문은 기본 4개, 관례는 1–3개다. 쓴 수를 알리고, 「더 묻기」를 고르면 더 받는다. 처음 훑기(Phase 0 스캔)는 질문과 겹쳐 돌 수 있다.
+- AGENTS.md 로 옮기기를 거절해도 실행 전체가 멈추지 않는다(옛 「부분 진행 금지」를 바꿨다). 「CLAUDE.md 에 바로 쓰기」를 고를 수 있고, git-workflow 파일 만들기는 계속된다.
+- git 규칙 교체를 거절하면 선택지 셋이 나오고, 헌장은 그대로 진행한다. 「git 규칙은 그대로 두고 헌장만」을 고르면 다른 모든 「git 규칙 파일을 만든다」 조항보다 앞서 기존 git 규칙 내용을 건드리지 않는다. 마지막 보고에 헌장 건너뜀 · CLAUDE.md 직접 쓰기 · git 규칙 유지 줄이 나온다.
+- 헌장 상태 확인은 AGENTS.md 가 있으면 그것을, 없으면 CLAUDE.md 를 읽는다. AGENTS.md 로 옮길 때 CLAUDE.md 의 `## Project Charter` 도 함께 옮긴다.
+- 템플릿의 브랜치 「ALWAYS 확인」은 변경 작업일 때만 한다. Rules for Claude 의 접두 고정 문장은 `Branch Naming Pattern` 을 가리킨다.
+- 템플릿 worktree 절이, worktree 를 만들며 `-b` 로 지은 브랜치 이름은 훅이 검사하지 않는다고 밝힌다(훅은 그대로). 접두에 같은 낱말이 겹치면 하나만 남기고 알린다.
+
+### Added
+
+- 브랜치 접두 추가 질문과 템플릿 placeholder 셋(`{{BRANCH_PREFIXES}}` · `{{BRANCH_PREFIX_LIST}}` · `{{EXTRA_PREFIX_LIST}}`). 훅이 읽는 정규식이 정본이다.
+- 템플릿의 worktree 작업 절.
+
 ## [5.0.4] — 2026-10-19
 
 ### Changed
