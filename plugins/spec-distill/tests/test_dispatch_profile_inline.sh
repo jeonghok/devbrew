@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/references/docreview-profiles/design-doc.md plugins/spec-distill/scripts/brief_review_state.py plugins/spec-distill/scripts/state_path.py plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/references/docreview-profiles/seed.md
+# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/references/docreview-profiles/design-doc.md plugins/spec-distill/scripts/brief_review_state.py plugins/spec-distill/scripts/state_path.py plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/clear_critic_outputs.sh
 #
 # 두 엔진 자리(`reviewing-brief` · `spec-review`)의 탐지 · 재비판 dispatch 가 `<profile>` 슬롯에 프로필
 # **경로가 아니라 내용**을 싣는가. 설치본에서 프로필은 플러그인 캐시(사용자 cwd 밖)에 있어 리뷰어의 Read 가
@@ -30,6 +30,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/scripts/state_path.py"
   echo "plugins/spec-distill/skills/request-framing/SKILL.md"
   echo "plugins/spec-distill/references/docreview-profiles/seed.md"
+  echo "plugins/spec-distill/scripts/clear_critic_outputs.sh"
   exit 0
 fi
 
@@ -236,6 +237,67 @@ for sk in reviewing-brief spec-review; do
       assert_contains "$(cat "$SCRATCH/$cell.err")" "critic-<번호>.txt)을 비웠다." "$sk Z(${zsh_name}·$shape): 비운 뒤 「비웠다」고 보고한다"
     done
   done
+done
+
+# W — 두 펜스가 부르는 비움 스크립트(clear_critic_outputs.sh)를 직접 bash 와 zsh 로 돌린다. 펜스는 bash 로 부르지만
+# 스크립트 자체도 어느 셸에서든 같게 동작해야 한다(글롭 · 단어 쪼개기를 쓰지 않는다). 모양: only · both · none ·
+# planted(공백과 글롭 글자를 심은 이름 · 번호 없는 이름) · unlistable(목록을 못 읽는 폴더).
+CLR="$SD/scripts/clear_critic_outputs.sh"
+[ -f "$CLR" ] && ok "W 전제: 비움 스크립트가 있다" || no "W 전제: 비움 스크립트가 없다 ($CLR)"
+for zsh_name in bash zsh; do
+  w_sh=bash; [ "$zsh_name" = zsh ] && { [ -n "$ZSH_BIN" ] || continue; w_sh="$ZSH_BIN"; }
+  for shape in only both none planted unlistable; do
+    wl="W(${zsh_name}·$shape)"; wdir="$SCRATCH/w-$zsh_name-$shape"; mkdir -p "$wdir"
+    case "$shape" in
+      only) printf '%s\n' "$CRITIC_SEED" > "$wdir/critic.txt" ;;
+      both|unlistable) printf '%s\n' "$CRITIC_SEED" > "$wdir/critic.txt"; printf '%s\n' "$CRITIC_SEED" > "$wdir/critic-2.txt" ;;
+      planted) printf '%s\n' "$CRITIC_SEED" > "$wdir/critic-6 *.txt"; printf '%s\n' "$CRITIC_SEED" > "$wdir/critic-x.txt" ;;
+    esac
+    [ "$shape" = unlistable ] && chmod 333 "$wdir"
+    ( cd "$SCRATCH" && env -i PATH="$BASE" HOME="$SCRATCH" "$w_sh" "$CLR" "$wdir" ) \
+      > "$SCRATCH/w.out" 2>"$SCRATCH/w-$zsh_name-$shape.err"; w_rc=$?
+    werr="$(cat "$SCRATCH/w-$zsh_name-$shape.err")"
+    assert_eq "$(grep -c . "$SCRATCH/w.out" || true)" "0" "$wl: stdout 에 아무것도 쓰지 않는다 (펜스의 stdout 은 프로필 슬롯이다)"
+    case "$shape" in planted|unlistable) assert_not_contains "$werr" "no matches found" "$wl: 글롭이 셸을 멈추지 않는다" ;; esac   # 나머지 모양은 z_check 가 잰다
+    case "$shape" in
+      unlistable)
+        if ( cd "$wdir" 2>/dev/null && ls >/dev/null 2>&1 ); then
+          echo "  - $wl: 이 환경에서는 읽기 권한을 빼도 목록이 읽힌다 — 목록 실패 확인을 건너뛴다"
+        else
+          assert_eq "$w_rc" "1" "$wl: 목록을 못 읽으면 rc 1"
+          assert_contains "$werr" "critic 출력 파일을 비우지 못했다" "$wl: 목록을 못 읽으면 「비우지 못했다」고 보고한다"
+          assert_contains "$werr" "목록을 읽지 못함" "$wl: 그 사유(목록을 읽지 못함)를 댄다"
+          assert_not_contains "$werr" "을 비웠다" "$wl: 목록을 못 읽었는데 「비웠다」고 말하지 않는다"
+        fi
+        chmod 755 "$wdir"
+        assert_eq "$(wc -c < "$wdir/critic.txt" 2>/dev/null | tr -d ' ')" "0" "$wl: 이름을 아는 critic.txt 는 그래도 비운다" ;;
+      planted)
+        assert_eq "$w_rc" "0" "$wl: rc 0"
+        assert_eq "$(wc -c < "$wdir/critic-6 *.txt" 2>/dev/null | tr -d ' ')" "0" "$wl: 공백 · 글롭 글자가 든 번호 이름을 쪼개지 않고 통째로 비운다"
+        assert_eq "$(cat "$wdir/critic-x.txt" 2>/dev/null)" "$CRITIC_SEED" "$wl: 번호 없는 이름(critic-x.txt)은 건드리지 않는다"
+        { [ ! -e "$wdir/critic.txt" ] && [ ! -e "$wdir/critic-6" ]; } \
+          && ok "$wl: 없던 파일을 새로 만들지 않는다" || no "$wl: 없던 파일이 생겼다" ;;
+      *)
+        assert_eq "$w_rc" "0" "$wl: rc 0"
+        z_check "$wl" "$wdir" "$shape" "$SCRATCH/w-$zsh_name-$shape.err"
+        assert_contains "$werr" "critic-<번호>.txt)을 비웠다." "$wl: 비운 뒤 「비웠다」고 보고한다" ;;
+    esac
+  done
+done
+# W — 비움 스크립트가 없는 플러그인 루트: 펜스는 그래도 rc 1 이고, 스크립트가 돌지 않았다고 말하며, 비웠다고 말하지 않는다.
+PR_NOCLR="$SCRATCH/pr-noclr"; mkdir -p "$PR_NOCLR/references" "$PR_NOCLR/scripts"
+for f in "$SD/scripts"/*; do
+  [ "${f##*/}" = clear_critic_outputs.sh ] || ln -s "$f" "$PR_NOCLR/scripts/${f##*/}"
+done
+for sk in reviewing-brief spec-review; do
+  cell="wn-$sk"
+  case "$sk" in reviewing-brief) wndoc="$(brief_doc "$cell")" ;; *) wndoc="$DOCS/design-sample.md" ;; esac
+  wndir="$(shape_seed "$cell" "$wndoc" both)"
+  [ -n "$wndir" ] || { no "$sk W(스크립트 없음) 전제: 상태 디렉토리를 도출하지 못했다"; continue; }
+  run_fence "$cell" "$SCRATCH/$sk.fence.sh" "$PR_NOCLR"
+  assert_eq "$(cat "$SCRATCH/$cell.rc")" "1" "$sk W(스크립트 없음): rc 1 (dispatch 하지 않는다)"
+  assert_contains "$(cat "$SCRATCH/$cell.err")" "비우는 스크립트가 돌지 않았다" "$sk W(스크립트 없음): 비우는 스크립트가 돌지 않았다고 말한다"
+  assert_not_contains "$(cat "$SCRATCH/$cell.err")" "을 비웠다" "$sk W(스크립트 없음): 비우지 않은 파일을 비웠다고 말하지 않는다"
 done
 
 FR_FENCE="$SCRATCH/request-framing.fence.sh"; cut_marked "$SD/skills/request-framing/SKILL.md" > "$FR_FENCE"

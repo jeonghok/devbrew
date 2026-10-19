@@ -443,23 +443,8 @@ prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
   echo "[spec-distill] 프로필 내용을 읽지 못했다(cat rc $prof_rc): $PROFILE — 탐지 · 재비판을 dispatch 하지 않는다. 5단계가 critic 사망으로 읽는다(재dispatch 1회 → 「미검증」)." >&2
   if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then
-    critic_left=""
-    if [ -e "$STATE_DIR/critic.txt" ]; then { : > "$STATE_DIR/critic.txt"; } 2>/dev/null || critic_left=" $STATE_DIR/critic.txt"; fi
-    # 번호 붙은 출력은 글롭 대신 ls 목록을 한 줄씩 읽는다 — zsh 는 맞는 파일이 없는 글롭에서 멈추고, 목록을 단어로 쪼개면 이름이 갈린다.
-    crit_names="$(cd "$STATE_DIR" 2>/dev/null && ls 2>/dev/null)" \
-      || { echo "[spec-distill] 상태 폴더의 파일 목록을 읽지 못했다: $STATE_DIR" >&2; critic_left="$critic_left $STATE_DIR/critic-<번호>.txt(목록을 읽지 못함)"; }
-    while IFS= read -r crit_b; do
-      case "$crit_b" in critic-[0-9]*.txt) ;; *) continue ;; esac
-      [ -e "$STATE_DIR/$crit_b" ] || continue
-      { : > "$STATE_DIR/$crit_b"; } 2>/dev/null || critic_left="$critic_left $STATE_DIR/$crit_b"
-    done <<CRIT_NAMES
-$crit_names
-CRIT_NAMES
-    if [ -z "$critic_left" ]; then
-      echo "[spec-distill] critic 출력 파일($STATE_DIR 의 critic.txt · critic-<번호>.txt)을 비웠다." >&2
-    else
-      echo "[spec-distill] critic 출력 파일을 비우지 못했다:${critic_left} — 5단계가 라운드 시작보다 오래된 그 파일을 부재로 읽는다(critic_predates_round)." >&2
-    fi
+    clr_rc=0; bash "$PR/scripts/clear_critic_outputs.sh" "$STATE_DIR" >&2 || clr_rc=$?
+    case "$clr_rc" in 0|1|2) ;; *) echo "[spec-distill] critic 출력 파일을 비우지 못했다 — 비우는 스크립트가 돌지 않았다(rc ${clr_rc}): $PR/scripts/clear_critic_outputs.sh" >&2 ;; esac
   else
     echo "[spec-distill] critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패(PAYLOAD='${PAYLOAD:-}' · harness_sid='${harness_sid:-}' · STATE_DIR='${STATE_DIR:-}'). PAYLOAD 는 이 펜스와 같은 Bash 호출에서 대입한다. 5단계는 라운드 시작보다 오래된 critic 파일을 부재로 읽는다(critic_predates_round)." >&2
   fi
