@@ -26,6 +26,16 @@ class Settings(unittest.TestCase):
         self.assertEqual(s["sources"]["specs_dir"], "기본값")
         self.assertEqual(s["errors"], [])
 
+    def test_parallel_default_is_a_recommendation_with_default_three(self):
+        s = rd.repo_settings({})
+        self.assertEqual((s["parallel_default"], s["sources"]["parallel_default"]), (3, "기본값"))
+        s = rd.repo_settings({"parallel_default": "5"})
+        self.assertEqual((s["parallel_default"], s["sources"]["parallel_default"], s["errors"]), (5, "frontmatter", []))
+        for bad in ("0", "-1", "abc", "", "3.5", "\uff13"):
+            s = rd.repo_settings({"parallel_default": bad})
+            self.assertIsNone(s["parallel_default"], bad)
+            self.assertTrue(any("parallel_default" in e for e in s["errors"]), bad)
+
     def test_frontmatter_wins_and_gets_trailing_slash(self):
         s = rd.repo_settings({"specs_dir": "design", "plans_dir": "\"work/plans/\""})
         self.assertEqual(s["specs_dir"], "design/")

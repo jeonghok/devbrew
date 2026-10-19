@@ -12,6 +12,8 @@
   drop --roadmap R --session S --section 절 --where 칸=값
   approval | approve --roadmap R --session S --scale "규모"   시작 승인 공시 판단 · 기록
   (Task 5~7 이 자원 · 기록 절 · 감사 명령을 더한다)
+  suite-lock --roadmap R                               공유 스위트 잠금 경로 · 주인 · 잡은 시각
+  progress   --roadmap R                               실행 원장마다 마지막 고친 시각 · 마지막 줄
 
 종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가 · 5 다른 세션의 표지.
 """
@@ -34,6 +36,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
+import suite_lock  # noqa: E402
 from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, NO_DEFAULT, RECORD_HEADING,  # noqa: E402
                            RULINGS_HEADING, FormatError, approval_date, frontmatter, parse_roadmap, section_lines, unquote)
 from state_path import state_root  # noqa: E402
@@ -147,19 +150,6 @@ def dirty_lines(path: Path) -> list:
 REVIEW_PACK_DIR = "review"
 FILES_DIR = "files"                      # 기계 상태 자원 폴더 — <기계 상태 폴더>/files/<종류>/<이름>
 FILE_KINDS = ("tmp", "relay", "report")  # agent 몫 임시 폴더 · 옮김 기록 · 하위 보고
-LOCK_YOUNG = 60  # 주인 기록 전 잠금은 이 초 동안 바쁜 것으로 본다(merge_check 와 같은 규칙)
-
-
-def _alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
 def disposable_kind(root, roadmap: str, path: Path):
     """지휘자가 직접 만든 일회용만 「merge」(스위트 대조 사본) · 「pack」(리뷰 묶음) · 「file」(자원 폴더의 바로 아래
     항목 — `resource-dir` 이 만든 것) — 그 밖은 None."""
@@ -176,18 +166,11 @@ def disposable_kind(root, roadmap: str, path: Path):
 
 
 def _live_lock(root, roadmap: str) -> str:
-    lock = mpath(root, roadmap).parent / repo_defaults.MERGE_CHECK_DIR / "lock"
-    try:
-        head = (lock / "owner").read_text(encoding="utf-8").split(" ", 1)[0].strip()
-    except OSError:
-        head = ""
-    if head.isdigit():
-        return head if _alive(int(head)) else ""
-    try:
-        young = (time.time() - lock.stat().st_mtime) < LOCK_YOUNG
-    except OSError:
+    """공유 스위트 잠금이 바쁘면 그 주인(비면 「기록 전」), 아니면 빈 글 — 판정은 `suite_lock.state` 하나."""
+    s = suite_lock.state(suite_lock.lock_path(mpath(root, roadmap).parent))
+    if not s["busy"]:
         return ""
-    return "기록 전" if young else ""
+    return s["owner"] or "기록 전"
 
 
 def require_user_worktree(root, path: Path) -> None:
@@ -531,6 +514,35 @@ def _roadmap_blocks(root, roadmap: str) -> list:
     _m, blocks, _r, _k, errors = parse_roadmap(text)
     if errors:
         raise Fail(3, "로드맵 형식이 깨졌다: %s" % errors[0])
+    return blocks
+
+
+def _with_copy_branches(root, roadmap: str, blocks: list, warns: list) -> list:
+    """블록 `브랜치:` 에 기본 브랜치에 아직 들어가지 않은 브랜치의 로드맵 사본이 더한 이름을 잇는다 — 상태 계산과 같은 규칙
+    (`roadmap_status.extra_branches`: 사본 블록이 기본 브랜치 블록의 브랜치를 모두 품을 때만). 계획 2 · 3 의 브랜치는 자기
+    사본에서만 블록에 자신을 더해서, 기본 브랜치 블록만 읽으면 열린 에픽 브랜치를 빠뜨린다."""
+    import roadmap_status as rs
+    rc, main, _e = git(root, "rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
+    if rc:
+        raise Fail(3, NO_DEFAULT)
+    g = rs.Git(str(root))
+    if os.path.isabs(GIT):  # 이 스크립트가 찾은 git 을 상태 계산의 git 호출도 쓰게 한다
+        g.env["PATH"] = os.path.dirname(GIT) + os.pathsep + g.env.get("PATH", "")
+    try:
+        extra, broken = rs.extra_branches(g, main, roadmap, blocks)
+    except RuntimeError as exc:
+        warns.append("로드맵 사본을 읽지 못했다 — 사본이 더한 브랜치를 빠뜨렸을 수 있다(%s)" % exc)
+        return blocks
+    for f in g.failures:
+        warns.append("로드맵 사본을 다 읽지 못했다 — 사본이 더한 브랜치를 빠뜨렸을 수 있다(%s)" % f)
+    if broken:
+        warns.append("기본 브랜치에 아직 들어가지 않은 브랜치의 로드맵 사본 %d개는 형식이 깨져 읽은 블록만 셌다" % broken)
+    for b in blocks:
+        more = [br for br in extra.get(b["id"], []) if br not in (b.get("branches") or [])]
+        if more:
+            b["branches"] = list(b.get("branches") or []) + more
+            warns.append("%s: 블록 `브랜치:` 에 없는 %s 도 열린 브랜치로 셌다 — 기본 브랜치에 아직 들어가지 않은 브랜치의 "
+                         "로드맵 사본이 이 블록에 더했다" % (b["id"], " · ".join(more)))
     return blocks
 
 
@@ -954,7 +966,8 @@ def c_audit(root, a) -> int:
 def c_review_pack(root, a) -> int:
     if not a.epic or not set(a.epic) <= NAME_CHARS or a.epic in (".", ".."):
         raise Fail(2, "에픽 이름은 영숫자 · . · _ · - 만 쓴다: %r" % a.epic)
-    blocks = _roadmap_blocks(root, a.roadmap)
+    files, conflicts, warns, skipped = [], [], [], []
+    blocks = _with_copy_branches(root, a.roadmap, _roadmap_blocks(root, a.roadmap), warns)
     tip = _tip(root, a.branch)
     if tip is None:
         raise Fail(3, "브랜치를 찾지 못했다: %s" % a.branch)
@@ -966,7 +979,6 @@ def c_review_pack(root, a) -> int:
         raise Fail(2, "이미 있는 폴더다 — 새 폴더를 쓴다: %s" % out)
     except OSError as exc:
         raise Fail(3, "묶음 폴더를 만들지 못했다: %s (%s)" % (out, type(exc).__name__))
-    files, conflicts, warns, skipped = [], [], [], []
 
     def put(name, text):
         write_atomic(out / name, text)
@@ -1074,6 +1086,39 @@ def c_resource_dir(root, a) -> int:
     return 0
 
 
+def c_suite_lock(root, a) -> int:
+    """공유 스위트 잠금 경로(첫 줄)와 지금 주인 · 잡은 시각(둘째 줄). 경로는 하위에게 보내는 글에 싣는다."""
+    lock = suite_lock.lock_path(mpath(root, a.roadmap).parent)
+    print(lock)
+    print(suite_lock.describe(lock))
+    return 0
+
+
+PROGRESS_TAIL = 120
+
+
+def c_progress(root, a) -> int:
+    """실행 원장마다 마지막으로 고친 시각과 마지막 줄 — 멈춤 판단의 근거(완료 표시만으로 멈춤을 단정하지 않는다)."""
+    rows = load(root, a.roadmap)["실행 원장"]
+    print("기준 %s" % datetime.datetime.now().strftime("%H:%M"))
+    for r in rows:
+        head = "%s · %s" % (r["에픽"], r["계획"])
+        path = Path(r["원장"])
+        try:
+            mtime = path.stat().st_mtime
+            lines = [l.strip() for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
+        except (OSError, UnicodeDecodeError) as exc:
+            print("%s · 원장을 읽지 못했다(%s · %s)" % (head, path, type(exc).__name__))
+            continue
+        ago = int((time.time() - mtime) // 60)
+        last = lines[-1][:PROGRESS_TAIL] if lines else "(빈 원장)"
+        print("%s · 마지막 고침 %s(%d분 전) · %s" % (
+            head, datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M"), ago, last))
+    if not rows:
+        print("실행 원장 없음")
+    return 0
+
+
 def c_version(root, a) -> int:
     rc, msg = version_report(root, Path(a.plugin_json))
     print(msg)
@@ -1128,6 +1173,8 @@ COMMANDS = {
                                                 p.add_argument("--kind", required=True, choices=FILE_KINDS),
                                                 p.add_argument("--name", required=True))),
     "version": (c_version, lambda p: p.add_argument("--plugin-json", required=True)),
+    "suite-lock": (c_suite_lock, lambda p: p.add_argument("--roadmap", required=True)),
+    "progress": (c_progress, lambda p: p.add_argument("--roadmap", required=True)),
 }
 
 
