@@ -182,9 +182,9 @@ test_failure_pattern: "^FAILED (.+)$"
   - 한다: 조사 subagent 를 모델 판단으로 여럿 동시에 · 시의성 있는 사실의 신선한 근거(사용자 원칙 여덟 — 흐름 고정 점검 문서 R10 절, 설계문서 `## 번호 대조` 에 원칙마다 반영/기각 행) · 흐름 고정 점검(flexibility-audit.md)의 R10 행 · 인터뷰 끝 게이트 둘(분해된 일의 ①② 이름 · 다음 세션 줄의 에픽마다 brainstorming 고정, /compact 권장은 유지) · 분해 판단이 로드맵 `흐름` · `산출물` 칸을 채움 · 인터뷰 조사에 레포 안 재사용 검토 · 나눈 일 다음 세션 줄 문면 조율(그 한 줄 자체는 R5) · 하나짜리 brief 의 다음 세션 줄(finishing.md)이 가정하는 「SDD 의 마지막 전체 리뷰」를 「고른 실행 방식의 마지막 전체 리뷰」로 · 인터뷰 진입 이름 `spec-interview` → `pm-interview`(호출 이름 변경은 레포 규칙대로 별칭 없이 즉시 · major bump)
   - 안 한다: 에픽 넘김 줄 · 지휘(R5) · 공유 리뷰 엔진(R2a)
 - 의존: R1, R2, R3, R4, R7
-- 브랜치: feature/interview-open-research
+- 브랜치: feature/interview-open-research · feature/interview-end-gates · feature/pm-interview-rename
 - 묶음: R10.md
-- 경로 예약: plugins/spec-distill/skills/spec-interview/, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/reviewing-brief/SKILL.md, plugins/spec-distill/agents/saturation-judge.md, plugins/spec-distill/agents/steelman-builder.md, plugins/spec-distill/templates/interview-brief-template.md, plugins/spec-distill/references/trivia-escape.md, plugins/spec-distill/skills/pm-interview/
+- 경로 예약: plugins/spec-distill/skills/spec-interview/, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/reviewing-brief/SKILL.md, plugins/spec-distill/agents/saturation-judge.md, plugins/spec-distill/agents/steelman-builder.md, plugins/spec-distill/templates/interview-brief-template.md, plugins/spec-distill/references/trivia-escape.md, plugins/spec-distill/skills/pm-interview/, plugins/spec-distill/agents/open-researcher.md, plugins/spec-distill/references/fresh-evidence.md, plugins/spec-distill/references/research-claims.md, plugins/spec-distill/references/proceed-gate.md, plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/scripts/brief_body.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/roadmap_render.py, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/scripts/build_brief_bundle.py, plugins/spec-distill/scripts/build_brief_inline_blob.py, plugins/spec-distill/templates/interview-seed-template.md, plugins/spec-distill/tests/test_conducting_interview_stage.sh
 
 ### R11 — 원칙 문서 정리
 - 의도: 사용자의 상시 원칙을 auto-memory 에서 CLAUDE.md · 철학 문서 · 주요 문서로 옮기고 낡은 개념은 과감히 지워 문서 크기를 줄인다
