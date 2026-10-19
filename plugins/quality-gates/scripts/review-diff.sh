@@ -5,11 +5,14 @@
 #                       [--globs <glob>...] [--scope-file <file>]
 #
 #   session  resolve-baseline.sh 의 merge_base 대비 작업 트리(추적 diff ∪ 무시되지 않는 untracked).
-#            추적 안 되는 중첩 리포(ls-files 가 폴더 한 줄로 낸다)는 그 리포의 ls-files -co 로 안의 파일을
-#            펼쳐 리뷰한다(paths 도 같다). 폴더를 가리키는 링크는 펼치지 않고 링크로 diff 한다.
+#            추적 안 되는 중첩 레포(ls-files 가 폴더 한 줄로 낸다)는 리뷰하지 않는다 — 그 안에서 git 을
+#            돌리지도 파일을 읽지도 않고 폴더 줄만 names 에 남긴 채, 폴더마다 이스케이프한 이름으로 stderr 에
+#            크게 알린다(판정은 바꾸지 않는다). 폴더를 가리키는 링크는 링크 자체로 diff 한다. session · paths 의
+#            diff 는 --ignore-submodules=dirty 로 하위 모듈(gitlink) 폴더 안에서 git 을 돌리지 않는다.
 #   branch   merge_base..HEAD
 #   paths    session 집합 중 --globs(git pathspec)에 맞는 것
-#   topic    --scope-file(topic-scope.txt)의 boundary..tree
+#   topic    --scope-file(topic-scope.txt)의 boundary..tree. boundary 의 .gitmodules 에 선언되지 않은 새
+#            gitlink(mode 160000)는 리뷰하지 않았다고 같은 줄로 알린다(공시만)
 #   range    --scope-file(range-scope.txt)의 start..end — 이 파일의 start · end 만 읽는다
 #
 # 쓰는 파일(<dir> 안 임시 폴더에 쓴 뒤 mv):
@@ -21,9 +24,7 @@
 #
 # stdout 10줄: mode · base · head · degraded · files · filtered_files · excluded · kept_model ·
 # doc_paths_source · self_state. session · branch · paths 의 기준선이 degraded 면 다섯 파일을
-# 비워 두고 degraded: yes · files: - · self_state: - 로 rc 0. 추적 안 되는 중첩 리포의 목록을 못 읽으면
-# 그 폴더 줄만 names 에 남기고 나머지는 그대로 쓴 뒤 degraded: yes(files 등은 수 그대로) · stderr 에 그 폴더로
-# rc 0 — 세었는데 리뷰하지 않은 경로를 조용히 두지 않는다. git 실패 rc 4, 사용 오류 rc 2.
+# 비워 두고 degraded: yes · files: - · self_state: - 로 rc 0. git 실패 rc 4, 사용 오류 rc 2.
 #
 # qg 자기 산출물(이 실행의 --dir 바로 아래에서 아래 「qg 산출물 문법」 하나에 맞는 경로와 이 리포에
 # 등록된 qg 일회용 worktree)은 session · paths 의 untracked 목록에서만 건너뛰고(앞 반복의 산출물이 다음
@@ -166,6 +167,9 @@ case "$MODE" in
       REV=("$BASE" "$HEAD_LABEL")
     else
       HEAD_LABEL=worktree; WORKTREE=1
+      # 작업 트리 쪽 diff 는 하위 모듈의 더러움을 재려고 그 폴더 안에서 git 을 띄운다 — 그 레포의 설정
+      # (core.fsmonitor 등)이 명령을 돌린다. 더러움은 보지 않고 gitlink 커밋 변경만 본다.
+      GITD+=(--ignore-submodules=dirty)
       REV=("$BASE")
     fi ;;
   topic)
@@ -194,7 +198,8 @@ if [ "${#GLOBS[@]}" -gt 0 ]; then PS=("${GLOBS[@]}"); else PS=(.); fi
 #             .resolve-range.XXXXXX · 이 스크립트가 끊겨 남긴 .review-diff.XXXXXX/ 안의 임시 이름)
 #   하위 폴더 qg-worktree.sh 의 <리포 최상위>/.claude/quality-gates/worktrees/(base|head)-<sid 앞 8자> —
 #             git worktree 라 ls-files 가 폴더 한 줄(끝 /)로만 낸다. `git worktree list` 에 같은 물리
-#             경로로 등록된 것만 건너뛰고, 등록되지 않은 같은 이름 폴더(안에 든 다른 리포)는 리뷰한다.
+#             경로로 등록된 것만 건너뛰고, 등록되지 않은 같은 이름 폴더(안에 든 다른 레포)는 건너뛰지 않는다
+#             (중첩 레포로 크게 알린다).
 #   테스트    test_review_diff.sh 가 state-file-format.md 의 목록 전부를 이 문법이 받는지 잰다.
 QG_NAMES='result\.md|intent\.md|excluded\.md|differential\.yaml|differential-not-counted\.md|verdict\.out'
 QG_NAMES="$QG_NAMES"'|topic-scope\.txt|range-scope\.txt|review-tree\.txt|extra-iterations\.md'
@@ -203,8 +208,9 @@ QG_NAMES="$QG_NAMES"'|e2e-record\.md|e2e-flip\.md|e2e-evidence\.tsv|e2e-cmd\.txt
 QG_NAMES="$QG_NAMES"'|e2e-before\.txt|e2e-after\.txt|e2e-app\.pgid|e2e-app\.log'
 QG_NAMES="$QG_NAMES"'|review-i[1-9][0-9]*\.(names|full\.diff|diff|doc-paths|self-state)'
 QG_NAMES="$QG_NAMES"'|result\.md\.tmp\.[0-9]+|e2e-(before|after)\.txt\.tmp|\.resolve-range\.[A-Za-z0-9]{6}'
-QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(tracked|untracked|filtered)\.z'
+QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(tracked|untracked|filtered|raw|gitmodules)\.z'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(names|full\.diff|diff|doc-paths|self-state)'
+QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/link\.(tmp|patch|out)'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/settings(-local)?-(base|head)'
 QG_NAMES_RE="^($QG_NAMES)\$"
 QG_WT_RE='^\.claude/quality-gates/worktrees/(base|head)-[A-Za-z0-9_-]{8}/$'
@@ -248,47 +254,32 @@ if [ "$WORKTREE" -eq 1 ]; then
     "추적되지 않은 파일을 모두 리뷰한다(self_state 0): $DIR" >&2
 fi
 
-NAMES=(); UNTR=(); SELF=(); NESTED_BAD=(); NESTED_N=0
-# 추적 안 되는 중첩 리포 — 바깥 ls-files 는 그 폴더를 한 줄(끝 /)로만 낸다. 그 리포의 ls-files -co 로 안의
-# 파일을 펼쳐 리포 최상위 기준 경로(<폴더>/<파일>)로 UNTR 에 더한다(그 안의 중첩 리포도 같은 길, 깊이 16 까지).
-# 목록을 못 읽으면(git 실패 · 그 폴더가 리포 최상위가 아님 · 깊이 초과) 폴더 줄을 NESTED_BAD 에 남기고
-# 실행 전체가 degraded: yes 다. 링크는 폴더를 가리켜도 펼치지 않는다 — 링크 자체가 리뷰 대상이다.
-# 등록된 qg worktree 는 이 함수 전에 is_qg_state 가 건너뛴다. core.fsmonitor 를 꺼 중첩 리포 설정이 명령을
-# 돌리지 못하게 한다.
-add_untr_entry() {   # <리포 기준 경로> <깊이>
-  local p="$1" d n want got f
-  if [ ! -d "$p" ] || [ -L "${p%/}" ]; then
-    { [ -e "$p" ] || [ -L "${p%/}" ]; } && UNTR+=("${p%/}")   # 목록 뒤 사라진 파일은 리뷰할 글이 없다
-    return 0
-  fi
-  d="${p%/}"
-  if [ "$2" -ge 16 ]; then NESTED_BAD+=("$d/"); return 0; fi
-  NESTED_N=$((NESTED_N + 1)); n="$T/nested-$NESTED_N.z"
-  want="$(cd "$d" 2>/dev/null && pwd -P)" || want=""
-  got="$(git -c core.fsmonitor=false -C "$d" rev-parse --show-toplevel 2>/dev/null)" || got=""
-  [ -n "$got" ] && got="$(cd "$got" 2>/dev/null && pwd -P)" || got=""
-  if [ -z "$want" ] || [ "$got" != "$want" ] \
-    || ! git -c core.fsmonitor=false -C "$d" ls-files -co --exclude-standard -z > "$n" 2>/dev/null; then
-    NESTED_BAD+=("$d/"); return 0
-  fi
-  while IFS= read -r -d '' f; do add_untr_entry "$d/$f" $(( $2 + 1 )); done < "$n"
-}
+NAMES=(); UNTR=(); SELF=(); NESTED=()
+# 추적 안 되는 중첩 레포 — 바깥 ls-files 는 그 폴더를 한 줄(끝 /)로만 낸다. 그 안은 다른 레포가 정한 글이라
+# 리뷰하지 않는다(그 안에서 git 을 돌리지도 파일을 읽지도 않는다). 폴더 줄을 names 에 남기고 폴더마다
+# stderr 에 크게 알린다(say_unreviewed). 끝 / 는 git 이 내는 표시라 파일 시스템을 따라가지 않고 가른다.
+# 링크는 폴더를 가리켜도 끝 / 가 없다 — 링크 자체를 diff 한다(add_dir_link).
+# 등록된 qg worktree 는 이 갈래 전에 is_qg_state 가 건너뛴다.
 while IFS= read -r -d '' f; do NAMES+=("$f"); done < "$T/tracked.z"
 while IFS= read -r -d '' f; do
   if [ -n "$T_REL" ]; then
     case "$f" in "$T_REL"/*) continue ;; esac
   fi
-  if is_qg_state "$f"; then SELF+=("$f"); else add_untr_entry "$f" 0; fi
+  if is_qg_state "$f"; then
+    SELF+=("$f")
+  else
+    case "$f" in */) NESTED+=("$f") ;; *) UNTR+=("$f") ;; esac
+  fi
 done < "$T/untracked.z"
 {
-  for f in ${NAMES[@]+"${NAMES[@]}"} ${UNTR[@]+"${UNTR[@]}"} ${NESTED_BAD[@]+"${NESTED_BAD[@]}"}; do
+  for f in ${NAMES[@]+"${NAMES[@]}"} ${UNTR[@]+"${UNTR[@]}"} ${NESTED[@]+"${NESTED[@]}"}; do
     printf '%s\n' "$f"
   done
 } > "$T/names" || gitfail "경로 목록을 쓰지 못했다"
 {
   for f in ${SELF[@]+"${SELF[@]}"}; do printf '%s\n' "$f"; done
 } > "$T/self-state" || gitfail "상태 경로 목록을 쓰지 못했다"
-FILES=$(( ${#NAMES[@]} + ${#UNTR[@]} + ${#NESTED_BAD[@]} ))
+FILES=$(( ${#NAMES[@]} + ${#UNTR[@]} + ${#NESTED[@]} ))
 
 add_untracked() {   # <out> <path> — untracked 파일 하나를 /dev/null 대비 diff 로 덧붙인다
   local rc
@@ -298,21 +289,42 @@ add_untracked() {   # <out> <path> — untracked 파일 하나를 /dev/null 대�
   [ "$rc" -le 1 ] || gitfail "untracked 파일의 diff 가 실패했다(rc $rc): $2"
 }
 
-# 폴더를 가리키는 링크 — git diff --no-index 는 그 인자를 폴더로 읽는다. 링크 대상 글자를 담은 보통 파일을
-# 같은 상대 경로로 리포 밖처럼 보이는 임시 폴더에 두고(GIT_CEILING_DIRECTORIES — 경로가 받은 그대로 찍힌다)
-# diff 한 뒤 mode 줄만 120000 으로 고친다.
+# 폴더를 가리키는 링크 — git diff --no-index 는 그 인자를 폴더로 읽는다(그리고 rc 1 로 조용히 끝난다).
+# 링크 대상 글자만 고정 이름 link.tmp 에 쓰고 리포를 찾지 않는 cwd($T — GIT_CEILING_DIRECTORIES)에서 diff 한
+# 뒤, 머리의 고정 이름을 바깥 ls-files 가 내는 실제 이름(따옴표 규칙 그대로)으로, mode 를 120000 으로 바꾼다.
+# 리포가 정한 이름으로 폴더 · 파일을 만들지 않는다.
 add_dir_link() {   # <out> <path>
-  local sl="$T/dirlink" rc
-  rm -rf -- "$sl" && mkdir -p -- "$sl" || gitfail "링크 diff 임시 폴더를 만들지 못했다: $sl"
-  case "$2" in */*) mkdir -p -- "$sl/${2%/*}" || gitfail "링크 diff 임시 폴더를 만들지 못했다: $2" ;; esac
-  readlink -n -- "$2" > "$sl/$2" || gitfail "링크를 읽지 못했다: $2"
-  ( cd "$sl" && GIT_CEILING_DIRECTORIES="$T" "${GITD_NOINDEX[@]}" -- /dev/null "$2" ) > "$T/dirlink.patch"
+  local q qa qb tab="" rc nl
+  nl=$'\n'
+  case "/$2/" in */../*|*/./*|//*) gitfail "링크 이름이 리포 안 상대 경로가 아니다: $(printf '%q' "$2")" ;; esac
+  q="$(git -c core.quotePath=false ls-files --others --exclude-standard -- ":(literal)$2")" \
+    || gitfail "링크 이름을 읽지 못했다: $2"
+  case "$q" in ''|*"$nl"*) gitfail "링크 이름을 하나로 풀지 못했다: $2" ;; esac
+  readlink -n -- "$2" > "$T/link.tmp" || gitfail "링크를 읽지 못했다: $2"
+  ( cd "$T" && GIT_CEILING_DIRECTORIES="$DIR" "${GITD_NOINDEX[@]}" -- /dev/null link.tmp ) > "$T/link.patch"
   rc=$?
   [ "$rc" -eq 1 ] || gitfail "링크의 diff 가 실패했다(rc $rc): $2"
-  [ "$(sed -n 2p "$T/dirlink.patch")" = "new file mode 100644" ] \
+  case "$2" in *' '*) tab="$TAB" ;; esac   # git 은 공백 든 이름의 +++ 줄 끝에 TAB 을 붙인다
+  case "$q" in '"'*) qa="\"a/${q#\"}"; qb="\"b/${q#\"}" ;; *) qa="a/$q"; qb="b/$q" ;; esac
+  link_patch "$qa" "$qb" "$tab" < "$T/link.patch" > "$T/link.out" \
     || gitfail "링크의 diff 모양이 예상과 다르다: $2"
-  sed '2s/^new file mode 100644$/new file mode 120000/' "$T/dirlink.patch" >> "$1" \
-    || gitfail "링크의 diff 를 쓰지 못했다: $2"
+  cat -- "$T/link.out" >> "$1" || gitfail "링크의 diff 를 쓰지 못했다: $2"
+}
+
+link_patch() {   # <a 이름> <b 이름> <+++ 줄 끝> — stdin 의 link.tmp diff 머리를 실제 이름으로 바꾼다
+  local n=0 line
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    case "$n" in
+      1) [ "$line" = "diff --git a/link.tmp b/link.tmp" ] || return 1; line="diff --git $1 $2" ;;
+      2) [ "$line" = "new file mode 100644" ] || return 1; line="new file mode 120000" ;;
+      3) case "$line" in "index 0000000.."*) ;; *) return 1 ;; esac ;;
+      4) [ "$line" = "--- /dev/null" ] || return 1 ;;
+      5) [ "$line" = "+++ b/link.tmp" ] || return 1; line="+++ $2$3" ;;
+    esac
+    printf '%s\n' "$line"
+  done
+  [ "$n" -ge 6 ]
 }
 
 # ── 거르기 전 diff ─────────────────────────────────────────────────────────
@@ -378,13 +390,36 @@ for f in ${UNTR[@]+"${UNTR[@]}"}; do
   add_untracked "$T/diff" "$f"
 done
 
-deg_out=no
-for x in ${NESTED_BAD[@]+"${NESTED_BAD[@]}"}; do
-  deg_out=yes
-  echo "review-diff: 추적 안 되는 중첩 리포의 파일 목록을 읽지 못해 그 안의 파일을 리뷰 diff 에 싣지 못했다" \
-    "— 이 실행은 degraded 다(clean 이 아니다): $x" >&2
-done
+# 리뷰하지 않은 중첩 레포를 크게 알린다 — 이름은 레포가 정한 글이라 %q 로 이스케이프한다(줄바꿈 · 제어 문자가
+# 줄을 위조하지 못하게). 판정은 바꾸지 않는다.
+say_unreviewed() {   # <경로>
+  printf 'review-diff: 추적 안 되는 중첩 레포 %q 는 리뷰하지 않았다 — .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라\n' \
+    "$1" >&2
+}
+for x in ${NESTED[@]+"${NESTED[@]}"}; do say_unreviewed "$x"; done
+
+# 토픽 — 봉인(git add -A)이 추적 안 되는 중첩 레포를 gitlink 로 만든다. 그 안의 글은 diff 에 없다. boundary 의
+# .gitmodules 에 선언되지 않았고 이 범위에서 새로 gitlink 가 된 경로를 같은 줄로 알린다(공시만 — 판정은 그대로).
+if [ "$MODE" = topic ]; then
+  "${GITD[@]}" --raw -z "${REV[@]}" -- "${PS[@]}" > "$T/raw.z" \
+    || gitfail "git diff --raw 가 실패했다: ${REV[*]}"
+  : > "$T/gitmodules.z"
+  if git cat-file -e "$BASE:.gitmodules" 2>/dev/null; then
+    # 못 읽으면(모양이 깨진 .gitmodules 등) 선언 없음으로 본다 — 더 많이 알리는 쪽이다.
+    git config -z --blob "$BASE:.gitmodules" --get-regexp '^submodule\..*\.path$' > "$T/gitmodules.z" 2>/dev/null \
+      || : > "$T/gitmodules.z"
+  fi
+  DECL=()
+  while IFS= read -r -d '' rec; do DECL+=("${rec#*$'\n'}"); done < "$T/gitmodules.z"
+  while IFS= read -r -d '' meta && IFS= read -r -d '' gp; do
+    read -r om nm _ <<< "$meta"
+    [ "$nm" = 160000 ] && [ "${om#:}" != 160000 ] || continue
+    declared=0
+    for x in ${DECL[@]+"${DECL[@]}"}; do [ "$x" = "$gp" ] && declared=1; done
+    [ "$declared" -eq 1 ] || say_unreviewed "$gp"
+  done < "$T/raw.z"
+fi
 
 publish
-emit "$BASE" "$HEAD_LABEL" "$deg_out" "$FILES" "$FILTERED" "${excluded:--}" "${kept:--}" "${dp_source:--}" "${#SELF[@]}"
+emit "$BASE" "$HEAD_LABEL" no "$FILES" "$FILTERED" "${excluded:--}" "${kept:--}" "${dp_source:--}" "${#SELF[@]}"
 exit 0
