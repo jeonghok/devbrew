@@ -471,6 +471,12 @@ test('axes [1,6] runs exactly those', async () => {
   assert.ok(ac[0].opts.label.startsWith('축1 '), ac[0].opts.label)
   assert.ok(ac[1].opts.label.startsWith('축6 '), ac[1].opts.label)
   assert.deepEqual(result.axes_run, [1, 6])
+  // The real Workflow tool hands args over as a JSON string.
+  const { result: r2, calls: c2 } = await runWorkflow(WF, {
+    args: JSON.stringify(argsWithAxes([1, 6])), stubAgent: stubOneFinding(),
+  })
+  assert.deepEqual(auditCalls(c2).map((c) => c.opts.label.slice(0, 3)), ['축1 ', '축6 '])
+  assert.deepEqual(r2.axes_run, [1, 6])
 })
 
 test('bad axes throw before any dispatch', async () => {
@@ -482,6 +488,13 @@ test('bad axes throw before any dispatch', async () => {
       JSON.stringify(bad),
     )
     assert.equal(calls.length, 0, 'dispatch before the axes check: ' + JSON.stringify(bad))
+    const strCalls = []
+    await assert.rejects(
+      runWorkflow(WF, { args: JSON.stringify(argsWithAxes(bad)), stubAgent: stubOneFinding(), calls: strCalls }),
+      (e) => e instanceof Error && e.message.startsWith('[plugin-audit] 축 선택이 잘못됐다 — '),
+      'string args ' + JSON.stringify(bad),
+    )
+    assert.equal(strCalls.length, 0, 'string args dispatch before the axes check: ' + JSON.stringify(bad))
   }
 })
 

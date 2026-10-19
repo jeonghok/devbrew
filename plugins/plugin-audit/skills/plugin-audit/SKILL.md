@@ -242,6 +242,11 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    codex re-verify R4).
 2. `<meta.json>` 에 `staleness_excluded` 를 pre-1 의 같은 값으로 적는다 — pre-1 이 키를 빼 뒀으면 여기서도
    빼 둔다, 0 으로 채우지 않는다. `<meta.json>` 에 `axes` 를 consent 아티팩트와 같은 값으로 적는다.
+   `fanout_declared` 는 consent 아티팩트의 `fanout` 을 글자 그대로 옮긴다(검증이 둘이 같은지 본다).
+   `<assigned.json>` 은 `{assigned_d, assigned_oq, axis_of}` 다 — evidence pack 의 `candidate_clues` ·
+   `open_questions` id 목록, 그리고 `axis_of` 에 id 마다 그 항목의 `axis`(축이 없는 항목은 빼 둔다).
+   고르지 않은 축의 id 는 codex 판정 없이도 검증을 통과하고 「검증 안 됨」으로 채워진다 — `axis_of` 가
+   없으면 그 id 를 어느 축인지 몰라 codex 판정을 요구한다.
    `assemble-audit-data.py --workflow-return <wf.json> --codex-side <codex.json> --meta <meta.json>
    --assigned <assigned.json> --repo-root . --out "$RUN_DIR/audit-data.json"` (내부에서
    `check-grounding.py`를 동적 import해 재읽기 — A grounding: 인용 실재 검증, null-degrade/폐기/line-교정.

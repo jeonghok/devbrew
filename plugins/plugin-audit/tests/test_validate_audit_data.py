@@ -362,5 +362,89 @@ class TestB7NarrowedToRanAndNotFailed(unittest.TestCase):
         self.assertEqual(errs, [])
 
 
+
+def _drop_codex(data, id_):
+    data["d_verdicts"] = [x for x in data["d_verdicts"] if not (x["id"] == id_ and x["source"] == "codex")]
+    return data
+
+
+class TestChosenAxes(unittest.TestCase):
+    """고른 축만 돈 감사 — codex 도 고른 축만 감사한다(SKILL pre-1)."""
+
+    def test_b7_skips_ids_on_unchosen_axes(self):
+        d_ = _drop_codex(copy.deepcopy(VALID), "D4")
+        d_["meta"].update(axes=[1], assigned_axis={"D1": 1, "D4": 4})
+        rc, err = run_validate(d_)
+        self.assertEqual(rc, 0, err)
+
+    def test_b7_still_reds_chosen_or_unknown_axis(self):
+        # 양성 짝 — 고른 축의 id, 축을 모르는 id, 고른 축 정보가 없는 데이터는 여전히 RED.
+        cases = (
+            ("D1", dict(axes=[1], assigned_axis={"D1": 1, "D4": 4})),
+            ("D4", dict(axes=[1], assigned_axis={"D1": 1})),
+            ("D4", dict(assigned_axis={"D4": 4})),
+            ("D4", dict(axes=[1], assigned_axis={"D4": True})),
+        )
+        for id_, extra in cases:
+            d_ = _drop_codex(copy.deepcopy(VALID), id_)
+            d_["meta"].update(extra)
+            rc, err = run_validate(d_)
+            self.assertEqual(rc, 1, f"{id_} {extra}")
+            self.assertIn(f"{id_}의 codex 판정 없음", err)
+
+    def test_axes_and_axes_run_must_match(self):
+        d_ = copy.deepcopy(VALID); d_["meta"].update(axes=[1, 6], axes_run=[1, 2])
+        rc, err = run_validate(d_)
+        self.assertEqual(rc, 1)
+        self.assertIn("axes_run", err)
+        for good in (dict(axes=[6, 1], axes_run=[1, 6]), dict(axes_run=[1, 6]), dict(axes=[1, 6])):
+            d_ = copy.deepcopy(VALID); d_["meta"].update(good)
+            rc, err = run_validate(d_)
+            self.assertEqual(rc, 0, f"{good}: {err}")
+        d_ = copy.deepcopy(VALID); d_["meta"].update(axes_run=[0])
+        rc, err = run_validate(d_)
+        self.assertEqual(rc, 1)
+        self.assertIn("meta.axes_run 가 잘못됐다", err)
+
+    def _assemble_then_validate(self, codex_d):
+        assemble = SCRIPTS_DIR / "assemble-audit-data.py"
+        with tempfile.TemporaryDirectory() as t:
+            t = Path(t)
+            wf = {"findings": [], "d_verdicts": [d("D1", "claude")], "oq_answers": [],
+                  "new_open_questions": [], "axis_failures": [], "degraded_events": [], "axes_run": [1]}
+            codex = {"d_verdicts": codex_d, "oq_answers": [], "new_open_questions": []}
+            meta = {"date": "2026-01-01", "fanout_declared": "규모 문장",
+                    "consent": {"approved": True, "at": "t", "fanout": "규모 문장", "axes": [1]},
+                    "codex": {"ran": True, "version": "1.0"}, "target": "myplugin", "seed_provided": True,
+                    "axes": [1]}
+            assigned = {"assigned_d": ["D1", "D4"], "assigned_oq": [], "axis_of": {"D1": 1, "D4": 4}}
+            paths = {}
+            for name, obj in (("wf", wf), ("codex", codex), ("meta", meta), ("assigned", assigned)):
+                p = t / f"{name}.json"
+                p.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+                paths[name] = p
+            out = t / "data.json"
+            subprocess.run([sys.executable, str(assemble),
+                            "--workflow-return", str(paths["wf"]), "--codex-side", str(paths["codex"]),
+                            "--meta", str(paths["meta"]), "--assigned", str(paths["assigned"]),
+                            "--repo-root", str(t), "--no-grounding", "--out", str(out)],
+                           check=True, capture_output=True, text=True)
+            data = json.loads(out.read_text(encoding="utf-8"))
+        return data, run_validate(data)
+
+    def test_end_to_end_subset_axes_with_codex_is_green(self):
+        data, (rc, err) = self._assemble_then_validate([{"id": "D1", "verdict": "confirmed", "reason": "r"}])
+        self.assertEqual(rc, 0, err)
+        d4 = [x for x in data["d_verdicts"] if x["id"] == "D4"]
+        self.assertEqual([x["source"] for x in d4], ["claude"])
+        self.assertEqual(d4[0]["verdict"], "unverified")
+
+    def test_end_to_end_chosen_axis_missing_codex_still_reds(self):
+        data, (rc, err) = self._assemble_then_validate([])
+        self.assertEqual(rc, 1)
+        self.assertIn("D1의 codex 판정 없음", err)
+        self.assertNotIn("D4의 codex 판정 없음", err)
+
+
 if __name__ == "__main__":
     unittest.main()

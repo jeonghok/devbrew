@@ -140,6 +140,8 @@ class TestSkillOrchestration(unittest.TestCase):
     def test_meta_gets_axes_and_staleness_key_is_never_zero_filled(self):
         body = SKILL.read_text(encoding="utf-8")
         self.assertIn("`<meta.json>` 에 `axes` 를 consent 아티팩트와 같은 값으로 적는다", body)
+        self.assertIn("`fanout_declared` 는 consent 아티팩트의 `fanout` 을 글자 그대로 옮긴다", body)
+        self.assertIn("`axis_of`", body)
         self.assertGreaterEqual(body.count("0 으로 채우지 않는다"), 2,
                                 "pack 과 meta.json 두 자리 모두 staleness_excluded 를 빼 두라고 해야 한다")
 

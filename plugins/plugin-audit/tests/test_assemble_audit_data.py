@@ -166,6 +166,53 @@ class TestAssemble(unittest.TestCase):
         r, data = run(workflow_return=empty_wf, codex_side=empty_cx, meta=BASE_META, assigned=none)
         self.assertNotIn("axes", data["meta"], "없는 키를 만들어 넣지 않는다")
 
+    def test_axes_come_from_axes_run_when_meta_lacks_them(self):
+        wf = {"findings": [], "d_verdicts": [], "oq_answers": [], "new_open_questions": [],
+              "axis_failures": [], "degraded_events": [], "axes_run": [1, 2]}
+        cx = {"d_verdicts": [], "oq_answers": [], "new_open_questions": []}
+        none = {"assigned_d": [], "assigned_oq": []}
+        r, data = run(workflow_return=wf, codex_side=cx, meta=BASE_META, assigned=none)
+        self.assertEqual(data["meta"]["axes"], [1, 2])
+        self.assertEqual(data["meta"]["axes_run"], [1, 2])
+        r, data = run(workflow_return=wf, codex_side=cx, meta=dict(BASE_META, axes=[1, 6]), assigned=none)
+        self.assertEqual(data["meta"]["axes"], [1, 6], "consent 쪽 값을 덮지 않는다 — 검증이 차이를 잡는다")
+        self.assertEqual(data["meta"]["axes_run"], [1, 2])
+
+    def test_assigned_axis_map_is_carried(self):
+        wf = {"findings": [], "d_verdicts": [], "oq_answers": [], "new_open_questions": [],
+              "axis_failures": [], "degraded_events": []}
+        cx = {"d_verdicts": [], "oq_answers": [], "new_open_questions": []}
+        assigned = {"assigned_d": ["D1", "D4"], "assigned_oq": ["OQ1"],
+                    "axis_of": {"D1": 1, "D4": 4, "OQ1": None, "OQ9": True, "D7": 9}}
+        r, data = run(workflow_return=wf, codex_side=cx, meta=BASE_META, assigned=assigned)
+        self.assertEqual(data["meta"]["assigned_axis"], {"D1": 1, "D4": 4})
+
+    def test_both_chosen_axes_dead_makes_no_report(self):
+        # axes 가 meta.json 에 빠져도 Workflow 의 axes_run 이 분모가 된다 (AC-4 우회 봉쇄).
+        render = SCRIPT.parent / "render-audit-report.py"
+        wf = {"findings": [], "d_verdicts": [], "oq_answers": [], "new_open_questions": [],
+              "axis_failures": [{"axis": 1, "why": "x"}, {"axis": 2, "why": "x"}],
+              "degraded_events": [], "axes_run": [1, 2]}
+        cx = {"d_verdicts": [], "oq_answers": [], "new_open_questions": []}
+        r, data = run(workflow_return=wf, codex_side=cx, meta=BASE_META,
+                      assigned={"assigned_d": [], "assigned_oq": []})
+        with tempfile.TemporaryDirectory() as t:
+            j = Path(t) / "d.json"
+            out = Path(t) / "r.md"
+            j.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            rr = subprocess.run([sys.executable, str(render), str(j), "--out", str(out)],
+                                capture_output=True, text=True)
+            self.assertEqual(rr.returncode, 1, rr.stderr)
+            self.assertFalse(out.exists())
+            wf["axis_failures"] = wf["axis_failures"][:1]
+            r, data = run(workflow_return=wf, codex_side=cx, meta=BASE_META,
+                          assigned={"assigned_d": [], "assigned_oq": []})
+            j.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            rr = subprocess.run([sys.executable, str(render), str(j), "--out", str(out)],
+                                capture_output=True, text=True)
+            self.assertEqual(rr.returncode, 0, rr.stderr)
+            self.assertIn("⚠ **축 1/2 완주**", out.read_text(encoding="utf-8"))
+
     def test_meta_and_degraded_attached(self):
         r, data = run(
             workflow_return={"findings": [], "d_verdicts": [], "oq_answers": [],

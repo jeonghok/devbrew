@@ -508,6 +508,11 @@ class TestAppendix(unittest.TestCase):
         self.assertEqual(rc, 0, err)
         sec = md.split("## 수집에서 뺀 것", 1)[1].split("\n## ", 1)[0]
         self.assertIn("셀 수 없음", sec)
+        bools = {"fence_lines": True, "placeholder_or_url": 2, "generation_target": 1}
+        rc, md, err, _ = render(dict(self._data([]), meta=dict(META_OK, staleness_excluded=bools)))
+        self.assertEqual(rc, 0, err)
+        sec = md.split("## 수집에서 뺀 것", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("셀 수 없음", sec, "참/거짓 값은 개수가 아니다")
         rc, md, err, _ = render(dict(self._data([]), meta=dict(META_OK, staleness_excluded={"fence_lines": 3})))
         self.assertEqual(rc, 0, err)
         sec = md.split("## 수집에서 뺀 것", 1)[1].split("\n## ", 1)[0]

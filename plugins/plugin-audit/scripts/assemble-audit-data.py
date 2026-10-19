@@ -81,6 +81,14 @@ def ev_keys(f):
     return {(e.get("file"), e.get("line"))}
 
 
+def _axis_map(raw):
+    """assigned.json 의 axis_of — id → 축(1~6 정수). 그 밖의 값은 버린다(축을 모르는 id 로 남는다)."""
+    if not isinstance(raw, dict):
+        return {}
+    return {k: v for k, v in raw.items()
+            if isinstance(k, str) and type(v) is int and 1 <= v <= 6}
+
+
 def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     findings = [_sanitize_finding(f) for f in wf["findings"]]   # codex-source malformed 입력 근본 봉쇄
     d_verdicts = list(wf.get("d_verdicts", []))
@@ -106,17 +114,29 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     # have_d/have_oq는 codex merge(2) *후*의 전체 목록(any-source)이 아니라 **claude source만**
     # 봐야 한다: codex가 답한 축이라도 Claude가 죽었으면 'axis incomplete' 정직성 backfill이
     # 떠야 한다. any-source로 보면 codex 답변이 죽은 Claude 축을 조용히 가린다 (LD4 정직성 갭).
+    # 고르지 않은 축의 id 는 사유가 다르다 — 축이 죽은 것이 아니라 이번 감사가 그 축을 돌리지 않았다.
+    chosen = meta.get("axes") if "axes" in meta else wf.get("axes_run")
+    axis_of = _axis_map(assigned.get("axis_of"))
+    unchosen_reason = "이번 감사에서 고르지 않은 축이라 빈칸을 채웠다(backfilled — 검증 안 됨)"
+
+    def unchosen(i):
+        return isinstance(chosen, list) and i in axis_of and axis_of[i] not in chosen
+
     have_d = {v["id"] for v in d_verdicts if v.get("source") == "claude"}
     for did in assigned.get("assigned_d", []):
         if did not in have_d:
             d_verdicts.append({"id": did, "verdict": "unverified",
-                               "reason": "축 감사가 끝나지 않아 빈칸을 채웠다(backfilled)", "source": "claude"})
+                               "reason": (unchosen_reason if unchosen(did)
+                                          else "축 감사가 끝나지 않아 빈칸을 채웠다(backfilled)"),
+                               "source": "claude"})
     have_oq = {v["id"] for v in oq_answers if v.get("source") == "claude"}
     for oid in assigned.get("assigned_oq", []):
         if oid not in have_oq:
             # steelman_condition enum(a|b|c|d|none|pending)을 침범하지 않음 — reason으로만 unverified 표시
             oq_answers.append({"id": oid, "answer": None,
-                               "reason": "축 감사가 끝나지 않아 빈칸을 채웠다(backfilled — 검증 안 됨)", "source": "claude"})
+                               "reason": (unchosen_reason if unchosen(oid)
+                                          else "축 감사가 끝나지 않아 빈칸을 채웠다(backfilled — 검증 안 됨)"),
+                               "source": "claude"})
 
     # (4) cross_model_confirmed (claude∪codex file:line 교집합)
     claude_ev, codex_ev = set(), set()
@@ -196,6 +216,13 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     out_meta["codex"] = codex_meta
     out_meta["assigned_d"] = assigned.get("assigned_d", [])
     out_meta["assigned_oq"] = assigned.get("assigned_oq", [])
+    # 고른 축: consent 값(meta.axes)이 정본이고, 빠졌으면 Workflow 가 실제로 돈 축(axes_run)으로 채운다 —
+    # 렌더러의 분모(AC-4)가 여섯으로 떨어지지 않게. 둘 다 있으면 validate 가 일치를 본다.
+    if "axes_run" in wf:
+        out_meta["axes_run"] = wf["axes_run"]
+        out_meta.setdefault("axes", wf["axes_run"])
+    if axis_of:
+        out_meta["assigned_axis"] = axis_of
     return {"meta": out_meta, "findings": findings, "d_verdicts": d_verdicts,
             "oq_answers": oq_answers, "new_open_questions": noq,
             "axis_failures": wf.get("axis_failures", []), "degraded": degraded}

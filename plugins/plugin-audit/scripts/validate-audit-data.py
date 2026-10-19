@@ -36,12 +36,30 @@ def validate_data(data: dict) -> list:
     if meta.get("fanout_declared") != consent.get("fanout"):
         errs.append(f"fanout_declared({meta.get('fanout_declared')}) != consent.fanout({consent.get('fanout')})")
 
-    # 고른 축 — 있으면 비지 않은 1~6 정수 목록, 중복 없음 (bool 은 int 가 아니다).
-    if "axes" in meta:
-        ax = meta.get("axes")
-        if not (isinstance(ax, list) and ax and all(type(x) is int and 1 <= x <= 6 for x in ax)
-                and len(set(ax)) == len(ax)):
-            errs.append(f"meta.axes 가 잘못됐다 ({ax!r}) — 비지 않은 1~6 정수 목록, 중복 없음이어야 한다")
+    # 고른 축(consent) · 실제로 돈 축(Workflow axes_run) — 있으면 비지 않은 1~6 정수 목록, 중복 없음
+    # (bool 은 int 가 아니다). 둘 다 있으면 같은 축이어야 한다.
+    def _axes_ok(ax):
+        return (isinstance(ax, list) and bool(ax) and all(type(x) is int and 1 <= x <= 6 for x in ax)
+                and len(set(ax)) == len(ax))
+
+    chosen = None
+    for key in ("axes", "axes_run"):
+        if key in meta:
+            if _axes_ok(meta.get(key)):
+                chosen = chosen if chosen is not None else set(meta[key])
+            else:
+                errs.append(f"meta.{key} 가 잘못됐다 ({meta.get(key)!r}) — 비지 않은 1~6 정수 목록, 중복 없음이어야 한다")
+    if _axes_ok(meta.get("axes")) and _axes_ok(meta.get("axes_run")) \
+            and set(meta["axes"]) != set(meta["axes_run"]):
+        errs.append(f"meta.axes({meta['axes']})와 Workflow 가 실제로 돈 축 axes_run({meta['axes_run']})이 다르다")
+
+    # 배정 id 의 축(assemble 이 assigned.json 의 axis_of 에서 옮긴다). 고르지 않은 축이라고 알 수 있는
+    # id 만 codex 판정 요구(B7)에서 뺀다 — 축을 모르면 요구한다(fail-closed).
+    assigned_axis = meta.get("assigned_axis") if isinstance(meta.get("assigned_axis"), dict) else {}
+
+    def _codex_expected(i):
+        ax = assigned_axis.get(i)
+        return chosen is None or not (type(ax) is int and ax not in chosen)
 
     # D/OQ 완결성 (row 16 이빨 — backfill 안 하면 여기서 RED)
     d_ids = {x.get("id") for x in data.get("d_verdicts", [])}
@@ -77,9 +95,13 @@ def validate_data(data: dict) -> list:
     _cx = meta.get("codex", {})
     if _cx.get("ran") is True and _cx.get("failed") is not True:
         for did in assigned_d:
+            if not _codex_expected(did):
+                continue   # codex 는 고른 축만 감사한다 (SKILL pre-1)
             if not any(x.get("id") == did and x.get("source") == "codex" for x in data.get("d_verdicts", [])):
                 errs.append(f"codex.ran=true인데 {did}의 codex 판정 없음 (B7 — LD4 참칭)")
         for oid in assigned_oq:
+            if not _codex_expected(oid):
+                continue
             if not any(x.get("id") == oid and x.get("source") == "codex" for x in data.get("oq_answers", [])):
                 errs.append(f"codex.ran=true인데 {oid}의 codex 답변 없음 (B7)")
 

@@ -134,6 +134,38 @@ class AssembleTextTest(unittest.TestCase):
         self.assertEqual(oq1[0]["reason"], "축 감사가 끝나지 않아 빈칸을 채웠다(backfilled — 검증 안 됨)")
         self.assertNotIn("axis incomplete", json.dumps(data, ensure_ascii=False))
 
+    def test_backfill_reason_for_unchosen_axis(self):
+        meta = {"date": "2026-01-01", "fanout_declared": "s",
+                "consent": {"approved": True, "at": "2026-01-01T00:00Z", "fanout": "s"},
+                "codex": {"ran": False}, "target": "myplugin", "seed_provided": True, "axes": [1]}
+        files = {
+            "workflow-return": {"findings": [], "d_verdicts": [], "oq_answers": [], "new_open_questions": [],
+                                "axis_failures": [{"axis": 1, "why": "x"}], "degraded_events": []},
+            "codex-side": {"d_verdicts": [], "oq_answers": [], "new_open_questions": []},
+            "meta": meta,
+            "assigned": {"assigned_d": ["D1", "D4"], "assigned_oq": ["OQ2"],
+                         "axis_of": {"D1": 1, "D4": 4, "OQ2": 2}},
+        }
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            argv = [sys.executable, str(ASSEMBLE)]
+            for flag, obj in files.items():
+                p = d / (flag + ".json")
+                p.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+                argv += ["--" + flag, str(p)]
+            out = d / "out.json"
+            argv += ["--repo-root", str(d), "--no-grounding", "--out", str(out)]
+            r = subprocess.run(argv, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            data = json.loads(out.read_text(encoding="utf-8"))
+        by = {v["id"]: v for v in data["d_verdicts"] + data["oq_answers"]}
+        unchosen = "이번 감사에서 고르지 않은 축이라 빈칸을 채웠다(backfilled — 검증 안 됨)"
+        self.assertEqual(by["D4"]["reason"], unchosen)
+        self.assertEqual(by["OQ2"]["reason"], unchosen)
+        self.assertEqual(by["D4"]["verdict"], "unverified")
+        self.assertEqual(by["D1"]["reason"], "축 감사가 끝나지 않아 빈칸을 채웠다(backfilled)",
+                         "고른 축이 죽은 경우는 옛 사유 그대로")
+
 
 PREAMBLE = PLUGIN / "scripts" / "codex-prompt-preamble.md"
 CONVERTER = PLUGIN / "scripts" / "codex_audit_to_json.py"

@@ -113,7 +113,7 @@ def exclusion_lines(ex) -> list:
     """자동 사실 수집이 뺀 수를 보인다. 수가 없으면 모른다고 적는다."""
     out = ["## 수집에서 뺀 것"]
     keys = ("fence_lines", "placeholder_or_url", "generation_target")
-    if isinstance(ex, dict) and all(isinstance(ex.get(k), int) for k in keys):
+    if isinstance(ex, dict) and all(type(ex.get(k)) is int for k in keys):   # bool 은 개수가 아니다
         out.append(f"- 자동 사실 수집이 코드 펜스 안 {ex['fence_lines']}줄 · 자리표시자·URL 때문에 건너뛴 후보 "
                    f"{ex['placeholder_or_url']}건 · 생성 대상 경로 {ex['generation_target']}개를 뺐다. "
                    "감사자는 원문을 직접 읽는다.")
