@@ -635,6 +635,32 @@ git commit -m 'test(spec-distill): seed 기록 펜스를 macOS bash 3.2 로도 �
 
 ---
 
+### Task 10: request-framing 의 critic 출력 비움을 공유 스크립트로 · 「다시 심음」 시험 (설계 `## 미룸` 보안 잔여 H2 · H3) — 보안 리뷰 대상
+
+> 지휘자 판정(2026-10-19)으로 더한 과제다 — 설계 `## 미룸` 의 「request-framing 펜스 안의 critic 출력 비움 …(R2a 계획 2 보안 재리뷰 잔여 H2 · H3)」 행(받는 곳 R10 계획 1). 실행 순서는 Task 8 다음, Task 9 앞이다. 리뷰는 `quality-gates:security-reviewer`(opus, 웹 도구 없음)도 받는다.
+
+**Files:**
+- Modify: `plugins/spec-distill/skills/request-framing/SKILL.md` — `### 프로필 내용 — 탐지 dispatch 직전마다` 의 `profile-content` 펜스 실패 분기(지금 `: > "$STATE_DIR/critic.txt"` 와 ls 목록 + `case … critic-[0-9]*.txt` + `: >` 로 제자리에서 자른다 — 링크를 따라 상태 폴더 밖 파일을 자른다)
+- Modify: `plugins/spec-distill/scripts/clear_critic_outputs.sh`(주석 바로잡기 · 필요하면 다시 심은 «파일이 아닌 것» 처리)
+- Modify: `plugins/spec-distill/tests/test_dispatch_profile_inline.sh` — `W` 블록(모양 `replanted`) · request-framing `Z` 블록(링크 · 하드 링크 모양, 스크립트 없는 루트)
+
+- [ ] **Step 1: 실패하는 락을 쓴다**
+  - request-framing `Z` 블록에 모양 `linked`(상태 폴더 밖 파일을 가리키는 심볼릭 링크 `critic.txt` · `critic-2.txt`)와 `hardlinked`(폴더 밖 파일과 하드 링크로 이어진 두 이름)를 더한다 — 기대는 `W` 블록의 같은 모양과 같다(폴더 밖 파일 내용 그대로 · 링크는 이름으로 알림 · 하드 링크 이름은 빈 보통 파일). bash · zsh 둘 다.
+  - request-framing 펜스를 `CLAUDE_PLUGIN_ROOT` 를 받아 돌리고, 비움 스크립트가 없는 플러그인 루트(기존 `PR_NOCLR` 꼴)에서 rc 1 · 「비우는 스크립트가 돌지 않았다」 · 「을 비웠다」 없음을 단언한다(reviewing-brief · spec-review 와 같은 사례).
+  - `W` 블록에 모양 `replanted` 를 더한다 — `PATH` 맨 앞에 `rm` 대역(진짜 `/bin/rm` 을 부른 뒤 같은 이름에 상태 폴더 밖 파일로 가는 하드 링크를 다시 심는다)을 두고 스크립트를 돌린다. 기대: rc 1 · 폴더 밖 파일 내용 그대로 · stderr 가 그 이름을 「비우지 못했다」 목록에 댄다 · 「을 비웠다」 없음. 심볼릭 링크를 다시 심는 꼴도 같은 기대로 하나 더(`replanted-symlink`).
+  - 펜스 본문 부재 락: request-framing `profile-content` 펜스 본문에 `: > "$STATE_DIR/` 가 없고 `scripts/clear_critic_outputs.sh` 호출이 있다(본문 고유 문구 — 주석으로 맞출 수 없게 주석 줄을 뺀 본문에서 잰다).
+- [ ] **Step 2: 돌려 실패를 본다** — Run: `bash plugins/spec-distill/tests/test_dispatch_profile_inline.sh 2>&1 | grep -E '✗' | head -30`. Expected: request-framing `Z(linked)` 가 폴더 밖 파일이 잘려 ✗, 부재 락 ✗, 스크립트 없는 루트 사례 ✗. `W(replanted*)` 는 처음부터 ✓ 일 수 있다(지금 스크립트가 `set -C` 를 쓴다) — 이빨은 Step 5 변이로 본다.
+- [ ] **Step 3: request-framing 펜스를 고친다** — 실패 분기의 인라인 비움을 reviewing-brief 의 같은 자리와 같은 꼴로 바꾼다: `clr_rc=0; bash "<플러그인 루트>/scripts/clear_critic_outputs.sh" "$STATE_DIR" >&2 || clr_rc=$?` + `case "$clr_rc" in 0|1|2) ;; *) echo "… 비우는 스크립트가 돌지 않았다(rc …)" >&2 ;; esac`. 플러그인 루트는 `${CLAUDE_PLUGIN_ROOT}` 에서 얻고(이 펜스가 이미 받는 변수가 아니면 펜스 머리에서 대입), 비면 비우지 않았다고 알린다(경로 추측 금지). stdout 에는 아무것도 쓰지 않는다(펜스의 stdout 은 프로필 슬롯이다). zsh · bash 3.2 에서 돈다.
+- [ ] **Step 4: 스크립트 주석을 바로잡는다** — `empty_one` 주석 「그 사이 무엇이 다시 심기면 만들기가 실패」는 `set -C` 가 «보통 파일»만 막는다는 사실과 맞게 고친다. 다시 심은 것이 보통 파일이 아닌 것(폴더 · FIFO 등)이면 지금 동작이 무엇인지 재고(FIFO 는 쓰기 열기가 멈출 수 있다), 막아야 하면 만든 뒤 `[ -f ] && [ ! -L ]` 확인 등 가장 작은 고침으로 막고 그 모양도 `W` 에 더한다. 고치지 않기로 하면 그 이유를 보고에 적는다.
+- [ ] **Step 5: 락을 돌리고 변이를 본다(AC32)** — 먼저 커밋한 뒤 하나씩: 스크립트의 `( set -C; : > … )` 에서 `set -C;` 를 지우기(`W(replanted)` RED), request-framing 펜스를 옛 인라인 `: >` 비움으로 되돌리기(`Z(linked)` · 부재 락 RED), 스크립트의 `[ -L ]` 가드 지우기(`W(linked)` RED). 매번 `git checkout HEAD -- <파일>` 뒤 `git diff HEAD --stat` 이 빈지 본다. Run: `bash plugins/spec-distill/tests/test_dispatch_profile_inline.sh && bash plugins/spec-distill/tests/test_seed_gate_wiring.sh && bash plugins/spec-distill/tests/test_web_kill_switch.sh`, 그리고 request-framing SKILL.md 를 코퍼스로 읽는 다른 락(파일 이름으로 찾는다).
+- [ ] **Step 6: 커밋** (메시지 본문에 「보안 잔여 H2 · H3 — 보안 리뷰 대상」)
+
+```bash
+git commit -m 'fix(spec-distill): request-framing 의 critic 출력 비움을 공유 스크립트로 — 링크를 따라 폴더 밖을 비우지 않게' -m '보안 잔여 H2 · H3 — 보안 리뷰 대상.' -- plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/clear_critic_outputs.sh plugins/spec-distill/tests/test_dispatch_profile_inline.sh
+```
+
+---
+
 ### Task 9: 문서 · 버전 · 스위트 대조 · 끝에서 끝 (AC32 마감)
 
 **Files:**
