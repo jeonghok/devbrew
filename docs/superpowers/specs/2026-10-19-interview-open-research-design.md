@@ -96,7 +96,7 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 - 출력은 기존 조사 출력과 같은 길을 탄다 — V1(본체가 주장마다 확인) → «지금 이해» → `research_log`.
 - 처분 줄: `consumer=orchestrator · fail-closed · disclosure=loud advisory + 본체 직접 조사로 강등`(기존 `repo-researcher` 와 같은 꼴).
 
-**포화 판정의 묶음 단위.** 포화 판정자는 지금 「최근 두 항목 · 시간 순」으로 새로움을 본다(`agents/saturation-judge.md`, `references/saturation.md`). 동시에 띄운 조사는 하나의 묶음으로 다룬다 — `research_log` 항목에 묶음 표지를 달고, 판정자는 「최근 두 묶음」을 본다. 하나만 띄운 조사는 그 하나가 한 묶음이다.
+**포화 판정의 묶음 단위.** 포화 판정자는 지금 「최근 두 항목 · 시간 순」으로 새로움을 본다(`agents/saturation-judge.md`, `references/saturation.md`). 판정자가 받는 것은 state 본문의 `### 조사 <n> — <장치> · R<round>` 블록뿐이고 `research_log` 는 받지 않으므로, 묶음 표지는 그 블록 머리에 싣는다 — 꼴 `### 조사 <n> — <장치> · R<round> · 묶음 <b>`(정확한 꼴은 계획이 정한다). 동시에 띄운 조사는 같은 `<b>` 를 갖고, 하나만 띄운 조사는 그 하나가 한 묶음이다. 본체 직접 조사 블록(`device: orchestrator`)은 각자 한 묶음이다. 판정자의 「최근 두 항목」은 「최근 두 묶음」으로, 규칙 4 「두 항목 미만이면 `not_saturated`」는 「두 묶음 미만이면」으로 읽는다 — 판정자 persona 편집이므로 보안 리뷰 대상이다(레포 규칙 「Persona 파일은 보안-민감 코드」). `research_log` 항목에도 같은 표지를 둬 상한 계수와 맞춘다.
 
 ### §2 호출 세기 · 넉넉한 비상 끝
 
@@ -136,7 +136,7 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 | 조사 subagent 를 여럿 동시에 | 필요할 때 하나씩 | §1 · §2 |
 | 라운드마다 질문 1개 | 질문 하나 | 서로 독립인 결정은 한 `AskUserQuestion` 호출에 묶을 수 있다. 라운드의 호출은 여전히 하나라 본체 직접 조사는 지금처럼 라운드 규약이 묶는다 — 따로 상한을 세우지 않는다(지휘자 판정, 원칙 7) |
 | 첫 조사 순서 · R1 대기 · landscape 를 웹으로만 닫기 | floor 유지 · 웹으로 닫기 | 조사 시점은 모델 판단. 외부 선례가 상관없는 일이면 「외부 선례 무관 — <이유>」를 사용자 S 로 닫는 길을 연다(`check_brief` 손봄) |
-| 포화 판정 최소 조사 2회 | 2회 | 판단만 남은 경로면 「조사 불필요」를 제안하고 사용자 S 로 닫는다 |
+| 포화 판정 최소 조사 2회 | 2회 | 판정자는 그대로 부른다(D23 유지). 판단만 남은 경로에서 판정자가 「두 묶음 미만」으로 `not_saturated` 를 내면, 기존의 사용자 판단 포화 줄 꼴(`- 포화 판정 <k>: 사용자 판단 포화(@S<m>) — 조사 불필요`)로 사용자가 닫을 수 있게 한다. 이 경우를 `saturation.md` 의 audit §2 줄 목록과 `check_brief` gate 에 더한다. 판정자 규칙은 이 행 때문에 고치지 않는다(사용자 결정 D1.1 「판정자 유지 (권장)」) |
 | request-framing 의 웹 금지 | 웹 금지 | 레포로 설명이 안 되는 이름은 짧은 조회를 audit 에 남기고 seed 에는 싣지 않는다. 그 자리에서 `DISABLE_WEB` 을 확인한다 |
 | request-framing 의 다음 단계가 인터뷰 하나 | 인터뷰 | 모델이 다른 다음 단계를 이유와 함께 제안할 수 있다(예: 이미 설계문서를 쓸 만큼 분명한 일) |
 | 끝 게이트 ①② 이름 · 다음 세션 줄 | — | §6 |
@@ -174,8 +174,9 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 ### §9 진입 이름 pm-interview
 
 - `skills/spec-interview/` → `skills/pm-interview/`, `name: pm-interview`. 별칭 없이 즉시, spec-distill major bump, CHANGELOG `Changed`(또는 `Removed`)에 옛 이름.
-- 참조 전수는 개념 별칭으로 찾는다 — `spec-interview` · `spec interview` · `/spec-distill:spec-interview` · 경로 · 테스트 · README(spec-distill README 의 진입 줄 포함) · 다른 플러그인 · 문서. 이력 기록(CHANGELOG 옛 항목 · 머지된 설계문서 · 계획)은 고치지 않는다.
-- 상태 경로 · kill switch 이름에 `spec-interview` 가 들어 있으면 별칭을 두거나 그대로 둔다 — kill switch 이름은 이 예외에 들지 않는다(레포 규칙).
+- 참조 전수는 개념 별칭으로 찾는다 — `spec-interview` · `spec interview` · `/spec-distill:spec-interview` · seed 의 `next_phase: spec-distill:interview`(`templates/interview-seed-template.md` 와 테스트 fixture) · 경로 · 테스트 · README(spec-distill README 의 진입 줄 포함) · 다른 플러그인 · 문서. 이력 기록(CHANGELOG 옛 항목 · 머지된 설계문서 · 계획)은 고치지 않는다.
+- seed 의 `next_phase` 값도 새 이름으로 바꾸고, 옛 값 `spec-distill:interview` 를 가진 seed 를 받는 자리(request-framing 넘김 · 인터뷰 진입)는 그 값을 새 이름과 같게 읽는다 — 사용자 레포에 남은 옛 seed 가 조용히 버려지지 않게(호출 이름이 아니라 데이터 값이라 레포 규칙의 「별칭 없이」 예외에 들지 않는다).
+- 플러그인 코드에 `spec-interview` 가 들어간 kill switch 이름은 없다(설계문서 점검 · 리뷰가 확인) — 그런 이름이 새로 발견되면 이름을 바꾸지 않고 그대로 둔다(kill switch 이름은 호출 이름 예외에 들지 않는다).
 - 다른 에픽과 같은 파일을 많이 건드리므로 R10 의 마지막 계획으로 둔다(§11).
 
 ### §10 위험에 대한 답
@@ -248,7 +249,9 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 ## Files to Modify
 
 - `plugins/spec-distill/skills/spec-interview/SKILL.md`(§9 뒤 `skills/pm-interview/SKILL.md`) — 조사 열기 · 세기 · 안내 · 질문 묶기 · 진입 한 줄.
-- `plugins/spec-distill/skills/spec-interview/references/finishing.md` · `saturation.md` · state 관련 reference — 게이트 · 다음 세션 줄 · 분해 표 · 포화 최소 · 묶음 단위.
+- `plugins/spec-distill/skills/spec-interview/references/finishing.md` · `saturation.md` — 게이트 · 다음 세션 줄 · 분해 표 · 포화 최소 · 묶음 단위 · audit §2 조사 호출 줄의 장치 목록(「커버리지 · 맹점 · 반론 · 레포 조사 · 본체 직접」에 만들어 보낸 조사를 더함) · 사용자 판단 포화 줄의 「조사 불필요」 경우.
+- `plugins/spec-distill/skills/spec-interview/references/state-migration.md` — `research_dispatches` 정본에 `open_researcher` 칸 · 진행 중이던 인터뷰의 옛 state(칸 넷)를 0 으로 채워 잇는 이월 · 옛 상한 값(20)을 가진 state 는 그 값을 그대로 쓴다(새 기본 60 은 새 state 에만).
+- `plugins/spec-distill/tests/test_conducting_interview_stage.sh` — 「장치 칸이 넷」 단언을 다섯으로.
 - `plugins/spec-distill/agents/open-researcher.md`(새) · `agents/saturation-judge.md` · `agents/steelman-builder.md`.
 - `plugins/spec-distill/references/fresh-evidence.md`(새) · `references/research-claims.md` · `references/trivia-escape.md`.
 - `plugins/spec-distill/skills/request-framing/SKILL.md` · `skills/reviewing-brief/SKILL.md`(이름 참조).
@@ -283,6 +286,7 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 - 결정 · 2026-10-17 · 끝 게이트 — 「새 인터뷰 에픽에 함께 (권장)」 · 「new 권장 말고 compact 로 가자」.
 - 결정 · 2026-10-17 · 진입 이름 — 「spec interview였나? 이름을 바꿔야 겠는데」 → 「pm-interview (권장)」.
 - 지휘자 판정(설계문서 승인 때 사용자가 함께 본다 — 승인되면 확정값): `open-researcher` 이름(출시 뒤엔 호출 이름이라 바꾸면 major bump) · 기본값 60 · 이어 부르기 1 · 질문 묶기에 새 상한 없음 · 원칙 5 를 brief 줄에 싣지 않음 · K 번호를 글에 박기 · §4 RC 색인 · 계획 1 · 2 는 R2a 계획 2 머지 뒤 · 계획 3 은 `spec-interview` 참조를 가진 열린 브랜치 모두 머지 뒤 · 계획마다 브랜치 하나 · 로드맵 블록은 지휘자의 로드맵 PR · zsh 펜스는 확인만(설계문서 점검의 질문 넷을 이렇게 정함).
+- D1.1 · r1 · adopt · 561d71f0#r1.1 · "판정자 유지 (권장)" — 「포화 판정 최소 조사 2회」를 사용자의 「조사 불필요」 답으로 닫는 길이 독립 판정자를 건너뛰는지 문서가 정하지 않았습니다. 건너뛴다면 확정 제약 D23 과 부딪힙니다.
 
 ## 사용자 원문 대조
 
@@ -346,7 +350,7 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 
 ## 원칙 · 입력 대조
 
-묶음 번호 밖의 입력(신선한 근거 원칙 여덟 · 점검 문서 · 넘겨받은 것).
+묶음 번호 밖의 입력(신선한 근거 원칙 여덟 · 점검 문서 · 넘겨받은 것). 묶음은 원칙 행을 `## 번호 대조` 에 두라고 하지만, 그 표는 첫 칸을 번호 문법으로 읽는 검사(`check_bundle_coverage.py`)가 쓰므로 「원칙 1」 같은 행이 표 검사를 깨뜨린다 — 그래서 원칙 행은 이 표에 둔다. 사용자 원문 대조의 「번호 대조 「원칙」 행」은 이 표의 원칙 행을 가리킨다.
 
 | 입력 | 반영/기각 | 자리 |
 |---|---|---|
@@ -358,7 +362,7 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 | 원칙 6 | 반영 | §3 |
 | 원칙 7 | 반영 | §2 · §3 |
 | 원칙 8 | 반영 | §3 |
-| 점검 R10 행 10개 | 반영 | §5 표 |
+| 점검 R10 행 10개 | 반영(한 행 조정) | §5 표 — 질문 묶기 행은 점검 문서의 「본체 직접 조사의 상한은 먼저 따로 세운다」와 달리 새 상한을 두지 않는다(라운드의 호출이 하나로 남아 라운드 규약이 묶고, 새 상한은 원칙 7 과 부딪힘 — Rejected Alternatives · 결정 기록의 지휘자 판정) |
 | 끝에서 끝 결함 4개 | 반영 | §7 |
 | R11 넘김 2행 | 반영 | §6 · §8 · §9 |
 | R5 미룸 R10 알림 행 | 반영 | Constraints · §6 · AC22 |
@@ -368,6 +372,11 @@ R1 이 인터뷰를 「한 번 채우면 닫는」 꼴에서 포화까지 조사
 
 | 항목 | 이유 | 받는 곳 |
 |---|---|---|
+| 첫 dispatch 안내 줄의 정확한 문구(§2) | 뜻(조사 agent · 비상 끝 · 검색 · 출처 수 안 셈)은 정했고 거버넌스 락과 맞는 낱말은 락을 읽고 정한다 | R10 계획 1 |
+| 묶음 표지의 정확한 꼴(§1) | 블록 머리에 싣는다는 것은 정했고 파서 · 락과 맞는 꼴은 코드를 읽고 정한다 | R10 계획 1 |
+| 조사 에픽을 R5 모델의 기존 종류로 쓸지 새 종류를 더할지(§7) | R5 모델의 `REQUIRED` · `FORBIDDEN` 을 읽어야 정해진다 | R10 계획 2 |
+| §4 «» 고침 방식 — 키 자리만 읽기 또는 실패 메시지(§8) | 둘 다 AC28 을 만족하고, R2a 계획 2 머지 뒤 판독 자리(`brief_body.py`)를 보고 고른다 | R10 계획 2 |
+| 계획 1 · 2 를 R2a 계획 2 머지 뒤 기본 브랜치에 맞추기(§11) | 그 브랜치가 같은 파일을 크게 고쳐 지금 줄 번호 · 함수 자리가 바뀐다 | R10 계획 1 · 2 |
 
 ## 지휘 기록
 
