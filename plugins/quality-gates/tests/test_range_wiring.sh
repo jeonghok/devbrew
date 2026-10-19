@@ -127,7 +127,8 @@ case_text_locks() {
   local RMF; RMF="$(awk '/^## Final verdict$/{f=1;next} f&&/^## Publish$/{exit} f' "$SK" | fence_with 'review-tree.txt')"
   assert_not_contains "$RMF" '세션 정리가 회수' "Final verdict: 지우기 실패 안내가 세션 정리가 회수한다고 약속하지 않는다"
   assert_not_contains "$(cat "$SK" "$RM" "$SF")" '오래된 세션 정리가 회수' "SKILL · README · state-file-format: 리뷰 트리를 세션 정리가 회수한다는 문장이 없다"
-  assert_contains "$RMF" "git worktree remove --force \$(cat \"\$RD/review-tree.txt\")" "Final verdict: 실패 안내가 git worktree remove 와 실제 경로 변수를 보인다"
+  assert_contains "$RMF" "git worktree remove --force \\\"\$(cat \"\$RD/review-tree.txt\")\\\"" "Final verdict: 실패 안내가 git worktree remove 와 큰따옴표로 감싼 실제 경로를 보인다(공백 경로)"
+  assert_not_contains "$RMF" "--force \$(cat" "Final verdict: 실패 안내의 경로가 따옴표 없이 펼쳐지지 않는다"
   assert_not_contains "$(cat "$RM")" '리뷰 diff · 의도 출처 · codex · 차등 테스트 · 판정 줄이 모두 같은 두 커밋을 쓴다 — diff 의 기준과 차등 테스트 기준선은 시작 커밋, HEAD 축과 판정 줄의 커밋은 끝 커밋이다. 지금 작업 트리는 보지 않는다.' \
     "README: 리뷰어가 작업 트리를 보지 않는다던 틀린 문장이 없다"
   assert_contains "$(cat "$RM")" '리뷰어 · codex 가 diff 밖 코드를 열어 볼 때도 끝 커밋을 본다 — 지금 체크아웃이 끝 커밋이어도 늘 끝 커밋의 임시 트리를 하나 만들어 읽고(커밋 안 된 변경 · 추적 안 된 파일을 리뷰어가 읽지 않게 한다, 실행 끝에 지운다), 그 트리를 만들지 못하면 판정 없이 멈춘다.' \

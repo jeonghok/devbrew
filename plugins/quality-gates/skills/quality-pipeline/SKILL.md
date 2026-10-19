@@ -1187,7 +1187,7 @@ if [ -s "$RD/review-tree.txt" ]; then
   if "$QG/scripts/qg-worktree.sh" remove "$(cat "$RD/review-tree.txt")"; then
     rm -f "$RD/review-tree.txt"; echo "review-tree: removed"
   else
-    echo "[quality-gates] 리뷰 트리를 지우지 못했다 — 직접 지우려면 'git worktree remove --force $(cat "$RD/review-tree.txt")' 를 실행한다(같은 자리에 다음 실행이 트리를 만들 때도 먼저 지운다)" >&2
+    echo "[quality-gates] 리뷰 트리를 지우지 못했다 — 직접 지우려면 'git worktree remove --force \"$(cat "$RD/review-tree.txt")\"' 를 실행한다(같은 자리에 다음 실행이 트리를 만들 때도 먼저 지운다)" >&2
   fi
 fi
 ```
