@@ -273,6 +273,38 @@ case_readme_has_disable_e2e_line() {
   assert_file_grep "$README" '`DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 은 e2e 를 끈다\(판정 줄의 e2e 칸이 `꺼짐\(kill switch\)`\)' "README 범위 절에 DISABLE_E2E 줄이 있다"
 }
 
+case_AC28_e2e_scenarios_are_multi_select() {
+  # AC28 · 계획 결정 11 — 여러 시나리오를 고를 수 있고, 번호 순으로 하나씩 걷기마다 게이트, 칸은 가장 나쁜 결과.
+  local q w g s
+  q=$(section "$REF" "## 2. 질문"); w=$(section "$REF" "## 5. 걷기 직후 게이트"); g=$(section "$REF" "## 6. 게이트 결과 → e2e 칸")
+  assert_file_grep "$REF" 'multiSelect: true' "e2e 질문은 여러 선택이다(AC28)"
+  assert_file_absent "$REF" '질문 하나, 단일 선택이다' "옛 단일 선택 문장이 없다"
+  assert_eq "$(printf '%s\n' "$q" | grep -cxF -- '`AskUserQuestion` 질문 하나, 여러 선택(`multiSelect: true`)이다. 선택지는 넷을 넘지 않는다.')" "1" \
+    "§2 첫 줄이 여러 선택 문장 그대로다(옛 문장 부재의 양성 짝)"
+  assert_contains "$q" '시나리오를 하나 이상 고르면 고른 시나리오만 걷는다 — 「안 한다」 · 「걸을 것 없음」을 함께 골랐어도 그렇다.' \
+    "§2: 시나리오와 「안 한다」 · 「걸을 것 없음」을 함께 고르면 시나리오만 걷는다"
+  assert_contains "$q" '고른 시나리오 하나하나가 그 시나리오의 부팅 명령' "§2: 승인은 고른 시나리오마다다"
+  assert_contains "$q" '고르지 않은 시나리오의 명령' "§2: 고르지 않은 시나리오의 명령은 실행하지 않는다"
+  assert_contains "$w" '고른 시나리오를 번호 순으로 하나씩 걷는다 — 시나리오마다 SKILL 의 E1~E5 를 돌고 걷기마다 게이트를 띄운다.' \
+    "§5: 번호 순 · 시나리오마다 E1~E5 · 걷기마다 게이트"
+  assert_contains "$w" '루프가 돌아온 뒤 고른 시나리오 전부를 1번부터 다시 걷는다' "§5: 루프에서 돌아오면 고른 시나리오 전부를 다시 걷는다"
+  assert_contains "$w" '남은 시나리오를 걷지 않고 끝낸다' "§5: 지금 판정으로 끝내기 · 멈추기면 남은 시나리오를 걷지 않는다"
+  assert_file_grep "$REF" 'fail` > `미확인` > `pass`' "여러 시나리오의 e2e 칸은 가장 나쁜 결과"
+  assert_contains "$g" '여러 시나리오를 걸었으면 판정 줄의 e2e 칸은 가장 나쁜 결과다 — `fail` > `미확인` > `pass`.' \
+    "§6: 가장 나쁜 결과 문장이 §6 안에 통째로 있다"
+  assert_contains "$g" '뒤집은 걷기를 뒤집기 전 판정안으로 되돌려 다시 합쳤을 때 칸이 달라지면' "§6: 「사람이 뒤집음」은 뒤집기가 칸을 바꿨을 때다"
+  # Task 8 의 상한 규칙이 여러 시나리오 문면 옆에 그대로 남았다(양성 짝).
+  assert_contains "$w" '「기타」 칸 글이 뒤집기 사유면 뒤집기이고 반복을 열지 않는다' "§5: 상한의 「기타」 칸 가르기가 남았다"
+  s=$(section "$SKILL" "## e2e")
+  assert_contains "$s" '- `e2e-gate rc=0` — 레퍼런스 1 · 2 절대로 시나리오를 만들고 질문(여러 선택)을 띄운다. 시나리오를 하나 이상 골랐으면 고른 시나리오를 번호 순으로 하나씩' \
+    "SKILL E0: rc=0 이 여러 선택 질문과 번호 순 걷기를 가리킨다"
+  assert_contains "$s" '- **여러 시나리오** — ' "SKILL E4: 여러 시나리오 갈래가 있다"
+  assert_not_contains "$s" '질문을 생략하고 같은 시나리오 · 같은 명령으로' "SKILL E4: 루프에서 돌아와 한 시나리오만 다시 걷는 옛 문장이 없다"
+  assert_contains "$s" '질문을 생략하고 고른 시나리오 전부를 같은 명령으로 번호 순으로 E1 펜스' "SKILL E4: 루프에서 돌아오면 고른 시나리오 전부를 다시 걷는다(옛 문장 부재의 양성 짝)"
+  local fv; fv=$(section "$SKILL" "## Final verdict")
+  assert_contains "$fv" 'With several scenarios the walk that set the e2e 칸 counts instead of the last walk' "Final verdict: 여러 시나리오의 「사람이 뒤집음」은 e2e.md §6 이 정한다"
+}
+
 for c in $(declare -F | awk '{print $3}' | grep '^case_'); do
   note "── $c"
   "$c"

@@ -29,8 +29,16 @@ trv = [i for i, l in enumerate(lines) if '작은 수정이라 파이프라인을
 print("DETECT:%d" % len(det))
 print("DETECT_FIRST:%d" % (1 if det and trv and det[0] < trv[0] else 0))
 skip_needle = 'trivia escape 를 **쓰지 않고** 곧장 iteration 1 로 간다'
-skip = [l for l in lines if 'status: ok' in l and 'status: declaration-invalid' in l and skip_needle in l]
+skip = [l for l in lines if 'status: declaration-invalid' in l and skip_needle in l and 'status: ok' not in l]
 print("SKIP_LINE:%d" % len(skip))
+ok_skip = [l for l in lines if 'status: ok' in l and skip_needle in l]
+print("OK_SKIP:%d" % len(ok_skip))
+defer_needle = '`$RD/review-i1.full.diff`(문서 경로를 거르기 전 diff 전체)'
+disc_needle = '`작은 수정이라 파이프라인을 건너뛰었다(trivia diff — <토픽 전체 | 범위 전체>) — <한 문장 설명>.`'
+defer = [l for l in lines if l.startswith('- `status: ok`') and '범위 모드' in l and defer_needle in l and disc_needle in l]
+print("DEFER_LINE:%d" % len(defer))
+gate1a = [l for l in lines if l.startswith('- `status: ok`') and 'Step 1a 가 `ok`(topic)를 낸 때만' in l]
+print("DEFER_NEEDS_1A_OK:%d" % len(gate1a))
 nodecl_violation = [l for l in lines if 'no-declaration' in l and ('iteration 1' in l or ('trivia escape' in l and '쓰지 않' in l))]
 print("NODECL_VIOLATION:%d" % len(nodecl_violation))
 PY
@@ -148,8 +156,19 @@ case_trivia_escape_is_gated_by_declaration() {
   local got; got=$(python3 -c "$PY_TRIVIA" "$SKILL")
   assert_grep "$got" '^DETECT:1$'         "Trivia escape 절에 detect 호출 펜스가 하나"
   assert_grep "$got" '^DETECT_FIRST:1$'   "detect 가 trivia 판단(「작은 수정이라 파이프라인을 건너뛰었다」)보다 먼저 나온다"
-  assert_grep "$got" '^SKIP_LINE:1$'      "ok · declaration-invalid 면 trivia escape 를 쓰지 않고 곧장 iteration 1 로 간다(같은 줄, 긍정 목적지 단언)"
+  assert_grep "$got" '^SKIP_LINE:1$'      "declaration-invalid 면 trivia escape 를 쓰지 않고 곧장 iteration 1 로 간다(같은 줄, 긍정 목적지 단언 — AC28 의 음의 짝)"
+  assert_grep "$got" '^OK_SKIP:0$'        "AC28: status: ok(토픽)는 더 이상 trivia escape 를 막지 않는다 — ok 와 「쓰지 않고 곧장 iteration 1」이 한 줄에 없다"
+  assert_grep "$got" '^DEFER_LINE:1$'     "AC28: ok(토픽) · 범위 모드는 iteration 1 의 거르기 전 diff 전체(review-i1.full.diff)로 판단하고 토픽 · 범위 전체 공시 줄을 낸다(같은 줄 — OK_SKIP 의 양성 짝)"
+  assert_grep "$got" '^DEFER_NEEDS_1A_OK:1$' "AC28: 토픽의 미룬 판단은 Step 1a 가 ok(topic)를 낸 때만 — 1a 가 session 으로 떨어지면 full.diff 는 토픽 전체가 아니다"
   assert_grep "$got" '^NODECL_VIOLATION:0$' "Trivia 절 전체에서 no-declaration 과 trivia escape 를 쓰지 않음이 한 줄에 함께 나오지 않는다"
+  local tr; tr="$(awk '/^### Trivia escape$/{f=1;next} f&&/^## Review$/{exit} f' "$SKILL")"
+  assert_contains "$tr" '토픽 전체' "AC28: 토픽 diff 전체가 trivia 면 우회한다"
+  assert_contains "$tr" 'review-i1.full.diff' "AC28: 토픽 · 범위의 trivia 판단은 iteration 1 의 거르기 전 diff 전체로"
+  assert_contains "$tr" 'declaration-invalid' "AC28: 선언이 깨졌으면 여전히 trivia 우회가 없다(음의 짝)"
+  # Step 1c 가 미룬 판단으로 보낸다 — 판단하는 자리(진입점)에서 Trivia 절로 가는 길이 보여야 한다.
+  local s1c; s1c="$(awk '/^### Step 1 — scope$/{f=1;next} f&&/^### Step 1b /{exit} f' "$SKILL")"
+  assert_eq "$(printf '%s\n' "$s1c" | grep -c -x -F -- '   - iteration 1 이고 스코프가 `topic` · `range` 면 리뷰어로 가기 전에 [Trivia escape](#trivia-escape) 의 미룬 판단을 한다.')" "1" \
+    "AC28: Step 1c 가 iteration 1 의 topic · range 를 Trivia escape 의 미룬 판단으로 보낸다(줄 전체)"
 }
 
 case_step1_writes_scope_file() {

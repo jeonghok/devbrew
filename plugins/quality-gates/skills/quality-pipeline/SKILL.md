@@ -164,7 +164,7 @@ reviewers, and it never lowers or skips a finding.
 ```
 /quality-gates:quality-pipeline
  ├ Preflight ── kill switch · setup · 범위(range 일 때 두 커밋으로 얼림) · intent: 한 줄
- ├ trivia 판단 ── 한 문장 diff 면 not-certified (trivia) 로 끝
+ ├ trivia 판단 ── 한 문장 diff 면 not-certified (trivia) 로 끝 (토픽 · 범위는 iteration 1 의 Step 1c 뒤에 전체 diff 로)
  ├ iteration N = 1..CAP (CAP = 5 + 사용자가 연 반복)
  │   ① 리뷰        Review Step 1 · 1b · 3 · 3.5  (시작 구성 + 근거를 적어 더한 리뷰어 → code-recritic)
  │       Step 1c 의 걸러진 diff 가 비면 → not-certified (scope-empty) 로 끝
@@ -188,7 +188,7 @@ reviewers, and it never lowers or skips a finding.
 
 ### Trivia escape
 
-**선언이 있으면 trivia escape 를 쓰지 않는다.** `branch` · `--paths` · `range` override 가 없으면 먼저 현재
+**trivia 판단은 판정 대상 diff 전체를 본다.** `branch` · `--paths` · `range` override 가 없으면 먼저 현재
 브랜치의 토픽 선언을 감지한다:
 
 ```bash
@@ -196,11 +196,13 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 "$QG/scripts/resolve-topic.sh" detect
 ```
 
-`status: ok` 또는 `status: declaration-invalid` 면 trivia escape 를 **쓰지 않고** 곧장 iteration 1 로 간다 — 선언된 작업은 spec 에 묶인 작업 단위라, 현재 브랜치의 diff 가 한 문장이어도 판정 대상은 토픽 전체다.
-그 밖(`no-declaration` · `base-unresolved`)이거나 override 가 있으면 diff 를 네가 판단한다(범위 모드면 그 diff 는 범위 파일의 시작 커밋부터 끝 커밋까지다). 한 문장으로
-설명되는 diff — typo · rename · 주석만 · 포매팅, 파일 수와 무관(CLAUDE.md trivia escape) — 면 파이프라인을
-건너뛴다: `작은 수정이라 파이프라인을 건너뛰었다(trivia diff) — <한 문장 설명>.` 을 보이고 [Final verdict](#final-verdict) 의 trivia
-펜스로 간다. trivia 실행은 `clean` 이 아니다(`not-certified (trivia)`). 애매하면 trivia 가 아니다.
+- `status: declaration-invalid` 면 trivia escape 를 **쓰지 않고** 곧장 iteration 1 로 간다 — 선언이 깨져 토픽 전체를 볼 수 없다.
+- `status: ok`(토픽)이거나 범위 모드면 이 자리에서 판단하지 않는다 — 판정 대상은 토픽(범위) 전체이고 그 diff 는 Step 1c 가 만든다. iteration 1 의 Step 1c 뒤에 `$RD/review-i1.full.diff`(문서 경로를 거르기 전 diff 전체)를 보고 판단한다. 그 diff 전체가 한 문장으로 설명되면 `작은 수정이라 파이프라인을 건너뛰었다(trivia diff — <토픽 전체 | 범위 전체>) — <한 문장 설명>.` 을 보이고 trivia 펜스로 간다. 토픽은 Step 1a 가 `ok`(topic)를 낸 때만 이렇게 판단한다 — 1a 가 session 으로 떨어졌으면 그 diff 는 토픽 전체가 아니므로 trivia escape 없이 iteration 1 을 잇는다.
+- 그 밖(`no-declaration` · `base-unresolved`)이거나 `branch` · `--paths` override 면 diff 를 지금 네가 판단한다. 한 문장으로 설명되는 diff 면 `작은 수정이라 파이프라인을 건너뛰었다(trivia diff) — <한 문장 설명>.` 을 보이고 trivia 펜스로 간다.
+
+한 문장으로 설명되는 diff 는 typo · rename · 주석만 · 포매팅이다 — 파일 수와 무관하다(CLAUDE.md trivia escape). 미룬 판단에서
+Step 1c 가 `degraded: yes` 를 냈거나 걸러진 diff 가 비어 [Final verdict](#final-verdict) 로 보냈으면 판단하지 않는다. trivia 펜스는 [Final verdict](#final-verdict) 의
+trivia 펜스다. trivia 실행은 `clean` 이 아니다(`not-certified (trivia)`). 애매하면 trivia 가 아니다.
 
 ## Review
 
@@ -274,6 +276,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
    - stdout 의 `self_state:` 가 0 보다 큰 수면 매 iteration 공시 한 줄(조용히 넘기지 않는다 — 경로는 `$RD/review-i<N>.self-state` 의 줄들): `> [quality-gates] qg 상태 파일이라 리뷰에서 건너뛴 추적 안 되는 경로 <self_state 값>개: <review-i<N>.self-state 의 경로들>`
    - `files:` 가 0 보다 크고 `filtered_files: 0` 이면 `> [quality-gates] 리뷰할 diff 가 비었다 — 바뀐 파일 <files>개가 전부 문서 경로라 리뷰에서 뺐다. 이 실행은 clean 이 아니다.` 를 내고 리뷰어 · 차등 테스트 · e2e 를 건너뛰어 [Final verdict](#final-verdict) 의 「걸러진 diff 가 빈 실행」 펜스로 간다.
    - 리뷰어가 받는 diff(`FILTERED_DIFF`)는 `$RD/review-i<N>.diff` 의 내용이다 — 문서 경로를 뺀 diff 이고, 보안 · 외부 리뷰어 · codex · 재비판이 모두 이 파일 하나를 받는다. `review-i<N>.full.diff` 는 거르기 전 diff, `review-i<N>.names` 는 거르기 전 경로 목록이다.
+   - iteration 1 이고 스코프가 `topic` · `range` 면 리뷰어로 가기 전에 [Trivia escape](#trivia-escape) 의 미룬 판단을 한다.
 
    **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> 리뷰 범위: 이번 세션에서 바뀐 파일 <COUNT>개. 브랜치 전체를 보려면 /quality-gates:quality-pipeline branch.` (`<COUNT>` = `$resolved_scope_file_count` — 정의는 Step 4.5 "Resolved-scope file count" 참조, `check-review-scope.sh` 산출값이 아니다). 스코프가 `topic` 으로 풀렸으면(N=1) 대신 `> 리뷰 범위: 토픽 <topic_key> — 바뀐 파일 <COUNT>개 · 구성원 <branches>.` 를 낸다. 명시적 `/quality-gates:quality-pipeline branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 범위 모드도 출력하지 않는다 — P2b 의 「리뷰 범위」 줄이 이미 냈다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/quality-gates:quality-pipeline branch`는 결정론적 escape hatch로 유지).
 
@@ -677,7 +680,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/quality-pipeline/references/differential-test.
 읽지 않고 ② 를 통째로 건너뛴다. 이 줄을 그대로 보인다:
 `> [quality-gates] 차등 테스트가 DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1 로 꺼져 있다 — 이 실행은 not-certified (kill-switch) 다.`
 그리고 Step 4 에 `--reason kill-switch` 를 싣는다. 차등 테스트는 리뷰 대상 저장소의 코드를
-호스트 권한으로 돌린다 — 이 스위치는 그것을 끄는 보안 컨트롤이다. 테스트를 돌리는 스크립트(`run-test-selection.sh run`)도 이 스위치가 켜져 있으면 저장소 코드를 돌리지 않는다. 1a 는 스위치와 무관하게 돌지만 저장소 git 훅을 끈 채(`topic-head.sh` 가 자기와 자식 git 의 `core.hooksPath` 를 `/dev/null` 로 둔다) git 만 쓴다.
+호스트 권한으로 돌린다 — 이 스위치는 그것을 끄는 보안 컨트롤이다. 테스트를 돌리는 스크립트(`run-test-selection.sh run`)도 이 스위치가 켜져 있으면 저장소 코드를 돌리지 않는다. 조사용 실행(레퍼런스 D2)도 하지 않는다 — 이 실행 어디에서도 저장소의 스위트나 테스트를 돌리지 않는다. 1a 는 스위치와 무관하게 돌지만 저장소 git 훅을 끈 채(`topic-head.sh` 가 자기와 자식 git 의 `core.hooksPath` 를 `/dev/null` 로 둔다) git 만 쓴다.
 
 ## Fix-loop
 
@@ -910,7 +913,8 @@ D="${TOP}/.claude/quality-gates/<session-id>"
   줄이나 stderr 사유를 그대로 공시하고, 질문을 띄우지 않고 e2e 칸을 `미확인` 으로 두고 `## Final verdict` 로 간다.
 - `e2e-gate rc=4` — 코드 상태를 잴 수 없어 걷기의 무효 판정을 할 수 없다. 질문을 띄우지 않고 stderr 사유를
   공시한 뒤 e2e 칸을 `미확인` 으로 두고 `## Final verdict` 로 간다.
-- `e2e-gate rc=0` — 레퍼런스 1 · 2 절대로 시나리오를 만들고 질문을 띄운다. `안 한다` · `걸을 것 없음` ·
+- `e2e-gate rc=0` — 레퍼런스 1 · 2 절대로 시나리오를 만들고 질문(여러 선택)을 띄운다. 시나리오를 하나 이상 골랐으면 고른 시나리오를 번호 순으로 하나씩
+  E1~E5 로 걷는다(레퍼런스 5 절 — 「안 한다」 · 「걸을 것 없음」을 함께 골랐어도 시나리오만 걷는다). 시나리오 없이 `안 한다` · `걸을 것 없음` 이거나
   전부 `걸을 도구 없음` 이면 그 칸으로 두고 `## Final verdict` 로 간다.
 
 **E1 — 부팅.** 고른 시나리오의 부팅 명령을 글자 그대로 파일에 적고, 지문을 잰 **뒤에만** 부팅한다. `&&` 가 그
@@ -998,7 +1002,7 @@ e2e 칸과 「사람이 뒤집음」을 정한다. 어느 결과든 E5 로 기�
   같은 명령으로 다시 돈다. 판정안이 `미확인(걷기 뒤 지문 실패)` 면 걷는 사이 코드가 바뀌었는지 모르므로 이 선택지를
   넣지 않는다.
 - **고치고 다시 돌기** (fail 행) — `## Fix-loop` 의 「고치고 다시 돌기」와 같다: iteration 하나를 쓰고, 「적용」 목록만 고친 뒤 `## Flow` 의 ① 리뷰부터
-  다시 돈다. 루프가 다시 「멈추기」 없이 끝나면 이 절로 돌아오고, 질문을 생략하고 같은 시나리오 · 같은 명령으로 E1 펜스(부팅 펜스, CLI 직접 실행이면 E1 (CLI 직접 실행) 펜스)부터 걷는다.
+  다시 돈다. 루프가 다시 「멈추기」 없이 끝나면 이 절로 돌아오고, 질문을 생략하고 고른 시나리오 전부를 같은 명령으로 번호 순으로 E1 펜스(부팅 펜스, CLI 직접 실행이면 E1 (CLI 직접 실행) 펜스)부터 걷는다.
 - **지금 판정으로 끝내기** (fail 행) — `## Final verdict` 로 간다. Outcome 은 `accepted with findings iter <N>`, e2e 칸은 `fail` 이다.
 - **멈추기** (fail 행) — `## Fix-loop` 의 「멈추기」와 같다: `## Final verdict` 로 간다. Outcome 은 `aborted iter <N>`, e2e 칸은
   `fail` 이다. 게시 펜스는 `skipped: aborted` 를 낸다.
@@ -1011,6 +1015,9 @@ e2e 칸과 「사람이 뒤집음」을 정한다. 어느 결과든 E5 로 기�
 - CAP 에 닿았으면 fail 행에 「고치고 다시 돌기」 대신, 무효 행에 「리뷰·테스트부터 다시」 대신 「한 번 더 돌기」를 넣고, 고르면 위와
   같이 기록한다. 그때 fail 행은 한 번 더 돌기 / 지금 판정으로 끝내기 / 멈추기 / pass 로 뒤집기, 무효 행은 한 번 더 돌기 / 산출물 확인 /
   그대로 둠 이다. CAP 를 넘어 반복을 쓰는 길은 모두 이 기록을 거친다.
+- **여러 시나리오** — 게이트 결과마다 레퍼런스 5 절 첫머리의 규칙으로 다음 시나리오 · 루프 · 끝을 정한다: 루프로 가는 선택이면
+  남은 시나리오를 걷지 않고, 돌아오면 고른 시나리오 전부를 1번부터 다시 걷는다. 「지금 판정으로 끝내기」 · 「멈추기」면 남은 시나리오를
+  걷지 않는다. 그 밖이면 다음 시나리오의 E1 펜스로 간다. e2e 칸과 「사람이 뒤집음」은 레퍼런스 6 절 끝(가장 나쁜 결과)이 정한다.
 
 **E5 — 기록.** 레퍼런스 7 절대로 걷기마다 세션 폴더의 `e2e-record.md` 에 덧붙인다. 걷는 동안 `result.md` 에는 쓰지
 않는다 — `## Final verdict` 의 기록 펜스가 옮긴다.
@@ -1021,7 +1028,7 @@ D="${TOP}/.claude/quality-gates/<session-id>"
 cat >> "$D/e2e-record.md" <<'E2E_RECORD'
 ### 걷기 <n>
 
-<시나리오(표면 · 부팅 명령 · 명령 출처 · 준비 신호) · 증거표 원문 · 판정안 · 게이트 선택 · stop-failed 줄(있으면)>
+<시나리오(번호 · 표면 · 부팅 명령 · 명령 출처 · 준비 신호) · 증거표 원문 · 판정안 · 게이트 선택 · stop-failed 줄(있으면)>
 
 E2E_RECORD
 ```
@@ -1036,7 +1043,7 @@ cat >> "$D/e2e-flip.md" <<'E2E_FLIP'
 E2E_FLIP
 ```
 
-그다음 `## Final verdict` 로 간다(고치고 다시 돌기 · 리뷰·테스트부터 다시 · 다시 걷기면 위 E4 의 경로로).
+그다음 `## Final verdict` 로 간다(고치고 다시 돌기 · 리뷰·테스트부터 다시 · 다시 걷기 · 남은 시나리오가 있으면 위 E4 의 경로로).
 
 ## Final verdict
 
@@ -1044,7 +1051,8 @@ The last iteration's `$RV/synth.out` holds the review · differential verdict. `
 result to it and renders the verdict line — you do not retype the verdict, the counts, or the precedence (V1 · R24).
 Fill only `<session-id>`, the last iteration's `RV`, `<N>` (the iteration number) and the e2e 칸 from `## e2e`.
 Add `--e2e-overridden` before `--e2e` only when the human flipped the **last** walk's proposal — a flip in an earlier
-walk (a line in `e2e-flip.md`) does not count.
+walk (a line in `e2e-flip.md`) does not count. With several scenarios the walk that set the e2e 칸 counts instead of the last walk —
+for several scenarios: `references/e2e.md` §6 decides which walk that is.
 판정 줄의 커밋(`--sha`)은 각 판정 펜스의 `SHA_ARG` 가 정한다 — 범위 모드면 범위 파일의 끝 커밋이고, 지금 체크아웃(HEAD)이 아니다.
 
 ```bash
