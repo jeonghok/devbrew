@@ -190,6 +190,17 @@ class Cli(unittest.TestCase):
         self.assertIn("holder", out)
         self.assertTrue(self.d.exists())
 
+    def test_run_unwritable_lock_folder_is_its_own_exit_code(self):
+        ro = self.t / "ro"
+        ro.mkdir()
+        os.chmod(str(ro), 0o500)
+        try:
+            rc, out = self.cli("run", "--lock", str(ro / "sub" / "lock"), "--owner", "a", "--", sys.executable, "-c", "pass")
+        finally:
+            os.chmod(str(ro), 0o755)
+        self.assertEqual(rc, sl.NO_LOCK_RC, out)
+        self.assertIn("잠금 폴더에 쓰지 못했다", out)
+
     def test_run_without_command_is_usage(self):
         rc, _out = self.cli("run", "--lock", str(self.d), "--owner", "a")
         self.assertEqual(rc, 2)

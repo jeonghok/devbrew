@@ -14,7 +14,7 @@
   suite_lock.py show --lock <잠금 폴더>
   suite_lock.py run  --lock <잠금 폴더> --owner <이름> [--wait <초>] -- <명령> [인자 …]
 
-종료 코드: show 0 · run 은 명령의 종료 코드, 잠금을 잡지 못하면 75(BUSY_RC) · 2 사용법.
+종료 코드: show 0 · run 은 명령의 종료 코드, 잠금을 잡지 못하면 75(BUSY_RC) · 잠금 폴더에 쓰지 못하면 3(NO_LOCK_RC) · 2 사용법.
 """
 from __future__ import annotations
 
@@ -34,6 +34,7 @@ LOCK_YOUNG = 60            # 주인 기록 전 잠금은 이 초 동안 바쁜 �
 POLL = 15                  # 기다릴 때 다시 보는 간격(초)
 RESTORE_MAX = 3            # 주인 없는 잠금을 풀다 경합으로 되돌린 횟수가 이것을 넘으면 바쁜 것으로 본다
 BUSY_RC = 75               # 명령의 종료 코드와 섞이지 않게 고른 값(EX_TEMPFAIL)
+NO_LOCK_RC = 3             # 잠금 폴더에 쓰지 못했다 — 잠금 없이 돌리지 않는다
 
 
 def lock_path(machine_dir) -> Path:
@@ -186,6 +187,9 @@ def main(argv=None) -> int:
     except Busy as exc:
         print("[suite-lock] 잠금을 잡지 못했다 — %s" % exc)
         return BUSY_RC
+    except OSError as exc:
+        print("[suite-lock] 잠금 폴더에 쓰지 못했다: %s (%s) — 잠금 없이 돌리지 않는다" % (lock, type(exc).__name__))
+        return NO_LOCK_RC
     print("[suite-lock] 잡았다 — %s" % lock)
     sys.stdout.flush()
 
