@@ -16,6 +16,7 @@
 - git 규칙 교체를 거절하면 선택지 셋이 나오고, 헌장은 그대로 진행한다. 「git 규칙은 그대로 두고 헌장만」을 고르면 다른 모든 「git 규칙 파일을 만든다」 조항보다 앞서 기존 git 규칙 내용을 건드리지 않는다. 마지막 보고에 헌장 건너뜀 · CLAUDE.md 직접 쓰기 · git 규칙 유지 줄이 나온다.
 - 헌장 상태 확인은 AGENTS.md 가 있으면 그것을, 없으면 CLAUDE.md 를 읽는다. AGENTS.md 로 옮길 때 CLAUDE.md 의 `## Project Charter` 도 함께 옮긴다.
 - 기존 git 규칙(`## Git Workflow`)을 CLAUDE.md 뿐 아니라 AGENTS.md 에서도 찾는다. 그대로 두기로 한 git 규칙이 다음 실행에서 덮이지 않는다.
+- 「git 규칙은 그대로 두고 헌장만」을 고르고 AGENTS.md 로 옮길 때(S4), AGENTS.md 에 `## Git Workflow` 가 없으면 CLAUDE.md 의 그 절도 AGENTS.md 로 옮긴다. 그대로 두기로 한 git 규칙이 CLAUDE.md 교체와 함께 사라지지 않는다.
 - 템플릿의 브랜치 「ALWAYS 확인」은 변경 작업일 때만 한다. Rules for Claude 의 접두 고정 문장은 `Branch Naming Pattern` 을 가리킨다.
 - 템플릿 worktree 절이, worktree 를 만들며 `-b` 로 지은 브랜치 이름은 훅이 검사하지 않는다고 밝힌다(훅은 그대로). 접두에 같은 낱말이 겹치면 하나만 남기고 알린다.
 

@@ -317,6 +317,20 @@ class TestMigrationRefusalChoices(unittest.TestCase):
         self.assertIn("「git 규칙 파일도 바꾸지 않았다.」로 바꾼다", gate)
         self.assertIn("S1 · S2b 는 헌장 절과 포인터만 쓴다", self.step1)
 
+    def test_keep_git_choice_s4_move_carries_claude_git_workflow(self):
+        # S4 (i) 는 관리 절을 이전 대상에서 빼고 CLAUDE.md 를 포인터로 바꾼다. 「git 규칙은 그대로
+        # 두고 헌장만」이면 S3 action 의 `## Git Workflow` 갱신도 건너뛰므로, 그 절이 CLAUDE.md 에만
+        # 있으면 지워진다. 우선 문단과 S4 행이 둘 다 이 경우의 이전을 말해야 한다.
+        keep = standalone_line(self.step1, "위 git 규칙 질문에서 「git 규칙은 그대로 두고 헌장만」을 골랐다면")
+        self.assertIn(
+            "S4 (i) 는 AGENTS.md 에 `## Git Workflow` 가 없으면 CLAUDE.md 의 그 절을 새 template 없이 AGENTS.md 로 옮기며",
+            keep)
+        s4 = standalone_line(self.matrix, "| **S4 (")
+        self.assertIn(
+            "「git 규칙은 그대로 두고 헌장만」을 골랐고 AGENTS.md 에 `## Git Workflow` 가 없으면 "
+            "CLAUDE.md 의 `## Git Workflow` 는 이전한다",
+            s4)
+
 
 class TestGitWorkflowReplaceRefusal(unittest.TestCase):
     """설계에 없던 결정 1 — git 규칙 교체 거절이 헌장까지 멈추지 않는다."""
