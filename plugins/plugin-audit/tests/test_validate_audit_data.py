@@ -1,4 +1,4 @@
-import copy, json, subprocess, sys, tempfile, unittest
+import copy, json, shutil, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"   # plugins/plugin-audit/scripts
@@ -250,6 +250,19 @@ class TestData(unittest.TestCase):
             self.assertEqual(rc, 1, f"비-dict refutation({bad_ref!r})이 clean RED로 안 잡힘:\n{err}")
             self.assertIn("refutation", err, f"malformed refutation 사유가 stderr에 없음:\n{err}")
 
+    def test_axes_must_be_valid_subset(self):
+        for bad in ([], [0], [7], [1, 1], ["1"], [True], "16", None):
+            d_ = copy.deepcopy(VALID); d_["meta"]["axes"] = bad
+            rc, err = run_validate(d_)
+            self.assertEqual(rc, 1, f"meta.axes={bad!r} 가 통과했다")
+            self.assertIn("meta.axes 가 잘못됐다", err)
+        for good in ([1, 6], [1, 2, 3, 4, 5, 6], [3]):
+            d_ = copy.deepcopy(VALID); d_["meta"]["axes"] = good
+            rc, err = run_validate(d_)
+            self.assertEqual(rc, 0, err)
+        rc, err = run_validate(copy.deepcopy(VALID))   # 키 없음
+        self.assertEqual(rc, 0, err)
+
     def test_missing_claude_source_verdict_is_red(self):  # SF2 (qg 2026-07-20 round-2)
         # silent-failure-hunter: 완결성(40-47)은 any-source 존재만, B7(53-59)은 codex-source 존재만
         # 강제한다. 대칭인 claude-source 존재 검사가 없어, backfill 회귀로 dead Claude 축이 codex 답변에
@@ -347,6 +360,223 @@ class TestB7NarrowedToRanAndNotFailed(unittest.TestCase):
         errs = self._errs({"ran": False, "failed": False},
                           [{"id": "D1", "verdict": "confirmed", "source": "claude"}])
         self.assertEqual(errs, [])
+
+
+
+def _drop_codex(data, id_):
+    data["d_verdicts"] = [x for x in data["d_verdicts"] if not (x["id"] == id_ and x["source"] == "codex")]
+    return data
+
+
+def _mark_backfilled(data, id_):
+    # 고르지 않은 축의 id 는 claude 판정이 assemble 의 빈칸 채움뿐이다.
+    for x in data["d_verdicts"]:
+        if x["id"] == id_ and x["source"] == "claude":
+            x.update(verdict="unverified", backfilled=True,
+                     reason="이번 감사에서 고르지 않은 축이라 빈칸을 채웠다(backfilled — 검증 안 됨)")
+    return data
+
+
+class TestChosenAxes(unittest.TestCase):
+    """고른 축만 돈 감사 — codex 도 고른 축만 감사한다(SKILL pre-1)."""
+
+    def test_b7_skips_ids_on_unchosen_axes(self):
+        d_ = _mark_backfilled(_drop_codex(copy.deepcopy(VALID), "D4"), "D4")
+        d_["meta"].update(axes=[1], assigned_axis={"D1": 1, "D4": 4})
+        rc, err = run_validate(d_)
+        self.assertEqual(rc, 0, err)
+
+    def test_b7_still_reds_chosen_or_unknown_axis(self):
+        # 양성 짝 — 고른 축의 id, 축을 모르는 id, 고른 축 정보가 없는 데이터는 여전히 RED.
+        cases = (
+            ("D1", dict(axes=[1], assigned_axis={"D1": 1, "D4": 4})),
+            ("D4", dict(axes=[1], assigned_axis={"D1": 1})),
+            ("D4", dict(assigned_axis={"D4": 4})),
+            ("D4", dict(axes=[1], assigned_axis={"D4": True})),
+        )
+        for id_, extra in cases:
+            d_ = _mark_backfilled(_drop_codex(copy.deepcopy(VALID), id_), "D4")
+            d_["meta"].update(extra)
+            rc, err = run_validate(d_)
+            self.assertEqual(rc, 1, f"{id_} {extra}")
+            self.assertIn(f"{id_}의 codex 판정 없음", err)
+
+    def test_audited_id_needs_codex_even_if_map_says_unchosen(self):
+        # 손으로 옮긴 축 지도가 틀려도(D1 은 고른 축 1 인데 4 로 적힘) D1 에는 실제 claude 판정이 있다 —
+        # 돈 축이 감사했다는 뜻이므로 codex 판정 요구를 끄지 않는다 (B7 fail-open 봉쇄).
+        d_ = _drop_codex(copy.deepcopy(VALID), "D1")
+        d_["meta"].update(axes=[1], assigned_axis={"D1": 4})
+        rc, err = run_validate(d_)
+        self.assertEqual(rc, 1)
+        self.assertIn("D1의 codex 판정 없음", err)
+        # 양성 짝 — 같은 지도에서 claude 판정이 빈칸 채움뿐이면 통과한다.
+        d_ = _mark_backfilled(_drop_codex(copy.deepcopy(VALID), "D1"), "D1")
+        d_["meta"].update(axes=[1], assigned_axis={"D1": 4})
+        rc, err = run_validate(d_)
+        self.assertEqual(rc, 0, err)
+
+    def test_b7_message_points_at_the_fix(self):
+        d_ = _drop_codex(copy.deepcopy(VALID), "D1")
+        rc, err = run_validate(d_)
+        self.assertEqual(rc, 1)
+        line = [l for l in err.splitlines() if "D1의 codex 판정 없음" in l][0]
+        self.assertIn("assigned_axis", line)
+        self.assertIn("axis_of", line)
+        self.assertIn("assemble 을 다시 돌려라", line)
+        self.assertIn("$RUN_DIR", line)
+
+    def test_axes_and_axes_run_must_match(self):
+        d_ = copy.deepcopy(VALID); d_["meta"].update(axes=[1, 6], axes_run=[1, 2])
+        rc, err = run_validate(d_)
+        self.assertEqual(rc, 1)
+        self.assertIn("axes_run", err)
+        for good in (dict(axes=[6, 1], axes_run=[1, 6]), dict(axes_run=[1, 6]), dict(axes=[1, 6])):
+            d_ = copy.deepcopy(VALID); d_["meta"].update(good)
+            rc, err = run_validate(d_)
+            self.assertEqual(rc, 0, f"{good}: {err}")
+        d_ = copy.deepcopy(VALID); d_["meta"].update(axes_run=[0])
+        rc, err = run_validate(d_)
+        self.assertEqual(rc, 1)
+        self.assertIn("meta.axes_run 가 잘못됐다", err)
+
+    def test_axes_and_consent_axes_must_match(self):
+        d_ = copy.deepcopy(VALID); d_["meta"]["axes"] = [1, 6]
+        d_["meta"]["consent"] = dict(d_["meta"]["consent"], axes=[1, 2])
+        rc, err = run_validate(d_)
+        self.assertEqual(rc, 1)
+        self.assertIn("동의에서 고른 축", err)
+        # positive pair — same set in any order, or only one of the two present
+        for meta_axes, consent_axes in (([6, 1], [1, 6]), ([1, 6], None), (None, [1, 6])):
+            d_ = copy.deepcopy(VALID)
+            if meta_axes is not None:
+                d_["meta"]["axes"] = meta_axes
+            if consent_axes is not None:
+                d_["meta"]["consent"] = dict(d_["meta"]["consent"], axes=consent_axes)
+            rc, err = run_validate(d_)
+            self.assertEqual(rc, 0, f"{meta_axes} {consent_axes}: {err}")
+
+    def _assemble_then_validate(self, codex_d, axis_of=None, wf_axis=None, wf_d=None):
+        assemble = SCRIPTS_DIR / "assemble-audit-data.py"
+        with tempfile.TemporaryDirectory() as t:
+            t = Path(t)
+            wf = {"findings": [], "d_verdicts": [d("D1", "claude")], "oq_answers": [],
+                  "new_open_questions": [], "axis_failures": [], "degraded_events": [], "axes_run": [1]}
+            if wf_axis is not None:
+                wf["assigned_axis"] = wf_axis
+            if wf_d is not None:
+                wf["d_verdicts"] = wf_d
+            codex = {"d_verdicts": codex_d, "oq_answers": [], "new_open_questions": []}
+            meta = {"date": "2026-01-01", "fanout_declared": "규모 문장",
+                    "consent": {"approved": True, "at": "t", "fanout": "규모 문장", "axes": [1]},
+                    "codex": {"ran": True, "version": "1.0"}, "target": "myplugin", "seed_provided": True,
+                    "axes": [1]}
+            assigned = {"assigned_d": ["D1", "D4"], "assigned_oq": [],
+                        "axis_of": axis_of if axis_of is not None else {"D1": 1, "D4": 4}}
+            paths = {}
+            for name, obj in (("wf", wf), ("codex", codex), ("meta", meta), ("assigned", assigned)):
+                p = t / f"{name}.json"
+                p.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+                paths[name] = p
+            out = t / "data.json"
+            subprocess.run([sys.executable, str(assemble),
+                            "--workflow-return", str(paths["wf"]), "--codex-side", str(paths["codex"]),
+                            "--meta", str(paths["meta"]), "--assigned", str(paths["assigned"]),
+                            "--repo-root", str(t), "--no-grounding", "--out", str(out)],
+                           check=True, capture_output=True, text=True)
+            data = json.loads(out.read_text(encoding="utf-8"))
+        return data, run_validate(data)
+
+    def test_end_to_end_subset_axes_with_codex_is_green(self):
+        data, (rc, err) = self._assemble_then_validate([{"id": "D1", "verdict": "confirmed", "reason": "r"}])
+        self.assertEqual(rc, 0, err)
+        d4 = [x for x in data["d_verdicts"] if x["id"] == "D4"]
+        self.assertEqual([x["source"] for x in d4], ["claude"])
+        self.assertEqual(d4[0]["verdict"], "unverified")
+
+    def test_end_to_end_mislabelled_axis_of_still_reds(self):
+        # 변이 — Workflow 지도가 없고 axis_of 가 D1(고른 축 1)을 4 로 잘못 적었다. D1 은 실제 claude 판정이 있다.
+        data, (rc, err) = self._assemble_then_validate([], axis_of={"D1": 4, "D4": 4})
+        self.assertEqual(data["meta"]["assigned_axis_source"], "assigned.json")
+        self.assertEqual(rc, 1)
+        self.assertIn("D1의 codex 판정 없음", err)
+
+    def test_end_to_end_incoming_backfilled_marker_is_ignored(self):
+        # 표식은 assemble 만 단다 — Workflow 가 보낸 backfilled 는 지우고 판단한다.
+        d1 = dict(d("D1", "claude"), backfilled=True)
+        data, (rc, err) = self._assemble_then_validate([], wf_axis={"D1": 4, "D4": 4}, wf_d=[d1])
+        self.assertNotIn("backfilled", [x for x in data["d_verdicts"] if x["id"] == "D1"][0])
+        self.assertEqual(rc, 1)
+        self.assertIn("D1의 codex 판정 없음", err)
+
+    def test_end_to_end_workflow_map_wins(self):
+        data, (rc, err) = self._assemble_then_validate(
+            [{"id": "D1", "verdict": "confirmed", "reason": "r"}],
+            axis_of={"D1": 4, "D4": 1}, wf_axis={"D1": 1, "D4": 4})
+        self.assertEqual(data["meta"]["assigned_axis"], {"D1": 1, "D4": 4})
+        self.assertEqual(data["meta"]["assigned_axis_source"], "workflow")
+        self.assertEqual(rc, 0, err)
+
+    @unittest.skipUnless(shutil.which("node"), "node 없음 — Workflow 를 돌릴 수 없다")
+    def test_end_to_end_real_workflow_drops_cross_axis_verdict(self):
+        # 실제 Workflow 스크립트를 돌린다 — 자기 id 가 없는 축 3 이 고르지 않은 축 4 의 D4 를 판정해도
+        # Workflow 가 그 판정을 빼고 공시하므로, 고른 축 [1,3] + codex 실행에서 B7 이 GREEN 이다.
+        harness = (Path(__file__).resolve().parent / "_wf_harness.mjs").as_uri()
+        driver = (
+            "import { runWorkflow, DEFAULT_PACK } from " + json.dumps(harness) + "\n"
+            "const pack = { ...DEFAULT_PACK, candidate_clues: [\n"
+            "  { id: 'D1', axis: 1, claim: 'c', file: 'a', line: 1 },\n"
+            "  { id: 'D4', axis: 4, claim: 'c', file: 'a', line: 4 }] }\n"
+            "const v = (id) => ({ id, verdict: 'confirmed', reason: 'r' })\n"
+            "const stub = async (p, o) => {\n"
+            "  if (o.phase !== '감사') return { verdicts: [] }\n"
+            "  const dv = o.label.startsWith('축1 ') ? [v('D1')] : o.label.startsWith('축3 ') ? [v('D4')] : []\n"
+            "  return { findings: [], d_verdicts: dv, oq_answers: [], new_open_questions: [] }\n"
+            "}\n"
+            "const { result } = await runWorkflow('plugins/plugin-audit/scripts/audit-workflow.js', {\n"
+            "  args: { target: 'sample', evidencePack: pack, codexFindings: [], axes: [1, 3] }, stubAgent: stub })\n"
+            "process.stdout.write(JSON.stringify(result))\n"
+        )
+        r = subprocess.run(["node", "--input-type=module", "-e", driver],
+                           capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        wf = json.loads(r.stdout)
+        self.assertEqual([x["id"] for x in wf["d_verdicts"]], ["D1"])
+        self.assertTrue(any("D4" in e["what"] for e in wf["degraded_events"]), wf["degraded_events"])
+        assemble = SCRIPTS_DIR / "assemble-audit-data.py"
+        with tempfile.TemporaryDirectory() as t:
+            t = Path(t)
+            codex = {"d_verdicts": [{"id": "D1", "verdict": "confirmed", "reason": "r"}],
+                     "oq_answers": [], "new_open_questions": []}
+            meta = {"date": "2026-01-01", "fanout_declared": "규모 문장",
+                    "consent": {"approved": True, "at": "t", "fanout": "규모 문장", "axes": [1, 3]},
+                    "codex": {"ran": True, "version": "1.0"}, "target": "myplugin", "seed_provided": True,
+                    "axes": [1, 3]}
+            assigned = {"assigned_d": ["D1", "D4"], "assigned_oq": []}
+            paths = {}
+            for name, obj in (("wf", wf), ("codex", codex), ("meta", meta), ("assigned", assigned)):
+                p = t / f"{name}.json"
+                p.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+                paths[name] = p
+            out = t / "data.json"
+            subprocess.run([sys.executable, str(assemble),
+                            "--workflow-return", str(paths["wf"]), "--codex-side", str(paths["codex"]),
+                            "--meta", str(paths["meta"]), "--assigned", str(paths["assigned"]),
+                            "--repo-root", str(t), "--no-grounding", "--out", str(out)],
+                           check=True, capture_output=True, text=True)
+            data = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(data["meta"]["assigned_axis_source"], "workflow")
+        d4 = [x for x in data["d_verdicts"] if x["id"] == "D4"]
+        self.assertEqual([(x["source"], x["verdict"], x.get("backfilled")) for x in d4],
+                         [("claude", "unverified", True)])
+        self.assertIn("D4", json.dumps(data["degraded"], ensure_ascii=False))
+        rc, err = run_validate(data)
+        self.assertEqual(rc, 0, err)
+
+    def test_end_to_end_chosen_axis_missing_codex_still_reds(self):
+        data, (rc, err) = self._assemble_then_validate([])
+        self.assertEqual(rc, 1)
+        self.assertIn("D1의 codex 판정 없음", err)
+        self.assertNotIn("D4의 codex 판정 없음", err)
 
 
 if __name__ == "__main__":

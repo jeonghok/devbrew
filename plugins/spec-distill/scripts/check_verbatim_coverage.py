@@ -43,7 +43,7 @@ frontmatter에서 유도하지 않는다. `check_brief.py`의 `resolve_audit()`�
 exit 계약:
   0  위반 없음
   1  **위반 발견** (missing_ids · not_contained · unknown_ids 중 하나라도 비어 있지 않음) — 호출자는 차단
-  3  검사 불가 (파일 부재·파싱 실패 — 의도적으로 매핑된 경로) — degrade 후 계속
+  3  검사 불가 (파일 부재·파싱 실패 — 의도적으로 매핑된 경로) — 호출자는 차단, 사용자가 「검사 없이 계속」을 고를 때만 계속
   4  내부 오류 (미처리 예외) — Python 기본 종료 코드 1을 절대 쓰지 않는다.
      `main()`이 top-level `try/except`로 감싸여 있고, "exit 1은 오직 명시적 위반
      판정에서만 나온다"가 계약이다. 이 계약이 없으면 예상 못 한 버그가 "원문이 빠졌다"로
@@ -66,6 +66,7 @@ _SCRIPTS_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 import section6  # noqa: E402
+import brief_body  # noqa: E402
 
 EXIT_OK = 0
 EXIT_VIOLATION = 1
@@ -73,7 +74,8 @@ EXIT_INDETERMINATE = 3
 EXIT_INTERNAL = 4
 EXIT_USAGE = 64
 
-ITEM_RE = re.compile(r"^\s*[-*]\s+\*\*(S\d+)\*\*(.*)$")
+# §6 앵커 줄의 판독은 `brief_body` 하나다 — 게이트(`check_brief`) · 로드맵과 같은 객체.
+ANCHOR_LINE_RE = brief_body.ANCHOR_LINE_RE
 # P21 canonical placeholder 토큰 (spec-interview SKILL.md의 P21 줄과 같은 집합).
 # 라벨 문자류는 `[\w.-]` — 파이썬 3에서 `\w`는 유니코드 인식이라 `[A-Za-z0-9_]`에
 # **다른 문자 체계의 글자/숫자**가 더해진다. producer 문서(Korean-primary)가 예시로
@@ -82,10 +84,7 @@ ITEM_RE = re.compile(r"^\s*[-*]\s+\*\*(S\d+)\*\*(.*)$")
 # 좁히면 규약과 싸우게 된다. 넓힌 것은 **글자 종류뿐**이고 경계는 그대로다 —
 # 공백·`>`·`<`는 여전히 못 들어가고 길이 상한 64도 유지한다. 즉 산문 한 문장을 라벨로
 # 위장해 L2 비교를 통째로 강등시키는 경로는 열리지 않는다.
-P21_PLACEHOLDER_RE = re.compile(
-    r"<(?:REDACTED|SECRET|TOKEN|KEY|CREDENTIAL|PLACEHOLDER)"
-    r"(?:[:_-][\w.-]{0,64})?>"
-)
+P21_PLACEHOLDER_RE = brief_body.P21_PLACEHOLDER_RE   # 정규식은 brief_body 가 소유한다(§6 판독이 같은 토큰을 거부하지 않는다)
 
 
 class ParseError(Exception):
@@ -96,8 +95,8 @@ class StructuralViolation(Exception):
     """위반(exit 1)로 매핑되는 **구조적** 규칙 위반.
 
     `ParseError`(판독 불가)와 구분한다. 판독에 실패한 것이 아니라 판독에 성공했고
-    그 결과가 규칙 위반인 경우다 — 3(degrade 후 계속)으로 내면 위반 항목뿐 아니라
-    **전 statement**의 L1·L2가 함께 skip되고 호출자는 그것을 "계속"으로 읽는다.
+    그 결과가 규칙 위반인 경우다 — 3(차단 — 사용자가 고를 때만 계속)으로 내면 위반 항목뿐 아니라
+    **전 statement**의 L1·L2가 함께 skip되고 호출자는 그것을 «사용자가 계속을 고를 수 있는 검사 불가» 로 읽는다.
     """
 
 
@@ -236,26 +235,24 @@ def parse_section6(text: str, label: str) -> dict[str, str]:
             # 하는지 아무도 모른 채 전 statement 의 L1·L2 가 skip 된다.
             raise StructuralViolation(f"{label} §6 경계가 유일하지 않다 — {amb[0]}")
         raise ParseError(f"{label}에 '## 6.' 섹션이 없다")
+    items, bad = brief_body.anchor_items(body)
+    if bad:
+        raise StructuralViolation(
+            f"{label} §6에 문법 밖 앵커 줄이 있다 — "
+            + ", ".join(f"{n}번째 줄 {brief_body.ANCHOR_REASON_TEXT[why]}({why})" for n, why in bad[:5]))
     bodies: dict[str, list[str]] = {}
     heads: dict[str, str] = {}
     order: list[str] = []
-    cur = None
-    for ln in body.splitlines():
-        m2 = ITEM_RE.match(ln)
-        if m2:
-            cur = m2.group(1)
-            if cur in bodies:
-                # 위임하지 않는다. `check_brief.py`의 `verbatim_anchors()`는 §6 앵커를
-                # set()으로 모아 중복을 **아예 보지 않으므로**, 여기서 3(검사 불가)으로
-                # 내면 그 사실을 아무도 잡지 못한 채 전 statement의 L1·L2가 skip된다.
-                # 중복 앵커는 판독 실패가 아니라 append-only 규칙의 구조적 위반이다.
-                raise StructuralViolation(f"{label} §6에 {cur} 앵커가 중복 — append-only 위반")
-            bodies[cur] = []
-            heads[cur] = m2.group(2)
-            order.append(cur)
-            continue
-        if cur is not None:
-            bodies[cur].append(ln)
+    for cur, rest, following in items:
+        if cur in bodies:
+            # 위임하지 않는다. `check_brief.py`의 `verbatim_anchors()`는 §6 앵커를
+            # set()으로 모아 중복을 **아예 보지 않으므로**, 여기서 3(검사 불가)으로
+            # 내면 그 사실을 아무도 잡지 못한 채 전 statement의 L1·L2가 skip된다.
+            # 중복 앵커는 판독 실패가 아니라 append-only 규칙의 구조적 위반이다.
+            raise StructuralViolation(f"{label} §6에 {cur} 앵커가 중복 — append-only 위반")
+        bodies[cur] = following
+        heads[cur] = rest
+        order.append(cur)
     out: dict[str, str] = {}
     for sid in order:
         joined = "\n".join(bodies[sid]).strip()
@@ -301,7 +298,7 @@ def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, di
     try:
         # payload(+audit)를 **먼저** 판다. 순서를 뒤집으면 state의 ParseError가
         # payload의 StructuralViolation을 선점해, state에서 키 하나만 빼는 것으로 구조
-        # 위반(차단)이 검사 불가(계속)로 되돌아간다 — state는 저자가 쓰는 파일이다(작업
+        # 위반(차단)이 검사 불가(사용자 선택 때만 계속)로 되돌아간다 — state는 저자가 쓰는 파일이다(작업
         # 트리의 `<줄기>-interview.state.md` — 인터뷰가 끝날 때 brief · audit 와 함께 커밋된다).
         items = parse_section6_union(payload_text, audit_text)
         pay_ids = set(parse_section6(payload_text, "payload"))
@@ -316,7 +313,7 @@ def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, di
 
     # 확정 위반은 뒤 항목의 불확정에 밀려 강등되지 않는다. 루프 안에서 곧바로
     # `return EXIT_INDETERMINATE` 하면 이미 누적한 not_contained가 rc 3(= 호출자에겐
-    # "degrade 후 계속")으로 나가 차단되지 않는다. 판정은 루프 **밖**에서 한 번,
+    # "사용자 선택 때만 계속")으로 나가 차단되지 않는다. 판정은 루프 **밖**에서 한 번,
     # 위반 > 불확정 순으로 한다.
     saw_indeterminate = False
 

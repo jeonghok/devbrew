@@ -87,7 +87,7 @@ assert_contains "$GATE" '`ask_open` 개수를 처분과 무관하게 싣는다' 
 assert_not_grep "$(grep -vE 'degrade-append|framing_degradations' "$SK")" '--(quote|note|reason|extra-approval)[ =]"<' "사용자 문구 · 리뷰어 요약을 큰따옴표 자리표로 셸 인자에 싣는 곳이 SKILL 에 0건(degrade 원장의 하니스 사유 제외)"
 assert_not_grep "$(cat "$SK")" '\$STATE_DIR/(said|note)\.txt' "고정 이름 문구 파일(said.txt · note.txt)이 SKILL 에 0건 — 문구 파일은 항목을 이름에 담는다"
 assert_contains "$GATE" '--quote-file "$STATE_DIR/said-<id>.txt"' "양의 짝: 게이트의 사용자 문구는 항목별 파일로 넘긴다"
-assert_contains "$VER" '--extra-approval="$q"' "추가 라운드 승인도 파일에서 받은 문구로 넘긴다"
+assert_contains "$VER" '--extra-approval="$q" --extra-approval-source "$src"' "추가 라운드 승인도 파일에서 받은 문구로 넘긴다"
 assert_contains "$GATE" '**Write' "양의 짝: 문구 파일은 Write 도구로 쓴다(셸로 쓰지 않는다)"
 # check-intent 는 결과를 스스로 원장에 적는다 — 뒤따르는 fix 호출은 이중 기록이다.
 assert_contains "$GATE" "check-intent <id> --intent '#__doc__'" "fix 적용은 check-intent 를 부른다(양의 짝)"

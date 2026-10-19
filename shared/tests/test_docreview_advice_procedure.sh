@@ -55,8 +55,8 @@ FINP="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/references/finishing
 ADV_FENCE="$(awk '/<!-- advice-display:begin -->/{f=1} f; /<!-- advice-display:end -->/{f=0}' "$RSP")"
 assert_contains "$ADV_FENCE" 'elif [ ! -f "$spec_path" ]; then' "spec-review: 설계문서가 없으면 advice 를 부르지 않는다(박제 · 계수가 빈 파일을 만들지 않게)"
 BA="$(awk '/^#### B-A/{f=1;print;next} /^#### /{f=0} f' "$FINP")"
-assert_contains "$BA" 'echo "advice-list: $STATE_DIR/advice-list.json"' "finishing B-A: JSON 목록 경로를 한 줄로 낸다"
-assert_contains "$BA" "advice-list:\` 줄이 가리킨" "finishing B-A: 박제는 그 줄이 가리킨 파일을 읽는다"
+assert_contains "$BA" 'echo "advice-list: $adv_list"' "finishing B-A: JSON 목록을 한 줄로 낸다(파일로 넘기지 않는다)"
+assert_contains "$BA" "advice-list:\` 줄의 JSON" "finishing B-A: 박제는 그 줄의 JSON 을 읽는다"
 first_line() {   # first_line <파일> <고정 문자열> <이 줄 뒤에서> — 없으면 0
   awk -v n="$2" -v from="$3" 'NR>from && index($0,n){print NR; exit}' "$1" | grep . || echo 0
 }
@@ -73,8 +73,8 @@ in_order "spec-review: 「미검증」 문단 → advice 펜스 → 2단계 옵�
   "$(first_line "$RSP" '승인 게이트 **2단계**의 옵션 넷' 0)"
 BA_AT="$(first_line "$FINP" '#### B-A' 0)"
 in_order "finishing: B-A 가 B-1 앞이고, B-A 안에서 JSON → 표시 → 재게이트 순서다" \
-  "$BA_AT" "$(first_line "$FINP" '> "$STATE_DIR/advice-list.json"' "$BA_AT")" \
-  "$(first_line "$FINP" '--render --cap 8' "$BA_AT")" "$(first_line "$FINP" 'check_brief.py" gate "$PAYLOAD"' "$BA_AT")" \
+  "$BA_AT" "$(first_line "$FINP" 'advice-list --state-dir "$STATE_DIR" 2>&1' "$BA_AT")" \
+  "$(first_line "$FINP" '--log-file "$AUDIT" --render --where' "$BA_AT")" "$(first_line "$FINP" 'check_brief.py" gate "$PAYLOAD"' "$BA_AT")" \
   "$(first_line "$FINP" '#### B-1' 0)"
 RD="$(cat "$REPO_ROOT/shared/docreview/references/reviewing-document.md")"
 assert_contains "$RD" "끝에서 한 번" "절차서: 참고 목록은 끝에서 한 번이다"

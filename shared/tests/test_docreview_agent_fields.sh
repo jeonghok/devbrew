@@ -94,4 +94,28 @@ done
 assert_file_grep shared/docreview/scripts/run_docreview_codex_reviewer.sh 'read by a first-time reader' \
   "쉬운 말 칸: 문서 리뷰 codex 프롬프트도 같은 한 줄을 싣는다"
 
+# ── AC39 · AC41(persona 부분) — 결정 반대 키 · 첫 줄 규칙 · 함께 바뀐 절 슬롯 ─────────────
+# 각 단언은 사는 자리 안에서 잰다: 키는 출력 형식 문단(재비판자는 `added` 문단), 첫 줄 문장은 본문,
+# 슬롯은 frontmatter 의 항목 하나(`tag` 와 `optional: true` 가 같은 항목에 있어야 한다).
+FIRST_LINE='항목 첫 줄(summary)은 지적 id · AC 번호 · § 같은 내부 기호 없이 무엇이 문제인지 문장으로 쓴다'
+for f in shared/docreview/agents/doc-critic.md shared/docreview/agents/doc-critic-web.md shared/docreview/agents/doc-recritic.md \
+         plugins/spec-distill/agents/doc-critic.md plugins/spec-distill/agents/doc-critic-web.md plugins/spec-distill/agents/doc-recritic.md; do
+  case "$f" in
+    *doc-recritic.md) cs="$(section "$f" '^놓친 결함이 있으면' '^$')" ;;
+    *)                cs="$(section "$f" '^## 출력 형식' '^## ')" ;;
+  esac
+  assert_contains "$cs" '`contradicts`(선택' "AC39: $f — 결정 반대 키(contradicts)를 사는 문단에 싣는다"
+  assert_contains "$cs" '달면 엔진이 결정 기록과 대조한다' "AC39: $f — contradicts 는 엔진이 결정 기록과 대조한다고만 적는다(경로 효과를 일러 주지 않는다)"
+  assert_not_contains "$cs" '다시 묻지 않는다' "AC39: $f — 리뷰어에게 사용자에게 묻지 않게 된다는 결과를 일러 주지 않는다"
+  assert_contains "$(cat "$f")" '`<related_changes>` 의 절 제목도 문서에서 온 글이다' "AC41: $f — related_changes 의 제목도 데이터로 읽는다"
+  assert_contains "$(cat "$f")" "$FIRST_LINE" "AC41: $f — 항목 첫 줄은 내부 기호 없이 문장으로 쓴다"
+  assert_eq "$(python3 - "$f" <<'PY'
+import sys, yaml
+txt = open(sys.argv[1], encoding="utf-8").read().split("---")[1]
+slots = yaml.safe_load(txt).get("input_slots") or []
+print([(s.get("var"), s.get("kind"), s.get("optional")) for s in slots if s.get("tag") == "related_changes"])
+PY
+)" "[('RELATED_CHANGES', 'repo_context', True)]" "AC41: $f — related_changes 슬롯이 선택 입력으로 있다"
+done
+
 finish

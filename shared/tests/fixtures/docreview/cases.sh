@@ -14,6 +14,8 @@ PROF_SD="${DOCREVIEW_PROF_SD:-$(bash "$FX/nofield_profiles.sh")}"
 [ -n "$PROF_SD" ] && [ -d "$PROF_SD" ] || { echo "[cases.sh] 사본 프로필 디렉토리 없음: '${PROF_SD}'" >&2; exit 1; }
 PROF_QG="$REPO_ROOT/plugins/quality-gates/references/docreview-profiles"
 export PYTHONDONTWRITEBYTECODE=1
+# 개발자 환경의 엔진 값이 케이스에 새지 않게 한다 — 값을 따지는 케이스는 호출마다 직접 지정한다.
+unset DEVBREW_DOCREVIEW_DETECTORS DEVBREW_DOCREVIEW_REREVIEW_CAP DEVBREW_DOCREVIEW_RENDER_CAP DEVBREW_DOCREVIEW_SUMMARY_WIDTH
 
 py()   { python3 "$SCRIPTS/$1" "${@:2}"; }                      # py <script> <args…>
 jget() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' "$1" "$2"; }
@@ -36,10 +38,10 @@ case_T37_cap_and_extra() {
   assert_eq "$r1 $r2 $r3" "0 1 2" "T37: rereview_count 는 라운드 1·2·3 에서 0·1·2"
   py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null 2>&1; r4=$?
   assert_eq "$r4" "3" "T37: 라운드 4 는 승인 없이 rc 3 (cap_reached)"
-  r4b="$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval '사용자: 한 라운드 더' | jgets 'd["round"]')"
+  r4b="$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval '추가 라운드 1회 열기' --extra-approval-source label | jgets 'd["round"]')"
   assert_eq "$r4b" "4" "T37: --extra-approval 이 있으면 라운드 4 가 열린다"
-  local nx; nx="$(python3 "$FX/st_get.py" "$d/docreview-state.md" 'len(st["extra_rounds"]), st["extra_rounds"][0]["round"], st["rereview_count"]')"
-  assert_eq "$nx" "(1, 4, 2)" "T37: extra_rounds 에 개별 기록 1건(round 4), 카운터는 2 에 머문다"
+  local nx; nx="$(python3 "$FX/st_get.py" "$d/docreview-state.md" 'len(st["extra_rounds"]), st["extra_rounds"][0]["round"], st["rereview_count"], st["extra_rounds"][0]["source"]')"
+  assert_eq "$nx" "(1, 4, 2, 'label')" "T37: extra_rounds 에 개별 기록 1건(round 4), 카운터는 2 에 머문다"
   rm -rf "$d"
 }
 
@@ -142,7 +144,7 @@ r1() {   # r1 <profile> <doc> → state dir with round 1 begun
 }
 next_round() {   # next_round <state-dir> <doc-for-this-round> [extra-quote]  → prints diff json path
   local d="$1" n; n="$(st_yaml "$d" 'st["round"]+1')"; snap "$2" "$d/s$n.json"
-  if [ -n "${3:-}" ]; then py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s$n.json" --extra-approval "$3" >/dev/null
+  if [ -n "${3:-}" ]; then py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s$n.json" --extra-approval "$3" --extra-approval-source label >/dev/null
   else py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s$n.json" >/dev/null; fi
   py docreview_state.py exempt-anchors --state-dir "$d" > "$d/ex$n.json"
   py docreview_anchor.py diff "$d/s$((n-1)).json" "$d/s$n.json" --exempt "$d/ex$n.json" > "$d/diff$n.json"
@@ -184,6 +186,719 @@ case_T21_permit_applied() {
   # 함께 사라진다(그 사실 자체는 case_AC20_reexpiry_blocks_again 이 재지 않는다, 아래
   # ⑫ 은퇴 노트 정정 참조).
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["adopted"], d["blocked_expired"], d["approval_ready"]')" "([], [], True)" "T21: 정상 적용 뒤엔 adopted·blocked_expired 둘 다 비고 승인 게이트가 열린다"
+  rm -rf "$d"
+}
+case_AC38_related_declared_exempt_and_shown() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#2-goals' > "$d/rel.json"
+  assert_eq "$(jget "$d/rel.json" 'd["ok"], d["related"]')" "(True, ['#2-goals'])" "AC38: 고친다 결정에 절을 묶는다"
+  local df; df="$(next_round "$d" "$FX/design-sample-r2.md")"
+  assert_eq "$(jget "$df" '[c["anchor"] for c in d["changed"]]')" "[]" "AC38: 묶인 절의 변경은 frozen_change 로 오르지 않는다"
+  assert_eq "$did" "D1.1" "AC38: 라운드 1 의 첫 결정 id"
+  assert_eq "$(jget "$df" 'sorted(e["scope"] for e in d["exempt_applied"])')" "['#12-files-to-modify', 'related:D1.1']" "AC38: 면제 사유가 신고로 보인다"
+  local r; r="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$r" "이 결정 때문에 함께 바뀐 곳" "AC38: 게이트에 목록 제목"
+  assert_contains "$r" "2. Goals" "AC38: 게이트에 절 제목"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["related_changes"][0]["decision_id"], d["related_changes"][0]["changed"], d["related_changes"][0]["unchanged"]')" "('D1.1', ['#2-goals'], [])" "AC38: gate JSON 의 related_changes"
+  assert_eq "$(py docreview_state.py related-changes --state-dir "$d" | jgets '[x["anchor"] for x in d]')" "['#2-goals']" "AC38: 탐지 · 재비판 입력용 목록"
+  local h1 h2; h1="$(md5 -q "$d/docreview-state.md" 2>/dev/null || md5sum "$d/docreview-state.md")"
+  py docreview_state.py related-changes --state-dir "$d" >/dev/null
+  h2="$(md5 -q "$d/docreview-state.md" 2>/dev/null || md5sum "$d/docreview-state.md")"
+  assert_eq "$h2" "$h1" "AC38: related-changes 는 읽기 전용(원장 해시 불변)"
+  rm -rf "$d"
+}
+case_AC38_related_undeclared_still_frozen() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null
+  local df; df="$(next_round "$d" "$FX/design-sample-r2.md")"
+  assert_eq "$(jget "$df" '[c["anchor"] for c in d["changed"]]')" "['#2-goals']" "AC38: 신고하지 않은 절은 여전히 frozen_change"
+  rm -rf "$d"
+}
+case_AC38_related_refusals() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local err
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision D9.9 --anchors '#2-goals' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "unknown_decision"' "AC38: 원장에 없는 결정 id 는 거부"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice reject --quote '그대로' | jgets 'd["decision_id"]')"
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#2-goals' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "decision_not_adopted"' "AC38: 고친다가 아닌 결정은 거부"
+  rm -rf "$d"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#없는-절' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "anchor_not_in_snapshot"' "AC38: 스냅숏에 없는 앵커는 거부"
+  py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors 'insert-after:#2-goals' > "$d/rel.json"
+  assert_eq "$(jget "$d/rel.json" 'd["ok"]')" "True" "AC38: insert-after 꼴은 받는다"
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#3-non-goals' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "permit_consumed"' "AC38: 이미 소비된 permit 에는 묶지 못한다"
+  rm -rf "$d"
+}
+case_AC38_related_declared_but_unchanged_disclosed() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#3-non-goals' >/dev/null
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "신고했지만 바뀌지 않은 곳" "AC38: 신고했는데 안 바뀐 절도 공시한다"
+  rm -rf "$d"
+}
+F_BRIEF_DEC='{"id":"aaaa0001#r1.1","lineage":"aaaa0001#r1.1","bucket":"aaaa0001","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#2-확정","edit_scope":"#2-확정","disposition":"decide","summary":"확정 항목이 두 가지로 읽힌다","evidence":"3행","blocks":[],"kind":"pre"}'
+case_AC38_related_immutable_refused_and_frozen() {
+  local d s1 s2 err; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  s1="$d/s1.json"; snap "$FX/brief-append-r1.md" "$s1"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s1" >/dev/null
+  seed_findings "$d" "[$F_BRIEF_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#6-사용자-원문' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "anchor_immutable"' "AC38: 불변 절(사용자 원문)은 신고로 묶지 못한다"
+  # 이중 방어 — 원장이 손으로 바뀌어 불변 절이 related_anchors 에 들어 있어도 면제하지 않는다
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); [p.update(related_anchors=["#6-사용자-원문"]) for p in st["permits"].values()]; save_state(d, st, "fixture")' "$d"
+  s2="$d/s2.json"; snap "$FX/brief-append-r2-edit.md" "$s2"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s2" >/dev/null
+  assert_not_contains "$(py docreview_state.py exempt-anchors --state-dir "$d")" "related:" "AC38: 불변 절은 exempt 집합에 안 든다(이중 방어)"
+  assert_eq "$(PYTHONPATH="$SCRIPTS" python3 "$FX/st_get.py" "$d/docreview-state.md" '[c["anchor"] for c in __import__("docreview_state").round_diff(st, __import__("docreview_state").load_profile(st["profile"]), 2)["changed"]]')" "['#6-사용자-원문']" "AC38: 불변 절의 비-추가 수정은 여전히 frozen_change"
+  rm -rf "$d"
+}
+case_AC38_related_insert_after() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  local err; err="$(py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors 'insert-after:#없는-절' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "anchor_not_in_snapshot"' "AC38: insert-after 의 기준 앵커가 스냅숏에 없으면 거부"
+  py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors 'insert-after:#2-goals' >/dev/null
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); i=t.index("## 3."); open(sys.argv[2],"w",encoding="utf-8").write(t[:i]+"## 새 절\n\n본문 한 줄.\n\n"+t[i:])' "$FX/design-sample.md" "$d/ins.md"
+  local df; df="$(next_round "$d" "$d/ins.md")"
+  assert_eq "$(jget "$df" '[c["anchor"] for c in d["changed"]]')" "[]" "AC38: 신고한 insert-after 로 들어온 절은 frozen_change 가 아니다"
+  assert_eq "$(jget "$df" '[(e["anchor"], e["scope"]) for e in d["exempt_applied"]]')" "[('#새-절', 'related:D1.1')]" "AC38: 면제 사유가 신고로 보인다"
+  local r; r="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$r" "이 결정 때문에 함께 바뀐 곳 1개 (D1.1)" "AC38: 끼워 넣은 절이 바뀐 곳으로 보인다"
+  assert_not_contains "$r" "신고했지만 바뀌지 않은 곳" "AC38: 끼워 넣은 절을 안 바뀐 곳으로 세지 않는다"
+  assert_eq "$(py docreview_state.py related-changes --state-dir "$d" | jgets '[x["anchor"] for x in d]')" "['#새-절']" "AC38: related-changes 가 끼워 넣은 절을 낸다"
+  rm -rf "$d"
+}
+case_AC38_related_scoped_to_permit_round() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#2-goals' >/dev/null
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  local df; df="$(next_round "$d" "$FX/design-sample.md")"
+  assert_eq "$(jget "$df" 'sorted(c["anchor"] for c in d["changed"])')" "['#12-files-to-modify', '#2-goals']" "AC38: 신고는 permit 라운드 밖에서 면제하지 않는다(라운드 3 에서 둘 다 frozen_change)"
+  rm -rf "$d"
+}
+case_AC38_related_uncountable_disclosed() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#2-goals' >/dev/null
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); del st["snapshots"]["1"]; save_state(d, st, "fixture")' "$d"
+  local r; r="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$r" "이 결정 때문에 함께 바뀐 곳을 셀 수 없다" "AC38: 못 읽으면 「셀 수 없음」 을 낸다"
+  assert_not_contains "$r" "신고했지만 바뀌지 않은 곳" "AC38: 못 읽은 것을 «안 바뀜» 으로 내지 않는다"
+  local err; err="$(py docreview_state.py related-changes --state-dir "$d" 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "related_uncountable"' "AC38: related-changes 는 빈 목록 대신 이름 있는 사유로 실패한다"
+  rm -rf "$d"
+}
+r2_changed() {   # r2_changed <state-dir> → 라운드 2 얼림 diff 의 changed 앵커 목록과 면제 (anchor, scope) 쌍
+  PYTHONPATH="$SCRIPTS" python3 "$FX/st_get.py" "$1/docreview-state.md" '(lambda D: ([c["anchor"] for c in D["changed"]], [(e["anchor"], e.get("scope")) for e in D["exempt_applied"]]))(__import__("docreview_state").round_diff(st, __import__("docreview_state").load_profile(st["profile"]), 2))'
+}
+plant_permit() {   # plant_permit <state-dir> <finding-id> <apply-anchor> [related-anchor] — 옛 원장 · 위조를 흉내 낸 permit 을 원장에 심는다
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d, fid, ap = sys.argv[1:4]; st=load_state(d); st["decides"][fid]["state"]="adopted"; p={"kind":"apply","apply_anchors":[ap],"round":2,"finding_id":fid,"consumed":False}; (p.update(related_anchors=[sys.argv[4]]) if len(sys.argv) > 4 else None); st["permits"]["D1.1"]=p; save_state(d, st, "fixture")' "$@"
+}
+F_BRIEF_NOIMM='{"id":"eeee0001#r1.1","lineage":"eeee0001#r1.1","bucket":"eeee0001","origin":"reviewer","layer":2,"category":"omission","anchor":"#2-확정","edit_scope":"EDIT_SCOPE","disposition":"decide","summary":"x","evidence":"S1","blocks":[],"kind":"pre"}'
+case_AC38_audit_row1_forged_related_scope() {
+  # 감사 1 — 리뷰어 edit_scope 로 쓴 「related:D9.9=#6」 이 불변 절을 얼림에서 빼는 우회
+  local d err; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" "[${F_BRIEF_NOIMM/EDIT_SCOPE/related:D9.9=#6-사용자-원문}]"
+  err="$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '고친다' 2>&1 >/dev/null)"
+  assert_contains "$err" '"why": "scope_label_forged"' "AC38 감사1: 위조 related: edit_scope 는 decide 가 permit 을 열지 않는다"
+  plant_permit "$d" 'eeee0001#r1.1' 'related:D9.9=#6-사용자-원문'
+  snap "$FX/brief-append-r2-edit.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  assert_eq "$(r2_changed "$d")" "(['#6-사용자-원문'], [])" "AC38 감사1: 심어 둔 위조 permit 도 §6 을 면제하지 못한다(exempt_scopes 이중 방어) — §6 은 frozen_change"
+  assert_eq "$(py docreview_anchor.py check-intent 'eeee0001#r1.1' --intent 'related:D9.9=#6-사용자-원문' --state-dir "$d" | jgets 'd["reason"]')" "scope_label_forged" "AC38 감사1: check-intent 도 위조 라벨을 거부한다"
+  rm -rf "$d"
+}
+case_AC38_audit_row2_edit_scope_immutable() {
+  # 감사 2 — 불변이 아닌 앵커의 finding 이 edit_scope 로 §6 을 가리킨 채 채택되는 우회
+  local d err; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" "[${F_BRIEF_NOIMM/EDIT_SCOPE/#6-사용자-원문}]"
+  err="$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '고친다' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "edit_scope_refused"' "AC38 감사2: 불변 절로 풀리는 edit_scope 의 채택은 permit 을 열지 않는다"
+  assert_eq "$(st_yaml "$d" 'len(st["permits"]), st["decides"]["eeee0001#r1.1"]["state"]')" "(0, 'open')" "AC38 감사2: 거부된 채택은 원장을 바꾸지 않는다"
+  plant_permit "$d" 'eeee0001#r1.1' '#6-사용자-원문'
+  snap "$FX/brief-append-r2-edit.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  assert_eq "$(r2_changed "$d")" "(['#6-사용자-원문'], [])" "AC38 감사2: 심어 둔 permit 의 §6 앵커도 면제하지 못한다(exempt_scopes 이중 방어)"
+  rm -rf "$d"
+  # 양성 짝 — 불변이 아닌 edit_scope 의 채택은 그대로 permit 을 연다
+  d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" "[${F_BRIEF_NOIMM/EDIT_SCOPE/#2-확정}]"
+  assert_eq "$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["permit"]["apply_anchors"]')" "['#2-확정']" "AC38 감사2 양성 짝: 정상 edit_scope 는 permit 을 연다"
+  rm -rf "$d"
+}
+case_AC38_audit_row3_insert_after_immutable() {
+  # 감사 3 — insert-after:#(불변 절 또는 그 하위 절) 를 신고로 받아 §6 안에 끼운 절을 면제하는 우회
+  local d err; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(t.rstrip("\n")+"\n\n### 하위\n\n본문 한 줄.\n")' "$FX/brief-append-r1.md" "$d/r1.md"
+  snap "$d/r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" "[${F_BRIEF_NOIMM/EDIT_SCOPE/#2-확정}]"
+  py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '고친다' >/dev/null
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision D1.1 --anchors 'insert-after:#하위' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "anchor_immutable"' "AC38 감사3: 불변 절의 하위 절 뒤에 끼우는 신고는 거부"
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision D1.1 --anchors 'insert-after:#6-사용자-원문' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "anchor_immutable"' "AC38 감사3: 불변 절 자신의 뒤에 끼우는 신고도 거부"
+  # 이중 방어 — 원장에 손으로 심은 insert-after 신고는 풀린 앵커(새 절의 조상 제목이 불변)로 걸러진다
+  plant_permit "$d" 'eeee0001#r1.1' '#2-확정' 'insert-after:#하위'
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(t.rstrip("\n")+"\n\n### 끼워 넣은 가짜 원문\n\n가짜.\n")' "$d/r1.md" "$d/r2.md"
+  snap "$d/r2.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  assert_not_contains "$(py docreview_state.py exempt-anchors --state-dir "$d")" "related:" "AC38 감사3: 불변 절 안에 끼운 절은 신고로 면제되지 않는다"
+  rm -rf "$d"
+}
+case_AC38_audit_row4_fix_intent_pass_validated() {
+  # 감사 4 — fix --event intent-pass --scope 로 아무 범위나 면제를 만드는 뒷문. 3차에서 이벤트 자체를 없앴다(이름 있는 거부).
+  local d err; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" '[{"id":"ffff0001#r1.1","lineage":"ffff0001#r1.1","bucket":"ffff0001","origin":"reviewer","layer":2,"category":"placeholder","anchor":"#2-확정","edit_scope":"#2-확정","disposition":"fix","summary":"x","evidence":null,"blocks":[]}]'
+  err="$(py docreview_state.py fix --state-dir "$d" --id 'ffff0001#r1.1' --event intent-pass --scope 'related:D9.9=#6-사용자-원문' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "intent_pass_removed"' "AC38 감사4: fix intent-pass 는 위조 라벨 범위도 이름 있는 거부"
+  err="$(py docreview_state.py fix --state-dir "$d" --id 'ffff0001#r1.1' --event intent-pass --scope '#6-사용자-원문' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "intent_pass_removed"' "AC38 감사4: fix intent-pass 는 불변 절 범위도 이름 있는 거부"
+  assert_eq "$(st_yaml "$d" 'len(st["applied_scopes"]), st["fixes"]["ffff0001#r1.1"]["state"]')" "(0, 'pending')" "AC38 감사4: 거부된 intent-pass 는 원장을 바꾸지 않는다"
+  assert_eq "$(_ci 'ffff0001#r1.1' --intent '#6-사용자-원문' --state-dir "$d" | jgets 'd["reason"]')" "scope_outside_edit_scope" "AC38 감사4: 남은 기록자(check-intent)는 edit_scope 밖 범위를 거부한다"
+  rm -rf "$d"; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" '[{"id":"ffff0001#r1.1","lineage":"ffff0001#r1.1","bucket":"ffff0001","origin":"reviewer","layer":2,"category":"placeholder","anchor":"#2-확정","edit_scope":"#2-확정","disposition":"fix","summary":"x","evidence":null,"blocks":[]}]'
+  assert_eq "$(_ci 'ffff0001#r1.1' --intent '#2-확정' --state-dir "$d" | jgets 'd["contract"]')" "fix" "AC38 감사4 양성 짝: 정상 범위는 check-intent 로 통과"
+  rm -rf "$d"
+}
+case_AC38_audit_row5_labels_never_apply() {
+  # 감사 5 — 면제 라벨(append-only)과 같은 글자를 범위로 쓴 fix 가 «적용됨» 으로 읽히는 우회
+  local d; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" '[{"id":"ffff0001#r1.1","lineage":"ffff0001#r1.1","bucket":"ffff0001","origin":"reviewer","layer":2,"category":"placeholder","anchor":"#2-확정","edit_scope":"#2-확정","disposition":"fix","summary":"x","evidence":null,"blocks":[]}]'
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); fx=st["fixes"]["ffff0001#r1.1"]; fx.update(state="intent_passed", scope="append-only", round=1); save_state(d, st, "fixture")' "$d"
+  snap "$FX/brief-append-r2.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  assert_eq "$(py docreview_state.py observe-diff --state-dir "$d" | jgets 'd["applied"]')" "[]" "AC38 감사5: 라벨 글자의 fix 범위는 §6 에 줄이 덧붙었다는 사실만으로 적용됨이 되지 않는다"
+  rm -rf "$d"
+}
+case_AC38_audit_row6_decision_log_append_only() {
+  # 감사 6 — 결정 기록 절 전체를 면제해 과거 결정 줄을 고쳐 써도 안 잡히던 틈
+  local d; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38: init 실패"; return; }
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(t.rstrip("\n")+"\n\n## 결정 기록\n\n- D1.1 · r1 · reject · x · \"이 방향은 안 된다\" — 요약\n")' "$FX/design-sample.md" "$d/r1.md"
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(t.replace("reject","adopt").replace("이 방향은 안 된다","좋다"))' "$d/r1.md" "$d/r2.md"
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(t.rstrip("\n")+"\n- D2.1 · r2 · adopt · y — 엔진이 덧붙인 줄\n")' "$d/r1.md" "$d/r2a.md"
+  snap "$d/r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  snap "$d/r2.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  assert_eq "$(r2_changed "$d")" "(['#결정-기록'], [])" "AC38 감사6: 과거 결정 줄을 고쳐 쓰면 frozen_change"
+  rm -rf "$d"
+  # [4차] 양성 짝은 엔진이 실제로 쓴 줄이어야 한다 — 작성자가 붙인 줄은 엔진 줄이 아니다(case_AC38_r4_B_fake_log_lines).
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  eng_log "$d" bbbb0006; br "$d" "$d/doc.md"
+  assert_eq "$(r2_changed "$d")" "([], [('#결정-기록', 'append-only')])" "AC38 감사6 양성 짝: 엔진이 덧붙인 줄은 append-only 로 지나간다"
+  rm -rf "$d"
+}
+case_AC38_audit_row9_declare_stale_permit() {
+  # 감사 9 — 지난 라운드의 permit 에 신고를 받아 게이트에 안 보이게 되는 틈
+  local d err; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null
+  snap "$FX/design-sample.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  assert_eq "$(py docreview_state.py declare-related --state-dir "$d" --decision D1.1 --anchors '#2-goals' | jgets 'd["ok"]')" "True" "AC38 감사9 양성 짝: permit 라운드(현재 라운드)에는 신고를 받는다"
+  snap "$FX/design-sample.md" "$d/s3.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s3.json" >/dev/null
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision D1.1 --anchors '#3-non-goals' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "permit_round_mismatch"' "AC38 감사9: 지난 라운드의 permit 에는 신고를 받지 않는다"
+  rm -rf "$d"
+}
+case_AC38_audit_row10_11_entry_flags() {
+  # 감사 10·11 — 진입 플래그 정수는 환경 값과 같은 ASCII 숫자만, 공백뿐인 추가 승인은 승인이 아니다
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  snap "$FX/design-sample.md" "$d/s2.json"
+  local v
+  for v in '1_0' '+2' '２' ' 3'; do
+    py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" --detectors "$v" >/dev/null 2>&1; rc=$?
+    assert_eq "$rc" "2" "AC38 감사10: --detectors «${v}» 는 인자 오류(rc 2)"
+    py docreview_state.py advice --state-dir "$d" --render --cap "$v" >/dev/null 2>"$d/cap-err"; rc=$?
+    assert_eq "$rc $(grep -c 'ASCII 숫자만 쓸 수 있다' "$d/cap-err") $(grep -c advice_needs_flag "$d/cap-err")" "2 1 0" \
+      "AC38 감사10: --cap «${v}» 는 ASCII 정수 거부(rc 2 · 사유가 cap 이지 advice_needs_flag 가 아니다)"
+  done
+  local dmc; dmc="$(r1 "$REPO_ROOT/plugins/spec-distill/references/docreview-profiles/design-doc.md" "$FX/design-sample.md")"   # must_catch 를 지목한 프로필 — advice 가 도는 원장
+  py docreview_state.py advice --state-dir "$dmc" --render --cap 3 >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "0" "AC38 감사10 양성 짝: --render 와 ASCII 정수 cap 은 받는다(rc 0)"
+  assert_eq "$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" --detectors 1 | jgets 'd["ok"]')" "True" "AC38 감사10 양성 짝: ASCII 숫자는 받는다"
+  snap "$FX/design-sample.md" "$d/s3.json"; snap "$FX/design-sample.md" "$d/s4.json"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s3.json" >/dev/null
+  local err; err="$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s4.json" --extra-approval '   ' --extra-approval-source typed 2>&1 >/dev/null)"; rc=$?
+  assert_contains "$err" '"reason": "extra_approval_blank"' "AC38 감사11: 공백뿐인 추가 승인은 거부"
+  rm -rf "$d"
+}
+# ── AC38 3차 — 쓰는 때의 울타리 하나(불변 절 ∪ 결정 기록 · 미룸 절)가 면제를 정한다 ─────────────
+br() {   # br <state-dir> <doc> — 그 문서로 다음 라운드를 연다(스냅숏 s<n>.json)
+  local n; n="$(st_yaml "$1" 'st["round"]+1')"; snap "$2" "$1/s$n.json"
+  py docreview_state.py begin-round --state-dir "$1" --snapshot "$1/s$n.json" >/dev/null
+}
+rk_changed() {   # rk_changed <state-dir> <round> → 그 라운드 얼림 diff 의 (changed 앵커, 면제 (anchor, scope)) — 둘 다 정렬
+  PYTHONPATH="$SCRIPTS" python3 "$FX/st_get.py" "$1/docreview-state.md" '(lambda D: (sorted(c["anchor"] for c in D["changed"]), sorted((e["anchor"], e.get("scope")) for e in D["exempt_applied"])))(__import__("docreview_state").round_diff(st, __import__("docreview_state").load_profile(st["profile"]), '"$2"'))'
+}
+with_log() {   # with_log <src> <out> <줄…> — src 끝에 「## 결정 기록」 절과 줄들을 붙인다(줄이 없으면 원문 그대로)
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); L=sys.argv[3:]; open(sys.argv[2],"w",encoding="utf-8").write(t.rstrip("\n")+"\n" + ("\n## 결정 기록\n\n"+"".join(x+"\n" for x in L) if L else ""))' "$@"
+}
+LOG_L1='- D1.1 · r1 · reject · x · "이 방향은 안 된다" — 요약'
+LOG_L1_FORGED='- D1.1 · r1 · adopt · x · "좋다" — 요약'
+LOG_L2='- D2.1 · r2 · adopt · y — 엔진이 덧붙인 줄'
+LOG_L3='- D3.1 · r3 · reject · z — 엔진이 덧붙인 줄'
+F_LOGSCOPE='{"id":"eeee0001#r1.1","lineage":"eeee0001#r1.1","bucket":"eeee0001","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#1-context","edit_scope":"EDIT_SCOPE","disposition":"DISP","summary":"맥락 문장이 두 가지로 읽힌다","evidence":"2행","blocks":[],"kind":"pre"}'
+log_docs() {   # log_docs <dir> — r1.md(결정 줄 하나) · r2.md(과거 결정 줄을 고쳐 씀) · r2a.md(엔진처럼 줄을 덧붙임) · r3a.md(한 줄 더)
+  with_log "$FX/design-sample.md" "$1/r1.md" "$LOG_L1"
+  with_log "$FX/design-sample.md" "$1/r2.md" "$LOG_L1_FORGED"
+  with_log "$FX/design-sample.md" "$1/r2a.md" "$LOG_L1" "$LOG_L2"
+  with_log "$FX/design-sample.md" "$1/r3a.md" "$LOG_L1" "$LOG_L2" "$LOG_L3"
+}
+case_AC38_r3_f1_intent_pass_removed() {
+  # 3차 지적 1 — fix --event intent-pass 는 check-intent 의 fix 계약(범위 = edit_scope · 실재 · 보호 · 상태)을 거치지 않고 면제를
+  # 남기는 뒷문이었다. 호출자가 없으므로 원인을 없앤다 — 이름 있는 거부가 check-intent 를 가리킨다.
+  local d err rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_FIX]"
+  assert_eq "$(_ci 'bbbb0001#r1.1' --intent '#2-goals' --state-dir "$d" | jgets 'd["reason"]')" "scope_outside_edit_scope" "AC38 3차1 전제: check-intent 는 edit_scope 밖 범위를 거부한다"
+  err="$(py docreview_state.py fix --state-dir "$d" --id 'bbbb0001#r1.1' --event intent-pass --scope '#2-goals' 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc" "1" "AC38 3차1: fix intent-pass 는 rc 1 로 거부된다"
+  assert_contains "$err" '"reason": "intent_pass_removed"' "AC38 3차1: 사유는 intent_pass_removed"
+  assert_contains "$err" 'check-intent' "AC38 3차1: 거부가 대신 쓸 명령(check-intent)을 가리킨다"
+  assert_eq "$(st_yaml "$d" 'len(st["applied_scopes"])')" "0" "AC38 3차1: 거부는 면제 범위를 남기지 않는다"
+  br "$d" "$FX/design-sample-r2.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#12-files-to-modify', '#2-goals'], [])" "AC38 3차1: 다음 라운드의 Goals 고쳐 쓰기는 frozen_change 다"
+  rm -rf "$d"
+  # 양성 짝 — check-intent 를 통과한 fix 범위는 다음 라운드 면제다
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_FIX]"
+  assert_eq "$(_ci 'bbbb0001#r1.1' --intent '#12-files-to-modify' --state-dir "$d" | jgets 'd["contract"]')" "fix" "AC38 3차1 양성 짝: 정상 범위는 check-intent 를 통과한다"
+  br "$d" "$FX/design-sample-r2.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#2-goals'], [('#12-files-to-modify', '#12-files-to-modify')])" "AC38 3차1 양성 짝: 통과한 범위만 면제다"
+  rm -rf "$d"
+}
+case_AC38_r3_f2_revert_immutable_restored() {
+  # 3차 지적 2 — 불변 절(§6)을 원래 글자로 정확히 되돌린 원복이 frozen_change 로 다시 올라오던 회귀. 원복 permit 은 새 해시가
+  # 그 permit 의 expect_hash 와 같을 때만(진짜 복원) 울타리 안 절을 면제한다.
+  local d h fp third
+  for third in restore other; do
+    d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38 3차2: init 실패"; return; }
+    br "$d" "$FX/brief-append-r1.md"; br "$d" "$FX/brief-append-r2-edit.md"
+    h="$(jget "$d/s1.json" '[s["hash"] for s in d["sections"] if s["anchor"]=="#6-사용자-원문"][0]')"
+    fp="${F_POST//#12-files-to-modify/#6-사용자-원문}"; fp="${fp/PREV/$h}"
+    seed_findings "$d" "[$fp]"
+    py docreview_state.py decide --state-dir "$d" --id 'dddd0001#r2.1' --choice reject --quote '원복하라' >/dev/null
+    if [ "$third" = restore ]; then
+      br "$d" "$FX/brief-append-r1.md"
+      assert_eq "$(rk_changed "$d" 3)" "([], [('#6-사용자-원문', '#6-사용자-원문')])" "AC38 3차2: 원래 글자로 되돌린 §6 은 원복 permit 으로 면제된다(frozen_change 아님)"
+      assert_eq "$(py docreview_state.py observe-diff --state-dir "$d" | jgets 'd["applied"]')" "['dddd0001#r2.1']" "AC38 3차2: 원복이 적용으로 관측된다"
+    else
+      br "$d" "$FX/brief-append-r2.md"
+      assert_eq "$(rk_changed "$d" 3)" "(['#6-사용자-원문'], [])" "AC38 3차2 짝: 원래 글자가 아닌 §6 은 원복 permit 이 있어도 frozen_change 다"
+    fi
+    rm -rf "$d"
+  done
+}
+case_AC38_r3_f3_log_section_fenced() {
+  # 3차 지적 3 — 결정 기록 · 미룸 절은 범위(edit_scope · fix 범위 · 신고)로 면제되지 못한다. 기록할 때 이름 있는 거부, 쓸 때 울타리.
+  local d err
+  # ① decide — 사용자는 #1-context 를 보는데 edit_scope 가 결정 기록이다
+  d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 3차3: init 실패"; return; }
+  log_docs "$d"; br "$d" "$d/r1.md"
+  local f="${F_LOGSCOPE/EDIT_SCOPE/#결정-기록}"; seed_findings "$d" "[${f/DISP/decide}]"
+  err="$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '고친다' 2>&1 >/dev/null)"
+  assert_contains "$err" '"why": "anchor_log_section"' "AC38 3차3: 결정 기록을 고칠 범위로 쓴 채택은 permit 을 열지 않는다"
+  assert_eq "$(st_yaml "$d" 'len(st["permits"])')" "0" "AC38 3차3: 거부된 채택은 원장을 바꾸지 않는다"
+  plant_permit "$d" 'eeee0001#r1.1' '#결정-기록'
+  br "$d" "$d/r2.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#결정-기록'], [])" "AC38 3차3: 심어 둔 permit 도 결정 기록 고쳐 쓰기를 면제하지 못한다(쓰는 때의 울타리)"
+  rm -rf "$d"
+  # ② check-intent fix 계약 — edit_scope 가 결정 기록인 fix
+  d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 3차3: init 실패"; return; }
+  log_docs "$d"; br "$d" "$d/r1.md"
+  seed_findings "$d" "[${f/DISP/fix}]"
+  assert_eq "$(_ci 'eeee0001#r1.1' --intent '#결정-기록' --state-dir "$d" | jgets 'd["reason"]')" "anchor_log_section" "AC38 3차3: check-intent 는 결정 기록 범위를 거부한다"
+  assert_eq "$(st_yaml "$d" 'len(st["applied_scopes"])')" "0" "AC38 3차3: 거부된 check-intent 는 면제 범위를 남기지 않는다"
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); st["applied_scopes"].append({"finding_id":"eeee0001#r1.1","scope":"#결정-기록","round":1}); save_state(d, st, "fixture")' "$d"
+  br "$d" "$d/r2.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#결정-기록'], [])" "AC38 3차3: 심어 둔 fix 범위도 결정 기록을 면제하지 못한다"
+  rm -rf "$d"
+  # ③ declare-related — 결정 기록을 함께 고친 곳으로 신고
+  d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 3차3: init 실패"; return; }
+  log_docs "$d"; br "$d" "$d/r1.md"; seed_findings "$d" "[$F_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision D1.1 --anchors '#결정-기록' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "anchor_log_section"' "AC38 3차3: 결정 기록은 신고로 묶지 못한다"
+  err="$(py docreview_state.py declare-related --state-dir "$d" --decision D1.1 --anchors 'insert-after:#결정-기록' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "anchor_log_section"' "AC38 3차3: 결정 기록 뒤에 끼우는 신고도 거부"
+  assert_eq "$(py docreview_state.py declare-related --state-dir "$d" --decision D1.1 --anchors '#2-goals' | jgets 'd["ok"]')" "True" "AC38 3차3 양성 짝: 울타리 밖 절의 신고는 받는다"
+  plant_permit "$d" 'aaaa0001#r1.1' '#12-files-to-modify' '#결정-기록'
+  br "$d" "$d/r2.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#결정-기록'], [])" "AC38 3차3: 심어 둔 신고도 결정 기록을 면제하지 못한다"
+  rm -rf "$d"
+  # ④ 꼬리 — 결정 기록에 심은 apply permit 은 엔진의 덧붙이기(append-only 면제)로 «적용됨» 이 되지 않는다
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 3차3: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"; seed_findings "$d" "[${f/DISP/decide}]"
+  plant_permit "$d" 'eeee0001#r1.1' '#결정-기록'
+  eng_log "$d" bbbb0007; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', 'append-only')])" "AC38 3차3 꼬리 전제: 엔진이 덧붙인 줄은 append-only 로 지나간다"
+  assert_eq "$(py docreview_state.py observe-diff --state-dir "$d" | jgets 'd["applied"]')" "[]" "AC38 3차3 꼬리: 덧붙이기 면제는 permit 의 적용 증거가 아니다"
+  rm -rf "$d"
+}
+case_AC38_r3_f3_positive_controls() {
+  # 양성 짝 — 엔진이 결정 기록에 덧붙이는 정상 경로(절을 만드는 라운드 포함 1~3 라운드)와 울타리 밖 절의 permit 은 그대로 면제된다
+  # [4차] 엔진이 실제로 쓴 줄로 잰다 — 작성자가 지어낸 줄은 4차부터 지나가지 못한다(case_AC38_r4_B_fake_log_lines)
+  local d; d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 3차3 양성: init 실패"; return; }
+  br "$d" "$d/doc.md"; eng_log "$d" bbbb0008; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', '#결정-기록')])" "AC38 3차3 양성 짝: 엔진이 결정 기록 절을 만드는 라운드는 면제"
+  eng_log "$d" bbbb0009; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 3)" "([], [('#결정-기록', 'append-only')])" "AC38 3차3 양성 짝: 다음 라운드에 엔진이 덧붙인 줄은 append-only"
+  rm -rf "$d"
+  d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 3차3 양성: init 실패"; return; }
+  log_docs "$d"; br "$d" "$d/r1.md"
+  local f="${F_LOGSCOPE/EDIT_SCOPE/#1-context}"; seed_findings "$d" "[${f/DISP/decide}]"
+  assert_eq "$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["permit"]["apply_anchors"]')" "['#1-context']" "AC38 3차3 양성 짝: 울타리 밖 edit_scope 의 채택은 permit 을 연다"
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(t.replace("배경 한 문단.", "배경을 고쳐 쓴 문단."))' "$d/r1.md" "$d/r2c.md"
+  br "$d" "$d/r2c.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#1-context', '#1-context')])" "AC38 3차3 양성 짝: 울타리 밖 permit 앵커의 변경은 면제"
+  assert_eq "$(py docreview_state.py observe-diff --state-dir "$d" | jgets 'd["applied"]')" "['eeee0001#r1.1']" "AC38 3차3 양성 짝: 울타리 밖 절의 실제 변경은 적용으로 관측된다"
+  rm -rf "$d"
+}
+case_AC38_r3_f4_headingless_transition() {
+  # 3차 지적 4 — 문서를 코드 펜스로 감싸 머리 없는 라운드를 만들면 그 앞뒤 diff 가 통째로 #__doc__ 면제였다. 둘 다 머리 없을 때만
+  # 통째 면제이고, 머리 있음 ↔ 없음 전이에서는 머리 있는 쪽의 울타리 절이 changed 에 든다.
+  local d; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38 3차4: init 실패"; return; }
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write("```\n"+t+"```\n")' "$FX/brief-append-r2-edit.md" "$d/fenced.md"
+  br "$d" "$FX/brief-append-r1.md"; br "$d" "$d/fenced.md"
+  assert_eq "$(st_yaml "$d" 'st["snapshots"]["2"]["headingless"]')" "True" "AC38 3차4 전제: 펜스로 감싼 라운드는 머리 없는 스냅숏이다"
+  assert_eq "$(rk_changed "$d" 2 | jgets_py 'd[0]')" "['#6-사용자-원문']" "AC38 3차4: 머리 있음 → 없음 전이에서 사라진 §6 은 frozen_change"
+  br "$d" "$FX/brief-append-r2-edit.md"
+  assert_eq "$(rk_changed "$d" 3 | jgets_py 'd[0]')" "['#6-사용자-원문']" "AC38 3차4: 머리 없음 → 있음 전이에서 고쳐 쓴 채 돌아온 §6 도 frozen_change"
+  rm -rf "$d"
+  d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38 3차4: init 실패"; return; }
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write("```\n"+t)' "$FX/brief-append-r2-edit.md" "$d/unclosed.md"
+  br "$d" "$FX/brief-append-r1.md"; br "$d" "$d/unclosed.md"
+  assert_eq "$(rk_changed "$d" 2 | jgets_py 'd[0]')" "['#6-사용자-원문']" "AC38 3차4: 닫히지 않은 펜스 하나로 만든 머리 없는 라운드도 같다"
+  rm -rf "$d"
+  # 양성 짝 — 두 라운드 다 머리 없으면 그대로 통째 면제(#__doc__)
+  d="$(mk_state "$FX/headingless.md" "$PROF_SD/brief.md")" || { no "AC38 3차4: init 실패"; return; }
+  br "$d" "$FX/headingless.md"; br "$d" "$FX/headingless-r2.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#__doc__', '#__doc__')])" "AC38 3차4 양성 짝: 둘 다 머리 없는 라운드는 #__doc__ 로 통째 면제"
+  rm -rf "$d"
+}
+jgets_py() { python3 -I -c 'import ast,sys; d=ast.literal_eval(sys.stdin.read()); print(eval(sys.argv[1]))' "$1"; }
+case_AC38_r3_f5_gate_adopt_unavailable() {
+  # 3차 지적 5 — decide 가 거부할 채택을 게이트가 고를 수 있는 것처럼 내던 틈. 「고친다(채택)」를 빼고 이유를 한 줄로 보인다.
+  local d r; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38 3차5: init 실패"; return; }
+  br "$d" "$FX/brief-append-r1.md"; seed_findings "$d" "[${F_BRIEF_NOIMM/EDIT_SCOPE/#6-사용자-원문}]"
+  r="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$r" "고친다(채택)는 고를 수 없다" "AC38 3차5: 게이트가 채택을 고를 수 없다고 말한다"
+  assert_contains "$r" "사용자 원문" "AC38 3차5: 이유를 쉬운 말로 — 바꾸면 안 되는 사용자 원문 절"
+  assert_eq "$(printf '%s\n' "$r" | grep '^  대안:' | grep -c '고친다(채택)')" "0" "AC38 3차5: 「대안:」 줄에 채택이 없다(제안 = 수용)"
+  local err; err="$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '고친다' 2>&1 >/dev/null)"
+  assert_contains "$err" '"reason": "edit_scope_refused"' "AC38 3차5: 그래도 채택을 보내면 같은 사유로 거부"
+  assert_eq "$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice reject --quote '그대로' | jgets 'd["state"]')" "rejected" "AC38 3차5: 남은 선택지(기각)는 그대로 받는다"
+  rm -rf "$d"
+  # 결정 기록을 고칠 범위로 쓴 decide — 이유가 결정 기록이라고 말한다
+  d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 3차5: init 실패"; return; }
+  log_docs "$d"; br "$d" "$d/r1.md"
+  local f="${F_LOGSCOPE/EDIT_SCOPE/#결정-기록}"; seed_findings "$d" "[${f/DISP/decide}]"
+  r="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$r" "고친다(채택)는 고를 수 없다 — 고칠 범위가 결정 기록" "AC38 3차5: 결정 기록 범위는 그 이유로 보인다"
+  rm -rf "$d"
+  # 양성 짝 — 정상 범위의 decide 는 채택을 그대로 고를 수 있다
+  d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38 3차5: init 실패"; return; }
+  br "$d" "$FX/brief-append-r1.md"; seed_findings "$d" "[${F_BRIEF_NOIMM/EDIT_SCOPE/#2-확정}]"
+  r="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_eq "$(printf '%s\n' "$r" | grep '^  대안:' | grep -c '고친다(채택)')" "1" "AC38 3차5 양성 짝: 정상 범위는 「대안:」 에 채택이 있다"
+  assert_not_contains "$r" "고를 수 없다" "AC38 3차5 양성 짝: 정상 범위엔 그 줄이 없다"
+  rm -rf "$d"
+}
+case_AC38_r3_f6_legacy_ledger_disclosed() {
+  # 3차 지적 6 — 이 변경 전에 진행 중이던 원장은 결정 기록 절의 줄 해시가 없다. 그 첫 라운드는 옛 절 면제를 한 번 쓰고 게이트에 공시한다.
+  local d r; d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 3차6: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  # 옛 원장 — 결정 기록 절의 줄 해시도, 엔진 줄 기록(4차)도 없다
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); [s.pop("line_hashes", None) for s in st["snapshots"]["1"]["sections"]]; st.pop("engine_lines", None); st.pop("engine_lines_since", None); save_state(d, st, "fixture: 옛 원장")' "$d"
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1" "$LOG_L2"; eng_log "$d" bbbb000a; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', '#결정-기록')])" "AC38 3차6: 옛 원장의 첫 라운드는 엔진의 덧붙이기를 frozen_change 로 올리지 않는다"
+  r="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$r" "덧붙이기만 됐는지 이번 라운드는 확인하지 못했다" "AC38 3차6: 확인하지 못했다는 사실을 게이트에 공시한다"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["log_check_skipped"]')" "['#결정-기록']" "AC38 3차6: gate JSON 이 건너뛴 절을 싣는다"
+  eng_log "$d" bbbb000b; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 3)" "([], [('#결정-기록', 'append-only')])" "AC38 3차6: 다음 라운드부터는 줄 출처 규칙이 다시 선다(엔진 줄은 append-only)"
+  assert_not_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "확인하지 못했다" "AC38 3차6: 한 번뿐 — 다음 라운드엔 공시가 없다"
+  rm -rf "$d"
+}
+case_AC38_r3_f7_invisible_blank_quote() {
+  # 3차 지적 7 — 보이지 않는 글자(폭 없는 공백 등)뿐인 추가 승인은 승인이 아니다
+  local d s err v rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; snap "$FX/design-sample.md" "$d/s2.json"
+  for v in "$(python3 -I -c 'print("​", end="")')" "$(python3 -I -c 'print("﻿⁠", end="")')" "$(python3 -I -c 'print("​ 　‌", end="")')"; do
+    err="$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" --extra-approval "$v" --extra-approval-source typed 2>&1 >/dev/null)"; rc=$?
+    assert_eq "$rc" "2" "AC38 3차7: 보이지 않는 글자뿐인 추가 승인은 rc 2"
+    assert_contains "$err" '"reason": "extra_approval_blank"' "AC38 3차7: 사유는 extra_approval_blank"
+  done
+  assert_eq "$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" --extra-approval '열기' --extra-approval-source typed | jgets 'd["ok"]')" "True" "AC38 3차7 양성 짝: 보이는 글자가 있는 승인은 받는다"
+  rm -rf "$d"
+}
+# ── AC38 4차 — 결정 기록 · 미룸 절의 줄 출처: 엔진이 쓴 줄만 지나간다 ─────────────────────────
+mk_doc_state() {   # mk_doc_state <src-doc> <profile> → state dir. 문서는 그 안의 doc.md 다(원장의 문서 = 엔진이 줄을 쓰는 문서)
+  local d; d="$(mktemp -d -t docreview-XXXXXX)" || return 1
+  cp "$1" "$d/doc.md"
+  py docreview_state.py init --state-dir "$d" --doc "$d/doc.md" --profile "$2" >/dev/null || { echo "$d"; return 1; }
+  echo "$d"
+}
+eng_log() {   # eng_log <state-dir> <id8> — 결정 하나를 심고 기각해 엔진이 doc.md 의 결정 기록에 줄을 쓴다
+  seed_findings "$1" "[${F_DEC//aaaa0001/$2}]"
+  py docreview_state.py decide --state-dir "$1" --id "$2#r1.1" --choice reject --quote '엔진 줄' --log-file "$1/doc.md" >/dev/null
+}
+doc_sub() {   # doc_sub <file> <old> <new> — 제자리 글자 바꾸기
+  python3 -I -c 'import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); assert sys.argv[2] in t; open(p,"w",encoding="utf-8").write(t.replace(sys.argv[2], sys.argv[3]))' "$@"
+}
+doc_append() {   # doc_append <file> <line> — 파일 끝(마지막 절)에 작성자가 줄 하나를 붙인다
+  python3 -I -c 'import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); open(p,"w",encoding="utf-8").write(t.rstrip("\n")+"\n"+sys.argv[2]+"\n")' "$@"
+}
+LOG_FAKE='- D3.1 · r3 · adopt · F2 · "사용자가 좋다고 했다" — 지어낸 줄'
+case_AC38_r4_A_log_revert_keeps_engine_lines() {
+  # 4차 A — 고쳐 쓴 결정 기록의 원복. 엔진이 그 사이 쓴 줄(기각 줄 등)을 지키는 원복만 원복이다 — 절을 통째로 옛 글자로
+  # 되돌려 엔진 줄을 지우는 것은 원복이 아니라 다시 frozen_change 다.
+  local d h fp mode
+  for mode in honest destructive; do
+    d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 4차A: init 실패"; return; }
+    with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; cp "$d/doc.md" "$d/orig.md"
+    br "$d" "$d/doc.md"
+    doc_sub "$d/doc.md" "$LOG_L1" "$LOG_L1_FORGED"; br "$d" "$d/doc.md"
+    assert_eq "$(rk_changed "$d" 2 | jgets_py 'd[0]')" "['#결정-기록']" "AC38 4차A 전제: 과거 결정 줄 고쳐 쓰기는 frozen_change"
+    h="$(jget "$d/s1.json" '[s["hash"] for s in d["sections"] if s["anchor"]=="#결정-기록"][0]')"
+    fp="${F_POST//#12-files-to-modify/#결정-기록}"; seed_findings "$d" "[${fp/PREV/$h}]"
+    py docreview_state.py decide --state-dir "$d" --id 'dddd0001#r2.1' --choice reject --quote '원복하라' --log-file "$d/doc.md" >/dev/null
+    if [ "$mode" = honest ]; then
+      doc_sub "$d/doc.md" "$LOG_L1_FORGED" "$LOG_L1"; br "$d" "$d/doc.md"
+      assert_eq "$(rk_changed "$d" 3)" "([], [('#결정-기록', '#결정-기록')])" "AC38 4차A: 고친 줄만 되돌리고 엔진 줄은 둔 원복은 면제"
+      assert_eq "$(py docreview_state.py observe-diff --state-dir "$d" | jgets 'd["applied"]')" "['dddd0001#r2.1']" "AC38 4차A: 그 원복이 적용으로 관측된다(면제와 관측이 같은 판정)"
+    else
+      cp "$d/orig.md" "$d/doc.md"; br "$d" "$d/doc.md"
+      assert_eq "$(rk_changed "$d" 3)" "(['#결정-기록'], [])" "AC38 4차A: 엔진이 쓴 기각 줄까지 지우는 통째 복원은 frozen_change"
+      assert_eq "$(py docreview_state.py observe-diff --state-dir "$d" | jgets 'd["expired"]')" "['dddd0001#r2.1']" "AC38 4차A: 통째 복원은 원복 적용이 아니다"
+    fi
+    rm -rf "$d"
+  done
+}
+case_AC38_r4_B_fake_log_lines() {
+  # 4차 B — 엔진이 쓰지 않은 줄을 결정 기록 · 미룸 표에 덧붙이거나, 그런 줄로 절을 만들면 frozen_change
+  local d
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 4차B: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  doc_append "$d/doc.md" "$LOG_FAKE"; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#결정-기록'], [])" "AC38 4차B: 작성자가 덧붙인 지어낸 결정 줄은 frozen_change"
+  rm -rf "$d"
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 4차B: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  eng_log "$d" bbbb0002; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', 'append-only')])" "AC38 4차B 양성 짝: 엔진이 덧붙인 결정 줄은 append-only"
+  rm -rf "$d"
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 4차B: init 실패"; return; }
+  br "$d" "$d/doc.md"; doc_append "$d/doc.md" '| cccc0002#r1.1 | 지어낸 미룸 |'; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#deferred-to-plan'], [])" "AC38 4차B: 작성자가 덧붙인 미룸 행은 frozen_change"
+  rm -rf "$d"
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 4차B: init 실패"; return; }
+  br "$d" "$d/doc.md"
+  local fd="${F_FIX//bbbb0001/cccc0002}"; seed_findings "$d" "[${fd/\"disposition\":\"fix\"/\"disposition\":\"defer\"}]"
+  py docreview_state.py defer --state-dir "$d" --id 'cccc0002#r1.1' --log-file "$d/doc.md" >/dev/null
+  br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#deferred-to-plan', 'append-only')])" "AC38 4차B 양성 짝: 엔진이 덧붙인 미룸 행은 append-only"
+  rm -rf "$d"
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 4차B: init 실패"; return; }
+  br "$d" "$d/doc.md"; with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_FAKE"; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#결정-기록'], [])" "AC38 4차B: 지어낸 줄로 결정 기록 절을 처음 만들면 frozen_change"
+  rm -rf "$d"
+}
+case_AC38_r4_C_log_recreated() {
+  # 4차 C — 결정 기록 절이 이 원장의 앞 스냅숏 어디엔가 있었으면 «처음 만드는 라운드» 가 아니다(펜스 전이 · 지웠다 다시 만들기)
+  local d
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 4차C: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  python3 -I -c 'import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); open(p,"w",encoding="utf-8").write("```\n"+t+"```\n")' "$d/doc.md"
+  br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2 | jgets_py '"#결정-기록" in d[0]')" "True" "AC38 4차C 전제: 펜스로 감싼 라운드에 결정 기록이 사라짐은 frozen_change"
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1_FORGED"; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 3 | jgets_py '"#결정-기록" in d[0]')" "True" "AC38 4차C: 펜스를 풀며 과거 결정 줄을 고쳐 쓴 결정 기록은 frozen_change(만드는 라운드 아님)"
+  rm -rf "$d"
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 4차C: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  cp "$FX/design-sample.md" "$d/doc.md"; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#결정-기록'], [])" "AC38 4차C 전제: 결정 기록 절을 지우면 frozen_change"
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1_FORGED"; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 3)" "(['#결정-기록'], [])" "AC38 4차C: 지웠다 고쳐 쓴 줄로 다시 만든 결정 기록은 frozen_change"
+  rm -rf "$d"
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 4차C: init 실패"; return; }
+  br "$d" "$d/doc.md"; eng_log "$d" cccc0003; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', '#결정-기록')])" "AC38 4차C 양성 짝: 엔진이 결정 기록 절을 처음 만든 라운드는 면제"
+  eng_log "$d" cccc0004; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 3)" "([], [('#결정-기록', 'append-only')])" "AC38 4차C 양성 짝: 다음 라운드 엔진 줄은 append-only"
+  rm -rf "$d"
+}
+case_AC38_r4_m3_invisible_letters() {
+  # 4차 m3 — 글자 부류로는 문자지만 보이지 않는 것(한글 채움 문자 · 점자 빈칸 · 결합 자소 결합자)뿐인 추가 승인도 승인이 아니다
+  local d err rc v; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; snap "$FX/design-sample.md" "$d/s2.json"
+  for v in 3164 115F 1160 2800 034F FFA0; do
+    err="$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" --extra-approval "$(python3 -I -c 'import sys; print(chr(int(sys.argv[1], 16)), end="")' "$v")" --extra-approval-source typed 2>&1 >/dev/null)"; rc=$?
+    assert_eq "$rc" "2" "AC38 4차m3: U+${v} 뿐인 추가 승인은 rc 2"
+  done
+  assert_eq "$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" --extra-approval "$(python3 -I -c 'print(chr(0x3164) + "열기", end="")')" --extra-approval-source typed | jgets 'd["ok"]')" "True" "AC38 4차m3 양성 짝: 보이는 글자가 섞이면 받는다"
+  rm -rf "$d"
+}
+revert_target_flagged_state() {   # → state dir: 라운드 2 와 3 에 #12 가 연달아 허가 없이 바뀌고 사후 결정 둘이 열려 있다
+  local d h1 h2 p2; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  h1="$(jget "$d/s1.json" '[s["hash"] for s in d["sections"] if s["anchor"]=="#12-files-to-modify"][0]')"
+  seed_findings "$d" "[${F_POST/PREV/$h1}]"
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); assert "## Handoff Context" in t; open(sys.argv[2],"w",encoding="utf-8").write(t.replace("## Handoff Context", "- `z.py`\n\n## Handoff Context"))' "$FX/design-sample-r2.md" "$d/r3.md"
+  next_round "$d" "$d/r3.md" >/dev/null
+  h2="$(jget "$d/s2.json" '[s["hash"] for s in d["sections"] if s["anchor"]=="#12-files-to-modify"][0]')"
+  p2="${F_POST//dddd0001/dddd0002}"; seed_findings "$d" "[${p2/PREV/$h2}]"
+  echo "$d"
+}
+case_AC38_r4_m1_revert_target_flagged() {
+  # 4차 m1 — 사후 결정의 「이전 상태로 원복」이 돌아갈 글이 앞 라운드에 허가 없이 바뀐 글이면 게이트가 쉬운 말로 알린다
+  local d r; d="$(revert_target_flagged_state)"
+  r="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$r" "원복하면 원래 글이 아니라 라운드 2 에 허가 없이 바뀐 글로 돌아간다 — 그 변경은 아직 받아들여지지 않았다 (dddd0001#r2.1)" "AC38 4차m1: 둘째 사후 결정의 원복 대상이 앞 라운드의 허가 없는 변경임을 알린다"
+  assert_eq "$(printf '%s\n' "$r" | grep -c '원복하면 원래 글이 아니라')" "1" "AC38 4차m1 양성 짝: 원래 글로 돌아가는 첫 사후 결정에는 그 줄이 없다"
+  py docreview_state.py decide --state-dir "$d" --id 'dddd0001#r2.1' --choice adopt --quote '이 변경 승인' >/dev/null
+  assert_not_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "원복하면 원래 글이 아니라" "AC38 4차m1 양성 짝: 앞 변경을 사용자가 받아들였으면 알리지 않는다"
+  rm -rf "$d"
+}
+snap_edit() {   # snap_edit <snapshot.json> <python-stmt over d> — 호출자가 내미는 스냅숏을 고쳐 쓴다(위조 흉내)
+  python3 -I -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p,encoding="utf-8")); exec(sys.argv[2]); json.dump(d, open(p,"w",encoding="utf-8"), ensure_ascii=False)' "$1" "$2"
+}
+case_AC38_r4_snapshot_fields_cannot_switch_guards_off() {
+  # 4차 덧붙임 — begin-round 는 호출자가 낸 스냅숏을 받는다. 울타리 절의 줄 해시를 떼거나 머리 없음 표지를 거짓으로 달아
+  # 가드를 끄는 스냅숏은 받지 않는다(rc 2, 원장 불변). 옛 원장 판정은 스냅숏 하나가 아니라 원장의 사실(엔진 줄 기록)로 한다.
+  local d err rc
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 4차+: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  snap "$d/doc.md" "$d/s2.json"
+  snap_edit "$d/s2.json" '[s.pop("line_hashes", None) for s in d["sections"] if s["anchor"] == "#결정-기록"]'
+  err="$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc" "2" "AC38 4차+: 결정 기록 절의 줄 해시를 뗀 스냅숏은 rc 2"
+  assert_contains "$err" '"reason": "snapshot_invalid"' "AC38 4차+: 사유는 snapshot_invalid"
+  assert_eq "$(st_yaml "$d" 'st["round"]')" "1" "AC38 4차+: 거부는 원장을 바꾸지 않는다(라운드 그대로)"
+  # 원장에 줄 해시 없는 스냅숏이 들어 있어도(손으로 심은 위조) 출처 기록이 있는 원장은 옛 원장 면제를 주지 않는다
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); [s.pop("line_hashes", None) for s in st["snapshots"]["1"]["sections"]]; save_state(d, st, "fixture: 위조")' "$d"
+  doc_sub "$d/doc.md" "$LOG_L1" "$LOG_L1_FORGED"; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#결정-기록'], [])" "AC38 4차+: 줄 해시 없는 스냅숏 하나로는 옛 원장 면제가 열리지 않는다 — 고쳐 쓴 결정 기록은 frozen_change"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["log_check_skipped"]')" "[]" "AC38 4차+: 공시할 옛 원장 넘기기도 없다"
+  rm -rf "$d"
+  # 불변 절(§6)의 줄 해시를 뗀 스냅숏 · 머리가 있는데 머리 없음이라고 단 스냅숏도 받지 않는다
+  d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38 4차+: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"
+  snap_edit "$d/s1.json" '[s.pop("line_hashes", None) for s in d["sections"] if s["anchor"] == "#6-사용자-원문"]'
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "AC38 4차+: 불변 절의 줄 해시를 뗀 스냅숏은 rc 2"
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; snap_edit "$d/s1.json" 'd["headingless"] = True'
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "AC38 4차+: 머리가 있는 절들에 머리 없음 표지를 단 스냅숏은 rc 2"
+  snap "$FX/brief-append-r2-edit.md" "$d/s2.json"; snap_edit "$d/s2.json" 'd["headingless"] = True'
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; snap_edit "$d/s1.json" 'd["headingless"] = True'
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null 2>&1
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null 2>&1
+  assert_eq "$(st_yaml "$d" 'st["round"]')" "0" "AC38 4차+: 거짓 머리 없음 표지 두 라운드로 §6 고쳐 쓰기를 통째 면제받는 길이 없다(둘 다 거부)"
+  rm -rf "$d"
+  # 양성 짝 — 도구가 낸 그대로의 스냅숏(머리 없는 문서 포함)은 받는다
+  d="$(mk_state "$FX/headingless.md" "$PROF_SD/brief.md")" || { no "AC38 4차+: init 실패"; return; }
+  br "$d" "$FX/headingless.md"
+  assert_eq "$(st_yaml "$d" 'st["round"]')" "1" "AC38 4차+ 양성 짝: 머리 없는 문서의 정상 스냅숏은 받는다"
+  rm -rf "$d"
+}
+# ── AC38 5차 ─────────────────────────────────────────────────────────────────────────
+log_added_then_rejected() {   # log_added_then_rejected <log-file-flag:yes|no> → state dir: 라운드 2 에 작성자가 지어낸 결정 기록 절을
+  # 만들고(사후 결정, prev_hash 없음) 사용자가 기각했다. yes 면 그 기각 줄을 엔진이 그 절에 썼다.
+  local d fp; d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || return 1
+  br "$d" "$d/doc.md"; with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_FAKE"; br "$d" "$d/doc.md"
+  fp="${F_POST//#12-files-to-modify/#결정-기록}"; fp="${fp/\"prev_hash\":\"PREV\"/\"prev_hash\":null}"; seed_findings "$d" "[$fp]"
+  if [ "$1" = yes ]; then
+    py docreview_state.py decide --state-dir "$d" --id 'dddd0001#r2.1' --choice reject --quote '원복하라' --log-file "$d/doc.md" >/dev/null
+  else
+    py docreview_state.py decide --state-dir "$d" --id 'dddd0001#r2.1' --choice reject --quote '원복하라' >/dev/null
+  fi
+  cp "$FX/design-sample.md" "$d/doc.md"; br "$d" "$d/doc.md"   # 라운드 3 — 절을 통째로 지운다
+  echo "$d"
+}
+case_AC38_r5_1_revert_to_absence_keeps_engine_lines() {
+  # 5차 1 — 없던 절로 되돌리는 원복도 엔진이 그 절에 쓴 줄(기각 줄)을 지우면 원복이 아니다
+  local d; d="$(log_added_then_rejected yes)" || { no "AC38 5차1: 준비 실패"; return; }
+  assert_eq "$(rk_changed "$d" 3)" "(['#결정-기록'], [])" "AC38 5차1: 엔진의 기각 줄째 절을 지운 «원복» 은 frozen_change"
+  assert_eq "$(py docreview_state.py observe-diff --state-dir "$d" | jgets 'd["applied"], d["expired"]')" "([], ['dddd0001#r2.1'])" "AC38 5차1: 그 «원복» 은 적용으로 관측되지 않는다"
+  rm -rf "$d"
+  d="$(log_added_then_rejected no)" || { no "AC38 5차1: 준비 실패"; return; }
+  assert_eq "$(rk_changed "$d" 3)" "([], [('#결정-기록', '#결정-기록')])" "AC38 5차1 양성 짝: 엔진 줄이 없는 절을 지운 원복은 면제"
+  assert_eq "$(py docreview_state.py observe-diff --state-dir "$d" | jgets 'd["applied"]')" "['dddd0001#r2.1']" "AC38 5차1 양성 짝: 그 원복은 적용으로 관측된다"
+  rm -rf "$d"
+}
+case_AC38_r5_2_window_upper_bound() {
+  # 5차 2 — 판정하는 스냅숏 «뒤에» 엔진이 쓴 줄은 그 스냅숏에 있을 수 없다. 같은 라운드 다시 계산 · 늦은 관측이 거짓으로 뒤집히지 않는다.
+  local d h fp
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 5차2: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  eng_log "$d" bbbb0010; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', 'append-only')])" "AC38 5차2 전제: 라운드 2 의 엔진 덧붙이기는 append-only"
+  eng_log "$d" bbbb0011   # 라운드 2 게이트의 decide --log-file — 스냅숏 2 뒤에 쓴 줄
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', 'append-only')])" "AC38 5차2: 같은 라운드에 다시 계산해도(재-finalize) 스냅숏 뒤에 쓴 엔진 줄 때문에 frozen_change 가 되지 않는다"
+  rm -rf "$d"
+  # 늦은 관측 — 정직한 원복(라운드 3) 뒤 라운드 3 에 엔진이 줄을 더 쓰고 라운드 4 에야 관측한다
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 5차2: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  doc_sub "$d/doc.md" "$LOG_L1" "$LOG_L1_FORGED"; br "$d" "$d/doc.md"
+  h="$(jget "$d/s1.json" '[s["hash"] for s in d["sections"] if s["anchor"]=="#결정-기록"][0]')"
+  fp="${F_POST//#12-files-to-modify/#결정-기록}"; seed_findings "$d" "[${fp/PREV/$h}]"
+  py docreview_state.py decide --state-dir "$d" --id 'dddd0001#r2.1' --choice reject --quote '원복하라' --log-file "$d/doc.md" >/dev/null
+  doc_sub "$d/doc.md" "$LOG_L1_FORGED" "$LOG_L1"; br "$d" "$d/doc.md"
+  eng_log "$d" bbbb0012; br "$d" "$d/doc.md"
+  assert_eq "$(py docreview_state.py observe-diff --state-dir "$d" | jgets 'd["applied"]')" "['dddd0001#r2.1']" "AC38 5차2: 라운드 4 에 따라잡은 정직한 원복은 그 뒤 엔진 줄 때문에 만료로 뒤집히지 않는다"
+  rm -rf "$d"
+}
+case_AC38_r5_3_since_corrupt_and_legacy_once() {
+  # 5차 3 — 엔진 줄 기록 시작 라운드가 정수가 아니거나 현재 라운드보다 크면 원장 파손(이름 있는 실패), 옛 원장 넘기기는 그 라운드 한 번뿐
+  local d v err
+  for v in '"1"' 'True' '99'; do
+    d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 5차3: init 실패"; return; }
+    with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"; br "$d" "$d/doc.md"
+    PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); st["engine_lines_since"]=eval(sys.argv[2]); save_state(d, st, "fixture")' "$d" "$v"
+    err="$(py docreview_state.py exempt-anchors --state-dir "$d" 2>&1 >/dev/null)"
+    assert_contains "$err" '"reason": "engine_lines_since_corrupt"' "AC38 5차3: engine_lines_since=${v} 는 원장 파손으로 멈춘다"
+    rm -rf "$d"
+  done
+  # 기록 시작(라운드 3)보다 앞 라운드의 diff 는 옛 원장 넘기기를 받지 않는다(그 라운드 한 번만)
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 5차3: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  doc_append "$d/doc.md" "$LOG_FAKE"; br "$d" "$d/doc.md"; br "$d" "$d/doc.md"
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); st["engine_lines_since"]=3; save_state(d, st, "fixture")' "$d"
+  assert_eq "$(rk_changed "$d" 2)" "(['#결정-기록'], [])" "AC38 5차3: 기록 시작 전 라운드의 지어낸 줄은 옛 원장 넘기기를 받지 않는다"
+  rm -rf "$d"
+}
+case_AC38_r5_4_duplicate_engine_line() {
+  # 5차 4 — 엔진이 한 번 쓴 줄을 작성자가 한 번 더 붙이면 엔진 줄이 아니다(개수로 잰다)
+  local d; d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC38 5차4: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  eng_log "$d" bbbb0013; doc_append "$d/doc.md" "$(tail -1 "$d/doc.md")"; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#결정-기록'], [])" "AC38 5차4: 엔진 줄을 한 번 더 베껴 붙인 결정 기록은 frozen_change"
+  rm -rf "$d"
+}
+case_AC38_r5_5_combining_only_blank() {
+  # 5차 5 — 변형 선택자 · 결합 부호뿐인 추가 승인도 승인이 아니다
+  local d rc v; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; snap "$FX/design-sample.md" "$d/s2.json"
+  for v in FE0F E0100 0301 20DD; do
+    py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" --extra-approval "$(python3 -I -c 'import sys; print(chr(int(sys.argv[1], 16)), end="")' "$v")" --extra-approval-source typed >/dev/null 2>&1; rc=$?
+    assert_eq "$rc" "2" "AC38 5차5: U+${v} 뿐인 추가 승인은 rc 2"
+  done
+  assert_eq "$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" --extra-approval "$(python3 -I -c 'print("é", end="")')" --extra-approval-source typed | jgets 'd["ok"]')" "True" "AC38 5차5 양성 짝: 보이는 글자에 붙은 결합 부호는 받는다"
+  rm -rf "$d"
+}
+case_AC38_r4_m4_route_alternatives_filtered() {
+  # 4차 m4 — 라우팅이 fin.json 에 싣는 선택지(decision_view.alternatives)도 decide 가 받는 것과 같다
+  local d; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC38 4차m4: init 실패"; return; }
+  br "$d" "$FX/brief-append-r1.md"
+  local probe='import sys, docreview_state as S, docreview_route as R; st=S.load_state(sys.argv[1]); it={"id":"eeee0001#r1.1","anchor":"#2-확정","edit_scope":sys.argv[2],"category":"omission","kind":"pre","immutable":False,"origin":"reviewer","summary":"x"}; print("고친다(채택)" in R._decision_view(it, None, st)["alternatives"])'
+  assert_eq "$(PYTHONPATH="$SCRIPTS" python3 -c "$probe" "$d" '#6-사용자-원문')" "False" "AC38 4차m4: 고칠 범위가 불변 절인 decide 의 fin.json 선택지에 채택이 없다"
+  assert_eq "$(PYTHONPATH="$SCRIPTS" python3 -c "$probe" "$d" '#2-확정')" "True" "AC38 4차m4 양성 짝: 정상 범위는 채택이 있다"
   rm -rf "$d"
 }
 case_T22_permit_expired_reraise() {
@@ -674,13 +1389,13 @@ case_T26_revert_missed_reraise() {
 }
 case_T27_intent_pass_records_scope() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_FIX]"
-  py docreview_state.py fix --state-dir "$d" --id 'bbbb0001#r1.1' --event intent-pass --scope '#12-files-to-modify' >/dev/null
-  assert_eq "$(st_yaml "$d" 'st["fixes"]["bbbb0001#r1.1"]["state"], st["applied_scopes"][0]["scope"], st["applied_scopes"][0]["round"]')" "('intent_passed', '#12-files-to-modify', 1)" "T27: intent-pass → intent_passed + applied_scopes(round 1)"
+  _ci 'bbbb0001#r1.1' --intent '#12-files-to-modify' --state-dir "$d" >/dev/null
+  assert_eq "$(st_yaml "$d" 'st["fixes"]["bbbb0001#r1.1"]["state"], st["applied_scopes"][0]["scope"], st["applied_scopes"][0]["round"]')" "('intent_passed', '#12-files-to-modify', 1)" "T27: check-intent 통과 → intent_passed + applied_scopes(round 1)"
   rm -rf "$d"
 }
 case_T29_fix_applied() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_FIX]"
-  py docreview_state.py fix --state-dir "$d" --id 'bbbb0001#r1.1' --event intent-pass --scope '#12-files-to-modify' >/dev/null
+  _ci 'bbbb0001#r1.1' --intent '#12-files-to-modify' --state-dir "$d" >/dev/null
   local df; df="$(next_round "$d" "$FX/design-sample-r2.md")"
   assert_eq "$(jget "$df" '[c["anchor"] for c in d["changed"]]')" "['#2-goals']" "T29: applied_scopes 의 앵커는 얼림 예외 ①"
   assert_eq "$(jget "$d/obs2.json" 'd["applied"], d["progress"]')" "(['bbbb0001#r1.1'], 1)" "T29: scope 변경 관측 → fix applied"
@@ -688,7 +1403,7 @@ case_T29_fix_applied() {
 }
 case_T30_fix_unapplied_counts() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_FIX]"
-  py docreview_state.py fix --state-dir "$d" --id 'bbbb0001#r1.1' --event intent-pass --scope '#12-files-to-modify' >/dev/null
+  _ci 'bbbb0001#r1.1' --intent '#12-files-to-modify' --state-dir "$d" >/dev/null
   next_round "$d" "$FX/design-sample.md" >/dev/null
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["unapplied_fix"], d["approval_ready"]')" "(['bbbb0001#r1.1'], False)" "T30: 통과했으나 미적용 fix 는 승인을 막는다"
   rm -rf "$d"
@@ -715,7 +1430,9 @@ case_T33_user_drops_fix() {
 }
 case_T36_freeze_exceptions_log_targets() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
-  assert_eq "$(py docreview_state.py exempt-anchors --state-dir "$d" | jgets 'sorted(d)')" "['#deferred-to-plan', '#결정-기록']" "T36: decision_log·defer_target 절은 항상 얼림 예외 ③"
+  # [R2a plan 2 Task 5 4차] 결정 기록 · 미룸 절은 범위로 면제되지 않고, 만드는 라운드도 엔진 줄만일 때만 지나간다 —
+  # 라운드 1 의 이미 있는 미룸 절(작성자 표 머리)은 면제 집합에 없다. 그 규칙은 case_AC38_r4_* 가 잰다.
+  assert_eq "$(py docreview_state.py exempt-anchors --state-dir "$d" | jgets 'sorted(d)')" "[]" "T36: 결정 기록 · 미룸 절은 범위 면제 집합에 그냥 들지 않는다(줄 출처 규칙만)"
   rm -rf "$d"
 }
 case_T38_stagnation() {
@@ -723,6 +1440,14 @@ case_T38_stagnation() {
   next_round "$d" "$FX/design-sample.md" >/dev/null
   seed_findings "$d" "[${F_FIX/bbbb0001#r1.1\"/bbbb0001#r2.1\"}]"     # 같은 계보(lineage 필드 그대로) 의 r2 id
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["stagnation"], d["approval_gate_open"], d["two_stage"], d["next_round_mode"]')" "(True, True, True, 'budget')" "T38: 열린 계보 동일 + 진행 0 → stagnation, 두 단계 게이트, 예산 남음"
+  rm -rf "$d"
+}
+case_AC13_stagnation_first_line() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_FIX]"
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  seed_findings "$d" "[${F_FIX/bbbb0001#r1.1\"/bbbb0001#r2.1\"}]"
+  assert_eq "$(gsum "$d" 'd["stagnation"], d["cap_reached"]')" "(True, False)" "AC13 전제: 상한 전 정체다"
+  assert_contains "$(gfirst "$d")" "열린 지적 2개 — 아직 안 고친 곳 2개가 남았다" "AC13: 정체 경로의 첫 줄도 열린 지적 수를 싣고 그 수가 같은 문장의 항목 합이다"
   rm -rf "$d"
 }
 case_T39_gate_derivation() {
@@ -754,6 +1479,38 @@ case_cap_zero_open_two_stage() {
   assert_contains "$gr" "추가 라운드 1회 열기" "상한 도달 + 열린 것 0: 렌더 1단계가 사용자 말로 「추가 라운드 1회 열기」를 싣는다"
   assert_contains "$gr" "진행 옵션으로" "상한 도달 + 열린 것 0: 1단계 둘째 선택지 「진행 옵션으로」도 함께 실린다"
   assert_not_contains "$gr" "= extra_approval" "상한 도달 + 열린 것 0: 렌더에 날 모드 토큰 'extra_approval' 이 없다"
+  rm -rf "$d"
+}
+case_AC40_extra_source_required() {
+  local d s; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC40: init 실패"; return; }
+  s="$d/s.json"; snap "$FX/design-sample.md" "$s"
+  local i; for i in 1 2 3; do py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null; done
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval '한 번 더 봐 줘' >/dev/null 2>&1; local rc=$?
+  assert_eq "$rc" "2" "AC40: 출처 없이 승인 값만 오면 rc 2"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval-source typed >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "AC40: 출처만 오면 rc 2"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval '한 번 더 봐 줘' --extra-approval-source typed >/dev/null
+  assert_eq "$(st_yaml "$d" 'st["extra_rounds"][-1]["quote"], st["extra_rounds"][-1]["source"]')" "('한 번 더 봐 줘', 'typed')" "AC40: 기타 칸 원문은 typed 로 적힌다"
+  rm -rf "$d"
+}
+case_AC40_below_cap_approval_logged() {
+  local d s; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC40: init 실패"; return; }
+  s="$d/s.json"; snap "$FX/design-sample.md" "$s"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval '미리 승인' --extra-approval-source typed >/dev/null
+  assert_eq "$(st_yaml "$d" 'len(st["extra_rounds"])')" "0" "AC40: 상한 아래서 온 승인 값은 extra_rounds 에 안 남는다"
+  assert_contains "$(cat "$d/docreview-state.md")" "추가 승인 값이 왔지만 상한 아래라 쓰지 않았다" "AC40: 그 사실이 그 라운드 로그 줄(원장 본문)에 남는다"
+  rm -rf "$d"
+}
+case_AC13_open_count_and_label() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC,$F_FIX]"
+  local s="$d/s.json"; snap "$FX/design-sample.md" "$s"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null; py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null
+  local g; g="$(py docreview_state.py gate --state-dir "$d")"
+  assert_eq "$(printf '%s' "$g" | jgets 'd["cap_reached"], d["open_total"]')" "(True, 2)" "AC13: 상한에서 열린 지적 수를 센다"
+  local r; r="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$(printf '%s\n' "$r" | head -1)" "열린 지적 2개" "AC13: 게이트 첫 줄에 열린 지적 수"
+  assert_contains "$r" "「열린 지적 2개를 두고 진행」" "AC13: 승인 선택지 이름에 열린 지적 수"
+  assert_not_contains "$r" "사용자가 직접 쓴 말로" "AC40: 옛 문구가 없다"
   rm -rf "$d"
 }
 case_precap_zero_open_not_two_stage() {
@@ -1587,7 +2344,7 @@ case_T46_unverified_two_stage_with_open_items() {   # 「미검증」 + 이전 �
   critic_dead_twice "$d"
   assert_eq "$(gsum "$d" 'd["unverified"], d["approval_gate_open"], d["approval_ready"], d["two_stage"], d["next_round_mode"]')" \
     "('critic_dead', True, False, True, 'budget')" "T46: 「미검증」 + 열린 항목 → 승인 게이트를 열되 두 단계 · 다음 라운드는 예산"
-  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "다음: 승인 게이트(「미검증」) 1단계 — 남은 항목을 처리한 뒤 진행 옵션 (다음 라운드: 재리뷰 횟수 안에서)" \
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "다음: 승인 게이트(「미검증」) 1단계 — 남은 항목을 처리하거나 「열린 지적 8개를 두고 진행」 (다음 라운드: 재리뷰 횟수 안에서)" \
     "T46: 렌더의 다음 줄이 「미검증」 라벨의 두 단계 승인 게이트다"
   rm -rf "$d"
 }
@@ -1821,7 +2578,12 @@ case_AC6_permit_contract() {
   # immutable 은 permit 으로도 못 넘는다
   d="$(r1 "$PROF_SD/brief.md" "$FX/brief-sample.md")"
   seed_findings "$d" '[{"id":"eeee0001#r1.1","lineage":"eeee0001#r1.1","bucket":"eeee0001","origin":"reviewer","layer":2,"category":"omission","anchor":"#6-사용자-원문","edit_scope":"#6-사용자-원문","disposition":"decide","summary":"x","evidence":"S1","blocks":[],"kind":"pre"}]'
-  did="$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '채택' | jgets 'd["decision_id"]')"
+  # [R2a plan 2 Task 5 fix round 2] 이제 decide 가 불변 절로 풀리는 edit_scope 의 permit 을 처음부터 열지 않는다 — 그 거부를 먼저 재고,
+  # check-intent 의 두 번째 방어선은 원장에 permit 을 손으로 심어(옛 원장 · 위조) 따로 잰다.
+  out="$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '채택' 2>&1 >/dev/null)"
+  assert_contains "$out" '"reason": "edit_scope_refused"' "AC6·AC11: 불변 절로 풀리는 edit_scope 는 decide 가 permit 을 열지 않는다"
+  did="D1.1"
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); st["decides"]["eeee0001#r1.1"]["state"]="adopted"; st["permits"]["D1.1"]={"kind":"apply","apply_anchors":["#6-사용자-원문"],"round":2,"finding_id":"eeee0001#r1.1","consumed":False}; save_state(d, st, "fixture")' "$d"
   snap "$FX/brief-sample.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
   out="$(_ci 'eeee0001#r1.1' --intent '#6-사용자-원문' --state-dir "$d" --decision-id "$did")"; rc=$?
   assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 anchor_immutable" "AC6·AC11: immutable 은 permit 으로도 절대 못 넘는다(immutable 플래그 없는 decide 의 permit 이 §6 을 겨눈 경우)"
@@ -2018,7 +2780,8 @@ case_escalated_accumulates() {
 # `intent-pass` 분기(`docreview_state.py` 의 `cmd_fix` 안, "intent-pass" 갈래)는 현재 상태를 검사하지 않고
 # `fx["state"] = "intent_passed"` 로 무조건 대입하고, `intent_passed` 는 그 가드의
 # 허용 집합 안이다. 즉 `escalate → intent-pass → escalate` 로 **check-intent 경유의
-# 자연 재예약도 가능하다** — 도달성은 원래 서술보다 더 높다. 그와 별개로 이 파일의
+# 자연 재예약도 가능하다** — 도달성은 원래 서술보다 더 높다([R2a plan 2 Task 5 3차] 그
+# `intent-pass` 이벤트는 없어졌다 — 지금은 이 재예약 경로가 없다). 그와 별개로 이 파일의
 # 다른 모든 escalated 케이스가 이미 쓰는 저수준 CLI(`docreview_state.py fix --event
 # escalate`)는 애초에 그 가드를 갖지 않는다(현재 상태를 검사하지 않고 매번 그대로
 # append 한다) — 재상승 쪽 dedup(`case_AC21_reraise_dedup`)이 `cmd_decide` 를 완전히
@@ -2177,7 +2940,7 @@ case_GR_escalated_fix_blocks_approval() {
 }
 
 # [Fix round 1 — I2/Ruling 27] escalated 된 fix 를 벗어나는 프로덕션 전이는 `cmd_fix`
-# 의 `drop`/`intent-pass`/`hold` 뿐이고, 의도된 흐름(escalate → 후속 auto-decide →
+# 의 `drop`/`hold` 뿐이고(`intent-pass` 는 R2a plan 2 Task 5 3차에서 없어졌다), 의도된 흐름(escalate → 후속 auto-decide →
 # 채택)은 원본 fix 의 `state` 를 안 건드린다 — 리뷰 실측대로 그대로 두면 한 번 escalate
 # 된 fix 는 `approval_ready` 를 영구히 False 로 묶는다. `drop` 은 상태 가드가 없어
 # (AC23 이 이미 연 탈출구, 이 태스크가 새로 만든 것이 아니다) escalated 에서도 그대로
@@ -2490,7 +3253,7 @@ print(len(pos) >= 2 and pos == sorted(pos), len(pos))
   # 항목 머리는 열 0 의 「- 」로 시작하고 id 괄호(「(<id>)」 · 「(<id> · 자동)」)로 끝난다 — 그 모양만 센다.
   # 묶음 제목과 「  그대로 두면:」 같은 이어지는 줄은 열 0 의 「- 」가 아니라 안 걸린다. n_items 는 GATE_ROWS
   # 전 행의 합이므로 두 값이 같으면 렌더가 항목을 빼거나 더하지 않았다는 뜻이다.
-  local n_headers; n_headers="$(printf '%s\n' "$render" | grep -cE '^- .* \([0-9a-f]+#r[0-9]+\.[0-9]+( · 자동)?\)$' || true)"
+  local n_headers; n_headers="$(printf '%s\n' "$render" | grep -cE '^- .* \([0-9a-f]+#r[0-9]+\.[0-9]+( · [^()]*)?\)$' || true)"
   [ "${n_items:-0}" -gt 0 ] \
     && ok "AC18' 양의 짝: 이 케이스에 열린 항목이 ${n_items}개 있다 (아래 등식이 0 == 0 으로 통과하지 않는다)" \
     || no "AC18': 열린 항목이 0개다 — 아래 등식이 공허하다. 항목을 만드는 픽스처로 바꿔라"
@@ -2942,4 +3705,558 @@ case_same_name_block_broken_kills_critic() {
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$f")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep.json"; local rc=$?
   assert_eq "$rc" "4" "같은 이름 블록 하나라도 파손 → 출력 전체가 탐지 사망(rc 4)"
   rm -rf "$d"
+}
+# ── AC14 — 파서는 줄인 플래그를 거부한다 ─────────────────────────────────
+case_AC14_no_abbrev_flags() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC14: r1 실패"; return; }
+  py docreview_state.py advice --state-dir "$d" --rend >/dev/null 2>&1; local rc=$?
+  assert_eq "$rc" "2" "AC14: advice --rend(줄인 --render)는 사용법 오류 rc 2"
+  py docreview_state.py gate --state-dir "$d" --rend >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "AC14: gate --rend 도 rc 2"
+  py docreview_route.py finalize --state-dir "$d" --recritic-s >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "AC14: 라우터 finalize --recritic-s(줄인 --recritic-skipped)도 rc 2"
+  py docreview_state.py gate --state-dir "$d" --render >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "0" "AC14 양성 짝: 온전한 플래그는 그대로 rc 0"
+  rm -rf "$d"
+}
+# ── AC14 — brief 「## 6」 은 끝에 덧붙인 줄만이면 통과 ─────────────────────
+case_AC14_append_only_passes() {
+  local d s1 s2; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC14: init 실패"; return; }
+  s1="$d/s1.json"; snap "$FX/brief-append-r1.md" "$s1"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s1" >/dev/null
+  s2="$d/s2.json"; snap "$FX/brief-append-r2.md" "$s2"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s2" >/dev/null
+  py docreview_state.py exempt-anchors --state-dir "$d" > "$d/ex2.json"
+  # yaml 은 -I 로는 안 보이는 사용자 site 에 있을 수 있다 — st_get.py(비-I)에 식을 넘기고 엔진은 PYTHONPATH 로 건다.
+  local out; out="$(PYTHONPATH="$SCRIPTS" python3 "$FX/st_get.py" "$d/docreview-state.md" '(lambda D: ([c["anchor"] for c in D["changed"]], [e.get("scope") for e in D["exempt_applied"]]))(__import__("docreview_state").round_diff(st, __import__("docreview_state").load_profile(st["profile"]), 2))')"
+  assert_eq "$out" "([], ['append-only'])" "AC14: 「## 6」 끝에 덧붙인 줄만이면 changed 가 없고 append-only 면제로 보인다"
+  rm -rf "$d"
+}
+case_AC14_append_only_plus_edit() {
+  local d s1 s2; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC14: init 실패"; return; }
+  s1="$d/s1.json"; snap "$FX/brief-append-r1.md" "$s1"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s1" >/dev/null
+  s2="$d/s2.json"; snap "$FX/brief-append-r2-edit.md" "$s2"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s2" >/dev/null
+  # yaml 은 -I 로는 안 보이는 사용자 site 에 있을 수 있다 — st_get.py(비-I)에 식을 넘기고 엔진은 PYTHONPATH 로 건다.
+  local out; out="$(PYTHONPATH="$SCRIPTS" python3 "$FX/st_get.py" "$d/docreview-state.md" '(lambda D: [c["anchor"] for c in D["changed"]])(__import__("docreview_state").round_diff(st, __import__("docreview_state").load_profile(st["profile"]), 2))')"
+  assert_eq "$out" "['#6-사용자-원문']" "AC14: 이미 있는 원문 줄이 바뀌면 덧붙인 줄이 함께 있어도 frozen_change 대상이다"
+  rm -rf "$d"
+}
+case_AC14_line_hashes_only_immutable() {
+  local d s1; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC14: init 실패"; return; }
+  s1="$d/s1.json"; snap "$FX/brief-append-r1.md" "$s1"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s1" >/dev/null
+  assert_eq "$(st_yaml "$d" 'sorted(s["anchor"] for s in st["snapshots"]["1"]["sections"] if "line_hashes" in s)')" "['#6-사용자-원문']" "AC14: 원장 스냅숏은 불변 절에만 줄 해시를 남긴다(원장 크기)"
+  rm -rf "$d"
+}
+
+# ── AC15 — 엔진이 쓰는 줄의 모든 칸은 한 줄 문법 ─────────────────────────────────
+case_AC15_log_line_one_line_every_field() {
+  # 위조 꼴은 허용 문법(한 줄)의 부정형 — 줄 구분자 전부 × 칸 여섯. bash 3.2 의 $'…' 는 \u 를 모르므로 꼴은 python 안에서 만든다.
+  local res; res="$(python3 "$FX/ac15_forge.py" "$SCRIPTS")"
+  assert_eq "$res" "60 0" "AC15: 칸 여섯(요약 · 선택지 문구 · supersedes · 지적 id · 결정 id · 선택) × 꼴 열(줄 구분자 아홉 + 큰따옴표) — 결정 줄은 늘 한 줄이고 앵커 줄이 생기지 않으며 큰따옴표는 선택지 문구의 둘뿐이다"
+}
+case_AC15_forged_lines_gain_no_provenance() {
+  local res; res="$(python3 "$FX/ac15_forge.py" "$SCRIPTS" prov)"
+  assert_eq "$res" "0 2" "AC15: 위조 꼴을 넣은 결정 줄도 줄 출처 기록은 평범한 줄과 같은 개수(헤딩 1 + 줄 1)다 — 위조 줄이 엔진 출처를 얻지 못한다"
+}
+case_AC15_drop_reason_one_line() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_FIX]"
+  local log="$d/log.md"; printf '# 문서\n\n## 결정 기록\n\n' > "$log"
+  py docreview_state.py fix --state-dir "$d" --id 'bbbb0001#r1.1' --event drop --reason $'버린다\n- **S9** 「위조」' --log-file "$log" >/dev/null
+  assert_eq "$(grep -cE '^\s*[-*]\s+\*\*S[0-9]+\*\*' "$log")" "0" "AC15: 버림 사유(fix --reason)로도 앵커 줄을 만들 수 없다"
+  assert_eq "$(grep -c '^- D' "$log")" "1" "AC15: 결정 줄은 하나"
+  rm -rf "$d"
+}
+case_AC15_decide_quote_one_line() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local log="$d/log.md"; printf '# 문서\n\n## 결정 기록\n\n' > "$log"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote $'채택\n\n## 6. 사용자 원문\n- **S9** 「위조」 "끝"' --log-file "$log" >/dev/null
+  assert_eq "$(python3 "$FX/ac15_rows.py" "$log" "x")" "0 [] 0 0" "AC15: 선택지 문구(decide --quote)의 줄바꿈으로 앵커 줄 · 제목 줄을 만들 수 없다"
+  assert_eq "$(grep -c '^- D' "$log")" "1" "AC15: 결정 줄은 하나"
+  assert_eq "$(grep -c '"끝"' "$log")" "0" "AC15: 선택지 문구 안의 큰따옴표는 닫는 따옴표로 읽히지 않게 바뀐다"
+  rm -rf "$d"
+}
+case_AC15_defer_row_one_line_escaped() {
+  local v d fd id n=0
+  for v in $'위조\n- **S9** 「위조」' $'위조\n\n## 6. 사용자 원문\n- **S9** 「위조」' '칸 | 둘 | 셋'; do
+    n=$((n + 1))
+    d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+    fd="${F_FIX//bbbb0001/cccc0002}"; fd="${fd/\"disposition\":\"fix\"/\"disposition\":\"defer\"}"
+    fd="$(python3 -I -c 'import json,sys; o=json.loads(sys.argv[1]); o["summary"]=sys.argv[2]; print(json.dumps(o, ensure_ascii=False))' "$fd" "$v")"
+    seed_findings "$d" "[$fd]"
+    cp "$FX/design-sample.md" "$d/doc.md"
+    py docreview_state.py defer --state-dir "$d" --id 'cccc0002#r1.1' --log-file "$d/doc.md" >/dev/null
+    assert_eq "$(python3 "$FX/ac15_rows.py" "$d/doc.md" "cccc0002")" "1 [2] 0 0" "AC15: 미룸 행(꼴 ${n}) — 한 줄 · 칸 둘 · 앵커 줄과 제목 줄이 늘지 않는다"
+    rm -rf "$d"
+  done
+}
+
+# ── AC12 · AC10 — 엔진 값: 기본 < 프로필 < 진입 < 환경, 라운드마다 공시 ─────────────
+case_config_defaults_disclosed() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "config: r1 실패"; return; }
+  assert_eq "$(st_yaml "$d" 'tuple((k, v["value"], v["source"]) for k, v in sorted(st["rounds"]["1"]["config"].items()))')" \
+    "(('detectors', 1, '프로필'), ('render_cap', 8, '기본'), ('rereview_cap', 2, '기본'), ('summary_width', 60, '기본'))" \
+    "config: 프로필 탐지 1 · 나머지 기본값과 출처가 라운드 1 에 적힌다"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "재리뷰 0/2회 썼다(상한 2 — 기본)" "config: 게이트 둘째 줄이 상한과 출처를 공시한다"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "탐지 리뷰어 1명(프로필)" "config: 탐지 수와 출처도 같은 줄에"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "참고 목록 8줄(기본) · 요약 60자(기본)" "config: 참고 목록 줄 수와 요약 폭도 출처와 함께 같은 줄에"
+  rm -rf "$d"
+}
+case_config_env_wins() {
+  local d s; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "config: init 실패"; return; }
+  s="$d/s1.json"; snap "$FX/design-sample.md" "$s"
+  local out; out="$(DEVBREW_DOCREVIEW_DETECTORS=3 DEVBREW_DOCREVIEW_REREVIEW_CAP=0 py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --detectors 2)"
+  assert_eq "$(printf '%s' "$out" | jgets 'd["config"]["detectors"]["value"], d["config"]["detectors"]["source"], d["config"]["rereview_cap"]["value"]')" "(3, '환경', 0)" "config: 환경이 진입(--detectors 2)과 프로필을 이긴다"
+  DEVBREW_DOCREVIEW_REREVIEW_CAP=0 py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null 2>&1; local rc=$?
+  assert_eq "$rc" "3" "config: 상한 0 이면 라운드 2 는 승인 없이 rc 3"
+  rm -rf "$d"
+}
+case_config_entry_beats_profile() {
+  local d s; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "config: init 실패"; return; }
+  s="$d/s1.json"; snap "$FX/design-sample.md" "$s"
+  assert_eq "$(env -u DEVBREW_DOCREVIEW_DETECTORS python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d" --snapshot "$s" --detectors 2 | jgets 'd["config"]["detectors"]["value"], d["config"]["detectors"]["source"]')" "(2, '진입')" "config: 진입 선언이 프로필(1)을 이긴다"
+  rm -rf "$d"
+}
+case_config_invalid_refused() {
+  local d s; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "config: init 실패"; return; }
+  s="$d/s1.json"; snap "$FX/design-sample.md" "$s"
+  local err rc; err="$(DEVBREW_DOCREVIEW_DETECTORS=two py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc" "2" "config: 정수가 아닌 환경 값은 라운드를 시작하지 않는다(rc 2)"
+  assert_contains "$err" '"reason": "config_invalid"' "config: 사유 이름"
+  assert_contains "$err" "DEVBREW_DOCREVIEW_DETECTORS" "config: 변수 이름을 낸다"
+  assert_contains "$err" '"value": "two"' "config: 거부된 값도 낸다"
+  for bad in 1_0 ' 2' '+2' '２'; do
+    DEVBREW_DOCREVIEW_DETECTORS="$bad" py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null 2>&1; rc=$?
+    assert_eq "$rc" "2" "config: 환경 값 '${bad}' 은 엄격한 정수가 아니라 거부된다"
+  done
+  assert_eq "$(st_yaml "$d" 'st["round"]')" "0" "config: 거부는 원장을 바꾸지 않는다"
+  DEVBREW_DOCREVIEW_RENDER_CAP=0 py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "config: 조언 줄 수 0 은 범위 밖"
+  rm -rf "$d"
+}
+case_config_changes_between_rounds() {
+  local d s; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "config: r1 실패"; return; }
+  s="$d/s2.json"; snap "$FX/design-sample.md" "$s"
+  DEVBREW_DOCREVIEW_DETECTORS=2 py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null
+  assert_eq "$(st_yaml "$d" 'st["rounds"]["1"]["config"]["detectors"]["value"], st["rounds"]["2"]["config"]["detectors"]["value"], st["rounds"]["2"]["config"]["detectors"]["source"]')" "(1, 2, '환경')" "config: 라운드마다 따로 적히고 앞 라운드 기록은 그대로다"
+  rm -rf "$d"
+}
+case_config_profile_fields() {
+  local p; p="$(mktemp -d -t prof-XXXXXX)"
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); t=t.replace("detectors: 1\n","detectors: 2\nrereview_cap: 4\nrender_cap: 12\nsummary_width: 80\n",1); open(sys.argv[2],"w",encoding="utf-8").write(t)' "$PROF_SD/design-doc.md" "$p/design-doc.md"
+  local d s; d="$(mk_state "$FX/design-sample.md" "$p/design-doc.md")" || { no "config: init 실패"; rm -rf "$p"; return; }
+  s="$d/s1.json"; snap "$FX/design-sample.md" "$s"
+  assert_eq "$(env -u DEVBREW_DOCREVIEW_DETECTORS -u DEVBREW_DOCREVIEW_REREVIEW_CAP -u DEVBREW_DOCREVIEW_RENDER_CAP -u DEVBREW_DOCREVIEW_SUMMARY_WIDTH python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d" --snapshot "$s" | jgets 'tuple((k, v["value"], v["source"]) for k, v in sorted(d["config"].items()))')" \
+    "(('detectors', 2, '프로필'), ('render_cap', 12, '프로필'), ('rereview_cap', 4, '프로필'), ('summary_width', 80, '프로필'))" "config: 프로필 필드 넷이 먹는다"
+  rm -rf "$d" "$p"
+}
+case_config_profile_string_refused() {
+  local p; p="$(mktemp -d -t prof-XXXXXX)"
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); t=t.replace("detectors: 1\n","detectors: 1\nrender_cap: \"8\"\n",1); open(sys.argv[2],"w",encoding="utf-8").write(t)' "$PROF_SD/design-doc.md" "$p/design-doc.md"
+  py docreview_state.py profile-check "$p/design-doc.md" >/dev/null 2>&1; local rc=$?
+  assert_eq "$rc" "2" "config: 프로필의 문자열 값(render_cap: \"8\")은 정수형이 아니라 거부된다"
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); t=t.replace("detectors: 1\n","detectors: 1\nrender_cap: true\n",1); open(sys.argv[2],"w",encoding="utf-8").write(t)' "$PROF_SD/design-doc.md" "$p/design-doc.md"
+  py docreview_state.py profile-check "$p/design-doc.md" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "config: 프로필의 true 도 거부된다"
+  rm -rf "$p"
+}
+case_config_rereview_count_never_decreases() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "config: r1 실패"; return; }
+  next_round "$d" "$FX/design-sample.md" >/dev/null; next_round "$d" "$FX/design-sample.md" >/dev/null
+  assert_eq "$(st_yaml "$d" 'st["round"], st["rereview_count"]')" "(3, 2)" "config: 라운드 3 까지 재리뷰 2회"
+  local s="$d/s4.json"; snap "$FX/design-sample.md" "$s"
+  DEVBREW_DOCREVIEW_REREVIEW_CAP=1 py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" --extra-approval "승인 인용" --extra-approval-source typed >/dev/null
+  assert_eq "$(st_yaml "$d" 'st["round"], st["rereview_count"]')" "(4, 2)" "config: 상한을 낮춘 뒤 추가 승인으로 돈 라운드 4 도 재리뷰 횟수는 줄지 않는다"
+  rm -rf "$d"
+}
+# ── AC10 · AC11 — 탐지 리뷰어 여럿 ───────────────────────────────────────
+r1_detectors() {   # r1_detectors <N> <profile> <doc> → round 1 begun with N detectors (환경으로)
+  local d s; d="$(mk_state "$3" "$2")" || return 1; s="$d/s1.json"; snap "$3" "$s"
+  DEVBREW_DOCREVIEW_DETECTORS="$1" py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null; echo "$d"
+}
+case_detectors_merge_and_source() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  local c1 c2; c1="$(critic_now "$d" "$FX/critic-r1.txt")"; cp "$FX/critic-d2.txt" "$d/critic-2.txt"; c2="$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$c1" --critic "$c2" --codex "$(codex_now "$d" "$FX/codex-r1.yaml")" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'any("detector" in i for i in d["items"])')" "False" "AC10: 재비판 입력에는 출처 리뷰어가 없다(익명화)"
+  assert_eq "$(st_yaml "$d" 'sorted({p["finding"].get("detector") for p in st["pending_recritic"]["items"] if p["source"]=="critic"})')" "['d1', 'd2']" "AC10: 원장 준비에는 리뷰어마다 출처가 있다"
+  assert_eq "$(st_yaml "$d" '[p["finding"]["blocks"] for p in st["pending_recritic"]["items"] if p["finding"]["summary"].startswith("넘김 절의 경로")][0] == [[p["f"] for p in st["pending_recritic"]["items"] if p["finding"]["summary"].startswith("넘김 절에 이어")][0]]')" "True" "AC10: 둘째 리뷰어의 질문은 자기 c1 을 막는다(번호 충돌 없음)"
+  rm -rf "$d"
+}
+case_detectors_partial_death() {
+  local d; d="$(r1_detectors 3 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC11: r1 실패"; return; }
+  local c1 c2; c1="$(critic_now "$d" "$FX/critic-r1.txt")"; cp "$FX/critic-d2.txt" "$d/critic-2.txt"; c2="$d/critic-2.txt"
+  cp "$FX/critic-broken.txt" "$d/critic-3.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$c1" --critic "$c2" --critic "$d/critic-3.txt" > "$d/prep.json"; local rc=$?
+  assert_eq "$rc" "0" "AC11: 일부 사망은 라운드를 죽이지 않는다(rc 0)"
+  assert_eq "$(jget "$d/prep.json" 'd["degrade"]["detectors"]["expected"], d["degrade"]["detectors"]["dead"], d["degrade"]["critic_dead"]')" "(3, [3], False)" "AC11: 탐지 3 중 셋째 사망 · 주 판정자 사망 아님"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_contains "$(jget "$d/fin.json" '" | ".join(d["advisory"])')" "탐지 3 중 1 사망" "AC11: 라우팅 보고가 degrade 로 공시한다"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | head -1)" "탐지 리뷰어 3명 중 1명이 결과를 내지 못했다" "AC11: 게이트 첫 줄 경고가 쉬운 말로 말한다"
+  rm -rf "$d"
+}
+case_detectors_all_dead() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC11: r1 실패"; return; }
+  cp "$FX/critic-broken.txt" "$d/critic-1.txt"; cp "$FX/critic-broken.txt" "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-1.txt" --critic "$d/critic-2.txt" > "$d/prep.json"; local rc=$?
+  assert_eq "$rc" "4" "AC11: 전부 죽으면 지금처럼 critic 사망 rc 4"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["unverified"]')" "critic_dead" "AC11: 게이트는 「미검증」"
+  rm -rf "$d"
+}
+case_detectors_count_mismatch() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'd["degrade"]["detectors"]["expected"], d["degrade"]["detectors"]["dead"]')" "(2, [2])" "AC10: 기대 2 인데 파일 1 이면 빠진 둘째를 사망으로 센다(조용히 1 로 줄이지 않는다)"
+  rm -rf "$d"
+}
+case_detectors_dangling_block_no_tag_leak() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  local c1; c1="$(critic_now "$d" "$FX/critic-r1.txt")"; cp "$FX/critic-d2-dangling.txt" "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$c1" --critic "$d/critic-2.txt" > "$d/prep.json"
+  assert_eq "$(grep -c '@d' "$d/prep.json")" "0" "AC10: 재비판 입력 전체에 리뷰어 꼬리표(@d)가 없다(없는 항목을 막는 참조 포함)"
+  assert_eq "$(grep -c '@b' "$d/prep.json")" "0" "AC10: 블록 꼬리표(@b)도 없다"
+  assert_eq "$(jget "$d/prep.json" '[i["blocks"] for i in d["items"] if "없는 항목 참조" in i["summary"]]')" "[['c9']]" "AC10: 풀리지 않는 참조는 꼬리표를 뗀 중립 형태로 남는다(최종 단계가 어차피 버린다)"
+  rm -rf "$d"
+}
+case_detectors_overlap_absorbed() {
+  local d1 d2 n1 n2
+  d1="$(r1_detectors 1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  py docreview_route.py prepare-recritic --state-dir "$d1" --critic "$(critic_now "$d1" "$FX/critic-r1.txt")" > "$d1/prep.json"
+  n1="$(jget "$d1/prep.json" 'len(d["items"])')"
+  d2="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  critic_now "$d2" "$FX/critic-r1.txt" >/dev/null; cp "$FX/critic-r1.txt" "$d2/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d2" --critic "$d2/critic.txt" --critic "$d2/critic-2.txt" > "$d2/prep.json"
+  assert_eq "$(jget "$d2/prep.json" 'len(d["items"])')" "$n1" "AC10: 같은 지적 둘은 하나로 센다(두 배가 되지 않는다)"
+  assert_eq "$(st_yaml "$d2" 'len([e for e in st["pending_recritic"]["events"] if e[0]=="absorbed"])')" "$n1" "AC10: 버려진 중복 하나하나를 흡수로 센다"
+  rm -rf "$d1" "$d2"
+}
+case_detectors_overlap_malformed_notice_follows_contradicts() {
+  local d c1 c2 mk
+  mk() {   # mk <파일> <contradicts 줄 또는 빈 값> — 같은 지적 하나
+    printf '%s\n' '```docreview-layer1' '[]' '```' '```docreview-layer2' '- ref: c1' '  layer: 2' '  category: placeholder' '  anchor: "#handoff-context"' '  disposition: fix' '  summary: "넘김 절에 경로가 없다"' '  edit_scope: "#handoff-context"' ${2:+"$2"} '```' > "$1"
+  }
+  d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  c1="$d/critic-1.txt"; c2="$d/critic-2.txt"
+  mk "$c1" '  contradicts: D1.1'; mk "$c2" '  contradicts: "형식 아님 !"'
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$c1" --critic "$c2" > "$d/prep.json"
+  assert_eq "$(st_yaml "$d" 'len(st["pending_recritic"]["items"])')" "1" "AC10: 전제 — 같은 지적 둘은 하나로 합쳐진다"
+  assert_eq "$(st_yaml "$d" 'bool(st["pending_recritic"]["items"][0]["finding"].get("_contradicts_malformed"))')" "False" "AC39: 유효한 번호를 단 남은 항목은 버려진 사본의 형식 위반 표시를 물려받지 않는다"
+  assert_eq "$(jget "$d/prep.json" 'sorted(k for i in d["items"] for k in i if k.startswith("_"))')" "[]" "AC10: 재비판자에게 가는 항목에 엔진 내부 칸(_ 시작)이 없다"
+  mk "$c1" ''; mk "$c2" '  contradicts: "형식 아님 !"'
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$c1" --critic "$c2" > "$d/prep.json"
+  assert_eq "$(st_yaml "$d" 'bool(st["pending_recritic"]["items"][0]["finding"].get("_contradicts_malformed"))')" "True" "AC39 양성 짝: 남은 항목에 번호가 없으면 버려진 사본의 형식 위반 표시를 물려받는다"
+  rm -rf "$d"
+}
+case_detectors_overlap_repoints_blocks() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  cp "$FX/critic-d1-only.txt" "$d/critic-1.txt"; cp "$FX/critic-d2.txt" "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-1.txt" --critic "$d/critic-2.txt" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'len(d["items"])')" "2" "AC10: 겹치는 첫째 지적은 하나만 남는다"
+  assert_eq "$(jget "$d/prep.json" '[i["blocks"] for i in d["items"] if i["summary"].startswith("넘김 절의 경로")][0] == [i["f"] for i in d["items"] if i["summary"].startswith("넘김 절에 이어")]')" "True" "AC10: 버려진 지적을 막던 질문은 남은 지적을 막는다"
+  assert_eq "$(st_yaml "$d" 'sorted(p["finding"]["detector"] for p in st["pending_recritic"]["items"])')" "['d1', 'd2']" "AC10: 남은 것은 가장 앞 리뷰어의 지적이다"
+  rm -rf "$d"
+}
+case_detectors_overlap_keeps_both_blocks() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  cp "$FX/critic-d1-blocks.txt" "$d/critic-1.txt"; cp "$FX/critic-d2-blocks.txt" "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-1.txt" --critic "$d/critic-2.txt" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'len(d["items"])')" "3" "AC10: 같은 질문 하나와 서로 다른 고침 둘이 남는다"
+  assert_eq "$(jget "$d/prep.json" '[len(i["blocks"]) for i in d["items"] if i["summary"].startswith("넘김 절의 경로")][0]')" "2" "AC10: 흡수된 사본이 막던 고침도 남은 질문이 계속 막는다(막는 항목 둘)"
+  rm -rf "$d"
+}
+case_detectors_identical_pair_counts_blocks_once() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  cp "$FX/critic-d2.txt" "$d/critic-1.txt"; cp "$FX/critic-d2.txt" "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-1.txt" --critic "$d/critic-2.txt" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" '[len(i["blocks"]) for i in d["items"] if i["summary"].startswith("넘김 절의 경로")][0]')" "1" "AC10: 두 리뷰어가 같은 질문과 고침을 내도 막는 항목은 하나로 센다"
+  rm -rf "$d"
+}
+case_same_as_merge_counts_blocked_fix_once() {
+  local d cr rt f1 f2; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  cr="$d/critic-src.txt"
+  printf '%s\n' '```docreview-layer1' '[]' '```' '```docreview-layer2' '- ref: c1' '  layer: 2' '  category: placeholder' '  anchor: "#handoff-context"' '  disposition: fix' '  summary: "넘김 절에 경로가 없다"' '  edit_scope: "#handoff-context"' '- ref: c2' '  layer: 2' '  category: placeholder' '  anchor: "#handoff-context"' '  disposition: fix' '  summary: "넘김 절에 이어 갈 위치가 없다"' '  edit_scope: "#handoff-context"' '- ref: c3' '  layer: 2' '  category: ambiguity' '  anchor: "#handoff-context"' '  disposition: ask' '  summary: "넘김 절의 경로를 어디로 둘지 정해야 한다"' '  blocks: [c1, c2]' '```' > "$cr"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$cr")" > "$d/prep.json"
+  f1="$(jget "$d/prep.json" "[i['f'] for i in d['items'] if i['summary']=='넘김 절에 경로가 없다'][0]")"
+  f2="$(jget "$d/prep.json" "[i['f'] for i in d['items'] if i['summary']=='넘김 절에 이어 갈 위치가 없다'][0]")"
+  rt="$d/rt.txt"
+  printf '```docreview-recritic\nverdicts:\n  - f: "%s"\n    verdict: confirm\n    same_as: ["%s"]\nadded: []\n```\n' "$f2" "$f1" > "$rt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" '[len(x["blocks"]) for x in d["findings"] if x["category"]=="ambiguity"][0]')" "1" "AC10: 재비판이 두 고침을 하나로 묶어도 질문이 막는 항목은 한 번만 센다"
+  rm -rf "$d"
+}
+case_detectors_absorb_fills_contradicts() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  cp "$FX/critic-d1-blocks.txt" "$d/critic-1.txt"; cp "$FX/critic-d2-contra.txt" "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-1.txt" --critic "$d/critic-2.txt" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" '[i.get("contradicts") for i in d["items"] if i["summary"].startswith("넘김 절의 경로")][0]')" "D1.1" "AC39: 결정 반대 번호가 둘째 리뷰어에만 있어도 남은 지적이 이어받는다"
+  rm -rf "$d"
+}
+case_detectors_at_ref_coerced() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  cp "$FX/critic-d1-atref.txt" "$d/critic-1.txt"; cp "$FX/critic-d2-atref.txt" "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic-1.txt" --critic "$d/critic-2.txt" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" '[i["blocks"] for i in d["items"] if i["summary"].startswith("넘김 절의 경로")][0] == [i["f"] for i in d["items"] if i["summary"].startswith("넘김 절에 이어")]')" "True" "AC10: 첫째 리뷰어가 둘째의 꼬리표를 흉내 내도 둘째의 질문은 제 고침을 계속 막는다"
+  assert_eq "$(st_yaml "$d" 'len([e for e in st["pending_recritic"]["events"] if e[0]=="coerced" and e[1]=="ref"])')" "1" "AC10: ref 의 @ 는 바꾸고 센다"
+  rm -rf "$d"
+}
+case_detectors_one_warning_per_partial_death() {
+  local d; d="$(r1_detectors 3 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC11: r1 실패"; return; }
+  local c1; c1="$(critic_now "$d" "$FX/critic-r1.txt")"; cp "$FX/critic-d2.txt" "$d/critic-2.txt"; cp "$FX/critic-broken.txt" "$d/critic-3.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$c1" --critic "$d/critic-2.txt" --critic "$d/critic-3.txt" > "$d/prep.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" 'len([w for w in d["advisory"] if "탐지 3 중" in w])')" "1" "AC11: 일부 사망은 라우팅 경고 한 줄"
+  assert_eq "$(jget "$d/fin.json" 'len([w for w in d["advisory"] if "doc-critic#" in w])')" "0" "AC11: 같은 사실의 원장 문구가 둘째 경고로 나오지 않는다"
+  local first; first="$(py docreview_state.py gate --state-dir "$d" --render | head -1)"
+  assert_eq "$(printf '%s' "$first" | grep -c '보조 리뷰어')" "0" "AC11: 탐지 리뷰어를 보조라고 부르지 않는다"
+  assert_eq "$(printf '%s' "$first" | grep -o '탐지 리뷰어' | wc -l | tr -d ' ')" "1" "AC11: 게이트 첫 줄의 탐지 경고는 한 번"
+  rm -rf "$d"
+}
+case_detectors_single_layer2_reason_kept() {
+  local d; d="$(r1_detectors 1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  printf '```docreview-layer1\n[]\n```\n```docreview-layer2\na: b\n```\n' > "$d/critic.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$d/critic.txt" > "$d/prep.json"
+  assert_eq "$(st_yaml "$d" '[e[2] for e in st["pending_recritic"]["events"] if e[0]=="uncountable"]')" "['block not a list']" "AC10: 탐지 하나일 때 층 2 사유는 예전 문구 그대로"
+  rm -rf "$d"
+}
+case_detectors_stale_file_per_file() {
+  local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  cp "$FX/critic-d2.txt" "$d/critic-2.txt"; touch -t 200001010000 "$d/critic-2.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-r1.txt")" --critic "$d/critic-2.txt" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'd["degrade"]["detectors"]["dead_reasons"].get("2")')" "critic_predates_round" "AC10: 신선도는 파일마다 — 라운드 시작보다 오래된 둘째만 사망"
+  rm -rf "$d"
+}
+
+# ── AC17 — 원장 요약값: 엔진 밖에서 고친 원장은 복구 길과 함께 멈춘다 ─────────────────
+# 확인값이 생기기 전 버전이 쓴 원장을 흉내 낸다 — 확인값 줄과 시대 표지 파일을 함께 없앤다.
+legacy_ledger() {   # legacy_ledger <state-dir>
+  python3 -I -c 'import sys,re; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); open(p,"w",encoding="utf-8").write(re.sub(r"^docreview_digest: .*\n","",t,count=1,flags=re.M))' "$1/docreview-state.md"
+  rm -f "$1/docreview-digest-era"
+}
+case_AC17_digest_mismatch_stops() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_contains "$(head -3 "$d/docreview-state.md")" "docreview_digest:" "AC17: 엔진이 저장할 때 요약값을 쓴다"
+  python3 -I -c 'import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); open(p,"w",encoding="utf-8").write(t.replace("round: 1","round: 7",1))' "$d/docreview-state.md"
+  local err rc; err="$(py docreview_state.py gate --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc" "1" "AC17: 상태만 바꾼 원장은 멈춘다"
+  assert_contains "$err" '"reason": "ledger_corrupt"' "AC17: 사유 이름"
+  assert_contains "$err" "1라운드부터 다시 리뷰" "AC17: 복구 길을 함께 낸다"
+  assert_contains "$err" "$d/docreview-state.md" "AC17: 원장 경로를 낸다"
+  err="$(py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "ledger_corrupt"')" "1 1" "AC17: 라우터도 같은 사유로 멈춘다"
+  rm -rf "$d"
+}
+case_AC17_digest_covers_engine_lines_and_body() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  cp "$d/docreview-state.md" "$d/orig.md"
+  python3 -I -c 'import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); assert "  engine_lines: []\n" in t; open(p,"w",encoding="utf-8").write(t.replace("  engine_lines: []\n","  engine_lines:\n  - aaaaaaaaaaaa\n",1))' "$d/docreview-state.md"
+  local err rc; err="$(py docreview_state.py gate --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "ledger_corrupt"')" "1 1" "AC17: 엔진 줄 기록만 바꿔도 멈춘다"
+  cp "$d/orig.md" "$d/docreview-state.md"
+  printf -- '- r1: 손으로 덧붙인 줄\n' >> "$d/docreview-state.md"
+  err="$(py docreview_state.py gate --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "ledger_corrupt"')" "1 1" "AC17: 본문 줄만 덧붙여도 멈춘다"
+  cp "$d/orig.md" "$d/docreview-state.md"
+  py docreview_state.py gate --state-dir "$d" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "0" "AC17 양성 대조: 엔진이 쓴 그대로면 통과한다"
+  rm -rf "$d"
+}
+case_AC17_digest_backfill_disclosed_once() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  legacy_ledger "$d"
+  py docreview_state.py gate --state-dir "$d" >/dev/null; local rc=$?
+  assert_eq "$rc" "0" "AC17: 요약값 없는 기존 원장은 손상으로 보지 않는다"
+  local s="$d/s2.json"; snap "$FX/design-sample.md" "$s"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" >/dev/null
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "원장 확인값을 이번에 채웠다" "AC17: 채운 라운드 머리에 한 번 공시"
+  local s3="$d/s3.json"; snap "$FX/design-sample.md" "$s3"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$s3" >/dev/null
+  assert_not_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "원장 확인값을 이번에 채웠다" "AC17: 다음 라운드엔 다시 말하지 않는다"
+  rm -rf "$d"
+}
+case_AC17_digest_line_strip_stops() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_eq "$([ -f "$d/docreview-digest-era" ] && echo yes)" "yes" "AC17: 처음 확인값을 쓰면 시대 표지 파일을 함께 둔다"
+  python3 -I -c 'import sys,re; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); t=re.sub(r"^docreview_digest: .*\n","",t,count=1,flags=re.M); open(p,"w",encoding="utf-8").write(t.replace("round: 1","round: 7",1))' "$d/docreview-state.md"
+  local err rc; err="$(py docreview_state.py gate --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "ledger_corrupt"')" "1 1" "AC17: 확인값 줄을 지우고 상태를 바꿔도 읽기 전용 gate 가 멈춘다"
+  rm -rf "$d"
+}
+case_AC17_era_marker_failure_disclosed() {
+  local d s err rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  rm -f "$d/docreview-digest-era"
+  s="$d.snap.json"; snap "$FX/design-sample.md" "$s"
+  chmod 555 "$d"
+  err="$(py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" 2>&1 >/dev/null)"; rc=$?
+  chmod 755 "$d"
+  assert_eq "$rc" "0" "AC17: 표지 파일을 못 만들어도 원장 갱신은 계속된다"
+  assert_contains "$err" "시대 표지 파일을 만들지 못했다" "AC17: 표지 파일을 만들지 못한 것을 한 줄로 알린다"
+  assert_contains "$err" "$d/docreview-digest-era" "AC17: 그 줄이 표지 파일 경로를 댄다"
+  assert_eq "$([ -e "$d/docreview-digest-era" ] && echo yes || echo no)" "no" "AC17: 전제 — 표지 파일은 실제로 만들어지지 않았다"
+  rm -f "$s"; rm -rf "$d"
+}
+case_AC17_legacy_disclosed_on_every_load() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  legacy_ledger "$d"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "원장 확인값이 없다" "AC17: 확인값 없는 옛 원장은 저장 전 읽기 전용 gate 에서도 알린다"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("digest_missing"))')" "True" "AC17: gate JSON 에 digest_missing"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render | sed -n 2p)" "원장 확인값이 없다" "AC17: 두 번째 읽기에서도 다시 알린다"
+  rm -rf "$d"
+}
+case_AC17_misplaced_or_malformed_digest_stops() {
+  local d err rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  rm -f "$d/docreview-digest-era"   # 시대 표지가 없어야 «확인값 줄 모양» 가지만 잰다
+  cp "$d/docreview-state.md" "$d/orig.md"
+  python3 -I -c 'import sys,re; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); m=re.search(r"^docreview_digest: .*\n",t,re.M); t=t.replace(m.group(0),"",1).replace("\n---\n","\n"+m.group(0)+"---\n",1); open(p,"w",encoding="utf-8").write(t)' "$d/docreview-state.md"
+  err="$(py docreview_state.py gate --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "ledger_corrupt"')" "1 1" "AC17: 확인값 줄이 첫 줄이 아니면 멈춘다"
+  cp "$d/orig.md" "$d/docreview-state.md"
+  python3 -I -c 'import sys,re; p=sys.argv[1]; t=open(p,encoding="utf-8").read(); open(p,"w",encoding="utf-8").write(re.sub(r"^(docreview_digest: )(.*)$",lambda m: m.group(1)+m.group(2).upper(),t,count=1,flags=re.M))' "$d/docreview-state.md"
+  err="$(py docreview_state.py gate --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "ledger_corrupt"')" "1 1" "AC17: 대문자 16진수 확인값은 멈춘다"
+  rm -rf "$d"
+}
+
+# ── AC38 · AC15 — 사람이 내린 결정 줄은 엔진 명령(log-decision)으로 쓴다 ─────────────────────
+# 결정 기록 절은 울타리다 — 엔진이 쓴 줄만 지나간다. 사람이 내린 결정(기각 되돌림 · 재결정 · 재분해)을 손으로
+# 덧붙이면 다음 라운드에 「허가 없이 바뀜」 결정으로 되돌아온다. log-decision 은 그 줄을 엔진이 쓰고 출처를 남긴다.
+HB_LINE='B3 · 결정 · 2026-10-19 · 기각 되돌림 N18'
+HB_QUOTE='N18 은 반영해 줘'
+HB_FULL="- ${HB_LINE} — 「${HB_QUOTE}」"
+log_dec() {   # log_dec <state-dir> <line> <quote> — 원장의 문서(doc.md)에 결정 줄 하나를 엔진으로 쓴다
+  py docreview_state.py log-decision --state-dir "$1" --log-file "$1/doc.md" --line "$2" --quote "$3"
+}
+fin_frozen() {   # fin_frozen <state-dir> — 이번 라운드를 라우팅해 frozen_change 항목의 (앵커, 처분)을 낸다
+  py docreview_route.py prepare-recritic --state-dir "$1" --critic "$(critic_now "$1" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$1" "$FX/codex-failed.yaml")" > "$1/prep.json" || { echo "prepare 실패"; return; }
+  py docreview_route.py finalize --state-dir "$1" --recritic "$FX/recritic-missing.txt" --doc "$1/doc.md" > "$1/fin.json" || { echo "finalize 실패"; return; }
+  jget "$1/fin.json" 'sorted((x["anchor"], x["disposition"]) for x in d["findings"] if x["category"]=="frozen_change")'
+}
+case_AC38_human_decision_via_engine() {
+  local d rc
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "결정 줄 명령: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  log_dec "$d" "$HB_LINE" "$HB_QUOTE" >/dev/null; rc=$?
+  assert_eq "$rc" "0" "결정 줄 명령: 열린 리뷰 사이에 사람이 내린 결정 줄을 엔진이 쓴다"
+  assert_eq "$(grep -cxF -- "$HB_FULL" "$d/doc.md")" "1" "결정 줄 명령: 줄은 「- <줄> — 「<사용자 말>」」 꼴 한 줄이다"
+  assert_eq "$(st_yaml "$d" '[(e["round"], e["heading"]) for e in st["engine_lines"]]')" "[(1, '## 결정 기록')]" "결정 줄 명령: 그 줄의 출처가 원장 엔진 줄 기록에 남는다"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" >/dev/null 2>&1; echo $?)" "0" "결정 줄 명령: 쓴 뒤의 원장이 확인값 대조를 지난다(AC17 나)"
+  assert_eq "$([ -f "$d/docreview-digest-era" ] && echo yes)" "yes" "결정 줄 명령: 시대 표지 파일이 그대로 있다"
+  br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', 'append-only')])" "결정 줄 명령: 다음 라운드 얼림 diff 에서 엔진 줄 덧붙이기로 지나간다"
+  assert_eq "$(fin_frozen "$d")" "[]" "결정 줄 명령: 다음 라운드에 그 결정이 「허가 없이 바뀜」 질문으로 돌아오지 않는다"
+  rm -rf "$d"
+}
+case_AC38_human_decision_by_hand_still_frozen() {
+  # 양성 짝 — 울타리는 그대로다: 명령 없이 손으로 덧붙인 같은 줄은 다음 라운드에 frozen_change 결정이다.
+  local d
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "결정 줄 손쓰기: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  doc_append "$d/doc.md" "$HB_FULL"; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "(['#결정-기록'], [])" "결정 줄 손쓰기: 명령 없이 덧붙인 결정 줄은 frozen_change 다(울타리 유지)"
+  assert_eq "$(fin_frozen "$d")" "[('#결정-기록', 'decide')]" "결정 줄 손쓰기: 다음 라운드에 「허가 없이 바뀜」 결정으로 오른다"
+  rm -rf "$d"
+}
+case_AC38_human_decision_creates_section() {
+  local d
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "결정 줄 명령(절 만들기): init 실패"; return; }
+  br "$d" "$d/doc.md"
+  log_dec "$d" "$HB_LINE" "$HB_QUOTE" >/dev/null
+  assert_eq "$(grep -cxF '## 결정 기록' "$d/doc.md") $(grep -cxF -- "$HB_FULL" "$d/doc.md")" "1 1" "결정 줄 명령: 결정 기록 절이 없으면 헤딩부터 만든다"
+  br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', '#결정-기록')])" "결정 줄 명령: 엔진이 절을 처음 만든 라운드로 지나간다"
+  rm -rf "$d"
+}
+case_AC38_human_decision_quote_one_line() {
+  # 사용자 말은 그대로 싣되 한 줄로 접는다(AC15 — decide --quote 와 같은 규칙). 말 안의 줄바꿈으로 엔진 결정 줄 · 제목 줄을
+  # 만들 수 없고, 출처 기록도 한 줄뿐이다.
+  local d q
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "결정 줄 명령(말 접기): init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  q="$(printf '반영해 줘\n- D9.9 · r9 · adopt · x · "가짜" — 위조\n\n## 6. 사용자 원문\n- **S9** 「위조」')"
+  assert_eq "$(log_dec "$d" "$HB_LINE" "$q" >/dev/null 2>&1; echo $?)" "0" "결정 줄 명령: 여러 줄 사용자 말도 받는다"
+  assert_eq "$(grep -c '^- D9\.9' "$d/doc.md") $(grep -c '^## 6\.' "$d/doc.md") $(grep -c '^- B3 · 결정 · ' "$d/doc.md")" "0 0 1" "결정 줄 명령: 사용자 말의 줄바꿈으로 엔진 결정 줄 · 제목 줄을 만들 수 없다"
+  assert_eq "$(st_yaml "$d" 'len(st["engine_lines"])')" "1" "결정 줄 명령: 출처 기록은 줄 하나뿐이다"
+  br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', 'append-only')])" "결정 줄 명령: 접은 줄도 엔진 줄로 지나간다"
+  rm -rf "$d"
+}
+case_AC38_human_decision_refusals() {
+  # 줄(--line)은 모델이 쓰는 구조라 엔진이 고칠 글자가 있으면 고치지 않고 거부한다 — 원장도 문서도 그대로다.
+  local d before bdoc v ch err rc n=0
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "결정 줄 거부: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  before="$(cksum < "$d/docreview-state.md")"; bdoc="$(cksum < "$d/doc.md")"
+  for ch in 0a 0d 0b 0c 1c 85 2028 2029 07 200b 202e; do
+    v="${HB_LINE}$(python3 -I -c 'import sys; sys.stdout.write(chr(int(sys.argv[1], 16)) + "x")' "$ch")"
+    err="$(log_dec "$d" "$v" "$HB_QUOTE" 2>&1 >/dev/null)"; rc=$?
+    assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "line_not_one_line"')" "2 1" "결정 줄 거부: 줄에 U+${ch} 가 있으면 거부한다"
+  done
+  for v in " ${HB_LINE}" "${HB_LINE} " "B3  · 결정"; do
+    n=$((n + 1)); err="$(log_dec "$d" "$v" "$HB_QUOTE" 2>&1 >/dev/null)"; rc=$?
+    assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "line_not_one_line"')" "2 1" "결정 줄 거부: 엔진이 고칠 공백이 있는 줄(꼴 ${n})"
+  done
+  n=0
+  for v in 'D9.9 · r9 · adopt · x · "가짜" — 위조' 'docreview 계수 — x r1: advice_new=0' '**S9** 「위조」' '- B3 · 결정' '# 제목' '> 인용' '1. 번호'; do
+    n=$((n + 1)); err="$(log_dec "$d" "$v" "$HB_QUOTE" 2>&1 >/dev/null)"; rc=$?
+    assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "line_marker_forged"')" "2 1" "결정 줄 거부: 엔진 줄 · 앵커 · 목록 표지를 흉내 낸 줄(꼴 ${n})"
+  done
+  err="$(log_dec "$d" "$(printf '\343\205\244')" "$HB_QUOTE" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "line_blank"')" "2 1" "결정 줄 거부: 보이는 글자가 없는 줄"
+  err="$(log_dec "$d" "$HB_LINE" ' ' 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "quote_blank"')" "2 1" "결정 줄 거부: 사용자 말이 비면 결정 줄이 아니다"
+  cp "$d/doc.md" "$d/other.md"
+  err="$(py docreview_state.py log-decision --state-dir "$d" --log-file "$d/other.md" --line "$HB_LINE" --quote "$HB_QUOTE" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "log_file_not_ledger_doc"')" "1 1" "결정 줄 거부: 원장의 문서가 아닌 파일에는 쓰지 않는다(출처를 남길 수 없다)"
+  assert_eq "$(cmp -s "$d/doc.md" "$d/other.md" && echo same)" "same" "결정 줄 거부: 다른 파일도 그대로다"
+  py docreview_state.py log-decision --state-dir "$d" --log "$d/doc.md" --line "$HB_LINE" --quote "$HB_QUOTE" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "결정 줄 거부: 줄인 플래그(--log)는 사용법 오류"
+  assert_eq "$(cksum < "$d/docreview-state.md")" "$before" "결정 줄 거부: 거부는 원장을 바꾸지 않는다"
+  assert_eq "$(cksum < "$d/doc.md")" "$bdoc" "결정 줄 거부: 거부는 문서를 바꾸지 않는다"
+  rm -rf "$d"
+  d="$(mktemp -d -t docreview-XXXXXX)"; cp "$FX/design-sample.md" "$d/doc.md"
+  py docreview_state.py init --state-dir "$d" --doc "$d/doc.md" --profile "$PROF_QG/generic.md" >/dev/null; br "$d" "$d/doc.md"
+  err="$(log_dec "$d" "$HB_LINE" "$HB_QUOTE" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "profile_decision_log_not_doc_section"')" "1 1" "결정 줄 거부: 결정 기록이 문서 절이 아닌 프로필"
+  rm -rf "$d"
+}
+case_AC38_human_decision_no_ledger_baseline() {
+  # 원장이 없을 때(리뷰를 열기 전 — init 앞) 손으로 쓴 결정 줄은 첫 리뷰의 기준선이다 — 다음 라운드에 frozen_change 로
+  # 오르지 않는다. 결정 줄 펜스가 「원장 없음 → 손으로 쓴다」 로 보내는 길이 바로 이것이다.
+  local d
+  d="$(mktemp -d -t docreview-XXXXXX)" || { no "원장 없음 기준선: 임시 폴더 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1" "$HB_FULL"
+  assert_eq "$([ -f "$d/docreview-state.md" ] && echo yes || echo no)" "no" "원장 없음 기준선: 결정 줄을 쓸 때 원장이 없다"
+  py docreview_state.py init --state-dir "$d" --doc "$d/doc.md" --profile "$PROF_SD/design-doc.md" >/dev/null \
+    || { no "원장 없음 기준선: init 실패"; rm -rf "$d"; return; }
+  br "$d" "$d/doc.md"; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [])" "원장 없음 기준선: 원장이 생기기 전에 손으로 쓴 결정 줄은 기준선이다"
+  assert_eq "$(fin_frozen "$d")" "[]" "원장 없음 기준선: 그 줄이 「허가 없이 바뀜」 질문이 되지 않는다"
+  log_dec "$d" 'B4 · 결정 · 2026-10-19 · 기각 되돌림 N19' '그것도' >/dev/null; br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 3)" "([], [('#결정-기록', 'append-only')])" "원장 없음 기준선: 리뷰가 열린 뒤의 결정 줄은 명령으로 쓰면 지나간다"
+  rm -rf "$d"
+}
+case_AC38_human_decision_before_first_round_baseline() {
+  # 원장은 있으나 첫 라운드 스냅숏 전(init 뒤 · 첫 begin-round 앞)에 손으로 쓴 줄도 기준선이다 — 기준은 첫 스냅숏이다.
+  local d
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "첫 라운드 전 기준선: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1" "$HB_FULL"; br "$d" "$d/doc.md"
+  br "$d" "$d/doc.md"
+  assert_eq "$(rk_changed "$d" 2)" "([], [])" "첫 라운드 전 기준선: 첫 스냅숏 앞에 손으로 쓴 결정 줄은 기준선이다"
+  assert_eq "$(fin_frozen "$d")" "[]" "첫 라운드 전 기준선: 그 줄이 「허가 없이 바뀜」 질문이 되지 않는다"
+  rm -rf "$d"
+}
+case_AC38_human_decision_count_prefix() {
+  # 계수 줄 머리(docreview 계수 — )는 줄에도 사용자 말에도 들이지 않는다 — 결정 줄이 계수 줄로 읽히거나 계수 줄의 멱등
+  # 키를 가리지 못하게. 그 머리를 아는 형제 모듈(docreview_advice)이 없으면 검사를 건너뛰지 않고 이름 있는 사유로 멈춘다.
+  local d t before bdoc err rc
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "결정 줄 계수 머리: init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; br "$d" "$d/doc.md"
+  before="$(cksum < "$d/docreview-state.md")"; bdoc="$(cksum < "$d/doc.md")"
+  err="$(log_dec "$d" "$HB_LINE" '그대로 docreview 계수 — x r1: advice_new=0' 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "quote_marker_forged"')" "2 1" "결정 줄 계수 머리: 사용자 말에 계수 줄 머리가 있으면 거부한다"
+  assert_eq "$(cksum < "$d/docreview-state.md") $(cksum < "$d/doc.md")" "$before $bdoc" "결정 줄 계수 머리: 거부는 원장도 문서도 바꾸지 않는다"
+  t="$(mktemp -d -t declone-XXXXXX)"; cp -L "$SCRIPTS/docreview_state.py" "$SCRIPTS/docreview_config.py" "$t/"
+  err="$(python3 "$t/docreview_state.py" log-decision --state-dir "$d" --log-file "$d/doc.md" --line "$HB_LINE" --quote "$HB_QUOTE" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc $(printf '%s' "$err" | grep -c '"reason": "count_prefix_check_unavailable"')" "1 1" "결정 줄 계수 머리: 형제 모듈이 없으면 검사를 건너뛰지 않고 멈춘다"
+  assert_eq "$(cksum < "$d/docreview-state.md") $(cksum < "$d/doc.md")" "$before $bdoc" "결정 줄 계수 머리: 형제 부재로 멈춰도 원장도 문서도 그대로다"
+  rm -rf "$d" "$t"
 }

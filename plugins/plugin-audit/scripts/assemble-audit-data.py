@@ -14,7 +14,7 @@ def _sanitize_finding(f):
     ev_keys(unhashable set-key/.get())·gate-E(.get())·grounding·validate·render 어디서든 크래시한다.
     **ingestion에서 한 번** 정규형으로 강등하면 downstream 소비자 전부가 malformed 입력에서 안전해진다
     (근본 봉쇄 — 소비자마다 개별 가드하는 whack-a-mole 대신, codex re-verify round-2). claude findings는
-    이미 AXIS_SCHEMA로 정형이라 이 정규화가 no-op이다."""
+    이미 축 스키마(axisSchema)로 정형이라 이 정규화가 no-op이다."""
     g = dict(f)
     ev = []
     for e in (g.get("evidence") or []):
@@ -81,10 +81,23 @@ def ev_keys(f):
     return {(e.get("file"), e.get("line"))}
 
 
+def _drop_marker(v):
+    return {k: x for k, x in v.items() if k != "backfilled"} if isinstance(v, dict) else v
+
+
+def _axis_map(raw):
+    """assigned.json 의 axis_of — id → 축(1~6 정수). 그 밖의 값은 버린다(축을 모르는 id 로 남는다)."""
+    if not isinstance(raw, dict):
+        return {}
+    return {k: v for k, v in raw.items()
+            if isinstance(k, str) and type(v) is int and 1 <= v <= 6}
+
+
 def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     findings = [_sanitize_finding(f) for f in wf["findings"]]   # codex-source malformed 입력 근본 봉쇄
-    d_verdicts = list(wf.get("d_verdicts", []))
-    oq_answers = list(wf.get("oq_answers", []))
+    # `backfilled` 표식은 assemble 만 단다(아래 빈칸 채움) — 들어온 판정의 같은 키는 지운다.
+    d_verdicts = [_drop_marker(v) for v in wf.get("d_verdicts", [])]
+    oq_answers = [_drop_marker(v) for v in wf.get("oq_answers", [])]
     noq = list(wf.get("new_open_questions", []))
     # workflow return의 claude-source 기본값 stamp (source 미부착 시)
     for v in d_verdicts + oq_answers + noq:
@@ -94,10 +107,10 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     codex_dropped = []
     for v in _sanitize_collection(codex_side.get("d_verdicts", []),
                                   "d_verdicts", codex_dropped):
-        d_verdicts.append({**v, "source": "codex"})
+        d_verdicts.append({**_drop_marker(v), "source": "codex"})
     for v in _sanitize_collection(codex_side.get("oq_answers", []),
                                   "oq_answers", codex_dropped):
-        oq_answers.append({**v, "source": "codex"})
+        oq_answers.append({**_drop_marker(v), "source": "codex"})
     for v in _sanitize_collection(codex_side.get("new_open_questions", []),
                                   "new_open_questions", codex_dropped):
         noq.append({**v, "source": "codex"})
@@ -106,17 +119,35 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     # have_d/have_oq는 codex merge(2) *후*의 전체 목록(any-source)이 아니라 **claude source만**
     # 봐야 한다: codex가 답한 축이라도 Claude가 죽었으면 'axis incomplete' 정직성 backfill이
     # 떠야 한다. any-source로 보면 codex 답변이 죽은 Claude 축을 조용히 가린다 (LD4 정직성 갭).
+    # 고르지 않은 축의 id 는 사유가 다르다 — 축이 죽은 것이 아니라 이번 감사가 그 축을 돌리지 않았다.
+    chosen = meta.get("axes") if "axes" in meta else wf.get("axes_run")
+    # 축 지도: Workflow 가 실제 dispatch 에 쓴 지도가 정본이고, 없을 때만 손으로 적는 assigned.json 의 axis_of.
+    if isinstance(wf.get("assigned_axis"), dict):
+        axis_of, axis_source = _axis_map(wf["assigned_axis"]), "workflow"
+    elif "axis_of" in assigned:
+        axis_of, axis_source = _axis_map(assigned.get("axis_of")), "assigned.json"
+    else:
+        axis_of, axis_source = {}, None
+    unchosen_reason = "이번 감사에서 고르지 않은 축이라 빈칸을 채웠다(backfilled — 검증 안 됨)"
+
+    def unchosen(i):
+        return isinstance(chosen, list) and i in axis_of and axis_of[i] not in chosen
+
     have_d = {v["id"] for v in d_verdicts if v.get("source") == "claude"}
     for did in assigned.get("assigned_d", []):
         if did not in have_d:
             d_verdicts.append({"id": did, "verdict": "unverified",
-                               "reason": "축 감사가 끝나지 않아 빈칸을 채웠다(backfilled)", "source": "claude"})
+                               "reason": (unchosen_reason if unchosen(did)
+                                          else "축 감사가 끝나지 않아 빈칸을 채웠다(backfilled)"),
+                               "source": "claude", "backfilled": True})
     have_oq = {v["id"] for v in oq_answers if v.get("source") == "claude"}
     for oid in assigned.get("assigned_oq", []):
         if oid not in have_oq:
             # steelman_condition enum(a|b|c|d|none|pending)을 침범하지 않음 — reason으로만 unverified 표시
             oq_answers.append({"id": oid, "answer": None,
-                               "reason": "축 감사가 끝나지 않아 빈칸을 채웠다(backfilled — 검증 안 됨)", "source": "claude"})
+                               "reason": (unchosen_reason if unchosen(oid)
+                                          else "축 감사가 끝나지 않아 빈칸을 채웠다(backfilled — 검증 안 됨)"),
+                               "source": "claude", "backfilled": True})
 
     # (4) cross_model_confirmed (claude∪codex file:line 교집합)
     claude_ev, codex_ev = set(), set()
@@ -140,7 +171,9 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
                 ax = int(ax.strip())
             noq.append({"id": f["id"], "axis": ax,
                         "observation": f.get("title", ""),
-                        "why_not_gap": "scope-out (gate E) — 범위 밖",
+                        "why_not_gap": ("범위 판단 불가 (gate E) — 반박이 범위 안팎을 정하지 못했다"
+                                        if (f.get("refutation") or {}).get("uncertain") is True
+                                        else "scope-out (gate E) — 범위 밖"),
                         "reason_code": "gate_e_scope_out",
                         "source": f.get("source", "claude")})
 
@@ -163,7 +196,8 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     for f in findings:
         for gev in f.get("degraded_events", []):
             degraded.append(_grounding_degraded_note(gev))
-    out_meta = {k: meta[k] for k in ("date", "fanout_declared", "consent", "codex", "target", "seed_provided") if k in meta}
+    out_meta = {k: meta[k] for k in ("date", "fanout_declared", "consent", "codex", "target", "seed_provided",
+                                     "staleness_excluded", "axes") if k in meta}
     # §4.1 truth table의 층⑤ 표현. `ran`/`failed` 쌍이 세 상태를 구분한다:
     #   미실행: ran=false, failed=false  |  실행-실패: ran=true, failed=true
     #   실행-성공: ran=true, failed=false
@@ -193,6 +227,14 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     out_meta["codex"] = codex_meta
     out_meta["assigned_d"] = assigned.get("assigned_d", [])
     out_meta["assigned_oq"] = assigned.get("assigned_oq", [])
+    # 고른 축: consent 값(meta.axes)이 정본이고, 빠졌으면 Workflow 가 실제로 돈 축(axes_run)으로 채운다 —
+    # 렌더러의 분모(AC-4)가 여섯으로 떨어지지 않게. 둘 다 있으면 validate 가 일치를 본다.
+    if "axes_run" in wf:
+        out_meta["axes_run"] = wf["axes_run"]
+        out_meta.setdefault("axes", wf["axes_run"])
+    if axis_source is not None:
+        out_meta["assigned_axis"] = axis_of
+        out_meta["assigned_axis_source"] = axis_source
     return {"meta": out_meta, "findings": findings, "d_verdicts": d_verdicts,
             "oq_answers": oq_answers, "new_open_questions": noq,
             "axis_failures": wf.get("axis_failures", []), "degraded": degraded}

@@ -460,9 +460,9 @@ tline="$(grep -F '내가 읽은 것:' "$TPL" | head -1)"
 [ -n "$tline" ] && ok "템플릿에 풀이 줄이 있다" || no "템플릿에 '내가 읽은 것:' 줄이 없다 — 아래 판정은 무의미하다"
 # 템플릿 줄 끝의 선택 꼬리 `[ — 사용자가 적은 말: 「<…>」]` 는 대괄호째 떼면 꼬리 없는 줄, 대괄호만 벗기고 채우면
 # 꼬리 있는 줄이다 — 두 모양 다 풀이 줄이어야 한다.
-pick="$(printf '%s\n' "$tline" | sed -e 's/<풀이 문장>/확인된 풀이다./' -e 's/<고름 | 고르지 않음>/고름/' -e 's/\[ — 사용자가 적은 말: 「<적은 말 그대로>」\]//')"
-skip="$(printf '%s\n' "$tline" | sed -e 's/<풀이 문장>/안 고른 풀이다./' -e 's/<고름 | 고르지 않음>/고르지 않음/' -e 's/\[ — 사용자가 적은 말: 「<적은 말 그대로>」\]//')"
-tailed="$(printf '%s\n' "$tline" | sed -e 's/<풀이 문장>/꼬리 있는 풀이다./' -e 's/<고름 | 고르지 않음>/고름/' -e 's/\[ — 사용자가 적은 말: 「<적은 말 그대로>」\]/ — 사용자가 적은 말: 「기타로 적었다」/')"
+pick="$(printf '%s\n' "$tline" | sed -e 's/<풀이 문장>/확인된 풀이다./' -e 's/<고름 | 고르지 않음>/고름/' -e 's/\[ — 사용자가 적은 말: 「<적은 말 — one-line 을 거친 그대로>」\]//')"
+skip="$(printf '%s\n' "$tline" | sed -e 's/<풀이 문장>/안 고른 풀이다./' -e 's/<고름 | 고르지 않음>/고르지 않음/' -e 's/\[ — 사용자가 적은 말: 「<적은 말 — one-line 을 거친 그대로>」\]//')"
+tailed="$(printf '%s\n' "$tline" | sed -e 's/<풀이 문장>/꼬리 있는 풀이다./' -e 's/<고름 | 고르지 않음>/고름/' -e 's/\[ — 사용자가 적은 말: 「<적은 말 — one-line 을 거친 그대로>」\]/ — 사용자가 적은 말: 「기타로 적었다」/')"
 [ "$pick" != "$tline" ] && [ "$skip" != "$tline" ] && ok "템플릿 풀이 줄의 자리표 둘을 채웠다" \
   || no "템플릿 풀이 줄의 자리표 모양이 바뀌었다('$tline') — 이 테스트의 치환과 seed_provenance 의 정규식을 함께 고쳐라"
 printf -- '---\ntype: interview-seed-audit\n---\n\n## 1. 원문\n\n원문.\n\n## 2. 질문 전체\n\n### 라운드 1\n\n- 확인 질문: 라운드 1\n%s\n%s\n' "$pick" "$skip" > "$TMP/t.audit.md"
@@ -493,11 +493,11 @@ fi
 python3 - "$P" "$TMP/mutp.py" <<'PY'
 import sys
 t = open(sys.argv[1], encoding="utf-8").read()
-needle = 'for para in re.split(r"\\n\\s*\\n", body.strip()):\n        whole'
-open(sys.argv[2], "w", encoding="utf-8").write(t.replace(needle, 'for para in [body]:\n        whole', 1))
+needle = 'for para in split_paragraphs(body.strip()):'
+open(sys.argv[2], "w", encoding="utf-8").write(t.replace(needle, 'for para in [body]:', 1))
 print("MUTATED" if needle in t else "UNCHANGED")
 PY
-cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$ROOT/plugins/spec-distill/scripts/section6.py" "$ROOT/plugins/spec-distill/scripts/seed_body.py" "$ROOT/plugins/spec-distill/scripts/docreview_advice.py" "$TMP/"
+cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$ROOT/plugins/spec-distill/scripts/section6.py" "$ROOT/plugins/spec-distill/scripts/seed_body.py" "$ROOT/plugins/spec-distill/scripts/docreview_advice.py" "$ROOT/plugins/spec-distill/scripts/docreview_config.py" "$TMP/"
 python3 "$TMP/mutp.py" classify "$TMP/p.md" --audit "$TMP/p.audit.md" > "$TMP/pm.json" 2>/dev/null
 [ "$(j "$TMP/pm.json" '[s["basis"] for s in d["sentences"]]' 2>/dev/null)" = "['none']" ] \
   && ok "변이: 문단 경계를 지우면 다음 문단의 원문이 저자로 떨어진다 — 문단 경계 단언에 이빨이 있다" \
@@ -520,7 +520,7 @@ needle = 's = re.sub(r"\\s+", " ", s).strip()'
 open(sys.argv[2], "w", encoding="utf-8").write(t.replace(needle, "s = s.strip()", 1))
 print("MUTATED" if needle in t else "UNCHANGED")
 PY
-cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$ROOT/plugins/spec-distill/scripts/section6.py" "$ROOT/plugins/spec-distill/scripts/seed_body.py" "$ROOT/plugins/spec-distill/scripts/docreview_advice.py" "$TMP/"
+cp "$ROOT/plugins/spec-distill/scripts/seed_review_log.py" "$ROOT/plugins/spec-distill/scripts/section6.py" "$ROOT/plugins/spec-distill/scripts/seed_body.py" "$ROOT/plugins/spec-distill/scripts/docreview_advice.py" "$ROOT/plugins/spec-distill/scripts/docreview_config.py" "$TMP/"
 cp "$TMP/s.orig.md" "$TMP/s3.md"
 python3 "$TMP/mut.py" marks "$TMP/s3.md" "$TMP/a.audit.md" > "$TMP/m4.json" 2>/dev/null
 [ "$(j "$TMP/m4.json" 'len(d["invalid"])' 2>/dev/null)" = "4" ] \

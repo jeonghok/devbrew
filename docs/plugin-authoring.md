@@ -43,8 +43,16 @@ frontmatter 의 키 부재는 `shared/tests/test_docreview_agents.sh` 가, 이 �
 
 - **설계 (brainstorming)** — `plugin-dev:plugin-structure`. 컴포넌트 타입, `plugin.json` 스키마, 디렉토리 레이아웃. 이 단계에서 필요한 유일한 것.
 - **구현** — shipping하는 surface별로 `plugin-dev:skill-development` / `command-development` / `agent-development` / `hook-development` / `mcp-integration`.
-- **검증** — `/plugin-audit` (읽기전용 6축 감사 → 적대적 반박 → codex 병렬 co-audit).
+- **검증** — `/plugin-audit` (읽기전용 고른 축(기본 여섯) 감사 → 적대적 반박 → codex 병렬 co-audit).
 
 `plugin-dev`가 주는 것은 **문법**이다. devbrew **정책**(위 트리의 주석 + [Plugin Shape](../CLAUDE.md#plugin-shape))은 이 문서가 유일한 소스이며 충돌 시 우선한다. `plugin-dev`의 `/create-plugin`은 자체 Discovery/Design phase를 갖는 end-to-end 워크플로우 — devbrew에서는 설계를 brainstorming과 spec-distill이 담당하므로 skill을 지식으로만 쓴다.
+
+**devbrew 를 고칠 때의 규칙:**
+
+- 새 책임은 별도 모듈(스크립트 · skill · reference)로 두고, 기존 파일에는 진입 한 줄만 더한다.
+- 락을 쓰거나 고치면 변이(삭제 · 추가 · 반전 · 형태 바꾸기)로 RED 를 보이고, 양성 대조로 계측기가 살아 있음을 확인한다. 부재 락에는 양성 짝을 둔다.
+- 새 파일 · 문면을 쓰기 전에 그 경로를 코퍼스로 삼는 락(`# guards:` 글롭 · 부재 스캔)을 찾는다.
+- 새 셸 테스트는 실행 비트를 붙여(`100755`) 커밋한다.
+- 플러그인 파일을 subagent 에 넘길 때는 경로가 아니라 내용으로 싣는다 — 설치본 캐시는 작업 폴더 밖이라 subagent 가 못 읽을 수 있다.
 
 **Merge 전:** [Plugin Shape](../CLAUDE.md#plugin-shape)의 모든 bullet 만족 + 시작 버전 `0.1.0`.

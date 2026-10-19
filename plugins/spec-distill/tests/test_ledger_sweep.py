@@ -11,6 +11,8 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 SWEEP = SCRIPTS / "ledger_sweep.py"
+sys.path.insert(0, str(SCRIPTS))
+import docreview_state  # noqa: E402
 REPO = Path(__file__).resolve().parents[3]
 OLD_GC_COMMIT = "9b7a5e07"
 OLD = time.time() - 30 * 3600          # TTL(24h) 너머
@@ -34,9 +36,16 @@ def age(path: Path, when=OLD):
 
 def write_ledger(d: Path, doc: str):
     d.mkdir(parents=True, exist_ok=True)
-    (d / "docreview-state.md").write_text(
-        "---\ndocreview:\n  doc: %s\n  profile: design-doc\n  round: 2\n---\n# docreview 원장\n" % doc,
-        encoding="utf-8")
+    st = docreview_state._empty(doc, "design-doc")   # 엔진이 쓴 모양 그대로 — 손으로 만든 원장이 아니다
+    st["round"] = 2
+    st["_body"] = "# docreview 원장\n"
+    docreview_state.save_state(d, st)
+
+
+def append_ledger_line(d: Path, line: str):
+    st = docreview_state.load_state(d)
+    st["_body"] = st["_body"] + line + "\n"
+    docreview_state.save_state(d, st)
 
 
 def key_for(root: Path, doc: str) -> Path:
@@ -184,7 +193,7 @@ class OldSessionTest(Base):
             (tgt / "reviewing-by").write_text("sess-live0001\n", encoding="utf-8")
         s = self.old_session("oldsess01", ledgers=[("k1", doc)])
         old_state = s / "docreview" / "k1" / "docreview-state.md"
-        old_state.write_text(old_state.read_text(encoding="utf-8") + "- old\n", encoding="utf-8")
+        append_ledger_line(old_state.parent, "- old")
         age(s)                                   # 옛 폴더 전체를 다시 TTL 너머로 — 아래 한 파일만 조금 젊힌다
         # 옛 폴더는 TTL 너머여야 ② 가 본다 — 옛 원장의 시각은 OLD 근처에서만 움직인다.
         t_old, t_new = (OLD + 100, OLD) if old_newer else (OLD, time.time() - 100)

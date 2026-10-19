@@ -49,26 +49,34 @@ branching strategy 템플릿을 선택해 git workflow 룰을 초기화하고, �
 
 ### Step 1: 프로젝트 상태 감지
 
-1. 프로젝트 root에 `CLAUDE.md`가 존재하는지 확인
-2. 존재한다면 `## Git Workflow` 섹션이 이미 있는지 확인
+1. 프로젝트 root의 AGENTS.md 와 CLAUDE.md 가 각각 존재하는지 확인
+2. 있는 파일마다 `## Git Workflow` 섹션이 이미 있는지 확인 — AGENTS.md 와 CLAUDE.md 중 어느 쪽에 있어도 기존 규칙이다(앞선 실행에서 「AGENTS.md 로 옮기기」를 골랐다면 그 절은 AGENTS.md 에 있다)
 3. `docs/git-workflow/` 디렉토리가 존재하는지 확인
 
 기존 Git Workflow 설정이 발견되면 사용자에게 묻는다:
 > "기존 git workflow 룰이 감지됐습니다. 새 템플릿으로 교체할까요?"
 
-사용자가 거절하면 중단.
+`AskUserQuestion` 으로 고르게 한다 (질문 하나에 결정 하나):
 
-또한 root에 `CLAUDE.md`가 존재하고 `AGENTS.md`가 없다면 사용자에게 묻는다:
+- 「교체 (권장)」 — 새 템플릿으로 바꾼다.
+- 「git 규칙은 그대로 두고 헌장만」 — 기존 git 규칙 파일과 `## Git Workflow` 절은 그대로 두고, Step 2 · 3 · 4b · 4c 의 `## Git Workflow` 갱신 · 4d 를 건너뛰고 헌장 단계로 간다.
+- 「중단」 — 아무 파일도 쓰지 않고 멈춘다.
+
+또한 root에 `CLAUDE.md`가 존재하고 `AGENTS.md`가 없다면 `AskUserQuestion` 으로 묻는다:
 
 > "기존 CLAUDE.md 발견. AGENTS.md로 migrate할까요? (CLAUDE.md는 `@AGENTS.md` thin pointer로 교체됩니다)"
 
-사용자 거절 시: 전체 `/project-init:project-init` 실행 abort — Step 2 이후의 docs/git-workflow/ 생성도 skip. AC21에 따라 부분 진행 금지.
+- 「AGENTS.md 로 옮기기 (권장)」 — 4c 의 S2a · S2b 대로 옮긴다.
+- 「CLAUDE.md 에 바로 쓰기」 — AGENTS.md 를 만들지 않고 관리 절 `## Git Workflow` · `## Project Charter` 를 CLAUDE.md 안에서 제자리 갱신한다. S3 의 절 갱신 규칙을 CLAUDE.md 에 그대로 적용하고 비-관리 컨텐츠는 보존한다. `docs/git-workflow/` 파일은 그대로 만든다.
+- 「중단」 — 아무 파일도 쓰지 않고 멈춘다.
+
+위 git 규칙 질문에서 「git 규칙은 그대로 두고 헌장만」을 골랐다면 그 선택이 이 문서에서 git 규칙 파일을 만든다는 모든 문장(바로 위 「CLAUDE.md 에 바로 쓰기」의 「`docs/git-workflow/` 파일은 그대로 만든다」 · 4c S4 · 게이트 안내 포함)보다 앞선다 — `docs/git-workflow/` 에는 아무것도 쓰지 않고 기존 `## Git Workflow` 내용도 그대로 둔다(S2a 는 새 template 없이 기존 절을 AGENTS.md 로 옮기고, S4 (i) 는 AGENTS.md 에 `## Git Workflow` 가 없으면 CLAUDE.md 의 그 절을 새 template 없이 AGENTS.md 로 옮기며, S1 · S2b 는 헌장 절과 포인터만 쓴다).
 
 #### Charter 상태 감지 (파일 레벨 — Phase 0보다 선행)
 
 charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
 
-- (a) `AGENTS.md`에 `## Project Charter` 섹션이 존재하는가.
+- (a) 관리 절을 담는 파일 — AGENTS.md 가 있으면 AGENTS.md, 없으면 CLAUDE.md(「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md) — 에 `## Project Charter` 섹션이 존재하는가. AGENTS.md 가 있어도 거기 `## Project Charter` 가 없고 CLAUDE.md 에 있으면 CLAUDE.md 의 그 절을 읽는다 — 4c S4 「옮기기」가 4e 전에 그 절을 AGENTS.md 로 옮기므로(S2a 는 AGENTS.md 가 없는 경우라 위 규칙대로 CLAUDE.md 를 읽는다), 4e 는 옮긴 절을 제자리 갱신하고 두 번째 `## Project Charter` 를 더하지 않는다. S4 에서 「CLAUDE.md 는 그대로 두기」를 골라 절이 옮겨지지 않으면 이 경우는 4e 의 「갱신할 헌장 절이 쓸 파일에 없으면」 규칙이 맡는다.
 - (b) 그 섹션의 `**Vision:**`·`**Non-goals:**`·`**Tech Stack:**` 값이 모두 비어있지 않고 `{{...}}` placeholder가 아닌가 (= `charter_section_complete`).
 - (c) `docs/project/charter.md` **와** `docs/project/conventions.md`가 모두 존재하는가 (= `docs_complete`; `glossary.md`는 조건부라 completeness 판정에서 제외).
 
@@ -108,15 +116,21 @@ charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
    - Merge commit (모든 commit 보존)
    - Rebase (linear history)
 
+3. **브랜치 접두 추가** — "기본 접두는 <선택한 전략의 기본 접두>예요. 더할 접두가 있나요? (예: `docs` · `chore`)"
+   - 더하지 않음 (권장)
+   - 더하기 (기타 칸에 쉼표로 적는다)
+
+   받은 낱말마다 규칙 `[a-z][a-z0-9-]*`(소문자로 시작, 소문자 · 숫자 · `-` 만 — 훅이 접두 목록을 읽는 규칙과 같다)과 중복을 본다. 규칙 밖이면 그 낱말과 이유를 보이고 다시 묻는다. 이미 있는 접두와 같은 낱말은 빼고 빠졌다고 알린다.
+
 **Git Flow 추가:**
 
-3. **Release branch 명명** — "release 브랜치 포맷?"
+4. **Release branch 명명** — "release 브랜치 포맷?"
    - `release/v*` (예: `release/v1.2.0`) — default
    - 커스텀 포맷
 
 ### Step 3.5: Project Charter (신규)
 
-**직렬 순서**: Step 3.5는 Step 3(release-branch 질문 포함)이 *모두 끝난 뒤* 시작한다. branching 질문과 charter 질문을 교차하지 않는다. Phase 1의 "≤4개" 한도는 charter 질문에만 적용되며 git step 질문 수와 합산하지 않는다 (독립 카운트).
+**질문 순서**: 기본은 직렬이다 — Step 3(release 브랜치 질문 포함)의 질문이 모두 끝난 뒤 헌장 질문을 시작하고, git 질문과 헌장 질문을 교차하지 않는다(답이 엉키지 않게). Phase 0 스캔은 질문이 없으므로 Step 2 · 3 질문과 겹쳐 돌려도 된다 — 예: Step 2 질문을 띄우기 전에 스캔을 시작한다. 헌장 질문 수는 git 질문 수와 따로 센다.
 
 C-S2(완전 헌장 존재)면 먼저 "헌장을 업데이트할까요?"를 묻고, **거절 시 Step 3.5를 건너뛴다**(unchanged — NG7 경계상 합법, Law 1 게이트 비적용). 승인 또는 C-S1/C-S3(a)면 아래 Phase 0+1을 진행한다. C-S3(b)(docs 파일만 누락)는 질문 없이 Step 4e에서 기존 섹션 값으로 누락 파일만 생성한다.
 
@@ -144,30 +158,42 @@ C-S2(완전 헌장 존재)면 먼저 "헌장을 업데이트할까요?"를 묻�
 
 이 경우 Phase 1 ④는 `[감지됨]` 확인 대신 open-ended tech-stack 질문이 된다.
 
-#### Phase 1 — 판단 질문 (AskUserQuestion, ≤4개)
+#### Phase 1 — 판단 질문 (AskUserQuestion, 기본 4개)
 
-`AskUserQuestion`으로 다음 4개만 묻는다 (자동 감지된 사실은 open-ended 재질문 금지 — AC3):
+`AskUserQuestion`으로 다음 4개를 묻는다(기본값 — 아래 「더 묻기」로 더 연다) (자동 감지된 사실은 open-ended 재질문 금지 — AC3):
 
 1. **Vision** (필수, 1문장) — "이 프로젝트의 한 문장 vision은?"
 2. **Non-goals** (필수) — "명시적으로 하지 *않을* 것 (non-goals)은?"
-3. **핵심 conventions** (필수, 1–3개) — "지켜야 할 핵심 코딩/구조 컨벤션 1–3개는?"
+3. **핵심 conventions** (필수) — "지켜야 할 핵심 코딩/구조 컨벤션은? (보통 1–3개, 더 적어도 된다)" — 받은 관례는 개수와 상관없이 모두 쓴다(자르지 않는다).
 4. **Tech-stack 확인** (필수) — Phase 0 후보를 보여주고 "감지된 tech-stack이 맞나요? 수정·추가할 것은?" (fallback 시 open-ended 입력).
 
 **Glossary 트리거 (AC7, 별도 질문 아님)**: 위 4개 답변 안에서 사용자가 *프로젝트 고유 도메인 용어*(일반 SW 어휘가 아닌, 이 프로젝트에서 특정 의미로 정의해 쓰는 명사 — 예: "ledger", "tenant", "rollup")를 명시적으로 정의·언급한 경우에만 glossary 후보로 수집한다. 용어를 **추측해 만들지 않는다**. 모호하면 수집하지 않는다(보수적). 수집된 용어가 0개면 `glossary.md`를 생성하지 않는다(빈 파일 금지).
 
+**쓴 수 공시와 더 묻기**: 필수 4개 항목이 Law 1 게이트(아래)를 통과한 뒤에 공시 줄을 낸다 — 사용자가 「건너뛰기」나 「중단」을 골랐으면 이 공시와 선택은 하지 않는다.
+
+> `[project-init] 헌장 질문 <n>개를 물었고(기본 4개) 관례 <m>개를 받았다(기본 1–3개).`
+
+이어 `AskUserQuestion` 한 번 — 「이대로 진행 (권장)」 · 「더 묻기」. 「더 묻기」면 `AskUserQuestion` 한 번에 질문을 최대 넷 — 관례 더 · 목표(`{{GOALS}}`) · 성공 기준(`{{SUCCESS_CRITERIA}}`) · 사용자(`{{PERSONAS}}`) — 묻고, 답한 칸은 4e 의 기본값(파생 · `_명시되지 않음 — 추후 보강._`) 대신 그 답을 쓴다. 그 뒤 공시 줄을 새 수로 다시 내고 같은 선택을 다시 묻는다.
+
 #### Law 1 구조적 게이트 (bounded — AC10/C9)
 
-C-S1 및 C-S3(a)에서 **vision·non-goals·conventions·tech-stack**가 채워질 때까지 진행을 막는다. 각 필수 항목에 대해 빈/무의미 응답이면 AskUserQuestion 재질문을 **최대 3회**까지 한다. 3회 후에도 비면 charter step을 *loud advisory와 함께 abort*한다:
+C-S1 및 C-S3(a)에서 **vision·non-goals·conventions·tech-stack**가 채워질 때까지 진행을 막는다. 각 필수 항목에 대해 빈/무의미 응답이면 AskUserQuestion 재질문을 **최대 3회**까지 한다. 3회 뒤에도 비면 `AskUserQuestion` 한 번으로 사용자가 고른다:
 
-> `[project-init] charter 미완료: <항목> 비어 abort. git-workflow 산출물은 정상 생성됩니다. 미완 항목의 사후 자동 플래그는 없습니다 — 헌장을 채우려면 /project-init:project-init 을 다시 실행하세요.`
+- 「건너뛰기」 — 헌장 단계를 건너뛴다. 헌장 절과 `docs/project/` 파일을 쓰지 않는다. git 규칙 파일은 그대로 만든다.
+- 「계속 묻기」 — 그 항목을 다시 최대 3회 묻고, 그래도 비면 이 선택을 다시 묻는다.
+- 「중단」 — 실행 전체를 멈춘다. Step 4 전이라 아무 파일도 쓰지 않았다.
 
-abort 후에도 Step 4의 git-workflow 파일 생성은 정상 진행한다(부분 산출물 금지 아님 — git-workflow는 charter와 독립). C-S2(완전 헌장 갱신)는 이 게이트 면제.
+「건너뛰기」를 고르면 이렇게 알린다 (Step 1 에서 「git 규칙은 그대로 두고 헌장만」을 골랐다면 git 규칙 파일도 만들지 않으므로 그 문장을 「git 규칙 파일도 바꾸지 않았다.」로 바꾼다):
+
+> `[project-init] 헌장 단계를 건너뛰었다 — 미완 항목: <항목>. git 규칙 파일은 그대로 만든다. 헌장을 채우려면 /project-init:project-init 을 다시 실행하세요.`
+
+「중단」이면 `[project-init] 사용자가 중단을 골랐다 — 아무 파일도 쓰지 않았다.` 를 내고 멈춘다. C-S2(완전 헌장 갱신)는 이 게이트 면제.
 
 ### Step 4: 파일 생성
 
 선택된 strategy와 답변을 바탕으로 다음 파일들을 생성한다.
 
-**중요:** template 파일들은 `${CLAUDE_PLUGIN_ROOT}/templates/`에 있다. 읽고, placeholder를 치환하고, 프로젝트에 쓴다. **AGENTS.md를 canonical content source로**, **CLAUDE.md를 `@AGENTS.md` thin pointer로** 발행한다 (Codex/Cursor 등 16+ 벤더 호환 + 단일 source of truth).
+**중요:** template 파일들은 `${CLAUDE_PLUGIN_ROOT}/templates/`에 있다. 읽고, placeholder를 치환하고, 프로젝트에 쓴다. **AGENTS.md를 canonical content source로**, **CLAUDE.md를 `@AGENTS.md` thin pointer로** 발행한다 (Codex/Cursor 등 16+ 벤더 호환 + 단일 source of truth). 단 Step 1 에서 「CLAUDE.md 에 바로 쓰기」를 골랐다면 AGENTS.md 를 만들지 않고 관리 절을 CLAUDE.md 에 쓴다.
 
 #### 4a: Templates 읽기
 
@@ -188,6 +214,13 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 |-------------|---------|
 | `{{SCOPE_CONVENTION}}` | Step 3 질문 1의 scope 룰 |
 | `{{MERGE_STRATEGY}}` | Step 3 질문 2의 merge 전략 |
+| `{{BRANCH_PREFIXES}}` | 전략 기본 접두 + Step 3 질문 3 에서 더한 접두를 순서대로 중복 없이 `\|` 로 이은 정규식 갈래 |
+| `{{BRANCH_PREFIX_LIST}}` | 같은 낱말을 `` `<접두>/*` `` 로 감싸 ` · ` 로 이은 목록 |
+| `{{EXTRA_PREFIX_LIST}}` | 질문 3 에서 더한 접두만 같은 꼴로 이은 목록, 없으면 `없음` |
+
+**전략별 기본 접두** — github-flow: `feature, fix` · git-flow: `feature, fix, release, hotfix` · trunk-based: `feature, fix`
+
+예: 기본 `feature, fix` 에 질문 3 에서 `docs` 를 더하면 `{{BRANCH_PREFIXES}}` = `feature|fix|docs` 다(표 안의 `\|` 는 표가 깨지지 않게 적은 `|` 다).
 
 #### 4c: AGENTS.md × CLAUDE.md 4-state matrix
 
@@ -196,9 +229,9 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 | State | AGENTS.md | CLAUDE.md | Action |
 |---|---|---|---|
 | **S1 (clean slate)** | 없음 | 없음 | AGENTS.md 신규 작성 (`agents-md-section.md` content); CLAUDE.md 신규 작성 (`claude-md-pointer.md` content — `@AGENTS.md` 한 줄). |
-| **S2 (CLAUDE-only legacy)** | 없음 | 존재 | Step 1의 migration 프롬프트 (AC21) — 거절 시 전체 `/project-init:project-init` abort. 승인 시 CLAUDE.md 내용 분기 (AC16 정규화 절차 (frontmatter strip → HTML comment strip → str.strip()) 준용해 분류): **S2a** 정규화 결과가 `@AGENTS.md` 아니면 full content — (a) `## Git Workflow` 섹션 추출, (b) AGENTS.md로 이전·새 template과 merge, (c) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체, (d) 이전된 H1이 *원본 파일명을 지칭*하면 (`# CLAUDE.md`) `# AGENTS.md`로 재제목한다 — 그렇지 않은 H1(`# My Project` 등)은 프로젝트 제목이므로 비-관리 컨텐츠로 보존. 기존 CLAUDE.md의 `## LLM Coding Guidelines` 섹션은 plugin이 더 이상 *managed*로 취급하지 않으므로 자동으로 *비-관리 컨텐츠*로 분류되어, matrix 직후의 "비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존" 규칙에 따라 AGENTS.md migration 시 그대로 이전·보존됨 (사용자 4-bullet 컨텐츠 silent drop 없음). **S2b** 정규화 결과 == `@AGENTS.md`인 dangling pointer (AGENTS.md 부재) — 새 template만으로 AGENTS.md 신규 작성, CLAUDE.md unchanged. |
+| **S2 (CLAUDE-only legacy)** | 없음 | 존재 | Step 1 의 이전 질문 — 「AGENTS.md 로 옮기기」면 아래 S2a · S2b, 「CLAUDE.md 에 바로 쓰기」면 CLAUDE.md 안에서 관리 절만 제자리 갱신(AGENTS.md 를 만들지 않음), 「중단」이면 멈춘다. 「옮기기」를 고르면 CLAUDE.md 내용 분기 (AC16 정규화 절차 (frontmatter strip → HTML comment strip → str.strip()) 준용해 분류): **S2a** 정규화 결과가 `@AGENTS.md` 아니면 full content — (a) `## Git Workflow` 섹션과 `## Project Charter` 섹션(있으면, 관리 섹션이다) 추출, (b) AGENTS.md로 이전·새 template과 merge(헌장 절은 중복 없이 그대로 옮긴다; 「git 규칙은 그대로 두고 헌장만」이면 새 git template 을 merge 하지 않고 기존 `## Git Workflow` 를 그대로 옮긴다), (c) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체, (d) 이전된 H1이 *원본 파일명을 지칭*하면 (`# CLAUDE.md`) `# AGENTS.md`로 재제목한다 — 그렇지 않은 H1(`# My Project` 등)은 프로젝트 제목이므로 비-관리 컨텐츠로 보존. 기존 CLAUDE.md의 `## LLM Coding Guidelines` 섹션은 plugin이 더 이상 *managed*로 취급하지 않으므로 자동으로 *비-관리 컨텐츠*로 분류되어, matrix 직후의 "비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존" 규칙에 따라 AGENTS.md migration 시 그대로 이전·보존됨 (사용자 4-bullet 컨텐츠 silent drop 없음). **S2b** 정규화 결과 == `@AGENTS.md`인 dangling pointer (AGENTS.md 부재) — 새 template만으로 AGENTS.md 신규 작성, CLAUDE.md unchanged. |
 | **S3 (AGENTS canonical, CLAUDE pointer)** | 존재 | 존재 + `@AGENTS.md` (R-pointer 통과) | AGENTS.md의 `## Git Workflow` 섹션만 in-place 갱신. CLAUDE.md는 unchanged. |
-| **S4 (AGENTS exists, CLAUDE divergent or absent)** | 존재 | 없음 또는 divergent content | 사용자에게 advisory + 두 옵션 — (i) CLAUDE.md가 존재하면 관리 섹션(`## Git Workflow` · `## Project Charter`)을 뺀 비-관리 컨텐츠를 AGENTS.md에서 **먼저 나오는 관리 섹션 앞**에 이전한 뒤(관리 섹션이 하나도 없으면 AGENTS.md 끝에) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체한다. 관리 섹션 뒤에 붙이지 않는다 — 헤딩 없는 본문은 바로 앞 절의 일부가 되어 그 절의 제자리 갱신(이어지는 S3 action, 다음 `/project-init:project-init` 실행)이 함께 덮는다. 관리 섹션을 이전 대상에서 빼는 것은 중복 절을 막기 위해서다. 원본 파일명을 지칭하는 H1(`# CLAUDE.md`)은 이전하지 않는다(S2a (d)와 같은 근거). CLAUDE.md가 없으면 `@AGENTS.md` 포인터만 쓴다. advisory는 이전될 비-관리 컨텐츠가 있다는 것을 밝힌다. (ii) abort. 승인 시 (i) 수행 + S3 action. |
+| **S4 (AGENTS exists, CLAUDE divergent or absent)** | 존재 | 없음 또는 divergent content | 사용자에게 advisory + 세 선택지 — (i) CLAUDE.md가 존재하면 관리 섹션(`## Git Workflow` · `## Project Charter`)을 뺀 비-관리 컨텐츠를 AGENTS.md에서 **먼저 나오는 관리 섹션 앞**에 이전한 뒤(관리 섹션이 하나도 없으면 AGENTS.md 끝에) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체한다. 관리 섹션 뒤에 붙이지 않는다 — 헤딩 없는 본문은 바로 앞 절의 일부가 되어 그 절의 제자리 갱신(이어지는 S3 action, 다음 `/project-init:project-init` 실행)이 함께 덮는다. 관리 섹션을 이전 대상에서 빼는 것은 중복 절을 막기 위해서다. 단 AGENTS.md 에 `## Project Charter` 가 없으면 CLAUDE.md 의 `## Project Charter` 는 git 규칙 선택과 상관없이 이전한다 — 헌장 절은 중복 없이 그대로 AGENTS.md 끝에 옮긴다(S2a (b)와 같다). 포인터로 바뀐 CLAUDE.md 에는 절이 남지 않으므로 빼면 CLAUDE.md 교체와 함께 사라진다. 또 Step 1 에서 「git 규칙은 그대로 두고 헌장만」을 골랐고 AGENTS.md 에 `## Git Workflow` 가 없으면 CLAUDE.md 의 `## Git Workflow` 는 이전한다 — 새 template 과 merge 하지 않고 그대로 AGENTS.md 끝에 옮긴다(S2a (b)와 같다). 이 선택에서는 S3 action 이 그 절을 갱신하지 않으므로 빼면 CLAUDE.md 교체와 함께 사라진다. 원본 파일명을 지칭하는 H1(`# CLAUDE.md`)은 이전하지 않는다(S2a (d)와 같은 근거). CLAUDE.md가 없으면 `@AGENTS.md` 포인터만 쓴다. advisory는 이전될 비-관리 컨텐츠가 있다는 것을 밝힌다. 선택지: 「옮기기 (권장)」((i) 수행 + S3 action) · 「CLAUDE.md 는 그대로 두기」(S3 action 만 — AGENTS.md 관리 절 갱신, CLAUDE.md 는 손대지 않음, git-workflow 파일은 만든다) · 「중단」(아무 파일도 쓰지 않고 멈춘다). |
 
 비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존. 유일한 예외는 파일명을 지칭하는 H1(`# CLAUDE.md`)이다 — 4c S2a (d)는 재제목하고 S4 (i)는 이전하지 않는다. 파일명을 지칭하는 제목은 이전 후 대상 파일을 잘못 가리키므로 보존 대상이 아니다.
 
@@ -206,16 +239,16 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 
 `docs/git-workflow/` 디렉토리가 없으면 생성. 다음 3개 파일 작성:
 
-1. `docs/git-workflow/branch-strategy.md` — `templates/<strategy>/branch-strategy.md`에서
+1. `docs/git-workflow/branch-strategy.md` — `templates/<strategy>/branch-strategy.md`에서 (placeholder 치환 후 — 4b 의 `{{BRANCH_PREFIXES}}` · `{{EXTRA_PREFIX_LIST}}`)
 2. `docs/git-workflow/commit-conventions.md` — `templates/shared/commit-conventions.md`에서 (placeholder 치환 후)
 3. `docs/git-workflow/pr-process.md` — `templates/shared/pr-process.md`에서 (placeholder 치환 후)
 
 #### 4e: Project Charter 발행 (§6 state matrix)
 
-charter step이 abort(Law 1 게이트 실패)되지 않았다면, Step 1에서 판정한 charter state에 따라 발행한다 (C-S2 갱신 거절은 abort가 아니라 아래 C-S2 행의 unchanged로 처리). template은 `${CLAUDE_PLUGIN_ROOT}/templates/project/`에서 읽어 placeholder를 elicit된 값으로 치환한다 (C7 — 의견 콘텐츠 주입 금지, AC14).
+헌장 단계를 건너뛰지 않았다면(Law 1 게이트에서 「건너뛰기」를 고르지 않았고 C-S2 갱신을 거절하지 않았다면), Step 1에서 판정한 charter state에 따라 발행한다 (C-S2 갱신 거절은 건너뛰기가 아니라 아래 C-S2 행의 unchanged로 처리). template은 `${CLAUDE_PLUGIN_ROOT}/templates/project/`에서 읽어 placeholder를 elicit된 값으로 치환한다 (C7 — 의견 콘텐츠 주입 금지, AC14).
 
 읽을 template:
-- `${CLAUDE_PLUGIN_ROOT}/templates/project/agents-md-section.md` → `AGENTS.md`의 `## Project Charter` 섹션
+- `${CLAUDE_PLUGIN_ROOT}/templates/project/agents-md-section.md` → `AGENTS.md`(「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md)의 `## Project Charter` 섹션
 - `${CLAUDE_PLUGIN_ROOT}/templates/project/charter.md` → `docs/project/charter.md`
 - `${CLAUDE_PLUGIN_ROOT}/templates/project/conventions.md` → `docs/project/conventions.md`
 - `${CLAUDE_PLUGIN_ROOT}/templates/project/glossary.md` → `docs/project/glossary.md` (조건부)
@@ -227,9 +260,9 @@ placeholder 치환 매핑:
 | `{{VISION}}` | Phase 1 ① |
 | `{{NON_GOALS}}` | Phase 1 ② |
 | `{{TECH_STACK}}` | Phase 1 ④ (확정 tech-stack) |
-| `{{GOALS}}` | vision에서 파생한 1–3개 목표 (사용자 답변 기반) |
-| `{{SUCCESS_CRITERIA}}` | 사용자가 success/DoD를 언급했으면 그 값, 아니면 `_명시되지 않음 — 추후 보강._` |
-| `{{PERSONAS}}` | vision·non-goals 답변에 audience/사용자가 언급됐으면 그로부터 파생; 없으면 `_명시되지 않음 — 추후 보강._` (canned persona 주입 금지, AC14). **personas는 Law 1 게이트 항목이 아니므로**(AC10은 vision·non-goals·conventions·tech-stack만) 비어 있어도 abort하지 않는다. |
+| `{{GOALS}}` | 「더 묻기」 답이 있으면 그 답, 아니면 vision에서 파생한 1–3개 목표 (사용자 답변 기반) |
+| `{{SUCCESS_CRITERIA}}` | 「더 묻기」 답이 있으면 그 답; 아니면 사용자가 success/DoD를 언급했으면 그 값, 아니면 `_명시되지 않음 — 추후 보강._` |
+| `{{PERSONAS}}` | 「더 묻기」 답이 있으면 그 답; 아니면 vision·non-goals 답변에 audience/사용자가 언급됐으면 그로부터 파생; 없으면 `_명시되지 않음 — 추후 보강._` (canned persona 주입 금지, AC14). **personas는 Law 1 게이트 항목이 아니므로**(AC10은 vision·non-goals·conventions·tech-stack만) 비어 있어도 게이트에 걸리지 않는다. |
 | `{{NAMING}}`·`{{DIRECTORY_STRUCTURE}}`·`{{ERROR_HANDLING}}`·`{{ANTI_PATTERNS}}` | Phase 1 ③ conventions 답변을 항목별로 분배; 해당 답변이 없으면 `_명시되지 않음._` |
 | `{{BUILD_TEST}}` | Phase 0에서 감지한 build·test 명령; 없으면 `_명시되지 않음._` |
 | `{{GLOSSARY_TERMS}}` | 수집된 도메인 용어를 `- **<용어>**: <정의>` 목록으로 (용어 0개면 glossary.md 미생성) |
@@ -242,6 +275,8 @@ placeholder 치환 매핑:
 | **C-S2 (complete)** | 업데이트 승인 시: `## Project Charter` 섹션 in-place 교체 + `docs/project/` 파일 in-place 갱신. 거절 시: 전부 unchanged, 중복 `## Project Charter` 섹션 생성 안 함. |
 | **C-S3 (a) 섹션 항목 누락** | Phase 1 보충 질문으로 채운 뒤 C-S1과 동일하게 발행(in-place 교체). |
 | **C-S3 (b) docs 파일만 누락** | 질문 없이(C-S3(b) 계약) 누락된 `docs/project/charter.md`·`conventions.md`를 생성하되, **`## Project Charter` 요약이 실제 source로 가진 값(vision·non-goals·tech-stack)만** 채운다. 요약에 없는 필드 — charter.md의 `## Goals`·`## Success Criteria / Definition of Done`·`## Personas`, conventions.md의 모든 헤딩(`## Naming`·`## Directory Structure`·`## Error Handling`·`## Anti-patterns`·`## Build & Test`) — 는 위 4e placeholder 치환 매핑 표의 해당 fallback 마커(`_명시되지 않음._` 또는 charter.md soft 필드의 `_명시되지 않음 — 추후 보강._`)로 둔다(요약은 이 값들의 source가 아니므로 재구성 불가). AGENTS.md 섹션은 unchanged. 헌장 전체를 다시 채우려면 C-S2 경로의 "업데이트" 승인으로 Phase 1을 재진행한다. |
+
+갱신할 헌장 절이 쓸 파일에 없으면 C-S1 처럼 그 파일에 `## Project Charter` 섹션을 새로 더한다 — 위 C-S2 · C-S3 (a) 행이 제자리 갱신할 절이 4e 가 쓰는 파일(`AGENTS.md`, 「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md)에 없을 때다(감지가 CLAUDE.md 의 절을 읽었는데 S4 「CLAUDE.md 는 그대로 두기」로 옮겨지지 않은 경우). 값은 감지한 절의 값과 이번 실행에서 받은 답에서 가져온다. 「CLAUDE.md 는 그대로 두기」를 고른 CLAUDE.md 에는 쓰지 않는다.
 
 `docs/project/` 디렉토리가 없으면 생성한다. 비-관리 콘텐츠(다른 헤딩·단락·코드 블록)는 모든 state에서 보존한다(기존 4c matrix 정신). `## Project Charter` 요약은 ≤약 25줄로 유지하고 상세는 전부 `docs/project/`로 내린다(C5 — 기존 R1 size 룰 자기 준수).
 
@@ -257,10 +292,15 @@ placeholder 치환 매핑:
 > - `docs/git-workflow/branch-strategy.md` — 브랜치 룰
 > - `docs/git-workflow/commit-conventions.md` — Commit 컨벤션
 > - `docs/git-workflow/pr-process.md` — PR 프로세스
-> - `AGENTS.md` — `## Project Charter` 요약 섹션 (vision·non-goals·tech-stack + docs/project/ 포인터)
-> - `docs/project/charter.md` — vision·goals·non-goals·success criteria·personas
-> - `docs/project/conventions.md` — naming·구조·error handling·anti-patterns·build & test
-> - (도메인 용어가 있으면) `docs/project/glossary.md`
+> - `AGENTS.md` — `## Project Charter` 요약 섹션 (vision·non-goals·tech-stack + docs/project/ 포인터) (헌장을 건너뛰지 않았다면)
+> - `docs/project/charter.md` — vision·goals·non-goals·success criteria·personas (헌장을 건너뛰지 않았다면)
+> - `docs/project/conventions.md` — naming·구조·error handling·anti-patterns·build & test (헌장을 건너뛰지 않았다면)
+> - (헌장을 건너뛰지 않았고 도메인 용어가 있으면) `docs/project/glossary.md`
 >
 > `project-init` 플러그인 hook이 `Bash` 호출에서 브랜치 이름과 commit 메시지를 자동 검증합니다. 그 둘이 이 hook이 검사하는 전부입니다 — 위에 생성된 문서의 내용·구조·상호 포인터를 사후에 검증하는 것은 없습니다.
+> 헌장을 건너뛰었다면: 미완 항목 <항목> — 헌장 파일은 만들지 않았다.
+> CLAUDE.md 에 바로 썼다면: 관리 절이 CLAUDE.md 에 있다 — AGENTS.md 는 만들지 않았다.
+> CLAUDE.md 를 그대로 뒀다면: CLAUDE.md 의 관리 절은 갱신하지 않았다 — AGENTS.md 와 다를 수 있다.
+> git 규칙을 그대로 뒀다면: 브랜치 전략과 git 규칙 파일은 바꾸지 않았다 — 위 git 항목은 해당 없다. CLAUDE.md 에서 옮겼다면 기존 `## Git Workflow` 를 바꾸지 않고 AGENTS.md 로 옮겼다.
+> 헌장 절을 옮겼다면: CLAUDE.md 에 있던 `## Project Charter` 를 AGENTS.md 로 옮겼다.
 > 다음 할 일: 새 브랜치를 하나 만들어 보라 — `git checkout -b feature/<이름>` 이면 훅이 이름을 바로 확인한다.

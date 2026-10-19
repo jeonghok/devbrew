@@ -2,7 +2,7 @@
 
 ## 상한
 
-`rereview_cap: 2` — 최초 리뷰가 라운드 1(`rereview_count` 0), 저자 수정 뒤 리뷰마다 +1, 2 에서 상한(라운드 3). 라운드 4 는 사용자가 승인 게이트에서 열어야만 돈다. 이 값의 정본은 이 한 줄이다.
+`rereview_cap: 2` — 최초 리뷰가 라운드 1(`rereview_count` 0), 저자 수정 뒤 리뷰마다 +1, 2 에서 상한(라운드 3). 라운드 4 는 사용자가 승인 게이트에서 열어야만 돈다. 이 값의 정본은 이 한 줄이다. 기본값이다 — 프로필 필드 `rereview_cap` 과 환경 변수 `DEVBREW_DOCREVIEW_REREVIEW_CAP` 로 바꿀 수 있고(환경이 이긴다) 쓰인 값과 출처는 게이트 둘째 줄이 낸다.
 
 ## 한 라운드
 
@@ -13,16 +13,16 @@
 
 **왜 배포 경로에서 부르는가.** 스크립트는 배포 경로(`<플러그인 루트>/scripts/…`)에서 부른다. 정본(`shared/docreview/scripts/`)에서 부르면 안 된다 — 스크립트는 형제 파일에 의존하는데(셸 러너는 `runner_common.sh` 를, `docreview_route.py` 는 `adjudication` 모듈을) 그 형제는 배포 디렉토리에만 있다(정본 트리에서는 다른 자리에 산다). 그래서 정본에서 부르면 죽는 방식도 다르다: 셸 러너는 fail-closed 로 `codex_failed: true · reason: runner_common_unloadable` 을 기록하고 rc 0 으로 끝나고, `docreview_route.py` 는 `ModuleNotFoundError` 로 rc 1 에 죽는다.
 
-1. **스냅샷** — `docreview_anchor.py snapshot <doc> > snap.json`. `docreview_state.py begin-round --state-dir D --snapshot snap.json` (라운드 4 이상은 `--extra-approval "<사용자 문구>"`; rc 3 이면 상한 — 승인 없이 진행하지 않는다). **rc 가 0 이 아니면 값과 무관하게 이 라운드를 진행하지 않는다** — rc 3 밖의 non-zero 는 이번 라운드 시작 표식이 기록됐다고 믿을 수 없다는 뜻이고, 5단계의 시점 판별(4단계 중화가 불가능한 조합의 집행)이 그 표식에 기댄다.
+1. **스냅샷** — `docreview_anchor.py snapshot <doc> > snap.json`. `docreview_state.py begin-round --state-dir D --snapshot snap.json` (라운드 4 이상은 `--extra-approval "<고른 선택지 이름 또는 기타 칸에 쓴 말>" --extra-approval-source label|typed`; rc 3 이면 상한 — 승인 없이 진행하지 않는다). **rc 가 0 이 아니면 값과 무관하게 이 라운드를 진행하지 않는다** — rc 3 밖의 non-zero 는 이번 라운드 시작 표식이 기록됐다고 믿을 수 없다는 뜻이고, 5단계의 시점 판별(4단계 중화가 불가능한 조합의 집행)이 그 표식에 기댄다.
 2. **kill switch** — dispatch 직전에 확인하고 캐시하지 않는다. `DEVBREW_<HOST>_DISABLE`(전체)·`…_DISABLE_CODEX`·`…_DISABLE_WEB`·`…_DISABLE_RECRITIC`.
-3. **탐지** — 진입 skill 이 고른 탐지 리뷰어를 한 번 dispatch. 기본은 `doc-critic` 이고, 프로필이 `web: true` 인 자리는 자기 선택 펜스로 웹 사본 `doc-critic-web` 을 지명할 수 있다(어느 쪽인지는 진입 skill 이 정한다). 입력 슬롯: 문서(또는 번들) · 프로필 · (있으면) 같은 출처의 이전 라운드 finding id. 출력을 verbatim 파일로 저장한다.
+3. **탐지** — 1단계 `begin-round` 출력의 `config.detectors.value`(N) 만큼 진입 skill 이 고른 탐지 리뷰어를 dispatch 한다(한 메시지에 Agent 호출 여럿 — 병렬). 리뷰어 i 의 출력은 문서별 상태 디렉토리의 `critic-<i>.txt`(i = 1…N)에 verbatim 으로 저장한다 — N 과 그 출처는 게이트 둘째 줄이 공시한다. 기본은 `doc-critic` 이고, 프로필이 `web: true` 인 자리는 자기 선택 펜스로 웹 사본 `doc-critic-web` 을 지명할 수 있다(어느 쪽인지는 진입 skill 이 정한다). 입력 슬롯: 문서(또는 번들) · 프로필 · (있으면) 같은 출처의 이전 라운드 finding id. (있으면) `docreview_state.py related-changes --state-dir D` 출력 — 이 라운드에 결정 때문에 함께 바뀐 절의 제목과 앵커만. 결정 이유는 싣지 않는다. 리뷰어마다 출력을 verbatim 파일로 저장한다.
 4. **codex** — 산출물 경로는 **같은 문서의 라운드마다 같아야 한다**(문서의 순수 함수 — 문서별 상태 디렉토리 안에 둔다. `mktemp` 은 다음 셸이 재발견하지 못한다). 아래에서 `codex.yaml` 이라 부르는 것은 **그렇게 도출한 절대 경로**이지 벗은 상대 이름이 아니다 — 상대 이름은 cwd 의 함수라 동시 세션 둘이 같은 파일을 공유한다. 그래서 이 단계는 **그 경로의 중화로 시작한다**(아래 첫 불릿). 그다음 kill switch 가 codex 를 끄지 않았으면 `run_docreview_codex_reviewer.sh <profile> <doc> <project_dir> codex.yaml`, 그리고 `rc == 3` 이면 `rm -f codex.yaml`.
    - **왜 중화가 앞인가.** 파일 내용으로 5단계가 볼 수 있는 것은 `meta.codex_failed` 하나다. 직전 라운드가 성공했으면 그 파일에 `codex_failed: false` 가 남아 있고, codex 를 **건너뛴** 라운드(kill switch · 미설치 · 감지기 부재 · 게이트 입력 부재)가 그것을 남기면 5단계가 이번 라운드의 codex 결과로 삼켜 `codex_absent: false` · degrade 없음으로 보고할 수 있다(5단계의 시점 판별은 1단계가 이번 라운드 시작을 기록했다는 전제 위에 있다 — 이 중화는 그 전제에 기대지 않는다). 제거를 가용성 분기 **안**에 두면 그 넷이 전부 우회한다 — 사용자가 끈 라운드가 「모델 다양성 정상」으로 보이는 것은 P21 위반이다(kill switch 는 보안 컨트롤).
    - **판별자는 내용이 아니라 시점이다.** 직전 라운드의 산출물과 이번 라운드의 정직한 실패 기록은 스키마도 마커도 같아 내용으로 못 가른다. 진입에서 지우면 그 뒤에 있는 것은 이 실행이 쓴 것뿐이고, 러너가 `trap … EXIT`·`emit_fallback` 으로 남기는 이번 라운드의 degrade 기록(`codex_failed: true` + 사유)은 지움 **뒤**에 쓰이므로 살아남는다. 그러므로 **무조건 지움을 분기 뒤로 옮기지 마라** — 그러면 이번 라운드의 정직한 사유가 `yaml_missing_or_broken` 으로 뭉개진다.
    - **중화는 「시도」가 아니라 「보장」이어야 한다.** `rm -f` 의 rc 를 보지 않으면 이 규칙은 무조건형으로 적히고 조건부로 동작한다 — 실측: 상태 디렉토리가 쓰기 불가면 `rm` 이 rc 1 로 실패하고 파일이 살아남아 위 결함이 그대로 재현된다. unlink 는 **디렉토리** 권한을, 절단은 **파일** 권한을 요구한다: 지우지 못하면 `: > codex.yaml` 로 0바이트로 만든다(0바이트는 5단계에서 이미 fail-closed 다 — 실측 `codex_absent: true`). 둘 다 실패하면(디렉토리·파일 모두 쓰기 불가) **조용히 넘어가지 말고** 그 라운드의 codex 축을 끄고 사유(`residue_unclearable`)와 함께 공시한다 — 그리고 5단계의 `--codex` 에 그 경로를 넘기지 않는다. 1단계가 이번 라운드에 rc 0 으로 끝났다면 5단계의 시점 판별이 그 파일을 부재로 읽지만(`codex_predates_round`), 그것은 그 전제 위의 두 번째 방어다.
    - **왜 `rc == 3` 인가(그리고 `rc != 0` 이 왜 틀렸나).** 〔정정〕 이 자리는 한때 *"기록을 남기는 러너 종료는 전부 exit 0"* 이라는 이유로 `!= 0` 을 가르쳤다. **그 전제는 거짓이다.** EXIT 트랩은 「자기 rc 를 갖는 종료 지점」이 아니라 모든 종료에 얹히므로 **원래 실패의 rc 를 그대로 둔 채** 기록을 남긴다 — 실측: 트랩 무장 뒤 SIGTERM 이면 `rc 143` 과 `reason: aborted_before_completion` 인 정직한 이번 라운드 기록이 함께 나온다. 그래서 `!= 0` 은 바로 위 불릿이 「살아남는다」고 가르치는 그 기록을 지운다(같은 단계 안에서 자기모순이었다). 반대로 `!= 0` 이 대신 막아 주는 것은 **없다** — 0바이트 껍데기는 러너가 출력 경로를 절단한 뒤 자신의 EXIT 트랩(`_degrade_if_empty`)이 기록을 끝내기 전에 죽으면 생기고, 그 죽음은 rc 하나로 안 좁혀진다(실측: 트랩 자체가 못 뜨는 신호 종료 SIGKILL·SIGXFSZ 둘 다 같은 껍데기를 남겼다). 트랩이 뜨는 종료(SIGTERM, 위 문단)는 이미 정직한 기록을 남기고, 트랩이 못 뜨는 나머지는 5단계(익명화)가 빈 파일을 이미 fail-closed 로 읽으므로(실측 `codex_absent: true`) 술어를 넓힐 이유가 없다. `rc == 3` 이 실제로 디스크에 남기는 것은 새 껍데기가 아니라 **원래 있던 것 그대로**다(실측: 경로가 애초에 쓰기 불가면 파일 자체가 없고, 사전에 0바이트 껍데기나 이전 라운드의 실 데이터가 있었으면 그 내용이 손대지 않은 채 남는다) — 그래서 이 단계 맨 앞의 `rc == 3` 이면 `rm -f codex.yaml` 이 정확히 이 잔존을 치우는 조치다. 잃는 것은 정직한 사유뿐이므로 **`== 3` 이 `!= 0` 을 지배한다.** 형제 `request-framing` 도 `-eq 3` 이다.
-5. **익명화** — `docreview_route.py prepare-recritic --state-dir D --critic critic.txt --codex codex.yaml > prep.json`. `codex.yaml` 이 1단계 `begin-round` 가 기록한 이번 라운드 시작보다 먼저(또는 같은 시각에) 쓰였으면 내용과 무관하게 부재로 읽는다(`codex_predates_round`; 기록이 없으면 `round_start_unrecorded`, 정수가 아니면 `round_start_unreadable`) — 4단계의 중화가 불가능한 권한 조합(상태 디렉토리와 그 파일이 둘 다 쓰기 불가, 상태 파일은 쓰기 가능 — 이때 1단계는 통과한다)의 집행 지점이 여기다. `critic.txt`(진입 skill 이 문서별 상태 디렉토리 안에 둔 절대 경로)도 같은 표식보다 먼저(또는 같은 시각에) 쓰였으면 내용과 무관하게 부재로 읽어 critic 사망이다(`critic_predates_round`) — 탐지를 dispatch 하지 못한 라운드에 같은 자리에 남은 직전 라운드의 탐지 출력을 이번 라운드 것으로 섭취하지 않는다. rc 4 면 critic 사망 — 라운드를 세지 않고 재dispatch 1회, 또 실패면 6~7단계를 건너뛰고 8단계로 가 승인 게이트를 「미검증」으로 연다. 그 사실은 엔진이 안다 — 이 단계가 이번 라운드의 준비에 critic 사망을 남기고 그 준비는 7단계의 성공만 치우므로, 8단계 요약이 `unverified: critic_dead` 를 내고 렌더 첫 줄이 그 공시로 시작한다. `prep.json` 의 `items` 가 재비판 입력이다.
-6. **재비판** — recritic kill switch 가 아니면 `doc-recritic` 을 한 번 dispatch. 입력 슬롯 셋: 문서 · `prep.json` 의 items(출처 라벨 없음) · 프로필. 그 외 아무것도 넣지 않는다(프레이밍 차단). 출력을 verbatim 파일로.
+5. **익명화** — `docreview_route.py prepare-recritic --state-dir D --critic critic-1.txt [--critic critic-2.txt …] --codex codex.yaml > prep.json`. `codex.yaml` 이 1단계 `begin-round` 가 기록한 이번 라운드 시작보다 먼저(또는 같은 시각에) 쓰였으면 내용과 무관하게 부재로 읽는다(`codex_predates_round`; 기록이 없으면 `round_start_unrecorded`, 정수가 아니면 `round_start_unreadable`) — 4단계의 중화가 불가능한 권한 조합(상태 디렉토리와 그 파일이 둘 다 쓰기 불가, 상태 파일은 쓰기 가능 — 이때 1단계는 통과한다)의 집행 지점이 여기다. `critic-<i>.txt`(진입 skill 이 문서별 상태 디렉토리 안에 둔 절대 경로 — 파일마다 따로 잰다)도 같은 표식보다 먼저(또는 같은 시각에) 쓰였으면 내용과 무관하게 부재로 읽어 critic 사망이다(`critic_predates_round`) — 탐지를 dispatch 하지 못한 라운드에 같은 자리에 남은 직전 라운드의 탐지 출력을 이번 라운드 것으로 섭취하지 않는다. 일부 리뷰어만 죽으면(`degrade.detectors`) 그 리뷰어만 재dispatch 1회, 또 실패면 「탐지 N 중 k 사망」으로 공시하고 남은 결과로 간다 — 전부 죽어야 「미검증」이다. rc 4 면 critic 사망(탐지 전부 사망) — 라운드를 세지 않고 재dispatch 1회, 또 실패면 6~7단계를 건너뛰고 8단계로 가 승인 게이트를 「미검증」으로 연다. 그 사실은 엔진이 안다 — 이 단계가 이번 라운드의 준비에 critic 사망을 남기고 그 준비는 7단계의 성공만 치우므로, 8단계 요약이 `unverified: critic_dead` 를 내고 렌더 첫 줄이 그 공시로 시작한다. `prep.json` 의 `items` 가 재비판 입력이다.
+6. **재비판** — recritic kill switch 가 아니면 `doc-recritic` 을 한 번 dispatch. 입력 슬롯 셋: 문서 · `prep.json` 의 items(출처 라벨 없음) · 프로필. 여기에 (있으면) `related-changes` 출력 — 함께 바뀐 절의 제목과 앵커만 — 을 더한다. 그 외 아무것도 넣지 않는다(프레이밍 차단 — 결정 이유는 싣지 않는다). 출력을 verbatim 파일로.
 7. **얼림 검사 + 라우팅** — `docreview_route.py finalize --state-dir D [--recritic recritic.txt | --recritic-skipped] --doc <doc> > fin.json`. 얼림 검사와 permit · fix 적용 관측은 엔진이 1단계 `begin-round` 가 원장에 저장한 라운드별 스냅숏으로 계산한다 — 오케스트레이터는 diff 를 만들지 않는다. 관측을 건너뛴 라운드(5단계 critic 사망으로 6~7단계를 건너뛴 라운드 등)의 permit 은 뒤 라운드의 `finalize` 가 그 라운드의 스냅숏 쌍으로 따라잡는다. **따라잡는 것은 permit · fix 관측뿐이다** — 그 라운드 자신의 얼림 검사(직전 스냅숏 → 그 라운드 스냅숏의 허가 없는 변경 → 자동 `decide`)는 따라잡지 않는다. 뒤 라운드는 자기 창만 보므로 그 창의 변경은 결정으로 올라오지 않는다(알려진 한계). 필요한 스냅숏이 원장에 없으면 `finalize` 가 빈 diff 로 넘어가지 않고 rc ≠ 0 이다(`snapshot_missing`). **`finalize` 의 rc 가 0 이 아니면 값과 무관하게 이 라운드를 정상 게이트로 넘기지 않는다** — 그 `fin.json` 은 비었거나 직전 라운드 것이라 판정에 쓰지 않고, 8단계는 엔진이 「미검증」으로 낸 게이트다(`unverified: finalize_incomplete`): 실패한 `finalize` 는 이번 라운드의 준비를 치우지 못했거나(라우팅 전에 죽었다) 이번 라운드 자리에 거부 표지를 남긴다(준비가 없거나 다른 라운드 것이라 소비하지 않았다). 모양은 선결 `init` · 1단계의 rc 규칙(값과 무관하게)과 같되, 탐지가 이미 돈 뒤라 라운드를 되돌리지 않고 critic 사망과 같은 「미검증」 게이트로 닫는다 — 둘 다 이번 라운드의 판정이 원장에 없다는 같은 사실이라 막는 것은 같고, 공시하는 사유만 다르다.
 8. **게이트** — `docreview_state.py gate --state-dir D --render`. `round_gate_needed` 면 라운드
 게이트(`decide` 묶음 + 차단 `ask`, 렌더 순서)를 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠
@@ -36,11 +36,10 @@
 하나다.** **열린 것이 있으면 그 열린 항목들과 함께 「추가 라운드 1회 열기」가 별개 항목으로
 렌더 순서 맨 끝에 서고, 같은 4개씩 분할에 함께 세어지며, 선택지 「열기 / 열지 않음」 둘뿐인 그
 자신의 질문이다**(열린 항목을 마저 처리하는 것과는 독립적으로 고른다 — 다른 항목의 질문에
-얹지 않는다). 「추가 라운드 1회 열기」를 고르면 다음 라운드 1단계가 `begin-round --extra-approval "<사용자
-자신의 문구>"` 로 돈다(그 문구가 `extra_rounds` 에 개별 기록된다). 2단계(네 옵션)의 정본은
-`proceed-gate.md`.
+얹지 않는다). 「추가 라운드 1회 열기」를 고르면 다음 라운드 1단계가 `begin-round --extra-approval "<고른 선택지 이름 또는 기타 칸에 쓴 말 그대로>" --extra-approval-source label|typed` 로 돈다 — 선택지를 골랐으면 `label`, 기타 칸에 썼으면 `typed`. 둘이 `extra_rounds` 에 함께 기록된다. 2단계(네 옵션)의 정본은
+`proceed-gate.md`. (지휘 세션 아래는 승인 질문 하나 — 승인 · 수정 필요 · 멈춤)
 
-**`AskUserQuestion` 라벨의 항목별 내용** — 각 선택지 `label` 은 **상태별 라벨 + `— <replacement 를 1–5 낱말로 압축>`** 이다. 상태별 라벨만 담으면 같은 라운드의 여러 항목이 전부 같은 글자가 되어 「라벨만 읽고 고른다」가 원리적으로 안 닫힌다. 같은 라운드의 두 항목이 **같은 라벨을 갖지 않는다.** 단 `replacement` 가 둘 다 부재면 그 부재 표기(`(대체안 미작성)`)가 같을 수 있고, 그때는 이 규약이 공허해지지 않도록 **부재 건수를 함께 공시한다**(「대체안 미작성 N건」). `label` 예산은 1–5 낱말이므로 압축은 필수다 — 렌더의 「고치면」 줄이 전문을 이미 내므로 라벨은 그 줄을 가리키는 손잡이다.
+**`AskUserQuestion` 라벨의 항목별 내용** — 각 선택지 `label` 은 **상태별 라벨 + `— <replacement 를 1–5 낱말로 압축>`** 이다. 상태별 라벨만 담으면 같은 라운드의 여러 항목이 전부 같은 글자가 되어 「라벨만 읽고 고른다」가 원리적으로 안 닫힌다. 같은 라운드의 두 항목이 **같은 라벨을 갖지 않는다.** 단 `replacement` 가 둘 다 부재면 그 부재 표기(`(대체안 미작성)`)가 같을 수 있고, 그때는 이 규약이 공허해지지 않도록 **부재 건수를 함께 공시한다**(「대체안 미작성 N건」). `label` 예산은 1–5 낱말이므로 압축은 필수다 — 렌더의 「고치면」 줄이 전문을 이미 내므로 라벨은 그 줄을 가리키는 손잡이다. 질문 · 선택지 이름에 AC 번호 · 지적 id · § 를 쓰지 않고 설명 괄호에만 쓴다 — 선택지 이름만 보고 무엇을 고르는지 알 수 있어야 한다. 상한 · 정체로 열린 승인 게이트의 승인 선택지 이름은 엔진 렌더의 「열린 지적 N개를 두고 진행」을 그대로 쓴다.
 
 요약(`gate --state-dir D`, `--render` 없이)의 `approval_label` 이 있으면(「미검증」) 승인
 게이트를 그 라벨로 연다 — 라벨의 정본은 엔진 출력이고, 사유는 `unverified`(`critic_dead` · `finalize_incomplete`)다.
@@ -67,14 +66,16 @@ advice 로 간 항목이나 적용 · drop 된 fix 를 `supersedes` 로 이은 �
 - brief — 호출자 Step B
 - seed — 계수만
 
-    docreview_state.py advice --state-dir D [--render [--cap 8] [--where <박제처>]] [--sink <doc>] [--log-file <decision_log 목적지>]
+    docreview_state.py advice --state-dir D [--render [--cap <n>] [--where <박제처>]] [--sink <doc>] [--log-file <decision_log 목적지>]
 
+- `--cap` 을 주지 않으면 줄 수는 환경 변수 > 프로필 > 8 순으로 정해진다(머리 줄이 값과 출처를 밝힌다).
 - `--render` 는 아직 안 보인 항목을 머리 한 줄 + 항목 한 줄씩(최대 cap) + `외 K건` 한 줄로 낸다(≤10줄).
 - `--sink` 는 프로필 `defer_target` 절에 아직 박제하지 않은 항목을 표 행으로 적는다. `defer_target` 이 없으면
   rc 1 `profile_has_no_defer_target` 이다.
 - `--log-file` 은 라운드별 계수 줄(`docreview 계수 — <리뷰 정체> r<n>: …`)을 프로필 `decision_log` 절에 한 번씩
   적는다.
-- 플래그가 없으면 목록 JSON 을 낸다(읽기 전용).
+- `advice` 는 위 쓰기 플래그 하나 이상이 있어야 돈다 — 없으면 rc 2 `advice_needs_flag` 이다. 목록은
+  `advice-list --state-dir D`(쓰기 플래그 없음 · 원장을 쓰지 않음)로 받는다 — `$(…)` 로 받고 파일로 넘기지 않는다.
 
 셋 다 멱등이다. 「추가 라운드 1회 열기」를 고르면 부르지 않는다 — 다음 라운드 끝으로 미뤄진다.
 
@@ -82,8 +83,13 @@ advice 로 간 항목이나 적용 · drop 된 fix 를 `supersedes` 로 이은 �
 
 - `decide` → 라운드 게이트(결정 묶음). `defer` → `docreview_state.py defer --log-file <목적지>`. `fix` → 저자가 `check-intent <id> --intent <scope> --state-dir D` 통과 후 적용. `drop`·recritic `reject` → 회계에만 남고 게이트 앞 글에 개수 공시.
 - 채택된 `decide` 의 적용은 `check-intent <id> --intent <scope> --state-dir D --decision-id <D#>`(permit 계약).
+- 렌더에서 「고친다(채택)는 고를 수 없다」 줄이 붙은 결정은 그 선택지를 질문에 넣지 않는다 — 고칠 범위가 바꾸면 안 되는 절(사용자 원문 · 결정 기록 · 미룬 항목)이거나 문서에 없는 자리라 `decide` 가 거부한다(`edit_scope_refused`). 질문 앞 글에 그 줄을 그대로 옮긴다.
+- 채택한 결정 때문에 다른 절(수용 기준 · 처분표 등)도 고쳤으면 `docreview_state.py declare-related --state-dir D --decision <D#> --anchors <앵커…>` 로 그 절을 결정에 묶는다(이 명령도 원장 쓰기다 — 진입 skill 의 표지 확인 줄 다음에만 같은 Bash 호출에서 부른다) — 묶은 절은 다음 라운드 얼림 검사에서 빠지되 게이트에 「이 결정 때문에 함께 바뀐 곳」으로 보이고 다음 라운드 리뷰어가 다시 본다. 묶지 않고 고친 절은 「허가 없이 바뀐 곳」으로 다시 사용자에게 간다.
+- 사람이 내린 결정(기각 되돌림 · 재결정 · 재분해 등)을 문서의 결정 기록 절(프로필 `decision_log` 이 문서 절인 자리)에 남길 때, 그 문서에 원장이 있으면 손으로 쓰지 않고 `docreview_state.py log-decision --state-dir D --log-file=<doc> --line=<줄> --quote=<사용자 말>` 로 쓴다(원장 쓰기 — 진입 skill 의 표지 확인 줄 다음에만). 줄과 말은 따옴표 heredoc 으로 받은 임시 파일에서 넘긴다 — 셸 따옴표 안에 글을 직접 넣지 않는다(글 안의 따옴표가 셸로 샌다) · 값은 `=` 꼴로 붙인다(「-」 로 시작하는 글이 옵션으로 읽히지 않게). 엔진이 `- <줄> — 「<사용자 말>」` 한 줄을 쓰고 출처를 남겨 다음 라운드 얼림 검사를 지난다. 손으로 쓴 줄은 「허가 없이 바뀜」 결정으로 돌아온다. 줄은 이미 한 줄이어야 하고 엔진 결정 줄 · 목록 · 제목 표지로 시작하지 못한다(rc 2). 사용자 말은 그대로 싣되 한 줄로 접는다. 원장이 없으면(리뷰 전) 손으로 쓴다 — 첫 라운드가 기준선으로 받는다. 원장 자리를 찾지 못했거나 엔진이 거부하면(rc 1) 손으로 쓰지 않고 사유를 보이고 멈춘다 — 그 줄은 열린 리뷰에서 다시 묻는다.
 - 참고(advisory) → 라운드 게이트에 오지 않는다. 끝에서 한 번 `advice`(진입 자리)로 보이고 박제된다.
 
 ## degrade
 
 codex 부재·critic 층 2 부재·recritic 부재는 `fin.json` 의 `advisory[]` 와 게이트 첫 줄로 공시한다. 막는 것은 critic 사망(주 판정자)·항목 소실·셀 수 없음뿐이다(`fin.json` 의 `blocks`). critic 사망과 `finalize` 실패는 `fin.json` 이 없는 라운드에서도 게이트 요약(`unverified` · `round_reviewed`)과 렌더 첫 줄이 말한다.
+
+엔진이 `ledger_corrupt`(원장이 엔진이 쓴 것과 다르다)로 멈추면 거기서 멈춘다. 사용자에게 원장 경로와 복구 길 둘을 그대로 보이고, 원장을 손으로 고쳐 계속하지 않는다.

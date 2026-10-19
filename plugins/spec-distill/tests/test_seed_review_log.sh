@@ -213,7 +213,7 @@ assert_contains "$(cat "$TMP/evil.out")" '`touch' "one-line: 글자는 그대로
 # ── 변이 — 한 줄 잇기를 지우면 여러 줄 문구가 기록되지 못한다(이빨) ──────────
 # 변이본은 $TMP 에서 돈다 — 형제 모듈 section6.py(제목 모양 판정) · docreview_advice.py(엔진 계수 줄)를 함께 옮긴다. 없으면
 # ModuleNotFoundError 로 죽은 rc 가 변이의 결과로 오독된다.
-cp "$S/section6.py" "$S/docreview_advice.py" "$TMP/"
+cp "$S/section6.py" "$S/docreview_advice.py" "$S/docreview_config.py" "$TMP/"
 python3 - "$L" "$TMP/mut_ol.py" <<'PY'
 import sys
 t = open(sys.argv[1], encoding="utf-8").read()

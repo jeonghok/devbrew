@@ -19,8 +19,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점의 형제를 읽는다
 from docreview_state import (  # noqa: E402
-    DOC_ANCHOR, ProfileError, anchors_matching, diff_snapshots, fail, load_profile, load_state, save_state,
-    slugify,
+    DOC_ANCHOR, LedgerCorrupt, ProfileError, anchors_matching, diff_snapshots, fail, load_profile, load_state, save_state,
+    scope_label_problem, scope_problem, slugify,
 )
 
 HEADING_RE = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
@@ -60,9 +60,13 @@ def parse_sections(text: str, keep_body: bool = False) -> dict:
     sections = []
 
     def add(anchor, title, level, a, b, parents):
-        body = "\n".join(x.rstrip() for x in lines[a:b]).strip("\n")
+        rows = [x.rstrip() for x in lines[a:b]]
+        while rows and rows[-1] == "":
+            rows.pop()
+        body = "\n".join(rows).strip("\n")
         item = {"anchor": anchor, "title": title, "level": level, "line": a + 1,
                 "hash": hashlib.sha1(body.encode("utf-8")).hexdigest()[:12],
+                "line_hashes": [hashlib.sha1(r.encode("utf-8")).hexdigest()[:12] for r in rows],
                 "parents": list(parents)}
         if keep_body:
             item["body"] = body
@@ -149,6 +153,10 @@ def cmd_diff(a) -> int:
     ex = json.loads(Path(a.exempt).read_text(encoding="utf-8")) if a.exempt else []
     if not isinstance(ex, list):
         return fail("exempt_not_list")
+    # 이 CLI 는 어느 절이 불변인지 모른다 — 줄 해시를 떼어 «덧붙이기만 허용» 면제가 모든 절에 번지지 않게 한다.
+    for snap in (old, new):
+        for s in snap.get("sections", []):
+            s.pop("line_hashes", None)
     _emit(diff_snapshots(old, new, ex))
     return 0
 
@@ -197,6 +205,8 @@ def cmd_check_intent(a) -> int:
     「immutable 은 예외 0」이라는 더 강한 사실이 하류에 안 보인다. 일반 경로도 앵커 실재를 본다
     (AC23) — `fix_anchors: ["*"]` 프로필에서 없는 앵커가 `fix_allowed` 로 분류되기 때문이다
     (insert-after 경로의 `insert_after_unresolved` 와 사유 문자열이 다르다).
+    라벨 · 실재 · 불변 · 결정 기록 · 미룸 절 판정은 `docreview_state.scope_problem` 하나다(decide · declare-related 와
+    같다) — 결정 기록 · 미룸 절은 두 계약 모두에서 못 넘는다(`anchor_log_section` · `insert_after_log_section`).
     """
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
@@ -206,6 +216,9 @@ def cmd_check_intent(a) -> int:
     if not f:
         return _reject("unknown_finding", id=a.finding_id)
     intent = a.intent.strip()
+    why_label = scope_label_problem(intent)   # 면제 라벨 위조는 두 계약 모두에서 거부 — state 와 같은 검증기
+    if why_label:
+        return _reject(why_label, scope=intent)
     is_insert = intent.startswith("insert-after:")
     target = intent.split(":", 1)[1] if is_insert else intent
     cls = classify_anchor(target, sections, prof)
@@ -219,8 +232,9 @@ def cmd_check_intent(a) -> int:
             return _reject("permit_consumed")
         if intent not in p["apply_anchors"]:
             return _reject("scope_outside_permit", apply_anchors=p["apply_anchors"])
-        if cls["immutable"]:
-            return _reject("anchor_immutable")
+        why = scope_problem(intent, sections, prof)   # 기록 검증 하나 — 불변 · 결정 기록 · 미룸 절과 없는 앵커는 permit 으로도 못 넘는다
+        if why:
+            return _reject("anchor_immutable" if why == "insert_after_immutable" else why)
         print(json.dumps({"ok": True, "contract": "permit", "scope": intent, "decision_id": a.decision_id},
                          ensure_ascii=False))
         return 0
@@ -245,18 +259,13 @@ def cmd_check_intent(a) -> int:
     scope = f.get("edit_scope") or f["anchor"]
     if intent != scope:
         return escalate("scope_outside_edit_scope")
+    why = scope_problem(intent, sections, prof)   # 라벨 · 없는 앵커 · 울타리 절(불변 · 결정 기록 · 미룸) — decide · declare-related 와 같은 판정
+    if why:
+        return escalate(why)
     if is_insert:
-        if not cls["found"] and target != PREAMBLE:
-            return escalate("insert_after_unresolved")
-        if cls["immutable"]:
-            return escalate("insert_after_immutable")
         if cls["protected"]:
             return escalate("insert_after_protected")
     else:
-        if cls["immutable"]:
-            return escalate("anchor_immutable")
-        if not cls["found"] and target != PREAMBLE:
-            return escalate("anchor_unresolved")
         if not cls["fix_allowed"]:
             return escalate("anchor_not_in_fix_anchors")
         if cls["protected"]:
@@ -271,16 +280,19 @@ def cmd_check_intent(a) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="docreview_anchor.py")
+    p = argparse.ArgumentParser(prog="docreview_anchor.py", allow_abbrev=False)
     sp = p.add_subparsers(dest="cmd", required=True)
-    x = sp.add_parser("snapshot"); x.add_argument("doc"); x.set_defaults(fn=cmd_snapshot)
-    x = sp.add_parser("diff"); x.add_argument("old"); x.add_argument("new")
+
+    def P(name):   # 하위 명령마다 줄인 플래그를 거부한다
+        return sp.add_parser(name, allow_abbrev=False)
+    x = P("snapshot"); x.add_argument("doc"); x.set_defaults(fn=cmd_snapshot)
+    x = P("diff"); x.add_argument("old"); x.add_argument("new")
     x.add_argument("--exempt", default=None); x.set_defaults(fn=cmd_diff)
-    x = sp.add_parser("protected"); x.add_argument("anchor")
+    x = P("protected"); x.add_argument("anchor")
     x.add_argument("--profile", required=True); x.add_argument("--snapshot", required=True)
     x.set_defaults(fn=cmd_protected)
-    x = sp.add_parser("refs"); x.add_argument("anchor"); x.add_argument("doc"); x.set_defaults(fn=cmd_refs)
-    x = sp.add_parser("check-intent"); x.add_argument("finding_id")
+    x = P("refs"); x.add_argument("anchor"); x.add_argument("doc"); x.set_defaults(fn=cmd_refs)
+    x = P("check-intent"); x.add_argument("finding_id")
     x.add_argument("--intent", required=True); x.add_argument("--state-dir", required=True)
     x.add_argument("--decision-id", default=None); x.set_defaults(fn=cmd_check_intent)
     return p
@@ -290,6 +302,8 @@ def main(argv=None) -> int:
     a = build_parser().parse_args(argv)
     try:
         return a.fn(a)
+    except LedgerCorrupt as e:
+        return fail(e.reason, **e.extra)
     except FileNotFoundError as e:
         return fail("file_missing", path=str(e))
     except (ValueError, RuntimeError) as e:

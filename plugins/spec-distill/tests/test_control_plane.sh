@@ -36,7 +36,7 @@ git clone -q "$T/origin.git" "$W" 2>/dev/null
 push_file "$RM" "로드맵"
 mkdir -p "$S"
 cp "$REAL/control_plane.py" "$REAL/kill_switch_active.py" "$REAL/conductor_state.py" "$REAL/repo_defaults.py" \
-  "$REAL/ledger_marker.py" "$REAL/roadmap_model.py" "$REAL/section6.py" "$S/"
+  "$REAL/ledger_marker.py" "$REAL/roadmap_model.py" "$REAL/section6.py" "$REAL/brief_body.py" "$S/"
 sp_off "$S/state_path.py"
 cat > "$S/roadmap_status.py" <<'PY'
 #!/usr/bin/env python3

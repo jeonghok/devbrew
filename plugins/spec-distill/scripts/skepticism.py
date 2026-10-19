@@ -31,7 +31,7 @@ VALID_VERDICTS = ("kept", "refined", "switched", "deferred")
 # statement<10c 측정에서 판정 어구 자체를 제외한다 — 남겨두면 그 어구(>=14자)가 항상 통과시켜
 # 검사가 도달 불가능해진다.
 VERDICT_CLAUSE_RE = re.compile(r"verdict:\s*\S+", re.IGNORECASE)
-ST_HEADING_RE = re.compile(r"^####\s+(ST\d+)\b", re.MULTILINE)
+ST_HEADING_RE = re.compile(r"^####[ \t]+(ST\d+)\b", re.MULTILINE)
 ST_REF_RE = re.compile(r"\b(ST\d+)\b")
 
 # 검토 항목 — steelman 0건 폐쇄 기록. `steelman 0건` 리터럴까지 요구해 미래의 다른 `검토 —` 와 겹치지 않게 좁힌다.

@@ -45,8 +45,8 @@ if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 import section6  # noqa: E402
 from seed_review_log import (AuditAmbiguous, duplicate_headings, heading_structure,  # noqa: E402
-                             require_unambiguous, section_body, separator_lines, separator_message,
-                             user_quotes)
+                             read_audit_text, require_unambiguous, section_body, separator_lines,
+                             separator_message, user_quotes)
 
 # 리뷰어에게 비신뢰 verbatim 으로 알릴 audit 자리 — seed 프로필 `## 처분 안내` 가 이 셋을 이름으로
 # 가리킨다(shared/tests/test_docreview_profiles.sh 가 이 튜플에서 도출해 대조한다). assemble() 은
@@ -146,7 +146,7 @@ def main() -> int:
             return 2
 
     seed_text = paths["seed_file"].read_text(encoding="utf-8", errors="replace")
-    audit_text = paths["audit_file"].read_text(encoding="utf-8", errors="replace")
+    audit_text = read_audit_text(paths["audit_file"], "replace")
     claude_md_text = paths["claude_md_file"].read_text(encoding="utf-8", errors="replace")
 
     sep = separator_lines(audit_text)

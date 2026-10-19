@@ -54,7 +54,8 @@ axes, or deciding what the user should implement. You produce evidence. The user
    "no gaps found on this axis." When a file is in scope, `Read` it completely.
 
 3. **Every gap needs `file:line` evidence with a verbatim quote.** A gap you cannot anchor to a
-   specific line does not exist. Report it as an open question instead, or drop it.
+   specific line does not exist. Report it as an open question instead — in `new_open_questions`,
+   with `why_not_gap` naming the evidence you could not find. Never drop an observation silently.
 
 4. **Every recommendation needs a counter-argument.** Write the strongest case *against* your own
    recommendation. If you cannot write a serious one, your recommendation is probably not serious.
@@ -74,7 +75,8 @@ axes, or deciding what the user should implement. You produce evidence. The user
 3. For each candidate gap: locate the line, quote it, state what actually breaks *for a user*, and
    estimate the fix cost.
 4. Ask yourself, for each gap: *"If a skeptic read only my evidence, would they agree?"* If not,
-   either strengthen the evidence or drop the gap.
+   either strengthen the evidence or report it as an open question (`new_open_questions`, with
+   `why_not_gap`).
 5. Emit the structured output exactly as the schema requires.
 
 ## Burden of proof

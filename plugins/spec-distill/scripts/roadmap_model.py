@@ -14,6 +14,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import section6  # noqa: E402
+import brief_body  # noqa: E402
+
+ANCHOR_LINE_RE = brief_body.ANCHOR_LINE_RE
+section4_items = brief_body.section4_items
 
 # 번호 한 개 — 확정 C/D · 열린 질문 OQ · 레포 근거 RC · 위험 K · steelman ST · 발화 S, 또는 «key».
 TOKEN_RE = re.compile(r"(?:C|D|OQ|RC|K|ST|S)\d+|«[^«»,·\s]+»")
@@ -139,11 +143,9 @@ BUNDLE_NAME_RE = re.compile(r"[A-Za-z0-9_-]+\.md")
 RISK_ROW_RE = re.compile(r"- (K\d+) — (\S.*)")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 ID_ITEM_RE = re.compile(r"\s+- id: ([CD]\d+)\s*")
-OQ_LINE_RE = re.compile(r"- (OQ\d+) ")
 RC_RE = re.compile(r"\bRC\d+\b")
 ST_RE = re.compile(r"\bST\d+\b")
 KEY_RE = re.compile(r"«[^«»]+»")
-S_ANCHOR_RE = re.compile(r"\*\*(S\d+)\*\*")
 LIST_SEP_RE = re.compile(r"\s*,\s*|\s+·\s+")
 
 
@@ -420,28 +422,50 @@ def _cycles(blocks: list) -> list:
     return errs
 
 
+def brief_section(brief: str, num: str) -> str:
+    """brief 의 §<num> 본문 — 게이트와 같은 판독(`brief_body.section_text` · 제목 붙은 경계 · 펜스 벗김). 제목 붙은 머리가
+    없거나 같은 번호 머리가 둘 이상이면 FormatError(셀 수 없음). brief 절은 `section_body` 로 읽지 않는다 — 그것은 아무
+    `## ` 줄에서나 끊고 다른 줄 나눔 글자에서도 잘라 게이트와 다른 절을 읽는다."""
+    why = brief_body.section_problem(brief, num)
+    if not why:
+        found = brief_body.head_problems(brief)
+        why = found[0][1] if found else None
+    if why:
+        raise FormatError("brief §%s 를 하나로 읽을 수 없다 — %s(%s)" % (num, brief_body.SECTION_REASON_TEXT[why], why))
+    return brief_body.section_text(brief, num)
+
+
 def brief_universe(brief: str, audit: str):
     """(non_s, s_ids, k_expected). 셀 수 없으면 FormatError."""
     fm_lines = brief.split("\n---", 1)[0].splitlines()
     non_s = {m.group(1) for line in fm_lines for m in [ID_ITEM_RE.fullmatch(line)] if m}
-    s0 = section_body(brief, "## 0.")
-    s4 = section_body(brief, "## 4.")
-    s5 = section_body(brief, "## 5.")
-    if s0 is None or s4 is None or s5 is None:
-        raise FormatError("brief 에 §0 · §4 · §5 중 없는 절이 있다")
-    non_s |= {m.group(1) for line in s0.splitlines() for m in [OQ_LINE_RE.match(line)] if m}
-    non_s |= set(RC_RE.findall(s5)) | set(ST_RE.findall(s5)) | set(KEY_RE.findall(s4))
+    s0, s4, s5 = (brief_section(brief, n) for n in ("0", "4", "5"))
+    # §0 결정 번호는 게이트와 같은 판독기 · 같은 절 경계로 센다. 결정 줄 문법 밖 줄이 있으면 셀 수 없다(게이트도 그 brief 를
+    # 막는다).
+    oq_entries, oq_rejects = brief_body.decision_entries(s0)
+    if oq_rejects:
+        raise FormatError("brief §0 에 결정 줄 문법 밖 줄이 있어 번호를 셀 수 없다(%s)"
+                          % ", ".join("%d번째 줄 %s" % t for t in oq_rejects[:5]))
+    non_s |= {oq for oq, _line in oq_entries if oq}
+    non_s |= set(RC_RE.findall(s5)) | set(ST_RE.findall(s5)) | {k for head, body in section4_items(s4) for k in KEY_RE.findall("\n".join([head] + body))}
     k_expected = []
     for prefix in RISK_PREFIXES:
-        k_expected += [line[2:] for line in s5.splitlines() if line.startswith(prefix)]
+        k_expected += [line[2:] for line in brief_body.split_lines(s5) if line.startswith(prefix)]
     k_expected = [("K%d" % (i + 1), text) for i, text in enumerate(k_expected)]
     non_s |= {k for k, _ in k_expected}
     s_ids = set()
+    found = brief_body.audit_subset_problems(audit)
+    if found:   # audit 본문에도 payload 와 같은 부분집합 규칙 — 읽는 쪽마다 다르게 읽히는 글이 있으면 §6 을 셀 수 없다
+        raise FormatError("audit 에 읽는 쪽마다 다르게 읽히는 글이 있어 번호를 셀 수 없다(%s)" % found[0][1])
     for label, doc in (("brief", brief), ("audit", audit)):
         b6 = section6.body(doc)
         if b6 is None:
             raise FormatError("%s §6 을 하나로 읽을 수 없다" % label)
-        s_ids |= set(S_ANCHOR_RE.findall(b6))
+        ok6, bad6 = brief_body.anchor_lines(b6)
+        if bad6:
+            raise FormatError("%s §6 에 문법 밖 앵커 줄이 있어 번호를 셀 수 없다(%s)"
+                              % (label, ", ".join("%d번째 줄 %s" % t for t in bad6[:5])))
+        s_ids |= {sid for _n, sid, _r in ok6}
     if not non_s or not s_ids:
         raise FormatError("brief 번호 집합이 비었다")
     return non_s, s_ids, k_expected
