@@ -584,20 +584,17 @@ fi
 # 리뷰어의 `<profile>` 슬롯에는 경로가 아니라 **내용**을 싣는다 — 플러그인 캐시는 사용자 프로젝트 밖이라
 # 리뷰어의 Read 가 거부된다. rc 가 0 이 아니면 dispatch 하지 않는다 — critic 출력 파일을 비워 5단계가
 # critic 사망(재dispatch 1회 → 「미검증」)으로 읽게 한다.
+clr_root="${CLAUDE_PLUGIN_ROOT}"
 prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
   echo "[spec-distill] seed 프로필을 읽지 못했다(cat rc $prof_rc): ${PROFILE:-} — 탐지 · 재비판을 dispatch 하지 않는다." >&2
   if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then
-    [ ! -e "$STATE_DIR/critic.txt" ] || { : > "$STATE_DIR/critic.txt"; } 2>/dev/null || true
-    # 번호 붙은 출력은 글롭 대신 ls 목록을 한 줄씩 읽는다 — zsh 는 맞는 파일이 없는 글롭에서 멈춘다.
-    crit_names="$(cd "$STATE_DIR" 2>/dev/null && ls 2>/dev/null)" \
-      || echo "[spec-distill] 상태 폴더의 파일 목록을 읽지 못했다 — 번호 붙은 critic 출력(critic-<번호>.txt)을 비우지 못했다: $STATE_DIR" >&2
-    while IFS= read -r crit_b; do
-      case "$crit_b" in critic-[0-9]*.txt) ;; *) continue ;; esac
-      [ ! -e "$STATE_DIR/$crit_b" ] || { : > "$STATE_DIR/$crit_b"; } 2>/dev/null || true
-    done <<CRIT_NAMES
-$crit_names
-CRIT_NAMES
+    if [ -z "$clr_root" ]; then
+      echo "[spec-distill] critic 출력 파일을 비우지 않았다 — 플러그인 루트(CLAUDE_PLUGIN_ROOT)를 모른다. 비우는 스크립트 경로를 추측하지 않는다. 5단계는 라운드 시작보다 오래된 critic 파일을 부재로 읽는다(critic_predates_round)." >&2
+    else
+      clr_rc=0; bash "$clr_root/scripts/clear_critic_outputs.sh" "$STATE_DIR" >&2 || clr_rc=$?
+      case "$clr_rc" in 0|1|2) ;; *) echo "[spec-distill] critic 출력 파일을 비우지 못했다 — 비우는 스크립트가 돌지 않았다(rc ${clr_rc}): ${clr_root}/scripts/clear_critic_outputs.sh" >&2 ;; esac
+    fi
   fi
   exit 1
 fi
