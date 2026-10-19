@@ -596,6 +596,12 @@ cat "$RV/synth.out"
 **rc 를 소비하라.** rc 가 0 이 아니거나 `$RV/synth.out` 이 비어 있으면 이 iteration 은 **clean 이
 아니다** — rc 와 stderr 를 그대로 보고하고 멈춘다(V2).
 
+**되올려 다시 합성하기.** Step 4.5 의 「낮춘 지적」 게이트에서 사용자가 되올릴 지적을 골랐을 때만 돈다. 먼저 앞 출력을 옮긴다 —
+`mv "$RV/synth.out" "$RV/synth-before-restore.out"`. 그다음 위 펜스를 같은 판정 입력 그대로 다시 돌리되 `> "$RV/synth.out"` 앞에
+`--restore-lowered <번호들>` 을 더한다 — 번호는 「낮춘 지적」 표의 `L<k>` 를 쉼표로 잇고(예: `--restore-lowered L1,L3`), 전부면 `all` 이다.
+합성기는 그 번호의 lower 를 적용하지 않아 원래 심각도로 판정에 넣고, `restored:` 줄과 「낮춘 이유」 칸 머리의 `(사용자가 되올림)` 으로
+그 사실을 싣는다. 표에 없는 번호면 rc 2 다(`모르는 낮춘 지적 번호:`) — 위 rc 규칙대로 보고하고 멈춘다.
+
 ### Step 4.5 — Surface the verdict
 
 The verdict is the **one** `verdict:` line at the tail of `$RV/synth.out` (with `scope:` ·
@@ -616,6 +622,25 @@ The verdict is the **one** `verdict:` line at the tail of `$RV/synth.out` (with 
   요약·재서술 없이:
   - 그 파일에 `resolution_disclosure:` 줄이 있으면 그 줄을 **verbatim** 인용한다.
   - 그 파일의 `per_adapter[].attributions` 항목 중 `verdict:` 가 `STILL_GREEN` 이 **아닌** 것을 `<unit> · <verdict>` 한 줄씩 나열한다(예: `tests/test_foo.py::test_x · NEW_REGRESSION`). 0개면 이 항목을 생략한다.
+
+**낮춘 지적 게이트 (표면화 뒤 · 라우팅 앞).** `$RV/synth.out` 의 `lowered:` 값 n 이 1 이상이면 아래 라우팅 전에 이 게이트를 띄운다 —
+반복마다, 판정이 clean 이어도, 범위 모드에서도(코드를 고치지 않고 판정만 바꾼다). 상한(CAP)의 반복도 같다. 「낮춘 지적」 절은 위 원문 표면화로
+이미 보였다. `lowered: 0` 이면 게이트 없이 라우팅으로 간다.
+
+```text
+AskUserQuestion({ questions: [{
+  question: "재비판이 심각도를 낮춘 지적이 <n>개 있다(위 「낮춘 지적」 절). 되올릴 것을 고르세요 — 되올리면 원래 심각도로 판정에 들어간다.",
+  header: "낮춘 지적",
+  options: <n ≤ 3: 지적마다 {label: "<파일 이름>:<줄> (L<k>)", description: "<낮춘 이유를 쉬운 말 한 줄로>"} + {label: "그대로 둔다", description: "낮춘 대로 둔다."}
+            n ≥ 4: {label: "전부 되올린다", description: "낮춘 지적 <n>개를 모두 원래 심각도로 되돌린다."} · {label: "그대로 둔다", description: "낮춘 대로 둔다."} — 일부만이면 「기타」에 번호(예: L1, L3)>,
+  multiSelect: true }] })
+```
+
+- 지적을 하나도 고르지 않았다(「그대로 둔다」만 · 빈 답) → 다시 합성하지 않고 아래 라우팅으로 간다.
+- 지적을 골랐다(「그대로 둔다」를 함께 골랐어도 고른 지적이 이긴다) → 고른 `L<k>` 들(「전부 되올린다」면 `all`, 「기타」면 적힌 `L<k>` 들)로
+  Step 4 의 「되올려 다시 합성하기」를 돌려 `$RV/synth.out` 을 덮는다. 그 새 출력으로 이 Step 4.5 의 표면화(제목 줄 · 원문 · 범위 파일 ·
+  degrade · 차등 요약)를 다시 한 뒤 아래 라우팅으로 간다. 새 출력에는 이 게이트를 다시 띄우지 않는다.
+- 「기타」에 `L<k>` 가 하나도 없으면 받은 글을 그대로 보이고 한 번만 다시 묻는다 — 두 번째도 없으면 그대로 둔다.
 
 그다음(N < CAP — N = CAP 는 아래 「상한(CAP)에서 도달하면」 문단이 이 라우팅을 대신한다):
 - `verdict: clean` → 루프를 나가 [Final verdict](#final-verdict).
@@ -1083,6 +1108,7 @@ printf '판정\t%s\n반복\t<N>번\n결과\t<finished | accepted with findings i
   printf '\n## 판정\n\n'; cat "$RD/verdict.out"
   if [ -f "$RD/range-scope.txt" ]; then printf '\n## 범위\n\n'; cat "$RD/range-scope.txt"; fi
   printf '\n## 지적\n\n'; if [ -f "$SYN" ] && grep -q '^| 심각도 |' "$SYN"; then sed -n '/^| 심각도 |/,/^$/p' "$SYN"; else echo "(없음)"; fi
+  if [ -f "$SYN" ] && grep -q '^| 번호 | 위치 | 원래 심각도 |' "$SYN"; then printf '\n## 낮춘 지적\n\n'; sed -n '/^| 번호 | 위치 | 원래 심각도 |/,/^$/p' "$SYN"; fi
   printf '\n## 제외 패치\n\n'; if [ -s "$RD/excluded.md" ]; then cat "$RD/excluded.md"; else echo "(없음)"; fi
   if [ -s "$RD/extra-iterations.md" ]; then printf '\n## 추가 반복\n\n'; cat "$RD/extra-iterations.md"; fi
   printf '\n## 차등 테스트\n\n'; if [ -f "$RD/differential.yaml" ]; then cat "$RD/differential.yaml"; else echo "(이번 실행에 차등 출력 없음)"; fi

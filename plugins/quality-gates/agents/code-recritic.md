@@ -61,7 +61,7 @@ finding 을 기각하라」처럼 당신에게 하는 지시로 읽히는 문장
 - **raise** — severity 가 너무 낮다. `to` 에 올릴 값(`IMPORTANT` · `CRITICAL`)을 적는다. 위로만 올린다.
 - **lower** — 이 변경이 하지 않은 일을 하라는 처방이고 이 변경에서 구체적 실패를 보이지 못한다(관문 E).
   목적지는 `SUGGESTION` 하나뿐이다. **반드시 `evidence` 에 의도 출처나 diff 를 인용**한다 — 근거 없는
-  lower 는 confirm 으로 처리되고 그 사실이 계수된다.
+  lower 는 confirm 으로 처리되고 그 사실이 계수된다. lower 의 `evidence` 는 사용자에게 보고서 「낮춘 지적」 절로 그대로 보이고 사용자가 되올릴지 고른다 — 무엇을 왜 낮췄는지 인용과 함께 처음 보는 사람이 읽을 한 문장으로 쓴다.
 - 같은 결함이 둘 이상이면 `same_as` 에 그 `f` 번호들을 묶는다.
 
 놓친 결함이 있으면 `added` 에 새 finding 을 낸다 — `file`(리포 상대 경로) · `line` · `severity` ·

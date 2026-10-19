@@ -18,10 +18,10 @@
   --reason R           호출자만 아는 사유(반복 가능, verdict.REASONS 안)
   --angles PATH        각도 상태 파일(`<각도>: <상태>` 세 줄)
   --scope PATH         스코프 튜플(topic-head.sh 산출물)
+  --restore-lowered L  되올린 낮춘 지적 번호(`L1,L3` · `all`, `--recritic` 과 함께) — `_parse_restore`
 
-본 보고서는 `**Findings:**` 개수 줄 다음에 `blocking: N`(살아남은 CRITICAL·IMPORTANT)과
-`optional: M`(SUGGESTION)을 싣는다(K-4). confidence 는 읽지도 쓰지도 않는다 — 오탐 거르기는
-재비판의 관문 A 가 한다.
+본 보고서는 개수 줄 다음에 `blocking: N`(살아남은 CRITICAL·IMPORTANT) · `optional: M`(SUGGESTION) ·
+`lowered: K`(K-4 · `_lowered_lines`)를 싣는다. confidence 는 읽지 않는다 — 오탐 거르기는 재비판의 관문 A 가 한다.
 
 exit: 0 정상 · 2 잘못된 호출 · 4 판정축 실패(stdout 비움).
 """
@@ -239,15 +239,17 @@ def promote_new_findings(raw_new, existing, *, author, ledger=None):
     return promoted, dropped
 
 
-def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
+def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False, restore=None, lowered_out=None):
     """판정을 적용한다. Returns `(out, dropped_malformed)`.
 
     - 매핑이 아닌 finding 은 버리되 센다(V3).
     - 판정 없는 finding 은 유지하고 `hold` 로 센다(다음 소비자가 사람이다). 판정자가 통째로
       죽었으면 항목마다 세지 않는다 — 그 사망은 원장에 이미 있고 `angle-absent` 로 나간다.
     - `raise` 는 올리기만, `lower` 는 SUGGESTION 으로만 내린다(관문 E).
+    - `lower` 의 번호 · 기록 · 되올리기(`restore`)는 `_lower` 가 한다 — 되올려도 `accept` 다.
     """
     by_id = {v.get("finding_id"): v for v in verdicts if isinstance(v, dict)}
+    lowered = [] if lowered_out is None else lowered_out
     out, dropped = [], 0
     for f in findings:
         if not isinstance(f, dict):
@@ -274,9 +276,7 @@ def apply_verdicts(findings, verdicts, ledger=None, adjudicator_dead=False):
         if kind == "raise" and "adjusted_severity" in v:
             f = _apply_raise(f, v["adjusted_severity"], ledger)
         elif kind == "lower":
-            f = dict(f)
-            f["severity"] = "SUGGESTION"
-            f["lowered"] = True
+            f = _lower(f, v, restore, lowered)
         if ledger is not None:
             ledger.accept(finding_id(f))
         out.append(f)
@@ -345,6 +345,27 @@ def _same_claim(a, b):
 def sort_findings(findings):
     return sorted(findings, key=lambda f: (
         SEV_ORDER.get(_norm_sev(f), 9), str(f.get("file", "")), _norm_line(f)))
+
+
+def _lower(f, v, restore, lowered):
+    """`lower` 판정 하나를 적용한다. 입력 순서로 번호 `L<k>` 를 주고 원래 심각도 · 이유를
+    `lowered` 에 싣는다(보고서 `## 낮춘 지적` 절). `restore`(`"all"` 또는 번호 집합)에 든
+    번호는 lower 를 적용하지 않고 원래 심각도로 남긴다 — 사람이 되올린 것이라 호출자가
+    confirm 처럼 `accept` 로 센다(강제 계수가 아니다).
+    """
+    label = "L%d" % (len(lowered) + 1)
+    restored = restore == "all" or (restore is not None and label in restore)
+    reason = str(v.get("reason", ""))
+    lowered.append({"label": label, "finding": dict(f), "from": f["severity"],
+                    "reason": reason, "restored": restored})
+    if restored:
+        return f
+    f = dict(f)
+    f["lowered_from"] = f["severity"]
+    f["lowered_reason"] = reason
+    f["severity"] = "SUGGESTION"
+    f["lowered"] = True
+    return f
 
 
 # ── 재비판 입출력 (code-recritic) ────────────────────────────────────
@@ -670,7 +691,31 @@ def _status_line(counts, dropped_malformed, degraded, blocking, unconfirmed=Fals
     return s
 
 
-def render(findings, dropped_malformed, report, held_classes, recritic_zero=False, *, blocking, unconfirmed=False):
+def _summary_cell(f):
+    """표의 「내용」 칸 — 쉬운 문장(`plain`)이 있으면 그것과 괄호 속 요약, 없으면 요약."""
+    if _has_plain(f):
+        return _cell(f"{f['plain']} ({f.get('summary', '')})")
+    return _cell(f.get("summary", ""))
+
+
+RESTORED_PREFIX = "(사용자가 되올림) "
+
+
+def _lowered_lines(lowered):
+    """`## 낮춘 지적` 절 — 재비판이 낮춘 지적을 원래 심각도 · 이유와 함께. 번호는 입력 순서다."""
+    out = ["## 낮춘 지적", "", "| 번호 | 위치 | 원래 심각도 | 내용 | 낮춘 이유 |", "|---|---|---|---|---|"]
+    for e in lowered:
+        f = e["finding"]
+        reason = (RESTORED_PREFIX if e["restored"] else "") + e["reason"]
+        out.append("| %s | %s | %s | %s | %s |" % (
+            e["label"], _cell("%s:%s" % (f.get("file"), f.get("line"))), e["from"],
+            _summary_cell(f), _cell(reason)))
+    out.append("")
+    return out
+
+
+def render(findings, dropped_malformed, report, held_classes, recritic_zero=False, *, blocking,
+           unconfirmed=False, lowered=()):
     counts = count_split(findings)
     n_block = counts["CRITICAL"] + counts["IMPORTANT"]
     disp_line, plumb_line, gloss_line, advisories = disposition_lines(report, held_classes, blocking)
@@ -678,10 +723,17 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
         print(a, file=sys.stderr)
     counts_line = (f"**Findings:** {counts['CRITICAL']} CRITICAL / "
                    f"{counts['IMPORTANT']} IMPORTANT / {counts['SUGGESTION']} SUGGESTION")
+    restored = []
+    for e in lowered:
+        if e["restored"]:
+            restored.append(e["label"])
     out = [_status_line(counts, dropped_malformed, report["degraded"], blocking, unconfirmed),
            "## 리뷰 지적 (합친 결과)", "", counts_line,
            f"blocking: {n_block}", f"optional: {counts['SUGGESTION']}",
-           disp_line, plumb_line, gloss_line]
+           f"lowered: {len(lowered)}"]
+    if restored:
+        out.append("restored: " + ",".join(restored))
+    out.extend([disp_line, plumb_line, gloss_line])
     if not findings:
         if recritic_zero:
             out.append(RECRITIC_ZERO_LINE)
@@ -707,12 +759,11 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
         sev = _norm_sev(f) + (" (lowered)" if f.get("lowered") else "")
         path_line = _cell("%s:%s" % (f.get("file"), f.get("line")))
         source = _cell(", ".join(str(s) for s in srcs))
-        if _has_plain(f):
-            summary = _cell(f"{f['plain']} ({f.get('summary', '')})")
-        else:
-            summary = _cell(f.get("summary", ""))
+        summary = _summary_cell(f)
         out.append(f"| {sev} | {path_line} | {summary} | {source} |")
     out.append("")
+    if lowered:
+        out.extend(_lowered_lines(lowered))
     if dropped_malformed > 0:
         out.append(
             f"{dropped_malformed}개 지적을 버렸다 — 형식이 깨졌다(dropped as malformed — 매핑이 아니거나, "
@@ -732,6 +783,21 @@ def _usage(msg):
     sys.exit(2)
 
 
+def _parse_restore(value):
+    """`--restore-lowered` 값 → None · `"all"` · 번호 집합. 번호가 실제로 있는지는 판정 적용 뒤에 본다."""
+    if value is None:
+        return None
+    tokens = set()
+    for t in value.split(","):
+        if t.strip():
+            tokens.add(t.strip())
+    if tokens == {"all"}:
+        return "all"
+    if not tokens or "all" in tokens:
+        _usage("--restore-lowered 는 L<번호> 쉼표 목록이나 all 하나를 받는다 (받은 값: %r)" % value)
+    return tokens
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["prepare"]:
@@ -749,18 +815,24 @@ def main(argv=None):
     ap.add_argument("--recritic", default=None)
     ap.add_argument("--recritic-map", default=None)
     ap.add_argument("--recritic-diff", default=None)
+    # 사용자가 「낮춘 지적」 게이트에서 되올린 번호 — `L<k>` 쉼표 목록 또는 `all`.
+    ap.add_argument("--restore-lowered", default=None)
     args = ap.parse_args(argv)
 
     for flag, val in (("--differential", args.differential), ("--angles", args.angles),
                       ("--scope", args.scope), ("--recritic", args.recritic),
                       ("--recritic-map", args.recritic_map),
-                      ("--recritic-diff", args.recritic_diff)):
+                      ("--recritic-diff", args.recritic_diff),
+                      ("--restore-lowered", args.restore_lowered)):
         if val is not None and val == "":
             _usage(f"{flag} 는 빈 문자열을 받지 않는다 (플래그를 생략하거나 실제 경로를 줘라)")
     if (args.recritic is None) != (args.recritic_map is None):
         _usage("--recritic 과 --recritic-map 은 함께 준다")
     if args.recritic_diff is not None and args.recritic is None:
         _usage("--recritic-diff 는 --recritic 없이 의미가 없다")
+    restore = _parse_restore(args.restore_lowered)
+    if restore is not None and args.recritic is None:
+        _usage("--restore-lowered 는 --recritic 없이 의미가 없다 (낮춘 지적은 재비판이 만든다)")
     if not args.emit_verdict:
         for flag, val in (("--differential", args.differential), ("--angles", args.angles),
                           ("--scope", args.scope)):
@@ -778,8 +850,17 @@ def main(argv=None):
     verdicts, dropped_verdicts = extract_verdicts(doc, ledger=ledger)
     raw, dropped_raw, findings_dead = load_findings(args.findings, ledger=ledger)
 
+    lowered = []
     findings, dropped_primary = apply_verdicts(raw, verdicts, ledger=ledger,
-                                               adjudicator_dead=adjudicator_dead)
+                                               adjudicator_dead=adjudicator_dead,
+                                               restore=restore, lowered_out=lowered)
+    if restore is not None and restore != "all":
+        known = set()
+        for e in lowered:
+            known.add(e["label"])
+        unknown = sorted(restore - known)
+        if unknown:
+            _usage("모르는 낮춘 지적 번호: " + ", ".join(unknown))
     new_raw, dropped_newlist = extract_new_findings(doc, ledger=ledger)
     promoted, dropped_promoted = promote_new_findings(new_raw, findings,
                                                       author=ADJUDICATOR, ledger=ledger)
@@ -845,7 +926,8 @@ def main(argv=None):
                      and raw_verdict_count == 0 and raw_added_count == 0)
     sys.stdout.write(render(findings, dropped_malformed, report, ledger.held_by_class(),
                             recritic_zero=recritic_zero, blocking=blocking,
-                            unconfirmed=ledger.primary_source_failed() or bool(report["unknown_counts"])))
+                            unconfirmed=ledger.primary_source_failed() or bool(report["unknown_counts"]),
+                            lowered=lowered))
     if args.emit_verdict:
         if scope is not None and angle_states is not None:
             sys.stdout.write("아래는 이 판정이 본 범위(scope)와 리뷰 각도(angles)의 원문이다.\n")

@@ -889,6 +889,7 @@ ${to_line:+$to_line
     local out; out=$(synth "$T" --emit-verdict)
     assert_contains "$out" '0 CRITICAL / 0 IMPORTANT / 1 SUGGESTION' "근거 있는 lower 는 SUGGESTION 으로 내린다 [to='${to_line# *to: }']"
     assert_contains "$out" 'SUGGESTION (lowered)' "내린 항목은 표에서 구별된다 [to='${to_line# *to: }']"
+    assert_grep     "$out" '^lowered: 1$'         "낮춘 지적 수가 1 이다 [to='${to_line# *to: }']"
     assert_grep     "$out" '^blocking: 0$'        "막는 지적이 0 이다 [to='${to_line# *to: }']"
     assert_grep     "$out" '^verdict: clean$'     "SUGGESTION 만 남으면 clean 이다 (AC4) [to='${to_line# *to: }']"
     assert_not_contains "$out" '게이트 변경' "정상 lower 는 강제가 아니다 [to='${to_line# *to: }']"
@@ -910,7 +911,8 @@ case_ac6_lower_to_blocking_severity_is_coerced_to_confirm() {
     evidence: \"의도 출처는 캐시 무효화만 요구한다\""
     local out; out=$(synth "$T" --emit-verdict)
     assert_contains "$out" '1 CRITICAL / 0 IMPORTANT / 0 SUGGESTION' "막는 to 의 lower 는 적용되지 않는다 [to=$to]"
-    assert_not_contains "$out" 'lowered'          "내린 표시가 없다 [to=$to]"
+    assert_not_contains "$out" '(lowered)'        "내린 표시가 없다 [to=$to]"
+    assert_grep     "$out" '^lowered: 0$'        "낮춘 지적 수가 0 이다 [to=$to]"
     assert_grep     "$out" '^blocking: 1$'        "막는 지적이 남는다 [to=$to]"
     assert_grep     "$out" '^verdict: defect$'    "defect 다 [to=$to]"
     assert_contains "$out" "강제(게이트 변경): lower.to '$to'→'confirm'" "그 강제가 계수·공시된다 [to=$to]"
@@ -934,7 +936,8 @@ case_ac6_lower_with_unknown_to_is_coerced_to_confirm() {
     evidence: \"의도 출처는 캐시 무효화만 요구한다\""
     local out; out=$(synth "$T" --emit-verdict)
     assert_contains "$out" '1 CRITICAL / 0 IMPORTANT / 0 SUGGESTION' "모르는 to 의 lower 는 적용되지 않는다 [to=$yv]"
-    assert_not_contains "$out" 'lowered'       "내린 표시가 없다 [to=$yv]"
+    assert_not_contains "$out" '(lowered)'     "내린 표시가 없다 [to=$yv]"
+    assert_grep     "$out" '^lowered: 0$'     "낮춘 지적 수가 0 이다 [to=$yv]"
     assert_grep     "$out" '^blocking: 1$'     "막는 지적이 남는다 [to=$yv]"
     assert_grep     "$out" '^verdict: defect$' "defect 다 [to=$yv]"
     assert_contains "$out" "강제(게이트 변경): lower.to ${shown}→'confirm'" "원래 값이 공시된다 [to=$yv]"
@@ -996,7 +999,8 @@ case_ac6_lower_on_suggestion_is_noop() {
     verdict: lower
     evidence: "이미 선택 사항"'
   local out; out=$(synth "$T" --emit-verdict)
-  assert_not_contains "$out" 'lowered'  "이미 SUGGESTION 이면 표시를 바꾸지 않는다"
+  assert_not_contains "$out" '(lowered)'  "이미 SUGGESTION 이면 표시를 바꾸지 않는다"
+  assert_grep "$out" '^lowered: 0$' "이미 SUGGESTION 이면 낮춘 지적으로 세지 않는다"
   assert_not_contains "$out" '게이트 변경' "판정을 바꾸지 않은 강제는 게이트 변경으로 공시하지 않는다"
   assert_grep "$out" '^verdict: clean$' "clean 이다"
   rm -rf "$T"
