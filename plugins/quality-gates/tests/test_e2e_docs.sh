@@ -302,7 +302,7 @@ case_AC28_e2e_scenarios_are_multi_select() {
   assert_not_contains "$s" '질문을 생략하고 같은 시나리오 · 같은 명령으로' "SKILL E4: 루프에서 돌아와 한 시나리오만 다시 걷는 옛 문장이 없다"
   assert_contains "$s" '질문을 생략하고 고른 시나리오 전부를 같은 명령으로 번호 순으로 E1 펜스' "SKILL E4: 루프에서 돌아오면 고른 시나리오 전부를 다시 걷는다(옛 문장 부재의 양성 짝)"
   local fv; fv=$(section "$SKILL" "## Final verdict")
-  assert_contains "$fv" '시나리오가 여럿이면 `references/e2e.md` §6 이 e2e 칸을 정한 걷기를 정하고,' "Final verdict: 여러 시나리오의 「사람이 뒤집음」은 e2e.md §6 이 정한다"
+  assert_contains "$fv" '시나리오가 여럿이면 `${CLAUDE_PLUGIN_ROOT}/references/e2e.md` §6 이 e2e 칸을 정한 걷기를 정하고,' "Final verdict: 여러 시나리오의 「사람이 뒤집음」은 e2e.md §6 이 정한다"
   assert_contains "$fv" '그 걷기가 마지막 걷기 대신 쓰인다.' "Final verdict: 칸을 정한 걷기가 마지막 걷기 대신 쓰인다"
 }
 

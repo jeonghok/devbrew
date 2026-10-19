@@ -104,12 +104,16 @@ case_text_locks() {
 
   # 리뷰어가 읽는 트리(final-review I1) — 범위 모드의 리뷰어 · codex · 재비판은 끝 커밋을 읽는다.
   assert_contains "$(awk '/^\*\*P2 — /{f=1} /^\*\*P2b — /{f=0} f && /^rm -f /' "$SK")" '"$RD/review-tree.txt"' "P2 가 앞 실행의 review-tree.txt 를 지운다"
-  assert_contains "$P2B" '리뷰어가 읽는 트리: <지금 체크아웃 | 끝 커밋의 임시 트리>' "P2b: 범위 줄이 리뷰어가 읽는 트리를 밝힌다"
+  assert_contains "$P2B" ' · 리뷰어가 읽는 트리: 끝 커밋의 임시 트리.`' "P2b: 범위 줄이 리뷰어가 읽는 트리(늘 끝 커밋의 임시 트리)를 밝힌다"
+  # 보안 리뷰 S4 — head_is_end 로 갈라 체크아웃을 넘기던 지름길이 없다(펜스 본문 · SKILL 전체). 양성 짝은 위 create-head 줄.
+  assert_not_contains "$(printf '%s\n' "$P2B" | fence_with 'review_tree:')" 'head_is_end' "P2b 리뷰 트리 펜스: head_is_end 로 갈라지지 않는다"
+  assert_eq "$(grep -c 'review_tree: checkout' "$SK")" "0" "SKILL: 지금 체크아웃을 리뷰 트리로 내는 갈래가 없다"
+  assert_contains "$P2B" '범위 모드는 늘 끝 커밋의 임시 트리를 하나 만들어 그 경로를 `project_dir` 로 쓴다 — 지금 체크아웃이 범위 끝이어도(`head_is_end: yes`) 그렇다.' "P2b: 체크아웃이 끝이어도 임시 트리(규칙 줄)"
   assert_contains "$(printf '%s\n' "$P2B" | fence_with 'review_tree:')" 'RT="$("$QG/scripts/qg-worktree.sh" create-head "$(sed -n '"'s/^end: //p'"' "$RS")" "<session-id>" --range "$RS")"' \
     "P2b 리뷰 트리 펜스: 끝 커밋으로 create-head --range 를 부른다"
-  assert_contains "$P2B" '- `review_tree: <경로>` 면 그 경로가 이 실행의 `project_dir` 이다' "P2b: 임시 트리 경로가 project_dir 가 된다(규칙 줄)"
+  assert_contains "$P2B" '- `review_tree: <경로>` 의 그 경로가 이 실행의 `project_dir` 이다' "P2b: 임시 트리 경로가 project_dir 가 된다(규칙 줄)"
   assert_contains "$P2B" '지금 체크아웃으로 대신하지 않는다' "P2b: 트리를 못 만들면 체크아웃으로 대신하지 않는다(규칙 줄)"
-  assert_contains "$(awk '/^\*\*P0 — /{f=1} /^\*\*P0b — /{f=0} f' "$SK")" '범위 모드만 예외가 하나다 — P2b 의 리뷰 트리 펜스가 `review_tree: <경로>` 를 내면 그 경로가 이 실행의 `project_dir` 이다' \
+  assert_contains "$(awk '/^\*\*P0 — /{f=1} /^\*\*P0b — /{f=0} f' "$SK")" '범위 모드만 예외가 하나다 — P2b 의 리뷰 트리 펜스가 낸 `review_tree: <경로>`(끝 커밋의 임시 트리)가 이 실행의 `project_dir` 이다' \
     "P0: 범위 모드의 project_dir 예외"
   local S3W; S3W="$(awk '/^### Step 3 — reviewers$/{f=1;next} f&&/^### Step 3\.5/{exit} f' "$SK")"
   assert_contains "$S3W" '- `PROJECT_DIR` = P0 의 `project_dir` — 범위 모드에서 P2b 의 리뷰 트리 펜스가 `review_tree: <경로>` 를 냈으면 그 경로다.' \
@@ -121,7 +125,7 @@ case_text_locks() {
     'if "$QG/scripts/qg-worktree.sh" remove "$(cat "$RD/review-tree.txt")"; then' "Final verdict: 리뷰 트리를 지우는 펜스"
   assert_not_contains "$(cat "$RM")" '리뷰 diff · 의도 출처 · codex · 차등 테스트 · 판정 줄이 모두 같은 두 커밋을 쓴다 — diff 의 기준과 차등 테스트 기준선은 시작 커밋, HEAD 축과 판정 줄의 커밋은 끝 커밋이다. 지금 작업 트리는 보지 않는다.' \
     "README: 리뷰어가 작업 트리를 보지 않는다던 틀린 문장이 없다"
-  assert_contains "$(cat "$RM")" '리뷰어 · codex 가 diff 밖 코드를 열어 볼 때도 끝 커밋을 본다 — 지금 체크아웃이 끝 커밋이면 그 체크아웃을, 아니면 끝 커밋의 임시 트리를 하나 만들어 읽고(실행 끝에 지운다), 그 트리를 만들지 못하면 판정 없이 멈춘다.' \
+  assert_contains "$(cat "$RM")" '리뷰어 · codex 가 diff 밖 코드를 열어 볼 때도 끝 커밋을 본다 — 지금 체크아웃이 끝 커밋이어도 늘 끝 커밋의 임시 트리를 하나 만들어 읽고(커밋 안 된 변경 · 추적 안 된 파일을 리뷰어가 읽지 않게 한다, 실행 끝에 지운다), 그 트리를 만들지 못하면 판정 없이 멈춘다.' \
     "README: 리뷰어가 읽는 트리(옛 문장 부재의 양성 짝)"
 
   local P3W; P3W="$(awk '/^\*\*P3 — /{f=1} /^## Flow/{f=0} f' "$SK")"
@@ -195,10 +199,11 @@ case_text_locks() {
   assert_contains "$(awk '/^같은 폴더의 다른 파일/{f=1} f' "$SF")" '`review-tree.txt`' "state-file-format: 다른 파일 목록에 review-tree.txt"
 }
 
-# 범위 모드의 리뷰어가 읽는 트리(final-review I1) — 체크아웃을 시작 커밋에 두고 P2b · 리뷰 트리 · 지우기 펜스를 그대로 돌린다.
+# 범위 모드의 리뷰어가 읽는 트리(final-review I1 · 보안 리뷰 S4) — 체크아웃이 시작이든 끝이든, 커밋 안 된 변경과
+# 추적 안 된 파일이 있어도 리뷰어는 늘 끝 커밋의 임시 트리를 읽는다. P2b · 리뷰 트리 · 지우기 펜스를 그대로 돌린다.
 case_review_tree() {
   echo "[리뷰 트리 — 펜스]"
-  local sid=sid12345 p2b tree rmf out rc rt
+  local sid=sid12345 p2b tree rmf out rc rt where
   rt_run() {   # rt_run <본문> — R 에서 플러그인 루트를 주고 돌린다. out · rc 를 채운다.
     printf '%s\n' "$1" > "$ROOT/rt.sh"
     out=$(cd "$R" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$ROOT/rt.sh" 2>"$ROOT/rt.err"); rc=$?
@@ -210,25 +215,36 @@ case_review_tree() {
   [ -n "$tree" ] && ok "P2b 의 리뷰 트리 펜스를 뽑았다" || no "P2b 에 리뷰 트리 펜스(review_tree:)가 없다"
   [ -n "$rmf" ] && ok "Final verdict 의 리뷰 트리 지우기 펜스를 뽑았다" || no "Final verdict 에 리뷰 트리 지우기 펜스가 없다"
 
-  # 1) 체크아웃이 시작 커밋(head_is_end: no) — 끝 커밋의 임시 트리를 읽는다
-  mkfix
-  rt_run "$(printf '%s\n' "$p2b" | LC_ALL=C sed -e "s/<session-id>/$sid/g" -e "s/\\\$ARGUMENTS/range $S/g")"
-  assert_eq "$(sed -n 's/^head_is_end: //p' "$F" 2>/dev/null)" "no" "전제: 체크아웃(시작 커밋)은 범위 끝이 아니다"
-  rt_run "$tree"
-  assert_eq "$rc" "0" "리뷰 트리 펜스 rc 0 (끝이 아님)"
-  rt="$(printf '%s\n' "$out" | sed -n 's/^review_tree: //p')"
-  if [ -n "$rt" ] && [ "$rt" != checkout ] && [ -d "$rt" ]; then
-    assert_eq "$(git -C "$rt" rev-parse HEAD)" "$E" "리뷰 트리의 HEAD = 끝 커밋(체크아웃은 시작 커밋)"
-    assert_eq "$(git -C "$R" rev-parse HEAD)" "$S" "체크아웃은 그대로 시작 커밋이다"
-    assert_eq "$(cat "$D/review-tree.txt" 2>/dev/null)" "$rt" "review-tree.txt 에 그 경로를 남긴다"
-    rt_run "$rmf"
-    [ ! -d "$rt" ] && ok "지우기 펜스가 리뷰 트리를 지웠다" || no "리뷰 트리가 남았다: $rt"
-    [ ! -e "$D/review-tree.txt" ] && ok "지우기 펜스가 review-tree.txt 도 지웠다" || no "review-tree.txt 가 남았다"
-  else
-    no "끝이 아닌데 끝 커밋의 임시 트리를 내지 않았다 (out: $out · err: $(cat "$ROOT/rt.err"))"
-  fi
+  for where in end start; do
+    # 체크아웃을 끝(where=end) 또는 시작(where=start)에 두고, 추적 파일을 고치고 추적 안 된 파일을 둔다
+    mkfix
+    if [ "$where" = end ]; then git -C "$R" checkout -q --detach "$E"; fi
+    rt_run "$(printf '%s\n' "$p2b" | LC_ALL=C sed -e "s/<session-id>/$sid/g" -e "s/\\\$ARGUMENTS/range $S/g")"
+    if [ "$where" = end ]; then
+      assert_eq "$(sed -n 's/^head_is_end: //p' "$F" 2>/dev/null)" "yes" "[$where] 전제: 체크아웃이 범위 끝이다(head_is_end 는 그대로 공시된다)"
+    else
+      assert_eq "$(sed -n 's/^head_is_end: //p' "$F" 2>/dev/null)" "no" "[$where] 전제: 체크아웃(시작 커밋)은 범위 끝이 아니다"
+    fi
+    printf '# dirty\n' > "$R/README.md"; printf 'x\n' > "$R/untracked-probe.txt"
+    rt_run "$tree"
+    assert_eq "$rc" "0" "[$where] 리뷰 트리 펜스 rc 0"
+    assert_eq "$(printf '%s\n' "$out" | grep -c '^review_tree: checkout$')" "0" "[$where] 지금 체크아웃을 리뷰어에게 넘기지 않는다"
+    rt="$(printf '%s\n' "$out" | sed -n 's/^review_tree: //p')"
+    if [ -n "$rt" ] && [ -d "$rt" ]; then
+      assert_eq "$(git -C "$rt" rev-parse HEAD)" "$E" "[$where] 리뷰 트리의 HEAD = 끝 커밋"
+      assert_eq "$(cat "$rt/README.md")" "# a" "[$where] 커밋 안 된 추적 변경이 리뷰 트리에 없다"
+      [ ! -e "$rt/untracked-probe.txt" ] && ok "[$where] 추적 안 된 파일이 리뷰 트리에 없다" || no "[$where] 추적 안 된 파일이 리뷰 트리에 있다"
+      assert_eq "$(cat "$R/README.md")" "# dirty" "[$where] 체크아웃의 변경은 그대로다"
+      assert_eq "$(cat "$D/review-tree.txt" 2>/dev/null)" "$rt" "[$where] review-tree.txt 에 그 경로를 남긴다"
+      rt_run "$rmf"
+      [ ! -d "$rt" ] && ok "[$where] 지우기 펜스가 리뷰 트리를 지웠다" || no "[$where] 리뷰 트리가 남았다: $rt"
+      [ ! -e "$D/review-tree.txt" ] && ok "[$where] 지우기 펜스가 review-tree.txt 도 지웠다" || no "[$where] review-tree.txt 가 남았다"
+    else
+      no "[$where] 끝 커밋의 임시 트리를 내지 않았다 (out: $out · err: $(cat "$ROOT/rt.err"))"
+    fi
+  done
 
-  # 2) 트리를 못 만들면 0 이 아닌 값으로 멈춘다 — 체크아웃으로 대신하지 않는다
+  # 트리를 못 만들면 0 이 아닌 값으로 멈춘다 — 체크아웃으로 대신하지 않는다
   cp "$F" "$ROOT/rs.bak"
   sed 's/^end: .*/end: 0000000000000000000000000000000000000000/' "$ROOT/rs.bak" > "$F"
   rt_run "$tree"
@@ -236,20 +252,10 @@ case_review_tree() {
   assert_not_contains "$out" 'review_tree:' "못 만들면 리뷰 트리 줄을 내지 않는다(체크아웃으로 대신하지 않는다)"
   [ ! -e "$D/review-tree.txt" ] && ok "못 만들면 review-tree.txt 가 없다" || no "못 만들었는데 review-tree.txt 가 있다"
   assert_contains "$(cat "$ROOT/rt.err")" '지금 체크아웃으로 대신하지 않고 멈춘다' "못 만들면 멈춤 줄을 낸다"
-
-  # 3) 체크아웃이 끝 커밋(head_is_end: yes) — 지금 체크아웃을 읽는다
-  mkfix
-  git -C "$R" checkout -q --detach "$E"
-  rt_run "$(printf '%s\n' "$p2b" | LC_ALL=C sed -e "s/<session-id>/$sid/g" -e "s/\\\$ARGUMENTS/range $S/g")"
-  assert_eq "$(sed -n 's/^head_is_end: //p' "$F" 2>/dev/null)" "yes" "전제: 체크아웃이 범위 끝이다"
-  rt_run "$tree"
-  assert_eq "$rc" "0" "리뷰 트리 펜스 rc 0 (끝임)"
-  assert_eq "$(printf '%s\n' "$out" | grep -cx 'review_tree: checkout')" "1" "끝이면 지금 체크아웃을 읽는다"
-  [ ! -e "$D/review-tree.txt" ] && ok "끝이면 review-tree.txt 를 만들지 않는다" || no "끝인데 review-tree.txt 가 있다"
-  [ ! -e "$R/.claude/quality-gates/worktrees/head-${sid:0:8}" ] && ok "끝이면 임시 트리를 만들지 않는다" || no "끝인데 임시 트리를 만들었다"
-  rt_run "$rmf"
+  rm -f "$D/review-tree.txt"; rt_run "$rmf"
   assert_eq "$rc" "0" "지울 트리가 없으면 지우기 펜스는 아무 일 없이 끝난다"
 }
+
 
 # ── 끝에서 끝 사슬 ───────────────────────────────────────────────────────
 # 픽스처: 레포 A(trunk: S → c1(설계 a · 코드) → E(설계 b · tests/test_x.sh 100755)) · 클론 R 을 S 에 체크아웃.

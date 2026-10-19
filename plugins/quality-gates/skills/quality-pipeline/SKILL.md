@@ -58,7 +58,7 @@ fixes the user approved at the Fix-loop gate.
 ## Preflight
 
 **P0 — project_dir.** Once, frozen for the turn: `project_dir=$(pwd)`. Every reviewer dispatch
-carries it in `project_dir:` (V12). Do not re-derive it later. 범위 모드만 예외가 하나다 — P2b 의 리뷰 트리 펜스가 `review_tree: <경로>` 를 내면 그 경로가 이 실행의 `project_dir` 이다(실행에 한 번 정하고, 그 뒤로 다시 도출하지 않는다).
+carries it in `project_dir:` (V12). Do not re-derive it later. 범위 모드만 예외가 하나다 — P2b 의 리뷰 트리 펜스가 낸 `review_tree: <경로>`(끝 커밋의 임시 트리)가 이 실행의 `project_dir` 이다(실행에 한 번 정하고, 그 뒤로 다시 도출하지 않는다).
 
 **P0b — plugin root.** Every script lives under `${CLAUDE_PLUGIN_ROOT}/scripts/`. If that path does
 not read as absolute, do not guess one (the cwd included) — stop and report (E2). Every fence that
@@ -116,32 +116,27 @@ RD="${TOP}/.claude/quality-gates/<session-id>"
 ```
 
 - `range: none` 이면(이때도 `range rc=0` 이다) 범위 모드가 아니다 — 아래 「범위 모드」 갈래를 모두 건너뛴다.
-- `range rc=0` 이고 출력에 `status: ok` 가 있으면 **범위 모드**다. 아래 리뷰 트리 펜스를 돌린 뒤 한 줄을 낸다: `> [quality-gates] 리뷰 범위: <start 앞 12자>..<end 앞 12자> — 커밋 <commits>개 · 바뀐 파일 <files>개(끝: <end_from 이 origin/HEAD 면 「기본 브랜치 끝」, given 이면 「적은 끝」>) · 리뷰어가 읽는 트리: <지금 체크아웃 | 끝 커밋의 임시 트리>.`
+- `range rc=0` 이고 출력에 `status: ok` 가 있으면 **범위 모드**다. 아래 리뷰 트리 펜스를 돌린 뒤 한 줄을 낸다: `> [quality-gates] 리뷰 범위: <start 앞 12자>..<end 앞 12자> — 커밋 <commits>개 · 바뀐 파일 <files>개(끝: <end_from 이 origin/HEAD 면 「기본 브랜치 끝」, given 이면 「적은 끝」>) · 리뷰어가 읽는 트리: 끝 커밋의 임시 트리.`
 - `range rc=3` 이면 `[quality-gates] 범위를 풀지 못했다 (<status>: <reason>) — 실행하지 않는다.` 를 내고 멈춘다 — 판정도 게시도 없다.
 - `range rc=2` 면 stderr 를 그대로 보이고 멈춘다.
 
 `$RD/range-scope.txt` 는 실행 동안 고치지 않는다 — 모든 반복과 모든 소비자(리뷰 diff · 의도 출처 · codex · 차등 테스트 · 판정 줄)가 이 파일의 같은 두 커밋을 쓴다. diff 의 기준과 차등 테스트의 기준선은 시작 커밋(`start:`), HEAD 축과 판정 줄의 커밋은 끝 커밋(`end:`)이다. 범위는 이미 있는 커밋이라 지금 체크아웃과 다를 수 있다 — 그래서 범위 모드는 고치고 다시 돌지 않고([Fix-loop decision](#fix-loop-decision)), 앱을 걷지 않고([e2e](#e2e)), PR 코멘트를 달지 않는다([Publish](#publish)).
 
-**리뷰 트리 (범위 모드 · 실행에 한 번 · P2b 바로 뒤).** 리뷰어(보안 · 외부 · 재비판)와 codex 러너는 diff 밖 코드를 `project_dir` 에서 열어 본다. 지금 체크아웃이 범위 끝이 아니면(범위 파일의 `head_is_end: no`) 끝 커밋의 임시 트리를 하나 만들어 그 경로를 `project_dir` 로 쓴다 — 리뷰어가 시작 커밋이나 다른 체크아웃의 코드를 끝 커밋의 코드로 읽지 않게 한다:
+**리뷰 트리 (범위 모드 · 실행에 한 번 · P2b 바로 뒤).** 리뷰어(보안 · 외부 · 재비판)와 codex 러너는 diff 밖 코드를 `project_dir` 에서 열어 본다. 범위 모드는 늘 끝 커밋의 임시 트리를 하나 만들어 그 경로를 `project_dir` 로 쓴다 — 지금 체크아웃이 범위 끝이어도(`head_is_end: yes`) 그렇다. 체크아웃에는 커밋 안 된 변경과 추적 안 된 파일이 있을 수 있고, 그것을 리뷰어가 끝 커밋의 코드로 읽으면 판정이 커밋에 없는 코드(예: 커밋 안 된 검증 함수)를 근거로 삼는다. 범위 파일의 `head_is_end:` 는 그대로 남아 공시되지만 이 갈래를 정하지 않는다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 RS="$RD/range-scope.txt"; rm -f "$RD/review-tree.txt"
-if [ "$(sed -n 's/^head_is_end: //p' "$RS")" = yes ]; then
-  echo "review_tree: checkout"
-else
-  RT="$("$QG/scripts/qg-worktree.sh" create-head "$(sed -n 's/^end: //p' "$RS")" "<session-id>" --range "$RS")" && [ -n "$RT" ] && [ -d "$RT" ] \
-    || { echo "[quality-gates] 리뷰어가 읽을 끝 커밋의 임시 트리를 만들지 못했다 — 지금 체크아웃으로 대신하지 않고 멈춘다(판정 없음)." >&2; exit 6; }
-  printf '%s\n' "$RT" > "$RD/review-tree.txt" \
-    || { "$QG/scripts/qg-worktree.sh" remove "$RT"; echo "[quality-gates] 리뷰 트리 경로를 기록하지 못했다 — 트리를 지우고 멈춘다(판정 없음)." >&2; exit 6; }
-  echo "review_tree: $RT"
-fi
+RT="$("$QG/scripts/qg-worktree.sh" create-head "$(sed -n 's/^end: //p' "$RS")" "<session-id>" --range "$RS")" && [ -n "$RT" ] && [ -d "$RT" ] \
+  || { echo "[quality-gates] 리뷰어가 읽을 끝 커밋의 임시 트리를 만들지 못했다 — 지금 체크아웃으로 대신하지 않고 멈춘다(판정 없음)." >&2; exit 6; }
+printf '%s\n' "$RT" > "$RD/review-tree.txt" \
+  || { "$QG/scripts/qg-worktree.sh" remove "$RT"; echo "[quality-gates] 리뷰 트리 경로를 기록하지 못했다 — 트리를 지우고 멈춘다(판정 없음)." >&2; exit 6; }
+echo "review_tree: $RT"
 ```
 
-- `review_tree: checkout` 이면 `project_dir` 는 P0 값 그대로다 — 범위 줄의 트리 칸은 「지금 체크아웃」.
-- `review_tree: <경로>` 면 그 경로가 이 실행의 `project_dir` 이다 — Step 3 의 모든 리뷰어 dispatch · 외부 리뷰어 · codex 러너와 Step 3.5 의 재비판이 그것을 싣는다. 범위 줄의 트리 칸은 「끝 커밋의 임시 트리」. 차등 테스트 D1 은 같은 자리(일회용 트리 이름공간의 HEAD 축 자리)에 같은 끝 커밋으로 트리를 다시 만든다 — 리뷰가 ② 보다 먼저 끝나므로(C1) 리뷰어가 읽는 동안 트리가 바뀌지 않고, 내용도 같은 커밋이다.
+- `review_tree: <경로>` 의 그 경로가 이 실행의 `project_dir` 이다 — Step 3 의 모든 리뷰어 dispatch · 외부 리뷰어 · codex 러너와 Step 3.5 의 재비판이 그것을 싣는다. 차등 테스트 D1 은 같은 자리(일회용 트리 이름공간의 HEAD 축 자리)에 같은 끝 커밋으로 트리를 다시 만든다 — 리뷰가 ② 보다 먼저 끝나므로(C1) 리뷰어가 읽는 동안 트리가 바뀌지 않고, 내용도 같은 커밋이다.
 - 펜스가 0 이 아닌 값으로 끝나면 stderr 를 그대로 보이고 멈춘다 — 판정도 게시도 없다. 지금 체크아웃으로 대신하지 않는다.
 - 이 트리는 실행이 어느 경로로 끝나든(최종 판정 · 멈추기 · 중간에 멈춤) [Final verdict](#final-verdict) 의 「리뷰 트리 지우기」 펜스로 지운다. 지우지 못하고 남은 트리는 다음 실행이 같은 자리에 트리를 만들 때 먼저 지운다.
 
@@ -1093,7 +1088,7 @@ The last iteration's `$RV/synth.out` holds the review · differential verdict. `
 result to it and renders the verdict line — you do not retype the verdict, the counts, or the precedence (V1 · R24).
 Fill only `<session-id>`, the last iteration's `RV`, `<N>` (the iteration number) and the e2e 칸 from `## e2e`.
 Add `--e2e-overridden` before `--e2e` only when the human flipped the **last** walk's proposal — a flip in an earlier
-walk (a line in `e2e-flip.md`) does not count. 시나리오가 여럿이면 `references/e2e.md` §6 이 e2e 칸을 정한 걷기를 정하고,
+walk (a line in `e2e-flip.md`) does not count. 시나리오가 여럿이면 `${CLAUDE_PLUGIN_ROOT}/references/e2e.md` §6 이 e2e 칸을 정한 걷기를 정하고,
 그 걷기가 마지막 걷기 대신 쓰인다.
 판정 줄의 커밋(`--sha`)은 각 판정 펜스의 `SHA_ARG` 가 정한다 — 범위 모드면 범위 파일의 끝 커밋이고, 지금 체크아웃(HEAD)이 아니다.
 
@@ -1180,7 +1175,7 @@ Print the verdict line (the last line of `$RD/verdict.out`) on its own line, and
 Then run D8 of `references/differential-test.md` (drop the run's memo) when ② made one — the verdict line and the record above
 read the session-folder copies, not the memo.
 
-**리뷰 트리 지우기 (범위 모드).** P2b 가 리뷰 트리를 만들었으면(세션 폴더의 `review-tree.txt`) 실행이 어느 경로로 끝나든 —
+**리뷰 트리 지우기 (범위 모드).** P2b 가 만든 리뷰 트리(세션 폴더의 `review-tree.txt`)가 있으면 실행이 어느 경로로 끝나든 —
 최종 판정 · 「멈추기」 · 합성기 rc 같은 중간 멈춤 — 마지막에 이 펜스를 돈다. 최종 판정이면 D8 바로 뒤, 게시 앞이다.
 차등 테스트 D6 이 같은 자리를 이미 지웠으면 아무 일 없이 끝난다(`remove` 는 없는 트리를 그냥 넘긴다):
 

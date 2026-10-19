@@ -80,7 +80,7 @@ started_at: "<ISO-8601 UTC>"
 같은 폴더의 다른 파일 — `intent.md`(의도 출처 본문) · `excluded.md`(제외 패치 누적) ·
 `extra-iterations.md`(Max-iter decision 에서 사용자가 연 반복 — 승인 출처(label · typed)와 원문, 줄 수가 상한을 늘린다) ·
 `differential.yaml`(마지막 iteration 의 차등 출력 사본) · `differential-not-counted.md`(커버리지로 세지 않은 테스트) ·
-`verdict.out` · `topic-scope.txt` · `range-scope.txt`(P2b 가 얼린 범위 — 범위 모드일 때만) · `review-tree.txt`(범위 모드에서 리뷰어가 읽는 끝 커밋 임시 트리의 경로 — 체크아웃이 범위 끝이 아닐 때만, 실행 끝에 트리와 함께 지운다) · `comment-head.md` · `comment.md` · `publish.out` · `publish.err`(게시) · `e2e-record.md` · `e2e-flip.md` ·
+`verdict.out` · `topic-scope.txt` · `range-scope.txt`(P2b 가 얼린 범위 — 범위 모드일 때만) · `review-tree.txt`(범위 모드에서 리뷰어가 읽는 끝 커밋 임시 트리의 경로 — 범위 모드일 때만, 실행 끝에 트리와 함께 지운다) · `comment-head.md` · `comment.md` · `publish.out` · `publish.err`(게시) · `e2e-record.md` · `e2e-flip.md` ·
 `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt` · `e2e-app.pgid` · `e2e-app.log`(e2e) ·
 `review-i<N>.names` · `review-i<N>.full.diff` · `review-i<N>.diff` · `review-i<N>.doc-paths` · `review-i<N>.self-state`(Review Step 1c 의 리뷰 diff — iteration 마다) —
 도 같은 생명주기를 따른다.
