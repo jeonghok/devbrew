@@ -1332,7 +1332,7 @@ grep -qE 'references/trivia-escape\.md' "$CMD" \
   || no "v0.41.0: spec-interview 진입 단계에 trivia-escape.md 포인터가 없다"
 # 정본과의 분기 방지 — request-framing 진입 단계의 동형 검사(test_request_framing_entry.sh)와
 # 대칭이다. 5패턴 본문이 이 파일에 다시 복제되면 정본이 바뀌어도 이 사본은 안 바뀐다.
-cmd_pattern_dup="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 식별자|<10 토큰)' "$CMD")"
+cmd_pattern_dup="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 식별자|짧은 요청)' "$CMD")"
 [[ "$cmd_pattern_dup" -eq 0 ]] \
   && ok "v0.41.0: spec-interview 에 5패턴 본문이 복제되지 않았다 (정본만)" \
   || no "v0.41.0: spec-interview 에 5패턴 본문이 복제돼 있다 (${cmd_pattern_dup}줄) — 정본과 갈라진다"
@@ -1340,7 +1340,7 @@ cmd_pattern_dup="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 �
 # 정본에 규칙으로 있어야 한다. 양성 짝: 정본을 실제로 읽었는가(5패턴 헤더) · 새 안내 문면.
 # 부재: 옛 문면(재호출하면 trivia 가 다시 막는 막다른 안내).
 TRIVIA_ESC="$REPO_ROOT/plugins/spec-distill/references/trivia-escape.md"
-grep -qF '# Trivia Escape — 5 패턴' "$TRIVIA_ESC" \
+grep -qF '# Trivia Escape — 한 문장 기준' "$TRIVIA_ESC" \
   && ok "force(양성 짝): trivia-escape.md 정본을 읽었다" \
   || no "force(양성 짝): trivia-escape.md 를 읽지 못했다 — 아래 단언이 공허하다"
 grep -qF '「풀린 입력」의 첫 토큰이 정확히 `force` 면 그 토큰을 떼고 이 판정을 건너뛴다 — 나머지가 「풀린 입력」이 된다' "$TRIVIA_ESC" \

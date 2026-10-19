@@ -58,7 +58,7 @@ assert_contains "$s2" '시도한 절대경로를 모두 담아 아래 문구를 
 assert_contains "$s2" '시도: ' "@ 실패 문구가 시도한 절대경로를 싣는다"
 assert_contains "$s2" '공백 없는 경로 한 토큰으로 다시 불러라' "@ 경로의 공백을 알리고 멈춘다"
 assert_contains "$s2" '발동하지 않았으면 「풀린 입력」은' "§3: 미발동이면 받은 입력 그대로"
-assert_contains "$s3" '「풀린 입력」을 대조' "§3: 진입 단계 3 trivia 대조 대상 = 풀린 입력"
+assert_contains "$s3" '「풀린 입력」을 그 파일의 기준과 예시로 판정한다' "§3: 진입 단계 3 trivia 대조 대상 = 풀린 입력"
 assert_contains "$s3" '「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다' "§3: seed 면 trivia 판정을 건너뛴다"
 assert_contains "$s35" '「풀린 입력」의 frontmatter 에 `type: interview-seed`' "§3: 진입 단계 3.5 seed 판별 대상 = 풀린 입력"
 assert_contains "$s4" '「풀린 입력」' "§3: 진입 단계 4 가 풀린 입력을 본 절차로 넘긴다"

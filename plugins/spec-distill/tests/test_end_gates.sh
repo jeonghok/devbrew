@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-interview/SKILL.md plugins/spec-distill/references/epic-handoff.md
+# guards: plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-interview/SKILL.md plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/references/trivia-escape.md plugins/spec-distill/agents/steelman-builder.md plugins/spec-distill/skills/spec-interview/references/steelman.md plugins/spec-distill/skills/request-framing/SKILL.md
 #
 # R10 계획 2 — 끝 게이트: 정본의 둘째 질문(선택) · 인터뷰 끝 ①② 이름 표 · 다른 다음 단계의 줄.
 # 정적 락이다 — 모델이 이 문면을 실제로 따르는지는 재지 못한다.
@@ -12,6 +12,10 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/templates/interview-brief-template.md"
   echo "plugins/spec-distill/skills/spec-interview/SKILL.md"
   echo "plugins/spec-distill/references/epic-handoff.md"
+  echo "plugins/spec-distill/references/trivia-escape.md"
+  echo "plugins/spec-distill/agents/steelman-builder.md"
+  echo "plugins/spec-distill/skills/spec-interview/references/steelman.md"
+  echo "plugins/spec-distill/skills/request-framing/SKILL.md"
   exit 0
 fi
 . "$ROOT/shared/tests/assert.sh"
@@ -68,4 +72,30 @@ assert_contains "$(win "$TPL" '^## 7[.]' '^## ')" '(기본 다음 단계 — sup
 assert_contains "$(flat "$FIN")" '`next_phase: superpowers:brainstorming`(기본 다음 단계 — 끝 게이트의 둘째 질문에서 다른 단계를 고르면 B-3 이 그 skill 의 완전명으로 바꾼다)' "AC18: Step A 의 next_phase"
 assert_contains "$(flat "$SKI")" 'interview brief**(기본 다음 단계가 brainstorming 인 meta-prompt)' "AC18: SKILL 정의 문장"
 grep -qF 'brainstorming용 meta-prompt' "$SKI" && no "AC18: 옛 「brainstorming용」 정의 잔존" || ok "AC18: 옛 정의 없음(양성 짝: 위 단언)"
+# AC19 · AC20
+TE="$SD/references/trivia-escape.md"; SB="$SD/agents/steelman-builder.md"; SM="$SD/skills/spec-interview/references/steelman.md"
+TEF="$(flat "$TE")"
+grep -qxF '# Trivia Escape — 한 문장 기준' "$TE" && ok "AC19: 머리가 한 문장 기준" || no "AC19: 머리가 다르다"
+for lit in '한 문장으로 설명 가능한 사소한 변경이면' '아래 다섯은 그 기준에 드는 흔한 예시다' \
+           '목록에 없어도 한 문장으로 설명되는 변경이면 trivia 로 보고' '목록에 들어도 의미가 바뀌는 변경이면 trivia 가 아니다' \
+           '**짧은 요청 + 명백히 안전한 syntactic action 동사**' '(보기: 10 토큰 안팎)' '판정 근거: <판정 근거>'; do
+  assert_contains "$TEF" "$lit" "AC19: «${lit}»"
+done
+for old in '<10 토큰' '다섯 중 하나에 해당하면' '맞은 패턴'; do
+  grep -qF "$old" "$TE" && no "AC19: 옛 문구 «${old}» 잔존" || ok "AC19: 옛 문구 «${old}» 없음(양성 짝: 위 단언)"
+done
+for f in "$SD/skills/spec-interview/SKILL.md" "$SD/skills/request-framing/SKILL.md"; do
+  assert_contains "$(flat "$f")" '그 파일의 기준과 예시로 판정한다' "AC19: ${f##*/skills/} 진입이 기준으로 판정"
+  grep -qF '다섯 패턴' "$f" && no "AC19: ${f##*/skills/} 에 「다섯 패턴」 잔존" || ok "AC19: ${f##*/skills/} 「다섯 패턴」 없음"
+done
+SBF="$(flat "$SB")"
+for lit in '보기: landscape 모순 · 알려진 anti-pattern · 기존 사용자 제약과의 충돌. 이 셋에 한정하지 않는다.' \
+           '<goal 기준으로 대안이 이기는 케이스 — 길이는 근거가 정한다(보기: 2-4줄)>' \
+           '<같은 기준으로 원안이 이기는 케이스 — 길이는 근거가 정한다(보기: 2-4줄)>'; do
+  assert_contains "$SBF" "$lit" "AC20: steelman-builder «${lit}»"
+done
+for old in '충돌 중 하나.' ', 2-4줄>'; do
+  grep -qF "$old" "$SB" && no "AC20: steelman-builder 옛 «${old}» 잔존" || ok "AC20: 옛 «${old}» 없음(양성 짝: 위 단언)"
+done
+assert_contains "$(flat "$SM")" '**trigger** — 기본은 셋이다: landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의 충돌. 다른 이유로 방향이 의심되면 모델이 판단해 띄우고 그 이유를 trigger 로 적는다.' "AC20: 인터뷰 쪽 trigger 도 예시"
 finish

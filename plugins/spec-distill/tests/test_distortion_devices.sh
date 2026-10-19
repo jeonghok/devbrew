@@ -52,7 +52,7 @@ has   "$SP" '덜어 낸 것 표' "§2-4: seed 층 1 머리 · 판정 관계가 �
 # ── Task 3 — trivia 우회 앞 질문 (N11 · AC16a) ──
 TE="$SD/references/trivia-escape.md"; SI="$SD/skills/spec-interview/SKILL.md"
 has   "$TE" '사소한 일로 보고 게이트를 건너뛴다 — 그대로 / 전체 과정으로' "AC16a: 우회 전에 「그대로 / 전체 과정으로」 질문이 있다"
-has   "$TE" '맞은 패턴: <해당 패턴 이름>' "AC16a: 질문에 맞은 패턴 이름이 보인다"
+has   "$TE" '판정 근거: <판정 근거>' "AC16a: 질문에 판정 근거가 보인다"
 has   "$TE" 'label: "전체 과정으로"' "AC16a: 「전체 과정으로」 선택지가 있다"
 has   "$TE" 'label: "그대로"' "AC16a: 「그대로」 선택지가 있다"
 has   "$TE" '「풀린 입력」의 첫 토큰이 정확히 `force` 면 그 토큰을 떼고 이 판정을 건너뛴다 — 나머지가 「풀린 입력」이 된다' "AC16a: 첫 토큰 force 경로가 그대로다"
