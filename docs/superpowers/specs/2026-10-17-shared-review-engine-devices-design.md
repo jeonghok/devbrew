@@ -401,6 +401,9 @@ next_phase: superpowers:writing-plans
 | CHANGELOG 다듬기: spec-distill 7.2.1 의 절 순서(Fixed 가 Changed 앞) · 옛 skill 이름 `critiquing-artifacts` 가 Changed 에만 있고 Removed 에 없다 · qg 새 링크 `scripts/entry_preflight.py` 가 CHANGELOG 에 없다 — 끝냄: 5d1796b0 에서 고쳤다(qg 14.0.0 의 절 순서도 함께) | 계획 1 머지 전에 고쳤다 — 남은 일 없음 | R2a |
 | 공유본 넷을 모두 링크 — `compute-test-scope-candidates.sh` 가 형제 `resolve-baseline.sh` 를 자기 폴더에서 부른다(R5 설계 §5 · 변경표는 「스크립트 셋」이라 적었다, 소비 규칙은 `shared/test-selection/README.md`). 설치본 캐시 사본에서 형제 경로(compute → resolve-baseline, diff → run-test-selection)는 계획 1 이 `detect` 로만 쟀다 | R5 계획 셋째가 공유본을 링크하고 합친 사본 스위트로 잰다 | R5 |
 | qg 새 진입 이름 `/quality-gates:quality-pipeline` · `/quality-gates:artifact-critique` — R5 끝 단계의 qg 호출 꼴은 계획 3 의 범위 모드(`range <시작>[..<끝>]`)에서 정해진다 | 호출 꼴은 범위 모드가 생긴 뒤 확정 | R5 |
+| project-init S4 「CLAUDE.md 는 그대로 두기」 + 헌장 C-S3 (b): AGENTS.md 에 `## Project Charter` 가 생기지 않아 실행마다 CLAUDE.md 의 헌장 절을 다시 읽는다(손실 없음) | 계획 4 가 S4 헌장 이전을 고치며 남은 모서리 — 「그대로 두기」가 관리 절을 담는 파일 둘을 남기는 데서 온다, 계획 4 범위 밖의 규칙 정리 | R9 |
+| project-init AGENTS.md 에 이미 관리 절이 있는 S4 「옮기기」: CLAUDE.md 쪽의 다른 `## Project Charter`(또는 git 규칙을 지킨 실행의 `## Git Workflow`)가 「중복」으로 공시 없이 빠진다 | 계획 4 이전부터 있던 동작 — 판정 범위 밖 | R9 |
+| project-init Step 5 보고의 「CLAUDE.md 를 그대로 뒀다면:」 문구 — 「「CLAUDE.md 는 그대로 두기」를 골랐다면:」으로 다듬을지(관리 절이 없는 CLAUDE.md 에도 읽힐 수 있다) | 문구 다듬기 — 바꾸면 테스트 접두도 함께 | R9 |
 
 ## Metadata
 
