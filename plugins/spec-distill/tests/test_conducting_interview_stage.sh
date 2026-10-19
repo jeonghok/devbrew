@@ -267,9 +267,9 @@ state_block="$(awk '/^State frontmatter schema:/{f=1;next} f&&/^```yaml$/{y=1;ne
 { [[ -n "$state_block" ]] && grep -q 'orchestration:' <<<"$state_block"; } \
   && ok "AC1(양성대조): state 스키마 블록을 잘랐다 ($(grep -c . <<<"$state_block")줄)" \
   || no "AC1(양성대조): state 스키마 블록을 못 잘랐다 — 아래 단언이 공허하다"
-grep -qE '^ +research_dispatches: \{coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0\}' <<<"$state_block" \
-  && ok "R1/state: orchestration.research_dispatches (장치별 넷) in schema" \
-  || no "R1/state: orchestration.research_dispatches 부재 또는 장치 칸이 넷이 아니다"
+grep -qE '^ +research_dispatches: \{coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0, open_researcher: 0\}' <<<"$state_block" \
+  && ok "R1/state: orchestration.research_dispatches (장치별 다섯) in schema" \
+  || no "R1/state: orchestration.research_dispatches 부재 또는 장치 칸이 다섯이 아니다"
 for k in research_limit saturation_limit research_log saturation_log; do
   grep -qE "^ +${k}:" <<<"$state_block" && ok "R1/state: orchestration.${k} in schema" || no "R1/state: orchestration.${k} 부재"
 done
@@ -319,13 +319,14 @@ has 'coverage.*부재|coverage 부재|interview_round.*존재' "AC5: legacy dete
 has 'state schema migration' "AC5: migration advisory 줄 실재"
 has 'coverage_mapper_dispatches/blind_spot_dispatches -> research_dispatches' "R1/state: advisory 가 이월을 이름으로 댄다"
 has 'research_limit · saturation_limit · research_log · saturation_log added' "R1/state: advisory 가 신설 키를 이름으로 댄다"
+has 'research_dispatches\.open_researcher added \(0\)' "R10/state: advisory 가 새 장치 칸을 이름으로 댄다"
 # Task 11b: 절 전문이 SKILL에서 $MIG_REF 로 옮겨졌다(조건부 로드) — 윈도우도 거기서 뜬다.
 mig_block="$(awk '/^## In-flight state migration/{f=1;print;next} /^## /{f=0} f' "$MIG_REF")"
 # v0.57.0: migration 절도 orchestration 열거를 담고 있다 — 필드 교체를 소유한 태스크가 그
 # 필드의 모든 자리를 책임진다. 음의 grep 대신 **정확히 일치**하는 전체 열거 리터럴을 요구한다 —
 # `coverage_mapper_dispatches` 하나로 정확히 끝나는 열거만 통과하므로 정체 트리거 필드가
 # 끼어들거나 대체돼도 이 리터럴과 달라져 RED다. 부분 토큰 공존이 아니라 **열거 전체의 동일성**이 이빨이다.
-{ grep -qF '`orchestration`: `{focused_dimension: null, research_dispatches: {coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0}, research_limit: <시작값>, saturation_limit: <시작값>, research_log: [], saturation_log: [], open_decisions: []}`' <<<"$mig_block"; } \
+{ grep -qF '`orchestration`: `{focused_dimension: null, research_dispatches: {coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0, open_researcher: 0}, research_limit: <시작값>, saturation_limit: <시작값>, research_log: [], saturation_log: [], open_decisions: []}`' <<<"$mig_block"; } \
   && ok "R1/state: migration 절의 orchestration 열거가 새 키와 정확히 일치" \
   || no "R1/state: migration 절의 orchestration 열거가 새 키와 다르다"
 mig_flat="$(tr '\n' ' ' <<<"$mig_block" | tr -s ' ')"
@@ -339,6 +340,13 @@ grep -qE '옛 키 [^.]*`non_user_streak`[^.]*`touched`[^.]*를 \*\*지운다\*\*
   && ok "R1/state(양의 짝): 이월 뒤 옛 키 · non_user_streak · touched 를 지운다" || no "R1/state: 옛 키 삭제 규칙 부재 — 두 이름이 공존한다"
 grep -qF '`open_decisions` 는 부재 시 `[]`' <<<"$mig_flat" \
   && ok "AC13: open_decisions 기본값 []" || no "AC13: open_decisions 기본값 규칙 부재"
+# R10 — 직전 릴리스 세션(장치 칸 넷 · 기본 20 · 묶음 표지 없음)의 이월.
+grep -qF '`open_researcher` 칸만 없으면 그 칸만 `0` 으로 더한다' <<<"$mig_flat" \
+  && ok "R10/state: open_researcher 칸만 0 으로 더한다(다른 칸 값 보존)" || no "R10/state: open_researcher 칸 이월 규칙 부재"
+grep -qF '옛 기본값(20)이어도 그대로 쓴다' <<<"$mig_flat" \
+  && ok "R10/state: 이미 있는 research_limit 은 그대로" || no "R10/state: 옛 research_limit 보존 규칙 부재"
+grep -qF '각자 한 묶음이다' <<<"$mig_flat" \
+  && ok "R10/state: 묶음 표지 없는 옛 블록 · 항목은 각자 한 묶음" || no "R10/state: 옛 블록 묶음 규칙 부재"
 # v0.57.0 C2: 발동 조건이 «구조 통째 부재» 면 **실제 업그레이드 경로가 통째로 빠진다** —
 # 직전 릴리스 세션은 `coverage`·`orchestration` 을 이미 갖고 이 릴리스가 더한 세 키
 # (`reopened`·`reopen_log`·`coverage_mapper_dispatches`)만 없어서 어느 조건에도 안 걸린 채

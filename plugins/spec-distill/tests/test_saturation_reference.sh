@@ -14,9 +14,16 @@ CAP_FLAT="$(tr '\n' ' ' <<<"$cap_sec" | tr -s ' ')"
 [[ -n "$cap_sec" ]] && ok "SKILL: 조사 상한 · 포화 판정 절을 떴다" || no "SKILL: 조사 상한 · 포화 판정 절 부재 — 아래가 공허하다"
 
 # G9 — 첫 조사 전 규모 공시, 승인 미요청
-grep -qF '[spec-distill] 이 인터뷰는 조사 subagent 를 최대 <limit>회까지 부른다(웹 포함 · 승인 없이 진행 · 연장은 닿을 때 묻는다).' <<<"$CAP_FLAT" \
-  && ok "G9: 첫 조사 전 규모 한 줄" || no "G9: 첫 조사 전 규모 한 줄 부재"
-grep -qF '첫 조사 subagent dispatch 직전에' <<<"$CAP_FLAT" && ok "G9: 그 줄의 시점 = 첫 조사 dispatch 직전" || no "G9: 시점 문구 부재"
+grep -qF '[spec-distill] 이 인터뷰는 조사 agent 를 최대 <limit>번까지 부른다(agent 안의 검색 · 출처 수는 세지 않는다 · 멈춤은 포화 판정이 정하고 이 수는 비상 끝 · 승인 없이 진행 · 닿으면 연장을 묻는다).' <<<"$CAP_FLAT" \
+  && ok "G9/AC6: 첫 조사 전 규모 한 줄(조사 agent · 비상 끝 · 검색 · 출처 수는 세지 않는다)" || no "G9/AC6: 첫 조사 전 규모 한 줄 부재"
+# 음의 짝 — 위 리터럴이 양의 짝이다. 「웹 포함」은 agent 안 검색을 세는 것처럼 읽힌다.
+grep -qF '웹 포함' <<<"$CAP_FLAT" && no "AC6: 「웹 포함」 잔존" || ok "AC6: 조사 상한 절에 「웹 포함」 없음"
+grep -qF '첫 조사 agent dispatch 직전에' <<<"$CAP_FLAT" && ok "G9: 그 줄의 시점 = 첫 조사 dispatch 직전" || no "G9: 시점 문구 부재"
+# AC4 — 세는 것 · 세지 않는 것
+grep -qF '한 메시지에서 여럿을 띄우면 띄운 수만큼' <<<"$CAP_FLAT" && ok "AC4: 함께 띄우면 띄운 수만큼 센다" || no "AC4: 함께 띄운 조사의 계수 문구 부재"
+grep -qF '`SendMessage` 로 이어 부르면 새 조사라 1 이다' <<<"$CAP_FLAT" && ok "AC4: 이어 부르기도 1" || no "AC4: 이어 부르기 계수 문구 부재"
+grep -qF 'agent 안의 검색 횟수 · 출처 수는 세지 않는다' <<<"$CAP_FLAT" && ok "AC4: agent 안 검색 · 출처 수는 세지 않는다" || no "AC4: agent 안 검색 · 출처 수 비계수 문구 부재"
+grep -qF '### 조사 <n> — <장치> · R<round> · 묶음 <b>' "$SKILL" && ok "§1: 조사 블록 머리에 묶음 표지" || no "§1: 조사 블록 머리에 묶음 표지 부재"
 grep -qF '승인은 묻지 않는다' <<<"$CAP_FLAT" && ok "G9: 승인을 묻지 않는다" || no "G9: 승인 미요청 문구 부재"
 # 부르기 기준 · 계수 · 원문 보존
 grep -qF '열린 결정을 바꾸거나 새 결정을 열 수 있다고 볼 때마다' <<<"$CAP_FLAT" && ok "§1: 부르기 기준" || no "§1: 부르기 기준 부재"
@@ -40,8 +47,11 @@ grep -qF '재개방되지 않았으면 바로' <<<"$NOTYET_FLAT" && ok "D23: 포
 for o in '같은 크기만큼 연장' '지금 포화 판정으로' '인터뷰 종료'; do
   grep -qF "「${o}」" <<<"$CAPHIT_FLAT" && ok "G4: 선택지 «${o}»" || no "G4: 선택지 «${o}» 부재"
 done
+# §2 — 남은 호출 수보다 큰 묶음은 통째로 멈춘다(잘라 보내면 독립 질문 일부가 조용히 빠진다).
+grep -qF '그 묶음의 어느 것도 띄우기 전에 멈춘다' <<<"$CAPHIT_FLAT" && ok "§2: 남은 수보다 큰 묶음은 띄우기 전에 멈춘다" || no "§2: 묶음 멈춤 문구 부재"
+grep -qF '일부만 띄우지 않는다' <<<"$CAPHIT_FLAT" && ok "§2: 묶음을 일부만 띄우지 않는다" || no "§2: 일부 dispatch 금지 문구 부재"
 grep -qF '하한 자리도 상한 앞에서 멈춘다' <<<"$SAT_FLAT" && ok "RF4: 하한 자리도 상한 앞에서 멈춘다" || no "RF4: 하한 vs 상한 규칙 부재"
-grep -qF '양의 정수가 아니면 20 으로 두고' <<<"$SAT_FLAT" && grep -qF '양의 정수가 아니면 5 로 두고' <<<"$SAT_FLAT" \
+grep -qF '양의 정수가 아니면 60 으로 두고' <<<"$SAT_FLAT" && grep -qF '양의 정수가 아니면 5 로 두고' <<<"$SAT_FLAT" \
   && ok "RF2: 환경 변수 이상값 → 기본값 + 한 줄" || no "RF2: 이상값 처리 문구 부재"
 # 포화 판정 — dispatch · 기준 · 반복 감지 · 판정 불가 · 판정 상한
 grep -qF 'subagent_type: "spec-distill:saturation-judge"' "$SAT" && ok "D23: 판정자 dispatch" || no "D23: 판정자 dispatch 부재"
@@ -54,7 +64,7 @@ grep -qF '[spec-distill] 포화 판정 불가 — <사유>' <<<"$SAT_FLAT" && ok
 grep -qF '[spec-distill] 포화 판정 상한 도달 — <k>/<limit>. 연장 · 포화로 보고 종료 · 인터뷰 종료 중 고르세요.' <<<"$SAT_FLAT" \
   && ok "D2.5: 판정 상한 도달 한 줄" || no "D2.5: 판정 상한 도달 한 줄 부재"
 # audit §2 줄 형식 — 게이트(check_brief.py)가 읽는 그 글자
-for ln in '- 조사 호출 <n>/<limit> (장치별: 커버리지 <a> · 맹점 <b> · 반론 <c> · 레포 조사 <d> · 본체 직접 <e>)' \
+for ln in '- 조사 호출 <n>/<limit> (장치별: 커버리지 <a> · 맹점 <b> · 반론 <c> · 레포 조사 <d> · 만든 조사 <o> · 본체 직접 <e>)' \
           '- 상한 도달 <n>/<limit> — 사용자 선택 S<m>: 연장 | 판정으로 | 인터뷰 종료' \
           '- 판정 상한 도달 <k>/<limit> — 사용자 선택 S<m>: 연장 | 포화로 보고 종료 | 인터뷰 종료' \
           '- 포화 판정 <k>: 포화 — <basis 요지>' '- 포화 판정 <k>: 아직 — 빈 곳 <g>개' \
@@ -97,7 +107,7 @@ grep -qF "$ORCH" <<<"$SAT_FLAT" && ok "I3: saturation.md 입력 레시피가 같
 # M2 — 상한 값 펜스를 실제로 돌린다: 0 · 00 · 음수 · 문자는 기본값, 앞자리 0 은 10진 정규화.
 LIM_FENCE="$(awk '/^### 상한 값/{f=1;next} /^### /{f=0} f&&/^```bash$/{b=1;next} f&&b&&/^```$/{exit} f&&b' "$SAT")"
 { [[ -n "$LIM_FENCE" ]] && bash -n <<<"$LIM_FENCE"; } && ok "M2(양성대조): 상한 값 펜스를 떴고 bash -n 통과" || no "M2: 상한 값 펜스 부재 또는 구문 오류"
-for pair in '00|20|5' '0|20|5' '-3|20|5' 'abc|20|5' '007|7|7' '3|3|3' '|20|5'; do
+for pair in '00|60|5' '0|60|5' '-3|60|5' 'abc|60|5' '007|7|7' '3|3|3' '|60|5'; do
   v="${pair%%|*}"; rest="${pair#*|}"; er="${rest%%|*}"; es="${rest#*|}"
   got="$(DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT="${v}" DEVBREW_SPEC_DISTILL_SATURATION_LIMIT="${v}" bash -c "$LIM_FENCE" 2>/dev/null)"
   [[ "$got" == "research_limit=${er} saturation_limit=${es}" ]] && ok "M2: 값 '${v}' → ${er} · ${es}" || no "M2: 값 '${v}' → «${got}» (기대 ${er} · ${es})"

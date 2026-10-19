@@ -106,6 +106,11 @@ assert_eq "$(calls)" "4" "진행 중 인터뷰 상태 파일이 생겨도 상태
 age "$STATE_DIR/2026-10-15-t-interview.state.md" 3000
 assert_eq "$(sl)" "$LINE · 인터뷰 조사 3/20" "인터뷰 상태 파일 수정 시각이 바뀌어도 줄은 맞고"
 assert_eq "$(calls)" "4" "상태 계산은 다시 부르지 않는다"
+# R10 — 장치 칸 다섯(open_researcher 포함) · 기본 60. 마지막 칸이 0 이 아니어야 «마지막 칸 빠뜨림»이 보인다.
+printf -- '---\ntype: interview-state\nseed: none\norchestration:\n  research_dispatches: {coverage_mapper: 1, blind_spot_prober: 1, steelman_builder: 1, repo_researcher: 1, open_researcher: 2}\n  research_limit: 60\n---\n' \
+  > "$STATE_DIR/2026-10-19-o-interview.state.md"
+assert_eq "$(sl)" "$LINE · 인터뷰 조사 6/60 외 1" "장치 칸 다섯을 모두 더한다(open_researcher 2 포함)"
+rm -f "$STATE_DIR/2026-10-19-o-interview.state.md"
 git -C "$W" worktree add -q --detach "$T/wt2" HEAD
 sl2() { (cd "$T/wt2" && python3 "$S/control_plane.py" statusline </dev/null); }
 sl >/dev/null; sl2 >/dev/null; base="$(calls)"

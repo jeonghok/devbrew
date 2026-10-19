@@ -127,10 +127,10 @@ coverage:                            # G1 커버리지 원장 (floor 5 + derived
   derived: []                        # 주제-도출 차원 ({name, rationale, status, evidence, reopened, reopen_log})
 orchestration:                       # orchestrator 소유, agent read-only
   focused_dimension: null            # 현재 probe 대상 차원 이름 또는 null
-  research_dispatches: {coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0}  # 조사 subagent 호출 수
-  research_limit: <int>              # 조사 호출 상한 — 시작값 DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT(기본 20), 연장마다 더한다
+  research_dispatches: {coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0, open_researcher: 0}  # 조사 agent 호출 수
+  research_limit: <int>              # 조사 호출 상한 — 시작값 DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT(기본 60), 연장마다 더한다
   saturation_limit: <int>            # 포화 판정 상한 — 시작값 DEVBREW_SPEC_DISTILL_SATURATION_LIMIT(기본 5), 연장마다 더한다
-  research_log: []                   # 조사마다 {n, device, round, changed: [OQ…], opened: [OQ…], summary}
+  research_log: []                   # 조사마다 {n, device, round, batch, changed: [OQ…], opened: [OQ…], summary}
   saturation_log: []                 # 판정마다 {k, round, verdict, basis, gaps: […], user_choice: S<n> | null} · 판정 불가 {k, round, verdict: unavailable, reason, user_choice}
   open_decisions: []                 # 결정의 유일한 거처 — OQ<n> 의 산출자. 시작은 빈 목록이고 항목 형식은:
   #   - id: OQ<n>                    # 발급 시 순증 (라운드 규약 «다음 결정»)
@@ -144,7 +144,7 @@ confirm_repost_count: 0              # 종료 확정 확인 재제시 횟수 (�
 ---
 ```
 
-State body: 각 라운드의 `## R<n>` 기록(«라운드 규약» 형식) + 조사 산출 원문(`### 조사 <n> — <장치> · R<round>` 아래 verbatim — 포화 판정자의 입력이라 요약으로 바꾸지 않는다) + `## audit §2 대기 줄`(게이트가 읽는 사건 줄 — `references/saturation.md` 가 정한다).
+State body: 각 라운드의 `## R<n>` 기록(«라운드 규약» 형식) + 조사 산출 원문(`### 조사 <n> — <장치> · R<round> · 묶음 <b>` 아래 verbatim — 포화 판정자의 입력이라 요약으로 바꾸지 않는다) + `## audit §2 대기 줄`(게이트가 읽는 사건 줄 — `references/saturation.md` 가 정한다).
 
 **`open_decisions[]` 의 생명주기.** 발급은 orchestrator 가 «다음 결정» 블록을 쓸 때 그 문장에
 `OQ<n>` 을 붙이는 것이다(새 결정이면 새 번호 — 순증, 인터뷰 안에서만 유일 — 이어가는 결정이면 기존 번호).
@@ -367,15 +367,16 @@ dispatch 하지 않고 본체가 직접 조사한다 — 공시는 loud advisory
 
 ## 조사 상한 · 포화 판정
 
-조사 subagent 넷(`coverage-mapper` · `blind-spot-prober` · `steelman-builder` · `repo-researcher`)은 자격 · 예산 없이,
+조사 agent 다섯(`coverage-mapper` · `blind-spot-prober` · `steelman-builder` · `repo-researcher` · `open-researcher`)은 자격 · 예산 없이,
 그 호출이 열린 결정을 바꾸거나 새 결정을 열 수 있다고 볼 때마다 부른다. 첫 호출 필수 자리 둘은 하한으로 남는다.
-state 를 처음 만들 때(아래 한 줄보다 앞) 아래 `Read` 줄의 파일에서 `### 상한 값` 만 한 번 읽어 그 fence 로 `research_limit` · `saturation_limit` 를 정한다(양의 정수가 아니면 20 · 5 와 한 줄 알림).
-인터뷰의 첫 조사 subagent dispatch 직전에 아래 한 줄을 그대로 내고, 승인은 묻지 않는다:
+state 를 처음 만들 때(아래 한 줄보다 앞) 아래 `Read` 줄의 파일에서 `### 상한 값` 만 한 번 읽어 그 fence 로 `research_limit` · `saturation_limit` 를 정한다(양의 정수가 아니면 60 · 5 와 한 줄 알림).
+인터뷰의 첫 조사 agent dispatch 직전에 아래 한 줄을 그대로 내고, 승인은 묻지 않는다:
 
-> `[spec-distill] 이 인터뷰는 조사 subagent 를 최대 <limit>회까지 부른다(웹 포함 · 승인 없이 진행 · 연장은 닿을 때 묻는다).`
+> `[spec-distill] 이 인터뷰는 조사 agent 를 최대 <limit>번까지 부른다(agent 안의 검색 · 출처 수는 세지 않는다 · 멈춤은 포화 판정이 정하고 이 수는 비상 끝 · 승인 없이 진행 · 닿으면 연장을 묻는다).`
 
-dispatch 마다 `research_dispatches` 의 그 장치 칸을 +1 하고, 산출 원문을 state 본문 `### 조사 <n> — <장치> · R<round>`
-아래 verbatim 으로 남기고, «지금 이해»에 실은 뒤(V1 확인 뒤) `research_log` 에 한 항목을 더한다. 본체의 직접 조사(경로 (a)
+dispatch 마다 `research_dispatches` 의 그 장치 칸을 +1 한다 — 한 메시지에서 여럿을 띄우면 띄운 수만큼, 끝난 agent 를 `SendMessage` 로 이어 부르면 새 조사라 1 이다. agent 안의 검색 횟수 · 출처 수는 세지 않는다.
+산출 원문을 state 본문 `### 조사 <n> — <장치> · R<round> · 묶음 <b>` 아래 verbatim 으로 남기고, «지금 이해»에 실은 뒤(V1 확인 뒤) `research_log` 에 한 항목을 더한다.
+`<b>` 는 인터뷰 안 1부터 순증하는 묶음 번호다 — 한 메시지에서 함께 띄운 조사는 같은 `<b>` 이고, 하나만 띄운 조사와 본체 직접 조사 블록은 각자 한 묶음이다. `research_log` 항목의 `batch` 도 같은 값이다. 본체의 직접 조사(경로 (a)
 확인 · web sweep)도 «지금 이해»에 실을 때 같은 두 자리에 `device: orchestrator` 로 남기되(`device: orchestrator` 의 원문 블록은 V1 확인 줄(`- 확인 RC<n> — …`)과
 웹 항목 줄 그대로다 — 산문 요약을 넣지 않는다) 상한에는 세지 않는다 — 판정자 호출도 세지 않는다. 본체 직접 조사는 라운드 규약(라운드마다 질문 호출 하나 · 질문마다 답 하나)이 묶는다. 합이 `research_limit` 에 닿을 때와
 floor 다섯이 모두 `closed` 가 될 때 아래 파일을 Read 로 읽어 그대로 따른다.
@@ -575,5 +576,5 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/state-migration.md
 ## kill switch
 
 - `DEVBREW_SPEC_DISTILL_DISABLE=1`: `## 진입 단계` 1 이 멈춘다(no-op). 상태 파일은 docs 에 그대로 남는다.
-- `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT=<n>` · `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT=<n>`: 조사 호출 · 포화 판정 상한의 시작값(기본 20 · 5). 상한은 끄는 스위치가 아니라 닿으면 사용자에게 묻는 자리다.
+- `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT=<n>` · `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT=<n>`: 조사 호출 · 포화 판정 상한의 시작값(기본 60 · 5). 상한은 끄는 스위치가 아니라 닿으면 사용자에게 묻는 자리다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`: web landscape(R2) 비활성 — loud advisory 후 codebase 근거만 사용.

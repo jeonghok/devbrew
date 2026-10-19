@@ -7,14 +7,14 @@ floor 다섯이 사용자 답으로 모두 `closed` 가 될 때. 줄 형식은 �
 
 ### 상한 값
 
-`research_limit` 의 시작값은 `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT` 다 — 양의 정수가 아니면 20 으로 두고 그 사실을
+`research_limit` 의 시작값은 `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT` 다 — 양의 정수가 아니면 60 으로 두고 그 사실을
 한 줄로 알린다. `saturation_limit` 의 시작값은 `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT` 다 — 양의 정수가 아니면 5 로 두고
 그 사실을 한 줄로 알린다. 둘 다 state 에 적고 연장마다 시작값만큼 더한다.
 
 ```bash
-lim="${DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT:-20}"
+lim="${DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT:-60}"
 case "$lim" in ''|*[!0-9]*) lim=0 ;; *) lim=$((10#$lim)) ;; esac
-[ "$lim" -gt 0 ] || { echo "[spec-distill] DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT='${DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT:-}' 가 양의 정수가 아니다 — 20 으로 둔다." >&2; lim=20; }
+[ "$lim" -gt 0 ] || { echo "[spec-distill] DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT='${DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT:-}' 가 양의 정수가 아니다 — 60 으로 둔다." >&2; lim=60; }
 sat="${DEVBREW_SPEC_DISTILL_SATURATION_LIMIT:-5}"
 case "$sat" in ''|*[!0-9]*) sat=0 ;; *) sat=$((10#$sat)) ;; esac
 [ "$sat" -gt 0 ] || { echo "[spec-distill] DEVBREW_SPEC_DISTILL_SATURATION_LIMIT='${DEVBREW_SPEC_DISTILL_SATURATION_LIMIT:-}' 가 양의 정수가 아니다 — 5 로 둔다." >&2; sat=5; }
@@ -24,13 +24,14 @@ echo "research_limit=$lim saturation_limit=$sat"
 ### 상한 도달
 
 `research_dispatches` 합이 `research_limit` 에 닿으면 다음 조사 dispatch **전에** 멈춘다. 하한 자리도 상한 앞에서 멈춘다 —
-coverage-mapper · blind-spot-prober 의 첫 호출도 예외가 아니다. 그 순간 한 줄을 그대로 낸다:
+coverage-mapper · blind-spot-prober 의 첫 호출도 예외가 아니다. 한 메시지에서 띄우려는 묶음이 남은 호출 수(`research_limit` − 합)보다
+크면 그 묶음의 어느 것도 띄우기 전에 멈춘다 — 일부만 띄우지 않는다. 그 순간 한 줄을 그대로 낸다:
 
 > `[spec-distill] 조사 호출 상한 도달 — <n>/<limit>. 연장 · 판정 · 종료 중 고르세요.`
 
 그리고 `AskUserQuestion` 1회로 셋 중 하나를 받는다(첫 선택지가 추천):
 
-- 「같은 크기만큼 연장」 — `research_limit` 에 시작값을 더하고 멈췄던 dispatch 를 한다.
+- 「같은 크기만큼 연장」 — `research_limit` 에 시작값을 더하고 멈췄던 dispatch(묶음이면 묶음 전부)를 한다.
 - 「지금 포화 판정으로」 — floor 가 다 닫혔으면 아래 `### 포화 판정` 으로 간다. 아직 열린 floor 는 사용자 질문으로 닫는다
   — blind_spot 첫 호출이 남았으면 web 비활성 때와 같은 inline premortem 강등으로 닫는다.
 - 「인터뷰 종료」 — SKILL 의 「나가는 문」(사용자-승인 박제)으로 간다.
@@ -45,7 +46,7 @@ floor 다섯이 사용자 답으로 모두 `closed` 가 되면 brief 작성(`fin
 입력을 만든다:
 
 - `${DECISIONS}` — `open_decisions[]` 전량, 한 줄에 하나 `OQ<n>: <한 줄> [열림|해결]`.
-- `${RESEARCH_OUTPUTS}` — state 본문의 `### 조사 <n> — <장치> · R<round>` 블록을 번호 순으로 그대로 이어 붙인다.
+- `${RESEARCH_OUTPUTS}` — state 본문의 `### 조사 <n> — <장치> · R<round> · 묶음 <b>` 블록을 번호 순으로 그대로 이어 붙인다.
   `device: orchestrator` 의 원문 블록은 V1 확인 줄(`- 확인 RC<n> — …`)과 웹 항목 줄 그대로다 — 본체 산문 요약은 블록에 없다.
   `research_log` 의 `changed` · `opened` · `summary` 는 싣지 않는다. 번호가 있는 `research_log` 항목의 블록이 하나라도
   빠졌으면(원문을 남기지 않은 조사) 요약으로 대신하지 않는다 — `### 판정 불가` 로 간다(사유 `조사 원문 블록 누락: <n…>`).
@@ -121,7 +122,7 @@ floor 다섯이 닫힌 뒤에는 「판정자 → 빈 곳 조사 → 판정자�
 조사 호출 줄은 `finishing.md` Step A ④ 가 state 에서 짓는다. 나머지는 인터뷰 중 대기 줄 블록에 쌓인 그대로 Step A ④ 가
 mapper 줄 아래로 옮긴다. 판정 줄은 같은 차례 `<k>` 에 사용자 선택 줄이 이어진다.
 
-- `- 조사 호출 <n>/<limit> (장치별: 커버리지 <a> · 맹점 <b> · 반론 <c> · 레포 조사 <d> · 본체 직접 <e>)` — `<e>` 는 상한 밖이고 보이기만 한다.
+- `- 조사 호출 <n>/<limit> (장치별: 커버리지 <a> · 맹점 <b> · 반론 <c> · 레포 조사 <d> · 만든 조사 <o> · 본체 직접 <e>)` — `<e>` 는 상한 밖이고 보이기만 한다.
 - `- 상한 도달 <n>/<limit> — 사용자 선택 S<m>: 연장 | 판정으로 | 인터뷰 종료`
 - `- 판정 상한 도달 <k>/<limit> — 사용자 선택 S<m>: 연장 | 포화로 보고 종료 | 인터뷰 종료`
 - `- 포화 판정 <k>: 포화 — <basis 요지>`
