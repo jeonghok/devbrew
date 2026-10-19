@@ -92,6 +92,11 @@ python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd 
 assert_eq "$rc" "2" "AC27: 새 자리도 끝난 인터뷰면 exit 2"
 python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 2460 --cwd "$IV" >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "AC27: --time 꼴이 아니면 exit 2"
+# 새 자리에 남의 파일(seed audit)이 있어도 멈춘다
+rm -f "$D/2026-10-15-t-0930-interview.md"
+put_type "$D/2026-10-15-t-0930-interview.audit.md" interview-seed-audit
+python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "AC27: 새 자리에 남의 파일이 있으면 exit 2"
 rm -f "$D"/2026-10-15-t-*interview*
 # git 이 아니면 --cwd 기준 + stderr 한 줄
 NG="$WORK/iv-nogit"; mkdir -p "$NG"
