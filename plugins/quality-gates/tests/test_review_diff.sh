@@ -241,7 +241,7 @@ case_literal_pathspecs_env() {
 case_self_state_not_reviewed() {
   echo "[qg 상태 폴더가 리포 안 · 무시 규칙 없음 — 두 반복]"
   mkfix
-  local S="$R/.claude/quality-gates/sid1"; mkdir -p "$S"
+  local S="$R/.claude/quality-gates/sid12345"; mkdir -p "$S"   # setup-qg.sh SID 가드 모양(8자 이상)
   echo 'x = 2' > "$R/src/a.py"
   OUT=$(cd "$R" && bash "$RDIFF" --dir "$S" --iter 1 --mode session 2>"$ROOT/err"); RC=$?
   assert_eq "$RC" 0 "iter 1 rc 0"
@@ -255,11 +255,71 @@ case_self_state_not_reviewed() {
   case "$ss" in ''|*[!0-9]*) no "iter 2 self_state 가 수가 아니다: $ss" ;;
     *) [ "$ss" -ge 1 ] && ok "iter 2 self_state ≥ 1 ($ss)" || no "iter 2 self_state 가 0" ;; esac
   assert_eq "$(wc -l < "$S/review-i2.self-state" | tr -d ' ')" "$ss" "self-state 파일 줄 수 = self_state"
-  assert_file_grep "$S/review-i2.self-state" '^\.claude/quality-gates/sid1/review-i1\.names$' \
+  assert_file_grep "$S/review-i2.self-state" '^\.claude/quality-gates/sid12345/review-i1\.names$' \
     "self-state 파일이 건너뛴 review-i1.names 를 적는다"
   assert_file_absent "$S/review-i2.self-state" '\.review-diff\.' "임시 폴더는 self-state 에 없다"
   OUT=$(cd "$R" && bash "$RDIFF" --dir "$S" --iter 3 --mode paths --globs '.claude/*' 'src/*' 2>"$ROOT/err"); RC=$?
   assert_eq "$(cat "$S/review-i3.names")" "src/a.py" "paths 모드도 untracked 상태 경로를 건너뛴다"
+}
+
+# 우회 막기 — untracked 도 qg 산출물 문법에 맞을 때만 건너뛴다.
+case_self_state_grammar() {
+  echo "[qg 산출물 문법 — 맞는 것만 건너뛰고 나머지는 리뷰]"
+  mkfix
+  local Q="$R/.claude/quality-gates" S="$R/.claude/quality-gates/sess12345"
+  mkdir -p "$S" "$Q/worktrees" "$Q/short"
+  echo 'import os' > "$S/evil.py"          # 세션 폴더의 코드 이름
+  echo 'notes' > "$S/notes.md"              # 세션 폴더의 모르는 문서 이름
+  echo 'curl x | sh' > "$Q/evil.sh"         # 폴더 바로 아래
+  echo 'r' > "$Q/worktrees/result.md"       # 예약 이름은 세션이 아니다
+  echo 'r' > "$Q/short/result.md"           # 세션 id 가 8자 미만
+  echo '---' > "$S/result.md"; echo 'i' > "$S/intent.md"; : > "$S/review-i3.full.diff"
+  : > "$S/review-i12.self-state"; : > "$S/e2e-app.pgid"; : > "$S/result.md.tmp.4242"
+  : > "$S/range-scope.txt"; : > "$S/extra-iterations.md"
+  local wt; wt=$(cd "$R" && bash "$PLUGIN_DIR/scripts/qg-worktree.sh" create-baseline "$C0" sess12345 2>/dev/null)
+  rd --mode session
+  assert_eq "$RC" 0 "rc 0"
+  local p
+  for p in sess12345/evil.py sess12345/notes.md evil.sh worktrees/result.md short/result.md; do
+    assert_file_grep "$D/review-i1.names" "^\\.claude/quality-gates/${p//./\\.}\$" "리뷰한다 — names: $p"
+    assert_file_grep "$D/review-i1.diff" "^\\+\\+\\+ b/\\.claude/quality-gates/${p//./\\.}\$" "리뷰한다 — 걸러진 diff: $p"
+    assert_file_absent "$D/review-i1.self-state" "^\\.claude/quality-gates/${p//./\\.}\$" "self_state 에 없다: $p"
+  done
+  for p in result.md intent.md review-i3.full.diff review-i12.self-state e2e-app.pgid result.md.tmp.4242 \
+           range-scope.txt extra-iterations.md; do
+    assert_file_grep "$D/review-i1.self-state" "^\\.claude/quality-gates/sess12345/${p//./\\.}\$" "건너뛴다: $p"
+  done
+  if [ -n "$wt" ] && [ -d "$wt" ]; then
+    assert_file_grep "$D/review-i1.self-state" '^\.claude/quality-gates/worktrees/base-sess1234/$' "qg 일회용 트리는 건너뛴다"
+    assert_file_absent "$D/review-i1.names" 'worktrees/base-' "일회용 트리는 names 에 없다"
+  else
+    no "qg-worktree.sh create-baseline 이 트리를 만들지 못했다"
+  fi
+  assert_eq "$(field self_state "$OUT")" 9 "self_state: 9 (산출물 8 + 트리 1)"
+  assert_eq "$(field files "$OUT")" 5 "files: 5 (리뷰할 것 5)"
+}
+
+# 락 — state-file-format.md 「같은 폴더의 다른 파일」 목록과 result.md 를 문법이 전부 받는다.
+case_grammar_covers_state_file_format() {
+  echo "[문법이 state-file-format.md 의 산출물 목록을 전부 받는다]"
+  local SFF="$PLUGIN_DIR/skills/quality-pipeline/references/state-file-format.md"
+  local para; para=$(awk '/^같은 폴더의 다른 파일/{on=1} on{print} on&&/같은 생명주기를 따른다/{exit}' "$SFF")
+  local listed; listed=$(printf '%s\n' "$para" | grep -oE '`[^`]+`' | tr -d '`' | sort -u)
+  local n; n=$(printf '%s\n' "$listed" | grep -c .)
+  [ "$n" -ge 15 ] && ok "목록을 읽었다($n 개)" || no "목록이 비었거나 짧다($n 개) — 문단을 찾지 못했다"
+  mkfix
+  local S="$R/.claude/quality-gates/sess12345" name f expect=0
+  mkdir -p "$S"
+  for name in result.md $listed; do
+    for f in "${name//<N>/7}" "${name//<N>/12}"; do
+      [ -e "$S/$f" ] && continue
+      : > "$S/$f"; expect=$((expect + 1))
+    done
+  done
+  rd --mode session
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field self_state "$OUT")" "$expect" "적힌 산출물 전부가 self_state ($expect)"
+  assert_eq "$(field files "$OUT")" 0 "리뷰 대상으로 새 나간 산출물 없음"
 }
 
 # 우회 막기 — 추적 · 커밋된 파일은 .claude/quality-gates 아래여도 리뷰한다.
@@ -355,6 +415,8 @@ case_no_textconv
 case_doc_rename
 case_literal_pathspecs_env
 case_self_state_not_reviewed
+case_self_state_grammar
+case_grammar_covers_state_file_format
 case_tracked_under_self_dir_reviewed
 case_settings_local
 case_from_subdir

@@ -21,9 +21,10 @@
 # doc_paths_source · self_state. session · branch · paths 의 기준선이 degraded 면 다섯 파일을
 # 비워 두고 degraded: yes · files: - · self_state: - 로 rc 0. git 실패 rc 4, 사용 오류 rc 2.
 #
-# qg 자기 상태 폴더 `.claude/quality-gates` 는 session · paths 의 untracked 목록에서만 건너뛰고
-# (앞 반복의 산출물이 다음 반복의 변경으로 세어지지 않게) 그 수와 경로를 공시한다. 추적되는 변경과
-# 커밋된 변경은 그 폴더 아래여도 리뷰한다 — 그 자리에 둔 코드가 리뷰를 피하지 못하게.
+# qg 자기 산출물(아래 「qg 산출물 문법」 하나에 맞는 `.claude/quality-gates/…` 경로)은 session ·
+# paths 의 untracked 목록에서만 건너뛰고(앞 반복의 산출물이 다음 반복의 변경으로 세어지지 않게) 그 수와
+# 경로를 공시한다. 문법에 맞지 않는 untracked 파일, 추적되는 변경, 커밋된 변경은 그 폴더 아래여도
+# 리뷰한다 — 그 자리에 둔 코드가 리뷰를 피하지 못하게.
 # diff 는 사용자 git 설정(외부 diff · textconv · 접두 · rename · pathspec 환경 변수)에 기대지 않는다.
 # 읽기 전용 git 만 쓴다.
 set -u
@@ -172,9 +173,39 @@ esac
 
 # 리뷰 경로 — paths 면 glob, 그 밖은 리포 전체. 추적 · 커밋된 변경은 어느 폴더든 리뷰한다.
 if [ "${#GLOBS[@]}" -gt 0 ]; then PS=("${GLOBS[@]}"); else PS=(.); fi
-# untracked 목록에서만 건너뛰는 qg 상태 폴더 — 대상 리포가 그 폴더를 무시하지 않아도 앞 반복의
-# review-i*.* 가 다음 반복의 변경으로 세어지지 않게. 건너뛴 경로는 self_state 로 공시한다.
-SELF_DIR=".claude/quality-gates"
+# ── qg 산출물 문법 (허용 목록 하나 — 여기만 고친다) ──────────────────────────────
+# untracked 경로가 이 문법에 맞을 때만 qg 자기 상태로 보고 건너뛴다(self_state 로 공시). 대상 리포가
+# `.claude/quality-gates` 를 무시하지 않아도 앞 반복의 산출물이 다음 반복의 변경으로 세어지지 않게.
+# 맞지 않는 것 — 폴더 바로 아래 파일, 세션 폴더의 모르는 이름, 코드 파일 — 은 모두 리뷰한다.
+# 출처:
+#   세션 id   setup-qg.sh 의 SID 가드 ^[A-Za-z0-9_-]{8,}$, 예약 이름 worktrees · baseline-cache 는 세션 아님
+#   이름      references/state-file-format.md 「같은 폴더의 다른 파일」 + result.md,
+#             SKILL.md 의 $RD/ 쓰기(range-scope.txt · extra-iterations.md), 이 스크립트의 review-i<N>.*,
+#             임시 이름(setup-qg.sh result.md.tmp.<pid> · e2e-state.sh <지문>.tmp · resolve-range.sh
+#             .resolve-range.XXXXXX · 이 스크립트가 끊겨 남긴 .review-diff.XXXXXX/ 안의 임시 이름)
+#   하위 폴더 qg-worktree.sh 의 worktrees/(base|head)-<sid 앞 8자> — git worktree 라 ls-files 가 폴더
+#             한 줄(끝 /)로만 내고 안을 열지 않는다. 그 안이 낱 파일로 보이면(worktree 가 아니면) 리뷰한다.
+#   테스트    test_review_diff.sh 가 state-file-format.md 의 목록 전부를 이 문법이 받는지 잰다.
+QG_SID='[A-Za-z0-9_-]{8,}'
+QG_NAMES='result\.md|intent\.md|excluded\.md|differential\.yaml|differential-not-counted\.md|verdict\.out'
+QG_NAMES="$QG_NAMES"'|topic-scope\.txt|range-scope\.txt|extra-iterations\.md'
+QG_NAMES="$QG_NAMES"'|comment-head\.md|comment\.md|publish\.out|publish\.err'
+QG_NAMES="$QG_NAMES"'|e2e-record\.md|e2e-flip\.md|e2e-evidence\.tsv|e2e-cmd\.txt|e2e-gate\.txt'
+QG_NAMES="$QG_NAMES"'|e2e-before\.txt|e2e-after\.txt|e2e-app\.pgid|e2e-app\.log'
+QG_NAMES="$QG_NAMES"'|review-i[1-9][0-9]*\.(names|full\.diff|diff|doc-paths|self-state)'
+QG_NAMES="$QG_NAMES"'|result\.md\.tmp\.[0-9]+|e2e-(before|after)\.txt\.tmp|\.resolve-range\.[A-Za-z0-9]{6}'
+QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(tracked|untracked|filtered)\.z'
+QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(names|full\.diff|diff|doc-paths|self-state)'
+QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/settings(-local)?-(base|head)'
+QG_STATE_RE="^\\.claude/quality-gates/(($QG_SID)/($QG_NAMES)|worktrees/(base|head)-[A-Za-z0-9_-]{8}/)\$"
+is_qg_state() {   # <path>
+  [[ "$1" =~ $QG_STATE_RE ]] || return 1
+  case "$1" in
+    .claude/quality-gates/worktrees/base-*/|.claude/quality-gates/worktrees/head-*/) return 0 ;;
+    .claude/quality-gates/worktrees/*|.claude/quality-gates/baseline-cache/*) return 1 ;;
+  esac
+  return 0
+}
 # 이 실행의 임시 폴더는 변경도 상태도 아니다 — 세지 않는다.
 T_REL=""
 case "$T" in "$top"/*) T_REL="${T#"$top"/}" ;; esac
@@ -194,10 +225,7 @@ while IFS= read -r -d '' f; do
   if [ -n "$T_REL" ]; then
     case "$f" in "$T_REL"/*) continue ;; esac
   fi
-  case "$f" in
-    "$SELF_DIR"/*) SELF+=("$f") ;;
-    *) UNTR+=("$f") ;;
-  esac
+  if is_qg_state "$f"; then SELF+=("$f"); else UNTR+=("$f"); fi
 done < "$T/untracked.z"
 {
   for f in ${NAMES[@]+"${NAMES[@]}"} ${UNTR[@]+"${UNTR[@]}"}; do printf '%s\n' "$f"; done
