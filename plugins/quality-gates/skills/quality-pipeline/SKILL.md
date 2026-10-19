@@ -1018,6 +1018,7 @@ e2e 칸과 「사람이 뒤집음」을 정한다. 어느 결과든 E5 로 기�
 - **여러 시나리오** — 게이트 결과마다 레퍼런스 5 절 첫머리의 규칙으로 다음 시나리오 · 루프 · 끝을 정한다: 루프로 가는 선택이면
   남은 시나리오를 걷지 않고, 돌아오면 고른 시나리오 전부를 1번부터 다시 걷는다. 「지금 판정으로 끝내기」 · 「멈추기」면 남은 시나리오를
   걷지 않는다. 그 밖이면 다음 시나리오의 E1 펜스로 간다. e2e 칸과 「사람이 뒤집음」은 레퍼런스 6 절 끝(가장 나쁜 결과)이 정한다.
+  E1 · E3 의 kill switch 갈래(exit 3)도 이때는 칸을 바로 `꺼짐(kill switch)` 로 두지 않는다 — 이 차례에 이미 걸은 걷기가 `fail` · `미확인` 이면 칸은 그것이다(6 절 끝).
 
 **E5 — 기록.** 레퍼런스 7 절대로 걷기마다 세션 폴더의 `e2e-record.md` 에 덧붙인다. 걷는 동안 `result.md` 에는 쓰지
 않는다 — `## Final verdict` 의 기록 펜스가 옮긴다.
@@ -1051,8 +1052,8 @@ The last iteration's `$RV/synth.out` holds the review · differential verdict. `
 result to it and renders the verdict line — you do not retype the verdict, the counts, or the precedence (V1 · R24).
 Fill only `<session-id>`, the last iteration's `RV`, `<N>` (the iteration number) and the e2e 칸 from `## e2e`.
 Add `--e2e-overridden` before `--e2e` only when the human flipped the **last** walk's proposal — a flip in an earlier
-walk (a line in `e2e-flip.md`) does not count. With several scenarios the walk that set the e2e 칸 counts instead of the last walk —
-for several scenarios: `references/e2e.md` §6 decides which walk that is.
+walk (a line in `e2e-flip.md`) does not count. 시나리오가 여럿이면 `references/e2e.md` §6 이 e2e 칸을 정한 걷기를 정하고,
+그 걷기가 마지막 걷기 대신 쓰인다.
 판정 줄의 커밋(`--sha`)은 각 판정 펜스의 `SHA_ARG` 가 정한다 — 범위 모드면 범위 파일의 끝 커밋이고, 지금 체크아웃(HEAD)이 아니다.
 
 ```bash

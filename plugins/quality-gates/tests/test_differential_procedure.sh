@@ -162,17 +162,17 @@ case_AC28_investigation_runs_are_marked_and_never_feed_the_verdict() {
   assert_file_grep "$REF" '조사용 실행 — 판정에 안 씀' "조사용 실행 표시 줄"
   assert_file_grep "$REF" 'DISABLE_DIFFERENTIAL_TEST=1` 이면 조사용 실행도' "kill switch 는 조사용 실행도 막는다(보안 — 양성 짝)"
   assert_contains "$d2" 'D3/D4 밖에서 스위트나 테스트를 돌릴 수 있다 — 원인을 찾는 조사용이다.' "D2: 조사용 실행 허용 문장(금지 문장 부재의 양성 짝)"
-  assert_contains "$d2" '돌리기 전에 `> [quality-gates] 조사용 실행 — 판정에 안 씀: <명령>` 한 줄을 내고, 결과를 배정 · 행 파일 · D5 · 합성기에 넣지 않는다.' \
+  assert_contains "$d2" '돌리기 전에 `> [quality-gates] 조사용 실행 — 판정에 안 씀: <명령>` 한 줄을 내고, 결과를 판정 입력 어디에도(배정 · 커버리지로 세지 않을 목록 · 행 파일 · D5 · 합성기) 넣지 않고, D3/D4 의 트리(기준선 · head 트리)에서는 돌리지 않는다.' \
     "D2: 돌리기 전에 표시 줄 · 결과는 판정 입력 어디에도 넣지 않는다(문장 전체)"
   assert_contains "$d2" '`DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 조사용 실행도 하지 않는다 — 저장소 코드를 호스트에서 돌리기 때문이다.' \
     "D2: kill switch 가 켜져 있으면 조사용 실행도 하지 않는다(문장 전체 — R22)"
   # 부분 문자열 락은 문장 끝 뒤 부정(「다만 …」)을 못 잡는다 — 조사용 실행 문단은 한 줄이라 줄 전체로 한 번 더 잰다.
-  assert_eq "$(printf '%s\n' "$d2" | grep -cxF -- 'D3/D4 밖에서 스위트나 테스트를 돌릴 수 있다 — 원인을 찾는 조사용이다. 돌리기 전에 `> [quality-gates] 조사용 실행 — 판정에 안 씀: <명령>` 한 줄을 내고, 결과를 배정 · 행 파일 · D5 · 합성기에 넣지 않는다. `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 조사용 실행도 하지 않는다 — 저장소 코드를 호스트에서 돌리기 때문이다.')" "1" \
+  assert_eq "$(printf '%s\n' "$d2" | grep -cxF -- 'D3/D4 밖에서 스위트나 테스트를 돌릴 수 있다 — 원인을 찾는 조사용이다. 돌리기 전에 `> [quality-gates] 조사용 실행 — 판정에 안 씀: <명령>` 한 줄을 내고, 결과를 판정 입력 어디에도(배정 · 커버리지로 세지 않을 목록 · 행 파일 · D5 · 합성기) 넣지 않고, D3/D4 의 트리(기준선 · head 트리)에서는 돌리지 않는다. `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 조사용 실행도 하지 않는다 — 저장소 코드를 호스트에서 돌리기 때문이다.')" "1" \
     "D2: 조사용 실행 문단이 줄 전체 그대로다(끝에 덧붙인 단서 · 부정이 없다)"
   # 스위치가 켜지면 레퍼런스를 읽지 않는다 — D2 의 금지문은 그때 안 읽힌다. 켜진 실행이 읽는 SKILL 문단이 같은 금지를 실어야 한다.
   local sk; sk=$(section "$SKILL" "## Differential test" | awk '/^\*\*Kill switch — /{f=1} f&&/^$/{exit} f')
-  assert_contains "$sk" '조사용 실행(레퍼런스 D2)도 하지 않는다 — 이 실행 어디에서도 저장소의 스위트나 테스트를 돌리지 않는다.' \
-    "SKILL 의 kill switch 문단(스위치가 켜진 실행이 읽는 자리)이 조사용 실행도 막는다"
+  assert_contains "$sk" '조사용 실행(레퍼런스 D2)도 하지 않는다 — 이 실행 어디에서도 저장소의 스위트나 테스트를 돌리지 않는다. 1a 는 스위치와 무관하게' \
+    "SKILL 의 kill switch 문단(스위치가 켜진 실행이 읽는 자리)이 조사용 실행도 막는다 — 바로 뒤가 1a 문장이라 끝에 덧붙인 예외를 잡는다"
 }
 
 for c in case_AC28_investigation_runs_are_marked_and_never_feed_the_verdict \

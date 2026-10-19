@@ -161,7 +161,7 @@ cat > "<memo>/not-counted-i<N>.md" <<'QG_NOT_COUNTED'
 QG_NOT_COUNTED
 ```
 
-D3/D4 밖에서 스위트나 테스트를 돌릴 수 있다 — 원인을 찾는 조사용이다. 돌리기 전에 `> [quality-gates] 조사용 실행 — 판정에 안 씀: <명령>` 한 줄을 내고, 결과를 배정 · 행 파일 · D5 · 합성기에 넣지 않는다. `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 조사용 실행도 하지 않는다 — 저장소 코드를 호스트에서 돌리기 때문이다.
+D3/D4 밖에서 스위트나 테스트를 돌릴 수 있다 — 원인을 찾는 조사용이다. 돌리기 전에 `> [quality-gates] 조사용 실행 — 판정에 안 씀: <명령>` 한 줄을 내고, 결과를 판정 입력 어디에도(배정 · 커버리지로 세지 않을 목록 · 행 파일 · D5 · 합성기) 넣지 않고, D3/D4 의 트리(기준선 · head 트리)에서는 돌리지 않는다. `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 조사용 실행도 하지 않는다 — 저장소 코드를 호스트에서 돌리기 때문이다.
 
 고른 파일을 배정 파일로 바꾼다. unit 변환(파일 → 패키지 · bulk 흡수)은 스크립트가 한다:
 
