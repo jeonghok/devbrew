@@ -6,12 +6,14 @@
 
 세 축 모두 **∃-존재검사가 아니라 ∀-지배관계**이고, 비교 집합은 열거하지 않고 도출한다.
 
-  축 1 — SKILL 이 말하는 질의를 **그대로 실행**한다. 질의 목록은 SKILL.md 의 문구가
-         아니라 **구조**(```bash 펜스 안에서 `git ` 로 시작하는 줄)에서 뽑는다. 그
-         질의들의 합집합을, **다른 git 표면**(`git log --name-only` + `git status
+  축 1 — SKILL 이 부르는 리뷰 diff 스크립트를 **그대로 실행**한다. 스크립트는 SKILL.md 의
+         문구가 아니라 **구조**(```bash 펜스 안에서 `review-diff.sh` 를 부르는 줄 — Step 1c)
+         에서 뽑고, 그 줄의 모드 자리에 session 이 있는지 본다. 그 스크립트를 session 모드로
+         돌린 경로 집합을, **다른 git 표면**(`git log --name-only` + `git status
          --porcelain`)으로 독립 계산한 오라클과 **집합 상등**으로 비교한다 — 기대값이
-         런타임 도출이라 상수로 만족시킬 수 없다. 픽스처의 모든 변경은 오직 셸로만
-         만든다(heredoc · 리다이렉트 · `sed -i`) — 그것이 A20 의 조건 자체다.
+         런타임 도출이라 상수로 만족시킬 수 없다. 리뷰어가 받는 걸러진 diff 에도 셸로 쓴
+         파일이 전부 있어야 한다. 픽스처의 모든 변경은 오직 셸로만 만든다(heredoc ·
+         리다이렉트 · `sed -i`) — 그것이 A20 의 조건 자체다.
 
   축 2 — 배포되는 결정론 신호(`scripts/check-review-scope.sh`)가 그 셸-작성 변경을
          본다. `branch_ahead_count` 의 기대값도 git 에서 런타임 도출한다. 상수-yes
@@ -30,7 +32,6 @@ import ast
 import io
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import tempfile
@@ -42,9 +43,10 @@ SKILL = PLUGIN_ROOT / "skills" / "quality-pipeline" / "SKILL.md"
 GC = PLUGIN_ROOT / "scripts" / "qg-gc.py"
 CHECK = PLUGIN_ROOT / "scripts" / "check-review-scope.sh"
 
-# 셸 메타문자가 섞인 줄은 실행하지 않는다. 이 락은 피검자(SKILL.md)의 텍스트를
-# 실행하므로, 실행 대상은 인자 배열로만 넘길 수 있는 순수 git 호출로 제한한다.
-_UNSAFE = re.compile(r"[;|&`><]|\$\(")
+# SKILL 의 Step 1c 줄에서 스크립트 이름과 모드 자리를 읽는다. 줄 자체는 자리표시가 있어
+# 실행하지 않는다 — 이름이 가리키는 배포 스크립트를 인자 배열로 부른다.
+_RD_SCRIPT = re.compile(r'"\$QG/scripts/(review-diff\.sh)"')
+_RD_MODES = re.compile(r"--mode <([^>]*)>")
 
 
 def _read(path: Path) -> str:
@@ -65,8 +67,8 @@ def _bash_fence_lines(md: str) -> list:
     return lines
 
 
-def _skill_git_queries() -> list:
-    return [ln for ln in _bash_fence_lines(_read(SKILL)) if ln.startswith("git ")]
+def _skill_review_diff_calls() -> list:
+    return [ln for ln in _bash_fence_lines(_read(SKILL)) if _RD_SCRIPT.search(ln)]
 
 
 def _legacy_markers() -> tuple:
@@ -101,7 +103,7 @@ class _ShellOnlyFixture:
         self.root = Path(tempfile.mkdtemp())
         self.env = dict(os.environ)
         for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE",
-                  "CLAUDE_CODE_SESSION_ID"):
+                  "CLAUDE_CODE_SESSION_ID", "DEVBREW_QUALITY_GATES_DOC_PATHS"):
             self.env.pop(k, None)
         self.env["HOME"] = str(self.root)
         self.env["GIT_CONFIG_NOSYSTEM"] = "1"
@@ -144,74 +146,88 @@ class _ShellOnlyFixture:
         shutil.rmtree(self.root, ignore_errors=True)
 
 
-class SkillQueriesCoverShellWrites(unittest.TestCase):
-    """축 1 — SKILL 이 적어 둔 질의를 실행해 셸-작성 변경을 전부 잡는가."""
+class SkillReviewDiffCoversShellWrites(unittest.TestCase):
+    """축 1 — SKILL 이 부르는 리뷰 diff 스크립트가 셸-작성 변경을 전부 잡는가."""
+
+    SHELL_WRITTEN = ("committed_by_heredoc.txt", "tracked.txt",
+                     "untracked_by_redirect.txt")
 
     def setUp(self) -> None:
         self.fx = _ShellOnlyFixture()
         self.addCleanup(self.fx.cleanup)
+        # 출력 폴더와 스크립트의 HOME 은 픽스처 리포 밖 — 안에 두면 그 자체가 untracked
+        # 변경이 된다(픽스처의 HOME 은 리포 루트라, 스크립트가 부른 도구가 HOME 아래에
+        # 캐시를 만들면 오라클에만 새 경로가 생긴다).
+        self.out = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(self.out), True)
+        self.home = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(self.home), True)
 
-    def test_union_equals_independently_derived_oracle(self):
-        queries = _skill_git_queries()
-        # 계측기 확인 — 뽑은 게 없으면 아래 합집합은 공허하게 무엇이든 만족시킨다.
-        self.assertGreaterEqual(
-            len(queries), 3,
-            "SKILL.md 의 ```bash 펜스에서 git 질의를 3개 미만 뽑았다 — Step 1 의 "
-            "도출이 사라졌거나 추출기가 깨졌다: %r" % (queries,))
-        for q in queries:
-            self.assertIsNone(_UNSAFE.search(q),
-                              "실행 불가한 셸 메타문자가 섞인 질의: %r" % (q,))
-
+    def _session_run(self) -> dict:
+        """SKILL Step 1c 의 줄에서 스크립트를 찾아 session 모드로 돌린다."""
+        calls = _skill_review_diff_calls()
+        # 계측기 확인 — 뽑은 게 없으면 아래 비교는 대상이 없다.
+        self.assertEqual(
+            len(calls), 1,
+            "SKILL.md 의 ```bash 펜스에서 review-diff.sh 를 부르는 줄이 정확히 하나가 "
+            "아니다 — Step 1c 가 사라졌거나 추출기가 깨졌다: %r" % (calls,))
+        line = calls[0]
+        modes = _RD_MODES.search(line)
+        self.assertIsNotNone(modes, "Step 1c 줄에 --mode <…> 자리가 없다: %r" % (line,))
+        self.assertIn("session", modes.group(1).split("|"),
+                      "Step 1c 줄의 모드 자리에 session 이 없다 — 기본 scope 가 이 "
+                      "스크립트를 지나지 않는다: %r" % (line,))
+        script = PLUGIN_ROOT / "scripts" / _RD_SCRIPT.search(line).group(1)
+        self.assertTrue(script.is_file(), "SKILL 이 부르는 스크립트가 없다: %s" % script)
         env = dict(self.fx.env)
-        env["MERGE_BASE"] = self.fx.merge_base()
-        union = set()
-        for q in queries:
-            argv = [
-                tok.replace("${MERGE_BASE}", env["MERGE_BASE"])
-                   .replace("$MERGE_BASE", env["MERGE_BASE"])
-                for tok in shlex.split(q, comments=True)
-            ]
-            proc = subprocess.run(argv, cwd=str(self.fx.root), env=env,
-                                  capture_output=True, text=True)
-            self.assertEqual(proc.returncode, 0,
-                             "SKILL 의 질의가 실행되지 않는다: %r\n%s"
-                             % (q, proc.stderr))
-            union |= _names(proc.stdout)
+        env["HOME"] = str(self.home)
+        proc = subprocess.run(
+            ["bash", str(script), "--dir", str(self.out), "--iter", "1",
+             "--mode", "session"],
+            cwd=str(self.fx.root), env=env, capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0,
+                         "review-diff.sh session 이 실패했다: %s" % proc.stderr)
+        fields = {}
+        for ln in proc.stdout.splitlines():
+            k, _, v = ln.partition(":")
+            fields[k.strip()] = v.strip()
+        self.assertEqual(fields.get("degraded"), "no", fields)
+        return {
+            "fields": fields,
+            "names": _names(_read(self.out / "review-i1.names")),
+            "diff": _read(self.out / "review-i1.diff"),
+        }
 
-        # 오라클은 **다른 git 표면**에서 독립 도출한다 — 위 질의의 동어반복이 아니다.
-        log = _git(["log", "--name-only", "--pretty=format:",
-                    "%s..HEAD" % env["MERGE_BASE"]], self.fx.root, self.fx.env)
+    def test_names_equal_independently_derived_oracle(self):
+        run = self._session_run()
+        # 오라클은 **다른 git 표면**에서 독립 도출한다 — 스크립트의 동어반복이 아니다.
+        mb = self.fx.merge_base()
+        log = _git(["log", "--name-only", "--pretty=format:", "%s..HEAD" % mb],
+                   self.fx.root, self.fx.env)
         status = _git(["status", "--porcelain"], self.fx.root, self.fx.env)
         oracle = _names(log.stdout) | {
             ln[3:].strip() for ln in status.stdout.splitlines() if ln.strip()
         }
         self.assertTrue(oracle, "오라클이 비었다 — 픽스처가 아무 변경도 만들지 않았다")
         self.assertEqual(
-            union, oracle,
-            "SKILL Step 1 의 질의 합집합이 git 이 보고하는 변경 집합과 다르다.\n"
-            "질의만 있는 것: %r\n오라클만 있는 것: %r"
-            % (sorted(union - oracle), sorted(oracle - union)))
+            run["names"], oracle,
+            "SKILL Step 1c 의 session 경로 집합이 git 이 보고하는 변경 집합과 다르다.\n"
+            "스크립트만 있는 것: %r\n오라클만 있는 것: %r"
+            % (sorted(run["names"] - oracle), sorted(oracle - run["names"])))
+        self.assertEqual(run["fields"].get("files"), str(len(oracle)), run["fields"])
 
-    def test_each_shell_write_mechanism_is_in_scope(self):
-        """∀ 셸-작성 파일 ∈ 합집합, 그리고 무시된 파일 ∉ 합집합."""
-        env = dict(self.fx.env)
-        env["MERGE_BASE"] = self.fx.merge_base()
-        union = set()
-        for q in _skill_git_queries():
-            argv = [
-                tok.replace("${MERGE_BASE}", env["MERGE_BASE"])
-                   .replace("$MERGE_BASE", env["MERGE_BASE"])
-                for tok in shlex.split(q, comments=True)
-            ]
-            proc = subprocess.run(argv, cwd=str(self.fx.root), env=env,
-                                  capture_output=True, text=True)
-            union |= _names(proc.stdout)
-        for written in ("committed_by_heredoc.txt", "tracked.txt",
-                        "untracked_by_redirect.txt"):
-            self.assertIn(written, union,
+    def test_each_shell_write_mechanism_reaches_reviewers(self):
+        """∀ 셸-작성 파일 ∈ 경로 집합 ∧ 걸러진 diff, 그리고 무시된 파일 ∉ 둘 다."""
+        run = self._session_run()
+        for written in self.SHELL_WRITTEN:
+            self.assertIn(written, run["names"],
                           "셸로 쓴 %s 가 기본 scope 에서 빠졌다 (A20 위반)" % written)
-        self.assertNotIn("build/artifact.bin", union,
+            self.assertIn("+++ b/%s" % written, run["diff"].splitlines(),
+                          "셸로 쓴 %s 가 리뷰어가 받는 diff 에서 빠졌다 (A20 위반)" % written)
+        self.assertNotIn("build/artifact.bin", run["names"],
                          "gitignore 된 파일이 scope 에 들어왔다")
+        self.assertNotIn("build/artifact.bin", run["diff"],
+                         "gitignore 된 파일이 리뷰 diff 에 들어왔다")
 
 
 class ShippedSignalSeesShellWrites(unittest.TestCase):

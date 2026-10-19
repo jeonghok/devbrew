@@ -68,6 +68,21 @@ for f in excluded.md differential.yaml differential-not-counted.md verdict.out i
   [ -e "$RDIR/$f" ] && no "(b) $f 가 남았다" || ok "(b) $f 가 없다"
 done
 
+# (b2) 앞 실행의 리뷰 diff 파일(review-i<N>.*, Step 1c)도 지운다 — 앞 실행이 더 많은 iteration 을
+#      돌았으면 이번 실행이 쓰지 않는 번호의 파일이 남아 이번 것처럼 읽힌다. 같은 폴더의
+#      다른 파일(e2e-app.pgid)은 남긴다 — 지우는 범위가 review-i 이름으로 한정된다.
+seed_prev 0
+for f in review-i1.names review-i1.full.diff review-i1.diff review-i1.doc-paths review-i1.self-state review-i3.diff e2e-app.pgid; do echo old > "$RDIR/$f"; done
+( cd "$T" && CLAUDE_PLUGIN_ROOT="$QGP" CLAUDE_CODE_SESSION_ID="$SID" bash "$RUN" ) >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "0" "(b2) P2 펜스가 리뷰 diff 파일이 있는 폴더 위에서 0 으로 끝난다"
+for f in review-i1.names review-i1.full.diff review-i1.diff review-i1.doc-paths review-i1.self-state review-i3.diff; do
+  [ -e "$RDIR/$f" ] && no "(b2) 앞 실행의 $f 가 남았다" || ok "(b2) 앞 실행의 $f 가 없다"
+done
+[ -e "$RDIR/e2e-app.pgid" ] && ok "(b2) e2e-app.pgid 는 남는다(지우는 범위가 review-i 로 한정)" || no "(b2) e2e-app.pgid 까지 지웠다"
+( cd "$T" && CLAUDE_PLUGIN_ROOT="$QGP" CLAUDE_CODE_SESSION_ID="$SID" bash "$RUN" ) >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "0" "(b2) 지울 review-i 파일이 하나도 없어도 P2 펜스가 0 으로 끝난다"
+rm -f "$RDIR/e2e-app.pgid"
+
 # (c) 하위 디렉토리에서 시작한 세션 (최종 리뷰 I2) — setup 과 RD 가 같은 최상위 폴더를 본다.
 #     최상위 result.md 에 옛 ## 판정 이 있으면 하위에서 돈 P2 도 그 파일을 다시 만든다(K-2).
 seed_prev 1

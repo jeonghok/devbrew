@@ -85,6 +85,7 @@ RD="${TOP}/.claude/quality-gates/<session-id>"
 if grep -q '^## 판정$' "$RD/result.md" 2>/dev/null; then "$QG/scripts/setup-qg.sh" $ARGUMENTS || exit; fi
 bash "$QG/scripts/e2e-state.sh" stop --dir "$RD"; echo "preflight-stop rc=$?"
 rm -f "$RD/excluded.md" "$RD/differential.yaml" "$RD/differential-not-counted.md" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt"
+( cd "$RD" && find . ! -name . -prune -type f -name 'review-i*' -exec rm -f {} + )
 ```
 
 `--ensure` keeps this session's folder `.claude/quality-gates/<session-id>/` when an earlier
@@ -93,7 +94,8 @@ step of this run already made it; otherwise setup creates it with a `result.md` 
 belongs to a finished earlier run in this session — setup without `--ensure` recreates the folder.
 Every run then starts without the previous run's `excluded.md` · `differential.yaml` · `differential-not-counted.md` · `verdict.out` ·
 `intent.md` · `topic-scope.txt` · `comment-head.md` · `comment.md` · `publish.out` · `publish.err` and the e2e walk files
-(`e2e-record.md` · `e2e-flip.md` · `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt`).
+(`e2e-record.md` · `e2e-flip.md` · `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt`)
+and the review diff files of Review Step 1c (`review-i<N>.*` — the `find` line, which also works when there are none).
 `e2e-app.pgid` is kept. The `stop` line brings down an app a cut-off earlier walk left running; show its output, and a non-zero `preflight-stop rc` does not stop the run — `## e2e` E0 tries again with the same record. Setup refuses an empty or malformed session id (E1). A gone
 argument (`branch <name>` · `--reset` · `--gc` · `--pr-url` · `--plan` · `critique`) prints one line on stdout and exits 2 —
 the run does not start. Non-zero exit → show its output (stdout and stderr) verbatim and stop.
@@ -135,6 +137,7 @@ reviewers, and it never lowers or skips a finding.
  ├ trivia 판단 ── 한 문장 diff 면 not-certified (trivia) 로 끝
  ├ iteration N = 1..5
  │   ① 리뷰        Review Step 1 · 1b · 3 · 3.5  (기본 3 + 조건부 ≤4 → code-recritic)
+ │       Step 1c 의 걸러진 diff 가 비면 → not-certified (scope-empty) 로 끝
  │   ② 차등 테스트  Differential test
  │   ③ 합성 · 판정  Review Step 4 · 4.5
  │   막는 지적 또는 차등 defect → Fix-loop (고치고 다시 돌기(Retry) / 지금 판정으로 끝내기 / 멈추기)
@@ -181,7 +184,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
    "$QG/scripts/topic-head.sh" "<session-id>" > "$S" && cat "$S"
    ```
 
-   스코프 파일은 cwd 가 아니라 **리포 루트**의 `.claude/quality-gates/<session-id>/` 에 둔다(봉인이 빼는 자리는 리포 루트의 그 네임스페이스뿐이다) — 아래 세 자리(파일 집합 · override 정리 · Step 4 `--scope`)도 같은 경로를 쓴다. exit 0 이 아니면(사용 오류) stderr 를 그대로 보이고 멈춘다. 파일의 `status:` 로 이 iteration 의 스코프가 갈린다:
+   스코프 파일은 cwd 가 아니라 **리포 루트**의 `.claude/quality-gates/<session-id>/` 에 둔다(봉인이 빼는 자리는 리포 루트의 그 네임스페이스뿐이다) — 아래 세 자리(1c 의 `--scope-file` · override 정리 · Step 4 `--scope`)도 같은 경로를 쓴다. exit 0 이 아니면(사용 오류) stderr 를 그대로 보이고 멈춘다. 파일의 `status:` 로 이 iteration 의 스코프가 갈린다:
 
    | `status:` | 스코프 | 그다음 |
    |---|---|---|
@@ -200,13 +203,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 
    `status: ok` 이고 파일의 `in_base:` 가 0 보다 크면 공지 한 줄: `> [quality-gates] 토픽 <topic_key> 의 선언 커밋 <in_base>개는 이미 base 에 있어 토픽 구성원에서 빠졌다 — 그 머지 전에 갈라져 base 를 아직 안 들인 형제 구성원이 그 조각을 품은 구성원과 함께 있으면 그 변경이 이번 diff 에 다시 보인다.`
 
-   `topic` 스코프의 파일 집합(= `$resolved_scope_file_count` 의 집합):
-
-   ```bash
-   S="$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"; b=$(sed -n 's/^boundary: //p' "$S"); t=$(sed -n 's/^tree: //p' "$S"); git diff --name-only "$b" "$t"
-   ```
-
-   reviewer 에게 주는 diff(`FILTERED_DIFF`)는 같은 두 값의 `git diff "$b" "$t"` 에서 문서 경로를 뺀 것이다. 스코프 파일은 Step 4 가 `--scope` 로 다시 읽는다 — 이 iteration 동안 지우거나 고치지 않는다.
+   `topic` 스코프의 파일 집합과 diff 는 1c 가 이 스코프 파일의 경계 · 합친 트리 사이에서 만든다. 스코프 파일은 Step 4 가 `--scope` 로 다시 읽는다 — 이 iteration 동안 지우거나 고치지 않는다.
 
    **override 스코프 파일 정리 (override 일 때 · 1a 대신 · 매 iteration).** override(`branch` · `--paths`)면 이번 iteration 에 1a 를 돌리지 않으므로 위 「지우거나 고치지 않는다」의 대상이 아니다 — 이전 iteration·이전 실행이 남긴 스코프 파일이 있으면 지운다. 차등 테스트 D0 · D1 이 파일 부재를 session 으로 읽는다:
 
@@ -214,19 +211,36 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
    rm -f "$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"
    ```
 
-   **session 스코프**(1a 가 `topic` 을 내지 않았거나 override):
-
-   ```bash
-   QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }   # plugin root per Step P0b
-   MERGE_BASE=$("$QG/scripts/resolve-baseline.sh" | sed -n 's/^merge_base: //p')
-   git diff --name-only "$MERGE_BASE"..HEAD    # (a) committed on this branch
-   git diff HEAD --name-only                   # (b) tracked, not yet committed
-   git ls-files --others --exclude-standard    # (c) untracked and not ignored
-   ```
-
-   `session` = **(a) ∪ (b) ∪ (c)** · `branch` = **(a)** · `paths` = what the `--paths` globs resolve to. Never re-derive a base yourself — `resolve-baseline.sh` owns it (two consumers on different baselines is the C2 failure), and its `degraded: yes` means the set is undeterminable: carry that to Step 4.5's degraded branch instead of silently calling it 0. The size of the set you end up with is `$resolved_scope_file_count` (Step 1b).
+   **session 스코프**(1a 가 `topic` 을 내지 않았거나 override): 1c 가 세 집합을 합친다 — (a) 이 브랜치에 커밋된 변경(base 대비) · (b) 추적되지만 아직 커밋하지 않은 변경 · (c) 추적되지 않고 무시되지도 않는 파일. `session` = **(a) ∪ (b) ∪ (c)** · `branch` = **(a)** · `paths` = 그 바뀐 파일 중 `--paths` glob 에 맞는 것(바뀌지 않은 파일은 세지 않는다). Never re-derive a base yourself — `review-diff.sh` takes it from `resolve-baseline.sh` (two consumers on different baselines is the C2 failure), and a degraded base means the set is undeterminable: 1c 의 `degraded: yes` 갈래가 그것이다.
 
    **Deriving from git is what makes the scope tool-agnostic** — git reports a changed file the same way whichever tool produced it, so a file written by a Bash heredoc or `sed -i` is in the default scope exactly like one written by `Write` (A20). Never source the scope from a per-session record of "files this turn edited": such a record is produced by a hook keyed on the writing tool's name, so every write outside that name list vanishes from the scope silently — the pre-5.0.0 defect this release removed.
+
+   **1c — 리뷰 diff (매 iteration, 스코프를 정한 뒤).** 모든 스코프의 리뷰 diff 는 이 펜스 하나가 만든다 — 문서 경로 규칙도 이 스크립트(그 안의 `doc_paths.py`)에만 있다. `<N>` 은 이 iteration 번호, 모드와 그 뒤 인자는 아래 표대로 채운다:
+
+   ```bash
+   QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+   TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+   RD="${TOP}/.claude/quality-gates/<session-id>"
+   "$QG/scripts/review-diff.sh" --dir "$RD" --iter <N> --mode <session|branch|paths|topic|range> <--globs <glob>... | --scope-file <topic-scope.txt 또는 range-scope.txt 경로>>; echo "review-diff rc=$?"
+   cat "$RD/review-i<N>.doc-paths"
+   ```
+
+   | 스코프 | 모드와 그 뒤 인자 |
+   |---|---|
+   | session | `--mode session` |
+   | branch | `--mode branch` |
+   | paths | `--mode paths --globs <glob>...` (`--paths` 의 glob 그대로) |
+   | topic | `--mode topic --scope-file "$RD/topic-scope.txt"` |
+
+   - `review-diff rc` 가 0 이 아니면(2 잘못된 호출 · 4 git 실패) stderr 를 그대로 보이고 멈춘다.
+   - stdout 의 `degraded:` 를 먼저 읽는다. `degraded: yes` 면 기준선을 풀지 못해 바뀐 파일 집합을 정할 수 없다 — `files:` · `excluded:` · `kept_model:` · `doc_paths_source:` · `self_state:` 의 `-` 를 0 으로 읽지 않고, Step 1b 의 「정할 수 없으면」 규칙대로 Step 4.5 의 degraded 갈래로 싣는다. 이때는 아래 문서 경로 공시 · 상태 파일 공시와 빈 diff 갈래를 건너뛴다.
+   - `degraded: no` 면 `$resolved_scope_file_count` = `files:` 값(문서 경로를 빼기 전 바뀐 파일 수)이다.
+   - 매 iteration 공시 한 줄 — `<doc_paths>` 는 `.doc-paths` 의 `doc_paths:` 값, `<excluded>` 는 stdout 의 `excluded:` 값, 출처는 `doc_paths_source:` 가 `default` 면 「기본」, `env` 면 「환경 변수」, `default-settings-changed` 면 「기본 — 이 변경이 설정을 바꿨다」: `> [quality-gates] 문서 경로 <doc_paths>(출처: <기본 | 환경 변수 | 기본 — 이 변경이 설정을 바꿨다>) — 리뷰에서 뺀 경로 <excluded>개.`
+   - `kept_model:` 이 0 보다 크면(`.doc-paths` 의 `kept` 줄들): `> [quality-gates] 문서 경로 패턴에 걸렸지만 모델이 읽거나 코드라 리뷰에 남겼다: <kept 경로들>`
+   - `.doc-paths` 의 `bad_patterns:` 가 `-` 가 아니면: `> [quality-gates] 읽지 못한 문서 경로 패턴 — 적용하지 않았다: <bad_patterns>`
+   - stdout 의 `self_state:` 가 0 보다 큰 수면 매 iteration 공시 한 줄(조용히 넘기지 않는다 — 경로는 `$RD/review-i<N>.self-state` 의 줄들): `> [quality-gates] qg 상태 파일이라 리뷰에서 건너뛴 추적 안 되는 경로 <self_state 값>개: <review-i<N>.self-state 의 경로들>`
+   - `files:` 가 0 보다 크고 `filtered_files: 0` 이면 `> [quality-gates] 리뷰할 diff 가 비었다 — 바뀐 파일 <files>개가 전부 문서 경로라 리뷰에서 뺐다. 이 실행은 clean 이 아니다.` 를 내고 리뷰어 · 차등 테스트 · e2e 를 건너뛰어 [Final verdict](#final-verdict) 의 「걸러진 diff 가 빈 실행」 펜스로 간다.
+   - 리뷰어가 받는 diff(`FILTERED_DIFF`)는 `$RD/review-i<N>.diff` 의 내용이다 — 문서 경로를 뺀 diff 이고, 보안 · 외부 리뷰어 · codex · 재비판이 모두 이 파일 하나를 받는다. `review-i<N>.full.diff` 는 거르기 전 diff, `review-i<N>.names` 는 거르기 전 경로 목록이다.
 
    **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> 리뷰 범위: 이번 세션에서 바뀐 파일 <COUNT>개. 브랜치 전체를 보려면 /quality-gates:quality-pipeline branch.` (`<COUNT>` = `$resolved_scope_file_count` — 정의는 Step 4.5 "Resolved-scope file count" 참조, `check-review-scope.sh` 산출값이 아니다). 스코프가 `topic` 으로 풀렸으면(N=1) 대신 `> 리뷰 범위: 토픽 <topic_key> — 바뀐 파일 <COUNT>개 · 구성원 <branches>.` 를 낸다. 명시적 `/quality-gates:quality-pipeline branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/quality-gates:quality-pipeline branch`는 결정론적 escape hatch로 유지).
 
@@ -242,18 +256,18 @@ No arguments. Cache `$changes_exist`, `$branch_ahead_count`, `$worktree_dirty`, 
 
 **Resolved-scope file count (floor input — reuse, not a new measurement).**
 `$resolved_scope_file_count` = the size of the file set you actually resolved
-and reviewed at step 1. It is **never** copied from `check-review-scope.sh`: for
-`topic` it is the `git diff --name-only <boundary> <tree>` set from step 1a; for
-the default (`session`) that set is the git-derived changed-file set (branch
-diff against base, unioned with the worktree's own changed files); for
-`branch` it is the branch diff against base; for `paths` it is the number of
-`--paths` glob matches you resolved. This count and the cached
+and reviewed at step 1. It is **never** copied from `check-review-scope.sh`: in
+every mode it is the `files:` value `review-diff.sh` printed at step 1c — the
+changed-file set before documentation paths are excluded (`topic`: boundary to
+merged tree from step 1a; `session`: branch diff against base, unioned with the
+worktree's own changed and untracked-not-ignored files; `branch`: the branch
+diff against base; `paths`: the changed files the `--paths` globs match). This count and the cached
 `$changes_exist` MUST stay independently computed (V7) — the floor compares
 them, and if the count were itself read off `check-review-scope.sh` the two
 could never disagree, silently disarming the floor for its default mode.
-If this count cannot be determined (e.g. the same git-sanity failure that
-makes `check-review-scope.sh` itself report `degraded: yes` — detached HEAD,
-no base branch, shallow clone), do NOT silently treat it as 0 — treat the run
+If this count cannot be determined (`review-diff.sh` printed `degraded: yes` —
+the same git-sanity failure that makes `check-review-scope.sh` itself report
+`degraded: yes`: detached HEAD, no base branch, shallow clone), do NOT silently treat it as 0 — treat the run
 as `$degraded == yes` for the floor (Step 4.5's degraded advisory). This is
 an already-known value; do not re-measure.
 
@@ -274,6 +288,7 @@ cat "${TOP}/.claude/quality-gates/<session-id>/intent.md"
 
 - `CRITERIA` = the criteria block's **content** (reviewers cannot read the plugin cache path).
 - `INTENT` = the `intent:` line from P3, then the intent file's content.
+- `FILTERED_DIFF` = the content of `${TOP}/.claude/quality-gates/<session-id>/review-i<N>.diff` that Step 1c wrote for this iteration — every reviewer below (security · external · codex · re-critic) gets this one file.
 
 **Composition** — at most 8 per iteration:
 
@@ -327,7 +342,7 @@ Agent({
     intent: <intent>${INTENT}</intent>
     criteria: <criteria>${CRITERIA}</criteria>
     iteration: <iteration>${ITERATION}</iteration>
-    filtered_diff: <filtered_diff>${FILTERED_DIFF}</filtered_diff> (unified diff of the Step 1 scope, documentation paths excluded)"
+    filtered_diff: <filtered_diff>${FILTERED_DIFF}</filtered_diff> (Step 1c 의 리뷰 diff — 문서 경로를 뺀 것)"
 })
 ```
 
@@ -354,9 +369,9 @@ Their output is prose; you convert each finding to a YAML item. A reviewer that 
 nothing readable is marked `실패` in the iteration line — it does not block.
 
 **다른 전제 각도 — codex (사용 가능하면 부른다).** `detect_codex.sh` 가 참이면 매 iteration,
-regardless of scope, 부른다 — 모델 계열 다양성이 load-bearing 이다(V6). Build the diff blob from the
-Step 1 scope and run
-`run_codex_reviewer.sh <diff 경로> <project_dir> <산출물 경로>`. The runner resolves the intent
+regardless of scope, 부른다 — 모델 계열 다양성이 load-bearing 이다(V6). The diff blob is Step 1c's
+`$RD/review-i<N>.diff` itself — pass its absolute path:
+`run_codex_reviewer.sh <$RD/review-i<N>.diff 의 절대 경로> <project_dir> <산출물 경로>`. The runner resolves the intent
 source itself (`discover-spec.sh`, same chain) and loads the criteria block.
 If codex is unavailable, continue without it. 러너 stderr 에 `DISABLE_SPEC_CONFORMANCE 는 없어졌다` 줄이 있으면 그 줄을 그대로 사용자에게 보인다 — 옛 끔 설정이 더는 듣지 않는다는 알림이다.
 
@@ -450,15 +465,18 @@ Once per iteration, after detection. 탐지 결과가 0건이어도 디스패치
 
    ```bash
    QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+   TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+   RD="${TOP}/.claude/quality-gates/<session-id>"
    RV="<1 에서 만든 절대 경로>"
+   cp "$RD/review-i<N>.diff" "$RV/recritic.diff"
    python3 "$QG/scripts/synthesize_findings.py" prepare --findings "$RV/findings.yaml" \
      --out-findings "$RV/recritic-findings.yaml" --out-map "$RV/recritic-map.json"
    cat "${CLAUDE_PLUGIN_ROOT}/references/recritic-code-profile.md" "${CLAUDE_PLUGIN_ROOT}/references/review-criteria.md"
    ```
 
    If `prepare` exits non-zero, do not dispatch — Step 4 counts the missing response as the
-   adjudication angle's primary input failure. `$RV/recritic.diff` 에는 security-reviewer 에게 준
-   것과 같은 **raw unified diff**(hunk 만)를 쓴다. `git show` · `git format-patch` · `git log -p` 의 출력은 쓰지 않는다 —
+   adjudication angle's primary input failure. `$RV/recritic.diff` 는 Step 1c 의 `$RD/review-i<N>.diff` 를
+   `cp` 한 사본이다 — security-reviewer 에게 준 것과 같은 **raw unified diff**(hunk 만). `git show` · `git format-patch` · `git log -p` 의 출력은 쓰지 않는다 —
    그 출력은 커밋 메시지를 싣는다. 의도 출처는 `<intent>` 슬롯 하나로만 간다.
 3. Dispatch with the six slots filled verbatim: `<project_dir>` · `<scope>` = this iteration's
    scope path list · `<findings>` = content of `$RV/recritic-findings.yaml` · `<diff>` = content of
@@ -513,7 +531,7 @@ different-premise: absent(not-installed)
 | ② 가 kill switch 없이 그 파일을 남기지 못했다 — `diff_rc` 가 0 이 아니다 · 파일이 없다 · D5 전에 절차가 끝났다(D0 메모 실패 · D2 exit 4 포함) | `--differential` 을 싣지 않고 `--reason error-axis` |
 | ② 가 kill switch 로 생략됐다([Differential test](#differential-test)) | `--reason kill-switch` |
 | 기본 모드 — Step 1a 가 `topic-head.sh` 를 불렀다(`status:` 가 무엇이든) | `--scope "$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"` — `declaration-invalid` · `merge-conflict` 사유와 `scope:` 블록은 합성기가 이 파일에서 낸다 |
-| `$resolved_scope_file_count == 0` 이고 캐시한 `$changes_exist == yes` (정직-verdict floor) | `--reason scope-empty` |
+| `$resolved_scope_file_count == 0`(Step 1c 의 `files: 0`) 이고 캐시한 `$changes_exist == yes` (정직-verdict floor) | `--reason scope-empty` |
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -565,7 +583,7 @@ The verdict is the **one** `verdict:` line at the tail of `$RV/synth.out` (with 
 ## Differential test
 
 절차는 `references/differential-test.md` 에 있다. 매 iteration 의 ② 에서 그 파일을 Read 로 읽고
-D0~D8 을 그대로 따른다. trivia 로 파이프라인 전체를 건너뛴 실행과 아래 kill switch 가 켜진 실행만 읽지 않는다.
+D0~D8 을 그대로 따른다. trivia 로 파이프라인 전체를 건너뛴 실행 · Step 1c 의 걸러진 diff 가 빈 실행과 아래 kill switch 가 켜진 실행만 읽지 않는다.
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/skills/quality-pipeline/references/differential-test.md
@@ -724,7 +742,7 @@ A skipped file's items are appended to `$RD/excluded.md` with 사유 `Edit 실�
 ## e2e
 
 리뷰·테스트 루프가 「멈추기」 없이 끝나면 최종 판정 전에 이 절을 한 번 돈다. 루프가 「멈추기」로 끝났으면(aborted) 이 절을
-건너뛰고 e2e 칸을 `안 함` 으로 둔다. trivia 로 파이프라인이 생략된 실행도 건너뛰고 e2e 칸을 `안 함` 으로 둔다.
+건너뛰고 e2e 칸을 `안 함` 으로 둔다. trivia 로 파이프라인이 생략된 실행과 Step 1c 의 걸러진 diff 가 빈 실행도 건너뛰고 e2e 칸을 `안 함` 으로 둔다.
 
 판단과 기록 규칙은 e2e 레퍼런스에 있다. 이 절에 들어오면 먼저 읽는다.
 
@@ -915,9 +933,19 @@ python3 "$QG/scripts/verdict.py" --reason trivia --line --blocking 0 --optional 
 echo "verdict rc=$?"; cat "$RD/verdict.out"
 ```
 
+걸러진 diff 가 빈 실행(Step 1c 에서 `files:` 가 0 보다 크고 `filtered_files: 0`)도 `$RV` 와 e2e 걷기가 없다 — `<N>` 에 그 iteration 번호를 넣고 판정을 바로 만든다:
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+RD="${TOP}/.claude/quality-gates/<session-id>"
+python3 "$QG/scripts/verdict.py" --reason scope-empty --line --blocking 0 --optional 0 --new-failures 0 --excluded 0 --iter <N> --sha "$(git rev-parse --short HEAD)" --e2e '안 함' > "$RD/verdict.out"
+echo "verdict rc=$?"; cat "$RD/verdict.out"
+```
+
 A non-zero rc is not a verdict — report and stop.
 
-Then render the summary and record the local result (a trivia run sets `SYN=""`):
+Then render the summary and record the local result (a trivia run and an empty-filtered-diff run set `SYN=""`):
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -937,7 +965,7 @@ printf '판정\t%s\n반복\t<N>번\n결과\t<finished | accepted with findings i
 } >> "$RD/result.md"
 ```
 
-Then print the last synthesizer output's `scope:` block and `angles:` block verbatim if any (the trivia escape has none).
+Then print the last synthesizer output's `scope:` block and `angles:` block verbatim if any (the trivia escape and an empty-filtered-diff run have none).
 Print the verdict line (the last line of `$RD/verdict.out`) on its own line, and `> 로컬 결과: <$RD/result.md 경로>`.
 Then run D8 of `references/differential-test.md` (drop the run's memo) when ② made one — the verdict line and the record above
 read the session-folder copies, not the memo.
