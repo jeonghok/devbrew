@@ -27,15 +27,15 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 **Law 3 — Every Cycle Must Leave the System Smarter.** Compounding은 선택적 wrap-up이 아니라 discoverability check가 붙은 이름 붙은 단계. 사이클이 learning을 생산하면 하니스는 그것을 파일로 capture하고 다음 세션이 실제로 찾을 것임을 확인 — 「다음 세션」은 메모리 없는 레포의 세션도 뜻한다: 교훈은 메모리가 아니라 그 동작을 내는 skill · reference · 스크립트 · 락을 고쳐 남긴다(철학 Law 3). 어떤 미래 agent도 읽지 않는 파일에 기록하는 것은 theater.
 
-## Plugin Shape
-
-`plugins/*`의 모든 플러그인은 [canonical 디렉토리 구조](docs/plugin-authoring.md)를 따르고 아래를 모두 만족해야 합니다.
-
 - **기본값과 판단.** 규칙은 「기본은 X, 일의 모양이 다르면 모델이 판단하고 이유를 적는다」로 쓰고 정석 흐름의 의도는 지킨다. 결정론은 보안 · 정확성 게이트에만(철학 P8).
 - **레포 전용 값 금지.** 경로 · 테스트 명령 · 브랜치 · 모델 · `gh` 같은 값은 도출하거나 레포마다 정하게 한다(철학 P8).
 - **상류 · 하류 연계.** 설계마다 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 같은 상태를 읽는 표면과 이음매 담당을 보인다(철학 P23).
 - **진입점에서 따라 내려가기.** 산출물 · 상태가 얽히면 객체 · 링크 · 속성 · 주인을 적어 진입점에서 따라가게 한다(철학 P5).
 - **있는 것 먼저.** 만들기 전에 레포 안 · 밖의 있는 것을 검토하고 외부 것은 사용자 검토 뒤 쓴다(철학 P8).
+
+## Plugin Shape
+
+`plugins/*`의 모든 플러그인은 [canonical 디렉토리 구조](docs/plugin-authoring.md)를 따르고 아래를 모두 만족해야 합니다.
 
 ### 메타데이터 & 버전 관리
 

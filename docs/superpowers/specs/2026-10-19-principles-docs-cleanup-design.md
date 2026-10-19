@@ -109,6 +109,7 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 | CLAUDE.md 의존 최소 버전 줄 · spec-distill README 의 superpowers · qg · gh 부재 동작 | R8 | R8 범위(의존 선언 · 부재 시 강등) |
 | 「사용자 리뷰 게이트」 용어(spec-distill README · skill · 템플릿 · 테스트) · worktree 격리 상속 · 스택 PR base 삭제 · SDD 과제 사이 이음매를 구현 틀에 | R5 후속(R5 설계 `## 미룸`) | superpowers 7.0.0 이음매와 함께 skill · README 를 같은 PR 에서 맞춰야 어긋나지 않는다 |
 | qg README 원칙 절 머리(「인스턴스화한 원칙」 vs 「Principles Instantiated」) · qg 판정 id 충돌 · kill switch 정규식(plugin-audit shape 검사) · docreview 엔진 결함 셋(finalize 두 번 · 복수 앵커 · § 앵커) · 설계문서 프로필의 대안 비교 축 | R2a | 그 파일 · 테스트가 R2a 예약 · 진행 중 |
+| 철학 P3 의 「문서 리뷰 자리 넷(design doc·brief·seed·generic)을 통일하는 엔진은 `shared/docreview/`」가 지금 사실과 어긋남 — qg 의 `generic` 프로필은 엔진 테스트만 읽고(qg README 의 문서 리뷰 엔진 줄), 엔진 자리는 셋이다(spec-distill README 의 문서 리뷰 엔진 줄) | R2a | artifact-critique 를 엔진에 붙이면 그 문장이 참이 되고, 붙이지 않으면 R2a 가 그 문장을 고친다 |
 | brief §4 의 «» 키 · brief 묶음 rc 3 오탐 · spec-interview 개명에 따른 README 줄 | R10 | R10 예약(spec-interview · 템플릿) |
 | 하나짜리 brief 의 다음 세션 줄(`finishing.md`)에 원칙 2 · 3 · 4 · 6 이 없음(원칙 5 는 작은 일엔 만들지 않으니 필요 여부를 R10 이 판단) | R10 | R10 이 그 줄 문면을 맡음(`## 플러그인 동작 자리 대조`) |
 | 에픽 넘김 줄(`epic-handoff.md`)에 원칙 5(계층 · 온톨로지)를 쓰라는 문장이 없음 | R5 후속(R5 설계 `## 미룸`) | R5 가 그 파일을 예약(`## 플러그인 동작 자리 대조`) |
@@ -237,6 +238,7 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 | §5 의 R8 행 | R8 범위 | R8 |
 | §5 의 R5 후속 행 | superpowers 7.0.0 이음매와 같은 PR | R5 후속(R5 설계 `## 미룸`) |
 | §5 의 R2a 행 | R2a 예약 · 진행 중 | R2a |
+| §5 의 철학 P3 「문서 리뷰 자리 넷」 행 | artifact-critique 를 엔진에 붙일지에 따라 문장이 참이 되거나 고쳐야 함 | R2a |
 | §5 의 R10 행 | R10 예약 | R10 |
 | §5 의 `finishing.md` 행(원칙 2 · 3 · 4 · 6, 원칙 5 는 R10 이 필요 여부 판단) | R10 이 그 줄 문면을 맡음 | R10 |
 | §5 의 `epic-handoff.md` 행(원칙 5) | R5 예약 파일 | R5 후속(R5 설계 `## 미룸`) |

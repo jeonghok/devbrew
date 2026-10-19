@@ -64,7 +64,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 코드: `plugins/quality-gates/skills/quality-pipeline/SKILL.md` frontmatter `cost_class`
 
 ### P23 — Decisions Stay Refutable
-**Law 1 × P17 집행.** 확정된 결정은 재논의 대상이 아니지만 **반증 대상이다.** 앞 단계가 못 박은 것이 뒤 단계에서 틀린 것으로 드러나면, 그 단계는 근거를 제시하고 사용자 동의를 받아 피벗할 수 있어야 한다 — 임의 변경은 금지, 보고 후 재결정은 허용. Load-bearing: **오류를 가장 잘 볼 수 있는 자리는 그 오류를 만든 자리가 아니라 하류다** — 확정을 영구 봉인하면 볼 수 있는 자리와 고칠 수 있는 자리가 분리되고, 이른 단계의 오차가 하류 전 구간에 증폭된 채 아무도 말할 길이 없어진다. 재발견 금지는 반증 금지가 아니다. 그래서 설계마다 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 같은 상태를 읽는 표면과 이음매를 고치는 쪽을 적어, 하류의 오류가 돌아갈 길을 둔다.
+**Law 1 × P17 집행.** 확정된 결정은 재논의 대상이 아니지만 **반증 대상이다.** 앞 단계가 못 박은 것이 뒤 단계에서 틀린 것으로 드러나면, 그 단계는 근거를 제시하고 사용자 동의를 받아 피벗할 수 있어야 한다 — 임의 변경은 금지, 보고 후 재결정은 허용. Load-bearing: **오류를 가장 잘 볼 수 있는 자리는 그 오류를 만든 자리가 아니라 하류다** — 확정을 영구 봉인하면 볼 수 있는 자리와 고칠 수 있는 자리가 분리되고, 이른 단계의 오차가 하류 전 구간에 증폭된 채 아무도 말할 길이 없어진다. 재발견 금지는 반증 금지가 아니다. 설계마다 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 같은 상태를 읽는 표면과 이음매 담당을 적어 하류의 오류가 돌아갈 길을 둔다.
 코드: `plugins/spec-distill/references/proceed-gate.md` 「재결정 규약」 절 · `plugins/spec-distill/skills/spec-review/SKILL.md` · `plugins/spec-distill/references/epic-handoff.md` (설계의 「상류 · 하류 연계」 절)
 
 ### AP3 — Self-Approval (the #1 anti-pattern)
@@ -82,7 +82,7 @@ CLAUDE.md에 부재하거나 미묘해서 이 essence에서만 완전히 생존�
 - (부과 방향) 결정론은 보안/정확성 게이트(fail-closed)라는 load-bearing 지점에만 정확히 부과한다.
 
 - (흐름) 규칙은 「기본은 X, 일의 모양이 다르면 모델이 판단하고 이유를 적는다」로 쓴다 — 정석 흐름(brainstorming → 계획 → 구현)의 의도는 지키되 순서를 강제하는 결정론은 두지 않는다.
-- (재사용) 새로 만들기 전에 레포 안 · 밖에 이미 있는 것을 먼저 검토하고, 외부 것은 사용자가 검토한 뒤에 쓴다(P17).
+- (재사용) 새로 만든 것은 유지할 표면이 되므로 레포 안 · 밖에 있는 것을 먼저 검토하고, 외부 것은 사용자가 검토한 뒤에 쓴다(P17).
 - (이식성) 레포 전용 값을 박는 것은 이 레포에서만 맞는 결정론이라 다른 레포에서 조용히 틀린다 — 도출하거나 레포마다 정하게 한다.
 
 예: qg 의 판정 floor 는 「검토하지 않은 범위를 clean 이라 부르지 않는다」는 정확성 한 점에만 결정론을 걸고(kill 불가), 무엇을 리뷰할지 고르는 일은 모델 신뢰로 둔다.
@@ -91,7 +91,7 @@ CLAUDE.md에 부재하거나 미묘해서 이 essence에서만 완전히 생존�
 컨텍스트 윈도우는 compact될 것이다 — 하니스는 그럴 것이라 가정하고 설계한다. 규칙: **턴 종료 전 load-bearing 사실은 파일로 기록한다 — 대화에만 있는 사실은 compaction 후 사망한다.** Plan 파일·state 파일·스펙 파일·커밋 메시지·`CLAUDE.md`·review findings 마크다운 등 지속적인 것에 기록한다. 이 규칙은 CLAUDE.md에 부재하므로 이 essence가 정본이다.
 
 ### P5 — Filesystem as Memory
-상태는 context가 아니라 파일에 산다 — 최소 인덱스만 preload하고 나머지는 Glob/Read/Grep으로 just-in-time 로드한다. stale-index·vector store·RAG 없음. 상태가 얽히면 객체 · 링크 · 속성 · 주인을 명시해 진입점 하나에서 따라가게 하되(주인 하나라야 끝이 정본), 작은 일에는 이 구조를 만들지 않는다. state 자리는 CLAUDE.md §런타임 상태 & 훅.
+상태는 context가 아니라 파일에 산다 — 최소 인덱스만 preload하고 나머지는 Glob/Read/Grep으로 just-in-time 로드한다. stale-index·vector store·RAG 없음. 상태가 얽히면 객체 · 링크 · 속성 · 주인을 명시해 진입점 하나에서 따라가게 하되(주인이 하나라야 끝이 정본), 작은 일에는 이 구조를 만들지 않는다. state 자리는 CLAUDE.md §런타임 상태 & 훅.
 코드: `plugins/spec-distill/references/roadmap-ontology.md`
 
 ## Anti-Pattern Anchors
