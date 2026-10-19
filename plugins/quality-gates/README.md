@@ -222,10 +222,12 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
 ```
 /quality-gates:quality-pipeline  (single assistant turn)
  ├ setup-qg.sh ── .claude/quality-gates/<sid>/result.md
- ├ SKILL preflight ── kill switch · setup --ensure · intent: 한 줄
+ ├ SKILL preflight ── kill switch · setup --ensure · 범위(range 면 두 커밋으로 얼림) · intent: 한 줄
  ├ trivia escape? ── yes ──▶ not-certified (trivia) ──────▶ Final verdict
+ │   (토픽 · 범위 모드는 여기서 판단하지 않고 iteration 1 의 Step 1c 뒤에 거르기 전 diff 전체로 판단)
  ├ qg iter loop (CAP = 5 + 사용자가 연 반복)
  │   Step 1c 의 걸러진 diff 가 비면 → not-certified (scope-empty)
+ │   범위 모드: 고치고 다시 돌기 없음(지금 판정으로 끝내기 / 멈추기) · e2e 없음 · 게시 없음
  │   ① review — 시작 구성 + 근거를 적어 더한 리뷰어 → code-recritic
  │   ② differential test — 기준선 vs 봉인된 HEAD (매 iteration)
  │   ③ synthesize → verdict: clean | defect | not-certified
@@ -316,7 +318,7 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
 
 ## 범위
 
-기본 범위는 git 이 보고하는 변경이다 — base 대비 브랜치 diff 와 작업트리 변경(추적 변경 · 무시되지 않는 새 파일)의 합집합이다. `Spec:` 트레일러로 선언된 토픽이면 토픽 전체(합친 트리)가 범위다(「토픽 스코프」). 리포 밖 절대경로 편집은 잡히지 않으므로 `--paths` 로 명시한다. `--paths` 는 바뀐 파일 중 그 glob 에 맞는 것이다 — 바뀌지 않은 파일은 세지 않는다.
+기본 범위는 git 이 보고하는 변경이다 — base 대비 브랜치 diff 와 작업트리 변경(추적 변경 · 무시되지 않는 새 파일)의 합집합이다. `Spec:` 트레일러로 선언된 토픽이면 토픽 전체(합친 트리)가 범위다(「토픽 스코프」). 리포 밖 파일은 리뷰 범위에 들지 않는다. `--paths` 는 바뀐 파일 중 그 glob 에 맞는 것이다 — 바뀌지 않은 파일은 세지 않는다.
 
 모든 범위의 리뷰 diff 는 `scripts/review-diff.sh` 한 자리가 만든다. 문서 경로(기본 `README*` · `CHANGELOG*` — 「설정」 절)에 맞는 문서 파일은 리뷰어에게 가는 diff 에서 빠지고, 매 iteration `문서 경로 … — 리뷰에서 뺀 경로 N개.` 한 줄로 알린다. 패턴에 걸려도 모델이 읽는 파일(`CLAUDE.md` · `SKILL.md` · `agents/` · `references/` 아래 등)과 코드는 빼지 않고 이름만 알린다. 문서를 빼고 나니 리뷰할 diff 가 비면 리뷰어 · 차등 테스트 · e2e 를 부르지 않고 `not-certified (scope-empty)` 로 끝난다.
 
@@ -353,9 +355,11 @@ JSON 한 줄(`intent_source` · `intent_note` · `intent_file` · `specs`)을 �
 1. 범위 안 커밋의 `Spec:` 트레일러가 가리키는 설계문서 전부(`intent_source: spec-trailer` · `specs` 에 실은 경로 목록).
    오래된 커밋 먼저 모으고, 같은 경로는 한 번, 한 커밋에 `Spec:` 줄이 여럿이면 전부 받는다. 문서가 하나면 그 내용 그대로,
    둘 이상이면 문서마다 구분 줄 `<!-- qg-spec <k>/<N>: <경로> -->` 뒤에 싣는다. 설계문서가 여럿이면 리뷰어는 의도를 어긴
-   막는 지적마다 근거 문서 경로와 AC 번호를 단다(`references/review-criteria.md`). 리포 상대 경로이고 추적되는 보통 파일이어야
-   한다 — `..` · `.git/` · 추적되지 않는 경로 · 링크는 거부하고 그 수를 알린다(`intent_note: spec 경로 거부 <k>개`). 남은 문서가
-   없으면 아래로 내려간다. 내용은 객체 저장소에서 읽는다 — 보통은 HEAD, 범위 모드는 끝 커밋의 트리다.
+   막는 지적마다 근거 문서 경로와 AC 번호를 단다(`references/review-criteria.md`). 리포 상대 경로이고 추적되는 파일이어야
+   한다 — `..` · `.git/` · 추적되지 않는 경로 · 보통 파일이 아닌 경로(없음 · 폴더 등)는 거부하고 그 수를 알린다(`intent_note: spec 경로
+   거부 <k>개`). 링크는 모드마다 다르다: 범위 모드는 끝 커밋 트리의 보통 파일만 받아 링크를 거부하고, 그 밖의 모드는 리포 안을
+   가리키는 링크를 따라가 그 실제 경로의 추적 파일을 읽으며 리포 밖으로 풀리는 링크만 거부한다. 남은 문서가 없으면 아래로
+   내려간다. 내용은 객체 저장소에서 읽는다 — 보통은 HEAD, 범위 모드는 끝 커밋의 트리다.
 2. 없으면 범위 안 커밋 메시지 + 열린 PR 본문(`commits+pr`), PR 이 없거나 gh 를 못 쓰면 커밋 메시지만
    (`commits`; `intent_note` 는 `gh 없음` · `열린 PR 없음` · `gh 오류`). PR 본문은 읽기 전용 `gh pr view` 하나로 읽는다.
    범위 모드는 PR 본문을 읽지 않는다(`intent_note: 범위 모드 — PR 본문 안 읽음`).
@@ -403,7 +407,7 @@ JSON 한 줄(`intent_source` · `intent_note` · `intent_file` · `specs`)을 �
   `CHANGELOG` 인 파일만 빠진다. 그중 모델이 읽는 파일(`CLAUDE.md` · `AGENTS.md` · `SKILL.md`, 또는 경로에 `agents` · `skills` ·
   `commands` · `references` · `templates` · `hooks` · `.claude` · `.claude-plugin` 이 든 파일)과 코드는 패턴에 걸려도 남기고 이름을 알린다.
 - **어디에 두나** — 셸 환경 변수로 두거나, `.claude/settings.json` · `.claude/settings.local.json` 의 `env` 에 둔다. 설정 파일의
-  `env` 는 세션 환경 변수로 실린다(실측: Claude Code 2.1.303, 헤드리스 한 번 — 대화형 세션은 재지 않았다).
+  `env` 는 세션 환경 변수로 실린다(실측: Claude Code 2.1.303, 두 파일을 하나씩 따로 둔 헤드리스 실행 각 한 번 — 대화형 세션은 재지 않았다).
 - **리뷰 대상이 자기 범위를 못 정한다** — 리뷰하는 변경이 두 설정 파일 중 하나에서 이 키를 바꾸면 이 값을 쓰지 않고 기본 목록으로
   돌아가며, 공시 줄의 출처가 「기본 — 이 변경이 설정을 바꿨다」가 된다. git 이 무시하는 추적 안 된 `settings.local.json` 은
   변경에 들지 않으므로 그대로 쓴다.
