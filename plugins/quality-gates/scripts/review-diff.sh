@@ -15,12 +15,15 @@
 #   review-i<N>.full.diff  거르기 전 diff
 #   review-i<N>.diff       문서 경로를 뺀 diff — 리뷰어가 받는 것
 #   review-i<N>.doc-paths  doc_paths.py select 출력(어느 경로를 왜 뺐고 남겼는지)
+#   review-i<N>.self-state 건너뛴 untracked qg 상태 경로(한 줄에 하나, 없으면 빈 파일)
 #
-# stdout 9줄: mode · base · head · degraded · files · filtered_files · excluded · kept_model ·
-# doc_paths_source. session · branch · paths 의 기준선이 degraded 면 네 파일을 비워 두고
-# degraded: yes · files: - 로 rc 0. git 실패 rc 4, 사용 오류 rc 2.
+# stdout 10줄: mode · base · head · degraded · files · filtered_files · excluded · kept_model ·
+# doc_paths_source · self_state. session · branch · paths 의 기준선이 degraded 면 다섯 파일을
+# 비워 두고 degraded: yes · files: - · self_state: - 로 rc 0. git 실패 rc 4, 사용 오류 rc 2.
 #
-# 모든 모드에서 qg 자기 상태 폴더 `.claude/quality-gates` 는 리뷰 경로에서 뺀다.
+# qg 자기 상태 폴더 `.claude/quality-gates` 는 session · paths 의 untracked 목록에서만 건너뛰고
+# (앞 반복의 산출물이 다음 반복의 변경으로 세어지지 않게) 그 수와 경로를 공시한다. 추적되는 변경과
+# 커밋된 변경은 그 폴더 아래여도 리뷰한다 — 그 자리에 둔 코드가 리뷰를 피하지 못하게.
 # diff 는 사용자 git 설정(외부 diff · textconv · 접두 · rename · pathspec 환경 변수)에 기대지 않는다.
 # 읽기 전용 git 만 쓴다.
 set -u
@@ -83,7 +86,7 @@ case "$MODE" in
 esac
 
 # 상대 경로는 부른 자리 기준 — 리포 최상위로 옮기기 전에 절대 경로로 굳힌다.
-DIR="$(cd "$DIR" && pwd)" || die "출력 폴더로 들어가지 못했다: $DIR"
+DIR="$(cd "$DIR" && pwd -P)" || die "출력 폴더로 들어가지 못했다: $DIR"
 if [ -n "$SCOPE" ]; then
   case "$SCOPE" in /*) ;; *) SCOPE="$PWD/$SCOPE" ;; esac
 fi
@@ -95,8 +98,9 @@ OUT_NAMES="$DIR/review-i$ITER.names"
 OUT_FULL="$DIR/review-i$ITER.full.diff"
 OUT_DIFF="$DIR/review-i$ITER.diff"
 OUT_DOC="$DIR/review-i$ITER.doc-paths"
+OUT_SELF="$DIR/review-i$ITER.self-state"
 # 앞 실행의 결과가 이번 실패 뒤에 남아 읽히지 않게 먼저 지운다.
-rm -f -- "$OUT_NAMES" "$OUT_FULL" "$OUT_DIFF" "$OUT_DOC" || die "앞 실행의 출력 파일을 지우지 못했다: $DIR"
+rm -f -- "$OUT_NAMES" "$OUT_FULL" "$OUT_DIFF" "$OUT_DOC" "$OUT_SELF" || die "앞 실행의 출력 파일을 지우지 못했다: $DIR"
 T="$(mktemp -d "$DIR/.review-diff.XXXXXX")" || die "임시 폴더를 만들지 못했다: $DIR"
 
 GITD=(git -c core.quotePath=false diff --no-color --no-ext-diff --no-textconv --no-renames
@@ -104,17 +108,18 @@ GITD=(git -c core.quotePath=false diff --no-color --no-ext-diff --no-textconv --
 GITD_NOINDEX=(git -c core.quotePath=false diff --no-index --no-color --no-ext-diff --no-textconv
               --src-prefix=a/ --dst-prefix=b/)
 
-publish() {   # 임시 파일 넷을 제자리로
+publish() {   # 임시 파일 다섯을 제자리로
   mv -f -- "$T/names" "$OUT_NAMES" \
     && mv -f -- "$T/full.diff" "$OUT_FULL" \
     && mv -f -- "$T/doc-paths" "$OUT_DOC" \
+    && mv -f -- "$T/self-state" "$OUT_SELF" \
     && mv -f -- "$T/diff" "$OUT_DIFF" \
     || gitfail "결과 파일을 옮기지 못했다: $DIR"
 }
 
-emit() {   # <base> <head> <degraded> <files> <filtered> <excluded> <kept> <source>
-  printf 'mode: %s\nbase: %s\nhead: %s\ndegraded: %s\nfiles: %s\nfiltered_files: %s\nexcluded: %s\nkept_model: %s\ndoc_paths_source: %s\n' \
-    "$MODE" "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8"
+emit() {   # <base> <head> <degraded> <files> <filtered> <excluded> <kept> <source> <self_state>
+  printf 'mode: %s\nbase: %s\nhead: %s\ndegraded: %s\nfiles: %s\nfiltered_files: %s\nexcluded: %s\nkept_model: %s\ndoc_paths_source: %s\nself_state: %s\n' \
+    "$MODE" "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9"
 }
 
 scope_val() {   # <key> — 범위 파일에서 그 키의 첫 값
@@ -136,7 +141,7 @@ case "$MODE" in
     deg="$(printf '%s\n' "$rb" | sed -n 's/^degraded: //p')"
     mb="$(printf '%s\n' "$rb" | sed -n 's/^merge_base: //p')"
     if [ "$deg" != no ] || [ -z "$mb" ] || [ "$mb" = - ]; then
-      : > "$T/names"; : > "$T/full.diff"; : > "$T/doc-paths"; : > "$T/diff"
+      : > "$T/names"; : > "$T/full.diff"; : > "$T/doc-paths"; : > "$T/self-state"; : > "$T/diff"
       publish
       if [ "$MODE" = branch ]; then
         h="$(git rev-parse --verify --quiet HEAD 2>/dev/null)" || h="-"
@@ -144,7 +149,7 @@ case "$MODE" in
       else
         h=worktree
       fi
-      emit - "$h" yes - - - - -
+      emit - "$h" yes - - - - - -
       exit 0
     fi
     BASE="$mb"
@@ -165,10 +170,14 @@ case "$MODE" in
     REV=("$BASE" "$HEAD_LABEL") ;;
 esac
 
-# 리뷰 경로 — paths 면 glob, 그 밖은 리포 전체. qg 자기 상태 폴더는 언제나 뺀다(대상 리포가 그 폴더를
-# 무시하지 않아도 앞 반복의 review-i*.* · 임시 폴더가 다음 반복의 변경으로 세어지지 않게).
+# 리뷰 경로 — paths 면 glob, 그 밖은 리포 전체. 추적 · 커밋된 변경은 어느 폴더든 리뷰한다.
 if [ "${#GLOBS[@]}" -gt 0 ]; then PS=("${GLOBS[@]}"); else PS=(.); fi
-PS+=(":(exclude).claude/quality-gates")
+# untracked 목록에서만 건너뛰는 qg 상태 폴더 — 대상 리포가 그 폴더를 무시하지 않아도 앞 반복의
+# review-i*.* 가 다음 반복의 변경으로 세어지지 않게. 건너뛴 경로는 self_state 로 공시한다.
+SELF_DIR=".claude/quality-gates"
+# 이 실행의 임시 폴더는 변경도 상태도 아니다 — 세지 않는다.
+T_REL=""
+case "$T" in "$top"/*) T_REL="${T#"$top"/}" ;; esac
 
 # ── 거르기 전 경로 ──────────────────────────────────────────────────────────
 "${GITD[@]}" --name-only -z "${REV[@]}" -- "${PS[@]}" > "$T/tracked.z" \
@@ -179,12 +188,23 @@ if [ "$WORKTREE" -eq 1 ]; then
     || gitfail "git ls-files --others 가 실패했다"
 fi
 
-NAMES=(); UNTR=()
+NAMES=(); UNTR=(); SELF=()
 while IFS= read -r -d '' f; do NAMES+=("$f"); done < "$T/tracked.z"
-while IFS= read -r -d '' f; do UNTR+=("$f"); done < "$T/untracked.z"
+while IFS= read -r -d '' f; do
+  if [ -n "$T_REL" ]; then
+    case "$f" in "$T_REL"/*) continue ;; esac
+  fi
+  case "$f" in
+    "$SELF_DIR"/*) SELF+=("$f") ;;
+    *) UNTR+=("$f") ;;
+  esac
+done < "$T/untracked.z"
 {
   for f in ${NAMES[@]+"${NAMES[@]}"} ${UNTR[@]+"${UNTR[@]}"}; do printf '%s\n' "$f"; done
 } > "$T/names" || gitfail "경로 목록을 쓰지 못했다"
+{
+  for f in ${SELF[@]+"${SELF[@]}"}; do printf '%s\n' "$f"; done
+} > "$T/self-state" || gitfail "상태 경로 목록을 쓰지 못했다"
 FILES=$(( ${#NAMES[@]} + ${#UNTR[@]} ))
 
 add_untracked() {   # <out> <path> — untracked 파일 하나를 /dev/null 대비 diff 로 덧붙인다
@@ -258,5 +278,5 @@ for f in ${UNTR[@]+"${UNTR[@]}"}; do
 done
 
 publish
-emit "$BASE" "$HEAD_LABEL" no "$FILES" "$FILTERED" "${excluded:--}" "${kept:--}" "${dp_source:--}"
+emit "$BASE" "$HEAD_LABEL" no "$FILES" "$FILTERED" "${excluded:--}" "${kept:--}" "${dp_source:--}" "${#SELF[@]}"
 exit 0

