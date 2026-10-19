@@ -60,6 +60,13 @@ class TestSelect(unittest.TestCase):
         self.assertFalse(m.is_doc_file("Makefile"))
         self.assertTrue(m.is_doc_file("docs/a.rst"))
 
+    def test_mdx_is_code(self):
+        # MDX 는 JSX · 코드를 실행한다 — 문서가 아니라 코드로 남는다(패턴에 걸리면 kept).
+        self.assertFalse(m.is_doc_file("README.mdx"))
+        self.assertFalse(m.is_doc_file("docs/page.MDX"))
+        ex, kept = m.select(["README.mdx", "README.md"], list(m.DEFAULT_DOC_PATHS))
+        self.assertEqual((ex, kept), (["README.md"], ["README.mdx"]))
+
     def test_model_read_segments(self):
         for p in ["x/.claude/notes.md", "p/.claude-plugin/x.md", "p/hooks/readme.md",
                   "p/templates/t.md", "p/commands/c.md", "AGENTS.md", "a/b/SKILL.md"]:

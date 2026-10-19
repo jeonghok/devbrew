@@ -6,7 +6,8 @@
 `.claude/settings.local.json` 의 그 키를 바꾸면 기본 목록으로 돌아간다(리뷰 대상이 자기
 리뷰 범위를 정하지 못하게).
 
-포함 규칙이 먼저다 — 패턴에 맞아도 문서 파일만 빠진다. 문서 파일 중 모델이 읽는 파일은 남긴다.
+포함 규칙이 먼저다 — 패턴에 맞아도 문서 파일(실행되지 않는 글 형식 — DOC_EXTS · DOC_BARE_NAMES)만
+빠진다. 문서 파일 중 모델이 읽는 파일은 남긴다.
 패턴에 걸렸지만 남긴 경로는 `kept` 로 이름을 낸다.
 
 패턴 문법: `/` 가 없는 패턴은 어느 깊이의 파일 이름에나 맞고, `/` 가 있는 패턴은 레포 루트
@@ -33,7 +34,8 @@ from typing import List, Optional, Tuple
 
 ENV_KEY = "DEVBREW_QUALITY_GATES_DOC_PATHS"
 DEFAULT_DOC_PATHS = ("README*", "CHANGELOG*")
-DOC_EXTS = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc")
+# 실행되지 않는 글 형식만 문서다. `.mdx` 는 JSX · 코드를 실행하므로 코드로 리뷰한다(패턴에 걸리면 kept).
+DOC_EXTS = (".md", ".markdown", ".rst", ".txt", ".adoc")
 DOC_BARE_NAMES = ("README", "CHANGELOG")
 MODEL_READ_NAMES = ("CLAUDE.md", "AGENTS.md", "SKILL.md")
 MODEL_READ_SEGMENTS = ("agents", "skills", "commands", "references", "templates", "hooks",
