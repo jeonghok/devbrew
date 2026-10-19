@@ -106,7 +106,7 @@ assert_grep "$out" "^[0-9]+ True True True$" "R0 설계문서 표가 한 칸 여
 # 9. 변이 — 빠진 번호 판정을 지우면 2번 단언이 무너지는지(통과가 정답인 1번의 짝)
 sed 's/return {"status": 1 if missing else 0,/return {"status": 0,/' "$C" > "$T/mut.py"
 cmp -s "$C" "$T/mut.py" && no "변이가 적용되지 않았다" || ok "변이 적용됨"
-cp "$S/section6.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$T/" 2>/dev/null
+cp "$S/section6.py" "$S/brief_body.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$T/" 2>/dev/null
 python3 "$T/mut.py" "$T/bundle.md" "$T/miss.md" >/dev/null; rc=$?
 assert_eq "$rc" "0" "변이: status 를 0 으로 고정하면 빠진 번호가 rc 0 — 2번 단언에 이빨이 있다"
 # 10. 공유 모듈(R3 §2-5) — 두 스크립트가 같은 함수를 쓰고 순환 import 가 없다
@@ -184,7 +184,7 @@ assert_eq "$(jget "$out" "[(s['id'], s['reason']) for s in r['shallow']]")" "[('
 txt="$(python3 "$C" "$R/docs/x/R9.md" "$R/loc2.md")"
 assert_contains "$txt" "얕은 답 — C1: 가리킨 자리가 없다" "번호별 줄"
 # 변이(AC15) — 「자리 표기 없음」 판정을 끄면 위 단언이 무너진다
-M2="$T/mut2"; mkdir -p "$M2"; cp "$S/section6.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M2/"
+M2="$T/mut2"; mkdir -p "$M2"; cp "$S/section6.py" "$S/brief_body.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M2/"
 sed 's/^    if not found:$/    if False:/' "$C" > "$M2/check_bundle_coverage.py"
 cmp -s "$C" "$M2/check_bundle_coverage.py" && no "변이 적용 안 됨(자리 표기 없음)" || ok "변이 적용됨(자리 표기 없음)"
 out="$(python3 "$M2/check_bundle_coverage.py" --json "$R/docs/x/R9.md" "$R/loc2.md")"

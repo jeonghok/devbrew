@@ -457,10 +457,10 @@ for path in sys.argv[1:]:
 print("CHECKED %d" % count)
 PY
 }
-out="$(LOCAL_DIR="$S" static_check "$RS" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/spec_review_bundle.py" "$S/repo_defaults.py" "$S/section6.py")"; rc=$?
+out="$(LOCAL_DIR="$S" static_check "$RS" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/spec_review_bundle.py" "$S/repo_defaults.py" "$S/section6.py" "$S/brief_body.py")"; rc=$?
 assert_eq "$rc" "0" "정적 검사기가 죽지 않았다(rc 0)"
-assert_eq "$(printf '%s\n' "$out" | grep -v '^CHECKED ')" "" "정적: 여섯 스크립트에 쓰기 · 네트워크 · git 밖 subprocess · 허용 밖 git · 이름 import · 잠긴 파일 밖 로컬 import 가 없다"
-assert_eq "$(printf '%s\n' "$out" | grep '^CHECKED ')" "CHECKED 6" "정적 검사가 여섯 스크립트를 셌다"
+assert_eq "$(printf '%s\n' "$out" | grep -v '^CHECKED ')" "" "정적: 일곱 스크립트에 쓰기 · 네트워크 · git 밖 subprocess · 허용 밖 git · 이름 import · 잠긴 파일 밖 로컬 import 가 없다"
+assert_eq "$(printf '%s\n' "$out" | grep '^CHECKED ')" "CHECKED 7" "정적 검사가 일곱 스크립트를 셌다"
 sed 's/GIT_ALLOWED = frozenset({"show",/GIT_ALLOWED = frozenset({"fetch", "show",/' "$RS" > "$T/mut_fetch.py"
 assert_contains "$(static_check "$T/mut_fetch.py")" "GIT_ALLOWED" "양성 대조: fetch 를 허용 목록에 넣으면 정적 검사가 잡는다"
 printf 'from pathlib import Path\nPath("x").write_text("y", encoding="utf-8")\nimport urllib.request\n' > "$T/mut_write.py"
@@ -497,7 +497,7 @@ printf 'x\n' >> "$W/README.txt"; after2="$(snap)"; git -C "$W" checkout -q -- RE
 [ "$before" != "$after2" ] && ok "양성 대조: 파일 하나를 바꾸면 비교가 잡는다" || no "양성 대조: 비교가 변화를 못 본다"
 
 # ── 6. 변이 — 첫째 부모 이력 제한(D4.24)과 조상 아님 조건(D1.1)에 이빨이 있는지 ──────
-M="$T/mut"; mkdir -p "$M"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M/"
+M="$T/mut"; mkdir -p "$M"; cp "$S/section6.py" "$S/brief_body.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M/"
 sed 's/"log", "--first-parent", "--merges"/"log", "--merges"/' "$RS" > "$M/roadmap_status.py"
 cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(--first-parent)" || ok "변이 적용됨(--first-parent)"
 (cd "$W" && python3 "$M/roadmap_status.py" --json docs/rm/roadmap.md > "$T/mfp.json")
@@ -549,7 +549,7 @@ assert_eq "$rc" "3" "AC9: ## 미룸 표가 깨지면 검사 불가(rc 3)"
 assert_contains "$(warns "$T/f9.json" F9)" "미룸 셀 수 없음(" "AC9: 깨진 표는 「셀 수 없음」"
 assert_contains "$(js "$T/f9.json" "r['unknown_reasons']")" "F9 미룸 표" "AC9: 셀 수 없음이 검사 불가 사유로 올라온다"
 # 변이(AC15) — 받는 곳 판정을 끄면 경고가 사라진다
-M3="$T/mut3"; mkdir -p "$M3"; cp "$S/section6.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M3/"
+M3="$T/mut3"; mkdir -p "$M3"; cp "$S/section6.py" "$S/brief_body.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M3/"
 sed 's/^            bad = \[item for item, _why, recv in rows if not receiver_ok(recv, known_ids)\]$/            bad = []/' "$RS" > "$M3/roadmap_status.py"
 cmp -s "$RS" "$M3/roadmap_status.py" && no "변이 적용 안 됨(받는 곳 판정)" || ok "변이 적용됨(받는 곳 판정)"
 (cd "$W" && python3 "$M3/roadmap_status.py" --json docs/rm8/roadmap.md > "$T/md8.json")
@@ -665,7 +665,7 @@ assert_eq "$(field_of BAD)" "[]" "실데이터 AC2: 묶음 10개의 frontmatter 
 assert_eq "$(field_of UNASSIGNED)" "[]" "실데이터 AC3: 미배정 번호 0"
 assert_eq "$(field_of ORPHANS)" "[]" "실데이터 AC3: 고아 발화 0"
 assert_eq "$(field_of UNKNOWN)" "[]" "실데이터: brief 에 없는 번호 0"
-assert_eq "$(field_of OVERLAPS)" "[{'blocks': ['R2', 'R3'], 'paths': ['plugins/spec-distill/references/docreview-profiles/design-doc.md']}, {'blocks': ['R5', 'R10'], 'paths': ['plugins/spec-distill/skills/spec-interview/references/finishing.md']}]" "실데이터: 의존 없이 겹치는 경로 예약은 정보 둘 — R2 ↔ R3 의 design-doc.md · R5 ↔ R10 의 finishing.md(병렬 유지, 충돌은 머지 때 푼다)"
+assert_eq "$(field_of OVERLAPS)" "[{'blocks': ['R2', 'R3'], 'paths': ['plugins/spec-distill/references/docreview-profiles/design-doc.md']}, {'blocks': ['R2a', 'R10'], 'paths': ['plugins/spec-distill/scripts/brief_body.py', 'plugins/spec-distill/scripts/check_brief.py']}, {'blocks': ['R5', 'R10'], 'paths': ['plugins/spec-distill/references/proceed-gate.md', 'plugins/spec-distill/scripts/roadmap_model.py', 'plugins/spec-distill/scripts/roadmap_render.py', 'plugins/spec-distill/scripts/state_path.py', 'plugins/spec-distill/skills/spec-interview/references/finishing.md']}, {'blocks': ['R9', 'R12'], 'paths': ['docs/philosophy/devbrew-harness-philosophy.md']}]" "실데이터: 의존 없이 겹치는 경로 예약은 정보 넷 — R2 ↔ R3 의 design-doc.md · R2a ↔ R10 의 brief_body.py · check_brief.py(R10 계획 셋 예약) · R5 ↔ R10 의 proceed-gate.md · roadmap_model.py · roadmap_render.py · state_path.py · finishing.md(R10 계획 셋 예약) · R9 ↔ R12 의 철학 문서(R12 의 P3 문장)(병렬 유지, 충돌은 머지 때 푼다)"
 assert_eq "$(field_of R0TABLE)" "True" "실데이터: R0 블록의 항목 · 발화 = R0 설계문서 번호 대조 표의 첫 칸"
 assert_eq "$(field_of LOCKBAD)" "[]" "실데이터: 락 지도의 모든 줄이 다른 에픽이 예약한 파일을 자기 것으로 적지 않았다"
 [ "$(field_of LOCKROWS)" -ge 10 ] && ok "실데이터: 락 지도 줄 $(field_of LOCKROWS)개를 읽었다(양성 대조 — 표를 못 읽으면 0)" || no "실데이터: 락 지도 줄을 10개 미만으로 읽었다($(field_of LOCKROWS))"

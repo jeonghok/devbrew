@@ -208,6 +208,7 @@ mut() { mut_expect caught "$@"; }   # 기존 10셀의 계약: 변이는 항상 c
 sed_route()  { sed -i.bak "$1" "$2/docreview_route.py"  && rm -f "$2/docreview_route.py.bak"; }
 sed_anchor() { sed -i.bak "$1" "$2/docreview_anchor.py" && rm -f "$2/docreview_anchor.py.bak"; }
 sed_state()  { sed -i.bak "$1" "$2/docreview_state.py"  && rm -f "$2/docreview_state.py.bak"; }
+sed_config() { sed -i.bak "$1" "$2/docreview_config.py" && rm -f "$2/docreview_config.py.bak"; }
 sed_advice() { sed -i.bak "$1" "$2/docreview_advice.py" && rm -f "$2/docreview_advice.py.bak"; }
 
 # ① 얼림 diff 비활성 — 사후 auto decide 를 안 만든다.
@@ -274,7 +275,7 @@ mut 1/1 id_no_round case_T11_permit_keeps_disposition sed_route 's/"%s#r%d.%d" %
 # ⑥ defer 예외 제거(불허 defer 를 fix 로) — AC10 위반
 mut 1/1 defer_to_fix case_T08_defer_disallowed sed_route 's/if d == "defer":/if d == "defer" and False:/'
 # ⑦ 상한 3 으로 — 라운드 4 가 승인 없이 돈다
-mut 1/1 cap_three case_T37_cap_and_extra sed_state 's/^REREVIEW_CAP = 2$/REREVIEW_CAP = 3/'
+mut 1/1 cap_three case_T37_cap_and_extra sed_config 's/"rereview_cap": 2,/"rereview_cap": 3,/'
 # ⑧ check-intent 의 edit_scope 검사 제거 — 범위 밖도 통과
 mut 1/1 intent_no_scope case_AC6_fix_contract sed_anchor 's/if intent != scope:/if False and intent != scope:/'
 # ⑨ 보호 부류 캐스케이드 제거(자기 제목만) — 하위 절이 자유 편집
@@ -410,13 +411,11 @@ mut 1/1 post_tail_removed case_AC22_post_expiry_render_tail sed_state \
   's/ if d\.get("kind") == "post" else ""/ if False else ""/'
 
 # ── check-intent 일반 fix 경로의 앵커 실재 검사 (Task 5, AC23) ─────────────
-# ㉔ 일반 경로의 앵커 실재 검사 제거 — 슬러그 오타가 보호 검사를 건너뛴다.
-# insert-after 분기도 문자 그대로 같은 줄(`if not cls["found"] and target != PREAMBLE:`)을
-# 갖고 있어 순수 텍스트 sed 는 둘 다 잡는다(헤더-satisfiable 함정) — 바로 앞 줄인
-# `return escalate("anchor_immutable")`(파일에 유일)에 앵커해 `n` 으로 그 다음 줄만
-# 겨눈다(cell ② 와 같은 기법).
-mut 1/1 general_anchor_unresolved_off case_AC23_general_fix_anchor_unresolved sed_anchor \
-  '/return escalate("anchor_immutable")/{n;s/if not cls\["found"\] and target != PREAMBLE:/if False:/;}'
+# ㉔ 앵커 실재 검사 제거 — 슬러그 오타가 보호 검사를 건너뛴다. [R2a plan 2 Task 5 3차] 실재 검사는
+# 기록 검증 하나(`docreview_state.scope_problem`)로 옮겼다 — check-intent 두 계약 · decide · declare-related 가
+# 그 함수를 부른다. 그 함수의 실재 검사 줄(파일에 유일)을 끈다.
+mut 1/1 general_anchor_unresolved_off case_AC23_general_fix_anchor_unresolved sed_state \
+  's/    if t != PREAMBLE and t not in known:/    if False:/'
 
 # ── `_permit_covers` 의 라운드 경계 (Task 6, AC24) ──────────────────────────
 # ㉕ permit 의 라운드 경계 삭제 — 낡은 permit 이 영원히 보호 승격을 막는다.
@@ -696,7 +695,7 @@ mut 1/1 reraise_kind_hardcoded_post case_AC22c_reraise_preserves_pre_kind sed_ro
 #    `case_AC22c_reraise_inherits_post_kind` 의 렌더 꼬리 단언만 RED — kind·
 #    즉시-applied 단언은 렌더 텍스트와 무관해 생존한다(실측 RED(1) 생존(2)).
 mut 1/1 rg_decide_post_tail_unwired case_AC22c_reraise_inherits_post_kind sed_state \
-  's/"- %s%s (%s%s)" % (_one(f\.get("summary")), _post_kind_notice(d), fid, " · 자동" if dv\.get("auto") else ""),/"- %s (%s%s)" % (_one(f.get("summary")), fid, " · 자동" if dv.get("auto") else ""),/'
+  's/"- %s%s (%s%s)%s" % (_one(f\.get("summary")), _post_kind_notice(d), fid, " · 자동" if dv\.get("auto") else "", cited),/"- %s (%s%s)%s" % (_one(f.get("summary")), fid, " · 자동" if dv.get("auto") else "", cited),/'
 # ── 쉬운 말 렌더 (쉬운 말 출력 PR 1 · AC3) ──────────────────────────────────
 # 0 인 집계 되살리기 — 0 을 거르는 조건을 지운다.
 mut 1/1 zero_counts_revived case_plain_render_nothing_left sed_state \
@@ -841,9 +840,9 @@ mut 1/1 blocks_coercion_gate_dropped case_advice_blocks_coercion_flips_gate sed_
 mut 1/1 blocking_ask_single_pass case_advice_step2_order_independent sed_advice \
   's/^    for _ in range(len(pending)):$/    for _ in range(1):/'
 # (78) cap 상수를 바꾼다 — 기본 호출이 9줄을 내고 「외 2건」이 된다.
-mut 1/1 render_cap_changed case_AC6_render_cap sed_advice 's/^RENDER_CAP = 8 /RENDER_CAP = 9 /'
+mut 1/1 render_cap_changed case_AC6_render_cap sed_config 's/"render_cap": 8,/"render_cap": 9,/'
 # (79) 요약 폭을 넓힌다 — 80자 요약이 다른 자리에서 잘려 렌더 항목 전문이 어긋난다.
-mut 1/1 summary_width_changed case_advice_odd_text_one_line sed_advice 's/^SUMMARY_WIDTH = 60 /SUMMARY_WIDTH = 74 /'
+mut 1/1 summary_width_changed case_advice_odd_text_one_line sed_config 's/"summary_width": 60}/"summary_width": 74}/'
 # (80) 원자 쓰기를 `write_text` 로 되돌린다 — 인코딩 전에 파일을 잘라 인코딩 실패가 사용자 문서를 0 바이트로 만든다.
 mut 1/1 atomic_write_reverted case_advice_surrogate_sink_atomic sed_state \
   's/^    data = text\.encode("utf-8")$/    path.write_text(text, encoding="utf-8"); data = text.encode("utf-8")/'
@@ -904,4 +903,10 @@ mut 1/1 advice_zero_listing_revived case_advice_plain_render_nothing_left_mc sed
 # 참고 0 의 쉬운 문장 뒤에 붙는 필수 지적 수를 끄기 — 전부터 있던 절의 새 필수 지적이 참고 줄에서 사라진다.
 mut 1/1 advice_zero_mc_append_dropped case_advice_plain_render_zero_with_mc_preexisting sed_state \
   's/^            if adv_g\["mc_preexisting_new"\] > 0:$/            if False:/'
+# (AC17) 시대 표지 검사를 끈다 — 확인값 줄을 지운 원장이 옛 원장으로 통과한다.
+mut 1/1 era_marker_check_dropped case_AC17_digest_line_strip_stops sed_state \
+  's/^    elif (p\.parent \/ ERA_FILE)\.exists():.*$/    elif False:/'
+# (AC17) 확인값 줄 모양 검사를 끈다 — 첫 줄이 아닌 자리나 대문자 16진수 확인값이 «없음» 으로 통과한다.
+mut 1/1 digest_key_shape_branch_dropped case_AC17_misplaced_or_malformed_digest_stops sed_state \
+  's/^    elif DIGEST_KEY in data:.*$/    elif False:/'
 finish
