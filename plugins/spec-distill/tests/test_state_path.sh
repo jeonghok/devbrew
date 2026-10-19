@@ -88,15 +88,30 @@ assert_eq "$rc:$out" "0:$D/2026-10-15-t-interview.state.md" "AC27 양의 짝: �
 # 같은 분에 또 끝난 인터뷰 → 멈춘다
 put_type "$D/2026-10-15-t-interview.md" interview-brief
 put_type "$D/2026-10-15-t-0930-interview.md" interview-brief
-python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" >/dev/null 2>&1; rc=$?
+err=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>&1 >/dev/null); rc=$?
 assert_eq "$rc" "2" "AC27: 새 자리도 끝난 인터뷰면 exit 2"
-python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 2460 --cwd "$IV" >/dev/null 2>&1; rc=$?
-assert_eq "$rc" "2" "AC27: --time 꼴이 아니면 exit 2"
-# 새 자리에 남의 파일(seed audit)이 있어도 멈춘다
+assert_contains "$err" "에도 끝난 인터뷰가 있다" "AC27: 새 자리가 끝난 인터뷰면 그 사유를 낸다"
+for tm in 2360 2400 930 09a0; do
+  err=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time "$tm" --cwd "$IV" 2>&1 >/dev/null); rc=$?
+  assert_eq "$rc" "2" "AC27: --time '${tm}' 은 exit 2"
+  assert_contains "$err" "HHMM 이 아니다" "AC27: --time '${tm}' 의 사유를 낸다"
+done
 rm -f "$D/2026-10-15-t-0930-interview.md"
+out=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 2359 --cwd "$IV" 2>/dev/null); rc=$?
+assert_eq "$rc:$out" "0:$D/2026-10-15-t-2359-interview.state.md" "AC27: --time 2359 는 통과한다(양성 대조)"
+# 새 자리에 남의 파일(seed audit)이 있어도 멈춘다
 put_type "$D/2026-10-15-t-0930-interview.audit.md" interview-seed-audit
-python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" >/dev/null 2>&1; rc=$?
+err=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>&1 >/dev/null); rc=$?
 assert_eq "$rc" "2" "AC27: 새 자리에 남의 파일이 있으면 exit 2"
+assert_contains "$err" "다른 종류의 파일이 있다" "AC27: 새 자리의 남의 파일 사유를 낸다"
+rm -f "$D/2026-10-15-t-0930-interview.audit.md"
+# 새 자리가 작업 트리 밖으로 가는 링크이면(유효한 type 이어도) 멈춘다
+put_type "$WORK/ac27-out.md" interview-state
+ln -s "$WORK/ac27-out.md" "$D/2026-10-15-t-0930-interview.state.md"
+err=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>&1 >/dev/null); rc=$?
+assert_eq "$rc" "2" "AC27: 새 자리가 링크이면 exit 2"
+assert_contains "$err" "링크를 거친다" "AC27: 새 자리 링크의 사유를 낸다"
+rm -f "$D/2026-10-15-t-0930-interview.state.md"
 rm -f "$D"/2026-10-15-t-*interview*
 # git 이 아니면 --cwd 기준 + stderr 한 줄
 NG="$WORK/iv-nogit"; mkdir -p "$NG"

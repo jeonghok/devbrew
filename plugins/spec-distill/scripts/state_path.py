@@ -264,11 +264,7 @@ def main(argv: list[str]) -> int:
                 if i + 1 < len(argv):
                     return argv[i + 1]
             return None
-        hhmm = opt("--time")
-        if hhmm is not None and not _HHMM.fullmatch(hhmm):
-            print("[spec-distill] --time 은 HHMM 꼴이어야 한다: {0!r}".format(hhmm), file=sys.stderr)
-            return 2
-        path, msgs = interview_state_path(opt("--topic") or "", opt("--date"), opt("--cwd"), hhmm)
+        path, msgs = interview_state_path(opt("--topic") or "", opt("--date"), opt("--cwd"), opt("--time"))
         for m in msgs:
             print(m, file=sys.stderr)
         if path is None:
