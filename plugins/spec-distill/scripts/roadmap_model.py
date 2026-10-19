@@ -473,7 +473,7 @@ def brief_universe(brief: str, audit: str):
         raise FormatError("brief §0 에 결정 줄 문법 밖 줄이 있어 번호를 셀 수 없다(%s)"
                           % ", ".join("%d번째 줄 %s" % t for t in oq_rejects[:5]))
     non_s |= {oq for oq, _line in oq_entries if oq}
-    non_s |= set(RC_RE.findall(s5)) | set(ST_RE.findall(s5)) | {k for head, body in section4_items(s4) for k in KEY_RE.findall("\n".join([head] + body))}
+    non_s |= set(RC_RE.findall(s5)) | set(ST_RE.findall(s5)) | {k for head, body in section4_items(s4) for k in KEY_RE.findall("\n".join([head] + body))} | {rc for head, _body in section4_items(s4) for rc in RC_RE.findall(head)}
     k_expected = brief_risk_numbers(s5)[0]
     non_s |= {k for k, _ in k_expected}
     s_ids = set()

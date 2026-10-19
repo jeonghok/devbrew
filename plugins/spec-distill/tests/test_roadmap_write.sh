@@ -483,4 +483,24 @@ assert_file_has "$T/out.create1.txt" "줄 순서로 매겼다" "AC25 old_order_n
 assert_file_has "$T/out.update1.txt" "줄 순서로 매겼다" "AC25 old_order_notice: 번호 없는 brief 의 update 도 알린다"
 if grep -qF '줄 순서로 매겼다' "$T/out.stamped.txt"; then no "AC25 old_order_notice: 박힌 brief 에 알림이 나왔다"; else ok "AC25 old_order_notice: 박힌 brief 는 알리지 않는다(양의 짝)"; fi
 
+# ── AC26: §4 항목 첫 줄의 RC 도 배정할 수 있다 ───────────────────────────────
+mkdir -p "$W/docs/iv3"
+cp "$W/docs/iv/brief.md" "$W/docs/iv/brief.audit.md" "$W/docs/iv3/"
+python3 -I - "$W/docs/iv3/brief.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+old = "- 바깥 둘 «ext-b» — [중립] [→ 없음]\n"
+if t.count(old) != 1:
+    sys.exit("변형이 적용되지 않았다: " + old)
+open(p, "w", encoding="utf-8").write(t.replace(old, old + "- 레포 주장 «ext-a» — [중립] — 이유 [RC7 → OQ1]\n", 1))
+PY
+table "$T/rc7.md" "$P1_ROW" "${E1_ROW/ · S1 · S2/ · RC7 · S1 · S2}" "$E2_ROW"
+assert_eq "$(create_b docs/iv3/brief.md "$T/rc7.md" docs/rmrc)" "0" "AC26 head_rc: RC7 을 배정한 표는 rc 0"
+assert_eq "$(four_empty docs/rmrc/roadmap.md)" "ok" "AC26 head_rc: 검사기 네 목록이 빈 목록"
+assert_file_has "$W/docs/rmrc/E1.md" "[RC7 → OQ1]" "AC26 head_rc: E1 에 RC7 의 §4 줄이 실린다"
+table "$T/rc7n.md" "$P1_ROW" "$E1_ROW" "$E2_ROW"
+assert_eq "$(create_b docs/iv3/brief.md "$T/rc7n.md" docs/rmrc2)" "1" "AC26 head_rc: RC7 을 뺀 표는 rc 1(양의 짝)"
+assert_file_has "$T/out.txt" "unassigned: RC7" "AC26 head_rc: 사유에 unassigned: RC7"
+
 finish

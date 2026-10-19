@@ -17,7 +17,7 @@ import section6  # noqa: E402
 import brief_body  # noqa: E402
 from brief_body import section4_items  # noqa: E402
 from roadmap_model import (  # noqa: E402
-    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, FormatError, brief_risk_numbers, brief_section, brief_universe, bundle_ids,
+    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, RC_RE, FormatError, brief_risk_numbers, brief_section, brief_universe, bundle_ids,
     field_text, id_sort_key, is_quote, parse_ids, parse_roadmap, section_body)
 
 TABLE_HEADING = "## 분해안"
@@ -255,7 +255,7 @@ def _section4_index(brief: str) -> dict:
     out = {}
     items = [(head, "\n".join([head] + ["  " + b for b in body]), body) for head, body in section4_items(_body(brief, "## 4."))]
     for head, text, _body_lines in items:
-        for key in KEY_RE.findall(head):
+        for key in KEY_RE.findall(head) + RC_RE.findall(head):
             out[key] = text
     for _head, text, body in items:
         for key in KEY_RE.findall("\n".join(body)):

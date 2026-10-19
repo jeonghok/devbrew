@@ -226,6 +226,14 @@ class BriefUniverseSection4(unittest.TestCase):
         self.assertIn("«second-key»", extra)
         self.assertIn("«cont-key»", extra)
 
+    def test_head_rc_counted(self):
+        extra = self.universe("- 레포 주장 «repo-k» — [중립] — 이유 [RC7 → 없음]\n")
+        self.assertIn("RC7", extra)
+
+    def test_body_line_rc_not_counted(self):
+        extra = self.universe("- 둘째 «body-k» — [중립] — 이유 [→ 없음]\n  본문 줄 RC8 (a/b.py)\n")
+        self.assertNotIn("RC8", extra)
+
     def test_out_of_grammar_anchor_makes_universe_uncountable(self):
         brief = (self.FX / "interview-brief-valid.md").read_text(encoding="utf-8")
         audit = (self.FX / "interview-brief-valid.audit.md").read_text(encoding="utf-8")
