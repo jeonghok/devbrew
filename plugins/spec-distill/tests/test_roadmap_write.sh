@@ -493,7 +493,7 @@ t = open(p, encoding="utf-8").read()
 old = "- 바깥 둘 «ext-b» — [중립] [→ 없음]\n"
 if t.count(old) != 1:
     sys.exit("변형이 적용되지 않았다: " + old)
-open(p, "w", encoding="utf-8").write(t.replace(old, old + "- 레포 주장 «ext-a» — [중립] — 이유 [RC7 → OQ1]\n", 1))
+open(p, "w", encoding="utf-8").write(t.replace(old, old + "- 레포 주장 «ext-b» — [중립] — 이유 [RC7 → OQ1]\n", 1))
 PY
 table "$T/rc7.md" "$P1_ROW" "${E1_ROW/ · S1 · S2/ · RC7 · S1 · S2}" "$E2_ROW"
 assert_eq "$(create_b docs/iv3/brief.md "$T/rc7.md" docs/rmrc)" "0" "AC26 head_rc: RC7 을 배정한 표는 rc 0"
