@@ -24,7 +24,19 @@ SF="$(flat "$S")"
 
 # ① 질문 — question 줄에서 잰다(새 문구 양성 · 옛 영어 부재 · 분류 질문은 그대로)
 assert_grep "$(qlines "$S")" 'question: "qg 반복 N: 남은 지적이 있다\(<summary>\)\. 어떻게 할까\?"' "AC6: Fix-loop 질문이 한국어다"
-assert_grep "$(qlines "$S")" 'question: "qg 가 최대 5번 반복했다\. 마지막 지적: <summary>\. 지금 판정으로 끝낼까, 멈출까\?"' "AC6: 최대 반복 질문이 한국어다"
+assert_grep "$(qlines "$S")" 'question: "qg 가 반복 상한\(<CAP>번 — 기본 5번\)에 닿았다\. 마지막 지적: <summary>\.' "AC25: 상한 질문이 기본 5 와 지금 상한을 말한다"
+assert_grep "$(qlines "$S")" 'question: "qg 가 반복 상한\(<CAP>번 — 기본 5번\)에 닿았다\. 마지막 지적: <summary>\. 반복을 하나 더 열까, 지금 판정으로 끝낼까, 멈출까\?"' "AC25: 상한 질문이 세 길(하나 더 · 끝내기 · 멈추기)을 묻는다"
+assert_not_grep "$(qlines "$S")" '최대 5번 반복했다' "AC25: 상한을 고정 5 로 말하는 옛 질문이 없다"
+MX="$(awk '/^### Max-iter decision$/{f=1;next} f&&/^### /{exit} f' "$S")"
+assert_contains "$MX" 'extra-iterations.md' "한 번 더 돌기는 승인 출처와 원문을 기록한다"
+assert_contains "$MX" 'typed' "기타 칸 원문도 승인으로 받는다(출처 typed)"
+assert_contains "$(printf '%s\n' "$MX" | tr '\n' ' ' | tr -s ' ')" '반복을 더 여는 뜻이면 「한 번 더 돌기」와 같은 경로로 가되 출처 `typed` 와 그 원문을 기록한다' "AC25 · 결정 9: 기타 칸 글이 여는 뜻이면 같은 경로 · 출처 typed 로 기록한다(분기 문장 — 펜스 자리표시의 typed 로는 채워지지 않는다)"
+assert_contains "$MX" '한 번에 하나' "한 번 열면 반복 하나 — 그 끝에 다시 묻는다(상한은 남는다)"
+MXR="$(printf '%s\n' "$MX" | awk '/^```bash$/{f=1;next} f&&/^```$/{exit} f')"
+assert_grep "$MXR" "^printf -- '- iter %s 뒤 · 반복 하나 더 · %s · %s\\\\n' '<N>' '<label 또는 typed>' '<" "AC25: 기록 펜스가 출처와 원문을 인자로(형식 문자열 밖에서) 싣는다"
+assert_grep "$MXR" '>> "\$RD/extra-iterations\.md"$' "AC25: 기록 펜스가 extra-iterations.md 에 덧붙인다"
+assert_not_grep "$MXR" '<<' "AC25: 기록 펜스에 here-doc 이 없다(원문은 작은따옴표 인자 하나)"
+assert_contains "$(printf '%s\n' "$MX" | tr '\n' ' ' | tr -s ' ')" "작은따옴표(') 는 '\\''" "AC25: 원문 안 작은따옴표를 어떻게 넣는지 말한다"
 assert_grep "$(qlines "$S")" 'question: "<file> 수정에 실패했다: <reason>\. 이번 수정 반복을 멈출까, 이 파일만 건너뛰고 나머지를 계속할까\?"' "AC6: 수정 실패 질문이 한국어다"
 assert_grep "$(qlines "$S")" 'question: "분류표의 적용/제외를 바꿀까요\?' "분류 질문은 그대로 있다(양성 짝)"
 assert_not_grep "$(qlines "$S")" 'findings remain|What next|reached max|Retry failed at' "AC6: 영어 질문이 남지 않았다"
@@ -32,7 +44,7 @@ assert_grep "$(qlines "$S")" 'question: "qg 반복 N: 남은 지적이 있다\(<
 assert_eq "$(qlines "$S" | grep -c .)" "5" "AC6: 이 SKILL 의 question 줄은 다섯이다(넷 + 범위 모드 질문 — 새로 생기거나 사라진 질문 없음)"
 
 # ② 선택지 라벨 · 머리글 — 새 라벨 양성 · 옛 라벨 부재
-for l in '고치고 다시 돌기' '지금 판정으로 끝내기' '멈추기' '이번 반복 멈추기' '이 파일만 건너뛰기' '분류표 그대로'; do
+for l in '고치고 다시 돌기' '지금 판정으로 끝내기' '멈추기' '이번 반복 멈추기' '이 파일만 건너뛰기' '분류표 그대로' '한 번 더 돌기'; do
   assert_file_grep "$S" "label: \"${l}\"" "AC6: 선택지 라벨 「${l}」"
 done
 assert_file_absent "$S" 'label: "(Retry|Accept and finish|Stop|Abort retry|Skip this file)"' "AC6: 영어 선택지 라벨이 없다"
@@ -51,7 +63,9 @@ for l in '고치고 다시 돌기' '지금 판정으로 끝내기' '멈추기'; 
   assert_file_grep "$S" "^- \\*\\*${l}\\*\\* →" "AC6: Fix-loop 분기 불릿 「${l}」"
 done
 assert_file_absent "$S" '^- \*\*(Retry|Accept and finish|Stop)\*\* →' "AC6: 옛 Fix-loop 분기 불릿이 없다"
-assert_contains "$SF" 'Branch on answer: **지금 판정으로 끝내기** → Final verdict with Outcome `accepted with findings iter 5`; **멈추기** → Final verdict with Outcome `aborted iter 5`.' "AC6: 최대 반복 분기가 새 라벨을 부른다"
+assert_contains "$MX" '- **지금 판정으로 끝내기** → Final verdict with Outcome `accepted with findings iter N` (N = CAP).' "AC6 · AC25: 최대 반복 끝내기 분기가 새 라벨을 부르고 반복 번호는 CAP 이다"
+assert_contains "$MX" '- **멈추기** → Final verdict with Outcome `aborted iter N` (N = CAP).' "AC6 · AC25: 최대 반복 멈추기 분기가 새 라벨을 부른다"
+assert_not_contains "$MX" 'iter 5`' "AC25: 최대 반복 분기가 반복 번호를 5 로 박지 않는다"
 assert_not_contains "$SF" '**Accept and finish** →' "AC6: 옛 Accept 분기가 없다"
 assert_contains "$SF" '**「고치고 다시 돌기」 옵션 문구 — 차등 테스트 기원' "AC6: 차등 기원 안내가 새 옵션 이름을 부른다"
 assert_contains "$SF" 'Fix-loop (고치고 다시 돌기(Retry) / 지금 판정으로 끝내기 / 멈추기)' "흐름 그림이 새 라벨을 부르고 이 파일의 Retry 가 어느 선택지인지 묶는다"
@@ -104,7 +118,9 @@ assert_not_grep "$E2S" '^- \*\*(Retry|Accept|Accept and finish|Stop)\*\* \(fail 
 assert_contains "$E2SF" '`## Fix-loop` 의 「고치고 다시 돌기」와 같다:' "AC6: e2e 「고치고 다시 돌기」가 Fix-loop 의 같은 선택지를 부른다"
 assert_contains "$E2SF" '`## Fix-loop` 의 「멈추기」와 같다:' "AC6: e2e 「멈추기」가 Fix-loop 의 같은 선택지를 부른다"
 assert_contains "$E2SF" '다시 돈 뒤, 「고치고 다시 돌기」와 같은 경로로 이 절에 돌아와' "AC6: 무효 행이 새 라벨의 경로를 부른다"
-assert_contains "$E2SF" 'iteration 5 를 다 썼으면 고치고 다시 돌기 · 리뷰·테스트부터 다시 를 선택지에 넣지 않는다. 그때 fail 행은 지금 판정으로 끝내기 / 멈추기 / pass 로 뒤집기,' "AC6: 최대 반복의 e2e 선택지가 새 라벨이다"
+assert_contains "$E2SF" 'CAP 에 닿았으면 fail 행에 「고치고 다시 돌기」 대신 「한 번 더 돌기」를 넣고, 고르면 위와 같이 기록한다' "AC25: 상한의 e2e fail 행이 한 번 더 돌기를 내고 기록한다"
+assert_contains "$E2SF" '그때 fail 행은 한 번 더 돌기 / 지금 판정으로 끝내기 / 멈추기 / pass 로 뒤집기,' "AC6 · AC25: 상한의 e2e 선택지가 새 라벨이다"
+assert_not_contains "$E2SF" 'iteration 5 를 다 썼으면' "AC25: e2e 가 상한을 고정 5 로 말하지 않는다"
 assert_contains "$E2SF" '리뷰·테스트 루프가 「멈추기」 없이 끝나면 최종 판정 전에 이 절을 한 번 돈다. 루프가 「멈추기」로 끝났으면(aborted)' "AC6: e2e 절 첫 문장이 새 라벨을 부른다"
 assert_contains "$E2SF" '루프가 다시 「멈추기」 없이 끝나면 이 절로 돌아오고' "AC6: 재걷기 조건이 새 라벨을 부른다"
 assert_contains "$E2SF" '(고치고 다시 돌기 · 리뷰·테스트부터 다시 · 다시 걷기면 위 E4 의 경로로)' "AC6: e2e 절 끝 문장이 새 라벨을 부른다"
@@ -114,7 +130,9 @@ assert_file_grep "$E2R" '^\| fail 에서 지금 판정으로 끝내기 \| `fail`
 assert_file_grep "$E2R" '^\| fail 에서 멈추기 \| `fail` \| 아니오 \|$' "AC6: e2e 결과 표 「멈추기」 행"
 assert_file_grep "$E2R" '^\| 루프가 「멈추기」\(aborted\)로 끝나 e2e 를 건너뜀 \|' "AC6: e2e 결과 표의 건너뜀 행이 새 라벨을 부른다"
 E2RF="$(flat "$E2R")"
-assert_contains "$E2RF" '남은 iteration 이 없으면 「고치고 다시 돌기」를 넣지 않는다.' "AC6: e2e 레퍼런스가 넣지 않는 선택지를 새 라벨로 부른다"
+assert_contains "$E2RF" 'CAP 에 닿았으면 fail 행에 「고치고 다시 돌기」 대신 「한 번 더 돌기」를 넣고, 고르면' "AC6 · AC25: e2e 레퍼런스가 상한에서 바꿔 넣는 선택지를 새 라벨로 부른다"
+assert_contains "$E2RF" '`extra-iterations.md`' "AC25: e2e 레퍼런스가 승인 기록 자리를 부른다"
+assert_not_contains "$E2RF" '남은 iteration 이 없' "AC25: e2e 레퍼런스에 상한을 닫힌 끝으로 말하는 옛 문장이 없다"
 assert_contains "$E2RF" 'fail 에서 「멈추기」를 고르면 실행은 aborted' "AC6: e2e 레퍼런스의 aborted 문장이 새 라벨을 부른다"
 assert_file_absent "$E2R" 'Accept|Stop|Retry /|Retry 를 넣지' "AC6: e2e 레퍼런스에 옛 선택지 이름이 없다"
 
@@ -127,17 +145,22 @@ assert_contains "$CAF" '맨 끝에 사용자가 할 일 하나를 쓴다' "§4: 
 # ⑩ Max-iter 결정 — AskUserQuestion 의 라벨이 같은 절의 굵은 분기 글자와 같다(라벨만 바꾸면 분기가 없는 선택지를 부른다)
 MX="$(awk '/^### Max-iter decision$/{f=1;next} f&&/^### /{exit} f' "$S")"
 MXF="$(printf '%s\n' "$MX" | tr '\n' ' ' | tr -s ' ')"
-assert_grep "$MX" '^After iteration 5' "Max-iter 절을 잘랐다(양성 짝 — 창이 비면 아래 단언이 공허하다)"
+assert_grep "$MX" '^After iteration CAP' "Max-iter 절을 잘랐다(양성 짝 — 창이 비면 아래 단언이 공허하다)"
 MXL="$(printf '%s\n' "$MX" | grep -E '^[[:space:]]*\{label: "' | sed -e 's/^[^"]*"//' -e 's/".*$//')"
-assert_eq "$(printf '%s\n' "$MXL" | grep -c .)" "2" "Max-iter: 선택지 라벨은 둘이다"
-assert_contains "$MXF" "Branch on answer: " "Max-iter: 분기 문장이 있다"
+assert_eq "$(printf '%s\n' "$MXL" | tr '\n' '|')" "한 번 더 돌기|지금 판정으로 끝내기|멈추기|" "Max-iter: 선택지 라벨은 셋이고 이 순서다(분류 질문은 Fix-loop 의 것을 그대로 실어 여기 라벨이 없다)"
+assert_contains "$MXF" "Branch on answer:" "Max-iter: 분기 문장이 있다"
 assert_contains "$MXF" '{label: "멈추기", description: "파이프라인을 멈춘다 — PR 코멘트도 달지 않는다.' "M2: Max-iter 의 멈추기 설명이 PR 코멘트를 달지 않는다고 말한다(줄바꿈을 접은 본문)"
+assert_contains "$MXF" '{label: "한 번 더 돌기", description: "반복을 하나 더 연다 — 분류표의 「적용」 항목을 고치고 다시 돈다(차등 테스트 포함). 그 반복 끝에 다시 묻는다."}' "AC25: 한 번 더 돌기 설명이 반복 하나와 다시 묻기를 말한다"
 printf '%s\n' "$MXL" > "${TMPDIR:-/tmp}/qg-plain-mxl.$$"
 while IFS= read -r l; do
   [ -n "$l" ] || continue
-  assert_contains "$MXF" "**${l}** → Final verdict" "Max-iter: 라벨 「${l}」가 같은 절의 굵은 분기 글자와 같다"
+  assert_contains "$MXF" "- **${l}** → " "Max-iter: 라벨 「${l}」가 같은 절의 굵은 분기 글자와 같다"
 done < "${TMPDIR:-/tmp}/qg-plain-mxl.$$"
 rm -f "${TMPDIR:-/tmp}/qg-plain-mxl.$$"
+MXH="$(printf '%s\n' "$MXF" | sed -n 's/.*\(- \*\*한 번 더 돌기\*\* → .*\)- \*\*지금 판정으로 끝내기\*\* → .*/\1/p')"
+assert_contains "$MXH" '「고치고 다시 돌기」와 같은 경로' "AC25: 한 번 더 돌기는 Fix-loop 의 고치고 다시 돌기와 같은 경로다(Final verdict 로 새지 않는다)"
+assert_contains "$MXH" 'N += 1' "AC25: 한 번 더 돌기가 반복 하나를 쓴다"
+assert_not_contains "$MXH" 'Final verdict' "AC25: 한 번 더 돌기 분기는 최종 판정으로 가지 않는다"
 
 # ⑪ 게시 게이트가 완료 표의 바뀐 칸 이름을 부른다(OUTCOME 변수 이름과 값은 그대로)
 PB="$(awk '/^## Publish$/{f=1;next} f&&/^## /{exit} f' "$S")"

@@ -182,7 +182,7 @@ case_differential_runs_inside_every_iteration() {
   # Review Focus 3 · R-AC — ② 는 iteration 루프 «안»이다.
   local body it d fin
   body=$(awk '/^## Flow$/{f=1;next} f&&/^## /{exit} f' "$SKILL")
-  it=$(printf '%s\n' "$body" | grep -n 'iteration N = 1\.\.5' | head -1 | cut -d: -f1)
+  it=$(printf '%s\n' "$body" | grep -n 'iteration N = 1\.\.CAP (CAP = 5 + ' | head -1 | cut -d: -f1)
   d=$(printf '%s\n' "$body" | grep -n '②' | head -1 | cut -d: -f1)
   fin=$(printf '%s\n' "$body" | grep -n 'Final verdict' | head -1 | cut -d: -f1)
   local inside=0
@@ -376,9 +376,11 @@ PY
 }
 
 case_n5_and_retry_cover_differential_origin() {
-  # 최종 리뷰 (2차) 항목 1–2 — N=5 상한(P18)과 Retry 옵션 문구가 kept=0 차등 기원
-  # defect 를 커버하는지 잰다. 「N=5 확장을 지우는」 변이(옛 「kept > 0」 전용 문구로
-  # 되돌리기)와 Retry 문장이 빠지는 변이를 각각 잡는다.
+  # 최종 리뷰 (2차) 항목 1–2 — 상한 CAP(P18 — 기본 5, 사용자가 연 반복만큼 늘어난다)과 Retry
+  # 옵션 문구가 kept=0 차등 기원 defect 를 커버하는지 잰다. 「상한 확장을 지우는」 변이(옛
+  # 「kept > 0」 전용 문구로 되돌리기)와 Retry 문장이 빠지는 변이를 각각 잡는다.
+  # AC25 전에는 같은 뜻을 「N=5 에서 도달하면」 문단 · 「N < 5」 머리에서 쟀다 — 상한이 CAP 가 된 뒤에도
+  # 차등 기원 포함 · Max-iter 를 부른다 · Fix-loop 언급은 부정에 묶임을 같은 자리에서 잰다.
   local got
   got=$(python3 - "$SKILL" <<'PY'
 import re, sys
@@ -391,26 +393,30 @@ def seg(pattern):
     m = re.search(pattern, text, re.S)
     return norm(m.group(0)) if m else None
 
-n5 = seg(r'\*\*N=5 에서 도달하면\.\*\*.*?(?=\n\n---)')
-print(f"N5_FOUND:{1 if n5 is not None else 0}")
-print(f"N5_HAS_DIFFERENTIAL:{1 if (n5 and '차등' in n5 and 'blocking: 0' in n5) else 0}")
-print(f"N5_HAS_MAXITER:{1 if (n5 and 'Max-iter decision' in n5) else 0}")
+cap = seg(r'\*\*상한.CAP.에서 도달하면\.\*\*.*?(?=\n\n---)')
+print(f"CAP_FOUND:{1 if cap is not None else 0}")
+print(f"CAP_HAS_DIFFERENTIAL:{1 if (cap and '차등' in cap and 'blocking: 0' in cap) else 0}")
+print(f"CAP_HAS_MAXITER:{1 if (cap and 'Max-iter decision' in cap) else 0}")
 
-# X6 — N=5 문단 안의 Fix-loop decision 언급은 전부 부정(「가 아니라」 · 「새지 않는다」)에 묶인다.
+# X6 — 상한 문단 안의 Fix-loop decision 언급은 전부 부정(「가 아니라」 · 「새지 않는다」)에 묶인다.
 #      토큰(차등 · kept = 0 · Max-iter decision)을 남긴 채 목적지를 Fix-loop 로 되돌리는 변이를 잡는다.
-fl_all = len(re.findall(r'Fix-loop decision', n5)) if n5 else 0
-fl_neg = len(re.findall(r'Fix-loop decision[^.]{0,60}?(?:가 아니라|새지 않는다)', n5)) if n5 else 0
-print(f"N5_FIXLOOP_ALL_NEGATED:{1 if (fl_all >= 1 and fl_all == fl_neg) else 0}")
+fl_all = len(re.findall(r'Fix-loop decision', cap)) if cap else 0
+fl_neg = len(re.findall(r'Fix-loop decision[^.]{0,60}?(?:가 아니라|새지 않는다)', cap)) if cap else 0
+print(f"CAP_FIXLOOP_ALL_NEGATED:{1 if (fl_all >= 1 and fl_all == fl_neg) else 0}")
 # 목적지 양의 단언 — Max-iter decision 링크 뒤가 「을 부른다」. 괄호 · # 를 정규식에 쓰지 않는다
 # (이 본문은 $( ) 안 heredoc 이다 — bash 3.2 가 짝 없는 괄호로 치환 경계를 잘못 잡는다).
-n5_maxiter = bool(n5 and re.search(r'\[Max-iter decision\].{1,24} 을 부른다', n5))
-print(f"N5_MAXITER_INVOKED:{1 if n5_maxiter else 0}")
-# X7 — Step 4.5 라우팅의 머리가 N < 5 로 한정된다(같은 줄)
-lead = re.search(r'^\s*그다음.N < 5 — N=5 는 [^\n]*「N=5 에서 도달하면」', text, re.M)
-print(f"LEAD_N_LT_5:{1 if lead else 0}")
-# X8 — Step 5 결정 도구의 머리가 N < 5 전용이고 N=5 는 Max-iter 로 간다(같은 줄)
-dtool = re.search(r'^\s*\*\*Decision tool .N < 5 only — N=5 always goes to Max-iter decision instead', text, re.M)
-print(f"DECISION_TOOL_N_LT_5:{1 if dtool else 0}")
+cap_maxiter = bool(cap and re.search(r'\[Max-iter decision\].{1,24} 을 부른다', cap))
+print(f"CAP_MAXITER_INVOKED:{1 if cap_maxiter else 0}")
+# 상한을 넘는 길은 사용자 승인 하나뿐이라고 말한다(P18 — 상한이 남는다)
+print(f"CAP_ONLY_USER_OPENS:{1 if (cap and '넘는 길은 Max-iter decision 의 사용자 승인 하나뿐이다' in cap) else 0}")
+# X7 — Step 4.5 라우팅의 머리가 N < CAP 로 한정된다(같은 줄)
+lead = re.search(r'^\s*그다음.N < CAP — N = CAP 는 [^\n]*「상한.CAP.에서 도달하면」', text, re.M)
+print(f"LEAD_N_LT_CAP:{1 if lead else 0}")
+# X8 — Step 5 결정 도구의 머리가 N < CAP 전용이고 N = CAP 는 Max-iter 로 간다(같은 줄)
+dtool = re.search(r'^\s*\*\*Decision tool .N < CAP only — N = CAP always goes to Max-iter decision instead', text, re.M)
+print(f"DECISION_TOOL_N_LT_CAP:{1 if dtool else 0}")
+# 옛 고정 상한 글자(N=5 · N < 5)가 라우팅 자리에 남지 않는다 — 위 양성(LEAD · DECISION_TOOL)이 짝이다
+print(f"OLD_N5_LITERAL:{len(re.findall(r'N ?= ?5 |N=5|N < 5', text))}")
 
 note = seg(r'\*\*「고치고 다시 돌기」 옵션 문구.*?(?=\n\nBranch on answer:)')
 print(f"RETRY_NOTE_FOUND:{1 if note is not None else 0}")
@@ -422,13 +428,15 @@ print(f"RETRY_BULLET_HAS_DIFFERENTIAL:{1 if (bullet and '차등 테스트 기원
 print(f"RETRY_BULLET_HAS_FIX_MEANING:{1 if (bullet and ('회귀' in bullet or 'NEW_REGRESSION' in bullet)) else 0}")
 PY
 )
-  assert_grep "$got" '^N5_FOUND:1$'                    "「N=5 에서 도달하면」 문단을 찾았다"
-  assert_grep "$got" '^N5_HAS_DIFFERENTIAL:1$'         "그 문단이 kept=0 차등 기원 defect 도 포함한다고 말한다(N=5 확장 삭제 변이 → RED)"
-  assert_grep "$got" '^N5_HAS_MAXITER:1$'              "그 문단이 Max-iter decision 을 부른다고 말한다"
-  assert_grep "$got" '^N5_FIXLOOP_ALL_NEGATED:1$' "N=5 문단의 Fix-loop decision 언급은 전부 부정에 묶인다(X6 — 토큰을 남긴 목적지 반전 → RED)"
-  assert_grep "$got" '^N5_MAXITER_INVOKED:1$'     "N=5 문단이 Max-iter decision 을 «부른다»(목적지 양의 단언)"
-  assert_grep "$got" '^LEAD_N_LT_5:1$'            "Step 4.5 라우팅 머리가 N < 5 로 한정된다(X7)"
-  assert_grep "$got" '^DECISION_TOOL_N_LT_5:1$'   "Step 5 결정 도구가 N < 5 전용이다(X8)"
+  assert_grep "$got" '^CAP_FOUND:1$'                   "「상한(CAP)에서 도달하면」 문단을 찾았다"
+  assert_grep "$got" '^CAP_HAS_DIFFERENTIAL:1$'        "그 문단이 kept=0 차등 기원 defect 도 포함한다고 말한다(상한 확장 삭제 변이 → RED)"
+  assert_grep "$got" '^CAP_HAS_MAXITER:1$'             "그 문단이 Max-iter decision 을 부른다고 말한다"
+  assert_grep "$got" '^CAP_FIXLOOP_ALL_NEGATED:1$' "상한 문단의 Fix-loop decision 언급은 전부 부정에 묶인다(X6 — 토큰을 남긴 목적지 반전 → RED)"
+  assert_grep "$got" '^CAP_MAXITER_INVOKED:1$'     "상한 문단이 Max-iter decision 을 «부른다»(목적지 양의 단언)"
+  assert_grep "$got" '^CAP_ONLY_USER_OPENS:1$'     "상한을 넘는 길은 Max-iter decision 의 사용자 승인 하나뿐이다(P18 — AC25)"
+  assert_grep "$got" '^LEAD_N_LT_CAP:1$'           "Step 4.5 라우팅 머리가 N < CAP 로 한정된다(X7)"
+  assert_grep "$got" '^DECISION_TOOL_N_LT_CAP:1$'  "Step 5 결정 도구가 N < CAP 전용이다(X8)"
+  assert_grep "$got" '^OLD_N5_LITERAL:0$'          "고정 상한 글자(N=5 · N < 5)가 SKILL 에 남지 않는다(AC25)"
   assert_grep "$got" '^RETRY_NOTE_FOUND:1$'            "Retry 옵션 문구 안내를 찾았다"
   assert_grep "$got" '^RETRY_NOTE_HAS_DIFFERENTIAL:1$' "그 안내가 차등 테스트 기원 kept=0 을 지목한다"
   assert_grep "$got" '^RETRY_BULLET_FOUND:1$'          "Branch on answer 의 Retry 불릿을 찾았다"

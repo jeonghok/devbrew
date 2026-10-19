@@ -189,12 +189,13 @@ done
 # Fix-loop iter cap proximity to the fix-loop AskUserQuestion.
 # v10(K-8): 차등 테스트 절이 Review 와 Fix-loop 사이에 접히므로 「재비판 dispatch 뒤 첫
 # AskUserQuestion」 은 레퍼런스 R3 산문에 떨어진다 — 앵커를 Fix-loop decision 절의 호출
-# 리터럴로 옮기고, 상한은 그 결정 도구가 스스로 밝히는 N<5 / N=5 → Max-iter 문장으로 잰다.
+# 리터럴로 옮기고, 상한은 그 결정 도구가 스스로 밝히는 N<CAP / N=CAP → Max-iter 문장으로 잰다
+# (AC25 전에는 고정 상한 5 의 같은 문장).
 # 160 을 올리지 않는다: 상한을 올리는 것은 이 근접성 sanity 를 무디게 하는 것이다.
 fixloop_line=$(first_line '^### Fix-loop decision')
 assert_line "Fix-loop decision 절 앵커" "$fixloop_line"
 askuser_review_line=$(first_line_after 'AskUserQuestion[(][{]' "$fixloop_line")
-itercap_line=$(first_line 'N < 5 only — N=5 always goes to Max-iter decision')
+itercap_line=$(first_line 'N < CAP only — N = CAP always goes to Max-iter decision')
 assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 160
 
 # 대상 소멸 (Task 7 — runtime-verifier · Decision 1/2 · Upfront Execution Plan ·

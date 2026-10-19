@@ -84,7 +84,7 @@ RD="${TOP}/.claude/quality-gates/<session-id>"
 "$QG/scripts/setup-qg.sh" --ensure $ARGUMENTS || exit
 if grep -q '^## 판정$' "$RD/result.md" 2>/dev/null; then "$QG/scripts/setup-qg.sh" $ARGUMENTS || exit; fi
 bash "$QG/scripts/e2e-state.sh" stop --dir "$RD"; echo "preflight-stop rc=$?"
-rm -f "$RD/excluded.md" "$RD/differential.yaml" "$RD/differential-not-counted.md" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/range-scope.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt"
+rm -f "$RD/excluded.md" "$RD/extra-iterations.md" "$RD/differential.yaml" "$RD/differential-not-counted.md" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/range-scope.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt"
 ( cd "$RD" && find . ! -name . -prune -type f -name 'review-i*' -exec rm -f {} + )
 ```
 
@@ -92,7 +92,7 @@ rm -f "$RD/excluded.md" "$RD/differential.yaml" "$RD/differential-not-counted.md
 step of this run already made it; otherwise setup creates it with a `result.md` skeleton
 ([state-file-format](references/state-file-format.md)). A `result.md` that already has `## 판정`
 belongs to a finished earlier run in this session — setup without `--ensure` recreates the folder.
-Every run then starts without the previous run's `excluded.md` · `differential.yaml` · `differential-not-counted.md` · `verdict.out` ·
+Every run then starts without the previous run's `excluded.md` · `extra-iterations.md` · `differential.yaml` · `differential-not-counted.md` · `verdict.out` ·
 `intent.md` · `topic-scope.txt` · `range-scope.txt` · `comment-head.md` · `comment.md` · `publish.out` · `publish.err` and the e2e walk files
 (`e2e-record.md` · `e2e-flip.md` · `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt`)
 and the review diff files of Review Step 1c (`review-i<N>.*` — the `find` line, which also works when there are none).
@@ -165,7 +165,7 @@ reviewers, and it never lowers or skips a finding.
 /quality-gates:quality-pipeline
  ├ Preflight ── kill switch · setup · 범위(range 일 때 두 커밋으로 얼림) · intent: 한 줄
  ├ trivia 판단 ── 한 문장 diff 면 not-certified (trivia) 로 끝
- ├ iteration N = 1..5
+ ├ iteration N = 1..CAP (CAP = 5 + 사용자가 연 반복)
  │   ① 리뷰        Review Step 1 · 1b · 3 · 3.5  (시작 구성 + 근거를 적어 더한 리뷰어 → code-recritic)
  │       Step 1c 의 걸러진 diff 가 비면 → not-certified (scope-empty) 로 끝
  │   ② 차등 테스트  Differential test
@@ -173,8 +173,9 @@ reviewers, and it never lowers or skips a finding.
  │   막는 지적 또는 차등 defect → Fix-loop (고치고 다시 돌기(Retry) / 지금 판정으로 끝내기 / 멈추기)
  │       Retry: 「적용」 항목만 고치고 「제외」는 기록 → 다음 iteration
  │       범위 모드: 지금 판정으로 끝내기 / 멈추기 둘뿐 — iteration 1 에서 끝난다
+ │   N = CAP 에서 남으면 → Max-iter (한 번 더 돌기 / 지금 판정으로 끝내기 / 멈추기) — 한 번 더 돌기는 반복 하나만 연다
  ├ e2e 질문 (루프 끝, 한 번) → 걷기 → 걷기 직후 게이트 (범위 모드는 걷지 않는다)
- │   fail → Fix-loop 게이트 다시 (Retry 면 남은 iteration 에서 ①② 후 같은 승인 경로로 다시 걷기)
+ │   fail → Fix-loop 게이트 다시 (Retry 면 다음 iteration 에서 ①② 후 같은 승인 경로로 다시 걷기 — CAP 에서는 「한 번 더 돌기」)
  ├ Final verdict ── verdict.py 의 판정 줄 · result.md
  └ Publish ── sink 한 번 · posted:/skipped: 한 줄 · result.md ## 게시 (범위 모드는 달지 않고 공시)
 ```
@@ -182,8 +183,8 @@ reviewers, and it never lowers or skips a finding.
 ② 차등 테스트는 매 iteration 돈다 — iteration 2 이상은 Retry 가 코드를 고친 뒤라, 앞 iteration 의
 결과는 다른 트리의 것이다. ① 리뷰가 ② 보다 앞이다(C1).
 
-**Iteration accounting.** Retry spends one iteration. At N = 5 there is no Retry —
-[Max-iter decision](#max-iter-decision).
+**Iteration accounting.** Retry spends one iteration. N = CAP 에서는 Retry 가 없다 —
+[Max-iter decision](#max-iter-decision) 이 한 번에 하나씩 반복을 더 열 수 있다(CAP 는 그 절이 정한다).
 
 ### Trivia escape
 
@@ -616,13 +617,13 @@ The verdict is the **one** `verdict:` line at the tail of `$RV/synth.out` (with 
   - 그 파일에 `resolution_disclosure:` 줄이 있으면 그 줄을 **verbatim** 인용한다.
   - 그 파일의 `per_adapter[].attributions` 항목 중 `verdict:` 가 `STILL_GREEN` 이 **아닌** 것을 `<unit> · <verdict>` 한 줄씩 나열한다(예: `tests/test_foo.py::test_x · NEW_REGRESSION`). 0개면 이 항목을 생략한다.
 
-그다음(N < 5 — N=5 는 아래 「N=5 에서 도달하면」 문단이 이 라우팅을 대신한다):
+그다음(N < CAP — N = CAP 는 아래 「상한(CAP)에서 도달하면」 문단이 이 라우팅을 대신한다):
 - `verdict: clean` → 루프를 나가 [Final verdict](#final-verdict).
 - `blocking:` ≥ 1 → [Fix-loop decision](#fix-loop-decision).
 - `verdict: defect` 이고 `blocking: 0` — 이 결함은 리뷰 지적이 아니라 **차등 테스트**에서 왔다(D5 사본의 `confirmed_product_defect: true`). 고칠 패치가 없다고 Final verdict 로 직행하지 않는다 — [Fix-loop decision](#fix-loop-decision) 를 그대로 부르되, 분류표에 회귀 unit 마다 네가 쓴 고칠 계획을 싣는다.
 - `not-certified` 이고 `blocking: 0` 이며 차등 defect 가 없다 → 고칠 것이 없다. 루프를 나가 Final verdict(판정 그대로).
 
-**N=5 에서 도달하면.** iteration N=5 가 `blocking:` ≥ 1 로 끝나거나 `blocking: 0` 인 차등 테스트 기원 defect 로 끝나면 — 두 경우 모두 Step 4.5 의 표면화를 먼저 돌린 뒤, 평소의 결정 도구([Fix-loop decision](#fix-loop-decision))가 아니라 [Max-iter decision](#max-iter-decision) 을 부른다. **N=5 는 P18 상한이라 예외가 없다** — 차등 테스트 기원이라고 Fix-loop decision(Retry 로 루프를 늘리는 도구)으로 새지 않는다.
+**상한(CAP)에서 도달하면.** iteration N = CAP 가 `blocking:` ≥ 1 로 끝나거나 `blocking: 0` 인 차등 테스트 기원 defect 로 끝나면 — 두 경우 모두 Step 4.5 의 표면화를 먼저 돌린 뒤, 평소의 결정 도구([Fix-loop decision](#fix-loop-decision))가 아니라 [Max-iter decision](#max-iter-decision) 을 부른다. **상한은 P18 이다 — 넘는 길은 Max-iter decision 의 사용자 승인 하나뿐이다** — 차등 테스트 기원이라고 Fix-loop decision(Retry 로 루프를 늘리는 도구)으로 새지 않는다.
 
 ---
 
@@ -679,7 +680,7 @@ patch with the intent source (`$RD/intent.md`):
 
 ### Fix-loop decision
 
-**Decision tool (N < 5 only — N=5 always goes to Max-iter decision instead).**
+**Decision tool (N < CAP only — N = CAP always goes to Max-iter decision instead).**
 
 `<summary>` is the `**Findings:**` counts line from `$RV/synth.out`, copied verbatim; for a
 differential-origin defect with no findings, the comma-joined `<unit> · <verdict>` list.
@@ -753,26 +754,55 @@ Branch on answer:
 
 ### Max-iter decision
 
-After iteration 5 still has blocking findings or a differential defect, show the table and call:
+기본 상한은 5 다(P18). 지금 상한은 `CAP = 5 + <$RD/extra-iterations.md 의 줄 수>` 이다 — 이 결정에서 사용자가 반복을 하나
+열 때마다 아래 펜스가 한 줄을 남긴다(파일이 없으면 CAP = 5).
+
+After iteration CAP still has blocking findings or a differential defect, show the table (Step 5) and call:
 
 ```
 AskUserQuestion({
   questions: [
     {
-      question: "qg 가 최대 5번 반복했다. 마지막 지적: <summary>. 지금 판정으로 끝낼까, 멈출까?",
+      question: "qg 가 반복 상한(<CAP>번 — 기본 5번)에 닿았다. 마지막 지적: <summary>. 반복을 하나 더 열까, 지금 판정으로 끝낼까, 멈출까?",
       header: "qg 최대 반복",
       options: [
+        {label: "한 번 더 돌기",        description: "반복을 하나 더 연다 — 분류표의 「적용」 항목을 고치고 다시 돈다(차등 테스트 포함). 그 반복 끝에 다시 묻는다."},
         {label: "지금 판정으로 끝내기", description: "남은 지적을 그대로 두고 지금 판정으로 끝낸다."},
         {label: "멈추기",               description: "파이프라인을 멈춘다 — PR 코멘트도 달지 않는다. 지적을 고친 뒤 /quality-gates:quality-pipeline 을 다시 돌린다."}
       ],
       multiSelect: false
-    }
+    },
+    <Fix-loop decision 의 두 번째 질문(header "분류") 그대로>
   ]
 })
 ```
 
-Branch on answer: **지금 판정으로 끝내기** → Final verdict with Outcome `accepted with findings iter 5`;
-**멈추기** → Final verdict with Outcome `aborted iter 5`.
+차등 테스트 기원(`blocking: 0`)이면 「한 번 더 돌기」의 `description` 을 Fix-loop decision 의 「고치고 다시 돌기」 차등 기원
+문구처럼 회귀 단위를 고치는 말로 바꿔 싣는다. 두 번째 질문의 답은 Fix-loop decision 과 같이 분류를 바꾼다.
+
+Branch on answer:
+- **한 번 더 돌기** → 아래 펜스로 한 줄을 기록하고(출처 `label` · 원문은 고른 선택지 이름 「한 번 더 돌기」) Fix-loop decision 의
+  「고치고 다시 돌기」와 같은 경로로 간다 — 「적용」 항목만 고치고 「제외」는 `excluded.md` 에 남긴 뒤 N += 1 하고 Review Step 1
+  부터 다시 돈다(차등 테스트 포함). 한 번에 하나다 — 한 번 열면 반복 하나만 열리고, 그 반복이 또 막는 지적이나 차등 defect 로
+  끝나면 이 결정이 다시 뜬다(상한은 남는다).
+- **지금 판정으로 끝내기** → Final verdict with Outcome `accepted with findings iter N` (N = CAP).
+- **멈추기** → Final verdict with Outcome `aborted iter N` (N = CAP).
+- 첫 질문의 「기타」 칸에 글을 적었으면 그 뜻으로 고른다. 반복을 더 여는 뜻이면 「한 번 더 돌기」와 같은 경로로 가되 출처 `typed`
+  와 그 원문을 기록한다(사용자 자기 문구의 승인). 끝내기 · 멈추기 뜻이면 그 분기로 간다. 셋 중 어느 뜻인지 모르겠으면 반복을
+  열지 않고 이 질문을 한 번 더 띄운다.
+
+기록 펜스 — `<N>` 은 지금 반복 번호(= CAP), 출처는 `label` 또는 `typed`, 마지막 인자는 원문이다. 원문은 신뢰하지 않는
+데이터다: 줄바꿈은 공백으로 바꾸고, 원문 안의 작은따옴표(') 는 '\'' 로 바꿔 작은따옴표 인자 하나로 싣는다 — 셸이 원문을
+펼치지 않고(`$` · 백틱 · `%` 그대로), 형식 문자열이 아니라 `%s` 인자라 원문의 `%` 도 형식이 되지 않는다. `cap:` 줄이 다음
+반복의 상한이다.
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+RD="${TOP}/.claude/quality-gates/<session-id>"
+printf -- '- iter %s 뒤 · 반복 하나 더 · %s · %s\n' '<N>' '<label 또는 typed>' '<고른 선택지 이름 또는 기타 칸 원문 — 줄바꿈은 공백으로>' >> "$RD/extra-iterations.md"
+echo "cap: $((5 + $(grep -c '^- ' "$RD/extra-iterations.md")))"
+```
 
 ### Retry: file-write safety
 
@@ -939,8 +969,10 @@ e2e 칸과 「사람이 뒤집음」을 정한다. 어느 결과든 E5 로 기�
   `fail` 이다. 게시 펜스는 `skipped: aborted` 를 낸다.
 - **리뷰·테스트부터 다시** (무효 행) — iteration 하나를 쓰고 코드를 고치지 않은 채 ① 리뷰부터 다시 돈 뒤, 「고치고 다시 돌기」와 같은
   경로로 이 절에 돌아와 E1 펜스(부팅 펜스, CLI 직접 실행이면 E1 (CLI 직접 실행) 펜스)부터 걷는다.
-- iteration 5 를 다 썼으면 고치고 다시 돌기 · 리뷰·테스트부터 다시 를 선택지에 넣지 않는다. 그때 fail 행은 지금 판정으로 끝내기 / 멈추기 / pass 로
-  뒤집기, 무효 행은 산출물 확인 / 그대로 둠 이다.
+- **한 번 더 돌기** (fail 행 · CAP 에서만) — `## Fix-loop` 의 Max-iter decision 과 같다: 그 절의 기록 펜스로 한 줄을 남기고(출처
+  `label`, 「기타」 칸의 글이 반복을 더 여는 뜻이면 `typed` 와 그 원문) 위 「고치고 다시 돌기」와 같은 경로로 간다.
+- CAP 에 닿았으면 fail 행에 「고치고 다시 돌기」 대신 「한 번 더 돌기」를 넣고, 고르면 위와 같이 기록한다. 리뷰·테스트부터 다시 는
+  넣지 않는다. 그때 fail 행은 한 번 더 돌기 / 지금 판정으로 끝내기 / 멈추기 / pass 로 뒤집기, 무효 행은 산출물 확인 / 그대로 둠 이다.
 
 **E5 — 기록.** 레퍼런스 7 절대로 걷기마다 세션 폴더의 `e2e-record.md` 에 덧붙인다. 걷는 동안 `result.md` 에는 쓰지
 않는다 — `## Final verdict` 의 기록 펜스가 옮긴다.
@@ -1040,6 +1072,7 @@ printf '판정\t%s\n반복\t<N>번\n결과\t<finished | accepted with findings i
   if [ -f "$RD/range-scope.txt" ]; then printf '\n## 범위\n\n'; cat "$RD/range-scope.txt"; fi
   printf '\n## 지적\n\n'; if [ -f "$SYN" ] && grep -q '^| 심각도 |' "$SYN"; then sed -n '/^| 심각도 |/,/^$/p' "$SYN"; else echo "(없음)"; fi
   printf '\n## 제외 패치\n\n'; if [ -s "$RD/excluded.md" ]; then cat "$RD/excluded.md"; else echo "(없음)"; fi
+  if [ -s "$RD/extra-iterations.md" ]; then printf '\n## 추가 반복\n\n'; cat "$RD/extra-iterations.md"; fi
   printf '\n## 차등 테스트\n\n'; if [ -f "$RD/differential.yaml" ]; then cat "$RD/differential.yaml"; else echo "(이번 실행에 차등 출력 없음)"; fi
   if [ -s "$RD/differential-not-counted.md" ]; then printf '\n커버리지로 세지 않은 테스트:\n\n'; cat "$RD/differential-not-counted.md"; fi
   if [ -s "$RD/e2e-record.md" ]; then printf '\n## e2e\n\n'; cat "$RD/e2e-record.md"; fi
