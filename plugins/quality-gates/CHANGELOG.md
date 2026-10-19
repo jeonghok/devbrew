@@ -3,6 +3,40 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.1.0] — 2026-10-19
+
+### Added
+- 범위 모드 `range <시작>[..<끝>]` — 시작 커밋부터 끝 커밋까지를 한 판정으로 본다. 끝을 생략하면 `origin/HEAD` 이고, 없으면 다른 이름으로 대신하지 않고 멈춘다. 범위는 실행 시작에 두 커밋으로 얼려(`range-scope.txt`) 리뷰 diff · 의도 출처 · codex · 차등 테스트 · 판정 줄이 같은 두 커밋을 쓴다(diff 기준 · 기준선은 시작, HEAD 축 · 판정 줄은 끝). 리뷰어 · codex 는 끝 커밋의 코드를 읽는다 — 지금 체크아웃이 끝 커밋이어도 늘 끝 커밋의 임시 트리를 하나 만들어 그 경로를 `project_dir` 로 쓰고(커밋 안 된 변경 · 추적 안 된 파일을 리뷰어에게 넘기지 않는다, 실행 끝에 지운다, `review-tree.txt`), 만들지 못하면 판정 없이 멈춘다. 범위 줄이 리뷰어가 읽는 트리를 밝힌다. 범위 모드는 고치고 다시 돌지 않고 앱을 걷지 않으며 PR 코멘트를 달지 않는다 — 게시 펜스 안에서 범위 모드를 거절한다. 범위를 풀지 못하면 사유 한 줄을 내고 판정 없이 멈춘다.
+- 새 스크립트 셋 — `resolve-range.sh`(범위를 두 커밋으로) · `review-diff.sh`(모든 범위의 리뷰 diff 를 한 자리에서) · `doc_paths.py`(리뷰에서 뺄 문서 경로 규칙의 유일한 자리).
+- 환경 변수 `DEVBREW_QUALITY_GATES_DOC_PATHS`(쉼표 목록, 기본 `README*,CHANGELOG*`) — 맞는 문서 파일을 리뷰어에게 가는 diff 에서 빼고 매 iteration 뺀 수를 알린다. 빈 값은 아무것도 빼지 않는다. 모델이 읽는 파일(`CLAUDE.md` · `SKILL.md` · `agents/` · `references/` 아래 등)과 코드는 패턴에 걸려도 남기고 이름을 알린다 — 문서 파일인지를 먼저 보고, 문서 파일 중에서만 패턴으로 뺀다. `/` 로 끝나는 패턴은 그 폴더 아래 전부, 앞의 `/` 는 레포 루트에 묶는다. 읽지 못한 패턴은 적용하지 않고 이름을 알린다(`bad_patterns`). 마지막 반복의 공시 요약 줄(출처 · 패턴 · 뺀 수 · 남긴 수 · 건너뛴 qg 상태 파일 수)은 `result.md` 의 `## 문서 경로` 절에도 남는다. `.claude/settings.json` · `.claude/settings.local.json` 의 `env` 에 둔 값도 세션에 실린다(실측: Claude Code 2.1.303, 두 파일을 하나씩 따로 둔 헤드리스 실행 각 한 번). 리뷰하는 변경이 두 설정 파일 중 하나에서 이 키를 바꾸면 기본 목록으로 돌아간다 — git 이 무시하는 추적 안 된 local 파일은 변경이 아니라 그대로 쓴다.
+- `review-diff.sh` 의 stdout `self_state:` 줄과 `review-i<N>.self-state` 파일 — 이 실행의 세션 폴더 안에서 qg 가 쓴 추적 안 되는 상태 파일만 리뷰에서 건너뛰고, 그 수와 경로를 매 iteration 공시한다.
+- 「낮춘 지적」 — 재비판이 낮춘 지적을 합성기가 번호(`L<k>`) · 원래 심각도 · 이유와 함께 `## 낮춘 지적` 절과 `lowered:` 줄로 싣는다. 반복마다(판정이 clean 이어도) 사용자가 골라 원래 심각도로 되올린다(`--restore-lowered`). 「기타」 칸에 적은 번호는 다시 합성하기 전에 표와 맞추고, 표에 없는 번호는 한 번 다시 묻고 그래도 틀리면 낮춘 대로 둔다 — 잘못 친 번호로 리뷰가 끝난 실행이 멈추지 않는다.
+- Step 3 의 리뷰어 모델 출처 공시 줄 — `리뷰어 모델: <값>(CLAUDE_CODE_SUBAGENT_MODEL 이 있으면 그 값, 없으면 세션 모델)`.
+- artifact-critique — 대상 여럿(같은 파일 · 링크와 원본은 하나로 합친다 · 코드 대상은 그것만 빼고 진행), 「지적만 받기」(`--findings-only` — 대상마다 한 라운드 비평만, 편집 · 커밋 없음, 브랜치 전제가 막으면 「지적만 받기로 진행」 · 「그 대상만 빼고 진행」을 고른다), 동의 질문에서 정하는 라운드당 비평자 수(기본 1).
+- `synthesize_artifact_findings.py` 의 출력 키 `unadjudicated_items` — 반박자가 판정하지 못한 지적 자체. artifact-critique 보고가 「판정 못 한 지적」으로 라벨을 붙여 하나씩 보인다.
+
+### Changed
+- 의도 출처 — 범위 안 커밋의 `Spec:` 트레일러가 가리키는 설계문서를 전부 싣는다(오래된 커밋 먼저 · 같은 경로 한 번 · 한 커밋의 여러 줄 전부, stdout JSON 의 `specs`). 둘 이상이면 문서마다 구분 줄을 두고, 리뷰어는 의도를 어긴 막는 지적에 근거 문서 경로와 AC 번호를 단다. 범위 모드는 끝 커밋의 트리에서 읽고 PR 본문을 읽지 않는다. 보통 파일이 아닌 경로(없음 · 폴더 등 — 범위 모드는 링크도)를 가리키는 트레일러는 거부하고 그 수를 알린다(`spec 경로 거부 <k>개`).
+- 리뷰어 상한 8 · 같은 반복 재호출 금지를 지웠다. 규모는 dispatch 전 시작 줄과 모두 돌아온 뒤 끝 줄 두 줄로 공시한다. 일시 실패한 리뷰어는 한 번 다시 부른다(보안 리뷰어의 fail-closed 는 그 뒤). README 의 「iteration 당 총 ≤10」 문장도 함께 지웠다.
+- 수정 루프 상한(기본 5)에 닿으면 사용자가 「한 번 더 돌기」로 반복을 하나씩 더 연다. 승인은 출처(`label` · `typed`)와 원문을 따옴표 here-doc 으로 `extra-iterations.md` 에 한 줄 기록한다 — 끝 줄 이름은 호출마다 새로 고르고, 쓴 뒤 정확히 한 줄이 늘었는지 검사한다. e2e 의 fail 행과 무효 행도 상한에서는 같은 길로 연다.
+- 리뷰어 모델 고정(`model: opus`)을 풀어 `CLAUDE_CODE_SUBAGENT_MODEL`, 없으면 세션 모델을 따른다.
+- 리뷰 범위 문장 — 「diff 밖이어도 원인이 이 변경이면 보고」. 재비판자도 그런 지적이 가리키는 범위 밖 파일을 읽어 판정하고, 관문 B 는 이 변경이 원인인 결함을 「원래 있던 결함」으로 보지 않는다.
+- e2e 시나리오 질문이 여러 선택이다 — 고른 시나리오를 번호 순으로 하나씩 걷고 걷기마다 게이트를 띄운다. e2e 칸은 가장 나쁜 결과(`fail` > `미확인` > `pass`)다.
+- 토픽 · 범위 전체 diff 가 trivia 면 trivia escape 로 우회한다 — 첫 iteration 의 거르기 전 diff(`review-i1.full.diff`)로 판단한다. 선언이 깨졌으면(`declaration-invalid`) 여전히 우회하지 않는다.
+- 차등 테스트 절차 밖의 조사용 테스트 실행은 「조사용 실행 — 판정에 안 씀」으로 표시하고 판정에 넣지 않는다. `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 조사용 실행도 하지 않는다.
+- `--paths` 범위는 「바뀐 파일 ∩ glob」이다 — 바뀌지 않은 파일은 세지 않는다.
+- 문서 경로를 뺀 리뷰 diff 가 비면 리뷰어 · 차등 테스트 · e2e 를 부르지 않고 `not-certified (scope-empty)` 로 끝난다. 그때 앞 반복이 남긴 차등 사본을 지워 이번 판정의 `## 차등 테스트` 로 기록되지 않게 한다.
+- artifact-critique 상한 라운드에서 사용자가 「한 번 더 돌기」로 라운드를 하나씩 더 연다(승인 줄을 라운드 히스토리에 남긴다).
+- README 원칙 절 제목을 레포 규칙 이름 `## Principles Instantiated` 로 바꿨다(plugin-audit 의 모양 검사가 이 제목을 읽는다). 고정 5회 상한을 말하던 README 문장들을 「기본 5 + 사용자가 하나씩 연 반복」으로 맞췄다.
+
+### Fixed
+- `setup-qg.sh` 의 `critique` 안내가 인자 위치(첫 인자 · `branch` 뒤 · `--paths` 뒤)와 무관하게 같고, kill switch 가 그보다 먼저 본다. `--help` 의 없어진 인자 줄에 `critique` 가 있다.
+- artifact-critique 의 옛 모드 이름(`critique skipped` · `critique mode disabled`)과 egress 문장(「그 경로로」)을 바로잡았다.
+
+### Security
+- 이 릴리스 안에서 만든 `review-diff.sh` 코드(배포된 적 없음)에 보안 경보 두 건이 나서 릴리스 전에 고쳤다 — qg 상태 폴더(`.claude/quality-gates/`)를 리뷰에서 빼는 규칙이 그 아래 둔 코드를 숨겼다. 이 릴리스는 이 실행의 세션 폴더(`--dir`) 바로 아래, qg 가 실제로 쓰는 이름에 맞는 추적 안 된 파일과 등록된 qg 일회용 worktree 만 건너뛰고 그 수와 경로를 공시한다. 추적되는 변경 · 커밋된 변경 · 다른 세션 폴더의 파일 · 모르는 이름은 그 폴더 아래여도 리뷰하고, `--dir` 가 리포 밖이면 아무것도 건너뛰지 않는다(50bc7729 · 7f75f7a3 · 354c8e06).
+- 같은 코드의 보안 경보 두 건을 더 릴리스 전에 고쳤다. ① `.mdx` 를 문서로 보아 문서 경로 패턴(`README*` 등)에 걸리면 리뷰에서 뺐다 — MDX 는 JSX · 코드를 실행한다. 이제 `.mdx` 는 코드로 리뷰하고, 패턴에 걸리면 남긴 경로(`kept`)로 이름을 알린다. 문서는 실행되지 않는 글 형식(`.md` · `.markdown` · `.rst` · `.txt` · `.adoc` · 확장자 없는 `README` · `CHANGELOG`)뿐이다. ② 추적 안 되는 중첩 레포는 경로 수에는 들었지만 diff 에 실리지 않았고 아무 말도 없었다(세었는데 리뷰하지 않음). 그 안을 펼쳐 리뷰하거나 레포 안 표지 파일로 판정을 막는 중간 고침은 그 레포가 고른 경로 · 설정 · 링크를 따르거나 판정 전에 도는 레포 코드가 표지를 지울 수 있어(보안 경보) 버렸다. 이제 중첩 레포와 기준의 `.gitmodules` 에 선언되지 않은 새 · 바뀐 gitlink(모든 범위)는 리뷰하지 않되 공시하고 인증하지 않는다 — 그 안에서 git 프로세스나 그 레포 설정이 고른 명령을 돌리지 않고 그 안의 파일을 리뷰에 싣지 않으며(git 은 gitlink 의 커밋 줄을 보이려고 그 HEAD 만 읽는다), 매 iteration 그 경로마다 이스케이프한 이름으로 「추적 안 되는 중첩 레포 <이름> 는 리뷰하지 않았다 — .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라」를 내며, 리뷰 diff 가 `degraded: yes`(수인 `files:`)가 되어 Step 1c 가 판정 입력 `--reason error-axis` 를 싣는다 — 그 실행은 `not-certified (error-axis)` 다. 선언된 하위 모듈의 커밋 변경은 그대로 둔다. 모든 범위의 diff 는 `--submodule=short` 로 하위 모듈을 「Subproject commit」 줄로만 낸다(사용자 설정 `diff.submodule=diff` 가 그 폴더 안에서 자식 git diff 를 띄워 그 폴더의 `diff.external` · textconv 를 돌리지 못하게). 작업 트리 범위(session · `--paths`)의 diff 는 `--ignore-submodules=dirty` 로 하위 모듈 폴더 안에서 git status 를 띄우지 않는다(그 레포의 `core.fsmonitor` 가 돌지 못한다, gitlink 커밋 변경은 그대로 보인다). 폴더를 가리키는 추적 안 된 링크는 링크 자체(mode 120000 · 가리키는 곳)로 diff 에 싣고, 그 diff 는 고정 임시 이름으로 만든다(레포가 정한 이름으로 폴더 · 파일을 만들지 않는다). 레포가 정한 이름을 찍는 오류 · 공시 줄은 모두 이스케이프하고 백틱은 `\x60` 으로 바꾼다. 모든 범위의 diff 는 `--ignore-submodules=none` 으로 리뷰하는 변경이 더한 `.gitmodules` 의 `ignore = all` 이나 사용자 설정 `diff.ignoreSubmodules` 가 gitlink 를 숨기지 못하게 한다(session · `--paths` 는 그 뒤 `=dirty`). README 에 `.md` 를 MDX 로 읽는 도구(Docusaurus 등) 안내를 더했다.
+
 ## [14.0.3] — 2026-10-19
 
 ### Changed

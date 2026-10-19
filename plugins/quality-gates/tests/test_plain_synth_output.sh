@@ -118,10 +118,13 @@ assert_grep "$out" '^verdict: defect$' "AC5: 블록 없는 실행도 판정 줄�
 
 # ⑥ 합성기 표를 읽는 SKILL 자리 — 머리 글자와 고칠 방법 목록 이름이 합성기와 같다(한쪽만 바뀌면 조용히 빈 「지적」 절)
 out="$(rf_synth "$T/one")"
-anchor="$(sed -n "s/.*grep -q '\([^']*\)' \"\$SYN\".*/\1/p" "$SKILL")"
+# 「지적」 절을 쓰는 줄에서만 뽑는다 — 같은 블록의 「낮춘 지적」 줄도 `grep -q … "$SYN"` 꼴이다
+# (그 줄의 앵커 일치는 test_lowered_gate_wiring.sh 가 실제 합성기 출력으로 잰다).
+JL="$(grep -F "printf '\n## 지적\n\n'" "$SKILL")"
+anchor="$(printf '%s\n' "$JL" | sed -n "s/.*grep -q '\([^']*\)' \"\$SYN\".*/\1/p")"
 assert_eq "$(printf '%s\n' "$anchor" | grep -c .)" "1" "SKILL Final verdict 의 지적 표 앵커를 하나 찾았다"
 assert_eq "${anchor}" "^| 심각도 |" "SKILL 의 지적 표 앵커가 한국어 머리다"
-sedpat="$(sed -n "s/.*then sed -n '\/\([^/]*\)\/,\/^\$\/p' \"\$SYN\".*/\1/p" "$SKILL")"
+sedpat="$(printf '%s\n' "$JL" | sed -n "s/.*then sed -n '\/\([^/]*\)\/,\/^\$\/p' \"\$SYN\".*/\1/p")"
 assert_eq "${sedpat}" "${anchor}" "SKILL 의 sed 범위 시작이 grep 앵커와 같은 글자다(한쪽만 바뀌면 빈 절)"
 rng="$(printf '%s\n' "$out" | sed -n "/${anchor}/,/^\$/p")"
 assert_grep "$rng" '^\| CRITICAL \| app\.py:3 \| SQL 을 문자열로 만든다 \| security-reviewer \|$' "그 앵커로 자른 범위에 지적 행이 든다(result.md 의 「지적」 절이 비지 않는다)"

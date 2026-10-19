@@ -56,14 +56,14 @@ case_readme_component_tree() {
   [[ $missing -eq 0 ]] && ok "README ## 구조 트리에 신규 스크립트 3종 등재" || no "README 컴포넌트 트리 누락"
 }
 
-# T33 + AC30: 인스턴스화한 원칙에 LD3/LD5/LD7 줄
+# T33 + AC30: 원칙 절(## Principles Instantiated)에 LD3/LD5/LD7 줄
 case_readme_principles() {
   local w ok=1 tok
-  w=$(awk '/^## 인스턴스화한 원칙/{i=1;next} i && /^## /{exit} i' "$README")
+  w=$(awk '/^## Principles Instantiated$/{i=1;next} i && /^## /{exit} i' "$README")
   for tok in 'LD3' 'LD5' 'LD7'; do
     printf '%s\n' "$w" | grep -qF "$tok" || { echo "    누락: $tok"; ok=0; }
   done
-  [[ $ok -eq 1 ]] && ok "인스턴스화한 원칙에 LD3/LD5/LD7" || no "원칙 줄 누락"
+  [[ $ok -eq 1 ]] && ok "원칙 절에 LD3/LD5/LD7" || no "원칙 줄 누락"
 }
 
 # 신규 스크립트 3종이 실제로 존재하고 실행 가능. 이 3개 이름만 확인한다 — scripts/를

@@ -241,30 +241,84 @@ done
 
 # W — 두 펜스가 부르는 비움 스크립트(clear_critic_outputs.sh)를 직접 bash 와 zsh 로 돌린다. 펜스는 bash 로 부르지만
 # 스크립트 자체도 어느 셸에서든 같게 동작해야 한다(글롭 · 단어 쪼개기를 쓰지 않는다). 모양: only · both · none ·
-# planted(공백과 글롭 글자를 심은 이름 · 번호 없는 이름) · unlistable(목록을 못 읽는 폴더).
+# planted(공백과 글롭 글자를 심은 이름 · 번호 없는 이름) · unlistable(목록을 못 읽는 폴더) · linked · hardlinked(폴더
+# 밖 파일로 가는 링크) · notfile(폴더) · replanted*(지운 뒤 새로 만들기 전에 그 이름에 무엇이 다시 심김).
 CLR="$SD/scripts/clear_critic_outputs.sh"
 [ -f "$CLR" ] && ok "W 전제: 비움 스크립트가 있다" || no "W 전제: 비움 스크립트가 없다 ($CLR)"
+# link_shape_seed <상태 폴더> <밖 파일 접두> <linked|hardlinked> — 폴더 밖 파일로 가는 링크 이름 둘을 심는다.
+link_shape_seed() {
+  case "$3" in
+    linked) printf '%s\n' "$CRITIC_SEED" > "$2.a"; printf '%s\n' "$CRITIC_SEED" > "$2.b"
+            ln -s "$2.a" "$1/critic.txt"; ln -s "$2.b" "$1/critic-2.txt" ;;
+    hardlinked) printf '%s\n' "$CRITIC_SEED" > "$2.c"; printf '%s\n' "$CRITIC_SEED" > "$2.d"
+                ln "$2.c" "$1/critic.txt"; ln "$2.d" "$1/critic-4.txt" ;;
+  esac
+}
+# link_shape_check <라벨> <상태 폴더> <밖 파일 접두> <linked|hardlinked> <stderr 글> — 폴더 밖 파일 내용 그대로 ·
+# 심볼릭 링크는 이름으로 알리고 「비웠다」고 하지 않는다 · 하드 링크 이름은 빈 보통 파일로 바꾸고 「비웠다」고 한다.
+link_shape_check() {
+  local l="$1" d="$2" o="$3" e="$5" hn
+  case "$4" in
+    linked)
+      assert_eq "$(cat "$o.a" 2>/dev/null)" "$CRITIC_SEED" "$l: critic.txt 링크가 가리키는 폴더 밖 파일을 그대로 둔다"
+      assert_eq "$(cat "$o.b" 2>/dev/null)" "$CRITIC_SEED" "$l: critic-2.txt 링크가 가리키는 폴더 밖 파일을 그대로 둔다"
+      assert_contains "$e" "critic.txt(링크)" "$l: 비우지 않은 critic.txt 링크를 이름으로 알린다"
+      assert_contains "$e" "critic-2.txt(링크)" "$l: 비우지 않은 critic-2.txt 링크를 이름으로 알린다"
+      assert_not_contains "$e" "을 비웠다" "$l: 링크를 남겼는데 「비웠다」고 말하지 않는다" ;;
+    hardlinked)
+      assert_eq "$(cat "$o.c" 2>/dev/null)" "$CRITIC_SEED" "$l: critic.txt 와 하드 링크로 이어진 폴더 밖 파일을 그대로 둔다"
+      assert_eq "$(cat "$o.d" 2>/dev/null)" "$CRITIC_SEED" "$l: critic-4.txt 와 하드 링크로 이어진 폴더 밖 파일을 그대로 둔다"
+      for hn in critic.txt critic-4.txt; do
+        { [ -f "$d/$hn" ] && [ ! -L "$d/$hn" ] && [ ! -s "$d/$hn" ]; } \
+          && ok "$l: 상태 폴더의 $hn 는 빈 보통 파일로 남는다" || no "$l: 상태 폴더의 $hn 가 빈 보통 파일이 아니다"
+      done
+      assert_contains "$e" "critic-<번호>.txt)을 비웠다." "$l: 비운 뒤 「비웠다」고 보고한다" ;;
+  esac
+}
+# replanted*: `rm` 대역 — 진짜 rm 을 절대 경로로 부른 뒤 같은 이름에 다시 심는다(지우기와 noclobber 만들기 사이에
+# 다른 쓰는 쪽이 끼어든 꼴). 심는 자리는 이 시험의 scratch 안 REPLANT_DIR 의 이름뿐이다 — 그 밖이면 지우기만 한다.
+RM_STUB="$SCRATCH/rm-stub"; mkdir -p "$RM_STUB"
+{ printf '#!/bin/sh\nSCR=%s\n' "'$SCRATCH'"; cat <<'STUB'
+/bin/rm "$@" || exit $?
+for t in "$@"; do :; done
+[ -n "${REPLANT_DIR:-}" ] || exit 0
+case "$REPLANT_DIR" in "$SCR"/*) ;; *) exit 0 ;; esac
+case "$t" in "$REPLANT_DIR"/*) ;; *) exit 0 ;; esac
+case "${REPLANT_KIND:-}" in
+  hard) /bin/ln "$REPLANT_SRC" "$t" ;;
+  sym) /bin/ln -s "$REPLANT_SRC" "$t" ;;
+esac
+exit 0
+STUB
+} > "$RM_STUB/rm"; chmod +x "$RM_STUB/rm"
 for zsh_name in bash zsh; do
   w_sh=bash; [ "$zsh_name" = zsh ] && { [ -n "$ZSH_BIN" ] || continue; w_sh="$ZSH_BIN"; }
-  for shape in only both none planted unlistable linked notfile hardlinked; do
+  for shape in only both none planted unlistable linked notfile hardlinked replanted replanted-symlink replanted-nonfile; do
     wl="W(${zsh_name}·$shape)"; wdir="$SCRATCH/w-$zsh_name-$shape"; mkdir -p "$wdir"
-    wout="$SCRATCH/w-outside-$zsh_name"   # linked · hardlinked: 상태 폴더 밖의 파일 — 링크를 거쳐 비우면 안 된다
+    wout="$SCRATCH/w-outside-$zsh_name"   # linked · hardlinked · replanted*: 상태 폴더 밖의 파일 — 링크를 거쳐 비우면 안 된다
+    w_path="$BASE"; w_rdir=""; w_kind=""; w_src=""
     case "$shape" in
       only) printf '%s\n' "$CRITIC_SEED" > "$wdir/critic.txt" ;;
       both|unlistable) printf '%s\n' "$CRITIC_SEED" > "$wdir/critic.txt"; printf '%s\n' "$CRITIC_SEED" > "$wdir/critic-2.txt" ;;
       planted) printf '%s\n' "$CRITIC_SEED" > "$wdir/critic-6 *.txt"; printf '%s\n' "$CRITIC_SEED" > "$wdir/critic-x.txt" ;;
-      linked) printf '%s\n' "$CRITIC_SEED" > "$wout.a"; printf '%s\n' "$CRITIC_SEED" > "$wout.b"
-              ln -s "$wout.a" "$wdir/critic.txt"; ln -s "$wout.b" "$wdir/critic-2.txt" ;;
+      linked|hardlinked) link_shape_seed "$wdir" "$wout" "$shape" ;;
       notfile) printf '%s\n' "$CRITIC_SEED" > "$wdir/critic.txt"; mkdir -p "$wdir/critic-3.txt" ;;
-      hardlinked) printf '%s\n' "$CRITIC_SEED" > "$wout.c"; printf '%s\n' "$CRITIC_SEED" > "$wout.d"
-                  ln "$wout.c" "$wdir/critic.txt"; ln "$wout.d" "$wdir/critic-4.txt" ;;
+      replanted*)
+        printf '%s\n' "$CRITIC_SEED" > "$wdir/critic.txt"; printf '%s\n' "$CRITIC_SEED" > "$wdir/critic-2.txt"
+        w_path="$RM_STUB:$BASE"; w_rdir="$wdir"
+        case "$shape" in
+          replanted) w_kind=hard; w_src="$wout.r"; printf '%s\n' "$CRITIC_SEED" > "$w_src" ;;
+          replanted-symlink) w_kind=sym; w_src="$wout.s"; printf '%s\n' "$CRITIC_SEED" > "$w_src" ;;
+          replanted-nonfile) w_kind=sym; w_src=/dev/null ;;   # 보통 파일이 아닌 것(장치)으로 가는 링크
+        esac ;;
     esac
     [ "$shape" = unlistable ] && chmod 333 "$wdir"
-    ( cd "$SCRATCH" && env -i PATH="$BASE" HOME="$SCRATCH" "$w_sh" "$CLR" "$wdir" ) \
+    ( cd "$SCRATCH" && env -i PATH="$w_path" HOME="$SCRATCH" REPLANT_DIR="$w_rdir" REPLANT_KIND="$w_kind" REPLANT_SRC="$w_src" \
+        "$w_sh" "$CLR" "$wdir" ) \
       > "$SCRATCH/w.out" 2>"$SCRATCH/w-$zsh_name-$shape.err"; w_rc=$?
     werr="$(cat "$SCRATCH/w-$zsh_name-$shape.err")"
     assert_eq "$(grep -c . "$SCRATCH/w.out" || true)" "0" "$wl: stdout 에 아무것도 쓰지 않는다 (펜스의 stdout 은 프로필 슬롯이다)"
-    case "$shape" in planted|unlistable|linked|notfile|hardlinked) assert_not_contains "$werr" "no matches found" "$wl: 글롭이 셸을 멈추지 않는다" ;; esac   # 나머지 모양은 z_check 가 잰다
+    case "$shape" in only|both|none) ;; *) assert_not_contains "$werr" "no matches found" "$wl: 글롭이 셸을 멈추지 않는다" ;; esac   # 나머지 모양은 z_check 가 잰다
     case "$shape" in
       unlistable)
         if ( cd "$wdir" 2>/dev/null && ls >/dev/null 2>&1 ); then
@@ -285,11 +339,22 @@ for zsh_name in bash zsh; do
           && ok "$wl: 없던 파일을 새로 만들지 않는다" || no "$wl: 없던 파일이 생겼다" ;;
       linked)
         assert_eq "$w_rc" "1" "$wl: 링크를 비우지 않았으니 rc 1"
-        assert_eq "$(cat "$wout.a" 2>/dev/null)" "$CRITIC_SEED" "$wl: critic.txt 링크가 가리키는 폴더 밖 파일을 그대로 둔다"
-        assert_eq "$(cat "$wout.b" 2>/dev/null)" "$CRITIC_SEED" "$wl: critic-2.txt 링크가 가리키는 폴더 밖 파일을 그대로 둔다"
-        assert_contains "$werr" "critic.txt(링크)" "$wl: 비우지 않은 critic.txt 링크를 이름으로 알린다"
-        assert_contains "$werr" "critic-2.txt(링크)" "$wl: 비우지 않은 critic-2.txt 링크를 이름으로 알린다"
-        assert_not_contains "$werr" "을 비웠다" "$wl: 링크를 남겼는데 「비웠다」고 말하지 않는다" ;;
+        link_shape_check "$wl" "$wdir" "$wout" linked "$werr" ;;
+      replanted*)
+        # 전제(양의 대조): 대역이 실제로 돌아 그 이름에 다시 심었다 — 아니면 아래 단언이 「다시 심음」을 재지 않는다.
+        if [ "$shape" = replanted-nonfile ]; then
+          { [ -L "$wdir/critic.txt" ] && [ -L "$wdir/critic-2.txt" ]; } \
+            && ok "$wl 전제: rm 대역이 두 이름에 링크를 다시 심었다" || no "$wl 전제: rm 대역이 다시 심지 않았다 — 「다시 심음」을 재지 못한다"
+        else
+          { [ "$wdir/critic.txt" -ef "$w_src" ] && [ "$wdir/critic-2.txt" -ef "$w_src" ]; } \
+            && ok "$wl 전제: rm 대역이 두 이름을 폴더 밖 파일로 다시 이었다" || no "$wl 전제: rm 대역이 다시 심지 않았다 — 「다시 심음」을 재지 못한다"
+          assert_eq "$(cat "$w_src" 2>/dev/null)" "$CRITIC_SEED" "$wl: 다시 심긴 이름이 가리키는 폴더 밖 파일을 그대로 둔다"
+        fi
+        assert_eq "$w_rc" "1" "$wl: 다시 심긴 이름을 비우지 못했으니 rc 1"
+        assert_contains "$werr" "critic 출력 파일을 비우지 못했다:" "$wl: 「비우지 못했다」 목록을 낸다"
+        assert_contains "$werr" " $wdir/critic.txt" "$wl: 그 목록에 critic.txt 를 이름으로 댄다"
+        assert_contains "$werr" " $wdir/critic-2.txt" "$wl: 그 목록에 critic-2.txt 를 이름으로 댄다"
+        assert_not_contains "$werr" "을 비웠다" "$wl: 다시 심긴 이름을 남겼는데 「비웠다」고 말하지 않는다" ;;
       notfile)
         assert_eq "$w_rc" "1" "$wl: 파일이 아닌 항목을 남겼으니 rc 1"
         assert_eq "$(wc -c < "$wdir/critic.txt" 2>/dev/null | tr -d ' ')" "0" "$wl: 보통 파일 critic.txt 는 비운다"
@@ -297,13 +362,7 @@ for zsh_name in bash zsh; do
         assert_contains "$werr" "critic-3.txt(파일이 아님)" "$wl: 건너뛴 항목을 이름으로 알린다" ;;
       hardlinked)
         assert_eq "$w_rc" "0" "$wl: 하드 링크 이름도 빈 파일로 바꿔 비우니 rc 0"
-        assert_eq "$(cat "$wout.c" 2>/dev/null)" "$CRITIC_SEED" "$wl: critic.txt 와 하드 링크로 이어진 폴더 밖 파일을 그대로 둔다"
-        assert_eq "$(cat "$wout.d" 2>/dev/null)" "$CRITIC_SEED" "$wl: critic-4.txt 와 하드 링크로 이어진 폴더 밖 파일을 그대로 둔다"
-        for hn in critic.txt critic-4.txt; do
-          { [ -f "$wdir/$hn" ] && [ ! -L "$wdir/$hn" ] && [ ! -s "$wdir/$hn" ]; } \
-            && ok "$wl: 상태 폴더의 $hn 는 빈 보통 파일로 남는다" || no "$wl: 상태 폴더의 $hn 가 빈 보통 파일이 아니다"
-        done
-        assert_contains "$werr" "critic-<번호>.txt)을 비웠다." "$wl: 비운 뒤 「비웠다」고 보고한다" ;;
+        link_shape_check "$wl" "$wdir" "$wout" hardlinked "$werr" ;;
       *)
         assert_eq "$w_rc" "0" "$wl: rc 0"
         z_check "$wl" "$wdir" "$shape" "$SCRATCH/w-$zsh_name-$shape.err"
@@ -341,19 +400,63 @@ assert_eq "$fr_rc" "0" "request-framing S: 펜스 rc 0"
 assert_eq "$(cat "$SCRATCH/fr.out")" "$(expect_stripped "$SEED_PROF")" "request-framing S: stdout 이 seed 프로필에서 must_catch 줄만 뺀 것과 같다"
 assert_eq "$(grep -c '^must_catch:' "$SCRATCH/fr.out" || true)" "0" "request-framing S: 펜스 출력에 must_catch 줄이 없다"
 assert_eq "$(grep -c '^must_catch:' "$SEED_PROF" || true)" "1" "request-framing S 전제: seed 프로필에는 must_catch 줄이 있다"
-# Z — request-framing 실패 분기(프로필 없음)의 비움도 bash 와 zsh, 모양 셋으로.
+# Z — request-framing 실패 분기(프로필 없음)의 비움도 bash 와 zsh 로, 모양 다섯으로(링크 둘은 W 와 같은 기대).
+# 펜스는 플러그인 루트(CLAUDE_PLUGIN_ROOT)의 비움 스크립트를 부른다. `fr_run <셀> <셸> <상태 폴더> <루트|"">`.
+fr_run() {
+  local rootvar=(CLAUDE_PLUGIN_ROOT="$4"); [ -n "$4" ] || rootvar=()
+  ( cd "$SCRATCH" && env -i PATH="$BASE" HOME="$SCRATCH" PROFILE="$SCRATCH/no-such-profile.md" STATE_DIR="$3" \
+      ${rootvar[@]+"${rootvar[@]}"} "$2" "$FR_FENCE" ) > "$SCRATCH/$1.out" 2>"$SCRATCH/$1.err"
+  echo $? > "$SCRATCH/$1.rc"
+}
 for zsh_name in bash zsh; do
   z_sh=bash; [ "$zsh_name" = zsh ] && { [ -n "$ZSH_BIN" ] || continue; z_sh="$ZSH_BIN"; }
-  for shape in only both none; do
-    zdir="$SCRATCH/frz-$zsh_name-$shape/state"; mkdir -p "$zdir"
-    [ "$shape" = none ] || printf '%s\n' "$CRITIC_SEED" > "$zdir/critic.txt"
-    [ "$shape" = both ] && printf '%s\n' "$CRITIC_SEED" > "$zdir/critic-2.txt"
-    ( cd "$SCRATCH" && env -i PATH="$BASE" HOME="$SCRATCH" PROFILE="$SCRATCH/no-such-profile.md" STATE_DIR="$zdir" "$z_sh" "$FR_FENCE" ) \
-      > "$SCRATCH/frz.out" 2>"$SCRATCH/frz-$zsh_name-$shape.err"; frz_rc=$?
-    assert_eq "$frz_rc" "1" "request-framing Z(${zsh_name}·$shape): 프로필이 없으면 rc 1"
-    z_check "request-framing Z(${zsh_name}·$shape)" "$zdir" "$shape" "$SCRATCH/frz-$zsh_name-$shape.err"
+  for shape in only both none linked hardlinked; do
+    zl="request-framing Z(${zsh_name}·$shape)"; cell="frz-$zsh_name-$shape"
+    zdir="$SCRATCH/$cell/state"; mkdir -p "$zdir"; zout="$SCRATCH/frz-outside-$zsh_name"
+    case "$shape" in
+      linked|hardlinked) link_shape_seed "$zdir" "$zout" "$shape" ;;
+      *) [ "$shape" = none ] || printf '%s\n' "$CRITIC_SEED" > "$zdir/critic.txt"
+         [ "$shape" = both ] && printf '%s\n' "$CRITIC_SEED" > "$zdir/critic-2.txt" ;;
+    esac
+    fr_run "$cell" "$z_sh" "$zdir" "$SD"
+    zerr="$(cat "$SCRATCH/$cell.err")"
+    assert_eq "$(cat "$SCRATCH/$cell.rc")" "1" "$zl: 프로필이 없으면 rc 1"
+    assert_eq "$(grep -c . "$SCRATCH/$cell.out" || true)" "0" "$zl: stdout 에 아무것도 쓰지 않는다 (펜스의 stdout 은 프로필 슬롯이다)"
+    case "$shape" in
+      linked|hardlinked)
+        assert_not_contains "$zerr" "no matches found" "$zl: 글롭이 셸을 멈추지 않는다"
+        link_shape_check "$zl" "$zdir" "$zout" "$shape" "$zerr" ;;
+      *)
+        z_check "$zl" "$zdir" "$shape" "$SCRATCH/$cell.err"
+        assert_contains "$zerr" "critic-<번호>.txt)을 비웠다." "$zl: 비운 뒤 「비웠다」고 보고한다" ;;
+    esac
   done
 done
+# 비움 스크립트가 없는 루트 · 루트를 모름 · 상태 폴더 없음(빈 값 · 폴더 아닌 경로) — 그래도 rc 1, 비우지 않았다고
+# 말하고 「비웠다」고 하지 않는다. 경로를 추측하지 않는다. 상태 폴더 없음의 문구는 reviewing-brief · spec-review 와 같은 꼴이다.
+for case_name in noclr noroot nostate nodir; do
+  cell="frw-$case_name"; zdir="$SCRATCH/$cell/state"; mkdir -p "$zdir"
+  printf '%s\n' "$CRITIC_SEED" > "$zdir/critic.txt"; printf '%s\n' "$CRITIC_SEED" > "$zdir/critic-2.txt"
+  case "$case_name" in
+    noclr) fr_run "$cell" bash "$zdir" "$PR_NOCLR"; want="비우는 스크립트가 돌지 않았다"; zl="request-framing W(스크립트 없음)" ;;
+    noroot) fr_run "$cell" bash "$zdir" ""; want="critic 출력 파일을 비우지 않았다"; zl="request-framing W(루트 모름)" ;;
+    nostate) fr_run "$cell" bash "" "$SD"; want="critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패"; zl="request-framing W(상태 폴더 빈 값)" ;;
+    nodir) fr_run "$cell" bash "$zdir/critic.txt" "$SD"; want="critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패"; zl="request-framing W(상태 폴더가 파일)" ;;
+  esac
+  zerr="$(cat "$SCRATCH/$cell.err")"
+  assert_eq "$(cat "$SCRATCH/$cell.rc")" "1" "$zl: rc 1 (dispatch 하지 않는다)"
+  assert_eq "$(grep -c . "$SCRATCH/$cell.out" || true)" "0" "$zl: stdout 에 아무것도 쓰지 않는다"
+  assert_contains "$zerr" "$want" "$zl: 비우지 않았다고 말한다 («${want}»)"
+  assert_not_contains "$zerr" "을 비웠다" "$zl: 비우지 않은 파일을 비웠다고 말하지 않는다"
+  assert_eq "$(cat "$zdir/critic.txt" 2>/dev/null)" "$CRITIC_SEED" "$zl: critic.txt 를 건드리지 않는다 (채워 둔 값 그대로)"
+done
+# 부재 · 존재 락 — 펜스 본문(주석 줄을 뺀 것)에 제자리 자르기 `: > "$STATE_DIR/` 와 자체 번호 글롭이 없고, 공유 비움
+# 스크립트를 `$STATE_DIR` 로 부르는 줄이 있다. echo 문구가 스크립트 이름을 말해도 호출 꼴은 만족시키지 못한다.
+FR_BODY="$(grep -v '^[[:space:]]*#' "$FR_FENCE")"
+assert_not_contains "$FR_BODY" ': > "$STATE_DIR/' "request-framing 부재: 펜스 본문이 critic 출력을 제자리에서 자르지 않는다 (: > \"\$STATE_DIR/…\")"
+assert_not_contains "$FR_BODY" 'critic-[0-9]*.txt' "request-framing 부재: 펜스 본문이 번호 붙은 critic 이름을 스스로 맞추지 않는다"
+assert_grep "$FR_BODY" 'bash "[^"]*/scripts/clear_critic_outputs\.sh" "\$STATE_DIR"' \
+  "request-framing 존재: 펜스 본문이 공유 비움 스크립트(scripts/clear_critic_outputs.sh)를 \$STATE_DIR 로 부른다"
 
 # brief 는 실패를 degrade 원장에 남긴다(Step B 로 가는 채널). 원장이 못 쓰이면 두 번째 채널.
 # 원장 = 그 셀의 상태 파일, 두 번째 채널 = 그 셀의 원장 자리(.docreview/<키>) 안.

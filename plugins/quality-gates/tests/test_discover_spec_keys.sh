@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test_discover_spec_keys.sh — ⑤ 뒤 discover-spec.sh 의 출력 키는 intent 셋뿐이다(K-5 ⑤ 줄 · AC27).
+# test_discover_spec_keys.sh — discover-spec.sh 의 출력 키는 intent 셋과 specs 뿐이다(K-5 ⑤ 줄 · AC27 · AC22).
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 DS="$(cd -- "$SCRIPT_DIR/.." && pwd)/scripts/discover-spec.sh"
@@ -21,8 +21,10 @@ printf '#!/bin/sh\nexit 1\n' > "$R/bin/gh"; chmod +x "$R/bin/gh"
 out=$(cd "$R/repo" && PATH="$R/bin:$PATH" bash "$DS" --intent-out "$R/intent.md" 2>/dev/null); rc=$?
 assert_eq "$rc" "0" "discover-spec.sh exit 0"
 keys=$(printf '%s' "$out" | python3 -c 'import json,sys; print(" ".join(sorted(json.loads(sys.stdin.read()))))' 2>/dev/null)
-assert_eq "$keys" "intent_file intent_note intent_source" "K-5 ⑤: 키는 intent_source · intent_note · intent_file 셋"
+assert_eq "$keys" "intent_file intent_note intent_source specs" "AC22: 키는 intent_source · intent_note · intent_file · specs 넷"
 assert_not_contains "$out" '"spec_path"' "K-5 ⑤: spec_path 키가 없다"
 src=$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["intent_source"])' 2>/dev/null)
 assert_eq "$src" "spec-trailer" "양성 짝: Spec: 트레일러는 여전히 첫 의도 출처다"
+specs=$(printf '%s' "$out" | python3 -I -c 'import json,sys; print(json.dumps(json.loads(sys.stdin.read())["specs"]))' 2>/dev/null)
+assert_eq "$specs" '["docs/superpowers/specs/2026-01-01-x-design.md"]' "AC22: specs 는 의도에 실은 설계문서의 리포 상대 경로 목록이다"
 finish

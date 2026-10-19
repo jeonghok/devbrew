@@ -47,8 +47,7 @@ assert_count_ge "grep -c '^name: security-reviewer$' '$PERSONA'" 1 "frontmatter 
 assert_count_ge "grep -c '^cost_class: medium$' '$PERSONA'" 1 "frontmatter cost_class medium"
 MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
 fm="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$PERSONA")"
-assert_eq "$(printf '%s\n' "$fm" | grep -cE "$MODEL_KEY")" "1" "AC10: frontmatter 의 model 키는 정확히 한 줄"
-assert_eq "$(printf '%s\n' "$fm" | grep -E "$MODEL_KEY")" "model: opus" "AC10: 그 줄은 model: opus (qg 소유 리뷰 agent 는 opus — 재결정 R3)"
+assert_eq "$(printf '%s\n' "$fm" | grep -cE "$MODEL_KEY")" "0" "AC27: frontmatter 에 model 키가 없다 (세션 모델을 따른다 — R2a 사용자 결정, 옛 R3 의 opus 고정 해제)"
 assert_count_ge "grep -c '^tools: Read, Grep, Glob$' '$PERSONA'" 1 "frontmatter tools: allowlist (fail-closed)"
 assert_file_absent "$PERSONA" '^allowedTools:' "죽은 allowedTools 없음"
 assert_file_absent "$PERSONA" '^disallowedTools:' "disallowedTools 없음 (allowlist 가 컨트롤)"
@@ -67,7 +66,8 @@ assert_file_absent "$PERSONA" '^[[:space:]]*confidence:' "출력 스키마에 co
 assert_count_ge "grep -c '^## Severity' '$PERSONA'" 1 "Severity 절이 있다"
 # Severity 절 «본문»이 살아남은 눈금의 이빨이다 — 제목만 남기고 본문을 지우면 RED.
 assert_fixed "$(severity_section)" 'Set `severity` by the `criteria` block.' "Severity — 기준 블록이 severity 를 정한다"
-assert_fixed "$(severity_section)" 'Code this change did not touch is out of scope — do not report hardening for it' "Severity — 변경 밖 코드의 강화 권고는 내지 않는다 (Forbidden 과 일치)"
+assert_fixed "$(severity_section)" 'Report a finding located outside the diff when its cause is this change' "Severity — 원인이 이 변경이면 diff 밖 위치도 보고 (AC27)"
+assert_fixed "$(severity_section)" 'Do not report hardening for code whose behavior this change did not affect (see `## Forbidden`).' "Severity — 변경이 행동을 바꾸지 않은 코드의 강화 권고는 내지 않는다 (Forbidden 과 일치 — 양성 짝)"
 assert_fixed "$(severity_section)" 'including when the input *looks* user-controlled but its validation is not shown in the diff' "Severity — 검증이 diff 에 안 보이는 사용자 입력도 CRITICAL"
 assert_fixed "$(severity_section)" 'Do not report a finding whose attack needs conditions you have no evidence for.' "Severity — 근거 없는 조건이 필요한 공격은 내지 않는다"
 assert_fixed "$(severity_section)" 'that the change commits to source is an exploitable path the change itself introduces — `CRITICAL`' "Severity — 변경이 커밋한 비밀은 막는 CRITICAL"
@@ -75,7 +75,7 @@ assert_fixed "$(severity_section)" 'A dependency-manifest finding (see `## Hunt 
 assert_fixed "$(severity_section)" 'Otherwise it is reported as fact at `SUGGESTION`.' "Severity — 구체 경로가 없는 매니페스트 항목은 SUGGESTION 으로 사실 보고"
 assert_not_fixed "$(severity_section)" 'the entry alone is not a blocking condition' "Severity — 매니페스트를 일괄 비차단으로 두는 옛 문구가 없다"
 # M7 — 위 부분 문자열 락의 꼬리. Severity 단락은 각각 한 줄이고, 줄 전체를 등호로 잠근다.
-assert_line "$(severity_section)" 'Set `severity` by the `criteria` block. A finding is `CRITICAL` or `IMPORTANT` only when it is one of the blocking conditions there — for this reviewer that is usually the third: a concrete path that breaks a control this change itself added or modified, or an exploitable path the change itself introduces. Code this change did not touch is out of scope — do not report hardening for it (see `## Forbidden`). A finding tied to a changed line that is not one of the blocking conditions is `SUGGESTION`.' \
+assert_line "$(severity_section)" 'Set `severity` by the `criteria` block. A finding is `CRITICAL` or `IMPORTANT` only when it is one of the blocking conditions there — for this reviewer that is usually the third: a concrete path that breaks a control this change itself added or modified, or an exploitable path the change itself introduces. Report a finding located outside the diff when its cause is this change (for example, a caller or a control the change broke). Do not report hardening for code whose behavior this change did not affect (see `## Forbidden`). A finding this change caused that is not one of the blocking conditions is `SUGGESTION`.' \
   "M7: Severity 첫 단락이 줄 전체로 그대로다"
 assert_line "$(severity_section)" 'Use `CRITICAL` when the path is traceable from the diff to a severe impact (data breach, RCE, auth bypass) — including when the input *looks* user-controlled but its validation is not shown in the diff. Do not report a finding whose attack needs conditions you have no evidence for.' \
   "M7: CRITICAL 단락이 줄 전체로 그대로다"
@@ -129,5 +129,20 @@ assert_count_ge "hunt_section | grep -cF 'becomes caller input when the fence is
 assert_count_ge "hunt_section | grep -cF 'the input that crosses that limit is wrong behavior this change introduces'" 1 "I4: input-driven resource exhaustion hunt bullet in Hunt categories"
 assert_line "$(hunt_section)" '- **Input-driven resource exhaustion (availability)** — a regex, loop, recursion, read, or allocation the change adds whose time or memory grows with input it does not bound: catastrophic-backtracking regex (nested or overlapping quantifiers applied to unbounded input), loops or whole-input reads over stdin, request bodies, file contents, or diffs with no size cap, and recursion with no depth limit. In a hook, gate, CLI, or request path that runs under a timeout, the input that crosses that limit is wrong behavior this change introduces. Name the input and the construct the change added — this is not the generic rate-limiting advice in the anti-flag list.' \
   "I4: 자원 고갈 불릿이 줄 전체로 그대로다"
+
+# AC27 — 범위 문장: 원인이 이 변경이면 diff 밖 위치도 보고한다. hardening 금지는 남는다(양성 짝).
+assert_file_grep "$PERSONA" 'when its cause is this change' "Severity: 원인이 이 변경이면 diff 밖 위치도 보고(AC27)"
+assert_file_grep "$PERSONA" 'a location outside the diff is fine when the cause is this change' "Forbidden: 같은 범위"
+assert_file_absent "$PERSONA" "No findings outside the diff's actual code changes" "옛 「바뀐 코드만」 문장이 없다"
+assert_file_grep "$PERSONA" 'Do not report hardening for code whose behavior this change did not affect' "hardening 금지는 남는다(약화 아님 — 양성 짝)"
+assert_file_grep "$PERSONA" '^tools: Read, Grep, Glob$' "도구 allowlist 그대로"
+assert_file_grep "$PERSONA" 'you have no web tools' "AC27: 웹 금지 문장 그대로"
+assert_file_grep "$PERSONA" 'would create an exfiltration channel \(P21\)' "AC27: 웹 금지 근거(exfiltration P21) 그대로"
+assert_file_grep "$PERSONA" 'Do not run audit commands yourself' "AC27: 실행 금지 문장 그대로"
+assert_file_grep "$PERSONA" 'A finding this change caused that is not one of the blocking conditions is `SUGGESTION`' "Severity 꼬리: 이 변경이 낳은 지적 (넓힌 범위와 일치)"
+assert_file_absent "$PERSONA" 'tied to a changed line' "Severity 꼬리: 옛 「바뀐 줄에 묶인」 문구가 없다"
+SK="$REPO_ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
+assert_contains "$(cat "$SK")" 'Report findings this change caused — the location may be outside the diff when the cause is this change.' "SKILL 외부 리뷰어 프롬프트도 같은 범위"
+assert_contains "$(cat "$PERSONA")" 'do not re-apply your own exclusion' "filtered_diff: 제외 정의를 다시 갖지 않는다"
 
 finish

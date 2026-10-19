@@ -251,6 +251,28 @@ if [ -n "$ZSH_BIN" ]; then
 else
   echo "  - K(zsh): zsh 없음 — zsh 실행 확인을 건너뛴다"
 fi
+# K(bash3.2) — 같은 세 사례를 macOS 의 /bin/bash(3.2)로 돌린다. 3.2 에서만 깨지는 펜스 문법을 본다.
+if /bin/bash --version 2>/dev/null | head -n 1 | grep -qF 'version 3.'; then
+  kb_case() {   # kb_case <sid> <확인 fixture 쓰기 함수> <통과 라벨> <확인 식 함수>
+    local sid="$1" fill="$2" label="$3" check="$4" b_rc
+    home "$sid"; pl="$(place "$sid")"; mkdir -p "$pl"; au="$(add_sec4 "$sid")"
+    "$fill"
+    RUN_SHELL=/bin/bash; run_in "$sid" "$W/record-run.sh"; b_rc=$?; RUN_SHELL=bash
+    if [ "$b_rc" -eq 0 ] && "$check"; then ok "K(bash3.2): $label"
+    else no "K(bash3.2): $label — 실패(rc ${b_rc}) — $(tail -2 "$W/$sid.err" | tr '\n' ' ')"; fi
+  }
+  kb_fill_old() { printf 'BOLD_NAME_BODY\n' > "$pl/critic.txt"; }
+  kb_chk_old() { grep -qF 'BOLD_NAME_BODY' "$au"; }
+  kb_fill_det() { printf 'BDET_ONE\n' > "$pl/critic-1.txt"; printf 'BDET_TWO\n' > "$pl/critic-2.txt"; printf 'BRECRITIC\n' > "$pl/recritic.txt"; }
+  kb_chk_det() { grep -qF '탐지 1 (doc-critic)' "$au" && grep -qF 'BDET_ONE' "$au" && grep -qF 'BDET_TWO' "$au" && grep -qF 'BRECRITIC' "$au"; }
+  kb_fill_none() { printf 'BRECRITIC_ONLY\n' > "$pl/recritic.txt"; }
+  kb_chk_none() { grep -qF '산출물 없음 — critic.txt' "$au" && grep -qF 'BRECRITIC_ONLY' "$au"; }
+  kb_case fb13recolds kb_fill_old "critic.txt 만 있으면 bash 3.2 에서도 그것을 옮긴다" kb_chk_old
+  kb_case fb11recdet kb_fill_det "탐지 리뷰어 둘과 재비판 출력이 bash 3.2 에서도 audit ## 4 에 옮겨진다" kb_chk_det
+  kb_case fb12recnone kb_fill_none "탐지 출력이 하나도 없어도 bash 3.2 에서 멈추지 않고 없다는 사실을 적는다" kb_chk_none
+else
+  echo "  - K(bash3.2): bash 3.2 없음 — 건너뛴다"
+fi
 
 # ── codex — A · A+ · R · X · E ───────────────────────────────────────────────
 { cat "$W/state.sh"; cat "$W/bundle.sh"; cat "$W/gate.sh"; } > "$W/full.sh"

@@ -792,6 +792,9 @@ def landscape_present(text: str) -> bool:
     다른 세션에서 그 변수 없이 게이트를 다시 타면 RED가 된다. audit `## 4. 게이트 실행
     기록`에 web-disabled 사유 칸을 둔 것은 그래서다 — 저술 시점의 환경을 아티팩트가
     날라, 나중 실행이 자기 환경으로 남의 brief를 판정하지 않게 한다.
+
+    항목 없는 §4 의 다른 닫힘 「외부 선례 무관(@S<m>)」(`landscape_irrelevant`)은 환경변수와 무관하다 — audit §6 의
+    사용자 선택(☑)이 연다.
     """
     sec = _section_text(text, "4", brief_body.SECTION_TITLES["4"]).strip()
     if not sec:
@@ -799,6 +802,43 @@ def landscape_present(text: str) -> bool:
     if _web_disabled() and re.search(r"\bN/?A\b|비활성|생략|web[ -]?disabled", sec, re.IGNORECASE):
         return True
     return bool(_section4_heads(text))
+
+
+# §4 의 「외부 선례 무관」 닫힘 줄 — 열 0, 불릿 없이. 불릿으로 쓴 같은 꼴은 따로 잡아 고칠 말을 준다.
+IRRELEVANT_RE = re.compile(r"^외부 선례 무관\(@(S\d+)\) — \S")
+IRRELEVANT_BULLET_RE = re.compile(r"^\s*[-*+]\s+외부 선례 무관\(@S\d+\)")
+
+
+def audit_chosen_anchors(audit_text: str) -> set:
+    """audit §6 의 사용자 선택(☑) 앵커 — `verbatim_anchors` 와 같은 경계(`_audit_section6`) · 같은 앵커 문법
+    (`brief_body.anchor_lines`)에서, 본문 첫 낱말이 `☑`(이체 선택자 U+FE0F 는 뗀다)인 `S<N>` 집합."""
+    out = set()
+    for _n, sid, rest in brief_body.anchor_lines(_audit_section6(audit_text))[0]:
+        words = rest.split()
+        if words and words[0].replace("\ufe0f", "") == "☑":
+            out.add(sid)
+    return out
+
+
+def landscape_irrelevant(payload_text: str, audit_text: str) -> tuple:
+    """§4 의 불릿 없는 줄 `외부 선례 무관(@S<m>) — <이유>` -> (closed, failures). 줄이 없으면 `(False, [])`. 있으면
+    가리킨 `S<m>` 이 모두 audit §6 의 사용자 선택(☑)일 때만 `(True, [])`, 아니면 ☑ 아닌 S 마다 실패 한 줄.
+    §4 경계는 `_section_text`(펜스를 벗긴 본문) 그대로 — 인용 줄(`> …`)은 열 0 이 `외` 가 아니라 닫힘이 아니다."""
+    sids = [m.group(1) for ln in brief_body.split_lines(_section_text(payload_text, *SECTION4))
+            for m in [IRRELEVANT_RE.match(ln)] if m]
+    if not sids:
+        return False, []
+    chosen = audit_chosen_anchors(audit_text)
+    fails = [f"External Landscape: 「외부 선례 무관(@{s})」 이 가리키는 {s} 가 audit §6 에서 사용자 선택(☑)이 아니다 "
+             f"— 사용자가 라운드 질문에서 고른 답만 이 닫힘을 연다"
+             for s in dict.fromkeys(sids) if s not in chosen]
+    return not fails, fails
+
+
+def landscape_irrelevant_bulleted(payload_text: str) -> bool:
+    """§4 에 불릿으로 쓴 「외부 선례 무관(@S<m>)」 줄이 있는가 — 그 줄은 닫힘이 아니라 출처키 없는 조사 항목으로 읽힌다."""
+    return any(IRRELEVANT_BULLET_RE.match(ln)
+               for ln in brief_body.split_lines(_section_text(payload_text, *SECTION4)))
 
 
 def section5_entries(text: str) -> list[str]:
@@ -1736,8 +1776,15 @@ def gate(path: Path) -> int:
                  for tok in sorted(set(brief_body.ref_confusables(_payload_excluding_section6(text))))]
 
     sec4_absent = any(m.startswith("4.") for m in miss)
-    if not sec4_absent and not landscape_present(text):
-        failures.append("External Landscape empty (no entries and no web-disabled sentinel)")
+    if not sec4_absent:
+        # 「외부 선례 무관」 줄은 항목이 있는 §4 에서도 판정한다 — ☑ 아닌 S 를 사용자 선택으로 적은 줄을 남기지 않는다.
+        if landscape_irrelevant_bulleted(text):
+            failures.append("External Landscape: 「외부 선례 무관(@S<m>)」 은 불릿 없이 한 줄로 쓴다 "
+                            "— 불릿이면 출처키 없는 조사 항목으로 읽힌다")
+        closed, lf = landscape_irrelevant(text, audit_text)
+        failures += lf
+        if not closed and not lf and not landscape_present(text):
+            failures.append("External Landscape empty (no entries and no web-disabled sentinel)")
     urls = payload_url_free(text)
     if urls:
         failures.append(f"payload에 외부 URL {len(urls)}건 (§6 사용자 원문 제외): {urls[:3]}")

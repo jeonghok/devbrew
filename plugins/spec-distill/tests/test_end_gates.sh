@@ -168,7 +168,7 @@ assert_not_contains "$DT" '칸은 열하나다:' "AC24: 옛 «칸은 열하나�
 [ -f "$SD/references/roadmap-ontology.md" ] && ok "AC24: 인용한 roadmap-ontology.md 가 있다" || no "AC24: roadmap-ontology.md 부재"
 # CHANGELOG · README — 사람에게 보이는 글은 내부 단계 이름 대신 쉬운 말로
 CL="$SD/CHANGELOG.md"; RD="$SD/README.md"
-assert_contains "$(flat "$CL")" '- 같이 쓰는 진행 게이트의 정본(`references/proceed-gate.md`)에 선택 질문 「다음 단계 갈래」가 생겼다.' "CHANGELOG: 둘째 질문은 같이 쓰는 진행 게이트의 정본에"
+assert_contains "$(flat "$CL")" '- 같이 쓰는 진행 게이트의 정본(`references/proceed-gate.md`)의 둘째 질문 문단에, 지휘자 아래 승인 질문에는 둘째 질문이 없다는 문장을 더했다.' "CHANGELOG: 둘째 질문은 같이 쓰는 진행 게이트의 정본에"
 assert_contains "$(flat "$CL")" '- 로드맵을 다시 만드는 단계가 「brief 에서 줄을 찾지 못한 번호」 로 멈추면, 그 번호가 brief 에 없을 때만 분해 표에서 뺀다.' "CHANGELOG: 다시 만드는 단계를 쉬운 말로"
 for old in '인터뷰 끝 게이트의 정본에 선택 질문' 'B-R 이 묶음 에픽의'; do
   grep -qF "$old" "$CL" && no "CHANGELOG: 옛 «${old}» 잔존" || ok "CHANGELOG: 옛 «${old}» 없음(양성 짝: 위 단언)"

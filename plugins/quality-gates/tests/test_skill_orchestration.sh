@@ -34,14 +34,21 @@ fi
 # Fix-loop iter context
 assert_file_grep "$S" '남은 지적이 있다' "Fix-loop iter anchor"
 # AC6 anchor uniqueness (Medium): `남은 지적이 있다` must appear in EXACTLY
-# ONE AskUserQuestion question template, so the routing is unambiguous.
+# ONE AskUserQuestion question template per run mode, so the routing is unambiguous.
+# 범위 모드(AC21)는 같은 앵커로 시작하는 자기 질문 하나를 따로 가진다 — 그 줄은 「범위 모드」로
+# 갈린다. 그래서 앵커는 범위 모드가 아닌 질문 줄에 정확히 하나, 범위 모드 질문 줄에 정확히 하나다.
 # Prose mentions and meta-comments outside `question:` lines are allowed.
-question_findings=$(awk '/^[[:space:]]*question:/ && /남은 지적이 있다/ { c++ } END { print c+0 }' "$S")
+question_findings=$(awk '/^[[:space:]]*question:/ && /남은 지적이 있다/ && !/범위 모드/ { c++ } END { print c+0 }' "$S")
 if [[ "$question_findings" -ne 1 ]]; then
-  echo "FAIL V2b uniqueness: '남은 지적이 있다' appears in $question_findings question: lines (expected 1)"
+  echo "FAIL V2b uniqueness: '남은 지적이 있다' appears in $question_findings non-range question: lines (expected 1)"
   exit 1
 fi
-echo "PASS V2b (anchor uniqueness: 1 question line)"
+range_findings=$(awk '/^[[:space:]]*question:/ && /남은 지적이 있다/ && /범위 모드/ { c++ } END { print c+0 }' "$S")
+if [[ "$range_findings" -ne 1 ]]; then
+  echo "FAIL V2b uniqueness: '남은 지적이 있다' appears in $range_findings range-mode question: lines (expected 1)"
+  exit 1
+fi
+echo "PASS V2b (anchor uniqueness: 1 question line per mode)"
 assert_file_grep "$S" '고치고 다시 돌기' "Fix-loop iter option"
 assert_file_grep "$S" '지금 판정으로 끝내기' "Fix-loop iter option"
 

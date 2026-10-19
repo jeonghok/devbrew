@@ -50,7 +50,9 @@ exit 2 면 stderr 를 그대로 보이고 이 실행에서는 차등 테스트�
 판정 입력은 `--reason error-axis` 다(D1~D6 을 돌지 않는다).
 
 기준선을 정한다. 기준선 커밋은 실행마다 하나로 고정된다 — 기준선 행 파일(`<memo>/baseline-<runner>.tsv`)이 한
-커밋에 묶여 iteration 사이에 재사용되기 때문이다. 첫 iteration 의 스코프 파일로 정한다:
+커밋에 묶여 iteration 사이에 재사용되기 때문이다. 첫 iteration 의 스코프 파일로 정한다. 범위 모드(세션 폴더에
+`range-scope.txt` 가 있다)면 아래 `resolve-baseline.sh` 펜스를 돌리지 않는다 — 기준선은 그다음 판별 펜스가 찍는 시작 커밋이고,
+지금 체크아웃의 merge_base 는 범위와 무관하다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -60,10 +62,12 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 ```bash
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
-S="$RD/topic-scope.txt"
-if [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then printf 'scope0=topic\nboundary=%s\n' "$(sed -n 's/^boundary: //p' "$S")"; else echo "scope0=session"; fi
+S="$RD/topic-scope.txt"; RS="$RD/range-scope.txt"
+if [ -f "$RS" ] && [ "$(sed -n 's/^status: //p' "$RS")" = ok ]; then printf 'scope0=range\nboundary=%s\n' "$(sed -n 's/^start: //p' "$RS")"
+elif [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then printf 'scope0=topic\nboundary=%s\n' "$(sed -n 's/^boundary: //p' "$S")"; else echo "scope0=session"; fi
 ```
 
+- `scope0=range` 이면 기준선 커밋은 `boundary=` 값 — 범위의 시작 커밋이다(리뷰 diff 의 기준과 같다).
 - `scope0=topic` 이면 기준선 커밋은 `boundary=` 값이다.
 - `scope0=session` 이면 기준선 커밋은 `merge_base:` 다. `degraded: yes` 면 기준선 커밋은 `-` 이다 — 기준선 축을
   돌리지 못한다. session 스코프에서는 D2 가 같은 기준선을 풀다가 exit 4 로 멈추므로 판정 입력은 error-axis 가 된다.
@@ -71,13 +75,16 @@ if [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then printf 'scope
 `scope0` 와 기준선 커밋을 기억해 둔다 — D1 이 매 iteration 대조한다. 뒤 iteration 에서 스코프가 session ↔ topic 으로
 바뀌거나 경계가 달라지면 그 iteration 은 기준선이 어긋나 판정하지 않는다(error-axis, D1). 한 줄로 알린다:
 `> [quality-gates] baseline: <base 또는 topic 키> @ <기준선 커밋 앞 12자> (<ahead>커밋 앞섬)`.
+범위면 키 칸은 `range` 이고 앞섬 칸은 범위 파일의 `commits:` 값이다. 범위 모드는 iteration 1 에서 끝나므로 기준선이
+어긋날 뒤 iteration 이 없다.
 
 ## D1 HEAD 축 트리 — 매 iteration
 
 이 iteration 의 스코프 파일(Step 1a 가 이번 iteration 에 쓴 것)을 읽어 HEAD 축 트리를 만든다(R11 · R12). 먼저 앞
 iteration 이 세션 폴더에 남긴 차등 출력 사본을 지운다 — 이 iteration 이 D5 에 닿지 못하면 사본이 없어야 한다.
-토픽 스코프면 봉인하지 않고 그 파일의 `head_commit:` 으로 `create-head --topic` 을 부르고(합친 트리를 다시 도출해
-대조한다), 아니면 작업트리 전체를 봉인한 커밋으로 부른다. `<D0 의 스코프: topic | session>` 와 `<D0 의 기준선 커밋>` 은
+범위 스코프면 봉인하지 않고 범위 파일의 끝 커밋으로 `create-head --range` 를 부른다(얼린 범위 파일과 다시 대조한다 —
+시작 커밋이나 움직인 ref 로는 만들지 않는다). 토픽 스코프면 봉인하지 않고 그 파일의 `head_commit:` 으로 `create-head --topic` 을 부르고(합친 트리를 다시 도출해
+대조한다), 아니면 작업트리 전체를 봉인한 커밋으로 부른다. `<D0 의 스코프: topic | session | range>` 와 `<D0 의 기준선 커밋>` 은
 D0 에서 기억해 둔 값이다:
 
 ```bash
@@ -85,9 +92,11 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 rm -f "$RD/differential.yaml" "$RD/differential-not-counted.md"
-SCOPE0="<D0 의 스코프: topic | session>"; BASE0="<D0 의 기준선 커밋>"
-S="$RD/topic-scope.txt"; scope=session; base="$BASE0"; key=""; hc=""; tree=""
-if [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then
+SCOPE0="<D0 의 스코프: topic | session | range>"; BASE0="<D0 의 기준선 커밋>"
+S="$RD/topic-scope.txt"; RS="$RD/range-scope.txt"; scope=session; base="$BASE0"; key=""; hc=""; tree=""
+if [ -f "$RS" ] && [ "$(sed -n 's/^status: //p' "$RS")" = ok ]; then
+  scope=range; base=$(sed -n 's/^start: //p' "$RS"); hc=$(sed -n 's/^end: //p' "$RS"); tree="$hc"
+elif [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then
   scope=topic; base=$(sed -n 's/^boundary: //p' "$S"); key=$(sed -n 's/^topic_key: //p' "$S")
   hc=$(sed -n 's/^head_commit: //p' "$S"); tree=$(sed -n 's/^tree: //p' "$S")
 fi
@@ -96,7 +105,9 @@ if [ "$scope" != "$SCOPE0" ] || [ "$base" != "$BASE0" ]; then
   echo "axis=mismatch"; exit 0
 fi
 head_tree=""; cand=""
-if [ "$scope" = topic ]; then
+if [ "$scope" = range ]; then
+  cand="$hc"; head_tree=$("$QG/scripts/qg-worktree.sh" create-head "$hc" "<session-id>" --range "$RD/range-scope.txt") || head_tree=""
+elif [ "$scope" = topic ]; then
   cand="$hc"; head_tree=$("$QG/scripts/qg-worktree.sh" create-head "$hc" "<session-id>" --topic "$key") || head_tree=""
 else
   cand=$("$QG/scripts/seal-worktree.sh" seal "<session-id>") || cand=""
@@ -113,21 +124,35 @@ printf 'axis=ok\nscope=%s\nboundary=%s\ntree=%s\nhead_commit=%s\nhead_tree=%s\n'
 
 ## D2 후보와 배정 — 매 iteration
 
-후보의 바닥을 받는다. 토픽 스코프면 `--topic <boundary> <tree>` 를 붙인다 — 두 값은 D1 이 이 iteration 의 스코프
-파일에서 읽어 찍은 `boundary=` · `tree=` 다:
+후보의 바닥을 받는다. 토픽 · 범위 스코프면 `--topic <boundary> <tree>` 를 붙인다 — 두 값은 D1 이 이 iteration 의 스코프
+파일에서 읽어 찍은 `boundary=` · `tree=` 다. 범위면 그것이 `--topic <start> <end>`(범위 파일의 시작 · 끝 커밋)다.
+펜스가 같은 스코프 파일에서 두 값을 직접 읽는다 — 옮겨 적지 않는다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-"$QG/scripts/compute-test-scope-candidates.sh"
-"$QG/scripts/compute-test-scope-candidates.sh" --total
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+RD="${TOP}/.claude/quality-gates/<session-id>"
+S="$RD/topic-scope.txt"; RS="$RD/range-scope.txt"; b=""; t=""
+if [ -f "$RS" ] && [ "$(sed -n 's/^status: //p' "$RS")" = ok ]; then
+  b=$(sed -n 's/^start: //p' "$RS"); t=$(sed -n 's/^end: //p' "$RS")
+elif [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then
+  b=$(sed -n 's/^boundary: //p' "$S"); t=$(sed -n 's/^tree: //p' "$S")
+fi
+if [ -n "$t" ]; then
+  "$QG/scripts/compute-test-scope-candidates.sh" --topic "$b" "$t"; echo "candidates rc=$?"
+  "$QG/scripts/compute-test-scope-candidates.sh" --total --tree "$t"; echo "total rc=$?"
+else
+  "$QG/scripts/compute-test-scope-candidates.sh"; echo "candidates rc=$?"
+  "$QG/scripts/compute-test-scope-candidates.sh" --total; echo "total rc=$?"
+fi
 ```
 
-exit 4 는 「후보 없음」이 아니다(R17). stderr 를 그대로 보이고 이 iteration 의 판정 입력은 `--reason error-axis` 다.
+`candidates rc` · `total rc` 의 exit 4 는 「후보 없음」이 아니다(R17). stderr 를 그대로 보이고 이 iteration 의 판정 입력은 `--reason error-axis` 다.
 
 후보는 바닥이다. 오케스트레이터는 diff 와 의도 출처를 보고 영향 테스트를 **더할** 수만 있고 뺄 수는 없다. 낡았거나
 (이번 변경과 무관한 옛 동작을 검사) 골라 담은(변경을 피해 가는) 테스트로 판단한 것은 그대로 돌리되 커버리지로 세지
 않는다. 그 목록을 테스트마다 한 줄 이유와 함께 메모에 적는다 — 없으면 `(없음)` 한 줄이다. 영향 테스트가 하나도
-없다고 판단되면 그 사실도 여기에 적는다 — 0 단위면 D5 가 scope-empty 를 낸다. D3/D4 밖에서 스위트를 돌리지 않는다. 실행 끝의 `result.md` `## 차등 테스트` 가
+없다고 판단되면 그 사실도 여기에 적는다 — 0 단위면 D5 가 scope-empty 를 낸다. 실행 끝의 `result.md` `## 차등 테스트` 가
 이 목록을 싣는다:
 
 ```bash
@@ -136,6 +161,8 @@ cat > "<memo>/not-counted-i<N>.md" <<'QG_NOT_COUNTED'
 QG_NOT_COUNTED
 ```
 
+D3/D4 밖에서 스위트나 테스트를 돌릴 수 있다 — 원인을 찾는 조사용이다. 돌리기 전에 `> [quality-gates] 조사용 실행 — 판정에 안 씀: <명령>` 한 줄을 내고, 결과를 판정 입력 어디에도(배정 · 커버리지로 세지 않을 목록 · 행 파일 · D5 · 합성기) 넣지 않고, D3/D4 의 트리(기준선 · head 트리)에서는 돌리지 않는다. `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 조사용 실행도 하지 않는다 — 저장소 코드를 호스트에서 돌리기 때문이다.
+
 고른 파일을 배정 파일로 바꾼다. unit 변환(파일 → 패키지 · bulk 흡수)은 스크립트가 한다:
 
 ```bash
@@ -143,11 +170,12 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 printf '%s\n' <고른 파일들> | "$QG/scripts/run-test-selection.sh" assign "<스캔 트리>" "<memo>/assign-i<N>.tsv"
 ```
 
-스캔 트리는 D1 의 `head_tree` 다(비었으면 `<project_dir>`). 배정 파일의 행은
+스캔 트리는 D1 의 `head_tree` 다(비었으면 `<project_dir>`). 범위 스코프에서 이 대체는 어느 러너가 맡을지 정하는 데만 쓰인다 —
+`head_tree` 가 비면 D3 이 HEAD 축을 관측 없음으로 채우므로 지금 체크아웃(시작 커밋일 수 있다)의 테스트 결과는 판정에 들어가지 않는다. 배정 파일의 행은
 `<unit>\t<runner|unclaimed>\t<granularity>` 이고 마지막 줄은 `#qg-assign` 꼬리다. `unclaimed` 는 어느 러너 어댑터
 9종도 못 돌리는 후보다 — 판정에서 silent-drop 이 된다(R16).
 
-계획을 한 줄로 알린다. 분모는 `--total` 의 출력이다(토픽 스코프면 `--total --tree <tree>`):
+계획을 한 줄로 알린다. 분모는 `--total` 의 출력이다(토픽 · 범위 스코프면 `--total --tree <tree>` — 범위면 `--total --tree <end>`):
 
 > `> Differential scope: 영향 테스트 <N>개 선택 (전체 <M>개 중), 러너 <runners> — 이번 변경의 영향분만 기준선 대비로 돌린다.`
 

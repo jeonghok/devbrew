@@ -29,8 +29,16 @@ trv = [i for i, l in enumerate(lines) if '작은 수정이라 파이프라인을
 print("DETECT:%d" % len(det))
 print("DETECT_FIRST:%d" % (1 if det and trv and det[0] < trv[0] else 0))
 skip_needle = 'trivia escape 를 **쓰지 않고** 곧장 iteration 1 로 간다'
-skip = [l for l in lines if 'status: ok' in l and 'status: declaration-invalid' in l and skip_needle in l]
+skip = [l for l in lines if 'status: declaration-invalid' in l and skip_needle in l and 'status: ok' not in l]
 print("SKIP_LINE:%d" % len(skip))
+ok_skip = [l for l in lines if 'status: ok' in l and skip_needle in l]
+print("OK_SKIP:%d" % len(ok_skip))
+defer_needle = '`$RD/review-i1.full.diff`(문서 경로를 거르기 전 diff 전체)'
+disc_needle = '`작은 수정이라 파이프라인을 건너뛰었다(trivia diff — <토픽 전체 | 범위 전체>) — <한 문장 설명>.`'
+defer = [l for l in lines if l.startswith('- `status: ok`') and '범위 모드' in l and defer_needle in l and disc_needle in l]
+print("DEFER_LINE:%d" % len(defer))
+gate1a = [l for l in lines if l.startswith('- `status: ok`') and 'Step 1a 가 `ok`(topic)를 낸 때만' in l]
+print("DEFER_NEEDS_1A_OK:%d" % len(gate1a))
 nodecl_violation = [l for l in lines if 'no-declaration' in l and ('iteration 1' in l or ('trivia escape' in l and '쓰지 않' in l))]
 print("NODECL_VIOLATION:%d" % len(nodecl_violation))
 PY
@@ -139,7 +147,7 @@ print("PARA_DELETE_NEG:%d" % (1 if "지우지 않" in para_text else 0))
 # override 조건 자체의 극성 — 문단 전체가 「override 다」쪽으로 조건을 뒤집어도
 # 위 네 토큰 존재 검사는 전부 그대로 만족된다(토큰은 안 지웠다). 조건절의 긍정형을
 # 리터럴로 고정하고, 그 부정형 표지가 섞여 있지 않은지 별도로 잰다.
-print("PARA_OVERRIDE_POSITIVE:%d" % (1 if "override(`branch` · `--paths`)면" in para_text else 0))
+print("PARA_OVERRIDE_POSITIVE:%d" % (1 if "override(`branch` · `--paths` · `range`)면" in para_text else 0))
 print("PARA_OVERRIDE_NEGATED:%d" % (1 if ("가 없으면" in para_text or "가 없을 때" in para_text) else 0))
 PY
 
@@ -148,8 +156,19 @@ case_trivia_escape_is_gated_by_declaration() {
   local got; got=$(python3 -c "$PY_TRIVIA" "$SKILL")
   assert_grep "$got" '^DETECT:1$'         "Trivia escape 절에 detect 호출 펜스가 하나"
   assert_grep "$got" '^DETECT_FIRST:1$'   "detect 가 trivia 판단(「작은 수정이라 파이프라인을 건너뛰었다」)보다 먼저 나온다"
-  assert_grep "$got" '^SKIP_LINE:1$'      "ok · declaration-invalid 면 trivia escape 를 쓰지 않고 곧장 iteration 1 로 간다(같은 줄, 긍정 목적지 단언)"
+  assert_grep "$got" '^SKIP_LINE:1$'      "declaration-invalid 면 trivia escape 를 쓰지 않고 곧장 iteration 1 로 간다(같은 줄, 긍정 목적지 단언 — AC28 의 음의 짝)"
+  assert_grep "$got" '^OK_SKIP:0$'        "AC28: status: ok(토픽)는 더 이상 trivia escape 를 막지 않는다 — ok 와 「쓰지 않고 곧장 iteration 1」이 한 줄에 없다"
+  assert_grep "$got" '^DEFER_LINE:1$'     "AC28: ok(토픽) · 범위 모드는 iteration 1 의 거르기 전 diff 전체(review-i1.full.diff)로 판단하고 토픽 · 범위 전체 공시 줄을 낸다(같은 줄 — OK_SKIP 의 양성 짝)"
+  assert_grep "$got" '^DEFER_NEEDS_1A_OK:1$' "AC28: 토픽의 미룬 판단은 Step 1a 가 ok(topic)를 낸 때만 — 1a 가 session 으로 떨어지면 full.diff 는 토픽 전체가 아니다"
   assert_grep "$got" '^NODECL_VIOLATION:0$' "Trivia 절 전체에서 no-declaration 과 trivia escape 를 쓰지 않음이 한 줄에 함께 나오지 않는다"
+  local tr; tr="$(awk '/^### Trivia escape$/{f=1;next} f&&/^## Review$/{exit} f' "$SKILL")"
+  assert_contains "$tr" '토픽 전체' "AC28: 토픽 diff 전체가 trivia 면 우회한다"
+  assert_contains "$tr" 'review-i1.full.diff' "AC28: 토픽 · 범위의 trivia 판단은 iteration 1 의 거르기 전 diff 전체로"
+  assert_contains "$tr" 'declaration-invalid' "AC28: 선언이 깨졌으면 여전히 trivia 우회가 없다(음의 짝)"
+  # Step 1c 가 미룬 판단으로 보낸다 — 판단하는 자리(진입점)에서 Trivia 절로 가는 길이 보여야 한다.
+  local s1c; s1c="$(awk '/^### Step 1 — scope$/{f=1;next} f&&/^### Step 1b /{exit} f' "$SKILL")"
+  assert_eq "$(printf '%s\n' "$s1c" | grep -c -x -F -- '   - iteration 1 이고 스코프가 `topic` · `range` 면 리뷰어로 가기 전에 [Trivia escape](#trivia-escape) 의 미룬 판단을 한다.')" "1" \
+    "AC28: Step 1c 가 iteration 1 의 topic · range 를 Trivia escape 의 미룬 판단으로 보낸다(줄 전체)"
 }
 
 case_step1_writes_scope_file() {
@@ -167,8 +186,8 @@ case_step1_writes_scope_file() {
   local stale
   stale=$(grep -hF '".claude/quality-gates/<session-id>/topic-scope.txt"' "$SKILL" "$REF")
   assert_eq "$(printf '%s' "$stale" | grep -c .)" "0" "SKILL · 레퍼런스에 cwd 상대 스코프 파일 경로(\".claude/…/topic-scope.txt\")가 남지 않는다"
-  assert_eq "$(grep -cF '"$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"' "$SKILL")" "4" \
-    "SKILL 의 네 자리(1a · 파일 집합 · override 정리 · Step 4 --scope)가 리포 루트 경로를 쓴다(부재 락의 양의 짝)"
+  assert_eq "$(grep -cF '"$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"' "$SKILL")" "3" \
+    "SKILL 의 세 자리(1a · override 정리 · Step 4 --scope)가 리포 루트 경로를 쓴다(부재 락의 양의 짝 — 1c 가 넘기는 자리는 case_topic_diff_comes_from_review_diff 가 잰다)"
 }
 
 case_status_table_is_total_over_statuses() {
@@ -178,23 +197,22 @@ case_status_table_is_total_over_statuses() {
   assert_grep "$got" '^WRONG:$'   "ok 행만 **topic**, 나머지는 session"
 }
 
-case_topic_diff_uses_boundary_and_tree() {
-  # ② · ③ 이 같은 트리를 본다 — 파일 집합 · diff 는 스코프 파일의 boundary · tree 에서.
-  # `git ` 으로 시작하는 줄이면 A20 락이 session 합집합으로 끌어가 실행한다.
-  local got
-  got=$(grep -F "sed -n 's/^boundary: //p'" "$SKILL" | grep -F "sed -n 's/^tree: //p'" | grep -F 'git diff --name-only "$b" "$t"')
-  assert_eq "$(printf '%s\n' "$got" | grep -c .)" "1" "파일 집합 질의가 boundary · tree 를 한 줄에서 읽는다"
-  assert_not_grep "$got" '^[[:space:]]*git ' "그 줄은 git 으로 시작하지 않는다(A20 session 오라클 밖)"
-  # 부분 문자열 계수(`git diff` 하나)는 `git diff` 가 아닌 git 호출(예: `git log`)을 중간에
-  # 끼워 넣는 변이를 못 잡는다 — 줄 전체를 fullmatch 로 잰다.
-  assert_eq "$(printf '%s' "$got" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" \
-    'S="$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"; b=$(sed -n '\''s/^boundary: //p'\'' "$S"); t=$(sed -n '\''s/^tree: //p'\'' "$S"); git diff --name-only "$b" "$t"' \
-    "그 줄 전체가 리포 루트 스코프 파일 · boundary · tree · git diff --name-only 하나다(줄 전체 fullmatch — 다른 git 호출을 끼워 넣지 않는다)"
-  case "$got" in
-    *'git diff --name-only "$b" "$t"') ok "그 줄이 git diff --name-only \"\$b\" \"\$t\" 로 끝난다(뒤에 다른 git 호출을 덧붙이지 않는다)" ;;
-    *) no "그 줄이 git diff --name-only \"\$b\" \"\$t\" 로 끝난다(뒤에 다른 git 호출을 덧붙이지 않는다)"
-       printf '      actual tail: %s\n' "$got" ;;
-  esac
+case_topic_diff_comes_from_review_diff() {
+  # ② · ③ 이 같은 트리를 본다 — topic 스코프의 파일 집합 · diff 는 Step 1c 의 review-diff.sh 가
+  # 스코프 파일의 boundary · tree 에서 만든다(그 읽기는 test_review_diff.sh 의
+  # case_topic_uses_boundary_tree 가 잰다). SKILL 의 의무는 1a 가 쓴 리포 루트 스코프 파일을
+  # review-diff 에 넘기는 것 하나다. 모델이 boundary · tree 로 git diff 를 손으로 짜던 줄은 없다.
+  local s1 fence rows
+  s1=$(awk '/^### Step 1 — scope$/{f=1;next} f&&/^### Step 1b/{exit} f' "$SKILL")
+  [ -n "$s1" ] && ok "Step 1 창을 찾았다" || no "Step 1 창이 없다 — 아래가 공허하다"
+  rows=$(printf '%s\n' "$s1" | grep -F -- '--mode topic --scope-file "$RD/topic-scope.txt"')
+  assert_eq "$(printf '%s\n' "$rows" | grep -c .)" "1" "1c: topic 스코프는 review-diff 에 스코프 파일(\$RD/topic-scope.txt)을 넘긴다(한 줄)"
+  fence=$(printf '%s\n' "$s1" | awk '/^[[:space:]]*```bash[[:space:]]*$/{f=1;b="";next} f&&/^[[:space:]]*```[[:space:]]*$/{if(b ~ /review-diff\.sh/) printf "%s", b; f=0; next} f{b=b $0 "\n"}')
+  [ -n "$fence" ] && ok "1c 펜스(review-diff.sh 를 부르는 bash 펜스)를 찾았다" || no "1c 펜스가 없다"
+  assert_grep "$fence" '^[[:space:]]*TOP="\$\(git rev-parse --show-toplevel\)"' "1c 펜스가 TOP 을 리포 최상위에서 얻는다"
+  assert_grep "$fence" '^[[:space:]]*RD="\$\{TOP\}/\.claude/quality-gates/<session-id>"$' "1c 펜스의 RD 가 리포 루트 세션 폴더다 — 1a 가 쓴 스코프 파일과 같은 자리"
+  assert_eq "$(grep -cF 'git diff --name-only "$b" "$t"' "$SKILL")" "0" "boundary · tree 로 파일 집합을 손으로 뽑던 줄이 없다"
+  assert_eq "$(grep -cF 'git diff "$b" "$t"' "$SKILL")" "0" "boundary · tree 로 diff 를 손으로 뽑던 문장이 없다"
 }
 
 case_step4_row_carries_scope() {
@@ -218,13 +236,22 @@ case_scope_block_surfaces() {
   assert_eq "$(printf '%s\n' "$fs" | grep -c .)" "1" "Final verdict 가 scope: · angles: 블록을 이 순서로 verbatim 싣는다(한 줄, 리터럴)"
 }
 
-case_filtered_diff_uses_boundary_and_tree() {
-  # 리뷰 라운드 1 신규 — FILTERED_DIFF 도 topic 스코프에서는 경계 · 합친 트리에서 뽑는다.
-  # session 베이스라인(MERGE_BASE·HEAD)으로 새면 리뷰어 diff 가 스코프 파일과 어긋난다.
-  local got
-  got=$(grep -F 'FILTERED_DIFF' "$SKILL" | grep -F 'git diff "$b" "$t"')
-  assert_eq "$(printf '%s\n' "$got" | grep -c .)" "1" "FILTERED_DIFF 문장이 같은 줄에서 git diff \"\$b\" \"\$t\" 를 쓴다"
-  assert_not_grep "$got" 'MERGE_BASE|HEAD' "그 줄에 MERGE_BASE · HEAD 가 없다(session 베이스라인으로 새지 않는다)"
+case_filtered_diff_is_review_diff_file() {
+  # 리뷰어가 받는 diff(FILTERED_DIFF)는 모든 스코프에서 1c 가 쓴 $RD/review-i<N>.diff 다 —
+  # topic 스코프에서 session 베이스라인(MERGE_BASE · HEAD)으로 새던 결함의 자리는 이제 스크립트다.
+  # 정의하는 줄 = FILTERED_DIFF 를 말하되 슬롯(${FILTERED_DIFF})으로 채워 넣는 줄이 아닌 것.
+  # ∀ 정의 줄이 review-i<N>.diff 를 출처로 대고, 두 정의(1c · Step 3)가 리터럴 그대로 있다.
+  local all defs bad
+  all=$(grep -F 'FILTERED_DIFF' "$SKILL")
+  defs=$(printf '%s\n' "$all" | grep -vF '${FILTERED_DIFF}')
+  assert_eq "$(printf '%s\n' "$defs" | grep -c .)" "2" "FILTERED_DIFF 를 정의하는 줄이 둘(1c · Step 3)"
+  bad=$(printf '%s\n' "$defs" | grep -vF 'review-i<N>.diff')
+  assert_eq "$(printf '%s' "$bad" | grep -c .)" "0" "FILTERED_DIFF 를 정의하는 줄 ∀ 가 review-i<N>.diff 를 출처로 댄다"
+  assert_contains "$defs" '리뷰어가 받는 diff(`FILTERED_DIFF`)는 `$RD/review-i<N>.diff` 의 내용이다' "1c 의 정의(리터럴)"
+  assert_contains "$defs" '- `FILTERED_DIFF` = the content of `${TOP}/.claude/quality-gates/<session-id>/review-i<N>.diff` that Step 1c wrote for this iteration' \
+    "Step 3 의 정의(리터럴)"
+  assert_not_grep "$all" 'MERGE_BASE|git (diff|show|log|format-patch)' \
+    "FILTERED_DIFF 를 말하는 줄이 손으로 짠 git diff · git show · git log -p · session 베이스라인을 쓰지 않는다"
 }
 
 case_override_clears_stale_scope_file() {
@@ -267,9 +294,9 @@ case_in_base_notice() {
 }
 
 for c in case_trivia_escape_is_gated_by_declaration case_step1_writes_scope_file \
-         case_status_table_is_total_over_statuses case_topic_diff_uses_boundary_and_tree \
+         case_status_table_is_total_over_statuses case_topic_diff_comes_from_review_diff \
          case_step4_row_carries_scope case_scope_block_surfaces \
-         case_filtered_diff_uses_boundary_and_tree \
+         case_filtered_diff_is_review_diff_file \
          case_override_clears_stale_scope_file case_in_base_notice \
 ; do
   echo "== $c"; $c

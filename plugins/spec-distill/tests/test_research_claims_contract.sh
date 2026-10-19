@@ -92,14 +92,14 @@ assert_contains "$(prose_of "$SEC")" "$PHRASE" \
 assert_contains "$(prose_of "$SEC" | tr '\n' ' ' | tr -s ' ')" '`${OPEN_DECISIONS}` 에는 `open_decisions[]` 중 `status: open` 인 것만 한 줄에 하나씩 `OQ<n>: <한 줄>` 로 싣는다' \
   "A2: 절 산문이 \`\${OPEN_DECISIONS}\` 의 렌더 형식(열린 것만 · OQ<n>: <한 줄>)을 정의한다"
 
-# B — 양의 짝: 슬롯 개수. SKILL.md 3(coverage-mapper · blind-spot-prober · repo-researcher) + steelman.md 1.
+# B — 양의 짝: 슬롯 개수. SKILL.md 4(coverage-mapper · blind-spot-prober · repo-researcher · open-researcher) + steelman.md 1.
 n_sk="$(grep -oF "$SLOT" "$SKILL" | wc -l | tr -d ' ')"
 n_st="$(grep -oF "$SLOT" "$STEEL" | wc -l | tr -d ' ')"
-assert_eq "$n_sk" "3" "B: SKILL.md 의 \`claims_contract\` 슬롯이 3개 (coverage-mapper · blind-spot-prober · repo-researcher)"
+assert_eq "$n_sk" "4" "B: SKILL.md 의 \`claims_contract\` 슬롯이 4개 (coverage-mapper · blind-spot-prober · repo-researcher · open-researcher)"
 assert_eq "$n_st" "1" "B: steelman.md 의 \`claims_contract\` 슬롯이 1개"
 m_sk="$(grep -oF "$SLOT2" "$SKILL" | wc -l | tr -d ' ')"
 m_st="$(grep -oF "$SLOT2" "$STEEL" | wc -l | tr -d ' ')"
-assert_eq "$m_sk" "3" "B: SKILL.md 의 \`open_decisions\` 슬롯이 3개 (coverage-mapper · blind-spot-prober · repo-researcher; 계약만 있고 결정 목록이 없으면 decides 를 채울 수 없다)"
+assert_eq "$m_sk" "4" "B: SKILL.md 의 \`open_decisions\` 슬롯이 4개 (coverage-mapper · blind-spot-prober · repo-researcher · open-researcher; 계약만 있고 결정 목록이 없으면 decides 를 채울 수 없다)"
 assert_eq "$m_st" "1" "B: steelman.md 의 \`open_decisions\` 슬롯이 1개"
 
 # F — 결정 연결 형식 넷과 레포 주장의 RC 상시 탑재(최종 리뷰 I-4). 정본이 말하지 않으면 계약을
@@ -224,6 +224,7 @@ if [ "${n_fence:-0}" -ge 5 ]; then
     # 강등 경로 둘을 이름으로 댄다 — 어느 자리가 무엇으로 강등되는지가 사유에 실려야 한다.
     assert_contains "$(cat "$SCRATCH/no-$mode.err")" "coverage-mapper 0 (unavailable: 계약 배달 실패)" "X($mode): 사유가 audit §2 문면을 댄다"
     assert_contains "$(cat "$SCRATCH/no-$mode.err")" "inline premortem" "X($mode): 사유가 prober 강등 경로를 댄다"
+    assert_contains "$(cat "$SCRATCH/no-$mode.err")" "repo-researcher · open-researcher 자리면 본체가 직접 조사한다" "X(${mode}): 사유가 repo-researcher · open-researcher 강등 경로를 한 문장으로 댄다"
   done
 else
   no "X: 펜스를 못 잘라 실행 축을 재지 못했다"

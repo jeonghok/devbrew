@@ -212,4 +212,11 @@ assert_fixed "$(evidence_section)" '`lower` 는 **반드시** `evidence` 에 의
 assert_fixed "$(disposition_section)" '`lower` 의 목적지는 `SUGGESTION` 하나뿐이고 `evidence` 가 있어야 한다' \
   "처분 어휘 — lower 의 목적지 · 근거"
 
+# 고침 라운드 2 — 이 변경이 원인인 범위 밖 finding 도 읽고, 관문 B 가 hunk 없다는 이유만으로 기각하지 않는다.
+gate_b_window() { awk '/^\*\*B — /{f=1} /^\*\*C — /{f=0} f && $0 !~ /^#/' "$PROFILE"; }
+assert_fixed "$(gate_b_window)" '**B — 이 변경이 도입했는가.**' "관문 B — 창이 비지 않았다 (양성 짝)"
+assert_fixed "$(gate_b_window)" '원인이 diff 의 hunk 인 범위 밖 finding(예: 변경이 깬 호출자)은 선재 결함이 아니다 — 그 파일에 hunk 가 없다는 이유만으로 `reject` 하지 않는다.' \
+  "관문 B — 원인이 hunk 인 범위 밖 finding 은 선재 결함이 아니다"
+assert_fixed "$(awk 'NR<=4' "$PROFILE")" 'finding 이 이 변경이 원인이라며 범위 밖 파일을 인용하면 그 파일도 읽는다.' "프로필 머리 — 범위 밖 인용 파일도 읽는다"
+
 finish

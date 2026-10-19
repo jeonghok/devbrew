@@ -267,12 +267,15 @@ state_block="$(awk '/^State frontmatter schema:/{f=1;next} f&&/^```yaml$/{y=1;ne
 { [[ -n "$state_block" ]] && grep -q 'orchestration:' <<<"$state_block"; } \
   && ok "AC1(양성대조): state 스키마 블록을 잘랐다 ($(grep -c . <<<"$state_block")줄)" \
   || no "AC1(양성대조): state 스키마 블록을 못 잘랐다 — 아래 단언이 공허하다"
-grep -qE '^ +research_dispatches: \{coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0\}' <<<"$state_block" \
-  && ok "R1/state: orchestration.research_dispatches (장치별 넷) in schema" \
-  || no "R1/state: orchestration.research_dispatches 부재 또는 장치 칸이 넷이 아니다"
+grep -qE '^ +research_dispatches: \{coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0, open_researcher: 0\}' <<<"$state_block" \
+  && ok "R1/state: orchestration.research_dispatches (장치별 다섯) in schema" \
+  || no "R1/state: orchestration.research_dispatches 부재 또는 장치 칸이 다섯이 아니다"
 for k in research_limit saturation_limit research_log saturation_log; do
   grep -qE "^ +${k}:" <<<"$state_block" && ok "R1/state: orchestration.${k} in schema" || no "R1/state: orchestration.${k} 부재"
 done
+grep -qE '^ +research_log: \[\] +# 조사마다 \{n, device, round, batch, changed: ' <<<"$state_block" \
+  && ok "R10/state: research_log 항목 꼴이 묶음 번호(batch)를 싣는다" \
+  || no "R10/state: research_log 항목 꼴에 batch 가 없다 — 포화 판정의 묶음 단위가 기록에서 빠진다"
 for k in blind_spot_dispatches coverage_mapper_dispatches; do
   grep -qE "^ +${k}:" <<<"$state_block" && no "R1/state: 옛 카운터 ${k} 가 스키마에 잔존" || ok "R1/state: 옛 카운터 ${k} 없음"
 done
@@ -319,16 +322,20 @@ has 'coverage.*부재|coverage 부재|interview_round.*존재' "AC5: legacy dete
 has 'state schema migration' "AC5: migration advisory 줄 실재"
 has 'coverage_mapper_dispatches/blind_spot_dispatches -> research_dispatches' "R1/state: advisory 가 이월을 이름으로 댄다"
 has 'research_limit · saturation_limit · research_log · saturation_log added' "R1/state: advisory 가 신설 키를 이름으로 댄다"
+has 'research_dispatches\.open_researcher added \(0\)' "R10/state: advisory 가 새 장치 칸을 이름으로 댄다"
 # Task 11b: 절 전문이 SKILL에서 $MIG_REF 로 옮겨졌다(조건부 로드) — 윈도우도 거기서 뜬다.
 mig_block="$(awk '/^## In-flight state migration/{f=1;print;next} /^## /{f=0} f' "$MIG_REF")"
 # v0.57.0: migration 절도 orchestration 열거를 담고 있다 — 필드 교체를 소유한 태스크가 그
 # 필드의 모든 자리를 책임진다. 음의 grep 대신 **정확히 일치**하는 전체 열거 리터럴을 요구한다 —
 # `coverage_mapper_dispatches` 하나로 정확히 끝나는 열거만 통과하므로 정체 트리거 필드가
 # 끼어들거나 대체돼도 이 리터럴과 달라져 RED다. 부분 토큰 공존이 아니라 **열거 전체의 동일성**이 이빨이다.
-{ grep -qF '`orchestration`: `{focused_dimension: null, research_dispatches: {coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0}, research_limit: <시작값>, saturation_limit: <시작값>, research_log: [], saturation_log: [], open_decisions: []}`' <<<"$mig_block"; } \
+{ grep -qF '`orchestration`: `{focused_dimension: null, research_dispatches: {coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0, open_researcher: 0}, research_limit: <시작값>, saturation_limit: <시작값>, research_log: [], saturation_log: [], open_decisions: []}`' <<<"$mig_block"; } \
   && ok "R1/state: migration 절의 orchestration 열거가 새 키와 정확히 일치" \
   || no "R1/state: migration 절의 orchestration 열거가 새 키와 다르다"
 mig_flat="$(tr '\n' ' ' <<<"$mig_block" | tr -s ' ')"
+grep -qF '이 릴리스가 바꾼 키(`orchestration.research_dispatches` · `research_dispatches.open_researcher` · `research_limit` · `saturation_limit` · `research_log` · `research_log[].batch` · `saturation_log`)만' <<<"$mig_flat" \
+  && ok "R10/state: migration 절의 「이 릴리스가 바꾼 키」가 새 장치 칸 · 묶음 번호를 이름으로 댄다" \
+  || no "R10/state: migration 절의 「이 릴리스가 바꾼 키」 열거가 open_researcher · batch 를 빠뜨렸다"
 grep -qF '`coverage_mapper_dispatches: <k>` 는 `research_dispatches.coverage_mapper: <k>` 로' <<<"$mig_flat" \
   && ok "R1/state: 이월 — coverage_mapper_dispatches 값 보존" || no "R1/state: coverage_mapper_dispatches 이월 규칙 부재 — 상한 계수가 0 으로 되돌아간다"
 grep -qF '`blind_spot_dispatches: <k>` 는 `research_dispatches.blind_spot_prober: <k>` 로' <<<"$mig_flat" \
@@ -339,6 +346,13 @@ grep -qE '옛 키 [^.]*`non_user_streak`[^.]*`touched`[^.]*를 \*\*지운다\*\*
   && ok "R1/state(양의 짝): 이월 뒤 옛 키 · non_user_streak · touched 를 지운다" || no "R1/state: 옛 키 삭제 규칙 부재 — 두 이름이 공존한다"
 grep -qF '`open_decisions` 는 부재 시 `[]`' <<<"$mig_flat" \
   && ok "AC13: open_decisions 기본값 []" || no "AC13: open_decisions 기본값 규칙 부재"
+# R10 — 직전 릴리스 세션(장치 칸 넷 · 기본 20 · 묶음 표지 없음)의 이월.
+grep -qF '`open_researcher` 칸만 없으면 그 칸만 `0` 으로 더한다' <<<"$mig_flat" \
+  && ok "R10/state: open_researcher 칸만 0 으로 더한다(다른 칸 값 보존)" || no "R10/state: open_researcher 칸 이월 규칙 부재"
+grep -qF '옛 기본값(20)이어도 그대로 쓴다' <<<"$mig_flat" \
+  && ok "R10/state: 이미 있는 research_limit 은 그대로" || no "R10/state: 옛 research_limit 보존 규칙 부재"
+grep -qF '각자 한 묶음이다' <<<"$mig_flat" \
+  && ok "R10/state: 묶음 표지 없는 옛 블록 · 항목은 각자 한 묶음" || no "R10/state: 옛 블록 묶음 규칙 부재"
 # v0.57.0 C2: 발동 조건이 «구조 통째 부재» 면 **실제 업그레이드 경로가 통째로 빠진다** —
 # 직전 릴리스 세션은 `coverage`·`orchestration` 을 이미 갖고 이 릴리스가 더한 세 키
 # (`reopened`·`reopen_log`·`coverage_mapper_dispatches`)만 없어서 어느 조건에도 안 걸린 채
@@ -477,8 +491,8 @@ nd_line="$(awk '/^### 다음 결정$/{getline; print; exit}' <<<"$round_block")"
 tr '\n' ' ' < "$SKILL" | tr -s ' ' | grep -qF '새 결정이면 새 번호 — 순증, 인터뷰 안에서만 유일 — 이어가는 결정이면 기존 번호' \
   && ok "AC13: OQ<n> 발급 — 새 결정은 새 번호 · 이어가는 결정은 기존 번호" \
   || no "AC13: OQ<n> 발급 규칙이 없거나 뒤집혔다 — 이어가는 결정에 새 번호를 주면 같은 결정이 둘로 갈린다"
-grep -qF 'AskUserQuestion 1회, **질문 1개**' <<<"$round_flat" \
-  && ok "AC3: 라운드마다 AskUserQuestion 1회 · 질문 1개" || no "AC3: 질문 1개 규칙 부재"
+grep -qF 'AskUserQuestion 1회다. 기본은 질문 1개이고' <<<"$round_flat" \
+  && ok "AC3: 라운드마다 AskUserQuestion 1회 · 기본 질문 1개" || no "AC3: 질문 1개 규칙 부재"
 grep -qF '첫 선택지가 추천이고 그 라벨 끝에 `(권장)` 을 단다' <<<"$round_flat" \
   && ok "AC3: 첫 선택지가 추천 (권장)" || no "AC3: 추천 첫 선택지 규칙 부재"
 grep -qF '고르면 무엇이 달라지는가' <<<"$round_flat" \
@@ -564,7 +578,9 @@ done
 # SKILL.md 한 파일은 그 절만큼 늘어 래칫을 **그 절의 줄 수만큼** 옮긴다(여유는 옮기기 전과 같은 0).
 # 2026-10-12 R1: C44 · 자격/예산 문단을 걷고 조사 상한 절 · repo-researcher dispatch 를 더한다. 순감이라 값을 올리지 않는다.
 # 2026-10-12 R1: 실측 494 + 8 로 조였다.
-SKILL_LINE_CAP=502
+# 2026-10-19 R10 조사 열기: `## 조사 열기` 절(여럿 동시에 · 만들어 보내기 · 있는 것 먼저 · 웹 펜스 · 요약 펜스 ·
+# open-researcher dispatch)과 라운드 질문 묶기 · V1 웹 주장 문장을 더한다. 삭제 0 의 순증이라 래칫을 올린다 — 실측 564 + 8.
+SKILL_LINE_CAP=572
 [[ "$(skill_own_lines "$SKILL")" -lt "$SKILL_LINE_CAP" ]] \
   && ok "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") < $SKILL_LINE_CAP (규칙 블록 제외 — 조사 특화 순증 + 진입 단계 흡수)" \
   || no "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") ≥ $SKILL_LINE_CAP"
@@ -1258,6 +1274,9 @@ r2_flat="$(tr '\n' ' ' <<<"$r2_block" | tr -s ' ')"
 grep -qE 'request-framing[^.]{0,60}웹[^.]{0,20}보지 않' <<<"$r2_flat" \
   && ok "R2(v0.41.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)" \
   || no "R2(v0.41.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)"
+grep -qF '레포로 설명이 안 되는 이름만 짧게 조회해' <<<"$r2_flat" \
+  && ok "R2(양의 짝): request-framing 의 이름 조회 예외가 소비자 쪽에도 있다" \
+  || no "R2(양의 짝): R2 탐색 경계에 이름 조회 예외 문장 부재"
 grep -qF 'round 1–2' "$SKILL" && no "R1/D: landscape 시점 강제 «round 1–2» 잔존" || ok "R1/D: landscape 시점 강제 없음"
 grep -qF '토픽이 잡히면, 그리고 결정에 닿을 때마다' <<<"$r2_flat" \
   && ok "R1/D(양의 짝): landscape 는 결정에 닿을 때마다" || no "R1/D(양의 짝): landscape 새 시점 문구 부재"

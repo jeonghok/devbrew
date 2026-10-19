@@ -357,7 +357,8 @@ for sk in "${surfaces[@]+"${surfaces[@]}"}"; do
   # 부재 검사는 dispatch 유무와 **무관하게** 표면 전량에서 돈다. dispatch 가 없는 파일에서
   # `continue` 로 빠지면 그 파일은 두 금지 패턴에 대해 영영 검사되지 않는다(분리된 절차
   # 전문이 정확히 그런 파일이다).
-  grep -qE 'DEVBREW_SPEC_DISTILL_DISABLE_WEB.*(true|yes|-n |!= *"")' "$sk" \
+  # 스위치 이름 앞에 오는 비었는지 검사(`-n "${…:-}"` · `-z`)도 느슨한 참이다 — 이름 뒤만 보면 그 꼴이 빠진다.
+  grep -qE 'DEVBREW_SPEC_DISTILL_DISABLE_WEB.*(true|yes|-n |!= *"")|-[nz][[:space:]]+"?\$\{?DEVBREW_SPEC_DISTILL_DISABLE_WEB' "$sk" \
     && no "$name: 느슨한 참 판정 — 계약은 정확히 \"1\"이다" \
     || ok "$name: 참 판정이 \"1\" 한정"
   grep -qE 'web_budget|SWEEP_CAP|SESSION_CAP' "$sk" \

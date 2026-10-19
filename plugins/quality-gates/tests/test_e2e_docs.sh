@@ -62,7 +62,7 @@ case_I1_cli_direct_walk_is_gated_by_the_fingerprint_rc() {
   assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '"$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-before.txt"; echo "before rc=$?"')" "1" \
     "I1: CLI 직접 실행 경로가 지문을 재고 그 rc 를 낸다"
   assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc=0` — E2 로 간다.')" "1" "I1: 걷기는 before rc=0 에서만 간다"
-  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다.')" "1" \
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.')" "1" \
     "I1: before rc=3 이면 CLI 명령을 실행하지 않고 꺼짐(kill switch)"
   assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc` 가 그 밖의 0 아닌 값 — 걷지 않는다. stderr 사유를 공시하고 판정안 `미확인(지문 실패)` 로 E3 를 건너뛰고 E4 로 간다.')" "1" \
     "I1: 그 밖의 rc 면 걷지 않고 미확인(지문 실패)"
@@ -260,7 +260,7 @@ case_readme_states_the_e2e_limits() {
 case_readme_security_paragraph_and_principle() {
   assert_file_grep "$README" '^명령을 호스트 권한으로 실행한다 — 시나리오를 고르는 것이 그 실행의 승인이고' "README 보안 문단: e2e 승인 문장"
   assert_file_grep "$README" '^코드가 아니라 오케스트레이터가 읽는 지문 rc 다\)\. 선언 경로의$' "I2: README 보안 문단이 CLI 직접 걷기의 게이트는 지문 rc 라고 말한다"
-  assert_file_grep "$README" '^- \*\*P4 — runtime tier 는 사람이 승인하는 e2e 걷기.*tests/test_e2e_docs\.sh`\.$' "README 인스턴스화한 원칙에 P4 줄"
+  assert_file_grep "$README" '^- \*\*P4 — runtime tier 는 사람이 승인하는 e2e 걷기.*tests/test_e2e_docs\.sh`\.$' "README Principles Instantiated 절에 P4 줄"
   assert_file_grep "$README" '^- \*\*P4 — .*runtime tier 는 사람이 승인하면 e2e 걷기로 확인한다 — 걷지 않은 실행은 판정 줄의 e2e 칸이 그 사실을 보인다\. 걷는 동안 .*tests/test_e2e_docs\.sh`\.$' "README P4 줄: 확인한다 문장이 줄 안에 통째로 있다"
   assert_file_absent "$README" 'e2e 걷기로 집행한다' "README: 옛 「집행한다」 문장이 없다"
   assert_file_absent "$README" '주장을 거둔다' "README: 옛 「주장을 거둔다」 문장이 없다"
@@ -271,6 +271,74 @@ case_readme_security_paragraph_and_principle() {
 
 case_readme_has_disable_e2e_line() {
   assert_file_grep "$README" '`DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 은 e2e 를 끈다\(판정 줄의 e2e 칸이 `꺼짐\(kill switch\)`\)' "README 범위 절에 DISABLE_E2E 줄이 있다"
+}
+
+case_AC28_e2e_scenarios_are_multi_select() {
+  # AC28 · 계획 결정 11 — 여러 시나리오를 고를 수 있고, 번호 순으로 하나씩 걷기마다 게이트, 칸은 가장 나쁜 결과.
+  local q w g s
+  q=$(section "$REF" "## 2. 질문"); w=$(section "$REF" "## 5. 걷기 직후 게이트"); g=$(section "$REF" "## 6. 게이트 결과 → e2e 칸")
+  assert_file_grep "$REF" 'multiSelect: true' "e2e 질문은 여러 선택이다(AC28)"
+  assert_file_absent "$REF" '질문 하나, 단일 선택이다' "옛 단일 선택 문장이 없다"
+  assert_eq "$(printf '%s\n' "$q" | grep -cxF -- '`AskUserQuestion` 질문 하나, 여러 선택(`multiSelect: true`)이다. 선택지는 넷을 넘지 않는다.')" "1" \
+    "§2 첫 줄이 여러 선택 문장 그대로다(옛 문장 부재의 양성 짝)"
+  assert_contains "$q" '시나리오를 하나 이상 고르면 고른 시나리오만 걷는다 — 「안 한다」 · 「걸을 것 없음」을 함께 골랐어도 그렇다.' \
+    "§2: 시나리오와 「안 한다」 · 「걸을 것 없음」을 함께 고르면 시나리오만 걷는다"
+  assert_contains "$q" '고른 시나리오 하나하나가 그 시나리오의 부팅 명령' "§2: 승인은 고른 시나리오마다다"
+  assert_contains "$q" '고르지 않은 시나리오의 명령' "§2: 고르지 않은 시나리오의 명령은 실행하지 않는다"
+  assert_contains "$w" '고른 시나리오를 번호 순으로 하나씩 걷는다 — 시나리오마다 SKILL 의 E1~E5 를 돌고 걷기마다 게이트를 띄운다.' \
+    "§5: 번호 순 · 시나리오마다 E1~E5 · 걷기마다 게이트"
+  assert_contains "$w" '루프가 돌아온 뒤 고른 시나리오 전부를 1번부터 다시 걷는다' "§5: 루프에서 돌아오면 고른 시나리오 전부를 다시 걷는다"
+  assert_contains "$w" '남은 시나리오를 걷지 않고 끝낸다' "§5: 지금 판정으로 끝내기 · 멈추기면 남은 시나리오를 걷지 않는다"
+  assert_file_grep "$REF" 'fail` > `미확인` > `pass`' "여러 시나리오의 e2e 칸은 가장 나쁜 결과"
+  assert_contains "$g" '여러 시나리오를 걸었으면 판정 줄의 e2e 칸은 가장 나쁜 결과다 — `fail` > `미확인` > `pass`.' \
+    "§6: 가장 나쁜 결과 문장이 §6 안에 통째로 있다"
+  assert_contains "$g" '뒤집은 걷기를 뒤집기 전 판정안으로 되돌려 다시 합쳤을 때 칸이 달라지면' "§6: 「사람이 뒤집음」은 뒤집기가 칸을 바꿨을 때다"
+  # Task 8 의 상한 규칙이 여러 시나리오 문면 옆에 그대로 남았다(양성 짝).
+  assert_contains "$w" '「기타」 칸 글이 뒤집기 사유면 뒤집기이고 반복을 열지 않는다' "§5: 상한의 「기타」 칸 가르기가 남았다"
+  s=$(section "$SKILL" "## e2e")
+  assert_contains "$s" '- `e2e-gate rc=0` — 레퍼런스 1 · 2 절대로 시나리오를 만들고 질문(여러 선택)을 띄운다. 시나리오를 하나 이상 골랐으면 고른 시나리오를 번호 순으로 하나씩' \
+    "SKILL E0: rc=0 이 여러 선택 질문과 번호 순 걷기를 가리킨다"
+  assert_contains "$s" '- **여러 시나리오** — ' "SKILL E4: 여러 시나리오 갈래가 있다"
+  assert_not_contains "$s" '질문을 생략하고 같은 시나리오 · 같은 명령으로' "SKILL E4: 루프에서 돌아와 한 시나리오만 다시 걷는 옛 문장이 없다"
+  assert_contains "$s" '질문을 생략하고 고른 시나리오 전부를 같은 명령으로 번호 순으로 E1 펜스' "SKILL E4: 루프에서 돌아오면 고른 시나리오 전부를 다시 걷는다(옛 문장 부재의 양성 짝)"
+  local fv; fv=$(section "$SKILL" "## Final verdict")
+  assert_contains "$fv" '시나리오가 여럿이면 `${CLAUDE_PLUGIN_ROOT}/references/e2e.md` §6 이 e2e 칸을 정한 걷기를 정하고,' "Final verdict: 여러 시나리오의 「사람이 뒤집음」은 e2e.md §6 이 정한다"
+  assert_contains "$fv" '그 걷기가 마지막 걷기 대신 쓰인다.' "Final verdict: 칸을 정한 걷기가 마지막 걷기 대신 쓰인다"
+}
+
+case_AC28_fix1_kill_switch_does_not_erase_an_earlier_walk() {
+  # 고침 1 — 뒤 시나리오가 exit 3 이면 앞 걷기의 fail · 미확인을 지우지 않는다(꺼짐은 verdict.py 에서 defect 도 사유도 아니다 — fail-open).
+  local g s
+  g=$(section "$REF" "## 6. 게이트 결과 → e2e 칸"); s=$(section "$SKILL" "## e2e")
+  assert_contains "$g" '`fail` > `미확인` > `꺼짐(kill switch)` > `pass` 로 합친다 — 이 차례에 이미 걸은 걷기가 `fail` · `미확인` 이면 칸은 그것이고, 아니면 `꺼짐(kill switch)` 이다.' \
+    "§6: kill switch 로 끝나도 이 차례의 앞 걷기 fail · 미확인이 칸이다"
+  assert_not_contains "$g" 'kill switch 로 끝났으면 칸은 `꺼짐(kill switch)` 이다.' "§6: 앞 걷기를 지우는 옛 kill switch 문장이 없다"
+  assert_contains "$s" 'E1 · E3 의 kill switch 갈래(exit 3)도 이때는 칸을 바로 `꺼짐(kill switch)` 로 두지 않는다 — 이 차례에 이미 걸은 걷기가 `fail` · `미확인` 이면 칸은 그것이다(6 절 끝).' \
+    "SKILL E4: 여러 시나리오에서 E1 · E3 의 exit 3 갈래가 앞 걷기를 지우지 않는다"
+  # final-review T11b — kill switch 갈래 줄 셋(E1 부팅 · E1 CLI · E3)이 각자 그 규칙을 가리킨다(줄 전체)
+  local ptr='여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.'
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- 두 줄이 없고 \`boot rc=3\` — kill switch 가 켜졌다. e2e 칸을 \`꺼짐(kill switch)\` 로 두고 \`## Final verdict\` 로 간다. $ptr")" "1" \
+    "SKILL E1 부팅: kill switch 줄이 여러 시나리오 규칙을 가리킨다"
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- \`before rc=3\` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 \`꺼짐(kill switch)\` 로 두고 \`## Final verdict\` 로 간다. $ptr")" "1" \
+    "SKILL E1 CLI: kill switch 줄이 여러 시나리오 규칙을 가리킨다"
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- \`after rc=3\` — 걷는 사이 kill switch 가 켜졌다. e2e 칸을 \`꺼짐(kill switch)\` 로 두고 E5 로 기록한 뒤 \`## Final verdict\` 로 간다. $ptr")" "1" \
+    "SKILL E3: kill switch 줄이 여러 시나리오 규칙을 가리킨다"
+  assert_eq "$(printf '%s\n' "$s" | grep -cF -- "$ptr")" "3" "SKILL: 가리키는 문장은 kill switch 갈래 줄 셋에만 있다(양성 짝)"
+}
+
+case_AC28_fix2_last_walk_per_scenario_and_choice_rules() {
+  local g q
+  g=$(section "$REF" "## 6. 게이트 결과 → e2e 칸"); q=$(section "$REF" "## 2. 질문")
+  assert_contains "$g" '그 차례에서 시나리오마다 자기 마지막 걷기 하나만 센다 — 「다시 걷기」로 끝난 걷기는 칸을 내지 않는다.' \
+    "§6: 시나리오마다 마지막 차례의 마지막 걷기만 센다"
+  assert_contains "$q" '「안 한다」와 「걸을 것 없음」을 둘 다 골랐으면 `안 한다` 로 닫는다.' "§2: 둘 다 고르면 안 한다로 닫는다"
+  # final-review T11 — 줄 전체로 잰다: 뒤에 예외(「단, …」)를 붙이면 줄이 달라져 실패한다
+  assert_eq "$(printf '%s\n' "$q" | grep -cxF -- '- 「기타」 칸 글은 고른 시나리오를 바꾸지 않는다. 시나리오를 하나 이상 골랐으면 고른 시나리오를 보인 명령 그대로 걷고, 「기타」 칸 글은 7 절의 기록에 메모로 적는다 — 이 실행에서 명령을 바꾸거나 더하지 않는다.')" "1" \
+    "§2: 시나리오와 「기타」를 함께 고르면 시나리오를 보인 명령 그대로 걷고 「기타」는 메모 (줄 전체)"
+  assert_eq "$(printf '%s\n' "$q" | grep -c '^- 「기타」 칸 글은 고른 시나리오를 바꾸지 않는다\. ')" "1" "§2: 그 「기타」 규칙 줄이 하나다(양성 짝)"
+  assert_contains "$q" '- 시나리오를 고르지 않고 「기타」 칸에만 글이 있으면 시나리오 수정으로 읽는다.' "§2: 시나리오 없이 「기타」만이면 수정으로 읽는다"
+  assert_contains "$q" '두 번째에도 시나리오 없이 「기타」 면 `안 한다` 로 닫는다.' "§2: 두 번째 「기타」 닫기는 시나리오가 없을 때만"
+  assert_not_contains "$q" '「기타」 로 받은 답은 시나리오 수정으로 읽는다.' "§2: 고른 시나리오가 있어도 「기타」를 수정으로 읽던 옛 문장이 없다"
 }
 
 for c in $(declare -F | awk '{print $3}' | grep '^case_'); do
