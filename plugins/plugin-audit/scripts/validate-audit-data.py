@@ -52,6 +52,13 @@ def validate_data(data: dict) -> list:
     if _axes_ok(meta.get("axes")) and _axes_ok(meta.get("axes_run")) \
             and set(meta["axes"]) != set(meta["axes_run"]):
         errs.append(f"meta.axes({meta['axes']})와 Workflow 가 실제로 돈 축 axes_run({meta['axes_run']})이 다르다")
+    if isinstance(consent, dict) and "axes" in consent and "axes" in meta:
+        if not _axes_ok(consent.get("axes")):
+            errs.append(f"동의에서 고른 축(meta.consent.axes = {consent.get('axes')!r})이 잘못됐다"
+                        " — 비지 않은 1~6 정수 목록, 중복 없음이어야 한다")
+        elif _axes_ok(meta.get("axes")) and set(consent["axes"]) != set(meta["axes"]):
+            errs.append(f"동의에서 고른 축(meta.consent.axes = {consent['axes']})과 감사 기록의 축"
+                        f"(meta.axes = {meta['axes']})이 다르다 — 동의한 축과 같은 값을 적어라")
 
     # 배정 id 의 축(assemble 이 Workflow 의 assigned_axis, 없으면 assigned.json 의 axis_of 에서 옮긴다).
     # 고르지 않은 축이라고 알 수 있는 id 만 codex 판정 요구(B7)에서 뺀다 — 축을 모르면 요구한다(fail-closed).

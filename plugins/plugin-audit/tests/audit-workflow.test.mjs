@@ -727,6 +727,24 @@ test('deep unsure vote with refuted:false still counts as a refute', async () =>
   assert.equal(pass.result.findings.find((x) => x.id === 'A1-1').deep_verified, true)
 })
 
+// 확신한 반박 한 표(2표 중 1표)는 finding 을 죽이지 않지만 「심층검증 통과」 표시도 주지 않는다.
+test('a confident 1-of-2 lens refute survives without the 심층검증 통과 label', async () => {
+  const one = await runWorkflow(WF, { stubAgent: deepFlagStub([{ refuted: true }, { refuted: false }]) })
+  const f = one.result.findings.find((x) => x.id === 'A1-1')
+  assert.equal(f.status, 'reported', 'one refute out of three votes does not kill')
+  assert.notEqual(f.deep_verified, true, 'a refuting lens must withhold 심층검증 통과')
+  // positive pair — two plain passes still earn the label
+  const pass = await runWorkflow(WF, { stubAgent: deepFlagStub([{ refuted: false }, { refuted: false }]) })
+  assert.equal(pass.result.findings.find((x) => x.id === 'A1-1').deep_verified, true)
+})
+
+test('deep kill reason is plain Korean', async () => {
+  const both = await runWorkflow(WF, { stubAgent: deepFlagStub([{ refuted: true }, { refuted: true }]) })
+  const f = both.result.findings.find((x) => x.id === 'A1-1')
+  assert.equal(f.status, 'refuted')
+  assert.equal(f.refutation.reason, '심층검증 3표 중 2표가 반박')
+})
+
 test('DEEP_SCHEMA ties uncertain:true to refuted:true', async () => {
   const { captured } = await runWorkflow(WF, { stubAgent: deepFlagStub([{ refuted: false }]) })
   const s = captured['심층검증']

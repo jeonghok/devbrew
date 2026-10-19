@@ -752,15 +752,15 @@ for (const f of deepTargets) {
   if (refutes >= 2) {
     f.status = 'refuted'
     f.refutation = {
-      stage: 'deep', reason: '심층검증 3표 중 ' + refutes + '표 refute', votes,
+      stage: 'deep', reason: '심층검증 3표 중 ' + refutes + '표가 반박', votes,
       uncertain: votes.filter((x) => x.refuted).every((x) => x.uncertain),
     }
     f.deep_verified = null
   } else {
     // refuter가 죽었거나(unverified) 판정을 누락한 finding은 축 검증을 못 받았다 —
     // 심층 2렌즈 통과만으로 "두 모델 독립 확인(true)"을 참칭할 수 없다. null 유지.
-    // 「모르겠다」 렌즈가 하나라도 있으면 심층검증 통과라 부를 수 없다.
-    f.deep_verified = (!f.unverified && votes.length === LENSES.length && !votes.some((v) => v.uncertain)) ? true : null
+    // 반박한 렌즈가 하나라도 있으면(「모르겠다」 렌즈 포함 — 반박 한 표로 센다) 심층검증 통과라 부를 수 없다.
+    f.deep_verified = (!f.unverified && votes.length === LENSES.length && !votes.some((v) => v.refuted)) ? true : null
     f.deep_votes = votes
   }
 }
@@ -775,8 +775,8 @@ const ownVerdicts = (r, key, kind) => (r.res[key] || []).filter((v) => {
   const owner = Object.prototype.hasOwnProperty.call(ASSIGNED_AXIS, v.id) ? ASSIGNED_AXIS[v.id] : undefined
   if (owner === undefined || owner === r.ax.n) return true
   degradedEvents.push({
-    what: '축' + r.ax.n + '이 낸 ' + kind + ' ' + v.id + ' 판정을 뺐다 — ' + v.id + '는 축' + owner + '의 것이다',
-    why: '항목은 그 축만 판정한다. 축' + owner + '이 이번에 돌지 않았다면 ' + v.id + '는 검증 안 됨으로 남는다',
+    what: '축' + r.ax.n + ' 판정에서 뺐다: ' + kind + ' ' + v.id + ' (축' + owner + ' 몫)',
+    why: '항목은 그 축만 판정한다. 이번에 축' + owner + ' 감사가 돌지 않았다면 ' + v.id + ' 항목은 검증 안 됨으로 남는다',
   })
   return false
 })

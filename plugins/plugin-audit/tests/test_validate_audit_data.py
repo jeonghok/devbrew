@@ -439,6 +439,22 @@ class TestChosenAxes(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("meta.axes_run 가 잘못됐다", err)
 
+    def test_axes_and_consent_axes_must_match(self):
+        d_ = copy.deepcopy(VALID); d_["meta"]["axes"] = [1, 6]
+        d_["meta"]["consent"] = dict(d_["meta"]["consent"], axes=[1, 2])
+        rc, err = run_validate(d_)
+        self.assertEqual(rc, 1)
+        self.assertIn("동의에서 고른 축", err)
+        # positive pair — same set in any order, or only one of the two present
+        for meta_axes, consent_axes in (([6, 1], [1, 6]), ([1, 6], None), (None, [1, 6])):
+            d_ = copy.deepcopy(VALID)
+            if meta_axes is not None:
+                d_["meta"]["axes"] = meta_axes
+            if consent_axes is not None:
+                d_["meta"]["consent"] = dict(d_["meta"]["consent"], axes=consent_axes)
+            rc, err = run_validate(d_)
+            self.assertEqual(rc, 0, f"{meta_axes} {consent_axes}: {err}")
+
     def _assemble_then_validate(self, codex_d, axis_of=None, wf_axis=None, wf_d=None):
         assemble = SCRIPTS_DIR / "assemble-audit-data.py"
         with tempfile.TemporaryDirectory() as t:
