@@ -239,7 +239,7 @@ def machine_error_line(why) -> str:
 
 
 OUTSIDE = "로드맵 밖"
-WORK_DONE = ("끝", "끝남", "머지됨")
+WORK_DONE = cs.WORK_DONE
 
 
 def recommended(report: dict):

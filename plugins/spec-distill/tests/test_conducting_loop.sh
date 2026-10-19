@@ -78,6 +78,20 @@ once 3 '하위에게 보내는 글에는 `ledger suite-lock --roadmap <로드맵
 assert_contains "$(step 5)" '하위 agent 의 전체 스위트와 같은 잠금이다' "걸음 5: 스위트 대조는 담당자와 같은 공유 잠금"
 assert_contains "$(step 4 | grep -F -- '- 기록:')" '「설계에 없던 결정」 을 가른 결과와 이유 → 설계문서 `## 지휘 기록`' "걸음 4: 가른 결과는 지휘 기록에(결정 기록 울타리 밖)"
 assert_contains "$(step 4 | grep -F -- '- 기록:')" '사용자 결정 원문을 설계문서 `## 결정 기록` 에 남겨야 하면 갈래가 셋이다 — ① 그 문서의 리뷰가 열려 있으면 그 리뷰의 결정 줄 펜스(`decision-line` — 엔진 `log-decision`)로 쓴다 ② 리뷰 원장이 없으면(리뷰 전) 손으로 쓴다 — 첫 라운드가 기준선으로 받는다 ③ 리뷰가 닫혔고 원장이 남았으면 `## 결정 기록` 에 쓰지 않고 사용자 원문과 함께 `## 지휘 기록` 에 둔다(재분해 줄은 `redecompose.md` 대로 쓰고 다시 묻힐 수 있다고 알린다)' "걸음 4: 사용자 결정 원문의 세 갈래(열린 리뷰 · 원장 없음 · 닫힌 리뷰)"
+# 작업 표의 단계 칸은 자유 글이다 — 끝난 일은 상태 보기가 끝으로 세는 낱말(conductor_state.WORK_DONE)로 적거나 줄을 지운다(통합 리뷰 지적)
+DONE_RULE='끝난 일은 단계 칸에 「끝」 으로 적거나 그 줄을 지운다(`ledger drop`) — 상태 보기는 단계가 '
+assert_contains "$(step 1)" "$DONE_RULE" "걸음 1: 끝난 작업 줄의 단계 낱말"
+DONE_WORDS="$(PYTHONDONTWRITEBYTECODE=1 python3 -I -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import conductor_state as cs
+print("\n".join(cs.WORK_DONE))' "$ROOT/plugins/spec-distill/scripts")"
+[ -n "$DONE_WORDS" ] && ok "conductor_state.WORK_DONE 를 읽었다" || no "conductor_state.WORK_DONE 이 없다"
+DONE_SENT="$(step 1 | grep -oF -- "$DONE_RULE" >/dev/null && step 1 | PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
+t = sys.stdin.read(); s = t.find(sys.argv[1]); print(t[s:t.find(chr(10), s)])' "$DONE_RULE")"
+while IFS= read -r w; do
+  [ -n "$w" ] || continue
+  assert_contains "$DONE_SENT" "「${w}」" "걸음 1: 끝으로 세는 낱말 「${w}」 를 문장이 밝힌다(코드 상수에서 도출)"
+done <<< "$DONE_WORDS"
 for n in 1 3 4; do assert_contains "$(step "$n" | grep -F -- '- 기계 상태:')" '`## 작업`' "걸음 ${n}: 기계 상태 칸에 작업 표"; done
 # 음의 락 — 동시에 돌리는 일의 개수를 수량 상한에 묶는 문장(지휘자 수리 1 리뷰 넘김 · 수리 2). 「권장(기본값) · 사용자가 늘림」 은 허용.
 cap_hits() {  # cap_hits <글> — 상한 문장을 한 줄씩(명시 부정 「상한이 아니다」 류는 뺀 뒤 잰다)

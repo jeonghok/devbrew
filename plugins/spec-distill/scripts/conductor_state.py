@@ -44,6 +44,7 @@ SECTIONS = (
 )
 COLUMNS = dict(SECTIONS)
 OPTIONAL_SECTIONS = ("작업",)
+WORK_DONE = ("끝", "끝남", "머지됨")  # 「작업」 단계 칸에서 끝으로 세는 낱말 — 지휘 절차(conducting.md 걸음 1)가 같은 낱말을 밝힌다
 PR_STATES = ("열림", "머지됨", "닫힘")
 PR_NUMBER_RE = re.compile(r"#\d+")
 SEP = " · "
@@ -121,7 +122,7 @@ def render_machine(roadmap_rel: str, data: dict) -> str:
     out = ["---", "type: " + TYPE, "roadmap: " + roadmap_rel, "---", ""]
     for name, cols in SECTIONS:
         if name in OPTIONAL_SECTIONS and not data.get(name):
-            continue  # 7.5 에 더한 절 — 비어 있으면 머리를 쓰지 않아 옛 판도 이 파일을 읽는다
+            continue  # 7.6 에 더한 절 — 비어 있으면 머리를 쓰지 않아 옛 판도 이 파일을 읽는다
         out += ["## " + name, ""]
         for row in data.get(name, []):
             cells = [str(row[c]).replace("\n", " ").strip() for c in cols]

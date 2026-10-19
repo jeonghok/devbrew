@@ -268,6 +268,9 @@ class Works(unittest.TestCase):
                              "warnings": ["레포 설정 parallel_default 는 1 이상의 정수다: 'x' — 기본 3 으로 센다"]})
         self.assertIn("경고: 레포 설정 parallel_default 는 1 이상의 정수다: 'x' — 기본 3 으로 센다", self.lines(r))
 
+    def test_done_words_come_from_one_place(self):
+        self.assertIs(cp.WORK_DONE, cs.WORK_DONE)  # 상태 보기와 지휘 절차 락이 같은 낱말 목록을 본다
+
     def test_quiet_when_nothing_runs(self):
         r = report([blk("R1", "준비", "pending")], machine=self.machine(), suite_lock="스위트 잠금: 비어 있음")
         text = "\n".join(self.lines(r))
