@@ -13,12 +13,15 @@ fi
 
 left=""
 # empty_one <이름> — 보통 파일만 비운다. 링크는 따라가지 않고(폴더 밖 파일을 비우게 된다), 파일이 아닌 것은
-# 건드리지 않는다 — 둘 다 비우지 못한 것으로 적어 알린다. 지운 뒤 noclobber 로 새로 만든다 — 그 사이 무엇이 다시
-# 심기면 만들기가 실패하고 비우지 못한 것으로 알린다.
+# 건드리지 않는다 — 둘 다 비우지 못한 것으로 적어 알린다. 지운 뒤 noclobber 로 새로 만든다 — 그 사이 보통 파일
+# (하드 링크 · 보통 파일로 가는 링크 포함)이 다시 심기면 noclobber 가 열지 않아 만들기가 실패한다. noclobber 는 보통
+# 파일이 아닌 것(폴더 · 장치 · FIFO, 그리로 가는 링크)은 막지 않는다 — 만든 뒤 그 이름이 링크 아닌 보통 파일인지 다시
+# 보고, 아니면 비우지 못한 것으로 알린다. 다시 심긴 FIFO 는 쓰기 열기에서 멈출 수 있다.
 empty_one() {
   if [ -L "$dir/$1" ]; then left="$left $dir/$1(링크)"; return 0; fi
   if [ ! -f "$dir/$1" ]; then left="$left $dir/$1(파일이 아님)"; return 0; fi
-  { rm -f "$dir/$1" && ( set -C; : > "$dir/$1" ); } 2>/dev/null || left="$left $dir/$1"
+  { rm -f "$dir/$1" && ( set -C; : > "$dir/$1" ) && [ -f "$dir/$1" ] && [ ! -L "$dir/$1" ]; } 2>/dev/null \
+    || left="$left $dir/$1"
 }
 if [ -e "$dir/critic.txt" ] || [ -L "$dir/critic.txt" ]; then empty_one critic.txt; fi
 # 번호 붙은 출력은 ls 목록을 한 줄씩 읽는다 — 맞는 파일이 없는 글롭은 zsh 를 멈추고, 단어로 쪼갠 목록은 이름을 가른다.
