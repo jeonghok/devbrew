@@ -41,6 +41,18 @@ for lit in '### 계획 agent' '### 구현 agent' '### 이어 부르기'; do
   assert_contains "$TPL" "$lit" "틀: $lit"
 done
 assert_contains "$TPL" 'check_bundle_coverage.py --plan' "계획 틀: --plan 대조"
+# 지휘자 수리 3 — 하위 agent 의 자리: 격리 agent 가 자기 worktree 에서 에픽 브랜치에 선다(기본) · 비격리는 다른 길
+once '## 늘 싣는 것' '`isolation: "worktree"` 로 띄운 agent 가 자기 worktree 에서 `git switch --ignore-other-worktrees <에픽 브랜치>`'
+once '## 늘 싣는 것' '지휘 세션이 그 에픽 worktree 에 머문 채 격리 없이 보낼 때'
+once '## 늘 싣는 것' '임시 파일에 쓴 뒤 `cp` 로 옮긴다'
+for t in '### 계획 agent' '### 구현 agent'; do
+  blk="$(printf '%s\n' "$TPL" | awk -v h="$t" '$0==h{f=1;next} f&&/^### /{exit} f')"
+  assert_contains "$blk" '네 worktree 에서 git switch --ignore-other-worktrees <브랜치> 로 그 브랜치에 선다' "${t} 틀: 자리의 기본(격리 agent 가 브랜치에 선다)"
+  assert_not_contains "$blk" '자리: <에픽 worktree 절대경로>(브랜치 <브랜치>). 이 worktree 밖' "${t} 틀: 다른 worktree 를 자리로만 주던 옛 문장이 없다(양성 짝: 위 단언)"
+done
+# 지휘자 수리 5 — 구현 틀의 마지막 전체 리뷰가 과제 사이 이음매와 계획이 쓴 테스트 코드도 묻는다
+IMPL="$(printf '%s\n' "$TPL" | awk '$0=="### 구현 agent"{f=1;next} f&&/^### /{exit} f')"
+assert_contains "$IMPL" '과제 사이 이음매(끝에서 끝 흐름 · 종료 코드를 받는 쪽 · 상태 가정)와 계획이 쓴 테스트 코드도 묻게 한다' "구현 틀: 마지막 전체 리뷰에 이음매 · 계획이 쓴 테스트 코드"
 assert_not_contains "$TXT" 'CLAUDE_PLUGIN_ROOT' "플러그인 루트 토큰을 쓰지 않는다(<SD> 자리표)"
 # 부재 락 — 옛 결정(실행 방식 고정 · Push 후 PR · 계획 검토 무대기)
 bad="$(printf '%s\n' "$TXT" | grep -nE 'Push 후 PR|푸시 후 PR|계획 검토는 기다리지 않|언제나 subagent|항상 subagent' || true)"

@@ -29,7 +29,7 @@ TMP="$(mktemp -d)" || exit 1
 [ -n "$TMP" ] && [ -d "$TMP" ] || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
-RETURN_TAIL='리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).'
+RETURN_TAIL='리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리).'
 
 nonempty() {   # nonempty <라벨> <창> — 빈 창은 통과가 아니라 앵커 파손
   if [ -n "$2" ]; then ok "$1: 창 추출 ($(printf '%s\n' "$2" | wc -l | tr -d ' ')줄)"; return 0; fi
@@ -89,7 +89,18 @@ if nonempty "다음 세션 줄" "$ONE"; then
     assert_contains "$ONE" "$n" "AC1 · AC10: brief 다음 세션 줄에 「${n}」"
   done
   order "다음 세션 줄" "$ONE" "--plan" "--impl"
-  assert_contains "$ONE" "게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다" "다음 세션 줄: 게이트 없는 종료의 복귀 분기를 싣는다 (AC16)"
+  assert_contains "$ONE" "게이트 없이 끝나면 brainstorming 의 문서 승인 자리로 돌아간다" "다음 세션 줄: 게이트 없는 종료의 복귀 분기를 싣는다 (AC16)"
+  # 지휘자 수리 2 — superpowers 7.0.0 brainstorming: 크기 · 건너뛰기는 사용자 선호 입력, 자리는 설계문서 점검 뒤 문서 승인
+  for n in '사용자 선호: 이 brief 의 설계는 설계문서를 쓰는 크기다 — 질문을 건너뛰어도 설계문서를 쓰고 spec-review 를 거친다.' \
+           'brief 의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다.' \
+           'brainstorming 의 설계문서 점검(builder check)과 그 질문을 마치고 문서를 승인받는 자리에서' \
+           '메시지 모양(첫 메시지 · 질문 하나 · 되비춤)은 brainstorming 을 따른다.'; do
+    assert_contains "$ONE" "$n" "지휘자 수리 2: brief 다음 세션 줄에 「${n}」"
+  done
+  for old in '사용자 리뷰 게이트' '첫 줄에 상태, 끝에 할 일 하나'; do
+    assert_not_contains "$ONE" "$old" "지휘자 수리 2: brief 다음 세션 줄에 「${old}」 가 없다(양성 짝: 위 단언)"
+  done
+  order "다음 세션 줄" "$ONE" "사용자 선호:" "spec-distill:spec-review"
   assert_eq "$(lead_only "$ONE")" "ok" "다음 세션 줄 안의 꺾쇠 자리표는 줄 앞 @<…> 토큰의 이름뿐이다"
   assert_eq "$(lead_only '@<a> x <a> y')" "ok" "꺾쇠 규칙: 줄 앞 토큰의 이름은 줄 안에 다시 쓸 수 있다"
   assert_eq "$(lead_only '@<a> x <b> y')" "no" "꺾쇠 규칙 양성 대조: 줄 앞 토큰에 없는 이름은 거부한다"
@@ -107,6 +118,8 @@ SEV="$(awk '/^## 7\. Next Action/{f=1} f' "$TPL")"
 if nonempty "§7" "$SEV"; then
   order "brief 템플릿 §7" "$SEV" "superpowers:brainstorming" "spec-distill:spec-review"
   order "brief 템플릿 §7" "$SEV" "spec-distill:spec-review" "writing-plans"
+  assert_contains "$SEV" "설계문서 점검과 그 질문을 마친 뒤 문서를 승인받는 자리" "지휘자 수리 2: §7 이 spec-review 의 자리를 7.0.0 이름으로 적는다"
+  assert_not_contains "$SEV" "사용자 리뷰 게이트" "지휘자 수리 2: §7 에 옛 이름이 없다(양성 짝: 위 단언)"
 fi
 
 # ── spec-review description — 자기 자신을 가리키므로 이름 대신 «앞/뒤» 를 잰다 ─
@@ -115,7 +128,8 @@ DESC="$(awk 'NR==1 && /^---$/{f=1; next} f && /^---$/{exit} f' "$SKILL" \
 if nonempty "description" "$DESC"; then
   order "description" "$DESC" "superpowers:brainstorming" "superpowers:writing-plans"
   assert_contains "$DESC" "before superpowers:writing-plans" "description: writing-plans «앞» 에 쓴다고 적는다"
-  assert_contains "$DESC" "user-review gate" "description: brainstorming 의 사용자 리뷰 게이트를 대신한다고 적는다"
+  assert_contains "$DESC" "after its builder check and that check's questions, hands the document" "description: brainstorming 의 설계문서 점검 뒤 문서 승인 자리를 대신한다고 적는다(superpowers 7.0.0)"
+  assert_not_contains "$DESC" "user-review gate" "description: 7.0.0 에 없는 「사용자 리뷰 게이트」 이름을 쓰지 않는다(양성 짝: 위 단언)"
   assert_contains "$DESC" "path as the argument" "description: 설계문서 경로를 인자로 받는다고 적는다"
 fi
 

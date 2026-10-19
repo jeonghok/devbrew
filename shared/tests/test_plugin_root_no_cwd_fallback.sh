@@ -159,7 +159,7 @@ MSG = ("플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경�
 # 갖는다(그 skill 의 `ends_with_return`). 「아무 꼬리나 허용」으로 두면 두 문구를 품은 채 뒤에 부정을
 # 붙이는 우회가 통과한다 — 실측(변이 M22).
 RS_TAIL = (" — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 "
-           "요청하라(brainstorming 의 사용자 리뷰 게이트).")
+           "요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리).")
 FM = re.compile(r"\A---\n.*?\n---\n", re.S)
 FOPEN = re.compile(r"^(\s*)```(\S*)\s*$")
 GUARD = re.compile(r'^\s*([A-Za-z_]\w*)="\$\{CLAUDE_PLUGIN_ROOT\}"; \[ -n "\$\1" \] \|\| '
