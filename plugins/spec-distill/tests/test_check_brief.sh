@@ -2728,4 +2728,32 @@ grep -qF -- '- 위험 K1 — 숨은 가정 |' "$TMPD/k_stamped.md" \
 out="$(ac3_gate k_stamped)"; rc=$?
 [[ $rc -eq 0 ]] && ok "AC25: 번호 박힌 위험 줄도 게이트를 지난다" \
   || { no "AC25: 번호 박힌 위험 줄이 막혔다 (rc=$rc)"; printf '    %s\n' "$out" | head -c 400; }
+# --- R10 계획 2 AC28: §4 강조 «» 는 「」 안내가 먼저 ------------------------------------
+emph_pair() {  # $1 = stem, $2 = 바꿀 모양(head|body|fixed)
+  ac3_pair "$1"
+  python3 -I - "$TMPD/$1.md" "$2" <<'PY'
+import sys
+p, mode = sys.argv[1], sys.argv[2]
+line = "- Next.js app-router SSR «nextjs-docs» — [취함] — 데이터 형태와 부합"
+t = open(p, encoding="utf-8").read()
+if mode == "head":
+    new_line = line.replace("데이터 형태와 부합", "데이터 형태와 «중요» 부합", 1)
+elif mode == "fixed":
+    new_line = line.replace("데이터 형태와 부합", "데이터 형태와 「중요」 부합", 1)
+else:
+    new_line = line + "\n  «중요» 한 점"
+new = t.replace(line, new_line, 1)
+if new == t:
+    sys.exit("변형이 적용되지 않았다")
+open(p, "w", encoding="utf-8").write(new)
+PY
+}
+ac28_before() { OUT="$1" python3 -I -c 'import os; o = os.environ["OUT"]; a = o.find("강조로 쓴 것이면 「」 로 바꾸고"); b = o.find("audit §7 에 그 키와"); print("ok" if 0 <= a < b else "no")'; }
+emph_pair emph_head head; emph_pair emph_body body; emph_pair emph_fixed fixed
+for c in emph_head emph_body; do
+  out="$(python3 "$SCRIPT" gate "$TMPD/$c.md" 2>&1)"; rc=$?
+  { [[ $rc -ne 0 ]] && [[ "$(ac28_before "$out")" == ok ]]; } \
+    && ok "AC28: $c → 「」 안내가 키 선언 안내보다 먼저" || { no "AC28: $c 안내 순서 · 부재"; printf '    %s\n' "$out" | head -c 400; }
+done
+python3 "$SCRIPT" gate "$TMPD/emph_fixed.md" >/dev/null 2>&1 && ok "AC28 양의 짝: 「」 로 바꾸면 통과" || no "AC28: 「」 로 바꿔도 막힌다"
 finish

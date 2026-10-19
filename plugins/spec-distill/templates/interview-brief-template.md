@@ -87,6 +87,8 @@ user_sourced_items:
 - ... «example» — [취함] — 이유 [→ OQ1]
 - ... «other» — [중립] — 이유 [→ 없음]
 
+(«» 는 출처키 자리에만 쓴다 — 강조는 「」. §4 의 «» 는 본문 줄까지 모두 출처키로 읽혀 audit §7 선언을 요구받는다.)
+
 ## 5. 기각 · Blind Spots
 
 (`기각` 항목이 0건이면 `- 기각 — N/A — 전부 first-time defend+lock` 한 줄 명시(빈 섹션 금지).

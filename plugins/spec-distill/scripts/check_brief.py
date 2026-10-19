@@ -1693,7 +1693,11 @@ def gate(path: Path) -> int:
             if not any(m.startswith("7.") for m in amiss):
                 nk = landscape_keys_declared(text, audit_text)
                 if nk:
-                    failures.append(f"landscape keys not declared in audit §7: {nk}")
+                    failures.append(
+                        f"landscape keys not declared in audit §7: {nk}"
+                        " — §4 의 «» 는 모두 출처키로 읽힌다. "
+                        "강조로 쓴 것이면 「」 로 바꾸고, "
+                        "출처키면 audit §7 에 그 키와 원자료 URL 을 선언한다")
             if not any(m.startswith("2.") for m in amiss):
                 bf, ba = budget_mapper_failures(audit_text)
                 failures += [f"coverage-mapper budget: {x}" for x in bf]
