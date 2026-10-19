@@ -153,6 +153,8 @@ TPL5="$(win "$TPL" '^## 5[.]' '^## ')"
 for lit in '- 위험 K1 — <숨은 가정 | 실패 양식>: <내용> — <근거>' '- 위험 K2 — 숨은 가정 | <내용> — RC3 (plugins/x/y.py#sym) [RC3 → OQ1]'; do
   assert_contains "$TPL5" "$lit" "AC25: 템플릿 §5 «${lit}»"
 done
+# 인터뷰 중 §5 위험 줄은 번호 없이 적고 번호는 Step A 가 박는다(섞인 줄은 생성기가 FormatError 로 막는다)
+assert_contains "$(flat "$SKI")" '라운드 중에는 번호 없이 적고, brief 를 쓸 때 Step A 가 줄마다 `위험` 바로 뒤에 번호를 박는다 (`- 위험 K<n> — …`, `references/finishing.md` 「위험 번호」).' "AC25: 인터뷰 중 위험 줄의 번호는 Step A 가 박는다"
 # AC24 — 분해 표의 선택 칸 여섯 · 조사 에픽
 DT="$(win "$FIN" '^3[.] [*][*]분해안 표' '^4[.] [*][*]')"
 [ -n "$DT" ] && ok "AC24(양성 대조): 분해 판단 3 창을 떴다" || no "AC24: 분해 판단 3 창 부재"
