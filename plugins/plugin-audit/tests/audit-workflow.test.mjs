@@ -17,8 +17,10 @@ test('row 3 — d_verdicts.id enum is derived from pack candidate clues', async 
     },
     codexFindings: [],
   }
-  const { captured } = await runWorkflow(WF, { args, stubAgent: stubOneFinding() })
-  const enumIds = captured['감사'].properties.d_verdicts.items.properties.id.enum
+  const { calls } = await runWorkflow(WF, { args, stubAgent: stubOneFinding() })
+  // Both clues sit on axis 1, so axis 1's schema carries them (each axis judges only its own ids).
+  const ax1 = calls.find((c) => c.opts.phase === '감사' && c.opts.label.startsWith('축1 '))
+  const enumIds = ax1.opts.schema.properties.d_verdicts.items.properties.id.enum
   assert.deepEqual(enumIds, ['D1', 'D2'])
 })
 
@@ -341,7 +343,7 @@ test('결함 #9 대칭 절반 양성 짝 — 축 refuter 가 판정하면 그 �
   assert.equal(axisMissedVerdictEvents(result).length, 0)
 })
 
-test('AXIS_SCHEMA findings 에 plain 이 선택 속성으로 있다', async () => {
+test('axisSchema findings 에 plain 이 선택 속성으로 있다', async () => {
   const { captured } = await runWorkflow(WF, { stubAgent: stubOneFinding() })
   const items = captured['감사'].properties.findings.items
   assert.equal(items.properties.plain.type, 'string')
@@ -353,4 +355,431 @@ test('감사자가 쓴 plain 이 Workflow 결과의 finding 에 그대로 남는
   const { result } = await runWorkflow(WF, { stubAgent: stubOneFinding('IMPORTANT', { plain: '쉬운 한 문장' }) })
   const f = result.findings.find((x) => x.id === 'A1-1')
   assert.equal(f.plain, '쉬운 한 문장')
+})
+
+test('REFUTE_SCHEMA verdict enum includes uncertain', async () => {
+  const { captured } = await runWorkflow(WF, { stubAgent: stubOneFinding() })
+  const item = captured['검증'].properties.verdicts.items
+  const en = item.properties.verdict.enum
+  for (const v of ['refuted', 'survives', 'uncertain']) assert.ok(en.includes(v), v)
+  assert.equal(item.if.properties.verdict.const, 'refuted')
+  assert.deepEqual(item.then.required, ['gate'])
+})
+
+function axisVerdictStub(verdict) {
+  const base = stubOneFinding('SUGGESTION')
+  return async (prompt, o) => {
+    if (o.phase === '검증') return { verdicts: [verdict] }
+    return base(prompt, o)
+  }
+}
+
+test('uncertain verdict keeps the finding off the list but marked', async () => {
+  const { result } = await runWorkflow(WF, {
+    stubAgent: axisVerdictStub({ finding_id: 'A1-1', verdict: 'uncertain', reason: '근거 줄을 못 찾음' }),
+  })
+  const f = result.findings.find((x) => x.id === 'A1-1')
+  assert.equal(f.status, 'refuted')
+  assert.equal(f.refutation.uncertain, true)
+  assert.equal(f.refutation.stage, 'axis')
+  const { result: r2 } = await runWorkflow(WF, {
+    stubAgent: axisVerdictStub({ finding_id: 'A1-1', verdict: 'refuted', gate: 'A', reason: '틀림' }),
+  })
+  const g = r2.findings.find((x) => x.id === 'A1-1')
+  assert.equal(g.status, 'refuted')
+  assert.equal(g.refutation.uncertain, false)
+})
+
+test('deep kill by uncertain votes is marked uncertain', async () => {
+  const mk = (flags) => {
+    const base = stubOneFinding('IMPORTANT')
+    let i = 0
+    return async (prompt, o) => {
+      if (o.phase === '검증') return { verdicts: [{ finding_id: 'A1-1', verdict: 'survives', reason: 'ok' }] }
+      if (o.phase === '심층검증') return { finding_id: 'A1-1', refuted: true, reason: 'r', ...flags[i++ % flags.length] }
+      return base(prompt, o)
+    }
+  }
+  const both = await runWorkflow(WF, { stubAgent: mk([{ uncertain: true }, { uncertain: true }]) })
+  const f = both.result.findings.find((x) => x.id === 'A1-1')
+  assert.equal(f.refutation.stage, 'deep')
+  assert.equal(f.refutation.uncertain, true)
+  const one = await runWorkflow(WF, { stubAgent: mk([{ uncertain: true }, {}]) })
+  const g = one.result.findings.find((x) => x.id === 'A1-1')
+  assert.equal(g.refutation.stage, 'deep')
+  assert.equal(g.refutation.uncertain, false)
+})
+
+test('refute prompt no longer says refute when unsure', async () => {
+  const { calls } = await runWorkflow(WF, {
+    stubAgent: async (prompt, o) => {
+      if (o.phase === '검증') return { verdicts: [{ finding_id: 'A1-1', verdict: 'survives', reason: 'ok' }] }
+      return stubOneFinding('IMPORTANT')(prompt, o)
+    },
+  })
+  const rp = calls.find((c) => c.opts.phase === '검증').prompt
+  assert.ok(!rp.includes('확신이 없으면 `refuted`다'))
+  assert.ok(rp.includes('uncertain'))
+  const dp = calls.find((c) => c.opts.phase === '심층검증').prompt
+  assert.ok(!dp.includes('확신이 없으면 refute하라'))
+  assert.ok(dp.includes('uncertain: true'))
+})
+
+test('CONTRACT discloses staleness exclusion counts', async () => {
+  const pack = { ...DEFAULT_PACK, staleness_excluded: { fence_lines: 7, placeholder_or_url: 2, generation_target: 1 } }
+  const { calls } = await runWorkflow(WF, {
+    stubAgent: stubOneFinding(),
+    args: { target: 'sample', evidencePack: pack, codexFindings: [] },
+  })
+  const p = calls.find((c) => c.opts.phase === '감사').prompt
+  assert.ok(p.includes('코드 펜스 안 7줄'))
+  assert.ok(p.includes('자리표시자·URL 때문에 건너뛴 후보 2건'))
+  assert.ok(p.includes('생성 대상 경로 1개'))
+  const { calls: c2 } = await runWorkflow(WF, { stubAgent: stubOneFinding() })
+  const q = c2.find((c) => c.opts.phase === '감사').prompt
+  assert.ok(q.includes('뺀 개수를 받지 못했다 — 셀 수 없음'))
+  assert.ok(!q.includes('코드 펜스 안 '))
+})
+
+test('CONTRACT says 셀 수 없음 when staleness_excluded lacks a count', async () => {
+  const pack = { ...DEFAULT_PACK, staleness_excluded: { fence_lines: 3 } }
+  const { calls } = await runWorkflow(WF, {
+    stubAgent: stubOneFinding(),
+    args: { target: 'sample', evidencePack: pack, codexFindings: [] },
+  })
+  const p = calls.find((c) => c.opts.phase === '감사').prompt
+  assert.ok(p.includes('뺀 개수를 받지 못했다 — 셀 수 없음'))
+  assert.ok(!p.includes('코드 펜스 안 3줄'))
+  assert.ok(!p.includes('undefined'))
+})
+
+const argsWithAxes = (axes) => {
+  const a = { target: 'sample', evidencePack: DEFAULT_PACK, codexFindings: [] }
+  if (axes !== undefined) a.axes = axes
+  return a
+}
+const auditCalls = (calls) => calls.filter((c) => c.opts.phase === '감사')
+
+test('axes default runs all six', async () => {
+  const { result, calls } = await runWorkflow(WF, { args: argsWithAxes(undefined), stubAgent: stubOneFinding() })
+  assert.equal(auditCalls(calls).length, 6)
+  assert.deepEqual(result.axes_run, [1, 2, 3, 4, 5, 6])
+})
+
+test('axes [1,6] runs exactly those', async () => {
+  const { result, calls } = await runWorkflow(WF, { args: argsWithAxes([1, 6]), stubAgent: stubOneFinding() })
+  const ac = auditCalls(calls)
+  assert.equal(ac.length, 2)
+  assert.ok(ac[0].opts.label.startsWith('축1 '), ac[0].opts.label)
+  assert.ok(ac[1].opts.label.startsWith('축6 '), ac[1].opts.label)
+  assert.deepEqual(result.axes_run, [1, 6])
+  // The real Workflow tool hands args over as a JSON string.
+  const { result: r2, calls: c2 } = await runWorkflow(WF, {
+    args: JSON.stringify(argsWithAxes([1, 6])), stubAgent: stubOneFinding(),
+  })
+  assert.deepEqual(auditCalls(c2).map((c) => c.opts.label.slice(0, 3)), ['축1 ', '축6 '])
+  assert.deepEqual(r2.axes_run, [1, 6])
+})
+
+test('bad axes throw before any dispatch', async () => {
+  for (const bad of [[0], [7], ['3'], [1, 1], [], 3, null, [1.5]]) {
+    const calls = []
+    await assert.rejects(
+      runWorkflow(WF, { args: argsWithAxes(bad), stubAgent: stubOneFinding(), calls }),
+      (e) => e instanceof Error && e.message.startsWith('[plugin-audit] 축 선택이 잘못됐다 — '),
+      JSON.stringify(bad),
+    )
+    assert.equal(calls.length, 0, 'dispatch before the axes check: ' + JSON.stringify(bad))
+    const strCalls = []
+    await assert.rejects(
+      runWorkflow(WF, { args: JSON.stringify(argsWithAxes(bad)), stubAgent: stubOneFinding(), calls: strCalls }),
+      (e) => e instanceof Error && e.message.startsWith('[plugin-audit] 축 선택이 잘못됐다 — '),
+      'string args ' + JSON.stringify(bad),
+    )
+    assert.equal(strCalls.length, 0, 'string args dispatch before the axes check: ' + JSON.stringify(bad))
+  }
+})
+
+test('assigned_axis is the id → axis map the question blocks used', async () => {
+  const pack = {
+    ...DEFAULT_PACK,
+    candidate_clues: [
+      { id: 'D1', axis: 1, claim: 'c', file: 'a', line: 1 },
+      { id: 'D2', axis: 2, claim: 'c', file: 'a', line: 2 },
+      { id: 'D6', axis: 6, claim: 'c', file: 'a', line: 3 },
+    ],
+    open_questions: [
+      { id: 'OQ1', axis: 1, question: 'q' },
+      { id: 'OQ2', axis: 2, question: 'q' },
+      { id: 'OQ6', axis: 6, question: 'q' },
+      { id: 'OQ9', axis: null, question: 'q' },
+    ],
+  }
+  const { result, calls } = await runWorkflow(WF, {
+    args: { target: 'sample', evidencePack: pack, codexFindings: [], axes: [1, 6] },
+    stubAgent: stubOneFinding(),
+  })
+  assert.deepEqual(result.assigned_axis, { D1: 1, D2: 2, D6: 6, OQ1: 1, OQ2: 2, OQ6: 6 })
+  assert.deepEqual(result.axes_run, [1, 6])
+  // the map matches what the dispatched question blocks carried
+  const ax6 = auditCalls(calls).find((c) => c.opts.label.startsWith('축6 ')).prompt.split('너의 축: 6')[1]
+  assert.ok(ax6.includes('D6: c') && ax6.includes('OQ6: q'))
+  assert.ok(!ax6.includes('D2: c'))
+})
+
+test('each axis schema enums only its own clue / question ids', async () => {
+  const pack = {
+    ...DEFAULT_PACK,
+    candidate_clues: [
+      { id: 'D1', axis: 1, claim: 'c', file: 'a', line: 1 },
+      { id: 'D4', axis: 4, claim: 'c', file: 'a', line: 4 },
+    ],
+    open_questions: [
+      { id: 'OQ1', axis: 1, question: 'q' },
+      { id: 'OQ4', axis: 4, question: 'q' },
+    ],
+  }
+  const { calls } = await runWorkflow(WF, {
+    args: { target: 'sample', evidencePack: pack, codexFindings: [] },
+    stubAgent: stubOneFinding(),
+  })
+  const schemaOf = (n) => auditCalls(calls).find((c) => c.opts.label.startsWith('축' + n + ' ')).opts.schema
+  const ids = (s) => [s.properties.d_verdicts.items.properties.id, s.properties.oq_answers.items.properties.id]
+  const [d1, o1] = ids(schemaOf(1))
+  assert.deepEqual(d1.enum, ['D1'])
+  assert.deepEqual(o1.enum, ['OQ1'])
+  const [d4, o4] = ids(schemaOf(4))
+  assert.deepEqual(d4.enum, ['D4'])
+  assert.deepEqual(o4.enum, ['OQ4'])
+  // an axis with no ids of its own keeps a valid schema: the enum is omitted, never enum: []
+  for (const p of ids(schemaOf(3))) {
+    assert.equal(p.type, 'string')
+    assert.ok(!('enum' in p), JSON.stringify(p))
+  }
+})
+
+// Axis 3 has no ids of its own, so its schema has no id enum and it can name another axis's clue.
+const crossAxisPack = {
+  ...DEFAULT_PACK,
+  candidate_clues: [
+    { id: 'D1', axis: 1, claim: 'c', file: 'a', line: 1 },
+    { id: 'D4', axis: 4, claim: 'c', file: 'a', line: 4 },
+  ],
+  open_questions: [{ id: 'OQ4', axis: 4, question: 'q' }],
+}
+const crossAxisStub = async (prompt, o) => {
+  if (o.phase !== '감사') return { verdicts: [] }
+  const v = (id) => ({ id, verdict: 'confirmed', reason: 'r' })
+  if (o.label.startsWith('축1 ')) {
+    return { findings: [], d_verdicts: [v('D1')], oq_answers: [], new_open_questions: [] }
+  }
+  if (o.label.startsWith('축3 ')) {
+    return {
+      findings: [], d_verdicts: [v('D4'), v('D9')],
+      oq_answers: [{ id: 'OQ4', reason: 'r', answer: 'a' }], new_open_questions: [],
+    }
+  }
+  return { findings: [], d_verdicts: [], oq_answers: [], new_open_questions: [] }
+}
+
+test("a verdict for another axis's id is dropped and disclosed", async () => {
+  const { result } = await runWorkflow(WF, {
+    args: { target: 'sample', evidencePack: crossAxisPack, codexFindings: [], axes: [1, 3] },
+    stubAgent: crossAxisStub,
+  })
+  // D4 / OQ4 belong to axis 4, which did not run — axis 3's verdicts for them do not count
+  assert.deepEqual(result.d_verdicts.map((x) => x.id), ['D1', 'D9'])
+  assert.deepEqual(result.oq_answers, [])
+  for (const id of ['D4', 'OQ4']) {
+    const ev = result.degraded_events.filter((e) => e.what.includes(id))
+    assert.equal(ev.length, 1, id + ': ' + JSON.stringify(result.degraded_events))
+    assert.ok(ev[0].what.includes('축3') && ev[0].what.includes('축4'), ev[0].what)
+    assert.ok(typeof ev[0].why === 'string' && ev[0].why.length > 0)
+  }
+  // positive pair — own-id (D1) and unmapped fresh-id (D9) verdicts are kept and not disclosed
+  for (const id of ['D1', 'D9']) {
+    assert.ok(!result.degraded_events.some((e) => e.what.includes(id)), id)
+  }
+  // the owning axis's own verdict is kept when it runs
+  const { result: r2 } = await runWorkflow(WF, {
+    args: { target: 'sample', evidencePack: crossAxisPack, codexFindings: [], axes: [1, 4] },
+    stubAgent: async (prompt, o) => {
+      if (o.phase === '감사' && o.label.startsWith('축4 ')) {
+        return {
+          findings: [], d_verdicts: [{ id: 'D4', verdict: 'confirmed', reason: 'r' }],
+          oq_answers: [{ id: 'OQ4', reason: 'r', answer: 'a' }], new_open_questions: [],
+        }
+      }
+      return crossAxisStub(prompt, o)
+    },
+  })
+  assert.deepEqual(r2.d_verdicts.map((x) => x.id), ['D1', 'D4'])
+  assert.deepEqual(r2.oq_answers.map((x) => x.id), ['OQ4'])
+  assert.deepEqual(r2.degraded_events, [])
+})
+
+test("CONTRACT tells each axis not to judge other axes' clues", async () => {
+  const { calls } = await runWorkflow(WF, {
+    args: { target: 'sample', evidencePack: crossAxisPack, codexFindings: [], axes: [3] },
+    stubAgent: crossAxisStub,
+  })
+  const contract = auditCalls(calls)[0].prompt.split('너의 축: 3')[0]
+  const clueSection = contract.split('## 후보 단서 (검증하라, 전제하지 마라)')[1].split('## Evidence Pack')[0]
+  assert.ok(clueSection.includes('D4 (축4)'), 'all clues stay listed for context')
+  assert.ok(clueSection.includes('다른 축의 단서는 맥락'), clueSection)
+  assert.ok(clueSection.includes('`d_verdicts`'), clueSection)
+  // with no clues the fresh-discovery line stays as is, without the other-axis sentence
+  const { calls: c0 } = await runWorkflow(WF, { args: argsWithAxes([3]), stubAgent: stubOneFinding() })
+  const empty = auditCalls(c0)[0].prompt.split('## 후보 단서 (검증하라, 전제하지 마라)')[1].split('## Evidence Pack')[0]
+  assert.ok(empty.includes('후보 단서 없음 — fresh discovery'))
+  assert.ok(!empty.includes('다른 축의 단서는 맥락'))
+})
+
+test('axes without 6 — axis 2 schema drops pending', async () => {
+  const stEnums = (schema) => [
+    schema.properties.findings.items.properties.steelman_condition.enum,
+    schema.properties.oq_answers.items.properties.steelman_condition.enum,
+  ]
+  const axis2 = (calls) => auditCalls(calls).find((c) => c.opts.label.startsWith('축2 '))
+  const SENT = '축⑥은 이번 감사에서 돌지 않는다'
+
+  const { calls } = await runWorkflow(WF, { args: argsWithAxes([2]), stubAgent: stubOneFinding() })
+  const a = axis2(calls)
+  for (const en of stEnums(a.opts.schema)) {
+    assert.ok(!en.includes('pending'), JSON.stringify(en))
+    assert.ok(en.includes('none'))
+  }
+  assert.ok(a.prompt.includes(SENT))
+  assert.ok(!a.prompt.includes('orchestrator가 축⑥의 판정으로 해소한다'))
+
+  const { calls: c2 } = await runWorkflow(WF, { args: argsWithAxes([2, 6]), stubAgent: stubOneFinding() })
+  const b = axis2(c2)
+  for (const en of stEnums(b.opts.schema)) assert.ok(en.includes('pending'), JSON.stringify(en))
+  assert.ok(!b.prompt.includes(SENT))
+  assert.ok(b.prompt.includes('orchestrator가 축⑥의 판정으로 해소한다'))
+})
+
+test('deep verify has no cap', async () => {
+  const ids = Array.from({ length: 12 }, (_, i) => 'A1-' + (i + 1))
+  const stub = async (prompt, o) => {
+    if (o.phase === '감사') {
+      const mine = o.label.startsWith('축1 ')
+      return {
+        findings: mine ? ids.map((id, i) => ({
+          id, axis: 1, title: 't' + id, user_harm: 'h', recommendation: 'r',
+          counter_argument: 'c', evidence: [{ file: 'f', line: i + 1, quote: 'q' }],
+          severity: 'IMPORTANT', fix_cost: 'S', fix_cost_rationale: 'x', reference_gap: 'none',
+        })) : [],
+        d_verdicts: [], oq_answers: [], new_open_questions: [],
+      }
+    }
+    if (o.phase === '검증') return { verdicts: ids.map((id) => ({ finding_id: id, verdict: 'survives', reason: 'ok' })) }
+    if (o.phase === '심층검증') return { finding_id: o.label.split(':').pop(), refuted: false, reason: 'ok' }
+    return { verdicts: [] }
+  }
+  const { result, calls } = await runWorkflow(WF, { stubAgent: stub })
+  assert.equal(calls.filter((c) => c.opts.phase === '심층검증').length, 24)
+  for (const id of ids) {
+    const f = result.findings.find((x) => x.id === id)
+    assert.notEqual(f.deep_verified, false, id)
+    assert.equal(f.deep_verified, true, id)
+  }
+})
+
+test('no DEEP_CAP in source', async () => {
+  const fs = await import('node:fs')
+  const path = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const src = fs.readFileSync(path.join(here, '..', 'scripts', 'audit-workflow.js'), 'utf8')
+  for (const tok of ['DEEP_CAP', '캡 8', '6축']) assert.ok(!src.includes(tok), tok)
+  assert.ok(src.includes('상한 없음'), 'positive pair — the no-cap wording is present')
+})
+
+// 심층검증의 «모르겠다» 한 표가 통과로 세지면 안 된다 — DEEP_SCHEMA 가 {refuted:false, uncertain:true}
+// 를 허용하던 자리. 코드가 기본 verdict(refuted)를 강제한다.
+const deepFlagStub = (votes) => {
+  const base = stubOneFinding('IMPORTANT')
+  let i = 0
+  return async (prompt, o) => {
+    if (o.phase === '검증') return { verdicts: [{ finding_id: 'A1-1', verdict: 'survives', reason: 'ok' }] }
+    if (o.phase === '심층검증') return { finding_id: 'A1-1', reason: 'r', ...votes[i++ % votes.length] }
+    return base(prompt, o)
+  }
+}
+
+test('deep unsure vote with refuted:false still counts as a refute', async () => {
+  const both = await runWorkflow(WF, {
+    stubAgent: deepFlagStub([{ refuted: false, uncertain: true }, { refuted: false, uncertain: true }]),
+  })
+  const f = both.result.findings.find((x) => x.id === 'A1-1')
+  assert.equal(f.status, 'refuted')
+  assert.equal(f.refutation.stage, 'deep')
+  assert.equal(f.refutation.uncertain, true)
+  assert.notEqual(f.deep_verified, true)
+  const one = await runWorkflow(WF, {
+    stubAgent: deepFlagStub([{ refuted: false, uncertain: true }, { refuted: false }]),
+  })
+  const g = one.result.findings.find((x) => x.id === 'A1-1')
+  assert.notEqual(g.deep_verified, true, 'an unsure lens must not yield 심층검증 통과')
+  // positive pair — two plain passes still earn the label
+  const pass = await runWorkflow(WF, { stubAgent: deepFlagStub([{ refuted: false }, { refuted: false }]) })
+  assert.equal(pass.result.findings.find((x) => x.id === 'A1-1').deep_verified, true)
+})
+
+// 확신한 반박 한 표(2표 중 1표)는 finding 을 죽이지 않지만 「심층검증 통과」 표시도 주지 않는다.
+test('a confident 1-of-2 lens refute survives without the 심층검증 통과 label', async () => {
+  const one = await runWorkflow(WF, { stubAgent: deepFlagStub([{ refuted: true }, { refuted: false }]) })
+  const f = one.result.findings.find((x) => x.id === 'A1-1')
+  assert.equal(f.status, 'reported', 'one refute out of three votes does not kill')
+  assert.notEqual(f.deep_verified, true, 'a refuting lens must withhold 심층검증 통과')
+  // positive pair — two plain passes still earn the label
+  const pass = await runWorkflow(WF, { stubAgent: deepFlagStub([{ refuted: false }, { refuted: false }]) })
+  assert.equal(pass.result.findings.find((x) => x.id === 'A1-1').deep_verified, true)
+})
+
+test('deep kill reason is plain Korean', async () => {
+  const both = await runWorkflow(WF, { stubAgent: deepFlagStub([{ refuted: true }, { refuted: true }]) })
+  const f = both.result.findings.find((x) => x.id === 'A1-1')
+  assert.equal(f.status, 'refuted')
+  assert.equal(f.refutation.reason, '심층검증 3표 중 2표가 반박')
+})
+
+test('DEEP_SCHEMA ties uncertain:true to refuted:true', async () => {
+  const { captured } = await runWorkflow(WF, { stubAgent: deepFlagStub([{ refuted: false }]) })
+  const s = captured['심층검증']
+  assert.equal(s.properties.uncertain.type, 'boolean')
+  assert.equal(s.if.properties.uncertain.const, true)
+  assert.deepEqual(s.if.required, ['uncertain'])
+  assert.equal(s.then.properties.refuted.const, true)
+})
+
+test('a clue id on two axes throws before any dispatch', async () => {
+  const pack = {
+    ...DEFAULT_PACK,
+    candidate_clues: [
+      { id: 'D1', axis: 2, claim: 'c', file: 'a', line: 1 },
+      { id: 'D1', axis: 5, claim: 'c', file: 'a', line: 2 },
+    ],
+  }
+  for (const args of [
+    { target: 'sample', evidencePack: pack, codexFindings: [] },
+    { target: 'sample', evidencePack: pack, codexFindings: [], axes: [2] },
+  ]) {
+    const calls = []
+    await assert.rejects(
+      runWorkflow(WF, { args, stubAgent: stubOneFinding(), calls }),
+      (e) => e instanceof Error && e.message === '[plugin-audit] 같은 단서 id 가 두 축에 있다 — D1 (축2 · 축5)',
+    )
+    assert.equal(calls.length, 0)
+  }
+  // positive pair — the same id twice on one axis is not this error
+  const same = { ...DEFAULT_PACK, candidate_clues: [
+    { id: 'D1', axis: 2, claim: 'c', file: 'a', line: 1 },
+    { id: 'D1', axis: 2, claim: 'c', file: 'a', line: 2 },
+  ] }
+  const { result } = await runWorkflow(WF, {
+    args: { target: 'sample', evidencePack: same, codexFindings: [] }, stubAgent: stubOneFinding(),
+  })
+  assert.equal(result.assigned_axis.D1, 2)
 })

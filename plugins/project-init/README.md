@@ -19,7 +19,8 @@ plugins/project-init/
 ├── tests/                           # 플러그인 최상위, hooks/의 형제 — 3규약(hooks/tests 포함)을 1종으로 통일
 │   ├── __init__.py
 │   ├── test_post_tool_use.py        # post-tool-use fail-open/F2/main 검증
-│   ├── test_command_contract.py     # skills/project-init 산문 계약 회귀 락 (4c S2a H1, AC21 abort)
+│   ├── test_command_contract.py     # skills/project-init 산문 계약 회귀 락 (4c S2a H1 · 이전 거절 선택지 · 헌장 게이트 선택)
+│   ├── test_branch_prefix_templates.py  # 템플릿 브랜치 접두 placeholder · worktree 절 락
 │   ├── test_branch_strategy_rebase_clause.sh  # AC8e, rebase 무조건 금지 조항 부재 락
 │   └── test_no_write_matcher_hooks.sh  # PostToolUse에 쓰기-도구(Write/Edit/MultiEdit/NotebookEdit) matcher 부재 회귀 락 (A1–A3)
 └── templates/
@@ -47,14 +48,14 @@ plugins/project-init/
 
 1. `/project-init` 실행
 2. branching strategy 선택 (GitHub Flow / Git Flow / Trunk-based)
-3. 커스터마이징 질문 2–3개 답변 (commit scope, merge strategy)
+3. 커스터마이징 질문 3–4개 답변 (commit scope, merge strategy, 브랜치 접두 추가)
 4. 플러그인이 다음을 생성:
-   - `AGENTS.md` — `## Git Workflow` (canonical content source, OpenAI Codex/Cursor/Aider 등 16+ 벤더 자동 인식)
-   - `CLAUDE.md` — `@AGENTS.md` 한 줄 thin pointer (Claude Code가 AGENTS.md content를 자동 import)
+   - `AGENTS.md` — `## Git Workflow` (canonical content source, OpenAI Codex/Cursor/Aider 등 16+ 벤더 자동 인식). 기존 `CLAUDE.md` 가 있으면 옮길지 묻는다 — 「CLAUDE.md 에 바로 쓰기」를 고르면 `AGENTS.md` 를 만들지 않고 관리 절을 `CLAUDE.md` 안에 쓴다.
+   - `CLAUDE.md` — 기본은 `@AGENTS.md` 한 줄 thin pointer (Claude Code가 AGENTS.md content를 자동 import). 「CLAUDE.md 에 바로 쓰기」면 관리 절을 담고, 「CLAUDE.md 는 그대로 두기」면 손대지 않는다.
    - `docs/git-workflow/branch-strategy.md` — 팀의 브랜치 룰
    - `docs/git-workflow/commit-conventions.md` — Conventional Commits 룰
    - `docs/git-workflow/pr-process.md` — PR 템플릿과 리뷰 체크리스트
-5. charter step — Phase 0가 manifest를 스캔해 tech-stack을 자동 감지하고, Phase 1이 vision·non-goals·conventions·tech-stack 확인을 ≤4개 질문으로 elicit. 결과를 `AGENTS.md ## Project Charter` 요약 + `docs/project/charter.md`·`conventions.md`(+ 조건부 `glossary.md`)로 발행.
+5. charter step — Phase 0가 manifest를 스캔해 tech-stack을 자동 감지하고, Phase 1이 vision·non-goals·conventions·tech-stack 확인을 기본 4개 질문으로(쓴 수를 공시하고 「더 묻기」로 더 받는다) elicit. 결과를 `AGENTS.md ## Project Charter` 요약 + `docs/project/charter.md`·`conventions.md`(+ 조건부 `glossary.md`)로 발행.
 
 ## 기능
 
@@ -100,8 +101,8 @@ plugins/project-init/
 ([`docs/philosophy/devbrew-harness-philosophy.md`](../../docs/philosophy/devbrew-harness-philosophy.md) 참고):
 
 - **Law 3 (Compounding)** — PostToolUse hook이 브랜치 명명과 Conventional Commits 포맷을 지속적으로 강제; 컨벤션 drift를 action 레이어에서 잡음.
-- **Plugin shape — minimal pointer pattern** — `CLAUDE.md` 는 `@AGENTS.md` 한 줄 thin pointer, 규칙 본문은 `AGENTS.md` 와 `docs/git-workflow/` 에 산다.
-- **Law 1 (Clarity Before Code)** — Project Charter가 project-init에 *처음으로* 생기는 clarity 구조 게이트. 최초 실행에서 vision·non-goals·tech-stack·conventions가 채워질 때까지 진행을 막되, 각 항목 최대 3회 재질문 후 loud abort (bounded — Unbounded-autonomy anti-pattern 회피).
+- **Plugin shape — minimal pointer pattern** — 기본은 `CLAUDE.md` 가 `@AGENTS.md` 한 줄 thin pointer 이고 규칙 본문은 `AGENTS.md` 와 `docs/git-workflow/` 에 산다. 「CLAUDE.md 에 바로 쓰기」를 고르면 관리 절이 `CLAUDE.md` 안에 있고, 「CLAUDE.md 는 그대로 두기」를 고르면 `CLAUDE.md` 는 손대지 않는다.
+- **Law 1 (Clarity Before Code)** — Project Charter가 project-init에 *처음으로* 생기는 clarity 구조 게이트. 최초 실행에서 vision·non-goals·tech-stack·conventions가 채워질 때까지 진행을 막되, 각 항목 최대 3회 재질문 뒤 사용자가 건너뛰기 · 계속 묻기 · 중단을 고른다(기계가 멈추지 않는다 — 반복은 사용자 선택이 연다).
 - **Law 3 (Compounding)** — 헌장이 AGENTS.md 계층에 거주해 매 세션·모든 spec-distill 인터뷰가 자동 상속하는 compounding substrate. 한 번 정의한 프로젝트 불변이 미래 모든 사이클에 discoverable하게 흐른다.
 
 ## 사용

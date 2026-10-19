@@ -33,5 +33,28 @@ class TestAgentsGeneric(unittest.TestCase):
             self.assertNotIn("disallowedTools", fm, f"{name} uses denylist (fail-open in time)")
 
 
+    def test_auditor_never_drops(self):
+        body = read("plugin-auditor.md")
+        self.assertNotIn("or drop it", body)
+        self.assertNotIn("or drop the gap", body)
+        self.assertIn("new_open_questions", body)
+        self.assertIn("why_not_gap", body)
+
+    def test_refuter_marks_uncertain_separately(self):
+        body = read("audit-refuter.md")
+        self.assertNotIn("If you are uncertain, refute.", body)
+        self.assertIn("verdict: uncertain", body)
+        fm = body.split("---")[1]
+        line = next(l for l in fm.splitlines() if l.strip().startswith("tools:"))
+        self.assertEqual(line.strip(), "tools: Read, Grep, Glob, WebSearch, WebFetch")
+
+    def test_refuter_unsure_rule_covers_both_schemas(self):
+        # 심층검증은 `refuted` boolean 스키마다 — 「uncertain」만 말하면 refuted:false + uncertain 을 고를 수 있다
+        body = read("audit-refuter.md")
+        self.assertIn("in a `verdict` schema return `uncertain`", body)
+        self.assertIn("in a `refuted` boolean schema return `refuted: true` with `uncertain: true`", body)
+        self.assertNotIn("If you could not settle it, return `uncertain` — never `survives`.", body)
+
+
 if __name__ == "__main__":
     unittest.main()

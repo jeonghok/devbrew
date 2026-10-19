@@ -241,18 +241,220 @@ class TestCompletionReportPromisesOnlyWhatShips(unittest.TestCase):
                  f"{self.claims!r}"))
 
 
-class TestMigrationPromptStillGated(unittest.TestCase):
-    """AC21: refusing the CLAUDE.md→AGENTS.md migration aborts the whole run."""
+class TestMigrationRefusalChoices(unittest.TestCase):
+    """AC32 — 이전 거절이 실행 전체를 멈추지 않는다(옛 AC21 「부분 진행 금지」 폐지)."""
 
-    def test_refusal_aborts_entire_run(self) -> None:
+    def setUp(self):
+        self.text = COMMAND.read_text(encoding="utf-8")
+        self.step1 = section(self.text, "### Step 1:", "### Step 2:")
+        self.matrix = section(self.text, "#### 4c:", "#### 4d:")
+
+    def test_s2_offers_three_choices(self):
+        for label in ("「AGENTS.md 로 옮기기 (권장)」", "「CLAUDE.md 에 바로 쓰기」", "「중단」"):
+            self.assertIn(label, self.step1)
+
+    def test_git_workflow_files_continue(self):
+        self.assertIn("`docs/git-workflow/` 파일은 그대로 만든다", self.step1)
+
+    def test_old_whole_run_abort_is_gone(self):
+        self.assertTrue(self.step1.strip())
+        self.assertNotIn("부분 진행 금지", self.step1)
+        self.assertNotRegex(self.step1, r"사용자 거절 시.*전체 `/project-init:project-init` 실행 abort")
+        s2 = self.matrix[self.matrix.index("**S2 (CLAUDE-only legacy)**"):self.matrix.index("**S3 (")]
+        self.assertNotIn("거절 시 전체", s2)
+        self.assertIn("「CLAUDE.md 에 바로 쓰기」", s2)
+
+    def test_s4_offers_keep_claude_md(self):
+        s4 = self.matrix[self.matrix.index("**S4 ("):]
+        for label in ("「옮기기 (권장)」", "「CLAUDE.md 는 그대로 두기」", "「중단」"):
+            self.assertIn(label, s4)
+
+    def test_charter_detection_reads_the_canonical_file(self):
+        detect = section(self.text, "#### Charter 상태 감지", "### Step 2:")
+        self.assertIn("「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md", detect)
+        self.assertIn("AGENTS.md 가 있으면 AGENTS.md, 없으면 CLAUDE.md", detect)
+
+    def test_charter_detection_reads_claude_charter_that_s4_will_move(self):
+        # S4 「옮기기」는 CLAUDE.md 에만 있는 `## Project Charter` 를 4e 전에 AGENTS.md 로 옮긴다. 감지가
+        # AGENTS.md 만 보면 C-S1 이 되어 헌장을 다시 묻고 4e 가 옮긴 절 옆에 두 번째 절을 더한다.
+        detect = section(self.text, "#### Charter 상태 감지", "### Step 2:")
+        self.assertIn(
+            "AGENTS.md 가 있어도 거기 `## Project Charter` 가 없고 CLAUDE.md 에 있으면 CLAUDE.md 의 그 절을 읽는다",
+            detect)
+        self.assertIn("두 번째 `## Project Charter` 를 더하지 않는다", detect)
+        self.assertIn("이 경우는 4e 의 「갱신할 헌장 절이 쓸 파일에 없으면」 규칙이 맡는다", detect)
+
+    def test_4e_adds_section_when_in_place_target_is_missing(self):
+        # S4 + 「CLAUDE.md 는 그대로 두기」: 감지는 CLAUDE.md 의 헌장 절로 C-S2 · C-S3 를 냈지만 옮기지
+        # 않았으므로 4e 가 제자리 갱신할 절이 AGENTS.md 에 없다. 4e 는 그 파일에 절을 새로 더하고,
+        # 손대지 않기로 한 CLAUDE.md 에는 쓰지 않는다.
+        step4e = section(self.text, "#### 4e:", "### Step 5:")
+        self.assertIn(
+            "갱신할 헌장 절이 쓸 파일에 없으면 C-S1 처럼 그 파일에 `## Project Charter` 섹션을 새로 더한다",
+            step4e)
+        self.assertIn("「CLAUDE.md 는 그대로 두기」를 고른 CLAUDE.md 에는 쓰지 않는다", step4e)
+
+    def test_git_rules_detection_reads_the_canonical_file(self):
+        # 「git 규칙은 그대로 두고 헌장만」 + 「AGENTS.md 로 옮기기」 뒤 재실행에서 기존 `## Git Workflow` 는
+        # AGENTS.md 에 산다. CLAUDE.md 만 보면 감지가 비어 S3 action 이 그 절을 덮는다. 거꾸로 S4
+        # (AGENTS.md 가 있고 CLAUDE.md 가 포인터가 아님)에서는 그 절이 CLAUDE.md 에만 있을 수 있다 —
+        # 두 파일을 모두 본다.
+        detect = section(self.step1, "### Step 1:", "기존 Git Workflow 설정이 발견되면")
+        self.assertIn("AGENTS.md 와 CLAUDE.md 가 각각 존재하는지", detect)
+        self.assertIn("AGENTS.md 와 CLAUDE.md 중 어느 쪽에 있어도 기존 규칙이다", detect)
+        self.assertNotIn("존재한다면 `## Git Workflow` 섹션이 이미 있는지", detect)
+        self.assertNotIn("그 파일에 `## Git Workflow` 섹션이 이미 있는지", detect)
+
+    def test_s4_old_abort_is_gone(self):
+        s4 = self.matrix[self.matrix.index("**S4 ("):]
+        self.assertIn("「CLAUDE.md 는 그대로 두기」", s4)
+        self.assertNotIn("(ii) abort", s4)
+
+    def test_s2a_moves_the_charter_section_too(self):
+        s2 = self.matrix[self.matrix.index("**S2 (CLAUDE-only legacy)**"):self.matrix.index("**S3 (")]
+        self.assertIn("`## Git Workflow` 섹션과 `## Project Charter` 섹션(있으면, 관리 섹션이다) 추출", s2)
+
+    def test_template_target_names_claude_md_case(self):
+        step4e = section(self.text, "#### 4e:", "### Step 5:")
+        self.assertIn("`AGENTS.md`(「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md)의", step4e)
+
+    def test_step4_canonical_line_has_exception(self):
+        step4 = section(self.text, "### Step 4:", "#### 4a:")
+        self.assertIn("「CLAUDE.md 에 바로 쓰기」를 골랐다면 AGENTS.md 를 만들지 않고", step4)
+
+    def test_step5_notes_direct_claude_md_write(self):
+        step5 = self.text[self.text.index("### Step 5:"):]
+        self.assertIn("CLAUDE.md 에 바로 썼다면: 관리 절이 CLAUDE.md 에 있다", step5)
+
+    def test_step5_notes_kept_git_rules(self):
+        step5 = self.text[self.text.index("### Step 5:"):]
+        self.assertIn("git 규칙을 그대로 뒀다면: 브랜치 전략과 git 규칙 파일은 바꾸지 않았다", step5)
+
+    def test_keep_git_choice_outranks_git_workflow_file_clauses(self):
+        self.assertIn("그 선택이 이 문서에서 git 규칙 파일을 만든다는 모든 문장", self.step1)
+        self.assertIn("바로 위 「CLAUDE.md 에 바로 쓰기」의", self.step1)
+        gate = section(self.text, "#### Law 1 구조적 게이트", "### Step 4:")
+        self.assertIn("「git 규칙 파일도 바꾸지 않았다.」로 바꾼다", gate)
+        self.assertIn("S1 · S2b 는 헌장 절과 포인터만 쓴다", self.step1)
+
+    def test_keep_git_choice_s4_move_carries_claude_git_workflow(self):
+        # S4 (i) 는 관리 절을 이전 대상에서 빼고 CLAUDE.md 를 포인터로 바꾼다. 「git 규칙은 그대로
+        # 두고 헌장만」이면 S3 action 의 `## Git Workflow` 갱신도 건너뛰므로, 그 절이 CLAUDE.md 에만
+        # 있으면 지워진다. 우선 문단과 S4 행이 둘 다 이 경우의 이전을 말해야 한다.
+        keep = standalone_line(self.step1, "위 git 규칙 질문에서 「git 규칙은 그대로 두고 헌장만」을 골랐다면")
+        self.assertIn(
+            "S4 (i) 는 AGENTS.md 에 `## Git Workflow` 가 없으면 CLAUDE.md 의 그 절을 새 template 없이 AGENTS.md 로 옮기며",
+            keep)
+        s4 = standalone_line(self.matrix, "| **S4 (")
+        self.assertIn(
+            "「git 규칙은 그대로 두고 헌장만」을 골랐고 AGENTS.md 에 `## Git Workflow` 가 없으면 "
+            "CLAUDE.md 의 `## Git Workflow` 는 이전한다",
+            s4)
+
+    def test_s4_move_carries_claude_only_charter(self):
+        # S4 (i) 가 관리 절을 이전 대상에서 빼고 CLAUDE.md 를 포인터로 바꾸면, 포인터로 바뀐 CLAUDE.md
+        # 에는 절이 남지 않으므로 CLAUDE.md 에만 있던 `## Project Charter` 는 아무 공지 없이 사라진다.
+        # S2a 처럼 옮기되, AGENTS.md 에 이미 그 절이 있으면 중복을 막는 규칙은 남는다.
+        s4 = standalone_line(self.matrix, "| **S4 (")
+        self.assertIn(
+            "AGENTS.md 에 `## Project Charter` 가 없으면 CLAUDE.md 의 `## Project Charter` 는 "
+            "git 규칙 선택과 상관없이 이전한다",
+            s4)
+        self.assertIn("헌장 절은 중복 없이 그대로 AGENTS.md 끝에 옮긴다", s4)
+        self.assertIn("관리 섹션을 이전 대상에서 빼는 것은 중복 절을 막기 위해서다", s4)
+        # 감지는 AGENTS.md 에 헌장 절이 없으면 CLAUDE.md 의 절을 읽는다 — 그와 어긋나는 옛 근거 문장은 없어야 한다.
+        self.assertIn("포인터로 바뀐 CLAUDE.md 에는 절이 남지 않으므로 빼면 CLAUDE.md 교체와 함께 사라진다", s4)
+        self.assertNotIn("헌장 감지는 AGENTS.md 가 있으면 AGENTS.md 만 읽으므로", s4)
+
+    def test_step5_report_flags_kept_claude_md_copies(self):
+        # S4 「CLAUDE.md 는 그대로 두기」는 AGENTS.md 의 관리 절만 갱신한다. CLAUDE.md 에 남은 옛 사본이
+        # 다를 수 있다는 것을 보고가 알린다.
+        block = "\n".join(_report_block(self.text))
+        kept = standalone_line(block, "> CLAUDE.md 를 그대로 뒀다면:")
+        self.assertIn("CLAUDE.md 의 관리 절은 갱신하지 않았다 — AGENTS.md 와 다를 수 있다", kept)
+        for word in ("hook", "훅", "검증"):
+            self.assertNotIn(word, kept)
+
+    def test_step5_report_names_moved_sections(self):
+        # 옮긴 절은 보고에서 이름으로 드러나야 한다 — git 규칙을 그대로 둔 실행의 `## Git Workflow` 이전,
+        # 그리고 git 선택과 상관없는 `## Project Charter` 이전.
+        block = _report_block(self.text)
+        keep = standalone_line("\n".join(block), "> git 규칙을 그대로 뒀다면:")
+        self.assertIn("CLAUDE.md 에서 옮겼다면 기존 `## Git Workflow` 를 바꾸지 않고 AGENTS.md 로 옮겼다", keep)
+        charter = standalone_line("\n".join(block), "> 헌장 절을 옮겼다면:")
+        self.assertIn("CLAUDE.md 에 있던 `## Project Charter` 를 AGENTS.md 로 옮겼다", charter)
+        for ln in (keep, charter):
+            for word in ("hook", "훅", "검증"):
+                self.assertNotIn(word, ln)
+
+
+class TestGitWorkflowReplaceRefusal(unittest.TestCase):
+    """설계에 없던 결정 1 — git 규칙 교체 거절이 헌장까지 멈추지 않는다."""
+
+    def test_three_choices(self):
+        step1 = section(COMMAND.read_text(encoding="utf-8"), "### Step 1:", "### Step 2:")
+        git_para = section(step1, "기존 Git Workflow 설정이 발견되면", "또한 root에")
+        for label in ("「교체 (권장)」", "「git 규칙은 그대로 두고 헌장만」", "「중단」"):
+            self.assertIn(label, git_para)
+        self.assertNotIn("사용자가 거절하면 중단.", step1)
+
+
+class TestCharterGateChoice(unittest.TestCase):
+    """AC31 — 재질문 3회 뒤 기계가 멈추지 않고 사용자가 고른다."""
+
+    def setUp(self):
+        self.text = COMMAND.read_text(encoding="utf-8")
+        self.gate = section(self.text, "#### Law 1 구조적 게이트", "### Step 4:")
+
+    def test_three_choices_after_three_asks(self):
+        for label in ("「건너뛰기」", "「계속 묻기」", "「중단」"):
+            self.assertIn(label, self.gate)
+        self.assertIn("최대 3회", self.gate)
+
+    def test_machine_abort_is_gone(self):
+        self.assertTrue(self.gate.strip(), "게이트 절이 비었다 — 부재 단언이 공허하다")
+        self.assertNotIn("abort", self.gate)
+        self.assertNotIn("charter 미완료: <항목> 비어 abort", self.gate)
+
+    def test_skip_discloses_incomplete_items(self):
+        self.assertIn("[project-init] 헌장 단계를 건너뛰었다 — 미완 항목: <항목>", self.gate)
+
+    def test_skip_writes_no_charter(self):
+        self.assertIn("헌장 절과 `docs/project/` 파일을 쓰지 않는다", self.gate)
+        step4e = section(self.text, "#### 4e:", "### Step 5:")
+        self.assertIn("헌장 단계를 건너뛰지 않았다면", step4e)
+        self.assertNotIn("abort(Law 1 게이트 실패)", step4e)
+
+
+class TestQuestionDefaultsDisclosed(unittest.TestCase):
+    """AC31 — 질문 4개 · 관례 1–3개는 기본값, 쓴 수를 공시하고 「더 묻기」로 연다."""
+
+    def setUp(self):
         text = COMMAND.read_text(encoding="utf-8")
-        step1 = section(text, "### Step 1:", "### Step 2:")
-        self.assertRegex(
-            step1,
-            r"사용자 거절 시.*전체 `/project-init:project-init` 실행 abort",
-            "the migration refusal no longer aborts the run",
-        )
-        self.assertIn("부분 진행 금지", step1)
+        self.phase1 = section(text, "#### Phase 1", "#### Law 1 구조적 게이트")
+
+    def test_no_hard_cap_wording(self):
+        self.assertTrue(self.phase1.strip())
+        self.assertNotIn("≤4개", self.phase1)
+        self.assertNotIn("4개만 묻는다", self.phase1)
+
+    def test_disclosure_line_and_more_option(self):
+        self.assertIn("헌장 질문 <n>개를 물었고(기본 4개) 관례 <m>개를 받았다(기본 1–3개)", self.phase1)
+        self.assertIn("「이대로 진행 (권장)」", self.phase1)
+        self.assertIn("「더 묻기」", self.phase1)
+        for slot in ("{{GOALS}}", "{{SUCCESS_CRITERIA}}", "{{PERSONAS}}"):
+            self.assertIn(slot, self.phase1)
+
+
+class TestPhase0MayOverlap(unittest.TestCase):
+    """AC31 — 질문 순서는 기본 직렬, 질문 없는 Phase 0 스캔은 겹쳐 돌 수 있다."""
+
+    def test_serial_default_and_scan_overlap(self):
+        text = COMMAND.read_text(encoding="utf-8")
+        head = section(text, "### Step 3.5:", "#### Phase 0")
+        self.assertIn("기본은 직렬", head)
+        self.assertIn("Phase 0 스캔은 질문이 없으므로", head)
+        self.assertNotIn("*모두 끝난 뒤* 시작한다", head)
 
 
 if __name__ == "__main__":
