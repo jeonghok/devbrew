@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-interview/SKILL.md plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/references/trivia-escape.md plugins/spec-distill/agents/steelman-builder.md plugins/spec-distill/skills/spec-interview/references/steelman.md plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/roadmap_render.py
+# guards: plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-interview/SKILL.md plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/references/trivia-escape.md plugins/spec-distill/agents/steelman-builder.md plugins/spec-distill/skills/spec-interview/references/steelman.md plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/roadmap_render.py plugins/spec-distill/scripts/roadmap_model.py
 #
 # R10 계획 2 — 끝 게이트: 정본의 둘째 질문(선택) · 인터뷰 끝 ①② 이름 표 · 다른 다음 단계의 줄.
 # 정적 락이다 — 모델이 이 문면을 실제로 따르는지는 재지 못한다.
@@ -17,6 +17,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/skills/spec-interview/references/steelman.md"
   echo "plugins/spec-distill/skills/request-framing/SKILL.md"
   echo "plugins/spec-distill/scripts/roadmap_render.py"
+  echo "plugins/spec-distill/scripts/roadmap_model.py"
   exit 0
 fi
 . "$ROOT/shared/tests/assert.sh"
@@ -111,15 +112,34 @@ parab() { awk -v m="$2" 'index($0,m)==1{f=1} f&&!NF{exit} f{print}' "$1" | tr '\
 RISKP="$(parab "$FIN" '   **위험 번호.**')"
 assert_contains "$SA" ' **위험 번호.** payload §5 의 위험 줄마다' "AC25: 「위험 번호」 문단이 Step A 안에 있다"
 for lit in '`- 위험 K<n> — <숨은 가정 | 실패 양식 | 리뷰 참고> …`' '숨은 가정 · 실패 양식 · 리뷰 참고 순으로 K1 부터 매긴다' \
-           '다른 줄의 번호를 고치지 않고' '새로 더하는 위험 줄은 이 brief 의 가장 큰 K 다음 수를 받는다'; do
+           '다른 줄의 번호를 고치지 않는다.' \
+           '지운 위험의 번호는 다시 쓰지 않는다 — 새로 더하는 위험 줄은 지금까지 나온 가장 큰 K(이 brief 의 §5, 로드맵이 있으면 그 `## 위험 번호표` 와 분해 표의 배정 번호까지)의 다음 수를 받는다.'; do
   assert_contains "$RISKP" "$lit" "AC25: Step A 「위험 번호」 «${lit}»"
 done
+assert_not_contains "$RISKP" '이 brief 의 가장 큰 K 다음 수' "AC25: Step A 「위험 번호」 에 옛 「이 brief 의 가장 큰 K」 없음(양성 짝: 위 단언)"
 assert_contains "$DJ" '위험 K 는 Step A 가 brief §5 위험 줄에 박을 번호다' "AC25: 분해 표 배정 번호 불릿"
 grep -qF '번호 없는 위험 줄' "$FIN" && no "AC25: 옛 「번호 없는 위험 줄」 불릿 잔존" || ok "AC25: 옛 「번호 없는 위험 줄」 없음(양성 짝: 위 단언)"
-assert_contains "$BA" '`- 위험 K<n> — 리뷰 참고 | [<category>] <anchor> — <summary> (리뷰 <id>)`(`<n>` 은 이 brief 의 가장 큰 K 다음 수)' "AC25: B-A 의 §5 줄 꼴"
+assert_contains "$BA" '`- 위험 K<n> — 리뷰 참고 | [<category>] <anchor> — <summary> (리뷰 <id>)`(`<n>` 은 Step A 「위험 번호」 의 다음 수 — 지운 위험의 번호는 다시 쓰지 않는다)' "AC25: B-A 의 §5 줄 꼴이 Step A 의 번호 규칙을 가리킨다"
+assert_not_contains "$BA" '이 brief 의 가장 큰 K 다음 수' "AC25: B-A 에 옛 「이 brief 의 가장 큰 K」 없음(양성 짝: 위 단언)"
+# 분해 판단 5 — 로드맵 폴더 이름은 brief 파일 이름에서 도출한다(<주제>-<HHMM> 줄기도)
+DJ5="$(parab "$FIN" '5. **기록.**')"
+assert_contains "$DJ" '5. **기록.**' "분해 판단 5 가 분해 판단 절 안에 있다"
+assert_contains "$DJ5" '로드맵 폴더는 `docs/superpowers/roadmaps/<YYYY-MM-DD>-<주제 또는 주제-HHMM>/` 다 — 폴더 이름은 brief 파일 이름(`<줄기>.md`)에서 끝의 `-interview.md` 를 뗀 것, 곧 brief 파일 이름의 날짜 · 주제 부분 그대로다.' "분해 판단 5: 로드맵 폴더 이름을 brief 파일 이름에서 도출"
+assert_not_contains "$DJ5" '(brief 와 같은 날짜 · 주제)' "분해 판단 5: 옛 「brief 와 같은 날짜 · 주제」 없음(양성 짝: 위 단언)"
 for lit in '사유가 `unassigned` · `orphans` · `unknown_ids` 이거나 `brief 에서 줄을 찾지 못한 번호` 면' \
-           '`unknown_ids` · `brief 에서 줄을 찾지 못한 번호` 는 표가 brief 에 없는 번호(지운 위험의 K 등)를 배정한 것이다 — 표에서 그 번호를 뺀다.'; do
+           '`unknown_ids` 는 표가 brief 에 없는 번호(지운 위험의 K 등)를 배정한 것이다 — 표에서 그 번호를 뺀다.' \
+           '`brief 에서 줄을 찾지 못한 번호` 면 그 번호를 brief 에서 찾아 가른다 — brief 에 없으면 `unknown_ids` 와 같이 표에서 뺀다.' \
+           'brief 에 있으면 생성기가 그 줄을 읽지 못한 것이다(생성기의 빈틈) — 표를 고치지 않고 그 번호와 사유를 그대로 보이고 아래 「표로 고칠 수 없는 사유」 처럼 멈춘다.' \
+           '면 표가 아니라 brief 를 고친다 — 번호 없는 줄에는 메시지가 말한 번호부터 박고(로드맵 `## 위험 번호표` 에 더 큰 K 가 있으면 그다음 수부터), 겹친 번호는 한 줄을 Step A 「위험 번호」 의 다음 수로 바꾼다.' \
+           '그다음 Step A 8 의 명령을 한 번만 다시 돌리고 위 갈래대로 가른다 — 또 같은 사유면 아래 「표로 고칠 수 없는 사유」 처럼 멈춘다.'; do
   assert_contains "$BR" "$lit" "AC25: B-R «${lit}»"
+done
+assert_not_contains "$BR" '`unknown_ids` · `brief 에서 줄을 찾지 못한 번호` 는 표가' "AC25: B-R 이 두 사유를 한데 묶어 표에서 빼지 않는다(양성 짝: 위 단언)"
+# B-R 이 brief 를 고치게 하는 위험 번호 사유는 생성기의 글과 같은 글이다
+for msg in 'brief §5 위험 줄 가운데 K 번호가 없는 줄이 있다' 'brief §5 위험 줄의 K 번호가 겹친다'; do
+  assert_contains "$BR" "\`${msg}\`" "AC25: B-R 이 위험 번호 사유 «${msg}» 를 이름으로 가른다"
+  grep -F 'raise FormatError(' "$SD/scripts/roadmap_model.py" | grep -qF "$msg" \
+    && ok "AC25: roadmap_model 의 FormatError 글에 «${msg}» 가 있다" || no "AC25: roadmap_model 의 FormatError 글이 B-R 과 다르다(«${msg}»)"
 done
 # B-R 이 부르는 묶음 그리기 사유는 생성기의 글과 같은 글이다(문서 · 코드가 따로 바뀌지 않게)
 NOFIND='brief 에서 줄을 찾지 못한 번호'
