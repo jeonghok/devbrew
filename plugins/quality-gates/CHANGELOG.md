@@ -3,6 +3,40 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.1.0] — 2026-10-19
+
+### Added
+- 범위 모드 `range <시작>[..<끝>]` — 시작 커밋부터 끝 커밋까지를 한 판정으로 본다. 끝을 생략하면 `origin/HEAD` 이고, 없으면 다른 이름으로 대신하지 않고 멈춘다. 범위는 실행 시작에 두 커밋으로 얼려(`range-scope.txt`) 리뷰 diff · 의도 출처 · codex · 차등 테스트 · 판정 줄이 같은 두 커밋을 쓴다(diff 기준 · 기준선은 시작, HEAD 축 · 판정 줄은 끝). 범위 모드는 고치고 다시 돌지 않고 앱을 걷지 않으며 PR 코멘트를 달지 않는다 — 게시 펜스 안에서 범위 모드를 거절한다. 범위를 풀지 못하면 사유 한 줄을 내고 판정 없이 멈춘다.
+- 새 스크립트 셋 — `resolve-range.sh`(범위를 두 커밋으로) · `review-diff.sh`(모든 범위의 리뷰 diff 를 한 자리에서) · `doc_paths.py`(리뷰에서 뺄 문서 경로 규칙의 유일한 자리).
+- 환경 변수 `DEVBREW_QUALITY_GATES_DOC_PATHS`(쉼표 목록, 기본 `README*,CHANGELOG*`) — 맞는 문서 파일을 리뷰어에게 가는 diff 에서 빼고 매 iteration 뺀 수를 알린다. 빈 값은 아무것도 빼지 않는다. 모델이 읽는 파일(`CLAUDE.md` · `SKILL.md` · `agents/` · `references/` 아래 등)과 코드는 패턴에 걸려도 남기고 이름을 알린다(설계 문면은 「패턴이 이김」이었다 — 지휘자 판정으로 포함 규칙을 먼저 둔다). `/` 로 끝나는 패턴은 그 폴더 아래 전부, 앞의 `/` 는 레포 루트에 묶는다. `.claude/settings.json` · `.claude/settings.local.json` 의 `env` 에 둔 값도 세션에 실린다(실측: Claude Code 2.1.303, 헤드리스). 리뷰하는 변경이 두 설정 파일 중 하나에서 이 키를 바꾸면 기본 목록으로 돌아간다 — git 이 무시하는 추적 안 된 local 파일은 변경이 아니라 그대로 쓴다.
+- `review-diff.sh` 의 stdout `self_state:` 줄과 `review-i<N>.self-state` 파일 — 이 실행의 세션 폴더 안에서 qg 가 쓴 추적 안 되는 상태 파일만 리뷰에서 건너뛰고, 그 수와 경로를 매 iteration 공시한다.
+- 「낮춘 지적」 — 재비판이 낮춘 지적을 합성기가 번호(`L<k>`) · 원래 심각도 · 이유와 함께 `## 낮춘 지적` 절과 `lowered:` 줄로 싣는다. 반복마다(판정이 clean 이어도) 사용자가 골라 원래 심각도로 되올린다(`--restore-lowered`).
+- Step 3 의 리뷰어 모델 출처 공시 줄 — `리뷰어 모델: <값>(CLAUDE_CODE_SUBAGENT_MODEL 이 있으면 그 값, 없으면 세션 모델)`.
+- artifact-critique — 대상 여럿(같은 파일 · 링크와 원본은 하나로 합친다 · 코드 대상은 그것만 빼고 진행), 「지적만 받기」(`--findings-only` — 대상마다 한 라운드 비평만, 편집 · 커밋 없음, 브랜치 전제가 막으면 「지적만 받기로 진행」 · 「그 대상만 빼고 진행」을 고른다), 동의 질문에서 정하는 라운드당 비평자 수(기본 1).
+- `synthesize_artifact_findings.py` 의 출력 키 `unadjudicated_items` — 반박자가 판정하지 못한 지적 자체. artifact-critique 보고가 「판정 못 한 지적」으로 라벨을 붙여 하나씩 보인다.
+
+### Changed
+- 의도 출처 — 범위 안 커밋의 `Spec:` 트레일러가 가리키는 설계문서를 전부 싣는다(오래된 커밋 먼저 · 같은 경로 한 번 · 한 커밋의 여러 줄 전부, stdout JSON 의 `specs`). 둘 이상이면 문서마다 구분 줄을 두고, 리뷰어는 의도를 어긴 막는 지적에 근거 문서 경로와 AC 번호를 단다. 범위 모드는 끝 커밋의 트리에서 읽고 PR 본문을 읽지 않는다.
+- 리뷰어 상한 8 · 같은 반복 재호출 금지를 지웠다. 규모는 dispatch 전 시작 줄과 모두 돌아온 뒤 끝 줄 두 줄로 공시한다. 일시 실패한 리뷰어는 한 번 다시 부른다(보안 리뷰어의 fail-closed 는 그 뒤). README 의 「iteration 당 총 ≤10」 문장도 함께 지웠다.
+- 수정 루프 상한(기본 5)에 닿으면 사용자가 「한 번 더 돌기」로 반복을 하나씩 더 연다. 승인은 출처(`label` · `typed`)와 원문을 따옴표 here-doc 으로 `extra-iterations.md` 에 한 줄 기록한다 — 끝 줄 이름은 호출마다 새로 고르고, 쓴 뒤 정확히 한 줄이 늘었는지 검사한다. e2e 의 fail 행과 무효 행도 상한에서는 같은 길로 연다.
+- 리뷰어 모델 고정(`model: opus`)을 풀어 `CLAUDE_CODE_SUBAGENT_MODEL`, 없으면 세션 모델을 따른다.
+- 리뷰 범위 문장 — 「diff 밖이어도 원인이 이 변경이면 보고」. 재비판자도 그런 지적이 가리키는 범위 밖 파일을 읽어 판정하고, 관문 B 는 이 변경이 원인인 결함을 「원래 있던 결함」으로 보지 않는다.
+- e2e 시나리오 질문이 여러 선택이다 — 고른 시나리오를 번호 순으로 하나씩 걷고 걷기마다 게이트를 띄운다. e2e 칸은 가장 나쁜 결과(`fail` > `미확인` > `pass`)다.
+- 토픽 · 범위 전체 diff 가 trivia 면 trivia escape 로 우회한다 — 첫 iteration 의 거르기 전 diff(`review-i1.full.diff`)로 판단한다. 선언이 깨졌으면(`declaration-invalid`) 여전히 우회하지 않는다.
+- 차등 테스트 절차 밖의 조사용 테스트 실행은 「조사용 실행 — 판정에 안 씀」으로 표시하고 판정에 넣지 않는다. `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 조사용 실행도 하지 않는다.
+- `--paths` 범위는 「바뀐 파일 ∩ glob」이다 — 바뀌지 않은 파일은 세지 않는다.
+- 문서 경로를 뺀 리뷰 diff 가 비면 리뷰어 · 차등 테스트 · e2e 를 부르지 않고 `not-certified (scope-empty)` 로 끝난다.
+- artifact-critique 상한 라운드에서 사용자가 「한 번 더 돌기」로 라운드를 하나씩 더 연다(승인 줄을 라운드 히스토리에 남긴다).
+- README 원칙 절 제목을 레포 규칙 이름 `## Principles Instantiated` 로 바꿨다(plugin-audit 의 모양 검사가 이 제목을 읽는다). 고정 5회 상한을 말하던 README 문장들을 「기본 5 + 사용자가 하나씩 연 반복」으로 맞췄다.
+
+### Fixed
+- `setup-qg.sh` 의 `critique` 안내가 인자 위치(첫 인자 · `branch` 뒤 · `--paths` 뒤)와 무관하게 같고, kill switch 가 그보다 먼저 본다. `--help` 의 없어진 인자 줄에 `critique` 가 있다.
+- artifact-critique 의 옛 모드 이름(`critique skipped` · `critique mode disabled`)과 egress 문장(「그 경로로」)을 바로잡았다.
+- Max-iter 의 「한 번 더 돌기」 기록이 모델의 손 이스케이프에 기대지 않는다(따옴표 here-doc · 호출마다 새 끝 줄 이름 · 한 줄 검사).
+
+### Security
+- 개발 중 `review-diff.sh` 에 난 보안 경보 두 건을 이 릴리스 전에 고쳤다 — qg 상태 폴더(`.claude/quality-gates/`)를 리뷰에서 빼는 규칙이 그 아래 둔 코드를 숨겼다. 이 릴리스는 이 실행의 세션 폴더(`--dir`) 바로 아래, qg 가 실제로 쓰는 이름에 맞는 추적 안 된 파일과 등록된 qg 일회용 worktree 만 건너뛰고 그 수와 경로를 공시한다. 추적되는 변경 · 커밋된 변경 · 다른 세션 폴더의 파일 · 모르는 이름은 그 폴더 아래여도 리뷰하고, `--dir` 가 리포 밖이면 아무것도 건너뛰지 않는다(50bc7729 · 7f75f7a3 · 354c8e06).
+
 ## [14.0.1] — 2026-10-19
 
 ### Changed

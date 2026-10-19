@@ -2,7 +2,7 @@
 
 바뀐 코드를 내보내기 전에 확인한다. `/quality-gates:quality-pipeline` 한 번이 diff 를 여러 독립 각도에서 리뷰하고, 동작이 바뀐 테스트를 기준선과 지금 트리 양쪽에서 돌려, 판정 하나(`clean` · `defect` · `not-certified (<사유>)`)를 낸다. 원하면 판정 전에 사람이 승인한 명령으로 앱을 띄워 직접 걸어 본다(e2e 걷기). 브랜치에 열린 PR 이 있으면 판정 뒤 쉬운 설명과 판정 줄을 코멘트 하나로 단다(`DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` 로 끈다).
 
-## 인스턴스화한 원칙
+## Principles Instantiated
 
 이 플러그인은 다음 devbrew 법칙·원칙을 인스턴스화합니다
 ([`docs/philosophy/devbrew-harness-philosophy.md`](../../docs/philosophy/devbrew-harness-philosophy.md) 참고):
@@ -12,9 +12,9 @@
 - **Law 3 (Compounding)** — Phase 1 single dispatch builder (T2-2/T3-5). Future persona edits land in one place, never drift across two dispatch sections.
 - **Law 2 (Writer ≠ Reviewer)** — 순수 read-only reviewer agent(`security-reviewer`/`code-recritic`)가 `tools: Read, Grep, Glob` fail-closed allowlist 선언 (frontmatter scoping으로 물리적 격리 — write/exec/delegation 도구는 목록에 없어 물리적으로 부재; 이름 기반 denylist는 시간에 대해 fail-open이라 대체됨). qg 자체 agent 는 모두 쓰기 권한이 없다. 외부 추가 리뷰어(`pr-review-toolkit` 등)는 쓰기 가능할 수 있으나 advisory 이고 fix 는 오케스트레이터가 소유한다 — 테스트는 오케스트레이터가 자기가 만든 트리에서 직접 돌린다.
 - **Law 3 (Compounding)** — reviewer-persona 편집이 학습된 교훈을 인코딩하는 substrate.
-- **P12 anti-corollary (former AP5, trivia ceremony) 회피** — 한 문장으로 설명되는 diff(typo · rename · 주석만 · 포매팅 — 파일 수와 무관)를 오케스트레이터가 판단해 trivia 로 닫는다(판정 `not-certified (trivia)`). `Spec:` 선언이 있으면 trivia escape 를 쓰지 않는다.
+- **P12 anti-corollary (former AP5, trivia ceremony) 회피** — 한 문장으로 설명되는 diff(typo · rename · 주석만 · 포매팅 — 파일 수와 무관)를 오케스트레이터가 판단해 trivia 로 닫는다(판정 `not-certified (trivia)`). 토픽 · 범위면 그 전체 diff 로 판단하고, 선언이 깨졌으면(`declaration-invalid`) trivia escape 를 쓰지 않는다.
 - **P22 anti-corollary (former AP9, over-dispatching / subagent spray) 회피** — 파이프라인은 fan-out consent 게이트를 fire하지 않고(documented-not-implemented였음), 리뷰어 상한 없이 iteration 마다 찍는 두 공시 줄(dispatch 전 시작 줄: 계획한 수와 더한 수 · 모두 돌아온 뒤 끝 줄: 다시 부른 수와 실패)로 subagent spray를 드러낸다.
-- **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — 파이프라인 내부 fix-loop이 iteration 상한 5(N=5 에는 Retry 가 없고 Max-iter decision 으로 간다) + 항목마다 사용자 적용/제외 결정 + kill switch로 묶임.
+- **P18 — 루프 상한은 남기고 넘는 길은 사용자 승인 하나(수정 루프 · 문서 비평 라운드)** — 수정 루프의 기본 상한은 5 번이다. 상한에 닿으면 Retry 대신 「한 번 더 돌기」로 사용자가 반복을 하나씩 더 열고, 연 승인은 출처(고른 선택지 · 기타 칸에 쓴 글)와 원문 그대로 세션 폴더의 `extra-iterations.md` 에 한 줄씩 남는다(지금 상한 = 5 + 그 줄 수). 문서 비평(`/quality-gates:artifact-critique`)도 상한 라운드에서 같은 꼴로 묻는다. 항목마다 적용/제외 결정과 kill switch 는 그대로다.
 - **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (따로 무시되지 않는다 — 「파이프라인 state」 절; `/quality-gates:quality-pipeline` 시작마다 자기 폴더를 다시 만들고 TTL sweep 으로 폴더 GC).
 - **P8 determinism-economy (harness lightness — trust the model)** (v2.5.0) — 암묵 session scope로 파이프라인이 돌 때 그 사실을 사용자-가시 한 줄로 밝히는 **scope 투명성**. 버려진 결정론적 under-coverage 경고를 결정론 가드가 아니라 *모델 행동*으로 대체(git 비교·차단 없음). 자연어 scope 의도는 별도 parser 없이 모델이 branch scope로 해석 — `/quality-gates:quality-pipeline branch`는 결정론적 escape hatch로 유지. devbrew P8 determinism-economy refinement("Zero hooks" 일반화) instantiation.
 - **P8 determinism-economy — self-honest verdict floor** (v2.6.0; routing 제거·단순화 v2.7.0) — 파이프라인이 *검토받았다고 믿는 scope*와 *resolve한 scope*가 발산할 때(빈 세션 → resolved scope 0 → "clean"의 false-clean)를 봉쇄. read-only `scripts/check-review-scope.sh`가 `changes_exist`를 결정론으로 emit하고, SKILL이 iter-1에서 1회 호출·캐시해 **정직-verdict floor**(load-bearing, kill 불가)가 `resolved scope 0 AND changes_exist == yes`이면 판정이 `not-certified (scope-empty)` 가 된다. **무엇을 리뷰할지(routing)는 모델이 소유** — v2.7.0에서 v2.6.0의 redirect 게이트·`$effective_diff_scope` 배선·redirect kill switch를 제거하고 `/quality-gates:quality-pipeline branch` escape hatch + honesty norm 한 줄로 대체(dogfood 5버그가 전부 routing 재구성에서 나왔고 floor의 load-bearing 입력 `changes_exist`는 틀린 적 없음). 결정론은 무결성 floor 한 점에만; routing/자연어는 모델 신뢰. session 기본값·`/quality-gates:quality-pipeline branch` 자체의 스코프 **선택**(routing)은 무변경이지만, 이 floor 가 보는 것과 **별개로** ② 차등 테스트가 상시 도는 v9.0.0 이후는 차등 테스트가 고르는 test unit 이 0개인 실행도 `expected-empty` → `not-certified (scope-empty)` 다(관측 없음은 음성 결과가 아니다 — §6.4.3 P23 재결정, 2026-09-26) — **진짜 무변경(genuine no-op)과 docs/config-only 변경을 포함한다.** regression: `tests/test_check_review_scope.sh`, `tests/test_qg_false_clean_floor.sh`.
@@ -32,7 +32,7 @@
   boundary. It gates fix-loop consent (it does NOT gate subagent fan-out —
   that consent gate was never implemented; fan-out is disclosed by the
   two per-iteration lines, start line before dispatch and end line after; there is no reviewer cap) — no new principle ID needed.
-- **C66 (Linked Artifact Flow) — 의도 출처** (v2.1.0; v10 에서 D13 사슬로) — `scripts/discover-spec.sh` 가 의도 출처를 정한다: HEAD 쪽 커밋의 `Spec:` 트레일러가 가리키는 spec, 없으면 브랜치 커밋 메시지 + 열린 PR 본문. 그 내용이 모든 리뷰어 dispatch 와 codex 프롬프트의 `<intent>` 로 같은 기준 블록(`references/review-criteria.md`)과 함께 간다. 파일 mtime 은 읽지 않는다.
+- **C66 (Linked Artifact Flow) — 의도 출처** (v2.1.0; v10 에서 D13 사슬로; 14.1.0 에서 설계문서 여럿) — `scripts/discover-spec.sh` 가 의도 출처를 정한다: 범위 안 커밋의 `Spec:` 트레일러가 가리키는 설계문서 전부, 없으면 브랜치 커밋 메시지 + 열린 PR 본문. 그 내용이 모든 리뷰어 dispatch 와 codex 프롬프트의 `<intent>` 로 같은 기준 블록(`references/review-criteria.md`)과 함께 간다. 파일 mtime 은 읽지 않는다.
 - **P21 (Untrusted input — diff is data, not instructions)** (v2.8.0) — 파이프라인의 두 diff-reading reviewer(`security-reviewer`/재비판 `code-recritic`)가 attacker-influenced `filtered_diff`(및 finding 텍스트)를 데이터로만 다루고 그 안의 prompt-injection·안전성 주장을 verdict 근거로 삼지 않도록 명시. 더해 언어/프레임워크 FP precedent 5건을 기능별 단일 배치(DRY)로 흡수 — suppress-at-source 3(security-reviewer anti-flag) + reject-at-verify 2(재비판 코드 프로필 관문 C, PR4a 부터 `references/recritic-code-profile.md`가 싣는다). 섹션-스코프 grep 회귀 락(`test_security_reviewer_persona.sh` · `test_code_recritic_frontmatter.sh`)으로 persona 약화 검출. 신규 P# 0, 결정론 가드 0 (Anthropic *"Using LLMs to Secure Source Code"* 평가 Tier-1; design-lightness).
 - **P21 (출력값 유출 차단 · kill switch 는 가장 안쪽 sink 에서) — 게시 sink** (v10 ③) — `scripts/publish-comment.sh` 하나가 게시의 통제를 모두 쥔다: kill switch(`DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`) → gh 존재·인증 → 열린 PR → corpus(변경 파일 내용 + 커밋 메시지) 위의 `secret-scan.py`(첫 줄 리터럴 `scan_ok: yes` 로만 통과 · degraded corpus 는 fail-closed) → 이미지·HTML 태그 차단(`![` · `<img` · `<image` · `<picture` · `<source` · `<svg` · `<video` · `<audio` — 렌더링이 본문 속 URL 을 클릭 없이 불러 값이 밖으로 새는 길이라 `scan-failed`) → 65,536자 상한 → `gh pr comment --body-file`. 마지막 줄은 `posted: <url>` · `skipped: <사유>` 리터럴이다. gh 를 부르는 qg 파일은 이 sink 와 `discover-spec.sh`(읽기 전용 `gh pr view`) 둘뿐이다. regression: `tests/test_publish_comment_sink.sh` · `tests/test_publish_gh_two_files.sh` · `tests/test_secret_scan.py` · `tests/test_secret_scan_fp.py`.
 - **P17 (상시 동의)** (v10 ③) — 열린 PR 이 있으면 `/quality-gates:quality-pipeline` 실행마다 새 코멘트 하나(이해글 + 판정 줄)를 남긴다. 게시마다 묻지 않는다 — `/quality-gates:quality-pipeline` 실행이 그 동의이고 게시만 끄는 길은 kill switch `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` 하나다(전역 `DEVBREW_QUALITY_GATES_DISABLE=1` 은 전부를 끈다). 이해글은 오케스트레이터가 쓴다. secret-scan 은 corpus 밖의 낯선 비밀값을 알려진 패턴으로만 잡는다(오케스트레이터가 읽은 e2e 로그 · 환경 파일 등 — 남는 위험). 매 실행 새 코멘트라 구독자 알림이 실행마다 간다.
@@ -78,7 +78,10 @@ quality-gates/
 │   ├── artifact-adversarial.md  # `/quality-gates:artifact-critique` 게이트 — tier-unpinned 판정자; critic/codex 발견을 confirm/downgrade/reject 하고 놓친 것을 추가 (read-only)
 ├── scripts/
 │   ├── setup-qg.sh                           # 파이프라인 초기화
-│   ├── discover-spec.sh                      # 의도 출처 (`--intent-out`; `Spec:` 트레일러 → 커밋 메시지 + 열린 PR 본문)
+│   ├── resolve-range.sh                      # `range <시작>[..<끝>]` 을 실행 시작에 두 커밋으로 얼림(`range-scope.txt`)
+│   ├── review-diff.sh                        # 모든 범위의 리뷰 diff 를 한 자리에서 — 문서 경로를 뺀 diff · 뺀 경로 · 건너뛴 qg 상태 경로
+│   ├── doc_paths.py                          # 리뷰에서 뺄 문서 경로 규칙의 유일한 자리(`DEVBREW_QUALITY_GATES_DOC_PATHS`)
+│   ├── discover-spec.sh                      # 의도 출처 (`--intent-out`; 범위 안 `Spec:` 트레일러의 설계문서 전부 → 커밋 메시지 + 열린 PR 본문)
 │   ├── compute-test-scope-candidates.sh      # 차등 — 후보의 바닥(이름 일치 · 바뀐 테스트 · # guards:) + 분모
 │   ├── resolve-baseline.sh                   # 공유 baseline resolution (base/base_ref/merge_base/degraded/same_as_head/ahead)
 │   ├── scope_tuple.py                        # 스코프 튜플 파서 · status → 사유 · scope: 블록
@@ -101,6 +104,8 @@ quality-gates/
 │   └── docreview-profiles/
 │       └── generic.md             # `/quality-gates:artifact-critique` 게이트 — non-code 아티팩트 리뷰 프로필(§ 위 v7.4.0 bullet)
 ├── skills/
+│   ├── artifact-critique/
+│   │   └── SKILL.md         # 문서 비평 — 대상 하나 이상 · 고치며 돌기 또는 지적만 받기(`--findings-only`)
 │   └── quality-pipeline/
 │       ├── SKILL.md         # 한 파이프라인 실행기 — 리뷰 → 차등 테스트 → 합성 · 판정 in-turn 오케스트레이션
 │       └── references/
@@ -117,7 +122,7 @@ quality-gates/
 
 ## Cost Class
 
-`quality-pipeline` skill은 `cost_class: variable` — 리뷰어는 시작 구성(code-reviewer · security-reviewer · codex + 신호에 맞는 조건부 + 재비판)에 모델이 근거를 적어 더한 리뷰어가 얹히고 상한은 없으며, 비용은 diff 크기와 iteration 수(≤5)에 따라 달라진다. trivia 로 닫힌 실행은 리뷰어를 부르지 않는다.
+`quality-pipeline` skill은 `cost_class: variable` — 리뷰어는 시작 구성(code-reviewer · security-reviewer · codex + 신호에 맞는 조건부 + 재비판)에 모델이 근거를 적어 더한 리뷰어가 얹히고 상한은 없으며, 비용은 diff 크기와 iteration 수(기본 상한 5 — 상한에서 사용자가 하나씩 더 열 수 있다)에 따라 달라진다. trivia 로 닫힌 실행은 리뷰어를 부르지 않는다.
 
 트리거 조건과 override flag는 아래 「쓰는 법」 · 「범위」 절 참고.
 
@@ -131,7 +136,8 @@ qg 리뷰 agent(`code-recritic` · `security-reviewer`)는 모델을 고정하�
 `code-recritic` 은 파이프라인 안에서 **단일 model-based 판정 각도**다: 탐지 리뷰어가 findings 를 내고
 그 뒤의 synthesizer 는 결정론적 스크립트이므로, 사용자가 보는 모든 finding 은 재비판자의 판정을
 거친다. 판정 관문 A–E 는 `references/recritic-code-profile.md` 가 싣는다. Runs once per pipeline
-iteration (≤5×).
+iteration (default cap 5; the user can open more iterations, one at a time). 파이프라인은 리뷰어를 부르기 전에
+iteration 마다 `리뷰어 모델: <값>` 한 줄로 어느 모델이 도는지 알린다.
 
 **Choosing a cheaper tier for devbrew subagents is the user's call, not the plugin's.** Put it in your own settings — for example in `~/.claude/settings.json`:
 
@@ -144,15 +150,16 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 ## 파이프라인
 
 > **비-코드 산출물 비평 모드 (v2.11.0):** `/quality-gates:artifact-critique <path>` 또는 자연어 비평 의도로 문서·스펙·계획·설정·산문을 대상으로 비평-수정-재비평 루프를 돈다(라운드별 커밋; 코드 리뷰 아님 — 코드는 위 코드 파이프라인). 상세는 skill `artifact-critique`.
+> 대상은 여럿 적을 수 있다(같은 파일을 두 번 적었거나 링크와 원본을 함께 적으면 하나로 합친다 · 코드 파일은 그 대상만 빼고 진행한다). `--findings-only` 면 「지적만 받기」 — 대상마다 한 라운드 비평만 받아 보고하고 고치거나 커밋하지 않는다(반박자가 판정하지 못한 지적은 「판정 못 한 지적」으로 따로 보인다). 동의 질문에서 라운드마다 부를 비평자 수(기본 1명)를 정하고, 상한 라운드에 닿으면 「한 번 더 돌기」로 라운드를 하나씩 더 연다.
 
 | 단계 | 주체 | 무엇 |
 |---|---|---|
-| ① 리뷰 | 시작 구성(`pr-review-toolkit:code-reviewer` · `security-reviewer` · codex + 신호에 맞는 조건부) + 근거를 적어 더한 리뷰어 → `code-recritic` | 범위(topic · session · `branch` · `--paths`)의 diff 를 한 기준 블록과 의도 출처로 리뷰하고, 출처를 못 보는 재비판이 지적을 다시 판정한다(탐지 0 이어도 돈다) |
+| ① 리뷰 | 시작 구성(`pr-review-toolkit:code-reviewer` · `security-reviewer` · codex + 신호에 맞는 조건부) + 근거를 적어 더한 리뷰어 → `code-recritic` | 범위(topic · session · `branch` · `--paths` · `range`)의 diff(문서 경로를 뺀 것)를 한 기준 블록과 의도 출처로 리뷰하고, 출처를 못 보는 재비판이 지적을 다시 판정한다(탐지 0 이어도 돈다) |
 | ② 차등 테스트 | 오케스트레이터 + 결정론 스크립트 | 영향분 테스트를 기준선 축과 봉인된 HEAD 축에서 돌려 귀속(`references/differential-test.md`) |
-| ③ 합성 · 판정 | `synthesize_findings.py` → `verdict.py` | `clean` · `defect` · `not-certified (<사유>)` — 막는 지적(CRITICAL · IMPORTANT)이 1건 이상이면 `defect` |
-| ④ e2e | 오케스트레이터 + `e2e-state.sh` | 사람이 고른 시나리오를 승인된 명령으로 띄운 앱에서 걷고, 증거표에서 코드가 판정안을 낸다 — 걷기 직후 게이트에서 사람이 확정한다(`references/e2e.md`) |
+| ③ 합성 · 판정 | `synthesize_findings.py` → `verdict.py` | `clean` · `defect` · `not-certified (<사유>)` — 막는 지적(CRITICAL · IMPORTANT)이 1건 이상이면 `defect`. 재비판이 낮춘 지적은 「낮춘 지적」 절에 원래 심각도 · 이유와 함께 보이고, 사용자가 반복마다 골라 원래 심각도로 되올릴 수 있다 |
+| ④ e2e | 오케스트레이터 + `e2e-state.sh` | 사람이 고른 시나리오(여럿 고를 수 있다 — 번호 순으로 하나씩 걷고, e2e 칸은 가장 나쁜 결과)를 승인된 명령으로 띄운 앱에서 걷고, 증거표에서 코드가 판정안을 낸다 — 걷기 직후 게이트에서 사람이 확정한다(`references/e2e.md`) |
 
-**차등 테스트** — 차등 테스트는 영향 테스트를 기준선 트리와 HEAD 트리(작업트리 전체를 봉인한 일회용 트리)에서 각각 돌려 짝짓는다. 행은 `run-test-selection.sh` 가 꼬리 줄 달린 행 파일에 쓰고, `diff-test-results.py` 가 배정 파일과 두 축의 행 파일을 짝지어 판정 입력 한 파일을 낸다 — 판정은 그 파일을 `verdict.py` 가 직접 읽는다. 기준선 행은 한 번의 `/quality-gates:quality-pipeline` 동안만 사는 실행 안 메모(리포 밖)에 두고 같은 실행의 다음 iteration 에서 재사용한다. 세션을 넘는 캐시는 없다. 절차와 지킬 요구 R1~R24 는 `skills/quality-pipeline/references/differential-test.md` 에 있다.
+**차등 테스트** — 차등 테스트는 영향 테스트를 기준선 트리와 HEAD 트리(작업트리 전체를 봉인한 일회용 트리)에서 각각 돌려 짝짓는다. 행은 `run-test-selection.sh` 가 꼬리 줄 달린 행 파일에 쓰고, `diff-test-results.py` 가 배정 파일과 두 축의 행 파일을 짝지어 판정 입력 한 파일을 낸다 — 판정은 그 파일을 `verdict.py` 가 직접 읽는다. 기준선 행은 한 번의 `/quality-gates:quality-pipeline` 동안만 사는 실행 안 메모(리포 밖)에 두고 같은 실행의 다음 iteration 에서 재사용한다. 세션을 넘는 캐시는 없다. 절차와 지킬 요구 R1~R24 는 `skills/quality-pipeline/references/differential-test.md` 에 있다. 원인을 찾으려고 그 절차 밖에서 테스트를 돌릴 수는 있지만, 그 실행은 「조사용 실행 — 판정에 안 씀」으로 표시되고 판정에 들어가지 않는다(`DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 그것도 돌리지 않는다).
 
 **아키텍처 메모 — 왜 오케스트레이션이 skill 에 있는가**: Claude Code는 skill만 `Agent()`의
 `subagent_type`을 쓸 수 있다. 파이프라인은 여러 리뷰어를 디스패치해야 하므로 orchestration
@@ -194,6 +201,8 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 위 표는 시작 구성이다. 조건부 넷은 오케스트레이터가 SKILL Step 3 의 신호 규칙표로 매 iteration 고르고,
 diff 를 보고 근거를 적어 리뷰어를 더할 수도 있다. 규모는 두 줄로 알린다 — 첫 dispatch 앞의 시작 줄(부를 수와
 더한 수)과 dispatch 가 모두 돌아온 뒤의 끝 줄(다시 부른 수). 실패한 리뷰어는 한 번 다시 부른다. 모든 dispatch(외부 포함)와 codex 프롬프트가 같은 기준 블록과 의도 출처를 받는다.
+리뷰어는 diff 밖의 결함도 원인이 이 변경이면 보고하고, 재비판자는 그런 지적이 가리키는 파일을 읽어 판정한다 — 이 변경이
+원인인 결함은 「원래 있던 결함」으로 기각되지 않는다.
 
 **Prerequisites (optional dependency):** `pr-review-toolkit`(code-reviewer + pr-test-analyzer +
 silent-failure-hunter + type-design-analyzer + comment-analyzer). 미설치 시 그 리뷰어는 unavailable 로
@@ -215,14 +224,16 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
  ├ setup-qg.sh ── .claude/quality-gates/<sid>/result.md
  ├ SKILL preflight ── kill switch · setup --ensure · intent: 한 줄
  ├ trivia escape? ── yes ──▶ not-certified (trivia) ──────▶ Final verdict
- ├ qg iter loop (≤5)
+ ├ qg iter loop (CAP = 5 + 사용자가 연 반복)
+ │   Step 1c 의 걸러진 diff 가 비면 → not-certified (scope-empty)
  │   ① review — 시작 구성 + 근거를 적어 더한 리뷰어 → code-recritic
  │   ② differential test — 기준선 vs 봉인된 HEAD (매 iteration)
  │   ③ synthesize → verdict: clean | defect | not-certified
  │   막는 지적 또는 차등 defect → AskUserQuestion ("남은 지적이 있다…")
  │       분류표(항목마다 적용 / 제외 + 사유) · 고치고 다시 돌기 / 지금 판정으로 끝내기 / 멈추기
  │       고치고 다시 돌기: 「적용」만 Edit, 「제외」는 excluded.md → 다음 iteration
- ├ e2e ── 시나리오 질문 → 앱 부팅 · 걷기 → 판정안 · 걷기 직후 게이트 (끔 · 안 함도 판정 줄에 남는다)
+ │   N = CAP 에서 남으면 → 한 번 더 돌기(반복 하나만 연다) / 지금 판정으로 끝내기 / 멈추기
+ ├ e2e ── 시나리오 질문(여러 선택) → 고른 것마다 앱 부팅 · 걷기 → 판정안 · 걷기 직후 게이트 (끔 · 안 함도 판정 줄에 남는다)
  ├ Final verdict ── verdict.py 의 판정 줄 · result.md
  └ Publish ── sink 한 번 · posted:/skipped:
 ```
@@ -230,8 +241,9 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
 ### Trivia escape
 
 한 문장으로 설명되는 diff(typo · rename · 주석만 · 포매팅 — 파일 수와 무관)는 오케스트레이터가 판단해
-파이프라인을 건너뛴다. 판정은 `not-certified (trivia)` 다 — `clean` 이 아니다. `Spec:` 선언이 있으면
-trivia escape 를 쓰지 않는다. 애매하면 trivia 가 아니다.
+파이프라인을 건너뛴다. 판정은 `not-certified (trivia)` 다 — `clean` 이 아니다. 토픽(`Spec:` 선언)이나 범위 모드면
+첫 iteration 의 리뷰 diff 를 만든 뒤 문서 경로를 거르기 전 diff 전체(토픽 · 범위 전체)로 판단한다. 선언이 깨졌으면
+(`declaration-invalid`) trivia escape 를 쓰지 않는다. 애매하면 trivia 가 아니다.
 
 ## 토픽 스코프 — `Spec:` 트레일러
 
@@ -255,7 +267,7 @@ trivia escape 를 쓰지 않는다. 애매하면 trivia 가 아니다.
 선언이 깨졌으면(경로 부재 · 한 브랜치에 두 키 · 경계 · 끝점을 셀 수 없음) `not-certified
 (declaration-invalid)`, 끝점 합치기가 실패하면(충돌이면 충돌 파일을 싣는다) `not-certified
 (merge-conflict)` 다 — 두 경우 모두 리뷰 · 차등 테스트는 현재 브랜치(session)로 계속 돈다.
-선언이 있으면 trivia escape 를 쓰지 않는다. `branch` · `--paths` override 는 토픽을 보지 않는다.
+선언이 있으면 trivia 판단은 토픽 전체 diff 로 한다(「Trivia escape」). `branch` · `--paths` · `range` override 는 토픽을 보지 않는다.
 
 **알려진 한계**
 - 다른 리모트의 기본 브랜치(예: `upstream/main`)가 토픽을 이미 머지했으면 구성원으로 잡혀 리뷰
@@ -287,10 +299,11 @@ trivia escape 를 쓰지 않는다. 애매하면 trivia 가 아니다.
 
 | 이럴 때 | 친다 | 나오는 것 |
 |---|---|---|
-| 지금 바꾼 것을 내보내기 전에 | `/quality-gates:quality-pipeline` | 판정 하나와 남은 지적 표. 지적이 남으면 고칠지 묻고(최대 5번), 판정 전에 앱을 띄워 걸어 볼지 묻는다. 열린 PR 이 있으면 코멘트 하나를 단다 |
-| 브랜치 전체를 보고 싶을 때 | `/quality-gates:quality-pipeline branch` | main 대비 브랜치 전체 diff 의 판정 |
-| 일부 경로만 볼 때 | `/quality-gates:quality-pipeline --paths <glob>...` | 그 경로만 리뷰한 판정 |
-| 문서 · 설계 · 설정을 비평받을 때 | `/quality-gates:artifact-critique <path>` | 비평 · 수정 라운드(라운드마다 커밋). 코드는 `/quality-gates:quality-pipeline` 로 본다 |
+| 지금 바꾼 것을 내보내기 전에 | `/quality-gates:quality-pipeline` | 판정 하나와 남은 지적 표. 지적이 남으면 고칠지 묻고(기본 5번 — 다 쓰면 한 번씩 더 돌지 묻는다), 판정 전에 앱을 띄워 걸어 볼지 묻는다. 열린 PR 이 있으면 코멘트 하나를 단다 |
+| 브랜치 전체를 보고 싶을 때 | `/quality-gates:quality-pipeline branch` | 기본 브랜치 대비 브랜치 전체 diff 의 판정 |
+| 일부 경로만 볼 때 | `/quality-gates:quality-pipeline --paths <glob>...` | 바뀐 파일 중 그 glob 에 맞는 것만 리뷰한 판정 |
+| 지난 커밋들을 한꺼번에 볼 때 | `/quality-gates:quality-pipeline range <시작>[..<끝>]` | 시작 커밋부터 끝 커밋까지 변경의 판정. 끝을 생략하면 기본 브랜치 끝(`origin/HEAD`)이다. 고치지 않고 앱을 걷지 않으며 PR 코멘트도 달지 않는다 |
+| 문서 · 설계 · 설정을 비평받을 때 | `/quality-gates:artifact-critique <path>` | 비평 · 수정 라운드(라운드마다 커밋). 경로를 여럿 적을 수 있고, `--findings-only` 를 붙이면 고치지 않고 지적만 받는다. 코드는 `/quality-gates:quality-pipeline` 로 본다 |
 
 `/quality-gates:quality-pipeline critique …` 는 실행하지 않고 위 새 이름을 안내한다(종료 코드 2).
 
@@ -303,11 +316,20 @@ trivia escape 를 쓰지 않는다. 애매하면 trivia 가 아니다.
 
 ## 범위
 
-기본 범위는 git 이 보고하는 변경이다 — base 대비 브랜치 diff 와 작업트리 변경의 합집합을 오케스트레이터가 직접 정한다. `Spec:` 트레일러로 선언된 토픽이면 토픽 전체(합친 트리)가 범위다(「토픽 스코프」). 리포 밖 절대경로 편집은 잡히지 않으므로 `--paths` 로 명시한다.
+기본 범위는 git 이 보고하는 변경이다 — base 대비 브랜치 diff 와 작업트리 변경(추적 변경 · 무시되지 않는 새 파일)의 합집합이다. `Spec:` 트레일러로 선언된 토픽이면 토픽 전체(합친 트리)가 범위다(「토픽 스코프」). 리포 밖 절대경로 편집은 잡히지 않으므로 `--paths` 로 명시한다. `--paths` 는 바뀐 파일 중 그 glob 에 맞는 것이다 — 바뀌지 않은 파일은 세지 않는다.
 
-암묵 session 범위로 돌 때는 한 줄로 밝힌다: `리뷰 범위: 이번 세션에서 바뀐 파일 N개.` 토픽이면 `리뷰 범위: 토픽 <키> — 바뀐 파일 N개 · 구성원 <branches>.` 를 밝힌다. 자연어로 브랜치 전체 리뷰 의도를 말하면 모델이 `branch` 범위로 해석한다.
+모든 범위의 리뷰 diff 는 `scripts/review-diff.sh` 한 자리가 만든다. 문서 경로(기본 `README*` · `CHANGELOG*` — 「설정」 절)에 맞는 문서 파일은 리뷰어에게 가는 diff 에서 빠지고, 매 iteration `문서 경로 … — 리뷰에서 뺀 경로 N개.` 한 줄로 알린다. 패턴에 걸려도 모델이 읽는 파일(`CLAUDE.md` · `SKILL.md` · `agents/` · `references/` 아래 등)과 코드는 빼지 않고 이름만 알린다. 문서를 빼고 나니 리뷰할 diff 가 비면 리뷰어 · 차등 테스트 · e2e 를 부르지 않고 `not-certified (scope-empty)` 로 끝난다.
 
-판정은 `clean` · `defect` · `not-certified (<사유>)` 중 하나다. 막는 지적이나 차등 defect 가 남으면 반복마다 항목별 적용/제외 분류표와 함께 `고치고 다시 돌기` / `지금 판정으로 끝내기` / `멈추기` 로 사용자가 진행을 정한다(최대 5회). 「고치고 다시 돌기」는 「적용」 항목만 고친다.
+이 실행의 세션 폴더 안에 qg 가 쓴 추적 안 되는 상태 파일은 리뷰에서 건너뛰되, 그 수와 경로를 매 iteration 한 줄로 알린다(`review-i<N>.self-state`). 다른 세션 폴더의 파일 · qg 가 쓰지 않는 이름 · 추적되는 변경 · 커밋된 변경은 그 폴더 아래여도 리뷰한다.
+
+**범위 모드 — `range <시작>[..<끝>]`.** 시작 커밋부터 끝 커밋까지의 변경을 한 판정으로 본다. 끝을 생략하면 `origin/HEAD` 가 가리키는 기본 브랜치 끝이다 — `origin/HEAD` 가 없으면 다른 이름으로 대신하지 않고 멈추며, 고치는 길(`git remote set-head origin --auto` 또는 끝을 적기)을 알린다.
+- 범위는 실행 시작에 두 커밋으로 얼린다(`scripts/resolve-range.sh` → 세션 폴더의 `range-scope.txt`). 리뷰 diff · 의도 출처 · codex · 차등 테스트 · 판정 줄이 모두 같은 두 커밋을 쓴다 — diff 의 기준과 차등 테스트 기준선은 시작 커밋, HEAD 축과 판정 줄의 커밋은 끝 커밋이다. 지금 작업 트리는 보지 않는다.
+- 범위는 이미 있는 커밋이라 지금 체크아웃과 다를 수 있다. 그래서 범위 모드는 고치고 다시 돌지 않고(결정은 「지금 판정으로 끝내기」 · 「멈추기」 둘), 앱을 걷지 않으며, PR 코멘트도 달지 않는다(게시 펜스가 범위 모드를 거절한다).
+- 범위를 풀지 못하면(시작 · 끝을 못 찾음 · 시작이 끝의 조상이 아님 · 빈 범위 · `-` 로 시작하거나 `...` 를 쓴 모양) 사유 한 줄을 내고 판정 없이 멈춘다. `range` 는 `branch` · `--paths` 와 함께 줄 수 없다.
+
+암묵 session 범위로 돌 때는 한 줄로 밝힌다: `리뷰 범위: 이번 세션에서 바뀐 파일 N개.` 토픽이면 `리뷰 범위: 토픽 <키> — 바뀐 파일 N개 · 구성원 <branches>.`, 범위 모드면 `리뷰 범위: <시작>..<끝> — 커밋 N개 · 바뀐 파일 M개` 를 밝힌다. 자연어로 브랜치 전체 리뷰 의도를 말하면 모델이 `branch` 범위로 해석한다.
+
+판정은 `clean` · `defect` · `not-certified (<사유>)` 중 하나다. 막는 지적이나 차등 defect 가 남으면 반복마다 항목별 적용/제외 분류표와 함께 `고치고 다시 돌기` / `지금 판정으로 끝내기` / `멈추기` 로 사용자가 진행을 정한다. 반복 상한은 기본 5 번이다. 상한에 닿으면 「한 번 더 돌기」 / 「지금 판정으로 끝내기」 / 「멈추기」를 묻고, 「한 번 더 돌기」는 반복을 하나만 더 열어 그 끝에 다시 묻는다(e2e 의 fail · 무효 행도 상한에서는 같은 길이다). 「고치고 다시 돌기」는 「적용」 항목만 고친다.
 
 차단 스위치: `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 은 차등 테스트를 건너뛴다(판정은 `not-certified (kill-switch)`). `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 은 e2e 를 끈다(판정 줄의 e2e 칸이 `꺼짐(kill switch)`). `DEVBREW_QUALITY_GATES_DISABLE=1` 은 전부를 끈다.
 
@@ -325,14 +347,20 @@ cd ../pr-123 && claude   # 그 세션에서 /quality-gates:quality-pipeline
 
 ## 의도 출처 (`discover-spec.sh`)
 
-`discover-spec.sh --intent-out <file> [--base <sha>]` 가 의도 출처를 정해 그 본문을 `<file>` 에 쓰고 stdout 에
-JSON 한 줄(`intent_source` · `intent_note` · `intent_file`)을 낸다. 사슬은 둘이다:
+`discover-spec.sh --intent-out <file> [--base <sha> | --range <시작> <끝>]` 가 의도 출처를 정해 그 본문을 `<file>` 에 쓰고 stdout 에
+JSON 한 줄(`intent_source` · `intent_note` · `intent_file` · `specs`)을 낸다. 사슬은 둘이다:
 
-1. HEAD 쪽 커밋의 `Spec:` 트레일러가 가리키는 spec(`intent_source: spec-trailer`). 리포 상대 경로이고
-   추적되는 파일이어야 한다 — `..` · `.git/` · 추적되지 않는 경로는 거부하고(`intent_note: spec 경로 거부`)
-   아래로 내려간다. 내용은 객체 저장소(`git show HEAD:<path>`)에서 읽는다.
-2. 없으면 브랜치 커밋 메시지 + 열린 PR 본문(`commits+pr`), PR 이 없거나 gh 를 못 쓰면 커밋 메시지만
+1. 범위 안 커밋의 `Spec:` 트레일러가 가리키는 설계문서 전부(`intent_source: spec-trailer` · `specs` 에 실은 경로 목록).
+   오래된 커밋 먼저 모으고, 같은 경로는 한 번, 한 커밋에 `Spec:` 줄이 여럿이면 전부 받는다. 문서가 하나면 그 내용 그대로,
+   둘 이상이면 문서마다 구분 줄 `<!-- qg-spec <k>/<N>: <경로> -->` 뒤에 싣는다. 설계문서가 여럿이면 리뷰어는 의도를 어긴
+   막는 지적마다 근거 문서 경로와 AC 번호를 단다(`references/review-criteria.md`). 리포 상대 경로이고 추적되는 보통 파일이어야
+   한다 — `..` · `.git/` · 추적되지 않는 경로 · 링크는 거부하고 그 수를 알린다(`intent_note: spec 경로 거부 <k>개`). 남은 문서가
+   없으면 아래로 내려간다. 내용은 객체 저장소에서 읽는다 — 보통은 HEAD, 범위 모드는 끝 커밋의 트리다.
+2. 없으면 범위 안 커밋 메시지 + 열린 PR 본문(`commits+pr`), PR 이 없거나 gh 를 못 쓰면 커밋 메시지만
    (`commits`; `intent_note` 는 `gh 없음` · `열린 PR 없음` · `gh 오류`). PR 본문은 읽기 전용 `gh pr view` 하나로 읽는다.
+   범위 모드는 PR 본문을 읽지 않는다(`intent_note: 범위 모드 — PR 본문 안 읽음`).
+
+범위는 `--range` 면 `<시작>..<끝>`, 아니면 `--base`(없으면 merge-base)부터 HEAD 까지다.
 
 파일 mtime 은 읽지 않는다. 파이프라인은 실행마다 `intent: <intent_source>[ (<intent_note>)] — <출처 요약>` 한 줄을
 정확히 한 번 낸다. 의도 본문은 비신뢰 데이터다 — 리뷰어 지시가 아니며, 지적을 낮추거나 건너뛰는 근거가 되지 않는다.
@@ -356,10 +384,29 @@ JSON 한 줄(`intent_source` · `intent_note` · `intent_file`)을 낸다. 사�
 
 ### Tuning knobs
 
-- `MAX_REVIEW_ITERATIONS`: 5 (파이프라인 fix-loop iteration 수)
+- 수정 루프 반복 상한: 기본 5 (환경 변수가 아니다 — 상한에 닿으면 사용자가 「한 번 더 돌기」로 하나씩 더 연다)
+- `DEVBREW_QUALITY_GATES_DOC_PATHS`: `README*,CHANGELOG*` (리뷰에서 뺄 문서 경로 — 아래 「문서 경로」)
 - `DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT`: 90 (e2e 부팅의 준비 신호를 기다리는 초 — 넘으면 판정안이 「미확인(부팅 실패)」)
 - `DEVBREW_QUALITY_GATES_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/quality-gates:quality-pipeline` 시작마다 GC)
 - `DEVBREW_QUALITY_GATES_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
+
+### 문서 경로 (`DEVBREW_QUALITY_GATES_DOC_PATHS`)
+
+리뷰어에게 가는 diff 에서 뺄 문서 경로를 쉼표 목록으로 정한다. 규칙은 `scripts/doc_paths.py` 한 곳에 있고, 모든 범위에서
+`review-diff.sh` 가 부른다.
+
+- **값** — 없으면 기본 `README*,CHANGELOG*`. 빈 값(`""`)은 「아무것도 빼지 않음」이다.
+- **패턴** — `/` 가 없는 패턴은 어느 깊이의 파일 이름에나 맞고(`README*` 는 `a/b/README.md` 에도 맞는다), `/` 가 있는
+  패턴은 레포 루트 기준 경로 전체에 맞는다. 앞에 `/` 를 붙이면 루트에 묶인다(`/docs/*.md`). `/` 로 끝나는 패턴은 그
+  폴더 아래 전부다(`docs/drafts/`). `**` 는 여러 마디, `*` · `?` 는 한 마디 안이다. 읽지 못한 패턴은 적용하지 않고 이름을 알린다.
+- **빼는 것은 문서 파일뿐** — 확장자가 `.md` · `.markdown` · `.mdx` · `.rst` · `.txt` · `.adoc` 이거나 이름이 `README` ·
+  `CHANGELOG` 인 파일만 빠진다. 그중 모델이 읽는 파일(`CLAUDE.md` · `AGENTS.md` · `SKILL.md`, 또는 경로에 `agents` · `skills` ·
+  `commands` · `references` · `templates` · `hooks` · `.claude` · `.claude-plugin` 이 든 파일)과 코드는 패턴에 걸려도 남기고 이름을 알린다.
+- **어디에 두나** — 셸 환경 변수로 두거나, `.claude/settings.json` · `.claude/settings.local.json` 의 `env` 에 둔다. 설정 파일의
+  `env` 는 세션 환경 변수로 실린다(실측: Claude Code 2.1.303, 헤드리스 한 번 — 대화형 세션은 재지 않았다).
+- **리뷰 대상이 자기 범위를 못 정한다** — 리뷰하는 변경이 두 설정 파일 중 하나에서 이 키를 바꾸면 이 값을 쓰지 않고 기본 목록으로
+  돌아가며, 공시 줄의 출처가 「기본 — 이 변경이 설정을 바꿨다」가 된다. git 이 무시하는 추적 안 된 `settings.local.json` 은
+  변경에 들지 않으므로 그대로 쓴다.
 
 **`.claude/quality-gates/baseline-cache/`** — 12.x 까지의 판이 남긴 기준선 캐시 폴더다. 13.0.0 은 이 폴더를
 쓰지도 읽지도 않고 GC 도 지우지 않는다 — 남아 있으면 직접 지워도 된다.
