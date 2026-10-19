@@ -3,10 +3,11 @@
 """merge_check.py — 머지 전 스위트 대조(R5 AC18).
 
 합친 사본(origin 기본 브랜치 + 에픽 브랜치)과 기준선 사본(origin 기본 브랜치)을 일회용 worktree 로 만들고,
-그 레포의 스위트를 두 사본에서 돌려 실패를 단위와 «이름» 으로 대조한다. 동시 실행은 잠금으로 막는다.
+그 레포의 스위트를 두 사본에서 돌려 실패를 단위와 «이름» 으로 대조한다. 동시 실행은 하위 agent 의 전체 스위트와
+같은 공유 스위트 잠금(`suite_lock.py` — 기계 상태 자원 폴더의 `suite-lock`)으로 막는다.
 
 명령줄:
-  merge_check.py run --roadmap <로드맵 레포 상대경로> --branch <브랜치> [--keep-merged] [--no-fetch] [--root <레포>]
+  merge_check.py run --roadmap <로드맵 레포 상대경로> --branch <브랜치> [--keep-merged] [--no-fetch] [--wait <초>] [--root <레포>]
 
 무엇을 돌리나: 기본 브랜치의 로드맵 frontmatter `test_command` 가 있으면 그것 — 실패 이름은 `test_failure_pattern`
 (정규식, 묶음이 있으면 첫 묶음) 또는 알려진 모양. frontmatter 에 없는 키는 이 로드맵 기계 상태의 `## 레포 설정`
@@ -15,7 +16,7 @@
 러너의 실패 모양으로만 이름을 뽑아 대조한다(모양을 모르는 러너는 단위 수준만).
 
 종료 코드: 0 새 실패 없음 · 1 새 실패 있음 · 3 검사 불가 · 4 새 실패는 없으나 이름 대조 불가 단위가 있다 ·
-5 다른 대조가 도는 중 · 6 테스트 명령을 모른다(사용자에게 묻는다) · 7 스위트 대조 없음(테스트 없음).
+5 다른 스위트가 도는 중(공유 잠금) · 6 테스트 명령을 모른다(사용자에게 묻는다) · 7 스위트 대조 없음(테스트 없음).
 """
 from __future__ import annotations
 
@@ -27,13 +28,13 @@ import re
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
+import suite_lock  # noqa: E402
 from roadmap_model import DEFAULT_REF, NO_DEFAULT, frontmatter, unquote  # noqa: E402
 from state_path import state_root  # noqa: E402
 
@@ -55,7 +56,6 @@ RUNNER_SHAPES = {
 }
 MACHINE_NOTE = "(기계 상태 임시값)"
 NEW, FIXED = ("NEW_REGRESSION", "NEW_TEST_RED"), ("FIXED",)
-LOCK_YOUNG = 60  # 주인 기록 전 잠금은 이 초 동안 바쁜 것으로 본다
 
 
 class Stop(Exception):
@@ -97,51 +97,17 @@ def names_in(text: str, pattern=None, shapes=None):
 
 
 # ── 잠금 ─────────────────────────────────────────────────────────────────────
+# 하위 agent 의 전체 스위트와 같은 잠금 하나(`suite_lock.py`) — 지휘자 대조와 담당자 스위트가 같은 시각에 돌지 않는다.
 
-def _alive(pid: int) -> bool:
+def take_lock(d: Path, branch: str, wait: float = 0) -> None:
     try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
-def take_lock(d: Path) -> None:
-    d.parent.mkdir(parents=True, exist_ok=True)
-    for _try in (1, 2, 3):
-        try:
-            d.mkdir()
-        except FileExistsError:
-            try:
-                owner_file = d / "owner"
-                owner = owner_file.read_text(encoding="utf-8").strip() if owner_file.is_file() else ""
-                head = owner.split(" ", 1)[0]
-                pid = int(head) if head.isdigit() else None
-                young = (time.time() - d.stat().st_mtime) < LOCK_YOUNG
-            except FileNotFoundError:
-                continue
-            if (pid is not None and _alive(pid)) or (pid is None and young):
-                raise Stop(5, "다른 스위트 대조가 도는 중이다(잠금 %s · 주인 %s) — 끝난 뒤 다시 돈다" % (d, owner or "기록 전"))
-            gone = d.parent / ("lock.stale-%d-%d" % (os.getpid(), int(time.time() * 1000)))
-            try:
-                os.rename(str(d), str(gone))
-            except OSError:
-                continue
-            print("[spec-distill] 주인 없는 잠금을 풀었다(%s · %s)" % (d, owner or "주인 기록 없음"))
-            shutil.rmtree(str(gone), ignore_errors=True)
-            continue
-        (d / "owner").write_text("%d %s\n" % (os.getpid(), stamp()), encoding="utf-8")
-        return
-    raise Stop(5, "잠금을 잡지 못했다: %s" % d)
+        suite_lock.take(d, "merge_check %s" % branch, wait)
+    except suite_lock.Busy as exc:
+        raise Stop(5, "다른 스위트가 도는 중이다(%s) — 끝난 뒤 다시 돈다(잠금 %s)" % (exc, d))
 
 
 def drop_lock(d: Path) -> None:
-    owner_file = d / "owner"
-    owner = owner_file.read_text(encoding="utf-8").split(" ", 1)[0] if owner_file.is_file() else ""
-    if owner == str(os.getpid()):
-        shutil.rmtree(str(d), ignore_errors=True)
+    suite_lock.drop(d)
 
 
 # ── 사본 ─────────────────────────────────────────────────────────────────────
@@ -414,8 +380,8 @@ def run(root: Path, a) -> int:
         except re.error as exc:
             raise Stop(3, "test_failure_pattern 정규식이 깨졌다%s: %s" % (sources.get("test_failure_pattern", ""), exc))
     mdir = mroot / repo_defaults.MERGE_CHECK_DIR
-    lock = mdir / "lock"
-    take_lock(lock)
+    lock = suite_lock.lock_path(mroot)
+    take_lock(lock, a.branch, a.wait)
     work = mdir / ("run-%s-%d" % (datetime.datetime.now().strftime("%Y%m%d%H%M%S"), os.getpid()))
     keep = None
     try:
@@ -451,6 +417,7 @@ def main(argv=None) -> int:
     r.add_argument("--branch", required=True)
     r.add_argument("--keep-merged", action="store_true")
     r.add_argument("--no-fetch", action="store_true")
+    r.add_argument("--wait", type=float, default=0, help="잠금이 잡혀 있으면 이 초까지 기다린다(줄)")
     r.add_argument("--root")
     a = ap.parse_args(argv)
     try:

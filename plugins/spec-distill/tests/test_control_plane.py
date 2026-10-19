@@ -214,6 +214,85 @@ class Show(unittest.TestCase):
         self.assertIn("    경고: w x", text.split("\n"))
 
 
+class Works(unittest.TestCase):
+    """지휘자 수리 2 — 상태 보기의 「작업」 표(로드맵 밖 일 포함) · 돌고 있는 수와 권장 수 · 공유 스위트 잠금."""
+    def machine(self, agents=0, works=()):
+        data = cs.empty()
+        for i in range(agents):
+            data["살아 있는 agent"].append({"이름": "a%d" % i, "에픽": "R5", "일": "구현", "worktree": "/w", "보낸 때": "t"})
+        for w in works:
+            data["작업"].append(dict(zip(cs.COLUMNS["작업"], w)))
+        return data
+
+    def lines(self, r):
+        return cp.show_text([(RM, r)], NO_IV, [], lambda rep: "첫 줄", None).split("\n")
+
+    def test_table_counts_and_recommended(self):
+        r = report([blk("R5", "구현 중", "in_progress")],
+                   settings={"parallel_default": 3, "sources": {"parallel_default": "기본값"}},
+                   machine=self.machine(2, [("수리 PR", "fix/x", "로드맵 밖", "구현", "conductor-fix2", "/d.md")]),
+                   suite_lock="스위트 잠금: 주인 프로세스가 돌고 있다 — 주인 1 impl · 잡은 시각 2026-10-19 08:07:00")
+        text = self.lines(r)
+        self.assertIn("돌고 있는 큰 작업 3(기계 상태 사본) · 권장 3(기본값 — 상한이 아니다, 사용자가 늘린다)", text)  # agent 둘 + 작업 표에만 있는 수리 담당
+        self.assertIn("작업:", text)
+        self.assertIn("    수리 PR fix/x — 로드맵 밖 · 구현 · 담당 conductor-fix2 · /d.md", text)
+        self.assertIn("스위트 잠금: 주인 프로세스가 돌고 있다 — 주인 1 impl · 잡은 시각 2026-10-19 08:07:00", text)
+
+    def test_recommended_from_frontmatter_and_broken(self):
+        r = report([], settings={"parallel_default": 5, "sources": {"parallel_default": "frontmatter"}},
+                   machine=self.machine(1))
+        self.assertIn("돌고 있는 큰 작업 1(기계 상태 사본) · 권장 5(로드맵 머리말 — 상한이 아니다, 사용자가 늘린다)", self.lines(r))
+        r = report([], settings={"parallel_default": None, "sources": {"parallel_default": "frontmatter"}},
+                   machine=self.machine(1))
+        self.assertTrue(any("권장 수 모름" in l for l in self.lines(r)))
+
+    def test_running_counts_repair_agents_only_in_works(self):
+        m = self.machine(1, [("수리 PR", "fix/x", "로드맵 밖", "구현", "repair-agent", "/d"),
+                             ("구현", "R5 구현", "R5", "구현", "a0", "/e"),
+                             ("정리", "x", "로드맵 밖", "끝", "done-agent", "/f"),
+                             ("정리", "y", "로드맵 밖", "대기", "없음", "/g")])
+        r = report([], settings={"parallel_default": 3, "sources": {"parallel_default": "기본값"}}, machine=m)
+        self.assertTrue(any(l.startswith("돌고 있는 큰 작업 2(") for l in self.lines(r)), self.lines(r))
+
+    def test_broken_parallel_default_is_warned(self):
+        r = report([], settings={"parallel_default": 3, "sources": {"parallel_default": "기본값(머리말 값이 깨졌다)"},
+                                 "warnings": ["레포 설정 parallel_default 는 1 이상의 정수다: 'x' — 기본 3 으로 센다"]},
+                   machine=self.machine(1))
+        text = self.lines(r)
+        self.assertIn("돌고 있는 큰 작업 1(기계 상태 사본) · 권장 3(기본값(머리말 값이 깨졌다) — 상한이 아니다, 사용자가 늘린다)", text)
+        self.assertIn("경고: 레포 설정 parallel_default 는 1 이상의 정수다: 'x' — 기본 3 으로 센다", text)
+
+    def test_broken_parallel_default_warned_even_when_nothing_runs(self):
+        r = report([blk("R1", "준비", "pending")], machine=self.machine(),
+                   settings={"parallel_default": 3, "sources": {"parallel_default": "기본값(머리말 값이 깨졌다)"},
+                             "warnings": ["레포 설정 parallel_default 는 1 이상의 정수다: 'x' — 기본 3 으로 센다"]})
+        self.assertIn("경고: 레포 설정 parallel_default 는 1 이상의 정수다: 'x' — 기본 3 으로 센다", self.lines(r))
+
+    def test_done_words_come_from_one_place(self):
+        self.assertIs(cp.WORK_DONE, cs.WORK_DONE)  # 상태 보기와 지휘 절차 락이 같은 낱말 목록을 본다
+
+    def test_quiet_when_nothing_runs(self):
+        r = report([blk("R1", "준비", "pending")], machine=self.machine(), suite_lock="스위트 잠금: 비어 있음")
+        text = "\n".join(self.lines(r))
+        self.assertNotIn("돌고 있는 큰 작업", text)
+        self.assertNotIn("스위트 잠금", text)
+
+    def test_busy_lock_shows_even_without_rows(self):
+        r = report([], machine=self.machine(), suite_lock="스위트 잠금: 주인이 살았는지 알 수 없다 — 주인 x · 잡은 시각 t")
+        self.assertIn("스위트 잠금: 주인이 살았는지 알 수 없다 — 주인 x · 잡은 시각 t", self.lines(r))
+
+    def test_tasks_add_outside_roadmap_rows(self):
+        r = report([blk("R1", "설계 중", "in_progress")],
+                   machine=self.machine(0, [("수리 PR", "fix/x", "로드맵 밖", "구현", "a", "/d"),
+                                            ("정리", "worktree 정리", "로드맵 밖", "끝", "없음", "/e"),
+                                            ("계획", "R1 계획", "R1", "계획", "b", "/f")]))
+        out, err, rc = cp.tasks_output([(RM, r)])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(out, ["R1 에픽 R1 — 설계 중\tin_progress",
+                               "로드맵 밖 수리 PR fix/x — 구현\tin_progress",
+                               "로드맵 밖 정리 worktree 정리 — 끝\tcompleted"])
+
+
 class Tasks(unittest.TestCase):
     def test_lines(self):
         r = report([blk("R1", "설계 중", "in_progress"), blk("R5", "구현 중", None, reason="R5 단계")], 1)

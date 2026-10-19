@@ -14,6 +14,15 @@ def run_sweep(plugin_dir, repo_root=None, env=None):
     return json.loads(r.stdout)["facts"]
 
 
+def run_sweep_full(plugin_dir, repo_root=None, env=None):
+    cmd = [sys.executable, str(SCRIPT), str(plugin_dir)]
+    if repo_root is not None:
+        cmd += ["--repo-root", str(repo_root)]
+    r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(SCRIPTS_DIR), env=env)
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
 def classes(facts):
     return sorted({f["class"] for f in facts})
 
@@ -647,11 +656,35 @@ class TestSweepInvariants(unittest.TestCase):
                                capture_output=True, text=True, cwd=str(SCRIPTS_DIR))
             self.assertEqual(r.returncode, 0)
             payload = json.loads(r.stdout)
-            self.assertEqual(set(payload.keys()), {"facts"})
+            self.assertEqual(set(payload.keys()), {"facts", "excluded"})
             forbidden = {"verdict", "score", "pass", "fail", "status"}
             for f in payload["facts"]:
                 self.assertFalse(forbidden & set(k.lower() for k in f.keys()),
                                  f"fact에 verdict성 키가 섞임: {f}")
+
+
+class TestExcludedCounts(unittest.TestCase):
+    def _plugin(self, tmp, readme):
+        p = Path(tmp) / "myplugin"; p.mkdir()
+        (p / "plugin.json").write_text('{"name":"myplugin","version":"1.0.0"}\n', encoding="utf-8")
+        (p / "README.md").write_text(readme, encoding="utf-8")
+        (p / "CHANGELOG.md").write_text("## [1.0.0] — 2026-01-01\n", encoding="utf-8")
+        return p
+
+    def test_excluded_counts(self):
+        readme = ("# t\n\n```\nrun `scripts/in-fence.sh`\nsecond line\n```\n\n"
+                  "Use `<your-plugin>/scripts/x.sh` here.\n"
+                  "`docs/out.md` 를 생성한다\n")
+        with tempfile.TemporaryDirectory() as d:
+            out = run_sweep_full(self._plugin(d, readme))
+        self.assertEqual(out["excluded"],
+                         {"fence_lines": 2, "placeholder_or_url": 1, "generation_target": 1})
+
+    def test_excluded_zero_is_reported(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = run_sweep_full(self._plugin(d, "# t\n\nplain prose only.\n"))
+        self.assertEqual(out["excluded"],
+                         {"fence_lines": 0, "placeholder_or_url": 0, "generation_target": 0})
 
 
 if __name__ == "__main__":

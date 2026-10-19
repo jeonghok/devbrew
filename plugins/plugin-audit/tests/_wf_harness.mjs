@@ -26,7 +26,8 @@ export async function runWorkflow(scriptRel, opts = {}) {
   const src = fs.readFileSync(path.join(REPO, scriptRel), 'utf8')
     .replace(/^export const meta/m, 'const meta')
   const captured = {}
-  const calls = []
+  // opts.calls lets a caller watch dispatches even when the run rejects (no return value then).
+  const calls = opts.calls || []
   const stubAgent = opts.stubAgent || (async () => ({ findings: [], verdicts: [] }))
   const agent = async (prompt, o = {}) => {
     if (o.phase) captured[o.phase] = o.schema
