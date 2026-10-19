@@ -127,8 +127,8 @@ gate; rc=$?
 cp "$FX/brief-verbatim-ok.md" "$TMP/v.md"; cp "$FX/brief-verbatim-ok.audit.md" "$TMP/v.audit.md"
 plant "$TMP/v.md" '  > "브리프에 리뷰를 붙이고 싶다"'
 python3 "$CV" "$TMP/v.md" "$STATE" "$TMP/v.audit.md" > "$TMP/cv" 2>&1; rc=$?
-{ [ "$rc" -eq 1 ] && grep -q '"unknown_ids": \["S3"\]' "$TMP/cv"; } \
-  && ok "phantom_nested: state 원장에 없는 S3 가 payload §6 에 있으면 위반(rc 1 · unknown_ids)" || no "phantom_nested: rc=$rc $(head -c 300 "$TMP/cv")"
+{ [ "$rc" -eq 1 ] && grep -q 'anchor_indented' "$TMP/cv"; } \
+  && ok "phantom_nested: 들여 쓴 S3 앵커 줄은 payload §6 의 문법 밖이라 사유 이름(anchor_indented)과 함께 위반(rc 1)" || no "phantom_nested: rc=$rc $(head -c 300 "$TMP/cv")"
 # payload · audit 에만 더하고 state 에는 안 더한 append — 두 게이트를 다 통과하던 길
 cp "$FX/brief-verbatim-ok.md" "$TMP/v.md"; cp "$FX/brief-verbatim-ok.audit.md" "$TMP/v.audit.md"
 python3 -I -X utf8 - "$TMP/v.md" "$TMP/v.audit.md" <<'PY'

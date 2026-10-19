@@ -1,0 +1,20 @@
+```docreview-layer1
+[]
+```
+```docreview-layer2
+- ref: c1
+  layer: 2
+  category: ambiguity
+  anchor: "#handoff-context"
+  disposition: ask
+  summary: "넘김 절의 경로를 어디로 둘지 정해야 한다"
+  contradicts: D1.1
+  blocks: [c2]
+- ref: c2
+  layer: 2
+  category: ambiguity
+  anchor: "#handoff-context"
+  disposition: fix
+  summary: "경로를 적는 꼴(절대 · 상대)이 정해져 있지 않다"
+  edit_scope: "#handoff-context"
+```

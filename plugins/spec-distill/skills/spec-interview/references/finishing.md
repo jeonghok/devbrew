@@ -99,7 +99,9 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    `user_statements`의 순서를 따르고, 최초 요청이 없으면 첫 사용자 답변이 `S1`입니다.
    원문 보존은 **관례가 아니라 요구**입니다 — N1b 가 payload §6 앵커가 S1 부터 빠짐없고
    audit §6 앵커를 다 포함하는지 보고, `check_verbatim_coverage.py`(brief 리뷰 진입 게이트)가
-   state 발화 전량이 payload §6 에 같은 글자로 있는지 봅니다.
+   state 발화 전량이 payload §6 에 같은 글자로 있는지 봅니다. 앵커 줄은 열 0 의 `- **S<N>**` 꼴만
+   받습니다(들여 쓴 · 전각 공백 · `*` 불릿 줄은 거부). 이 검사를 돌리지 못하면(검사 불가) 게이트가
+   막고 사용자에게 계속할지 묻습니다.
    구조상 이 시점의 `confirmed`는 **항상 0건**이므로, frontmatter에 sentinel 한 줄
    (`# confirmed 0건 — 사용자가 전부 잠정으로 판단`)을 **반드시** 함께 씁니다 — 템플릿이
    `user_sourced_items:` 블록 첫 줄로 상속시키는 그 줄입니다. 이 줄이 sentinel로 인정되려면
@@ -218,7 +220,7 @@ Skill spec-distill:reviewing-brief $PAYLOAD $AUDIT
 두 인자는 **주석이 아니라 호출 라인 위에** 있어야 합니다 — `reviewing-brief`는 이 값들을 스스로 정의하지 않는다고 명시하므로, `#` 뒤에만 적혀 있으면 호출은 인자 없이 나가고 callee는 정의되지 않은 변수를 쥡니다.
 
 - 지출 승인 게이트는 없습니다(`cost_class: medium`). 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다 — 상한 뒤의
-  추가 라운드는 사용자가 그 skill 의 승인 게이트에서 자기 문구로 열어야만 돕니다.
+  추가 라운드는 사용자가 그 skill 의 승인 게이트에서 고른 선택지 이름이나 기타 칸에 쓴 말을 승인으로 남겨(출처와 함께 기록) 열어야만 돕니다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1`이면 파이프라인이 전체 skip되고 skip record가
   Step B 게이트 질문에 표시됩니다 — 조용한 생략이 아닙니다.
 - 리뷰가 payload 를 수정할 수 있습니다(§0 · §2~§5 — 프로필의 수정 자리. §1 은 사용자 결정이고 §6 은 추가만 허용이다). 수정이 일어나면 Step B는 **리뷰 후
@@ -336,39 +338,50 @@ elif [ "$lm_rc" -ne 0 ]; then
 else
   g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
   adv_rc=0
-  adv_err="$STATE_DIR/advice-err.json"
-  python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$STATE_DIR/advice-list.json" 2>"$adv_err" || adv_rc=$?
+  adv_list="$(python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR" 2>&1)" || adv_rc=$?
+  adv_out="$adv_list"
   if [ "$adv_rc" -eq 0 ]; then
-    echo "advice-list: $STATE_DIR/advice-list.json"
-    python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --log-file "$AUDIT" --render --cap 8 --where "brief §3 · §5" 2>"$adv_err" || adv_rc=$?
+    echo "advice-list: $adv_list"
+    adv_out="$(python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --log-file "$AUDIT" --render --where "brief §3 · §5" 2>&1)" || adv_rc=$?
+    [ "$adv_rc" -ne 0 ] || printf '%s\n' "$adv_out"
   fi
   if [ "$adv_rc" -ne 0 ]; then
-    cat "$adv_err" >&2
+    printf '%s\n' "$adv_out" >&2
     echo "[spec-distill] 참고 목록 판독 · 표시 실패(rc $adv_rc) — 위 stderr 사유를 게이트 앞 글에 싣는다."
-    grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' "$adv_err" || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8 --where "brief §3 · §5" || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 게이트 앞 글에 싣는다."
+    printf '%s' "$adv_out" | grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --where "brief §3 · §5" || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 게이트 앞 글에 싣는다."
   fi
 fi
 [ -z "${STATE_DIR:-}" ] || [ ! -d "$STATE_DIR" ] || [ -z "${harness_sid:-}" ] || python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$harness_sid"
 ```
 <!-- advice-ba:end -->
 
-펜스 출력(머리 한 줄 + 최대 8줄 + `외 K건`)과 `[spec-distill]` 줄을 그대로 보입니다. 이어 `advice-list:` 줄이 가리킨
-파일을 Read 하고, 그 `items` 중 `shown` 이 거짓이던 항목을 payload 에 박제합니다 — 표시가 돌았으면 방금 보인
+펜스 출력(머리 한 줄 + 항목 줄 + `외 K건` — 머리 줄이 줄 수 상한과 그 출처를 밝힙니다)과 `[spec-distill]` 줄을 그대로 보입니다. 이어 `advice-list:` 줄의 JSON
+(`advice-list` 하위 명령이 읽기 전용으로 낸 목록)의 `items` 중 `shown` 이 거짓이던 항목을 payload 에 박제합니다 — 표시가 돌았으면 방금 보인
 항목들이고, 「표시도 실패했다」 줄이 나왔으면 사용자가 보지 못한 항목이라 그 사실을 B-2 에 싣습니다.
 `advice-list:` 줄이 없으면(원장 없음 · 판독 실패) 박제할 것이 없고 그 `[spec-distill]` 줄을 B-2 에 싣습니다.
 
 펜스 출력에 접는 줄(`… 외 K건`)이 있으면 박제로 가기 전에 `AskUserQuestion` 한 번 — 「참고 전부 보기」 ·
-「접은 채로 둔다」. 「참고 전부 보기」면 아래 펜스로 `advice-list:` 줄이 가리킨 파일의 항목 전부를 요약 전문으로
-보입니다(엔진의 접기 폭 · 요약 폭 상수는 R2a 의 일이다):
+「접은 채로 둔다」. 「참고 전부 보기」면 아래 펜스로 목록 전부를 다시 읽어 요약 전문으로
+보입니다(`advice-list` 는 읽기 전용이다. 엔진의 접기 폭 · 요약 폭 상수는 R2a 의 일이다):
 
 ```bash
-python3 -I -X utf8 -c '
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+PAYLOAD="<Step A.5 의 PAYLOAD 절대경로>"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "$PAYLOAD" || true)"
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
+  echo "[spec-distill] 참고(advisory) 목록 없음 — brief 리뷰 원장을 찾지 못했다(STATE_DIR='${STATE_DIR:-}'). 게이트 앞 글에 싣는다."; exit 0
+fi
+adv_all="$(python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR")" \
+  || { echo "[spec-distill] 참고 전부 보기 실패 — 엔진 원장을 읽지 못했다. 게이트 앞 글에 싣는다."; exit 0; }
+printf '%s' "$adv_all" | python3 -I -X utf8 -c '
 import json, sys
-items = json.load(open(sys.argv[1], encoding="utf-8")).get("items") or []
+items = json.load(sys.stdin).get("items") or []
 print("참고 전부 %d건" % len(items))
 for it in items:
     print("- [%s] %s — %s" % (it.get("category"), it.get("anchor"), " ".join(str(it.get("summary") or "").split())))
-' "<advice-list: 줄이 가리킨 파일>"
+'
 ```
 
 가르는 판단은 한 줄입니다:

@@ -1,0 +1,12 @@
+```docreview-layer1
+[]
+```
+```docreview-layer2
+- ref: c1
+  layer: 2
+  category: ambiguity
+  anchor: "#handoff-context"
+  disposition: ask
+  summary: "넘김 절의 경로를 어디로 둘지 정해야 한다 (없는 항목 참조)"
+  blocks: [c9]
+```

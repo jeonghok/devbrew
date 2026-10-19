@@ -20,11 +20,18 @@
 - S4 「옮기기」는 AGENTS.md 에 `## Project Charter` 가 없으면 CLAUDE.md 의 그 절도 AGENTS.md 로 옮긴다(git 규칙 선택과 상관없이). 헌장 상태 확인도 그 경우 CLAUDE.md 의 절을 읽어, 헌장을 다시 묻거나 두 번째 절을 더하지 않는다. 「CLAUDE.md 는 그대로 두기」로 절이 옮겨지지 않았으면 헌장 발행이 AGENTS.md 에 그 절을 새로 더하고 CLAUDE.md 에는 쓰지 않는다. 마지막 보고가 AGENTS.md 로 옮긴 절을 이름으로 밝히고, 「CLAUDE.md 는 그대로 두기」면 CLAUDE.md 의 관리 절이 AGENTS.md 와 다를 수 있다고 알린다.
 - 템플릿의 브랜치 「ALWAYS 확인」은 변경 작업일 때만 한다. Rules for Claude 의 접두 고정 문장은 `Branch Naming Pattern` 을 가리킨다.
 - 템플릿 worktree 절이, worktree 를 만들며 `-b` 로 지은 브랜치 이름은 훅이 검사하지 않는다고 밝힌다(훅은 그대로). 접두에 같은 낱말이 겹치면 하나만 남기고 알린다.
+- README 의 생성물 설명이 `CLAUDE.md` 는 기본이 `@AGENTS.md` 포인터이고, 「CLAUDE.md 에 바로 쓰기」 · 「CLAUDE.md 는 그대로 두기」를 고르면 달라진다고 밝힌다.
 
 ### Added
 
 - 브랜치 접두 추가 질문과 템플릿 placeholder 셋(`{{BRANCH_PREFIXES}}` · `{{BRANCH_PREFIX_LIST}}` · `{{EXTRA_PREFIX_LIST}}`). 훅이 읽는 정규식이 정본이다.
 - 템플릿의 worktree 작업 절.
+
+## [5.0.5] — 2026-10-19
+
+### Changed
+
+- README 에서 버전 꼬리표를 지우고, `CLAUDE.md` 생성물 설명을 그때 동작(`@AGENTS.md` 한 줄)에 맞췄다. 5.1.0 부터는 「CLAUDE.md 에 바로 쓰기」 · 「CLAUDE.md 는 그대로 두기」를 고르면 CLAUDE.md 가 포인터가 되지 않는다.
 
 ## [5.0.4] — 2026-10-19
 

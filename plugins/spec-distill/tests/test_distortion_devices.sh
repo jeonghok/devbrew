@@ -147,7 +147,7 @@ hasnt "$RB" '방향 · overdesign 항목은' "§3-2(부재): 방향을 참고로
 has   "$SR" '「참고 전부 보기」' "AC8(spec-review): 설계문서 승인 게이트 앞에 참고 전부 보기가 있다"
 has   "$SR" '<!-- advice-display:end -->' "AC8(양성 짝): advice 표시 펜스 표지가 그대로다"
 # 「참고 전부 보기」 펜스 — 원장이 없으면 「목록 없음」 한 줄로 끝나고, 있으면 전부를 내되 원장 폴더에는 아무것도 쓰지 않는다.
-# 스텁은 R7 의 실제 계약을 흉내 낸다: state-dir-for 는 `--session` 을 받으면 rc 2, advice 는 정확히 `--state-dir <x>` 가 아니면 rc 3,
+# 스텁은 R7 의 실제 계약을 흉내 낸다: state-dir-for 는 `--session` 을 받으면 rc 2, advice-list 는 정확히 `--state-dir <x>` 가 아니면 rc 3,
 # path-inside 는 ADV_OUTSIDE=1 이면 rc 1(관문이 STATE_DIR 을 비워야 한다).
 ALLF="$(awk -v b='<!-- advice-all:begin -->' -v e='<!-- advice-all:end -->' 'index($0,b){f=1;next} index($0,e){f=0} f&&/^```bash$/{c=1;next} f&&c&&/^```$/{c=0;next} f&&c' "$SR")"
 [ -n "$ALLF" ] && ok "전제(ledger1): advice-all 펜스를 뽑았다" || no "전제(ledger1): advice-all 펜스가 비었다 — 아래 칸이 공허하다"
@@ -158,7 +158,7 @@ printf '%s\n' 'import sys, os' 'a = sys.argv[1:]' \
   'sys.exit(1 if a[0] == "path-inside" and os.environ.get("ADV_OUTSIDE") == "1" else 0) if a[0] == "path-inside" else print("stub")' > "$AT/root/scripts/state_path.py"
 printf '%s\n' 'import sys, os' 'a = sys.argv[1:]' \
   'if a[0] == "state-dir-for" and "--session" in a: sys.exit(2)' \
-  'if a[0] == "advice" and (len(a) != 3 or a[1] != "--state-dir"): sys.exit(3)' \
+  'if a[0] == "advice-list" and (len(a) != 3 or a[1] != "--state-dir"): sys.exit(3)' \
   'print(os.environ["ADV_SD"]) if a[0] == "state-dir-for" else print("{\"items\": [{\"category\": \"overdesign\", \"anchor\": \"x\", \"summary\": \"y\"}, {\"category\": \"overdesign\", \"anchor\": \"z\", \"summary\": \"w\"}]}")' > "$AT/root/scripts/docreview_state.py"
 adv_run() { (cd "$AT" && CLAUDE_PLUGIN_ROOT="$AT/root" ADV_SD="$AT/sd" TMPDIR="$AT/tmp" spec_path="$AT/doc.md" bash -c "$ALLF" 2>&1); }
 adv_out="$(adv_run)"; adv_rc=$?

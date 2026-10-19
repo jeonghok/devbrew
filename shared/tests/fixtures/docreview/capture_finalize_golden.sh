@@ -30,6 +30,7 @@ REPO_ROOT="$(cd "$HERE/../../../.." && pwd)"
 SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
 OUT="${1:-$HERE/golden}"
 export PYTHONDONTWRITEBYTECODE=1
+unset DEVBREW_DOCREVIEW_DETECTORS DEVBREW_DOCREVIEW_REREVIEW_CAP DEVBREW_DOCREVIEW_RENDER_CAP DEVBREW_DOCREVIEW_SUMMARY_WIDTH
 mkdir -p "$OUT"
 . "$REPO_ROOT/shared/tests/assert.sh"
 . "$HERE/cases.sh"
@@ -45,12 +46,13 @@ mkdir -p "$OUT"
 # fail-open 하지 않게).
 GOLDEN_PLACEHOLDER='<REPO_ROOT>'
 # 라운드 시작 표식(`started_mtime_ns`)은 실행마다 다른 파일시스템 시각이다 — 같은 이유로
-# 자리표로 바꾼다. 줄 자체는 남기므로 표식이 사라지면 골든이 여전히 RED 다.
+# 자리표로 바꾼다. 줄 자체는 남기므로 표식이 사라지면 골든이 여전히 RED 다. 원장 요약값(`docreview_digest`)도 같다.
 norm_copy() {   # norm_copy <src> <dst> — 사본 프로필 경로 · REPO_ROOT 절대경로 · 라운드 시작 표식을 안정 자리표로
   python3 -c 'import io, re, sys
 src, dst, root, ph, prof, canon = sys.argv[1:7]
 t = io.open(src, encoding="utf-8").read().replace(prof + "/", canon + "/").replace(root + "/", ph + "/")
 t = re.sub(r"(?m)^(\s*started_mtime_ns: )[0-9]+$", r"\g<1><MTIME_NS>", t)
+t = re.sub(r"(?m)^(docreview_digest: )[0-9a-f]{64}$", r"\g<1><DIGEST>", t)   # 원장 요약값은 REPO_ROOT 를 담은 글자의 해시라 체크아웃마다 다르다
 io.open(dst, "w", encoding="utf-8").write(t)' \
     "$1" "$2" "$REPO_ROOT" "$GOLDEN_PLACEHOLDER" "$PROF_SD" "$REPO_ROOT/plugins/spec-distill/references/docreview-profiles"
 }

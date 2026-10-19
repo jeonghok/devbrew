@@ -47,8 +47,8 @@ import re
 import sys
 
 from seed_body import (MARK, fold_flat, mark_spans, marks_in_flat, parse_seed,  # noqa: F401
-                       rejected_lines_message, split_front)
-from seed_review_log import heading_structure, section_body, separator_lines, separator_message
+                       rejected_lines_message, split_front, split_paragraphs)
+from seed_review_log import heading_structure, read_audit_text, section_body, separator_lines, separator_message
 
 REVERIFY_PREFIX = "다시 검증할 것 —"
 # 풀이 줄 — `parse_reading_line` 이 읽는다. 끝의 선택 꼬리는 사용자가 «기타» 로 적은 말 · 「아니다」 뒤에
@@ -169,7 +169,7 @@ def verbatim_units(audit_text: str | None) -> set[str]:
     if not body:
         return set()
     out: set[str] = set()
-    for para in re.split(r"\n\s*\n", body.strip()):
+    for para in split_paragraphs(body.strip()):   # seed 본문과 같은 문단 나눔 — 공백만 있는 줄은 경계가 아니다
         whole = set(_sentence_units(norm(para)))
         out |= whole
         for line in para.split("\n"):
@@ -239,7 +239,7 @@ def _read_audit(path: str | None) -> tuple[str | None, str]:
     if not path:
         return None, "unavailable: --audit 없음"
     try:
-        text = pathlib.Path(path).read_text(encoding="utf-8")
+        text = read_audit_text(path)
     except (OSError, UnicodeError) as e:
         return None, "unavailable: %s" % e
     sep = separator_lines(text)

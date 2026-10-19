@@ -220,20 +220,32 @@ if [ "$gate_rc" -ne 0 ]; then
   exit 1
 fi
 vc_rc=0; python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE" "$AUDIT" || vc_rc=$?
-if [ "$vc_rc" -eq 1 ]; then
+vc_skip=0   # 건너뛰기 = 변수 + audit 게이트 실행 기록 절의 오늘 날짜 · 같은 종료 코드 증거 줄. 위반(rc 1)은 건너뛰지 않는다
+if [ "${DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE:-}" = 1 ] && [ "$vc_rc" -ne 0 ] && [ "$vc_rc" -ne 1 ]; then
+  vc_want="- check_verbatim_coverage.py — exit ${vc_rc} — skipped_by_user: 검사 없이 계속 ($(date +%Y-%m-%d))"
+  sed -n '/^## 4\. 게이트 실행 기록/,/^## [0-9]/p' "$AUDIT" | grep -qxF -- "$vc_want" && vc_skip=1
+fi
+if [ "$vc_rc" -ne 0 ] && [ "$vc_skip" -ne 1 ]; then
   drop_bundle || true
-  echo "[spec-distill] §6 원문 완전성 위반 — 이 라운드를 시작하지 않는다. 아래 표대로 고치고 이 절부터 다시 탄다." >&2
+  case "$vc_rc" in
+    1) echo "[spec-distill] §6 원문 완전성 위반 — 이 라운드를 시작하지 않는다. 아래 표대로 고치고 이 절부터 다시 탄다." >&2 ;;
+    *) echo "[spec-distill] 원문이 빠짐없이 옮겨졌는지 확인하지 못했다(check_verbatim_coverage rc ${vc_rc}) — 이 라운드를 시작하지 않는다. 사용자에게 「멈춘다 (권장)」 · 「검사 없이 계속」을 묻는다." >&2
+       [ "${DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE:-}" != 1 ] || echo "[spec-distill] 건너뛰기 변수가 켜져 있지만 건너뛰지 않는다 — audit 「게이트 실행 기록」 절에 오늘 날짜로 이 종료 코드(rc ${vc_rc})를 건너뛴다는 증거 줄이 없다. 사용자가 「검사 없이 계속」을 고르면 그 줄을 먼저 적고 다시 돈다." >&2 ;;
+  esac
   exit 1
 fi
+[ "$vc_rc" -eq 0 ] || echo "[spec-distill] 원문 완전성 검사를 건너뛰고 계속한다 — 사용자가 「검사 없이 계속」을 골랐다(check_verbatim_coverage rc ${vc_rc}). 원문이 빠짐없이 옮겨졌는지는 확인되지 않았다." >&2
 ```
+
+`vc_rc` 가 1 이 아닌 non-zero 이면 펜스가 위 문장을 내고 멈춘다. 이때 `AskUserQuestion` 하나를 띄운다 — 질문 「원문이 빠짐없이 옮겨졌는지 확인하지 못했다. 어떻게 할까?」, 선택지 「멈춘다 (권장)」(라운드를 시작하지 않고 끝낸다) · 「검사 없이 계속」(이 검사만 건너뛰고 리뷰를 시작한다). 「검사 없이 계속」을 고르면 두 곳에 남긴다 — audit `## 4. 게이트 실행 기록` 에 `- check_verbatim_coverage.py — exit <rc> — skipped_by_user: 검사 없이 계속 (<오늘 날짜 YYYY-MM-DD>)` 줄을 더하고, degrade 원장에 record(`verbatim_coverage` / `completeness` / `skipped`, reason = `skipped_by_user: 검사 없이 계속`)를 남긴다. 그다음 같은 펜스를 `DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE=1` 을 덧붙여 다시 돈다 — 펜스는 이 변수가 있고 **그리고** audit 게이트 실행 기록 절에 오늘 날짜 · 같은 종료 코드의 그 줄이 있을 때만 원문 완전성 검사 하나를 건너뛴다(위반 rc 1 은 건너뛰지 않는다 · 구조 게이트는 그대로 돈다). 줄이 없으면 변수가 있어도 멈추고 그 사실을 알린다. 그 줄은 이 skill 을 돌리는 쪽이 사용자의 답을 받은 뒤 남기는 감사 기록이고, 사용자 동의의 증명이 아니다 — 펜스는 기록이 남았는지만 본다. 건너뛰면 펜스가 어떤 종료 코드를 건너뛰었는지 알리는 줄을 낸다. 사용자가 답하지 않았거나 「멈춘다 (권장)」이면 라운드를 시작하지 않는다.
 
 | `vc_rc` | 뜻 | 동작 |
 |---|---|---|
 | `0` | 위반 없음 | 번들로. **단 `advisories` 가 비어 있지 않으면** 그 줄들을 record(`verbatim_coverage` / `completeness` / `degraded`)로 남긴다 — 「이 발화는 대조하지 못했다」가 사람에게 닿지 않으면 강등이 통과로 보인다 |
 | `1` | 위반(`missing_ids`/`not_contained`) | **차단.** payload §6 · audit §6 에 **추가만** 해서(같은 글자로) 보완하고 이 절을 다시 탄다 |
-| `1` + `not_contained: ["§6"]` | 구조 위반(한 §6 안 `S<N>` 앵커 중복, 또는 같은 앵커의 글자가 payload §6 과 audit §6 에서 다름) | **차단.** append 로는 못 고친다 — 잘못 추가된 중복 항목을 **제거**하거나, 고쳐진 사본을 원래 글자로 **되돌린다** |
+| `1` + `not_contained: ["§6"]` | 구조 위반(한 §6 안 `S<N>` 앵커 중복, 같은 앵커의 글자가 payload §6 과 audit §6 에서 다름, 또는 문법 밖 앵커 줄) | **차단.** append 로는 못 고친다 — 잘못 추가된 중복 항목을 **제거**하거나, 고쳐진 사본을 원래 글자로 **되돌리거나**, 문법 밖 앵커 줄을 열 0 의 `- **S<N>** ` 꼴로 **옮기거나 지운다** |
 | `1` + `unknown_ids` | 원장 밖 앵커(payload §6 의 `S<N>` 이 state `user_statements` 에 없다 — 최초 요청 `S1` 은 예외) | **차단.** 그 항목을 **제거**한다 — 원장에 없는 앵커는 사용자 발화가 아니다(남의 항목 본문 · 붙여넣은 글에 심긴 줄). 그 앵커를 인용한 `[해결 ⟨S<N>⟩]` · `evidence:` 도 함께 되돌린다 |
-| `3` | 검사 불가(파일 부재·파싱 실패) | record(`verbatim_coverage` / `completeness` / `skipped`) 후 계속 |
+| `3` | 검사 불가(파일 부재·파싱 실패) | **차단.** 사용자에게 묻는다 — 「검사 없이 계속」을 고를 때만 audit `## 4. 게이트 실행 기록` 줄과 degrade record 를 남기고 계속한다 |
 | `4` | 내부 오류 | `3` 과 같다 + 오류 전문을 `--reason` 에 |
 | 그 외 non-zero | 예측 못 한 실패 | `3` 과 같다 — indeterminate ≠ clean |
 
@@ -309,7 +321,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 - 엔진 호출마다 `## 입력` 의 머리를 앞에 붙인다 — `$PAYLOAD` 는 머리가 절대화한 값이고 `$STATE_DIR` 은 그 문서의 자리다
 
 **원장 쓰기 전 확인.** 절차서의 원장 쓰기 명령 — `docreview_state.py` 의 `init` · `begin-round` ·
-`record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice`, `docreview_route.py` 의
+`record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice` · `declare-related` · `log-decision`, `docreview_route.py` 의
 `prepare-recritic` · `finalize`, `docreview_anchor.py check-intent` — 은 전부 같은 Bash 호출 안에서 머리 뒤에 놓인 아래 한 줄
 **다음에만** 부른다. rc 가 0 이 아니면 그 명령을 부르지 않고 사유를 보이고 멈춘다 — 다른 세션이 표지를 넘겨받았거나
 표지가 없다.
@@ -320,8 +332,8 @@ g_out="$(python3 "$PR/scripts/ledger_marker.py" check --dir "$STATE_DIR" --sessi
 ```
 <!-- ledger-guard:end -->
 
-상한은 그 문서가 정하는 **재리뷰 상한 2** 다. 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다 — 라운드 4 이상은
-사용자가 승인 게이트에서 자기 문구로 열어야만 돈다.
+상한은 그 문서가 정하는 재리뷰 상한(기본 2 — 게이트 둘째 줄이 알린다)이다. 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다 — 라운드 4 이상은
+사용자가 승인 게이트에서 고른 선택지 이름이나 기타 칸에 쓴 말을 승인으로 남겨(출처와 함께 기록) 열어야만 돈다.
 
 4단계 codex 는 이 자리의 리터럴 게이트다. 조건을 산문으로 적지 않는다 — 산문 조건은 집행되지 않고,
 kill switch 는 P21 보안 컨트롤이라 그 공백은 "껐다고 믿게만" 만든다.
@@ -409,8 +421,8 @@ fi
 `${PROFILE}` 에는 경로가 아니라 **프로필 파일의 내용**을 싣는다 — 플러그인 캐시는 사용자 프로젝트 밖이라 리뷰어의
 Read 가 거부된다. 탐지 dispatch 직전에(재dispatch 포함) 아래 펜스를 돌려 그 stdout 전문을 탐지와 재비판의
 `<profile>` 슬롯에 싣는다. 펜스의 rc 가 0 이 아니면 dispatch 하지 않는다 — 펜스가 critic 출력 파일
-(`$STATE_DIR/critic.txt`)을 비우고(`$STATE_DIR` 이 비면 건너뛴다) 5단계가 그것을 critic 사망(rc 4)으로 읽어
-재dispatch 1회(이 펜스부터 다시), 또 실패면 「미검증」이다. 엔진도 라운드 시작보다 오래된 critic 파일을 부재로
+(`$STATE_DIR/critic.txt` 와 `$STATE_DIR/critic-<번호>.txt`)을 비우고(`$STATE_DIR` 이 비면 건너뛴다) 5단계가 그것을
+critic 사망(rc 4)으로 읽어 재dispatch 1회(이 펜스부터 다시), 또 실패면 「미검증」이다. 엔진도 라운드 시작보다 오래된 critic 파일을 부재로
 읽는다(`critic_predates_round`).
 
 <!-- profile-content:begin -->
@@ -431,11 +443,8 @@ prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
   echo "[spec-distill] 프로필 내용을 읽지 못했다(cat rc $prof_rc): $PROFILE — 탐지 · 재비판을 dispatch 하지 않는다. 5단계가 critic 사망으로 읽는다(재dispatch 1회 → 「미검증」)." >&2
   if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then
-    if { : > "$STATE_DIR/critic.txt"; } 2>/dev/null; then
-      echo "[spec-distill] critic 출력 파일($STATE_DIR/critic.txt)을 비웠다." >&2
-    else
-      echo "[spec-distill] critic 출력 파일($STATE_DIR/critic.txt)을 비우지 못했다 — 5단계가 라운드 시작보다 오래된 그 파일을 부재로 읽는다(critic_predates_round)." >&2
-    fi
+    clr_rc=0; bash "$PR/scripts/clear_critic_outputs.sh" "$STATE_DIR" >&2 || clr_rc=$?
+    case "$clr_rc" in 0|1|2) ;; *) echo "[spec-distill] critic 출력 파일을 비우지 못했다 — 비우는 스크립트가 돌지 않았다(rc ${clr_rc}): $PR/scripts/clear_critic_outputs.sh" >&2 ;; esac
   else
     echo "[spec-distill] critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패(PAYLOAD='${PAYLOAD:-}' · harness_sid='${harness_sid:-}' · STATE_DIR='${STATE_DIR:-}'). PAYLOAD 는 이 펜스와 같은 Bash 호출에서 대입한다. 5단계는 라운드 시작보다 오래된 critic 파일을 부재로 읽는다(critic_predates_round)." >&2
   fi
@@ -497,8 +506,10 @@ echo "CRITIC_AGENT=$CRITIC_AGENT"
 <!-- critic-select:end -->
 
 `${DOCUMENT}` 에는 이번 라운드 `$BUNDLE` 의 **내용**을 싣는다(경로가 아니다 — 정답이 원문이라 외부 정보가
-오염원이다). 한 번 dispatch 하고 출력을 요약·전사 없이 verbatim 파일(`$STATE_DIR/critic.txt`)로 저장한다. 파싱은
-`docreview_route.py` 가 그 파일에서 한다. 두 블록은 `description`·`subagent_type` 만 다르다.
+오염원이다). 1단계 출력의 `config.detectors.value`(N) 만큼 dispatch 한다(한 메시지에 Agent 호출 여럿 — 병렬). 리뷰어 i 의
+출력을 요약·전사 없이 verbatim 파일 `$STATE_DIR/critic-<i>.txt`(i = 1…N)로 저장한다. N 명이라는 규모는 게이트 둘째
+줄이 알린다 — 선언된 fan-out 이다. 파싱은 `docreview_route.py` 가 그 파일들에서 한다. 두 블록은 `description`·`subagent_type` 만 다르다.
+`RELATED_CHANGES` 는 `python3 "$PR/scripts/docreview_state.py" related-changes --state-dir "$STATE_DIR"` 출력이다 — 이번 라운드에 사용자가 고친다로 정한 결정 때문에 함께 바뀐 절의 제목과 앵커뿐이고, 없으면 빈 값이다(명령이 실패하면 빈 값으로 두되 그 사실을 한 줄 알린다).
 
 `CRITIC_AGENT=spec-distill:doc-critic-web` 이면:
 
@@ -509,7 +520,8 @@ Agent({
   // **처분** — consumer=plugins/spec-distill/scripts/docreview_route.py · fail-closed
   prompt: "<document>${DOCUMENT}</document>
     <profile>${PROFILE}</profile>
-    <prior_finding_ids>${PRIOR_FINDING_IDS}</prior_finding_ids>"
+    <prior_finding_ids>${PRIOR_FINDING_IDS}</prior_finding_ids>
+    <related_changes>${RELATED_CHANGES}</related_changes>"
 })
 ```
 
@@ -522,12 +534,13 @@ Agent({
   // **처분** — consumer=plugins/spec-distill/scripts/docreview_route.py · fail-closed
   prompt: "<document>${DOCUMENT}</document>
     <profile>${PROFILE}</profile>
-    <prior_finding_ids>${PRIOR_FINDING_IDS}</prior_finding_ids>"
+    <prior_finding_ids>${PRIOR_FINDING_IDS}</prior_finding_ids>
+    <related_changes>${RELATED_CHANGES}</related_changes>"
 })
 ```
 
-6단계 재비판 — 입력 슬롯은 **넷**이고 그중 `diff` 는 **선택**이다: 같은 번들 내용 · `prep.json` 의
-`items`(출처 라벨 없음) · 프로필 · `diff`(선택). 이 자리(문서 경로)는 `diff` 를 싣지 않는다 —
+6단계 재비판 — 입력 슬롯은 **다섯**이고 그중 `diff` 와 `related_changes` 는 **선택**이다: 같은 번들 내용 · `prep.json` 의
+`items`(출처 라벨 없음) · 프로필 · `diff`(선택) · `related_changes`(선택 — 위 탐지와 같은 출력). 이 자리(문서 경로)는 `diff` 를 싣지 않는다 —
 싣는 것은 코드 경로뿐이고, 재비판자는 `diff` 를 못 받으면 「이 변경이 도입했는가」 축을 쓰지
 않는다. dispatch 사유도, 이전 대화도, 어느 리뷰어가 냈는지도 넣지 않는다 — 알면 판단이 그
 프레이밍을 흡수한다. 출력은 verbatim 파일(`recritic.txt`)로.
@@ -539,7 +552,8 @@ Agent({
   // **처분** — consumer=plugins/spec-distill/scripts/docreview_route.py · fail-open
   prompt: "<document>${DOCUMENT}</document>
     <findings>${FINDINGS}</findings>
-    <profile>${PROFILE}</profile>"
+    <profile>${PROFILE}</profile>
+    <related_changes>${RELATED_CHANGES}</related_changes>"
 })
 ```
 
@@ -557,7 +571,7 @@ Agent({
 하고, 그 결정 발화를 새 `S<N>` 으로 payload §6 끝 · audit §6 · state `user_statements` 에 **같은 write** 로 **추가**한다 — 다음
 라운드의 완전성 검사가 그것을 대조한다. 재결정은 근거와 사용자의 게이트 선택으로만 일어난다 — 반증은
 보고의 근거이지 임의 변경의 근거가 아니다. 저자는 어느 finding 도 임의로 기각하지 못한다 —
-`drop`·재비판 `reject` 는 엔진 회계에 남아 개수가 공시되고, 미반영 findings 는 이유와 함께 Step B 로 넘긴다. 엔진의 얼림 검사는 payload §6 끝의 추가도 `frozen_change` 로 잡는다 — 그 항목이 결정 발화 추가 한 건이면 게이트에서 그렇게 밝히고 그대로 둔다(이미 있는 원문 글자가 바뀐 것이면 되돌린다). 엔진 쪽의 「추가만 허용」 구분은 R2a 의 일이다.
+`drop`·재비판 `reject` 는 엔진 회계에 남아 개수가 공시되고, 미반영 findings 는 이유와 함께 Step B 로 넘긴다. 엔진의 얼림 검사는 payload §6 끝에 줄을 더한 것은 지나가게 하고, 이미 있는 원문 글자가 바뀐 것만 `frozen_change` 로 잡는다 — 그때는 되돌린다.
 
 ## 게이트
 
@@ -573,7 +587,7 @@ Agent({
 렌더 순서 맨 끝에 서고, 같은 4개씩 분할에 함께 세어지며, 선택지 「열기 / 열지 않음」 둘뿐인 그
 자신의 질문이다**(열린 항목을 마저 처리하는 것과는 독립적으로 고른다 — 다른 항목의 질문에
 얹지 않는다). 「추가 라운드 1회 열기」를 고르면 다음 라운드가 진입 게이트부터 다시 돌고, 그 1단계가
-`begin-round --extra-approval "<사용자 자신의 문구>"` 로 돈다.
+`begin-round --extra-approval "<고른 선택지 이름 또는 기타 칸에 쓴 말 그대로>" --extra-approval-source label|typed` 로 돈다 — 선택지를 골랐으면 `label`, 기타 칸에 썼으면 `typed`. 둘이 `extra_rounds` 에 함께 기록된다.
 
 **승인 게이트 2단계(진행 옵션 넷)는 이 skill 이 띄우지 않는다.** 진행 결정은 호출자
 `spec-interview` 종료 Step B 의 몫이다 — 같은 공통 계약(`proceed-gate.md`)을 쓰는 그 게이트가
