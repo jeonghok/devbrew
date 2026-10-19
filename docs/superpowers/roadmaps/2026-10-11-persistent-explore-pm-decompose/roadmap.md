@@ -159,7 +159,7 @@ test_failure_pattern: "^FAILED (.+)$"
 ### R8 — 의존 선언 · 부재 시 강등 · devbrew 밖 경로
 - 의도: 이 장치들이 devbrew 밖 레포와 superpowers 부재에서도 통하게 한다
 - 범위:
-  - 한다: 의존 최소 버전 선언 · 부재 시 강등 · 경로 규약 범용화 · squash · rebase 머지 자동 판정 · 다른 파일에 박힌 레포 전용 값(예: 인터뷰 끝의 로드맵 폴더 위치 검사) · gh · superpowers 부재 강등 · AC17 (가) 엔진 밖 원장 쓰기의 권한 경계 · 스냅숏 칸 신뢰 · `--quote-file` 출처 · 제목 하나 빠진 audit(R2a 설계 미룸 · 사용자 결정 B16)
+  - 한다: 의존 최소 버전 선언 · 부재 시 강등 · 경로 규약 범용화 · squash · rebase 머지 자동 판정 · 다른 파일에 박힌 레포 전용 값(예: 인터뷰 끝의 로드맵 폴더 위치 검사) · gh · superpowers 부재 강등 · AC17 (가) 엔진 밖 원장 쓰기의 권한 경계 · 스냅숏 칸 신뢰 · `--quote-file` · `log-decision --quote` 출처 · 제목 하나 빠진 audit(R2a 설계 미룸 · 사용자 결정 B16)
   - 안 한다: 규칙 문서(R9)
 - 의존: R2a, R5
 - 브랜치: feature/dependency-portability
@@ -197,14 +197,25 @@ test_failure_pattern: "^FAILED (.+)$"
 - 경로 예약: CLAUDE.md, docs/philosophy/devbrew-harness-philosophy.md
 
 ### R12 — R2a 남은 리뷰 엔진 · qg 소결함
-- 의도: R2a 와 R11 이 남긴 공유 리뷰 엔진 · qg · plugin-audit 의 작은 결함과 보안 제안을 고친다
+- 의도: R2a 와 R11 이 남긴 공유 리뷰 엔진 · qg · project-init · plugin-audit 의 작은 결함과 보안 제안을 고친다
 - 범위:
-  - 한다: 엔진 환경 변수(`DEVBREW_DOCREVIEW_*`) 최댓값 · 원문 절 마지막 앵커 밑 이어 붙인 줄 · `</related_changes>` 주입 · `declare-related` 펜스 락 · 리뷰어 둘의 같은 질문 흡수 때 기다리던 수정 목록 소실 · 확인된 결정의 보호가 자식 절에 붙지 않음 · docreview 엔진 결함 셋(finalize 두 번 · 복수 앵커 · § 앵커) · 설계문서 프로필의 대안 비교 축 · 번호 대조 · 미룸 손 편집의 허가 길 · 리뷰가 닫힌 뒤 손으로 쓴 결정 줄 · qg 판정 id 충돌(synthesize_findings.py) · plugin-audit kill switch 정규식(check-shape-completeness.py) · tools/adjudication/check_wiring.py 의 줄 번호 핀 · 철학 P3 「문서 리뷰 자리 넷」 문장
-  - 안 한다: R2a 계획 2~4 의 범위 · R8 의 권한 경계(AC17 가)
+  - 한다: 엔진 환경 변수(`DEVBREW_DOCREVIEW_*`) 최댓값 · 원문 절 마지막 앵커 밑 이어 붙인 줄 · `</related_changes>` 주입 · `declare-related` 펜스 락 · 리뷰어 둘의 같은 질문 흡수 때 기다리던 수정 목록 소실 · 확인된 결정의 보호가 자식 절에 붙지 않음 · docreview 엔진 결함 셋(finalize 두 번 · 복수 앵커 · § 앵커) · 설계문서 프로필의 대안 비교 축 · 번호 대조 · 미룸 손 편집의 허가 길 · 리뷰가 닫힌 뒤 손으로 쓴 결정 줄 · qg 판정 id 충돌(synthesize_findings.py) · plugin-audit kill switch 정규식(check-shape-completeness.py) · tools/adjudication/check_wiring.py 의 줄 번호 핀 · 철학 P3 「문서 리뷰 자리 넷」 문장 · 공유 락 빈틈(copy-of-contract 소비 도출 오탐 · 같은 이름 블록 첫 블록만 읽기 · 라우터 흡수 분기 스캔 · 같은 임시 번호 · 호출 표면 `_LEAD` · `_OLD_TRAIL` · 살아 있는 표면) · `log-decision` 표지 가드 · project-init 헌장 모서리 셋(그대로 두기 · 옮기기 중복 공시 · Step 5 문구) · qg 판정 상태 위치(판정 전에 도는 레포 코드가 세션 폴더 · 표지 · synth.out 에 닿음 — 설계 결정 · 사용자 결정 「R12 로 (권장)」) · qg e2e 시나리오 수 상한 공시
+  - 안 한다: R2a 계획 2~4 의 범위 · R8 의 권한 경계(AC17 가) · R10 미룸의 인터뷰 쪽 소결함(R13)
 - 의존: R2a, R11
 - 브랜치: feature/review-engine-leftovers
 - 묶음: R12.md
-- 경로 예약: shared/docreview/, plugins/quality-gates/scripts/synthesize_findings.py, plugins/plugin-audit/scripts/check-shape-completeness.py, tools/adjudication/check_wiring.py, docs/philosophy/devbrew-harness-philosophy.md, plugins/spec-distill/references/docreview-profiles/design-doc.md
+- 경로 예약: shared/docreview/, plugins/quality-gates/scripts/synthesize_findings.py, plugins/plugin-audit/scripts/check-shape-completeness.py, tools/adjudication/check_wiring.py, docs/philosophy/devbrew-harness-philosophy.md, plugins/spec-distill/references/docreview-profiles/design-doc.md, shared/tests/test_copy_of_contract.sh, shared/tests/test_docreview_route.sh, shared/tests/fixtures/docreview/, shared/tests/test_adjudication_wiring.sh, shared/entry/check_invocation_surface.py, shared/tests/test_invocation_surface.sh, plugins/spec-distill/tests/test_ledger_wiring.sh, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/skills/request-framing/, plugins/spec-distill/skills/reviewing-brief/, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/project-init/, plugins/quality-gates/skills/quality-pipeline/, plugins/quality-gates/scripts/setup-qg.sh, plugins/quality-gates/references/e2e.md, plugins/quality-gates/tests/test_synthesize_recritic.sh
+
+### R13 — R10 남은 인터뷰 게이트 · 엔진 skill 소결함
+- 의도: R10 이 남긴 인터뷰 게이트 · 엔진 skill 의 작은 결함과 보안 제안을 pm-interview 이름 바꾸기 뒤 고친다
+- 범위:
+  - 한다: `check_brief` 의 사용자 답과 state `source: chosen` 대조 · 엔진 skill 셋(request-framing · reviewing-brief · spec-review) 번들 쓰기의 링크 따라가기(함께 쓰는 writer) · V1 확인 줄을 실을 자리
+  - 안 한다: R10 계획 1~3 의 범위 · R12 의 엔진 · qg 소결함
+- 의존: R10, R12
+- 브랜치: feature/interview-gate-leftovers
+- 묶음: R13.md
+- 경로 예약: plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/skills/pm-interview/, plugins/spec-distill/skills/request-framing/, plugins/spec-distill/skills/reviewing-brief/, plugins/spec-distill/skills/spec-review/SKILL.md
+- 순서 이유: 인터뷰 skill 은 R10 계획 3 의 pm-interview 이름 바꾸기 뒤 새 이름 자리에서 · 엔진 skill 셋은 R12 의 펜스 락 뒤에
 
 ## 지휘 절차
 
@@ -402,6 +413,13 @@ test_failure_pattern: "^FAILED (.+)$"
 - 원문:
   - 「새 에픽으로 (권장)」
   - 「이대로 다시 나눈다」
+
+### 2026-10-20 · R12 범위 · 경로 예약에 R2a 미룸의 받는 곳 R12 행을 싣고 R10 이 넘긴 인터뷰 쪽 셋을 새 에픽 R13 으로 · R8 범위에 log-decision --quote 출처
+- 바뀜: 바뀐 에픽 R8 · R12 · 새 에픽 R13 「새 에픽으로 (권장)」 · 「R12 로 (권장)」 · 「나눠서 다시 나눈다 (권장)」
+- 원문:
+  - 「새 에픽으로 (권장)」
+  - 「R12 로 (권장)」
+  - 「나눠서 다시 나눈다 (권장)」
 
 ## 위험 번호표
 
