@@ -7,13 +7,15 @@
 #   session  resolve-baseline.sh 의 merge_base 대비 작업 트리(추적 diff ∪ 무시되지 않는 untracked).
 #            추적 안 되는 중첩 레포(ls-files 가 폴더 한 줄로 낸다)는 리뷰하지 않는다 — 그 안에서 git 을
 #            돌리지도 파일을 읽지도 않고 폴더 줄만 names 에 남긴 채, 폴더마다 이스케이프한 이름으로 stderr 에
-#            크게 알린다(판정은 바꾸지 않는다). 폴더를 가리키는 링크는 링크 자체로 diff 한다. session · paths 의
+#            크게 알리고 degraded: yes 를 낸다(리뷰하지 못한 항목 — 인증을 막는다). 폴더를 가리키는 링크는 링크
+#            자체로 diff 한다. session · paths 의
 #            diff 는 --ignore-submodules=dirty 로 하위 모듈(gitlink) 폴더 안에서 git 을 돌리지 않는다.
 #   branch   merge_base..HEAD
 #   paths    session 집합 중 --globs(git pathspec)에 맞는 것
-#   topic    --scope-file(topic-scope.txt)의 boundary..tree. boundary 의 .gitmodules 에 선언되지 않은 새
-#            gitlink(mode 160000)는 리뷰하지 않았다고 같은 줄로 알린다(공시만)
+#   topic    --scope-file(topic-scope.txt)의 boundary..tree
 #   range    --scope-file(range-scope.txt)의 start..end — 이 파일의 start · end 만 읽는다
+#   모든 모드 기준(merge_base · boundary · start)의 .gitmodules 에 선언되지 않은 새 · 바뀐 gitlink(mode 160000)는
+#            리뷰하지 않았다고 같은 줄로 알리고 degraded: yes 를 낸다(그 안의 글은 diff 에 없다)
 #
 # 쓰는 파일(<dir> 안 임시 폴더에 쓴 뒤 mv):
 #   review-i<N>.names      거르기 전 경로 전부(한 줄에 하나)
@@ -24,7 +26,9 @@
 #
 # stdout 10줄: mode · base · head · degraded · files · filtered_files · excluded · kept_model ·
 # doc_paths_source · self_state. session · branch · paths 의 기준선이 degraded 면 다섯 파일을
-# 비워 두고 degraded: yes · files: - · self_state: - 로 rc 0. git 실패 rc 4, 사용 오류 rc 2.
+# 비워 두고 degraded: yes · files: - · self_state: - 로 rc 0. 리뷰하지 못한 항목(중첩 레포 · 선언되지 않은
+# gitlink)이 있으면 다섯 파일은 그대로 쓰고 degraded: yes(files 등은 수 그대로)로 rc 0 — 기준선 degraded 와는
+# files 가 수인지로 갈린다. git 실패 rc 4, 사용 오류 rc 2.
 #
 # qg 자기 산출물(이 실행의 --dir 바로 아래에서 아래 「qg 산출물 문법」 하나에 맞는 경로와 이 리포에
 # 등록된 qg 일회용 worktree)은 session · paths 의 untracked 목록에서만 건너뛰고(앞 반복의 산출물이 다음
@@ -112,7 +116,9 @@ OUT_SELF="$DIR/review-i$ITER.self-state"
 rm -f -- "$OUT_NAMES" "$OUT_FULL" "$OUT_DIFF" "$OUT_DOC" "$OUT_SELF" || die "앞 실행의 출력 파일을 지우지 못했다: $DIR"
 T="$(mktemp -d "$DIR/.review-diff.XXXXXX")" || die "임시 폴더를 만들지 못했다: $DIR"
 
-GITD=(git -c core.quotePath=false diff --no-color --no-ext-diff --no-textconv --no-renames
+# --submodule=short — 사용자 설정 diff.submodule=diff · log 가 gitlink 폴더 안에서 자식 git 을 띄워 그 폴더의
+# 설정(diff.external · textconv)을 돌리지 못하게 하위 모듈은 늘 「Subproject commit」 줄로만 낸다.
+GITD=(git -c core.quotePath=false diff --no-color --no-ext-diff --no-textconv --no-renames --submodule=short
       --src-prefix=a/ --dst-prefix=b/)
 GITD_NOINDEX=(git -c core.quotePath=false diff --no-index --no-color --no-ext-diff --no-textconv
               --src-prefix=a/ --dst-prefix=b/)
@@ -257,7 +263,8 @@ fi
 NAMES=(); UNTR=(); SELF=(); NESTED=()
 # 추적 안 되는 중첩 레포 — 바깥 ls-files 는 그 폴더를 한 줄(끝 /)로만 낸다. 그 안은 다른 레포가 정한 글이라
 # 리뷰하지 않는다(그 안에서 git 을 돌리지도 파일을 읽지도 않는다). 폴더 줄을 names 에 남기고 폴더마다
-# stderr 에 크게 알린다(say_unreviewed). 끝 / 는 git 이 내는 표시라 파일 시스템을 따라가지 않고 가른다.
+# stderr 에 크게 알리고 degraded: yes 를 낸다(say_unreviewed). 끝 / 는 git 이 내는 표시라 파일 시스템을
+# 따라가지 않고 가른다.
 # 링크는 폴더를 가리켜도 끝 / 가 없다 — 링크 자체를 diff 한다(add_dir_link).
 # 등록된 qg worktree 는 이 갈래 전에 is_qg_state 가 건너뛴다.
 while IFS= read -r -d '' f; do NAMES+=("$f"); done < "$T/tracked.z"
@@ -286,7 +293,7 @@ add_untracked() {   # <out> <path> — untracked 파일 하나를 /dev/null 대�
   if [ -L "$2" ] && [ -d "$2" ]; then add_dir_link "$1" "$2"; return; fi
   "${GITD_NOINDEX[@]}" -- /dev/null "$2" >> "$1"
   rc=$?
-  [ "$rc" -le 1 ] || gitfail "untracked 파일의 diff 가 실패했다(rc $rc): $2"
+  [ "$rc" -le 1 ] || gitfail "untracked 파일의 diff 가 실패했다(rc $rc): $(printf '%q' "$2")"
 }
 
 # 폴더를 가리키는 링크 — git diff --no-index 는 그 인자를 폴더로 읽는다(그리고 rc 1 로 조용히 끝난다).
@@ -298,17 +305,17 @@ add_dir_link() {   # <out> <path>
   nl=$'\n'
   case "/$2/" in */../*|*/./*|//*) gitfail "링크 이름이 리포 안 상대 경로가 아니다: $(printf '%q' "$2")" ;; esac
   q="$(git -c core.quotePath=false ls-files --others --exclude-standard -- ":(literal)$2")" \
-    || gitfail "링크 이름을 읽지 못했다: $2"
-  case "$q" in ''|*"$nl"*) gitfail "링크 이름을 하나로 풀지 못했다: $2" ;; esac
-  readlink -n -- "$2" > "$T/link.tmp" || gitfail "링크를 읽지 못했다: $2"
+    || gitfail "링크 이름을 읽지 못했다: $(printf '%q' "$2")"
+  case "$q" in ''|*"$nl"*) gitfail "링크 이름을 하나로 풀지 못했다: $(printf '%q' "$2")" ;; esac
+  readlink -n -- "$2" > "$T/link.tmp" || gitfail "링크를 읽지 못했다: $(printf '%q' "$2")"
   ( cd "$T" && GIT_CEILING_DIRECTORIES="$DIR" "${GITD_NOINDEX[@]}" -- /dev/null link.tmp ) > "$T/link.patch"
   rc=$?
-  [ "$rc" -eq 1 ] || gitfail "링크의 diff 가 실패했다(rc $rc): $2"
+  [ "$rc" -eq 1 ] || gitfail "링크의 diff 가 실패했다(rc $rc): $(printf '%q' "$2")"
   case "$2" in *' '*) tab="$TAB" ;; esac   # git 은 공백 든 이름의 +++ 줄 끝에 TAB 을 붙인다
   case "$q" in '"'*) qa="\"a/${q#\"}"; qb="\"b/${q#\"}" ;; *) qa="a/$q"; qb="b/$q" ;; esac
   link_patch "$qa" "$qb" "$tab" < "$T/link.patch" > "$T/link.out" \
-    || gitfail "링크의 diff 모양이 예상과 다르다: $2"
-  cat -- "$T/link.out" >> "$1" || gitfail "링크의 diff 를 쓰지 못했다: $2"
+    || gitfail "링크의 diff 모양이 예상과 다르다: $(printf '%q' "$2")"
+  cat -- "$T/link.out" >> "$1" || gitfail "링크의 diff 를 쓰지 못했다: $(printf '%q' "$2")"
 }
 
 link_patch() {   # <a 이름> <b 이름> <+++ 줄 끝> — stdin 의 link.tmp diff 머리를 실제 이름으로 바꾼다
@@ -391,35 +398,39 @@ for f in ${UNTR[@]+"${UNTR[@]}"}; do
 done
 
 # 리뷰하지 않은 중첩 레포를 크게 알린다 — 이름은 레포가 정한 글이라 %q 로 이스케이프한다(줄바꿈 · 제어 문자가
-# 줄을 위조하지 못하게). 판정은 바꾸지 않는다.
+# 줄을 위조하지 못하게). 하나라도 있으면 degraded: yes — 이 값은 Step 1c 의 stdout 으로 같은 턴의
+# 오케스트레이터에 가고(레포 안 표지를 나중에 다시 읽지 않는다), Step 1c 가 판정 입력 error-axis 로 싣는다.
+UNREVIEWED=0
 say_unreviewed() {   # <경로>
+  UNREVIEWED=$((UNREVIEWED + 1))
   printf 'review-diff: 추적 안 되는 중첩 레포 %q 는 리뷰하지 않았다 — .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라\n' \
     "$1" >&2
 }
 for x in ${NESTED[@]+"${NESTED[@]}"}; do say_unreviewed "$x"; done
 
-# 토픽 — 봉인(git add -A)이 추적 안 되는 중첩 레포를 gitlink 로 만든다. 그 안의 글은 diff 에 없다. boundary 의
-# .gitmodules 에 선언되지 않았고 이 범위에서 새로 gitlink 가 된 경로를 같은 줄로 알린다(공시만 — 판정은 그대로).
-if [ "$MODE" = topic ]; then
-  "${GITD[@]}" --raw -z "${REV[@]}" -- "${PS[@]}" > "$T/raw.z" \
-    || gitfail "git diff --raw 가 실패했다: ${REV[*]}"
-  : > "$T/gitmodules.z"
-  if git cat-file -e "$BASE:.gitmodules" 2>/dev/null; then
-    # 못 읽으면(모양이 깨진 .gitmodules 등) 선언 없음으로 본다 — 더 많이 알리는 쪽이다.
-    git config -z --blob "$BASE:.gitmodules" --get-regexp '^submodule\..*\.path$' > "$T/gitmodules.z" 2>/dev/null \
-      || : > "$T/gitmodules.z"
-  fi
-  DECL=()
-  while IFS= read -r -d '' rec; do DECL+=("${rec#*$'\n'}"); done < "$T/gitmodules.z"
-  while IFS= read -r -d '' meta && IFS= read -r -d '' gp; do
-    read -r om nm _ <<< "$meta"
-    [ "$nm" = 160000 ] && [ "${om#:}" != 160000 ] || continue
-    declared=0
-    for x in ${DECL[@]+"${DECL[@]}"}; do [ "$x" = "$gp" ] && declared=1; done
-    [ "$declared" -eq 1 ] || say_unreviewed "$gp"
-  done < "$T/raw.z"
+# gitlink — 그 안은 diff 에 없다(커밋 줄 하나뿐). 스테이지 · 커밋한 중첩 레포, 토픽 봉인(git add -A)이 만든
+# gitlink 가 그렇다. 모든 모드에서 기준(merge_base · boundary · start)의 .gitmodules 에 선언되지 않았고 이
+# 범위에서 새로 생기거나 바뀐 gitlink 를 같은 줄로 알린다(degraded: yes). 선언된 하위 모듈의 커밋 변경은
+# 알리지 않는다. 같은 REV · 경로로 세는 --raw 라 session · paths 는 작업 트리 쪽을 본다.
+"${GITD[@]}" --raw -z "${REV[@]}" -- "${PS[@]}" > "$T/raw.z" \
+  || gitfail "git diff --raw 가 실패했다: ${REV[*]}"
+: > "$T/gitmodules.z"
+if git cat-file -e "$BASE:.gitmodules" 2>/dev/null; then
+  # 못 읽으면(모양이 깨진 .gitmodules 등) 선언 없음으로 본다 — 더 많이 알리는 쪽이다.
+  git config -z --blob "$BASE:.gitmodules" --get-regexp '^submodule\..*\.path$' > "$T/gitmodules.z" 2>/dev/null \
+    || : > "$T/gitmodules.z"
 fi
+DECL=()
+while IFS= read -r -d '' rec; do DECL+=("${rec#*$'\n'}"); done < "$T/gitmodules.z"
+while IFS= read -r -d '' meta && IFS= read -r -d '' gp; do
+  read -r _ nm _ <<< "$meta"
+  [ "$nm" = 160000 ] || continue
+  declared=0
+  for x in ${DECL[@]+"${DECL[@]}"}; do [ "$x" = "$gp" ] && declared=1; done
+  [ "$declared" -eq 1 ] || say_unreviewed "$gp"
+done < "$T/raw.z"
 
 publish
-emit "$BASE" "$HEAD_LABEL" no "$FILES" "$FILTERED" "${excluded:--}" "${kept:--}" "${dp_source:--}" "${#SELF[@]}"
+deg_out=no; [ "$UNREVIEWED" -gt 0 ] && deg_out=yes
+emit "$BASE" "$HEAD_LABEL" "$deg_out" "$FILES" "$FILTERED" "${excluded:--}" "${kept:--}" "${dp_source:--}" "${#SELF[@]}"
 exit 0

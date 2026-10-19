@@ -384,6 +384,7 @@ case_unregistered_worktree_folder_reviewed() {
   assert_file_grep "$ROOT/err" "중첩 레포 \.claude/quality-gates/worktrees/base-abcdefgh/ ${NESTED_TAIL}\$" \
     "가짜 트리 폴더를 크게 알린다"
   assert_file_absent "$S/review-i1.self-state" 'base-abcdefgh' "가짜 트리 폴더는 self_state 에 없다"
+  assert_eq "$(field degraded "$OUT")" yes "가짜 트리 폴더(리뷰하지 못한 항목)가 있으면 degraded: yes"
   assert_file_absent "$S/review-i1.names" 'base-mysess00' "등록된 qg 트리는 names 에 없다"
   assert_file_absent "$ROOT/err" 'base-mysess00' "등록된 qg 트리는 알리지 않는다(건너뜀)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then
@@ -414,6 +415,22 @@ case_dir_outside_repo_skips_nothing() {
   assert_file_grep "$ROOT/err" '리포 밖' "stderr 가 건너뛰지 않는 이유를 말한다"
   assert_file_grep "$ROOT/err" "중첩 레포 \.claude/quality-gates/worktrees/base-mysess00/ ${NESTED_TAIL}\$" \
     "건너뛰지 않은 등록된 트리도 크게 알린다"
+  assert_eq "$(field degraded "$OUT")" yes "건너뛰지 않은 등록된 트리가 있으면 degraded: yes"
+}
+
+# 등록된 qg 트리만 있으면 degraded 가 아니다(양의 짝).
+case_registered_worktree_only_not_degraded() {
+  echo "[등록된 qg 트리만 — degraded 아님]"
+  mkfix
+  local S="$R/.claude/quality-gates/mysess001"; mkdir -p "$S"
+  local wt; wt=$(cd "$R" && bash "$PLUGIN_DIR/scripts/qg-worktree.sh" create-baseline "$C0" mysess001 2>/dev/null)
+  [ -n "$wt" ] && [ -d "$wt" ] && ok "등록된 qg 트리를 만들었다" || no "qg-worktree.sh create-baseline 이 트리를 만들지 못했다"
+  echo 'new = 1' > "$R/new.py"
+  rdd "$S" --mode session
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field degraded "$OUT")" no "degraded: no"
+  assert_eq "$(field self_state "$OUT")" 1 "self_state: 1"
+  assert_file_absent "$ROOT/err" '중첩 레포' "알리는 줄 없음"
 }
 
 # MDX 는 코드를 실행한다 — 문서 경로 패턴(README*)에 걸려도 빠지지 않고 kept 로 이름이 난다.
@@ -445,6 +462,8 @@ case_nested_repo_disclosed() {
 name" esc; esc="$R/esc$(printf '\033')x"
   git init -q -b trunk "$odd"; echo 'nested_marker_c = 1' > "$odd/c.py"
   git init -q -b trunk "$esc"; echo 'nested_marker_d = 1' > "$esc/d.py"
+  local tick="$R/tick\`\`x"
+  git init -q -b trunk "$tick"; echo 'nested_marker_e = 1' > "$tick/e.py"
   echo 'new = 1' > "$R/new.py"
   local fsm; fsm=$(mktemp -d "$ROOT/fsm.XXXXXX")
   printf '#!/bin/sh\ntouch "%s/RAN"\nexit 1\n' "$fsm" > "$fsm/hook.sh"; chmod +x "$fsm/hook.sh"
@@ -452,16 +471,19 @@ name" esc; esc="$R/esc$(printf '\033')x"
   rd --mode session
   [ ! -e "$fsm/RAN" ] && ok "중첩 레포의 core.fsmonitor 가 돌지 않았다" || no "중첩 레포의 core.fsmonitor 가 돌았다"
   assert_eq "$RC" 0 "rc 0"
-  assert_eq "$(field degraded "$OUT")" no "degraded: no (판정은 바꾸지 않는다)"
+  assert_eq "$(field degraded "$OUT")" yes "degraded: yes (리뷰하지 못한 항목 — 인증을 막는다)"
   assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 10 "stdout 10줄"
-  assert_eq "$(field files "$OUT")" 4 "files: 4 (new.py + 폴더 줄 셋)"
+  assert_eq "$(field files "$OUT")" 5 "files: 5 (new.py + 폴더 줄 넷)"
   assert_eq "$(field filtered_files "$OUT")" 1 "filtered_files: 1 (new.py)"
   assert_file_grep "$D/review-i1.names" '^vendor/lib/$' "names 에 폴더 줄 vendor/lib/"
   assert_file_absent "$D/review-i1.names" '^vendor/lib/.' "안의 파일을 names 에 펼치지 않는다"
   assert_file_absent "$D/review-i1.full.diff" 'nested_marker' "안의 파일 글이 full.diff 에 없다"
   assert_file_absent "$D/review-i1.diff" 'nested_marker' "안의 파일 글이 걸러진 diff 에 없다"
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/new\.py$' "다른 파일은 그대로 리뷰한다"
-  assert_eq "$(grep -c "$NESTED_TAIL" "$ROOT/err")" 3 "폴더마다 크게 알리는 줄 하나"
+  assert_eq "$(grep -c "$NESTED_TAIL" "$ROOT/err")" 4 "폴더마다 크게 알리는 줄 하나"
+  grep -qF 'tick\`\`x/ ' "$ROOT/err" && ok "백틱 든 이름은 백틱마다 역슬래시를 붙여 알린다" \
+    || no "백틱 든 이름을 이스케이프하지 않았다"
+  assert_eq "$(grep -c '``' "$ROOT/err")" 0 "알리는 줄에 백틱 둘이 잇달아 나오지 않는다(두 겹 코드 스팬을 닫지 못한다)"
   assert_file_grep "$ROOT/err" "^review-diff: 추적 안 되는 중첩 레포 vendor/lib/ ${NESTED_TAIL}\$" "vendor/lib/ 를 알린다"
   grep -qF "중첩 레포 \$'odd\\nname/' " "$ROOT/err" \
     && ok "줄바꿈 든 이름은 이스케이프해 한 줄로 알린다" || no "줄바꿈 든 이름을 이스케이프하지 않았다"
@@ -489,6 +511,63 @@ case_gitlink_no_git_inside() {
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/src/a\.py$' "다른 변경은 그대로 리뷰한다"
 }
 
+# 하위 모듈 diff 꼴을 고정한다 — 사용자 설정 diff.submodule=diff 여도 gitlink 폴더 안에서 자식 git diff 를
+# 띄우지 않는다(그 폴더의 diff.external 이 돌지 않는다).
+case_submodule_diff_format_pinned() {
+  echo "[diff.submodule=diff — gitlink 폴더의 diff.external 이 돌지 않는다]"
+  mkfix
+  local canary; canary=$(mktemp -d "$ROOT/canary.XXXXXX")
+  printf '#!/bin/sh\ntouch "%s/RAN"\nexit 0\n' "$canary" > "$canary/ext.sh"; chmod +x "$canary/ext.sh"
+  local Sm="$R/sub"; mkdir -p "$Sm"
+  git init -q -b trunk "$Sm"; echo 'x = 1' > "$Sm/x.py"; g "$Sm" add x.py; g "$Sm" commit -q -m s1
+  g "$R" -c advice.addEmbeddedRepo=false add sub; g "$R" commit -q -m gl1
+  local B; B=$(git -C "$R" rev-parse HEAD)
+  echo 'x = 2' > "$Sm/x.py"; g "$Sm" commit -q -am s2
+  g "$R" add sub; g "$R" commit -q -m gl2
+  git -C "$Sm" config diff.external "$canary/ext.sh"
+  git -C "$R" config diff.submodule diff
+  echo 'x = 3' > "$R/src/a.py"
+  rd --mode session
+  assert_eq "$RC" 0 "session rc 0"
+  [ ! -e "$canary/RAN" ] && ok "session: gitlink 폴더의 diff.external 이 돌지 않았다" || no "session: gitlink 폴더의 diff.external 이 돌았다"
+  assert_file_grep "$D/review-i1.full.diff" '^\+Subproject commit ' "session: gitlink 는 짧은 꼴(Subproject commit)로 보인다"
+  rm -f "$canary/RAN"
+  local S="$D/topic-scope.txt"
+  printf 'status: ok\nboundary: %s\ntree: %s\n' "$B" "$(git -C "$R" rev-parse "HEAD^{tree}")" > "$S"
+  rd --mode topic --scope-file "$S"
+  assert_eq "$RC" 0 "topic rc 0"
+  [ ! -e "$canary/RAN" ] && ok "topic: gitlink 폴더의 diff.external 이 돌지 않았다" || no "topic: gitlink 폴더의 diff.external 이 돌았다"
+  git -C "$R" config --unset diff.submodule
+}
+
+# 세션 — 스테이지한 중첩 레포(git add vendor/lib)는 --others 를 떠나 gitlink 가 된다. 선언되지 않았으면 알리고 degraded.
+case_session_staged_gitlink_degraded() {
+  echo "[session — 스테이지한 중첩 레포(gitlink)는 degraded]"
+  mkfix
+  local N="$R/vendor/lib"; mkdir -p "$N"
+  git init -q -b trunk "$N"; echo 'staged_marker = 1' > "$N/a.py"; g "$N" add a.py; g "$N" commit -q -m n
+  g "$R" -c advice.addEmbeddedRepo=false add vendor/lib
+  echo 'x = 2' > "$R/src/a.py"
+  rd --mode session
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+  assert_file_grep "$ROOT/err" "중첩 레포 vendor/lib ${NESTED_TAIL}\$" "스테이지한 gitlink 를 알린다"
+  assert_file_absent "$D/review-i1.full.diff" 'staged_marker' "그 안의 글은 diff 에 없다"
+}
+
+# 브랜치 — 커밋한 선언되지 않은 gitlink 도 같다.
+case_branch_committed_gitlink_degraded() {
+  echo "[branch — 커밋한 선언되지 않은 gitlink 는 degraded]"
+  mkfix
+  local N="$R/vendor/lib"; mkdir -p "$N"
+  git init -q -b trunk "$N"; echo 'a = 1' > "$N/a.py"; g "$N" add a.py; g "$N" commit -q -m n
+  g "$R" -c advice.addEmbeddedRepo=false add vendor/lib; g "$R" commit -q -m gl
+  rd --mode branch
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+  assert_file_grep "$ROOT/err" "중첩 레포 vendor/lib ${NESTED_TAIL}\$" "커밋한 gitlink 를 알린다"
+}
+
 # 토픽 모드 — boundary 에 선언되지 않은 새 gitlink 는 리뷰하지 않았다고 알린다(판정은 그대로).
 case_topic_new_gitlink_disclosed() {
   echo "[topic — 선언되지 않은 새 gitlink 를 알린다]"
@@ -509,16 +588,73 @@ case_topic_new_gitlink_disclosed() {
   printf 'status: ok\nboundary: %s\ntree: %s\n' "$B" "$tree" > "$S"
   rd --mode topic --scope-file "$S"
   assert_eq "$RC" 0 "rc 0"
-  assert_eq "$(field degraded "$OUT")" no "degraded: no (공시만)"
+  assert_eq "$(field degraded "$OUT")" yes "degraded: yes (선언되지 않은 새 gitlink)"
   assert_file_grep "$ROOT/err" "중첩 레포 vend ${NESTED_TAIL}\$" "선언되지 않은 새 gitlink vend 를 알린다"
   assert_file_absent "$ROOT/err" '중첩 레포 decl ' "boundary 의 .gitmodules 에 선언된 decl 은 알리지 않는다"
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/lib/b\.py$' "다른 변경은 그대로 리뷰한다"
-  # 이미 있던 gitlink 의 커밋만 바뀐 것은 새 gitlink 가 아니다.
-  echo 'z = 2' > "$R/vend/z.py"; g "$R/vend" commit -q -am z2; g "$R" add vend; g "$R" commit -q -m bump
+  # 선언된 하위 모듈의 커밋만 바뀐 범위는 알리지 않고 degraded 도 아니다(양의 짝).
+  echo 'z = 2' > "$R/decl/z.py"; g "$R/decl" commit -q -am z2; g "$R" add decl; g "$R" commit -q -m bump-decl
   printf 'status: ok\nboundary: %s\ntree: %s\n' "$(git -C "$R" rev-parse HEAD~1)" "$(git -C "$R" rev-parse "HEAD^{tree}")" > "$S"
   rd --mode topic --scope-file "$S"
-  assert_eq "$RC" 0 "rc 0 (gitlink 커밋만 바뀜)"
-  assert_file_absent "$ROOT/err" '중첩 레포 vend ' "있던 gitlink 의 커밋 변경은 알리지 않는다"
+  assert_eq "$RC" 0 "rc 0 (선언된 하위 모듈 커밋만 바뀜)"
+  assert_eq "$(field degraded "$OUT")" no "선언된 하위 모듈 커밋 변경은 degraded 아님"
+  assert_file_absent "$ROOT/err" '중첩 레포' "선언된 하위 모듈 커밋 변경은 알리지 않는다"
+  # 선언되지 않은 gitlink 의 커밋이 바뀐 범위는 알리고 degraded 다(그 안의 변경도 리뷰하지 못한다).
+  echo 'z = 3' > "$R/vend/z.py"; g "$R/vend" commit -q -am z3; g "$R" add vend; g "$R" commit -q -m bump-vend
+  printf 'status: ok\nboundary: %s\ntree: %s\n' "$(git -C "$R" rev-parse HEAD~1)" "$(git -C "$R" rev-parse "HEAD^{tree}")" > "$S"
+  rd --mode topic --scope-file "$S"
+  assert_eq "$(field degraded "$OUT")" yes "선언되지 않은 gitlink 의 커밋 변경은 degraded: yes"
+  assert_file_grep "$ROOT/err" "중첩 레포 vend ${NESTED_TAIL}\$" "선언되지 않은 gitlink 의 커밋 변경을 알린다"
+}
+
+# 범위 모드 — 선언되지 않은 새 gitlink 가 있으면 degraded · 크게 알린다.
+case_range_new_gitlink_degraded() {
+  echo "[range — 선언되지 않은 새 gitlink 는 degraded]"
+  mkfix
+  mkdir -p "$R/vend"; git init -q -b trunk "$R/vend"; echo 'z = 1' > "$R/vend/z.py"
+  g "$R/vend" add z.py; g "$R/vend" commit -q -m z
+  g "$R" -c advice.addEmbeddedRepo=false add vend
+  echo 'y = 2' > "$R/lib/b.py"; g "$R" add lib/b.py; g "$R" commit -q -m t1
+  local F="$D/range-scope.txt"
+  printf 'status: ok\nstart: %s\nend: %s\n' "$C0" "$(git -C "$R" rev-parse HEAD)" > "$F"
+  rd --mode range --scope-file "$F"
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 10 "stdout 10줄"
+  assert_file_grep "$ROOT/err" "중첩 레포 vend ${NESTED_TAIL}\$" "새 gitlink vend 를 알린다"
+  assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/lib/b\.py$' "다른 변경은 그대로 리뷰한다"
+  # 양의 짝 — gitlink 없는 범위는 degraded 아님
+  printf 'status: ok\nstart: %s\nend: %s\n' "$(git -C "$R" rev-parse HEAD)" "$(git -C "$R" rev-parse HEAD)" > "$F"
+  g "$R" commit -q --allow-empty -m e
+  printf 'status: ok\nstart: %s\nend: %s\n' "$(git -C "$R" rev-parse HEAD~1)" "$(git -C "$R" rev-parse HEAD)" > "$F"
+  rd --mode range --scope-file "$F"
+  assert_eq "$(field degraded "$OUT")" no "gitlink 없는 범위는 degraded: no"
+}
+
+# 실행 확인 — Step 1c 의 「수인 files: 와 degraded: yes」 규칙이 고른 판정 입력을 SKILL 에서 꺼내 그대로
+# 판정 펜스까지 흘려 보면 판정 줄이 clean 이 아니다(이 입력은 Step 1c 출력에서 나오고 레포 안 파일을 다시
+# 읽지 않는다).
+case_degraded_blocks_certification() {
+  echo "[degraded: yes(수인 files:) — 판정 줄이 clean 이 아니다]"
+  mkfix
+  mkdir -p "$R/vendor/lib"; git init -q -b trunk "$R/vendor/lib"; echo 'a = 1' > "$R/vendor/lib/a.py"
+  echo 'new = 1' > "$R/new.py"
+  rd --mode session
+  assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+  case "$(field files "$OUT")" in ''|-|*[!0-9]*) no "files: 가 수가 아니다" ;; *) ok "files: 가 수다" ;; esac
+  local SK="$PLUGIN_DIR/skills/quality-pipeline/SKILL.md" row args
+  row=$(grep -F '| Step 1c 가 `degraded: yes` 와 수인 `files:` 를 냈다' "$SK")
+  assert_eq "$(printf '%s\n' "$row" | grep -c .)" 1 "판정 입력 표에 그 행이 하나"
+  args=$(printf '%s\n' "$row" | awk -F'|' '{print $3}' | sed -n 's/^ *`\(.*\)` *$/\1/p')
+  assert_eq "$args" "--reason error-axis" "그 행의 판정 입력은 --reason error-axis"
+  local V="$PLUGIN_DIR/scripts/verdict.py" SYN="$ROOT/syn.out"
+  # 합성기 꼬리와 같은 꼴: 판정 블록 + blocking · optional
+  # shellcheck disable=SC2086
+  { python3 "$V" $args; printf 'blocking: 0\noptional: 0\n'; } > "$SYN"
+  local line; line=$(python3 "$V" --prior "$SYN" --line --blocking 0 --optional 0 --new-failures 0 \
+    --excluded 0 --iter 1 --sha abc1234 --e2e '안 함' | tail -n 1)
+  assert_not_contains "$line" "qg: clean" "판정 줄이 clean 이 아니다"
+  assert_contains "$line" "not-certified (error-axis)" "판정 줄이 not-certified (error-axis)"
 }
 
 # 폴더를 가리키는 추적 안 된 링크는 중첩 레포가 아니다 — 링크 자체(가리키는 곳)로 diff 에 실린다.
@@ -660,10 +796,16 @@ case_grammar_covers_state_file_format
 case_self_state_bound_to_run_dir
 case_unregistered_worktree_folder_reviewed
 case_dir_outside_repo_skips_nothing
+case_registered_worktree_only_not_degraded
 case_mdx_reviewed_as_code
 case_nested_repo_disclosed
 case_gitlink_no_git_inside
+case_submodule_diff_format_pinned
+case_session_staged_gitlink_degraded
+case_branch_committed_gitlink_degraded
 case_topic_new_gitlink_disclosed
+case_range_new_gitlink_degraded
+case_degraded_blocks_certification
 case_untracked_symlink_to_dir
 case_dir_link_no_repo_named_dirs
 case_tracked_under_self_dir_reviewed
