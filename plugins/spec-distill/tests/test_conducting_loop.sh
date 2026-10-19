@@ -49,9 +49,61 @@ done
 for lit in '직접 merge 하지 않는다' '다음 task 경계에서 merge 하라고' '그 에픽만 멈추고 알린다' '`redecompose.md`' '브랜치는 지우지 않는다' 'ledger pending' '맡을 에픽을 제안하고' '이슈를 새로 만드는 것은 그때마다 묻는다'; do once 6 "$lit"; done
 for lit in '끝에서 끝 확인' '로드맵 시작 커밋부터' '그 사실을 알린다' 'ledger release'; do once 7 "$lit"; done
 # 병렬 — 보내거나 거둘 때마다 동시 가능한 일을 훑어 바로 보낸다(사용자 「일단 더 병렬진행 안한 이유는 3개 진행중이어서인거야?」)
-PAR='agent 를 보내거나 거둘 때마다 상태 계산의 동시 가능 목록과 승인된 설계의 남은 계획을 훑어, 의존 · 같은 파일 겹침 · 기다리는 답이 없는 일은 규모를 알리고 바로 보낸다 — 고정된 동시 개수 상한은 없다.'
+PAR='agent 를 보내거나 거둘 때마다 상태 계산의 동시 가능 목록과 승인된 설계의 남은 계획을 훑어, 의존 · 같은 파일 겹침 · 기다리는 답이 없는 일은 규모를 알리고 바로 보낸다 — 동시에 돌리는 큰 작업의 권장 수는 기본 3(로드맵 머리말 `parallel_default` 로 바꾼다)이고 상한이 아니다(사용자가 늘린다).'
 once 1 "$PAR"
 once 4 "$PAR"
+# 지휘자 수리 2 — 원천에서 다시 세기 · 맞추기 순서 · 완료 표시는 끝이 아님 · 잠금 대기는 줄 · 권장 수 · 채우기 · 로드맵 밖 일
+for lit in '맞추기 순서(보낼 때 · 돌아올 때 · 진행 상황을 말할 때마다 같은 턴에)' '하니스 agent 목록(`ListAgents`)' '「HH:MM 기준」' \
+           '조회하지 않은 숫자는 말하지 않는다' '이름 없는 agent(하위 agent 가 띄운 agent)는 세지 않는다' 'ledger progress --roadmap <로드맵>' \
+           'completed 만으로 멈춤을 단정하지 않는다' '「waiting on its own background work」' '판단이 모호하면 그 agent 에 한 줄 묻는다' \
+           '잠금 대기는 멈춤이 아니라 줄이다' 'ledger suite-lock --roadmap <로드맵>' '짧은 리뷰어와 하위 agent 가 띄운 agent 는 세지 않는다' \
+           '권장 수는 기본값이지 상한이 아니다 — 사용자가 늘리고' '지휘자가 이유와 함께 늘리자고 제안한다' '모자라면 채우기:' \
+           '에픽 또는 「로드맵 밖」' '--section "작업"' '표에만 있고 원천에 없는 줄은 지우고'; do once 1 "$lit"; done
+recon_order() {  # recon_order <글> — 맞추기 순서 문장 안에서 agent 목록 → 상태 계산 → 권장 수 → 채우기 → 기준 시각이면 yes
+  PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
+t = sys.argv[1]
+s = t.find("맞추기 순서(")
+e = t.find("\n", s)
+seg = (t[s:e] if e >= 0 else t[s:]) if s >= 0 else ""
+ks = ["agent 목록", "상태 계산", "권장 수", "채우기", "기준"]
+ix = [seg.find(k) for k in ks]
+print("yes" if s >= 0 and min(ix) >= 0 and ix == sorted(ix) else "no")' "$1"
+}
+assert_eq "$(recon_order "$(step 1)")" "yes" "걸음 1: 맞추기 순서는 agent 목록 → 상태 계산 → 권장 수 → 채우기 → 기준 시각"
+assert_eq "$(recon_order '맞추기 순서(x): ① 상태 계산 ② agent 목록 ③ 권장 수 ④ 채우기 ⑤ 기준')" "no" "양성 대조: 상태 계산이 agent 목록보다 앞이면 no"
+assert_eq "$(recon_order '맞추기 순서(x): ① agent 목록 ② 상태 계산 ③ 권장 수 ④ 채우기')" "no" "양성 대조: 기준 시각이 빠지면 no"
+assert_eq "$(recon_order '맞추기 순서(x): ① agent 목록 ② 상태 계산 ③ 권장 수 ④ 채우기 ⑤ 기준')" "yes" "양성 짝: 규칙대로면 yes"
+assert_contains "$(step 4)" '맞추기 순서(① agent 목록 → ② 상태 계산 → ③ 돌고 있는 수 대 권장 수 → ④ 채우기 → ⑤ 기준 시각 붙여 보고)' "걸음 4: 돌아오면 맞추기 순서로 다시 센다"
+once 3 '하위에게 보내는 글에는 `ledger suite-lock --roadmap <로드맵>` 의 첫 줄(공유 스위트 잠금 경로)을 싣는다'
+assert_contains "$(step 5)" '하위 agent 의 전체 스위트와 같은 잠금이다' "걸음 5: 스위트 대조는 담당자와 같은 공유 잠금"
+for n in 1 3 4; do assert_contains "$(step "$n" | grep -F -- '- 기계 상태:')" '`## 작업`' "걸음 ${n}: 기계 상태 칸에 작업 표"; done
+# 음의 락 — 동시에 돌리는 일의 개수를 수량 상한에 묶는 문장(지휘자 수리 1 리뷰 넘김 · 수리 2). 「권장(기본값) · 사용자가 늘림」 은 허용.
+cap_hits() {  # cap_hits <글> — 상한 문장을 한 줄씩(명시 부정 「상한이 아니다」 류는 뺀 뒤 잰다)
+  PYTHONIOENCODING=utf-8 python3 -I -c 'import re, sys
+SUBJ = re.compile(r"동시|병렬|한꺼번에|큰 작업|돌리는 (작업|일)|agent 수|agent 를 [^.]{0,12}개|concurren|parallel", re.I)
+QUANT = re.compile(r"[0-9]|하나|둘|셋|넷|다섯|여섯|일곱|여덟|아홉|한 ?개|두 ?개|세 ?개|네 ?개")
+LIMIT = re.compile(r"까지만|까지 만|이하|미만|초과|넘지|넘기지|넘으면|넘는|넘게|최대|상한|한도|at most|no more than|max|limit|cap\b", re.I)
+NEG = re.compile(r"상한(이|은|을|도) ?(아니|없|두지 않)[가-힣]*|한도(가|는) ?(아니|없)[가-힣]*|is not a (cap|limit)|not a (cap|limit)", re.I)
+W = 40  # 주어 앞뒤 이 글자 안에서만 수량 · 상한을 본다(같은 문장의 다른 상한 — 예: 리뷰 라운드 상한 — 과 엮지 않게)
+for sent in re.split(r"(?<=[.。!?])\s+|\n", sys.argv[1]):
+    probe = NEG.sub("", sent)
+    for m in SUBJ.finditer(probe):
+        win = probe[max(0, m.start() - W):m.end() + W]
+        if QUANT.search(win) and LIMIT.search(win):
+            print(sent.strip()[:160])
+            break' "$1"
+}
+SKILL_MD="$ROOT/plugins/spec-distill/skills/epic-conductor/SKILL.md"
+for f in "$CD" "$ROOT/plugins/spec-distill/references/conductor-dispatch.md" "$SKILL_MD"; do
+  assert_eq "$(cap_hits "$(cat "$f")")" "" "$(basename "$f"): 동시 개수를 수량 상한에 묶는 문장이 없다"
+done
+for lit in '동시에 셋까지만 돌린다.' '병렬 agent 는 최대 3개다.' '큰 작업을 3개 넘게 돌리지 않는다.' '동시 개수 상한은 3 이다.' \
+           'Run at most 3 parallel agents.' '돌리는 큰 작업은 네 개 이하로 둔다.'; do
+  [ -n "$(cap_hits "$lit")" ] && ok "양성 대조: 「${lit}」 를 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
+done
+for lit in "$PAR" '권장 수는 기본 3 이고 상한이 아니다 — 사용자가 늘린다.' '좁은 재리뷰는 PR 하나에 두 번까지다.'; do
+  assert_eq "$(cap_hits "$lit")" "" "양성 짝: 권장(기본값) · 사용자가 늘림 문장은 허용 — 「${lit:0:40}…」"
+done
 COMPACT="$(printf '%s\n' "$LOOP" | awk '$0=="### /compact 시점"{f=1;next} f&&/^### /{exit} f')"
 assert_contains "$COMPACT" '`/compact` 와 `/spec-distill:epic-conductor <로드맵>`' "/compact: 두 줄"
 assert_contains "$COMPACT" '커밋하고 기계 상태를 저장한 뒤' "/compact: 저장이 먼저"

@@ -50,6 +50,14 @@ for t in '### 계획 agent' '### 구현 agent'; do
   assert_contains "$blk" '네 worktree 에서 git switch --ignore-other-worktrees <브랜치> 로 그 브랜치에 선다' "${t} 틀: 자리의 기본(격리 agent 가 브랜치에 선다)"
   assert_not_contains "$blk" '자리: <에픽 worktree 절대경로>(브랜치 <브랜치>). 이 worktree 밖' "${t} 틀: 다른 worktree 를 자리로만 주던 옛 문장이 없다(양성 짝: 위 단언)"
 done
+# 지휘자 수리 2(병렬 진실) — 전체 스위트는 지휘자 대조와 같은 공유 잠금 아래서만. 경로는 기계 상태에서 도출해 싣는다.
+once '## 늘 싣는 것' 'conductor_ledger.py suite-lock --roadmap <로드맵>` 의 첫 줄로 얻어 싣는다(레포 전용 경로를 박지 않는다)'
+once '## 늘 싣는 것' '기다리는 것은 멈춤이 아니라 줄이다'
+for t in '### 계획 agent' '### 구현 agent'; do
+  blk="$(printf '%s\n' "$TPL" | awk -v h="$t" '$0==h{f=1;next} f&&/^### /{exit} f')"
+  assert_contains "$blk" 'suite_lock.py run --lock <스위트 잠금 경로> --owner <이 agent 이름> --wait <초> -- <스위트 명령> 으로만 돌린다' "${t} 틀: 전체 스위트는 공유 잠금 아래서만"
+done
+assert_not_contains "$TXT" 'sdd-mirror' "공유 잠금 경로를 사용자 폴더로 박지 않는다(양성 짝: suite-lock 으로 얻어 싣는다)"
 # 지휘자 수리 5 — 구현 틀의 마지막 전체 리뷰가 과제 사이 이음매와 계획이 쓴 테스트 코드도 묻는다
 IMPL="$(printf '%s\n' "$TPL" | awk '$0=="### 구현 agent"{f=1;next} f&&/^### /{exit} f')"
 assert_contains "$IMPL" '과제 사이 이음매(끝에서 끝 흐름 · 종료 코드를 받는 쪽 · 상태 가정)와 계획이 쓴 테스트 코드도 묻게 한다' "구현 틀: 마지막 전체 리뷰에 이음매 · 계획이 쓴 테스트 코드"
