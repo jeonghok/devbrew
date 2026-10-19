@@ -139,13 +139,22 @@ class Lock(unittest.TestCase):
             if s["held"]:
                 s = dict(s, ident=("drift", time.time()))  # 옮긴 뒤 비교가 늘 어긋난다
             return s
+        real_rename = os.rename
+        calls = []
+
+        def counting(src, dst):
+            calls.append(1)
+            return real_rename(src, dst)
         sl.state = drifting
+        sl.os.rename = counting
         try:
             with self.assertRaises(sl.Busy) as cm:
                 sl.take(self.d, "me", say=lambda m: None)
         finally:
             sl.state = real_state
+            sl.os.rename = real_rename
         self.assertIn("경합했다", str(cm.exception))
+        self.assertLessEqual(len(calls), 2 * (sl.RESTORE_MAX + 1), "되돌리기가 상한을 넘어 돌았다")
         self.assertTrue(self.d.exists())
 
     def test_describe_empty(self):
