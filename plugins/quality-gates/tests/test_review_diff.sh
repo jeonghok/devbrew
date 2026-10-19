@@ -462,8 +462,9 @@ case_nested_repo_disclosed() {
 name" esc; esc="$R/esc$(printf '\033')x"
   git init -q -b trunk "$odd"; echo 'nested_marker_c = 1' > "$odd/c.py"
   git init -q -b trunk "$esc"; echo 'nested_marker_d = 1' > "$esc/d.py"
-  local tick="$R/tick\`\`x"
+  local tick="$R/tick\`\`x" ticktab; ticktab="$R/a\`\`b$(printf '\t')c"
   git init -q -b trunk "$tick"; echo 'nested_marker_e = 1' > "$tick/e.py"
+  git init -q -b trunk "$ticktab"; echo 'nested_marker_f = 1' > "$ticktab/f.py"
   echo 'new = 1' > "$R/new.py"
   local fsm; fsm=$(mktemp -d "$ROOT/fsm.XXXXXX")
   printf '#!/bin/sh\ntouch "%s/RAN"\nexit 1\n' "$fsm" > "$fsm/hook.sh"; chmod +x "$fsm/hook.sh"
@@ -473,17 +474,19 @@ name" esc; esc="$R/esc$(printf '\033')x"
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes (리뷰하지 못한 항목 — 인증을 막는다)"
   assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 10 "stdout 10줄"
-  assert_eq "$(field files "$OUT")" 5 "files: 5 (new.py + 폴더 줄 넷)"
+  assert_eq "$(field files "$OUT")" 6 "files: 6 (new.py + 폴더 줄 다섯)"
   assert_eq "$(field filtered_files "$OUT")" 1 "filtered_files: 1 (new.py)"
   assert_file_grep "$D/review-i1.names" '^vendor/lib/$' "names 에 폴더 줄 vendor/lib/"
   assert_file_absent "$D/review-i1.names" '^vendor/lib/.' "안의 파일을 names 에 펼치지 않는다"
   assert_file_absent "$D/review-i1.full.diff" 'nested_marker' "안의 파일 글이 full.diff 에 없다"
   assert_file_absent "$D/review-i1.diff" 'nested_marker' "안의 파일 글이 걸러진 diff 에 없다"
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/new\.py$' "다른 파일은 그대로 리뷰한다"
-  assert_eq "$(grep -c "$NESTED_TAIL" "$ROOT/err")" 4 "폴더마다 크게 알리는 줄 하나"
-  grep -qF 'tick\`\`x/ ' "$ROOT/err" && ok "백틱 든 이름은 백틱마다 역슬래시를 붙여 알린다" \
-    || no "백틱 든 이름을 이스케이프하지 않았다"
-  assert_eq "$(grep -c '``' "$ROOT/err")" 0 "알리는 줄에 백틱 둘이 잇달아 나오지 않는다(두 겹 코드 스팬을 닫지 못한다)"
+  assert_eq "$(grep -c "$NESTED_TAIL" "$ROOT/err")" 5 "폴더마다 크게 알리는 줄 하나"
+  grep -qF "중첩 레포 \$'tick\\x60\\x60x/' " "$ROOT/err" && ok "백틱 든 이름은 백틱을 \\x60 으로 바꿔 알린다" \
+    || no "백틱 든 이름을 \\x60 으로 바꾸지 않았다"
+  grep -qF "중첩 레포 \$'a\\x60\\x60b\\tc/' " "$ROOT/err" && ok "백틱과 탭이 함께 든 이름도 백틱을 \\x60 으로 바꿔 알린다" \
+    || no "백틱과 탭이 함께 든 이름의 백틱이 남았다"
+  assert_eq "$(grep "$NESTED_TAIL" "$ROOT/err" | grep -c '`')" 0 "알리는 줄에 백틱이 하나도 없다(코드 스팬을 닫지 못한다)"
   assert_file_grep "$ROOT/err" "^review-diff: 추적 안 되는 중첩 레포 vendor/lib/ ${NESTED_TAIL}\$" "vendor/lib/ 를 알린다"
   grep -qF "중첩 레포 \$'odd\\nname/' " "$ROOT/err" \
     && ok "줄바꿈 든 이름은 이스케이프해 한 줄로 알린다" || no "줄바꿈 든 이름을 이스케이프하지 않았다"
@@ -556,6 +559,34 @@ case_session_staged_gitlink_degraded() {
 }
 
 # 브랜치 — 커밋한 선언되지 않은 gitlink 도 같다.
+# 하위 모듈 ignore 설정(변경이 더한 .gitmodules 의 ignore = all · 사용자 diff.ignoreSubmodules=all)이 gitlink 를
+# diff 에서 숨기지 못한다.
+case_ignore_all_cannot_hide_gitlink() {
+  echo "[ignore = all · diff.ignoreSubmodules=all — gitlink 를 숨기지 못한다]"
+  mkfix
+  local N="$R/vendor/lib"; mkdir -p "$N"
+  git init -q -b trunk "$N"; echo 'a = 1' > "$N/a.py"; g "$N" add a.py; g "$N" commit -q -m n
+  printf '[submodule "x"]\n\tpath = vendor/lib\n\turl = https://example.invalid/x\n\tignore = all\n' > "$R/.gitmodules"
+  g "$R" -c advice.addEmbeddedRepo=false add vendor/lib .gitmodules; g "$R" commit -q -m gl
+  rd --mode branch
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field degraded "$OUT")" yes "변경이 더한 ignore = all 이어도 degraded: yes"
+  assert_file_grep "$ROOT/err" "중첩 레포 vendor/lib ${NESTED_TAIL}\$" "ignore = all 이어도 알린다"
+  assert_file_grep "$D/review-i1.names" '^vendor/lib$' "names 에 gitlink 가 있다"
+  # 사용자 설정 diff.ignoreSubmodules=all — .gitmodules 없이
+  mkfix
+  N="$R/vendor/lib"; mkdir -p "$N"
+  git init -q -b trunk "$N"; echo 'a = 1' > "$N/a.py"; g "$N" add a.py; g "$N" commit -q -m n
+  g "$R" -c advice.addEmbeddedRepo=false add vendor/lib; g "$R" commit -q -m gl
+  git -C "$R" config diff.ignoreSubmodules all
+  rd --mode branch
+  assert_eq "$(field degraded "$OUT")" yes "diff.ignoreSubmodules=all 이어도 degraded: yes"
+  assert_file_grep "$ROOT/err" "중첩 레포 vendor/lib ${NESTED_TAIL}\$" "diff.ignoreSubmodules=all 이어도 알린다"
+  printf 'status: ok\nstart: %s\nend: %s\n' "$C0" "$(git -C "$R" rev-parse HEAD)" > "$D/range-scope.txt"
+  rd --mode range --scope-file "$D/range-scope.txt"
+  assert_eq "$(field degraded "$OUT")" yes "range 도 diff.ignoreSubmodules=all 이어도 degraded: yes"
+}
+
 case_branch_committed_gitlink_degraded() {
   echo "[branch — 커밋한 선언되지 않은 gitlink 는 degraded]"
   mkfix
@@ -803,6 +834,7 @@ case_gitlink_no_git_inside
 case_submodule_diff_format_pinned
 case_session_staged_gitlink_degraded
 case_branch_committed_gitlink_degraded
+case_ignore_all_cannot_hide_gitlink
 case_topic_new_gitlink_disclosed
 case_range_new_gitlink_degraded
 case_degraded_blocks_certification

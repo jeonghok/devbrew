@@ -118,8 +118,11 @@ T="$(mktemp -d "$DIR/.review-diff.XXXXXX")" || die "임시 폴더를 만들지 �
 
 # --submodule=short — 사용자 설정 diff.submodule=diff · log 가 gitlink 폴더 안에서 자식 git 을 띄워 그 폴더의
 # 설정(diff.external · textconv)을 돌리지 못하게 하위 모듈은 늘 「Subproject commit」 줄로만 낸다.
+# --ignore-submodules=none — 작업 트리 .gitmodules 의 submodule.<이름>.ignore(리뷰하는 변경이 더할 수 있다)나
+# 사용자 설정 diff.ignoreSubmodules 가 gitlink 를 diff 에서 숨기지 못하게 한다. session · paths 는 뒤에
+# --ignore-submodules=dirty 를 덧붙인다(뒤 플래그가 이긴다).
 GITD=(git -c core.quotePath=false diff --no-color --no-ext-diff --no-textconv --no-renames --submodule=short
-      --src-prefix=a/ --dst-prefix=b/)
+      --ignore-submodules=none --src-prefix=a/ --dst-prefix=b/)
 GITD_NOINDEX=(git -c core.quotePath=false diff --no-index --no-color --no-ext-diff --no-textconv
               --src-prefix=a/ --dst-prefix=b/)
 
@@ -288,12 +291,26 @@ done < "$T/untracked.z"
 } > "$T/self-state" || gitfail "상태 경로 목록을 쓰지 못했다"
 FILES=$(( ${#NAMES[@]} + ${#UNTR[@]} + ${#NESTED[@]} ))
 
+# 레포가 정한 이름을 한 줄로 찍는다 — printf %q 로 이스케이프하고 백틱은 하나도 남기지 않는다(SKILL 이 이름을
+# 코드 스팬에 싣는데 백틱이 그 스팬을 닫지 못하게). %q 가 제어 문자 때문에 $'...' 꼴을 내면 그 안의 백틱을
+# \x60 으로, 보통 꼴인데 백틱이 있으면 $'...' 꼴로 다시 쓴다(\ → \\ · ' → \' · ` → \x60).
+esc_name() {   # <이름>
+  local q
+  q="$(printf '%q' "$1")"
+  case "$q" in *'`'*) ;; *) printf '%s' "$q"; return 0 ;; esac
+  case "$q" in
+    "\$'"*) q="$(printf '%s' "$q" | LC_ALL=C sed 's/`/\\x60/g')" ;;
+    *) q="\$'$(printf '%s' "$1" | LC_ALL=C sed -e 's/\\/\\\\/g' -e "s/'/\\\\'/g" -e 's/`/\\x60/g')'" ;;
+  esac
+  printf '%s' "$q"
+}
+
 add_untracked() {   # <out> <path> — untracked 파일 하나를 /dev/null 대비 diff 로 덧붙인다
   local rc
   if [ -L "$2" ] && [ -d "$2" ]; then add_dir_link "$1" "$2"; return; fi
   "${GITD_NOINDEX[@]}" -- /dev/null "$2" >> "$1"
   rc=$?
-  [ "$rc" -le 1 ] || gitfail "untracked 파일의 diff 가 실패했다(rc $rc): $(printf '%q' "$2")"
+  [ "$rc" -le 1 ] || gitfail "untracked 파일의 diff 가 실패했다(rc $rc): $(esc_name "$2")"
 }
 
 # 폴더를 가리키는 링크 — git diff --no-index 는 그 인자를 폴더로 읽는다(그리고 rc 1 로 조용히 끝난다).
@@ -303,19 +320,19 @@ add_untracked() {   # <out> <path> — untracked 파일 하나를 /dev/null 대�
 add_dir_link() {   # <out> <path>
   local q qa qb tab="" rc nl
   nl=$'\n'
-  case "/$2/" in */../*|*/./*|//*) gitfail "링크 이름이 리포 안 상대 경로가 아니다: $(printf '%q' "$2")" ;; esac
+  case "/$2/" in */../*|*/./*|//*) gitfail "링크 이름이 리포 안 상대 경로가 아니다: $(esc_name "$2")" ;; esac
   q="$(git -c core.quotePath=false ls-files --others --exclude-standard -- ":(literal)$2")" \
-    || gitfail "링크 이름을 읽지 못했다: $(printf '%q' "$2")"
-  case "$q" in ''|*"$nl"*) gitfail "링크 이름을 하나로 풀지 못했다: $(printf '%q' "$2")" ;; esac
-  readlink -n -- "$2" > "$T/link.tmp" || gitfail "링크를 읽지 못했다: $(printf '%q' "$2")"
+    || gitfail "링크 이름을 읽지 못했다: $(esc_name "$2")"
+  case "$q" in ''|*"$nl"*) gitfail "링크 이름을 하나로 풀지 못했다: $(esc_name "$2")" ;; esac
+  readlink -n -- "$2" > "$T/link.tmp" || gitfail "링크를 읽지 못했다: $(esc_name "$2")"
   ( cd "$T" && GIT_CEILING_DIRECTORIES="$DIR" "${GITD_NOINDEX[@]}" -- /dev/null link.tmp ) > "$T/link.patch"
   rc=$?
-  [ "$rc" -eq 1 ] || gitfail "링크의 diff 가 실패했다(rc $rc): $(printf '%q' "$2")"
+  [ "$rc" -eq 1 ] || gitfail "링크의 diff 가 실패했다(rc $rc): $(esc_name "$2")"
   case "$2" in *' '*) tab="$TAB" ;; esac   # git 은 공백 든 이름의 +++ 줄 끝에 TAB 을 붙인다
   case "$q" in '"'*) qa="\"a/${q#\"}"; qb="\"b/${q#\"}" ;; *) qa="a/$q"; qb="b/$q" ;; esac
   link_patch "$qa" "$qb" "$tab" < "$T/link.patch" > "$T/link.out" \
-    || gitfail "링크의 diff 모양이 예상과 다르다: $(printf '%q' "$2")"
-  cat -- "$T/link.out" >> "$1" || gitfail "링크의 diff 를 쓰지 못했다: $(printf '%q' "$2")"
+    || gitfail "링크의 diff 모양이 예상과 다르다: $(esc_name "$2")"
+  cat -- "$T/link.out" >> "$1" || gitfail "링크의 diff 를 쓰지 못했다: $(esc_name "$2")"
 }
 
 link_patch() {   # <a 이름> <b 이름> <+++ 줄 끝> — stdin 의 link.tmp diff 머리를 실제 이름으로 바꾼다
@@ -403,8 +420,8 @@ done
 UNREVIEWED=0
 say_unreviewed() {   # <경로>
   UNREVIEWED=$((UNREVIEWED + 1))
-  printf 'review-diff: 추적 안 되는 중첩 레포 %q 는 리뷰하지 않았다 — .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라\n' \
-    "$1" >&2
+  printf 'review-diff: 추적 안 되는 중첩 레포 %s 는 리뷰하지 않았다 — .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라\n' \
+    "$(esc_name "$1")" >&2
 }
 for x in ${NESTED[@]+"${NESTED[@]}"}; do say_unreviewed "$x"; done
 
