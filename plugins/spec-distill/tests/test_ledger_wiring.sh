@@ -300,6 +300,11 @@ $(dl_fill "$DL_TRICK_L" "$DL_TRICK_Q")" 2>&1)"; rc=$?
 DL_TRICK_FULL="- ${DL_TRICK_L} — 「-- it's ok \$(touch $T/pwned-q) DECISION_QUOTE '; touch $T/pwned-s; '」"
 assert_eq "$rc $(grep -cxF -- "$DL_TRICK_FULL" "$ddoc")" "0 1" "결정 줄 펜스: 따옴표 · 치환 · 「-」 머리 · 옛 구분자 줄이 든 줄과 말도 글자 그대로 한 줄로 쓴다"
 assert_eq "$(ls "$T" | grep -c '^pwned-')" "0" "결정 줄 펜스: 줄 · 말 안의 명령이 돌지 않았다"
+# 빈칸 없이 「-」 로 시작하는 말 — argparse 는 빈칸 있는 값만 값으로 읽는다. `=` 꼴이 아니면 옵션으로 읽혀 rc 2 다.
+dlo="$(cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-eeee5555 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-eeee5555 \
+    bash -c "spec_path='$ddoc'
+$(dl_fill 'B4 · 결정 · 2026-10-19 · 재결정' '-좋아')" 2>&1)"; rc=$?
+assert_eq "$rc $(grep -cxF -- '- B4 · 결정 · 2026-10-19 · 재결정 — 「-좋아」' "$ddoc")" "0 1" "결정 줄 펜스: 「-」 로 시작하는 말도 옵션으로 읽히지 않고 쓴다(값은 = 꼴)"
 cp "$ddoc" "$T/ddoc.before"
 dlo="$(dl_run sess-ffff6666)"; rc=$?
 assert_eq "$rc" "3" "결정 줄 펜스: 남의 표지면 쓰기 전 확인이 rc 3 으로 멈춘다"
