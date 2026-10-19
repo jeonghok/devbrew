@@ -16,7 +16,6 @@ cd "$ROOT" || exit 1
 . "$ROOT/shared/tests/assert.sh"
 
 MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
-PINNED=()
 
 shopt -s nullglob
 agents=(plugins/*/agents/*.md)
@@ -30,14 +29,11 @@ else
 fi
 
 fm_of() { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$1"; }
-is_pinned() { local p; for p in ${PINNED[@]+"${PINNED[@]}"}; do [ "$p" = "$1" ] && return 0; done; return 1; }
 
-keyed=(); bad_pin=()
+keyed=()
 for f in "${agents[@]}"; do
   lines="$(fm_of "$f" | grep -E "$MODEL_KEY")"
-  if is_pinned "$f"; then
-    [ "$lines" = "model: opus" ] || bad_pin+=("$f: «${lines:-키 없음}»")
-  elif [ -n "$lines" ]; then
+  if [ -n "$lines" ]; then
     keyed+=("$f: $(printf '%s\n' "$lines" | head -1)")
   fi
 done
@@ -45,5 +41,4 @@ done
 [ "${#keyed[@]}" -eq 0 ] && ok "1 — frontmatter 에 model 키를 둔 agent 0개" || {
   no "1 — model 키를 둔 agent ${#keyed[@]}개"
   printf '      %s\n' "${keyed[@]}"; }
-[ "${#PINNED[@]}" -eq 0 ] && ok "2 — 예외 목록이 비어 있다 (qg 리뷰 agent 도 키 부재)" || no "2 — PINNED 가 비어 있지 않다 — 고정은 R2a 결정으로 풀렸다"
 finish

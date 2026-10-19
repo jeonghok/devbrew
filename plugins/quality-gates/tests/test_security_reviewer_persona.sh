@@ -75,7 +75,7 @@ assert_fixed "$(severity_section)" 'A dependency-manifest finding (see `## Hunt 
 assert_fixed "$(severity_section)" 'Otherwise it is reported as fact at `SUGGESTION`.' "Severity — 구체 경로가 없는 매니페스트 항목은 SUGGESTION 으로 사실 보고"
 assert_not_fixed "$(severity_section)" 'the entry alone is not a blocking condition' "Severity — 매니페스트를 일괄 비차단으로 두는 옛 문구가 없다"
 # M7 — 위 부분 문자열 락의 꼬리. Severity 단락은 각각 한 줄이고, 줄 전체를 등호로 잠근다.
-assert_line "$(severity_section)" 'Set `severity` by the `criteria` block. A finding is `CRITICAL` or `IMPORTANT` only when it is one of the blocking conditions there — for this reviewer that is usually the third: a concrete path that breaks a control this change itself added or modified, or an exploitable path the change itself introduces. Report a finding located outside the diff when its cause is this change (for example, a caller or a control the change broke). Do not report hardening for code whose behavior this change did not affect (see `## Forbidden`). A finding tied to a changed line that is not one of the blocking conditions is `SUGGESTION`.' \
+assert_line "$(severity_section)" 'Set `severity` by the `criteria` block. A finding is `CRITICAL` or `IMPORTANT` only when it is one of the blocking conditions there — for this reviewer that is usually the third: a concrete path that breaks a control this change itself added or modified, or an exploitable path the change itself introduces. Report a finding located outside the diff when its cause is this change (for example, a caller or a control the change broke). Do not report hardening for code whose behavior this change did not affect (see `## Forbidden`). A finding this change caused that is not one of the blocking conditions is `SUGGESTION`.' \
   "M7: Severity 첫 단락이 줄 전체로 그대로다"
 assert_line "$(severity_section)" 'Use `CRITICAL` when the path is traceable from the diff to a severe impact (data breach, RCE, auth bypass) — including when the input *looks* user-controlled but its validation is not shown in the diff. Do not report a finding whose attack needs conditions you have no evidence for.' \
   "M7: CRITICAL 단락이 줄 전체로 그대로다"
@@ -136,7 +136,11 @@ assert_file_grep "$PERSONA" 'a location outside the diff is fine when the cause 
 assert_file_absent "$PERSONA" "No findings outside the diff's actual code changes" "옛 「바뀐 코드만」 문장이 없다"
 assert_file_grep "$PERSONA" 'Do not report hardening for code whose behavior this change did not affect' "hardening 금지는 남는다(약화 아님 — 양성 짝)"
 assert_file_grep "$PERSONA" '^tools: Read, Grep, Glob$' "도구 allowlist 그대로"
-assert_file_grep "$PERSONA" 'Do not run audit commands yourself' "AC27: 웹·실행 금지 문장 그대로 (persona 약화 아님)"
+assert_file_grep "$PERSONA" 'you have no web tools' "AC27: 웹 금지 문장 그대로"
+assert_file_grep "$PERSONA" 'would create an exfiltration channel \(P21\)' "AC27: 웹 금지 근거(exfiltration P21) 그대로"
+assert_file_grep "$PERSONA" 'Do not run audit commands yourself' "AC27: 실행 금지 문장 그대로"
+assert_file_grep "$PERSONA" 'A finding this change caused that is not one of the blocking conditions is `SUGGESTION`' "Severity 꼬리: 이 변경이 낳은 지적 (넓힌 범위와 일치)"
+assert_file_absent "$PERSONA" 'tied to a changed line' "Severity 꼬리: 옛 「바뀐 줄에 묶인」 문구가 없다"
 SK="$REPO_ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
 assert_contains "$(cat "$SK")" 'Report findings this change caused — the location may be outside the diff when the cause is this change.' "SKILL 외부 리뷰어 프롬프트도 같은 범위"
 assert_contains "$(cat "$PERSONA")" 'do not re-apply your own exclusion' "filtered_diff: 제외 정의를 다시 갖지 않는다"
