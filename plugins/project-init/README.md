@@ -48,7 +48,7 @@ plugins/project-init/
 
 1. `/project-init` 실행
 2. branching strategy 선택 (GitHub Flow / Git Flow / Trunk-based)
-3. 커스터마이징 질문 2–3개 답변 (commit scope, merge strategy, 브랜치 접두 추가)
+3. 커스터마이징 질문 3–4개 답변 (commit scope, merge strategy, 브랜치 접두 추가)
 4. 플러그인이 다음을 생성:
    - `AGENTS.md` — `## Git Workflow` (canonical content source, OpenAI Codex/Cursor/Aider 등 16+ 벤더 자동 인식)
    - `CLAUDE.md` — `@AGENTS.md` 한 줄 thin pointer (Claude Code가 AGENTS.md content를 자동 import)
