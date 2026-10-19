@@ -1,5 +1,12 @@
 # Changelog
 
+## [7.4.1] — 2026-10-19
+
+### Changed
+- README 에서 지난 버전 이력 문단 · 버전 꼬리표 · 출처 이력 절을 지우고, 겹친 원칙 줄을 합치고, 틀린 원칙 라벨을 고쳤다. 지금 동작 서술은 그대로다.
+- `tests/test_readme_sync.sh` 가 README 전체를 살아 있는 줄로 읽는다(이력 면제 없음).
+- 7.4.0 이 고친 `## External source absorption` 절은 이번에 통째로 지웠다(출처 이력은 CHANGELOG · PR 몫).
+
 ## [7.4.0] — 2026-10-19
 
 ### Changed
