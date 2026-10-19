@@ -224,6 +224,7 @@ if [ "${n_fence:-0}" -ge 5 ]; then
     # 강등 경로 둘을 이름으로 댄다 — 어느 자리가 무엇으로 강등되는지가 사유에 실려야 한다.
     assert_contains "$(cat "$SCRATCH/no-$mode.err")" "coverage-mapper 0 (unavailable: 계약 배달 실패)" "X($mode): 사유가 audit §2 문면을 댄다"
     assert_contains "$(cat "$SCRATCH/no-$mode.err")" "inline premortem" "X($mode): 사유가 prober 강등 경로를 댄다"
+    assert_contains "$(cat "$SCRATCH/no-$mode.err")" "open-researcher 자리면 본체가 직접 조사한다" "X(${mode}): 사유가 open-researcher 강등 경로를 댄다"
   done
 else
   no "X: 펜스를 못 잘라 실행 축을 재지 못했다"
