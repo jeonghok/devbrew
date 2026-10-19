@@ -76,7 +76,7 @@ branching strategy 템플릿을 선택해 git workflow 룰을 초기화하고, �
 
 charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
 
-- (a) 관리 절을 담는 파일 — AGENTS.md 가 있으면 AGENTS.md, 없으면 CLAUDE.md(「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md) — 에 `## Project Charter` 섹션이 존재하는가. AGENTS.md 가 있어도 거기 `## Project Charter` 가 없고 CLAUDE.md 에 있으면 CLAUDE.md 의 그 절을 읽는다 — 4c S4 「옮기기」가 4e 전에 그 절을 AGENTS.md 로 옮기므로(S2a 는 AGENTS.md 가 없는 경우라 위 규칙대로 CLAUDE.md 를 읽는다), 4e 는 옮긴 절을 제자리 갱신하고 두 번째 `## Project Charter` 를 더하지 않는다.
+- (a) 관리 절을 담는 파일 — AGENTS.md 가 있으면 AGENTS.md, 없으면 CLAUDE.md(「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md) — 에 `## Project Charter` 섹션이 존재하는가. AGENTS.md 가 있어도 거기 `## Project Charter` 가 없고 CLAUDE.md 에 있으면 CLAUDE.md 의 그 절을 읽는다 — 4c S4 「옮기기」가 4e 전에 그 절을 AGENTS.md 로 옮기므로(S2a 는 AGENTS.md 가 없는 경우라 위 규칙대로 CLAUDE.md 를 읽는다), 4e 는 옮긴 절을 제자리 갱신하고 두 번째 `## Project Charter` 를 더하지 않는다. S4 에서 「CLAUDE.md 는 그대로 두기」를 골라 절이 옮겨지지 않으면 이 경우는 4e 의 「갱신할 헌장 절이 쓸 파일에 없으면」 규칙이 맡는다.
 - (b) 그 섹션의 `**Vision:**`·`**Non-goals:**`·`**Tech Stack:**` 값이 모두 비어있지 않고 `{{...}}` placeholder가 아닌가 (= `charter_section_complete`).
 - (c) `docs/project/charter.md` **와** `docs/project/conventions.md`가 모두 존재하는가 (= `docs_complete`; `glossary.md`는 조건부라 completeness 판정에서 제외).
 
@@ -275,6 +275,8 @@ placeholder 치환 매핑:
 | **C-S2 (complete)** | 업데이트 승인 시: `## Project Charter` 섹션 in-place 교체 + `docs/project/` 파일 in-place 갱신. 거절 시: 전부 unchanged, 중복 `## Project Charter` 섹션 생성 안 함. |
 | **C-S3 (a) 섹션 항목 누락** | Phase 1 보충 질문으로 채운 뒤 C-S1과 동일하게 발행(in-place 교체). |
 | **C-S3 (b) docs 파일만 누락** | 질문 없이(C-S3(b) 계약) 누락된 `docs/project/charter.md`·`conventions.md`를 생성하되, **`## Project Charter` 요약이 실제 source로 가진 값(vision·non-goals·tech-stack)만** 채운다. 요약에 없는 필드 — charter.md의 `## Goals`·`## Success Criteria / Definition of Done`·`## Personas`, conventions.md의 모든 헤딩(`## Naming`·`## Directory Structure`·`## Error Handling`·`## Anti-patterns`·`## Build & Test`) — 는 위 4e placeholder 치환 매핑 표의 해당 fallback 마커(`_명시되지 않음._` 또는 charter.md soft 필드의 `_명시되지 않음 — 추후 보강._`)로 둔다(요약은 이 값들의 source가 아니므로 재구성 불가). AGENTS.md 섹션은 unchanged. 헌장 전체를 다시 채우려면 C-S2 경로의 "업데이트" 승인으로 Phase 1을 재진행한다. |
+
+갱신할 헌장 절이 쓸 파일에 없으면 C-S1 처럼 그 파일에 `## Project Charter` 섹션을 새로 더한다 — 위 C-S2 · C-S3 (a) 행이 제자리 갱신할 절이 4e 가 쓰는 파일(`AGENTS.md`, 「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md)에 없을 때다(감지가 CLAUDE.md 의 절을 읽었는데 S4 「CLAUDE.md 는 그대로 두기」로 옮겨지지 않은 경우). 값은 감지한 절의 값과 이번 실행에서 받은 답에서 가져온다. 「CLAUDE.md 는 그대로 두기」를 고른 CLAUDE.md 에는 쓰지 않는다.
 
 `docs/project/` 디렉토리가 없으면 생성한다. 비-관리 콘텐츠(다른 헤딩·단락·코드 블록)는 모든 state에서 보존한다(기존 4c matrix 정신). `## Project Charter` 요약은 ≤약 25줄로 유지하고 상세는 전부 `docs/project/`로 내린다(C5 — 기존 R1 size 룰 자기 준수).
 

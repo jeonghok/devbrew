@@ -282,6 +282,17 @@ class TestMigrationRefusalChoices(unittest.TestCase):
             "AGENTS.md 가 있어도 거기 `## Project Charter` 가 없고 CLAUDE.md 에 있으면 CLAUDE.md 의 그 절을 읽는다",
             detect)
         self.assertIn("두 번째 `## Project Charter` 를 더하지 않는다", detect)
+        self.assertIn("이 경우는 4e 의 「갱신할 헌장 절이 쓸 파일에 없으면」 규칙이 맡는다", detect)
+
+    def test_4e_adds_section_when_in_place_target_is_missing(self):
+        # S4 + 「CLAUDE.md 는 그대로 두기」: 감지는 CLAUDE.md 의 헌장 절로 C-S2 · C-S3 를 냈지만 옮기지
+        # 않았으므로 4e 가 제자리 갱신할 절이 AGENTS.md 에 없다. 4e 는 그 파일에 절을 새로 더하고,
+        # 손대지 않기로 한 CLAUDE.md 에는 쓰지 않는다.
+        step4e = section(self.text, "#### 4e:", "### Step 5:")
+        self.assertIn(
+            "갱신할 헌장 절이 쓸 파일에 없으면 C-S1 처럼 그 파일에 `## Project Charter` 섹션을 새로 더한다",
+            step4e)
+        self.assertIn("「CLAUDE.md 는 그대로 두기」를 고른 CLAUDE.md 에는 쓰지 않는다", step4e)
 
     def test_git_rules_detection_reads_the_canonical_file(self):
         # 「git 규칙은 그대로 두고 헌장만」 + 「AGENTS.md 로 옮기기」 뒤 재실행에서 기존 `## Git Workflow` 는
