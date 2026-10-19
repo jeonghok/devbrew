@@ -123,6 +123,11 @@ grep -qF '최근 두 묶음의 항목은 필수다' <<<"$SJ_FLAT" && ok "saturat
 # 묶음 번호는 본체가 단다 — 뒤 블록에 앞 묶음 번호를 달아 최근 변화를 가리는 길을 판정자가 막는다.
 grep -qF '최근 두 묶음은 블록 번호 순으로 마지막 두 묶음이다. 블록 번호 순으로 묶음 번호가 줄거나 한 묶음의 블록이 다른 묶음의 블록을 사이에 두고 떨어져 있으면 `not_saturated` 와 `kind: confirm` 빈 곳(「묶음 표지 순서 어긋남 — <n…>」)을 낸다' <<<"$SJ_FLAT" \
   && ok "saturation-judge: 묶음 표지 순서 어긋남 → not_saturated + confirm 빈 곳" || no "saturation-judge: 묶음 표지 순서 규칙 부재"
+# 이월 세션: 표지 없는 옛 블록 뒤에 새 「묶음 1」이 온다 — 옛 블록에 번호를 지어 감소로 읽으면 이후 판정이 모두 «아직»이다.
+grep -qF '순서 검사는 묶음 표지가 있는 블록끼리만 본다 — 묶음 표지가 없는 블록은 순서 검사에서 빼고, 최근 두 묶음을 셀 때는 그대로 각자 한 묶음으로 센다.' <<<"$SJ_FLAT" \
+  && ok "saturation-judge: 표지 없는 블록은 순서 검사에서 빠지고 두 묶음 창에는 센다" || no "saturation-judge: 표지 없는 블록의 순서 검사 제외 문장 부재"
+grep -qF '순서 검사는 최근 두 묶음 중 블록 번호가 앞선 묶음의 첫 블록부터 끝까지만 본다.' <<<"$SJ_FLAT" \
+  && ok "saturation-judge: 순서 검사 범위 = 최근 두 묶음 창" || no "saturation-judge: 순서 검사 범위 문장 부재"
 grep -qF '「조사가 두 묶음 미만 — 열린 결정에 닿는 조사를 하나 더」' <<<"$SJ_FLAT" \
   && ok "saturation-judge: 두 묶음 미만 빈 곳 문구(saturation.md 의 판단만 남은 경로가 이 글자로 경우를 안다)" || no "saturation-judge: 두 묶음 미만 빈 곳 문구 부재"
 grep -qF '묶음은 블록 머리의 `묶음 <b>` 가 같은 블록들이다' <<<"$SJ_FLAT" && ok "saturation-judge: 묶음 정의" || no "saturation-judge: 묶음 정의 부재"
