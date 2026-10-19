@@ -287,7 +287,7 @@ trivia 펜스다. trivia 실행은 `clean` 이 아니다(`not-certified (trivia)
 
    - `review-diff rc` 가 0 이 아니면(2 잘못된 호출 · 4 git 실패) stderr 를 그대로 보이고 멈춘다.
    - stdout 의 `degraded:` 를 먼저 읽는다. `files:` 가 수인 `degraded: yes` 는 다음 줄의 중첩 리포 갈래다. `files: -` 인 `degraded: yes` 면 기준선을 풀지 못해 바뀐 파일 집합을 정할 수 없다 — `files:` · `excluded:` · `kept_model:` · `doc_paths_source:` · `self_state:` 의 `-` 를 0 으로 읽지 않고, Step 1b 의 「정할 수 없으면」 규칙대로 Step 4.5 의 degraded 갈래로 싣는다. 이때는 아래 문서 경로 공시 · 상태 파일 공시와 빈 diff 갈래를 건너뛴다. 리뷰어는 빈 diff 를 받고 그대로 돌지만, 차등 테스트의 D2 가 같은 기준선을 풀지 못해 exit 4 로 멈추므로 판정 입력이 error-axis 가 된다 — 이 실행은 clean 이 아니다.
-   - `degraded: yes` 인데 `files:` 가 수면 추적 안 되는 중첩 리포의 파일 목록을 읽지 못해 그 안의 파일이 리뷰 diff 에 없다 — stderr 의 그 줄(읽지 못한 폴더)을 그대로 보이고, 나머지는 `degraded: no` 처럼 읽어 진행하되 Step 4 에 `--reason error-axis` 를 싣는다(이 실행은 clean 이 아니다).
+   - `degraded: yes` 인데 `files:` 가 수면 추적 안 되는 중첩 리포(안에 든 레포)가 있어 그 안을 리뷰하지 않았다 — 그 폴더는 `$RD/review-i<N>.unreviewed` 의 줄들이다. 매 iteration `> [quality-gates] 안에 든 레포는 리뷰하지 않았다 — 커밋하거나 .gitignore 에 넣고 다시 돌려라: <review-i<N>.unreviewed 의 줄들>` 을 내고, 나머지는 `degraded: no` 처럼 읽어 진행한다. 판정은 [Final verdict](#final-verdict) 의 펜스가 그 파일을 읽어 `findings-lost` 로 막는다 — 이 실행은 clean 이 될 수 없다.
    - `degraded: no` 면 `$resolved_scope_file_count` = `files:` 값(문서 경로를 빼기 전 바뀐 파일 수)이다.
    - 매 iteration 공시 한 줄 — `<doc_paths>` 는 `.doc-paths` 의 `doc_paths:` 값, `<excluded>` 는 stdout 의 `excluded:` 값, 출처는 `doc_paths_source:` 가 `default` 면 「기본」, `env` 면 「환경 변수」, `default-settings-changed` 면 「기본 — 이 변경이 설정을 바꿨다」: `> [quality-gates] 문서 경로 <doc_paths>(출처: <기본 | 환경 변수 | 기본 — 이 변경이 설정을 바꿨다>) — 리뷰에서 뺀 경로 <excluded>개.`
    - `kept_model:` 이 0 보다 크면(`.doc-paths` 의 `kept` 줄들): `> [quality-gates] 문서 경로 패턴에 걸렸지만 모델이 읽거나 코드라 리뷰에 남겼다: <kept 경로들>`
@@ -600,7 +600,6 @@ different-premise: absent(not-installed)
 | ② 의 D5 가 `diff_rc=0` 으로 끝났고 그 사본 `$RD/differential.yaml` 이 있다(`references/differential-test.md` 의 D7) | `--differential "$RD/differential.yaml"` |
 | ② 가 kill switch 없이 그 파일을 남기지 못했다 — `diff_rc` 가 0 이 아니다 · 파일이 없다 · D5 전에 절차가 끝났다(D0 메모 실패 · D2 exit 4 포함) | `--differential` 을 싣지 않고 `--reason error-axis` |
 | ② 가 kill switch 로 생략됐다([Differential test](#differential-test)) | `--reason kill-switch` |
-| Step 1c 가 `degraded: yes` 와 수인 `files:` 를 냈다(중첩 리포의 목록을 읽지 못함) | `--reason error-axis` |
 | 기본 모드 — Step 1a 가 `topic-head.sh` 를 불렀다(`status:` 가 무엇이든) | `--scope "$(git rev-parse --show-toplevel)/.claude/quality-gates/<session-id>/topic-scope.txt"` — `declaration-invalid` · `merge-conflict` 사유와 `scope:` 블록은 합성기가 이 파일에서 낸다 |
 | `$resolved_scope_file_count == 0`(Step 1c 의 `files: 0`) 이고 캐시한 `$changes_exist == yes` (정직-verdict floor) | `--reason scope-empty` |
 
@@ -1112,7 +1111,7 @@ if [ -f "$DY" ]; then
 fi
 X=0; [ -f "$RD/excluded.md" ] && X=$(grep -c '^- ' "$RD/excluded.md")
 SHA_ARG="$(git rev-parse --short HEAD)"; RS="$RD/range-scope.txt"; if [ -f "$RS" ]; then SHA_ARG="$(git rev-parse --short "$(sed -n 's/^end: //p' "$RS")")"; fi
-python3 "$QG/scripts/verdict.py" --prior "$SYN" --line \
+python3 "$QG/scripts/verdict.py" --prior "$SYN" --line --unreviewed-dir "$RD" \
   --blocking "$N_BLOCK" --optional "$N_OPT" --new-failures "$K" --excluded "$X" \
   --iter <N> --sha "$SHA_ARG" --e2e '<e2e 칸>' > "$RD/verdict.out"
 echo "verdict rc=$?"; cat "$RD/verdict.out"
@@ -1125,7 +1124,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 SHA_ARG="$(git rev-parse --short HEAD)"; RS="$RD/range-scope.txt"; if [ -f "$RS" ]; then SHA_ARG="$(git rev-parse --short "$(sed -n 's/^end: //p' "$RS")")"; fi
-python3 "$QG/scripts/verdict.py" --reason trivia --line --blocking 0 --optional 0 --new-failures 0 --excluded 0 --iter 0 --sha "$SHA_ARG" --e2e '안 함' > "$RD/verdict.out"
+python3 "$QG/scripts/verdict.py" --reason trivia --unreviewed-dir "$RD" --line --blocking 0 --optional 0 --new-failures 0 --excluded 0 --iter 0 --sha "$SHA_ARG" --e2e '안 함' > "$RD/verdict.out"
 echo "verdict rc=$?"; cat "$RD/verdict.out"
 ```
 
@@ -1138,7 +1137,7 @@ RD="${TOP}/.claude/quality-gates/<session-id>"
 rm -f "$RD/differential.yaml" "$RD/differential-not-counted.md"
 X=0; [ -f "$RD/excluded.md" ] && X=$(grep -c '^- ' "$RD/excluded.md")
 SHA_ARG="$(git rev-parse --short HEAD)"; RS="$RD/range-scope.txt"; if [ -f "$RS" ]; then SHA_ARG="$(git rev-parse --short "$(sed -n 's/^end: //p' "$RS")")"; fi
-python3 "$QG/scripts/verdict.py" --reason scope-empty --line --blocking 0 --optional 0 --new-failures 0 --excluded "$X" --iter <N> --sha "$SHA_ARG" --e2e '안 함' > "$RD/verdict.out"
+python3 "$QG/scripts/verdict.py" --reason scope-empty --unreviewed-dir "$RD" --line --blocking 0 --optional 0 --new-failures 0 --excluded "$X" --iter <N> --sha "$SHA_ARG" --e2e '안 함' > "$RD/verdict.out"
 echo "verdict rc=$?"; cat "$RD/verdict.out"
 ```
 

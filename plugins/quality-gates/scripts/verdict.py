@@ -10,6 +10,7 @@ trivia · 합치기 충돌 · 선언 무효 · 스코프 0 · 각도 부재).
 e2e 걷기의 결과는 `--e2e` 로 들어오고, 최종 판정은 `--prior` 로 마지막 iteration 의 합성기 출력(`$RV/synth.out`)을 잇는다.
 """
 import argparse
+import os
 import re
 import sys
 
@@ -63,6 +64,30 @@ def fail4(msg):
     # {msg}", ...)` 와 같은 모양으로 스크립트 이름을 접두사로 쓴다.
     print(f"verdict.py: {msg}", file=sys.stderr)
     raise SystemExit(4)
+
+
+# review-diff.sh 가 iteration 마다 세션 폴더에 쓰는 「리뷰하지 않은 추적 안 되는 중첩 리포 폴더」 표시.
+UNREVIEWED_NAME = re.compile(r"review-i[1-9][0-9]*\.unreviewed")
+UNREVIEWED_LINE = "안에 든 레포는 리뷰하지 않았다 — 커밋하거나 .gitignore 에 넣고 다시 돌려라"
+
+
+def unreviewed_in(folder):
+    """세션 폴더의 표시 파일 전부에 적힌 폴더(중복 없이, 정렬). 폴더 · 파일을 못 읽으면 exit 4."""
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError as exc:
+        fail4(f"세션 폴더를 읽지 못했다: {folder} ({exc})")
+    found = set()
+    for name in names:
+        if not UNREVIEWED_NAME.fullmatch(name):
+            continue
+        path = os.path.join(folder, name)
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                found.update(line for line in f.read().splitlines() if line.strip())
+        except OSError as exc:
+            fail4(f"리뷰하지 않은 폴더 표시를 읽지 못했다: {path} ({exc})")
+    return sorted(found)
 
 
 def read_or_none(path):
@@ -247,7 +272,13 @@ def main():
     ap.add_argument("--prior", default=None)
     ap.add_argument("--e2e", default=None, choices=E2E_STATES)
     ap.add_argument("--e2e-overridden", action="store_true")
+    # 세션 폴더 — 그 안의 review-i<N>.unreviewed 중 하나라도 비어 있지 않으면 리뷰하지 않은 항목이 있다
+    # (셀 수 없다) → findings-lost. `--prior` 와 함께 쓴다(--e2e 처럼 앞 판정 위에 더한다).
+    ap.add_argument("--unreviewed-dir", default=None)
     args = ap.parse_args()
+    if args.unreviewed_dir is not None and args.unreviewed_dir == "":
+        print("verdict.py: --unreviewed-dir 은 빈 문자열을 받지 않는다", file=sys.stderr)
+        return 2
     line_vals = (args.blocking, args.optional, args.new_failures, args.excluded,
                  args.iter, args.sha)
     if args.line and any(v is None for v in line_vals):
@@ -289,6 +320,11 @@ def main():
         defect = defect or args.e2e in E2E_DEFECT
         if args.e2e in E2E_TO_REASON:
             extra.append(E2E_TO_REASON[args.e2e])
+    if args.unreviewed_dir is not None:
+        unreviewed = unreviewed_in(args.unreviewed_dir)
+        if unreviewed:
+            extra.append("findings-lost")
+            print(f"[quality-gates] {UNREVIEWED_LINE}: {' '.join(unreviewed)}", file=sys.stderr)
     decision = decide(
         defect=defect,
         review_blocked=args.review_blocked,

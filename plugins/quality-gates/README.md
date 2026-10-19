@@ -321,7 +321,7 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
 
 이 실행의 세션 폴더 안에 qg 가 쓴 추적 안 되는 상태 파일은 리뷰에서 건너뛰되, 그 수와 경로를 매 iteration 한 줄로 알린다(`review-i<N>.self-state`). 다른 세션 폴더의 파일 · qg 가 쓰지 않는 이름 · 추적되는 변경 · 커밋된 변경은 그 폴더 아래여도 리뷰한다.
 
-추적 안 되는 중첩 리포(바깥 리포 안에 든 다른 git 리포)는 그 안의 파일(그 리포가 추적하는 파일과 무시되지 않는 새 파일)을 하나씩 리뷰한다. 그 목록을 읽지 못하면 그 폴더를 알리는 줄을 내고 이 실행은 clean 이 아니다. 폴더를 가리키는 추적 안 된 링크는 링크(가리키는 곳)로 리뷰한다.
+추적 안 되는 중첩 리포(바깥 리포 안에 든 다른 git 리포)는 리뷰하지 않는다 — 그 안에서 git 을 돌리지도, 그 안의 파일을 읽지도 않는다(그 리포의 설정 · 링크가 명령을 돌리거나 리포 밖 파일을 리뷰에 싣지 못하게). 대신 매 iteration `안에 든 레포는 리뷰하지 않았다 — 커밋하거나 .gitignore 에 넣고 다시 돌려라: <폴더>` 를 내고, 판정은 `not-certified (findings-lost)` 가 된다(`review-i<N>.unreviewed` 를 판정 펜스가 읽는다). 폴더를 가리키는 추적 안 된 링크는 링크 자체(가리키는 곳)로 리뷰한다.
 
 **범위 모드 — `range <시작>[..<끝>]`.** 시작 커밋부터 끝 커밋까지의 변경을 한 판정으로 본다. 끝을 생략하면 `origin/HEAD` 가 가리키는 기본 브랜치 끝이다 — `origin/HEAD` 가 없으면 다른 이름으로 대신하지 않고 멈추며, 고치는 길(`git remote set-head origin --auto` 또는 끝을 적기)을 알린다.
 - 범위는 실행 시작에 두 커밋으로 얼린다(`scripts/resolve-range.sh` → 세션 폴더의 `range-scope.txt`). 리뷰 diff · 의도 출처 · codex · 차등 테스트 · 판정 줄이 모두 같은 두 커밋을 쓴다 — diff 의 기준과 차등 테스트 기준선은 시작 커밋, HEAD 축과 판정 줄의 커밋은 끝 커밋이다. 리뷰어 · codex 가 diff 밖 코드를 열어 볼 때도 끝 커밋을 본다 — 지금 체크아웃이 끝 커밋이어도 늘 끝 커밋의 임시 트리를 하나 만들어 읽고(커밋 안 된 변경 · 추적 안 된 파일을 리뷰어가 읽지 않게 한다, 실행 끝에 지운다), 그 트리를 만들지 못하면 판정 없이 멈춘다.
@@ -403,7 +403,8 @@ JSON 한 줄(`intent_source` · `intent_note` · `intent_file` · `specs`)을 �
   패턴은 레포 루트 기준 경로 전체에 맞는다. 앞에 `/` 를 붙이면 루트에 묶인다(`/docs/*.md`). `/` 로 끝나는 패턴은 그
   폴더 아래 전부다(`docs/drafts/`). `**` 는 여러 마디, `*` · `?` 는 한 마디 안이다. 읽지 못한 패턴은 적용하지 않고 이름을 알린다.
 - **빼는 것은 문서 파일뿐** — 확장자가 `.md` · `.markdown` · `.rst` · `.txt` · `.adoc` 이거나 이름이 `README` ·
-  `CHANGELOG` 인 파일만 빠진다. `.mdx` 는 코드를 실행하므로 코드로 리뷰한다. 그중 모델이 읽는 파일(`CLAUDE.md` · `AGENTS.md` · `SKILL.md`, 또는 경로에 `agents` · `skills` ·
+  `CHANGELOG` 인 파일만 빠진다. `.mdx` 는 코드를 실행하므로 코드로 리뷰한다. 어떤 도구(예: Docusaurus)는 `.md` 도 MDX 로
+  읽어 실행하므로, 그런 리포에서는 패턴이 코드를 담은 `.md` 를 리뷰에서 뺄 수 있다 — 패턴을 그에 맞게 고른다. 그중 모델이 읽는 파일(`CLAUDE.md` · `AGENTS.md` · `SKILL.md`, 또는 경로에 `agents` · `skills` ·
   `commands` · `references` · `templates` · `hooks` · `.claude` · `.claude-plugin` 이 든 파일)과 코드는 패턴에 걸려도 남기고 이름을 알린다.
 - **어디에 두나** — 셸 환경 변수로 두거나, `.claude/settings.json` · `.claude/settings.local.json` 의 `env` 에 둔다. 설정 파일의
   `env` 는 세션 환경 변수로 실린다(실측: Claude Code 2.1.303, 두 파일을 하나씩 따로 둔 헤드리스 실행 각 한 번 — 대화형 세션은 재지 않았다).
