@@ -444,6 +444,7 @@ next_phase: superpowers:writing-plans
 | design-doc 프로필에 대안 비교 축(Rejected Alternatives 의 비교가 실제로 됐는지)이 없다 | R11 §5 넘김 — R2a 이번 계획들의 범위 밖, R2a 남은 리뷰 엔진 · qg 소결함(R12) | R12 |
 | 철학 P3 의 문장 「문서 리뷰 자리 넷(design doc · brief · seed · generic)」이 사실과 어긋난다 — 엔진을 쓰는 자리는 셋이고, qg 의 `generic` 프로필은 엔진 테스트만 읽는다(문서 비평은 별도 루프) | R11 §5 넘김 — R2a 이번 계획들의 범위 밖, R2a 남은 리뷰 엔진 · qg 소결함(R12) | R12 |
 | qg 합성기 `synthesize_findings.py` 의 `finding_id`(= `agent-file-line`)가 같은 리뷰어 · 같은 파일 · 같은 줄의 서로 다른 지적에 같은 id 를 준다(줄이 없거나 `10-12` 같은 범위 줄은 0 으로 접혀 더 자주 겹친다). 재비판이 둘을 다르게 판정하면(하나 기각 · 하나 유지) 합성기가 「같은 finding_id 에 갈린 재비판 판정」으로 hold 해 정당한 실행이 `not-certified (findings-lost)` 가 되고, 둘 다 `lower` 면 첫 지적의 낮춘 이유가 둘째에 붙는다. 실패 방향은 막는 쪽이라 소실은 없다. 고치려면 id 에 요약을 넣어(내용 기반 · 순서 무관) 정체를 가르고 `test_synthesize_recritic.sh` 의 충돌 케이스 넷을 다시 써야 하며, `tools/adjudication/check_wiring.py` 의 dedup 면제 줄번호 핀도 함께 옮겨야 한다 — 작은 수정이 아니다 | R11 §5 넘김 — R2a 이번 계획들의 범위 밖, R2a 남은 리뷰 엔진 · qg 소결함(R12) | R12 |
+| qg 판정에 쓰는 상태(세션 폴더 · 표지 · synth.out)가 리뷰 대상 레포 안에 있어, 판정 전에 도는 레포 코드(e2e 부팅 · CLI 걷기 · 차등 테스트)가 그것을 지우거나 바꿀 수 있다 — 상태 위치(레포 밖) · 턴 문맥 운반 · 순서 바꾸기 중 설계 결정 필요(CLAUDE.md 상태 위치 규칙에 걸림, 사용자 결정 대상). 추적 안 되는 중첩 레포 리뷰는 그 결정 뒤에 | R2a 계획 3 보안 재리뷰(CRITICAL) — 이 PR 범위 밖 설계 결정 | R12 |
 
 ## Metadata
 
